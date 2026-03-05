@@ -5,39 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Weerkaarten – Ed Aldus Weer en Media</title>
 <style>
+  * { box-sizing: border-box; }
   body { font-family: Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; }
   h1 { color: #003366; font-size: 1.4em; margin-bottom: 4px; }
-  p  { color: #555; font-size: 0.9em; margin-top: 0; }
-  .kaarten { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
-  .kaarten img { width: 100%; max-width: 420px; border-radius: 6px;
-                 box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  .subtitel { color: #555; font-size: 0.9em; margin: 0 0 16px; }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin: 16px 0; flex-wrap: wrap; }
+  .btn { background: #003366; color: white; border: none; padding: 8px 16px;
+         border-radius: 5px; cursor: pointer; font-size: 0.85em; }
+  .btn:hover { background: #0055aa; }
+  .btn.groen { background: #2a7a2a; }
+  .btn.groen:hover { background: #3a9a3a; }
+  .kaarten { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
+  .kaart-item { background: white; border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+                overflow: hidden; width: 100%; max-width: 420px; }
+  .kaart-item img { width: 100%; display: block; }
+  .kaart-footer { padding: 8px 10px; display: flex; justify-content: space-between;
+                  align-items: center; background: #f8f9fa;
+                  border-top: 1px solid #e0e0e0; }
+  .kaart-naam { font-size: 0.78em; color: #444; }
+  .btn-down { background: #003366; color: white; border: none; padding: 5px 12px;
+              border-radius: 4px; cursor: pointer; font-size: 0.78em;
+              text-decoration: none; }
+  .btn-down:hover { background: #0055aa; }
 </style>
 </head>
 <body>
 <h1>Ed Aldus Weer en Media – Weerkaarten</h1>
-<p>Maximumtemperatuur · Neerslag · Wind · Bewolking | Bron: DWD MOSMIX</p>
+<p class="subtitel">Maximumtemperatuur · Neerslag · Wind · Bewolking | Bron: DWD MOSMIX</p>
+<div class="toolbar">
+  <button class="btn groen" onclick="downloadAlles()">⬇ Download alle kaarten</button>
+  <span style="font-size:0.8em;color:#777;">of download per kaart hieronder</span>
+</div>
 <div class="kaarten" id="kaarten"></div>
 <script>
-const kaarten = [
-  "kaart_donderdag_05mar2026.png",
-  "kaart_vrijdag_06mar2026.png",
-  "kaart_zaterdag_07mar2026.png",
-  "kaart_zondag_08mar2026.png",
-  "kaart_maandag_09mar2026.png",
-  "kaart_dinsdag_10mar2026.png",
-  "kaart_woensdag_11mar2026.png",
-  "kaart_donderdag_12mar2026.png",
-  "kaart_vrijdag_13mar2026.png",
-  "kaart_zaterdag_14mar2026.png"
-];
-const div = document.getElementById("kaarten");
-kaarten.forEach(naam => {
-  const img = document.createElement("img");
-  img.src = naam;
-  img.alt = naam;
-  img.onerror = function(){ this.style.display='none'; };
-  div.appendChild(img);
-});
+fetch("index.json")
+  .then(r => r.json())
+  .then(kaarten => {
+    const div = document.getElementById("kaarten");
+    kaarten.forEach(naam => {
+      const dagNaam = naam.replace("kaart_","").replace(".png","").replace(/_/g," ");
+      const item = document.createElement("div");
+      item.className = "kaart-item";
+      const img = document.createElement("img");
+      img.src = naam; img.alt = dagNaam;
+      img.onerror = function(){ item.style.display="none"; };
+      const footer = document.createElement("div");
+      footer.className = "kaart-footer";
+      const label = document.createElement("span");
+      label.className = "kaart-naam"; label.textContent = dagNaam;
+      const btn = document.createElement("a");
+      btn.className = "btn-down"; btn.href = naam;
+      btn.download = naam; btn.textContent = "⬇ Download";
+      footer.appendChild(label); footer.appendChild(btn);
+      item.appendChild(img); item.appendChild(footer);
+      div.appendChild(item);
+    });
+  })
+  .catch(() => {
+    document.getElementById("kaarten").innerHTML =
+      "<p style='color:red'>Kon kaartlijst niet laden.</p>";
+  });
+
+async function downloadAlles() {
+  try {
+    const kaarten = await fetch("index.json").then(r => r.json());
+    for (const naam of kaarten) {
+      const a = document.createElement("a");
+      a.href = naam; a.download = naam;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      await new Promise(res => setTimeout(res, 400));
+    }
+  } catch(e) { alert("Kon kaartlijst niet laden."); }
+}
 </script>
 </body>
 </html>
