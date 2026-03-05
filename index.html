@@ -6,9 +6,16 @@
 <title>Weerkaarten – Ed Aldus Weer en Media</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; }
-  h1 { color: #003366; font-size: 1.4em; margin-bottom: 4px; }
-  .subtitel { color: #555; font-size: 0.9em; margin: 0 0 16px; }
+  body { font-family: Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 0; }
+  .header { background: #00205b; padding: 14px 24px 10px; }
+  .header-titel { color: white; font-size: 1.3em; font-weight: bold; letter-spacing: 0.04em; margin: 0; }
+  .header-sub { color: #a8c4e8; font-size: 0.82em; margin: 3px 0 0; letter-spacing: 0.02em; }
+  .content { padding: 16px 20px; }
+  .waarschuwing { padding: 8px 20px; font-size: 0.85em; font-weight: bold;
+                  display: none; border-bottom: 2px solid rgba(0,0,0,0.15); }
+  .waarschuwing.geel  { background: #f5c400; color: #333; display: block; }
+  .waarschuwing.oranje { background: #e07000; color: white; display: block; }
+  .waarschuwing.rood  { background: #cc0000; color: white; display: block; }
   .toolbar { display: flex; align-items: center; gap: 10px; margin: 16px 0; flex-wrap: wrap; }
   .btn { background: #003366; color: white; border: none; padding: 8px 16px;
          border-radius: 5px; cursor: pointer; font-size: 0.85em; }
@@ -40,8 +47,12 @@
 </style>
 </head>
 <body>
-<h1>Ed Aldus Weer en Media – Weerkaarten</h1>
-<p class="subtitel">Maximumtemperatuur · Neerslag · Wind · Bewolking | Bron: DWD MOSMIX</p>
+<div class="header">
+  <p class="header-titel">Ed Aldus WM – Weerkaarten</p>
+  <p class="header-sub">Maximumtemperatuur · Neerslag · Wind · Bewolking &nbsp;|&nbsp; Bron: DWD MOSMIX</p>
+</div>
+<div class="waarschuwing" id="waarschuwing-balk"></div>
+<div class="content">
 <div class="toolbar">
   <button class="btn groen" onclick="downloadAlles()">⬇ Download alle kaarten</button>
   <span style="font-size:0.8em;color:#777;">of download per kaart hieronder</span>
@@ -61,6 +72,16 @@ function sluitLightbox() {
 }
 document.addEventListener("keydown", e => { if(e.key === "Escape") sluitLightbox(); });
 
+fetch("waarschuwing.json")
+  .then(r => r.json())
+  .then(w => {
+    if (w.code && w.code !== "groen") {
+      const balk = document.getElementById("waarschuwing-balk");
+      balk.className = "waarschuwing " + w.code;
+      balk.textContent = "⚠ KNMI waarschuwing: " + w.tekst;
+    }
+  }).catch(() => {});
+
 fetch("index.json")
   .then(r => r.json())
   .then(kaarten => {
@@ -77,11 +98,14 @@ fetch("index.json")
       footer.className = "kaart-footer";
       const label = document.createElement("span");
       label.className = "kaart-naam"; label.textContent = dagNaam;
+      const hint = document.createElement("span");
+      hint.style.cssText = "font-size:0.72em;color:#666;background:#f0f4f8;padding:4px 10px;display:block;text-align:right;border-bottom:1px solid #e0e0e0;";
+      hint.textContent = "🔍 klik voor vergroting";
       const btn = document.createElement("a");
       btn.className = "btn-down"; btn.href = naam;
       btn.download = naam; btn.textContent = "⬇ Download";
       footer.appendChild(label); footer.appendChild(btn);
-      item.appendChild(img); item.appendChild(footer);
+      item.appendChild(hint); item.appendChild(img); item.appendChild(footer);
       div.appendChild(item);
     });
   })
@@ -103,5 +127,6 @@ async function downloadAlles() {
   } catch(e) { alert("Kon kaartlijst niet laden."); }
 }
 </script>
+</div>
 </body>
 </html>
