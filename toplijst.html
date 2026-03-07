@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Toplijst temperaturen – Ed Aldus WM</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f4f8; }
+  .header { background: #00205b; padding: 14px 24px 10px; }
+  .header-titel { color: white; font-size: 1.3em; font-weight: bold; }
+  .header-sub { color: #a8c4e8; font-size: 0.82em; margin-top: 3px; }
+  .header-nav { margin-top: 10px; }
+  .header-nav a { color: #a8c4e8; font-size: 0.82em; text-decoration: none; margin-right: 16px; }
+  .header-nav a:hover { color: white; }
+  .content { padding: 16px 20px; max-width: 1100px; }
+  .dag-blok { margin-bottom: 28px; }
+  .dag-titel { font-size: 1.05em; font-weight: bold; color: #00205b;
+               border-bottom: 2px solid #00205b; padding-bottom: 4px; margin-bottom: 10px;
+               display: flex; align-items: center; gap: 10px; }
+  .dag-status { font-size: 0.72em; font-weight: normal; padding: 2px 8px; border-radius: 10px; }
+  .dag-status.voorlopig { background: #f5c400; color: #333; }
+  .dag-status.definitief { background: #2a7a2a; color: white; }
+  .dag-update { font-size: 0.72em; color: #888; font-weight: normal; }
+  .tabellen { display: flex; gap: 20px; flex-wrap: wrap; }
+  .tabel-blok { flex: 1; min-width: 280px; }
+  .tabel-kop { font-size: 0.85em; font-weight: bold; color: white; padding: 5px 10px; border-radius: 5px 5px 0 0; }
+  .tabel-kop.max { background: #c0392b; }
+  .tabel-kop.min { background: #2471a3; }
+  table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+  th { background: #f0f4f8; font-size: 0.78em; color: #555; padding: 5px 8px; text-align: left; }
+  td { padding: 5px 8px; font-size: 0.82em; border-bottom: 1px solid #f0f0f0; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8f9fa; }
+  .pos { color: #888; font-size: 0.78em; width: 22px; }
+  .waarde-max { font-weight: bold; color: #c0392b; text-align: right; width: 50px; }
+  .waarde-min { font-weight: bold; color: #2471a3; text-align: right; width: 50px; }
+  .tijd { color: #888; font-size: 0.78em; text-align: right; width: 45px; }
+  .top1 td { background: #fff8e1; }
+  .geen-data { color: #888; font-size: 0.85em; padding: 20px; }
+  .laden { color: #555; padding: 20px; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-titel">Ed Aldus WM</p>
+  <p class="header-sub">Dagelijkse temperatuur toplijst Nederland &nbsp;|&nbsp; Bron: KNMI</p>
+  <div class="header-nav"><a href="index.html">← Weerkaarten</a></div>
+</div>
+<div class="content" id="inhoud"><p class="laden">Gegevens laden...</p></div>
+<script>
+const maanden = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+const dagen = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+function formatDatum(d) {
+  const dt = new Date(d + "T12:00:00");
+  return dagen[dt.getDay()] + " " + dt.getDate() + " " + maanden[dt.getMonth()] + " " + dt.getFullYear();
+}
+function maakTabel(lijst, modus) {
+  if (!lijst || !lijst.length) return '<p class="geen-data">Geen data.</p>';
+  const kl = modus === "max" ? "waarde-max" : "waarde-min";
+  let h = "<table><tr><th></th><th>Station</th><th style='text-align:right'>°C</th><th style='text-align:right'>Tijd</th></tr>";
+  lijst.forEach((r, i) => {
+    const top = i === 0 ? "top1" : "";
+    h += "<tr class='" + top + "'><td class='pos'>" + (i+1) + "</td><td>" + r.station + "</td><td class='" + kl + "'>" + r.waarde.toFixed(1) + "</td><td class='tijd'>" + (r.tijdstip || "–") + "</td></tr>";
+  });
+  return h + "</table>";
+}
+fetch("toplijst.json?t=" + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    const datums = Object.keys(data).sort().reverse();
+    if (!datums.length) { document.getElementById("inhoud").innerHTML = '<p class="geen-data">Nog geen data.</p>'; return; }
+    let html = "";
+    datums.forEach(datum => {
+      const dag = data[datum];
+      const sk = dag.status === "definitief" ? "definitief" : "voorlopig";
+      html += "<div class='dag-blok'><div class='dag-titel'>" + formatDatum(datum) +
+        "<span class='dag-status " + sk + "'>" + dag.status + "</span>" +
+        "<span class='dag-update'>bijgewerkt " + dag.update + "</span></div>" +
+        "<div class='tabellen'>" +
+        "<div class='tabel-blok'><div class='tabel-kop max'>🌡 Maximumtemperatuur TX</div>" + maakTabel(dag.max, "max") + "</div>" +
+        "<div class='tabel-blok'><div class='tabel-kop min'>❄️ Minimumtemperatuur TN</div>" + maakTabel(dag.min, "min") + "</div>" +
+        "</div></div>";
+    });
+    document.getElementById("inhoud").innerHTML = html;
+  })
+  .catch(() => { document.getElementById("inhoud").innerHTML = '<p class="geen-data">Kon toplijst.json niet laden.</p>'; });
+</script>
+</body>
+</html>
