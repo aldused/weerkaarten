@@ -51,22 +51,59 @@
 <div class="kaarten" id="kaarten"></div>
 </div>
 <div id="lightbox" onclick="sluitLightbox()">
-  <span id="lightbox-sluit">&#10005;</span>
+  <span id="lightbox-sluit" onclick="sluitLightbox()">&#10005;</span>
+  <span id="lightbox-prev" onclick="event.stopPropagation();vorigeLightbox()" style="position:fixed;left:16px;top:50%;transform:translateY(-50%);font-size:2.5em;color:white;cursor:pointer;user-select:none;">&#8249;</span>
+  <span id="lightbox-next" onclick="event.stopPropagation();volgendeLightbox()" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);font-size:2.5em;color:white;cursor:pointer;user-select:none;">&#8250;</span>
   <img id="lightbox-img" src="" alt="">
 </div>
 <script>
+let kaartLijst = [];
+let huidigIndex = 0;
+
 function openLightbox(src) {
+  huidigIndex = kaartLijst.indexOf(src);
   document.getElementById("lightbox-img").src = src;
   document.getElementById("lightbox").classList.add("actief");
 }
 function sluitLightbox() {
   document.getElementById("lightbox").classList.remove("actief");
 }
-document.addEventListener("keydown", e => { if(e.key === "Escape") sluitLightbox(); });
+function volgendeLightbox() {
+  if (huidigIndex < kaartLijst.length - 1) {
+    huidigIndex++;
+    document.getElementById("lightbox-img").src = kaartLijst[huidigIndex];
+  }
+}
+function vorigeLightbox() {
+  if (huidigIndex > 0) {
+    huidigIndex--;
+    document.getElementById("lightbox-img").src = kaartLijst[huidigIndex];
+  }
+}
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape") sluitLightbox();
+  if(e.key === "ArrowRight") volgendeLightbox();
+  if(e.key === "ArrowLeft") vorigeLightbox();
+});
+
+// Swipe support
+let touchStartX = 0;
+document.getElementById("lightbox").addEventListener("touchstart", e => {
+  touchStartX = e.touches[0].clientX;
+}, {passive: true});
+document.getElementById("lightbox").addEventListener("touchend", e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 50) {
+    if (dx < 0) volgendeLightbox();
+    else vorigeLightbox();
+  }
+}, {passive: true});
 fetch("index.json?t=" + Date.now())
   .then(r => r.json())
   .then(kaarten => {
     const div = document.getElementById("kaarten");
+    kaartLijst = kaarten;
+    kaartLijst = kaarten;
     kaarten.forEach(naam => {
       const dagNaam = naam.replace("kaart_","").replace(".png","").replace(/_/g," ");
       const item = document.createElement("div");
