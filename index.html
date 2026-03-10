@@ -28,6 +28,16 @@
   .kaart-naam { font-size: 0.78em; color: #444; }
   .btn-down { background: #003366; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.78em; text-decoration: none; }
   .btn-down:hover { background: #0055aa; }
+
+  /* Tabbladen */
+  .tabs { display: flex; gap: 4px; margin-bottom: 0; }
+  .tab { padding: 9px 20px; background: #dce6f0; border: 1px solid #b0c4d8; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 0.88em; color: #333; font-weight: bold; }
+  .tab:hover { background: #c8d8ec; }
+  .tab.actief { background: white; border-bottom: 1px solid white; color: #00205b; }
+  .tab-inhoud { display: none; background: white; border: 1px solid #b0c4d8; border-radius: 0 6px 6px 6px; padding: 16px; }
+  .tab-inhoud.actief { display: block; }
+
+  /* Lightbox */
   #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; }
   #lightbox.actief { display: flex; }
   #lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 6px; }
@@ -37,31 +47,57 @@
 <body>
 <div class="header">
   <p class="header-titel">Ed Aldus WM</p>
-  <p class="header-sub">MOS kaarten ECMWF/ICON van de DWD &nbsp;|&nbsp; Maximum- en minimumtemperatuur, neerslag en windstoten</p>
+  <p class="header-sub">MOS kaarten ECMWF/ICON van de DWD &nbsp;|&nbsp; Maximum- en minimumtemperatuur, neerslag, windstoten, bewolking en zon</p>
   <div class="header-nav">
     <a href="toplijst.html">&#128202; Historie &rarr;</a>
   </div>
 </div>
 <div class="content">
-<div class="toolbar">
-  <button class="btn groen" onclick="downloadAlles()">⬇ Download alle kaarten</button>
-  <span style="font-size:0.8em;color:#777;">of download per kaart hieronder</span>
-  <div class="updates">🕐 <strong>Updates:</strong><br>05:30 &nbsp;&middot;&nbsp; 11:30 &nbsp;&middot;&nbsp; 17:30 &nbsp;&middot;&nbsp; 23:30</div>
+  <div class="toolbar">
+    <button class="btn groen" onclick="downloadAlles()">⬇ Download alle kaarten</button>
+    <span style="font-size:0.8em;color:#777;">of download per kaart hieronder</span>
+    <div class="updates">🕐 <strong>Updates:</strong><br>05:30 &nbsp;&middot;&nbsp; 11:30 &nbsp;&middot;&nbsp; 17:30 &nbsp;&middot;&nbsp; 23:30</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab actief" id="tab-temp" onclick="wisselTab('temp')">🌡️ Temperatuur &amp; wind</div>
+    <div class="tab" id="tab-zon" onclick="wisselTab('zon')">☀️ Bewolking &amp; zon</div>
+  </div>
+
+  <div class="tab-inhoud actief" id="inhoud-temp">
+    <div class="kaarten" id="kaarten-temp"></div>
+  </div>
+  <div class="tab-inhoud" id="inhoud-zon">
+    <div class="kaarten" id="kaarten-zon"></div>
+  </div>
 </div>
-<div class="kaarten" id="kaarten"></div>
-</div>
+
 <div id="lightbox" onclick="sluitLightbox()">
   <span id="lightbox-sluit" onclick="sluitLightbox()">&#10005;</span>
   <span id="lightbox-prev" onclick="event.stopPropagation();vorigeLightbox()" style="position:fixed;left:16px;top:50%;transform:translateY(-50%);font-size:2.5em;color:white;cursor:pointer;user-select:none;">&#8249;</span>
   <span id="lightbox-next" onclick="event.stopPropagation();volgendeLightbox()" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);font-size:2.5em;color:white;cursor:pointer;user-select:none;">&#8250;</span>
   <img id="lightbox-img" src="" alt="">
 </div>
+
 <script>
 let kaartLijst = [];
 let huidigIndex = 0;
+let activeLijst = [];
 
-function openLightbox(src) {
-  huidigIndex = kaartLijst.indexOf(src);
+function wisselTab(tab) {
+  document.getElementById("tab-temp").classList.toggle("actief", tab === "temp");
+  document.getElementById("tab-zon").classList.toggle("actief", tab === "zon");
+  document.getElementById("inhoud-temp").classList.toggle("actief", tab === "temp");
+  document.getElementById("inhoud-zon").classList.toggle("actief", tab === "zon");
+  activeLijst = tab === "temp" ? tempLijst : zonLijst;
+}
+
+let tempLijst = [];
+let zonLijst = [];
+
+function openLightbox(src, lijst) {
+  activeLijst = lijst;
+  huidigIndex = activeLijst.indexOf(src);
   document.getElementById("lightbox-img").src = src;
   document.getElementById("lightbox").classList.add("actief");
 }
@@ -69,15 +105,15 @@ function sluitLightbox() {
   document.getElementById("lightbox").classList.remove("actief");
 }
 function volgendeLightbox() {
-  if (huidigIndex < kaartLijst.length - 1) {
+  if (huidigIndex < activeLijst.length - 1) {
     huidigIndex++;
-    document.getElementById("lightbox-img").src = kaartLijst[huidigIndex];
+    document.getElementById("lightbox-img").src = activeLijst[huidigIndex];
   }
 }
 function vorigeLightbox() {
   if (huidigIndex > 0) {
     huidigIndex--;
-    document.getElementById("lightbox-img").src = kaartLijst[huidigIndex];
+    document.getElementById("lightbox-img").src = activeLijst[huidigIndex];
   }
 }
 document.addEventListener("keydown", e => {
@@ -86,7 +122,6 @@ document.addEventListener("keydown", e => {
   if(e.key === "ArrowLeft") vorigeLightbox();
 });
 
-// Swipe support
 let touchStartX = 0;
 document.getElementById("lightbox").addEventListener("touchstart", e => {
   touchStartX = e.touches[0].clientX;
@@ -98,39 +133,48 @@ document.getElementById("lightbox").addEventListener("touchend", e => {
     else vorigeLightbox();
   }
 }, {passive: true});
+
+function maakKaartItem(naam, lijst) {
+  const dagNaam = naam.replace("kaart_zon_","").replace("kaart_","").replace(".png","").replace(/_/g," ");
+  const item = document.createElement("div");
+  item.className = "kaart-item";
+  const hint = document.createElement("span");
+  hint.style.cssText = "font-size:0.72em;color:#666;background:#f0f4f8;padding:4px 10px;display:block;text-align:right;border-bottom:1px solid #e0e0e0;";
+  hint.textContent = "🔍 klik voor vergroting";
+  const img = document.createElement("img");
+  img.src = naam; img.alt = dagNaam;
+  img.onclick = function(){ openLightbox(naam, lijst); };
+  img.onerror = function(){ item.style.display="none"; };
+  const footer = document.createElement("div");
+  footer.className = "kaart-footer";
+  const label = document.createElement("span");
+  label.className = "kaart-naam"; label.textContent = dagNaam;
+  const btn = document.createElement("a");
+  btn.className = "btn-down"; btn.href = naam;
+  btn.download = naam; btn.textContent = "⬇ Download";
+  footer.appendChild(label); footer.appendChild(btn);
+  item.appendChild(hint); item.appendChild(img); item.appendChild(footer);
+  return item;
+}
+
 fetch("index.json?t=" + Date.now())
   .then(r => r.json())
   .then(kaarten => {
-    const div = document.getElementById("kaarten");
     kaartLijst = kaarten;
-    kaartLijst = kaarten;
-    kaartLijst = kaarten;
-    kaarten.forEach(naam => {
-      const dagNaam = naam.replace("kaart_","").replace(".png","").replace(/_/g," ");
-      const item = document.createElement("div");
-      item.className = "kaart-item";
-      const hint = document.createElement("span");
-      hint.style.cssText = "font-size:0.72em;color:#666;background:#f0f4f8;padding:4px 10px;display:block;text-align:right;border-bottom:1px solid #e0e0e0;";
-      hint.textContent = "🔍 klik voor vergroting";
-      const img = document.createElement("img");
-      img.src = naam; img.alt = dagNaam;
-      img.onclick = function(){ openLightbox(naam); };
-      img.onerror = function(){ item.style.display="none"; };
-      const footer = document.createElement("div");
-      footer.className = "kaart-footer";
-      const label = document.createElement("span");
-      label.className = "kaart-naam"; label.textContent = dagNaam;
-      const btn = document.createElement("a");
-      btn.className = "btn-down"; btn.href = naam;
-      btn.download = naam; btn.textContent = "⬇ Download";
-      footer.appendChild(label); footer.appendChild(btn);
-      item.appendChild(hint); item.appendChild(img); item.appendChild(footer);
-      div.appendChild(item);
-    });
+    tempLijst = kaarten.filter(n => !n.startsWith("kaart_zon_"));
+    zonLijst  = kaarten.filter(n => n.startsWith("kaart_zon_"));
+    activeLijst = tempLijst;
+
+    const divTemp = document.getElementById("kaarten-temp");
+    tempLijst.forEach(naam => divTemp.appendChild(maakKaartItem(naam, tempLijst)));
+
+    const divZon = document.getElementById("kaarten-zon");
+    zonLijst.forEach(naam => divZon.appendChild(maakKaartItem(naam, zonLijst)));
   })
   .catch(() => {
-    document.getElementById("kaarten").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
+    document.getElementById("kaarten-temp").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
   });
+
 async function downloadAlles() {
   try {
     const kaarten = await fetch("index.json").then(r => r.json());
