@@ -21,7 +21,6 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
-    ("10500","Geilenkirchen"),("E5204","IJmuiden"),("E5405","E5405"),
 ]
 
 coords = {
@@ -39,7 +38,7 @@ coords = {
     "IJmuiden":(3.31,52.31),"E5405":(5.00,54.50),
 }
 
-EXTENT = [3.3, 7.4, 50.7, 54.7]
+EXTENT = [3.3, 7.4, 50.45, 53.8]
 
 nl_dagen   = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"]
 nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
@@ -82,7 +81,7 @@ def parse_values(root, element_name):
                     if t == '-': res.append(None)
                     else:
                         try: res.append(float(t))
-                        except: res.append(None)
+                        except: pass
                 return res
     return []
 
@@ -158,16 +157,6 @@ for day, dag_data in data_per_day.items():
     maak_header(fig, gs, dag_nl, day, now_str)
     ax = maak_kaart_ax(fig, gs)
 
-    # Kleurenbalk
-    sm = plt.cm.ScalarMappable(cmap=cmap_tx, norm=norm_tx)
-    sm.set_array([])
-    cbar_ax = fig.add_axes([0.08, 0.915, 0.84, 0.012])
-    cb = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
-    cb.ax.tick_params(labelsize=6)
-    for label in ['-5°','0°','5°','10°','15°','20°','25°']:
-        pass
-    cb.set_ticks([-5,0,5,10,15,20,25])
-    cb.set_ticklabels([f'{v}°' for v in [-5,0,5,10,15,20,25]])
 
     for name, vals in dag_data.items():
         if name not in coords: continue
