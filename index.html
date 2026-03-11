@@ -28,16 +28,12 @@
   .kaart-naam { font-size: 0.78em; color: #444; }
   .btn-down { background: #003366; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.78em; text-decoration: none; }
   .btn-down:hover { background: #0055aa; }
-
-  /* Tabbladen */
   .tabs { display: flex; gap: 4px; margin-bottom: 0; }
   .tab { padding: 9px 20px; background: #dce6f0; border: 1px solid #b0c4d8; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 0.88em; color: #333; font-weight: bold; }
   .tab:hover { background: #c8d8ec; }
   .tab.actief { background: white; border-bottom: 1px solid white; color: #00205b; }
   .tab-inhoud { display: none; background: white; border: 1px solid #b0c4d8; border-radius: 0 6px 6px 6px; padding: 16px; }
   .tab-inhoud.actief { display: block; }
-
-  /* Lightbox */
   #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; }
   #lightbox.actief { display: flex; }
   #lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 6px; }
@@ -47,7 +43,7 @@
 <body>
 <div class="header">
   <p class="header-titel">Ed Aldus WM</p>
-  <p class="header-sub">MOS kaarten ECMWF/ICON van de DWD &nbsp;|&nbsp; Maximum- en minimumtemperatuur, neerslag, windstoten, bewolking en zon</p>
+  <p class="header-sub">MOS kaarten ECMWF/ICON van de DWD &nbsp;|&nbsp; Temperatuur, wind, bewolking en zon</p>
   <div class="header-nav">
     <a href="toplijst.html">&#128202; Historie &rarr;</a>
   </div>
@@ -60,12 +56,16 @@
   </div>
 
   <div class="tabs">
-    <div class="tab actief" id="tab-temp" onclick="wisselTab('temp')">🌡️ Temperatuur &amp; wind</div>
+    <div class="tab actief" id="tab-temp" onclick="wisselTab('temp')">🌡️ Temperatuur</div>
+    <div class="tab" id="tab-wind" onclick="wisselTab('wind')">💨 Wind</div>
     <div class="tab" id="tab-zon" onclick="wisselTab('zon')">☀️ Bewolking &amp; zon</div>
   </div>
 
   <div class="tab-inhoud actief" id="inhoud-temp">
     <div class="kaarten" id="kaarten-temp"></div>
+  </div>
+  <div class="tab-inhoud" id="inhoud-wind">
+    <div class="kaarten" id="kaarten-wind"></div>
   </div>
   <div class="tab-inhoud" id="inhoud-zon">
     <div class="kaarten" id="kaarten-zon"></div>
@@ -80,20 +80,21 @@
 </div>
 
 <script>
-let kaartLijst = [];
-let huidigIndex = 0;
 let activeLijst = [];
+let huidigIndex = 0;
+let tempLijst = [];
+let windLijst = [];
+let zonLijst  = [];
 
 function wisselTab(tab) {
-  document.getElementById("tab-temp").classList.toggle("actief", tab === "temp");
-  document.getElementById("tab-zon").classList.toggle("actief", tab === "zon");
-  document.getElementById("inhoud-temp").classList.toggle("actief", tab === "temp");
-  document.getElementById("inhoud-zon").classList.toggle("actief", tab === "zon");
-  activeLijst = tab === "temp" ? tempLijst : zonLijst;
+  ["temp","wind","zon"].forEach(t => {
+    document.getElementById("tab-" + t).classList.toggle("actief", t === tab);
+    document.getElementById("inhoud-" + t).classList.toggle("actief", t === tab);
+  });
+  if (tab === "temp") activeLijst = tempLijst;
+  else if (tab === "wind") activeLijst = windLijst;
+  else activeLijst = zonLijst;
 }
-
-let tempLijst = [];
-let zonLijst = [];
 
 function openLightbox(src, lijst) {
   activeLijst = lijst;
@@ -121,7 +122,6 @@ document.addEventListener("keydown", e => {
   if(e.key === "ArrowRight") volgendeLightbox();
   if(e.key === "ArrowLeft") vorigeLightbox();
 });
-
 let touchStartX = 0;
 document.getElementById("lightbox").addEventListener("touchstart", e => {
   touchStartX = e.touches[0].clientX;
@@ -135,7 +135,7 @@ document.getElementById("lightbox").addEventListener("touchend", e => {
 }, {passive: true});
 
 function maakKaartItem(naam, lijst) {
-  const dagNaam = naam.replace("kaart_zon_","").replace("kaart_","").replace(".png","").replace(/_/g," ");
+  const dagNaam = naam.replace("kaart_wind_","").replace("kaart_zon_","").replace("kaart_","").replace(".png","").replace(/_/g," ");
   const item = document.createElement("div");
   item.className = "kaart-item";
   const hint = document.createElement("span");
@@ -160,16 +160,14 @@ function maakKaartItem(naam, lijst) {
 fetch("index.json?t=" + Date.now())
   .then(r => r.json())
   .then(kaarten => {
-    kaartLijst = kaarten;
-    tempLijst = kaarten.filter(n => !n.startsWith("kaart_zon_"));
+    tempLijst = kaarten.filter(n => !n.startsWith("kaart_zon_") && !n.startsWith("kaart_wind_"));
+    windLijst = kaarten.filter(n => n.startsWith("kaart_wind_"));
     zonLijst  = kaarten.filter(n => n.startsWith("kaart_zon_"));
     activeLijst = tempLijst;
 
-    const divTemp = document.getElementById("kaarten-temp");
-    tempLijst.forEach(naam => divTemp.appendChild(maakKaartItem(naam, tempLijst)));
-
-    const divZon = document.getElementById("kaarten-zon");
-    zonLijst.forEach(naam => divZon.appendChild(maakKaartItem(naam, zonLijst)));
+    tempLijst.forEach(n => document.getElementById("kaarten-temp").appendChild(maakKaartItem(n, tempLijst)));
+    windLijst.forEach(n => document.getElementById("kaarten-wind").appendChild(maakKaartItem(n, windLijst)));
+    zonLijst.forEach(n  => document.getElementById("kaarten-zon").appendChild(maakKaartItem(n, zonLijst)));
   })
   .catch(() => {
     document.getElementById("kaarten-temp").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
