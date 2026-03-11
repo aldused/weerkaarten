@@ -85,7 +85,7 @@ gisteren = vandaag - timedelta(days=1)
 
 resultaten = {}
 
-for dag in [gisteren, vandaag]:
+for dag in [vandaag - timedelta(days=i) for i in range(4, -1, -1)]:
     dt_range = f"{dag}T00:00:00Z/{dag}T23:59:59Z"
     key = dag.isoformat()
     resultaten[key] = {"datum": key, "TX": [], "TN": [], "RR": [], "FX": []}

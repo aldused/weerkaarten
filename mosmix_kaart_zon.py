@@ -21,7 +21,6 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
-    ("10500","Geilenkirchen"),("E5204","IJmuiden"),("E5405","E5405"),
 ]
 
 coords = {
@@ -39,7 +38,7 @@ coords = {
     "IJmuiden":(3.31,52.31),"E5405":(5.00,54.50),
 }
 
-EXTENT = [3.3, 7.4, 50.7, 54.7]
+EXTENT = [3.3, 7.4, 50.45, 53.8]
 
 nl_dagen   = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"]
 nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
@@ -138,7 +137,7 @@ for code, name in stations:
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         sd_tot = sum(daily[d]["sd"])/3600 if daily[d]["sd"] else 0
-        neff_gem = sum(daily[d]["neff"])/len(daily[d]["neff"])*100 if daily[d]["neff"] else 0
+        neff_gem = sum(daily[d]["neff"])/len(daily[d]["neff"]) if daily[d]["neff"] else 0
         data_per_day[d][name] = {"sd":round(sd_tot,1),"neff":round(neff_gem,0)}
 
 print(f"Data voor {len(data_per_day)} dagen")

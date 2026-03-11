@@ -21,7 +21,6 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
-    ("10500","Geilenkirchen"),("E5204","IJmuiden"),("E5405","E5405"),
 ]
 
 coords = {
@@ -39,7 +38,7 @@ coords = {
     "IJmuiden":(3.31,52.31),"E5405":(5.00,54.50),
 }
 
-EXTENT = [3.3, 7.4, 50.7, 54.7]
+EXTENT = [3.3, 7.4, 50.45, 53.8]
 
 nl_dagen   = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"]
 nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
