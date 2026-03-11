@@ -16,7 +16,7 @@ def datum_uit_naam(naam):
     m = re.search(r'(\d{2})([a-z]{3})(\d{4})', naam)
     if not m: return None
     dag,mnd,jaar = m.groups()
-    mnd_map = {"jan":1,"feb":2,"mrt":3,"apr":4,"mei":5,"jun":6,
+    mnd_map = {"jan":1,"feb":2,"mrt":3,"mar":3,"apr":4,"mei":5,"jun":6,
                "jul":7,"aug":8,"sep":9,"okt":10,"nov":11,"dec":12}
     try: return date(int(jaar), mnd_map[mnd], int(dag))
     except: return None
@@ -27,7 +27,7 @@ for k in kaarten:
     if d is None or d >= vandaag:
         kaarten_gefilterd.append(k)
 
-kaarten_gefilterd.sort()
+kaarten_gefilterd.sort(key=lambda k: datum_uit_naam(k) or date(9999,1,1))
 with open("index.json","w") as f:
     json.dump(kaarten_gefilterd, f)
 print(f"index.json: {len(kaarten_gefilterd)} kaarten")
