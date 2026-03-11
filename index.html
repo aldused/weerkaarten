@@ -59,6 +59,7 @@
     <div class="tab actief" id="tab-temp" onclick="wisselTab('temp')">🌡️ Temperatuur</div>
     <div class="tab" id="tab-wind" onclick="wisselTab('wind')">💨 Wind</div>
     <div class="tab" id="tab-zon" onclick="wisselTab('zon')">☀️ Bewolking &amp; zon</div>
+    <div class="tab" id="tab-regen" onclick="wisselTab('regen')">🌧️ Neerslag</div>
   </div>
 
   <div class="tab-inhoud actief" id="inhoud-temp">
@@ -69,6 +70,9 @@
   </div>
   <div class="tab-inhoud" id="inhoud-zon">
     <div class="kaarten" id="kaarten-zon"></div>
+  </div>
+  <div class="tab-inhoud" id="inhoud-regen">
+    <div class="kaarten" id="kaarten-regen"></div>
   </div>
 </div>
 
@@ -85,15 +89,17 @@ let huidigIndex = 0;
 let tempLijst = [];
 let windLijst = [];
 let zonLijst  = [];
+let regenLijst = [];
 
 function wisselTab(tab) {
-  ["temp","wind","zon"].forEach(t => {
+  ["temp","wind","zon","regen"].forEach(t => {
     document.getElementById("tab-" + t).classList.toggle("actief", t === tab);
     document.getElementById("inhoud-" + t).classList.toggle("actief", t === tab);
   });
   if (tab === "temp") activeLijst = tempLijst;
   else if (tab === "wind") activeLijst = windLijst;
-  else activeLijst = zonLijst;
+  else if (tab === "zon") activeLijst = zonLijst;
+  else activeLijst = regenLijst;
 }
 
 function openLightbox(src, lijst) {
@@ -135,7 +141,7 @@ document.getElementById("lightbox").addEventListener("touchend", e => {
 }, {passive: true});
 
 function maakKaartItem(naam, lijst) {
-  const dagNaam = naam.replace("kaart_wind_","").replace("kaart_zon_","").replace("kaart_","").replace(".png","").replace(/_/g," ");
+  const dagNaam = naam.replace("kaart_wind_","").replace("kaart_zon_","").replace("kaart_regen_","").replace("kaart_","").replace(".png","").replace(/_/g," ");
   const item = document.createElement("div");
   item.className = "kaart-item";
   const hint = document.createElement("span");
@@ -160,14 +166,16 @@ function maakKaartItem(naam, lijst) {
 fetch("index.json?t=" + Date.now())
   .then(r => r.json())
   .then(kaarten => {
-    tempLijst = kaarten.filter(n => !n.startsWith("kaart_zon_") && !n.startsWith("kaart_wind_"));
+    tempLijst = kaarten.filter(n => !n.startsWith("kaart_zon_") && !n.startsWith("kaart_wind_") && !n.startsWith("kaart_regen_"));
     windLijst = kaarten.filter(n => n.startsWith("kaart_wind_"));
-    zonLijst  = kaarten.filter(n => n.startsWith("kaart_zon_"));
+    zonLijst   = kaarten.filter(n => n.startsWith("kaart_zon_"));
+    regenLijst = kaarten.filter(n => n.startsWith("kaart_regen_"));
     activeLijst = tempLijst;
 
     tempLijst.forEach(n => document.getElementById("kaarten-temp").appendChild(maakKaartItem(n, tempLijst)));
     windLijst.forEach(n => document.getElementById("kaarten-wind").appendChild(maakKaartItem(n, windLijst)));
-    zonLijst.forEach(n  => document.getElementById("kaarten-zon").appendChild(maakKaartItem(n, zonLijst)));
+    zonLijst.forEach(n   => document.getElementById("kaarten-zon").appendChild(maakKaartItem(n, zonLijst)));
+    regenLijst.forEach(n => document.getElementById("kaarten-regen").appendChild(maakKaartItem(n, regenLijst)));
   })
   .catch(() => {
     document.getElementById("kaarten-temp").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
