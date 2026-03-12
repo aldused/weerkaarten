@@ -88,11 +88,11 @@ def parse_values(root, element_name):
 def maak_header(fig, gs, dag_nl, day, now_str):
     ax = fig.add_subplot(gs[0])
     ax.set_xlim(0,1); ax.set_ylim(0,1); ax.axis("off")
-    ax.add_patch(plt.Rectangle((0,0),1,1,transform=ax.transAxes,facecolor="#003366",zorder=0,clip_on=False))
+    ax.add_patch(plt.Rectangle((0,0),1,1,transform=ax.transAxes,facecolor="#001a33",zorder=0,clip_on=False))
     maand_nl = nl_maanden[day.month]
     ax.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",weight="bold",va="center",transform=ax.transAxes)
     ax.text(0.012,0.18,"MOS ECMWF/ICON",fontsize=7.5,color="#a8c8e8",va="center",transform=ax.transAxes)
-    ax.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax.transAxes)
+    ax.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}  (nacht)",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax.transAxes)
     ax.text(0.988,0.18,f"DWD MOSMIX  \u00b7  run: {now_str}",fontsize=7,color="#a8c8e8",ha="right",va="center",transform=ax.transAxes)
     ax.axhline(0,color="#4a90c4",linewidth=1.5)
     return ax
@@ -103,10 +103,10 @@ def maak_kaart_ax(fig, gs):
     ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
     ax.set_aspect('auto')
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
-    ax.add_feature(cfeature.OCEAN.with_scale("10m"),facecolor="#c8e0f0",zorder=0)
-    ax.add_feature(cfeature.LAND.with_scale("10m"),facecolor="#eaf3e8",zorder=1)
-    ax.add_feature(cfeature.LAKES.with_scale("10m"),facecolor="#c8e0f0",zorder=2)
-    ax.add_feature(cfeature.RIVERS.with_scale("10m"),edgecolor="#89b8d4",linewidth=0.5,zorder=3)
+    ax.add_feature(cfeature.OCEAN.with_scale("10m"),facecolor="#9ab8d0",zorder=0)
+    ax.add_feature(cfeature.LAND.with_scale("10m"),facecolor="#c8d8e8",zorder=1)
+    ax.add_feature(cfeature.LAKES.with_scale("10m"),facecolor="#9ab8d0",zorder=2)
+    ax.add_feature(cfeature.RIVERS.with_scale("10m"),edgecolor="#6090b0",linewidth=0.5,zorder=3)
     ax.add_feature(cfeature.COASTLINE.with_scale("10m"),edgecolor="#333333",linewidth=0.7,zorder=4)
     ax.add_feature(cfeature.BORDERS.with_scale("10m"),edgecolor="#666666",linewidth=0.6,linestyle="--",zorder=4)
     return ax
@@ -134,7 +134,7 @@ def windpijl(graden):
     return pijlen[round(graden/45) % 8]
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-print("MOSMIX ophalen (wind dag 06-18u)...")
+print("MOSMIX ophalen (wind nacht 18-06u)...")
 
 data_per_day = {}
 for code, name in stations:
@@ -148,17 +148,23 @@ for code, name in stations:
     UTC_OFFSET = timedelta(hours=1)
     daily = {}
     for i, dt in enumerate(times):
-        loc = dt + UTC_OFFSET; d = loc.date()
+        loc = dt + UTC_OFFSET
         hour = loc.hour
-        if 6 <= hour < 18:
-            if d not in daily: daily[d] = {"ff":[], "ff_dd":[], "fx":[]}
-            if i < len(ff_raw) and ff_raw[i] is not None:
-                daily[d]["ff"].append(ff_raw[i])
-                # sla dd op gesynchroniseerd met ff
-                dd_val = dd_raw[i] if i < len(dd_raw) else None
-                daily[d]["ff_dd"].append(dd_val)
-            if i < len(fx_raw) and fx_raw[i] is not None:
-                daily[d]["fx"].append(fx_raw[i])
+        # Nacht 18-06u: uren 18-23 → dag D, uren 00-05 → dag D-1
+        if hour >= 18:
+            d = loc.date()
+        elif hour < 6:
+            d = (loc - timedelta(days=1)).date()
+        else:
+            continue
+
+        if d not in daily: daily[d] = {"ff":[], "ff_dd":[], "fx":[]}
+        if i < len(ff_raw) and ff_raw[i] is not None:
+            daily[d]["ff"].append(ff_raw[i])
+            dd_val = dd_raw[i] if i < len(dd_raw) else None
+            daily[d]["ff_dd"].append(dd_val)
+        if i < len(fx_raw) and fx_raw[i] is not None:
+            daily[d]["fx"].append(fx_raw[i])
 
     days = sorted(daily.keys())[:10]
     for d in days:
@@ -166,7 +172,6 @@ for code, name in stations:
         ff_lijst = daily[d]["ff"]
         ff_gem = sum(ff_lijst)/len(ff_lijst) if ff_lijst else 0
         fx_max = max(daily[d]["fx"]) if daily[d]["fx"] else 0
-        # windrichting op moment van hoogste 10-min gemiddelde wind
         if ff_lijst:
             idx = ff_lijst.index(max(ff_lijst))
             dd_bij_ff_max = daily[d]["ff_dd"][idx] if idx < len(daily[d]["ff_dd"]) else None
@@ -212,13 +217,13 @@ for day, dag_data in data_per_day.items():
     leg = ax.inset_axes([leg_x, leg_y-leg_h, 0.18, leg_h])
     leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
-    leg.text(0.5,0.94,"Windkracht (06-18u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
+    leg.text(0.5,0.94,"Windkracht (18-06u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
     for idx,(b,label,kleur,tk) in enumerate(legenda_items):
         y = 0.86 - idx*(1.0/len(legenda_items))*0.88
         leg.add_patch(plt.Rectangle((0.04,y-0.04),0.20,0.09,facecolor=kleur,transform=leg.transAxes,zorder=1))
         leg.text(0.30,y+0.005,label,fontsize=4.0,va="center",transform=leg.transAxes,color="#222222")
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
-    fname = f"kaart_wind_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
+    fname = f"kaart_wind_nacht_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
