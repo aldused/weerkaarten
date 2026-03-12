@@ -206,7 +206,42 @@ function msToBft(ms) {
   }
   return b;
 }
-function ffWeergave(ms) {
+function ddNaarPijl(dd) {
+  if (dd === null || dd === undefined) return '';
+  const pijlen = ['↓','↙','←','↖','↑','↗','→','↘'];
+  return pijlen[Math.round(dd / 45) % 8];
+}
+
+function maakTabelFF(rijen) {
+  if (!rijen || rijen.length === 0) return '<p style="padding:8px;color:#aaa;font-size:0.75rem">Geen data</p>';
+  let html = '<table>';
+  rijen.forEach((item, i) => {
+    // item = [ff, naam, tijdvak, dd]  of  [ff, naam]  (oude data)
+    const waarde = Array.isArray(item) ? item[0] : item;
+    const station = Array.isArray(item) ? item[1] : '';
+    const tijdvak = Array.isArray(item) && item[2] ? item[2] : null;
+    const dd      = Array.isArray(item) && item.length > 3 ? item[3] : null;
+    const rang = i + 1;
+    const topKlasse = rang === 1 ? 'top1' : rang === 2 ? 'top2' : rang === 3 ? 'top3' : '';
+    const kmh = (waarde * 3.6).toFixed(1);
+    const bft = msToBft(waarde);
+    let cel = `${kmh}<small style="font-size:0.62rem;margin-left:1px">km/h</small> <span style="color:#aaa;font-size:0.68rem">Bft${bft}</span>`;
+    // Top 3: tijdvak + pijltje als extra regel
+    let extra = '';
+    if (rang <= 3 && (tijdvak || dd !== null)) {
+      const pijl = ddNaarPijl(dd);
+      extra = `<div style="font-size:0.65rem;color:#888;margin-top:1px">${tijdvak || ''}${pijl ? ' ' + pijl : ''}</div>`;
+    }
+    html += `<tr class="${topKlasse}">
+      <td class="rang">${rang}</td>
+      <td class="waarde ff-kleur">${cel}${extra}</td>
+      <td class="station">${station}</td>
+    </tr>`;
+  });
+  return html + '</table>';
+}
+
+
   const kmh = (ms * 3.6).toFixed(1);
   const bft = msToBft(ms);
   return `${kmh}<small style="font-size:0.62rem;margin-left:1px">km/h</small> <span style="color:#aaa;font-size:0.68rem">Bft${bft}</span>`;
@@ -260,7 +295,7 @@ function toonDag(datum) {
       </div>
       <div class="kolom">
         <div class="kolom-header ff">🌬 Wind gem.<div style="font-size:0.65rem;font-weight:400;opacity:0.85">uur .10 › heel</div></div>
-        ${maakTabel(dag.ff || [], 'ff', '', null, v => ffWeergave(v))}
+        ${maakTabelFF(dag.ff || [])}
       </div>
     </div>`;
 }
