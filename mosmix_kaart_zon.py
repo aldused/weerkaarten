@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 import re
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 import numpy as np
 
 stations = [
@@ -93,7 +93,7 @@ def maak_header(fig, gs, dag_nl, day, now_str):
     ax.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",weight="bold",va="center",transform=ax.transAxes)
     ax.text(0.012,0.18,"MOS ECMWF/ICON",fontsize=7.5,color="#a8c8e8",va="center",transform=ax.transAxes)
     ax.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax.transAxes)
-    ax.text(0.988,0.18,f"DWD MOSMIX  \u00b7  run: {now_str}",fontsize=7,color="#a8c8e8",ha="right",va="center",transform=ax.transAxes)
+    ax.text(0.988,0.18,f"DWD MOSMIX  ·  run: {now_str}",fontsize=7,color="#a8c8e8",ha="right",va="center",transform=ax.transAxes)
     ax.axhline(0,color="#4a90c4",linewidth=1.5)
     return ax
 
@@ -111,12 +111,22 @@ def maak_kaart_ax(fig, gs):
     ax.add_feature(cfeature.BORDERS.with_scale("10m"),edgecolor="#666666",linewidth=0.6,linestyle="--",zorder=4)
     return ax
 
-# ── ZON/BEWOLKINGSKAART ───────────────────────────────────────────────────────
+def zon_cirkel_kleur(sd_uren):
+    """Kleur van de cirkel op basis van zonuren."""
+    if sd_uren >= 10: return "#FFD700", "black"   # stralend geel
+    if sd_uren >= 7:  return "#FFC200", "black"   # geel
+    if sd_uren >= 4:  return "#FFB347", "black"   # oranje-geel
+    if sd_uren >= 2:  return "#C8C8C8", "black"   # grijs
+    return "#888888", "white"                      # donkergrijs
+
+# ── DATA OPHALEN ──────────────────────────────────────────────────────────────
 from matplotlib.gridspec import GridSpec
 import cartopy.crs as ccrs
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 print("MOSMIX ophalen (zon/bewolking)...")
+
+UTC_OFFSET = timedelta(hours=1)  # TODO: vervangen door ZoneInfo
 
 data_per_day = {}
 for code, name in stations:
@@ -124,65 +134,119 @@ for code, name in stations:
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
     times = get_times(root)
-    sd_raw = parse_values(root, 'SunD1')
-    neff_raw = parse_values(root, 'Neff')
-    UTC_OFFSET = timedelta(hours=1)
+    sd_raw   = parse_values(root, 'SunD1')   # zonschijnduur afgelopen uur [seconden]
+    neff_raw = parse_values(root, 'Neff')    # effectieve bewolking [%]
+
     daily = {}
-    for i, dt in enumerate(times):
-        loc = dt + UTC_OFFSET; d = loc.date()
-        if d not in daily: daily[d] = {"sd":[],"neff":[]}
-        if i < len(sd_raw) and sd_raw[i] is not None: daily[d]["sd"].append(sd_raw[i])
-        if i < len(neff_raw) and neff_raw[i] is not None: daily[d]["neff"].append(neff_raw[i])
+    prev_hour = None
+    for i, dt_utc in enumerate(times):
+        dt_loc = dt_utc + UTC_OFFSET
+        d = dt_loc.date()
+        if d not in daily:
+            daily[d] = {"sd": 0.0, "neff": [], "heeft_sd": False, "prev_dt": None}
+
+        # SunD1: alleen uurlijkse stappen meenemen (verschil = 1 uur)
+        # Bij 3-uurs stappen is de waarde de zonuren van het laatste uur vóór de stap,
+        # niet de som over 3 uur — we tellen ze gewoon mee als losse uurwaarden.
+        if i < len(sd_raw) and sd_raw[i] is not None:
+            # check tijdstap-interval
+            if i > 0:
+                dt_prev = times[i-1] + UTC_OFFSET
+                interval_h = (dt_loc - dt_prev).total_seconds() / 3600
+            else:
+                interval_h = 1.0
+            # SunD1 is altijd "afgelopen uur" in seconden → omrekenen naar uren
+            # Bij 3-uurs stap: de waarde beslaat alleen het laatste uur van de 3 → niet vermenigvuldigen
+            daily[d]["sd"] += sd_raw[i] / 3600.0
+            daily[d]["heeft_sd"] = True
+
+        if i < len(neff_raw) and neff_raw[i] is not None:
+            daily[d]["neff"].append(neff_raw[i])
+
     days = sorted(daily.keys())[:10]
     for d in days:
-        if d not in data_per_day: data_per_day[d] = {}
-        sd_tot = sum(daily[d]["sd"])/3600 if daily[d]["sd"] else 0
-        neff_gem = sum(daily[d]["neff"])/len(daily[d]["neff"]) if daily[d]["neff"] else 0
-        data_per_day[d][name] = {"sd":round(sd_tot,1),"neff":round(neff_gem,0)}
+        if d not in data_per_day:
+            data_per_day[d] = {}
+        sd_tot   = round(daily[d]["sd"], 1)
+        neff_gem = round(sum(daily[d]["neff"]) / len(daily[d]["neff"]), 0) if daily[d]["neff"] else 0
+        data_per_day[d][name] = {"sd": sd_tot, "neff": neff_gem, "heeft_sd": daily[d]["heeft_sd"]}
 
 print(f"Data voor {len(data_per_day)} dagen")
-if not data_per_day: print("Geen data!"); exit()
+if not data_per_day:
+    print("Geen data!"); exit()
 
-def bewolking_kleur(neff):
-    if neff < 20: return "#ffe066","black"
-    if neff < 40: return "#ffd700","black"
-    if neff < 60: return "#bdbdbd","black"
-    if neff < 80: return "#9e9e9e","white"
-    return "#616161","white"
-
-now_str = datetime.now().strftime("%d %b %Y  %H:%M")
+# ── KAARTEN GENEREREN ─────────────────────────────────────────────────────────
+now_str  = datetime.now().strftime("%d %b %Y  %H:%M")
 now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
+
+# Kaartbreedte in graden (voor cirkelgrootte schaalbepaling)
+LON_RANGE = EXTENT[1] - EXTENT[0]  # 4.1 graden
 
 for day, dag_data in data_per_day.items():
     dag_nl = nl_dagen[day.weekday()]
-    fig = plt.figure(figsize=(8,11))
-    gs = GridSpec(2,1,figure=fig,height_ratios=[0.085,1],hspace=0.01)
+    fig = plt.figure(figsize=(8, 11))
+    gs = GridSpec(2, 1, figure=fig, height_ratios=[0.085, 1], hspace=0.01)
     maak_header(fig, gs, dag_nl, day, now_str)
     ax = maak_kaart_ax(fig, gs)
 
     for name, vals in dag_data.items():
-        if name not in coords: continue
+        if name not in coords:
+            continue
+        if not vals.get("heeft_sd"):
+            continue
         lon, lat = coords[name]
-        kleur, tkleur = bewolking_kleur(vals["neff"])
-        tekst = f"\u2600 {vals['sd']:.0f}u\n\u2601 {vals['neff']:.0f}%"
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=5.5, weight="bold",
-                color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="#cccccc", linewidth=0.3, zorder=7))
+        sd   = vals["sd"]
+        neff = vals["neff"]
+        kleur, tkleur = zon_cirkel_kleur(sd)
 
-    ax.text(1.0,0.0,f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
-            transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
+        # ── Cirkel ──
+        # Radius in graden: vaste grootte, iets groter voor >8u zon
+        r_base = 0.13
+        r = r_base * (1.0 + 0.25 * min(sd / 10.0, 1.0))
 
-    # Legenda
-    leg = ax.inset_axes([0.01,0.75,0.20,0.20])
-    leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
-    leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
-    leg.text(0.5,0.92,"Bewolking",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
-    items = [("<20%","#ffe066","black"),("<40%","#ffd700","black"),("<60%","#bdbdbd","black"),("<80%","#9e9e9e","white"),(">80%","#616161","white")]
-    for idx,(label,kleur,tk) in enumerate(items):
-        y = 0.78 - idx*0.17
-        leg.add_patch(plt.Rectangle((0.04,y-0.04),0.20,0.12,facecolor=kleur,edgecolor="#aaaaaa",linewidth=0.3,transform=leg.transAxes,zorder=1))
-        leg.text(0.30,y+0.02,label,fontsize=4.0,va="center",transform=leg.transAxes)
-    leg.text(0.10,0.05,"\u2600 zon (uren)  \u2601 bewolking (%)",fontsize=3.5,va="center",transform=leg.transAxes)
+        cirkel = mpatches.Circle(
+            (lon, lat), radius=r,
+            facecolor=kleur, edgecolor="#888888", linewidth=0.5,
+            transform=ccrs.PlateCarree(), zorder=8
+        )
+        ax.add_patch(cirkel)
+
+        # Zonuren in de cirkel (vet, groot)
+        ax.text(lon, lat + 0.025, f"{sd:.0f}u",
+                ha="center", va="center", fontsize=6.0, weight="bold",
+                color=tkleur, zorder=9, transform=ccrs.PlateCarree())
+
+        # Bewolking % klein eronder in de cirkel
+        ax.text(lon, lat - 0.065, f"{neff:.0f}%",
+                ha="center", va="center", fontsize=4.5,
+                color=tkleur, zorder=9, transform=ccrs.PlateCarree())
+
+        # Stationsnaam boven de cirkel
+        ax.text(lon, lat + r + 0.04, name,
+                ha="center", va="bottom", fontsize=4.0,
+                color="#222222", zorder=9, transform=ccrs.PlateCarree())
+
+    # ── Legenda ──
+    leg = ax.inset_axes([0.01, 0.72, 0.22, 0.25])
+    leg.set_xlim(0, 1); leg.set_ylim(0, 1); leg.axis("off")
+    leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
+                                 linewidth=0.7,transform=leg.transAxes,zorder=0))
+    leg.text(0.5, 0.94, "Zonuren", fontsize=5, weight="bold",
+             ha="center", va="top", transform=leg.transAxes)
+    items = [("≥10u","#FFD700"),("≥7u","#FFC200"),("≥4u","#FFB347"),("≥2u","#C8C8C8"),("<2u","#888888")]
+    for idx, (label, kleur) in enumerate(items):
+        y = 0.80 - idx * 0.155
+        circ = mpatches.Circle((0.12, y), radius=0.07, facecolor=kleur,
+                                edgecolor="#888888", linewidth=0.4,
+                                transform=leg.transAxes, zorder=1)
+        leg.add_patch(circ)
+        leg.text(0.25, y, label, fontsize=4.2, va="center", transform=leg.transAxes)
+    leg.text(0.5, 0.04, "getal = zonuren  klein = bewolking%",
+             fontsize=3.5, ha="center", va="center", transform=leg.transAxes)
+
+    ax.text(1.0, 0.0, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
+            transform=ax.transAxes, fontsize=6.5, style="italic",
+            ha="right", va="bottom", color="#555555")
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
     fname = f"kaart_zon_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
