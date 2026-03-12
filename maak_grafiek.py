@@ -197,3 +197,138 @@ fname = "grafiek_trend.png"
 plt.savefig(fname, dpi=150, bbox_inches="tight")
 plt.close()
 print(f"Grafiek: {fname}")
+
+# ── WINDTREND ─────────────────────────────────────────────────────────────────
+wind_stations = [
+    ("06242", "Vlieland"),
+    ("06235", "De Kooy"),
+    ("06270", "Leeuwarden"),
+    ("06330", "Hoek v. Holland"),
+    ("06310", "Vlissingen"),
+]
+
+WIND_KLEUREN = {
+    "Vlieland":       "#E63946",
+    "De Kooy":        "#457B9D",
+    "Leeuwarden":     "#2A9D8F",
+    "Hoek v. Holland":"#F4A261",
+    "Vlissingen":     "#9B5DE5",
+}
+
+def ms_naar_bft(ms):
+    schaal = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7]
+    for i, grens in enumerate(schaal):
+        if ms < grens: return i
+    return 12
+
+print("MOSMIX ophalen (windtrend)...")
+wind_data = {}  # {naam: {date: {"ff": bft, "fx": bft}}}
+
+for code, naam in wind_stations:
+    print(f"  {naam} ({code})...")
+    root = download_kmz(code)
+    if root is None: continue
+    times  = get_times(root)
+    ff_raw = parse_values(root, 'FF')    # gem. wind m/s
+    fx_raw = parse_values(root, 'FX1')   # windstoten m/s
+
+    daily = {}
+    for i, dt_utc in enumerate(times):
+        dt_loc = dt_utc + UTC_OFFSET
+        d = dt_loc.date()
+        if d not in daily:
+            daily[d] = {"ff_vals": [], "fx_vals": []}
+        if i < len(ff_raw) and ff_raw[i] is not None: daily[d]["ff_vals"].append(ff_raw[i])
+        if i < len(fx_raw) and fx_raw[i] is not None: daily[d]["fx_vals"].append(fx_raw[i])
+
+    dag_data = {}
+    for d in sorted(daily.keys())[:11]:
+        ff_v = daily[d]["ff_vals"]
+        fx_v = daily[d]["fx_vals"]
+        ff_ms = max(ff_v) if ff_v else None   # hoogste dagwaarde
+        fx_ms = max(fx_v) if fx_v else None
+        if ff_ms is not None:
+            dag_data[d] = {
+                "ff": ms_naar_bft(ff_ms),
+                "fx": ms_naar_bft(fx_ms) if fx_ms is not None else None,
+                "ff_ms": round(ff_ms, 1),
+                "fx_ms": round(fx_ms, 1) if fx_ms is not None else None,
+            }
+    wind_data[naam] = dag_data
+
+alle_wind_dagen = sorted(set(d for sd in wind_data.values() for d in sd.keys()))[:10]
+
+fig2 = plt.figure(figsize=(12, 7))
+gs2 = gridspec.GridSpec(2, 1, figure=fig2, height_ratios=[0.07, 1], hspace=0.01)
+
+# Header
+ax_h2 = fig2.add_subplot(gs2[0])
+ax_h2.set_xlim(0,1); ax_h2.set_ylim(0,1); ax_h2.axis("off")
+ax_h2.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h2.transAxes,
+                facecolor="#003366",zorder=0,clip_on=False))
+ax_h2.text(0.012, 0.58, "Ed Aldus WM", fontsize=11, color="white",
+           weight="bold", va="center", transform=ax_h2.transAxes)
+ax_h2.text(0.012, 0.18, "MOS ECMWF/ICON", fontsize=7.5, color="#a8c8e8",
+           va="center", transform=ax_h2.transAxes)
+ax_h2.text(0.988, 0.62, "10-daagse windverwachting (Beaufort)",
+           fontsize=13, color="white", weight="bold",
+           ha="right", va="center", transform=ax_h2.transAxes)
+ax_h2.text(0.988, 0.18, f"DWD MOSMIX  ·  run: {now_str}",
+           fontsize=7, color="#a8c8e8", ha="right", va="center",
+           transform=ax_h2.transAxes)
+ax_h2.axhline(0, color="#4a90c4", linewidth=1.5)
+
+# Grafiek
+ax2 = fig2.add_subplot(gs2[1])
+ax2.set_facecolor("#f8f8f8")
+ax2.grid(axis="y", color="#dddddd", linewidth=0.7, zorder=0)
+ax2.grid(axis="x", color="#eeeeee", linewidth=0.5, zorder=0)
+
+x2 = np.arange(len(alle_wind_dagen))
+
+for naam, dag_data in wind_data.items():
+    kleur = WIND_KLEUREN.get(naam, "#333333")
+    ff_list = [dag_data[d]["ff"] if d in dag_data else np.nan for d in alle_wind_dagen]
+    fx_list = [dag_data[d]["fx"] if d in dag_data and dag_data[d]["fx"] is not None else np.nan for d in alle_wind_dagen]
+
+    ax2.plot(x2, ff_list, color=kleur, linewidth=2.0, marker="o",
+             markersize=4, zorder=5, label=naam)
+
+# Bft referentielijnen
+for bft, label in [(6,"Bft 6"),(7,"Bft 7"),(8,"Bft 8"),(9,"Bft 9")]:
+    ax2.axhline(bft, color="#cccccc", linewidth=0.6, linestyle=":", zorder=2)
+    ax2.text(len(alle_wind_dagen)-0.05, bft+0.05, label,
+             fontsize=6, color="#aaaaaa", va="bottom", ha="right")
+
+# Y-as: Bft ticks
+bft_max = 12
+ax2.set_ylim(0, bft_max + 0.5)
+ax2.set_yticks(range(0, bft_max + 1))
+ax2.set_yticklabels([f"Bft {i}" for i in range(0, bft_max + 1)], fontsize=7.5)
+
+dag_labels2 = [f"{nl_dagen[d.weekday()]}\n{d.day} {nl_maanden[d.month]}" for d in alle_wind_dagen]
+ax2.set_xticks(x2)
+ax2.set_xticklabels(dag_labels2, fontsize=8.5)
+
+ax2.set_ylabel("Windkracht (Bft)", fontsize=9, color="#444444")
+ax2.tick_params(axis="y", labelsize=8, colors="#444444")
+ax2.tick_params(axis="x", colors="#444444")
+for spine in ["top","right"]: ax2.spines[spine].set_visible(False)
+ax2.spines["left"].set_color("#cccccc")
+ax2.spines["bottom"].set_color("#cccccc")
+
+handles2, labels2 = ax2.get_legend_handles_labels()
+ax2.legend(handles2, labels2, fontsize=6.5, loc="upper left",
+           framealpha=0.9, edgecolor="#cccccc", ncol=2,
+           borderpad=0.5, labelspacing=0.3, handlelength=1.5)
+
+ax2.text(1.0, -0.10, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
+         transform=ax2.transAxes, fontsize=6.5, style="italic",
+         ha="right", va="bottom", color="#555555")
+
+plt.tight_layout(rect=[0, 0, 1, 1])
+fname2 = "grafiek_wind.png"
+plt.savefig(fname2, dpi=150, bbox_inches="tight")
+plt.close()
+print(f"Grafiek: {fname2}")
+
