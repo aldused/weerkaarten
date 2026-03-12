@@ -82,11 +82,12 @@
   /* Grid met 4 kolommen */
   .grid-4 {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 12px;
   }
-  @media (max-width: 900px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 500px) { .grid-4 { grid-template-columns: 1fr; } }
+  @media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 700px)  { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 400px)  { .grid-4 { grid-template-columns: 1fr; } }
 
   .kolom {
     background: white;
@@ -108,6 +109,7 @@
   .kolom-header.tn { background: #2471a3; color: white; }
   .kolom-header.rh { background: #1a7a4a; color: white; }
   .kolom-header.fx { background: #6c3483; color: white; }
+  .kolom-header.ff { background: #d35400; color: white; }
 
   table { width: 100%; border-collapse: collapse; }
   tr:nth-child(even) { background: #f7f9fc; }
@@ -135,6 +137,7 @@
   td.waarde.tn-kleur { color: #2471a3; }
   td.waarde.rh-kleur { color: #1a7a4a; }
   td.waarde.fx-kleur { color: #6c3483; }
+  td.waarde.ff-kleur { color: #d35400; }
   td.station { color: #2c3e50; font-size: 0.78rem; }
 
   /* Top 3 accentuering */
@@ -175,15 +178,36 @@ function fxKmh(ms) {
   return (ms * 3.6).toFixed(0);
 }
 
-function maakTabel(rijen, klasse, eenheid, transform) {
+const BFT_THRESH = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+function msToBft(ms) {
+  let b = 0;
+  for (let i = 0; i < BFT_THRESH.length; i++) {
+    if (ms >= BFT_THRESH[i]) b = i + 1; else break;
+  }
+  return b;
+}
+
+function ffWeergave(ms) {
+  const kmh = (ms * 3.6).toFixed(0);
+  const bft = msToBft(ms);
+  return `${kmh}<small style="font-size:0.65rem;margin-left:2px">km/h</small> <span style="color:#888;font-size:0.7rem">Bft ${bft}</span>`;
+}
+
+function maakTabel(rijen, klasse, eenheid, transform, htmlTransform) {
   let html = '<table>';
   rijen.forEach(([waarde, station], i) => {
     const rang = i + 1;
     const topKlasse = rang === 1 ? 'top1' : rang === 2 ? 'top2' : rang === 3 ? 'top3' : '';
-    const weergave = transform ? transform(waarde) : waarde.toFixed(1);
+    let celInhoud;
+    if (htmlTransform) {
+      celInhoud = htmlTransform(waarde);
+    } else {
+      const weergave = transform ? transform(waarde) : waarde.toFixed(1);
+      celInhoud = `${weergave}<small>${eenheid}</small>`;
+    }
     html += `<tr class="${topKlasse}">
       <td class="rang">${rang}</td>
-      <td class="waarde ${klasse}-kleur">${weergave}<small>${eenheid}</small></td>
+      <td class="waarde ${klasse}-kleur">${celInhoud}</td>
       <td class="station">${station}</td>
     </tr>`;
   });
@@ -225,6 +249,10 @@ function toonDag(datum) {
       <div class="kolom">
         <div class="kolom-header fx">💨 Windstoten</div>
         ${maakTabel(dag.fx, 'fx', ' km/h', v => fxKmh(v))}
+      </div>
+      <div class="kolom">
+        <div class="kolom-header ff">🌬 Wind gem.</div>
+        ${maakTabel(dag.ff || [], 'ff', '', null, v => ffWeergave(v))}
       </div>
     </div>
   `;
