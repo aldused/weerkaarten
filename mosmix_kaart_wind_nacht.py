@@ -89,10 +89,14 @@ def maak_header(fig, gs, dag_nl, day, now_str):
     ax = fig.add_subplot(gs[0])
     ax.set_xlim(0,1); ax.set_ylim(0,1); ax.axis("off")
     ax.add_patch(plt.Rectangle((0,0),1,1,transform=ax.transAxes,facecolor="#001a33",zorder=0,clip_on=False))
-    maand_nl = nl_maanden[day.month]
+    # Volgende dag berekenen
+    from datetime import timedelta
+    volgende = day + timedelta(days=1)
+    dag_volgende = nl_dagen[volgende.weekday()]
+    maand_nl = nl_maanden[volgende.month]
     ax.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",weight="bold",va="center",transform=ax.transAxes)
     ax.text(0.012,0.18,"MOS ECMWF/ICON",fontsize=7.5,color="#a8c8e8",va="center",transform=ax.transAxes)
-    ax.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}  (nacht)",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax.transAxes)
+    ax.text(0.988,0.62,f"Nacht naar {dag_volgende} {volgende.day} {maand_nl}",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax.transAxes)
     ax.text(0.988,0.18,f"DWD MOSMIX  \u00b7  run: {now_str}",fontsize=7,color="#a8c8e8",ha="right",va="center",transform=ax.transAxes)
     ax.axhline(0,color="#4a90c4",linewidth=1.5)
     return ax
