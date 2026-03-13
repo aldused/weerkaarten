@@ -21,6 +21,7 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
+    ("10500","Geilenkirchen"),
 ]
 
 coords = {
@@ -113,11 +114,26 @@ def maak_kaart_ax(fig, gs):
 
 def zon_cirkel_kleur(sd_uren):
     """Kleur van de cirkel op basis van zonuren."""
-    if sd_uren >= 10: return "#FFD700", "black"   # stralend geel
-    if sd_uren >= 7:  return "#FFC200", "black"   # geel
-    if sd_uren >= 4:  return "#FFB347", "black"   # oranje-geel
-    if sd_uren >= 2:  return "#C8C8C8", "black"   # grijs
-    return "#888888", "white"                      # donkergrijs
+    if sd_uren >= 10: return "#FFD700", "black"
+    if sd_uren >= 7:  return "#FFC200", "black"
+    if sd_uren >= 4:  return "#FFB347", "black"
+    if sd_uren >= 2:  return "#C8C8C8", "black"
+    return "#888888", "white"
+
+def max_daglengte(datum, lat_deg=52.0):
+    """Astronomische daglengte in uren voor gegeven datum en breedte."""
+    import math
+    dag_nr = datum.timetuple().tm_yday
+    decl = math.radians(-23.45 * math.cos(math.radians(360/365 * (dag_nr + 10))))
+    lat  = math.radians(lat_deg)
+    cos_ha = -math.tan(lat) * math.tan(decl)
+    cos_ha = max(-1.0, min(1.0, cos_ha))
+    return 2 * math.degrees(math.acos(cos_ha)) / 15.0
+
+def sd_uit_neff(neff_gem, datum):
+    """Schat zonuren uit gemiddelde bewolking% via lineaire benadering."""
+    dl = max_daglengte(datum)
+    return round(max(0.0, dl * (1.0 - neff_gem / 100.0) * 0.75), 1)
 
 # ── DATA OPHALEN ──────────────────────────────────────────────────────────────
 from matplotlib.gridspec import GridSpec
@@ -169,6 +185,9 @@ for code, name in stations:
             data_per_day[d] = {}
         sd_tot   = round(daily[d]["sd"], 1)
         neff_gem = round(sum(daily[d]["neff"]) / len(daily[d]["neff"]), 0) if daily[d]["neff"] else 0
+        # Fallback: schat zonuren uit Neff als geen SunD1 beschikbaar
+        if not daily[d]["heeft_sd"] and daily[d]["neff"]:
+            sd_tot = sd_uit_neff(neff_gem, d)
         data_per_day[d][name] = {"sd": sd_tot, "neff": neff_gem, "heeft_sd": daily[d]["heeft_sd"]}
 
 print(f"Data voor {len(data_per_day)} dagen")
@@ -192,8 +211,8 @@ for day, dag_data in data_per_day.items():
     for name, vals in dag_data.items():
         if name not in coords:
             continue
-        if not vals.get("heeft_sd"):
-            continue
+        if not vals.get("heeft_sd") and vals.get("neff", 0) == 0:
+            continue  # geen data beschikbaar
         lon, lat = coords[name]
         sd   = vals["sd"]
         neff = vals["neff"]
@@ -227,10 +246,10 @@ for day, dag_data in data_per_day.items():
         leg.scatter([0.12], [y], s=120, c=kleur, edgecolors="#888888",
                     linewidths=0.4, zorder=1, transform=leg.transAxes)
         leg.text(0.25, y, label, fontsize=4.2, va="center", transform=leg.transAxes)
-    leg.text(0.5, 0.04, "getal = zonuren  klein = bewolking%",
+    leg.text(0.5, 0.04, "getal = zonuren (~schatting via bewolking%)",
              fontsize=3.5, ha="center", va="center", transform=leg.transAxes)
 
-    ax.text(1.0, 0.0, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
+    ax.text(1.0, 0.0, f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes, fontsize=6.5, style="italic",
             ha="right", va="bottom", color="#555555")
 

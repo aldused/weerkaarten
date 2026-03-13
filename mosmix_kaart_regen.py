@@ -21,6 +21,7 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
+    ("10500","Geilenkirchen"),
 ]
 
 coords = {
@@ -167,7 +168,7 @@ for day, dag_data in data_per_day.items():
                 color=rr_tekstkleur(rr_nacht), zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.10",facecolor=rr_kleur(rr_nacht),edgecolor="#6baed6",linewidth=0.4,zorder=7))
 
-    ax.text(1.0,0.0,f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
+    ax.text(1.0,0.0,f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
 
     # Legenda
