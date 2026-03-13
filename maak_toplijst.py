@@ -248,11 +248,11 @@ def haal_dag(dag: date) -> dict:
 
         time.sleep(0.05)
 
-    res["max"] = sorted(res["max"], reverse=True)[:20]
-    res["min"] = sorted(res["min"])[:20]
-    res["rr"]  = sorted(res["rr"],  reverse=True)[:20]
-    res["fx"]  = sorted(res["fx"],  reverse=True)[:20]
-    res["ff"]  = sorted(res["ff"],  key=lambda x: x[0], reverse=True)[:20]
+    res["max"] = sorted(res["max"], reverse=True)
+    res["min"] = sorted(res["min"])
+    res["rr"]  = sorted(res["rr"],  reverse=True)
+    res["fx"]  = sorted(res["fx"],  reverse=True)
+    res["ff"]  = sorted(res["ff"],  key=lambda x: x[0], reverse=True)
     res["update"] = datetime.now().strftime("%d %b %Y %H:%M")
 
     print(f"    TX top3: {res['max'][:3]}")
