@@ -273,6 +273,11 @@ if os.path.exists(JSON_PATH):
 else:
     resultaten = {}
 
+# Zet alle dagen vóór vandaag op definitief
+for key, dag_data in resultaten.items():
+    if key < vandaag.isoformat() and dag_data.get("status") == "voorlopig":
+        dag_data["status"] = "definitief"
+
 # Bepaal alle dagen van HISTORIE_START t/m vandaag
 alle_dagen = []
 d = HISTORIE_START
@@ -280,13 +285,20 @@ while d <= vandaag:
     alle_dagen.append(d)
     d += timedelta(days=1)
 
+# Vandaag altijd eerst verwerken
+resultaten[vandaag.isoformat()] = haal_dag(vandaag)
+
+# Dan historische dagen: 1 ontbrekende dag per run
 for dag in alle_dagen:
+    if dag == vandaag:
+        continue
     key = dag.isoformat()
-    # Sla over als al aanwezig én niet vandaag
-    if key in resultaten and dag != vandaag:
+    if key in resultaten:
         print(f"  {dag}: al in cache, overgeslagen")
         continue
+    # Eerste ontbrekende dag ophalen en stoppen
     resultaten[key] = haal_dag(dag)
+    break
 
 # Sorteer op datum
 resultaten = dict(sorted(resultaten.items()))

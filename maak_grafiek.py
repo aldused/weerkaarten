@@ -9,11 +9,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import matplotlib.dates as mdates
 import numpy as np
 
 # ── STATIONS ──────────────────────────────────────────────────────────────────
-stations = [
+stations_temp = [
     ("06260", "De Bilt"),
     ("06235", "De Kooy"),
     ("06280", "Eelde"),
@@ -21,6 +20,15 @@ stations = [
     ("06380", "Beek"),
     ("06344", "Rotterdam"),
     ("06330", "Hoek v. Holland"),
+    ("06290", "Twenthe"),
+]
+
+stations_wind = [
+    ("06242", "Vlieland"),
+    ("06235", "De Kooy"),
+    ("06270", "Leeuwarden"),
+    ("06330", "Hoek v. Holland"),
+    ("06310", "Vlissingen"),
 ]
 
 KLEUREN = {
@@ -31,6 +39,9 @@ KLEUREN = {
     "Beek":           "#F4A261",
     "Rotterdam":      "#9B5DE5",
     "Hoek v. Holland":"#06D6A0",
+    "Twenthe":        "#FF6B6B",
+    "Vlieland":       "#E63946",
+    "Leeuwarden":     "#2A9D8F",
 }
 
 nl_dagen   = ["Ma","Di","Wo","Do","Vr","Za","Zo"]
@@ -79,256 +90,177 @@ def parse_values(root, element_name):
                 return res
     return []
 
-# ── DATA OPHALEN ──────────────────────────────────────────────────────────────
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-print("MOSMIX ophalen (trend)...")
-
-UTC_OFFSET = timedelta(hours=1)
-alle_data = {}  # {naam: {date: {"tx": float, "tn": float}}}
-
-for code, naam in stations:
-    print(f"  {naam} ({code})...")
-    root = download_kmz(code)
-    if root is None: continue
-    times  = get_times(root)
-    tx_raw = parse_values(root, 'TX')
-    tn_raw = parse_values(root, 'TN')
-    ttt_raw = parse_values(root, 'TTT')  # uurtemperatuur als fallback
-
-    daily = {}
-    for i, dt_utc in enumerate(times):
-        dt_loc = dt_utc + UTC_OFFSET
-        d = dt_loc.date()
-        if d not in daily:
-            daily[d] = {"tx_vals": [], "tn_vals": [], "ttt_vals": []}
-        if i < len(tx_raw)  and tx_raw[i]  is not None: daily[d]["tx_vals"].append(tx_raw[i] - 273.15)
-        if i < len(tn_raw)  and tn_raw[i]  is not None: daily[d]["tn_vals"].append(tn_raw[i] - 273.15)
-        if i < len(ttt_raw) and ttt_raw[i] is not None: daily[d]["ttt_vals"].append(ttt_raw[i] - 273.15)
-
-    dag_data = {}
-    for d in sorted(daily.keys())[:11]:
-        tx_v = daily[d]["tx_vals"]
-        tn_v = daily[d]["tn_vals"]
-        ttt_v = daily[d]["ttt_vals"]
-        tx = max(tx_v) if tx_v else (max(ttt_v) if ttt_v else None)
-        tn = min(tn_v) if tn_v else (min(ttt_v) if ttt_v else None)
-        if tx is not None and tn is not None:
-            dag_data[d] = {"tx": round(tx, 1), "tn": round(tn, 1)}
-
-    alle_data[naam] = dag_data
-
-# ── GRAFIEK ───────────────────────────────────────────────────────────────────
-# Gemeenschappelijke datums (aanwezig in minstens 1 station)
-alle_dagen = sorted(set(d for sd in alle_data.values() for d in sd.keys()))[:10]
-
-now_str = datetime.now().strftime("%d %b %Y  %H:%M")
-now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
-
-fig = plt.figure(figsize=(12, 7))
-gs = gridspec.GridSpec(2, 1, figure=fig, height_ratios=[0.07, 1], hspace=0.01)
-
-# ── Header ──
-ax_h = fig.add_subplot(gs[0])
-ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
-ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,
-               facecolor="#003366",zorder=0,clip_on=False))
-ax_h.text(0.012, 0.58, "Ed Aldus WM", fontsize=11, color="white",
-          weight="bold", va="center", transform=ax_h.transAxes)
-ax_h.text(0.012, 0.18, "MOS ECMWF/ICON", fontsize=7.5, color="#a8c8e8",
-          va="center", transform=ax_h.transAxes)
-ax_h.text(0.988, 0.62, "10-daagse temperatuurverwachting",
-          fontsize=13, color="white", weight="bold",
-          ha="right", va="center", transform=ax_h.transAxes)
-ax_h.text(0.988, 0.18, f"DWD MOSMIX  ·  run: {now_str}",
-          fontsize=7, color="#a8c8e8", ha="right", va="center",
-          transform=ax_h.transAxes)
-ax_h.axhline(0, color="#4a90c4", linewidth=1.5)
-
-# ── Grafiekpaneel ──
-ax = fig.add_subplot(gs[1])
-ax.set_facecolor("#f8f8f8")
-ax.grid(axis="y", color="#dddddd", linewidth=0.7, zorder=0)
-ax.grid(axis="x", color="#eeeeee", linewidth=0.5, zorder=0)
-
-x = np.arange(len(alle_dagen))
-
-for naam, dag_data in alle_data.items():
-    kleur = KLEUREN.get(naam, "#333333")
-    tx_list = [dag_data[d]["tx"] if d in dag_data else np.nan for d in alle_dagen]
-    tn_list = [dag_data[d]["tn"] if d in dag_data else np.nan for d in alle_dagen]
-
-    ax.plot(x, tx_list, color=kleur, linewidth=2.0, marker="o",
-            markersize=4, zorder=5, label=naam)
-    ax.plot(x, tn_list, color=kleur, linewidth=1.4, marker="o",
-            markersize=3, linestyle="--", zorder=4, alpha=0.85)
-
-# Nullijn
-ax.axhline(0, color="#888888", linewidth=0.8, linestyle=":", zorder=3)
-
-# X-as labels: dag + datum
-dag_labels = []
-for d in alle_dagen:
-    dag_labels.append(f"{nl_dagen[d.weekday()]}\n{d.day} {nl_maanden[d.month]}")
-ax.set_xticks(x)
-ax.set_xticklabels(dag_labels, fontsize=8.5)
-
-ax.set_ylabel("Temperatuur (°C)", fontsize=9, color="#444444")
-ax.tick_params(axis="y", labelsize=8.5, colors="#444444")
-ax.tick_params(axis="x", colors="#444444")
-for spine in ["top","right"]: ax.spines[spine].set_visible(False)
-ax.spines["left"].set_color("#cccccc")
-ax.spines["bottom"].set_color("#cccccc")
-
-# Legenda (TX = vol, TN = gestippeld uitleg)
-handles, labels = ax.get_legend_handles_labels()
-leg = ax.legend(handles, labels, fontsize=6.5, loc="lower right",
-                framealpha=0.9, edgecolor="#cccccc", ncol=2,
-                borderpad=0.5, labelspacing=0.3, handlelength=1.5)
-# Extra uitleg TX/TN
-ax.text(0.01, 0.98, "— TX (max)   - - TN (min)",
-        transform=ax.transAxes, fontsize=7, va="top", color="#555555")
-
-ax.text(1.0, -0.10, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
-        transform=ax.transAxes, fontsize=6.5, style="italic",
-        ha="right", va="bottom", color="#555555")
-
-plt.tight_layout(rect=[0, 0, 1, 1])
-fname = "grafiek_trend.png"
-plt.savefig(fname, dpi=150, bbox_inches="tight")
-plt.close()
-print(f"Grafiek: {fname}")
-
-# ── WINDTREND ─────────────────────────────────────────────────────────────────
-wind_stations = [
-    ("06242", "Vlieland"),
-    ("06235", "De Kooy"),
-    ("06270", "Leeuwarden"),
-    ("06330", "Hoek v. Holland"),
-    ("06310", "Vlissingen"),
-]
-
-WIND_KLEUREN = {
-    "Vlieland":       "#E63946",
-    "De Kooy":        "#457B9D",
-    "Leeuwarden":     "#2A9D8F",
-    "Hoek v. Holland":"#F4A261",
-    "Vlissingen":     "#9B5DE5",
-}
-
 def ms_naar_bft(ms):
     schaal = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7]
     for i, grens in enumerate(schaal):
         if ms < grens: return i
     return 12
 
-print("MOSMIX ophalen (windtrend)...")
-wind_data = {}  # {naam: {date: {"ff": bft, "fx": bft}}}
+def maak_panel(ax, ylabel):
+    ax.set_facecolor("#f8f8f8")
+    ax.grid(axis="y", color="#dddddd", linewidth=0.7, zorder=0)
+    ax.grid(axis="x", color="#eeeeee", linewidth=0.5, zorder=0)
+    ax.set_ylabel(ylabel, fontsize=8, color="#444444")
+    ax.tick_params(axis="y", labelsize=7.5, colors="#444444")
+    ax.tick_params(axis="x", colors="#444444")
+    for spine in ["top","right"]: ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color("#cccccc")
+    ax.spines["bottom"].set_color("#cccccc")
 
-for code, naam in wind_stations:
+# ── DATA OPHALEN ──────────────────────────────────────────────────────────────
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+print("MOSMIX ophalen (trend)...")
+
+UTC_OFFSET = timedelta(hours=1)
+
+temp_data   = {}
+rr_data     = {}
+cache_root  = {}
+
+for code, naam in stations_temp:
     print(f"  {naam} ({code})...")
     root = download_kmz(code)
     if root is None: continue
-    times  = get_times(root)
-    ff_raw = parse_values(root, 'FF')    # gem. wind m/s
-    fx_raw = parse_values(root, 'FX1')   # windstoten m/s
+    cache_root[code] = root
+    times   = get_times(root)
+    tx_raw  = parse_values(root, 'TX')
+    tn_raw  = parse_values(root, 'TN')
+    ttt_raw = parse_values(root, 'TTT')
+    rr_raw  = parse_values(root, 'RR1c')
 
     daily = {}
     for i, dt_utc in enumerate(times):
         dt_loc = dt_utc + UTC_OFFSET
         d = dt_loc.date()
         if d not in daily:
-            daily[d] = {"ff_vals": [], "fx_vals": []}
-        if i < len(ff_raw) and ff_raw[i] is not None: daily[d]["ff_vals"].append(ff_raw[i])
-        if i < len(fx_raw) and fx_raw[i] is not None: daily[d]["fx_vals"].append(fx_raw[i])
+            daily[d] = {"tx":[], "tn":[], "ttt":[], "rr":[]}
+        if i < len(tx_raw)  and tx_raw[i]  is not None: daily[d]["tx"].append(tx_raw[i] - 273.15)
+        if i < len(tn_raw)  and tn_raw[i]  is not None: daily[d]["tn"].append(tn_raw[i] - 273.15)
+        if i < len(ttt_raw) and ttt_raw[i] is not None: daily[d]["ttt"].append(ttt_raw[i] - 273.15)
+        if i < len(rr_raw)  and rr_raw[i]  is not None and rr_raw[i] >= 0: daily[d]["rr"].append(rr_raw[i])
 
-    dag_data = {}
+    td = {}; rd = {}; wd = {}
     for d in sorted(daily.keys())[:11]:
-        ff_v = daily[d]["ff_vals"]
-        fx_v = daily[d]["fx_vals"]
-        ff_ms = max(ff_v) if ff_v else None   # hoogste dagwaarde
-        fx_ms = max(fx_v) if fx_v else None
-        if ff_ms is not None:
-            dag_data[d] = {
-                "ff": ms_naar_bft(ff_ms),
-                "fx": ms_naar_bft(fx_ms) if fx_ms is not None else None,
-                "ff_ms": round(ff_ms, 1),
-                "fx_ms": round(fx_ms, 1) if fx_ms is not None else None,
-            }
-    wind_data[naam] = dag_data
+        tx_v = daily[d]["tx"]; tn_v = daily[d]["tn"]; ttt_v = daily[d]["ttt"]
+        tx = max(tx_v) if tx_v else (max(ttt_v) if ttt_v else None)
+        tn = min(tn_v) if tn_v else (min(ttt_v) if ttt_v else None)
+        if tx is not None:
+            td[d] = {"tx": round(tx,1), "tn": round(tn,1) if tn is not None else None}
+        rd[d] = round(sum(daily[d]["rr"]), 1) if daily[d]["rr"] else 0.0
 
-alle_wind_dagen = sorted(set(d for sd in wind_data.values() for d in sd.keys()))[:10]
+    temp_data[naam]   = td
+    rr_data[naam]     = rd
 
-fig2 = plt.figure(figsize=(12, 7))
-gs2 = gridspec.GridSpec(2, 1, figure=fig2, height_ratios=[0.07, 1], hspace=0.01)
+# Wind (5 kuststations)
+wind_data = {}
+for code, naam in stations_wind:
+    print(f"  Wind {naam} ({code})...")
+    root = cache_root.get(code) or download_kmz(code)
+    if root is None: continue
+    times  = get_times(root)
+    ff_raw = parse_values(root, 'FF')
+
+    daily = {}
+    for i, dt_utc in enumerate(times):
+        dt_loc = dt_utc + UTC_OFFSET
+        d = dt_loc.date()
+        if d not in daily: daily[d] = []
+        if i < len(ff_raw) and ff_raw[i] is not None: daily[d].append(ff_raw[i])
+
+    wd = {}
+    for d in sorted(daily.keys())[:11]:
+        ff_max = max(daily[d]) if daily[d] else None
+        if ff_max is not None: wd[d] = ms_naar_bft(ff_max)
+    wind_data[naam] = wd
+
+# Gemeenschappelijke dagen
+alle_dagen = sorted(set(d for sd in temp_data.values() for d in sd.keys()))[:10]
+x = np.arange(len(alle_dagen))
+dag_labels = [f"{nl_dagen[d.weekday()]}\n{d.day} {nl_maanden[d.month]}" for d in alle_dagen]
+
+now_str  = datetime.now().strftime("%d %b %Y  %H:%M")
+now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
+
+# ── FIGUUR: 4 panelen ─────────────────────────────────────────────────────────
+fig = plt.figure(figsize=(12, 22))
+gs = gridspec.GridSpec(4, 1, figure=fig,
+                       height_ratios=[0.12, 1, 1, 1],
+                       hspace=0.4)
 
 # Header
-ax_h2 = fig2.add_subplot(gs2[0])
-ax_h2.set_xlim(0,1); ax_h2.set_ylim(0,1); ax_h2.axis("off")
-ax_h2.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h2.transAxes,
-                facecolor="#003366",zorder=0,clip_on=False))
-ax_h2.text(0.012, 0.58, "Ed Aldus WM", fontsize=11, color="white",
-           weight="bold", va="center", transform=ax_h2.transAxes)
-ax_h2.text(0.012, 0.18, "MOS ECMWF/ICON", fontsize=7.5, color="#a8c8e8",
-           va="center", transform=ax_h2.transAxes)
-ax_h2.text(0.988, 0.62, "10-daagse windverwachting (Beaufort)",
-           fontsize=13, color="white", weight="bold",
-           ha="right", va="center", transform=ax_h2.transAxes)
-ax_h2.text(0.988, 0.18, f"DWD MOSMIX  ·  run: {now_str}",
-           fontsize=7, color="#a8c8e8", ha="right", va="center",
-           transform=ax_h2.transAxes)
-ax_h2.axhline(0, color="#4a90c4", linewidth=1.5)
+ax_h = fig.add_subplot(gs[0])
+ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
+ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,
+               facecolor="#003366",zorder=0,clip_on=False))
+ax_h.text(0.012, 0.65, "Ed Aldus WM", fontsize=11, color="white",
+          weight="bold", va="center", transform=ax_h.transAxes)
+ax_h.text(0.012, 0.25, "MOS ECMWF/ICON", fontsize=7.5, color="#a8c8e8",
+          va="center", transform=ax_h.transAxes)
+ax_h.text(0.988, 0.65, "10-daagse verwachting",
+          fontsize=13, color="white", weight="bold",
+          ha="right", va="center", transform=ax_h.transAxes)
+ax_h.text(0.988, 0.25, f"DWD MOSMIX  ·  run: {now_str}",
+          fontsize=7, color="#a8c8e8", ha="right", va="center",
+          transform=ax_h.transAxes)
+ax_h.axhline(0, color="#4a90c4", linewidth=1.5)
 
-# Grafiek
-ax2 = fig2.add_subplot(gs2[1])
-ax2.set_facecolor("#f8f8f8")
-ax2.grid(axis="y", color="#dddddd", linewidth=0.7, zorder=0)
-ax2.grid(axis="x", color="#eeeeee", linewidth=0.5, zorder=0)
+# Paneel 1: Temperatuur
+ax1 = fig.add_subplot(gs[1])
+maak_panel(ax1, "Temperatuur (°C)")
+ax1.set_title("Temperatuur", fontsize=9, color="#333333", loc="left", pad=4)
+for naam, dag_data in temp_data.items():
+    kleur = KLEUREN.get(naam, "#333333")
+    tx_list = [dag_data[d]["tx"] if d in dag_data else np.nan for d in alle_dagen]
+    tn_list = [dag_data[d]["tn"] if d in dag_data and dag_data[d]["tn"] is not None else np.nan for d in alle_dagen]
+    ax1.plot(x, tx_list, color=kleur, linewidth=2.0, marker="o", markersize=4, zorder=5, label=naam)
+    ax1.plot(x, tn_list, color=kleur, linewidth=1.4, marker="o", markersize=3, linestyle="--", zorder=4, alpha=0.85)
+ax1.axhline(0, color="#888888", linewidth=0.8, linestyle=":", zorder=3)
+ax1.set_xticks(x); ax1.set_xticklabels(dag_labels, fontsize=8)
+handles, labels = ax1.get_legend_handles_labels()
+ax1.legend(handles, labels, fontsize=6.5, loc="lower right", framealpha=0.9,
+           edgecolor="#cccccc", ncol=2, borderpad=0.5, labelspacing=0.3, handlelength=1.5)
+ax1.text(0.01, 0.98, "— TX (max)   - - TN (min)", transform=ax1.transAxes,
+         fontsize=7, va="top", color="#555555")
 
-x2 = np.arange(len(alle_wind_dagen))
-
-for naam, dag_data in wind_data.items():
-    kleur = WIND_KLEUREN.get(naam, "#333333")
-    ff_list = [dag_data[d]["ff"] if d in dag_data else np.nan for d in alle_wind_dagen]
-    fx_list = [dag_data[d]["fx"] if d in dag_data and dag_data[d]["fx"] is not None else np.nan for d in alle_wind_dagen]
-
-    ax2.plot(x2, ff_list, color=kleur, linewidth=2.0, marker="o",
-             markersize=4, zorder=5, label=naam)
-
-# Bft referentielijnen
-for bft, label in [(6,"Bft 6"),(7,"Bft 7"),(8,"Bft 8"),(9,"Bft 9")]:
-    ax2.axhline(bft, color="#cccccc", linewidth=0.6, linestyle=":", zorder=2)
-    ax2.text(len(alle_wind_dagen)-0.05, bft+0.05, label,
-             fontsize=6, color="#aaaaaa", va="bottom", ha="right")
-
-# Y-as: Bft ticks
-bft_max = 12
-ax2.set_ylim(0, bft_max + 0.5)
-ax2.set_yticks(range(0, bft_max + 1))
-ax2.set_yticklabels([f"Bft {i}" for i in range(0, bft_max + 1)], fontsize=7.5)
-
-dag_labels2 = [f"{nl_dagen[d.weekday()]}\n{d.day} {nl_maanden[d.month]}" for d in alle_wind_dagen]
-ax2.set_xticks(x2)
-ax2.set_xticklabels(dag_labels2, fontsize=8.5)
-
-ax2.set_ylabel("Windkracht (Bft)", fontsize=9, color="#444444")
-ax2.tick_params(axis="y", labelsize=8, colors="#444444")
-ax2.tick_params(axis="x", colors="#444444")
-for spine in ["top","right"]: ax2.spines[spine].set_visible(False)
-ax2.spines["left"].set_color("#cccccc")
-ax2.spines["bottom"].set_color("#cccccc")
-
+# Paneel 2: Neerslag
+ax2 = fig.add_subplot(gs[2])
+maak_panel(ax2, "Neerslag (mm)")
+ax2.set_title("Neerslag (dagsom)", fontsize=9, color="#333333", loc="left", pad=4)
+n = len(stations_temp)
+breedte = 0.10
+offsets = np.linspace(-(n-1)*breedte/2, (n-1)*breedte/2, n)
+for idx, (naam, rd) in enumerate(rr_data.items()):
+    kleur = KLEUREN.get(naam, "#333333")
+    rr_list = [rd.get(d, 0.0) for d in alle_dagen]
+    ax2.bar(x + offsets[idx], rr_list, width=breedte, color=kleur, alpha=0.8, zorder=5, label=naam)
+ax2.set_xticks(x); ax2.set_xticklabels(dag_labels, fontsize=8)
+ax2.set_ylim(bottom=0)
 handles2, labels2 = ax2.get_legend_handles_labels()
-ax2.legend(handles2, labels2, fontsize=6.5, loc="upper left",
-           framealpha=0.9, edgecolor="#cccccc", ncol=2,
-           borderpad=0.5, labelspacing=0.3, handlelength=1.5)
+ax2.legend(handles2, labels2, fontsize=6.5, loc="upper right", framealpha=0.9,
+           edgecolor="#cccccc", ncol=2, borderpad=0.5, labelspacing=0.3)
 
-ax2.text(1.0, -0.10, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
-         transform=ax2.transAxes, fontsize=6.5, style="italic",
+# Paneel 3: Wind
+ax3 = fig.add_subplot(gs[3])
+maak_panel(ax3, "Windkracht (Bft)")
+ax3.set_title("Wind (max Bft, kuststations)", fontsize=9, color="#333333", loc="left", pad=4)
+for naam, wd in wind_data.items():
+    kleur = KLEUREN.get(naam, "#333333")
+    ff_list = [wd.get(d, np.nan) for d in alle_dagen]
+    ax3.plot(x, ff_list, color=kleur, linewidth=2.0, marker="o", markersize=4, zorder=5, label=naam)
+for bft in [6, 7, 8]:
+    ax3.axhline(bft, color="#cccccc", linewidth=0.6, linestyle=":", zorder=2)
+    ax3.text(len(alle_dagen)-0.1, bft+0.05, f"Bft {bft}", fontsize=6, color="#aaaaaa", va="bottom", ha="right")
+ax3.set_ylim(0, 12.5)
+ax3.set_yticks(range(0, 13))
+ax3.set_yticklabels([f"Bft {i}" for i in range(0, 13)], fontsize=7)
+ax3.set_xticks(x); ax3.set_xticklabels(dag_labels, fontsize=8)
+handles3, labels3 = ax3.get_legend_handles_labels()
+ax3.legend(handles3, labels3, fontsize=6.5, loc="upper left", framealpha=0.9,
+           edgecolor="#cccccc", ncol=2, borderpad=0.5, labelspacing=0.3, handlelength=1.5)
+ax3.text(1.0, -0.10, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
+         transform=ax3.transAxes, fontsize=6.5, style="italic",
          ha="right", va="bottom", color="#555555")
 
-plt.tight_layout(rect=[0, 0, 1, 1])
-fname2 = "grafiek_wind.png"
-plt.savefig(fname2, dpi=150, bbox_inches="tight")
+plt.savefig("grafiek_trend.png", dpi=150, bbox_inches="tight")
 plt.close()
-print(f"Grafiek: {fname2}")
-
+print("Grafiek opgeslagen: grafiek_trend.png")
