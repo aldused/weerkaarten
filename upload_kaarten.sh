@@ -9,12 +9,13 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_fixed.py" || { echo "FOUT: mosmix_kaart_fixed.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_zon.py"   || { echo "FOUT: mosmix_kaart_zon.py";   exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_wind.py"  || { echo "FOUT: mosmix_kaart_wind.py";  exit 1; }
+/usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_mist.py" || { echo "FOUT: mosmix_kaart_mist.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_regen.py" || { echo "FOUT: mosmix_kaart_regen.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_grafiek.py"       || { echo "FOUT: maak_grafiek.py";       exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_toplijst.py"      || { echo "FOUT: maak_toplijst.py";      exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_index.py"         || { echo "FOUT: maak_index.py";         exit 1; }
 
-git add kaart_*.png kaart_zon_*.png kaart_wind_*.png kaart_regen_*.png \
+git add kaart_*.png kaart_zon_*.png kaart_wind_*.png kaart_regen_*.png kaart_mist_*.png \
         index.json index.html toplijst.html toplijst.json grafiek_debilt.html grafiek_trend.png grafiek_wind.png
 
 if git diff --cached --quiet; then
