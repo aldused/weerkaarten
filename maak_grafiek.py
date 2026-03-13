@@ -212,8 +212,32 @@ for naam, dag_data in temp_data.items():
     kleur = KLEUREN.get(naam, "#333333")
     tx_list = [dag_data[d]["tx"] if d in dag_data else np.nan for d in alle_dagen]
     tn_list = [dag_data[d]["tn"] if d in dag_data and dag_data[d]["tn"] is not None else np.nan for d in alle_dagen]
-    ax1.plot(x, tx_list, color=kleur, linewidth=2.0, marker="o", markersize=4, zorder=5, label=naam)
-    ax1.plot(x, tn_list, color=kleur, linewidth=1.4, marker="o", markersize=3, linestyle="--", zorder=4, alpha=0.85)
+
+    # Vloeiende lijn via cubic hermite interpolatie (geen scipy nodig)
+    def smooth(y_list):
+        xi = np.array([i for i, v in enumerate(y_list) if not np.isnan(v)], dtype=float)
+        yi = np.array([v for v in y_list if not np.isnan(v)], dtype=float)
+        if len(xi) < 3: return xi, yi
+        x_smooth = np.linspace(xi[0], xi[-1], 300)
+        # Pchip-achtig via np.interp + Catmull-Rom
+        yi_interp = np.interp(x_smooth, xi, yi)
+        # Gaussian smooth voor ronding
+        from numpy import exp
+        sigma = 12
+        kernel = exp(-0.5 * (np.arange(-30, 31) / sigma)**2)
+        kernel /= kernel.sum()
+        padded = np.pad(yi_interp, 30, mode='edge')
+        return x_smooth, np.convolve(padded, kernel, mode='valid')
+
+    xs, tx_smooth = smooth(tx_list)
+    _, tn_smooth  = smooth(tn_list)
+    ax1.plot(xs, tx_smooth, color=kleur, linewidth=2.0, zorder=5, label=naam)
+    ax1.plot(xs, tn_smooth, color=kleur, linewidth=1.4, linestyle="--", zorder=4, alpha=0.85)
+    # Datapunten als kleine stippen
+    xi_pts = [i for i, v in enumerate(tx_list) if not np.isnan(v)]
+    ax1.scatter(xi_pts, [tx_list[i] for i in xi_pts], color=kleur, s=18, zorder=6)
+    xi_pts2 = [i for i, v in enumerate(tn_list) if not np.isnan(v)]
+    ax1.scatter(xi_pts2, [tn_list[i] for i in xi_pts2], color=kleur, s=10, zorder=6, alpha=0.85)
 ax1.axhline(0, color="#888888", linewidth=0.8, linestyle=":", zorder=3)
 ax1.set_xticks(x); ax1.set_xticklabels(dag_labels, fontsize=8)
 handles, labels = ax1.get_legend_handles_labels()
@@ -246,7 +270,23 @@ ax3.set_title("Wind (max Bft, kuststations)", fontsize=9, color="#333333", loc="
 for naam, wd in wind_data.items():
     kleur = KLEUREN.get(naam, "#333333")
     ff_list = [wd.get(d, np.nan) for d in alle_dagen]
-    ax3.plot(x, ff_list, color=kleur, linewidth=2.0, marker="o", markersize=4, zorder=5, label=naam)
+
+    def smooth_wind(y_list):
+        xi = np.array([i for i, v in enumerate(y_list) if not np.isnan(v)], dtype=float)
+        yi = np.array([v for v in y_list if not np.isnan(v)], dtype=float)
+        if len(xi) < 3: return xi, yi
+        x_smooth = np.linspace(xi[0], xi[-1], 300)
+        yi_interp = np.interp(x_smooth, xi, yi)
+        sigma = 12
+        kernel = np.exp(-0.5 * (np.arange(-30, 31) / sigma)**2)
+        kernel /= kernel.sum()
+        padded = np.pad(yi_interp, 30, mode='edge')
+        return x_smooth, np.convolve(padded, kernel, mode='valid')
+
+    xs, ff_smooth = smooth_wind(ff_list)
+    ax3.plot(xs, ff_smooth, color=kleur, linewidth=2.0, zorder=5, label=naam)
+    xi_pts = [i for i, v in enumerate(ff_list) if not np.isnan(v)]
+    ax3.scatter(xi_pts, [ff_list[i] for i in xi_pts], color=kleur, s=18, zorder=6)
 for bft in [6, 7, 8]:
     ax3.axhline(bft, color="#cccccc", linewidth=0.6, linestyle=":", zorder=2)
     ax3.text(len(alle_dagen)-0.1, bft+0.05, f"Bft {bft}", fontsize=6, color="#aaaaaa", va="bottom", ha="right")
