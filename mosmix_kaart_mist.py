@@ -21,7 +21,7 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
-    ("10500","Geilenkirchen"),("06458","Beauvechain"),("06478","Bierset"),
+    ("10500","Geilenkirchen"),
 ]
 
 coords = {
@@ -36,7 +36,6 @@ coords = {
     "Valkenburg":(4.417,52.270),"Kleve":(6.140,51.790),"Weeze":(6.141,51.603),
     "Bocholt":(6.617,51.838),"Nettetal":(6.276,51.317),"Geilenkirchen":(6.030,50.580),
     "Borkum":(6.749,53.586),"Volkel":(5.707,51.657),
-    "Beauvechain":(4.460,50.450),"Bierset":(5.270,50.390),
 }
 
 EXTENT = [3.3, 7.4, 50.45, 53.8]

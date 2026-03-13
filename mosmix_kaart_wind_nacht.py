@@ -21,7 +21,6 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
-    ("10500","Geilenkirchen"),("06458","Beauvechain"),("06478","Bierset"),
 ]
 
 coords = {
@@ -34,9 +33,8 @@ coords = {
     "Antwerpen":(4.405,51.219),"Brussel":(4.484,50.901),"Kleine Brogel":(5.470,51.168),
     "Dollart":(7.220,53.230),"Wielen":(6.450,52.320),"IJsselmeer":(5.280,52.750),
     "Valkenburg":(4.417,52.270),"Kleve":(6.140,51.790),"Weeze":(6.141,51.603),
-    "Bocholt":(6.617,51.838),"Nettetal":(6.276,51.317),"Geilenkirchen":(6.030,50.580),
+    "Bocholt":(6.617,51.838),"Nettetal":(6.276,51.317),"Geilenkirchen":(6.043,50.960),
     "Borkum":(6.749,53.586),"Volkel":(5.707,51.657),
-    "Beauvechain":(4.460,50.450),"Bierset":(5.270,50.390),
     "IJmuiden":(3.31,52.31),"E5405":(5.00,54.50),
 }
 

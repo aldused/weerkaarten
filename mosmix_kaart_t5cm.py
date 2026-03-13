@@ -21,6 +21,7 @@ stations = [
     ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
     ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
     ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
+    ("10500","Geilenkirchen"),
 ]
 
 coords = {
@@ -33,9 +34,8 @@ coords = {
     "Antwerpen":(4.405,51.219),"Brussel":(4.484,50.901),"Kleine Brogel":(5.470,51.168),
     "Dollart":(7.220,53.230),"Wielen":(6.450,52.320),"IJsselmeer":(5.280,52.750),
     "Valkenburg":(4.417,52.270),"Kleve":(6.140,51.790),"Weeze":(6.141,51.603),
-    "Bocholt":(6.617,51.838),"Nettetal":(6.276,51.317),"Geilenkirchen":(6.043,50.960),
+    "Bocholt":(6.617,51.838),"Nettetal":(6.276,51.317),"Geilenkirchen":(6.030,50.580),
     "Borkum":(6.749,53.586),"Volkel":(5.707,51.657),
-    "IJmuiden":(3.31,52.31),"E5405":(5.00,54.50),
 }
 
 EXTENT = [3.3, 7.4, 50.45, 53.8]
@@ -44,6 +44,24 @@ nl_dagen   = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Z
 nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
                "Juli","Augustus","September","Oktober","November","December"]
 
+# ── T5cm categorieën ───────────────────────────────────────────────────────
+def t5_categorie(t):
+    if t is None:  return 4
+    if t >= 0.0:   return 0  # geen grondvorst
+    if t >= -2.0:  return 1  # lichte grondvorst
+    if t >= -5.0:  return 2  # grondvorst
+    return 3                 # matige grondvorst
+
+T5_KLEUREN = {
+    0: "#27ae60",  # geen grondvorst - groen
+    1: "#a8d8ea",  # lichte grondvorst - lichtblauw
+    2: "#2980b9",  # grondvorst - blauw
+    3: "#1a3a6b",  # matige grondvorst - donkerblauw
+    4: "#aaaaaa",  # onbekend - grijs
+}
+T5_TEKSTKLEUR = {0:"white", 1:"black", 2:"white", 3:"white", 4:"white"}
+
+# ── Helpers ────────────────────────────────────────────────────────────────
 def strip_namespaces(xml_string):
     xml_string = re.sub(r'<(/?)\w+:', r'<\1', xml_string)
     xml_string = re.sub(r'\b\w+:(\w+=)', r'\1', xml_string)
@@ -114,65 +132,41 @@ def maak_kaart_ax(fig, gs):
 from matplotlib.gridspec import GridSpec
 import cartopy.crs as ccrs
 
-bft_kleuren = {0:"#aaaaaa",1:"#aaaaaa",2:"#aaaaaa",3:"#4caf50",4:"#8bc34a",
-               5:"#ffeb3b",6:"#ff9800",7:"#f44336",8:"#b71c1c"}
-bft_tekstkleur = {0:"white",1:"white",2:"white",3:"white",4:"white",
-                  5:"black",6:"white",7:"white",8:"white"}
-
-def ms_to_bft(ms):
-    if ms is None: return 0
-    for b,v in [(0,0.3),(1,1.6),(2,3.4),(3,5.5),(4,8.0),(5,10.8),(6,13.9),(7,17.2),(8,20.8)]:
-        if ms <= v: return b
-    return 9
-
-def bft_to_kmh(ms):
-    return round(ms * 3.6) if ms else 0
-
-def windpijl(graden):
-    pijlen = ["↓","↙","←","↖","↑","↗","→","↘","↓"]
-    if graden is None: return "·"
-    return pijlen[round(graden/45) % 8]
-
+# ── Data ophalen ───────────────────────────────────────────────────────────
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-print("MOSMIX ophalen (wind dag 06-18u)...")
+print("MOSMIX ophalen (T5cm grastemperatuur)...")
 
+UTC_OFFSET = timedelta(hours=1)
 data_per_day = {}
+
 for code, name in stations:
     print(f"Ophalen: {name} ({code})...")
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
-    times = get_times(root)
-    ff_raw = parse_values(root, 'FF')
-    fx_raw = parse_values(root, 'FX1')
-    dd_raw = parse_values(root, 'DD')
-    UTC_OFFSET = timedelta(hours=1)
+    times   = get_times(root)
+    t5_raw  = parse_values(root, 'T5cm')
+
+    if not t5_raw:
+        print(f"  x Geen T5cm data voor {name}"); continue
+
     daily = {}
     for i, dt in enumerate(times):
-        loc = dt + UTC_OFFSET; d = loc.date()
+        loc  = dt + UTC_OFFSET
+        d    = loc.date()
         hour = loc.hour
-        if 6 <= hour < 18:
-            if d not in daily: daily[d] = {"ff":[], "ff_dd":[], "fx":[]}
-            if i < len(ff_raw) and ff_raw[i] is not None:
-                daily[d]["ff"].append(ff_raw[i])
-                # sla dd op gesynchroniseerd met ff
-                dd_val = dd_raw[i] if i < len(dd_raw) else None
-                daily[d]["ff_dd"].append(dd_val)
-            if i < len(fx_raw) and fx_raw[i] is not None:
-                daily[d]["fx"].append(fx_raw[i])
+        # Minimum grastemperatuur tussen 00 en 12u
+        if 0 <= hour < 12:
+            if d not in daily: daily[d] = []
+            if i < len(t5_raw) and t5_raw[i] is not None:
+                t_c = t5_raw[i] - 273.15  # Kelvin → Celsius
+                daily[d].append(t_c)
 
     days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
-        ff_lijst = daily[d]["ff"]
-        ff_gem = sum(ff_lijst)/len(ff_lijst) if ff_lijst else 0
-        fx_max = max(daily[d]["fx"]) if daily[d]["fx"] else 0
-        # windrichting op moment van hoogste 10-min gemiddelde wind
-        if ff_lijst:
-            idx = ff_lijst.index(max(ff_lijst))
-            dd_bij_ff_max = daily[d]["ff_dd"][idx] if idx < len(daily[d]["ff_dd"]) else None
-        else:
-            dd_bij_ff_max = None
-        data_per_day[d][name] = {"ff":ff_gem, "fx":fx_max, "dd":dd_bij_ff_max}
+        vals = daily[d]
+        t5_min = round(min(vals), 1) if vals else None
+        data_per_day[d][name] = t5_min
 
 print(f"Data voor {len(data_per_day)} dagen")
 if not data_per_day: print("Geen data!"); exit()
@@ -180,6 +174,7 @@ if not data_per_day: print("Geen data!"); exit()
 now_str  = datetime.now().strftime("%d %b %Y  %H:%M")
 now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
 
+# ── Kaarten maken ──────────────────────────────────────────────────────────
 for day, dag_data in data_per_day.items():
     dag_nl = nl_dagen[day.weekday()]
     fig = plt.figure(figsize=(8,11))
@@ -187,38 +182,42 @@ for day, dag_data in data_per_day.items():
     maak_header(fig, gs, dag_nl, day, now_str)
     ax = maak_kaart_ax(fig, gs)
 
-    for name, vals in dag_data.items():
+    for name, t5_min in dag_data.items():
         if name not in coords: continue
+        if t5_min is None: continue  # geen T5cm data → overslaan
         lon, lat = coords[name]
-        bft = ms_to_bft(vals["ff"])
-        fx_kmh = bft_to_kmh(vals["fx"])
-        pijl = windpijl(vals["dd"])
-        kleur = bft_kleuren.get(min(bft,8),"#b71c1c")
-        tkleur = bft_tekstkleur.get(min(bft,8),"white")
-        tekst = f"{pijl} {bft}Bft\nmax {fx_kmh}km/u"
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=5.5, weight="bold",
+        cat    = t5_categorie(t5_min)
+        kleur  = T5_KLEUREN[cat]
+        tkleur = T5_TEKSTKLEUR[cat]
+        tekst  = f"{t5_min:.1f}°" if t5_min is not None else "?"
+
+        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=6.5, weight="bold",
                 color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
 
     ax.text(1.0,0.0,f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
 
-    legenda_items = [(0,"0-2 Bft","#aaaaaa","white"),(3,"3 Bft","#4caf50","white"),
-                     (4,"4 Bft","#8bc34a","white"),(5,"5 Bft","#ffeb3b","black"),
-                     (6,"6 Bft","#ff9800","white"),(7,"7 Bft","#f44336","white"),(8,"8+ Bft","#b71c1c","white")]
+    # Legenda
+    legenda_items = [
+        (0, "≥ 0°C  geen grondvorst",      "#27ae60", "white"),
+        (1, "-2 – 0°C  lichte grondvorst", "#a8d8ea", "black"),
+        (2, "-5 – -2°C  grondvorst",       "#2980b9", "white"),
+        (3, "< -5°C  matige grondvorst",   "#1a3a6b", "white"),
+    ]
     leg_x, leg_y = 0.01, 0.98
     item_h = 0.035
-    leg_h = len(legenda_items)*item_h + 0.04
-    leg = ax.inset_axes([leg_x, leg_y-leg_h, 0.18, leg_h])
+    leg_h = len(legenda_items)*item_h + 0.08
+    leg = ax.inset_axes([leg_x, leg_y-leg_h, 0.28, leg_h])
     leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
-    leg.text(0.5,0.94,"Windkracht (06-18u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
-    for idx,(b,label,kleur,tk) in enumerate(legenda_items):
-        y = 0.86 - idx*(1.0/len(legenda_items))*0.88
-        leg.add_patch(plt.Rectangle((0.04,y-0.04),0.20,0.09,facecolor=kleur,transform=leg.transAxes,zorder=1))
-        leg.text(0.30,y+0.005,label,fontsize=4.0,va="center",transform=leg.transAxes,color="#222222")
+    leg.text(0.5,0.96,"Grastemperatuur min (00–12u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
+    for idx,(cat,label,kleur,tk) in enumerate(legenda_items):
+        y = 0.82 - idx*(1.0/len(legenda_items))*0.85
+        leg.add_patch(plt.Rectangle((0.03,y-0.04),0.14,0.09,facecolor=kleur,transform=leg.transAxes,zorder=1))
+        leg.text(0.21,y+0.005,label,fontsize=3.8,va="center",transform=leg.transAxes,color="#222222")
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
-    fname = f"kaart_wind_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
+    fname = f"kaart_t5cm_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
