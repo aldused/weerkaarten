@@ -199,32 +199,20 @@ for day, dag_data in data_per_day.items():
         neff = vals["neff"]
         kleur, tkleur = zon_cirkel_kleur(sd)
 
-        # ── Cirkel ──
-        # Radius in graden: vaste grootte, iets groter voor >8u zon
-        r_base = 0.13
-        r = r_base * (1.0 + 0.25 * min(sd / 10.0, 1.0))
+        # ── Cirkel via scatter (altijd rond in schermcoördinaten) ──
+        markersize = 900 + 300 * min(sd / 10.0, 1.0)
+        ax.scatter(lon, lat, s=markersize, c=kleur, edgecolors="#888888",
+                   linewidths=0.5, zorder=8, transform=ccrs.PlateCarree())
 
-        cirkel = mpatches.Circle(
-            (lon, lat), radius=r,
-            facecolor=kleur, edgecolor="#888888", linewidth=0.5,
-            transform=ccrs.PlateCarree(), zorder=8
-        )
-        ax.add_patch(cirkel)
-
-        # Zonuren in de cirkel (vet, groot)
-        ax.text(lon, lat + 0.025, f"{sd:.0f}u",
+        # Zonuren in de cirkel (vet)
+        ax.text(lon, lat + 0.04, f"{sd:.0f}u",
                 ha="center", va="center", fontsize=6.0, weight="bold",
                 color=tkleur, zorder=9, transform=ccrs.PlateCarree())
 
-        # Bewolking % klein eronder in de cirkel
-        ax.text(lon, lat - 0.065, f"{neff:.0f}%",
+        # Bewolking % klein eronder
+        ax.text(lon, lat - 0.06, f"{neff:.0f}%",
                 ha="center", va="center", fontsize=4.5,
                 color=tkleur, zorder=9, transform=ccrs.PlateCarree())
-
-        # Stationsnaam boven de cirkel
-        ax.text(lon, lat + r + 0.04, name,
-                ha="center", va="bottom", fontsize=4.0,
-                color="#222222", zorder=9, transform=ccrs.PlateCarree())
 
     # ── Legenda ──
     leg = ax.inset_axes([0.01, 0.72, 0.22, 0.25])
@@ -236,10 +224,8 @@ for day, dag_data in data_per_day.items():
     items = [("≥10u","#FFD700"),("≥7u","#FFC200"),("≥4u","#FFB347"),("≥2u","#C8C8C8"),("<2u","#888888")]
     for idx, (label, kleur) in enumerate(items):
         y = 0.80 - idx * 0.155
-        circ = mpatches.Circle((0.12, y), radius=0.07, facecolor=kleur,
-                                edgecolor="#888888", linewidth=0.4,
-                                transform=leg.transAxes, zorder=1)
-        leg.add_patch(circ)
+        leg.scatter([0.12], [y], s=120, c=kleur, edgecolors="#888888",
+                    linewidths=0.4, zorder=1, transform=leg.transAxes)
         leg.text(0.25, y, label, fontsize=4.2, va="center", transform=leg.transAxes)
     leg.text(0.5, 0.04, "getal = zonuren  klein = bewolking%",
              fontsize=3.5, ha="center", va="center", transform=leg.transAxes)

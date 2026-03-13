@@ -172,7 +172,7 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     fx  → max windstoot
     ff via anker-uur → hoogste uurgemiddelde wind (officiële KNMI-definitie)
     """
-    params = {"datetime": dt_range, "parameter-name": "ta,fx"}
+    params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx"}
     r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
@@ -180,10 +180,12 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     if not js.get("coverages"): return None
     ranges = js["coverages"][0].get("ranges", {})
     ta = to_floats(ranges.get("ta", {}).get("values"))
+    tx = to_floats(ranges.get("tx", {}).get("values"))
+    tn = to_floats(ranges.get("tn", {}).get("values"))
     fx = to_floats(ranges.get("fx", {}).get("values"))
     return {
-        "tx": max_valid(ta),
-        "tn": min_valid(ta),
+        "tx": max_valid(tx) if max_valid(tx) is not None else max_valid(ta),
+        "tn": min_valid(tn) if min_valid(tn) is not None else min_valid(ta),
         "fx": max_valid(fx),
     }
 
