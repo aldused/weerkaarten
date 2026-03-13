@@ -297,10 +297,11 @@ ax3.set_xticks(x); ax3.set_xticklabels(dag_labels, fontsize=8)
 handles3, labels3 = ax3.get_legend_handles_labels()
 ax3.legend(handles3, labels3, fontsize=6.5, loc="upper left", framealpha=0.9,
            edgecolor="#cccccc", ncol=2, borderpad=0.5, labelspacing=0.3, handlelength=1.5)
-ax3.text(1.0, -0.10, f"Bron: Ed Aldus / DWD Deutscher Wetterdienst | {now_str2}",
+ax3.text(1.0, -0.18, f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
          transform=ax3.transAxes, fontsize=6.5, style="italic",
          ha="right", va="bottom", color="#555555")
 
+plt.subplots_adjust(bottom=0.08)
 plt.savefig("grafiek_trend.png", dpi=150, bbox_inches="tight")
 plt.close()
 print("Grafiek opgeslagen: grafiek_trend.png")
