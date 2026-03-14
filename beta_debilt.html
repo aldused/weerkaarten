@@ -73,6 +73,13 @@
 
 <div class="content">
 
+  <div class="station-tabs" style="margin-bottom:8px;">
+    <div class="station-tab actief" id="pagina-voorspelling" onclick="wisselPagina('voorspelling')">📈 Voorspelling</div>
+    <div class="station-tab" id="pagina-verificatie" onclick="wisselPagina('verificatie')">✅ Verificatie</div>
+  </div>
+
+  <!-- VOORSPELLING pagina -->
+  <div id="sectie-voorspelling">
   <div class="station-tabs" id="station-tabs"></div>
 
   <!-- Temperatuur grafiek -->
@@ -121,6 +128,48 @@
 
   <div class="info-blok">
     <strong>Over deze grafiek:</strong> MOSMIX is het statistisch gecorrigeerde model van DWD op basis van ECMWF en ICON. Harmonie is het hoge-resolutie model van KNMI/UWC-West. De Harmonie-data worden live opgehaald via Open-Meteo.
+  </div>
+  </div><!-- einde sectie-voorspelling -->
+
+  <!-- VERIFICATIE pagina -->
+  <div id="sectie-verificatie" style="display:none;">
+    <div class="station-tabs" id="ver-station-tabs"></div>
+
+    <div class="kaart">
+      <h2 id="ver-titel">Verificatie – De Bilt</h2>
+      <p class="kaart-sub">Voorspelling (3 dagen geleden) vs werkelijk gemeten · TX en TN</p>
+      <div class="legenda">
+        <div class="legenda-item"><div style="width:24px;height:3px;background:#cc2200;border-radius:2px;"></div><span>MOSMIX TX</span></div>
+        <div class="legenda-item"><div style="width:24px;height:3px;background:#1a5fb4;border-radius:2px;"></div><span>MOSMIX TN</span></div>
+        <div class="legenda-item"><div style="width:24px;height:3px;background:repeating-linear-gradient(90deg,#27ae60 0,#27ae60 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TX</span></div>
+        <div class="legenda-item"><div style="width:24px;height:3px;background:repeating-linear-gradient(90deg,#8e44ad 0,#8e44ad 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TN</span></div>
+        <div class="legenda-item"><div style="width:24px;height:8px;background:#333;border-radius:2px;"></div><span>Gemeten TX</span></div>
+        <div class="legenda-item"><div style="width:24px;height:8px;background:#888;border-radius:2px;"></div><span>Gemeten TN</span></div>
+      </div>
+      <div class="grafiek-wrapper"><canvas id="grafiek-ver"></canvas></div>
+      <div class="status" id="ver-status">Laden...</div>
+    </div>
+
+    <div class="kaart">
+      <h2>Verificatietabel</h2>
+      <p class="kaart-sub">Voorspelling vs werkelijk gemeten · afwijking in °C</p>
+      <table class="tabel">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>MOS TX</th><th>Har TX</th><th>Gem TX</th><th>Δ MOS</th><th>Δ Har</th>
+            <th>MOS TN</th><th>Har TN</th><th>Gem TN</th><th>Δ MOS</th><th>Δ Har</th>
+          </tr>
+        </thead>
+        <tbody id="ver-tabel-body">
+          <tr><td colspan="11" style="color:#888;text-align:center;padding:14px;">Laden...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="info-blok">
+      <strong>Over verificatie:</strong> De MOSMIX-voorspelling wordt dagelijks opgeslagen. Na 3 dagen vergelijken we met de werkelijke KNMI-meting. Harmonie wordt achteraf opgehaald via Open-Meteo (past_days). De eerste 3 dagen na installatie zijn nog geen vergelijkingen beschikbaar.
+    </div>
   </div>
 
 </div>
@@ -269,6 +318,127 @@ async function init() {
   } catch(e) {
     document.getElementById("status").innerHTML = "<span class='fout'>MOSMIX data niet beschikbaar</span>";
   }
+}
+
+// ── Pagina wisselen ──────────────────────────────────────────────────────────
+function wisselPagina(pagina) {
+  document.getElementById("sectie-voorspelling").style.display = pagina === "voorspelling" ? "block" : "none";
+  document.getElementById("sectie-verificatie").style.display  = pagina === "verificatie"  ? "block" : "none";
+  document.getElementById("pagina-voorspelling").classList.toggle("actief", pagina === "voorspelling");
+  document.getElementById("pagina-verificatie").classList.toggle("actief",  pagina === "verificatie");
+  if (pagina === "verificatie" && !verData) laadVerificatie();
+}
+
+// ── Verificatie ───────────────────────────────────────────────────────────────
+let verData = null;
+let grafiekVer = null;
+let verIdx = 0;
+
+async function laadVerificatie() {
+  document.getElementById("ver-status").textContent = "Laden...";
+  try {
+    const r = await fetch("beta_verificatie.json?t=" + Date.now());
+    verData = await r.json();
+    bouwVerTabs(verData.stations);
+    tekenVerificatie(0);
+  } catch(e) {
+    document.getElementById("ver-status").innerHTML = "<span class='fout'>Verificatie data niet beschikbaar — draai maak_beta_verificatie.py</span>";
+  }
+}
+
+function bouwVerTabs(stations) {
+  const container = document.getElementById("ver-station-tabs");
+  container.innerHTML = "";
+  stations.forEach((s, i) => {
+    const btn = document.createElement("div");
+    btn.className = "station-tab" + (i === 0 ? " actief" : "");
+    btn.textContent = s.naam;
+    btn.onclick = () => {
+      verIdx = i;
+      document.querySelectorAll("#ver-station-tabs .station-tab").forEach((b, j) =>
+        b.classList.toggle("actief", j === i));
+      tekenVerificatie(i);
+    };
+    container.appendChild(btn);
+  });
+}
+
+async function tekenVerificatie(idx) {
+  const station = verData.stations[idx];
+  document.getElementById("ver-titel").textContent = `Verificatie – ${station.naam}`;
+  document.getElementById("ver-status").textContent = "Harmonie ophalen...";
+
+  // Harmonie historisch ophalen
+  let harmonie = null;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&daily=temperature_2m_max,temperature_2m_min&models=knmi_seamless&timezone=Europe/Amsterdam&past_days=7&forecast_days=1`;
+    const r = await fetch(url);
+    harmonie = await r.json();
+  } catch(e) {}
+
+  const dagen  = station.data.map(d => d.datum);
+  const labels = dagen.map(datumLabel);
+  const mosTX  = station.data.map(d => d.mos_tx);
+  const mosTN  = station.data.map(d => d.mos_tn);
+  const obsTX  = station.data.map(d => d.obs_tx);
+  const obsTN  = station.data.map(d => d.obs_tn);
+  const harTX  = [], harTN  = [];
+
+  if (harmonie) {
+    for (const dag of dagen) {
+      const i = harmonie.daily.time.indexOf(dag);
+      harTX.push(i >= 0 ? Math.round(harmonie.daily.temperature_2m_max[i] * 10) / 10 : null);
+      harTN.push(i >= 0 ? Math.round(harmonie.daily.temperature_2m_min[i] * 10) / 10 : null);
+    }
+  }
+
+  // Grafiek
+  const ctx = document.getElementById("grafiek-ver").getContext("2d");
+  if (grafiekVer) grafiekVer.destroy();
+  grafiekVer = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label:"MOSMIX TX",  data:mosTX, borderColor:"#cc2200", borderWidth:2, borderDash:[6,4], pointRadius:4, pointHoverRadius:7, tension:0.3, fill:false },
+        { label:"MOSMIX TN",  data:mosTN, borderColor:"#1a5fb4", borderWidth:2, borderDash:[6,4], pointRadius:4, pointHoverRadius:7, tension:0.3, fill:false },
+        { label:"Harmonie TX", data:harTX, borderColor:"#27ae60", borderWidth:2, borderDash:[3,3], pointRadius:4, pointHoverRadius:7, tension:0.3, fill:false },
+        { label:"Harmonie TN", data:harTN, borderColor:"#8e44ad", borderWidth:2, borderDash:[3,3], pointRadius:4, pointHoverRadius:7, tension:0.3, fill:false },
+        { label:"Gemeten TX",  data:obsTX, borderColor:"#222",    borderWidth:3, pointRadius:6, pointHoverRadius:8, pointStyle:"rectRot", tension:0.2 },
+        { label:"Gemeten TN",  data:obsTN, borderColor:"#666",    borderWidth:3, pointRadius:6, pointHoverRadius:8, pointStyle:"rectRot", tension:0.2 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:"index", intersect:false },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: c => `${c.dataset.label}: ${c.parsed.y !== null ? c.parsed.y.toFixed(1)+"°C" : "–"}` }}},
+      scales:{ y:{ grid:{color:"#eee"}, ticks:{callback:v=>v+"°"} }, x:{ grid:{color:"#f0f0f0"} } }
+    }
+  });
+
+  // Tabel
+  const tbody = document.getElementById("ver-tabel-body");
+  tbody.innerHTML = "";
+  for (let i = 0; i < dagen.length; i++) {
+    const dMosTX = (mosTX[i] !== null && obsTX[i] !== null) ? Math.round((mosTX[i] - obsTX[i]) * 10) / 10 : null;
+    const dHarTX = (harTX[i] !== null && obsTX[i] !== null) ? Math.round((harTX[i] - obsTX[i]) * 10) / 10 : null;
+    const dMosTN = (mosTN[i] !== null && obsTN[i] !== null) ? Math.round((mosTN[i] - obsTN[i]) * 10) / 10 : null;
+    const dHarTN = (harTN[i] !== null && obsTN[i] !== null) ? Math.round((harTN[i] - obsTN[i]) * 10) / 10 : null;
+    function fmtD(v) { return v !== null ? `<span class="${vKleur(v)}">${v > 0 ? "+" : ""}${v.toFixed(1)}</span>` : "–"; }
+    tbody.innerHTML += `<tr>
+      <td>${labels[i]}</td>
+      <td class="tx">${fmt(mosTX[i],1,"°")}</td>
+      <td class="tx" style="color:#27ae60">${fmt(harTX[i],1,"°")}</td>
+      <td style="font-weight:bold">${fmt(obsTX[i],1,"°")}</td>
+      <td>${fmtD(dMosTX)}</td><td>${fmtD(dHarTX)}</td>
+      <td class="tn">${fmt(mosTN[i],1,"°")}</td>
+      <td class="tn" style="color:#8e44ad">${fmt(harTN[i],1,"°")}</td>
+      <td style="font-weight:bold">${fmt(obsTN[i],1,"°")}</td>
+      <td>${fmtD(dMosTN)}</td><td>${fmtD(dHarTN)}</td>
+    </tr>`;
+  }
+
+  document.getElementById("ver-status").innerHTML = `<span class="ok">✓ MOSMIX archief</span> &nbsp;·&nbsp; ${harmonie ? '<span class="ok">✓ Harmonie</span>' : '<span class="fout">✗ Harmonie</span>'} &nbsp;·&nbsp; <span class="ok">✓ KNMI metingen</span> · gegenereerd: ${verData.gegenereerd}`;
 }
 
 init();
