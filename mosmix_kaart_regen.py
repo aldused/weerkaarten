@@ -161,10 +161,10 @@ for day, dag_data in data_per_day.items():
         if name not in coords: continue
         lon, lat = coords[name]
         rr_dag = rr["rr_dag"]; rr_nacht = rr["rr_nacht"]
-        ax.text(lon, lat+0.035, f"\u2600 {rr_dag:.1f}", ha="center", va="bottom", fontsize=5.5, weight="bold",
+        ax.text(lon, lat+0.035, f"\u2600 {rr_dag:.1f}", ha="center", va="bottom", fontsize=7.5, weight="bold",
                 color=rr_tekstkleur(rr_dag), zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.10",facecolor=rr_kleur(rr_dag),edgecolor="#6baed6",linewidth=0.4,zorder=7))
-        ax.text(lon, lat+0.018, f"\u263d {rr_nacht:.1f}", ha="center", va="top", fontsize=5.5, weight="bold",
+        ax.text(lon, lat+0.018, f"\u263d {rr_nacht:.1f}", ha="center", va="top", fontsize=7.5, weight="bold",
                 color=rr_tekstkleur(rr_nacht), zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.10",facecolor=rr_kleur(rr_nacht),edgecolor="#6baed6",linewidth=0.4,zorder=7))
 

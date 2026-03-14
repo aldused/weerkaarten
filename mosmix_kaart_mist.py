@@ -214,7 +214,7 @@ for day, dag_data in data_per_day.items():
         tkleur = VV_TEKSTKLEUR[cat]
         tekst = vv_label_kort(vv_min, uren_mist)
 
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=5.5, weight="bold",
+        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.5, weight="bold",
                 color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
 

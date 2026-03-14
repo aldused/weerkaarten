@@ -225,7 +225,7 @@ for day, dag_data in data_per_day.items():
 
         # Zonuren in de cirkel (vet)
         ax.text(lon, lat + 0.04, f"{sd:.0f}u",
-                ha="center", va="center", fontsize=6.0, weight="bold",
+                ha="center", va="center", fontsize=8.0, weight="bold",
                 color=tkleur, zorder=9, transform=ccrs.PlateCarree())
 
         # Bewolking % klein eronder

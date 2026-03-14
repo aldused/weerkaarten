@@ -164,12 +164,12 @@ for day, dag_data in data_per_day.items():
         lon, lat = coords[name]
         tx_v = vals["tx"]; tn_v = vals["tn"]
         kleur_tx = cmap_tx(norm_tx(tx_v))
-        ax.text(lon, lat+0.035, f"{tx_v:.1f}", ha="center", va="bottom", fontsize=7.0, weight="bold",
+        ax.text(lon, lat+0.045, f"{tx_v:.1f}", ha="center", va="bottom", fontsize=9.0, weight="bold",
                 color="white", zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.10", facecolor="#cc2200", edgecolor="none", linewidth=0, zorder=7))
-        ax.text(lon, lat+0.018, f"{tn_v:.1f}", ha="center", va="top", fontsize=7.0, weight="bold",
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="#cc2200", edgecolor="none", linewidth=0, zorder=7))
+        ax.text(lon, lat+0.025, f"{tn_v:.1f}", ha="center", va="top", fontsize=9.0, weight="bold",
                 color="white", zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.10", facecolor="#1a5fb4", edgecolor="none", linewidth=0, zorder=7))
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="#1a5fb4", edgecolor="none", linewidth=0, zorder=7))
 
     ax.text(1.0,0.0,f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")

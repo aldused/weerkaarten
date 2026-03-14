@@ -191,7 +191,7 @@ for day, dag_data in data_per_day.items():
         tkleur = T5_TEKSTKLEUR[cat]
         tekst  = f"{t5_min:.1f}°" if t5_min is not None else "?"
 
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=6.5, weight="bold",
+        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=8.5, weight="bold",
                 color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
 

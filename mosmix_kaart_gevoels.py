@@ -1,4 +1,5 @@
 import os
+import math
 import requests
 import zipfile
 import io
@@ -6,6 +7,7 @@ import xml.etree.ElementTree as ET
 import re
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
 
 stations = [
@@ -37,26 +39,29 @@ coords = {
 }
 
 EXTENT = [3.3, 7.4, 50.45, 53.8]
+
 nl_dagen   = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"]
 nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
                "Juli","Augustus","September","Oktober","November","December"]
 
-# ── Depressie categorieën ──────────────────────────────────────────────────
-def dep_categorie(dep):
-    if dep is None: return 4
-    if dep < 1.0:   return 0  # mistkans hoog
-    if dep < 3.0:   return 1  # nevel mogelijk
-    if dep < 6.0:   return 2  # matig
-    return 3                  # droog
+# ── Gevoelstemperatuur categorieën ────────────────────────────────────────
+def wc_categorie(t):
+    if t is None: return 5
+    if t >= 10.0: return 0  # aangenaam
+    if t >= 5.0:  return 1  # koel
+    if t >= 0.0:  return 2  # koud
+    if t >= -5.0: return 3  # gevoelsvorst
+    return 4                # strenge gevoelsvorst
 
-DEP_KLEUREN = {
-    0: "#c0392b",  # rood - mistkans hoog
-    1: "#e67e22",  # oranje - nevel mogelijk
-    2: "#f1c40f",  # geel - matig
-    3: "#27ae60",  # groen - droog
-    4: "#aaaaaa",  # onbekend
+WC_KLEUREN = {
+    0: "#27ae60",  # aangenaam - groen
+    1: "#a8d8ea",  # koel - lichtblauw
+    2: "#2980b9",  # koud - blauw
+    3: "#1a3a6b",  # gevoelsvorst - donkerblauw
+    4: "#4a0080",  # strenge gevoelsvorst - paars
+    5: "#aaaaaa",  # onbekend - grijs
 }
-DEP_TEKSTKLEUR = {0:"white", 1:"white", 2:"black", 3:"white", 4:"white"}
+WC_TEKSTKLEUR = {0:"white", 1:"black", 2:"white", 3:"white", 4:"white", 5:"white"}
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 def strip_namespaces(xml_string):
@@ -131,46 +136,56 @@ import cartopy.crs as ccrs
 
 # ── Data ophalen ───────────────────────────────────────────────────────────
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-print("MOSMIX ophalen (dauwpunt Td2)...")
+print("MOSMIX ophalen (gevoelstemperatuur berekend via TTT+FF)...")
 
 UTC_OFFSET = timedelta(hours=1)
 data_per_day = {}
+
+def windchill(t_c, ff_ms):
+    """Officiële windchill formule (Environment Canada / KNMI).
+    t_c: temperatuur °C, ff_ms: windsnelheid m/s
+    Geldig bij T < 10°C en v > 1.33 m/s (4.8 km/u)"""
+    v_kmh = ff_ms * 3.6
+    if t_c >= 10.0 or v_kmh <= 4.8:
+        return t_c
+    wc = 13.12 + 0.6215*t_c - 11.37*(v_kmh**0.16) + 0.3965*t_c*(v_kmh**0.16)
+    return round(wc, 1)
 
 for code, name in stations:
     print(f"Ophalen: {name} ({code})...")
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
-    times  = get_times(root)
-    td_raw = parse_values(root, 'Td')    # dauwpunt 2m (Kelvin)
-    tt_raw = parse_values(root, 'TTT')   # temperatuur 2m (Kelvin)
+    times   = get_times(root)
+    ttt_raw = parse_values(root, 'TTT')
+    ff_raw  = parse_values(root, 'FF')
 
-    if not td_raw:
-        print(f"  x Geen Td data voor {name}"); continue
+    if not ttt_raw or not ff_raw:
+        print(f"  x Geen TTT/FF data voor {name}"); continue
 
     daily = {}
     for i, dt in enumerate(times):
         loc  = dt + UTC_OFFSET
         d    = loc.date()
         hour = loc.hour
-        if 0 <= hour < 12:
-            if d not in daily: daily[d] = {"td": [], "tt": []}
-            if i < len(td_raw) and td_raw[i] is not None:
-                daily[d]["td"].append(td_raw[i] - 273.15)
-            if i < len(tt_raw) and tt_raw[i] is not None:
-                daily[d]["tt"].append(tt_raw[i] - 273.15)
+        t = ttt_raw[i] - 273.15 if i < len(ttt_raw) and ttt_raw[i] is not None else None
+        f = ff_raw[i] if i < len(ff_raw) and ff_raw[i] is not None else None
+        if t is not None and f is not None:
+            wc = windchill(t, f)
+            if d not in daily: daily[d] = {"dag": [], "nacht": []}
+            if 6 <= hour < 18:
+                daily[d]["dag"].append(wc)
+            if 0 <= hour < 12:
+                daily[d]["nacht"].append(wc)
 
     days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
-        td_vals = daily[d]["td"]
-        tt_vals = daily[d]["tt"]
-        if not td_vals: continue
-        td_min = round(min(td_vals), 1)
-        # Depressie op moment van laagste dauwpunt
-        idx = td_vals.index(min(td_vals))
-        tt_op_min = tt_vals[idx] if idx < len(tt_vals) else None
-        dep = round(tt_op_min - td_min, 1) if tt_op_min is not None else None
-        data_per_day[d][name] = {"td": td_min, "dep": dep}
+        dag   = daily[d]["dag"]
+        nacht = daily[d]["nacht"]
+        data_per_day[d][name] = {
+            "max": round(max(dag), 1)   if dag   else None,
+            "min": round(min(nacht), 1) if nacht else None,
+        }
 
 print(f"Data voor {len(data_per_day)} dagen")
 if not data_per_day: print("Geen data!"); exit()
@@ -188,43 +203,50 @@ for day, dag_data in data_per_day.items():
 
     for name, vals in dag_data.items():
         if name not in coords: continue
+        if vals is None: continue
+        wc_max = vals.get("max")
+        wc_min = vals.get("min")
+        if wc_max is None and wc_min is None: continue
         lon, lat = coords[name]
-        td  = vals["td"]
-        dep = vals["dep"]
-        cat    = dep_categorie(dep)
-        kleur  = DEP_KLEUREN[cat]
-        tkleur = DEP_TEKSTKLEUR[cat]
-        dep_str = f"Δ{dep:.1f}°" if dep is not None else ""
-        tekst = f"{td:.1f}°\n{dep_str}"
 
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.5, weight="bold",
-                color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
+        if wc_max is not None:
+            cat = wc_categorie(wc_max)
+            ax.text(lon, lat+0.035, f"{wc_max:.1f}°", ha="center", va="bottom",
+                    fontsize=7.0, weight="bold", color="white", zorder=8,
+                    transform=ccrs.PlateCarree(),
+                    bbox=dict(boxstyle="round,pad=0.10", facecolor=WC_KLEUREN[cat], edgecolor="none", zorder=7))
+        if wc_min is not None:
+            cat = wc_categorie(wc_min)
+            ax.text(lon, lat+0.018, f"{wc_min:.1f}°", ha="center", va="top",
+                    fontsize=7.0, style="italic", color=WC_TEKSTKLEUR[cat], zorder=8,
+                    transform=ccrs.PlateCarree(),
+                    bbox=dict(boxstyle="round,pad=0.10", facecolor=WC_KLEUREN[cat], edgecolor="none", zorder=7))
 
     ax.text(1.0,0.0,f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
 
     # Legenda
     legenda_items = [
-        (0, "Δ < 1°C  mistkans hoog",    "#c0392b", "white"),
-        (1, "Δ 1–3°C  nevel mogelijk",   "#e67e22", "white"),
-        (2, "Δ 3–6°C  matig",            "#f1c40f", "black"),
-        (3, "Δ > 6°C  droog",            "#27ae60", "white"),
+        ("≥10°",  "#27ae60", "white"),
+        ("5°",    "#a8d8ea", "black"),
+        ("0°",    "#2980b9", "white"),
+        ("-5°",   "#1a3a6b", "white"),
+        ("<-5°",  "#4a0080", "white"),
     ]
-    leg_x, leg_y = 0.01, 0.98
-    item_h = 0.035
-    leg_h = len(legenda_items)*item_h + 0.10
-    leg = ax.inset_axes([leg_x, leg_y-leg_h, 0.28, leg_h])
+    leg = ax.inset_axes([0.01, 0.75, 0.10, 0.22])
     leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
-    leg.text(0.5,0.96,"Dauwpunt min (00–12u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
-    leg.text(0.5,0.88,"getal = Td2°C  Δ = depressie (T–Td)",fontsize=3.8,ha="center",va="top",transform=leg.transAxes,color="#555555")
-    for idx,(cat,label,kleur,tk) in enumerate(legenda_items):
-        y = 0.78 - idx*(1.0/len(legenda_items))*0.82
-        leg.add_patch(plt.Rectangle((0.03,y-0.04),0.14,0.09,facecolor=kleur,transform=leg.transAxes,zorder=1))
-        leg.text(0.21,y+0.005,label,fontsize=3.8,va="center",transform=leg.transAxes,color="#222222")
+    for idx,(label,kleur,tk) in enumerate(legenda_items):
+        y = 0.85 - idx*(0.85/len(legenda_items))
+        h = 0.85/len(legenda_items) - 0.02
+        leg.add_patch(plt.Rectangle((0.05,y-h+0.02),0.90,h,facecolor=kleur,transform=leg.transAxes,zorder=1))
+        leg.text(0.50,y-h/2+0.02,label,fontsize=4.0,ha="center",va="center",transform=leg.transAxes,color=tk,weight="bold")
+    ax.text(0.01, 0.73, "vet = max (06–18u)", fontsize=6.0,
+            ha="left", va="top", transform=ax.transAxes, color="#222222", weight="bold")
+    ax.text(0.01, 0.70, "cursief = min (00–12u)", fontsize=6.0,
+            ha="left", va="top", transform=ax.transAxes, color="#222222", style="italic")
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
-    fname = f"kaart_dauwpunt_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
+    fname = f"kaart_gevoels_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")

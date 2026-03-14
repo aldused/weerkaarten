@@ -29,7 +29,7 @@ coords = {
     "Leeuwarden":(5.774,53.224),"Den Helder":(4.789,52.928),"Amsterdam":(4.781,52.309),
     "De Bilt":(5.178,52.101),"Deelen":(5.885,52.060),"Hoogeveen":(6.520,52.730),
     "Enschede":(6.889,52.275),"Vlissingen":(3.596,51.442),"Hoek van Holland":(4.131,51.978),
-    "Rotterdam Airport":(4.437,51.957),"Gilze Rijen":(4.931,51.567),
+    "Rotterdam Airport":(4.550,51.880),"Gilze Rijen":(4.931,51.567),
     "Eindhoven":(5.377,51.451),"Maastricht":(5.770,50.911),"Gent":(3.720,51.054),
     "Antwerpen":(4.405,51.219),"Brussel":(4.484,50.901),"Kleine Brogel":(5.470,51.168),
     "Dollart":(7.220,53.230),"Wielen":(6.450,52.320),"IJsselmeer":(5.280,52.750),
@@ -197,7 +197,7 @@ for day, dag_data in data_per_day.items():
         kleur = bft_kleuren.get(min(bft,8),"#b71c1c")
         tkleur = bft_tekstkleur.get(min(bft,8),"white")
         tekst = f"{pijl} {bft}Bft\nmax {fx_kmh}km/u"
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=5.5, weight="bold",
+        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.0, weight="bold",
                 color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
 
