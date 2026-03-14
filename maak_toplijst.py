@@ -288,7 +288,8 @@ while d <= vandaag:
 # Vandaag altijd eerst verwerken
 resultaten[vandaag.isoformat()] = haal_dag(vandaag)
 
-# Dan historische dagen: 1 ontbrekende dag per run
+# Historische dagen: 2 ontbrekende dagen per run
+aangevuld = 0
 for dag in alle_dagen:
     if dag == vandaag:
         continue
@@ -296,9 +297,10 @@ for dag in alle_dagen:
     if key in resultaten:
         print(f"  {dag}: al in cache, overgeslagen")
         continue
-    # Eerste ontbrekende dag ophalen en stoppen
     resultaten[key] = haal_dag(dag)
-    break
+    aangevuld += 1
+    if aangevuld >= 2:
+        break
 
 # Sorteer op datum
 resultaten = dict(sorted(resultaten.items()))
