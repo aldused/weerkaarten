@@ -183,17 +183,17 @@ for code, naam, lat, lon, wigos in STATIONS_MOSMIX:
         dag = vandaag - timedelta(days=i)
         dag_str = dag.isoformat()
 
-        # Zoek beste MOSMIX-run (voorkeur: 2-3 dagen eerder)
+        # Zoek beste MOSMIX-run (voorkeur: 2-3 dagen eerder, anders vandaag als fallback)
         mos_tx, mos_tn = None, None
         mos_run = None
-        for offset in [2, 3, 1, 4]:
-            run = (dag - timedelta(days=offset)).isoformat()
+        for offset in [2, 3, 1, 4, 0]:  # 0 = vandaag als fallback
+            run = (dag - timedelta(days=offset)).isoformat() if offset > 0 else run_datum
             if naam in archief and run in archief[naam]:
                 pred = archief[naam][run].get(dag_str, {})
                 if pred.get("tx") is not None:
                     mos_tx = pred["tx"]
                     mos_tn = pred.get("tn")
-                    mos_run = run
+                    mos_run = run + (" (vandaag)" if offset == 0 else "")
                     break
 
         # Werkelijke meting
