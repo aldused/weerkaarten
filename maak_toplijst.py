@@ -6,7 +6,8 @@ from zoneinfo import ZoneInfo
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
-BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
+BASE_URL     = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
+BASE_URL_DAG = "https://api.dataplatform.knmi.nl/edr/v1/collections/daily-in-situ-meteorological-observations-validated"
 HEADERS  = {"Authorization": KNMI_KEY, "Accept": "application/json"}
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
@@ -166,11 +167,26 @@ def hoogste_anker_uur(station_id: str, dt_range: str) -> dict | None:
                 }
     return best_info
 
+def haal_t10n(station_id: str, dag: date) -> float | None:
+    """T10N ophalen via de daggegevens API (validated daily observations)."""
+    s = f"{dag.isoformat()}T00:00:00Z"
+    e = f"{(dag + timedelta(days=1)).isoformat()}T00:00:00Z"
+    params = {"datetime": f"{s}/{e}", "parameter-name": "T10N"}
+    try:
+        r = requests.get(f"{BASE_URL_DAG}/locations/{station_id}", headers=HEADERS, params=params, timeout=20)
+        if r.status_code in (400, 404): return None
+        r.raise_for_status()
+        js = r.json()
+        if not js.get("coverages"): return None
+        vals = to_floats(js["coverages"][0].get("ranges", {}).get("T10N", {}).get("values"))
+        return min_valid(vals)
+    except Exception:
+        return None
+
 def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     """
     ta  → max = TX, min = TN (over UTC-etmaal)
     fx  → max windstoot
-    ff via anker-uur → hoogste uurgemiddelde wind (officiële KNMI-definitie)
     """
     params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx"}
     r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
@@ -179,10 +195,10 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     js = r.json()
     if not js.get("coverages"): return None
     ranges = js["coverages"][0].get("ranges", {})
-    ta = to_floats(ranges.get("ta", {}).get("values"))
-    tx = to_floats(ranges.get("tx", {}).get("values"))
-    tn = to_floats(ranges.get("tn", {}).get("values"))
-    fx = to_floats(ranges.get("fx", {}).get("values"))
+    ta  = to_floats(ranges.get("ta", {}).get("values"))
+    tx  = to_floats(ranges.get("tx", {}).get("values"))
+    tn  = to_floats(ranges.get("tn", {}).get("values"))
+    fx  = to_floats(ranges.get("fx", {}).get("values"))
     return {
         "tx": max_valid(tx) if max_valid(tx) is not None else max_valid(ta),
         "tn": min_valid(tn) if min_valid(tn) is not None else min_valid(ta),
@@ -219,7 +235,7 @@ def haal_dag(dag: date) -> dict:
     dt_range   = dag_interval_tot_nu_utc(dag) if is_vandaag else dag_interval_utc(dag)
     key        = dag.isoformat()
     res        = {"datum": key, "status": "voorlopig", "update": "",
-                  "max": [], "min": [], "rr": [], "fx": [], "ff": []}
+                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": []}
     print(f"  Ophalen {dag} ({'tot nu' if is_vandaag else 'heel dag'})...")
 
     for station_id, naam in STATIONS.items():
@@ -231,6 +247,12 @@ def haal_dag(dag: date) -> dict:
                 if tw["fx"] is not None: res["fx"].append((tw["fx"], naam))
         except Exception as e:
             print(f"    Temp/wind fout {naam}: {e}")
+
+        try:
+            t10n = haal_t10n(station_id, dag)
+            if t10n is not None: res["t10n"].append((t10n, naam))
+        except Exception as e:
+            print(f"    T10N fout {naam}: {e}")
 
         try:
             ff_anker = hoogste_anker_uur(station_id, dt_range)
@@ -248,11 +270,12 @@ def haal_dag(dag: date) -> dict:
 
         time.sleep(0.05)
 
-    res["max"] = sorted(res["max"], reverse=True)
-    res["min"] = sorted(res["min"])
-    res["rr"]  = sorted(res["rr"],  reverse=True)
-    res["fx"]  = sorted(res["fx"],  reverse=True)
-    res["ff"]  = sorted(res["ff"],  key=lambda x: x[0], reverse=True)
+    res["max"]  = sorted(res["max"],  reverse=True)
+    res["min"]  = sorted(res["min"])
+    res["rr"]   = sorted(res["rr"],   reverse=True)
+    res["fx"]   = sorted(res["fx"],   reverse=True)
+    res["ff"]   = sorted(res["ff"],   key=lambda x: x[0], reverse=True)
+    res["t10n"] = sorted(res["t10n"])
     res["update"] = datetime.now().strftime("%d %b %Y %H:%M")
 
     print(f"    TX top3: {res['max'][:3]}")
