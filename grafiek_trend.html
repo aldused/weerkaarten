@@ -96,6 +96,20 @@
   }
   .canvas-wrapper { position: relative; }
 
+  .download-btn {
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: 1px solid #c5d3e3;
+    background: #f4f7fb;
+    color: #2a4a70;
+    font-size: 0.72em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .download-btn:hover { background: #dce9f7; border-color: #4a90c4; }
+
   .footer {
     text-align: right;
     font-size: 0.70em;
@@ -331,6 +345,21 @@ fetch(JSON_URL)
     for (const [n, d] of Object.entries(data.temp))  kleuren[n] = d.kleur;
     for (const [n, d] of Object.entries(data.wind))  kleuren[n] = d.kleur;
 
+    // Helper: download knop
+    function maakDownloadBtn(label, getChart) {
+      const btn = document.createElement("button");
+      btn.className = "download-btn";
+      btn.textContent = "⬇ PNG";
+      btn.addEventListener("click", () => {
+        const chart = getChart();
+        const link = document.createElement("a");
+        link.href = chart.toBase64Image("image/png", 1.0);
+        link.download = `edaldus_${label}_${data.gegenereerd.replace(/[: ]/g,"_")}.png`;
+        link.click();
+      });
+      return btn;
+    }
+
     // ── Temperatuur ──────────────────────────────────────────────────────
     const tempKaart = document.createElement("div");
     tempKaart.className = "grafiek-kaart";
@@ -361,6 +390,7 @@ fetch(JSON_URL)
     content.appendChild(tempKaart);
 
     const tempChart = new Chart(tempCanvas, maakTempGrafiek(data, zichtbaar));
+    tempTitel.appendChild(maakDownloadBtn("temperatuur", () => tempChart));
 
     // ── Neerslag ─────────────────────────────────────────────────────────
     const rrKaart = document.createElement("div");
@@ -378,6 +408,7 @@ fetch(JSON_URL)
     content.appendChild(rrKaart);
 
     const rrChart = new Chart(rrCanvas, maakRRGrafiek(data, zichtbaar));
+    rrTitel.appendChild(maakDownloadBtn("neerslag", () => rrChart));
 
     // ── Wind ──────────────────────────────────────────────────────────────
     const windKaart = document.createElement("div");
@@ -404,8 +435,9 @@ fetch(JSON_URL)
     content.appendChild(windKaart);
 
     const windChart = new Chart(windCanvas, maakWindGrafiek(data, zichtbaar));
+    windTitel.appendChild(maakDownloadBtn("wind", () => windChart));
 
-    // Footer
+    // Footer copyright
     const footer = document.createElement("div");
     footer.className = "footer";
     footer.textContent = `© Ed Aldus | Data: DWD (MOSMIX) | ${data.gegenereerd}`;
