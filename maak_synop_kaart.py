@@ -85,7 +85,7 @@ def haal_obs(wigos_id):
     # Haal laatste 30 minuten op
     s = (now_utc - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     e = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td"}
+    params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh"}
     try:
         r = requests.get(f"{BASE_URL}/locations/{wigos_id}",
                          headers=HEADERS, params=params, timeout=15)
@@ -107,12 +107,13 @@ def haal_obs(wigos_id):
             "dd": laatste("dd"),
             "n":  laatste("n"),
             "td": laatste("td"),
+            "rh": laatste("rh"),
         }
     except Exception as e:
         return None
 
 # ── Teken bewolkingscirkel ─────────────────────────────────────────────────────
-def teken_station(ax, fig, lon, lat, ta, ff, dd, n, td=None):
+def teken_station(ax, fig, lon, lat, ta, ff, dd, n, td=None, rh=None):
     """Teken bewolkingscirkel, temp en wind voor één station."""
     # Zet lon/lat om naar display-coördinaten (pixels)
     tr = ccrs.PlateCarree()
@@ -193,6 +194,14 @@ def teken_station(ax, fig, lon, lat, ta, ff, dd, n, td=None):
                 ha="left", va="center", transform=tr, zorder=15,
                 path_effects=[pe.withStroke(linewidth=2, foreground="white")])
 
+    # ── Relatieve vochtigheid ── onder dauwpunt, grijs
+    if rh is not None:
+        rh_str = f"{int(round(rh))}%"
+        ax.text(lon + dlon * 1.3, lat - dlat * 2.7, rh_str,
+                fontsize=6.0, fontweight="normal", color="#555555",
+                ha="left", va="center", transform=tr, zorder=15,
+                path_effects=[pe.withStroke(linewidth=2, foreground="white")])
+
     # ── Beaufort ── onder de cirkel
     if bft is not None:
         ax.text(lon, lat - dlat * 1.6, f"Bft {bft}",
@@ -262,14 +271,15 @@ for naam, v in obs_data.items():
     lon, lat = v["lon"], v["lat"]
     teken_station(ax, fig, lon, lat,
                   ta=v.get("ta"), ff=v.get("ff"),
-                  dd=v.get("dd"), n=v.get("n"), td=v.get("td"))
+                  dd=v.get("dd"), n=v.get("n"),
+                  td=v.get("td"), rh=v.get("rh"))
 
 # Legenda bewolking
 leg = ax.inset_axes([0.01, 0.87, 0.30, 0.12])
 leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
 leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
               linewidth=0.7,transform=leg.transAxes,zorder=0))
-leg.text(0.5, 0.92, "Bewolking (oktas)  ·  Temp °C  ·  Bft",
+leg.text(0.5, 0.97, "Bewolking (oktas)",
          fontsize=4.5, weight="bold", ha="center", va="top", transform=leg.transAxes)
 
 # Bepaal aspect-ratio van de legenda-as voor ronde cirkels
@@ -307,6 +317,37 @@ for i, ok in enumerate(okta_voorbeelden):
 ax.text(1.0, 0.0, f"© Ed Aldus | Data: KNMI | {now_str2}",
         transform=ax.transAxes, fontsize=6.5, style="italic",
         ha="right", va="bottom", color="#555555")
+
+# Symbolen legenda rechtsonder
+sym = ax.inset_axes([0.62, 0.01, 0.37, 0.10])
+sym.set_xlim(0,1); sym.set_ylim(0,1); sym.axis("off")
+sym.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
+              linewidth=0.7,transform=sym.transAxes,zorder=0))
+sym.text(0.5, 0.95, "Stationssymbolen", fontsize=4.5, weight="bold",
+         ha="center", va="top", transform=sym.transAxes)
+# Voorbeeldsymbool links
+sym.add_patch(mpatches.Ellipse((0.12, 0.48), 0.10, 0.28,
+              facecolor='#aaaaaa', edgecolor='#1a2b40', linewidth=0.8,
+              zorder=1, transform=sym.transAxes))
+# Labels
+sym.text(0.26, 0.82, "7.4°", fontsize=4.5, color="#cc2200", weight="bold",
+         transform=sym.transAxes, va="center")
+sym.text(0.26, 0.60, "5.1°", fontsize=3.8, color="#1a5fb4", weight="bold",
+         transform=sym.transAxes, va="center")
+sym.text(0.26, 0.38, "82%", fontsize=3.5, color="#555555",
+         transform=sym.transAxes, va="center")
+sym.text(0.12, 0.14, "Bft 4", fontsize=3.5, color="#003366", weight="bold",
+         ha="center", transform=sym.transAxes, va="center")
+# Pijl
+sym.annotate("", xy=(0.12, 0.62), xytext=(0.12, 0.90),
+             xycoords=sym.transAxes, textcoords=sym.transAxes,
+             arrowprops=dict(arrowstyle="-|>", color="#003366", lw=1.0, mutation_scale=5))
+# Rechts: uitleg
+sym.text(0.55, 0.88, "← Temp (°C)",    fontsize=3.5, color="#cc2200", transform=sym.transAxes)
+sym.text(0.55, 0.68, "← Dauwpunt (°C)",fontsize=3.5, color="#1a5fb4", transform=sym.transAxes)
+sym.text(0.55, 0.48, "← Vochtigheid",  fontsize=3.5, color="#555555", transform=sym.transAxes)
+sym.text(0.55, 0.28, "← Windkracht",   fontsize=3.5, color="#003366", transform=sym.transAxes)
+sym.text(0.55, 0.08, "↑ Windrichting", fontsize=3.5, color="#003366", transform=sym.transAxes)
 
 ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
 ax.axis("off")
