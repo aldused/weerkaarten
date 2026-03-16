@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <title>Ed Aldus WM – Weerkaarten België</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f0f4f8; color: #222; }
+
+    .header {
+      background: #003366;
+      color: white;
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .header-titel { font-size: 1.1em; font-weight: bold; }
+    .header-sub { font-size: 0.75em; color: #a8c4e8; margin-top: 3px; }
+    .header-sub a { color: #a8c4e8; }
+
+    .toolbar {
+      background: white;
+      border-bottom: 1px solid #dde6f0;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-groen {
+      background: #27ae60;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85em;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #c5d3e3;
+      background: #e4eaf2;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.88em;
+      color: #5a7090;
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+    .tab:hover { color: #003366; }
+    .tab.actief { color: #003366; border-bottom-color: #003366; background: white; }
+
+    .tab-inhoud { display: none; padding: 16px; }
+    .tab-inhoud.actief { display: block; }
+
+    .kaarten {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .kaart-item {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      width: 280px;
+    }
+    .kaart-item:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.14); }
+    .kaart-item img { width: 100%; display: block; }
+    .kaart-label {
+      padding: 8px 10px;
+      font-size: 0.78em;
+      color: #5a7090;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    /* Lightbox */
+    .lightbox {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.88);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .lightbox img {
+      max-width: 95vw;
+      max-height: 95vh;
+      border-radius: 6px;
+    }
+    .lightbox-sluit {
+      position: absolute; top: 16px; right: 20px;
+      color: white; font-size: 2em; cursor: pointer; font-weight: bold;
+    }
+    .lightbox-nav {
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.15);
+      color: white; font-size: 2em;
+      border: none; cursor: pointer;
+      padding: 12px 18px; border-radius: 6px;
+    }
+    #lb-prev { left: 10px; }
+    #lb-next { right: 10px; }
+
+    .geen-kaarten { color: #888; font-style: italic; padding: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM</div>
+    <div class="header-sub">
+      MOS kaarten ECMWF/ICON · DWD MOSMIX &nbsp;|&nbsp;
+      <a href="index.html">🇳🇱 Nederland</a> &nbsp;·&nbsp;
+      <strong style="color:white;">🇧🇪 België</strong>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span id="update-lbl" style="font-size:0.75em;color:#a8c4e8;"></span>
+  </div>
+</div>
+
+<div class="toolbar">
+  <button class="btn-groen" onclick="downloadAlles()">⬇ Download alle kaarten</button>
+  <span style="font-size:0.78em;color:#777;">of download per kaart hieronder</span>
+</div>
+
+<div class="tabs">
+  <div class="tab actief" id="tab-be-temp" onclick="wisselTab('be-temp')">🌡️ Temperatuur</div>
+</div>
+
+<div class="tab-inhoud actief" id="inhoud-be-temp">
+  <div class="kaarten" id="kaarten-be-temp">
+    <p class="geen-kaarten">Kaarten laden...</p>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="sluitLightbox()">
+  <span class="lightbox-sluit" onclick="sluitLightbox()">✕</span>
+  <button class="lightbox-nav" id="lb-prev" onclick="event.stopPropagation();navLightbox(-1)">◀</button>
+  <img id="lightbox-img" src="" alt="">
+  <button class="lightbox-nav" id="lb-next" onclick="event.stopPropagation();navLightbox(1)">▶</button>
+</div>
+
+<script>
+let beTempLijst = [];
+let activeLijst = [];
+let huidigIndex = 0;
+
+const NL_DAGEN   = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+const NL_MAANDEN = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+const MND_MAP = {jan:1,feb:2,mrt:3,apr:4,mei:5,jun:6,jul:7,aug:8,sep:9,okt:10,nov:11,dec:12};
+
+function wisselTab(tab) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("actief"));
+  document.querySelectorAll(".tab-inhoud").forEach(t => t.classList.remove("actief"));
+  document.getElementById("tab-" + tab).classList.add("actief");
+  document.getElementById("inhoud-" + tab).classList.add("actief");
+  if (tab === "be-temp") activeLijst = beTempLijst;
+}
+
+function datumUitNaam(naam) {
+  const m = naam.match(/(\d{2})([a-z]{3})(\d{4})/);
+  if (!m) return null;
+  const mnd = MND_MAP[m[2]];
+  if (!mnd) return null;
+  return new Date(parseInt(m[3]), mnd - 1, parseInt(m[1]));
+}
+
+function dagLabel(naam) {
+  const d = datumUitNaam(naam);
+  if (!d) return naam.replace("kaart_be_temp_","").replace(".png","");
+  return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MAANDEN[d.getMonth()+1]}`;
+}
+
+function maakKaartItem(naam, lijst) {
+  const div = document.createElement("div");
+  div.className = "kaart-item";
+  const img = document.createElement("img");
+  img.src = naam;
+  img.loading = "lazy";
+  img.alt = naam;
+  const lbl = document.createElement("div");
+  lbl.className = "kaart-label";
+  lbl.textContent = dagLabel(naam);
+  div.appendChild(img);
+  div.appendChild(lbl);
+  div.addEventListener("click", () => openLightbox(naam, lijst));
+  return div;
+}
+
+function openLightbox(naam, lijst) {
+  activeLijst = lijst;
+  huidigIndex = lijst.indexOf(naam);
+  document.getElementById("lightbox-img").src = naam;
+  document.getElementById("lightbox").style.display = "flex";
+  document.getElementById("lb-prev").style.opacity = huidigIndex === 0 ? "0.3" : "1";
+  document.getElementById("lb-next").style.opacity = huidigIndex === lijst.length-1 ? "0.3" : "1";
+}
+
+function sluitLightbox() {
+  document.getElementById("lightbox").style.display = "none";
+}
+
+function navLightbox(richting) {
+  huidigIndex = Math.max(0, Math.min(activeLijst.length-1, huidigIndex + richting));
+  document.getElementById("lightbox-img").src = activeLijst[huidigIndex];
+  document.getElementById("lb-prev").style.opacity = huidigIndex === 0 ? "0.3" : "1";
+  document.getElementById("lb-next").style.opacity = huidigIndex === activeLijst.length-1 ? "0.3" : "1";
+}
+
+document.addEventListener("keydown", e => {
+  if (document.getElementById("lightbox").style.display === "flex") {
+    if (e.key === "ArrowLeft")  navLightbox(-1);
+    if (e.key === "ArrowRight") navLightbox(1);
+    if (e.key === "Escape") sluitLightbox();
+  }
+});
+
+async function downloadAlles() {
+  for (const naam of beTempLijst) {
+    const a = document.createElement("a");
+    a.href = naam; a.download = naam;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    await new Promise(res => setTimeout(res, 400));
+  }
+}
+
+// Laad kaarten uit index.json
+fetch("index.json?t=" + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    const kaarten = Array.isArray(data) ? data : (data.kaarten || []);
+    beTempLijst = kaarten.filter(n => n.startsWith("kaart_be_temp_")).sort();
+    activeLijst = beTempLijst;
+
+    const container = document.getElementById("kaarten-be-temp");
+    container.innerHTML = "";
+    if (beTempLijst.length === 0) {
+      container.innerHTML = "<p class='geen-kaarten'>Nog geen Belgische kaarten beschikbaar.</p>";
+    } else {
+      beTempLijst.forEach(n => container.appendChild(maakKaartItem(n, beTempLijst)));
+    }
+  })
+  .catch(() => {
+    document.getElementById("kaarten-be-temp").innerHTML =
+      "<p class='geen-kaarten'>Kon kaartlijst niet laden.</p>";
+  });
+</script>
+</body>
+</html>
