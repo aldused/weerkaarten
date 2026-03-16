@@ -92,6 +92,8 @@
       <div class="legenda-item"><div style="width:28px;height:3px;background:#1a5fb4;border-radius:2px;"></div><span>MOSMIX TN</span></div>
       <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#27ae60 0,#27ae60 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TX</span></div>
       <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#8e44ad 0,#8e44ad 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TN</span></div>
+      <div class="legenda-item"><div style="width:12px;height:12px;background:#27ae60;border-radius:50%;display:inline-block;"></div><span>Gemeten TX</span></div>
+      <div class="legenda-item"><div style="width:12px;height:12px;background:#0d3a7a;border-radius:50%;display:inline-block;"></div><span>Gemeten TN</span></div>
     </div>
     <div class="grafiek-wrapper"><canvas id="grafiek-verw"></canvas></div>
     <div class="status" id="status-verw">Laden...</div>
@@ -102,10 +104,10 @@
     <table class="tabel">
       <thead><tr>
         <th>Datum</th>
-        <th class="tx-kop">MOSMIX TX</th><th class="tx-kop">Harmonie TX</th><th class="tx-kop">Δ TX</th>
-        <th class="tn-kop">MOSMIX TN</th><th class="tn-kop">Harmonie TN</th><th class="tn-kop">Δ TN</th>
+        <th class="tx-kop">MOSMIX TX</th><th class="tx-kop">Harmonie TX</th><th class="tx-kop" style="background:#1a7a4a;">Gemeten TX</th><th class="tx-kop">Δ MOS</th>
+        <th class="tn-kop">MOSMIX TN</th><th class="tn-kop">Harmonie TN</th><th class="tn-kop" style="background:#0d3a7a;">Gemeten TN</th><th class="tn-kop">Δ MOS</th>
       </tr></thead>
-      <tbody id="tabel-verw-body"><tr><td colspan="7" style="text-align:center;color:#888;padding:16px;">Laden...</td></tr></tbody>
+      <tbody id="tabel-verw-body"><tr><td colspan="9" style="text-align:center;color:#888;padding:16px;">Laden...</td></tr></tbody>
     </table>
   </div>
   <div class="info-blok"><strong>Over deze pagina:</strong> MOSMIX is het statistisch gecorrigeerde model van DWD op basis van ECMWF en ICON. Harmonie is het hoge-resolutie model van KNMI/UWC-West. Harmonie-data worden live opgehaald.</div>
@@ -192,6 +194,19 @@ async function toonVerwachting() {
   const labels=dagen.map(datumLabel);
   const mosTX=station.data.map(d=>d.tx);
   const mosTN=station.data.map(d=>d.tn);
+
+  // Werkelijke metingen uit verificatiedata (voor verleden dagen)
+  let obsTX=Array(dagen.length).fill(null), obsTN=Array(dagen.length).fill(null);
+  if (verifData) {
+    const vs=verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (vs) {
+      for(let i=0;i<dagen.length;i++){
+        const vd=vs.data.find(d=>d.datum===dagen[i]);
+        if(vd){obsTX[i]=vd.obs_tx;obsTN[i]=vd.obs_tn;}
+      }
+    }
+  }
+
   let harmTX=Array(dagen.length).fill(null), harmTN=Array(dagen.length).fill(null);
   try {
     const url=`https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&daily=temperature_2m_max,temperature_2m_min&models=knmi_seamless&timezone=Europe/Amsterdam&forecast_days=7`;
@@ -199,20 +214,36 @@ async function toonVerwachting() {
     for(let i=0;i<dagen.length;i++){const idx=h.daily.time.indexOf(dagen[i]);if(idx>=0){harmTX[i]=Math.round(h.daily.temperature_2m_max[idx]*10)/10;harmTN[i]=Math.round(h.daily.temperature_2m_min[idx]*10)/10;}}
     document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='ok'>✓ Harmonie</span>";
   } catch(e) { document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='fout'>Harmonie niet beschikbaar</span>"; }
+
   const ctx=document.getElementById("grafiek-verw").getContext("2d");
   if(grafiekVerw)grafiekVerw.destroy();
   grafiekVerw=new Chart(ctx,{type:"line",data:{labels,datasets:[
-    {label:"MOSMIX TX",data:mosTX,borderColor:"#cc2200",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
-    {label:"MOSMIX TN",data:mosTN,borderColor:"#1a5fb4",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
+    {label:"MOSMIX TX",  data:mosTX, borderColor:"#cc2200",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
+    {label:"MOSMIX TN",  data:mosTN, borderColor:"#1a5fb4",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
     {label:"Harmonie TX",data:harmTX,borderColor:"#27ae60",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.4,fill:false},
     {label:"Harmonie TN",data:harmTN,borderColor:"#8e44ad",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.4,fill:false},
+    {label:"Gemeten TX", data:obsTX, borderColor:"#27ae60",borderWidth:0,pointRadius:9,pointStyle:"star",showLine:false},
+    {label:"Gemeten TN", data:obsTN, borderColor:"#0d3a7a",borderWidth:0,pointRadius:9,pointStyle:"star",showLine:false},
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!==null?c.parsed.y.toFixed(1)+"°C":"–"}`}}},scales:{y:{grid:{color:"#eeeeee"},ticks:{callback:v=>v+"°"}},x:{grid:{color:"#f0f0f0"}}}}});
+
   const tbody=document.getElementById("tabel-verw-body");
   tbody.innerHTML="";
   for(let i=0;i<dagen.length;i++){
     const dTX=(mosTX[i]!==null&&harmTX[i]!==null)?Math.round((harmTX[i]-mosTX[i])*10)/10:null;
     const dTN=(mosTN[i]!==null&&harmTN[i]!==null)?Math.round((harmTN[i]-mosTN[i])*10)/10:null;
-    tbody.innerHTML+=`<tr><td>${datumLabel(dagen[i])}</td><td class="tx">${tStr(mosTX[i])}</td><td class="tx">${tStr(harmTX[i])}</td><td class="verschil ${dKleur(dTX)}">${dStr(dTX)}</td><td class="tn">${tStr(mosTN[i])}</td><td class="tn">${tStr(harmTN[i])}</td><td class="verschil ${dKleur(dTN)}">${dStr(dTN)}</td></tr>`;
+    const dObsTX=(mosTX[i]!==null&&obsTX[i]!==null)?Math.round((obsTX[i]-mosTX[i])*10)/10:null;
+    const dObsTN=(mosTN[i]!==null&&obsTN[i]!==null)?Math.round((obsTN[i]-mosTN[i])*10)/10:null;
+    // Highlight rijen met gemeten data
+    const heeftObs = obsTX[i]!==null||obsTN[i]!==null;
+    tbody.innerHTML+=`<tr${heeftObs?' style="background:#f0faf4;"':''}>
+      <td>${datumLabel(dagen[i])}</td>
+      <td class="tx">${tStr(mosTX[i])}</td><td class="tx">${tStr(harmTX[i])}</td>
+      <td class="obs">${tStr(obsTX[i])}</td>
+      <td class="verschil ${dKleur(dObsTX)}">${dStr(dObsTX)}</td>
+      <td class="tn">${tStr(mosTN[i])}</td><td class="tn">${tStr(harmTN[i])}</td>
+      <td class="obs">${tStr(obsTN[i])}</td>
+      <td class="verschil ${dKleur(dObsTN)}">${dStr(dObsTN)}</td>
+    </tr>`;
   }
 }
 
