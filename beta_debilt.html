@@ -92,7 +92,7 @@
       <div class="legenda-item"><div style="width:28px;height:3px;background:#1a5fb4;border-radius:2px;"></div><span>MOSMIX TN</span></div>
       <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#27ae60 0,#27ae60 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TX</span></div>
       <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#8e44ad 0,#8e44ad 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TN</span></div>
-      <div class="legenda-item"><div style="width:12px;height:12px;background:#27ae60;border-radius:50%;display:inline-block;"></div><span>Gemeten TX</span></div>
+      <div class="legenda-item"><div style="width:12px;height:12px;background:#e67e22;border-radius:50%;display:inline-block;"></div><span>Gemeten TX</span></div>
       <div class="legenda-item"><div style="width:12px;height:12px;background:#0d3a7a;border-radius:50%;display:inline-block;"></div><span>Gemeten TN</span></div>
     </div>
     <div class="grafiek-wrapper"><canvas id="grafiek-verw"></canvas></div>
@@ -194,26 +194,35 @@ async function laadVerwachting() {
 async function toonVerwachting() {
   const station=verwData.stations.find(s=>s.naam===huidigStation)||verwData.stations[0];
   document.getElementById("verw-titel").textContent=`Temperatuurverwachting – ${station.naam}`;
-  const dagen=station.data.map(d=>d.datum);
-  const labels=dagen.map(datumLabel);
-  const mosTX=station.data.map(d=>d.tx);
-  const mosTN=station.data.map(d=>d.tn);
 
-  // Werkelijke metingen uit verificatiedata (voor verleden dagen)
-  let obsTX=Array(dagen.length).fill(null), obsTN=Array(dagen.length).fill(null);
+  // Combineer: verleden (uit verifData) + toekomst (uit verwData)
+  const toekomstDagen = station.data.map(d=>d.datum);
+  let verledenDagen = [], verledenTX = {}, verledenTN = {};
   if (verifData) {
-    const vs=verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
     if (vs) {
-      for(let i=0;i<dagen.length;i++){
-        const vd=vs.data.find(d=>d.datum===dagen[i]);
-        if(vd){obsTX[i]=vd.obs_tx;obsTN[i]=vd.obs_tn;}
-      }
+      vs.data.forEach(d => {
+        if (!toekomstDagen.includes(d.datum)) {
+          verledenDagen.push(d.datum);
+          verledenTX[d.datum] = d.obs_tx;
+          verledenTN[d.datum] = d.obs_tn;
+        }
+      });
+      verledenDagen.sort();
     }
   }
 
+  const dagen   = [...verledenDagen, ...toekomstDagen];
+  const labels  = dagen.map(datumLabel);
+  const mosTX   = dagen.map(d => { const v=station.data.find(x=>x.datum===d); return v?v.tx:null; });
+  const mosTN   = dagen.map(d => { const v=station.data.find(x=>x.datum===d); return v?v.tn:null; });
+  const obsTX   = dagen.map(d => verledenTX[d] ?? null);
+  const obsTN   = dagen.map(d => verledenTN[d] ?? null);
+
   let harmTX=Array(dagen.length).fill(null), harmTN=Array(dagen.length).fill(null);
   try {
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&daily=temperature_2m_max,temperature_2m_min&models=knmi_seamless&timezone=Europe/Amsterdam&forecast_days=7`;
+    const vanDatum = dagen[0];
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&daily=temperature_2m_max,temperature_2m_min&models=knmi_seamless&timezone=Europe/Amsterdam&forecast_days=7&start_date=${vanDatum}`;
     const h=(await (await fetch(url)).json());
     for(let i=0;i<dagen.length;i++){const idx=h.daily.time.indexOf(dagen[i]);if(idx>=0){harmTX[i]=Math.round(h.daily.temperature_2m_max[idx]*10)/10;harmTN[i]=Math.round(h.daily.temperature_2m_min[idx]*10)/10;}}
     document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='ok'>✓ Harmonie</span>";
@@ -226,26 +235,23 @@ async function toonVerwachting() {
     {label:"MOSMIX TN",  data:mosTN, borderColor:"#1a5fb4",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
     {label:"Harmonie TX",data:harmTX,borderColor:"#27ae60",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.4,fill:false},
     {label:"Harmonie TN",data:harmTN,borderColor:"#8e44ad",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.4,fill:false},
-    {label:"Gemeten TX", data:obsTX, borderColor:"#27ae60",borderWidth:0,pointRadius:9,pointStyle:"star",showLine:false},
-    {label:"Gemeten TN", data:obsTN, borderColor:"#0d3a7a",borderWidth:0,pointRadius:9,pointStyle:"star",showLine:false},
+    {label:"Gemeten TX", data:obsTX, borderColor:"#e67e22",borderWidth:0,pointRadius:10,pointStyle:"star",showLine:false},
+    {label:"Gemeten TN", data:obsTN, borderColor:"#0d3a7a",borderWidth:0,pointRadius:10,pointStyle:"star",showLine:false},
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!==null?c.parsed.y.toFixed(1)+"°C":"–"}`}}},scales:{y:{grid:{color:"#eeeeee"},ticks:{callback:v=>v+"°"}},x:{grid:{color:"#f0f0f0"}}}}});
 
   const tbody=document.getElementById("tabel-verw-body");
   tbody.innerHTML="";
   for(let i=0;i<dagen.length;i++){
-    const dTX=(mosTX[i]!==null&&harmTX[i]!==null)?Math.round((harmTX[i]-mosTX[i])*10)/10:null;
-    const dTN=(mosTN[i]!==null&&harmTN[i]!==null)?Math.round((harmTN[i]-mosTN[i])*10)/10:null;
     const dObsTX=(mosTX[i]!==null&&obsTX[i]!==null)?Math.round((obsTX[i]-mosTX[i])*10)/10:null;
     const dObsTN=(mosTN[i]!==null&&obsTN[i]!==null)?Math.round((obsTN[i]-mosTN[i])*10)/10:null;
-    // Highlight rijen met gemeten data
     const heeftObs = obsTX[i]!==null||obsTN[i]!==null;
-    tbody.innerHTML+=`<tr${heeftObs?' style="background:#f0faf4;"':''}>
+    tbody.innerHTML+=`<tr${heeftObs?' style="background:#fff8f0;"':''}>
       <td>${datumLabel(dagen[i])}</td>
       <td class="tx">${tStr(mosTX[i])}</td><td class="tx">${tStr(harmTX[i])}</td>
-      <td class="obs">${tStr(obsTX[i])}</td>
+      <td class="obs" style="color:#e67e22">${tStr(obsTX[i])}</td>
       <td class="verschil ${dKleur(dObsTX)}">${dStr(dObsTX)}</td>
       <td class="tn">${tStr(mosTN[i])}</td><td class="tn">${tStr(harmTN[i])}</td>
-      <td class="obs">${tStr(obsTN[i])}</td>
+      <td class="obs" style="color:#0d3a7a">${tStr(obsTN[i])}</td>
       <td class="verschil ${dKleur(dObsTN)}">${dStr(dObsTN)}</td>
     </tr>`;
   }
