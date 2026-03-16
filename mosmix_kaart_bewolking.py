@@ -111,7 +111,7 @@ now_lokaal = now_utc.astimezone(LOCAL_TZ)
 now_str    = now_lokaal.strftime("%d %b %Y  %H:%M")
 
 # Genereer voor de komende 4 dagen
-DAGEN_VOORUIT = 4
+DAGEN_VOORUIT = 10
 
 for dag_offset in range(1, DAGEN_VOORUIT + 1):
     doeldag = (now_lokaal + timedelta(days=dag_offset)).date()
