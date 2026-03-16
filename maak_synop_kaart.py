@@ -349,7 +349,20 @@ sym.text(0.42, 0.14, "Windkracht Bft",fontsize=3.5, color="#003366", transform=s
 ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
 ax.axis("off")
 
-fname = "kaart_synop.png"
+import glob, os as _os
+
+fname = f"kaart_synop_{now_lokaal.strftime('%Y%m%d_%H%M')}.png"
 plt.savefig(fname, dpi=150, bbox_inches="tight")
 plt.close()
 print(f"Kaart opgeslagen: {fname}")
+bestanden = sorted(glob.glob("kaart_synop_*.png"))
+if len(bestanden) > 10:
+    for oud in bestanden[:-10]:
+        _os.remove(oud)
+
+# Bewaar laatste 10 synop kaarten, verwijder de rest
+synop_bestanden = sorted(glob.glob("kaart_synop_*.png"))
+if len(synop_bestanden) > 10:
+    for oud in synop_bestanden[:-10]:
+        _os.remove(oud)
+        print(f"Verwijderd: {oud}")
