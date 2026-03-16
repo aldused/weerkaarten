@@ -64,8 +64,7 @@
   </div>
 </div>
 <div class="tab-balk">
-  <div class="tab-knop actief" id="tab-verwachting" onclick="wisselTab('verwachting')">📈 Verwachting</div>
-  <div class="tab-knop"        id="tab-verificatie" onclick="wisselTab('verificatie')">✅ Verificatie</div>
+  <div class="tab-knop actief" id="tab-verwachting">📈 Verwachting &amp; Verificatie</div>
 </div>
 <div class="station-balk">
   <label>Station:</label>
@@ -97,6 +96,7 @@
     </div>
     <div class="grafiek-wrapper"><canvas id="grafiek-verw"></canvas></div>
     <div class="status" id="status-verw">Laden...</div>
+    <div class="score-rij" id="score-rij" style="margin-top:14px;"></div>
   </div>
   <div class="kaart">
     <h2>Vergelijkingstabel</h2>
@@ -114,43 +114,6 @@
   <div class="footer-cr">© Ed Aldus | Data: DWD (MOSMIX) &amp; KNMI (Harmonie via Open-Meteo)</div>
 </div>
 
-<!-- Tab: Verificatie -->
-<div id="inhoud-verificatie" class="content" style="display:none;">
-  <div class="kaart">
-    <h2 id="verif-titel">Verificatie – De Bilt</h2>
-    <p class="kaart-sub">Afgelopen 3 dagen: MOSMIX-voorspelling vs werkelijke meting vs Harmonie</p>
-    <div class="score-rij" id="score-rij"></div>
-    <div class="legenda">
-      <div class="legenda-item"><div style="width:28px;height:3px;background:#cc2200;border-radius:2px;"></div><span>MOSMIX TX</span></div>
-      <div class="legenda-item"><div style="width:28px;height:3px;background:#1a5fb4;border-radius:2px;"></div><span>MOSMIX TN</span></div>
-      <div class="legenda-item"><div style="width:12px;height:12px;background:#27ae60;border-radius:50%;display:inline-block;"></div><span>Werkelijk TX</span></div>
-      <div class="legenda-item"><div style="width:12px;height:12px;background:#0d3a7a;border-radius:50%;display:inline-block;"></div><span>Werkelijk TN</span></div>
-      <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#f39c12 0,#f39c12 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TX</span></div>
-      <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#8e44ad 0,#8e44ad 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TN</span></div>
-    </div>
-    <div class="grafiek-wrapper"><canvas id="grafiek-verif"></canvas></div>
-    <div class="status" id="status-verif">Laden...</div>
-  </div>
-  <div class="kaart">
-    <h2>Verificatietabel</h2>
-    <p class="kaart-sub">MOSMIX-voorspelling (2-3 dagen van tevoren) vs werkelijke meting · verschil in °C</p>
-    <table class="tabel">
-      <thead>
-        <tr>
-          <th rowspan="2">Datum</th>
-          <th colspan="3" class="tx-kop" style="text-align:center;">Max temperatuur (TX)</th>
-          <th colspan="3" class="tn-kop" style="text-align:center;">Min temperatuur (TN)</th>
-        </tr>
-        <tr>
-          <th class="tx-kop">MOSMIX</th><th class="tx-kop">Werkelijk</th><th class="tx-kop">Δ</th>
-          <th class="tn-kop">MOSMIX</th><th class="tn-kop">Werkelijk</th><th class="tn-kop">Δ</th>
-        </tr>
-      </thead>
-      <tbody id="tabel-verif-body"><tr><td colspan="7" style="text-align:center;color:#888;padding:16px;">Laden...</td></tr></tbody>
-    </table>
-  </div>
-  <div class="footer-cr">© Ed Aldus | Data: DWD (MOSMIX) &amp; KNMI</div>
-</div>
 
 <script>
 const NL_DAGEN   = ["zo","ma","di","wo","do","vr","za"];
@@ -160,26 +123,16 @@ function dKleur(v) { if (v===null||v===undefined) return "verschil-nul"; return 
 function dStr(v)   { if (v===null||v===undefined) return "–"; return (v>0?"+":"")+v.toFixed(1); }
 function tStr(v)   { return v!==null&&v!==undefined ? v.toFixed(1)+"°" : "–"; }
 
-let grafiekVerw=null, grafiekVerif=null, verwData=null, verifData=null;
-let huidigStation="De Bilt", huidigTab="verwachting";
-
-function wisselTab(tab) {
-  huidigTab=tab;
-  document.getElementById("tab-verwachting").classList.toggle("actief",tab==="verwachting");
-  document.getElementById("tab-verificatie").classList.toggle("actief",tab==="verificatie");
-  document.getElementById("inhoud-verwachting").style.display=tab==="verwachting"?"block":"none";
-  document.getElementById("inhoud-verificatie").style.display=tab==="verificatie"?"block":"none";
-  if (tab==="verificatie"&&verifData) toonVerificatie();
-}
+let grafiekVerw=null, verwData=null, verifData=null;
+let huidigStation="De Bilt";
 
 function wisselStation(naam) {
   huidigStation = naam;
   document.querySelectorAll(".station-btn").forEach(b => {
-    b.classList.toggle("actief", b.textContent.trim() === naam || 
+    b.classList.toggle("actief", b.textContent.trim() === naam ||
       (naam === "Hoek van Holland" && b.textContent.trim() === "Hoek v. Holland"));
   });
-  if (verwData)  toonVerwachting();
-  if (verifData && huidigTab === "verificatie") toonVerificatie();
+  if (verwData) toonVerwachting();
 }
 
 async function laadVerwachting() {
@@ -255,57 +208,34 @@ async function toonVerwachting() {
       <td class="verschil ${dKleur(dObsTN)}">${dStr(dObsTN)}</td>
     </tr>`;
   }
+
+  // MAE scores
+  function mae(pred, obs) {
+    const p = pred.map((v,i)=>[v,obs[i]]).filter(([a,b])=>a!==null&&b!==null);
+    return p.length ? Math.round(p.reduce((s,[a,b])=>s+Math.abs(a-b),0)/p.length*10)/10 : null;
+  }
+  const scoreRij = document.getElementById("score-rij");
+  const maeMosTX = mae(mosTX, obsTX);
+  const maeMosTN = mae(mosTN, obsTN);
+  const maeHaTX  = mae(harmTX, obsTX);
+  const maeHaTN  = mae(harmTN, obsTN);
+  if (scoreRij && maeMosTX !== null) {
+    scoreRij.innerHTML = `
+      <div style="font-size:0.72em;font-weight:600;color:#5a7090;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:4px;">Gemiddelde afwijking afgelopen dagen (MAE — lager = beter)</div>
+      ${[["MOSMIX TX",maeMosTX,"#cc2200"],["MOSMIX TN",maeMosTN,"#1a5fb4"],["Harmonie TX",maeHaTX,"#27ae60"],["Harmonie TN",maeHaTN,"#8e44ad"]]
+        .map(([l,v,k])=>`<div class="score-kaartje"><div class="score-waarde" style="color:${k}">${v!==null?v.toFixed(1)+"°":"–"}</div><div class="score-label">${l}</div></div>`).join("")}`;
+  } else if (scoreRij) {
+    scoreRij.innerHTML = "";
+  }
 }
+
 
 async function laadVerificatie() {
   try {
-    const r=await fetch("beta_verificatie.json?t="+Date.now());
-    verifData=await r.json();
-    if(huidigTab==="verificatie")toonVerificatie();
-  } catch(e) { document.getElementById("status-verif").innerHTML="<span class='fout'>Verificatiedata niet beschikbaar — draai maak_beta_verificatie.py</span>"; }
-}
-
-async function toonVerificatie() {
-  const station=verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
-  document.getElementById("verif-titel").textContent=`Verificatie – ${station.naam}`;
-  const dagen=station.data.map(d=>d.datum);
-  const labels=dagen.map(datumLabel);
-  const mosTX=station.data.map(d=>d.mos_tx);
-  const mosTN=station.data.map(d=>d.mos_tn);
-  const obsTX=station.data.map(d=>d.obs_tx);
-  const obsTN=station.data.map(d=>d.obs_tn);
-  let harmTX=Array(dagen.length).fill(null), harmTN=Array(dagen.length).fill(null);
-  try {
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&daily=temperature_2m_max,temperature_2m_min&models=knmi_seamless&timezone=Europe/Amsterdam&start_date=${dagen[0]}&end_date=${dagen[dagen.length-1]}`;
-    const h=(await (await fetch(url)).json());
-    for(let i=0;i<dagen.length;i++){const idx=h.daily.time.indexOf(dagen[i]);if(idx>=0){harmTX[i]=Math.round(h.daily.temperature_2m_max[idx]*10)/10;harmTN[i]=Math.round(h.daily.temperature_2m_min[idx]*10)/10;}}
-  } catch(e){}
-  function mae(pred,obs){const p=pred.map((v,i)=>[v,obs[i]]).filter(([a,b])=>a!==null&&b!==null);return p.length?Math.round(p.reduce((s,[a,b])=>s+Math.abs(a-b),0)/p.length*10)/10:null;}
-  const scoreRij=document.getElementById("score-rij");
-  scoreRij.innerHTML=[
-    ["MAE MOSMIX TX",mae(mosTX,obsTX),"#cc2200"],
-    ["MAE MOSMIX TN",mae(mosTN,obsTN),"#1a5fb4"],
-    ["MAE Harmonie TX",mae(harmTX,obsTX),"#27ae60"],
-    ["MAE Harmonie TN",mae(harmTN,obsTN),"#8e44ad"],
-  ].map(([l,v,k])=>`<div class="score-kaartje"><div class="score-waarde" style="color:${k}">${v!==null?v.toFixed(1)+"°":"–"}</div><div class="score-label">${l}</div></div>`).join("");
-  const ctx=document.getElementById("grafiek-verif").getContext("2d");
-  if(grafiekVerif)grafiekVerif.destroy();
-  grafiekVerif=new Chart(ctx,{type:"line",data:{labels,datasets:[
-    {label:"MOSMIX TX",data:mosTX,borderColor:"#cc2200",borderWidth:2,pointRadius:5,tension:0.3,fill:false},
-    {label:"MOSMIX TN",data:mosTN,borderColor:"#1a5fb4",borderWidth:2,pointRadius:5,tension:0.3,fill:false},
-    {label:"Werkelijk TX",data:obsTX,borderColor:"#27ae60",borderWidth:0,pointRadius:9,pointStyle:"star",showLine:false},
-    {label:"Werkelijk TN",data:obsTN,borderColor:"#0d3a7a",borderWidth:0,pointRadius:9,pointStyle:"star",showLine:false},
-    {label:"Harmonie TX",data:harmTX,borderColor:"#f39c12",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.3,fill:false},
-    {label:"Harmonie TN",data:harmTN,borderColor:"#8e44ad",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.3,fill:false},
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!==null?c.parsed.y.toFixed(1)+"°C":"–"}`}}},scales:{y:{grid:{color:"#eeeeee"},ticks:{callback:v=>v+"°"}},x:{grid:{color:"#f0f0f0"}}}}});
-  const tbody=document.getElementById("tabel-verif-body");
-  tbody.innerHTML="";
-  for(let i=0;i<dagen.length;i++){
-    const dTX=(mosTX[i]!==null&&obsTX[i]!==null)?Math.round((obsTX[i]-mosTX[i])*10)/10:null;
-    const dTN=(mosTN[i]!==null&&obsTN[i]!==null)?Math.round((obsTN[i]-mosTN[i])*10)/10:null;
-    tbody.innerHTML+=`<tr><td><strong>${datumLabel(dagen[i])}</strong></td><td class="tx">${tStr(mosTX[i])}</td><td class="obs">${tStr(obsTX[i])}</td><td class="verschil ${dKleur(dTX)}">${dStr(dTX)}</td><td class="tn">${tStr(mosTN[i])}</td><td class="obs">${tStr(obsTN[i])}</td><td class="verschil ${dKleur(dTN)}">${dStr(dTN)}</td></tr>`;
-  }
-  document.getElementById("status-verif").innerHTML=`<span class='ok'>✓ Verificatiedata geladen</span> &nbsp;·&nbsp; Gegenereerd: ${verifData.gegenereerd}`;
+    const r = await fetch("beta_verificatie.json?t=" + Date.now());
+    verifData = await r.json();
+    if (verwData) toonVerwachting();
+  } catch(e) {}
 }
 
 laadVerwachting();
