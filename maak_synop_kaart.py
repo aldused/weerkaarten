@@ -319,7 +319,7 @@ ax.text(1.0, 0.0, f"© Ed Aldus | Data: KNMI | {now_str2}",
         ha="right", va="bottom", color="#555555")
 
 # Symbolen legenda rechtsonder
-sym = ax.inset_axes([0.58, 0.01, 0.41, 0.12])
+sym = ax.inset_axes([0.01, 0.01, 0.41, 0.12])
 sym.set_xlim(0,1); sym.set_ylim(0,1); sym.axis("off")
 sym.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
               linewidth=0.7,transform=sym.transAxes,zorder=0))
