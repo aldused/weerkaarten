@@ -27,7 +27,7 @@
   .kaart-sub { font-size: 0.78em; color: #666; margin-bottom: 14px; }
   .legenda { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78em; }
   .legenda-item { display: flex; align-items: center; gap: 6px; }
-  .grafiek-wrapper { position: relative; height: 300px; }
+  .grafiek-wrapper { position: relative; height: 340px; }
   .status { font-size: 0.75em; color: #888; margin-top: 10px; text-align: right; }
   .status .ok { color: #27ae60; }
   .status .fout { color: #e74c3c; }
@@ -85,7 +85,7 @@
 <div id="inhoud-verwachting" class="content">
   <div class="kaart">
     <h2 id="verw-titel">Temperatuurverwachting – De Bilt</h2>
-    <p class="kaart-sub">TX (max) en TN (min) per dag · komende dagen</p>
+    <p class="kaart-sub">Groen vlak = gemeten periode · sterren = werkelijk gemeten waarden · stippellijnen = Harmonie</p>
     <div class="legenda">
       <div class="legenda-item"><div style="width:28px;height:3px;background:#cc2200;border-radius:2px;"></div><span>MOSMIX TX</span></div>
       <div class="legenda-item"><div style="width:28px;height:3px;background:#1a5fb4;border-radius:2px;"></div><span>MOSMIX TN</span></div>
@@ -181,16 +181,71 @@ async function toonVerwachting() {
     document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='ok'>✓ Harmonie</span>";
   } catch(e) { document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='fout'>Harmonie niet beschikbaar</span>"; }
 
+  // Voeg ook MOSMIX-voorspelling uit verificatiedata toe voor verleden dagen
+  const mosTXVerif = dagen.map(d => {
+    if (!verifData) return null;
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (!vs) return null;
+    const vd = vs.data.find(x=>x.datum===d);
+    return vd ? vd.mos_tx : null;
+  });
+  const mosTNVerif = dagen.map(d => {
+    if (!verifData) return null;
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (!vs) return null;
+    const vd = vs.data.find(x=>x.datum===d);
+    return vd ? vd.mos_tn : null;
+  });
+
+  // Combineer: gebruik mosTX uit verwData waar beschikbaar, anders uit verifData
+  const mosTXCombined = dagen.map((d,i) => mosTX[i] ?? mosTXVerif[i]);
+  const mosTNCombined = dagen.map((d,i) => mosTN[i] ?? mosTNVerif[i]);
+
+  // Aantal verleden dagen voor achtergrond shading
+  const aantalVerleden = verledenDagen.length;
+
   const ctx=document.getElementById("grafiek-verw").getContext("2d");
   if(grafiekVerw)grafiekVerw.destroy();
-  grafiekVerw=new Chart(ctx,{type:"line",data:{labels,datasets:[
-    {label:"MOSMIX TX",  data:mosTX, borderColor:"#cc2200",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
-    {label:"MOSMIX TN",  data:mosTN, borderColor:"#1a5fb4",borderWidth:2.5,pointRadius:5,tension:0.4,fill:false},
-    {label:"Harmonie TX",data:harmTX,borderColor:"#27ae60",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.4,fill:false},
-    {label:"Harmonie TN",data:harmTN,borderColor:"#8e44ad",borderWidth:2,borderDash:[6,4],pointRadius:4,tension:0.4,fill:false},
-    {label:"Gemeten TX", data:obsTX, borderColor:"#e67e22",borderWidth:0,pointRadius:10,pointStyle:"star",showLine:false},
-    {label:"Gemeten TN", data:obsTN, borderColor:"#0d3a7a",borderWidth:0,pointRadius:10,pointStyle:"star",showLine:false},
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!==null?c.parsed.y.toFixed(1)+"°C":"–"}`}}},scales:{y:{grid:{color:"#eeeeee"},ticks:{callback:v=>v+"°"}},x:{grid:{color:"#f0f0f0"}}}}});
+
+  // Plugin voor groene achtergrond over verleden dagen
+  const verledenPlugin = {
+    id: "verledenAchtergrond",
+    beforeDraw(chart) {
+      if (aantalVerleden === 0) return;
+      const {ctx: c, chartArea, scales} = chart;
+      const x0 = chartArea.left;
+      const x1 = scales.x.getPixelForValue(aantalVerleden - 1) + (scales.x.getPixelForValue(1) - scales.x.getPixelForValue(0)) / 2;
+      c.save();
+      c.fillStyle = "rgba(39,174,96,0.07)";
+      c.fillRect(x0, chartArea.top, x1 - x0, chartArea.bottom - chartArea.top);
+      c.restore();
+    }
+  };
+
+  grafiekVerw=new Chart(ctx,{
+    type:"line",
+    plugins:[verledenPlugin],
+    data:{labels,datasets:[
+      {label:"MOSMIX TX",  data:mosTXCombined, borderColor:"#cc2200",borderWidth:2.5,pointRadius:4,tension:0.4,fill:false},
+      {label:"MOSMIX TN",  data:mosTNCombined, borderColor:"#1a5fb4",borderWidth:2.5,pointRadius:4,tension:0.4,fill:false},
+      {label:"Harmonie TX",data:harmTX,borderColor:"#27ae60",borderWidth:2,borderDash:[6,4],pointRadius:3,tension:0.4,fill:false},
+      {label:"Harmonie TN",data:harmTN,borderColor:"#8e44ad",borderWidth:2,borderDash:[6,4],pointRadius:3,tension:0.4,fill:false},
+      {label:"Gemeten TX", data:obsTX, borderColor:"#e67e22",backgroundColor:"#e67e22",borderWidth:2,pointRadius:obsTX.map(v=>v!==null?9:0),pointStyle:"circle",showLine:false},
+      {label:"Gemeten TN", data:obsTN, borderColor:"#0d3a7a",backgroundColor:"#0d3a7a",borderWidth:2,pointRadius:obsTN.map(v=>v!==null?9:0),pointStyle:"circle",showLine:false},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!==null?c.parsed.y.toFixed(1)+"°C":"–"}`}}
+      },
+      scales:{
+        y:{grid:{color:"#eeeeee"},ticks:{callback:v=>v+"°"}},
+        x:{grid:{color:"#f0f0f0"}}
+      }
+    }
+  });
 
   const tbody=document.getElementById("tabel-verw-body");
   tbody.innerHTML="";
