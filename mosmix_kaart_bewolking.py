@@ -106,150 +106,150 @@ def dag_gemiddelde(times, values, doeldatum):
     return round(totaal / n, 1) if n > 0 else None
 
 # ── Data ophalen ───────────────────────────────────────────────────────────────
-now_utc  = datetime.now(timezone.utc)
+now_utc   = datetime.now(timezone.utc)
 now_lokaal = now_utc.astimezone(LOCAL_TZ)
-morgen   = (now_lokaal + timedelta(days=1)).date()
+now_str    = now_lokaal.strftime("%d %b %Y  %H:%M")
 
-now_str  = now_lokaal.strftime("%d %b %Y  %H:%M")
-dag_label = f"{nl_dagen[morgen.weekday()]} {morgen.day} {nl_maanden[morgen.month]}"
+# Genereer voor de komende 4 dagen
+DAGEN_VOORUIT = 4
 
-print(f"Bewolkingskaart voor {dag_label}...")
+for dag_offset in range(1, DAGEN_VOORUIT + 1):
+    doeldag = (now_lokaal + timedelta(days=dag_offset)).date()
+    dag_label = f"{nl_dagen[doeldag.weekday()]} {doeldag.day} {nl_maanden[doeldag.month]}"
+    datum_str = doeldag.strftime("%Y-%m-%d")
 
-station_data = {}
-for code, naam in stations:
-    if naam not in coords: continue
-    print(f"  {naam}...")
-    root = download_kmz(code)
-    if root is None: continue
-    times = get_times(root)
+    print(f"\nBewolkingskaart voor {dag_label}...")
 
-    # Probeer N_L/N_M/N_H, ook als alternatief N (totaal)
-    nl_raw = parse_values(root, 'Nl')
-    nm_raw = parse_values(root, 'Nm')
-    nh_raw = parse_values(root, 'Nh')
+    station_data = {}
+    for code, naam in stations:
+        if naam not in coords: continue
+        print(f"  {naam}...")
+        root = download_kmz(code)
+        if root is None: continue
+        times = get_times(root)
 
-    print(f"    Nl={len(nl_raw)} Nm={len(nm_raw)} Nh={len(nh_raw)} waarden")
+        nl_raw = parse_values(root, 'Nl')
+        nm_raw = parse_values(root, 'Nm')
+        nh_raw = parse_values(root, 'Nh')
 
-    nl_ok = dag_gemiddelde(times, nl_raw, morgen)
-    nm_ok = dag_gemiddelde(times, nm_raw, morgen)
-    nh_ok = dag_gemiddelde(times, nh_raw, morgen)
+        nl = dag_gemiddelde(times, nl_raw, doeldag)
+        nm = dag_gemiddelde(times, nm_raw, doeldag)
+        nh = dag_gemiddelde(times, nh_raw, doeldag)
 
-    # Waarden zijn al in % (0-100)
-    nl = round(nl_ok, 1) if nl_ok is not None else None
-    nm = round(nm_ok, 1) if nm_ok is not None else None
-    nh = round(nh_ok, 1) if nh_ok is not None else None
+        if nl is not None or nm is not None or nh is not None:
+            station_data[naam] = {
+                "nl": round(nl, 1) if nl is not None else None,
+                "nm": round(nm, 1) if nm is not None else None,
+                "nh": round(nh, 1) if nh is not None else None,
+            }
 
-    print(f"    Dag gemiddelden: NL={nl}% NM={nm}% NH={nh}%")
+    print(f"  Data voor {len(station_data)} stations")
 
-    if nl is not None or nm is not None or nh is not None:
-        station_data[naam] = {"nl": nl, "nm": nm, "nh": nh}
+    # ── Kaart tekenen ────────────────────────────────────────────
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    from matplotlib.gridspec import GridSpec
 
-print(f"Data voor {len(station_data)} stations")
+    fig = plt.figure(figsize=(10, 13))
+    gs = GridSpec(2, 1, figure=fig, height_ratios=[0.07, 1], hspace=0.01)
 
-# ── Kaart tekenen ─────────────────────────────────────────────────────────────
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-from matplotlib.gridspec import GridSpec
+    # Header
+    ax_h = fig.add_subplot(gs[0])
+    ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
+    ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,
+                   facecolor="#003366", zorder=0, clip_on=False))
+    ax_h.text(0.012, 0.65, "Ed Aldus WM", fontsize=11, color="white",
+              weight="bold", va="center", transform=ax_h.transAxes)
+    ax_h.text(0.012, 0.22, "MOS ECMWF/ICON · DWD MOSMIX", fontsize=7.5,
+              color="#a8c8e8", va="center", transform=ax_h.transAxes)
+    ax_h.text(0.988, 0.65, f"Bewolking – {dag_label}",
+              fontsize=13, color="white", weight="bold",
+              ha="right", va="center", transform=ax_h.transAxes)
+    ax_h.text(0.988, 0.22, f"run: {now_str}",
+              fontsize=7.5, color="#a8c8e8", ha="right", va="center",
+              transform=ax_h.transAxes)
+    ax_h.axhline(0, color="#4a90c4", linewidth=1.5)
 
-fig = plt.figure(figsize=(10, 13))
-gs = GridSpec(2, 1, figure=fig, height_ratios=[0.07, 1], hspace=0.01)
+    # Kaart
+    ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
+    ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
+    ax.set_aspect('auto')
+    ax.add_feature(cfeature.OCEAN.with_scale("10m"),  facecolor="#d8ecf8", zorder=0)
+    ax.add_feature(cfeature.LAND.with_scale("10m"),   facecolor="#f0f4ec", zorder=1)
+    ax.add_feature(cfeature.LAKES.with_scale("10m"),  facecolor="#d8ecf8", zorder=2)
+    ax.add_feature(cfeature.RIVERS.with_scale("10m"), edgecolor="#a8cce0", linewidth=0.5, zorder=3)
+    ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="#555555", linewidth=0.8, zorder=4)
+    ax.add_feature(cfeature.BORDERS.with_scale("10m"),   edgecolor="#888888", linewidth=0.6,
+                   linestyle="--", zorder=4)
+    ax.axis("off")
 
-# Header
-ax_h = fig.add_subplot(gs[0])
-ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
-ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,
-               facecolor="#003366", zorder=0, clip_on=False))
-ax_h.text(0.012, 0.65, "Ed Aldus WM", fontsize=11, color="white",
-          weight="bold", va="center", transform=ax_h.transAxes)
-ax_h.text(0.012, 0.22, "MOS ECMWF/ICON · DWD MOSMIX", fontsize=7.5,
-          color="#a8c8e8", va="center", transform=ax_h.transAxes)
-ax_h.text(0.988, 0.65, f"Bewolking – {dag_label}",
-          fontsize=13, color="white", weight="bold",
-          ha="right", va="center", transform=ax_h.transAxes)
-ax_h.text(0.988, 0.22, f"run: {now_str}",
-          fontsize=7.5, color="#a8c8e8", ha="right", va="center",
-          transform=ax_h.transAxes)
-ax_h.axhline(0, color="#4a90c4", linewidth=1.5)
+    tr = ccrs.PlateCarree()
 
-# Kaart
-ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
-ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
-ax.set_aspect('auto')
-ax.add_feature(cfeature.OCEAN.with_scale("10m"),  facecolor="#d8ecf8", zorder=0)
-ax.add_feature(cfeature.LAND.with_scale("10m"),   facecolor="#f0f4ec", zorder=1)
-ax.add_feature(cfeature.LAKES.with_scale("10m"),  facecolor="#d8ecf8", zorder=2)
-ax.add_feature(cfeature.RIVERS.with_scale("10m"), edgecolor="#a8cce0", linewidth=0.5, zorder=3)
-ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="#555555", linewidth=0.8, zorder=4)
-ax.add_feature(cfeature.BORDERS.with_scale("10m"),   edgecolor="#888888", linewidth=0.6,
-               linestyle="--", zorder=4)
-ax.axis("off")
+    # Vaste cirkelgrootte in graden (eenvoudiger en betrouwbaarder)
+    R_LON = 0.065
+    R_LAT = 0.045
 
-tr = ccrs.PlateCarree()
+    def teken_cirkel(ax, lon, lat, waarde, kleur):
+        """Teken een gevulde cirkel op (lon, lat) met vulling naar waarde (0-100%)."""
+        # Witte achtergrond
+        ax.add_patch(mpatches.Ellipse((lon, lat), 2*R_LON, 2*R_LAT,
+                     facecolor='white', edgecolor='none', zorder=8, transform=tr))
+        # Vulling
+        if waarde is not None and waarde > 0:
+            frac = min(waarde / 100.0, 1.0)
+            theta = np.linspace(np.pi/2, np.pi/2 - frac*2*np.pi, 80)
+            xs = lon + R_LON * np.cos(theta)
+            ys = lat + R_LAT * np.sin(theta)
+            ax.fill(np.append([lon], xs), np.append([lat], ys),
+                    color=kleur, zorder=9, transform=tr)
+        # Rand
+        ax.add_patch(mpatches.Ellipse((lon, lat), 2*R_LON, 2*R_LAT,
+                     facecolor='none', edgecolor='#333333',
+                     linewidth=0.8, zorder=10, transform=tr))
+        # Percentage weglaten — vulling spreekt voor zich
 
-# Vaste cirkelgrootte in graden (eenvoudiger en betrouwbaarder)
-R_LON = 0.065
-R_LAT = 0.045
+    for naam, v in station_data.items():
+        lon, lat = coords[naam]
+        nl, nm, nh = v["nl"], v["nm"], v["nh"]
+        # Drie cirkels gestapeld: laag onderin, hoog bovenin
+        teken_cirkel(ax, lon, lat,                    nl, KLEUR_L)  # laag
+        teken_cirkel(ax, lon, lat + R_LAT*2.4,        nm, KLEUR_M)  # midden
+        teken_cirkel(ax, lon, lat + R_LAT*4.8,        nh, KLEUR_H)  # hoog
 
-def teken_cirkel(ax, lon, lat, waarde, kleur):
-    """Teken een gevulde cirkel op (lon, lat) met vulling naar waarde (0-100%)."""
-    # Witte achtergrond
-    ax.add_patch(mpatches.Ellipse((lon, lat), 2*R_LON, 2*R_LAT,
-                 facecolor='white', edgecolor='none', zorder=8, transform=tr))
-    # Vulling
-    if waarde is not None and waarde > 0:
-        frac = min(waarde / 100.0, 1.0)
-        theta = np.linspace(np.pi/2, np.pi/2 - frac*2*np.pi, 80)
-        xs = lon + R_LON * np.cos(theta)
-        ys = lat + R_LAT * np.sin(theta)
-        ax.fill(np.append([lon], xs), np.append([lat], ys),
-                color=kleur, zorder=9, transform=tr)
-    # Rand
-    ax.add_patch(mpatches.Ellipse((lon, lat), 2*R_LON, 2*R_LAT,
-                 facecolor='none', edgecolor='#333333',
-                 linewidth=0.8, zorder=10, transform=tr))
-    # Percentage weglaten — vulling spreekt voor zich
+    # ── Legenda ───────────────────────────────────────────────────────────────────
+    leg = ax.inset_axes([0.01, 0.82, 0.28, 0.17])
+    leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
+    leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
+                  linewidth=0.7, transform=leg.transAxes, zorder=0))
+    leg.text(0.5, 0.96, "Bewolking per laag (daggemiddelde)",
+             fontsize=4.5, weight="bold", ha="center", va="top", transform=leg.transAxes)
 
-for naam, v in station_data.items():
-    lon, lat = coords[naam]
-    nl, nm, nh = v["nl"], v["nm"], v["nh"]
-    # Drie cirkels gestapeld: laag onderin, hoog bovenin
-    teken_cirkel(ax, lon, lat,                    nl, KLEUR_L)  # laag
-    teken_cirkel(ax, lon, lat + R_LAT*2.4,        nm, KLEUR_M)  # midden
-    teken_cirkel(ax, lon, lat + R_LAT*4.8,        nh, KLEUR_H)  # hoog
+    # Drie lagen tonen
+    lagen = [
+        (0.75, KLEUR_H, "Hoog (Nh)", "Cirrus / sluierbewolking"),
+        (0.50, KLEUR_M, "Midden (Nm)", "Altocumulus / altostratus"),
+        (0.25, KLEUR_L, "Laag (Nl)",  "Cumulus / stratus"),
+    ]
+    for y, kleur, naam_l, omschr in lagen:
+        # Gevulde cirkel
+        c = mpatches.Ellipse((0.10, y), 0.10, 0.14,
+                              facecolor=kleur, edgecolor='#444444',
+                              linewidth=0.6, zorder=1, transform=leg.transAxes)
+        leg.add_patch(c)
+        leg.text(0.20, y+0.04, naam_l, fontsize=4.2, weight="bold",
+                 color="#222222", transform=leg.transAxes, va="center")
+        leg.text(0.20, y-0.06, omschr, fontsize=3.5,
+                 color="#666666", transform=leg.transAxes, va="center")
 
-# ── Legenda ───────────────────────────────────────────────────────────────────
-leg = ax.inset_axes([0.01, 0.82, 0.28, 0.17])
-leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
-leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
-              linewidth=0.7, transform=leg.transAxes, zorder=0))
-leg.text(0.5, 0.96, "Bewolking per laag (daggemiddelde)",
-         fontsize=4.5, weight="bold", ha="center", va="top", transform=leg.transAxes)
+    # Vulling uitleg
+    leg.text(0.5, 0.05, "Vulling = bewolkingsgraad (0% = helder, 100% = bedekt)",
+             fontsize=3.2, color="#888888", ha="center", transform=leg.transAxes)
 
-# Drie lagen tonen
-lagen = [
-    (0.75, KLEUR_H, "Hoog (Nh)", "Cirrus / sluierbewolking"),
-    (0.50, KLEUR_M, "Midden (Nm)", "Altocumulus / altostratus"),
-    (0.25, KLEUR_L, "Laag (Nl)",  "Cumulus / stratus"),
-]
-for y, kleur, naam_l, omschr in lagen:
-    # Gevulde cirkel
-    c = mpatches.Ellipse((0.10, y), 0.10, 0.14,
-                          facecolor=kleur, edgecolor='#444444',
-                          linewidth=0.6, zorder=1, transform=leg.transAxes)
-    leg.add_patch(c)
-    leg.text(0.20, y+0.04, naam_l, fontsize=4.2, weight="bold",
-             color="#222222", transform=leg.transAxes, va="center")
-    leg.text(0.20, y-0.06, omschr, fontsize=3.5,
-             color="#666666", transform=leg.transAxes, va="center")
+    ax.text(1.0, 0.0, f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str}",
+            transform=ax.transAxes, fontsize=6.5, style="italic",
+            ha="right", va="bottom", color="#555555")
 
-# Vulling uitleg
-leg.text(0.5, 0.05, "Vulling = bewolkingsgraad (0% = helder, 100% = bedekt)",
-         fontsize=3.2, color="#888888", ha="center", transform=leg.transAxes)
-
-ax.text(1.0, 0.0, f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str}",
-        transform=ax.transAxes, fontsize=6.5, style="italic",
-        ha="right", va="bottom", color="#555555")
-
-plt.savefig("kaart_bewolking.png", dpi=150, bbox_inches="tight")
-plt.close()
-print("Kaart opgeslagen: kaart_bewolking.png")
+    fname = f"kaart_bewolking_{datum_str}.png"
+    plt.savefig(fname, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Kaart opgeslagen: {fname}")
