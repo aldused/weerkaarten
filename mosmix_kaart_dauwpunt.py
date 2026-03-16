@@ -140,9 +140,10 @@ for code, name in stations:
     print(f"Ophalen: {name} ({code})...")
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
-    times  = get_times(root)
-    td_raw = parse_values(root, 'Td')    # dauwpunt 2m (Kelvin)
-    tt_raw = parse_values(root, 'TTT')   # temperatuur 2m (Kelvin)
+    times   = get_times(root)
+    td_raw  = parse_values(root, 'Td')
+    tt_raw  = parse_values(root, 'TTT')
+    wwm_raw = parse_values(root, 'wwM')
 
     if not td_raw:
         print(f"  x Geen Td data voor {name}"); continue
@@ -153,24 +154,27 @@ for code, name in stations:
         d    = loc.date()
         hour = loc.hour
         if 0 <= hour < 12:
-            if d not in daily: daily[d] = {"td": [], "tt": []}
+            if d not in daily: daily[d] = {"td": [], "tt": [], "wwm": []}
             if i < len(td_raw) and td_raw[i] is not None:
                 daily[d]["td"].append(td_raw[i] - 273.15)
             if i < len(tt_raw) and tt_raw[i] is not None:
                 daily[d]["tt"].append(tt_raw[i] - 273.15)
+            if i < len(wwm_raw) and wwm_raw[i] is not None:
+                daily[d]["wwm"].append(wwm_raw[i])
 
     days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
-        td_vals = daily[d]["td"]
-        tt_vals = daily[d]["tt"]
+        td_vals  = daily[d]["td"]
+        tt_vals  = daily[d]["tt"]
+        wwm_vals = daily[d]["wwm"]
         if not td_vals: continue
         td_min = round(min(td_vals), 1)
-        # Depressie op moment van laagste dauwpunt
         idx = td_vals.index(min(td_vals))
         tt_op_min = tt_vals[idx] if idx < len(tt_vals) else None
         dep = round(tt_op_min - td_min, 1) if tt_op_min is not None else None
-        data_per_day[d][name] = {"td": td_min, "dep": dep}
+        wwm_max = round(max(wwm_vals)) if wwm_vals else None
+        data_per_day[d][name] = {"td": td_min, "dep": dep, "wwm": wwm_max}
 
 print(f"Data voor {len(data_per_day)} dagen")
 if not data_per_day: print("Geen data!"); exit()
@@ -191,15 +195,18 @@ for day, dag_data in data_per_day.items():
         lon, lat = coords[name]
         td  = vals["td"]
         dep = vals["dep"]
+        wwm = vals.get("wwm")
         cat    = dep_categorie(dep)
         kleur  = DEP_KLEUREN[cat]
         tkleur = DEP_TEKSTKLEUR[cat]
         dep_str = f"Δ{dep:.1f}°" if dep is not None else ""
         tekst = f"{td:.1f}°\n{dep_str}"
+        if wwm is not None and wwm > 0:
+            tekst += f"\n≡{wwm}%"
 
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.5, weight="bold",
+        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.0, weight="bold",
                 color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
+                bbox=dict(boxstyle="round,pad=0.18", facecolor=kleur, edgecolor="none", zorder=7))
 
     ax.text(1.0,0.0,f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
@@ -219,8 +226,9 @@ for day, dag_data in data_per_day.items():
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
     leg.text(0.5,0.96,"Dauwpunt min (00–12u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
     leg.text(0.5,0.88,"getal = Td2°C  Δ = depressie (T–Td)",fontsize=3.8,ha="center",va="top",transform=leg.transAxes,color="#555555")
+    leg.text(0.5,0.80,"≡ = kans op mist (%)",fontsize=3.8,ha="center",va="top",transform=leg.transAxes,color="#555555")
     for idx,(cat,label,kleur,tk) in enumerate(legenda_items):
-        y = 0.78 - idx*(1.0/len(legenda_items))*0.82
+        y = 0.70 - idx*(1.0/len(legenda_items))*0.75
         leg.add_patch(plt.Rectangle((0.03,y-0.04),0.14,0.09,facecolor=kleur,transform=leg.transAxes,zorder=1))
         leg.text(0.21,y+0.005,label,fontsize=3.8,va="center",transform=leg.transAxes,color="#222222")
 

@@ -167,19 +167,42 @@ def hoogste_anker_uur(station_id: str, dt_range: str) -> dict | None:
                 }
     return best_info
 
-def haal_t10n(station_id: str, dag: date) -> float | None:
-    """T10N ophalen via de daggegevens API (validated daily observations)."""
+def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float | None:
+    """
+    T10N ophalen via de daggegevens API (validated daily observations).
+    Fallback: laagste ta10 uit de 10-minuten API als daggegevens leeg zijn.
+    """
+    # Eerst proberen via validated daily API
     s = f"{dag.isoformat()}T00:00:00Z"
     e = f"{(dag + timedelta(days=1)).isoformat()}T00:00:00Z"
     params = {"datetime": f"{s}/{e}", "parameter-name": "T10N"}
     try:
         r = requests.get(f"{BASE_URL_DAG}/locations/{station_id}", headers=HEADERS, params=params, timeout=20)
-        if r.status_code in (400, 404): return None
-        r.raise_for_status()
-        js = r.json()
-        if not js.get("coverages"): return None
-        vals = to_floats(js["coverages"][0].get("ranges", {}).get("T10N", {}).get("values"))
-        return min_valid(vals)
+        if r.status_code not in (400, 404):
+            r.raise_for_status()
+            js = r.json()
+            if js.get("coverages"):
+                vals = to_floats(js["coverages"][0].get("ranges", {}).get("T10N", {}).get("values"))
+                result = min_valid(vals)
+                if result is not None:
+                    return result
+    except Exception:
+        pass
+
+    # Fallback: 10-minuten API, parameter ta10 (temp op 10cm)
+    if dt_range_10min is None:
+        dt_range_10min = f"{s}/{e}"
+    try:
+        params2 = {"datetime": dt_range_10min, "parameter-name": "ta10"}
+        r2 = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params2, timeout=20)
+        if r2.status_code in (400, 404):
+            return None
+        r2.raise_for_status()
+        js2 = r2.json()
+        if not js2.get("coverages"):
+            return None
+        vals2 = to_floats(js2["coverages"][0].get("ranges", {}).get("ta10", {}).get("values"))
+        return min_valid(vals2)
     except Exception:
         return None
 
@@ -249,7 +272,7 @@ def haal_dag(dag: date) -> dict:
             print(f"    Temp/wind fout {naam}: {e}")
 
         try:
-            t10n = haal_t10n(station_id, dag)
+            t10n = haal_t10n(station_id, dag, dt_range)
             if t10n is not None: res["t10n"].append((t10n, naam))
         except Exception as e:
             print(f"    T10N fout {naam}: {e}")

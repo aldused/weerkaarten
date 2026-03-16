@@ -164,8 +164,9 @@ for code, name in stations:
     print(f"Ophalen: {name} ({code})...")
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
-    times  = get_times(root)
-    vv_raw = parse_values(root, 'VV')
+    times   = get_times(root)
+    vv_raw  = parse_values(root, 'VV')
+    wwm_raw = parse_values(root, 'wwM')   # kans op mist %
 
     if not vv_raw:
         print(f"  x Geen VV data voor {name}"); continue
@@ -175,20 +176,25 @@ for code, name in stations:
         loc = dt + UTC_OFFSET
         d = loc.date()
         hour = loc.hour
-        # Nacht + ochtend meest relevant voor mist: 00-12u
         if 0 <= hour < 12:
-            if d not in daily: daily[d] = []
+            if d not in daily: daily[d] = {"vv": [], "wwm": []}
             if i < len(vv_raw) and vv_raw[i] is not None:
-                daily[d].append(vv_raw[i])
+                daily[d]["vv"].append(vv_raw[i])
+            if i < len(wwm_raw) and wwm_raw[i] is not None:
+                daily[d]["wwm"].append(wwm_raw[i])
 
     days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
-        vv_vals = daily[d]
-        vv_min = min(vv_vals) if vv_vals else None
-        # Aantal uren met zichtbaarheid < 1000m (elke tijdstap = 1 uur in MOSMIX_L)
+        vv_vals  = daily[d]["vv"]
+        wwm_vals = daily[d]["wwm"]
+        vv_min    = min(vv_vals) if vv_vals else None
         uren_mist = sum(1 for v in vv_vals if v is not None and v < 1000)
-        data_per_day[d][name] = {"vv_min": vv_min, "uren_mist": uren_mist}
+        wwm_max   = round(max(wwm_vals)) if wwm_vals else None
+        data_per_day[d][name] = {
+            "vv_min": vv_min, "uren_mist": uren_mist,
+            "wwm": wwm_max,
+        }
 
 print(f"Data voor {len(data_per_day)} dagen")
 if not data_per_day: print("Geen data!"); exit()
@@ -207,16 +213,19 @@ for day, dag_data in data_per_day.items():
     for name, vals in dag_data.items():
         if name not in coords: continue
         lon, lat = coords[name]
-        vv_min = vals["vv_min"]
+        vv_min    = vals["vv_min"]
         uren_mist = vals["uren_mist"]
-        cat   = vv_categorie(vv_min)
-        kleur = VV_KLEUREN[cat]
+        wwm = vals.get("wwm")
+        cat    = vv_categorie(vv_min)
+        kleur  = VV_KLEUREN[cat]
         tkleur = VV_TEKSTKLEUR[cat]
         tekst = vv_label_kort(vv_min, uren_mist)
+        if wwm is not None and wwm > 0:
+            tekst += f"\n≡{wwm}%"
 
-        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.5, weight="bold",
+        ax.text(lon, lat, tekst, ha="center", va="center", fontsize=7.0, weight="bold",
                 color=tkleur, zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.15", facecolor=kleur, edgecolor="none", zorder=7))
+                bbox=dict(boxstyle="round,pad=0.18", facecolor=kleur, edgecolor="none", zorder=7))
 
     ax.text(1.0,0.0,f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
@@ -235,6 +244,7 @@ for day, dag_data in data_per_day.items():
     leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
     leg.text(0.5,0.96,"Zichtbaarheid (00–12u)",fontsize=4.5,weight="bold",ha="center",va="top",transform=leg.transAxes)
+    leg.text(0.5,0.88,"≡ = kans op mist (%)",fontsize=3.8,ha="center",va="top",transform=leg.transAxes,color="#555555")
     for idx,(cat,label,kleur,tk) in enumerate(legenda_items):
         y = 0.82 - idx*(1.0/len(legenda_items))*0.85
         leg.add_patch(plt.Rectangle((0.04,y-0.04),0.20,0.09,facecolor=kleur,transform=leg.transAxes,zorder=1))

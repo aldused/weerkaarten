@@ -155,9 +155,14 @@ def parse_csv(tekst):
             "seizoen": seizoen(maand),
             "tx": val("TX"),
             "tn": val("TN"),
+            "tg": val("TG"),
             "rh": val("RH"),
             "fx": val("FXX"),
             "fg": val("FG"),
+            "fhx": val("FHX"),
+            "pg": val("PG"),
+            "px": val("PX"),
+            "pn": val("PN"),
             "sq": val("SQ"),
         })
     return records
@@ -171,15 +176,74 @@ def seizoen(maand):
 # ── Record helpers ────────────────────────────────────────────────────────────
 def top10_max(groep, param):
     vals = [(r[param], r["datum"]) for r in groep if r[param] is not None]
-    return sorted(vals, reverse=True)[:10]
+    return sorted(vals, reverse=True)[:25]
 
 def top10_min(groep, param):
     vals = [(r[param], r["datum"]) for r in groep if r[param] is not None]
-    return sorted(vals)[:10]
+    return sorted(vals)[:25]
 
-NL_MAANDEN = ["","januari","februari","maart","april","mei","juni",
-               "juli","augustus","september","oktober","november","december"]
-NL_SEIZOENEN = {"winter":"Winter","lente":"Lente","zomer":"Zomer","herfst":"Herfst"}
+def bereken_hittegolven(groep):
+    """
+    KNMI-definitie: ≥5 aaneengesloten dagen TX≥25°C, waarvan ≥3 dagen TX≥30°C.
+    Geeft lijst van hittegolven: {start, eind, duur, tropische_dagen, tx_max}
+    """
+    # Sorteer op datum
+    dagen = sorted([r for r in groep if r["tx"] is not None], key=lambda r: r["datum"])
+    golven = []
+    i = 0
+    while i < len(dagen):
+        if dagen[i]["tx"] >= 25:
+            # Begin van een warme reeks
+            j = i
+            while j < len(dagen) and dagen[j]["tx"] >= 25:
+                j += 1
+            reeks = dagen[i:j]
+            duur = len(reeks)
+            if duur >= 5:
+                tropisch = sum(1 for r in reeks if r["tx"] >= 30)
+                if tropisch >= 3:
+                    golven.append({
+                        "start": reeks[0]["datum"],
+                        "eind":  reeks[-1]["datum"],
+                        "duur":  duur,
+                        "tropische_dagen": tropisch,
+                        "tx_max": max(r["tx"] for r in reeks),
+                    })
+            i = j
+        else:
+            i += 1
+    return golven
+
+def bereken_koudegolven(groep):
+    """
+    KNMI-definitie: ≥5 aaneengesloten ijsdagen (TX<0°C),
+    waarvan ≥3 dagen met strenge vorst (TN<-10°C).
+    Geeft lijst van koudegolven: {start, eind, duur, strenge_vorst_dagen, tn_min}
+    """
+    dagen = sorted([r for r in groep if r["tx"] is not None], key=lambda r: r["datum"])
+    golven = []
+    i = 0
+    while i < len(dagen):
+        if dagen[i]["tx"] < 0:
+            j = i
+            while j < len(dagen) and dagen[j]["tx"] < 0:
+                j += 1
+            reeks = dagen[i:j]
+            duur = len(reeks)
+            if duur >= 5:
+                streng = sum(1 for r in reeks if r["tn"] is not None and r["tn"] < -10)
+                if streng >= 3:
+                    golven.append({
+                        "start": reeks[0]["datum"],
+                        "eind":  reeks[-1]["datum"],
+                        "duur":  duur,
+                        "strenge_vorst_dagen": streng,
+                        "tn_min": min(r["tn"] for r in reeks if r["tn"] is not None),
+                    })
+            i = j
+        else:
+            i += 1
+    return golven
 
 # ── Hoofdprogramma ────────────────────────────────────────────────────────────
 for STATION, STATION_NAAM in STATIONS:
@@ -217,7 +281,13 @@ for STATION, STATION_NAAM in STATIONS:
         records["dag"][msleutel][dsleutel] = {
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
             "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),
+            "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
+            "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
+            "sq_hoog": top10_max(groep, "sq"),
         }
 
     # ── Decaderecords ──────────────────────────────────────────────────────────
@@ -230,7 +300,13 @@ for STATION, STATION_NAAM in STATIONS:
         records["decade"][msleutel][dsleutel] = {
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
             "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),
+            "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
+            "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
+            "sq_hoog": top10_max(groep, "sq"),
         }
 
     # ── Maandrecords ───────────────────────────────────────────────────────────
@@ -241,7 +317,13 @@ for STATION, STATION_NAAM in STATIONS:
         records["maand"][str(m)] = {
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
             "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),
+            "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
+            "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
+            "sq_hoog": top10_max(groep, "sq"),
         }
 
     # ── Seizoensrecords ────────────────────────────────────────────────────────
@@ -252,7 +334,13 @@ for STATION, STATION_NAAM in STATIONS:
         records["seizoen"][s] = {
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
             "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),
+            "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
+            "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
+            "sq_hoog": top10_max(groep, "sq"),
         }
 
     # ── Jaarrecords ────────────────────────────────────────────────────────────
@@ -263,7 +351,21 @@ for STATION, STATION_NAAM in STATIONS:
         records["jaar"][str(j)] = {
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
             "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),
+            "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
+            "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
+            "sq_hoog": top10_max(groep, "sq"),
+            "sq_totaal": round(sum(r["sq"] for r in groep if r["sq"] is not None), 1),
+            "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
+            "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
+            "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
+            "zomerse_dagen":   sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 25),
+            "tropische_dagen": sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 30),
+            "hittegolven":     bereken_hittegolven(groep),
+            "koudegolven":     bereken_koudegolven(groep),
         }
 
     # ── Alltime records ────────────────────────────────────────────────────────
@@ -271,7 +373,13 @@ for STATION, STATION_NAAM in STATIONS:
     records["alltime"] = {
         "tx_hoog": top10_max(data, "tx"), "tx_laag": top10_min(data, "tx"),
         "tn_hoog": top10_max(data, "tn"), "tn_laag": top10_min(data, "tn"),
+        "tg_hoog": top10_max(data, "tg"), "tg_laag": top10_min(data, "tg"),
         "rh_hoog": top10_max(data, "rh"), "fx_hoog": top10_max(data, "fx"),
+        "fhx_hoog": top10_max(data, "fhx"),
+        "fg_hoog":  top10_max(data, "fg"),
+        "pg_hoog": top10_max(data, "pg"), "pg_laag": top10_min(data, "pg"),
+        "px_hoog": top10_max(data, "px"), "pn_laag": top10_min(data, "pn"),
+        "sq_hoog": top10_max(data, "sq"),
     }
 
     # ── Opslaan ────────────────────────────────────────────────────────────────

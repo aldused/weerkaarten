@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waarnemingen Kaart – Ed Aldus WM</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0d1b2e; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+
+  .topbalk {
+    background: #0d2b5e;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid #1e4080;
+    flex-shrink: 0;
+  }
+  .topbalk-titel { font-size: 1rem; font-weight: 700; color: white; white-space: nowrap; }
+  .topbalk-sub   { font-size: 0.72rem; color: #7fb8f7; }
+
+  .param-knoppen {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .param-knop {
+    padding: 5px 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #c8d8f0;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .param-knop:hover { background: rgba(255,255,255,0.15); }
+  .param-knop.actief { color: white; font-weight: 700; border-color: transparent; }
+  .param-knop.actief.tx   { background: #c0392b; }
+  .param-knop.actief.tn   { background: #2471a3; }
+  .param-knop.actief.t10n { background: #0e7c4a; }
+  .param-knop.actief.rr   { background: #1a5276; }
+  .param-knop.actief.fx   { background: #6c3483; }
+  .param-knop.actief.ff   { background: #d35400; }
+
+  .dag-balk {
+    background: #112240;
+    padding: 6px 16px;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #1e4080;
+    flex-shrink: 0;
+  }
+  .dag-knop {
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+    color: #94a3b8;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .dag-knop:hover { background: rgba(255,255,255,0.12); color: white; }
+  .dag-knop.actief { background: #2a5298; color: white; border-color: #3a62a8; font-weight: 600; }
+
+  .status-balk {
+    background: #0a1628;
+    padding: 4px 16px;
+    font-size: 0.68rem;
+    color: #64748b;
+    flex-shrink: 0;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .badge { display:inline-block; padding:1px 7px; border-radius:8px; font-size:0.65rem; font-weight:600; background:#f0c040; color:#5a4000; }
+  .badge.definitief { background:#4caf7d; color:white; }
+
+  #kaart { flex: 1; }
+
+  /* Leaflet marker labels */
+  .marker-label {
+    background: white;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    cursor: pointer;
+  }
+
+  /* Popup */
+  .leaflet-popup-content-wrapper {
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  .popup-inhoud { font-family: 'Segoe UI', Arial, sans-serif; min-width: 180px; }
+  .popup-naam { font-size: 0.95rem; font-weight: 700; color: #0d2b5e; margin-bottom: 8px; border-bottom: 2px solid #e4eaf2; padding-bottom: 5px; }
+  .popup-rij { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 0.82rem; border-bottom: 1px solid #f0f4f8; }
+  .popup-label { color: #5a7090; }
+  .popup-waarde { font-weight: 700; }
+  .popup-waarde.tx   { color: #c0392b; }
+  .popup-waarde.tn   { color: #2471a3; }
+  .popup-waarde.t10n { color: #0e7c4a; }
+  .popup-waarde.rr   { color: #1a5276; }
+  .popup-waarde.fx   { color: #6c3483; }
+  .popup-waarde.ff   { color: #d35400; }
+
+  .legenda {
+    position: absolute;
+    bottom: 28px;
+    right: 10px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.95);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.7rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    min-width: 120px;
+    pointer-events: none;
+  }
+  .legenda-titel { font-weight: 700; color: #0d2b5e; margin-bottom: 5px; font-size: 0.72rem; }
+  .legenda-rij { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .legenda-kleur { width: 16px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div class="topbalk">
+  <div>
+    <div class="topbalk-titel">📍 Waarnemingen Kaart</div>
+    <div class="topbalk-sub" id="update-lbl">Laden…</div>
+  </div>
+  <div class="param-knoppen">
+    <div class="param-knop actief tx" onclick="wisselParam('tx')">🌡 TX</div>
+    <div class="param-knop tn"  onclick="wisselParam('tn')">❄️ TN</div>
+    <div class="param-knop t10n" onclick="wisselParam('t10n')">🌿 T10N</div>
+    <div class="param-knop rr"  onclick="wisselParam('rr')">🌧 RR</div>
+    <div class="param-knop fx"  onclick="wisselParam('fx')">💨 FX</div>
+    <div class="param-knop ff"  onclick="wisselParam('ff')">🌬 FF</div>
+  </div>
+</div>
+
+<div class="dag-balk" id="dag-balk"></div>
+
+<div class="status-balk">
+  <span id="status-badge"></span>
+  <span id="status-tekst"></span>
+  <span style="margin-left:auto">© Ed Aldus | Data: KNMI</span>
+</div>
+
+<div id="kaart"></div>
+
+<div class="legenda" id="legenda"></div>
+
+<script>
+const NL_DAGEN   = ["zo","ma","di","wo","do","vr","za"];
+const NL_MAANDEN = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+const COORDS = {
+  "Voorschoten":         [52.125, 4.447],
+  "IJmuiden":            [52.458, 4.555],
+  "Texelhors":           [52.982, 4.862],
+  "Den Helder":          [52.928, 4.789],
+  "Schiphol":            [52.309, 4.781],
+  "Vlieland":            [53.250, 4.920],
+  "Wijdenes":            [52.632, 5.166],
+  "Berkhout":            [52.644, 4.979],
+  "Terschelling":        [53.392, 5.350],
+  "Wijk aan Zee":        [52.504, 4.601],
+  "Houtribdijk":         [52.649, 5.385],
+  "De Bilt":             [52.101, 5.178],
+  "Soesterberg":         [52.128, 5.276],
+  "Stavoren":            [52.882, 5.362],
+  "Lelystad":            [52.458, 5.521],
+  "Leeuwarden":          [53.224, 5.774],
+  "Marknesse":           [52.703, 5.888],
+  "Deelen":              [52.060, 5.885],
+  "Lauwersoog":          [53.413, 6.201],
+  "Heino":               [52.439, 6.261],
+  "Hoogeveen":           [52.730, 6.520],
+  "Eelde":               [53.123, 6.586],
+  "Hupsel":              [52.069, 6.657],
+  "Nieuw Beerta":        [53.197, 7.150],
+  "Twenthe":             [52.275, 6.889],
+  "Vlissingen":          [51.442, 3.596],
+  "Westdorpe":           [51.226, 3.861],
+  "Wilhelminadorp":      [51.527, 3.884],
+  "Stavenisse":          [51.594, 4.001],
+  "Hoek van Holland":    [51.978, 4.131],
+  "Tholen":              [51.531, 4.219],
+  "Woensdrecht":         [51.449, 4.342],
+  "Rotterdam Geulhaven": [51.893, 4.320],
+  "Rotterdam Airport":   [51.957, 4.437],
+  "Cabauw":              [51.971, 4.926],
+  "Gilze-Rijen":         [51.567, 4.931],
+  "Herwijnen":           [51.859, 5.146],
+  "Eindhoven":           [51.451, 5.377],
+  "Volkel":              [51.657, 5.707],
+  "Ell":                 [51.198, 5.763],
+  "Maastricht":          [50.911, 5.770],
+  "Arcen":               [51.500, 6.196],
+  "Horst":               [51.449, 6.029],
+};
+
+const PARAM_INFO = {
+  tx:   { label: "Max temp",     eenheid: "°C",  kleur: "#c0392b", schaal: [[-10,"#084594"],[-5,"#4292c6"],[0,"#9ecae1"],[5,"#ffffcc"],[10,"#fed976"],[20,"#fd8d3c"],[30,"#e31a1c"],[35,"#800026"]] },
+  tn:   { label: "Min temp",     eenheid: "°C",  kleur: "#2471a3", schaal: [[-20,"#1a3a6b"],[-10,"#2980b9"],[-5,"#a8d8ea"],[0,"#e8f4f8"],[5,"#ffffcc"],[10,"#fed976"],[20,"#fd8d3c"]] },
+  t10n: { label: "Min 10 cm",    eenheid: "°C",  kleur: "#0e7c4a", schaal: [[-15,"#1a3a6b"],[-5,"#2980b9"],[0,"#a8d8ea"],[5,"#c8e6c9"],[10,"#81c784"],[15,"#388e3c"]] },
+  rr:   { label: "Neerslag",     eenheid: "mm",  kleur: "#1a5276", schaal: [[0,"#f0f8ff"],[1,"#c6dbef"],[5,"#6baed6"],[15,"#2171b5"],[30,"#084594"]] },
+  fx:   { label: "Max windstoot",eenheid: "m/s", kleur: "#6c3483", schaal: [[0,"#ffffb2"],[10,"#fecc5c"],[20,"#fd8d3c"],[30,"#f03b20"],[40,"#bd0026"]] },
+  ff:   { label: "Uurwind",      eenheid: "m/s", kleur: "#d35400", schaal: [[0,"#ffffb2"],[5,"#fecc5c"],[10,"#fd8d3c"],[15,"#f03b20"],[20,"#bd0026"]] },
+};
+
+// Kleur interpolatie
+function kleurVoorWaarde(param, waarde) {
+  const schaal = PARAM_INFO[param].schaal;
+  if (waarde === null || waarde === undefined) return "#cccccc";
+  for (let i = schaal.length - 1; i >= 0; i--) {
+    if (waarde >= schaal[i][0]) return schaal[i][1];
+  }
+  return schaal[0][1];
+}
+
+function luminantie(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  return 0.299*r + 0.587*g + 0.114*b;
+}
+
+// Kaart initialiseren
+const kaart = L.map('kaart', { zoomControl: true }).setView([52.2, 5.3], 7);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap, © CartoDB', maxZoom: 13
+}).addTo(kaart);
+
+let markers = [];
+let dagData = {};
+let huidigParam = "tx";
+let huidigDatum = null;
+
+function verwijderMarkers() {
+  markers.forEach(m => kaart.removeLayer(m));
+  markers = [];
+}
+
+function haalWaarde(dag, param, station) {
+  if (!dag) return null;
+  if (param === "tx")   return (dag.max   || []).find(([,n]) => n === station)?.[0] ?? null;
+  if (param === "tn")   return (dag.min   || []).find(([,n]) => n === station)?.[0] ?? null;
+  if (param === "t10n") return (dag.t10n  || []).find(([,n]) => n === station)?.[0] ?? null;
+  if (param === "rr")   return (dag.rr    || []).find(([,n]) => n === station)?.[0] ?? null;
+  if (param === "fx")   return (dag.fx    || []).find(([,n]) => n === station)?.[0] ?? null;
+  if (param === "ff")   return (dag.ff    || []).find(([,n]) => n === station)?.[0] ?? null;
+  return null;
+}
+
+function formatWaarde(param, v) {
+  if (v === null) return "–";
+  if (param === "tx" || param === "tn" || param === "t10n") return v.toFixed(1) + "°";
+  if (param === "rr") return v.toFixed(1) + " mm";
+  if (param === "fx" || param === "ff") return v.toFixed(1) + " m/s";
+  return v;
+}
+
+function tekenMarkers() {
+  verwijderMarkers();
+  const dag = dagData[huidigDatum];
+  if (!dag) return;
+  const info = PARAM_INFO[huidigParam];
+
+  for (const [naam, coords] of Object.entries(COORDS)) {
+    const v = haalWaarde(dag, huidigParam, naam);
+    const bg = kleurVoorWaarde(huidigParam, v);
+    const fg = luminantie(bg) > 0.55 ? "#000" : "#fff";
+    const label = v !== null ? formatWaarde(huidigParam, v) : "–";
+
+    const icon = L.divIcon({
+      className: "",
+      html: `<div class="marker-label" style="background:${bg};color:${fg};border:1px solid rgba(0,0,0,0.15)">${label}</div>`,
+      iconAnchor: [20, 10],
+    });
+
+    const marker = L.marker(coords, { icon }).addTo(kaart);
+
+    // Popup met alle waarden
+    const tx   = haalWaarde(dag, "tx",   naam);
+    const tn   = haalWaarde(dag, "tn",   naam);
+    const t10n = haalWaarde(dag, "t10n", naam);
+    const rr   = haalWaarde(dag, "rr",   naam);
+    const fx   = haalWaarde(dag, "fx",   naam);
+    const ff   = dag.ff?.find(([,n]) => n === naam);
+    const ffVal = ff ? ff[0] : null;
+    const tijdvak = ff?.[2] || "";
+
+    marker.bindPopup(`<div class="popup-inhoud">
+      <div class="popup-naam">📍 ${naam}</div>
+      <div class="popup-rij"><span class="popup-label">🌡 Max temp</span><span class="popup-waarde tx">${tx !== null ? tx.toFixed(1)+"°C" : "–"}</span></div>
+      <div class="popup-rij"><span class="popup-label">❄️ Min temp</span><span class="popup-waarde tn">${tn !== null ? tn.toFixed(1)+"°C" : "–"}</span></div>
+      <div class="popup-rij"><span class="popup-label">🌿 Min 10cm</span><span class="popup-waarde t10n">${t10n !== null ? t10n.toFixed(1)+"°C" : "–"}</span></div>
+      <div class="popup-rij"><span class="popup-label">🌧 Neerslag</span><span class="popup-waarde rr">${rr !== null ? rr.toFixed(1)+" mm" : "–"}</span></div>
+      <div class="popup-rij"><span class="popup-label">💨 Windstoot</span><span class="popup-waarde fx">${fx !== null ? fx.toFixed(1)+" m/s" : "–"}</span></div>
+      <div class="popup-rij"><span class="popup-label">🌬 Uurwind</span><span class="popup-waarde ff">${ffVal !== null ? ffVal.toFixed(1)+" m/s" : "–"}${tijdvak ? "<small style='color:#aaa;font-size:0.65rem'> "+tijdvak+"</small>" : ""}</span></div>
+      <div style="font-size:0.65rem;color:#aaa;margin-top:6px">Bijgewerkt: ${dag.update || "–"}</div>
+    </div>`);
+
+    markers.push(marker);
+  }
+
+  // Legenda
+  const schaal = info.schaal;
+  let legHTML = `<div class="legenda-titel">${info.label} (${info.eenheid})</div>`;
+  schaal.forEach(([v, kleur]) => {
+    const fg2 = luminantie(kleur) > 0.55 ? "#000" : "#fff";
+    legHTML += `<div class="legenda-rij"><div class="legenda-kleur" style="background:${kleur}"></div><span>${v} ${info.eenheid}</span></div>`;
+  });
+  document.getElementById("legenda").innerHTML = legHTML;
+}
+
+function wisselParam(p) {
+  huidigParam = p;
+  document.querySelectorAll(".param-knop").forEach(k => {
+    k.classList.toggle("actief", k.getAttribute("onclick").includes(`'${p}'`));
+  });
+  tekenMarkers();
+}
+
+function wisselDag(datum) {
+  huidigDatum = datum;
+  document.querySelectorAll(".dag-knop").forEach(k =>
+    k.classList.toggle("actief", k.dataset.datum === datum));
+  const dag = dagData[datum];
+  if (dag) {
+    const badge = dag.status === "definitief" ? "definitief" : "";
+    document.getElementById("status-badge").innerHTML = `<span class="badge ${badge}">${dag.status}</span>`;
+    document.getElementById("status-tekst").textContent = `Bijgewerkt: ${dag.update || "–"}`;
+  }
+  tekenMarkers();
+}
+
+function dagLabel(d) {
+  const dt = new Date(d + "T12:00:00");
+  return `${NL_DAGEN[dt.getDay()]} ${dt.getDate()} ${NL_MAANDEN[dt.getMonth()+1]}`;
+}
+
+// Data laden en auto-refresh elke 5 min
+async function laadData() {
+  try {
+    const r = await fetch("toplijst.json?t=" + Date.now());
+    dagData = await r.json();
+    const dagen = Object.keys(dagData).sort().reverse().slice(0, 10);
+
+    const balk = document.getElementById("dag-balk");
+    balk.innerHTML = dagen.map(d =>
+      `<div class="dag-knop${d === huidigDatum ? " actief" : ""}" data-datum="${d}" onclick="wisselDag('${d}')">${dagLabel(d)}</div>`
+    ).join("");
+
+    const huidig = huidigDatum || dagen[0];
+    document.getElementById("update-lbl").textContent = `Waarnemingen KNMI · ${dagLabel(huidig)}`;
+    wisselDag(huidig);
+  } catch(e) {
+    document.getElementById("update-lbl").textContent = "Fout bij laden data";
+  }
+}
+
+laadData();
+setInterval(laadData, 5 * 60 * 1000); // elke 5 minuten
+</script>
+</body>
+</html>
