@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10-daagse verwachting – Ed Aldus WM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f0f4f8;
+    color: #1a2b40;
+    font-size: 13px;
+  }
+
+  .header {
+    background: #003366;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header-links { display: flex; gap: 16px; align-items: center; }
+  .header-left h1 { color: white; font-size: 1.1em; font-weight: 700; }
+  .header-left p  { color: #a8c4e8; font-size: 0.78em; margin-top: 2px; }
+  .header-right   { color: #a8c4e8; font-size: 0.78em; text-align: right; line-height: 1.6; }
+  .header-right strong { color: white; }
+  .run-lbl { color: #7fb8f7; font-size: 0.78em; }
+
+  .content { padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
+
+  /* Legenda toggle knoppen */
+  .legenda-rij {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+  .legenda-rij .lbl {
+    font-size: 0.72em;
+    font-weight: 600;
+    color: #5a7090;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+  }
+  .station-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-size: 0.78em;
+    font-weight: 600;
+    background: white;
+    transition: opacity 0.15s, transform 0.1s;
+    user-select: none;
+  }
+  .station-btn:hover { transform: scale(1.04); }
+  .station-btn.uit { opacity: 0.35; }
+  .station-btn .kleur-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Grafiek kaart */
+  .grafiek-kaart {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 16px 16px 10px;
+    margin-bottom: 14px;
+  }
+  .grafiek-titel {
+    font-size: 0.88em;
+    font-weight: 700;
+    color: #1a2b40;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .grafiek-sub {
+    font-size: 0.72em;
+    color: #5a7090;
+    font-weight: 400;
+  }
+  .canvas-wrapper { position: relative; }
+
+  .footer {
+    text-align: right;
+    font-size: 0.70em;
+    color: #94a3b8;
+    font-style: italic;
+    margin-top: 6px;
+    padding-bottom: 8px;
+  }
+
+  .laden { text-align: center; padding: 60px; color: #5a7090; }
+  .fout  { text-align: center; padding: 40px; color: #c0392b; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Ed Aldus WM</h1>
+    <p>MOS ECMWF/ICON · 10-daagse verwachting</p>
+  </div>
+  <div class="header-right">
+    <strong>DWD MOSMIX</strong><br>
+    <span class="run-lbl" id="run-lbl">laden...</span>
+  </div>
+</div>
+
+<div class="content" id="content">
+  <div class="laden">Gegevens laden...</div>
+</div>
+
+<script>
+const JSON_URL = "grafiek_trend.json?t=" + Date.now();
+
+// Smooth via moving average
+function smooth(arr, sigma=1.5) {
+  const out = [...arr];
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] === null) continue;
+    let sum = 0, wsum = 0;
+    for (let j = 0; j < arr.length; j++) {
+      if (arr[j] === null) continue;
+      const w = Math.exp(-0.5 * ((i-j)/sigma)**2);
+      sum  += arr[j] * w;
+      wsum += w;
+    }
+    out[i] = wsum > 0 ? Math.round(sum/wsum * 10)/10 : arr[i];
+  }
+  return out;
+}
+
+function maakTempGrafiek(data, zichtbaar) {
+  const datasets = [];
+  for (const [naam, sd] of Object.entries(data.temp)) {
+    const k = sd.kleur;
+    const hidden = !zichtbaar[naam];
+    datasets.push({
+      label: naam + " TX",
+      data: sd.tx,
+      borderColor: k,
+      backgroundColor: "transparent",
+      borderWidth: 2,
+      pointRadius: 4,
+      pointBackgroundColor: k,
+      tension: 0.4,
+      hidden,
+      station: naam,
+      type_: "tx",
+    });
+    datasets.push({
+      label: naam + " TN",
+      data: sd.tn,
+      borderColor: k,
+      backgroundColor: "transparent",
+      borderWidth: 1.5,
+      borderDash: [5,3],
+      pointRadius: 3,
+      pointBackgroundColor: k,
+      tension: 0.4,
+      hidden,
+      station: naam,
+      type_: "tn",
+    });
+  }
+  return {
+    type: "line",
+    data: { labels: data.dag_labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              if (ctx.parsed.y === null) return null;
+              const type = ctx.dataset.type_ === "tx" ? "TX" : "TN";
+              return `${ctx.dataset.station} ${type}: ${ctx.parsed.y.toFixed(1)}°C`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: "#eeeeee" }, ticks: { color: "#5a7090", font: { size: 10 } } },
+        y: {
+          grid: { color: "#eeeeee" },
+          ticks: { color: "#5a7090", font: { size: 10 }, callback: v => v + "°C" }
+        }
+      }
+    }
+  };
+}
+
+function maakRRGrafiek(data, zichtbaar) {
+  const stations = Object.keys(data.rr);
+  const n = stations.length;
+  const datasets = stations.map((naam, idx) => ({
+    label: naam,
+    data: data.rr[naam].rr,
+    backgroundColor: data.rr[naam].kleur + "cc",
+    borderColor: data.rr[naam].kleur,
+    borderWidth: 1,
+    borderRadius: 2,
+    hidden: !zichtbaar[naam],
+    station: naam,
+  }));
+  return {
+    type: "bar",
+    data: { labels: data.dag_labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.parsed.y > 0 ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} mm` : null,
+            filter: item => item.parsed.y > 0,
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: "#eeeeee" }, ticks: { color: "#5a7090", font: { size: 10 } } },
+        y: {
+          grid: { color: "#eeeeee" },
+          ticks: { color: "#5a7090", font: { size: 10 }, callback: v => v + " mm" },
+          beginAtZero: true,
+        }
+      }
+    }
+  };
+}
+
+function maakWindGrafiek(data, zichtbaar) {
+  const datasets = Object.entries(data.wind).map(([naam, wd]) => ({
+    label: naam,
+    data: wd.bft,
+    borderColor: wd.kleur,
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    pointRadius: 4,
+    pointBackgroundColor: wd.kleur,
+    tension: 0.4,
+    hidden: !zichtbaar[naam],
+    station: naam,
+  }));
+  return {
+    type: "line",
+    data: { labels: data.dag_labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.parsed.y !== null ? `${ctx.dataset.label}: Bft ${ctx.parsed.y}` : null,
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: "#eeeeee" }, ticks: { color: "#5a7090", font: { size: 10 } } },
+        y: {
+          grid: { color: "#eeeeee" },
+          ticks: { color: "#5a7090", font: { size: 10 }, callback: v => "Bft " + v, stepSize: 1 },
+          min: 0, max: 12,
+        }
+      }
+    }
+  };
+}
+
+function maakLegenda(stations, kleuren, zichtbaar, onChange) {
+  const div = document.createElement("div");
+  div.className = "legenda-rij";
+  const lbl = document.createElement("span");
+  lbl.className = "lbl";
+  lbl.textContent = "Stations:";
+  div.appendChild(lbl);
+  for (const naam of stations) {
+    const btn = document.createElement("div");
+    btn.className = "station-btn" + (zichtbaar[naam] ? "" : " uit");
+    btn.style.borderColor = kleuren[naam];
+    btn.innerHTML = `<div class="kleur-dot" style="background:${kleuren[naam]}"></div>${naam}`;
+    btn.addEventListener("click", () => {
+      zichtbaar[naam] = !zichtbaar[naam];
+      btn.classList.toggle("uit", !zichtbaar[naam]);
+      onChange(naam, zichtbaar[naam]);
+    });
+    div.appendChild(btn);
+  }
+  return div;
+}
+
+fetch(JSON_URL)
+  .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+  .then(data => {
+    document.getElementById("run-lbl").textContent = "run: " + data.gegenereerd;
+
+    const content = document.getElementById("content");
+    content.innerHTML = "";
+
+    // Zichtbaarheid state
+    const alleStations = Object.keys(data.temp);
+    const windStations  = Object.keys(data.wind);
+    const zichtbaar = {};
+    for (const s of alleStations) zichtbaar[s] = true;
+    for (const s of windStations)  zichtbaar[s] = true;
+
+    const kleuren = {};
+    for (const [n, d] of Object.entries(data.temp))  kleuren[n] = d.kleur;
+    for (const [n, d] of Object.entries(data.wind))  kleuren[n] = d.kleur;
+
+    // ── Temperatuur ──────────────────────────────────────────────────────
+    const tempKaart = document.createElement("div");
+    tempKaart.className = "grafiek-kaart";
+
+    const tempLeg = maakLegenda(alleStations, kleuren, zichtbaar, (naam, vis) => {
+      tempChart.data.datasets.forEach(ds => {
+        if (ds.station === naam) ds.hidden = !vis;
+      });
+      rrChart.data.datasets.forEach(ds => {
+        if (ds.station === naam) ds.hidden = !vis;
+      });
+      tempChart.update();
+      rrChart.update();
+    });
+    tempKaart.appendChild(tempLeg);
+
+    const tempTitel = document.createElement("div");
+    tempTitel.className = "grafiek-titel";
+    tempTitel.innerHTML = `<span>Temperatuur <span class="grafiek-sub">— TX (max) &nbsp; - - TN (min)</span></span>`;
+    tempKaart.appendChild(tempTitel);
+
+    const tempWrapper = document.createElement("div");
+    tempWrapper.className = "canvas-wrapper";
+    tempWrapper.style.height = "280px";
+    const tempCanvas = document.createElement("canvas");
+    tempWrapper.appendChild(tempCanvas);
+    tempKaart.appendChild(tempWrapper);
+    content.appendChild(tempKaart);
+
+    const tempChart = new Chart(tempCanvas, maakTempGrafiek(data, zichtbaar));
+
+    // ── Neerslag ─────────────────────────────────────────────────────────
+    const rrKaart = document.createElement("div");
+    rrKaart.className = "grafiek-kaart";
+    const rrTitel = document.createElement("div");
+    rrTitel.className = "grafiek-titel";
+    rrTitel.innerHTML = `<span>Neerslag <span class="grafiek-sub">(dagsom mm)</span></span>`;
+    rrKaart.appendChild(rrTitel);
+    const rrWrapper = document.createElement("div");
+    rrWrapper.className = "canvas-wrapper";
+    rrWrapper.style.height = "220px";
+    const rrCanvas = document.createElement("canvas");
+    rrWrapper.appendChild(rrCanvas);
+    rrKaart.appendChild(rrWrapper);
+    content.appendChild(rrKaart);
+
+    const rrChart = new Chart(rrCanvas, maakRRGrafiek(data, zichtbaar));
+
+    // ── Wind ──────────────────────────────────────────────────────────────
+    const windKaart = document.createElement("div");
+    windKaart.className = "grafiek-kaart";
+
+    const windLeg = maakLegenda(windStations, kleuren, zichtbaar, (naam, vis) => {
+      windChart.data.datasets.forEach(ds => {
+        if (ds.station === naam) ds.hidden = !vis;
+      });
+      windChart.update();
+    });
+    windKaart.appendChild(windLeg);
+
+    const windTitel = document.createElement("div");
+    windTitel.className = "grafiek-titel";
+    windTitel.innerHTML = `<span>Wind <span class="grafiek-sub">(max Bft, kuststations)</span></span>`;
+    windKaart.appendChild(windTitel);
+    const windWrapper = document.createElement("div");
+    windWrapper.className = "canvas-wrapper";
+    windWrapper.style.height = "240px";
+    const windCanvas = document.createElement("canvas");
+    windWrapper.appendChild(windCanvas);
+    windKaart.appendChild(windWrapper);
+    content.appendChild(windKaart);
+
+    const windChart = new Chart(windCanvas, maakWindGrafiek(data, zichtbaar));
+
+    // Footer
+    const footer = document.createElement("div");
+    footer.className = "footer";
+    footer.textContent = `© Ed Aldus | Data: DWD (MOSMIX) | ${data.gegenereerd}`;
+    content.appendChild(footer);
+  })
+  .catch(err => {
+    document.getElementById("content").innerHTML =
+      `<div class="fout">Kon grafiek_trend.json niet laden.<br><small>${err.message}</small></div>`;
+  });
+</script>
+</body>
+</html>

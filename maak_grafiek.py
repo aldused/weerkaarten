@@ -21,6 +21,7 @@ stations_temp = [
     ("06344", "Rotterdam"),
     ("06330", "Hoek v. Holland"),
     ("06290", "Twenthe"),
+    ("06370", "Eindhoven"),
 ]
 
 stations_wind = [
@@ -40,6 +41,7 @@ KLEUREN = {
     "Rotterdam":      "#9B5DE5",
     "Hoek v. Holland":"#06D6A0",
     "Twenthe":        "#FF6B6B",
+    "Eindhoven":      "#B5179E",
     "Vlieland":       "#E63946",
     "Leeuwarden":     "#2A9D8F",
 }
@@ -300,6 +302,37 @@ ax3.legend(handles3, labels3, fontsize=6.5, loc="upper left", framealpha=0.9,
 ax3.text(1.0, -0.18, f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
          transform=ax3.transAxes, fontsize=6.5, style="italic",
          ha="right", va="bottom", color="#555555")
+
+# ── JSON exporteren voor interactieve grafiek ─────────────────────────────
+json_data = {
+    "gegenereerd": now_str2,
+    "dagen": [d.isoformat() for d in alle_dagen],
+    "dag_labels": dag_labels,
+    "temp": {},
+    "rr": {},
+    "wind": {},
+}
+for naam, dag_data in temp_data.items():
+    json_data["temp"][naam] = {
+        "kleur": KLEUREN.get(naam, "#333333"),
+        "tx": [dag_data[d]["tx"] if d in dag_data else None for d in alle_dagen],
+        "tn": [dag_data[d]["tn"] if d in dag_data and dag_data[d]["tn"] is not None else None for d in alle_dagen],
+    }
+for naam, rd in rr_data.items():
+    json_data["rr"][naam] = {
+        "kleur": KLEUREN.get(naam, "#333333"),
+        "rr": [rd.get(d, 0.0) for d in alle_dagen],
+    }
+for naam, wd in wind_data.items():
+    json_data["wind"][naam] = {
+        "kleur": KLEUREN.get(naam, "#333333"),
+        "bft": [wd.get(d, None) for d in alle_dagen],
+    }
+
+import json
+with open("grafiek_trend.json", "w") as f:
+    json.dump(json_data, f)
+print("JSON opgeslagen: grafiek_trend.json")
 
 plt.subplots_adjust(bottom=0.08)
 plt.savefig("grafiek_trend.png", dpi=150, bbox_inches="tight")
