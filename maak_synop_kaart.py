@@ -319,35 +319,32 @@ ax.text(1.0, 0.0, f"© Ed Aldus | Data: KNMI | {now_str2}",
         ha="right", va="bottom", color="#555555")
 
 # Symbolen legenda rechtsonder
-sym = ax.inset_axes([0.62, 0.01, 0.37, 0.10])
+sym = ax.inset_axes([0.58, 0.01, 0.41, 0.12])
 sym.set_xlim(0,1); sym.set_ylim(0,1); sym.axis("off")
 sym.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
               linewidth=0.7,transform=sym.transAxes,zorder=0))
-sym.text(0.5, 0.95, "Stationssymbolen", fontsize=4.5, weight="bold",
+sym.text(0.5, 0.96, "Stationssymbolen", fontsize=4.5, weight="bold",
          ha="center", va="top", transform=sym.transAxes)
-# Voorbeeldsymbool links
-sym.add_patch(mpatches.Ellipse((0.12, 0.48), 0.10, 0.28,
+# Bewolkingscirkel
+sym.add_patch(mpatches.Ellipse((0.10, 0.50), 0.10, 0.28,
               facecolor='#aaaaaa', edgecolor='#1a2b40', linewidth=0.8,
               zorder=1, transform=sym.transAxes))
-# Labels
-sym.text(0.26, 0.82, "7.4°", fontsize=4.5, color="#cc2200", weight="bold",
-         transform=sym.transAxes, va="center")
-sym.text(0.26, 0.60, "5.1°", fontsize=3.8, color="#1a5fb4", weight="bold",
-         transform=sym.transAxes, va="center")
-sym.text(0.26, 0.38, "82%", fontsize=3.5, color="#555555",
-         transform=sym.transAxes, va="center")
-sym.text(0.12, 0.14, "Bft 4", fontsize=3.5, color="#003366", weight="bold",
-         ha="center", transform=sym.transAxes, va="center")
-# Pijl
-sym.annotate("", xy=(0.12, 0.62), xytext=(0.12, 0.90),
+# Windpijl
+sym.annotate("", xy=(0.10, 0.64), xytext=(0.10, 0.88),
              xycoords=sym.transAxes, textcoords=sym.transAxes,
              arrowprops=dict(arrowstyle="-|>", color="#003366", lw=1.0, mutation_scale=5))
-# Rechts: uitleg
-sym.text(0.55, 0.88, "← Temp (°C)",    fontsize=3.5, color="#cc2200", transform=sym.transAxes)
-sym.text(0.55, 0.68, "← Dauwpunt (°C)",fontsize=3.5, color="#1a5fb4", transform=sym.transAxes)
-sym.text(0.55, 0.48, "← Vochtigheid",  fontsize=3.5, color="#555555", transform=sym.transAxes)
-sym.text(0.55, 0.28, "← Windkracht",   fontsize=3.5, color="#003366", transform=sym.transAxes)
-sym.text(0.55, 0.08, "↑ Windrichting", fontsize=3.5, color="#003366", transform=sym.transAxes)
+# Bft onder cirkel
+sym.text(0.10, 0.14, "Bft 4", fontsize=3.5, color="#003366", weight="bold",
+         ha="center", va="center", transform=sym.transAxes)
+# Waarden rechts van cirkel — ruim genoeg verdeeld
+sym.text(0.24, 0.80, "7.4°",  fontsize=4.2, color="#cc2200", weight="bold", transform=sym.transAxes, va="center")
+sym.text(0.24, 0.57, "5.1°",  fontsize=3.5, color="#1a5fb4", weight="bold", transform=sym.transAxes, va="center")
+sym.text(0.24, 0.36, "82%",   fontsize=3.2, color="#555555",               transform=sym.transAxes, va="center")
+# Uitleg labels
+sym.text(0.42, 0.80, "Temperatuur",   fontsize=3.5, color="#cc2200", transform=sym.transAxes, va="center")
+sym.text(0.42, 0.57, "Dauwpunt",      fontsize=3.5, color="#1a5fb4", transform=sym.transAxes, va="center")
+sym.text(0.42, 0.36, "Vochtigheid",   fontsize=3.5, color="#555555", transform=sym.transAxes, va="center")
+sym.text(0.42, 0.14, "Windkracht Bft",fontsize=3.5, color="#003366", transform=sym.transAxes, va="center")
 
 ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
 ax.axis("off")
