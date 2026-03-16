@@ -121,6 +121,28 @@ def haal_werkelijk(wigos_id, dag: date):
     tn = min_v("tn") or min_v("ta")
     return {"tx": tx, "tn": tn}
 
+# ── Harmonie voorspelling ophalen via Open-Meteo ──────────────────────────────
+def haal_harmonie_voorspelling(lat, lon):
+    """Haal Harmonie TX/TN op voor komende dagen via Open-Meteo."""
+    try:
+        url = (f"https://api.open-meteo.com/v1/forecast"
+               f"?latitude={lat}&longitude={lon}"
+               f"&daily=temperature_2m_max,temperature_2m_min"
+               f"&models=knmi_seamless&timezone=Europe/Amsterdam&forecast_days=7")
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        js = r.json()
+        result = {}
+        for i, dag in enumerate(js["daily"]["time"]):
+            result[dag] = {
+                "tx": round(js["daily"]["temperature_2m_max"][i], 1) if js["daily"]["temperature_2m_max"][i] is not None else None,
+                "tn": round(js["daily"]["temperature_2m_min"][i], 1) if js["daily"]["temperature_2m_min"][i] is not None else None,
+            }
+        return result
+    except Exception as e:
+        print(f"    Harmonie FOUT: {e}")
+        return {}
+
 # ── Archief bijwerken ──────────────────────────────────────────────────────────
 vandaag   = date.today()
 run_datum = vandaag.isoformat()
@@ -133,15 +155,23 @@ else:
     archief = {}
 
 # Sla huidige MOSMIX-voorspelling op (per station, per run-datum)
-print("MOSMIX voorspellingen ophalen voor archief...")
+print("MOSMIX + Harmonie voorspellingen ophalen voor archief...")
 for code, naam, lat, lon, wigos in STATIONS_MOSMIX:
     print(f"  {naam}...")
     try:
         voorspelling = haal_mosmix_voorspelling(code)
+        harmonie_vsp = haal_harmonie_voorspelling(lat, lon)
         if naam not in archief:
             archief[naam] = {}
-        # Sla op: archief[naam][run_datum][doel_datum] = {tx, tn}
-        archief[naam][run_datum] = voorspelling
+        # Sla op: archief[naam][run_datum][doel_datum] = {tx, tn, harm_tx, harm_tn}
+        archief[naam][run_datum] = {}
+        for dag, v in voorspelling.items():
+            archief[naam][run_datum][dag] = {
+                "tx":      v.get("tx"),
+                "tn":      v.get("tn"),
+                "harm_tx": harmonie_vsp.get(dag, {}).get("tx"),
+                "harm_tn": harmonie_vsp.get(dag, {}).get("tn"),
+            }
         # Bewaar max 10 run-datums per station
         runs = sorted(archief[naam].keys())
         if len(runs) > 10:
@@ -185,15 +215,18 @@ for code, naam, lat, lon, wigos in STATIONS_MOSMIX:
 
         # Zoek beste MOSMIX-run (voorkeur: 2-3 dagen eerder, anders vandaag als fallback)
         mos_tx, mos_tn = None, None
+        harm_tx, harm_tn = None, None
         mos_run = None
-        for offset in [2, 3, 1, 4, 0]:  # 0 = vandaag als fallback
+        for offset in [2, 3, 1, 4, 0]:
             run = (dag - timedelta(days=offset)).isoformat() if offset > 0 else run_datum
             if naam in archief and run in archief[naam]:
                 pred = archief[naam][run].get(dag_str, {})
                 if pred.get("tx") is not None:
-                    mos_tx = pred["tx"]
-                    mos_tn = pred.get("tn")
-                    mos_run = run + (" (vandaag)" if offset == 0 else "")
+                    mos_tx   = pred["tx"]
+                    mos_tn   = pred.get("tn")
+                    harm_tx  = pred.get("harm_tx")
+                    harm_tn  = pred.get("harm_tn")
+                    mos_run  = run + (" (vandaag)" if offset == 0 else "")
                     break
 
         # Werkelijke meting
@@ -205,6 +238,8 @@ for code, naam, lat, lon, wigos in STATIONS_MOSMIX:
             "datum":   dag_str,
             "mos_tx":  mos_tx,
             "mos_tn":  mos_tn,
+            "harm_tx": harm_tx,
+            "harm_tn": harm_tn,
             "mos_run": mos_run,
             "obs_tx":  obs_tx,
             "obs_tn":  obs_tn,
