@@ -9,7 +9,8 @@ Per run:
 """
 
 import os, json, requests, zipfile, io, xml.etree.ElementTree as ET, re
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, date, timezone
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -30,7 +31,7 @@ STATIONS_MOSMIX = [
 KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
 EDR_URL  = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
 HEADERS  = {"Authorization": KNMI_KEY, "Accept": "application/json"}
-UTC_OFFSET = timedelta(hours=1)
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 ARCHIEF_PATH = "beta_verificatie_archive.json"
 OUTPUT_PATH  = "beta_verificatie.json"
 DAGEN_TERUG  = 3
@@ -79,7 +80,7 @@ def haal_mosmix_voorspelling(code):
     tn_raw = parse_values(root, 'TN')
     daily  = {}
     for i, dt in enumerate(times):
-        loc = dt + UTC_OFFSET
+        loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d   = loc.date().isoformat()
         if d not in daily: daily[d] = {"tx": [], "tn": []}
         if i < len(tx_raw) and tx_raw[i] is not None:

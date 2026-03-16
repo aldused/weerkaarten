@@ -4,7 +4,8 @@ import zipfile
 import io
 import xml.etree.ElementTree as ET
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -113,7 +114,7 @@ def maak_panel(ax, ylabel):
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 print("MOSMIX ophalen (trend)...")
 
-UTC_OFFSET = timedelta(hours=1)
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 temp_data   = {}
 rr_data     = {}
@@ -132,7 +133,7 @@ for code, naam in stations_temp:
 
     daily = {}
     for i, dt_utc in enumerate(times):
-        dt_loc = dt_utc + UTC_OFFSET
+        dt_loc = dt_utc.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d = dt_loc.date()
         if d not in daily:
             daily[d] = {"tx":[], "tn":[], "ttt":[], "rr":[]}
@@ -164,7 +165,7 @@ for code, naam in stations_wind:
 
     daily = {}
     for i, dt_utc in enumerate(times):
-        dt_loc = dt_utc + UTC_OFFSET
+        dt_loc = dt_utc.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d = dt_loc.date()
         if d not in daily: daily[d] = []
         if i < len(ff_raw) and ff_raw[i] is not None: daily[d].append(ff_raw[i])

@@ -5,7 +5,8 @@ import zipfile
 import io
 import xml.etree.ElementTree as ET
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
@@ -138,7 +139,7 @@ import cartopy.crs as ccrs
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 print("MOSMIX ophalen (gevoelstemperatuur berekend via TTT+FF)...")
 
-UTC_OFFSET = timedelta(hours=1)
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 data_per_day = {}
 
 def windchill(t_c, ff_ms):
@@ -164,7 +165,7 @@ for code, name in stations:
 
     daily = {}
     for i, dt in enumerate(times):
-        loc  = dt + UTC_OFFSET
+        loc  = dt .replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d    = loc.date()
         hour = loc.hour
         t = ttt_raw[i] - 273.15 if i < len(ttt_raw) and ttt_raw[i] is not None else None

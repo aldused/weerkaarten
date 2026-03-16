@@ -142,7 +142,7 @@ import cartopy.crs as ccrs
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 print("MOSMIX ophalen (zon/bewolking)...")
 
-UTC_OFFSET = timedelta(hours=1)  # TODO: vervangen door ZoneInfo
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")  # TODO: vervangen door ZoneInfo
 
 data_per_day = {}
 for code, name in stations:
@@ -156,7 +156,7 @@ for code, name in stations:
     daily = {}
     prev_hour = None
     for i, dt_utc in enumerate(times):
-        dt_loc = dt_utc + UTC_OFFSET
+        dt_loc = dt_utc .replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d = dt_loc.date()
         if d not in daily:
             daily[d] = {"sd": 0.0, "neff": [], "heeft_sd": False, "prev_dt": None}
@@ -167,7 +167,7 @@ for code, name in stations:
         if i < len(sd_raw) and sd_raw[i] is not None:
             # check tijdstap-interval
             if i > 0:
-                dt_prev = times[i-1] + UTC_OFFSET
+                dt_prev = times[i-1] .replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
                 interval_h = (dt_loc - dt_prev).total_seconds() / 3600
             else:
                 interval_h = 1.0

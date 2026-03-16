@@ -4,7 +4,8 @@ import zipfile
 import io
 import xml.etree.ElementTree as ET
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -142,7 +143,7 @@ import cartopy.crs as ccrs
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 print("MOSMIX ophalen (onweer: wwT, wwTd, CAPE, CIN)...")
 
-UTC_OFFSET = timedelta(hours=1)
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 data_per_day = {}
 
 for code, name in stations:
@@ -157,7 +158,7 @@ for code, name in stations:
 
     daily = {}
     for i, dt in enumerate(times):
-        loc  = dt + UTC_OFFSET
+        loc  = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d    = loc.date()
         hour = loc.hour
         # Hele dag meenemen voor onweer (ook 's middags)

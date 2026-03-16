@@ -5,7 +5,8 @@ import zipfile
 import io
 import xml.etree.ElementTree as ET
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
@@ -131,10 +132,10 @@ for code, name in stations:
     if root is None: print("  x Geen data"); continue
     times = get_times(root)
     rr_raw = parse_values(root, 'RR1c')
-    UTC_OFFSET = timedelta(hours=1)
+    LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
     daily_dag, daily_nacht = {}, {}
     for i, dt in enumerate(times):
-        loc = dt + UTC_OFFSET; d = loc.date(); hour = loc.hour
+        loc = dt .replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ); d = loc.date(); hour = loc.hour
         if i < len(rr_raw) and rr_raw[i] is not None:
             rr = rr_raw[i]
             if 6 <= hour < 18: daily_dag[d] = daily_dag.get(d,0.0) + rr
