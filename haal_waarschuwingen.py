@@ -68,12 +68,26 @@ def haal_waarschuwingen():
         r3.raise_for_status()
         tekst = requests.get(r3.json()["temporaryDownloadUrl"], timeout=15).text.strip()
 
+    # Fenomeen uit XML halen
+    FENOMEEN_NL = {
+        "SNOW": "sneeuw", "ICE": "gladheid", "FOG": "mist",
+        "RAIN": "regen", "THUNDER": "onweer", "WIND": "storm",
+        "HEAT": "hitte", "COLD": "kou", "WATERSPOUT": "waterhoos",
+    }
+    fenomenen = set()
+    for ph in root.iter("phenomenon_id"):
+        fn = (ph.text or "").strip().upper()
+        if fn in FENOMEEN_NL:
+            fenomenen.add(FENOMEEN_NL[fn])
+    fenomeen_str = ", ".join(sorted(fenomenen)) if fenomenen else ""
+
     nu = datetime.now(timezone.utc).astimezone(LOCAL_TZ).strftime("%d %b %Y %H:%M")
 
     resultaat = {
         "bijgewerkt": nu,
         "max_kleur": max_kleur,
         "max_kleur_nl": KLEUR_NL.get(max_kleur, "groen"),
+        "fenomeen": fenomeen_str,
         "provincies": {pid: provincie_codes.get(pid, "GREEN") for pid in PROVINCIES},
         "tekst": tekst,
         "knmi_url": "https://www.knmi.nl/nederland-nu/weer/waarschuwingen"
