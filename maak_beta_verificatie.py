@@ -9,8 +9,8 @@ Per run:
 """
 
 import os, json, requests, zipfile, io, xml.etree.ElementTree as ET, re
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo, date, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 

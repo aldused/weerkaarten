@@ -25,7 +25,14 @@
   .btn:hover { background: #0055aa; }
   .btn.groen { background: #2a7a2a; }
   .btn.groen:hover { background: #3a9a3a; }
-  .updates { background: white; border: 1px solid #ccd6e0; border-radius: 6px; padding: 7px 12px; font-size: 0.78em; color: #444; line-height: 1.7; }
+  .waarschuwingsbalk { display:none; width:100%; padding:9px 20px; font-size:0.85em; font-weight:600; cursor:pointer; text-align:left; border:none; transition:background 0.2s; }
+  .waarschuwingsbalk.groen  { background:#1a7a1a; color:white; display:flex; }
+  .waarschuwingsbalk.geel   { background:#e6b800; color:#333; display:flex; }
+  .waarschuwingsbalk.oranje { background:#e07000; color:white; display:flex; }
+  .waarschuwingsbalk.rood   { background:#cc0000; color:white; display:flex; }
+  .waarschuwingsbalk:hover  { filter:brightness(1.1); }
+  .waarschuwingsbalk .ws-icon { font-size:1.1em; margin-right:8px; }
+  .waarschuwingsbalk .ws-prov { margin-left:auto; font-size:0.78em; opacity:0.85; }
   .menu-overzicht { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.78em; color: #444; margin: 10px 0 4px; padding: 8px 12px; background: #f4f7fb; border: 1px solid #dde6f0; border-radius: 6px; }
   .kaarten { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
   .kaart-item { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); overflow: hidden; width: 100%; max-width: 420px; }
@@ -79,6 +86,11 @@
     </div>
   </div>
 </div>
+<button id="waarschuwingsbalk" class="waarschuwingsbalk" onclick="window.open('https://www.knmi.nl/nederland-nu/weer/waarschuwingen','_blank')" style="display:none;">
+  <span class="ws-icon">⚠️</span>
+  <span id="ws-tekst">KNMI waarschuwing van kracht</span>
+  <span class="ws-prov" id="ws-prov"></span>
+</button>
 <div class="content">
   <div class="toolbar">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -177,6 +189,35 @@ let activeLijst = [];
 let huidigIndex = 0;
 let tempLijst = [], gevoelsLijst = [], windDagLijst = [], windNachtLijst = [], zonLijst = [], regenLijst = [], mistLijst = [], onweerLijst = [], bewolkingLijst = [], t5cmLijst = [], dauwpuntLijst = [];
 let obsTxLijst = [], obsTnLijst = [], obsRrLijst = [], obsFxLijst = [], obsFfLijst = [];
+
+// ── Waarschuwingsbalk ──────────────────────────────────────────────────────────
+fetch("waarschuwingen.json?t=" + Date.now())
+  .then(r => r.json())
+  .then(d => {
+    const balk = document.getElementById("waarschuwingsbalk");
+    const kleur = d.max_kleur_nl || "groen";
+    const icons = { groen: "✅", geel: "⚠️", oranje: "🟠", rood: "🔴" };
+    balk.className = "waarschuwingsbalk " + kleur;
+    balk.style.display = "flex";
+    document.getElementById("ws-icon").textContent = icons[kleur] || "⚠️";
+    if (kleur === "groen") {
+      document.getElementById("ws-tekst").textContent = "Geen KNMI waarschuwingen van kracht · klik voor details";
+    } else {
+      // Toon provincies met waarschuwing
+      const PROV = { GR:"Groningen",FR:"Friesland",DR:"Drenthe",OV:"Overijssel",FL:"Flevoland",
+        GL:"Gelderland",NH:"Noord-Holland",UT:"Utrecht",ZH:"Zuid-Holland",ZE:"Zeeland",
+        NB:"Noord-Brabant",LB:"Limburg",WAE:"Waddeneilanden",WAD:"Waddenzee",IJG:"IJsselmeer" };
+      const KLEUREN = { GREEN:0, YELLOW:1, ORANGE:2, RED:3 };
+      const gewaarschuwd = Object.entries(d.provincies || {})
+        .filter(([,c]) => c !== "GREEN")
+        .sort(([,a],[,b]) => KLEUREN[b] - KLEUREN[a])
+        .map(([id]) => PROV[id] || id)
+        .join(", ");
+      document.getElementById("ws-tekst").textContent =
+        `KNMI code ${kleur.toUpperCase()} · ${gewaarschuwd || "meerdere gebieden"} · klik voor details`;
+    }
+  })
+  .catch(() => {});
 
 function wisselTab(tab) {
   ["temp","wind","weer","waarnemingen","trend","beta"].forEach(t => {
@@ -363,7 +404,7 @@ function maakKaartItem(naam, lijst, isNacht) {
 fetch("index.json?t=" + Date.now())
   .then(r => r.json())
   .then(kaarten => {
-    tempLijst      = kaarten.filter(n => !n.startsWith("kaart_zon_") && !n.startsWith("kaart_wind_") && !n.startsWith("kaart_regen_") && !n.startsWith("kaart_mist_") && !n.startsWith("kaart_onweer_") && !n.startsWith("kaart_t5cm_") && !n.startsWith("kaart_dauwpunt_") && !n.startsWith("kaart_gevoels_") && !n.startsWith("kaart_obs_") && !n.startsWith("kaart_synop_") && !n.startsWith("kaart_bewolking") && !n.startsWith("kaart_be_"));
+    tempLijst      = kaarten.filter(n => !n.startsWith("kaart_zon_") && !n.startsWith("kaart_wind_") && !n.startsWith("kaart_regen_") && !n.startsWith("kaart_mist_") && !n.startsWith("kaart_onweer_") && !n.startsWith("kaart_t5cm_") && !n.startsWith("kaart_dauwpunt_") && !n.startsWith("kaart_gevoels_") && !n.startsWith("kaart_obs_") && !n.startsWith("kaart_synop_") && !n.startsWith("kaart_bewolking"));
     gevoelsLijst   = kaarten.filter(n => n.startsWith("kaart_gevoels_"));
     windDagLijst   = kaarten.filter(n => n.startsWith("kaart_wind_") && !n.startsWith("kaart_wind_nacht_"));
     windNachtLijst = kaarten.filter(n => n.startsWith("kaart_wind_nacht_"));

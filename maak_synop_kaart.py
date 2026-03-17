@@ -82,8 +82,8 @@ def ms_naar_bft(ms):
 def haal_obs(wigos_id):
     """Haal meest recente ta, ff, dd, n op."""
     now_utc = datetime.now(timezone.utc)
-    # Haal laatste 30 minuten op
-    s = (now_utc - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Haal laatste 90 minuten op (bewolking wordt niet elke 10 min gerapporteerd)
+    s = (now_utc - timedelta(minutes=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
     e = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh"}
     try:
@@ -142,7 +142,15 @@ def teken_station(ax, fig, lon, lat, ta, ff, dd, n, td=None, rh=None):
     ax.add_patch(cir_bg)
 
     # Bewolking vulling
-    if n is not None and n != 9 and n > 0:
+    if n is None or n == 9:
+        # Geen bewolkingsdata — grijze cirkel met streepje
+        cir_grijs = mpatches.Ellipse((lon, lat), 2*dlon, 2*dlat,
+                                      facecolor='#cccccc', edgecolor='#888888',
+                                      linewidth=1.0, zorder=10, transform=tr)
+        ax.add_patch(cir_grijs)
+        ax.text(lon, lat, chr(8211), ha='center', va='center', fontsize=6,
+                color='#666666', zorder=12, transform=tr)
+    elif n > 0:
         frac = min(n / 8.0, 1.0)
         theta = np.linspace(np.pi/2, np.pi/2 - frac*2*np.pi, 80)
         xs = lon + dlon * np.cos(theta)
@@ -151,11 +159,12 @@ def teken_station(ax, fig, lon, lat, ta, ff, dd, n, td=None, rh=None):
         ys = np.append([lat], ys)
         ax.fill(xs, ys, color='#1a2b40', zorder=10, transform=tr)
 
-    # Cirkelrand
-    cir_rand = mpatches.Ellipse((lon, lat), 2*dlon, 2*dlat,
-                                 facecolor='none', edgecolor='#1a2b40',
-                                 linewidth=1.3, zorder=11, transform=tr)
-    ax.add_patch(cir_rand)
+    # Cirkelrand (alleen als n bekend is)
+    if n is not None and n != 9:
+        cir_rand = mpatches.Ellipse((lon, lat), 2*dlon, 2*dlat,
+                                     facecolor='none', edgecolor='#1a2b40',
+                                     linewidth=1.3, zorder=11, transform=tr)
+        ax.add_patch(cir_rand)
 
     # ── Windpijl ── pijlpunt aan rand cirkel, staart wijst naar herkomst wind
     bft = ms_naar_bft(ff)
@@ -165,11 +174,13 @@ def teken_station(ax, fig, lon, lat, ta, ff, dd, n, td=None, rh=None):
         # dd = richting van waar wind komt (270 = uit west)
         # sin(dd) positief = component naar oost, cos(dd) positief = component naar noord
         # Pijlpunt aan rand van cirkel, aan de kant waar wind vandaan komt
+        # Verschuif pijl 1 dlat omlaag zodat hij niet overlapt met cirkel
+        offset_y = -dlat * 1.0
         ex = lon + math.sin(rad) * dlon
-        ey = lat + math.cos(rad) * dlat
+        ey = lat + math.cos(rad) * dlat + offset_y
         # Staart verder weg in dezelfde richting
         sx = lon + math.sin(rad) * (dlon + pijl_len)
-        sy = lat + math.cos(rad) * (dlat + pijl_len * abs(dlat/dlon))
+        sy = lat + math.cos(rad) * (dlat + pijl_len * abs(dlat/dlon)) + offset_y
         ax.annotate("",
             xy=(ex, ey), xytext=(sx, sy),
             xycoords=tr._as_mpl_transform(ax),
