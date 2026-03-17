@@ -177,7 +177,8 @@ for code, naam in stations_wind:
     wind_data[naam] = wd
 
 # Gemeenschappelijke dagen
-alle_dagen = sorted(set(d for sd in temp_data.values() for d in sd.keys()))[:10]
+vandaag = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
+alle_dagen = [d for d in sorted(set(d for sd in temp_data.values() for d in sd.keys())) if d >= vandaag][:10]
 x = np.arange(len(alle_dagen))
 dag_labels = [f"{nl_dagen[d.weekday()]}\n{d.day} {nl_maanden[d.month]}" for d in alle_dagen]
 
