@@ -83,7 +83,7 @@ def haal_obs(wigos_id):
     """Haal meest recente ta, ff, dd, n op."""
     now_utc = datetime.now(timezone.utc)
     # Haal laatste 90 minuten op (bewolking wordt niet elke 10 min gerapporteerd)
-    s = (now_utc - timedelta(minutes=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    s = (now_utc - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     e = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh"}
     try:
