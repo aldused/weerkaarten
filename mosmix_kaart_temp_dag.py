@@ -1,5 +1,4 @@
 import os
-import math
 import requests
 import zipfile
 import io
@@ -9,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-import numpy as np
 
 stations = [
     ("06280","Eelde"),("06250","Terschelling"),("06242","Vlieland"),
@@ -41,10 +39,10 @@ coords = {
 }
 
 EXTENT = [3.3, 7.4, 50.45, 53.8]
-
 nl_dagen   = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"]
 nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
                "Juli","Augustus","September","Oktober","November","December"]
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 def strip_namespaces(xml_string):
     xml_string = re.sub(r'<(/?)\w+:', r'<\1', xml_string)
@@ -87,13 +85,13 @@ def parse_values(root, element_name):
                 return res
     return []
 
-def maak_header(fig, gs, dag_nl, day, now_str):
+def maak_header(fig, gs, dag_nl, day, now_str, subtitel):
     ax = fig.add_subplot(gs[0])
     ax.set_xlim(0,1); ax.set_ylim(0,1); ax.axis("off")
     ax.add_patch(plt.Rectangle((0,0),1,1,transform=ax.transAxes,facecolor="#003366",zorder=0,clip_on=False))
     maand_nl = nl_maanden[day.month]
     ax.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",weight="bold",va="center",transform=ax.transAxes)
-    ax.text(0.012,0.18,"MOS ECMWF/ICON",fontsize=7.5,color="#a8c8e8",va="center",transform=ax.transAxes)
+    ax.text(0.012,0.18,subtitel,fontsize=7.5,color="#a8c8e8",va="center",transform=ax.transAxes)
     ax.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax.transAxes)
     ax.text(0.988,0.18,f"DWD MOSMIX  \u00b7  run: {now_str}",fontsize=7,color="#a8c8e8",ha="right",va="center",transform=ax.transAxes)
     ax.axhline(0,color="#4a90c4",linewidth=1.5)
@@ -113,12 +111,11 @@ def maak_kaart_ax(fig, gs):
     ax.add_feature(cfeature.BORDERS.with_scale("10m"),edgecolor="#666666",linewidth=0.6,linestyle="--",zorder=4)
     return ax
 
-# ── TEMPERATUURKAART ─────────────────────────────────────────────────────────
 from matplotlib.gridspec import GridSpec
 import cartopy.crs as ccrs
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-print("MOSMIX ophalen (temperatuur)...")
+print("MOSMIX ophalen (max temp dag 06-18u)...")
 
 data_per_day = {}
 for code, name in stations:
@@ -127,21 +124,23 @@ for code, name in stations:
     if root is None: print("  x Geen data"); continue
     times = get_times(root)
     tx_raw = parse_values(root, 'TX')
-    tn_raw = parse_values(root, 'TN')
     tx = [v-273.15 if v and v>200 else None for v in tx_raw]
-    tn = [v-273.15 if v and v>200 else None for v in tn_raw]
-    LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
-    daily_tx, daily_tn = {}, {}
+
+    daily_tx = {}
     for i, dt in enumerate(times):
-        loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ); d = loc.date()
-        if i < len(tx) and tx[i] is not None:
-            if d not in daily_tx or tx[i] > daily_tx[d]: daily_tx[d] = tx[i]
-        if i < len(tn) and tn[i] is not None:
-            if d not in daily_tn or tn[i] < daily_tn[d]: daily_tn[d] = tn[i]
-    days = sorted(set(list(daily_tx.keys())+list(daily_tn.keys())))[:7]  # 7 kaarten
+        loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        d = loc.date()
+        h = loc.hour
+        # Dagperiode: 06:00 t/m 17:59 lokale tijd
+        if 6 <= h < 18:
+            if i < len(tx) and tx[i] is not None:
+                if d not in daily_tx or tx[i] > daily_tx[d]:
+                    daily_tx[d] = tx[i]
+
+    days = sorted(daily_tx.keys())[:7]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
-        data_per_day[d][name] = {"tx": round(daily_tx.get(d,0),1), "tn": round(daily_tn.get(d,0),1)}
+        data_per_day[d][name] = round(daily_tx[d], 1)
 
 print(f"Data voor {len(data_per_day)} dagen")
 if not data_per_day: print("Geen data!"); exit()
@@ -149,40 +148,34 @@ if not data_per_day: print("Geen data!"); exit()
 cmap_tx = mcolors.LinearSegmentedColormap.from_list("tx",["#084594","#4292c6","#9ecae1","#c6dbef","#ffffcc","#fed976","#fd8d3c","#e31a1c","#800026"])
 norm_tx = mcolors.Normalize(vmin=-5, vmax=25)
 
-now_str = datetime.now().strftime("%d %b %Y  %H:%M")
+now_str  = datetime.now().strftime("%d %b %Y  %H:%M")
 now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
 
 for day, dag_data in data_per_day.items():
     dag_nl = nl_dagen[day.weekday()]
     fig = plt.figure(figsize=(8,11))
     gs = GridSpec(2,1,figure=fig,height_ratios=[0.085,1],hspace=0.01)
-    maak_header(fig, gs, dag_nl, day, now_str)
+    maak_header(fig, gs, dag_nl, day, now_str, "Max temp dag (06–18u)  \u00b7  MOS ECMWF/ICON")
     ax = maak_kaart_ax(fig, gs)
 
-    for name, vals in dag_data.items():
+    for name, tx_v in dag_data.items():
         if name not in coords: continue
         lon, lat = coords[name]
-        tx_v = vals["tx"]; tn_v = vals["tn"]
-        ax.text(lon, lat+0.045, f"{tx_v:.1f}", ha="center", va="bottom", fontsize=9.0, weight="bold",
+        ax.text(lon, lat+0.03, f"{tx_v:.1f}", ha="center", va="center", fontsize=9.0, weight="bold",
                 color="white", zorder=8, transform=ccrs.PlateCarree(),
                 bbox=dict(boxstyle="round,pad=0.12", facecolor="#cc2200", edgecolor="none", linewidth=0, zorder=7))
-        ax.text(lon, lat+0.025, f"{tn_v:.1f}", ha="center", va="top", fontsize=9.0, weight="bold",
-                color="white", zorder=8, transform=ccrs.PlateCarree(),
-                bbox=dict(boxstyle="round,pad=0.12", facecolor="#1a5fb4", edgecolor="none", linewidth=0, zorder=7))
 
     ax.text(1.0,0.0,f"© Ed Aldus | Data: DWD (MOSMIX) | {now_str2}",
             transform=ax.transAxes,fontsize=6.5,style="italic",ha="right",va="bottom",color="#555555")
 
     # Legenda
-    leg = ax.inset_axes([0.01,0.01,0.18,0.10])
+    leg = ax.inset_axes([0.01,0.01,0.20,0.07])
     leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",linewidth=0.7,transform=leg.transAxes,zorder=0))
-    leg.add_patch(plt.Rectangle((0.05,0.55),0.18,0.30,facecolor="#cc2200",transform=leg.transAxes,zorder=1))
-    leg.text(0.28,0.70,"Maximumtemperatuur",fontsize=4,va="center",transform=leg.transAxes)
-    leg.add_patch(plt.Rectangle((0.05,0.10),0.18,0.30,facecolor="#1a5fb4",transform=leg.transAxes,zorder=1))
-    leg.text(0.28,0.25,"Minimumtemperatuur",fontsize=4,va="center",transform=leg.transAxes)
+    leg.add_patch(plt.Rectangle((0.05,0.20),0.14,0.60,facecolor="#cc2200",transform=leg.transAxes,zorder=1))
+    leg.text(0.24,0.50,"Max temp dag (06–18u)",fontsize=4,va="center",transform=leg.transAxes)
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
-    fname = f"kaart_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
+    fname = f"kaart_temp_dag_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
