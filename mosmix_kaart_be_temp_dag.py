@@ -109,9 +109,11 @@ for code, naam in stations:
     print(f"  {naam} ({code})...")
     root = download_kmz(code)
     if root is None: continue
-    times  = get_times(root)
-    tx_raw = parse_values(root, 'TX')
-    tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
+    times   = get_times(root)
+    tx_raw  = parse_values(root, 'TX')
+    ttt_raw = parse_values(root, 'TTT')
+    tx  = [v - 273.15 if v and v > 200 else None for v in tx_raw]
+    ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
 
     daily_tx = {}
     for i, dt in enumerate(times):
@@ -119,9 +121,11 @@ for code, naam in stations:
         d = loc.date()
         h = loc.hour
         if 6 <= h < 18:
-            if i < len(tx) and tx[i] is not None:
-                if d not in daily_tx or tx[i] > daily_tx[d]:
-                    daily_tx[d] = tx[i]
+            v = (tx[i] if i < len(tx) and tx[i] is not None
+                 else (ttt[i] if i < len(ttt) and ttt[i] is not None else None))
+            if v is not None:
+                if d not in daily_tx or v > daily_tx[d]:
+                    daily_tx[d] = v
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
     days = [d for d in sorted(daily_tx.keys()) if d >= vandaag][:7]

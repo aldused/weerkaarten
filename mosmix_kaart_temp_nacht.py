@@ -122,9 +122,11 @@ for code, name in stations:
     print(f"Ophalen: {name} ({code})...")
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
-    times = get_times(root)
-    tn_raw = parse_values(root, 'TN')
-    tn = [v-273.15 if v and v>200 else None for v in tn_raw]
+    times   = get_times(root)
+    tn_raw  = parse_values(root, 'TN')
+    ttt_raw = parse_values(root, 'TTT')
+    tn  = [v-273.15 if v and v>200 else None for v in tn_raw]
+    ttt = [v-273.15 if v and v>200 else None for v in ttt_raw]
 
     # Nachtperiode: 18:00 t/m 05:59 lokale tijd
     # We koppelen de nacht aan de dag waarop de nacht BEGINT (de avond)
@@ -134,14 +136,17 @@ for code, name in stations:
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         h = loc.hour
         if h >= 18:
-            d = loc.date()  # avond: koppel aan die dag
+            d = loc.date()
         elif h < 6:
-            d = loc.date() - timedelta(days=1)  # vroege ochtend: koppel aan dag ervoor
+            d = loc.date() - timedelta(days=1)
         else:
-            continue  # dagperiode, overslaan
-        if i < len(tn) and tn[i] is not None:
-            if d not in daily_tn or tn[i] < daily_tn[d]:
-                daily_tn[d] = tn[i]
+            continue
+        # TN als beschikbaar, anders TTT als fallback
+        v = (tn[i] if i < len(tn) and tn[i] is not None
+             else (ttt[i] if i < len(ttt) and ttt[i] is not None else None))
+        if v is not None:
+            if d not in daily_tn or v < daily_tn[d]:
+                daily_tn[d] = v
 
     days = sorted(daily_tn.keys())[:7]
     for d in days:
