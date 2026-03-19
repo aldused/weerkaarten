@@ -142,8 +142,11 @@ for code, naam in stations_temp:
         if i < len(ttt_raw) and ttt_raw[i] is not None: daily[d]["ttt"].append(ttt_raw[i] - 273.15)
         if i < len(rr_raw)  and rr_raw[i]  is not None and rr_raw[i] >= 0: daily[d]["rr"].append(rr_raw[i])
 
+    vandaag_lokaal = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
     td = {}; rd = {}; wd = {}
-    for d in sorted(daily.keys())[:11]:
+    for d in sorted(daily.keys()):
+        if d < vandaag_lokaal: continue
+        if len(td) >= 10: break
         tx_v = daily[d]["tx"]; tn_v = daily[d]["tn"]; ttt_v = daily[d]["ttt"]
         tx = max(tx_v) if tx_v else (max(ttt_v) if ttt_v else None)
         tn = min(tn_v) if tn_v else (min(ttt_v) if ttt_v else None)
@@ -171,7 +174,10 @@ for code, naam in stations_wind:
         if i < len(ff_raw) and ff_raw[i] is not None: daily[d].append(ff_raw[i])
 
     wd = {}
-    for d in sorted(daily.keys())[:11]:
+    vandaag_lokaal = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
+    for d in sorted(daily.keys()):
+        if d < vandaag_lokaal: continue
+        if len(wd) >= 10: break
         ff_max = max(daily[d]) if daily[d] else None
         if ff_max is not None: wd[d] = ms_naar_bft(ff_max)
     wind_data[naam] = wd
