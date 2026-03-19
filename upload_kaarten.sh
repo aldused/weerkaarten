@@ -34,10 +34,13 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_pluim_multi_wind.py" || { echo "FOUT: maak_pluim_multi_wind.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_bewolking.py" || { echo "FOUT: mosmix_kaart_bewolking.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_be_temp.py" || { echo "FOUT: mosmix_kaart_be_temp.py"; exit 1; }
+/usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_be_temp_dag.py"   || { echo "FOUT: mosmix_kaart_be_temp_dag.py";   exit 1; }
+/usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_be_temp_nacht.py" || { echo "FOUT: mosmix_kaart_be_temp_nacht.py"; exit 1; }
 
 git add waarschuwingen.json kaart_pluim_*.png kaart_onweer_*.png kaart_bewolking_*.png kaart_*.png kaart_zon_*.png kaart_wind_*.png kaart_regen_*.png kaart_mist_*.png kaart_t5cm_*.png kaart_dauwpunt_*.png kaart_gevoels_*.png kaart_obs_*.png \
         kaart_temp_dag_*.png kaart_temp_nacht_*.png \
-        index.json index.html toplijst.html toplijst.json grafiek_trend.png grafiek_trend.json beta_debilt.html beta_debilt.json beta_verificatie.json beta_verificatie_archive.json
+        kaart_be_temp_dag_*.png kaart_be_temp_nacht_*.png \
+        index.json index.html index_be.html toplijst.html toplijst.json grafiek_trend.png grafiek_trend.json beta_debilt.html beta_debilt.json beta_verificatie.json beta_verificatie_archive.json
 
 if git diff --cached --quiet; then
     echo "Niets gewijzigd, geen commit nodig."

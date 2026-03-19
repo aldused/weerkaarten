@@ -119,6 +119,9 @@
     #lb-next { right: 10px; }
 
     .geen-kaarten { color: #888; font-style: italic; padding: 20px; }
+    .subtab { padding: 6px 16px; background: #eef3fa; border: 1px solid #c0d0e4; border-radius: 5px; cursor: pointer; font-size: 0.8em; color: #444; font-weight: 600; }
+    .subtab:hover { background: #d8e6f5; }
+    .subtab.actief { background: #003366; color: white; border-color: #003366; }
   </style>
 </head>
 <body>
@@ -147,9 +150,14 @@
 </div>
 
 <div class="tab-inhoud actief" id="inhoud-be-temp">
-  <div class="kaarten" id="kaarten-be-temp">
-    <p class="geen-kaarten">Kaarten laden...</p>
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+    <div class="subtab actief" id="subtab-be-temp"       onclick="wisselSubtab('be-temp')">🌡️ Temp</div>
+    <div class="subtab"        id="subtab-be-temp-dag"   onclick="wisselSubtab('be-temp-dag')">☀️ Max 06-18</div>
+    <div class="subtab"        id="subtab-be-temp-nacht" onclick="wisselSubtab('be-temp-nacht')">🌙 Min 18-06</div>
   </div>
+  <div id="subinhoud-be-temp"       style="display:block"><div class="kaarten" id="kaarten-be-temp"><p class="geen-kaarten">Kaarten laden...</p></div></div>
+  <div id="subinhoud-be-temp-dag"   style="display:none" ><div class="kaarten" id="kaarten-be-temp-dag"></div></div>
+  <div id="subinhoud-be-temp-nacht" style="display:none" ><div class="kaarten" id="kaarten-be-temp-nacht"></div></div>
 </div>
 
 <!-- Lightbox -->
@@ -161,7 +169,7 @@
 </div>
 
 <script>
-let beTempLijst = [];
+let beTempLijst = [], beTempDagLijst = [], beTempNachtLijst = [];
 let activeLijst = [];
 let huidigIndex = 0;
 
@@ -177,6 +185,19 @@ function wisselTab(tab) {
   if (tab === "be-temp") activeLijst = beTempLijst;
 }
 
+function wisselSubtab(sub) {
+  const subs = ["be-temp","be-temp-dag","be-temp-nacht"];
+  subs.forEach(s => {
+    const btn = document.getElementById("subtab-" + s);
+    const div = document.getElementById("subinhoud-" + s);
+    if (btn) btn.classList.toggle("actief", s === sub);
+    if (div) div.style.display = (s === sub) ? "block" : "none";
+  });
+  if (sub === "be-temp")       activeLijst = beTempLijst;
+  else if (sub === "be-temp-dag")   activeLijst = beTempDagLijst;
+  else if (sub === "be-temp-nacht") activeLijst = beTempNachtLijst;
+}
+
 function datumUitNaam(naam) {
   const m = naam.match(/(\d{2})([a-z]{3})(\d{4})/);
   if (!m) return null;
@@ -188,6 +209,10 @@ function datumUitNaam(naam) {
 function dagLabel(naam) {
   const d = datumUitNaam(naam);
   if (!d) return naam.replace("kaart_be_temp_","").replace(".png","");
+  if (naam.includes("kaart_be_temp_nacht_")) {
+    const volgende = new Date(d); volgende.setDate(d.getDate() + 1);
+    return `Nacht naar ${NL_DAGEN[volgende.getDay()]} ${volgende.getDate()} ${NL_MAANDEN[volgende.getMonth()+1]} ${volgende.getFullYear()}`;
+  }
   return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MAANDEN[d.getMonth()+1]} ${d.getFullYear()}`;
 }
 
@@ -251,12 +276,14 @@ fetch("index.json?t=" + Date.now())
   .then(data => {
     const kaarten = Array.isArray(data) ? data : (data.kaarten || []);
     beTempLijst = kaarten
-      .filter(n => n.startsWith("kaart_be_temp_"))
-      .sort((a, b) => {
-        const da = datumUitNaam(a), db = datumUitNaam(b);
-        if (!da || !db) return 0;
-        return da - db;
-      });
+      .filter(n => n.startsWith("kaart_be_temp_") && !n.startsWith("kaart_be_temp_dag_") && !n.startsWith("kaart_be_temp_nacht_"))
+      .sort((a, b) => { const da = datumUitNaam(a), db = datumUitNaam(b); return (!da||!db) ? 0 : da-db; });
+    beTempDagLijst = kaarten
+      .filter(n => n.startsWith("kaart_be_temp_dag_"))
+      .sort((a, b) => { const da = datumUitNaam(a), db = datumUitNaam(b); return (!da||!db) ? 0 : da-db; });
+    beTempNachtLijst = kaarten
+      .filter(n => n.startsWith("kaart_be_temp_nacht_"))
+      .sort((a, b) => { const da = datumUitNaam(a), db = datumUitNaam(b); return (!da||!db) ? 0 : da-db; });
     activeLijst = beTempLijst;
 
     const container = document.getElementById("kaarten-be-temp");
@@ -266,6 +293,8 @@ fetch("index.json?t=" + Date.now())
     } else {
       beTempLijst.forEach(n => container.appendChild(maakKaartItem(n, beTempLijst)));
     }
+    beTempDagLijst.forEach(n => document.getElementById("kaarten-be-temp-dag").appendChild(maakKaartItem(n, beTempDagLijst)));
+    beTempNachtLijst.forEach(n => document.getElementById("kaarten-be-temp-nacht").appendChild(maakKaartItem(n, beTempNachtLijst)));
   })
   .catch(() => {
     document.getElementById("kaarten-be-temp").innerHTML =
