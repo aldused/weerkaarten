@@ -132,7 +132,7 @@ for code, naam in stations:
             if d not in daily_tn or tn[i] < daily_tn[d]: daily_tn[d] = tn[i]
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(set(list(daily_tx.keys()) + list(daily_tn.keys()))) if d >= vandaag][:10]
+    days = [d for d in sorted(set(list(daily_tx.keys()) + list(daily_tn.keys()))) if d >= vandaag][:7]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][naam] = {

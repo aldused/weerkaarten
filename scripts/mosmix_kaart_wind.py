@@ -162,7 +162,7 @@ for code, name in stations:
             if i < len(fx_raw) and fx_raw[i] is not None:
                 daily[d]["fx"].append(fx_raw[i])
 
-    days = sorted(daily.keys())[:10]
+    days = sorted(daily.keys())[:7]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         ff_lijst = daily[d]["ff"]

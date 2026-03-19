@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "=== Ed Aldus WM — upload $(date) ==="
@@ -40,7 +40,7 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 git add waarschuwingen.json kaart_pluim_*.png kaart_onweer_*.png kaart_bewolking_*.png kaart_*.png kaart_zon_*.png kaart_wind_*.png kaart_regen_*.png kaart_mist_*.png kaart_t5cm_*.png kaart_dauwpunt_*.png kaart_gevoels_*.png kaart_obs_*.png \
         kaart_temp_dag_*.png kaart_temp_nacht_*.png \
         kaart_be_temp_dag_*.png kaart_be_temp_nacht_*.png \
-        index.json index.html index_be.html toplijst.html toplijst.json grafiek_trend.png grafiek_trend.json beta_debilt.html beta_debilt.json beta_verificatie.json beta_verificatie_archive.json
+        index.json index.html index_be.html toplijst.html toplijst.json grafiek_trend.html grafiek_trend.png grafiek_trend.json beta_debilt.html beta_debilt.json beta_verificatie.json beta_verificatie_archive.json
 
 if git diff --cached --quiet; then
     echo "Niets gewijzigd, geen commit nodig."
