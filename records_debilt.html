@@ -1854,6 +1854,221 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // ════════════════════════════════════════════════════════════════════════════
 // L5 GEMIDDELDE
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// L5 GEMIDDELDE
+// ════════════════════════════════════════════════════════════════════════════
+
+let l5Data = null;
+let l5Param = "TX";
+let l5Periode = "dag";
+let l5Richting = "hoog";
+let l5JaarModus = false;
+let l5JaarSort = { kolom: "jaar", asc: false };
+
+async function wisselModus(modus) {
+  const isL5 = modus === "l5";
+  document.getElementById("l5-sectie").style.display = isL5 ? "block" : "none";
+
+  // Verberg/toon stations UI
+  document.querySelector(".filters").style.display = isL5 ? "none" : "flex";
+  document.querySelector(".content").style.display = isL5 ? "none" : "block";
+
+  // Knoppen stylen
+  const btnS = document.getElementById("mode-btn-stations");
+  const btnL = document.getElementById("mode-btn-l5");
+  btnS.style.background = isL5 ? "var(--kaart)" : "var(--accent)";
+  btnS.style.color = isL5 ? "var(--tekst2)" : "white";
+  btnS.style.border = isL5 ? "1px solid var(--rand)" : "none";
+  btnL.style.background = isL5 ? "var(--accent)" : "var(--kaart)";
+  btnL.style.color = isL5 ? "white" : "var(--tekst2)";
+  btnL.style.border = isL5 ? "none" : "1px solid var(--rand)";
+
+  if (isL5) {
+    if (!l5Data) await l5LaadData();
+    l5Toon();
+  }
+}
+
+async function l5LaadData() {
+  document.getElementById("l5-laden").style.display = "block";
+  document.getElementById("l5-tabel").style.display = "none";
+  try {
+    const r = await fetch("l5_records.json?t=" + Date.now());
+    l5Data = await r.json();
+    // Metadata tonen
+    const meta = l5Data.meta;
+    document.getElementById("l5-meta-periode").textContent =
+      "TX/TN/TG: " + meta.periode_TX_start + " t/m " + meta.periode_TX_eind +
+      " · RH: " + meta.periode_RH_start + " t/m " + meta.periode_RH_eind +
+      " · Gegenereerd: " + meta.gegenereerd;
+  } catch(e) {
+    document.getElementById("l5-laden").textContent = "Fout bij laden l5_records.json: " + e.message;
+    document.getElementById("l5-laden").className = "fout";
+  }
+}
+
+function l5WisselParam(p) {
+  l5Param = p;
+  ["TX","TN","TG","RH"].forEach(function(x) {
+    const el = document.getElementById("l5-ptab-" + x);
+    if (el) el.classList.toggle("actief", x === p);
+  });
+  // Laagste niet beschikbaar voor RH bij dag
+  const laagBtn = document.querySelector("#l5-richting-tabs .rtab:last-child");
+  if (p === "RH" && l5Periode === "dag") {
+    if (l5Richting === "laag") { l5Richting = "hoog"; document.querySelector("#l5-richting-tabs .rtab").classList.add("actief"); laagBtn.classList.remove("actief"); }
+    laagBtn.style.opacity = "0.3"; laagBtn.style.pointerEvents = "none";
+  } else {
+    laagBtn.style.opacity = ""; laagBtn.style.pointerEvents = "";
+  }
+  l5Toon();
+}
+
+function l5WisselPeriode(p) {
+  l5Periode = p;
+  ["dag","decade","maand","seizoen","jaar"].forEach(function(x) {
+    const el = document.getElementById("l5-per-" + x);
+    if (el) el.classList.toggle("actief", x === p);
+  });
+  document.getElementById("l5-filter-seizoen").style.display = p === "seizoen" ? "flex" : "none";
+  l5Toon();
+}
+
+function l5WisselRichting(r) {
+  l5Richting = r;
+  document.querySelectorAll("#l5-richting-tabs .rtab").forEach(function(b) {
+    b.classList.toggle("actief", b.textContent.toLowerCase().includes(r === "hoog" ? "hoogste" : "laagste"));
+  });
+  l5Toon();
+}
+
+function l5WisselJaar() {
+  l5JaarModus = true;
+  document.getElementById("l5-records-sectie").style.display = "none";
+  document.getElementById("l5-jaar-sectie").style.display = "block";
+  document.getElementById("l5-filters").querySelector(".periode-tabs").style.display = "none";
+  document.getElementById("l5-filter-seizoen").style.display = "none";
+  document.getElementById("l5-btn-jaaroverzicht").style.opacity = "0.6";
+  l5VulJaar();
+}
+
+function l5SluitJaar() {
+  l5JaarModus = false;
+  document.getElementById("l5-records-sectie").style.display = "block";
+  document.getElementById("l5-jaar-sectie").style.display = "none";
+  document.getElementById("l5-filters").querySelector(".periode-tabs").style.display = "flex";
+  document.getElementById("l5-btn-jaaroverzicht").style.opacity = "1";
+  if (l5Periode === "seizoen") document.getElementById("l5-filter-seizoen").style.display = "flex";
+}
+
+function l5Toon() {
+  if (!l5Data) return;
+  if (l5JaarModus) { l5VulJaar(); return; }
+
+  const rec = l5Data.records[l5Param];
+  if (!rec) return;
+
+  // Bepaal de juiste key
+  let sleutel;
+  if (l5Periode === "dag")     sleutel = l5Richting === "hoog" ? "hoogste_dag"    : "laagste_dag";
+  else if (l5Periode === "decade") sleutel = l5Richting === "hoog" ? "hoogste_decade" : "laagste_decade";
+  else if (l5Periode === "maand")  sleutel = l5Richting === "hoog" ? "hoogste_maand"  : "laagste_maand";
+  else if (l5Periode === "jaar")   sleutel = l5Richting === "hoog" ? "hoogste_jaar"   : "laagste_jaar";
+  else if (l5Periode === "seizoen") {
+    const s = document.getElementById("l5-sel-seizoen").value;
+    sleutel = l5Richting === "hoog" ? ("hoogste_" + s) : ("laagste_" + s);
+  }
+
+  const rijen = rec[sleutel] || [];
+
+  // Titel updaten
+  const paramLabels = { TX: "Max temp TX", TN: "Min temp TN", TG: "Gem temp TG", RH: "Neerslag RH" };
+  const periodeLabels = { dag: "Dag", decade: "Decade", maand: "Maand", seizoen: "Seizoen", jaar: "Jaar" };
+  const seizoenLabel = l5Periode === "seizoen"
+    ? " – " + document.querySelector("#l5-sel-seizoen option:checked").text
+    : "";
+  document.getElementById("l5-titel").textContent =
+    (l5Richting === "hoog" ? "Hoogste" : "Laagste") + " " + paramLabels[l5Param] +
+    " · " + periodeLabels[l5Periode] + seizoenLabel + " · L5 gemiddelde";
+
+  const eenheid = l5Data.meta.param_eenheid[l5Param];
+  document.getElementById("l5-th-waarde").textContent = paramLabels[l5Param] + " (" + eenheid + ")";
+
+  // Periodes
+  const meta = l5Data.meta;
+  const periodeStr = l5Param === "RH"
+    ? meta.periode_RH_start + " – " + meta.periode_RH_eind
+    : meta.periode_TX_start + " – " + meta.periode_TX_eind;
+  document.getElementById("l5-periode-lbl").textContent = periodeStr;
+
+  // Tabel vullen
+  const tbody = document.getElementById("l5-body");
+  tbody.innerHTML = "";
+  if (rijen.length === 0) {
+    document.getElementById("l5-laden").style.display = "block";
+    document.getElementById("l5-laden").className = "laden";
+    document.getElementById("l5-laden").textContent = "Geen data beschikbaar voor deze combinatie.";
+    document.getElementById("l5-tabel").style.display = "none";
+    return;
+  }
+
+  document.getElementById("l5-laden").style.display = "none";
+  document.getElementById("l5-tabel").style.display = "table";
+
+  rijen.forEach(function(r, i) {
+    const tr = document.createElement("tr");
+    // Medaille kleuren voor top 3
+    const kleuren = ["#ffd700","#c0c0c0","#cd7f32"];
+    const rankStijl = i < 3 ? ("color:" + kleuren[i] + ";font-weight:700;") : "color:var(--tekst2);";
+    tr.innerHTML =
+      "<td style='" + rankStijl + "'>" + (i + 1) + "</td>" +
+      "<td style='color:var(--tekst);'>" + r.label + "</td>" +
+      "<td style='text-align:right;font-weight:600;" + (l5Richting === "hoog" ? "color:#ef4444;" : "color:#60a5fa;") + "'>" +
+        r.waarde + " " + eenheid + "</td>";
+    tbody.appendChild(tr);
+  });
+}
+
+function l5VulJaar() {
+  if (!l5Data || !l5Data.jaaroverzicht) return;
+  const data = l5Data.jaaroverzicht.slice();
+  const k = l5JaarSort.kolom;
+  data.sort(function(a, b) {
+    const va = a[k] != null ? a[k] : -9999;
+    const vb = b[k] != null ? b[k] : -9999;
+    return l5JaarSort.asc ? va - vb : vb - va;
+  });
+
+  const tbody = document.getElementById("l5-jaar-body");
+  tbody.innerHTML = "";
+  data.forEach(function(r) {
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid var(--rand)";
+    function cel(v, kleur, extra) {
+      return "<td style='padding:6px 12px;text-align:right;color:" + (kleur||"var(--tekst)") + ";" + (extra||"") + "'>" + (v != null ? v : "–") + "</td>";
+    }
+    tr.innerHTML =
+      "<td style='padding:6px 12px;text-align:left;font-weight:600;color:var(--tekst);'>" + r.jaar + "</td>" +
+      cel(r.tg_gem != null ? r.tg_gem + " °C" : null, "#f59e0b") +
+      cel(r.tx_gem != null ? r.tx_gem + " °C" : null, "#ef4444") +
+      cel(r.tn_gem != null ? r.tn_gem + " °C" : null, "#60a5fa") +
+      cel(r.warme_dagen, r.warme_dagen > 100 ? "#ef4444" : "var(--tekst)") +
+      cel(r.zomerse_dagen, r.zomerse_dagen > 60 ? "#f59e0b" : "var(--tekst)") +
+      cel(r.vorst_dagen, r.vorst_dagen > 60 ? "#60a5fa" : "var(--tekst)") +
+      cel(r.rh_som != null ? r.rh_som + " mm" : null, r.rh_som > 1000 ? "#60a5fa" : "var(--tekst)") +
+      cel(r.neerslagdagen);
+    tbody.appendChild(tr);
+  });
+}
+
+function l5SortJaar(kolom) {
+  if (l5JaarSort.kolom === kolom) l5JaarSort.asc = !l5JaarSort.asc;
+  else { l5JaarSort.kolom = kolom; l5JaarSort.asc = false; }
+  l5VulJaar();
+}
+
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
