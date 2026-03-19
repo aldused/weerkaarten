@@ -162,7 +162,8 @@ for code, name in stations:
                 t_c = t5_raw[i] - 273.15  # Kelvin → Celsius
                 daily[d].append(t_c)
 
-    days = sorted(daily.keys())[:10]
+    vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
+    days = [d for d in sorted(daily.keys()) if d >= vandaag][:7]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         vals = daily[d]
