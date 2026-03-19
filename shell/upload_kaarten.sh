@@ -24,6 +24,7 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_toplijst.py"              || { echo "FOUT: maak_toplijst.py";              exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_waarnemingen_kaarten.py"  || { echo "FOUT: maak_waarnemingen_kaarten.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_index.py"                 || { echo "FOUT: maak_index.py";                exit 1; }
+/usr/local/bin/python3 "$SCRIPT_DIR/maak_p13_html.py"                 || { echo "FOUT: maak_p13_html.py";                exit 1; }
 
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_onweer.py" || { echo "FOUT: mosmix_kaart_onweer.py"; exit 1; }
 
@@ -40,7 +41,8 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 git add waarschuwingen.json kaart_pluim_*.png kaart_onweer_*.png kaart_bewolking_*.png kaart_*.png kaart_zon_*.png kaart_wind_*.png kaart_regen_*.png kaart_mist_*.png kaart_t5cm_*.png kaart_dauwpunt_*.png kaart_gevoels_*.png kaart_obs_*.png \
         kaart_temp_dag_*.png kaart_temp_nacht_*.png \
         kaart_be_temp_dag_*.png kaart_be_temp_nacht_*.png \
-        index.json index.html index_be.html toplijst.html toplijst.json grafiek_trend.html grafiek_trend.png grafiek_trend.json beta_debilt.html beta_debilt.json beta_verificatie.json beta_verificatie_archive.json
+        index.json index.html index_be.html toplijst.html toplijst.json grafiek_trend.html grafiek_trend.png grafiek_trend.json beta_debilt.html beta_debilt.json beta_verificatie.json beta_verificatie_archive.json \
+        p13_records.json p13_records.html l5_records.json records_debilt.html
 
 if git diff --cached --quiet; then
     echo "Niets gewijzigd, geen commit nodig."
