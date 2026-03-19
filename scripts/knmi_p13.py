@@ -33,7 +33,7 @@ P13_STATIONS = {
     "011": "West-Terschelling",
     "025": "De Kooy",
     "144": "Ter Apel",
-    "161": "Eelde",
+    "139": "Groningen",
     "222": "Hoorn",
     "328": "Heerde",
     "438": "Hoofddorp",
@@ -47,7 +47,7 @@ P13_STATIONS = {
 
 BASE_URL     = "https://daggegevens.knmi.nl/klimatologie/monv/reeksen"
 START_DATE   = "19000101"
-SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR    = os.path.join(SCRIPT_DIR, "p13_cache")
 OUTPUT_JSON  = os.path.join(SCRIPT_DIR, "p13_records.json")
 
@@ -223,6 +223,13 @@ def droge_natte_periodes(dag: pd.DataFrame, top: int = 10) -> dict:
         reeksen = []
         start = prev = None
         for datum, val in mask.items():
+            # Breek reeks als er een dag ontbreekt in de tijdreeks
+            if prev is not None and (datum - prev).days > 1:
+                if start is not None:
+                    reeksen.append({"start": start.strftime("%d %b %Y"),
+                                    "eind":  prev.strftime("%d %b %Y"),
+                                    "dagen": (prev - start).days + 1})
+                start = None
             if val:
                 if start is None:
                     start = datum
@@ -230,7 +237,7 @@ def droge_natte_periodes(dag: pd.DataFrame, top: int = 10) -> dict:
                 if start is not None:
                     reeksen.append({"start": start.strftime("%d %b %Y"),
                                     "eind":  prev.strftime("%d %b %Y"),
-                                    "dagen": (datum - start).days})
+                                    "dagen": (prev - start).days + 1})
                     start = None
             prev = datum
         if start is not None:
@@ -304,6 +311,14 @@ def main():
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
     print(f"\n✓ Geschreven naar: {OUTPUT_JSON}")
+
+    # Schrijf ook als JS-variabele (voor lokaal openen zonder webserver)
+    output_js = os.path.join(SCRIPT_DIR, "p13_records.js")
+    with open(output_js, "w", encoding="utf-8") as f:
+        f.write("const P13_DATA = ")
+        json.dump(output, f, ensure_ascii=False, indent=2)
+        f.write(";\n")
+    print(f"✓ Geschreven naar: {output_js}")
 
     print("\n── Top-5 natste jaren ──")
     for r in records["natste_jaar"][:5]:
