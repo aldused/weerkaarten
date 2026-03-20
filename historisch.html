@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historische Dagkaart – Ed Aldus WM</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 0; color: #222; }
+  .header { background: #00205b; padding: 14px 24px 10px; }
+  .header-titel { color: white; font-size: 1.2em; font-weight: bold; margin: 0; }
+  .header-sub { color: #a8c4e8; font-size: 0.82em; margin: 3px 0 0; }
+  .header-sub a { color: #a8c4e8; }
+  .content { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
+
+  .controls { background: white; border-radius: 8px; padding: 16px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .ctrl-groep { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl-label { font-size: 0.78em; font-weight: 600; color: #555; }
+  input[type=number], select { padding: 7px 10px; border: 1px solid #c0d0e4; border-radius: 6px; font-size: 0.88em; background: white; }
+  .btn-laden { background: #003366; color: white; border: none; padding: 9px 22px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; }
+  .btn-laden:hover { background: #0055aa; }
+  .btn-nav { background: #eef3fa; color: #003366; border: 1px solid #c0d0e4; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+  .btn-nav:hover { background: #003366; color: white; }
+
+  .params { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .param-btn { padding: 6px 16px; background: #eef3fa; border: 1px solid #c0d0e4; border-radius: 5px; cursor: pointer; font-size: 0.82em; font-weight: 600; color: #444; }
+  .param-btn:hover { background: #d8e6f5; }
+  .param-btn.actief { background: #003366; color: white; border-color: #003366; }
+
+  .kaart-wrapper { display: flex; flex-wrap: wrap; gap: 20px; }
+  .kaart-container { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 16px; flex: 1 1 500px; }
+  .kaart-titel { font-size: 1em; font-weight: 700; color: #003366; margin-bottom: 12px; }
+
+  #nl-kaart { width: 100%; max-width: 560px; display: block; margin: 0 auto; }
+
+  .info-panel { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 16px; flex: 0 0 280px; }
+  .info-titel { font-size: 0.9em; font-weight: 700; color: #003366; margin-bottom: 10px; }
+  .info-tabel { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  .info-tabel th { background: #f0f4f8; padding: 5px 8px; text-align: left; font-weight: 600; color: #555; }
+  .info-tabel td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+  .info-tabel tr:hover td { background: #f8f9fb; }
+
+  .legenda { margin-top: 12px; }
+  .legenda-titel { font-size: 0.78em; font-weight: 600; color: #555; margin-bottom: 6px; }
+  .legenda-items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .legenda-item { display: flex; align-items: center; gap: 4px; font-size: 0.75em; }
+  .legenda-kleur { width: 16px; height: 16px; border-radius: 3px; }
+
+  .status { padding: 12px; background: #f0f4f8; border-radius: 6px; font-size: 0.85em; color: #666; text-align: center; }
+  .fout { background: #fff5f5; color: #cc2200; border: 1px solid #ffcccc; }
+
+  @media (max-width: 600px) {
+    .kaart-wrapper { flex-direction: column; }
+    .info-panel { flex: 1 1 auto; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div>
+      <p class="header-titel">🗺️ Historische Dagkaart Nederland</p>
+      <p class="header-sub">KNMI daggegevens &nbsp;·&nbsp; <a href="index.html">← Terug naar kaarten</a> &nbsp;·&nbsp; <a href="records_debilt.html">📊 Weerrecords</a></p>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="controls">
+    <div class="ctrl-groep">
+      <span class="ctrl-label">Dag</span>
+      <input type="number" id="inp-dag" min="1" max="31" value="2" style="width:70px;">
+    </div>
+    <div class="ctrl-groep">
+      <span class="ctrl-label">Maand</span>
+      <select id="inp-maand">
+        <option value="1">Januari</option><option value="2">Februari</option>
+        <option value="3">Maart</option><option value="4">April</option>
+        <option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Augustus</option>
+        <option value="9">September</option><option value="10">Oktober</option>
+        <option value="11">November</option><option value="12">December</option>
+      </select>
+    </div>
+    <div class="ctrl-groep">
+      <span class="ctrl-label">Jaar</span>
+      <input type="number" id="inp-jaar" min="1901" max="2025" value="1979" style="width:90px;">
+    </div>
+    <button class="btn-laden" onclick="laadDag()">🔍 Toon kaart</button>
+    <button class="btn-nav" onclick="navigeer(-1)">◀ Vorige dag</button>
+    <button class="btn-nav" onclick="navigeer(1)">Volgende dag ▶</button>
+  </div>
+
+  <div class="params">
+    <button class="param-btn actief" id="btn-TX" onclick="wisselParam('TX')">🌡️ TX Max temp</button>
+    <button class="param-btn" id="btn-TN" onclick="wisselParam('TN')">❄️ TN Min temp</button>
+    <button class="param-btn" id="btn-TG" onclick="wisselParam('TG')">🌡️ TG Gemiddeld</button>
+    <button class="param-btn" id="btn-RH" onclick="wisselParam('RH')">🌧️ RH Neerslag</button>
+    <button class="param-btn" id="btn-FG" onclick="wisselParam('FG')">💨 FG Gem. wind</button>
+    <button class="param-btn" id="btn-FXX" onclick="wisselParam('FXX')">💨 FX Windstoot</button>
+    <button class="param-btn" id="btn-SQ" onclick="wisselParam('SQ')">☀️ SQ Zon</button>
+    <button class="param-btn" id="btn-PG" onclick="wisselParam('PG')">📊 PG Luchtdruk</button>
+  </div>
+
+  <div id="status" class="status">Kies een datum en klik op "Toon kaart".</div>
+
+  <div class="kaart-wrapper" id="kaart-wrapper" style="display:none;">
+    <div class="kaart-container">
+      <div class="kaart-titel" id="kaart-titel"></div>
+      <svg id="nl-kaart" viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+        <!-- Nederland achtergrond -->
+        <rect width="400" height="500" fill="#c8e0f0"/>
+        <!-- Vereenvoudigde NL outline -->
+        <path d="M120,30 L140,25 L170,20 L200,18 L230,22 L260,28 L280,35 L290,50 L295,70 L300,90 L310,110 L320,130 L330,150 L335,170 L330,190 L325,210 L320,230 L315,250 L305,265 L295,275 L285,285 L275,295 L265,305 L255,315 L245,325 L235,335 L225,345 L215,355 L205,365 L195,375 L185,385 L175,390 L165,388 L155,382 L145,372 L135,360 L125,348 L115,335 L108,320 L105,305 L100,290 L95,275 L90,260 L88,245 L90,230 L92,215 L95,200 L98,185 L100,170 L102,155 L100,140 L98,125 L95,110 L90,95 L88,80 L90,65 L95,50 L105,38 L120,30 Z" fill="#eaf3e8" stroke="#333" stroke-width="1.5"/>
+        <!-- Waddeneilanden -->
+        <ellipse cx="155" cy="38" rx="18" ry="7" fill="#eaf3e8" stroke="#333" stroke-width="1"/>
+        <ellipse cx="195" cy="30" rx="14" ry="6" fill="#eaf3e8" stroke="#333" stroke-width="1"/>
+        <ellipse cx="228" cy="24" rx="12" ry="5" fill="#eaf3e8" stroke="#333" stroke-width="1"/>
+        <ellipse cx="258" cy="22" rx="10" ry="5" fill="#eaf3e8" stroke="#333" stroke-width="1"/>
+        <!-- IJsselmeer -->
+        <path d="M155,120 L175,110 L195,108 L210,112 L215,125 L210,140 L200,150 L185,155 L170,152 L158,142 L153,130 Z" fill="#c8e0f0" stroke="#89b8d4" stroke-width="0.8"/>
+        <!-- Stations worden hier dynamisch ingetekend -->
+        <g id="stations-laag"></g>
+      </svg>
+
+      <div class="legenda" id="legenda"></div>
+    </div>
+
+    <div class="info-panel">
+      <div class="info-titel" id="info-titel">Stationsoverzicht</div>
+      <table class="info-tabel">
+        <thead><tr><th>Station</th><th id="th-param">Waarde</th></tr></thead>
+        <tbody id="info-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// Stations: stn, naam, lon, lat (geografisch) → wordt omgezet naar SVG coords
+const STATIONS = [
+  {stn:209, naam:"IJmuiden",          lon:4.518,  lat:52.463},
+  {stn:210, naam:"Valkenburg",        lon:4.430,  lat:52.180},
+  {stn:215, naam:"Voorschoten",       lon:4.433,  lat:52.133},
+  {stn:225, naam:"IJmuiden",          lon:4.555,  lat:52.461},
+  {stn:229, naam:"Texelhors",         lon:4.845,  lat:52.997},
+  {stn:235, naam:"Den Helder",        lon:4.789,  lat:52.924},
+  {stn:240, naam:"Schiphol",          lon:4.790,  lat:52.318},
+  {stn:242, naam:"Vlieland",          lon:4.920,  lat:53.250},
+  {stn:248, naam:"Wijdenes",          lon:5.167,  lat:52.633},
+  {stn:249, naam:"Berkhout",          lon:4.979,  lat:52.644},
+  {stn:251, naam:"Hoorn",             lon:5.346,  lat:53.392},
+  {stn:257, naam:"Wijk aan Zee",      lon:4.603,  lat:52.500},
+  {stn:258, naam:"Houtribdijk",       lon:5.433,  lat:52.618},
+  {stn:260, naam:"De Bilt",           lon:5.180,  lat:52.101},
+  {stn:265, naam:"Soesterberg",       lon:5.277,  lat:52.127},
+  {stn:267, naam:"Stavoren",          lon:5.384,  lat:52.888},
+  {stn:269, naam:"Lelystad",          lon:5.520,  lat:52.458},
+  {stn:270, naam:"Leeuwarden",        lon:5.752,  lat:53.224},
+  {stn:273, naam:"Marknesse",         lon:5.888,  lat:52.703},
+  {stn:275, naam:"Deelen",            lon:5.873,  lat:52.060},
+  {stn:277, naam:"Lauwersoog",        lon:6.200,  lat:53.413},
+  {stn:278, naam:"Heino",             lon:6.261,  lat:52.439},
+  {stn:279, naam:"Hoogeveen",         lon:6.574,  lat:52.727},
+  {stn:280, naam:"Eelde",             lon:6.585,  lat:53.125},
+  {stn:283, naam:"Hupsel",            lon:6.657,  lat:52.069},
+  {stn:286, naam:"Nieuw Beerta",      lon:7.150,  lat:53.196},
+  {stn:290, naam:"Twenthe",           lon:6.891,  lat:52.274},
+  {stn:310, naam:"Vlissingen",        lon:3.596,  lat:51.442},
+  {stn:319, naam:"Westdorpe",         lon:3.861,  lat:51.226},
+  {stn:323, naam:"Wilhelminadorp",    lon:3.884,  lat:51.527},
+  {stn:324, naam:"Stavenisse",        lon:4.001,  lat:51.597},
+  {stn:330, naam:"Hoek v. Holland",   lon:4.122,  lat:51.978},
+  {stn:331, naam:"Tholen",            lon:4.133,  lat:51.519},
+  {stn:340, naam:"Woensdrecht",       lon:4.342,  lat:51.449},
+  {stn:343, naam:"Rotterdam",         lon:4.447,  lat:51.962},
+  {stn:344, naam:"Rotterdam AP",      lon:4.444,  lat:51.957},
+  {stn:348, naam:"Cabauw",            lon:4.926,  lat:51.971},
+  {stn:350, naam:"Gilze-Rijen",       lon:4.936,  lat:51.566},
+  {stn:356, naam:"Herwijnen",         lon:5.138,  lat:51.859},
+  {stn:370, naam:"Eindhoven",         lon:5.377,  lat:51.451},
+  {stn:375, naam:"Volkel",            lon:5.707,  lat:51.656},
+  {stn:377, naam:"Ell",               lon:5.763,  lat:51.198},
+  {stn:380, naam:"Maastricht",        lon:5.762,  lat:50.906},
+  {stn:391, naam:"Arcen",             lon:6.197,  lat:51.498},
+  {stn:392, naam:"Vlakte v.d. Raan",  lon:3.242,  lat:51.499},
+];
+
+// SVG extent: lon 3.0-7.5, lat 50.6-53.7
+const LON_MIN=3.0, LON_MAX=7.5, LAT_MIN=50.6, LAT_MAX=53.7;
+const SVG_W=400, SVG_H=500;
+function lonToX(lon) { return (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W; }
+function latToY(lat) { return (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H; }
+
+// Kolomindices in CSV (0-based na STN,YYYYMMDD)
+const PARAM_COL = {
+  TG:  {col:10, div:10, eenheid:"°C",  label:"Gem. temp"},
+  TN:  {col:11, div:10, eenheid:"°C",  label:"Min temp"},
+  TX:  {col:13, div:10, eenheid:"°C",  label:"Max temp"},
+  SQ:  {col:17, div:10, eenheid:"u",   label:"Zonneschijn"},
+  RH:  {col:21, div:10, eenheid:"mm",  label:"Neerslag"},
+  PG:  {col:24, div:10, eenheid:"hPa", label:"Luchtdruk"},
+  FG:  {col:4,  div:10, eenheid:"m/s", label:"Gem. wind"},
+  FXX: {col:8,  div:10, eenheid:"m/s", label:"Max windstoot"},
+};
+
+const NL_MAANDEN = ["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+const NL_DAGEN_LANG = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+
+let huidigParam = "TX";
+let huidigData = {};
+
+// Kleurschalen per parameter
+function getKleur(param, waarde) {
+  if (waarde === null) return "#cccccc";
+  if (param === "TX" || param === "TG" || param === "TN") {
+    const schaal = [
+      {grens:-10, kleur:"#084594"},{grens:-5,  kleur:"#2166ac"},
+      {grens:0,   kleur:"#4393c3"},{grens:5,   kleur:"#92c5de"},
+      {grens:10,  kleur:"#d1e5f0"},{grens:15,  kleur:"#fddbc7"},
+      {grens:20,  kleur:"#f4a582"},{grens:25,  kleur:"#d6604d"},
+      {grens:30,  kleur:"#b2182b"},{grens:999, kleur:"#67001f"},
+    ];
+    for (const s of schaal) if (waarde < s.grens) return s.kleur;
+    return "#67001f";
+  }
+  if (param === "RH") {
+    if (waarde <= 0)  return "#f7fbff";
+    if (waarde < 2)   return "#c6dbef";
+    if (waarde < 5)   return "#6baed6";
+    if (waarde < 10)  return "#2171b5";
+    if (waarde < 20)  return "#084594";
+    return "#08306b";
+  }
+  if (param === "FG" || param === "FXX") {
+    if (waarde < 3)   return "#ffffcc";
+    if (waarde < 6)   return "#a1dab4";
+    if (waarde < 9)   return "#41b6c4";
+    if (waarde < 12)  return "#2c7fb8";
+    if (waarde < 15)  return "#253494";
+    return "#081d58";
+  }
+  if (param === "SQ") {
+    if (waarde <= 0)  return "#f7f7f7";
+    if (waarde < 2)   return "#fee391";
+    if (waarde < 4)   return "#fec44f";
+    if (waarde < 6)   return "#fe9929";
+    if (waarde < 8)   return "#d95f0e";
+    return "#993404";
+  }
+  if (param === "PG") {
+    if (waarde < 990)  return "#084594";
+    if (waarde < 1000) return "#4393c3";
+    if (waarde < 1010) return "#d1e5f0";
+    if (waarde < 1020) return "#fddbc7";
+    if (waarde < 1030) return "#d6604d";
+    return "#b2182b";
+  }
+  return "#aaaaaa";
+}
+
+function tekstKleur(kleur) {
+  // Simpele luma check
+  const r = parseInt(kleur.slice(1,3),16), g = parseInt(kleur.slice(3,5),16), b = parseInt(kleur.slice(5,7),16);
+  return (r*299+g*587+b*114)/1000 > 150 ? "#333" : "white";
+}
+
+function maakLegenda(param) {
+  const legendas = {
+    TX: [{k:"#084594",t:"< -10°C"},{k:"#2166ac",t:"-10–-5°C"},{k:"#4393c3",t:"-5–0°C"},{k:"#92c5de",t:"0–5°C"},{k:"#d1e5f0",t:"5–10°C"},{k:"#fddbc7",t:"10–15°C"},{k:"#f4a582",t:"15–20°C"},{k:"#d6604d",t:"20–25°C"},{k:"#b2182b",t:"25–30°C"},{k:"#67001f",t:"> 30°C"}],
+    TN: [{k:"#084594",t:"< -10°C"},{k:"#2166ac",t:"-10–-5°C"},{k:"#4393c3",t:"-5–0°C"},{k:"#92c5de",t:"0–5°C"},{k:"#d1e5f0",t:"5–10°C"},{k:"#fddbc7",t:"10–15°C"},{k:"#f4a582",t:"15–20°C"},{k:"#d6604d",t:"20–25°C"},{k:"#b2182b",t:"25–30°C"},{k:"#67001f",t:"> 30°C"}],
+    TG: [{k:"#084594",t:"< -10°C"},{k:"#2166ac",t:"-10–-5°C"},{k:"#4393c3",t:"-5–0°C"},{k:"#92c5de",t:"0–5°C"},{k:"#d1e5f0",t:"5–10°C"},{k:"#fddbc7",t:"10–15°C"},{k:"#f4a582",t:"15–20°C"},{k:"#d6604d",t:"20–25°C"},{k:"#b2182b",t:"25–30°C"}],
+    RH: [{k:"#f7fbff",t:"0 mm"},{k:"#c6dbef",t:"< 2 mm"},{k:"#6baed6",t:"2–5 mm"},{k:"#2171b5",t:"5–10 mm"},{k:"#084594",t:"10–20 mm"},{k:"#08306b",t:"> 20 mm"}],
+    FG: [{k:"#ffffcc",t:"< 3 m/s"},{k:"#a1dab4",t:"3–6 m/s"},{k:"#41b6c4",t:"6–9 m/s"},{k:"#2c7fb8",t:"9–12 m/s"},{k:"#253494",t:"12–15 m/s"},{k:"#081d58",t:"> 15 m/s"}],
+    FXX:[{k:"#ffffcc",t:"< 3 m/s"},{k:"#a1dab4",t:"3–6 m/s"},{k:"#41b6c4",t:"6–9 m/s"},{k:"#2c7fb8",t:"9–12 m/s"},{k:"#253494",t:"12–15 m/s"},{k:"#081d58",t:"> 15 m/s"}],
+    SQ: [{k:"#f7f7f7",t:"0 u"},{k:"#fee391",t:"< 2 u"},{k:"#fec44f",t:"2–4 u"},{k:"#fe9929",t:"4–6 u"},{k:"#d95f0e",t:"6–8 u"},{k:"#993404",t:"> 8 u"}],
+    PG: [{k:"#084594",t:"< 990 hPa"},{k:"#4393c3",t:"990–1000"},{k:"#d1e5f0",t:"1000–1010"},{k:"#fddbc7",t:"1010–1020"},{k:"#d6604d",t:"1020–1030"},{k:"#b2182b",t:"> 1030 hPa"}],
+  };
+  const items = legendas[param] || [];
+  return `<div class="legenda">
+    <div class="legenda-titel">${PARAM_COL[param].label} (${PARAM_COL[param].eenheid})</div>
+    <div class="legenda-items">${items.map(i=>`<div class="legenda-item"><div class="legenda-kleur" style="background:${i.k};border:1px solid #ccc;"></div><span>${i.t}</span></div>`).join("")}
+    <div class="legenda-item"><div class="legenda-kleur" style="background:#ccc;border:1px solid #aaa;"></div><span>Geen data</span></div>
+    </div></div>`;
+}
+
+function tekenKaart() {
+  const laag = document.getElementById("stations-laag");
+  laag.innerHTML = "";
+  const info = document.getElementById("info-tbody");
+  info.innerHTML = "";
+  document.getElementById("th-param").textContent = `${PARAM_COL[huidigParam].label} (${PARAM_COL[huidigParam].eenheid})`;
+
+  const rijen = [];
+  for (const st of STATIONS) {
+    const waarde = huidigData[st.stn] !== undefined ? huidigData[st.stn] : null;
+    const x = lonToX(st.lon), y = latToY(st.lat);
+    const kleur = getKleur(huidigParam, waarde);
+    const tk = tekstKleur(kleur);
+    const tekst = waarde !== null ? String(waarde) : "–";
+
+    // Cirkel + label
+    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.style.cursor = "pointer";
+    g.setAttribute("title", `${st.naam}: ${tekst} ${PARAM_COL[huidigParam].eenheid}`);
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    circle.setAttribute("cx", x); circle.setAttribute("cy", y);
+    circle.setAttribute("r", "14"); circle.setAttribute("fill", kleur);
+    circle.setAttribute("stroke", "#555"); circle.setAttribute("stroke-width", "0.8");
+
+    const text = document.createElementNS("http://www.w3.org/2000/svg","text");
+    text.setAttribute("x", x); text.setAttribute("y", y+1);
+    text.setAttribute("text-anchor","middle"); text.setAttribute("dominant-baseline","middle");
+    text.setAttribute("font-size","7.5"); text.setAttribute("font-weight","bold");
+    text.setAttribute("fill", tk); text.textContent = tekst;
+
+    g.appendChild(circle); g.appendChild(text);
+    laag.appendChild(g);
+
+    rijen.push({naam: st.naam, waarde});
+  }
+
+  // Sorteer tabel op waarde
+  rijen.sort((a,b) => (b.waarde??-9999) - (a.waarde??-9999));
+  rijen.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.naam}</td><td><strong>${r.waarde !== null ? r.waarde : "–"}</strong> ${r.waarde !== null ? PARAM_COL[huidigParam].eenheid : ""}</td>`;
+    info.appendChild(tr);
+  });
+
+  document.getElementById("legenda").innerHTML = maakLegenda(huidigParam);
+}
+
+function wisselParam(param) {
+  huidigParam = param;
+  document.querySelectorAll(".param-btn").forEach(b => b.classList.remove("actief"));
+  document.getElementById("btn-" + param).classList.add("actief");
+  if (Object.keys(huidigData).length > 0) tekenKaart();
+}
+
+function getDatumStr() {
+  const dag = String(document.getElementById("inp-dag").value).padStart(2,"0");
+  const maand = String(document.getElementById("inp-maand").value).padStart(2,"0");
+  const jaar = document.getElementById("inp-jaar").value;
+  return `${jaar}${maand}${dag}`;
+}
+
+function getDatumLabel() {
+  const dag = parseInt(document.getElementById("inp-dag").value);
+  const maand = parseInt(document.getElementById("inp-maand").value);
+  const jaar = parseInt(document.getElementById("inp-jaar").value);
+  const d = new Date(jaar, maand-1, dag);
+  return `${NL_DAGEN_LANG[d.getDay()]} ${dag} ${NL_MAANDEN[maand]} ${jaar}`;
+}
+
+async function laadDag() {
+  const datumStr = getDatumStr();
+  const datumLabel = getDatumLabel();
+  const status = document.getElementById("status");
+  status.className = "status";
+  status.textContent = `⏳ Data laden voor ${datumLabel}...`;
+  status.style.display = "block";
+  document.getElementById("kaart-wrapper").style.display = "none";
+
+  huidigData = {};
+  let geladen = 0, fouten = 0;
+
+  const beloftes = STATIONS.map(async st => {
+    try {
+      const url = `knmi_dagdata_${st.stn}.csv`;
+      const res = await fetch(url);
+      if (!res.ok) { fouten++; return; }
+      const txt = await res.text();
+      const regels = txt.split("\n");
+      for (const regel of regels) {
+        const cols = regel.split(",").map(c => c.trim());
+        if (cols[1] === datumStr) {
+          const info = PARAM_COL[huidigParam];
+          const raw = cols[info.col];
+          if (raw && raw !== "" && raw !== "-1") {
+            huidigData[st.stn] = Math.round(parseInt(raw) / info.div * 10) / 10;
+          }
+          geladen++;
+          return;
+        }
+      }
+      fouten++;
+    } catch(e) { fouten++; }
+  });
+
+  await Promise.all(beloftes);
+
+  if (Object.keys(huidigData).length === 0) {
+    status.className = "status fout";
+    status.textContent = `Geen data gevonden voor ${datumLabel}. Mogelijk is deze datum niet beschikbaar in de dataset.`;
+    return;
+  }
+
+  status.style.display = "none";
+  document.getElementById("kaart-wrapper").style.display = "flex";
+  document.getElementById("kaart-titel").textContent = `${PARAM_COL[huidigParam].label} — ${datumLabel}`;
+  document.getElementById("info-titel").textContent = datumLabel;
+  tekenKaart();
+}
+
+function navigeer(richting) {
+  const dag = parseInt(document.getElementById("inp-dag").value);
+  const maand = parseInt(document.getElementById("inp-maand").value);
+  const jaar = parseInt(document.getElementById("inp-jaar").value);
+  const d = new Date(jaar, maand-1, dag);
+  d.setDate(d.getDate() + richting);
+  document.getElementById("inp-dag").value = d.getDate();
+  document.getElementById("inp-maand").value = d.getMonth() + 1;
+  document.getElementById("inp-jaar").value = d.getFullYear();
+  laadDag();
+}
+
+// Initialiseer met vandaag min 1 jaar
+const gisteren = new Date();
+gisteren.setFullYear(gisteren.getFullYear() - 1);
+document.getElementById("inp-dag").value = gisteren.getDate();
+document.getElementById("inp-maand").value = gisteren.getMonth() + 1;
+document.getElementById("inp-jaar").value = gisteren.getFullYear();
+</script>
+</body>
+</html>
