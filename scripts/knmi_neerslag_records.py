@@ -163,10 +163,17 @@ def bereken_records(data):
         for rij in data if rij.get("sx") and 0 < rij["sx"] <= 200
     ], key=lambda x: -x["waarde"])[:TOP_N]
 
+    # Jaarsommen voor grafiek (gesorteerd op jaar)
+    jaar_reeks = sorted([
+        {"jaar": k, "mm": round(v, 1)}
+        for k, v in jaar_data.items()
+    ], key=lambda x: x["jaar"])
+
     return {
         "dag": dag_top, "decade": dec_top,
         "maand": mnd_top, "jaar": jaar_top,
-        "sneeuw": sneeuw_top
+        "sneeuw": sneeuw_top,
+        "jaar_reeks": jaar_reeks
     }
 
 
