@@ -357,63 +357,107 @@ function zoekMetar() {
   document.getElementById("metar-suggesties").style.display = "none";
   haalMetar(val);
 }
+// Parse raw METAR string naar losse velden
+function parseMetarRaw(raw) {
+  const r = raw.trim();
+  const out = { raw: r };
+  // Tijd: bijv. 200525Z
+  const tijd = r.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+  if (tijd) out.tijd = `dag ${tijd[1]}, ${tijd[2]}:${tijd[3]}Z`;
+  // Wind: bijv. 04004KT of VRB03KT of 04004G08KT
+  const wind = r.match(/\b(VRB|\d{3})(\d{2,3})(?:G(\d{2,3}))?KT\b/);
+  if (wind) out.wind = `${wind[1]}° / ${parseInt(wind[2])} kt${wind[3] ? ` (G${parseInt(wind[3])} kt)` : ""}`;
+  // Zicht: bijv. 6000 of 9999 of CAVOK
+  if (r.includes("CAVOK")) { out.zicht = "CAVOK (>10 km)"; out.wolken = "Geen wolken < 5000ft"; }
+  else {
+    const zicht = r.match(/\b(\d{4})\b(?!\d)/);
+    if (zicht) out.zicht = parseInt(zicht[1]) >= 9999 ? ">10 km" : `${parseInt(zicht[1])} m`;
+  }
+  // Wolken: bijv. FEW030 SCT040 BKN010 OVC020 NSC CLR
+  if (!out.wolken) {
+    if (r.includes(" NSC") || r.includes(" NCD")) out.wolken = "Geen significante wolken";
+    else if (r.includes(" CLR") || r.includes(" SKC")) out.wolken = "Helder";
+    else {
+      const wolken = [...r.matchAll(/\b(FEW|SCT|BKN|OVC)(\d{3})\b/g)];
+      out.wolken = wolken.length ? wolken.map(w => `${w[1]} ${parseInt(w[2])*100}ft`).join(", ") : "–";
+    }
+  }
+  // Temp/dauwpunt: bijv. 06/05 of M02/M05
+  const temp = r.match(/\b(M?\d{2})\/(M?\d{2})\b/);
+  if (temp) {
+    out.temp = temp[1].replace("M","-") + "°C";
+    out.dewp = temp[2].replace("M","-") + "°C";
+  }
+  // QNH: bijv. Q1022
+  const qnh = r.match(/\bQ(\d{4})\b/);
+  if (qnh) out.qnh = `${qnh[1]} hPa`;
+  // Weer: bijv. -RA TSRA FZFG BR
+  const weerCodes = {"RA":"Regen","SN":"Sneeuw","FG":"Mist","BR":"Nevel","TS":"Onweer","DZ":"Motregen","SH":"Buien","GR":"Hagel","FZFG":"Rijpmist","FZRA":"IJsregen","TSRA":"Onweer met regen","SHRA":"Regenbuien","SNRA":"Sneeuw/regen"};
+  const weerMatch = r.match(/\b(-|\+|VC)?(TS|SH|FZ|BC|BL|DR|MI|PR)?(DZ|RA|SN|SG|IC|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS)(\w*)?\b/g);
+  if (weerMatch) out.weer = weerMatch.filter(w => w.length > 1 && !w.match(/^\d/)).map(w => weerCodes[w.replace(/^[-+]/,"")] || w).join(", ");
+  return out;
+}
+
 async function haalMetar(icao) {
   document.getElementById("metar-resultaat").style.display = "none";
   document.getElementById("metar-fout").style.display = "none";
   document.getElementById("metar-laden").style.display = "block";
   document.getElementById("metar-input").value = icao;
   try {
-    const proxy = "https://api.allorigins.win/raw?url="; const fetchTimeout = (url, ms=8000) => Promise.race([fetch(url), new Promise((_,r) => setTimeout(() => r(new Error("Timeout")), ms))]);
-    const metarUrl = proxy + encodeURIComponent(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=json&hours=2`);
-    const tafUrl   = proxy + encodeURIComponent(`https://aviationweather.gov/api/data/taf?ids=${icao}&format=json`);
-
     const [metarRes, tafRes] = await Promise.all([
-      fetchTimeout(metarUrl),
-      fetchTimeout(tafUrl)
+      fetch(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw&hours=2`),
+      fetch(`https://aviationweather.gov/api/data/taf?ids=${icao}&format=raw`)
     ]);
-    const metarRaw = await metarRes.json(); const metarData = Array.isArray(metarRaw) ? metarRaw : (metarRaw.data || [metarRaw]).filter(Boolean);
-    const tafRaw = await tafRes.json(); const tafData = Array.isArray(tafRaw) ? tafRaw : (tafRaw.data || [tafRaw]).filter(Boolean);
+    const metarTxt = (await metarRes.text()).trim();
+    const tafTxt   = (await tafRes.text()).trim();
+
     document.getElementById("metar-laden").style.display = "none";
-    if (!metarData || metarData.length === 0) {
-      document.getElementById("metar-fout").textContent = `Geen METAR gevonden voor ${icao}.`;
+
+    if (!metarTxt || metarTxt.length < 10) {
+      document.getElementById("metar-fout").textContent = `Geen METAR gevonden voor ${icao}. Controleer de ICAO-code.`;
       document.getElementById("metar-fout").style.display = "block";
       return;
     }
-    const m = metarData[0];
-    document.getElementById("metar-station-naam").textContent = `${icao} — ${ICAO_NL[icao] || m.name || icao}`;
-    document.getElementById("metar-raw").textContent = m.rawOb || "–";
-    document.getElementById("metar-tijd").textContent = m.obsTime ? new Date(m.obsTime * 1000).toLocaleString("nl-NL") : "";
+
+    // Neem de eerste METAR (meest recent)
+    const eersteMetar = metarTxt.split("\n")[0].trim();
+    const m = parseMetarRaw(eersteMetar);
+
+    document.getElementById("metar-station-naam").textContent = `${icao} — ${ICAO_NL[icao] || icao}`;
+    document.getElementById("metar-raw").textContent = eersteMetar;
+    document.getElementById("metar-tijd").textContent = m.tijd || "";
+
     const decoded = document.getElementById("metar-decoded");
     decoded.innerHTML = "";
-    [["Temperatuur", m.temp != null ? `${m.temp}°C` : "–"],
-     ["Dauwpunt",    m.dewp != null ? `${m.dewp}°C` : "–"],
-     ["Wind",        m.wspd != null ? `${m.wdir||"VRB"}° / ${m.wspd} kt${m.wgst?` (G${m.wgst} kt)`:""}` : "–"],
-     ["Zicht",       m.visib != null ? `${m.visib} SM` : "–"],
-     ["Wolken",      m.clouds ? m.clouds.map(c=>`${c.cover} ${c.base}ft`).join(", ") : "–"],
-     ["QNH",         m.altim != null ? `${m.altim} hPa` : "–"],
-     ["Weer",        m.wxString || "–"],
-     ["Vliegcat.",   m.fltCat || "–"],
+    [["Temperatuur", m.temp  || "–"],
+     ["Dauwpunt",    m.dewp  || "–"],
+     ["Wind",        m.wind  || "–"],
+     ["Zicht",       m.zicht || "–"],
+     ["Wolken",      m.wolken|| "–"],
+     ["QNH",         m.qnh   || "–"],
+     ["Weer",        m.weer  || "–"],
     ].forEach(([l,w]) => {
       decoded.innerHTML += `<div class="metar-kaart"><div class="metar-kaart-label">${l}</div><div class="metar-kaart-waarde">${w}</div></div>`;
     });
-    if (tafData && tafData.length > 0) {
-      const t = tafData[0];
-      document.getElementById("taf-raw").textContent = t.rawTAF || "–";
-      document.getElementById("taf-tijd").textContent = t.issueTime ? new Date(t.issueTime * 1000 || t.issueTime).toLocaleString("nl-NL") : "";
+
+    // TAF
+    if (tafTxt && tafTxt.length > 10) {
+      document.getElementById("taf-raw").textContent = tafTxt;
+      document.getElementById("taf-tijd").textContent = "";
+      // Parse TAF regels als periodes
+      const regels = tafTxt.split("\n").map(r => r.trim()).filter(r => r.length > 2);
       const periodes = document.getElementById("taf-periodes");
-      periodes.innerHTML = (t.fcsts||[]).map(f => {
-        const van = f.timeFrom ? new Date(f.timeFrom * 1000 || f.timeFrom).toLocaleString("nl-NL",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "";
-        const tot = f.timeTo   ? new Date(f.timeTo * 1000 || f.timeTo).toLocaleString("nl-NL",{hour:"2-digit",minute:"2-digit"}) : "";
-        return `<div style="padding:4px 0;border-bottom:1px solid #eee;">
-          <strong>${van} – ${tot}</strong>
-          ${f.changeIndicator?`<span style="color:#e67e22;font-size:0.85em;margin-left:6px;">${f.changeIndicator}</span>`:""}
-          &nbsp;|&nbsp; Wind: ${f.wspd!=null?`${f.wdir||"VRB"}°/${f.wspd}kt${f.wgst?` G${f.wgst}kt`:""}` : "–"}
-          &nbsp;|&nbsp; Wolken: ${f.clouds?f.clouds.map(c=>`${c.cover} ${c.base}ft`).join(" "):"–"}
-          ${f.wxString?`&nbsp;|&nbsp; ${f.wxString}`:""}
+      periodes.innerHTML = regels.map((r,i) => {
+        const isBecmg = r.startsWith("BECMG");
+        const isTempo = r.startsWith("TEMPO");
+        const isProb  = r.startsWith("PROB");
+        const kleur   = isBecmg ? "#2a7a2a" : isTempo ? "#e67e22" : isProb ? "#9b59b6" : "#003366";
+        return `<div style="padding:4px 0;border-bottom:1px solid #eee;font-family:monospace;font-size:0.82em;">
+          <span style="color:${kleur};font-weight:${i===0?'700':'400'};">${r}</span>
         </div>`;
       }).join("");
     } else {
-      document.getElementById("taf-raw").textContent = "Geen TAF beschikbaar.";
+      document.getElementById("taf-raw").textContent = "Geen TAF beschikbaar voor dit station.";
       document.getElementById("taf-periodes").innerHTML = "";
       document.getElementById("taf-tijd").textContent = "";
     }
