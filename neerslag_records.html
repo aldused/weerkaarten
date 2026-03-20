@@ -47,8 +47,8 @@ tr:hover td { background: #f8f9fb; }
 .filter-balk label { font-size: 0.82em; font-weight: 600; color: #555; }
 .grafiek-wrap { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 16px; margin-bottom: 16px; }
 .grafiek-titel { font-size: 1em; font-weight: 700; color: #003366; margin-bottom: 12px; }
-.vergelijk-station { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.vergelijk-kleur { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; }
+.vergelijk-station { display: inline-flex; align-items: center; gap: 6px; background: #eef3fa; border-radius: 20px; padding: 4px 10px; font-size: 0.82em; }
+.vergelijk-kleur { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -146,13 +146,13 @@ tr:hover td { background: #f8f9fb; }
     <div class="filter-balk">
       <label>Station:</label>
       <select id="sel-grafiek-station" onchange="laadGrafiek()" style="min-width:220px;"></select>
-      <label>Periode:</label>
+      <label>Vanaf jaar:</label>
       <select id="sel-grafiek-periode" onchange="laadGrafiek()">
         <option value="0">Alle jaren</option>
-        <option value="1950">Vanaf 1950</option>
-        <option value="1970">Vanaf 1970</option>
-        <option value="1990">Vanaf 1990</option>
-        <option value="2000">Vanaf 2000</option>
+        <option value="1950">1950</option>
+        <option value="1970">1970</option>
+        <option value="1990">1990</option>
+        <option value="2000">2000</option>
       </select>
     </div>
     <div class="grafiek-wrap">
@@ -165,22 +165,23 @@ tr:hover td { background: #f8f9fb; }
     </div>
   </div>
 
-  <!-- VERGELIJK STATIONS -->
+  <!-- VERGELIJK -->
   <div class="sectie" id="sectie-vergelijk">
-    <div class="filter-balk" style="flex-direction:column;align-items:flex-start;">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <label>Voeg station toe:</label>
+    <div class="filter-balk" style="flex-direction:column;align-items:flex-start;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label>Station toevoegen:</label>
         <select id="sel-verg-station" style="min-width:220px;"></select>
-        <button onclick="voegVergelijkToe()" style="padding:6px 16px;background:#003366;color:white;border:none;border-radius:5px;cursor:pointer;font-size:0.85em;font-weight:600;">+ Voeg toe</button>
-        <button onclick="clearVergelijk()" style="padding:6px 16px;background:#eef3fa;color:#003366;border:1px solid #c0d0e4;border-radius:5px;cursor:pointer;font-size:0.85em;font-weight:600;">Wis alles</button>
+        <button onclick="voegVergelijkToe()" style="padding:6px 14px;background:#003366;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:0.85em;">+ Voeg toe</button>
+        <button onclick="clearVergelijk()" style="padding:6px 14px;background:#eef3fa;color:#003366;border:1px solid #c0d0e4;border-radius:5px;cursor:pointer;font-weight:600;font-size:0.85em;">Wis alles</button>
       </div>
-      <div id="vergelijk-lijst" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
+      <div id="vergelijk-lijst" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>
     <div class="grafiek-wrap">
-      <div class="grafiek-titel">📈 Jaarsom neerslag vergelijking</div>
+      <div class="grafiek-titel">📈 Jaarsom neerslag — vergelijking</div>
       <canvas id="canvas-vergelijk" height="120"></canvas>
     </div>
   </div>
+
 </div>
 
 </div>
@@ -193,6 +194,8 @@ function wisselTab(tab) {
   document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("actief", tabs[i] === tab));
   document.querySelectorAll(".sectie").forEach(s => s.classList.remove("actief"));
   document.getElementById("sectie-" + tab).classList.add("actief");
+  if (tab === "grafiek") setTimeout(laadGrafiek, 50);
+  if (tab === "vergelijk") setTimeout(tekenVergelijk, 50);
 }
 
 function rijKlas(i) {
@@ -265,94 +268,45 @@ function laadStation() {
 }
 
 
-// ── Grafiek functies ──────────────────────────────────────────────────────────
-let chartJaarsom = null;
-let chartTrend = null;
-let chartVergelijk = null;
 const KLEUREN = ["#003366","#e84545","#27ae60","#f39c12","#8e44ad","#16a085","#c0392b","#2980b9"];
+let chartJaarsom = null, chartTrend = null, chartVergelijk = null;
 let vergelijkStations = [];
 
 function laadGrafiek() {
   const nr = document.getElementById("sel-grafiek-station").value;
   const vanafJaar = parseInt(document.getElementById("sel-grafiek-periode").value) || 0;
-  if (!nr || !data.stations[nr]) return;
-
+  if (!nr || !data || !data.stations[nr]) return;
   const rec = data.stations[nr];
-  const naam = data.stationsnamen[nr] || "Station " + nr;
-  const reeks = (rec.jaar_reeks || []).filter(r => r.jaar >= (vanafJaar || 0));
-
-  document.getElementById("grafiek-titel").textContent = `📊 Jaarsom neerslag — ${naam}`;
-
+  const naam = data.stationsnamen[nr] || nr;
+  const reeks = (rec.jaar_reeks || []).filter(r => r.jaar >= vanafJaar);
+  if (!reeks.length) return;
+  document.getElementById("grafiek-titel").textContent = "Jaarsom neerslag — " + naam;
   const jaren = reeks.map(r => r.jaar);
   const waarden = reeks.map(r => r.mm);
-  const gem = waarden.length ? Math.round(waarden.reduce((a,b)=>a+b,0)/waarden.length) : 0;
-
-  // Kleur boven/onder gemiddelde
-  const kleuren = waarden.map(v => v >= gem ? "rgba(0,51,102,0.7)" : "rgba(100,149,237,0.5)");
-
+  const gem = Math.round(waarden.reduce((a,b)=>a+b,0)/waarden.length);
+  const kleuren = waarden.map(v => v >= gem ? "rgba(0,51,102,0.75)" : "rgba(100,149,237,0.55)");
   if (chartJaarsom) chartJaarsom.destroy();
   chartJaarsom = new Chart(document.getElementById("canvas-jaarsom"), {
     type: "bar",
-    data: {
-      labels: jaren,
-      datasets: [{
-        label: "Jaarsom (mm)",
-        data: waarden,
-        backgroundColor: kleuren,
-        borderWidth: 0
-      }, {
-        label: `Gemiddelde (${gem} mm)`,
-        data: jaren.map(() => gem),
-        type: "line",
-        borderColor: "#e84545",
-        borderWidth: 2,
-        borderDash: [5,5],
-        pointRadius: 0,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true, position: "top" } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 20 } },
-        y: { beginAtZero: false, title: { display: true, text: "mm" } }
-      }
-    }
+    data: { labels: jaren, datasets: [
+      { label: "Jaarsom (mm)", data: waarden, backgroundColor: kleuren, borderWidth: 0 },
+      { label: "Gemiddelde (" + gem + " mm)", data: jaren.map(()=>gem), type: "line",
+        borderColor: "#e84545", borderWidth: 2, borderDash: [5,5], pointRadius: 0, fill: false }
+    ]},
+    options: { responsive: true, plugins: { legend: { position: "top" } },
+      scales: { x: { ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: "mm" } } } }
   });
-
-  // Trendgrafiek: voortschrijdend gemiddelde 10 jaar
   if (waarden.length >= 10) {
     document.getElementById("trend-wrap").style.display = "block";
-    const trend = waarden.map((v,i) => {
-      if (i < 9) return null;
-      const slice = waarden.slice(i-9, i+1);
-      return Math.round(slice.reduce((a,b)=>a+b,0)/10);
-    });
+    const trend = waarden.map((v,i) => i < 9 ? null : Math.round(waarden.slice(i-9,i+1).reduce((a,b)=>a+b)/10));
     if (chartTrend) chartTrend.destroy();
     chartTrend = new Chart(document.getElementById("canvas-trend"), {
       type: "line",
-      data: {
-        labels: jaren,
-        datasets: [{
-          label: "10-jaar gemiddelde",
-          data: trend,
-          borderColor: "#003366",
-          backgroundColor: "rgba(0,51,102,0.1)",
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: true,
-          spanGaps: false
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { maxTicksLimit: 20 } },
-          y: { title: { display: true, text: "mm" } }
-        }
-      }
+      data: { labels: jaren, datasets: [{ label: "10-jaar gem.", data: trend,
+        borderColor: "#003366", backgroundColor: "rgba(0,51,102,0.1)", borderWidth: 2,
+        pointRadius: 0, fill: true, spanGaps: false }] },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: "mm" } } } }
     });
   } else {
     document.getElementById("trend-wrap").style.display = "none";
@@ -366,64 +320,42 @@ function voegVergelijkToe() {
   tekenVergelijk();
 }
 
-function clearVergelijk() {
-  vergelijkStations = [];
-  tekenVergelijk();
-}
-
-function tekenVergelijk() {
-  const lijst = document.getElementById("vergelijk-lijst");
-  lijst.innerHTML = vergelijkStations.map((nr,i) => {
-    const naam = data.stationsnamen[nr] || nr;
-    return `<div class="vergelijk-station"><div class="vergelijk-kleur" style="background:${KLEUREN[i]};"></div><span style="font-size:0.82em;">${naam}</span><button onclick="verwijderVergelijk('${nr}')" style="background:none;border:none;cursor:pointer;color:#888;font-size:0.9em;">✕</button></div>`;
-  }).join("");
-
-  const datasets = vergelijkStations.map((nr, i) => {
-    const rec = data.stations[nr];
-    const naam = data.stationsnamen[nr] || nr;
-    const reeks = rec ? (rec.jaar_reeks || []) : [];
-    return {
-      label: naam,
-      data: reeks.map(r => ({ x: r.jaar, y: r.mm })),
-      borderColor: KLEUREN[i],
-      backgroundColor: "transparent",
-      borderWidth: 2,
-      pointRadius: 0,
-      tension: 0.2
-    };
-  });
-
-  if (chartVergelijk) chartVergelijk.destroy();
-  chartVergelijk = new Chart(document.getElementById("canvas-vergelijk"), {
-    type: "line",
-    data: { datasets },
-    options: {
-      responsive: true,
-      parsing: false,
-      plugins: { legend: { display: true, position: "top" } },
-      scales: {
-        x: { type: "linear", title: { display: true, text: "Jaar" }, ticks: { maxTicksLimit: 20 } },
-        y: { title: { display: true, text: "mm" } }
-      }
-    }
-  });
-}
+function clearVergelijk() { vergelijkStations = []; tekenVergelijk(); }
 
 function verwijderVergelijk(nr) {
   vergelijkStations = vergelijkStations.filter(s => s !== nr);
   tekenVergelijk();
 }
 
+function tekenVergelijk() {
+  const lijst = document.getElementById("vergelijk-lijst");
+  lijst.innerHTML = vergelijkStations.map((nr,i) =>
+    `<div class="vergelijk-station"><div class="vergelijk-kleur" style="background:${KLEUREN[i]};"></div>${data.stationsnamen[nr]||nr}<button onclick="verwijderVergelijk('${nr}')" style="background:none;border:none;cursor:pointer;color:#888;margin-left:4px;">✕</button></div>`
+  ).join("");
+  const datasets = vergelijkStations.map((nr,i) => ({
+    label: data.stationsnamen[nr] || nr,
+    data: (data.stations[nr]?.jaar_reeks || []).map(r => ({x: r.jaar, y: r.mm})),
+    borderColor: KLEUREN[i], backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.2
+  }));
+  if (chartVergelijk) chartVergelijk.destroy();
+  chartVergelijk = new Chart(document.getElementById("canvas-vergelijk"), {
+    type: "line", data: { datasets },
+    options: { responsive: true, parsing: false,
+      plugins: { legend: { position: "top" } },
+      scales: { x: { type: "linear", ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: "mm" } } } }
+  });
+}
+
 function vulGrafiekDropdowns() {
+  if (!data) return;
   const namen = data.stationsnamen;
   const gesorteerd = Object.entries(namen).sort((a,b) => a[1].localeCompare(b[1]));
-  ["sel-grafiek-station", "sel-verg-station"].forEach(id => {
+  ["sel-grafiek-station","sel-verg-station"].forEach(id => {
     const sel = document.getElementById(id);
     gesorteerd.forEach(([nr, naam]) => {
-      if (data.stations[nr] && data.stations[nr].jaar_reeks) {
+      if (data.stations[nr] && (data.stations[nr].jaar_reeks||[]).length > 5) {
         const opt = document.createElement("option");
-        opt.value = nr;
-        opt.textContent = `${naam} (${nr})`;
+        opt.value = nr; opt.textContent = naam + " (" + nr + ")";
         sel.appendChild(opt);
       }
     });
