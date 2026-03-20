@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KNMI Guidance – Ed Aldus WM</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+* { box-sizing: border-box; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 0; color: #222; }
+.header { background: #00205b; padding: 14px 24px 10px; }
+.header-titel { color: white; font-size: 1.2em; font-weight: bold; margin: 0; }
+.header-sub { color: #a8c4e8; font-size: 0.82em; margin: 3px 0 0; }
+.header-sub a { color: #a8c4e8; }
+.content { padding: 16px 20px; max-width: 900px; margin: 0 auto; }
+
+.guidance-kaart { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 20px 24px; margin-bottom: 24px; }
+.guidance-label { display: inline-block; font-size: 0.72em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 10px; border-radius: 20px; margin-bottom: 10px; }
+.label-kort { background: #dbeafe; color: #1e40af; }
+.label-lang { background: #dcfce7; color: #166534; }
+.guidance-titel { font-size: 1.15em; font-weight: 700; color: #003366; margin: 0 0 6px; }
+.guidance-geldig { font-size: 0.8em; color: #666; margin-bottom: 14px; border-bottom: 1px solid #e8edf5; padding-bottom: 10px; }
+.guidance-tekst { font-size: 0.88em; line-height: 1.7; color: #333; white-space: pre-wrap; }
+.guidance-tekst h3 { font-size: 0.92em; font-weight: 700; color: #003366; margin: 14px 0 4px; }
+.guidance-paraaf { font-size: 0.78em; color: #888; margin-top: 14px; padding-top: 10px; border-top: 1px solid #e8edf5; font-style: italic; }
+.bron { font-size: 0.75em; color: #888; margin-top: 6px; }
+.bron a { color: #4a7aaf; }
+.bijgewerkt { font-size: 0.75em; color: #888; text-align: right; margin-bottom: 16px; }
+.laden { text-align: center; color: #888; padding: 40px; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div>
+      <p class="header-titel">📋 KNMI Guidance</p>
+      <p class="header-sub">Modelbeoordeling &amp; Meerdaagse verwachting &nbsp;·&nbsp; <a href="index.html">← Terug naar kaarten</a></p>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="bijgewerkt" id="bijgewerkt">Laden...</div>
+  <div id="laden" class="laden">⏳ Guidance ophalen...</div>
+  <div id="guidance-inhoud" style="display:none;">
+
+    <!-- KORT: Modelbeoordeling -->
+    <div class="guidance-kaart">
+      <div class="guidance-label label-kort">⚡ Kort — Modelbeoordeling +48u</div>
+      <h2 class="guidance-titel" id="kort-titel"></h2>
+      <div class="guidance-geldig" id="kort-geldig"></div>
+      <div class="guidance-tekst" id="kort-tekst"></div>
+      <div class="guidance-paraaf" id="kort-paraaf"></div>
+      <div class="bron">Bron: <a href="https://www.knmi.nl/nederland-nu/weer/waarschuwingen-en-verwachtingen/extra/guidance-modelbeoordeling" target="_blank">KNMI Guidance modelbeoordeling</a> · © KNMI</div>
+    </div>
+
+    <!-- LANG: Meerdaagse -->
+    <div class="guidance-kaart">
+      <div class="guidance-label label-lang">🔭 Lang — Meerdaagse verwachting</div>
+      <h2 class="guidance-titel" id="lang-titel"></h2>
+      <div class="guidance-geldig" id="lang-geldig"></div>
+      <div class="guidance-tekst" id="lang-tekst"></div>
+      <div class="guidance-paraaf" id="lang-paraaf"></div>
+      <div class="bron">Bron: <a href="https://www.knmi.nl/nederland-nu/weer/waarschuwingen-en-verwachtingen/extra/guidance-meerdaagse" target="_blank">KNMI Guidance meerdaagse</a> · © KNMI</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function formatTekst(tekst) {
+  // Verwijder overbodige lege regels
+  tekst = tekst.replace(/\n{3,}/g, '\n\n').trim();
+  // Zet ### headers om naar <h3>
+  tekst = tekst.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  // Zet **vet** om
+  tekst = tekst.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return tekst;
+}
+
+fetch('guidance.json?t=' + Date.now())
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('laden').style.display = 'none';
+    document.getElementById('guidance-inhoud').style.display = 'block';
+
+    const bw = d.bijgewerkt ? d.bijgewerkt.substring(0,16).replace('T',' ') : '';
+    document.getElementById('bijgewerkt').textContent = 'Bijgewerkt: ' + bw;
+
+    ['kort','lang'].forEach(type => {
+      const g = d[type];
+      if (!g) return;
+      document.getElementById(type+'-titel').textContent = g.titel || '';
+      document.getElementById(type+'-geldig').textContent = g.geldig || '';
+      document.getElementById(type+'-tekst').innerHTML = formatTekst(g.tekst || '');
+      document.getElementById(type+'-paraaf').textContent = g.paraaf || '';
+    });
+  })
+  .catch(e => {
+    document.getElementById('laden').textContent = 'Fout bij laden: ' + e.message;
+  });
+</script>
+</body>
+</html>
