@@ -75,6 +75,9 @@ def scrape_guidance(url):
         main_html = re.sub(r'&#\d+;', '', main_html)
         main_html = re.sub(r'&[a-z]+;', '', main_html)
         main_html = re.sub(r'\n{3,}', '\n\n', main_html)
+        regels2 = [r.strip() for r in main_html.split('\n')]
+        main_html = '\n'.join(r for r in regels2)
+        main_html = re.sub(r'\n{3,}', '\n\n', main_html)
         main_html = re.sub(r'[ \t]+', ' ', main_html)
 
         # Zoek de relevante tekst - begin bij de geldigheidsregel of eerste sectie
