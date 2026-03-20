@@ -337,7 +337,7 @@ function wisselParam(param) {
   huidigParam = param;
   document.querySelectorAll(".param-btn").forEach(b => b.classList.remove("actief"));
   document.getElementById("btn-" + param).classList.add("actief");
-  if (Object.keys(huidigData).length > 0) tekenKaart();
+  if (Object.keys(huidigData).length > 0) laadDag();
 }
 
 function getDatumStr() {
@@ -365,44 +365,58 @@ async function laadDag() {
   document.getElementById("kaart-wrapper").style.display = "none";
 
   huidigData = {};
-  let geladen = 0, fouten = 0;
 
-  const beloftes = STATIONS.map(async st => {
+  try {
+    const apiUrl = `https://www.daggegevens.knmi.nl/klimatologie/daggegevens`;
+    const postData = `start=${datumStr}&end=${datumStr}&stns=ALL&vars=TX:TN:TG:RH:FG:FXX:SQ:PG&fmt=json`;
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl + "?" + postData)}`;
+
+    // Probeer eerst direct (CORS), anders via proxy
+    let json;
     try {
-      const url = `knmi_dagdata_${st.stn}.csv`;
-      const res = await fetch(url);
-      if (!res.ok) { fouten++; return; }
-      const txt = await res.text();
-      const regels = txt.split("\n");
-      for (const regel of regels) {
-        const cols = regel.split(",").map(c => c.trim());
-        if (cols[1] === datumStr) {
-          const info = PARAM_COL[huidigParam];
-          const raw = cols[info.col];
-          if (raw && raw !== "" && raw !== "-1") {
-            huidigData[st.stn] = Math.round(parseInt(raw) / info.div * 10) / 10;
-          }
-          geladen++;
-          return;
-        }
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: postData
+      });
+      json = await res.json();
+    } catch(e) {
+      // CORS fallback: GET via proxy
+      const res2 = await fetch(proxyUrl);
+      json = await res2.json();
+    }
+
+    if (!json || json.length === 0) {
+      status.className = "status fout";
+      status.textContent = `Geen data gevonden voor ${datumLabel}.`;
+      return;
+    }
+
+    const info = PARAM_COL[huidigParam];
+    for (const rij of json) {
+      const stn = rij.station_code;
+      const raw = rij[huidigParam];
+      if (raw !== null && raw !== undefined) {
+        huidigData[stn] = Math.round(raw / info.div * 10) / 10;
       }
-      fouten++;
-    } catch(e) { fouten++; }
-  });
+    }
 
-  await Promise.all(beloftes);
+    if (Object.keys(huidigData).length === 0) {
+      status.className = "status fout";
+      status.textContent = `Geen data gevonden voor ${datumLabel}.`;
+      return;
+    }
 
-  if (Object.keys(huidigData).length === 0) {
+    status.style.display = "none";
+    document.getElementById("kaart-wrapper").style.display = "flex";
+    document.getElementById("kaart-titel").textContent = `${info.label} — ${datumLabel}`;
+    document.getElementById("info-titel").textContent = datumLabel;
+    tekenKaart();
+
+  } catch(e) {
     status.className = "status fout";
-    status.textContent = `Geen data gevonden voor ${datumLabel}. Mogelijk is deze datum niet beschikbaar in de dataset.`;
-    return;
+    status.textContent = `Fout bij ophalen: ${e.message}`;
   }
-
-  status.style.display = "none";
-  document.getElementById("kaart-wrapper").style.display = "flex";
-  document.getElementById("kaart-titel").textContent = `${PARAM_COL[huidigParam].label} — ${datumLabel}`;
-  document.getElementById("info-titel").textContent = datumLabel;
-  tekenKaart();
 }
 
 function navigeer(richting) {
