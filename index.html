@@ -50,12 +50,6 @@
   .subtab:hover { background: #d8e6f5; }
   .subtab.actief { background: #003366; color: white; border-color: #003366; }
 
-  .btn-metar-snel { background:#eef3fa;border:1px solid #c0d0e4;border-radius:5px;padding:5px 12px;font-size:0.78em;cursor:pointer;font-weight:600;color:#003366; }
-  .btn-metar-snel:hover { background:#003366;color:white; }
-  .metar-kaart { background:white;border:1px solid #dde6f0;border-radius:6px;padding:8px 12px;display:flex;flex-direction:column;gap:3px; }
-  .metar-kaart-label { font-size:0.7em;color:#888;font-weight:600;text-transform:uppercase; }
-  .metar-kaart-waarde { font-size:0.95em;font-weight:700;color:#003366; }
-
   /* Lightbox */
   #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; }
   #lightbox.actief { display: flex; }
@@ -90,7 +84,6 @@
     <div class="tab"        id="tab-weer"         onclick="wisselTab('weer')">🌤️ Weer</div>
     <div class="tab"        id="tab-waarnemingen" onclick="wisselTab('waarnemingen')">📊 Waarnemingen</div>
     <div class="tab"        id="tab-trend"        onclick="wisselTab('trend')">📈 Trend</div>
-    <div class="tab"        id="tab-metar"        onclick="wisselTab('metar')">✈️ METAR/TAF</div>
     <div class="tab"        id="tab-beta"         onclick="wisselTab('beta')" style="color:#e67e22;">🧪 Beta</div>
   </div>
 
@@ -130,67 +123,29 @@
   </div>
 
   <div class="tab-inhoud" id="inhoud-waarnemingen">
-    <div class="subtabs">
+    <div class="subtabs" id="subtabs-waar">
+      <div class="subtab actief" id="subtab-waar-lijst" onclick="wisselSubtab('waar-lijst')">📊 Toplijst</div>
+      <div class="subtab"        id="subtab-waar-synop" onclick="wisselSubtab('waar-synop')">🗺️ Synoptisch</div>
+    </div>
     <div id="subinhoud-waar-lijst" style="display:block"><iframe src="toplijst.html" style="width:100%;height:85vh;border:none;" loading="lazy"></iframe></div>
+    <div id="subinhoud-waar-synop" style="display:none;padding:12px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+        <button id="synop-prev" onclick="synopNav(-1)" style="padding:7px 18px;border-radius:20px;border:1px solid #c5d3e3;background:white;cursor:pointer;font-size:0.85em;font-weight:600;color:#003366;">◀ Vorige</button>
+        <span id="synop-label" style="font-size:0.85em;font-weight:600;color:#003366;min-width:160px;text-align:center;">–</span>
+        <button id="synop-next" onclick="synopNav(1)" style="padding:7px 18px;border-radius:20px;border:1px solid #c5d3e3;background:white;cursor:pointer;font-size:0.85em;font-weight:600;color:#003366;">Volgende ▶</button>
+        <span id="synop-teller" style="font-size:0.78em;color:#888;"></span>
+        <a href="weercodes_Nederland.pdf" target="_blank" style="padding:7px 14px;border-radius:20px;border:1px solid #c5d3e3;background:white;cursor:pointer;font-size:0.82em;font-weight:600;color:#003366;text-decoration:none;">📄 Weercodes</a>
+      </div>
+      <div style="text-align:center;">
+        <img id="img-synop" src="" style="max-width:100%;max-height:85vh;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.15);" alt="Synoptische kaart">
+      </div>
+      <div style="font-size:0.72em;color:#888;text-align:center;margin-top:6px;">Wordt elke 10 minuten bijgewerkt · laatste 10 kaarten bewaard</div>
+    </div>
   </div>
   <div class="tab-inhoud" id="inhoud-trend">
     <img id="grafiek-trend-img" src="" alt="10-daagse temperatuurtrend" style="width:100%;max-width:1000px;display:block;margin:0 auto 16px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.12);">
     <p id="grafiek-trend-fout" style="display:none;color:red;text-align:center;">Grafiek nog niet beschikbaar.</p>
   </div>
-  <div class="tab-inhoud" id="inhoud-metar">
-    <div style="max-width:680px;margin:0 auto;">
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-        <input id="metar-input" type="text" placeholder="ICAO code of plaatsnaam (bv. EHRD, Schiphol, EBBR)"
-          style="flex:1;min-width:200px;padding:9px 14px;border:1px solid #c0d0e4;border-radius:6px;font-size:0.9em;outline:none;"
-          onkeydown="if(event.key==='Enter')zoekMetar()"
-          oninput="zoekSuggesties(this.value)">
-        <button onclick="zoekMetar()" style="padding:9px 20px;background:#003366;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.9em;font-weight:600;">🔍 Zoek</button>
-      </div>
-      <div id="metar-suggesties" style="display:none;background:white;border:1px solid #c0d0e4;border-radius:6px;margin-top:-12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);max-height:200px;overflow-y:auto;"></div>
-
-      <!-- Snelknoppen NL/BE -->
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
-        <span style="font-size:0.78em;color:#666;align-self:center;">Snel:</span>
-        <button class="btn-metar-snel" onclick="haalMetar('EHAM')">Amsterdam</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EHRD')">Rotterdam</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EHEH')">Eindhoven</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EHGG')">Groningen</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EHMZ')">Maastricht</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EBBR')">Brussel</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EBOS')">Oostende</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EGLL')">Londen</button>
-        <button class="btn-metar-snel" onclick="haalMetar('EDDM')">München</button>
-        <button class="btn-metar-snel" onclick="haalMetar('LFPG')">Parijs</button>
-      </div>
-
-      <div id="metar-resultaat" style="display:none;">
-        <div id="metar-station-naam" style="font-size:1.05em;font-weight:700;color:#003366;margin-bottom:12px;"></div>
-
-        <!-- METAR blok -->
-        <div style="background:#f4f7fb;border:1px solid #dde6f0;border-radius:8px;padding:14px 16px;margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span style="font-weight:700;color:#003366;font-size:0.9em;">✈️ METAR</span>
-            <span id="metar-tijd" style="font-size:0.75em;color:#888;"></span>
-          </div>
-          <div id="metar-raw" style="font-family:monospace;font-size:0.82em;color:#333;background:white;padding:10px;border-radius:5px;border:1px solid #e0e0e0;word-break:break-all;margin-bottom:10px;"></div>
-          <div id="metar-decoded" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;"></div>
-        </div>
-
-        <!-- TAF blok -->
-        <div style="background:#f4f7fb;border:1px solid #dde6f0;border-radius:8px;padding:14px 16px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span style="font-weight:700;color:#003366;font-size:0.9em;">📋 TAF</span>
-            <span id="taf-tijd" style="font-size:0.75em;color:#888;"></span>
-          </div>
-          <div id="taf-raw" style="font-family:monospace;font-size:0.82em;color:#333;background:white;padding:10px;border-radius:5px;border:1px solid #e0e0e0;word-break:break-all;margin-bottom:10px;"></div>
-          <div id="taf-periodes" style="font-size:0.82em;color:#555;line-height:1.8;"></div>
-        </div>
-      </div>
-      <div id="metar-fout" style="display:none;color:#cc2200;font-size:0.88em;padding:12px;background:#fff5f5;border-radius:6px;border:1px solid #ffcccc;"></div>
-      <div id="metar-laden" style="display:none;color:#666;font-size:0.88em;padding:12px;">⏳ Gegevens ophalen...</div>
-    </div>
-  </div>
-
   <div class="tab-inhoud" id="inhoud-beta">
     <iframe src="beta_debilt.html" style="width:100%;height:90vh;border:none;" loading="lazy"></iframe>
   </div>
@@ -214,7 +169,7 @@ let tempLijst = [], gevoelsLijst = [], windDagLijst = [], windNachtLijst = [], z
 let obsTxLijst = [], obsTnLijst = [], obsRrLijst = [], obsFxLijst = [], obsFfLijst = [];
 
 function wisselTab(tab) {
-  ["temp","wind","weer","waarnemingen","trend","metar","beta"].forEach(t => {
+  ["temp","wind","weer","waarnemingen","trend","beta"].forEach(t => {
     document.getElementById("tab-" + t).classList.toggle("actief", t === tab);
     document.getElementById("inhoud-" + t).classList.toggle("actief", t === tab);
   });
@@ -290,136 +245,6 @@ function openLightbox(src, lijst) {
   document.getElementById("lightbox-img").src = src;
   document.getElementById("lightbox").classList.add("actief");
 }
-// ── METAR/TAF ─────────────────────────────────────────────────────────────────
-const ICAO_NL = {
-  EHAM:"Amsterdam Schiphol",EHRD:"Rotterdam The Hague",EHEH:"Eindhoven",
-  EHGG:"Groningen Eelde",EHMZ:"Maastricht Aachen",EHKD:"Den Helder",
-  EHLW:"Leeuwarden",EHVK:"Volkel",EHTE:"Twenthe",EHFS:"Gilze-Rijen",
-  EHDB:"Deelen",EHSB:"Soesterberg",EHVB:"Valkenburg",
-  EBBR:"Brussel",EBOS:"Oostende",EBCI:"Charleroi",EBLE:"Lièke",
-  EBAW:"Antwerpen",EBKH:"Beauvechain",EBBL:"Kleine Brogel",
-};
-
-function zoekSuggesties(val) {
-  const div = document.getElementById("metar-suggesties");
-  if (val.length < 2) { div.style.display="none"; return; }
-  const q = val.toUpperCase();
-  const hits = Object.entries(ICAO_NL).filter(([k,v]) =>
-    k.includes(q) || v.toUpperCase().includes(q)
-  ).slice(0, 8);
-  if (!hits.length) { div.style.display="none"; return; }
-  div.innerHTML = hits.map(([k,v]) =>
-    `<div onclick="document.getElementById('metar-input').value='${k}';document.getElementById('metar-suggesties').style.display='none';haalMetar('${k}')"
-      style="padding:8px 14px;cursor:pointer;font-size:0.85em;border-bottom:1px solid #f0f0f0;"
-      onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background='white'">
-      <strong>${k}</strong> — ${v}
-    </div>`
-  ).join("");
-  div.style.display = "block";
-}
-
-function zoekMetar() {
-  let val = document.getElementById("metar-input").value.trim().toUpperCase();
-  // Zoek op naam
-  if (val.length < 4 || val.length > 4) {
-    const hit = Object.entries(ICAO_NL).find(([k,v]) => v.toUpperCase().includes(val));
-    if (hit) val = hit[0];
-  }
-  if (!val) return;
-  document.getElementById("metar-suggesties").style.display = "none";
-  haalMetar(val);
-}
-
-async function haalMetar(icao) {
-  document.getElementById("metar-resultaat").style.display = "none";
-  document.getElementById("metar-fout").style.display = "none";
-  document.getElementById("metar-laden").style.display = "block";
-  document.getElementById("metar-input").value = icao;
-
-  try {
-    const [metarRes, tafRes] = await Promise.all([
-      fetch(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=json`),
-      fetch(`https://aviationweather.gov/api/data/taf?ids=${icao}&format=json`)
-    ]);
-    const metarData = await metarRes.json();
-    const tafData   = await tafRes.json();
-
-    document.getElementById("metar-laden").style.display = "none";
-
-    if (!metarData || metarData.length === 0) {
-      document.getElementById("metar-fout").textContent = `Geen METAR gevonden voor ${icao}. Controleer de ICAO-code.`;
-      document.getElementById("metar-fout").style.display = "block";
-      return;
-    }
-
-    const m = metarData[0];
-    const stationNaam = ICAO_NL[icao] || m.name || icao;
-    document.getElementById("metar-station-naam").textContent = `${icao} — ${stationNaam}`;
-
-    // METAR raw
-    document.getElementById("metar-raw").textContent = m.rawOb || "–";
-    document.getElementById("metar-tijd").textContent = m.obsTime ? new Date(m.obsTime).toLocaleString("nl-NL") : "";
-
-    // METAR decoded
-    const decoded = document.getElementById("metar-decoded");
-    decoded.innerHTML = "";
-    const velden = [
-      ["Temperatuur", m.temp != null ? `${m.temp}°C` : "–"],
-      ["Dauwpunt",    m.dewp != null ? `${m.dewp}°C` : "–"],
-      ["Wind",        m.wspd != null ? `${m.wdir || "VRB"}° / ${m.wspd} kt${m.wgst ? ` (gusts ${m.wgst} kt)` : ""}` : "–"],
-      ["Zicht",       m.visib != null ? `${m.visib} SM` : "–"],
-      ["Wolken",      m.clouds ? m.clouds.map(c => `${c.cover} ${c.base}ft`).join(", ") : "–"],
-      ["QNH",         m.altim != null ? `${m.altim} hPa` : "–"],
-      ["Weer",        m.wxString || "–"],
-      ["Vliegcat.",   m.fltcat || "–"],
-    ];
-    velden.forEach(([label, waarde]) => {
-      decoded.innerHTML += `<div class="metar-kaart"><div class="metar-kaart-label">${label}</div><div class="metar-kaart-waarde">${waarde}</div></div>`;
-    });
-
-    // TAF
-    if (tafData && tafData.length > 0) {
-      const t = tafData[0];
-      document.getElementById("taf-raw").textContent = t.rawTAF || "–";
-      document.getElementById("taf-tijd").textContent = t.issueTime ? new Date(t.issueTime).toLocaleString("nl-NL") : "";
-      // Periodes
-      const periodes = document.getElementById("taf-periodes");
-      if (t.fcsts && t.fcsts.length > 0) {
-        periodes.innerHTML = t.fcsts.map(f => {
-          const van  = f.timeFrom ? new Date(f.timeFrom).toLocaleString("nl-NL",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "";
-          const tot  = f.timeTo   ? new Date(f.timeTo).toLocaleString("nl-NL",{hour:"2-digit",minute:"2-digit"}) : "";
-          const wind = f.wspd != null ? `${f.wdir || "VRB"}°/${f.wspd}kt${f.wgst?` G${f.wgst}kt`:""}` : "";
-          const wolken = f.clouds ? f.clouds.map(c=>`${c.cover}${c.base}ft`).join(" ") : "";
-          const weer = f.wxString || "";
-          return `<div style="padding:4px 0;border-bottom:1px solid #eee;">
-            <strong>${van} – ${tot}</strong>
-            ${f.changeIndicator ? `<span style="color:#e67e22;font-size:0.85em;margin-left:6px;">${f.changeIndicator}</span>` : ""}
-            &nbsp;|&nbsp;Wind: ${wind || "–"} &nbsp;|&nbsp; Wolken: ${wolken || "–"} ${weer ? `&nbsp;|&nbsp; ${weer}` : ""}
-          </div>`;
-        }).join("");
-      } else {
-        periodes.innerHTML = "";
-      }
-    } else {
-      document.getElementById("taf-raw").textContent = "Geen TAF beschikbaar voor dit station.";
-      document.getElementById("taf-periodes").innerHTML = "";
-      document.getElementById("taf-tijd").textContent = "";
-    }
-
-    document.getElementById("metar-resultaat").style.display = "block";
-  } catch(e) {
-    document.getElementById("metar-laden").style.display = "none";
-    document.getElementById("metar-fout").textContent = `Fout bij ophalen: ${e.message}`;
-    document.getElementById("metar-fout").style.display = "block";
-  }
-}
-
-document.addEventListener("click", e => {
-  if (!e.target.closest("#metar-input") && !e.target.closest("#metar-suggesties")) {
-    document.getElementById("metar-suggesties").style.display = "none";
-  }
-});
-
 function sluitLightbox() { document.getElementById("lightbox").classList.remove("actief"); }
 function volgendeLightbox() {
   if (huidigIndex < activeLijst.length - 1) {
