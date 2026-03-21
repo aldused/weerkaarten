@@ -7,6 +7,7 @@ cd "$SCRIPT_DIR"
 echo "=== Ed Aldus WM — upload $(date) ==="
 
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_waarschuwingen.py" || { echo "FOUT: haal_waarschuwingen.py"; exit 1; }
+/usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_guidance.py" || echo "WAARSCHUWING: haal_guidance.py mislukt"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_fixed.py" || { echo "FOUT: mosmix_kaart_fixed.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp_dag.py"   || { echo "FOUT: mosmix_kaart_temp_dag.py";   exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp_nacht.py" || { echo "FOUT: mosmix_kaart_temp_nacht.py"; exit 1; }
