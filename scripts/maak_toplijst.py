@@ -251,6 +251,25 @@ def haal_neerslag(station_id: str, dt_range: str) -> float | None:
     # Meetruis onder drempel → 0.0
     return total if total >= RR_DREMPEL else 0.0
 
+
+def haal_zon(station_id: str, dt_range: str) -> float | None:
+    """
+    Zonuren uit qg (globale straling W/m2).
+    KNMI definitie: zon = straling > 120 W/m2.
+    Per 10-min stap = 1/6 uur.
+    """
+    params = {"datetime": dt_range, "parameter-name": "qg"}
+    r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
+    if r.status_code in (400, 404): return None
+    r.raise_for_status()
+    js = r.json()
+    if not js.get("coverages"): return None
+    qg_raw = js["coverages"][0].get("ranges", {}).get("qg", {}).get("values")
+    if not qg_raw: return None
+    qg_vals = to_floats(qg_raw)
+    zon_stappen = sum(1 for v in qg_vals if v is not None and v > 120)
+    return round(zon_stappen / 6.0, 1)
+
 # ---- Ophalen van één dag ----
 
 def haal_dag(dag: date) -> dict:
@@ -258,7 +277,7 @@ def haal_dag(dag: date) -> dict:
     dt_range   = dag_interval_tot_nu_utc(dag) if is_vandaag else dag_interval_utc(dag)
     key        = dag.isoformat()
     res        = {"datum": key, "status": "voorlopig", "update": "",
-                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": []}
+                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": [], "sq": []}
     print(f"  Ophalen {dag} ({'tot nu' if is_vandaag else 'heel dag'})...")
 
     for station_id, naam in STATIONS.items():
@@ -285,6 +304,12 @@ def haal_dag(dag: date) -> dict:
             print(f"    Anker-uur fout {naam}: {e}")
 
         try:
+            sq = haal_zon(station_id, dt_range)
+            if sq is not None: res["sq"].append((sq, naam))
+        except Exception as e:
+            print(f"    Zon fout {naam}: {e}")
+
+        try:
             mm = haal_neerslag(station_id, dt_range)
             if mm is not None:
                 res["rr"].append((mm, naam))  # ook 0.0 opnemen
@@ -299,6 +324,8 @@ def haal_dag(dag: date) -> dict:
     res["fx"]   = sorted(res["fx"],   reverse=True)
     res["ff"]   = sorted(res["ff"],   key=lambda x: x[0], reverse=True)
     res["t10n"] = sorted(res["t10n"])
+    res["sq"]   = sorted(res["sq"],   reverse=True)
+    res["sq"]   = sorted(res["sq"],   reverse=True)
     res["update"] = datetime.now().strftime("%d %b %Y %H:%M")
 
     print(f"    TX top3: {res['max'][:3]}")
