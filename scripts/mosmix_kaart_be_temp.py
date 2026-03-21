@@ -1,4 +1,5 @@
 import os
+import glob
 import math
 import requests
 import zipfile
@@ -227,3 +228,10 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Kaart: {fname}")
+
+# Ruim oude kaarten op (max 7 bewaren)
+oude_kaarten = sorted(glob.glob("kaart_be_temp_*.png"))
+for oud in oude_kaarten[:-7]:
+    os.remove(oud)
+    print(f"  Verwijderd: {oud}")
+

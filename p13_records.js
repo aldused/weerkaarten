@@ -1,0 +1,2442 @@
+const P13_DATA = {
+  "meta": {
+    "stations": {
+      "011": "West-Terschelling",
+      "025": "De Kooy",
+      "144": "Ter Apel",
+      "139": "Groningen",
+      "222": "Hoorn",
+      "328": "Heerde",
+      "438": "Hoofddorp",
+      "550": "De Bilt",
+      "666": "Winterswijk",
+      "737": "Kerkwerve",
+      "770": "Westdorpe",
+      "828": "Oudenbosch",
+      "961": "Roermond"
+    },
+    "periode_start": "1900-01-01",
+    "periode_eind": "2026-02-20",
+    "min_stations": 10,
+    "top_n": 25,
+    "gegenereerd": "2026-03-21 05:20"
+  },
+  "records": {
+    "natste_dag": [
+      {
+        "label": "04 Dec 1960",
+        "waarde": 46.1
+      },
+      {
+        "label": "04 Jul 1952",
+        "waarde": 36.2
+      },
+      {
+        "label": "10 Dec 1965",
+        "waarde": 33.8
+      },
+      {
+        "label": "19 Jun 1966",
+        "waarde": 31.8
+      },
+      {
+        "label": "28 Oct 1998",
+        "waarde": 31.0
+      },
+      {
+        "label": "15 Sep 1998",
+        "waarde": 31.0
+      },
+      {
+        "label": "18 Oct 1961",
+        "waarde": 30.6
+      },
+      {
+        "label": "27 Nov 1983",
+        "waarde": 29.9
+      },
+      {
+        "label": "29 Aug 1996",
+        "waarde": 29.5
+      },
+      {
+        "label": "17 Jun 1965",
+        "waarde": 29.3
+      },
+      {
+        "label": "12 Jul 1942",
+        "waarde": 29.1
+      },
+      {
+        "label": "07 Mar 1998",
+        "waarde": 28.6
+      },
+      {
+        "label": "27 Aug 2010",
+        "waarde": 27.8
+      },
+      {
+        "label": "12 Oct 1960",
+        "waarde": 27.6
+      },
+      {
+        "label": "26 Sep 1993",
+        "waarde": 27.5
+      },
+      {
+        "label": "16 Sep 1970",
+        "waarde": 27.5
+      },
+      {
+        "label": "08 Oct 2009",
+        "waarde": 27.4
+      },
+      {
+        "label": "30 Apr 2018",
+        "waarde": 27.0
+      },
+      {
+        "label": "26 Jul 1954",
+        "waarde": 26.9
+      },
+      {
+        "label": "11 Nov 2008",
+        "waarde": 26.9
+      },
+      {
+        "label": "18 Jul 1987",
+        "waarde": 26.6
+      },
+      {
+        "label": "11 Aug 1945",
+        "waarde": 26.2
+      },
+      {
+        "label": "15 Sep 1994",
+        "waarde": 26.2
+      },
+      {
+        "label": "13 Jul 2024",
+        "waarde": 26.1
+      },
+      {
+        "label": "15 Jul 2011",
+        "waarde": 26.1
+      }
+    ],
+    "natste_decade": [
+      {
+        "label": "aug III 2010",
+        "waarde": 103.2
+      },
+      {
+        "label": "aug III 1969",
+        "waarde": 101.1
+      },
+      {
+        "label": "sep II 1994",
+        "waarde": 99.9
+      },
+      {
+        "label": "sep II 1957",
+        "waarde": 98.1
+      },
+      {
+        "label": "okt III 1998",
+        "waarde": 98.1
+      },
+      {
+        "label": "jul II 2011",
+        "waarde": 95.1
+      },
+      {
+        "label": "aug III 1912",
+        "waarde": 88.1
+      },
+      {
+        "label": "feb I 1946",
+        "waarde": 88.0
+      },
+      {
+        "label": "aug III 1953",
+        "waarde": 87.6
+      },
+      {
+        "label": "sep II 1998",
+        "waarde": 86.4
+      },
+      {
+        "label": "okt III 2023",
+        "waarde": 85.5
+      },
+      {
+        "label": "okt I 1929",
+        "waarde": 85.0
+      },
+      {
+        "label": "jul II 1942",
+        "waarde": 84.7
+      },
+      {
+        "label": "sep II 1983",
+        "waarde": 83.6
+      },
+      {
+        "label": "jul III 1965",
+        "waarde": 83.4
+      },
+      {
+        "label": "okt I 1938",
+        "waarde": 83.3
+      },
+      {
+        "label": "aug I 1917",
+        "waarde": 82.8
+      },
+      {
+        "label": "dec I 1965",
+        "waarde": 82.2
+      },
+      {
+        "label": "aug II 2004",
+        "waarde": 82.1
+      },
+      {
+        "label": "jan III 1995",
+        "waarde": 81.8
+      },
+      {
+        "label": "okt III 2025",
+        "waarde": 81.7
+      },
+      {
+        "label": "okt II 1941",
+        "waarde": 81.3
+      },
+      {
+        "label": "okt III 1986",
+        "waarde": 79.7
+      },
+      {
+        "label": "nov I 2013",
+        "waarde": 79.5
+      },
+      {
+        "label": "okt I 1917",
+        "waarde": 79.3
+      }
+    ],
+    "natste_maand": [
+      {
+        "label": "september 2001",
+        "waarde": 190.8
+      },
+      {
+        "label": "augustus 2006",
+        "waarde": 189.5
+      },
+      {
+        "label": "november 2023",
+        "waarde": 180.0
+      },
+      {
+        "label": "augustus 2010",
+        "waarde": 177.5
+      },
+      {
+        "label": "oktober 1932",
+        "waarde": 176.6
+      },
+      {
+        "label": "november 1944",
+        "waarde": 173.8
+      },
+      {
+        "label": "september 1957",
+        "waarde": 173.7
+      },
+      {
+        "label": "oktober 1998",
+        "waarde": 171.6
+      },
+      {
+        "label": "december 1965",
+        "waarde": 166.9
+      },
+      {
+        "label": "juli 2007",
+        "waarde": 163.4
+      },
+      {
+        "label": "oktober 2023",
+        "waarde": 160.9
+      },
+      {
+        "label": "juli 1942",
+        "waarde": 158.0
+      },
+      {
+        "label": "december 1966",
+        "waarde": 153.9
+      },
+      {
+        "label": "december 1999",
+        "waarde": 153.3
+      },
+      {
+        "label": "december 1993",
+        "waarde": 153.0
+      },
+      {
+        "label": "november 1977",
+        "waarde": 152.3
+      },
+      {
+        "label": "december 2011",
+        "waarde": 151.7
+      },
+      {
+        "label": "september 1994",
+        "waarde": 151.7
+      },
+      {
+        "label": "augustus 1969",
+        "waarde": 151.3
+      },
+      {
+        "label": "augustus 2004",
+        "waarde": 150.3
+      },
+      {
+        "label": "september 1998",
+        "waarde": 149.3
+      },
+      {
+        "label": "augustus 1917",
+        "waarde": 148.9
+      },
+      {
+        "label": "oktober 1981",
+        "waarde": 148.1
+      },
+      {
+        "label": "september 1984",
+        "waarde": 147.3
+      },
+      {
+        "label": "juli 1965",
+        "waarde": 146.6
+      }
+    ],
+    "droogste_maand": [
+      {
+        "label": "april 2007",
+        "waarde": 0.5
+      },
+      {
+        "label": "februari 1986",
+        "waarde": 3.1
+      },
+      {
+        "label": "september 1959",
+        "waarde": 3.9
+      },
+      {
+        "label": "maart 2025",
+        "waarde": 4.9
+      },
+      {
+        "label": "januari 1997",
+        "waarde": 5.2
+      },
+      {
+        "label": "februari 1959",
+        "waarde": 5.5
+      },
+      {
+        "label": "april 1976",
+        "waarde": 6.0
+      },
+      {
+        "label": "februari 1985",
+        "waarde": 6.6
+      },
+      {
+        "label": "mei 1989",
+        "waarde": 7.8
+      },
+      {
+        "label": "februari 1917",
+        "waarde": 7.8
+      },
+      {
+        "label": "december 1933",
+        "waarde": 8.1
+      },
+      {
+        "label": "oktober 1908",
+        "waarde": 8.3
+      },
+      {
+        "label": "februari 1929",
+        "waarde": 8.7
+      },
+      {
+        "label": "februari 1932",
+        "waarde": 9.0
+      },
+      {
+        "label": "maart 1929",
+        "waarde": 9.0
+      },
+      {
+        "label": "april 1996",
+        "waarde": 9.1
+      },
+      {
+        "label": "januari 1996",
+        "waarde": 9.3
+      },
+      {
+        "label": "maart 2022",
+        "waarde": 9.3
+      },
+      {
+        "label": "oktober 1953",
+        "waarde": 9.5
+      },
+      {
+        "label": "april 1974",
+        "waarde": 9.7
+      },
+      {
+        "label": "november 2011",
+        "waarde": 9.7
+      },
+      {
+        "label": "februari 1921",
+        "waarde": 9.8
+      },
+      {
+        "label": "april 1988",
+        "waarde": 10.2
+      },
+      {
+        "label": "juli 2018",
+        "waarde": 10.3
+      },
+      {
+        "label": "februari 1934",
+        "waarde": 10.5
+      }
+    ],
+    "natste_winter": [
+      {
+        "label": "Winter 1995",
+        "waarde": 334.2
+      },
+      {
+        "label": "Winter 2024",
+        "waarde": 325.5
+      },
+      {
+        "label": "Winter 2002",
+        "waarde": 301.3
+      },
+      {
+        "label": "Winter 1966",
+        "waarde": 298.3
+      },
+      {
+        "label": "Winter 2004",
+        "waarde": 292.5
+      },
+      {
+        "label": "Winter 2000",
+        "waarde": 286.4
+      },
+      {
+        "label": "Winter 2007",
+        "waarde": 278.3
+      },
+      {
+        "label": "Winter 1994",
+        "waarde": 272.2
+      },
+      {
+        "label": "Winter 1948",
+        "waarde": 270.4
+      },
+      {
+        "label": "Winter 2021",
+        "waarde": 268.4
+      },
+      {
+        "label": "Winter 2012",
+        "waarde": 268.2
+      },
+      {
+        "label": "Winter 2020",
+        "waarde": 267.4
+      },
+      {
+        "label": "Winter 1967",
+        "waarde": 267.0
+      },
+      {
+        "label": "Winter 2015",
+        "waarde": 265.2
+      },
+      {
+        "label": "Winter 1988",
+        "waarde": 265.0
+      },
+      {
+        "label": "Winter 1961",
+        "waarde": 262.8
+      },
+      {
+        "label": "Winter 2016",
+        "waarde": 262.6
+      },
+      {
+        "label": "Winter 1915",
+        "waarde": 254.6
+      },
+      {
+        "label": "Winter 2013",
+        "waarde": 254.0
+      },
+      {
+        "label": "Winter 1962",
+        "waarde": 251.2
+      },
+      {
+        "label": "Winter 2022",
+        "waarde": 249.5
+      },
+      {
+        "label": "Winter 1984",
+        "waarde": 249.1
+      },
+      {
+        "label": "Winter 1916",
+        "waarde": 248.5
+      },
+      {
+        "label": "Winter 1946",
+        "waarde": 246.9
+      },
+      {
+        "label": "Winter 2018",
+        "waarde": 245.8
+      }
+    ],
+    "droogste_winter": [
+      {
+        "label": "Winter 1964",
+        "waarde": 63.6
+      },
+      {
+        "label": "Winter 1934",
+        "waarde": 73.0
+      },
+      {
+        "label": "Winter 1933",
+        "waarde": 74.1
+      },
+      {
+        "label": "Winter 1947",
+        "waarde": 81.3
+      },
+      {
+        "label": "Winter 1972",
+        "waarde": 89.5
+      },
+      {
+        "label": "Winter 1929",
+        "waarde": 92.3
+      },
+      {
+        "label": "Winter 1932",
+        "waarde": 99.3
+      },
+      {
+        "label": "Winter 1909",
+        "waarde": 101.2
+      },
+      {
+        "label": "Winter 1996",
+        "waarde": 102.2
+      },
+      {
+        "label": "Winter 1940",
+        "waarde": 103.4
+      },
+      {
+        "label": "Winter 1949",
+        "waarde": 106.4
+      },
+      {
+        "label": "Winter 1985",
+        "waarde": 116.7
+      },
+      {
+        "label": "Winter 1905",
+        "waarde": 117.1
+      },
+      {
+        "label": "Winter 1963",
+        "waarde": 117.1
+      },
+      {
+        "label": "Winter 1973",
+        "waarde": 120.0
+      },
+      {
+        "label": "Winter 1917",
+        "waarde": 120.2
+      },
+      {
+        "label": "Winter 1924",
+        "waarde": 122.9
+      },
+      {
+        "label": "Winter 1992",
+        "waarde": 124.1
+      },
+      {
+        "label": "Winter 1927",
+        "waarde": 128.8
+      },
+      {
+        "label": "Winter 1901",
+        "waarde": 129.2
+      },
+      {
+        "label": "Winter 1997",
+        "waarde": 130.3
+      },
+      {
+        "label": "Winter 1903",
+        "waarde": 131.9
+      },
+      {
+        "label": "Winter 1969",
+        "waarde": 132.3
+      },
+      {
+        "label": "Winter 1942",
+        "waarde": 132.3
+      },
+      {
+        "label": "Winter 1921",
+        "waarde": 137.0
+      }
+    ],
+    "natste_lente": [
+      {
+        "label": "Lente 1983",
+        "waarde": 283.7
+      },
+      {
+        "label": "Lente 2024",
+        "waarde": 265.5
+      },
+      {
+        "label": "Lente 1979",
+        "waarde": 247.9
+      },
+      {
+        "label": "Lente 1903",
+        "waarde": 240.2
+      },
+      {
+        "label": "Lente 1994",
+        "waarde": 226.0
+      },
+      {
+        "label": "Lente 2023",
+        "waarde": 225.4
+      },
+      {
+        "label": "Lente 1998",
+        "waarde": 220.1
+      },
+      {
+        "label": "Lente 1981",
+        "waarde": 215.5
+      },
+      {
+        "label": "Lente 2000",
+        "waarde": 215.1
+      },
+      {
+        "label": "Lente 1965",
+        "waarde": 211.3
+      },
+      {
+        "label": "Lente 1951",
+        "waarde": 211.2
+      },
+      {
+        "label": "Lente 1914",
+        "waarde": 197.3
+      },
+      {
+        "label": "Lente 1969",
+        "waarde": 197.0
+      },
+      {
+        "label": "Lente 2006",
+        "waarde": 194.5
+      },
+      {
+        "label": "Lente 1932",
+        "waarde": 194.2
+      },
+      {
+        "label": "Lente 2021",
+        "waarde": 190.7
+      },
+      {
+        "label": "Lente 2008",
+        "waarde": 188.3
+      },
+      {
+        "label": "Lente 1992",
+        "waarde": 187.5
+      },
+      {
+        "label": "Lente 2016",
+        "waarde": 186.1
+      },
+      {
+        "label": "Lente 1945",
+        "waarde": 183.9
+      },
+      {
+        "label": "Lente 1999",
+        "waarde": 183.2
+      },
+      {
+        "label": "Lente 1972",
+        "waarde": 181.1
+      },
+      {
+        "label": "Lente 1995",
+        "waarde": 181.0
+      },
+      {
+        "label": "Lente 1967",
+        "waarde": 180.8
+      },
+      {
+        "label": "Lente 1937",
+        "waarde": 180.3
+      }
+    ],
+    "droogste_lente": [
+      {
+        "label": "Lente 2011",
+        "waarde": 52.2
+      },
+      {
+        "label": "Lente 2025",
+        "waarde": 62.9
+      },
+      {
+        "label": "Lente 1976",
+        "waarde": 68.3
+      },
+      {
+        "label": "Lente 1929",
+        "waarde": 76.7
+      },
+      {
+        "label": "Lente 1996",
+        "waarde": 78.3
+      },
+      {
+        "label": "Lente 1921",
+        "waarde": 79.9
+      },
+      {
+        "label": "Lente 1918",
+        "waarde": 82.9
+      },
+      {
+        "label": "Lente 2020",
+        "waarde": 85.3
+      },
+      {
+        "label": "Lente 1900",
+        "waarde": 86.4
+      },
+      {
+        "label": "Lente 1991",
+        "waarde": 93.2
+      },
+      {
+        "label": "Lente 1943",
+        "waarde": 94.5
+      },
+      {
+        "label": "Lente 1938",
+        "waarde": 95.8
+      },
+      {
+        "label": "Lente 1974",
+        "waarde": 96.0
+      },
+      {
+        "label": "Lente 1960",
+        "waarde": 96.1
+      },
+      {
+        "label": "Lente 1952",
+        "waarde": 98.6
+      },
+      {
+        "label": "Lente 1942",
+        "waarde": 99.2
+      },
+      {
+        "label": "Lente 1953",
+        "waarde": 103.2
+      },
+      {
+        "label": "Lente 1936",
+        "waarde": 103.6
+      },
+      {
+        "label": "Lente 1944",
+        "waarde": 104.8
+      },
+      {
+        "label": "Lente 1954",
+        "waarde": 105.6
+      },
+      {
+        "label": "Lente 1917",
+        "waarde": 105.7
+      },
+      {
+        "label": "Lente 2022",
+        "waarde": 106.3
+      },
+      {
+        "label": "Lente 1956",
+        "waarde": 107.1
+      },
+      {
+        "label": "Lente 2004",
+        "waarde": 111.3
+      },
+      {
+        "label": "Lente 1946",
+        "waarde": 111.6
+      }
+    ],
+    "natste_zomer": [
+      {
+        "label": "Zomer 2011",
+        "waarde": 351.3
+      },
+      {
+        "label": "Zomer 1927",
+        "waarde": 337.3
+      },
+      {
+        "label": "Zomer 2004",
+        "waarde": 332.7
+      },
+      {
+        "label": "Zomer 1954",
+        "waarde": 331.4
+      },
+      {
+        "label": "Zomer 2007",
+        "waarde": 319.9
+      },
+      {
+        "label": "Zomer 1956",
+        "waarde": 313.9
+      },
+      {
+        "label": "Zomer 1966",
+        "waarde": 310.5
+      },
+      {
+        "label": "Zomer 1985",
+        "waarde": 309.8
+      },
+      {
+        "label": "Zomer 1965",
+        "waarde": 301.9
+      },
+      {
+        "label": "Zomer 2012",
+        "waarde": 301.9
+      },
+      {
+        "label": "Zomer 1930",
+        "waarde": 295.5
+      },
+      {
+        "label": "Zomer 1917",
+        "waarde": 290.8
+      },
+      {
+        "label": "Zomer 1960",
+        "waarde": 286.6
+      },
+      {
+        "label": "Zomer 1980",
+        "waarde": 286.1
+      },
+      {
+        "label": "Zomer 1953",
+        "waarde": 284.8
+      },
+      {
+        "label": "Zomer 2010",
+        "waarde": 283.2
+      },
+      {
+        "label": "Zomer 1987",
+        "waarde": 282.0
+      },
+      {
+        "label": "Zomer 2002",
+        "waarde": 278.9
+      },
+      {
+        "label": "Zomer 1968",
+        "waarde": 276.9
+      },
+      {
+        "label": "Zomer 2014",
+        "waarde": 276.9
+      },
+      {
+        "label": "Zomer 1998",
+        "waarde": 274.4
+      },
+      {
+        "label": "Zomer 1912",
+        "waarde": 272.9
+      },
+      {
+        "label": "Zomer 1900",
+        "waarde": 268.7
+      },
+      {
+        "label": "Zomer 1957",
+        "waarde": 268.6
+      },
+      {
+        "label": "Zomer 1931",
+        "waarde": 265.9
+      }
+    ],
+    "droogste_zomer": [
+      {
+        "label": "Zomer 1976",
+        "waarde": 84.8
+      },
+      {
+        "label": "Zomer 1921",
+        "waarde": 90.7
+      },
+      {
+        "label": "Zomer 1983",
+        "waarde": 96.1
+      },
+      {
+        "label": "Zomer 1911",
+        "waarde": 110.9
+      },
+      {
+        "label": "Zomer 2003",
+        "waarde": 114.5
+      },
+      {
+        "label": "Zomer 1959",
+        "waarde": 116.3
+      },
+      {
+        "label": "Zomer 2018",
+        "waarde": 116.5
+      },
+      {
+        "label": "Zomer 1955",
+        "waarde": 120.6
+      },
+      {
+        "label": "Zomer 1904",
+        "waarde": 129.6
+      },
+      {
+        "label": "Zomer 1949",
+        "waarde": 135.2
+      },
+      {
+        "label": "Zomer 2022",
+        "waarde": 139.4
+      },
+      {
+        "label": "Zomer 1984",
+        "waarde": 140.2
+      },
+      {
+        "label": "Zomer 2013",
+        "waarde": 142.5
+      },
+      {
+        "label": "Zomer 1967",
+        "waarde": 143.2
+      },
+      {
+        "label": "Zomer 1929",
+        "waarde": 149.2
+      },
+      {
+        "label": "Zomer 1975",
+        "waarde": 149.6
+      },
+      {
+        "label": "Zomer 1934",
+        "waarde": 154.9
+      },
+      {
+        "label": "Zomer 1932",
+        "waarde": 156.3
+      },
+      {
+        "label": "Zomer 1947",
+        "waarde": 156.3
+      },
+      {
+        "label": "Zomer 1990",
+        "waarde": 160.6
+      },
+      {
+        "label": "Zomer 1995",
+        "waarde": 160.8
+      },
+      {
+        "label": "Zomer 1973",
+        "waarde": 161.3
+      },
+      {
+        "label": "Zomer 1925",
+        "waarde": 162.6
+      },
+      {
+        "label": "Zomer 1994",
+        "waarde": 168.5
+      },
+      {
+        "label": "Zomer 1907",
+        "waarde": 169.2
+      }
+    ],
+    "natste_herfst": [
+      {
+        "label": "Herfst 1998",
+        "waarde": 431.3
+      },
+      {
+        "label": "Herfst 2023",
+        "waarde": 407.2
+      },
+      {
+        "label": "Herfst 1974",
+        "waarde": 373.3
+      },
+      {
+        "label": "Herfst 2013",
+        "waarde": 343.5
+      },
+      {
+        "label": "Herfst 2001",
+        "waarde": 341.8
+      },
+      {
+        "label": "Herfst 1960",
+        "waarde": 339.9
+      },
+      {
+        "label": "Herfst 1944",
+        "waarde": 338.8
+      },
+      {
+        "label": "Herfst 2000",
+        "waarde": 332.3
+      },
+      {
+        "label": "Herfst 1930",
+        "waarde": 331.6
+      },
+      {
+        "label": "Herfst 1932",
+        "waarde": 326.6
+      },
+      {
+        "label": "Herfst 1984",
+        "waarde": 325.8
+      },
+      {
+        "label": "Herfst 2019",
+        "waarde": 320.0
+      },
+      {
+        "label": "Herfst 1994",
+        "waarde": 317.4
+      },
+      {
+        "label": "Herfst 1903",
+        "waarde": 304.8
+      },
+      {
+        "label": "Herfst 2017",
+        "waarde": 302.1
+      },
+      {
+        "label": "Herfst 1992",
+        "waarde": 295.2
+      },
+      {
+        "label": "Herfst 2025",
+        "waarde": 293.0
+      },
+      {
+        "label": "Herfst 2022",
+        "waarde": 292.2
+      },
+      {
+        "label": "Herfst 1968",
+        "waarde": 287.7
+      },
+      {
+        "label": "Herfst 1939",
+        "waarde": 287.4
+      },
+      {
+        "label": "Herfst 1967",
+        "waarde": 286.7
+      },
+      {
+        "label": "Herfst 1957",
+        "waarde": 280.4
+      },
+      {
+        "label": "Herfst 1990",
+        "waarde": 279.0
+      },
+      {
+        "label": "Herfst 1981",
+        "waarde": 277.8
+      },
+      {
+        "label": "Herfst 2024",
+        "waarde": 277.4
+      }
+    ],
+    "droogste_herfst": [
+      {
+        "label": "Herfst 1920",
+        "waarde": 58.6
+      },
+      {
+        "label": "Herfst 1953",
+        "waarde": 80.4
+      },
+      {
+        "label": "Herfst 1948",
+        "waarde": 106.4
+      },
+      {
+        "label": "Herfst 1921",
+        "waarde": 107.8
+      },
+      {
+        "label": "Herfst 1908",
+        "waarde": 117.3
+      },
+      {
+        "label": "Herfst 1931",
+        "waarde": 118.3
+      },
+      {
+        "label": "Herfst 1959",
+        "waarde": 120.5
+      },
+      {
+        "label": "Herfst 1902",
+        "waarde": 120.9
+      },
+      {
+        "label": "Herfst 2018",
+        "waarde": 126.3
+      },
+      {
+        "label": "Herfst 1969",
+        "waarde": 132.8
+      },
+      {
+        "label": "Herfst 1904",
+        "waarde": 138.1
+      },
+      {
+        "label": "Herfst 1971",
+        "waarde": 143.1
+      },
+      {
+        "label": "Herfst 1907",
+        "waarde": 143.2
+      },
+      {
+        "label": "Herfst 1937",
+        "waarde": 145.9
+      },
+      {
+        "label": "Herfst 2014",
+        "waarde": 146.1
+      },
+      {
+        "label": "Herfst 1913",
+        "waarde": 152.4
+      },
+      {
+        "label": "Herfst 1978",
+        "waarde": 155.8
+      },
+      {
+        "label": "Herfst 2011",
+        "waarde": 157.8
+      },
+      {
+        "label": "Herfst 1943",
+        "waarde": 160.7
+      },
+      {
+        "label": "Herfst 1900",
+        "waarde": 161.8
+      },
+      {
+        "label": "Herfst 1976",
+        "waarde": 162.7
+      },
+      {
+        "label": "Herfst 1997",
+        "waarde": 162.8
+      },
+      {
+        "label": "Herfst 1979",
+        "waarde": 165.8
+      },
+      {
+        "label": "Herfst 1989",
+        "waarde": 165.8
+      },
+      {
+        "label": "Herfst 1972",
+        "waarde": 166.9
+      }
+    ],
+    "natste_jaar": [
+      {
+        "label": "2023",
+        "waarde": 1153.3
+      },
+      {
+        "label": "1998",
+        "waarde": 1108.9
+      },
+      {
+        "label": "2024",
+        "waarde": 1054.9
+      },
+      {
+        "label": "1966",
+        "waarde": 1004.5
+      },
+      {
+        "label": "2001",
+        "waarde": 1002.0
+      },
+      {
+        "label": "1965",
+        "waarde": 965.5
+      },
+      {
+        "label": "2007",
+        "waarde": 961.7
+      },
+      {
+        "label": "2002",
+        "waarde": 954.6
+      },
+      {
+        "label": "2000",
+        "waarde": 954.5
+      },
+      {
+        "label": "1994",
+        "waarde": 942.3
+      },
+      {
+        "label": "2012",
+        "waarde": 941.4
+      },
+      {
+        "label": "1961",
+        "waarde": 935.0
+      },
+      {
+        "label": "1960",
+        "waarde": 931.6
+      },
+      {
+        "label": "1988",
+        "waarde": 928.0
+      },
+      {
+        "label": "1993",
+        "waarde": 915.2
+      },
+      {
+        "label": "2017",
+        "waarde": 913.7
+      },
+      {
+        "label": "1950",
+        "waarde": 904.7
+      },
+      {
+        "label": "1999",
+        "waarde": 904.1
+      },
+      {
+        "label": "2004",
+        "waarde": 902.3
+      },
+      {
+        "label": "1903",
+        "waarde": 901.9
+      },
+      {
+        "label": "2015",
+        "waarde": 900.8
+      },
+      {
+        "label": "1981",
+        "waarde": 884.2
+      },
+      {
+        "label": "2021",
+        "waarde": 883.2
+      },
+      {
+        "label": "2008",
+        "waarde": 882.7
+      },
+      {
+        "label": "2020",
+        "waarde": 869.2
+      }
+    ],
+    "droogste_jaar": [
+      {
+        "label": "1921",
+        "waarde": 418.2
+      },
+      {
+        "label": "1976",
+        "waarde": 530.3
+      },
+      {
+        "label": "1959",
+        "waarde": 531.2
+      },
+      {
+        "label": "1933",
+        "waarde": 539.9
+      },
+      {
+        "label": "1904",
+        "waarde": 550.9
+      },
+      {
+        "label": "1971",
+        "waarde": 582.4
+      },
+      {
+        "label": "1929",
+        "waarde": 582.4
+      },
+      {
+        "label": "1953",
+        "waarde": 597.2
+      },
+      {
+        "label": "1920",
+        "waarde": 599.4
+      },
+      {
+        "label": "1907",
+        "waarde": 603.3
+      },
+      {
+        "label": "1911",
+        "waarde": 603.7
+      },
+      {
+        "label": "1908",
+        "waarde": 619.7
+      },
+      {
+        "label": "1943",
+        "waarde": 624.6
+      },
+      {
+        "label": "1934",
+        "waarde": 628.0
+      },
+      {
+        "label": "1996",
+        "waarde": 631.3
+      },
+      {
+        "label": "1902",
+        "waarde": 648.0
+      },
+      {
+        "label": "2018",
+        "waarde": 648.0
+      },
+      {
+        "label": "1947",
+        "waarde": 652.2
+      },
+      {
+        "label": "2003",
+        "waarde": 654.5
+      },
+      {
+        "label": "1922",
+        "waarde": 655.9
+      },
+      {
+        "label": "1989",
+        "waarde": 659.5
+      },
+      {
+        "label": "1955",
+        "waarde": 660.0
+      },
+      {
+        "label": "1978",
+        "waarde": 660.7
+      },
+      {
+        "label": "1975",
+        "waarde": 661.0
+      },
+      {
+        "label": "1991",
+        "waarde": 664.7
+      }
+    ],
+    "langste_droge_periode": [
+      {
+        "start": "11 Nov 1921",
+        "eind": "07 Dec 1921",
+        "dagen": 27
+      },
+      {
+        "start": "24 May 2023",
+        "eind": "17 Jun 2023",
+        "dagen": 25
+      },
+      {
+        "start": "21 May 1939",
+        "eind": "11 Jun 1939",
+        "dagen": 22
+      },
+      {
+        "start": "28 Sep 1972",
+        "eind": "19 Oct 1972",
+        "dagen": 22
+      },
+      {
+        "start": "22 Jun 1976",
+        "eind": "12 Jul 1976",
+        "dagen": 21
+      },
+      {
+        "start": "19 Sep 1986",
+        "eind": "07 Oct 1986",
+        "dagen": 19
+      },
+      {
+        "start": "10 Feb 2003",
+        "eind": "28 Feb 2003",
+        "dagen": 19
+      },
+      {
+        "start": "14 Mar 2003",
+        "eind": "01 Apr 2003",
+        "dagen": 19
+      },
+      {
+        "start": "05 Jul 2013",
+        "eind": "23 Jul 2013",
+        "dagen": 19
+      },
+      {
+        "start": "19 Feb 1930",
+        "eind": "08 Mar 1930",
+        "dagen": 18
+      }
+    ],
+    "langste_natte_periode": [
+      {
+        "start": "10 Oct 1932",
+        "eind": "04 Nov 1932",
+        "dagen": 26
+      },
+      {
+        "start": "03 Sep 2001",
+        "eind": "28 Sep 2001",
+        "dagen": 26
+      },
+      {
+        "start": "24 Oct 2023",
+        "eind": "16 Nov 2023",
+        "dagen": 24
+      },
+      {
+        "start": "05 Aug 1941",
+        "eind": "27 Aug 1941",
+        "dagen": 23
+      },
+      {
+        "start": "23 Nov 1965",
+        "eind": "14 Dec 1965",
+        "dagen": 22
+      },
+      {
+        "start": "07 Dec 1993",
+        "eind": "28 Dec 1993",
+        "dagen": 22
+      },
+      {
+        "start": "18 Aug 1924",
+        "eind": "07 Sep 1924",
+        "dagen": 21
+      },
+      {
+        "start": "24 Oct 2000",
+        "eind": "13 Nov 2000",
+        "dagen": 21
+      },
+      {
+        "start": "28 Dec 2022",
+        "eind": "17 Jan 2023",
+        "dagen": 21
+      },
+      {
+        "start": "07 Jul 1942",
+        "eind": "25 Jul 1942",
+        "dagen": 19
+      }
+    ]
+  },
+  "jaaroverzicht": [
+    {
+      "jaar": 1900,
+      "jaarsom": 701.7,
+      "max_dag": 16.4,
+      "max_dag_datum": "22 Aug",
+      "neerslagdagen": 163
+    },
+    {
+      "jaar": 1901,
+      "jaarsom": 697.2,
+      "max_dag": 21.4,
+      "max_dag_datum": "08 Oct",
+      "neerslagdagen": 157
+    },
+    {
+      "jaar": 1902,
+      "jaarsom": 648.0,
+      "max_dag": 15.8,
+      "max_dag_datum": "07 Apr",
+      "neerslagdagen": 171
+    },
+    {
+      "jaar": 1903,
+      "jaarsom": 901.9,
+      "max_dag": 21.8,
+      "max_dag_datum": "25 Apr",
+      "neerslagdagen": 179
+    },
+    {
+      "jaar": 1904,
+      "jaarsom": 550.9,
+      "max_dag": 14.7,
+      "max_dag_datum": "10 Nov",
+      "neerslagdagen": 133
+    },
+    {
+      "jaar": 1905,
+      "jaarsom": 734.7,
+      "max_dag": 19.3,
+      "max_dag_datum": "09 Jun",
+      "neerslagdagen": 175
+    },
+    {
+      "jaar": 1906,
+      "jaarsom": 745.0,
+      "max_dag": 20.7,
+      "max_dag_datum": "13 Jul",
+      "neerslagdagen": 175
+    },
+    {
+      "jaar": 1907,
+      "jaarsom": 603.3,
+      "max_dag": 11.7,
+      "max_dag_datum": "15 Dec",
+      "neerslagdagen": 161
+    },
+    {
+      "jaar": 1908,
+      "jaarsom": 619.7,
+      "max_dag": 14.3,
+      "max_dag_datum": "15 Aug",
+      "neerslagdagen": 150
+    },
+    {
+      "jaar": 1909,
+      "jaarsom": 773.1,
+      "max_dag": 21.7,
+      "max_dag_datum": "26 Aug",
+      "neerslagdagen": 169
+    },
+    {
+      "jaar": 1910,
+      "jaarsom": 755.9,
+      "max_dag": 14.9,
+      "max_dag_datum": "15 Sep",
+      "neerslagdagen": 188
+    },
+    {
+      "jaar": 1911,
+      "jaarsom": 603.7,
+      "max_dag": 16.1,
+      "max_dag_datum": "02 Oct",
+      "neerslagdagen": 147
+    },
+    {
+      "jaar": 1912,
+      "jaarsom": 831.8,
+      "max_dag": 21.6,
+      "max_dag_datum": "25 Aug",
+      "neerslagdagen": 191
+    },
+    {
+      "jaar": 1913,
+      "jaarsom": 669.1,
+      "max_dag": 17.7,
+      "max_dag_datum": "06 Jun",
+      "neerslagdagen": 171
+    },
+    {
+      "jaar": 1914,
+      "jaarsom": 772.3,
+      "max_dag": 22.8,
+      "max_dag_datum": "14 Sep",
+      "neerslagdagen": 160
+    },
+    {
+      "jaar": 1915,
+      "jaarsom": 826.3,
+      "max_dag": 22.2,
+      "max_dag_datum": "15 May",
+      "neerslagdagen": 191
+    },
+    {
+      "jaar": 1916,
+      "jaarsom": 767.1,
+      "max_dag": 22.5,
+      "max_dag_datum": "31 Aug",
+      "neerslagdagen": 188
+    },
+    {
+      "jaar": 1917,
+      "jaarsom": 728.5,
+      "max_dag": 23.9,
+      "max_dag_datum": "06 Oct",
+      "neerslagdagen": 155
+    },
+    {
+      "jaar": 1918,
+      "jaarsom": 770.4,
+      "max_dag": 19.4,
+      "max_dag_datum": "17 Jan",
+      "neerslagdagen": 181
+    },
+    {
+      "jaar": 1919,
+      "jaarsom": 711.0,
+      "max_dag": 15.4,
+      "max_dag_datum": "24 Jul",
+      "neerslagdagen": 165
+    },
+    {
+      "jaar": 1920,
+      "jaarsom": 599.4,
+      "max_dag": 15.2,
+      "max_dag_datum": "23 Aug",
+      "neerslagdagen": 150
+    },
+    {
+      "jaar": 1921,
+      "jaarsom": 418.2,
+      "max_dag": 13.6,
+      "max_dag_datum": "08 Nov",
+      "neerslagdagen": 116
+    },
+    {
+      "jaar": 1922,
+      "jaarsom": 655.9,
+      "max_dag": 16.9,
+      "max_dag_datum": "10 Aug",
+      "neerslagdagen": 173
+    },
+    {
+      "jaar": 1923,
+      "jaarsom": 797.2,
+      "max_dag": 16.9,
+      "max_dag_datum": "19 Aug",
+      "neerslagdagen": 187
+    },
+    {
+      "jaar": 1924,
+      "jaarsom": 698.8,
+      "max_dag": 13.2,
+      "max_dag_datum": "23 Sep",
+      "neerslagdagen": 162
+    },
+    {
+      "jaar": 1925,
+      "jaarsom": 828.7,
+      "max_dag": 13.8,
+      "max_dag_datum": "28 Sep",
+      "neerslagdagen": 176
+    },
+    {
+      "jaar": 1926,
+      "jaarsom": 755.1,
+      "max_dag": 14.3,
+      "max_dag_datum": "16 Oct",
+      "neerslagdagen": 178
+    },
+    {
+      "jaar": 1927,
+      "jaarsom": 845.7,
+      "max_dag": 16.0,
+      "max_dag_datum": "16 Aug",
+      "neerslagdagen": 185
+    },
+    {
+      "jaar": 1928,
+      "jaarsom": 740.8,
+      "max_dag": 18.7,
+      "max_dag_datum": "27 Nov",
+      "neerslagdagen": 175
+    },
+    {
+      "jaar": 1929,
+      "jaarsom": 582.4,
+      "max_dag": 18.0,
+      "max_dag_datum": "04 Oct",
+      "neerslagdagen": 137
+    },
+    {
+      "jaar": 1930,
+      "jaarsom": 845.9,
+      "max_dag": 18.0,
+      "max_dag_datum": "08 Oct",
+      "neerslagdagen": 173
+    },
+    {
+      "jaar": 1931,
+      "jaarsom": 729.8,
+      "max_dag": 17.6,
+      "max_dag_datum": "09 May",
+      "neerslagdagen": 167
+    },
+    {
+      "jaar": 1932,
+      "jaarsom": 751.6,
+      "max_dag": 18.7,
+      "max_dag_datum": "16 Oct",
+      "neerslagdagen": 155
+    },
+    {
+      "jaar": 1933,
+      "jaarsom": 539.9,
+      "max_dag": 16.1,
+      "max_dag_datum": "15 Sep",
+      "neerslagdagen": 120
+    },
+    {
+      "jaar": 1934,
+      "jaarsom": 628.0,
+      "max_dag": 15.4,
+      "max_dag_datum": "10 Oct",
+      "neerslagdagen": 150
+    },
+    {
+      "jaar": 1935,
+      "jaarsom": 779.1,
+      "max_dag": 14.2,
+      "max_dag_datum": "06 Sep",
+      "neerslagdagen": 177
+    },
+    {
+      "jaar": 1936,
+      "jaarsom": 775.6,
+      "max_dag": 20.9,
+      "max_dag_datum": "09 Sep",
+      "neerslagdagen": 163
+    },
+    {
+      "jaar": 1937,
+      "jaarsom": 739.6,
+      "max_dag": 19.7,
+      "max_dag_datum": "22 Apr",
+      "neerslagdagen": 183
+    },
+    {
+      "jaar": 1938,
+      "jaarsom": 685.5,
+      "max_dag": 16.2,
+      "max_dag_datum": "09 Oct",
+      "neerslagdagen": 157
+    },
+    {
+      "jaar": 1939,
+      "jaarsom": 786.0,
+      "max_dag": 18.6,
+      "max_dag_datum": "20 Nov",
+      "neerslagdagen": 179
+    },
+    {
+      "jaar": 1940,
+      "jaarsom": 792.6,
+      "max_dag": 18.8,
+      "max_dag_datum": "04 Nov",
+      "neerslagdagen": 163
+    },
+    {
+      "jaar": 1941,
+      "jaarsom": 728.4,
+      "max_dag": 23.7,
+      "max_dag_datum": "11 Oct",
+      "neerslagdagen": 153
+    },
+    {
+      "jaar": 1942,
+      "jaarsom": 710.0,
+      "max_dag": 29.1,
+      "max_dag_datum": "12 Jul",
+      "neerslagdagen": 173
+    },
+    {
+      "jaar": 1943,
+      "jaarsom": 624.6,
+      "max_dag": 15.3,
+      "max_dag_datum": "08 Nov",
+      "neerslagdagen": 151
+    },
+    {
+      "jaar": 1944,
+      "jaarsom": 795.9,
+      "max_dag": 25.8,
+      "max_dag_datum": "19 Nov",
+      "neerslagdagen": 182
+    },
+    {
+      "jaar": 1945,
+      "jaarsom": 735.6,
+      "max_dag": 26.2,
+      "max_dag_datum": "11 Aug",
+      "neerslagdagen": 169
+    },
+    {
+      "jaar": 1946,
+      "jaarsom": 773.6,
+      "max_dag": 25.4,
+      "max_dag_datum": "10 Feb",
+      "neerslagdagen": 161
+    },
+    {
+      "jaar": 1947,
+      "jaarsom": 652.2,
+      "max_dag": 22.7,
+      "max_dag_datum": "07 Aug",
+      "neerslagdagen": 152
+    },
+    {
+      "jaar": 1948,
+      "jaarsom": 682.0,
+      "max_dag": 13.6,
+      "max_dag_datum": "29 Jun",
+      "neerslagdagen": 166
+    },
+    {
+      "jaar": 1949,
+      "jaarsom": 665.6,
+      "max_dag": 19.6,
+      "max_dag_datum": "04 Aug",
+      "neerslagdagen": 146
+    },
+    {
+      "jaar": 1950,
+      "jaarsom": 904.7,
+      "max_dag": 20.0,
+      "max_dag_datum": "17 Sep",
+      "neerslagdagen": 186
+    },
+    {
+      "jaar": 1951,
+      "jaarsom": 819.6,
+      "max_dag": 17.6,
+      "max_dag_datum": "25 Nov",
+      "neerslagdagen": 172
+    },
+    {
+      "jaar": 1952,
+      "jaarsom": 826.0,
+      "max_dag": 36.2,
+      "max_dag_datum": "04 Jul",
+      "neerslagdagen": 172
+    },
+    {
+      "jaar": 1953,
+      "jaarsom": 597.2,
+      "max_dag": 19.3,
+      "max_dag_datum": "25 Aug",
+      "neerslagdagen": 116
+    },
+    {
+      "jaar": 1954,
+      "jaarsom": 861.6,
+      "max_dag": 26.9,
+      "max_dag_datum": "26 Jul",
+      "neerslagdagen": 182
+    },
+    {
+      "jaar": 1955,
+      "jaarsom": 660.0,
+      "max_dag": 23.1,
+      "max_dag_datum": "15 Sep",
+      "neerslagdagen": 138
+    },
+    {
+      "jaar": 1956,
+      "jaarsom": 792.7,
+      "max_dag": 22.4,
+      "max_dag_datum": "25 Aug",
+      "neerslagdagen": 162
+    },
+    {
+      "jaar": 1957,
+      "jaarsom": 848.1,
+      "max_dag": 19.5,
+      "max_dag_datum": "12 Sep",
+      "neerslagdagen": 175
+    },
+    {
+      "jaar": 1958,
+      "jaarsom": 828.1,
+      "max_dag": 16.5,
+      "max_dag_datum": "24 Sep",
+      "neerslagdagen": 173
+    },
+    {
+      "jaar": 1959,
+      "jaarsom": 531.2,
+      "max_dag": 16.1,
+      "max_dag_datum": "31 Oct",
+      "neerslagdagen": 124
+    },
+    {
+      "jaar": 1960,
+      "jaarsom": 931.6,
+      "max_dag": 46.1,
+      "max_dag_datum": "04 Dec",
+      "neerslagdagen": 188
+    },
+    {
+      "jaar": 1961,
+      "jaarsom": 935.0,
+      "max_dag": 30.6,
+      "max_dag_datum": "18 Oct",
+      "neerslagdagen": 177
+    },
+    {
+      "jaar": 1962,
+      "jaarsom": 735.2,
+      "max_dag": 22.1,
+      "max_dag_datum": "27 Jul",
+      "neerslagdagen": 159
+    },
+    {
+      "jaar": 1963,
+      "jaarsom": 703.9,
+      "max_dag": 19.6,
+      "max_dag_datum": "21 Aug",
+      "neerslagdagen": 144
+    },
+    {
+      "jaar": 1964,
+      "jaarsom": 686.2,
+      "max_dag": 21.4,
+      "max_dag_datum": "16 Oct",
+      "neerslagdagen": 128
+    },
+    {
+      "jaar": 1965,
+      "jaarsom": 965.5,
+      "max_dag": 33.8,
+      "max_dag_datum": "10 Dec",
+      "neerslagdagen": 182
+    },
+    {
+      "jaar": 1966,
+      "jaarsom": 1004.5,
+      "max_dag": 31.8,
+      "max_dag_datum": "19 Jun",
+      "neerslagdagen": 188
+    },
+    {
+      "jaar": 1967,
+      "jaarsom": 818.9,
+      "max_dag": 19.5,
+      "max_dag_datum": "28 Feb",
+      "neerslagdagen": 181
+    },
+    {
+      "jaar": 1968,
+      "jaarsom": 855.4,
+      "max_dag": 21.4,
+      "max_dag_datum": "16 Sep",
+      "neerslagdagen": 177
+    },
+    {
+      "jaar": 1969,
+      "jaarsom": 716.1,
+      "max_dag": 18.2,
+      "max_dag_datum": "14 Mar",
+      "neerslagdagen": 150
+    },
+    {
+      "jaar": 1970,
+      "jaarsom": 825.7,
+      "max_dag": 27.5,
+      "max_dag_datum": "16 Sep",
+      "neerslagdagen": 167
+    },
+    {
+      "jaar": 1971,
+      "jaarsom": 582.4,
+      "max_dag": 22.4,
+      "max_dag_datum": "15 Jun",
+      "neerslagdagen": 131
+    },
+    {
+      "jaar": 1972,
+      "jaarsom": 666.9,
+      "max_dag": 17.2,
+      "max_dag_datum": "10 Sep",
+      "neerslagdagen": 145
+    },
+    {
+      "jaar": 1973,
+      "jaarsom": 745.4,
+      "max_dag": 21.2,
+      "max_dag_datum": "20 Oct",
+      "neerslagdagen": 153
+    },
+    {
+      "jaar": 1974,
+      "jaarsom": 864.1,
+      "max_dag": 18.5,
+      "max_dag_datum": "06 Sep",
+      "neerslagdagen": 183
+    },
+    {
+      "jaar": 1975,
+      "jaarsom": 661.0,
+      "max_dag": 18.2,
+      "max_dag_datum": "29 Nov",
+      "neerslagdagen": 141
+    },
+    {
+      "jaar": 1976,
+      "jaarsom": 530.3,
+      "max_dag": 20.0,
+      "max_dag_datum": "01 Dec",
+      "neerslagdagen": 129
+    },
+    {
+      "jaar": 1977,
+      "jaarsom": 746.1,
+      "max_dag": 14.2,
+      "max_dag_datum": "01 Oct",
+      "neerslagdagen": 173
+    },
+    {
+      "jaar": 1978,
+      "jaarsom": 660.7,
+      "max_dag": 17.4,
+      "max_dag_datum": "01 Oct",
+      "neerslagdagen": 143
+    },
+    {
+      "jaar": 1979,
+      "jaarsom": 820.7,
+      "max_dag": 18.3,
+      "max_dag_datum": "02 May",
+      "neerslagdagen": 188
+    },
+    {
+      "jaar": 1980,
+      "jaarsom": 804.8,
+      "max_dag": 18.1,
+      "max_dag_datum": "07 Oct",
+      "neerslagdagen": 168
+    },
+    {
+      "jaar": 1981,
+      "jaarsom": 884.2,
+      "max_dag": 24.8,
+      "max_dag_datum": "29 Jun",
+      "neerslagdagen": 179
+    },
+    {
+      "jaar": 1982,
+      "jaarsom": 699.0,
+      "max_dag": 21.2,
+      "max_dag_datum": "23 Jun",
+      "neerslagdagen": 158
+    },
+    {
+      "jaar": 1983,
+      "jaarsom": 823.2,
+      "max_dag": 29.9,
+      "max_dag_datum": "27 Nov",
+      "neerslagdagen": 165
+    },
+    {
+      "jaar": 1984,
+      "jaarsom": 859.8,
+      "max_dag": 25.1,
+      "max_dag_datum": "22 May",
+      "neerslagdagen": 156
+    },
+    {
+      "jaar": 1985,
+      "jaarsom": 804.2,
+      "max_dag": 18.4,
+      "max_dag_datum": "08 Oct",
+      "neerslagdagen": 166
+    },
+    {
+      "jaar": 1986,
+      "jaarsom": 800.2,
+      "max_dag": 19.3,
+      "max_dag_datum": "31 Dec",
+      "neerslagdagen": 147
+    },
+    {
+      "jaar": 1987,
+      "jaarsom": 854.0,
+      "max_dag": 26.6,
+      "max_dag_datum": "18 Jul",
+      "neerslagdagen": 166
+    },
+    {
+      "jaar": 1988,
+      "jaarsom": 928.0,
+      "max_dag": 21.9,
+      "max_dag_datum": "06 Jan",
+      "neerslagdagen": 172
+    },
+    {
+      "jaar": 1989,
+      "jaarsom": 659.5,
+      "max_dag": 21.5,
+      "max_dag_datum": "08 Mar",
+      "neerslagdagen": 134
+    },
+    {
+      "jaar": 1990,
+      "jaarsom": 770.2,
+      "max_dag": 20.0,
+      "max_dag_datum": "01 Mar",
+      "neerslagdagen": 143
+    },
+    {
+      "jaar": 1991,
+      "jaarsom": 664.7,
+      "max_dag": 15.8,
+      "max_dag_datum": "28 Jun",
+      "neerslagdagen": 134
+    },
+    {
+      "jaar": 1992,
+      "jaarsom": 850.5,
+      "max_dag": 19.5,
+      "max_dag_datum": "13 Mar",
+      "neerslagdagen": 147
+    },
+    {
+      "jaar": 1993,
+      "jaarsom": 915.2,
+      "max_dag": 27.5,
+      "max_dag_datum": "26 Sep",
+      "neerslagdagen": 160
+    },
+    {
+      "jaar": 1994,
+      "jaarsom": 942.3,
+      "max_dag": 26.2,
+      "max_dag_datum": "15 Sep",
+      "neerslagdagen": 173
+    },
+    {
+      "jaar": 1995,
+      "jaarsom": 788.3,
+      "max_dag": 25.8,
+      "max_dag_datum": "27 Sep",
+      "neerslagdagen": 164
+    },
+    {
+      "jaar": 1996,
+      "jaarsom": 631.3,
+      "max_dag": 29.5,
+      "max_dag_datum": "29 Aug",
+      "neerslagdagen": 125
+    },
+    {
+      "jaar": 1997,
+      "jaarsom": 685.9,
+      "max_dag": 18.9,
+      "max_dag_datum": "10 Oct",
+      "neerslagdagen": 139
+    },
+    {
+      "jaar": 1998,
+      "jaarsom": 1108.9,
+      "max_dag": 31.0,
+      "max_dag_datum": "28 Oct",
+      "neerslagdagen": 199
+    },
+    {
+      "jaar": 1999,
+      "jaarsom": 904.1,
+      "max_dag": 18.7,
+      "max_dag_datum": "05 Jul",
+      "neerslagdagen": 184
+    },
+    {
+      "jaar": 2000,
+      "jaarsom": 954.5,
+      "max_dag": 20.9,
+      "max_dag_datum": "03 Mar",
+      "neerslagdagen": 194
+    },
+    {
+      "jaar": 2001,
+      "jaarsom": 1002.0,
+      "max_dag": 19.5,
+      "max_dag_datum": "05 Feb",
+      "neerslagdagen": 194
+    },
+    {
+      "jaar": 2002,
+      "jaarsom": 954.6,
+      "max_dag": 25.4,
+      "max_dag_datum": "21 Aug",
+      "neerslagdagen": 172
+    },
+    {
+      "jaar": 2003,
+      "jaarsom": 654.5,
+      "max_dag": 17.4,
+      "max_dag_datum": "14 Dec",
+      "neerslagdagen": 125
+    },
+    {
+      "jaar": 2004,
+      "jaarsom": 902.3,
+      "max_dag": 21.7,
+      "max_dag_datum": "19 Nov",
+      "neerslagdagen": 171
+    },
+    {
+      "jaar": 2005,
+      "jaarsom": 828.4,
+      "max_dag": 21.6,
+      "max_dag_datum": "30 Jul",
+      "neerslagdagen": 169
+    },
+    {
+      "jaar": 2006,
+      "jaarsom": 804.2,
+      "max_dag": 17.3,
+      "max_dag_datum": "15 Aug",
+      "neerslagdagen": 154
+    },
+    {
+      "jaar": 2007,
+      "jaarsom": 961.7,
+      "max_dag": 22.4,
+      "max_dag_datum": "07 Dec",
+      "neerslagdagen": 171
+    },
+    {
+      "jaar": 2008,
+      "jaarsom": 882.7,
+      "max_dag": 26.9,
+      "max_dag_datum": "11 Nov",
+      "neerslagdagen": 174
+    },
+    {
+      "jaar": 2009,
+      "jaarsom": 812.6,
+      "max_dag": 27.4,
+      "max_dag_datum": "08 Oct",
+      "neerslagdagen": 160
+    },
+    {
+      "jaar": 2010,
+      "jaarsom": 866.3,
+      "max_dag": 27.8,
+      "max_dag_datum": "27 Aug",
+      "neerslagdagen": 161
+    },
+    {
+      "jaar": 2011,
+      "jaarsom": 845.2,
+      "max_dag": 26.1,
+      "max_dag_datum": "15 Jul",
+      "neerslagdagen": 153
+    },
+    {
+      "jaar": 2012,
+      "jaarsom": 941.4,
+      "max_dag": 24.2,
+      "max_dag_datum": "23 Dec",
+      "neerslagdagen": 187
+    },
+    {
+      "jaar": 2013,
+      "jaarsom": 804.3,
+      "max_dag": 22.9,
+      "max_dag_datum": "10 Sep",
+      "neerslagdagen": 145
+    },
+    {
+      "jaar": 2014,
+      "jaarsom": 825.6,
+      "max_dag": 18.6,
+      "max_dag_datum": "22 Oct",
+      "neerslagdagen": 175
+    },
+    {
+      "jaar": 2015,
+      "jaarsom": 900.8,
+      "max_dag": 17.5,
+      "max_dag_datum": "17 Aug",
+      "neerslagdagen": 169
+    },
+    {
+      "jaar": 2016,
+      "jaarsom": 837.0,
+      "max_dag": 20.6,
+      "max_dag_datum": "19 Oct",
+      "neerslagdagen": 172
+    },
+    {
+      "jaar": 2017,
+      "jaarsom": 913.7,
+      "max_dag": 25.1,
+      "max_dag_datum": "09 Sep",
+      "neerslagdagen": 178
+    },
+    {
+      "jaar": 2018,
+      "jaarsom": 648.0,
+      "max_dag": 27.0,
+      "max_dag_datum": "30 Apr",
+      "neerslagdagen": 126
+    },
+    {
+      "jaar": 2019,
+      "jaarsom": 868.5,
+      "max_dag": 17.2,
+      "max_dag_datum": "06 Jun",
+      "neerslagdagen": 167
+    },
+    {
+      "jaar": 2020,
+      "jaarsom": 869.2,
+      "max_dag": 22.6,
+      "max_dag_datum": "24 Dec",
+      "neerslagdagen": 176
+    },
+    {
+      "jaar": 2021,
+      "jaarsom": 883.2,
+      "max_dag": 23.7,
+      "max_dag_datum": "20 Jun",
+      "neerslagdagen": 171
+    },
+    {
+      "jaar": 2022,
+      "jaarsom": 798.8,
+      "max_dag": 21.7,
+      "max_dag_datum": "21 Feb",
+      "neerslagdagen": 148
+    },
+    {
+      "jaar": 2023,
+      "jaarsom": 1153.3,
+      "max_dag": 21.3,
+      "max_dag_datum": "21 Oct",
+      "neerslagdagen": 186
+    },
+    {
+      "jaar": 2024,
+      "jaarsom": 1054.9,
+      "max_dag": 26.1,
+      "max_dag_datum": "13 Jul",
+      "neerslagdagen": 181
+    },
+    {
+      "jaar": 2025,
+      "jaarsom": 672.9,
+      "max_dag": 26.0,
+      "max_dag_datum": "04 Oct",
+      "neerslagdagen": 127
+    }
+  ]
+};
