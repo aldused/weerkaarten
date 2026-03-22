@@ -227,7 +227,14 @@ for day, dag_data in data_per_day.items():
     print(f"Kaart: {fname}")
 
 # Ruim oude kaarten op (max 7 bewaren)
-oude_kaarten = sorted(glob.glob("kaart_wind_*.png"))
+oude_dag = sorted(glob.glob("kaart_wind_[!n]*.png"))
+for oud in oude_dag[:-7]:
+    os.remove(oud)
+    print(f"  Verwijderd: {oud}")
+oude_nacht = sorted(glob.glob("kaart_wind_nacht_*.png"))
+for oud in oude_nacht[:-7]:
+    os.remove(oud)
+    print(f"  Verwijderd: {oud}")
 for oud in oude_kaarten[:-7]:
     os.remove(oud)
     print(f"  Verwijderd: {oud}")
