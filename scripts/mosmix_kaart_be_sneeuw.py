@@ -192,7 +192,7 @@ for day, dag_data in data_per_day.items():
                           zorder=7))
 
     # Legenda
-    leg = ax.inset_axes([0.01, 0.60, 0.28, 0.37])
+    leg = ax.inset_axes([0.01, 0.01, 0.28, 0.37])
     leg.set_xlim(0,1); leg.set_ylim(0,1); leg.axis("off")
     leg.add_patch(plt.Rectangle((0,0),1,1,facecolor="white",edgecolor="#aaaaaa",
                   linewidth=0.7,transform=leg.transAxes,zorder=0))
