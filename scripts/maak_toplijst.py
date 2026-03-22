@@ -267,7 +267,7 @@ def haal_zon(station_id: str, dt_range: str) -> float | None:
     qg_raw = js["coverages"][0].get("ranges", {}).get("qg", {}).get("values")
     if not qg_raw: return None
     qg_vals = to_floats(qg_raw)
-    zon_stappen = sum(1 for v in qg_vals if v is not None and v > 120)
+    zon_stappen = sum(1 for v in qg_vals if v is not None and v >= 120)
     return round(zon_stappen / 6.0, 1)
 
 # ---- Ophalen van één dag ----
