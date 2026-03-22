@@ -207,6 +207,8 @@ for day, dag_data in data_per_day.items():
              ha="center",va="top",transform=leg.transAxes,color="#555555")
     leg.text(0.5,0.82,"❄ droog (<-2°)  🌨 nat (-2–2°)  🌧❄ ijzel (>2°)",fontsize=3.4,
              ha="center",va="top",transform=leg.transAxes,color="#555555")
+    leg.text(0.5,0.75,"❄ = vlok (droge sneeuw)  🌨 = vierkant (natte sneeuw)",fontsize=3.2,
+             ha="center",va="top",transform=leg.transAxes,color="#888888")
     legenda = [
         ("<5%",   "#d0e8ff", "#336699", "#336699"),
         ("5–20%", "#88ccff", "none",    "#003366"),
