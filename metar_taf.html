@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>METAR / TAF – Ed Aldus WM</title>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-D23M7CD0P8"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-D23M7CD0P8');
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0d1825; color: #dde8f5; min-height: 100vh; }
+
+  .header {
+    background: #00205b;
+    padding: 14px 24px 10px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  .header-titel { color: white; font-size: 1.2em; font-weight: bold; }
+  .header-sub { color: #a8c4e8; font-size: 0.80em; margin-top: 3px; }
+  .header a { color: #a8c4e8; text-decoration: none; }
+  .header a:hover { text-decoration: underline; }
+
+  .content { max-width: 860px; margin: 0 auto; padding: 28px 20px; }
+
+  /* Zoekbalk */
+  .zoek-wrap {
+    display: flex; gap: 10px; margin-bottom: 28px; flex-wrap: wrap;
+  }
+  .zoek-input {
+    flex: 1; min-width: 180px;
+    padding: 12px 16px;
+    font-size: 1.1em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: #111e2e;
+    border: 2px solid #2a4a70;
+    border-radius: 8px;
+    color: #dde8f5;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .zoek-input::placeholder { color: #4a6a90; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .zoek-input:focus { border-color: #2ec4e8; }
+  .zoek-btn {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #0d9488, #1d4ed8);
+    color: white; font-weight: 700; font-size: 1em;
+    border: none; border-radius: 8px; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .zoek-btn:hover { opacity: 0.85; }
+
+  /* Snelknoppen */
+  .snelknoppen {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px;
+  }
+  .snelknop {
+    padding: 6px 14px;
+    background: #111e2e;
+    border: 1px solid #2a4a70;
+    border-radius: 20px;
+    color: #a8c4e8;
+    font-size: 0.82em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .snelknop:hover { background: #1a3050; border-color: #2ec4e8; color: #2ec4e8; }
+
+  /* Station info */
+  .station-info {
+    font-size: 0.85em;
+    color: #6a8aaa;
+    margin-bottom: 20px;
+  }
+  .station-naam { font-size: 1.1em; font-weight: 700; color: #dde8f5; }
+
+  /* METAR blok */
+  .blok {
+    background: #111e2e;
+    border: 1px solid #1e3a5a;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .blok-header {
+    background: #0d2b5e;
+    padding: 10px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .blok-titel { font-weight: 700; font-size: 0.95em; color: #7fb8f7; letter-spacing: 0.04em; }
+  .blok-tijd { font-size: 0.75em; color: #6a8aaa; }
+
+  /* Raw string */
+  .raw-metar {
+    font-family: 'Courier New', monospace;
+    font-size: 0.88em;
+    background: #0a1520;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1e3a5a;
+    color: #b8d8f8;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  /* Decoded tabel */
+  .decoded { padding: 14px 16px; }
+  .decoded-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .param {
+    background: #0d1825;
+    border: 1px solid #1e3a5a;
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+  .param-label { font-size: 0.68em; color: #6a8aaa; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+  .param-waarde { font-size: 1.0em; font-weight: 700; color: #dde8f5; }
+  .param-waarde.vfr  { color: #4caf50; }
+  .param-waarde.mvfr { color: #2196f3; }
+  .param-waarde.ifr  { color: #f44336; }
+  .param-waarde.lifr { color: #9c27b0; }
+
+  /* TAF regels */
+  .taf-raw {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    background: #0a1520;
+    padding: 14px 16px;
+    color: #b8d8f8;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .taf-periode { color: #2ec4e8; font-weight: bold; }
+  .taf-wind   { color: #ffcc66; }
+  .taf-zicht  { color: #88ddaa; }
+  .taf-wolken { color: #aaaaee; }
+  .taf-wx     { color: #ff9966; }
+
+  /* Status */
+  .status { padding: 20px; text-align: center; color: #6a8aaa; font-style: italic; }
+  .fout   { padding: 20px; text-align: center; color: #f44336; }
+
+  /* Flight category badge */
+  .cat-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin-left: 8px;
+  }
+  .cat-VFR  { background: #1b5e20; color: #a5d6a7; }
+  .cat-MVFR { background: #0d47a1; color: #90caf9; }
+  .cat-IFR  { background: #b71c1c; color: #ffcdd2; }
+  .cat-LIFR { background: #4a148c; color: #e1bee7; }
+
+  footer {
+    text-align: center; padding: 24px; font-size: 12px; color: #4a6a90;
+    border-top: 1px solid #1e3a5a; margin-top: 20px;
+  }
+  footer a { color: #2ec4e8; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM &nbsp;
+      <span style="font-weight:400;font-size:0.78em;color:#a8c4e8;">
+        <a href="index.html">🇳🇱 Nederland</a> &nbsp;·&nbsp;
+        <a href="index_be.html">🇧🇪 België</a> &nbsp;·&nbsp;
+        <a href="portal.html">Portaal</a>
+      </span>
+    </div>
+    <div class="header-sub">METAR &amp; TAF – actuele luchtvaartweerwaarnemingen</div>
+  </div>
+</div>
+
+<div class="content">
+
+  <div class="zoek-wrap">
+    <input class="zoek-input" id="zoek-input" type="text" placeholder="ICAO-code bijv. EHRD, EHAM, EBOS…"
+           maxlength="4" autocomplete="off" autocapitalize="characters"
+           onkeydown="if(event.key==='Enter') haal()">
+    <button class="zoek-btn" onclick="haal()">🔍 Ophalen</button>
+  </div>
+
+  <div class="snelknoppen">
+    <span style="font-size:0.78em;color:#4a6a90;align-self:center;">Snel:</span>
+    <button class="snelknop" onclick="haalCode('EHAM')">EHAM Amsterdam</button>
+    <button class="snelknop" onclick="haalCode('EHRD')">EHRD Rotterdam</button>
+    <button class="snelknop" onclick="haalCode('EHBK')">EHBK Maastricht</button>
+    <button class="snelknop" onclick="haalCode('EBBR')">EBBR Brussel</button>
+    <button class="snelknop" onclick="haalCode('EBOS')">EBOS Oostende</button>
+    <button class="snelknop" onclick="haalCode('EDDL')">EDDL Düsseldorf</button>
+    <button class="snelknop" onclick="haalCode('EGLL')">EGLL Londen</button>
+    <button class="snelknop" onclick="haalCode('LFPG')">LFPG Parijs</button>
+  </div>
+
+  <div id="resultaat"></div>
+
+</div>
+
+<footer>
+  © <script>document.write(new Date().getFullYear())</script> <strong>Ed Aldus WM</strong> &nbsp;·&nbsp;
+  Data: <a href="https://aviationweather.gov" target="_blank">aviationweather.gov (NOAA/NWS)</a>
+</footer>
+
+<script>
+const API = "https://aviationweather.gov/api/data";
+
+function haalCode(code) {
+  document.getElementById('zoek-input').value = code.toUpperCase();
+  haal();
+}
+
+async function haal() {
+  const code = document.getElementById('zoek-input').value.trim().toUpperCase();
+  if (code.length < 2) { toonFout("Voer een ICAO-code in (bijv. EHRD)"); return; }
+  const el = document.getElementById('resultaat');
+  el.innerHTML = '<div class="status">⏳ Ophalen...</div>';
+  try {
+    const [metarRes, tafRes] = await Promise.all([
+      fetch(`${API}/metar?ids=${code}&format=json`),
+      fetch(`${API}/taf?ids=${code}&format=json`)
+    ]);
+    const metarData = await metarRes.json();
+    const tafData   = await tafRes.json();
+    toon(code, metarData, tafData);
+  } catch(e) {
+    toonFout("Kon data niet ophalen. Controleer de ICAO-code en probeer opnieuw.");
+  }
+}
+
+function toonFout(msg) {
+  document.getElementById('resultaat').innerHTML = `<div class="fout">⚠ ${msg}</div>`;
+}
+
+function toon(code, metarArr, tafArr) {
+  const el = document.getElementById('resultaat');
+  if (!metarArr || metarArr.length === 0) {
+    toonFout(`Geen METAR gevonden voor ${code}. Controleer de ICAO-code.`); return;
+  }
+  const m = metarArr[0];
+  const cat = m.flightCategory || '';
+  const naam = m.name || m.stationId || code;
+
+  let html = `
+    <div class="station-info">
+      <span class="station-naam">${naam}</span>
+      <span class="cat-badge cat-${cat}">${cat}</span>
+      &nbsp;·&nbsp; ${m.stationId || code}
+      &nbsp;·&nbsp; ${m.lat ? m.lat.toFixed(3) + '°N' : ''} ${m.lon ? m.lon.toFixed(3) + '°E' : ''}
+      ${m.elev ? '&nbsp;·&nbsp; ' + m.elev + 'm' : ''}
+    </div>`;
+
+  // METAR blok
+  const tijd = m.obsTime ? new Date(m.obsTime * 1000).toUTCString().replace(':00 GMT', 'Z').slice(5) : '';
+  html += `
+    <div class="blok">
+      <div class="blok-header">
+        <span class="blok-titel">METAR</span>
+        <span class="blok-tijd">${tijd}</span>
+      </div>
+      <div class="raw-metar">${m.rawOb || '–'}</div>
+      <div class="decoded">
+        <div class="decoded-grid">
+          ${param('Temperatuur', m.temp !== undefined ? m.temp + ' °C' : '–')}
+          ${param('Dauwpunt',    m.dewp !== undefined ? m.dewp + ' °C' : '–')}
+          ${param('Wind',        windStr(m))}
+          ${param('Zichtbaarheid', zichtStr(m))}
+          ${param('QNH',         m.altim ? m.altim.toFixed(0) + ' hPa' : '–')}
+          ${param('Wolken',      wolkenStr(m))}
+          ${param('Weerfenomeen', m.wxString || 'geen')}
+          ${param('Vluchtcat.', cat, 'param-waarde ' + catKleur(cat))}
+        </div>
+      </div>
+    </div>`;
+
+  // TAF blok
+  if (tafArr && tafArr.length > 0) {
+    const t = tafArr[0];
+    const tafTijd = t.issueTime ? new Date(t.issueTime * 1000).toUTCString().replace(':00 GMT', 'Z').slice(5) : '';
+    const tafFormatted = formatTAF(t.rawTAF || t.tafText || '');
+    html += `
+      <div class="blok">
+        <div class="blok-header">
+          <span class="blok-titel">TAF</span>
+          <span class="blok-tijd">afgifte: ${tafTijd}</span>
+        </div>
+        <div class="taf-raw">${tafFormatted}</div>
+      </div>`;
+  } else {
+    html += `<div class="blok"><div class="status">Geen TAF beschikbaar voor ${code}</div></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function param(label, waarde, extraKlasse = 'param-waarde') {
+  return `<div class="param">
+    <div class="param-label">${label}</div>
+    <div class="${extraKlasse}">${waarde}</div>
+  </div>`;
+}
+
+function catKleur(cat) {
+  if (cat === 'VFR')  return 'vfr';
+  if (cat === 'MVFR') return 'mvfr';
+  if (cat === 'IFR')  return 'ifr';
+  if (cat === 'LIFR') return 'lifr';
+  return '';
+}
+
+function windStr(m) {
+  if (m.wdir === undefined && !m.wspd) return '–';
+  const dir = m.wdir === 0 && m.wspd === 0 ? 'Stil' : (m.wdir === 990 ? 'VRB' : (m.wdir + '°'));
+  const snd = m.wspd !== undefined ? m.wspd + ' kt' : '';
+  const gust = m.wgst ? ' (stoot ' + m.wgst + ' kt)' : '';
+  return `${dir} ${snd}${gust}`.trim();
+}
+
+function zichtStr(m) {
+  if (!m.visib) return '–';
+  const v = parseFloat(m.visib);
+  if (v >= 6) return '≥10 km';
+  if (v >= 3) return Math.round(v * 1.6) + ' km';
+  return (v * 1609).toFixed(0) + ' m';
+}
+
+function wolkenStr(m) {
+  if (!m.clouds || m.clouds.length === 0) return m.wxString === 'CAVOK' ? 'CAVOK' : '–';
+  return m.clouds.map(c => {
+    const hoogte = c.base !== undefined ? (c.base * 30) + 'm' : '';
+    return `${c.cover}${hoogte ? ' ' + hoogte : ''}`;
+  }).join(', ');
+}
+
+function formatTAF(raw) {
+  if (!raw) return '–';
+  // Zet periodes op nieuwe regel en kleur ze
+  return raw
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/(BECMG|TEMPO|FM\d{6}|PROB\d{2}\s+TEMPO|PROB\d{2})/g, '\n<span class="taf-periode">$1</span>')
+    .replace(/(\d{5}(?:G\d{2,3})?KT)/g, '<span class="taf-wind">$1</span>')
+    .replace(/\b(CAVOK|[0-9]+SM|[0-9]+\/[0-9]+SM|[0-9]{4})\b/g, '<span class="taf-zicht">$1</span>')
+    .replace(/\b(SKC|FEW|SCT|BKN|OVC|VV)(\d{3})/g, '<span class="taf-wolken">$1$2</span>')
+    .replace(/\b(-|\+)?(RA|SN|SG|DZ|GR|GS|FZRA|FZDZ|TSRA|TS|BR|FG|MIFG|FU|VA|DU|SA|HZ|BLSN|BLDU|BLSA|SQ|FC|SS|DS)\b/g, '<span class="taf-wx">$&</span>');
+}
+</script>
+</body>
+</html>
