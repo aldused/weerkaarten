@@ -229,11 +229,12 @@ for day, dag_data in data_per_day.items():
     plt.close()
     print(f"Kaart: {fname}")
 
-# Ruim oude kaarten op (elk type apart, max 7 per reeks)
+# Ruim oude kaarten op (elk type apart, max 7 per reeks, gesorteerd op bestandsdatum)
 import glob as _glob
-alle = sorted(_glob.glob("kaart_be_temp_*.png"))
-oude_temp  = [f for f in alle if not os.path.basename(f).startswith("kaart_be_temp_dag_")
-                               and not os.path.basename(f).startswith("kaart_be_temp_nacht_")]
+alle = _glob.glob("kaart_be_temp_*.png")
+oude_temp = sorted([f for f in alle if not os.path.basename(f).startswith("kaart_be_temp_dag_")
+                                    and not os.path.basename(f).startswith("kaart_be_temp_nacht_")],
+                   key=os.path.getmtime)
 for oud in oude_temp[:-7]:
     os.remove(oud); print(f"  Verwijderd: {oud}")
 
