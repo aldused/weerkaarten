@@ -151,6 +151,7 @@
 
 <div class="tabs">
   <div class="tab actief" id="tab-be-temp" onclick="wisselTab('be-temp')">🌡️ Temperatuur</div>
+  <div class="tab" id="tab-be-wind" onclick="wisselTab('be-wind')">💨 Wind</div>
 </div>
 
 <div class="tab-inhoud actief" id="inhoud-be-temp">
@@ -164,6 +165,15 @@
   <div id="subinhoud-be-temp-nacht" style="display:none" ><div class="kaarten" id="kaarten-be-temp-nacht"></div></div>
 </div>
 
+<div class="tab-inhoud" id="inhoud-be-wind">
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+    <div class="subtab actief" id="subtab-be-wind-dag"   onclick="wisselSubtab('be-wind-dag')">☀️ Dag 06-18</div>
+    <div class="subtab"        id="subtab-be-wind-nacht" onclick="wisselSubtab('be-wind-nacht')">🌙 Nacht 18-06</div>
+  </div>
+  <div id="subinhoud-be-wind-dag"   style="display:block"><div class="kaarten" id="kaarten-be-wind-dag"></div></div>
+  <div id="subinhoud-be-wind-nacht" style="display:none" ><div class="kaarten" id="kaarten-be-wind-nacht"></div></div>
+</div>
+
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox" onclick="sluitLightbox()">
   <span class="lightbox-sluit" onclick="sluitLightbox()">✕</span>
@@ -174,6 +184,7 @@
 
 <script>
 let beTempLijst = [], beTempDagLijst = [], beTempNachtLijst = [];
+let beWindDagLijst = [], beWindNachtLijst = [];
 let activeLijst = [];
 let huidigIndex = 0;
 
@@ -186,20 +197,23 @@ function wisselTab(tab) {
   document.querySelectorAll(".tab-inhoud").forEach(t => t.classList.remove("actief"));
   document.getElementById("tab-" + tab).classList.add("actief");
   document.getElementById("inhoud-" + tab).classList.add("actief");
-  if (tab === "be-temp") activeLijst = beTempLijst;
+  if (tab === "be-temp")      activeLijst = beTempLijst;
+  else if (tab === "be-wind") activeLijst = beWindDagLijst;
 }
 
 function wisselSubtab(sub) {
-  const subs = ["be-temp","be-temp-dag","be-temp-nacht"];
+  const subs = ["be-temp","be-temp-dag","be-temp-nacht","be-wind-dag","be-wind-nacht"];
   subs.forEach(s => {
     const btn = document.getElementById("subtab-" + s);
     const div = document.getElementById("subinhoud-" + s);
     if (btn) btn.classList.toggle("actief", s === sub);
     if (div) div.style.display = (s === sub) ? "block" : "none";
   });
-  if (sub === "be-temp")       activeLijst = beTempLijst;
+  if (sub === "be-temp")            activeLijst = beTempLijst;
   else if (sub === "be-temp-dag")   activeLijst = beTempDagLijst;
   else if (sub === "be-temp-nacht") activeLijst = beTempNachtLijst;
+  else if (sub === "be-wind-dag")   activeLijst = beWindDagLijst;
+  else if (sub === "be-wind-nacht") activeLijst = beWindNachtLijst;
 }
 
 function datumUitNaam(naam) {
@@ -301,6 +315,16 @@ fetch("index.json?t=" + Date.now())
     }
     beTempDagLijst.forEach(n => document.getElementById("kaarten-be-temp-dag").appendChild(maakKaartItem(n, beTempDagLijst)));
     beTempNachtLijst.forEach(n => document.getElementById("kaarten-be-temp-nacht").appendChild(maakKaartItem(n, beTempNachtLijst)));
+
+    beWindDagLijst = kaarten
+      .filter(n => n.startsWith("kaart_be_wind_") && !n.startsWith("kaart_be_wind_nacht_"))
+      .sort((a, b) => { const da = datumUitNaam(a), db = datumUitNaam(b); return (!da||!db) ? 0 : da-db; });
+    beWindNachtLijst = kaarten
+      .filter(n => n.startsWith("kaart_be_wind_nacht_"))
+      .sort((a, b) => { const da = datumUitNaam(a), db = datumUitNaam(b); return (!da||!db) ? 0 : da-db; });
+
+    beWindDagLijst.forEach(n => document.getElementById("kaarten-be-wind-dag").appendChild(maakKaartItem(n, beWindDagLijst)));
+    beWindNachtLijst.forEach(n => document.getElementById("kaarten-be-wind-nacht").appendChild(maakKaartItem(n, beWindNachtLijst)));
   })
   .catch(() => {
     document.getElementById("kaarten-be-temp").innerHTML =
