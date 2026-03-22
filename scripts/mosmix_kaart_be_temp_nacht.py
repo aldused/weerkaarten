@@ -206,3 +206,8 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Kaart: {fname}")
+
+# Ruim oude kaarten op (max 7 bewaren)
+import glob as _glob
+for oud in sorted(_glob.glob("kaart_be_temp_nacht_*.png"))[:-7]:
+    os.remove(oud); print(f"  Verwijderd: {oud}")
