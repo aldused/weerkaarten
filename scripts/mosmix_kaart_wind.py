@@ -226,10 +226,12 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-# Ruim oude kaarten op (dag en nacht apart, max 7 per reeks)
-alle_wind = sorted(glob.glob("kaart_wind_*.png"))
-oude_dag   = [f for f in alle_wind if not os.path.basename(f).startswith("kaart_wind_nacht_")]
-oude_nacht = [f for f in alle_wind if os.path.basename(f).startswith("kaart_wind_nacht_")]
+# Ruim oude kaarten op (dag en nacht apart, max 7 per reeks, gesorteerd op datum)
+alle_wind = glob.glob("kaart_wind_*.png")
+oude_dag   = sorted([f for f in alle_wind if not os.path.basename(f).startswith("kaart_wind_nacht_")],
+                    key=os.path.getmtime)
+oude_nacht = sorted([f for f in alle_wind if os.path.basename(f).startswith("kaart_wind_nacht_")],
+                    key=os.path.getmtime)
 for oud in oude_dag[:-7]:
     os.remove(oud)
     print(f"  Verwijderd: {oud}")
