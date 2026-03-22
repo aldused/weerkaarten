@@ -168,13 +168,18 @@ for day, dag_data in data_per_day.items():
         tmin = v["tmin"]
         cat  = sneeuw_cat(wws)
 
-        # Hoofdtekst: kans %
+        # Droog/nat sneeuw indicator op basis van minimumtemperatuur
         if wws is not None and wws >= 5:
-            tekst = f"❄ {wws}%"
+            if tmin is not None and tmin <= -2:
+                soort = "❄"
+            elif tmin is not None and tmin <= 2:
+                soort = "🌨"
+            else:
+                soort = "🌧❄"
+            tekst = f"{soort} {wws}%"
         else:
             tekst = f"{wws}%" if wws is not None else "–"
 
-        # Extra: sneeuwval en minimumtemp bij kans ≥ 20%
         if wws is not None and wws >= 20:
             if rrs > 0:
                 tekst += f"\n{rrs:.1f}mm"
@@ -199,6 +204,8 @@ for day, dag_data in data_per_day.items():
     leg.text(0.5,0.97,"Kans op sneeuw (max dag)",fontsize=4.5,weight="bold",
              ha="center",va="top",transform=leg.transAxes)
     leg.text(0.5,0.89,"Bij ≥20%: sneeuwval mm + Tmin °C",fontsize=3.6,
+             ha="center",va="top",transform=leg.transAxes,color="#555555")
+    leg.text(0.5,0.82,"❄ droog (<-2°)  🌨 nat (-2–2°)  🌧❄ ijzel (>2°)",fontsize=3.4,
              ha="center",va="top",transform=leg.transAxes,color="#555555")
     legenda = [
         ("<5%",   "#d0e8ff", "#336699", "#336699"),
