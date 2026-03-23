@@ -13,7 +13,6 @@ import os, json, sys
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
-import matplotlib.image as mpimg
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import numpy as np
@@ -89,11 +88,7 @@ norm_rr   = mcolors.Normalize(vmin=0,   vmax=30)
 norm_fx   = mcolors.Normalize(vmin=0,   vmax=40)
 norm_ff   = mcolors.Normalize(vmin=0,   vmax=20)
 
-# Logo laden
-LOGO_PAD = "EdLogo.png"
-logo_img = None
-if os.path.exists(LOGO_PAD):
-    logo_img = mpimg.imread(LOGO_PAD)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def maak_kaart_base(fig, gs, dag_nl, day, now_str, titel):
@@ -194,7 +189,7 @@ for datum_str in alle_datums:
                 v = tx_map[naam]
                 kleur = cmap_tx(norm_tx(v))
                 teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tekstkleur(kleur))
-        bronvermelding(ax, now_str2); teken_logo(ax)
+        bronvermelding(ax, now_str2)
         ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
         plt.savefig(f"kaart_obs_tx_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
@@ -209,7 +204,7 @@ for datum_str in alle_datums:
                 v = tn_map[naam]
                 kleur = cmap_tn(norm_tn(v))
                 teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tekstkleur(kleur))
-        bronvermelding(ax, now_str2); teken_logo(ax)
+        bronvermelding(ax, now_str2)
         ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
         plt.savefig(f"kaart_obs_tn_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
@@ -224,7 +219,7 @@ for datum_str in alle_datums:
                 v = t10n_map[naam]
                 kleur = cmap_t10n(norm_t10n(v))
                 teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tekstkleur(kleur))
-        bronvermelding(ax, now_str2); teken_logo(ax)
+        bronvermelding(ax, now_str2)
         ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
         plt.savefig(f"kaart_obs_t10n_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
@@ -239,7 +234,7 @@ for datum_str in alle_datums:
                 v = rr_map[naam]
                 kleur = cmap_rr(norm_rr(v))
                 teken_station(ax, lon, lat, f"{v:.1f}", kleur, tekstkleur(kleur))
-        bronvermelding(ax, now_str2); teken_logo(ax)
+        bronvermelding(ax, now_str2)
         ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
         plt.savefig(f"kaart_obs_rr_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
@@ -254,7 +249,7 @@ for datum_str in alle_datums:
                 v = fx_map[naam]
                 kleur = cmap_fx(norm_fx(v))
                 teken_station(ax, lon, lat, f"{v:.1f}", kleur, tekstkleur(kleur))
-        bronvermelding(ax, now_str2); teken_logo(ax)
+        bronvermelding(ax, now_str2)
         ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
         plt.savefig(f"kaart_obs_fx_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
@@ -269,7 +264,7 @@ for datum_str in alle_datums:
                 v = ff_map[naam]
                 kleur = cmap_ff(norm_ff(v))
                 teken_station(ax, lon, lat, f"{v:.1f}", kleur, tekstkleur(kleur))
-        bronvermelding(ax, now_str2); teken_logo(ax)
+        bronvermelding(ax, now_str2)
         ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
         plt.savefig(f"kaart_obs_ff_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
