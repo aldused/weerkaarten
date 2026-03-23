@@ -52,6 +52,8 @@ norm_tx = mcolors.Normalize(vmin=-5, vmax=30)
 norm_tn = mcolors.Normalize(vmin=-15, vmax=20)
 norm_rr = mcolors.Normalize(vmin=0, vmax=30)
 norm_fx = mcolors.Normalize(vmin=0, vmax=40)
+cmap_sq = mcolors.LinearSegmentedColormap.from_list("sq", ["#ffffff","#fffacd","#ffe066","#ffa500","#ff6600"])
+norm_sq = mcolors.Normalize(vmin=0, vmax=12)
 
 def tekstkleur(rgba):
     r,g,b = rgba[:3]
@@ -144,7 +146,18 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
     bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_fx_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
 
-    print(f"  → 4 kaarten klaar voor {datum_str}")
+    # SQ kaart (zonuren)
+    fig, ax = maak_base(dag_label, "Zonneschijnduur (uur)", now_str)
+    for item in dag_data.get("sq", []):
+        naam = item[1]; v = item[0]
+        if naam in COORDS and v > 0:
+            lon, lat = COORDS[naam]
+            kleur = cmap_sq(norm_sq(v))
+            teken_station(ax, lon, lat, f"{v:.1f}", kleur)
+    bronvermelding(ax, now_str2)
+    plt.savefig(f"kaart_top_sq_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+
+    print(f"  → 5 kaarten klaar voor {datum_str}")
 
 # Laden
 with open("toplijst.json") as f:
