@@ -140,17 +140,33 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
 .metar-kaart-waarde { font-size:0.95em;font-weight:700;color:#003366; }
 
 /* Mobiel: sidebar inklapbaar */
-@media (max-width: 700px) {
-  .sidebar { width: 48px; min-width: 48px; }
-  .nav-groep-titel, .nav-item span:not(.ni), .sub-item, .sidebar-brand .sub,
-  .sidebar-flags, .merk { display: none; }
-  .nav-item { padding: 10px 0; justify-content: center; }
-  .sidebar-brand { padding: 10px 0; text-align: center; }
+/* Hamburger */
+.hamburger {
+  display: none; position: fixed; top: 10px; left: 10px; z-index: 500;
+  background: #00205b; border: none; border-radius: 6px;
+  padding: 8px 10px; cursor: pointer; color: white; font-size: 18px;
+}
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
+}
+@media (max-width: 768px) {
+  .hamburger { display: block; }
+  .sidebar {
+    position: fixed; left: -220px; top: 0; height: 100vh; z-index: 300;
+    transition: left 0.25s ease; width: 220px; min-width: 220px;
+  }
+  .sidebar.open { left: 0; }
+  .sidebar-overlay.open { display: block; }
+  .hoofd { width: 100%; }
+  .topbar { padding-left: 52px; }
+  .kaart-item { max-width: 100%; }
 }
 </style>
 </head>
 <body>
 
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="sluitSidebar()"></div>
 <div class="pagina-wrap">
 
 <!-- ══ SIDEBAR ══════════════════════════════════════════════════════════ -->
@@ -406,6 +422,15 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
 </div>
 
 <script>
+function toggleSidebar() {
+  document.querySelector(".sidebar").classList.toggle("open");
+  document.getElementById("sidebar-overlay").classList.toggle("open");
+}
+function sluitSidebar() {
+  document.querySelector(".sidebar").classList.remove("open");
+  document.getElementById("sidebar-overlay").classList.remove("open");
+}
+
 const NL_DAGEN   = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
 const NL_MAANDEN = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 const MND_MAP    = {jan:1,feb:2,mrt:3,mar:3,apr:4,mei:5,jun:6,jul:7,aug:8,sep:9,okt:10,nov:11,dec:12};
@@ -525,14 +550,38 @@ function openSub(panel, sub) {
 }
 
 // Guidance
+function markdownNaarHtml(tekst) {
+  return tekst
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/^### (.+)$/gm, '<h3 style="color:#003366;font-size:0.95em;margin:14px 0 4px;font-weight:700;">$1</h3>')
+    .replace(/^## (.+)$/gm,  '<h2 style="color:#003366;font-size:1.05em;margin:16px 0 6px;font-weight:700;">$1</h2>')
+    .replace(/[*][*](.+?)[*][*]/g, '<strong>$1</strong>')
+    .replace(/[*](.+?)[*]/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+
 function laadGuidance() {
   fetch("guidance.json?t=" + Date.now()).then(r=>r.json()).then(data=>{
-    if(data&&data.tekst){
-      const el = document.getElementById("guidance-tekst");
-      const tijd = data.tijd ? `<div style="font-size:0.78em;color:#888;margin-bottom:10px;">KNMI guidance: ${data.tijd}</div>` : "";
-      el.innerHTML = tijd + data.tekst.replace(/\n/g,"<br>");
+    const el = document.getElementById("guidance-tekst");
+    if (!el) return;
+    let html = "";
+    if (data.kort && data.kort.tekst) {
+      const geldig = data.kort.geldig ? `<div style="font-size:0.78em;color:#888;margin-bottom:8px;">📅 ${data.kort.geldig}</div>` : "";
+      const bijgew = data.bijgewerkt ? `<div style="font-size:0.75em;color:#aaa;margin-bottom:16px;">Bijgewerkt: ${data.bijgewerkt.replace("T"," ").slice(0,16)}</div>` : "";
+      html += `<h3 style="color:#003366;font-size:1em;margin-bottom:6px;">📋 ${data.kort.titel || "Guidance modelbeoordeling"}</h3>`;
+      html += geldig + bijgew;
+      html += `<div style="margin-bottom:24px;">${markdownNaarHtml(data.kort.tekst)}</div>`;
     }
-  }).catch(()=>{});
+    if (data.lang && data.lang.tekst) {
+      html += `<hr style="margin:16px 0;border:none;border-top:1px solid #e0e0e0;">`;
+      html += `<h3 style="color:#003366;font-size:1em;margin-bottom:6px;">📅 ${data.lang.titel || "Guidance meerdaagse"}</h3>`;
+      html += `<div>${markdownNaarHtml(data.lang.tekst)}</div>`;
+    }
+    if (html) el.innerHTML = html;
+    else el.innerHTML = "<p style='color:#888'>Geen guidance beschikbaar.</p>";
+  }).catch(()=>{
+    document.getElementById("guidance-tekst").innerHTML = "<p style='color:#cc2200'>Guidance kon niet worden geladen.</p>";
+  });
 }
 
 // Synop
