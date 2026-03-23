@@ -1,5 +1,6 @@
 import os, json, requests, zipfile, io, xml.etree.ElementTree as ET, re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -16,7 +17,7 @@ STATIONS = [
     ("06350", "Gilze-Rijen",      51.567, 4.931),
 ]
 
-UTC_OFFSET = timedelta(hours=1)
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 def strip_namespaces(xml_string):
     xml_string = re.sub(r'<(/?)\w+:', r'<\1', xml_string)
@@ -66,7 +67,7 @@ for code, naam, lat, lon in STATIONS:
 
         daily = {}
         for i, dt in enumerate(times):
-            loc = dt + UTC_OFFSET
+            loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
             d   = loc.date().isoformat()
             if d not in daily: daily[d] = {"tx": [], "tn": [], "rr": 0.0}
             if i < len(tx_raw) and tx_raw[i] is not None:
