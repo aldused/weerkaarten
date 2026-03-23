@@ -1,10 +1,8 @@
 #!/bin/bash
 set -e  # stop bij fout
 SCRIPT_DIR="/Users/aldus/Desktop/KNMI_Project/weerkaarten 2"
-GITHUB_TOKEN="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"
 
 cd "$SCRIPT_DIR"
-git remote set-url origin "https://aldused:${GITHUB_TOKEN}@github.com/aldused/weerkaarten.git"
 
 echo "Kaarten genereren..."
 /usr/local/bin/python3 "$SCRIPT_DIR/mosmix_kaart_fixed.py" || { echo "FOUT: mosmix_kaart_fixed.py"; exit 1; }
