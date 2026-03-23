@@ -227,19 +227,17 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
     <div class="nav-item" id="nav-toplijst" onclick="openPanel('toplijst')">
       <span class="ni">📊</span><span>Toplijst</span>
     </div>
+    <div class="nav-item" id="nav-topkaarten" onclick="openPanel('topkaarten')">
+      <span class="ni">🗺</span><span>Toplijst kaarten</span>
+    </div>
+    <div class="sub-items" id="subs-topkaarten" style="display:none">
+      <div class="sub-item actief" id="snav-topkaarten-vandaag"  onclick="openSub('topkaarten','topkaarten-vandaag')">Vandaag</div>
+      <div class="sub-item"        id="snav-topkaarten-gisteren" onclick="openSub('topkaarten','topkaarten-gisteren')">Gisteren</div>
+    </div>
     <div class="nav-item" id="nav-synop" onclick="openPanel('synop')">
       <span class="ni">🗺</span><span>Synoptisch</span>
     </div>
-    <div class="nav-item" id="nav-obs" onclick="openPanel('obs')">
-      <span class="ni">📡</span><span>Obs kaarten</span>
-    </div>
-    <div class="sub-items" id="subs-obs" style="display:none">
-      <div class="sub-item actief" id="snav-obs-tx" onclick="openSub('obs','obs-tx')">TX Maximum</div>
-      <div class="sub-item"        id="snav-obs-tn" onclick="openSub('obs','obs-tn')">TN Minimum</div>
-      <div class="sub-item"        id="snav-obs-rr" onclick="openSub('obs','obs-rr')">Neerslag RR</div>
-      <div class="sub-item"        id="snav-obs-fx" onclick="openSub('obs','obs-fx')">Windstoot FX</div>
-      <div class="sub-item"        id="snav-obs-ff" onclick="openSub('obs','obs-ff')">Wind gem. FF</div>
-    </div>
+
   </div>
 
   <div class="sidebar-divider"></div>
@@ -361,13 +359,10 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
       <div style="font-size:0.72em;color:#888;text-align:center;margin-top:6px;">Elke 10 minuten bijgewerkt · laatste 10 kaarten bewaard</div>
     </div>
 
-    <!-- ── OBS KAARTEN ── -->
-    <div class="panel" id="panel-obs">
-      <div id="subinhoud-obs-tx"><div class="kaarten" id="kaarten-obs-tx"></div></div>
-      <div id="subinhoud-obs-tn" style="display:none"><div class="kaarten" id="kaarten-obs-tn"></div></div>
-      <div id="subinhoud-obs-rr" style="display:none"><div class="kaarten" id="kaarten-obs-rr"></div></div>
-      <div id="subinhoud-obs-fx" style="display:none"><div class="kaarten" id="kaarten-obs-fx"></div></div>
-      <div id="subinhoud-obs-ff" style="display:none"><div class="kaarten" id="kaarten-obs-ff"></div></div>
+    <!-- ── TOPLIJST KAARTEN ── -->
+    <div class="panel" id="panel-topkaarten">
+      <div id="subinhoud-topkaarten-vandaag" ><div class="kaarten" id="kaarten-top-vandaag"></div></div>
+      <div id="subinhoud-topkaarten-gisteren" style="display:none"><div class="kaarten" id="kaarten-top-gisteren"></div></div>
     </div>
 
     <!-- ── TREND ── -->
@@ -444,14 +439,14 @@ let activeLijst = [], huidigIndex = 0;
 let tempLijst=[], tempDagLijst=[], tempNachtLijst=[], gevoelsLijst=[], windDagLijst=[], windNachtLijst=[];
 let zonLijst=[], regenLijst=[], mistLijst=[], onweerLijst=[], bewolkingLijst=[], sneeuwLijst=[], hagelLijst=[];
 let t5cmLijst=[], dauwpuntLijst=[];
-let obsTxLijst=[], obsTnLijst=[], obsRrLijst=[], obsFxLijst=[], obsFfLijst=[];
+let topVandaagLijst=[], topGisterenLijst=[];
 
 const PANEL_TITELS = {
   records:"Weerrecords & Historie", p13:"P13 Neerslagrecords",
   neerslag668:"668 KNMI Neerslagstations", archief:"Archief Waarnemingen",
   temp:"Temperatuur TX / TN", wind:"Wind", weer:"Weer",
   toplijst:"Toplijst waarnemingen", synop:"Synoptische kaart",
-  obs:"Observatiekaarten", trend:"Trendgrafiek",
+  topkaarten:"Toplijst kaarten", trend:"Trendgrafiek",
   guidance:"KNMI Guidance", metar:"METAR / TAF", beta:"Beta verificatie"
 };
 const SUB_TITELS = {
@@ -470,12 +465,12 @@ const SUB_TITELS = {
   "weer-bewolking":"Bewolking",
   "weer-sneeuw":"Sneeuwkans",
   "weer-hagel":"Hagelkans",
-  "obs-tx":"Obs TX Maximum","obs-tn":"Obs TN Minimum",
-  "obs-rr":"Obs Neerslag","obs-fx":"Obs Windstoot FX","obs-ff":"Obs Wind FF",
+  "topkaarten-vandaag":"Toplijst kaarten vandaag",
+  "topkaarten-gisteren":"Toplijst kaarten gisteren",
 };
 
 let huidigPanel = "temp";
-let huidigSub   = {temp:"temp-temp", wind:"wind-dag", weer:"weer-zon", obs:"obs-tx"};
+let huidigSub   = {temp:"temp-temp", wind:"wind-dag", weer:"weer-zon", topkaarten:"topkaarten-vandaag"};
 
 function openPanel(panel) {
   // Verberg alle panels
@@ -488,7 +483,7 @@ function openPanel(panel) {
   if (nav) nav.classList.add("actief");
 
   // Subtabs tonen/verbergen (toggle als zelfde panel)
-  ["temp","wind","weer","obs"].forEach(g => {
+  ["temp","wind","weer","topkaarten"].forEach(g => {
     const el = document.getElementById("subs-" + g);
     if (!el) return;
     if (g === panel) {
@@ -507,7 +502,7 @@ function openPanel(panel) {
   if (window.innerWidth <= 768) sluitSidebar();
 
   // Toolbar alleen bij kaartenpanels
-  const kaartPanels = ["temp","wind","weer","obs"];
+  const kaartPanels = ["temp","wind","weer","topkaarten"];
   const toolbar = document.getElementById("toolbar-download");
   if (toolbar) toolbar.style.display = kaartPanels.includes(panel) ? "flex" : "none";
 
@@ -528,7 +523,7 @@ function openPanel(panel) {
       "weer-onweer": onweerLijst, "weer-bewolking": bewolkingLijst,
       "weer-sneeuw": sneeuwLijst, "weer-hagel": hagelLijst
     },
-    obs: {"obs-tx": obsTxLijst, "obs-tn": obsTnLijst, "obs-rr": obsRrLijst, "obs-fx": obsFxLijst, "obs-ff": obsFfLijst}
+    topkaarten: {"topkaarten-vandaag": topVandaagLijst, "topkaarten-gisteren": topGisterenLijst}
   };
   if (lijstMap[panel] && sub) activeLijst = lijstMap[panel][sub] || [];
   else activeLijst = [];
@@ -563,8 +558,7 @@ function openSub(panel, sub) {
     "weer-zon": zonLijst, "weer-regen": regenLijst, "weer-mist": mistLijst,
     "weer-onweer": onweerLijst, "weer-bewolking": bewolkingLijst,
     "weer-sneeuw": sneeuwLijst, "weer-hagel": hagelLijst,
-    "obs-tx": obsTxLijst, "obs-tn": obsTnLijst, "obs-rr": obsRrLijst,
-    "obs-fx": obsFxLijst, "obs-ff": obsFfLijst,
+    "topkaarten-vandaag": topVandaagLijst, "topkaarten-gisteren": topGisterenLijst,
   };
   activeLijst = m[sub] || [];
 }
@@ -575,9 +569,10 @@ function markdownNaarHtml(tekst) {
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .replace(/^### (.+)$/gm, '<h3 style="color:#003366;font-size:0.95em;margin:14px 0 4px;font-weight:700;">$1</h3>')
     .replace(/^## (.+)$/gm,  '<h2 style="color:#003366;font-size:1.05em;margin:16px 0 6px;font-weight:700;">$1</h2>')
-    .replace(/[*][*](.+?)[*][*]/g, '<strong>$1</strong>')
-    .replace(/[*](.+?)[*]/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>');
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/
+/g, '<br>');
 }
 
 function laadGuidance() {
@@ -714,11 +709,8 @@ fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
   hagelLijst     = kaarten.filter(n => n.startsWith("kaart_hagel_"));
   t5cmLijst      = kaarten.filter(n => n.startsWith("kaart_t5cm_"));
   dauwpuntLijst  = kaarten.filter(n => n.startsWith("kaart_dauwpunt_"));
-  obsTxLijst     = kaarten.filter(n => n.startsWith("kaart_obs_tx_"));
-  obsTnLijst     = kaarten.filter(n => n.startsWith("kaart_obs_tn_"));
-  obsRrLijst     = kaarten.filter(n => n.startsWith("kaart_obs_rr_"));
-  obsFxLijst     = kaarten.filter(n => n.startsWith("kaart_obs_fx_"));
-  obsFfLijst     = kaarten.filter(n => n.startsWith("kaart_obs_ff_"));
+  topVandaagLijst  = kaarten.filter(n => n.startsWith("kaart_top_") && n.includes("_vandaag"));
+  topGisterenLijst = kaarten.filter(n => n.startsWith("kaart_top_") && n.includes("_gisteren"));
   activeLijst    = tempLijst;
 
   const vul = (id, lijst, isNacht=false) => {
@@ -740,11 +732,8 @@ fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
   vul("kaarten-bewolking", bewolkingLijst);
   vul("kaarten-sneeuw", sneeuwLijst);
   vul("kaarten-hagel", hagelLijst);
-  vul("kaarten-obs-tx", obsTxLijst);
-  vul("kaarten-obs-tn", obsTnLijst);
-  vul("kaarten-obs-rr", obsRrLijst);
-  vul("kaarten-obs-fx", obsFxLijst);
-  vul("kaarten-obs-ff", obsFfLijst);
+  vul("kaarten-top-vandaag", topVandaagLijst);
+  vul("kaarten-top-gisteren", topGisterenLijst);
 }).catch(() => {
   document.getElementById("kaarten-temp").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
 });

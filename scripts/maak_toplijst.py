@@ -206,10 +206,37 @@ def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float |
     except Exception:
         return None
 
+def tijdstip_van_max(vals, tijden, local_tz):
+    """Geeft tijdstip (HH:MM LT) van de maximale waarde."""
+    best_val, best_t = None, None
+    for v, t in zip(vals, tijden):
+        if v is not None and (best_val is None or v > best_val):
+            best_val, best_t = v, t
+    if best_t is None: return None
+    try:
+        dt_utc = datetime.fromisoformat(best_t.replace("Z", "+00:00"))
+        dt_lt  = dt_utc.astimezone(local_tz)
+        return dt_lt.strftime("%H:%M")
+    except: return None
+
+def tijdstip_van_min(vals, tijden, local_tz):
+    """Geeft tijdstip (HH:MM LT) van de minimale waarde."""
+    best_val, best_t = None, None
+    for v, t in zip(vals, tijden):
+        if v is not None and (best_val is None or v < best_val):
+            best_val, best_t = v, t
+    if best_t is None: return None
+    try:
+        dt_utc = datetime.fromisoformat(best_t.replace("Z", "+00:00"))
+        dt_lt  = dt_utc.astimezone(local_tz)
+        return dt_lt.strftime("%H:%M")
+    except: return None
+
 def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     """
     ta  → max = TX, min = TN (over UTC-etmaal)
     fx  → max windstoot
+    Inclusief tijdstip van TX, TN en FX.
     """
     params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx"}
     r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
@@ -217,15 +244,23 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     r.raise_for_status()
     js = r.json()
     if not js.get("coverages"): return None
-    ranges = js["coverages"][0].get("ranges", {})
+    cov    = js["coverages"][0]
+    t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
+    ranges = cov.get("ranges", {})
     ta  = to_floats(ranges.get("ta", {}).get("values"))
     tx  = to_floats(ranges.get("tx", {}).get("values"))
     tn  = to_floats(ranges.get("tn", {}).get("values"))
     fx  = to_floats(ranges.get("fx", {}).get("values"))
+    tx_val = max_valid(tx) if max_valid(tx) is not None else max_valid(ta)
+    tn_val = min_valid(tn) if min_valid(tn) is not None else min_valid(ta)
+    fx_val = max_valid(fx)
+    tx_t = tijdstip_van_max(tx if any(v is not None for v in tx) else ta, t_vals, LOCAL_TZ)
+    tn_t = tijdstip_van_min(tn if any(v is not None for v in tn) else ta, t_vals, LOCAL_TZ)
+    fx_t = tijdstip_van_max(fx, t_vals, LOCAL_TZ)
     return {
-        "tx": max_valid(tx) if max_valid(tx) is not None else max_valid(ta),
-        "tn": min_valid(tn) if min_valid(tn) is not None else min_valid(ta),
-        "fx": max_valid(fx),
+        "tx": tx_val, "tx_t": tx_t,
+        "tn": tn_val, "tn_t": tn_t,
+        "fx": fx_val, "fx_t": fx_t,
     }
 
 def haal_neerslag(station_id: str, dt_range: str) -> float | None:
@@ -284,9 +319,9 @@ def haal_dag(dag: date) -> dict:
         try:
             tw = haal_temp_wind(station_id, dt_range)
             if tw:
-                if tw["tx"] is not None: res["max"].append((tw["tx"], naam))
-                if tw["tn"] is not None: res["min"].append((tw["tn"], naam))
-                if tw["fx"] is not None: res["fx"].append((tw["fx"], naam))
+                if tw["tx"] is not None: res["max"].append((tw["tx"], naam, tw.get("tx_t")))
+                if tw["tn"] is not None: res["min"].append((tw["tn"], naam, tw.get("tn_t")))
+                if tw["fx"] is not None: res["fx"].append((tw["fx"], naam, tw.get("fx_t")))
         except Exception as e:
             print(f"    Temp/wind fout {naam}: {e}")
 
