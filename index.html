@@ -527,12 +527,28 @@ function openSub(panel, sub) {
 // Guidance
 function laadGuidance() {
   fetch("guidance.json?t=" + Date.now()).then(r=>r.json()).then(data=>{
-    if(data&&data.tekst){
-      const el = document.getElementById("guidance-tekst");
-      const tijd = data.tijd ? `<div style="font-size:0.78em;color:#888;margin-bottom:10px;">KNMI guidance: ${data.tijd}</div>` : "";
-      el.innerHTML = tijd + data.tekst.replace(/\n/g,"<br>");
+    const el = document.getElementById("guidance-tekst");
+    if (!el) return;
+    let html = "";
+    // Kort (modelbeoordeling)
+    if (data.kort && data.kort.tekst) {
+      const geldig = data.kort.geldig ? `<div style="font-size:0.78em;color:#888;margin-bottom:8px;">📅 ${data.kort.geldig}</div>` : "";
+      const bijgew = data.bijgewerkt ? `<div style="font-size:0.75em;color:#aaa;margin-bottom:16px;">Bijgewerkt: ${data.bijgewerkt.replace("T"," ").slice(0,16)}</div>` : "";
+      html += `<h3 style="color:#003366;font-size:1em;margin-bottom:6px;">📋 ${data.kort.titel || "Guidance modelbeoordeling"}</h3>`;
+      html += geldig + bijgew;
+      html += `<div style="margin-bottom:24px;">${data.kort.tekst.replace(/\n/g,"<br>")}</div>`;
     }
-  }).catch(()=>{});
+    // Lang (meerdaagse)
+    if (data.lang && data.lang.tekst) {
+      html += `<hr style="margin:16px 0;border:none;border-top:1px solid #e0e0e0;">`;
+      html += `<h3 style="color:#003366;font-size:1em;margin-bottom:6px;">📅 ${data.lang.titel || "Guidance meerdaagse"}</h3>`;
+      html += `<div>${data.lang.tekst.replace(/\n/g,"<br>")}</div>`;
+    }
+    if (html) el.innerHTML = html;
+    else el.innerHTML = "<p style='color:#888'>Geen guidance beschikbaar.</p>";
+  }).catch(()=>{
+    document.getElementById("guidance-tekst").innerHTML = "<p style='color:#cc2200'>Guidance kon niet worden geladen.</p>";
+  });
 }
 
 // Synop
