@@ -238,7 +238,7 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     fx  → max windstoot
     Inclusief tijdstip van TX, TN en FX.
     """
-    params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx"}
+    params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx,ff"}
     r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
@@ -257,10 +257,26 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     tx_t = tijdstip_van_max(tx if any(v is not None for v in tx) else ta, t_vals, LOCAL_TZ)
     tn_t = tijdstip_van_min(tn if any(v is not None for v in tn) else ta, t_vals, LOCAL_TZ)
     fx_t = tijdstip_van_max(fx, t_vals, LOCAL_TZ)
+    # Windchill (min gevoelstemperatuur)
+    ff_vals = to_floats(ranges.get("ff", {}).get("values"))
+    gevoels_min = None
+    gevoels_t = None
+    for i, (t, f) in enumerate(zip(ta, ff_vals)):
+        if t is None or f is None: continue
+        if t < 10.0 and f * 3.6 > 4.8:
+            wc = 13.12 + 0.6215*t - 11.37*(f*3.6)**0.16 + 0.3965*t*(f*3.6)**0.16
+            wc = round(wc, 1)
+            if gevoels_min is None or wc < gevoels_min:
+                gevoels_min = wc
+                if i < len(t_vals) and t_vals[i]:
+                    from datetime import datetime, timezone
+                    dt = datetime.fromisoformat(t_vals[i].replace("Z","+00:00"))
+                    gevoels_t = dt.astimezone(LOCAL_TZ).strftime("%H:%M")
     return {
         "tx": tx_val, "tx_t": tx_t,
         "tn": tn_val, "tn_t": tn_t,
         "fx": fx_val, "fx_t": fx_t,
+        "gevoels": gevoels_min, "gevoels_t": gevoels_t,
     }
 
 def haal_neerslag(station_id: str, dt_range: str) -> float | None:
@@ -312,7 +328,7 @@ def haal_dag(dag: date) -> dict:
     dt_range   = dag_interval_tot_nu_utc(dag) if is_vandaag else dag_interval_utc(dag)
     key        = dag.isoformat()
     res        = {"datum": key, "status": "voorlopig", "update": "",
-                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": [], "sq": []}
+                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": [], "sq": [], "gevoels": []}
     print(f"  Ophalen {dag} ({'tot nu' if is_vandaag else 'heel dag'})...")
 
     for station_id, naam in STATIONS.items():
@@ -322,6 +338,7 @@ def haal_dag(dag: date) -> dict:
                 if tw["tx"] is not None: res["max"].append((tw["tx"], naam, tw.get("tx_t")))
                 if tw["tn"] is not None: res["min"].append((tw["tn"], naam, tw.get("tn_t")))
                 if tw["fx"] is not None: res["fx"].append((tw["fx"], naam, tw.get("fx_t")))
+                if tw.get("gevoels") is not None: res["gevoels"].append((tw["gevoels"], naam, tw.get("gevoels_t")))
         except Exception as e:
             print(f"    Temp/wind fout {naam}: {e}")
 
@@ -360,7 +377,7 @@ def haal_dag(dag: date) -> dict:
     res["ff"]   = sorted(res["ff"],   key=lambda x: x[0], reverse=True)
     res["t10n"] = sorted(res["t10n"])
     res["sq"]   = sorted(res["sq"],   reverse=True)
-    res["sq"]   = sorted(res["sq"],   reverse=True)
+    res["gevoels"] = sorted(res["gevoels"])
     res["update"] = datetime.now().strftime("%d %b %Y %H:%M")
 
     print(f"    TX top3: {res['max'][:3]}")
