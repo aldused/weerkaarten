@@ -76,7 +76,11 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     <button class="btn-param ff" data-param="ff">🌬 Gem. wind</button>
     <button class="btn-param gv" data-param="gevoels">🥶 Gevoels</button>
   </div>
-  <div style="display:flex;gap:4px;flex-wrap:wrap;" id="dag-btns"></div>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;" id="dag-btns"></div>
+  <div style="position:relative;">
+    <button class="btn-dag" id="btn-archief" onclick="toggleArchief()" style="border-radius:16px;">📅 Afgelopen 10 dagen ▾</button>
+    <div id="archief-menu" style="display:none;position:absolute;top:32px;left:0;background:white;border:1px solid #c5d3e3;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;min-width:160px;"></div>
+  </div>
   <button class="btn-opslaan" onclick="slaOp()">⬇ Opslaan PNG</button>
 </div>
 
@@ -150,7 +154,7 @@ const PARAMS = {
     schaal:[0,15] },
   gevoels: { label:"Min gevoelstemperatuur (°C)", eenheid:"°", decimalen:1,
     kleuren:[["#1a3a6b","≤-15°"],["#2980b9","-10°"],["#a8d8ea","-5°"],["#e8f4f8","0°"],["#ffffcc","5°"]],
-    schaal:[-20,10] },
+    schaal:[-20,10] }
   sq: { label:"Zonneschijn (uur)", eenheid:" u", decimalen:1,
     kleuren:[["#fffacd","1u"],["#ffe066","4u"],["#ffa500","8u"],["#ff6600","12u+"]],
     schaal:[0,12] },
@@ -359,6 +363,26 @@ function openZoom() {
 function sluitZoom() { document.getElementById("lightbox").classList.remove("actief"); }
 document.addEventListener("keydown", e => { if(e.key==="Escape") sluitZoom(); });
 
+function toggleArchief() {
+  const menu = document.getElementById("archief-menu");
+  const btn = document.getElementById("btn-archief");
+  const open = menu.style.display === "none";
+  menu.style.display = open ? "block" : "none";
+  btn.classList.toggle("actief", open);
+}
+document.addEventListener("click", e => {
+  if (!e.target.closest("#btn-archief") && !e.target.closest("#archief-menu")) {
+    document.getElementById("archief-menu").style.display = "none";
+    document.getElementById("btn-archief").classList.remove("actief");
+  }
+});
+function selecteerDag(key) {
+  huidigDag = key;
+  document.querySelectorAll(".btn-dag").forEach(b => b.classList.remove("actief"));
+  document.getElementById("btn-archief").classList.add("actief");
+  update();
+}
+
 function tekenHeader(ctx, breedte, hoogte) {
   ctx.fillStyle = "#003366";
   ctx.fillRect(0, 0, breedte, hoogte);
@@ -385,6 +409,7 @@ document.getElementById("dag-btns").addEventListener("click", e => {
   const btn = e.target.closest(".btn-dag"); if (!btn) return;
   huidigDag = btn.dataset.dag;
   document.querySelectorAll(".btn-dag").forEach(b=>b.classList.remove("actief"));
+  document.getElementById("btn-archief").classList.remove("actief");
   btn.classList.add("actief"); update();
 });
 // slaOp: gebruik huidigDag als bestandsnaam
@@ -397,18 +422,38 @@ function startLaad() {
     const laatste = Object.keys(data).sort().reverse()[0];
     if (laatste) document.getElementById("hdr-update").textContent = `Bijgewerkt: ${data[laatste].update||laatste}`;
     document.getElementById("status").textContent = "";
-    // Bouw dag knoppen: vandaag + laatste 4 beschikbare dagen
-    const dagKeys = Object.keys(data).sort().reverse().slice(0, 5);
+    const dagKeys = Object.keys(data).sort().reverse();
     const dagBtns = document.getElementById("dag-btns");
-    dagKeys.forEach((key, i) => {
+
+    // Vandaag, gisteren, eergisteren
+    dagKeys.slice(0, 3).forEach((key, i) => {
       const d = new Date(key + "T12:00:00");
-      const lbl = i === 0 ? "Vandaag" : i === 1 ? "Gisteren" : dagLabel(d);
+      const lbl = i === 0 ? "Vandaag" : i === 1 ? "Gisteren" : "Eergisteren";
       const btn = document.createElement("button");
       btn.className = "btn-dag" + (i === 0 ? " actief" : "");
       btn.dataset.dag = key;
       btn.textContent = lbl;
       dagBtns.appendChild(btn);
     });
+
+    // Archief dropdown: dagen 4-10
+    const archiefMenu = document.getElementById("archief-menu");
+    dagKeys.slice(3, 10).forEach(key => {
+      const d = new Date(key + "T12:00:00");
+      const item = document.createElement("div");
+      item.textContent = dagLabel(d);
+      item.dataset.dag = key;
+      item.style.cssText = "padding:8px 16px;cursor:pointer;font-size:12px;color:#2a4a70;font-weight:600;border-bottom:1px solid #f0f4f8;";
+      item.onmouseover = () => item.style.background = "#f0f4f8";
+      item.onmouseout  = () => item.style.background = "white";
+      item.onclick = () => {
+        selecteerDag(key);
+        document.getElementById("archief-menu").style.display = "none";
+        document.getElementById("btn-archief").classList.remove("actief");
+      };
+      archiefMenu.appendChild(item);
+    });
+
     huidigDag = dagKeys[0];
     update();
   }).catch(e=>document.getElementById("status").textContent="Kon toplijst.json niet laden: "+e.message);
