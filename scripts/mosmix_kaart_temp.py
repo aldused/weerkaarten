@@ -96,9 +96,10 @@ for code, naam in stations:
     for i, dt in enumerate(times):
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d   = loc.date()
-        if i < len(tx) and tx[i] is not None:
+        # TX: max overdag 06-18u, TN: min nacht 18-06u (vorige dag)
+        if i < len(tx) and tx[i] is not None and 6 <= loc.hour < 18:
             if d not in daily_tx or tx[i] > daily_tx[d]: daily_tx[d] = tx[i]
-        if i < len(tn) and tn[i] is not None:
+        if i < len(tn) and tn[i] is not None and (loc.hour >= 18 or loc.hour < 6):
             if d not in daily_tn or tn[i] < daily_tn[d]: daily_tn[d] = tn[i]
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
