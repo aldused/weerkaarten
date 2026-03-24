@@ -23,6 +23,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 .btn-param.rr.actief { background: #1a7a4a; }
 .btn-param.fx.actief { background: #6c3483; }
 .btn-param.sq.actief { background: #e67e00; }
+.btn-param.ff.actief { background: #5d4037; }
 .btn-dag.actief { background: #003366; color: white; border-color: #003366; }
 .btn-opslaan { padding: 5px 16px; border-radius: 16px; border: none; background: #003366; color: white; font-size: 12px; font-weight: 700; cursor: pointer; margin-left: auto; }
 .btn-opslaan:hover { background: #0055aa; }
@@ -71,11 +72,9 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     <button class="btn-param rr" data-param="rr">🌧 Neerslag</button>
     <button class="btn-param fx" data-param="fx">💨 Windstoot</button>
     <button class="btn-param sq" data-param="sq">☀ Zon</button>
+    <button class="btn-param ff" data-param="ff">🌬 Gem. wind</button>
   </div>
-  <div style="display:flex;gap:4px;" id="dag-btns">
-    <button class="btn-dag actief" data-dag="vandaag">Vandaag</button>
-    <button class="btn-dag" data-dag="gisteren">Gisteren</button>
-  </div>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;" id="dag-btns"></div>
   <button class="btn-opslaan" onclick="slaOp()">⬇ Opslaan PNG</button>
 </div>
 
@@ -144,6 +143,9 @@ const PARAMS = {
   fx: { label:"Max windstoot (km/h)", eenheid:" km/h", decimalen:0,
     kleuren:[["#d4b896","<50"],["#b5835a","60"],["#8b5e3c","70"],["#6b3a1f","80"],["#3d1a08","90+"]],
     schaal:[0,40] },
+  ff: { label:"Gem. wind hoogste uur (m/s)", eenheid:" m/s", decimalen:1,
+    kleuren:[["#e3f2fd","1"],["#90caf9","3"],["#42a5f5","5"],["#1565c0","8"],["#0d47a1","12+"]],
+    schaal:[0,15] },
   sq: { label:"Zonneschijn (uur)", eenheid:" u", decimalen:1,
     kleuren:[["#fffacd","1u"],["#ffe066","4u"],["#ffa500","8u"],["#ff6600","12u+"]],
     schaal:[0,12] },
@@ -250,15 +252,9 @@ function dagLabel(d) { return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MND[d
 
 let dagData = {}, huidigParam = "max", huidigDag = "vandaag";
 
-function huidigDatum() {
-  const d = new Date(); d.setHours(12,0,0,0);
-  if (huidigDag === "gisteren") d.setDate(d.getDate()-1);
-  return d;
-}
-
 function update() {
-  const d = huidigDatum();
-  const key = d.toISOString().slice(0,10);
+  const key = huidigDag;
+  const d = new Date(key + "T12:00:00");
   const dd = dagData[key];
   if (!dd) { document.getElementById("status").textContent = `Geen data voor ${key}`; return; }
   document.getElementById("status").textContent = "";
@@ -357,6 +353,8 @@ document.getElementById("dag-btns").addEventListener("click", e => {
   document.querySelectorAll(".btn-dag").forEach(b=>b.classList.remove("actief"));
   btn.classList.add("actief"); update();
 });
+// slaOp: gebruik huidigDag als bestandsnaam
+
 
 const imgEl = document.getElementById("kaart-basis");
 function startLaad() {
@@ -365,6 +363,19 @@ function startLaad() {
     const laatste = Object.keys(data).sort().reverse()[0];
     if (laatste) document.getElementById("hdr-update").textContent = `Bijgewerkt: ${data[laatste].update||laatste}`;
     document.getElementById("status").textContent = "";
+    // Bouw dag knoppen: vandaag + laatste 4 beschikbare dagen
+    const dagKeys = Object.keys(data).sort().reverse().slice(0, 5);
+    const dagBtns = document.getElementById("dag-btns");
+    dagKeys.forEach((key, i) => {
+      const d = new Date(key + "T12:00:00");
+      const lbl = i === 0 ? "Vandaag" : i === 1 ? "Gisteren" : dagLabel(d);
+      const btn = document.createElement("button");
+      btn.className = "btn-dag" + (i === 0 ? " actief" : "");
+      btn.dataset.dag = key;
+      btn.textContent = lbl;
+      dagBtns.appendChild(btn);
+    });
+    huidigDag = dagKeys[0];
     update();
   }).catch(e=>document.getElementById("status").textContent="Kon toplijst.json niet laden: "+e.message);
 }
