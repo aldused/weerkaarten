@@ -47,6 +47,11 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 .legenda-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #5a7090; }
 .legenda-blok { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
 .status { text-align: center; padding: 12px; font-size: 12px; color: #888; }
+.zoom-hint { text-align:center; font-size:11px; color:#888; padding:4px 0 0; cursor:pointer; }
+#lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:1000; justify-content:center; align-items:center; }
+#lightbox.actief { display:flex; }
+#lightbox img { max-width:95vw; max-height:95vh; border-radius:6px; }
+#lightbox-sluit { position:fixed; top:16px; right:22px; font-size:2em; color:white; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -86,12 +91,18 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
         <div class="rechts-sub" id="kaart-subtitel">Maximum temperatuur (°C)</div>
       </div>
     </div>
-    <div class="kaart-container">
+    <div class="kaart-container" onclick="openZoom()" style="cursor:zoom-in;">
       <img src="kaart_basis_nl.png" id="kaart-basis" alt="Basiskaart Nederland">
       <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
+    <div class="zoom-hint" onclick="openZoom()">🔍 klik voor vergroting</div>
   </div>
+</div>
+
+<div id="lightbox" onclick="sluitZoom()">
+  <span id="lightbox-sluit" onclick="sluitZoom()">✕</span>
+  <img id="lightbox-img" src="" alt="">
 </div>
 
 <div class="legenda" id="legenda"></div>
@@ -269,18 +280,7 @@ function slaOp() {
   canvas.height = (img.naturalHeight + header.offsetHeight) * scale;
   const ctx = canvas.getContext("2d");
   ctx.scale(scale, scale);
-  // Header
-  ctx.fillStyle = "#003366";
-  ctx.fillRect(0,0,img.naturalWidth,header.offsetHeight);
-  ctx.fillStyle = "white"; ctx.font = "bold 14px Arial";
-  ctx.fillText("Ed Aldus WM",14,20);
-  ctx.fillStyle="#a8c8e8"; ctx.font="10px Arial";
-  ctx.fillText("Waarnemingen KNMI",14,34);
-  ctx.fillStyle="white"; ctx.font="bold 14px Arial"; ctx.textAlign="right";
-  ctx.fillText(document.getElementById("kaart-dag-label").textContent,img.naturalWidth-14,20);
-  ctx.fillStyle="#a8c8e8"; ctx.font="10px Arial";
-  ctx.fillText(document.getElementById("kaart-subtitel").textContent,img.naturalWidth-14,34);
-  ctx.textAlign="left";
+  tekenHeader(ctx, img.naturalWidth, header.offsetHeight);
   // Kaart
   ctx.drawImage(img,0,header.offsetHeight);
   // SVG overlay
@@ -298,6 +298,51 @@ function slaOp() {
     a.click();
   };
   svgImg.src = url;
+}
+
+function openZoom() {
+  // Render kaart naar canvas en toon in lightbox
+  const img = document.getElementById("kaart-basis");
+  const svg = document.getElementById("nl-kaart");
+  const header = document.getElementById("kaart-header");
+  const canvas = document.createElement("canvas");
+  const scale = 2;
+  canvas.width = img.naturalWidth * scale;
+  canvas.height = (img.naturalHeight + header.offsetHeight) * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  tekenHeader(ctx, img.naturalWidth, header.offsetHeight);
+  ctx.drawImage(img, 0, header.offsetHeight);
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+  const blob = new Blob([svgStr],{type:"image/svg+xml"});
+  const url = URL.createObjectURL(blob);
+  const svgImg = new Image();
+  svgImg.onload = () => {
+    ctx.drawImage(svgImg, 0, header.offsetHeight, img.naturalWidth, img.naturalHeight);
+    URL.revokeObjectURL(url);
+    document.getElementById("lightbox-img").src = canvas.toDataURL("image/png");
+    document.getElementById("lightbox").classList.add("actief");
+  };
+  svgImg.src = url;
+}
+function sluitZoom() { document.getElementById("lightbox").classList.remove("actief"); }
+document.addEventListener("keydown", e => { if(e.key==="Escape") sluitZoom(); });
+
+function tekenHeader(ctx, breedte, hoogte) {
+  ctx.fillStyle = "#003366";
+  ctx.fillRect(0, 0, breedte, hoogte);
+  ctx.fillStyle = "#4a90c4";
+  ctx.fillRect(0, hoogte-2, breedte, 2);
+  ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left";
+  ctx.fillText("Ed Aldus WM", 14, 20);
+  ctx.fillStyle = "#a8c8e8"; ctx.font = "10px Arial";
+  ctx.fillText("Waarnemingen KNMI", 14, 34);
+  ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "right";
+  ctx.fillText(document.getElementById("kaart-dag-label").textContent, breedte-14, 20);
+  ctx.fillStyle = "#a8c8e8"; ctx.font = "10px Arial";
+  ctx.fillText(document.getElementById("kaart-subtitel").textContent, breedte-14, 34);
+  ctx.textAlign = "left";
 }
 
 document.getElementById("param-btns").addEventListener("click", e => {
