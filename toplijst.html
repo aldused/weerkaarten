@@ -279,44 +279,46 @@ function maakTabel(rijen, klasse, eenheid, transform, htmlTransform) {
   return html + '</table>';
 }
 
+let actieveCat = 'temp';
+
+function toonCat(cat) {
+  actieveCat = cat;
+  document.querySelectorAll('.cat-tab').forEach(t =>
+    t.classList.toggle('actief', t.dataset.cat === cat));
+  if (actieveDag) toonDag(actieveDag);
+}
+
 function toonDag(datum) {
   actieveDag = datum;
   document.querySelectorAll('.dag-tab').forEach(t =>
     t.classList.toggle('actief', t.dataset.datum === datum));
-
   const dag = dagData[datum];
   const badgeKlasse = dag.status === 'definitief' ? 'definitief' : '';
+  let kolommen = '';
+  if (actieveCat === 'temp') {
+    kolommen = `
+      <div class="kolom"><div class="kolom-header tx">🌡 Maximum °C</div>${maakTabel(dag.max, 'tx', '°', v => v.toFixed(1))}</div>
+      <div class="kolom"><div class="kolom-header tn">❄ Minimum °C</div>${maakTabel(dag.min, 'tn', '°', v => v.toFixed(1))}</div>
+      <div class="kolom"><div class="kolom-header" style="background:#5c35a0;color:white;">🥶 Min gevoels °C</div>${maakTabel(dag.gevoels || [], 'tn', '°', v => v.toFixed(1))}</div>`;
+  } else if (actieveCat === 'wind') {
+    kolommen = `
+      <div class="kolom"><div class="kolom-header fx">💨 Windstoten km/h</div>${maakTabel(dag.fx, 'fx', ' km/h', v => fxKmh(v))}</div>
+      <div class="kolom"><div class="kolom-header ff">🌬 Wind gem.<div style="font-size:0.65rem;font-weight:400;opacity:0.85">uur .10 › heel · m/s</div></div>${maakTabelFF(dag.ff || [])}</div>`;
+  } else if (actieveCat === 'neerslag') {
+    kolommen = `
+      <div class="kolom"><div class="kolom-header rh">🌧 Neerslag mm</div>${maakTabel(dag.rr, 'rh', 'mm', v => v.toFixed(1))}</div>
+      <div class="kolom"><div class="kolom-header sq">☀️ Zon uur</div>${maakTabel(dag.sq || [], 'sq', 'u', v => v.toFixed(1))}</div>`;
+  } else if (actieveCat === 'druk') {
+    kolommen = `
+      <div class="kolom"><div class="kolom-header" style="background:#1565c0;color:white;">🔵 Max luchtdruk hPa</div>${maakTabel(dag.px || [], 'ff', ' hPa', v => v.toFixed(1))}</div>
+      <div class="kolom"><div class="kolom-header" style="background:#0d47a1;color:white;">🔵 Min luchtdruk hPa</div>${maakTabel(dag.pn || [], 'ff', ' hPa', v => v.toFixed(1))}</div>`;
+  }
   document.getElementById('inhoud').innerHTML = `
     <div class="status-balk">
       <span class="badge ${badgeKlasse}">${dag.status}</span>
       <span>Bijgewerkt: ${dag.update || '–'}</span>
     </div>
-    <div class="grid-6">
-      <div class="kolom">
-        <div class="kolom-header tx">🌡 Maximum °C</div>
-        ${maakTabel(dag.max, 'tx', '°', v => v.toFixed(1))}
-      </div>
-      <div class="kolom">
-        <div class="kolom-header tn">❄ Minimum °C</div>
-        ${maakTabel(dag.min, 'tn', '°', v => v.toFixed(1))}
-      </div>
-      <div class="kolom">
-        <div class="kolom-header rh">🌧 Neerslag mm</div>
-        ${maakTabel(dag.rr, 'rh', 'mm', v => v.toFixed(1))}
-      </div>
-      <div class="kolom">
-        <div class="kolom-header fx">💨 Windstoten</div>
-        ${maakTabel(dag.fx, 'fx', ' km/h', v => fxKmh(v))}
-      </div>
-      <div class="kolom">
-        <div class="kolom-header ff">🌬 Wind gem.<div style="font-size:0.65rem;font-weight:400;opacity:0.85">uur .10 › heel · m/s</div></div>
-        ${maakTabelFF(dag.ff || [])}
-      </div>
-      <div class="kolom">
-        <div class="kolom-header sq">☀️ Zon uur</div>
-        ${maakTabel(dag.sq || [], 'sq', 'u', v => v.toFixed(1))}
-      </div>
-    </div>`;
+    <div class="grid-6">${kolommen}</div>`;
 }
 
 function toonMaand(maand) {
