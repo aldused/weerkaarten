@@ -71,7 +71,7 @@ def haal_waarschuwingen():
     # Fenomeen uit XML halen
     FENOMEEN_NL = {
         "SNOW": "sneeuw", "ICE": "gladheid", "FOG": "mist",
-        "RAIN": "regen", "THUNDER": "onweer", "WIND": "storm",
+        "RAIN": "regen", "THUNDER": "onweer", "WIND": "zware windstoten",
         "HEAT": "hitte", "COLD": "kou", "WATERSPOUT": "waterhoos",
     }
     fenomenen = set()
