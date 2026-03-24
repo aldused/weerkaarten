@@ -169,12 +169,12 @@ for datum_str in alle_datums:
     fname_suffix = f"{dag_nl.lower()}_{d.strftime('%d%b%Y').lower()}"
 
     # Bouw lookup: naam → waarde
-    tx_map   = {naam: val for val, naam in dag_data.get("max",  [])}
-    tn_map   = {naam: val for val, naam in dag_data.get("min",  [])}
-    t10n_map = {naam: val for val, naam in dag_data.get("t10n", [])}
-    rr_map   = {naam: val for val, naam in dag_data.get("rr",   [])}
-    fx_map   = {naam: val for val, naam in dag_data.get("fx",   [])}
-    ff_map   = {naam: ff  for ff, naam, *_ in dag_data.get("ff", [])}
+    tx_map   = {item[1]: item[0] for item in dag_data.get("max",  [])}
+    tn_map   = {item[1]: item[0] for item in dag_data.get("min",  [])}
+    t10n_map = {item[1]: item[0] for item in dag_data.get("t10n", [])}
+    rr_map   = {item[1]: item[0] for item in dag_data.get("rr",   [])}
+    fx_map   = {item[1]: item[0] for item in dag_data.get("fx",   [])}
+    ff_map   = {item[1]: item[0] for item in dag_data.get("ff",   [])}
 
     print(f"Kaarten maken voor {datum_str}...")
 
