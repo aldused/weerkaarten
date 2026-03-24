@@ -323,31 +323,12 @@ def haal_zon(station_id: str, dt_range: str) -> float | None:
 
 # ---- Ophalen van één dag ----
 
-def haal_luchtdruk(station_id: str, dt_range: str):
-    """Hoogste en laagste luchtdruk (pg, hPa) over het etmaal."""
-    params = {"datetime": dt_range, "parameter-name": "pg"}
-    r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
-    if r.status_code in (400, 404): return None, None
-    r.raise_for_status()
-    js = r.json()
-    if not js.get("coverages"): return None, None
-    cov = js["coverages"][0]
-    t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
-    pg = to_floats(cov.get("ranges", {}).get("pg", {}).get("values"))
-    if not pg: return None, None
-    px = max((v for v in pg if v is not None), default=None)
-    pn = min((v for v in pg if v is not None), default=None)
-    px_t = tijdstip_van_max(pg, t_vals, LOCAL_TZ)
-    pn_t = tijdstip_van_min(pg, t_vals, LOCAL_TZ)
-    return (round(px, 1), px_t) if px else (None, None), (round(pn, 1), pn_t) if pn else (None, None)
-
-
 def haal_dag(dag: date) -> dict:
     is_vandaag = (dag == date.today())
     dt_range   = dag_interval_tot_nu_utc(dag) if is_vandaag else dag_interval_utc(dag)
     key        = dag.isoformat()
     res        = {"datum": key, "status": "voorlopig", "update": "",
-                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": [], "sq": [], "gevoels": [], "px": [], "pn": []}
+                  "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": [], "sq": [], "gevoels": []}
     print(f"  Ophalen {dag} ({'tot nu' if is_vandaag else 'heel dag'})...")
 
     for station_id, naam in STATIONS.items():
@@ -381,13 +362,6 @@ def haal_dag(dag: date) -> dict:
             print(f"    Zon fout {naam}: {e}")
 
         try:
-            px_res, pn_res = haal_luchtdruk(station_id, dt_range)
-            if px_res and px_res[0] is not None: res["px"].append((px_res[0], naam, px_res[1]))
-            if pn_res and pn_res[0] is not None: res["pn"].append((pn_res[0], naam, pn_res[1]))
-        except Exception as e:
-            print(f"    Luchtdruk fout {naam}: {e}")
-
-        try:
             mm = haal_neerslag(station_id, dt_range)
             if mm is not None:
                 res["rr"].append((mm, naam))  # ook 0.0 opnemen
@@ -404,8 +378,6 @@ def haal_dag(dag: date) -> dict:
     res["t10n"] = sorted(res["t10n"])
     res["sq"]   = sorted(res["sq"],   reverse=True)
     res["gevoels"] = sorted(res["gevoels"])
-    res["px"] = sorted(res["px"], reverse=True)
-    res["pn"] = sorted(res["pn"])
     res["update"] = datetime.now().strftime("%d %b %Y %H:%M")
 
     print(f"    TX top3: {res['max'][:3]}")
