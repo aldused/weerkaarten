@@ -263,7 +263,7 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     gevoels_t = None
     for i, (t, f) in enumerate(zip(ta, ff_vals)):
         if t is None or f is None: continue
-        if t < 10.0 and f * 3.6 > 4.8:
+        if t < 15.0 and f * 3.6 > 4.8:
             wc = 13.12 + 0.6215*t - 11.37*(f*3.6)**0.16 + 0.3965*t*(f*3.6)**0.16
             wc = round(wc, 1)
             if gevoels_min is None or wc < gevoels_min:
