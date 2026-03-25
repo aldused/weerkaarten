@@ -255,7 +255,6 @@ const NL_MAANDEN = ["","januari","februari","maart","april","mei","juni",
 const NL_MAANDEN_LANG = ["","Januari","Februari","Maart","April","Mei","Juni",
                           "Juli","Augustus","September","Oktober","November","December"];
 const NL_DAGEN_KORT = ["zo","ma","di","wo","do","vr","za"];
-const STATION = "Rotterdam Airport";
 
 let dagData = {};
 let huidigJaar, huidigMaand;
@@ -273,10 +272,13 @@ function navigeer(delta) {
   toon();
 }
 
-function vindWaarde(dagObj, veld, station) {
-  if (!dagObj || !dagObj[veld]) return null;
-  const rij = dagObj[veld].find(r => Array.isArray(r) && r[1] === station);
-  return rij ? rij[0] : null;
+function vindWaarde(dagObj, veld) {
+  if (!dagObj) return null;
+  // maanddata_344.json: directe waarden per parameter
+  const MAP = { max:'tx', min:'tn', rr:'rr', sq:'sq', fx:'fx' };
+  const key = MAP[veld] || veld;
+  const v = dagObj[key];
+  return (v !== undefined && v !== null) ? v : null;
 }
 
 function toon() {
@@ -301,14 +303,14 @@ function toon() {
   const beschikbaar = dagen.filter(x => x.obj);
 
   // Waarden extraheren
-  const txLijst = beschikbaar.map(x => vindWaarde(x.obj, "max", STATION)).filter(v => v !== null);
-  const tnLijst = beschikbaar.map(x => vindWaarde(x.obj, "min", STATION)).filter(v => v !== null);
-  const rrLijst = beschikbaar.map(x => vindWaarde(x.obj, "rr",  STATION)).filter(v => v !== null);
-  const sqLijst = beschikbaar.map(x => vindWaarde(x.obj, "sq",  STATION)).filter(v => v !== null);
-  const fxLijst = beschikbaar.map(x => vindWaarde(x.obj, "fx",  STATION)).filter(v => v !== null);
+  const txLijst = beschikbaar.map(x => vindWaarde(x.obj, "max")).filter(v => v !== null);
+  const tnLijst = beschikbaar.map(x => vindWaarde(x.obj, "min")).filter(v => v !== null);
+  const rrLijst = beschikbaar.map(x => vindWaarde(x.obj, "rr")).filter(v => v !== null);
+  const sqLijst = beschikbaar.map(x => vindWaarde(x.obj, "sq")).filter(v => v !== null);
+  const fxLijst = beschikbaar.map(x => vindWaarde(x.obj, "fx")).filter(v => v !== null);
   const tgLijst = beschikbaar.map(x => {
-    const tx = vindWaarde(x.obj, "max", STATION);
-    const tn = vindWaarde(x.obj, "min", STATION);
+    const tx = vindWaarde(x.obj, "max");
+    const tn = vindWaarde(x.obj, "min");
     return (tx !== null && tn !== null) ? (tx + tn) / 2 : null;
   }).filter(v => v !== null);
 
@@ -347,15 +349,15 @@ function toon() {
   tbody.innerHTML = '';
   dagen.forEach(({ d, key, obj, datum, isVandaag, isToekomst }) => {
     const dagNaam = NL_DAGEN_KORT[datum.getDay()];
-    const tx = obj ? vindWaarde(obj, "max", STATION) : null;
-    const tn = obj ? vindWaarde(obj, "min", STATION) : null;
-    const tg = (tx !== null && tn !== null) ? (tx+tn)/2 : null;
-    const rr = obj ? vindWaarde(obj, "rr",  STATION) : null;
-    const sq = obj ? vindWaarde(obj, "sq",  STATION) : null;
-    const fx = obj ? vindWaarde(obj, "fx",  STATION) : null;
+    const tx = obj ? vindWaarde(obj, "max") : null;
+    const tn = obj ? vindWaarde(obj, "min") : null;
+    const tg = obj ? (obj.tg !== undefined && obj.tg !== null ? obj.tg : (tx !== null && tn !== null ? (tx+tn)/2 : null)) : null;
+    const rr = obj ? vindWaarde(obj, "rr") : null;
+    const sq = obj ? vindWaarde(obj, "sq") : null;
+    const fx = obj ? vindWaarde(obj, "fx") : null;
     const cls = isVandaag ? "vandaag" : isToekomst ? "ontbreekt" : "";
     const fmt1 = v => v !== null ? v.toFixed(1) : "–";
-    const fxKmh = v => v !== null ? (v*3.6).toFixed(0) : "–";
+    const fxKmh = v => v !== null ? v.toFixed(0) : "–";  // al in km/h na conversie
     const rrBar = rr !== null ? `<div class="bar-wrap">
       <div class="bar rr-kleur" style="width:${Math.min(rr/maxRR*60,60).toFixed(0)}px"></div>
       <span class="bar-val rr">${rr.toFixed(1)}</span></div>` : '–';
@@ -394,20 +396,12 @@ function toon() {
 
 // Laden
 init();
-fetch("toplijst.json?t=" + Date.now())
+fetch("maanddata_344.json?t=" + Date.now())
   .then(r => r.json())
-  .then(data => {
-    dagData = data;
-    // Debug: check eerste dag met data
-    const eersteKey = Object.keys(data).filter(k => k.startsWith('2026-03')).sort()[0];
-    if (eersteKey) {
-      const eersteMax = (data[eersteKey].max || []).slice(0,3).map(r => r[1]);
-      console.log('Eerste dag:', eersteKey, '| max stations:', eersteMax);
-      console.log('Zoekt naar:', "Rotterdam Airport");
-    }
-    const laatste = Object.keys(data).sort().reverse()[0];
-    if (laatste) document.getElementById("hdr-update").textContent =
-      `Bijgewerkt: ${data[laatste].update || laatste}`;
+  .then(json => {
+    dagData = json.data || {};
+    document.getElementById("hdr-update").textContent =
+      `Bijgewerkt: ${json.bijgewerkt || ''}`;
     toon();
   })
   .catch(e => {
