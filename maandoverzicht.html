@@ -10,9 +10,9 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .header { background: #00205b; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2ec4e8; }
 .header-titel { color: white; font-size: 14px; font-weight: 700; }
 .header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
-.maand-nav { background: #1a3a6b; padding: 8px 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.nav-pijl { font-size: 16px; color: #2ec4e8; cursor: pointer; user-select: none; }
-.nav-pijl:hover { color: white; }
+.nav { background: #1a3a6b; padding: 8px 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pijl { font-size: 16px; color: #2ec4e8; cursor: pointer; user-select: none; }
+.pijl:hover { color: white; }
 select { background: #1a3a6b; color: white; border: 1px solid #2ec4e8; border-radius: 4px; padding: 4px 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .stats { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px; background: white; border-bottom: 1px solid #dde6f0; }
 .stat { background: #f7fafc; border-radius: 8px; padding: 10px 14px; border-left: 3px solid #ccc; min-width: 130px; }
@@ -61,14 +61,13 @@ tfoot td.sq { color: #ffcc66; }
 <body>
 <div class="header">
   <div>
-    <div class="header-titel">Ed Aldus WM — Maandoverzicht</div>
-    <div class="header-sub">KNMI daggegevens</div>
+    <div class="header-titel">Ed Aldus WM &#8212; Maandoverzicht</div>
+    <div class="header-sub" id="bw">KNMI daggegevens</div>
   </div>
-  <div id="bw" style="font-size:11px;color:#a8c4e8;"></div>
 </div>
-<div class="maand-nav">
+<div class="nav">
   <select id="ss" onchange="wisselStation()"></select>
-  <span class="nav-pijl" onclick="nav(-1)">&#9664;</span>
+  <span class="pijl" onclick="nav(-1)">&#9664;</span>
   <select id="sm" onchange="sel()">
     <option value="1">Januari</option><option value="2">Februari</option>
     <option value="3">Maart</option><option value="4">April</option>
@@ -78,7 +77,7 @@ tfoot td.sq { color: #ffcc66; }
     <option value="11">November</option><option value="12">December</option>
   </select>
   <select id="sj" onchange="sel()"></select>
-  <span class="nav-pijl" onclick="nav(1)">&#9654;</span>
+  <span class="pijl" onclick="nav(1)">&#9654;</span>
 </div>
 <div class="stats" id="st"></div>
 <div class="tbl-wrap">
@@ -98,141 +97,200 @@ tfoot td.sq { color: #ffcc66; }
 </div>
 <script>
 var STATIONS = [
-  {nr:260, naam:"De Bilt",          file:"maanddata_260.json"},
-  {nr:235, naam:"Den Helder",       file:"maanddata_235.json"},
-  {nr:280, naam:"Eelde",            file:"maanddata_280.json"},
-  {nr:310, naam:"Vlissingen",       file:"maanddata_310.json"},
-  {nr:380, naam:"Maastricht",       file:"maanddata_380.json"},
-  {nr:330, naam:"Hoek van Holland", file:"maanddata_330.json"},
-  {nr:344, naam:"Rotterdam Airport",file:"maanddata_344.json"}
+  {nr:260, naam:"De Bilt",           file:"maanddata_260.json"},
+  {nr:235, naam:"Den Helder",        file:"maanddata_235.json"},
+  {nr:280, naam:"Eelde",             file:"maanddata_280.json"},
+  {nr:310, naam:"Vlissingen",        file:"maanddata_310.json"},
+  {nr:380, naam:"Maastricht",        file:"maanddata_380.json"},
+  {nr:330, naam:"Hoek van Holland",  file:"maanddata_330.json"},
+  {nr:344, naam:"Rotterdam Airport", file:"maanddata_344.json"}
 ];
-var huidigStation = STATIONS[6]; // Rotterdam default
 
-// Normalen per station (KNMI 1991-2020)
 var ALLE_NM = {
-  260: {1:{tx:6.1,tn:0.9,tg:3.6,rr:70.8,sq:66.6},2:{tx:7.0,tn:0.7,tg:3.9,rr:63.1,sq:89.6},3:{tx:10.5,tn:2.4,tg:6.5,rr:57.8,sq:139.4},4:{tx:14.8,tn:4.5,tg:9.8,rr:41.6,sq:189.2},5:{tx:18.3,tn:8.0,tg:13.4,rr:59.3,sq:217.5},6:{tx:20.9,tn:10.8,tg:16.2,rr:70.5,sq:207.1},7:{tx:23.1,tn:13.0,tg:18.3,rr:85.2,sq:213.9},8:{tx:22.9,tn:12.5,tg:17.9,rr:83.6,sq:196.3},9:{tx:19.5,tn:10.0,tg:14.7,rr:77.9,sq:152.8},10:{tx:14.8,tn:7.1,tg:10.9,rr:81.1,sq:119.3},11:{tx:9.9,tn:3.9,tg:7.0,rr:80.0,sq:67.4},12:{tx:6.7,tn:1.6,tg:4.2,rr:83.8,sq:55.5}},
-  235: {1:{tx:6.0,tn:1.7,tg:4.0,rr:65.6,sq:70.2},2:{tx:6.2,tn:1.4,tg:3.9,rr:50.1,sq:97.8},3:{tx:8.7,tn:3.0,tg:5.9,rr:43.7,sq:155.7},4:{tx:12.4,tn:5.5,tg:9.0,rr:34.9,sq:214.5},5:{tx:15.8,tn:9.0,tg:12.4,rr:42.0,sq:246.6},6:{tx:18.5,tn:11.8,tg:15.2,rr:58.7,sq:230.4},7:{tx:20.8,tn:14.1,tg:17.5,rr:62.5,sq:240.5},8:{tx:21.1,tn:14.4,tg:17.8,rr:89.1,sq:219.7},9:{tx:18.3,tn:12.1,tg:15.4,rr:84.7,sq:161.2},10:{tx:14.3,tn:8.7,tg:11.6,rr:96.5,sq:122.1},11:{tx:10.0,tn:5.2,tg:7.8,rr:83.5,sq:68.5},12:{tx:7.0,tn:2.6,tg:5.0,rr:75.3,sq:60.6}},
-  280: {1:{tx:5.2,tn:0.1,tg:2.8,rr:72.7,sq:60.7},2:{tx:6.0,tn:-0.1,tg:3.0,rr:54.7,sq:86.1},3:{tx:9.5,tn:1.4,tg:5.5,rr:54.1,sq:139.0},4:{tx:14.2,tn:3.7,tg:9.0,rr:41.3,sq:188.7},5:{tx:17.6,tn:7.0,tg:12.5,rr:57.9,sq:218.0},6:{tx:20.4,tn:9.9,tg:15.4,rr:65.0,sq:198.6},7:{tx:22.7,tn:12.2,tg:17.5,rr:85.0,sq:212.3},8:{tx:22.6,tn:11.9,tg:17.3,rr:77.8,sq:196.3},9:{tx:19.0,tn:9.4,tg:14.1,rr:75.4,sq:150.7},10:{tx:14.2,tn:6.3,tg:10.3,rr:71.4,sq:112.9},11:{tx:9.0,tn:3.2,tg:6.3,rr:70.0,sq:63.4},12:{tx:5.9,tn:0.8,tg:3.5,rr:79.4,sq:56.1}},
-  310: {1:{tx:6.4,tn:2.6,tg:4.5,rr:58.9,sq:76.3},2:{tx:6.8,tn:2.6,tg:4.6,rr:52.8,sq:99.0},3:{tx:9.6,tn:4.4,tg:6.8,rr:44.6,sq:155.5},4:{tx:13.3,tn:6.9,tg:9.8,rr:35.0,sq:207.5},5:{tx:16.8,tn:10.2,tg:13.3,rr:49.4,sq:233.8},6:{tx:19.6,tn:13.0,tg:16.1,rr:62.0,sq:230.1},7:{tx:21.8,tn:15.4,tg:18.4,rr:72.4,sq:232.1},8:{tx:22.0,tn:15.6,tg:18.6,rr:81.8,sq:217.0},9:{tx:19.0,tn:13.4,tg:16.1,rr:73.6,sq:170.8},10:{tx:14.8,tn:10.1,tg:12.4,rr:73.8,sq:127.0},11:{tx:10.4,tn:6.5,tg:8.5,rr:78.9,sq:77.4},12:{tx:7.2,tn:3.5,tg:5.4,rr:75.7,sq:62.5}},
-  380: {1:{tx:5.7,tn:0.5,tg:3.2,rr:63.8,sq:66.9},2:{tx:6.7,tn:0.7,tg:3.7,rr:57.6,sq:86.0},3:{tx:10.7,tn:2.7,tg:6.6,rr:54.6,sq:138.5},4:{tx:15.0,tn:5.0,tg:10.1,rr:41.0,sq:180.8},5:{tx:18.8,tn:8.7,tg:13.8,rr:57.7,sq:208.7},6:{tx:21.7,tn:11.7,tg:16.8,rr:68.9,sq:205.5},7:{tx:23.8,tn:13.8,tg:18.8,rr:72.8,sq:209.0},8:{tx:23.5,tn:13.4,tg:18.4,rr:82.8,sq:197.5},9:{tx:19.7,tn:10.6,tg:15.0,rr:57.5,sq:157.0},10:{tx:14.8,tn:7.3,tg:11.0,rr:63.6,sq:118.2},11:{tx:9.7,tn:3.8,tg:6.8,rr:62.2,sq:74.1},12:{tx:6.3,tn:1.4,tg:4.0,rr:74.3,sq:53.5}},
-  330: {1:{tx:6.5,tn:2.3,tg:4.4,rr:69.1,sq:74.6},2:{tx:7.1,tn:2.0,tg:4.5,rr:65.2,sq:100.8},3:{tx:10.1,tn:3.8,tg:6.8,rr:54.0,sq:155.4},4:{tx:14.0,tn:6.2,tg:9.8,rr:37.5,sq:217.0},5:{tx:17.1,tn:9.4,tg:13.1,rr:52.8,sq:241.7},6:{tx:19.5,tn:12.2,tg:15.7,rr:62.0,sq:232.6},7:{tx:21.5,tn:14.5,tg:18.0,rr:76.2,sq:231.9},8:{tx:22.2,tn:14.7,tg:18.3,rr:100.7,sq:216.4},9:{tx:19.4,tn:12.5,tg:15.8,rr:87.4,sq:167.9},10:{tx:15.1,tn:9.2,tg:12.0,rr:88.6,sq:121.0},11:{tx:10.4,tn:5.6,tg:8.2,rr:94.4,sq:70.4},12:{tx:7.2,tn:3.1,tg:5.2,rr:83.9,sq:56.8}},
-  344: {1:{tx:6.4,tn:1.3,tg:4.0,rr:70.8,sq:69.6},2:{tx:7.1,tn:1.1,tg:4.3,rr:65.9,sq:89.9},3:{tx:10.3,tn:2.7,tg:6.7,rr:56.5,sq:143.4},4:{tx:14.3,tn:4.8,tg:9.7,rr:42.1,sq:192.9},5:{tx:17.9,tn:8.1,tg:13.2,rr:55.7,sq:226.2},6:{tx:20.6,tn:11.0,tg:16.0,rr:68.6,sq:216.0},7:{tx:22.7,tn:13.4,tg:18.2,rr:78.6,sq:221.2},8:{tx:22.6,tn:13.2,tg:18.0,rr:91.9,sq:202.5},9:{tx:19.3,tn:10.7,tg:15.1,rr:90.3,sq:152.9},10:{tx:14.9,tn:7.6,tg:11.4,rr:87.3,sq:115.1},11:{tx:10.2,tn:4.4,tg:7.5,rr:87.6,sq:66.8},12:{tx:7.0,tn:1.9,tg:4.7,rr:86.2,sq:55.5}}
+  260:{1:{tx:6.1,tn:0.9,tg:3.6,rr:70.8,sq:66.6},2:{tx:7.0,tn:0.7,tg:3.9,rr:63.1,sq:89.6},3:{tx:10.5,tn:2.4,tg:6.5,rr:57.8,sq:139.4},4:{tx:14.8,tn:4.5,tg:9.8,rr:41.6,sq:189.2},5:{tx:18.3,tn:8.0,tg:13.4,rr:59.3,sq:217.5},6:{tx:20.9,tn:10.8,tg:16.2,rr:70.5,sq:207.1},7:{tx:23.1,tn:13.0,tg:18.3,rr:85.2,sq:213.9},8:{tx:22.9,tn:12.5,tg:17.9,rr:83.6,sq:196.3},9:{tx:19.5,tn:10.0,tg:14.7,rr:77.9,sq:152.8},10:{tx:14.8,tn:7.1,tg:10.9,rr:81.1,sq:119.3},11:{tx:9.9,tn:3.9,tg:7.0,rr:80.0,sq:67.4},12:{tx:6.7,tn:1.6,tg:4.2,rr:83.8,sq:55.5}},
+  235:{1:{tx:6.0,tn:1.7,tg:4.0,rr:65.6,sq:70.2},2:{tx:6.2,tn:1.4,tg:3.9,rr:50.1,sq:97.8},3:{tx:8.7,tn:3.0,tg:5.9,rr:43.7,sq:155.7},4:{tx:12.4,tn:5.5,tg:9.0,rr:34.9,sq:214.5},5:{tx:15.8,tn:9.0,tg:12.4,rr:42.0,sq:246.6},6:{tx:18.5,tn:11.8,tg:15.2,rr:58.7,sq:230.4},7:{tx:20.8,tn:14.1,tg:17.5,rr:62.5,sq:240.5},8:{tx:21.1,tn:14.4,tg:17.8,rr:89.1,sq:219.7},9:{tx:18.3,tn:12.1,tg:15.4,rr:84.7,sq:161.2},10:{tx:14.3,tn:8.7,tg:11.6,rr:96.5,sq:122.1},11:{tx:10.0,tn:5.2,tg:7.8,rr:83.5,sq:68.5},12:{tx:7.0,tn:2.6,tg:5.0,rr:75.3,sq:60.6}},
+  280:{1:{tx:5.2,tn:0.1,tg:2.8,rr:72.7,sq:60.7},2:{tx:6.0,tn:-0.1,tg:3.0,rr:54.7,sq:86.1},3:{tx:9.5,tn:1.4,tg:5.5,rr:54.1,sq:139.0},4:{tx:14.2,tn:3.7,tg:9.0,rr:41.3,sq:188.7},5:{tx:17.6,tn:7.0,tg:12.5,rr:57.9,sq:218.0},6:{tx:20.4,tn:9.9,tg:15.4,rr:65.0,sq:198.6},7:{tx:22.7,tn:12.2,tg:17.5,rr:85.0,sq:212.3},8:{tx:22.6,tn:11.9,tg:17.3,rr:77.8,sq:196.3},9:{tx:19.0,tn:9.4,tg:14.1,rr:75.4,sq:150.7},10:{tx:14.2,tn:6.3,tg:10.3,rr:71.4,sq:112.9},11:{tx:9.0,tn:3.2,tg:6.3,rr:70.0,sq:63.4},12:{tx:5.9,tn:0.8,tg:3.5,rr:79.4,sq:56.1}},
+  310:{1:{tx:6.4,tn:2.6,tg:4.5,rr:58.9,sq:76.3},2:{tx:6.8,tn:2.6,tg:4.6,rr:52.8,sq:99.0},3:{tx:9.6,tn:4.4,tg:6.8,rr:44.6,sq:155.5},4:{tx:13.3,tn:6.9,tg:9.8,rr:35.0,sq:207.5},5:{tx:16.8,tn:10.2,tg:13.3,rr:49.4,sq:233.8},6:{tx:19.6,tn:13.0,tg:16.1,rr:62.0,sq:230.1},7:{tx:21.8,tn:15.4,tg:18.4,rr:72.4,sq:232.1},8:{tx:22.0,tn:15.6,tg:18.6,rr:81.8,sq:217.0},9:{tx:19.0,tn:13.4,tg:16.1,rr:73.6,sq:170.8},10:{tx:14.8,tn:10.1,tg:12.4,rr:73.8,sq:127.0},11:{tx:10.4,tn:6.5,tg:8.5,rr:78.9,sq:77.4},12:{tx:7.2,tn:3.5,tg:5.4,rr:75.7,sq:62.5}},
+  380:{1:{tx:5.7,tn:0.5,tg:3.2,rr:63.8,sq:66.9},2:{tx:6.7,tn:0.7,tg:3.7,rr:57.6,sq:86.0},3:{tx:10.7,tn:2.7,tg:6.6,rr:54.6,sq:138.5},4:{tx:15.0,tn:5.0,tg:10.1,rr:41.0,sq:180.8},5:{tx:18.8,tn:8.7,tg:13.8,rr:57.7,sq:208.7},6:{tx:21.7,tn:11.7,tg:16.8,rr:68.9,sq:205.5},7:{tx:23.8,tn:13.8,tg:18.8,rr:72.8,sq:209.0},8:{tx:23.5,tn:13.4,tg:18.4,rr:82.8,sq:197.5},9:{tx:19.7,tn:10.6,tg:15.0,rr:57.5,sq:157.0},10:{tx:14.8,tn:7.3,tg:11.0,rr:63.6,sq:118.2},11:{tx:9.7,tn:3.8,tg:6.8,rr:62.2,sq:74.1},12:{tx:6.3,tn:1.4,tg:4.0,rr:74.3,sq:53.5}},
+  330:{1:{tx:6.5,tn:2.3,tg:4.4,rr:69.1,sq:74.6},2:{tx:7.1,tn:2.0,tg:4.5,rr:65.2,sq:100.8},3:{tx:10.1,tn:3.8,tg:6.8,rr:54.0,sq:155.4},4:{tx:14.0,tn:6.2,tg:9.8,rr:37.5,sq:217.0},5:{tx:17.1,tn:9.4,tg:13.1,rr:52.8,sq:241.7},6:{tx:19.5,tn:12.2,tg:15.7,rr:62.0,sq:232.6},7:{tx:21.5,tn:14.5,tg:18.0,rr:76.2,sq:231.9},8:{tx:22.2,tn:14.7,tg:18.3,rr:100.7,sq:216.4},9:{tx:19.4,tn:12.5,tg:15.8,rr:87.4,sq:167.9},10:{tx:15.1,tn:9.2,tg:12.0,rr:88.6,sq:121.0},11:{tx:10.4,tn:5.6,tg:8.2,rr:94.4,sq:70.4},12:{tx:7.2,tn:3.1,tg:5.2,rr:83.9,sq:56.8}},
+  344:{1:{tx:6.4,tn:1.3,tg:4.0,rr:70.8,sq:69.6},2:{tx:7.1,tn:1.1,tg:4.3,rr:65.9,sq:89.9},3:{tx:10.3,tn:2.7,tg:6.7,rr:56.5,sq:143.4},4:{tx:14.3,tn:4.8,tg:9.7,rr:42.1,sq:192.9},5:{tx:17.9,tn:8.1,tg:13.2,rr:55.7,sq:226.2},6:{tx:20.6,tn:11.0,tg:16.0,rr:68.6,sq:216.0},7:{tx:22.7,tn:13.4,tg:18.2,rr:78.6,sq:221.2},8:{tx:22.6,tn:13.2,tg:18.0,rr:91.9,sq:202.5},9:{tx:19.3,tn:10.7,tg:15.1,rr:90.3,sq:152.9},10:{tx:14.9,tn:7.6,tg:11.4,rr:87.3,sq:115.1},11:{tx:10.2,tn:4.4,tg:7.5,rr:87.6,sq:66.8},12:{tx:7.0,tn:1.9,tg:4.7,rr:86.2,sq:55.5}}
 };
-var NM = ALLE_NM[344];
+
 var ND=['zo','ma','di','wo','do','vr','za'];
 var D={}, J=new Date().getFullYear(), M=new Date().getMonth()+1;
+var hSt = STATIONS[6]; // Rotterdam default
 
-(function(){
-  var s=document.getElementById('sj');
-  for(var j=J;j>=1957;j--){var o=document.createElement('option');o.value=o.textContent=j;s.appendChild(o);}
-})();
+function vulStations() {
+  var sel = document.getElementById('ss');
+  for (var i = 0; i < STATIONS.length; i++) {
+    var o = document.createElement('option');
+    o.value = i; o.textContent = STATIONS[i].naam;
+    if (STATIONS[i].nr === 344) o.selected = true;
+    sel.appendChild(o);
+  }
+}
 
-function sync(){document.getElementById('sm').value=M;document.getElementById('sj').value=J;}
-function sel(){M=+document.getElementById('sm').value;J=+document.getElementById('sj').value;toon();}
-function nav(d){M+=d;if(M>12){M=1;J++;}if(M<1){M=12;J--;}sync();toon();}
+function vulJaren() {
+  var sel = document.getElementById('sj');
+  for (var j = J; j >= 1957; j--) {
+    var o = document.createElement('option');
+    o.value = o.textContent = j;
+    sel.appendChild(o);
+  }
+}
 
-function idx(){
-  var ms=String(M).padStart(2,'0'), ix={}, ks=Object.keys(D);
-  for(var i=0;i<ks.length;i++){
-    var k=ks[i]; if(k.slice(5,7)!==ms) continue;
-    var j=+k.slice(0,4); if(j===J) continue;
-    if(!ix[j]) ix[j]={tx:[],tn:[],tg:[],rr:[],sq:[]};
-    var o=D[k];
-    if(o.tx!=null)ix[j].tx.push(o.tx);
-    if(o.tn!=null)ix[j].tn.push(o.tn);
-    if(o.tg!=null)ix[j].tg.push(o.tg);
-    if(o.rr!=null)ix[j].rr.push(o.rr);
-    if(o.sq!=null)ix[j].sq.push(o.sq);
+function sync() {
+  document.getElementById('sm').value = M;
+  document.getElementById('sj').value = J;
+}
+
+function sel() {
+  M = +document.getElementById('sm').value;
+  J = +document.getElementById('sj').value;
+  toon();
+}
+
+function nav(d) {
+  M += d;
+  if (M > 12) { M = 1; J++; }
+  if (M < 1)  { M = 12; J--; }
+  sync(); toon();
+}
+
+function wisselStation() {
+  var i = +document.getElementById('ss').value;
+  hSt = STATIONS[i];
+  laadData();
+}
+
+function laadData() {
+  document.getElementById('msg').style.display = '';
+  document.getElementById('msg').textContent = 'Laden...';
+  document.getElementById('tbl').style.display = 'none';
+  D = {};
+  fetch(hSt.file + '?t=' + Date.now())
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j) {
+      D = j.data || {};
+      document.getElementById('bw').textContent = hSt.naam + ' (0' + hSt.nr + ') · ' + (j.bijgewerkt || '');
+      toon();
+    })
+    .catch(function(e) { document.getElementById('msg').textContent = 'Fout: ' + e.message; });
+}
+
+function bouwIdx() {
+  var ms = String(M).padStart(2,'0'), ix = {}, ks = Object.keys(D);
+  for (var i = 0; i < ks.length; i++) {
+    var k = ks[i];
+    if (k.slice(5,7) !== ms) continue;
+    var j = +k.slice(0,4);
+    if (j === J) continue;
+    if (!ix[j]) ix[j] = {tx:[],tn:[],tg:[],rr:[],sq:[]};
+    var o = D[k];
+    if (o.tx!=null) ix[j].tx.push(o.tx);
+    if (o.tn!=null) ix[j].tn.push(o.tn);
+    if (o.tg!=null) ix[j].tg.push(o.tg);
+    if (o.rr!=null) ix[j].rr.push(o.rr);
+    if (o.sq!=null) ix[j].sq.push(o.sq);
   }
   return ix;
 }
 
-function rang(val,veld,hoger,ix){
-  if(val==null) return '';
-  var v=[], ks=Object.keys(ix);
-  for(var i=0;i<ks.length;i++){
-    var a=ix[ks[i]][veld]||[];
-    if(a.length<25) continue;
-    var s=0; for(var j=0;j<a.length;j++) s+=a[j];
-    v.push(['tx','tn','tg'].indexOf(veld)>=0 ? s/a.length : s);
+function rang(val, veld, hoger, ix) {
+  if (val == null) return '';
+  var v = [], ks = Object.keys(ix);
+  for (var i = 0; i < ks.length; i++) {
+    var a = ix[ks[i]][veld] || [];
+    if (a.length < 25) continue;
+    var s = 0; for (var j = 0; j < a.length; j++) s += a[j];
+    v.push(['tx','tn','tg'].indexOf(veld) >= 0 ? s/a.length : s);
   }
-  if(!v.length) return '';
-  var r=1; for(var i=0;i<v.length;i++){if(hoger&&v[i]>val)r++;if(!hoger&&v[i]<val)r++;}
-  return '<span class="rng">#'+r+'/'+(v.length+1)+'</span>';
+  if (!v.length) return '';
+  var r = 1;
+  for (var i = 0; i < v.length; i++) {
+    if (hoger && v[i] > val) r++;
+    if (!hoger && v[i] < val) r++;
+  }
+  return '<span class="rng">#' + r + '/' + (v.length + 1) + '</span>';
 }
 
-function ds(val,nm){
-  if(val==null||nm==null) return '';
-  var d=val-nm, s=d>=0?'+':'', c=d>0.05?'dp':d<-0.05?'dm':'';
-  return ' <span class="'+c+'">'+s+d.toFixed(1)+'</span>';
+function ds(val, nm) {
+  if (val == null || nm == null) return '';
+  var d = val - nm, s = d >= 0 ? '+' : '', c = d > 0.05 ? 'dp' : d < -0.05 ? 'dm' : '';
+  return ' <span class="' + c + '">' + s + d.toFixed(1) + '</span>';
 }
 
-function f(v){return v!=null?v.toFixed(1):'&#8211;';}
+function f(v) { return v != null ? v.toFixed(1) : '&#8211;'; }
 
-function toon(){
+function toon() {
   sync();
-  var vd=new Date().toISOString().slice(0,10);
-  var n=NM[M]||{}, ad=new Date(J,M,0).getDate(), ms=String(M).padStart(2,'0');
-  var tx=[],tn=[],tg=[],rr=[],sq=[];
-  var rows=[];
-  for(var d=1;d<=ad;d++){
-    var k=J+'-'+ms+'-'+String(d).padStart(2,'0');
-    var o=D[k]||null;
-    rows.push({d:d,k:k,o:o,vd:k===vd,tk:k>vd});
-    if(!o) continue;
-    if(o.tx!=null)tx.push(o.tx);
-    if(o.tn!=null)tn.push(o.tn);
-    if(o.tg!=null)tg.push(o.tg);
-    if(o.rr!=null)rr.push(o.rr);
-    if(o.sq!=null)sq.push(o.sq);
-  }
-  function gm(a){if(!a.length)return null;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
-  function sm(a){if(!a.length)return null;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s;}
-  var txG=gm(tx),tnG=gm(tn),tgG=gm(tg),rrS=sm(rr),sqS=sm(sq);
+  var vd = new Date().toISOString().slice(0,10);
+  var nm = (ALLE_NM[hSt.nr] || {})[M] || {};
+  var ad = new Date(J, M, 0).getDate();
+  var ms = String(M).padStart(2,'0');
+  var tx=[],tn=[],tg=[],rr=[],sq=[], rows=[];
 
-  document.getElementById('st').innerHTML=[
-    {c:'tx',l:'Gem. TX',v:txG,e:'°',nm:n.tx},
-    {c:'tn',l:'Gem. TN',v:tnG,e:'°',nm:n.tn},
-    {c:'tg',l:'Gem. TG',v:tgG,e:'°',nm:n.tg},
-    {c:'rr',l:'Neerslag',v:rrS,e:' mm',nm:n.rr},
-    {c:'sq',l:'Zonneschijn',v:sqS,e:' u',nm:n.sq}
-  ].map(function(s){
-    return '<div class="stat '+s.c+'"><div class="stat-lbl">'+s.l+'</div>'+
-      '<div class="stat-val">'+(s.v!=null?s.v.toFixed(1)+s.e:'&#8211;')+'</div>'+
-      (s.nm!=null?'<div class="stat-norm">Normaal: '+s.nm+s.e+ds(s.v,s.nm)+'</div>':'')+
+  for (var d = 1; d <= ad; d++) {
+    var k = J + '-' + ms + '-' + String(d).padStart(2,'0');
+    var o = D[k] || null;
+    rows.push({d:d, k:k, o:o, vd:k===vd, tk:k>vd});
+    if (!o) continue;
+    if (o.tx!=null) tx.push(o.tx);
+    if (o.tn!=null) tn.push(o.tn);
+    if (o.tg!=null) tg.push(o.tg);
+    if (o.rr!=null) rr.push(o.rr);
+    if (o.sq!=null) sq.push(o.sq);
+  }
+
+  function gm(a) { if (!a.length) return null; var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s/a.length; }
+  function sm(a) { if (!a.length) return null; var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s; }
+
+  var txG=gm(tx), tnG=gm(tn), tgG=gm(tg), rrS=sm(rr), sqS=sm(sq);
+
+  document.getElementById('st').innerHTML = [
+    {c:'tx',l:'Gem. TX',v:txG,e:'°',nm:nm.tx},
+    {c:'tn',l:'Gem. TN',v:tnG,e:'°',nm:nm.tn},
+    {c:'tg',l:'Gem. TG',v:tgG,e:'°',nm:nm.tg},
+    {c:'rr',l:'Neerslag',v:rrS,e:' mm',nm:nm.rr},
+    {c:'sq',l:'Zonneschijn',v:sqS,e:' u',nm:nm.sq}
+  ].map(function(s) {
+    return '<div class="stat ' + s.c + '"><div class="stat-lbl">' + s.l + '</div>' +
+      '<div class="stat-val">' + (s.v!=null ? s.v.toFixed(1)+s.e : '&#8211;') + '</div>' +
+      (s.nm!=null ? '<div class="stat-norm">Normaal: ' + s.nm + s.e + ds(s.v,s.nm) + '</div>' : '') +
       '</div>';
   }).join('');
 
-  var mxR=Math.max.apply(null,rr.length?rr:[0.1]);
-  var mxS=Math.max.apply(null,sq.length?sq:[0.1]);
-  var h='';
-  for(var i=0;i<rows.length;i++){
-    var r=rows[i], dt=new Date(r.k+'T12:00:00');
-    var cl=r.vd?'vd':r.tk?'tk':'';
-    var dn=ND[dt.getDay()]+' '+r.d+(r.vd?' &#8592;':'');
-    if(!r.o){h+='<tr class="'+cl+'"><td>'+dn+'</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td></tr>';continue;}
-    var o=r.o;
-    var rB=o.rr!=null?'<span class="bar brr" style="width:'+Math.min(o.rr/mxR*50,50).toFixed(0)+'px"></span>'+o.rr.toFixed(1):'&#8211;';
-    var sB=o.sq!=null?'<span class="bar bsq" style="width:'+Math.min(o.sq/mxS*50,50).toFixed(0)+'px"></span>'+o.sq.toFixed(1)+'u':'&#8211;';
-    h+='<tr class="'+cl+'"><td>'+dn+'</td><td class="tx">'+f(o.tx)+'°</td><td class="tn">'+f(o.tn)+'°</td><td>'+(o.tg!=null?o.tg.toFixed(1)+'°':'&#8211;')+'</td><td class="rr">'+rB+'</td><td class="sq">'+sB+'</td></tr>';
+  var mxR = Math.max.apply(null, rr.length ? rr : [0.1]);
+  var mxS = Math.max.apply(null, sq.length ? sq : [0.1]);
+  var h = '';
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i], dt = new Date(r.k+'T12:00:00');
+    var cl = r.vd ? 'vd' : r.tk ? 'tk' : '';
+    var dn = ND[dt.getDay()] + ' ' + r.d + (r.vd ? ' &#8592;' : '');
+    if (!r.o) { h += '<tr class="'+cl+'"><td>'+dn+'</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td></tr>'; continue; }
+    var o = r.o;
+    var rB = o.rr!=null ? '<span class="bar brr" style="width:'+Math.min(o.rr/mxR*50,50).toFixed(0)+'px"></span>'+o.rr.toFixed(1) : '&#8211;';
+    var sB = o.sq!=null ? '<span class="bar bsq" style="width:'+Math.min(o.sq/mxS*50,50).toFixed(0)+'px"></span>'+o.sq.toFixed(1)+'u' : '&#8211;';
+    h += '<tr class="'+cl+'"><td>'+dn+'</td><td class="tx">'+f(o.tx)+'°</td><td class="tn">'+f(o.tn)+'°</td><td>'+(o.tg!=null?o.tg.toFixed(1)+'°':'&#8211;')+'</td><td class="rr">'+rB+'</td><td class="sq">'+sB+'</td></tr>';
   }
-  document.getElementById('tb').innerHTML=h;
+  document.getElementById('tb').innerHTML = h;
 
-  var ix=idx();
-  document.getElementById('tf').innerHTML='<tr>'+
-    '<td>Gem/som ('+tx.length+' dgn)</td>'+
-    '<td class="tx">'+(txG!=null?txG.toFixed(1)+'°'+rang(txG,'tx',true,ix):'&#8211;')+'</td>'+
-    '<td class="tn">'+(tnG!=null?tnG.toFixed(1)+'°'+rang(tnG,'tn',true,ix):'&#8211;')+'</td>'+
-    '<td>'+(tgG!=null?tgG.toFixed(1)+'°'+rang(tgG,'tg',true,ix):'&#8211;')+'</td>'+
-    '<td class="rr">'+(rrS!=null?rrS.toFixed(1)+' mm'+rang(rrS,'rr',false,ix):'&#8211;')+'</td>'+
-    '<td class="sq">'+(sqS!=null?sqS.toFixed(1)+' u'+rang(sqS,'sq',true,ix):'&#8211;')+'</td>'+
+  var ix = bouwIdx();
+  document.getElementById('tf').innerHTML = '<tr>' +
+    '<td>Gem/som ('+tx.length+' dgn)</td>' +
+    '<td class="tx">'+(txG!=null?txG.toFixed(1)+'°'+rang(txG,'tx',true,ix):'&#8211;')+'</td>' +
+    '<td class="tn">'+(tnG!=null?tnG.toFixed(1)+'°'+rang(tnG,'tn',true,ix):'&#8211;')+'</td>' +
+    '<td>'+(tgG!=null?tgG.toFixed(1)+'°'+rang(tgG,'tg',true,ix):'&#8211;')+'</td>' +
+    '<td class="rr">'+(rrS!=null?rrS.toFixed(1)+' mm'+rang(rrS,'rr',false,ix):'&#8211;')+'</td>' +
+    '<td class="sq">'+(sqS!=null?sqS.toFixed(1)+' u'+rang(sqS,'sq',true,ix):'&#8211;')+'</td>' +
     '</tr>';
 
-  document.getElementById('msg').style.display='none';
-  document.getElementById('tbl').style.display='';
+  document.getElementById('msg').style.display = 'none';
+  document.getElementById('tbl').style.display = '';
 }
 
 vulStations();
+vulJaren();
 sync();
 laadData();
 </script>
