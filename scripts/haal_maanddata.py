@@ -52,9 +52,8 @@ def parse_zip(tekst):
                 'tx': getal('TX'),
                 'tn': getal('TN'),
                 'tg': getal('TG'),
-                'rr': getal('RR'),
+                'rr': getal('RH'),   # neerslag som (kolom RH in KNMI ZIP)
                 'sq': getal('SQ'),
-                'fx': getal('FXX'),  # max windstoot in 0.1 m/s (KNMI kolom FXX)
                 'ug': getal('UG', 1),  # relatieve vochtigheid %
                 'pg': getal('PG', 10), # gem luchtdruk hPa
             }
