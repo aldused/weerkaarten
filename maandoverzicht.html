@@ -194,7 +194,15 @@ tfoot td.fx { color: #cc99ff; }
 
 <div class="maand-nav">
   <span class="nav-pijl" onclick="navigeer(-1)">◀</span>
-  <span class="maand-titel" id="maand-titel">Laden...</span>
+  <select id="sel-maand" onchange="selectMaand()" style="background:#1a3a6b;color:white;border:1px solid #2ec4e8;border-radius:4px;padding:4px 8px;font-size:13px;font-weight:600;cursor:pointer;">
+    <option value="1">Januari</option><option value="2">Februari</option>
+    <option value="3">Maart</option><option value="4">April</option>
+    <option value="5">Mei</option><option value="6">Juni</option>
+    <option value="7">Juli</option><option value="8">Augustus</option>
+    <option value="9">September</option><option value="10">Oktober</option>
+    <option value="11">November</option><option value="12">December</option>
+  </select>
+  <select id="sel-jaar" onchange="selectMaand()" style="background:#1a3a6b;color:white;border:1px solid #2ec4e8;border-radius:4px;padding:4px 8px;font-size:13px;font-weight:600;cursor:pointer;"></select>
   <span class="nav-pijl" onclick="navigeer(1)">▶</span>
 </div>
 
@@ -265,10 +273,34 @@ function init() {
   huidigMaand = nu.getMonth() + 1;
 }
 
+function vulJaarDropdown() {
+  const sel = document.getElementById("sel-jaar");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const nu = new Date().getFullYear();
+  for (let j = nu; j >= 1957; j--) {
+    const opt = document.createElement("option");
+    opt.value = j; opt.textContent = j;
+    if (j === huidigJaar) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+function selectMaand() {
+  huidigMaand = parseInt(document.getElementById("sel-maand").value);
+  huidigJaar  = parseInt(document.getElementById("sel-jaar").value);
+  toon();
+}
+function updateDropdowns() {
+  const sm = document.getElementById("sel-maand");
+  const sj = document.getElementById("sel-jaar");
+  if (sm) sm.value = huidigMaand;
+  if (sj) sj.value = huidigJaar;
+}
 function navigeer(delta) {
   huidigMaand += delta;
   if (huidigMaand > 12) { huidigMaand = 1; huidigJaar++; }
   if (huidigMaand < 1)  { huidigMaand = 12; huidigJaar--; }
+  updateDropdowns();
   toon();
 }
 
@@ -324,9 +356,9 @@ function toon() {
   const rrSom = som(rrLijst), sqSom = som(sqLijst);
 
   document.getElementById("samenvatting").innerHTML = [
-    { lbl:"Gem. TX", val: txGem, fmt: v=>`${v.toFixed(1)}°`, kleur:"rood",  normVal: norm.tx, eenheid:"°" },
-    { lbl:"Gem. TN", val: tnGem, fmt: v=>`${v.toFixed(1)}°`, kleur:"blauw", normVal: norm.tn, eenheid:"°" },
-    { lbl:"Gem. TG", val: tgGem, fmt: v=>`${v.toFixed(1)}°`, kleur:"",      normVal: norm.tg, eenheid:"°" },
+    { lbl:"Gem. TX", val: txGem, fmt: v=>`${v.toFixed(1)}`, kleur:"rood",  normVal: norm.tx, eenheid:"°" },
+    { lbl:"Gem. TN", val: tnGem, fmt: v=>`${v.toFixed(1)}`, kleur:"blauw", normVal: norm.tn, eenheid:"°" },
+    { lbl:"Gem. TG", val: tgGem, fmt: v=>`${v.toFixed(1)}`, kleur:"",      normVal: norm.tg, eenheid:"°" },
     { lbl:"Neerslag", val: rrSom, fmt: v=>`${v.toFixed(1)}`, kleur:"groen", normVal: norm.rr, eenheid:" mm" },
     { lbl:"Zonneschijn", val: sqSom, fmt: v=>`${v.toFixed(1)}`, kleur:"geel", normVal: norm.sq, eenheid:" u" },
   ].map(s => {
@@ -357,7 +389,7 @@ function toon() {
     const fx = obj ? vindWaarde(obj, "fx") : null;
     const cls = isVandaag ? "vandaag" : isToekomst ? "ontbreekt" : "";
     const fmt1 = v => v !== null ? v.toFixed(1) : "–";
-    const fxKmh = v => v !== null ? v.toFixed(0) : "–";  // al in km/h na conversie
+    const fxKmh = v => v !== null ? (v * 0.36).toFixed(0) : "–";  // 0.1 m/s → km/h
     const rrBar = rr !== null ? `<div class="bar-wrap">
       <div class="bar rr-kleur" style="width:${Math.min(rr/maxRR*60,60).toFixed(0)}px"></div>
       <span class="bar-val rr">${rr.toFixed(1)}</span></div>` : '–';
@@ -396,6 +428,8 @@ function toon() {
 
 // Laden
 init();
+vulJaarDropdown();
+updateDropdowns();
 fetch("maanddata_344.json?t=" + Date.now())
   .then(r => r.json())
   .then(json => {
