@@ -240,21 +240,36 @@ tfoot td.fx { color: #cc99ff; }
 </div>
 
 <script>
-// Klimaatnormaal Rotterdam Airport 1991-2020
-const NORMAAL = {
-  1:  { tx:5.2,  tn:0.7,  tg:3.0,  rr:73,  sq:51  },
-  2:  { tx:6.1,  tn:0.9,  tg:3.5,  rr:55,  sq:72  },
-  3:  { tx:10.2, tn:3.2,  tg:6.7,  rr:69,  sq:116 },
-  4:  { tx:14.0, tn:5.8,  tg:9.9,  rr:47,  sq:165 },
-  5:  { tx:18.0, tn:9.4,  tg:13.7, rr:61,  sq:209 },
-  6:  { tx:21.0, tn:12.3, tg:16.6, rr:68,  sq:210 },
-  7:  { tx:23.1, tn:14.3, tg:18.7, rr:72,  sq:211 },
-  8:  { tx:23.0, tn:14.3, tg:18.6, rr:77,  sq:193 },
-  9:  { tx:19.4, tn:11.5, tg:15.4, rr:79,  sq:143 },
-  10: { tx:14.7, tn:7.8,  tg:11.2, rr:87,  sq:90  },
-  11: { tx:9.4,  tn:3.8,  tg:6.6,  rr:83,  sq:47  },
-  12: { tx:6.5,  tn:1.6,  tg:4.0,  rr:81,  sq:35  },
-};
+// Klimaatnormaal wordt dynamisch berekend uit data 1991-2020
+let NORMAAL = {};
+function berekenNormaal() {
+  NORMAAL = {};
+  for (let m = 1; m <= 12; m++) {
+    const tx=[], tn=[], tg=[], rr=[], sq=[];
+    for (let jaar = 1991; jaar <= 2020; jaar++) {
+      const maandStr = `${jaar}-${String(m).padStart(2,'0')}`;
+      const dagen = Object.entries(dagData)
+        .filter(([k]) => k.startsWith(maandStr))
+        .map(([,v]) => v);
+      if (dagen.length < 25) continue;
+      const gemArr = (arr, fn) => { const v=arr.map(fn).filter(x=>x!==null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; };
+      const somArr = (arr, fn) => { const v=arr.map(fn).filter(x=>x!==null); return v.length>=25?v.reduce((a,b)=>a+b,0):null; };
+      const txG = gemArr(dagen, d=>d?.tx??null);
+      const tnG = gemArr(dagen, d=>d?.tn??null);
+      const tgG = gemArr(dagen, d=>d?.tg??null);
+      const rrS = somArr(dagen, d=>d?.rr??null);
+      const sqS = somArr(dagen, d=>d?.sq??null);
+      if (txG!==null) tx.push(txG);
+      if (tnG!==null) tn.push(tnG);
+      if (tgG!==null) tg.push(tgG);
+      if (rrS!==null) rr.push(rrS);
+      if (sqS!==null) sq.push(sqS);
+    }
+    const gem = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*10)/10 : null;
+    const gemSom = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+    NORMAAL[m] = { tx:gem(tx), tn:gem(tn), tg:gem(tg), rr:gemSom(rr), sq:gemSom(sq) };
+  }
+}
 
 const NL_MAANDEN = ["","januari","februari","maart","april","mei","juni",
                     "juli","augustus","september","oktober","november","december"];
@@ -404,13 +419,63 @@ function toon() {
   // Totaalrij
   const tfoot = document.getElementById("tabel-foot");
   const n = beschikbaar.length;
+  // Rangberekening op basis van alle historische jaren voor deze maand
+  function berekenRang(huidigVal, jaren, extraheer, hoger_is_beter) {
+    if (huidigVal === null) return null;
+    const vals = [];
+    for (const [key, dagObj] of Object.entries(dagData)) {
+      const d = new Date(key + 'T12:00:00');
+      if (d.getMonth() + 1 !== huidigMaand) continue;
+      const jaar = d.getFullYear();
+      if (jaar === huidigJaar) continue;
+      // Alle dagen van dit jaar+maand
+      const maandDagen = Object.entries(dagData)
+        .filter(([k]) => k.startsWith(`${jaar}-${String(huidigMaand).padStart(2,'0')}-`))
+        .map(([,v]) => v);
+      if (maandDagen.length < 20) continue; // sla incomplete maanden over
+      const v = extraheer(maandDagen);
+      if (v !== null) vals.push({jaar, v});
+    }
+    // Dedupliceer op jaar
+    const jarenMap = {};
+    for (const {jaar, v} of vals) jarenMap[jaar] = v;
+    const alleVals = Object.values(jarenMap);
+    if (alleVals.length === 0) return null;
+    const rang = hoger_is_beter
+      ? alleVals.filter(v => v > huidigVal).length + 1
+      : alleVals.filter(v => v < huidigVal).length + 1;
+    return { rang, totaal: alleVals.length + 1 };
+  }
+
+  function gemTG(dagen) {
+    const tgs = dagen.map(d => d && d.tg !== undefined && d.tg !== null ? d.tg : null).filter(v => v !== null);
+    return tgs.length >= 20 ? tgs.reduce((a,b)=>a+b,0)/tgs.length : null;
+  }
+  function somRR(dagen) {
+    const rrs = dagen.map(d => d && d.rr !== undefined && d.rr !== null ? d.rr : null).filter(v => v !== null);
+    return rrs.length >= 20 ? rrs.reduce((a,b)=>a+b,0) : null;
+  }
+  function somSQ(dagen) {
+    const sqs = dagen.map(d => d && d.sq !== undefined && d.sq !== null ? d.sq : null).filter(v => v !== null);
+    return sqs.length >= 20 ? sqs.reduce((a,b)=>a+b,0) : null;
+  }
+
+  const rangTG = n >= 20 ? berekenRang(tgGem, dagData, gemTG, true) : null;
+  const rangRR = n >= 20 ? berekenRang(rrSom, dagData, somRR, false) : null;
+  const rangSQ = n >= 20 ? berekenRang(sqSom, dagData, somSQ, true) : null;
+
+  function rangStr(r) {
+    if (!r) return '';
+    return ` <span style="font-size:10px;font-weight:400;opacity:0.8">#${r.rang}/${r.totaal}</span>`;
+  }
+
   tfoot.innerHTML = `<tr>
     <td>Gem/som (${n} dgn)</td>
     <td class="tx">${txGem !== null ? txGem.toFixed(1)+'°' : '–'}</td>
     <td class="tn">${tnGem !== null ? tnGem.toFixed(1)+'°' : '–'}</td>
-    <td class="tg">${tgGem !== null ? tgGem.toFixed(1)+'°' : '–'}</td>
-    <td class="rr">${rrSom !== null ? rrSom.toFixed(1)+' mm' : '–'}</td>
-    <td class="sq">${sqSom !== null ? sqSom.toFixed(1)+' u' : '–'}</td>
+    <td class="tg">${tgGem !== null ? tgGem.toFixed(1)+'°'+rangStr(rangTG) : '–'}</td>
+    <td class="rr">${rrSom !== null ? rrSom.toFixed(1)+' mm'+rangStr(rangRR) : '–'}</td>
+    <td class="sq">${sqSom !== null ? sqSom.toFixed(1)+' u'+rangStr(rangSQ) : '–'}</td>
   </tr>`;
 
   document.getElementById("status").style.display = "none";
@@ -426,6 +491,7 @@ fetch("maanddata_344.json?t=" + Date.now())
   .then(r => r.json())
   .then(json => {
     dagData = json.data || {};
+    berekenNormaal();
     document.getElementById("hdr-update").textContent =
       `Bijgewerkt: ${json.bijgewerkt || ''}`;
     toon();
