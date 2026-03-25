@@ -94,11 +94,11 @@ def haal_station(wigos, naam):
     dt  = f"{van.strftime('%Y-%m-%dT%H:%M:%SZ')}/{nu.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     params = {
         "datetime": dt,
-        "parameter-name": "ta,ff,fx,dd,t10n,vv,uu"
+        "parameter-name": "ta,ff,fx,dd,vv,rh"
     }
     try:
         r = requests.get(f"{BASE_URL}/locations/{wigos}", headers=HEADERS, params=params, timeout=15)
-        if r.status_code in (400, 403, 404): return None
+        if r.status_code in (400, 403, 404): print(f"  {naam}: HTTP {r.status_code}"); return None
         r.raise_for_status()
         js = r.json()
         if not js.get("coverages"): return None
@@ -115,9 +115,23 @@ def haal_station(wigos, naam):
         ff   = laatste("ff")
         fx   = laatste("fx")
         dd   = laatste("dd")
-        t10n = laatste("t10n")
         vv   = laatste("vv")
-        uu   = laatste("uu")
+        uu   = laatste("rh")
+
+        # t10n apart ophalen (niet alle stations)
+        t10n = None
+        try:
+            r2 = requests.get(f"{BASE_URL}/locations/{wigos}", headers=HEADERS,
+                             params={"datetime": dt, "parameter-name": "t10n"}, timeout=10)
+            if r2.status_code == 200:
+                js2 = r2.json()
+                if js2.get("coverages"):
+                    cov2 = js2["coverages"][0]
+                    vals2 = cov2.get("ranges",{}).get("t10n",{}).get("values",[])
+                    for v in reversed(vals2):
+                        if v is not None: t10n = v; break
+        except:
+            pass
 
         return {
             "naam": naam,
@@ -132,7 +146,7 @@ def haal_station(wigos, naam):
             "uu":   round(uu,   0) if uu   is not None else None,
         }
     except Exception as e:
-        print(f"  Fout {naam}: {e}")
+        print(f"  FOUT {naam}: {type(e).__name__}: {e}")
         return None
 
 print("Actuele waarnemingen ophalen...")
