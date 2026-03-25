@@ -406,50 +406,41 @@ function toon() {
   // Totaalrij
   const tfoot = document.getElementById("tabel-foot");
   const n = beschikbaar.length;
-  // Rangberekening op basis van alle historische jaren voor deze maand
-  function berekenRang(huidigVal, jaren, extraheer, hoger_is_beter) {
+  // Rangberekening: bouw maandindex op per jaar
+  function maandIndex(maand) {
+    const mStr = String(maand).padStart(2,'0');
+    const index = {};
+    for (const [key, d] of Object.entries(dagData)) {
+      if (!key.includes(`-${mStr}-`)) continue;
+      const jaar = parseInt(key.slice(0,4));
+      if (!index[jaar]) index[jaar] = {tg:[],rr:[],sq:[]};
+      if (d.tg != null) index[jaar].tg.push(d.tg);
+      if (d.rr != null) index[jaar].rr.push(d.rr);
+      if (d.sq != null) index[jaar].sq.push(d.sq);
+    }
+    return index;
+  }
+
+  function rangBerekend(huidigVal, idx, veld, hoger, minDagen) {
     if (huidigVal === null) return null;
     const vals = [];
-    for (const [key, dagObj] of Object.entries(dagData)) {
-      const d = new Date(key + 'T12:00:00');
-      if (d.getMonth() + 1 !== huidigMaand) continue;
-      const jaar = d.getFullYear();
-      if (jaar === huidigJaar) continue;
-      // Alle dagen van dit jaar+maand
-      const maandDagen = Object.entries(dagData)
-        .filter(([k]) => k.startsWith(`${jaar}-${String(huidigMaand).padStart(2,'0')}-`))
-        .map(([,v]) => v);
-      if (maandDagen.length < 20) continue; // sla incomplete maanden over
-      const v = extraheer(maandDagen);
-      if (v !== null) vals.push({jaar, v});
+    for (const [jaar, v] of Object.entries(idx)) {
+      if (parseInt(jaar) === huidigJaar) continue;
+      if (v[veld].length < minDagen) continue;
+      const som = v[veld].reduce((a,b)=>a+b,0);
+      const val = veld === 'tg' ? som/v[veld].length : som;
+      vals.push(val);
     }
-    // Dedupliceer op jaar
-    const jarenMap = {};
-    for (const {jaar, v} of vals) jarenMap[jaar] = v;
-    const alleVals = Object.values(jarenMap);
-    if (alleVals.length === 0) return null;
-    const rang = hoger_is_beter
-      ? alleVals.filter(v => v > huidigVal).length + 1
-      : alleVals.filter(v => v < huidigVal).length + 1;
-    return { rang, totaal: alleVals.length + 1 };
+    if (!vals.length) return null;
+    const rang = hoger ? vals.filter(v=>v>huidigVal).length+1 : vals.filter(v=>v<huidigVal).length+1;
+    return { rang, totaal: vals.length+1 };
   }
 
-  function gemTG(dagen) {
-    const tgs = dagen.map(d => d && d.tg !== undefined && d.tg !== null ? d.tg : null).filter(v => v !== null);
-    return tgs.length >= 20 ? tgs.reduce((a,b)=>a+b,0)/tgs.length : null;
-  }
-  function somRR(dagen) {
-    const rrs = dagen.map(d => d && d.rr !== undefined && d.rr !== null ? d.rr : null).filter(v => v !== null);
-    return rrs.length >= 20 ? rrs.reduce((a,b)=>a+b,0) : null;
-  }
-  function somSQ(dagen) {
-    const sqs = dagen.map(d => d && d.sq !== undefined && d.sq !== null ? d.sq : null).filter(v => v !== null);
-    return sqs.length >= 20 ? sqs.reduce((a,b)=>a+b,0) : null;
-  }
-
-  const rangTG = n >= 20 ? berekenRang(tgGem, dagData, gemTG, true) : null;
-  const rangRR = n >= 20 ? berekenRang(rrSom, dagData, somRR, false) : null;
-  const rangSQ = n >= 20 ? berekenRang(sqSom, dagData, somSQ, true) : null;
+  const idx = maandIndex(huidigMaand);
+  const minD = new Date(huidigJaar, huidigMaand, 0).getDate() - 2;
+  const rangTG = n >= 20 ? rangBerekend(tgGem, idx, 'tg', true, minD) : null;
+  const rangRR = n >= 20 ? rangBerekend(rrSom, idx, 'rr', false, minD) : null;
+  const rangSQ = n >= 20 ? rangBerekend(sqSom, idx, 'sq', true, minD) : null;
 
   function rangStr(r) {
     if (!r) return '';
