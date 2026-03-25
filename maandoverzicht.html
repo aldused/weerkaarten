@@ -15,7 +15,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #
 .nav-pijl:hover { color: white; }
 select { background: #1a3a6b; color: white; border: 1px solid #2ec4e8; border-radius: 4px; padding: 4px 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .stats { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px; background: white; border-bottom: 1px solid #dde6f0; }
-.stat { background: #f7fafc; border-radius: 8px; padding: 10px 14px; border-left: 3px solid #ccc; min-width: 120px; }
+.stat { background: #f7fafc; border-radius: 8px; padding: 10px 14px; border-left: 3px solid #ccc; min-width: 130px; }
 .stat.tx { border-left-color: #c0392b; }
 .stat.tn { border-left-color: #2471a3; }
 .stat.tg { border-left-color: #555; }
@@ -28,9 +28,8 @@ select { background: #1a3a6b; color: white; border: 1px solid #2ec4e8; border-ra
 .stat.rr .stat-val { color: #1a7a4a; }
 .stat.sq .stat-val { color: #e67e00; }
 .stat-norm { font-size: 10px; color: #aaa; }
-.stat-diff { font-weight: 700; }
-.stat-diff.plus { color: #c0392b; }
-.stat-diff.min { color: #2471a3; }
+.dp { color: #c0392b; font-weight: 700; }
+.dm { color: #2471a3; font-weight: 700; }
 .tbl-wrap { padding: 12px 16px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.07); min-width: 500px; }
 thead tr { background: #0d2b5e; color: white; }
@@ -38,8 +37,8 @@ thead th { padding: 8px 10px; font-size: 11px; font-weight: 600; text-align: cen
 thead th:first-child { text-align: left; }
 tbody tr:nth-child(even) { background: #f7f9fc; }
 tbody tr:hover { background: #eef3fa; }
-tbody tr.vandaag { background: #fff8e1 !important; font-weight: 600; }
-tbody tr.toekomst { opacity: 0.35; }
+tbody tr.vd { background: #fff8e1 !important; font-weight: 600; }
+tbody tr.tk { opacity: 0.35; }
 td { padding: 5px 10px; border-bottom: 1px solid #eef1f5; text-align: center; white-space: nowrap; }
 td:first-child { text-align: left; color: #2a4a70; font-weight: 600; }
 td.tx { color: #c0392b; font-weight: 700; }
@@ -47,14 +46,15 @@ td.tn { color: #2471a3; font-weight: 700; }
 td.rr { color: #1a7a4a; font-weight: 600; }
 td.sq { color: #e67e00; font-weight: 600; }
 .bar { display: inline-block; height: 9px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
-.bar.rr { background: #1a7a4a; }
-.bar.sq { background: #e67e00; }
-tfoot td { background: #0d2b5e; color: white; font-weight: 700; padding: 7px 10px; border: none; }
+.brr { background: #1a7a4a; }
+.bsq { background: #e67e00; }
+tfoot td { background: #0d2b5e; color: white; font-weight: 700; padding: 7px 10px; border: none; text-align: center; }
+tfoot td:first-child { text-align: left; }
 tfoot td.tx { color: #ffaaaa; }
 tfoot td.tn { color: #aaccff; }
 tfoot td.rr { color: #88ddaa; }
 tfoot td.sq { color: #ffcc66; }
-.rang { font-size: 10px; font-weight: 400; opacity: 0.8; margin-left: 4px; }
+.rng { font-size: 10px; font-weight: 400; opacity: 0.75; margin-left: 3px; }
 .status { padding: 40px; text-align: center; color: #7a90a8; font-size: 14px; }
 </style>
 </head>
@@ -64,12 +64,11 @@ tfoot td.sq { color: #ffcc66; }
     <div class="header-titel">Ed Aldus WM — Maandoverzicht</div>
     <div class="header-sub">Rotterdam Airport (06344) · KNMI daggegevens</div>
   </div>
-  <div id="bijgewerkt" style="font-size:11px;color:#a8c4e8;"></div>
+  <div id="bw" style="font-size:11px;color:#a8c4e8;"></div>
 </div>
-
 <div class="maand-nav">
-  <span class="nav-pijl" onclick="navigeer(-1)">◀</span>
-  <select id="sel-maand" onchange="selecteer()">
+  <span class="nav-pijl" onclick="nav(-1)">&#9664;</span>
+  <select id="sm" onchange="sel()">
     <option value="1">Januari</option><option value="2">Februari</option>
     <option value="3">Maart</option><option value="4">April</option>
     <option value="5">Mei</option><option value="6">Juni</option>
@@ -77,13 +76,12 @@ tfoot td.sq { color: #ffcc66; }
     <option value="9">September</option><option value="10">Oktober</option>
     <option value="11">November</option><option value="12">December</option>
   </select>
-  <select id="sel-jaar" onchange="selecteer()"></select>
-  <span class="nav-pijl" onclick="navigeer(1)">▶</span>
+  <select id="sj" onchange="sel()"></select>
+  <span class="nav-pijl" onclick="nav(1)">&#9654;</span>
 </div>
-
-<div class="stats" id="stats"></div>
+<div class="stats" id="st"></div>
 <div class="tbl-wrap">
-  <div class="status" id="status">Laden...</div>
+  <div class="status" id="msg">Laden...</div>
   <table id="tbl" style="display:none">
     <thead><tr>
       <th>Dag</th>
@@ -93,236 +91,143 @@ tfoot td.sq { color: #ffcc66; }
       <th style="color:#88ddaa">Neerslag</th>
       <th style="color:#ffcc66">Zon</th>
     </tr></thead>
-    <tbody id="tbody"></tbody>
-    <tfoot id="tfoot"></tfoot>
+    <tbody id="tb"></tbody>
+    <tfoot id="tf"></tfoot>
   </table>
 </div>
-
 <script>
-// Officiële KNMI normalen 1991-2020 Rotterdam Airport (344)
-const NORM = {
-  1:  {tx:6.4,  tn:1.3,  tg:4.0,  rr:70.8,  sq:69.6},
-  2:  {tx:7.1,  tn:1.1,  tg:4.3,  rr:65.9,  sq:89.9},
-  3:  {tx:10.3, tn:2.7,  tg:6.7,  rr:56.5,  sq:143.4},
-  4:  {tx:14.3, tn:4.8,  tg:9.7,  rr:42.1,  sq:192.9},
-  5:  {tx:17.9, tn:8.1,  tg:13.2, rr:55.7,  sq:226.2},
-  6:  {tx:20.6, tn:11.0, tg:16.0, rr:68.6,  sq:216.0},
-  7:  {tx:22.7, tn:13.4, tg:18.2, rr:78.6,  sq:221.2},
-  8:  {tx:22.6, tn:13.2, tg:18.0, rr:91.9,  sq:202.5},
-  9:  {tx:19.3, tn:10.7, tg:15.1, rr:90.3,  sq:152.9},
-  10: {tx:14.9, tn:7.6,  tg:11.4, rr:87.3,  sq:115.1},
-  11: {tx:10.2, tn:4.4,  tg:7.5,  rr:87.6,  sq:66.8},
-  12: {tx:7.0,  tn:1.9,  tg:4.7,  rr:86.2,  sq:55.5},
+var NM = {
+  1:{tx:6.4,tn:1.3,tg:4.0,rr:70.8,sq:69.6},
+  2:{tx:7.1,tn:1.1,tg:4.3,rr:65.9,sq:89.9},
+  3:{tx:10.3,tn:2.7,tg:6.7,rr:56.5,sq:143.4},
+  4:{tx:14.3,tn:4.8,tg:9.7,rr:42.1,sq:192.9},
+  5:{tx:17.9,tn:8.1,tg:13.2,rr:55.7,sq:226.2},
+  6:{tx:20.6,tn:11.0,tg:16.0,rr:68.6,sq:216.0},
+  7:{tx:22.7,tn:13.4,tg:18.2,rr:78.6,sq:221.2},
+  8:{tx:22.6,tn:13.2,tg:18.0,rr:91.9,sq:202.5},
+  9:{tx:19.3,tn:10.7,tg:15.1,rr:90.3,sq:152.9},
+  10:{tx:14.9,tn:7.6,tg:11.4,rr:87.3,sq:115.1},
+  11:{tx:10.2,tn:4.4,tg:7.5,rr:87.6,sq:66.8},
+  12:{tx:7.0,tn:1.9,tg:4.7,rr:86.2,sq:55.5}
 };
+var ND=['zo','ma','di','wo','do','vr','za'];
+var D={}, J=new Date().getFullYear(), M=new Date().getMonth()+1;
 
-const NL_MNDLANG = ['','Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
-const NL_DAG = ['zo','ma','di','wo','do','vr','za'];
+(function(){
+  var s=document.getElementById('sj');
+  for(var j=J;j>=1957;j--){var o=document.createElement('option');o.value=o.textContent=j;s.appendChild(o);}
+})();
 
-let data = {}, jaar = new Date().getFullYear(), maand = new Date().getMonth()+1;
+function sync(){document.getElementById('sm').value=M;document.getElementById('sj').value=J;}
+function sel(){M=+document.getElementById('sm').value;J=+document.getElementById('sj').value;toon();}
+function nav(d){M+=d;if(M>12){M=1;J++;}if(M<1){M=12;J--;}sync();toon();}
 
-// Bouw jaar dropdown
-function vulJaren() {
-  const sel = document.getElementById('sel-jaar');
-  const nu = new Date().getFullYear();
-  for (let j = nu; j >= 1957; j--) {
-    const o = document.createElement('option');
-    o.value = o.textContent = j;
-    sel.appendChild(o);
+function idx(){
+  var ms=String(M).padStart(2,'0'), ix={}, ks=Object.keys(D);
+  for(var i=0;i<ks.length;i++){
+    var k=ks[i]; if(k.slice(5,7)!==ms) continue;
+    var j=+k.slice(0,4); if(j===J) continue;
+    if(!ix[j]) ix[j]={tx:[],tn:[],tg:[],rr:[],sq:[]};
+    var o=D[k];
+    if(o.tx!=null)ix[j].tx.push(o.tx);
+    if(o.tn!=null)ix[j].tn.push(o.tn);
+    if(o.tg!=null)ix[j].tg.push(o.tg);
+    if(o.rr!=null)ix[j].rr.push(o.rr);
+    if(o.sq!=null)ix[j].sq.push(o.sq);
   }
+  return ix;
 }
 
-function syncDropdowns() {
-  document.getElementById('sel-maand').value = maand;
-  document.getElementById('sel-jaar').value = jaar;
-}
-
-function selecteer() {
-  maand = parseInt(document.getElementById('sel-maand').value);
-  jaar  = parseInt(document.getElementById('sel-jaar').value);
-  toon();
-}
-
-function navigeer(d) {
-  maand += d;
-  if (maand > 12) { maand = 1; jaar++; }
-  if (maand < 1)  { maand = 12; jaar--; }
-  syncDropdowns();
-  toon();
-}
-
-function f1(v) { return v != null ? v.toFixed(1) : '–'; }
-function diffStr(v, n) {
-  if (v == null || n == null) return '';
-  const d = v - n, s = d >= 0 ? '+' : '';
-  const cls = d > 0.05 ? 'plus' : d < -0.05 ? 'min' : '';
-  return ` <span class="stat-diff ${cls}">${s}${d.toFixed(1)}</span>`;
-}
-
-// Rang berekening
-function rangVoorMaand(huidigVal, veld, hoger) {
-  if (huidigVal == null) return null;
-  const mStr = String(maand).padStart(2,'0');
-  const jarenMap = {};
-  for (const [k, d] of Object.entries(data)) {
-    if (k.slice(5,7) === mStr) {
-      const j = parseInt(k.slice(0,4));
-      if (j === jaar) continue;
-      if (!jarenMap[j]) jarenMap[j] = [];
-      if (d[veld] != null) jarenMap[j].push(d[veld]);
-    }
+function rang(val,veld,hoger,ix){
+  if(val==null) return '';
+  var v=[], ks=Object.keys(ix);
+  for(var i=0;i<ks.length;i++){
+    var a=ix[ks[i]][veld]||[];
+    if(a.length<25) continue;
+    var s=0; for(var j=0;j<a.length;j++) s+=a[j];
+    v.push(['tx','tn','tg'].indexOf(veld)>=0 ? s/a.length : s);
   }
-  const vals = [];
-  for (const [j, arr] of Object.entries(jarenMap)) {
-    if (arr.length < 25) continue;
-    const v = veld === 'tg' || veld === 'tx' || veld === 'tn'
-      ? arr.reduce((a,b)=>a+b,0)/arr.length
-      : arr.reduce((a,b)=>a+b,0);
-    vals.push(v);
-  }
-  if (!vals.length) return null;
-  const rang = hoger ? vals.filter(v=>v>huidigVal).length+1 : vals.filter(v=>v<huidigVal).length+1;
-  return `#${rang}/${vals.length+1}`;
+  if(!v.length) return '';
+  var r=1; for(var i=0;i<v.length;i++){if(hoger&&v[i]>val)r++;if(!hoger&&v[i]<val)r++;}
+  return '<span class="rng">#'+r+'/'+(v.length+1)+'</span>';
 }
 
-function bouwMaandIndex() {
-  const mStr = String(maand).padStart(2,'0');
-  const idx = {};
-  for (const [k, d] of Object.entries(data)) {
-    if (k.slice(5,7) !== mStr) continue;
-    const j = parseInt(k.slice(0,4));
-    if (j === jaar) continue;
-    if (!idx[j]) idx[j] = {tx:[],tn:[],tg:[],rr:[],sq:[]};
-    if (d.tx != null) idx[j].tx.push(d.tx);
-    if (d.tn != null) idx[j].tn.push(d.tn);
-    if (d.tg != null) idx[j].tg.push(d.tg);
-    if (d.rr != null) idx[j].rr.push(d.rr);
-    if (d.sq != null) idx[j].sq.push(d.sq);
-  }
-  return idx;
+function ds(val,nm){
+  if(val==null||nm==null) return '';
+  var d=val-nm, s=d>=0?'+':'', c=d>0.05?'dp':d<-0.05?'dm':'';
+  return ' <span class="'+c+'">'+s+d.toFixed(1)+'</span>';
 }
 
-function rangVoorMaand(huidigVal, veld, hoger, idx) {
-  if (huidigVal == null || !idx) return null;
-  const vals = [];
-  for (const arr of Object.values(idx)) {
-    if ((arr[veld]||[]).length < 25) continue;
-    const v = ['tx','tn','tg'].includes(veld)
-      ? arr[veld].reduce((a,b)=>a+b)/arr[veld].length
-      : arr[veld].reduce((a,b)=>a+b);
-    vals.push(v);
+function f(v){return v!=null?v.toFixed(1):'&#8211;';}
+
+function toon(){
+  sync();
+  var vd=new Date().toISOString().slice(0,10);
+  var n=NM[M]||{}, ad=new Date(J,M,0).getDate(), ms=String(M).padStart(2,'0');
+  var tx=[],tn=[],tg=[],rr=[],sq=[];
+  var rows=[];
+  for(var d=1;d<=ad;d++){
+    var k=J+'-'+ms+'-'+String(d).padStart(2,'0');
+    var o=D[k]||null;
+    rows.push({d:d,k:k,o:o,vd:k===vd,tk:k>vd});
+    if(!o) continue;
+    if(o.tx!=null)tx.push(o.tx);
+    if(o.tn!=null)tn.push(o.tn);
+    if(o.tg!=null)tg.push(o.tg);
+    if(o.rr!=null)rr.push(o.rr);
+    if(o.sq!=null)sq.push(o.sq);
   }
-  if (!vals.length) return null;
-  const rang = hoger ? vals.filter(v=>v>huidigVal).length+1 : vals.filter(v=>v<huidigVal).length+1;
-  return `#${rang}/${vals.length+1}`;
-}
+  function gm(a){if(!a.length)return null;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
+  function sm(a){if(!a.length)return null;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s;}
+  var txG=gm(tx),tnG=gm(tn),tgG=gm(tg),rrS=sm(rr),sqS=sm(sq);
 
-
-function toon() {
-  syncDropdowns();
-  const nu = new Date();
-  const vandaag = nu.toISOString().slice(0,10);
-  const n = NORM[maand] || {};
-  const aantalDagen = new Date(jaar, maand, 0).getDate();
-  const mStr = String(maand).padStart(2,'0');
-
-  // Verzamel data voor deze maand
-  const dagRijen = [];
-  for (let d = 1; d <= aantalDagen; d++) {
-    const key = `${jaar}-${mStr}-${String(d).padStart(2,'0')}`;
-    dagRijen.push({ d, key, obj: data[key]||null, isVandaag: key===vandaag, isToekomst: key>vandaag });
-  }
-
-  const beschikbaar = dagRijen.filter(r => r.obj);
-  const tx = beschikbaar.map(r=>r.obj.tx).filter(v=>v!=null);
-  const tn = beschikbaar.map(r=>r.obj.tn).filter(v=>v!=null);
-  const tg = beschikbaar.map(r=>r.obj.tg).filter(v=>v!=null);
-  const rr = beschikbaar.map(r=>r.obj.rr).filter(v=>v!=null);
-  const sq = beschikbaar.map(r=>r.obj.sq).filter(v=>v!=null);
-
-  const gem = arr => arr.length ? arr.reduce((a,b)=>a+b)/arr.length : null;
-  const som = arr => arr.length ? arr.reduce((a,b)=>a+b) : null;
-
-  const txGem = gem(tx), tnGem = gem(tn), tgGem = gem(tg);
-  const rrSom = som(rr), sqSom = som(sq);
-
-  // Stats
-  document.getElementById('stats').innerHTML = [
-    {cls:'tx', lbl:'Gem. TX', val:txGem, eenheid:'°', norm:n.tx},
-    {cls:'tn', lbl:'Gem. TN', val:tnGem, eenheid:'°', norm:n.tn},
-    {cls:'tg', lbl:'Gem. TG', val:tgGem, eenheid:'°', norm:n.tg},
-    {cls:'rr', lbl:'Neerslag', val:rrSom, eenheid:' mm', norm:n.rr},
-    {cls:'sq', lbl:'Zonneschijn', val:sqSom, eenheid:' u', norm:n.sq},
-  ].map(s => `<div class="stat ${s.cls}">
-    <div class="stat-lbl">${s.lbl}</div>
-    <div class="stat-val">${s.val!=null ? s.val.toFixed(1)+s.eenheid : '–'}</div>
-    ${s.norm!=null ? `<div class="stat-norm">Normaal: ${s.norm}${s.eenheid}${diffStr(s.val,s.norm)}</div>` : ''}
-  </div>`).join('');
-
-  // Tabel
-  const maxRR = Math.max(...rr, 0.1);
-  const maxSQ = Math.max(...sq, 0.1);
-  document.getElementById('tbody').innerHTML = dagRijen.map(({d, key, obj, isVandaag, isToekomst}) => {
-    const dt = new Date(key+'T12:00:00');
-    const cls = isVandaag ? 'vandaag' : isToekomst ? 'toekomst' : '';
-    if (!obj) return `<tr class="${cls}"><td>${NL_DAG[dt.getDay()]} ${d}${isVandaag?' ←':''}</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>`;
-    const rrBar = obj.rr!=null ? `<span class="bar rr" style="width:${Math.min(obj.rr/maxRR*50,50).toFixed(0)}px"></span>${obj.rr.toFixed(1)}` : '–';
-    const sqBar = obj.sq!=null ? `<span class="bar sq" style="width:${Math.min(obj.sq/maxSQ*50,50).toFixed(0)}px"></span>${obj.sq.toFixed(1)}u` : '–';
-    return `<tr class="${cls}">
-      <td>${NL_DAG[dt.getDay()]} ${d}${isVandaag?' ←':''}</td>
-      <td class="tx">${f1(obj.tx)}°</td>
-      <td class="tn">${f1(obj.tn)}°</td>
-      <td>${obj.tg!=null?obj.tg.toFixed(1)+'°':'–'}</td>
-      <td class="rr">${rrBar}</td>
-      <td class="sq">${sqBar}</td>
-    </tr>`;
+  document.getElementById('st').innerHTML=[
+    {c:'tx',l:'Gem. TX',v:txG,e:'°',nm:n.tx},
+    {c:'tn',l:'Gem. TN',v:tnG,e:'°',nm:n.tn},
+    {c:'tg',l:'Gem. TG',v:tgG,e:'°',nm:n.tg},
+    {c:'rr',l:'Neerslag',v:rrS,e:' mm',nm:n.rr},
+    {c:'sq',l:'Zonneschijn',v:sqS,e:' u',nm:n.sq}
+  ].map(function(s){
+    return '<div class="stat '+s.c+'"><div class="stat-lbl">'+s.l+'</div>'+
+      '<div class="stat-val">'+(s.v!=null?s.v.toFixed(1)+s.e:'&#8211;')+'</div>'+
+      (s.nm!=null?'<div class="stat-norm">Normaal: '+s.nm+s.e+ds(s.v,s.nm)+'</div>':'')+
+      '</div>';
   }).join('');
 
-  // Totaalrij met rang
-  const idx = bouwMaandIndex();
-  const rangTX = rangVoorMaand(txGem, 'tx', true, idx);
-  const rangTN = rangVoorMaand(tnGem, 'tn', true, idx);
-  const rangTG = rangVoorMaand(tgGem, 'tg', true, idx);
-  const rangRR = rangVoorMaand(rrSom, 'rr', false, idx);
-  const rangSQ = rangVoorMaand(sqSom, 'sq', true, idx);
-  function rangStr(r, hoger, totaal) {
-    if (!r) return '';
-    // Bepaal label op basis van positie
-    const num = parseInt(r.split('/')[0].slice(1));
-    const tot = parseInt(r.split('/')[1]);
-    let lbl = '';
-    if (num <= 3 && hoger) lbl = num===1?'warmste/zonnigste':'na top';
-    if (num <= 3 && !hoger) lbl = num===1?'laagste':'na laagste';
-    return `<span class="rang">${r}${lbl?' · '+lbl:''}</span>`;
+  var mxR=Math.max.apply(null,rr.length?rr:[0.1]);
+  var mxS=Math.max.apply(null,sq.length?sq:[0.1]);
+  var h='';
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i], dt=new Date(r.k+'T12:00:00');
+    var cl=r.vd?'vd':r.tk?'tk':'';
+    var dn=ND[dt.getDay()]+' '+r.d+(r.vd?' &#8592;':'');
+    if(!r.o){h+='<tr class="'+cl+'"><td>'+dn+'</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td><td>&#8211;</td></tr>';continue;}
+    var o=r.o;
+    var rB=o.rr!=null?'<span class="bar brr" style="width:'+Math.min(o.rr/mxR*50,50).toFixed(0)+'px"></span>'+o.rr.toFixed(1):'&#8211;';
+    var sB=o.sq!=null?'<span class="bar bsq" style="width:'+Math.min(o.sq/mxS*50,50).toFixed(0)+'px"></span>'+o.sq.toFixed(1)+'u':'&#8211;';
+    h+='<tr class="'+cl+'"><td>'+dn+'</td><td class="tx">'+f(o.tx)+'°</td><td class="tn">'+f(o.tn)+'°</td><td>'+(o.tg!=null?o.tg.toFixed(1)+'°':'&#8211;')+'</td><td class="rr">'+rB+'</td><td class="sq">'+sB+'</td></tr>';
   }
+  document.getElementById('tb').innerHTML=h;
 
-  document.getElementById('tfoot').innerHTML = `<tr>
-    <td>Gem/som (${beschikbaar.length} dgn)</td>
-    <td class="tx">${txGem!=null?txGem.toFixed(1)+'°'+rangStr(rangTX,true):'–'}</td>
-    <td class="tn">${tnGem!=null?tnGem.toFixed(1)+'°'+rangStr(rangTN,true):'–'}</td>
-    <td>${tgGem!=null?tgGem.toFixed(1)+'°'+rangStr(rangTG,true):'–'}</td>
-    <td class="rr">${rrSom!=null?rrSom.toFixed(1)+' mm'+rangStr(rangRR,false):'–'}</td>
-    <td class="sq">${sqSom!=null?sqSom.toFixed(1)+' u'+rangStr(rangSQ,true):'–'}</td>
-  </tr>`;
+  var ix=idx();
+  document.getElementById('tf').innerHTML='<tr>'+
+    '<td>Gem/som ('+tx.length+' dgn)</td>'+
+    '<td class="tx">'+(txG!=null?txG.toFixed(1)+'°'+rang(txG,'tx',true,ix):'&#8211;')+'</td>'+
+    '<td class="tn">'+(tnG!=null?tnG.toFixed(1)+'°'+rang(tnG,'tn',true,ix):'&#8211;')+'</td>'+
+    '<td>'+(tgG!=null?tgG.toFixed(1)+'°'+rang(tgG,'tg',true,ix):'&#8211;')+'</td>'+
+    '<td class="rr">'+(rrS!=null?rrS.toFixed(1)+' mm'+rang(rrS,'rr',false,ix):'&#8211;')+'</td>'+
+    '<td class="sq">'+(sqS!=null?sqS.toFixed(1)+' u'+rang(sqS,'sq',true,ix):'&#8211;')+'</td>'+
+    '</tr>';
 
-  document.getElementById('status').style.display = 'none';
-  document.getElementById('tbl').style.display = '';
+  document.getElementById('msg').style.display='none';
+  document.getElementById('tbl').style.display='';
 }
 
-// Init
-vulJaren();
-syncDropdowns();
-
-fetch('maanddata_344.json?t=' + Date.now())
-  .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-  .then(json => {
-    data = json.data || {};
-    document.getElementById('bijgewerkt').textContent = 'Bijgewerkt: ' + (json.bijgewerkt||'');
-    document.getElementById('status').textContent = '';
-    toon();
-  })
-  .catch(e => {
-    document.getElementById('status').textContent = 'Fout: ' + e.message;
-  });
+sync();
+fetch('maanddata_344.json?t='+Date.now())
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(j){D=j.data||{};document.getElementById('bw').textContent='Bijgewerkt: '+(j.bijgewerkt||'');toon();})
+  .catch(function(e){document.getElementById('msg').textContent='Fout: '+e.message;});
 </script>
 </body>
 </html>
