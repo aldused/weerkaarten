@@ -44,7 +44,10 @@ def parse_zip(tekst):
             datum = date(int(datum_str[:4]), int(datum_str[4:6]), int(datum_str[6:8]))
             def getal(k, schaal=10):
                 v = rij.get(k,'').strip()
-                return round(int(v)/schaal, 1) if v else None
+                if not v: return None
+                iv = int(v)
+                if iv == -1: return 0.0  # spoor/trace
+                return round(iv/schaal, 1)
             data[datum.isoformat()] = {
                 'tx': getal('TX'),
                 'tn': getal('TN'),
