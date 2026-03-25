@@ -9,13 +9,21 @@ from zoneinfo import ZoneInfo
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-STATION  = 344
-ZIP_URL  = f"https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/daggegevens/etmgeg_{STATION}.zip"
+STATIONS = [
+    (260, "De Bilt"),
+    (235, "Den Helder"),
+    (280, "Eelde"),
+    (310, "Vlissingen"),
+    (380, "Maastricht"),
+    (330, "Hoek van Holland"),
+    (344, "Rotterdam Airport"),
+]
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
-def haal_zip():
-    print(f"Downloaden KNMI ZIP station {STATION}...")
-    r = requests.get(ZIP_URL, timeout=60)
+def haal_zip(station_nr):
+    url = f"https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/daggegevens/etmgeg_{station_nr}.zip"
+    print(f"  Downloaden station {station_nr}...")
+    r = requests.get(url, timeout=60)
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
     naam = next(n for n in z.namelist() if n.endswith('.txt'))
@@ -61,23 +69,24 @@ def parse_zip(tekst):
             continue
     return data
 
-tekst = haal_zip()
-data  = parse_zip(tekst)
-print(f"{len(data)} dagen geladen")
-
-# Bewaar alleen jaren t/m heden
 nu = date.today()
-data = {k: v for k, v in data.items() if k <= nu.isoformat()}
 
-# Voeg update-timestamp toe
-resultaat = {
-    "station": STATION,
-    "naam": "Rotterdam Airport",
-    "bijgewerkt": datetime.now(LOCAL_TZ).strftime("%d %b %Y %H:%M"),
-    "data": data
-}
+for station_nr, naam in STATIONS:
+    try:
+        tekst = haal_zip(station_nr)
+        data  = parse_zip(tekst)
+        data  = {k: v for k, v in data.items() if k <= nu.isoformat()}
+        resultaat = {
+            "station": station_nr,
+            "naam": naam,
+            "bijgewerkt": datetime.now(LOCAL_TZ).strftime("%d %b %Y %H:%M"),
+            "data": data
+        }
+        fname = f"maanddata_{station_nr}.json"
+        with open(fname, "w") as f:
+            json.dump(resultaat, f)
+        print(f"  Opgeslagen: {fname} ({len(data)} dagen)")
+    except Exception as e:
+        print(f"  FOUT {station_nr}: {e}")
 
-with open("maanddata_344.json", "w") as f:
-    json.dump(resultaat, f)
-
-print(f"Opgeslagen: maanddata_344.json ({len(data)} dagen)")
+print("Klaar!")
