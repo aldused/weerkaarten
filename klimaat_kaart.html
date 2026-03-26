@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klimaatafwijking – Ed Aldus WM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
+.header{background:#003366;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #2ec4e8;flex-wrap:wrap;gap:6px}
+.header-titel{color:white;font-size:13px;font-weight:700}
+.header-sub{color:#a8c4e8;font-size:11px;margin-top:1px}
+.toolbar{background:white;padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #dde6f0}
+.btn{padding:4px 12px;border-radius:16px;border:1px solid #c5d3e3;background:#f0f4f8;color:#2a4a70;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.12s}
+.btn:hover{background:#dce9f7}
+.btn.act{background:#003366;color:white;border-color:#003366}
+.info-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#2980b9;padding:6px 14px;user-select:none}
+.info-blok{background:#e8f4fd;border-left:3px solid #2980b9;padding:10px 14px;margin:0 14px 8px;font-size:12px;color:#1a3a5c;line-height:1.6;border-radius:0 6px 6px 0}
+.kaarten-rij{display:flex;gap:12px;justify-content:center;padding:8px 12px 12px;flex-wrap:wrap}
+.kaart-box{flex:1;min-width:280px;max-width:420px}
+.kaart-header{background:#003366;color:white;padding:6px 10px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center}
+.kaart-header .l{font-size:11px;font-weight:700}
+.kaart-header .r{font-size:11px;text-align:right}
+.kaart-header .rs{font-size:9px;color:#a8c8e8}
+.kaart-container{position:relative;background:#d8ecf8}
+.kaart-container img{width:100%;display:block}
+.kaart-container svg{position:absolute;top:0;left:0;width:100%;height:100%}
+.stat-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:4px 12px 8px;max-width:860px;margin:0 auto}
+.stat{background:white;border-radius:6px;padding:6px 10px;border:1px solid #dde6f0}
+.stat-l{font-size:10px;color:#7a90a8}
+.stat-v{font-size:15px;font-weight:700;color:#003366}
+.legenda{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 10px;justify-content:center}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;color:#5a7090}
+.laden{text-align:center;padding:30px;color:#7a90a8;font-size:13px}
+.param-knoppen{display:flex;gap:4px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Klimaatafwijking</div>
+    <div class="header-sub">Afwijking t.o.v. normaal 1991–2020 · Open-Meteo · KNMI klimaatnormen · <span id="hdr-tijd">laden…</span></div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="param-knoppen" id="param-btns">
+    <button class="btn act" data-p="tx" onclick="setParam('tx',this)">🌡 TX max</button>
+    <button class="btn" data-p="tn" onclick="setParam('tn',this)">❄ TN min</button>
+  </div>
+</div>
+
+<div class="info-toggle" onclick="toggleInfo()" id="info-toggle">
+  <span id="info-pijl">▼</span> Hoe lees je deze kaart?
+</div>
+<div id="info-blok" class="info-blok">
+  <b>Klimaatafwijking</b> — De kaart toont hoeveel de gemeten (vandaag) en verwachte (morgen) temperatuur <b>afwijkt van normaal</b>. Normaal = maandgemiddelde TX of TN over de periode 1991–2020 (KNMI klimaatnormen). Een <b>rode</b> kleur betekent warmer dan normaal, <b>blauw</b> kouder dan normaal. De waarde in het balkje is de afwijking in graden (bijv. +3.2° = 3.2°C boven normaal).
+</div>
+
+<div class="laden" id="laden">Klimaatdata ophalen…</div>
+
+<div id="inhoud" style="display:none">
+  <div class="stat-bar" id="stats"></div>
+  <div class="kaarten-rij">
+    <div class="kaart-box">
+      <div class="kaart-header">
+        <div class="l" id="krt-l-0">Vandaag</div>
+        <div><div class="r" id="krt-r-0">–</div><div class="rs" id="krt-rs-0">gemeten TX</div></div>
+      </div>
+      <div class="kaart-container">
+        <img src="kaart_basis_nl.png" id="basis-0" alt="Nederland">
+        <svg id="svg-0" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+    <div class="kaart-box">
+      <div class="kaart-header">
+        <div class="l" id="krt-l-1">Morgen</div>
+        <div><div class="r" id="krt-r-1">–</div><div class="rs" id="krt-rs-1">verwacht TX</div></div>
+      </div>
+      <div class="kaart-container">
+        <img src="kaart_basis_nl.png" id="basis-1" alt="Nederland">
+        <svg id="svg-1" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+  </div>
+  <div class="legenda">
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#1a3a8b"></div>≤−4°</div>
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#2471a3"></div>−2°</div>
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#85c1e9"></div>−1°</div>
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#d5d8dc"></div>±0°</div>
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#f1948a"></div>+1°</div>
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#e74c3c"></div>+2°</div>
+    <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#922b21"></div>≥+4°</div>
+    <div class="leg" style="margin-left:12px"><b>+2.1°</b> = 2.1°C boven normaal</div>
+  </div>
+  <div style="text-align:center;font-size:10px;color:#aaa;padding-bottom:8px" id="copyright"></div>
+</div>
+
+<script>
+// ── Klimaatnormen 1991-2020 per station per maand (TX / TN) ──────────────
+// Bron: KNMI, maandgemiddelden tijdvak 1991-2020
+const NORMEN = {
+  // stn: { tx: [jan..dec], tn: [jan..dec] }
+  "Den Helder":    { tx:[6.0,6.2,8.7,12.4,15.8,18.5,20.8,21.1,18.3,14.3,10.0,7.0], tn:[1.7,1.4,3.0,5.5,9.0,11.8,14.1,14.4,12.1,8.7,5.2,2.6] },
+  "Vlieland":      { tx:[6.0,6.2,8.7,12.4,15.8,18.5,20.8,21.1,18.3,14.3,10.0,7.0], tn:[1.7,1.4,3.0,5.5,9.0,11.8,14.1,14.4,12.1,8.7,5.2,2.6] },
+  "Terschelling":  { tx:[6.0,6.2,8.7,12.4,15.8,18.5,20.8,21.1,18.3,14.3,10.0,7.0], tn:[1.7,1.4,3.0,5.5,9.0,11.8,14.1,14.4,12.1,8.7,5.2,2.6] },
+  "Leeuwarden":    { tx:[5.3,5.9,9.1,13.2,16.5,19.1,21.4,21.6,18.5,14.0,9.2,6.1],  tn:[0.5,0.3,1.9,4.2,7.6,10.5,12.9,12.9,10.5,7.2,3.9,1.2] },
+  "Schiphol":      { tx:[6.2,6.9,10.1,14.3,17.8,20.3,22.5,22.4,19.2,14.7,10.0,6.9], tn:[1.2,1.0,2.8,5.2,8.6,11.3,13.5,13.4,11.0,7.7,4.5,1.9] },
+  "De Bilt":       { tx:[6.1,7.0,10.5,14.8,18.3,20.9,23.1,22.9,19.5,14.8,9.9,6.7],  tn:[0.9,0.7,2.4,4.5,8.0,10.8,13.0,12.5,10.0,7.1,3.9,1.6] },
+  "Marknesse":     { tx:[5.3,6.1,9.6,14.3,17.9,20.2,22.4,22.4,18.9,14.2,9.2,6.0],   tn:[0.8,0.7,2.4,4.6,8.2,10.7,12.7,12.6,10.1,6.8,3.9,1.5] },
+  "Hoogeveen":     { tx:[5.2,6.1,9.7,14.5,18.1,20.7,22.9,22.6,19.1,14.2,9.0,5.8],   tn:[0.3,0.2,1.8,3.9,7.5,10.1,12.2,11.9,9.4,6.4,3.4,1.0] },
+  "Eelde":         { tx:[5.2,6.0,9.5,14.2,17.6,20.4,22.7,22.6,19.0,14.2,9.0,5.9],   tn:[0.1,-0.1,1.4,3.7,7.0,9.9,12.2,11.9,9.4,6.3,3.2,0.8] },
+  "Enschede":      { tx:[5.3,6.3,10.1,14.9,18.6,21.4,23.6,23.2,19.3,14.4,9.2,5.8],  tn:[-0.0,-0.2,1.3,3.5,7.0,9.8,12.1,11.7,9.1,6.2,3.1,0.8] },
+  "Vlissingen":    { tx:[6.4,6.8,9.6,13.3,16.8,19.6,21.8,22.0,19.0,14.8,10.4,7.2],  tn:[2.6,2.6,4.4,6.9,10.2,13.0,15.4,15.6,13.4,10.1,6.5,3.5] },
+  "Hoek v. Holland":{ tx:[6.5,7.1,10.1,14.0,17.1,19.5,21.5,22.2,19.4,15.1,10.4,7.2], tn:[2.3,2.0,3.8,6.2,9.4,12.2,14.5,14.7,12.5,9.2,5.6,3.1] },
+  "Rotterdam":     { tx:[6.4,7.1,10.3,14.3,17.9,20.6,22.7,22.6,19.3,14.9,10.2,7.0],  tn:[1.3,1.1,2.7,4.8,8.1,11.0,13.4,13.2,10.7,7.6,4.4,1.9] },
+  "Eindhoven":     { tx:[6.1,7.2,11.0,15.5,19.2,22.0,24.0,23.7,20.1,15.2,10.0,6.6],  tn:[0.4,0.3,2.1,4.3,7.9,10.8,12.9,12.4,9.7,6.8,3.5,1.2] },
+  "Maastricht":    { tx:[5.7,6.7,10.7,15.0,18.8,21.7,23.8,23.5,19.7,14.8,9.7,6.3],   tn:[0.5,0.7,2.7,5.0,8.7,11.7,13.8,13.4,10.6,7.3,3.8,1.4] },
+};
+
+const STATIONS = [
+  {n:"Den Helder",    lat:52.928, lon:4.789},
+  {n:"Vlieland",      lat:53.250, lon:4.920},
+  {n:"Terschelling",  lat:53.392, lon:5.350},
+  {n:"Leeuwarden",    lat:53.224, lon:5.774},
+  {n:"Schiphol",      lat:52.309, lon:4.781},
+  {n:"De Bilt",       lat:52.101, lon:5.178},
+  {n:"Marknesse",     lat:52.703, lon:5.888},
+  {n:"Hoogeveen",     lat:52.730, lon:6.520},
+  {n:"Eelde",         lat:53.123, lon:6.586},
+  {n:"Enschede",      lat:52.275, lon:6.889},
+  {n:"Vlissingen",    lat:51.442, lon:3.596},
+  {n:"Hoek v. Holland",lat:51.978, lon:4.131},
+  {n:"Rotterdam",     lat:51.957, lon:4.437},
+  {n:"Eindhoven",     lat:51.451, lon:5.377},
+  {n:"Maastricht",    lat:50.911, lon:5.770},
+];
+
+const LON_MIN=3.3,LON_MAX=7.4,LAT_MIN=50.45,LAT_MAX=53.8;
+const SVG_W=800,SVG_H=1100;
+function lx(lon){return(lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;}
+function ly(lat){return(1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;}
+
+const NL_DAGEN=["zo","ma","di","wo","do","vr","za"];
+const NL_MAANDEN=["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+let huidigParam="tx";
+let forecastData={};
+
+function normaal(naam, maand, param){
+  const n=NORMEN[naam];
+  if(!n) return null;
+  return n[param][maand-1];
+}
+
+function afwijkKleur(a){
+  // blauw = koud, rood = warm
+  if(a<=-4) return "#1a3a8b";
+  if(a<=-3) return "#1f618d";
+  if(a<=-2) return "#2471a3";
+  if(a<=-1) return "#85c1e9";
+  if(a<0)   return "#aed6f1";
+  if(a===0) return "#d5d8dc";
+  if(a<=1)  return "#f1948a";
+  if(a<=2)  return "#e74c3c";
+  if(a<=3)  return "#c0392b";
+  return "#922b21";
+}
+
+function tekstKleur(a){
+  return Math.abs(a)>=1 ? "white" : "#1a2b40";
+}
+
+async function fetchStation(st){
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&daily=temperature_2m_max,temperature_2m_min&forecast_days=3&timezone=Europe%2FAmsterdam`;
+  try{
+    const r=await fetch(url);
+    if(!r.ok) return null;
+    return r.json();
+  }catch(e){return null;}
+}
+
+function setParam(p,el){
+  huidigParam=p;
+  document.querySelectorAll('#param-btns .btn').forEach(b=>b.classList.remove('act'));
+  el.classList.add('act');
+  teken();
+}
+
+function toggleInfo(){
+  const b=document.getElementById('info-blok');
+  const p=document.getElementById('info-pijl');
+  const open=b.style.display==='none';
+  b.style.display=open?'block':'none';
+  p.textContent=open?'▼':'▶';
+}
+
+function dagLabel(offset){
+  const d=new Date(); d.setDate(d.getDate()+offset);
+  return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MAANDEN[d.getMonth()+1]}`;
+}
+
+function tekenSvg(svgId, dagOffset){
+  const svg=document.getElementById(svgId);
+  svg.innerHTML='';
+  const nu=new Date();
+  const maand=nu.getMonth()+1;
+  const p=huidigParam;
+
+  const stationsMetData=STATIONS.map(st=>{
+    const data=forecastData[st.n];
+    if(!data||!data.daily) return null;
+    const key=p==='tx'?'temperature_2m_max':'temperature_2m_min';
+    const val=data.daily[key]?.[dagOffset];
+    const norm=normaal(st.n, maand, p);
+    if(val==null||norm==null) return null;
+    const afwijk=Math.round((val-norm)*10)/10;
+    return{...st, val, norm, afwijk};
+  }).filter(Boolean);
+
+  const afwijkingen=stationsMetData.map(s=>s.afwijk);
+  const gemAfwijk=afwijkingen.length?Math.round(afwijkingen.reduce((a,b)=>a+b)/afwijkingen.length*10)/10:0;
+  const maxAfwijk=afwijkingen.length?Math.max(...afwijkingen):0;
+  const minAfwijk=afwijkingen.length?Math.min(...afwijkingen):0;
+
+  stationsMetData.forEach(st=>{
+    const x=lx(st.lon), y=ly(st.lat);
+    const kleur=afwijkKleur(st.afwijk);
+    const tk=tekstKleur(st.afwijk);
+    const teken=st.afwijk>0?'+':'';
+
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x',x-22); rect.setAttribute('y',y-12);
+    rect.setAttribute('width',44); rect.setAttribute('height',24);
+    rect.setAttribute('rx','4'); rect.setAttribute('fill',kleur);
+    g.appendChild(rect);
+
+    // Waarde boven
+    const tv=document.createElementNS('http://www.w3.org/2000/svg','text');
+    tv.setAttribute('x',x); tv.setAttribute('y',y-1);
+    tv.setAttribute('text-anchor','middle'); tv.setAttribute('font-size','11');
+    tv.setAttribute('font-weight','bold'); tv.setAttribute('font-family','Arial,sans-serif');
+    tv.setAttribute('fill',tk); tv.textContent=st.val.toFixed(1)+'°';
+    g.appendChild(tv);
+
+    // Afwijking onder
+    const ta=document.createElementNS('http://www.w3.org/2000/svg','text');
+    ta.setAttribute('x',x); ta.setAttribute('y',y+10);
+    ta.setAttribute('text-anchor','middle'); ta.setAttribute('font-size','10');
+    ta.setAttribute('font-family','Arial,sans-serif');
+    ta.setAttribute('fill',tk); ta.textContent=teken+st.afwijk.toFixed(1)+'°';
+    g.appendChild(ta);
+
+    svg.appendChild(g);
+  });
+
+  // copyright
+  const cr=document.createElementNS('http://www.w3.org/2000/svg','text');
+  cr.setAttribute('x',SVG_W-10); cr.setAttribute('y',SVG_H-14);
+  cr.setAttribute('text-anchor','end'); cr.setAttribute('font-size','18');
+  cr.setAttribute('fill','#999'); cr.setAttribute('font-style','italic');
+  cr.setAttribute('font-family','Arial,sans-serif');
+  cr.textContent='© Ed Aldus | KNMI normen 1991-2020 | Open-Meteo';
+  svg.appendChild(cr);
+
+  return{gem:gemAfwijk, max:maxAfwijk, min:minAfwijk, n:stationsMetData.length};
+}
+
+function teken(){
+  const p=huidigParam;
+  const pLbl=p==='tx'?'TX max':'TN min';
+  const nu=new Date();
+  const maand=nu.getMonth()+1;
+
+  document.getElementById('krt-rs-0').textContent=`gemeten ${pLbl} · normaal ${NL_MAANDEN[maand]}`;
+  document.getElementById('krt-rs-1').textContent=`verwacht ${pLbl} · normaal ${NL_MAANDEN[maand]}`;
+  document.getElementById('krt-r-0').textContent=dagLabel(0);
+  document.getElementById('krt-r-1').textContent=dagLabel(1);
+
+  const s0=tekenSvg('svg-0',0);
+  const s1=tekenSvg('svg-1',1);
+
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="stat-l">Vandaag gem. afwijk</div><div class="stat-v" style="color:${s0.gem>=0?'#c0392b':'#2471a3'}">${s0.gem>=0?'+':''}${s0.gem}°</div></div>
+    <div class="stat"><div class="stat-l">Vandaag max. afwijk</div><div class="stat-v" style="color:#c0392b">+${s0.max}°</div></div>
+    <div class="stat"><div class="stat-l">Morgen gem. afwijk</div><div class="stat-v" style="color:${s1.gem>=0?'#c0392b':'#2471a3'}">${s1.gem>=0?'+':''}${s1.gem}°</div></div>
+    <div class="stat"><div class="stat-l">Morgen max. afwijk</div><div class="stat-v" style="color:#c0392b">+${s1.max}°</div></div>
+  `;
+}
+
+async function laad(){
+  document.getElementById('laden').style.display='block';
+  document.getElementById('inhoud').style.display='none';
+
+  await Promise.allSettled(STATIONS.map(st=>
+    fetchStation(st).then(d=>{forecastData[st.n]=d;})
+  ));
+
+  document.getElementById('laden').style.display='none';
+  document.getElementById('inhoud').style.display='block';
+
+  const nu=new Date();
+  document.getElementById('hdr-tijd').textContent=nu.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('copyright').textContent=`© Ed Aldus | Normen: KNMI 1991-2020 | Forecast: Open-Meteo | ${nu.toLocaleDateString('nl-NL')}`;
+
+  teken();
+}
+
+laad();
+</script>
+</body>
+</html>
