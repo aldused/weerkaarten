@@ -15,13 +15,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
 .btn:hover{background:#dce9f7}
 .btn.act{background:#003366;color:white;border-color:#003366}
 .kaart-wrap{display:flex;justify-content:center;padding:12px}
-.kaart-box{width:100%;max-width:520px}
+.kaart-box{width:100%;max-width:700px}
 .kaart-header{background:#003366;color:white;padding:7px 12px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center}
 .kaart-header .l{font-size:12px;font-weight:700}
 .kaart-header .ls{font-size:10px;color:#a8c8e8;margin-top:1px}
 .kaart-header .r{font-size:12px;font-weight:700;text-align:right}
 .kaart-header .rs{font-size:10px;color:#a8c8e8}
-.kaart-container{position:relative;background:#d8ecf8}
+.kaart-container{position:relative;background:#d8ecf8;cursor:zoom-in}
 .kaart-container img{width:100%;display:block;border-radius:0 0 4px 4px}
 .kaart-container svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all}
 .legenda{display:flex;gap:8px;flex-wrap:wrap;padding:6px 14px 10px;justify-content:center}
@@ -67,10 +67,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
         <div><div class="l">Ed Aldus WM</div><div class="ls">Actuele waarnemingen KNMI</div></div>
         <div style="text-align:right"><div class="r" id="krt-tijd">–</div><div class="rs" id="krt-datum">–</div></div>
       </div>
-      <div class="kaart-container">
+      <div class="kaart-container" id="kaart-container" onclick="openZoom()">
         <img src="kaart_basis_nl.png" id="kaart-basis" alt="Nederland">
         <svg id="svg-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
+      <div style="text-align:center;font-size:11px;color:#888;padding:3px 0;cursor:pointer" onclick="openZoom()">🔍 klik voor vergroting</div>
     </div>
   </div>
   <div class="legenda">
@@ -81,6 +82,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
     <div class="leg"><svg width="20" height="16"><line x1="10" y1="2" x2="10" y2="14" stroke="#003366" stroke-width="2" marker-end="url(#arr)"/></svg>Wind</div>
   </div>
   <div style="text-align:center;font-size:10px;color:#aaa;padding-bottom:8px" id="copyright"></div>
+</div>
+
+<div id="lightbox" onclick="sluitZoom()">
+  <span id="lightbox-sluit" onclick="sluitZoom()">✕</span>
+  <img id="lightbox-img" src="" alt="">
 </div>
 
 <div id="popup">
@@ -266,7 +272,7 @@ function teken(){
     const R=10;
     const g=ns("g");
     g.style.cursor="pointer";
-    g.addEventListener("click",e=>toonPopup(st,obs,e));
+    g.addEventListener("click",e=>{e.stopPropagation();toonPopup(st,obs,e);});
 
     // Bewolking
     if(zichtbareLagen.has("n")){
@@ -340,7 +346,7 @@ function toonPopup(st,obs,e){
     ["Vochtigheid", obs.rh!=null?obs.rh.toFixed(0)+"%":"–"],
     ["Bewolking",   obs.n!=null?obs.n+" oktas":"–"],
     ["Wind",        obs.ff!=null?`${obs.ff.toFixed(1)} m/s (Bft ${msToBft(Math.round(obs.ff))})  ${obs.dd!=null?obs.dd.toFixed(0)+"°":""}` :"–"],
-    ["Windstoot",   obs.fx!=null?obs.fx.toFixed(1)+" m/s":"–"],
+    ["Windstoot",   obs.fx!=null?(obs.fx*3.6).toFixed(0)+" km/h":"–"],
     ["Zicht",       obs.vv!=null?(obs.vv>=10000?"≥10 km":obs.vv>=1000?(obs.vv/1000).toFixed(1)+" km":obs.vv.toFixed(0)+" m"):"–"],
     ["Wolkenhoogte",obs.h!=null&&obs.n>0?Math.round(obs.h*0.3048/50)*50+" m":"–"],
   ];
@@ -353,6 +359,31 @@ function toonPopup(st,obs,e){
   const py=Math.min(e.clientY-10,window.innerHeight-300);
   popup.style.left=px+"px";popup.style.top=py+"px";
 }
+
+function openZoom(){
+  const img=document.getElementById('kaart-basis');
+  const svg=document.getElementById('svg-kaart');
+  const canvas=document.createElement('canvas');
+  const scale=2;
+  canvas.width=img.naturalWidth*scale;
+  canvas.height=img.naturalHeight*scale;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(scale,scale);
+  ctx.drawImage(img,0,0);
+  const svgStr=new XMLSerializer().serializeToString(svg);
+  const blob=new Blob([svgStr],{type:'image/svg+xml'});
+  const url=URL.createObjectURL(blob);
+  const svgImg=new Image();
+  svgImg.onload=()=>{
+    ctx.drawImage(svgImg,0,0,img.naturalWidth,img.naturalHeight);
+    URL.revokeObjectURL(url);
+    document.getElementById('lightbox-img').src=canvas.toDataURL('image/png');
+    document.getElementById('lightbox').classList.add('actief');
+  };
+  svgImg.src=url;
+}
+function sluitZoom(){document.getElementById('lightbox').classList.remove('actief');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')sluitZoom();});
 
 function sluitPopup(){document.getElementById("popup").style.display="none";}
 document.addEventListener("click",e=>{
