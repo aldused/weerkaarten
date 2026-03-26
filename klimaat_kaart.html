@@ -32,6 +32,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
 .legenda{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 10px;justify-content:center}
 .leg{display:flex;align-items:center;gap:4px;font-size:10px;color:#5a7090}
 .laden{text-align:center;padding:30px;color:#7a90a8;font-size:13px}
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:1000;justify-content:center;align-items:center;cursor:zoom-out}
+#lightbox.actief{display:flex}
+#lightbox-img{max-width:95vw;max-height:95vh;border-radius:6px}
+#lightbox-sluit{position:fixed;top:16px;right:22px;font-size:2em;color:white;cursor:pointer;line-height:1}
+.zoom-hint{text-align:center;font-size:11px;color:#888;padding:3px 0 0;cursor:pointer}
 .param-knoppen{display:flex;gap:4px}
 </style>
 </head>
@@ -74,6 +79,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
     <div class="leg" style="margin-left:12px"><b>+2.1°</b> = 2.1°C boven normaal</div>
   </div>
   <div style="text-align:center;font-size:10px;color:#aaa;padding-bottom:8px" id="copyright"></div>
+</div>
+
+<div id="lightbox" onclick="sluitZoom()">
+  <span id="lightbox-sluit" onclick="sluitZoom()">✕</span>
+  <img id="lightbox-img" src="" alt="">
 </div>
 
 <script>
@@ -268,10 +278,11 @@ function teken(){
           <div class="l">${dagLabels[i]}</div>
           <div><div class="r">${dagLabel(i)}</div><div class="rs">${bronLabels[i]} ${pLbl} · normaal ${NL_MAANDEN[maand]}</div></div>
         </div>
-        <div class="kaart-container">
+        <div class="kaart-container" onclick="openZoom(${i})" style="cursor:zoom-in;">
           <img src="kaart_basis_nl.png" alt="Nederland">
           <svg id="svg-${i}" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
         </div>
+        <div class="zoom-hint" onclick="openZoom(${i})">🔍 klik voor vergroting</div>
       </div>`;
   }
 
@@ -287,6 +298,32 @@ function teken(){
     <div class="stat"><div class="stat-l">Max afwijk (5 dgn)</div><div class="stat-v" style="color:#c0392b">+${Math.max(...resultaten.map(r=>r.max)).toFixed(1)}°</div></div>
   `;
 }
+
+function openZoom(i){
+  const container=document.querySelectorAll('.kaart-container')[i];
+  const img=container.querySelector('img');
+  const svg=container.querySelector('svg');
+  const canvas=document.createElement('canvas');
+  const scale=2;
+  canvas.width=img.naturalWidth*scale;
+  canvas.height=img.naturalHeight*scale;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(scale,scale);
+  ctx.drawImage(img,0,0);
+  const svgStr=new XMLSerializer().serializeToString(svg);
+  const blob=new Blob([svgStr],{type:'image/svg+xml'});
+  const url=URL.createObjectURL(blob);
+  const svgImg=new Image();
+  svgImg.onload=()=>{
+    ctx.drawImage(svgImg,0,0,img.naturalWidth,img.naturalHeight);
+    URL.revokeObjectURL(url);
+    document.getElementById('lightbox-img').src=canvas.toDataURL('image/png');
+    document.getElementById('lightbox').classList.add('actief');
+  };
+  svgImg.src=url;
+}
+function sluitZoom(){document.getElementById('lightbox').classList.remove('actief');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')sluitZoom();});
 
 async function laad(){
   document.getElementById('laden').style.display='block';
