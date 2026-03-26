@@ -123,9 +123,7 @@ for code, name in stations:
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
     times   = get_times(root)
-    tn_raw  = parse_values(root, 'TN')
     ttt_raw = parse_values(root, 'TTT')
-    tn  = [v-273.15 if v and v>200 else None for v in tn_raw]
     ttt = [v-273.15 if v and v>200 else None for v in ttt_raw]
 
     # Nachtperiode: 18:00 t/m 05:59 lokale tijd
@@ -141,9 +139,7 @@ for code, name in stations:
             d = loc.date() - timedelta(days=1)
         else:
             continue
-        # TN als beschikbaar, anders TTT als fallback
-        v = (tn[i] if i < len(tn) and tn[i] is not None
-             else (ttt[i] if i < len(ttt) and ttt[i] is not None else None))
+        v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
         if v is not None:
             if d not in daily_tn or v < daily_tn[d]:
                 daily_tn[d] = v

@@ -123,9 +123,7 @@ for code, name in stations:
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
     times   = get_times(root)
-    tx_raw  = parse_values(root, 'TX')
     ttt_raw = parse_values(root, 'TTT')
-    tx  = [v-273.15 if v and v>200 else None for v in tx_raw]
     ttt = [v-273.15 if v and v>200 else None for v in ttt_raw]
 
     daily_tx = {}
@@ -135,9 +133,7 @@ for code, name in stations:
         h = loc.hour
         # Dagperiode: 06:00 t/m 17:59 lokale tijd
         if 6 <= h < 18:
-            # TX als beschikbaar, anders TTT als fallback
-            v = (tx[i] if i < len(tx) and tx[i] is not None
-                 else (ttt[i] if i < len(ttt) and ttt[i] is not None else None))
+            v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
             if v is not None:
                 if d not in daily_tx or v > daily_tx[d]:
                     daily_tx[d] = v
