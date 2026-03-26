@@ -363,17 +363,24 @@ async function laad(){
   document.getElementById("laden").style.display="block";
   document.getElementById("inhoud").style.display="none";
 
-  await Promise.allSettled(STATIONS.map(st=>
-    fetchStation(st).then(d=>{if(d) obsData[st.n]=d;})
-  ));
-
-  const nu=new Date();
-  const tijdStr=nu.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
-  const datumStr=`${NL_DAGEN[nu.getDay()]} ${nu.getDate()} ${NL_MAANDEN[nu.getMonth()+1]}`;
-  document.getElementById("hdr-tijd").textContent=tijdStr;
-  document.getElementById("krt-tijd").textContent=tijdStr;
-  document.getElementById("krt-datum").textContent=datumStr;
-  document.getElementById("copyright").textContent=`© Ed Aldus | Data: KNMI 10-min | ${datumStr} ${tijdStr}`;
+  try{
+    const r=await fetch("actueel.json?t="+Date.now());
+    const js=await r.json();
+    const stations=js.stations||{};
+    obsData={};
+    Object.values(stations).forEach(st=>{
+      obsData[st.naam]=st;
+    });
+    const nu=new Date();
+    const tijdStr=js.bijgewerkt||nu.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+    document.getElementById("hdr-tijd").textContent=tijdStr;
+    document.getElementById("krt-tijd").textContent=tijdStr;
+    document.getElementById("krt-datum").textContent=`${NL_DAGEN[nu.getDay()]} ${nu.getDate()} ${NL_MAANDEN[nu.getMonth()+1]}`;
+    document.getElementById("copyright").textContent=`© Ed Aldus | Data: KNMI 10-min | Bijgewerkt: ${tijdStr}`;
+  }catch(e){
+    document.getElementById("laden").innerHTML="Kon actueel.json niet laden: "+e.message;
+    return;
+  }
 
   document.getElementById("laden").style.display="none";
   document.getElementById("inhoud").style.display="block";
