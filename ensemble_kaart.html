@@ -15,6 +15,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
 .btn:hover{background:#dce9f7}
 .btn.act{background:#003366;color:white;border-color:#003366}
 .btn.param.act{background:#c0392b;border-color:#c0392b}
+.btn.param[data-p="tn"].act{background:#2471a3;border-color:#2471a3}
+.btn.param[data-p="rr"].act{background:#1a7a4a;border-color:#1a7a4a}
 .kaart-wrap{display:flex;justify-content:center;padding:12px}
 .kaart-box{width:100%;max-width:520px}
 .kaart-header{background:#003366;color:white;padding:7px 12px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center}
@@ -35,7 +37,14 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
 #popup h3{font-size:13px;font-weight:700;color:#003366;margin-bottom:6px}
 #popup-canvas{display:block;width:100%;height:80px}
 #popup-close{position:absolute;top:6px;right:10px;cursor:pointer;font-size:16px;color:#7a90a8;line-height:1}
-.laden{text-align:center;padding:30px;color:#7a90a8;font-size:13px}
+.info-blok{background:#e8f4fd;border-left:3px solid #2980b9;border-radius:0 6px 6px 0;padding:10px 14px;margin:8px 14px;font-size:12px;color:#1a3a5c;line-height:1.6}
+.info-blok b{color:#003366}
+.info-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#2980b9;padding:6px 14px;user-select:none}
+.info-toggle:hover{color:#003366}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:8px}
+.info-item{display:flex;gap:8px;align-items:flex-start}
+.info-icon{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px}
+.info-tekst{font-size:11px;color:#2a4a70;line-height:1.5}
 </style>
 </head>
 <body>
@@ -57,8 +66,43 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
   <div style="display:flex;gap:4px;margin-left:8px" id="param-btns">
     <button class="btn param act" data-p="tx" onclick="setParam('tx',this)">🌡 TX max</button>
     <button class="btn param" data-p="tn" onclick="setParam('tn',this)">❄ TN min</button>
+    <button class="btn param" data-p="rr" onclick="setParam('rr',this)">🌧 Neerslag</button>
   </div>
   <div style="margin-left:auto;font-size:11px;color:#7a90a8">klik station voor detail</div>
+</div>
+
+<div class="info-toggle" onclick="toggleInfo()" id="info-toggle">
+  <span id="info-pijl">▶</span> Hoe lees je deze kaart?
+</div>
+<div id="info-blok" class="info-blok" style="display:none">
+  <b>Wat is een ensemble-voorspelling?</b><br>
+  Het ECMWF draait niet één voorspelling, maar <b>51 versies</b> tegelijk — elk met kleine variaties in de begintoestand. Zo ontstaat een beeld van de onzekerheid: zijn alle 51 leden het eens, dan is de verwachting betrouwbaar. Lopen ze uiteen, dan is de onzekerheid groot.
+  <div class="info-grid" style="margin-top:10px">
+    <div class="info-item">
+      <div class="info-icon" style="background:#d6eaf8;border:1px solid #2980b9">🔵</div>
+      <div class="info-tekst"><b>Kleine cirkel (blauw)</b><br>Alle leden komen dicht bij elkaar uit. De verwachting is betrouwbaar.</div>
+    </div>
+    <div class="info-item">
+      <div class="info-icon" style="background:#fdebd0;border:1px solid #d35400">🟠</div>
+      <div class="info-tekst"><b>Grote cirkel (oranje)</b><br>Grote spreiding tussen de leden. Er is veel onzekerheid voor dit station.</div>
+    </div>
+    <div class="info-item">
+      <div class="info-icon" style="background:#eaf3e8;border:1px solid #003366">●</div>
+      <div class="info-tekst"><b>Puntjes in de cirkel</b><br>Elk puntje is één ensemble-lid. De spreiding toont de bandbreedte van mogelijke uitkomsten.</div>
+    </div>
+    <div class="info-item">
+      <div class="info-icon" style="background:#eaf3e8;border:1px solid #c0392b">●</div>
+      <div class="info-tekst"><b>Rode stip = HRES</b><br>De deterministische voorspelling (lid 0). Valt die buiten de cluster, dan is het een uitbijter.</div>
+    </div>
+    <div class="info-item">
+      <div class="info-icon" style="background:#eaf3e8;border:1px solid #003366">—</div>
+      <div class="info-tekst"><b>Blauwe streep = mediaan</b><br>De middelste waarde van alle 51 leden. Robuuster dan het gemiddelde bij scheve verdeling.</div>
+    </div>
+    <div class="info-item">
+      <div class="info-icon" style="background:#eaf3e8;border:1px solid #7a90a8">📊</div>
+      <div class="info-tekst"><b>Klik op een station</b><br>Toont een histogram van alle 51 leden met mediaan, P10, P90 en de volledige spreiding.</div>
+    </div>
+  </div>
 </div>
 
 <div class="laden" id="laden">Ensemble data ophalen (51 leden × 15 stations)…</div>
@@ -129,7 +173,7 @@ function dagLabel(offset){
 }
 
 async function fetchStation(st){
-  const url=`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${st.lat}&longitude=${st.lon}&hourly=temperature_2m&models=ecmwf_ifs025&forecast_days=5&timezone=Europe%2FAmsterdam`;
+  const url=`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${st.lat}&longitude=${st.lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs025&forecast_days=5&timezone=Europe%2FAmsterdam`;
   try{
     const r=await fetch(url);
     if(!r.ok) return null;
@@ -143,7 +187,8 @@ function computeDailyVal(json, dayOffset, param){
   const target=new Date(); target.setDate(target.getDate()+dayOffset);
   const ds=target.toISOString().slice(0,10);
 
-  const memberKeys=Object.keys(json.hourly).filter(k=>k.startsWith('temperature_2m_member'));
+  const prefix=param==='rr'?'precipitation_member':'temperature_2m_member';
+  const memberKeys=Object.keys(json.hourly).filter(k=>k.startsWith(prefix));
   if(!memberKeys.length) return null;
 
   const vals=[];
@@ -154,11 +199,15 @@ function computeDailyVal(json, dayOffset, param){
       if(!t.startsWith(ds)) return;
       const h=parseInt(t.slice(11,13));
       if(param==='tx' && h>=6 && h<18) dayVals.push(arr[i]);
-      if(param==='tn' && (h<6||h>=18)) dayVals.push(arr[i]);
+      else if(param==='tn' && (h<6||h>=18)) dayVals.push(arr[i]);
+      else if(param==='rr') dayVals.push(arr[i]);
     });
     const filtered=dayVals.filter(v=>v!=null);
     if(!filtered.length) return;
-    const v=param==='tx'?Math.max(...filtered):Math.min(...filtered);
+    let v;
+    if(param==='tx') v=Math.max(...filtered);
+    else if(param==='tn') v=Math.min(...filtered);
+    else v=filtered.reduce((a,b)=>a+b,0);
     vals.push(v);
   });
 
@@ -193,7 +242,7 @@ function spreadKleur(s, maxS){
 function tekenKaart(){
   const svg=document.getElementById('svg-kaart');
   svg.innerHTML='';
-  const paramLbl=huidigParam==='tx'?'TX maximum (°C)':'TN minimum (°C)';
+  const paramLbl=huidigParam==='tx'?'TX maximum (°C)':huidigParam==='tn'?'TN minimum (°C)':'Neerslag dagsom (mm)';
   document.getElementById('krt-dag').textContent=dagLabel(huidigDag);
   document.getElementById('krt-param').textContent=paramLbl;
 
@@ -209,11 +258,12 @@ function tekenKaart(){
   const maxSpread=Math.max(...allSpreads);
   const minMed=Math.min(...allMeds), maxMed=Math.max(...allMeds);
 
+  const unit=huidigParam==='rr'?'mm':'°';
   document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="stat-l">Mediaan NL gem.</div><div class="stat-v">${(allMeds.reduce((a,b)=>a+b)/allMeds.length).toFixed(1)}°</div></div>
-    <div class="stat"><div class="stat-l">Laagste mediaan</div><div class="stat-v">${Math.min(...allMeds).toFixed(1)}°</div></div>
-    <div class="stat"><div class="stat-l">Hoogste mediaan</div><div class="stat-v">${Math.max(...allMeds).toFixed(1)}°</div></div>
-    <div class="stat"><div class="stat-l">Max spreiding</div><div class="stat-v">${maxSpread.toFixed(1)}°</div></div>
+    <div class="stat"><div class="stat-l">Mediaan NL gem.</div><div class="stat-v">${(allMeds.reduce((a,b)=>a+b)/allMeds.length).toFixed(1)}${unit}</div></div>
+    <div class="stat"><div class="stat-l">Laagste mediaan</div><div class="stat-v">${Math.min(...allMeds).toFixed(1)}${unit}</div></div>
+    <div class="stat"><div class="stat-l">Hoogste mediaan</div><div class="stat-v">${Math.max(...allMeds).toFixed(1)}${unit}</div></div>
+    <div class="stat"><div class="stat-l">Max spreiding</div><div class="stat-v">${maxSpread.toFixed(1)}${unit}</div></div>
   `;
 
   stationVals.forEach(st=>{
@@ -273,7 +323,7 @@ function tekenKaart(){
     txt.setAttribute('x',x); txt.setAttribute('y',y+R+13);
     txt.setAttribute('text-anchor','middle'); txt.setAttribute('font-size','12');
     txt.setAttribute('font-weight','bold'); txt.setAttribute('font-family','Arial,sans-serif');
-    txt.setAttribute('fill','#003366'); txt.textContent=med.toFixed(1)+'°';
+    txt.setAttribute('fill','#003366'); txt.textContent=med.toFixed(1)+unit;
     g.appendChild(txt);
 
     svg.appendChild(g);
@@ -315,20 +365,21 @@ function toonPopup(st,svgX,svgY){
   ctx.strokeStyle='#003366'; ctx.lineWidth=2;
   ctx.beginPath(); ctx.moveTo(mx2,5); ctx.lineTo(mx2,75); ctx.stroke();
 
+  const unit2=huidigParam==='rr'?'mm':'°';
   ctx.fillStyle='#888'; ctx.font='10px Arial'; ctx.textAlign='left';
-  ctx.fillText(mn.toFixed(1)+'°',2,78);
-  ctx.textAlign='right'; ctx.fillText(mx.toFixed(1)+'°',238,78);
+  ctx.fillText(mn.toFixed(1)+unit2,2,78);
+  ctx.textAlign='right'; ctx.fillText(mx.toFixed(1)+unit2,238,78);
 
   document.getElementById('popup-naam').textContent=st.n;
   const p10=vals[Math.floor(vals.length*0.1)];
   const p90=vals[Math.floor(vals.length*0.9)];
   document.getElementById('popup-stats').innerHTML=`
-    <div><b>Mediaan:</b> ${med.toFixed(1)}°</div>
-    <div><b>Spreiding:</b> ${(p90-p10).toFixed(1)}°</div>
-    <div><b>P10:</b> ${p10.toFixed(1)}°</div>
-    <div><b>P90:</b> ${p90.toFixed(1)}°</div>
-    <div><b>Min:</b> ${Math.min(...vals).toFixed(1)}°</div>
-    <div><b>Max:</b> ${Math.max(...vals).toFixed(1)}°</div>
+    <div><b>Mediaan:</b> ${med.toFixed(1)}${unit2}</div>
+    <div><b>Spreiding:</b> ${(p90-p10).toFixed(1)}${unit2}</div>
+    <div><b>P10:</b> ${p10.toFixed(1)}${unit2}</div>
+    <div><b>P90:</b> ${p90.toFixed(1)}${unit2}</div>
+    <div><b>Min:</b> ${Math.min(...vals).toFixed(1)}${unit2}</div>
+    <div><b>Max:</b> ${Math.max(...vals).toFixed(1)}${unit2}</div>
   `;
 
   const img=document.getElementById('basis');
@@ -346,6 +397,14 @@ function sluitPopup(){document.getElementById('popup').style.display='none';}
 document.addEventListener('click',e=>{
   if(!e.target.closest('#popup')&&!e.target.closest('svg')) sluitPopup();
 });
+
+function toggleInfo(){
+  const blok=document.getElementById('info-blok');
+  const pijl=document.getElementById('info-pijl');
+  const open=blok.style.display==='none';
+  blok.style.display=open?'block':'none';
+  pijl.textContent=open?'▼':'▶';
+}
 
 async function laad(){
   document.getElementById('laden').style.display='block';
