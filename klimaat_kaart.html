@@ -16,8 +16,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
 .btn.act{background:#003366;color:white;border-color:#003366}
 .info-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#2980b9;padding:6px 14px;user-select:none}
 .info-blok{background:#e8f4fd;border-left:3px solid #2980b9;padding:10px 14px;margin:0 14px 8px;font-size:12px;color:#1a3a5c;line-height:1.6;border-radius:0 6px 6px 0}
-.kaarten-rij{display:flex;gap:12px;justify-content:center;padding:8px 12px 12px;flex-wrap:wrap}
-.kaart-box{flex:1;min-width:280px;max-width:420px}
+.kaarten-rij{display:flex;gap:8px;justify-content:center;padding:8px 12px 12px;flex-wrap:wrap;overflow-x:auto}
+.kaart-box{flex:1;min-width:200px;max-width:300px}
 .kaart-header{background:#003366;color:white;padding:6px 10px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center}
 .kaart-header .l{font-size:11px;font-weight:700}
 .kaart-header .r{font-size:11px;text-align:right}
@@ -62,28 +62,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
 
 <div id="inhoud" style="display:none">
   <div class="stat-bar" id="stats"></div>
-  <div class="kaarten-rij">
-    <div class="kaart-box">
-      <div class="kaart-header">
-        <div class="l" id="krt-l-0">Vandaag</div>
-        <div><div class="r" id="krt-r-0">–</div><div class="rs" id="krt-rs-0">gemeten TX</div></div>
-      </div>
-      <div class="kaart-container">
-        <img src="kaart_basis_nl.png" id="basis-0" alt="Nederland">
-        <svg id="svg-0" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
-      </div>
-    </div>
-    <div class="kaart-box">
-      <div class="kaart-header">
-        <div class="l" id="krt-l-1">Morgen</div>
-        <div><div class="r" id="krt-r-1">–</div><div class="rs" id="krt-rs-1">verwacht TX</div></div>
-      </div>
-      <div class="kaart-container">
-        <img src="kaart_basis_nl.png" id="basis-1" alt="Nederland">
-        <svg id="svg-1" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
-      </div>
-    </div>
-  </div>
+  <div class="kaarten-rij" id="kaarten-rij"></div>
   <div class="legenda">
     <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#1a3a8b"></div>≤−4°</div>
     <div class="leg"><div style="width:12px;height:12px;border-radius:2px;background:#2471a3"></div>−2°</div>
@@ -117,6 +96,7 @@ const NORMEN = {
   "Rotterdam":     { tx:[6.4,7.1,10.3,14.3,17.9,20.6,22.7,22.6,19.3,14.9,10.2,7.0],  tn:[1.3,1.1,2.7,4.8,8.1,11.0,13.4,13.2,10.7,7.6,4.4,1.9] },
   "Eindhoven":     { tx:[6.1,7.2,11.0,15.5,19.2,22.0,24.0,23.7,20.1,15.2,10.0,6.6],  tn:[0.4,0.3,2.1,4.3,7.9,10.8,12.9,12.4,9.7,6.8,3.5,1.2] },
   "Maastricht":    { tx:[5.7,6.7,10.7,15.0,18.8,21.7,23.8,23.5,19.7,14.8,9.7,6.3],   tn:[0.5,0.7,2.7,5.0,8.7,11.7,13.8,13.4,10.6,7.3,3.8,1.4] },
+  "Volkel":        { tx:[5.9,7.0,10.8,15.3,19.1,21.9,24.0,23.7,19.9,14.9,9.8,6.4],   tn:[0.1,0.1,1.8,4.0,7.6,10.5,12.6,12.1,9.5,6.5,3.3,0.9] },
 };
 
 const STATIONS = [
@@ -135,6 +115,7 @@ const STATIONS = [
   {n:"Rotterdam",     lat:51.957, lon:4.437},
   {n:"Eindhoven",     lat:51.451, lon:5.377},
   {n:"Maastricht",    lat:50.911, lon:5.770},
+  {n:"Volkel",        lat:51.657, lon:5.707},
 ];
 
 const LON_MIN=3.3,LON_MAX=7.4,LAT_MIN=50.45,LAT_MAX=53.8;
@@ -173,7 +154,7 @@ function tekstKleur(a){
 }
 
 async function fetchStation(st){
-  const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&daily=temperature_2m_max,temperature_2m_min&forecast_days=3&timezone=Europe%2FAmsterdam`;
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${st.lat}&longitude=${st.lon}&daily=temperature_2m_max,temperature_2m_min&forecast_days=6&timezone=Europe%2FAmsterdam`;
   try{
     const r=await fetch(url);
     if(!r.ok) return null;
@@ -274,20 +255,36 @@ function teken(){
   const pLbl=p==='tx'?'TX max':'TN min';
   const nu=new Date();
   const maand=nu.getMonth()+1;
+  const dagLabels=["Vandaag","Morgen","Overmorgen","D+3","D+4"];
+  const bronLabels=["gemeten","verwacht","verwacht","verwacht","verwacht"];
 
-  document.getElementById('krt-rs-0').textContent=`gemeten ${pLbl} · normaal ${NL_MAANDEN[maand]}`;
-  document.getElementById('krt-rs-1').textContent=`verwacht ${pLbl} · normaal ${NL_MAANDEN[maand]}`;
-  document.getElementById('krt-r-0').textContent=dagLabel(0);
-  document.getElementById('krt-r-1').textContent=dagLabel(1);
+  // Bouw kaarten dynamisch
+  const rij=document.getElementById('kaarten-rij');
+  rij.innerHTML='';
+  for(let i=0;i<5;i++){
+    rij.innerHTML+=`
+      <div class="kaart-box">
+        <div class="kaart-header">
+          <div class="l">${dagLabels[i]}</div>
+          <div><div class="r">${dagLabel(i)}</div><div class="rs">${bronLabels[i]} ${pLbl} · normaal ${NL_MAANDEN[maand]}</div></div>
+        </div>
+        <div class="kaart-container">
+          <img src="kaart_basis_nl.png" alt="Nederland">
+          <svg id="svg-${i}" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+      </div>`;
+  }
 
-  const s0=tekenSvg('svg-0',0);
-  const s1=tekenSvg('svg-1',1);
+  const resultaten=[];
+  for(let i=0;i<5;i++){
+    resultaten.push(tekenSvg(`svg-${i}`,i));
+  }
 
   document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="stat-l">Vandaag gem. afwijk</div><div class="stat-v" style="color:${s0.gem>=0?'#c0392b':'#2471a3'}">${s0.gem>=0?'+':''}${s0.gem}°</div></div>
-    <div class="stat"><div class="stat-l">Vandaag max. afwijk</div><div class="stat-v" style="color:#c0392b">+${s0.max}°</div></div>
-    <div class="stat"><div class="stat-l">Morgen gem. afwijk</div><div class="stat-v" style="color:${s1.gem>=0?'#c0392b':'#2471a3'}">${s1.gem>=0?'+':''}${s1.gem}°</div></div>
-    <div class="stat"><div class="stat-l">Morgen max. afwijk</div><div class="stat-v" style="color:#c0392b">+${s1.max}°</div></div>
+    <div class="stat"><div class="stat-l">Vandaag gem. afwijk</div><div class="stat-v" style="color:${resultaten[0].gem>=0?'#c0392b':'#2471a3'}">${resultaten[0].gem>=0?'+':''}${resultaten[0].gem}°</div></div>
+    <div class="stat"><div class="stat-l">Morgen gem. afwijk</div><div class="stat-v" style="color:${resultaten[1].gem>=0?'#c0392b':'#2471a3'}">${resultaten[1].gem>=0?'+':''}${resultaten[1].gem}°</div></div>
+    <div class="stat"><div class="stat-l">Overmorgen gem. afwijk</div><div class="stat-v" style="color:${resultaten[2].gem>=0?'#c0392b':'#2471a3'}">${resultaten[2].gem>=0?'+':''}${resultaten[2].gem}°</div></div>
+    <div class="stat"><div class="stat-l">Max afwijk (5 dgn)</div><div class="stat-v" style="color:#c0392b">+${Math.max(...resultaten.map(r=>r.max)).toFixed(1)}°</div></div>
   `;
 }
 
