@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjgzMDcwMzljZTYyYjRkYjM5NWY2ZDcxMGQ2OGZkNjVkIiwiaCI6Im11cm11cjEyOCJ9"
+KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
 BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
 HEADERS  = {"Authorization": KNMI_KEY}
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
