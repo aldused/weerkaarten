@@ -193,7 +193,7 @@ def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float |
     if dt_range_10min is None:
         dt_range_10min = f"{s}/{e}"
     try:
-        params2 = {"datetime": dt_range_10min, "parameter-name": "ta10"}
+        params2 = {"datetime": dt_range_10min, "parameter-name": "tgn"}
         r2 = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params2, timeout=20)
         if r2.status_code in (400, 404):
             return None
@@ -201,7 +201,7 @@ def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float |
         js2 = r2.json()
         if not js2.get("coverages"):
             return None
-        vals2 = to_floats(js2["coverages"][0].get("ranges", {}).get("ta10", {}).get("values"))
+        vals2 = to_floats(js2["coverages"][0].get("ranges", {}).get("tgn", {}).get("values"))
         return min_valid(vals2)
     except Exception:
         return None
