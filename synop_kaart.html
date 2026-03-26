@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synoptische kaart – Ed Aldus WM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a2b40}
+.header{background:#003366;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #2ec4e8;flex-wrap:wrap;gap:6px}
+.header-titel{color:white;font-size:13px;font-weight:700}
+.header-sub{color:#a8c4e8;font-size:11px;margin-top:1px}
+.toolbar{background:white;padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #dde6f0}
+.btn{padding:4px 12px;border-radius:16px;border:1px solid #c5d3e3;background:#f0f4f8;color:#2a4a70;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.12s}
+.btn:hover{background:#dce9f7}
+.btn.act{background:#003366;color:white;border-color:#003366}
+.kaart-wrap{display:flex;justify-content:center;padding:12px}
+.kaart-box{width:100%;max-width:520px}
+.kaart-header{background:#003366;color:white;padding:7px 12px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center}
+.kaart-header .l{font-size:12px;font-weight:700}
+.kaart-header .ls{font-size:10px;color:#a8c8e8;margin-top:1px}
+.kaart-header .r{font-size:12px;font-weight:700;text-align:right}
+.kaart-header .rs{font-size:10px;color:#a8c8e8}
+.kaart-container{position:relative;background:#d8ecf8}
+.kaart-container img{width:100%;display:block;border-radius:0 0 4px 4px}
+.kaart-container svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all}
+.legenda{display:flex;gap:8px;flex-wrap:wrap;padding:6px 14px 10px;justify-content:center}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;color:#5a7090}
+.laden{text-align:center;padding:40px;color:#7a90a8;font-size:13px}
+#popup{display:none;position:fixed;background:white;border:1px solid #c5d3e3;border-radius:10px;padding:14px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:100;min-width:200px;max-width:260px}
+#popup h3{font-size:13px;font-weight:700;color:#003366;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:6px}
+#popup-close{position:absolute;top:8px;right:12px;cursor:pointer;font-size:16px;color:#7a90a8}
+.popup-rij{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-bottom:1px solid #f5f5f5}
+.popup-label{color:#7a90a8}
+.popup-val{font-weight:600;color:#1a2b40}
+.ververs-btn{margin-left:auto;font-size:11px;color:#2980b9;cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Synoptische kaart</div>
+    <div class="header-sub">KNMI 10-minuten waarnemingen · <span id="hdr-tijd">laden…</span></div>
+  </div>
+  <span class="ververs-btn" onclick="laad()">↻ Vernieuwen</span>
+</div>
+
+<div class="toolbar">
+  <span style="font-size:12px;color:#7a90a8;font-weight:600">Toon:</span>
+  <button class="btn act" data-v="ta" onclick="toggleLayer(this)">🌡 Temp</button>
+  <button class="btn act" data-v="n" onclick="toggleLayer(this)">☁ Bewolking</button>
+  <button class="btn act" data-v="wind" onclick="toggleLayer(this)">💨 Wind</button>
+  <button class="btn act" data-v="td" onclick="toggleLayer(this)">💧 Dauwpunt</button>
+  <button class="btn" data-v="rh" onclick="toggleLayer(this)">% Vochtigheid</button>
+  <button class="btn" data-v="vv" onclick="toggleLayer(this)">👁 Zicht</button>
+  <button class="btn" data-v="h" onclick="toggleLayer(this)">↕ Wolkenhoogte</button>
+  <span style="font-size:11px;color:#aaa;margin-left:4px">klik station voor details</span>
+</div>
+
+<div class="laden" id="laden">Waarnemingen ophalen…</div>
+
+<div id="inhoud" style="display:none">
+  <div class="kaart-wrap">
+    <div class="kaart-box">
+      <div class="kaart-header">
+        <div><div class="l">Ed Aldus WM</div><div class="ls">Actuele waarnemingen KNMI</div></div>
+        <div style="text-align:right"><div class="r" id="krt-tijd">–</div><div class="rs" id="krt-datum">–</div></div>
+      </div>
+      <div class="kaart-container">
+        <img src="kaart_basis_nl.png" id="kaart-basis" alt="Nederland">
+        <svg id="svg-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+  </div>
+  <div class="legenda">
+    <div class="leg"><svg width="16" height="16"><circle cx="8" cy="8" r="6" fill="#1a2b40" stroke="#1a2b40" stroke-width="1.5"/></svg>8 oktas (bewolkt)</div>
+    <div class="leg"><svg width="16" height="16"><circle cx="8" cy="8" r="6" fill="white" stroke="#1a2b40" stroke-width="1.5"/></svg>0 oktas (helder)</div>
+    <div class="leg"><svg width="16" height="16"><text x="8" y="12" text-anchor="middle" font-size="11" fill="#cc2200" font-weight="bold">7.4</text></svg>Temp °C</div>
+    <div class="leg"><svg width="16" height="16"><text x="8" y="12" text-anchor="middle" font-size="11" fill="#1a5fb4">5.1</text></svg>Dauwpunt</div>
+    <div class="leg"><svg width="20" height="16"><line x1="10" y1="2" x2="10" y2="14" stroke="#003366" stroke-width="2" marker-end="url(#arr)"/></svg>Wind</div>
+  </div>
+  <div style="text-align:center;font-size:10px;color:#aaa;padding-bottom:8px" id="copyright"></div>
+</div>
+
+<div id="popup">
+  <span id="popup-close" onclick="sluitPopup()">✕</span>
+  <h3 id="popup-naam">Station</h3>
+  <div id="popup-inhoud"></div>
+</div>
+
+<script>
+const KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9";
+const BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations";
+const HEADERS  = {"Authorization": KNMI_KEY};
+
+const STATIONS = [
+  {n:"Den Helder",    w:"0-20000-0-06235", lat:52.928, lon:4.789},
+  {n:"Vlieland",      w:"0-20000-0-06242", lat:53.250, lon:4.920},
+  {n:"Terschelling",  w:"0-20000-0-06251", lat:53.392, lon:5.350},
+  {n:"Leeuwarden",    w:"0-20000-0-06270", lat:53.224, lon:5.774},
+  {n:"Schiphol",      w:"0-20000-0-06240", lat:52.309, lon:4.781},
+  {n:"Wijk aan Zee",  w:"0-20000-0-06257", lat:52.490, lon:4.600},
+  {n:"De Bilt",       w:"0-20000-0-06260", lat:52.101, lon:5.178},
+  {n:"Stavoren",      w:"0-20000-0-06267", lat:52.890, lon:5.380},
+  {n:"Lelystad",      w:"0-20000-0-06269", lat:52.458, lon:5.530},
+  {n:"Marknesse",     w:"0-20000-0-06273", lat:52.703, lon:5.888},
+  {n:"Deelen",        w:"0-20000-0-06275", lat:52.060, lon:5.885},
+  {n:"Lauwersoog",    w:"0-20000-0-06277", lat:53.410, lon:6.200},
+  {n:"Hoogeveen",     w:"0-20000-0-06279", lat:52.730, lon:6.520},
+  {n:"Eelde",         w:"0-20000-0-06280", lat:53.123, lon:6.586},
+  {n:"Hupsel",        w:"0-20000-0-06283", lat:52.069, lon:6.657},
+  {n:"Nieuw Beerta",  w:"0-20000-0-06286", lat:53.195, lon:7.150},
+  {n:"Twenthe",       w:"0-20000-0-06290", lat:52.275, lon:6.889},
+  {n:"Vlissingen",    w:"0-20000-0-06310", lat:51.442, lon:3.596},
+  {n:"Westdorpe",     w:"0-20000-0-06319", lat:51.226, lon:3.862},
+  {n:"Wilhelminadorp",w:"0-20000-0-06323", lat:51.527, lon:3.884},
+  {n:"Hoek v. Holland",w:"0-20000-0-06330",lat:51.978, lon:4.131},
+  {n:"Woensdrecht",   w:"0-20000-0-06340", lat:51.450, lon:4.342},
+  {n:"Rotterdam",     w:"0-20000-0-06344", lat:51.957, lon:4.437},
+  {n:"Cabauw",        w:"0-20000-0-06348", lat:51.971, lon:4.926},
+  {n:"Gilze-Rijen",   w:"0-20000-0-06350", lat:51.567, lon:4.931},
+  {n:"Herwijnen",     w:"0-20000-0-06356", lat:51.859, lon:5.140},
+  {n:"Eindhoven",     w:"0-20000-0-06370", lat:51.451, lon:5.377},
+  {n:"Volkel",        w:"0-20000-0-06375", lat:51.657, lon:5.707},
+  {n:"Ell",           w:"0-20000-0-06377", lat:51.198, lon:5.763},
+  {n:"Maastricht",    w:"0-20000-0-06380", lat:50.911, lon:5.770},
+];
+
+const LON_MIN=3.3,LON_MAX=7.4,LAT_MIN=50.45,LAT_MAX=53.8;
+const SVG_W=800,SVG_H=1100;
+function lx(lon){return(lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;}
+function ly(lat){return(1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;}
+
+const NL_DAGEN=["zo","ma","di","wo","do","vr","za"];
+const NL_MAANDEN=["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+let obsData={};
+let zichtbareLagen=new Set(["ta","n","wind","td"]);
+
+const BFT=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+function msToBft(ms){let b=0;for(let i=0;i<BFT.length;i++){if(ms>=BFT[i])b=i+1;else break;}return b;}
+
+function laatste(ranges,key){
+  const vals=(ranges[key]||{}).values||[];
+  for(let i=vals.length-1;i>=0;i--){if(vals[i]!=null)return vals[i];}
+  return null;
+}
+
+async function fetchStation(st){
+  const nu=new Date();
+  const van=new Date(nu-60*60*1000);
+  const fmt=d=>d.toISOString().replace('.000Z','Z').slice(0,20)+'Z';
+  const params=new URLSearchParams({
+    datetime:`${fmt(van)}/${fmt(nu)}`,
+    "parameter-name":"ta,td,ff,dd,fx,n,rh,vv,h,ww"
+  });
+  try{
+    const r=await fetch(`${BASE_URL}/locations/${st.w}?${params}`,{headers:HEADERS});
+    if(!r.ok) return null;
+    const js=await r.json();
+    if(!js.coverages) return null;
+    const ranges=js.coverages[0].ranges||{};
+    return{
+      ta:laatste(ranges,"ta"),
+      td:laatste(ranges,"td"),
+      ff:laatste(ranges,"ff"),
+      dd:laatste(ranges,"dd"),
+      fx:laatste(ranges,"fx"),
+      n: laatste(ranges,"n"),
+      rh:laatste(ranges,"rh"),
+      vv:laatste(ranges,"vv"),
+      h: laatste(ranges,"h"),
+      ww:laatste(ranges,"ww"),
+    };
+  }catch(e){return null;}
+}
+
+function ns(tag){return document.createElementNS("http://www.w3.org/2000/svg",tag);}
+
+function tekenOktas(svg,cx,cy,n,R){
+  const bg=ns("circle");
+  bg.setAttribute("cx",cx);bg.setAttribute("cy",cy);bg.setAttribute("r",R);
+  bg.setAttribute("fill","white");bg.setAttribute("stroke","#1a2b40");bg.setAttribute("stroke-width","1.5");
+  svg.appendChild(bg);
+
+  if(n===null||n===9){
+    const c=ns("circle");
+    c.setAttribute("cx",cx);c.setAttribute("cy",cy);c.setAttribute("r",R);
+    c.setAttribute("fill","#cccccc");c.setAttribute("stroke","#888");c.setAttribute("stroke-width","1");
+    svg.appendChild(c);
+    return;
+  }
+  if(n>0){
+    const frac=Math.min(n/8,1);
+    const startAngle=Math.PI/2;
+    const endAngle=startAngle-frac*2*Math.PI;
+    const steps=60;
+    let pts=[[cx,cy]];
+    for(let i=0;i<=steps;i++){
+      const a=startAngle+(endAngle-startAngle)*(i/steps);
+      pts.push([cx+R*Math.cos(a),cy+R*Math.sin(a)]);
+    }
+    const poly=ns("polygon");
+    poly.setAttribute("points",pts.map(p=>p.join(",")).join(" "));
+    poly.setAttribute("fill","#1a2b40");
+    svg.appendChild(poly);
+  }
+  const ring=ns("circle");
+  ring.setAttribute("cx",cx);ring.setAttribute("cy",cy);ring.setAttribute("r",R);
+  ring.setAttribute("fill","none");ring.setAttribute("stroke","#1a2b40");ring.setAttribute("stroke-width","1.5");
+  svg.appendChild(ring);
+}
+
+function tekenWindpijl(svg,cx,cy,dd,ff,R){
+  if(dd==null||ff==null) return;
+  const bft=msToBft(Math.round(ff));
+  const kleur=bft<=3?"#003366":bft<=5?"#e67e22":bft<=7?"#e74c3c":"#8e44ad";
+  const rad=(dd-180)*Math.PI/180;
+  const len=R+20;
+  const dx=Math.sin(rad)*len;
+  const dy=-Math.cos(rad)*len;
+
+  const line=ns("line");
+  line.setAttribute("x1",cx);line.setAttribute("y1",cy);
+  line.setAttribute("x2",cx+dx);line.setAttribute("y2",cy+dy);
+  line.setAttribute("stroke",kleur);line.setAttribute("stroke-width","2");
+  svg.appendChild(line);
+
+  const hs=8;
+  const angle=Math.atan2(dy,dx);
+  const hx1=cx+dx-hs*Math.cos(angle-0.5);
+  const hy1=cy+dy-hs*Math.sin(angle-0.5);
+  const hx2=cx+dx-hs*Math.cos(angle+0.5);
+  const hy2=cy+dy-hs*Math.sin(angle+0.5);
+  const arr=ns("polygon");
+  arr.setAttribute("points",`${cx+dx},${cy+dy} ${hx1},${hy1} ${hx2},${hy2}`);
+  arr.setAttribute("fill",kleur);
+  svg.appendChild(arr);
+}
+
+function txtLabel(svg,x,y,tekst,kleur,size,bold){
+  const bg=ns("rect");
+  const w=tekst.length*size*0.62+4;
+  bg.setAttribute("x",x-w/2);bg.setAttribute("y",y-size+1);
+  bg.setAttribute("width",w);bg.setAttribute("height",size+2);
+  bg.setAttribute("rx","2");bg.setAttribute("fill","rgba(255,255,255,0.82)");
+  svg.appendChild(bg);
+  const t=ns("text");
+  t.setAttribute("x",x);t.setAttribute("y",y);
+  t.setAttribute("text-anchor","middle");t.setAttribute("font-size",size);
+  t.setAttribute("font-family","Arial,sans-serif");t.setAttribute("fill",kleur);
+  if(bold) t.setAttribute("font-weight","bold");
+  t.textContent=tekst;
+  svg.appendChild(t);
+}
+
+function teken(){
+  const svg=document.getElementById("svg-kaart");
+  svg.innerHTML="";
+
+  STATIONS.forEach(st=>{
+    const obs=obsData[st.n];
+    if(!obs) return;
+    const x=lx(st.lon),y=ly(st.lat);
+    const R=10;
+    const g=ns("g");
+    g.style.cursor="pointer";
+    g.addEventListener("click",e=>toonPopup(st,obs,e));
+
+    // Bewolking
+    if(zichtbareLagen.has("n")){
+      tekenOktas(g,x,y,obs.n,R);
+    } else {
+      const dot=ns("circle");
+      dot.setAttribute("cx",x);dot.setAttribute("cy",y);dot.setAttribute("r",3);
+      dot.setAttribute("fill","#003366");
+      g.appendChild(dot);
+    }
+
+    // Wind
+    if(zichtbareLagen.has("wind") && obs.ff!=null){
+      tekenWindpijl(g,x,y,obs.dd,obs.ff,R);
+      const bft=msToBft(Math.round(obs.ff));
+      txtLabel(g,x,y+R+14,`Bft ${bft}`,"#003366",9,true);
+    }
+
+    // Temperatuur (rechtsboven)
+    if(zichtbareLagen.has("ta") && obs.ta!=null){
+      txtLabel(g,x+R+16,y-R-2,obs.ta.toFixed(1)+"°","#cc2200",11,true);
+    }
+
+    // Dauwpunt (rechtsonder)
+    if(zichtbareLagen.has("td") && obs.td!=null){
+      txtLabel(g,x+R+16,y+R+2,obs.td.toFixed(1)+"°","#1a5fb4",10,false);
+    }
+
+    // Vochtigheid (linksonder)
+    if(zichtbareLagen.has("rh") && obs.rh!=null){
+      txtLabel(g,x-R-14,y+R+2,obs.rh.toFixed(0)+"%","#555",9,false);
+    }
+
+    // Zicht (linksonder lager)
+    if(zichtbareLagen.has("vv") && obs.vv!=null){
+      const vv=obs.vv>=10000?"10km+":obs.vv>=1000?(obs.vv/1000).toFixed(1)+"km":obs.vv.toFixed(0)+"m";
+      txtLabel(g,x-R-14,y+R+14,vv,"#888",9,false);
+    }
+
+    // Wolkenhoogte (rechtsboven hoger)
+    if(zichtbareLagen.has("h") && obs.h!=null && obs.n>0){
+      const hm=Math.round(obs.h*0.3048/50)*50;
+      txtLabel(g,x+R+16,y-R-14,hm+"m","#1a7a4a",9,false);
+    }
+
+    svg.appendChild(g);
+  });
+
+  // Copyright
+  const cr=ns("text");
+  cr.setAttribute("x",SVG_W-10);cr.setAttribute("y",SVG_H-14);
+  cr.setAttribute("text-anchor","end");cr.setAttribute("font-size","18");
+  cr.setAttribute("fill","#999");cr.setAttribute("font-style","italic");
+  cr.setAttribute("font-family","Arial,sans-serif");
+  cr.textContent="© Ed Aldus | Data: KNMI";
+  svg.appendChild(cr);
+}
+
+function toggleLayer(btn){
+  const v=btn.dataset.v;
+  if(zichtbareLagen.has(v)){zichtbareLagen.delete(v);btn.classList.remove("act");}
+  else{zichtbareLagen.add(v);btn.classList.add("act");}
+  teken();
+}
+
+function toonPopup(st,obs,e){
+  const popup=document.getElementById("popup");
+  const rijen=[
+    ["Temperatuur", obs.ta!=null?obs.ta.toFixed(1)+"°C":"–"],
+    ["Dauwpunt",    obs.td!=null?obs.td.toFixed(1)+"°C":"–"],
+    ["Vochtigheid", obs.rh!=null?obs.rh.toFixed(0)+"%":"–"],
+    ["Bewolking",   obs.n!=null?obs.n+" oktas":"–"],
+    ["Wind",        obs.ff!=null?`${obs.ff.toFixed(1)} m/s (Bft ${msToBft(Math.round(obs.ff))})  ${obs.dd!=null?obs.dd.toFixed(0)+"°":""}` :"–"],
+    ["Windstoot",   obs.fx!=null?obs.fx.toFixed(1)+" m/s":"–"],
+    ["Zicht",       obs.vv!=null?(obs.vv>=10000?"≥10 km":obs.vv>=1000?(obs.vv/1000).toFixed(1)+" km":obs.vv.toFixed(0)+" m"):"–"],
+    ["Wolkenhoogte",obs.h!=null&&obs.n>0?Math.round(obs.h*0.3048/50)*50+" m":"–"],
+  ];
+  document.getElementById("popup-naam").textContent=st.n;
+  document.getElementById("popup-inhoud").innerHTML=rijen.map(([l,v])=>
+    `<div class="popup-rij"><span class="popup-label">${l}</span><span class="popup-val">${v}</span></div>`
+  ).join("");
+  popup.style.display="block";
+  const px=Math.min(e.clientX+12,window.innerWidth-280);
+  const py=Math.min(e.clientY-10,window.innerHeight-300);
+  popup.style.left=px+"px";popup.style.top=py+"px";
+}
+
+function sluitPopup(){document.getElementById("popup").style.display="none";}
+document.addEventListener("click",e=>{
+  if(!e.target.closest("#popup")&&!e.target.closest("svg")) sluitPopup();
+});
+
+async function laad(){
+  document.getElementById("laden").style.display="block";
+  document.getElementById("inhoud").style.display="none";
+
+  await Promise.allSettled(STATIONS.map(st=>
+    fetchStation(st).then(d=>{if(d) obsData[st.n]=d;})
+  ));
+
+  const nu=new Date();
+  const tijdStr=nu.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+  const datumStr=`${NL_DAGEN[nu.getDay()]} ${nu.getDate()} ${NL_MAANDEN[nu.getMonth()+1]}`;
+  document.getElementById("hdr-tijd").textContent=tijdStr;
+  document.getElementById("krt-tijd").textContent=tijdStr;
+  document.getElementById("krt-datum").textContent=datumStr;
+  document.getElementById("copyright").textContent=`© Ed Aldus | Data: KNMI 10-min | ${datumStr} ${tijdStr}`;
+
+  document.getElementById("laden").style.display="none";
+  document.getElementById("inhoud").style.display="block";
+  teken();
+}
+
+laad();
+setInterval(laad,10*60*1000);
+</script>
+</body>
+</html>
