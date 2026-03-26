@@ -82,14 +82,16 @@ def ms_naar_bft(ms):
 def haal_obs(wigos_id):
     """Haal meest recente ta, ff, dd, n op."""
     now_utc = datetime.now(timezone.utc)
-    # Haal laatste 90 minuten op (bewolking wordt niet elke 10 min gerapporteerd)
-    s = (now_utc - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Haal laatste 60 minuten op (bewolking wordt niet elke 10 min gerapporteerd)
+    s = (now_utc - timedelta(minutes=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
     e = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh,qg,h,ww"}
+    params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh,qg,h,ww,tg,tgn"}
     try:
         r = requests.get(f"{BASE_URL}/locations/{wigos_id}",
                          headers=HEADERS, params=params, timeout=15)
-        if r.status_code in (400, 404): return None
+        if r.status_code in (400, 404):
+            print(f"    !! HTTP {r.status_code} voor {wigos_id}: {r.text[:200]}")
+            return None
         r.raise_for_status()
         js = r.json()
         if not js.get("coverages"): return None
@@ -124,6 +126,7 @@ def haal_obs(wigos_id):
             "ww": laatste("ww"),
         }
     except Exception as e:
+        print(f"    !! Fout bij {wigos_id}: {e}")
         return None
 
 # ── Teken bewolkingscirkel ─────────────────────────────────────────────────────
