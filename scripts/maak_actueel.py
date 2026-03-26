@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
+KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjgzMDcwMzljZTYyYjRkYjM5NWY2ZDcxMGQ2OGZkNjVkIiwiaCI6Im11cm11cjEyOCJ9"
 BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
 HEADERS  = {"Authorization": KNMI_KEY}
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
@@ -94,7 +94,7 @@ def haal_station(wigos, naam):
     dt  = f"{van.strftime('%Y-%m-%dT%H:%M:%SZ')}/{nu.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     params = {
         "datetime": dt,
-        "parameter-name": "ta,ff,fx,dd,vv,rh"
+        "parameter-name": "ta,ff,fx,dd,vv,rh,tg"
     }
     try:
         r = requests.get(f"{BASE_URL}/locations/{wigos}", headers=HEADERS, params=params, timeout=15)
@@ -118,20 +118,7 @@ def haal_station(wigos, naam):
         vv   = laatste("vv")
         uu   = laatste("rh")
 
-        # t10n apart ophalen (niet alle stations)
-        t10n = None
-        try:
-            r2 = requests.get(f"{BASE_URL}/locations/{wigos}", headers=HEADERS,
-                             params={"datetime": dt, "parameter-name": "t10n"}, timeout=10)
-            if r2.status_code == 200:
-                js2 = r2.json()
-                if js2.get("coverages"):
-                    cov2 = js2["coverages"][0]
-                    vals2 = cov2.get("ranges",{}).get("t10n",{}).get("values",[])
-                    for v in reversed(vals2):
-                        if v is not None: t10n = v; break
-        except:
-            pass
+        t10n = laatste("tg")
 
         return {
             "naam": naam,
