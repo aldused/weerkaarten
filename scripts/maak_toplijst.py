@@ -5,10 +5,9 @@ from zoneinfo import ZoneInfo
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
 BASE_URL     = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
 BASE_URL_DAG = "https://api.dataplatform.knmi.nl/edr/v1/collections/daily-in-situ-meteorological-observations-validated"
-HEADERS  = {"Authorization": KNMI_KEY, "Accept": "application/json"}
+from knmi_api import knmi_get
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 # Startdatum: altijd vanaf 1 januari van het huidige jaar
@@ -116,7 +115,7 @@ def hoogste_anker_uur(station_id: str, dt_range: str) -> dict | None:
     Retourneert: {"ff": float, "tijdvak": "13:10-14:00", "dd": graden_of_None}
     """
     params = {"datetime": dt_range, "parameter-name": "ff,dd"}
-    r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
+    r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
     js = r.json()
@@ -177,7 +176,7 @@ def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float |
     e = f"{(dag + timedelta(days=1)).isoformat()}T00:00:00Z"
     params = {"datetime": f"{s}/{e}", "parameter-name": "T10N"}
     try:
-        r = requests.get(f"{BASE_URL_DAG}/locations/{station_id}", headers=HEADERS, params=params, timeout=20)
+        r = knmi_get(f"{BASE_URL_DAG}/locations/{station_id}", params=params, timeout=20)
         if r.status_code not in (400, 404):
             r.raise_for_status()
             js = r.json()
@@ -193,15 +192,15 @@ def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float |
     if dt_range_10min is None:
         dt_range_10min = f"{s}/{e}"
     try:
-        params2 = {"datetime": dt_range_10min, "parameter-name": "tgn"}
-        r2 = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params2, timeout=20)
+        params2 = {"datetime": dt_range_10min, "parameter-name": "ta10"}
+        r2 = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params2, timeout=20)
         if r2.status_code in (400, 404):
             return None
         r2.raise_for_status()
         js2 = r2.json()
         if not js2.get("coverages"):
             return None
-        vals2 = to_floats(js2["coverages"][0].get("ranges", {}).get("tgn", {}).get("values"))
+        vals2 = to_floats(js2["coverages"][0].get("ranges", {}).get("ta10", {}).get("values"))
         return min_valid(vals2)
     except Exception:
         return None
@@ -239,7 +238,7 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
     Inclusief tijdstip van TX, TN en FX.
     """
     params = {"datetime": dt_range, "parameter-name": "ta,tx,tn,fx,ff"}
-    r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
+    r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
     js = r.json()
@@ -286,7 +285,7 @@ def haal_neerslag(station_id: str, dt_range: str) -> float | None:
     Waarden onder RR_DREMPEL worden als 0 beschouwd (meetruis).
     """
     params = {"datetime": dt_range, "parameter-name": "rg"}
-    r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
+    r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
     js = r.json()
@@ -310,7 +309,7 @@ def haal_zon(station_id: str, dt_range: str) -> float | None:
     Per 10-min stap = 1/6 uur.
     """
     params = {"datetime": dt_range, "parameter-name": "qg"}
-    r = requests.get(f"{BASE_URL}/locations/{station_id}", headers=HEADERS, params=params, timeout=25)
+    r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None
     r.raise_for_status()
     js = r.json()
@@ -430,6 +429,10 @@ for dag in alle_dagen:
 # Sorteer op datum
 resultaten = dict(sorted(resultaten.items()))
 
-with open(JSON_PATH, "w") as f:
-    json.dump(resultaten, f)
-print(f"\ntoplijst.json bijgewerkt ({len(resultaten)} dagen)")
+vandaag_data = resultaten.get(vandaag.isoformat(), {})
+if len(vandaag_data.get("max", [])) >= 5 or len(resultaten) > 1:
+    with open(JSON_PATH, "w") as f:
+        json.dump(resultaten, f)
+    print(f"\ntoplijst.json bijgewerkt ({len(resultaten)} dagen)")
+else:
+    print(f"\nOnvoldoende data voor vandaag, toplijst.json NIET overschreven (fallback actief)")

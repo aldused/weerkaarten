@@ -22,9 +22,8 @@ from matplotlib.gridspec import GridSpec
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 # ── Configuratie ──────────────────────────────────────────────────────────────
-KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
 BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
-HEADERS  = {"Authorization": KNMI_KEY, "Accept": "application/json"}
+from knmi_api import knmi_get
 EXTENT   = [3.3, 7.4, 50.45, 53.8]
 
 nl_maanden = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"]
@@ -82,16 +81,13 @@ def ms_naar_bft(ms):
 def haal_obs(wigos_id):
     """Haal meest recente ta, ff, dd, n op."""
     now_utc = datetime.now(timezone.utc)
-    # Haal laatste 60 minuten op (bewolking wordt niet elke 10 min gerapporteerd)
-    s = (now_utc - timedelta(minutes=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Haal laatste 90 minuten op (bewolking wordt niet elke 10 min gerapporteerd)
+    s = (now_utc - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     e = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh,qg,h,ww,tg,tgn"}
+    params = {"datetime": f"{s}/{e}", "parameter-name": "ta,ff,dd,n,td,rh,qg,h,ww"}
     try:
-        r = requests.get(f"{BASE_URL}/locations/{wigos_id}",
-                         headers=HEADERS, params=params, timeout=15)
-        if r.status_code in (400, 404):
-            print(f"    !! HTTP {r.status_code} voor {wigos_id}: {r.text[:200]}")
-            return None
+        r = knmi_get(f"{BASE_URL}/locations/{wigos_id}", params=params, timeout=15)
+        if r.status_code in (400, 404): return None
         r.raise_for_status()
         js = r.json()
         if not js.get("coverages"): return None
@@ -126,7 +122,6 @@ def haal_obs(wigos_id):
             "ww": laatste("ww"),
         }
     except Exception as e:
-        print(f"    !! Fout bij {wigos_id}: {e}")
         return None
 
 # ── Teken bewolkingscirkel ─────────────────────────────────────────────────────
@@ -398,9 +393,13 @@ ax.axis("off")
 import glob, os as _os
 
 fname = f"kaart_synop_{now_lokaal.strftime('%Y%m%d_%H%M')}.png"
-plt.savefig(fname, dpi=150, bbox_inches="tight")
-plt.close()
-print(f"Kaart opgeslagen: {fname}")
+if len(obs_data) >= 10:
+    plt.savefig(fname, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Kaart opgeslagen: {fname} ({len(obs_data)} stations)")
+else:
+    plt.close()
+    print(f"Te weinig stations ({len(obs_data)}), synop NIET opgeslagen (fallback actief)")
 bestanden = sorted(glob.glob("kaart_synop_*.png"))
 if len(bestanden) > 10:
     for oud in bestanden[:-10]:
