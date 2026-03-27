@@ -55,8 +55,26 @@ tfoot td.tn { color: #aaccff; }
 tfoot td.rr { color: #88ddaa; }
 tfoot td.sq { color: #ffcc66; }
 .rng { font-size: 10px; font-weight: 400; opacity: 0.75; margin-left: 3px; }
-.status { padding: 40px; text-align: center; color: #7a90a8; font-size: 14px; }
+.grafiek-wrap { padding: 12px 16px 20px; }
+.grafiek-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.grafiek-titel { font-size: 13px; font-weight: 700; color: #1a2b40; }
+.grafiek-knoppen { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.gk { padding: 4px 12px; border-radius: 14px; border: 2px solid; cursor: pointer; font-size: 11px; font-weight: 700; transition: all 0.15s; user-select: none; }
+.gk.tx  { border-color: #c0392b; color: #c0392b; background: white; }
+.gk.tx.act  { background: #c0392b; color: white; }
+.gk.tn  { border-color: #2471a3; color: #2471a3; background: white; }
+.gk.tn.act  { background: #2471a3; color: white; }
+.gk.tg  { border-color: #666; color: #666; background: white; }
+.gk.tg.act  { background: #666; color: white; }
+.gk.rr  { border-color: #1a7a4a; color: #1a7a4a; background: white; }
+.gk.rr.act  { background: #1a7a4a; color: white; }
+.gk.sq  { border-color: #e67e00; color: #e67e00; background: white; }
+.gk.sq.act  { background: #e67e00; color: white; }
+.gk-dl { padding: 4px 12px; border-radius: 14px; border: 2px solid #003366; color: #003366; background: white; cursor: pointer; font-size: 11px; font-weight: 700; }
+.gk-dl:hover { background: #003366; color: white; }
+.grafiek-canvas-wrap { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 12px 8px 8px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="header">
@@ -95,7 +113,23 @@ tfoot td.sq { color: #ffcc66; }
     <tfoot id="tf"></tfoot>
   </table>
 </div>
-<script>
+
+<div class="grafiek-wrap" id="grafiek-wrap" style="display:none">
+  <div class="grafiek-header">
+    <div class="grafiek-titel" id="grafiek-titel">Grafiek</div>
+    <div class="grafiek-knoppen">
+      <div class="gk tx act" onclick="toggleGrafiekLijn('tx',this)">TX max</div>
+      <div class="gk tn act" onclick="toggleGrafiekLijn('tn',this)">TN min</div>
+      <div class="gk tg" onclick="toggleGrafiekLijn('tg',this)">TG gem</div>
+      <div class="gk rr act" onclick="toggleGrafiekLijn('rr',this)">Neerslag</div>
+      <div class="gk sq act" onclick="toggleGrafiekLijn('sq',this)">Zon</div>
+      <div class="gk-dl" onclick="downloadGrafiek()">⬇ PNG</div>
+    </div>
+  </div>
+  <div class="grafiek-canvas-wrap">
+    <canvas id="grafiek-canvas" style="max-height:320px"></canvas>
+  </div>
+</div>
 var STATIONS = [
   {nr:260, naam:"De Bilt",           file:"maanddata_260.json"},
   {nr:235, naam:"Den Helder",        file:"maanddata_235.json"},
@@ -287,12 +321,153 @@ function toon() {
 
   document.getElementById('msg').style.display = 'none';
   document.getElementById('tbl').style.display = '';
+  tekenGrafiek();
 }
 
 vulStations();
 vulJaren();
 sync();
 laadData();
+
+// ── Grafiek ───────────────────────────────────────────────────────────────────
+var grafiek = null;
+var grafiekLijnen = { tx: true, tn: true, tg: false, rr: true, sq: true };
+var NL_MAANDEN_LANG = ["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+
+function toggleGrafiekLijn(key, el) {
+  grafiekLijnen[key] = !grafiekLijnen[key];
+  el.classList.toggle('act', grafiekLijnen[key]);
+  tekenGrafiek();
+}
+
+function tekenGrafiek() {
+  var ms = String(M).padStart(2,'0');
+  var ad = new Date(J, M, 0).getDate();
+  var labels = [], tx = [], tn = [], tg = [], rr = [], sq = [];
+
+  for (var d = 1; d <= ad; d++) {
+    var k = J + '-' + ms + '-' + String(d).padStart(2,'0');
+    labels.push(d);
+    var o = D[k] || null;
+    tx.push(o && o.tx != null ? o.tx : null);
+    tn.push(o && o.tn != null ? o.tn : null);
+    tg.push(o && o.tg != null ? o.tg : null);
+    rr.push(o && o.rr != null ? o.rr : null);
+    sq.push(o && o.sq != null ? o.sq : null);
+  }
+
+  var nm = (ALLE_NM[hSt.nr] || {})[M] || {};
+
+  var datasets = [];
+
+  if (grafiekLijnen.tx) datasets.push({
+    label: 'TX max (°C)', data: tx, type: 'line',
+    borderColor: '#c0392b', backgroundColor: 'rgba(192,57,43,0.08)',
+    borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+    tension: 0.3, yAxisID: 'yTemp', spanGaps: true,
+  });
+  if (grafiekLijnen.tn) datasets.push({
+    label: 'TN min (°C)', data: tn, type: 'line',
+    borderColor: '#2471a3', backgroundColor: 'rgba(36,113,163,0.08)',
+    borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+    tension: 0.3, yAxisID: 'yTemp', spanGaps: true,
+  });
+  if (grafiekLijnen.tg) datasets.push({
+    label: 'TG gem (°C)', data: tg, type: 'line',
+    borderColor: '#888', backgroundColor: 'rgba(100,100,100,0.05)',
+    borderWidth: 1.5, pointRadius: 2, borderDash: [4,3],
+    tension: 0.3, yAxisID: 'yTemp', spanGaps: true,
+  });
+  if (grafiekLijnen.rr) datasets.push({
+    label: 'Neerslag (mm)', data: rr, type: 'bar',
+    backgroundColor: 'rgba(26,122,74,0.7)', borderColor: '#1a7a4a',
+    borderWidth: 1, yAxisID: 'yBar', order: 2,
+  });
+  if (grafiekLijnen.sq) datasets.push({
+    label: 'Zon (uur)', data: sq, type: 'bar',
+    backgroundColor: 'rgba(230,126,0,0.6)', borderColor: '#e67e00',
+    borderWidth: 1, yAxisID: 'yBar', order: 3,
+  });
+
+  // Normaallijnen als annotatie via horizontale dataset
+  if (grafiekLijnen.tx && nm.tx != null) datasets.push({
+    label: 'Normaal TX', data: Array(ad).fill(nm.tx), type: 'line',
+    borderColor: 'rgba(192,57,43,0.35)', borderWidth: 1, borderDash: [5,4],
+    pointRadius: 0, yAxisID: 'yTemp', spanGaps: true,
+  });
+  if (grafiekLijnen.tn && nm.tn != null) datasets.push({
+    label: 'Normaal TN', data: Array(ad).fill(nm.tn), type: 'line',
+    borderColor: 'rgba(36,113,163,0.35)', borderWidth: 1, borderDash: [5,4],
+    pointRadius: 0, yAxisID: 'yTemp', spanGaps: true,
+  });
+
+  var heeftTemp = grafiekLijnen.tx || grafiekLijnen.tn || grafiekLijnen.tg;
+  var heeftBar  = grafiekLijnen.rr || grafiekLijnen.sq;
+
+  var ctx = document.getElementById('grafiek-canvas').getContext('2d');
+  if (grafiek) { grafiek.destroy(); grafiek = null; }
+
+  grafiek = new Chart(ctx, {
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { font: { size: 11 }, boxWidth: 14, padding: 10,
+            filter: function(item) { return !item.text.startsWith('Normaal'); }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(c) {
+              if (c.parsed.y == null) return null;
+              return c.dataset.label + ': ' + c.parsed.y.toFixed(1);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { color: '#7a90a8', font: { size: 10 } }
+        },
+        yTemp: {
+          display: heeftTemp,
+          position: 'left',
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { color: '#7a90a8', font: { size: 10 },
+            callback: function(v) { return v.toFixed(0) + '°'; }
+          },
+          title: { display: true, text: 'Temperatuur (°C)', color: '#7a90a8', font: { size: 10 } }
+        },
+        yBar: {
+          display: heeftBar,
+          position: 'right',
+          min: 0,
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#7a90a8', font: { size: 10 } },
+          title: { display: true, text: 'mm / uur', color: '#7a90a8', font: { size: 10 } }
+        }
+      }
+    }
+  });
+
+  document.getElementById('grafiek-wrap').style.display = 'block';
+  var mnaam = NL_MAANDEN_LANG[M];
+  document.getElementById('grafiek-titel').textContent =
+    hSt.naam + ' – ' + mnaam.charAt(0).toUpperCase() + mnaam.slice(1) + ' ' + J;
+}
+
+function downloadGrafiek() {
+  var canvas = document.getElementById('grafiek-canvas');
+  var mnaam = NL_MAANDEN_LANG[M];
+  var a = document.createElement('a');
+  a.download = hSt.naam + '_' + mnaam + '_' + J + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
 </script>
 </body>
 </html>
