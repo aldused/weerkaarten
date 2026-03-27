@@ -143,7 +143,7 @@ import cartopy.crs as ccrs
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 print("MOSMIX ophalen (zon/bewolking)...")
 
-LOCAL_TZ = ZoneInfo("Europe/Amsterdam")  # TODO: vervangen door ZoneInfo
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 data_per_day = {}
 for code, name in stations:
