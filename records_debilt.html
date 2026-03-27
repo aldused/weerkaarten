@@ -1198,28 +1198,57 @@ function setMRRichting(r, el) {
   toonMaandranking();
 }
 
+function samenvoegMRData(datasets, sleutel, type, key) {
+  // Combineer maandranking over meerdere stations: gemiddelde per jaar
+  const jaarVals = {};
+  for (const d of datasets) {
+    const bron = type === "seizoen" ? d.seizoenranking?.[key] : d.maandranking?.[key];
+    if (!bron) continue;
+    for (const [waarde, jaar] of (bron[sleutel] || [])) {
+      if (!jaarVals[jaar]) jaarVals[jaar] = [];
+      jaarVals[jaar].push(waarde);
+    }
+  }
+  const minStn = Math.ceil(datasets.length * 0.6);
+  const res = [];
+  for (const [jaar, vals] of Object.entries(jaarVals)) {
+    if (vals.length < minStn) continue;
+    res.push([Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10, jaar]);
+  }
+  return res.sort((a,b) => sleutel.endsWith("_laag") ? a[0]-b[0] : b[0]-a[0]).slice(0,25);
+}
+
 function toonMaandranking() {
   if (!data) return;
-  const m   = document.getElementById("mr-maand").value;
-  const p   = huidigeMRParam;
-  const r   = huidigeMRRichting;
+  const p = huidigeMRParam;
+  const r = huidigeMRRichting;
   const sleutel = p + "_" + r;
-  const mr = data.maandranking?.[m];
-  if (!mr) return;
-
   const NL_MND_LANG = ["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
   const PARAM_LBL = { tx:"gemiddelde TX", tn:"gemiddelde TN", tg:"gemiddelde TG", rh:"neerslagsom", sq:"zonuren" };
   const PARAM_EEN = { tx:"°C", tn:"°C", tg:"°C", rh:"mm", sq:"uur" };
   const RICHT_LBL = { hoog:{ tx:"Warmste",tn:"Hoogste TN",tg:"Warmste",rh:"Natste",sq:"Zonnigste" },
                       laag:{ tx:"Koudste",tn:"Laagste TN",tg:"Koudste",rh:"Droogste",sq:"Minst zonnige" } };
+  const NL_SEI = { winter:"Winter (dec–feb)", lente:"Lente (mrt–mei)", zomer:"Zomer (jun–aug)", herfst:"Herfst (sep–nov)" };
+  const stnNaam = multiData ? document.querySelector("#sel-station option:checked").text : data.station;
 
-  const maandNaam = NL_MND_LANG[parseInt(m)];
-  const richtLbl  = RICHT_LBL[r][p];
-  document.getElementById("mr-titel").textContent = `${richtLbl} ${maandNaam}maanden – ${data.station}`;
-  document.getElementById("mr-sub").textContent = `${PARAM_LBL[p]} per ${maandNaam} · ${data.van.slice(0,4)}–${data.tm.slice(0,4)}`;
+  let lijst, periodeNaam;
+  if (huidigeMRPeriode === "seizoen") {
+    const sei = document.getElementById("mr-seizoen").value;
+    periodeNaam = NL_SEI[sei];
+    lijst = multiData ? samenvoegMRData(multiData, sleutel, "seizoen", sei)
+                      : (data.seizoenranking?.[sei]?.[sleutel] || []);
+    document.getElementById("mr-titel").textContent = `${RICHT_LBL[r][p]} ${periodeNaam.toLowerCase()} – ${stnNaam}`;
+    document.getElementById("mr-sub").textContent = `${PARAM_LBL[p]} per seizoen · ${data.van.slice(0,4)}–${data.tm.slice(0,4)}`;
+  } else {
+    const m = document.getElementById("mr-maand").value;
+    periodeNaam = NL_MND_LANG[parseInt(m)];
+    lijst = multiData ? samenvoegMRData(multiData, sleutel, "maand", m)
+                      : (data.maandranking?.[m]?.[sleutel] || []);
+    document.getElementById("mr-titel").textContent = `${RICHT_LBL[r][p]} ${periodeNaam}maanden – ${stnNaam}`;
+    document.getElementById("mr-sub").textContent = `${PARAM_LBL[p]} per ${periodeNaam} · ${data.van.slice(0,4)}–${data.tm.slice(0,4)}`;
+  }
   document.getElementById("mr-th-waarde").textContent = `${PARAM_LBL[p]} (${PARAM_EEN[p]})`;
 
-  const lijst = mr[sleutel] || [];
   const top1  = lijst[0]?.[0];
   const kleur = r === "hoog"
     ? (["tx","tg"].includes(p) ? "var(--rood)" : ["tn"].includes(p) ? "var(--rood)" : "var(--accent)")
@@ -1252,7 +1281,9 @@ function toonMaandranking() {
 }
 
 function toonTussenstand() {
-  const ts = data?.tussenstand;
+  // Haal tussenstand op — voor multiData: gemiddelde over alle stations
+  const datasets = multiData || [data];
+  const ts = datasets[0]?.tussenstand;
   if (!ts) return;
   const NL_MND = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
   const PARAM_CFG = [
@@ -1265,9 +1296,13 @@ function toonTussenstand() {
   const el = document.getElementById("mr-tussenstand-inhoud");
   const maandNaam = NL_MND[ts.maand];
   el.innerHTML = PARAM_CFG.map(({key,lbl,een,kleur}) => {
-    const d = ts[key];
-    if (!d) return `<div style="background:var(--kaart2);border-radius:10px;padding:12px 14px;"><div style="font-size:0.70em;color:var(--tekst2);margin-bottom:4px;">${lbl}</div><div style="color:var(--tekst2);font-size:0.80em;">Geen data</div></div>`;
-    const pct = Math.round((1 - (d.rang - 1) / d.totaal) * 100);
+    // Gemiddelde waarde en rang over alle datasets
+    const entries = datasets.map(d => d?.tussenstand?.[key]).filter(Boolean);
+    if (!entries.length) return `<div style="background:var(--kaart2);border-radius:10px;padding:12px 14px;"><div style="font-size:0.70em;color:var(--tekst2);margin-bottom:4px;">${lbl}</div><div style="color:var(--tekst2);font-size:0.80em;">Geen data</div></div>`;
+    const gemWaarde = Math.round(entries.reduce((a,e)=>a+e.waarde,0)/entries.length*10)/10;
+    const gemRang   = Math.round(entries.reduce((a,e)=>a+e.rang,0)/entries.length);
+    const totaal    = entries[0].totaal;
+    const d = { waarde: gemWaarde, rang: gemRang, totaal };
     const rangKleur = d.rang <= 3 ? "#0d9488" : d.rang <= 10 ? "#22c55e" : d.rang > d.totaal - 3 ? "#ef4444" : "var(--tekst2)";
     return `
       <div style="background:var(--kaart2);border:1px solid var(--rand);border-radius:10px;padding:12px 14px;">
