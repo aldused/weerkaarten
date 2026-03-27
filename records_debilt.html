@@ -288,6 +288,18 @@
     .waarde.laag { color: #00c !important; }
     canvas { max-width: 100%; }
     .sectie-jaar-overzicht { page-break-before: auto; }
+  .mr-param-tab {
+    padding:6px 14px;border-radius:20px;cursor:pointer;font-size:0.80em;font-weight:500;
+    border:1px solid var(--rand);color:var(--tekst2);transition:all 0.15s;background:var(--kaart);white-space:nowrap;
+  }
+  .mr-param-tab:hover { border-color:var(--accent);color:var(--tekst); }
+  .mr-param-tab.actief { background:var(--accent);border-color:var(--accent);color:white; }
+  .mr-richting-tab {
+    padding:5px 14px;border-radius:6px;cursor:pointer;font-size:0.78em;font-weight:500;
+    color:var(--tekst2);transition:all 0.15s;white-space:nowrap;
+  }
+  .mr-richting-tab:hover { color:var(--tekst); }
+  .mr-richting-tab.actief { background:var(--kaart2);color:var(--tekst); }
   }
 
   /* ── Sorteerbare kolomkoppen ── */
@@ -523,6 +535,7 @@
       <div class="ptab" onclick="wisselPeriode('jaar')">Jaar</div>
       <div class="ptab" onclick="wisselPeriode('alltime')">Alltime</div>
       <div class="ptab" onclick="wisselPeriode('periode')">Periode</div>
+      <div class="ptab" onclick="wisselPeriode('maandranking')" style="background:linear-gradient(135deg,#0d9488,#0891b2);color:white;border-radius:6px;">📅 Maandranking</div>
     </div>
 
     <div class="filter-groep" id="filter-periode" style="display:none;">
@@ -854,6 +867,67 @@
   </div>
 </div>
 
+<!-- Maandranking sectie -->
+<div id="sectie-maandranking" style="display:none;max-width:1100px;margin:28px auto;padding:0 24px;">
+
+  <!-- Tussenstand huidige maand -->
+  <div id="mr-tussenstand" style="background:linear-gradient(135deg,rgba(13,148,136,0.15),rgba(8,145,178,0.1));border:1px solid rgba(13,148,136,0.35);border-radius:14px;padding:18px 24px;margin-bottom:20px;">
+    <div style="font-size:0.75em;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#0d9488;margin-bottom:10px;">📅 Tussenstand huidige maand</div>
+    <div id="mr-tussenstand-inhoud" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;"></div>
+  </div>
+
+  <!-- Filters maandranking -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+    <div>
+      <div style="font-size:0.65em;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#64748b;margin-bottom:3px;">Maand</div>
+      <select id="mr-maand" onchange="toonMaandranking()" style="background:var(--kaart2);border:1px solid var(--rand);color:var(--tekst);padding:6px 10px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85em;outline:none;">
+        <option value="1">Januari</option><option value="2">Februari</option>
+        <option value="3">Maart</option><option value="4">April</option>
+        <option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Augustus</option>
+        <option value="9">September</option><option value="10">Oktober</option>
+        <option value="11">November</option><option value="12">December</option>
+      </select>
+    </div>
+    <div>
+      <div style="font-size:0.65em;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#64748b;margin-bottom:3px;">Parameter</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <div class="mr-param-tab actief" onclick="setMRParam('tx',this)">🌡 TX gem</div>
+        <div class="mr-param-tab" onclick="setMRParam('tn',this)">❄️ TN gem</div>
+        <div class="mr-param-tab" onclick="setMRParam('tg',this)">🌡 TG gem</div>
+        <div class="mr-param-tab" onclick="setMRParam('rh',this)">🌧 Neerslag</div>
+        <div class="mr-param-tab" onclick="setMRParam('sq',this)">☀️ Zonuren</div>
+      </div>
+    </div>
+    <div style="margin-left:auto;">
+      <div style="font-size:0.65em;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#64748b;margin-bottom:3px;">Richting</div>
+      <div style="display:flex;gap:3px;background:var(--kaart);border:1px solid var(--rand);border-radius:8px;padding:3px;">
+        <div class="mr-richting-tab actief" onclick="setMRRichting('hoog',this)">Warmste / Natste</div>
+        <div class="mr-richting-tab" onclick="setMRRichting('laag',this)">Koudste / Droogste</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ranking tabel -->
+  <div style="background:var(--kaart);border:1px solid var(--rand);border-radius:14px;overflow:hidden;">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--rand);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+      <div id="mr-titel" style="font-size:1.05em;font-weight:600;color:white;">Warmste januarissen</div>
+      <div id="mr-sub" style="font-size:0.78em;color:var(--tekst2);"></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:rgba(59,130,246,0.12);">
+          <th style="padding:10px 16px;text-align:left;font-size:0.72em;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--tekst2);border-bottom:1px solid var(--rand);width:40px;">#</th>
+          <th style="padding:10px 16px;text-align:left;font-size:0.72em;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--tekst2);border-bottom:1px solid var(--rand);">Jaar</th>
+          <th id="mr-th-waarde" style="padding:10px 16px;text-align:right;font-size:0.72em;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--tekst2);border-bottom:1px solid var(--rand);">Waarde</th>
+          <th style="padding:10px 16px;text-align:right;font-size:0.72em;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--tekst2);border-bottom:1px solid var(--rand);">Afstand #1</th>
+        </tr>
+      </thead>
+      <tbody id="mr-tabel-body"></tbody>
+    </table>
+  </div>
+</div>
+
 <script>
 const NL_MAANDEN = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 const NL_MAANDEN_LANG = ["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
@@ -1000,6 +1074,7 @@ async function init() {
     vulDagDagen();
     document.getElementById("sel-dag-dag").value = nu.getDate();
     toon();
+    if (huidigePeriode === "maandranking") { toonMaandranking(); toonTussenstand(); }
   } catch(e) {
     document.getElementById("laden").className = "fout";
     document.getElementById("laden").textContent = "Records data niet beschikbaar — draai knmi_records.py";
@@ -1026,6 +1101,23 @@ function wisselPeriode(p) {
     const match = b.getAttribute("onclick");
     b.classList.toggle("actief", match && match.includes(`'${p}'`));
   });
+
+  const isMR = p === "maandranking";
+  document.getElementById("sectie-maandranking").style.display = isMR ? "block" : "none";
+  document.getElementById("tabel-wrapper-outer").style.display = isMR ? "none" : "block";
+  document.querySelector(".richting-tabs").style.display = isMR ? "none" : "flex";
+  document.getElementById("param-tabs").style.display = isMR ? "none" : "flex";
+  document.getElementById("filter-periode-tabs-wrapper").style.display = isMR ? "none" : "flex";
+  document.getElementById("sectie-jaar-overzicht").style.display = "none";
+
+  if (isMR) {
+    const nu = new Date();
+    document.getElementById("mr-maand").value = nu.getMonth() + 1;
+    toonMaandranking();
+    toonTussenstand();
+    return;
+  }
+
   ["jaar","seizoen","maand","decade","dag","periode"].forEach(f => {
     document.getElementById("filter-" + f).style.display = (p === f) ? "flex" : "none";
   });
@@ -1054,6 +1146,7 @@ function wisselParam(p) {
   document.getElementById("filter-periode-tabs-wrapper").style.display = isJaar ? "none" : "flex";
 
   document.getElementById("sectie-jaar-overzicht").style.display = isJaar ? "block" : "none";
+  document.getElementById("sectie-maandranking").style.display = "none";
   document.querySelector(".richting-tabs").style.display = isJaar ? "none" : "flex";
   document.getElementById("tabel-wrapper-outer").style.display = isJaar ? "none" : "block";
 
@@ -1098,7 +1191,113 @@ function herbouwJaarSelector() {
   jaren.forEach(j => { const o = document.createElement("option"); o.value = j; o.textContent = j; selJaar.appendChild(o); });
 }
 
-function haalRecords() {
+let huidigeMRParam    = "tx";
+let huidigeMRRichting = "hoog";
+
+function setMRParam(p, el) {
+  huidigeMRParam = p;
+  document.querySelectorAll(".mr-param-tab").forEach(b => b.classList.remove("actief"));
+  el.classList.add("actief");
+  // Bij neerslag/zon geen laagste optie
+  const laagTab = document.querySelector(".mr-richting-tab:last-child");
+  if (["rh","sq"].includes(p) && huidigeMRRichting === "laag") {
+    huidigeMRRichting = "hoog";
+    document.querySelector(".mr-richting-tab").classList.add("actief");
+    laagTab.classList.remove("actief");
+  }
+  laagTab.style.opacity = ["rh","sq"].includes(p) ? "0.3" : "1";
+  laagTab.style.pointerEvents = ["rh","sq"].includes(p) ? "none" : "auto";
+  toonMaandranking();
+}
+
+function setMRRichting(r, el) {
+  huidigeMRRichting = r;
+  document.querySelectorAll(".mr-richting-tab").forEach(b => b.classList.remove("actief"));
+  el.classList.add("actief");
+  toonMaandranking();
+}
+
+function toonMaandranking() {
+  if (!data) return;
+  const m   = document.getElementById("mr-maand").value;
+  const p   = huidigeMRParam;
+  const r   = huidigeMRRichting;
+  const sleutel = p + "_" + r;
+  const mr = data.maandranking?.[m];
+  if (!mr) return;
+
+  const NL_MND_LANG = ["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+  const PARAM_LBL = { tx:"gemiddelde TX", tn:"gemiddelde TN", tg:"gemiddelde TG", rh:"neerslagsom", sq:"zonuren" };
+  const PARAM_EEN = { tx:"°C", tn:"°C", tg:"°C", rh:"mm", sq:"uur" };
+  const RICHT_LBL = { hoog:{ tx:"Warmste",tn:"Hoogste TN",tg:"Warmste",rh:"Natste",sq:"Zonnigste" },
+                      laag:{ tx:"Koudste",tn:"Laagste TN",tg:"Koudste",rh:"Droogste",sq:"Minder zonnige" } };
+
+  const maandNaam = NL_MND_LANG[parseInt(m)];
+  const richtLbl  = RICHT_LBL[r][p];
+  document.getElementById("mr-titel").textContent = `${richtLbl} ${maandNaam}maanden – ${data.station}`;
+  document.getElementById("mr-sub").textContent = `${PARAM_LBL[p]} per ${maandNaam} · ${data.van.slice(0,4)}–${data.tm.slice(0,4)}`;
+  document.getElementById("mr-th-waarde").textContent = `${PARAM_LBL[p]} (${PARAM_EEN[p]})`;
+
+  const lijst = mr[sleutel] || [];
+  const top1  = lijst[0]?.[0];
+  const kleur = r === "hoog"
+    ? (["tx","tg"].includes(p) ? "var(--rood)" : ["tn"].includes(p) ? "var(--rood)" : "var(--accent)")
+    : "var(--blauwt)";
+
+  // Huidig jaar markeren
+  const huidigJaar = new Date().getFullYear().toString();
+
+  const tbody = document.getElementById("mr-tabel-body");
+  tbody.innerHTML = "";
+  lijst.forEach(([waarde, jaar], i) => {
+    const rang = i + 1;
+    const isHuidig = jaar === huidigJaar;
+    const afstand  = top1 != null ? (rang === 1 ? "—" : (r === "hoog" ? (waarde - top1) : (waarde - top1)).toFixed(1)) : "—";
+    const rangKleur = rang===1?"#fbbf24":rang===2?"#94a3b8":rang===3?"#cd7f32":"var(--tekst2)";
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid var(--rand)";
+    if (isHuidig) tr.style.background = "rgba(13,148,136,0.12)";
+    tr.innerHTML = `
+      <td style="padding:10px 16px;font-family:'DM Mono',monospace;font-size:0.78em;color:${rangKleur};font-weight:${rang<=3?'600':'400'}">${rang}</td>
+      <td style="padding:10px 16px;font-size:0.90em;color:${isHuidig?'#0d9488':'var(--tekst)'};font-weight:${isHuidig?'600':'400'}">
+        ${jaar}${isHuidig?' <span style="font-size:0.72em;background:rgba(13,148,136,0.2);color:#0d9488;padding:1px 6px;border-radius:10px;margin-left:4px;">lopend</span>':''}
+      </td>
+      <td style="padding:10px 16px;text-align:right;font-family:'DM Mono',monospace;font-weight:600;font-size:1.02em;color:${kleur}">${waarde.toFixed(1)} <span style="font-size:0.75em;color:var(--tekst2)">${PARAM_EEN[p]}</span></td>
+      <td style="padding:10px 16px;text-align:right;font-family:'DM Mono',monospace;font-size:0.85em;color:var(--tekst2)">${rang===1?"":((r==="hoog"?waarde-top1:waarde-top1).toFixed(1))}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  if (!lijst.length) tbody.innerHTML = `<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--tekst2)">Geen data beschikbaar</td></tr>`;
+}
+
+function toonTussenstand() {
+  const ts = data?.tussenstand;
+  if (!ts) return;
+  const NL_MND = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+  const PARAM_CFG = [
+    { key:"tx", lbl:"TX gem",    een:"°C", kleur:"#ef4444" },
+    { key:"tn", lbl:"TN gem",    een:"°C", kleur:"#60a5fa" },
+    { key:"tg", lbl:"TG gem",    een:"°C", kleur:"#f59e0b" },
+    { key:"rh", lbl:"Neerslag",  een:"mm", kleur:"#3b82f6" },
+    { key:"sq", lbl:"Zonuren",   een:"u",  kleur:"#f59e0b" },
+  ];
+  const el = document.getElementById("mr-tussenstand-inhoud");
+  const maandNaam = NL_MND[ts.maand];
+  el.innerHTML = PARAM_CFG.map(({key,lbl,een,kleur}) => {
+    const d = ts[key];
+    if (!d) return `<div style="background:var(--kaart2);border-radius:10px;padding:12px 14px;"><div style="font-size:0.70em;color:var(--tekst2);margin-bottom:4px;">${lbl}</div><div style="color:var(--tekst2);font-size:0.80em;">Geen data</div></div>`;
+    const pct = Math.round((1 - (d.rang - 1) / d.totaal) * 100);
+    const rangKleur = d.rang <= 3 ? "#0d9488" : d.rang <= 10 ? "#22c55e" : d.rang > d.totaal - 3 ? "#ef4444" : "var(--tekst2)";
+    return `
+      <div style="background:var(--kaart2);border:1px solid var(--rand);border-radius:10px;padding:12px 14px;">
+        <div style="font-size:0.70em;color:var(--tekst2);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em;">${lbl} ${maandNaam} ${ts.jaar}</div>
+        <div style="font-size:1.4em;font-weight:600;color:${kleur};margin-bottom:2px;">${d.waarde.toFixed(1)}<span style="font-size:0.55em;margin-left:2px;color:var(--tekst2)">${een}</span></div>
+        <div style="font-size:0.78em;color:${rangKleur};font-weight:600;">Rang #${d.rang} van ${d.totaal} jaar</div>
+        <div style="font-size:0.70em;color:var(--tekst2);margin-top:2px;">t/m ${ts.dag} ${maandNaam}</div>
+      </div>`;
+  }).join("");
+}
+
   // Bepaal de juiste sleutel voor dit param+richting
   function paramSleutel(param, richting) {
     if (param === "pn") return "pn_laag";

@@ -382,6 +382,84 @@ for STATION, STATION_NAAM in STATIONS:
         "sq_hoog": top10_max(data, "sq"),
     }
 
+    # ── Maandranking ──────────────────────────────────────────────────────────
+    print("Maandranking berekenen...")
+    maandranking = {}
+    for m in range(1, 13):
+        maand_data = [r for r in data if r["maand"] == m]
+        jaar_groepen = defaultdict(list)
+        for r in maand_data:
+            jaar_groepen[r["jaar"]].append(r)
+
+        tx_gem, tn_gem, tg_gem, rh_som, sq_som = [], [], [], [], []
+        for j, groep in sorted(jaar_groepen.items()):
+            tx_v = [r["tx"] for r in groep if r["tx"] is not None]
+            tn_v = [r["tn"] for r in groep if r["tn"] is not None]
+            tg_v = [r["tg"] for r in groep if r["tg"] is not None]
+            rh_v = [r["rh"] for r in groep if r["rh"] is not None]
+            sq_v = [r["sq"] for r in groep if r["sq"] is not None]
+            min_dagen = 20
+            if len(tx_v) >= min_dagen: tx_gem.append((round(sum(tx_v)/len(tx_v),1), str(j)))
+            if len(tn_v) >= min_dagen: tn_gem.append((round(sum(tn_v)/len(tn_v),1), str(j)))
+            if len(tg_v) >= min_dagen: tg_gem.append((round(sum(tg_v)/len(tg_v),1), str(j)))
+            if len(rh_v) >= min_dagen: rh_som.append((round(sum(rh_v),1), str(j)))
+            if len(sq_v) >= min_dagen: sq_som.append((round(sum(sq_v),1), str(j)))
+
+        maandranking[str(m)] = {
+            "tx_hoog": sorted(tx_gem, reverse=True)[:50],
+            "tx_laag": sorted(tx_gem)[:25],
+            "tn_hoog": sorted(tn_gem, reverse=True)[:25],
+            "tn_laag": sorted(tn_gem)[:50],
+            "tg_hoog": sorted(tg_gem, reverse=True)[:25],
+            "tg_laag": sorted(tg_gem)[:25],
+            "rh_hoog": sorted(rh_som, reverse=True)[:25],
+            "rh_laag": sorted(rh_som)[:25],
+            "sq_hoog": sorted(sq_som, reverse=True)[:25],
+            "sq_laag": sorted(sq_som)[:25],
+        }
+    records["maandranking"] = maandranking
+
+    # ── Tussenstand huidige maand ──────────────────────────────────────────────
+    print("Tussenstand berekenen...")
+    vandaag    = date.today()
+    huid_maand = vandaag.month
+    huid_jaar  = vandaag.year
+    huid_dag   = vandaag.day
+
+    def tussenstand_param(maand, dag, param, aggregaat="gem"):
+        jaar_vals = defaultdict(list)
+        for r in data:
+            if r["maand"] == maand and r["dag"] <= dag and r[param] is not None:
+                jaar_vals[r["jaar"]].append(r[param])
+        jaar_agg = {}
+        for j, vals in jaar_vals.items():
+            if len(vals) >= max(dag - 4, 1):
+                v = round(sum(vals)/len(vals), 1) if aggregaat == "gem" else round(sum(vals), 1)
+                jaar_agg[j] = v
+        if huid_jaar not in jaar_agg:
+            return None
+        huidige = jaar_agg[huid_jaar]
+        gesorteerd = sorted(jaar_agg.items(), key=lambda x: x[1], reverse=True)
+        rang = next((i+1 for i,(j,_) in enumerate(gesorteerd) if j == huid_jaar), None)
+        return {
+            "waarde":  huidige,
+            "rang":    rang,
+            "totaal":  len(gesorteerd),
+            "top3":    [(w, str(j)) for j, w in sorted(jaar_agg.items(), key=lambda x: x[1], reverse=True)[:3]],
+            "laag3":   [(w, str(j)) for j, w in sorted(jaar_agg.items(), key=lambda x: x[1])[:3]],
+        }
+
+    records["tussenstand"] = {
+        "maand": huid_maand,
+        "jaar":  huid_jaar,
+        "dag":   huid_dag,
+        "tx": tussenstand_param(huid_maand, huid_dag, "tx", "gem"),
+        "tn": tussenstand_param(huid_maand, huid_dag, "tn", "gem"),
+        "tg": tussenstand_param(huid_maand, huid_dag, "tg", "gem"),
+        "rh": tussenstand_param(huid_maand, huid_dag, "rh", "som"),
+        "sq": tussenstand_param(huid_maand, huid_dag, "sq", "som"),
+    }
+
     # ── Opslaan ────────────────────────────────────────────────────────────────
     with open(OUTPUT_JSON, "w") as f:
         json.dump(records, f)
