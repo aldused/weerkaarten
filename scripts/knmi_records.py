@@ -419,7 +419,58 @@ for STATION, STATION_NAAM in STATIONS:
         }
     records["maandranking"] = maandranking
 
-    # ── Tussenstand huidige maand ──────────────────────────────────────────────
+    # ── Seizoenranking ────────────────────────────────────────────────────────
+    print("Seizoenranking berekenen...")
+    # Seizoen is gebaseerd op meteorologisch seizoen (op jaarbasis van het hoofdjaar)
+    # Winter: dec(jaar-1) + jan + feb → jaar = jan/feb jaar
+    # Lente: mrt apr mei, Zomer: jun jul aug, Herfst: sep okt nov
+    SEI_MAANDEN = {
+        "winter": (12, 1, 2),
+        "lente":  (3, 4, 5),
+        "zomer":  (6, 7, 8),
+        "herfst": (9, 10, 11),
+    }
+
+    def seizoen_jaar(r):
+        """Geef het 'hoofd-jaar' van het seizoen (winter: jan/feb jaar)."""
+        if r["maand"] == 12:
+            return r["jaar"] + 1  # dec hoort bij volgend seizoensjaar
+        return r["jaar"]
+
+    seizoenranking = {}
+    for sei, maanden in SEI_MAANDEN.items():
+        sei_data = [r for r in data if r["maand"] in maanden]
+        jaar_groepen = defaultdict(list)
+        for r in sei_data:
+            jaar_groepen[seizoen_jaar(r)].append(r)
+
+        tx_gem, tn_gem, tg_gem, rh_som, sq_som = [], [], [], [], []
+        min_dagen = 60  # seizoen heeft ~90 dagen, eis minimaal 60
+        for j, groep in sorted(jaar_groepen.items()):
+            tx_v = [r["tx"] for r in groep if r["tx"] is not None]
+            tn_v = [r["tn"] for r in groep if r["tn"] is not None]
+            tg_v = [r["tg"] for r in groep if r["tg"] is not None]
+            rh_v = [r["rh"] for r in groep if r["rh"] is not None]
+            sq_v = [r["sq"] for r in groep if r["sq"] is not None]
+            if len(tx_v) >= min_dagen: tx_gem.append((round(sum(tx_v)/len(tx_v),1), str(j)))
+            if len(tn_v) >= min_dagen: tn_gem.append((round(sum(tn_v)/len(tn_v),1), str(j)))
+            if len(tg_v) >= min_dagen: tg_gem.append((round(sum(tg_v)/len(tg_v),1), str(j)))
+            if len(rh_v) >= min_dagen: rh_som.append((round(sum(rh_v),1), str(j)))
+            if len(sq_v) >= min_dagen: sq_som.append((round(sum(sq_v),1), str(j)))
+
+        seizoenranking[sei] = {
+            "tx_hoog": sorted(tx_gem, reverse=True)[:25],
+            "tx_laag": sorted(tx_gem)[:25],
+            "tn_hoog": sorted(tn_gem, reverse=True)[:25],
+            "tn_laag": sorted(tn_gem)[:25],
+            "tg_hoog": sorted(tg_gem, reverse=True)[:25],
+            "tg_laag": sorted(tg_gem)[:25],
+            "rh_hoog": sorted(rh_som, reverse=True)[:25],
+            "rh_laag": sorted(rh_som)[:25],
+            "sq_hoog": sorted(sq_som, reverse=True)[:25],
+            "sq_laag": sorted(sq_som)[:25],
+        }
+    records["seizoenranking"] = seizoenranking
     print("Tussenstand berekenen...")
     vandaag    = date.today()
     huid_maand = vandaag.month
