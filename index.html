@@ -540,6 +540,8 @@ function openPanel(panel) {
     sub ? (SUB_TITELS[sub] || PANEL_TITELS[panel]) : PANEL_TITELS[panel];
 
   huidigPanel = panel;
+  // Hash bijwerken zodat reload op dezelfde pagina blijft
+  history.replaceState(null, '', '#' + panel);
   if (window.innerWidth <= 768) sluitSidebar();
 
   // Toolbar alleen bij kaartenpanels
@@ -571,6 +573,7 @@ function openPanel(panel) {
 }
 
 function openSub(panel, sub) {
+  history.replaceState(null, '', '#' + panel + '-' + sub);
   if (huidigPanel !== panel) openPanel(panel);
   huidigSub[panel] = sub;
 
@@ -791,6 +794,30 @@ async function downloadAlles() {
     }
   } catch(e) { alert("Kon kaartlijst niet laden."); }
 }
+// ── Hash navigatie: herstel panel bij laden / reload ──────────────────────────
+(function() {
+  const hash = window.location.hash.replace('#', '');
+  if (!hash) return;
+  const parts = hash.split('-');
+  const panel = parts[0];
+  const sub   = parts.slice(1).join('-') || null;
+  // Wacht tot DOM klaar is
+  const el = document.getElementById('panel-' + panel);
+  if (!el) return;
+  if (sub) {
+    openPanel(panel);
+    const subEl = document.getElementById('panel-' + sub) ||
+                  document.getElementById('kaarten-' + sub);
+    if (subEl) {
+      // open subtab without rewriting hash
+      const allPanels = document.querySelectorAll('.panel');
+      allPanels.forEach(p => p.classList.remove('actief'));
+      subEl.classList.add('actief');
+    }
+  } else {
+    openPanel(panel);
+  }
+})();
 </script>
 </body>
 </html>
