@@ -307,7 +307,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
     <div class="topbar-links">
       <div class="topbar-titel" id="topbar-titel">Temperatuur TX / TN</div>
       <div class="topbar-sub">
-        MOS kaarten ECMWF/ICON · DWD MOSMIX &nbsp;
+        MOS kaarten ECMWF/ICON · DWD MOSMIX &nbsp;<span id="toplijst-update-tijd" style="display:none;margin-left:8px;color:#2ec4e8;font-weight:600;"></span>
         <a href="#" onclick="document.getElementById('mos-modal').style.display='flex';return false;"
            style="color:#a8c4e8;font-size:0.85em;border:1px solid #a8c4e8;border-radius:3px;padding:1px 5px;text-decoration:none;">info</a>
       </div>
@@ -563,8 +563,14 @@ function openPanel(panel) {
   if (toolbar) toolbar.style.display = kaartPanels.includes(panel) ? "flex" : "none";
 
   // Speciale acties
-  if (panel === "guidance") laadGuidance();
-  if (panel === "synop")    laadSynop();
+  if (panel === "guidance")  laadGuidance();
+  if (panel === "synop")     laadSynop();
+  if (panel === "topkaart" || panel === "toplijst") {
+    laadToplijstTijd();
+    document.getElementById("toplijst-update-tijd").style.display = "inline";
+  } else {
+    document.getElementById("toplijst-update-tijd").style.display = "none";
+  }
 
   // activeLijst instellen
   const lijstMap = {
@@ -796,6 +802,19 @@ fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
 }).catch(() => {
   document.getElementById("kaarten-temp").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
 });
+
+// ── Toplijst timestamp ophalen ──────────────────────────────────────────────
+function laadToplijstTijd() {
+  fetch("toplijst.json?t=" + Date.now())
+    .then(r => r.json())
+    .then(data => {
+      const datums = Object.keys(data).sort().reverse();
+      if (!datums.length) return;
+      const laatste = data[datums[0]];
+      const el = document.getElementById("toplijst-update-tijd");
+      if (el && laatste.update) el.textContent = "Data: " + laatste.update;
+    }).catch(() => {});
+}
 
 async function downloadAlles() {
   try {
