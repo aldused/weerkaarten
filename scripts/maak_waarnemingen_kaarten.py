@@ -49,13 +49,13 @@ COORDS = {
     "Twenthe":             (6.889, 52.275),
     "Vlissingen":          (3.596, 51.442),
     "Westdorpe":           (3.861, 51.226),
-    "Wilhelminadorp":      (3.884, 51.527),
-    "Stavenisse":          (4.001, 51.594),
+    "Wilhelminadorp":      (3.804, 51.490),  # display offset
+    "Stavenisse":          (4.001, 51.634),  # display offset
     "Hoek van Holland":    (4.131, 51.978),
-    "Tholen":              (4.219, 51.531),
-    "Woensdrecht":         (4.342, 51.449),
-    "Rotterdam Geulhaven": (4.320, 51.893),
-    "Rotterdam Airport":   (4.437, 51.957),
+    "Tholen":              (4.169, 51.571),  # display offset
+    "Woensdrecht":         (4.382, 51.409),  # display offset
+    "Rotterdam Geulhaven": (4.255, 51.863),  # display offset
+    "Rotterdam Airport":   (4.467, 51.987),  # display offset
     "Cabauw":              (4.926, 51.971),
     "Gilze-Rijen":         (4.931, 51.567),
     "Herwijnen":           (5.146, 51.859),
