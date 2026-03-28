@@ -17,6 +17,12 @@ HISTORIE_START = date(date.today().year, 1, 1)
 # rg kan bij droge stations kleine spurious waarden geven
 RR_DREMPEL = 0.2
 
+# Stations die alleen wind meten (geen temperatuur) → aparte wind-only ophaling
+WIND_ONLY_STATIONS = {
+    "0-20000-0-06324",  # Stavenisse
+    "0-20000-0-06331",  # Tholen
+}
+
 STATIONS = {
     "0-20000-0-06215": "Voorschoten",
     "0-20000-0-06225": "IJmuiden",
@@ -302,6 +308,29 @@ def haal_neerslag(station_id: str, dt_range: str) -> float | None:
     return total if total >= RR_DREMPEL else 0.0
 
 
+def haal_wind_only(station_id: str, dt_range: str) -> dict | None:
+    """
+    Haal alleen fx en ff op voor wind-only stations (geen temperatuursensor).
+    """
+    params = {"datetime": dt_range, "parameter-name": "fx,ff"}
+    r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
+    if r.status_code in (400, 404): return None
+    r.raise_for_status()
+    js = r.json()
+    if not js.get("coverages"): return None
+    cov    = js["coverages"][0]
+    t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
+    ranges = cov.get("ranges", {})
+    fx  = to_floats(ranges.get("fx", {}).get("values"))
+    fx_val = max_valid(fx)
+    fx_t   = tijdstip_van_max(fx, t_vals, LOCAL_TZ)
+    return {
+        "tx": None, "tx_t": None,
+        "tn": None, "tn_t": None,
+        "fx": fx_val, "fx_t": fx_t,
+        "gevoels": None, "gevoels_t": None,
+    }
+
 def haal_zon(station_id: str, dt_range: str) -> float | None:
     """
     Zonuren uit qg (globale straling W/m2).
@@ -332,7 +361,10 @@ def haal_dag(dag: date) -> dict:
 
     for station_id, naam in STATIONS.items():
         try:
-            tw = haal_temp_wind(station_id, dt_range)
+            if station_id in WIND_ONLY_STATIONS:
+                tw = haal_wind_only(station_id, dt_range)
+            else:
+                tw = haal_temp_wind(station_id, dt_range)
             if tw:
                 if tw["tx"] is not None: res["max"].append((tw["tx"], naam, tw.get("tx_t")))
                 if tw["tn"] is not None: res["min"].append((tw["tn"], naam, tw.get("tn_t")))
