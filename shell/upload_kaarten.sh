@@ -3,6 +3,7 @@ set -e
 
 SCRIPT_DIR="/Users/aldus/Desktop/KNMI_Project/weerkaarten 2"
 cd "$SCRIPT_DIR"
+git checkout main 2>/dev/null || true
 
 echo "=== Ed Aldus WM — upload $(date) ==="
 
