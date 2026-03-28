@@ -214,27 +214,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
     </div>
   </div>
 
-  <div class="sidebar-divider"></div>
-
-  <div class="nav-groep">
-    <div class="nav-groep-titel">Waarnemingen</div>
-    <div class="nav-item" id="nav-toplijst" onclick="openPanel('toplijst')">
-      <span class="ni">📊</span><span>Toplijst</span>
-    </div>
-    <div class="nav-item" id="nav-synop" onclick="openPanel('synop')">
-      <span class="ni">🗺</span><span>Synoptisch</span>
-    </div>
-    <div class="nav-item" id="nav-obs" onclick="openPanel('obs')">
-      <span class="ni">📡</span><span>Obs kaarten</span>
-    </div>
-    <div class="sub-items" id="subs-obs" style="display:none">
-      <div class="sub-item actief" id="snav-obs-tx" onclick="openSub('obs','obs-tx')">TX Maximum</div>
-      <div class="sub-item"        id="snav-obs-tn" onclick="openSub('obs','obs-tn')">TN Minimum</div>
-      <div class="sub-item"        id="snav-obs-rr" onclick="openSub('obs','obs-rr')">Neerslag RR</div>
-      <div class="sub-item"        id="snav-obs-fx" onclick="openSub('obs','obs-fx')">Windstoot FX</div>
-      <div class="sub-item"        id="snav-obs-ff" onclick="openSub('obs','obs-ff')">Wind gem. FF</div>
-    </div>
-  </div>
+  
 
   <div class="sidebar-divider"></div>
 
@@ -335,29 +315,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
       <div id="subinhoud-weer-hagel"    style="display:none"><div class="kaarten" id="kaarten-hagel"></div></div>
     </div>
 
-    <!-- ── TOPLIJST ── -->
-    <div class="panel" id="panel-toplijst">
-      <iframe src="toplijst.html" style="width:100%;height:85vh;border:none;" loading="lazy"></iframe>
-    </div>
-
-    <!-- ── SYNOP ── -->
-    <div class="panel" id="panel-synop">
-      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <button onclick="synopNav(-1)" style="padding:7px 18px;border-radius:20px;border:1px solid #c5d3e3;background:white;cursor:pointer;font-size:0.85em;font-weight:600;color:#003366;">◀ Vorige</button>
-        <span id="synop-label" style="font-size:0.85em;font-weight:600;color:#003366;min-width:160px;text-align:center;">–</span>
-        <button onclick="synopNav(1)"  style="padding:7px 18px;border-radius:20px;border:1px solid #c5d3e3;background:white;cursor:pointer;font-size:0.85em;font-weight:600;color:#003366;">Volgende ▶</button>
-        <span id="synop-teller" style="font-size:0.78em;color:#888;"></span>
-        <a href="weercodes_Nederland.pdf" target="_blank" style="padding:7px 14px;border-radius:20px;border:1px solid #c5d3e3;background:white;font-size:0.82em;font-weight:600;color:#003366;text-decoration:none;">📄 Weercodes</a>
-      </div>
-      <div style="text-align:center;">
-        <img id="img-synop" src="" style="max-width:100%;max-height:85vh;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.15);" alt="Synoptische kaart">
-      </div>
-      <div style="font-size:0.72em;color:#888;text-align:center;margin-top:6px;">Elke 10 minuten bijgewerkt · laatste 10 kaarten bewaard</div>
-    </div>
-      <div id="subinhoud-obs-tn" style="display:none"><div class="kaarten" id="kaarten-obs-tn"></div></div>
-      <div id="subinhoud-obs-rr" style="display:none"><div class="kaarten" id="kaarten-obs-rr"></div></div>
-      <div id="subinhoud-obs-fx" style="display:none"><div class="kaarten" id="kaarten-obs-fx"></div></div>
-      <div id="subinhoud-obs-ff" style="display:none"><div class="kaarten" id="kaarten-obs-ff"></div></div>
+      </div>      </div>
     </div>
 
     <!-- ── TREND ── -->
@@ -441,7 +399,7 @@ const PANEL_TITELS = {
   records:"Weerrecords & Historie", p13:"P13 Neerslagrecords",
   neerslag668:"668 KNMI Neerslagstations", archief:"Archief Waarnemingen",
   temp:"Temperatuur TX / TN", wind:"Wind", weer:"Weer",
-  toplijst:"Toplijst waarnemingen", synop:"Synoptische kaart", trend:"Trendgrafiek",
+  trend:"Trendgrafiek",
   guidance:"KNMI Guidance", metar:"METAR / TAF", beta:"Beta verificatie"
 };
 const SUB_TITELS = {
@@ -491,7 +449,6 @@ function openPanel(panel) {
 
   // Speciale acties
   if (panel === "guidance") laadGuidance();
-  if (panel === "synop")    laadSynop();
 
   // activeLijst instellen
   const lijstMap = {
@@ -574,32 +531,6 @@ function laadGuidance() {
   }).catch(()=>{
     document.getElementById("guidance-tekst").innerHTML = "<p style='color:#cc2200'>Guidance kon niet worden geladen.</p>";
   });
-}
-
-// Synop
-let synopLijst = [], synopIndex = 0;
-function laadSynop() {
-  fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
-    synopLijst = kaarten.filter(n => n.startsWith("kaart_synop_")).sort();
-    if (!synopLijst.length) return;
-    synopIndex = synopLijst.length - 1;
-    toonSynop();
-  }).catch(()=>{});
-}
-function toonSynop() {
-  if (!synopLijst.length) return;
-  const naam = synopLijst[synopIndex];
-  document.getElementById("img-synop").src = naam + "?t=" + Date.now();
-  const m = naam.match(/kaart_synop_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/);
-  if (m) {
-    const mnd = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
-    document.getElementById("synop-label").textContent = `${parseInt(m[3])} ${mnd[parseInt(m[2])]} ${m[1]} · ${m[4]}:${m[5]}`;
-  }
-  document.getElementById("synop-teller").textContent = `${synopIndex+1} / ${synopLijst.length}`;
-}
-function synopNav(d) {
-  synopIndex = Math.max(0, Math.min(synopLijst.length-1, synopIndex+d));
-  toonSynop();
 }
 
 // Waarschuwingen
@@ -710,11 +641,6 @@ fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
   vul("kaarten-bewolking", bewolkingLijst);
   vul("kaarten-sneeuw", sneeuwLijst);
   vul("kaarten-hagel", hagelLijst);
-  vul("kaarten-obs-tx", obsTxLijst);
-  vul("kaarten-obs-tn", obsTnLijst);
-  vul("kaarten-obs-rr", obsRrLijst);
-  vul("kaarten-obs-fx", obsFxLijst);
-  vul("kaarten-obs-ff", obsFfLijst);
 }).catch(() => {
   document.getElementById("kaarten-temp").innerHTML = "<p style='color:red'>Kon kaartlijst niet laden.</p>";
 });
