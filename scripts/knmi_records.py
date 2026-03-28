@@ -251,6 +251,9 @@ for STATION, STATION_NAAM in STATIONS:
     OUTPUT_JSON = f"records_{STATION}.json"
     csv_tekst = download_knmi(STATION, CACHE_CSV)
     data      = parse_csv(csv_tekst)
+    # Sluit vandaag uit — dag is nog niet volledig
+    gisteren_str = (date.today() - timedelta(days=1)).isoformat()
+    data = [r for r in data if r["datum"] <= gisteren_str]
     if not data:
         print(f"Geen data voor {STATION_NAAM}"); continue
     print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")

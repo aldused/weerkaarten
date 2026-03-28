@@ -117,33 +117,37 @@ def haal_edr_dag(wigos, datum):
             continue
     return None
 
-nu = date.today()
+nu       = date.today()
+gisteren = nu - timedelta(days=1)
 
 for station_nr, naam, wigos in STATIONS:
     try:
         tekst = haal_zip(station_nr)
         data  = parse_zip(tekst)
-        data  = {k: v for k, v in data.items() if k <= nu.isoformat()}
+        # Filter tot en met gisteren — vandaag is nog niet volledig
+        data  = {k: v for k, v in data.items() if k <= gisteren.isoformat()}
 
         # Vind de laatste datum in de ZIP
         laatste_zip = max(data.keys()) if data else "2000-01-01"
         laatste_datum = date.fromisoformat(laatste_zip)
 
-        # Vul aan met EDR API tot en met gisteren
-        gisteren = nu - timedelta(days=1)
+        # Vul aan met EDR API: gisteren geverifieerd, vandaag voorlopig
         d = laatste_datum + timedelta(days=1)
         aangevuld = 0
-        while d <= gisteren:
+        while d <= nu:
             edr = haal_edr_dag(wigos, d.isoformat())
             if edr:
                 bron = edr.pop('_bron', '?')
+                if d == nu:
+                    edr['voorlopig'] = True   # vandaag = nog onvolledig
                 data[d.isoformat()] = edr
                 aangevuld += 1
-                print(f"    EDR [{bron}] {d}: tx={edr['tx']}° tn={edr['tn']}°")
+                label = " (voorlopig)" if d == nu else ""
+                print(f"    EDR [{bron}] {d}: tx={edr['tx']}° tn={edr['tn']}°{label}")
             d += timedelta(days=1)
 
         if aangevuld:
-            print(f"  {naam}: {aangevuld} dag(en) aangevuld via EDR")
+            print(f"  {naam}: {aangevuld} dag(en) aangevuld via EDR (incl. vandaag voorlopig)")
 
         resultaat = {
             "station": station_nr,
