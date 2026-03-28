@@ -9,6 +9,8 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_waarschuwingen.py"       || { echo "FOUT: haal_waarschuwingen.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_guidance.py"             || echo "WAARSCHUWING: haal_guidance.py mislukt"
+/usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_luchtvaart_bulletin.py"  || echo "WAARSCHUWING: haal_luchtvaart_bulletin.py mislukt"
+/usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_maanddata.py"            || echo "WAARSCHUWING: haal_maanddata.py mislukt"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_fixed.py"        || { echo "FOUT: mosmix_kaart_fixed.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp.py"         || { echo "FOUT: mosmix_kaart_temp.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp_dag.py"     || { echo "FOUT: mosmix_kaart_temp_dag.py"; exit 1; }
