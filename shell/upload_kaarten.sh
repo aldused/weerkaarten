@@ -50,11 +50,6 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_waarnemingen_kaarten.py" || { echo "FOUT: maak_waarnemingen_kaarten.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_index.py"                || { echo "FOUT: maak_index.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_p13_html.py"                     || { echo "FOUT: maak_p13_html.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_pluim_lijnen.py"         || { echo "FOUT: maak_pluim_lijnen.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_pluim_compleet.py"       || { echo "FOUT: maak_pluim_compleet.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_pluim_multi_neerslag.py" || { echo "FOUT: maak_pluim_multi_neerslag.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_pluim_multimodel.py"     || { echo "FOUT: maak_pluim_multimodel.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_pluim_multi_wind.py"     || { echo "FOUT: maak_pluim_multi_wind.py"; exit 1; }
 
 git add -A
 
