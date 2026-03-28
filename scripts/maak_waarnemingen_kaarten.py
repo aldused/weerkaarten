@@ -28,8 +28,8 @@ COORDS = {
     "Den Helder":          (4.789, 52.928),
     "Schiphol":            (4.781, 52.309),
     "Vlieland":            (4.920, 53.250),
-    "Wijdenes":            (5.166, 52.632),
-    "Berkhout":            (4.979, 52.644),
+    "Wijdenes":            (5.166, 52.675),  # display offset
+    "Berkhout":            (4.979, 52.601),  # display offset
     "Terschelling":        (5.350, 53.392),
     "Wijk aan Zee":        (4.601, 52.504),
     "Houtribdijk":         (5.385, 52.649),
