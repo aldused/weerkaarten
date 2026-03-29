@@ -179,5 +179,9 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-for oud in sorted(glob.glob("kaart_temp_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(
+    [f for f in glob.glob("kaart_temp_*.png")
+     if not os.path.basename(f).startswith("kaart_temp_dag_")
+     and not os.path.basename(f).startswith("kaart_temp_nacht_")],
+    key=os.path.getmtime)[:-7]:
     os.remove(oud); print(f"  Verwijderd: {oud}")
