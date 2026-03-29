@@ -562,7 +562,29 @@ while d <= vandaag:
     d += timedelta(days=1)
 
 # Vandaag altijd eerst verwerken
-resultaten[vandaag.isoformat()] = haal_dag(vandaag)
+nieuwe_dag = haal_dag(vandaag)
+vandaag_key = vandaag.isoformat()
+
+# Bewaar laagste t10n van de dag (momentopname Buienradar → cumulatief minimum)
+if vandaag_key in resultaten:
+    oud = resultaten[vandaag_key]
+    # Bouw lookup van oude t10n waarden per station
+    oud_t10n = {item[1]: item[0] for item in oud.get("t10n", []) if len(item) >= 2}
+    nieuw_t10n = []
+    for item in nieuwe_dag.get("t10n", []):
+        v, naam = item[0], item[1]
+        if naam in oud_t10n and oud_t10n[naam] < v:
+            nieuw_t10n.append([oud_t10n[naam], naam])  # oude waarde was lager
+        else:
+            nieuw_t10n.append(item)
+    # Voeg stations toe die alleen in de oude data zaten
+    nieuwe_namen = {item[1] for item in nieuw_t10n}
+    for item in oud.get("t10n", []):
+        if item[1] not in nieuwe_namen:
+            nieuw_t10n.append(item)
+    nieuwe_dag["t10n"] = sorted(nieuw_t10n)
+
+resultaten[vandaag_key] = nieuwe_dag
 
 # Historische dagen: 2 ontbrekende dagen per run
 aangevuld = 0
