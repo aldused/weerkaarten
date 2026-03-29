@@ -14,10 +14,9 @@ LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 HISTORIE_START = date(date.today().year, 1, 1)
 
 # Minimale neerslagdrempel om meetruis te filteren (mm)
-# rg kan bij droge stations kleine spurious waarden geven
 RR_DREMPEL = 0.2
 
-# Stations die alleen wind meten (geen temperatuur) → aparte wind-only ophaling
+# Stations die alleen wind meten (geen temperatuur)
 WIND_ONLY_STATIONS = {
     "0-20000-0-06324",  # Stavenisse
     "0-20000-0-06331",  # Tholen
@@ -66,10 +65,67 @@ STATIONS = {
     "0-20000-0-06377": "Ell",
     "0-20000-0-06380": "Maastricht",
     "0-20000-0-06391": "Arcen",
-    "0-528-0-06392": "Horst",
+    "0-528-0-06392":   "Horst",
 }
 
-# ---- helpers ----
+# ── Buienradar ────────────────────────────────────────────────────────────────
+
+def _wigos_to_br_id(station_id: str) -> int:
+    """WIGOS-ID "0-20000-0-06260" → Buienradar stationsnr 6260."""
+    return int(station_id.split("-")[-1])
+
+# Eenmalig gebouwde reverse-lookup: BR-stationsnr → stationsnaam
+_BR_ID_TO_NAAM = {_wigos_to_br_id(wid): naam for wid, naam in STATIONS.items()}
+
+def haal_buienradar() -> dict:
+    """
+    Haalt actuele metingen op via Buienradar JSON-feed.
+    Retourneert dict: {stationsnaam: {
+        "t10n": float|None,   ← groundtemperature  (altijd primair)
+        "tx":   float|None,   ← temperature actueel (fallback voor TX)
+        "tn":   float|None,   ← temperature actueel (fallback voor TN)
+        "fx":   float|None,   ← windgusts m/s       (fallback voor FX)
+        "ff":   float|None,   ← windspeed m/s        (fallback voor FF)
+        "rr":   float|None,   ← rainFallLast24Hour mm (fallback voor RR)
+    }}
+    Noot: tx/tn/fx/ff/rr zijn momentopnames, geen etmaal-extremen.
+    Ze dienen alleen als fallback als KNMI voor dat station helemaal uitvalt.
+    """
+    url = "https://data.buienradar.nl/2.0/feed/json"
+    try:
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        print(f"  Buienradar ophalen mislukt: {e}")
+        return {}
+
+    def _f(st, key):
+        v = st.get(key)
+        try:
+            return float(v) if v is not None else None
+        except (ValueError, TypeError):
+            return None
+
+    resultaat = {}
+    for st in data.get("actual", {}).get("stationmeasurements", []):
+        br_id = st.get("stationid")
+        naam  = _BR_ID_TO_NAAM.get(br_id)
+        if naam is None:
+            continue
+        resultaat[naam] = {
+            "t10n": _f(st, "groundtemperature"),
+            "tx":   _f(st, "temperature"),
+            "tn":   _f(st, "temperature"),
+            "fx":   _f(st, "windgusts"),
+            "ff":   _f(st, "windspeed"),
+            "rr":   _f(st, "rainFallLast24Hour"),
+        }
+
+    print(f"  Buienradar: {len(resultaat)}/{len(STATIONS)} stations gevonden")
+    return resultaat
+
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def to_floats(vals):
     out = []
@@ -89,7 +145,7 @@ def min_valid(vals):
     v = [x for x in vals if x is not None]
     return min(v) if v else None
 
-# ---- UTC-dag interval (KNMI TX/TN etmaal = 00:00–00:00 UTC) ----
+# ── UTC-dag interval ──────────────────────────────────────────────────────────
 
 def dag_interval_utc(dag: date) -> str:
     s = f"{dag.isoformat()}T00:00:00Z"
@@ -102,7 +158,7 @@ def dag_interval_tot_nu_utc(dag: date) -> str:
     e   = end.strftime("%Y-%m-%dT%H:%M:%SZ")
     return f"{s}/{e}"
 
-# ---- API calls ----
+# ── API calls ─────────────────────────────────────────────────────────────────
 
 def dd_gemiddeld(graden_lijst):
     """Circulair gemiddelde van windrichtingen in graden."""
@@ -172,12 +228,12 @@ def hoogste_anker_uur(station_id: str, dt_range: str) -> dict | None:
                 }
     return best_info
 
-def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float | None:
+def haal_t10n_knmi(station_id: str, dag: date, dt_range_10min: str = None) -> float | None:
     """
     T10N ophalen via de daggegevens API (validated daily observations).
     Fallback: laagste ta10 uit de 10-minuten API als daggegevens leeg zijn.
+    Wordt alleen gebruikt als Buienradar geen groundtemperature heeft voor dit station.
     """
-    # Eerst proberen via validated daily API
     s = f"{dag.isoformat()}T00:00:00Z"
     e = f"{(dag + timedelta(days=1)).isoformat()}T00:00:00Z"
     params = {"datetime": f"{s}/{e}", "parameter-name": "T10N"}
@@ -194,7 +250,7 @@ def haal_t10n(station_id: str, dag: date, dt_range_10min: str = None) -> float |
     except Exception:
         pass
 
-    # Fallback: 10-minuten API, parameter ta10 (temp op 10cm)
+    # Fallback: 10-minuten API, parameter ta10
     if dt_range_10min is None:
         dt_range_10min = f"{s}/{e}"
     try:
@@ -304,9 +360,7 @@ def haal_neerslag(station_id: str, dt_range: str) -> float | None:
     if not valide:
         return None
     total = round(sum(v * (10.0 / 60.0) for v in valide), 1)
-    # Meetruis onder drempel → 0.0
     return total if total >= RR_DREMPEL else 0.0
-
 
 def haal_wind_only(station_id: str, dt_range: str) -> dict | None:
     """
@@ -349,7 +403,7 @@ def haal_zon(station_id: str, dt_range: str) -> float | None:
     zon_stappen = sum(1 for v in qg_vals if v is not None and v >= 120)
     return round(zon_stappen / 6.0, 1)
 
-# ---- Ophalen van één dag ----
+# ── Ophalen van één dag ────────────────────────────────────────────────────────
 
 def haal_dag(dag: date) -> dict:
     is_vandaag = (dag == date.today())
@@ -359,64 +413,130 @@ def haal_dag(dag: date) -> dict:
                   "max": [], "min": [], "rr": [], "fx": [], "ff": [], "t10n": [], "sq": [], "gevoels": []}
     print(f"  Ophalen {dag} ({'tot nu' if is_vandaag else 'heel dag'})...")
 
+    # ── Buienradar eenmalig ophalen ───────────────────────────────────────────
+    # groundtemperature → altijd primair voor t10n
+    # overige waarden   → fallback als KNMI voor dat station uitvalt
+    br = haal_buienradar()
+
     for station_id, naam in STATIONS.items():
+        br_st = br.get(naam, {})  # BR-data voor dit station (leeg dict als ontbreekt)
+
+        # ── Temperatuur & wind (KNMI primair, BR fallback) ───────────────────
         try:
             if station_id in WIND_ONLY_STATIONS:
                 tw = haal_wind_only(station_id, dt_range)
             else:
                 tw = haal_temp_wind(station_id, dt_range)
+
             if tw:
-                if tw["tx"] is not None: res["max"].append((tw["tx"], naam, tw.get("tx_t")))
-                if tw["tn"] is not None: res["min"].append((tw["tn"], naam, tw.get("tn_t")))
-                if tw["fx"] is not None: res["fx"].append((tw["fx"], naam, tw.get("fx_t")))
-                if tw.get("gevoels") is not None: res["gevoels"].append((tw["gevoels"], naam, tw.get("gevoels_t")))
-        except Exception as e:
-            print(f"    Temp/wind fout {naam}: {e}")
+                # TX
+                if tw["tx"] is not None:
+                    res["max"].append((tw["tx"], naam, tw.get("tx_t")))
+                elif br_st.get("tx") is not None:
+                    res["max"].append((br_st["tx"], naam, None))
+                    print(f"    TX {naam}: KNMI None → BR {br_st['tx']:.1f}°")
+                # TN
+                if tw["tn"] is not None:
+                    res["min"].append((tw["tn"], naam, tw.get("tn_t")))
+                elif br_st.get("tn") is not None:
+                    res["min"].append((br_st["tn"], naam, None))
+                    print(f"    TN {naam}: KNMI None → BR {br_st['tn']:.1f}°")
+                # FX
+                if tw["fx"] is not None:
+                    res["fx"].append((tw["fx"], naam, tw.get("fx_t")))
+                elif br_st.get("fx") is not None:
+                    res["fx"].append((br_st["fx"], naam, None))
+                    print(f"    FX {naam}: KNMI None → BR {br_st['fx']:.1f} m/s")
+                # Gevoelstemperatuur (alleen uit KNMI berekend)
+                if tw.get("gevoels") is not None:
+                    res["gevoels"].append((tw["gevoels"], naam, tw.get("gevoels_t")))
+            else:
+                # KNMI gaf None terug → volledig BR fallback
+                if br_st.get("tx") is not None:
+                    res["max"].append((br_st["tx"], naam, None))
+                    print(f"    TX {naam}: KNMI leeg → BR {br_st['tx']:.1f}°")
+                if br_st.get("tn") is not None:
+                    res["min"].append((br_st["tn"], naam, None))
+                    print(f"    TN {naam}: KNMI leeg → BR {br_st['tn']:.1f}°")
+                if br_st.get("fx") is not None:
+                    res["fx"].append((br_st["fx"], naam, None))
+                    print(f"    FX {naam}: KNMI leeg → BR {br_st['fx']:.1f} m/s")
 
-        try:
-            t10n = haal_t10n(station_id, dag, dt_range)
-            if t10n is not None: res["t10n"].append((t10n, naam))
         except Exception as e:
-            print(f"    T10N fout {naam}: {e}")
+            print(f"    Temp/wind fout {naam}: {e} → BR fallback")
+            if br_st.get("tx") is not None:
+                res["max"].append((br_st["tx"], naam, None))
+            if br_st.get("tn") is not None:
+                res["min"].append((br_st["tn"], naam, None))
+            if br_st.get("fx") is not None:
+                res["fx"].append((br_st["fx"], naam, None))
 
+        # ── T10N: Buienradar groundtemperature altijd primair ─────────────────
+        gt = br_st.get("t10n")
+        if gt is not None:
+            res["t10n"].append((gt, naam))
+        else:
+            # BR-station ontbreekt in feed → KNMI als fallback
+            try:
+                t10n_knmi = haal_t10n_knmi(station_id, dag, dt_range)
+                if t10n_knmi is not None:
+                    res["t10n"].append((t10n_knmi, naam))
+                    print(f"    T10N {naam}: geen BR → KNMI {t10n_knmi:.1f}°")
+            except Exception as e:
+                print(f"    T10N {naam}: BR én KNMI mislukt: {e}")
+
+        # ── FF anker-uur (KNMI primair, BR windspeed fallback) ────────────────
         try:
             ff_anker = hoogste_anker_uur(station_id, dt_range)
             if ff_anker is not None:
                 res["ff"].append([ff_anker["ff"], naam, ff_anker["tijdvak"], ff_anker["dd"]])
+            elif br_st.get("ff") is not None:
+                res["ff"].append([br_st["ff"], naam, None, None])
+                print(f"    FF {naam}: KNMI leeg → BR {br_st['ff']:.1f} m/s")
         except Exception as e:
-            print(f"    Anker-uur fout {naam}: {e}")
+            print(f"    Anker-uur fout {naam}: {e} → BR fallback")
+            if br_st.get("ff") is not None:
+                res["ff"].append([br_st["ff"], naam, None, None])
 
+        # ── Zon (alleen KNMI) ─────────────────────────────────────────────────
         try:
             sq = haal_zon(station_id, dt_range)
             if sq is not None: res["sq"].append((sq, naam))
         except Exception as e:
             print(f"    Zon fout {naam}: {e}")
 
+        # ── Neerslag (KNMI primair, BR rainFallLast24Hour fallback) ───────────
         try:
             mm = haal_neerslag(station_id, dt_range)
             if mm is not None:
-                res["rr"].append((mm, naam))  # ook 0.0 opnemen
+                res["rr"].append((mm, naam))
+            elif br_st.get("rr") is not None:
+                res["rr"].append((br_st["rr"], naam))
+                print(f"    RR {naam}: KNMI None → BR {br_st['rr']:.1f} mm")
         except Exception as e:
-            print(f"    Neerslag fout {naam}: {e}")
+            print(f"    Neerslag fout {naam}: {e} → BR fallback")
+            if br_st.get("rr") is not None:
+                res["rr"].append((br_st["rr"], naam))
 
         time.sleep(0.05)
 
-    res["max"]  = sorted(res["max"],  reverse=True)
-    res["min"]  = sorted(res["min"])
-    res["rr"]   = sorted(res["rr"],   reverse=True)
-    res["fx"]   = sorted(res["fx"],   reverse=True)
-    res["ff"]   = sorted(res["ff"],   key=lambda x: x[0], reverse=True)
-    res["t10n"] = sorted(res["t10n"])
-    res["sq"]   = sorted(res["sq"],   reverse=True)
+    res["max"]    = sorted(res["max"],  reverse=True)
+    res["min"]    = sorted(res["min"])
+    res["rr"]     = sorted(res["rr"],   reverse=True)
+    res["fx"]     = sorted(res["fx"],   reverse=True)
+    res["ff"]     = sorted(res["ff"],   key=lambda x: x[0], reverse=True)
+    res["t10n"]   = sorted(res["t10n"])
+    res["sq"]     = sorted(res["sq"],   reverse=True)
     res["gevoels"] = sorted(res["gevoels"])
     res["update"] = datetime.now().strftime("%d %b %Y %H:%M")
 
-    print(f"    TX top3: {res['max'][:3]}")
-    print(f"    TN top3: {res['min'][:3]}")
-    print(f"    RR top3: {res['rr'][:3]}")
+    print(f"    TX top3:   {res['max'][:3]}")
+    print(f"    TN top3:   {res['min'][:3]}")
+    print(f"    T10N top3: {res['t10n'][:3]}")
+    print(f"    RR top3:   {res['rr'][:3]}")
     return res
 
-# ---- Hoofdlus met slim cachen ----
+# ── Hoofdlus met slim cachen ──────────────────────────────────────────────────
 
 JSON_PATH  = "toplijst.json"
 vandaag    = date.today()
