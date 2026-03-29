@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ensemble Pluim – Ed Aldus WM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d0d1a;
+    --bg2:      #111126;
+    --header:   #0f3460;
+    --panel:    #161630;
+    --border:   #2a2a50;
+    --text:     #ddddf0;
+    --text2:    #8888bb;
+    --accent:   #2299ff;
+    --red:      #ee3333;
+    --green:    #44ee44;
+    --yellow:   #f5e642;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--header);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid #1a4a80;
+  }
+  .header-left h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.02em;
+  }
+  .header-left p {
+    font-size: 0.72rem;
+    color: #8aaccc;
+    margin-top: 2px;
+  }
+  .header-right {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: #7a9ab8;
+    text-align: right;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+
+  .ctrl-groep {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .ctrl-groep label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  select, input[type="date"] {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.82rem;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    cursor: pointer;
+    min-width: 160px;
+  }
+  select:focus, input[type="date"]:focus {
+    border-color: var(--accent);
+  }
+
+  .periode-btns {
+    display: flex;
+    gap: 5px;
+  }
+  .periode-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .periode-btn:hover { border-color: var(--accent); color: var(--text); }
+  .periode-btn.actief { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .datum-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .datum-range span { color: var(--text2); font-size: 0.8rem; }
+
+  /* Type buttons */
+  .type-btns { display: flex; gap: 5px; }
+  .type-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .type-btn:hover { border-color: var(--accent); color: var(--text); }
+  .type-btn.actief { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .btn-laden {
+    padding: 7px 18px;
+    border-radius: 6px;
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: opacity 0.15s;
+  }
+  .btn-laden:hover { opacity: 0.85; }
+  .btn-laden:disabled { opacity: 0.4; cursor: wait; }
+
+  .btn-download {
+    padding: 7px 18px;
+    border-radius: 6px;
+    background: #1a5a30;
+    border: 1px solid #2a7a40;
+    color: #66dd88;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: opacity 0.15s;
+  }
+  .btn-download:hover { opacity: 0.85; }
+
+  /* ── Chart area ── */
+  #grafiek-wrap {
+    padding: 12px 16px;
+    position: relative;
+  }
+
+  #status {
+    text-align: center;
+    padding: 60px;
+    color: var(--text2);
+    font-size: 0.9rem;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #copyright {
+    text-align: center;
+    font-size: 0.7rem;
+    color: #44445a;
+    padding: 6px 0 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  @media (max-width: 700px) {
+    .controls { flex-direction: column; }
+    select, input[type="date"] { min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>ECMWF Ensemble Pluim</h1>
+    <p>51 ensembleleden · Open-Meteo · HRES operationeel</p>
+  </div>
+  <div class="header-right">
+    Ed Aldus WM<br>
+    <span id="klok">–</span>
+  </div>
+</div>
+
+<div class="controls">
+  <!-- Station -->
+  <div class="ctrl-groep">
+    <label>Station</label>
+    <select id="sel-station">
+      <option value="51.96,4.44,Rotterdam">Rotterdam</option>
+      <option value="51.845,4.534,Barendrecht">Barendrecht</option>
+      <option value="51.858,4.417,Rhoon">Rhoon</option>
+      <option value="51.866,4.600,Ridderkerk">Ridderkerk</option>
+      <option value="51.818,3.917,Ouddorp">Ouddorp</option>
+      <option value="51.814,4.669,Dordrecht">Dordrecht</option>
+      <option value="51.833,4.967,Gorinchem">Gorinchem</option>
+    </select>
+  </div>
+
+  <!-- Type -->
+  <div class="ctrl-groep">
+    <label>Type</label>
+    <div class="type-btns">
+      <button class="type-btn actief" data-type="temp">🌡 Temp + Neerslag</button>
+      <button class="type-btn" data-type="cloud">☁️ Bewolking</button>
+      <button class="type-btn" data-type="wind">💨 Wind</button>
+    </div>
+  </div>
+
+  <!-- Periode presets -->
+  <div class="ctrl-groep">
+    <label>Periode</label>
+    <div class="periode-btns">
+      <button class="periode-btn actief" data-preset="7">7 dagen</button>
+      <button class="periode-btn" data-preset="10">10 dagen</button>
+      <button class="periode-btn" data-preset="16">16 dagen</button>
+      <button class="periode-btn" data-preset="pasen">🐣 Pasen</button>
+      <button class="periode-btn" data-preset="custom">Datum…</button>
+    </div>
+  </div>
+
+  <!-- Custom datum -->
+  <div class="ctrl-groep" id="wrap-custom" style="display:none">
+    <label>Van – Tot</label>
+    <div class="datum-range">
+      <input type="date" id="datum-van">
+      <span>→</span>
+      <input type="date" id="datum-tot">
+    </div>
+  </div>
+
+  <!-- Actie knoppen -->
+  <div class="ctrl-groep" style="flex-direction:row;align-items:flex-end;gap:8px;margin-top:2px">
+    <button class="btn-laden" id="btn-laden" onclick="laadData()">▶ Ophalen</button>
+    <button class="btn-download" id="btn-download" onclick="downloadPng()" style="display:none">⬇ PNG</button>
+  </div>
+</div>
+
+<div id="grafiek-wrap">
+  <div id="status">Selecteer een station en klik op <strong>Ophalen</strong></div>
+  <div id="grafiek-temp" style="display:none"></div>
+  <div id="grafiek-neerslag" style="display:none;margin-top:6px"></div>
+  <div id="grafiek-cloud" style="display:none"></div>
+  <div id="grafiek-wind" style="display:none"></div>
+</div>
+<div id="copyright">© Ed Aldus | Data: Open-Meteo (ECMWF IFS ENS) | open-meteo.com</div>
+
+<script>
+// ── Klok ──────────────────────────────────────────────────────────────────────
+function updateKlok() {
+  document.getElementById('klok').textContent =
+    new Date().toLocaleString('nl-NL', {timeZone:'Europe/Amsterdam',
+      day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+updateKlok(); setInterval(updateKlok, 30000);
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let actieveType = 'temp';
+let actievePreset = '7';
+
+const DONKER = {
+  plot_bgcolor:  '#0d0d1a',
+  paper_bgcolor: '#0d0d1a',
+  font: { color: '#aaaacc', family: 'Inter, sans-serif', size: 11 },
+  xaxis: { gridcolor:'#1e1e35', linecolor:'#2a2a50', zerolinecolor:'#2a2a50', tickfont:{color:'#aaaacc'} },
+  yaxis: { gridcolor:'#1e1e35', linecolor:'#2a2a50', zerolinecolor:'#2a2a50', tickfont:{color:'#aaaacc'} },
+  legend: { bgcolor:'#111126', bordercolor:'#2a2a50', borderwidth:1, font:{color:'#ddddee'} },
+};
+
+// ── Type buttons ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.type-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.type-btn').forEach(x => x.classList.remove('actief'));
+    b.classList.add('actief');
+    actieveType = b.dataset.type;
+  });
+});
+
+// ── Periode buttons ───────────────────────────────────────────────────────────
+document.querySelectorAll('.periode-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.periode-btn').forEach(x => x.classList.remove('actief'));
+    b.classList.add('actief');
+    actievePreset = b.dataset.preset;
+    document.getElementById('wrap-custom').style.display = actievePreset === 'custom' ? '' : 'none';
+  });
+});
+
+// ── Datum helpers ─────────────────────────────────────────────────────────────
+function datumRange() {
+  const nu = new Date();
+  if (actievePreset === 'pasen') {
+    return { van: '2026-04-03', tot: '2026-04-06', dagen: 16 };
+  }
+  if (actievePreset === 'custom') {
+    return {
+      van: document.getElementById('datum-van').value,
+      tot: document.getElementById('datum-tot').value,
+      dagen: 16
+    };
+  }
+  const dagen = parseInt(actievePreset);
+  return { van: null, tot: null, dagen };
+}
+
+function filterTijden(times, van, tot) {
+  if (!van || !tot) return times.map((_,i) => i);
+  const v = new Date(van + 'T00:00:00');
+  const t = new Date(tot + 'T23:59:59');
+  return times.map((ts, i) => new Date(ts) >= v && new Date(ts) <= t ? i : -1)
+              .filter(i => i >= 0);
+}
+
+// ── Paasdag labels ────────────────────────────────────────────────────────────
+const PAAS_DAGEN = [
+  { datum: '2026-04-03', naam: 'Goede Vrijdag' },
+  { datum: '2026-04-04', naam: 'Stille Zaterdag' },
+  { datum: '2026-04-05', naam: '1e Paasdag' },
+  { datum: '2026-04-06', naam: '2e Paasdag' },
+];
+
+function paasShapes(yref, y0, y1) {
+  if (actievePreset !== 'pasen') return [];
+  return PAAS_DAGEN.map(p => ({
+    type: 'line', x0: p.datum + 'T00:00:00', x1: p.datum + 'T00:00:00',
+    yref, y0, y1, line: { color: '#445577', width: 1.2, dash: 'dot' }
+  }));
+}
+function paasAnnotations(y, yref) {
+  if (actievePreset !== 'pasen') return [];
+  return PAAS_DAGEN.map(p => ({
+    x: p.datum + 'T01:00:00', y, yref, text: `<b>${p.naam}</b>`,
+    showarrow: false, font: { color: '#aabbdd', size: 9 }, xanchor: 'left'
+  }));
+}
+
+// ── Ophalen ───────────────────────────────────────────────────────────────────
+async function laadData() {
+  const btn = document.getElementById('btn-laden');
+  btn.disabled = true;
+  btn.textContent = 'Ophalen…';
+  document.getElementById('status').innerHTML =
+    '<span class="spinner"></span>ECMWF ENS data ophalen…';
+  document.getElementById('status').style.display = '';
+  ['temp','neerslag','cloud','wind'].forEach(id =>
+    document.getElementById('grafiek-' + id).style.display = 'none');
+  document.getElementById('btn-download').style.display = 'none';
+
+  const stVal = document.getElementById('sel-station').value.split(',');
+  const lat = stVal[0], lon = stVal[1], naam = stVal[2];
+  const { van, tot, dagen } = datumRange();
+
+  try {
+    if (actieveType === 'temp') await laadTemp(lat, lon, naam, dagen, van, tot);
+    else if (actieveType === 'cloud') await laadBewolking(lat, lon, naam, dagen, van, tot);
+    else if (actieveType === 'wind') await laadWind(lat, lon, naam, dagen, van, tot);
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('btn-download').style.display = '';
+  } catch(e) {
+    document.getElementById('status').innerHTML = `<span style="color:#ee4444">Fout: ${e.message}</span>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '▶ Ophalen';
+}
+
+// ── Temp + Neerslag ───────────────────────────────────────────────────────────
+async function laadTemp(lat, lon, naam, dagen, van, tot) {
+  const [ens, hres] = await Promise.all([
+    fetch(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`).then(r=>r.json()),
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`).then(r=>r.json()),
+  ]);
+
+  const times = ens.hourly.time;
+  const idx = filterTijden(times, van, tot);
+  const ts = idx.map(i => times[i]);
+
+  const tKeys = Object.keys(ens.hourly).filter(k => k.startsWith('temperature_2m_member'));
+  const pKeys = Object.keys(ens.hourly).filter(k => k.startsWith('precipitation_member'));
+
+  const tArr = tKeys.map(k => idx.map(i => ens.hourly[k][i])).filter(a => a.some(v=>v!=null));
+  const pArr = pKeys.map(k => idx.map(i => ens.hourly[k][i])).filter(a => a.some(v=>v!=null));
+
+  // Statistieken temp
+  const tMed = ts.map((_,j) => medianCol(tArr, j));
+  const tP25 = ts.map((_,j) => percentileCol(tArr, j, 25));
+  const tP75 = ts.map((_,j) => percentileCol(tArr, j, 75));
+
+  // Statistieken neerslag
+  const pMed = ts.map((_,j) => medianCol(pArr, j));
+  const pP75 = ts.map((_,j) => percentileCol(pArr, j, 75));
+  const pP90 = ts.map((_,j) => percentileCol(pArr, j, 90));
+  const pKans = ts.map((_,j) => pArr.filter(m => (m[j]||0) > 0.1).length / pArr.length * 100);
+
+  // HRES
+  const hIdx = filterTijden(hres.hourly.time, van, tot);
+  const hTs  = hIdx.map(i => hres.hourly.time[i]);
+  const hTemp   = hIdx.map(i => hres.hourly.temperature_2m[i]);
+  const hPrecip = hIdx.map(i => hres.hourly.precipitation[i]);
+
+  const tMin = Math.min(...tArr.flat().filter(v=>v!=null)) - 1;
+  const tMax = Math.max(...tArr.flat().filter(v=>v!=null)) + 2;
+
+  const pMax = Math.max(...pArr.flat().filter(v=>v!=null)) * 1.3 || 2;
+
+  // ── Temperatuur traces ──
+  const tTraces = [];
+  tArr.forEach((m, i) => {
+    tTraces.push({ x: ts, y: m, type:'scatter', mode:'lines',
+      line:{color:'rgba(68,221,68,0.18)', width:0.5}, showlegend: i===0,
+      name: i===0 ? 'Ensembleleden' : '_', legendgroup:'ens',
+      hoverinfo:'skip' });
+  });
+  tTraces.push({ x:[...ts,...[...ts].reverse()], y:[...tP25,...[...tP75].reverse()],
+    fill:'toself', fillcolor:'rgba(51,187,51,0.12)', line:{color:'transparent'},
+    type:'scatter', mode:'lines', name:'IQR p25–p75', legendgroup:'iqr',
+    hoverinfo:'skip' });
+  tTraces.push({ x:ts, y:tMed, type:'scatter', mode:'lines',
+    line:{color:'#ee3333', width:2.5}, name:`Mediaan (${tArr.length} leden)` });
+  tTraces.push({ x:hTs, y:hTemp, type:'scatter', mode:'lines',
+    line:{color:'#2299ff', width:2.0}, name:'HRES operationeel' });
+  tTraces.push({ x:ts, y:Array(ts.length).fill(10), type:'scatter', mode:'lines',
+    line:{color:'rgba(200,50,50,0.5)', width:0.8, dash:'dash'},
+    name:'10°C', hoverinfo:'skip' });
+
+  const tLayout = {
+    ...DONKER, height: 380,
+    title: { text: `<b>Temperatuur – ${naam}</b>`, font:{color:'white',size:13}, x:0.01 },
+    xaxis: { ...DONKER.xaxis, tickformat:'%H:%M\n%a %d %b' },
+    yaxis: { ...DONKER.yaxis, title:{text:'°C', font:{color:'#bbbbcc'}}, range:[tMin,tMax] },
+    shapes: paasShapes('y', tMin, tMax),
+    annotations: paasAnnotations(tMax - 0.3, 'y'),
+    margin:{t:50,b:40,l:55,r:20},
+    hovermode:'x unified',
+    hoverlabel:{bgcolor:'#111126', bordercolor:'#2a2a50', font:{color:'#ddddf0'}},
+  };
+
+  // ── Neerslag traces ──
+  const pTraces = [];
+  pArr.forEach((m, i) => {
+    pTraces.push({ x:ts, y:m, type:'scatter', mode:'lines',
+      line:{color:'rgba(68,170,255,0.15)',width:0.4}, showlegend:i===0,
+      name:i===0?'Ensembleleden':'_', legendgroup:'ens2', hoverinfo:'skip' });
+  });
+  pTraces.push({ x:[...ts,...[...ts].reverse()], y:[...pP75,...[...pP90].reverse()],
+    fill:'toself', fillcolor:'rgba(68,136,204,0.18)', line:{color:'transparent'},
+    type:'scatter', name:'p75–p90', hoverinfo:'skip' });
+  pTraces.push({ x:[...ts,...[...ts].reverse()], y:[...Array(ts.length).fill(0),...[...pP75].reverse()],
+    fill:'toself', fillcolor:'rgba(68,136,204,0.28)', line:{color:'transparent'},
+    type:'scatter', name:'p25–p75', hoverinfo:'skip' });
+  pTraces.push({ x:ts, y:pMed, type:'scatter', mode:'lines',
+    line:{color:'#ee3333',width:2}, name:'Mediaan neerslag' });
+  pTraces.push({ x:hTs, y:hPrecip, type:'scatter', mode:'lines',
+    line:{color:'#2299ff',width:2}, name:'HRES neerslag' });
+  pTraces.push({ x:ts, y:pKans, type:'bar', yaxis:'y2', name:'Neerslagkans %',
+    marker:{color:'rgba(68,136,204,0.25)'}, hovertemplate:'%{y:.0f}%<extra>Kans</extra>' });
+
+  const pLayout = {
+    ...DONKER, height: 280,
+    xaxis:{...DONKER.xaxis, tickformat:'%H:%M\n%a %d %b'},
+    yaxis:{...DONKER.yaxis, title:{text:'mm/u',font:{color:'#bbbbcc'}}, range:[0,pMax]},
+    yaxis2:{overlaying:'y', side:'right', range:[0,200],
+      title:{text:'Kans %',font:{color:'#6699cc',size:10}},
+      tickfont:{color:'#6699cc'}, gridcolor:'transparent', showgrid:false},
+    shapes: paasShapes('y', 0, pMax),
+    margin:{t:20,b:50,l:55,r:55},
+    hovermode:'x unified',
+    hoverlabel:{bgcolor:'#111126',bordercolor:'#2a2a50',font:{color:'#ddddf0'}},
+  };
+
+  const cfg = { responsive:true, displayModeBar:true,
+    modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d'],
+    toImageButtonOptions:{format:'png',filename:`pluim_${naam.toLowerCase()}_temp`,scale:2} };
+
+  Plotly.newPlot('grafiek-temp', tTraces, tLayout, cfg);
+  Plotly.newPlot('grafiek-neerslag', pTraces, pLayout, cfg);
+  document.getElementById('grafiek-temp').style.display = '';
+  document.getElementById('grafiek-neerslag').style.display = '';
+}
+
+// ── Bewolking ─────────────────────────────────────────────────────────────────
+async function laadBewolking(lat, lon, naam, dagen, van, tot) {
+  const ens = await fetch(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`).then(r=>r.json());
+
+  const times = ens.hourly.time;
+  const idx = filterTijden(times, van, tot);
+  const ts = idx.map(i => times[i]);
+
+  const ccKeys = Object.keys(ens.hourly).filter(k=>k.startsWith('cloudcover_member'));
+  const members = ccKeys.map(k => idx.map(i => ens.hourly[k][i]));
+
+  const CATS = [
+    ['Onbewolkt',       0,  12, '#f5e642'],
+    ['Licht bewolkt',  12,  37, '#e8e0a0'],
+    ['Half bewolkt',   37,  62, '#b5a87a'],
+    ['Zwaar bewolkt',  62,  87, '#9090a0'],
+    ['Geheel bewolkt', 87, 101, '#444455'],
+  ];
+
+  const n = members.length;
+  const traces = CATS.map(([naam_cat, lo, hi, kleur], ci) => {
+    const frac = ts.map((_,j) => {
+      const col = members.map(m=>m[j]).filter(v=>v!=null);
+      return col.length ? col.filter(v=>v>=lo&&v<hi).length/col.length*100 : 0;
+    });
+    return {
+      x: ts, y: frac, type: 'bar', name: naam_cat,
+      marker: { color: kleur },
+      hovertemplate: `${naam_cat}: %{y:.0f}%<extra></extra>`,
+    };
+  });
+
+  const layout = {
+    ...DONKER, height: 420, barmode: 'stack',
+    title:{text:`<b>Bewolkingspluim – ${naam}</b> (${n} leden)`,font:{color:'white',size:13},x:0.01},
+    xaxis:{...DONKER.xaxis, tickformat:'%H:%M\n%a %d %b'},
+    yaxis:{...DONKER.yaxis, title:{text:'% ensembleleden',font:{color:'#bbbbcc'}}, range:[0,100]},
+    shapes: paasShapes('y', 0, 100),
+    annotations: paasAnnotations(101, 'y'),
+    margin:{t:50,b:50,l:60,r:20},
+    hovermode:'x unified',
+    hoverlabel:{bgcolor:'#111126',bordercolor:'#2a2a50',font:{color:'#ddddf0'}},
+  };
+
+  const cfg = {responsive:true, displayModeBar:true,
+    modeBarButtonsToRemove:['select2d','lasso2d'],
+    toImageButtonOptions:{format:'png',filename:`pluim_${naam.toLowerCase()}_bewolking`,scale:2}};
+
+  Plotly.newPlot('grafiek-cloud', traces, layout, cfg);
+  document.getElementById('grafiek-cloud').style.display = '';
+}
+
+// ── Wind ──────────────────────────────────────────────────────────────────────
+async function laadWind(lat, lon, naam, dagen, van, tot) {
+  const [ens, hres] = await Promise.all([
+    fetch(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,windgusts_10m&models=ecmwf_ifs025&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`).then(r=>r.json()),
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,windgusts_10m&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`).then(r=>r.json()),
+  ]);
+
+  const times = ens.hourly.time;
+  const idx = filterTijden(times, van, tot);
+  const ts = idx.map(i => times[i]);
+
+  const ffKeys = Object.keys(ens.hourly).filter(k=>k.startsWith('windspeed_10m_member'));
+  const fxKeys = Object.keys(ens.hourly).filter(k=>k.startsWith('windgusts_10m_member'));
+
+  const ffArr = ffKeys.map(k=>idx.map(i=>ens.hourly[k][i])).filter(a=>a.some(v=>v!=null));
+  const fxArr = fxKeys.map(k=>idx.map(i=>ens.hourly[k][i])).filter(a=>a.some(v=>v!=null));
+
+  const ffMed = ts.map((_,j)=>medianCol(ffArr,j));
+  const ffP25 = ts.map((_,j)=>percentileCol(ffArr,j,25));
+  const ffP75 = ts.map((_,j)=>percentileCol(ffArr,j,75));
+  const fxMed = ts.map((_,j)=>medianCol(fxArr,j));
+
+  const hIdx = filterTijden(hres.hourly.time, van, tot);
+  const hTs  = hIdx.map(i=>hres.hourly.time[i]);
+  const hFF  = hIdx.map(i=>hres.hourly.windspeed_10m[i]);
+  const hFX  = hIdx.map(i=>hres.hourly.windgusts_10m[i]);
+
+  const yMax = Math.max(...ffArr.flat().filter(v=>v!=null),...fxArr.flat().filter(v=>v!=null)) * 1.15;
+
+  // Bft lijnen
+  const BFT = [38.9, 49.9, 61.9, 74.9, 88.9]; // km/h grenzen Bft 7-11
+  const BFT_LABELS = ['Bft 7','Bft 8','Bft 9','Bft 10','Bft 11'];
+
+  const traces = [];
+  ffArr.forEach((m,i) => {
+    traces.push({x:ts,y:m,type:'scatter',mode:'lines',
+      line:{color:'rgba(68,221,68,0.15)',width:0.5},showlegend:i===0,
+      name:i===0?'ENS wind':'_',legendgroup:'ff',hoverinfo:'skip'});
+  });
+  traces.push({x:[...ts,...[...ts].reverse()],y:[...ffP25,...[...ffP75].reverse()],
+    fill:'toself',fillcolor:'rgba(68,187,68,0.12)',line:{color:'transparent'},
+    type:'scatter',name:'IQR p25–p75',hoverinfo:'skip'});
+  traces.push({x:ts,y:ffMed,type:'scatter',mode:'lines',
+    line:{color:'#2299ff',width:2.5},name:'Mediaan wind'});
+  traces.push({x:ts,y:fxMed,type:'scatter',mode:'lines',
+    line:{color:'rgba(255,140,60,0.7)',width:1.5,dash:'dot'},name:'Mediaan stoten'});
+  traces.push({x:hTs,y:hFF,type:'scatter',mode:'lines',
+    line:{color:'#ffffff',width:2},name:'HRES wind'});
+  traces.push({x:hTs,y:hFX,type:'scatter',mode:'lines',
+    line:{color:'#ff6633',width:2},name:'HRES stoten'});
+
+  const shapes = paasShapes('y',0,yMax);
+  BFT.filter(v=>v<yMax).forEach((v,i)=>{
+    shapes.push({type:'line',x0:ts[0],x1:ts[ts.length-1],y0:v,y1:v,
+      line:{color:'rgba(150,100,50,0.4)',width:0.8,dash:'dot'},yref:'y'});
+  });
+
+  const annotations = paasAnnotations(yMax-2,'y');
+  BFT.filter(v=>v<yMax).forEach((v,i)=>{
+    annotations.push({x:ts[ts.length-1],y:v+0.5,xanchor:'right',
+      text:BFT_LABELS[i],showarrow:false,font:{color:'rgba(180,130,80,0.7)',size:8}});
+  });
+
+  const layout = {
+    ...DONKER, height:420,
+    title:{text:`<b>Windpluim – ${naam}</b> (km/u)`,font:{color:'white',size:13},x:0.01},
+    xaxis:{...DONKER.xaxis,tickformat:'%H:%M\n%a %d %b'},
+    yaxis:{...DONKER.yaxis,title:{text:'km/u',font:{color:'#bbbbcc'}},range:[0,yMax]},
+    shapes, annotations,
+    margin:{t:50,b:50,l:55,r:20},
+    hovermode:'x unified',
+    hoverlabel:{bgcolor:'#111126',bordercolor:'#2a2a50',font:{color:'#ddddf0'}},
+  };
+
+  const cfg={responsive:true,displayModeBar:true,
+    modeBarButtonsToRemove:['select2d','lasso2d'],
+    toImageButtonOptions:{format:'png',filename:`pluim_${naam.toLowerCase()}_wind`,scale:2}};
+
+  Plotly.newPlot('grafiek-wind', traces, layout, cfg);
+  document.getElementById('grafiek-wind').style.display='';
+}
+
+// ── PNG download ──────────────────────────────────────────────────────────────
+function downloadPng() {
+  const naam = document.getElementById('sel-station').value.split(',')[2];
+  const type = actieveType;
+  const id = type==='temp' ? 'grafiek-temp' : type==='cloud' ? 'grafiek-cloud' : 'grafiek-wind';
+  Plotly.downloadImage(id, {format:'png', width:1400, height:type==='temp'?500:500,
+    filename:`pluim_${naam.toLowerCase()}_${type}`, scale:2});
+  if (type==='temp') {
+    setTimeout(()=>Plotly.downloadImage('grafiek-neerslag',
+      {format:'png',width:1400,height:350,filename:`pluim_${naam.toLowerCase()}_neerslag`,scale:2}), 500);
+  }
+}
+
+// ── Stats helpers ─────────────────────────────────────────────────────────────
+function medianCol(arr, j) {
+  const vals = arr.map(m=>m[j]).filter(v=>v!=null).sort((a,b)=>a-b);
+  if (!vals.length) return null;
+  const m = Math.floor(vals.length/2);
+  return vals.length%2 ? vals[m] : (vals[m-1]+vals[m])/2;
+}
+function percentileCol(arr, j, p) {
+  const vals = arr.map(m=>m[j]).filter(v=>v!=null).sort((a,b)=>a-b);
+  if (!vals.length) return null;
+  const i = (p/100)*(vals.length-1);
+  const lo = Math.floor(i), hi = Math.ceil(i);
+  return vals[lo] + (vals[hi]-vals[lo])*(i-lo);
+}
+
+// Init datum velden
+const nu = new Date();
+const vandaag = nu.toISOString().slice(0,10);
+const over7 = new Date(+nu+7*86400000).toISOString().slice(0,10);
+document.getElementById('datum-van').value = vandaag;
+document.getElementById('datum-tot').value = over7;
+</script>
+</body>
+</html>
