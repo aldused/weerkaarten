@@ -581,8 +581,8 @@ if vandaag_key in resultaten:
     nieuwe_namen = {item[1] for item in nieuw_t10n}
     for item in oud.get("t10n", []):
         if item[1] not in nieuwe_namen:
-            nieuw_t10n.append(item)
-    nieuwe_dag["t10n"] = sorted(nieuw_t10n)
+            nieuw_t10n.append(list(item) if isinstance(item, tuple) else item)
+    nieuwe_dag["t10n"] = sorted([list(item) if isinstance(item, tuple) else item for item in nieuw_t10n])
 
 resultaten[vandaag_key] = nieuwe_dag
 
