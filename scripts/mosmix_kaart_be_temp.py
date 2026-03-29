@@ -118,19 +118,30 @@ for code, naam in stations:
     root = download_kmz(code)
     if root is None: continue
     times  = get_times(root)
-    tx_raw = parse_values(root, 'TX')
-    tn_raw = parse_values(root, 'TN')
-    tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
-    tn = [v - 273.15 if v and v > 200 else None for v in tn_raw]
+    ttt_raw = parse_values(root, 'TTT')
+    ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
 
     daily_tx, daily_tn = {}, {}
     for i, dt in enumerate(times):
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
-        d   = loc.date()
-        if i < len(tx) and tx[i] is not None:
-            if d not in daily_tx or tx[i] > daily_tx[d]: daily_tx[d] = tx[i]
-        if i < len(tn) and tn[i] is not None:
-            if d not in daily_tn or tn[i] < daily_tn[d]: daily_tn[d] = tn[i]
+        h   = loc.hour
+        # TX: max TTT tussen 06-18u (zelfde als dagkaart)
+        d = loc.date()
+        if 6 <= h < 18:
+            v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
+            if v is not None:
+                if d not in daily_tx or v > daily_tx[d]: daily_tx[d] = v
+        # TN: min TTT tussen 18-06u (zelfde als nachtkaart)
+        if h >= 18:
+            d_tn = loc.date()
+        elif h < 6:
+            d_tn = loc.date() - timedelta(days=1)
+        else:
+            d_tn = None
+        if d_tn is not None:
+            v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
+            if v is not None:
+                if d_tn not in daily_tn or v < daily_tn[d_tn]: daily_tn[d_tn] = v
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
     days = [d for d in sorted(set(list(daily_tx.keys()) + list(daily_tn.keys()))) if d >= vandaag][:7]
