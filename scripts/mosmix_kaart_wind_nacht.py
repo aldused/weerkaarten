@@ -92,8 +92,6 @@ def maak_header(fig, gs, dag_nl, day, now_str):
     ax = fig.add_subplot(gs[0])
     ax.set_xlim(0,1); ax.set_ylim(0,1); ax.axis("off")
     ax.add_patch(plt.Rectangle((0,0),1,1,transform=ax.transAxes,facecolor="#001a33",zorder=0,clip_on=False))
-    # Volgende dag berekenen
-    from datetime import timedelta
     volgende = day + timedelta(days=1)
     dag_volgende = nl_dagen[volgende.weekday()]
     maand_nl = nl_maanden[volgende.month]
@@ -143,6 +141,8 @@ def windpijl(graden):
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 print("MOSMIX ophalen (wind nacht 18-06u)...")
 
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
+
 data_per_day = {}
 for code, name in stations:
     print(f"Ophalen: {name} ({code})...")
@@ -152,12 +152,14 @@ for code, name in stations:
     ff_raw = parse_values(root, 'FF')
     fx_raw = parse_values(root, 'FX1')
     dd_raw = parse_values(root, 'DD')
-    LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
+
     daily = {}
     for i, dt in enumerate(times):
-        loc = dt .replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         hour = loc.hour
-        # Nacht 18-06u: uren 18-23 → dag D, uren 00-05 → dag D-1
+        # Nacht 18-06u:
+        #   uren 18-23 van dag D  → nacht van dag D (avond richting D+1)
+        #   uren 00-05 van dag D  → nacht van dag D-1 (vroege ochtend na avond D-1)
         if hour >= 18:
             d = loc.date()
         elif hour < 6:
@@ -173,6 +175,7 @@ for code, name in stations:
         if i < len(fx_raw) and fx_raw[i] is not None:
             daily[d]["fx"].append(fx_raw[i])
 
+    # Sorteer op datum (niet op naam) – neem de 7 eerstvolgende nachten
     days = sorted(daily.keys())[:7]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
@@ -186,13 +189,17 @@ for code, name in stations:
             dd_bij_ff_max = None
         data_per_day[d][name] = {"ff":ff_gem, "fx":fx_max, "dd":dd_bij_ff_max}
 
-print(f"Data voor {len(data_per_day)} dagen")
+print(f"Data voor {len(data_per_day)} nachten")
 if not data_per_day: print("Geen data!"); exit()
 
 now_str  = datetime.now().strftime("%d %b %Y  %H:%M")
 now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
 
-for day, dag_data in data_per_day.items():
+# Sorteer op datum en neem eerste 7
+gesorteerde_dagen = sorted(data_per_day.keys())[:7]
+
+for day in gesorteerde_dagen:
+    dag_data = data_per_day[day]
     dag_nl = nl_dagen[day.weekday()]
     fig = plt.figure(figsize=(8,11))
     gs = GridSpec(2,1,figure=fig,height_ratios=[0.085,1],hspace=0.01)
@@ -231,13 +238,14 @@ for day, dag_data in data_per_day.items():
         leg.text(0.30,y+0.005,label,fontsize=4.0,va="center",transform=leg.transAxes,color="#222222")
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
-    fname = f"kaart_wind_nacht_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
+
+    # Bestandsnaam met YYYYMMDD zodat glob-sortering altijd chronologisch is
+    fname = f"kaart_wind_nacht_{day.strftime('%Y%m%d')}_{dag_nl.lower()}.png"
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-# Ruim oude kaarten op (max 7 bewaren)
+# Ruim oude kaarten op: sorteer op datum in bestandsnaam (YYYYMMDD staat vooraan → correct)
 oude_kaarten = sorted(glob.glob("kaart_wind_nacht_*.png"))
 for oud in oude_kaarten[:-7]:
     os.remove(oud)
     print(f"  Verwijderd: {oud}")
-
