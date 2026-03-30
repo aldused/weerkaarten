@@ -131,23 +131,20 @@ for station_nr, naam, wigos in STATIONS:
         laatste_zip = max(data.keys()) if data else "2000-01-01"
         laatste_datum = date.fromisoformat(laatste_zip)
 
-        # Vul aan met EDR API: gisteren geverifieerd, vandaag voorlopig
+        # Vul aan met EDR API t/m gisteren (vandaag is nog niet volledig)
         d = laatste_datum + timedelta(days=1)
         aangevuld = 0
-        while d <= nu:
+        while d <= gisteren:
             edr = haal_edr_dag(wigos, d.isoformat())
             if edr:
                 bron = edr.pop('_bron', '?')
-                if d == nu:
-                    edr['voorlopig'] = True   # vandaag = nog onvolledig
                 data[d.isoformat()] = edr
                 aangevuld += 1
-                label = " (voorlopig)" if d == nu else ""
-                print(f"    EDR [{bron}] {d}: tx={edr['tx']}° tn={edr['tn']}°{label}")
+                print(f"    EDR [{bron}] {d}: tx={edr['tx']}° tn={edr['tn']}°")
             d += timedelta(days=1)
 
         if aangevuld:
-            print(f"  {naam}: {aangevuld} dag(en) aangevuld via EDR (incl. vandaag voorlopig)")
+            print(f"  {naam}: {aangevuld} dag(en) aangevuld via EDR (t/m gisteren)")
 
         resultaat = {
             "station": station_nr,
