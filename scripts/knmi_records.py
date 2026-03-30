@@ -245,6 +245,96 @@ def bereken_koudegolven(groep):
             i += 1
     return golven
 
+
+# ── Historische CSV-stations (gedigitaliseerde data) ─────────────────────────
+# Bestand moet staan in de projectmap (naast de scripts/ map)
+CSV_STATIONS = [
+    ("20",  "Winterswijk", "Winterswijk_20_G_18940101_19701209.csv"),
+    # ("130", "Epen",        "Epen_130_G_18930101_19901231.csv"),
+    # ("170", "Oost-Maarland","Oost-Maarland_170_G_18930101_19901231.csv"),
+]
+
+def parse_historisch_csv(pad):
+    """
+    Parset het gedigitaliseerde KNMI-historisch formaat.
+    Meerdere obs per dag (800/1400/1900/2400); alleen de 2400-rij
+    bevat dagelijkse TX, TN en RD (dagsom neerslag).
+    Kwaliteitscodes 9 en 7 worden als onbruikbaar beschouwd.
+    """
+    from collections import defaultdict
+    dagrijen = defaultdict(dict)
+    header = None
+    with open(pad, encoding='latin-1') as f:
+        for regel in f:
+            regel = regel.strip()
+            if not regel:
+                continue
+            if regel.startswith('DATUM,'):
+                header = [k.strip() for k in regel.split(',')]
+                continue
+            if header is None or regel.startswith('#') or regel[0].isalpha():
+                continue
+            d = regel.split(',')
+            if len(d) < 4:
+                continue
+            datum = d[0].strip()
+            tijd  = d[1].strip() if len(d) > 1 else ''
+            if len(datum) != 8 or not datum.isdigit():
+                continue
+            if tijd != '2400':
+                continue
+
+            rij = dict(zip(header, d))
+
+            def getal(k):
+                v = rij.get(k, '').strip()
+                q = rij.get('Q_' + k, '').strip()
+                if not v:
+                    return None
+                if q in ('9', '7'):
+                    return None
+                try:
+                    f = float(v)
+                    return round(f / 10.0, 1)
+                except:
+                    return None
+
+            dagrijen[datum] = {
+                'tx': getal('TX'),
+                'tn': getal('TN'),
+                'rh': getal('RD'),
+            }
+
+    # Zet om naar records-formaat (zelfde structuur als parse_csv)
+    records = []
+    for datum_str, vals in sorted(dagrijen.items()):
+        try:
+            jaar  = int(datum_str[:4])
+            maand = int(datum_str[4:6])
+            dag   = int(datum_str[6:8])
+        except:
+            continue
+        records.append({
+            'datum':   f'{jaar:04d}-{maand:02d}-{dag:02d}',
+            'jaar':    jaar,
+            'maand':   maand,
+            'dag':     dag,
+            'decade':  ((dag - 1) // 10) + 1,
+            'seizoen': seizoen(maand),
+            'tx':  vals.get('tx'),
+            'tn':  vals.get('tn'),
+            'tg':  None,
+            'rh':  vals.get('rh'),
+            'fx':  None,
+            'fg':  None,
+            'fhx': None,
+            'pg':  None,
+            'px':  None,
+            'pn':  None,
+            'sq':  None,
+        })
+    return records
+
 # ── Hoofdprogramma ────────────────────────────────────────────────────────────
 for STATION, STATION_NAAM in STATIONS:
     CACHE_CSV   = f"knmi_dagdata_{STATION}.csv"
@@ -522,3 +612,131 @@ for STATION, STATION_NAAM in STATIONS:
     tn_rec = records['alltime']['tn_laag']
     print(f"  Alltime TX: {tx_rec[0] if tx_rec else 'geen data'}")
     print(f"  Alltime TN: {tn_rec[0] if tn_rec else 'geen data'}")
+
+
+# ── Historische CSV-stations verwerken ───────────────────────────────────────
+for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
+    if not os.path.exists(CSV_BESTAND):
+        print(f"CSV niet gevonden: {CSV_BESTAND} — sla over")
+        continue
+    print(f"\n=== Historisch CSV-station: {STATION_NAAM} ({STATION}) ===")
+    OUTPUT_JSON = f"records_{STATION}.json"
+    data = parse_historisch_csv(CSV_BESTAND)
+    if not data:
+        print(f"Geen data in {CSV_BESTAND}"); continue
+    print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")
+
+    records = {
+        "station":    STATION_NAAM,
+        "station_nr": STATION,
+        "van":        data[0]["datum"],
+        "tm":         data[-1]["datum"],
+        "gegenereerd": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "dag":        {},
+        "decade":     {},
+        "maand":      {},
+        "seizoen":    {},
+        "jaar":       {},
+        "alltime":    {},
+    }
+
+    print(f"Dagrecords berekenen... ({STATION_NAAM})")
+    dag_groepen = defaultdict(list)
+    for r in data:
+        dag_groepen[(r["maand"], r["dag"])].append(r)
+    for (m, d), groep in dag_groepen.items():
+        msleutel = str(m); dsleutel = str(d)
+        if msleutel not in records["dag"]: records["dag"][msleutel] = {}
+        records["dag"][msleutel][dsleutel] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [],
+            "rh_hoog": top10_max(groep, "rh"),
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [],
+            "sq_hoog": [],
+        }
+
+    dec_groepen = defaultdict(list)
+    for r in data: dec_groepen[(r["maand"], r["decade"])].append(r)
+    for (m, dec), groep in dec_groepen.items():
+        msleutel = str(m); dsleutel = str(dec)
+        if msleutel not in records["decade"]: records["decade"][msleutel] = {}
+        records["decade"][msleutel][dsleutel] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [],
+            "rh_hoog": top10_max(groep, "rh"),
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [],
+            "sq_hoog": [],
+        }
+
+    mnd_groepen = defaultdict(list)
+    for r in data: mnd_groepen[r["maand"]].append(r)
+    for m, groep in mnd_groepen.items():
+        records["maand"][str(m)] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [],
+            "rh_hoog": top10_max(groep, "rh"),
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [],
+            "sq_hoog": [],
+        }
+
+    sei_groepen = defaultdict(list)
+    for r in data: sei_groepen[r["seizoen"]].append(r)
+    for s, groep in sei_groepen.items():
+        records["seizoen"][s] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [],
+            "rh_hoog": top10_max(groep, "rh"),
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [],
+            "sq_hoog": [],
+        }
+
+    jaar_groepen = defaultdict(list)
+    for r in data: jaar_groepen[r["jaar"]].append(r)
+    for j, groep in jaar_groepen.items():
+        records["jaar"][str(j)] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [],
+            "rh_hoog": top10_max(groep, "rh"),
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [],
+            "sq_hoog": [],
+            "sq_totaal": 0,
+            "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
+            "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
+            "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
+            "zomerse_dagen":   sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 25),
+            "tropische_dagen": sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 30),
+            "hittegolven":     bereken_hittegolven(groep),
+            "koudegolven":     bereken_koudegolven(groep),
+        }
+
+    records["alltime"] = {
+        "tx_hoog": top10_max(data, "tx"), "tx_laag": top10_min(data, "tx"),
+        "tn_hoog": top10_max(data, "tn"), "tn_laag": top10_min(data, "tn"),
+        "tg_hoog": [], "tg_laag": [],
+        "rh_hoog": top10_max(data, "rh"),
+        "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+        "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [],
+        "sq_hoog": [],
+    }
+
+    records["maandranking"] = {}
+    records["seizoenranking"] = {}
+    records["tussenstand"] = None
+
+    with open(OUTPUT_JSON, "w") as f:
+        json.dump(records, f)
+    tx_rec = records["alltime"]["tx_hoog"]
+    tn_rec = records["alltime"]["tn_laag"]
+    print(f"  Alltime TX: {tx_rec[0] if tx_rec else 'geen data'}")
+    print(f"  Alltime TN: {tn_rec[0] if tn_rec else 'geen data'}")
+    print(f"  Opgeslagen: {OUTPUT_JSON}")
