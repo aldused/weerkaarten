@@ -219,6 +219,12 @@ def main():
         if os.path.exists(cache_file):
             mtime = os.path.getmtime(cache_file)
             if (time.time() - mtime) < 86400 * 30:
+                # Cache is geldig — laad alsnog in alle_records als nog niet aanwezig
+                if nr_str not in alle_records:
+                    with open(cache_file) as cf:
+                        cached = json.load(cf)
+                    if cached:
+                        alle_records[nr_str] = bereken_records(cached)
                 continue
 
         print(f"  [{verwerkt+1}/{MAX_PER_RUN}] Stn {info['nr']}: {info['naam']}...")
