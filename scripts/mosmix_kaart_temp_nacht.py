@@ -123,23 +123,37 @@ for code, name in stations:
     root = download_kmz(code)
     if root is None: print("  x Geen data"); continue
     times   = get_times(root)
-    ttt_raw = parse_values(root, 'TTT')
-    ttt = [v-273.15 if v and v>200 else None for v in ttt_raw]
+    # Gebruik TN parameter (nachtminimum) direct uit MOSMIX
+    tn_raw = parse_values(root, 'TN')
+    tn_vals = [v-273.15 if v and v>200 else None for v in tn_raw]
 
-    # Nachtperiode: 18:00 t/m 05:59 lokale tijd
-    # We koppelen de nacht aan de dag waarop de nacht BEGINT (de avond)
-    # bijv. nacht van dinsdag op woensdag → dag = dinsdag
+    # Fallback naar TTT min 18-06u als TN ontbreekt
+    if not any(v is not None for v in tn_vals):
+        ttt_raw = parse_values(root, 'TTT')
+        tn_vals = [v-273.15 if v and v>200 else None for v in ttt_raw]
+        gebruik_ttt = True
+    else:
+        gebruik_ttt = False
+
+    # TN koppelen aan de nacht: nacht van dinsdag op woensdag → sleutel = woensdag (next_day)
     daily_tn = {}
     for i, dt in enumerate(times):
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         h = loc.hour
-        if h >= 18:
-            d = loc.date()
-        elif h < 6:
-            d = loc.date() - timedelta(days=1)
+        if gebruik_ttt:
+            if h >= 18:
+                d = loc.date() + timedelta(days=1)  # nacht hoort bij volgende dag
+            elif h < 6:
+                d = loc.date()
+            else:
+                continue
         else:
-            continue
-        v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
+            # TN tijdstempel valt typisch om 06:00 van de volgende dag
+            if h <= 9:
+                d = loc.date()
+            else:
+                continue
+        v = tn_vals[i] if i < len(tn_vals) and tn_vals[i] is not None else None
         if v is not None:
             if d not in daily_tn or v < daily_tn[d]:
                 daily_tn[d] = v
@@ -162,7 +176,7 @@ for day, dag_data in data_per_day.items():
     next_dag_nl = nl_dagen[next_day.weekday()]
     fig = plt.figure(figsize=(8,11))
     gs = GridSpec(2,1,figure=fig,height_ratios=[0.085,1],hspace=0.01)
-    maak_header(fig, gs, f"Nacht naar {next_dag_nl}", day, now_str, "Min temp nacht (18–06u)  \u00b7  MOS ECMWF/ICON")
+    maak_header(fig, gs, f"Nacht naar {next_dag_nl}", next_day, now_str, "Min temp nacht (18–06u)  \u00b7  MOS ECMWF/ICON")
     ax = maak_kaart_ax(fig, gs)
 
     for name, tn_v in dag_data.items():
@@ -183,6 +197,6 @@ for day, dag_data in data_per_day.items():
     leg.text(0.24,0.50,"Min temp nacht (18–06u)",fontsize=4,va="center",transform=leg.transAxes)
 
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree()); ax.axis("off")
-    fname = f"kaart_temp_nacht_{dag_nl.lower()}_{day.strftime('%d%b%Y').lower()}.png"
+    fname = f"kaart_temp_nacht_{next_dag_nl.lower()}_{next_day.strftime('%d%b%Y').lower()}.png"
     plt.savefig(fname, dpi=300, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
