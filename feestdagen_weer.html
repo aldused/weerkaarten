@@ -177,7 +177,6 @@ optgroup{color:var(--gold);font-size:11px;font-weight:600}
 .tile[data-fd="2e Pinksterdag"]{--tile-accent:#d87ab0;--tile-bg1:rgba(216,122,176,0.1);--tile-bg2:rgba(216,122,176,0.02)}
 .tile[data-fd="1e Kerstdag"]{--tile-accent:#52c468;--tile-bg1:rgba(82,196,104,0.14);--tile-bg2:rgba(82,196,104,0.03)}
 .tile[data-fd="2e Kerstdag"]{--tile-accent:#4ab860;--tile-bg1:rgba(74,184,96,0.1);--tile-bg2:rgba(74,184,96,0.02)}
-.tile[data-fd="Sinterklaas"]{--tile-accent:#cc2222;--tile-bg1:rgba(204,34,34,0.12);--tile-bg2:rgba(204,34,34,0.03)}
 
 /* ── Stat cards ───────────────────────────────────── */
 .stat-grid{
@@ -541,7 +540,6 @@ const FEESTDAG_META = {
   '2e Pinksterdag':  { emoji:'🌺', kleur:'#d87ab0' },
   '1e Kerstdag':     { emoji:'🎄', kleur:'#52c468' },
   '2e Kerstdag':     { emoji:'🎁', kleur:'#4ab860' },
-  'Sinterklaas':     { emoji:'🎅', kleur:'#cc2222' },
 };
 
 document.getElementById('footer-year').textContent = new Date().getFullYear();
@@ -622,6 +620,22 @@ function getJaarRange() {
 
 function gefilterdData() {
   const [van, tot] = getJaarRange();
+  if(huidigStation === '__alle__') {
+    // Verzamel beste waarde per jaar over alle stations
+    const jaarMap = {};
+    const p = PARAMS.find(x=>x.id===huidigParam) || PARAMS[0];
+    for(const [stnNr, stnData] of Object.entries(DATA.data || {})) {
+      const rijen = (stnData[huidigFeestdag] || []).filter(r => r.jaar >= van && r.jaar <= tot);
+      for(const r of rijen) {
+        const val = r[p.id];
+        if(val == null) continue;
+        if(!jaarMap[r.jaar] || (p.omgekeerd ? val < jaarMap[r.jaar][p.id] : val > jaarMap[r.jaar][p.id])) {
+          jaarMap[r.jaar] = {...r, _station: DATA.stations[stnNr]?.naam || stnNr};
+        }
+      }
+    }
+    return Object.values(jaarMap).sort((a,b)=>a.jaar-b.jaar);
+  }
   const rijen = (DATA.data?.[huidigStation]?.[huidigFeestdag]) || [];
   return rijen.filter(r => r.jaar >= van && r.jaar <= tot);
 }
@@ -630,6 +644,10 @@ function gefilterdData() {
 function bouwStationSelect() {
   const sel = document.getElementById('station-select');
   sel.innerHTML = '';
+  // Optie "Alle stations" bovenaan
+  const alleOpt = document.createElement('option');
+  alleOpt.value = '__alle__'; alleOpt.textContent = '⭐ Alle stations (absoluut record)';
+  sel.appendChild(alleOpt);
   const hoofdStations = Object.entries(DATA.stations).filter(([,s]) => s.hoofd);
   const andereStations = Object.entries(DATA.stations).filter(([,s]) => !s.hoofd);
 
@@ -644,28 +662,14 @@ function bouwStationSelect() {
     sel.appendChild(og);
   }
   if(andereStations.length) {
-    const historisch = andereStations.filter(([,s]) => s.csv);
-    const normaal = andereStations.filter(([,s]) => !s.csv);
-    if(normaal.length) {
-      const og = document.createElement('optgroup');
-      og.label = '📍 Overige stations';
-      normaal.sort((a,b)=>a[1].naam.localeCompare(b[1].naam)).forEach(([nr,s]) => {
-        const o = document.createElement('option');
-        o.value = nr; o.textContent = s.naam;
-        og.appendChild(o);
-      });
-      sel.appendChild(og);
-    }
-    if(historisch.length) {
-      const og = document.createElement('optgroup');
-      og.label = '🏚 Historische stations';
-      historisch.sort((a,b)=>a[1].naam.localeCompare(b[1].naam)).forEach(([nr,s]) => {
-        const o = document.createElement('option');
-        o.value = nr; o.textContent = s.naam;
-        og.appendChild(o);
-      });
-      sel.appendChild(og);
-    }
+    const og = document.createElement('optgroup');
+    og.label = '📍 Overige stations';
+    andereStations.sort((a,b)=>a[1].naam.localeCompare(b[1].naam)).forEach(([nr,s]) => {
+      const o = document.createElement('option');
+      o.value = nr; o.textContent = s.naam;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
   }
   sel.addEventListener('change', () => { huidigStation = sel.value; ververs(); });
 }
@@ -744,7 +748,7 @@ function ververs() {
 // ── Jaar-panel: alle feestdagen voor één jaar ─────────
 function verversJaarPanel() {
   const jaar = parseInt(document.getElementById('jaar-enkel').value);
-  const stnNaam = DATA.stations?.[huidigStation]?.naam || huidigStation;
+  const stnNaam = huidigStation==='__alle__' ? 'Alle stations' : (DATA.stations?.[huidigStation]?.naam || huidigStation);
   document.getElementById('jaar-panel-titel').textContent =
     `Alle feestdagen ${jaar} — ${stnNaam}`;
 
@@ -836,7 +840,7 @@ function verversRanking() {
   document.getElementById('ranking-title').textContent =
     `${meta.emoji} ${huidigFeestdag} — ${p.desc}`;
   document.getElementById('ranking-subtitle').textContent =
-    `${DATA.stations?.[huidigStation]?.naam||huidigStation} · ${rijen.length} jaar gevonden`;
+    huidigStation==='__alle__' ? `Alle stations · beste per jaar · ${rijen.length} jaar` : `${DATA.stations?.[huidigStation]?.naam||huidigStation} · ${rijen.length} jaar gevonden`;
 
   // Sorteer
   const geldig = rijen.filter(r => r[p.id] != null && (p.id!=='RH'||r.RH>=0));
@@ -860,7 +864,7 @@ function verversRanking() {
     tr.innerHTML = `<td><div class="rank-row">
       <span class="rank-nr ${klasNr}">${i+1}</span>
       <span class="rank-jaar">${r.jaar}</span>
-      <span class="rank-datum">${formatDatum(r.datum)}</span>
+      <span class="rank-datum">${huidigStation==='__alle__'&&r._station?r._station+' · '+formatDatum(r.datum):formatDatum(r.datum)}</span>
       <div class="rank-bar-wrap"><div class="rank-bar" style="width:${barBreedte}%;background:${p.kleur}"></div></div>
       <span class="rank-val" style="color:${p.kleur}">${waarde.toFixed(1)}<small>${p.eenheid}</small></span>
     </div></td>`;
@@ -978,7 +982,7 @@ function tekenChart() {
     }
   });
 
-  const nm = DATA.stations?.[huidigStation]?.naam||huidigStation;
+  const nm = huidigStation==='__alle__' ? 'Alle stations (beste per jaar)' : (DATA.stations?.[huidigStation]?.naam||huidigStation);
   document.getElementById('chart-title').textContent =
     `${FEESTDAG_META[huidigFeestdag]?.emoji||''} ${huidigFeestdag} — ${p.desc} (${nm})`;
 }
