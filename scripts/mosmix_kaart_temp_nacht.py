@@ -137,7 +137,7 @@ for code, name in stations:
                 daily_tn[d] = tn[i]
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(daily_tn.keys()) if d >= vandaag][:7]
+    days = [d for d in sorted(daily_tn.keys()) if d >= vandaag][:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][name] = round(daily_tn[d], 1)
