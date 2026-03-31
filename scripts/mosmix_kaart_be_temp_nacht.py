@@ -110,23 +110,17 @@ for code, naam in stations:
     root = download_kmz(code)
     if root is None: continue
     times   = get_times(root)
-    ttt_raw = parse_values(root, 'TTT')
-    ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
+    tn_raw = parse_values(root, 'TN')
+    tn = [v - 273.15 if v and v > 200 else None for v in tn_raw]
 
     daily_tn = {}
     for i, dt in enumerate(times):
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
-        h = loc.hour
-        if h >= 18:
-            d = loc.date()
-        elif h < 6:
-            d = loc.date() - timedelta(days=1)
-        else:
-            continue
-        v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
-        if v is not None:
-            if d not in daily_tn or v < daily_tn[d]:
-                daily_tn[d] = v
+        d = loc.date()
+        # Zelfde logica als gecombineerde kaart: TN geldig vóór 12:00 lokaal
+        if i < len(tn) and tn[i] is not None and loc.hour < 12:
+            if d not in daily_tn or tn[i] < daily_tn[d]:
+                daily_tn[d] = tn[i]
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
     days = [d for d in sorted(daily_tn.keys()) if d >= vandaag][:7]
@@ -144,9 +138,6 @@ now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
 for day, dag_data in data_per_day.items():
     dag_nl   = nl_dagen[day.weekday()]
     maand_nl = nl_maanden[day.month]
-    next_day = day + timedelta(days=1)
-    next_dag_nl = nl_dagen[next_day.weekday()]
-
     fig = plt.figure(figsize=(12, 9))
     gs  = GridSpec(2, 1, figure=fig, height_ratios=[0.09, 1], hspace=0.01)
 
@@ -158,7 +149,7 @@ for day, dag_data in data_per_day.items():
               weight="bold", va="center", transform=ax_h.transAxes)
     ax_h.text(0.012, 0.22, "Min temp nacht (18–06u)  ·  MOS ECMWF/ICON", fontsize=8,
               color="#a8c8e8", va="center", transform=ax_h.transAxes)
-    ax_h.text(0.988, 0.65, f"Temperatuur België – Nacht naar {next_dag_nl} {next_day.day} {nl_maanden[next_day.month]}",
+    ax_h.text(0.988, 0.65, f"Temperatuur België – Nacht naar {dag_nl} {day.day} {nl_maanden[day.month]}",
               fontsize=15, color="white", weight="bold",
               ha="right", va="center", transform=ax_h.transAxes)
     ax_h.text(0.988, 0.20, f"DWD MOSMIX  ·  run: {now_str}",

@@ -110,19 +110,17 @@ for code, naam in stations:
     root = download_kmz(code)
     if root is None: continue
     times   = get_times(root)
-    ttt_raw = parse_values(root, 'TTT')
-    ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
+    tx_raw = parse_values(root, 'TX')
+    tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
 
     daily_tx = {}
     for i, dt in enumerate(times):
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d = loc.date()
-        h = loc.hour
-        if 6 <= h < 18:
-            v = ttt[i] if i < len(ttt) and ttt[i] is not None else None
-            if v is not None:
-                if d not in daily_tx or v > daily_tx[d]:
-                    daily_tx[d] = v
+        # Zelfde logica als gecombineerde kaart: TX geldig vanaf 12:00 lokaal
+        if i < len(tx) and tx[i] is not None and loc.hour >= 12:
+            if d not in daily_tx or tx[i] > daily_tx[d]:
+                daily_tx[d] = tx[i]
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
     days = [d for d in sorted(daily_tx.keys()) if d >= vandaag][:7]
