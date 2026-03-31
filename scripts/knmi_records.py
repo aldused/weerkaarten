@@ -175,12 +175,14 @@ def seizoen(maand):
 
 # ── Record helpers ────────────────────────────────────────────────────────────
 def top10_max(groep, param):
+    # Bij gelijke waarde: oudste datum eerst (origineel record blijft op #1)
     vals = [(r[param], r["datum"]) for r in groep if r[param] is not None]
-    return sorted(vals, reverse=True)[:25]
+    return sorted(vals, key=lambda x: (-x[0], x[1]))[:25]
 
 def top10_min(groep, param):
+    # Bij gelijke waarde: oudste datum eerst
     vals = [(r[param], r["datum"]) for r in groep if r[param] is not None]
-    return sorted(vals)[:25]
+    return sorted(vals, key=lambda x: (x[0], x[1]))[:25]
 
 def bereken_hittegolven(groep):
     """
