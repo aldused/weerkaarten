@@ -337,18 +337,6 @@ optgroup{color:var(--gold);font-size:11px;font-weight:600}
 </head>
 <body>
 
-<!-- ── Site header ──────────────────────────────────── -->
-<header class="site-header">
-  <div class="header-logo">Ed Aldus WM</div>
-  <nav class="header-nav">
-    <a href="index.html">🇳🇱 Nederland</a>
-    <a href="index_be.html">🇧🇪 België</a>
-    <a href="records_debilt.html">📊 Weerrecords</a>
-    <a href="feestdagen_weer.html" style="color:var(--gold)">🎉 Feestdagen</a>
-  </nav>
-  <span class="header-badge">WEERLAB.NL</span>
-</header>
-
 <!-- ── Hero ─────────────────────────────────────────── -->
 <section class="hero">
   <div class="hero-inner">
@@ -367,7 +355,7 @@ optgroup{color:var(--gold);font-size:11px;font-weight:600}
 <!-- ── No data banner ───────────────────────────────── -->
 <div id="no-data-banner">
   <h3>⚠️ Geen weerdata gevonden</h3>
-  <p>Genereer eerst <code>feestdagen_data.json</code> met het Python-script:<br>
+  <p>Genereer eerst <code>feestdagen_data.js</code> met het Python-script:<br>
   <code>python3 feestdagen_ophalen.py</code><br><br>
   Wil je alleen de 5 hoofdstations (sneller):<br>
   <code>python3 feestdagen_ophalen.py --hoofd</code></p>
@@ -557,15 +545,23 @@ const FEESTDAG_META = {
 document.getElementById('footer-year').textContent = new Date().getFullYear();
 
 // ── Load data ─────────────────────────────────────────
-fetch('feestdagen_data.json')
-  .then(r => { if(!r.ok) throw new Error('niet gevonden'); return r.json(); })
-  .then(d => {
-    DATA = d;
+// Laad via <script src> zodat het werkt zonder webserver (file://)
+function laadData() {
+  if(typeof FEESTDAGEN_DATA !== 'undefined') {
+    DATA = FEESTDAGEN_DATA;
     init();
-  })
-  .catch(() => {
+  } else {
     document.getElementById('no-data-banner').style.display = 'block';
-  });
+  }
+}
+// Voeg script-tag dynamisch toe
+(function() {
+  const s = document.createElement('script');
+  s.src = 'feestdagen_data.js';
+  s.onload = laadData;
+  s.onerror = () => { document.getElementById('no-data-banner').style.display = 'block'; };
+  document.head.appendChild(s);
+})();
 
 function init() {
   bouwStationSelect();
@@ -975,7 +971,7 @@ function tekenChart() {
 function formatDatum(d) {
   if(!d) return '';
   const dt = new Date(d);
-  return dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
+  return dt.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'});
 }
 function fmtTemp(v) { return v==null ? '–' : (v*0.1).toFixed(1); }
 function fmtRH(v)   { return v==null||v<0 ? '–' : (v*0.1).toFixed(1); }
