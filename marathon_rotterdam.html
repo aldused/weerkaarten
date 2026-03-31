@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marathon Rotterdam – Weer door de jaren</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="marathon_data.js"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-D23M7CD0P8"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-D23M7CD0P8');</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:     #0a0c10;
+  --bg2:    #10131a;
+  --bg3:    #161b26;
+  --bg4:    #1c2230;
+  --border: rgba(255,255,255,0.07);
+  --orange: #f0740a;
+  --orange2:#ffa040;
+  --red:    #e04444;
+  --blue:   #4488dd;
+  --green:  #44bb77;
+  --yellow: #f0c040;
+  --purple: #9977cc;
+  --text:   #e8eaf2;
+  --text2:  #8b93a8;
+  --text3:  #50586a;
+  --r:      12px;
+}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* ── Startlijn decoratie ── */
+.startlijn{height:4px;background:repeating-linear-gradient(90deg,#fff 0,#fff 24px,#111 24px,#111 48px)}
+
+/* ── Hero ── */
+.hero{
+  background:linear-gradient(135deg,#0d0f18 0%,#141828 50%,#0a0c14 100%);
+  border-bottom:1px solid var(--border);
+  padding:36px 32px 28px;
+  position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 15% 60%,rgba(240,116,10,0.1) 0%,transparent 55%),
+             radial-gradient(ellipse at 85% 20%,rgba(68,136,221,0.07) 0%,transparent 45%);
+}
+.hero-inner{position:relative;max-width:1100px;margin:0 auto}
+.hero-eyebrow{
+  font-size:10px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;
+  color:var(--orange);margin-bottom:10px;display:flex;align-items:center;gap:10px;
+}
+.hero-eyebrow::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--orange),transparent)}
+.hero-title{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(30px,5vw,58px);font-weight:900;
+  color:#fff;line-height:1.05;margin-bottom:8px;
+}
+.hero-title em{color:var(--orange);font-style:italic}
+.hero-sub{font-size:14px;color:var(--text2);margin-bottom:22px;line-height:1.6}
+.hero-stats{display:flex;gap:28px;flex-wrap:wrap}
+.hstat{display:flex;flex-direction:column;gap:2px}
+.hstat-n{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--orange2)}
+.hstat-l{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3)}
+
+/* ── Record cards ── */
+.main{max-width:1100px;margin:0 auto;padding:28px 32px 60px}
+.section-title{
+  font-family:'Playfair Display',serif;font-size:22px;font-weight:700;
+  margin-bottom:16px;display:flex;align-items:center;gap:12px;
+}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.records-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:12px;margin-bottom:36px;
+}
+.rec-card{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:18px 16px;
+  position:relative;overflow:hidden;
+  transition:border-color .2s,transform .2s;cursor:default;
+}
+.rec-card:hover{border-color:rgba(255,255,255,0.15);transform:translateY(-2px)}
+.rec-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--c,var(--orange));
+}
+.rec-emoji{font-size:22px;margin-bottom:8px;display:block}
+.rec-val{
+  font-family:'Playfair Display',serif;font-size:28px;font-weight:700;
+  color:var(--c,var(--orange));line-height:1;margin-bottom:4px;
+}
+.rec-label{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.rec-jaar{font-size:13px;color:var(--text2)}
+.rec-datum{font-size:11px;color:var(--text3)}
+
+/* ── Grafiek containers ── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.chart-grid.full{grid-template-columns:1fr}
+.chart-box{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px;
+}
+.chart-box-title{
+  font-size:13px;font-weight:600;color:var(--text2);
+  margin-bottom:4px;display:flex;align-items:center;gap:8px;
+}
+.chart-box-title span{font-size:18px}
+.chart-box-sub{font-size:11px;color:var(--text3);margin-bottom:16px}
+.chart-wrap{position:relative;height:220px}
+.chart-wrap.tall{height:280px}
+
+/* ── Tabel ── */
+.tabel-wrap{overflow-x:auto;margin-top:28px}
+table.marathon-tabel{
+  width:100%;border-collapse:collapse;font-size:12px;
+}
+table.marathon-tabel th{
+  font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--text3);padding:8px 10px;border-bottom:1px solid var(--border);
+  text-align:left;background:var(--bg3);position:sticky;top:0;
+}
+table.marathon-tabel td{
+  padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.03);
+  font-variant-numeric:tabular-nums;
+}
+table.marathon-tabel tr:hover td{background:rgba(255,255,255,0.03)}
+table.marathon-tabel tr.corona td{color:var(--purple);font-style:italic}
+.cel-warm{color:var(--red);font-weight:600}
+.cel-koud{color:var(--blue);font-weight:600}
+.cel-nat {color:var(--blue)}
+.cel-zon {color:var(--yellow)}
+.badge{
+  font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;
+  display:inline-block;vertical-align:middle;margin-left:4px;
+}
+.badge.record-warm{background:rgba(224,68,68,0.2);color:var(--red)}
+.badge.record-koud{background:rgba(68,136,221,0.2);color:var(--blue)}
+.badge.record-nat {background:rgba(68,136,221,0.15);color:#88bbff}
+.badge.record-zon {background:rgba(240,192,64,0.15);color:var(--yellow)}
+
+/* ── Divider ── */
+.divider{
+  display:flex;align-items:center;gap:14px;margin:32px 0 20px;
+}
+.divider-line{flex:1;height:1px;background:var(--border)}
+.divider-text{
+  font-size:10px;font-weight:700;letter-spacing:0.14em;
+  text-transform:uppercase;color:var(--text3);white-space:nowrap;
+}
+
+/* ── Footer ── */
+footer{
+  border-top:1px solid var(--border);padding:16px 32px;
+  font-size:11px;color:var(--text3);text-align:center;
+}
+
+@media(max-width:640px){
+  .hero,.main{padding-left:16px;padding-right:16px}
+  .chart-grid{grid-template-columns:1fr}
+  .hero-stats{gap:18px}
+}
+</style>
+</head>
+<body>
+
+<div class="startlijn"></div>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Ed Aldus WM · Weerarchief</div>
+    <h1 class="hero-title">Rotterdam<br><em>Marathon Weer</em></h1>
+    <p class="hero-sub">Weerdata voor elke editie van de Rotterdam Marathon (1981–2025).<br>Station Rotterdam Airport · Bron: KNMI</p>
+    <div class="hero-stats" id="hero-stats"></div>
+  </div>
+</section>
+
+<main class="main">
+
+  <!-- Records -->
+  <h2 class="section-title">🏆 Records</h2>
+  <div class="records-grid" id="records-grid"></div>
+
+  <!-- Temperatuurgrafiek -->
+  <div class="divider"><div class="divider-line"></div><div class="divider-text">Temperatuur</div><div class="divider-line"></div></div>
+
+  <div class="chart-grid full">
+    <div class="chart-box">
+      <div class="chart-box-title"><span>🌡</span> Temperatuur per editie</div>
+      <div class="chart-box-sub">TX (max), TG (gemiddeld) en TN (min) op de marathondag · in °C</div>
+      <div class="chart-wrap tall"><canvas id="chart-temp"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-grid" style="margin-top:16px">
+    <div class="chart-box">
+      <div class="chart-box-title"><span>🌧</span> Neerslag per editie</div>
+      <div class="chart-box-sub">Dagsom neerslag in mm</div>
+      <div class="chart-wrap"><canvas id="chart-regen"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-title"><span>☀</span> Zonneschijn per editie</div>
+      <div class="chart-box-sub">Zonneschijnduur in uren</div>
+      <div class="chart-wrap"><canvas id="chart-zon"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-grid" style="margin-top:16px">
+    <div class="chart-box">
+      <div class="chart-box-title"><span>💨</span> Max. windstoot per editie</div>
+      <div class="chart-box-sub">Hoogste windstoot in m/s</div>
+      <div class="chart-wrap"><canvas id="chart-wind"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-title"><span>📊</span> Verdeling marathondagen</div>
+      <div class="chart-box-sub">Hoe warm was het gemiddeld? (TG-klassen)</div>
+      <div class="chart-wrap"><canvas id="chart-verdeling"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Alle edities tabel -->
+  <div class="divider"><div class="divider-line"></div><div class="divider-text">Alle edities</div><div class="divider-line"></div></div>
+
+  <div class="tabel-wrap">
+    <table class="marathon-tabel">
+      <thead>
+        <tr>
+          <th>#</th><th>Jaar</th><th>Datum</th>
+          <th style="color:#e04444">TX °C</th>
+          <th style="color:#8899cc">TN °C</th>
+          <th style="color:#d4a843">TG °C</th>
+          <th style="color:#4488dd">Neersl. mm</th>
+          <th style="color:#f0c040">Zon u</th>
+          <th style="color:#88aacc">Wind m/s</th>
+        </tr>
+      </thead>
+      <tbody id="tabel-body"></tbody>
+    </table>
+  </div>
+
+</main>
+
+<footer>&copy; <span id="footer-jaar"></span> Ed Aldus WM &nbsp;·&nbsp; Data: KNMI &nbsp;·&nbsp; Rotterdam Marathon</footer>
+
+<script>
+document.getElementById('footer-jaar').textContent = new Date().getFullYear();
+
+// ── Helpers ──────────────────────────────────────────
+const f1  = v => v == null ? '–' : (v * 0.1).toFixed(1);
+const fmm = v => v == null || v < 0 ? '–' : (v * 0.1).toFixed(1);
+const fzon = v => v == null || v < 0 ? '–' : (v * 0.1).toFixed(1);
+
+function formatDatum(d) {
+  if(!d) return '';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'});
+}
+
+const CHART_DEFAULTS = {
+  responsive:true, maintainAspectRatio:false,
+  interaction:{mode:'index',intersect:false},
+  plugins:{
+    legend:{
+      labels:{color:'#8b93a8',font:{size:11},boxWidth:12,padding:12}
+    },
+    tooltip:{
+      backgroundColor:'#1a2035',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+      titleColor:'#e8eaf0',bodyColor:'#8b93a8',padding:10,
+    }
+  },
+  scales:{
+    x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#50586a',font:{size:10},maxTicksLimit:20},border:{color:'rgba(255,255,255,0.06)'}},
+    y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#50586a',font:{size:10}},border:{color:'rgba(255,255,255,0.06)'}}
+  }
+};
+
+// ── Laden ────────────────────────────────────────────
+if(typeof MARATHON_DATA === 'undefined') {
+  document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#8b93a8"><h2>Geen data</h2><p style="margin-top:10px">Genereer eerst <code>marathon_data.js</code> met:<br><code>python3 marathon_ophalen.py</code></p></div>';
+} else {
+  init(MARATHON_DATA);
+}
+
+function init(data) {
+  const edities = data.edities.filter(e => e.TX != null);
+  const jaren   = edities.map(e => e.jaar);
+  const labels  = edities.map(e => String(e.jaar));
+
+  const TX  = edities.map(e => e.TX  != null ? +(e.TX  * 0.1).toFixed(1) : null);
+  const TN  = edities.map(e => e.TN  != null ? +(e.TN  * 0.1).toFixed(1) : null);
+  const TG  = edities.map(e => e.TG  != null ? +(e.TG  * 0.1).toFixed(1) : null);
+  const RH  = edities.map(e => e.RH  != null && e.RH >= 0 ? +(e.RH  * 0.1).toFixed(1) : 0);
+  const SQ  = edities.map(e => e.SQ  != null && e.SQ >= 0 ? +(e.SQ  * 0.1).toFixed(1) : 0);
+  const FXX = edities.map(e => e.FXX != null ? +(e.FXX * 0.1).toFixed(1) : null);
+
+  // ── Hero stats ──
+  const gemTG = TG.filter(v=>v!=null).reduce((a,b)=>a+b,0)/TG.filter(v=>v!=null).length;
+  const gemRH = RH.reduce((a,b)=>a+b,0)/RH.length;
+  document.getElementById('hero-stats').innerHTML = `
+    <div class="hstat"><span class="hstat-n">${edities.length}</span><span class="hstat-l">Edities</span></div>
+    <div class="hstat"><span class="hstat-n">${gemTG.toFixed(1)}°</span><span class="hstat-l">Gem. temp.</span></div>
+    <div class="hstat"><span class="hstat-n">${gemRH.toFixed(1)} mm</span><span class="hstat-l">Gem. neerslag</span></div>
+    <div class="hstat"><span class="hstat-n">1981–2025</span><span class="hstat-l">Periode</span></div>
+  `;
+
+  // ── Records ──
+  const maxTX = edities.reduce((a,b) => b.TX > a.TX ? b : a);
+  const minTX = edities.reduce((a,b) => b.TX < a.TX ? b : a);
+  const minTN = edities.reduce((a,b) => b.TN < a.TN ? b : a);
+  const maxRH = edities.reduce((a,b) => (b.RH||0) > (a.RH||-1) ? b : a);
+  const minRH = edities.filter(e=>e.RH!=null&&e.RH>=0).reduce((a,b) => b.RH < a.RH ? b : a);
+  const maxSQ = edities.filter(e=>e.SQ!=null&&e.SQ>=0).reduce((a,b) => b.SQ > a.SQ ? b : a);
+  const minSQ = edities.filter(e=>e.SQ!=null&&e.SQ>=0).reduce((a,b) => b.SQ < a.SQ ? b : a);
+  const maxFX = edities.filter(e=>e.FXX!=null).reduce((a,b) => b.FXX > a.FXX ? b : a);
+
+  const records = [
+    {emoji:'🌡',label:'Warmste marathon',val:`${(maxTX.TX*0.1).toFixed(1)}°C`,jaar:maxTX.jaar,datum:maxTX.datum,kleur:'#e04444'},
+    {emoji:'🥶',label:'Koudste marathon',val:`${(minTX.TX*0.1).toFixed(1)}°C`,jaar:minTX.jaar,datum:minTX.datum,kleur:'#4488dd'},
+    {emoji:'❄️',label:'Laagste TN',val:`${(minTN.TN*0.1).toFixed(1)}°C`,jaar:minTN.jaar,datum:minTN.datum,kleur:'#6699ee'},
+    {emoji:'🌧',label:'Natste marathon',val:`${(maxRH.RH*0.1).toFixed(1)} mm`,jaar:maxRH.jaar,datum:maxRH.datum,kleur:'#4488dd'},
+    {emoji:'🏜',label:'Droogste marathon',val:`${(minRH.RH*0.1).toFixed(1)} mm`,jaar:minRH.jaar,datum:minRH.datum,kleur:'#d4a843'},
+    {emoji:'☀',label:'Zonnigste marathon',val:`${(maxSQ.SQ*0.1).toFixed(1)} u`,jaar:maxSQ.jaar,datum:maxSQ.datum,kleur:'#f0c040'},
+    {emoji:'🌫',label:'Bewolkste marathon',val:`${(minSQ.SQ*0.1).toFixed(1)} u`,jaar:minSQ.jaar,datum:minSQ.datum,kleur:'#88aabb'},
+    {emoji:'💨',label:'Winderigste marathon',val:`${(maxFX.FXX*0.1).toFixed(1)} m/s`,jaar:maxFX.jaar,datum:maxFX.datum,kleur:'#88ccaa'},
+  ];
+
+  document.getElementById('records-grid').innerHTML = records.map(r=>`
+    <div class="rec-card" style="--c:${r.kleur}">
+      <span class="rec-emoji">${r.emoji}</span>
+      <div class="rec-val">${r.val}</div>
+      <div class="rec-label">${r.label}</div>
+      <div class="rec-jaar">${r.jaar}</div>
+      <div class="rec-datum">${formatDatum(r.datum)}</div>
+    </div>
+  `).join('');
+
+  // ── Temperatuurgrafiek ──
+  new Chart(document.getElementById('chart-temp'), {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {label:'TX max',data:TX,borderColor:'#e04444',backgroundColor:'rgba(224,68,68,0.1)',
+         borderWidth:2,pointRadius:3,pointHoverRadius:5,fill:false,tension:0.3},
+        {label:'TG gem.',data:TG,borderColor:'#d4a843',backgroundColor:'rgba(212,168,67,0.15)',
+         borderWidth:2.5,pointRadius:3,pointHoverRadius:5,fill:false,tension:0.3},
+        {label:'TN min',data:TN,borderColor:'#4488dd',backgroundColor:'rgba(68,136,221,0.1)',
+         borderWidth:2,pointRadius:3,pointHoverRadius:5,fill:false,tension:0.3},
+      ]
+    },
+    options:{...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins,
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,
+          callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}°C`}
+        }
+      },
+      scales:{
+        x:{...CHART_DEFAULTS.scales.x},
+        y:{...CHART_DEFAULTS.scales.y,
+          ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>`${v}°C`}
+        }
+      }
+    }
+  });
+
+  // ── Neerslaggrafiek ──
+  new Chart(document.getElementById('chart-regen'), {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'Neerslag (mm)',data:RH,
+        backgroundColor: RH.map(v => v > 10 ? 'rgba(68,136,221,0.8)' : v > 0 ? 'rgba(68,136,221,0.5)' : 'rgba(68,136,221,0.2)'),
+        borderColor:'rgba(68,136,221,0.9)',borderWidth:1,borderRadius:3,
+      }]
+    },
+    options:{...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins,
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>`${ctx.raw} mm`}}
+      },
+      scales:{
+        x:{...CHART_DEFAULTS.scales.x},
+        y:{...CHART_DEFAULTS.scales.y,ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>`${v} mm`}}
+      }
+    }
+  });
+
+  // ── Zongrafiek ──
+  new Chart(document.getElementById('chart-zon'), {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'Zon (uur)',data:SQ,
+        backgroundColor: SQ.map(v => v > 8 ? 'rgba(240,192,64,0.9)' : v > 4 ? 'rgba(240,192,64,0.6)' : 'rgba(240,192,64,0.3)'),
+        borderColor:'rgba(240,192,64,0.8)',borderWidth:1,borderRadius:3,
+      }]
+    },
+    options:{...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins,
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>`${ctx.raw} uur`}}
+      },
+      scales:{
+        x:{...CHART_DEFAULTS.scales.x},
+        y:{...CHART_DEFAULTS.scales.y,ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>`${v} u`}}
+      }
+    }
+  });
+
+  // ── Windgrafiek ──
+  new Chart(document.getElementById('chart-wind'), {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'Max windstoot (m/s)',
+        data:FXX,
+        backgroundColor: FXX.map(v => v > 15 ? 'rgba(136,204,170,0.9)' : 'rgba(136,204,170,0.5)'),
+        borderColor:'rgba(136,204,170,0.8)',borderWidth:1,borderRadius:3,
+      }]
+    },
+    options:{...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins,
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>`${ctx.raw} m/s`}}
+      },
+      scales:{
+        x:{...CHART_DEFAULTS.scales.x},
+        y:{...CHART_DEFAULTS.scales.y,ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>`${v} m/s`}}
+      }
+    }
+  });
+
+  // ── Verdelingsgrafiek TG ──
+  const klassen = ['< 5°','5–8°','8–11°','11–14°','14–17°','≥ 17°'];
+  const grenzen = [5,8,11,14,17];
+  const telling = [0,0,0,0,0,0];
+  TG.filter(v=>v!=null).forEach(v => {
+    if(v < 5) telling[0]++;
+    else if(v < 8) telling[1]++;
+    else if(v < 11) telling[2]++;
+    else if(v < 14) telling[3]++;
+    else if(v < 17) telling[4]++;
+    else telling[5]++;
+  });
+  new Chart(document.getElementById('chart-verdeling'), {
+    type:'doughnut',
+    data:{
+      labels:klassen,
+      datasets:[{
+        data:telling,
+        backgroundColor:['#4a6fa8','#4488dd','#44bb77','#d4a843','#e07030','#e04444'],
+        borderColor:'var(--bg3)',borderWidth:2,hoverOffset:6,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'right',labels:{color:'#8b93a8',font:{size:11},padding:10,boxWidth:12}},
+        tooltip:{
+          backgroundColor:'#1a2035',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+          titleColor:'#e8eaf0',bodyColor:'#8b93a8',
+          callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}×`}
+        }
+      }
+    }
+  });
+
+  // ── Records voor tabel ──
+  const maxTX_val = maxTX.TX, minTX_val = minTX.TX, maxRH_val = maxRH.RH, maxSQ_val = maxSQ.SQ;
+
+  // ── Tabel ──
+  const tbody = document.getElementById('tabel-body');
+  const alle = [...data.edities].reverse();
+  alle.forEach((e, idx) => {
+    const nr = data.edities.indexOf(e) + 1;
+    const isCorona = e.jaar === 2021;
+    const tx  = e.TX  != null ? (e.TX  * 0.1).toFixed(1) : '–';
+    const tn  = e.TN  != null ? (e.TN  * 0.1).toFixed(1) : '–';
+    const tg  = e.TG  != null ? (e.TG  * 0.1).toFixed(1) : '–';
+    const rh  = e.RH  != null && e.RH >= 0 ? (e.RH * 0.1).toFixed(1) : '–';
+    const sq  = e.SQ  != null && e.SQ >= 0 ? (e.SQ * 0.1).toFixed(1) : '–';
+    const fxx = e.FXX != null ? (e.FXX * 0.1).toFixed(1) : '–';
+
+    const badgeTX  = e.TX === maxTX_val ? '<span class="badge record-warm">warmst</span>' : e.TX === minTX_val ? '<span class="badge record-koud">koudst</span>' : '';
+    const badgeRH  = e.RH === maxRH_val ? '<span class="badge record-nat">natst</span>' : '';
+    const badgeSQ  = e.SQ === maxSQ_val ? '<span class="badge record-zon">zonnigst</span>' : '';
+
+    const tr = document.createElement('tr');
+    if(isCorona) tr.className = 'corona';
+    tr.innerHTML = `
+      <td style="color:var(--text3)">${nr}</td>
+      <td style="font-weight:600">${e.jaar}${isCorona?' <small style="color:var(--purple)">(okt)</small>':''}</td>
+      <td style="color:var(--text2)">${formatDatum(e.datum)}</td>
+      <td class="cel-warm">${tx}${badgeTX}</td>
+      <td class="cel-koud">${tn}</td>
+      <td>${tg}</td>
+      <td class="cel-nat">${rh}${badgeRH}</td>
+      <td class="cel-zon">${sq}${badgeSQ}</td>
+      <td style="color:var(--text2)">${fxx}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
