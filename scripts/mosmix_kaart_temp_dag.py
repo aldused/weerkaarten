@@ -125,32 +125,19 @@ for code, name in stations:
     times   = get_times(root)
     # Gebruik TX parameter (dagmaximum) direct uit MOSMIX
     tx_raw = parse_values(root, 'TX')
-    tx_vals = [v-273.15 if v and v>200 else None for v in tx_raw]
-
-    # Fallback naar TTT max 06-18u als TX ontbreekt
-    if not any(v is not None for v in tx_vals):
-        ttt_raw = parse_values(root, 'TTT')
-        tx_vals = [v-273.15 if v and v>200 else None for v in ttt_raw]
-        gebruik_ttt = True
-    else:
-        gebruik_ttt = False
+    tx = [v-273.15 if v and v>200 else None for v in tx_raw]
 
     daily_tx = {}
     for i, dt in enumerate(times):
         loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
         d = loc.date()
-        h = loc.hour
-        if gebruik_ttt:
-            if not (6 <= h < 18): continue
-        else:
-            # TX in MOSMIX is het max t/m dat tijdstip — neem het maximum per dag
-            if not (6 <= h <= 18): continue
-        v = tx_vals[i] if i < len(tx_vals) and tx_vals[i] is not None else None
-        if v is not None:
-            if d not in daily_tx or v > daily_tx[d]:
-                daily_tx[d] = v
+        # Exact zelfde logica als gecombineerde kaart: TX geldig vanaf 12:00 lokaal
+        if i < len(tx) and tx[i] is not None and loc.hour >= 12:
+            if d not in daily_tx or tx[i] > daily_tx[d]:
+                daily_tx[d] = tx[i]
 
-    days = sorted(daily_tx.keys())[:7]
+    vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
+    days = [d for d in sorted(daily_tx.keys()) if d >= vandaag][:7]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][name] = round(daily_tx[d], 1)
