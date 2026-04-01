@@ -47,6 +47,7 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_grafiek.py"              || { echo "FOUT: maak_grafiek.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_grafiek_be.py"           || { echo "FOUT: maak_grafiek_be.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_toplijst.py"             || { echo "FOUT: maak_toplijst.py"; exit 1; }
+/usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_toplijst_kaarten.py"     || { echo "FOUT: maak_toplijst_kaarten.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_waarnemingen_kaarten.py" || { echo "FOUT: maak_waarnemingen_kaarten.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_index.py"                || { echo "FOUT: maak_index.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_p13_html.py"                     || { echo "FOUT: maak_p13_html.py"; exit 1; }
