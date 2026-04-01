@@ -1724,34 +1724,68 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
   const url=type==='wind'
     ?`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,windgusts_10m&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`
     :`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
-  const hres=await fetchT(url);
+  const prevUrl=type==='wind'
+    ?`https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m_previous_day1,windgusts_10m_previous_day1&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`
+    :`https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m_previous_day1,precipitation_previous_day1&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
+  const[hres,prev]=await Promise.all([fetchT(url),fetchT(prevUrl).catch(()=>null)]);
   const ts=hres.hourly.time;
   const lab=getLab(ts);
+
+  // Vorige run mapping
+  let pLookup={};
+  if(prev&&prev.hourly&&prev.hourly.time){
+    prev.hourly.time.forEach((t,i)=>{
+      pLookup[t]={
+        t:prev.hourly.temperature_2m_previous_day1?.[i]??null,
+        p:prev.hourly.precipitation_previous_day1?.[i]??null,
+        ff:prev.hourly.windspeed_10m_previous_day1?.[i]??null,
+        fx:prev.hourly.windgusts_10m_previous_day1?.[i]??null,
+      };
+    });
+  }
+  const heeftPrev=Object.keys(pLookup).length>0;
+
   let datasets,scales,tooltipCb,titel;
 
   if(type==='temp'){
+    const pTemp=heeftPrev?ts.map(t=>pLookup[t]?.t??null):null;
     titel=`HRES – ${naam} – Temp`;
     datasets=[
       {type:'line',data:hres.hourly.temperature_2m,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3},
+      ...(pTemp&&pTemp.some(v=>v!==null)?[{type:'line',data:pTemp,borderColor:'rgba(150,210,255,0.6)',borderWidth:1.2,borderDash:[3,2],pointRadius:0,fill:false,tension:0.3,spanGaps:true}]:[]),
       {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.4)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false},
     ];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:yAs('left','°C')};
-    tooltipCb={filter:item=>item.datasetIndex===0,callbacks:{label:ctx=>` HRES: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C`}};
+    tooltipCb={filter:item=>item.datasetIndex<=(pTemp?1:0),callbacks:{label:ctx=>{
+      const n=pTemp?['HRES huidig','HRES vorig']:['HRES'];
+      return ` ${n[ctx.datasetIndex]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C`;
+    }}};
   }else if(type==='neerslag'){
+    const pPrec=heeftPrev?ts.map(t=>pLookup[t]?.p??null):null;
     titel=`HRES – ${naam} – Neerslag`;
     datasets=[
-      {type:'bar',data:hres.hourly.precipitation,backgroundColor:'rgba(34,153,255,0.5)',order:1},
+      ...(pPrec&&pPrec.some(v=>v!==null)?[{type:'bar',data:pPrec,backgroundColor:'rgba(34,153,255,0.2)',order:2,barPercentage:1,categoryPercentage:1}]:[]),
+      {type:'bar',data:hres.hourly.precipitation,backgroundColor:'rgba(34,153,255,0.5)',order:1,barPercentage:0.6,categoryPercentage:0.9},
     ];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:{...yAs('left',' mm'),min:0}};
-    tooltipCb={callbacks:{label:ctx=>` HRES: ${ctx.parsed.y.toFixed(2)} mm/u`}};
+    tooltipCb={callbacks:{label:ctx=>` ${ctx.datasetIndex===0&&pPrec?'Vorig':'HRES'}: ${ctx.parsed.y.toFixed(2)} mm/u`}};
   }else if(type==='wind'){
+    const pFF=heeftPrev?ts.map(t=>pLookup[t]?.ff??null):null;
+    const pFX=heeftPrev?ts.map(t=>pLookup[t]?.fx??null):null;
     titel=`HRES – ${naam} – Wind`;
     datasets=[
+      ...(pFF&&pFF.some(v=>v!==null)?[
+        {type:'line',data:pFF,borderColor:'rgba(34,153,255,0.35)',borderWidth:1,borderDash:[2,2],pointRadius:0,fill:false,tension:0.3},
+        {type:'line',data:pFX,borderColor:'rgba(255,102,51,0.35)',borderWidth:1,borderDash:[2,2],pointRadius:0,fill:false,tension:0.3},
+      ]:[]),
       {type:'line',data:hres.hourly.windspeed_10m,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3},
       {type:'line',data:hres.hourly.windgusts_10m,borderColor:'#ff6633',borderWidth:2,borderDash:[4,3],pointRadius:0,fill:false,tension:0.3},
     ];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:yAs('left',' km/u')};
-    tooltipCb={callbacks:{label:ctx=>{if(ctx.datasetIndex===0)return ` Wind: ${ctx.parsed.y.toFixed(0)} km/u`;return ` Stoten: ${ctx.parsed.y.toFixed(0)} km/u`;}}};
+    const base=pFF&&pFF.some(v=>v!==null)?2:0;
+    tooltipCb={filter:item=>item.datasetIndex>=base,callbacks:{label:ctx=>{
+      const n=['Wind','Stoten'];return ` ${n[ctx.datasetIndex-base]}: ${ctx.parsed.y.toFixed(0)} km/u`;
+    }}};
   }else if(type==='cloud'){
     titel=`HRES – ${naam} – Bewolking`;
     const hres2=await fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
