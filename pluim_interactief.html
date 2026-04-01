@@ -131,6 +131,11 @@ select,input[type=date]{background:var(--bg2);border:1px solid var(--border);col
     <div class="legenda" id="leg-neerslag"></div>
     <div style="position:relative;width:100%;height:220px"><canvas id="canvas-neerslag"></canvas></div>
   </div>
+  <div id="blok-neer-kansen" class="grafiek-blok" style="display:none;margin-top:4px">
+    <div class="grafiek-titel" id="titel-neer-kansen"></div>
+    <div class="legenda" id="leg-neer-kansen"></div>
+    <div style="position:relative;width:100%;height:140px"><canvas id="canvas-neer-kansen"></canvas></div>
+  </div>
   <div id="blok-cloud" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-cloud"></div>
     <div class="legenda" id="leg-cloud"></div>
@@ -345,7 +350,7 @@ function datumRange(){
 function verwijderAlles(){
   Object.values(actieveCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   actieveCharts={};
-  ['temp','neerslag','cloud','wind','winddir','sneeuw','onweer','hoogte','icon','icon-neerslag','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind'].forEach(id=>{
+  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','hoogte','icon','icon-neerslag','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind'].forEach(id=>{
     document.getElementById('blok-'+id).style.display='none';
   });
 }
@@ -508,43 +513,67 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     }
   });
 
-  // Neerslag chart — drempelkansen + mediaan + HRES
+  // ── Neerslag grafiek 1: spreiding p10-p90 + mediaan + HRES ──
+  const pP10=ts.map((_,j)=>pctC(pA,j,10));
+  const pP25=ts.map((_,j)=>pctC(pA,j,25));
+  const pP75=ts.map((_,j)=>pctC(pA,j,75));
+  const pP90=ts.map((_,j)=>pctC(pA,j,90));
   const kans1=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>=1.0).length/pA.length*100);
   const kans5=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>=5.0).length/pA.length*100);
 
   document.getElementById('blok-neerslag').style.display='';
   document.getElementById('titel-neerslag').textContent=`ECMWF – ${naam}  Neerslag`;
   document.getElementById('leg-neerslag').innerHTML=legHtml([
-    ['rgba(68,136,204,0.35)','Kans >0.1mm','blok'],
-    ['rgba(100,160,220,0.55)','Kans >1mm','blok'],
-    ['rgba(30,80,180,0.75)','Kans >5mm','blok'],
+    ['rgba(68,136,204,0.18)','p10–p90','blok'],
+    ['rgba(68,136,204,0.38)','p25–p75','blok'],
     ['#ee3333','Mediaan','lijn'],
     ['#2299ff','HRES','lijn'],
   ]);
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
     data:{labels:lab,datasets:[
-      {type:'bar',data:pKans,backgroundColor:'rgba(68,136,204,0.30)',yAxisID:'y2',order:5,barPercentage:1,categoryPercentage:1},
-      {type:'bar',data:kans1, backgroundColor:'rgba(100,160,220,0.50)',yAxisID:'y2',order:4,barPercentage:1,categoryPercentage:1},
-      {type:'bar',data:kans5, backgroundColor:'rgba(30,80,180,0.70)', yAxisID:'y2',order:3,barPercentage:1,categoryPercentage:1},
-      {type:'line',data:pMed,  borderColor:'#ee3333',borderWidth:2,pointRadius:0,fill:false,tension:0.3,yAxisID:'y1',order:1},
-      {type:'line',data:hPrecip,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,yAxisID:'y1',order:2,xAxisID:'xH'},
+      {type:'line',data:pP10,borderColor:'transparent',backgroundColor:'rgba(68,136,204,0.15)',fill:'+1',pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:pP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:pP25,borderColor:'transparent',backgroundColor:'rgba(68,136,204,0.28)',fill:'+1',pointRadius:0,tension:0.3,order:8},
+      {type:'line',data:pP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8},
+      {type:'line',data:pMed,  borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
+      {type:'line',data:hPrecip,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
+    ]},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(13,13,26,0.97)',titleColor:'#ddddf0',bodyColor:'#aabbcc',borderColor:'#334466',borderWidth:1,
+        filter:item=>item.datasetIndex>=4,
+        callbacks:{label:ctx=>{
+          if(ctx.datasetIndex===4)return ` Mediaan: ${ctx.parsed.y.toFixed(2)} mm/u`;
+          if(ctx.datasetIndex===5)return ` HRES: ${ctx.parsed.y.toFixed(2)} mm/u`;
+        }}
+      }},
+      scales:{x:cfgBase.scales.x,xH:{display:false,labels:hLab},y:{...yAs('left',' mm'),min:0}}
+    }
+  });
+
+  // ── Neerslag grafiek 2: drempelkansen ──
+  document.getElementById('blok-neer-kansen').style.display='';
+  document.getElementById('titel-neer-kansen').textContent=`ECMWF – ${naam}  Neerslagkansen`;
+  document.getElementById('leg-neer-kansen').innerHTML=legHtml([
+    ['rgba(150,210,255,0.6)','Kans >0.1mm','blok'],
+    ['rgba(68,136,204,0.7)','Kans >1mm','blok'],
+    ['rgba(20,60,180,0.85)','Kans >5mm','blok'],
+  ]);
+  actieveCharts['neer-kansen']=new Chart(document.getElementById('canvas-neer-kansen'),{
+    data:{labels:lab,datasets:[
+      {type:'bar',data:pKans,backgroundColor:'rgba(150,210,255,0.5)',order:3,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:kans1, backgroundColor:'rgba(68,136,204,0.65)',order:2,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:kans5, backgroundColor:'rgba(20,60,180,0.80)', order:1,barPercentage:1,categoryPercentage:1},
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:'rgba(13,13,26,0.97)',titleColor:'#ddddf0',bodyColor:'#aabbcc',borderColor:'#334466',borderWidth:1,
         callbacks:{label:ctx=>{
-          if(ctx.datasetIndex===0)return ` >0.1mm: ${ctx.parsed.y.toFixed(0)}%`;
-          if(ctx.datasetIndex===1)return ` >1mm: ${ctx.parsed.y.toFixed(0)}%`;
-          if(ctx.datasetIndex===2)return ` >5mm: ${ctx.parsed.y.toFixed(0)}%`;
-          if(ctx.datasetIndex===3)return ` Mediaan: ${ctx.parsed.y.toFixed(2)} mm/u`;
-          if(ctx.datasetIndex===4)return ` HRES: ${ctx.parsed.y.toFixed(2)} mm/u`;
+          const n=['>0.1mm','>1mm','>5mm'];
+          return ` Kans ${n[ctx.datasetIndex]}: ${ctx.parsed.y.toFixed(0)}%`;
         }}
       }},
-      scales:{
-        x:cfgBase.scales.x,xH:{display:false,labels:hLab},
-        y1:yAs('left',' mm'),
-        y2:{...yAs('right','%','#6699cc'),grid:{display:false},max:100},
-      }
+      scales:{x:cfgBase.scales.x,y:{...yAs('left','%'),min:0,max:100}}
     }
   });
 }
