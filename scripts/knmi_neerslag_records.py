@@ -111,10 +111,37 @@ def parse_neerslag_txt(tekst, cache_file):
     return data
 
 
+SEIZOEN_NAMEN = {"winter": "winter", "lente": "lente", "zomer": "zomer", "herfst": "herfst"}
+
+def seizoen_van_maand(mnd):
+    if mnd in (12, 1, 2):  return "winter"
+    if mnd in (3, 4, 5):   return "lente"
+    if mnd in (6, 7, 8):   return "zomer"
+    return "herfst"
+
+def seizoen_label(seizoen, jaar, mnd):
+    if seizoen == "winter":
+        if mnd == 12:
+            return f"winter {jaar}/{jaar+1}"
+        else:
+            return f"winter {jaar-1}/{jaar}"
+    return f"{seizoen} {jaar}"
+
+def seizoen_key(seizoen, jaar, mnd):
+    """Geeft een unieke sleutel voor een meteorologisch seizoen."""
+    if seizoen == "winter":
+        if mnd == 12:
+            return (seizoen, jaar)
+        else:
+            return (seizoen, jaar - 1)
+    return (seizoen, jaar)
+
+
 def bereken_records(data):
     dag_data  = {}
     dec_data  = defaultdict(float)
     mnd_data  = defaultdict(float)
+    seizoen_data = defaultdict(float)
     jaar_data = defaultdict(float)
 
     for rij in data:
@@ -127,10 +154,13 @@ def bereken_records(data):
         mnd  = int(d[4:6])
         dag  = int(d[6:8])
         dec  = 1 if dag <= 10 else (2 if dag <= 20 else 3)
+        sz   = seizoen_van_maand(mnd)
+        sz_key = seizoen_key(sz, jaar, mnd)
 
         dag_data[d]              = dag_data.get(d, 0) + rd_mm
         dec_data[(jaar,mnd,dec)] += rd_mm
         mnd_data[(jaar,mnd)]     += rd_mm
+        seizoen_data[sz_key]     += rd_mm
         jaar_data[jaar]          += rd_mm
 
     dag_top = sorted(
@@ -153,6 +183,13 @@ def bereken_records(data):
         for k,v in mnd_data.items()
     ], key=lambda x: -x["waarde"])[:TOP_N]
 
+    seizoen_top = sorted([
+        {"waarde": round(v,1),
+         "label": f"{k[0]} {k[1]}" + (f"/{k[1]+1}" if k[0] == "winter" else ""),
+         "seizoen": k[0], "jaar": k[1]}
+        for k,v in seizoen_data.items()
+    ], key=lambda x: -x["waarde"])[:TOP_N]
+
     jaar_top = sorted([
         {"waarde": round(v,1), "jaar": k}
         for k,v in jaar_data.items()
@@ -171,31 +208,33 @@ def bereken_records(data):
 
     return {
         "dag": dag_top, "decade": dec_top,
-        "maand": mnd_top, "jaar": jaar_top,
-        "sneeuw": sneeuw_top,
+        "maand": mnd_top, "seizoen": seizoen_top,
+        "jaar": jaar_top, "sneeuw": sneeuw_top,
         "jaar_reeks": jaar_reeks
     }
 
 
 def bereken_landelijk(alle_records, stations):
     dag_alle = []; dec_alle = []; mnd_alle = []
-    jaar_alle = []; sneeuw_alle = []
+    seizoen_alle = []; jaar_alle = []; sneeuw_alle = []
 
     for nr_str, rec in alle_records.items():
         info = stations.get(nr_str, {})
         naam = info.get("naam", f"Station {nr_str}")
-        for r in rec.get("dag",    []): dag_alle.append({**r,    "station": nr_str, "naam": naam})
-        for r in rec.get("decade", []): dec_alle.append({**r,    "station": nr_str, "naam": naam})
-        for r in rec.get("maand",  []): mnd_alle.append({**r,    "station": nr_str, "naam": naam})
-        for r in rec.get("jaar",   []): jaar_alle.append({**r,   "station": nr_str, "naam": naam})
-        for r in rec.get("sneeuw", []): sneeuw_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("dag",     []): dag_alle.append({**r,     "station": nr_str, "naam": naam})
+        for r in rec.get("decade",  []): dec_alle.append({**r,     "station": nr_str, "naam": naam})
+        for r in rec.get("maand",   []): mnd_alle.append({**r,     "station": nr_str, "naam": naam})
+        for r in rec.get("seizoen", []): seizoen_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("jaar",    []): jaar_alle.append({**r,    "station": nr_str, "naam": naam})
+        for r in rec.get("sneeuw",  []): sneeuw_alle.append({**r,  "station": nr_str, "naam": naam})
 
     return {
-        "dag":    sorted(dag_alle,    key=lambda x: -x["waarde"])[:TOP_N],
-        "decade": sorted(dec_alle,    key=lambda x: -x["waarde"])[:TOP_N],
-        "maand":  sorted(mnd_alle,    key=lambda x: -x["waarde"])[:TOP_N],
-        "jaar":   sorted(jaar_alle,   key=lambda x: -x["waarde"])[:TOP_N],
-        "sneeuw": sorted(sneeuw_alle, key=lambda x: -x["waarde"])[:TOP_N],
+        "dag":     sorted(dag_alle,     key=lambda x: -x["waarde"])[:TOP_N],
+        "decade":  sorted(dec_alle,     key=lambda x: -x["waarde"])[:TOP_N],
+        "maand":   sorted(mnd_alle,     key=lambda x: -x["waarde"])[:TOP_N],
+        "seizoen": sorted(seizoen_alle, key=lambda x: -x["waarde"])[:TOP_N],
+        "jaar":    sorted(jaar_alle,    key=lambda x: -x["waarde"])[:TOP_N],
+        "sneeuw":  sorted(sneeuw_alle,  key=lambda x: -x["waarde"])[:TOP_N],
     }
 
 
