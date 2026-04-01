@@ -1167,6 +1167,8 @@ function samenvoegPeriodeRecords(datasets, sleutel) {
 
 async function wisselStation() {
   data = null; multiData = null;
+  // Wis cache zodat verse data geladen wordt
+  allData = {};
   document.getElementById("laden").style.display = "block";
   document.getElementById("laden").className = "laden";
   document.getElementById("laden").textContent = "Laden...";
@@ -1180,17 +1182,20 @@ async function wisselStation() {
       data = multiData[0];
       document.getElementById("gegenereerd-lbl").textContent = `${GROEPEN[stn].naam} · ${multiData.length} stations`;
     } else {
-      const d = await laadStation(stn);
-      data = d; multiData = null;
+      const r = await fetch(`records_${stn}.json?t=` + Date.now());
+      data = await r.json();
+      multiData = null;
       document.getElementById("gegenereerd-lbl").textContent = `Bijgewerkt: ${data?.gegenereerd}`;
     }
     herbouwJaarSelector();
-    // Als jaaroverzicht actief is, herteken
-    if (huidigeParam === "jaar_overzicht") {
-      tekenJaarGrafiek();
-    } else {
-      toon();
-    }
+
+    // Grafiek-caches resetten zodat ze opnieuw getekend worden
+    if (grafiekMOTemp)    { grafiekMOTemp.destroy();    grafiekMOTemp = null; }
+    if (grafiekMORH)      { grafiekMORH.destroy();      grafiekMORH = null; }
+    if (grafiekMRKlimaat) { grafiekMRKlimaat.destroy();  grafiekMRKlimaat = null; }
+
+    // Herlaad de actieve tab via wisselHoofdtab (die alle visibility correct zet)
+    wisselHoofdtab(huidigeHoofdtab);
   } catch(e) {
     document.getElementById("laden").className = "fout";
     document.getElementById("laden").textContent = `Data niet beschikbaar voor dit station`;
@@ -1637,6 +1642,9 @@ function wisselHoofdtab(tab) {
   document.getElementById("param-tabs").style.display        = isRec ? "flex" : "none";
   document.querySelector(".richting-tabs").style.display     = isRec ? "flex" : "none";
   document.getElementById("tabel-wrapper-outer").style.display = isRec ? "block" : "none";
+
+  // Records header verbergen bij andere tabs
+  document.querySelector(".records-header").style.display = (isRec || isJaar) ? "flex" : "none";
 
   // Maandranking
   document.getElementById("sectie-maandranking").style.display = isMR ? "block" : "none";
