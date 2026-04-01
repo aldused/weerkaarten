@@ -364,6 +364,7 @@ for STATION, STATION_NAAM in STATIONS:
             "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
             "sq_hoog": top10_max(groep, "sq"),
             "sq_totaal": round(sum(r["sq"] for r in groep if r["sq"] is not None), 1),
+            "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
             "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
             "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
             "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
@@ -372,6 +373,47 @@ for STATION, STATION_NAAM in STATIONS:
             "hittegolven":     bereken_hittegolven(groep),
             "koudegolven":     bereken_koudegolven(groep),
         }
+
+    # ── Maanddetail (dag-voor-dag per jaar-maand) ─────────────────────────────
+    print("Maanddetail berekenen...")
+    maanddetail = {}
+    jm_groepen = defaultdict(list)
+    for r in data:
+        jm_groepen[(r["jaar"], r["maand"])].append(r)
+    for (j, m), groep in jm_groepen.items():
+        jsleutel = str(j)
+        msleutel = str(m)
+        if jsleutel not in maanddetail:
+            maanddetail[jsleutel] = {}
+        dagen_gesorteerd = sorted(groep, key=lambda r: r["dag"])
+        tx_vals = [r["tx"] for r in dagen_gesorteerd if r["tx"] is not None]
+        tn_vals = [r["tn"] for r in dagen_gesorteerd if r["tn"] is not None]
+        tg_vals = [r["tg"] for r in dagen_gesorteerd if r["tg"] is not None]
+        rh_vals = [r["rh"] for r in dagen_gesorteerd if r["rh"] is not None]
+        sq_vals = [r["sq"] for r in dagen_gesorteerd if r["sq"] is not None]
+        maanddetail[jsleutel][msleutel] = {
+            "dagen": [{
+                "dag":  r["dag"],
+                "tx":   r["tx"],
+                "tn":   r["tn"],
+                "tg":   r["tg"],
+                "rh":   r["rh"],
+                "sq":   r["sq"],
+                "fg":   r["fg"],
+            } for r in dagen_gesorteerd],
+            "gem_tx": round(sum(tx_vals)/len(tx_vals), 1) if tx_vals else None,
+            "gem_tn": round(sum(tn_vals)/len(tn_vals), 1) if tn_vals else None,
+            "gem_tg": round(sum(tg_vals)/len(tg_vals), 1) if tg_vals else None,
+            "som_rh": round(sum(rh_vals), 1) if rh_vals else None,
+            "som_sq": round(sum(sq_vals), 1) if sq_vals else None,
+            "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
+            "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
+            "zomerse_dagen":   sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 25),
+            "tropische_dagen": sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 30),
+            "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
+            "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
+        }
+    records["maanddetail"] = maanddetail
 
     # ── Alltime records ────────────────────────────────────────────────────────
     print("Alltime records berekenen...")
@@ -410,6 +452,21 @@ for STATION, STATION_NAAM in STATIONS:
             if len(rh_v) >= min_dagen: rh_som.append((round(sum(rh_v),1), str(j)))
             if len(sq_v) >= min_dagen: sq_som.append((round(sum(sq_v),1), str(j)))
 
+        # Klimaatdagen per jaar voor deze maand
+        klimaat_per_jaar = []
+        for j, groep in sorted(jaar_groepen.items()):
+            if len([r for r in groep if r["tx"] is not None]) < 20:
+                continue
+            klimaat_per_jaar.append({
+                "jaar": str(j),
+                "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
+                "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
+                "zomerse_dagen":   sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 25),
+                "tropische_dagen": sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 30),
+                "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
+                "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
+            })
+
         maandranking[str(m)] = {
             "tx_hoog": sorted(tx_gem, reverse=True)[:50],
             "tx_laag": sorted(tx_gem)[:25],
@@ -421,6 +478,7 @@ for STATION, STATION_NAAM in STATIONS:
             "rh_laag": sorted(rh_som)[:25],
             "sq_hoog": sorted(sq_som, reverse=True)[:25],
             "sq_laag": sorted(sq_som)[:25],
+            "klimaatdagen": klimaat_per_jaar,
         }
     records["maandranking"] = maandranking
 
@@ -515,6 +573,58 @@ for STATION, STATION_NAAM in STATIONS:
         "rh": tussenstand_param(huid_maand, huid_dag, "rh", "som"),
         "sq": tussenstand_param(huid_maand, huid_dag, "sq", "som"),
     }
+
+    # ── Normaalwaarden per maand (1991-2020) ──────────────────────────────────
+    print("Normaalwaarden berekenen (1991-2020)...")
+    normaal = {}
+    NORM_START, NORM_EIND = 1991, 2020
+    for m in range(1, 13):
+        norm_data = [r for r in data if r["maand"] == m and NORM_START <= r["jaar"] <= NORM_EIND]
+        norm_jaren = defaultdict(list)
+        for r in norm_data:
+            norm_jaren[r["jaar"]].append(r)
+
+        # Gemiddelde per dag van de maand over normaalperiode
+        dag_norm = {}
+        dag_groep = defaultdict(list)
+        for r in norm_data:
+            dag_groep[r["dag"]].append(r)
+        for d, groep in sorted(dag_groep.items()):
+            tx_v = [r["tx"] for r in groep if r["tx"] is not None]
+            tn_v = [r["tn"] for r in groep if r["tn"] is not None]
+            tg_v = [r["tg"] for r in groep if r["tg"] is not None]
+            rh_v = [r["rh"] for r in groep if r["rh"] is not None]
+            dag_norm[str(d)] = {
+                "tx": round(sum(tx_v)/len(tx_v), 1) if tx_v else None,
+                "tn": round(sum(tn_v)/len(tn_v), 1) if tn_v else None,
+                "tg": round(sum(tg_v)/len(tg_v), 1) if tg_v else None,
+                "rh": round(sum(rh_v)/len(rh_v), 1) if rh_v else None,
+            }
+
+        # Maandgemiddelden over normaalperiode
+        tx_maand, tn_maand, tg_maand, rh_maand, sq_maand = [], [], [], [], []
+        for j, groep in norm_jaren.items():
+            tx_v = [r["tx"] for r in groep if r["tx"] is not None]
+            tn_v = [r["tn"] for r in groep if r["tn"] is not None]
+            tg_v = [r["tg"] for r in groep if r["tg"] is not None]
+            rh_v = [r["rh"] for r in groep if r["rh"] is not None]
+            sq_v = [r["sq"] for r in groep if r["sq"] is not None]
+            if len(tx_v) >= 20:
+                tx_maand.append(sum(tx_v)/len(tx_v))
+                tn_maand.append(sum(tn_v)/len(tn_v) if tn_v else 0)
+                tg_maand.append(sum(tg_v)/len(tg_v) if tg_v else 0)
+                rh_maand.append(sum(rh_v))
+                if sq_v: sq_maand.append(sum(sq_v))
+
+        normaal[str(m)] = {
+            "dag": dag_norm,
+            "gem_tx": round(sum(tx_maand)/len(tx_maand), 1) if tx_maand else None,
+            "gem_tn": round(sum(tn_maand)/len(tn_maand), 1) if tn_maand else None,
+            "gem_tg": round(sum(tg_maand)/len(tg_maand), 1) if tg_maand else None,
+            "som_rh": round(sum(rh_maand)/len(rh_maand), 1) if rh_maand else None,
+            "som_sq": round(sum(sq_maand)/len(sq_maand), 1) if sq_maand else None,
+        }
+    records["normaal"] = normaal
 
     # ── Opslaan ────────────────────────────────────────────────────────────────
     with open(OUTPUT_JSON, "w") as f:
@@ -715,6 +825,7 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
             "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
             "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
             "sq_totaal": 0,
+            "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
             "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
             "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
             "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
@@ -723,6 +834,44 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
             "hittegolven":     bereken_hittegolven(groep),
             "koudegolven":     bereken_koudegolven(groep),
         }
+
+    # ── Maanddetail historisch ────────────────────────────────────────────────
+    maanddetail = {}
+    jm_groepen = defaultdict(list)
+    for r in data:
+        jm_groepen[(r["jaar"], r["maand"])].append(r)
+    for (j, m), groep in jm_groepen.items():
+        jsleutel = str(j)
+        msleutel = str(m)
+        if jsleutel not in maanddetail:
+            maanddetail[jsleutel] = {}
+        dagen_gesorteerd = sorted(groep, key=lambda r: r["dag"])
+        tx_vals = [r["tx"] for r in dagen_gesorteerd if r["tx"] is not None]
+        tn_vals = [r["tn"] for r in dagen_gesorteerd if r["tn"] is not None]
+        rh_vals = [r["rh"] for r in dagen_gesorteerd if r["rh"] is not None]
+        maanddetail[jsleutel][msleutel] = {
+            "dagen": [{
+                "dag":  r["dag"],
+                "tx":   r["tx"],
+                "tn":   r["tn"],
+                "tg":   r["tg"],
+                "rh":   r["rh"],
+                "sq":   r["sq"],
+                "fg":   r["fg"],
+            } for r in dagen_gesorteerd],
+            "gem_tx": round(sum(tx_vals)/len(tx_vals), 1) if tx_vals else None,
+            "gem_tn": round(sum(tn_vals)/len(tn_vals), 1) if tn_vals else None,
+            "gem_tg": None,
+            "som_rh": round(sum(rh_vals), 1) if rh_vals else None,
+            "som_sq": None,
+            "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
+            "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
+            "zomerse_dagen":   sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 25),
+            "tropische_dagen": sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 30),
+            "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
+            "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
+        }
+    records["maanddetail"] = maanddetail
 
     records["alltime"] = {
         "tx_hoog": top10_max(data, "tx"), "tx_laag": top10_min(data, "tx"),
