@@ -159,7 +159,7 @@ for code, naam in stations:
             if i < len(fx_raw) and fx_raw[i] is not None:
                 daily[d]["fx"].append(fx_raw[i])
 
-    for d in sorted(daily.keys())[:7]:
+    for d in sorted(daily.keys())[:10]:
         if d not in data_per_day: data_per_day[d] = {}
         ff_lijst = daily[d]["ff"]
         ff_gem   = sum(ff_lijst)/len(ff_lijst) if ff_lijst else 0
@@ -243,7 +243,7 @@ for day, dag_data in data_per_day.items():
     print(f"Kaart: {fname}")
 
 # Opruimen
-for oud in sorted(glob.glob("kaart_wind_noordzee_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_wind_noordzee_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud)
 
 print("Klaar!")

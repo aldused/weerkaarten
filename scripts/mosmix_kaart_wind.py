@@ -163,7 +163,7 @@ for code, name in stations:
             if i < len(fx_raw) and fx_raw[i] is not None:
                 daily[d]["fx"].append(fx_raw[i])
 
-    days = sorted(daily.keys())[:7]
+    days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         ff_lijst = daily[d]["ff"]
@@ -232,10 +232,10 @@ oude_dag   = sorted([f for f in alle_wind if not os.path.basename(f).startswith(
                     key=os.path.getmtime)
 oude_nacht = sorted([f for f in alle_wind if os.path.basename(f).startswith("kaart_wind_nacht_")],
                     key=os.path.getmtime)
-for oud in oude_dag[:-7]:
+for oud in oude_dag[:-10]:
     os.remove(oud)
     print(f"  Verwijderd: {oud}")
-for oud in oude_nacht[:-7]:
+for oud in oude_nacht[:-10]:
     os.remove(oud)
     print(f"  Verwijderd: {oud}")
 

@@ -176,7 +176,7 @@ for code, name in stations:
             daily[d]["fx"].append(fx_raw[i])
 
     # Sorteer op datum (niet op naam) – neem de 7 eerstvolgende nachten
-    days = sorted(daily.keys())[:7]
+    days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         ff_lijst = daily[d]["ff"]
@@ -196,7 +196,7 @@ now_str  = datetime.now().strftime("%d %b %Y  %H:%M")
 now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
 
 # Sorteer op datum en neem eerste 7
-gesorteerde_dagen = sorted(data_per_day.keys())[:7]
+gesorteerde_dagen = sorted(data_per_day.keys())[:10]
 
 for day in gesorteerde_dagen:
     dag_data = data_per_day[day]
@@ -246,6 +246,6 @@ for day in gesorteerde_dagen:
 
 # Ruim oude kaarten op: sorteer op datum in bestandsnaam (YYYYMMDD staat vooraan → correct)
 oude_kaarten = sorted(glob.glob("kaart_wind_nacht_*.png"))
-for oud in oude_kaarten[:-7]:
+for oud in oude_kaarten[:-10]:
     os.remove(oud)
     print(f"  Verwijderd: {oud}")

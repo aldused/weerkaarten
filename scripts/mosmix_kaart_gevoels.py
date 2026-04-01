@@ -178,7 +178,7 @@ for code, name in stations:
             if 0 <= hour < 12:
                 daily[d]["nacht"].append(wc)
 
-    days = sorted(daily.keys())[:7]
+    days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         dag   = daily[d]["dag"]

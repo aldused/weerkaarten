@@ -140,7 +140,7 @@ for code, name in stations:
             rr = rr_raw[i]
             if 6 <= hour < 18: daily_dag[d] = daily_dag.get(d,0.0) + rr
             else: daily_nacht[d] = daily_nacht.get(d,0.0) + rr
-    days = sorted(set(list(daily_dag.keys())+list(daily_nacht.keys())))[:7]
+    days = sorted(set(list(daily_dag.keys())+list(daily_nacht.keys())))[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][name] = {"rr_dag":round(daily_dag.get(d,0),1),"rr_nacht":round(daily_nacht.get(d,0),1)}

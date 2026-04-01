@@ -180,7 +180,7 @@ for code, name in stations:
         if i < len(neff_raw) and neff_raw[i] is not None:
             daily[d]["neff"].append(neff_raw[i])
 
-    days = sorted(daily.keys())[:7]
+    days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day:
             data_per_day[d] = {}

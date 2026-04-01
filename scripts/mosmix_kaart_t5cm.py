@@ -163,7 +163,7 @@ for code, name in stations:
                 daily[d].append(t_c)
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(daily.keys()) if d >= vandaag][:7]
+    days = [d for d in sorted(daily.keys()) if d >= vandaag][:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         vals = daily[d]

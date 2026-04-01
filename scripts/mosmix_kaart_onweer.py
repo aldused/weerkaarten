@@ -168,7 +168,7 @@ for code, name in stations:
         if i < len(cape_raw) and cape_raw[i] is not None: daily[d]["cape"].append(cape_raw[i])
         if i < len(cin_raw)  and cin_raw[i]  is not None: daily[d]["cin"].append(cin_raw[i])
 
-    days = sorted(daily.keys())[:7]
+    days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         wwt_vals  = daily[d]["wwt"]

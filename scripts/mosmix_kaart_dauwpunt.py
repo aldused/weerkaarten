@@ -163,7 +163,7 @@ for code, name in stations:
             if i < len(wwm_raw) and wwm_raw[i] is not None:
                 daily[d]["wwm"].append(wwm_raw[i])
 
-    days = sorted(daily.keys())[:7]
+    days = sorted(daily.keys())[:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         td_vals  = daily[d]["td"]
