@@ -146,7 +146,7 @@ for code, naam in stations:
                 daily[d]["fx"].append(fx_raw[i])
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(daily.keys()) if d >= vandaag][:7]
+    days = [d for d in sorted(daily.keys()) if d >= vandaag][:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         ff_lijst = daily[d]["ff"]
@@ -243,5 +243,5 @@ for day, dag_data in data_per_day.items():
     print(f"Kaart: {fname}")
 
 # Ruim oude kaarten op (max 7, op bestandsdatum)
-for oud in sorted(glob.glob("kaart_be_wind_[!n]*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_be_wind_[!n]*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")

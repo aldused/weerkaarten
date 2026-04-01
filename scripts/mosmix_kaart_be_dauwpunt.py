@@ -98,7 +98,7 @@ for code, naam in stations:
             if i < len(tt_raw)  and tt_raw[i]  is not None: daily[d]["tt"].append(tt_raw[i] - 273.15)
             if i < len(wwm_raw) and wwm_raw[i] is not None: daily[d]["wwm"].append(wwm_raw[i])
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    for d in [d for d in sorted(daily.keys()) if d >= vandaag][:7]:
+    for d in [d for d in sorted(daily.keys()) if d >= vandaag][:10]:
         if d not in data_per_day: data_per_day[d] = {}
         td_vals = daily[d]["td"]; tt_vals = daily[d]["tt"]
         if not td_vals: continue
@@ -164,5 +164,5 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname,dpi=150,bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-for oud in sorted(glob.glob("kaart_be_dauwpunt_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_be_dauwpunt_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")

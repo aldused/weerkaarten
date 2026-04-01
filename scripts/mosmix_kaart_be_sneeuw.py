@@ -109,7 +109,7 @@ for code, naam in stations:
             daily[d]["ttt"].append(ttt_raw[i] - 273.15)
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    for d in [d for d in sorted(daily.keys()) if d >= vandaag][:7]:
+    for d in [d for d in sorted(daily.keys()) if d >= vandaag][:10]:
         if d not in data_per_day: data_per_day[d] = {}
         wws_vals = daily[d]["wws"]
         ttt_vals = daily[d]["ttt"]
@@ -232,5 +232,5 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname,dpi=150,bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-for oud in sorted(glob.glob("kaart_be_sneeuw_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_be_sneeuw_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")

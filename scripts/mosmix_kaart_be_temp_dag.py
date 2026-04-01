@@ -123,7 +123,7 @@ for code, naam in stations:
                 daily_tx[d] = tx[i]
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(daily_tx.keys()) if d >= vandaag][:7]
+    days = [d for d in sorted(daily_tx.keys()) if d >= vandaag][:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][naam] = round(daily_tx[d], 1)
@@ -198,5 +198,5 @@ for day, dag_data in data_per_day.items():
 
 # Ruim oude kaarten op (max 7 bewaren, gesorteerd op bestandsdatum)
 import glob as _glob
-for oud in sorted(_glob.glob("kaart_be_temp_dag_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(_glob.glob("kaart_be_temp_dag_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")

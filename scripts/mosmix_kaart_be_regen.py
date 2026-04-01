@@ -90,7 +90,7 @@ for code, naam in stations:
             if 6 <= hour < 18: daily_dag[d] = daily_dag.get(d, 0.0) + rr
             else: daily_nacht[d] = daily_nacht.get(d, 0.0) + rr
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(set(list(daily_dag.keys())+list(daily_nacht.keys()))) if d >= vandaag][:7]
+    days = [d for d in sorted(set(list(daily_dag.keys())+list(daily_nacht.keys()))) if d >= vandaag][:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][naam] = {"rr_dag": round(daily_dag.get(d,0),1), "rr_nacht": round(daily_nacht.get(d,0),1)}
@@ -156,5 +156,5 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname,dpi=150,bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-for oud in sorted(glob.glob("kaart_be_regen_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_be_regen_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")

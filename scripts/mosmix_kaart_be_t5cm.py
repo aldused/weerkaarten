@@ -117,7 +117,7 @@ for code, naam in stations:
                 daily_min[d_key] = v
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    days = [d for d in sorted(daily_min.keys()) if d >= vandaag][:7]
+    days = [d for d in sorted(daily_min.keys()) if d >= vandaag][:10]
     for d in days:
         if d not in data_per_day: data_per_day[d] = {}
         data_per_day[d][naam] = round(daily_min[d], 1)
@@ -178,5 +178,5 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname, dpi=150, bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-for oud in sorted(glob.glob("kaart_be_t5cm_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_be_t5cm_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")

@@ -103,7 +103,7 @@ for code, naam in stations:
         if i < len(neff_raw) and neff_raw[i] is not None:
             daily[d]["neff"].append(neff_raw[i])
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    for d in [d for d in sorted(daily.keys()) if d >= vandaag][:7]:
+    for d in [d for d in sorted(daily.keys()) if d >= vandaag][:10]:
         if d not in data_per_day: data_per_day[d] = {}
         sd = round(daily[d]["sd"], 1)
         neff = round(sum(daily[d]["neff"])/len(daily[d]["neff"]), 0) if daily[d]["neff"] else 0
@@ -167,5 +167,5 @@ for day, dag_data in data_per_day.items():
     plt.savefig(fname,dpi=150,bbox_inches="tight"); plt.close()
     print(f"Kaart: {fname}")
 
-for oud in sorted(glob.glob("kaart_be_zon_*.png"), key=os.path.getmtime)[:-7]:
+for oud in sorted(glob.glob("kaart_be_zon_*.png"), key=os.path.getmtime)[:-10]:
     os.remove(oud); print(f"  Verwijderd: {oud}")
