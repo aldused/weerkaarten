@@ -1594,29 +1594,29 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
   const lab=getLab(ts);
   const ttCfg={backgroundColor:'rgba(13,13,26,0.97)',titleColor:'#ddddf0',bodyColor:'#aabbcc',borderColor:'#334466',borderWidth:1};
 
-  // Map vorige run op dezelfde tijdstempels (robuust: match op ISO-string of epoch)
+  // Map vorige run op dezelfde tijdstempels (match op string + epoch fallback)
   let pTemp=null,pPrec=null,pFF=null,pFX=null;
   if(prev&&prev.hourly&&prev.hourly.time){
     const tKey='temperature_2m_previous_day1';
     const pKey='precipitation_previous_day1';
     const ffKey='windspeed_10m_previous_day1';
     const fxKey='windgusts_10m_previous_day1';
-    // Bouw lookup op epoch (ms) voor robuuste matching ondanks formaatverschillen
-    const pByEpoch={};
+    // Bouw lookup op string EN epoch
+    const pByStr={}, pByEpoch={};
     prev.hourly.time.forEach((t,i)=>{
-      const ep=new Date(t).getTime();
-      pByEpoch[ep]={
+      const row={
         t: prev.hourly[tKey]?.[i]??null,
         p: prev.hourly[pKey]?.[i]??null,
         ff: prev.hourly[ffKey]?.[i]??null,
         fx: prev.hourly[fxKey]?.[i]??null,
       };
+      pByStr[t]=row;
+      pByEpoch[new Date(t).getTime()]=row;
     });
     pTemp=[]; pPrec=[]; pFF=[]; pFX=[];
     let heeftData=false;
     ts.forEach(t=>{
-      const ep=new Date(t).getTime();
-      const d=pByEpoch[ep];
+      const d=pByStr[t]||pByEpoch[new Date(t).getTime()];
       pTemp.push(d?.t??null);
       pPrec.push(d?.p??null);
       pFF.push(d?.ff??null);
