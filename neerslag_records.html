@@ -97,6 +97,75 @@ tr:hover td { background: #f8f9fb; }
       <div class="ptab" onclick="wisselPeriode('alltime')">Alltime</div>
     </div>
 
+    <!-- Periode filters -->
+    <div class="filter-periode-extra" id="fp-dag" style="display:flex;">
+      <label>Maand:</label>
+      <select id="fp-dag-maand" onchange="filterLandelijk()">
+        <option value="">Alle maanden</option>
+        <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maart</option>
+        <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Augustus</option><option value="9">September</option>
+        <option value="10">Oktober</option><option value="11">November</option><option value="12">December</option>
+      </select>
+      <label>Jaar:</label>
+      <input type="number" id="fp-dag-jaar" placeholder="bijv. 2024" min="1900" max="2030" style="width:90px;" onchange="filterLandelijk()">
+    </div>
+
+    <div class="filter-periode-extra" id="fp-decade" style="display:none;">
+      <label>Maand:</label>
+      <select id="fp-dec-maand" onchange="filterLandelijk()">
+        <option value="">Alle maanden</option>
+        <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maart</option>
+        <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Augustus</option><option value="9">September</option>
+        <option value="10">Oktober</option><option value="11">November</option><option value="12">December</option>
+      </select>
+      <label>Decade:</label>
+      <select id="fp-dec-dec" onchange="filterLandelijk()">
+        <option value="">Alle decades</option>
+        <option value="1">1e (dag 1–10)</option>
+        <option value="2">2e (dag 11–20)</option>
+        <option value="3">3e (dag 21–31)</option>
+      </select>
+      <label>Jaar:</label>
+      <input type="number" id="fp-dec-jaar" placeholder="bijv. 2024" min="1900" max="2030" style="width:90px;" onchange="filterLandelijk()">
+    </div>
+
+    <div class="filter-periode-extra" id="fp-maand" style="display:none;">
+      <label>Maand:</label>
+      <select id="fp-mnd-maand" onchange="filterLandelijk()">
+        <option value="">Alle maanden</option>
+        <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maart</option>
+        <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+        <option value="7">Juli</option><option value="8">Augustus</option><option value="9">September</option>
+        <option value="10">Oktober</option><option value="11">November</option><option value="12">December</option>
+      </select>
+      <label>Jaar:</label>
+      <input type="number" id="fp-mnd-jaar" placeholder="bijv. 2024" min="1900" max="2030" style="width:90px;" onchange="filterLandelijk()">
+    </div>
+
+    <div class="filter-periode-extra" id="fp-seizoen" style="display:none;">
+      <label>Seizoen:</label>
+      <select id="fp-sei-seizoen" onchange="filterLandelijk()">
+        <option value="">Alle seizoenen</option>
+        <option value="winter">Winter (dec–feb)</option>
+        <option value="lente">Lente (mrt–mei)</option>
+        <option value="zomer">Zomer (jun–aug)</option>
+        <option value="herfst">Herfst (sep–nov)</option>
+      </select>
+      <label>Jaar:</label>
+      <input type="number" id="fp-sei-jaar" placeholder="bijv. 2024" min="1900" max="2030" style="width:90px;" onchange="filterLandelijk()">
+    </div>
+
+    <div class="filter-periode-extra" id="fp-jaar" style="display:none;">
+      <label>Jaar:</label>
+      <input type="number" id="fp-jr-jaar" placeholder="bijv. 2024" min="1900" max="2030" style="width:90px;" onchange="filterLandelijk()">
+      <label>Van:</label>
+      <input type="number" id="fp-jr-van" placeholder="vanaf" min="1900" max="2030" style="width:80px;" onchange="filterLandelijk()">
+      <label>Tot:</label>
+      <input type="number" id="fp-jr-tot" placeholder="t/m" min="1900" max="2030" style="width:80px;" onchange="filterLandelijk()">
+    </div>
+
     <!-- Dag -->
     <div class="kaart-grid periode-sectie" id="ps-dag">
       <div class="kaart">
@@ -288,6 +357,14 @@ function wisselPeriode(p) {
   });
   document.querySelectorAll(".periode-sectie").forEach(s => s.style.display = "none");
   document.getElementById("ps-" + p).style.display = "grid";
+
+  // Filters tonen/verbergen
+  ["dag","decade","maand","seizoen","jaar"].forEach(f => {
+    const el = document.getElementById("fp-" + f);
+    if (el) el.style.display = (p === f) ? "flex" : "none";
+  });
+
+  filterLandelijk();
 }
 
 function rijKlas(i) {
@@ -303,6 +380,9 @@ function vulTabel(id, items, labelFn) {
 }
 
 function vulLandelijk() {
+  filterLandelijk();
+
+  // Alltime (altijd ongefilterd)
   const l = data.landelijk;
   const dagLabel = r => r.datum;
   const decLabel = r => r.label;
@@ -310,22 +390,94 @@ function vulLandelijk() {
   const seizLabel = r => r.label;
   const jaarLabel = r => r.jaar;
   const snLabel = r => r.datum;
-
-  // Individuele periode-secties
-  vulTabel("tbl-dag", l.dag, dagLabel);
-  vulTabel("tbl-sneeuw", l.sneeuw, snLabel);
-  vulTabel("tbl-decade", l.decade, decLabel);
-  vulTabel("tbl-maand", l.maand, mndLabel);
-  vulTabel("tbl-seizoen", l.seizoen, seizLabel);
-  vulTabel("tbl-jaar", l.jaar, jaarLabel);
-
-  // Alltime (duplicaten)
   vulTabel("tbl-dag-all", l.dag, dagLabel);
   vulTabel("tbl-decade-all", l.decade, decLabel);
   vulTabel("tbl-maand-all", l.maand, mndLabel);
   vulTabel("tbl-seizoen-all", l.seizoen, seizLabel);
   vulTabel("tbl-jaar-all", l.jaar, jaarLabel);
   vulTabel("tbl-sneeuw-all", l.sneeuw, snLabel);
+}
+
+function datumMaand(datum) {
+  // "1948-08-03" → 8
+  const m = datum.match(/-(\d{2})-/);
+  return m ? parseInt(m[1]) : null;
+}
+function datumJaar(datum) {
+  const m = datum.match(/^(\d{4})/);
+  return m ? parseInt(m[1]) : null;
+}
+
+function filterLandelijk() {
+  if (!data) return;
+  const l = data.landelijk;
+  const p = huidigePeriode;
+
+  const dagLabel = r => r.datum;
+  const decLabel = r => r.label;
+  const mndLabel = r => r.label;
+  const seizLabel = r => r.label;
+  const jaarLabel = r => r.jaar;
+  const snLabel = r => r.datum;
+
+  if (p === "dag") {
+    const fMaand = document.getElementById("fp-dag-maand").value;
+    const fJaar = document.getElementById("fp-dag-jaar").value;
+    let gefilterd = l.dag;
+    if (fMaand) gefilterd = gefilterd.filter(r => datumMaand(r.datum) === parseInt(fMaand));
+    if (fJaar) gefilterd = gefilterd.filter(r => datumJaar(r.datum) === parseInt(fJaar));
+    vulTabel("tbl-dag", gefilterd, dagLabel);
+    // Sneeuw ook filteren
+    let snGefilterd = l.sneeuw;
+    if (fMaand) snGefilterd = snGefilterd.filter(r => datumMaand(r.datum) === parseInt(fMaand));
+    if (fJaar) snGefilterd = snGefilterd.filter(r => datumJaar(r.datum) === parseInt(fJaar));
+    vulTabel("tbl-sneeuw", snGefilterd, snLabel);
+  }
+  else if (p === "decade") {
+    const fMaand = document.getElementById("fp-dec-maand").value;
+    const fDec = document.getElementById("fp-dec-dec").value;
+    const fJaar = document.getElementById("fp-dec-jaar").value;
+    let gefilterd = l.decade;
+    if (fMaand) gefilterd = gefilterd.filter(r => r.mnd === parseInt(fMaand));
+    if (fDec) gefilterd = gefilterd.filter(r => r.dec === parseInt(fDec));
+    if (fJaar) gefilterd = gefilterd.filter(r => r.jaar === parseInt(fJaar));
+    vulTabel("tbl-decade", gefilterd, decLabel);
+  }
+  else if (p === "maand") {
+    const fMaand = document.getElementById("fp-mnd-maand").value;
+    const fJaar = document.getElementById("fp-mnd-jaar").value;
+    let gefilterd = l.maand;
+    if (fMaand) gefilterd = gefilterd.filter(r => r.mnd === parseInt(fMaand));
+    if (fJaar) gefilterd = gefilterd.filter(r => r.jaar === parseInt(fJaar));
+    vulTabel("tbl-maand", gefilterd, mndLabel);
+  }
+  else if (p === "seizoen") {
+    const fSeizoen = document.getElementById("fp-sei-seizoen").value;
+    const fJaar = document.getElementById("fp-sei-jaar").value;
+    let gefilterd = l.seizoen;
+    if (fSeizoen) gefilterd = gefilterd.filter(r => r.seizoen === fSeizoen);
+    if (fJaar) gefilterd = gefilterd.filter(r => r.jaar === parseInt(fJaar));
+    vulTabel("tbl-seizoen", gefilterd, seizLabel);
+  }
+  else if (p === "jaar") {
+    const fJaar = document.getElementById("fp-jr-jaar").value;
+    const fVan = document.getElementById("fp-jr-van").value;
+    const fTot = document.getElementById("fp-jr-tot").value;
+    let gefilterd = l.jaar;
+    if (fJaar) gefilterd = gefilterd.filter(r => r.jaar === parseInt(fJaar));
+    if (fVan) gefilterd = gefilterd.filter(r => r.jaar >= parseInt(fVan));
+    if (fTot) gefilterd = gefilterd.filter(r => r.jaar <= parseInt(fTot));
+    vulTabel("tbl-jaar", gefilterd, jaarLabel);
+  }
+  else {
+    // alltime — ongefilterd
+    vulTabel("tbl-dag", l.dag, dagLabel);
+    vulTabel("tbl-sneeuw", l.sneeuw, snLabel);
+    vulTabel("tbl-decade", l.decade, decLabel);
+    vulTabel("tbl-maand", l.maand, mndLabel);
+    vulTabel("tbl-seizoen", l.seizoen, seizLabel);
+    vulTabel("tbl-jaar", l.jaar, jaarLabel);
+  }
 }
 
 function vulStationDropdown() {
