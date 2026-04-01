@@ -198,14 +198,15 @@ def hoogste_anker_uur(station_id: str, dt_range: str) -> dict | None:
     ankers: dict = {}
     for i, (dt, ff) in enumerate(zip(tijden, ff_raw)):
         if dt is None or ff is None: continue
-        m = dt.minute
+        dt_lt = dt.astimezone(LOCAL_TZ)
+        m = dt_lt.minute
         if m in (10, 20, 30, 40, 50):
-            eind_uur  = (dt.hour + 1) % 24
-            start_uur = dt.hour
-            sleutel   = (dt.date(), eind_uur)
+            eind_uur  = (dt_lt.hour + 1) % 24
+            start_uur = dt_lt.hour
+            sleutel   = (dt_lt.date(), eind_uur)
         elif m == 0:
-            sleutel   = (dt.date(), dt.hour)
-            start_uur = (dt.hour - 1) % 24
+            sleutel   = (dt_lt.date(), dt_lt.hour)
+            start_uur = (dt_lt.hour - 1) % 24
         else:
             continue
         if sleutel not in ankers:
