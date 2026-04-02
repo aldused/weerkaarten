@@ -445,6 +445,7 @@ function tekenGrid() {
     body.className = "grid-card-body";
     const img = document.createElement("img");
     img.src = "kaart_basis_nl.png";
+    if (p.nacht) img.style.filter = "brightness(0.55) saturate(0.7)";
     body.appendChild(img);
 
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -474,7 +475,17 @@ function tekenKaartOpSvg(svg, dagKey, param) {
   items.forEach((item, idx) => {
     const cx = lonToX(item.lon), cy = latToY(item.lat);
     const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
-    const tekst = param === "DD" ? windpijl(item.val) + item.val.toFixed(0) : item.val.toFixed(p.decimalen);
+
+    let tekst;
+    if (param === "DD") {
+      tekst = windpijl(item.val) + item.val.toFixed(0);
+    } else if (p.bft) {
+      tekst = kmhNaarBft(item.val) + "Bft|" + item.val.toFixed(0);
+    } else if (param === "VV" && item.val < 10) {
+      tekst = Math.round(item.val * 1000) + "m";
+    } else {
+      tekst = item.val.toFixed(p.decimalen);
+    }
 
     const g = ns("g");
     const circle = ns("circle");
@@ -487,7 +498,8 @@ function tekenKaartOpSvg(svg, dagKey, param) {
     const text = ns("text");
     text.setAttribute("x", cx); text.setAttribute("y", cy + 4);
     text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", "12"); text.setAttribute("font-weight", "bold");
+    const klein = p.bft || (param === "VV" && item.val < 10);
+    text.setAttribute("font-size", klein ? "9" : "12"); text.setAttribute("font-weight", "bold");
     text.setAttribute("font-family", "Arial,sans-serif"); text.setAttribute("fill", fg);
     text.textContent = tekst;
     g.appendChild(text);
