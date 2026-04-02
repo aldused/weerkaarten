@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOSMIX Voorspelling Nederland - Ed Aldus WM</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
+.header { background: #00205b; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #2ec4e8; }
+.header-titel { color: white; font-size: 14px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+.toolbar { background: white; padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #dde6f0; }
+.toolbar-label { font-size: 11px; color: #5a7090; font-weight: 600; margin-right: 2px; }
+.btn-param, .btn-dag {
+  padding: 5px 14px; border-radius: 16px; border: 1px solid #c5d3e3;
+  background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.btn-param:hover, .btn-dag:hover { background: #dce9f7; }
+.btn-param.actief { color: white; border-color: transparent; }
+.btn-param.tx.actief { background: #c0392b; }
+.btn-param.tn.actief { background: #2471a3; }
+.btn-param.rr.actief { background: #1a7a4a; }
+.btn-param.ff.actief { background: #5d4037; }
+.btn-param.fx.actief { background: #6c3483; }
+.btn-param.sq.actief { background: #e67e00; }
+.btn-param.ttd.actief { background: #c0392b; }
+.btn-param.neff.actief { background: #607d8b; }
+.btn-param.gv.actief { background: #5c35a0; }
+.btn-dag.actief { background: #003366; color: white; border-color: #003366; }
+.btn-opslaan { padding: 5px 16px; border-radius: 16px; border: none; background: #003366; color: white; font-size: 12px; font-weight: 700; cursor: pointer; margin-left: auto; }
+.btn-opslaan:hover { background: #0055aa; }
+.kaart-wrap { display: flex; justify-content: center; padding: 16px; }
+.kaart-container { position: relative; width: 100%; max-width: 800px; }
+.kaart-container img { width: 100%; display: block; border-radius: 0 0 4px 4px; }
+.kaart-container svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.kaart-header-band {
+  background: #003366; color: white;
+  padding: 8px 14px; border-radius: 4px 4px 0 0;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.kaart-header-band .links { font-size: 13px; font-weight: 700; }
+.kaart-header-band .sub { font-size: 10px; color: #a8c8e8; margin-top: 1px; }
+.kaart-header-band .rechts { font-size: 13px; font-weight: 700; text-align: right; }
+.kaart-header-band .rechts-sub { font-size: 10px; color: #a8c8e8; }
+.legenda { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 16px; justify-content: center; }
+.legenda-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #5a7090; }
+.legenda-blok { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
+.status { text-align: center; padding: 12px; font-size: 12px; color: #888; }
+.zoom-hint { text-align:center; font-size:11px; color:#888; padding:4px 0 0; cursor:pointer; }
+.grid-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; padding: 16px; }
+.grid-card { background: white; border-radius: 6px; box-shadow: 0 1px 6px rgba(0,0,0,0.10); overflow: hidden; cursor: pointer; transition: transform 0.1s; }
+.grid-card:hover { transform: scale(1.01); }
+.grid-card-header { background: #003366; color: white; padding: 6px 10px; display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; }
+.grid-card-header .sub { font-size: 9px; color: #a8c8e8; }
+.grid-card-body { position: relative; }
+.grid-card-body img { width: 100%; display: block; }
+.grid-card-body svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.btn-grid { padding: 5px 14px; border-radius: 16px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-grid.actief { background: #003366; color: white; border-color: #003366; }
+#lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:1000; justify-content:center; align-items:center; }
+#lightbox.actief { display:flex; }
+#lightbox img { max-width:95vw; max-height:95vh; border-radius:6px; }
+#lightbox-sluit { position:fixed; top:16px; right:22px; font-size:2em; color:white; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — MOSMIX Voorspelling Nederland</div>
+    <div class="header-sub">DWD MOSMIX (ECMWF/ICON) · <span id="hdr-datum">laden...</span></div>
+  </div>
+  <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Parameter:</span>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;" id="param-btns">
+    <button class="btn-param tx actief" data-param="TX">🌡 TX Max</button>
+    <button class="btn-param tn" data-param="TN">❄ TN Min</button>
+    <button class="btn-param rr" data-param="RR">🌧 Neerslag</button>
+    <button class="btn-param sq" data-param="SQ">☀ Zon</button>
+    <button class="btn-param ff" data-param="FF">🌬 Wind</button>
+    <button class="btn-param fx" data-param="FX">💨 Windstoot</button>
+    <button class="btn-param ttd" data-param="TTD">💧 Dauwpunt</button>
+    <button class="btn-param neff" data-param="Neff">☁ Bewolking</button>
+    <button class="btn-param gv" data-param="gevoels">🥶 Gevoels</button>
+  </div>
+</div>
+<div class="toolbar" style="border-top:none;">
+  <span class="toolbar-label">Dag:</span>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;" id="dag-btns"></div>
+  <button class="btn-grid" id="btn-weergave" onclick="toggleWeergave()">📊 Alle dagen</button>
+  <button class="btn-opslaan" onclick="slaOp()">⬇ Opslaan PNG</button>
+</div>
+
+<div id="single-view" class="kaart-wrap">
+  <div style="width:100%;max-width:800px;">
+    <div class="kaart-header-band" id="kaart-header">
+      <div>
+        <div class="links">Ed Aldus WM</div>
+        <div class="sub" id="kaart-run-label">DWD MOSMIX voorspelling</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="rechts" id="kaart-dag-label">-</div>
+        <div class="rechts-sub" id="kaart-subtitel">Maximum temperatuur</div>
+      </div>
+    </div>
+    <div class="kaart-container" onclick="openZoom()" style="cursor:zoom-in;">
+      <img src="kaart_basis_nl.png" id="kaart-basis" alt="Basiskaart Nederland">
+      <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="zoom-hint" onclick="openZoom()">🔍 klik voor vergroting</div>
+  </div>
+</div>
+
+<div id="grid-view" class="grid-wrap" style="display:none;"></div>
+
+<div id="lightbox" onclick="sluitZoom()">
+  <span id="lightbox-sluit" onclick="sluitZoom()">✕</span>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div class="legenda" id="legenda"></div>
+<div class="status" id="status">Laden...</div>
+
+<script>
+const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
+const SVG_W=800, SVG_H=1100;
+function lonToX(lon) { return (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W; }
+function latToY(lat) { return (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H; }
+
+const PARAMS = {
+  TX:  { label:"Maximum temperatuur (°C)", eenheid:"°", decimalen:1,
+    kleuren:[["#084594","≤0°"],["#4292c6","5°"],["#9ecae1","10°"],["#ffffcc","15°"],["#fed976","20°"],["#fd8d3c","25°"],["#e31a1c","30°"],["#800026","35°+"]],
+    schaal:[-5,35] },
+  TN:  { label:"Minimum temperatuur (°C)", eenheid:"°", decimalen:1,
+    kleuren:[["#1a3a6b","≤-10°"],["#2980b9","-5°"],["#a8d8ea","0°"],["#ffffcc","5°"],["#fed976","10°"],["#fd8d3c","15°"],["#e31a1c","20°+"]],
+    schaal:[-10,20] },
+  RR:  { label:"Neerslag (mm)", eenheid:" mm", decimalen:1,
+    kleuren:[["#f7fbff","0"],["#c6dbef","2"],["#6baed6","5"],["#2171b5","10"],["#084594","20"],["#4a0080","30+"]],
+    schaal:[0,30] },
+  FF:  { label:"Gemiddelde wind (km/h)", eenheid:" km/h", decimalen:0,
+    kleuren:[["#e3f2fd","5"],["#90caf9","15"],["#42a5f5","25"],["#1565c0","35"],["#0d47a1","50+"]],
+    schaal:[0,50] },
+  FX:  { label:"Max windstoot (km/h)", eenheid:" km/h", decimalen:0,
+    kleuren:[["#e8f5e9","20"],["#a5d6a7","40"],["#ffeb3b","60"],["#ff9800","80"],["#f44336","100"],["#b71c1c","120+"]],
+    schaal:[20,120] },
+  DD:  { label:"Windrichting (°)", eenheid:"°", decimalen:0,
+    kleuren:[["#42a5f5","N"],["#66bb6a","O"],["#ffa726","Z"],["#ef5350","W"],["#42a5f5","N"]],
+    schaal:[0,360] },
+  SQ:  { label:"Zonneschijn (uur)", eenheid:" u", decimalen:1,
+    kleuren:[["#888888","0u"],["#c8c8c8","2u"],["#FFB347","5u"],["#FFC200","8u"],["#FFD700","12u+"]],
+    schaal:[0,12] },
+  TTD: { label:"Dauwpunt min (°C)", eenheid:"°", decimalen:1,
+    kleuren:[["#1a3a6b","≤-5°"],["#2980b9","0°"],["#a8d8ea","5°"],["#ffffcc","10°"],["#fed976","15°"],["#fd8d3c","20°+"]],
+    schaal:[-5,20] },
+  Neff:{ label:"Bewolking (%)", eenheid:"%", decimalen:0,
+    kleuren:[["#FFD700","0%"],["#ffe066","25%"],["#c8c8c8","50%"],["#888888","75%"],["#444444","100%"]],
+    schaal:[0,100] },
+  gevoels: { label:"Gevoelstemperatuur min (°C)", eenheid:"°", decimalen:1,
+    kleuren:[["#4a0080","≤-15°"],["#1a3a6b","-10°"],["#2980b9","-5°"],["#a8d8ea","0°"],["#e8f4f8","5°"],["#ffffcc","10°+"]],
+    schaal:[-15,10] },
+};
+
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+}
+function interpKleur(val, schaal, stops) {
+  const t = Math.max(0,Math.min(1,(val-schaal[0])/(schaal[1]-schaal[0])));
+  const colors = stops.map(s=>hexToRgb(s[0]));
+  const idx = Math.min(colors.length-2, Math.floor(t*(colors.length-1)));
+  const f = t*(colors.length-1)-idx;
+  const a=colors[idx],b=colors[idx+1];
+  const r=Math.round(a[0]+f*(b[0]-a[0])), g=Math.round(a[1]+f*(b[1]-a[1])), bl=Math.round(a[2]+f*(b[2]-a[2]));
+  const lum=(0.299*r+0.587*g+0.114*bl)/255;
+  return [`rgb(${r},${g},${bl})`, lum<0.55?"white":"#222"];
+}
+
+function ns(tag) { return document.createElementNS("http://www.w3.org/2000/svg",tag); }
+
+function windpijl(graden) {
+  const pijlen = ["↓","↙","←","↖","↑","↗","→","↘","↓"];
+  if (graden == null) return "·";
+  return pijlen[Math.round(graden/45) % 8];
+}
+
+function tekenKaart() {
+  const svg = document.getElementById("nl-kaart");
+  svg.innerHTML = "";
+  const p = PARAMS[huidigParam];
+  if (!p) return;
+
+  const dagObj = mosmixData.data[huidigDag];
+  if (!dagObj || !dagObj[huidigParam]) return;
+
+  const paramData = dagObj[huidigParam];
+  const stations = mosmixData.stations;
+
+  // Sorteer stations op waarde voor ranking
+  let items = Object.entries(paramData)
+    .filter(([naam]) => stations[naam])
+    .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
+
+  // Sorteer: hoog→laag voor de meeste, laag→hoog voor bewolking-inverse
+  const invertSort = ["TN","TTD","gevoels"];
+  items.sort((a,b) => invertSort.includes(huidigParam) ? a.val - b.val : b.val - a.val);
+
+  // Teken elk station
+  items.forEach((item, idx) => {
+    const cx = lonToX(item.lon), cy = latToY(item.lat);
+    const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
+
+    let tekst;
+    if (huidigParam === "DD") {
+      tekst = windpijl(item.val) + " " + item.val.toFixed(0);
+    } else {
+      tekst = item.val.toFixed(p.decimalen);
+    }
+
+    const g = ns("g");
+    const r = 22;
+
+    // Cirkel
+    const circle = ns("circle");
+    circle.setAttribute("cx", cx); circle.setAttribute("cy", cy);
+    circle.setAttribute("r", r);
+    circle.setAttribute("fill", bg);
+    circle.setAttribute("stroke", idx === 0 ? "#cc0000" : idx === 1 ? "#e6a800" : idx === 2 ? "#888" : "white");
+    circle.setAttribute("stroke-width", idx <= 2 ? "3" : "1.5");
+    g.appendChild(circle);
+
+    // Buitenste ring top 2
+    if (idx <= 1) {
+      const ring = ns("circle");
+      ring.setAttribute("cx", cx); ring.setAttribute("cy", cy);
+      ring.setAttribute("r", r + 5);
+      ring.setAttribute("fill", "none");
+      ring.setAttribute("stroke", idx === 0 ? "#cc0000" : "#e6a800");
+      ring.setAttribute("stroke-width", "2");
+      ring.setAttribute("stroke-dasharray", idx === 0 ? "5,3" : "4,4");
+      g.appendChild(ring);
+    }
+
+    // Waarde tekst
+    const text = ns("text");
+    text.setAttribute("x", cx); text.setAttribute("y", cy + 4);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "12"); text.setAttribute("font-weight", "bold");
+    text.setAttribute("font-family", "Arial,sans-serif");
+    text.setAttribute("fill", fg);
+    text.textContent = tekst;
+    g.appendChild(text);
+
+    svg.appendChild(g);
+  });
+
+  // Top 3 paneel
+  const top3 = items.slice(0, 3);
+  const top3Kleuren = ["#cc0000","#8B6914","#888888"];
+  const paneel_x = 10, paneel_y = 10;
+  const paneel_b = 180, rij_h = 38, paneel_h = 20 + top3.length * rij_h;
+
+  const pRect = ns("rect");
+  pRect.setAttribute("x", paneel_x); pRect.setAttribute("y", paneel_y);
+  pRect.setAttribute("width", paneel_b); pRect.setAttribute("height", paneel_h);
+  pRect.setAttribute("rx", 6); pRect.setAttribute("fill", "white");
+  pRect.setAttribute("fill-opacity", "0.88");
+  pRect.setAttribute("stroke", "#ccc"); pRect.setAttribute("stroke-width", "0.8");
+  svg.appendChild(pRect);
+
+  const pTitel = ns("text");
+  pTitel.setAttribute("x", paneel_x + paneel_b/2); pTitel.setAttribute("y", paneel_y + 14);
+  pTitel.setAttribute("text-anchor", "middle");
+  pTitel.setAttribute("font-size", "11"); pTitel.setAttribute("font-weight", "bold");
+  pTitel.setAttribute("font-family", "Arial,sans-serif"); pTitel.setAttribute("fill", "#003366");
+  pTitel.textContent = "Top 3";
+  svg.appendChild(pTitel);
+
+  top3.forEach((item, idx) => {
+    const ry = paneel_y + 22 + idx * rij_h;
+    const medKleur = top3Kleuren[idx];
+
+    const med = ns("circle");
+    med.setAttribute("cx", paneel_x + 18); med.setAttribute("cy", ry + 12);
+    med.setAttribute("r", 12); med.setAttribute("fill", medKleur);
+    svg.appendChild(med);
+    const medTxt = ns("text");
+    medTxt.setAttribute("x", paneel_x + 18); medTxt.setAttribute("y", ry + 17);
+    medTxt.setAttribute("text-anchor", "middle"); medTxt.setAttribute("font-size", "13");
+    medTxt.setAttribute("font-weight", "bold"); medTxt.setAttribute("font-family", "Arial,sans-serif");
+    medTxt.setAttribute("fill", "white"); medTxt.textContent = String(idx + 1);
+    svg.appendChild(medTxt);
+
+    const stn = ns("text");
+    stn.setAttribute("x", paneel_x + 35); stn.setAttribute("y", ry + 10);
+    stn.setAttribute("font-size", "11"); stn.setAttribute("font-weight", "bold");
+    stn.setAttribute("font-family", "Arial,sans-serif"); stn.setAttribute("fill", "#222");
+    stn.textContent = item.naam;
+    svg.appendChild(stn);
+
+    const waardeTxt = item.val.toFixed(p.decimalen) + (p.eenheid || "");
+    const wrd = ns("text");
+    wrd.setAttribute("x", paneel_x + 35); wrd.setAttribute("y", ry + 24);
+    wrd.setAttribute("font-size", "10"); wrd.setAttribute("font-family", "Arial,sans-serif");
+    wrd.setAttribute("fill", medKleur); wrd.setAttribute("font-weight", "bold");
+    wrd.textContent = waardeTxt;
+    svg.appendChild(wrd);
+  });
+
+  // Copyright
+  const cr = ns("text");
+  cr.setAttribute("x", SVG_W - 10); cr.setAttribute("y", SVG_H - 12);
+  cr.setAttribute("text-anchor", "end"); cr.setAttribute("font-size", "16");
+  cr.setAttribute("font-family", "Arial,sans-serif"); cr.setAttribute("font-style", "italic");
+  cr.setAttribute("fill", "#888");
+  cr.textContent = "© Ed Aldus / DWD MOSMIX";
+  svg.appendChild(cr);
+}
+
+function maakLegenda() {
+  const p = PARAMS[huidigParam];
+  if (!p) return;
+  document.getElementById("legenda").innerHTML = p.kleuren.map(([k,l]) =>
+    `<div class="legenda-item"><div class="legenda-blok" style="background:${k}"></div>${l}</div>`
+  ).join("");
+}
+
+const NL_DAGEN = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+const NL_MND = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+function dagLabel(d) { return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MND[d.getMonth()+1]}`; }
+
+let mosmixData = null, huidigParam = "TX", huidigDag = "";
+let gridModus = false;
+
+function toggleWeergave() {
+  gridModus = !gridModus;
+  document.getElementById("single-view").style.display = gridModus ? "none" : "flex";
+  document.getElementById("grid-view").style.display = gridModus ? "grid" : "none";
+  const btn = document.getElementById("btn-weergave");
+  btn.textContent = gridModus ? "🗺 Enkele kaart" : "📊 Alle dagen";
+  btn.classList.toggle("actief", gridModus);
+  // Dag-knoppen uitschakelen in gridmodus
+  document.querySelectorAll(".btn-dag").forEach(b => b.style.opacity = gridModus ? "0.4" : "1");
+  if (gridModus) tekenGrid();
+}
+
+function tekenGrid() {
+  if (!mosmixData) return;
+  const container = document.getElementById("grid-view");
+  container.innerHTML = "";
+  const p = PARAMS[huidigParam];
+  if (!p) return;
+
+  mosmixData.dagen.forEach(dagKey => {
+    const dagObj = mosmixData.data[dagKey];
+    if (!dagObj || !dagObj[huidigParam]) return;
+    const d = new Date(dagKey + "T12:00:00");
+    const label = dagLabel(d);
+
+    const card = document.createElement("div");
+    card.className = "grid-card";
+    card.onclick = () => {
+      gridModus = false;
+      document.getElementById("single-view").style.display = "flex";
+      document.getElementById("grid-view").style.display = "none";
+      document.getElementById("btn-weergave").textContent = "📊 Alle dagen";
+      document.getElementById("btn-weergave").classList.remove("actief");
+      document.querySelectorAll(".btn-dag").forEach(b => b.style.opacity = "1");
+      huidigDag = dagKey;
+      document.querySelectorAll(".btn-dag").forEach(b => b.classList.toggle("actief", b.dataset.dag === dagKey));
+      update();
+    };
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "grid-card-header";
+    header.innerHTML = `<span>${label}</span><span class="sub">${p.label}</span>`;
+    card.appendChild(header);
+
+    // Body met kaart + SVG
+    const body = document.createElement("div");
+    body.className = "grid-card-body";
+    const img = document.createElement("img");
+    img.src = "kaart_basis_nl.png";
+    body.appendChild(img);
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 800 1100");
+    tekenKaartOpSvg(svg, dagKey, huidigParam);
+    body.appendChild(svg);
+    card.appendChild(body);
+
+    container.appendChild(card);
+  });
+}
+
+function tekenKaartOpSvg(svg, dagKey, param) {
+  const p = PARAMS[param];
+  const dagObj = mosmixData.data[dagKey];
+  if (!dagObj || !dagObj[param]) return;
+  const paramData = dagObj[param];
+  const stations = mosmixData.stations;
+
+  let items = Object.entries(paramData)
+    .filter(([naam]) => stations[naam])
+    .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
+
+  const invertSort = ["TN","TTD","gevoels"];
+  items.sort((a,b) => invertSort.includes(param) ? a.val - b.val : b.val - a.val);
+
+  items.forEach((item, idx) => {
+    const cx = lonToX(item.lon), cy = latToY(item.lat);
+    const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
+    const tekst = param === "DD" ? windpijl(item.val) + item.val.toFixed(0) : item.val.toFixed(p.decimalen);
+
+    const g = ns("g");
+    const circle = ns("circle");
+    circle.setAttribute("cx", cx); circle.setAttribute("cy", cy);
+    circle.setAttribute("r", 22); circle.setAttribute("fill", bg);
+    circle.setAttribute("stroke", idx === 0 ? "#cc0000" : idx === 1 ? "#e6a800" : "white");
+    circle.setAttribute("stroke-width", idx <= 1 ? "3" : "1.5");
+    g.appendChild(circle);
+
+    const text = ns("text");
+    text.setAttribute("x", cx); text.setAttribute("y", cy + 4);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "12"); text.setAttribute("font-weight", "bold");
+    text.setAttribute("font-family", "Arial,sans-serif"); text.setAttribute("fill", fg);
+    text.textContent = tekst;
+    g.appendChild(text);
+    svg.appendChild(g);
+  });
+}
+
+function runLabel() {
+  if (!mosmixData || !mosmixData.run) return "DWD MOSMIX voorspelling";
+  const rd = new Date(mosmixData.run);
+  const uur = rd.getUTCHours().toString().padStart(2,"0");
+  return "DWD MOSMIX  ·  run: " + uur + " UTC";
+}
+
+function update() {
+  if (!mosmixData || !huidigDag) return;
+  if (gridModus) { tekenGrid(); return; }
+  const d = new Date(huidigDag + "T12:00:00");
+  document.getElementById("hdr-datum").textContent = dagLabel(d);
+  document.getElementById("kaart-dag-label").textContent = dagLabel(d);
+  document.getElementById("kaart-subtitel").textContent = PARAMS[huidigParam]?.label || huidigParam;
+  document.getElementById("kaart-run-label").textContent = runLabel();
+  tekenKaart();
+  maakLegenda();
+}
+
+// Opslaan als PNG
+function slaOp() {
+  const img = document.getElementById("kaart-basis");
+  const svg = document.getElementById("nl-kaart");
+  const header = document.getElementById("kaart-header");
+  const canvas = document.createElement("canvas");
+  const scale = 2;
+  canvas.width = img.naturalWidth * scale;
+  canvas.height = (img.naturalHeight + header.offsetHeight) * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  tekenHeaderCanvas(ctx, img.naturalWidth, header.offsetHeight);
+  ctx.drawImage(img, 0, header.offsetHeight);
+  const svgStr = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob([svgStr],{type:"image/svg+xml"});
+  const url = URL.createObjectURL(blob);
+  const svgImg = new Image();
+  svgImg.onload = () => {
+    ctx.drawImage(svgImg, 0, header.offsetHeight, img.naturalWidth, img.naturalHeight);
+    URL.revokeObjectURL(url);
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `mosmix_${huidigParam}_${huidigDag}.png`;
+    a.click();
+  };
+  svgImg.src = url;
+}
+
+function openZoom() {
+  const img = document.getElementById("kaart-basis");
+  const svg = document.getElementById("nl-kaart");
+  const header = document.getElementById("kaart-header");
+  const canvas = document.createElement("canvas");
+  const scale = 2;
+  canvas.width = img.naturalWidth * scale;
+  canvas.height = (img.naturalHeight + header.offsetHeight) * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  tekenHeaderCanvas(ctx, img.naturalWidth, header.offsetHeight);
+  ctx.drawImage(img, 0, header.offsetHeight);
+  const svgStr = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob([svgStr],{type:"image/svg+xml"});
+  const url = URL.createObjectURL(blob);
+  const svgImg = new Image();
+  svgImg.onload = () => {
+    ctx.drawImage(svgImg, 0, header.offsetHeight, img.naturalWidth, img.naturalHeight);
+    URL.revokeObjectURL(url);
+    document.getElementById("lightbox-img").src = canvas.toDataURL("image/png");
+    document.getElementById("lightbox").classList.add("actief");
+  };
+  svgImg.src = url;
+}
+function sluitZoom() { document.getElementById("lightbox").classList.remove("actief"); }
+document.addEventListener("keydown", e => { if(e.key==="Escape") sluitZoom(); });
+
+function tekenHeaderCanvas(ctx, breedte, hoogte) {
+  ctx.fillStyle = "#003366";
+  ctx.fillRect(0, 0, breedte, hoogte);
+  ctx.fillStyle = "#4a90c4";
+  ctx.fillRect(0, hoogte-2, breedte, 2);
+  ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left";
+  ctx.fillText("Ed Aldus WM", 14, 20);
+  ctx.fillStyle = "#a8c8e8"; ctx.font = "10px Arial";
+  ctx.fillText(runLabel(), 14, 34);
+  ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "right";
+  ctx.fillText(document.getElementById("kaart-dag-label").textContent, breedte-14, 20);
+  ctx.fillStyle = "#a8c8e8"; ctx.font = "10px Arial";
+  ctx.fillText(document.getElementById("kaart-subtitel").textContent, breedte-14, 34);
+  ctx.textAlign = "left";
+}
+
+// Event handlers
+document.getElementById("param-btns").addEventListener("click", e => {
+  const btn = e.target.closest(".btn-param"); if (!btn) return;
+  huidigParam = btn.dataset.param;
+  document.querySelectorAll(".btn-param").forEach(b => b.classList.remove("actief"));
+  btn.classList.add("actief"); update();
+});
+
+// URL parameter support
+function leesUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("param") && PARAMS[params.get("param")]) {
+    huidigParam = params.get("param");
+    document.querySelectorAll(".btn-param").forEach(b => {
+      b.classList.toggle("actief", b.dataset.param === huidigParam);
+    });
+  }
+}
+
+// Init
+const imgEl = document.getElementById("kaart-basis");
+function startLaad() {
+  leesUrlParams();
+  fetch("mosmix_nl.json?t="+Date.now()).then(r=>r.json()).then(data => {
+    mosmixData = data;
+    // Run-info tonen
+    let updateTekst = "Bijgewerkt: " + data.bijgewerkt.replace("T"," ");
+    if (data.run) {
+      const rd = new Date(data.run);
+      const runUur = rd.getUTCHours().toString().padStart(2,"0");
+      const runDag = rd.getUTCDate() + "-" + (rd.getUTCMonth()+1) + "-" + rd.getUTCFullYear();
+      updateTekst += "  ·  Run: " + runDag + " " + runUur + " UTC";
+    }
+    document.getElementById("hdr-update").textContent = updateTekst;
+    document.getElementById("status").textContent = "";
+
+    // Dag-knoppen
+    const dagBtns = document.getElementById("dag-btns");
+    const vandaag = new Date().toISOString().slice(0,10);
+    data.dagen.forEach((key, i) => {
+      const d = new Date(key + "T12:00:00");
+      let lbl;
+      if (key === vandaag) lbl = "Vandaag";
+      else if (i === 0 || (i === 1 && data.dagen[0] === vandaag)) {
+        const diff = Math.round((d - new Date(vandaag+"T12:00:00")) / 86400000);
+        lbl = diff === 1 ? "Morgen" : dagLabel(d);
+      } else {
+        lbl = NL_DAGEN[d.getDay()].slice(0,2) + " " + d.getDate() + "/" + (d.getMonth()+1);
+      }
+      const btn = document.createElement("button");
+      btn.className = "btn-dag" + (i === 0 ? " actief" : "");
+      btn.dataset.dag = key;
+      btn.textContent = lbl;
+      btn.onclick = () => {
+        huidigDag = key;
+        document.querySelectorAll(".btn-dag").forEach(b => b.classList.remove("actief"));
+        btn.classList.add("actief");
+        update();
+      };
+      dagBtns.appendChild(btn);
+    });
+
+    huidigDag = data.dagen[0];
+    update();
+  }).catch(e => {
+    document.getElementById("status").textContent = "Kon mosmix_nl.json niet laden: " + e.message;
+  });
+}
+if (imgEl.complete) startLaad();
+else imgEl.onload = startLaad;
+</script>
+</body>
+</html>
