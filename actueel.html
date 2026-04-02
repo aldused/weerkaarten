@@ -53,6 +53,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 .station-val b { color: #1a2b40; }
 .station-val.highlight { background: #ffe082; border-radius: 3px; padding: 1px 4px; }
 .auto-badge { display: inline-block; font-size: 10px; background: #2ec4e8; color: white; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.btn-opslaan { padding: 5px 16px; border-radius: 16px; border: none; background: #003366; color: white; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .klok { font-size: 28px; font-weight: 900; color: white; font-family: monospace; letter-spacing: 2px; }
 .klok-label { font-size: 11px; color: #a8c4e8; margin-top: 2px; }
 
@@ -84,6 +85,10 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   <button class="btn-param vv" data-param="vv">👁 Zicht</button>
   <button class="btn-param tg" data-param="tg">🌿 Grastemperatuur</button>
   <button class="btn-param p0" data-param="p0">📊 Luchtdruk</button>
+  <span style="margin-left:auto;display:flex;gap:6px;">
+    <button class="btn-opslaan" onclick="downloadKaart()">⬇ Kaart PNG</button>
+    <button class="btn-opslaan" onclick="downloadCSV()" style="background:#1a5a30;">⬇ Lijst CSV</button>
+  </span>
 </div>
 
 <div class="main">
@@ -347,6 +352,79 @@ document.querySelectorAll(".btn-param").forEach(btn => {
     tekenAlles();
   });
 });
+
+// ── Download kaart als PNG ──
+function downloadKaart() {
+  const container = document.querySelector(".kaart-container");
+  const img = container.querySelector("img");
+  const svg = document.getElementById("nl-kaart");
+  const header = document.querySelector(".kaart-header-band");
+
+  const canvas = document.createElement("canvas");
+  const hdrH = 44;
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight + hdrH;
+  const ctx = canvas.getContext("2d");
+
+  // Header
+  ctx.fillStyle = "#003366"; ctx.fillRect(0, 0, canvas.width, hdrH);
+  ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "left";
+  ctx.fillText("Ed Aldus WM — Actuele Waarnemingen", 14, 22);
+  ctx.fillStyle = "#a8c8e8"; ctx.font = "11px Arial";
+  ctx.fillText(PARAMS[huidigParam]?.label || "", 14, 38);
+  ctx.textAlign = "right"; ctx.fillStyle = "white"; ctx.font = "bold 16px Arial";
+  ctx.fillText(document.getElementById("klok-stand").textContent, canvas.width - 14, 22);
+  ctx.fillStyle = "#a8c8e8"; ctx.font = "11px Arial";
+  ctx.fillText(document.getElementById("kaart-dag").textContent, canvas.width - 14, 38);
+  ctx.textAlign = "left";
+
+  // Kaart
+  ctx.drawImage(img, 0, hdrH, canvas.width, img.naturalHeight);
+
+  // SVG overlay
+  const svgData = new XMLSerializer().serializeToString(svg);
+  const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
+  const url = URL.createObjectURL(svgBlob);
+  const svgImg = new Image();
+  svgImg.onload = () => {
+    ctx.drawImage(svgImg, 0, hdrH, canvas.width, img.naturalHeight);
+    URL.revokeObjectURL(url);
+    const a = document.createElement("a");
+    a.download = "actueel_" + huidigParam + "_" + new Date().toISOString().slice(0,16).replace(/[T:]/g,"-") + ".png";
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  };
+  svgImg.src = url;
+}
+
+// ── Download lijst als CSV ──
+function downloadCSV() {
+  const items = Object.values(stationData).filter(st => st && st.lon != null);
+  const stand = document.getElementById("klok-stand").textContent;
+  let csv = "Station;Temp (°C);Dauwpunt (°C);Wind (m/s);Bft;Richting (°);Stoot (km/h);Bewolking;Vochtigheid (%);Zicht (m);Gras (°C);Luchtdruk (hPa)\n";
+  items.sort((a, b) => a.naam.localeCompare(b.naam));
+  items.forEach(st => {
+    csv += [
+      st.naam,
+      st.ta != null ? st.ta.toFixed(1) : "",
+      st.td != null ? st.td.toFixed(1) : "",
+      st.ff != null ? st.ff.toFixed(1) : "",
+      st.ff != null ? msToBft(st.ff) : "",
+      st.dd != null ? Math.round(st.dd) : "",
+      st.fx != null ? Math.round(st.fx * 3.6) : "",
+      st.n != null ? st.n + "/8" : "",
+      st.rh != null ? Math.round(st.rh) : "",
+      st.vv != null ? Math.round(st.vv) : "",
+      (st.tg ?? st.tgn) != null ? (st.tg ?? st.tgn).toFixed(1) : "",
+      st.p0 != null ? st.p0.toFixed(1) : "",
+    ].join(";") + "\n";
+  });
+  const blob = new Blob(["\ufeff" + csv], {type: "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.download = "actueel_waarnemingen_" + new Date().toISOString().slice(0,16).replace(/[T:]/g,"-") + ".csv";
+  a.href = URL.createObjectURL(blob);
+  a.click();
+}
 
 // Init
 laadActueel();
