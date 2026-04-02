@@ -223,7 +223,7 @@ function tekenKaart() {
     .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
 
   // Sorteer: hoog→laag voor de meeste, laag→hoog voor bewolking-inverse
-  const invertSort = ["TN","TTD","gevoels"];
+  const invertSort = ["TN","TTD","gevoels","VV"];
   items.sort((a,b) => invertSort.includes(huidigParam) ? a.val - b.val : b.val - a.val);
 
   // Teken elk station
@@ -236,6 +236,8 @@ function tekenKaart() {
       tekst = windpijl(item.val) + " " + item.val.toFixed(0);
     } else if (p.bft) {
       tekst = item.val.toFixed(0) + " · " + kmhNaarBft(item.val) + "Bft";
+    } else if (huidigParam === "VV" && item.val < 10) {
+      tekst = Math.round(item.val * 1000) + "m";
     } else {
       tekst = item.val.toFixed(p.decimalen);
     }
@@ -268,7 +270,8 @@ function tekenKaart() {
     const text = ns("text");
     text.setAttribute("x", cx); text.setAttribute("y", cy + 4);
     text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", p.bft ? "9" : "12"); text.setAttribute("font-weight", "bold");
+    const klein = p.bft || (huidigParam === "VV" && item.val < 10);
+    text.setAttribute("font-size", klein ? "9" : "12"); text.setAttribute("font-weight", "bold");
     text.setAttribute("font-family", "Arial,sans-serif");
     text.setAttribute("fill", fg);
     text.textContent = tekst;
@@ -321,7 +324,12 @@ function tekenKaart() {
     stn.textContent = item.naam;
     svg.appendChild(stn);
 
-    const waardeTxt = item.val.toFixed(p.decimalen) + (p.eenheid || "");
+    let waardeTxt;
+    if (huidigParam === "VV" && item.val < 10) {
+      waardeTxt = Math.round(item.val * 1000) + " m";
+    } else {
+      waardeTxt = item.val.toFixed(p.decimalen) + (p.eenheid || "");
+    }
     const wrd = ns("text");
     wrd.setAttribute("x", paneel_x + 35); wrd.setAttribute("y", ry + 24);
     wrd.setAttribute("font-size", "10"); wrd.setAttribute("font-family", "Arial,sans-serif");
@@ -428,7 +436,7 @@ function tekenKaartOpSvg(svg, dagKey, param) {
     .filter(([naam]) => stations[naam])
     .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
 
-  const invertSort = ["TN","TTD","gevoels"];
+  const invertSort = ["TN","TTD","gevoels","VV"];
   items.sort((a,b) => invertSort.includes(param) ? a.val - b.val : b.val - a.val);
 
   items.forEach((item, idx) => {
