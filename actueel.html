@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Actuele Waarnemingen – Ed Aldus WM</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
+.header { background: #00205b; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #2ec4e8; }
+.header-titel { color: white; font-size: 14px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+.toolbar { background: white; padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #dde6f0; }
+.btn-param { padding: 5px 14px; border-radius: 16px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+.btn-param:hover { background: #dce9f7; }
+.btn-param.actief { color: white; border-color: transparent; }
+.btn-param.ta.actief   { background: #c0392b; }
+.btn-param.td.actief   { background: #2471a3; }
+.btn-param.ff.actief   { background: #2471a3; }
+.btn-param.fx.actief   { background: #6c3483; }
+.btn-param.tg.actief   { background: #1a7a4a; }
+.btn-param.vv.actief   { background: #5d4037; }
+.btn-param.rh.actief   { background: #0277bd; }
+.btn-param.p0.actief   { background: #455a64; }
+.btn-param.n.actief    { background: #616161; }
+.main { display: flex; gap: 0; height: calc(100vh - 90px); }
+.kaart-kolom { flex: 0 0 560px; overflow-y: auto; padding: 12px; }
+.lijst-kolom { flex: 1; overflow-y: auto; background: white; border-left: 1px solid #dde6f0; }
+.kaart-container { position: relative; width: 100%; }
+.kaart-container img { width: 100%; display: block; border-radius: 0 0 4px 4px; }
+.kaart-container svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.kaart-header-band { background: #003366; color: white; padding: 8px 14px; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; }
+.kaart-header-band .links { font-size: 13px; font-weight: 700; }
+.kaart-header-band .sub { font-size: 10px; color: #a8c8e8; margin-top: 1px; }
+.kaart-header-band .rechts { font-size: 13px; font-weight: 700; text-align: right; }
+.kaart-header-band .rechts-sub { font-size: 10px; color: #a8c8e8; }
+.legenda { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0; justify-content: center; }
+.legenda-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #5a7090; }
+.legenda-blok { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
+
+/* Stationslijst */
+.lijst-header { background: #003366; color: white; padding: 10px 14px; font-size: 13px; font-weight: 700; position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; }
+.lijst-header select { background: #1a4a80; border: 1px solid #2a6aaa; color: white; border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+.station-rij { padding: 8px 14px; border-bottom: 1px solid #eef2f6; display: flex; align-items: center; gap: 10px; font-size: 12px; transition: background 0.1s; }
+.station-rij:hover { background: #f5f8fc; }
+.station-rij.top { background: #fff8e6; }
+.station-rij.bottom { background: #e8f4ff; }
+.station-naam { font-weight: 700; color: #003366; min-width: 110px; flex-shrink: 0; }
+.station-waarden { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.station-val { font-size: 11px; color: #555; white-space: nowrap; }
+.station-val b { color: #1a2b40; }
+.station-val.highlight { background: #ffe082; border-radius: 3px; padding: 1px 4px; }
+.auto-badge { display: inline-block; font-size: 10px; background: #2ec4e8; color: white; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+
+@media(max-width:900px) {
+  .main { flex-direction: column; height: auto; }
+  .kaart-kolom { flex: none; }
+  .lijst-kolom { border-left: none; border-top: 1px solid #dde6f0; max-height: 50vh; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Actuele Waarnemingen Nederland</div>
+    <div class="header-sub">KNMI 10-minuten metingen · <span id="hdr-update">laden...</span> · <span class="auto-badge">auto-refresh 10 min</span></div>
+  </div>
+</div>
+<div class="toolbar" id="toolbar">
+  <button class="btn-param ta actief" data-param="ta">🌡 Temperatuur</button>
+  <button class="btn-param td" data-param="td">💧 Dauwpunt</button>
+  <button class="btn-param ff" data-param="ff">🌬 Wind</button>
+  <button class="btn-param fx" data-param="fx">💨 Windstoot</button>
+  <button class="btn-param n" data-param="n">☁ Bewolking</button>
+  <button class="btn-param rh" data-param="rh">💦 Vochtigheid</button>
+  <button class="btn-param vv" data-param="vv">👁 Zicht</button>
+  <button class="btn-param tg" data-param="tg">🌿 Grastemperatuur</button>
+  <button class="btn-param p0" data-param="p0">📊 Luchtdruk</button>
+</div>
+
+<div class="main">
+  <div class="kaart-kolom">
+    <div class="kaart-header-band">
+      <div><div class="links">Ed Aldus WM</div><div class="sub">Waarnemingen KNMI</div></div>
+      <div style="text-align:right;"><div class="rechts" id="kaart-dag">–</div><div class="rechts-sub" id="kaart-param-label">Temperatuur (°C)</div></div>
+    </div>
+    <div class="kaart-container">
+      <img src="kaart_basis_nl.png" alt="Basiskaart Nederland">
+      <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="legenda" id="legenda"></div>
+  </div>
+
+  <div class="lijst-kolom">
+    <div class="lijst-header">
+      <span>Alle stations (<span id="n-stations">0</span>)</span>
+      <select id="sorteer" onchange="tekenAlles()">
+        <option value="param-desc">Sorteer: hoog → laag</option>
+        <option value="param-asc">Sorteer: laag → hoog</option>
+        <option value="naam">Sorteer: A → Z</option>
+      </select>
+    </div>
+    <div id="stations-lijst"></div>
+  </div>
+</div>
+
+<div style="text-align:center;font-size:11px;color:#888;padding:6px 0;">© Ed Aldus WM · Data: KNMI</div>
+
+<script>
+const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
+const SVG_W=800, SVG_H=1100;
+function lonToX(lon){return (lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;}
+function latToY(lat){return (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;}
+function ns(tag){return document.createElementNS("http://www.w3.org/2000/svg",tag);}
+
+const BFT=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+function msToBft(ms){if(!ms&&ms!==0)return 0;let b=0;for(let i=0;i<BFT.length;i++){if(ms>=BFT[i])b=i+1;else break;}return b;}
+function windpijl(dd){if(dd==null)return "";const p=["↓","↙","←","↖","↑","↗","→","↘"];return p[Math.round(dd/45)%8];}
+
+const PARAMS = {
+  ta:  {label:"Temperatuur (°C)",         eenheid:"°",     decimalen:1,
+        kleuren:[["#084594","≤0°"],["#4292c6","5°"],["#9ecae1","10°"],["#ffffcc","15°"],["#fed976","20°"],["#fd8d3c","25°"],["#800026","30°+"]],schaal:[-5,30]},
+  td:  {label:"Dauwpunt (°C)",            eenheid:"°",     decimalen:1,
+        kleuren:[["#1a3a6b","≤-5°"],["#2980b9","0°"],["#a8d8ea","5°"],["#ffffcc","10°"],["#fed976","15°"],["#fd8d3c","20°+"]],schaal:[-5,20]},
+  ff:  {label:"Windsnelheid (Bft)",        eenheid:"bft",   decimalen:0,
+        kleuren:[["#e8f5e9","1-2"],["#a5d6a7","3"],["#ffeb3b","4"],["#ff9800","5"],["#f44336","6"],["#b71c1c","7+"]],schaal:[0,9]},
+  fx:  {label:"Max windstoot (km/h)",      eenheid:" km/h", decimalen:0,
+        kleuren:[["#e8f5e9","20"],["#a5d6a7","40"],["#ffeb3b","60"],["#ff9800","80"],["#f44336","100"],["#b71c1c","120+"]],schaal:[20,120]},
+  n:   {label:"Bewolking (okta's)",        eenheid:"",      decimalen:0,
+        kleuren:[["#FFD700","0"],["#ffe066","2"],["#c8c8c8","4"],["#888888","6"],["#444444","8"]],schaal:[0,8]},
+  rh:  {label:"Relatieve vochtigheid (%)", eenheid:"%",     decimalen:0,
+        kleuren:[["#fff7bc","30%"],["#fec44f","50%"],["#d95f0e","70%"],["#993404","85%"],["#4d1600","100%"]],schaal:[20,100]},
+  vv:  {label:"Zicht",                    eenheid:"",      decimalen:0,
+        kleuren:[["#800026","<200m"],["#e31a1c","500m"],["#fd8d3c","1km"],["#fecc5c","5km"],["#ffffb2","10km+"]],schaal:[0,10000]},
+  tg:  {label:"Grastemperatuur (°C)",      eenheid:"°",     decimalen:1,
+        kleuren:[["#1a3a6b","≤-5°"],["#2980b9","0°"],["#a8d8ea","5°"],["#ffffcc","10°"],["#fed976","15°+"]],schaal:[-10,20]},
+  p0:  {label:"Luchtdruk (hPa)",           eenheid:" hPa",  decimalen:1,
+        kleuren:[["#4a0080","≤990"],["#2171b5","1000"],["#6baed6","1010"],["#c6dbef","1020"],["#f7fbff","1030+"]],schaal:[990,1030]}
+};
+
+function hexToRgb(hex){return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];}
+function interpKleur(val,schaal,stops){
+  const t=Math.max(0,Math.min(1,(val-schaal[0])/(schaal[1]-schaal[0])));
+  const colors=stops.map(s=>hexToRgb(s[0]));
+  const idx=Math.min(colors.length-2,Math.floor(t*(colors.length-1)));
+  const f=t*(colors.length-1)-idx;
+  const a=colors[idx],b=colors[idx+1];
+  const r=Math.round(a[0]+f*(b[0]-a[0])),g=Math.round(a[1]+f*(b[1]-a[1])),bl=Math.round(a[2]+f*(b[2]-a[2]));
+  const lum=(0.299*r+0.587*g+0.114*bl)/255;
+  return [`rgb(${r},${g},${bl})`,lum<0.55?"white":"#222"];
+}
+
+let stationData = {}, huidigParam = "ta";
+
+function getVal(st, param) {
+  let val = st[param];
+  if (val == null) return null;
+  if (param === "ff") return msToBft(val);
+  if (param === "fx") return Math.round(val * 3.6);
+  if (param === "tg") return st.tg != null ? st.tg : st.tgn;
+  return val;
+}
+
+function formatVal(st, param) {
+  const raw = st[param];
+  if (raw == null) return "–";
+  const p = PARAMS[param];
+  if (param === "ff") return windpijl(st.dd) + " " + raw.toFixed(1) + " m/s (" + msToBft(raw) + " Bft)";
+  if (param === "fx") return Math.round(raw * 3.6) + " km/h";
+  if (param === "vv") return raw >= 10000 ? ">10 km" : raw >= 1000 ? (raw/1000).toFixed(1) + " km" : Math.round(raw) + " m";
+  if (param === "n") return raw + "/8";
+  if (param === "p0") return raw != null ? raw.toFixed(1) + " hPa" : "–";
+  return raw.toFixed(p.decimalen) + (p.eenheid || "");
+}
+
+function formatKaart(st, param) {
+  const raw = st[param];
+  if (raw == null) return null;
+  if (param === "ff") return windpijl(st.dd) + " " + raw.toFixed(1);
+  if (param === "fx") return Math.round(raw * 3.6) + "";
+  if (param === "vv") return raw >= 10000 ? "10+" : raw >= 1000 ? (raw/1000).toFixed(1) + "k" : Math.round(raw) + "m";
+  if (param === "n") return Math.round(raw) + "/8";
+  if (param === "p0") return raw.toFixed(0);
+  if (param === "rh") return Math.round(raw) + "%";
+  return raw.toFixed(PARAMS[param].decimalen) + (param === "ta" || param === "td" || param === "tg" ? "°" : "");
+}
+
+function tekenKaart() {
+  const svg = document.getElementById("nl-kaart");
+  svg.innerHTML = "";
+  const p = PARAMS[huidigParam];
+
+  Object.values(stationData).forEach(st => {
+    if (!st || st.lon == null || st.lat == null) return;
+    const val = getVal(st, huidigParam);
+    if (val == null) return;
+    const tekst = formatKaart(st, huidigParam);
+    if (tekst == null) return;
+
+    const cx = lonToX(st.lon), cy = latToY(st.lat);
+    const [bg, fg] = interpKleur(val, p.schaal, p.kleuren);
+
+    const g = ns("g");
+    const circle = ns("circle");
+    circle.setAttribute("cx", cx); circle.setAttribute("cy", cy);
+    circle.setAttribute("r", 22); circle.setAttribute("fill", bg);
+    circle.setAttribute("stroke", "white"); circle.setAttribute("stroke-width", "1.5");
+    g.appendChild(circle);
+
+    const text = ns("text");
+    text.setAttribute("x", cx); text.setAttribute("y", huidigParam === "ff" ? cy - 3 : cy + 4);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", tekst.length > 5 ? "9" : "12");
+    text.setAttribute("font-weight", "bold");
+    text.setAttribute("font-family", "Arial,sans-serif");
+    text.setAttribute("fill", fg);
+    text.textContent = tekst;
+    g.appendChild(text);
+
+    if (huidigParam === "ff") {
+      const tr = ns("rect");
+      tr.setAttribute("x", cx - 18); tr.setAttribute("y", cy + 6);
+      tr.setAttribute("width", 36); tr.setAttribute("height", 13);
+      tr.setAttribute("rx", 3); tr.setAttribute("fill", "white");
+      tr.setAttribute("stroke", "#ccc"); tr.setAttribute("stroke-width", "0.8");
+      g.appendChild(tr);
+      const tt = ns("text");
+      tt.setAttribute("x", cx); tt.setAttribute("y", cy + 15);
+      tt.setAttribute("text-anchor", "middle"); tt.setAttribute("font-size", "9");
+      tt.setAttribute("font-family", "Arial,sans-serif"); tt.setAttribute("fill", "#444");
+      tt.textContent = "Bft " + msToBft(st.ff);
+      g.appendChild(tt);
+    }
+    svg.appendChild(g);
+  });
+
+  // Copyright + tijdstempel
+  const cr = ns("text");
+  cr.setAttribute("x", SVG_W - 10); cr.setAttribute("y", SVG_H - 12);
+  cr.setAttribute("text-anchor", "end"); cr.setAttribute("font-size", "16");
+  cr.setAttribute("font-family", "Arial,sans-serif"); cr.setAttribute("font-style", "italic");
+  cr.setAttribute("fill", "#888"); cr.textContent = "© Ed Aldus / KNMI";
+  svg.appendChild(cr);
+}
+
+function tekenLijst() {
+  const lijst = document.getElementById("stations-lijst");
+  const sorteer = document.getElementById("sorteer").value;
+  const items = Object.values(stationData).filter(st => st && st.lon != null);
+
+  if (sorteer === "naam") {
+    items.sort((a, b) => a.naam.localeCompare(b.naam));
+  } else {
+    items.sort((a, b) => {
+      const va = getVal(a, huidigParam), vb = getVal(b, huidigParam);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return sorteer === "param-asc" ? va - vb : vb - va;
+    });
+  }
+
+  // Bepaal hoogste en laagste voor highlight
+  const vals = items.map(st => getVal(st, huidigParam)).filter(v => v != null);
+  const maxVal = Math.max(...vals), minVal = Math.min(...vals);
+
+  let html = "";
+  items.forEach(st => {
+    const val = getVal(st, huidigParam);
+    const isTop = val != null && val === maxVal;
+    const isBottom = val != null && val === minVal;
+    const cls = isTop ? " top" : isBottom ? " bottom" : "";
+
+    html += `<div class="station-rij${cls}">`;
+    html += `<div class="station-naam">${st.naam}</div>`;
+    html += `<div class="station-waarden">`;
+
+    // Alle waarden compact
+    const show = [
+      ["🌡", "ta", st.ta != null ? st.ta.toFixed(1) + "°" : "–"],
+      ["💧", "td", st.td != null ? st.td.toFixed(1) + "°" : "–"],
+      ["🌬", "ff", st.ff != null ? msToBft(st.ff) + " Bft" : "–"],
+      ["💨", "fx", st.fx != null ? Math.round(st.fx * 3.6) + " km/h" : "–"],
+      ["☁", "n", st.n != null ? st.n + "/8" : "–"],
+      ["💦", "rh", st.rh != null ? Math.round(st.rh) + "%" : "–"],
+      ["👁", "vv", st.vv != null ? (st.vv >= 10000 ? ">10km" : st.vv >= 1000 ? (st.vv/1000).toFixed(1) + "km" : Math.round(st.vv) + "m") : "–"],
+      ["🌿", "tg", (st.tg ?? st.tgn) != null ? (st.tg ?? st.tgn).toFixed(1) + "°" : "–"],
+      ["📊", "p0", st.p0 != null ? st.p0.toFixed(1) : "–"],
+    ];
+
+    show.forEach(([icon, key, txt]) => {
+      const hl = key === huidigParam ? " highlight" : "";
+      html += `<span class="station-val${hl}">${icon} <b>${txt}</b></span>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  lijst.innerHTML = html;
+  document.getElementById("n-stations").textContent = items.length;
+}
+
+function tekenLegenda() {
+  const p = PARAMS[huidigParam];
+  document.getElementById("legenda").innerHTML = p.kleuren.map(([k, l]) =>
+    `<div class="legenda-item"><div class="legenda-blok" style="background:${k}"></div>${l}</div>`
+  ).join("");
+}
+
+function tekenAlles() {
+  document.getElementById("kaart-dag").textContent =
+    new Date().toLocaleDateString("nl-NL", {weekday: "long", day: "numeric", month: "short"});
+  document.getElementById("kaart-param-label").textContent = PARAMS[huidigParam]?.label || "";
+  tekenKaart();
+  tekenLijst();
+  tekenLegenda();
+}
+
+function laadActueel() {
+  fetch("actueel.json?t=" + Date.now())
+    .then(r => r.json())
+    .then(json => {
+      stationData = json.stations || {};
+      document.getElementById("hdr-update").textContent = json.bijgewerkt || "";
+      tekenAlles();
+    })
+    .catch(e => console.error("Laden mislukt:", e));
+}
+
+// Parameter knoppen
+document.querySelectorAll(".btn-param").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".btn-param").forEach(b => b.classList.remove("actief"));
+    btn.classList.add("actief");
+    huidigParam = btn.dataset.param;
+    tekenAlles();
+  });
+});
+
+// Init
+laadActueel();
+setInterval(laadActueel, 10 * 60 * 1000);
+</script>
+</body>
+</html>
