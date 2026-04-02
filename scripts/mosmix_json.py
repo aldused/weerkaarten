@@ -182,7 +182,7 @@ def verwerk_station(code, naam):
         "tx": [], "tn": [],
         "ff_dag": [], "fx_dag": [], "dd_dag": [],
         "ff_nacht": [], "fx_nacht": [], "dd_nacht": [],
-        "rr": 0.0,
+        "rr": 0.0, "rr_dag": 0.0, "rr_nacht": 0.0,
         "sd": 0.0, "heeft_sd": False, "neff": [],
         "td_nacht": [],
         "gevoels_nacht": [],
@@ -220,9 +220,13 @@ def verwerk_station(code, naam):
             if i < len(fx_raw) and fx_raw[i] is not None:
                 dd["fx_nacht"].append(fx_raw[i])
 
-        # Neerslag: hele dag
+        # Neerslag: hele dag + dag/nacht apart
         if i < len(rr_raw) and rr_raw[i] is not None:
             dd["rr"] += rr_raw[i]
+            if 6 <= hour < 18:
+                dd["rr_dag"] += rr_raw[i]
+            else:
+                dd["rr_nacht"] += rr_raw[i]
 
         # Zon: SunD1 (seconden afgelopen uur)
         if i < len(sd_raw) and sd_raw[i] is not None:
@@ -288,6 +292,8 @@ def verwerk_station(code, naam):
 
         # Neerslag
         r["RR"] = round(dd["rr"], 1)
+        r["RR_D"] = round(dd["rr_dag"], 1)
+        r["RR_N"] = round(dd["rr_nacht"], 1)
 
         # Zon
         neff_gem = round(sum(dd["neff"]) / len(dd["neff"])) if dd["neff"] else None
@@ -352,7 +358,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "RR", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ"]
+    params = ["TX", "TN", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ"]
 
     for d in dagen:
         dag_key = d.isoformat()
