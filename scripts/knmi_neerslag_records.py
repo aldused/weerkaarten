@@ -163,42 +163,42 @@ def bereken_records(data):
         seizoen_data[sz_key]     += rd_mm
         jaar_data[jaar]          += rd_mm
 
-    dag_top = sorted(
+    dag_alle = sorted(
         [{"waarde": round(v,1), "datum": f"{k[:4]}-{k[4:6]}-{k[6:8]}"}
          for k,v in dag_data.items()],
         key=lambda x: -x["waarde"]
-    )[:TOP_N]
+    )
 
-    dec_top = sorted([
+    dec_alle = sorted([
         {"waarde": round(v,1),
          "label": f"{NL_MND[k[1]]} decade {k[2]}, {k[0]}",
          "jaar": k[0], "mnd": k[1], "dec": k[2]}
         for k,v in dec_data.items()
-    ], key=lambda x: -x["waarde"])[:TOP_N]
+    ], key=lambda x: -x["waarde"])
 
-    mnd_top = sorted([
+    mnd_alle = sorted([
         {"waarde": round(v,1),
          "label": f"{NL_MND_LANG[k[1]]} {k[0]}",
          "jaar": k[0], "mnd": k[1]}
         for k,v in mnd_data.items()
-    ], key=lambda x: -x["waarde"])[:TOP_N]
+    ], key=lambda x: -x["waarde"])
 
-    seizoen_top = sorted([
+    seizoen_alle = sorted([
         {"waarde": round(v,1),
          "label": f"{k[0]} {k[1]}" + (f"/{k[1]+1}" if k[0] == "winter" else ""),
          "seizoen": k[0], "jaar": k[1]}
         for k,v in seizoen_data.items()
-    ], key=lambda x: -x["waarde"])[:TOP_N]
+    ], key=lambda x: -x["waarde"])
 
-    jaar_top = sorted([
+    jaar_alle = sorted([
         {"waarde": round(v,1), "jaar": k}
         for k,v in jaar_data.items()
-    ], key=lambda x: -x["waarde"])[:TOP_N]
+    ], key=lambda x: -x["waarde"])
 
-    sneeuw_top = sorted([
+    sneeuw_alle = sorted([
         {"waarde": rij["sx"], "datum": f"{rij['d'][:4]}-{rij['d'][4:6]}-{rij['d'][6:8]}"}
         for rij in data if rij.get("sx") and 0 < rij["sx"] <= 200
-    ], key=lambda x: -x["waarde"])[:TOP_N]
+    ], key=lambda x: -x["waarde"])
 
     # Jaarsommen voor grafiek (gesorteerd op jaar)
     jaar_reeks = sorted([
@@ -207,10 +207,13 @@ def bereken_records(data):
     ], key=lambda x: x["jaar"])
 
     return {
-        "dag": dag_top, "decade": dec_top,
-        "maand": mnd_top, "seizoen": seizoen_top,
-        "jaar": jaar_top, "sneeuw": sneeuw_top,
-        "jaar_reeks": jaar_reeks
+        "dag": dag_alle[:TOP_N], "decade": dec_alle[:TOP_N],
+        "maand": mnd_alle[:TOP_N], "seizoen": seizoen_alle[:TOP_N],
+        "jaar": jaar_alle[:TOP_N], "sneeuw": sneeuw_alle[:TOP_N],
+        "jaar_reeks": jaar_reeks,
+        "_dag": dag_alle, "_decade": dec_alle,
+        "_maand": mnd_alle, "_seizoen": seizoen_alle,
+        "_jaar": jaar_alle, "_sneeuw": sneeuw_alle,
     }
 
 
@@ -221,20 +224,32 @@ def bereken_landelijk(alle_records, stations):
     for nr_str, rec in alle_records.items():
         info = stations.get(nr_str, {})
         naam = info.get("naam", f"Station {nr_str}")
-        for r in rec.get("dag",     []): dag_alle.append({**r,     "station": nr_str, "naam": naam})
-        for r in rec.get("decade",  []): dec_alle.append({**r,     "station": nr_str, "naam": naam})
-        for r in rec.get("maand",   []): mnd_alle.append({**r,     "station": nr_str, "naam": naam})
-        for r in rec.get("seizoen", []): seizoen_alle.append({**r, "station": nr_str, "naam": naam})
-        for r in rec.get("jaar",    []): jaar_alle.append({**r,    "station": nr_str, "naam": naam})
-        for r in rec.get("sneeuw",  []): sneeuw_alle.append({**r,  "station": nr_str, "naam": naam})
+        for r in rec.get("_dag",     rec.get("dag", [])):     dag_alle.append({**r,     "station": nr_str, "naam": naam})
+        for r in rec.get("_decade",  rec.get("decade", [])):  dec_alle.append({**r,     "station": nr_str, "naam": naam})
+        for r in rec.get("_maand",   rec.get("maand", [])):   mnd_alle.append({**r,     "station": nr_str, "naam": naam})
+        for r in rec.get("_seizoen", rec.get("seizoen", [])): seizoen_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("_jaar",    rec.get("jaar", [])):    jaar_alle.append({**r,    "station": nr_str, "naam": naam})
+        for r in rec.get("_sneeuw",  rec.get("sneeuw", [])):  sneeuw_alle.append({**r,  "station": nr_str, "naam": naam})
+
+    # Per unieke periode alleen de top 3 stations bewaren (beheersbare grootte)
+    def top_per_groep(items, sleutel_fn, n=3):
+        groepen = defaultdict(list)
+        for r in items:
+            groepen[sleutel_fn(r)].append(r)
+        resultaat = []
+        for vals in groepen.values():
+            vals.sort(key=lambda x: -x["waarde"])
+            resultaat.extend(vals[:n])
+        resultaat.sort(key=lambda x: -x["waarde"])
+        return resultaat
 
     return {
-        "dag":     sorted(dag_alle,     key=lambda x: -x["waarde"]),
-        "decade":  sorted(dec_alle,     key=lambda x: -x["waarde"]),
-        "maand":   sorted(mnd_alle,     key=lambda x: -x["waarde"]),
-        "seizoen": sorted(seizoen_alle, key=lambda x: -x["waarde"]),
-        "jaar":    sorted(jaar_alle,    key=lambda x: -x["waarde"]),
-        "sneeuw":  sorted(sneeuw_alle,  key=lambda x: -x["waarde"]),
+        "dag":     top_per_groep(dag_alle,     lambda r: r["datum"][:7], n=10),  # top 10 per maand
+        "decade":  top_per_groep(dec_alle,     lambda r: (r["jaar"], r["mnd"], r["dec"]), n=10),
+        "maand":   top_per_groep(mnd_alle,     lambda r: (r["jaar"], r["mnd"]), n=10),
+        "seizoen": top_per_groep(seizoen_alle, lambda r: (r["jaar"], r["seizoen"]), n=10),
+        "jaar":    top_per_groep(jaar_alle,    lambda r: r["jaar"], n=10),
+        "sneeuw":  top_per_groep(sneeuw_alle,  lambda r: r["datum"][:7], n=10),
     }
 
 
@@ -250,7 +265,7 @@ def main():
     else:
         output = {"stations": {}, "landelijk": {}, "bijgewerkt": ""}
 
-    alle_records = output.get("stations", {})
+    alle_records = {}  # Forceer herberekening van alle stations
 
     verwerkt = 0
     for nr_str, info in sorted(stations.items(), key=lambda x: int(x[0])):
@@ -282,8 +297,14 @@ def main():
 
     stationsnamen = {k: v["naam"] for k, v in stations.items()}
 
+    # Verwijder volledige data (_keys) uit per-station output (alleen top N behouden)
+    stations_export = {
+        nr: {k: v for k, v in rec.items() if not k.startswith("_")}
+        for nr, rec in alle_records.items()
+    }
+
     output = {
-        "stations": alle_records,
+        "stations": stations_export,
         "landelijk": landelijk,
         "stationsnamen": stationsnamen,
         "bijgewerkt": datetime.now().isoformat(),
