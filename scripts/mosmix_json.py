@@ -181,6 +181,7 @@ def verwerk_station(code, naam):
     daily = defaultdict(lambda: {
         "tx": [], "tn": [],
         "ff_dag": [], "fx_dag": [], "dd_dag": [],
+        "ff_nacht": [], "fx_nacht": [], "dd_nacht": [],
         "rr": 0.0,
         "sd": 0.0, "heeft_sd": False, "neff": [],
         "td_nacht": [],
@@ -211,6 +212,13 @@ def verwerk_station(code, naam):
                 dd["dd_dag"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
             if i < len(fx_raw) and fx_raw[i] is not None:
                 dd["fx_dag"].append(fx_raw[i])
+        # Wind: nacht 18-06h
+        else:
+            if i < len(ff_raw) and ff_raw[i] is not None:
+                dd["ff_nacht"].append(ff_raw[i])
+                dd["dd_nacht"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
+            if i < len(fx_raw) and fx_raw[i] is not None:
+                dd["fx_nacht"].append(fx_raw[i])
 
         # Neerslag: hele dag
         if i < len(rr_raw) and rr_raw[i] is not None:
@@ -267,6 +275,16 @@ def verwerk_station(code, naam):
             r["DD"] = None
 
         r["FX"] = round(max(dd["fx_dag"]) * 3.6, 1) if dd["fx_dag"] else None
+
+        # Wind nacht (18-06h)
+        if dd["ff_nacht"]:
+            r["FF_N"] = round(sum(dd["ff_nacht"]) / len(dd["ff_nacht"]) * 3.6, 1)
+            max_idx_n = dd["ff_nacht"].index(max(dd["ff_nacht"]))
+            r["DD_N"] = round(dd["dd_nacht"][max_idx_n]) if max_idx_n < len(dd["dd_nacht"]) and dd["dd_nacht"][max_idx_n] is not None else None
+        else:
+            r["FF_N"] = None
+            r["DD_N"] = None
+        r["FX_N"] = round(max(dd["fx_nacht"]) * 3.6, 1) if dd["fx_nacht"] else None
 
         # Neerslag
         r["RR"] = round(dd["rr"], 1)
@@ -334,7 +352,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "RR", "FF", "FX", "DD", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ"]
+    params = ["TX", "TN", "RR", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ"]
 
     for d in dagen:
         dag_key = d.isoformat()
