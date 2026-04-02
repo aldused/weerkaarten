@@ -364,7 +364,9 @@ async function zoekPlaats(){
   res.innerHTML='<div class="zoek-item" style="color:#8888bb">Zoeken…</div>';
   res.style.display='';
   try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=nl`,{headers:{'Accept-Language':'nl'}});
+    const ctrl=new AbortController();
+    setTimeout(()=>ctrl.abort(),10000);
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=nl`,{headers:{'Accept-Language':'nl'},signal:ctrl.signal});
     const data=await r.json();
     if(!data.length){res.innerHTML='<div class="zoek-item" style="color:#8888bb">Niets gevonden</div>';return;}
     res.innerHTML='';
@@ -552,6 +554,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
     fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
   ]);
+  if(!ens?.hourly?.time) throw new Error('Geen ensemble data ontvangen');
   const times=ens.hourly.time;
   const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
   const tK=Object.keys(ens.hourly).filter(k=>k.startsWith('temperature_2m_member'));
@@ -1309,11 +1312,13 @@ async function laadVergelijking(){
     const te=document.getElementById(`verg-type-${i}`);
     if(!se||!te)continue;
     const sv=se.value.split(',');
-    const lat=sv[0],lon=sv[1],naam=sv[2];
+    if(sv.length<3||!sv[0]||!sv[1]){continue;}
+    const lat=sv[0],lon=sv[1],naam=sv[2]||'Onbekend';
     try{
       await laadVergPluim(i,lat,lon,naam,te.value,vergDagen,vergModel);
     }catch(e){
-      document.getElementById(`verg-cel-${i}`).innerHTML=`<div style="color:#ee4444;padding:20px;font-size:.85rem">&#9888;&#65039; Fout bij ${naam}: ${e.message}</div>`;
+      const cel=document.getElementById(`verg-cel-${i}`);
+      if(cel) cel.innerHTML=`<div style="color:#ee4444;padding:20px;font-size:.85rem">&#9888;&#65039; Fout bij ${naam}: ${e.message}</div>`;
     }
   }
 }
@@ -2028,19 +2033,20 @@ function restoreState(){
   const parts=h.split('|');
   if(parts.length<5)return false;
   const[type,preset,lat,lon,naam]=parts;
+  if(!lat||!lon||isNaN(parseFloat(lat))||isNaN(parseFloat(lon)))return false;
   // Herstel type
   document.querySelectorAll('.type-btn').forEach(b=>{
     b.classList.toggle('actief',b.dataset.type===type);
   });
-  actieveType=type;
+  actieveType=type||'temp';
   // Herstel periode
   document.querySelectorAll('.periode-btn').forEach(b=>{
     b.classList.toggle('actief',b.dataset.preset===preset);
   });
-  actievePreset=preset;
+  actievePreset=preset||'7';
   document.getElementById('wrap-custom').style.display=preset==='custom'?'':'none';
   // Herstel station
-  setStation(lat,lon,naam);
+  setStation(lat,lon,naam||'Onbekend');
   return true;
 }
 
