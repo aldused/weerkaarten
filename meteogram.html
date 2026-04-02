@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meteogram – Weerlab.nl</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Inter, Arial, sans-serif;
+  background: #f0f4f8;
+  color: #1a2b40;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  background: #003366;
+  padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 2px solid #2ec4e8;
+}
+.header h1 { color: white; font-size: 1.1em; font-weight: 700; }
+.header p  { color: #a8c4e8; font-size: 0.72em; margin-top: 2px; }
+.header-right { color: #a8c4e8; font-size: 0.72em; text-align: right; line-height: 1.6; }
+.header-right strong { color: white; }
+
+/* ── Controls ── */
+.controls {
+  background: white;
+  border-bottom: 1px solid #d0d8e4;
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.ctrl-label {
+  font-size: 0.72em;
+  font-weight: 600;
+  color: #5a6a80;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+}
+.station-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.74em;
+  font-weight: 600;
+  background: white;
+  transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+  user-select: none;
+}
+.station-btn:hover { transform: scale(1.04); }
+.station-btn.actief { box-shadow: 0 0 0 2px rgba(0,102,204,0.3); }
+.station-btn:not(.actief) { opacity: 0.45; }
+.station-btn .dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.btn-download {
+  margin-left: auto;
+  padding: 5px 14px;
+  border-radius: 12px;
+  border: 1px solid #c5d3e3;
+  background: #f4f7fb;
+  color: #2a4a70;
+  font-size: 0.72em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-download:hover { background: #dce9f7; border-color: #4a90c4; }
+
+/* ── Meteogram container ── */
+.content { padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
+
+.meteogram-wrap {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 16px 12px 10px;
+  overflow: hidden;
+}
+
+.panel-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 1px solid #e8ecf0;
+}
+.panel-row:last-child { border-bottom: none; }
+
+.panel-label {
+  width: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 0.7em;
+  font-weight: 700;
+  color: #5a7090;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 2px;
+  background: #f8fafb;
+  border-right: 1px solid #e8ecf0;
+  flex-shrink: 0;
+}
+.panel-chart {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+/* ── Weersymbolen balk ── */
+.symbolen-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #e8ecf0;
+}
+.symbolen-label {
+  width: 44px; min-width: 44px;
+  background: #f8fafb;
+  border-right: 1px solid #e8ecf0;
+}
+#symbolen-strip {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  overflow: hidden;
+}
+
+/* ── Dag/tijd header balk ── */
+.dagtijd-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #d0d8e4;
+  background: #f4f7fb;
+}
+.dagtijd-label {
+  width: 44px; min-width: 44px;
+  background: #f4f7fb;
+  border-right: 1px solid #e8ecf0;
+}
+#dagtijd-strip {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  overflow: hidden;
+}
+
+/* ── Legenda ── */
+.legenda-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 8px 12px 4px;
+  font-size: 0.72em;
+  color: #5a6a80;
+}
+.legenda-bar span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.leg-lijn { display: inline-block; width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.leg-blok { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.leg-dash { display: inline-block; width: 20px; height: 0; border-top: 2px dashed; flex-shrink: 0; }
+.leg-area { display: inline-block; width: 14px; height: 10px; border-radius: 2px; flex-shrink: 0; opacity: 0.5; }
+
+/* ── Status / Footer ── */
+#status {
+  text-align: center;
+  padding: 60px 20px;
+  color: #5a6a80;
+  font-size: 0.9em;
+}
+.spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 2px solid #d0d8e4;
+  border-top-color: #0066cc;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.copyright {
+  text-align: center;
+  font-size: 0.7em;
+  color: #8899aa;
+  padding: 10px 0 6px;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+@media (max-width: 700px) {
+  .controls { flex-direction: column; align-items: flex-start; }
+  .btn-download { margin-left: 0; }
+  .panel-label, .symbolen-label, .dagtijd-label { width: 30px; min-width: 30px; font-size: 0.6em; }
+  .header { flex-direction: column; text-align: center; }
+  .header-right { text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Meteogram &mdash; 5-daagse verwachting</h1>
+    <p id="header-sub">Harmonie (0-48u) + ECMWF (48-120u) &middot; Open-Meteo &middot; uurlijks</p>
+  </div>
+  <div class="header-right">
+    Ed Aldus<br>
+    <span id="klok"></span>
+  </div>
+</div>
+
+<div class="controls" style="gap:6px;padding-bottom:8px">
+  <span class="ctrl-label">Plaats:</span>
+  <div style="position:relative;flex:0 0 auto">
+    <input type="text" id="zoek-input" placeholder="Bijv. Barendrecht..." style="border:1px solid #d0d8e4;border-radius:6px;padding:5px 10px;font-size:0.82em;width:200px;outline:none;font-family:inherit" oninput="zoekDebounce()">
+    <div id="zoek-resultaten" style="display:none;position:absolute;top:100%;left:0;z-index:99;background:white;border:1px solid #d0d8e4;border-radius:6px;min-width:260px;max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,0.12)"></div>
+  </div>
+  <button onclick="voegFavorietToe()" style="padding:4px 10px;border-radius:12px;border:1px solid #d0d8e4;background:#fff8e0;color:#996600;font-size:.74em;font-weight:600;cursor:pointer" title="Bewaar huidige plaats als favoriet">&#9733; Bewaar</button>
+  <div id="favorieten-lijst" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+</div>
+
+<div class="content">
+  <div id="status"><span class="spinner"></span> Meteogram laden&hellip;</div>
+
+  <div id="meteogram-container" style="display:none">
+    <div class="legenda-bar" id="legenda">
+      <span><span class="leg-lijn" style="background:#ee3333"></span> Temperatuur</span>
+      <span><span class="leg-lijn" style="background:#4488cc"></span> Dauwpunt</span>
+      <span><span class="leg-area" style="background:#ccddee"></span> Vochtspreiding</span>
+      <span><span class="leg-lijn" style="background:#e69500"></span> Wind</span>
+      <span><span class="leg-dash" style="border-color:#ff6600"></span> Windvlagen</span>
+      <span><span class="leg-blok" style="background:#5599dd"></span> Neerslag</span>
+      <span><span class="leg-blok" style="background:#b0c8e0"></span> Hoge bewolking</span>
+      <span><span class="leg-blok" style="background:#7a9ab8"></span> Middelhoge bew.</span>
+      <span><span class="leg-blok" style="background:#4a6a88"></span> Lage bewolking</span>
+      <span style="color:#cc8800;font-weight:600">&#9474; Modelgrens 48u</span>
+    </div>
+
+    <div class="meteogram-wrap">
+      <!-- Plaatsnaam -->
+      <div id="plaats-titel" style="padding:6px 12px 2px;font-size:1em;font-weight:700;color:#003366;display:flex;align-items:center;gap:8px">
+        <span id="plaats-naam">De Bilt</span>
+        <span id="plaats-coords" style="font-size:0.7em;font-weight:400;color:#8899aa"></span>
+      </div>
+      <!-- Dag/tijd header -->
+      <div class="dagtijd-row">
+        <div class="dagtijd-label"></div>
+        <canvas id="c-dagtijd"></canvas>
+      </div>
+      <!-- Weersymbolen -->
+      <div class="symbolen-row">
+        <div class="symbolen-label"></div>
+        <canvas id="c-symbolen"></canvas>
+      </div>
+      <!-- Temperatuur + Dauwpunt -->
+      <div class="panel-row">
+        <div class="panel-label">Temp &deg;C</div>
+        <div class="panel-chart" style="height:200px"><canvas id="c-temp"></canvas></div>
+      </div>
+      <!-- Wind + Vlagen -->
+      <div class="panel-row">
+        <div class="panel-label">Wind Bft</div>
+        <div class="panel-chart" style="height:180px"><canvas id="c-wind"></canvas></div>
+      </div>
+      <!-- Neerslag -->
+      <div class="panel-row">
+        <div class="panel-label">Neerslag mm</div>
+        <div class="panel-chart" style="height:140px"><canvas id="c-neerslag"></canvas></div>
+      </div>
+      <!-- Bewolking -->
+      <div class="panel-row">
+        <div class="panel-label">Bewolking %</div>
+        <div class="panel-chart" style="height:140px"><canvas id="c-cloud"></canvas></div>
+      </div>
+    </div>
+
+    <div class="copyright">&copy; Ed Aldus &middot; Weerlab.nl &mdash; Data: Open-Meteo (KNMI Harmonie &amp; ECMWF)</div>
+
+    <button class="btn-download" id="btn-png" style="margin-top:6px">&#128247; Download PNG</button>
+  </div>
+</div>
+
+<script>
+// ── Configuratie ────────────────────────────────────────────────────────────
+
+const STATIONS = [
+  { naam: 'De Bilt',     lat: 52.101, lon: 5.178,  kleur: '#E63946' },
+  { naam: 'Rotterdam',   lat: 51.957, lon: 4.437,  kleur: '#9B5DE5' },
+  { naam: 'Amsterdam',   lat: 52.309, lon: 4.781,  kleur: '#457B9D' },
+  { naam: 'Maastricht',  lat: 50.911, lon: 5.770,  kleur: '#F4A261' },
+  { naam: 'Leeuwarden',  lat: 53.224, lon: 5.774,  kleur: '#2A9D8F' },
+  { naam: 'Eindhoven',   lat: 51.451, lon: 5.377,  kleur: '#B5179E' },
+  { naam: 'Eelde',       lat: 53.123, lon: 6.586,  kleur: '#06D6A0' },
+  { naam: 'Vlissingen',  lat: 51.442, lon: 3.596,  kleur: '#E9C46A' },
+  { naam: 'Den Helder',  lat: 52.928, lon: 4.789,  kleur: '#FF6B6B' },
+  { naam: 'Dordrecht',   lat: 51.808, lon: 4.669,  kleur: '#6A994E' },
+  { naam: 'Enschede',    lat: 52.275, lon: 6.889,  kleur: '#00B4D8' },
+];
+
+let actiefStation = 0;
+let charts = {};
+let chartTimestamps = {};
+let modelGrensIdx = 0;
+let windRichtingData = [];
+let weerCodeData = [];
+let mergedTimes = [];
+let refreshTimer = null;
+
+const GRID = '#d0d8e4';
+const TICK = '#5a6a80';
+const NL_DAGEN = ['zo','ma','di','wo','do','vr','za'];
+const NL_DAGEN_LANG = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const NL_MAANDEN = ['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+// ── WMO weercode naar symbool ───────────────────────────────────────────────
+
+function weerSymbool(code, isNacht) {
+  if (code == null) return '';
+  // Helder
+  if (code === 0) return isNacht ? '\u{1F319}' : '\u2600\uFE0F';
+  // Licht bewolkt
+  if (code === 1) return isNacht ? '\u{1F319}' : '\u{1F324}\uFE0F';
+  // Half bewolkt
+  if (code === 2) return isNacht ? '\u2601\uFE0F' : '\u26C5';
+  // Bewolkt
+  if (code === 3) return '\u2601\uFE0F';
+  // Mist
+  if (code >= 45 && code <= 48) return '\u{1F32B}\uFE0F';
+  // Motregen
+  if (code >= 51 && code <= 55) return '\u{1F326}\uFE0F';
+  // Aanvriezende motregen
+  if (code >= 56 && code <= 57) return '\u2744\uFE0F';
+  // Regen
+  if (code >= 61 && code <= 65) return '\u{1F327}\uFE0F';
+  // Aanvriezende regen
+  if (code >= 66 && code <= 67) return '\u{1F9CA}';
+  // Sneeuw
+  if (code >= 71 && code <= 77) return '\u{1F328}\uFE0F';
+  // Buien
+  if (code >= 80 && code <= 82) return '\u{1F327}\uFE0F';
+  // Sneeuwbuien
+  if (code >= 85 && code <= 86) return '\u{1F328}\uFE0F';
+  // Onweer
+  if (code >= 95) return '\u26C8\uFE0F';
+  return '\u2601\uFE0F';
+}
+
+// ── Klok ────────────────────────────────────────────────────────────────────
+
+function updateKlok() {
+  const nu = new Date();
+  const d = NL_DAGEN[nu.getDay()];
+  const dag = nu.getDate();
+  const mnd = NL_MAANDEN[nu.getMonth() + 1];
+  const t = nu.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('klok').textContent = `${d} ${dag} ${mnd} ${nu.getFullYear()} \u2013 ${t}`;
+}
+updateKlok();
+setInterval(updateKlok, 30000);
+
+// ── Dag/nacht arcering plugin ───────────────────────────────────────────────
+
+const nachtPlugin = {
+  id: 'nachtArcering',
+  beforeDraw(chart) {
+    const ts = chartTimestamps[chart.canvas.id];
+    if (!ts || !ts.length) return;
+    const ctx = chart.ctx;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y || Object.values(chart.scales).find(s => s.id !== 'x');
+    if (!xScale || !yScale) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,40,0.06)';
+    let inNacht = false, startX = 0;
+    for (let i = 0; i < ts.length; i++) {
+      const h = new Date(ts[i]).getHours();
+      const isNacht = h < 7 || h >= 21;
+      const px = xScale.getPixelForValue(i);
+      if (isNacht && !inNacht) { inNacht = true; startX = px; }
+      if (!isNacht && inNacht) {
+        ctx.fillRect(startX, yScale.top, px - startX, yScale.bottom - yScale.top);
+        inNacht = false;
+      }
+    }
+    if (inNacht) {
+      ctx.fillRect(startX, yScale.top, xScale.getPixelForValue(ts.length - 1) - startX, yScale.bottom - yScale.top);
+    }
+    ctx.restore();
+  }
+};
+
+// ── Modelgrens plugin ───────────────────────────────────────────────────────
+
+const modelGrensPlugin = {
+  id: 'modelGrens',
+  afterDraw(chart) {
+    if (!modelGrensIdx) return;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y || Object.values(chart.scales).find(s => s.id !== 'x');
+    if (!xScale || !yScale) return;
+    const px = xScale.getPixelForValue(modelGrensIdx);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#cc8800';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(px, yScale.top);
+    ctx.lineTo(px, yScale.bottom);
+    ctx.stroke();
+    // Label alleen op temp-chart
+    if (chart.canvas.id === 'c-temp') {
+      ctx.setLineDash([]);
+      ctx.font = '9px "Segoe UI", sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#cc8800';
+      ctx.textAlign = 'right';
+      ctx.fillText('\u25C0 Harmonie', px - 4, yScale.top + 4);
+      ctx.textAlign = 'left';
+      ctx.fillText('ECMWF \u25B6', px + 4, yScale.top + 4);
+    }
+    ctx.restore();
+  }
+};
+
+// ── Wind pijltjes plugin ────────────────────────────────────────────────────
+
+const windPijlPlugin = {
+  id: 'windPijlen',
+  afterDraw(chart) {
+    if (chart.canvas.id !== 'c-wind' || !windRichtingData.length) return;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    if (!xScale || !yScale) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    const y = yScale.bottom - 14;
+    for (let i = 0; i < windRichtingData.length; i += 3) {
+      const dir = windRichtingData[i];
+      if (dir == null) continue;
+      const px = xScale.getPixelForValue(i);
+      const rad = (dir + 180) * Math.PI / 180;
+      ctx.fillStyle = '#5a6a80';
+      ctx.beginPath();
+      ctx.translate(px, y);
+      ctx.rotate(rad);
+      ctx.moveTo(0, -6);
+      ctx.lineTo(-3, 5);
+      ctx.lineTo(3, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    ctx.restore();
+  }
+};
+
+// ── Middernacht gridlijnen plugin ───────────────────────────────────────────
+
+const midnachtPlugin = {
+  id: 'midnachtGrid',
+  beforeDraw(chart) {
+    const ts = chartTimestamps[chart.canvas.id];
+    if (!ts || !ts.length) return;
+    const ctx = chart.ctx;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y || Object.values(chart.scales).find(s => s.id !== 'x');
+    if (!xScale || !yScale) return;
+    ctx.save();
+    for (let i = 0; i < ts.length; i++) {
+      const d = new Date(ts[i]);
+      const h = d.getHours();
+      if (h === 0) {
+        ctx.strokeStyle = '#b0bcc8';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([]);
+      } else if (h === 12) {
+        ctx.strokeStyle = '#dde2e8';
+        ctx.lineWidth = 0.8;
+        ctx.setLineDash([3, 3]);
+      } else {
+        continue;
+      }
+      const px = xScale.getPixelForValue(i);
+      ctx.beginPath();
+      ctx.moveTo(px, yScale.top);
+      ctx.lineTo(px, yScale.bottom);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+};
+
+Chart.register(nachtPlugin, modelGrensPlugin, midnachtPlugin, windPijlPlugin);
+
+// ── Stations UI ─────────────────────────────────────────────────────────────
+
+function bouwStationBar() {
+  const bar = document.getElementById('station-bar');
+  STATIONS.forEach((st, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'station-btn' + (i === actiefStation ? ' actief' : '');
+    btn.style.borderColor = st.kleur;
+    btn.innerHTML = `<span class="dot" style="background:${st.kleur}"></span>${st.naam}`;
+    btn.onclick = () => {
+      if (i === actiefStation && !customStation) return;
+      actiefStation = i;
+      customStation = null;
+      document.getElementById('zoek-input').value = '';
+      document.querySelectorAll('.station-btn').forEach((b, j) => {
+        b.classList.toggle('actief', j === i);
+      });
+      laadEnTeken();
+    };
+    bar.appendChild(btn);
+  });
+  const dl = document.createElement('button');
+  dl.className = 'btn-download';
+  dl.innerHTML = '&#128247; PNG';
+  dl.onclick = downloadPNG;
+  bar.appendChild(dl);
+}
+
+// ── Zoekfunctie ─────────────────────────────────────────────────────────────
+
+let customStation = null; // { naam, lat, lon } als een gezochte plaats actief is
+let zoekTimer = null;
+
+function zoekDebounce() {
+  clearTimeout(zoekTimer);
+  zoekTimer = setTimeout(zoekPlaats, 350);
+}
+
+async function zoekPlaats() {
+  const q = document.getElementById('zoek-input').value.trim();
+  const resultDiv = document.getElementById('zoek-resultaten');
+  if (q.length < 2) { resultDiv.style.display = 'none'; return; }
+
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=nl&format=json`);
+    const data = await r.json();
+    if (!data.results || !data.results.length) {
+      resultDiv.innerHTML = '<div style="padding:10px;color:#999;font-size:.82em">Geen resultaten</div>';
+      resultDiv.style.display = 'block';
+      return;
+    }
+    resultDiv.innerHTML = data.results.map(r =>
+      `<div class="zoek-item" onclick="kiesZoekResultaat('${r.name.replace(/'/g,"\\'")}',${r.latitude},${r.longitude})" style="padding:8px 12px;cursor:pointer;font-size:.82em;border-bottom:1px solid #e0e4ea">
+        <strong>${r.name}</strong> <span style="color:#888;font-size:.9em">${r.admin1 || ''} ${r.country || ''}</span>
+      </div>`
+    ).join('');
+    resultDiv.style.display = 'block';
+  } catch (e) {
+    resultDiv.innerHTML = `<div style="padding:10px;color:#cc3333;font-size:.82em">Zoekfout: ${e.message}</div>`;
+    resultDiv.style.display = 'block';
+  }
+}
+
+function kiesZoekResultaat(naam, lat, lon) {
+  document.getElementById('zoek-resultaten').style.display = 'none';
+  document.getElementById('zoek-input').value = naam;
+
+  // Deselecteer alle station-knoppen
+  customStation = { naam, lat, lon };
+  actiefStation = -1;
+  document.querySelectorAll('.station-btn').forEach(b => b.classList.remove('actief'));
+
+  laadEnTeken();
+}
+
+// Sluit zoekresultaten bij klik erbuiten
+document.addEventListener('click', e => {
+  if (!e.target.closest('#zoek-resultaten') && !e.target.closest('#zoek-input')) {
+    document.getElementById('zoek-resultaten').style.display = 'none';
+  }
+});
+
+// ── Favorieten ──────────────────────────────────────────────────────────────
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function getFavorieten() {
+  try { return JSON.parse(localStorage.getItem('meteogram_favorieten') || '[]'); } catch(e) { return []; }
+}
+function saveFavorieten(f) { localStorage.setItem('meteogram_favorieten', JSON.stringify(f)); }
+
+function voegFavorietToe() {
+  const info = customStation || STATIONS[actiefStation];
+  if (!info) return;
+  let favs = getFavorieten();
+  if (favs.some(f => f.naam === info.naam)) { toonFavorieten(); return; }
+  favs.push({ naam: info.naam, lat: info.lat, lon: info.lon });
+  if (favs.length > 12) favs = favs.slice(-12);
+  saveFavorieten(favs);
+  toonFavorieten();
+}
+
+function verwijderFavoriet(naam) {
+  saveFavorieten(getFavorieten().filter(f => f.naam !== naam));
+  toonFavorieten();
+}
+
+function kiesFavoriet(naam, lat, lon) {
+  customStation = { naam, lat: parseFloat(lat), lon: parseFloat(lon) };
+  actiefStation = -1;
+  document.getElementById('zoek-input').value = naam;
+  laadEnTeken();
+  toonFavorieten();
+}
+
+function toonFavorieten() {
+  const el = document.getElementById('favorieten-lijst');
+  const favs = getFavorieten();
+  if (!favs.length) { el.innerHTML = ''; return; }
+  const huidigeNaam = customStation ? customStation.naam : STATIONS[actiefStation]?.naam;
+  el.innerHTML = favs.map(f => {
+    const actief = huidigeNaam === f.naam;
+    return `<span style="display:inline-flex;align-items:center;gap:2px;padding:3px 9px;border-radius:12px;font-size:.72em;font-weight:600;cursor:pointer;border:1px solid ${actief ? '#cc8800' : '#d0d8e4'};background:${actief ? '#fff8e0' : 'white'};color:${actief ? '#996600' : '#5a6a80'}" onclick="kiesFavoriet('${escHtml(f.naam)}','${f.lat}','${f.lon}')">
+      ${escHtml(f.naam)}<span onclick="event.stopPropagation();verwijderFavoriet('${escHtml(f.naam)}')" style="margin-left:3px;color:#aaa;font-size:.85em;cursor:pointer" title="Verwijder">\u2715</span>
+    </span>`;
+  }).join('');
+}
+
+// ── Plaatsnaam updaten ──────────────────────────────────────────────────────
+
+function updatePlaatsNaam() {
+  let naam, lat, lon;
+  if (customStation) {
+    naam = customStation.naam;
+    lat = customStation.lat;
+    lon = customStation.lon;
+  } else {
+    const st = STATIONS[actiefStation];
+    naam = st.naam;
+    lat = st.lat;
+    lon = st.lon;
+  }
+  document.getElementById('plaats-naam').textContent = naam;
+  document.getElementById('plaats-coords').textContent = `${lat.toFixed(2)}\u00B0N, ${lon.toFixed(2)}\u00B0E`;
+  return { naam, lat, lon };
+}
+
+// ── Fetch helper ────────────────────────────────────────────────────────────
+
+async function fetchT(url, ms = 20000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(id);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    clearTimeout(id);
+    throw new Error(e.name === 'AbortError' ? 'Time-out' : e.message);
+  }
+}
+
+// ── Data laden & mergen ─────────────────────────────────────────────────────
+
+async function haalData(lat, lon) {
+  const params = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code';
+  const base = 'https://api.open-meteo.com/v1/forecast';
+
+  const [harm, ecmwf] = await Promise.all([
+    fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${params}&models=knmi_seamless&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_hours=48`),
+    fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${params}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=5`),
+  ]);
+
+  return mergeModellen(harm, ecmwf);
+}
+
+function mergeModellen(harm, ecmwf) {
+  const hTimes = harm.hourly.time;
+  const eTimes = ecmwf.hourly.time;
+  const laatsteH = hTimes[hTimes.length - 1];
+
+  let spliceStart = eTimes.findIndex(t => t > laatsteH);
+  if (spliceStart < 0) spliceStart = eTimes.length;
+
+  modelGrensIdx = hTimes.length;
+
+  const merged = { time: [...hTimes, ...eTimes.slice(spliceStart)] };
+  const keys = Object.keys(harm.hourly).filter(k => k !== 'time');
+  for (const k of keys) {
+    const hArr = harm.hourly[k] || [];
+    const eArr = (ecmwf.hourly[k] || []).slice(spliceStart);
+    merged[k] = [...hArr, ...eArr];
+  }
+  return merged;
+}
+
+// ── Labels genereren ────────────────────────────────────────────────────────
+
+function maakLabels(times) {
+  return times.map(t => {
+    const d = new Date(t);
+    const h = d.getHours();
+    if (h % 3 === 0) return String(h).padStart(2, '0');
+    return '';
+  });
+}
+
+// ── Dag/tijd header tekenen ─────────────────────────────────────────────────
+
+// ── Beaufort schaal ─────────────────────────────────────────────────────────
+
+function kmhNaarBft(kmh) {
+  if (kmh < 1) return 0;
+  if (kmh < 6) return 1;
+  if (kmh < 12) return 2;
+  if (kmh < 20) return 3;
+  if (kmh < 29) return 4;
+  if (kmh < 39) return 5;
+  if (kmh < 50) return 6;
+  if (kmh < 62) return 7;
+  if (kmh < 75) return 8;
+  if (kmh < 89) return 9;
+  if (kmh < 103) return 10;
+  if (kmh < 117) return 11;
+  return 12;
+}
+
+// ── Dagstatistieken berekenen ────────────────────────────────────────────────
+
+let dagStats = [];
+
+function berekenDagStats(times, data) {
+  dagStats = [];
+  let vorigeDag = -1, dagStart = 0;
+  const indices = [];
+
+  for (let i = 0; i < times.length; i++) {
+    const dag = new Date(times[i]).getDate();
+    if (dag !== vorigeDag) {
+      if (vorigeDag !== -1) indices.push({ start: dagStart, end: i });
+      vorigeDag = dag;
+      dagStart = i;
+    }
+  }
+  indices.push({ start: dagStart, end: times.length });
+
+  indices.forEach(({ start, end }) => {
+    const temps = (data.temperature_2m || []).slice(start, end).filter(v => v != null);
+    const winds = (data.windspeed_10m || []).slice(start, end).filter(v => v != null);
+    const regen = (data.precipitation || []).slice(start, end).filter(v => v != null);
+
+    dagStats.push({
+      tMax: temps.length ? Math.round(Math.max(...temps) * 10) / 10 : null,
+      tMin: temps.length ? Math.round(Math.min(...temps) * 10) / 10 : null,
+      bft: winds.length ? kmhNaarBft(winds.reduce((s, v) => s + v, 0) / winds.length) : null,
+      mm: regen.length ? regen.reduce((s, v) => s + v, 0) : 0,
+    });
+  });
+}
+
+// ── Dag/tijd header tekenen ─────────────────────────────────────────────────
+
+function maakDagen(times) {
+  let vorigeDag = -1, dagStart = 0;
+  const dagen = [];
+  for (let i = 0; i < times.length; i++) {
+    const d = new Date(times[i]);
+    const dag = d.getDate();
+    if (dag !== vorigeDag) {
+      if (vorigeDag !== -1) dagen.push({ start: dagStart, end: i, date: new Date(times[dagStart]) });
+      vorigeDag = dag;
+      dagStart = i;
+    }
+  }
+  dagen.push({ start: dagStart, end: times.length - 1, date: new Date(times[dagStart]) });
+  return dagen;
+}
+
+function tekenDagTijdHeader(times, chartLeft, chartRight) {
+  const canvas = document.getElementById('c-dagtijd');
+  const container = canvas.parentElement;
+  canvas.width = container.clientWidth;
+  canvas.height = 52;
+  const ctx = canvas.getContext('2d');
+  const n = times.length;
+  if (!n) return;
+
+  const padL = chartLeft || 0;
+  const padR = chartRight != null ? (canvas.width - chartRight) : 0;
+  const plotW = canvas.width - padL - padR;
+  const px = i => padL + (i / (n - 1)) * plotW;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const dagen = maakDagen(times);
+
+  dagen.forEach((dag, idx) => {
+    const x1 = px(dag.start);
+    const x2 = px(dag.end);
+    const breedte = x2 - x1;
+    ctx.fillStyle = idx % 2 === 0 ? '#eef2f7' : '#f8fafb';
+    ctx.fillRect(x1, 0, breedte, canvas.height);
+
+    if (idx > 0) {
+      ctx.strokeStyle = '#c0cad4';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x1, 0);
+      ctx.lineTo(x1, canvas.height);
+      ctx.stroke();
+    }
+
+    const mid = (x1 + x2) / 2;
+
+    // Regel 1: dag + datum
+    const dagNaam = NL_DAGEN[dag.date.getDay()];
+    const dagLabel = `${dagNaam} ${dag.date.getDate()} ${NL_MAANDEN[dag.date.getMonth() + 1]}`;
+    ctx.font = 'bold 11px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#2a4060';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    if (breedte > 30) {
+      ctx.fillText(dagLabel, mid, 4);
+    }
+
+    // Regel 2+3: stats (tMax/tMin, Bft, mm)
+    const st = dagStats[idx];
+    if (st && breedte > 50) {
+      const tMaxStr = st.tMax != null ? `${st.tMax.toFixed(1)}\u00B0` : '';
+      const tMinStr = st.tMin != null ? `${st.tMin.toFixed(1)}\u00B0` : '';
+
+      // Regel 2: temperatuur rood + blauw gecentreerd
+      ctx.font = 'bold 10px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      const tempTekst = `${tMaxStr}  ${tMinStr}`;
+      const tMaxW = ctx.measureText(tMaxStr).width;
+      const spatie = ctx.measureText('  ').width;
+      const totaalW = tMaxW + spatie + ctx.measureText(tMinStr).width;
+      const tempStartX = mid - totaalW / 2;
+      ctx.fillStyle = '#cc2222';
+      ctx.textAlign = 'left';
+      ctx.fillText(tMaxStr, tempStartX, 20);
+      ctx.fillStyle = '#2266aa';
+      ctx.fillText(tMinStr, tempStartX + tMaxW + spatie, 20);
+      ctx.textAlign = 'center';
+
+      // Regel 3: wind + regen
+      if (breedte > 60) {
+        ctx.font = '9px "Segoe UI", sans-serif';
+        ctx.fillStyle = '#5a6a80';
+        const bftStr = st.bft != null ? `${st.bft} Bft` : '';
+        const mmStr = st.mm > 0 ? `${st.mm.toFixed(1)} mm` : '0 mm';
+        ctx.fillText(`${bftStr}  \u00B7  ${mmStr}`, mid, 34);
+      }
+    }
+  });
+}
+
+// ── Weersymbolen tekenen ────────────────────────────────────────────────────
+
+function tekenSymbolen(times, codes, chartLeft, chartRight) {
+  const canvas = document.getElementById('c-symbolen');
+  const container = canvas.parentElement;
+  canvas.width = container.clientWidth;
+  canvas.height = 38;
+  const ctx = canvas.getContext('2d');
+  const n = times.length;
+  if (!n || !codes.length) return;
+
+  const padL = chartLeft || 0;
+  const padR = chartRight != null ? (canvas.width - chartRight) : 0;
+  const plotW = canvas.width - padL - padR;
+  const pxFn = i => padL + (i / (n - 1)) * plotW;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '18px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Teken elke 3 uur een symbool
+  for (let i = 0; i < n; i += 3) {
+    const code = codes[i];
+    if (code == null) continue;
+    const h = new Date(times[i]).getHours();
+    const isNacht = h < 7 || h >= 21;
+    const sym = weerSymbool(code, isNacht);
+    if (sym) {
+      ctx.fillText(sym, pxFn(i), canvas.height / 2);
+    }
+  }
+}
+
+// ── Chart helpers ───────────────────────────────────────────────────────────
+
+function vernietigCharts() {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  chartTimestamps = {};
+}
+
+function basisOpties(canvasId, yLabel, yExtra = {}) {
+  const isBottom = canvasId === 'c-cloud';
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(255,255,255,0.96)',
+        titleColor: '#1a2b40',
+        bodyColor: '#333',
+        borderColor: '#d0d8e4',
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 6,
+        titleFont: { weight: 'bold', size: 11 },
+        bodyFont: { size: 11 },
+        callbacks: {
+          title: (items) => {
+            const idx = items[0]?.dataIndex;
+            if (idx == null || !mergedTimes[idx]) return '';
+            const d = new Date(mergedTimes[idx]);
+            const dagNaam = NL_DAGEN_LANG[d.getDay()];
+            return `${dagNaam} ${d.getDate()} ${NL_MAANDEN[d.getMonth()+1]} \u2013 ${String(d.getHours()).padStart(2,'0')}:00`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: {
+          display: isBottom,
+          color: TICK,
+          font: { size: 10 },
+          maxRotation: 0,
+          autoSkip: false,
+          callback: function(val, idx) {
+            const label = this.getLabelForValue(idx);
+            return label || null;
+          }
+        },
+        border: { color: GRID },
+      },
+      y: {
+        position: 'left',
+        grid: { color: '#eef1f4' },
+        ticks: {
+          color: TICK,
+          font: { size: 10 },
+          callback: v => v + (yLabel || ''),
+        },
+        border: { color: GRID },
+        afterFit(axis) { axis.width = Math.max(axis.width, 58); },
+        ...yExtra
+      }
+    }
+  };
+}
+
+function neerslagKleur(val) {
+  if (val == null || val <= 0) return 'rgba(85,153,221,0.3)';
+  if (val < 1) return 'rgba(85,153,221,0.5)';
+  if (val < 3) return 'rgba(60,120,200,0.7)';
+  return 'rgba(30,80,170,0.85)';
+}
+
+// ── Hoofd render functie ────────────────────────────────────────────────────
+
+function tekenAlles(data) {
+  vernietigCharts();
+
+  const labels = maakLabels(data.time);
+  const ts = data.time;
+  mergedTimes = ts;
+
+  ['c-temp', 'c-wind', 'c-neerslag', 'c-cloud'].forEach(id => {
+    chartTimestamps[id] = ts;
+  });
+
+  windRichtingData = data.winddirection_10m || [];
+  weerCodeData = data.weather_code || [];
+
+  // Bereken dagstats voor header
+  berekenDagStats(ts, data);
+
+  // ── 1. Temperatuur + Dauwpunt ──
+  charts.temp = new Chart(document.getElementById('c-temp'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Temperatuur',
+          data: data.temperature_2m,
+          borderColor: '#ee3333',
+          backgroundColor: 'rgba(238,51,51,0.08)',
+          borderWidth: 2.2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: false,
+          order: 1,
+        },
+        {
+          label: 'Dauwpunt',
+          data: data.dewpoint_2m,
+          borderColor: '#4488cc',
+          backgroundColor: 'rgba(68,136,204,0.08)',
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: false,
+          order: 2,
+        },
+        {
+          label: 'Vochtspreiding',
+          data: data.temperature_2m,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(180,210,240,0.22)',
+          pointRadius: 0,
+          tension: 0.3,
+          fill: { target: 1, above: 'rgba(180,210,240,0.22)', below: 'rgba(180,210,240,0.22)' },
+          order: 3,
+        },
+      ]
+    },
+    options: {
+      ...basisOpties('c-temp', '\u00B0C'),
+      plugins: {
+        ...basisOpties('c-temp', '\u00B0C').plugins,
+        tooltip: {
+          ...basisOpties('c-temp', '\u00B0C').plugins.tooltip,
+          callbacks: {
+            ...basisOpties('c-temp', '\u00B0C').plugins.tooltip.callbacks,
+            label: ctx => {
+              if (ctx.datasetIndex === 2) return null;
+              return ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '-'}\u00B0C`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ── 2. Wind + Vlagen ──
+  charts.wind = new Chart(document.getElementById('c-wind'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Windvlagen',
+          data: data.windgusts_10m,
+          borderColor: '#ff6600',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: false,
+          order: 1,
+        },
+        {
+          label: 'Wind',
+          data: data.windspeed_10m,
+          borderColor: '#e69500',
+          backgroundColor: 'rgba(230,149,0,0.12)',
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: 'origin',
+          order: 2,
+        },
+      ]
+    },
+    options: {
+      ...basisOpties('c-wind', ''),
+      scales: {
+        ...basisOpties('c-wind', '').scales,
+        y: {
+          ...basisOpties('c-wind', '').scales.y,
+          beginAtZero: true,
+          // Beaufort grenzen: 0,1,6,12,20,29,39,50,62,75,89,103
+          ticks: {
+            color: TICK,
+            font: { size: 10 },
+            stepSize: null,
+            callback: v => {
+              const bft = kmhNaarBft(v);
+              // Toon alleen bij Bft-grenzen
+              const grenzen = [0,1,6,12,20,29,39,50,62,75,89];
+              if (grenzen.includes(Math.round(v))) return `${bft} Bft`;
+              return null;
+            }
+          },
+        }
+      },
+      plugins: {
+        ...basisOpties('c-wind', '').plugins,
+        tooltip: {
+          ...basisOpties('c-wind', '').plugins.tooltip,
+          callbacks: {
+            ...basisOpties('c-wind', '').plugins.tooltip.callbacks,
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v == null) return '';
+              const bft = kmhNaarBft(v);
+              return ` ${ctx.dataset.label}: ${bft} Bft (${Math.round(v)} km/h)`;
+            },
+            afterBody: (items) => {
+              const idx = items[0]?.dataIndex;
+              if (idx == null) return '';
+              const dir = windRichtingData[idx];
+              if (dir == null) return '';
+              const richtingen = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+              const ri = richtingen[Math.round(dir / 22.5) % 16];
+              return `  Richting: ${ri} (${Math.round(dir)}\u00B0)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ── 3. Neerslag ──
+  const neerslagKleuren = (data.precipitation || []).map(v => neerslagKleur(v));
+
+  charts.neerslag = new Chart(document.getElementById('c-neerslag'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Neerslag',
+        data: data.precipitation,
+        backgroundColor: neerslagKleuren,
+        borderColor: neerslagKleuren.map(c => c.replace(/[\d.]+\)$/, '1)')),
+        borderWidth: 1,
+        borderRadius: 1,
+        barPercentage: 1,
+        categoryPercentage: 1,
+      }]
+    },
+    options: {
+      ...basisOpties('c-neerslag', ' mm'),
+      scales: {
+        ...basisOpties('c-neerslag', ' mm').scales,
+        y: {
+          ...basisOpties('c-neerslag', ' mm').scales.y,
+          beginAtZero: true,
+        }
+      },
+      plugins: {
+        ...basisOpties('c-neerslag', ' mm').plugins,
+        tooltip: {
+          ...basisOpties('c-neerslag', ' mm').plugins.tooltip,
+          callbacks: {
+            ...basisOpties('c-neerslag', ' mm').plugins.tooltip.callbacks,
+            label: ctx => ` Neerslag: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '0.0'} mm`
+          }
+        }
+      }
+    }
+  });
+
+  // ── 4. Bewolking (3 lagen) ──
+  charts.cloud = new Chart(document.getElementById('c-cloud'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Lage bewolking',
+          data: data.cloudcover_low,
+          backgroundColor: 'rgba(74,106,136,0.55)',
+          borderWidth: 0,
+          barPercentage: 1,
+          categoryPercentage: 1,
+          order: 1,
+        },
+        {
+          label: 'Middelhoge bewolking',
+          data: data.cloudcover_mid,
+          backgroundColor: 'rgba(122,154,184,0.45)',
+          borderWidth: 0,
+          barPercentage: 1,
+          categoryPercentage: 1,
+          order: 2,
+        },
+        {
+          label: 'Hoge bewolking',
+          data: data.cloudcover_high,
+          backgroundColor: 'rgba(176,200,224,0.4)',
+          borderWidth: 0,
+          barPercentage: 1,
+          categoryPercentage: 1,
+          order: 3,
+        },
+      ]
+    },
+    options: {
+      ...basisOpties('c-cloud', '%'),
+      scales: {
+        ...basisOpties('c-cloud', '%').scales,
+        x: {
+          ...basisOpties('c-cloud', '%').scales.x,
+          ticks: {
+            ...basisOpties('c-cloud', '%').scales.x.ticks,
+            display: true,
+          }
+        },
+        y: {
+          ...basisOpties('c-cloud', '%').scales.y,
+          beginAtZero: true,
+          max: 100,
+          ticks: {
+            ...basisOpties('c-cloud', '%').scales.y.ticks,
+            stepSize: 25,
+          }
+        }
+      },
+      plugins: {
+        ...basisOpties('c-cloud', '%').plugins,
+        tooltip: {
+          ...basisOpties('c-cloud', '%').plugins.tooltip,
+          callbacks: {
+            ...basisOpties('c-cloud', '%').plugins.tooltip.callbacks,
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? Math.round(ctx.parsed.y) : '-'}%`
+          }
+        }
+      }
+    }
+  });
+
+  // Teken dag/tijd header en weersymbolen NA de charts,
+  // zodat we de chartArea kunnen uitlezen voor correcte uitlijning
+  const refChart = charts.temp;
+  if (refChart) {
+    const area = refChart.chartArea;
+    tekenDagTijdHeader(ts, area.left, area.right);
+    tekenSymbolen(ts, weerCodeData, area.left, area.right);
+  }
+}
+
+// ── Hoofd laad-functie ──────────────────────────────────────────────────────
+
+async function laadEnTeken() {
+  const info = updatePlaatsNaam();
+  const statusEl = document.getElementById('status');
+  const containerEl = document.getElementById('meteogram-container');
+
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = `<span class="spinner"></span> Meteogram laden voor ${info.naam}&hellip;`;
+  containerEl.style.display = 'none';
+
+  try {
+    const data = await haalData(info.lat, info.lon);
+    statusEl.style.display = 'none';
+    containerEl.style.display = 'block';
+
+    document.getElementById('header-sub').textContent =
+      `${info.naam} \u00B7 Harmonie (0\u201348u) + ECMWF (48\u2013120u) \u00B7 Open-Meteo \u00B7 uurlijks`;
+
+    tekenAlles(data);
+    toonFavorieten();
+  } catch (err) {
+    statusEl.innerHTML = `<div style="color:#cc3333">Fout bij laden: ${err.message}</div>`;
+    containerEl.style.display = 'none';
+  }
+}
+
+// ── Download PNG ────────────────────────────────────────────────────────────
+
+function downloadPNG() {
+  // Chart.js canvassen (hebben devicePixelRatio scaling)
+  const chartIds = ['c-temp', 'c-wind', 'c-neerslag', 'c-cloud'];
+  const chartCanvassen = chartIds.map(id => document.getElementById(id));
+
+  // Gebruik de breedte van de eerste chart canvas als referentie
+  const chartW = chartCanvassen[0].width;
+  const padding = 20;
+  const headerH = 50;
+  const dagH = 56;
+  const symH = 42;
+  const footerH = 30;
+  const gap = 2;
+
+  const totalChartH = chartCanvassen.reduce((s, c) => s + c.height + gap, 0);
+  const totalH = headerH + dagH + symH + totalChartH + footerH + padding;
+  const totalW = chartW + padding * 2;
+
+  const off = document.createElement('canvas');
+  off.width = totalW;
+  off.height = totalH;
+  const ctx = off.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, off.width, off.height);
+
+  // Header balk
+  ctx.fillStyle = '#003366';
+  ctx.fillRect(0, 0, off.width, headerH);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  const plaatsNaam = customStation ? customStation.naam : STATIONS[actiefStation]?.naam || '';
+  ctx.fillText(`Meteogram ${plaatsNaam}`, padding, 32);
+  ctx.fillStyle = '#a8c4e8';
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('Ed Aldus \u00B7 Harmonie + ECMWF', off.width - padding, 32);
+  ctx.textAlign = 'left';
+
+  let y = headerH;
+
+  // Dag-labels direct tekenen op PNG canvas, uitgelijnd op chartArea
+  const n = mergedTimes.length;
+  const refChart = charts.temp;
+  const dpr = window.devicePixelRatio || 1;
+  if (n > 0 && refChart) {
+    // chartArea.left/right zijn in CSS pixels, canvas is in device pixels
+    const areaLeft = refChart.chartArea.left * dpr;
+    const areaRight = refChart.chartArea.right * dpr;
+    const plotL = padding + areaLeft;
+    const plotR = padding + areaRight;
+    const plotW = areaRight - areaLeft;
+    const pxFn = i => plotL + (i / (n - 1)) * plotW;
+
+    // Dag-header achtergrond
+    let vorigeDag = -1, dagStart = 0;
+    const dagen = [];
+    for (let i = 0; i < n; i++) {
+      const d = new Date(mergedTimes[i]);
+      const dag = d.getDate();
+      if (dag !== vorigeDag) {
+        if (vorigeDag !== -1) dagen.push({ start: dagStart, end: i, date: new Date(mergedTimes[dagStart]) });
+        vorigeDag = dag;
+        dagStart = i;
+      }
+    }
+    dagen.push({ start: dagStart, end: n - 1, date: new Date(mergedTimes[dagStart]) });
+
+    dagen.forEach((dag, idx) => {
+      const x1 = pxFn(dag.start);
+      const x2 = pxFn(dag.end);
+      const breedte = x2 - x1;
+      ctx.fillStyle = idx % 2 === 0 ? '#eef2f7' : '#f8fafb';
+      ctx.fillRect(x1, y, breedte, dagH);
+      if (idx > 0) {
+        ctx.strokeStyle = '#c0cad4';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y);
+        ctx.lineTo(x1, y + dagH);
+        ctx.stroke();
+      }
+      const mid = (x1 + x2) / 2;
+      // Dag + datum
+      ctx.font = 'bold 13px "Segoe UI", sans-serif';
+      ctx.fillStyle = '#2a4060';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${NL_DAGEN[dag.date.getDay()]} ${dag.date.getDate()} ${NL_MAANDEN[dag.date.getMonth() + 1]}`, mid, y + 14);
+      // Stats
+      const st = dagStats[idx];
+      if (st && breedte > 60) {
+        ctx.font = 'bold 12px "Segoe UI", sans-serif';
+        ctx.fillStyle = '#cc2222';
+        ctx.fillText(`${st.tMax != null ? st.tMax.toFixed(1) + '\u00B0' : ''}  ${st.tMin != null ? st.tMin.toFixed(1) + '\u00B0' : ''}`, mid, y + 30);
+        ctx.font = '11px "Segoe UI", sans-serif';
+        ctx.fillStyle = '#5a6a80';
+        ctx.fillText(`${st.bft != null ? st.bft + ' Bft' : ''} \u00B7 ${st.mm > 0 ? st.mm.toFixed(1) : '0'} mm`, mid, y + 46);
+      }
+    });
+    ctx.textAlign = 'left';
+    y += dagH;
+
+    // Weersymbolen
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(padding, y, plotW, symH);
+    ctx.font = '22px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < n; i += 3) {
+      const code = weerCodeData[i];
+      if (code == null) continue;
+      const h = new Date(mergedTimes[i]).getHours();
+      const isNacht = h < 7 || h >= 21;
+      const sym = weerSymbool(code, isNacht);
+      if (sym) ctx.fillText(sym, pxFn(i), y + symH / 2 + 6);
+    }
+    ctx.textAlign = 'left';
+    y += symH;
+  }
+
+  // Chart canvassen
+  chartCanvassen.forEach(c => {
+    ctx.drawImage(c, padding, y, chartW, c.height);
+    y += c.height + gap;
+  });
+
+  // Footer / copyright
+  ctx.fillStyle = '#8899aa';
+  ctx.font = '11px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('\u00A9 Ed Aldus \u2014 Data: Open-Meteo (KNMI Harmonie & ECMWF)', off.width / 2, y + 16);
+
+  const link = document.createElement('a');
+  const nu = new Date();
+  const ts = `${nu.getFullYear()}${String(nu.getMonth()+1).padStart(2,'0')}${String(nu.getDate()).padStart(2,'0')}_${String(nu.getHours()).padStart(2,'0')}${String(nu.getMinutes()).padStart(2,'0')}`;
+  link.download = `meteogram_${plaatsNaam.toLowerCase().replace(/\s+/g,'_')}_${ts}.png`;
+  link.href = off.toDataURL('image/png', 1.0);
+  link.click();
+}
+
+// ── Auto-refresh ────────────────────────────────────────────────────────────
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(laadEnTeken, 30 * 60 * 1000);
+}
+
+// ── Resize handler voor canvas headers ──────────────────────────────────────
+
+window.addEventListener('resize', () => {
+  if (mergedTimes.length && charts.temp) {
+    const area = charts.temp.chartArea;
+    if (area) {
+      tekenDagTijdHeader(mergedTimes, area.left, area.right);
+      tekenSymbolen(mergedTimes, weerCodeData, area.left, area.right);
+    }
+  }
+});
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+toonFavorieten();
+laadEnTeken();
+startAutoRefresh();
+
+</script>
+</body>
+</html>

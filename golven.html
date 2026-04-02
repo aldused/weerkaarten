@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golfhoogtes Noordzee – Ed Aldus WM</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1520;--bg2:#111926;--panel:#161f30;--border:#2a3a50;--text:#dde8f0;--text2:#7a99bb;--accent:#2299ff;--hdr:#0f3460}
+body{font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+.header{background:var(--hdr);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1a4a80;flex-shrink:0}
+.header h1{font-size:.9rem;font-weight:700;color:white}
+.header p{font-size:.65rem;color:#8aaccc;margin-top:0}
+.btn{padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:white;font-size:.8rem;font-weight:600;cursor:pointer;font-family:Inter,sans-serif}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:wait}
+#status-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:5px 14px;font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.main{display:flex;flex:1;overflow:hidden;min-height:0}
+#map{flex:1;min-width:0;z-index:1}
+.sidebar{width:380px;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-hdr{padding:12px 14px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sidebar-hdr h2{font-size:.9rem;font-weight:600;color:white}
+.sidebar-hdr p{font-size:.72rem;color:var(--text2);margin-top:2px}
+.sidebar-content{flex:1;overflow-y:auto;padding:10px 12px}
+.golf-groot{font-size:2.2rem;font-weight:700;color:white;line-height:1}
+.golf-label{font-size:.75rem;color:var(--text2);margin-top:2px}
+.info-rij{display:flex;justify-content:space-between;font-size:.78rem;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.info-rij span:first-child{color:var(--text2)}
+.info-rij span:last-child{color:white;font-weight:500}
+.grafiek-blok{margin-top:14px}
+.grafiek-titel{font-size:.8rem;font-weight:600;color:white;margin-bottom:6px}
+#hint{padding:40px 20px;text-align:center;color:var(--text2);font-size:.85rem;line-height:1.7}
+#hint strong{color:var(--text);display:block;font-size:1rem;margin-bottom:8px}
+.leaflet-container{background:#0a1a2e!important}
+.copyright{font-size:.65rem;color:#445566;text-align:center;padding:4px;flex-shrink:0;border-top:1px solid var(--border)}
+.legenda-bar{display:flex;align-items:center;gap:0;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+.legenda-bar .titel{font-size:.7rem;color:var(--text2);margin-right:8px;white-space:nowrap}
+.legenda-grad{display:flex;height:14px;flex:1;border-radius:3px;overflow:hidden}
+.legenda-grad div{flex:1;position:relative}
+.legenda-labels{display:flex;justify-content:space-between;font-size:.6rem;color:var(--text2);margin-top:2px;flex:1}
+.filter-btns{display:flex;gap:4px;margin-left:12px}
+.fbtn{padding:3px 10px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:.7rem;font-weight:600;cursor:pointer}
+.fbtn.actief{background:var(--accent);border-color:var(--accent);color:white}
+@media(max-width:768px){
+  .sidebar{display:none;position:fixed;right:0;top:0;height:100vh;z-index:500;width:100%;max-width:380px}
+  .sidebar.open{display:flex}
+  .sidebar-sluit{display:block!important}
+}
+.sidebar-sluit{display:none;position:absolute;top:8px;right:12px;background:none;border:none;color:var(--text2);font-size:1.2rem;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Golfhoogtes Noordzee</h1>
+    <p>Rijkswaterstaat meetnet &middot; Significante golfhoogte (Hm0) &middot; <span id="klok"></span></p>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="btn" id="btn-sidebar" onclick="toggleSidebar()" style="display:none;background:#334466">Details</button>
+    <button class="btn" id="btn-laden" onclick="laadData()">&#8635; Vernieuwen</button>
+  </div>
+</div>
+
+<div class="legenda-bar">
+  <span class="titel">Hm0 (m):</span>
+  <div style="flex:1">
+    <div class="legenda-grad">
+      <div style="background:#22aa44"></div>
+      <div style="background:#66cc33"></div>
+      <div style="background:#ccdd22"></div>
+      <div style="background:#ffbb00"></div>
+      <div style="background:#ff7711"></div>
+      <div style="background:#ee3333"></div>
+      <div style="background:#aa1155"></div>
+    </div>
+    <div class="legenda-labels">
+      <span>0</span><span>0.5</span><span>1.0</span><span>1.5</span><span>2.0</span><span>3.0</span><span>4.0+</span>
+    </div>
+  </div>
+  <div class="filter-btns">
+    <button class="fbtn actief" data-filter="alle" onclick="setFilter('alle',this)">Alle</button>
+    <button class="fbtn" data-filter="nl" onclick="setFilter('nl',this)">Nederland</button>
+    <button class="fbtn" data-filter="uk" onclick="setFilter('uk',this)">UK</button>
+    <button class="fbtn" data-filter="intl" onclick="setFilter('intl',this)">Overig</button>
+  </div>
+</div>
+
+<div id="status-bar">
+  <span id="status-tekst">Data laden...</span>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-sluit" onclick="toggleSidebar()">&times;</button>
+    <div class="sidebar-hdr">
+      <h2 id="sidebar-naam">Selecteer een meetpunt</h2>
+      <p id="sidebar-coord">Klik op een marker op de kaart</p>
+    </div>
+    <div class="sidebar-content" id="sidebar-content">
+      <div id="hint">
+        <strong>Golfhoogtes Noordzee</strong>
+        Klik op een meetpunt om de actuele golfhoogte en het verloop van de afgelopen uren te bekijken.
+        <br><br>
+        De kleur geeft de significante golfhoogte (Hm0) aan:<br>
+        <span style="color:#22aa44">groen</span> = kalm (&lt;0.5m),
+        <span style="color:#ffbb00">geel</span> = matig (1-2m),
+        <span style="color:#ee3333">rood</span> = ruw (&gt;2m)
+        <br><br>
+        <span style="font-size:.75rem;color:#556">Data: Rijkswaterstaat LMW Golven<br>Update: elke 10 minuten</span>
+      </div>
+    </div>
+    <div class="copyright">&copy; Ed Aldus WM | Data: Rijkswaterstaat DDL API + Open-Meteo Marine API</div>
+  </div>
+</div>
+
+<script>
+// ── Klok ─────────────────────────────────────────────────────────────────────
+function updateKlok() {
+  const nu = new Date();
+  document.getElementById('klok').textContent =
+    nu.toLocaleString('nl-NL', { timeZone:'Europe/Amsterdam', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+updateKlok();
+setInterval(updateKlok, 30000);
+
+// ── Kaart ────────────────────────────────────────────────────────────────────
+const kaart = L.map('map', {
+  center: [53.0, 3.8],
+  zoom: 7,
+  zoomControl: true,
+  attributionControl: false,
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 14, minZoom: 4,
+}).addTo(kaart);
+
+L.control.attribution({ prefix: '&copy; OpenStreetMap | CartoDB | Ed Aldus WM' }).addTo(kaart);
+
+// ── Kleurschaal ──────────────────────────────────────────────────────────────
+function golfKleur(h) {
+  const stops = [
+    [0,   '#22aa44'],
+    [0.5, '#66cc33'],
+    [1.0, '#ccdd22'],
+    [1.5, '#ffbb00'],
+    [2.0, '#ff7711'],
+    [3.0, '#ee3333'],
+    [4.0, '#aa1155'],
+    [6.0, '#660033'],
+  ];
+  if (h <= stops[0][0]) return stops[0][1];
+  if (h >= stops[stops.length-1][0]) return stops[stops.length-1][1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [h0, c0] = stops[i], [h1, c1] = stops[i+1];
+    if (h >= h0 && h <= h1) {
+      const f = (h - h0) / (h1 - h0);
+      return lerpKleur(c0, c1, f);
+    }
+  }
+  return '#888';
+}
+
+function lerpKleur(c0, c1, f) {
+  const r0=parseInt(c0.slice(1,3),16), g0=parseInt(c0.slice(3,5),16), b0=parseInt(c0.slice(5,7),16);
+  const r1=parseInt(c1.slice(1,3),16), g1=parseInt(c1.slice(3,5),16), b1=parseInt(c1.slice(5,7),16);
+  const r=Math.round(r0+(r1-r0)*f), g=Math.round(g0+(g1-g0)*f), b=Math.round(b0+(b1-b0)*f);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+function tekstKleur(h) {
+  return (h > 1.5) ? 'white' : '#111';
+}
+
+// ── Markers ──────────────────────────────────────────────────────────────────
+let markerLaag = L.layerGroup().addTo(kaart);
+let alleStations = [];
+let actieveChart = null;
+let huidigFilter = 'alle';
+
+// Landvlaggen
+const VLAGGEN = { NL: '\ud83c\uddf3\ud83c\uddf1', UK: '\ud83c\uddec\ud83c\udde7', NO: '\ud83c\uddf3\ud83c\uddf4', DK: '\ud83c\udde9\ud83c\uddf0', DE: '\ud83c\udde9\ud83c\uddea', BE: '\ud83c\udde7\ud83c\uddea', INT: '\ud83c\udf0d' };
+
+function stationLand(s) {
+  return s.land || 'NL';
+}
+
+function maakMarker(s) {
+  const kleur = golfKleur(s.hm0);
+  const tk = tekstKleur(s.hm0);
+  const html = `<div style="background:${kleur};color:${tk};border-radius:12px;padding:3px 7px;font-size:11px;font-weight:700;font-family:Inter,sans-serif;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);min-width:28px;text-align:center">${s.hm0.toFixed(1)}</div>`;
+  const icon = L.divIcon({ html, className: '', iconAnchor: [20, 12] });
+  const marker = L.marker([s.lat, s.lon], { icon });
+  marker.on('click', () => toonDetail(s));
+  marker.bindTooltip(s.naam, { permanent: false, direction: 'top', className: 'golf-tooltip' });
+  marker._stationData = s;
+  return marker;
+}
+
+function toonMarkers() {
+  markerLaag.clearLayers();
+  alleStations.forEach(s => {
+    const land = stationLand(s);
+    if (huidigFilter === 'alle') {
+      maakMarker(s).addTo(markerLaag);
+    } else if (huidigFilter === 'nl' && land === 'NL') {
+      maakMarker(s).addTo(markerLaag);
+    } else if (huidigFilter === 'uk' && land === 'UK') {
+      maakMarker(s).addTo(markerLaag);
+    } else if (huidigFilter === 'intl' && !['NL','UK'].includes(land)) {
+      maakMarker(s).addTo(markerLaag);
+    }
+  });
+}
+
+function setFilter(filter, btn) {
+  huidigFilter = filter;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('actief'));
+  btn.classList.add('actief');
+  toonMarkers();
+}
+
+// ── Data laden ───────────────────────────────────────────────────────────────
+async function laadData() {
+  const btn = document.getElementById('btn-laden');
+  btn.disabled = true;
+  btn.textContent = 'Ophalen...';
+  setStatus('<span class="spinner"></span> Golfdata ophalen...');
+
+  try {
+    const r = await fetch('golven.json?t=' + Date.now());
+    const data = await r.json();
+    alleStations = data.stations;
+    toonMarkers();
+
+    const bw = data.bijgewerkt ? new Date(data.bijgewerkt).toLocaleString('nl-NL', {
+      timeZone: 'Europe/Amsterdam', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+    }) : '?';
+    setStatus(`&#10003; ${data.aantal} meetpunten geladen &middot; Data: ${bw}`);
+  } catch (e) {
+    setStatus('&#10007; Fout bij laden: ' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '\u21BB Vernieuwen';
+}
+
+function setStatus(html) {
+  document.getElementById('status-tekst').innerHTML = html;
+}
+
+// ── Detail sidebar ───────────────────────────────────────────────────────────
+function toonDetail(s) {
+  document.getElementById('sidebar-naam').textContent = s.naam;
+  document.getElementById('sidebar-coord').textContent =
+    `${s.lat.toFixed(3)}\u00b0 N, ${s.lon.toFixed(3)}\u00b0 E \u00b7 ${s.code}`;
+
+  const kleur = golfKleur(s.hm0);
+  const tijdObj = new Date(s.tijdstip);
+  const tijdStr = tijdObj.toLocaleString('nl-NL', {
+    timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short',
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  // Bereken min/max/gem uit historie
+  let min = Infinity, max = -Infinity, som = 0;
+  s.historie.forEach(h => {
+    if (h.h < min) min = h.h;
+    if (h.h > max) max = h.h;
+    som += h.h;
+  });
+  const gem = s.historie.length ? (som / s.historie.length) : s.hm0;
+
+  // Beaufort-beschrijving
+  const beschrijving = golfBeschrijving(s.hm0);
+
+  const content = document.getElementById('sidebar-content');
+  content.innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:12px">
+      <div>
+        <div class="golf-groot" style="color:${kleur}">${s.hm0.toFixed(2)} m</div>
+        <div class="golf-label">Significante golfhoogte (Hm0)</div>
+      </div>
+      <div style="font-size:.75rem;color:var(--text2);padding-bottom:4px">${beschrijving}</div>
+    </div>
+    <div class="info-rij"><span>Laatste meting</span><span>${tijdStr}</span></div>
+    <div class="info-rij"><span>Minimum (afgelopen uren)</span><span>${min === Infinity ? '-' : min.toFixed(2) + ' m'}</span></div>
+    <div class="info-rij"><span>Maximum (afgelopen uren)</span><span>${max === -Infinity ? '-' : max.toFixed(2) + ' m'}</span></div>
+    <div class="info-rij"><span>Gemiddeld (afgelopen uren)</span><span>${gem.toFixed(2)} m</span></div>
+    ${s.periode ? `<div class="info-rij"><span>Golfperiode</span><span>${s.periode} s</span></div>` : ''}
+    ${s.richting != null ? `<div class="info-rij"><span>Golfrichting</span><span>${richtingTekst(s.richting)} (${s.richting}&deg;)</span></div>` : ''}
+    <div class="info-rij"><span>Station</span><span>${VLAGGEN[stationLand(s)] || ''} ${s.code}</span></div>
+    <div class="info-rij"><span>Bron</span><span>${s.bron === 'open-meteo' ? 'Open-Meteo Marine (model)' : 'RWS LMW Golven (meting)'}</span></div>
+    <div class="grafiek-blok">
+      <div class="grafiek-titel">Verloop afgelopen uren</div>
+      <div style="position:relative;height:200px"><canvas id="canvas-golf"></canvas></div>
+    </div>
+  `;
+
+  // Mobiel: sidebar openen
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('btn-sidebar').style.display = '';
+
+  // Wacht op DOM update
+  requestAnimationFrame(() => tekenGrafiek(s));
+}
+
+function richtingTekst(graden) {
+  const dirs = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+  return dirs[Math.round(graden / 22.5) % 16];
+}
+
+function golfBeschrijving(h) {
+  if (h < 0.1) return 'Vlak';
+  if (h < 0.5) return 'Kalm';
+  if (h < 1.0) return 'Licht golvend';
+  if (h < 1.5) return 'Golvend';
+  if (h < 2.5) return 'Matig ruw';
+  if (h < 4.0) return 'Ruw';
+  if (h < 6.0) return 'Zeer ruw';
+  return 'Hoog';
+}
+
+function tekenGrafiek(s) {
+  if (actieveChart) { try { actieveChart.destroy(); } catch(e) {} }
+
+  const canv = document.getElementById('canvas-golf');
+  if (!canv || !s.historie.length) return;
+
+  const labels = s.historie.map(h => {
+    const d = new Date(h.t);
+    return d.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' });
+  });
+  const waarden = s.historie.map(h => h.h);
+
+  const GRID = '#1e2e40', TICK = '#7a99bb';
+
+  actieveChart = new Chart(canv, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: waarden,
+        borderColor: golfKleur(s.hm0),
+        backgroundColor: golfKleur(s.hm0) + '20',
+        borderWidth: 2.5,
+        pointRadius: 2,
+        pointBackgroundColor: golfKleur(s.hm0),
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(10,20,40,0.95)',
+          titleColor: '#dde8f0',
+          bodyColor: '#aabbcc',
+          borderColor: '#2a3a50',
+          borderWidth: 1,
+          callbacks: {
+            label: ctx => `Hm0: ${ctx.parsed.y.toFixed(2)} m`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: GRID },
+          ticks: { color: TICK, font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+          border: { color: GRID }
+        },
+        y: {
+          grid: { color: GRID },
+          ticks: { color: TICK, font: { size: 10 }, callback: v => v.toFixed(1) + 'm' },
+          border: { color: GRID },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+}
+
+// ── Sidebar toggle (mobiel) ──────────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ── Auto-laden ───────────────────────────────────────────────────────────────
+laadData();
+
+// Auto-refresh elke 10 minuten
+setInterval(laadData, 10 * 60 * 1000);
+</script>
+</body>
+</html>
