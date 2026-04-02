@@ -249,8 +249,8 @@ def verwerk_station(code, naam):
         if i < len(vv_raw) and vv_raw[i] is not None:
             dd["vv_min"].append(vv_raw[i])
 
-        # Mistkans: max over hele dag (%)
-        if i < len(wwm_raw) and wwm_raw[i] is not None:
+        # Mistkans: max over 00-12h lokaal (%)
+        if hour < 12 and i < len(wwm_raw) and wwm_raw[i] is not None:
             dd["wwm"].append(wwm_raw[i])
 
         # Hagelkans: max over hele dag (%)
