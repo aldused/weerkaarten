@@ -1,4 +1,4 @@
-SCRIPT_DIR="/Users/aldus/Desktop/KNMI_Project/weerkaarten 2"
+SCRIPT_DIR="/Users/aldus/KNMI_Project/weerkaarten 2"
 cd "$SCRIPT_DIR"
 
 echo "=== Toplijst update $(date) ==="
