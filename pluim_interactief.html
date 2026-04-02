@@ -269,28 +269,31 @@ function dichtstbijStation(mosmix, lat, lon) {
 }
 
 function mosmixBolletjes(mosmix, station, ts) {
-  // Geeft {tx: [{x, y}], tn: [{x, y}], label} terug
   if (!mosmix || !station) return null;
-  const txPunten = [], tnPunten = [];
+  const txPunten = [], tnPunten = [], rrDagPunten = [], rrNachtPunten = [];
   const dagen = mosmix.dagen || [];
   for (const dag of dagen) {
     const txVal = mosmix.data[dag]?.TX?.[station];
     const tnVal = mosmix.data[dag]?.TN?.[station];
-    // Zoek index in ts die het dichtst bij 14:00 van die dag ligt (voor TX)
-    const dagDatum = dag + 'T14:00';
-    const nachtDatum = dag + 'T06:00';
-    let txIdx = -1, tnIdx = -1;
+    const rrDagVal = mosmix.data[dag]?.RR_D?.[station];
+    const rrNachtVal = mosmix.data[dag]?.RR_N?.[station];
+    let txIdx = -1, tnIdx = -1, rrDagIdx = -1, rrNachtIdx = -1;
     for (let i = 0; i < ts.length; i++) {
       if (ts[i].startsWith(dag)) {
         const h = new Date(ts[i]).getHours();
-        if (h >= 13 && h <= 15 && txIdx === -1) txIdx = i;
-        if (h >= 5 && h <= 7 && tnIdx === -1) tnIdx = i;
+        if (h >= 15 && h <= 17 && txIdx === -1) txIdx = i;  // TX om 16:00
+        if (h >= 5 && h <= 7 && tnIdx === -1) tnIdx = i;    // TN om 06:00
+        if (h >= 11 && h <= 13 && rrDagIdx === -1) rrDagIdx = i;  // RR dag om 12:00
+        if (h >= 23 && rrNachtIdx === -1) rrNachtIdx = i;         // RR nacht om 23:00
+        if (h === 0 && rrNachtIdx === -1) rrNachtIdx = i;         // of 00:00
       }
     }
     if (txVal != null && txIdx >= 0) txPunten.push({x: txIdx, y: txVal});
     if (tnVal != null && tnIdx >= 0) tnPunten.push({x: tnIdx, y: tnVal});
+    if (rrDagVal != null && rrDagVal > 0 && rrDagIdx >= 0) rrDagPunten.push({x: rrDagIdx, y: rrDagVal});
+    if (rrNachtVal != null && rrNachtVal > 0 && rrNachtIdx >= 0) rrNachtPunten.push({x: rrNachtIdx, y: rrNachtVal});
   }
-  return { tx: txPunten, tn: tnPunten, station };
+  return { tx: txPunten, tn: tnPunten, rrDag: rrDagPunten, rrNacht: rrNachtPunten, station };
 }
 
 let actieveType = 'temp';
@@ -627,9 +630,13 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   const mosBol = mosmixBolletjes(mosmix, mosStation, ts);
   const mosTxData = Array(ts.length).fill(null);
   const mosTnData = Array(ts.length).fill(null);
+  const mosRrDagData = Array(ts.length).fill(null);
+  const mosRrNachtData = Array(ts.length).fill(null);
   if (mosBol) {
     mosBol.tx.forEach(p => { if (p.x >= 0 && p.x < mosTxData.length) mosTxData[p.x] = p.y; });
     mosBol.tn.forEach(p => { if (p.x >= 0 && p.x < mosTnData.length) mosTnData[p.x] = p.y; });
+    mosBol.rrDag.forEach(p => { if (p.x >= 0 && p.x < mosRrDagData.length) mosRrDagData[p.x] = p.y; });
+    mosBol.rrNacht.forEach(p => { if (p.x >= 0 && p.x < mosRrNachtData.length) mosRrNachtData[p.x] = p.y; });
   }
   const mosLabel = mosStation ? ` · MOSMIX ${mosStation}` : '';
 
@@ -700,6 +707,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     ['rgba(68,136,204,0.38)','p25–p75','blok'],
     ['#ee3333','Mediaan','lijn'],
     ['#2299ff','HRES','lijn'],
+    ...(mosBol ? [['#1a3a8a','MOSMIX dag'+mosLabel,'punt'],['#0a1a4a','MOSMIX nacht'+mosLabel,'punt']] : []),
   ]);
   chartTimestamps['canvas-neerslag']=ts;
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
@@ -710,6 +718,10 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
       {type:'line',data:pP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8},
       {type:'line',data:pMed,  borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
       {type:'line',data:hPrecip,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
+      ...(mosBol ? [
+        {type:'line',data:mosRrDagData,borderColor:'transparent',backgroundColor:'#1a3a8a',pointRadius:ctx=>mosRrDagData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
+        {type:'line',data:mosRrNachtData,borderColor:'transparent',backgroundColor:'#0a1a4a',pointRadius:ctx=>mosRrNachtData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'#6688aa',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
+      ] : []),
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
@@ -718,6 +730,8 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
         callbacks:{label:ctx=>{
           if(ctx.datasetIndex===4)return ` Mediaan: ${ctx.parsed.y.toFixed(2)} mm/u`;
           if(ctx.datasetIndex===5)return ` HRES: ${ctx.parsed.y.toFixed(2)} mm/u`;
+          if(mosBol&&ctx.datasetIndex===6)return ` MOSMIX dag: ${ctx.parsed.y?.toFixed(1)} mm`;
+          if(mosBol&&ctx.datasetIndex===7)return ` MOSMIX nacht: ${ctx.parsed.y?.toFixed(1)} mm`;
         }}
       }},
       scales:{x:cfgBase.scales.x,xH:{display:false,labels:hLab},y:{...yAs('left',' mm'),min:0}}
