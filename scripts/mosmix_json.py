@@ -334,7 +334,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "RR", "FF", "FX", "DD", "SQ", "TTD", "Neff", "gevoels"]
+    params = ["TX", "TN", "RR", "FF", "FX", "DD", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ"]
 
     for d in dagen:
         dag_key = d.isoformat()
