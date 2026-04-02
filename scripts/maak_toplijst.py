@@ -246,7 +246,7 @@ def haal_t10n_knmi(station_id: str, dag: date, dt_range_10min: str = None) -> fl
                 vals = to_floats(js["coverages"][0].get("ranges", {}).get("T10N", {}).get("values"))
                 result = min_valid(vals)
                 if result is not None:
-                    return result
+                    return result, None  # dagelijkse API heeft geen exact tijdstip
     except Exception:
         pass
 
@@ -257,15 +257,18 @@ def haal_t10n_knmi(station_id: str, dag: date, dt_range_10min: str = None) -> fl
         params2 = {"datetime": dt_range_10min, "parameter-name": "ta10"}
         r2 = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params2, timeout=20)
         if r2.status_code in (400, 404):
-            return None
+            return None, None
         r2.raise_for_status()
         js2 = r2.json()
         if not js2.get("coverages"):
-            return None
-        vals2 = to_floats(js2["coverages"][0].get("ranges", {}).get("ta10", {}).get("values"))
-        return min_valid(vals2)
+            return None, None
+        cov2 = js2["coverages"][0]
+        t_vals = cov2.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
+        vals2 = to_floats(cov2.get("ranges", {}).get("ta10", {}).get("values"))
+        t10n_t = tijdstip_van_min(vals2, t_vals, LOCAL_TZ)
+        return min_valid(vals2), t10n_t
     except Exception:
-        return None
+        return None, None
 
 def tijdstip_van_max(vals, tijden, local_tz):
     """Geeft tijdstip (HH:MM LT) van de maximale waarde."""
@@ -340,27 +343,31 @@ def haal_temp_wind(station_id: str, dt_range: str) -> dict | None:
         "gevoels": gevoels_min, "gevoels_t": gevoels_t,
     }
 
-def haal_neerslag(station_id: str, dt_range: str) -> float | None:
+def haal_neerslag(station_id: str, dt_range: str) -> tuple:
     """
     Neerslagsom uit rg (mm/uur × 10/60 per 10-min stap).
-    Retourneert None als station geen regenmeter heeft (rg ontbreekt geheel).
-    Waarden onder RR_DREMPEL worden als 0 beschouwd (meetruis).
+    Retourneert (totaal_mm, tijdstip_max_intensiteit) of (None, None).
     """
     params = {"datetime": dt_range, "parameter-name": "rg"}
     r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
-    if r.status_code in (400, 404): return None
+    if r.status_code in (400, 404): return None, None
     r.raise_for_status()
     js = r.json()
-    if not js.get("coverages"): return None
-    rg_raw = js["coverages"][0].get("ranges", {}).get("rg", {}).get("values")
+    if not js.get("coverages"): return None, None
+    cov = js["coverages"][0]
+    t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
+    rg_raw = cov.get("ranges", {}).get("rg", {}).get("values")
     if not rg_raw:
-        return None  # geen regenmeter
+        return None, None  # geen regenmeter
     rg_vals = to_floats(rg_raw)
     valide = [v for v in rg_vals if v is not None and v >= 0]
     if not valide:
-        return None
+        return None, None
     total = round(sum(v * (10.0 / 60.0) for v in valide), 1)
-    return total if total >= RR_DREMPEL else 0.0
+    if total < RR_DREMPEL:
+        return 0.0, None
+    rr_t = tijdstip_van_max(rg_vals, t_vals, LOCAL_TZ)
+    return total, rr_t
 
 def haal_wind_only(station_id: str, dt_range: str) -> dict | None:
     """
@@ -385,23 +392,27 @@ def haal_wind_only(station_id: str, dt_range: str) -> dict | None:
         "gevoels": None, "gevoels_t": None,
     }
 
-def haal_zon(station_id: str, dt_range: str) -> float | None:
+def haal_zon(station_id: str, dt_range: str) -> tuple:
     """
     Zonuren uit qg (globale straling W/m2).
     KNMI definitie: zon = straling > 120 W/m2.
     Per 10-min stap = 1/6 uur.
+    Retourneert (uren, tijdstip_max_straling).
     """
     params = {"datetime": dt_range, "parameter-name": "qg"}
     r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
-    if r.status_code in (400, 404): return None
+    if r.status_code in (400, 404): return None, None
     r.raise_for_status()
     js = r.json()
-    if not js.get("coverages"): return None
-    qg_raw = js["coverages"][0].get("ranges", {}).get("qg", {}).get("values")
-    if not qg_raw: return None
+    if not js.get("coverages"): return None, None
+    cov = js["coverages"][0]
+    t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
+    qg_raw = cov.get("ranges", {}).get("qg", {}).get("values")
+    if not qg_raw: return None, None
     qg_vals = to_floats(qg_raw)
     zon_stappen = sum(1 for v in qg_vals if v is not None and v >= 120)
-    return round(zon_stappen / 6.0, 1)
+    sq_t = tijdstip_van_max(qg_vals, t_vals, LOCAL_TZ)
+    return round(zon_stappen / 6.0, 1), sq_t
 
 # ── Ophalen van één dag ────────────────────────────────────────────────────────
 
@@ -474,13 +485,13 @@ def haal_dag(dag: date) -> dict:
         # ── T10N: Buienradar groundtemperature altijd primair ─────────────────
         gt = br_st.get("t10n")
         if gt is not None:
-            res["t10n"].append((gt, naam))
+            res["t10n"].append((gt, naam, None))  # BR heeft geen tijdstip
         else:
             # BR-station ontbreekt in feed → KNMI als fallback
             try:
-                t10n_knmi = haal_t10n_knmi(station_id, dag, dt_range)
+                t10n_knmi, t10n_t = haal_t10n_knmi(station_id, dag, dt_range)
                 if t10n_knmi is not None:
-                    res["t10n"].append((t10n_knmi, naam))
+                    res["t10n"].append((t10n_knmi, naam, t10n_t))
                     print(f"    T10N {naam}: geen BR → KNMI {t10n_knmi:.1f}°")
             except Exception as e:
                 print(f"    T10N {naam}: BR én KNMI mislukt: {e}")
@@ -500,23 +511,23 @@ def haal_dag(dag: date) -> dict:
 
         # ── Zon (alleen KNMI) ─────────────────────────────────────────────────
         try:
-            sq = haal_zon(station_id, dt_range)
-            if sq is not None: res["sq"].append((sq, naam))
+            sq, sq_t = haal_zon(station_id, dt_range)
+            if sq is not None: res["sq"].append((sq, naam, sq_t))
         except Exception as e:
             print(f"    Zon fout {naam}: {e}")
 
         # ── Neerslag (KNMI primair, BR rainFallLast24Hour fallback) ───────────
         try:
-            mm = haal_neerslag(station_id, dt_range)
+            mm, rr_t = haal_neerslag(station_id, dt_range)
             if mm is not None:
-                res["rr"].append((mm, naam))
+                res["rr"].append((mm, naam, rr_t))
             elif br_st.get("rr") is not None:
-                res["rr"].append((br_st["rr"], naam))
+                res["rr"].append((br_st["rr"], naam, None))
                 print(f"    RR {naam}: KNMI None → BR {br_st['rr']:.1f} mm")
         except Exception as e:
             print(f"    Neerslag fout {naam}: {e} → BR fallback")
             if br_st.get("rr") is not None:
-                res["rr"].append((br_st["rr"], naam))
+                res["rr"].append((br_st["rr"], naam, None))
 
         time.sleep(0.05)
 
