@@ -87,6 +87,9 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     <button class="btn-param ttd" data-param="TTD">💧 Dauwpunt</button>
     <button class="btn-param neff" data-param="Neff">☁ Bewolking</button>
     <button class="btn-param gv" data-param="gevoels">🥶 Gevoels</button>
+    <button class="btn-param mist" data-param="wwM">🌫 Mistkans</button>
+    <button class="btn-param zicht" data-param="VV">👁 Zicht</button>
+    <button class="btn-param hagel" data-param="wwZ">🧊 Hagel</button>
   </div>
 </div>
 <div class="toolbar" style="border-top:none;">
@@ -143,8 +146,8 @@ const PARAMS = {
   RR:  { label:"Neerslag (mm)", eenheid:" mm", decimalen:1,
     kleuren:[["#f7fbff","0"],["#c6dbef","2"],["#6baed6","5"],["#2171b5","10"],["#084594","20"],["#4a0080","30+"]],
     schaal:[0,30] },
-  FF:  { label:"Gemiddelde wind (km/h)", eenheid:" km/h", decimalen:0,
-    kleuren:[["#e3f2fd","5"],["#90caf9","15"],["#42a5f5","25"],["#1565c0","35"],["#0d47a1","50+"]],
+  FF:  { label:"Gemiddelde wind (km/h · Bft)", eenheid:" km/h", decimalen:0, bft:true,
+    kleuren:[["#e8f5e9","1-2"],["#a5d6a7","3"],["#ffeb3b","4"],["#ff9800","5"],["#f44336","6"],["#b71c1c","7+"]],
     schaal:[0,50] },
   FX:  { label:"Max windstoot (km/h)", eenheid:" km/h", decimalen:0,
     kleuren:[["#e8f5e9","20"],["#a5d6a7","40"],["#ffeb3b","60"],["#ff9800","80"],["#f44336","100"],["#b71c1c","120+"]],
@@ -164,6 +167,15 @@ const PARAMS = {
   gevoels: { label:"Gevoelstemperatuur min (°C)", eenheid:"°", decimalen:1,
     kleuren:[["#4a0080","≤-15°"],["#1a3a6b","-10°"],["#2980b9","-5°"],["#a8d8ea","0°"],["#e8f4f8","5°"],["#ffffcc","10°+"]],
     schaal:[-15,10] },
+  wwM: { label:"Mistkans (%)", eenheid:"%", decimalen:0,
+    kleuren:[["#f7fbff","0%"],["#c6dbef","10%"],["#6baed6","30%"],["#2171b5","50%"],["#084594","70%"],["#4a0080","90%+"]],
+    schaal:[0,90] },
+  VV:  { label:"Minimum zicht (km)", eenheid:" km", decimalen:1,
+    kleuren:[["#4a0080","≤0.2"],["#084594","0.5"],["#6baed6","1"],["#c6dbef","2"],["#ffffcc","5"],["#f7fbff","10+"]],
+    schaal:[0,10] },
+  wwZ: { label:"Hagelkans (%)", eenheid:"%", decimalen:0,
+    kleuren:[["#f7fbff","0%"],["#c6dbef","5%"],["#ffeb3b","15%"],["#ff9800","30%"],["#f44336","50%"],["#b71c1c","70%+"]],
+    schaal:[0,70] },
 };
 
 function hexToRgb(hex) {
@@ -183,9 +195,16 @@ function interpKleur(val, schaal, stops) {
 function ns(tag) { return document.createElementNS("http://www.w3.org/2000/svg",tag); }
 
 function windpijl(graden) {
+  // Pijl wijst waarheen de wind WAAIT (NW-wind → pijl ↘)
   const pijlen = ["↓","↙","←","↖","↑","↗","→","↘","↓"];
-  if (graden == null) return "·";
+  if (graden == null) return "";
   return pijlen[Math.round(graden/45) % 8];
+}
+
+function kmhNaarBft(kmh) {
+  const grenzen = [1,6,12,20,29,39,50,62,75,89,103,118];
+  for (let i = 0; i < grenzen.length; i++) { if (kmh < grenzen[i]) return i; }
+  return 12;
 }
 
 function tekenKaart() {
@@ -204,9 +223,11 @@ function tekenKaart() {
     .filter(([naam]) => stations[naam])
     .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
 
-  const invertSort = ["TN","TTD","gevoels"];
+  // Sorteer: hoog→laag voor de meeste, laag→hoog voor bewolking-inverse
+  const invertSort = ["TN","TTD","gevoels","VV"];
   items.sort((a,b) => invertSort.includes(huidigParam) ? a.val - b.val : b.val - a.val);
 
+  // Teken elk station
   items.forEach((item, idx) => {
     const cx = lonToX(item.lon), cy = latToY(item.lat);
     const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
@@ -214,35 +235,64 @@ function tekenKaart() {
     let tekst;
     if (huidigParam === "DD") {
       tekst = windpijl(item.val) + " " + item.val.toFixed(0);
+    } else if (p.bft) {
+      tekst = item.val.toFixed(0) + "·" + kmhNaarBft(item.val) + "Bft";
+    } else if (huidigParam === "VV" && item.val < 10) {
+      tekst = Math.round(item.val * 1000) + "m";
     } else {
       tekst = item.val.toFixed(p.decimalen);
     }
 
     const g = ns("g");
-    const r = 20;
+    const r = 22;
 
+    // Cirkel
     const circle = ns("circle");
     circle.setAttribute("cx", cx); circle.setAttribute("cy", cy);
-    circle.setAttribute("r", r); circle.setAttribute("fill", bg);
+    circle.setAttribute("r", r);
+    circle.setAttribute("fill", bg);
     circle.setAttribute("stroke", idx === 0 ? "#cc0000" : idx === 1 ? "#e6a800" : idx === 2 ? "#888" : "white");
     circle.setAttribute("stroke-width", idx <= 2 ? "3" : "1.5");
     g.appendChild(circle);
 
+    // Buitenste ring top 2
     if (idx <= 1) {
       const ring = ns("circle");
       ring.setAttribute("cx", cx); ring.setAttribute("cy", cy);
-      ring.setAttribute("r", r + 4); ring.setAttribute("fill", "none");
+      ring.setAttribute("r", r + 5);
+      ring.setAttribute("fill", "none");
       ring.setAttribute("stroke", idx === 0 ? "#cc0000" : "#e6a800");
       ring.setAttribute("stroke-width", "2");
       ring.setAttribute("stroke-dasharray", idx === 0 ? "5,3" : "4,4");
       g.appendChild(ring);
     }
 
+    // Windpijl naast cirkel (alleen bij FF/FX)
+    if (p.bft) {
+      const ddData = dagObj["DD"];
+      const dd = ddData ? ddData[item.naam] : null;
+      const pijl = windpijl(dd);
+      if (pijl) {
+        const pijlText = ns("text");
+        pijlText.setAttribute("x", cx + r + 10); pijlText.setAttribute("y", cy + 6);
+        pijlText.setAttribute("text-anchor", "middle");
+        pijlText.setAttribute("font-size", "24"); pijlText.setAttribute("font-weight", "900");
+        pijlText.setAttribute("font-family", "Arial,sans-serif");
+        pijlText.setAttribute("fill", "#222");
+        pijlText.setAttribute("stroke", "#222"); pijlText.setAttribute("stroke-width", "1");
+        pijlText.textContent = pijl;
+        g.appendChild(pijlText);
+      }
+    }
+
+    // Waarde tekst
     const text = ns("text");
     text.setAttribute("x", cx); text.setAttribute("y", cy + 4);
     text.setAttribute("text-anchor", "middle");
-    text.setAttribute("font-size", "11"); text.setAttribute("font-weight", "bold");
-    text.setAttribute("font-family", "Arial,sans-serif"); text.setAttribute("fill", fg);
+    const klein = p.bft || (huidigParam === "VV" && item.val < 10);
+    text.setAttribute("font-size", klein ? "9" : "12"); text.setAttribute("font-weight", "bold");
+    text.setAttribute("font-family", "Arial,sans-serif");
+    text.setAttribute("fill", fg);
     text.textContent = tekst;
     g.appendChild(text);
 
@@ -253,7 +303,7 @@ function tekenKaart() {
   const top3 = items.slice(0, 3);
   const top3Kleuren = ["#cc0000","#8B6914","#888888"];
   const paneel_x = 10, paneel_y = 10;
-  const paneel_b = 160, rij_h = 35, paneel_h = 18 + top3.length * rij_h;
+  const paneel_b = 180, rij_h = 38, paneel_h = 20 + top3.length * rij_h;
 
   const pRect = ns("rect");
   pRect.setAttribute("x", paneel_x); pRect.setAttribute("y", paneel_y);
@@ -266,37 +316,42 @@ function tekenKaart() {
   const pTitel = ns("text");
   pTitel.setAttribute("x", paneel_x + paneel_b/2); pTitel.setAttribute("y", paneel_y + 14);
   pTitel.setAttribute("text-anchor", "middle");
-  pTitel.setAttribute("font-size", "10"); pTitel.setAttribute("font-weight", "bold");
+  pTitel.setAttribute("font-size", "11"); pTitel.setAttribute("font-weight", "bold");
   pTitel.setAttribute("font-family", "Arial,sans-serif"); pTitel.setAttribute("fill", "#003366");
   pTitel.textContent = "Top 3";
   svg.appendChild(pTitel);
 
   top3.forEach((item, idx) => {
-    const ry = paneel_y + 20 + idx * rij_h;
+    const ry = paneel_y + 22 + idx * rij_h;
     const medKleur = top3Kleuren[idx];
 
     const med = ns("circle");
-    med.setAttribute("cx", paneel_x + 16); med.setAttribute("cy", ry + 10);
-    med.setAttribute("r", 10); med.setAttribute("fill", medKleur);
+    med.setAttribute("cx", paneel_x + 18); med.setAttribute("cy", ry + 12);
+    med.setAttribute("r", 12); med.setAttribute("fill", medKleur);
     svg.appendChild(med);
     const medTxt = ns("text");
-    medTxt.setAttribute("x", paneel_x + 16); medTxt.setAttribute("y", ry + 14);
-    medTxt.setAttribute("text-anchor", "middle"); medTxt.setAttribute("font-size", "11");
+    medTxt.setAttribute("x", paneel_x + 18); medTxt.setAttribute("y", ry + 17);
+    medTxt.setAttribute("text-anchor", "middle"); medTxt.setAttribute("font-size", "13");
     medTxt.setAttribute("font-weight", "bold"); medTxt.setAttribute("font-family", "Arial,sans-serif");
     medTxt.setAttribute("fill", "white"); medTxt.textContent = String(idx + 1);
     svg.appendChild(medTxt);
 
     const stn = ns("text");
-    stn.setAttribute("x", paneel_x + 30); stn.setAttribute("y", ry + 8);
-    stn.setAttribute("font-size", "10"); stn.setAttribute("font-weight", "bold");
+    stn.setAttribute("x", paneel_x + 35); stn.setAttribute("y", ry + 10);
+    stn.setAttribute("font-size", "11"); stn.setAttribute("font-weight", "bold");
     stn.setAttribute("font-family", "Arial,sans-serif"); stn.setAttribute("fill", "#222");
     stn.textContent = item.naam;
     svg.appendChild(stn);
 
-    const waardeTxt = item.val.toFixed(p.decimalen) + (p.eenheid || "");
+    let waardeTxt;
+    if (huidigParam === "VV" && item.val < 10) {
+      waardeTxt = Math.round(item.val * 1000) + " m";
+    } else {
+      waardeTxt = item.val.toFixed(p.decimalen) + (p.eenheid || "");
+    }
     const wrd = ns("text");
-    wrd.setAttribute("x", paneel_x + 30); wrd.setAttribute("y", ry + 22);
-    wrd.setAttribute("font-size", "9"); wrd.setAttribute("font-family", "Arial,sans-serif");
+    wrd.setAttribute("x", paneel_x + 35); wrd.setAttribute("y", ry + 24);
+    wrd.setAttribute("font-size", "10"); wrd.setAttribute("font-family", "Arial,sans-serif");
     wrd.setAttribute("fill", medKleur); wrd.setAttribute("font-weight", "bold");
     wrd.textContent = waardeTxt;
     svg.appendChild(wrd);
@@ -397,7 +452,7 @@ function tekenKaartOpSvg(svg, dagKey, param) {
     .filter(([naam]) => stations[naam])
     .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
 
-  const invertSort = ["TN","TTD","gevoels"];
+  const invertSort = ["TN","TTD","gevoels","VV"];
   items.sort((a,b) => invertSort.includes(param) ? a.val - b.val : b.val - a.val);
 
   items.forEach((item, idx) => {
