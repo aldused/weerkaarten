@@ -7,18 +7,20 @@ import requests
 KNMI_KEYS = [
     "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9",
     "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjgzMDcwMzljZTYyYjRkYjM5NWY2ZDcxMGQ2OGZkNjVkIiwiaCI6Im11cm11cjEyOCJ9",
+    "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjBkOWYwYzJjMmQzNzRjOGFhOTc5MzMyYTkwYTIzNmUwIiwiaCI6Im11cm11cjEyOCJ9",
+    "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjcwNzVkMTU5NzkzYjQzMzc5ZjQyYzFjNjY1NzllZDMzIiwiaCI6Im11cm11cjEyOCJ9",
 ]
 
 _actieve_key_idx = 0
 
 def knmi_get(url, params=None, timeout=20, extra_headers=None):
     """
-    GET request naar KNMI API met automatische fallback naar tweede key.
-    Geeft (response, key_idx) terug, of gooit een Exception als beide falen.
+    GET request naar KNMI API met automatische fallback naar 3 keys.
+    Gooit een Exception als alle keys falen.
     """
     global _actieve_key_idx
-    # Probeer eerst de actieve key, dan de andere
-    volgorde = [_actieve_key_idx, 1 - _actieve_key_idx]
+    # Probeer alle keys, begin bij de actieve
+    volgorde = [(_actieve_key_idx + i) % len(KNMI_KEYS) for i in range(len(KNMI_KEYS))]
     for idx in volgorde:
         headers = {"Authorization": KNMI_KEYS[idx], "Accept": "application/json"}
         if extra_headers:
@@ -37,4 +39,4 @@ def knmi_get(url, params=None, timeout=20, extra_headers=None):
         except Exception as e:
             print(f"  Key {idx+1} fout: {e}")
             continue
-    raise Exception("Beide KNMI API-keys falen")
+    raise Exception(f"Alle {len(KNMI_KEYS)} KNMI API-keys falen")
