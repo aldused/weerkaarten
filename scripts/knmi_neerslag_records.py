@@ -229,12 +229,12 @@ def bereken_landelijk(alle_records, stations):
         for r in rec.get("sneeuw",  []): sneeuw_alle.append({**r,  "station": nr_str, "naam": naam})
 
     return {
-        "dag":     sorted(dag_alle,     key=lambda x: -x["waarde"])[:TOP_N],
-        "decade":  sorted(dec_alle,     key=lambda x: -x["waarde"])[:TOP_N],
-        "maand":   sorted(mnd_alle,     key=lambda x: -x["waarde"])[:TOP_N],
-        "seizoen": sorted(seizoen_alle, key=lambda x: -x["waarde"])[:TOP_N],
-        "jaar":    sorted(jaar_alle,    key=lambda x: -x["waarde"])[:TOP_N],
-        "sneeuw":  sorted(sneeuw_alle,  key=lambda x: -x["waarde"])[:TOP_N],
+        "dag":     sorted(dag_alle,     key=lambda x: -x["waarde"]),
+        "decade":  sorted(dec_alle,     key=lambda x: -x["waarde"]),
+        "maand":   sorted(mnd_alle,     key=lambda x: -x["waarde"]),
+        "seizoen": sorted(seizoen_alle, key=lambda x: -x["waarde"]),
+        "jaar":    sorted(jaar_alle,    key=lambda x: -x["waarde"]),
+        "sneeuw":  sorted(sneeuw_alle,  key=lambda x: -x["waarde"]),
     }
 
 
