@@ -11,37 +11,6 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_guidance.py"             || echo "WAARSCHUWING: haal_guidance.py mislukt"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_luchtvaart_bulletin.py"  || echo "WAARSCHUWING: haal_luchtvaart_bulletin.py mislukt"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_maanddata.py"            || echo "WAARSCHUWING: haal_maanddata.py mislukt"
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_fixed.py"        || { echo "FOUT: mosmix_kaart_fixed.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp.py"         || { echo "FOUT: mosmix_kaart_temp.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp_dag.py"     || { echo "FOUT: mosmix_kaart_temp_dag.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_temp_nacht.py"   || { echo "FOUT: mosmix_kaart_temp_nacht.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_zon.py"          || { echo "FOUT: mosmix_kaart_zon.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_wind.py"         || { echo "FOUT: mosmix_kaart_wind.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_wind_nacht.py"   || { echo "FOUT: mosmix_kaart_wind_nacht.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_mist.py"         || { echo "FOUT: mosmix_kaart_mist.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_t5cm.py"         || { echo "FOUT: mosmix_kaart_t5cm.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_dauwpunt.py"     || { echo "FOUT: mosmix_kaart_dauwpunt.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_gevoels.py"      || { echo "FOUT: mosmix_kaart_gevoels.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_regen.py"        || { echo "FOUT: mosmix_kaart_regen.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_onweer.py"       || { echo "FOUT: mosmix_kaart_onweer.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_bewolking.py"    || { echo "FOUT: mosmix_kaart_bewolking.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_sneeuw.py"       || { echo "FOUT: mosmix_kaart_sneeuw.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_hagel.py"        || { echo "FOUT: mosmix_kaart_hagel.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_temp.py"      || { echo "FOUT: mosmix_kaart_be_temp.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_temp_dag.py"  || { echo "FOUT: mosmix_kaart_be_temp_dag.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_temp_nacht.py" || { echo "FOUT: mosmix_kaart_be_temp_nacht.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_wind.py"      || { echo "FOUT: mosmix_kaart_be_wind.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_wind_nacht.py" || { echo "FOUT: mosmix_kaart_be_wind_nacht.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_zon.py"       || { echo "FOUT: mosmix_kaart_be_zon.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_regen.py"     || { echo "FOUT: mosmix_kaart_be_regen.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_mist.py"      || { echo "FOUT: mosmix_kaart_be_mist.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_onweer.py"    || { echo "FOUT: mosmix_kaart_be_onweer.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_bewolking.py" || { echo "FOUT: mosmix_kaart_be_bewolking.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_sneeuw.py"    || { echo "FOUT: mosmix_kaart_be_sneeuw.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_hagel.py"     || { echo "FOUT: mosmix_kaart_be_hagel.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_gevoels.py"   || { echo "FOUT: mosmix_kaart_be_gevoels.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_dauwpunt.py"  || { echo "FOUT: mosmix_kaart_be_dauwpunt.py"; exit 1; }
-/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_be_t5cm.py"      || { echo "FOUT: mosmix_kaart_be_t5cm.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_beta_debilt.py"          || { echo "FOUT: maak_beta_debilt.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_beta_verificatie.py"     || { echo "FOUT: maak_beta_verificatie.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_grafiek.py"              || { echo "FOUT: maak_grafiek.py"; exit 1; }
