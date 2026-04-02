@@ -11,6 +11,7 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_guidance.py"             || echo "WAARSCHUWING: haal_guidance.py mislukt"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_luchtvaart_bulletin.py"  || echo "WAARSCHUWING: haal_luchtvaart_bulletin.py mislukt"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_maanddata.py"            || echo "WAARSCHUWING: haal_maanddata.py mislukt"
+/usr/local/bin/python3 "$SCRIPT_DIR/scripts/mosmix_kaart_fixed.py"        || { echo "FOUT: mosmix_kaart_fixed.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_beta_debilt.py"          || { echo "FOUT: maak_beta_debilt.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_beta_verificatie.py"     || { echo "FOUT: maak_beta_verificatie.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_grafiek.py"              || { echo "FOUT: maak_grafiek.py"; exit 1; }
