@@ -756,6 +756,16 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
         data = sorted(gecorrigeerd, key=lambda r: r["datum"])
         print(f"  Datumcorrectie: t/m 1931-12-31 één dag naar voren geschoven")
         print(f"  1932-01-01 toegevoegd met TX=TN=0.0")
+
+        # ── TN extra correctie: schuif TN één dag vooruit (1894-01-01 t/m 1931-12-30)
+        # De minimumtemperatuur stond in het originele Excel één dag verkeerd.
+        tn_start = "1894-01-01"
+        tn_einde = "1931-12-30"
+        for i in range(len(data) - 1):
+            if tn_start <= data[i]["datum"] <= tn_einde:
+                data[i]["tn"] = data[i + 1]["tn"]
+        # Laatste dag van het bereik (1931-12-30): TN is al overgenomen van 1931-12-31
+        print(f"  TN-correctie: minimumtemperatuur één dag vooruit geschoven (1894-01-01 t/m 1931-12-30)")
     # ──────────────────────────────────────────────────────────────────────────
 
     print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")
