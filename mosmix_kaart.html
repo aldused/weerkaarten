@@ -87,6 +87,9 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     <button class="btn-param ttd" data-param="TTD">💧 Dauwpunt</button>
     <button class="btn-param neff" data-param="Neff">☁ Bewolking</button>
     <button class="btn-param gv" data-param="gevoels">🥶 Gevoels</button>
+    <button class="btn-param mist" data-param="wwM">🌫 Mistkans</button>
+    <button class="btn-param zicht" data-param="VV">👁 Zicht</button>
+    <button class="btn-param hagel" data-param="wwZ">🧊 Hagel</button>
   </div>
 </div>
 <div class="toolbar" style="border-top:none;">
@@ -142,10 +145,10 @@ const PARAMS = {
   RR:  { label:"Neerslag (mm)", eenheid:" mm", decimalen:1,
     kleuren:[["#f7fbff","0"],["#c6dbef","2"],["#6baed6","5"],["#2171b5","10"],["#084594","20"],["#4a0080","30+"]],
     schaal:[0,30] },
-  FF:  { label:"Gemiddelde wind (km/h)", eenheid:" km/h", decimalen:0,
-    kleuren:[["#e3f2fd","5"],["#90caf9","15"],["#42a5f5","25"],["#1565c0","35"],["#0d47a1","50+"]],
+  FF:  { label:"Gemiddelde wind (km/h · Bft)", eenheid:" km/h", decimalen:0, bft:true,
+    kleuren:[["#e3f2fd","1-2"],["#90caf9","3"],["#42a5f5","4-5"],["#1565c0","6"],["#0d47a1","7+"]],
     schaal:[0,50] },
-  FX:  { label:"Max windstoot (km/h)", eenheid:" km/h", decimalen:0,
+  FX:  { label:"Max windstoot (km/h · Bft)", eenheid:" km/h", decimalen:0, bft:true,
     kleuren:[["#e8f5e9","20"],["#a5d6a7","40"],["#ffeb3b","60"],["#ff9800","80"],["#f44336","100"],["#b71c1c","120+"]],
     schaal:[20,120] },
   DD:  { label:"Windrichting (°)", eenheid:"°", decimalen:0,
@@ -163,6 +166,15 @@ const PARAMS = {
   gevoels: { label:"Gevoelstemperatuur min (°C)", eenheid:"°", decimalen:1,
     kleuren:[["#4a0080","≤-15°"],["#1a3a6b","-10°"],["#2980b9","-5°"],["#a8d8ea","0°"],["#e8f4f8","5°"],["#ffffcc","10°+"]],
     schaal:[-15,10] },
+  wwM: { label:"Mistkans (%)", eenheid:"%", decimalen:0,
+    kleuren:[["#f7fbff","0%"],["#c6dbef","10%"],["#6baed6","30%"],["#2171b5","50%"],["#084594","70%"],["#4a0080","90%+"]],
+    schaal:[0,90] },
+  VV:  { label:"Minimum zicht (km)", eenheid:" km", decimalen:1,
+    kleuren:[["#4a0080","≤0.2"],["#084594","0.5"],["#6baed6","1"],["#c6dbef","2"],["#ffffcc","5"],["#f7fbff","10+"]],
+    schaal:[0,10] },
+  wwZ: { label:"Hagelkans (%)", eenheid:"%", decimalen:0,
+    kleuren:[["#f7fbff","0%"],["#c6dbef","5%"],["#ffeb3b","15%"],["#ff9800","30%"],["#f44336","50%"],["#b71c1c","70%+"]],
+    schaal:[0,70] },
 };
 
 function hexToRgb(hex) {
@@ -185,6 +197,12 @@ function windpijl(graden) {
   const pijlen = ["↓","↙","←","↖","↑","↗","→","↘","↓"];
   if (graden == null) return "·";
   return pijlen[Math.round(graden/45) % 8];
+}
+
+function kmhNaarBft(kmh) {
+  const grenzen = [1,6,12,20,29,39,50,62,75,89,103,118];
+  for (let i = 0; i < grenzen.length; i++) { if (kmh < grenzen[i]) return i; }
+  return 12;
 }
 
 function tekenKaart() {
@@ -216,6 +234,8 @@ function tekenKaart() {
     let tekst;
     if (huidigParam === "DD") {
       tekst = windpijl(item.val) + " " + item.val.toFixed(0);
+    } else if (p.bft) {
+      tekst = item.val.toFixed(0) + " · " + kmhNaarBft(item.val) + "Bft";
     } else {
       tekst = item.val.toFixed(p.decimalen);
     }

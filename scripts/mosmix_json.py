@@ -167,6 +167,9 @@ def verwerk_station(code, naam):
     sd_raw   = parse_values(root, 'SunD1')
     td_raw   = parse_values(root, 'Td')
     neff_raw = parse_values(root, 'Neff')
+    vv_raw   = parse_values(root, 'VV')      # zicht in meters
+    wwm_raw  = parse_values(root, 'wwM')     # kans op mist %
+    wwz_raw  = parse_values(root, 'wwZ')     # kans op hagel %
 
     # Conversie Kelvin → Celsius
     tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
@@ -182,6 +185,9 @@ def verwerk_station(code, naam):
         "sd": 0.0, "heeft_sd": False, "neff": [],
         "td_nacht": [],
         "gevoels_nacht": [],
+        "vv_min": [],
+        "wwm": [],
+        "wwz": [],
     })
 
     for i, dt in enumerate(times):
@@ -231,6 +237,18 @@ def verwerk_station(code, naam):
             if t_val is not None and f_val is not None:
                 dd["gevoels_nacht"].append(windchill(t_val, f_val))
 
+        # Zicht / mist: minimum over hele dag (meters)
+        if i < len(vv_raw) and vv_raw[i] is not None:
+            dd["vv_min"].append(vv_raw[i])
+
+        # Mistkans: max over hele dag (%)
+        if i < len(wwm_raw) and wwm_raw[i] is not None:
+            dd["wwm"].append(wwm_raw[i])
+
+        # Hagelkans: max over hele dag (%)
+        if i < len(wwz_raw) and wwz_raw[i] is not None:
+            dd["wwz"].append(wwz_raw[i])
+
     # Aggregeer naar eindwaarden per dag
     result = {}
     for d, dd in daily.items():
@@ -270,6 +288,15 @@ def verwerk_station(code, naam):
 
         # Gevoelstemperatuur (minimum nachts)
         r["gevoels"] = round(min(dd["gevoels_nacht"]), 1) if dd["gevoels_nacht"] else None
+
+        # Zicht minimum (km)
+        r["VV"] = round(min(dd["vv_min"]) / 1000, 1) if dd["vv_min"] else None
+
+        # Mistkans max (%)
+        r["wwM"] = round(max(dd["wwm"])) if dd["wwm"] else None
+
+        # Hagelkans max (%)
+        r["wwZ"] = round(max(dd["wwz"])) if dd["wwz"] else None
 
         result[d] = r
 
