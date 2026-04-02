@@ -246,6 +246,52 @@ Chart.register(nachtPlugin);
 
 // ── Data cache ──
 let dataCache = {};
+let mosmixCache = null;
+
+// ── MOSMIX TX/TN ophalen ──
+async function haalMosmix() {
+  if (mosmixCache) return mosmixCache;
+  try {
+    const r = await fetch('mosmix_nl.json?t=' + Date.now());
+    mosmixCache = await r.json();
+    return mosmixCache;
+  } catch(e) { console.warn('MOSMIX laden mislukt:', e); return null; }
+}
+
+function dichtstbijStation(mosmix, lat, lon) {
+  let best = null, bestDist = Infinity;
+  for (const [naam, coords] of Object.entries(mosmix.stations)) {
+    const dx = coords[0] - parseFloat(lon), dy = coords[1] - parseFloat(lat);
+    const dist = dx*dx + dy*dy;
+    if (dist < bestDist) { bestDist = dist; best = naam; }
+  }
+  return best;
+}
+
+function mosmixBolletjes(mosmix, station, ts) {
+  // Geeft {tx: [{x, y}], tn: [{x, y}], label} terug
+  if (!mosmix || !station) return null;
+  const txPunten = [], tnPunten = [];
+  const dagen = mosmix.dagen || [];
+  for (const dag of dagen) {
+    const txVal = mosmix.data[dag]?.TX?.[station];
+    const tnVal = mosmix.data[dag]?.TN?.[station];
+    // Zoek index in ts die het dichtst bij 14:00 van die dag ligt (voor TX)
+    const dagDatum = dag + 'T14:00';
+    const nachtDatum = dag + 'T06:00';
+    let txIdx = -1, tnIdx = -1;
+    for (let i = 0; i < ts.length; i++) {
+      if (ts[i].startsWith(dag)) {
+        const h = new Date(ts[i]).getHours();
+        if (h >= 13 && h <= 15 && txIdx === -1) txIdx = i;
+        if (h >= 5 && h <= 7 && tnIdx === -1) tnIdx = i;
+      }
+    }
+    if (txVal != null && txIdx >= 0) txPunten.push({x: txIdx, y: txVal});
+    if (tnVal != null && tnIdx >= 0) tnPunten.push({x: tnIdx, y: tnVal});
+  }
+  return { tx: txPunten, tn: tnPunten, station };
+}
 
 let actieveType = 'temp';
 let actievePreset = '7';
@@ -453,9 +499,11 @@ function verwijderAlles(){
 
 function legHtml(items){
   return items.map(([kleur,tekst,vorm])=>{
-    const el=vorm==='blok'
-      ?`<span class="leg-blok" style="background:${kleur}"></span>`
-      :`<span class="leg-lijn" style="background:${kleur}${vorm==='dash'?';border-top:2px dashed '+kleur+';background:transparent':''}"></span>`;
+    let el;
+    if(vorm==='blok') el=`<span class="leg-blok" style="background:${kleur}"></span>`;
+    else if(vorm==='punt') el=`<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${kleur};border:2px solid white;box-shadow:0 0 2px rgba(0,0,0,0.4);flex-shrink:0"></span>`;
+    else if(vorm==='dash') el=`<span class="leg-lijn" style="border-top:2px dashed ${kleur};background:transparent"></span>`;
+    else el=`<span class="leg-lijn" style="background:${kleur}"></span>`;
     return `<span>${el}${tekst}</span>`;
   }).join('');
 }
@@ -573,6 +621,18 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   const lab=getLab(ts);
   const hLab=getLab(hTs);
 
+  // MOSMIX TX/TN bolletjes
+  const mosmix = await haalMosmix();
+  const mosStation = mosmix ? dichtstbijStation(mosmix, lat, lon) : null;
+  const mosBol = mosmixBolletjes(mosmix, mosStation, ts);
+  const mosTxData = Array(ts.length).fill(null);
+  const mosTnData = Array(ts.length).fill(null);
+  if (mosBol) {
+    mosBol.tx.forEach(p => { if (p.x >= 0 && p.x < mosTxData.length) mosTxData[p.x] = p.y; });
+    mosBol.tn.forEach(p => { if (p.x >= 0 && p.x < mosTnData.length) mosTnData[p.x] = p.y; });
+  }
+  const mosLabel = mosStation ? ` · MOSMIX ${mosStation}` : '';
+
   // Temp chart
   document.getElementById('blok-temp').style.display='';
   document.getElementById('titel-temp').textContent=`ECMWF – ${naam}  Temperatuur`;
@@ -582,6 +642,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     ['#ee3333','Mediaan','lijn'],
     ['#2299ff','HRES','lijn'],
     ['rgba(200,50,50,0.5)','10°C','dash'],
+    ...(mosBol ? [['#ff4444','MOSMIX TX' + mosLabel,'punt'],['#4488ff','MOSMIX TN' + mosLabel,'punt']] : []),
   ]);
   chartTimestamps['canvas-temp']=ts;
   actieveCharts.temp=new Chart(document.getElementById('canvas-temp'),{
@@ -592,14 +653,26 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
       {type:'line',data:tMed,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
       {type:'line',data:hTemp,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
       {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:3},
+      ...(mosBol ? [
+        {type:'line',data:mosTxData,borderColor:'transparent',backgroundColor:'#ff4444',pointRadius:ctx=>mosTxData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
+        {type:'line',data:mosTnData,borderColor:'transparent',backgroundColor:'#4488ff',pointRadius:ctx=>mosTnData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
+      ] : []),
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:'rgba(13,13,26,0.97)',titleColor:'#ddddf0',bodyColor:'#aabbcc',borderColor:'#334466',borderWidth:1,
-        filter:item=>item.datasetIndex>=tA.length+2&&item.datasetIndex<=tA.length+3,
+        filter:item=>{
+          const base=tA.length+2;
+          return (item.datasetIndex>=base&&item.datasetIndex<=base+1)||(mosBol&&item.datasetIndex>=base+2);
+        },
         callbacks:{label:ctx=>{
+          const base=tA.length+2;
           const names=['Mediaan','HRES'];
-          const i=ctx.datasetIndex-tA.length-2;
+          if(mosBol){
+            if(ctx.datasetIndex===base+2) return ` MOSMIX TX: ${ctx.parsed.y?.toFixed(1)}°C`;
+            if(ctx.datasetIndex===base+3) return ` MOSMIX TN: ${ctx.parsed.y?.toFixed(1)}°C`;
+          }
+          const i=ctx.datasetIndex-base;
           if(i<0||i>=names.length)return null;
           return ` ${names[i]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C`;
         }}
