@@ -304,7 +304,7 @@ body {
 <div class="header">
   <div>
     <h1>Meteogram &mdash; 5-daagse verwachting</h1>
-    <p id="header-sub">Harmonie (0-48u) + ECMWF (48-120u) &middot; Open-Meteo &middot; uurlijks</p>
+    <p id="header-sub">Yr.no MEPS (0-60u) + ECMWF (60-120u) &middot; uurlijks</p>
   </div>
   <div class="header-right">
     Ed Aldus<br>
@@ -336,7 +336,7 @@ body {
       <span><span class="leg-blok" style="background:#b0c8e0"></span> Hoge bewolking</span>
       <span><span class="leg-blok" style="background:#7a9ab8"></span> Middelhoge bew.</span>
       <span><span class="leg-blok" style="background:#4a6a88"></span> Lage bewolking</span>
-      <span style="color:#cc8800;font-weight:600">&#9474; Modelgrens 48u</span>
+      <span style="color:#cc8800;font-weight:600">&#9474; Modelgrens</span>
     </div>
 
     <div class="meteogram-wrap">
@@ -393,7 +393,7 @@ body {
     <!-- Uurlijkse details eerste 3 dagen -->
     <div id="uur-details" style="margin-top:12px"></div>
 
-    <div class="copyright">&copy; Ed Aldus &mdash; Data: Open-Meteo (KNMI Harmonie &amp; ECMWF)</div>
+    <div class="copyright">&copy; Ed Aldus &mdash; Data: Yr.no (MET Norway MEPS) &amp; Open-Meteo (ECMWF)</div>
   </div>
 </div>
 
@@ -533,7 +533,7 @@ const modelGrensPlugin = {
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#cc8800';
       ctx.textAlign = 'right';
-      ctx.fillText('\u25C0 Harmonie', px - 4, yScale.top + 4);
+      ctx.fillText('\u25C0 Yr.no MEPS', px - 4, yScale.top + 4);
       ctx.textAlign = 'left';
       ctx.fillText('ECMWF \u25B6', px + 4, yScale.top + 4);
     }
@@ -775,21 +775,111 @@ async function fetchT(url, ms = 20000) {
 }
 
 // ── Data laden & mergen ─────────────────────────────────────────────────────
+// Yr.no (MET Norway MEPS 2.5km) voor eerste ~60u, ECMWF voor dag 3-5
+// Yr.no mist windvlagen en zonnestraling, die komen van Open-Meteo
 
-async function haalData(lat, lon) {
-  const params = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code,shortwave_radiation,relative_humidity_2m';
-  const base = 'https://api.open-meteo.com/v1/forecast';
-
-  const [harm, ecmwf] = await Promise.all([
-    fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${params}&models=knmi_seamless&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_hours=48`),
-    fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${params}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=5`),
-  ]);
-
-  return mergeModellen(harm, ecmwf);
+async function haalYrData(lat, lon) {
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const r = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'weerlab.nl github.com/aldused/weerkaarten' }
+    });
+    clearTimeout(id);
+    if (!r.ok) throw new Error(`Yr.no HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    clearTimeout(id);
+    throw new Error(e.name === 'AbortError' ? 'Yr.no time-out' : e.message);
+  }
 }
 
-function mergeModellen(harm, ecmwf) {
-  const hTimes = harm.hourly.time;
+function parseYrData(yrJson) {
+  const ts = yrJson.properties.timeseries;
+  // Filter alleen uurlijkse entries (die next_1_hours hebben)
+  const uurlijks = ts.filter(t => t.data.next_1_hours);
+
+  const result = { time: [], temperature_2m: [], dewpoint_2m: [],
+    windspeed_10m: [], winddirection_10m: [], precipitation: [],
+    cloudcover_low: [], cloudcover_mid: [], cloudcover_high: [],
+    weather_code: [], relative_humidity_2m: [] };
+
+  // WMO symbol_code mapping naar weather_code
+  const symNaarCode = {
+    'clearsky': 0, 'fair': 1, 'partlycloudy': 2, 'cloudy': 3,
+    'fog': 45, 'lightrain': 61, 'rain': 63, 'heavyrain': 65,
+    'lightrainshowers': 80, 'rainshowers': 81, 'heavyrainshowers': 82,
+    'lightsleet': 66, 'sleet': 67, 'lightsnow': 71, 'snow': 73, 'heavysnow': 75,
+    'lightsnowshowers': 85, 'snowshowers': 86, 'sleetshowers': 67,
+    'lightrainandthunder': 95, 'rainandthunder': 95, 'heavyrainandthunder': 99,
+    'lightssleetandthunder': 95, 'sleetandthunder': 95,
+    'lightsnowandthunder': 95, 'snowandthunder': 95,
+    'lightrainshowersandthunder': 95, 'rainshowersandthunder': 95,
+    'heavyrainshowersandthunder': 99, 'lightsleetshowersandthunder': 95,
+    'sleetshowersandthunder': 95, 'lightsnowshowersandthunder': 95,
+    'snowshowersandthunder': 95
+  };
+
+  for (const t of uurlijks) {
+    const d = t.data.instant.details;
+    // Yr.no geeft UTC tijden, converteer naar lokaal formaat (YYYY-MM-DDTHH:MM)
+    const utc = new Date(t.time);
+    const lokaal = new Date(utc.toLocaleString('en-US', { timeZone: 'Europe/Amsterdam' }));
+    const tStr = `${lokaal.getFullYear()}-${String(lokaal.getMonth()+1).padStart(2,'0')}-${String(lokaal.getDate()).padStart(2,'0')}T${String(lokaal.getHours()).padStart(2,'0')}:00`;
+
+    result.time.push(tStr);
+    result.temperature_2m.push(d.air_temperature ?? null);
+    result.dewpoint_2m.push(d.dew_point_temperature ?? null);
+    result.windspeed_10m.push(d.wind_speed != null ? Math.round(d.wind_speed * 3.6 * 10) / 10 : null); // m/s → km/h
+    result.winddirection_10m.push(d.wind_from_direction ?? null);
+    result.cloudcover_low.push(d.cloud_area_fraction_low ?? null);
+    result.cloudcover_mid.push(d.cloud_area_fraction_medium ?? null);
+    result.cloudcover_high.push(d.cloud_area_fraction_high ?? null);
+    result.relative_humidity_2m.push(d.relative_humidity ?? null);
+
+    // Neerslag uit next_1_hours
+    const precip = t.data.next_1_hours?.details?.precipitation_amount ?? 0;
+    result.precipitation.push(precip);
+
+    // Weercode uit symbol_code
+    const sym = t.data.next_1_hours?.summary?.symbol_code || '';
+    const baseSym = sym.replace(/_day|_night|_polartwilight/g, '');
+    result.weather_code.push(symNaarCode[baseSym] ?? 3);
+  }
+
+  return result;
+}
+
+async function haalData(lat, lon) {
+  const ecmwfParams = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code,shortwave_radiation,relative_humidity_2m';
+  const base = 'https://api.open-meteo.com/v1/forecast';
+
+  // Yr.no + ECMWF parallel ophalen
+  const [yrJson, ecmwf] = await Promise.all([
+    haalYrData(lat, lon),
+    fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${ecmwfParams}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=5`),
+  ]);
+
+  const yr = parseYrData(yrJson);
+
+  // Windvlagen en zonnestraling van ECMWF toevoegen aan Yr data
+  // (Yr.no heeft deze niet)
+  yr.windgusts_10m = [];
+  yr.shortwave_radiation = [];
+  for (let i = 0; i < yr.time.length; i++) {
+    const yrT = yr.time[i];
+    const eIdx = ecmwf.hourly.time.indexOf(yrT);
+    yr.windgusts_10m.push(eIdx >= 0 ? ecmwf.hourly.windgusts_10m[eIdx] : null);
+    yr.shortwave_radiation.push(eIdx >= 0 ? ecmwf.hourly.shortwave_radiation?.[eIdx] : null);
+  }
+
+  return mergeModellen(yr, ecmwf);
+}
+
+function mergeModellen(yr, ecmwf) {
+  const hTimes = yr.time;
   const eTimes = ecmwf.hourly.time;
   const laatsteH = hTimes[hTimes.length - 1];
 
@@ -799,9 +889,9 @@ function mergeModellen(harm, ecmwf) {
   modelGrensIdx = hTimes.length;
 
   const merged = { time: [...hTimes, ...eTimes.slice(spliceStart)] };
-  const keys = Object.keys(harm.hourly).filter(k => k !== 'time');
+  const keys = Object.keys(yr).filter(k => k !== 'time');
   for (const k of keys) {
-    const hArr = harm.hourly[k] || [];
+    const hArr = yr[k] || [];
     const eArr = (ecmwf.hourly[k] || []).slice(spliceStart);
     merged[k] = [...hArr, ...eArr];
   }
@@ -1420,7 +1510,7 @@ async function laadEnTeken() {
     containerEl.style.display = 'block';
 
     document.getElementById('header-sub').textContent =
-      `${info.naam} \u00B7 Harmonie (0\u201348u) + ECMWF (48\u2013120u) \u00B7 Open-Meteo \u00B7 uurlijks`;
+      `${info.naam} \u00B7 Yr.no MEPS (0\u201360u) + ECMWF (60\u2013120u) \u00B7 uurlijks`;
 
     tekenAlles(data);
     bouwUurDetails(data);
