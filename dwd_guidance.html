@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DWD Guidance (NL)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#333;padding:16px 20px}
+
+.koptekst{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.koptekst h2{font-size:1.05em;color:#00205b}
+.koptekst .bron{font-size:0.75em;color:#888}
+
+.tabs{display:flex;gap:4px;margin-bottom:0}
+.tab{padding:8px 16px;background:#dce6f0;border:1px solid #b0c4d8;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-size:0.82em;color:#333;font-weight:600}
+.tab:hover{background:#c8d8ec}
+.tab.actief{background:white;border-bottom:1px solid white;color:#00205b}
+
+.inhoud{background:white;border:1px solid #b0c4d8;border-radius:0 6px 6px 6px;padding:16px 20px;min-height:300px}
+
+.meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e8ecf0;flex-wrap:wrap;gap:8px}
+.meta-info{font-size:0.78em;color:#888}
+.meta-info strong{color:#333}
+
+.toggle{font-size:0.75em;padding:5px 10px;background:#e8ecf0;border:1px solid #c8d4e0;border-radius:5px;color:#555;cursor:pointer}
+.toggle:hover{background:#d0d8e4}
+.toggle.actief{background:#003366;color:white;border-color:#003366}
+
+.tekst{white-space:pre-wrap;font-size:0.88em;line-height:1.75;color:#333}
+.tekst h3{color:#00205b;font-size:0.95em;margin:18px 0 6px;font-weight:700}
+.tekst h3:first-child{margin-top:0}
+
+.laden{text-align:center;padding:40px;color:#999;font-size:0.85em}
+.laden::after{content:"";display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#003366;border-radius:50%;animation:draai .7s linear infinite;margin-left:8px;vertical-align:middle}
+@keyframes draai{to{transform:rotate(360deg)}}
+
+.fout{background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:12px;color:#cc2200;font-size:0.85em}
+</style>
+</head>
+<body>
+
+<div class="koptekst">
+  <h2>🇩🇪 DWD Synoptische Guidance</h2>
+  <span class="bron">Automatisch vertaald vanuit het Duits (Deutscher Wetterdienst)</span>
+</div>
+
+<div class="tabs">
+  <div class="tab actief" id="tab-kort" onclick="wisselTab('kurzfrist')">Korte termijn (0–3 dagen)</div>
+  <div class="tab" id="tab-mid" onclick="wisselTab('mittelfrist')">Middellange termijn (4–7 dagen)</div>
+</div>
+
+<div class="inhoud">
+  <div class="meta">
+    <div class="meta-info">
+      Uitgegeven: <strong id="uitgegeven">–</strong> · Opgehaald: <strong id="opgehaald">–</strong>
+    </div>
+    <button class="toggle" id="taalToggle" onclick="wisselTaal()">Toon origineel (Duits)</button>
+  </div>
+  <div id="tekst" class="tekst">
+    <div class="laden">Guidance ophalen en vertalen</div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:3000";
+const state = { tab: "kurzfrist", origineel: false, data: {} };
+
+function wisselTab(tab) {
+  state.tab = tab;
+  document.getElementById("tab-kort").classList.toggle("actief", tab === "kurzfrist");
+  document.getElementById("tab-mid").classList.toggle("actief", tab === "mittelfrist");
+  render();
+  if (!state.data[tab]) laad(tab);
+}
+
+function wisselTaal() {
+  state.origineel = !state.origineel;
+  const btn = document.getElementById("taalToggle");
+  btn.textContent = state.origineel ? "Toon vertaling (NL)" : "Toon origineel (Duits)";
+  btn.classList.toggle("actief", state.origineel);
+  render();
+}
+
+function formateer(tekst) {
+  return tekst
+    .replace(/^(={2,})/gm, "")
+    .replace(/^(__+)/gm, "")
+    .replace(/^(Synoptische .*|S Y N O P T.*)/gim, "<h3>$1</h3>")
+    .replace(/^(GWL und .*|Synoptische Entwicklung.*|Modellvergleich.*|Vorhersage.*|Bewertung.*)/gim, "<h3>$1</h3>")
+    .replace(/^(GWL en .*|Synoptische ontwikkeling.*|Modelvergelijking.*|Voorspelling.*|Beoordeling.*)/gim, "<h3>$1</h3>");
+}
+
+function render() {
+  const d = state.data[state.tab];
+  const el = document.getElementById("tekst");
+  const uit = document.getElementById("uitgegeven");
+  const opg = document.getElementById("opgehaald");
+  if (!d) { el.innerHTML = '<div class="laden">Guidance ophalen en vertalen</div>'; uit.textContent = "–"; opg.textContent = "–"; return; }
+  if (d.error) { el.innerHTML = `<div class="fout">${d.error}</div>`; return; }
+  el.innerHTML = formateer(state.origineel ? d.original : d.translated);
+  uit.textContent = d.issuedAt || "onbekend";
+  opg.textContent = new Date(d.fetchedAt).toLocaleString("nl-NL");
+}
+
+async function laad(type) {
+  state.data[type] = null;
+  render();
+  try {
+    const r = await fetch(`${API_BASE}/api/guidance/${type}`);
+    if (!r.ok) throw new Error(`Server fout: ${r.status}`);
+    state.data[type] = await r.json();
+  } catch(e) {
+    state.data[type] = { error: `Kon DWD guidance niet laden: ${e.message}` };
+  }
+  render();
+}
+
+laad("kurzfrist");
+</script>
+</body>
+</html>
