@@ -245,7 +245,7 @@ const nachtPlugin = {
 };
 Chart.register(nachtPlugin);
 
-// ── Crosshair: verticale lijn + info op canvas ──
+// ── Crosshair: verticale lijn + info via HTML element ──
 let crosshairData = {};
 
 const crosshairPlugin = {
@@ -253,35 +253,24 @@ const crosshairPlugin = {
   afterEvent(chart, args) {
     if (chart.canvas.id !== 'canvas-temp') return;
     const evt = args.event;
-    if (evt.type === 'mouseout') { chart._chIdx = null; chart.draw(); return; }
+    const info = document.getElementById('crosshair-info');
+    if (!info) return;
+    const cd = crosshairData['canvas-temp'];
+    if (!cd) return;
+
+    if (evt.type === 'mouseout') {
+      chart._chIdx = null;
+      info.style.display = 'none';
+      return;
+    }
     if (evt.type !== 'mousemove') return;
     const xScale = chart.scales.x;
     if (!xScale) return;
-    chart._chIdx = Math.round(xScale.getValueForPixel(evt.x));
+    const idx = Math.round(xScale.getValueForPixel(evt.x));
+    if (idx < 0 || idx >= (cd.tMed||[]).length) { info.style.display = 'none'; chart._chIdx = null; return; }
+
+    chart._chIdx = idx;
     chart._chX = evt.x;
-    chart.draw();
-  },
-  afterDraw(chart) {
-    if (chart.canvas.id !== 'canvas-temp') return;
-    const idx = chart._chIdx;
-    const cd = crosshairData['canvas-temp'];
-    if (idx == null || !cd || idx < 0 || idx >= (cd.tMed||[]).length) return;
-
-    const ctx = chart.ctx;
-    const xScale = chart.scales.x;
-    const yScale = chart.scales.y;
-    const px = chart._chX || xScale.getPixelForValue(idx);
-
-    // Verticale lijn
-    ctx.save();
-    ctx.beginPath();
-    ctx.setLineDash([4, 3]);
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = '#888';
-    ctx.moveTo(px, yScale.top);
-    ctx.lineTo(px, yScale.bottom);
-    ctx.stroke();
-    ctx.restore();
 
     // Waarden berekenen
     const ensVals = (cd.tA||[]).map(m => m[idx]).filter(v => v != null);
@@ -294,47 +283,39 @@ const crosshairPlugin = {
     const ts = chartTimestamps['canvas-temp'];
     const tijd = ts && ts[idx] ? new Date(ts[idx]).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
 
-    // Tekst items
-    const items = [];
-    items.push({t: tijd, c: '#555'});
-    if (maxVal != null) items.push({t: `Max: ${maxVal.toFixed(1)}°`, c: '#cc6600'});
-    if (hresVal != null) items.push({t: `HRES: ${hresVal.toFixed(1)}°`, c: '#2299ff'});
-    if (medVal != null) items.push({t: `Med: ${medVal.toFixed(1)}°`, c: '#cc2222'});
-    if (minVal != null) items.push({t: `Min: ${minVal.toFixed(1)}°`, c: '#2266aa'});
-    if (mosTx != null) items.push({t: `MOS TX: ${mosTx.toFixed(1)}°`, c: '#ff4444'});
-    if (mosTn != null) items.push({t: `MOS TN: ${mosTn.toFixed(1)}°`, c: '#4488ff'});
+    let html = `<span style="color:#555">${tijd}</span>`;
+    if (maxVal != null) html += `<span style="color:#cc6600">Max: <b>${maxVal.toFixed(1)}°</b></span>`;
+    if (hresVal != null) html += `<span style="color:#2299ff">HRES: <b>${hresVal.toFixed(1)}°</b></span>`;
+    if (medVal != null) html += `<span style="color:#cc2222">Med: <b>${medVal.toFixed(1)}°</b></span>`;
+    if (minVal != null) html += `<span style="color:#2266aa">Min: <b>${minVal.toFixed(1)}°</b></span>`;
+    if (mosTx != null) html += `<span style="color:#ff4444">MOS TX: <b>${mosTx.toFixed(1)}°</b></span>`;
+    if (mosTn != null) html += `<span style="color:#4488ff">MOS TN: <b>${mosTn.toFixed(1)}°</b></span>`;
 
-    // Teken achtergrond balk bovenaan
+    info.innerHTML = html;
+    info.style.display = 'flex';
+  },
+  afterDraw(chart) {
+    if (chart.canvas.id !== 'canvas-temp' || chart._chIdx == null) return;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    if (!xScale || !yScale) return;
+    const px = chart._chX || xScale.getPixelForValue(chart._chIdx);
+
+    const ctx = chart.ctx;
     ctx.save();
-    ctx.font = 'bold 11px Inter,Arial,sans-serif';
-    const padding = 8;
-    let totalW = padding;
-    items.forEach(it => { totalW += ctx.measureText(it.t).width + 14; });
-    const barH = 22;
-    const barY = yScale.top - barH - 4;
-    const barX = xScale.left;
-
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.strokeStyle = '#d0d8e4';
-    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(barX, barY, Math.min(totalW, xScale.width), barH, 4);
-    ctx.fill();
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = '#888';
+    ctx.moveTo(px, yScale.top);
+    ctx.lineTo(px, yScale.bottom);
     ctx.stroke();
-
-    // Teken tekst items
-    let x = barX + padding;
-    items.forEach(it => {
-      ctx.fillStyle = it.c;
-      ctx.fillText(it.t, x, barY + 15);
-      x += ctx.measureText(it.t).width + 14;
-    });
     ctx.restore();
   }
 };
 Chart.register(crosshairPlugin);
 
-function initCrosshair() {} // niet meer nodig, plugin doet alles
+function initCrosshair() {}
 
 // ── Data cache ──
 let dataCache = {};
