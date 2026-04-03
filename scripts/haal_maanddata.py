@@ -76,9 +76,13 @@ def parse_zip(tekst):
     return data
 
 def haal_edr_dag(wigos, datum):
-    """Haal 1 dag op via EDR: eerst validated, dan realtime als fallback."""
-    s = f"{datum}T00:00:00Z"
-    e = f"{datum}T23:59:59Z"
+    """Haal 1 dag op via EDR: eerst validated, dan realtime als fallback.
+    De EDR API gebruikt UTC-etmalen (00-00 UTC), terwijl de KNMI ZIP-bestanden
+    etmaalwaarden gebruiken (08-08 UTC). Hierdoor loopt de EDR-datum 1 dag
+    voor op de ZIP-conventie. We vragen daarom datum+1 op bij de EDR API."""
+    edr_datum = (date.fromisoformat(datum) + timedelta(days=1)).isoformat()
+    s = f"{edr_datum}T00:00:00Z"
+    e = f"{edr_datum}T23:59:59Z"
     params = {"datetime": f"{s}/{e}", "parameter-name": "TX,TN,TG,RH,SQ"}
 
     for collectie in EDR_COLLECTIES:
