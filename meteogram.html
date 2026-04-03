@@ -381,6 +381,12 @@ body {
     <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <input type="text" id="png-tekst" placeholder="Optionele tekst, bijv. Marathon Rotterdam 2026" style="border:1px solid #d0d8e4;border-radius:6px;padding:5px 10px;font-size:0.82em;flex:1;min-width:200px;outline:none;font-family:inherit">
       <button class="btn-download" onclick="downloadPNG('meteogram')">&#128247; Meteogram PNG</button>
+      <select id="tabel-dag" style="border:1px solid #d0d8e4;border-radius:6px;padding:4px 8px;font-size:0.78em;font-family:inherit;cursor:pointer">
+        <option value="alle">Alle dagen</option>
+        <option value="0">Dag 1</option>
+        <option value="1">Dag 2</option>
+        <option value="2">Dag 3</option>
+      </select>
       <button class="btn-download" onclick="downloadPNG('tabel')">&#128203; Tabel PNG</button>
     </div>
 
@@ -1679,14 +1685,23 @@ function downloadTabelPNG(plaatsNaam, ts) {
 
   const richtingen = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
   const dagen = maakDagen(mergedTimes);
-  const eersteN = Math.min(dagen.length, 3);
+  const dagKeuze = document.getElementById('tabel-dag')?.value || 'alle';
+  let startDag, eindDag;
+  if (dagKeuze === 'alle') {
+    startDag = 0;
+    eindDag = Math.min(dagen.length, 3);
+  } else {
+    startDag = parseInt(dagKeuze);
+    eindDag = startDag + 1;
+  }
+  const aantalDagen = eindDag - startDag;
 
   // Bereken totale hoogte
   let totalRows = 0;
-  for (let d = 0; d < eersteN; d++) {
+  for (let d = startDag; d < eindDag && d < dagen.length; d++) {
     totalRows += (dagen[d].end - dagen[d].start);
   }
-  const totalH = headerH + subH + (eersteN * (thH + dagGap + 20)) + totalRows * rowH + footerH + padding;
+  const totalH = headerH + subH + (aantalDagen * (thH + dagGap + 20)) + totalRows * rowH + footerH + padding;
 
   const off = document.createElement('canvas');
   off.width = totalW;
@@ -1697,7 +1712,7 @@ function downloadTabelPNG(plaatsNaam, ts) {
 
   let y = pngHeader(ctx, off.width, headerH, padding, plaatsNaam, 'Uurlijks overzicht');
 
-  for (let d = 0; d < eersteN; d++) {
+  for (let d = startDag; d < eindDag && d < dagen.length; d++) {
     const dag = dagen[d];
     const date = dag.date;
     const dagLabel = `${NL_DAGEN_LANG[date.getDay()]} ${date.getDate()} ${NL_MAANDEN[date.getMonth() + 1]}`;
