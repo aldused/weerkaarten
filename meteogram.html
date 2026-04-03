@@ -211,6 +211,85 @@ body {
   font-family: 'Segoe UI', sans-serif;
 }
 
+/* ── Uurlijkse details ── */
+.dag-dropdown {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  margin-bottom: 8px;
+  border: 1px solid #e0e5ec;
+  overflow: hidden;
+}
+.dag-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  background: #f4f7fb;
+  border-bottom: 1px solid #e0e5ec;
+  transition: background 0.15s;
+}
+.dag-dropdown-header:hover { background: #eaf0f8; }
+.dag-dropdown-header h3 {
+  font-size: 0.88em;
+  font-weight: 700;
+  color: #1a2b40;
+  margin: 0;
+}
+.dag-dropdown-header .dag-stats {
+  font-size: 0.75em;
+  color: #5a6a80;
+  display: flex;
+  gap: 10px;
+}
+.dag-dropdown-header .pijl {
+  font-size: 0.8em;
+  color: #5a6a80;
+  transition: transform 0.2s;
+}
+.dag-dropdown.open .pijl { transform: rotate(180deg); }
+.dag-dropdown-body {
+  display: none;
+  overflow-x: auto;
+}
+.dag-dropdown.open .dag-dropdown-body { display: block; }
+.uur-tabel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78em;
+}
+.uur-tabel th {
+  background: #f4f7fb;
+  color: #5a7090;
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  text-align: center;
+  border-bottom: 1px solid #e0e5ec;
+  position: sticky;
+  top: 0;
+}
+.uur-tabel td {
+  padding: 5px 8px;
+  text-align: center;
+  border-bottom: 1px solid #f0f2f5;
+  white-space: nowrap;
+}
+.uur-tabel tr:hover td { background: #f8fafb; }
+.uur-tabel .nacht-rij td { background: #f5f7fa; }
+.uur-tabel .temp-cel { color: #cc2222; font-weight: 600; }
+.uur-tabel .dauw-cel { color: #2266aa; }
+.uur-tabel .wind-cel { color: #996600; font-weight: 600; }
+.uur-tabel .vlaag-cel { color: #cc5500; }
+.uur-tabel .regen-cel { color: #2255aa; }
+.uur-tabel .bew-cel { color: #5a6a80; }
+.uur-tabel .richting-cel { color: #5a6a80; font-size: 0.92em; }
+.uur-tabel .weer-cel { font-size: 1.1em; }
+
 @media (max-width: 700px) {
   .controls { flex-direction: column; align-items: flex-start; }
   .btn-download { margin-left: 0; }
@@ -298,9 +377,17 @@ body {
       </div>
     </div>
 
-    <div class="copyright">&copy; Ed Aldus &middot; Weerlab.nl &mdash; Data: Open-Meteo (KNMI Harmonie &amp; ECMWF)</div>
+    <!-- PNG opties -->
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <input type="text" id="png-tekst" placeholder="Optionele tekst, bijv. Marathon Rotterdam 2026" style="border:1px solid #d0d8e4;border-radius:6px;padding:5px 10px;font-size:0.82em;flex:1;min-width:200px;outline:none;font-family:inherit">
+      <button class="btn-download" onclick="downloadPNG('meteogram')">&#128247; Meteogram PNG</button>
+      <button class="btn-download" onclick="downloadPNG('tabel')">&#128203; Tabel PNG</button>
+    </div>
 
-    <button class="btn-download" id="btn-png" style="margin-top:6px">&#128247; Download PNG</button>
+    <!-- Uurlijkse details eerste 3 dagen -->
+    <div id="uur-details" style="margin-top:12px"></div>
+
+    <div class="copyright">&copy; Ed Aldus &mdash; Data: Open-Meteo (KNMI Harmonie &amp; ECMWF)</div>
   </div>
 </div>
 
@@ -329,6 +416,7 @@ let windRichtingData = [];
 let weerCodeData = [];
 let mergedTimes = [];
 let refreshTimer = null;
+let data_cache = null;
 
 const GRID = '#d0d8e4';
 const TICK = '#5a6a80';
@@ -343,15 +431,15 @@ function weerSymbool(code, isNacht) {
   // Helder
   if (code === 0) return isNacht ? '\u{1F319}' : '\u2600\uFE0F';
   // Licht bewolkt
-  if (code === 1) return isNacht ? '\u{1F319}' : '\u{1F324}\uFE0F';
+  if (code === 1) return isNacht ? '\u{1F319}\u2601' : '\u{1F324}\uFE0F';
   // Half bewolkt
-  if (code === 2) return isNacht ? '\u2601\uFE0F' : '\u26C5';
+  if (code === 2) return isNacht ? '\u{1F319}\u2601' : '\u26C5';
   // Bewolkt
   if (code === 3) return '\u2601\uFE0F';
   // Mist
   if (code >= 45 && code <= 48) return '\u{1F32B}\uFE0F';
   // Motregen
-  if (code >= 51 && code <= 55) return '\u{1F326}\uFE0F';
+  if (code >= 51 && code <= 55) return isNacht ? '\u{1F319}\u{1F327}' : '\u{1F326}\uFE0F';
   // Aanvriezende motregen
   if (code >= 56 && code <= 57) return '\u2744\uFE0F';
   // Regen
@@ -361,7 +449,7 @@ function weerSymbool(code, isNacht) {
   // Sneeuw
   if (code >= 71 && code <= 77) return '\u{1F328}\uFE0F';
   // Buien
-  if (code >= 80 && code <= 82) return '\u{1F327}\uFE0F';
+  if (code >= 80 && code <= 82) return isNacht ? '\u{1F319}\u{1F327}' : '\u{1F326}\uFE0F';
   // Sneeuwbuien
   if (code >= 85 && code <= 86) return '\u{1F328}\uFE0F';
   // Onweer
@@ -683,7 +771,7 @@ async function fetchT(url, ms = 20000) {
 // ── Data laden & mergen ─────────────────────────────────────────────────────
 
 async function haalData(lat, lon) {
-  const params = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code';
+  const params = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code,shortwave_radiation,relative_humidity_2m';
   const base = 'https://api.open-meteo.com/v1/forecast';
 
   const [harm, ecmwf] = await Promise.all([
@@ -728,6 +816,46 @@ function maakLabels(times) {
 // ── Dag/tijd header tekenen ─────────────────────────────────────────────────
 
 // ── Beaufort schaal ─────────────────────────────────────────────────────────
+
+// ── WBGT berekening ─────────────────────────────────────────────────────────
+// Vereenvoudigde WBGT op basis van Australisch Bureau of Meteorology methode
+// Combineert nat-bol temperatuur (Tw), globe temperatuur (Tg) en droge temp (Ta)
+// WBGT_outdoor = 0.7 * Tw + 0.2 * Tg + 0.1 * Ta
+
+function berekenWBGT(tempC, rhPct, windKmh, stralW) {
+  if (tempC == null || rhPct == null) return null;
+  const wind = windKmh != null ? windKmh / 3.6 : 1; // m/s, minimum 1
+  const stral = stralW != null ? stralW : 0;
+
+  // Dampdruk (hPa) via Magnus-formule
+  const es = 6.112 * Math.exp((17.67 * tempC) / (tempC + 243.5));
+  const ea = es * (rhPct / 100);
+
+  // Nat-bol temperatuur (Stull 2011 benadering)
+  const Tw = tempC * Math.atan(0.151977 * Math.sqrt(rhPct + 8.313659))
+    + Math.atan(tempC + rhPct)
+    - Math.atan(rhPct - 1.676331)
+    + 0.00391838 * Math.pow(rhPct, 1.5) * Math.atan(0.023101 * rhPct)
+    - 4.686035;
+
+  // Globe temperatuur: benadering met zonnestraling en wind
+  // Tg ≈ Ta + straling-effect - wind-koeling
+  const Tg = tempC + (0.01 * stral) - (0.4 * Math.sqrt(Math.max(wind, 0.5)));
+
+  // WBGT outdoor
+  const wbgt = 0.7 * Tw + 0.2 * Tg + 0.1 * tempC;
+  return Math.round(wbgt * 10) / 10;
+}
+
+function wbgtKleur(wbgt) {
+  if (wbgt == null) return { bg: '#f0f0f0', color: '#999' };
+  if (wbgt < 5)  return { bg: '#ddeeff', color: '#2266aa', label: 'Koud' };
+  if (wbgt < 13) return { bg: '#d4edda', color: '#1a7a3a', label: 'Ideaal' };
+  if (wbgt < 18) return { bg: '#fff3cd', color: '#856404', label: 'Matig' };
+  if (wbgt < 23) return { bg: '#ffe0cc', color: '#cc5500', label: 'Hoog' };
+  if (wbgt < 28) return { bg: '#f8d7da', color: '#cc2222', label: 'Zeer hoog' };
+  return { bg: '#d4002a', color: '#ffffff', label: 'Extreem' };
+}
 
 function kmhNaarBft(kmh) {
   if (kmh < 1) return 0;
@@ -1280,6 +1408,7 @@ async function laadEnTeken() {
 
   try {
     const data = await haalData(info.lat, info.lon);
+    data_cache = data;
     statusEl.style.display = 'none';
     containerEl.style.display = 'block';
 
@@ -1287,6 +1416,7 @@ async function laadEnTeken() {
       `${info.naam} \u00B7 Harmonie (0\u201348u) + ECMWF (48\u2013120u) \u00B7 Open-Meteo \u00B7 uurlijks`;
 
     tekenAlles(data);
+    bouwUurDetails(data);
     toonFavorieten();
   } catch (err) {
     statusEl.innerHTML = `<div style="color:#cc3333">Fout bij laden: ${err.message}</div>`;
@@ -1294,14 +1424,159 @@ async function laadEnTeken() {
   }
 }
 
+// ── Uurlijkse details (eerste 3 dagen) ──────────────────────────────────────
+
+function bouwUurDetails(data) {
+  const container = document.getElementById('uur-details');
+  container.innerHTML = '';
+  const times = data.time;
+  if (!times.length) return;
+
+  // Groepeer per dag (eerste 3 dagen)
+  const dagen = maakDagen(times);
+  const eersteN = Math.min(dagen.length, 3);
+
+  const richtingen = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+
+  for (let d = 0; d < eersteN; d++) {
+    const dag = dagen[d];
+    const date = dag.date;
+    const dagNaam = NL_DAGEN_LANG[date.getDay()];
+    const dagLabel = `${dagNaam} ${date.getDate()} ${NL_MAANDEN[date.getMonth() + 1]}`;
+    const st = dagStats[d];
+
+    // Stats samenvatting
+    const statsHtml = st ? `
+      <span style="color:#cc2222;font-weight:600">${st.tMax != null ? st.tMax.toFixed(1) + '\u00B0' : ''}</span> /
+      <span style="color:#2266aa">${st.tMin != null ? st.tMin.toFixed(1) + '\u00B0' : ''}</span>
+      <span style="color:#996600">${st.bft != null ? st.bft + ' Bft' : ''}</span>
+      <span style="color:#2255aa">${st.mm > 0 ? st.mm.toFixed(1) + ' mm' : '0 mm'}</span>
+    ` : '';
+
+    // Tabel rijen
+    let rijen = '';
+    for (let i = dag.start; i < dag.end && i < times.length; i++) {
+      const t = new Date(times[i]);
+      const h = t.getHours();
+      const isNacht = h < 7 || h >= 21;
+
+      const temp = data.temperature_2m?.[i];
+      const dauw = data.dewpoint_2m?.[i];
+      const wind = data.windspeed_10m?.[i];
+      const vlaag = data.windgusts_10m?.[i];
+      const dir = data.winddirection_10m?.[i];
+      const regen = data.precipitation?.[i];
+      const bewL = data.cloudcover_low?.[i];
+      const bewM = data.cloudcover_mid?.[i];
+      const bewH = data.cloudcover_high?.[i];
+      const code = data.weather_code?.[i];
+      const stral = data.shortwave_radiation?.[i];
+      const rh = data.relative_humidity_2m?.[i];
+
+      const bft = wind != null ? kmhNaarBft(wind) : '';
+      const bftVlaag = vlaag != null ? kmhNaarBft(vlaag) : '';
+      const ri = dir != null ? richtingen[Math.round(dir / 22.5) % 16] : '';
+      const sym = code != null ? weerSymbool(code, isNacht) : '';
+      const wbgt = berekenWBGT(temp, rh, wind, stral);
+      const wk = wbgtKleur(wbgt);
+
+      // Bewolking: toon laag/midden/hoog apart met kleurcodering
+      // Lage bewolking blokkeert zon echt, hoge (sluier) veel minder
+      let bewHtml = '';
+      if (bewL != null || bewM != null || bewH != null) {
+        const l = bewL != null ? Math.round(bewL) : 0;
+        const m = bewM != null ? Math.round(bewM) : 0;
+        const h2 = bewH != null ? Math.round(bewH) : 0;
+        // Kleur op basis van lage bewolking (meest impactvol)
+        const impact = l > 0 ? l : (m > 0 ? m * 0.7 : h2 * 0.3);
+        const bewKleur = impact > 70 ? '#4a6a88' : impact > 30 ? '#7a9ab8' : '#aabbcc';
+        bewHtml = `<span style="color:#4a6a88" title="Laag">${l}%</span> <span style="color:#7a9ab8" title="Midden">${m}%</span> <span style="color:#aabbcc" title="Hoog">${h2}%</span>`;
+      }
+
+      rijen += `<tr class="${isNacht ? 'nacht-rij' : ''}">
+        <td style="font-weight:600;color:#2a4060">${String(h).padStart(2, '0')}:00</td>
+        <td class="weer-cel">${sym}</td>
+        <td class="temp-cel">${temp != null ? temp.toFixed(1) + '\u00B0' : ''}</td>
+        <td class="dauw-cel">${dauw != null ? dauw.toFixed(1) + '\u00B0' : ''}</td>
+        <td class="wind-cel">${bft !== '' ? bft + ' Bft' : ''}</td>
+        <td class="vlaag-cel">${bftVlaag !== '' ? bftVlaag + ' Bft (' + Math.round(vlaag) + ' km/h)' : ''}</td>
+        <td class="richting-cel">${ri}${dir != null ? ' (' + Math.round(dir) + '\u00B0)' : ''}</td>
+        <td class="regen-cel">${regen != null && regen > 0 ? regen.toFixed(1) + ' mm' : '\u2013'}</td>
+        <td class="bew-cel">${bewHtml}</td>
+        <td style="background:${wk.bg};color:${wk.color};font-weight:600;border-radius:4px">${wbgt != null ? wbgt.toFixed(1) + '\u00B0' : ''}</td>
+      </tr>`;
+    }
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'dag-dropdown' + (d === 0 ? ' open' : '');
+    dropdown.innerHTML = `
+      <div class="dag-dropdown-header" onclick="this.parentElement.classList.toggle('open')">
+        <h3>${dagLabel}</h3>
+        <div class="dag-stats">${statsHtml}</div>
+        <span class="pijl">\u25BC</span>
+      </div>
+      <div class="dag-dropdown-body">
+        <table class="uur-tabel">
+          <thead><tr>
+            <th>Uur</th><th></th><th>Temp</th><th>Dauwp.</th><th>Wind</th><th>Vlagen</th><th>Richting</th><th>Neerslag</th><th title="Laag / Midden / Hoog">Bewolking (L/M/H)</th><th>WBGT</th>
+          </tr></thead>
+          <tbody>${rijen}</tbody>
+        </table>
+      </div>
+    `;
+    container.appendChild(dropdown);
+  }
+}
+
 // ── Download PNG ────────────────────────────────────────────────────────────
 
-function downloadPNG() {
-  // Chart.js canvassen (hebben devicePixelRatio scaling)
+function pngHeader(ctx, w, headerH, padding, plaatsNaam, typeTekst) {
+  const extraTekst = document.getElementById('png-tekst')?.value?.trim() || '';
+  const subH = extraTekst ? 18 : 0;
+  const totaalH = headerH + subH;
+
+  ctx.fillStyle = '#003366';
+  ctx.fillRect(0, 0, w, totaalH);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${typeTekst} ${plaatsNaam}`, padding, headerH / 2 + 6);
+  ctx.fillStyle = '#a8c4e8';
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('Ed Aldus \u00B7 Harmonie + ECMWF', w - padding, headerH / 2 + 6);
+
+  if (extraTekst) {
+    ctx.fillStyle = '#7fb8f7';
+    ctx.font = '13px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(extraTekst, padding, headerH + subH / 2 + 4);
+  }
+  ctx.textAlign = 'left';
+  return totaalH;
+}
+
+function pngFooter(ctx, w, y) {
+  ctx.fillStyle = '#8899aa';
+  ctx.font = '11px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('\u00A9 Ed Aldus \u2014 Data: Open-Meteo (KNMI Harmonie & ECMWF)', w / 2, y + 16);
+  ctx.textAlign = 'left';
+}
+
+function downloadPNG(type) {
+  const plaatsNaam = customStation ? customStation.naam : STATIONS[actiefStation]?.naam || '';
+  const nu = new Date();
+  const ts = `${nu.getFullYear()}${String(nu.getMonth()+1).padStart(2,'0')}${String(nu.getDate()).padStart(2,'0')}_${String(nu.getHours()).padStart(2,'0')}${String(nu.getMinutes()).padStart(2,'0')}`;
+
+  if (type === 'tabel') {
+    downloadTabelPNG(plaatsNaam, ts);
+    return;
+  }
+
+  // Meteogram PNG
   const chartIds = ['c-temp', 'c-wind', 'c-neerslag', 'c-cloud'];
   const chartCanvassen = chartIds.map(id => document.getElementById(id));
-
-  // Gebruik de breedte van de eerste chart canvas als referentie
   const chartW = chartCanvassen[0].width;
   const padding = 20;
   const headerH = 50;
@@ -1310,61 +1585,33 @@ function downloadPNG() {
   const footerH = 30;
   const gap = 2;
 
+  const extraTekst = document.getElementById('png-tekst')?.value?.trim() || '';
+  const subH = extraTekst ? 18 : 0;
   const totalChartH = chartCanvassen.reduce((s, c) => s + c.height + gap, 0);
-  const totalH = headerH + dagH + symH + totalChartH + footerH + padding;
+  const totalH = headerH + subH + dagH + symH + totalChartH + footerH + padding;
   const totalW = chartW + padding * 2;
 
   const off = document.createElement('canvas');
   off.width = totalW;
   off.height = totalH;
   const ctx = off.getContext('2d');
-
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, off.width, off.height);
 
-  // Header balk
-  ctx.fillStyle = '#003366';
-  ctx.fillRect(0, 0, off.width, headerH);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 18px "Segoe UI", sans-serif';
-  ctx.textAlign = 'left';
-  const plaatsNaam = customStation ? customStation.naam : STATIONS[actiefStation]?.naam || '';
-  ctx.fillText(`Meteogram ${plaatsNaam}`, padding, 32);
-  ctx.fillStyle = '#a8c4e8';
-  ctx.font = '12px "Segoe UI", sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('Ed Aldus \u00B7 Harmonie + ECMWF', off.width - padding, 32);
-  ctx.textAlign = 'left';
+  let y = pngHeader(ctx, off.width, headerH, padding, plaatsNaam, 'Meteogram');
 
-  let y = headerH;
-
-  // Dag-labels direct tekenen op PNG canvas, uitgelijnd op chartArea
+  // Dag-labels en symbolen
   const n = mergedTimes.length;
   const refChart = charts.temp;
   const dpr = window.devicePixelRatio || 1;
   if (n > 0 && refChart) {
-    // chartArea.left/right zijn in CSS pixels, canvas is in device pixels
     const areaLeft = refChart.chartArea.left * dpr;
     const areaRight = refChart.chartArea.right * dpr;
     const plotL = padding + areaLeft;
-    const plotR = padding + areaRight;
     const plotW = areaRight - areaLeft;
     const pxFn = i => plotL + (i / (n - 1)) * plotW;
 
-    // Dag-header achtergrond
-    let vorigeDag = -1, dagStart = 0;
-    const dagen = [];
-    for (let i = 0; i < n; i++) {
-      const d = new Date(mergedTimes[i]);
-      const dag = d.getDate();
-      if (dag !== vorigeDag) {
-        if (vorigeDag !== -1) dagen.push({ start: dagStart, end: i, date: new Date(mergedTimes[dagStart]) });
-        vorigeDag = dag;
-        dagStart = i;
-      }
-    }
-    dagen.push({ start: dagStart, end: n - 1, date: new Date(mergedTimes[dagStart]) });
-
+    const dagen = maakDagen(mergedTimes);
     dagen.forEach((dag, idx) => {
       const x1 = pxFn(dag.start);
       const x2 = pxFn(dag.end);
@@ -1372,66 +1619,198 @@ function downloadPNG() {
       ctx.fillStyle = idx % 2 === 0 ? '#eef2f7' : '#f8fafb';
       ctx.fillRect(x1, y, breedte, dagH);
       if (idx > 0) {
-        ctx.strokeStyle = '#c0cad4';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x1, y);
-        ctx.lineTo(x1, y + dagH);
-        ctx.stroke();
+        ctx.strokeStyle = '#c0cad4'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1, y + dagH); ctx.stroke();
       }
       const mid = (x1 + x2) / 2;
-      // Dag + datum
       ctx.font = 'bold 13px "Segoe UI", sans-serif';
-      ctx.fillStyle = '#2a4060';
-      ctx.textAlign = 'center';
+      ctx.fillStyle = '#2a4060'; ctx.textAlign = 'center';
       ctx.fillText(`${NL_DAGEN[dag.date.getDay()]} ${dag.date.getDate()} ${NL_MAANDEN[dag.date.getMonth() + 1]}`, mid, y + 14);
-      // Stats
       const st = dagStats[idx];
       if (st && breedte > 60) {
-        ctx.font = 'bold 12px "Segoe UI", sans-serif';
-        ctx.fillStyle = '#cc2222';
+        ctx.font = 'bold 12px "Segoe UI", sans-serif'; ctx.fillStyle = '#cc2222';
         ctx.fillText(`${st.tMax != null ? st.tMax.toFixed(1) + '\u00B0' : ''}  ${st.tMin != null ? st.tMin.toFixed(1) + '\u00B0' : ''}`, mid, y + 30);
-        ctx.font = '11px "Segoe UI", sans-serif';
-        ctx.fillStyle = '#5a6a80';
+        ctx.font = '11px "Segoe UI", sans-serif'; ctx.fillStyle = '#5a6a80';
         ctx.fillText(`${st.bft != null ? st.bft + ' Bft' : ''} \u00B7 ${st.mm > 0 ? st.mm.toFixed(1) : '0'} mm`, mid, y + 46);
       }
     });
     ctx.textAlign = 'left';
     y += dagH;
 
-    // Weersymbolen
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(padding, y, plotW, symH);
-    ctx.font = '22px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(padding, y, plotW, symH);
+    ctx.font = '22px "Segoe UI Emoji", "Apple Color Emoji", sans-serif'; ctx.textAlign = 'center';
     for (let i = 0; i < n; i += 3) {
       const code = weerCodeData[i];
       if (code == null) continue;
       const h = new Date(mergedTimes[i]).getHours();
-      const isNacht = h < 7 || h >= 21;
-      const sym = weerSymbool(code, isNacht);
+      const sym = weerSymbool(code, h < 7 || h >= 21);
       if (sym) ctx.fillText(sym, pxFn(i), y + symH / 2 + 6);
     }
     ctx.textAlign = 'left';
     y += symH;
   }
 
-  // Chart canvassen
-  chartCanvassen.forEach(c => {
-    ctx.drawImage(c, padding, y, chartW, c.height);
-    y += c.height + gap;
-  });
-
-  // Footer / copyright
-  ctx.fillStyle = '#8899aa';
-  ctx.font = '11px "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('\u00A9 Ed Aldus \u2014 Data: Open-Meteo (KNMI Harmonie & ECMWF)', off.width / 2, y + 16);
+  chartCanvassen.forEach(c => { ctx.drawImage(c, padding, y, chartW, c.height); y += c.height + gap; });
+  pngFooter(ctx, off.width, y);
 
   const link = document.createElement('a');
-  const nu = new Date();
-  const ts = `${nu.getFullYear()}${String(nu.getMonth()+1).padStart(2,'0')}${String(nu.getDate()).padStart(2,'0')}_${String(nu.getHours()).padStart(2,'0')}${String(nu.getMinutes()).padStart(2,'0')}`;
   link.download = `meteogram_${plaatsNaam.toLowerCase().replace(/\s+/g,'_')}_${ts}.png`;
+  link.href = off.toDataURL('image/png', 1.0);
+  link.click();
+}
+
+// ── Tabel PNG ───────────────────────────────────────────────────────────────
+
+function downloadTabelPNG(plaatsNaam, ts) {
+  const padding = 24;
+  const headerH = 50;
+  const extraTekst = document.getElementById('png-tekst')?.value?.trim() || '';
+  const subH = extraTekst ? 18 : 0;
+  const footerH = 30;
+  const rowH = 26;
+  const thH = 28;
+  const dagGap = 12;
+
+  const kolommen = ['Uur', '', 'Temp', 'Dauwp.', 'Wind', 'Vlagen', 'Richting', 'Neerslag', 'Bew. L/M/H', 'WBGT'];
+  const kolW = [50, 30, 55, 55, 55, 100, 90, 65, 85, 50];
+  const tabelW = kolW.reduce((s, w) => s + w, 0);
+  const totalW = tabelW + padding * 2;
+
+  const richtingen = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+  const dagen = maakDagen(mergedTimes);
+  const eersteN = Math.min(dagen.length, 3);
+
+  // Bereken totale hoogte
+  let totalRows = 0;
+  for (let d = 0; d < eersteN; d++) {
+    totalRows += (dagen[d].end - dagen[d].start);
+  }
+  const totalH = headerH + subH + (eersteN * (thH + dagGap + 20)) + totalRows * rowH + footerH + padding;
+
+  const off = document.createElement('canvas');
+  off.width = totalW;
+  off.height = totalH;
+  const ctx = off.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, off.width, off.height);
+
+  let y = pngHeader(ctx, off.width, headerH, padding, plaatsNaam, 'Uurlijks overzicht');
+
+  for (let d = 0; d < eersteN; d++) {
+    const dag = dagen[d];
+    const date = dag.date;
+    const dagLabel = `${NL_DAGEN_LANG[date.getDay()]} ${date.getDate()} ${NL_MAANDEN[date.getMonth() + 1]}`;
+    const st = dagStats[d];
+
+    // Dag-header
+    y += dagGap;
+    ctx.fillStyle = '#003366';
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(dagLabel, padding, y + 12);
+    if (st) {
+      ctx.font = '12px "Segoe UI", sans-serif';
+      ctx.fillStyle = '#cc2222';
+      const statsX = padding + 180;
+      ctx.fillText(`${st.tMax != null ? st.tMax.toFixed(1) + '\u00B0' : ''}`, statsX, y + 12);
+      ctx.fillStyle = '#2266aa';
+      ctx.fillText(`${st.tMin != null ? st.tMin.toFixed(1) + '\u00B0' : ''}`, statsX + 45, y + 12);
+      ctx.fillStyle = '#5a6a80';
+      ctx.fillText(`${st.bft != null ? st.bft + ' Bft' : ''} \u00B7 ${st.mm > 0 ? st.mm.toFixed(1) : '0'} mm`, statsX + 90, y + 12);
+    }
+    y += 20;
+
+    // Tabel-header
+    ctx.fillStyle = '#f4f7fb';
+    ctx.fillRect(padding, y, tabelW, thH);
+    ctx.strokeStyle = '#d0d8e4'; ctx.lineWidth = 1;
+    ctx.strokeRect(padding, y, tabelW, thH);
+    ctx.font = 'bold 10px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#5a7090';
+    ctx.textAlign = 'center';
+    let x = padding;
+    kolommen.forEach((k, ki) => { ctx.fillText(k, x + kolW[ki] / 2, y + thH / 2 + 4); x += kolW[ki]; });
+    y += thH;
+
+    // Data rijen
+    for (let i = dag.start; i < dag.end && i < mergedTimes.length; i++) {
+      const t = new Date(mergedTimes[i]);
+      const h = t.getHours();
+      const isNacht = h < 7 || h >= 21;
+
+      ctx.fillStyle = isNacht ? '#f5f7fa' : '#ffffff';
+      ctx.fillRect(padding, y, tabelW, rowH);
+      ctx.strokeStyle = '#f0f2f5'; ctx.lineWidth = 0.5;
+      ctx.strokeRect(padding, y, tabelW, rowH);
+
+      const temp = mergedTimes[i] ? (data_cache?.temperature_2m?.[i]) : null;
+      const dauw = data_cache?.dewpoint_2m?.[i];
+      const wind = data_cache?.windspeed_10m?.[i];
+      const vlaag = data_cache?.windgusts_10m?.[i];
+      const dir = data_cache?.winddirection_10m?.[i];
+      const regen = data_cache?.precipitation?.[i];
+      const bewL = data_cache?.cloudcover_low?.[i];
+      const bewM = data_cache?.cloudcover_mid?.[i];
+      const bewH2 = data_cache?.cloudcover_high?.[i];
+      const code = data_cache?.weather_code?.[i];
+      const rh = data_cache?.relative_humidity_2m?.[i];
+      const stral = data_cache?.shortwave_radiation?.[i];
+
+      const bft = wind != null ? kmhNaarBft(wind) : '';
+      const bftVlaag = vlaag != null ? kmhNaarBft(vlaag) : '';
+      const ri = dir != null ? richtingen[Math.round(dir / 22.5) % 16] : '';
+      const sym = code != null ? weerSymbool(code, isNacht) : '';
+      const wbgt = berekenWBGT(temp, rh, wind, stral);
+
+      ctx.font = '11px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      x = padding;
+
+      // Uur
+      ctx.fillStyle = '#2a4060'; ctx.font = 'bold 11px "Segoe UI", sans-serif';
+      ctx.fillText(`${String(h).padStart(2,'0')}:00`, x + kolW[0]/2, y + rowH/2 + 4); x += kolW[0];
+      // Symbool
+      ctx.font = '14px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+      ctx.fillText(sym, x + kolW[1]/2, y + rowH/2 + 5); x += kolW[1];
+      // Temp
+      ctx.font = 'bold 11px "Segoe UI", sans-serif'; ctx.fillStyle = '#cc2222';
+      ctx.fillText(temp != null ? temp.toFixed(1) + '\u00B0' : '', x + kolW[2]/2, y + rowH/2 + 4); x += kolW[2];
+      // Dauwpunt
+      ctx.font = '11px "Segoe UI", sans-serif'; ctx.fillStyle = '#2266aa';
+      ctx.fillText(dauw != null ? dauw.toFixed(1) + '\u00B0' : '', x + kolW[3]/2, y + rowH/2 + 4); x += kolW[3];
+      // Wind
+      ctx.fillStyle = '#996600'; ctx.font = 'bold 11px "Segoe UI", sans-serif';
+      ctx.fillText(bft !== '' ? bft + ' Bft' : '', x + kolW[4]/2, y + rowH/2 + 4); x += kolW[4];
+      // Vlagen
+      ctx.fillStyle = '#cc5500'; ctx.font = '11px "Segoe UI", sans-serif';
+      ctx.fillText(bftVlaag !== '' ? `${bftVlaag} Bft (${Math.round(vlaag)} km/h)` : '', x + kolW[5]/2, y + rowH/2 + 4); x += kolW[5];
+      // Richting
+      ctx.fillStyle = '#5a6a80';
+      ctx.fillText(ri + (dir != null ? ` (${Math.round(dir)}\u00B0)` : ''), x + kolW[6]/2, y + rowH/2 + 4); x += kolW[6];
+      // Neerslag
+      ctx.fillStyle = '#2255aa';
+      ctx.fillText(regen != null && regen > 0 ? regen.toFixed(1) + ' mm' : '\u2013', x + kolW[7]/2, y + rowH/2 + 4); x += kolW[7];
+      // Bewolking L/M/H
+      ctx.fillStyle = '#5a6a80'; ctx.font = '10px "Segoe UI", sans-serif';
+      const bL = bewL != null ? Math.round(bewL) : 0;
+      const bM = bewM != null ? Math.round(bewM) : 0;
+      const bH = bewH2 != null ? Math.round(bewH2) : 0;
+      ctx.fillText(`${bL}/${bM}/${bH}`, x + kolW[8]/2, y + rowH/2 + 4); x += kolW[8];
+      // WBGT
+      const wk = wbgtKleur(wbgt);
+      ctx.fillStyle = wk.bg;
+      ctx.fillRect(x + 2, y + 2, kolW[9] - 4, rowH - 4);
+      ctx.fillStyle = wk.color; ctx.font = 'bold 11px "Segoe UI", sans-serif';
+      ctx.fillText(wbgt != null ? wbgt.toFixed(1) + '\u00B0' : '', x + kolW[9]/2, y + rowH/2 + 4);
+
+      y += rowH;
+    }
+  }
+
+  pngFooter(ctx, off.width, y + 4);
+
+  const link = document.createElement('a');
+  link.download = `uurlijks_${plaatsNaam.toLowerCase().replace(/\s+/g,'_')}_${ts}.png`;
   link.href = off.toDataURL('image/png', 1.0);
   link.click();
 }
