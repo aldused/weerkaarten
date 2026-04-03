@@ -726,47 +726,7 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
     if not data:
         print(f"Geen data in {CSV_BESTAND}"); continue
 
-    # ── Winterswijk datumcorrectie ─────────────────────────────────────────────
-    # KNMI-bug: alle maxima t/m december 1931 staan één dag te laat geregistreerd.
-    # Fix: schuif datums t/m 1931-12-31 één dag naar voren.
-    # De dag die dan ontbreekt (1932-01-01) krijgt TX=TN=0.0, RH=0.
-    if STATION == "20":
-        grens = "1931-12-31"
-        gecorrigeerd = []
-        for r in data:
-            if r["datum"] <= grens:
-                oude_datum = date.fromisoformat(r["datum"])
-                nieuwe_datum = oude_datum - timedelta(days=1)
-                r = dict(r)
-                r["datum"]  = nieuwe_datum.isoformat()
-                r["jaar"]   = nieuwe_datum.year
-                r["maand"]  = nieuwe_datum.month
-                r["dag"]    = nieuwe_datum.day
-                r["decade"] = ((nieuwe_datum.day - 1) // 10) + 1
-                r["seizoen"] = seizoen(nieuwe_datum.month)
-            gecorrigeerd.append(r)
-        # Voeg 1932-01-01 toe met nulwaarden
-        gecorrigeerd.append({
-            "datum": "1932-01-01", "jaar": 1932, "maand": 1, "dag": 1,
-            "decade": 1, "seizoen": "winter",
-            "tx": 0.0, "tn": 0.0, "tg": None, "rh": 0.0,
-            "fx": None, "fg": None, "fhx": None,
-            "pg": None, "px": None, "pn": None, "sq": None,
-        })
-        data = sorted(gecorrigeerd, key=lambda r: r["datum"])
-        print(f"  Datumcorrectie: t/m 1931-12-31 één dag naar voren geschoven")
-        print(f"  1932-01-01 toegevoegd met TX=TN=0.0")
-
-        # ── TN extra correctie: schuif TN één dag vooruit (1894-01-01 t/m 1931-12-30)
-        # De minimumtemperatuur stond in het originele Excel één dag verkeerd.
-        tn_start = "1894-01-01"
-        tn_einde = "1931-12-30"
-        for i in range(len(data) - 1):
-            if tn_start <= data[i]["datum"] <= tn_einde:
-                data[i]["tn"] = data[i + 1]["tn"]
-        # Laatste dag van het bereik (1931-12-30): TN is al overgenomen van 1931-12-31
-        print(f"  TN-correctie: minimumtemperatuur één dag vooruit geschoven (1894-01-01 t/m 1931-12-30)")
-    # ──────────────────────────────────────────────────────────────────────────
+    # ── Winterswijk: geen correcties meer nodig (nieuwe data is al gecorrigeerd) ──
 
     print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")
 
