@@ -245,30 +245,29 @@ const nachtPlugin = {
 };
 Chart.register(nachtPlugin);
 
-// ── Crosshair plugin: verticale lijn + info-balk ──
-let crosshairData = {}; // per chart-id: {tA, tMed, hTemp, mosTxData, mosTnData}
-const crosshairPlugin = {
-  id: 'crosshair',
-  afterEvent(chart, args) {
-    const evt = args.event;
-    if (chart.canvas.id !== 'canvas-temp') return;
-    const info = document.getElementById('crosshair-info');
-    if (!info) return;
-    if (evt.type === 'mouseout' || !evt.x) {
-      chart._crosshairX = null;
-      info.style.display = 'none';
-      chart.draw();
-      return;
-    }
+// ── Crosshair: verticale lijn + info-balk ──
+let crosshairData = {};
+
+function initCrosshair() {
+  const canvas = document.getElementById('canvas-temp');
+  if (!canvas || canvas._crosshairInit) return;
+  canvas._crosshairInit = true;
+
+  canvas.addEventListener('mousemove', e => {
+    const chart = actieveCharts.temp;
+    if (!chart) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
     const xScale = chart.scales.x;
     if (!xScale) return;
-    const idx = Math.round(xScale.getValueForPixel(evt.x));
-    const cd = crosshairData[chart.canvas.id];
-    if (!cd || idx < 0 || idx >= (cd.tMed||[]).length) { info.style.display = 'none'; return; }
+    const idx = Math.round(xScale.getValueForPixel(x));
+    const cd = crosshairData['canvas-temp'];
+    const info = document.getElementById('crosshair-info');
+    if (!cd || !info || idx < 0 || idx >= (cd.tMed||[]).length) {
+      if (info) info.style.display = 'none';
+      return;
+    }
 
-    chart._crosshairX = evt.x;
-
-    // Bereken waarden op dit punt
     const ensVals = (cd.tA||[]).map(m => m[idx]).filter(v => v != null);
     const maxVal = ensVals.length ? Math.max(...ensVals) : null;
     const minVal = ensVals.length ? Math.min(...ensVals) : null;
@@ -276,38 +275,26 @@ const crosshairPlugin = {
     const hresVal = cd.hTemp ? cd.hTemp[idx] : null;
     const mosTx = cd.mosTxData ? cd.mosTxData[idx] : null;
     const mosTn = cd.mosTnData ? cd.mosTnData[idx] : null;
-    const ts = chartTimestamps[chart.canvas.id];
+    const ts = chartTimestamps['canvas-temp'];
     const tijd = ts && ts[idx] ? new Date(ts[idx]).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
 
     let html = `<span style="color:#555">${tijd}</span>`;
-    if (maxVal != null) html += `<span>Max: <span style="color:#cc6600">${maxVal.toFixed(1)}°C</span></span>`;
-    if (hresVal != null) html += `<span>HRES: <span style="color:#2299ff">${hresVal.toFixed(1)}°C</span></span>`;
-    if (medVal != null) html += `<span>Mediaan: <span style="color:#cc2222">${medVal.toFixed(1)}°C</span></span>`;
-    if (minVal != null) html += `<span>Min: <span style="color:#2266aa">${minVal.toFixed(1)}°C</span></span>`;
+    if (maxVal != null) html += `<span>Max: <span style="color:#cc6600;font-weight:800">${maxVal.toFixed(1)}°C</span></span>`;
+    if (hresVal != null) html += `<span>HRES: <span style="color:#2299ff;font-weight:800">${hresVal.toFixed(1)}°C</span></span>`;
+    if (medVal != null) html += `<span>Mediaan: <span style="color:#cc2222;font-weight:800">${medVal.toFixed(1)}°C</span></span>`;
+    if (minVal != null) html += `<span>Min: <span style="color:#2266aa;font-weight:800">${minVal.toFixed(1)}°C</span></span>`;
     if (mosTx != null) html += `<span>MOSMIX TX: <span style="color:#ff4444;font-weight:800">${mosTx.toFixed(1)}°C</span></span>`;
     if (mosTn != null) html += `<span>MOSMIX TN: <span style="color:#4488ff;font-weight:800">${mosTn.toFixed(1)}°C</span></span>`;
 
     info.innerHTML = html;
     info.style.display = 'flex';
-    chart.draw();
-  },
-  afterDraw(chart) {
-    if (chart.canvas.id !== 'canvas-temp' || !chart._crosshairX) return;
-    const ctx = chart.ctx;
-    const yScale = chart.scales.y;
-    if (!yScale) return;
-    ctx.save();
-    ctx.beginPath();
-    ctx.setLineDash([4, 3]);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = '#666';
-    ctx.moveTo(chart._crosshairX, yScale.top);
-    ctx.lineTo(chart._crosshairX, yScale.bottom);
-    ctx.stroke();
-    ctx.restore();
-  }
-};
-Chart.register(crosshairPlugin);
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    const info = document.getElementById('crosshair-info');
+    if (info) info.style.display = 'none';
+  });
+}
 
 // ── Data cache ──
 let dataCache = {};
@@ -723,6 +710,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   ]);
   chartTimestamps['canvas-temp']=ts;
   crosshairData['canvas-temp']={tA, tMed, hTemp:hTempMapped, mosTxData, mosTnData};
+  setTimeout(initCrosshair, 100);
   actieveCharts.temp=new Chart(document.getElementById('canvas-temp'),{
     data:{labels:lab,datasets:[
       ...ensDatasets(tA,'rgba(20,130,20,0.45)'),
