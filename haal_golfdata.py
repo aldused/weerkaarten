@@ -187,7 +187,9 @@ def haal_waarnemingen(locatie, uren_terug=24):
 # ── Open-Meteo Marine API voor internationale Noordzee-punten ────────────────
 
 INTERNATIONALE_PUNTEN = [
-    # ── Engelse oostkust (Noordzee) ──────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # ENGELSE OOSTKUST (Noordzee)
+    # ══════════════════════════════════════════════════════════════════════════
     ("Dowsing",            53.531,  1.053, "UK"),
     ("West Gabbard",       51.955,  2.110, "UK"),
     ("Lowestoft",          52.47,   1.76,  "UK"),
@@ -205,33 +207,83 @@ INTERNATIONALE_PUNTEN = [
     ("Hartlepool",         54.69,  -1.15,  "UK"),
     ("Sunderland",         54.92,  -1.35,  "UK"),
     ("Berwick-upon-Tweed", 55.77,  -1.98,  "UK"),
+    ("Warp",               51.525,  1.032, "UK"),  # CEFAS boei
 
-    # ── Engelse/Schotse offshore Noordzee ────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # UK OFFSHORE PLATFORMS & VELDEN
+    # ══════════════════════════════════════════════════════════════════════════
     ("Dogger Bank",        54.75,   2.00,  "UK"),
     ("Dogger Bank Oost",   54.80,   3.50,  "UK"),
-    ("Forties",            57.75,   0.90,  "UK"),
-    ("Ekofisk Approach",   56.30,   3.10,  "UK"),
+    ("Forties Field",      57.717,  1.017, "UK"),
     ("Rough",              53.80,   1.10,  "UK"),
     ("Cleeton",            53.70,   0.80,  "UK"),
     ("Sole Pit",           53.50,   1.50,  "UK"),
-    ("Leman",              53.10,   2.20,  "UK"),
+    ("Leman Bank",         53.10,   2.20,  "UK"),
     ("Indefatigable",      53.45,   2.50,  "UK"),
+    ("Brent",              60.900,  1.800, "UK"),
+    ("Piper",              58.280,  0.120, "UK"),
+    ("Claymore",           58.450, -0.250, "UK"),
+    ("Beryl",              59.546,  1.537, "UK"),
+    ("Bruce",              59.744,  1.634, "UK"),
+    ("Buzzard",            57.832, -0.966, "UK"),
+    ("Elgin/Franklin",     57.167,  2.000, "UK"),
+    ("Shearwater",         57.032,  1.944, "UK"),
+    ("Britannia",          58.075,  0.994, "UK"),
+    ("Alba",               58.036,  1.108, "UK"),
+    ("Captain",            58.306, -1.711, "UK"),
+    ("Goldeneye",          58.000, -0.383, "UK"),
+    ("Scott",              58.278,  0.213, "UK"),
+    ("Andrew",             58.083,  1.250, "UK"),
+    ("Montrose Field",     57.451,  1.388, "UK"),
+    ("Fulmar",             56.483,  2.133, "UK"),
+    ("Gannet Alpha",       57.220,  0.880, "UK"),
 
-    # ── Schotse Noordzeekust ─────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # UK OFFSHORE WINDPARKEN
+    # ══════════════════════════════════════════════════════════════════════════
+    ("Hornsea 1",          53.900,  1.790, "UK"),
+    ("Hornsea 2",          53.920,  1.560, "UK"),
+    ("Hornsea 3",          53.920,  1.330, "UK"),
+    ("East Anglia ONE",    52.230,  2.480, "UK"),
+    ("Beatrice",           58.130, -3.070, "UK"),
+    ("Moray East",         58.167, -2.699, "UK"),
+    ("Dudgeon",            53.249,  1.390, "UK"),
+    ("Sheringham Shoal",   53.117,  1.133, "UK"),
+    ("Race Bank",          53.275,  0.833, "UK"),
+    ("Triton Knoll",       53.400,  0.900, "UK"),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SCHOTSE NOORDZEEKUST
+    # ══════════════════════════════════════════════════════════════════════════
     ("Aberdeen",           57.14,  -2.08,  "UK"),
     ("Firth of Forth",     56.15,  -2.50,  "UK"),
     ("Moray Firth",        57.70,  -3.30,  "UK"),
     ("Peterhead",          57.50,  -1.77,  "UK"),
     ("Montrose",           56.70,  -2.43,  "UK"),
 
-    # ── Noorse zuidwestkust ──────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # NOORSE PLATFORMS & KUST
+    # ══════════════════════════════════════════════════════════════════════════
     ("Stavanger",          58.97,   5.73,  "NO"),
     ("Kristiansand",       58.15,   8.00,  "NO"),
     ("Egersund",           58.45,   5.99,  "NO"),
     ("Lista",              58.10,   6.57,  "NO"),
     ("Haugesund",          59.41,   5.27,  "NO"),
+    ("Ekofisk",            56.549,  3.210, "NO"),
+    ("Sleipner",           58.360,  1.910, "NO"),
+    ("Troll",              60.646,  3.726, "NO"),
+    ("Oseberg",            60.492,  2.827, "NO"),
+    ("Gullfaks",           61.215,  2.280, "NO"),
+    ("Statfjord",          61.256,  1.854, "NO"),
+    ("Valhall",            56.278,  3.395, "NO"),
+    ("Snorre",             61.525,  2.212, "NO"),
+    ("Ula",                57.111,  2.847, "NO"),
+    ("Gyda",               56.911,  3.108, "NO"),
+    ("Frigg",              59.880,  2.067, "NO"),
 
-    # ── Deense westkust en offshore ──────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # DEENSE WESTKUST, PLATFORMS & WINDPARKEN
+    # ══════════════════════════════════════════════════════════════════════════
     ("Esbjerg",            55.47,   8.13,  "DK"),
     ("Thyboron",           56.70,   8.08,  "DK"),
     ("Hanstholm",          57.12,   8.60,  "DK"),
@@ -239,8 +291,16 @@ INTERNATIONALE_PUNTEN = [
     ("Hvide Sande",        56.00,   8.12,  "DK"),
     ("Horns Rev",          55.53,   7.85,  "DK"),
     ("Nymindegab",         55.82,   8.17,  "DK"),
+    ("Dan",                55.473,  5.103, "DK"),
+    ("Tyra",               55.717,  4.793, "DK"),
+    ("Gorm",               55.567,  4.783, "DK"),
+    ("Siri",               56.483,  4.911, "DK"),
+    ("Halfdan",            55.230,  5.006, "DK"),
+    ("South Arne",         56.078,  4.229, "DK"),
 
-    # ── Duitse Noordzeekust ──────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # DUITSE NOORDZEEKUST, PLATFORMS & WINDPARKEN
+    # ══════════════════════════════════════════════════════════════════════════
     ("Helgoland",          54.18,   7.89,  "DE"),
     ("Sylt",               54.90,   8.30,  "DE"),
     ("Borkum",             53.59,   6.66,  "DE"),
@@ -248,17 +308,37 @@ INTERNATIONALE_PUNTEN = [
     ("Bremerhaven",        53.55,   8.57,  "DE"),
     ("Cuxhaven",           53.87,   8.71,  "DE"),
     ("St. Peter-Ording",   54.32,   8.60,  "DE"),
-    ("FINO-1",             54.01,   6.59,  "DE"),  # Offshore meetplatform
+    ("FINO-1",             54.01,   6.59,  "DE"),
+    ("DanTysk",            55.140,  7.200, "DE"),
+    ("Sandbank",           55.183,  6.850, "DE"),
+    ("Gemini",             54.037,  5.965, "DE"),
 
-    # ── Belgische kust ───────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # BELGISCHE KUST
+    # ══════════════════════════════════════════════════════════════════════════
     ("Oostende",           51.23,   2.92,  "BE"),
     ("Westhinder",         51.38,   2.44,  "BE"),
     ("Zeebrugge",          51.35,   3.18,  "BE"),
 
-    # ── Centrale & Noordelijke Noordzee ──────────────────────────────────────
-    ("Centrale Noordzee",  56.00,   3.00,  "INT"),
-    ("Fisher",             57.00,   4.50,  "INT"),
-    ("Viking",             58.50,   2.00,  "INT"),
+    # ══════════════════════════════════════════════════════════════════════════
+    # SCHEEPVAARTGEBIEDEN (centrum-coördinaten)
+    # ══════════════════════════════════════════════════════════════════════════
+    ("Viking",             59.75,   2.00,  "INT"),
+    ("North Utsire",       60.25,   4.00,  "INT"),
+    ("South Utsire",       58.50,   4.50,  "INT"),
+    ("Forties Area",       57.25,   1.50,  "INT"),
+    ("Cromarty",           57.75,  -1.58,  "INT"),
+    ("Tyne Area",          55.25,  -0.75,  "INT"),
+    ("Dogger Area",        55.50,   2.00,  "INT"),
+    ("Fisher",             57.00,   6.00,  "INT"),
+    ("German Bight",       54.75,   6.00,  "INT"),
+    ("Humber Area",        53.75,   1.00,  "INT"),
+    ("Thames Area",        51.75,   1.75,  "INT"),
+    ("Fair Isle",          59.75,  -1.50,  "INT"),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CENTRALE & NOORDELIJKE NOORDZEE (extra punten voor dekking)
+    # ══════════════════════════════════════════════════════════════════════════
     ("Dogger Bank Centrum",54.50,   3.00,  "INT"),
     ("Zuidelijke Noordzee",53.00,   3.00,  "INT"),
     ("Oyster Grounds",     54.20,   4.00,  "INT"),
@@ -266,8 +346,6 @@ INTERNATIONALE_PUNTEN = [
     ("Devil's Hole",       56.50,   1.00,  "INT"),
     ("Fladen Ground",      58.20,   0.50,  "INT"),
     ("Long Forties",       57.50,   1.50,  "INT"),
-
-    # ── Tussen Engeland en Denemarken (extra dekking) ────────────────────────
     ("Midden-Noordzee West",  55.00,  2.00, "INT"),
     ("Midden-Noordzee Oost",  55.00,  5.00, "INT"),
     ("Jyllandbank",           55.50,  5.50, "INT"),
@@ -276,6 +354,10 @@ INTERNATIONALE_PUNTEN = [
     ("Skagerrak West",        57.50,  7.00, "INT"),
     ("Noordzee Midden-Noord", 56.50,  4.00, "INT"),
     ("Noordzee Midden-Zuid",  54.00,  4.50, "INT"),
+    ("Witch Ground",       58.00,   1.50,  "INT"),
+    ("Buchan Deep",        57.75,  -0.50,  "INT"),
+    ("Outer Moray Firth",  58.50,  -2.00,  "INT"),
+    ("Centrale Noordzee Noord", 56.00, 3.00, "INT"),
 ]
 
 
