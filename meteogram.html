@@ -165,7 +165,7 @@ body {
 #dagtijd-strip {
   flex: 1;
   min-width: 0;
-  height: 52px;
+  height: 60px;
   overflow: hidden;
 }
 
@@ -1061,9 +1061,22 @@ function berekenDagStats(times, data) {
     const mosTX = data._dailyTX?.[datum];
     const mosTN = data._dailyTN?.[datum];
 
+    // Ensemble spreiding per dag: p90 max overdag (12-18u), p10 min 's nachts (00-06u)
+    const ensP90vals = [], ensP10vals = [];
+    const ensP90dag = [], ensP10nacht = [];
+    for (let j = start; j < end && j < (data._ensP90 || []).length; j++) {
+      if (data._ensP90[j] != null) ensP90vals.push(data._ensP90[j]);
+      if (data._ensP10[j] != null) ensP10vals.push(data._ensP10[j]);
+    }
+    const ensTXhoog = ensP90vals.length ? Math.round(Math.max(...ensP90vals) * 10) / 10 : null;
+    const ensTXlaag = ensP10vals.length ? Math.round(Math.max(...ensP10vals) * 10) / 10 : null;
+    const ensTNlaag = ensP10vals.length ? Math.round(Math.min(...ensP10vals) * 10) / 10 : null;
+    const ensTNhoog = ensP90vals.length ? Math.round(Math.min(...ensP90vals) * 10) / 10 : null;
+
     dagStats.push({
       tMax: mosTX != null ? Math.round(mosTX * 10) / 10 : (temps.length ? Math.round(Math.max(...temps) * 10) / 10 : null),
       tMin: mosTN != null ? Math.round(mosTN * 10) / 10 : (temps.length ? Math.round(Math.min(...temps) * 10) / 10 : null),
+      ensTXhoog, ensTXlaag, ensTNlaag, ensTNhoog,
       bft: winds.length ? kmhNaarBft(winds.reduce((s, v) => s + v, 0) / winds.length) : null,
       mm: regen.length ? regen.reduce((s, v) => s + v, 0) : 0,
     });
@@ -1092,7 +1105,7 @@ function tekenDagTijdHeader(times, chartLeft, chartRight) {
   const canvas = document.getElementById('c-dagtijd');
   const container = canvas.parentElement;
   canvas.width = container.clientWidth;
-  canvas.height = 52;
+  canvas.height = 60;
   const ctx = canvas.getContext('2d');
   const n = times.length;
   if (!n) return;
@@ -1141,10 +1154,17 @@ function tekenDagTijdHeader(times, chartLeft, chartRight) {
       const tMaxStr = st.tMax != null ? `${st.tMax.toFixed(1)}\u00B0` : '';
       const tMinStr = st.tMin != null ? `${st.tMin.toFixed(1)}\u00B0` : '';
 
-      // Regel 2: temperatuur rood + blauw gecentreerd
+      // Regel 2: temperatuur rood + blauw + ensemble range
       ctx.font = 'bold 10px "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
-      const tempTekst = `${tMaxStr}  ${tMinStr}`;
+
+      // Ensemble range bepalen (alleen als beschikbaar)
+      const heeftEns = st.ensTXhoog != null && st.ensTXlaag != null;
+      const txRange = heeftEns ? `${Math.round(st.ensTXlaag)}-${Math.round(st.ensTXhoog)}\u00B0` : '';
+      const tnRange = (st.ensTNlaag != null && st.ensTNhoog != null) ? `${Math.round(st.ensTNlaag)}-${Math.round(st.ensTNhoog)}\u00B0` : '';
+
+      // Regel 2: TX en TN
+      ctx.font = 'bold 10px "Segoe UI", sans-serif';
       const tMaxW = ctx.measureText(tMaxStr).width;
       const spatie = ctx.measureText('  ').width;
       const totaalW = tMaxW + spatie + ctx.measureText(tMinStr).width;
@@ -1156,13 +1176,26 @@ function tekenDagTijdHeader(times, chartLeft, chartRight) {
       ctx.fillText(tMinStr, tempStartX + tMaxW + spatie, 20);
       ctx.textAlign = 'center';
 
+      // Regel 2b: ensemble range (kleiner, onder TX/TN)
+      if (heeftEns && breedte > 80) {
+        ctx.font = '8.5px "Segoe UI", sans-serif';
+        ctx.fillStyle = '#cc8888';
+        ctx.textAlign = 'left';
+        ctx.fillText(txRange, tempStartX, 31);
+        if (tnRange) {
+          ctx.fillStyle = '#8899cc';
+          ctx.fillText(tnRange, tempStartX + tMaxW + spatie, 31);
+        }
+        ctx.textAlign = 'center';
+      }
+
       // Regel 3: wind + regen
       if (breedte > 60) {
         ctx.font = '9px "Segoe UI", sans-serif';
         ctx.fillStyle = '#5a6a80';
         const bftStr = st.bft != null ? `${st.bft} Bft` : '';
         const mmStr = st.mm > 0 ? `${st.mm.toFixed(1)} mm` : '0 mm';
-        ctx.fillText(`${bftStr}  \u00B7  ${mmStr}`, mid, 34);
+        ctx.fillText(`${bftStr}  \u00B7  ${mmStr}`, mid, 42);
       }
     }
   });
