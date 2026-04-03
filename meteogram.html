@@ -336,6 +336,7 @@ body {
       <span><span class="leg-blok" style="background:#b0c8e0"></span> Hoge bewolking</span>
       <span><span class="leg-blok" style="background:#7a9ab8"></span> Middelhoge bew.</span>
       <span><span class="leg-blok" style="background:#4a6a88"></span> Lage bewolking</span>
+      <span><span class="leg-area" style="background:#ee6666"></span> Ensemble p10-p90</span>
       <span style="color:#cc8800;font-weight:600">&#9474; Modelgrens</span>
     </div>
 
@@ -856,10 +857,11 @@ async function haalData(lat, lon) {
   const ecmwfParams = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code,shortwave_radiation,relative_humidity_2m';
   const base = 'https://api.open-meteo.com/v1/forecast';
 
-  // Yr.no + ECMWF + MOSMIX TX/TN + fallback daily parallel ophalen
-  const [yrJson, ecmwf, mosmix, daily] = await Promise.all([
+  // Yr.no + ECMWF + ensemble + MOSMIX TX/TN + fallback daily parallel ophalen
+  const [yrJson, ecmwf, ensemble, mosmix, daily] = await Promise.all([
     haalYrData(lat, lon),
     fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${ecmwfParams}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=5`),
+    fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=5`).catch(() => null),
     fetchT('mosmix_nl.json?t=' + Date.now()).catch(() => null),
     fetchT(`${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min&models=icon_seamless&timezone=Europe%2FAmsterdam&forecast_days=10`).catch(() => null),
   ]);
@@ -878,6 +880,31 @@ async function haalData(lat, lon) {
   }
 
   const merged = mergeModellen(yr, ecmwf);
+
+  // Ensemble spreiding berekenen (p10, p25, p75, p90 per tijdstap)
+  merged._ensP10 = new Array(merged.time.length).fill(null);
+  merged._ensP25 = new Array(merged.time.length).fill(null);
+  merged._ensP75 = new Array(merged.time.length).fill(null);
+  merged._ensP90 = new Array(merged.time.length).fill(null);
+
+  if (ensemble?.hourly) {
+    const memberKeys = Object.keys(ensemble.hourly).filter(k => k.startsWith('temperature_2m_member'));
+    const ensTimes = ensemble.hourly.time;
+
+    for (let i = 0; i < merged.time.length; i++) {
+      // Alleen na modelgrens (ECMWF deel)
+      if (i < modelGrensIdx) continue;
+      const eIdx = ensTimes.indexOf(merged.time[i]);
+      if (eIdx < 0) continue;
+      const vals = memberKeys.map(k => ensemble.hourly[k][eIdx]).filter(v => v != null).sort((a, b) => a - b);
+      if (vals.length < 5) continue;
+      const pct = (p) => { const idx = (p / 100) * (vals.length - 1); const lo = Math.floor(idx); return vals[lo] + (vals[Math.ceil(idx)] - vals[lo]) * (idx - lo); };
+      merged._ensP10[i] = Math.round(pct(10) * 10) / 10;
+      merged._ensP25[i] = Math.round(pct(25) * 10) / 10;
+      merged._ensP75[i] = Math.round(pct(75) * 10) / 10;
+      merged._ensP90[i] = Math.round(pct(90) * 10) / 10;
+    }
+  }
 
   // Dagelijkse TX/TN: MOSMIX (beste) > ICON daily > berekend uit uurdata
   merged._dailyTX = {};
@@ -1311,6 +1338,51 @@ function tekenAlles(data) {
           fill: { target: 1, above: 'rgba(180,210,240,0.22)', below: 'rgba(180,210,240,0.22)' },
           order: 3,
         },
+        // Ensemble spreiding (alleen ECMWF deel)
+        {
+          label: 'Ensemble p90',
+          data: data._ensP90,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(238,100,100,0.10)',
+          pointRadius: 0,
+          tension: 0.3,
+          fill: '+1',
+          order: 8,
+        },
+        {
+          label: 'Ensemble p10',
+          data: data._ensP10,
+          borderColor: 'rgba(238,100,100,0.20)',
+          borderWidth: 0.8,
+          borderDash: [3, 3],
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+          order: 8,
+        },
+        {
+          label: 'Ensemble p75',
+          data: data._ensP75,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(238,80,80,0.12)',
+          pointRadius: 0,
+          tension: 0.3,
+          fill: '+1',
+          order: 7,
+        },
+        {
+          label: 'Ensemble p25',
+          data: data._ensP25,
+          borderColor: 'rgba(238,80,80,0.25)',
+          borderWidth: 0.8,
+          borderDash: [3, 3],
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+          order: 7,
+        },
       ]
     },
     options: {
@@ -1322,8 +1394,15 @@ function tekenAlles(data) {
           callbacks: {
             ...basisOpties('c-temp', '\u00B0C').plugins.tooltip.callbacks,
             label: ctx => {
-              if (ctx.datasetIndex === 2) return null;
+              if (ctx.datasetIndex >= 2) return null; // Verberg vochtspreiding + ensemble in tooltip
               return ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '-'}\u00B0C`;
+            },
+            afterBody: (items) => {
+              const idx = items[0]?.dataIndex;
+              if (idx == null || idx < modelGrensIdx) return '';
+              const p10 = data._ensP10?.[idx], p90 = data._ensP90?.[idx];
+              if (p10 == null || p90 == null) return '';
+              return `  Ensemble: ${p10.toFixed(1)}\u00B0 \u2013 ${p90.toFixed(1)}\u00B0C (p10\u2013p90)`;
             }
           }
         }
