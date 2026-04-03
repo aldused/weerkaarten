@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Haal golfhoogtedata op van Rijkswaterstaat (DDL API) en schrijf naar golven.json.
-Bron: waterwebservices.rijkswaterstaat.nl
+Haal golfhoogtedata op en schrijf naar golven.json.
+Bronnen:
+  1. Rijkswaterstaat DDL API (NL boei-metingen, 10-min interval)
+  2. MET Norway / yr.no Oceanforecast API (4km model, heel Noordzee)
+  3. Open-Meteo Marine API (fallback voor punten buiten yr.no dekking)
 Draait elke 10 minuten via cron.
 """
 
@@ -361,8 +364,76 @@ INTERNATIONALE_PUNTEN = [
 ]
 
 
+YRNO_HEADERS = {"User-Agent": "Weerlab/1.0 ed@weerlab.nl"}
+YRNO_URL = "https://api.met.no/weatherapi/oceanforecast/2.0/complete"
+
+
+def haal_yrno_golven(punten):
+    """Haal golfhoogtedata op via MET Norway / yr.no Oceanforecast API (4km model)."""
+    resultaten = []
+    import time
+
+    for naam, lat, lon, land in punten:
+        try:
+            url = f"{YRNO_URL}?lat={lat:.4f}&lon={lon:.4f}"
+            r = requests.get(url, headers=YRNO_HEADERS, timeout=15)
+
+            if r.status_code == 422:
+                # Punt ligt niet op zee volgens yr.no model
+                continue
+            r.raise_for_status()
+            data = r.json()
+
+            ts = data.get("properties", {}).get("timeseries", [])
+            if not ts:
+                continue
+
+            # Eerste tijdstap = meest actuele modelwaarde
+            eerste = ts[0]
+            details = eerste.get("data", {}).get("instant", {}).get("details", {})
+            hm0 = details.get("sea_surface_wave_height")
+            if hm0 is None:
+                continue
+
+            richting = details.get("sea_surface_wave_from_direction")
+            watertemp = details.get("sea_water_temperature")
+            tijdstip = eerste.get("time", "")
+
+            # Historie: laatste 24 uur uit forecast (elk uur)
+            historie = []
+            for t in ts[:24]:
+                d = t.get("data", {}).get("instant", {}).get("details", {})
+                h = d.get("sea_surface_wave_height")
+                if h is not None:
+                    historie.append({"t": t["time"], "h": round(h, 2)})
+
+            code = naam.upper().replace(" ", "").replace("/", "")[:12] + f"_{land}"
+            resultaten.append({
+                "code": code,
+                "naam": naam,
+                "lat": lat,
+                "lon": lon,
+                "hm0": round(hm0, 2),
+                "tijdstip": tijdstip,
+                "historie": historie,
+                "richting": round(richting) if richting is not None else None,
+                "watertemp": round(watertemp, 1) if watertemp is not None else None,
+                "bron": "yr.no",
+                "land": land,
+            })
+            print(f"  [YR] {naam:25s} ({land})  Hm0={hm0:.2f}m")
+
+            # Rate limiting: yr.no vraagt beleefd gebruik
+            time.sleep(0.3)
+
+        except Exception as e:
+            print(f"  [YR] Fout bij {naam}: {e}", file=sys.stderr)
+
+    return resultaten
+
+
 def haal_open_meteo_golven(punten):
-    """Haal golfhoogtedata op via Open-Meteo Marine API."""
+    """Haal golfhoogtedata op via Open-Meteo Marine API (fallback)."""
     resultaten = []
 
     for naam, lat, lon, land in punten:
@@ -466,17 +537,26 @@ def main():
 
     print(f"\nRWS: {ok} stations met data")
 
-    # ── Stap 2: Open-Meteo data (internationaal) ────────────────────────────
-    print("\n=== Open-Meteo Marine API ===")
-    intl = haal_open_meteo_golven(INTERNATIONALE_PUNTEN)
-    resultaten.extend(intl)
-    print(f"Open-Meteo: {len(intl)} punten met data")
+    # ── Stap 2: yr.no Oceanforecast (primaire internationale bron) ─────────
+    print("\n=== MET Norway / yr.no Oceanforecast API ===")
+    yrno_resultaten = haal_yrno_golven(INTERNATIONALE_PUNTEN)
+    resultaten.extend(yrno_resultaten)
+    print(f"yr.no: {len(yrno_resultaten)} punten met data")
+
+    # ── Stap 3: Open-Meteo als fallback voor mislukte yr.no punten ───────
+    yrno_namen = {r["naam"] for r in yrno_resultaten}
+    fallback_punten = [p for p in INTERNATIONALE_PUNTEN if p[0] not in yrno_namen]
+    if fallback_punten:
+        print(f"\n=== Open-Meteo Marine API (fallback voor {len(fallback_punten)} punten) ===")
+        om_resultaten = haal_open_meteo_golven(fallback_punten)
+        resultaten.extend(om_resultaten)
+        print(f"Open-Meteo fallback: {len(om_resultaten)} punten met data")
 
     # ── Opslaan ──────────────────────────────────────────────────────────────
     nu = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     uitvoer = {
         "bijgewerkt": nu,
-        "bron": "Rijkswaterstaat DDL API + Open-Meteo Marine API",
+        "bron": "Rijkswaterstaat DDL API + MET Norway yr.no + Open-Meteo Marine API",
         "aantal": len(resultaten),
         "stations": resultaten,
     }
