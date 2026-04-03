@@ -1,25 +1,35 @@
 """
-knmi_api.py — Gedeelde KNMI API helper met fallback key
+knmi_api.py — Gedeelde KNMI API helper met key-rotatie
 Importeer: from knmi_api import knmi_get
+
+5 EDR API keys met automatische rotatie om de 6 uur
++ fallback bij 403/401.
 """
 import requests
+from datetime import datetime
 
 KNMI_KEYS = [
     "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9",
     "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjgzMDcwMzljZTYyYjRkYjM5NWY2ZDcxMGQ2OGZkNjVkIiwiaCI6Im11cm11cjEyOCJ9",
     "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjBkOWYwYzJjMmQzNzRjOGFhOTc5MzMyYTkwYTIzNmUwIiwiaCI6Im11cm11cjEyOCJ9",
     "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjcwNzVkMTU5NzkzYjQzMzc5ZjQyYzFjNjY1NzllZDMzIiwiaCI6Im11cm11cjEyOCJ9",
+    "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY1MjM5YTkzYmIyNjRlMTQ5MGYwNmY2YWY5OTg3NzdhIiwiaCI6Im11cm11cjEyOCJ9",
 ]
 
-_actieve_key_idx = 0
+def _rotatie_key():
+    """Kies key op basis van uur: roteert om de 6 uur over alle keys."""
+    uur = datetime.now().hour
+    return (uur // 6) % len(KNMI_KEYS)
+
+_actieve_key_idx = _rotatie_key()
 
 def knmi_get(url, params=None, timeout=20, extra_headers=None):
     """
-    GET request naar KNMI API met automatische fallback naar 3 keys.
-    Gooit een Exception als alle keys falen.
+    GET request naar KNMI API met automatische rotatie (om de 6 uur)
+    en fallback naar volgende key bij 403. Gooit Exception als alle falen.
     """
     global _actieve_key_idx
-    # Probeer alle keys, begin bij de actieve
+    # Probeer alle keys, begin bij de actieve (rotatie-based)
     volgorde = [(_actieve_key_idx + i) % len(KNMI_KEYS) for i in range(len(KNMI_KEYS))]
     for idx in volgorde:
         headers = {"Authorization": KNMI_KEYS[idx], "Accept": "application/json"}
