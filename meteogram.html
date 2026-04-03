@@ -856,10 +856,12 @@ async function haalData(lat, lon) {
   const ecmwfParams = 'temperature_2m,dewpoint_2m,windspeed_10m,windgusts_10m,winddirection_10m,precipitation,cloudcover_low,cloudcover_mid,cloudcover_high,weather_code,shortwave_radiation,relative_humidity_2m';
   const base = 'https://api.open-meteo.com/v1/forecast';
 
-  // Yr.no + ECMWF parallel ophalen
-  const [yrJson, ecmwf] = await Promise.all([
+  // Yr.no + ECMWF + MOSMIX TX/TN + fallback daily parallel ophalen
+  const [yrJson, ecmwf, mosmix, daily] = await Promise.all([
     haalYrData(lat, lon),
     fetchT(`${base}?latitude=${lat}&longitude=${lon}&hourly=${ecmwfParams}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=5`),
+    fetchT('mosmix_nl.json?t=' + Date.now()).catch(() => null),
+    fetchT(`${base}?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min&models=icon_seamless&timezone=Europe%2FAmsterdam&forecast_days=10`).catch(() => null),
   ]);
 
   const yr = parseYrData(yrJson);
@@ -875,7 +877,42 @@ async function haalData(lat, lon) {
     yr.shortwave_radiation.push(eIdx >= 0 ? ecmwf.hourly.shortwave_radiation?.[eIdx] : null);
   }
 
-  return mergeModellen(yr, ecmwf);
+  const merged = mergeModellen(yr, ecmwf);
+
+  // Dagelijkse TX/TN: MOSMIX (beste) > ICON daily > berekend uit uurdata
+  merged._dailyTX = {};
+  merged._dailyTN = {};
+
+  // Zoek dichtstbijzijnde MOSMIX station
+  if (mosmix?.data && mosmix?.stations) {
+    let bestStation = null, bestDist = Infinity;
+    for (const [naam, coords] of Object.entries(mosmix.stations)) {
+      const dx = coords[0] - lon, dy = coords[1] - lat;
+      const dist = dx * dx + dy * dy;
+      if (dist < bestDist) { bestDist = dist; bestStation = naam; }
+    }
+    // Gebruik MOSMIX als station < ~30km afstand (0.3 graden)
+    if (bestStation && bestDist < 0.09) {
+      for (const dag of (mosmix.dagen || [])) {
+        const tx = mosmix.data?.[dag]?.TX?.[bestStation];
+        const tn = mosmix.data?.[dag]?.TN?.[bestStation];
+        if (tx != null) merged._dailyTX[dag] = tx;
+        if (tn != null) merged._dailyTN[dag] = tn;
+      }
+      merged._mosmixStation = bestStation;
+    }
+  }
+
+  // Fallback: ICON daily voor dagen zonder MOSMIX
+  if (daily?.daily) {
+    for (let i = 0; i < daily.daily.time.length; i++) {
+      const dag = daily.daily.time[i];
+      if (merged._dailyTX[dag] == null) merged._dailyTX[dag] = daily.daily.temperature_2m_max[i];
+      if (merged._dailyTN[dag] == null) merged._dailyTN[dag] = daily.daily.temperature_2m_min[i];
+    }
+  }
+
+  return merged;
 }
 
 function mergeModellen(yr, ecmwf) {
@@ -981,21 +1018,25 @@ function berekenDagStats(times, data) {
   for (let i = 0; i < times.length; i++) {
     const dag = new Date(times[i]).getDate();
     if (dag !== vorigeDag) {
-      if (vorigeDag !== -1) indices.push({ start: dagStart, end: i });
+      if (vorigeDag !== -1) indices.push({ start: dagStart, end: i, datum: times[dagStart]?.substring(0, 10) });
       vorigeDag = dag;
       dagStart = i;
     }
   }
-  indices.push({ start: dagStart, end: times.length });
+  indices.push({ start: dagStart, end: times.length, datum: times[dagStart]?.substring(0, 10) });
 
-  indices.forEach(({ start, end }) => {
+  indices.forEach(({ start, end, datum }) => {
     const temps = (data.temperature_2m || []).slice(start, end).filter(v => v != null);
     const winds = (data.windspeed_10m || []).slice(start, end).filter(v => v != null);
     const regen = (data.precipitation || []).slice(start, end).filter(v => v != null);
 
+    // Gebruik dagelijkse TX/TN (MOS-gecorrigeerd) als beschikbaar, anders berekend uit uurdata
+    const mosTX = data._dailyTX?.[datum];
+    const mosTN = data._dailyTN?.[datum];
+
     dagStats.push({
-      tMax: temps.length ? Math.round(Math.max(...temps) * 10) / 10 : null,
-      tMin: temps.length ? Math.round(Math.min(...temps) * 10) / 10 : null,
+      tMax: mosTX != null ? Math.round(mosTX * 10) / 10 : (temps.length ? Math.round(Math.max(...temps) * 10) / 10 : null),
+      tMin: mosTN != null ? Math.round(mosTN * 10) / 10 : (temps.length ? Math.round(Math.min(...temps) * 10) / 10 : null),
       bft: winds.length ? kmhNaarBft(winds.reduce((s, v) => s + v, 0) / winds.length) : null,
       mm: regen.length ? regen.reduce((s, v) => s + v, 0) : 0,
     });
