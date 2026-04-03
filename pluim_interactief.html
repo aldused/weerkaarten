@@ -133,7 +133,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
   <div id="blok-temp" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-temp"></div>
     <div class="legenda" id="leg-temp"></div>
-    <div id="crosshair-info" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;display:flex;gap:16px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
+    <div id="crosshair-info" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;gap:16px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
     <div style="position:relative;width:100%;height:380px"><canvas id="canvas-temp"></canvas></div>
   </div>
   <div id="blok-neerslag" class="grafiek-blok" style="display:none;margin-top:8px">
@@ -579,6 +579,7 @@ function legHtml(items){
 const cfgBase={
   responsive:true,maintainAspectRatio:false,animation:false,
   interaction:{mode:'index',intersect:false},
+  events:['mousemove','mouseout','click','touchstart','touchmove'],
   plugins:{legend:{display:false}},
   scales:{
     x:{grid:{color:GRID},ticks:{color:TICK,font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:80},border:{color:GRID}},
@@ -684,6 +685,10 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   const hTs=hIdx.map(i=>hres.hourly.time[i]);
   const hTemp=hIdx.map(i=>hres.hourly.temperature_2m[i]);
   const hPrecip=hIdx.map(i=>hres.hourly.precipitation[i]);
+  // HRES gemapped op ensemble-timestamps voor crosshair
+  const hTempMap = {};
+  hTs.forEach((t,i) => { hTempMap[t] = hTemp[i]; });
+  const hTempMapped = ts.map(t => hTempMap[t] ?? null);
   const pMed=ts.map((_,j)=>medC(pA,j));
   const pKans=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>0.1).length/pA.length*100);
   const lab=getLab(ts);
@@ -717,7 +722,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     ...(mosBol ? [['#ff4444','MOSMIX TX' + mosLabel,'punt'],['#4488ff','MOSMIX TN' + mosLabel,'punt']] : []),
   ]);
   chartTimestamps['canvas-temp']=ts;
-  crosshairData['canvas-temp']={tA, tMed, hTemp, mosTxData, mosTnData};
+  crosshairData['canvas-temp']={tA, tMed, hTemp:hTempMapped, mosTxData, mosTnData};
   actieveCharts.temp=new Chart(document.getElementById('canvas-temp'),{
     data:{labels:lab,datasets:[
       ...ensDatasets(tA,'rgba(20,130,20,0.45)'),
