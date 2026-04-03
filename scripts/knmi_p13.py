@@ -254,16 +254,44 @@ def droge_natte_periodes(dag: pd.DataFrame, top: int = 10) -> dict:
     }
 
 def jaar_statistieken(dag: pd.DataFrame) -> list:
+    huidig_jaar = dag.index[-1].year
     result = []
     for jaar, grp in dag.groupby(dag.index.year):
-        if grp["rh_mm"].count() < 300:
+        n_dagen = grp["rh_mm"].count()
+        # Volledige jaren: minstens 300 dagen vereist
+        # Lopend jaar: altijd opnemen (markeren als onvolledig)
+        if n_dagen < 300 and jaar != huidig_jaar:
             continue
-        result.append({
+        entry = {
             "jaar":          int(jaar),
             "jaarsom":       round(float(grp["rh_mm"].sum()), 1),
             "max_dag":       round(float(grp["rh_mm"].max()), 1),
             "max_dag_datum": grp["rh_mm"].idxmax().strftime("%d %b"),
             "neerslagdagen": int((grp["rh_mm"] >= 1.0).sum()),
+        }
+        if n_dagen < 300:
+            entry["onvolledig"] = True
+            entry["dagen"] = int(n_dagen)
+            entry["tm_datum"] = grp.index[-1].strftime("%d %b")
+        result.append(entry)
+    return result
+
+
+def maand_statistieken(dag: pd.DataFrame) -> dict:
+    """Per jaar een lijst van 12 maanden met som, max dag, neerslagdagen."""
+    result = {}
+    for (jaar, maand), grp in dag.groupby([dag.index.year, dag.index.month]):
+        key = str(jaar)
+        if key not in result:
+            result[key] = []
+        result[key].append({
+            "maand":         int(maand),
+            "naam":          MAANDEN_NL[maand][:3],
+            "som":           round(float(grp["rh_mm"].sum()), 1),
+            "max_dag":       round(float(grp["rh_mm"].max()), 1),
+            "max_dag_datum": grp["rh_mm"].idxmax().strftime("%d"),
+            "neerslagdagen": int((grp["rh_mm"] >= 1.0).sum()),
+            "dagen":         int(grp["rh_mm"].count()),
         })
     return result
 
@@ -295,6 +323,9 @@ def main():
     print("Jaaroverzicht berekenen...")
     jaaroverzicht = jaar_statistieken(dag)
 
+    print("Maandoverzicht berekenen...")
+    maandoverzicht = maand_statistieken(dag)
+
     output = {
         "meta": {
             "stations":      P13_STATIONS,
@@ -306,6 +337,7 @@ def main():
         },
         "records":       records,
         "jaaroverzicht": jaaroverzicht,
+        "maandoverzicht": maandoverzicht,
     }
 
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
