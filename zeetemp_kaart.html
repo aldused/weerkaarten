@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zeewatertemperatuur Europa – Ed Aldus WM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1520;--bg2:#111926;--panel:#161f30;--border:#2a3a50;--text:#dde8f0;--text2:#7a99bb;--accent:#2299ff;--hdr:#0f3460}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+.header{background:var(--hdr);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1a4a80;flex-shrink:0}
+.header h1{font-size:.9rem;font-weight:700;color:white}
+.header p{font-size:.65rem;color:#8aaccc;margin-top:0}
+.btn{padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:white;font-size:.8rem;font-weight:600;cursor:pointer;font-family:Inter,sans-serif}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:wait}
+#status-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:5px 14px;font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.kaart-wrap{flex:1;display:flex;justify-content:center;align-items:center;overflow:hidden;position:relative;min-height:0}
+canvas{display:block}
+.legenda-bar{background:var(--panel);border-top:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:12px;flex-shrink:0}
+.legenda-bar span{font-size:.72rem;color:var(--text2)}
+.legenda-gradient{width:200px;height:12px;border-radius:4px}
+.copyright{font-size:.65rem;color:#445566;text-align:center;padding:4px;flex-shrink:0;border-top:1px solid var(--border)}
+/* Tooltip */
+#tooltip{position:fixed;display:none;background:rgba(13,21,32,0.95);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.8rem;color:var(--text);pointer-events:none;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.4)}
+#tooltip .tt-naam{font-weight:700;color:white;font-size:.85rem}
+#tooltip .tt-temp{font-size:1.4rem;font-weight:700;margin:2px 0}
+#tooltip .tt-coord{font-size:.7rem;color:var(--text2)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Zeewatertemperatuur Europa</h1>
+    <p>Open-Meteo Marine API (CMEMS) &middot; Statische kaart</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="klok" style="font-size:.75rem;color:#8aaccc"></span>
+    <button class="btn" id="btn-laden" onclick="laadData()">&#8635; Vernieuwen</button>
+  </div>
+</div>
+
+<div id="status-bar">
+  <span id="status-tekst">Kaart wordt geladen...</span>
+</div>
+
+<div class="kaart-wrap" id="kaart-wrap">
+  <canvas id="kaart"></canvas>
+</div>
+
+<div class="legenda-bar">
+  <span>0 °C</span>
+  <canvas class="legenda-gradient" id="legenda" width="200" height="12"></canvas>
+  <span>28 °C</span>
+  <span style="margin-left:16px;color:#667788">© Ed Aldus WM | weerlab.nl | Data: Open-Meteo Marine API</span>
+</div>
+
+<div id="tooltip">
+  <div class="tt-naam"></div>
+  <div class="tt-temp"></div>
+  <div class="tt-coord"></div>
+</div>
+
+<script>
+// ── Configuratie ────────────────────────────────────────────────────────────
+const LON_MIN = -14, LON_MAX = 32, LAT_MIN = 34, LAT_MAX = 65;
+const OCEAN = '#1a3a5a', LAND = '#2d3b4a', KUST = '#5a88aa', GRENS = '#3a4e60', BG = '#0d1520';
+
+const STATIONS = [
+  // Noordzee & Kanaal
+  ["Terschelling",53.35,5.20],["IJmuiden",52.46,4.55],["Hoek van Holland",51.98,4.10],
+  ["Vlissingen",51.44,3.60],["Zeebrugge",51.35,3.18],["Calais",50.95,1.85],
+  ["Dunkerque",51.03,2.37],["Cherbourg",49.65,-1.62],["Brest",48.38,-4.49],
+  ["Texel",53.05,4.75],["Den Helder",52.93,4.75],["Dover",51.11,1.32],
+  ["Brighton",50.82,-0.14],["Felixstowe",51.96,1.35],["Harlingen",53.18,5.41],
+  ["Schiermonnikoog",53.48,6.19],["Ameland",53.45,5.79],["Katwijk",52.20,4.40],
+  ["Oostende",51.23,2.92],["Boulogne",50.72,1.60],["Le Havre",49.49,0.10],
+  ["Aberdeen",57.14,-2.08],["Newcastle",55.00,-1.43],["Edinburgh",55.95,-3.19],
+  ["Humber",53.65,-0.18],
+  // Noorwegen & Denemarken
+  ["Bergen",60.39,5.33],["Stavanger",58.97,5.73],["Kristiansand",58.15,8.00],
+  ["Goteborg",57.70,11.97],["Esbjerg",55.47,8.45],["Thyboron",56.70,8.22],
+  ["Skagen",57.72,10.58],
+  // Baltische Zee
+  ["Kopenhagen",55.68,12.57],["Kiel",54.32,10.13],["Rostock",54.15,12.10],
+  ["Gdansk",54.35,18.65],["Tallinn",59.44,24.75],["Helsinki",60.17,24.94],
+  ["Stockholm",59.33,18.07],["Riga",56.95,24.11],
+  // Atlantische kust
+  ["Cork",51.90,-8.47],["Dublin",53.33,-6.25],["Galway",53.27,-9.06],
+  ["Blackpool",53.82,-3.05],["Bordeaux",45.55,-1.07],["Biarritz",43.48,-1.56],
+  ["Santander",43.46,-3.80],["A Coruna",43.37,-8.40],["Porto",41.15,-8.67],
+  ["Lissabon",38.71,-9.14],["Faro",37.02,-7.93],["Cadiz",36.53,-6.30],
+  // Middellandse Zee
+  ["Gibraltar",36.14,-5.35],["Malaga",36.72,-4.42],["Alicante",38.34,-0.48],
+  ["Barcelona",41.38,2.18],["Marseille",43.30,5.37],["Genua",44.41,8.93],
+  ["Napels",40.84,14.25],["Palermo",38.12,13.36],["Athene",37.98,23.73],
+  ["Izmir",38.42,27.14],["Istanbul",41.01,28.98],["Venetie",45.44,12.32],
+  ["Split",43.51,16.44],["Dubrovnik",42.65,18.09],["Valletta",35.90,14.51],
+];
+
+// ── Kleurschaal ─────────────────────────────────────────────────────────────
+const KLEUR_STOPS = [
+  [0,'#0a1a6e'],[5,'#1a5fa8'],[10,'#2299ee'],[14,'#44ccbb'],
+  [18,'#f5e642'],[22,'#f5a010'],[26,'#dd3333'],[30,'#880000'],
+];
+
+function parseHex(c){return [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];}
+
+function tempKleur(t){
+  if(t<=KLEUR_STOPS[0][0]) return KLEUR_STOPS[0][1];
+  if(t>=KLEUR_STOPS[KLEUR_STOPS.length-1][0]) return KLEUR_STOPS[KLEUR_STOPS.length-1][1];
+  for(let i=0;i<KLEUR_STOPS.length-1;i++){
+    const[t0,c0]=KLEUR_STOPS[i],[t1,c1]=KLEUR_STOPS[i+1];
+    if(t>=t0&&t<=t1){
+      const f=(t-t0)/(t1-t0);
+      const[r0,g0,b0]=parseHex(c0),[r1,g1,b1]=parseHex(c1);
+      const r=Math.round(r0+(r1-r0)*f),g=Math.round(g0+(g1-g0)*f),b=Math.round(b0+(b1-b0)*f);
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  return '#888';
+}
+
+function tekstKleur(t){return(t<12||t>24)?'white':'#111';}
+
+// ── Projectie ───────────────────────────────────────────────────────────────
+let W, H, PAD = 0;
+
+function lonToX(lon){return PAD + (lon-LON_MIN)/(LON_MAX-LON_MIN)*(W-2*PAD);}
+function latToY(lat){return PAD + (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*(H-2*PAD);}
+
+// ── Canvas ──────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('kaart');
+const ctx = canvas.getContext('2d');
+let geoData = null;
+let stationData = []; // [{naam, lat, lon, t, x, y}]
+
+function resize(){
+  const wrap = document.getElementById('kaart-wrap');
+  const maxW = wrap.clientWidth;
+  const maxH = wrap.clientHeight;
+  // Aspect ratio van de projectie
+  const aspect = (LON_MAX-LON_MIN)/(LAT_MAX-LAT_MIN);
+  if(maxW/maxH > aspect){
+    H = maxH; W = Math.round(H*aspect);
+  } else {
+    W = maxW; H = Math.round(W/aspect);
+  }
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W*dpr;
+  canvas.height = H*dpr;
+  canvas.style.width = W+'px';
+  canvas.style.height = H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  teken();
+}
+
+// ── GeoJSON laden ───────────────────────────────────────────────────────────
+async function laadGeo(){
+  setStatus('<span class="spinner"></span> Kustlijnen laden...');
+  try {
+    // world-atlas 110m land polygons (TopoJSON)
+    const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json');
+    const topo = await resp.json();
+    // Converteer TopoJSON naar GeoJSON geometries
+    geoData = topoToGeo(topo, topo.objects.land);
+    setStatus('Kustlijnen geladen, temperaturen ophalen...');
+  } catch(e){
+    setStatus('Fout bij laden kustlijnen: '+e.message);
+  }
+}
+
+// Minimale TopoJSON decoder (alleen wat we nodig hebben)
+function topoToGeo(topology, object){
+  const arcs = topology.arcs;
+  const transform = topology.transform;
+  const scale = transform ? transform.scale : [1,1];
+  const translate = transform ? transform.translate : [0,0];
+
+  // Decodeer arc-coordinaten (delta-encoded)
+  function decodeArc(arcIdx){
+    const arc = arcs[arcIdx < 0 ? ~arcIdx : arcIdx];
+    const coords = [];
+    let x=0, y=0;
+    for(const [dx,dy] of arc){
+      x += dx; y += dy;
+      coords.push([x*scale[0]+translate[0], y*scale[1]+translate[1]]);
+    }
+    if(arcIdx < 0) coords.reverse();
+    return coords;
+  }
+
+  function decodeRing(indices){
+    let coords = [];
+    for(const idx of indices){
+      const arc = decodeArc(idx);
+      // Skip eerste punt als het aansluit op vorige
+      if(coords.length>0) arc.shift();
+      coords = coords.concat(arc);
+    }
+    return coords;
+  }
+
+  // Verwerk geometries
+  const polygons = [];
+  function processGeom(geom){
+    if(geom.type==='GeometryCollection'){
+      geom.geometries.forEach(processGeom);
+    } else if(geom.type==='Polygon'){
+      polygons.push(geom.arcs.map(decodeRing));
+    } else if(geom.type==='MultiPolygon'){
+      for(const poly of geom.arcs){
+        polygons.push(poly.map(decodeRing));
+      }
+    }
+  }
+  processGeom(object);
+  return polygons;
+}
+
+// ── Tekenen ─────────────────────────────────────────────────────────────────
+function teken(){
+  // Achtergrond (oceaan)
+  ctx.fillStyle = OCEAN;
+  ctx.fillRect(0, 0, W, H);
+
+  // Land tekenen
+  if(geoData){
+    ctx.fillStyle = LAND;
+    ctx.strokeStyle = KUST;
+    ctx.lineWidth = 0.6;
+    for(const polygon of geoData){
+      ctx.beginPath();
+      for(const ring of polygon){
+        let first = true;
+        for(const[lon,lat] of ring){
+          const x = lonToX(lon), y = latToY(lat);
+          if(first){ctx.moveTo(x,y);first=false;}
+          else ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // Graticule (lichte rasterlijnen)
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for(let lon=-10;lon<=30;lon+=10){
+    ctx.beginPath();
+    ctx.moveTo(lonToX(lon),latToY(LAT_MIN));
+    ctx.lineTo(lonToX(lon),latToY(LAT_MAX));
+    ctx.stroke();
+  }
+  for(let lat=35;lat<=65;lat+=5){
+    ctx.beginPath();
+    ctx.moveTo(lonToX(LON_MIN),latToY(lat));
+    ctx.lineTo(lonToX(LON_MAX),latToY(lat));
+    ctx.stroke();
+  }
+
+  // Temperatuurlabels
+  tekenLabels();
+}
+
+function tekenLabels(){
+  if(!stationData.length) return;
+
+  const fontSize = Math.max(9, Math.min(12, W/85));
+  ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Bereken posities en afmetingen
+  const labels = stationData.map(s => {
+    const x = lonToX(s.lon);
+    const y = latToY(s.lat);
+    s.x = x; s.y = y;
+    const label = s.t.toFixed(1)+'°';
+    const tw = ctx.measureText(label).width;
+    const pw = tw + 8, ph = fontSize + 6;
+    return { s, x, y, label, pw, ph };
+  });
+
+  // Simpele collision avoidance: verschuif overlappende labels
+  for(let pass=0;pass<4;pass++){
+    for(let i=0;i<labels.length;i++){
+      for(let j=i+1;j<labels.length;j++){
+        const a=labels[i], b=labels[j];
+        const ox = (a.pw/2+b.pw/2) - Math.abs(a.x-b.x);
+        const oy = (a.ph/2+b.ph/2) - Math.abs(a.y-b.y);
+        if(ox>0 && oy>0){
+          // Verschuif uit elkaar
+          const dx = a.x-b.x||0.5, dy = a.y-b.y||0.5;
+          const len = Math.hypot(dx,dy)||1;
+          const push = Math.min(ox,oy)*0.55;
+          a.x += (dx/len)*push; a.y += (dy/len)*push;
+          b.x -= (dx/len)*push; b.y -= (dy/len)*push;
+        }
+      }
+    }
+  }
+
+  // Update stationData posities voor tooltip
+  labels.forEach(l => { l.s.x = l.x; l.s.y = l.y; });
+
+  // Teken labels
+  for(const {s, x, y, label, pw, ph} of labels){
+    const kleur = tempKleur(s.t);
+    const tkleur = tekstKleur(s.t);
+
+    ctx.fillStyle = kleur;
+    ctx.globalAlpha = 0.92;
+    roundRect(ctx, x-pw/2, y-ph/2, pw, ph, 5);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = tkleur;
+    ctx.fillText(label, x, y+0.5);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// ── Data ophalen ────────────────────────────────────────────────────────────
+async function laadData(){
+  const btn = document.getElementById('btn-laden');
+  btn.disabled = true; btn.textContent = 'Ophalen...';
+  setStatus('<span class="spinner"></span> Zeewatertemperaturen ophalen...');
+
+  const beloftes = STATIONS.map(([naam,lat,lon]) =>
+    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=sea_surface_temperature&timezone=Europe%2FAmsterdam`)
+      .then(r=>r.json())
+      .then(d=>({naam, lat, lon, t:d?.current?.sea_surface_temperature}))
+      .catch(()=>({naam, lat, lon, t:null}))
+  );
+
+  const res = await Promise.all(beloftes);
+  stationData = res.filter(r=>r.t!=null).map(r=>({...r, x:0, y:0}));
+
+  const nu = new Date().toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  setStatus(`${stationData.length} meetpunten geladen · ${nu}`);
+  btn.disabled = false; btn.textContent = '\u21BB Vernieuwen';
+  teken();
+}
+
+function setStatus(html){document.getElementById('status-tekst').innerHTML=html;}
+
+// ── Tooltip ─────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+
+canvas.addEventListener('mousemove', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  let gevonden = null;
+  let minDist = 18;
+  for(const s of stationData){
+    const d = Math.hypot(s.x-mx, s.y-my);
+    if(d<minDist){minDist=d;gevonden=s;}
+  }
+  if(gevonden){
+    tooltip.style.display='block';
+    tooltip.style.left=(e.clientX+14)+'px';
+    tooltip.style.top=(e.clientY-10)+'px';
+    tooltip.querySelector('.tt-naam').textContent=gevonden.naam;
+    tooltip.querySelector('.tt-temp').textContent=gevonden.t.toFixed(1)+' °C';
+    tooltip.querySelector('.tt-temp').style.color=tempKleur(gevonden.t);
+    tooltip.querySelector('.tt-coord').textContent=
+      `${gevonden.lat.toFixed(2)}°N  ${gevonden.lon.toFixed(2)}°${gevonden.lon>=0?'E':'W'}`;
+    canvas.style.cursor='pointer';
+  } else {
+    tooltip.style.display='none';
+    canvas.style.cursor='default';
+  }
+});
+
+canvas.addEventListener('mouseleave', ()=>{
+  tooltip.style.display='none';
+});
+
+// ── Legenda gradient ────────────────────────────────────────────────────────
+function tekenLegenda(){
+  const c = document.getElementById('legenda');
+  const lctx = c.getContext('2d');
+  const grad = lctx.createLinearGradient(0,0,200,0);
+  for(const[t,kleur] of KLEUR_STOPS){
+    grad.addColorStop(t/30, kleur);
+  }
+  lctx.fillStyle = grad;
+  lctx.beginPath();
+  lctx.roundRect(0,0,200,12,4);
+  lctx.fill();
+}
+
+// ── Klok ────────────────────────────────────────────────────────────────────
+function updateKlok(){
+  document.getElementById('klok').textContent=
+    new Date().toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+async function init(){
+  updateKlok(); setInterval(updateKlok, 30000);
+  tekenLegenda();
+  await laadGeo();
+  resize();
+  await laadData();
+}
+
+window.addEventListener('resize', resize);
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
