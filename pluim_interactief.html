@@ -767,8 +767,8 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   document.getElementById('blok-neerslag').style.display='';
   document.getElementById('titel-neerslag').textContent=`ECMWF – ${naam}  Neerslag`;
   document.getElementById('leg-neerslag').innerHTML=legHtml([
-    ['rgba(68,136,204,0.18)','p10–p90','blok'],
-    ['rgba(68,136,204,0.38)','p25–p75','blok'],
+    ['rgba(30,100,200,0.5)','Ensembleleden','lijn'],
+    ['rgba(68,136,204,0.38)','IQR p25–p75','blok'],
     ['#ee3333','Mediaan','lijn'],
     ['#2299ff','HRES','lijn'],
     ...(mosBol ? [['#1a3a8a','MOSMIX dag'+mosLabel,'punt'],['#0a1a4a','MOSMIX nacht'+mosLabel,'punt']] : []),
@@ -776,9 +776,8 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   chartTimestamps['canvas-neerslag']=ts;
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
     data:{labels:lab,datasets:[
-      {type:'line',data:pP10,borderColor:'transparent',backgroundColor:'rgba(68,136,204,0.15)',fill:'+1',pointRadius:0,tension:0.3,order:9},
-      {type:'line',data:pP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
-      {type:'line',data:pP25,borderColor:'transparent',backgroundColor:'rgba(68,136,204,0.28)',fill:'+1',pointRadius:0,tension:0.3,order:8},
+      ...ensDatasets(pA,'rgba(30,100,200,0.35)'),
+      {type:'line',data:pP25,borderColor:'transparent',backgroundColor:'rgba(68,136,204,0.15)',fill:'+1',pointRadius:0,tension:0.3,order:8},
       {type:'line',data:pP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8},
       {type:'line',data:pMed,  borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
       {type:'line',data:hPrecip,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
@@ -1325,17 +1324,17 @@ async function laadDauwpunt(lat,lon,naam,dagen,van,tot){
   document.getElementById('blok-dauwpunt').style.display='';
   document.getElementById('titel-dauwpunt').textContent=`ECMWF – ${naam}  Dauwpunt & Vochtigheid`;
   document.getElementById('leg-dauwpunt').innerHTML=legHtml([
-    ['rgba(100,200,255,0.5)','ENS dauwpunt','lijn'],['rgba(100,200,255,0.2)','IQR p25–p75','blok'],
-    ['#66ccff','Mediaan dauwpunt','lijn'],['#2299ff','HRES dauwpunt','lijn'],
+    ['rgba(34,160,34,0.5)','ENS dauwpunt','lijn'],['rgba(51,187,51,0.2)','IQR p25–p75','blok'],
+    ['#22aa22','Mediaan dauwpunt','lijn'],['#2299ff','HRES dauwpunt','lijn'],
     ['rgba(100,220,180,0.7)','ENS mediaan RV%','dash'],['rgba(50,200,150,0.7)','HRES RV%','dash'],
   ]);
   chartTimestamps['canvas-dauwpunt']=ts;
   actieveCharts.dauwpunt=new Chart(document.getElementById('canvas-dauwpunt'),{
     data:{labels:lab,datasets:[
-      ...ensDatasets(dpA,'rgba(40,120,200,0.35)'),
-      {type:'line',data:dpP25,borderColor:'transparent',backgroundColor:'rgba(100,200,255,0.10)',fill:'+1',pointRadius:0,tension:0.3,order:9},
+      ...ensDatasets(dpA,'rgba(20,130,20,0.45)'),
+      {type:'line',data:dpP25,borderColor:'transparent',backgroundColor:'rgba(51,187,51,0.12)',fill:'+1',pointRadius:0,tension:0.3,order:9},
       {type:'line',data:dpP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
-      {type:'line',data:dpMed,borderColor:'#66ccff',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
+      {type:'line',data:dpMed,borderColor:'#22aa22',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
       {type:'line',data:hDp,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
       {type:'line',data:rhMed,borderColor:'rgba(100,220,180,0.7)',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,tension:0.3,order:3,yAxisID:'y2'},
       {type:'line',data:hRh,borderColor:'rgba(50,200,150,0.7)',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,tension:0.3,order:4,yAxisID:'y2',xAxisID:'xH'},
@@ -1516,12 +1515,13 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
       const pMed=ts.map((_,j)=>medC(pA,j));
       const kans=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>0.1).length/pA.length*100);
       titel=`${mLbl} – ${naam} – Neerslag`;
+      const pEnsK=model==='icon'?'rgba(20,120,160,0.35)':'rgba(30,100,200,0.35)';
       datasets=[
-        {type:'bar',data:kans,backgroundColor:'rgba(68,136,204,0.3)',yAxisID:'y2',order:2},
-        {type:'line',data:pMed,borderColor:medK,borderWidth:2,pointRadius:0,fill:false,tension:0.3,yAxisID:'y1',order:1},
+        ...ensDatasets(pA,pEnsK),
+        {type:'line',data:pMed,borderColor:medK,borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:1},
       ];
-      scales={x:{...cfgBase.scales.x},y1:yAs('left',' mm'),y2:{...yAs('right','%','#6699cc'),grid:{display:false},max:100}};
-      tooltipCb={callbacks:{label:ctx=>{if(ctx.datasetIndex===0)return ` Kans: ${ctx.parsed.y.toFixed(0)}%`;return ` Med: ${ctx.parsed.y.toFixed(2)} mm/u`;}}};
+      scales={x:{...cfgBase.scales.x},y:{...yAs('left',' mm'),min:0}};
+      tooltipCb={filter:item=>item.datasetIndex===pA.length,callbacks:{label:ctx=>` Med: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'-'} mm/u`}};
     }
   }else if(type==='wind'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m&models=${ensModel}&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
