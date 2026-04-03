@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weersverwachting Nederland – KNMI – Ed Aldus WM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a1628;--bg2:#0f1d32;--panel:#152238;--card:#182a45;--border:rgba(255,255,255,0.07);--text:#e2e8f0;--text2:#94a3b8;--accent:#3b82f6;--warm:#f59e0b;--koud:#60a5fa;--knmi:#003da5}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:linear-gradient(135deg,#001a4d,var(--knmi));padding:16px 24px;border-bottom:2px solid rgba(255,255,255,0.1)}
+.header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.header h1{font-size:1.1rem;font-weight:700;color:white}
+.header p{font-size:.7rem;color:#8aaccc;margin-top:1px}
+.header-rechts{display:flex;align-items:center;gap:12px}
+.btn{padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:white;font-size:.78rem;font-weight:600;cursor:pointer;font-family:Inter,sans-serif}
+.btn:hover{opacity:.85}
+.meta-tijd{font-size:.7rem;color:#8aaccc}
+.container{max-width:1100px;margin:0 auto;padding:20px 20px 60px}
+
+/* Sectie styling */
+.sectie{margin-bottom:28px}
+.sectie-titel{font-size:1rem;font-weight:700;color:white;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid var(--accent);display:inline-block}
+
+/* Kaartjes strip */
+.kaarten-strip{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
+.kaart-item{flex-shrink:0;text-align:center}
+.kaart-item img{border-radius:8px;border:1px solid var(--border);height:220px}
+.kaart-item .kaart-label{font-size:.72rem;color:var(--text2);margin-top:4px}
+
+/* Tekstverwachting */
+.tekst-blok{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:12px}
+.tekst-titel{font-size:1.05rem;font-weight:700;color:var(--warm);margin-bottom:10px}
+.tekst-blok p{font-size:.88rem;color:var(--text);line-height:1.65;margin-bottom:10px}
+.tekst-blok p:last-child{margin-bottom:0}
+.tekst-blok strong{color:white}
+
+/* 7-daagse kaartjes */
+.dagen-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+@media(max-width:900px){.dagen-strip{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:550px){.dagen-strip{grid-template-columns:repeat(2,1fr)}}
+
+.dag-kaart{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center;transition:transform .15s}
+.dag-kaart:hover{transform:translateY(-2px);border-color:rgba(255,255,255,0.15)}
+.dag-kaart.vandaag{border-color:var(--accent);box-shadow:0 0 12px rgba(59,130,246,0.2)}
+.dag-naam{font-size:.82rem;font-weight:700;color:white;text-transform:capitalize}
+.dag-datum{font-size:.68rem;color:var(--text2);margin-bottom:6px}
+.dag-icoon{width:48px;height:48px;margin:4px auto}
+.dag-temps{display:flex;justify-content:center;gap:8px;margin:6px 0}
+.dag-max{font-size:1.05rem;font-weight:700;color:var(--warm)}
+.dag-min{font-size:.85rem;color:var(--koud)}
+.dag-detail{font-size:.7rem;color:var(--text2);line-height:1.5}
+.dag-detail span{display:block}
+
+/* Vooruitzichten */
+.vooruitzicht-blok{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px}
+.vooruitzicht-blok p{font-size:.88rem;line-height:1.6;color:var(--text)}
+.vooruitzicht-blok .vz-tijd{font-size:.7rem;color:var(--text2);margin-top:6px}
+
+/* Loading */
+.laden{text-align:center;padding:40px;color:var(--text2)}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.copyright{text-align:center;font-size:.65rem;color:#445566;padding:12px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1>Weersverwachting Nederland</h1>
+      <p>Bron: KNMI &middot; Bijgewerkt <span id="meta-tijd">-</span></p>
+    </div>
+    <div class="header-rechts">
+      <span class="meta-tijd" id="opgehaald"></span>
+      <button class="btn" onclick="laadData()">&#8635; Vernieuwen</button>
+    </div>
+  </div>
+</div>
+
+<div class="container" id="inhoud">
+  <div class="laden" id="laden"><span class="spinner"></span> Verwachting laden...</div>
+</div>
+
+<div class="copyright">© Ed Aldus WM | weerlab.nl | Bron: KNMI (knmi.nl)</div>
+
+<script>
+async function laadData(){
+  const inhoud = document.getElementById('inhoud');
+  inhoud.innerHTML = '<div class="laden"><span class="spinner"></span> Verwachting laden...</div>';
+
+  try {
+    const r = await fetch('knmi_verwachting.json?t='+Date.now());
+    if(!r.ok) throw new Error('JSON niet gevonden — draai eerst het Python script');
+    const d = await r.json();
+    toon(d);
+  } catch(e){
+    inhoud.innerHTML = `<div class="laden" style="color:#ef4444">${e.message}</div>`;
+  }
+}
+
+function toon(d){
+  const inhoud = document.getElementById('inhoud');
+  document.getElementById('meta-tijd').textContent = d.vandaag_morgen?.tijd || '';
+  document.getElementById('opgehaald').textContent = 'Data: ' + (d.opgehaald || '');
+
+  let html = '';
+
+  // ── Kaartjes ──────────────────────────────────────────────────────────
+  if(d.kaartjes?.length){
+    html += `<div class="sectie">
+      <div class="sectie-titel">Verwachtingskaarten</div>
+      <div class="kaarten-strip">
+        ${d.kaartjes.map(k => `
+          <div class="kaart-item">
+            <img src="${k.url}" alt="${k.label}" loading="lazy">
+            <div class="kaart-label">${k.label}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Vandaag & morgen ──────────────────────────────────────────────────
+  if(d.vandaag_morgen){
+    const vm = d.vandaag_morgen;
+    html += `<div class="sectie">
+      <div class="sectie-titel">Vandaag &amp; morgen</div>
+      <div class="tekst-blok">
+        <div class="tekst-titel">${vm.titel || ''}</div>
+        ${(vm.tekst||[]).map(t => `<p>${markeerVet(t)}</p>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── 7-daagse ──────────────────────────────────────────────────────────
+  if(d.dagen?.length){
+    const vandaag = new Date().toLocaleDateString('nl-NL',{weekday:'long'}).toLowerCase();
+    html += `<div class="sectie">
+      <div class="sectie-titel">7-daagse verwachting</div>
+      <div class="dagen-strip">
+        ${d.dagen.map(dag => {
+          const isVandaag = dag.dag.toLowerCase() === vandaag;
+          return `<div class="dag-kaart${isVandaag?' vandaag':''}">
+            <div class="dag-naam">${dag.dag}</div>
+            <div class="dag-datum">${dag.datum}</div>
+            ${dag.icoon_url ? `<img class="dag-icoon" src="${dag.icoon_url}" alt="${dag.icoon_alt||''}" title="${dag.icoon_alt||''}">` : ''}
+            <div class="dag-temps">
+              <span class="dag-max">${dag.tmax||'-'}</span>
+              <span class="dag-min">${dag.tmin||'-'}</span>
+            </div>
+            <div class="dag-detail">
+              ${dag.neerslagkans ? `<span>&#9748; ${dag.neerslagkans} &middot; ${dag.neerslag||''}</span>` : ''}
+              ${dag.wind ? `<span>&#127788; ${dag.wind}</span>` : ''}
+              ${dag.zon ? `<span>&#9728; ${dag.zon}</span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Vooruitzichten ────────────────────────────────────────────────────
+  if(d.vooruitzichten?.tekst){
+    html += `<div class="sectie">
+      <div class="sectie-titel">Vooruitzichten</div>
+      <div class="vooruitzicht-blok">
+        <p>${d.vooruitzichten.tekst}</p>
+        <div class="vz-tijd">${d.vooruitzichten.tijd||''}</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Lange termijn ─────────────────────────────────────────────────────
+  if(d.lange_termijn?.tekst){
+    html += `<div class="sectie">
+      <div class="sectie-titel">Lange termijn</div>
+      <div class="vooruitzicht-blok">
+        <p>${d.lange_termijn.tekst}</p>
+        <div class="vz-tijd">${d.lange_termijn.tijd||''}</div>
+      </div>
+    </div>`;
+  }
+
+  inhoud.innerHTML = html;
+}
+
+function markeerVet(tekst){
+  // Maak tijdsaanduidingen vet
+  return tekst.replace(/(Vanmiddag|Vanavond|Komende nacht|Morgenochtend|Morgenmiddag|Morgenavond|Vannacht|Vanochtend)/g, '<strong>$1</strong>');
+}
+
+window.addEventListener('load', laadData);
+</script>
+</body>
+</html>
