@@ -330,8 +330,8 @@ function toonJaar(jaar) {
     for (var m = 0; m < maanden.length; m++) {
       var r = maanden[m];
       cumSom += r.som;
-      h += "<tr>";
-      h += "<td>" + MAANDEN_LANG[r.maand] + "</td>";
+      h += "<tr class='maand-rij' data-jaar='" + jaar + "' data-maand='" + r.maand + "' style='cursor:pointer'>";
+      h += "<td>" + MAANDEN_LANG[r.maand] + " <span style='font-size:.65rem;color:#3a5a78'>&#9654;</span></td>";
       h += "<td style='text-align:right'><div class='bw'><div class='bk' style='width:" + Math.round(r.som / 1.5) + "px'></div>" + r.som + "</div></td>";
       h += "<td style='text-align:right'>" + r.neerslagdagen + "</td>";
       h += "<td style='text-align:right'>" + r.max_dag + "</td>";
@@ -353,9 +353,22 @@ function toonJaar(jaar) {
 
     // Maand-staafgrafiek
     h += "<div class='cw' style='margin-top:16px'><canvas id='c-jaar'></canvas></div>";
+
+    // Dagdetail container
+    h += "<div id='maand-detail'></div>";
   }
 
   el.innerHTML = h;
+
+  // Klikbare maandrijen
+  document.querySelectorAll(".maand-rij").forEach(function(tr) {
+    tr.addEventListener("click", function() {
+      var j = parseInt(tr.dataset.jaar), mn = parseInt(tr.dataset.maand);
+      toonMaand(j, mn);
+      document.querySelectorAll(".maand-rij").forEach(function(r) { r.style.background = ""; });
+      tr.style.background = "#1a2840";
+    });
+  });
 
   // Bouw maandgrafiek als er data is
   if (maanden.length && document.getElementById("c-jaar")) {
@@ -366,6 +379,66 @@ function toonJaar(jaar) {
       type: "bar",
       data: { labels: labels, datasets: [{ label: "Neerslag (mm)", data: waarden, backgroundColor: "rgba(31,200,240,.7)", borderWidth: 0, borderRadius: 4 }] },
       options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: "#8ab4cc", font: { size: 12 } }, grid: { color: "#1a2a3a" } }, y: { ticks: { color: "#5a7a99", font: { size: 11 } }, grid: { color: "#1a2a3a" }, title: { display: true, text: "mm", color: "#5a7a99" } } } }
+    });
+  }
+}
+
+function toonMaand(jaar, maandNr) {
+  var el = document.getElementById("maand-detail");
+  var md = window._maandData;
+  var maanden = md[String(jaar)] || [];
+  var maand = null;
+  for (var i = 0; i < maanden.length; i++) { if (maanden[i].maand === maandNr) { maand = maanden[i]; break; } }
+  if (!maand || !maand.dagwaarden || !maand.dagwaarden.length) {
+    el.innerHTML = "<p style='color:#e05050;padding:20px'>Geen dagdata voor " + MAANDEN_LANG[maandNr] + " " + jaar + "</p>";
+    return;
+  }
+
+  var DAGEN_NL = ["zo","ma","di","wo","do","vr","za"];
+  var maxMm = Math.max.apply(null, maand.dagwaarden.map(function(d) { return d.mm; }));
+  var h = "<div class='st'>" + MAANDEN_LANG[maandNr] + " " + jaar + " &mdash; dagelijks</div>";
+  h += "<div style='display:flex;gap:20px;flex-wrap:wrap'>";
+
+  // Dagtabel
+  h += "<div class='jw' style='flex:1;min-width:300px'><table class='jt'><thead><tr>";
+  h += "<th style='text-align:left'>Dag</th><th style='text-align:left'>Datum</th><th>Neerslag (mm)</th>";
+  h += "</tr></thead><tbody>";
+  var totaal = 0, ndagen = 0;
+  maand.dagwaarden.forEach(function(d) {
+    var dt = new Date(jaar, maandNr - 1, d.dag);
+    var dagNaam = DAGEN_NL[dt.getDay()];
+    var breedte = maxMm > 0 ? Math.round(d.mm / maxMm * 120) : 0;
+    var kleur = d.mm >= 10 ? "#1fc8f0" : (d.mm >= 1 ? "rgba(31,200,240,.6)" : "rgba(31,200,240,.2)");
+    totaal += d.mm;
+    if (d.mm >= 1) ndagen++;
+    h += "<tr>";
+    h += "<td style='text-align:left;color:#5a7a99;width:30px'>" + d.dag + "</td>";
+    h += "<td style='text-align:left;color:#7aabcc;width:30px'>" + dagNaam + "</td>";
+    h += "<td style='text-align:right'><div class='bw'><div class='bk' style='width:" + breedte + "px;background:" + kleur + "'></div><span style='min-width:45px;text-align:right'>" + d.mm + "</span></div></td>";
+    h += "</tr>";
+  });
+  h += "<tr style='border-top:2px solid #1a9bbf;font-weight:700'>";
+  h += "<td colspan='2' style='text-align:left;color:#1fc8f0'>Totaal (" + ndagen + " neerslagdagen)</td>";
+  h += "<td style='text-align:right;color:#1fc8f0'>" + totaal.toFixed(1) + " mm</td>";
+  h += "</tr></tbody></table></div>";
+
+  // Daggrafiek
+  h += "<div class='cw' style='flex:2;min-width:300px'><canvas id='c-maand'></canvas></div>";
+  h += "</div>";
+
+  el.innerHTML = h;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // Bouw daggrafiek
+  if (document.getElementById("c-maand")) {
+    var labels = maand.dagwaarden.map(function(d) { return d.dag; });
+    var waarden = maand.dagwaarden.map(function(d) { return d.mm; });
+    var kleuren = waarden.map(function(v) { return v >= 10 ? "rgba(31,200,240,.9)" : (v >= 1 ? "rgba(31,200,240,.6)" : "rgba(31,200,240,.25)"); });
+    if (window._maandChart) { window._maandChart.destroy(); }
+    window._maandChart = new Chart(document.getElementById("c-maand"), {
+      type: "bar",
+      data: { labels: labels, datasets: [{ label: "Neerslag (mm)", data: waarden, backgroundColor: kleuren, borderWidth: 0, borderRadius: 3 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: "dag", color: "#5a7a99" }, ticks: { color: "#8ab4cc", font: { size: 11 } }, grid: { color: "#1a2a3a" } }, y: { ticks: { color: "#5a7a99", font: { size: 11 } }, grid: { color: "#1a2a3a" }, title: { display: true, text: "mm", color: "#5a7a99" } } } }
     });
   }
 }

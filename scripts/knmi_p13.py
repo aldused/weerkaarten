@@ -284,6 +284,8 @@ def maand_statistieken(dag: pd.DataFrame) -> dict:
         key = str(jaar)
         if key not in result:
             result[key] = []
+        dagwaarden = [{"dag": int(d.day), "mm": round(float(v), 1)}
+                      for d, v in grp["rh_mm"].items()]
         result[key].append({
             "maand":         int(maand),
             "naam":          MAANDEN_NL[maand][:3],
@@ -292,6 +294,7 @@ def maand_statistieken(dag: pd.DataFrame) -> dict:
             "max_dag_datum": grp["rh_mm"].idxmax().strftime("%d"),
             "neerslagdagen": int((grp["rh_mm"] >= 1.0).sum()),
             "dagen":         int(grp["rh_mm"].count()),
+            "dagwaarden":    dagwaarden,
         })
     return result
 
