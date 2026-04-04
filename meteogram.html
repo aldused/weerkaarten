@@ -282,7 +282,7 @@ body {
 .uur-tabel tr:hover td { background: #f8fafb; }
 .uur-tabel .nacht-rij td { background: #f5f7fa; }
 .uur-tabel .temp-cel { color: #cc2222; font-weight: 600; }
-.uur-tabel .dauw-cel { color: #2266aa; }
+.uur-tabel .rv-cel { color: #2266aa; }
 .uur-tabel .wind-cel { color: #996600; font-weight: 600; }
 .uur-tabel .vlaag-cel { color: #cc5500; }
 .uur-tabel .regen-cel { color: #2255aa; }
@@ -1730,29 +1730,28 @@ function bouwUurDetails(data) {
       const wbgt = berekenWBGT(temp, rh, wind, stral);
       const wk = wbgtKleur(wbgt);
 
-      // Bewolking: toon laag/midden/hoog apart met kleurcodering
-      // Lage bewolking blokkeert zon echt, hoge (sluier) veel minder
-      let bewHtml = '';
-      if (bewL != null || bewM != null || bewH != null) {
-        const l = bewL != null ? Math.round(bewL) : 0;
-        const m = bewM != null ? Math.round(bewM) : 0;
-        const h2 = bewH != null ? Math.round(bewH) : 0;
-        // Kleur op basis van lage bewolking (meest impactvol)
-        const impact = l > 0 ? l : (m > 0 ? m * 0.7 : h2 * 0.3);
-        const bewKleur = impact > 70 ? '#4a6a88' : impact > 30 ? '#7a9ab8' : '#aabbcc';
-        bewHtml = `<span style="color:#4a6a88" title="Laag">${l}%</span> <span style="color:#7a9ab8" title="Midden">${m}%</span> <span style="color:#aabbcc" title="Hoog">${h2}%</span>`;
-      }
+      // Bewolking per laag met achtergrondkleur
+      const bewKleur = (v) => {
+        if (v == null) return '';
+        const pct = Math.round(v);
+        if (pct >= 80) return `<span style="background:#c0cdd8;padding:1px 4px;border-radius:3px">${pct}%</span>`;
+        if (pct >= 50) return `<span style="background:#dde4ea;padding:1px 4px;border-radius:3px">${pct}%</span>`;
+        if (pct > 0)  return `<span style="color:#8899aa">${pct}%</span>`;
+        return `<span style="color:#ccc">0%</span>`;
+      };
 
       rijen += `<tr class="${isNacht ? 'nacht-rij' : ''}">
         <td style="font-weight:600;color:#2a4060">${String(h).padStart(2, '0')}:00</td>
         <td class="weer-cel">${sym}</td>
         <td class="temp-cel">${temp != null ? temp.toFixed(1) + '\u00B0' : ''}</td>
-        <td class="dauw-cel">${dauw != null ? dauw.toFixed(1) + '\u00B0' : ''}</td>
+        <td class="rv-cel">${rh != null ? Math.round(rh) + '%' : ''}</td>
         <td class="wind-cel">${bft !== '' ? bft + ' Bft' : ''}</td>
         <td class="vlaag-cel">${bftVlaag !== '' ? bftVlaag + ' Bft (' + Math.round(vlaag) + ' km/h)' : ''}</td>
         <td class="richting-cel">${ri}${dir != null ? ' (' + Math.round(dir) + '\u00B0)' : ''}</td>
         <td class="regen-cel">${regen != null && regen > 0 ? regen.toFixed(1) + ' mm' : '\u2013'}</td>
-        <td class="bew-cel">${bewHtml}</td>
+        <td class="bew-cel">${bewKleur(bewL)}</td>
+        <td class="bew-cel">${bewKleur(bewM)}</td>
+        <td class="bew-cel">${bewKleur(bewH)}</td>
         <td style="background:${wk.bg};color:${wk.color};font-weight:600;border-radius:4px">${wbgt != null ? wbgt.toFixed(1) + '\u00B0' : ''}</td>
       </tr>`;
     }
@@ -1768,7 +1767,7 @@ function bouwUurDetails(data) {
       <div class="dag-dropdown-body">
         <table class="uur-tabel">
           <thead><tr>
-            <th>Uur</th><th></th><th>Temp</th><th>Dauwp.</th><th>Wind</th><th>Vlagen</th><th>Richting</th><th>Neerslag</th><th title="Laag / Midden / Hoog">Bewolking (L/M/H)</th><th>WBGT</th>
+            <th>Uur</th><th></th><th>Temp</th><th>RV</th><th>Wind</th><th>Vlagen</th><th>Richting</th><th>Neerslag</th><th>Laag</th><th>Midden</th><th>Hoog</th><th>WBGT</th>
           </tr></thead>
           <tbody>${rijen}</tbody>
         </table>
@@ -1921,8 +1920,8 @@ function downloadTabelPNG(plaatsNaam, ts) {
   const thH = 28;
   const dagGap = 12;
 
-  const kolommen = ['Uur', '', 'Temp', 'Dauwp.', 'Wind', 'Vlagen', 'Richting', 'Neerslag', 'Bew. L/M/H', 'WBGT'];
-  const kolW = [50, 30, 55, 55, 55, 100, 90, 65, 85, 50];
+  const kolommen = ['Uur', '', 'Temp', 'RV', 'Wind', 'Vlagen', 'Richting', 'Neerslag', 'Laag', 'Midden', 'Hoog', 'WBGT'];
+  const kolW = [50, 30, 55, 40, 55, 100, 90, 65, 50, 50, 50, 50];
   const tabelW = kolW.reduce((s, w) => s + w, 0);
   const totalW = tabelW + padding * 2;
 
@@ -2034,9 +2033,9 @@ function downloadTabelPNG(plaatsNaam, ts) {
       // Temp
       ctx.font = 'bold 11px "Segoe UI", sans-serif'; ctx.fillStyle = '#cc2222';
       ctx.fillText(temp != null ? temp.toFixed(1) + '\u00B0' : '', x + kolW[2]/2, y + rowH/2 + 4); x += kolW[2];
-      // Dauwpunt
+      // Luchtvochtigheid
       ctx.font = '11px "Segoe UI", sans-serif'; ctx.fillStyle = '#2266aa';
-      ctx.fillText(dauw != null ? dauw.toFixed(1) + '\u00B0' : '', x + kolW[3]/2, y + rowH/2 + 4); x += kolW[3];
+      ctx.fillText(rh != null ? Math.round(rh) + '%' : '', x + kolW[3]/2, y + rowH/2 + 4); x += kolW[3];
       // Wind
       ctx.fillStyle = '#996600'; ctx.font = 'bold 11px "Segoe UI", sans-serif';
       ctx.fillText(bft !== '' ? bft + ' Bft' : '', x + kolW[4]/2, y + rowH/2 + 4); x += kolW[4];
@@ -2049,18 +2048,24 @@ function downloadTabelPNG(plaatsNaam, ts) {
       // Neerslag
       ctx.fillStyle = '#2255aa';
       ctx.fillText(regen != null && regen > 0 ? regen.toFixed(1) + ' mm' : '\u2013', x + kolW[7]/2, y + rowH/2 + 4); x += kolW[7];
-      // Bewolking L/M/H
-      ctx.fillStyle = '#5a6a80'; ctx.font = '10px "Segoe UI", sans-serif';
+      // Bewolking 3 kolommen: Laag, Midden, Hoog
+      ctx.font = '10px "Segoe UI", sans-serif';
       const bL = bewL != null ? Math.round(bewL) : 0;
       const bM = bewM != null ? Math.round(bewM) : 0;
       const bH = bewH2 != null ? Math.round(bewH2) : 0;
-      ctx.fillText(`${bL}/${bM}/${bH}`, x + kolW[8]/2, y + rowH/2 + 4); x += kolW[8];
+      [bL, bM, bH].forEach((v, ci) => {
+        if (v >= 80) { ctx.fillStyle = '#c0cdd8'; ctx.fillRect(x + 2, y + 2, kolW[8 + ci] - 4, rowH - 4); }
+        else if (v >= 50) { ctx.fillStyle = '#dde4ea'; ctx.fillRect(x + 2, y + 2, kolW[8 + ci] - 4, rowH - 4); }
+        ctx.fillStyle = v > 0 ? '#4a6a88' : '#ccc';
+        ctx.fillText(v + '%', x + kolW[8 + ci]/2, y + rowH/2 + 4);
+        x += kolW[8 + ci];
+      });
       // WBGT
       const wk = wbgtKleur(wbgt);
       ctx.fillStyle = wk.bg;
-      ctx.fillRect(x + 2, y + 2, kolW[9] - 4, rowH - 4);
+      ctx.fillRect(x + 2, y + 2, kolW[11] - 4, rowH - 4);
       ctx.fillStyle = wk.color; ctx.font = 'bold 11px "Segoe UI", sans-serif';
-      ctx.fillText(wbgt != null ? wbgt.toFixed(1) + '\u00B0' : '', x + kolW[9]/2, y + rowH/2 + 4);
+      ctx.fillText(wbgt != null ? wbgt.toFixed(1) + '\u00B0' : '', x + kolW[11]/2, y + rowH/2 + 4);
 
       y += rowH;
     }
