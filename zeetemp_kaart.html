@@ -67,7 +67,11 @@ canvas{display:block}
 
 <script>
 // ── Configuratie ────────────────────────────────────────────────────────────
-const LON_MIN = -14, LON_MAX = 32, LAT_MIN = 34, LAT_MAX = 65;
+const EUROPA = {lonMin:-14, lonMax:32, latMin:34, latMax:65};
+const NOORDZEE = {lonMin:-5, lonMax:11, latMin:48.5, latMax:57.5, label:'Noordzee'};
+let zoomGebied = null; // null = Europa, of NOORDZEE
+function ext(){return zoomGebied || EUROPA;}
+
 const OCEAN = '#1a3a5a', LAND = '#2d3b4a', KUST = '#5a88aa', GRENS = '#3a4e60', BG = '#0d1520';
 
 const STATIONS = [
@@ -130,8 +134,10 @@ function tekstKleur(t){return(t<12||t>24)?'white':'#111';}
 // ── Projectie ───────────────────────────────────────────────────────────────
 let W, H, PAD = 0;
 
-function lonToX(lon){return PAD + (lon-LON_MIN)/(LON_MAX-LON_MIN)*(W-2*PAD);}
-function latToY(lat){return PAD + (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*(H-2*PAD);}
+function lonToX(lon){const e=ext();return PAD + (lon-e.lonMin)/(e.lonMax-e.lonMin)*(W-2*PAD);}
+function latToY(lat){const e=ext();return PAD + (1-(lat-e.latMin)/(e.latMax-e.latMin))*(H-2*PAD);}
+function xToLon(x){const e=ext();return e.lonMin + (x-PAD)/(W-2*PAD)*(e.lonMax-e.lonMin);}
+function yToLat(y){const e=ext();return e.latMin + (1-(y-PAD)/(H-2*PAD))*(e.latMax-e.latMin);}
 
 // ── Canvas ──────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('kaart');
@@ -143,8 +149,8 @@ function resize(){
   const wrap = document.getElementById('kaart-wrap');
   const maxW = wrap.clientWidth;
   const maxH = wrap.clientHeight;
-  // Aspect ratio van de projectie
-  const aspect = (LON_MAX-LON_MIN)/(LAT_MAX-LAT_MIN);
+  const e = ext();
+  const aspect = (e.lonMax-e.lonMin)/(e.latMax-e.latMin);
   if(maxW/maxH > aspect){
     H = maxH; W = Math.round(H*aspect);
   } else {
@@ -250,35 +256,107 @@ function teken(){
   }
 
   // Graticule (lichte rasterlijnen)
+  const e = ext();
+  const lonStep = zoomGebied ? 2 : 10;
+  const latStep = zoomGebied ? 1 : 5;
   ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 0.5;
-  for(let lon=-10;lon<=30;lon+=10){
+  for(let lon=Math.ceil(e.lonMin/lonStep)*lonStep;lon<=e.lonMax;lon+=lonStep){
     ctx.beginPath();
-    ctx.moveTo(lonToX(lon),latToY(LAT_MIN));
-    ctx.lineTo(lonToX(lon),latToY(LAT_MAX));
+    ctx.moveTo(lonToX(lon),latToY(e.latMin));
+    ctx.lineTo(lonToX(lon),latToY(e.latMax));
     ctx.stroke();
   }
-  for(let lat=35;lat<=65;lat+=5){
+  for(let lat=Math.ceil(e.latMin/latStep)*latStep;lat<=e.latMax;lat+=latStep){
     ctx.beginPath();
-    ctx.moveTo(lonToX(LON_MIN),latToY(lat));
-    ctx.lineTo(lonToX(LON_MAX),latToY(lat));
+    ctx.moveTo(lonToX(e.lonMin),latToY(lat));
+    ctx.lineTo(lonToX(e.lonMax),latToY(lat));
     ctx.stroke();
   }
 
   // Temperatuurlabels
   tekenLabels();
+
+  // Zoom-rechthoek met vergrootglas (alleen op Europa-weergave)
+  if(!zoomGebied){
+    tekenZoomRect();
+  } else {
+    tekenTerugKnop();
+  }
+}
+
+// ── Zoom-rechthoek + vergrootglas ──────────────────────────────────────────
+let zoomRectBounds = null; // {x,y,w,h} in canvas px
+let terugKnopBounds = null;
+
+function tekenZoomRect(){
+  const x1 = lonToX(NOORDZEE.lonMin), x2 = lonToX(NOORDZEE.lonMax);
+  const y1 = latToY(NOORDZEE.latMax), y2 = latToY(NOORDZEE.latMin);
+  const rx = x1, ry = y1, rw = x2-x1, rh = y2-y1;
+  zoomRectBounds = {x:rx, y:ry, w:rw, h:rh};
+
+  // Stippellijn
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6,4]);
+  ctx.strokeRect(rx, ry, rw, rh);
+  ctx.setLineDash([]);
+
+  // Vergrootglas icoon rechtsonder in de rechthoek
+  const ix = rx + rw - 8, iy = ry + rh - 8;
+  const r = Math.min(10, rw/8);
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(ix - r*1.2, iy - r*1.2, r, 0, Math.PI*2);
+  ctx.stroke();
+  // Handvat
+  ctx.beginPath();
+  ctx.moveTo(ix - r*0.4, iy - r*0.4);
+  ctx.lineTo(ix + 2, iy + 2);
+  ctx.stroke();
+
+  // Label
+  ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Noordzee 🔍', rx + 6, ry + 4);
+}
+
+function tekenTerugKnop(){
+  const bw = 100, bh = 28, bx = 12, by = 12;
+  terugKnopBounds = {x:bx, y:by, w:bw, h:bh};
+
+  ctx.fillStyle = 'rgba(34,153,255,0.85)';
+  roundRect(ctx, bx, by, bw, bh, 6);
+  ctx.fill();
+
+  ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = 'white';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('← Europa', bx + bw/2, by + bh/2);
 }
 
 function tekenLabels(){
   if(!stationData.length) return;
 
-  const fontSize = Math.max(9, Math.min(12, W/85));
+  const e = ext();
+  const fontSize = zoomGebied ? Math.max(12, Math.min(15, W/55)) : Math.max(9, Math.min(12, W/85));
   ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  // Filter stations op zichtbaar gebied (met marge)
+  const marge = zoomGebied ? 0.5 : 0;
+  const zichtbaar = stationData.filter(s =>
+    s.lon >= e.lonMin-marge && s.lon <= e.lonMax+marge &&
+    s.lat >= e.latMin-marge && s.lat <= e.latMax+marge
+  );
+
   // Bereken posities en afmetingen
-  const labels = stationData.map(s => {
+  const labels = zichtbaar.map(s => {
     const x = lonToX(s.lon);
     const y = latToY(s.lat);
     s.x = x; s.y = y;
@@ -288,8 +366,12 @@ function tekenLabels(){
     return { s, x, y, label, pw, ph };
   });
 
+  // Reset niet-zichtbare stations buiten beeld
+  stationData.filter(s => !zichtbaar.includes(s)).forEach(s => { s.x = -999; s.y = -999; });
+
   // Simpele collision avoidance: verschuif overlappende labels
-  for(let pass=0;pass<4;pass++){
+  const passes = zoomGebied ? 8 : 4;
+  for(let pass=0;pass<passes;pass++){
     for(let i=0;i<labels.length;i++){
       for(let j=i+1;j<labels.length;j++){
         const a=labels[i], b=labels[j];
@@ -367,13 +449,32 @@ function setStatus(html){document.getElementById('status-tekst').innerHTML=html;
 // ── Tooltip ─────────────────────────────────────────────────────────────────
 const tooltip = document.getElementById('tooltip');
 
+function inRect(mx, my, b){
+  return b && mx>=b.x && mx<=b.x+b.w && my>=b.y && my<=b.y+b.h;
+}
+
 canvas.addEventListener('mousemove', e=>{
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
+
+  // Check zoom-rect hover
+  if(!zoomGebied && inRect(mx,my,zoomRectBounds)){
+    tooltip.style.display='none';
+    canvas.style.cursor='pointer';
+    return;
+  }
+  // Check terug-knop hover
+  if(zoomGebied && inRect(mx,my,terugKnopBounds)){
+    tooltip.style.display='none';
+    canvas.style.cursor='pointer';
+    return;
+  }
+
   let gevonden = null;
-  let minDist = 18;
+  let minDist = zoomGebied ? 24 : 18;
   for(const s of stationData){
+    if(s.x < -900) continue;
     const d = Math.hypot(s.x-mx, s.y-my);
     if(d<minDist){minDist=d;gevonden=s;}
   }
@@ -390,6 +491,25 @@ canvas.addEventListener('mousemove', e=>{
   } else {
     tooltip.style.display='none';
     canvas.style.cursor='default';
+  }
+});
+
+canvas.addEventListener('click', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if(!zoomGebied && inRect(mx,my,zoomRectBounds)){
+    zoomGebied = NOORDZEE;
+    tooltip.style.display='none';
+    resize();
+    return;
+  }
+  if(zoomGebied && inRect(mx,my,terugKnopBounds)){
+    zoomGebied = null;
+    tooltip.style.display='none';
+    resize();
+    return;
   }
 });
 
