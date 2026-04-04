@@ -81,6 +81,22 @@ def haal_waarschuwingen():
             fenomenen.add(FENOMEEN_NL[fn])
     fenomeen_str = ", ".join(sorted(fenomenen)) if fenomenen else ""
 
+    # Fallback: fenomeen uit waarschuwingstekst halen als XML het niet geeft
+    if not fenomeen_str and tekst:
+        tekst_lower = tekst.lower()
+        TEKST_FENOMEEN = [
+            ("zware windstoten", "zware windstoten"), ("windstoten", "zware windstoten"),
+            ("onweer", "onweer"), ("hagel", "hagel"),
+            ("sneeuw", "sneeuw"), ("ijzel", "ijzel"), ("gladheid", "gladheid"),
+            ("mist", "dichte mist"), ("hitte", "hitte"), ("kou", "kou"),
+            ("regen", "zware regen"), ("neerslag", "zware neerslag"),
+        ]
+        gevonden = set()
+        for zoek, label in TEKST_FENOMEEN:
+            if zoek in tekst_lower:
+                gevonden.add(label)
+        fenomeen_str = ", ".join(sorted(gevonden)) if gevonden else ""
+
     nu = datetime.now(timezone.utc).astimezone(LOCAL_TZ).strftime("%d %b %Y %H:%M")
 
     resultaat = {
