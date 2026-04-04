@@ -117,12 +117,19 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <button class="btn-laden" id="btn-laden" onclick="laadData()">&#9654; Ophalen</button>
     <button class="btn-laden" id="btn-vergelijk" onclick="openVergelijking()" style="background:#1a5a30;border-color:#2a7a40">&#8862; 4 Pluimen / Stations</button>
     <button class="btn-laden" id="btn-reset" onclick="resetAlles()" style="background:#4a2020;border:1px solid #7a3030;color:#ff9999;display:none">&#8634; Reset</button>
-    <select id="png-formaat" style="background:#1a5a30;border:1px solid #2a7a40;color:#66dd88;border-radius:6px;padding:6px 8px;font-size:.78rem;cursor:pointer;display:none">
+    <select id="png-formaat" style="background:#1a5a30;border:1px solid #2a7a40;color:white;border-radius:6px;padding:6px 8px;font-size:.78rem;cursor:pointer;display:none">
       <option value="auto">PNG (auto)</option>
       <option value="social">1200×630 (social)</option>
       <option value="square">1080×1080 (instagram)</option>
       <option value="story">1080×1920 (story)</option>
     </select>
+    <select id="png-deel" style="background:#003366;border:1px solid #2a5a8a;color:white;border-radius:6px;padding:6px 8px;font-size:.78rem;cursor:pointer;display:none">
+      <option value="alles">Alles</option>
+      <option value="temp">Alleen temperatuur</option>
+      <option value="neerslag">Alleen neerslag</option>
+      <option value="kansen">Alleen neerslagkansen</option>
+    </select>
+    <input type="text" id="png-tekst" placeholder="Eigen tekst (bijv. Marathon Rotterdam)" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:6px 10px;font-size:.78rem;width:220px;display:none">
     <button class="btn-download" id="btn-download" onclick="downloadPng()" style="display:none">&#11015; PNG</button>
     <button class="btn-laden" id="btn-auto" onclick="toggleAutoRefresh()" style="background:#e8ecf2;border:1px solid #d0d8e4;color:#666;font-size:.75rem;padding:6px 10px">&#10227; Auto-refresh uit</button>
   </div>
@@ -674,6 +681,8 @@ async function laadData(){
     document.getElementById('status').style.display='none';
     document.getElementById('btn-download').style.display='';
     document.getElementById('png-formaat').style.display='';
+    document.getElementById('png-deel').style.display='';
+    document.getElementById('png-tekst').style.display='';
     document.getElementById('btn-reset').style.display='';
     document.getElementById('run-info').textContent=bepaalRun();
   }catch(e){
@@ -2021,33 +2030,41 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
   });
 }
 // ── PNG download met formaat-opties ──
-function maakPngCanvas(canvasList,naam,typeLabel,modelLabel){
-  const HDR=56,PAD=8,FOOT=20;
+function maakPngCanvas(canvasList,naam,typeLabel,modelLabel,eigenTekst){
+  const HDR=eigenTekst?72:56, PAD=8, FOOT=24;
   const W=canvasList[0].width;
   const totH=HDR+canvasList.reduce((s,c)=>s+c.height+PAD,0)-PAD+FOOT;
   const out=document.createElement('canvas');
   out.width=W; out.height=totH;
   const ctx=out.getContext('2d');
 
-  // Achtergrond
-  ctx.fillStyle='#0d0d1a';
+  // Lichte achtergrond
+  ctx.fillStyle='#f0f3f7';
   ctx.fillRect(0,0,W,totH);
 
-  // Header
-  ctx.fillStyle='#0f3460';
+  // Header (donkerblauw)
+  ctx.fillStyle='#003366';
   ctx.fillRect(0,0,W,HDR);
   ctx.fillStyle='white';
   ctx.font='bold 16px Inter,sans-serif';
-  ctx.fillText('Ed Aldus WM',14,24);
-  ctx.fillStyle='#8aaccc';
+  ctx.fillText('Ed Aldus WM',14,22);
+  ctx.fillStyle='#a8c8e8';
   ctx.font='12px Inter,sans-serif';
-  ctx.fillText(`${naam} · ${typeLabel} · ${modelLabel}`,14,42);
+  ctx.fillText(`${naam} · ${typeLabel} · ${modelLabel}`,14,40);
+  if(eigenTekst){
+    ctx.fillStyle='#f5e642';
+    ctx.font='bold 14px Inter,sans-serif';
+    ctx.fillText(eigenTekst,14,58);
+  }
   const datStr=new Date().toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   ctx.textAlign='right';
-  ctx.fillText(datStr,W-14,24);
-  ctx.fillText('© Ed Aldus WM | open-meteo.com',W-14,42);
+  ctx.fillStyle='white';
+  ctx.font='12px Inter,sans-serif';
+  ctx.fillText(datStr,W-14,22);
+  ctx.fillStyle='#a8c8e8';
+  ctx.fillText('© Ed Aldus WM | open-meteo.com',W-14,40);
   ctx.textAlign='left';
-  ctx.fillStyle='#4a90c4';
+  ctx.fillStyle='#2ec4e8';
   ctx.fillRect(0,HDR-2,W,2);
 
   // Charts
@@ -2055,11 +2072,11 @@ function maakPngCanvas(canvasList,naam,typeLabel,modelLabel){
   canvasList.forEach((c,i)=>{ctx.drawImage(c,0,y);y+=c.height+(i<canvasList.length-1?PAD:0);});
 
   // Footer
-  ctx.fillStyle='rgba(10,10,28,0.85)';
+  ctx.fillStyle='rgba(240,243,247,0.95)';
   ctx.fillRect(0,totH-FOOT,W,FOOT);
-  ctx.fillStyle='#445566';
+  ctx.fillStyle='#888';
   ctx.font='10px Inter,sans-serif';
-  ctx.fillText('© Ed Aldus WM | Data: Open-Meteo | weerlab.nl',8,totH-6);
+  ctx.fillText('© Ed Aldus WM · Data: Open-Meteo · weerlab.nl',8,totH-7);
   return out;
 }
 
@@ -2079,6 +2096,8 @@ function downloadPng(){
   const{naam}=getStationInfo();
   const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
   const formaat=document.getElementById('png-formaat')?.value||'auto';
+  const deel=document.getElementById('png-deel')?.value||'alles';
+  const eigenTekst=document.getElementById('png-tekst')?.value||'';
   const ids={temp:'canvas-temp',cloud:'canvas-cloud',wind:'canvas-wind',winddir:'canvas-winddir',
              sneeuw:'canvas-sneeuw',onweer:'canvas-onweer',hoogte:'canvas-hoogte',
              icon:'canvas-icon',vergelijking:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt'};
@@ -2086,19 +2105,34 @@ function downloadPng(){
   const kansenIds={temp:'canvas-neer-kansen',icon:'canvas-icon-kansen'};
   const windIds={vergelijking:'canvas-verg-wind',hres:'canvas-hres-wind'};
   const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',hres:'HRES operationeel',dauwpunt:'ECMWF ENS'};
-  const typeNamen={temp:'Temp & Neerslag',icon:'ICON Temp & Neerslag',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',hoogte:'850/500 hPa',vergelijking:'Temp · Neerslag · Wind',hres:'HRES Temp · Neerslag · Wind',dauwpunt:'Dauwpunt & Vochtigheid'};
+  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',hoogte:'850/500 hPa',vergelijking:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid'};
 
-  const mainC=document.getElementById(ids[actieveType]||'canvas-temp');
-  if(!mainC)return;
-  const canvassen=[mainC];
-  const nC=document.getElementById(neerslagIds[actieveType]);
-  if(nC) canvassen.push(nC);
-  const kC=document.getElementById(kansenIds[actieveType]);
-  if(kC) canvassen.push(kC);
-  const wC=document.getElementById(windIds[actieveType]);
-  if(wC) canvassen.push(wC);
+  let canvassen=[];
+  let typeLabel=typeNamen[actieveType]||'';
 
-  let uit=maakPngCanvas(canvassen,naam,typeNamen[actieveType]||'',modelNamen[actieveType]||'ECMWF ENS');
+  if(deel==='temp'||deel==='alles'){
+    const mainC=document.getElementById(ids[actieveType]||'canvas-temp');
+    if(mainC) canvassen.push(mainC);
+    if(deel==='temp') typeLabel='Temperatuur';
+  }
+  if(deel==='neerslag'||deel==='alles'){
+    const nC=document.getElementById(neerslagIds[actieveType]);
+    if(nC) canvassen.push(nC);
+    if(deel==='neerslag') typeLabel='Neerslag';
+  }
+  if(deel==='kansen'||deel==='alles'){
+    const kC=document.getElementById(kansenIds[actieveType]);
+    if(kC) canvassen.push(kC);
+    if(deel==='kansen') typeLabel='Neerslagkansen';
+  }
+  if(deel==='alles'){
+    const wC=document.getElementById(windIds[actieveType]);
+    if(wC) canvassen.push(wC);
+  }
+
+  if(!canvassen.length)return;
+
+  let uit=maakPngCanvas(canvassen,naam,typeLabel,modelNamen[actieveType]||'ECMWF ENS',eigenTekst||null);
 
   if(formaat==='social') uit=schaalCanvas(uit,1200,630);
   else if(formaat==='square') uit=schaalCanvas(uit,1080,1080);
@@ -2106,7 +2140,7 @@ function downloadPng(){
 
   const a=document.createElement('a');
   a.href=uit.toDataURL('image/png');
-  a.download=`pluim_${naam.toLowerCase().replace(/\s+/g,'_')}_${actieveType}_${formaat}_${ts}.png`;
+  a.download=`pluim_${naam.toLowerCase().replace(/\s+/g,'_')}_${deel}_${formaat}_${ts}.png`;
   a.click();
 }
 
