@@ -859,22 +859,24 @@ function verversRanking() {
     huidigStation==='__alle__' ? `Alle stations · beste per jaar · ${rijen.length} jaar` : `${DATA.stations?.[huidigStation]?.naam||huidigStation} · ${rijen.length} jaar gevonden`;
 
   // Sorteer
-  const geldig = rijen.filter(r => r[p.veld||p.id] != null && (p.id!=='RH'||r.RH>=0));
-  const gesorteerd = [...geldig].sort((a,b) => p.omgekeerd ? a[p.id]-b[p.id] : b[p.id]-a[p.id]);
+  const veld = p.veld || p.id;
+  const geldig = rijen.filter(r => r[veld] != null && (p.id!=='RH'||r.RH>=0));
+  const gesorteerd = [...geldig].sort((a,b) => p.omgekeerd ? a[veld]-b[veld] : b[veld]-a[veld]);
 
-  const max = gesorteerd.length ? gesorteerd[0][p.id] : 1;
-  const min = gesorteerd.length ? gesorteerd[gesorteerd.length-1][p.id] : 0;
-  const range = Math.abs(max - min) || 1;
+  // Voor bar-breedte: schaal van absolute min tot max over alle data
+  const alleWaarden = geldig.map(r => r[veld]);
+  const absMin = Math.min(...alleWaarden);
+  const absMax = Math.max(...alleWaarden);
+  const absRange = Math.abs(absMax - absMin) || 1;
 
   const n = toonTop25 ? Math.min(25, gesorteerd.length) : Math.min(10, gesorteerd.length);
   const tbody = document.getElementById('ranking-body');
   tbody.innerHTML = '';
 
   gesorteerd.slice(0, n).forEach((r, i) => {
-    const waarde = r[p.veld||p.id] * p.factor;
-    const barBreedte = p.omgekeerd
-      ? ((max - r[p.veld||p.id]) / range * 100).toFixed(1)
-      : ((r[p.veld||p.id] - min) / range * 100).toFixed(1);
+    const waarde = r[veld] * p.factor;
+    // Bar breedte proportioneel aan waarde (hoe warmer = langer, hoe kouder = korter)
+    const barBreedte = Math.max(5, ((r[veld] - absMin) / absRange * 95 + 5)).toFixed(1);
     const klasNr = i===0?'top1':i===1?'top2':i===2?'top3':'';
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><div class="rank-row">
