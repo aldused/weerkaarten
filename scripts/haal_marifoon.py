@@ -254,13 +254,15 @@ def _format_tijd(dt_str):
 
 
 def _format_tijd_kort(dt_str):
-    """Format '2026-04-04 14:00:00' naar '14:00' (lokale tijd)."""
+    """Format '2026-04-04 14:00:00' naar 'za 4 apr 14:00' (lokale tijd)."""
     if not dt_str:
         return ""
     try:
         dt = datetime.strptime(dt_str.strip(), "%Y-%m-%d %H:%M:%S")
         dt = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
-        return dt.strftime("%H:%M")
+        DAGEN = ['ma','di','wo','do','vr','za','zo']
+        dag = DAGEN[dt.weekday()]
+        return f"{dag} {dt.day} {dt.strftime('%b').lower()} {dt.strftime('%H:%M')}"
     except ValueError:
         return dt_str
 
