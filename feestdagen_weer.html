@@ -524,8 +524,9 @@ let chartInstantie = null;
 let chartParam = 'TX';
 
 const PARAMS = [
-  { id:'TX',  label:'🌡 Warmste',    eenheid:'°C', factor:0.1, kleur:'#e05555', desc:'Max. temperatuur' },
-  { id:'TN',  label:'🥶 Koudste',    eenheid:'°C', factor:0.1, kleur:'#5599ee', desc:'Min. temperatuur', omgekeerd:true },
+  { id:'TX',  label:'🌡 Hoogste max',   eenheid:'°C', factor:0.1, kleur:'#e05555', desc:'Hoogste maximum temperatuur' },
+  { id:'TX_LOW', label:'🧊 Laagste max', eenheid:'°C', factor:0.1, kleur:'#77bbdd', desc:'Laagste maximum temperatuur', veld:'TX', omgekeerd:true },
+  { id:'TN',  label:'🥶 Laagste min',   eenheid:'°C', factor:0.1, kleur:'#5599ee', desc:'Laagste minimum temperatuur', omgekeerd:true },
   { id:'TG',  label:'📊 Gemiddeld',  eenheid:'°C', factor:0.1, kleur:'#d4a843', desc:'Gem. temperatuur' },
   { id:'RH',  label:'🌧 Neerslag',   eenheid:'mm', factor:0.1, kleur:'#4488cc', desc:'Neerslag' },
   { id:'SQ',  label:'☀ Zonuren',    eenheid:'u',  factor:0.1, kleur:'#f0c060', desc:'Zonneschijnduur' },
@@ -641,9 +642,9 @@ function gefilterdData() {
     for(const [stnNr, stnData] of Object.entries(DATA.data || {})) {
       const rijen = (stnData[huidigFeestdag] || []).filter(r => r.jaar >= van && r.jaar <= tot);
       for(const r of rijen) {
-        const val = r[p.id];
+        const val = r[p.veld||p.id];
         if(val == null) continue;
-        if(!jaarMap[r.jaar] || (p.omgekeerd ? val < jaarMap[r.jaar][p.id] : val > jaarMap[r.jaar][p.id])) {
+        if(!jaarMap[r.jaar] || (p.omgekeerd ? val < jaarMap[r.jaar][p.veld||p.id] : val > jaarMap[r.jaar][p.veld||p.id])) {
           jaarMap[r.jaar] = {...r, _station: DATA.stations[stnNr]?.naam || stnNr};
         }
       }
@@ -811,9 +812,9 @@ function verversStats() {
   grid.innerHTML = '';
 
   const statDefs = [
-    { label:'Warmst ooit', icon:'🌡',  kleur:'#e05555', fn: r=>r.TX!=null?r.TX:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TX', max:true },
-    { label:'Koudste nacht', icon:'❄️',  kleur:'#5599ee', fn: r=>r.TN!=null?r.TN:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TN', max:false },
-    { label:'Koudste dag', icon:'🧊',  kleur:'#77bbdd', fn: r=>r.TX!=null?r.TX:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TX', max:false },
+    { label:'Hoogste maximum', icon:'🌡',  kleur:'#e05555', fn: r=>r.TX!=null?r.TX:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TX', max:true },
+    { label:'Laagste minimum', icon:'❄️',  kleur:'#5599ee', fn: r=>r.TN!=null?r.TN:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TN', max:false },
+    { label:'Laagste maximum', icon:'🧊',  kleur:'#77bbdd', fn: r=>r.TX!=null?r.TX:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TX', max:false },
     { label:'Natste dag',  icon:'💧',  kleur:'#4488cc', fn: r=>r.RH!=null&&r.RH>=0?r.RH:null, fmt: v=>(v*0.1).toFixed(1)+' mm', key:'RH', max:true },
     { label:'Zonnigste',   icon:'☀',  kleur:'#f0c060', fn: r=>r.SQ!=null&&r.SQ>=0?r.SQ:null, fmt: v=>(v*0.1).toFixed(1)+' u', key:'SQ', max:true },
     { label:'Winderigste', icon:'🌬',  kleur:'#88aabb', fn: r=>r.FX!=null?r.FX:null, fmt: v=>(v*0.1).toFixed(1)+' m/s', key:'FX', max:true },
@@ -858,7 +859,7 @@ function verversRanking() {
     huidigStation==='__alle__' ? `Alle stations · beste per jaar · ${rijen.length} jaar` : `${DATA.stations?.[huidigStation]?.naam||huidigStation} · ${rijen.length} jaar gevonden`;
 
   // Sorteer
-  const geldig = rijen.filter(r => r[p.id] != null && (p.id!=='RH'||r.RH>=0));
+  const geldig = rijen.filter(r => r[p.veld||p.id] != null && (p.id!=='RH'||r.RH>=0));
   const gesorteerd = [...geldig].sort((a,b) => p.omgekeerd ? a[p.id]-b[p.id] : b[p.id]-a[p.id]);
 
   const max = gesorteerd.length ? gesorteerd[0][p.id] : 1;
@@ -870,10 +871,10 @@ function verversRanking() {
   tbody.innerHTML = '';
 
   gesorteerd.slice(0, n).forEach((r, i) => {
-    const waarde = r[p.id] * p.factor;
+    const waarde = r[p.veld||p.id] * p.factor;
     const barBreedte = p.omgekeerd
-      ? ((max - r[p.id]) / range * 100).toFixed(1)
-      : ((r[p.id] - min) / range * 100).toFixed(1);
+      ? ((max - r[p.veld||p.id]) / range * 100).toFixed(1)
+      : ((r[p.veld||p.id] - min) / range * 100).toFixed(1);
     const klasNr = i===0?'top1':i===1?'top2':i===2?'top3':'';
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><div class="rank-row">
@@ -922,11 +923,11 @@ function verversAlleJaren() {
 function tekenChart() {
   const rijen = gefilterdData();
   const p = PARAMS.find(x=>x.id===chartParam);
-  const geldig = rijen.filter(r=>r[p.id]!=null&&(p.id!=='RH'||r.RH>=0));
+  const geldig = rijen.filter(r=>r[p.veld||p.id]!=null&&(p.id!=='RH'||r.RH>=0));
   geldig.sort((a,b)=>a.jaar-b.jaar);
 
   const labels = geldig.map(r=>r.jaar);
-  const waarden = geldig.map(r=>+(r[p.id]*p.factor).toFixed(2));
+  const waarden = geldig.map(r=>+(r[p.veld||p.id]*p.factor).toFixed(2));
 
   // Lopend gemiddelde (10 jaar)
   const gem = waarden.map((_,i) => {
