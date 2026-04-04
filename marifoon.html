@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marifoon Kustdistricten – Ed Aldus WM</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.header { background: #00205b; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #2ec4e8; }
+.header-titel { color: white; font-size: 14px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+.auto-badge { display: inline-block; font-size: 10px; background: #2ec4e8; color: white; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+
+.overzicht { background: white; padding: 12px 16px; border-bottom: 1px solid #dde6f0; }
+.overzicht-tekst { font-size: 13px; color: #2a4a70; line-height: 1.5; }
+.waarschuwing-box { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: 12px; color: #856404; font-weight: 600; }
+
+.toolbar { background: white; padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #dde6f0; }
+.btn-termijn { padding: 6px 16px; border-radius: 16px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+.btn-termijn:hover { background: #dce9f7; }
+.btn-termijn.actief { background: #00205b; color: white; border-color: transparent; }
+.toolbar-label { font-size: 11px; color: #7a90a8; font-weight: 600; margin-right: 4px; }
+
+.main { display: flex; gap: 0; flex: 1; min-height: 0; }
+.kaart-kolom { flex: 0 0 560px; overflow-y: auto; padding: 12px; }
+.detail-kolom { flex: 1; overflow-y: auto; background: white; border-left: 1px solid #dde6f0; }
+
+.kaart-container { position: relative; width: 100%; }
+.kaart-container img { width: 100%; display: block; border-radius: 0 0 4px 4px; }
+.kaart-container svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+.kaart-header-band { background: #003366; color: white; padding: 8px 14px; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 2; }
+.kaart-header-band .links { font-size: 13px; font-weight: 700; }
+.kaart-header-band .sub { font-size: 10px; color: #a8c8e8; margin-top: 1px; }
+
+/* Detail panel */
+.detail-header { background: #003366; color: white; padding: 10px 14px; font-size: 14px; font-weight: 700; position: sticky; top: 0; z-index: 2; }
+.detail-leeg { padding: 20px; font-size: 13px; color: #7a90a8; text-align: center; }
+.detail-vak { padding: 14px; }
+.detail-vak h3 { font-size: 15px; color: #003366; margin-bottom: 10px; }
+.detail-rij { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid #eef2f6; font-size: 12px; }
+.detail-label { font-weight: 700; color: #5a7090; min-width: 55px; flex-shrink: 0; }
+.detail-waarde { color: #1a2b40; line-height: 1.4; }
+.detail-termijn-titel { font-size: 11px; font-weight: 700; color: #00205b; background: #e8f0fa; padding: 4px 8px; border-radius: 4px; margin: 10px 0 6px; }
+
+/* Volledige tekst */
+.tekst-panel { display: none; padding: 14px; }
+.tekst-panel pre { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.6; white-space: pre-wrap; color: #2a4a70; }
+.btn-tekst { margin-left: auto; padding: 5px 14px; border-radius: 16px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 11px; font-weight: 600; cursor: pointer; }
+.btn-tekst.actief { background: #00205b; color: white; border-color: transparent; }
+
+/* Legenda */
+.legenda { display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 0; justify-content: center; font-size: 11px; color: #5a7090; }
+.legenda-item { display: flex; align-items: center; gap: 4px; }
+
+@media(max-width:900px) {
+  .main { flex-direction: column; height: auto; }
+  .kaart-kolom { flex: none; }
+  .detail-kolom { flex: none; border-left: none; border-top: 1px solid #dde6f0; max-height: 50vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Marifoon Kustdistricten</div>
+    <div class="header-sub">KNMI kustberichtgeving · <span class="auto-badge">auto-refresh 30 min</span> · <span id="header-stand">–</span></div>
+  </div>
+  <div style="text-align:right;color:white;">
+    <div style="font-size:12px;font-weight:700;" id="header-meteoroloog">–</div>
+    <div style="font-size:10px;color:#a8c8e8;" id="header-volgend">–</div>
+  </div>
+</div>
+
+<div class="overzicht" id="overzicht-box">
+  <div class="overzicht-tekst" id="overzicht-tekst">Laden...</div>
+  <div class="waarschuwing-box" id="waarschuwing-box" style="display:none;"></div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Periode:</span>
+  <div id="termijn-knoppen"></div>
+  <button class="btn-tekst" id="btn-volledig" onclick="toggleTekst()">Volledige tekst</button>
+</div>
+
+<div class="main">
+  <div class="kaart-kolom">
+    <div class="kaart-header-band">
+      <div><div class="links">Marifoon Kustdistricten</div><div class="sub" id="kaart-periode">–</div></div>
+    </div>
+    <div class="kaart-container">
+      <img src="kaart_basis_nl.png" alt="Basiskaart Nederland">
+      <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="legenda">
+      <div class="legenda-item"><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#2471a3"/></svg> Windkracht (Bft)</div>
+      <div class="legenda-item"><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="2" fill="#27ae60"/></svg> Zicht goed</div>
+      <div class="legenda-item"><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="2" fill="#f39c12"/></svg> Zicht matig</div>
+      <div class="legenda-item"><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="2" fill="#e74c3c"/></svg> Zicht slecht/mist</div>
+      <div class="legenda-item"><svg width="14" height="14"><polygon points="7,1 13,13 1,13" fill="#0277bd"/></svg> Neerslag</div>
+    </div>
+  </div>
+
+  <div class="detail-kolom">
+    <div class="detail-header" id="detail-header">Klik op een kustdistrict</div>
+    <div class="detail-leeg" id="detail-leeg">Klik op een kustdistrict op de kaart om de details te zien.</div>
+    <div class="detail-vak" id="detail-vak" style="display:none;"></div>
+    <div class="tekst-panel" id="tekst-panel"><pre id="tekst-pre"></pre></div>
+  </div>
+</div>
+
+<div style="text-align:center;font-size:11px;color:#888;padding:6px 0;">&copy; Ed Aldus WM &middot; Data: KNMI</div>
+
+<script>
+const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
+const SVG_W=800, SVG_H=1100;
+function lonToX(lon){return (lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;}
+function latToY(lat){return (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;}
+function ns(tag){return document.createElementNS("http://www.w3.org/2000/svg",tag);}
+
+// Windrichting tekst → graden
+const WINDRICHT = {
+  'noord':0,'nne':22.5,'noordoost':45,'ono':67.5,'oost':90,'ozo':112.5,
+  'zuidoost':135,'zzw':157.5,'zuid':180,'zzw':202.5,'zuidwest':225,'wzw':247.5,
+  'west':270,'wnw':292.5,'noordwest':315,'nnw':337.5,
+  'n':0,'no':45,'o':90,'zo':135,'z':180,'zw':225,'w':270,'nw':315,
+};
+
+// Beaufort kleuren
+const BFT_KLEUR = [
+  '#87ceeb','#6cb4ee','#4a90d9','#2471a3','#1a5276',
+  '#f39c12','#e67e22','#d35400','#c0392b','#922b21',
+  '#7d3c98','#4a235a','#1a1a2e'
+];
+
+let DATA = null;
+let actieveTermijn = '1';
+let actiefVak = null;
+let tekstZichtbaar = false;
+
+async function laadData() {
+  const r = await fetch('marifoon.json?t='+Date.now());
+  DATA = await r.json();
+
+  document.getElementById('header-stand').textContent = 'Stand: ' + DATA.bijgewerkt;
+  document.getElementById('header-meteoroloog').textContent = 'Meteoroloog: ' + DATA.meteoroloog;
+  document.getElementById('header-volgend').textContent = 'Volgend bericht: ' + DATA.volgend_bericht;
+
+  // Overzicht
+  document.getElementById('overzicht-tekst').textContent = DATA.overzicht || 'Geen overzicht beschikbaar.';
+  if (DATA.waarschuwing) {
+    document.getElementById('waarschuwing-box').style.display = 'block';
+    document.getElementById('waarschuwing-box').textContent = DATA.waarschuwing;
+  }
+
+  // Volledige tekst
+  document.getElementById('tekst-pre').textContent = DATA.volledige_tekst || '';
+
+  // Termijn knoppen
+  maakTermijnKnoppen();
+
+  // Kaart tekenen
+  tekenKaart();
+}
+
+function maakTermijnKnoppen() {
+  const container = document.getElementById('termijn-knoppen');
+  container.innerHTML = '';
+
+  // Gebruik periodes uit data, filter op termijn 1 en 2 (de hoofdverwachtingen)
+  const termijnen = ['1','2'];
+  const labels = {
+    '1': DATA.periodes?.['1'] || 'Periode 1',
+    '2': DATA.periodes?.['2'] || 'Periode 2',
+  };
+
+  // Check of er termijn 10/11/12 data is (dag-verwachtingen)
+  const eerstVak = Object.values(DATA.vakken)[0];
+  if (eerstVak) {
+    for (const t of eerstVak.termijnen) {
+      if (['10','11','12'].includes(t.termijn) && t.wind) {
+        termijnen.push(t.termijn);
+        const dagNr = parseInt(t.termijn) - 10;
+        labels[t.termijn] = DATA.periodes?.[t.termijn] || `Dag +${dagNr}`;
+      }
+    }
+  }
+
+  // Stel actieve termijn in op eerste beschikbare met data
+  if (!termijnen.includes(actieveTermijn)) actieveTermijn = termijnen[0];
+
+  for (const t of termijnen) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-termijn' + (t === actieveTermijn ? ' actief' : '');
+    btn.textContent = labels[t];
+    btn.onclick = () => { actieveTermijn = t; maakTermijnKnoppen(); tekenKaart(); if(actiefVak) toonDetail(actiefVak); };
+    container.appendChild(btn);
+  }
+}
+
+function tekenKaart() {
+  const svg = document.getElementById('nl-kaart');
+  svg.innerHTML = '';
+
+  const periode = DATA.periodes?.[actieveTermijn] || '';
+  document.getElementById('kaart-periode').textContent = periode ? `Verwachting ${periode} uur` : '';
+
+  for (const [naam, vak] of Object.entries(DATA.vakken)) {
+    const x = lonToX(vak.lon);
+    const y = latToY(vak.lat);
+
+    // Zoek data voor actieve termijn
+    const termijn = vak.termijnen.find(t => t.termijn === actieveTermijn);
+    if (!termijn) continue;
+
+    const g = ns('g');
+    g.style.cursor = 'pointer';
+    g.style.pointerEvents = 'all';
+    g.onclick = () => { actiefVak = naam; toonDetail(naam); };
+
+    // Parse wind
+    const bft = parseBft(termijn.wind);
+    const windRichting = parseWindRichting(termijn.wind);
+
+    // Achtergrond cirkel (windkracht kleur)
+    const bftKleur = BFT_KLEUR[Math.min(bft, BFT_KLEUR.length-1)];
+    const cirkel = ns('circle');
+    cirkel.setAttribute('cx', x);
+    cirkel.setAttribute('cy', y);
+    cirkel.setAttribute('r', 28);
+    cirkel.setAttribute('fill', bftKleur);
+    cirkel.setAttribute('stroke', 'white');
+    cirkel.setAttribute('stroke-width', 2);
+    cirkel.setAttribute('opacity', 0.92);
+    g.appendChild(cirkel);
+
+    // Bft getal (centraal in cirkel)
+    const tekst = ns('text');
+    tekst.setAttribute('x', x);
+    tekst.setAttribute('y', y + 2);
+    tekst.setAttribute('text-anchor', 'middle');
+    tekst.setAttribute('dominant-baseline', 'middle');
+    tekst.setAttribute('font-size', '16');
+    tekst.setAttribute('font-weight', '800');
+    tekst.setAttribute('fill', 'white');
+    tekst.textContent = bft > 0 ? bft : '–';
+    g.appendChild(tekst);
+
+    // "Bft" label onder het getal
+    const bftLabel = ns('text');
+    bftLabel.setAttribute('x', x);
+    bftLabel.setAttribute('y', y + 16);
+    bftLabel.setAttribute('text-anchor', 'middle');
+    bftLabel.setAttribute('font-size', '9');
+    bftLabel.setAttribute('font-weight', '600');
+    bftLabel.setAttribute('fill', 'rgba(255,255,255,0.8)');
+    bftLabel.textContent = 'Bft';
+    g.appendChild(bftLabel);
+
+    // Windrichting pijl (buiten cirkel, bovenaan)
+    if (windRichting !== null) {
+      const pijl = ns('g');
+      // Pijl boven de cirkel, roteert rond het centrum
+      pijl.setAttribute('transform', `translate(${x},${y}) rotate(${windRichting})`);
+      // Pijl van buiten naar binnen (wind komt UIT deze richting)
+      const lijn = ns('line');
+      lijn.setAttribute('x1', 0); lijn.setAttribute('y1', -38);
+      lijn.setAttribute('x2', 0); lijn.setAttribute('y2', -26);
+      lijn.setAttribute('stroke', '#003366'); lijn.setAttribute('stroke-width', 2.5);
+      lijn.setAttribute('stroke-linecap', 'round');
+      pijl.appendChild(lijn);
+      const punt = ns('polygon');
+      punt.setAttribute('points', '0,-26 -4,-34 4,-34');
+      punt.setAttribute('fill', '#003366');
+      pijl.appendChild(punt);
+      g.appendChild(pijl);
+    }
+
+    // Zicht indicator (klein bolletje rechtsonder)
+    const zichtKleur = parseZichtKleur(termijn.zicht);
+    const zichtDot = ns('circle');
+    zichtDot.setAttribute('cx', x + 20);
+    zichtDot.setAttribute('cy', y + 18);
+    zichtDot.setAttribute('r', 7);
+    zichtDot.setAttribute('fill', zichtKleur);
+    zichtDot.setAttribute('stroke', 'white');
+    zichtDot.setAttribute('stroke-width', 1.5);
+    g.appendChild(zichtDot);
+
+    // Zicht letter (G/M/S)
+    const zichtLetter = ns('text');
+    zichtLetter.setAttribute('x', x + 20);
+    zichtLetter.setAttribute('y', y + 21);
+    zichtLetter.setAttribute('text-anchor', 'middle');
+    zichtLetter.setAttribute('font-size', '8');
+    zichtLetter.setAttribute('font-weight', '800');
+    zichtLetter.setAttribute('fill', 'white');
+    zichtLetter.textContent = parseZichtLetter(termijn.zicht);
+    g.appendChild(zichtLetter);
+
+    // Weer indicator (driehoekje linksboven als er neerslag is)
+    if (termijn.weer) {
+      const driehoek = ns('polygon');
+      const dx = x - 20, dy = y - 18;
+      driehoek.setAttribute('points', `${dx},${dy-8} ${dx+7},${dy+4} ${dx-7},${dy+4}`);
+      driehoek.setAttribute('fill', '#0277bd');
+      driehoek.setAttribute('stroke', 'white');
+      driehoek.setAttribute('stroke-width', 1.5);
+      g.appendChild(driehoek);
+    }
+
+    // Naam label
+    const label = ns('text');
+    label.setAttribute('x', x);
+    label.setAttribute('y', y - 34);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-size', '11');
+    label.setAttribute('font-weight', '700');
+    label.setAttribute('fill', '#003366');
+    label.textContent = naam;
+    g.appendChild(label);
+
+    // Highlight ring als actief
+    if (naam === actiefVak) {
+      const ring = ns('circle');
+      ring.setAttribute('cx', x);
+      ring.setAttribute('cy', y);
+      ring.setAttribute('r', 32);
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', '#ffc107');
+      ring.setAttribute('stroke-width', 3);
+      g.appendChild(ring);
+    }
+
+    svg.appendChild(g);
+  }
+}
+
+function toonDetail(naam) {
+  actiefVak = naam;
+  tekenKaart(); // Herteken voor highlight ring
+
+  const vak = DATA.vakken[naam];
+  if (!vak) return;
+
+  document.getElementById('detail-header').textContent = naam;
+  document.getElementById('detail-leeg').style.display = 'none';
+  document.getElementById('detail-vak').style.display = 'block';
+
+  let html = '';
+  for (const t of vak.termijnen) {
+    // Skip lege termijnen
+    if (!t.wind && !t.weer && !t.zicht) continue;
+
+    html += `<div class="detail-termijn-titel">${t.periode || 'Termijn ' + t.termijn}</div>`;
+
+    if (t.wind) {
+      const bft = parseBft(t.wind);
+      html += `<div class="detail-rij"><span class="detail-label">Wind</span><span class="detail-waarde">${t.wind}${bft > 0 ? '' : ''}</span></div>`;
+    }
+    if (t.windstoten) {
+      html += `<div class="detail-rij"><span class="detail-label">Stoten</span><span class="detail-waarde">${t.windstoten}</span></div>`;
+    }
+    if (t.wind_waarschuwing) {
+      html += `<div class="detail-rij"><span class="detail-label" style="color:#c0392b;">Wrsch.</span><span class="detail-waarde" style="color:#c0392b;font-weight:700;">${t.wind_waarschuwing}</span></div>`;
+    }
+    if (t.zicht) {
+      const kleur = parseZichtKleur(t.zicht);
+      html += `<div class="detail-rij"><span class="detail-label">Zicht</span><span class="detail-waarde"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${kleur};margin-right:4px;vertical-align:middle;"></span>${t.zicht}</span></div>`;
+    }
+    if (t.weer) {
+      html += `<div class="detail-rij"><span class="detail-label">Weer</span><span class="detail-waarde">${t.weer}</span></div>`;
+    }
+  }
+
+  // Tijdreeks info
+  if (vak.tijdreeks && vak.tijdreeks.tijden.length > 0) {
+    const tr = vak.tijdreeks;
+    const heeftData = (tr.ff && tr.ff.some(v => v > 0)) || (tr.hs && tr.hs.some(v => v > 0));
+    if (heeftData) {
+      html += `<div class="detail-termijn-titel">Tijdreeks (uurlijks)</div>`;
+      html += `<div style="font-size:11px;color:#7a90a8;margin-top:4px;">`;
+      html += `<table style="width:100%;border-collapse:collapse;font-size:11px;">`;
+      html += `<tr style="background:#e8f0fa;"><th style="padding:3px 6px;">Tijd</th>`;
+      if (tr.ff) html += `<th>Wind</th>`;
+      if (tr.ddd) html += `<th>Richt.</th>`;
+      if (tr.hs) html += `<th>Golf</th>`;
+      if (tr.tt) html += `<th>Temp</th>`;
+      html += `</tr>`;
+      for (let i = 0; i < tr.tijden.length; i++) {
+        html += `<tr style="border-bottom:1px solid #eef2f6;"><td style="padding:2px 6px;">${tr.tijden[i]}</td>`;
+        if (tr.ff) html += `<td>${tr.ff[i] ?? '–'}</td>`;
+        if (tr.ddd) html += `<td>${tr.ddd[i] != null ? tr.ddd[i]+'°' : '–'}</td>`;
+        if (tr.hs) html += `<td>${tr.hs[i] != null ? tr.hs[i]+'m' : '–'}</td>`;
+        if (tr.tt) html += `<td>${tr.tt[i] != null ? tr.tt[i]+'°' : '–'}</td>`;
+        html += `</tr>`;
+      }
+      html += `</table></div>`;
+    }
+  }
+
+  document.getElementById('detail-vak').innerHTML = html;
+}
+
+function toggleTekst() {
+  tekstZichtbaar = !tekstZichtbaar;
+  document.getElementById('tekst-panel').style.display = tekstZichtbaar ? 'block' : 'none';
+  document.getElementById('detail-vak').style.display = tekstZichtbaar ? 'none' : (actiefVak ? 'block' : 'none');
+  document.getElementById('detail-leeg').style.display = tekstZichtbaar || actiefVak ? 'none' : 'block';
+  document.getElementById('btn-volledig').classList.toggle('actief', tekstZichtbaar);
+  if (tekstZichtbaar) {
+    document.getElementById('detail-header').textContent = 'Volledige tekst';
+  } else if (actiefVak) {
+    document.getElementById('detail-header').textContent = actiefVak;
+  } else {
+    document.getElementById('detail-header').textContent = 'Klik op een kustdistrict';
+  }
+}
+
+// === Parsers ===
+
+function parseBft(windTekst) {
+  if (!windTekst) return 0;
+  // Zoek het hoogste Beaufort getal in de tekst
+  const matches = windTekst.match(/\d+/g);
+  if (!matches) return 0;
+  return Math.max(...matches.map(Number).filter(n => n <= 12));
+}
+
+function parseWindRichting(windTekst) {
+  if (!windTekst) return null;
+  const tekst = windTekst.toLowerCase();
+  // Zoek eerste windrichting woord
+  const richtingen = [
+    ['noordnoordoost', 22.5], ['noordoost', 45], ['noordnoordwest', 337.5], ['noordwest', 315],
+    ['zuidzuidwest', 202.5], ['zuidwest', 225], ['zuidzuidoost', 157.5], ['zuidoost', 135],
+    ['westnoordwest', 292.5], ['westzuidwest', 247.5],
+    ['oostnoordoost', 67.5], ['oostzuidoost', 112.5],
+    ['noord', 0], ['oost', 90], ['zuid', 180], ['west', 270],
+  ];
+  for (const [naam, graden] of richtingen) {
+    if (tekst.includes(naam)) return graden;
+  }
+  return null;
+}
+
+function parseZichtKleur(zichtTekst) {
+  if (!zichtTekst) return '#27ae60';
+  const tekst = zichtTekst.toLowerCase();
+  if (tekst.includes('mist') && !tekst.includes('mogelijk')) return '#e74c3c';
+  if (tekst.includes('slecht')) return '#e74c3c';
+  if (tekst.includes('matig')) return '#f39c12';
+  return '#27ae60';
+}
+
+function parseZichtLetter(zichtTekst) {
+  if (!zichtTekst) return 'G';
+  const tekst = zichtTekst.toLowerCase();
+  if (tekst.includes('mist') && !tekst.includes('mogelijk')) return 'S';
+  if (tekst.includes('slecht')) return 'S';
+  if (tekst.includes('matig')) return 'M';
+  return 'G';
+}
+
+// === Init ===
+laadData();
+setInterval(laadData, 30 * 60 * 1000);
+</script>
+</body>
+</html>
