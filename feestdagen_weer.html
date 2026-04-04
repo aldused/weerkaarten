@@ -417,7 +417,7 @@ optgroup{color:var(--gold);font-size:11px;font-weight:600}
             <th style="text-align:right;color:#d4a843">TG <small>&#xb0;C</small></th>
             <th style="text-align:right;color:#4488cc">Neersl. <small>mm</small></th>
             <th style="text-align:right;color:#f0c060">Zon <small>uur</small></th>
-            <th style="text-align:right;color:#88aabb">Wind <small>m/s</small></th>
+            <th style="text-align:right;color:#88aabb">Wind <small>Bft</small></th>
           </tr>
         </thead>
         <tbody id="jaar-panel-body"></tbody>
@@ -501,7 +501,7 @@ optgroup{color:var(--gold);font-size:11px;font-weight:600}
           <th style="text-align:right;color:#d4a843">TG <small>°C</small></th>
           <th style="text-align:right;color:#5599ee">Neersl. <small>mm</small></th>
           <th style="text-align:right;color:#f0c060">Zon <small>uur</small></th>
-          <th style="text-align:right;color:#8b93a8">Wind <small>m/s</small></th>
+          <th style="text-align:right;color:#8b93a8">Wind <small>Bft</small></th>
         </tr>
       </thead>
       <tbody id="all-years-body"></tbody>
@@ -525,6 +525,11 @@ let toonTop25 = false;
 let chartInstantie = null;
 let chartParam = 'TX';
 
+function msToBft(ms) {
+  const g=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+  let b=0; for(let i=0;i<g.length;i++){if(ms>=g[i])b=i+1;else break;} return b;
+}
+
 const PARAMS = [
   { id:'TX',  label:'🌡 Hoogste max',   eenheid:'°C', factor:0.1, kleur:'#e05555', desc:'Hoogste maximum temperatuur' },
   { id:'TX_LOW', label:'🧊 Laagste max', eenheid:'°C', factor:0.1, kleur:'#77bbdd', desc:'Laagste maximum temperatuur', veld:'TX', omgekeerd:true },
@@ -532,7 +537,7 @@ const PARAMS = [
   { id:'TG',  label:'📊 Gemiddeld',  eenheid:'°C', factor:0.1, kleur:'#d4a843', desc:'Gem. temperatuur' },
   { id:'RH',  label:'🌧 Neerslag',   eenheid:'mm', factor:0.1, kleur:'#4488cc', desc:'Neerslag' },
   { id:'SQ',  label:'☀ Zonuren',    eenheid:'u',  factor:0.1, kleur:'#f0c060', desc:'Zonneschijnduur' },
-  { id:'FX',  label:'💨 Wind',       eenheid:'m/s',factor:0.1, kleur:'#88aabb', desc:'Max. windstoot' },
+  { id:'FX',  label:'💨 Wind',       eenheid:'Bft',factor:0.1, kleur:'#88aabb', desc:'Max. windstoot', bft:true },
 ];
 
 const FEESTDAG_META = {
@@ -819,10 +824,10 @@ function verversStats() {
     { label:'Hoogste maximum', icon:'🌡',  kleur:'#e05555', fn: r=>r.TX!=null?r.TX:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TX', max:true },
     { label:'Laagste minimum', icon:'❄️',  kleur:'#5599ee', fn: r=>r.TN!=null?r.TN:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TN', max:false },
     { label:'Laagste maximum', icon:'🧊',  kleur:'#77bbdd', fn: r=>r.TX!=null?r.TX:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TX', max:false },
+    { label:'Gem. temp.',  icon:'📈',  kleur:'#d4a843', fn: r=>r.TG!=null?r.TG:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TG', avg:true },
     { label:'Natste dag',  icon:'💧',  kleur:'#4488cc', fn: r=>r.RH!=null&&r.RH>=0?r.RH:null, fmt: v=>(v*0.1).toFixed(1)+' mm', key:'RH', max:true },
     { label:'Zonnigste',   icon:'☀',  kleur:'#f0c060', fn: r=>r.SQ!=null&&r.SQ>=0?r.SQ:null, fmt: v=>(v*0.1).toFixed(1)+' u', key:'SQ', max:true },
-    { label:'Winderigste', icon:'🌬',  kleur:'#88aabb', fn: r=>r.FX!=null?r.FX:null, fmt: v=>(v*0.1).toFixed(1)+' m/s', key:'FX', max:true },
-    { label:'Gem. temp.',  icon:'📈',  kleur:'#d4a843', fn: r=>r.TG!=null?r.TG:null, fmt: v=>(v*0.1).toFixed(1)+'°C', key:'TG', avg:true },
+    { label:'Winderigste', icon:'🌬',  kleur:'#88aabb', fn: r=>r.FX!=null?r.FX:null, fmt: v=>msToBft(v*0.1)+' Bft ('+(v*0.1).toFixed(1)+' m/s)', key:'FX', max:true },
   ];
 
   statDefs.forEach(sd => {
@@ -888,7 +893,7 @@ function verversRanking() {
       <span class="rank-jaar">${r.jaar}</span>
       <span class="rank-datum">${huidigStation==='__alle__'&&r._station?r._station+' · '+formatDatum(r.datum):formatDatum(r.datum)}</span>
       <div class="rank-bar-wrap"><div class="rank-bar" style="width:${barBreedte}%;background:${p.kleur}"></div></div>
-      <span class="rank-val" style="color:${p.kleur}">${waarde.toFixed(1)}<small>${p.eenheid}</small></span>
+      <span class="rank-val" style="color:${p.kleur}">${p.bft ? msToBft(waarde)+' Bft <small>'+waarde.toFixed(1)+' m/s</small>' : waarde.toFixed(1)+'<small>'+p.eenheid+'</small>'}</span>
     </div></td>`;
     tbody.appendChild(tr);
   });
