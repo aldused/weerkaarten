@@ -129,7 +129,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
       <option value="neerslag">Alleen neerslag</option>
       <option value="kansen">Alleen neerslagkansen</option>
     </select>
-    <input type="text" id="png-tekst" placeholder="Eigen tekst (bijv. Marathon Rotterdam)" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:6px 10px;font-size:.78rem;width:220px;display:none">
+    <input type="text" id="png-tekst" placeholder="Eigen tekst voor PNG" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:6px 10px;font-size:.78rem;width:200px;display:none">
     <button class="btn-download" id="btn-download" onclick="downloadPng()" style="display:none">&#11015; PNG</button>
     <button class="btn-laden" id="btn-auto" onclick="toggleAutoRefresh()" style="background:#e8ecf2;border:1px solid #d0d8e4;color:#666;font-size:.75rem;padding:6px 10px">&#10227; Auto-refresh uit</button>
   </div>
@@ -252,8 +252,55 @@ const nachtPlugin = {
 };
 Chart.register(nachtPlugin);
 
-// ── Crosshair: verticale lijn + info via HTML element ──
+// ── Crosshair: verticale lijn + info + pin bij dubbelklik ──
 let crosshairData = {};
+let crosshairPinned = null; // {idx, x, html, items} als gepind
+
+function crosshairBerekenItems(cd, idx) {
+  const ensVals = (cd.tA||[]).map(m => m[idx]).filter(v => v != null);
+  const maxVal = ensVals.length ? Math.max(...ensVals) : null;
+  const minVal = ensVals.length ? Math.min(...ensVals) : null;
+  const medVal = cd.tMed ? cd.tMed[idx] : null;
+  const hresVal = cd.hTemp ? cd.hTemp[idx] : null;
+  const mosTx = cd.mosTxData ? cd.mosTxData[idx] : null;
+  const mosTn = cd.mosTnData ? cd.mosTnData[idx] : null;
+  const ts = chartTimestamps['canvas-temp'];
+  const tijd = ts && ts[idx] ? new Date(ts[idx]).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+
+  const items = [{t:tijd,c:'#555'}];
+  if (maxVal != null) items.push({t:`Max: ${maxVal.toFixed(1)}°`,c:'#cc6600'});
+  if (hresVal != null) items.push({t:`HRES: ${hresVal.toFixed(1)}°`,c:'#2299ff'});
+  if (medVal != null) items.push({t:`Med: ${medVal.toFixed(1)}°`,c:'#cc2222'});
+  if (minVal != null) items.push({t:`Min: ${minVal.toFixed(1)}°`,c:'#2266aa'});
+  if (mosTx != null) items.push({t:`MOS TX: ${mosTx.toFixed(1)}°`,c:'#ff4444'});
+  if (mosTn != null) items.push({t:`MOS TN: ${mosTn.toFixed(1)}°`,c:'#4488ff'});
+
+  let html = items.map(it => `<span style="color:${it.c}">${it.t.includes(':')?it.t:`<b>${it.t}</b>`}</span>`).join('');
+  return {items, html, idx};
+}
+
+function crosshairTekenBalk(ctx, items, x, yScale) {
+  ctx.save();
+  ctx.font = 'bold 10px Inter,Arial,sans-serif';
+  const pad = 6;
+  let totalW = pad;
+  items.forEach(it => { totalW += ctx.measureText(it.t).width + 10; });
+  const barH = 18;
+  const barY = yScale.top - barH - 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.strokeStyle = '#d0d8e4';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.roundRect(Math.max(0,x-totalW/2), barY, totalW, barH, 3);
+  ctx.fill(); ctx.stroke();
+  let tx = Math.max(0,x-totalW/2) + pad;
+  items.forEach(it => {
+    ctx.fillStyle = it.c;
+    ctx.fillText(it.t, tx, barY + 13);
+    tx += ctx.measureText(it.t).width + 10;
+  });
+  ctx.restore();
+}
 
 const crosshairPlugin = {
   id: 'crosshairInfo',
@@ -264,6 +311,23 @@ const crosshairPlugin = {
     if (!info) return;
     const cd = crosshairData['canvas-temp'];
     if (!cd) return;
+
+    // Dubbelklik: pin/unpin
+    if (evt.type === 'click' && evt.native && evt.native.detail === 2) {
+      if (crosshairPinned) {
+        crosshairPinned = null;
+        info.style.background = '#f8f9fb';
+      } else if (chart._chIdx != null) {
+        const r = crosshairBerekenItems(cd, chart._chIdx);
+        crosshairPinned = {idx: chart._chIdx, x: chart._chX, html: r.html, items: r.items};
+        info.innerHTML = r.html + '<span style="color:#0d9488;font-size:.7rem;margin-left:8px">📌 vastgezet</span>';
+        info.style.background = '#e8f8f5';
+      }
+      return;
+    }
+
+    // Als gepind, niet updaten bij mousemove
+    if (crosshairPinned) return;
 
     if (evt.type === 'mouseout') {
       chart._chIdx = null;
@@ -279,45 +343,47 @@ const crosshairPlugin = {
     chart._chIdx = idx;
     chart._chX = evt.x;
 
-    // Waarden berekenen
-    const ensVals = (cd.tA||[]).map(m => m[idx]).filter(v => v != null);
-    const maxVal = ensVals.length ? Math.max(...ensVals) : null;
-    const minVal = ensVals.length ? Math.min(...ensVals) : null;
-    const medVal = cd.tMed ? cd.tMed[idx] : null;
-    const hresVal = cd.hTemp ? cd.hTemp[idx] : null;
-    const mosTx = cd.mosTxData ? cd.mosTxData[idx] : null;
-    const mosTn = cd.mosTnData ? cd.mosTnData[idx] : null;
-    const ts = chartTimestamps['canvas-temp'];
-    const tijd = ts && ts[idx] ? new Date(ts[idx]).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
-
-    let html = `<span style="color:#555">${tijd}</span>`;
-    if (maxVal != null) html += `<span style="color:#cc6600">Max: <b>${maxVal.toFixed(1)}°</b></span>`;
-    if (hresVal != null) html += `<span style="color:#2299ff">HRES: <b>${hresVal.toFixed(1)}°</b></span>`;
-    if (medVal != null) html += `<span style="color:#cc2222">Med: <b>${medVal.toFixed(1)}°</b></span>`;
-    if (minVal != null) html += `<span style="color:#2266aa">Min: <b>${minVal.toFixed(1)}°</b></span>`;
-    if (mosTx != null) html += `<span style="color:#ff4444">MOS TX: <b>${mosTx.toFixed(1)}°</b></span>`;
-    if (mosTn != null) html += `<span style="color:#4488ff">MOS TN: <b>${mosTn.toFixed(1)}°</b></span>`;
-
-    info.innerHTML = html;
+    const r = crosshairBerekenItems(cd, idx);
+    info.innerHTML = r.html;
     info.style.display = 'flex';
+    info.style.background = '#f8f9fb';
   },
   afterDraw(chart) {
-    if (chart.canvas.id !== 'canvas-temp' || chart._chIdx == null) return;
+    if (chart.canvas.id !== 'canvas-temp') return;
     const xScale = chart.scales.x;
     const yScale = chart.scales.y;
     if (!xScale || !yScale) return;
-    const px = chart._chX || xScale.getPixelForValue(chart._chIdx);
 
-    const ctx = chart.ctx;
-    ctx.save();
-    ctx.beginPath();
-    ctx.setLineDash([4, 3]);
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = '#888';
-    ctx.moveTo(px, yScale.top);
-    ctx.lineTo(px, yScale.bottom);
-    ctx.stroke();
-    ctx.restore();
+    // Teken gepinde crosshair (blijft in PNG!)
+    if (crosshairPinned) {
+      const px = xScale.getPixelForValue(crosshairPinned.idx);
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#0d9488';
+      ctx.moveTo(px, yScale.top);
+      ctx.lineTo(px, yScale.bottom);
+      ctx.stroke();
+      ctx.restore();
+      crosshairTekenBalk(ctx, crosshairPinned.items, px, yScale);
+    }
+
+    // Teken live crosshair (alleen op scherm, niet als gepind)
+    if (!crosshairPinned && chart._chIdx != null) {
+      const px = chart._chX || xScale.getPixelForValue(chart._chIdx);
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = '#888';
+      ctx.moveTo(px, yScale.top);
+      ctx.lineTo(px, yScale.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 };
 Chart.register(crosshairPlugin);
@@ -571,6 +637,7 @@ function datumRange(){
 }
 
 function verwijderAlles(){
+  crosshairPinned = null;
   Object.values(actieveCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   actieveCharts={};
   ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','hoogte','icon','icon-neerslag','icon-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
