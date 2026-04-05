@@ -51,23 +51,24 @@ nl_maanden = ["","jan","feb","mrt","apr","mei","jun",
                "jul","aug","sep","okt","nov","dec"]
 
 # ── Kleurenschaal neerslag (radar-stijl) ─────────────────────────────────────
-NEERSLAG_LEVELS = [0.1, 0.2, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+# Radar-stijl: sneller naar groen/geel/oranje/rood (vergelijkbaar met dBZ-schaal)
+NEERSLAG_LEVELS = [0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 50]
 NEERSLAG_COLORS = [
-    "#b8e2f8",  # 0.1  heel lichtblauw
-    "#82ccee",  # 0.2  lichtblauw
-    "#4ab4e6",  # 0.5  blauw
-    "#2196d3",  # 1    middenblauw
-    "#0d7fc4",  # 2    donkerblauw
-    "#30b86e",  # 3    lichtgroen
-    "#1fa349",  # 5    groen
-    "#0e8c30",  # 7    donkergroen
-    "#f5e636",  # 10   geel
-    "#f5b800",  # 15   donkergeel
-    "#f57600",  # 20   oranje
-    "#e63e00",  # 30   rood
-    "#c40000",  # 50   donkerrood
-    "#aa00aa",  # 75   paars
-    "#ff55ff",  # 100  roze/magenta
+    "#c8c8c8",  # 0.1  lichtgrijs
+    "#a0a0a0",  # 0.2  grijs
+    "#80d080",  # 0.5  lichtgroen
+    "#30b830",  # 1    groen
+    "#00a000",  # 1.5  heldergroen
+    "#008800",  # 2    donkergroen
+    "#ffff00",  # 3    geel
+    "#ffd000",  # 4    donkergeel
+    "#ffa000",  # 5    oranje
+    "#ff6000",  # 7    donkeroranje
+    "#ff0000",  # 10   rood
+    "#cc0000",  # 15   donkerrood
+    "#990066",  # 20   bordeaux
+    "#cc00cc",  # 30   paars
+    "#ff44ff",  # 50   magenta
 ]
 
 CMAP_NEERSLAG = mcolors.ListedColormap(NEERSLAG_COLORS)
@@ -134,21 +135,20 @@ def knmi_download_grib(filename, output_dir):
 def haal_data_knmi_grib(max_hours=MAX_HOURS):
     """
     Download het laatste Harmonie GRIB bestand en extraheer neerslagdata.
+    Gebruikt eccodes direct (KNMI GRIB1 tabel 253, indicator=61 = neerslag).
     Returns: (lats, lons, grid_data[uur,lat,lon], times_str, run_str)
     """
-    import xarray as xr
-    import cfgrib
+    import eccodes
 
     print("KNMI Open Data API — laatste Harmonie bestand zoeken...")
     filename = knmi_laatste_bestand()
     print(f"  Bestand: {filename}")
 
-    # Parse run-tijd uit bestandsnaam: HA43_N20_YYYYMMDDhhmm_...
-    # Formaat: HA43_N20_202604050300_00048_GB
+    # Parse run-tijd uit bestandsnaam: HARM43_V1_P1_2026040505.tar
     parts = filename.replace(".tar", "").split("_")
-    run_str_raw = parts[2] if len(parts) > 2 else ""
+    run_str_raw = parts[-1] if parts else ""
     try:
-        run_dt = datetime.strptime(run_str_raw[:12], "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
+        run_dt = datetime.strptime(run_str_raw[:10], "%Y%m%d%H").replace(tzinfo=timezone.utc)
         run_str = run_dt.astimezone(LOCAL_TZ).strftime("%d %b %Y %H:%M")
     except:
         run_dt = datetime.now(tz=LOCAL_TZ)
@@ -158,72 +158,59 @@ def haal_data_knmi_grib(max_hours=MAX_HOURS):
     with tempfile.TemporaryDirectory(prefix="harmonie_") as tmpdir:
         grib_files = knmi_download_grib(filename, tmpdir)
 
-        print("  GRIB data lezen...")
-        # Open alle GRIB bestanden en zoek neerslag-parameter
-        # KNMI Harmonie P1: parameterName = "Total precipitation" of shortName = "tp"
+        print("  GRIB data lezen (neerslag, indicator=61)...")
         all_data = []
-        all_times = []
+        lats_grib = None
+        lons_grib = None
 
         for gf in sorted(grib_files):
             try:
-                ds = xr.open_dataset(gf, engine="cfgrib",
-                                     backend_kwargs={"filter_by_keys": {"shortName": "tp"}})
-                if "tp" in ds:
-                    precip = ds["tp"].values  # shape: (lat, lon)
-                    lats_grib = ds["latitude"].values
-                    lons_grib = ds["longitude"].values
-                    valid_time = ds["valid_time"].values
-                    all_data.append(precip)
-                    all_times.append(valid_time)
-                ds.close()
-            except Exception:
-                # Probeer alternatieve parameter namen
-                try:
-                    ds = xr.open_dataset(gf, engine="cfgrib",
-                                         backend_kwargs={"filter_by_keys": {"shortName": "prate"}})
-                    if "prate" in ds:
-                        precip = ds["prate"].values
-                        lats_grib = ds["latitude"].values
-                        lons_grib = ds["longitude"].values
-                        valid_time = ds["valid_time"].values
-                        all_data.append(precip)
-                        all_times.append(valid_time)
-                    ds.close()
-                except Exception:
-                    continue
+                with open(gf, "rb") as fh:
+                    while True:
+                        msgid = eccodes.codes_grib_new_from_file(fh)
+                        if msgid is None:
+                            break
+                        indicator = eccodes.codes_get(msgid, "indicatorOfParameter")
+                        if indicator == 61:  # Neerslag
+                            ni = eccodes.codes_get(msgid, "Ni")
+                            nj = eccodes.codes_get(msgid, "Nj")
+                            values = eccodes.codes_get_values(msgid)
+                            data = values.reshape(nj, ni)
+                            all_data.append(data)
+
+                            if lats_grib is None:
+                                lat1 = eccodes.codes_get(msgid, "latitudeOfFirstGridPointInDegrees")
+                                lat2 = eccodes.codes_get(msgid, "latitudeOfLastGridPointInDegrees")
+                                lon1 = eccodes.codes_get(msgid, "longitudeOfFirstGridPointInDegrees")
+                                lon2 = eccodes.codes_get(msgid, "longitudeOfLastGridPointInDegrees")
+                                lats_grib = np.linspace(lat1, lat2, nj)
+                                lons_grib = np.linspace(lon1, lon2, ni)
+
+                        eccodes.codes_release(msgid)
+            except Exception as e:
+                print(f"    Fout bij {os.path.basename(gf)}: {e}")
+                continue
 
         if not all_data:
-            print("  WAARSCHUWING: Geen neerslagdata gevonden in GRIB bestanden")
-            print("  Beschikbare variabelen zoeken...")
-            # Toon wat er wel beschikbaar is
-            for gf in grib_files[:3]:
-                try:
-                    ds = xr.open_dataset(gf, engine="cfgrib")
-                    print(f"    {os.path.basename(gf)}: {list(ds.data_vars)}")
-                    ds.close()
-                except Exception as e:
-                    print(f"    {os.path.basename(gf)}: kon niet lezen ({e})")
-            raise RuntimeError("Geen neerslag in GRIB data gevonden")
+            raise RuntimeError("Geen neerslag (indicator=61) gevonden in GRIB bestanden")
 
-        # Sorteer op tijd
-        sort_idx = np.argsort([t for t in all_times])
-        all_data = [all_data[i] for i in sort_idx]
-        all_times = [all_times[i] for i in sort_idx]
+        print(f"  Gevonden: {len(all_data)} tijdstappen, grid {all_data[0].shape}")
 
-        # Beperk tot max_hours
-        n_hours = min(max_hours, len(all_data))
-        grid_data = np.stack(all_data[:n_hours], axis=0)
+        # Beperk tot max_hours (sla timestep 0 over als die leeg is)
+        start_idx = 1 if len(all_data) > 1 and np.max(all_data[0]) == 0 else 0
+        n_hours = min(max_hours, len(all_data) - start_idx)
+        grid_data = np.stack(all_data[start_idx:start_idx + n_hours], axis=0)
 
         # Zorg dat lats van zuid naar noord gaan
         if lats_grib[0] > lats_grib[-1]:
             lats_grib = lats_grib[::-1]
             grid_data = grid_data[:, ::-1, :]
 
-        # Tijden als strings
+        # Tijden genereren (elk uur vanaf run + start_idx)
         times_str = []
-        for t in all_times[:n_hours]:
-            dt_val = np.datetime64(t, "s").astype("datetime64[s]").item()
-            dt_local = dt_val.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        for h in range(n_hours):
+            dt_valid = run_dt + timedelta(hours=start_idx + h)
+            dt_local = dt_valid.astimezone(LOCAL_TZ)
             times_str.append(dt_local.strftime("%Y-%m-%dT%H:%M"))
 
     return lats_grib, lons_grib, grid_data, times_str, run_str
@@ -318,12 +305,164 @@ def haal_data_openmeteo(max_hours=MAX_HOURS):
     return lats, lons, grid_data, times_str, run_str
 
 
+# ── Kleurenschaal temperatuur (noodweer.be stijl) ────────────────────────────
+# Fijne schaal per 1°C: paars→blauw→cyaan→groen→geel→oranje→rood→donkerrood
+TEMP_LEVELS = list(range(-20, 51))  # -20 tot +50, elke 1°C
+# Noodweer.be stijl: paars→blauw→cyaan→groen→geelgroen→geel→oranje→rood→magenta
+TEMP_COLORS_DEF = [
+    (-30, "#cc00ff"),  # magenta
+    (-25, "#8800cc"),  # donkerpaars
+    (-20, "#5500aa"),  # paars
+    (-15, "#2200aa"),  # donkerblauw/paars
+    (-10, "#0044cc"),  # blauw
+    (-5,  "#0088ee"),  # middenblauw
+    (-2,  "#00bbdd"),  # cyaan
+    (0,   "#00ccaa"),  # turquoise
+    (2,   "#00cc66"),  # groen-cyaan
+    (4,   "#00bb33"),  # helder groen
+    (6,   "#22aa22"),  # groen
+    (8,   "#44aa00"),  # groen (noodweer 8°C)
+    (10,  "#66aa00"),  # donker geelgroen
+    (12,  "#88aa00"),  # olijfgroen
+    (14,  "#aaaa00"),  # geelgroen
+    (16,  "#ccbb00"),  # donkergeel
+    (18,  "#ddcc00"),  # geel
+    (20,  "#eedd00"),  # lichtgeel
+    (22,  "#ffdd00"),  # goud
+    (24,  "#ffbb00"),  # donkergeel/oranje
+    (26,  "#ff9900"),  # oranje
+    (28,  "#ff6600"),  # donkeroranje
+    (30,  "#ff3300"),  # rood-oranje
+    (32,  "#ee0000"),  # rood
+    (34,  "#cc0000"),  # donkerrood
+    (36,  "#aa0000"),  # zeer donkerrood
+    (38,  "#880044"),  # bordeaux
+    (40,  "#aa0066"),  # donker magenta
+    (45,  "#cc00aa"),  # magenta
+    (50,  "#ee00cc"),  # roze
+]
+
+def _maak_temp_cmap():
+    """Maak een vloeiende temperatuur-kleurenschaal."""
+    # Interpoleer kleuren voor elke graad
+    import matplotlib.colors as mc
+    ref_vals = [v for v, _ in TEMP_COLORS_DEF]
+    ref_colors = [mc.to_rgb(c) for _, c in TEMP_COLORS_DEF]
+    colors = []
+    for t in TEMP_LEVELS[:-1]:
+        # Zoek interpolatie positie
+        for i in range(len(ref_vals) - 1):
+            if ref_vals[i] <= t <= ref_vals[i + 1]:
+                frac = (t - ref_vals[i]) / (ref_vals[i + 1] - ref_vals[i])
+                r = ref_colors[i][0] + frac * (ref_colors[i + 1][0] - ref_colors[i][0])
+                g = ref_colors[i][1] + frac * (ref_colors[i + 1][1] - ref_colors[i][1])
+                b = ref_colors[i][2] + frac * (ref_colors[i + 1][2] - ref_colors[i][2])
+                colors.append((r, g, b))
+                break
+        else:
+            if t < ref_vals[0]:
+                colors.append(ref_colors[0])
+            else:
+                colors.append(ref_colors[-1])
+    return mcolors.ListedColormap(colors), mcolors.BoundaryNorm(TEMP_LEVELS, len(colors))
+
+CMAP_TEMP, NORM_TEMP = _maak_temp_cmap()
+
+# Grid-stap voor het tonen van numerieke waarden (elke Nde punt)
+TEMP_LABEL_STEP = 10  # toon waarde elke ~20 km
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # KAART RENDEREN
 # ══════════════════════════════════════════════════════════════════════════════
 
+DPI = 200
+FIGSIZE = (10, 13)  # 3:4 verhouding (breed:hoog)
+
+# Gridpunt-label stap
+LABEL_STEP = 8  # toon waarde elke 8e gridpunt (~16 km)
+
+
+def _maak_kaart_basis(titel_links, titel_rechts_boven, titel_rechts_onder):
+    """Maak basis figuur met titel en cartopy axes. Wetterzentrale-stijl."""
+    fig = plt.figure(figsize=FIGSIZE, facecolor="white")
+
+    # Layout: titel boven, kaart groot, legenda horizontal onder
+    ax_titel = fig.add_axes([0.01, 0.955, 0.98, 0.04])
+    ax = fig.add_axes([0.01, 0.06, 0.98, 0.89], projection=ccrs.PlateCarree())
+    ax_leg = fig.add_axes([0.15, 0.02, 0.70, 0.018])  # horizontaal onderaan
+
+    # Titel
+    ax_titel.set_xlim(0, 1); ax_titel.set_ylim(0, 1); ax_titel.axis("off")
+    ax_titel.text(0.0, 0.55, titel_links, fontsize=14, weight="bold",
+                  va="center", transform=ax_titel.transAxes, color="#1a1a1a")
+    ax_titel.text(0.5, 0.55, titel_rechts_boven, fontsize=11, weight="bold",
+                  ha="center", va="center", transform=ax_titel.transAxes, color="#333333")
+    ax_titel.text(1.0, 0.55, titel_rechts_onder, fontsize=10,
+                  ha="right", va="center", transform=ax_titel.transAxes, color="#555555")
+
+    # Kaart
+    ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
+    ax.set_aspect("auto")
+    ax.set_facecolor("white")
+
+    # Water: meren (IJsselmeer, Markermeer, etc.)
+    ax.add_feature(cfeature.LAKES.with_scale("10m"), facecolor="#d4e9f7",
+                   edgecolor="#444444", linewidth=0.5, zorder=3)
+    # Rivieren
+    ax.add_feature(cfeature.RIVERS.with_scale("10m"), edgecolor="#7fbbdb",
+                   linewidth=0.4, zorder=3)
+
+    # Kustlijnen (incl. Afsluitdijk, Houtribdijk)
+    ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="black",
+                   linewidth=1.0, zorder=10)
+    # Landsgrenzen
+    ax.add_feature(cfeature.BORDERS.with_scale("10m"), edgecolor="#222222",
+                   linewidth=0.6, linestyle="-", zorder=10)
+    # Provinciegrenzen (dunnere lijn)
+    ax.add_feature(cfeature.NaturalEarthFeature(
+        "cultural", "admin_1_states_provinces_lines", "10m",
+        edgecolor="#666666", linewidth=0.35, facecolor="none"), zorder=9)
+
+    # Bronvermelding
+    ax.text(0.005, 0.005, "Data: HARMONIE43 OPER 0.029\u00b0",
+            transform=ax.transAxes, fontsize=7, weight="bold",
+            ha="left", va="bottom", color="#333333", zorder=20)
+    # Copyright rechtsonder in wit gebied onder de kaart
+    fig.text(0.98, 0.045, "\u00a9 Ed Aldus / KNMI",
+             fontsize=8, ha="right", va="top", color="#333333", weight="bold")
+
+    return fig, ax, ax_leg
+
+
+def _teken_gridwaarden(ax, lats, lons, data, fmt="{:.0f}", stap=LABEL_STEP,
+                        cmap=None, norm=None, altijd_zwart=False):
+    """Teken numerieke waarden op gridpunten — Wetterzentrale-stijl."""
+    lon_min, lon_max = EXTENT[0], EXTENT[1]
+    lat_min, lat_max = EXTENT[2], EXTENT[3]
+    for i in range(0, len(lats), stap):
+        for j in range(0, len(lons), stap):
+            lat_v, lon_v = lats[i], lons[j]
+            if lat_min <= lat_v <= lat_max and lon_min <= lon_v <= lon_max:
+                val = data[i, j]
+                if np.isnan(val):
+                    continue
+                txt = fmt.format(val)
+                if altijd_zwart:
+                    tkleur = "black"
+                elif cmap is not None and norm is not None:
+                    rgba = cmap(norm(val))
+                    lum = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
+                    tkleur = "white" if lum < 0.4 else "black"
+                else:
+                    tkleur = "black"
+                ax.text(lon_v, lat_v, txt, transform=ccrs.PlateCarree(),
+                        fontsize=7.5, ha="center", va="center", color=tkleur,
+                        weight="bold", zorder=12)
+
+
 def render_kaart(lats, lons, precip_2d, tijdstip_str, uur_idx, run_str, output_dir="."):
-    """Render een enkele neerslagkaart als PNG — radar-stijl."""
+    """Render neerslagkaart — Wetterzentrale-stijl met gridwaarden."""
     try:
         dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
     except:
@@ -331,80 +470,184 @@ def render_kaart(lats, lons, precip_2d, tijdstip_str, uur_idx, run_str, output_d
 
     dag_nl = nl_dagen[dt.weekday()]
     maand_nl = nl_maanden[dt.month]
-    run_label = f"Run: {run_str}"
-    valid_label = f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} (+{uur_idx}h)"
 
-    # Data voorbereiden
-    data = precip_2d.copy()
-    data = np.nan_to_num(data, nan=0.0)
-
-    # Maskeer droog (< 0.1 mm)
-    data_masked = np.ma.masked_less(data, 0.1)
-
-    # ── Figuur aanmaken ──────────────────────────────────────────────────────
-    fig = plt.figure(figsize=(10, 11.5), facecolor="white")
-
-    ax_titel = fig.add_axes([0.02, 0.935, 0.96, 0.05])
-    ax = fig.add_axes([0.02, 0.08, 0.88, 0.85], projection=ccrs.PlateCarree())
-    ax_leg = fig.add_axes([0.91, 0.12, 0.025, 0.75])
-
-    # ── Titel ────────────────────────────────────────────────────────────────
-    ax_titel.set_xlim(0, 1); ax_titel.set_ylim(0, 1); ax_titel.axis("off")
-    ax_titel.text(0.0, 0.7, "Neerslag (mm/uur)", fontsize=14, weight="bold",
-                  va="center", transform=ax_titel.transAxes, color="#222222")
-    ax_titel.text(0.0, 0.15, "Model: HARMONIE Cy43 (KNMI)",
-                  fontsize=9, va="center", transform=ax_titel.transAxes, color="#555555")
-    ax_titel.text(1.0, 0.7, run_label, fontsize=10, weight="bold",
-                  ha="right", va="center", transform=ax_titel.transAxes, color="#333333")
-    ax_titel.text(1.0, 0.15, valid_label, fontsize=9,
-                  ha="right", va="center", transform=ax_titel.transAxes, color="#555555")
-
-    # ── Kaart ────────────────────────────────────────────────────────────────
-    ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
-    ax.set_aspect("auto")
-    ax.set_facecolor("white")
-
-    # Neerslag overlay
-    lon_grid, lat_grid = np.meshgrid(lons, lats)
-    mesh = ax.pcolormesh(
-        lon_grid, lat_grid, data_masked,
-        cmap=CMAP_NEERSLAG, norm=NORM_NEERSLAG,
-        transform=ccrs.PlateCarree(),
-        zorder=2, shading="auto"
+    fig, ax, ax_leg = _maak_kaart_basis(
+        "1h-Neerslag (mm)",
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
     )
 
-    # Kustlijnen en grenzen bovenop
-    ax.add_feature(cfeature.COASTLINE.with_scale("10m"), edgecolor="black",
-                   linewidth=0.8, zorder=5)
-    ax.add_feature(cfeature.BORDERS.with_scale("10m"), edgecolor="#333333",
-                   linewidth=0.5, linestyle="-", zorder=5)
-    try:
-        ax.add_feature(cfeature.NaturalEarthFeature(
-            "cultural", "admin_1_states_provinces_lines", "50m",
-            edgecolor="#888888", linewidth=0.3, facecolor="none"), zorder=4)
-    except:
-        pass
+    data = np.nan_to_num(precip_2d.copy(), nan=0.0)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # contourf voor vloeiende vulling
+    cf = ax.contourf(
+        lon_grid, lat_grid, data,
+        levels=NEERSLAG_LEVELS,
+        cmap=CMAP_NEERSLAG, norm=NORM_NEERSLAG,
+        transform=ccrs.PlateCarree(),
+        zorder=2, extend="max"
+    )
+
+    # Gridwaarden — afgeronde mm op elke Nde gridpunt
+    _teken_gridwaarden(ax, lats, lons, data, fmt="{:.0f}", stap=LABEL_STEP,
+                       altijd_zwart=True)
 
     ax.axis("off")
 
-    # Bronvermelding
-    ax.text(1.0, -0.005, "\u00a9 Ed Aldus  |  Data: KNMI Harmonie 43",
-            transform=ax.transAxes, fontsize=7, style="italic",
-            ha="right", va="top", color="#777777")
-
-    # ── Legenda ──────────────────────────────────────────────────────────────
-    cb = plt.colorbar(mesh, cax=ax_leg, orientation="vertical", extend="max",
-                      spacing="uniform")
-    cb.set_label("mm/uur", fontsize=9, labelpad=8)
+    # Legenda horizontaal onderaan
+    cb = plt.colorbar(cf, cax=ax_leg, orientation="horizontal", spacing="uniform",
+                      extend="max")
     cb.set_ticks(NEERSLAG_LEVELS)
-    cb.ax.tick_params(labelsize=7.5)
-    cb.ax.yaxis.set_ticks_position("right")
-    cb.ax.yaxis.set_label_position("right")
+    cb.ax.tick_params(labelsize=7)
+    cb.set_label("Neerslagintensiteit (mm/u)", fontsize=8, labelpad=2)
 
-    # Opslaan
     fname = os.path.join(output_dir, f"harmonie_neerslag_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=150, bbox_inches="tight", facecolor="white",
-                edgecolor="none", pad_inches=0.05)
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
+    plt.close()
+    return fname
+
+
+def render_temp_kaart(lats, lons, temp_2d, tijdstip_str, uur_idx, run_str, output_dir="."):
+    """Render temperatuurkaart — noodweer.be stijl met numerieke waarden."""
+    try:
+        dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
+    except:
+        dt = datetime.now(tz=LOCAL_TZ)
+
+    dag_nl = nl_dagen[dt.weekday()]
+    maand_nl = nl_maanden[dt.month]
+
+    fig, ax, ax_leg = _maak_kaart_basis(
+        "Temperatuur 2m (\u00b0C)",
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
+    )
+
+    data = np.nan_to_num(temp_2d.copy(), nan=0.0)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # contourf vulling — fijne stappen per 1°C
+    t_min = max(-20, int(np.floor(np.nanmin(data))) - 2)
+    t_max = min(50, int(np.ceil(np.nanmax(data))) + 2)
+    fine_levels = list(range(t_min, t_max + 1))
+
+    cf = ax.contourf(
+        lon_grid, lat_grid, data,
+        levels=fine_levels,
+        cmap=CMAP_TEMP, norm=NORM_TEMP,
+        transform=ccrs.PlateCarree(),
+        zorder=2, extend="both"
+    )
+
+    # Numerieke waarden op gridpunten (Wetterzentrale-stijl)
+    _teken_gridwaarden(ax, lats, lons, data, fmt="{:.0f}", stap=LABEL_STEP,
+                       cmap=CMAP_TEMP, norm=NORM_TEMP)
+
+    ax.axis("off")
+
+    # Legenda horizontaal onderaan
+    cb = plt.colorbar(cf, cax=ax_leg, orientation="horizontal", spacing="uniform",
+                      extend="both")
+    cb.set_ticks(list(range(t_min, t_max + 1, 3)))
+    cb.ax.tick_params(labelsize=7)
+    cb.set_label("Temperatuur 2m (\u00b0C)", fontsize=8, labelpad=2)
+
+    fname = os.path.join(output_dir, f"harmonie_temp_{uur_idx:02d}.png")
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
+    plt.close()
+    return fname
+
+
+# ── Bewolking kleuren per laag ────────────────────────────────────────────────
+# Hoog (cirrus): wit/lichtblauw — ijl, transparant
+CLOUD_HIGH_CMAP = mcolors.LinearSegmentedColormap.from_list(
+    "cloud_high", ["#ffffff00", "#b0c4de88", "#8fafc8cc", "#7090a8ee"], N=256)
+# Midden (alto): geel/oker — dichter
+CLOUD_MID_CMAP = mcolors.LinearSegmentedColormap.from_list(
+    "cloud_mid", ["#ffffff00", "#ddcc6688", "#ccaa33cc", "#aa8800ee"], N=256)
+# Laag (stratus/cumulus): grijs/donker — meest opaque
+CLOUD_LOW_CMAP = mcolors.LinearSegmentedColormap.from_list(
+    "cloud_low", ["#ffffff00", "#aaaaaa88", "#777777cc", "#444444ee"], N=256)
+
+CLOUD_NORM = mcolors.Normalize(vmin=0, vmax=1)
+
+
+def render_bewolking_kaart(lats, lons, hoog, midden, laag, tijdstip_str, uur_idx,
+                            run_str, output_dir="."):
+    """Render bewolkingskaart — 3 lagen in verschillende kleuren.
+    Renderorde: hoog eerst (onder), midden erover, laag bovenop.
+    Zo zie je altijd alle lagen.
+    """
+    try:
+        dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
+    except:
+        dt = datetime.now(tz=LOCAL_TZ)
+
+    dag_nl = nl_dagen[dt.weekday()]
+    maand_nl = nl_maanden[dt.month]
+
+    fig, ax, ax_leg = _maak_kaart_basis(
+        "Bewolking (hoog/midden/laag)",
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
+    )
+
+    # Lichtblauwe lucht als achtergrond
+    ax.set_facecolor("#c8e8ff")
+
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # Laag 1 (onderaan): Hoge bewolking — wit/lichtblauw, ijl
+    hoog_data = np.nan_to_num(hoog.copy(), nan=0.0)
+    hoog_masked = np.ma.masked_less(hoog_data, 0.05)
+    ax.pcolormesh(lon_grid, lat_grid, hoog_masked,
+                  cmap=CLOUD_HIGH_CMAP, norm=CLOUD_NORM,
+                  transform=ccrs.PlateCarree(), zorder=2, shading="auto")
+
+    # Laag 2 (midden): Middelhoge bewolking — blauw/paars
+    mid_data = np.nan_to_num(midden.copy(), nan=0.0)
+    mid_masked = np.ma.masked_less(mid_data, 0.05)
+    ax.pcolormesh(lon_grid, lat_grid, mid_masked,
+                  cmap=CLOUD_MID_CMAP, norm=CLOUD_NORM,
+                  transform=ccrs.PlateCarree(), zorder=3, shading="auto")
+
+    # Laag 3 (bovenop): Lage bewolking — grijs/donker
+    laag_data = np.nan_to_num(laag.copy(), nan=0.0)
+    laag_masked = np.ma.masked_less(laag_data, 0.05)
+    ax.pcolormesh(lon_grid, lat_grid, laag_masked,
+                  cmap=CLOUD_LOW_CMAP, norm=CLOUD_NORM,
+                  transform=ccrs.PlateCarree(), zorder=4, shading="auto")
+
+    ax.axis("off")
+
+    # Legenda: handmatige kleurvakjes
+    ax_leg.set_xlim(0, 1); ax_leg.set_ylim(0, 1); ax_leg.axis("off")
+
+    # Drie blokjes met labels
+    labels = [
+        ("Hoog (cirrus)", "#8fafc8", 0.05),
+        ("Midden (alto)", "#ccaa33", 0.40),
+        ("Laag (stratus)", "#666666", 0.75),
+    ]
+    for tekst, kleur, x_pos in labels:
+        ax_leg.add_patch(plt.Rectangle((x_pos, 0.3), 0.06, 0.5,
+                         facecolor=kleur, edgecolor="#333", linewidth=0.5,
+                         transform=ax_leg.transAxes))
+        ax_leg.text(x_pos + 0.075, 0.55, tekst, fontsize=8, va="center",
+                    transform=ax_leg.transAxes, color="#333333")
+
+    # Transparantie schaal
+    ax_leg.text(0.0, 0.05, "0%", fontsize=7, va="center",
+                transform=ax_leg.transAxes, color="#888")
+    ax_leg.text(0.95, 0.05, "100% bedekking", fontsize=7, va="center",
+                ha="right", transform=ax_leg.transAxes, color="#888")
+
+    fname = os.path.join(output_dir, f"harmonie_bewolking_{uur_idx:02d}.png")
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
 
