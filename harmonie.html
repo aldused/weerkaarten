@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harmonie 43 — Ed Aldus WM</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
+
+.header {
+  background: #00205b; padding: 12px 20px;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #2ec4e8;
+}
+.header-titel { color: white; font-size: 14px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+
+.toolbar {
+  background: white; padding: 10px 16px;
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  border-bottom: 1px solid #dde6f0;
+}
+.toolbar-label { font-size: 11px; color: #5a7090; font-weight: 600; margin-right: 2px; }
+.btn {
+  padding: 5px 14px; border-radius: 16px; border: 1px solid #c5d3e3;
+  background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.btn:hover { background: #dce9f7; }
+.btn.actief { background: #003366; color: white; border-color: #003366; }
+
+/* Slider controls */
+.slider-wrap {
+  background: white; padding: 12px 20px;
+  display: flex; gap: 12px; align-items: center;
+  border-bottom: 1px solid #dde6f0;
+}
+.slider-wrap input[type=range] {
+  flex: 1; height: 6px; -webkit-appearance: none; appearance: none;
+  background: #dde6f0; border-radius: 3px; outline: none;
+  cursor: pointer;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #003366; cursor: pointer; border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.tijd-label {
+  font-size: 13px; font-weight: 700; color: #003366;
+  min-width: 140px; text-align: center;
+}
+.uur-label {
+  font-size: 11px; color: #5a7090; font-weight: 600;
+  min-width: 40px; text-align: center;
+}
+.btn-play {
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: #003366; color: white; font-size: 16px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.btn-play:hover { background: #0055aa; }
+.btn-stap {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid #c5d3e3;
+  background: #f0f4f8; color: #2a4a70; font-size: 14px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.btn-stap:hover { background: #dce9f7; }
+
+/* Kaart */
+.kaart-wrap { display: flex; justify-content: center; padding: 16px; }
+.kaart-container {
+  position: relative; width: 100%; max-width: 900px;
+  background: white; border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12); overflow: hidden;
+}
+.kaart-container img {
+  width: 100%; display: block; transition: opacity 0.15s;
+}
+.kaart-container img.laden { opacity: 0.4; }
+
+/* Preload indicator */
+.preload-bar {
+  height: 3px; background: #e0e8f0; position: relative; overflow: hidden;
+}
+.preload-bar-inner {
+  height: 100%; background: #2ec4e8; width: 0%;
+  transition: width 0.3s;
+}
+
+/* Snelheid */
+.snelheid-wrap {
+  display: flex; gap: 4px; align-items: center;
+}
+.snelheid-wrap .btn { font-size: 10px; padding: 3px 8px; }
+
+.status { text-align: center; padding: 12px; font-size: 12px; color: #888; }
+
+@media (max-width: 600px) {
+  .header { padding: 10px 12px; }
+  .toolbar { padding: 8px 10px; gap: 6px; }
+  .slider-wrap { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .tijd-label { min-width: 100px; font-size: 12px; }
+  .kaart-wrap { padding: 8px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Harmonie 43</div>
+    <div class="header-sub">KNMI Harmonie (via Open-Meteo) · <span id="hdr-run">laden...</span></div>
+  </div>
+  <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Parameter:</span>
+  <button class="btn actief" data-param="neerslag" style="background:#1a7a4a;color:white;border-color:#1a7a4a;">Neerslag</button>
+  <!-- Toekomstige parameters: -->
+  <!--
+  <button class="btn" data-param="temp">Temperatuur</button>
+  <button class="btn" data-param="wind">Wind</button>
+  -->
+</div>
+
+<div class="slider-wrap">
+  <button class="btn-stap" id="btn-vorige" title="Vorige uur">&#9664;</button>
+  <button class="btn-play" id="btn-play" title="Afspelen">&#9654;</button>
+  <button class="btn-stap" id="btn-volgende" title="Volgende uur">&#9654;</button>
+  <input type="range" id="slider" min="0" max="47" value="0" step="1">
+  <span class="uur-label" id="uur-label">+0h</span>
+  <span class="tijd-label" id="tijd-label">--</span>
+  <div class="snelheid-wrap">
+    <span class="toolbar-label">Snelheid:</span>
+    <button class="btn snelheid" data-ms="800">1x</button>
+    <button class="btn snelheid actief" data-ms="400">2x</button>
+    <button class="btn snelheid" data-ms="200">4x</button>
+  </div>
+</div>
+
+<div class="preload-bar"><div class="preload-bar-inner" id="preload-bar"></div></div>
+
+<div class="kaart-wrap">
+  <div class="kaart-container">
+    <img id="kaart-img" src="" alt="Harmonie neerslagkaart">
+  </div>
+</div>
+
+<div class="status" id="status">Kaarten laden...</div>
+
+<script>
+(function() {
+  const slider = document.getElementById("slider");
+  const kaartImg = document.getElementById("kaart-img");
+  const tijdLabel = document.getElementById("tijd-label");
+  const uurLabel = document.getElementById("uur-label");
+  const btnPlay = document.getElementById("btn-play");
+  const btnVorige = document.getElementById("btn-vorige");
+  const btnVolgende = document.getElementById("btn-volgende");
+  const preloadBar = document.getElementById("preload-bar");
+  const statusEl = document.getElementById("status");
+  const hdrRun = document.getElementById("hdr-run");
+  const hdrUpdate = document.getElementById("hdr-update");
+
+  let meta = null;
+  let preloaded = {};
+  let speelInterval = null;
+  let speelSnelheid = 400;
+  let aantalUren = 48;
+
+  const cacheBust = "?t=" + Date.now();
+
+  // Metadata laden
+  fetch("harmonie_meta.json" + cacheBust)
+    .then(r => r.json())
+    .then(data => {
+      meta = data;
+      aantalUren = data.uren || 48;
+      slider.max = aantalUren - 1;
+      hdrRun.textContent = "run: " + (data.run || "?");
+      hdrUpdate.textContent = "Bijgewerkt: " + (data.bijgewerkt || "?");
+      statusEl.textContent = "";
+      updateKaart(0);
+      preloadAlles();
+    })
+    .catch(e => {
+      statusEl.textContent = "Kon metadata niet laden. Draai eerst harmonie_neerslag.py";
+      console.error("Meta laden mislukt:", e);
+    });
+
+  function kaartUrl(uur) {
+    return "harmonie_neerslag_" + String(uur).padStart(2, "0") + ".png" + cacheBust;
+  }
+
+  function updateKaart(uur) {
+    uur = Math.max(0, Math.min(uur, aantalUren - 1));
+    slider.value = uur;
+    uurLabel.textContent = "+" + uur + "h";
+
+    // Tijdlabel
+    if (meta && meta.tijden && meta.tijden[uur]) {
+      const dt = new Date(meta.tijden[uur]);
+      const dagen = ["Zo","Ma","Di","Wo","Do","Vr","Za"];
+      const maanden = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+      tijdLabel.textContent = dagen[dt.getDay()] + " " + dt.getDate() + " " + maanden[dt.getMonth()] + " " + String(dt.getHours()).padStart(2,"0") + ":" + String(dt.getMinutes()).padStart(2,"0");
+    } else {
+      tijdLabel.textContent = "--";
+    }
+
+    // Afbeelding
+    const url = kaartUrl(uur);
+    if (preloaded[uur]) {
+      kaartImg.src = preloaded[uur].src;
+      kaartImg.classList.remove("laden");
+    } else {
+      kaartImg.classList.add("laden");
+      kaartImg.src = url;
+      kaartImg.onload = function() { kaartImg.classList.remove("laden"); };
+    }
+  }
+
+  function preloadAlles() {
+    let geladen = 0;
+    for (let i = 0; i < aantalUren; i++) {
+      const img = new Image();
+      img.onload = function() {
+        preloaded[i] = img;
+        geladen++;
+        preloadBar.style.width = Math.round(geladen / aantalUren * 100) + "%";
+        if (geladen === aantalUren) {
+          setTimeout(() => { preloadBar.parentElement.style.display = "none"; }, 500);
+        }
+      };
+      img.onerror = function() {
+        geladen++;
+        preloadBar.style.width = Math.round(geladen / aantalUren * 100) + "%";
+      };
+      img.src = kaartUrl(i);
+    }
+  }
+
+  // Slider
+  slider.addEventListener("input", function() {
+    updateKaart(parseInt(this.value));
+  });
+
+  // Play/pause
+  function startSpelen() {
+    if (speelInterval) return;
+    btnPlay.innerHTML = "&#9646;&#9646;";
+    speelInterval = setInterval(function() {
+      let uur = parseInt(slider.value) + 1;
+      if (uur >= aantalUren) uur = 0;
+      updateKaart(uur);
+    }, speelSnelheid);
+  }
+
+  function stopSpelen() {
+    if (speelInterval) {
+      clearInterval(speelInterval);
+      speelInterval = null;
+    }
+    btnPlay.innerHTML = "&#9654;";
+  }
+
+  btnPlay.addEventListener("click", function() {
+    if (speelInterval) stopSpelen();
+    else startSpelen();
+  });
+
+  btnVorige.addEventListener("click", function() {
+    stopSpelen();
+    let uur = parseInt(slider.value) - 1;
+    if (uur < 0) uur = aantalUren - 1;
+    updateKaart(uur);
+  });
+
+  btnVolgende.addEventListener("click", function() {
+    stopSpelen();
+    let uur = parseInt(slider.value) + 1;
+    if (uur >= aantalUren) uur = 0;
+    updateKaart(uur);
+  });
+
+  // Snelheid knoppen
+  document.querySelectorAll(".snelheid").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      document.querySelectorAll(".snelheid").forEach(b => b.classList.remove("actief"));
+      this.classList.add("actief");
+      speelSnelheid = parseInt(this.dataset.ms);
+      if (speelInterval) {
+        stopSpelen();
+        startSpelen();
+      }
+    });
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      let uur = parseInt(slider.value) - 1;
+      if (uur < 0) uur = aantalUren - 1;
+      updateKaart(uur);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      let uur = parseInt(slider.value) + 1;
+      if (uur >= aantalUren) uur = 0;
+      updateKaart(uur);
+    } else if (e.key === " ") {
+      e.preventDefault();
+      if (speelInterval) stopSpelen();
+      else startSpelen();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
