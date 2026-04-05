@@ -457,7 +457,7 @@ def _teken_gridwaarden(ax, lats, lons, data, fmt="{:.0f}", stap=LABEL_STEP,
                 else:
                     tkleur = "black"
                 ax.text(lon_v, lat_v, txt, transform=ccrs.PlateCarree(),
-                        fontsize=7.5, ha="center", va="center", color=tkleur,
+                        fontsize=9, ha="center", va="center", color=tkleur,
                         weight="bold", zorder=12)
 
 
@@ -561,6 +561,158 @@ def render_temp_kaart(lats, lons, temp_2d, tijdstip_str, uur_idx, run_str, outpu
     return fname
 
 
+# ── Wind kleurenschaal — Beaufort (bft) ──────────────────────────────────────
+# Beaufort grenzen in m/s: 0,1,2,3,4,5,6,7,8,9,10,11,12
+BFT_GRENZEN_MS = [0, 0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7]
+WIND_LEVELS_BFT = list(range(13))  # 0-12 Beaufort
+WIND_COLORS = [
+    "#f0f0f0",  # 0  windstil
+    "#d4eaf7",  # 1  zwak
+    "#a8d5f0",  # 2  zwak
+    "#6cb8e0",  # 3  matig
+    "#3a9fd0",  # 4  matig
+    "#28b463",  # 5  vrij krachtig
+    "#7dcea0",  # 6  krachtig
+    "#f7dc6f",  # 7  hard
+    "#f5b041",  # 8  stormachtig
+    "#e74c3c",  # 9  storm
+    "#c0392b",  # 10 zware storm
+    "#8e44ad",  # 11 zeer zware storm
+]
+CMAP_WIND = mcolors.ListedColormap(WIND_COLORS)
+NORM_WIND = mcolors.BoundaryNorm(WIND_LEVELS_BFT, CMAP_WIND.N)
+
+def ms_naar_bft(ms):
+    """Converteer m/s naar Beaufort."""
+    for bft in range(12, -1, -1):
+        if ms >= BFT_GRENZEN_MS[bft]:
+            return bft
+    return 0
+
+# Windstoten kleurenschaal — km/u
+GUST_LEVELS = [0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 140]  # km/u
+GUST_COLORS = [
+    "#f0f0f0",  # 0
+    "#d4eaf7",  # 20
+    "#a8d5f0",  # 30
+    "#6cb8e0",  # 40
+    "#28b463",  # 50
+    "#f7dc6f",  # 60
+    "#f5b041",  # 70
+    "#eb984e",  # 80
+    "#e74c3c",  # 90
+    "#c0392b",  # 100
+    "#8e44ad",  # 110
+    "#6c3483",  # 120
+]
+CMAP_GUST = mcolors.ListedColormap(GUST_COLORS)
+NORM_GUST = mcolors.BoundaryNorm(GUST_LEVELS, CMAP_GUST.N)
+
+# Pijltjes stap (elke Nde gridpunt)
+BARB_STEP = 12
+
+
+def _render_wind_kaart(lats, lons, u, v, tijdstip_str, uur_idx, run_str,
+                        is_stoten=False, output_dir="."):
+    """Render wind (Bft) of windstoten (km/u) kaart met kleur + pijltjes."""
+    try:
+        dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
+    except:
+        dt = datetime.now(tz=LOCAL_TZ)
+
+    dag_nl = nl_dagen[dt.weekday()]
+    maand_nl = nl_maanden[dt.month]
+
+    # Windsnelheid berekenen (m/s)
+    u_data = np.nan_to_num(u.copy(), nan=0.0)
+    v_data = np.nan_to_num(v.copy(), nan=0.0)
+    snelheid_ms = np.sqrt(u_data**2 + v_data**2)
+
+    if is_stoten:
+        titel = "Windstoten 10m (km/u)"
+        prefix = "harmonie_windstoten"
+        cmap, norm, levels = CMAP_GUST, NORM_GUST, GUST_LEVELS
+        # Converteer naar km/u voor weergave
+        display_data = snelheid_ms * 3.6
+        label_fmt = "{:.0f}"
+        eenheid = "Windstoten (km/u)"
+    else:
+        titel = "Wind 10m (Bft)"
+        prefix = "harmonie_wind"
+        cmap, norm, levels = CMAP_WIND, NORM_WIND, WIND_LEVELS_BFT
+        # Converteer naar Beaufort voor weergave
+        bft_vectorized = np.vectorize(ms_naar_bft)
+        display_data = bft_vectorized(snelheid_ms).astype(float)
+        label_fmt = "{:.0f}"
+        eenheid = "Windkracht (Bft)"
+
+    fig, ax, ax_leg = _maak_kaart_basis(
+        titel,
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
+    )
+
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # Kleurvulling
+    cf = ax.contourf(
+        lon_grid, lat_grid, display_data,
+        levels=levels, cmap=cmap, norm=norm,
+        transform=ccrs.PlateCarree(),
+        zorder=2, extend="max"
+    )
+
+    # Gridwaarden
+    _teken_gridwaarden(ax, lats, lons, display_data, fmt=label_fmt, stap=LABEL_STEP,
+                       cmap=cmap, norm=norm)
+
+    # Windpijltjes (barbs) — alleen bij gemiddelde wind, niet bij stoten
+    if not is_stoten:
+        step = BARB_STEP
+        lat_mask = (lats >= EXTENT[2]) & (lats <= EXTENT[3])
+        lon_mask = (lons >= EXTENT[0]) & (lons <= EXTENT[1])
+        lat_idx = np.where(lat_mask)[0][::step]
+        lon_idx = np.where(lon_mask)[0][::step]
+
+        barb_lons = lons[lon_idx]
+        barb_lats = lats[lat_idx]
+        barb_lon_grid, barb_lat_grid = np.meshgrid(barb_lons, barb_lats)
+        barb_u = u_data[np.ix_(lat_idx, lon_idx)] * 1.94384
+        barb_v = v_data[np.ix_(lat_idx, lon_idx)] * 1.94384
+
+        ax.barbs(barb_lon_grid, barb_lat_grid, barb_u, barb_v,
+                 transform=ccrs.PlateCarree(), length=5.5, linewidth=0.5,
+                 barb_increments=dict(half=2.5, full=5, flag=25),
+                 zorder=11, color="black", sizes=dict(emptybarb=0.05))
+
+    ax.axis("off")
+
+    # Legenda
+    cb = plt.colorbar(cf, cax=ax_leg, orientation="horizontal", spacing="uniform",
+                      extend="max")
+    cb.set_ticks(levels)
+    cb.ax.tick_params(labelsize=7)
+    cb.set_label(eenheid, fontsize=8, labelpad=2)
+
+    fname = os.path.join(output_dir, f"{prefix}_{uur_idx:02d}.png")
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
+    plt.close()
+    return fname
+
+
+def render_wind_kaart(lats, lons, u, v, tijdstip_str, uur_idx, run_str, output_dir="."):
+    """Render gemiddelde wind 10m kaart."""
+    return _render_wind_kaart(lats, lons, u, v, tijdstip_str, uur_idx, run_str,
+                               is_stoten=False, output_dir=output_dir)
+
+
+def render_windstoten_kaart(lats, lons, u, v, tijdstip_str, uur_idx, run_str, output_dir="."):
+    """Render windstoten 10m kaart."""
+    return _render_wind_kaart(lats, lons, u, v, tijdstip_str, uur_idx, run_str,
+                               is_stoten=True, output_dir=output_dir)
+
+
 # ── Bewolking kleuren per laag ────────────────────────────────────────────────
 # Hoog (cirrus): wit/lichtblauw — ijl, transparant
 CLOUD_HIGH_CMAP = mcolors.LinearSegmentedColormap.from_list(
@@ -574,12 +726,273 @@ CLOUD_LOW_CMAP = mcolors.LinearSegmentedColormap.from_list(
 
 CLOUD_NORM = mcolors.Normalize(vmin=0, vmax=1)
 
+# ── CAPE kleurenschaal ───────────────────────────────────────────────────────
+CAPE_LEVELS = [0, 50, 100, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000]  # J/kg
+CAPE_COLORS = [
+    "#f0f0f0",  # 0     geen
+    "#d4eaf7",  # 50    minimaal
+    "#a8d5f0",  # 100   zwak
+    "#6cb8e0",  # 250   matig
+    "#28b463",  # 500   aanzienlijk
+    "#f7dc6f",  # 750   sterk
+    "#f5b041",  # 1000  zeer sterk
+    "#e74c3c",  # 1500  extreem
+    "#c0392b",  # 2000  gevaarlijk
+    "#8e44ad",  # 3000  zeer gevaarlijk
+    "#6c3483",  # 4000  extreem gevaarlijk
+]
+CMAP_CAPE = mcolors.ListedColormap(CAPE_COLORS)
+NORM_CAPE = mcolors.BoundaryNorm(CAPE_LEVELS, CMAP_CAPE.N)
+
+
+def render_cape_kaart(lats, lons, cape, onweer, tijdstip_str, uur_idx, run_str, output_dir="."):
+    """Render CAPE kaart met onweervlag-arcering."""
+    try:
+        dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
+    except:
+        dt = datetime.now(tz=LOCAL_TZ)
+
+    dag_nl = nl_dagen[dt.weekday()]
+    maand_nl = nl_maanden[dt.month]
+
+    fig, ax, ax_leg = _maak_kaart_basis(
+        "CAPE (J/kg) + Onweer",
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
+    )
+
+    data = np.nan_to_num(cape.copy(), nan=0.0)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # CAPE kleurvulling
+    cf = ax.contourf(
+        lon_grid, lat_grid, data,
+        levels=CAPE_LEVELS, cmap=CMAP_CAPE, norm=NORM_CAPE,
+        transform=ccrs.PlateCarree(),
+        zorder=2, extend="max"
+    )
+
+    # Onweervlag als arcering (waar onweer > 0)
+    onweer_data = np.nan_to_num(onweer.copy(), nan=0.0)
+    if np.max(onweer_data) > 0:
+        ax.contourf(
+            lon_grid, lat_grid, onweer_data,
+            levels=[0.5, 2], colors="none",
+            hatches=["///"], transform=ccrs.PlateCarree(),
+            zorder=6, alpha=0.0
+        )
+        # Contour rond onweergebieden
+        ax.contour(
+            lon_grid, lat_grid, onweer_data,
+            levels=[0.5], colors="red", linewidths=1.5,
+            transform=ccrs.PlateCarree(), zorder=7
+        )
+
+    # Gridwaarden
+    _teken_gridwaarden(ax, lats, lons, data, fmt="{:.0f}", stap=LABEL_STEP,
+                       cmap=CMAP_CAPE, norm=NORM_CAPE)
+
+    ax.axis("off")
+
+    # Legenda
+    cb = plt.colorbar(cf, cax=ax_leg, orientation="horizontal", spacing="uniform",
+                      extend="max")
+    cb.set_ticks(CAPE_LEVELS)
+    cb.ax.tick_params(labelsize=6)
+    cb.set_label("CAPE (J/kg) — gearceerd = onweersvlag actief", fontsize=7, labelpad=2)
+
+    fname = os.path.join(output_dir, f"harmonie_cape_{uur_idx:02d}.png")
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
+    plt.close()
+    return fname
+
+
+# ── Luchtdruk kleurenschaal ───────────────────────────────────────────────────
+DRUK_LEVELS = list(range(970, 1055, 2))  # hPa, elke 2 hPa
+DRUK_COLORS_DEF = [
+    (970, "#4a0082"),  # zeer laag — diep paars
+    (980, "#6a3d9a"),  # laag — paars
+    (990, "#1f78b4"),  # onder normaal — blauw
+    (1000, "#33a02c"), # normaal laag — groen
+    (1010, "#b2df8a"), # normaal — lichtgroen
+    (1015, "#ffffb3"), # normaal — lichtgeel
+    (1020, "#fdbf6f"), # boven normaal — geel/oranje
+    (1030, "#ff7f00"), # hoog — oranje
+    (1040, "#e31a1c"), # zeer hoog — rood
+    (1050, "#800026"), # extreem — donkerrood
+]
+
+def _maak_druk_cmap():
+    import matplotlib.colors as mc
+    ref_vals = [v for v, _ in DRUK_COLORS_DEF]
+    ref_colors = [mc.to_rgb(c) for _, c in DRUK_COLORS_DEF]
+    colors = []
+    for hpa in DRUK_LEVELS[:-1]:
+        for i in range(len(ref_vals) - 1):
+            if ref_vals[i] <= hpa <= ref_vals[i + 1]:
+                frac = (hpa - ref_vals[i]) / (ref_vals[i + 1] - ref_vals[i])
+                r = ref_colors[i][0] + frac * (ref_colors[i + 1][0] - ref_colors[i][0])
+                g = ref_colors[i][1] + frac * (ref_colors[i + 1][1] - ref_colors[i][1])
+                b = ref_colors[i][2] + frac * (ref_colors[i + 1][2] - ref_colors[i][2])
+                colors.append((r, g, b))
+                break
+        else:
+            colors.append(ref_colors[-1] if hpa > ref_vals[-1] else ref_colors[0])
+    return mcolors.ListedColormap(colors), mcolors.BoundaryNorm(DRUK_LEVELS, len(colors))
+
+CMAP_DRUK, NORM_DRUK = _maak_druk_cmap()
+
+
+def render_druk_kaart(lats, lons, druk_pa, tijdstip_str, uur_idx, run_str, output_dir="."):
+    """Render luchtdruk (MSLP) kaart met isobaren."""
+    try:
+        dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
+    except:
+        dt = datetime.now(tz=LOCAL_TZ)
+
+    dag_nl = nl_dagen[dt.weekday()]
+    maand_nl = nl_maanden[dt.month]
+
+    fig, ax, ax_leg = _maak_kaart_basis(
+        "Luchtdruk zeeniveau (hPa)",
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
+    )
+
+    # Pa naar hPa
+    data = np.nan_to_num(druk_pa.copy(), nan=101325.0) / 100.0
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # Kleurvulling
+    cf = ax.contourf(
+        lon_grid, lat_grid, data,
+        levels=DRUK_LEVELS, cmap=CMAP_DRUK, norm=NORM_DRUK,
+        transform=ccrs.PlateCarree(),
+        zorder=2, extend="both"
+    )
+
+    # Isobaren (elke 4 hPa, dikker)
+    isobar_levels = list(range(970, 1055, 4))
+    cs = ax.contour(
+        lon_grid, lat_grid, data,
+        levels=isobar_levels, colors="black", linewidths=0.8,
+        transform=ccrs.PlateCarree(), zorder=6
+    )
+    ax.clabel(cs, inline=True, fontsize=7, fmt="%d")
+
+    # Gridwaarden (afgerond op geheel)
+    _teken_gridwaarden(ax, lats, lons, data, fmt="{:.0f}", stap=LABEL_STEP,
+                       cmap=CMAP_DRUK, norm=NORM_DRUK)
+
+    ax.axis("off")
+
+    # Legenda
+    cb = plt.colorbar(cf, cax=ax_leg, orientation="horizontal", spacing="uniform",
+                      extend="both")
+    cb.set_ticks(list(range(970, 1055, 5)))
+    cb.ax.tick_params(labelsize=6)
+    cb.set_label("Luchtdruk zeeniveau (hPa)", fontsize=8, labelpad=2)
+
+    fname = os.path.join(output_dir, f"harmonie_druk_{uur_idx:02d}.png")
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
+    plt.close()
+    return fname
+
+
+# ── Zicht kleurenschaal ──────────────────────────────────────────────────────
+# Omgekeerd: slecht zicht = rood/oranje, goed zicht = groen/blauw
+ZICHT_LEVELS = [0, 200, 500, 1000, 2000, 4000, 7000, 10000, 20000, 35000, 50000]  # meters
+ZICHT_COLORS = [
+    "#990033",  # <200m   dichte mist, donkerrood
+    "#cc0000",  # 200m    mist, rood
+    "#ff4400",  # 500m    dichte nevel, oranje
+    "#ff8800",  # 1km     nevel, licht oranje
+    "#ffcc00",  # 2km     slecht zicht, geel
+    "#dddd44",  # 4km     matig zicht, geelgroen
+    "#88cc44",  # 7km     redelijk zicht, lichtgroen
+    "#44aa44",  # 10km    goed zicht, groen
+    "#88ccee",  # 20km    zeer goed zicht, lichtblauw
+    "#cceeff",  # 35km    uitstekend zicht, heel lichtblauw
+]
+CMAP_ZICHT = mcolors.ListedColormap(ZICHT_COLORS)
+NORM_ZICHT = mcolors.BoundaryNorm(ZICHT_LEVELS, CMAP_ZICHT.N)
+
+
+def render_zicht_kaart(lats, lons, zicht_m, tijdstip_str, uur_idx, run_str, output_dir="."):
+    """Render zichtkaart — slecht zicht rood, goed zicht blauw/groen."""
+    try:
+        dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
+    except:
+        dt = datetime.now(tz=LOCAL_TZ)
+
+    dag_nl = nl_dagen[dt.weekday()]
+    maand_nl = nl_maanden[dt.month]
+
+    fig, ax, ax_leg = _maak_kaart_basis(
+        "Zicht (km)",
+        f"Run: {run_str}",
+        f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
+    )
+
+    data = np.nan_to_num(zicht_m.copy(), nan=50000.0)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # Kleurvulling
+    cf = ax.contourf(
+        lon_grid, lat_grid, data,
+        levels=ZICHT_LEVELS, cmap=CMAP_ZICHT, norm=NORM_ZICHT,
+        transform=ccrs.PlateCarree(),
+        zorder=2, extend="both"
+    )
+
+    # Gridwaarden: <5 km in meters, >=5 km in km
+    def fmt_zicht(val_m):
+        if val_m < 5000:
+            return f"{val_m:.0f}"
+        return f"{val_m/1000:.0f}"
+    fmt_vec = np.vectorize(fmt_zicht)
+    data_fmt = fmt_vec(data)
+
+    # Teken waarden
+    lon_min, lon_max = EXTENT[0], EXTENT[1]
+    lat_min, lat_max = EXTENT[2], EXTENT[3]
+    for i in range(0, len(lats), LABEL_STEP):
+        for j in range(0, len(lons), LABEL_STEP):
+            lat_v, lon_v = lats[i], lons[j]
+            if lat_min <= lat_v <= lat_max and lon_min <= lon_v <= lon_max:
+                val_m = data[i, j]
+                rgba = CMAP_ZICHT(NORM_ZICHT(val_m))
+                lum = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
+                tkleur = "white" if lum < 0.4 else "black"
+                ax.text(lon_v, lat_v, data_fmt[i, j], transform=ccrs.PlateCarree(),
+                        fontsize=7.5, ha="center", va="center", color=tkleur,
+                        weight="bold", zorder=12)
+
+    ax.axis("off")
+
+    # Legenda
+    cb = plt.colorbar(cf, cax=ax_leg, orientation="horizontal", spacing="uniform",
+                      extend="both")
+    # Labels in km
+    cb.set_ticks(ZICHT_LEVELS)
+    cb.set_ticklabels([f"{v}m" if v < 5000 else f"{v//1000}km" for v in ZICHT_LEVELS])
+    cb.ax.tick_params(labelsize=7)
+    cb.set_label("Zicht (km)", fontsize=8, labelpad=2)
+
+    fname = os.path.join(output_dir, f"harmonie_zicht_{uur_idx:02d}.png")
+    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+                edgecolor="none", pad_inches=0.03)
+    plt.close()
+    return fname
+
 
 def render_bewolking_kaart(lats, lons, hoog, midden, laag, tijdstip_str, uur_idx,
                             run_str, output_dir="."):
-    """Render bewolkingskaart — 3 lagen in verschillende kleuren.
+    """Render bewolkingskaart — 3 lagen met eigen kleur.
     Renderorde: hoog eerst (onder), midden erover, laag bovenop.
-    Zo zie je altijd alle lagen.
+    Hoog = wit/lichtblauw, Midden = geel/oker, Laag = grijs/donker.
     """
     try:
         dt = datetime.fromisoformat(tijdstip_str).replace(tzinfo=LOCAL_TZ)
@@ -595,19 +1008,17 @@ def render_bewolking_kaart(lats, lons, hoog, midden, laag, tijdstip_str, uur_idx
         f"Geldig: {dag_nl} {dt.day} {maand_nl} {dt.strftime('%H:%M')} LT (+{uur_idx}h)"
     )
 
-    # Lichtblauwe lucht als achtergrond
     ax.set_facecolor("#c8e8ff")
-
     lon_grid, lat_grid = np.meshgrid(lons, lats)
 
-    # Laag 1 (onderaan): Hoge bewolking — wit/lichtblauw, ijl
+    # Laag 1 (onderaan): Hoge bewolking — wit/lichtblauw
     hoog_data = np.nan_to_num(hoog.copy(), nan=0.0)
     hoog_masked = np.ma.masked_less(hoog_data, 0.05)
     ax.pcolormesh(lon_grid, lat_grid, hoog_masked,
                   cmap=CLOUD_HIGH_CMAP, norm=CLOUD_NORM,
                   transform=ccrs.PlateCarree(), zorder=2, shading="auto")
 
-    # Laag 2 (midden): Middelhoge bewolking — blauw/paars
+    # Laag 2 (midden): Middelhoge bewolking — geel/oker
     mid_data = np.nan_to_num(midden.copy(), nan=0.0)
     mid_masked = np.ma.masked_less(mid_data, 0.05)
     ax.pcolormesh(lon_grid, lat_grid, mid_masked,
@@ -623,10 +1034,8 @@ def render_bewolking_kaart(lats, lons, hoog, midden, laag, tijdstip_str, uur_idx
 
     ax.axis("off")
 
-    # Legenda: handmatige kleurvakjes
+    # Legenda: drie kleurvakjes
     ax_leg.set_xlim(0, 1); ax_leg.set_ylim(0, 1); ax_leg.axis("off")
-
-    # Drie blokjes met labels
     labels = [
         ("Hoog (cirrus)", "#8fafc8", 0.05),
         ("Midden (alto)", "#ccaa33", 0.40),
@@ -638,12 +1047,6 @@ def render_bewolking_kaart(lats, lons, hoog, midden, laag, tijdstip_str, uur_idx
                          transform=ax_leg.transAxes))
         ax_leg.text(x_pos + 0.075, 0.55, tekst, fontsize=8, va="center",
                     transform=ax_leg.transAxes, color="#333333")
-
-    # Transparantie schaal
-    ax_leg.text(0.0, 0.05, "0%", fontsize=7, va="center",
-                transform=ax_leg.transAxes, color="#888")
-    ax_leg.text(0.95, 0.05, "100% bedekking", fontsize=7, va="center",
-                ha="right", transform=ax_leg.transAxes, color="#888")
 
     fname = os.path.join(output_dir, f"harmonie_bewolking_{uur_idx:02d}.png")
     plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
@@ -675,43 +1078,216 @@ def schrijf_metadata(times_str, run_str, output_dir="."):
 # HOOFDPROGRAMMA
 # ══════════════════════════════════════════════════════════════════════════════
 
+def opruimen_oude_kaarten(output_dir="."):
+    """Verwijder alle vorige harmonie kaarten en metadata."""
+    import glob as g
+    patronen = [
+        "harmonie_neerslag_*.png", "harmonie_temp_*.png", "harmonie_bewolking_*.png",
+        "harmonie_wind_*.png", "harmonie_windstoten_*.png", "harmonie_zicht_*.png",
+        "harmonie_cape_*.png", "harmonie_druk_*.png", "harmonie_*_meta.json",
+        "harmonie_meta.json",
+    ]
+    totaal = 0
+    for patroon in patronen:
+        for f in g.glob(os.path.join(output_dir, patroon)):
+            os.remove(f)
+            totaal += 1
+    if totaal:
+        print(f"  {totaal} oude bestanden verwijderd")
+
+
 def main():
+    import eccodes
+    t_start = time.time()
+
     print("=" * 60)
-    print("Harmonie 43 neerslagkaarten genereren")
+    print("Harmonie 43 weerkaarten — alle parameters")
     print("=" * 60)
 
-    # Probeer eerst KNMI GRIB, anders fallback naar Open-Meteo
-    if KNMI_OPEN_DATA_KEY:
-        print(f"\nDatabron: KNMI Open Data API (GRIB, 2km)")
-        try:
-            lats, lons, grid_data, times, run_str = haal_data_knmi_grib(MAX_HOURS)
-        except Exception as e:
-            print(f"\nKNMI GRIB fout: {e}")
-            print("Fallback naar Open-Meteo...")
-            lats, lons, grid_data, times, run_str = haal_data_openmeteo(MAX_HOURS)
-    else:
-        print(f"\nGeen KNMI_OPEN_DATA_KEY — gebruik Open-Meteo (lagere resolutie)")
-        print("Tip: stel KNMI_OPEN_DATA_KEY in voor 2km GRIB data")
-        lats, lons, grid_data, times, run_str = haal_data_openmeteo(MAX_HOURS)
-
-    if grid_data is None:
-        print("FOUT: Kon geen data ophalen!")
+    if not KNMI_OPEN_DATA_KEY:
+        print("FOUT: Geen KNMI_OPEN_DATA_KEY!")
         sys.exit(1)
 
-    n_hours = grid_data.shape[0]
-    print(f"\nOntvangen: {n_hours} uur, grid {grid_data.shape[1]}x{grid_data.shape[2]}")
+    # ── Stap 1: Laatste run vinden en downloaden ─────────────────────────────
+    print("\n1. KNMI Open Data API — laatste run zoeken...")
+    filename = knmi_laatste_bestand()
+    print(f"   Bestand: {filename}")
 
-    # Kaarten renderen
-    print(f"\nKaarten renderen ({n_hours} stuks)...")
-    for h in range(n_hours):
-        precip = grid_data[h]
-        max_val = np.nanmax(precip) if not np.all(np.isnan(precip)) else 0
-        tijdstip = times[h] if h < len(times) else ""
-        fname = render_kaart(lats, lons, precip, tijdstip, h, run_str)
-        print(f"  +{h:02d}h: max {max_val:.1f} mm \u2192 {fname}")
+    # Parse run-tijd
+    parts = filename.replace(".tar", "").split("_")
+    run_str_raw = parts[-1] if parts else ""
+    try:
+        run_dt = datetime.strptime(run_str_raw[:10], "%Y%m%d%H").replace(tzinfo=timezone.utc)
+    except:
+        run_dt = datetime.now(tz=timezone.utc)
+    run_str = run_dt.astimezone(LOCAL_TZ).strftime("%a %d.%m.%Y %Hz").lower()
 
-    schrijf_metadata(times, run_str)
-    print(f"\nKlaar! {n_hours} kaarten gegenereerd.")
+    # Download
+    print("\n2. Downloaden + extracten...")
+    with tempfile.TemporaryDirectory(prefix="harmonie_") as tmpdir:
+        grib_files = knmi_download_grib(filename, tmpdir)
+        grib_files = sorted(grib_files)
+        print(f"   {len(grib_files)} GRIB bestanden")
+
+        # ── Stap 2: Alle data lezen ──────────────────────────────────────────
+        print("\n3. GRIB data lezen (alle parameters)...")
+        all_temp = []; all_cum = []; all_hoog = []; all_mid = []; all_laag = []
+        all_uw = []; all_vw = []; all_ug = []; all_vg = []
+        all_zicht = []; all_cape = []; all_onweer = []; all_druk = []
+        lats = lons = None
+
+        for gf in grib_files:
+            temp = cum = hoog = mid = laag = uw = vw = ug = vg = zicht = druk = None
+            cape_list = []; onweer = None; druk_n = 0
+
+            with open(gf, "rb") as fh:
+                while True:
+                    msgid = eccodes.codes_grib_new_from_file(fh)
+                    if msgid is None:
+                        break
+                    ind = eccodes.codes_get(msgid, "indicatorOfParameter")
+                    lvl = eccodes.codes_get(msgid, "level")
+                    ni = eccodes.codes_get(msgid, "Ni")
+                    nj = eccodes.codes_get(msgid, "Nj")
+                    vals = eccodes.codes_get_values(msgid).reshape(nj, ni)
+
+                    if ind == 11 and lvl == 2: temp = vals - 273.15
+                    elif ind == 61: cum = vals
+                    elif ind == 75: hoog = vals
+                    elif ind == 74: mid = vals
+                    elif ind == 73: laag = vals
+                    elif ind == 33 and lvl == 10: uw = vals
+                    elif ind == 34 and lvl == 10: vw = vals
+                    elif ind == 162 and lvl == 10: ug = vals
+                    elif ind == 163 and lvl == 10: vg = vals
+                    elif ind == 20 and zicht is None: zicht = vals
+                    elif ind == 201: cape_list.append(vals)
+                    elif ind == 184 and onweer is None: onweer = vals
+                    elif ind == 1 and lvl == 0:
+                        druk_n += 1
+                        if druk_n == 1: druk = vals
+
+                    if lats is None:
+                        lat1 = eccodes.codes_get(msgid, "latitudeOfFirstGridPointInDegrees")
+                        lat2 = eccodes.codes_get(msgid, "latitudeOfLastGridPointInDegrees")
+                        lon1 = eccodes.codes_get(msgid, "longitudeOfFirstGridPointInDegrees")
+                        lon2 = eccodes.codes_get(msgid, "longitudeOfLastGridPointInDegrees")
+                        lats = np.linspace(lat1, lat2, nj)
+                        lons = np.linspace(lon1, lon2, ni)
+                    eccodes.codes_release(msgid)
+
+            z = np.zeros((nj, ni))
+            all_temp.append(temp); all_cum.append(cum)
+            all_hoog.append(hoog); all_mid.append(mid); all_laag.append(laag)
+            all_uw.append(uw); all_vw.append(vw)
+            all_ug.append(ug); all_vg.append(vg)
+            all_zicht.append(zicht)
+            all_cape.append(cape_list[-1] if cape_list else z)
+            all_onweer.append(onweer if onweer is not None else z)
+            all_druk.append(druk)
+
+        # Lats zuid->noord
+        if lats[0] > lats[-1]:
+            lats = lats[::-1]
+            for lst in [all_temp, all_cum, all_hoog, all_mid, all_laag,
+                        all_uw, all_vw, all_ug, all_vg,
+                        all_zicht, all_cape, all_onweer, all_druk]:
+                for i in range(len(lst)):
+                    if lst[i] is not None:
+                        lst[i] = lst[i][::-1, :]
+
+        # Uurlijkse neerslag
+        hourly = [np.maximum(all_cum[i] - all_cum[i - 1], 0) for i in range(1, len(all_cum))]
+
+        # Tijden
+        times_str = []
+        for h in range(1, len(grib_files)):
+            dt_valid = run_dt + timedelta(hours=h)
+            dt_local = dt_valid.astimezone(LOCAL_TZ)
+            times_str.append(dt_local.strftime("%Y-%m-%dT%H:%M"))
+
+        print(f"   {len(grib_files)} tijdstappen, grid {lats.shape[0]}x{lons.shape[0]}")
+
+    # ── Stap 3: Oude kaarten opruimen ────────────────────────────────────────
+    print("\n4. Oude kaarten opruimen...")
+    opruimen_oude_kaarten()
+
+    # ── Stap 4: Alle kaarten renderen ────────────────────────────────────────
+    def meta(param, prefix):
+        m = {"model": "Harmonie 43", "parameter": param, "run": run_str,
+             "bijgewerkt": datetime.now(tz=LOCAL_TZ).strftime("%d %b %Y %H:%M"),
+             "uren": len(times_str), "tijden": times_str}
+        with open(f"harmonie_{prefix}_meta.json", "w") as f:
+            json.dump(m, f, indent=2, ensure_ascii=False)
+
+    n = len(times_str)
+
+    print(f"\n5. Kaarten renderen (8 x {n} = {8*n} stuks)...")
+
+    print(f"   Neerslag...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(n):
+        render_kaart(lats, lons, hourly[h], times_str[h], h + 1, run_str)
+    # Ook harmonie_meta.json voor backwards compat
+    meta("neerslag", "meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   Temperatuur...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_temp)):
+        render_temp_kaart(lats, lons, all_temp[h], times_str[h - 1], h, run_str)
+    meta("temperatuur", "temp_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   Bewolking...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_hoog)):
+        render_bewolking_kaart(lats, lons, all_hoog[h], all_mid[h], all_laag[h],
+                               times_str[h - 1], h, run_str)
+    meta("bewolking", "bewolking_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   Wind...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_uw)):
+        render_wind_kaart(lats, lons, all_uw[h], all_vw[h], times_str[h - 1], h, run_str)
+    meta("wind", "wind_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   Windstoten...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_ug)):
+        render_windstoten_kaart(lats, lons, all_ug[h], all_vg[h], times_str[h - 1], h, run_str)
+    meta("windstoten", "windstoten_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   Zicht...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_zicht)):
+        render_zicht_kaart(lats, lons, all_zicht[h], times_str[h - 1], h, run_str)
+    meta("zicht", "zicht_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   CAPE...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_cape)):
+        render_cape_kaart(lats, lons, all_cape[h], all_onweer[h],
+                          times_str[h - 1], h, run_str)
+    meta("cape", "cape_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    print(f"   Luchtdruk...", end=" ", flush=True)
+    t0 = time.time()
+    for h in range(1, len(all_druk)):
+        render_druk_kaart(lats, lons, all_druk[h], times_str[h - 1], h, run_str)
+    meta("druk", "druk_meta")
+    print(f"{time.time()-t0:.0f}s")
+
+    totaal = time.time() - t_start
+    print(f"\n{'='*60}")
+    print(f"KLAAR! {8*n} kaarten in {totaal/60:.1f} minuten")
+    print(f"Run: {run_str}")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":
