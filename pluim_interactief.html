@@ -636,15 +636,28 @@ function pctC(arr,j,p){
   return v[lo]+(v[hi]-v[lo])*(i-lo);
 }
 
-async function fetchT(url,ms=25000){
-  const ctrl=new AbortController();
-  const id=setTimeout(()=>ctrl.abort(),ms);
-  try{
-    const r=await fetch(url,{signal:ctrl.signal});
-    clearTimeout(id);
-    if(!r.ok)throw new Error(`HTTP ${r.status}`);
-    return await r.json();
-  }catch(e){clearTimeout(id);throw new Error(e.name==='AbortError'?'Time-out':e.message);}
+async function fetchT(url,ms=25000,retries=3){
+  for(let poging=0;poging<retries;poging++){
+    const ctrl=new AbortController();
+    const id=setTimeout(()=>ctrl.abort(),ms);
+    try{
+      const r=await fetch(url,{signal:ctrl.signal});
+      clearTimeout(id);
+      if(r.status===429){
+        const wacht=Math.min(2000*(poging+1),8000);
+        console.warn(`Rate limit (429), wacht ${wacht/1000}s... (poging ${poging+1}/${retries})`);
+        await new Promise(res=>setTimeout(res,wacht));
+        continue;
+      }
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    }catch(e){
+      clearTimeout(id);
+      if(e.name==='AbortError'&&poging<retries-1){await new Promise(res=>setTimeout(res,2000));continue;}
+      throw new Error(e.name==='AbortError'?'Time-out':e.message);
+    }
+  }
+  throw new Error('Rate limit - probeer het over een minuut opnieuw');
 }
 
 function filterT(times,van,tot){
