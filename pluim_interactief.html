@@ -90,6 +90,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
       <button class="type-btn" data-type="sneeuw">&#10052;&#65039; Sneeuwkans</button>
       <button class="type-btn" data-type="onweer">&#9928;&#65039; Onweer</button>
       <button class="type-btn" data-type="hoogte">&#128225; 850/500 hPa</button>
+      <button class="type-btn" data-type="aifs">&#129302; AIFS ENS</button>
       <button class="type-btn" data-type="icon">&#127465;&#127466; ICON ENS</button>
       <button class="type-btn" data-type="vergelijking">&#8644; ECMWF vs ICON</button>
       <button class="type-btn" data-type="dauwpunt">&#128167; Dauwpunt</button>
@@ -205,6 +206,21 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <div class="grafiek-titel" id="titel-icon-kansen"></div>
     <div class="legenda" id="leg-icon-kansen"></div>
     <div style="position:relative;width:100%;height:140px"><canvas id="canvas-icon-kansen"></canvas></div>
+  </div>
+  <div id="blok-aifs" class="grafiek-blok" style="display:none">
+    <div class="grafiek-titel" id="titel-aifs"></div>
+    <div class="legenda" id="leg-aifs"></div>
+    <div style="position:relative;width:100%;height:380px"><canvas id="canvas-aifs"></canvas></div>
+  </div>
+  <div id="blok-aifs-neerslag" class="grafiek-blok" style="display:none;margin-top:8px">
+    <div class="grafiek-titel" id="titel-aifs-neerslag"></div>
+    <div class="legenda" id="leg-aifs-neerslag"></div>
+    <div style="position:relative;width:100%;height:220px"><canvas id="canvas-aifs-neerslag"></canvas></div>
+  </div>
+  <div id="blok-aifs-kansen" class="grafiek-blok" style="display:none;margin-top:4px">
+    <div class="grafiek-titel" id="titel-aifs-kansen"></div>
+    <div class="legenda" id="leg-aifs-kansen"></div>
+    <div style="position:relative;width:100%;height:140px"><canvas id="canvas-aifs-kansen"></canvas></div>
   </div>
   <div id="blok-dauwpunt" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-dauwpunt"></div>
@@ -644,7 +660,7 @@ function verwijderAlles(){
   crosshairPinned = null;
   Object.values(actieveCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   actieveCharts={};
-  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','hoogte','icon','icon-neerslag','icon-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
+  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
     document.getElementById('blok-'+id).style.display='none';
   });
 }
@@ -745,6 +761,7 @@ async function laadData(){
     else if(actieveType==='onweer') await laadOnweer(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='hoogte') await laadHoogte(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='icon') await laadIcon(lat,lon,naam,dagen,van,tot);
+    else if(actieveType==='aifs') await laadAifs(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='dauwpunt') await laadDauwpunt(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='vergelijking') await laadVergelijkingModel(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='hres') await laadHres(lat,lon,naam,dagen,van,tot);
@@ -1295,6 +1312,124 @@ async function laadHoogte(lat,lon,naam,dagen,van,tot){
 }
 
 // ── ICON ENS ──
+// ── ECMWF AIFS (AI-model) ──
+async function laadAifs(lat,lon,naam,dagen,van,tot){
+  document.getElementById('header-sub').textContent='ECMWF AIFS ensemble · Bron: Open-Meteo';
+  const[ens,det]=await Promise.all([
+    fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_aifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
+    fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_aifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
+  ]);
+  if(!ens?.hourly?.time) throw new Error('Geen AIFS ensemble data ontvangen');
+  const times=ens.hourly.time;
+  const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
+  const tK=Object.keys(ens.hourly).filter(k=>k.startsWith('temperature_2m_member'));
+  const pK=Object.keys(ens.hourly).filter(k=>k.startsWith('precipitation_member'));
+  const tA=tK.map(k=>idx.map(i=>ens.hourly[k][i]));
+  const pA=pK.map(k=>idx.map(i=>ens.hourly[k][i]));
+  const tMed=ts.map((_,j)=>medC(tA,j));
+  const tP25=ts.map((_,j)=>pctC(tA,j,25));
+  const tP75=ts.map((_,j)=>pctC(tA,j,75));
+  const hIdx=filterT(det.hourly.time,van,tot);
+  const hTs=hIdx.map(i=>det.hourly.time[i]);
+  const hTemp=hIdx.map(i=>det.hourly.temperature_2m[i]);
+  const hPrecip=hIdx.map(i=>det.hourly.precipitation[i]);
+  const pMed=ts.map((_,j)=>medC(pA,j));
+  const pKans=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>0.1).length/pA.length*100);
+  const lab=getLab(ts),hLab=getLab(hTs);
+
+  // MOSMIX bolletjes
+  const mosmix = await haalMosmix();
+  const mosStation = mosmix ? dichtstbijStation(mosmix, lat, lon) : null;
+  const mosBol = mosmixBolletjes(mosmix, mosStation, ts);
+  const mosTxData = Array(ts.length).fill(null);
+  const mosTnData = Array(ts.length).fill(null);
+  if (mosBol) {
+    mosBol.tx.forEach(p => { if (p.x >= 0 && p.x < mosTxData.length) mosTxData[p.x] = p.y; });
+    mosBol.tn.forEach(p => { if (p.x >= 0 && p.x < mosTnData.length) mosTnData[p.x] = p.y; });
+  }
+  const mosLabel = mosStation ? ` · MOS/MIX ${mosStation}` : '';
+
+  // Temp chart
+  document.getElementById('blok-aifs').style.display='';
+  document.getElementById('titel-aifs').textContent=`ECMWF AIFS – ${naam}  Temperatuur`;
+  document.getElementById('leg-aifs').innerHTML=legHtml([
+    ['rgba(20,130,20,0.5)','Ensembleleden','lijn'],['rgba(51,187,51,0.25)','IQR p25–p75','blok'],
+    ['#ee3333','Mediaan','lijn'],['#2299ff','AIFS deterministisch','lijn'],
+    ['rgba(200,50,50,0.5)','10° / 20°C','dash'],
+    ...(mosBol ? [['#ff4444','MOS/MIX TX'+mosLabel,'punt'],['#4488ff','MOS/MIX TN'+mosLabel,'punt']] : []),
+  ]);
+  chartTimestamps['canvas-aifs']=ts;
+  actieveCharts.aifs=new Chart(document.getElementById('canvas-aifs'),{
+    data:{labels:lab,datasets:[
+      ...ensDatasets(tA,'rgba(20,130,20,0.45)'),
+      {type:'line',data:tP25,borderColor:'transparent',backgroundColor:'rgba(51,187,51,0.12)',fill:'+1',pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:tP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:tMed,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
+      {type:'line',data:hTemp,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
+      {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:3},
+      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.35)',borderWidth:0.7,borderDash:[5,4],pointRadius:0,fill:false,order:3},
+      ...(mosBol ? [
+        {type:'line',data:mosTxData,borderColor:'transparent',backgroundColor:'#ff4444',pointRadius:ctx=>mosTxData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
+        {type:'line',data:mosTnData,borderColor:'transparent',backgroundColor:'#4488ff',pointRadius:ctx=>mosTnData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
+      ] : []),
+    ]},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:cfgBase.scales.x,xH:{display:false,labels:hLab},y:yAs('left','°C')},
+    }
+  });
+
+  // Neerslag
+  document.getElementById('blok-aifs-neerslag').style.display='';
+  document.getElementById('titel-aifs-neerslag').textContent=`ECMWF AIFS – ${naam}  Neerslag`;
+  document.getElementById('leg-aifs-neerslag').innerHTML=legHtml([
+    ['rgba(40,160,40,0.6)','Ensembleleden','lijn'],
+    ['#ee3333','Mediaan','lijn'],['#2299ff','AIFS det.','lijn'],
+  ]);
+  chartTimestamps['canvas-aifs-neerslag']=ts;
+  actieveCharts['aifs-neerslag']=new Chart(document.getElementById('canvas-aifs-neerslag'),{
+    data:{labels:lab,datasets:[
+      ...pA.map(m=>({type:'line',data:idx.map(i=>m[i]||m[i]===0?m[i]:null),borderColor:'rgba(40,160,40,0.45)',borderWidth:1.2,pointRadius:0,fill:false,tension:0.3,order:10})),
+      {type:'line',data:pMed,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0.3,order:1},
+      {type:'line',data:hPrecip,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:2,xAxisID:'xH'},
+    ]},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        filter:item=>item.datasetIndex>=pA.length,
+        callbacks:{label:ctx=>{
+          if(ctx.datasetIndex===pA.length)return ` Mediaan: ${ctx.parsed.y?.toFixed(2)} mm/u`;
+          if(ctx.datasetIndex===pA.length+1)return ` AIFS det.: ${ctx.parsed.y?.toFixed(2)} mm/u`;
+        }}
+      }},
+      scales:{x:cfgBase.scales.x,xH:{display:false,labels:hLab},y:{...yAs('left',' mm'),min:0,suggestedMax:10}},
+    }
+  });
+
+  // Neerslagkansen
+  const aKans1=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>=1.0).length/pA.length*100);
+  const aKans5=ts.map((_,j)=>pA.map(m=>m[j]).filter(v=>v!=null&&v>=5.0).length/pA.length*100);
+  document.getElementById('blok-aifs-kansen').style.display='';
+  document.getElementById('titel-aifs-kansen').textContent=`ECMWF AIFS – ${naam}  Neerslagkansen`;
+  document.getElementById('leg-aifs-kansen').innerHTML=legHtml([
+    ['rgba(150,210,255,0.6)','Kans >0.1mm','blok'],
+    ['rgba(68,136,204,0.7)','Kans >1mm','blok'],
+    ['rgba(20,60,180,0.85)','Kans >5mm','blok'],
+  ]);
+  chartTimestamps['canvas-aifs-kansen']=ts;
+  actieveCharts['aifs-kansen']=new Chart(document.getElementById('canvas-aifs-kansen'),{
+    data:{labels:lab,datasets:[
+      {type:'bar',data:pKans,backgroundColor:'rgba(150,210,255,0.5)',order:3,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:aKans1,backgroundColor:'rgba(68,136,204,0.6)',order:2,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:aKans5,backgroundColor:'rgba(20,60,180,0.75)',order:1,barPercentage:1,categoryPercentage:1},
+    ]},
+    options:{...cfgBase,plugins:{legend:{display:false},tooltip:{
+      backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+      callbacks:{label:ctx=>{const n=['Kans >0.1mm','Kans >1mm','Kans >5mm'];return ` ${n[ctx.datasetIndex]}: ${ctx.parsed.y.toFixed(0)}%`;}}}},
+      scales:{x:cfgBase.scales.x,y:{...yAs('left','%'),min:0,max:100}}}
+  });
+}
+
 async function laadIcon(lat,lon,naam,dagen,van,tot){
   document.getElementById('header-sub').textContent='40 ensembleleden · Bron: Open-Meteo';
   const[ens,det]=await Promise.all([
@@ -1515,6 +1650,7 @@ function openVergelijking(){
   </div></div>`;
   html+=`<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:.65rem;color:#5a6a80;text-transform:uppercase;font-weight:600">Model</label><div style="display:flex;gap:4px">
     <button onclick="setVergModel('ecmwf',this)" class="vmbtn" style="${btnStyle};background:#2299ff;border:none;color:white">ECMWF</button>
+    <button onclick="setVergModel('aifs',this)" class="vmbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">AIFS</button>
     <button onclick="setVergModel('icon',this)" class="vmbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">ICON</button>
     <button onclick="setVergModel('hres',this)" class="vmbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">HRES</button>
   </div></div>`;
@@ -1587,7 +1723,7 @@ async function laadVergelijking(){
 
 async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
   if(model==='hres'){await laadVergHres(idx,lat,lon,naam,type,dagen);return;}
-  const ensModel=model==='icon'?'icon_seamless':'ecmwf_ifs025';
+  const ensModel=model==='icon'?'icon_seamless':model==='aifs'?'ecmwf_aifs025':'ecmwf_ifs025';
   // GFS ensemble ondersteunt alleen temp en neerslag (geen wind/cloud members)
   if(model==='gfs'&&(type==='wind'||type==='cloud'||type==='onweer')){
     const cel=document.getElementById(`verg-cel-${idx}`);
@@ -1595,7 +1731,7 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
     return;
   }
   let apiTimes=[];
-  const mLbl=model==='icon'?'ICON':'ECMWF';
+  const mLbl=model==='icon'?'ICON':model==='aifs'?'AIFS':'ECMWF';
   const medK=model==='icon'?'#22aa22':'#ee3333';
   const ensK=model==='icon'?'rgba(20,130,20,0.40)':'rgba(20,130,20,0.40)';
 
@@ -2201,12 +2337,12 @@ function downloadPng(){
   const eigenTekst=document.getElementById('png-tekst')?.value||'';
   const ids={temp:'canvas-temp',cloud:'canvas-cloud',wind:'canvas-wind',winddir:'canvas-winddir',
              sneeuw:'canvas-sneeuw',onweer:'canvas-onweer',hoogte:'canvas-hoogte',
-             icon:'canvas-icon',vergelijking:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt'};
-  const neerslagIds={temp:'canvas-neerslag',icon:'canvas-icon-neerslag',vergelijking:'canvas-verg-neerslag',hres:'canvas-hres-neerslag'};
-  const kansenIds={temp:'canvas-neer-kansen',icon:'canvas-icon-kansen'};
+             icon:'canvas-icon',aifs:'canvas-aifs',vergelijking:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt'};
+  const neerslagIds={temp:'canvas-neerslag',icon:'canvas-icon-neerslag',aifs:'canvas-aifs-neerslag',vergelijking:'canvas-verg-neerslag',hres:'canvas-hres-neerslag'};
+  const kansenIds={temp:'canvas-neer-kansen',icon:'canvas-icon-kansen',aifs:'canvas-aifs-kansen'};
   const windIds={vergelijking:'canvas-verg-wind',hres:'canvas-hres-wind'};
-  const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',hres:'HRES operationeel',dauwpunt:'ECMWF ENS'};
-  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',hoogte:'850/500 hPa',vergelijking:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid'};
+  const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',aifs:'ECMWF AIFS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',hres:'HRES operationeel',dauwpunt:'ECMWF ENS'};
+  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',aifs:'AIFS Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',hoogte:'850/500 hPa',vergelijking:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid'};
 
   // Forceer chart update zodat gepinde crosshair op canvas staat
   if(crosshairPinned && actieveCharts.temp) actieveCharts.temp.update('none');
