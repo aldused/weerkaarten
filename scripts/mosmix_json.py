@@ -177,6 +177,34 @@ def verwerk_station(code, naam):
     ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
     td = [v - 273.15 if v and v > 200 else None for v in td_raw]
 
+    # ── WBGT berekening (vereenvoudigd Liljegren) ──
+    import math
+    def bereken_wbgt(t_celsius, td_celsius, ff_ms, neff_pct):
+        """
+        Vereenvoudigde WBGT uit temperatuur, dauwpunt, wind en bewolking.
+        WBGT_outdoor = 0.7 * Tw + 0.2 * Tg + 0.1 * Ta
+        Tw (nat-bol) geschat uit Stull (2011) formule
+        Tg (globe) geschat uit straling + wind
+        """
+        if t_celsius is None or td_celsius is None:
+            return None
+        ta = t_celsius
+        # Relatieve vochtigheid uit dauwpunt
+        rh = 100 * math.exp((17.625 * td_celsius) / (243.04 + td_celsius)) / math.exp((17.625 * ta) / (243.04 + ta))
+        rh = max(0, min(100, rh))
+        # Nat-bol temperatuur (Stull 2011 benadering)
+        tw = ta * math.atan(0.151977 * (rh + 8.313659)**0.5) + math.atan(ta + rh) - math.atan(rh - 1.676331) + 0.00391838 * rh**1.5 * math.atan(0.023101 * rh) - 4.686035
+        # Geschatte straling (W/m2) uit bewolking
+        cloud = (neff_pct or 50) / 100.0
+        solar_max = 800  # max straling zomer
+        solar = solar_max * (1 - 0.75 * cloud**3.4)
+        # Globe temperatuur (benadering Liljegren)
+        wind = max(0.5, (ff_ms or 1.0))
+        tg = ta + 7.0 * (solar / 1000.0) - 1.5 * wind**0.6
+        # WBGT outdoor
+        wbgt = 0.7 * tw + 0.2 * tg + 0.1 * ta
+        return round(wbgt, 1)
+
     # Dagaggregatie
     daily = defaultdict(lambda: {
         "tx": [], "tn": [],
@@ -189,6 +217,8 @@ def verwerk_station(code, naam):
         "vv_min": [],
         "wwm": [],
         "wwz": [],
+        "wbgt_ochtend": [],  # 06-12h
+        "wbgt_middag": [],   # 12-18h
     })
 
     for i, dt in enumerate(times):
@@ -261,6 +291,19 @@ def verwerk_station(code, naam):
         if i < len(wwz_raw) and wwz_raw[i] is not None:
             dd["wwz"].append(wwz_raw[i])
 
+        # WBGT: berekenen voor ochtend (06-12h) en middag (12-18h)
+        if 6 <= hour < 18:
+            t_val = ttt[i] if i < len(ttt) else None
+            td_val = td[i] if i < len(td) else None
+            ff_val = ff_raw[i] if i < len(ff_raw) else None
+            neff_val = neff_raw[i] if i < len(neff_raw) else None
+            wbgt = bereken_wbgt(t_val, td_val, ff_val, neff_val)
+            if wbgt is not None:
+                if 6 <= hour < 12:
+                    dd["wbgt_ochtend"].append(wbgt)
+                else:
+                    dd["wbgt_middag"].append(wbgt)
+
     # Aggregeer naar eindwaarden per dag
     result = {}
     for d, dd in daily.items():
@@ -322,6 +365,10 @@ def verwerk_station(code, naam):
         # Hagelkans max (%)
         r["wwZ"] = round(max(dd["wwz"])) if dd["wwz"] else None
 
+        # WBGT max ochtend en middag
+        r["WBGT_O"] = round(max(dd["wbgt_ochtend"]), 1) if dd["wbgt_ochtend"] else None
+        r["WBGT_M"] = round(max(dd["wbgt_middag"]), 1) if dd["wbgt_middag"] else None
+
         result[d] = r
 
     return result, issue_time
@@ -358,7 +405,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ"]
+    params = ["TX", "TN", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "WBGT_O", "WBGT_M"]
 
     for d in dagen:
         dag_key = d.isoformat()
