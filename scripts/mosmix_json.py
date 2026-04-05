@@ -219,6 +219,7 @@ def verwerk_station(code, naam):
         "wwz": [],
         "wbgt_ochtend": [],  # 06-12h
         "wbgt_middag": [],   # 12-18h
+        "rv_middag": [],     # laagste RV 12-18h
     })
 
     for i, dt in enumerate(times):
@@ -304,6 +305,11 @@ def verwerk_station(code, naam):
                 else:
                     dd["wbgt_middag"].append(wbgt)
 
+            # Relatieve vochtigheid middag (12-18h)
+            if 12 <= hour < 18 and t_val is not None and td_val is not None:
+                rv = 100 * math.exp((17.625 * td_val) / (243.04 + td_val)) / math.exp((17.625 * t_val) / (243.04 + t_val))
+                dd["rv_middag"].append(round(max(0, min(100, rv))))
+
     # Aggregeer naar eindwaarden per dag
     result = {}
     for d, dd in daily.items():
@@ -369,6 +375,9 @@ def verwerk_station(code, naam):
         r["WBGT_O"] = round(max(dd["wbgt_ochtend"]), 1) if dd["wbgt_ochtend"] else None
         r["WBGT_M"] = round(max(dd["wbgt_middag"]), 1) if dd["wbgt_middag"] else None
 
+        # Laagste relatieve vochtigheid middag
+        r["RV_M"] = round(min(dd["rv_middag"])) if dd["rv_middag"] else None
+
         result[d] = r
 
     return result, issue_time
@@ -405,7 +414,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "WBGT_O", "WBGT_M"]
+    params = ["TX", "TN", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "WBGT_O", "WBGT_M", "RV_M"]
 
     for d in dagen:
         dag_key = d.isoformat()
