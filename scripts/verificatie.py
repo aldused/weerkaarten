@@ -100,10 +100,9 @@ def archiveer_mosmix():
 
 # ── Stap 2: Haal KNMI dagobservaties op ────────────────────────────────────
 
-def haal_knmi_obs(datum_str):
-    """Haal dagobservaties op voor alle stations via KNMI EDR API.
-    Let op: EDR API gebruikt UTC-etmalen, KNMI ZIP-bestanden 08-08 UTC.
-    Daarom vragen we datum+1 op."""
+def haal_knmi_obs_daily(datum_str):
+    """Haal dagobservaties op via KNMI daily EDR API.
+    EDR API gebruikt UTC-etmalen, daarom datum+1."""
     edr_datum = (date.fromisoformat(datum_str) + timedelta(days=1)).isoformat()
     s = f"{edr_datum}T00:00:00Z"
     e = f"{edr_datum}T23:59:59Z"
@@ -139,17 +138,78 @@ def haal_knmi_obs(datum_str):
                 obs = {}
                 if tx is not None: obs["TX"] = round(tx, 1)
                 if tn is not None: obs["TN"] = round(tn, 1)
-                if rh is not None: obs["RR"] = round(max(0, rh), 1)  # negatief = spoor
-                if fg is not None: obs["FF"] = round(fg * 3.6, 1)    # m/s → km/h
+                if rh is not None: obs["RR"] = round(max(0, rh), 1)
+                if fg is not None: obs["FF"] = round(fg * 3.6, 1)
 
                 if obs:
                     observaties[naam] = obs
-                    break  # gelukt, niet naar volgende collectie
+                    break
             except Exception as ex:
                 print(f"    {naam} ({collectie}): {ex}")
                 continue
         time.sleep(0.05)
 
+    return observaties
+
+
+def haal_knmi_obs_10min(datum_str):
+    """Fallback: bereken dagwaarden uit 10-minuten observaties."""
+    from datetime import datetime as dt
+    s = f"{datum_str}T00:00:00Z"
+    e = f"{datum_str}T23:59:59Z"
+    base = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
+
+    observaties = {}
+    for naam, wigos in MOSMIX_NL_STATIONS.items():
+        try:
+            url = f"{base}/locations/{wigos}"
+            r = knmi_get(url, params={
+                "datetime": f"{s}/{e}",
+                "parameter-name": "ta,ff,rg",
+            }, timeout=15)
+            if r.status_code != 200:
+                continue
+            js = r.json()
+            if not js.get("coverages"):
+                continue
+            ranges = js["coverages"][0].get("ranges", {})
+            ta_vals = [v for v in (ranges.get("ta", {}).get("values", []) or []) if v is not None]
+            ff_vals = [v for v in (ranges.get("ff", {}).get("values", []) or []) if v is not None]
+            rg_vals = [v for v in (ranges.get("rg", {}).get("values", []) or []) if v is not None]
+
+            obs = {}
+            if ta_vals:
+                obs["TX"] = round(max(ta_vals), 1)
+                obs["TN"] = round(min(ta_vals), 1)
+            if ff_vals:
+                obs["FF"] = round(sum(ff_vals) / len(ff_vals) * 3.6, 1)
+            if rg_vals:
+                obs["RR"] = round(sum(max(0, v) for v in rg_vals) / 6, 1)
+            if obs:
+                observaties[naam] = obs
+        except Exception as ex:
+            print(f"    {naam} (10min): {ex}")
+        time.sleep(0.05)
+
+    return observaties
+
+
+def haal_knmi_obs(datum_str):
+    """Haal observaties op: eerst daily API, fallback naar 10-minuten API."""
+    print("  Probeer daily API...")
+    observaties = haal_knmi_obs_daily(datum_str)
+    if len(observaties) >= 10:
+        print(f"  Daily API: {len(observaties)} stations")
+        return observaties
+
+    print(f"  Daily API: slechts {len(observaties)} stations, fallback naar 10-minuten API...")
+    obs_10min = haal_knmi_obs_10min(datum_str)
+    print(f"  10-minuten API: {len(obs_10min)} stations")
+
+    # Merge: daily heeft voorrang, 10min vult aan
+    for naam, obs in obs_10min.items():
+        if naam not in observaties:
+            observaties[naam] = obs
     return observaties
 
 # ── Stap 3: Vergelijk en genereer output ───────────────────────────────────

@@ -39,14 +39,12 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 .kaart-grid.layout-4 .kaart-panel:nth-child(n+3) { border-bottom: none; }
 .panel-selector { padding: 0; flex-shrink: 0; }
 .panel-selector select {
-  width: 100%; padding: 5px 10px; border: none; border-bottom: 1px solid #e0e8f0;
-  background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600;
-  cursor: pointer; outline: none; -webkit-appearance: none; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 10px center;
+  width: 100%; padding: 7px 12px; border: none; border-bottom: 2px solid #003366;
+  background: #00205b; color: white; font-size: 13px; font-weight: 700;
+  cursor: pointer; outline: none;
 }
-.panel-selector select:hover { background-color: #e8eef6; }
-.panel-selector select:focus { background-color: #dce9f7; }
+.panel-selector select option { background: white; color: #1a2b40; font-weight: 600; }
+.panel-selector select optgroup { background: #f0f4f8; color: #5a7090; font-weight: 700; font-style: normal; }
 .canvas-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .canvas-wrap canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
@@ -102,9 +100,73 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 <div id="tooltip" style="display:none; position:fixed; background:rgba(0,32,91,0.92); color:white; padding:8px 12px; border-radius:6px; font-size:12px; pointer-events:none; z-index:100; line-height:1.6; box-shadow:0 2px 8px rgba(0,0,0,0.3); max-width:220px;">
 </div>
 
+<!-- Cross-section popup -->
+<div id="xsec-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; justify-content:center; align-items:center;">
+  <div style="background:white; border-radius:8px; padding:16px; max-width:1150px; width:98%; max-height:95vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.4); position:relative;">
+    <button id="xsec-sluit" style="position:absolute; top:8px; right:12px; background:none; border:none; font-size:22px; cursor:pointer; color:#666;">&times;</button>
+    <div id="xsec-titel" style="font-size:14px; font-weight:700; color:#003366; margin-bottom:8px;"></div>
+    <canvas id="xsec-canvas" style="width:100%; display:block;"></canvas>
+  </div>
+</div>
+
+<!-- Meteogram popup -->
+<div id="meteogram-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; justify-content:center; align-items:center;">
+  <div id="meteogram-box" style="background:white; border-radius:8px; padding:16px; max-width:900px; width:95%; max-height:90vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.4); position:relative;">
+    <button id="meteogram-sluit" style="position:absolute; top:8px; right:12px; background:none; border:none; font-size:22px; cursor:pointer; color:#666;">&times;</button>
+    <div id="meteogram-titel" style="font-size:14px; font-weight:700; color:#003366; margin-bottom:8px;"></div>
+    <canvas id="meteogram-canvas" style="width:100%; display:block;"></canvas>
+  </div>
+</div>
+
 <script>
 (function() {
   "use strict";
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PLAATSEN (voor tooltip)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  var PLAATSEN = [
+    // Nederland
+    [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
+    [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
+    [51.84,5.86,"Arnhem"],[52.51,6.09,"Zwolle"],[51.69,5.30,"Den Bosch"],
+    [51.45,3.57,"Vlissingen"],[52.63,4.75,"Alkmaar"],[53.20,5.80,"Leeuwarden"],
+    [52.22,6.90,"Enschede"],[51.56,4.47,"Breda"],[52.16,4.49,"Leiden"],
+    [51.99,4.37,"Dordrecht"],[52.39,4.65,"Haarlem"],[53.32,5.04,"Harlingen"],
+    [52.70,5.75,"Emmeloord"],[51.43,5.48,"Helmond"],[51.59,4.78,"Tilburg"],
+    [52.36,4.63,"IJmuiden"],[52.35,5.23,"Amersfoort"],[52.22,5.97,"Apeldoorn"],
+    [51.96,5.92,"Wageningen"],[52.96,5.94,"Assen"],[52.76,6.90,"Emmen"],
+    [53.38,5.35,"Terschelling"],[53.25,4.92,"Vlieland"],[52.93,4.79,"Den Helder"],
+    [51.98,5.10,"De Bilt"],[52.46,5.52,"Lelystad"],[51.65,5.71,"Volkel"],
+    // Belgie
+    [50.85,4.35,"Brussel"],[51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],
+    [50.63,5.57,"Luik"],[51.21,3.22,"Brugge"],[50.41,4.44,"Charleroi"],
+    [50.93,5.33,"Hasselt"],[50.47,3.95,"Bergen"],[51.03,2.38,"Duinkerke"],
+    // Duitsland
+    [51.96,7.63,"Munster"],[53.08,8.80,"Bremen"],[52.37,9.74,"Hannover"],
+    [51.23,6.78,"Dusseldorf"],[50.94,6.96,"Keulen"],[51.51,7.47,"Dortmund"],
+    [52.02,8.53,"Bielefeld"],[51.45,7.01,"Essen"],[52.28,8.05,"Osnabruck"],
+    [53.55,9.99,"Hamburg"],[53.87,8.69,"Bremerhaven"],[50.78,6.08,"Aken"],
+    [51.81,6.14,"Kleve"],[53.36,7.21,"Emden"],[52.22,7.00,"Gronau"],
+    // Engeland (kust)
+    [51.38,1.40,"Margate"],[51.13,1.31,"Dover"],[51.95,1.35,"Felixstowe"],
+    // Frankrijk (noord)
+    [50.63,3.07,"Rijsel"],[50.95,1.86,"Calais"],[49.90,2.30,"Amiens"],
+    // Luxemburg
+    [49.61,6.13,"Luxemburg"],
+  ];
+
+  function dichtstbijzijnde(lat, lon) {
+    var best = null, bestDist = 999;
+    for (var i = 0; i < PLAATSEN.length; i++) {
+      var dlat = PLAATSEN[i][0] - lat, dlon = PLAATSEN[i][1] - lon;
+      var d = Math.sqrt(dlat*dlat + dlon*dlon*0.5); // lon weegt minder op deze breedtegraad
+      if (d < bestDist) { bestDist = d; best = PLAATSEN[i]; }
+    }
+    if (bestDist < 0.3) return best[2] + " (" + lat.toFixed(2) + "\u00b0N, " + lon.toFixed(2) + "\u00b0E)";
+    return lat.toFixed(2) + "\u00b0N, " + lon.toFixed(2) + "\u00b0E";
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // KLEURSCHALEN (geport vanuit Python)
@@ -217,6 +279,13 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     var tw = wetBulb(T, RH);
     return 0.7 * tw + 0.3 * T;
   }
+
+  // Globale straling (W/m2)
+  var STRALING_LEVELS = [0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 1000];
+  var STRALING_COLORS = [
+    [40,40,60],[60,60,100],[80,80,160],[120,120,200],[180,180,60],
+    [240,220,0],[255,180,0],[255,130,0],[255,80,0],[255,40,0]
+  ];
 
   // Relatieve vochtigheid (%)
   var RV_LEVELS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100];
@@ -357,6 +426,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     if (paramKey === "wbgt") refParam = "temp";
     else if (paramKey === "nsomm") refParam = "neerslag";
     else if (paramKey === "wind_druk") refParam = "wind";
+    else if (paramKey === "combi") refParam = "temp";
 
     var pd = isDerived ? paramCache[refParam] : paramCache[paramKey];
     if (!pd || !meta) return;
@@ -458,6 +528,17 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
             c = interpColor(val / 100, DRUK_REF); // Pa -> hPa
           } else if (paramKey === "rv") {
             c = boundaryColor(val, RV_LEVELS, RV_COLORS);
+          } else if (paramKey === "dauwpunt") {
+            c = interpColor(val, TEMP_REF); // zelfde kleurschaal als temp
+          } else if (paramKey === "straling") {
+            c = boundaryColor(val, STRALING_LEVELS, STRALING_COLORS);
+          } else if (paramKey === "combi") {
+            // Combinatiekaart: temp als kleur
+            var tpd4 = paramCache["temp"];
+            if (tpd4) {
+              var tVal4 = tpd4.data[stepIdx * tpd4.nLat * tpd4.nLon + i];
+              c = interpColor(tVal4, TEMP_REF);
+            }
           }
 
           var pi = (y * nLon + x) * 4;
@@ -492,70 +573,98 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       ctx.drawImage(overlayImg, 0, 0, cw, ch);
     }
 
-    // ── Wind+Druk: isobaren + windpijltjes ──────────────────────────────────
-    if (paramKey === "wind_druk" && paramCache["druk"] && paramCache["wind"]) {
-      var dpd = paramCache["druk"], wpd2 = paramCache["wind"];
-      var dOff = stepIdx * dpd.nLat * dpd.nLon;
+    // ── Wind+Druk of Wind kaart: windpijltjes (dikker, met witte rand) ─────
+    if ((paramKey === "wind_druk" || paramKey === "wind") && paramCache["wind"]) {
+      var wpd2 = paramCache["wind"];
       var wOff2 = stepIdx * wpd2.nLat * wpd2.nLon * 2;
+      var barbStep2 = 10;
 
-      // Isobaren via simpele contour-detectie (elke 4 hPa)
-      ctx.strokeStyle = "black";
-      ctx.lineWidth = 1.5;
-      ctx.font = "bold 10px Arial";
-      ctx.fillStyle = "black";
-      ctx.textAlign = "center";
-      for (var hpa = 980; hpa <= 1040; hpa += 4) {
-        ctx.beginPath();
-        var labeled = false;
-        for (var iy = 1; iy < nLat - 1; iy++) {
-          for (var ix = 1; ix < nLon - 1; ix++) {
-            var ci = iy * nLon + ix;
-            var p00 = dpd.data[dOff + ci] / 100;
-            var p10 = dpd.data[dOff + ci + 1] / 100;
-            var p01 = dpd.data[dOff + (iy+1)*nLon + ix] / 100;
-            // Horizontale crossing
-            if ((p00 - hpa) * (p10 - hpa) < 0) {
-              var frac = (hpa - p00) / (p10 - p00);
-              var px2 = ((ix + frac) / nLon) * cw;
-              var py2 = ((nLat - 1 - iy) / nLat) * ch;
-              ctx.lineTo(px2, py2);
-              if (!labeled && ix % 20 === 0) {
-                ctx.stroke(); ctx.beginPath();
-                ctx.fillText(hpa.toString(), px2, py2 - 3);
-                labeled = true;
-              }
-            }
+      // Twee passes: eerst witte outline, dan zwarte pijl
+      var passes = [
+        {stroke:"white", fill:"white", lw:3.5, headW:5.5},
+        {stroke:"#111",  fill:"#111",  lw:1.8, headW:4.0},
+      ];
+      for (var pass = 0; pass < 2; pass++) {
+        var p = passes[pass];
+        ctx.strokeStyle = p.stroke;
+        ctx.fillStyle = p.fill;
+        ctx.lineWidth = p.lw;
+        for (var by = 0; by < nLat; by += barbStep2) {
+          for (var bx = 0; bx < nLon; bx += barbStep2) {
+            var bi2 = by * nLon + bx;
+            var bu = wpd2.data[wOff2 + bi2];
+            var bv = wpd2.data[wOff2 + wpd2.nLat * wpd2.nLon + bi2];
+            var bspd = Math.sqrt(bu*bu + bv*bv);
+            if (bspd < 0.5) continue;
+            var bdir = Math.atan2(-bu, -bv);
+            var bpx = ((bx + 0.5) / nLon) * cw;
+            var bpy = ((nLat - 1 - by) / nLat) * ch;
+            var alen = Math.min(16, 6 + bspd);
+            ctx.beginPath();
+            ctx.moveTo(bpx, bpy);
+            var tipX = bpx + Math.sin(bdir) * alen;
+            var tipY = bpy - Math.cos(bdir) * alen;
+            ctx.lineTo(tipX, tipY);
+            ctx.stroke();
+            // Pijlpunt
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(tipX - Math.sin(bdir+0.45)*p.headW, tipY + Math.cos(bdir+0.45)*p.headW);
+            ctx.lineTo(tipX - Math.sin(bdir-0.45)*p.headW, tipY + Math.cos(bdir-0.45)*p.headW);
+            ctx.closePath();
+            ctx.fill();
           }
         }
-        ctx.stroke();
+      }
+    }
+
+    // ── Combinatiekaart: windpijltjes + neerslagarcering ────────────────────
+    if (paramKey === "combi" && paramCache["wind"] && paramCache["neerslag"]) {
+      var wpd3 = paramCache["wind"], npd3 = paramCache["neerslag"];
+      var wOff3 = stepIdx * wpd3.nLat * wpd3.nLon * 2;
+      var nOff3 = stepIdx * npd3.nLat * npd3.nLon;
+
+      // Neerslaggebieden: semi-transparante blauwe overlay waar neerslag > 0.2 mm
+      for (var ny = 0; ny < nLat; ny++) {
+        for (var nx = 0; nx < nLon; nx++) {
+          var ni3 = ny * nLon + nx;
+          var nval = npd3.data[nOff3 + ni3];
+          if (nval > 0.2) {
+            var alpha = Math.min(0.5, nval / 10);
+            ctx.fillStyle = "rgba(0,80,200," + alpha.toFixed(2) + ")";
+            var rpx = (nx / nLon) * cw, rpy = ((nLat - 1 - ny) / nLat) * ch;
+            var rpw = cw / nLon + 1, rph = ch / nLat + 1;
+            ctx.fillRect(rpx, rpy, rpw, rph);
+          }
+        }
       }
 
-      // Windpijltjes (simpele pijl, elke 15 gridpunten)
-      var barbStep2 = 15;
-      ctx.strokeStyle = "black";
-      ctx.lineWidth = 1;
-      for (var by = 0; by < nLat; by += barbStep2) {
-        for (var bx = 0; bx < nLon; bx += barbStep2) {
-          var bi2 = by * nLon + bx;
-          var bu = wpd2.data[wOff2 + bi2];
-          var bv = wpd2.data[wOff2 + wpd2.nLat * wpd2.nLon + bi2];
-          var bspd = Math.sqrt(bu*bu + bv*bv);
-          if (bspd < 0.5) continue;
-          var bdir = Math.atan2(-bu, -bv); // wind FROM direction
-          var bpx = ((bx + 0.5) / nLon) * cw;
-          var bpy = ((nLat - 1 - by) / nLat) * ch;
-          var alen = Math.min(12, 4 + bspd * 0.8);
+      // Windpijltjes
+      var bs3 = 12;
+      ctx.strokeStyle = "#333";
+      ctx.fillStyle = "#333";
+      ctx.lineWidth = 1.2;
+      for (var wy = 0; wy < nLat; wy += bs3) {
+        for (var wx = 0; wx < nLon; wx += bs3) {
+          var wi3 = wy * nLon + wx;
+          var wu = wpd3.data[wOff3 + wi3];
+          var wv = wpd3.data[wOff3 + wpd3.nLat * wpd3.nLon + wi3];
+          var wspd = Math.sqrt(wu*wu + wv*wv);
+          if (wspd < 0.3) continue;
+          var wdir = Math.atan2(-wu, -wv);
+          var wpx = ((wx + 0.5) / nLon) * cw;
+          var wpy = ((nLat - 1 - wy) / nLat) * ch;
+          var wlen = Math.min(14, 5 + wspd * 0.8);
           ctx.beginPath();
-          ctx.moveTo(bpx, bpy);
-          ctx.lineTo(bpx + Math.sin(bdir) * alen, bpy - Math.cos(bdir) * alen);
+          ctx.moveTo(wpx, wpy);
+          var wtx = wpx + Math.sin(wdir) * wlen;
+          var wty = wpy - Math.cos(wdir) * wlen;
+          ctx.lineTo(wtx, wty);
           ctx.stroke();
-          // Pijlpunt
-          var tipX = bpx + Math.sin(bdir) * alen;
-          var tipY = bpy - Math.cos(bdir) * alen;
           ctx.beginPath();
-          ctx.moveTo(tipX, tipY);
-          ctx.lineTo(tipX - Math.sin(bdir + 0.4) * 3, tipY + Math.cos(bdir + 0.4) * 3);
-          ctx.lineTo(tipX - Math.sin(bdir - 0.4) * 3, tipY + Math.cos(bdir - 0.4) * 3);
+          ctx.moveTo(wtx, wty);
+          ctx.lineTo(wtx - Math.sin(wdir+0.4)*3.5, wty + Math.cos(wdir+0.4)*3.5);
+          ctx.lineTo(wtx - Math.sin(wdir-0.4)*3.5, wty + Math.cos(wdir-0.4)*3.5);
           ctx.closePath();
           ctx.fill();
         }
@@ -620,6 +729,14 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
         } else if (paramKey === "rv") {
           txt = Math.round(val).toString();
           bgc = boundaryColor(val, RV_LEVELS, RV_COLORS);
+        } else if (paramKey === "dauwpunt") {
+          txt = Math.round(val).toString();
+          bgc = interpColor(val, TEMP_REF);
+        } else if (paramKey === "straling") {
+          txt = Math.round(val).toString();
+          bgc = boundaryColor(val, STRALING_LEVELS, STRALING_COLORS);
+        } else if (paramKey === "combi") {
+          continue; // geen cijfers bij combi (te druk)
         }
 
         var px = (gx + 0.5) / nLon * cw;
@@ -632,7 +749,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 
     // ── Titel (Wetterzentrale-stijl: groot, duidelijk) ────────────────────
     var hdrH = 48;
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, cw, hdrH);
     ctx.strokeStyle = "#ccc";
     ctx.lineWidth = 1;
@@ -707,6 +824,17 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
         legLabel = "hPa";
       }
       else if (paramKey === "rv") { legLevels = RV_LEVELS; legColors = RV_COLORS; legLabel = "%"; }
+      else if (paramKey === "dauwpunt") {
+        legLevels = [-10,-5,0,5,10,15,20,25,30];
+        legColors = legLevels.map(function(t){ return interpColor(t, TEMP_REF); });
+        legLabel = "\u00b0C dauwpunt";
+      }
+      else if (paramKey === "straling") { legLevels = STRALING_LEVELS; legColors = STRALING_COLORS; legLabel = "W/m\u00b2"; }
+      else if (paramKey === "combi") {
+        legLevels = [-5,0,5,10,15,20,25,30,35];
+        legColors = legLevels.map(function(t){ return interpColor(t, TEMP_REF); });
+        legLabel = "\u00b0C + wind + neerslag";
+      }
       else if (paramKey === "wind_druk") { legLevels = [0,1,2,3,4,5,6,7,8,9,10,11]; legColors = WIND_COLORS; legLabel = "Bft + hPa"; }
       else if (paramKey === "wbgt") { legLevels = WBGT_LEVELS; legColors = WBGT_COLORS; legLabel = "\u00b0C WBGT"; }
       else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm/" + nsomUren + "u"; }
@@ -763,7 +891,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   // UI CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var PARAM_KEYS = ["neerslag","temp","bewolking","wind","windstoten","zicht","rv","cape","druk","wbgt","nsomm","wind_druk"];
+  var PARAM_KEYS = ["neerslag","temp","bewolking","wind","windstoten","zicht","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","straling","combi"];
   var nsomUren = 6;
   var DEFAULT_PARAMS = ["neerslag","temp","wind"];
   var layout = 1;
@@ -805,24 +933,26 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       dropdown.dataset.panel = i;
 
       var groepen = [
-        ["Temperatuur", [
-          ["temp", "Temperatuur 2m"],
-          ["wbgt", "WBGT Hitteindex"],
-          ["rv", "Relatieve vochtigheid 2m"],
+        ["Temperatuur & Vocht", [
+          ["temp", "Temperatuur 2m (\u00b0C)"],
+          ["dauwpunt", "Dauwpuntstemperatuur 2m (\u00b0C)"],
+          ["rv", "Relatieve vochtigheid 2m (%)"],
+          ["wbgt", "WBGT Hitteindex (\u00b0C)"],
         ]],
         ["Neerslag", [
           ["neerslag", "Gesimuleerde radar (dBZ)"],
-          ["nsomm", "Neerslagsom (cumulatief)"],
+          ["nsomm", "Neerslagsom (cumulatief mm)"],
         ]],
         ["Wind & Druk", [
           ["wind", "Wind 10m (Bft)"],
           ["windstoten", "Windstoten 10m (km/u)"],
-          ["wind_druk", "Wind + Luchtdruk (isobaren)"],
-          ["druk", "Luchtdruk (hPa)"],
+          ["druk", "Luchtdruk zeeniveau (hPa)"],
+          ["wind_druk", "Wind + Luchtdruk (combinatie)"],
         ]],
         ["Bewolking & Zicht", [
           ["bewolking", "Bewolking (hoog/midden/laag)"],
-          ["zicht", "Horizontaal zicht"],
+          ["zicht", "Horizontaal zicht (m/km)"],
+          ["straling", "Globale straling (W/m\u00b2)"],
         ]],
         ["Instabiliteit", [
           ["cape", "CAPE (J/kg)"],
@@ -882,7 +1012,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
         var lat = meta.grid.lat_min + gy * (meta.grid.lat_max - meta.grid.lat_min) / (meta.grid.n_lat - 1);
         var lon = meta.grid.lon_min + gx * (meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1);
 
-        var lines = ["<b>" + lat.toFixed(2) + "\u00b0N, " + lon.toFixed(2) + "\u00b0E</b>"];
+        var lines = ["<b>" + dichtstbijzijnde(lat, lon) + "</b>"];
         // Toon waarden van alle geladen parameters
         var paramInfo = [
           ["temp", "Temp", "\u00b0C", function(v){return v.toFixed(1);}],
@@ -930,6 +1060,30 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
         tooltip.style.top = (e.clientY - 10) + "px";
       });
       cvs.addEventListener("mouseleave", function() { tooltip.style.display = "none"; });
+      // Klik = meteogram, Shift+klik = cross-section punten
+      cvs.addEventListener("click", function(e) {
+        if (e.detail === 2) return;
+        var rect = this.getBoundingClientRect();
+        var mx = (e.clientX - rect.left) / rect.width;
+        var my = (e.clientY - rect.top) / rect.height;
+        var gx = Math.floor(mx * meta.grid.n_lon);
+        var gy = Math.floor((1 - my) * meta.grid.n_lat);
+        if (gx < 0 || gx >= meta.grid.n_lon || gy < 0 || gy >= meta.grid.n_lat) return;
+
+        if (e.shiftKey) {
+          // Cross-section modus
+          if (!xsecPunt1) {
+            xsecPunt1 = {gx:gx, gy:gy};
+            statusEl.textContent = "Cross-section: shift+klik op tweede punt...";
+          } else {
+            toonCrossSection(xsecPunt1.gx, xsecPunt1.gy, gx, gy);
+            xsecPunt1 = null;
+            statusEl.textContent = "";
+          }
+        } else {
+          toonMeteogram(gx, gy);
+        }
+      });
       wrap.appendChild(cvs);
       panel.appendChild(wrap);
 
@@ -1010,6 +1164,426 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // CROSS-SECTION (grenslaag doorsnede)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  var xsecPunt1 = null;
+  var xsecOverlay = document.getElementById("xsec-overlay");
+  var xsecCanvas = document.getElementById("xsec-canvas");
+  var xsecTitel = document.getElementById("xsec-titel");
+  document.getElementById("xsec-sluit").addEventListener("click", function() { xsecOverlay.style.display = "none"; });
+  xsecOverlay.addEventListener("click", function(e) { if (e.target === xsecOverlay) xsecOverlay.style.display = "none"; });
+
+  function toonCrossSection(gx1, gy1, gx2, gy2) {
+    var ppd = paramCache["profiel"];
+    if (!ppd) {
+      // Laad profieldata eerst
+      laadParam("profiel").then(function() { toonCrossSection(gx1, gy1, gx2, gy2); });
+      statusEl.textContent = "Profieldata laden...";
+      return;
+    }
+
+    var lat1 = meta.grid.lat_min + gy1 * (meta.grid.lat_max - meta.grid.lat_min) / (meta.grid.n_lat - 1);
+    var lon1 = meta.grid.lon_min + gx1 * (meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1);
+    var lat2 = meta.grid.lat_min + gy2 * (meta.grid.lat_max - meta.grid.lat_min) / (meta.grid.n_lat - 1);
+    var lon2 = meta.grid.lon_min + gx2 * (meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1);
+
+    xsecTitel.textContent = "Cross-section: " + dichtstbijzijnde(lat1, lon1) + " \u2192 " + dichtstbijzijnde(lat2, lon2);
+    xsecOverlay.style.display = "flex";
+
+    var LEVELS = [2, 50, 100, 200, 300];
+    var nLevels = 5;
+    var nLat = ppd.nLat, nLon = ppd.nLon;
+    var stepIdx = parseInt(slider.value) - 1;
+    var stepSize = nLat * nLon * 10;
+    var offset = stepIdx * stepSize;
+
+    // Interpoleer punten langs de lijn
+    var nPunten = 80;
+    var temps = []; // [punt][level]
+    var winds = [];
+
+    for (var p = 0; p < nPunten; p++) {
+      var frac = p / (nPunten - 1);
+      var px = gx1 + frac * (gx2 - gx1);
+      var py = gy1 + frac * (gy2 - gy1);
+      // Bilineaire interpolatie
+      var ix = Math.floor(px), iy = Math.floor(py);
+      var fx = px - ix, fy = py - iy;
+      ix = Math.max(0, Math.min(ix, nLon - 2));
+      iy = Math.max(0, Math.min(iy, nLat - 2));
+
+      var tRow = [], wRow = [];
+      for (var lv = 0; lv < nLevels; lv++) {
+        // Temp: component 0-4
+        var base = offset + lv * nLat * nLon;
+        var v00 = ppd.data[base + iy * nLon + ix];
+        var v10 = ppd.data[base + iy * nLon + ix + 1];
+        var v01 = ppd.data[base + (iy+1) * nLon + ix];
+        var v11 = ppd.data[base + (iy+1) * nLon + ix + 1];
+        var tv = v00*(1-fx)*(1-fy) + v10*fx*(1-fy) + v01*(1-fx)*fy + v11*fx*fy;
+        tRow.push(tv);
+
+        // Wind: component 5-9
+        var wbase = offset + (5 + lv) * nLat * nLon;
+        var w00 = ppd.data[wbase + iy * nLon + ix];
+        var w10 = ppd.data[wbase + iy * nLon + ix + 1];
+        var w01 = ppd.data[wbase + (iy+1) * nLon + ix];
+        var w11 = ppd.data[wbase + (iy+1) * nLon + ix + 1];
+        wRow.push(w00*(1-fx)*(1-fy) + w10*fx*(1-fy) + w01*(1-fx)*fy + w11*fx*fy);
+      }
+      temps.push(tRow);
+      winds.push(wRow);
+    }
+
+    // Teken cross-section
+    var cw3 = 1100, ch3 = 550;
+    xsecCanvas.width = cw3;
+    xsecCanvas.height = ch3;
+    var ctx3 = xsecCanvas.getContext("2d");
+    ctx3.fillStyle = "white";
+    ctx3.fillRect(0, 0, cw3, ch3);
+
+    var ml3 = 50, mr3 = 50, mt3 = 10, mb3 = 50;
+    var pw3 = cw3 - ml3 - mr3, ph3 = ch3 - mt3 - mb3;
+
+    // Subpixel rendering: maak een fijner grid (verticaal interpoleren)
+    var cellW = pw3 / nPunten;
+    var nVertPix = 100; // verticale pixels
+    var levelHeights = LEVELS; // [2, 50, 100, 200, 300]
+
+    // Offscreen canvas voor vloeiende vulling
+    var offX = document.createElement("canvas");
+    offX.width = nPunten; offX.height = nVertPix;
+    var offXctx = offX.getContext("2d");
+    var xImg = offXctx.createImageData(nPunten, nVertPix);
+
+    for (var px = 0; px < nPunten; px++) {
+      for (var py = 0; py < nVertPix; py++) {
+        // Hoogte in meters voor deze pixel
+        var hgt = (py / (nVertPix - 1)) * 300;
+        // Interpoleer temp tussen niveaus
+        var tVal3 = temps[px][0]; // default = laagste
+        for (var lv2 = 0; lv2 < nLevels - 1; lv2++) {
+          if (hgt >= levelHeights[lv2] && hgt <= levelHeights[lv2+1]) {
+            var fr2 = (hgt - levelHeights[lv2]) / (levelHeights[lv2+1] - levelHeights[lv2]);
+            tVal3 = temps[px][lv2] + fr2 * (temps[px][lv2+1] - temps[px][lv2]);
+            break;
+          }
+        }
+        if (hgt > levelHeights[nLevels-1]) tVal3 = temps[px][nLevels-1];
+
+        var tc2 = interpColor(tVal3, TEMP_REF);
+        var pi3 = ((nVertPix - 1 - py) * nPunten + px) * 4;
+        xImg.data[pi3] = tc2[0]; xImg.data[pi3+1] = tc2[1]; xImg.data[pi3+2] = tc2[2]; xImg.data[pi3+3] = 255;
+      }
+    }
+    offXctx.putImageData(xImg, 0, 0);
+
+    // Upscale naar plot area met smoothing
+    ctx3.imageSmoothingEnabled = true;
+    ctx3.imageSmoothingQuality = "high";
+    ctx3.drawImage(offX, ml3, mt3, pw3, ph3);
+
+    // Temp waarden als tekst op het grid (i.p.v. isothermen)
+    var tMin3 = 99, tMax3 = -99;
+    for (var pp6 = 0; pp6 < nPunten; pp6++) {
+      for (var ll6 = 0; ll6 < nLevels; ll6++) {
+        tMin3 = Math.min(tMin3, temps[pp6][ll6]);
+        tMax3 = Math.max(tMax3, temps[pp6][ll6]);
+      }
+    }
+    ctx3.textAlign = "center";
+    for (var px2 = 0; px2 < nPunten; px2 += 10) {
+      for (var lv3 = 0; lv3 < nLevels; lv3++) {
+        var xp = ml3 + (px2 + 0.5) / nPunten * pw3;
+        var yp = mt3 + ph3 - (levelHeights[lv3] / 300) * ph3;
+        var tv2 = temps[px2][lv3];
+        var tc3 = interpColor(tv2, TEMP_REF);
+        var tl2 = lum(tc3[0], tc3[1], tc3[2]);
+        // Temperatuurwaarde
+        ctx3.fillStyle = "rgba(255,255,255,0.7)";
+        ctx3.fillRect(xp - 20, yp - 10, 40, 20);
+        ctx3.font = "bold 14px Arial";
+        ctx3.fillStyle = tl2 > 0.4 ? "#111" : "#fff";
+        ctx3.fillText(tv2.toFixed(1) + "\u00b0", xp, yp + 5);
+      }
+    }
+
+    // Wind in Bft per niveau (elke 10 punten, onder de temp)
+    for (var px3 = 0; px3 < nPunten; px3 += 10) {
+      var xw = ml3 + (px3 + 0.5) / nPunten * pw3;
+      for (var lv4 = 0; lv4 < nLevels; lv4++) {
+        var yw = mt3 + ph3 - (levelHeights[lv4] / 300) * ph3;
+        var bft = msNaarBft(winds[px3][lv4]);
+        ctx3.fillStyle = "rgba(255,255,255,0.7)";
+        ctx3.fillRect(xw - 16, yw + 10, 32, 16);
+        ctx3.fillStyle = "#003366";
+        ctx3.font = "bold 12px Arial";
+        ctx3.textAlign = "center";
+        ctx3.fillText(bft + " Bft", xw, yw + 23);
+      }
+    }
+
+    // Y-as: hoogte labels
+    ctx3.font = "bold 11px Arial";
+    ctx3.fillStyle = "#222";
+    ctx3.textAlign = "right";
+    for (var ll7 = 0; ll7 < nLevels; ll7++) {
+      var yh = mt3 + ph3 - (levelHeights[ll7] / 300) * ph3;
+      ctx3.fillText(LEVELS[ll7] + "m", ml3 - 5, yh + 4);
+      ctx3.strokeStyle = "rgba(0,0,0,0.15)";
+      ctx3.lineWidth = 0.5;
+      ctx3.setLineDash([3,3]);
+      ctx3.beginPath(); ctx3.moveTo(ml3, yh); ctx3.lineTo(ml3 + pw3, yh); ctx3.stroke();
+      ctx3.setLineDash([]);
+    }
+
+    // Kader
+    ctx3.strokeStyle = "#333"; ctx3.lineWidth = 1;
+    ctx3.strokeRect(ml3, mt3, pw3, ph3);
+
+    // X-as: plaatsnamen
+    ctx3.font = "10px Arial";
+    ctx3.fillStyle = "#333";
+    ctx3.textAlign = "center";
+    for (var px5 = 0; px5 < nPunten; px5 += 16) {
+      var fr5 = px5 / (nPunten - 1);
+      var plat = lat1 + fr5 * (lat2 - lat1);
+      var plon = lon1 + fr5 * (lon2 - lon1);
+      var x5 = ml3 + (px5 + 0.5) / nPunten * pw3;
+      ctx3.fillText(dichtstbijzijnde(plat, plon).split("(")[0].trim(), x5, ch3 - mb3 + 15);
+    }
+
+    // Ondertitel
+    ctx3.textAlign = "center";
+    ctx3.font = "10px Arial";
+    ctx3.fillStyle = "#666";
+    ctx3.fillText("Grenslaag temperatuur (\u00b0C) + wind (Bft) \u2014 2m tot 300m", cw3/2, ch3 - 8);
+
+    // Legenda rechts: temp kleurenbalk
+    var legX3 = cw3 - mr3 + 8, legW3 = 12, legH3 = ph3;
+    for (var py3 = 0; py3 < legH3; py3++) {
+      var tl = tMin3 + (1 - py3/legH3) * (tMax3 - tMin3);
+      var tlc = interpColor(tl, TEMP_REF);
+      ctx3.fillStyle = "rgb(" + tlc[0] + "," + tlc[1] + "," + tlc[2] + ")";
+      ctx3.fillRect(legX3, mt3 + py3, legW3, 2);
+    }
+    ctx3.strokeRect(legX3, mt3, legW3, legH3);
+    ctx3.font = "8px Arial"; ctx3.fillStyle = "#333"; ctx3.textAlign = "left";
+    ctx3.fillText(Math.round(tMax3) + "\u00b0", legX3 + legW3 + 3, mt3 + 8);
+    ctx3.fillText(Math.round(tMin3) + "\u00b0", legX3 + legW3 + 3, mt3 + legH3);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // METEOGRAM (tijdreeks popup)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  var meteoOverlay = document.getElementById("meteogram-overlay");
+  var meteoCanvas = document.getElementById("meteogram-canvas");
+  var meteoTitel = document.getElementById("meteogram-titel");
+  document.getElementById("meteogram-sluit").addEventListener("click", function() {
+    meteoOverlay.style.display = "none";
+  });
+  meteoOverlay.addEventListener("click", function(e) {
+    if (e.target === meteoOverlay) meteoOverlay.style.display = "none";
+  });
+
+  function toonMeteogram(gx, gy) {
+    var gi = gy * meta.grid.n_lon + gx;
+    var lat = meta.grid.lat_min + gy * (meta.grid.lat_max - meta.grid.lat_min) / (meta.grid.n_lat - 1);
+    var lon = meta.grid.lon_min + gx * (meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1);
+
+    meteoTitel.textContent = "Meteogram " + dichtstbijzijnde(lat, lon);
+    meteoOverlay.style.display = "flex";
+
+    var nSteps = meta.uren;
+    var cw2 = 860, ch2 = 500;
+    meteoCanvas.width = cw2;
+    meteoCanvas.height = ch2;
+    var ctx2 = meteoCanvas.getContext("2d");
+    ctx2.fillStyle = "white";
+    ctx2.fillRect(0, 0, cw2, ch2);
+
+    var ml = 50, mr = 40, mt = 10, mb = 55; // marges
+    var pw = cw2 - ml - mr, ph = ch2 - mt - mb;
+
+    // Verzamel data per parameter
+    var series = [];
+
+    function addSeries(paramKey, label, kleur, yMin, yMax, fmt, dash, transform) {
+      var pd2 = paramCache[paramKey];
+      if (!pd2) return;
+      var vals = [];
+      var nPts = pd2.nLat * pd2.nLon;
+      for (var s = 0; s < nSteps; s++) {
+        var raw;
+        if (pd2.nComp === 1) {
+          raw = pd2.data[s * nPts + gi];
+        } else {
+          var u3 = pd2.data[s * nPts * 2 + gi];
+          var v3 = pd2.data[s * nPts * 2 + nPts + gi];
+          raw = Math.sqrt(u3*u3 + v3*v3);
+        }
+        vals.push(transform ? transform(raw) : raw);
+      }
+      series.push({label:label, kleur:kleur, vals:vals, yMin:yMin, yMax:yMax, fmt:fmt, dash:dash||[]});
+    }
+
+    addSeries("temp", "Temp (\u00b0C)", "#cc3300", -5, 35, function(v){return v.toFixed(1);});
+    addSeries("rv", "RV (%)", "#0077cc", 0, 100, function(v){return Math.round(v);}, [4,2]);
+    addSeries("neerslag", "Neerslag (mm)", "#1a7a4a", 0, null, function(v){return v.toFixed(1);});
+    addSeries("wind", "Wind (Bft)", "#5d4037", 0, 12, function(v){return Math.round(v);}, [6,3], msNaarBft);
+
+    // Bepaal y-assen: links = temp, rechts = RV (of auto)
+    // Teken alles met eigen schaal
+
+    // X-as: uren
+    var xStep = pw / nSteps;
+
+    // Achtergrond dag/nacht
+    for (var s2 = 0; s2 < nSteps; s2++) {
+      var tstr2 = meta.tijden[s2] || "";
+      if (tstr2) {
+        var dt2 = new Date(tstr2);
+        var hr = dt2.getHours();
+        if (hr >= 21 || hr < 6) {
+          ctx2.fillStyle = "rgba(0,0,50,0.06)";
+          ctx2.fillRect(ml + s2 * xStep, mt, xStep, ph);
+        }
+      }
+    }
+
+    // Y-as links: Temperatuur (-5 tot 35°C)
+    var tMin = -5, tMax = 35;
+    // Zoek werkelijke temp range
+    if (paramCache["temp"]) {
+      var tpd3 = paramCache["temp"], nPts3 = tpd3.nLat * tpd3.nLon;
+      var tVals = [];
+      for (var s9 = 0; s9 < nSteps; s9++) tVals.push(tpd3.data[s9 * nPts3 + gi]);
+      tMin = Math.floor(Math.min.apply(null, tVals)) - 2;
+      tMax = Math.ceil(Math.max.apply(null, tVals)) + 2;
+    }
+    // Update temp series range
+    for (var si9 = 0; si9 < series.length; si9++) {
+      if (series[si9].label.indexOf("Temp") >= 0) { series[si9].yMin = tMin; series[si9].yMax = tMax; }
+    }
+
+    // Y-as rechts: RV (0-100%)
+    var rvMin = 0, rvMax = 100;
+
+    // Grid horizontaal + Y-as labels
+    ctx2.font = "10px Arial";
+    for (var g2 = 0; g2 <= 5; g2++) {
+      var gy2 = mt + (g2/5) * ph;
+      ctx2.strokeStyle = "#eee";
+      ctx2.lineWidth = 0.5;
+      ctx2.beginPath(); ctx2.moveTo(ml, gy2); ctx2.lineTo(ml+pw, gy2); ctx2.stroke();
+
+      // Links: temp
+      var tVal2 = tMax - (g2/5) * (tMax - tMin);
+      ctx2.fillStyle = "#cc3300";
+      ctx2.textAlign = "right";
+      ctx2.fillText(Math.round(tVal2) + "\u00b0", ml - 5, gy2 + 4);
+
+      // Rechts: RV
+      var rvVal = rvMax - (g2/5) * (rvMax - rvMin);
+      ctx2.fillStyle = "#0077cc";
+      ctx2.textAlign = "left";
+      ctx2.fillText(Math.round(rvVal) + "%", ml + pw + 5, gy2 + 4);
+    }
+
+    // As-lijnen
+    ctx2.strokeStyle = "#999";
+    ctx2.lineWidth = 1;
+    ctx2.beginPath(); ctx2.moveTo(ml, mt); ctx2.lineTo(ml, mt+ph); ctx2.stroke(); // links
+    ctx2.beginPath(); ctx2.moveTo(ml+pw, mt); ctx2.lineTo(ml+pw, mt+ph); ctx2.stroke(); // rechts
+
+    // Teken series
+    var kleuren = ["#cc3300", "#0077cc", "#1a7a4a", "#5d4037"];
+    for (var si = 0; si < series.length; si++) {
+      var sr = series[si];
+      var vmin = sr.yMin !== null ? sr.yMin : 0;
+      var vmax = sr.yMax;
+      if (vmax === null) {
+        vmax = 0;
+        for (var vi = 0; vi < sr.vals.length; vi++) vmax = Math.max(vmax, sr.vals[vi]);
+        vmax = Math.max(vmax * 1.2, 1);
+      }
+
+      ctx2.strokeStyle = sr.kleur;
+      ctx2.lineWidth = 2;
+      ctx2.setLineDash(sr.dash);
+      ctx2.beginPath();
+      for (var s3 = 0; s3 < sr.vals.length; s3++) {
+        var vx = ml + (s3 + 0.5) * xStep;
+        var vy = mt + ph - ((sr.vals[s3] - vmin) / (vmax - vmin)) * ph;
+        vy = Math.max(mt, Math.min(mt + ph, vy));
+
+        // Neerslag als staafjes
+        if (sr.label.indexOf("Neerslag") >= 0) {
+          ctx2.setLineDash([]);
+          ctx2.fillStyle = "rgba(26,122,74,0.5)";
+          var barH = ((sr.vals[s3] - vmin) / (vmax - vmin)) * ph;
+          ctx2.fillRect(vx - xStep*0.3, mt + ph - barH, xStep*0.6, barH);
+        } else {
+          if (s3 === 0) ctx2.moveTo(vx, vy);
+          else ctx2.lineTo(vx, vy);
+        }
+      }
+      if (sr.label.indexOf("Neerslag") < 0) ctx2.stroke();
+      ctx2.setLineDash([]);
+    }
+
+    // X-as labels (elke 6 uur)
+    ctx2.fillStyle = "#333";
+    ctx2.font = "10px Arial";
+    ctx2.textAlign = "center";
+    for (var s4 = 0; s4 < nSteps; s4 += 6) {
+      var vx2 = ml + (s4 + 0.5) * xStep;
+      var tstr3 = meta.tijden[s4] || "";
+      if (tstr3) {
+        var dt3 = new Date(tstr3);
+        var dag = ["Zo","Ma","Di","Wo","Do","Vr","Za"][dt3.getDay()];
+        var uur2 = String(dt3.getHours()).padStart(2,"0") + ":00";
+        ctx2.fillText(uur2, vx2, ch2 - mb + 15);
+        if (dt3.getHours() === 0 || s4 === 0) {
+          ctx2.font = "bold 10px Arial";
+          ctx2.fillText(dag + " " + dt3.getDate(), vx2, ch2 - mb + 28);
+          ctx2.font = "10px Arial";
+        }
+      }
+      // Verticale lijn
+      ctx2.strokeStyle = "#ddd";
+      ctx2.lineWidth = 0.5;
+      ctx2.beginPath(); ctx2.moveTo(vx2, mt); ctx2.lineTo(vx2, mt+ph); ctx2.stroke();
+    }
+
+    // Legenda onderaan
+    ctx2.font = "bold 11px Arial";
+    var legX = ml;
+    for (var si2 = 0; si2 < series.length; si2++) {
+      ctx2.fillStyle = series[si2].kleur;
+      ctx2.fillRect(legX, ch2 - 18, 12, 12);
+      ctx2.fillStyle = "#333";
+      ctx2.textAlign = "left";
+      ctx2.fillText(series[si2].label, legX + 16, ch2 - 8);
+      legX += ctx2.measureText(series[si2].label).width + 30;
+    }
+
+    // Huidige tijdstap markeren
+    var curStep = parseInt(slider.value) - 1;
+    if (curStep >= 0 && curStep < nSteps) {
+      var cx = ml + (curStep + 0.5) * xStep;
+      ctx2.strokeStyle = "rgba(255,0,0,0.5)";
+      ctx2.lineWidth = 2;
+      ctx2.setLineDash([4,2]);
+      ctx2.beginPath(); ctx2.moveTo(cx, mt); ctx2.lineTo(cx, mt+ph); ctx2.stroke();
+      ctx2.setLineDash([]);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1018,6 +1592,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     meta.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
     meta.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
     meta.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
+    meta.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
     aantalUren = meta.uren;
     slider.max = aantalUren;
     // Run-tijd in Nederlands + LT
