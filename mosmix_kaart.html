@@ -107,8 +107,29 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     <span style="font-size:10px;font-weight:700;color:#555;padding:2px 4px;border-left:1px solid #ccc">WBGT:</span>
     <button class="btn-param wbgt" data-param="WBGT_O">🌡 Ochtend</button>
     <button class="btn-param wbgt" data-param="WBGT_M">☀ Middag</button>
+    <button onclick="toggleWbgtZoek()" style="padding:4px 10px;border-radius:12px;border:1px solid #e65100;background:white;color:#e65100;font-size:11px;font-weight:700;cursor:pointer;margin-left:4px">🔍 WBGT zoeken</button>
   </div>
 </div>
+
+<!-- WBGT Zoekpaneel -->
+<div id="wbgt-zoek" style="display:none;background:#fff8f0;border-bottom:2px solid #e65100;padding:12px 16px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <label style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase">Plaats zoeken (ECMWF)</label>
+      <div style="display:flex;gap:4px;position:relative;">
+        <input type="text" id="wbgt-zoek-input" placeholder="Bijv. Rotterdam, Nijmegen…" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;width:220px;" onkeydown="if(event.key==='Enter')wbgtZoekPlaats()">
+        <button onclick="wbgtZoekPlaats()" style="padding:6px 12px;border-radius:6px;background:#e65100;border:none;color:white;font-size:12px;font-weight:700;cursor:pointer">🔍</button>
+        <div id="wbgt-zoek-resultaten" style="display:none;position:absolute;top:100%;left:0;z-index:99;background:white;border:1px solid #ddd;border-radius:6px;min-width:260px;max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
+      </div>
+    </div>
+    <div id="wbgt-zoek-status" style="font-size:11px;color:#888;"></div>
+  </div>
+  <div id="wbgt-resultaat" style="margin-top:12px;display:none;">
+    <div id="wbgt-titel" style="font-size:14px;font-weight:700;color:#e65100;margin-bottom:8px;"></div>
+    <div id="wbgt-tabel" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
 <div class="toolbar" style="border-top:none;">
   <span class="toolbar-label">Dag:</span>
   <div style="display:flex;gap:4px;flex-wrap:wrap;" id="dag-btns"></div>
@@ -766,6 +787,124 @@ function startLaad() {
 }
 if (imgEl.complete) startLaad();
 else imgEl.onload = startLaad;
+
+// ── WBGT Zoekfunctie (ECMWF via Open-Meteo) ──
+function toggleWbgtZoek() {
+  const el = document.getElementById('wbgt-zoek');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function wbgtZoekPlaats() {
+  const q = document.getElementById('wbgt-zoek-input').value.trim();
+  if (q.length < 2) return;
+  const res = document.getElementById('wbgt-zoek-resultaten');
+  res.innerHTML = '<div style="padding:8px;color:#888;font-size:12px">Zoeken…</div>';
+  res.style.display = '';
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&accept-language=nl`);
+    const data = await r.json();
+    if (!data.length) { res.innerHTML = '<div style="padding:8px;color:#888;font-size:12px">Niets gevonden</div>'; return; }
+    res.innerHTML = '';
+    data.forEach(d => {
+      const naam = d.display_name.split(',')[0].trim();
+      const extra = d.display_name.split(',').slice(1,3).join(',').trim();
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee';
+      div.innerHTML = `<strong>${naam}</strong> <span style="color:#888;font-size:11px">${extra}</span>`;
+      div.onmouseover = () => div.style.background = '#f5f5f5';
+      div.onmouseout = () => div.style.background = '';
+      div.onclick = () => { res.style.display = 'none'; wbgtBereken(d.lat, d.lon, naam); };
+      res.appendChild(div);
+    });
+  } catch(e) { res.innerHTML = '<div style="padding:8px;color:#c00;font-size:12px">Zoekfout</div>'; }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#wbgt-zoek')) document.getElementById('wbgt-zoek-resultaten').style.display = 'none';
+});
+
+async function wbgtBereken(lat, lon, naam) {
+  document.getElementById('wbgt-zoek-status').textContent = 'Laden…';
+  document.getElementById('wbgt-resultaat').style.display = 'none';
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,dewpoint_2m,windspeed_10m,relative_humidity_2m,direct_radiation&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=10`);
+    const d = await r.json();
+    const times = d.hourly.time;
+    const ta = d.hourly.temperature_2m;
+    const td = d.hourly.dewpoint_2m;
+    const ff = d.hourly.windspeed_10m;
+    const rh = d.hourly.relative_humidity_2m;
+    const rad = d.hourly.direct_radiation;
+
+    // WBGT per uur berekenen
+    const wbgt = times.map((t, i) => {
+      if (ta[i] == null || td[i] == null) return null;
+      const T = ta[i], Td = td[i], W = (ff[i] || 1) / 3.6, R = rad[i] || 0;
+      // Nat-bol (Stull 2011)
+      const RH = rh[i] || 50;
+      const tw = T * Math.atan(0.151977 * Math.pow(RH + 8.313659, 0.5)) + Math.atan(T + RH) - Math.atan(RH - 1.676331) + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH) - 4.686035;
+      // Globe temp
+      const tg = T + 7.0 * (R / 1000.0) - 1.5 * Math.pow(Math.max(0.5, W), 0.6);
+      return Math.round((0.7 * tw + 0.2 * tg + 0.1 * T) * 10) / 10;
+    });
+
+    // Per dag aggregeren
+    const dagen = {};
+    times.forEach((t, i) => {
+      const dag = t.slice(0, 10);
+      const uur = parseInt(t.slice(11, 13));
+      if (!dagen[dag]) dagen[dag] = {ochtend: [], middag: [], uren: {}};
+      if (wbgt[i] != null) {
+        if (uur >= 6 && uur < 12) dagen[dag].ochtend.push(wbgt[i]);
+        if (uur >= 12 && uur < 18) dagen[dag].middag.push(wbgt[i]);
+        if (uur >= 8 && uur <= 20) dagen[dag].uren[uur] = wbgt[i];
+      }
+    });
+
+    // Kleur per WBGT waarde
+    function wbgtKleur(v) {
+      if (v == null) return '#ccc';
+      if (v < 10) return '#2171b5';
+      if (v < 18) return '#66bb6a';
+      if (v < 23) return '#ffeb3b';
+      if (v < 28) return '#ff9800';
+      return '#f44336';
+    }
+    function wbgtTekst(v) { return v != null ? v.toFixed(1) + '°' : '–'; }
+
+    const NLD = ['Zo','Ma','Di','Wo','Do','Vr','Za'];
+    const NLM = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+    let html = '<table style="border-collapse:collapse;font-size:12px;width:100%">';
+    html += '<tr style="background:#f5f0ea"><th style="padding:6px 8px;text-align:left">Dag</th><th>Ochtend<br><small>06–12u</small></th><th>Middag<br><small>12–18u</small></th>';
+    for (let h = 10; h <= 18; h += 2) html += `<th>${h}:00</th>`;
+    html += '</tr>';
+
+    Object.entries(dagen).forEach(([dag, v]) => {
+      const dt = new Date(dag + 'T12:00:00');
+      const dagNaam = NLD[dt.getDay()] + ' ' + dt.getDate() + ' ' + NLM[dt.getMonth()];
+      const oMax = v.ochtend.length ? Math.max(...v.ochtend) : null;
+      const mMax = v.middag.length ? Math.max(...v.middag) : null;
+      html += `<tr style="border-bottom:1px solid #eee">`;
+      html += `<td style="padding:5px 8px;font-weight:600">${dagNaam}</td>`;
+      html += `<td style="text-align:center;padding:4px;background:${wbgtKleur(oMax)};color:${oMax!=null&&oMax>=18?'#333':'white'};font-weight:700;border-radius:3px">${wbgtTekst(oMax)}</td>`;
+      html += `<td style="text-align:center;padding:4px;background:${wbgtKleur(mMax)};color:${mMax!=null&&mMax>=18?'#333':'white'};font-weight:700;border-radius:3px">${wbgtTekst(mMax)}</td>`;
+      for (let h = 10; h <= 18; h += 2) {
+        const w = v.uren[h];
+        html += `<td style="text-align:center;padding:4px;background:${wbgtKleur(w)};color:${w!=null&&w>=18?'#333':'white'};font-size:11px;border-radius:2px">${wbgtTekst(w)}</td>`;
+      }
+      html += '</tr>';
+    });
+    html += '</table>';
+
+    document.getElementById('wbgt-titel').textContent = `🌡 WBGT ${naam} — ECMWF 10 dagen`;
+    document.getElementById('wbgt-tabel').innerHTML = html;
+    document.getElementById('wbgt-resultaat').style.display = '';
+    document.getElementById('wbgt-zoek-status').textContent = '';
+  } catch(e) {
+    document.getElementById('wbgt-zoek-status').textContent = 'Fout: ' + e.message;
+  }
+}
 </script>
 </body>
 </html>
