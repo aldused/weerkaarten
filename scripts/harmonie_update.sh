@@ -217,7 +217,6 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         'cape':{'file':'harmonie_data_cape.bin','components':1,'label':'CAPE (J/kg)'},
         'druk':{'file':'harmonie_data_druk.bin','components':1,'label':'Luchtdruk (hPa)'},
         'dauwpunt':{'file':'harmonie_data_dauwpunt.bin','components':1,'label':'Dauwpuntstemperatuur 2m (°C)'},
-        'profiel':{'file':'harmonie_data_profiel.bin','components':10,'label':'Grenslaagprofiel','levels':[2,50,100,200,300]},
       },
       'overlay':'harmonie_overlay.png'}
     with open('harmonie_canvas_meta.json','w') as f:

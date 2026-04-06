@@ -19,9 +19,9 @@ body.scroll-mode { overflow-y: auto; }
 .btn:hover { background: #dce9f7; }
 .btn.actief { background: #003366; color: white; border-color: #003366; }
 
-.slider-wrap { background: white; padding: 8px 16px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #dde6f0; }
-.slider-wrap input[type=range] { flex: 1; height: 5px; -webkit-appearance: none; background: #dde6f0; border-radius: 3px; outline: none; cursor: pointer; }
-.slider-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #003366; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.slider-wrap { background: white; padding: 4px 16px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid #dde6f0; }
+.slider-wrap input[type=range] { flex: 1; height: 3px; -webkit-appearance: none; background: #dde6f0; border-radius: 2px; outline: none; cursor: pointer; }
+.slider-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #003366; cursor: pointer; border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .tijd-label { font-size: 13px; font-weight: 700; color: #003366; min-width: 150px; text-align: center; }
 .uur-label { font-size: 11px; color: #5a7090; font-weight: 600; min-width: 36px; text-align: center; }
 .btn-play { width: 32px; height: 32px; border-radius: 50%; border: none; background: #003366; color: white; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -116,6 +116,7 @@ body.scroll-mode { overflow-y: auto; }
   <button class="btn zoom-btn" data-zoom="4">4</button>
   <button class="btn zoom-btn" data-zoom="5">5</button>
   <span style="margin-left:8px;font-size:11px;color:#888;" id="zoom-hint">Sleep de kaart om te verschuiven</span>
+  <button class="btn" id="btn-save" style="margin-left:auto;" title="Kaart opslaan als PNG">💾 Opslaan</button>
 </div>
 <div class="kaart-grid layout-1" id="kaart-grid"></div>
 <div class="status" id="status">Laden...</div>
@@ -124,14 +125,6 @@ body.scroll-mode { overflow-y: auto; }
 <div id="tooltip" style="display:none; position:fixed; background:rgba(0,32,91,0.92); color:white; padding:8px 12px; border-radius:6px; font-size:12px; pointer-events:none; z-index:100; line-height:1.6; box-shadow:0 2px 8px rgba(0,0,0,0.3); max-width:220px;">
 </div>
 
-<!-- Cross-section popup -->
-<div id="xsec-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; justify-content:center; align-items:center;">
-  <div style="background:white; border-radius:8px; padding:16px; max-width:1150px; width:98%; max-height:95vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.4); position:relative;">
-    <button id="xsec-sluit" style="position:absolute; top:8px; right:12px; background:none; border:none; font-size:22px; cursor:pointer; color:#666;">&times;</button>
-    <div id="xsec-titel" style="font-size:14px; font-weight:700; color:#003366; margin-bottom:8px;"></div>
-    <canvas id="xsec-canvas" style="width:100%; display:block;"></canvas>
-  </div>
-</div>
 
 <!-- Meteogram popup -->
 <div id="meteogram-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; justify-content:center; align-items:center;">
@@ -1208,19 +1201,7 @@ body.scroll-mode { overflow-y: auto; }
         var gy = Math.floor((1 - dataMy2) * meta.grid.n_lat);
         if (gx < 0 || gx >= meta.grid.n_lon || gy < 0 || gy >= meta.grid.n_lat) return;
 
-        if (e.shiftKey) {
-          // Cross-section modus
-          if (!xsecPunt1) {
-            xsecPunt1 = {gx:gx, gy:gy};
-            statusEl.textContent = "Cross-section: shift+klik op tweede punt...";
-          } else {
-            toonCrossSection(xsecPunt1.gx, xsecPunt1.gy, gx, gy);
-            xsecPunt1 = null;
-            statusEl.textContent = "";
-          }
-        } else {
-          toonMeteogram(gx, gy);
-        }
+        toonMeteogram(gx, gy);
       });
       wrap.appendChild(cvs);
       panel.appendChild(wrap);
@@ -1293,6 +1274,18 @@ body.scroll-mode { overflow-y: auto; }
         ensureAndRender(pi2, parseInt(slider.value) - 1);
       }
     });
+  });
+
+  // Opslaan knop
+  document.getElementById("btn-save").addEventListener("click", function() {
+    var cvs = document.getElementById("panel-cvs-0");
+    if (!cvs) return;
+    var a = document.createElement("a");
+    a.href = cvs.toDataURL("image/png");
+    var sel = document.querySelector(".kaart-panel select");
+    var pname = sel ? sel.value : "kaart";
+    a.download = actiefModel + "_" + pname + "_" + slider.value + "h.png";
+    a.click();
   });
 
   // Model selector
@@ -1369,213 +1362,6 @@ body.scroll-mode { overflow-y: auto; }
   // CROSS-SECTION (grenslaag doorsnede)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var xsecPunt1 = null;
-  var xsecOverlay = document.getElementById("xsec-overlay");
-  var xsecCanvas = document.getElementById("xsec-canvas");
-  var xsecTitel = document.getElementById("xsec-titel");
-  document.getElementById("xsec-sluit").addEventListener("click", function() { xsecOverlay.style.display = "none"; });
-  xsecOverlay.addEventListener("click", function(e) { if (e.target === xsecOverlay) xsecOverlay.style.display = "none"; });
-
-  function toonCrossSection(gx1, gy1, gx2, gy2) {
-    var ppd = paramCache["profiel"];
-    if (!ppd) {
-      // Laad profieldata eerst
-      laadParam("profiel").then(function() { toonCrossSection(gx1, gy1, gx2, gy2); });
-      statusEl.textContent = "Profieldata laden...";
-      return;
-    }
-
-    var lat1 = meta.grid.lat_min + gy1 * (meta.grid.lat_max - meta.grid.lat_min) / (meta.grid.n_lat - 1);
-    var lon1 = meta.grid.lon_min + gx1 * (meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1);
-    var lat2 = meta.grid.lat_min + gy2 * (meta.grid.lat_max - meta.grid.lat_min) / (meta.grid.n_lat - 1);
-    var lon2 = meta.grid.lon_min + gx2 * (meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1);
-
-    xsecTitel.textContent = "Cross-section: " + dichtstbijzijnde(lat1, lon1) + " \u2192 " + dichtstbijzijnde(lat2, lon2);
-    xsecOverlay.style.display = "flex";
-
-    var LEVELS = [2, 50, 100, 200, 300];
-    var nLevels = 5;
-    var nLat = ppd.nLat, nLon = ppd.nLon;
-    var stepIdx = parseInt(slider.value) - 1;
-    var stepSize = nLat * nLon * 10;
-    var offset = stepIdx * stepSize;
-
-    // Interpoleer punten langs de lijn
-    var nPunten = 80;
-    var temps = []; // [punt][level]
-    var winds = [];
-
-    for (var p = 0; p < nPunten; p++) {
-      var frac = p / (nPunten - 1);
-      var px = gx1 + frac * (gx2 - gx1);
-      var py = gy1 + frac * (gy2 - gy1);
-      // Bilineaire interpolatie
-      var ix = Math.floor(px), iy = Math.floor(py);
-      var fx = px - ix, fy = py - iy;
-      ix = Math.max(0, Math.min(ix, nLon - 2));
-      iy = Math.max(0, Math.min(iy, nLat - 2));
-
-      var tRow = [], wRow = [];
-      for (var lv = 0; lv < nLevels; lv++) {
-        // Temp: component 0-4
-        var base = offset + lv * nLat * nLon;
-        var v00 = ppd.data[base + iy * nLon + ix];
-        var v10 = ppd.data[base + iy * nLon + ix + 1];
-        var v01 = ppd.data[base + (iy+1) * nLon + ix];
-        var v11 = ppd.data[base + (iy+1) * nLon + ix + 1];
-        var tv = v00*(1-fx)*(1-fy) + v10*fx*(1-fy) + v01*(1-fx)*fy + v11*fx*fy;
-        tRow.push(tv);
-
-        // Wind: component 5-9
-        var wbase = offset + (5 + lv) * nLat * nLon;
-        var w00 = ppd.data[wbase + iy * nLon + ix];
-        var w10 = ppd.data[wbase + iy * nLon + ix + 1];
-        var w01 = ppd.data[wbase + (iy+1) * nLon + ix];
-        var w11 = ppd.data[wbase + (iy+1) * nLon + ix + 1];
-        wRow.push(w00*(1-fx)*(1-fy) + w10*fx*(1-fy) + w01*(1-fx)*fy + w11*fx*fy);
-      }
-      temps.push(tRow);
-      winds.push(wRow);
-    }
-
-    // Teken cross-section
-    var cw3 = 1100, ch3 = 550;
-    xsecCanvas.width = cw3;
-    xsecCanvas.height = ch3;
-    var ctx3 = xsecCanvas.getContext("2d");
-    ctx3.fillStyle = "white";
-    ctx3.fillRect(0, 0, cw3, ch3);
-
-    var ml3 = 50, mr3 = 50, mt3 = 10, mb3 = 50;
-    var pw3 = cw3 - ml3 - mr3, ph3 = ch3 - mt3 - mb3;
-
-    // Subpixel rendering: maak een fijner grid (verticaal interpoleren)
-    var cellW = pw3 / nPunten;
-    var nVertPix = 100; // verticale pixels
-    var levelHeights = LEVELS; // [2, 50, 100, 200, 300]
-
-    // Offscreen canvas voor vloeiende vulling
-    var offX = document.createElement("canvas");
-    offX.width = nPunten; offX.height = nVertPix;
-    var offXctx = offX.getContext("2d");
-    var xImg = offXctx.createImageData(nPunten, nVertPix);
-
-    for (var px = 0; px < nPunten; px++) {
-      for (var py = 0; py < nVertPix; py++) {
-        // Hoogte in meters voor deze pixel
-        var hgt = (py / (nVertPix - 1)) * 300;
-        // Interpoleer temp tussen niveaus
-        var tVal3 = temps[px][0]; // default = laagste
-        for (var lv2 = 0; lv2 < nLevels - 1; lv2++) {
-          if (hgt >= levelHeights[lv2] && hgt <= levelHeights[lv2+1]) {
-            var fr2 = (hgt - levelHeights[lv2]) / (levelHeights[lv2+1] - levelHeights[lv2]);
-            tVal3 = temps[px][lv2] + fr2 * (temps[px][lv2+1] - temps[px][lv2]);
-            break;
-          }
-        }
-        if (hgt > levelHeights[nLevels-1]) tVal3 = temps[px][nLevels-1];
-
-        var tc2 = interpColor(tVal3, TEMP_REF);
-        var pi3 = ((nVertPix - 1 - py) * nPunten + px) * 4;
-        xImg.data[pi3] = tc2[0]; xImg.data[pi3+1] = tc2[1]; xImg.data[pi3+2] = tc2[2]; xImg.data[pi3+3] = 255;
-      }
-    }
-    offXctx.putImageData(xImg, 0, 0);
-
-    // Upscale naar plot area met smoothing
-    ctx3.imageSmoothingEnabled = true;
-    ctx3.imageSmoothingQuality = "high";
-    ctx3.drawImage(offX, ml3, mt3, pw3, ph3);
-
-    // Temp waarden als tekst op het grid (i.p.v. isothermen)
-    var tMin3 = 99, tMax3 = -99;
-    for (var pp6 = 0; pp6 < nPunten; pp6++) {
-      for (var ll6 = 0; ll6 < nLevels; ll6++) {
-        tMin3 = Math.min(tMin3, temps[pp6][ll6]);
-        tMax3 = Math.max(tMax3, temps[pp6][ll6]);
-      }
-    }
-    ctx3.textAlign = "center";
-    for (var px2 = 0; px2 < nPunten; px2 += 10) {
-      for (var lv3 = 0; lv3 < nLevels; lv3++) {
-        var xp = ml3 + (px2 + 0.5) / nPunten * pw3;
-        var yp = mt3 + ph3 - (levelHeights[lv3] / 300) * ph3;
-        var tv2 = temps[px2][lv3];
-        var tc3 = interpColor(tv2, TEMP_REF);
-        var tl2 = lum(tc3[0], tc3[1], tc3[2]);
-        // Temperatuurwaarde
-        ctx3.fillStyle = "rgba(255,255,255,0.7)";
-        ctx3.fillRect(xp - 20, yp - 10, 40, 20);
-        ctx3.font = "bold 14px Arial";
-        ctx3.fillStyle = tl2 > 0.4 ? "#111" : "#fff";
-        ctx3.fillText(tv2.toFixed(1) + "\u00b0", xp, yp + 5);
-      }
-    }
-
-    // Wind in Bft per niveau (elke 10 punten, onder de temp)
-    for (var px3 = 0; px3 < nPunten; px3 += 10) {
-      var xw = ml3 + (px3 + 0.5) / nPunten * pw3;
-      for (var lv4 = 0; lv4 < nLevels; lv4++) {
-        var yw = mt3 + ph3 - (levelHeights[lv4] / 300) * ph3;
-        var bft = msNaarBft(winds[px3][lv4]);
-        ctx3.fillStyle = "rgba(255,255,255,0.7)";
-        ctx3.fillRect(xw - 16, yw + 10, 32, 16);
-        ctx3.fillStyle = "#003366";
-        ctx3.font = "bold 12px Arial";
-        ctx3.textAlign = "center";
-        ctx3.fillText(bft + " Bft", xw, yw + 23);
-      }
-    }
-
-    // Y-as: hoogte labels
-    ctx3.font = "bold 11px Arial";
-    ctx3.fillStyle = "#222";
-    ctx3.textAlign = "right";
-    for (var ll7 = 0; ll7 < nLevels; ll7++) {
-      var yh = mt3 + ph3 - (levelHeights[ll7] / 300) * ph3;
-      ctx3.fillText(LEVELS[ll7] + "m", ml3 - 5, yh + 4);
-      ctx3.strokeStyle = "rgba(0,0,0,0.15)";
-      ctx3.lineWidth = 0.5;
-      ctx3.setLineDash([3,3]);
-      ctx3.beginPath(); ctx3.moveTo(ml3, yh); ctx3.lineTo(ml3 + pw3, yh); ctx3.stroke();
-      ctx3.setLineDash([]);
-    }
-
-    // Kader
-    ctx3.strokeStyle = "#333"; ctx3.lineWidth = 1;
-    ctx3.strokeRect(ml3, mt3, pw3, ph3);
-
-    // X-as: plaatsnamen
-    ctx3.font = "10px Arial";
-    ctx3.fillStyle = "#333";
-    ctx3.textAlign = "center";
-    for (var px5 = 0; px5 < nPunten; px5 += 16) {
-      var fr5 = px5 / (nPunten - 1);
-      var plat = lat1 + fr5 * (lat2 - lat1);
-      var plon = lon1 + fr5 * (lon2 - lon1);
-      var x5 = ml3 + (px5 + 0.5) / nPunten * pw3;
-      ctx3.fillText(dichtstbijzijnde(plat, plon).split("(")[0].trim(), x5, ch3 - mb3 + 15);
-    }
-
-    // Ondertitel
-    ctx3.textAlign = "center";
-    ctx3.font = "10px Arial";
-    ctx3.fillStyle = "#666";
-    ctx3.fillText("Grenslaag temperatuur (\u00b0C) + wind (Bft) \u2014 2m tot 300m", cw3/2, ch3 - 8);
-
-    // Legenda rechts: temp kleurenbalk
-    var legX3 = cw3 - mr3 + 8, legW3 = 12, legH3 = ph3;
-    for (var py3 = 0; py3 < legH3; py3++) {
-      var tl = tMin3 + (1 - py3/legH3) * (tMax3 - tMin3);
-      var tlc = interpColor(tl, TEMP_REF);
-      ctx3.fillStyle = "rgb(" + tlc[0] + "," + tlc[1] + "," + tlc[2] + ")";
-      ctx3.fillRect(legX3, mt3 + py3, legW3, 2);
-    }
-    ctx3.strokeRect(legX3, mt3, legW3, legH3);
-    ctx3.font = "8px Arial"; ctx3.fillStyle = "#333"; ctx3.textAlign = "left";
-    ctx3.fillText(Math.round(tMax3) + "\u00b0", legX3 + legW3 + 3, mt3 + 8);
-    ctx3.fillText(Math.round(tMin3) + "\u00b0", legX3 + legW3 + 3, mt3 + legH3);
-  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // METEOGRAM (tijdreeks popup)
