@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 os.chdir("/Users/aldus/KNMI_Project/weerkaarten 2")
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
-EXTENT = [0.5, 12.5, 47.5, 56.5]  # NL+BE+DE-west, 5:6 portret
+EXTENT = [0.5, 11.3, 49.0, 56.0]  # Zelfde bereik als Harmonie
 
 DWD_BASE = "https://opendata.dwd.de/weather/nwp/icon-d2/grib"
 R2_ENDPOINT = "https://05da71c7c88b8ce49fbb2c2d0a570416.r2.cloudflarestorage.com"
