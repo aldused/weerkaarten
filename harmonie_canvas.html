@@ -56,11 +56,18 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 <body>
 
 <div class="header">
-  <div>
-    <div class="header-titel">Ed Aldus WM — KNMI Harmonie 43</div>
-    <div class="header-sub">HARMONIE-AROME Cy43 (0.029°) · <span id="hdr-run">laden...</span></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="header-titel">Ed Aldus WM</div>
+    <select id="model-select" style="padding:4px 10px;border-radius:6px;border:1px solid #4a7ab5;background:#003366;color:white;font-size:13px;font-weight:700;cursor:pointer;">
+      <option value="harmonie">HARMONIE Cy43 (KNMI)</option>
+      <option value="icond2">ICON-D2 (DWD)</option>
+      <option value="ecmwf">ECMWF IFS (0.25°, 10 dagen)</option>
+    </select>
   </div>
-  <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+  <div>
+    <div class="header-sub"><span id="hdr-run">laden...</span></div>
+    <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+  </div>
 </div>
 
 <div class="toolbar">
@@ -132,6 +139,14 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   // ═══════════════════════════════════════════════════════════════════════════
   var DATA_URL = "https://harmonie-data.weerlab.nl/";
   // Voor lokaal testen: var DATA_URL = "";
+
+  // Model configuratie: meta-bestand per model
+  var MODELS = {
+    harmonie: { meta: "harmonie_canvas_meta.json", label: "HARMONIE Cy43 (KNMI, 2km)" },
+    icond2:   { meta: "icond2_canvas_meta.json",   label: "ICON-D2 (DWD, 2.2km)" },
+    ecmwf:    { meta: "ecmwf_canvas_meta.json",    label: "ECMWF IFS (25km)" },
+  };
+  var actiefModel = "harmonie";
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PLAATSEN (voor tooltip)
@@ -214,12 +229,13 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   var NEERSLAG_LEVELS_MM = [0.1, 0.2, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
 
   // Temperatuur: referentiepunten, interpolatie
+  // Temperatuur kleurschaal — feller groen (noodweer.be stijl)
   var TEMP_REF = [
     [-30,[204,0,255]],[-25,[136,0,204]],[-20,[85,0,170]],[-15,[34,0,170]],
-    [-10,[0,68,204]],[-5,[0,136,238]],[-2,[0,187,221]],[0,[0,204,170]],
-    [2,[0,204,102]],[4,[0,187,51]],[6,[34,170,34]],[8,[68,170,0]],
-    [10,[102,170,0]],[12,[136,170,0]],[14,[170,170,0]],[16,[204,187,0]],
-    [18,[221,204,0]],[20,[238,221,0]],[22,[255,221,0]],[24,[255,187,0]],
+    [-10,[0,68,204]],[-5,[0,136,238]],[-2,[0,200,230]],[0,[0,220,180]],
+    [2,[0,230,100]],[4,[0,210,50]],[6,[50,200,30]],[8,[80,190,0]],
+    [10,[120,190,0]],[12,[160,190,0]],[14,[190,190,0]],[16,[220,200,0]],
+    [18,[240,220,0]],[20,[255,240,0]],[22,[255,220,0]],[24,[255,187,0]],
     [26,[255,153,0]],[28,[255,102,0]],[30,[255,51,0]],[32,[238,0,0]],
     [34,[204,0,0]],[36,[170,0,0]],[38,[136,0,68]],[40,[170,0,102]],
     [45,[204,0,170]],[50,[238,0,204]]
@@ -354,7 +370,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   var paramCache = {}; // { paramKey: { header, data: Float32Array } }
 
   function laadMeta() {
-    return fetch(DATA_URL + "harmonie_canvas_meta.json?t=" + Date.now())
+    var modelInfo = MODELS[actiefModel];
+    return fetch(DATA_URL + modelInfo.meta + "?t=" + Date.now())
       .then(function(r) { return r.json(); })
       .then(function(d) { meta = d; return d; });
   }
@@ -447,7 +464,12 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     var offset = stepIdx * stepSize;
 
     // Canvas grootte: 4x grid voor scherpte
-    var cw = nLon * 4, ch = nLat * 4;
+    // Vaste aspect ratio gebaseerd op kaart-extent, niet op grid resolutie
+    var extentW = meta.grid.lon_max - meta.grid.lon_min;
+    var extentH = meta.grid.lat_max - meta.grid.lat_min;
+    var aspectRatio = extentW / extentH;
+    var ch = 1024;
+    var cw = Math.round(ch * aspectRatio);
     canvas.width = cw;
     canvas.height = ch;
     var ctx = canvas.getContext("2d");
@@ -584,16 +606,20 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       ctx.drawImage(overlayImg, 0, 0, cw, ch);
     }
 
-    // ── Wind+Druk of Wind kaart: windpijltjes (dikker, met witte rand) ─────
+    // ── Wind+Druk of Wind kaart: windpijltjes ─────────────────────────────
     if ((paramKey === "wind_druk" || paramKey === "wind") && paramCache["wind"]) {
       var wpd2 = paramCache["wind"];
       var wOff2 = stepIdx * wpd2.nLat * wpd2.nLon * 2;
       var barbStep2 = 8;
 
+      // Bij wind kaart (met cijfers): verschuif pijl omhoog zodat die niet op het cijfer staat
+      var heeftCijfers = (paramKey === "wind");
+      var offsetY = heeftCijfers ? -8 : 0; // pixels omhoog verschuiven
+
       // Twee passes: eerst witte outline, dan zwarte pijl
       var passes = [
-        {stroke:"white", fill:"white", lw:4.5, headW:7},
-        {stroke:"#111",  fill:"#111",  lw:2.2, headW:5},
+        {stroke:"white", fill:"white", lw:5, headW:12},
+        {stroke:"#111",  fill:"#111",  lw:2.5, headW:9},
       ];
       for (var pass = 0; pass < 2; pass++) {
         var p = passes[pass];
@@ -609,19 +635,22 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
             if (bspd < 0.5) continue;
             var bdir = Math.atan2(bu, bv); // pijl wijst mee met de wind
             var bpx = ((bx + 0.5) / nLon) * cw;
-            var bpy = ((nLat - 1 - by) / nLat) * ch;
-            var alen = Math.min(20, 8 + bspd * 1.2);
+            var bpy = ((nLat - 1 - by) / nLat) * ch + offsetY;
+            var alen = Math.min(24, 10 + bspd * 1.5);
+            // Start punt = basis van de pijl (halverwege verschuiving)
+            var startX = bpx - Math.sin(bdir) * alen * 0.3;
+            var startY = bpy + Math.cos(bdir) * alen * 0.3;
+            var tipX = bpx + Math.sin(bdir) * alen * 0.7;
+            var tipY = bpy - Math.cos(bdir) * alen * 0.7;
             ctx.beginPath();
-            ctx.moveTo(bpx, bpy);
-            var tipX = bpx + Math.sin(bdir) * alen;
-            var tipY = bpy - Math.cos(bdir) * alen;
+            ctx.moveTo(startX, startY);
             ctx.lineTo(tipX, tipY);
             ctx.stroke();
             // Pijlpunt
             ctx.beginPath();
             ctx.moveTo(tipX, tipY);
-            ctx.lineTo(tipX - Math.sin(bdir+0.45)*p.headW, tipY + Math.cos(bdir+0.45)*p.headW);
-            ctx.lineTo(tipX - Math.sin(bdir-0.45)*p.headW, tipY + Math.cos(bdir-0.45)*p.headW);
+            ctx.lineTo(tipX - Math.sin(bdir+0.4)*p.headW, tipY + Math.cos(bdir+0.4)*p.headW);
+            ctx.lineTo(tipX - Math.sin(bdir-0.4)*p.headW, tipY + Math.cos(bdir-0.4)*p.headW);
             ctx.closePath();
             ctx.fill();
           }
@@ -770,7 +799,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     ctx.fillStyle = "#111";
     ctx.font = "bold " + Math.max(14, Math.round(cw/45)) + "px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("KNMI Harmonie V43", 10, 20);
+    ctx.fillText(meta.model || "KNMI Harmonie V43", 10, 20);
     ctx.textAlign = "center";
     var paramLabel = meta.parameters[paramKey] ? meta.parameters[paramKey].label : paramKey;
     ctx.fillText(paramLabel, cw/2, 20);
@@ -1135,6 +1164,49 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   document.getElementById("btn-volgende").addEventListener("click", function(){ stopSpelen(); var s=parseInt(slider.value); if(s>=aantalUren)s=0; updateAlle(s); });
 
   document.querySelectorAll(".layout-btn").forEach(function(b){ b.addEventListener("click",function(){ setLayout(parseInt(this.dataset.layout)); }); });
+
+  // Model selector
+  document.getElementById("model-select").addEventListener("change", function() {
+    actiefModel = this.value;
+    paramCache = {};  // Cache legen — nieuw model = nieuwe data
+    statusEl.textContent = "Model wisselen...";
+    laadMeta().then(function() {
+      // Afgeleide parameters toevoegen
+      meta.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
+      meta.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
+      meta.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
+      aantalUren = meta.uren;
+      slider.max = aantalUren;
+      slider.value = 1;
+      document.getElementById("hdr-run").textContent = "run: " + meta.run;
+      document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
+      // Dag-knoppen opnieuw bouwen
+      var dagDiv = document.getElementById("dag-knoppen");
+      dagDiv.innerHTML = '<span class="toolbar-label">Dag:</span>';
+      var nlDag2 = ["zo","ma","di","wo","do","vr","za"];
+      var gezien2 = {};
+      for (var di2 = 0; di2 < meta.tijden.length; di2++) {
+        var ddt2 = new Date(meta.tijden[di2]);
+        var dagKey2 = ddt2.getFullYear() + "-" + ddt2.getMonth() + "-" + ddt2.getDate();
+        if (!gezien2[dagKey2]) {
+          gezien2[dagKey2] = di2;
+          var dbtn2 = document.createElement("button");
+          dbtn2.className = "btn";
+          dbtn2.textContent = nlDag2[ddt2.getDay()] + " " + ddt2.getDate();
+          dbtn2.dataset.step = di2;
+          dbtn2.style.fontSize = "12px";
+          dbtn2.addEventListener("click", function() { updateAlle(parseInt(this.dataset.step)); });
+          dagDiv.appendChild(dbtn2);
+        }
+      }
+      statusEl.textContent = "";
+      bouwPanels();
+      // Laad eerste parameter en render
+      return laadParam(panelParams[0]);
+    }).then(function() {
+      updateAlle(0);
+    });
+  });
 
   // Neerslagsom uren selector
   var nsomSelect = document.getElementById("nsom-select");
