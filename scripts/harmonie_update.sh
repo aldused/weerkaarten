@@ -206,7 +206,29 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     with open('harmonie_canvas_meta.json','w') as f:
         json.dump(meta,f,indent=2,ensure_ascii=False)
 
-    print(f'Klaar! Run: {run_str}, {n_steps} uur, grid {n_lat}x{n_lon}')
+    print(f'Data export klaar! Run: {run_str}, {n_steps} uur, grid {n_lat}x{n_lon}')
+
+    # 7. Upload naar Cloudflare R2
+    print('7. Uploaden naar Cloudflare R2...')
+    import boto3
+    s3 = boto3.client('s3',
+        endpoint_url='https://05da71c7c88b8ce49fbb2c2d0a570416.r2.cloudflarestorage.com',
+        aws_access_key_id='baf991003ce3e4075d91b89f8726bc0f',
+        aws_secret_access_key='0f33229e2e03fe7bc7f9fdf7f9fa0acd5336c40718c6e25fe0b6a631ade8ac97',
+        region_name='auto')
+
+    R2_BUCKET = 'weerlab-harmonie'
+    bestanden = ['harmonie_canvas_meta.json', 'harmonie_overlay.png']
+    for f2 in sorted(os.listdir('.')):
+        if f2.startswith('harmonie_data_') and f2.endswith('.bin'):
+            bestanden.append(f2)
+
+    for f2 in bestanden:
+        ct = 'application/json' if f2.endswith('.json') else 'image/png' if f2.endswith('.png') else 'application/octet-stream'
+        s3.upload_file(f2, R2_BUCKET, f2, ExtraArgs={'ContentType': ct})
+        print(f'   {f2} ({os.path.getsize(f2)/1024/1024:.1f} MB)')
+
+    print(f'Upload klaar!')
 " 2>&1
 
 echo "$(date): Harmonie update klaar"
