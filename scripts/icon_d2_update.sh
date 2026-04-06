@@ -77,6 +77,17 @@ for line in r_files.text.split("\n"):
         run_dt = datetime.strptime(date_str, "%Y%m%d%H").replace(tzinfo=timezone.utc)
         break
 
+# Check of deze run al verwerkt is
+run_utc_str = run_dt.strftime('%Y-%m-%dT%H:%MZ')
+if os.path.exists('icond2_canvas_meta.json'):
+    with open('icond2_canvas_meta.json') as mf:
+        old_meta = json.load(mf)
+    if old_meta.get('run_utc') == run_utc_str:
+        print(f'   Run {run_utc_str} al verwerkt, skip.')
+        raise SystemExit(0)
+
+print(f'   Nieuwe run: {run_utc_str}')
+
 run_local = run_dt.astimezone(LOCAL_TZ)
 run_str = run_local.strftime("%a %d.%m.%Y %H:%M LT").lower()
 print(f"   Run: {run_dt.strftime('%Y%m%d%Hz')} = {run_str}")

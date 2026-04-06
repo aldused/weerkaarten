@@ -28,6 +28,24 @@ r.raise_for_status()
 filename = r.json()['files'][0]['filename']
 print(f'   {filename}')
 
+# Check of deze run al verwerkt is
+parts = filename.replace('.tar','').split('_')
+run_str_raw = parts[-1] if parts else ''
+try:
+    run_dt_check = datetime.strptime(run_str_raw[:10], '%Y%m%d%H').replace(tzinfo=timezone.utc)
+    run_utc_check = run_dt_check.strftime('%Y-%m-%dT%H:%MZ')
+except:
+    run_utc_check = ''
+
+if os.path.exists('harmonie_canvas_meta.json'):
+    with open('harmonie_canvas_meta.json') as mf:
+        old_meta = json.load(mf)
+    if old_meta.get('run_utc') == run_utc_check:
+        print(f'   Run {run_utc_check} al verwerkt, skip.')
+        raise SystemExit(0)
+
+print(f'   Nieuwe run: {run_utc_check}')
+
 # 2. Downloaden
 print('2. Downloaden...')
 url2 = f'https://api.dataplatform.knmi.nl/open-data/v1/datasets/harmonie_arome_cy43_p1/versions/1.0/files/{filename}/url'
