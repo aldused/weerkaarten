@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regenradar — Weerlab.nl</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; display: flex; flex-direction: column; overflow: hidden; min-height: 100vh; }
+
+.header { background: #00205b; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; border-bottom: 2px solid #2ec4e8; }
+.header-titel { color: white; font-size: 17px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; }
+
+.controls { background: #0a1929; padding: 6px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #1e3a5f; }
+.btn-play { width: 34px; height: 34px; border-radius: 50%; border: none; background: #003366; color: white; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-play:hover { background: #0055aa; }
+.btn-stap { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-stap:hover { background: #1a3a5a; }
+.slider-area { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 200px; }
+.slider-area input[type=range] { flex: 1; height: 4px; -webkit-appearance: none; background: #1e3a5f; border-radius: 2px; outline: none; cursor: pointer; }
+.slider-area input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #2ec4e8; cursor: pointer; border: 2px solid #0a1929; }
+.tijd-label { font-size: 14px; font-weight: 700; color: #2ec4e8; min-width: 140px; text-align: center; }
+
+.speed-btns { display: flex; gap: 3px; }
+.speed-btn { padding: 3px 10px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 11px; font-weight: 600; cursor: pointer; }
+.speed-btn:hover { background: #1a3a5a; }
+.speed-btn.actief { background: #003366; color: white; border-color: #2ec4e8; }
+
+.export-btns { display: flex; gap: 4px; margin-left: auto; }
+.export-btn { padding: 4px 12px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 12px; font-weight: 600; cursor: pointer; }
+.export-btn:hover { background: #1a3a5a; color: white; }
+
+.canvas-container { flex: 1; position: relative; overflow: hidden; background: #0d1b2a; display: flex; align-items: center; justify-content: center; }
+.canvas-container canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+
+/* Legenda overlay */
+.legenda { position: absolute; bottom: 12px; right: 12px; background: rgba(10,25,41,0.90); border-radius: 8px; padding: 8px 10px; border: 1px solid #1e3a5f; }
+.legenda-titel { font-size: 10px; color: #a8c4e8; margin-bottom: 4px; font-weight: 600; }
+.legenda-bar { display: flex; height: 14px; border-radius: 2px; overflow: hidden; }
+.legenda-bar div { flex: 1; min-width: 18px; }
+.legenda-labels { display: flex; font-size: 9px; color: #8aa0b8; margin-top: 2px; }
+.legenda-labels span { flex: 1; min-width: 18px; text-align: center; }
+
+/* Tijdstempel op canvas */
+.canvas-tijd { position: absolute; top: 10px; left: 12px; font-size: 18px; font-weight: 700; color: white; text-shadow: 0 2px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.5); pointer-events: none; z-index: 10; }
+
+/* Tooltip */
+#tooltip { display: none; position: fixed; background: rgba(0,32,91,0.92); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+.status { text-align: center; padding: 8px; font-size: 11px; color: #5a7090; }
+.loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #1e3a5f; border-top: 2px solid #2ec4e8; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* GIF progress overlay */
+.gif-progress { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,32,91,0.95); color: white; padding: 20px 30px; border-radius: 12px; font-size: 14px; text-align: center; z-index: 200; }
+.gif-progress .bar { width: 200px; height: 6px; background: #1e3a5f; border-radius: 3px; margin-top: 8px; }
+.gif-progress .bar-fill { height: 100%; background: #2ec4e8; border-radius: 3px; transition: width 0.1s; }
+
+@media (max-width: 600px) {
+  .header { padding: 8px 10px; }
+  .header-titel { font-size: 14px; }
+  .controls { padding: 4px 10px; gap: 4px; }
+  .tijd-label { font-size: 12px; min-width: 100px; }
+  .legenda { bottom: 6px; right: 6px; padding: 4px 6px; }
+  .export-btns { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="header-titel">Regenradar</div>
+    <div class="header-sub">KNMI composiet</div>
+  </div>
+  <div>
+    <div class="header-sub" id="hdr-update">laden...</div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn-stap" id="btn-vorige">&#9664;</button>
+  <button class="btn-play" id="btn-play">&#9654;</button>
+  <button class="btn-stap" id="btn-volgende">&#9654;</button>
+
+  <div class="slider-area">
+    <input type="range" id="slider" min="0" max="23" value="23" step="1">
+    <span class="tijd-label" id="tijd-label">--</span>
+  </div>
+
+  <div class="speed-btns">
+    <button class="speed-btn" data-ms="800">1x</button>
+    <button class="speed-btn actief" data-ms="400">2x</button>
+    <button class="speed-btn" data-ms="200">4x</button>
+    <button class="speed-btn" data-ms="100">8x</button>
+  </div>
+
+  <div class="export-btns">
+    <button class="export-btn" id="btn-png">PNG</button>
+    <button class="export-btn" id="btn-gif">GIF</button>
+  </div>
+</div>
+
+<div class="canvas-container" id="canvas-container">
+  <canvas id="radar-canvas"></canvas>
+  <div class="canvas-tijd" id="canvas-tijd"></div>
+
+  <div class="legenda" id="legenda"></div>
+
+  <div class="gif-progress" id="gif-progress" style="display:none;">
+    <div>GIF genereren...</div>
+    <div class="bar"><div class="bar-fill" id="gif-bar" style="width:0%"></div></div>
+    <div id="gif-pct" style="margin-top:4px;font-size:12px;">0%</div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+<div class="status" id="status">Laden... <span class="loading-spinner"></span></div>
+
+<script>
+(function() {
+  "use strict";
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CONFIGURATIE
+  // ═══════════════════════════════════════════════════════════════════════
+  var DATA_BASE = "https://harmonie-data.weerlab.nl/";
+  var META_URL = DATA_BASE + "radar_meta.json";
+  var BIN_URL  = DATA_BASE + "radar_data.bin";
+  var BG_URL   = DATA_BASE + "radar_kaart_bg.png";
+  var OVL_URL  = DATA_BASE + "radar_kaart_overlay.png";
+  var REFRESH_MS = 5 * 60 * 1000; // 5 minuten
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PLAATSEN (voor hover tooltip)
+  // ═══════════════════════════════════════════════════════════════════════
+  var PLAATSEN = [
+    [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
+    [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
+    [51.84,5.86,"Arnhem"],[52.51,6.09,"Zwolle"],[51.69,5.30,"Den Bosch"],
+    [51.45,3.57,"Vlissingen"],[52.63,4.75,"Alkmaar"],[53.20,5.80,"Leeuwarden"],
+    [52.22,6.90,"Enschede"],[51.56,4.47,"Breda"],[52.16,4.49,"Leiden"],
+    [51.99,4.37,"Dordrecht"],[52.39,4.65,"Haarlem"],[53.32,5.04,"Harlingen"],
+    [52.70,5.75,"Emmeloord"],[51.43,5.48,"Helmond"],[51.59,4.78,"Tilburg"],
+    [52.36,4.63,"IJmuiden"],[52.35,5.23,"Amersfoort"],[52.22,5.97,"Apeldoorn"],
+    [51.96,5.92,"Wageningen"],[52.96,5.94,"Assen"],[52.76,6.90,"Emmen"],
+    [52.93,4.79,"Den Helder"],[51.98,5.10,"De Bilt"],[52.46,5.52,"Lelystad"],
+  ];
+
+  function dichtstbijzijnde(lat, lon) {
+    var best = null, bestD = 999;
+    for (var i = 0; i < PLAATSEN.length; i++) {
+      var dlat = PLAATSEN[i][0] - lat, dlon = PLAATSEN[i][1] - lon;
+      var d = Math.sqrt(dlat * dlat + dlon * dlon * 0.5);
+      if (d < bestD) { bestD = d; best = PLAATSEN[i]; }
+    }
+    if (bestD < 0.25) return best[2];
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // dBZ KLEURENSCHAAL
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // PV → dBZ: dBZ = 0.5 * PV - 32
+  // dBZ → mm/u: R = (10^(dBZ/10) / 200)^(1/1.6)  (Marshall-Palmer)
+  function pvToDbz(pv) { return 0.5 * pv - 32; }
+  function dbzToMmh(dbz) {
+    if (dbz <= 0) return 0;
+    return Math.pow(Math.pow(10, dbz / 10) / 200, 1 / 1.6);
+  }
+  function pvToMmh(pv) { return dbzToMmh(pvToDbz(pv)); }
+
+  // Radar kleurenschaal (dBZ → RGB)
+  var DBZ_LEVELS = [ 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70];
+  var DBZ_COLORS = [
+    [180,180,180], // 5   lichtgrijs
+    [120,200,120], // 10  lichtgroen
+    [40,180,40],   // 15  groen
+    [0,140,0],     // 20  donkergroen
+    [255,255,0],   // 25  geel
+    [255,200,0],   // 30  donkergeel
+    [255,150,0],   // 35  oranje
+    [255,80,0],    // 40  donkeroranje
+    [255,0,0],     // 45  rood
+    [200,0,0],     // 50  donkerrood
+    [160,0,80],    // 55  bordeaux
+    [200,0,200],   // 60  paars
+    [255,100,255], // 65  lichtpaars
+    [255,255,255], // 70  wit (hagel)
+  ];
+
+  function dbzColor(dbz) {
+    if (dbz < DBZ_LEVELS[0]) return null;
+    for (var i = DBZ_LEVELS.length - 1; i >= 0; i--) {
+      if (dbz >= DBZ_LEVELS[i]) return DBZ_COLORS[i];
+    }
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════════════════
+  var meta = null;
+  var radarData = null;   // Uint8Array (alle frames aaneengeschakeld)
+  var nLat = 0, nLon = 0, nFrames = 0;
+  var bgImg = null, ovlImg = null;
+  var canvas, ctx;
+  var offscreen, offCtx;
+  var frameIdx = 0;
+  var playing = true;
+  var animInterval = null;
+  var animSpeed = 400;
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // DATA LADEN
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function loadImage(url) {
+    return new Promise(function(resolve, reject) {
+      var img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = function() { resolve(img); };
+      img.onerror = function() { reject(new Error("Kan " + url + " niet laden")); };
+      img.src = url + "?t=" + Date.now();
+    });
+  }
+
+  function loadData() {
+    var t = Date.now();
+    return Promise.all([
+      fetch(META_URL + "?t=" + t).then(function(r) { return r.json(); }),
+      fetch(BIN_URL + "?t=" + t).then(function(r) { return r.arrayBuffer(); }),
+      loadImage(BG_URL),
+      loadImage(OVL_URL),
+    ]).then(function(results) {
+      meta = results[0];
+      var buf = results[1];
+      bgImg = results[2];
+      ovlImg = results[3];
+
+      // Parse binair header (16 bytes)
+      var view = new DataView(buf);
+      nLat = view.getUint16(0, true);
+      nLon = view.getUint16(2, true);
+      nFrames = view.getUint16(4, true);
+      // skip rest van header
+      radarData = new Uint8Array(buf, 16);
+
+      document.getElementById("slider").max = nFrames - 1;
+      document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
+
+      // Maak offscreen canvas op data-resolutie
+      offscreen = document.createElement("canvas");
+      offscreen.width = nLon;
+      offscreen.height = nLat;
+      offCtx = offscreen.getContext("2d");
+
+      setupCanvas();
+      frameIdx = nFrames - 1; // start bij nieuwste
+      document.getElementById("slider").value = frameIdx;
+      renderFrame();
+      document.getElementById("status").style.display = "none";
+      startAnimatie();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CANVAS SETUP & RENDERING
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function setupCanvas() {
+    canvas = document.getElementById("radar-canvas");
+    ctx = canvas.getContext("2d");
+
+    // Canvas resolutie = achtergrond afbeelding
+    canvas.width = bgImg.width;
+    canvas.height = bgImg.height;
+  }
+
+  function renderFrame() {
+    if (!radarData || !bgImg) return;
+
+    // 1. Achtergrond
+    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+
+    // 2. Radar data op offscreen canvas
+    var offset = frameIdx * nLat * nLon;
+    var imgData = offCtx.createImageData(nLon, nLat);
+    var pixels = imgData.data;
+
+    for (var i = 0; i < nLat * nLon; i++) {
+      var pv = radarData[offset + i];
+      if (pv === 0 || pv === 255) continue; // geen data / buiten beeld
+      var dbz = 0.5 * pv - 32;
+      var c = dbzColor(dbz);
+      if (c) {
+        var p = i * 4;
+        pixels[p]     = c[0];
+        pixels[p + 1] = c[1];
+        pixels[p + 2] = c[2];
+        pixels[p + 3] = 180; // semi-transparant
+      }
+    }
+    offCtx.putImageData(imgData, 0, 0);
+
+    // 3. Teken radar overlay op hoofdcanvas
+    ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height);
+
+    // 4. Kaart overlay (kustlijnen, steden)
+    if (ovlImg) {
+      ctx.drawImage(ovlImg, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Update tijd labels
+    var tijdTekst = meta.tijden_tekst ? meta.tijden_tekst[frameIdx] : "";
+    document.getElementById("tijd-label").textContent = tijdTekst;
+    document.getElementById("canvas-tijd").textContent = tijdTekst;
+    document.getElementById("slider").value = frameIdx;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ANIMATIE
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function startAnimatie() {
+    stopAnimatie();
+    if (!playing) return;
+    animInterval = setInterval(function() {
+      frameIdx = (frameIdx + 1) % nFrames;
+      renderFrame();
+    }, animSpeed);
+  }
+
+  function stopAnimatie() {
+    if (animInterval) { clearInterval(animInterval); animInterval = null; }
+  }
+
+  function togglePlay() {
+    playing = !playing;
+    document.getElementById("btn-play").innerHTML = playing ? "&#10074;&#10074;" : "&#9654;";
+    if (playing) startAnimatie();
+    else stopAnimatie();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LEGENDA
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function bouwLegenda() {
+    var el = document.getElementById("legenda");
+    // mm/u waarden en bijbehorende dBZ niveaus
+    var items = [
+      {mm: 0.1, label: "0.1"},
+      {mm: 0.3, label: "0.3"},
+      {mm: 1,   label: "1"},
+      {mm: 2,   label: "2"},
+      {mm: 5,   label: "5"},
+      {mm: 10,  label: "10"},
+      {mm: 30,  label: "30"},
+      {mm: 50,  label: "50"},
+      {mm: 100, label: "100"},
+    ];
+    var html = '<div class="legenda-titel">Neerslag (mm/u)</div>';
+    html += '<div class="legenda-bar">';
+    for (var i = 0; i < items.length; i++) {
+      // Bereken dBZ voor deze mm/u waarde
+      var dbz = 10 * Math.log10(200 * Math.pow(items[i].mm, 1.6));
+      var c = dbzColor(dbz);
+      if (c) {
+        html += '<div style="background:rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')"></div>';
+      }
+    }
+    html += '</div><div class="legenda-labels">';
+    for (var j = 0; j < items.length; j++) {
+      html += '<span>' + items[j].label + '</span>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HOVER TOOLTIP
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function setupHover() {
+    var tooltip = document.getElementById("tooltip");
+
+    canvas.addEventListener("mousemove", function(e) {
+      if (!radarData || !meta) return;
+      var rect = canvas.getBoundingClientRect();
+      var scaleX = canvas.width / rect.width;
+      var scaleY = canvas.height / rect.height;
+      var px = (e.clientX - rect.left) * scaleX;
+      var py = (e.clientY - rect.top) * scaleY;
+
+      // Canvas pixel → lat/lon
+      var lonFrac = px / canvas.width;
+      var latFrac = py / canvas.height;
+      var lon = meta.grid.lon_min + lonFrac * (meta.grid.lon_max - meta.grid.lon_min);
+      var lat = meta.grid.lat_max - latFrac * (meta.grid.lat_max - meta.grid.lat_min);
+
+      // Data pixel
+      var col = Math.round(lonFrac * (nLon - 1));
+      var row = Math.round(latFrac * (nLat - 1));
+      if (col < 0 || col >= nLon || row < 0 || row >= nLat) {
+        tooltip.style.display = "none";
+        return;
+      }
+
+      var offset = frameIdx * nLat * nLon + row * nLon + col;
+      var pv = radarData[offset];
+      var mmh = pvToMmh(pv);
+      var dbz = pvToDbz(pv);
+
+      var plaats = dichtstbijzijnde(lat, lon);
+      var lines = [];
+      if (plaats) lines.push("<b>" + plaats + "</b>");
+      lines.push(lat.toFixed(2) + "\u00b0N, " + lon.toFixed(2) + "\u00b0E");
+      if (pv > 0 && pv < 255 && dbz >= 5) {
+        lines.push(mmh.toFixed(1) + " mm/u (" + dbz.toFixed(0) + " dBZ)");
+      } else {
+        lines.push("Geen neerslag");
+      }
+
+      tooltip.innerHTML = lines.join("<br>");
+      tooltip.style.display = "block";
+      tooltip.style.left = (e.clientX + 14) + "px";
+      tooltip.style.top = (e.clientY + 14) + "px";
+    });
+
+    canvas.addEventListener("mouseleave", function() {
+      tooltip.style.display = "none";
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EXPORT: PNG
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function exportPNG() {
+    var link = document.createElement("a");
+    link.download = "regenradar_" + (meta.tijden[frameIdx] || "").replace(/[:\-T]/g, "").substring(0, 12) + ".png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EXPORT: GIF (client-side met eenvoudige GIF encoder)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function exportGIF() {
+    var progEl = document.getElementById("gif-progress");
+    var barEl = document.getElementById("gif-bar");
+    var pctEl = document.getElementById("gif-pct");
+    progEl.style.display = "block";
+
+    // Tijdelijk stoppen met animeren
+    var wasPlaying = playing;
+    if (playing) togglePlay();
+
+    // We maken een GIF door alle frames te renderen en te encoderen
+    var savedFrame = frameIdx;
+    var gifFrames = [];
+    var w = canvas.width;
+    var h = canvas.height;
+
+    // Render alle frames naar image data
+    for (var i = 0; i < nFrames; i++) {
+      frameIdx = i;
+      renderFrame();
+      gifFrames.push(ctx.getImageData(0, 0, w, h));
+      var pct = Math.round((i + 1) / nFrames * 30);
+      barEl.style.width = pct + "%";
+      pctEl.textContent = pct + "%";
+    }
+
+    // Herstel frame
+    frameIdx = savedFrame;
+    renderFrame();
+
+    // GIF encoder (compact, in-page)
+    // Gebruikt een versimpelde quantize + LZW methode
+    barEl.style.width = "40%";
+    pctEl.textContent = "Kleuren reduceren...";
+
+    setTimeout(function() {
+      try {
+        var gif = encodeGIF(gifFrames, w, h, 400, function(pct2) {
+          barEl.style.width = (40 + pct2 * 0.6) + "%";
+          pctEl.textContent = Math.round(40 + pct2 * 0.6) + "%";
+        });
+
+        var blob = new Blob([gif], { type: "image/gif" });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.download = "regenradar_" + (meta.tijden[0] || "").replace(/[:\-T]/g, "").substring(0, 12) + ".gif";
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      } catch(err) {
+        alert("GIF genereren mislukt: " + err.message);
+      }
+      progEl.style.display = "none";
+      if (wasPlaying) togglePlay();
+    }, 50);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // MINI GIF ENCODER (in-page, geen externe lib nodig)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function encodeGIF(frames, w, h, delayMs, onProgress) {
+    // Stap 1: Bouw globaal 256-kleuren palet uit eerste + laatste frame
+    var samplePixels = [];
+    var step = Math.max(1, Math.floor(w * h / 10000)); // sample ~10k pixels
+    for (var si = 0; si < frames.length; si += Math.max(1, Math.floor(frames.length / 4))) {
+      var d = frames[si].data;
+      for (var p = 0; p < d.length; p += step * 4) {
+        samplePixels.push(d[p], d[p+1], d[p+2]);
+      }
+    }
+    var palette = medianCut(samplePixels, 256);
+
+    // Stap 2: Bouw GIF binary
+    var buf = [];
+    // Header
+    writeStr(buf, "GIF89a");
+    writeU16(buf, w);
+    writeU16(buf, h);
+    buf.push(0xF7); // GCT flag, 256 kleuren (2^(7+1)=256)
+    buf.push(0);    // bg color index
+    buf.push(0);    // pixel aspect ratio
+
+    // Global Color Table
+    for (var ci = 0; ci < 256; ci++) {
+      buf.push(palette[ci * 3] || 0, palette[ci * 3 + 1] || 0, palette[ci * 3 + 2] || 0);
+    }
+
+    // Netscape extension (looping)
+    buf.push(0x21, 0xFF, 0x0B);
+    writeStr(buf, "NETSCAPE2.0");
+    buf.push(0x03, 0x01);
+    writeU16(buf, 0); // loop forever
+    buf.push(0x00);
+
+    // Frames
+    var delay = Math.round(delayMs / 10);
+    for (var fi = 0; fi < frames.length; fi++) {
+      // Graphic Control Extension
+      buf.push(0x21, 0xF9, 0x04, 0x00);
+      writeU16(buf, fi === frames.length - 1 ? delay * 3 : delay); // langere pauze op laatste frame
+      buf.push(0x00, 0x00); // no transparency
+
+      // Image Descriptor
+      buf.push(0x2C);
+      writeU16(buf, 0); writeU16(buf, 0); // left, top
+      writeU16(buf, w); writeU16(buf, h);
+      buf.push(0x00); // no local color table
+
+      // LZW encode
+      var indexed = quantizeFrame(frames[fi].data, palette, w, h);
+      var lzwData = lzwEncode(indexed, 8);
+      buf.push(8); // LZW min code size
+      // Sub-blocks
+      for (var bi = 0; bi < lzwData.length; bi += 255) {
+        var chunk = lzwData.slice(bi, bi + 255);
+        buf.push(chunk.length);
+        for (var bj = 0; bj < chunk.length; bj++) buf.push(chunk[bj]);
+      }
+      buf.push(0x00); // block terminator
+
+      if (onProgress) onProgress((fi + 1) / frames.length * 100);
+    }
+
+    // Trailer
+    buf.push(0x3B);
+    return new Uint8Array(buf);
+  }
+
+  function writeStr(buf, s) { for (var i = 0; i < s.length; i++) buf.push(s.charCodeAt(i)); }
+  function writeU16(buf, v) { buf.push(v & 0xFF, (v >> 8) & 0xFF); }
+
+  // Simpele median-cut kleur quantisatie
+  function medianCut(pixels, maxColors) {
+    // pixels = flat array [r,g,b,r,g,b,...]
+    var n = pixels.length / 3;
+    var indices = [];
+    for (var i = 0; i < n; i++) indices.push(i);
+
+    var boxes = [{ indices: indices }];
+
+    while (boxes.length < maxColors) {
+      // Vind box met meeste kleurvariatie
+      var bestBox = -1, bestRange = -1;
+      for (var b = 0; b < boxes.length; b++) {
+        if (boxes[b].indices.length <= 1) continue;
+        var range = boxRange(pixels, boxes[b].indices);
+        if (range.maxRange > bestRange) { bestRange = range.maxRange; bestBox = b; }
+      }
+      if (bestBox === -1) break;
+
+      var box = boxes[bestBox];
+      var rng = boxRange(pixels, box.indices);
+      // Sorteer op langste as
+      var axis = rng.maxAxis;
+      box.indices.sort(function(a, b) { return pixels[a * 3 + axis] - pixels[b * 3 + axis]; });
+      var mid = Math.floor(box.indices.length / 2);
+      boxes[bestBox] = { indices: box.indices.slice(0, mid) };
+      boxes.push({ indices: box.indices.slice(mid) });
+    }
+
+    // Bereken gemiddelde kleur per box
+    var palette = new Uint8Array(maxColors * 3);
+    for (var bi = 0; bi < boxes.length; bi++) {
+      var idxs = boxes[bi].indices;
+      var sr = 0, sg = 0, sb = 0;
+      for (var j = 0; j < idxs.length; j++) {
+        sr += pixels[idxs[j] * 3];
+        sg += pixels[idxs[j] * 3 + 1];
+        sb += pixels[idxs[j] * 3 + 2];
+      }
+      var cnt = idxs.length || 1;
+      palette[bi * 3] = Math.round(sr / cnt);
+      palette[bi * 3 + 1] = Math.round(sg / cnt);
+      palette[bi * 3 + 2] = Math.round(sb / cnt);
+    }
+    return palette;
+  }
+
+  function boxRange(pixels, indices) {
+    var rMin = 255, rMax = 0, gMin = 255, gMax = 0, bMin = 255, bMax = 0;
+    for (var i = 0; i < indices.length; i++) {
+      var idx = indices[i] * 3;
+      var r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
+      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
+    }
+    var rr = rMax - rMin, gr = gMax - gMin, br = bMax - bMin;
+    var maxRange = Math.max(rr, gr, br);
+    var maxAxis = rr >= gr && rr >= br ? 0 : gr >= br ? 1 : 2;
+    return { maxRange: maxRange, maxAxis: maxAxis };
+  }
+
+  function quantizeFrame(data, palette, w, h) {
+    // data = ImageData.data (RGBA flat)
+    var n = w * h;
+    var indexed = new Uint8Array(n);
+    var nColors = palette.length / 3;
+
+    // Bouw lookup cache
+    var cache = {};
+    for (var i = 0; i < n; i++) {
+      var r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+      var key = (r << 16) | (g << 8) | b;
+      if (cache[key] !== undefined) {
+        indexed[i] = cache[key];
+        continue;
+      }
+      // Zoek dichtstbijzijnde kleur
+      var bestD = Infinity, bestIdx = 0;
+      for (var c = 0; c < nColors; c++) {
+        var dr = r - palette[c * 3], dg = g - palette[c * 3 + 1], db = b - palette[c * 3 + 2];
+        var d = dr * dr + dg * dg + db * db;
+        if (d < bestD) { bestD = d; bestIdx = c; }
+      }
+      cache[key] = bestIdx;
+      indexed[i] = bestIdx;
+    }
+    return indexed;
+  }
+
+  // LZW encoder voor GIF
+  function lzwEncode(indexed, minCodeSize) {
+    var clearCode = 1 << minCodeSize;
+    var eoiCode = clearCode + 1;
+    var codeSize = minCodeSize + 1;
+    var nextCode = eoiCode + 1;
+    var maxCode = (1 << codeSize);
+
+    var output = [];
+    var bitBuf = 0, bitCount = 0;
+
+    function writeBits(code, size) {
+      bitBuf |= (code << bitCount);
+      bitCount += size;
+      while (bitCount >= 8) {
+        output.push(bitBuf & 0xFF);
+        bitBuf >>= 8;
+        bitCount -= 8;
+      }
+    }
+
+    // Init table met string->code mapping
+    var table = {};
+    for (var i = 0; i < clearCode; i++) table[i] = i;
+
+    writeBits(clearCode, codeSize);
+
+    var prefix = indexed[0];
+    for (var p = 1; p < indexed.length; p++) {
+      var suffix = indexed[p];
+      var key = prefix + "," + suffix;
+      if (table[key] !== undefined) {
+        prefix = table[key];
+      } else {
+        writeBits(prefix, codeSize);
+        if (nextCode < 4096) {
+          table[key] = nextCode++;
+          if (nextCode > maxCode && codeSize < 12) {
+            codeSize++;
+            maxCode = 1 << codeSize;
+          }
+        } else {
+          // Reset
+          writeBits(clearCode, codeSize);
+          table = {};
+          for (var j = 0; j < clearCode; j++) table[j] = j;
+          codeSize = minCodeSize + 1;
+          nextCode = eoiCode + 1;
+          maxCode = 1 << codeSize;
+        }
+        prefix = suffix;
+      }
+    }
+    writeBits(prefix, codeSize);
+    writeBits(eoiCode, codeSize);
+
+    // Flush remaining bits
+    if (bitCount > 0) output.push(bitBuf & 0xFF);
+
+    return output;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EVENT HANDLERS
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function init() {
+    bouwLegenda();
+
+    // Play/pause
+    document.getElementById("btn-play").addEventListener("click", togglePlay);
+
+    // Stap knoppen
+    document.getElementById("btn-vorige").addEventListener("click", function() {
+      if (playing) togglePlay();
+      frameIdx = (frameIdx - 1 + nFrames) % nFrames;
+      renderFrame();
+    });
+    document.getElementById("btn-volgende").addEventListener("click", function() {
+      if (playing) togglePlay();
+      frameIdx = (frameIdx + 1) % nFrames;
+      renderFrame();
+    });
+
+    // Slider
+    document.getElementById("slider").addEventListener("input", function() {
+      if (playing) togglePlay();
+      frameIdx = parseInt(this.value);
+      renderFrame();
+    });
+
+    // Snelheid
+    document.querySelectorAll(".speed-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".speed-btn").forEach(function(b) { b.classList.remove("actief"); });
+        this.classList.add("actief");
+        animSpeed = parseInt(this.getAttribute("data-ms"));
+        if (playing) startAnimatie();
+      });
+    });
+
+    // Export
+    document.getElementById("btn-png").addEventListener("click", exportPNG);
+    document.getElementById("btn-gif").addEventListener("click", exportGIF);
+
+    // Laad data
+    loadData().then(function() {
+      setupHover();
+
+      // Auto-refresh
+      setInterval(function() {
+        fetch(META_URL + "?t=" + Date.now())
+          .then(function(r) { return r.json(); })
+          .then(function(newMeta) {
+            if (newMeta.nieuwste !== meta.nieuwste) {
+              console.log("Nieuwe radar data beschikbaar, herladen...");
+              loadData();
+            }
+          }).catch(function() {});
+      }, REFRESH_MS);
+    }).catch(function(err) {
+      document.getElementById("status").textContent = "Fout: " + err.message;
+      console.error(err);
+    });
+  }
+
+  // Start
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+</body>
+</html>

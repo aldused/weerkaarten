@@ -170,6 +170,15 @@ body.scroll-mode { overflow-y: auto; }
     ecmwf:    { meta: "ecmwf_canvas_meta.json",    label: "ECMWF IFS (25km)" },
   };
   var actiefModel = "harmonie";
+  var vergelijkModus = false;
+  var modelData = {}; // { modelKey: { meta, paramCache } } — per-model cache voor vergelijkmodus
+
+  function addDerivedParams(m) {
+    m.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
+    m.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
+    m.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
+    m.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PLAATSEN (voor tooltip)
@@ -1029,6 +1038,15 @@ body.scroll-mode { overflow-y: auto; }
       var sel = document.createElement("div");
       sel.className = "panel-selector";
 
+      // In vergelijkmodus: toon modelnaam boven dropdown
+      if (vergelijkModus) {
+        var modelLabel = document.createElement("div");
+        var mk2 = i === 0 ? "harmonie" : "icond2";
+        modelLabel.style.cssText = "background:#00205b;color:white;padding:4px 12px;font-size:12px;font-weight:700;text-align:center;letter-spacing:0.5px;";
+        modelLabel.textContent = MODELS[mk2].label;
+        sel.appendChild(modelLabel);
+      }
+
       // Dropdown met gecategoriseerde parameters
       var dropdown = document.createElement("select");
       dropdown.dataset.panel = i;
@@ -1075,7 +1093,15 @@ body.scroll-mode { overflow-y: auto; }
       dropdown.addEventListener("change", function() {
         var idx = parseInt(this.dataset.panel);
         panelParams[idx] = this.value;
-        ensureAndRender(idx, parseInt(slider.value) - 1);
+        if (vergelijkModus) {
+          // Sync: zet beide panels op dezelfde parameter
+          for (var pi3 = 0; pi3 < panelParams.length; pi3++) panelParams[pi3] = this.value;
+          // Update alle dropdowns
+          document.querySelectorAll(".kaart-panel select").forEach(function(s) { s.value = panelParams[0]; });
+          updateAlle(parseInt(slider.value) - 1);
+        } else {
+          ensureAndRender(idx, parseInt(slider.value) - 1);
+        }
         if (typeof updateNsomVisibility === "function") updateNsomVisibility();
       });
 
@@ -1240,16 +1266,49 @@ body.scroll-mode { overflow-y: auto; }
     var cvs = document.getElementById("panel-cvs-" + panelIdx);
     if (!cvs) return;
 
-    var pinfo = meta.parameters[param];
-    if (pinfo && pinfo.derived) {
-      // Afgeleide parameter: laad alle benodigde brondata
-      var promises = pinfo.needs.map(function(n) { return laadParam(n); });
-      Promise.all(promises).then(function() { renderMap(cvs, param, stepIdx); });
-    } else if (paramCache[param]) {
+    // In vergelijkmodus: gebruik per-model meta/cache
+    var useMeta, useCache;
+    if (vergelijkModus) {
+      var mk = panelIdx === 0 ? "harmonie" : "icond2";
+      var md = modelData[mk];
+      if (!md || !md.meta) return;
+      useMeta = md.meta;
+      useCache = md.paramCache;
+    } else {
+      useMeta = meta;
+      useCache = paramCache;
+    }
+
+    function doRender() {
+      // Swap globals tijdelijk voor renderMap (die globals leest)
+      meta = useMeta; paramCache = useCache;
       renderMap(cvs, param, stepIdx);
+    }
+
+    function doLaad(key) {
+      if (useCache[key]) return Promise.resolve(useCache[key]);
+      var info = useMeta.parameters[key];
+      if (!info) return Promise.reject("Onbekend: " + key);
+      return fetch(DATA_URL + info.file + "?t=" + Date.now())
+        .then(function(r) { return r.arrayBuffer(); })
+        .then(function(buf) {
+          var view = new DataView(buf);
+          var result = { nLat: view.getUint16(0,true), nLon: view.getUint16(2,true),
+                         nSteps: view.getUint16(4,true), nComp: view.getUint16(6,true),
+                         data: new Float32Array(buf, 16) };
+          useCache[key] = result;
+          return result;
+        });
+    }
+
+    var pinfo = useMeta.parameters[param];
+    if (pinfo && pinfo.derived) {
+      Promise.all(pinfo.needs.map(doLaad)).then(doRender);
+    } else if (useCache[param]) {
+      doRender();
     } else {
       cvs.getContext("2d").clearRect(0, 0, cvs.width, cvs.height);
-      laadParam(param).then(function() { renderMap(cvs, param, stepIdx); });
+      doLaad(param).then(doRender);
     }
   }
 
@@ -1258,8 +1317,10 @@ body.scroll-mode { overflow-y: auto; }
     slider.value = stepIdx + 1;
     uurLabel.textContent = "+" + (stepIdx+1) + "h";
 
-    if (meta && meta.tijden && meta.tijden[stepIdx]) {
-      var dt = new Date(meta.tijden[stepIdx]);
+    // Tijdlabel: in vergelijkmodus gebruik harmonie tijden
+    var tijdMeta = vergelijkModus && modelData["harmonie"] ? modelData["harmonie"].meta : meta;
+    if (tijdMeta && tijdMeta.tijden && tijdMeta.tijden[stepIdx]) {
+      var dt = new Date(tijdMeta.tijden[stepIdx]);
       var dagen = ["Zo","Ma","Di","Wo","Do","Vr","Za"];
       var mnd = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
       tijdLabel.textContent = dagen[dt.getDay()]+" "+dt.getDate()+" "+mnd[dt.getMonth()]+" "+String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0")+" LT";
@@ -1279,7 +1340,90 @@ body.scroll-mode { overflow-y: auto; }
   document.getElementById("btn-vorige").addEventListener("click", function(){ stopSpelen(); var s=parseInt(slider.value)-2; if(s<0)s=aantalUren-1; updateAlle(s); });
   document.getElementById("btn-volgende").addEventListener("click", function(){ stopSpelen(); var s=parseInt(slider.value); if(s>=aantalUren)s=0; updateAlle(s); });
 
-  document.querySelectorAll(".layout-btn").forEach(function(b){ b.addEventListener("click",function(){ setLayout(parseInt(this.dataset.layout)); }); });
+  document.querySelectorAll(".layout-btn").forEach(function(b){ b.addEventListener("click",function(){
+    // Verlaat vergelijkmodus bij klik op layout-knop
+    if (vergelijkModus) {
+      vergelijkModus = false;
+      document.getElementById("btn-vergelijk").classList.remove("actief");
+      // Herstel actief model
+      var md0 = modelData[actiefModel];
+      if (md0) { meta = md0.meta; paramCache = md0.paramCache; }
+    }
+    setLayout(parseInt(this.dataset.layout));
+  }); });
+
+  // ── Vergelijk: Harmonie vs ICON-D2 naast elkaar ──
+  document.getElementById("btn-vergelijk").addEventListener("click", function() {
+    var btnV = this;
+
+    if (vergelijkModus) {
+      // Verlaat vergelijkmodus
+      vergelijkModus = false;
+      btnV.classList.remove("actief");
+      var md0 = modelData[actiefModel];
+      if (md0) { meta = md0.meta; paramCache = md0.paramCache; }
+      setLayout(1);
+      return;
+    }
+
+    // Start vergelijkmodus
+    statusEl.textContent = "Vergelijkdata laden...";
+
+    // Sla huidige model state op
+    modelData[actiefModel] = { meta: meta, paramCache: paramCache };
+
+    // Laad het andere model
+    var otherModel = actiefModel === "harmonie" ? "icond2" : "harmonie";
+    var loadModels = [];
+
+    // Zorg dat beide modellen metadata hebben
+    if (!modelData["harmonie"] || !modelData["harmonie"].meta) {
+      loadModels.push(
+        fetch(DATA_URL + MODELS["harmonie"].meta + "?t=" + Date.now())
+          .then(function(r) { return r.json(); })
+          .then(function(d) { addDerivedParams(d); modelData["harmonie"] = { meta: d, paramCache: modelData["harmonie"] ? modelData["harmonie"].paramCache : {} }; })
+      );
+    }
+    if (!modelData["icond2"] || !modelData["icond2"].meta) {
+      loadModels.push(
+        fetch(DATA_URL + MODELS["icond2"].meta + "?t=" + Date.now())
+          .then(function(r) { return r.json(); })
+          .then(function(d) { addDerivedParams(d); modelData["icond2"] = { meta: d, paramCache: modelData["icond2"] ? modelData["icond2"].paramCache : {} }; })
+      );
+    }
+
+    Promise.all(loadModels).then(function() {
+      vergelijkModus = true;
+      btnV.classList.add("actief");
+
+      // Gebruik minimum uren van beide modellen
+      var h1 = modelData["harmonie"].meta.uren;
+      var h2 = modelData["icond2"].meta.uren;
+      aantalUren = Math.min(h1, h2);
+      slider.max = aantalUren;
+      if (parseInt(slider.value) > aantalUren) slider.value = 1;
+
+      // Zelfde parameter in beide panels
+      var currentParam = panelParams[0] || "neerslag";
+      panelParams = [currentParam, currentParam];
+      layout = 2;
+      grid.className = "kaart-grid layout-2";
+      document.body.classList.remove("scroll-mode");
+      document.querySelectorAll(".layout-btn").forEach(function(b) { b.classList.remove("actief"); });
+
+      // Header updaten met beide runs
+      document.getElementById("hdr-run").textContent =
+        "H: " + modelData["harmonie"].meta.run + " | I: " + modelData["icond2"].meta.run;
+
+      statusEl.textContent = "";
+      bouwPanels();
+      bouwUurSidebar();
+      updateAlle(parseInt(slider.value) - 1);
+    }).catch(function(e) {
+      statusEl.textContent = "Fout bij laden: " + e;
+      console.error(e);
+    });
+  });
 
   // Zoom knoppen
   var zoomHint = document.getElementById("zoom-hint");
@@ -1354,14 +1498,24 @@ body.scroll-mode { overflow-y: auto; }
 
   // Model selector
   document.getElementById("model-select").addEventListener("change", function() {
+    // Verlaat vergelijkmodus bij model-wissel
+    if (vergelijkModus) {
+      vergelijkModus = false;
+      document.getElementById("btn-vergelijk").classList.remove("actief");
+    }
     actiefModel = this.value;
-    paramCache = {};  // Cache legen — nieuw model = nieuwe data
+    // Check of we al gecachte data hebben voor dit model
+    var cached = modelData[actiefModel];
+    if (cached && cached.meta) {
+      meta = cached.meta;
+      paramCache = cached.paramCache;
+    } else {
+      paramCache = {};
+    }
     statusEl.textContent = "Model wisselen...";
     laadMeta().then(function() {
-      // Afgeleide parameters toevoegen
-      meta.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
-      meta.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
-      meta.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
+      addDerivedParams(meta);
+      modelData[actiefModel] = { meta: meta, paramCache: paramCache };
       aantalUren = meta.uren;
       slider.max = aantalUren;
       slider.value = 1;
@@ -1642,10 +1796,9 @@ body.scroll-mode { overflow-y: auto; }
 
   Promise.all([laadMeta(), laadOverlay()]).then(function() {
     // Voeg afgeleide parameters toe aan metadata
-    meta.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
-    meta.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
-    meta.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
-    meta.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
+    addDerivedParams(meta);
+    // Sla op in modelData voor vergelijkmodus
+    modelData[actiefModel] = { meta: meta, paramCache: paramCache };
     aantalUren = meta.uren;
     slider.max = aantalUren;
     // Run-tijd — staat al in lokale tijd in meta.run

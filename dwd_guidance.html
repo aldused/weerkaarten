@@ -58,20 +58,18 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#333;paddi
     <button class="toggle" id="taalToggle" onclick="wisselTaal()">Toon origineel (Duits)</button>
   </div>
   <div id="tekst" class="tekst">
-    <div class="laden">Guidance ophalen en vertalen</div>
+    <div class="laden">Guidance ophalen</div>
   </div>
 </div>
 
 <script>
-const API_BASE = "http://localhost:3000";
-const state = { tab: "kurzfrist", origineel: false, data: {} };
+const state = { tab: "kurzfrist", origineel: false, data: null };
 
 function wisselTab(tab) {
   state.tab = tab;
   document.getElementById("tab-kort").classList.toggle("actief", tab === "kurzfrist");
   document.getElementById("tab-mid").classList.toggle("actief", tab === "mittelfrist");
   render();
-  if (!state.data[tab]) laad(tab);
 }
 
 function wisselTaal() {
@@ -88,35 +86,30 @@ function formateer(tekst) {
     .replace(/^(__+)/gm, "")
     .replace(/^(Synoptische .*|S Y N O P T.*)/gim, "<h3>$1</h3>")
     .replace(/^(GWL und .*|Synoptische Entwicklung.*|Modellvergleich.*|Vorhersage.*|Bewertung.*)/gim, "<h3>$1</h3>")
-    .replace(/^(GWL en .*|Synoptische ontwikkeling.*|Modelvergelijking.*|Voorspelling.*|Beoordeling.*)/gim, "<h3>$1</h3>");
+    .replace(/^(GWL en .*|Synoptische ontwikkeling.*|Modelvergelijking.*|Voorspelling.*|Beoordeling.*)/gim, "<h3>$1</h3>")
+    .replace(/### (.*)/g, "<h3>$1</h3>");
 }
 
 function render() {
-  const d = state.data[state.tab];
   const el = document.getElementById("tekst");
   const uit = document.getElementById("uitgegeven");
   const opg = document.getElementById("opgehaald");
-  if (!d) { el.innerHTML = '<div class="laden">Guidance ophalen en vertalen</div>'; uit.textContent = "–"; opg.textContent = "–"; return; }
+  if (!state.data) { el.innerHTML = '<div class="laden">Guidance ophalen</div>'; return; }
+  const d = state.data[state.tab];
+  if (!d) { el.innerHTML = '<div class="fout">Geen data voor deze termijn.</div>'; return; }
   if (d.error) { el.innerHTML = `<div class="fout">${d.error}</div>`; return; }
   el.innerHTML = formateer(state.origineel ? d.original : d.translated);
   uit.textContent = d.issuedAt || "onbekend";
-  opg.textContent = new Date(d.fetchedAt).toLocaleString("nl-NL");
+  opg.textContent = d.fetchedAt ? new Date(d.fetchedAt).toLocaleString("nl-NL") : "–";
 }
 
-async function laad(type) {
-  state.data[type] = null;
-  render();
-  try {
-    const r = await fetch(`${API_BASE}/api/guidance/${type}`);
-    if (!r.ok) throw new Error(`Server fout: ${r.status}`);
-    state.data[type] = await r.json();
-  } catch(e) {
-    state.data[type] = { error: `Kon DWD guidance niet laden: ${e.message}` };
-  }
-  render();
-}
-
-laad("kurzfrist");
+fetch("dwd_guidance.json?t=" + Date.now())
+  .then(r => r.json())
+  .then(data => { state.data = data; render(); })
+  .catch(e => {
+    document.getElementById("tekst").innerHTML =
+      `<div class="fout">Kon DWD guidance niet laden: ${e.message}</div>`;
+  });
 </script>
 </body>
 </html>
