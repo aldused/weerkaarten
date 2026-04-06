@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 os.chdir('/Users/aldus/KNMI_Project/weerkaarten 2')
 LOCAL_TZ = ZoneInfo('Europe/Amsterdam')
-EXTENT = [1.5, 9.0, 49.3, 53.9]
+EXTENT = [0.5, 12.5, 47.5, 56.5]
 KEY = 'eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6Ijk5YjZhMzkwMTlkYzQxYzlhMzJjNmNmY2MyNDgxNGRkIiwiaCI6Im11cm11cjEyOCJ9'
 
 import requests
@@ -163,7 +163,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     write_bin('harmonie_data_cape.bin', all_data['cape'][1:])
     write_bin('harmonie_data_druk.bin', all_data['druk'][1:])
     write_bin('harmonie_data_dauwpunt.bin', all_data['dauwpunt'][1:])
-    write_bin('harmonie_data_straling.bin', hourly_stral)
+    # straling verwijderd
 
     # Profiel
     with open('harmonie_data_profiel.bin','wb') as f:
@@ -199,7 +199,6 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         'cape':{'file':'harmonie_data_cape.bin','components':1,'label':'CAPE (J/kg)'},
         'druk':{'file':'harmonie_data_druk.bin','components':1,'label':'Luchtdruk (hPa)'},
         'dauwpunt':{'file':'harmonie_data_dauwpunt.bin','components':1,'label':'Dauwpuntstemperatuur 2m (°C)'},
-        'straling':{'file':'harmonie_data_straling.bin','components':1,'label':'Globale straling (W/m²)'},
         'profiel':{'file':'harmonie_data_profiel.bin','components':10,'label':'Grenslaagprofiel','levels':[2,50,100,200,300]},
       },
       'overlay':'harmonie_overlay.png'}
