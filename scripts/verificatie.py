@@ -214,29 +214,16 @@ def haal_knmi_obs(datum_str):
 
 # ── Stap 3: Vergelijk en genereer output ───────────────────────────────────
 
-def vergelijk():
-    """Vergelijk gearchiveerde MOSMIX-voorspelling met KNMI-observaties."""
-    gisteren = (date.today() - timedelta(days=1)).isoformat()
+def vergelijk_dag(datum_str, archief):
+    """Vergelijk één dag: return dict met resultaat of None."""
+    if datum_str not in archief:
+        return None
 
-    if not os.path.exists(ARCHIEF_FILE):
-        print("  Geen archief gevonden"); return False
-
-    archief = json.load(open(ARCHIEF_FILE))
-    if gisteren not in archief:
-        print(f"  Geen gearchiveerde voorspelling voor {gisteren}"); return False
-
-    voorspelling = archief[gisteren]
-    print(f"\n  Vergelijking voor {gisteren} (MOSMIX run: {voorspelling.get('run')})")
-
-    # Haal observaties op
-    print("  KNMI dagobservaties ophalen...")
-    observaties = haal_knmi_obs(gisteren)
-    print(f"  {len(observaties)} stations met observaties")
-
+    voorspelling = archief[datum_str]
+    observaties = haal_knmi_obs(datum_str)
     if not observaties:
-        print("  Geen observaties beschikbaar"); return False
+        return None
 
-    # Vergelijk per station
     stations_out = {}
     totalen = {p: {"verschil": [], "abs_verschil": []} for p in PARAMS}
 
@@ -263,7 +250,9 @@ def vergelijk():
         if station_out:
             stations_out[naam] = station_out
 
-    # Samenvatting: MAE en bias per parameter
+    if not stations_out:
+        return None
+
     samenvatting = {}
     for p in PARAMS:
         vals = totalen[p]
@@ -275,21 +264,67 @@ def vergelijk():
                 "n": n,
             }
 
-    output = {
-        "bijgewerkt": datetime.now().isoformat(timespec="minutes"),
-        "datum": gisteren,
+    return {
+        "datum": datum_str,
         "mosmix_run": voorspelling.get("run"),
         "stations": stations_out,
         "samenvatting": samenvatting,
     }
 
-    json.dump(output, open(OUTPUT_FILE, "w"), ensure_ascii=False)
-    print(f"\n  {OUTPUT_FILE} geschreven: {len(stations_out)} stations")
 
-    # Print samenvatting
-    for p, s in samenvatting.items():
-        eenheid = "mm" if p == "RR" else ("km/h" if p == "FF" else "\u00b0C")
-        print(f"    {p}: MAE={s['mae']}{eenheid}  bias={s['bias']:+}{eenheid}  (n={s['n']})")
+def vergelijk():
+    """Vergelijk gisteren + vul eventueel missende eerdere dagen aan.
+    Bewaart de laatste 10 dagen in verificatie.json."""
+    if not os.path.exists(ARCHIEF_FILE):
+        print("  Geen archief gevonden"); return False
+
+    archief = json.load(open(ARCHIEF_FILE))
+
+    # Lees bestaande verificatie-historie
+    historie = {}
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            bestaand = json.load(open(OUTPUT_FILE))
+            for dag in bestaand.get("dagen", []):
+                historie[dag["datum"]] = dag
+        except:
+            pass
+
+    # Verwerk gisteren (en eventueel eerdere missende dagen uit archief)
+    vandaag = date.today()
+    nieuwe_dagen = 0
+    for i in range(1, 11):  # tot 10 dagen terug
+        datum = (vandaag - timedelta(days=i)).isoformat()
+        if datum in historie:
+            continue  # al verwerkt
+        if datum not in archief:
+            continue  # geen voorspelling gearchiveerd
+
+        print(f"\n  Vergelijking voor {datum} (MOSMIX run: {archief[datum].get('run')})")
+        print("  KNMI dagobservaties ophalen...")
+        resultaat = vergelijk_dag(datum, archief)
+        if resultaat:
+            historie[datum] = resultaat
+            nieuwe_dagen += 1
+            s = resultaat["samenvatting"]
+            for p, v in s.items():
+                eenheid = "mm" if p == "RR" else ("km/h" if p == "FF" else "\u00b0C")
+                print(f"    {p}: MAE={v['mae']}{eenheid}  bias={v['bias']:+}{eenheid}  (n={v['n']})")
+
+    if not historie:
+        print("  Geen verificaties beschikbaar"); return False
+
+    # Bewaar max 10 dagen, nieuwste eerst
+    alle_datums = sorted(historie.keys(), reverse=True)[:10]
+    dagen_out = [historie[d] for d in alle_datums]
+
+    output = {
+        "bijgewerkt": datetime.now().isoformat(timespec="minutes"),
+        "dagen": dagen_out,
+    }
+
+    json.dump(output, open(OUTPUT_FILE, "w"), ensure_ascii=False)
+    print(f"\n  {OUTPUT_FILE} geschreven: {len(dagen_out)} dagen, {nieuwe_dagen} nieuw")
 
     return True
 

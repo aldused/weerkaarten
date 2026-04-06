@@ -102,6 +102,30 @@ td.verschil { font-weight: 700; }
 }
 .geen-data p { margin-top: 8px; font-size: 12px; opacity: 0.7; }
 
+.dag-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.dag-tab {
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: white;
+  border: 1px solid #d0d8e4;
+  cursor: pointer;
+  font-size: 12px;
+  color: #4a5568;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.dag-tab:hover { background: #e8edf4; }
+.dag-tab.actief {
+  background: #0d2b5e;
+  color: white;
+  border-color: #0d2b5e;
+}
+
 .info {
   font-size: 11px;
   color: #6b7c93;
@@ -114,6 +138,7 @@ td.verschil { font-weight: 700; }
   .samen { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   table { font-size: 11.5px; }
   thead th, tbody td { padding: 5px 6px; }
+  .dag-tab { padding: 5px 10px; font-size: 11px; }
 }
 </style>
 </head>
@@ -125,6 +150,7 @@ td.verschil { font-weight: 700; }
 </header>
 
 <div class="wrap">
+  <div class="dag-tabs" id="dag-tabs"></div>
   <div class="samen" id="samenvatting"></div>
   <div class="tabel-wrap" id="tabel-container">
     <div class="geen-data" id="geen-data">
@@ -156,18 +182,21 @@ function formatVerschil(v) {
   return (v > 0 ? "+" : "") + v.toFixed(1);
 }
 
-async function laad() {
-  let data;
-  try {
-    const r = await fetch("verificatie.json?" + Date.now());
-    if (!r.ok) throw new Error("Niet gevonden");
-    data = await r.json();
-  } catch {
-    return; // geen-data div blijft zichtbaar
-  }
+let alleDagen = [];
+let actieveDag = 0;
+
+function toonDag(index) {
+  actieveDag = index;
+  const dag = alleDagen[index];
+  if (!dag) return;
+
+  // Tabs bijwerken
+  document.querySelectorAll(".dag-tab").forEach((t, i) => {
+    t.classList.toggle("actief", i === index);
+  });
 
   // Subtitel
-  const d = new Date(data.datum + "T12:00:00");
+  const d = new Date(dag.datum + "T12:00:00");
   const opties = { weekday: "long", day: "numeric", month: "long", year: "numeric" };
   document.getElementById("subtitel").textContent =
     `Verwachting vs waarneming \u2014 ${d.toLocaleDateString("nl-NL", opties)}`;
@@ -177,7 +206,7 @@ async function laad() {
   const params = ["TX", "TN", "RR", "FF"];
   samenEl.innerHTML = "";
   for (const p of params) {
-    const s = (data.samenvatting || {})[p];
+    const s = (dag.samenvatting || {})[p];
     if (!s) continue;
     const cfg = PARAM_CONFIG[p];
     const kleur = kleurKlasse(p, s.mae);
@@ -189,12 +218,10 @@ async function laad() {
       </div>`;
   }
 
-  // Tabel opbouwen
-  const stations = data.stations || {};
+  // Tabel
+  const stations = dag.stations || {};
   const namen = Object.keys(stations);
   if (namen.length === 0) return;
-
-  document.getElementById("geen-data").style.display = "none";
 
   let html = "<table><thead><tr><th>Station</th>";
   for (const p of params) {
@@ -211,12 +238,12 @@ async function laad() {
     const st = stations[naam];
     html += `<tr><td>${naam}</td>`;
     for (const p of params) {
-      const d = st[p];
-      if (d) {
-        const kl = kleurKlasse(p, d.verschil);
-        html += `<td>${d.verwacht.toFixed(1)}</td>`;
-        html += `<td>${d.gemeten.toFixed(1)}</td>`;
-        html += `<td class="verschil ${kl}">${formatVerschil(d.verschil)}</td>`;
+      const v = st[p];
+      if (v) {
+        const kl = kleurKlasse(p, v.verschil);
+        html += `<td>${v.verwacht.toFixed(1)}</td>`;
+        html += `<td>${v.gemeten.toFixed(1)}</td>`;
+        html += `<td class="verschil ${kl}">${formatVerschil(v.verschil)}</td>`;
       } else {
         html += `<td>-</td><td>-</td><td>-</td>`;
       }
@@ -224,15 +251,51 @@ async function laad() {
     html += "</tr>";
   }
   html += "</tbody></table>";
-
   document.getElementById("tabel-container").innerHTML = html;
 
   // Info
-  const runTijd = data.mosmix_run ? new Date(data.mosmix_run).toLocaleString("nl-NL") : "onbekend";
+  const runTijd = dag.mosmix_run ? new Date(dag.mosmix_run).toLocaleString("nl-NL") : "onbekend";
   document.getElementById("info").innerHTML =
-    `MOSMIX-run: ${runTijd} &middot; Bijgewerkt: ${data.bijgewerkt}<br>` +
+    `MOSMIX-run: ${runTijd} &middot; Bijgewerkt: ${alleDagen._bijgewerkt || ""}<br>` +
     `MAE = gemiddelde absolute fout &middot; Bias = systematische afwijking (positief = te warm/veel voorspeld)<br>` +
     `FF: MOSMIX gemiddelde dagwind vs KNMI etmaalgemiddelde (FG)`;
+}
+
+async function laad() {
+  let data;
+  try {
+    const r = await fetch("verificatie.json?" + Date.now());
+    if (!r.ok) throw new Error("Niet gevonden");
+    data = await r.json();
+  } catch {
+    return;
+  }
+
+  // Nieuw formaat: data.dagen is array
+  if (data.dagen && data.dagen.length > 0) {
+    alleDagen = data.dagen;
+    alleDagen._bijgewerkt = data.bijgewerkt;
+  } else if (data.datum) {
+    // Oud formaat: enkele dag
+    alleDagen = [data];
+    alleDagen._bijgewerkt = data.bijgewerkt;
+  } else {
+    return;
+  }
+
+  document.getElementById("geen-data").style.display = "none";
+
+  // Dag-tabs opbouwen
+  const tabsEl = document.getElementById("dag-tabs");
+  const dagOpties = { weekday: "short", day: "numeric", month: "short" };
+  tabsEl.innerHTML = "";
+  alleDagen.forEach((dag, i) => {
+    const d = new Date(dag.datum + "T12:00:00");
+    const label = d.toLocaleDateString("nl-NL", dagOpties);
+    tabsEl.innerHTML += `<div class="dag-tab${i === 0 ? " actief" : ""}" onclick="toonDag(${i})">${label}</div>`;
+  });
+
+  toonDag(0);
 }
 
 laad();
