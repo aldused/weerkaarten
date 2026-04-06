@@ -84,6 +84,11 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
   <button class="btn snelheid" data-ms="100">8x</button>
 </div>
 
+<div id="dag-knoppen" style="background:white;padding:4px 16px;display:flex;gap:4px;border-bottom:1px solid #dde6f0;flex-wrap:wrap;align-items:center;">
+  <span class="toolbar-label">Dag:</span>
+  <!-- Wordt dynamisch gevuld -->
+</div>
+
 <div class="slider-wrap">
   <button class="btn-stap" id="btn-vorige">&#9664;</button>
   <button class="btn-play" id="btn-play">&#9654;</button>
@@ -577,12 +582,12 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     if ((paramKey === "wind_druk" || paramKey === "wind") && paramCache["wind"]) {
       var wpd2 = paramCache["wind"];
       var wOff2 = stepIdx * wpd2.nLat * wpd2.nLon * 2;
-      var barbStep2 = 10;
+      var barbStep2 = 8;
 
       // Twee passes: eerst witte outline, dan zwarte pijl
       var passes = [
-        {stroke:"white", fill:"white", lw:3.5, headW:5.5},
-        {stroke:"#111",  fill:"#111",  lw:1.8, headW:4.0},
+        {stroke:"white", fill:"white", lw:4.5, headW:7},
+        {stroke:"#111",  fill:"#111",  lw:2.2, headW:5},
       ];
       for (var pass = 0; pass < 2; pass++) {
         var p = passes[pass];
@@ -596,10 +601,10 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
             var bv = wpd2.data[wOff2 + wpd2.nLat * wpd2.nLon + bi2];
             var bspd = Math.sqrt(bu*bu + bv*bv);
             if (bspd < 0.5) continue;
-            var bdir = Math.atan2(-bu, -bv);
+            var bdir = Math.atan2(bu, bv); // pijl wijst mee met de wind
             var bpx = ((bx + 0.5) / nLon) * cw;
             var bpy = ((nLat - 1 - by) / nLat) * ch;
-            var alen = Math.min(16, 6 + bspd);
+            var alen = Math.min(20, 8 + bspd * 1.2);
             ctx.beginPath();
             ctx.moveTo(bpx, bpy);
             var tipX = bpx + Math.sin(bdir) * alen;
@@ -651,7 +656,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
           var wv = wpd3.data[wOff3 + wpd3.nLat * wpd3.nLon + wi3];
           var wspd = Math.sqrt(wu*wu + wv*wv);
           if (wspd < 0.3) continue;
-          var wdir = Math.atan2(-wu, -wv);
+          var wdir = Math.atan2(wu, wv); // pijl wijst mee met de wind
           var wpx = ((wx + 0.5) / nLon) * cw;
           var wpy = ((nLat - 1 - wy) / nLat) * ch;
           var wlen = Math.min(14, 5 + wspd * 0.8);
@@ -768,19 +773,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     ctx.font = Math.max(10, Math.round(cw/65)) + "px Arial";
     ctx.fillStyle = "#555";
     ctx.textAlign = "left";
-    // Run in Nederlands LT
-    var runTxtCanvas = meta.run;
-    try {
-      var rp2 = meta.run.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2})z/);
-      if (rp2) {
-        var rd = new Date(Date.UTC(parseInt(rp2[3]), parseInt(rp2[2])-1, parseInt(rp2[1]), parseInt(rp2[4])));
-        var nlD2 = ["zo","ma","di","wo","do","vr","za"];
-        var nlM2 = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
-        var rl = new Date(rd.getTime() + 2*3600000);
-        runTxtCanvas = "Run: " + nlD2[rl.getDay()] + " " + rl.getDate() + " " + nlM2[rl.getMonth()] + " " + rl.getFullYear() + " " + String(rl.getHours()).padStart(2,"0") + ":00 LT";
-      }
-    } catch(e) { runTxtCanvas = "Run: " + meta.run; }
-    ctx.fillText(runTxtCanvas, 10, 38);
+    // Run-tijd direct uit metadata (al in lokale tijd)
+    ctx.fillText("Run: " + meta.run, 10, 38);
 
     // Geldig tijd rechts
     ctx.textAlign = "right";
@@ -1595,22 +1589,31 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     meta.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
     aantalUren = meta.uren;
     slider.max = aantalUren;
-    // Run-tijd in Nederlands + LT
-    var runTxt = meta.run;
-    try {
-      // Parse run uit meta (bijv "sun 05.04.2026 09z")
-      var rp = meta.run.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2})z/);
-      if (rp) {
-        var rdt = new Date(Date.UTC(parseInt(rp[3]), parseInt(rp[2])-1, parseInt(rp[1]), parseInt(rp[4])));
-        var nlDagen = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
-        var nlMaanden = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
-        var rLocal = new Date(rdt.getTime() + 2*3600000); // UTC+2 CEST
-        runTxt = nlDagen[rLocal.getDay()] + " " + rLocal.getDate() + " " + nlMaanden[rLocal.getMonth()] + " " + String(rLocal.getHours()).padStart(2,"0") + ":00 LT";
-      }
-    } catch(e) {}
-    document.getElementById("hdr-run").textContent = "run: " + runTxt;
+    // Run-tijd — staat al in lokale tijd in meta.run
+    document.getElementById("hdr-run").textContent = "run: " + meta.run;
     document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
     statusEl.textContent = "";
+
+    // Dag-knoppen bouwen
+    var dagDiv = document.getElementById("dag-knoppen");
+    var nlDag = ["zo","ma","di","wo","do","vr","za"];
+    var gezien = {};
+    for (var di = 0; di < meta.tijden.length; di++) {
+      var ddt = new Date(meta.tijden[di]);
+      var dagKey = ddt.getFullYear() + "-" + ddt.getMonth() + "-" + ddt.getDate();
+      if (!gezien[dagKey]) {
+        gezien[dagKey] = di;
+        var dbtn = document.createElement("button");
+        dbtn.className = "btn";
+        dbtn.textContent = nlDag[ddt.getDay()] + " " + ddt.getDate();
+        dbtn.dataset.step = di;
+        dbtn.style.fontSize = "12px";
+        dbtn.addEventListener("click", function() {
+          updateAlle(parseInt(this.dataset.step));
+        });
+        dagDiv.appendChild(dbtn);
+      }
+    }
 
     // Laad eerste parameter
     return laadParam(panelParams[0]);

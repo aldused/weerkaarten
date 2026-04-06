@@ -174,13 +174,15 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
             for l in WIND_LEVELS: f.write(crop(all_wspd_prof[l][s]).astype(np.float32).tobytes())
 
     # 6. Metadata
-    run_str=run_dt.astimezone(LOCAL_TZ).strftime('%a %d.%m.%Y %Hz').lower()
+    run_local=run_dt.astimezone(LOCAL_TZ)
+    run_str=run_local.strftime('%a %d.%m.%Y %H:%M LT').lower()
+    run_utc_str=run_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
     times_str=[]
     for h in range(1,len(grib_files)):
         times_str.append((run_dt+timedelta(hours=h)).astimezone(LOCAL_TZ).strftime('%Y-%m-%dT%H:%M'))
 
     c_lats=lats[lat_idx]; c_lons=lons[lon_idx]
-    meta={'model':'Harmonie 43','run':run_str,
+    meta={'model':'Harmonie 43','run':run_str,'run_utc':run_utc_str,
       'bijgewerkt':datetime.now(tz=LOCAL_TZ).strftime('%d %b %Y %H:%M'),
       'uren':n_steps,'tijden':times_str,
       'grid':{'n_lat':n_lat,'n_lon':n_lon,
