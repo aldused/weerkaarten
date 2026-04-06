@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 os.chdir("/Users/aldus/KNMI_Project/weerkaarten 2")
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
-EXTENT = [1.5, 9.0, 49.3, 53.9]
+EXTENT = [0.5, 12.5, 47.5, 56.5]
 
 R2_ENDPOINT = "https://05da71c7c88b8ce49fbb2c2d0a570416.r2.cloudflarestorage.com"
 R2_ACCESS_KEY = "baf991003ce3e4075d91b89f8726bc0f"
@@ -52,44 +52,78 @@ run_local = run_dt.astimezone(LOCAL_TZ)
 run_str = run_local.strftime("%a %d.%m.%Y %H:%M LT").lower()
 print(f"   Run: {run_dt.strftime('%Y%m%d%Hz')} = {run_str}")
 
-# 2. Download alle parameters per stap
-print(f"\n2. Downloaden ({len(PARAMS)} params x {len(STEPS)} stappen)...")
+# 2. Download alle parameters per stap (gebundeld per stap = minder API-calls)
+# Drie groepen: basis, bewolking en instabiliteit apart (niet alle beschikbaar)
+PARAM_GROEP_A = ["2t", "2d", "10u", "10v", "msl", "tp"]
+PARAM_GROEP_B = ["tcc", "hcc", "mcc", "lcc"]
+PARAM_GROEP_C = ["cape", "i10fg"]
 
-all_data = {v["naam"]: {} for v in PARAMS.values()}  # {naam: {step: 2d_array}}
+# Lookup: ecmwf_code → info
+PARAM_LOOKUP = {code: info for code, info in PARAMS.items()}
+
+all_data = {v["naam"]: {} for v in PARAMS.values()}
 lats = lons = None
 
+def parse_grib(fname, step):
+    global lats, lons
+    with open(fname, "rb") as f:
+        while True:
+            msgid = eccodes.codes_grib_new_from_file(f)
+            if msgid is None:
+                break
+            try:
+                shortName = eccodes.codes_get(msgid, "shortName")
+                ni = eccodes.codes_get(msgid, "Ni")
+                nj = eccodes.codes_get(msgid, "Nj")
+                vals = eccodes.codes_get_values(msgid).reshape(nj, ni)
+
+                if shortName in PARAM_LOOKUP:
+                    info = PARAM_LOOKUP[shortName]
+                    vals = info["conv"](vals)
+                    all_data[info["naam"]][step] = vals
+
+                if lats is None:
+                    lat1 = eccodes.codes_get(msgid, "latitudeOfFirstGridPointInDegrees")
+                    lat2 = eccodes.codes_get(msgid, "latitudeOfLastGridPointInDegrees")
+                    lon1 = eccodes.codes_get(msgid, "longitudeOfFirstGridPointInDegrees")
+                    lon2 = eccodes.codes_get(msgid, "longitudeOfLastGridPointInDegrees")
+                    lats = np.linspace(lat1, lat2, nj)
+                    # ECMWF: lon kan wrappen (180→179.75 = via 360/0)
+                    if lon2 < lon1:
+                        lons = np.linspace(lon1, lon2 + 360, ni) % 360
+                    else:
+                        lons = np.linspace(lon1, lon2, ni)
+                    print(f"   Grid: {ni}x{nj}, lat {lat1:.2f}→{lat2:.2f}, lon {lon1:.2f}→{lon2:.2f}")
+                    print(f"   Lons range: {lons.min():.2f}→{lons.max():.2f} (na wrap-fix)")
+            finally:
+                eccodes.codes_release(msgid)
+
+print(f"\n2. Downloaden ({len(STEPS)} stappen, params gebundeld)...")
+
 for step in STEPS:
-    for ecmwf_code, info in PARAMS.items():
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".grib2", delete=True) as tmp:
-                client.retrieve(type="fc", step=step, param=[ecmwf_code],
-                               target=tmp.name, stream="oper", levtype="sfc")
-
-                with open(tmp.name, "rb") as f:
-                    msgid = eccodes.codes_grib_new_from_file(f)
-                    if msgid:
-                        ni = eccodes.codes_get(msgid, "Ni")
-                        nj = eccodes.codes_get(msgid, "Nj")
-                        vals = eccodes.codes_get_values(msgid).reshape(nj, ni)
-                        vals = info["conv"](vals)
-
-                        if lats is None:
-                            lat1 = eccodes.codes_get(msgid, "latitudeOfFirstGridPointInDegrees")
-                            lat2 = eccodes.codes_get(msgid, "latitudeOfLastGridPointInDegrees")
-                            lon1 = eccodes.codes_get(msgid, "longitudeOfFirstGridPointInDegrees")
-                            lon2 = eccodes.codes_get(msgid, "longitudeOfLastGridPointInDegrees")
-                            # ECMWF: lon 0-360, lat 90 to -90
-                            lats = np.linspace(lat1, lat2, nj)
-                            lons = np.linspace(lon1, lon2, ni)
-                            print(f"   Grid: {ni}x{nj}, lat {lats[0]:.1f}-{lats[-1]:.1f}, lon {lons[0]:.1f}-{lons[-1]:.1f}")
-
-                        all_data[info["naam"]][step] = vals
-                        eccodes.codes_release(msgid)
-        except Exception as e:
-            pass  # Parameter niet beschikbaar voor deze stap
+    for groep in [PARAM_GROEP_A, PARAM_GROEP_B, PARAM_GROEP_C]:
+        for poging in range(3):
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp:
+                    tmpname = tmp.name
+                client.retrieve(type="fc", step=step, param=groep,
+                               target=tmpname, stream="oper", levtype="sfc")
+                parse_grib(tmpname, step)
+                os.unlink(tmpname)
+                break
+            except Exception as e:
+                if poging < 2:
+                    time.sleep(2 * (poging + 1))
+                else:
+                    print(f"   ! Stap {step}, groep {groep[0]}...: {e}")
+                try:
+                    os.unlink(tmpname)
+                except:
+                    pass
 
     if step % 24 == 0:
         print(f"   Stap {step}h ({time.time()-t0:.0f}s)")
+    time.sleep(0.5)  # voorkom rate-limiting
 
 print(f"   Download klaar in {time.time()-t0:.0f}s")
 
