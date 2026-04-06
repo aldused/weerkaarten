@@ -2703,7 +2703,18 @@ let grafiekMORH   = null;
 
 function initMaandoverzicht() {
   if (!data || !data.maanddetail) return;
-  const jaren = Object.keys(data.maanddetail).sort().reverse();
+
+  // Bij multiData: verzamel alle beschikbare jaren over alle stations
+  let jarenSet = new Set();
+  if (multiData) {
+    multiData.forEach(ds => {
+      if (ds && ds.maanddetail) Object.keys(ds.maanddetail).forEach(j => jarenSet.add(j));
+    });
+  } else {
+    Object.keys(data.maanddetail).forEach(j => jarenSet.add(j));
+  }
+  const jaren = [...jarenSet].sort().reverse();
+
   const sel = document.getElementById("mo-jaar");
   sel.innerHTML = "";
   jaren.forEach(j => {
@@ -2711,14 +2722,81 @@ function initMaandoverzicht() {
     opt.value = j; opt.textContent = j;
     sel.appendChild(opt);
   });
-  // Standaard: huidige maand of vorige maand
   const nu = new Date();
   const huidMaand = nu.getMonth() + 1;
   const huidJaar = nu.getFullYear();
-  // Kies huidig jaar als dat beschikbaar is
   if (jaren.includes(String(huidJaar))) sel.value = String(huidJaar);
   document.getElementById("mo-maand").value = huidMaand;
   toonMaandoverzicht();
+}
+
+function bouwMultiMaanddetail(jaar, maand) {
+  // Combineer maanddetail van alle stations: per dag extremen berekenen
+  const alleStations = multiData.filter(ds => ds?.maanddetail?.[jaar]?.[maand]);
+  if (alleStations.length === 0) return null;
+
+  // Verzamel alle dagen
+  const dagMap = {}; // dag -> { tx: {val, stn}, tn: {val, stn}, tg: [], rh: {val, stn}, sq: {val, stn}, fg: [] }
+  alleStations.forEach(ds => {
+    const md = ds.maanddetail[jaar][maand];
+    if (!md.dagen) return;
+    md.dagen.forEach(d => {
+      if (!dagMap[d.dag]) dagMap[d.dag] = { tx: [], tn: [], tg: [], rh: [], sq: [], fg: [] };
+      const entry = dagMap[d.dag];
+      if (d.tx !== null) entry.tx.push({ val: d.tx, stn: ds.station });
+      if (d.tn !== null) entry.tn.push({ val: d.tn, stn: ds.station });
+      if (d.tg !== null) entry.tg.push({ val: d.tg, stn: ds.station });
+      if (d.rh !== null) entry.rh.push({ val: d.rh, stn: ds.station });
+      if (d.sq !== null) entry.sq.push({ val: d.sq, stn: ds.station });
+      if (d.fg !== null) entry.fg.push({ val: d.fg, stn: ds.station });
+    });
+  });
+
+  const dagen = Object.keys(dagMap).sort((a,b) => a - b).map(dag => {
+    const e = dagMap[dag];
+    const maxOf = arr => arr.length ? arr.reduce((best, x) => x.val > best.val ? x : best) : { val: null, stn: "" };
+    const minOf = arr => arr.length ? arr.reduce((best, x) => x.val < best.val ? x : best) : { val: null, stn: "" };
+    const avg   = arr => arr.length ? Math.round(arr.reduce((s, x) => s + x.val, 0) / arr.length * 10) / 10 : null;
+    const sum   = arr => arr.length ? Math.round(arr.reduce((s, x) => s + x.val, 0) * 10) / 10 : null;
+
+    const txBest = maxOf(e.tx); // hoogste TX over alle stations
+    const tnBest = minOf(e.tn); // laagste TN over alle stations
+    const rhBest = maxOf(e.rh); // meeste neerslag
+    const sqBest = maxOf(e.sq); // meeste zon
+    const fgBest = maxOf(e.fg); // hardste wind
+
+    return {
+      dag: parseInt(dag),
+      tx: txBest.val, tx_stn: txBest.stn,
+      tn: tnBest.val, tn_stn: tnBest.stn,
+      tg: avg(e.tg),
+      rh: rhBest.val, rh_stn: rhBest.stn,
+      sq: sqBest.val, sq_stn: sqBest.stn,
+      fg: fgBest.val, fg_stn: fgBest.stn,
+    };
+  });
+
+  // Samenvattende stats
+  const txVals = dagen.filter(d => d.tx !== null).map(d => d.tx);
+  const tnVals = dagen.filter(d => d.tn !== null).map(d => d.tn);
+  const tgVals = dagen.filter(d => d.tg !== null).map(d => d.tg);
+  const rhVals = dagen.filter(d => d.rh !== null).map(d => d.rh);
+  const sqVals = dagen.filter(d => d.sq !== null).map(d => d.sq);
+  const avg = arr => arr.length ? Math.round(arr.reduce((s,v) => s+v, 0) / arr.length * 10) / 10 : null;
+  const som = arr => arr.length ? Math.round(arr.reduce((s,v) => s+v, 0) * 10) / 10 : null;
+
+  return {
+    gem_tx: avg(txVals), gem_tn: avg(tnVals), gem_tg: avg(tgVals),
+    som_rh: som(rhVals), som_sq: som(sqVals),
+    zachte_dagen:    txVals.filter(v => v >= 15).length,
+    warme_dagen:     txVals.filter(v => v >= 20).length,
+    zomerse_dagen:   txVals.filter(v => v >= 25).length,
+    tropische_dagen: txVals.filter(v => v >= 30).length,
+    ijsdagen:        txVals.filter(v => v < 0).length,
+    vorstdagen:      tnVals.filter(v => v < 0).length,
+    dagen: dagen,
+    _aantalStations: alleStations.length,
+  };
 }
 
 function toonMaandoverzicht() {
@@ -2726,7 +2804,9 @@ function toonMaandoverzicht() {
   updateBreadcrumb();
   const jaar  = document.getElementById("mo-jaar").value;
   const maand = document.getElementById("mo-maand").value;
-  const md = data.maanddetail?.[jaar]?.[maand];
+
+  const isMulti = !!multiData;
+  const md = isMulti ? bouwMultiMaanddetail(jaar, maand) : data.maanddetail?.[jaar]?.[maand];
 
   if (!md) {
     document.getElementById("mo-samenvatting").innerHTML = '<div style="color:var(--tekst2);font-size:0.88em;grid-column:1/-1;">Geen data beschikbaar voor deze maand.</div>';
@@ -2736,9 +2816,12 @@ function toonMaandoverzicht() {
   }
 
   const maandNaam = NL_MAANDEN_LANG[parseInt(maand)];
+  const stationLabel = isMulti
+    ? `${document.querySelector("#sel-station option:checked").text} (${md._aantalStations} stations)`
+    : data.station;
 
   // ── Normaalwaarden ophalen ──
-  const norm = data.normaal?.[maand];
+  const norm = isMulti ? null : data.normaal?.[maand];
   const heeftNormaal = norm && norm.gem_tx !== null;
 
   // ── Samenvatting kaartjes ──
@@ -2786,7 +2869,7 @@ function toonMaandoverzicht() {
   const normTN = heeftNormaal ? labels.map(d => norm.dag?.[d]?.tn ?? null) : [];
   const normRH = heeftNormaal ? labels.map(d => norm.dag?.[d]?.rh ?? null) : [];
 
-  document.getElementById("mo-grafiek-titel").textContent = `Temperatuurverloop ${maandNaam} ${jaar} – ${data.station}`;
+  document.getElementById("mo-grafiek-titel").textContent = `Temperatuurverloop ${maandNaam} ${jaar} – ${stationLabel}`;
   document.getElementById("mo-grafiek-rh-titel").textContent = `Neerslag per dag – ${maandNaam} ${jaar}`;
 
   // Temperatuurgrafiek
@@ -2882,8 +2965,10 @@ function toonMaandoverzicht() {
   });
 
   // ── Tabel ──
-  document.getElementById("mo-tabel-titel").textContent = `Daggegevens ${maandNaam} ${jaar} – ${data.station}`;
-  document.getElementById("mo-tabel-sub").textContent = `${dagen.length} dagen`;
+  document.getElementById("mo-tabel-titel").textContent = `Daggegevens ${maandNaam} ${jaar} – ${stationLabel}`;
+  document.getElementById("mo-tabel-sub").textContent = isMulti
+    ? `${dagen.length} dagen · Extremen over alle stations`
+    : `${dagen.length} dagen`;
 
   const tbody = document.getElementById("mo-tabel-body");
   tbody.innerHTML = "";
@@ -2902,13 +2987,19 @@ function toonMaandoverzicht() {
     let tnKleur = "var(--tekst)";
     if (d.tn !== null && d.tn < 0) tnKleur = "#60a5fa";
 
+    // Bij multi-station: tooltip met stationsnaam bij de extremen
+    const txTitle = isMulti && d.tx_stn ? ` title="${d.tx_stn}"` : "";
+    const tnTitle = isMulti && d.tn_stn ? ` title="${d.tn_stn}"` : "";
+    const rhTitle = isMulti && d.rh_stn ? ` title="${d.rh_stn}"` : "";
+    const sqTitle = isMulti && d.sq_stn ? ` title="${d.sq_stn}"` : "";
+
     tr.innerHTML = `
       <td style="padding:8px 14px;font-weight:500;">${d.dag} ${maandNaam.slice(0,3)}</td>
-      <td style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${txKleur};font-weight:500;">${d.tx !== null ? d.tx.toFixed(1) : "–"}</td>
-      <td style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${tnKleur};">${d.tn !== null ? d.tn.toFixed(1) : "–"}</td>
+      <td${txTitle} style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${txKleur};font-weight:500;cursor:${isMulti ? 'help' : 'default'};">${d.tx !== null ? d.tx.toFixed(1) : "–"}</td>
+      <td${tnTitle} style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${tnKleur};cursor:${isMulti ? 'help' : 'default'};">${d.tn !== null ? d.tn.toFixed(1) : "–"}</td>
       <td style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:#94a3b8;">${d.tg !== null ? d.tg.toFixed(1) : "–"}</td>
-      <td style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${d.rh > 5 ? "#3b82f6" : "var(--tekst)"};">${d.rh !== null ? d.rh.toFixed(1) : "–"}</td>
-      <td style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${d.sq > 5 ? "#fbbf24" : "var(--tekst)"};">${d.sq !== null ? d.sq.toFixed(1) : "–"}</td>
+      <td${rhTitle} style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${d.rh > 5 ? "#3b82f6" : "var(--tekst)"};cursor:${isMulti ? 'help' : 'default'};">${d.rh !== null ? d.rh.toFixed(1) : "–"}</td>
+      <td${sqTitle} style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;color:${d.sq > 5 ? "#fbbf24" : "var(--tekst)"};cursor:${isMulti ? 'help' : 'default'};">${d.sq !== null ? d.sq.toFixed(1) : "–"}</td>
       <td style="padding:8px 14px;text-align:right;font-family:'DM Mono',monospace;">${d.fg !== null ? d.fg.toFixed(1) : "–"}</td>`;
     tbody.appendChild(tr);
   });
