@@ -142,7 +142,11 @@ body.scroll-mode { overflow-y: auto; }
     <button class="zoom-btn" data-zoom="5">5×</button>
   </div>
   <span style="font-size:11px;color:#888;" id="zoom-hint"></span>
-  <button class="btn" id="btn-save" style="margin-left:auto;" title="Kaart opslaan als PNG">💾 Opslaan</button>
+  <div style="margin-left:auto;display:flex;gap:6px;align-items:center;position:relative;">
+    <input id="plaats-zoek" type="text" placeholder="Zoek plaats..." style="width:140px;padding:4px 8px;border:1px solid #c5d3e3;border-radius:4px;font-size:12px;outline:none;" autocomplete="off">
+    <div id="plaats-suggest" style="display:none;position:absolute;top:100%;left:0;background:white;border:1px solid #c5d3e3;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);max-height:200px;overflow-y:auto;z-index:50;width:200px;margin-top:2px;"></div>
+    <button class="btn" id="btn-save" title="Kaart opslaan als PNG">💾 Opslaan</button>
+  </div>
 </div>
 <div id="main-content">
   <div id="uur-sidebar"></div>
@@ -184,6 +188,7 @@ body.scroll-mode { overflow-y: auto; }
   };
   var actiefModel = "harmonie";
   var vergelijkModus = false;
+  var pinPlaats = null; // [lat, lon, naam] — rode pin op kaart
   var modelData = {}; // { modelKey: { meta, paramCache } } — per-model cache voor vergelijkmodus
 
   function addDerivedParams(m) {
@@ -1007,6 +1012,42 @@ body.scroll-mode { overflow-y: auto; }
     ctx.font = "bold 12px Arial";
     ctx.textAlign = "right";
     ctx.fillText("\u00a9 Ed Aldus / KNMI", cw - 8, legY + legH - 5);
+
+    // ── Rode pin voor geselecteerde plaats ──
+    if (pinPlaats) {
+      var pinLatFrac = (pinPlaats[0] - meta.grid.lat_min) / (meta.grid.lat_max - meta.grid.lat_min);
+      var pinLonFrac = (pinPlaats[1] - meta.grid.lon_min) / (meta.grid.lon_max - meta.grid.lon_min);
+      // Grid-positie (gy=0 bovenaan)
+      var pinGy = (1 - pinLatFrac) * nLat;
+      var pinGx = pinLonFrac * nLon;
+      var pinPx = ((pinGx + 0.5) / nLon - vx0) / vw * cw;
+      var pinPy = (pinGy / nLat - vy0) / vh * ch;
+      // Alleen tekenen als zichtbaar
+      if (pinPx > -20 && pinPx < cw + 20 && pinPy > -20 && pinPy < ch + 20) {
+        var ps = Math.max(18, Math.round(ch / 40)); // pin grootte
+        // Pin schacht
+        ctx.fillStyle = "#cc0000";
+        ctx.beginPath();
+        ctx.moveTo(pinPx, pinPy);
+        ctx.bezierCurveTo(pinPx - ps*0.4, pinPy - ps*0.8, pinPx - ps*0.5, pinPy - ps*1.2, pinPx, pinPy - ps*1.5);
+        ctx.bezierCurveTo(pinPx + ps*0.5, pinPy - ps*1.2, pinPx + ps*0.4, pinPy - ps*0.8, pinPx, pinPy);
+        ctx.fill();
+        // Witte stip in pin
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(pinPx, pinPy - ps*1.1, ps*0.18, 0, Math.PI*2);
+        ctx.fill();
+        // Plaatsnaam label
+        ctx.font = "bold " + Math.max(12, Math.round(ps*0.6)) + "px Arial";
+        ctx.textAlign = "center";
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 3;
+        ctx.lineJoin = "round";
+        ctx.strokeText(pinPlaats[2], pinPx, pinPy - ps*1.7);
+        ctx.fillStyle = "#cc0000";
+        ctx.fillText(pinPlaats[2], pinPx, pinPy - ps*1.7);
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1474,6 +1515,109 @@ body.scroll-mode { overflow-y: auto; }
     a.download = actiefModel + "_" + pname + "_" + slider.value + "h.png";
     a.click();
   }
+
+  // ── Plaats zoeken + rode pin ──
+  var zoekInput = document.getElementById("plaats-zoek");
+  var suggestBox = document.getElementById("plaats-suggest");
+
+  function zoekPlaatsen(query) {
+    if (!query || query.length < 1) return [];
+    var q = query.toLowerCase();
+    var matches = [];
+    for (var i = 0; i < PLAATSEN.length; i++) {
+      if (PLAATSEN[i][2].toLowerCase().indexOf(q) >= 0) {
+        matches.push(PLAATSEN[i]);
+      }
+    }
+    // Sorteer: begint-met eerst, dan bevat
+    matches.sort(function(a, b) {
+      var aStart = a[2].toLowerCase().indexOf(q) === 0 ? 0 : 1;
+      var bStart = b[2].toLowerCase().indexOf(q) === 0 ? 0 : 1;
+      return aStart - bStart || a[2].localeCompare(b[2]);
+    });
+    return matches.slice(0, 8);
+  }
+
+  function gaNaarPlaats(plaats) {
+    pinPlaats = plaats;
+    zoekInput.value = plaats[2];
+    suggestBox.style.display = "none";
+
+    // Bereken positie in 0-1 space
+    var latFrac = (plaats[0] - meta.grid.lat_min) / (meta.grid.lat_max - meta.grid.lat_min);
+    var lonFrac = (plaats[1] - meta.grid.lon_min) / (meta.grid.lon_max - meta.grid.lon_min);
+    var cx = lonFrac, cy = 1 - latFrac;
+
+    // Zoom in naar niveau 3
+    var zoomNiveau = 3;
+    for (var pi = 0; pi < panelParams.length; pi++) {
+      var zs = getZoom(pi);
+      zs.zoom = zoomNiveau;
+      zs.cx = cx;
+      zs.cy = cy;
+    }
+    // Update zoom-knoppen
+    document.querySelectorAll(".zoom-btn").forEach(function(b) {
+      b.classList.toggle("actief", parseInt(b.dataset.zoom) === zoomNiveau);
+    });
+    document.getElementById("zoom-hint").textContent = "Sleep de kaart om te verschuiven";
+    updateAlle(parseInt(slider.value) - 1);
+  }
+
+  function toonSuggesties(matches) {
+    suggestBox.innerHTML = "";
+    if (matches.length === 0) { suggestBox.style.display = "none"; return; }
+    for (var i = 0; i < matches.length; i++) {
+      var div = document.createElement("div");
+      div.textContent = matches[i][2];
+      div.style.cssText = "padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;";
+      div.dataset.idx = i;
+      div.addEventListener("mouseenter", function() { this.style.background = "#e8f0f8"; });
+      div.addEventListener("mouseleave", function() { this.style.background = ""; });
+      (function(plaats) {
+        div.addEventListener("mousedown", function(e) {
+          e.preventDefault(); // voorkom blur
+          gaNaarPlaats(plaats);
+        });
+      })(matches[i]);
+      suggestBox.appendChild(div);
+    }
+    suggestBox.style.display = "block";
+  }
+
+  zoekInput.addEventListener("input", function() {
+    var matches = zoekPlaatsen(this.value);
+    toonSuggesties(matches);
+  });
+
+  zoekInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      var matches = zoekPlaatsen(this.value);
+      if (matches.length > 0) gaNaarPlaats(matches[0]);
+      e.preventDefault();
+    } else if (e.key === "Escape") {
+      suggestBox.style.display = "none";
+      this.blur();
+    }
+  });
+
+  zoekInput.addEventListener("blur", function() {
+    setTimeout(function() { suggestBox.style.display = "none"; }, 150);
+  });
+
+  zoekInput.addEventListener("focus", function() {
+    if (this.value.length > 0) {
+      toonSuggesties(zoekPlaatsen(this.value));
+    }
+  });
+
+  // Pin wissen bij zoom 1×
+  document.querySelectorAll(".zoom-btn").forEach(function(b) {
+    var origHandler = b.onclick;
+    b.addEventListener("click", function() {
+      if (parseInt(this.dataset.zoom) === 1) pinPlaats = null;
+    });
+  });
 
   // ── Uur-sidebar vullen ──
   var uurSidebar = document.getElementById("uur-sidebar");
