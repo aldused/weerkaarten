@@ -43,39 +43,49 @@ PARAMS = {
 
 MAX_HOURS = 48
 
-# 1. Bepaal laatste run
+# 1. Bepaal laatste run — check alle mappen voor de nieuwste bestandsdatum
 print("1. Laatste ICON-D2 run bepalen...")
 r = requests.get(f"{DWD_BASE}/", timeout=15)
 runs = sorted([l.split('href="')[1].split('"')[0].strip('/') for l in r.text.split("\n")
                if 'href="' in l and '/' in l and '..' not in l])
-run_utc = int(runs[-1])  # bijv "06"
 
-# Check of de run compleet is (laatste uur moet er zijn)
-url_check = f"{DWD_BASE}/{run_utc:02d}/t_2m/"
-r_check = requests.get(url_check, timeout=15)
-has_last = f"_{MAX_HOURS:03d}_" in r_check.text
-if not has_last:
-    # Neem vorige run
-    run_utc = int(runs[-2])
-    print(f"   Laatste run ({runs[-1]}) niet compleet, gebruik {run_utc:02d}z")
-else:
-    print(f"   Run: {run_utc:02d}z")
+# Check elke run-map voor de daadwerkelijke run-datum in de bestandsnamen
+best_run_dt = None
+best_run_utc = None
+for run_h in runs:
+    try:
+        r_files = requests.get(f"{DWD_BASE}/{run_h}/t_2m/", timeout=10)
+        for line in r_files.text.split("\n"):
+            if 'regular-lat-lon' in line and '_000_' in line:
+                fname = line.split('href="')[1].split('"')[0]
+                date_str = fname.split("_")[4]
+                rdt = datetime.strptime(date_str, "%Y%m%d%H").replace(tzinfo=timezone.utc)
+                # Check of run compleet is (laatste uur aanwezig)
+                has_last = f"_{MAX_HOURS:03d}_" in r_files.text
+                if has_last and (best_run_dt is None or rdt > best_run_dt):
+                    best_run_dt = rdt
+                    best_run_utc = int(run_h)
+                elif not has_last and (best_run_dt is None or rdt > best_run_dt):
+                    # Incompleet maar nieuwer — onthoud als fallback
+                    pass
+                break
+    except:
+        continue
 
-# Run datum (vandaag)
-now = datetime.now(tz=timezone.utc)
-run_dt = now.replace(hour=run_utc, minute=0, second=0, microsecond=0)
-if run_dt > now:
-    run_dt -= timedelta(days=1)
+if best_run_dt is None:
+    # Fallback: pak laatste map
+    best_run_utc = int(runs[-1])
+    r_files = requests.get(f"{DWD_BASE}/{best_run_utc:02d}/t_2m/", timeout=15)
+    for line in r_files.text.split("\n"):
+        if 'regular-lat-lon' in line and '_000_' in line:
+            fname = line.split('href="')[1].split('"')[0]
+            date_str = fname.split("_")[4]
+            best_run_dt = datetime.strptime(date_str, "%Y%m%d%H").replace(tzinfo=timezone.utc)
+            break
 
-# Bepaal run datum uit bestandsnaam
-r_files = requests.get(f"{DWD_BASE}/{run_utc:02d}/t_2m/", timeout=15)
-for line in r_files.text.split("\n"):
-    if 'regular-lat-lon' in line and '_000_' in line:
-        fname = line.split('href="')[1].split('"')[0]
-        # icon-d2_germany_regular-lat-lon_single-level_2026040600_000_2d_t_2m.grib2.bz2
-        date_str = fname.split("_")[4]  # "2026040600"
-        run_dt = datetime.strptime(date_str, "%Y%m%d%H").replace(tzinfo=timezone.utc)
-        break
+run_utc = best_run_utc
+run_dt = best_run_dt
+print(f"   Nieuwste complete run: {run_dt.strftime('%Y%m%d')} {run_utc:02d}z")
 
 # Check of deze run al verwerkt is
 run_utc_str = run_dt.strftime('%Y-%m-%dT%H:%MZ')
