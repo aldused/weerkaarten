@@ -433,9 +433,13 @@ body.scroll-mode { overflow-y: auto; }
   ];
 
   // Bewolking RGBA cmaps
-  function cloudHighRGBA(frac) { var a = frac * 0.85; return [143,175,200, Math.round(a*255)]; }
-  function cloudMidRGBA(frac)  { var a = frac * 0.80; return [204,170,51,  Math.round(a*255)]; }
-  function cloudLowRGBA(frac)  { var a = frac * 0.90; return [80,80,80,    Math.round(a*255)]; }
+  // Achtergrond: lichtblauw [200,232,255] = helder
+  // Hoog: wit (cirrus/cirrostratus) — sterk contrast met blauwe achtergrond
+  function cloudHighRGBA(frac) { var a = frac * 0.95; return [255,255,255, Math.round(a*255)]; }
+  // Midden: geel-oker (altocumulus/altostratus)
+  function cloudMidRGBA(frac)  { var a = frac * 0.9; return [190,170,60, Math.round(a*255)]; }
+  // Laag: donkergrijs (stratus/stratocumulus)
+  function cloudLowRGBA(frac)  { var a = frac * 0.95; return [60,60,60,   Math.round(a*255)]; }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // KLEUR FUNCTIES
@@ -477,6 +481,7 @@ body.scroll-mode { overflow-y: auto; }
 
   var meta = null;
   var overlayImg = null;
+  var landImg = null;
   var paramCache = {}; // { paramKey: { header, data: Float32Array } }
 
   function laadMeta() {
@@ -493,6 +498,16 @@ body.scroll-mode { overflow-y: auto; }
       img.onload = function() { overlayImg = img; resolve(img); };
       img.onerror = function() { resolve(null); };
       img.src = DATA_URL + "harmonie_overlay.png?t=" + Date.now();
+    });
+  }
+
+  function laadLand() {
+    return new Promise(function(resolve) {
+      var img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = function() { landImg = img; resolve(img); };
+      img.onerror = function() { resolve(null); };
+      img.src = DATA_URL + "harmonie_land.png?t=" + Date.now();
     });
   }
 
@@ -622,41 +637,42 @@ body.scroll-mode { overflow-y: auto; }
     var pixels = imgData.data;
 
     if (paramKey === "bewolking") {
-      // Bewolking: 3-laags alpha compositing
-      // Achtergrond: lichtblauw
+      // Bewolking: wolken als semi-transparante pixels op offscreen canvas
+      // Achtergrond (blauw zee + groen land) wordt apart getekend
       for (var y = 0; y < nLat; y++) {
         for (var x = 0; x < nLon; x++) {
-          var i = (nLat - 1 - y) * nLon + x; // flip Y (data is south-to-north)
+          var i = (nLat - 1 - y) * nLon + x;
           var hoog   = pd.data[offset + 0 * nLat * nLon + i] || 0;
           var midden = pd.data[offset + 1 * nLat * nLon + i] || 0;
           var laag   = pd.data[offset + 2 * nLat * nLon + i] || 0;
 
-          // Start met lichtblauwe lucht
-          var r = 200, g = 232, b = 255;
+          // Composit wolkenlagen op transparante achtergrond
+          var r = 0, g = 0, b = 0, totalA = 0;
 
-          // Hoog (wit/lichtblauw)
+          // Hoog (wit)
           var ha = cloudHighRGBA(hoog);
-          var a = ha[3] / 255;
-          r = r * (1-a) + ha[0] * a;
-          g = g * (1-a) + ha[1] * a;
-          b = b * (1-a) + ha[2] * a;
+          var a1 = ha[3] / 255;
+          r += ha[0] * a1; g += ha[1] * a1; b += ha[2] * a1; totalA = 1 - (1-totalA)*(1-a1);
 
-          // Midden (geel)
+          // Midden (oker)
           var ma = cloudMidRGBA(midden);
-          a = ma[3] / 255;
-          r = r * (1-a) + ma[0] * a;
-          g = g * (1-a) + ma[1] * a;
-          b = b * (1-a) + ma[2] * a;
+          var a2 = ma[3] / 255;
+          r = r*(1-a2) + ma[0]*a2; g = g*(1-a2) + ma[1]*a2; b = b*(1-a2) + ma[2]*a2; totalA = 1 - (1-totalA)*(1-a2);
 
-          // Laag (grijs)
+          // Laag (donkergrijs)
           var la = cloudLowRGBA(laag);
-          a = la[3] / 255;
-          r = r * (1-a) + la[0] * a;
-          g = g * (1-a) + la[1] * a;
-          b = b * (1-a) + la[2] * a;
+          var a3 = la[3] / 255;
+          r = r*(1-a3) + la[0]*a3; g = g*(1-a3) + la[1]*a3; b = b*(1-a3) + la[2]*a3; totalA = 1 - (1-totalA)*(1-a3);
 
           var pi = (y * nLon + x) * 4;
-          pixels[pi] = r; pixels[pi+1] = g; pixels[pi+2] = b; pixels[pi+3] = 255;
+          if (totalA > 0.01) {
+            pixels[pi] = Math.round(r / totalA);
+            pixels[pi+1] = Math.round(g / totalA);
+            pixels[pi+2] = Math.round(b / totalA);
+            pixels[pi+3] = Math.round(totalA * 255);
+          } else {
+            pixels[pi] = pixels[pi+1] = pixels[pi+2] = pixels[pi+3] = 0;
+          }
         }
       }
     } else {
@@ -732,26 +748,44 @@ body.scroll-mode { overflow-y: auto; }
     offCtx.putImageData(imgData, 0, 0);
 
     // Upscale naar zichtbare canvas met smoothing + zoom viewport
-    // Source rect in offscreen-pixels (grid space)
     var srcX = vx0 * nLon, srcY = vy0 * nLat;
     var srcW = vw * nLon, srcH = vh * nLat;
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
+
+    // Bij bewolking: eerst blauwe zee + groene land achtergrond
+    if (paramKey === "bewolking") {
+      ctx.fillStyle = "#6baed6"; // zee blauw
+      ctx.fillRect(0, 0, cw, ch);
+      // Land-fill PNG (groen) erover
+      if (landImg) {
+        var OE2 = {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5};
+        var DE2 = {lonMin: meta.grid.lon_min, lonMax: meta.grid.lon_max,
+                   latMin: meta.grid.lat_min, latMax: meta.grid.lat_max};
+        var oW2 = OE2.lonMax - OE2.lonMin, oH2 = OE2.latMax - OE2.latMin;
+        var osx2 = (DE2.lonMin - OE2.lonMin) / oW2 * landImg.naturalWidth;
+        var osy2 = (1 - (DE2.latMax - OE2.latMin) / oH2) * landImg.naturalHeight;
+        var osw2 = (DE2.lonMax - DE2.lonMin) / oW2 * landImg.naturalWidth;
+        var osh2 = (DE2.latMax - DE2.latMin) / oH2 * landImg.naturalHeight;
+        var lsx = osx2 + vx0 * osw2, lsy = osy2 + vy0 * osh2;
+        var lsw = vw * osw2, lsh = vh * osh2;
+        ctx.drawImage(landImg, lsx, lsy, lsw, lsh, 0, 0, cw, ch);
+      }
+    }
+
     ctx.drawImage(offCanvas, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
 
     // Overlay (kustlijnen etc) — crop van de vaste overlay-extent naar model-extent + zoom
     if (overlayImg) {
-      var OE = {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5}; // overlay extent (5:6 portret)
+      var OE = {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5};
       var DE = {lonMin: meta.grid.lon_min, lonMax: meta.grid.lon_max,
                 latMin: meta.grid.lat_min, latMax: meta.grid.lat_max};
       var oW = OE.lonMax - OE.lonMin, oH = OE.latMax - OE.latMin;
-      // Volledige model-extent in overlay pixels
       var osx = (DE.lonMin - OE.lonMin) / oW * overlayImg.naturalWidth;
       var osy = (1 - (DE.latMax - OE.latMin) / oH) * overlayImg.naturalHeight;
       var osw = (DE.lonMax - DE.lonMin) / oW * overlayImg.naturalWidth;
       var osh = (DE.latMax - DE.latMin) / oH * overlayImg.naturalHeight;
-      // Zoom viewport crop binnen overlay
       var sx = osx + vx0 * osw;
       var sy = osy + vy0 * osh;
       var sw = vw * osw;
@@ -2039,7 +2073,7 @@ body.scroll-mode { overflow-y: auto; }
   // INIT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Promise.all([laadMeta(), laadOverlay()]).then(function() {
+  Promise.all([laadMeta(), laadOverlay(), laadLand()]).then(function() {
     // Voeg afgeleide parameters toe aan metadata
     addDerivedParams(meta);
     // Sla op in modelData voor vergelijkmodus
