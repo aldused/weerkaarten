@@ -446,7 +446,7 @@ def interpret_sounding(thermo, profile):
             fh_detail = "Sneeuw/hagel kan de grond bereiken in buien"
             lines.append(("Nulgraadsgrens", f"{fh:.0f} m", "#2980b9", fh_detail))
         elif fh < 3000:
-            fh_detail = "Regen aan de grond, sneeuw in de bergen"
+            fh_detail = "Regen aan de grond, sneeuw boven ~1500 m"
             lines.append(("Nulgraadsgrens", f"{fh:.0f} m", "#2980b9", fh_detail))
         else:
             fh_detail = "Neerslag valt als regen"
@@ -596,7 +596,12 @@ def plot_sounding(profile, thermo, station_name, lat, lon, valid_time, model_nam
 
     interpretation = interpret_sounding(thermo, profile)
 
-    fig = plt.figure(figsize=(18, 16), facecolor="white")
+    # Data uit profiel halen (nodig voor windtabel vóór Skew-T)
+    p, T, Td = profile["p"], profile["T"], profile["Td"]
+    u, v = profile["u"], profile["v"]
+    heights_arr = profile["heights"]
+
+    fig = plt.figure(figsize=(18, 22), facecolor="white")
     plt.rcParams.update({'font.size': 12})
 
     # ============================================================
@@ -679,11 +684,60 @@ def plot_sounding(profile, thermo, station_name, lat, lon, valid_time, model_nam
     # ============================================================
     # SKEW-T DIAGRAM
     # ============================================================
-    skew = SkewT(fig, rotation=45, rect=[0.05, 0.08, 0.52, 0.82])
-    ax_skew = skew.ax
+    # ============================================================
+    # WINDPROFIEL TABEL (links boven het Skew-T)
+    # ============================================================
+    n_wind_rows = len(profile["p"]) + 1  # +1 voor header
+    wind_tbl_h = 0.018 * n_wind_rows + 0.025
+    wind_tbl_top = 0.935
+    wind_tbl_bot = wind_tbl_top - wind_tbl_h
 
-    p, T, Td = profile["p"], profile["T"], profile["Td"]
-    u, v = profile["u"], profile["v"]
+    ax_wind = fig.add_axes([0.05, wind_tbl_bot, 0.50, wind_tbl_h])
+    ax_wind.axis("off")
+    ax_wind.set_title("Windprofiel per druklaag", fontsize=13,
+                     fontweight="bold", loc="left", color="#2c3e50", pad=8)
+
+    dirs = ["N", "NNO", "NO", "ONO", "O", "OZO", "ZO", "ZZO",
+            "Z", "ZZW", "ZW", "WZW", "W", "WNW", "NW", "NNW"]
+    wind_rows = [["Hoogte", "hPa", "Temp", "Dauwpunt", "Richting", "km/h", "Bft"]]
+    bft_grenzen = [1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103, 118]
+    heights_arr = profile["heights"]
+    for i in range(len(p)):
+        plvl = p[i].magnitude
+        hgt = heights_arr[i].magnitude
+        wdir = profile["wd"][i].magnitude
+        wspd_kmh = profile["ws"][i].magnitude
+        t_val = T[i].magnitude
+        td_val = Td[i].magnitude
+        wd_txt = dirs[int((wdir + 11.25) % 360 / 22.5)]
+        bft = sum(1 for g in bft_grenzen if wspd_kmh >= g)
+        h_txt = f"{hgt:.0f} m" if hgt < 1000 else f"{hgt/1000:.1f} km"
+        wind_rows.append([h_txt, f"{plvl:.0f}", f"{t_val:.1f}°C", f"{td_val:.1f}°C",
+                         f"{wd_txt} ({wdir:.0f}°)", f"{wspd_kmh:.0f}", f"{bft}"])
+
+    tbl_wind = ax_wind.table(
+        cellText=wind_rows, loc="upper left",
+        cellLoc="center", colWidths=[0.12, 0.08, 0.11, 0.11, 0.24, 0.10, 0.07],
+    )
+    tbl_wind.auto_set_font_size(False)
+    tbl_wind.set_fontsize(11)
+    for (row, col), cell in tbl_wind.get_celld().items():
+        cell.set_linewidth(0.3)
+        cell.set_edgecolor("#dfe6e9")
+        if row == 0:
+            cell.set_facecolor("#2c3e50")
+            cell.set_text_props(fontweight="bold", color="white", fontsize=11)
+        else:
+            cell.set_facecolor("#f8f9fa" if row % 2 == 0 else "white")
+        cell.set_height(0.06)
+
+    # ============================================================
+    # SKEW-T DIAGRAM (onder de windtabel)
+    # ============================================================
+    skewt_top = wind_tbl_bot - 0.02
+    skewt_h = skewt_top - 0.30  # tot technische data
+    skew = SkewT(fig, rotation=45, rect=[0.05, 0.30, 0.52, skewt_h])
+    ax_skew = skew.ax
 
     # Temperatuur en dauwpunt lijnen
     skew.plot(p, T, "r", linewidth=2.5, label="Temperatuur", zorder=5)
@@ -866,9 +920,92 @@ def plot_sounding(profile, thermo, station_name, lat, lon, valid_time, model_nam
                      color="#2c3e50")
     ax_hodo.set_aspect("equal")
 
-    # Windtabel en technische data worden in HTML getoond, niet in PNG
+    # Windtabel staat nu boven het Skew-T diagram (zie hieronder)
 
-    # Technische data wordt in de HTML viewer getoond
+    # ============================================================
+    # TECHNISCHE DATA (onderaan)
+    # ============================================================
+    ax_tech = fig.add_axes([0.05, 0.03, 0.92, 0.24])
+    ax_tech.axis("off")
+    ax_tech.set_xlim(0, 1)
+    ax_tech.set_ylim(0, 1)
+
+    from matplotlib.patches import FancyBboxPatch as FBP2
+    bg2 = FBP2((0, 0), 1, 1, boxstyle="round,pad=0.01",
+               facecolor="#f8f9fa", edgecolor="#dfe6e9", linewidth=0.5,
+               transform=ax_tech.transAxes, clip_on=False)
+    ax_tech.add_patch(bg2)
+
+    ax_tech.text(0.01, 0.95, "Technische parameters", fontsize=14,
+                fontweight="bold", transform=ax_tech.transAxes,
+                va="top", color="#2c3e50")
+
+    def fmt(val, decimals=0, suffix=""):
+        if val is None or (isinstance(val, float) and np.isnan(val)):
+            return "---"
+        if decimals == 0:
+            return f"{val:.0f}{suffix}"
+        return f"{val:.{decimals}f}{suffix}"
+
+    col_data = [
+        [
+            ("Instabiliteit", True),
+            ("CAPE (oppervlak)", fmt(thermo.get("cape_sfc")), "J/kg",
+             "Buienenergie. >300 = buien, >1000 = onweer"),
+            ("CAPE (gemengd)", fmt(thermo.get("cape_ml")), "J/kg", ""),
+            ("CIN (rem)", fmt(thermo.get("cin_sfc")), "J/kg",
+             "Remmende laag"),
+            ("Lifted Index", fmt(thermo.get("li_sfc"), 1), "°C",
+             "Negatief = onstabiel"),
+            ("Wolkenbasis", fmt(thermo.get("lcl_h")), "m", ""),
+            ("LFC", fmt(thermo.get("lfc_p")), "hPa", ""),
+            ("Evenwichtsniveau", fmt(thermo.get("el_p")), "hPa", ""),
+        ],
+        [
+            ("Wind & dynamiek", True),
+            ("Schering 0-1 km", fmt(thermo.get("shear_01")), "kt", ""),
+            ("Schering 0-6 km", fmt(thermo.get("shear_06")), "kt",
+             ">25 = multicellen, >40 = supercellen"),
+            ("Heliciteit 0-1 km", fmt(thermo.get("srh_01")), "m\u00b2/s\u00b2", ""),
+            ("Heliciteit 0-3 km", fmt(thermo.get("srh_03")), "m\u00b2/s\u00b2", ""),
+        ],
+        [
+            ("Temperatuur & vocht", True),
+            ("Grondtemperatuur", fmt(thermo.get("sfc_t"), 1), "°C", ""),
+            ("Nulgraadsgrens", fmt(thermo.get("freezing_h")), "m", ""),
+            ("Nat-bol nulgrens", fmt(thermo.get("wbz_h")), "m",
+             "Hagel/sneeuw smelt hieronder"),
+            ("Neerslaanbaar water", fmt(thermo.get("pw"), 1), "mm",
+             ">25 mm = nattig"),
+        ],
+    ]
+
+    for col_i, col in enumerate(col_data):
+        x_base = 0.01 + col_i * 0.34
+        y_pos = 0.86
+        for item in col:
+            if len(item) == 2:
+                ax_tech.text(x_base, y_pos, item[0], fontsize=12,
+                            fontweight="bold", transform=ax_tech.transAxes,
+                            va="top", color="#2c3e50")
+                y_pos -= 0.04
+                ax_tech.plot([x_base, x_base + 0.30], [y_pos + 0.01, y_pos + 0.01],
+                            color="#3498db", linewidth=1.5, transform=ax_tech.transAxes,
+                            clip_on=False)
+                y_pos -= 0.03
+            else:
+                naam, waarde, eenheid, uitleg = item
+                ax_tech.text(x_base, y_pos, naam, fontsize=11,
+                            transform=ax_tech.transAxes, va="top", color="#2c3e50")
+                ax_tech.text(x_base + 0.22, y_pos, f"{waarde} {eenheid}",
+                            fontsize=11, fontweight="bold",
+                            transform=ax_tech.transAxes, va="top", color="#34495e")
+                if uitleg:
+                    y_pos -= 0.045
+                    ax_tech.text(x_base + 0.01, y_pos, uitleg, fontsize=9,
+                                transform=ax_tech.transAxes, va="top",
+                                color="#95a5a6", style="italic")
+                y_pos -= 0.065
 
     # Credit
     fig.text(0.97, 0.005, "weerlab.nl", fontsize=11, ha="right", color="#bdc3c7")
