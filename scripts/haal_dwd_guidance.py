@@ -2,16 +2,16 @@
 """
 haal_dwd_guidance.py
 Scrapt DWD Synoptische Übersicht (Kurzfrist + Mittelfrist),
-vertaalt naar Nederlands via DeepL, slaat op als dwd_guidance.json.
+vertaalt naar Nederlands via Claude Haiku, slaat op als dwd_guidance.json.
 """
 
 import os, json, re, requests
 from datetime import datetime
+import anthropic
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-DEEPL_KEY = "74b23afc-bfb0-463e-b689-9e7d2ad67f84:fx"
-DEEPL_URL = "https://api-free.deepl.com/v2/translate"
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 URLS = {
     "kurzfrist": "https://www.dwd.de/DE/fachnutzer/hobbymet/wetter_deutschland/_functions/PlainTeaser_synUebersichten/nas_bericht_syn_ueb_kurzfrist_frueh.html",
@@ -20,47 +20,29 @@ URLS = {
 
 OUTPUT = "dwd_guidance.json"
 
-# DeepL free tier: max 500.000 tekens/maand, max ~50 verzoeken/sec
-# Splits tekst in blokken van max 4000 tekens voor betrouwbare vertaling
-MAX_CHUNK = 4000
 
-
-def vertaal_deepl(tekst):
-    """Vertaal Duitse tekst naar Nederlands via DeepL API (header auth)."""
+def vertaal_claude(tekst):
+    """Vertaal Duitse tekst naar Nederlands via Claude Haiku."""
     if not tekst or not tekst.strip():
         return tekst
 
-    # Splits op dubbele newlines (alinea's) om context te bewaren
-    alineas = tekst.split("\n\n")
-    blokken = []
-    huidig = ""
-    for a in alineas:
-        if len(huidig) + len(a) + 2 > MAX_CHUNK and huidig:
-            blokken.append(huidig)
-            huidig = a
-        else:
-            huidig = huidig + "\n\n" + a if huidig else a
-    if huidig:
-        blokken.append(huidig)
+    client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=8000,
+        messages=[{
+            "role": "user",
+            "content": f"""Vertaal de volgende Duitse meteorologische tekst naar het Nederlands.
+Behoud exact dezelfde opmaak, regelafbrekingen en structuur.
+Vertaal alleen de tekst, voeg niets toe en laat niets weg.
+Meteorologische afkortingen (Bft, UTC, hPa, GWL, etc.) en plaatsnamen niet vertalen.
+SXEU/DWAV codes en datumregels niet vertalen.
 
-    vertaald = []
-    for blok in blokken:
-        try:
-            r = requests.post(DEEPL_URL, headers={
-                "Authorization": f"DeepL-Auth-Key {DEEPL_KEY}",
-                "Content-Type": "application/json",
-            }, json={
-                "text": [blok],
-                "source_lang": "DE",
-                "target_lang": "NL",
-            }, timeout=30)
-            r.raise_for_status()
-            vertaald.append(r.json()["translations"][0]["text"])
-        except Exception as e:
-            print(f"  DeepL fout: {e}")
-            vertaald.append(blok)  # fallback: origineel behouden
-
-    return "\n\n".join(vertaald)
+Tekst:
+{tekst}"""
+        }]
+    )
+    return message.content[0].text
 
 
 def scrape_dwd(url):
@@ -112,8 +94,8 @@ def main():
             origineel, uitgave = scrape_dwd(url)
             print(f"  Origineel: {len(origineel)} tekens")
 
-            print(f"  Vertalen via DeepL...")
-            vertaald = vertaal_deepl(origineel)
+            print(f"  Vertalen via Claude...")
+            vertaald = vertaal_claude(origineel)
             print(f"  Vertaald: {len(vertaald)} tekens")
 
             output[naam] = {
