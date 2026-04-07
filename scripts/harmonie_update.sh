@@ -193,7 +193,8 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
 
     # 6. Metadata
     run_local=run_dt.astimezone(LOCAL_TZ)
-    run_str=run_local.strftime('%a %d.%m.%Y %H:%M LT').lower()
+    _nl_dagen = ['maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag','zondag']
+    run_str = _nl_dagen[run_local.weekday()] + ' ' + run_local.strftime('%d.%m.%Y %H:%M LT')
     run_utc_str=run_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
     times_str=[]
     for h in range(1,len(grib_files)):
@@ -201,7 +202,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
 
     c_lats=lats[lat_idx]; c_lons=lons[lon_idx]
     meta={'model':'Harmonie 43','run':run_str,'run_utc':run_utc_str,
-      'bijgewerkt':datetime.now(tz=LOCAL_TZ).strftime('%d %b %Y %H:%M'),
+      'bijgewerkt':(lambda d: str(d.day) + ' ' + ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'][d.month-1] + d.strftime(' %Y %H:%M'))(datetime.now(tz=LOCAL_TZ)),
       'uren':n_steps,'tijden':times_str,
       'grid':{'n_lat':n_lat,'n_lon':n_lon,
         'lat_min':float(c_lats[0]),'lat_max':float(c_lats[-1]),

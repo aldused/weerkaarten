@@ -89,7 +89,8 @@ if os.path.exists('icond2_canvas_meta.json'):
 print(f'   Nieuwe run: {run_utc_str}')
 
 run_local = run_dt.astimezone(LOCAL_TZ)
-run_str = run_local.strftime("%a %d.%m.%Y %H:%M LT").lower()
+_nl_dagen = ['maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag','zondag']
+run_str = _nl_dagen[run_local.weekday()] + ' ' + run_local.strftime("%d.%m.%Y %H:%M LT")
 print(f"   Run: {run_dt.strftime('%Y%m%d%Hz')} = {run_str}")
 
 # 2. Download alle parameters
@@ -237,7 +238,7 @@ meta = {
     "model": "ICON-D2",
     "run": run_str,
     "run_utc": run_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "bijgewerkt": datetime.now(tz=LOCAL_TZ).strftime("%d %b %Y %H:%M"),
+    "bijgewerkt": (lambda d: str(d.day) + ' ' + ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'][d.month-1] + d.strftime(' %Y %H:%M'))(datetime.now(tz=LOCAL_TZ)),
     "uren": len(times_str),
     "tijden": times_str,
     "grid": {
