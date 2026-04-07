@@ -636,27 +636,40 @@ function pctC(arr,j,p){
   return v[lo]+(v[hi]-v[lo])*(i-lo);
 }
 
+const _fetchCache = {};
+const CACHE_TTL = 10 * 60 * 1000; // 10 minuten cache
+
 async function fetchT(url,ms=30000,retries=4){
+  // Cache check — hergebruik data als < 10 min oud
+  const cached = _fetchCache[url];
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    console.log('Cache hit:', url.slice(0,80));
+    return cached.data;
+  }
+
   for(let poging=0;poging<retries;poging++){
+    // Wacht even tussen calls om rate limit te voorkomen
+    if (poging > 0) await new Promise(res=>setTimeout(res, Math.min(3000*(poging),12000)));
+
     const ctrl=new AbortController();
     const id=setTimeout(()=>ctrl.abort(),ms);
     try{
       const r=await fetch(url,{signal:ctrl.signal});
       clearTimeout(id);
       if(r.status===429){
-        const wacht=Math.min(3000*(poging+1),12000);
+        const wacht=Math.min(4000*(poging+1),15000);
         console.warn(`Rate limit (429), wacht ${wacht/1000}s... (poging ${poging+1}/${retries})`);
         await new Promise(res=>setTimeout(res,wacht));
         continue;
       }
       if(!r.ok)throw new Error(`HTTP ${r.status}`);
-      return await r.json();
+      const data = await r.json();
+      _fetchCache[url] = {data, ts: Date.now()};
+      return data;
     }catch(e){
       clearTimeout(id);
       if(poging<retries-1){
-        const wacht=Math.min(3000*(poging+1),12000);
-        console.warn(`Fetch fout (${e.message}), retry in ${wacht/1000}s... (poging ${poging+1}/${retries})`);
-        await new Promise(res=>setTimeout(res,wacht));
+        console.warn(`Fetch fout (${e.message}), retry... (poging ${poging+1}/${retries})`);
         continue;
       }
       throw new Error(e.name==='AbortError'?'Time-out':e.message);
