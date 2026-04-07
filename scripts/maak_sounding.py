@@ -36,7 +36,7 @@ STATIONS = {
 }
 
 
-def fetch_sounding_data(lat, lon, model="ecmwf_ifs025"):
+def fetch_sounding_data(lat, lon, model="knmi_seamless"):
     """Haal druklaagdata op van Open-Meteo API."""
     # Bouw parameter-lijst
     hourly_params = []
@@ -288,13 +288,21 @@ def calc_thermodynamics(profile):
     # --- Temperatuur indices ---
     try:
         # Freezing level
+        found_freezing = False
         for i in range(len(T) - 1):
             if T[i].magnitude >= 0 >= T[i + 1].magnitude:
                 frac = T[i].magnitude / (T[i].magnitude - T[i + 1].magnitude)
                 results["freezing_h"] = (heights[i] + frac * (heights[i + 1] - heights[i])).magnitude
+                found_freezing = True
                 break
-        else:
-            results["freezing_h"] = None
+        if not found_freezing:
+            if T[0].magnitude < 0:
+                # Vorst aan de grond - nulgraadsgrens ligt onder het oppervlak
+                results["freezing_h"] = 0
+                results["freezing_below_sfc"] = True
+            else:
+                # Hele profiel boven nul (tropisch warm)
+                results["freezing_h"] = None
     except Exception:
         results["freezing_h"] = None
 
@@ -322,33 +330,371 @@ def calc_thermodynamics(profile):
     results["max_t"] = T[0].magnitude
     results["sfc_t"] = sfc.get("t", T[0].magnitude)
 
+    # --- Inversies detecteren ---
+    inversions = []
+    T_mag = np.array([t.magnitude for t in T])
+    h_mag = np.array([h.magnitude for h in heights])
+    p_mag = np.array([pp.magnitude for pp in p])
+    for i in range(len(T_mag) - 1):
+        if T_mag[i + 1] > T_mag[i]:  # Temperatuur neemt toe met hoogte
+            inv_sterkte = T_mag[i + 1] - T_mag[i]
+            inversions.append({
+                "h_onder": h_mag[i],
+                "h_boven": h_mag[i + 1],
+                "p_onder": p_mag[i],
+                "p_boven": p_mag[i + 1],
+                "t_onder": T_mag[i],
+                "t_boven": T_mag[i + 1],
+                "sterkte": inv_sterkte,
+            })
+    results["inversions"] = inversions
+
+    # --- IJsdriehoek: zone 0 tot -20°C met T-Td < 3°C ---
+    Td_mag = np.array([td.magnitude for td in Td])
+    icing_zones = []
+    for i in range(len(T_mag)):
+        t_val = T_mag[i]
+        spread = T_mag[i] - Td_mag[i]
+        if -20 <= t_val <= 0 and spread < 3:
+            icing_zones.append({
+                "h": h_mag[i],
+                "p": p_mag[i],
+                "t": t_val,
+                "spread": spread,
+            })
+    # Groepeer aaneengesloten zones
+    icing_layers = []
+    if icing_zones:
+        current = {"p_top": icing_zones[0]["p"], "p_bot": icing_zones[0]["p"],
+                   "h_bot": icing_zones[0]["h"], "h_top": icing_zones[0]["h"],
+                   "t_min": icing_zones[0]["t"], "t_max": icing_zones[0]["t"]}
+        for iz in icing_zones[1:]:
+            current["p_top"] = iz["p"]
+            current["h_top"] = iz["h"]
+            current["t_min"] = min(current["t_min"], iz["t"])
+            current["t_max"] = max(current["t_max"], iz["t"])
+        icing_layers.append(current)
+    results["icing_layers"] = icing_layers
+
     return results
 
 
+def interpret_sounding(thermo, profile):
+    """Vertaal technische sounding-data naar begrijpelijk Nederlands."""
+
+    lines = []
+
+    # --- Stabiliteit / buienkans ---
+    cape = thermo.get("cape_sfc", 0) or 0
+    cape_ml = thermo.get("cape_ml", 0) or 0
+    best_cape = max(cape, cape_ml)
+    li = thermo.get("li_sfc")
+
+    if best_cape >= 2500:
+        stab_tekst = "Zeer onstabiel"
+        stab_kleur = "#c0392b"
+        stab_detail = "Krachtige onweersbuien mogelijk met kans op hagel en windstoten"
+    elif best_cape >= 1000:
+        stab_tekst = "Onstabiel"
+        stab_kleur = "#e67e22"
+        stab_detail = "Onweersbuien waarschijnlijk, lokaal fors"
+    elif best_cape >= 300:
+        stab_tekst = "Licht onstabiel"
+        stab_kleur = "#f39c12"
+        stab_detail = "Kans op (onweers)buien"
+    elif best_cape > 0:
+        stab_tekst = "Marginaal onstabiel"
+        stab_kleur = "#d4ac0d"
+        stab_detail = "Kleine kans op een enkele bui"
+    else:
+        stab_tekst = "Stabiel"
+        stab_kleur = "#27ae60"
+        stab_detail = "Geen buien verwacht op basis van instabiliteit"
+
+    lines.append(("Stabiliteit", stab_tekst, stab_kleur, stab_detail))
+
+    # --- Wolkenbasis ---
+    lcl_h = thermo.get("lcl_h")
+    if lcl_h is not None:
+        if lcl_h < 500:
+            wb_tekst = f"{lcl_h:.0f} m (zeer laag)"
+            wb_kleur = "#7f8c8d"
+        elif lcl_h < 1500:
+            wb_tekst = f"{lcl_h:.0f} m (laag)"
+            wb_kleur = "#95a5a6"
+        elif lcl_h < 3000:
+            wb_tekst = f"{lcl_h:.0f} m"
+            wb_kleur = "#2c3e50"
+        else:
+            wb_tekst = f"{lcl_h:.0f} m (hoog)"
+            wb_kleur = "#3498db"
+        lines.append(("Wolkenbasis", wb_tekst, wb_kleur, "Hoogte waar condensatie begint (cumulus-basis)"))
+    else:
+        lines.append(("Wolkenbasis", "---", "#95a5a6", ""))
+
+    # --- Vriesgrens ---
+    fh = thermo.get("freezing_h")
+    if fh is not None:
+        if thermo.get("freezing_below_sfc"):
+            sfc_t = thermo.get("sfc_t", 0)
+            fh_detail = f"Vorst aan de grond ({sfc_t:.0f}°C), neerslag valt als sneeuw of ijzel"
+            lines.append(("Nulgraadsgrens", f"Aan het oppervlak (vorst)", "#c0392b", fh_detail))
+        elif fh < 500:
+            fh_detail = "Neerslag valt als sneeuw tot lage niveaus"
+            lines.append(("Nulgraadsgrens", f"{fh:.0f} m", "#2980b9", fh_detail))
+        elif fh < 1500:
+            fh_detail = "Sneeuw/hagel kan de grond bereiken in buien"
+            lines.append(("Nulgraadsgrens", f"{fh:.0f} m", "#2980b9", fh_detail))
+        elif fh < 3000:
+            fh_detail = "Regen aan de grond, sneeuw in de bergen"
+            lines.append(("Nulgraadsgrens", f"{fh:.0f} m", "#2980b9", fh_detail))
+        else:
+            fh_detail = "Neerslag valt als regen"
+            lines.append(("Nulgraadsgrens", f"{fh:.0f} m", "#27ae60", fh_detail))
+    else:
+        lines.append(("Nulgraadsgrens", "Boven bereik profiel", "#95a5a6", "Hele atmosfeer boven nul"))
+
+    # --- Neerslaanbaar water ---
+    pw = thermo.get("pw")
+    if pw is not None:
+        if pw > 40:
+            pw_detail = "Veel vocht, kans op zware neerslag"
+            pw_kleur = "#2980b9"
+        elif pw > 25:
+            pw_detail = "Flink vocht beschikbaar"
+            pw_kleur = "#3498db"
+        elif pw > 15:
+            pw_detail = "Gemiddelde hoeveelheid vocht"
+            pw_kleur = "#2c3e50"
+        else:
+            pw_detail = "Droge atmosfeer"
+            pw_kleur = "#e67e22"
+        lines.append(("Neerslaanbaar water", f"{pw:.0f} mm", pw_kleur, pw_detail))
+    else:
+        lines.append(("Neerslaanbaar water", "---", "#95a5a6", ""))
+
+    # --- Windschering (buien-organisatie) ---
+    shear = thermo.get("shear_06")
+    if shear is not None:
+        shear_kmh = shear * 1.852  # kt -> km/h
+        if shear >= 40:
+            sh_tekst = f"{shear_kmh:.0f} km/h (sterk)"
+            sh_kleur = "#c0392b"
+            sh_detail = "Sterke schering: buien kunnen georganiseerd/langlevend worden (supercellen)"
+        elif shear >= 25:
+            sh_tekst = f"{shear_kmh:.0f} km/h (matig)"
+            sh_kleur = "#e67e22"
+            sh_detail = "Matige schering: multicellen mogelijk, buien kunnen intenser worden"
+        elif shear >= 15:
+            sh_tekst = f"{shear_kmh:.0f} km/h (licht)"
+            sh_kleur = "#f39c12"
+            sh_detail = "Lichte schering: buien kortlevend maar mogelijk met windstoten"
+        else:
+            sh_tekst = f"{shear_kmh:.0f} km/h (zwak)"
+            sh_kleur = "#27ae60"
+            sh_detail = "Zwakke schering: buien weinig georganiseerd"
+        lines.append(("Windschering 0-6 km", sh_tekst, sh_kleur, sh_detail))
+    else:
+        lines.append(("Windschering 0-6 km", "---", "#95a5a6", ""))
+
+    # --- Oppervlaktewind ---
+    sfc_ws = profile["sfc"].get("ws")
+    sfc_wd = profile["sfc"].get("wd")
+    if sfc_ws is not None and sfc_wd is not None:
+        # Windrichting naar tekst
+        dirs = ["N", "NNO", "NO", "ONO", "O", "OZO", "ZO", "ZZO",
+                "Z", "ZZW", "ZW", "WZW", "W", "WNW", "NW", "NNW"]
+        wd_txt = dirs[int((sfc_wd + 11.25) % 360 / 22.5)]
+        # Beaufort
+        bft_grenzen = [1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103, 118]
+        bft = 0
+        for g in bft_grenzen:
+            if sfc_ws >= g:
+                bft += 1
+        lines.append(("Wind aan de grond",
+                      f"{wd_txt} {sfc_ws:.0f} km/h (Bft {bft})",
+                      "#2c3e50",
+                      f"Richting {sfc_wd:.0f}°"))
+
+    # --- Inversie ---
+    inversions = thermo.get("inversions", [])
+    if inversions:
+        # Sterkste inversie
+        strongest = max(inversions, key=lambda x: x["sterkte"])
+        h_onder = strongest["h_onder"]
+        h_boven = strongest["h_boven"]
+        sterkte = strongest["sterkte"]
+        if h_onder < 500:
+            inv_detail = "Grondnabije inversie: mist/laaghangende bewolking, luchtkwaliteit kan verslechteren"
+        elif h_onder < 2000:
+            inv_detail = "Lage inversie: deksel op de atmosfeer, buiengroei geblokkeerd"
+        else:
+            inv_detail = "Inversie in de middenlaag: kan buiengroei beperken"
+        if sterkte >= 5:
+            inv_kleur = "#c0392b"
+            inv_sterkte_txt = "sterk"
+        elif sterkte >= 2:
+            inv_kleur = "#e67e22"
+            inv_sterkte_txt = "matig"
+        else:
+            inv_kleur = "#f39c12"
+            inv_sterkte_txt = "zwak"
+        h_txt = f"{h_onder:.0f}-{h_boven:.0f} m" if h_onder < 1000 else f"{h_onder/1000:.1f}-{h_boven/1000:.1f} km"
+        lines.append(("Inversie",
+                      f"{inv_sterkte_txt} (+{sterkte:.1f}°C) op {h_txt}",
+                      inv_kleur, inv_detail))
+
+    # --- IJsdriehoek ---
+    icing = thermo.get("icing_layers", [])
+    if icing:
+        layer = icing[0]
+        h_bot = layer["h_bot"]
+        h_top = layer["h_top"]
+        t_min = layer["t_min"]
+        t_max = layer["t_max"]
+        if h_bot < 500:
+            ice_detail = "IJzel/aanvriezende neerslag mogelijk aan de grond"
+            ice_kleur = "#c0392b"
+        elif t_min < -12:
+            ice_detail = "Ernstige ijsafzetting mogelijk (veel onderkoeld water)"
+            ice_kleur = "#e67e22"
+        else:
+            ice_detail = "Lichte tot matige ijsafzetting mogelijk in wolken"
+            ice_kleur = "#3498db"
+        h_txt = f"{h_bot:.0f}-{h_top:.0f} m" if h_top < 1000 else f"{h_bot/1000:.1f}-{h_top/1000:.1f} km"
+        lines.append(("IJsdriehoek",
+                      f"{h_txt} ({t_max:.0f} tot {t_min:.0f}°C)",
+                      ice_kleur,
+                      ice_detail))
+
+    # --- Bovenwind ---
+    max_ws = 0
+    max_ws_h = 0
+    for i in range(len(profile["ws"])):
+        ws_val = profile["ws"][i].magnitude
+        if ws_val > max_ws:
+            max_ws = ws_val
+            max_ws_h = profile["heights"][i].magnitude
+    if max_ws > 0:
+        lines.append(("Sterkste bovenwind",
+                      f"{max_ws:.0f} km/h op {max_ws_h:.0f} m",
+                      "#8e44ad" if max_ws > 100 else "#2c3e50",
+                      "Straalstroom" if max_ws > 120 else ""))
+
+    return lines
+
+
+def _draw_indicator(ax, x, y, color, size=0.018):
+    """Teken een kleurindicator-bolletje."""
+    circle = plt.Circle((x, y), size, color=color, transform=ax.transAxes,
+                        clip_on=False, zorder=10)
+    ax.add_patch(circle)
+
+
 def plot_sounding(profile, thermo, station_name, lat, lon, valid_time, model_name, run_time):
-    """Maak het Skew-T diagram met hodograaf en tabellen."""
+    """Maak het Skew-T diagram met hodograaf, interpretatie en tabellen."""
 
-    fig = plt.figure(figsize=(16, 20), facecolor="white")
+    interpretation = interpret_sounding(thermo, profile)
+
+    fig = plt.figure(figsize=(18, 16), facecolor="white")
+    plt.rcParams.update({'font.size': 12})
 
     # ============================================================
-    # SKEW-T DIAGRAM (bovenste 65% van figuur)
+    # TITEL
     # ============================================================
-    # SkewT met rect ipv GridSpec (voorkomt bbox_inches='tight' problemen)
-    skew = SkewT(fig, rotation=45, rect=[0.05, 0.32, 0.55, 0.62])
+    valid_local = valid_time.astimezone(LOCAL_TZ)
+    run_local = run_time.astimezone(LOCAL_TZ) if run_time else valid_local
+
+    _nl_dagen = ["maandag", "dinsdag", "woensdag", "donderdag",
+                 "vrijdag", "zaterdag", "zondag"]
+    dag_tekst = _nl_dagen[valid_local.weekday()]
+    _nl_maanden = ["jan", "feb", "mrt", "apr", "mei", "jun",
+                   "jul", "aug", "sep", "okt", "nov", "dec"]
+    mnd = _nl_maanden[valid_local.month - 1]
+
+    fig.text(0.03, 0.975, f"Atmosferisch profiel  {station_name}",
+             fontsize=18, fontweight="bold", va="top", color="#2c3e50")
+    fig.text(0.03, 0.960,
+             f"{dag_tekst} {valid_local.day} {mnd} {valid_local.year}  "
+             f"{valid_local.strftime('%H:%M')} LT",
+             fontsize=13, va="top", color="#7f8c8d")
+    fig.text(0.97, 0.975,
+             f"{model_name}",
+             fontsize=12, va="top", ha="right", color="#95a5a6")
+    fig.text(0.97, 0.960,
+             f"Run {run_local.strftime('%d %b %HZ')}  |  "
+             f"{lat:.2f}°N  {lon:.2f}°E",
+             fontsize=12, va="top", ha="right", color="#bdc3c7")
+
+    # ============================================================
+    # INTERPRETATIE-PANEEL (rechts boven)
+    # Dynamische hoogte op basis van aantal items
+    # ============================================================
+    n_items = len(interpretation)
+    item_height = 0.028  # per item in fig-coords
+    detail_extra = 0.012
+    n_details = sum(1 for _, _, _, d in interpretation if d)
+    interp_h = 0.03 + n_items * item_height + n_details * detail_extra
+    interp_top = 0.945
+    interp_bot = interp_top - interp_h
+
+    ax_interp = fig.add_axes([0.58, interp_bot, 0.40, interp_h])
+    ax_interp.axis("off")
+    ax_interp.set_xlim(0, 1)
+    ax_interp.set_ylim(0, 1)
+
+    # Lichte achtergrond
+    from matplotlib.patches import FancyBboxPatch
+    bg = FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.02",
+                        facecolor="#f8f9fa", edgecolor="#dfe6e9", linewidth=1,
+                        transform=ax_interp.transAxes, clip_on=False)
+    ax_interp.add_patch(bg)
+
+    ax_interp.text(0.04, 0.97, "Samenvatting", fontsize=13, fontweight="bold",
+                  transform=ax_interp.transAxes, va="top", color="#2c3e50")
+
+    # Bereken stap per item
+    usable = 0.88  # van 0.88 tot ~0.02
+    step_with_detail = usable / max(n_items, 1)
+
+    y_pos = 0.88
+    for label, waarde, kleur, detail in interpretation:
+        _draw_indicator(ax_interp, 0.03, y_pos, kleur, size=0.014)
+        ax_interp.text(0.06, y_pos, label, fontsize=11.5, fontweight="bold",
+                      transform=ax_interp.transAxes, va="center", color="#2c3e50")
+        ax_interp.text(0.40, y_pos, waarde, fontsize=11.5,
+                      transform=ax_interp.transAxes, va="center", color=kleur,
+                      fontweight="bold")
+        if detail:
+            ax_interp.text(0.40, y_pos - 0.045, detail, fontsize=10.5,
+                          transform=ax_interp.transAxes, va="center",
+                          color="#7f8c8d", style="italic")
+            y_pos -= step_with_detail
+        else:
+            y_pos -= step_with_detail * 0.75
+
+    # Bereken beschikbare ruimte onder samenvatting
+    space_below_interp = interp_bot - 0.01
+
+    # ============================================================
+    # SKEW-T DIAGRAM
+    # ============================================================
+    skew = SkewT(fig, rotation=45, rect=[0.05, 0.08, 0.52, 0.82])
     ax_skew = skew.ax
 
     p, T, Td = profile["p"], profile["T"], profile["Td"]
     u, v = profile["u"], profile["v"]
 
     # Temperatuur en dauwpunt lijnen
-    skew.plot(p, T, "r", linewidth=2.2, label="Temperatuur")
-    skew.plot(p, Td, "b", linewidth=2.2, label="Dauwpunt")
+    skew.plot(p, T, "r", linewidth=2.5, label="Temperatuur", zorder=5)
+    skew.plot(p, Td, "#2980b9", linewidth=2.5, label="Dauwpunt", zorder=5)
 
     # Parcel path
     if thermo.get("parcel_path") is not None:
-        skew.plot(p, thermo["parcel_path"], "k--", linewidth=1.0, label="Parcel")
+        skew.plot(p, thermo["parcel_path"], color="#7f8c8d", linestyle="--",
+                 linewidth=1.0, label="Luchtpakket", zorder=4)
 
-    # Wind barbs (in knopen)
+    # Wind barbs
     u_kt = u.to("knots")
     v_kt = v.to("knots")
     skew.plot_barbs(p, u_kt, v_kt, xloc=1.06, linewidth=0.7)
@@ -356,52 +702,139 @@ def plot_sounding(profile, thermo, station_name, lat, lon, valid_time, model_nam
     # CAPE/CIN arcering
     if thermo.get("parcel_path") is not None:
         try:
-            skew.shade_cape(p, T, thermo["parcel_path"], alpha=0.15)
-            skew.shade_cin(p, T, thermo["parcel_path"], alpha=0.10)
+            skew.shade_cape(p, T, thermo["parcel_path"], alpha=0.12,
+                           facecolor="#e74c3c")
+            skew.shade_cin(p, T, thermo["parcel_path"], alpha=0.08,
+                          facecolor="#3498db")
         except Exception:
             pass
 
-    # Achtergrond lijnen
-    skew.plot_dry_adiabats(linewidth=0.4, alpha=0.35, colors="orangered")
-    skew.plot_moist_adiabats(linewidth=0.4, alpha=0.35, colors="teal")
-    skew.plot_mixing_lines(linewidth=0.4, alpha=0.25, colors="green")
+    # Achtergrond lijnen (subtiel)
+    skew.plot_dry_adiabats(linewidth=0.3, alpha=0.25, colors="#e74c3c")
+    skew.plot_moist_adiabats(linewidth=0.3, alpha=0.25, colors="#1abc9c")
+    skew.plot_mixing_lines(linewidth=0.3, alpha=0.15, colors="#27ae60")
 
-    # LCL marker
+    # Markers met Nederlandse labels
     if thermo.get("lcl_p") is not None:
-        ax_skew.axhline(thermo["lcl_p"], color="royalblue", linewidth=0.8,
-                       linestyle="--", alpha=0.5)
-        ax_skew.text(48, thermo["lcl_p"], "LCL", fontsize=8, color="royalblue",
-                    ha="right", va="bottom", fontweight="bold", alpha=0.8)
+        lcl_p = thermo["lcl_p"]
+        ax_skew.axhline(lcl_p, color="#3498db", linewidth=0.8,
+                       linestyle=":", alpha=0.6)
+        ax_skew.text(48, lcl_p, "wolkenbasis", fontsize=11,
+                    color="#3498db", ha="right", va="bottom",
+                    fontweight="bold", alpha=0.8,
+                    bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
+                             edgecolor="#3498db", alpha=0.7, linewidth=0.5))
+
+    if thermo.get("freezing_h") is not None:
+        fh = thermo["freezing_h"]
+        # Zoek bijbehorende druklaag
+        heights = profile["heights"].magnitude
+        for i in range(len(heights) - 1):
+            if heights[i] <= fh <= heights[i + 1]:
+                frac = (fh - heights[i]) / (heights[i + 1] - heights[i])
+                fz_p = p[i].magnitude + frac * (p[i + 1].magnitude - p[i].magnitude)
+                ax_skew.axhline(fz_p, color="#2980b9", linewidth=0.8,
+                               linestyle=":", alpha=0.4)
+                ax_skew.text(48, fz_p, "0°C grens", fontsize=11,
+                            color="#2980b9", ha="right", va="bottom",
+                            fontweight="bold", alpha=0.7,
+                            bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
+                                     edgecolor="#2980b9", alpha=0.6, linewidth=0.5))
+                break
+
+    # --- Inversie-banden ---
+    for inv in thermo.get("inversions", []):
+        ax_skew.axhspan(inv["p_onder"], inv["p_boven"],
+                       facecolor="#e67e22", alpha=0.10, zorder=1)
+        # Label
+        p_mid = (inv["p_onder"] + inv["p_boven"]) / 2
+        ax_skew.text(-38, p_mid, f"inversie +{inv['sterkte']:.1f}°C",
+                    fontsize=10.5, color="#e67e22", va="center", ha="left",
+                    fontweight="bold", alpha=0.8,
+                    bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
+                             edgecolor="#e67e22", alpha=0.7, linewidth=0.5))
+
+    # --- IJsdriehoek arcering ---
+    # Zone waar T tussen 0 en -20°C en lucht vochtig (T-Td < 3°C)
+    icing = thermo.get("icing_layers", [])
+    if icing:
+        layer = icing[0]
+        # Arceer de druklaag waar ijsafzetting mogelijk is
+        ax_skew.axhspan(layer["p_bot"], layer["p_top"],
+                       facecolor="#81ecec", alpha=0.12, zorder=1)
+        p_mid = (layer["p_bot"] + layer["p_top"]) / 2
+        # Driehoekje + label
+        ax_skew.text(-38, p_mid, "ijsdriehoek",
+                    fontsize=10.5, color="#00b894", va="center", ha="left",
+                    fontweight="bold", alpha=0.8,
+                    bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
+                             edgecolor="#00b894", alpha=0.7, linewidth=0.5))
+        # Driehoekje als unicode symbool in het label
+        ax_skew.text(-38.5, p_mid, "\u25B2", fontsize=12, color="#00b894",
+                    va="center", ha="center", alpha=0.7, zorder=6)
 
     # Assen
     ax_skew.set_xlim(-40, 50)
     ax_skew.set_ylim(1050, 100)
-    ax_skew.set_xlabel("Temperatuur (°C)", fontsize=9)
-    ax_skew.set_ylabel("Druk (hPa)", fontsize=9)
-    ax_skew.tick_params(labelsize=8)
+    ax_skew.set_xlabel("Temperatuur (°C)", fontsize=13)
+    ax_skew.set_ylabel("Druk (hPa)", fontsize=13)
+    ax_skew.tick_params(labelsize=11)
 
-    # Hoogte-labels rechts op de y-as
-    std_heights = {1000: "0m", 925: "~750m", 850: "~1500m", 700: "~3000m",
-                   500: "~5500m", 300: "~9200m", 200: "~11800m", 100: "~16200m"}
+    # Hoogte-labels rechts
+    std_heights = {1000: "zeeniveau", 925: "~750 m", 850: "~1,5 km",
+                   700: "~3 km", 500: "~5,5 km", 300: "~9 km",
+                   200: "~12 km", 100: "~16 km"}
     for plvl, hlbl in std_heights.items():
         if 100 <= plvl <= 1050:
-            ax_skew.text(51, plvl, hlbl, fontsize=6.5, color="gray",
+            ax_skew.text(51, plvl, hlbl, fontsize=10.5, color="#95a5a6",
                         va="center", ha="left")
 
+    # Legenda op het diagram
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], color="r", linewidth=2, label="Temperatuur"),
+        Line2D([0], [0], color="#2980b9", linewidth=2, label="Dauwpunt"),
+        Line2D([0], [0], color="#7f8c8d", linewidth=1, linestyle="--",
+               label="Luchtpakket (stijgend)"),
+    ]
+    from matplotlib.patches import Patch
+    cape_val = thermo.get("cape_sfc", 0) or 0
+    if cape_val > 0:
+        legend_elements.append(
+            Patch(facecolor="#e74c3c", alpha=0.2,
+                  label=f"Buienenergie (CAPE): {cape_val:.0f} J/kg"))
+    if thermo.get("inversions"):
+        legend_elements.append(
+            Patch(facecolor="#e67e22", alpha=0.15, label="Inversie (temp. toename)"))
+    if thermo.get("icing_layers"):
+        legend_elements.append(
+            Patch(facecolor="#81ecec", alpha=0.2, label="IJsdriehoek (0 tot -20°C, vochtig)"))
+    ax_skew.legend(handles=legend_elements, loc="upper left", fontsize=11,
+                  framealpha=0.85, fancybox=True)
+
+    # Uitleg-tekst onder het diagram
+    fig.text(0.05, 0.055,
+             "Rode lijn = temperatuur  |  Blauwe lijn = dauwpunt  |  "
+             "Dicht bij elkaar = vochtig (wolken)  |  "
+             "Windvanen: streep = 10 kt, vlaggetje = 50 kt  |  "
+             "Oranje = inversie  |  Lichtblauw = ijsdriehoek",
+             fontsize=10, color="#95a5a6", style="italic")
+
     # ============================================================
-    # HODOGRAAF (rechtsboven)
+    # HODOGRAAF (rechts, onder samenvatting)
     # ============================================================
-    ax_hodo = fig.add_axes([0.62, 0.55, 0.35, 0.38])
+    hodo_top = interp_bot - 0.02
+    hodo_h = 0.30
+    ax_hodo = fig.add_axes([0.60, hodo_top - hodo_h, 0.35, hodo_h])
 
     hodo = Hodograph(ax_hodo, component_range=60)
-    hodo.add_grid(increment=10, linewidth=0.5, alpha=0.4)
+    hodo.add_grid(increment=10, linewidth=0.4, alpha=0.3)
 
-    heights = profile["heights"]
+    heights_arr = profile["heights"]
     u_kt_arr = u.to("knots").magnitude
     v_kt_arr = v.to("knots").magnitude
-    h_arr = heights.magnitude
+    h_arr = heights_arr.magnitude
 
-    # Segmenten per hoogte
     colors_seg = ["#e74c3c", "#e67e22", "#2ecc71", "#3498db", "#9b59b6"]
     labels_seg = ["0-1 km", "1-3 km", "3-6 km", "6-9 km", "9+ km"]
     bounds_seg = [0, 1000, 3000, 6000, 9000, 20000]
@@ -418,183 +851,38 @@ def plot_sounding(profile, thermo, station_name, lat, lon, valid_time, model_nam
             ax_hodo.plot(u_kt_arr[idx], v_kt_arr[idx], "o",
                         color=colors_seg[i_seg], markersize=4, label=labels_seg[i_seg])
 
-    # Druklaag-labels op hodograaf
     for i in range(len(p)):
         plvl = p[i].magnitude
-        if plvl in [1000, 850, 700, 500, 300, 200]:
+        if plvl in [1000, 850, 700, 500, 300]:
             ax_hodo.annotate(f"{plvl:.0f}", (u_kt_arr[i], v_kt_arr[i]),
-                           fontsize=6, color="gray", ha="left", va="bottom",
+                           fontsize=11, color="#95a5a6", ha="left", va="bottom",
                            xytext=(3, 3), textcoords="offset points")
 
-    ax_hodo.set_xlabel("u (kt)", fontsize=8)
-    ax_hodo.set_ylabel("v (kt)", fontsize=8)
-    ax_hodo.tick_params(labelsize=7)
-    ax_hodo.legend(fontsize=6.5, loc="upper left", framealpha=0.8)
-    ax_hodo.set_title("Hodograaf", fontsize=10, fontweight="bold")
+    ax_hodo.set_xlabel("u (kt)", fontsize=11)
+    ax_hodo.set_ylabel("v (kt)", fontsize=11)
+    ax_hodo.tick_params(labelsize=6)
+    ax_hodo.legend(fontsize=11, loc="upper left", framealpha=0.8)
+    ax_hodo.set_title("Winddraaiing met hoogte", fontsize=12, fontweight="bold",
+                     color="#2c3e50")
     ax_hodo.set_aspect("equal")
 
-    # ============================================================
-    # WINDPROFIEL TEKST (rechts midden)
-    # ============================================================
-    ax_wind = fig.add_axes([0.62, 0.32, 0.35, 0.22])
-    ax_wind.axis("off")
-    ax_wind.set_title("Wind profiel", fontsize=9, fontweight="bold", loc="left")
+    # Windtabel en technische data worden in HTML getoond, niet in PNG
 
-    wind_header = f"{'hPa':>6s}  {'m':>6s}  {'°':>4s}  {'kt':>4s}  {'km/h':>5s}"
-    ax_wind.text(0.02, 0.92, wind_header, fontsize=7, fontweight="bold",
-                family="monospace", transform=ax_wind.transAxes, color="#2c3e50")
-    for i in range(len(p)):
-        plvl = p[i].magnitude
-        hgt = heights[i].magnitude if i < len(heights) else 0
-        wdir = profile["wd"][i].magnitude
-        wspd_kt = profile["ws"][i].to("knots").magnitude
-        wspd_kmh = profile["ws"][i].magnitude
-        y = 0.85 - i * 0.065
-        if y < 0:
-            break
-        line = f"{plvl:6.0f}  {hgt:6.0f}  {wdir:4.0f}  {wspd_kt:4.0f}  {wspd_kmh:5.0f}"
-        ax_wind.text(0.02, y, line, fontsize=6.5, family="monospace",
-                    transform=ax_wind.transAxes, color="#34495e")
-
-    # ============================================================
-    # TABELLEN (onderste deel)
-    # ============================================================
-    def fmt(val, decimals=0, suffix=""):
-        if val is None or (isinstance(val, float) and np.isnan(val)):
-            return "---"
-        if decimals == 0:
-            return f"{val:.0f}{suffix}"
-        return f"{val:.{decimals}f}{suffix}"
-
-    # --- Parcels tabel ---
-    ax_parcels = fig.add_axes([0.05, 0.05, 0.30, 0.24])
-    ax_parcels.axis("off")
-    ax_parcels.set_title("Parcels", fontsize=10, fontweight="bold",
-                        loc="left", color="#2c3e50")
-
-    parcel_rows = [
-        ["", "Surface", "Mixed 50hPa", "Most Unstable"],
-        ["CAPE [J/kg]", fmt(thermo.get("cape_sfc")), fmt(thermo.get("cape_ml")), fmt(thermo.get("cape_mu"))],
-        ["CIN [J/kg]", fmt(thermo.get("cin_sfc")), fmt(thermo.get("cin_ml")), fmt(thermo.get("cin_mu"))],
-        ["LI [°C]", fmt(thermo.get("li_sfc"), 1), fmt(thermo.get("li_ml"), 1), fmt(thermo.get("li_mu"), 1)],
-        ["LCL [m]", fmt(thermo.get("lcl_h")), fmt(thermo.get("lcl_ml")), ""],
-        ["LFC [hPa]", fmt(thermo.get("lfc_p")), "", ""],
-        ["EL [hPa]", fmt(thermo.get("el_p")), "", ""],
-    ]
-
-    tbl_parcels = ax_parcels.table(
-        cellText=parcel_rows, loc="upper left",
-        cellLoc="center", colWidths=[0.30, 0.23, 0.23, 0.24],
-    )
-    tbl_parcels.auto_set_font_size(False)
-    tbl_parcels.set_fontsize(7.5)
-    for (row, col), cell in tbl_parcels.get_celld().items():
-        cell.set_linewidth(0.3)
-        if row == 0:
-            cell.set_facecolor("#ecf0f1")
-            cell.set_text_props(fontweight="bold", fontsize=7)
-        elif col == 0:
-            cell.set_text_props(fontweight="bold")
-            cell.set_facecolor("#f8f9fa")
-        else:
-            cell.set_facecolor("white")
-        cell.set_edgecolor("#bdc3c7")
-
-    # --- Kinematics tabel ---
-    ax_kin = fig.add_axes([0.37, 0.05, 0.25, 0.24])
-    ax_kin.axis("off")
-    ax_kin.set_title("Kinematics", fontsize=10, fontweight="bold",
-                    loc="left", color="#2c3e50")
-
-    kin_rows = [
-        ["Wind Shear [kt]", ""],
-        ["0-1 km", fmt(thermo.get("shear_01"))],
-        ["0-6 km", fmt(thermo.get("shear_06"))],
-        ["", ""],
-        ["SRH [m²/s²]", ""],
-        ["0-1 km", fmt(thermo.get("srh_01"))],
-        ["0-3 km", fmt(thermo.get("srh_03"))],
-    ]
-
-    tbl_kin = ax_kin.table(
-        cellText=kin_rows, loc="upper left",
-        cellLoc="center", colWidths=[0.55, 0.45],
-    )
-    tbl_kin.auto_set_font_size(False)
-    tbl_kin.set_fontsize(7.5)
-    for (row, col), cell in tbl_kin.get_celld().items():
-        cell.set_linewidth(0.3)
-        if row in [0, 4]:
-            cell.set_facecolor("#ecf0f1")
-            cell.set_text_props(fontweight="bold", fontsize=7)
-        elif col == 0:
-            cell.set_text_props(fontweight="bold")
-            cell.set_facecolor("#f8f9fa")
-        else:
-            cell.set_facecolor("white")
-        cell.set_edgecolor("#bdc3c7")
-
-    # --- Thermodynamics tabel ---
-    ax_thermo = fig.add_axes([0.64, 0.05, 0.33, 0.24])
-    ax_thermo.axis("off")
-    ax_thermo.set_title("Thermodynamics", fontsize=10, fontweight="bold",
-                       loc="left", color="#2c3e50")
-
-    thermo_rows = [
-        ["Parameter", "Waarde"],
-        ["Freezing Level [m]", fmt(thermo.get("freezing_h"))],
-        ["Wet Bulb Zero [m]", fmt(thermo.get("wbz_h"))],
-        ["Max Temp [°C]", fmt(thermo.get("max_t"), 1)],
-        ["Sfc Temp [°C]", fmt(thermo.get("sfc_t"), 1)],
-        ["PW [mm]", fmt(thermo.get("pw"), 1)],
-        ["CAPE API [J/kg]", fmt(profile["sfc"].get("cape_api"))],
-    ]
-
-    tbl_thermo = ax_thermo.table(
-        cellText=thermo_rows, loc="upper left",
-        cellLoc="center", colWidths=[0.55, 0.45],
-    )
-    tbl_thermo.auto_set_font_size(False)
-    tbl_thermo.set_fontsize(7.5)
-    for (row, col), cell in tbl_thermo.get_celld().items():
-        cell.set_linewidth(0.3)
-        if row == 0:
-            cell.set_facecolor("#ecf0f1")
-            cell.set_text_props(fontweight="bold", fontsize=7)
-        elif col == 0:
-            cell.set_text_props(fontweight="bold")
-            cell.set_facecolor("#f8f9fa")
-        else:
-            cell.set_facecolor("white")
-        cell.set_edgecolor("#bdc3c7")
-
-    # ============================================================
-    # TITEL
-    # ============================================================
-    valid_local = valid_time.astimezone(LOCAL_TZ)
-    run_local = run_time.astimezone(LOCAL_TZ) if run_time else valid_local
-
-    title = (
-        f"{model_name}  |  {lat:.2f}°N {lon:.2f}°E  |  "
-        f"Run: {run_local.strftime('%d %b %Y %HZ')}  |  "
-        f"Valid: {valid_local.strftime('%d %b %Y %H:%M LT')}"
-    )
-    fig.suptitle(title, fontsize=12, fontweight="bold", y=0.97, x=0.5)
-    fig.text(0.5, 0.955, station_name, fontsize=11, ha="center", color="#7f8c8d")
+    # Technische data wordt in de HTML viewer getoond
 
     # Credit
-    fig.text(0.97, 0.005, "weerlab.nl", fontsize=7, ha="right", color="#bdc3c7")
+    fig.text(0.97, 0.005, "weerlab.nl", fontsize=11, ha="right", color="#bdc3c7")
 
     return fig
 
 
-def generate_soundings(station_id=None, model="ecmwf_ifs025", hours=None):
+def generate_soundings(station_id=None, model="knmi_seamless", hours=None):
     """Genereer soundings voor station(s)."""
     os.chdir(OUTDIR)
     model_labels = {
         "ecmwf_ifs025": "ECMWF IFS 0.25°",
         "ecmwf_ifs": "ECMWF IFS",
-        "knmi_seamless": "KNMI Harmonie (seamless)",
+        "knmi_seamless": "KNMI Harmonie AROME",
         "icon_seamless": "DWD ICON",
         "gfs_seamless": "GFS",
     }
@@ -644,7 +932,7 @@ def generate_soundings(station_id=None, model="ecmwf_ifs025", hours=None):
             )
 
             fname = f"sounding_{sid}_{valid_time.strftime('%Y%m%d%H')}.png"
-            fig.savefig(fname, dpi=150, facecolor="white")
+            fig.savefig(fname, dpi=120, facecolor="white")
             plt.close(fig)
             print(f"OK -> {fname}")
 
@@ -655,10 +943,23 @@ def generate_soundings(station_id=None, model="ecmwf_ifs025", hours=None):
             })
             all_files.append(fname)
 
-    # Metadata opslaan
-    with open("sounding_meta.json", "w") as f:
+    # Metadata opslaan (merge met bestaande)
+    meta_path = "sounding_meta.json"
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path) as mf:
+                existing = json.load(mf)
+            # Merge: update bestaande stations, behoud andere
+            for sid, sdata in meta["stations"].items():
+                existing["stations"][sid] = sdata
+            existing["model"] = meta["model"]
+            existing["generated"] = meta["generated"]
+            meta = existing
+        except Exception:
+            pass
+    with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
-    print(f"\nMetadata: sounding_meta.json")
+    print(f"\nMetadata: {meta_path}")
 
     return all_files
 
@@ -687,7 +988,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Skew-T sounding generator")
     parser.add_argument("--station", default=None, help="Station ID (bijv. debilt)")
-    parser.add_argument("--model", default="ecmwf_ifs025", help="Model (ecmwf_ifs025, knmi_seamless, etc.)")
+    parser.add_argument("--model", default="knmi_seamless", help="Model (knmi_seamless, ecmwf_ifs025, icon_seamless, etc.)")
     parser.add_argument("--hours", default="0,3,6,9,12,15,18,21,24", help="Uurstappen (komma-gescheiden)")
     parser.add_argument("--upload", action="store_true", help="Upload naar R2")
     args = parser.parse_args()
