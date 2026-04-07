@@ -385,11 +385,14 @@ body.scroll-mode { overflow-y: auto; }
     [247,220,111],[245,176,65],[231,76,60],[192,57,43],[142,68,173],[108,52,131]
   ];
 
-  // Druk referentiepunten (hPa)
+  // Druk referentiepunten (hPa) — fijne gradatie in normaal bereik
   var DRUK_REF = [
-    [970,[74,0,130]],[980,[106,61,154]],[990,[31,120,180]],[1000,[51,160,44]],
-    [1010,[178,223,138]],[1015,[255,255,179]],[1020,[253,191,111]],
-    [1030,[255,127,0]],[1040,[227,26,28]],[1050,[128,0,38]]
+    [960,[74,0,130]],[970,[106,61,154]],[980,[63,90,180]],[985,[31,120,200]],
+    [990,[0,150,200]],[995,[51,180,140]],[1000,[51,190,80]],
+    [1005,[120,210,80]],[1010,[178,223,100]],[1013,[220,240,120]],
+    [1016,[255,255,160]],[1019,[255,235,120]],[1022,[253,210,90]],
+    [1025,[253,180,60]],[1028,[255,150,30]],[1031,[255,120,0]],
+    [1035,[240,80,0]],[1040,[227,26,28]],[1050,[128,0,38]]
   ];
 
   // WBGT levels en kleuren (hitteindex)
@@ -866,7 +869,11 @@ body.scroll-mode { overflow-y: auto; }
 
     // Gridwaarden (cijfers) — minder dicht, met witte omlijning
     // Bij zoom: meer cijfers tonen (dichter grid)
-    var labelStep = Math.max(2, Math.round(nLon / (45 * zoomLevel)));
+    // Dichtheid afhankelijk van breedte van de waarden
+    var labelDichtheid = 45; // standaard: 2-cijferige waarden (temp, bft)
+    if (paramKey === "druk") labelDichtheid = 20; // 4 cijfers breed
+    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape") labelDichtheid = 30; // 3+ cijfers
+    var labelStep = Math.max(2, Math.round(nLon / (labelDichtheid * zoomLevel)));
     var fontSize = Math.max(11, Math.round(ch / 80));
     ctx.font = "bold " + fontSize + "px Arial";
     ctx.textAlign = "center";
@@ -935,10 +942,15 @@ body.scroll-mode { overflow-y: auto; }
         var py = gy2px(gy);
         if (px < -20 || px > cw+20 || py < -20 || py > ch+20) continue;
         var txtColor = (!bgc || lum(bgc[0], bgc[1], bgc[2]) > 0.4) ? "#000" : "#fff";
-        // Witte omlijning voor leesbaarheid
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = 3;
+        // Omlijning voor leesbaarheid — dunner bij witte tekst
         ctx.lineJoin = "round";
+        if (txtColor === "#fff") {
+          ctx.strokeStyle = "rgba(0,0,0,0.6)";
+          ctx.lineWidth = 2.5;
+        } else {
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.lineWidth = 2.5;
+        }
         ctx.strokeText(txt, px, py);
         ctx.fillStyle = txtColor;
         ctx.fillText(txt, px, py);
