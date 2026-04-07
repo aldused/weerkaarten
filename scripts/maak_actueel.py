@@ -5,12 +5,11 @@ Haalt alle synop-velden op en slaat op als actueel.json
 import os, json, requests, time
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+from knmi_api import knmi_get
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
 BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
-HEADERS  = {"Authorization": KNMI_KEY}
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 STATIONS = {
@@ -52,11 +51,10 @@ def haal_station(wigos, naam, lon, lat):
     dt  = f"{van.strftime('%Y-%m-%dT%H:%M:%SZ')}/{nu.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     params = {"datetime": dt, "parameter-name": "ta,td,ff,dd,fx,n,rh,vv,h,ww,tg,tgn,p0"}
     try:
-        r = requests.get(f"{BASE_URL}/locations/{wigos}", headers=HEADERS, params=params, timeout=15)
-        if r.status_code in (400, 403, 404):
+        r = knmi_get(f"{BASE_URL}/locations/{wigos}", params=params, timeout=15)
+        if r.status_code in (400, 404):
             print(f"  {naam}: HTTP {r.status_code}")
             return None
-        r.raise_for_status()
         js = r.json()
         if not js.get("coverages"): return None
         ranges = js["coverages"][0].get("ranges", {})
