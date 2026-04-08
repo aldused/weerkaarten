@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klimaatnormalen 1991-2020 - KNMI Stations</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a1a2e; }
+
+/* Header */
+.header {
+  background: #00205b; padding: 14px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 3px solid #2ec4e8; flex-wrap: wrap; gap: 8px;
+}
+.header-left { display: flex; align-items: center; gap: 14px; }
+.header h1 { font-size: 16px; font-weight: 700; color: white; }
+.header .sub { font-size: 12px; color: #a8c4e8; }
+.back-btn {
+  font-size: 12px; padding: 6px 14px; border-radius: 7px; border: none;
+  cursor: pointer; font-weight: 700; color: white; text-decoration: none;
+  background: linear-gradient(135deg,#0d9488,#1d4ed8);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.back-btn:hover { opacity: 0.85; }
+
+/* Layout */
+.container { max-width: 1600px; margin: 0 auto; padding: 16px; }
+
+/* Controls row */
+.controls {
+  display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.search-box {
+  flex: 1; min-width: 220px; position: relative;
+}
+.search-box input {
+  width: 100%; padding: 10px 14px 10px 36px; border: 2px solid #d0d5dd;
+  border-radius: 8px; font-size: 14px; background: white;
+  transition: border-color 0.15s;
+}
+.search-box input:focus { outline: none; border-color: #2ec4e8; }
+.search-box::before {
+  content: "\1F50D"; position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%); font-size: 16px; pointer-events: none;
+}
+
+/* View toggle */
+.view-toggle {
+  display: flex; background: white; border-radius: 8px; border: 2px solid #d0d5dd;
+  overflow: hidden;
+}
+.view-btn {
+  padding: 8px 16px; border: none; background: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: #475467;
+  transition: all 0.15s;
+}
+.view-btn.active { background: #00205b; color: white; }
+.view-btn:hover:not(.active) { background: #f0f4f8; }
+
+/* Category tabs */
+.cat-tabs {
+  display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px;
+  background: white; padding: 6px; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.cat-tab {
+  padding: 8px 16px; border: none; border-radius: 7px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: #475467; background: none;
+  transition: all 0.15s; white-space: nowrap;
+}
+.cat-tab.active { background: #00205b; color: white; }
+.cat-tab:hover:not(.active) { background: #f0f4f8; }
+.cat-tab .icon { margin-right: 4px; }
+
+/* Period tabs (maand/seizoen/jaar) */
+.period-tabs {
+  display: flex; gap: 3px; margin-bottom: 12px;
+}
+.period-tab {
+  padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: #475467; background: #e8ecf0;
+  transition: all 0.15s;
+}
+.period-tab.active { background: #2ec4e8; color: #00205b; }
+.period-tab:hover:not(.active) { background: #d0d8e0; }
+
+/* Station cards grid */
+.station-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+.station-card {
+  background: white; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden; cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+.station-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: translateY(-1px); }
+.station-card.selected { box-shadow: 0 0 0 2px #2ec4e8; }
+.station-card.national { border: 2px solid #2ec4e8; }
+.station-card.national .station-card-header { background: linear-gradient(135deg, #00205b, #0d4f8f); }
+.station-card.lh05-member .station-card-header::after {
+  content: "\u2605"; font-size: 10px; color: #2ec4e8; margin-left: 6px;
+}
+.data-table tbody tr.national-row td { background: #edf7ff; font-weight: 700; }
+.data-table tbody tr.national-row:hover td { background: #ddeeff; }
+.data-table tbody tr.national-row td:first-child { background: #edf7ff; color: #00205b; }
+.data-table tbody tr.national-row:hover td:first-child { background: #ddeeff; }
+.national-badge {
+  display: inline-block; background: #2ec4e8; color: #00205b; font-size: 9px;
+  font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-left: 6px;
+  letter-spacing: 0.05em; text-transform: uppercase; vertical-align: middle;
+}
+.station-card-header {
+  background: #00205b; padding: 10px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.station-card-header h3 { color: white; font-size: 14px; }
+.station-card-header .code { color: #a8c4e8; font-size: 12px; }
+.station-card-body { padding: 10px 14px; }
+.station-card-body .meta {
+  font-size: 11px; color: #667085; margin-bottom: 8px;
+}
+.mini-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.mini-table th {
+  text-align: right; padding: 2px 6px; color: #667085; font-weight: 500;
+  border-bottom: 1px solid #eee;
+}
+.mini-table td {
+  text-align: right; padding: 2px 6px; font-weight: 600;
+  border-bottom: 1px solid #eee;
+}
+.mini-table th:first-child, .mini-table td:first-child { text-align: left; }
+
+/* Full table view */
+.table-wrap {
+  background: white; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow-x: auto; display: none;
+}
+.table-wrap.visible { display: block; }
+.data-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  min-width: 900px;
+}
+.data-table thead th {
+  background: #00205b; color: white; padding: 8px 10px;
+  text-align: right; font-weight: 600; font-size: 11px;
+  position: sticky; top: 0; z-index: 2;
+  white-space: nowrap;
+}
+.data-table thead th:first-child {
+  text-align: left; position: sticky; left: 0; z-index: 3;
+  min-width: 140px;
+}
+.data-table thead th.month-header { background: #003380; }
+.data-table thead th.season-header { background: #1a4f8f; }
+.data-table thead th.year-header { background: #0d9488; }
+
+.data-table tbody td {
+  padding: 6px 10px; text-align: right; border-bottom: 1px solid #eee;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.data-table tbody td:first-child {
+  text-align: left; font-weight: 600; color: #00205b;
+  position: sticky; left: 0; background: white; z-index: 1;
+  border-right: 2px solid #eee;
+}
+.data-table tbody tr:hover td { background: #f0f8ff; }
+.data-table tbody tr:hover td:first-child { background: #e8f4ff; }
+.data-table tbody tr:nth-child(even) td { background: #fafbfc; }
+.data-table tbody tr:nth-child(even):hover td { background: #f0f8ff; }
+.data-table tbody tr:nth-child(even) td:first-child { background: #fafbfc; }
+.data-table tbody tr:nth-child(even):hover td:first-child { background: #e8f4ff; }
+
+.data-table td.val-null { color: #ccc; }
+
+/* Color gradients for temperature values */
+.temp-cold { color: #2563eb; }
+.temp-cool { color: #0891b2; }
+.temp-mild { color: #059669; }
+.temp-warm { color: #d97706; }
+.temp-hot { color: #dc2626; }
+
+/* Station detail panel */
+.detail-panel {
+  display: none; background: white; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 16px; margin-bottom: 16px;
+}
+.detail-panel.visible { display: block; }
+.detail-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #eee;
+}
+.detail-header h2 { color: #00205b; font-size: 18px; }
+.detail-close {
+  width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: #f0f4f8; cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.detail-close:hover { background: #e0e4e8; }
+
+/* Metric groups in detail */
+.metric-group { margin-bottom: 16px; }
+.metric-group-title {
+  font-size: 13px; font-weight: 700; color: #00205b;
+  padding: 6px 10px; background: #f0f4f8; border-radius: 6px;
+  margin-bottom: 6px;
+}
+.metric-group .data-table { min-width: 0; }
+
+/* Compare mode */
+.compare-bar {
+  display: none; position: fixed; bottom: 0; left: 0; right: 0;
+  background: #00205b; padding: 10px 24px; z-index: 100;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.2);
+  align-items: center; justify-content: space-between;
+}
+.compare-bar.visible { display: flex; }
+.compare-bar .info { color: white; font-size: 13px; font-weight: 600; }
+.compare-bar .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.compare-chip {
+  background: rgba(255,255,255,0.15); color: white; padding: 4px 10px;
+  border-radius: 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;
+}
+.compare-chip .remove {
+  cursor: pointer; font-size: 14px; opacity: 0.7;
+}
+.compare-chip .remove:hover { opacity: 1; }
+.compare-actions { display: flex; gap: 8px; }
+.compare-btn {
+  padding: 8px 18px; border: none; border-radius: 7px; cursor: pointer;
+  font-size: 13px; font-weight: 700; transition: opacity 0.15s;
+}
+.compare-btn.primary { background: #2ec4e8; color: #00205b; }
+.compare-btn.secondary { background: rgba(255,255,255,0.15); color: white; }
+.compare-btn:hover { opacity: 0.85; }
+
+/* Footer */
+.footer {
+  text-align: center; padding: 16px; color: #667085; font-size: 11px;
+  margin-top: 20px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container { padding: 10px; }
+  .station-grid { grid-template-columns: 1fr; }
+  .controls { flex-direction: column; }
+  .cat-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .header { padding: 10px 14px; }
+  .header h1 { font-size: 14px; }
+}
+
+/* Tooltip */
+.tooltip {
+  position: absolute; background: #1a1a2e; color: white; padding: 6px 10px;
+  border-radius: 6px; font-size: 11px; pointer-events: none;
+  z-index: 1000; max-width: 250px; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* Loading */
+.loading {
+  text-align: center; padding: 60px; color: #667085; font-size: 14px;
+}
+.loading .spinner {
+  width: 40px; height: 40px; border: 3px solid #e0e4e8;
+  border-top-color: #2ec4e8; border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* No results */
+.no-results { text-align: center; padding: 40px; color: #667085; font-size: 14px; }
+
+/* Info cards row */
+.info-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.info-card {
+  flex: 1; min-width: 120px; background: white; border-radius: 8px;
+  padding: 12px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.info-card .value { font-size: 22px; font-weight: 700; color: #00205b; }
+.info-card .label { font-size: 11px; color: #667085; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <a href="index.html" class="back-btn">&#8592; Terug</a>
+    <div>
+      <h1>Klimaatnormalen 1991-2020</h1>
+      <div class="sub" id="stationCount">KNMI Automatische Weerstations</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    Data laden...
+  </div>
+
+  <div id="app" style="display:none;">
+
+    <!-- Controls -->
+    <div class="controls">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Zoek station (naam, nummer of provincie)..." autocomplete="off">
+      </div>
+      <div class="view-toggle">
+        <button class="view-btn active" data-view="cards" onclick="setView('cards')">Kaarten</button>
+        <button class="view-btn" data-view="table" onclick="setView('table')">Tabel</button>
+        <button class="view-btn" data-view="compare" onclick="setView('compare')">Vergelijk</button>
+      </div>
+    </div>
+
+    <!-- Category tabs -->
+    <div class="cat-tabs" id="catTabs"></div>
+
+    <!-- Period tabs -->
+    <div class="period-tabs" id="periodTabs">
+      <button class="period-tab" data-period="decades" onclick="setPeriod('decades')">Decades</button>
+      <button class="period-tab active" data-period="months" onclick="setPeriod('months')">Maanden</button>
+      <button class="period-tab" data-period="seasons" onclick="setPeriod('seasons')">Seizoenen</button>
+      <button class="period-tab" data-period="year" onclick="setPeriod('year')">Jaar</button>
+    </div>
+
+    <!-- Station detail panel -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-header">
+        <h2 id="detailTitle"></h2>
+        <button class="detail-close" onclick="closeDetail()">&times;</button>
+      </div>
+      <div id="detailContent"></div>
+    </div>
+
+    <!-- Card view -->
+    <div class="station-grid" id="stationGrid"></div>
+
+    <!-- Table view -->
+    <div class="table-wrap" id="tableView"></div>
+
+    <!-- No results -->
+    <div class="no-results" id="noResults" style="display:none;">
+      Geen stations gevonden voor deze zoekopdracht.
+    </div>
+  </div>
+</div>
+
+<!-- Compare bar -->
+<div class="compare-bar" id="compareBar">
+  <div>
+    <div class="info">Selecteer stations om te vergelijken</div>
+    <div class="chips" id="compareChips"></div>
+  </div>
+  <div class="compare-actions">
+    <button class="compare-btn secondary" onclick="clearCompare()">Wissen</button>
+    <button class="compare-btn primary" onclick="showCompare()">Vergelijk</button>
+  </div>
+</div>
+
+<div class="footer">
+  Bron: KNMI - Koninklijk Nederlands Meteorologisch Instituut | Normaalperiode 1991-2020
+</div>
+
+<script>
+// ── Data & State ──
+let DATA = null;
+let currentView = 'cards';
+let currentCategory = 'temperatuur';
+let currentPeriod = 'months';
+let searchQuery = '';
+let selectedStation = null;
+let compareStations = [];
+
+// ── Metric definitions ──
+const CATEGORIES = {
+  temperatuur: {
+    label: 'Temperatuur', icon: '\uD83C\uDF21\uFE0F',
+    groups: {
+      'Gemiddelde temperatuur (TG)': ['TG_gemiddeld', 'TG_min', 'TG_max'],
+      'Minimum temperatuur (TN)': ['TN_gemiddeld', 'TN_min', 'TN_max'],
+      'Maximum temperatuur (TX)': ['TX_gemiddeld', 'TX_min', 'TX_max'],
+      'Vorstdagen / warme dagen': ['TG_beneden_0', 'TX_beneden_0', 'TN_beneden_0', 'TN_beneden_-5', 'TN_beneden_-10', 'TG_minstens_20', 'TX_minstens_20', 'TX_minstens_25', 'TX_minstens_30', 'TX_minstens_35'],
+      'Grondvorst': ['T10N_beneden_0'],
+    },
+    summaryMetrics: ['TG_gemiddeld', 'TN_gemiddeld', 'TX_gemiddeld'],
+    unit: '\u00B0C'
+  },
+  neerslag: {
+    label: 'Neerslag', icon: '\uD83C\uDF27\uFE0F',
+    groups: {
+      'Neerslagsom': ['RH24_som', 'RHX_max'],
+      'Neerslagduur': ['DR24_duur', 'DR24_duur_pct'],
+      'Drempelwaarden': ['RH24_gelijk_0', 'RH24_niet_gelijk_0', 'RH24_minstens_0.1', 'RH24_minstens_0.3', 'RH24_minstens_1', 'RH24_minstens_10', 'RH24_minstens_15', 'RH24_minstens_20', 'RH24_minstens_25'],
+      'Neerslagdagen': ['DR24_boven_0'],
+    },
+    summaryMetrics: ['RH24_som', 'DR24_duur', 'RH24_minstens_1'],
+    unit: 'mm / uur'
+  },
+  zon: {
+    label: 'Zon', icon: '\u2600\uFE0F',
+    groups: {
+      'Zonneschijn': ['SQ24_gemiddeld', 'SQ24_som', 'Daglicht', 'pctzon_gemiddeld'],
+      'Bewolking': ['SQ24_gelijk_0', 'SQ24_niet_gelijk_0', 'pctzon_hoogstens_20', 'pctzon_tussen_20_en_50', 'pctzon_tussen_50_en_80', 'pctzon_minstens_80'],
+      'Globale straling': ['Q24_som'],
+    },
+    summaryMetrics: ['SQ24_som', 'pctzon_gemiddeld', 'Q24_som'],
+    unit: 'uur / %'
+  },
+  wind: {
+    label: 'Wind', icon: '\uD83D\uDCA8',
+    groups: {
+      'Windsnelheid': ['FG_gemiddeld', 'FG_max', 'FHX_gemiddeld', 'FHX_max'],
+      'Drempelwaarden uurmax': ['FHX_minstens_Bft4', 'FHX_minstens_Bft5', 'FHX_minstens_Bft6', 'FHX_minstens_Bft7'],
+      'Stoten': ['FXX_gemiddeld #', 'FXX_max #', 'FXX_minstens_21 #', 'FXX_minstens_28 #'],
+    },
+    summaryMetrics: ['FG_gemiddeld', 'FHX_max', 'FXX_max #'],
+    unit: 'm/s'
+  },
+  vochtigheid: {
+    label: 'Vochtigheid', icon: '\uD83D\uDCA7',
+    groups: {
+      'Relatieve luchtvochtigheid': ['UG_gemiddeld', 'U12_gemiddeld'],
+      'Verdamping': ['EV24_gemiddeld', 'EV24_som', 'EEG_gemiddeld'],
+      'Waterbalans': ['waterbalans_som'],
+      'Weer': ['W1_code_minstens_1 #', 'W3_code_minstens_1 #'],
+    },
+    summaryMetrics: ['UG_gemiddeld', 'EV24_som', 'waterbalans_som'],
+    unit: '% / mm'
+  },
+  luchtdruk: {
+    label: 'Luchtdruk', icon: '\uD83D\uDCCA',
+    groups: {
+      'Luchtdruk': ['PG_gemiddeld'],
+    },
+    summaryMetrics: ['PG_gemiddeld'],
+    unit: 'hPa'
+  },
+};
+
+// Metric readable names
+const METRIC_LABELS = {
+  'TG_gemiddeld': 'Gem. temperatuur',
+  'TG_min': 'Laagste gem. temp.',
+  'TG_max': 'Hoogste gem. temp.',
+  'TG_beneden_0': 'Dagen TG < 0\u00B0C',
+  'TG_minstens_20': 'Warme dagen (TG \u2265 20)',
+  'TG_tussen_0_en_5': 'Dagen 0-5\u00B0C',
+  'TG_tussen_5_en_10': 'Dagen 5-10\u00B0C',
+  'TG_tussen_10_en_15': 'Dagen 10-15\u00B0C',
+  'TG_tussen_15_en_20': 'Dagen 15-20\u00B0C',
+  'TN_gemiddeld': 'Gem. minimum temp.',
+  'TN_min': 'Laagste minimum',
+  'TN_max': 'Hoogste minimum',
+  'TN_beneden_0': 'Vorstdagen (TN < 0)',
+  'TN_beneden_-5': 'Matige vorst (TN < -5)',
+  'TN_beneden_-10': 'Strenge vorst (TN < -10)',
+  'TN_minstens_20': 'Tropische nachten (\u2265 20)',
+  'TX_gemiddeld': 'Gem. maximum temp.',
+  'TX_min': 'Laagste maximum',
+  'TX_max': 'Hoogste maximum',
+  'TX_beneden_0': 'IJsdagen (TX < 0)',
+  'TX_minstens_15': 'Dagen TX \u2265 15',
+  'TX_minstens_20': 'Lentedagen (\u2265 20)',
+  'TX_minstens_25': 'Zomerse dagen (\u2265 25)',
+  'TX_minstens_30': 'Tropische dagen (\u2265 30)',
+  'TX_minstens_35': 'Extr. tropisch (\u2265 35)',
+  'T10N_beneden_0': 'Grondvorst (T10 < 0)',
+  'RH24_som': 'Neerslagsom (mm)',
+  'RHX_max': 'Max. uursom (mm)',
+  'DR24_duur': 'Neerslagduur (uur)',
+  'DR24_duur_pct': 'Neerslagduur (%)',
+  'DR24_boven_0': 'Natte dagen',
+  'RH24_gelijk_0': 'Droge dagen',
+  'RH24_niet_gelijk_0': 'Dagen met neerslag',
+  'RH24_minstens_0.1': 'Dagen \u2265 0.1 mm',
+  'RH24_minstens_0.3': 'Dagen \u2265 0.3 mm',
+  'RH24_minstens_1': 'Dagen \u2265 1 mm',
+  'RH24_minstens_10': 'Dagen \u2265 10 mm',
+  'RH24_minstens_15': 'Dagen \u2265 15 mm',
+  'RH24_minstens_20': 'Dagen \u2265 20 mm',
+  'RH24_minstens_25': 'Dagen \u2265 25 mm',
+  'waterbalans_som': 'Waterbalans (mm)',
+  'SQ24_gemiddeld': 'Gem. zonneschijn (uur)',
+  'SQ24_som': 'Totaal zonneschijn (uur)',
+  'SQ24_gelijk_0': 'Sombere dagen',
+  'SQ24_niet_gelijk_0': 'Dagen met zon',
+  'Daglicht': 'Daglicht (uur)',
+  'pctzon_gemiddeld': 'Zonpercentage (%)',
+  'pctzon_hoogstens_20': 'Somber (< 20%)',
+  'pctzon_tussen_20_en_50': 'Matig (20-50%)',
+  'pctzon_tussen_50_en_80': 'Zonnig (50-80%)',
+  'pctzon_minstens_80': 'Zeer zonnig (\u2265 80%)',
+  'Q24_som': 'Glob. straling (J/cm\u00B2)',
+  'FG_gemiddeld': 'Gem. windsnelheid (m/s)',
+  'FG_max': 'Max. gem. wind (m/s)',
+  'FHX_gemiddeld': 'Gem. uurmax (m/s)',
+  'FHX_max': 'Max. uurmax (m/s)',
+  'FHX_minstens_Bft4': 'Dagen \u2265 Bft 4',
+  'FHX_minstens_Bft5': 'Dagen \u2265 Bft 5',
+  'FHX_minstens_Bft6': 'Dagen \u2265 Bft 6',
+  'FHX_minstens_Bft7': 'Dagen \u2265 Bft 7',
+  'FXX_gemiddeld #': 'Gem. windstoot (m/s)',
+  'FXX_max #': 'Max. windstoot (m/s)',
+  'FXX_minstens_21 #': 'Dagen stoot \u2265 21 m/s',
+  'FXX_minstens_28 #': 'Dagen stoot \u2265 28 m/s',
+  'UG_gemiddeld': 'Gem. RV (%)',
+  'U12_gemiddeld': 'Gem. RV 12 UTC (%)',
+  'EV24_gemiddeld': 'Gem. verdamping (mm)',
+  'EV24_som': 'Totaal verdamping (mm)',
+  'EEG_gemiddeld': 'Gem. dampspanning (hPa)',
+  'PG_gemiddeld': 'Gem. luchtdruk (hPa)',
+  'W1_code_minstens_1 #': 'Onweersdagen',
+  'W3_code_minstens_1 #': 'Sneeuwdagen',
+};
+
+const MONTH_COLS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','okt','nov','dec'];
+const SEASON_COLS = ['winter','lente','zomer','herfst'];
+const YEAR_COLS = ['jaar'];
+const DECADE_COLS = [
+  'janI','janII','janIII','febI','febII','febIII',
+  'marI','marII','marIII','aprI','aprII','aprIII',
+  'meiI','meiII','meiIII','junI','junII','junIII',
+  'julI','julII','julIII','augI','augII','augIII',
+  'sepI','sepII','sepIII','oktI','oktII','oktIII',
+  'novI','novII','novIII','decI','decII','decIII'
+];
+const MONTH_LABELS = {jan:'Jan',feb:'Feb',mar:'Mrt',apr:'Apr',may:'Mei',jun:'Jun',jul:'Jul',aug:'Aug',sep:'Sep',okt:'Okt',nov:'Nov',dec:'Dec'};
+const SEASON_LABELS = {winter:'Winter',lente:'Lente',zomer:'Zomer',herfst:'Herfst'};
+const DECADE_LABELS = {};
+['jan','feb','mar','apr','mei','jun','jul','aug','sep','okt','nov','dec'].forEach(m => {
+  const ml = (MONTH_LABELS[m] || m.charAt(0).toUpperCase()+m.slice(1));
+  DECADE_LABELS[m+'I'] = ml+' I';
+  DECADE_LABELS[m+'II'] = ml+' II';
+  DECADE_LABELS[m+'III'] = ml+' III';
+});
+
+// Decade metrics available per category
+const DECADE_METRICS = {
+  temperatuur: ['TG_gemiddeld', 'TN_gemiddeld', 'TX_gemiddeld'],
+  neerslag: ['RH24_som', 'DR24_duur'],
+  zon: ['SQ24_som', 'SQ24_gemiddeld', 'pctzon_gemiddeld', 'Q24_som'],
+  wind: ['FG_gemiddeld', 'FG_pot_gemiddeld'],
+  vochtigheid: ['UG_gemiddeld', 'EV24_som', 'EEG_gemiddeld'],
+  luchtdruk: ['PG_gemiddeld'],
+};
+
+// LH05 constituent stations
+const LH05_STATIONS = ['235', '260', '280', '310', '380'];
+
+// Provincial mapping for search
+const PROVINCES = {
+  'LH05': 'Nederland',
+  '215': 'Zuid-Holland', '235': 'Noord-Holland', '240': 'Noord-Holland',
+  '249': 'Noord-Holland', '251': 'Friesland', '260': 'Utrecht',
+  '267': 'Friesland', '269': 'Flevoland', '270': 'Friesland',
+  '273': 'Flevoland', '275': 'Gelderland', '278': 'Overijssel',
+  '279': 'Drenthe', '280': 'Groningen', '283': 'Gelderland',
+  '286': 'Groningen', '290': 'Overijssel', '310': 'Zeeland',
+  '319': 'Zeeland', '320': 'Zuid-Holland', '344': 'Zuid-Holland',
+  '348': 'Utrecht', '350': 'Noord-Brabant', '356': 'Gelderland',
+  '370': 'Noord-Brabant', '375': 'Noord-Brabant', '380': 'Limburg',
+  '391': 'Limburg',
+};
+
+// ── Init ──
+async function init() {
+  try {
+    const resp = await fetch('normalen_1991_2020.json');
+    DATA = await resp.json();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('stationCount').textContent = `KNMI Automatische Weerstations - ${Object.keys(DATA.stations).length} stations`;
+    buildCategoryTabs();
+    render();
+    document.getElementById('searchInput').addEventListener('input', e => {
+      searchQuery = e.target.value.toLowerCase();
+      render();
+    });
+  } catch (err) {
+    document.getElementById('loading').innerHTML = '<p>Fout bij laden van data: ' + err.message + '</p>';
+  }
+}
+
+function buildCategoryTabs() {
+  const el = document.getElementById('catTabs');
+  el.innerHTML = Object.entries(CATEGORIES).map(([key, cat]) =>
+    `<button class="cat-tab ${key === currentCategory ? 'active' : ''}" onclick="setCategory('${key}')">
+      <span class="icon">${cat.icon}</span>${cat.label}
+    </button>`
+  ).join('');
+}
+
+function setCategory(cat) {
+  currentCategory = cat;
+  buildCategoryTabs();
+  render();
+}
+
+function setPeriod(period) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-tab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+  render();
+}
+
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  if (view === 'compare') {
+    document.getElementById('compareBar').classList.add('visible');
+  } else {
+    document.getElementById('compareBar').classList.remove('visible');
+  }
+  render();
+}
+
+function getVisibleCols() {
+  if (currentPeriod === 'decades') return DECADE_COLS;
+  if (currentPeriod === 'months') return MONTH_COLS;
+  if (currentPeriod === 'seasons') return SEASON_COLS;
+  return YEAR_COLS;
+}
+
+function getColLabel(col) {
+  return MONTH_LABELS[col] || SEASON_LABELS[col] || DECADE_LABELS[col] || (col === 'jaar' ? 'Jaar' : col);
+}
+
+function isDecadeMode() { return currentPeriod === 'decades'; }
+
+function getDecadeVal(station, metric, col) {
+  const dec = station.decade;
+  if (!dec || !dec[metric]) return null;
+  return dec[metric][col];
+}
+
+function getAvailableDecadeMetrics(cat) {
+  const available = DECADE_METRICS[cat] || [];
+  return available;
+}
+
+function formatVal(v) {
+  if (v === null || v === undefined) return '<span class="val-null">-</span>';
+  return typeof v === 'number' ? v.toFixed(1) : v;
+}
+
+function getTempClass(v) {
+  if (v === null || v === undefined) return '';
+  if (v < 0) return 'temp-cold';
+  if (v < 5) return 'temp-cool';
+  if (v < 15) return 'temp-mild';
+  if (v < 25) return 'temp-warm';
+  return 'temp-hot';
+}
+
+function getFilteredStations() {
+  const stations = Object.values(DATA.stations);
+  const sortFn = (a, b) => {
+    // LH05 always first
+    if (a.code === 'LH05') return -1;
+    if (b.code === 'LH05') return 1;
+    // LH05 member stations next
+    const aLH = LH05_STATIONS.includes(a.code);
+    const bLH = LH05_STATIONS.includes(b.code);
+    if (aLH && !bLH) return -1;
+    if (!aLH && bLH) return 1;
+    return a.name.localeCompare(b.name);
+  };
+  if (!searchQuery) return stations.sort(sortFn);
+  return stations.filter(s => {
+    const q = searchQuery;
+    const province = (PROVINCES[s.code] || '').toLowerCase();
+    return s.name.toLowerCase().includes(q) ||
+           s.code.toLowerCase().includes(q) ||
+           province.includes(q) ||
+           (s.description && s.description.toLowerCase().includes(q));
+  }).sort(sortFn);
+}
+
+// ── Render ──
+function render() {
+  const stations = getFilteredStations();
+  const grid = document.getElementById('stationGrid');
+  const table = document.getElementById('tableView');
+  const noRes = document.getElementById('noResults');
+
+  if (stations.length === 0) {
+    grid.style.display = 'none';
+    table.classList.remove('visible');
+    noRes.style.display = 'block';
+    return;
+  }
+  noRes.style.display = 'none';
+
+  // In decade mode, force table view (36 cols too wide for cards)
+  const effectiveView = (currentPeriod === 'decades' && currentView === 'cards') ? 'table' : currentView;
+
+  if (effectiveView === 'cards' || effectiveView === 'compare') {
+    grid.style.display = 'grid';
+    table.classList.remove('visible');
+    renderCards(stations);
+  } else {
+    grid.style.display = 'none';
+    table.classList.add('visible');
+    renderTable(stations);
+  }
+}
+
+function renderCards(stations) {
+  const cat = CATEGORIES[currentCategory];
+  const cols = getVisibleCols();
+  const isDecade = isDecadeMode();
+
+  let summaryMetrics;
+  if (isDecade) {
+    summaryMetrics = getAvailableDecadeMetrics(currentCategory);
+  } else {
+    summaryMetrics = cat.summaryMetrics.filter(m => stations.some(s => s.metrics[m]));
+  }
+
+  const grid = document.getElementById('stationGrid');
+  grid.innerHTML = stations.map(s => {
+    const isCompare = compareStations.includes(s.code);
+    const rows = summaryMetrics.map(m => {
+      const label = METRIC_LABELS[m] || m;
+      if (isDecade) {
+        const decData = s.decade && s.decade[m];
+        if (!decData) return '';
+        const cells = cols.map(c => {
+          const v = decData[c];
+          const cls = currentCategory === 'temperatuur' ? getTempClass(v) : '';
+          return `<td class="${cls}">${formatVal(v)}</td>`;
+        }).join('');
+        return `<tr><td>${label}</td>${cells}</tr>`;
+      }
+      const vals = s.metrics[m];
+      if (!vals) return '';
+      const cells = cols.map(c => {
+        const v = vals[c];
+        const cls = currentCategory === 'temperatuur' ? getTempClass(v) : '';
+        return `<td class="${cls}">${formatVal(v)}</td>`;
+      }).join('');
+      return `<tr><td>${label}</td>${cells}</tr>`;
+    }).join('');
+
+    const headers = cols.map(c => `<th>${getColLabel(c)}</th>`).join('');
+    const province = PROVINCES[s.code] || '';
+    const height = s.height !== null ? `${s.height} m` : '';
+
+    const isNational = s.code === 'LH05';
+    const isMember = LH05_STATIONS.includes(s.code);
+    const cardClass = `station-card ${isCompare ? 'selected' : ''} ${isNational ? 'national' : ''} ${isMember ? 'lh05-member' : ''}`;
+    const badge = isNational ? '<span class="national-badge">Landelijk</span>' : '';
+    const memberBadge = isMember ? ' <span style="color:#2ec4e8;font-size:10px;">&#9733;</span>' : '';
+
+    return `<div class="${cardClass}" onclick="${currentView === 'compare' ? `toggleCompare('${s.code}')` : `openDetail('${s.code}')`}">
+      <div class="station-card-header">
+        <h3>${s.name}${badge}</h3>
+        <span class="code">${isNational ? 'LH05' : s.code + ' | ' + province}${memberBadge}</span>
+      </div>
+      <div class="station-card-body">
+        <div class="meta">${isNational ? 'De Bilt, Eelde, Vlissingen, Maastricht, De Kooy' : (height + ' | ' + (s.lat != null ? s.lat.toFixed(2) + '\u00B0N' : '') + ' ' + (s.lon != null ? s.lon.toFixed(2) + '\u00B0O' : ''))}</div>
+        <table class="mini-table">
+          <thead><tr><th></th>${headers}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(stations) {
+  const cat = CATEGORIES[currentCategory];
+  const cols = getVisibleCols();
+  const isDecade = isDecadeMode();
+  const allMetrics = [];
+
+  if (isDecade) {
+    getAvailableDecadeMetrics(currentCategory).forEach(m => {
+      if (stations.some(s => s.decade && s.decade[m])) allMetrics.push(m);
+    });
+  } else {
+    Object.values(cat.groups).forEach(metrics => {
+      metrics.forEach(m => {
+        if (stations.some(s => s.metrics[m])) allMetrics.push(m);
+      });
+    });
+  }
+
+  // Table: stations as rows, pick one metric to show
+  // Or: show a metric selector
+  const tableEl = document.getElementById('tableView');
+
+  // Build metric selector + table
+  let metricSelect = `<div style="padding:10px 14px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+    <label style="font-size:12px; font-weight:600; color:#00205b;">Variabele:</label>
+    <select id="tableMetricSelect" onchange="renderTableContent()" style="padding:6px 10px; border:1px solid #d0d5dd; border-radius:6px; font-size:12px;">
+      ${allMetrics.map(m => `<option value="${m}">${METRIC_LABELS[m] || m}</option>`).join('')}
+    </select>
+  </div>`;
+
+  tableEl.innerHTML = metricSelect + '<div id="tableContent"></div>';
+  renderTableContent();
+}
+
+function renderTableContent() {
+  const stations = getFilteredStations();
+  const cols = getVisibleCols();
+  const selectEl = document.getElementById('tableMetricSelect');
+  if (!selectEl) return;
+  const metric = selectEl.value;
+  const content = document.getElementById('tableContent');
+
+  const colHeaders = cols.map(c => {
+    const cls = MONTH_COLS.includes(c) ? 'month-header' : SEASON_COLS.includes(c) ? 'season-header' : 'year-header';
+    return `<th class="${cls}">${getColLabel(c)}</th>`;
+  }).join('');
+
+  const isDecade = isDecadeMode();
+  const rows = stations.map(s => {
+    let vals;
+    if (isDecade) {
+      vals = (s.decade && s.decade[metric]) || {};
+    } else {
+      vals = s.metrics[metric] || {};
+    }
+    const cells = cols.map(c => {
+      const v = vals[c];
+      const cls = currentCategory === 'temperatuur' ? getTempClass(v) : '';
+      return `<td class="${cls}">${formatVal(v)}</td>`;
+    }).join('');
+    const isNat = s.code === 'LH05';
+    const isMem = LH05_STATIONS.includes(s.code);
+    const rowCls = isNat ? 'national-row' : '';
+    const star = isMem ? ' <span style="color:#2ec4e8;">&#9733;</span>' : '';
+    const badge = isNat ? ' <span class="national-badge">LH05</span>' : '';
+    return `<tr class="${rowCls}"><td>${s.name}${badge}${star} <span style="color:#667085;font-size:10px;">${isNat ? '' : '(' + s.code + ')'}</span></td>${cells}</tr>`;
+  }).join('');
+
+  content.innerHTML = `<table class="data-table">
+    <thead><tr><th>Station</th>${colHeaders}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── Detail Panel ──
+function openDetail(code) {
+  if (currentView === 'compare') return;
+  const s = DATA.stations[code];
+  if (!s) return;
+  selectedStation = code;
+  const panel = document.getElementById('detailPanel');
+  const province = PROVINCES[code] || '';
+
+  document.getElementById('detailTitle').textContent = `${s.name} (${code}) - ${province}`;
+  const cat = CATEGORIES[currentCategory];
+  const cols = getVisibleCols();
+
+  const isDecade = isDecadeMode();
+
+  let html = `<div class="meta" style="margin-bottom:12px;font-size:12px;color:#667085;">
+    Hoogte: ${s.height != null ? s.height + ' m' : 'n.b.'} |
+    Positie: ${s.lat != null ? s.lat.toFixed(3) + '\u00B0N' : ''}, ${s.lon != null ? s.lon.toFixed(3) + '\u00B0O' : ''} |
+    Periode: 1991-2020
+  </div>`;
+
+  const colHeaders = cols.map(c => {
+    const cls = DECADE_COLS.includes(c) ? 'month-header' : MONTH_COLS.includes(c) ? 'month-header' : SEASON_COLS.includes(c) ? 'season-header' : 'year-header';
+    return `<th class="${cls}">${getColLabel(c)}</th>`;
+  }).join('');
+
+  if (isDecade) {
+    const decMetrics = getAvailableDecadeMetrics(currentCategory).filter(m => s.decade && s.decade[m]);
+    if (decMetrics.length > 0) {
+      const rows = decMetrics.map(m => {
+        const vals = s.decade[m];
+        const cells = cols.map(c => {
+          const v = vals[c];
+          const cls = currentCategory === 'temperatuur' ? getTempClass(v) : '';
+          return `<td class="${cls}">${formatVal(v)}</td>`;
+        }).join('');
+        return `<tr><td>${METRIC_LABELS[m] || m}</td>${cells}</tr>`;
+      }).join('');
+      html += `<div class="metric-group">
+        <div class="metric-group-title">Decadenormalen</div>
+        <div style="overflow-x:auto;">
+          <table class="data-table"><thead><tr><th>Metric</th>${colHeaders}</tr></thead><tbody>${rows}</tbody></table>
+        </div>
+      </div>`;
+    }
+  } else {
+    Object.entries(cat.groups).forEach(([groupName, metrics]) => {
+      const available = metrics.filter(m => s.metrics[m]);
+      if (available.length === 0) return;
+
+      const rows = available.map(m => {
+        const vals = s.metrics[m];
+        const cells = cols.map(c => {
+          const v = vals[c];
+          const cls = currentCategory === 'temperatuur' ? getTempClass(v) : '';
+          return `<td class="${cls}">${formatVal(v)}</td>`;
+        }).join('');
+        return `<tr><td>${METRIC_LABELS[m] || m}</td>${cells}</tr>`;
+      }).join('');
+
+      html += `<div class="metric-group">
+        <div class="metric-group-title">${groupName}</div>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead><tr><th>Metric</th>${colHeaders}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    });
+  }
+
+  document.getElementById('detailContent').innerHTML = html;
+  panel.classList.add('visible');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('visible');
+  selectedStation = null;
+}
+
+// ── Compare ──
+function toggleCompare(code) {
+  const idx = compareStations.indexOf(code);
+  if (idx >= 0) {
+    compareStations.splice(idx, 1);
+  } else {
+    if (compareStations.length >= 6) return;
+    compareStations.push(code);
+  }
+  updateCompareBar();
+  render();
+}
+
+function updateCompareBar() {
+  const chips = document.getElementById('compareChips');
+  chips.innerHTML = compareStations.map(code => {
+    const s = DATA.stations[code];
+    return `<span class="compare-chip">${s.name} <span class="remove" onclick="event.stopPropagation();toggleCompare('${code}')">&times;</span></span>`;
+  }).join('');
+}
+
+function clearCompare() {
+  compareStations = [];
+  updateCompareBar();
+  render();
+}
+
+function showCompare() {
+  if (compareStations.length < 2) return;
+  const cat = CATEGORIES[currentCategory];
+  const cols = getVisibleCols();
+  const panel = document.getElementById('detailPanel');
+
+  document.getElementById('detailTitle').textContent = 'Vergelijking: ' + compareStations.map(c => DATA.stations[c].name).join(' vs ');
+
+  const isDecade = isDecadeMode();
+  const allMetrics = [];
+  if (isDecade) {
+    getAvailableDecadeMetrics(currentCategory).forEach(m => {
+      if (compareStations.some(c => DATA.stations[c].decade && DATA.stations[c].decade[m])) allMetrics.push(m);
+    });
+  } else {
+    Object.values(cat.groups).forEach(metrics => {
+      metrics.forEach(m => {
+        if (compareStations.some(c => DATA.stations[c].metrics[m])) allMetrics.push(m);
+      });
+    });
+  }
+
+  const colHeaders = cols.map(c => {
+    const cls = DECADE_COLS.includes(c) ? 'month-header' : MONTH_COLS.includes(c) ? 'month-header' : SEASON_COLS.includes(c) ? 'season-header' : 'year-header';
+    return `<th class="${cls}">${getColLabel(c)}</th>`;
+  }).join('');
+
+  let html = '';
+  allMetrics.forEach(m => {
+    const label = METRIC_LABELS[m] || m;
+    const rows = compareStations.map(code => {
+      const s = DATA.stations[code];
+      let vals;
+      if (isDecade) {
+        vals = (s.decade && s.decade[m]) || {};
+      } else {
+        vals = s.metrics[m] || {};
+      }
+      const cells = cols.map(c => {
+        const v = vals[c];
+        const cls = currentCategory === 'temperatuur' ? getTempClass(v) : '';
+        return `<td class="${cls}">${formatVal(v)}</td>`;
+      }).join('');
+      return `<tr><td>${s.name}</td>${cells}</tr>`;
+    }).join('');
+
+    html += `<div class="metric-group">
+      <div class="metric-group-title">${label}</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr><th>Station</th>${colHeaders}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('detailContent').innerHTML = html;
+  panel.classList.add('visible');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDetail();
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault();
+    document.getElementById('searchInput').focus();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
