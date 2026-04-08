@@ -554,55 +554,34 @@ function updatePresets() {
   }
 }
 
-// ── CSV laden ──
+// ── Data laden (JSON via R2) ──
+const IS_LOCAL = location.hostname === 'localhost' || location.protocol === 'file:';
+const R2_BASE = IS_LOCAL ? '' : 'https://pub-b85951afb4be461a9ac47caf4c8d7e83.r2.dev/';
+
 async function laadCSV(stn) {
   if (csvCache[stn]) return csvCache[stn];
 
-  const url = `knmi_dagdata_${stn}.csv`;
+  const url = R2_BASE + `dagdata_${stn}.json`;
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`CSV niet gevonden: ${url}`);
-  const tekst = await resp.text();
+  if (!resp.ok) throw new Error(`Data niet gevonden: ${url}`);
+  const json = await resp.json();
 
-  const regels = tekst.split('\n');
-  let data = [];
-  let headerGevonden = false;
+  // Kolom-index opbouwen uit JSON header
+  json.kolommen.forEach((c, i) => { kolomIndex[c] = i; });
 
-  for (const regel of regels) {
-    const trimmed = regel.trim();
-    if (!trimmed) continue;
-
-    // Header-regel begint met "# STN"
-    if (trimmed.startsWith('# STN')) {
-      const cols = trimmed.substring(2).split(',').map(c => c.trim());
-      cols.forEach((c, i) => { kolomIndex[c] = i; });
-      headerGevonden = true;
-      continue;
-    }
-
-    // Skip commentaar
-    if (trimmed.startsWith('#') || trimmed.startsWith('BRON') || trimmed.startsWith('SOURCE') ||
-        trimmed.startsWith('YYYYMMDD') || trimmed.startsWith('DDVEC') || !headerGevonden) continue;
-
-    // Data-regel
-    const velden = trimmed.split(',').map(v => v.trim());
-    if (velden.length < 10) continue;
-
-    const datum = velden[kolomIndex['YYYYMMDD']];
-    if (!datum || datum.length !== 8) continue;
-
-    data.push(velden);
-  }
-
-  csvCache[stn] = data;
-  return data;
+  csvCache[stn] = json.data;
+  return json.data;
 }
 
 function getVal(rij, kolom) {
   const idx = kolomIndex[kolom];
   if (idx === undefined) return null;
   const v = rij[idx];
-  if (!v || v.trim() === '') return null;
-  return parseInt(v, 10);
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim();
+  if (s === '') return null;
+  return parseInt(s, 10);
 }
 
 // ── Analyse uitvoeren ──
