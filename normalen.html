@@ -34,19 +34,16 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a1a2e; }
   display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap;
   margin-bottom: 16px;
 }
-.search-box {
-  flex: 1; min-width: 220px; position: relative;
+.station-select-wrap {
+  flex: 1; min-width: 220px;
 }
-.search-box input {
-  width: 100%; padding: 10px 14px 10px 36px; border: 2px solid #d0d5dd;
+.station-select-wrap select {
+  width: 100%; padding: 10px 14px; border: 2px solid #d0d5dd;
   border-radius: 8px; font-size: 14px; background: white;
+  cursor: pointer; appearance: auto;
   transition: border-color 0.15s;
 }
-.search-box input:focus { outline: none; border-color: #2ec4e8; }
-.search-box::before {
-  content: "\1F50D"; position: absolute; left: 10px; top: 50%;
-  transform: translateY(-50%); font-size: 16px; pointer-events: none;
-}
+.station-select-wrap select:focus { outline: none; border-color: #2ec4e8; }
 
 /* View toggle */
 .view-toggle {
@@ -293,7 +290,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a1a2e; }
 </head>
 <body>
 
-<div class="header">
+<div class="header" id="pageHeader">
   <div class="header-left">
     <a href="index.html" class="back-btn">&#8592; Terug</a>
     <div>
@@ -302,6 +299,12 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a1a2e; }
     </div>
   </div>
 </div>
+<script>
+// Hide header when embedded in iframe
+if (window !== window.top) {
+  document.getElementById('pageHeader').style.display = 'none';
+}
+</script>
 
 <div class="container">
   <div class="loading" id="loading">
@@ -313,14 +316,17 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a1a2e; }
 
     <!-- Controls -->
     <div class="controls">
-      <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Zoek station (naam, nummer of provincie)..." autocomplete="off">
+      <div class="station-select-wrap">
+        <select id="stationSelect">
+          <option value="">Alle stations</option>
+        </select>
       </div>
       <div class="view-toggle">
-        <button class="view-btn active" data-view="cards" onclick="setView('cards')">Kaarten</button>
+        <button class="view-btn active" data-view="cards" onclick="setView('cards')">Overzicht</button>
         <button class="view-btn" data-view="table" onclick="setView('table')">Tabel</button>
         <button class="view-btn" data-view="compare" onclick="setView('compare')">Vergelijk</button>
       </div>
+      <a href="normalen_vergelijk.html" style="padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;color:#00205b;background:linear-gradient(135deg,#2ec4e8,#0d9488);text-decoration:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">&#x1F4C8; Perioden vergelijken</a>
     </div>
 
     <!-- Category tabs -->
@@ -380,6 +386,7 @@ let currentCategory = 'temperatuur';
 let currentPeriod = 'months';
 let searchQuery = '';
 let selectedStation = null;
+let selectedStationFilter = '';
 let compareStations = [];
 
 // ── Metric definitions ──
@@ -582,9 +589,15 @@ async function init() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('stationCount').textContent = `KNMI Automatische Weerstations - ${Object.keys(DATA.stations).length} stations`;
     buildCategoryTabs();
+    buildStationSelect();
     render();
-    document.getElementById('searchInput').addEventListener('input', e => {
-      searchQuery = e.target.value.toLowerCase();
+    document.getElementById('stationSelect').addEventListener('change', e => {
+      selectedStationFilter = e.target.value;
+      if (selectedStationFilter) {
+        openDetail(selectedStationFilter);
+      } else {
+        closeDetail();
+      }
       render();
     });
   } catch (err) {
@@ -662,28 +675,44 @@ function getTempClass(v) {
   return 'temp-hot';
 }
 
+function buildStationSelect() {
+  const sel = document.getElementById('stationSelect');
+  const stations = Object.values(DATA.stations);
+  const lh05 = stations.find(s => s.code === 'LH05');
+  const members = stations.filter(s => LH05_STATIONS.includes(s.code)).sort((a,b) => a.name.localeCompare(b.name));
+  const rest = stations.filter(s => s.code !== 'LH05' && !LH05_STATIONS.includes(s.code)).sort((a,b) => a.name.localeCompare(b.name));
+
+  let html = '<option value="">Alle stations</option>';
+  // LH05 group
+  html += '<optgroup label="Landelijk gemiddelde">';
+  if (lh05) html += `<option value="LH05">${lh05.name}</option>`;
+  html += '</optgroup>';
+  // 5 hoofdstations
+  html += '<optgroup label="Hoofdstations">';
+  members.forEach(s => { html += `<option value="${s.code}">${s.name} (${s.code})</option>`; });
+  html += '</optgroup>';
+  // Overige stations
+  html += '<optgroup label="Overige stations">';
+  rest.forEach(s => { html += `<option value="${s.code}">${s.name} (${s.code})</option>`; });
+  html += '</optgroup>';
+  sel.innerHTML = html;
+}
+
 function getFilteredStations() {
   const stations = Object.values(DATA.stations);
   const sortFn = (a, b) => {
-    // LH05 always first
     if (a.code === 'LH05') return -1;
     if (b.code === 'LH05') return 1;
-    // LH05 member stations next
     const aLH = LH05_STATIONS.includes(a.code);
     const bLH = LH05_STATIONS.includes(b.code);
     if (aLH && !bLH) return -1;
     if (!aLH && bLH) return 1;
     return a.name.localeCompare(b.name);
   };
-  if (!searchQuery) return stations.sort(sortFn);
-  return stations.filter(s => {
-    const q = searchQuery;
-    const province = (PROVINCES[s.code] || '').toLowerCase();
-    return s.name.toLowerCase().includes(q) ||
-           s.code.toLowerCase().includes(q) ||
-           province.includes(q) ||
-           (s.description && s.description.toLowerCase().includes(q));
-  }).sort(sortFn);
+  if (selectedStationFilter) {
+    return stations.filter(s => s.code === selectedStationFilter);
+  }
+  return stations.sort(sortFn);
 }
 
 // ── Render ──
@@ -893,7 +922,7 @@ function openDetail(code) {
       html += `<div class="metric-group">
         <div class="metric-group-title">Decadenormalen</div>
         <div style="overflow-x:auto;">
-          <table class="data-table"><thead><tr><th>Metric</th>${colHeaders}</tr></thead><tbody>${rows}</tbody></table>
+          <table class="data-table"><thead><tr><th>Variabele</th>${colHeaders}</tr></thead><tbody>${rows}</tbody></table>
         </div>
       </div>`;
     }
@@ -916,7 +945,7 @@ function openDetail(code) {
         <div class="metric-group-title">${groupName}</div>
         <div style="overflow-x:auto;">
           <table class="data-table">
-            <thead><tr><th>Metric</th>${colHeaders}</tr></thead>
+            <thead><tr><th>Variabele</th>${colHeaders}</tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -1025,10 +1054,11 @@ function showCompare() {
 
 // ── Keyboard ──
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeDetail();
-  if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
-    e.preventDefault();
-    document.getElementById('searchInput').focus();
+  if (e.key === 'Escape') {
+    closeDetail();
+    document.getElementById('stationSelect').value = '';
+    selectedStationFilter = '';
+    render();
   }
 });
 

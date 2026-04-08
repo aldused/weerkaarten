@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klimaatnormalen vergelijken - KNMI</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f0f4f8;color:#1a1a2e}
+.header{background:#00205b;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #2ec4e8;flex-wrap:wrap;gap:8px}
+.header-left{display:flex;align-items:center;gap:14px}
+.header h1{font-size:16px;font-weight:700;color:white}
+.header .sub{font-size:12px;color:#a8c4e8}
+.back-btn{font-size:12px;padding:6px 14px;border-radius:7px;border:none;cursor:pointer;font-weight:700;color:white;text-decoration:none;background:linear-gradient(135deg,#0d9488,#1d4ed8);display:inline-flex;align-items:center;gap:5px}
+.back-btn:hover{opacity:0.85}
+.container{max-width:1500px;margin:0 auto;padding:16px}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.controls select{padding:8px 12px;border:2px solid #d0d5dd;border-radius:8px;font-size:13px;background:white;cursor:pointer}
+.controls select:focus{outline:none;border-color:#2ec4e8}
+.controls label{font-size:12px;font-weight:600;color:#00205b}
+.summary-row{flex-wrap:nowrap}
+.toggle-row{display:flex;gap:4px;background:white;padding:4px;border-radius:8px;border:2px solid #d0d5dd}
+.toggle-btn{padding:7px 14px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;color:#475467;background:none;transition:all .15s;white-space:nowrap}
+.toggle-btn.active{background:#00205b;color:white}
+.toggle-btn:hover:not(.active){background:#f0f4f8}
+
+/* Summary cards */
+.summary-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.summary-card{flex:1;min-width:150px;background:white;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,0.08);text-align:center}
+.summary-card .period{font-size:11px;color:#667085;font-weight:600}
+.summary-card .value{font-size:24px;font-weight:700;color:#00205b;margin:4px 0}
+.summary-card .diff{font-size:12px;font-weight:600;border-radius:12px;padding:2px 8px;display:inline-block}
+.diff.pos{background:#fef2f2;color:#dc2626}
+.diff.neg{background:#eff6ff;color:#2563eb}
+.diff.neutral{background:#f0f4f8;color:#667085}
+
+/* Data table */
+.table-wrap{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow-x:auto;margin-bottom:16px}
+.data-table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
+.data-table thead th{background:#00205b;color:white;padding:8px 10px;text-align:right;font-weight:600;font-size:11px;position:sticky;top:0;z-index:2;white-space:nowrap}
+.data-table thead th:first-child{text-align:left;position:sticky;left:0;z-index:3;min-width:180px}
+.data-table thead th.ref{background:#0d9488}
+.data-table tbody td{padding:6px 10px;text-align:right;border-bottom:1px solid #eee;white-space:nowrap;font-variant-numeric:tabular-nums}
+.data-table tbody td:first-child{text-align:left;font-weight:600;color:#00205b;position:sticky;left:0;background:white;z-index:1;border-right:2px solid #eee}
+.data-table tbody tr:hover td{background:#f0f8ff}
+.data-table tbody tr:hover td:first-child{background:#e8f4ff}
+.data-table tbody tr:nth-child(even) td{background:#fafbfc}
+.data-table tbody tr:nth-child(even):hover td{background:#f0f8ff}
+.data-table tbody tr:nth-child(even) td:first-child{background:#fafbfc}
+.data-table tbody tr:nth-child(even):hover td:first-child{background:#e8f4ff}
+.data-table tbody tr.diff-row td{font-weight:600;font-size:11px;border-top:2px solid #e0e4e8}
+.data-table tbody tr.diff-row td:first-child{font-style:italic;color:#667085}
+
+/* Color coding for differences */
+.val-up{color:#dc2626} /* warmer/more = red */
+.val-down{color:#2563eb} /* cooler/less = blue */
+.val-neutral{color:#667085}
+.val-null{color:#ccc}
+
+/* Section titles */
+.section-title{font-size:15px;font-weight:700;color:#00205b;margin:20px 0 10px;padding:8px 12px;background:white;border-radius:8px;border-left:4px solid #2ec4e8;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+
+.footer{text-align:center;padding:16px;color:#667085;font-size:11px;margin-top:20px}
+@media(max-width:768px){.container{padding:10px}.controls{flex-direction:column}.summary-row{flex-direction:column}}
+</style>
+</head>
+<body>
+
+<div class="header" id="pageHeader">
+  <div class="header-left">
+    <a href="normalen.html" class="back-btn">&#8592; Normalen</a>
+    <div>
+      <h1>Klimaatnormalen vergelijken</h1>
+      <div class="sub">Verschuivingen per normaalperiode - 5 KNMI-hoofdstations</div>
+    </div>
+  </div>
+</div>
+<script>if(window!==window.top)document.getElementById('pageHeader').style.display='none';</script>
+
+<div class="container">
+  <div class="controls">
+    <label>Station:</label>
+    <select id="stationSelect"></select>
+
+    <label>Variabele:</label>
+    <select id="metricSelect">
+      <option value="TG_gemiddeld">Gem. temperatuur (&deg;C)</option>
+      <option value="TX_gemiddeld">Gem. maximum temp. (&deg;C)</option>
+      <option value="TN_gemiddeld">Gem. minimum temp. (&deg;C)</option>
+      <option value="RH24_som">Neerslagsom (mm)</option>
+      <option value="SQ24_som">Zonneschijn (uur)</option>
+      <option value="FG_gemiddeld">Windsnelheid (m/s)</option>
+      <option value="UG_gemiddeld">Luchtvochtigheid (%)</option>
+    </select>
+
+    <div class="toggle-row">
+      <button class="toggle-btn active" data-mode="abs" onclick="setMode('abs')">Waarden</button>
+      <button class="toggle-btn" data-mode="diff" onclick="setMode('diff')">Verschil</button>
+      <button class="toggle-btn" data-mode="both" onclick="setMode('both')">Beide</button>
+    </div>
+  </div>
+
+  <div id="summaryRow" class="summary-row"></div>
+  <div id="content"></div>
+</div>
+
+<div class="footer">
+  Bron: KNMI daggegevens | Berekend uit 30-jarige gemiddelden | 2001-2025: lopende normaal (25 jaar)
+</div>
+
+<script>
+let DATA = null;
+let currentStation = 'LH05';
+let currentMetric = 'TG_gemiddeld';
+let currentMode = 'both';
+
+const PERIODS = ['1961-1990','1971-2000','1981-2010','1991-2020','2001-2025'];
+const REF_PERIOD = '1991-2020';
+const MONTH_COLS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','okt','nov','dec'];
+const SEASON_COLS = ['winter','lente','zomer','herfst'];
+const COL_LABELS = {jan:'Jan',feb:'Feb',mar:'Mrt',apr:'Apr',may:'Mei',jun:'Jun',jul:'Jul',aug:'Aug',sep:'Sep',okt:'Okt',nov:'Nov',dec:'Dec',winter:'Winter',lente:'Lente',zomer:'Zomer',herfst:'Herfst',jaar:'Jaar'};
+
+const METRIC_INFO = {
+  'TG_gemiddeld': {label:'Gem. temperatuur',unit:'\u00B0C',decimals:1,upColor:'val-up',downColor:'val-down'},
+  'TX_gemiddeld': {label:'Gem. max. temp.',unit:'\u00B0C',decimals:1,upColor:'val-up',downColor:'val-down'},
+  'TN_gemiddeld': {label:'Gem. min. temp.',unit:'\u00B0C',decimals:1,upColor:'val-up',downColor:'val-down'},
+  'RH24_som':     {label:'Neerslagsom',unit:'mm',decimals:1,upColor:'val-up',downColor:'val-down'},
+  'SQ24_som':     {label:'Zonneschijn',unit:'uur',decimals:1,upColor:'val-up',downColor:'val-down'},
+  'FG_gemiddeld': {label:'Windsnelheid',unit:'m/s',decimals:1,upColor:'val-neutral',downColor:'val-neutral'},
+  'UG_gemiddeld': {label:'Luchtvochtigheid',unit:'%',decimals:1,upColor:'val-neutral',downColor:'val-neutral'},
+};
+
+async function init() {
+  const resp = await fetch('normalen_vergelijking.json');
+  DATA = await resp.json();
+  buildStationSelect();
+  document.getElementById('stationSelect').addEventListener('change', e => { currentStation = e.target.value; render(); });
+  document.getElementById('metricSelect').addEventListener('change', e => { currentMetric = e.target.value; render(); });
+  render();
+}
+
+function buildStationSelect() {
+  const sel = document.getElementById('stationSelect');
+  sel.innerHTML = '<option value="LH05">Nederland (5 hoofdstations)</option>';
+  sel.innerHTML += '<optgroup label="Hoofdstations">';
+  for (const [code, info] of Object.entries(DATA)) {
+    if (code !== 'LH05') {
+      sel.innerHTML += `<option value="${code}">${info.name} (${code})</option>`;
+    }
+  }
+  sel.innerHTML += '</optgroup>';
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  render();
+}
+
+function fmt(v, decimals) {
+  if (v === null || v === undefined) return '<span class="val-null">-</span>';
+  return v.toFixed(decimals);
+}
+
+function fmtDiff(v, info) {
+  if (v === null || v === undefined) return '<span class="val-null">-</span>';
+  const sign = v > 0 ? '+' : '';
+  const cls = v > 0.05 ? info.upColor : v < -0.05 ? info.downColor : 'val-neutral';
+  return `<span class="${cls}">${sign}${v.toFixed(info.decimals)}</span>`;
+}
+
+function render() {
+  const station = DATA[currentStation];
+  if (!station) return;
+  const info = METRIC_INFO[currentMetric];
+  const periods = station.periods;
+
+  // Summary cards - yearly value per period
+  const summaryEl = document.getElementById('summaryRow');
+  const refVal = periods[REF_PERIOD]?.[currentMetric]?.jaar;
+
+  summaryEl.innerHTML = PERIODS.map(p => {
+    const val = periods[p]?.[currentMetric]?.jaar;
+    let diffHtml = '';
+    if (val !== null && val !== undefined && p !== '1961-1990') {
+      const firstVal = periods['1961-1990']?.[currentMetric]?.jaar;
+      if (firstVal !== null && firstVal !== undefined) {
+        const diff = val - firstVal;
+        const cls = diff > 0.05 ? 'pos' : diff < -0.05 ? 'neg' : 'neutral';
+        const sign = diff > 0 ? '+' : '';
+        diffHtml = `<div class="diff ${cls}">${sign}${diff.toFixed(info.decimals)} t.o.v. '61-'90</div>`;
+      }
+    }
+    const isRef = p === REF_PERIOD;
+    const border = isRef ? 'border:2px solid #2ec4e8;' : '';
+    return `<div class="summary-card" style="${border}">
+      <div class="period">${p}${isRef ? ' (huidig)' : p === '2001-2025' ? ' (lopend)' : ''}</div>
+      <div class="value">${val !== null ? val.toFixed(info.decimals) : '-'}</div>
+      <div style="font-size:11px;color:#667085">${info.unit}</div>
+      ${diffHtml}
+    </div>`;
+  }).join('');
+
+  // Tables
+  let html = '';
+
+  // Monthly table
+  html += buildTable('Maandgemiddelden', MONTH_COLS, periods, info);
+
+  // Seasons + year
+  html += buildTable('Seizoenen & jaar', [...SEASON_COLS, 'jaar'], periods, info);
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function buildTable(title, cols, periods, info) {
+  const colHeaders = cols.map(c => `<th>${COL_LABELS[c] || c}</th>`).join('');
+
+  let html = `<div class="section-title">${title}</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Periode</th>${colHeaders}</tr></thead><tbody>`;
+
+  // Value rows
+  for (const p of PERIODS) {
+    const vals = periods[p]?.[currentMetric] || {};
+    const isRef = p === REF_PERIOD;
+    const label = `${p}${isRef ? ' \u25C0' : p === '2001-2025' ? ' \u23F3' : ''}`;
+
+    if (currentMode === 'abs' || currentMode === 'both') {
+      const cells = cols.map(c => `<td>${fmt(vals[c], info.decimals)}</td>`).join('');
+      html += `<tr><td>${label}</td>${cells}</tr>`;
+    }
+
+    // Diff row (vs previous period)
+    if ((currentMode === 'diff' || currentMode === 'both') && PERIODS.indexOf(p) > 0) {
+      const prevP = PERIODS[PERIODS.indexOf(p) - 1];
+      const prevVals = periods[prevP]?.[currentMetric] || {};
+      const cells = cols.map(c => {
+        const cur = vals[c];
+        const prev = prevVals[c];
+        if (cur !== null && cur !== undefined && prev !== null && prev !== undefined) {
+          return `<td>${fmtDiff(cur - prev, info)}</td>`;
+        }
+        return '<td class="val-null">-</td>';
+      }).join('');
+      html += `<tr class="diff-row"><td>\u0394 t.o.v. ${prevP.split('-')[0]}-${prevP.split('-')[1].slice(2)}</td>${cells}</tr>`;
+    }
+  }
+
+  // Total change row (2001-2025 vs 1961-1990)
+  const first = periods['1961-1990']?.[currentMetric] || {};
+  const last = periods['2001-2025']?.[currentMetric] || {};
+  const totalCells = cols.map(c => {
+    const f = first[c];
+    const l = last[c];
+    if (f !== null && f !== undefined && l !== null && l !== undefined) {
+      return `<td><strong>${fmtDiff(l - f, info)}</strong></td>`;
+    }
+    return '<td>-</td>';
+  }).join('');
+  html += `<tr style="background:#f0f4f8;border-top:3px solid #00205b;"><td><strong>\u0394 Totaal ('61-'90 \u2192 '01-'25)</strong></td>${totalCells}</tr>`;
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+init();
+</script>
+</body>
+</html>
