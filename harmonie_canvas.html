@@ -313,21 +313,22 @@ body.scroll-mode { overflow-y: auto; }
   // ═══════════════════════════════════════════════════════════════════════════
 
   // Neerslag: conversie mm/u → dBZ (Marshall-Palmer: Z = 200 * R^1.6)
-  // Dan dBZ kleurschaal zoals Infoplaza/Wetterzentrale
+  // Dan dBZ kleurschaal zoals Infoplaza/KNMI radar
   function mmTodBZ(mm) {
-    if (mm <= 0.01) return 0;
+    if (mm <= 0.005) return -10;
     return 10 * Math.log10(200 * Math.pow(mm, 1.6));
   }
 
-  // dBZ levels en kleuren (standaard radar kleurschaal)
-  var DBZ_LEVELS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
+  // dBZ levels en kleuren — Infoplaza-stijl met lage drempel
+  var DBZ_LEVELS = [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
   var DBZ_COLORS = [
-    [180,180,180],  // 0   lichtgrijs
-    [140,140,140],  // 5   grijs
-    [100,100,100],  // 10  donkergrijs
-    [0,180,0],      // 15  lichtgroen
-    [0,144,0],      // 20  groen
-    [0,108,0],      // 25  donkergroen
+    [210,210,210],  // -5  zeer lichtgrijs (nauwelijks signaal)
+    [180,180,180],  //  0  lichtgrijs
+    [150,150,150],  //  5  grijs
+    [120,120,120],  // 10  donkergrijs
+    [0,200,0],      // 15  lichtgroen
+    [0,160,0],      // 20  groen
+    [0,120,0],      // 25  donkergroen
     [255,255,0],    // 30  geel
     [230,190,0],    // 35  donkergeel
     [255,128,0],    // 40  oranje
@@ -691,7 +692,7 @@ body.scroll-mode { overflow-y: auto; }
             c = val >= 0.5 ? boundaryColor(val, NSOMLEVELS, NSOMCOLORS) : null;
           } else if (paramKey === "neerslag") {
             var dbz = mmTodBZ(val);
-            c = dbz >= 5 ? boundaryColor(dbz, DBZ_LEVELS, DBZ_COLORS) : null;
+            c = dbz >= -5 ? boundaryColor(dbz, DBZ_LEVELS, DBZ_COLORS) : null;
           } else if (paramKey === "temp") {
             c = interpColor(val, TEMP_REF);
           } else if (paramKey === "wind") {
@@ -907,9 +908,9 @@ body.scroll-mode { overflow-y: auto; }
           txt = val < 0.5 ? "0" : val.toFixed(0);
           bgc = val >= 0.5 ? boundaryColor(val, NSOMLEVELS, NSOMCOLORS) : null;
         } else if (paramKey === "neerslag") {
-          txt = Math.round(val).toString();
           var dbz2 = mmTodBZ(val);
-          bgc = dbz2 >= 5 ? boundaryColor(dbz2, DBZ_LEVELS, DBZ_COLORS) : null;
+          if (dbz2 < 5) { txt = ""; bgc = null; } // geen label bij geen/nauwelijks neerslag
+          else { txt = Math.round(mmTodBZ(val)).toString(); bgc = boundaryColor(dbz2, DBZ_LEVELS, DBZ_COLORS); }
         } else if (paramKey === "temp") {
           txt = Math.round(val).toString();
           bgc = interpColor(val, TEMP_REF);
@@ -938,6 +939,7 @@ body.scroll-mode { overflow-y: auto; }
           continue; // geen cijfers bij combi (te druk)
         }
 
+        if (!txt) continue; // skip lege labels (bijv. geen neerslag)
         var px = gx2px(gx);
         var py = gy2px(gy);
         if (px < -20 || px > cw+20 || py < -20 || py > ch+20) continue;
@@ -1004,9 +1006,9 @@ body.scroll-mode { overflow-y: auto; }
     if (paramKey !== "bewolking") {
       var legLevels, legColors, legLabel;
       if (paramKey === "neerslag") {
-        // Toon dBZ schaal met mm/u equivalenten
-        legLevels = [5,10,15,20,25,30,35,40,45,50,55,60,65,70];
-        legColors = DBZ_COLORS.slice(1);
+        // Toon dBZ schaal
+        legLevels = [5,10,15,20,25,30,35,40,45,50,55,60];
+        legColors = DBZ_COLORS.slice(2); // start bij 5 dBZ
         legLabel = "dBZ (gesimuleerde radarreflectiviteit)";
       }
       else if (paramKey === "temp") {
