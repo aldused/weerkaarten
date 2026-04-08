@@ -200,6 +200,10 @@ body.scroll-mode { overflow-y: auto; }
   function addDerivedParams(m) {
     m.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
     m.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
+    m.parameters["neerslag_mm"] = {label: "Neerslag (mm/u)", derived: true, needs: ["neerslag"]};
+    m.parameters["bewolking_laag"] = {label: "Lage bewolking (%)", derived: true, needs: ["bewolking"]};
+    m.parameters["bewolking_mid"] = {label: "Middenbewolking (%)", derived: true, needs: ["bewolking"]};
+    m.parameters["bewolking_hoog"] = {label: "Hoge bewolking (%)", derived: true, needs: ["bewolking"]};
     m.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
     m.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
   }
@@ -342,6 +346,21 @@ body.scroll-mode { overflow-y: auto; }
 
   // Bewaar ook mm/u levels voor de legenda
   var NEERSLAG_LEVELS_MM = [0.1, 0.2, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
+
+  // Neerslag mm/u kleurschaal (blauw-groen-geel-rood)
+  var NEERSLAG_MM_LEVELS = [0.1, 0.2, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
+  var NEERSLAG_MM_COLORS = [
+    [200,220,255],[170,200,255],[120,170,240],[80,140,220],[50,120,200],
+    [30,160,80],[60,190,30],[180,210,0],[240,220,0],[255,170,0],
+    [240,80,0],[200,0,0],[160,0,100]
+  ];
+
+  // Bewolking % kleurschaal (voor losse laag-kaarten)
+  var CLOUD_PCT_LEVELS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  var CLOUD_PCT_COLORS = [
+    [235,245,255],[210,225,240],[185,205,225],[160,185,210],[135,165,195],
+    [115,145,175],[95,125,160],[75,105,140],[55,85,120],[40,65,100],[25,45,80]
+  ];
 
   // Temperatuur: referentiepunten, interpolatie
   // Temperatuur kleurschaal — feller groen (noodweer.be stijl)
@@ -569,14 +588,34 @@ body.scroll-mode { overflow-y: auto; }
           derivedData[k2] += npd.data[sOff + k2];
         }
       }
+    } else if (paramKey === "neerslag_mm") {
+      // Neerslag in mm/u — zelfde data als neerslag, andere kleurschaal
+      var nmpd = paramCache["neerslag"];
+      if (!nmpd) return;
+      var nPtsN = nmpd.nLat * nmpd.nLon;
+      derivedData = new Float32Array(nPtsN);
+      var nmOff = stepIdx * nPtsN;
+      for (var kn = 0; kn < nPtsN; kn++) derivedData[kn] = nmpd.data[nmOff + kn];
+    } else if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") {
+      var bpd = paramCache["bewolking"];
+      if (!bpd) return;
+      var nPtsB = bpd.nLat * bpd.nLon;
+      derivedData = new Float32Array(nPtsB);
+      var compIdx = paramKey === "bewolking_hoog" ? 0 : (paramKey === "bewolking_mid" ? 1 : 2);
+      var bOff = stepIdx * nPtsB * 3 + compIdx * nPtsB;
+      for (var kb = 0; kb < nPtsB; kb++) {
+        var bval = bpd.data[bOff + kb];
+        derivedData[kb] = (isNaN(bval) ? 0 : bval) * 100; // fractie → percentage
+      }
     }
 
     // Gebruik brondata of afgeleide data
     var refParam = paramKey;
     if (paramKey === "wbgt") refParam = "temp";
-    else if (paramKey === "nsomm") refParam = "neerslag";
+    else if (paramKey === "nsomm" || paramKey === "neerslag_mm") refParam = "neerslag";
     else if (paramKey === "wind_druk") refParam = "wind";
     else if (paramKey === "combi") refParam = "temp";
+    else if (paramKey.startsWith("bewolking_")) refParam = "bewolking";
 
     var pd = isDerived ? paramCache[refParam] : paramCache[paramKey];
     if (!pd || !meta) return;
@@ -690,6 +729,10 @@ body.scroll-mode { overflow-y: auto; }
             c = boundaryColor(val, WBGT_LEVELS, WBGT_COLORS);
           } else if (paramKey === "nsomm") {
             c = val >= 0.5 ? boundaryColor(val, NSOMLEVELS, NSOMCOLORS) : null;
+          } else if (paramKey === "neerslag_mm") {
+            c = val >= 0.1 ? boundaryColor(val, NEERSLAG_MM_LEVELS, NEERSLAG_MM_COLORS) : null;
+          } else if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") {
+            c = boundaryColor(val, CLOUD_PCT_LEVELS, CLOUD_PCT_COLORS);
           } else if (paramKey === "neerslag") {
             var dbz = mmTodBZ(val);
             c = dbz >= -5 ? boundaryColor(dbz, DBZ_LEVELS, DBZ_COLORS) : null;
@@ -886,6 +929,7 @@ body.scroll-mode { overflow-y: auto; }
         var val, txt, bgc;
 
         if (paramKey === "bewolking") continue;
+        if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") continue; // kleurvulling is genoeg
 
         if (derivedData) {
           val = derivedData[gi];
@@ -907,6 +951,9 @@ body.scroll-mode { overflow-y: auto; }
         } else if (paramKey === "nsomm") {
           txt = val < 0.5 ? "0" : val.toFixed(0);
           bgc = val >= 0.5 ? boundaryColor(val, NSOMLEVELS, NSOMCOLORS) : null;
+        } else if (paramKey === "neerslag_mm") {
+          if (val < 0.1) { txt = ""; bgc = null; }
+          else { txt = val < 10 ? val.toFixed(1) : Math.round(val).toString(); bgc = boundaryColor(val, NEERSLAG_MM_LEVELS, NEERSLAG_MM_COLORS); }
         } else if (paramKey === "neerslag") {
           var dbz2 = mmTodBZ(val);
           if (dbz2 < 5) { txt = ""; bgc = null; } // geen label bij geen/nauwelijks neerslag
@@ -1003,7 +1050,7 @@ body.scroll-mode { overflow-y: auto; }
     ctx.fillStyle = "rgba(255,255,255,0.92)";
     ctx.fillRect(0, legY, cw, legH);
 
-    if (paramKey !== "bewolking") {
+    if (paramKey !== "bewolking") { // NB: bewolking_laag etc. vallen NIET hieronder
       var legLevels, legColors, legLabel;
       if (paramKey === "neerslag") {
         // Toon dBZ schaal
@@ -1039,6 +1086,8 @@ body.scroll-mode { overflow-y: auto; }
       else if (paramKey === "wind_druk") { legLevels = [0,1,2,3,4,5,6,7,8,9,10,11]; legColors = WIND_COLORS; legLabel = "Bft + hPa"; }
       else if (paramKey === "wbgt") { legLevels = WBGT_LEVELS; legColors = WBGT_COLORS; legLabel = "\u00b0C WBGT"; }
       else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm/" + nsomUren + "u"; }
+      else if (paramKey === "neerslag_mm") { legLevels = NEERSLAG_MM_LEVELS; legColors = NEERSLAG_MM_COLORS; legLabel = "mm/u"; }
+      else if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") { legLevels = CLOUD_PCT_LEVELS; legColors = CLOUD_PCT_COLORS; legLabel = "%"; }
 
       if (legLevels && legColors) {
         var barX = 30, barW = cw - 60, barH = 10, barY2 = legY + 3;
@@ -1136,7 +1185,7 @@ body.scroll-mode { overflow-y: auto; }
   // UI CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var PARAM_KEYS = ["neerslag","temp","bewolking","wind","windstoten","zicht","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi"];
+  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi"];
   var nsomUren = 6;
   var DEFAULT_PARAMS = ["neerslag","temp","wind"];
   var layout = 1;
@@ -1196,6 +1245,7 @@ body.scroll-mode { overflow-y: auto; }
         ]],
         ["Neerslag", [
           ["neerslag", "Gesimuleerde radar (dBZ)"],
+          ["neerslag_mm", "Neerslag (mm/u)"],
           ["nsomm", "Neerslagsom (cumulatief mm)"],
         ]],
         ["Wind & Druk", [
@@ -1206,6 +1256,9 @@ body.scroll-mode { overflow-y: auto; }
         ]],
         ["Bewolking & Zicht", [
           ["bewolking", "Bewolking (hoog/midden/laag)"],
+          ["bewolking_laag", "Lage bewolking (%)"],
+          ["bewolking_mid", "Middenbewolking (%)"],
+          ["bewolking_hoog", "Hoge bewolking (%)"],
           ["zicht", "Horizontaal zicht (m/km)"],
         ]],
         ["Instabiliteit", [
