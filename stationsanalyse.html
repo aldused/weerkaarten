@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eerste &amp; Laatste - Weerlab.nl</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Inter, Arial, sans-serif;
+  background: #f0f4f8;
+  color: #1a2b40;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  background: #003366;
+  padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 2px solid #2ec4e8;
+}
+.header h1 { color: white; font-size: 1.1em; font-weight: 700; }
+.header p  { color: #a8c4e8; font-size: 0.72em; margin-top: 2px; }
+.header-right { color: #a8c4e8; font-size: 0.72em; text-align: right; line-height: 1.6; }
+.header-right strong { color: white; }
+
+/* ── Controls ── */
+.controls {
+  background: white;
+  border-bottom: 1px solid #d0d8e4;
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ctrl-label {
+  font-size: 0.72em;
+  font-weight: 600;
+  color: #5a6a80;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.ctrl-select, .ctrl-input {
+  border: 1px solid #d0d8e4;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82em;
+  font-family: inherit;
+  outline: none;
+  background: white;
+  color: #1a2b40;
+}
+.ctrl-select:focus, .ctrl-input:focus { border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,0.15); }
+.ctrl-input { width: 70px; }
+.ctrl-input.jaar { width: 60px; }
+
+.preset-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.preset-btn {
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid #d0d8e4;
+  background: #f4f7fb;
+  color: #2a4a70;
+  font-size: 0.72em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.preset-btn:hover { background: #dce9f7; border-color: #4a90c4; }
+.preset-btn.actief { background: #0066cc; color: white; border-color: #0066cc; }
+
+.ctrl-separator {
+  width: 1px;
+  height: 24px;
+  background: #d0d8e4;
+  margin: 0 4px;
+}
+
+.btn-analyseer {
+  padding: 6px 18px;
+  border-radius: 8px;
+  border: none;
+  background: #0066cc;
+  color: white;
+  font-size: 0.82em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-left: auto;
+}
+.btn-analyseer:hover { background: #0055aa; }
+
+/* ── Content ── */
+.content { padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
+
+/* ── Overzicht ── */
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.summary-card {
+  background: white;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  text-align: center;
+}
+.summary-card .label {
+  font-size: 0.7em;
+  font-weight: 600;
+  color: #5a6a80;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.summary-card .value {
+  font-size: 1.5em;
+  font-weight: 800;
+  color: #1a2b40;
+  line-height: 1.2;
+}
+.summary-card .sub {
+  font-size: 0.75em;
+  color: #7a8a9a;
+  margin-top: 4px;
+}
+
+/* ── Grafiek wrap ── */
+.chart-wrap {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.chart-wrap h2 {
+  font-size: 0.85em;
+  font-weight: 700;
+  color: #1a2b40;
+  margin-bottom: 10px;
+}
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+}
+
+/* ── Detailtabel ── */
+.detail-wrap {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.detail-wrap h2 {
+  font-size: 0.85em;
+  font-weight: 700;
+  color: #1a2b40;
+  padding: 12px 16px 8px;
+}
+.detail-tabel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8em;
+}
+.detail-tabel th {
+  background: #f4f7fb;
+  color: #5a7090;
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 1px solid #e0e5ec;
+  position: sticky;
+  top: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.detail-tabel th:hover { background: #e8eef6; }
+.detail-tabel td {
+  padding: 6px 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f2f5;
+  white-space: nowrap;
+}
+.detail-tabel tr:hover td { background: #f8fafb; }
+.detail-tabel .highlight { background: #fff8e0; font-weight: 700; }
+.detail-tabel .record-max { color: #cc2222; font-weight: 700; }
+.detail-tabel .record-min { color: #2266aa; font-weight: 700; }
+.detail-scroll {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* ── Status ── */
+#status {
+  text-align: center;
+  padding: 60px 20px;
+  color: #5a6a80;
+  font-size: 0.9em;
+}
+.spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 2px solid #d0d8e4;
+  border-top-color: #0066cc;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.copyright {
+  text-align: center;
+  font-size: 0.7em;
+  color: #8899aa;
+  padding: 10px 0 6px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .controls { flex-direction: column; align-items: stretch; }
+  .ctrl-group { flex-wrap: wrap; }
+  .btn-analyseer { margin-left: 0; width: 100%; }
+  .header { flex-direction: column; text-align: center; }
+  .header-right { text-align: center; }
+  .summary-cards { grid-template-columns: repeat(2, 1fr); }
+  .chart-container { height: 250px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Eerste &amp; Laatste &mdash; Historische dagdata</h1>
+    <p>Wanneer werd een drempel bereikt? &middot; Temperatuur, neerslag, wind &amp; zon &middot; alle KNMI-stations</p>
+  </div>
+  <div class="header-right">
+    <strong>Weerlab.nl</strong><br>
+    <span id="klok"></span>
+  </div>
+</div>
+
+<div class="controls" id="controls-row1">
+  <div class="ctrl-group">
+    <span class="ctrl-label">Station:</span>
+    <select class="ctrl-select" id="sel-station"></select>
+  </div>
+  <div class="ctrl-separator"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Analyse:</span>
+    <select class="ctrl-select" id="sel-analyse">
+      <option value="temp">Temperatuur (TX)</option>
+      <option value="temp_min">Temperatuur min (TN)</option>
+      <option value="neerslag">Neerslag (RH)</option>
+      <option value="wind">Windstoot (FXX)</option>
+      <option value="zon">Zonneschijn (SQ)</option>
+    </select>
+  </div>
+  <div class="ctrl-separator"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Richting:</span>
+    <select class="ctrl-select" id="sel-richting">
+      <option value="boven">&ge; boven</option>
+      <option value="onder">&le; onder</option>
+    </select>
+  </div>
+  <div class="ctrl-separator"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Drempel:</span>
+    <input type="number" class="ctrl-input" id="inp-drempel" value="20" step="0.1">
+    <span id="eenheid-label">&#176;C</span>
+  </div>
+</div>
+
+<div class="controls" id="controls-row2" style="border-top:none;padding-top:4px">
+  <div class="ctrl-group">
+    <span class="ctrl-label">Presets:</span>
+    <div class="preset-btns" id="preset-container"></div>
+  </div>
+  <div class="ctrl-separator"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Periode:</span>
+    <input type="number" class="ctrl-input jaar" id="inp-van" placeholder="Van">
+    <span style="color:#5a6a80;font-size:0.8em">t/m</span>
+    <input type="number" class="ctrl-input jaar" id="inp-tot" placeholder="Tot">
+  </div>
+  <button class="btn-analyseer" id="btn-go" onclick="startAnalyse()">Analyseer</button>
+</div>
+
+<div class="content">
+  <div id="status"><span class="spinner"></span> Kies een station en klik op Analyseer...</div>
+  <div id="resultaten" style="display:none">
+    <div class="summary-cards" id="summary-cards">
+      <div class="summary-card" id="card-eerste">
+        <div class="label">Vroegste eerste dag</div>
+        <div class="value" id="val-eerste">-</div>
+        <div class="sub" id="sub-eerste"></div>
+      </div>
+      <div class="summary-card" id="card-laatste">
+        <div class="label">Laatste dag (laatst in jaar)</div>
+        <div class="value" id="val-laatste">-</div>
+        <div class="sub" id="sub-laatste"></div>
+      </div>
+      <div class="summary-card" id="card-aantal">
+        <div class="label">Gem. dagen per jaar</div>
+        <div class="value" id="val-aantal">-</div>
+        <div class="sub" id="sub-aantal"></div>
+      </div>
+      <div class="summary-card" id="card-reeks">
+        <div class="label">Langste aaneengesloten reeks</div>
+        <div class="value" id="val-reeks">-</div>
+        <div class="sub" id="sub-reeks"></div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <h2 id="chart1-title">Eerste en laatste dag per jaar</h2>
+      <div class="chart-container"><canvas id="chart1"></canvas></div>
+    </div>
+
+    <div class="chart-wrap">
+      <h2 id="chart2-title">Aantal dagen per jaar</h2>
+      <div class="chart-container"><canvas id="chart2"></canvas></div>
+    </div>
+
+    <div class="detail-wrap">
+      <h2 id="tabel-title">Detail per jaar</h2>
+      <div class="detail-scroll">
+        <table class="detail-tabel" id="detail-tabel">
+          <thead><tr id="tabel-header"></tr></thead>
+          <tbody id="tabel-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="copyright">Bron: KNMI &middot; Weerlab.nl &middot; Ed Aldus</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   KNMI Stationsanalyse — Weerlab.nl
+   ══════════════════════════════════════════════════════════ */
+
+// ── Stationslijst ──
+const STATIONS = {
+  210:{naam:'Valkenburg',lat:52.167,lon:4.417},
+  215:{naam:'Voorschoten',lat:52.125,lon:4.432},
+  225:{naam:'IJmuiden',lat:52.463,lon:4.555},
+  235:{naam:'De Kooy',lat:52.924,lon:4.785},
+  240:{naam:'Schiphol',lat:52.309,lon:4.769},
+  242:{naam:'Vlieland',lat:53.242,lon:4.921},
+  248:{naam:'Wijdenes',lat:52.633,lon:5.172},
+  249:{naam:'Berkhout',lat:52.644,lon:4.979},
+  251:{naam:'Hoorn',lat:52.641,lon:5.052},
+  257:{naam:'Wijk aan Zee',lat:52.505,lon:4.601},
+  258:{naam:'Houtribdijk',lat:52.637,lon:5.401},
+  260:{naam:'De Bilt',lat:52.098,lon:5.180},
+  265:{naam:'Soesterberg',lat:52.127,lon:5.277},
+  267:{naam:'Stavoren',lat:52.890,lon:5.384},
+  269:{naam:'Lelystad',lat:52.458,lon:5.520},
+  270:{naam:'Leeuwarden',lat:53.224,lon:5.760},
+  273:{naam:'Marknesse',lat:52.703,lon:5.888},
+  275:{naam:'Deelen',lat:52.061,lon:5.873},
+  277:{naam:'Lauwersoog',lat:53.413,lon:6.197},
+  278:{naam:'Heino',lat:52.432,lon:6.241},
+  279:{naam:'Hoogeveen',lat:52.728,lon:6.574},
+  280:{naam:'Eelde',lat:53.125,lon:6.586},
+  283:{naam:'Hupsel',lat:52.069,lon:6.657},
+  286:{naam:'Nieuw Beerta',lat:53.196,lon:7.150},
+  290:{naam:'Twente',lat:52.274,lon:6.891},
+  310:{naam:'Vlissingen',lat:51.442,lon:3.596},
+  319:{naam:'Westdorpe',lat:51.226,lon:3.862},
+  323:{naam:'Wilhelminadorp',lat:51.527,lon:3.884},
+  330:{naam:'Hoek van Holland',lat:51.978,lon:4.122},
+  331:{naam:'Tholen',lat:51.524,lon:4.135},
+  340:{naam:'Woensdrecht',lat:51.449,lon:4.342},
+  343:{naam:'Rotterdam Geulhaven',lat:51.886,lon:4.319},
+  344:{naam:'Rotterdam',lat:51.956,lon:4.447},
+  348:{naam:'Cabauw',lat:51.970,lon:4.926},
+  350:{naam:'Gilze-Rijen',lat:51.566,lon:4.936},
+  356:{naam:'Herwijnen',lat:51.859,lon:5.147},
+  370:{naam:'Eindhoven',lat:51.451,lon:5.377},
+  375:{naam:'Volkel',lat:51.656,lon:5.707},
+  377:{naam:'Ell',lat:51.199,lon:5.763},
+  380:{naam:'Maastricht',lat:50.906,lon:5.762},
+  391:{naam:'Arcen',lat:51.500,lon:6.197},
+  392:{naam:'Epen (Vijlenerbos)',lat:50.777,lon:5.912}
+};
+
+// ── Presets per analyse-type ──
+const PRESETS = {
+  temp: [
+    {label:'0°C (vorst)',val:0,richting:'onder'},
+    {label:'20°C (lente)',val:20},
+    {label:'25°C (zomers)',val:25},
+    {label:'30°C (tropisch)',val:30},
+    {label:'35°C (extreem)',val:35}
+  ],
+  temp_min: [
+    {label:'-10°C (streng)',val:-10,richting:'onder'},
+    {label:'-5°C',val:-5,richting:'onder'},
+    {label:'0°C (vorst)',val:0,richting:'onder'},
+    {label:'20°C (tropennacht)',val:20}
+  ],
+  neerslag: [
+    {label:'1 mm',val:1},
+    {label:'5 mm',val:5},
+    {label:'10 mm',val:10},
+    {label:'20 mm',val:20},
+    {label:'30 mm',val:30},
+    {label:'50 mm',val:50}
+  ],
+  wind: [
+    {label:'6 Bft (75)',val:75},
+    {label:'7 Bft (90)',val:90},
+    {label:'8 Bft (105)',val:105},
+    {label:'9 Bft (120)',val:120},
+    {label:'10 Bft (140)',val:140}
+  ],
+  zon: [
+    {label:'0 uur',val:0},
+    {label:'5 uur',val:5},
+    {label:'8 uur',val:8},
+    {label:'10 uur',val:10},
+    {label:'12 uur',val:12}
+  ]
+};
+
+// ── Kolom-mapping per analyse ──
+const KOLOM_INFO = {
+  temp:     {kolom:'TX', factor:10, eenheid:'°C', naam:'Max. temperatuur'},
+  temp_min: {kolom:'TN', factor:10, eenheid:'°C', naam:'Min. temperatuur'},
+  neerslag: {kolom:'RH', factor:10, eenheid:'mm', naam:'Neerslag'},
+  wind:     {kolom:'FXX',factor:10, eenheid:'m/s (0.1)',naam:'Windstoot'},
+  zon:      {kolom:'SQ', factor:10, eenheid:'uur', naam:'Zonneschijn'}
+};
+
+// ── Globals ──
+let csvCache = {};      // stn → parsed array
+let kolomIndex = {};    // kolom naam → index
+let chart1Instance = null;
+let chart2Instance = null;
+
+// ── Maandnamen ──
+const MND = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+function dagNaarDatum(jaar, dagNr) {
+  const d = new Date(jaar, 0, dagNr);
+  return d.getDate() + ' ' + MND[d.getMonth()];
+}
+
+function datumNaarDagNr(yyyy, mm, dd) {
+  const start = new Date(yyyy, 0, 1);
+  const dag = new Date(yyyy, mm - 1, dd);
+  return Math.floor((dag - start) / 86400000) + 1;
+}
+
+// ── Init ──
+function init() {
+  // Vul station-dropdown gesorteerd op naam
+  const sel = document.getElementById('sel-station');
+  const sorted = Object.entries(STATIONS).sort((a,b) => a[1].naam.localeCompare(b[1].naam));
+  sorted.forEach(([stn, info]) => {
+    const opt = document.createElement('option');
+    opt.value = stn;
+    opt.textContent = `${info.naam} (${stn})`;
+    if (stn === '260') opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  // Analyse-type change → update presets + eenheid
+  document.getElementById('sel-analyse').addEventListener('change', updatePresets);
+  updatePresets();
+
+  // Klok
+  setInterval(() => {
+    const nu = new Date();
+    document.getElementById('klok').textContent =
+      nu.toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) +
+      ' ' + nu.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  }, 1000);
+
+  // Enter-toets triggert analyse
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList.contains('ctrl-input')) startAnalyse();
+  });
+
+  // Start direct met default
+  startAnalyse();
+}
+
+function updatePresets() {
+  const type = document.getElementById('sel-analyse').value;
+  const info = KOLOM_INFO[type];
+  document.getElementById('eenheid-label').textContent = info.eenheid;
+
+  // Wind: drempel is in 0.1 m/s, maar we tonen m/s
+  // Neerslag: -1 = <0.05mm → we behandelen dat
+  // Zon: SQ in 0.1 uur
+
+  const container = document.getElementById('preset-container');
+  container.innerHTML = '';
+  const presets = PRESETS[type] || [];
+  presets.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.textContent = p.label;
+    btn.onclick = () => {
+      document.getElementById('inp-drempel').value = p.val;
+      if (p.richting) document.getElementById('sel-richting').value = p.richting;
+      else if (type === 'temp' || type === 'temp_min') {
+        document.getElementById('sel-richting').value = p.val <= 0 ? 'onder' : 'boven';
+      }
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('actief'));
+      btn.classList.add('actief');
+      startAnalyse();
+    };
+    container.appendChild(btn);
+  });
+
+  // Update richting-default
+  if (type === 'neerslag' || type === 'wind' || type === 'zon') {
+    document.getElementById('sel-richting').value = 'boven';
+  }
+}
+
+// ── CSV laden ──
+async function laadCSV(stn) {
+  if (csvCache[stn]) return csvCache[stn];
+
+  const url = `knmi_dagdata_${stn}.csv`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`CSV niet gevonden: ${url}`);
+  const tekst = await resp.text();
+
+  const regels = tekst.split('\n');
+  let data = [];
+  let headerGevonden = false;
+
+  for (const regel of regels) {
+    const trimmed = regel.trim();
+    if (!trimmed) continue;
+
+    // Header-regel begint met "# STN"
+    if (trimmed.startsWith('# STN')) {
+      const cols = trimmed.substring(2).split(',').map(c => c.trim());
+      cols.forEach((c, i) => { kolomIndex[c] = i; });
+      headerGevonden = true;
+      continue;
+    }
+
+    // Skip commentaar
+    if (trimmed.startsWith('#') || trimmed.startsWith('BRON') || trimmed.startsWith('SOURCE') ||
+        trimmed.startsWith('YYYYMMDD') || trimmed.startsWith('DDVEC') || !headerGevonden) continue;
+
+    // Data-regel
+    const velden = trimmed.split(',').map(v => v.trim());
+    if (velden.length < 10) continue;
+
+    const datum = velden[kolomIndex['YYYYMMDD']];
+    if (!datum || datum.length !== 8) continue;
+
+    data.push(velden);
+  }
+
+  csvCache[stn] = data;
+  return data;
+}
+
+function getVal(rij, kolom) {
+  const idx = kolomIndex[kolom];
+  if (idx === undefined) return null;
+  const v = rij[idx];
+  if (!v || v.trim() === '') return null;
+  return parseInt(v, 10);
+}
+
+// ── Analyse uitvoeren ──
+function startAnalyse() {
+  const stn = document.getElementById('sel-station').value;
+  const type = document.getElementById('sel-analyse').value;
+  const richting = document.getElementById('sel-richting').value;
+  const drempel = parseFloat(document.getElementById('inp-drempel').value);
+  const vanJaar = parseInt(document.getElementById('inp-van').value) || 0;
+  const totJaar = parseInt(document.getElementById('inp-tot').value) || 9999;
+
+  if (isNaN(drempel)) return;
+
+  document.getElementById('status').style.display = 'block';
+  document.getElementById('status').innerHTML = '<span class="spinner"></span> Data laden...';
+  document.getElementById('resultaten').style.display = 'none';
+
+  laadCSV(stn).then(data => {
+    const info = KOLOM_INFO[type];
+    const kolom = info.kolom;
+    const factor = info.factor;
+
+    // Drempel omrekenen naar ruwe eenheid (0.1-waarden in CSV)
+    let drempelRaw = drempel * factor;
+    // Wind-presets zijn al in 0.1 m/s → maar drempel UI is in 0.1 m/s bij wind
+    // Neerslag: -1 = <0.05mm
+    // Zon: SQ in 0.1 uur
+
+    // Groepeer per jaar
+    const jarenMap = {};
+    data.forEach(rij => {
+      const datum = rij[kolomIndex['YYYYMMDD']];
+      const jaar = parseInt(datum.substring(0, 4));
+      if (jaar < vanJaar || jaar > totJaar) return;
+      if (!jarenMap[jaar]) jarenMap[jaar] = [];
+      jarenMap[jaar].push(rij);
+    });
+
+    // Analyseer per jaar
+    const resultaten = [];
+    const jaren = Object.keys(jarenMap).map(Number).sort((a,b) => a - b);
+
+    jaren.forEach(jaar => {
+      const rijen = jarenMap[jaar];
+      let eersteDag = null, laatsteDag = null, aantal = 0, langsteReeks = 0, huidigeReeks = 0;
+      let extremeVal = null, extremeDatum = null;
+
+      rijen.forEach(rij => {
+        const raw = getVal(rij, kolom);
+        if (raw === null) return;
+
+        // Neerslag: -1 betekent <0.05mm → behandel als 0
+        const waarde = (kolom === 'RH' && raw === -1) ? 0 : raw;
+
+        const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde <= drempelRaw;
+        const datum = rij[kolomIndex['YYYYMMDD']];
+        const mm = parseInt(datum.substring(4, 6));
+        const dd = parseInt(datum.substring(6, 8));
+        const dagNr = datumNaarDagNr(jaar, mm, dd);
+
+        if (voldoet) {
+          aantal++;
+          if (eersteDag === null) eersteDag = {dagNr, datum: dagNaarDatum(jaar, dagNr), raw: datum};
+          laatsteDag = {dagNr, datum: dagNaarDatum(jaar, dagNr), raw: datum};
+          huidigeReeks++;
+          if (huidigeReeks > langsteReeks) langsteReeks = huidigeReeks;
+        } else {
+          huidigeReeks = 0;
+        }
+
+        // Track extreme waarde
+        if (richting === 'boven') {
+          if (extremeVal === null || waarde > extremeVal) {
+            extremeVal = waarde;
+            extremeDatum = dagNaarDatum(jaar, dagNr);
+          }
+        } else {
+          if (extremeVal === null || waarde < extremeVal) {
+            extremeVal = waarde;
+            extremeDatum = dagNaarDatum(jaar, dagNr);
+          }
+        }
+      });
+
+      // Skip jaren zonder volledige data (< 300 dagen)
+      if (rijen.length < 300 && jaar < new Date().getFullYear()) return;
+
+      resultaten.push({
+        jaar, eersteDag, laatsteDag, aantal, langsteReeks,
+        extremeVal: extremeVal !== null ? extremeVal / factor : null,
+        extremeDatum,
+        aantalDagen: rijen.length
+      });
+    });
+
+    toonResultaten(resultaten, type, drempel, richting, stn);
+  }).catch(err => {
+    document.getElementById('status').innerHTML = `Fout: ${err.message}`;
+  });
+}
+
+// ── Resultaten tonen ──
+function toonResultaten(resultaten, type, drempel, richting, stn) {
+  document.getElementById('status').style.display = 'none';
+  document.getElementById('resultaten').style.display = 'block';
+
+  const info = KOLOM_INFO[type];
+  const stationNaam = STATIONS[stn]?.naam || stn;
+  const richtTekst = richting === 'boven' ? '≥' : '≤';
+
+  // ── Overzicht ──
+  const metEerste = resultaten.filter(r => r.eersteDag);
+  const metLaatste = resultaten.filter(r => r.laatsteDag);
+
+  // Vroegste eerste dag ooit
+  if (metEerste.length > 0) {
+    const vroegste = metEerste.reduce((a, b) => a.eersteDag.dagNr < b.eersteDag.dagNr ? a : b);
+    document.getElementById('val-eerste').textContent = vroegste.eersteDag.datum;
+    document.getElementById('sub-eerste').textContent = `in ${vroegste.jaar}`;
+    document.getElementById('card-eerste').querySelector('.label').textContent = 'Vroegste eerste dag';
+  } else {
+    document.getElementById('val-eerste').textContent = '-';
+    document.getElementById('sub-eerste').textContent = 'geen data';
+  }
+
+  // Laatst in het jaar ooit
+  if (metLaatste.length > 0) {
+    const laatst = metLaatste.reduce((a, b) => a.laatsteDag.dagNr > b.laatsteDag.dagNr ? a : b);
+    document.getElementById('val-laatste').textContent = laatst.laatsteDag.datum;
+    document.getElementById('sub-laatste').textContent = `in ${laatst.jaar}`;
+    document.getElementById('card-laatste').querySelector('.label').textContent = 'Laatste dag in jaar (record)';
+  } else {
+    document.getElementById('val-laatste').textContent = '-';
+    document.getElementById('sub-laatste').textContent = 'geen data';
+  }
+
+  // Gemiddeld aantal dagen
+  if (resultaten.length > 0) {
+    const gem = resultaten.reduce((s, r) => s + r.aantal, 0) / resultaten.length;
+    document.getElementById('val-aantal').textContent = gem.toFixed(1);
+    document.getElementById('sub-aantal').textContent = `over ${resultaten.length} jaar`;
+
+    // Meeste dagen
+    const meeste = resultaten.reduce((a, b) => a.aantal > b.aantal ? a : b);
+    document.getElementById('card-aantal').querySelector('.label').textContent =
+      `Gem. dagen/jaar (max ${meeste.aantal} in ${meeste.jaar})`;
+  }
+
+  // Langste reeks
+  if (resultaten.length > 0) {
+    const langst = resultaten.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
+    document.getElementById('val-reeks').textContent = langst.langsteReeks + ' dagen';
+    document.getElementById('sub-reeks').textContent = `in ${langst.jaar}`;
+  }
+
+  // ── Grafiek 1: Eerste & laatste dag per jaar ──
+  document.getElementById('chart1-title').textContent =
+    `Eerste en laatste dag ${richtTekst} ${drempel}${info.eenheid} per jaar — ${stationNaam}`;
+
+  const ctx1 = document.getElementById('chart1').getContext('2d');
+  if (chart1Instance) chart1Instance.destroy();
+
+  const jaren = resultaten.map(r => r.jaar);
+  const eersteData = resultaten.map(r => r.eersteDag ? r.eersteDag.dagNr : null);
+  const laatsteData = resultaten.map(r => r.laatsteDag ? r.laatsteDag.dagNr : null);
+
+  // Trendlijn berekenen (lineaire regressie)
+  function trendlijn(xArr, yArr) {
+    const punten = [];
+    xArr.forEach((x, i) => { if (yArr[i] !== null) punten.push({x, y: yArr[i]}); });
+    if (punten.length < 3) return null;
+    const n = punten.length;
+    const sx = punten.reduce((s, p) => s + p.x, 0);
+    const sy = punten.reduce((s, p) => s + p.y, 0);
+    const sxy = punten.reduce((s, p) => s + p.x * p.y, 0);
+    const sx2 = punten.reduce((s, p) => s + p.x * p.x, 0);
+    const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+    const intercept = (sy - slope * sx) / n;
+    return {slope, intercept, van: punten[0].x, tot: punten[punten.length-1].x};
+  }
+
+  const trendEerste = trendlijn(jaren, eersteData);
+  const trendLaatste = trendlijn(jaren, laatsteData);
+
+  const datasets1 = [
+    {
+      label: 'Eerste dag',
+      data: jaren.map((j, i) => eersteData[i] !== null ? {x: j, y: eersteData[i]} : null).filter(Boolean),
+      borderColor: '#22aa44',
+      backgroundColor: '#22aa4488',
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      showLine: false,
+      order: 2
+    },
+    {
+      label: 'Laatste dag',
+      data: jaren.map((j, i) => laatsteData[i] !== null ? {x: j, y: laatsteData[i]} : null).filter(Boolean),
+      borderColor: '#cc6622',
+      backgroundColor: '#cc662288',
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      showLine: false,
+      order: 2
+    }
+  ];
+
+  if (trendEerste) {
+    datasets1.push({
+      label: 'Trend eerste dag',
+      data: [{x: trendEerste.van, y: trendEerste.slope * trendEerste.van + trendEerste.intercept},
+             {x: trendEerste.tot, y: trendEerste.slope * trendEerste.tot + trendEerste.intercept}],
+      borderColor: '#22aa4466',
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      showLine: true,
+      order: 1
+    });
+  }
+  if (trendLaatste) {
+    datasets1.push({
+      label: 'Trend laatste dag',
+      data: [{x: trendLaatste.van, y: trendLaatste.slope * trendLaatste.van + trendLaatste.intercept},
+             {x: trendLaatste.tot, y: trendLaatste.slope * trendLaatste.tot + trendLaatste.intercept}],
+      borderColor: '#cc662266',
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      showLine: true,
+      order: 1
+    });
+  }
+
+  chart1Instance = new Chart(ctx1, {
+    type: 'scatter',
+    data: {datasets: datasets1},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const dagNr = ctx.parsed.y;
+              const jaar = ctx.parsed.x;
+              return `${ctx.dataset.label}: ${dagNaarDatum(jaar, dagNr)} (${jaar})`;
+            }
+          }
+        },
+        legend: {position: 'top', labels: {font: {size: 11}}}
+      },
+      scales: {
+        x: {
+          title: {display: true, text: 'Jaar'},
+          ticks: {font: {size: 10}}
+        },
+        y: {
+          reverse: false,
+          title: {display: true, text: 'Dag in het jaar'},
+          ticks: {
+            font: {size: 10},
+            callback: function(val) {
+              return dagNaarDatum(2024, Math.round(val)); // gebruik schrikkeljaar
+            },
+            stepSize: 30
+          },
+          min: 1,
+          max: 366
+        }
+      }
+    }
+  });
+
+  // ── Grafiek 2: Aantal dagen per jaar ──
+  document.getElementById('chart2-title').textContent =
+    `Aantal dagen ${richtTekst} ${drempel}${info.eenheid} per jaar — ${stationNaam}`;
+
+  const ctx2 = document.getElementById('chart2').getContext('2d');
+  if (chart2Instance) chart2Instance.destroy();
+
+  const aantalData = resultaten.map(r => r.aantal);
+  const gemAantal = aantalData.length > 0 ? aantalData.reduce((s, v) => s + v, 0) / aantalData.length : 0;
+
+  chart2Instance = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: jaren,
+      datasets: [{
+        label: `Dagen ${richtTekst} ${drempel}${info.eenheid}`,
+        data: aantalData,
+        backgroundColor: aantalData.map(v => v >= gemAantal ? '#0077cc88' : '#66aadd66'),
+        borderColor: aantalData.map(v => v >= gemAantal ? '#0066cc' : '#88bbdd'),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.y} dagen`
+          }
+        },
+        annotation: undefined
+      },
+      scales: {
+        x: {
+          ticks: {font: {size: 10}, maxTicksLimit: 30}
+        },
+        y: {
+          beginAtZero: true,
+          title: {display: true, text: 'Aantal dagen'},
+          ticks: {font: {size: 10}}
+        }
+      }
+    },
+    plugins: [{
+      id: 'gemLijn',
+      afterDraw(chart) {
+        if (gemAantal <= 0) return;
+        const yScale = chart.scales.y;
+        const yPos = yScale.getPixelForValue(gemAantal);
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 3]);
+        ctx.strokeStyle = '#cc333388';
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(chart.chartArea.left, yPos);
+        ctx.lineTo(chart.chartArea.right, yPos);
+        ctx.stroke();
+        ctx.fillStyle = '#cc3333';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(`gem: ${gemAantal.toFixed(1)}`, chart.chartArea.right - 60, yPos - 4);
+        ctx.restore();
+      }
+    }]
+  });
+
+  // ── Detail-tabel ──
+  document.getElementById('tabel-title').textContent =
+    `Detail per jaar — ${stationNaam} — ${richtTekst} ${drempel}${info.eenheid}`;
+
+  const thead = document.getElementById('tabel-header');
+  thead.innerHTML = '<th>Jaar</th><th>Eerste dag</th><th>Laatste dag</th><th>Venster</th><th>Aantal dagen</th><th>Langste reeks</th><th>Extreem</th>';
+
+  const tbody = document.getElementById('tabel-body');
+  tbody.innerHTML = '';
+
+  // Records vinden
+  const maxAantal = Math.max(...resultaten.map(r => r.aantal));
+  const maxReeks = Math.max(...resultaten.map(r => r.langsteReeks));
+
+  // Tabel van nieuw naar oud
+  [...resultaten].reverse().forEach(r => {
+    const tr = document.createElement('tr');
+    const eersteTd = r.eersteDag ? r.eersteDag.datum : '-';
+    const laatsteTd = r.laatsteDag ? r.laatsteDag.datum : '-';
+    const extremeTd = r.extremeVal !== null ? `${r.extremeVal.toFixed(1)}${info.eenheid} (${r.extremeDatum})` : '-';
+
+    const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.dagNr - r.eersteDag.dagNr + 1) : '-';
+
+    tr.innerHTML = `
+      <td style="font-weight:700">${r.jaar}</td>
+      <td>${eersteTd}</td>
+      <td>${laatsteTd}</td>
+      <td style="color:#6a5a00;font-weight:600">${venster !== '-' ? venster + ' d' : '-'}</td>
+      <td class="${r.aantal === maxAantal && maxAantal > 0 ? 'record-max' : ''}">${r.aantal}</td>
+      <td class="${r.langsteReeks === maxReeks && maxReeks > 0 ? 'record-max' : ''}">${r.langsteReeks}</td>
+      <td>${extremeTd}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Start ──
+init();
+</script>
+</body>
+</html>
