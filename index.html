@@ -45,17 +45,29 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
 }
 .flag-btn:hover, .flag-btn.actief { background: rgba(255,255,255,0.2); color: white; }
 
-.nav-groep { padding: 6px 0 2px; }
+.nav-groep { padding: 2px 0; }
 .nav-groep-titel {
-  padding: 8px 14px 3px;
+  padding: 8px 14px 6px;
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.1em; color: #4a6f9a;
+  cursor: pointer; user-select: none;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: color 0.15s;
 }
+.nav-groep-titel:hover { color: #8aafd0; }
+.nav-groep-titel::after {
+  content: "▾";
+  font-size: 9px; opacity: 0.5;
+  transition: transform 0.15s;
+}
+.nav-groep.dicht > .nav-groep-titel::after { transform: rotate(-90deg); }
+.nav-groep.dicht > .nav-item,
+.nav-groep.dicht > .sub-items { display: none !important; }
 .nav-nieuw{background:#1d4ed8;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;letter-spacing:0.05em;text-transform:uppercase}
 .nav-item {
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 14px; cursor: pointer;
-  font-size: 12.5px; color: #c8ddf0;
+  padding: 6px 14px; cursor: pointer;
+  font-size: 12px; color: #c8ddf0;
   border-left: 3px solid transparent;
   transition: background 0.1s;
   user-select: none;
@@ -197,8 +209,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
     </div>
   </div>
 
-  <div class="nav-groep">
-    <div class="nav-groep-titel">Verwachting</div>
+  <div class="nav-groep" id="groep-verwachting">
+    <div class="nav-groep-titel" onclick="toggleGroep('verwachting')">Verwachting</div>
     <div class="nav-item" id="nav-verwachting" onclick="openPanel('verwachting')">
       <span class="ni">📝</span><span>Weersverwachting KNMI</span>
     </div>
@@ -221,8 +233,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
 
   <div class="sidebar-divider"></div>
 
-  <div class="nav-groep">
-    <div class="nav-groep-titel">Actueel</div>
+  <div class="nav-groep" id="groep-actueel">
+    <div class="nav-groep-titel" onclick="toggleGroep('actueel')">Actueel</div>
     <div class="nav-item" id="nav-actueel" onclick="openPanel('actueel')">
       <span class="ni">📡</span><span>Actuele waarnemingen</span>
     </div>
@@ -234,8 +246,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
     </div>
   </div>
 
-  <div class="nav-groep">
-    <div class="nav-groep-titel">Waarnemingen</div>
+  <div class="nav-groep" id="groep-waarnemingen">
+    <div class="nav-groep-titel" onclick="toggleGroep('waarnemingen')">Waarnemingen</div>
     <div class="nav-item" id="nav-toplijst" onclick="openPanel('toplijst')">
       <span class="ni">📊</span><span>Toplijst</span>
     </div>
@@ -254,8 +266,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
 
   <div class="sidebar-divider"></div>
 
-  <div class="nav-groep">
-    <div class="nav-groep-titel">Analyse</div>
+  <div class="nav-groep" id="groep-analyse">
+    <div class="nav-groep-titel" onclick="toggleGroep('analyse')">Analyse</div>
     <div class="nav-item" id="nav-trend" onclick="openPanel('trend')">
       <span class="ni">📈</span><span>Trend</span>
     </div>
@@ -269,8 +281,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; display: flex; flex-
 
   <div class="sidebar-divider"></div>
 
-  <div class="nav-groep" style="padding-bottom:16px;">
-    <div class="nav-groep-titel">Records</div>
+  <div class="nav-groep" id="groep-records" style="padding-bottom:16px;">
+    <div class="nav-groep-titel" onclick="toggleGroep('records')">Records</div>
     <div class="nav-item" id="nav-records" onclick="openPanel('records')">
       <span class="ni">🏆</span><span>Weerrecords</span>
     </div>
@@ -535,6 +547,49 @@ function sluitSidebar() {
   document.querySelector(".sidebar").classList.remove("open");
   document.getElementById("sidebar-overlay").classList.remove("open");
 }
+
+// ── Collapsible sidebar groepen ───────────────────────────────────────
+// Welk panel hoort bij welke groep (voor auto-openen bij openPanel)
+const GROEP_VAN_PANEL = {
+  verwachting:"verwachting", mosmix:"verwachting", verificatie:"verwachting",
+  eigen:"verwachting", pluim:"verwachting", nowcast:"verwachting",
+  actueel:"actueel", marifoon:"actueel", zeetemp:"actueel",
+  toplijst:"waarnemingen", topkaart:"waarnemingen", synop:"waarnemingen",
+  maanddata:"waarnemingen",
+  trend:"analyse", guidance:"analyse", metar:"analyse", beta:"analyse",
+  verificatie:"analyse",
+  records:"records", eerstelaatste:"records", p13:"records",
+  neerslag668:"records", archief:"records", feestdagen:"records",
+  marathon:"records", normalen:"records"
+};
+function toggleGroep(naam){
+  const el = document.getElementById("groep-" + naam);
+  if (!el) return;
+  el.classList.toggle("dicht");
+  // Onthoud status
+  try {
+    const state = JSON.parse(localStorage.getItem("sb_groepen") || "{}");
+    state[naam] = el.classList.contains("dicht");
+    localStorage.setItem("sb_groepen", JSON.stringify(state));
+  } catch {}
+}
+function openGroep(naam){
+  const el = document.getElementById("groep-" + naam);
+  if (!el) return;
+  el.classList.remove("dicht");
+}
+function initGroepen(){
+  // Default: alleen Verwachting open
+  let state = {actueel:true, waarnemingen:true, analyse:true, records:true};
+  try {
+    const saved = JSON.parse(localStorage.getItem("sb_groepen") || "null");
+    if (saved) state = saved;
+  } catch {}
+  Object.keys(state).forEach(naam => {
+    const el = document.getElementById("groep-" + naam);
+    if (el) el.classList.toggle("dicht", !!state[naam]);
+  });
+}
 const NL_DAGEN   = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
 const NL_MAANDEN = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 const MND_MAP    = {jan:1,feb:2,mrt:3,mar:3,apr:4,mei:5,jun:6,jul:7,aug:8,sep:9,okt:10,nov:11,dec:12};
@@ -598,6 +653,10 @@ function openPanel(panel) {
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("actief"));
   const nav = document.getElementById("nav-" + panel);
   if (nav) nav.classList.add("actief");
+
+  // Open de groep van dit panel automatisch
+  const groepNaam = GROEP_VAN_PANEL[panel];
+  if (groepNaam) openGroep(groepNaam);
 
   // Subtabs tonen/verbergen (toggle als zelfde panel)
   ["temp","wind","weer","topkaarten"].forEach(g => {
@@ -883,6 +942,9 @@ async function downloadAlles() {
   } catch(e) { alert("Kon kaartlijst niet laden."); }
 }
 // ── Hash navigatie: herstel panel bij laden / reload ──────────────────────────
+// Init collapsible sidebar groepen
+initGroepen();
+
 (function() {
   const hash = window.location.hash.replace('#', '');
   if (!hash) return;
