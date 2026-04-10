@@ -4,7 +4,7 @@ mosmix_json.py
 Haalt alle MOSMIX data op van DWD en schrijft mosmix_nl.json + mosmix_be.json.
 Vervangt ~30 afzonderlijke PNG-generatiescripts door 1 snel JSON-script.
 
-Parameters: TX, TN, RR, FF, FX, DD, SQ, TTD, Neff, gevoels
+Parameters: TX, TN, TG, RR, FF, FX, DD, SQ, TTD, Neff, gevoels
 Output: ~200KB JSON i.p.v. ~73MB PNG's, ~10s i.p.v. ~3min.
 """
 
@@ -159,6 +159,7 @@ def verwerk_station(code, naam):
     # Ruwe waarden ophalen
     tx_raw   = parse_values(root, 'TX')
     tn_raw   = parse_values(root, 'TN')
+    tg_raw   = parse_values(root, 'TG')     # DWD: min. temp 5cm boven grond, laatste 12u
     ttt_raw  = parse_values(root, 'TTT')
     ff_raw   = parse_values(root, 'FF')
     fx_raw   = parse_values(root, 'FX1')
@@ -174,6 +175,7 @@ def verwerk_station(code, naam):
     # Conversie Kelvin → Celsius
     tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
     tn = [v - 273.15 if v and v > 200 else None for v in tn_raw]
+    tg = [v - 273.15 if v and v > 200 else None for v in tg_raw]
     ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
     td = [v - 273.15 if v and v > 200 else None for v in td_raw]
 
@@ -207,7 +209,7 @@ def verwerk_station(code, naam):
 
     # Dagaggregatie
     daily = defaultdict(lambda: {
-        "tx": [], "tn": [],
+        "tx": [], "tn": [], "tg": [],
         "ff_dag": [], "fx_dag": [], "dd_dag": [],
         "ff_nacht": [], "fx_nacht": [], "dd_nacht": [],
         "rr": 0.0, "rr_dag": 0.0, "rr_nacht": 0.0,
@@ -235,6 +237,10 @@ def verwerk_station(code, naam):
         # TN: min temp, geldig <12h lokaal
         if i < len(tn) and tn[i] is not None and hour < 12:
             dd["tn"].append(tn[i])
+
+        # TG: min. temp 5cm boven grond (DWD, 12-uurs min), geldig <12h lokaal
+        if i < len(tg) and tg[i] is not None and hour < 12:
+            dd["tg"].append(tg[i])
 
         # Wind: dag 6-18h
         if 6 <= hour < 18:
@@ -316,6 +322,7 @@ def verwerk_station(code, naam):
         r = {}
         r["TX"] = round(max(dd["tx"]), 1) if dd["tx"] else None
         r["TN"] = round(min(dd["tn"]), 1) if dd["tn"] else None
+        r["TG"] = round(min(dd["tg"]), 1) if dd["tg"] else None
 
         # Wind
         if dd["ff_dag"]:
@@ -414,7 +421,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "WBGT_O", "WBGT_M", "RV_M"]
+    params = ["TX", "TN", "TG", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "WBGT_O", "WBGT_M", "RV_M"]
 
     for d in dagen:
         dag_key = d.isoformat()
