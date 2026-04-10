@@ -280,6 +280,38 @@ const nachtPlugin = {
 };
 Chart.register(nachtPlugin);
 
+// ── Dag-grens plugin ── verticale lijn bij 00:00 van elke nieuwe dag
+const dagGrensPlugin = {
+  id: 'dagGrens',
+  afterDatasetsDraw(chart) {
+    const ts = chartTimestamps[chart.canvas.id];
+    if (!ts || !ts.length) return;
+    // Alleen voor charts die dit expliciet willen
+    if (!chart.options?.plugins?.dagGrens?.enabled) return;
+    const ctx = chart.ctx;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y || chart.scales.y1;
+    if (!xScale || !yScale) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(30,50,90,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    for (let i = 1; i < ts.length; i++) {
+      const cur = new Date(ts[i]);
+      const prev = new Date(ts[i - 1]);
+      if (cur.getDate() !== prev.getDate()) {
+        const px = xScale.getPixelForValue(i - 0.5);
+        ctx.beginPath();
+        ctx.moveTo(px, yScale.top);
+        ctx.lineTo(px, yScale.bottom);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+};
+Chart.register(dagGrensPlugin);
+
 // ── Crosshair: verticale lijn + info + pin bij dubbelklik ──
 let crosshairData = {};
 let crosshairPinned = null; // {idx, x, html, items} als gepind
@@ -1360,7 +1392,7 @@ async function laadWeertype(lat,lon,naam,dagen,van,tot){
   actieveCharts.weertype=new Chart(document.getElementById('canvas-weertype'),{
     data:{labels:lab,datasets},
     options:{...cfgBase,
-      plugins:{legend:{display:false},tooltip:{
+      plugins:{legend:{display:false},dagGrens:{enabled:true},tooltip:{
         backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
         filter:item=>item.parsed.y>0.5,
         callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}
