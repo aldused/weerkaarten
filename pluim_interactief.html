@@ -90,6 +90,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
       <button class="type-btn" data-type="winddir">&#129139; Richting</button>
       <button class="type-btn" data-type="sneeuw">&#10052;&#65039; Sneeuw</button>
       <button class="type-btn" data-type="onweer">&#9928;&#65039; Onweer</button>
+      <button class="type-btn" data-type="weertype">&#127780;&#65039; Weertype</button>
       <button class="type-btn" data-type="hoogte">&#128225; 850/500</button>
       <button class="type-btn" data-type="dauwpunt">&#128167; Dauwpunt</button>
       <button class="type-btn" data-type="hres">&#9654;&#65038; HRES</button>
@@ -184,6 +185,11 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <div class="grafiek-titel" id="titel-onweer"></div>
     <div class="legenda" id="leg-onweer"></div>
     <div style="position:relative;width:100%;height:400px"><canvas id="canvas-onweer"></canvas></div>
+  </div>
+  <div id="blok-weertype" class="grafiek-blok" style="display:none">
+    <div class="grafiek-titel" id="titel-weertype"></div>
+    <div class="legenda" id="leg-weertype"></div>
+    <div style="position:relative;width:100%;height:400px"><canvas id="canvas-weertype"></canvas></div>
   </div>
   <div id="blok-hoogte" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-hoogte"></div>
@@ -729,7 +735,7 @@ function verwijderAlles(){
   crosshairPinned = null;
   Object.values(actieveCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   actieveCharts={};
-  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
+  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','weertype','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
     document.getElementById('blok-'+id).style.display='none';
   });
 }
@@ -828,6 +834,7 @@ async function laadData(){
     else if(actieveType==='winddir') await laadWindrichting(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='sneeuw') await laadSneeuw(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='onweer') await laadOnweer(lat,lon,naam,dagen,van,tot);
+    else if(actieveType==='weertype') await laadWeertype(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='hoogte') await laadHoogte(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='icon') await laadIcon(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='aifs') await laadAifs(lat,lon,naam,dagen,van,tot);
@@ -1311,6 +1318,54 @@ async function laadOnweer(lat,lon,naam,dagen,van,tot){
         y2:{...yAs('right','%','rgba(255,180,50,0.7)'),grid:{display:false},min:0,max:100},
         y3:{display:false,min:-10,max:15},
       }
+    }
+  });
+}
+
+// ── Weertype ── (gestapelde kansen per WMO-categorie)
+async function laadWeertype(lat,lon,naam,dagen,van,tot){
+  const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=weathercode&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
+  const times=ens.hourly.time;
+  const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
+  const wcK=Object.keys(ens.hourly).filter(k=>k.startsWith('weathercode_member'));
+  const members=wcK.map(k=>idx.map(i=>ens.hourly[k][i]));
+  // WMO-categorieën — oplopend van zonnig → extreem
+  // [naam, testfn, kleur]
+  const CATS=[
+    ['Zonnig',          c => c===0,                         'rgba(255,215,64,0.90)'],
+    ['Licht bewolkt',   c => c===1 || c===2,                'rgba(255,240,150,0.85)'],
+    ['Zwaar bewolkt',   c => c===3,                         'rgba(150,160,180,0.80)'],
+    ['Mist',            c => c===45 || c===48,              'rgba(180,180,200,0.75)'],
+    ['Motregen',        c => c>=51 && c<=57,                'rgba(120,180,220,0.80)'],
+    ['Regen',           c => (c>=61 && c<=67),              'rgba(40,110,200,0.85)'],
+    ['Regenbui',        c => c>=80 && c<=82,                'rgba(20,70,160,0.85)'],
+    ['Sneeuw',          c => (c>=71 && c<=77) || c===85 || c===86, 'rgba(230,235,245,0.95)'],
+    ['Onweer',          c => c>=95 && c<=99,                'rgba(140,50,180,0.85)'],
+  ];
+  const lab=getLab(ts);
+  // Per uur: percentage leden per categorie
+  const datasets=CATS.map(([n,test,kleur])=>({
+    type:'bar',label:n,
+    data:ts.map((_,j)=>{
+      const col=members.map(m=>m[j]).filter(v=>v!=null);
+      if(!col.length)return 0;
+      return col.filter(test).length/col.length*100;
+    }),
+    backgroundColor:kleur,order:2,stack:'ens',barPercentage:1,categoryPercentage:1,
+  }));
+  document.getElementById('blok-weertype').style.display='';
+  document.getElementById('titel-weertype').textContent=`ECMWF – ${naam}  Weertype (kans per uur)`;
+  document.getElementById('leg-weertype').innerHTML=legHtml(CATS.map(([n,,k])=>[k,n,'blok']));
+  chartTimestamps['canvas-weertype']=ts;
+  actieveCharts.weertype=new Chart(document.getElementById('canvas-weertype'),{
+    data:{labels:lab,datasets},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        filter:item=>item.parsed.y>0.5,
+        callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}
+      }},
+      scales:{x:cfgBase.scales.x,y:{...yAs('left','%'),stacked:true,max:100,min:0}},
     }
   });
 }
