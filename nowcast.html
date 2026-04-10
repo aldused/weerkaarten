@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nowcast 15-min – Ed Aldus WM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f0f3f7;--panel:#ffffff;--header:#003366;--border:#d0d8e4;--text:#1a2b40;--text2:#5a6a80;--accent:#0066cc;--harmonie:#cc2222;--icond2:#2266cc}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--header);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #2ec4e8;flex-wrap:wrap;gap:10px}
+.header h1{font-family:monospace;font-size:1.1rem;font-weight:700;color:white;letter-spacing:.02em}
+.header p{font-size:.72rem;color:#a8c4e8;margin-top:2px}
+.header-right{font-size:.7rem;color:#a8c4e8;text-align:right;line-height:1.4}
+.controls{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.ctrl-groep{display:flex;flex-direction:column;gap:4px}
+.ctrl-groep label{font-size:.66rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+input[type=text]{background:white;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:.82rem;font-family:inherit;outline:none;min-width:220px}
+button{padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:white;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
+button:hover{opacity:.85}
+button.klein{padding:4px 10px;font-size:.72rem;background:#e8ecf2;color:var(--text);border:1px solid var(--border)}
+button.klein.actief{background:var(--accent);color:white;border-color:var(--accent)}
+#zoek-resultaten{display:none;position:absolute;top:100%;left:0;z-index:99;background:white;border:1px solid var(--border);border-radius:6px;min-width:260px;max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.zoek-item{padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #e0e4ea}
+.zoek-item:hover{background:#f0f4f8}
+.zoek-item:last-child{border-bottom:none}
+.zoek-wrap{position:relative}
+.station-info{font-size:.72rem;color:#6699cc;margin-top:3px}
+.favs{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.fav-btn{padding:2px 8px;border-radius:12px;border:1px solid var(--border);background:#fff8e0;color:#885500;font-size:.7rem;cursor:pointer}
+.fav-btn:hover{background:#ffeb99}
+.fav-del{margin-left:4px;color:#999;cursor:pointer}
+#grafieken{padding:12px 16px}
+.grafiek-blok{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.grafiek-titel{font-size:.88rem;font-weight:700;color:#003366;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.grafiek-sub{font-size:.68rem;color:var(--text2);margin-bottom:6px}
+.legenda{display:flex;flex-wrap:wrap;gap:12px;font-size:.72rem;color:var(--text2);margin-bottom:6px}
+.legenda span{display:flex;align-items:center;gap:5px}
+.leg-lijn{display:inline-block;width:18px;height:3px;border-radius:2px}
+.leg-blok{display:inline-block;width:10px;height:10px;border-radius:2px}
+.canvas-wrap{position:relative;width:100%;height:200px}
+.canvas-wrap.hoog{height:240px}
+#status{text-align:center;padding:50px;color:var(--text2);font-size:.9rem}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#copyright{text-align:center;font-size:.7rem;color:#888;padding:10px 0 16px;font-family:monospace}
+.huidig{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:10px 16px;background:linear-gradient(90deg,#e8f1fc,#f0f6fc)}
+.huidig-cel{background:white;border:1px solid var(--border);border-radius:6px;padding:8px 10px;text-align:center}
+.huidig-label{font-size:.65rem;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.huidig-waarde{font-size:1.2rem;font-weight:700;color:var(--text);margin-top:2px;font-family:monospace}
+.huidig-sub{font-size:.65rem;color:var(--text2);margin-top:1px}
+@media(max-width:640px){.header h1{font-size:.95rem}input[type=text]{min-width:160px}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Nowcast 15-min – HARMONIE &amp; ICON-D2</h1>
+    <p id="header-sub">De komende 6 uur · Bron: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</p>
+  </div>
+  <div class="header-right">
+    Ed Aldus WM<br>
+    <span id="klok"></span><br>
+    <span id="run-info" style="color:#5588aa">–</span>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="ctrl-groep zoek-wrap">
+    <label>Plaats zoeken</label>
+    <div style="display:flex;gap:4px;align-items:center">
+      <input type="text" id="zoek-input" placeholder="Bijv. Rotterdam…" oninput="zoekDebounce()" onkeydown="if(event.key==='Enter')zoekPlaats()">
+      <button class="klein" onclick="zoekPlaats()">&#128269;</button>
+    </div>
+    <div class="station-info" id="huidig-station">De Bilt · 52.10° N, 5.18° E</div>
+    <div id="zoek-resultaten"></div>
+    <div style="display:flex;gap:4px;align-items:center;margin-top:4px;flex-wrap:wrap">
+      <button class="klein" onclick="voegFavorietToe()" title="Bewaar als favoriet">&#9733; Bewaar</button>
+      <div class="favs" id="favorieten-lijst"></div>
+    </div>
+  </div>
+
+  <div class="ctrl-groep">
+    <label>Modellen</label>
+    <div style="display:flex;gap:4px">
+      <button class="klein actief" id="btn-harmonie" onclick="toggleModel('harmonie',this)">HARMONIE</button>
+      <button class="klein actief" id="btn-icond2" onclick="toggleModel('icond2',this)">ICON-D2</button>
+    </div>
+  </div>
+
+  <div class="ctrl-groep">
+    <label>Auto-refresh</label>
+    <div style="display:flex;gap:4px">
+      <button class="klein actief" id="btn-auto" onclick="toggleAuto(this)">&#8635; Elke 5 min</button>
+      <button class="klein" onclick="laadData()">&#8635; Nu</button>
+    </div>
+  </div>
+</div>
+
+<div class="huidig" id="huidig">
+  <div class="huidig-cel"><div class="huidig-label">Temp 2m</div><div class="huidig-waarde" id="h-temp">–</div><div class="huidig-sub" id="h-tempsub">HARMONIE</div></div>
+  <div class="huidig-cel"><div class="huidig-label">Dauwpunt</div><div class="huidig-waarde" id="h-dauw">–</div><div class="huidig-sub" id="h-dauwsub">HARMONIE</div></div>
+  <div class="huidig-cel"><div class="huidig-label">Neerslag/15m</div><div class="huidig-waarde" id="h-neer">–</div><div class="huidig-sub" id="h-neersub">HARMONIE</div></div>
+  <div class="huidig-cel"><div class="huidig-label">Wind</div><div class="huidig-waarde" id="h-wind">–</div><div class="huidig-sub" id="h-windsub">HARMONIE</div></div>
+  <div class="huidig-cel"><div class="huidig-label">Windstoot</div><div class="huidig-waarde" id="h-stoot">–</div><div class="huidig-sub" id="h-stootsub">HARMONIE</div></div>
+  <div class="huidig-cel"><div class="huidig-label">Bewolking</div><div class="huidig-waarde" id="h-cloud">–</div><div class="huidig-sub" id="h-cloudsub">HARMONIE</div></div>
+</div>
+
+<div id="grafieken">
+  <div id="status"><span class="spinner"></span>Data ophalen…</div>
+
+  <div class="grafiek-blok" id="blok-temp" style="display:none">
+    <div class="grafiek-titel">Temperatuur &amp; dauwpunt <span id="blok-temp-loc" style="font-weight:400;color:#5588aa"></span></div>
+    <div class="grafiek-sub">Per 15 minuten · &minus;2 uur tot +4 uur</div>
+    <div class="legenda" id="leg-temp"></div>
+    <div class="canvas-wrap"><canvas id="canvas-temp"></canvas></div>
+  </div>
+
+  <div class="grafiek-blok" id="blok-neerslag" style="display:none">
+    <div class="grafiek-titel">Neerslag per kwartier</div>
+    <div class="grafiek-sub">mm per 15 min · staafjes tonen verwachte intensiteit</div>
+    <div class="legenda" id="leg-neerslag"></div>
+    <div class="canvas-wrap"><canvas id="canvas-neerslag"></canvas></div>
+  </div>
+
+  <div class="grafiek-blok" id="blok-wind" style="display:none">
+    <div class="grafiek-titel">Wind &amp; windstoten</div>
+    <div class="grafiek-sub">Windsnelheid (lijn) en stoten (gestreept) in km/u · richting als pijl op mediaanlijn</div>
+    <div class="legenda" id="leg-wind"></div>
+    <div class="canvas-wrap hoog"><canvas id="canvas-wind"></canvas></div>
+  </div>
+</div>
+
+<div id="copyright">&copy; Ed Aldus WM &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
+
+<script>
+// ── Proxy routing (zelfde patroon als pluim_interactief.html) ───────────
+const OM_PROXY_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
+  ? 'https://om.weerlab.nl/om'
+  : null;
+function rewriteOM(url){
+  if (!OM_PROXY_BASE) return url;
+  return url.replace('https://api.open-meteo.com/v1/forecast', `${OM_PROXY_BASE}/forecast`);
+}
+async function fetchT(url, ms=20000){
+  url = rewriteOM(url);
+  const ctrl = new AbortController();
+  const id = setTimeout(()=>ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, {signal: ctrl.signal});
+    clearTimeout(id);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  } catch(e) {
+    clearTimeout(id);
+    throw new Error(e.name === 'AbortError' ? 'Time-out' : e.message);
+  }
+}
+
+// ── State ───────────────────────────────────────────────────────────────
+let huidigLat = 52.10, huidigLon = 5.18, huidigNaam = 'De Bilt';
+let modelActief = {harmonie: true, icond2: true};
+let autoRefresh = true;
+let autoTimer = null;
+const charts = {};
+
+// ── Plaats zoeken (Open-Meteo geocoding) ────────────────────────────────
+let zoekTimeout;
+function zoekDebounce(){
+  clearTimeout(zoekTimeout);
+  zoekTimeout = setTimeout(zoekPlaats, 300);
+}
+async function zoekPlaats(){
+  const q = document.getElementById('zoek-input').value.trim();
+  const box = document.getElementById('zoek-resultaten');
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=nl&format=json`);
+    const d = await r.json();
+    if (!d.results || !d.results.length) { box.innerHTML = '<div class="zoek-item">Niets gevonden</div>'; box.style.display = 'block'; return; }
+    box.innerHTML = d.results.map(x => {
+      const label = `${x.name}${x.admin1?' · '+x.admin1:''} (${x.country_code})`;
+      return `<div class="zoek-item" onclick="kiesPlaats(${x.latitude},${x.longitude},'${x.name.replace(/'/g,"\\'")}')">${label}</div>`;
+    }).join('');
+    box.style.display = 'block';
+  } catch(e) { console.warn(e); }
+}
+function kiesPlaats(lat, lon, naam){
+  huidigLat = lat; huidigLon = lon; huidigNaam = naam;
+  document.getElementById('huidig-station').textContent = `${naam} · ${lat.toFixed(2)}° N, ${lon.toFixed(2)}° E`;
+  document.getElementById('zoek-resultaten').style.display = 'none';
+  document.getElementById('zoek-input').value = '';
+  localStorage.setItem('nowcast_plek', JSON.stringify({lat, lon, naam}));
+  laadData();
+}
+
+// ── Favorieten ──────────────────────────────────────────────────────────
+function getFavs(){ try { return JSON.parse(localStorage.getItem('nowcast_favs') || '[]'); } catch { return []; } }
+function setFavs(f){ localStorage.setItem('nowcast_favs', JSON.stringify(f)); toonFavorieten(); }
+function voegFavorietToe(){
+  const favs = getFavs();
+  if (favs.find(f => f.naam === huidigNaam)) return;
+  favs.push({lat: huidigLat, lon: huidigLon, naam: huidigNaam});
+  setFavs(favs);
+}
+function toonFavorieten(){
+  const el = document.getElementById('favorieten-lijst');
+  el.innerHTML = getFavs().map((f,i) => `<span class="fav-btn" onclick="kiesPlaats(${f.lat},${f.lon},'${f.naam.replace(/'/g,"\\'")}')">${f.naam}<span class="fav-del" onclick="event.stopPropagation();verwijderFav(${i})">&times;</span></span>`).join('');
+}
+function verwijderFav(i){ const f = getFavs(); f.splice(i,1); setFavs(f); }
+
+// ── Model toggle ────────────────────────────────────────────────────────
+function toggleModel(m, btn){
+  modelActief[m] = !modelActief[m];
+  btn.classList.toggle('actief', modelActief[m]);
+  if (!modelActief.harmonie && !modelActief.icond2) {
+    modelActief[m] = true; btn.classList.add('actief'); return;
+  }
+  tekenCharts();
+}
+
+// ── Auto refresh ────────────────────────────────────────────────────────
+function toggleAuto(btn){
+  autoRefresh = !autoRefresh;
+  btn.classList.toggle('actief', autoRefresh);
+  if (autoRefresh) startAutoRefresh(); else stopAutoRefresh();
+}
+function startAutoRefresh(){
+  stopAutoRefresh();
+  autoTimer = setInterval(laadData, 5 * 60 * 1000);
+}
+function stopAutoRefresh(){ if (autoTimer) { clearInterval(autoTimer); autoTimer = null; } }
+
+// ── Data ophalen ────────────────────────────────────────────────────────
+let laatsteData = null;
+
+async function laadData(){
+  document.getElementById('status').innerHTML = '<span class="spinner"></span>Data ophalen…';
+  document.getElementById('status').style.display = '';
+  const variabelen = 'temperature_2m,dew_point_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,cloud_cover';
+  const basis = `https://api.open-meteo.com/v1/forecast?latitude=${huidigLat}&longitude=${huidigLon}`
+    + `&minutely_15=${variabelen}`
+    + `&wind_speed_unit=kmh&timezone=Europe%2FAmsterdam`
+    + `&past_minutely_15=8&forecast_minutely_15=16`;
+  try {
+    const [h, i] = await Promise.all([
+      fetchT(`${basis}&models=knmi_harmonie_arome_netherlands`),
+      fetchT(`${basis}&models=icon_d2`),
+    ]);
+    laatsteData = {harmonie: h, icond2: i};
+    document.getElementById('run-info').textContent = 'Laatst bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL', {hour:'2-digit',minute:'2-digit'});
+    document.getElementById('status').style.display = 'none';
+    tekenCharts();
+  } catch(e) {
+    document.getElementById('status').innerHTML = `&#9888; ${e.message}`;
+  }
+}
+
+// ── Charts ──────────────────────────────────────────────────────────────
+function formatTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'});
+}
+function nuIndex(tijden){
+  const nu = Date.now();
+  for (let i = 0; i < tijden.length; i++) {
+    if (new Date(tijden[i]).getTime() >= nu - 7*60*1000) return i;
+  }
+  return 0;
+}
+
+function tekenCharts(){
+  if (!laatsteData) return;
+  const h = laatsteData.harmonie.minutely_15;
+  const i = laatsteData.icond2.minutely_15;
+  if (!h || !h.time || !h.time.length) return;
+
+  const tijden = h.time;
+  const labels = tijden.map(formatTime);
+  const nuIdx = nuIndex(tijden);
+
+  // Huidige waarden (tonen van het meest geschikte actieve model)
+  const primModel = modelActief.harmonie ? 'HARMONIE' : 'ICON-D2';
+  const primBron = modelActief.harmonie ? h : i;
+  const set = (id, val, u='') => document.getElementById(id).textContent = (val != null ? val.toFixed(1) + u : '–');
+  set('h-temp',  primBron.temperature_2m?.[nuIdx], '°');
+  set('h-dauw',  primBron.dew_point_2m?.[nuIdx], '°');
+  set('h-neer',  primBron.precipitation?.[nuIdx], ' mm');
+  set('h-wind',  primBron.wind_speed_10m?.[nuIdx], '');
+  set('h-stoot', primBron.wind_gusts_10m?.[nuIdx], '');
+  set('h-cloud', primBron.cloud_cover?.[nuIdx], '%');
+  const dirDeg = primBron.wind_direction_10m?.[nuIdx];
+  if (dirDeg != null) {
+    const dirs = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+    const d8 = dirs[Math.round(((dirDeg%360)/22.5))%16];
+    document.getElementById('h-windsub').textContent = `${primModel} · ${d8} ${Math.round(dirDeg)}°`;
+  }
+  ['h-tempsub','h-dauwsub','h-neersub','h-stootsub','h-cloudsub'].forEach(id =>
+    document.getElementById(id).textContent = primModel);
+
+  // Chart datasets helper
+  const ds = (label, data, kleur, dash, extra={}) => ({
+    label, data, borderColor: kleur, backgroundColor: kleur + '22',
+    borderDash: dash || [], fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2, ...extra
+  });
+
+  // ── Temp + dauwpunt ────────────────────────────────────────────────
+  document.getElementById('blok-temp').style.display = '';
+  document.getElementById('blok-temp-loc').textContent = '· ' + huidigNaam;
+  const tempDatasets = [];
+  const tempLeg = [];
+  if (modelActief.harmonie) {
+    tempDatasets.push(ds('HARMONIE temp',    h.temperature_2m, '#cc2222'));
+    tempDatasets.push(ds('HARMONIE dauwp.',  h.dew_point_2m,   '#cc2222', [4,4]));
+    tempLeg.push(['#cc2222','HARMONIE temp','lijn'], ['#cc2222','HARMONIE dauwpunt','dash']);
+  }
+  if (modelActief.icond2) {
+    tempDatasets.push(ds('ICON-D2 temp',    i.temperature_2m, '#2266cc'));
+    tempDatasets.push(ds('ICON-D2 dauwp.',  i.dew_point_2m,   '#2266cc', [4,4]));
+    tempLeg.push(['#2266cc','ICON-D2 temp','lijn'], ['#2266cc','ICON-D2 dauwpunt','dash']);
+  }
+  document.getElementById('leg-temp').innerHTML = legHtml(tempLeg);
+  drawChart('canvas-temp', 'line', labels, tempDatasets, {y: {title: {display: true, text: '°C'}}}, nuIdx);
+
+  // ── Neerslag ────────────────────────────────────────────────────────
+  document.getElementById('blok-neerslag').style.display = '';
+  const neerDatasets = [];
+  const neerLeg = [];
+  if (modelActief.harmonie) {
+    neerDatasets.push({label:'HARMONIE', data: h.precipitation, backgroundColor: 'rgba(204,34,34,.6)', borderColor: '#cc2222', borderWidth: 1, barPercentage: 0.9, categoryPercentage: 0.85});
+    neerLeg.push(['#cc2222','HARMONIE','blok']);
+  }
+  if (modelActief.icond2) {
+    neerDatasets.push({label:'ICON-D2', data: i.precipitation, backgroundColor: 'rgba(34,102,204,.6)', borderColor: '#2266cc', borderWidth: 1, barPercentage: 0.9, categoryPercentage: 0.85});
+    neerLeg.push(['#2266cc','ICON-D2','blok']);
+  }
+  document.getElementById('leg-neerslag').innerHTML = legHtml(neerLeg);
+  drawChart('canvas-neerslag', 'bar', labels, neerDatasets, {y: {title: {display: true, text: 'mm/15min'}, beginAtZero: true, suggestedMax: 1}}, nuIdx);
+
+  // ── Wind + stoten ───────────────────────────────────────────────────
+  document.getElementById('blok-wind').style.display = '';
+  const windDatasets = [];
+  const windLeg = [];
+  if (modelActief.harmonie) {
+    windDatasets.push(ds('HARMONIE wind',   h.wind_speed_10m, '#cc2222'));
+    windDatasets.push(ds('HARMONIE stoten', h.wind_gusts_10m, '#cc2222', [4,4]));
+    windLeg.push(['#cc2222','HARMONIE wind','lijn'], ['#cc2222','HARMONIE stoten','dash']);
+  }
+  if (modelActief.icond2) {
+    windDatasets.push(ds('ICON-D2 wind',   i.wind_speed_10m, '#2266cc'));
+    windDatasets.push(ds('ICON-D2 stoten', i.wind_gusts_10m, '#2266cc', [4,4]));
+    windLeg.push(['#2266cc','ICON-D2 wind','lijn'], ['#2266cc','ICON-D2 stoten','dash']);
+  }
+  document.getElementById('leg-wind').innerHTML = legHtml(windLeg);
+  drawChart('canvas-wind', 'line', labels, windDatasets, {y: {title: {display: true, text: 'km/u'}, beginAtZero: true}}, nuIdx);
+}
+
+function legHtml(items){
+  return items.map(([kleur, tekst, type]) => {
+    if (type === 'dash') return `<span><span class="leg-lijn" style="background:repeating-linear-gradient(90deg,${kleur} 0 4px,transparent 4px 8px)"></span>${tekst}</span>`;
+    if (type === 'blok') return `<span><span class="leg-blok" style="background:${kleur}"></span>${tekst}</span>`;
+    return `<span><span class="leg-lijn" style="background:${kleur}"></span>${tekst}</span>`;
+  }).join('');
+}
+
+// Vertical "NU" line plugin
+const nuLinePlugin = {
+  id: 'nuLine',
+  afterDraw(chart, args, opts) {
+    if (opts.idx == null) return;
+    const {ctx, chartArea, scales: {x}} = chart;
+    const px = x.getPixelForValue(opts.idx);
+    if (px < chartArea.left || px > chartArea.right) return;
+    ctx.save();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    ctx.moveTo(px, chartArea.top);
+    ctx.lineTo(px, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#000';
+    ctx.font = '700 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('NU', px, chartArea.top + 10);
+    ctx.restore();
+  }
+};
+
+function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
+  if (charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type,
+    data: {labels, datasets},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        legend: {display: false},
+        tooltip: {enabled: true, callbacks: {title: (ctx) => labels[ctx[0].dataIndex]}},
+        nuLine: {idx: nuIdx},
+      },
+      scales: {
+        x: {ticks: {maxRotation: 0, autoSkipPadding: 20, font: {size: 10}}, grid: {color: '#eef1f5'}},
+        y: Object.assign({ticks: {font: {size: 10}}, grid: {color: '#eef1f5'}}, scales.y || {})
+      }
+    },
+    plugins: [nuLinePlugin]
+  });
+}
+
+// ── Klok ────────────────────────────────────────────────────────────────
+function updateKlok(){
+  document.getElementById('klok').textContent = new Date().toLocaleTimeString('nl-NL');
+}
+
+// ── Start ───────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  updateKlok(); setInterval(updateKlok, 1000);
+  const saved = localStorage.getItem('nowcast_plek');
+  if (saved) {
+    try { const p = JSON.parse(saved); kiesPlaats(p.lat, p.lon, p.naam); return; } catch {}
+  }
+  toonFavorieten();
+  laadData();
+  startAutoRefresh();
+});
+</script>
+</body>
+</html>
