@@ -90,6 +90,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
       <option value="sneeuw">&#10052;&#65039; Sneeuwkans</option>
       <option value="onweer">&#9928;&#65039; Onweer</option>
       <option value="weertype">&#127780;&#65039; Weertype</option>
+      <option value="uv">&#9728;&#65039; UV-index</option>
       <option value="hoogte">&#128225; 850 / 500 hPa</option>
       <option value="dauwpunt">&#128167; Dauwpunt</option>
       <option value="hres">&#9654;&#65038; HRES (deterministisch)</option>
@@ -201,6 +202,11 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <div class="grafiek-titel" id="titel-weertype"></div>
     <div class="legenda" id="leg-weertype"></div>
     <div style="position:relative;width:100%;height:400px"><canvas id="canvas-weertype"></canvas></div>
+  </div>
+  <div id="blok-uv" class="grafiek-blok" style="display:none">
+    <div class="grafiek-titel" id="titel-uv"></div>
+    <div class="legenda" id="leg-uv"></div>
+    <div style="position:relative;width:100%;height:420px"><canvas id="canvas-uv"></canvas></div>
   </div>
   <div id="blok-hoogte" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-hoogte"></div>
@@ -778,7 +784,7 @@ function verwijderAlles(){
   crosshairPinned = null;
   Object.values(actieveCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   actieveCharts={};
-  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','weertype','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
+  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
     document.getElementById('blok-'+id).style.display='none';
   });
 }
@@ -828,7 +834,7 @@ function ensDatasets(arr,kleur){
 
 // ── Type knoppen + dropdown ──
 // Welke waarden horen bij de ECMWF-parameter dropdown
-const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','hoogte','dauwpunt','hres'];
+const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','dauwpunt','hres'];
 
 function setActieveType(val){
   actieveType = val;
@@ -902,6 +908,7 @@ async function laadData(){
     else if(actieveType==='sneeuw') await laadSneeuw(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='onweer') await laadOnweer(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='weertype') await laadWeertype(lat,lon,naam,dagen,van,tot);
+    else if(actieveType==='uv') await laadUV(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='hoogte') await laadHoogte(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='icon') await laadIcon(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='aifs') await laadAifs(lat,lon,naam,dagen,van,tot);
@@ -1434,6 +1441,97 @@ async function laadWeertype(lat,lon,naam,dagen,van,tot){
         callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}
       }},
       scales:{x:cfgBase.scales.x,y:{...yAs('left','%'),stacked:true,max:100,min:0}},
+    }
+  });
+}
+
+// ── UV-index ── (deterministisch, hourly + daily max)
+// ECMWF perturbeert UV niet rechtstreeks, dus geen ensemble-pluim. We tonen
+// de hourly UV-index (Open-Meteo best_match), de clear-sky maximum (wat het
+// zou zijn zonder bewolking), en daily piek-balken gekleurd op WHO-niveau.
+async function laadUV(lat,lon,naam,dagen,van,tot){
+  const[hH,hD]=await Promise.all([
+    fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
+    fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=uv_index_max,uv_index_clear_sky_max&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
+  ]);
+  const times=hH.hourly.time;
+  const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
+  const uv=idx.map(i=>hH.hourly.uv_index[i]);
+  const uvCs=idx.map(i=>hH.hourly.uv_index_clear_sky[i]);
+  const lab=getLab(ts);
+
+  // Daily max-balken aligned op het middaguur van elke dag (12:00 lokaal),
+  // zodat ze visueel onder de bijbehorende piek staan
+  const dailyTimes=hD.daily.time;
+  const dailyMax=hD.daily.uv_index_max;
+  const dailyCs=hD.daily.uv_index_clear_sky_max;
+  const dagMaxData=Array(ts.length).fill(null);
+  const dagCsData=Array(ts.length).fill(null);
+  dailyTimes.forEach((dStr,di)=>{
+    // Vind de index van 12:00 lokaal op deze dag
+    const target=`${dStr}T12:00`;
+    const tIdx=ts.indexOf(target);
+    if(tIdx>=0){
+      dagMaxData[tIdx]=dailyMax[di];
+      dagCsData[tIdx]=dailyCs[di];
+    }
+  });
+
+  // WHO UV-niveau kleur
+  const uvKleur=v=>{
+    if(v==null)return '#888';
+    if(v<3)return '#5ec659';      // 0-2 laag (groen)
+    if(v<6)return '#f0c419';      // 3-5 matig (geel)
+    if(v<8)return '#ff8c1a';      // 6-7 hoog (oranje)
+    if(v<11)return '#e23636';     // 8-10 zeer hoog (rood)
+    return '#a052cf';             // 11+ extreem (paars)
+  };
+  const uvNiveau=v=>{
+    if(v==null)return '–';
+    if(v<3)return 'Laag';
+    if(v<6)return 'Matig';
+    if(v<8)return 'Hoog';
+    if(v<11)return 'Zeer hoog';
+    return 'Extreem';
+  };
+  const dagBarKleuren=dagMaxData.map(v=>uvKleur(v));
+
+  document.getElementById('blok-uv').style.display='';
+  document.getElementById('titel-uv').textContent=`ECMWF – ${naam}  UV-index`;
+  document.getElementById('leg-uv').innerHTML=legHtml([
+    ['#cc6600','UV werkelijk (uur)','lijn'],
+    ['rgba(204,102,0,0.35)','UV onbewolkt potentieel','dash'],
+    ['#5ec659','Laag (0-2)','blok'],
+    ['#f0c419','Matig (3-5)','blok'],
+    ['#ff8c1a','Hoog (6-7)','blok'],
+    ['#e23636','Zeer hoog (8-10)','blok'],
+    ['#a052cf','Extreem (11+)','blok'],
+  ]);
+  chartTimestamps['canvas-uv']=ts;
+  if(actieveCharts.uv) actieveCharts.uv.destroy();
+  actieveCharts.uv=new Chart(document.getElementById('canvas-uv'),{
+    data:{labels:lab,datasets:[
+      // Daily max balken op de achtergrond
+      {type:'bar',data:dagMaxData,backgroundColor:dagBarKleuren,borderColor:dagBarKleuren,borderWidth:0,barPercentage:0.6,categoryPercentage:1,order:5,label:'Dagmax'},
+      // Clear-sky uurlijn
+      {type:'line',data:uvCs,borderColor:'rgba(204,102,0,0.55)',borderWidth:1.4,borderDash:[5,3],pointRadius:0,fill:false,tension:0.3,order:2,label:'Clear-sky'},
+      // Werkelijke UV uurlijn (gevuld onder)
+      {type:'line',data:uv,borderColor:'#cc6600',backgroundColor:'rgba(204,102,0,0.18)',borderWidth:2.5,pointRadius:0,fill:'origin',tension:0.3,order:1,label:'UV werkelijk'},
+    ]},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        callbacks:{label:ctx=>{
+          const v=ctx.parsed.y;
+          if(ctx.dataset.label==='Dagmax'){
+            if(v==null)return null;
+            return ` Dagmax: ${v.toFixed(1)} (${uvNiveau(v)})`;
+          }
+          if(ctx.dataset.label==='Clear-sky')return ` Onbewolkt: ${v?.toFixed(1) ?? '-'}`;
+          return ` UV: ${v?.toFixed(1) ?? '-'} (${uvNiveau(v)})`;
+        }}
+      }},
+      scales:{x:cfgBase.scales.x,y:{...yAs('left',' UV'),min:0,suggestedMax:8}},
     }
   });
 }
