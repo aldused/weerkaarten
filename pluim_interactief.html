@@ -100,6 +100,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
       <span style="font-size:.6rem;color:var(--text2);font-weight:700;padding:4px 6px;border-left:1px solid var(--border)">VERGELIJK:</span>
       <button class="type-btn" data-type="vergelijking">&#8644; vs ICON</button>
       <button class="type-btn" data-type="vergaifs">&#8644; vs AIFS</button>
+      <button class="type-btn" data-type="verggfs">&#8644; vs GFS</button>
     </div>
   </div>
   <div class="ctrl-groep">
@@ -873,6 +874,7 @@ async function laadData(){
     else if(actieveType==='dauwpunt') await laadDauwpunt(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='vergelijking') await laadVergelijkingModel(lat,lon,naam,dagen,van,tot,'icon');
     else if(actieveType==='vergaifs') await laadVergelijkingModel(lat,lon,naam,dagen,van,tot,'aifs');
+    else if(actieveType==='verggfs') await laadVergelijkingModel(lat,lon,naam,dagen,van,tot,'gfs');
     else if(actieveType==='hres') await laadHres(lat,lon,naam,dagen,van,tot);
     document.getElementById('status').style.display='none';
     document.getElementById('png-opties').style.display='flex';
@@ -2042,11 +2044,17 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
 
 // ── ECMWF vs ICON/AIFS vergelijking (Temp + Neerslag + Wind) ──
 async function laadVergelijkingModel(lat,lon,naam,dagen,van,tot,vsModel){
-  const isAifs = vsModel === 'aifs';
-  const model2 = isAifs ? 'ecmwf_aifs025' : 'icon_seamless';
-  const label2 = isAifs ? 'AIFS' : 'ICON';
-  const kleur2 = isAifs ? '#cc6600' : '#22aa22';
-  const iqr2 = isAifs ? 'rgba(200,100,0,0.40)' : 'rgba(20,130,20,0.40)';
+  // Configuratie per vergelijkings-model
+  const VS = {
+    icon: { model:'icon_seamless', label:'ICON', kleur:'#22aa22', iqr:'rgba(20,130,20,0.40)' },
+    aifs: { model:'ecmwf_aifs025', label:'AIFS', kleur:'#cc6600', iqr:'rgba(200,100,0,0.40)' },
+    gfs:  { model:'gfs025',        label:'GFS',  kleur:'#0099cc', iqr:'rgba(0,153,204,0.40)' },
+  };
+  const cfg = VS[vsModel] || VS.icon;
+  const model2 = cfg.model;
+  const label2 = cfg.label;
+  const kleur2 = cfg.kleur;
+  const iqr2 = cfg.iqr;
   document.getElementById('header-sub').textContent=`ECMWF IFS vs ${label2} · Bron: Open-Meteo`;
 
   // Haal temp+neerslag+wind op voor beide modellen tegelijk
@@ -2499,12 +2507,12 @@ function downloadPng(){
   const eigenTekst=document.getElementById('png-tekst')?.value||'';
   const ids={temp:'canvas-temp',cloud:'canvas-cloud',wind:'canvas-wind',winddir:'canvas-winddir',
              sneeuw:'canvas-sneeuw',onweer:'canvas-onweer',hoogte:'canvas-hoogte',
-             icon:'canvas-icon',aifs:'canvas-aifs',vergelijking:'canvas-vergelijking',vergaifs:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt'};
-  const neerslagIds={temp:'canvas-neerslag',icon:'canvas-icon-neerslag',aifs:'canvas-aifs-neerslag',vergelijking:'canvas-verg-neerslag',vergaifs:'canvas-verg-neerslag',hres:'canvas-hres-neerslag'};
+             icon:'canvas-icon',aifs:'canvas-aifs',vergelijking:'canvas-vergelijking',vergaifs:'canvas-vergelijking',verggfs:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt'};
+  const neerslagIds={temp:'canvas-neerslag',icon:'canvas-icon-neerslag',aifs:'canvas-aifs-neerslag',vergelijking:'canvas-verg-neerslag',vergaifs:'canvas-verg-neerslag',verggfs:'canvas-verg-neerslag',hres:'canvas-hres-neerslag'};
   const kansenIds={temp:'canvas-neer-kansen',icon:'canvas-icon-kansen',aifs:'canvas-aifs-kansen'};
-  const windIds={vergelijking:'canvas-verg-wind',vergaifs:'canvas-verg-wind',hres:'canvas-hres-wind'};
-  const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',aifs:'ECMWF AIFS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',vergaifs:'ECMWF vs AIFS',hres:'HRES operationeel',dauwpunt:'ECMWF ENS'};
-  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',aifs:'AIFS Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',hoogte:'850/500 hPa',vergelijking:'Vergelijking',vergaifs:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid'};
+  const windIds={vergelijking:'canvas-verg-wind',vergaifs:'canvas-verg-wind',verggfs:'canvas-verg-wind',hres:'canvas-hres-wind'};
+  const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',aifs:'ECMWF AIFS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',vergaifs:'ECMWF vs AIFS',verggfs:'ECMWF vs GFS',hres:'HRES operationeel',dauwpunt:'ECMWF ENS'};
+  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',aifs:'AIFS Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',hoogte:'850/500 hPa',vergelijking:'Vergelijking',vergaifs:'Vergelijking',verggfs:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid'};
 
   // Forceer chart update zodat gepinde crosshair op canvas staat
   if(crosshairPinned && actieveCharts.temp) actieveCharts.temp.update('none');
