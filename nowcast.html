@@ -512,10 +512,15 @@ const waardenPlugin = {
 
         const x = pt.x;
         // Onderkant van het label-blokje — altijd boven de lijn
-        const yBottom = pt.y - 6;
-        const yTop = yBottom - labelH;
-        // Binnen chartArea blijven
-        if (yTop < chartArea.top) return;
+        let yBottom = pt.y - 6;
+        let yTop = yBottom - labelH;
+        // Het label mag in de top-padding tekenen (boven chartArea.top is OK
+        // zolang het binnen het canvas blijft). Pas alleen aan als het label
+        // boven de canvas-rand zou komen — dan zetten we het tegen y=2.
+        if (yTop < 2) {
+          yTop = 2;
+          yBottom = yTop + labelH;
+        }
         if (x - totW/2 - 2 < chartArea.left || x + totW/2 + 2 > chartArea.right) return;
 
         // Witte achtergrond
@@ -562,7 +567,16 @@ function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
   // Extra top-padding wanneer waarde-labels aan staan. Wind-label is
   // 2-regelig dus die heeft meer ruimte nodig dan temp/neerslag.
   const isMultiLine = datasets.some(d => d._showLabels && d._labelFormat);
-  const topPad = waardenInterval === 'uit' ? 8 : (isMultiLine ? 40 : 24);
+  const labelsAan = waardenInterval !== 'uit';
+  const topPad = !labelsAan ? 8 : (isMultiLine ? 50 : 32);
+  // Extra grace boven de Y-as zorgt dat de hoogste datapunten niet tegen
+  // de chart-top komen — anders past het label er niet boven.
+  const yScaleBase = scales.y || {};
+  const ySchaal = Object.assign(
+    {ticks: {font: {size: 10}}, grid: {color: '#eef1f5'}},
+    yScaleBase,
+    labelsAan && yScaleBase.beginAtZero === undefined ? {grace: '15%'} : {}
+  );
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
     type,
     data: {labels, datasets},
@@ -578,7 +592,7 @@ function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
       },
       scales: {
         x: {ticks: {maxRotation: 0, autoSkipPadding: 20, font: {size: 10}}, grid: {color: '#eef1f5'}},
-        y: Object.assign({ticks: {font: {size: 10}}, grid: {color: '#eef1f5'}}, scales.y || {})
+        y: ySchaal
       }
     },
     plugins: [nuLinePlugin, waardenPlugin]
