@@ -225,6 +225,15 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
 
     print(f'Data export klaar! Run: {run_str}, {n_steps} uur, grid {n_lat}x{n_lon}')
 
+    # 6b. Open-Meteo Pro: 500/850 hPa hoogtekaarten ophalen en toevoegen aan meta
+    print('6b. Open-Meteo hoogtekaarten (500/850 hPa)...')
+    import subprocess
+    try:
+        subprocess.run(['/usr/local/bin/python3', 'scripts/harmonie_openmeteo.py'],
+                       check=True, timeout=600)
+    except Exception as _e:
+        print(f'   [waarschuwing] Open-Meteo fetch mislukt: {_e}')
+
     # 7. Upload naar Cloudflare R2
     print('7. Uploaden naar Cloudflare R2...')
     import boto3

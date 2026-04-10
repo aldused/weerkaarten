@@ -185,6 +185,7 @@ body.scroll-mode { overflow-y: auto; }
   // ═══════════════════════════════════════════════════════════════════════════
   var DATA_URL = "https://harmonie-data.weerlab.nl/";
   // Voor lokaal testen: var DATA_URL = "";
+  // Productie: var DATA_URL = "https://harmonie-data.weerlab.nl/";
 
   // Model configuratie: meta-bestand per model
   var MODELS = {
@@ -206,6 +207,8 @@ body.scroll-mode { overflow-y: auto; }
     m.parameters["bewolking_hoog"] = {label: "Hoge bewolking (%)", derived: true, needs: ["bewolking"]};
     m.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
     m.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
+    m.parameters["mist"] = {label: "Mist / zicht (m)", derived: true, needs: ["zicht"]};
+    m.parameters["cloud_base"] = {label: "Wolkenbasis (m boven grond)", derived: true, needs: ["temp","dauwpunt","bewolking"]};
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -457,6 +460,67 @@ body.scroll-mode { overflow-y: auto; }
   function cloudMidRGBA(frac)  { var a = frac * 0.90; return [190,165,45,  Math.round(a*255)]; }
   function cloudLowRGBA(frac)  { var a = frac * 0.95; return [70,70,60,    Math.round(a*255)]; }
 
+  // Mist/zicht levels (m) — fog-gericht, lage zichtwaarden prominent rood/oranje
+  var MIST_LEVELS =  [0, 100, 200, 500, 1000, 2000, 4000, 8000, 15000, 30000];
+  var MIST_COLORS = [
+    [136,0,0],     // <100 m  zeer dichte mist — donkerrood
+    [200,30,30],   // 100–200 dichte mist
+    [230,80,30],   // 200–500 mist
+    [250,140,40],  // 500–1000 lichte mist
+    [255,200,60],  // 1–2 km  nevelig
+    [255,240,140], // 2–4 km  matig zicht
+    [200,230,200], // 4–8 km
+    [150,210,240], // 8–15 km goed
+    [110,180,230], // 15–30 km zeer goed
+    [200,230,255]  // >30 km helder
+  ];
+
+  // Cloud base height (m AGL) — lage basis rood (slecht voor luchtvaart), hoog groen/blauw
+  var CLOUDBASE_LEVELS =  [0, 100, 200, 500, 1000, 1500, 2000, 3000, 4000, 5000];
+  var CLOUDBASE_COLORS = [
+    [150,0,0],     // <100 m  gevaarlijk laag
+    [200,40,40],   // 100–200
+    [230,100,40],  // 200–500
+    [250,170,40],  // 500–1000
+    [255,220,80],  // 1000–1500
+    [200,230,100], // 1500–2000
+    [130,210,120], // 2000–3000
+    [100,200,180], // 3000–4000
+    [110,180,230], // 4000–5000
+    [180,210,250]  // >5000 m
+  ];
+
+  // 500 hPa geopotentiële hoogte (m) — standaard meteo kleurschaal (Wetterzentrale-stijl)
+  // Bereik ~5000 (koud) → 5900 (warm)
+  var GP500_REF = [
+    [4900,[40,0,80]],[5000,[50,0,120]],[5080,[30,50,170]],[5160,[10,120,200]],
+    [5240,[10,180,220]],[5320,[40,210,200]],[5400,[80,220,130]],
+    [5480,[150,230,80]],[5520,[210,230,40]],[5560,[255,220,40]],
+    [5600,[255,180,30]],[5640,[255,130,20]],[5680,[240,80,20]],
+    [5720,[220,30,30]],[5760,[180,0,60]],[5820,[140,0,110]],
+    [5900,[100,0,150]],[6000,[60,0,140]]
+  ];
+
+  // 850 hPa geopotentiële hoogte (m) — bereik ~1300–1600
+  // Wordt vooral gebruikt als achtergrond — temperatuur is de hoofdinfo
+  var GP850_REF = [
+    [1200,[30,0,80]],[1260,[20,40,140]],[1300,[20,100,200]],
+    [1340,[40,170,230]],[1380,[90,210,200]],[1410,[150,230,130]],
+    [1440,[220,230,60]],[1470,[255,200,40]],[1500,[255,140,20]],
+    [1530,[240,70,20]],[1560,[200,0,60]],[1600,[140,0,110]]
+  ];
+
+  // 850 hPa temperatuur kleurschaal — klassiek voor winter/zomer onderscheid
+  // Wordt als primaire kleurvulling gebruikt op 850 hPa kaart
+  var T850_REF = [
+    [-30,[60,0,120]],[-25,[80,0,160]],[-20,[30,0,200]],[-15,[20,60,220]],
+    [-12,[10,120,220]],[-10,[10,170,220]],[-8,[20,210,210]],[-6,[60,220,170]],
+    [-4,[120,230,120]],[-2,[180,240,80]],[0,[220,240,40]],[2,[255,230,30]],
+    [4,[255,200,30]],[6,[255,170,30]],[8,[255,130,20]],[10,[250,90,10]],
+    [12,[240,50,10]],[15,[220,20,20]],[18,[180,0,40]],[22,[140,0,80]],
+    [26,[110,0,120]]
+  ];
+
   // ═══════════════════════════════════════════════════════════════════════════
   // KLEUR FUNCTIES
   // ═══════════════════════════════════════════════════════════════════════════
@@ -607,6 +671,37 @@ body.scroll-mode { overflow-y: auto; }
         var bval = bpd.data[bOff + kb];
         derivedData[kb] = (isNaN(bval) ? 0 : bval) * 100; // fractie → percentage
       }
+    } else if (paramKey === "mist") {
+      var zpd = paramCache["zicht"];
+      if (!zpd) return;
+      var nPtsZ = zpd.nLat * zpd.nLon;
+      derivedData = new Float32Array(nPtsZ);
+      var zOff = stepIdx * nPtsZ;
+      for (var kz = 0; kz < nPtsZ; kz++) derivedData[kz] = zpd.data[zOff + kz];
+    } else if (paramKey === "cloud_base") {
+      // LCL-formule van Espy: hoogte (m) ≈ 125 * (T - Td)
+      // Alleen tonen waar LAGE of MIDDEN bewolking > 10% (fractie > 0.10)
+      var tpd5 = paramCache["temp"], dpd5 = paramCache["dauwpunt"], bpd5 = paramCache["bewolking"];
+      if (!tpd5 || !dpd5 || !bpd5) return;
+      var nPtsC = tpd5.nLat * tpd5.nLon;
+      derivedData = new Float32Array(nPtsC);
+      var tOff5 = stepIdx * nPtsC;
+      var bOff5 = stepIdx * nPtsC * 3; // bewolking: 3 comp, hoog[0] mid[1] laag[2]
+      for (var kc = 0; kc < nPtsC; kc++) {
+        var tc = tpd5.data[tOff5 + kc];
+        var dc = dpd5.data[tOff5 + kc];
+        var lowFrac = bpd5.data[bOff5 + 2 * nPtsC + kc];
+        var midFrac = bpd5.data[bOff5 + 1 * nPtsC + kc];
+        var hasCloud = (lowFrac > 0.10) || (midFrac > 0.10);
+        if (!hasCloud || isNaN(tc) || isNaN(dc)) {
+          derivedData[kc] = NaN;
+        } else {
+          var lcl = 125 * (tc - dc);
+          if (lcl < 0) lcl = 0;
+          if (lcl > 6000) lcl = 6000;
+          derivedData[kc] = lcl;
+        }
+      }
     }
 
     // Gebruik brondata of afgeleide data
@@ -616,6 +711,8 @@ body.scroll-mode { overflow-y: auto; }
     else if (paramKey === "wind_druk") refParam = "wind";
     else if (paramKey === "combi") refParam = "temp";
     else if (paramKey.startsWith("bewolking_")) refParam = "bewolking";
+    else if (paramKey === "mist") refParam = "zicht";
+    else if (paramKey === "cloud_base") refParam = "temp";
 
     var pd = isDerived ? paramCache[refParam] : paramCache[paramKey];
     if (!pd || !meta) return;
@@ -707,6 +804,11 @@ body.scroll-mode { overflow-y: auto; }
 
           if (derivedData) {
             val = derivedData[i];
+          } else if (paramKey === "hoogte_500" || paramKey === "hoogte_850") {
+            // 4-component: gebruik gp_hgt (comp0) of temp (comp1) afhankelijk van paramKey
+            val = paramKey === "hoogte_850"
+              ? pd.data[offset + 1 * nLat * nLon + i]  // T voor 850 hPa (kleur=temp)
+              : pd.data[offset + 0 * nLat * nLon + i]; // gp_hgt voor 500 hPa
           } else if (nComp === 1) {
             val = pd.data[offset + i];
           } else {
@@ -722,7 +824,21 @@ body.scroll-mode { overflow-y: auto; }
             continue;
           }
 
-          if (paramKey === "wind_druk") {
+          if (paramKey === "hoogte_500") {
+            c = interpColor(val, GP500_REF); // val = gp_hgt
+          } else if (paramKey === "hoogte_850") {
+            c = interpColor(val, T850_REF);  // val = T
+          } else if (paramKey === "mist") {
+            c = boundaryColor(val, MIST_LEVELS, MIST_COLORS);
+          } else if (paramKey === "cloud_base") {
+            if (isNaN(val)) {
+              // Geen wolken → geen kleur (lichtblauw/wit blijft)
+              var pi = (y * nLon + x) * 4;
+              pixels[pi] = 235; pixels[pi+1] = 245; pixels[pi+2] = 255; pixels[pi+3] = 255;
+              continue;
+            }
+            c = boundaryColor(val, CLOUDBASE_LEVELS, CLOUDBASE_COLORS);
+          } else if (paramKey === "wind_druk") {
             // Geen aparte kleur — al getekend via vulling
             c = boundaryColor(val, [0,1,2,3,4,5,6,7,8,9,10,11], WIND_COLORS);
           } else if (paramKey === "wbgt") {
@@ -908,12 +1024,60 @@ body.scroll-mode { overflow-y: auto; }
       }
     }
 
+    // ── Hoogte 500/850 hPa: windpijltjes uit comp 2,3 ──────────────────────
+    if ((paramKey === "hoogte_500" || paramKey === "hoogte_850") && pd && pd.nComp === 4) {
+      var nPtsH2 = nLat * nLon;
+      var uOff  = offset + 2 * nPtsH2;
+      var vOff  = offset + 3 * nPtsH2;
+      var bsH = Math.max(3, Math.round(nLon / (16 * zoomLevel)));
+      var passes2 = [
+        {stroke:"white", fill:"white", lw:4, headW:10},
+        {stroke:"#111",  fill:"#111",  lw:2,   headW:8},
+      ];
+      for (var passH = 0; passH < 2; passH++) {
+        var ph = passes2[passH];
+        ctx.strokeStyle = ph.stroke;
+        ctx.fillStyle = ph.fill;
+        ctx.lineWidth = ph.lw;
+        for (var hy = 0; hy < nLat; hy += bsH) {
+          for (var hx = 0; hx < nLon; hx += bsH) {
+            var hi2 = hy * nLon + hx;
+            var hu = pd.data[uOff + hi2];
+            var hv = pd.data[vOff + hi2];
+            if (isNaN(hu) || isNaN(hv)) continue;
+            var hspd2 = Math.sqrt(hu*hu + hv*hv);
+            if (hspd2 < 1) continue;
+            var hdir2 = Math.atan2(hu, hv);
+            var hpx2 = gx2px(hx);
+            var hpy2 = gy2px(nLat - 1 - hy) - 10; // iets omhoog zodat label eronder kan
+            if (hpx2 < -30 || hpx2 > cw+30 || hpy2 < -30 || hpy2 > ch+30) continue;
+            var alenH = Math.min(22, 8 + hspd2 * 0.6) * Math.min(zoomLevel, 3);
+            var sX = hpx2 - Math.sin(hdir2) * alenH * 0.3;
+            var sY = hpy2 + Math.cos(hdir2) * alenH * 0.3;
+            var tX = hpx2 + Math.sin(hdir2) * alenH * 0.7;
+            var tY = hpy2 - Math.cos(hdir2) * alenH * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(sX, sY);
+            ctx.lineTo(tX, tY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(tX, tY);
+            ctx.lineTo(tX - Math.sin(hdir2+0.4)*ph.headW, tY + Math.cos(hdir2+0.4)*ph.headW);
+            ctx.lineTo(tX - Math.sin(hdir2-0.4)*ph.headW, tY + Math.cos(hdir2-0.4)*ph.headW);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+    }
+
     // Gridwaarden (cijfers) — minder dicht, met witte omlijning
     // Gewenst aantal labels per rij (onafhankelijk van gridresolutie)
     // Pixel-afstand tussen labels (onafhankelijk van gridresolutie)
     var labelAfstandPx = 22; // standaard: ~22px per label (temp, bft: 2 cijfers)
     if (paramKey === "druk") labelAfstandPx = 50; // 4 cijfers breed
-    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape") labelAfstandPx = 35; // 3+ cijfers
+    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = 35; // 3+ cijfers
+    else if (paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = 40; // "556" of temp
     // Bereken stap op basis van canvas-pixels, niet gridpunten
     var pxPerGrid = cw * zoomLevel / nLon;
     var labelsPerRij = Math.round(cw / labelAfstandPx);
@@ -933,6 +1097,10 @@ body.scroll-mode { overflow-y: auto; }
 
         if (derivedData) {
           val = derivedData[gi];
+        } else if (paramKey === "hoogte_500") {
+          val = pd.data[offset + 0 * nLat * nLon + gi]; // gp_hgt
+        } else if (paramKey === "hoogte_850") {
+          val = pd.data[offset + 1 * nLat * nLon + gi]; // temperatuur
         } else if (nComp === 1) {
           val = pd.data[offset + gi];
         } else {
@@ -984,6 +1152,20 @@ body.scroll-mode { overflow-y: auto; }
           bgc = interpColor(val, TEMP_REF);
         } else if (paramKey === "combi") {
           continue; // geen cijfers bij combi (te druk)
+        } else if (paramKey === "mist") {
+          if (isNaN(val) || val > 15000) { txt = ""; bgc = null; }
+          else { txt = val < 1000 ? Math.round(val).toString() : (val/1000).toFixed(1); bgc = boundaryColor(val, MIST_LEVELS, MIST_COLORS); }
+        } else if (paramKey === "cloud_base") {
+          if (isNaN(val)) { txt = ""; bgc = null; }
+          else { txt = val < 1000 ? Math.round(val).toString() : Math.round(val/100)/10 + "k"; bgc = boundaryColor(val, CLOUDBASE_LEVELS, CLOUDBASE_COLORS); }
+        } else if (paramKey === "hoogte_500") {
+          // Geopotentiële hoogte in decameter (dam) — klassiek
+          txt = Math.round(val / 10).toString();
+          bgc = interpColor(val, GP500_REF);
+        } else if (paramKey === "hoogte_850") {
+          // Temperatuur als label (hoofdwaarde op 850 hPa kaart)
+          txt = Math.round(val).toString();
+          bgc = interpColor(val, T850_REF);
         }
 
         if (!txt) continue; // skip lege labels (bijv. geen neerslag)
@@ -1088,6 +1270,18 @@ body.scroll-mode { overflow-y: auto; }
       else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm/" + nsomUren + "u"; }
       else if (paramKey === "neerslag_mm") { legLevels = NEERSLAG_MM_LEVELS; legColors = NEERSLAG_MM_COLORS; legLabel = "mm/u"; }
       else if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") { legLevels = CLOUD_PCT_LEVELS; legColors = CLOUD_PCT_COLORS; legLabel = "%"; }
+      else if (paramKey === "mist") { legLevels = MIST_LEVELS; legColors = MIST_COLORS; legLabel = "m zicht"; }
+      else if (paramKey === "cloud_base") { legLevels = CLOUDBASE_LEVELS; legColors = CLOUDBASE_COLORS; legLabel = "m wolkenbasis"; }
+      else if (paramKey === "hoogte_500") {
+        legLevels = [5100,5200,5300,5400,5500,5600,5700,5800];
+        legColors = legLevels.map(function(g){ return interpColor(g, GP500_REF); });
+        legLabel = "m geopot. hgt — pijl = wind";
+      }
+      else if (paramKey === "hoogte_850") {
+        legLevels = [-20,-15,-10,-5,0,5,10,15,20];
+        legColors = legLevels.map(function(t){ return interpColor(t, T850_REF); });
+        legLabel = "°C @ 850 hPa — pijl = wind";
+      }
 
       if (legLevels && legColors) {
         var barX = 30, barW = cw - 60, barH = 10, barY2 = legY + 3;
@@ -1185,7 +1379,7 @@ body.scroll-mode { overflow-y: auto; }
   // UI CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi"];
+  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","mist","cloud_base","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi","hoogte_500","hoogte_850"];
   var nsomUren = 6;
   var DEFAULT_PARAMS = ["neerslag","temp","wind"];
   var layout = 1;
@@ -1259,10 +1453,16 @@ body.scroll-mode { overflow-y: auto; }
           ["bewolking_laag", "Lage bewolking (%)"],
           ["bewolking_mid", "Middelbare bewolking (%)"],
           ["bewolking_hoog", "Hoge bewolking (%)"],
+          ["cloud_base", "Wolkenbasis (m boven grond)"],
           ["zicht", "Horizontaal zicht (m/km)"],
+          ["mist", "Mist / slecht zicht"],
         ]],
         ["Instabiliteit", [
           ["cape", "CAPE (J/kg)"],
+        ]],
+        ["Hoogtekaarten", [
+          ["hoogte_500", "500 hPa — hoogte + wind"],
+          ["hoogte_850", "850 hPa — temperatuur + wind"],
         ]],
       ];
 
