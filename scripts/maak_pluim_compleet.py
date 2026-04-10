@@ -3,6 +3,7 @@ maak_pluim_compleet.py — ECMWF ensemble pluim compleet
 4 panelen: temperatuur, neerslag, bewolking, wind+stoten
 """
 import os, requests, numpy as np, math
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

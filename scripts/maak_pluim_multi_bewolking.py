@@ -3,6 +3,7 @@ maak_pluim_multi_bewolking_stapel.py — Multi-model gestapeld bewolkingsdiagram
 3 panelen: ECMWF ENS / ICON-EPS / GFS ENS
 """
 import os, requests, numpy as np
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

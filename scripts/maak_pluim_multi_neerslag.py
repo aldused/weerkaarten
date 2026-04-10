@@ -4,6 +4,7 @@ maak_pluim_multi_neerslag.py — Multi-model ensemble pluim neerslag
 Per paneel: leden + mediaan + neerslagkans staafjes
 """
 import os, requests, numpy as np
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

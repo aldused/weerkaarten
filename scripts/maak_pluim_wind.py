@@ -3,6 +3,7 @@ maak_pluim_wind.py — ECMWF ensemble pluim wind
 Windkracht (m/s) als pluim, windrichting als pijltjes op mediaan
 """
 import os, requests, numpy as np, math
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

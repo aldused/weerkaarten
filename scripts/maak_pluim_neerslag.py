@@ -4,6 +4,7 @@ Paneel 1: alle leden (mm/uur) groen + mediaan rood
 Paneel 2: neerslagkans (% leden > 0.1mm)
 """
 import os, requests, numpy as np
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

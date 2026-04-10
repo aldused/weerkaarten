@@ -3,6 +3,7 @@ maak_pluim_multimodel.py — Multi-model ensemble pluim
 3 panelen: ECMWF ENS / ICON-EPS / GEFS
 """
 import os, requests, numpy as np
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

@@ -649,7 +649,38 @@ function pctC(arr,j,p){
 const _fetchCache = {};
 const CACHE_TTL = 10 * 60 * 1000; // 10 minuten cache
 
+// ---------------------------------------------------------------------------
+// Open-Meteo URL rewriting → Cloudflare Worker proxy
+// ---------------------------------------------------------------------------
+// De Worker zit op weerlab.nl/om/* en voegt server-side de commerciële API-key
+// toe. Dat voorkomt 429 rate limits (de pluim blijft niet meer hangen) én
+// houdt de key verborgen. Valt automatisch terug op directe Open-Meteo calls
+// als de site lokaal wordt geopend (file://) of op een ander domein draait.
+const OM_PROXY_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
+  ? `${location.origin}/om`
+  : null;
+
+function rewriteOM(url){
+  if (!OM_PROXY_BASE) return url;
+  // Map upstream hosts → proxy paths
+  const map = [
+    ['https://ensemble-api.open-meteo.com/v1/ensemble',      `${OM_PROXY_BASE}/ensemble`],
+    ['https://previous-runs-api.open-meteo.com/v1/forecast', `${OM_PROXY_BASE}/previous`],
+    ['https://api.open-meteo.com/v1/forecast',               `${OM_PROXY_BASE}/forecast`],
+    ['https://air-quality-api.open-meteo.com/v1/air-quality', `${OM_PROXY_BASE}/air-quality`],
+    ['https://marine-api.open-meteo.com/v1/marine',          `${OM_PROXY_BASE}/marine`],
+    ['https://archive-api.open-meteo.com/v1/archive',        `${OM_PROXY_BASE}/archive`],
+    ['https://flood-api.open-meteo.com/v1/flood',            `${OM_PROXY_BASE}/flood`],
+  ];
+  for (const [from, to] of map){
+    if (url.startsWith(from)) return to + url.slice(from.length);
+  }
+  return url;
+}
+
 async function fetchT(url,ms=30000,retries=4){
+  // Route Open-Meteo calls via de Cloudflare Worker (commerciële API, geen 429)
+  url = rewriteOM(url);
   // Cache check — hergebruik data als < 10 min oud
   const cached = _fetchCache[url];
   if (cached && Date.now() - cached.ts < CACHE_TTL) {

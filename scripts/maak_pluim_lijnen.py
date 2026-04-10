@@ -3,6 +3,7 @@ maak_pluim_lijnen.py — ECMWF ensemble pluim met alle individuele lijnen
 Mediaan rood, alle 51 leden groen
 """
 import os, requests, numpy as np
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

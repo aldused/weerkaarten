@@ -3,6 +3,7 @@ maak_pluim_bewolking_stapel.py — Gestapeld ensemble bewolkingsdiagram
 Per tijdstap: % leden per bewolkingscategorie (zoals KNMI/Weerplaza)
 """
 import os, requests, numpy as np
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib

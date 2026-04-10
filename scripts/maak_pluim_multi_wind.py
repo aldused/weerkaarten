@@ -4,6 +4,7 @@ maak_pluim_multi_wind.py — Multi-model ensemble pluim wind + windstoten
 Per paneel: leden wind + mediaan wind + mediaan stoten + windrichtingspijltjes
 """
 import os, requests, numpy as np, math
+from open_meteo import install_requests_patch; install_requests_patch()
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import matplotlib
