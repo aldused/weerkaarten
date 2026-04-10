@@ -47,8 +47,8 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
 .legenda span{display:flex;align-items:center;gap:5px}
 .leg-lijn{display:inline-block;width:18px;height:3px;border-radius:2px}
 .leg-blok{display:inline-block;width:10px;height:10px;border-radius:2px}
-.canvas-wrap{position:relative;width:100%;height:200px}
-.canvas-wrap.hoog{height:240px}
+.canvas-wrap{position:relative;width:100%;height:220px}
+.canvas-wrap.hoog{height:260px}
 #status{text-align:center;padding:50px;color:var(--text2);font-size:.9rem}
 .spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -403,17 +403,25 @@ function tekenCharts(){
   document.getElementById('blok-wind').style.display = '';
   const windDatasets = [];
   const windLeg = [];
+  const windFmt = (v) => `${Math.round(v)} km/u\n${kmhToBft(v)} Bft`;
   let windLabelSet = false;
   if (modelActief.harmonie) {
     const hW = ds('HARMONIE wind', h.wind_speed_10m, '#cc2222');
-    hW._showLabels = true; hW._labelDecimals = 0; windLabelSet = true;
+    hW._showLabels = true;
+    hW._labelFormat = windFmt;
+    hW._directions = h.wind_direction_10m;
+    windLabelSet = true;
     windDatasets.push(hW);
     windDatasets.push(ds('HARMONIE stoten', h.wind_gusts_10m, '#cc2222', [4,4]));
     windLeg.push(['#cc2222','HARMONIE wind','lijn'], ['#cc2222','HARMONIE stoten','dash']);
   }
   if (modelActief.icond2) {
     const iW = ds('ICON-D2 wind', i.wind_speed_10m, '#2266cc');
-    if (!windLabelSet) { iW._showLabels = true; iW._labelDecimals = 0; }
+    if (!windLabelSet) {
+      iW._showLabels = true;
+      iW._labelFormat = windFmt;
+      iW._directions = i.wind_direction_10m;
+    }
     windDatasets.push(iW);
     windDatasets.push(ds('ICON-D2 stoten', i.wind_gusts_10m, '#2266cc', [4,4]));
     windLeg.push(['#2266cc','ICON-D2 wind','lijn'], ['#2266cc','ICON-D2 stoten','dash']);
@@ -455,8 +463,16 @@ const nuLinePlugin = {
   }
 };
 
-// Waarden-labels plugin: tekent getalwaarden boven datapunten/staven
-// op het gevraagde interval (elk kwartier of elk half uur).
+// km/u → Beaufort
+function kmhToBft(kmh){
+  const grenzen = [1,6,12,20,29,39,50,62,75,89,103,118];
+  for (let b = 0; b < grenzen.length; b++) if (kmh < grenzen[b]) return b;
+  return 12;
+}
+
+// Waarden-labels plugin: tekent waarden BOVEN de primaire lijn
+// (niet eronder) op het gevraagde interval. Ondersteunt multi-line labels
+// en optionele windrichting-pijltjes.
 const waardenPlugin = {
   id: 'waardenLabels',
   afterDatasetsDraw(chart, args, opts) {
@@ -464,9 +480,7 @@ const waardenPlugin = {
     const stap = opts.interval === '15' ? 1 : 2; // 1 punt = 15 min
     const {ctx, chartArea} = chart;
     ctx.save();
-    ctx.font = '700 10px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
 
     chart.data.datasets.forEach((dataset, dsIdx) => {
       if (!dataset._showLabels) return;
@@ -474,6 +488,8 @@ const waardenPlugin = {
       const decimals = dataset._labelDecimals != null ? dataset._labelDecimals : 1;
       const suffix = dataset._labelSuffix || '';
       const skipZero = !!dataset._labelSkipZero;
+      const directions = dataset._directions; // optioneel windrichting array
+      const format = dataset._labelFormat;    // optioneel custom formatter
 
       meta.data.forEach((pt, idx) => {
         if (idx % stap !== 0) return;
@@ -481,19 +497,60 @@ const waardenPlugin = {
         if (v == null) return;
         if (skipZero && v < 0.05) return;
 
-        const label = v.toFixed(decimals) + suffix;
-        const w = ctx.measureText(label).width;
-        const x = pt.x;
-        let y = pt.y - 4;
-        // Niet buiten chartArea tekenen
-        if (y - 12 < chartArea.top) y = pt.y + 16;
-        if (x - w/2 - 2 < chartArea.left || x + w/2 + 2 > chartArea.right) return;
+        // Label kan 1 of 2 regels zijn
+        const raw = format ? format(v, idx) : (v.toFixed(decimals) + suffix);
+        const regels = String(raw).split('\n');
+        const lineH = 11;
+        const labelH = regels.length * lineH;
 
-        // Witte achtergrond voor leesbaarheid
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.fillRect(x - w/2 - 2, y - 11, w + 4, 12);
+        // Meet de breedste regel
+        ctx.font = '700 10px Inter, system-ui, sans-serif';
+        let maxW = 0;
+        regels.forEach(r => { maxW = Math.max(maxW, ctx.measureText(r).width); });
+        const arrowW = directions ? 14 : 0;
+        const totW = maxW + arrowW + (arrowW ? 3 : 0);
+
+        const x = pt.x;
+        // Onderkant van het label-blokje — altijd boven de lijn
+        const yBottom = pt.y - 6;
+        const yTop = yBottom - labelH;
+        // Binnen chartArea blijven
+        if (yTop < chartArea.top) return;
+        if (x - totW/2 - 2 < chartArea.left || x + totW/2 + 2 > chartArea.right) return;
+
+        // Witte achtergrond
+        ctx.fillStyle = 'rgba(255,255,255,0.88)';
+        ctx.fillRect(x - totW/2 - 2, yTop - 1, totW + 4, labelH + 2);
+
+        // Tekst
         ctx.fillStyle = dataset.borderColor || dataset.backgroundColor || '#000';
-        ctx.fillText(label, x, y);
+        ctx.textBaseline = 'top';
+        const textX = arrowW ? (x - arrowW/2 - 1.5) : x;
+        regels.forEach((r, i) => {
+          ctx.fillText(r, textX, yTop + i * lineH + 1);
+        });
+
+        // Optioneel: windrichting-pijl rechts naast het label
+        if (directions && directions[idx] != null) {
+          const dir = directions[idx];
+          // Meteorologisch: dir = waar de wind VANDAAN komt.
+          // Pijl wijst in de richting waar de wind NAARTOE gaat: dir + 180.
+          const rad = ((dir + 180) % 360) * Math.PI / 180;
+          const cx = x + maxW/2 + 6;
+          const cy = yTop + labelH/2;
+          ctx.save();
+          ctx.translate(cx, cy);
+          // 0° = naar boven
+          ctx.rotate(rad);
+          ctx.beginPath();
+          ctx.moveTo(0, -6);       // punt
+          ctx.lineTo(3.5, 4);
+          ctx.lineTo(0, 2);
+          ctx.lineTo(-3.5, 4);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
       });
     });
     ctx.restore();
@@ -502,8 +559,10 @@ const waardenPlugin = {
 
 function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
   if (charts[canvasId]) charts[canvasId].destroy();
-  // Extra top-padding wanneer waarde-labels aan staan (anders botsen ze tegen de rand)
-  const topPad = waardenInterval !== 'uit' ? 22 : 8;
+  // Extra top-padding wanneer waarde-labels aan staan. Wind-label is
+  // 2-regelig dus die heeft meer ruimte nodig dan temp/neerslag.
+  const isMultiLine = datasets.some(d => d._showLabels && d._labelFormat);
+  const topPad = waardenInterval === 'uit' ? 8 : (isMultiLine ? 40 : 24);
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
     type,
     data: {labels, datasets},
