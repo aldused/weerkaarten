@@ -99,6 +99,15 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
   </div>
 
   <div class="ctrl-groep">
+    <label>Waarden in grafiek</label>
+    <div style="display:flex;gap:4px">
+      <button class="klein actief btn-waarden" onclick="setWaarden('uit',this)">Uit</button>
+      <button class="klein btn-waarden" onclick="setWaarden('15',this)">Elk kwartier</button>
+      <button class="klein btn-waarden" onclick="setWaarden('30',this)">Elk half uur</button>
+    </div>
+  </div>
+
+  <div class="ctrl-groep">
     <label>Auto-refresh</label>
     <div style="display:flex;gap:4px">
       <button class="klein actief" id="btn-auto" onclick="toggleAuto(this)">&#8635; Elke 5 min</button>
@@ -191,9 +200,18 @@ async function fetchT(url, ms=20000){
 // ── State ───────────────────────────────────────────────────────────────
 let huidigLat = 52.10, huidigLon = 5.18, huidigNaam = 'De Bilt';
 let modelActief = {harmonie: true, icond2: true};
+let waardenInterval = 'uit'; // 'uit' | '15' | '30'
 let autoRefresh = true;
 let autoTimer = null;
 const charts = {};
+
+function setWaarden(val, btn){
+  waardenInterval = val;
+  document.querySelectorAll('.btn-waarden').forEach(b => b.classList.remove('actief'));
+  btn.classList.add('actief');
+  localStorage.setItem('nowcast_waarden', val);
+  tekenCharts();
+}
 
 // ── Plaats zoeken (Open-Meteo geocoding) ────────────────────────────────
 let zoekTimeout;
@@ -339,16 +357,22 @@ function tekenCharts(){
   document.querySelectorAll('.blok-loc').forEach(el => el.textContent = '· ' + huidigNaam);
 
   // ── Temp + dauwpunt ────────────────────────────────────────────────
+  // Labels tonen op de primaire temp-lijn (de eerste actieve)
   document.getElementById('blok-temp').style.display = '';
   const tempDatasets = [];
   const tempLeg = [];
+  let tempLabelSet = false;
   if (modelActief.harmonie) {
-    tempDatasets.push(ds('HARMONIE temp',    h.temperature_2m, '#cc2222'));
+    const hTemp = ds('HARMONIE temp',    h.temperature_2m, '#cc2222');
+    hTemp._showLabels = true; hTemp._labelSuffix = '°'; tempLabelSet = true;
+    tempDatasets.push(hTemp);
     tempDatasets.push(ds('HARMONIE dauwp.',  h.dew_point_2m,   '#cc2222', [4,4]));
     tempLeg.push(['#cc2222','HARMONIE temp','lijn'], ['#cc2222','HARMONIE dauwpunt','dash']);
   }
   if (modelActief.icond2) {
-    tempDatasets.push(ds('ICON-D2 temp',    i.temperature_2m, '#2266cc'));
+    const iTemp = ds('ICON-D2 temp',    i.temperature_2m, '#2266cc');
+    if (!tempLabelSet) { iTemp._showLabels = true; iTemp._labelSuffix = '°'; }
+    tempDatasets.push(iTemp);
     tempDatasets.push(ds('ICON-D2 dauwp.',  i.dew_point_2m,   '#2266cc', [4,4]));
     tempLeg.push(['#2266cc','ICON-D2 temp','lijn'], ['#2266cc','ICON-D2 dauwpunt','dash']);
   }
@@ -359,12 +383,17 @@ function tekenCharts(){
   document.getElementById('blok-neerslag').style.display = '';
   const neerDatasets = [];
   const neerLeg = [];
+  let neerLabelSet = false;
   if (modelActief.harmonie) {
-    neerDatasets.push({label:'HARMONIE', data: h.precipitation, backgroundColor: 'rgba(204,34,34,.6)', borderColor: '#cc2222', borderWidth: 1, barPercentage: 0.9, categoryPercentage: 0.85});
+    const hN = {label:'HARMONIE', data: h.precipitation, backgroundColor: 'rgba(204,34,34,.6)', borderColor: '#cc2222', borderWidth: 1, barPercentage: 0.9, categoryPercentage: 0.85};
+    hN._showLabels = true; hN._labelDecimals = 1; hN._labelSuffix = ''; hN._labelSkipZero = true; neerLabelSet = true;
+    neerDatasets.push(hN);
     neerLeg.push(['#cc2222','HARMONIE','blok']);
   }
   if (modelActief.icond2) {
-    neerDatasets.push({label:'ICON-D2', data: i.precipitation, backgroundColor: 'rgba(34,102,204,.6)', borderColor: '#2266cc', borderWidth: 1, barPercentage: 0.9, categoryPercentage: 0.85});
+    const iN = {label:'ICON-D2', data: i.precipitation, backgroundColor: 'rgba(34,102,204,.6)', borderColor: '#2266cc', borderWidth: 1, barPercentage: 0.9, categoryPercentage: 0.85};
+    if (!neerLabelSet) { iN._showLabels = true; iN._labelDecimals = 1; iN._labelSkipZero = true; }
+    neerDatasets.push(iN);
     neerLeg.push(['#2266cc','ICON-D2','blok']);
   }
   document.getElementById('leg-neerslag').innerHTML = legHtml(neerLeg);
@@ -374,13 +403,18 @@ function tekenCharts(){
   document.getElementById('blok-wind').style.display = '';
   const windDatasets = [];
   const windLeg = [];
+  let windLabelSet = false;
   if (modelActief.harmonie) {
-    windDatasets.push(ds('HARMONIE wind',   h.wind_speed_10m, '#cc2222'));
+    const hW = ds('HARMONIE wind', h.wind_speed_10m, '#cc2222');
+    hW._showLabels = true; hW._labelDecimals = 0; windLabelSet = true;
+    windDatasets.push(hW);
     windDatasets.push(ds('HARMONIE stoten', h.wind_gusts_10m, '#cc2222', [4,4]));
     windLeg.push(['#cc2222','HARMONIE wind','lijn'], ['#cc2222','HARMONIE stoten','dash']);
   }
   if (modelActief.icond2) {
-    windDatasets.push(ds('ICON-D2 wind',   i.wind_speed_10m, '#2266cc'));
+    const iW = ds('ICON-D2 wind', i.wind_speed_10m, '#2266cc');
+    if (!windLabelSet) { iW._showLabels = true; iW._labelDecimals = 0; }
+    windDatasets.push(iW);
     windDatasets.push(ds('ICON-D2 stoten', i.wind_gusts_10m, '#2266cc', [4,4]));
     windLeg.push(['#2266cc','ICON-D2 wind','lijn'], ['#2266cc','ICON-D2 stoten','dash']);
   }
@@ -421,25 +455,74 @@ const nuLinePlugin = {
   }
 };
 
+// Waarden-labels plugin: tekent getalwaarden boven datapunten/staven
+// op het gevraagde interval (elk kwartier of elk half uur).
+const waardenPlugin = {
+  id: 'waardenLabels',
+  afterDatasetsDraw(chart, args, opts) {
+    if (!opts || opts.interval === 'uit' || !opts.interval) return;
+    const stap = opts.interval === '15' ? 1 : 2; // 1 punt = 15 min
+    const {ctx, chartArea} = chart;
+    ctx.save();
+    ctx.font = '700 10px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    chart.data.datasets.forEach((dataset, dsIdx) => {
+      if (!dataset._showLabels) return;
+      const meta = chart.getDatasetMeta(dsIdx);
+      const decimals = dataset._labelDecimals != null ? dataset._labelDecimals : 1;
+      const suffix = dataset._labelSuffix || '';
+      const skipZero = !!dataset._labelSkipZero;
+
+      meta.data.forEach((pt, idx) => {
+        if (idx % stap !== 0) return;
+        const v = dataset.data[idx];
+        if (v == null) return;
+        if (skipZero && v < 0.05) return;
+
+        const label = v.toFixed(decimals) + suffix;
+        const w = ctx.measureText(label).width;
+        const x = pt.x;
+        let y = pt.y - 4;
+        // Niet buiten chartArea tekenen
+        if (y - 12 < chartArea.top) y = pt.y + 16;
+        if (x - w/2 - 2 < chartArea.left || x + w/2 + 2 > chartArea.right) return;
+
+        // Witte achtergrond voor leesbaarheid
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillRect(x - w/2 - 2, y - 11, w + 4, 12);
+        ctx.fillStyle = dataset.borderColor || dataset.backgroundColor || '#000';
+        ctx.fillText(label, x, y);
+      });
+    });
+    ctx.restore();
+  }
+};
+
 function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
   if (charts[canvasId]) charts[canvasId].destroy();
+  // Extra top-padding wanneer waarde-labels aan staan (anders botsen ze tegen de rand)
+  const topPad = waardenInterval !== 'uit' ? 22 : 8;
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
     type,
     data: {labels, datasets},
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
+      layout: {padding: {top: topPad, right: 4, bottom: 0, left: 0}},
       interaction: {mode: 'index', intersect: false},
       plugins: {
         legend: {display: false},
         tooltip: {enabled: true, callbacks: {title: (ctx) => labels[ctx[0].dataIndex]}},
         nuLine: {idx: nuIdx},
+        waardenLabels: {interval: waardenInterval},
       },
       scales: {
         x: {ticks: {maxRotation: 0, autoSkipPadding: 20, font: {size: 10}}, grid: {color: '#eef1f5'}},
         y: Object.assign({ticks: {font: {size: 10}}, grid: {color: '#eef1f5'}}, scales.y || {})
       }
     },
-    plugins: [nuLinePlugin]
+    plugins: [nuLinePlugin, waardenPlugin]
   });
 }
 
@@ -448,21 +531,28 @@ function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
 // triggert een browser-download.
 function downloadChart(key, titel){
   const canvas = document.getElementById('canvas-' + key);
-  if (!canvas) return;
+  if (!canvas || !laatsteData) return;
   const chart = charts['canvas-' + key];
   if (!chart) return;
 
-  // Decodeer HTML entities in de titel (&amp; → &)
+  // Decodeer HTML entities in de titel
   const tmp = document.createElement('div');
   tmp.innerHTML = titel;
   const titelText = tmp.textContent;
 
-  // Target afmetingen (retina-kwaliteit)
-  const W = 1600, PAD = 40;
-  const HEADER_H = 90;
-  const FOOTER_H = 40;
-  const CHART_H = 500;
-  const H = HEADER_H + CHART_H + FOOTER_H;
+  // Layout: gebruik de werkelijke canvas aspect-ratio zodat er geen lelijke
+  // witruimte boven/onder de grafiek ontstaat. De header/footer groeien mee.
+  const src = canvas;
+  const srcW = src.width, srcH = src.height;
+  const aspect = srcW / srcH;
+
+  const W = 1600;
+  const PAD = 40;
+  const targetW = W - PAD * 2;
+  const CHART_H = Math.max(260, Math.round(targetW / aspect));
+  const HEADER_H = 110;
+  const FOOTER_H = 46;
+  const H = HEADER_H + CHART_H + FOOTER_H + 20;
 
   const out = document.createElement('canvas');
   out.width = W;
@@ -479,59 +569,73 @@ function downloadChart(key, titel){
 
   // Titel
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 26px Inter, system-ui, sans-serif';
+  ctx.font = '700 28px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText('Nowcast 15-min · ' + titelText, PAD, 18);
+  ctx.fillText('Nowcast 15-min · ' + titelText, PAD, 20);
 
-  // Sub: plaatsnaam + tijdstip
-  const tijdStr = new Date().toLocaleString('nl-NL', {
-    weekday: 'long', day: '2-digit', month: 'long',
-    hour: '2-digit', minute: '2-digit',
-  });
+  // Sub: plaatsnaam + run-tijd + tijdsbereik van de grafiek
+  const tijden = laatsteData.harmonie?.minutely_15?.time || laatsteData.icond2?.minutely_15?.time || [];
+  const vanTijd = tijden[0] ? new Date(tijden[0]) : null;
+  const totTijd = tijden.length ? new Date(tijden[tijden.length - 1]) : null;
+  const fmtDag = (d) => d ? d.toLocaleDateString('nl-NL', {weekday:'long', day:'2-digit', month:'long'}) : '';
+  const fmtUur = (d) => d ? d.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'}) : '';
+  const gedownloadOp = new Date();
+  const rangeText = vanTijd && totTijd
+    ? `${fmtDag(vanTijd)}  ·  ${fmtUur(vanTijd)} – ${fmtUur(totTijd)} uur`
+    : '';
+
   ctx.fillStyle = '#a8c4e8';
-  ctx.font = '400 16px Inter, system-ui, sans-serif';
-  ctx.fillText(huidigNaam + '  ·  ' + tijdStr, PAD, 52);
+  ctx.font = '500 17px Inter, system-ui, sans-serif';
+  ctx.fillText(huidigNaam, PAD, 58);
 
-  // Legenda-lijntjes top-right
+  ctx.font = '400 14px Inter, system-ui, sans-serif';
+  ctx.fillText(rangeText, PAD, 82);
+
+  // Gedownload-stempel rechts
+  ctx.font = '400 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#7a96b8';
+  ctx.textAlign = 'right';
+  ctx.fillText('Gedownload ' + gedownloadOp.toLocaleString('nl-NL', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+  }), W - PAD, 82);
+
+  // Legenda top-right
   const legItems = [];
   if (modelActief.harmonie) legItems.push({kleur: '#cc2222', label: 'HARMONIE'});
   if (modelActief.icond2)   legItems.push({kleur: '#2266cc', label: 'ICON-D2'});
-  ctx.font = '700 14px Inter, system-ui, sans-serif';
-  ctx.textAlign = 'right';
+  ctx.font = '700 15px Inter, system-ui, sans-serif';
   ctx.textBaseline = 'middle';
   let legX = W - PAD;
-  const legY = HEADER_H / 2;
+  const legY = 38;
   for (let i = legItems.length - 1; i >= 0; i--) {
     const item = legItems[i];
     const tw = ctx.measureText(item.label).width;
     ctx.fillStyle = '#ffffff';
     ctx.fillText(item.label, legX, legY);
     ctx.fillStyle = item.kleur;
-    ctx.fillRect(legX - tw - 22, legY - 2, 16, 4);
-    legX -= tw + 40;
+    ctx.fillRect(legX - tw - 24, legY - 2, 18, 4);
+    legX -= tw + 42;
   }
 
-  // Chart-canvas uittekenen (centeren en schalen)
-  const src = canvas;
-  const srcW = src.width, srcH = src.height;
-  const targetW = W - PAD * 2;
-  const scale = Math.min(targetW / srcW, CHART_H / srcH);
-  const drawW = srcW * scale;
+  // Chart-canvas uittekenen — precies passend binnen targetW
+  const scale = targetW / srcW;
+  const drawW = targetW;
   const drawH = srcH * scale;
-  const drawX = (W - drawW) / 2;
-  const drawY = HEADER_H + (CHART_H - drawH) / 2;
+  const drawX = PAD;
+  const drawY = HEADER_H + 10;
   ctx.drawImage(src, drawX, drawY, drawW, drawH);
 
   // Footer met copyright
+  const footerY = HEADER_H + CHART_H + 20;
   ctx.fillStyle = '#f0f3f7';
-  ctx.fillRect(0, HEADER_H + CHART_H, W, FOOTER_H);
+  ctx.fillRect(0, footerY, W, FOOTER_H);
   ctx.fillStyle = '#5a6a80';
-  ctx.font = '500 13px "SF Mono", Menlo, monospace';
+  ctx.font = '500 14px "SF Mono", Menlo, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('© Ed Aldus · Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo · weerlab.nl',
-               W / 2, HEADER_H + CHART_H + FOOTER_H / 2);
+               W / 2, footerY + FOOTER_H / 2);
 
   // Download triggeren
   const plekSlug = huidigNaam.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -551,6 +655,14 @@ function updateKlok(){
 // ── Start ───────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   updateKlok(); setInterval(updateKlok, 1000);
+  // Herstel waarden-interval keuze
+  const savedW = localStorage.getItem('nowcast_waarden');
+  if (savedW && ['uit','15','30'].includes(savedW)) {
+    waardenInterval = savedW;
+    document.querySelectorAll('.btn-waarden').forEach(b => {
+      b.classList.toggle('actief', b.getAttribute('onclick').includes(`'${savedW}'`));
+    });
+  }
   const saved = localStorage.getItem('nowcast_plek');
   if (saved) {
     try { const p = JSON.parse(saved); kiesPlaats(p.lat, p.lon, p.naam); return; } catch {}
