@@ -81,28 +81,38 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     </div>
   </div>
   <div class="ctrl-groep">
-    <label>Type</label>
+    <label>ECMWF parameter</label>
+    <select id="type-select" style="min-width:210px;padding:7px 10px;font-size:.82rem;border-radius:6px;border:1px solid var(--border);background:white;color:var(--text);cursor:pointer;font-family:Inter,sans-serif">
+      <option value="temp" selected>&#127777; Temperatuur</option>
+      <option value="cloud">&#9729;&#65039; Bewolking</option>
+      <option value="wind">&#128168; Wind</option>
+      <option value="winddir">&#129139; Windrichting</option>
+      <option value="sneeuw">&#10052;&#65039; Sneeuwkans</option>
+      <option value="onweer">&#9928;&#65039; Onweer</option>
+      <option value="weertype">&#127780;&#65039; Weertype</option>
+      <option value="hoogte">&#128225; 850 / 500 hPa</option>
+      <option value="dauwpunt">&#128167; Dauwpunt</option>
+      <option value="hres">&#9654;&#65038; HRES (deterministisch)</option>
+    </select>
+  </div>
+  <div class="ctrl-groep">
+    <label>Ander model</label>
     <div class="type-btns" style="gap:3px">
-      <span style="font-size:.6rem;color:var(--text2);font-weight:700;padding:4px 2px">ECMWF:</span>
-      <button class="type-btn actief" data-type="temp">&#127777; Temp</button>
-      <button class="type-btn" data-type="cloud">&#9729;&#65039; Bewolking</button>
-      <button class="type-btn" data-type="wind">&#128168; Wind</button>
-      <button class="type-btn" data-type="winddir">&#129139; Richting</button>
-      <button class="type-btn" data-type="sneeuw">&#10052;&#65039; Sneeuw</button>
-      <button class="type-btn" data-type="onweer">&#9928;&#65039; Onweer</button>
-      <button class="type-btn" data-type="weertype">&#127780;&#65039; Weertype</button>
-      <button class="type-btn" data-type="hoogte">&#128225; 850/500</button>
-      <button class="type-btn" data-type="dauwpunt">&#128167; Dauwpunt</button>
-      <button class="type-btn" data-type="hres">&#9654;&#65038; HRES</button>
-      <span style="font-size:.6rem;color:var(--text2);font-weight:700;padding:4px 6px;border-left:1px solid var(--border)">MODELLEN:</span>
       <button class="type-btn" data-type="aifs">&#129302; AIFS</button>
       <button class="type-btn" data-type="icon">&#127465;&#127466; ICON</button>
-      <span style="font-size:.6rem;color:var(--text2);font-weight:700;padding:4px 6px;border-left:1px solid var(--border)">VERGELIJK:</span>
+    </div>
+  </div>
+  <div class="ctrl-groep">
+    <label>Vergelijken</label>
+    <div class="type-btns" style="gap:3px">
       <button class="type-btn" data-type="vergelijking">&#8644; vs ICON</button>
       <button class="type-btn" data-type="vergaifs">&#8644; vs AIFS</button>
       <button class="type-btn" data-type="verggfs">&#8644; vs GFS</button>
     </div>
   </div>
+  <!-- Verborgen "actieve" knop voor de huidige ECMWF-parameter — houdt bestaande
+       klik-routing intact. De dropdown schrijft er zijn data-type naartoe. -->
+  <button class="type-btn actief" data-type="temp" id="type-hidden" style="display:none"></button>
   <div class="ctrl-groep">
     <label>Periode</label>
     <div class="periode-btns">
@@ -816,14 +826,38 @@ function ensDatasets(arr,kleur){
   return arr.map(m=>({type:'line',data:m,borderColor:kleur,borderWidth:1.0,pointRadius:0,fill:false,tension:0.3,order:10}));
 }
 
-// ── Type knoppen ──
+// ── Type knoppen + dropdown ──
+// Welke waarden horen bij de ECMWF-parameter dropdown
+const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','hoogte','dauwpunt','hres'];
+
+function setActieveType(val){
+  actieveType = val;
+  // Knoppen synchroniseren
+  document.querySelectorAll('.type-btn').forEach(x=>x.classList.remove('actief'));
+  const hb = document.getElementById('type-hidden');
+  if (ECMWF_DROPDOWN_TYPES.includes(val)) {
+    // Dropdown-keuze: hidden knop mag actief staan (routing blijft werken)
+    if (hb) { hb.dataset.type = val; hb.classList.add('actief'); }
+    const sel = document.getElementById('type-select');
+    if (sel && sel.value !== val) sel.value = val;
+  } else {
+    // Niet-dropdown keuze (AIFS/ICON/verg*): de bijbehorende knop actief
+    const btn = document.querySelector(`.type-btn[data-type="${val}"]`);
+    if (btn) btn.classList.add('actief');
+    // Dropdown naar neutrale state (blijft zelfde value maar niet actief)
+  }
+}
+
 document.querySelectorAll('.type-btn').forEach(b=>{
   b.addEventListener('click',()=>{
-    document.querySelectorAll('.type-btn').forEach(x=>x.classList.remove('actief'));
-    b.classList.add('actief');
-    actieveType=b.dataset.type;
+    setActieveType(b.dataset.type);
   });
 });
+
+const __typeSelect = document.getElementById('type-select');
+if (__typeSelect) {
+  __typeSelect.addEventListener('change', () => setActieveType(__typeSelect.value));
+}
 
 // ── Periode knoppen ──
 document.querySelectorAll('.periode-btn').forEach(b=>{
