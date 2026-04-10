@@ -35,7 +35,13 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
 .fav-del{margin-left:4px;color:#999;cursor:pointer}
 #grafieken{padding:12px 16px}
 .grafiek-blok{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
-.grafiek-titel{font-size:.88rem;font-weight:700;color:#003366;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.grafiek-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
+.grafiek-titel{font-size:.88rem;font-weight:700;color:#003366;line-height:1.2}
+.grafiek-head-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right;flex-shrink:0}
+.btn-download{padding:4px 10px;border-radius:5px;background:#1a5a30;border:1px solid #2a7a40;color:white;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;transition:opacity .15s}
+.btn-download:hover{opacity:.85}
+.blok-loc{font-size:.72rem;font-weight:600;color:#5588aa}
+.blok-copy{font-size:.62rem;color:#8a96a8;font-family:monospace;white-space:nowrap}
 .grafiek-sub{font-size:.68rem;color:var(--text2);margin-bottom:6px}
 .legenda{display:flex;flex-wrap:wrap;gap:12px;font-size:.72rem;color:var(--text2);margin-bottom:6px}
 .legenda span{display:flex;align-items:center;gap:5px}
@@ -114,21 +120,42 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
   <div id="status"><span class="spinner"></span>Data ophalen…</div>
 
   <div class="grafiek-blok" id="blok-temp" style="display:none">
-    <div class="grafiek-titel">Temperatuur &amp; dauwpunt <span class="blok-loc" style="font-weight:400;color:#5588aa"></span></div>
+    <div class="grafiek-head">
+      <div class="grafiek-titel">Temperatuur &amp; dauwpunt</div>
+      <div class="grafiek-head-right">
+        <button class="btn-download" onclick="downloadChart('temp','Temperatuur &amp; dauwpunt')" title="Download als PNG">&#11015; PNG</button>
+        <div class="blok-loc"></div>
+        <div class="blok-copy">&copy; Ed Aldus &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
+      </div>
+    </div>
     <div class="grafiek-sub">Per 15 minuten · &minus;2 uur tot +4 uur</div>
     <div class="legenda" id="leg-temp"></div>
     <div class="canvas-wrap"><canvas id="canvas-temp"></canvas></div>
   </div>
 
   <div class="grafiek-blok" id="blok-neerslag" style="display:none">
-    <div class="grafiek-titel">Neerslag per kwartier <span class="blok-loc" style="font-weight:400;color:#5588aa"></span></div>
+    <div class="grafiek-head">
+      <div class="grafiek-titel">Neerslag per kwartier</div>
+      <div class="grafiek-head-right">
+        <button class="btn-download" onclick="downloadChart('neerslag','Neerslag per kwartier')" title="Download als PNG">&#11015; PNG</button>
+        <div class="blok-loc"></div>
+        <div class="blok-copy">&copy; Ed Aldus &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
+      </div>
+    </div>
     <div class="grafiek-sub">mm per 15 min · staafjes tonen verwachte intensiteit</div>
     <div class="legenda" id="leg-neerslag"></div>
     <div class="canvas-wrap"><canvas id="canvas-neerslag"></canvas></div>
   </div>
 
   <div class="grafiek-blok" id="blok-wind" style="display:none">
-    <div class="grafiek-titel">Wind &amp; windstoten <span class="blok-loc" style="font-weight:400;color:#5588aa"></span></div>
+    <div class="grafiek-head">
+      <div class="grafiek-titel">Wind &amp; windstoten</div>
+      <div class="grafiek-head-right">
+        <button class="btn-download" onclick="downloadChart('wind','Wind &amp; windstoten')" title="Download als PNG">&#11015; PNG</button>
+        <div class="blok-loc"></div>
+        <div class="blok-copy">&copy; Ed Aldus &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
+      </div>
+    </div>
     <div class="grafiek-sub">Windsnelheid (lijn) en stoten (gestreept) in km/u</div>
     <div class="legenda" id="leg-wind"></div>
     <div class="canvas-wrap hoog"><canvas id="canvas-wind"></canvas></div>
@@ -414,6 +441,106 @@ function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
     },
     plugins: [nuLinePlugin]
   });
+}
+
+// ── Download chart als PNG ──────────────────────────────────────────────
+// Bouwt een offscreen canvas met titel, locatie, chart en copyright en
+// triggert een browser-download.
+function downloadChart(key, titel){
+  const canvas = document.getElementById('canvas-' + key);
+  if (!canvas) return;
+  const chart = charts['canvas-' + key];
+  if (!chart) return;
+
+  // Decodeer HTML entities in de titel (&amp; → &)
+  const tmp = document.createElement('div');
+  tmp.innerHTML = titel;
+  const titelText = tmp.textContent;
+
+  // Target afmetingen (retina-kwaliteit)
+  const W = 1600, PAD = 40;
+  const HEADER_H = 90;
+  const FOOTER_H = 40;
+  const CHART_H = 500;
+  const H = HEADER_H + CHART_H + FOOTER_H;
+
+  const out = document.createElement('canvas');
+  out.width = W;
+  out.height = H;
+  const ctx = out.getContext('2d');
+
+  // Witte achtergrond
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Header band
+  ctx.fillStyle = '#003366';
+  ctx.fillRect(0, 0, W, HEADER_H);
+
+  // Titel
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 26px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Nowcast 15-min · ' + titelText, PAD, 18);
+
+  // Sub: plaatsnaam + tijdstip
+  const tijdStr = new Date().toLocaleString('nl-NL', {
+    weekday: 'long', day: '2-digit', month: 'long',
+    hour: '2-digit', minute: '2-digit',
+  });
+  ctx.fillStyle = '#a8c4e8';
+  ctx.font = '400 16px Inter, system-ui, sans-serif';
+  ctx.fillText(huidigNaam + '  ·  ' + tijdStr, PAD, 52);
+
+  // Legenda-lijntjes top-right
+  const legItems = [];
+  if (modelActief.harmonie) legItems.push({kleur: '#cc2222', label: 'HARMONIE'});
+  if (modelActief.icond2)   legItems.push({kleur: '#2266cc', label: 'ICON-D2'});
+  ctx.font = '700 14px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  let legX = W - PAD;
+  const legY = HEADER_H / 2;
+  for (let i = legItems.length - 1; i >= 0; i--) {
+    const item = legItems[i];
+    const tw = ctx.measureText(item.label).width;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(item.label, legX, legY);
+    ctx.fillStyle = item.kleur;
+    ctx.fillRect(legX - tw - 22, legY - 2, 16, 4);
+    legX -= tw + 40;
+  }
+
+  // Chart-canvas uittekenen (centeren en schalen)
+  const src = canvas;
+  const srcW = src.width, srcH = src.height;
+  const targetW = W - PAD * 2;
+  const scale = Math.min(targetW / srcW, CHART_H / srcH);
+  const drawW = srcW * scale;
+  const drawH = srcH * scale;
+  const drawX = (W - drawW) / 2;
+  const drawY = HEADER_H + (CHART_H - drawH) / 2;
+  ctx.drawImage(src, drawX, drawY, drawW, drawH);
+
+  // Footer met copyright
+  ctx.fillStyle = '#f0f3f7';
+  ctx.fillRect(0, HEADER_H + CHART_H, W, FOOTER_H);
+  ctx.fillStyle = '#5a6a80';
+  ctx.font = '500 13px "SF Mono", Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('© Ed Aldus · Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo · weerlab.nl',
+               W / 2, HEADER_H + CHART_H + FOOTER_H / 2);
+
+  // Download triggeren
+  const plekSlug = huidigNaam.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const d = new Date();
+  const ts = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+  const link = document.createElement('a');
+  link.download = `nowcast_${key}_${plekSlug}_${ts}.png`;
+  link.href = out.toDataURL('image/png');
+  link.click();
 }
 
 // ── Klok ────────────────────────────────────────────────────────────────
