@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd ~/Desktop/KNMI_Project/"weerkaarten 2"
+cd ~/KNMI_Project/"weerkaarten 2"
 
 echo "=== Mappen aanmaken ==="
 mkdir -p scripts shell

@@ -1,5 +1,5 @@
 import os
-os.chdir(os.path.expanduser("~/Desktop/KNMI_Project/weerkaarten 2"))
+os.chdir(os.path.expanduser("~/KNMI_Project/weerkaarten 2"))
 
 c = open('historisch.html').read()
 

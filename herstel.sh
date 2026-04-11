@@ -2,7 +2,7 @@
 # herstel.sh — Herstelt de weerkaarten website vanuit git
 # Gebruik: bash herstel.sh
 
-PROJECTDIR=~/Desktop/KNMI_Project/"weerkaarten 2"
+PROJECTDIR=~/KNMI_Project/"weerkaarten 2"
 
 echo "=== HERSTEL WEERKAARTEN ==="
 echo "Projectmap: $PROJECTDIR"
