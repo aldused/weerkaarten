@@ -22,6 +22,9 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
 .periode-btns,.type-btns{display:flex;gap:5px}
 .periode-btn,.type-btn{padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:#f5f7fa;color:var(--text2);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s}
 .type-btn{padding:6px 14px}
+.rh-btn{padding:5px 12px;border-radius:5px;border:1px solid var(--border);background:#f5f7fa;color:var(--text2);font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:Inter,sans-serif}
+.rh-btn:hover{border-color:var(--accent);color:var(--text)}
+.rh-btn.actief{background:var(--accent);border-color:var(--accent);color:white}
 .periode-btn.actief,.type-btn.actief{background:var(--accent);border-color:var(--accent);color:white}
 .periode-btn:hover,.type-btn:hover{border-color:var(--accent);color:var(--text)}
 .datum-range{display:flex;align-items:center;gap:6px}
@@ -94,6 +97,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
       <option value="hoogte">&#128225; 850 / 500 hPa</option>
       <option value="dauwpunt">&#128167; Dauwpunt</option>
       <option value="hres">&#9654;&#65038; HRES (deterministisch)</option>
+      <option value="runhistorie">&#128218; Run-historie (7d)</option>
     </select>
   </div>
   <div class="ctrl-groep">
@@ -207,6 +211,12 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <div class="grafiek-titel" id="titel-uv"></div>
     <div class="legenda" id="leg-uv"></div>
     <div style="position:relative;width:100%;height:420px"><canvas id="canvas-uv"></canvas></div>
+  </div>
+  <div id="blok-runhistorie" class="grafiek-blok" style="display:none">
+    <div class="grafiek-titel" id="titel-runhistorie"></div>
+    <div class="legenda" id="leg-runhistorie"></div>
+    <div style="position:relative;width:100%;height:380px"><canvas id="canvas-runhistorie"></canvas></div>
+    <div id="tabel-runhistorie"></div>
   </div>
   <div id="blok-hoogte" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-hoogte"></div>
@@ -786,7 +796,7 @@ function verwijderAlles(){
   crosshairPinned = null;
   Object.values(actieveCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   actieveCharts={};
-  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
+  ['temp','neerslag','neer-kansen','cloud','wind','winddir','sneeuw','onweer','weertype','uv','runhistorie','hoogte','icon','icon-neerslag','icon-kansen','aifs','aifs-neerslag','aifs-kansen','vergelijking','verg-neerslag','verg-wind','hres','hres-neerslag','hres-wind','dauwpunt'].forEach(id=>{
     document.getElementById('blok-'+id).style.display='none';
   });
 }
@@ -838,7 +848,7 @@ function ensDatasets(arr,kleur){
 
 // ── Type knoppen + dropdown ──
 // Welke waarden horen bij de ECMWF-parameter dropdown
-const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','dauwpunt','hres'];
+const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','dauwpunt','hres','runhistorie'];
 
 function setActieveType(val){
   actieveType = val;
@@ -913,6 +923,7 @@ async function laadData(){
     else if(actieveType==='onweer') await laadOnweer(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='weertype') await laadWeertype(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='uv') await laadUV(lat,lon,naam,dagen,van,tot);
+    else if(actieveType==='runhistorie') await laadRunHistorie(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='hoogte') await laadHoogte(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='icon') await laadIcon(lat,lon,naam,dagen,van,tot);
     else if(actieveType==='aifs') await laadAifs(lat,lon,naam,dagen,van,tot);
@@ -2475,6 +2486,204 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
       scales:{x:cfgBase.scales.x,y:yAs('left',' km/u')}
     }
   });
+}
+
+// ── Run-historie ── (huidige + 7 voorgaande HRES runs naast elkaar)
+async function laadRunHistorie(lat,lon,naam,dagen,van,tot){
+  document.getElementById('header-sub').textContent='ECMWF HRES run-historie · 7 dagen terug · Bron: Open-Meteo';
+  // Welke parameter is gekozen? Default: temp
+  const param=window._runHistorieParam||'temp';
+  const paramCfg={
+    temp:    {key:'temperature_2m', unit:'°C',  decimals:1, kleur:'#cc2222', label:'Temperatuur'},
+    neerslag:{key:'precipitation',  unit:'mm',  decimals:2, kleur:'#2299ff', label:'Neerslag'},
+    wind:    {key:'windspeed_10m',  unit:'km/u',decimals:0, kleur:'#22aa22', label:'Wind'},
+  }[param];
+
+  // Huidige run (gewone forecast API)
+  const baseUrl=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${paramCfg.key}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
+  // 7 vorige runs in één call
+  const prevVars=[]; for(let n=1;n<=7;n++)prevVars.push(`${paramCfg.key}_previous_day${n}`);
+  const prevUrl=`https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${prevVars.join(',')}&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
+
+  const[cur,prev]=await Promise.all([
+    fetchT(baseUrl),
+    fetchT(prevUrl).catch(e=>{console.warn('Previous runs fout:',e);return null;}),
+  ]);
+
+  const times=cur.hourly.time;
+  const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
+  const huidig=idx.map(i=>cur.hourly[paramCfg.key][i]);
+  const lab=getLab(ts);
+
+  // Map alle 7 vorige runs op dezelfde tijdstempels
+  const prevDays=[null]; // index 0 leeg, dayN op index N
+  if(prev&&prev.hourly&&prev.hourly.time){
+    const pByStr={};
+    prev.hourly.time.forEach((t,i)=>{ pByStr[t]=i; });
+    for(let n=1;n<=7;n++){
+      const arr=ts.map(t=>{
+        const i=pByStr[t];
+        if(i==null)return null;
+        return prev.hourly[`${paramCfg.key}_previous_day${n}`]?.[i]??null;
+      });
+      const heeftData=arr.some(v=>v!=null);
+      prevDays.push(heeftData?arr:null);
+    }
+  } else {
+    for(let n=1;n<=7;n++)prevDays.push(null);
+  }
+
+  // Genereer kleurschakering — donker (recent) → licht (oud)
+  const baseRgb=param==='temp'?[204,34,34]:param==='neerslag'?[34,153,255]:[34,170,34];
+  const runKleur=n=>{
+    const a=0.85-(n-1)*0.10;
+    return `rgba(${baseRgb[0]},${baseRgb[1]},${baseRgb[2]},${a.toFixed(2)})`;
+  };
+
+  // ── Chart ──
+  document.getElementById('blok-runhistorie').style.display='';
+  document.getElementById('titel-runhistorie').textContent=`ECMWF HRES – ${naam}  ${paramCfg.label} (run-historie)`;
+
+  // Param-selector
+  const paramKnoppen=`
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+      <button class="rh-btn ${param==='temp'?'actief':''}" onclick="kiesRunParam('temp')">&#127777;&#65039; Temperatuur</button>
+      <button class="rh-btn ${param==='neerslag'?'actief':''}" onclick="kiesRunParam('neerslag')">&#127783;&#65039; Neerslag</button>
+      <button class="rh-btn ${param==='wind'?'actief':''}" onclick="kiesRunParam('wind')">&#128168; Wind</button>
+    </div>
+  `;
+  // Legenda
+  const legItems=[[paramCfg.kleur,'Huidige run','lijn']];
+  for(let n=1;n<=7;n++){
+    if(prevDays[n])legItems.push([runKleur(n),`${n}d geleden`,'dash']);
+  }
+  document.getElementById('leg-runhistorie').innerHTML=paramKnoppen+legHtml(legItems);
+
+  // Datasets — 7 vorige runs als dunne stippellijnen + huidige als dikke lijn
+  const datasets=[];
+  for(let n=7;n>=1;n--){
+    if(!prevDays[n])continue;
+    datasets.push({
+      type:'line',data:prevDays[n],
+      borderColor:runKleur(n),
+      borderWidth:1.2,borderDash:[3,3],
+      pointRadius:0,fill:false,tension:0.3,
+      order:10+n,spanGaps:true,
+      _runDay:n,
+    });
+  }
+  datasets.push({
+    type:'line',data:huidig,
+    borderColor:paramCfg.kleur,
+    borderWidth:3,
+    pointRadius:0,fill:false,tension:0.3,
+    order:1,
+    _runLabel:'Huidig',
+  });
+
+  if(actieveCharts.runhistorie)actieveCharts.runhistorie.destroy();
+  chartTimestamps['canvas-runhistorie']=ts;
+  const ttCfg={backgroundColor:'rgba(13,13,26,0.97)',titleColor:'#ddddf0',bodyColor:'#aabbcc',borderColor:'#334466',borderWidth:1};
+  actieveCharts.runhistorie=new Chart(document.getElementById('canvas-runhistorie'),{
+    data:{labels:lab,datasets},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},dagGrens:{enabled:true},tooltip:{...ttCfg,
+        callbacks:{label:ctx=>{
+          const ds=ctx.dataset;
+          const naam=ds._runLabel?'Huidig':`${ds._runDay}d geleden`;
+          const v=ctx.parsed.y;
+          return ` ${naam}: ${v!=null?v.toFixed(paramCfg.decimals):'-'} ${paramCfg.unit}`;
+        }}
+      }},
+      scales:{x:cfgBase.scales.x,y:{...yAs('left',' '+paramCfg.unit), ...(param==='neerslag'?{min:0,suggestedMax:10}:{})}}
+    }
+  });
+
+  // ── Tabel ──
+  // Sample alleen om de 6 uur (00, 06, 12, 18) zodat de tabel scanbaar blijft
+  const tabelRijen=[];
+  ts.forEach((t,i)=>{
+    const d=new Date(t);
+    if(d.getHours()%6!==0)return;
+    const huidigVal=huidig[i];
+    if(huidigVal==null)return;
+    const cellen=[];
+    for(let n=1;n<=7;n++){
+      const v=prevDays[n]?prevDays[n][i]:null;
+      cellen.push(v);
+    }
+    tabelRijen.push({tijd:t,huidig:huidigVal,prevs:cellen});
+  });
+
+  // Bouw HTML tabel
+  const fmtTijd=t=>{
+    const d=new Date(t);
+    return `${NL_DAGEN[d.getDay()].slice(0,2)} ${d.getDate()}/${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:00`;
+  };
+  // Kleurcodering: verschil tov huidig — rood = was warmer/natter/harder, blauw = was lager
+  const cellKleur=(huidig,prev)=>{
+    if(prev==null)return '#888';
+    const verschil=prev-huidig;
+    if(Math.abs(verschil)<(param==='temp'?0.5:param==='wind'?2:0.3))return '#333';
+    if(verschil>0)return '#cc4422';
+    return '#2266cc';
+  };
+  const fmtCel=v=>v==null?'–':v.toFixed(paramCfg.decimals);
+  const verschilTekst=(huidig,prev)=>{
+    if(prev==null)return '';
+    const d=prev-huidig;
+    if(Math.abs(d)<0.05)return '';
+    return ` (${d>0?'+':''}${d.toFixed(paramCfg.decimals)})`;
+  };
+
+  let tabelHtml=`
+    <div style="overflow-x:auto;margin-top:12px">
+    <table style="width:100%;border-collapse:collapse;font-family:Inter,Arial,sans-serif;font-size:0.78rem">
+      <thead>
+        <tr style="background:#1a2b40;color:white">
+          <th style="padding:6px 8px;text-align:left;border:1px solid #34466b">Tijdstip</th>
+          <th style="padding:6px 8px;border:1px solid #34466b;background:#0d1d33">Huidig (${paramCfg.unit})</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">1 dag terug</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">2 dagen</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">3 dagen</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">4 dagen</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">5 dagen</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">6 dagen</th>
+          <th style="padding:6px 8px;border:1px solid #34466b">7 dagen</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  tabelRijen.forEach((rij,i)=>{
+    const bg=i%2?'#f7f9fc':'#ffffff';
+    tabelHtml+=`<tr style="background:${bg}">`;
+    tabelHtml+=`<td style="padding:5px 8px;border:1px solid #d0d8e4;font-weight:600;color:#1a2b40">${fmtTijd(rij.tijd)}</td>`;
+    tabelHtml+=`<td style="padding:5px 8px;border:1px solid #d0d8e4;text-align:center;font-weight:700;color:${paramCfg.kleur};background:#f0f6fc">${fmtCel(rij.huidig)}</td>`;
+    rij.prevs.forEach(v=>{
+      const k=cellKleur(rij.huidig,v);
+      const verschil=verschilTekst(rij.huidig,v);
+      tabelHtml+=`<td style="padding:5px 8px;border:1px solid #d0d8e4;text-align:center;color:${k}">${fmtCel(v)}<span style="font-size:0.85em;color:#888">${verschil}</span></td>`;
+    });
+    tabelHtml+=`</tr>`;
+  });
+  tabelHtml+=`</tbody></table>
+    <div style="font-size:0.7rem;color:#5a6a80;margin-top:6px;padding:0 4px">
+      &bull; <strong>Huidig</strong> = nieuwste ECMWF HRES verwachting voor dat tijdstip
+      &bull; <strong>N dagen</strong> = wat ECMWF N dagen geleden voor dat zelfde tijdstip voorspelde
+      &bull; <span style="color:#cc4422">rood</span> = oude verwachting was hoger,
+      <span style="color:#2266cc">blauw</span> = oude verwachting was lager
+      &bull; verschil tussen haakjes
+    </div>
+    </div>
+  `;
+  document.getElementById('tabel-runhistorie').innerHTML=tabelHtml;
+}
+
+// Wisselen tussen temp/neerslag/wind binnen de Run-historie tab
+function kiesRunParam(p){
+  window._runHistorieParam=p;
+  // Herlaad zonder over het netwerk te gaan? Eenvoudiger: trigger opnieuw
+  laadData();
 }
 
 // ── 4 Stations: HRES deterministisch ──
