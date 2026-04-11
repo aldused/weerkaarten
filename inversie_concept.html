@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inversie-detectie — CONCEPT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f0f3f7;--panel:#ffffff;--header:#003366;--border:#d0d8e4;--text:#1a2b40;--text2:#5a6a80;--accent:#0066cc}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--header);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #2ec4e8;flex-wrap:wrap;gap:10px}
+.header h1{font-family:monospace;font-size:1.1rem;font-weight:700;color:white;letter-spacing:.02em}
+.header p{font-size:.72rem;color:#a8c4e8;margin-top:2px}
+.header-right{font-size:.7rem;color:#a8c4e8;text-align:right;line-height:1.4}
+.concept-banner{background:linear-gradient(90deg,#fff8e0,#ffeb99);color:#885500;padding:8px 20px;font-size:.85rem;font-weight:600;border-bottom:2px solid #d4a843;text-align:center}
+.status-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.huidig-inv{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;font-weight:600;font-size:.95rem}
+.huidig-inv.geen{background:#e8f5e9;color:#2a7a2a;border:1px solid #c8e6c9}
+.huidig-inv.zwak{background:#fff8e0;color:#996600;border:1px solid #ffe082}
+.huidig-inv.sterk{background:#ffebee;color:#c62828;border:1px solid #ef9a9a}
+.huidig-inv .emoji{font-size:1.6em}
+.huidig-detail{font-size:.75rem;color:var(--text2);margin-top:2px;font-weight:400}
+
+#grafieken{padding:12px 16px}
+.grafiek-blok{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.grafiek-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px}
+.grafiek-titel{font-size:.95rem;font-weight:700;color:#003366;line-height:1.2}
+.grafiek-sub{font-size:.68rem;color:var(--text2);margin-bottom:6px}
+.legenda{display:flex;flex-wrap:wrap;gap:12px;font-size:.72rem;color:var(--text2);margin-bottom:6px}
+.legenda span{display:flex;align-items:center;gap:5px}
+.leg-lijn{display:inline-block;width:18px;height:3px;border-radius:2px}
+.leg-blok{display:inline-block;width:10px;height:10px;border-radius:2px}
+.canvas-wrap{position:relative;width:100%;height:300px}
+.canvas-wrap.laag{height:150px}
+#status{text-align:center;padding:50px;color:var(--text2);font-size:.9rem}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.uitleg{background:#f0f6fc;border:1px solid #d0dceb;border-radius:8px;padding:12px 16px;margin:16px;font-size:.82rem;color:var(--text2);line-height:1.5}
+.uitleg strong{color:var(--text)}
+.uitleg ul{margin:6px 0 0 20px;padding:0}
+.uitleg li{margin-bottom:4px}
+
+#copyright{text-align:center;font-size:.7rem;color:#888;padding:10px 0 16px;font-family:monospace}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Inversie-detectie — HARMONIE</h1>
+    <p>Temperatuurverloop 2m → 180m · komende 48 uur · Bron: KNMI HARMONIE via Open-Meteo</p>
+  </div>
+  <div class="header-right">
+    Concept — Ed Aldus WM<br>
+    <span id="klok"></span>
+  </div>
+</div>
+
+<div class="concept-banner">
+  🧪 CONCEPT — visualisatie-voorstel, nog niet aan de sidebar gehaakt · Locatie vast: De Bilt
+</div>
+
+<div class="status-bar">
+  <div id="huidig-status" class="huidig-inv geen">
+    <div class="emoji">⏳</div>
+    <div>
+      <div class="titel">Data ophalen…</div>
+      <div class="huidig-detail">2 m — 180 m</div>
+    </div>
+  </div>
+  <div style="flex:1"></div>
+  <div style="font-size:.72rem;color:var(--text2)">
+    <strong>Inversie</strong> = warmere lucht bóven koudere lucht.<br>
+    Normaal koelt de lucht af met hoogte; bij inversie gebeurt het omgekeerde.
+  </div>
+</div>
+
+<div id="grafieken">
+  <div id="status"><span class="spinner"></span>HARMONIE data laden…</div>
+
+  <!-- Grafiek 1: HARMONIE onderste 180 m (grenslaag, fijne resolutie) -->
+  <div class="grafiek-blok" id="blok-temp" style="display:none">
+    <div class="grafiek-head">
+      <div>
+        <div class="grafiek-titel">Onderste 180 m — KNMI HARMONIE</div>
+        <div class="grafiek-sub">
+          4 niveaus: 2 m (bij de grond) &rarr; 180 m (~kerktoren-hoogte) ·
+          Dit is waar <strong>stralings-nachtinversies</strong> en <strong>mist</strong> ontstaan
+        </div>
+      </div>
+    </div>
+    <div class="legenda" id="leg-temp"></div>
+    <div class="canvas-wrap"><canvas id="canvas-temp"></canvas></div>
+  </div>
+
+  <!-- Grafiek 2: GFS bovenlucht (500 m → 5.5 km) -->
+  <div class="grafiek-blok" id="blok-temp-hoog" style="display:none">
+    <div class="grafiek-head">
+      <div>
+        <div class="grafiek-titel">Bovenlucht — GFS (500 m &rarr; 5.5 km)</div>
+        <div class="grafiek-sub">
+          7 pressure levels (950 &rarr; 500 hPa) ·
+          hier zie je <strong>frontale inversies</strong> en <strong>subsidentie-inversies</strong> bij hogedrukruggen ·
+          normaal koelt de lucht ~6.5°C per km af
+        </div>
+      </div>
+    </div>
+    <div class="legenda" id="leg-temp-hoog"></div>
+    <div class="canvas-wrap"><canvas id="canvas-temp-hoog"></canvas></div>
+  </div>
+
+  <!-- Mid-grafiek: delta (onderste 180m, stralings-nachtinversie) -->
+  <div class="grafiek-blok" id="blok-delta" style="display:none">
+    <div class="grafiek-head">
+      <div>
+        <div class="grafiek-titel">Grenslaag-inversie — T op 180 m minus T op 2 m</div>
+        <div class="grafiek-sub">
+          Positief = inversie (warmer boven) · negatief = normale opbouw ·
+          dit is de klassieke <strong>stralings-nachtinversie</strong> die mist en smog vasthoudt
+        </div>
+      </div>
+    </div>
+    <div class="legenda" id="leg-delta"></div>
+    <div class="canvas-wrap laag"><canvas id="canvas-delta"></canvas></div>
+  </div>
+
+  <!-- Extra: inversie op hoogte (frontale/subsidentie) -->
+  <div class="grafiek-blok" id="blok-delta-hoog" style="display:none">
+    <div class="grafiek-head">
+      <div>
+        <div class="grafiek-titel">Hogere-laag inversie — T op 850 hPa (~1.4 km) minus T op 950 hPa (~500 m)</div>
+        <div class="grafiek-sub">
+          Positief = inversie op hoogte · vaak bij <strong>hogedrukruggen</strong> (subsidentie-inversie) of na een <strong>warmtefront</strong>
+        </div>
+      </div>
+    </div>
+    <div class="legenda" id="leg-delta-hoog"></div>
+    <div class="canvas-wrap laag"><canvas id="canvas-delta-hoog"></canvas></div>
+  </div>
+</div>
+
+<div class="uitleg">
+  <strong>Waarom is een inversie interessant?</strong>
+  <ul>
+    <li>🌫️ <strong>Mist en nevel blijven hangen</strong> onder een inversie — geen verticale menging</li>
+    <li>😤 <strong>Smog en luchtvervuiling</strong> worden opgesloten in het laagje onder de inversie</li>
+    <li>❄️ <strong>Stralingsvorst</strong> is vaak een teken van inversie (heldere nacht, weinig wind)</li>
+    <li>🔥 <strong>Rook van haardvuren</strong> blijft laag hangen → klachten over houtrook</li>
+    <li>✈️ <strong>Turbulentie-overgang</strong> bij start en landing op die hoogte</li>
+  </ul>
+  <div style="margin-top:8px">In NL komen inversies het vaakst voor in <strong>winter-nachten</strong> (stralingsvorst) en bij <strong>hogedrukrug</strong>-situaties met weinig wind.</div>
+</div>
+
+<div id="copyright">&copy; Ed Aldus WM &middot; Data: KNMI HARMONIE via Open-Meteo &middot; Concept-pagina</div>
+
+<script>
+const OM_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
+  ? 'https://om.weerlab.nl/om'
+  : null;
+
+function fmtTijd(iso){
+  const d = new Date(iso);
+  return d.getHours().toString().padStart(2,'0') + ':00';
+}
+function maakLabels(tijden){
+  const dagen = ['Zo','Ma','Di','Wo','Do','Vr','Za'];
+  const mnden = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  return tijden.map(t=>{
+    const d = new Date(t);
+    const h = d.getHours();
+    if (h === 0) return ['', `${dagen[d.getDay()]} ${d.getDate()} ${mnden[d.getMonth()]}`];
+    if (h === 6 || h === 12 || h === 18) return h.toString().padStart(2,'0') + ':00';
+    return '';
+  });
+}
+
+// ── Nacht-arcering plugin ─────────────────────────────────────────────
+const nachtPlugin = {
+  id: 'nachtArcering',
+  beforeDatasetsDraw(chart, args, opts) {
+    const tijden = opts?.tijden;
+    if (!tijden) return;
+    const {ctx, chartArea, scales: {x, y}} = chart;
+    if (!x || !y) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,30,60,0.06)';
+    let inNacht = false, startX = 0;
+    for (let i = 0; i < tijden.length; i++) {
+      const h = new Date(tijden[i]).getHours();
+      const isNacht = h < 6 || h >= 18;
+      const px = x.getPixelForValue(i);
+      if (isNacht && !inNacht) { inNacht = true; startX = px; }
+      if (!isNacht && inNacht) {
+        ctx.fillRect(startX, y.top, px - startX, y.bottom - y.top);
+        inNacht = false;
+      }
+    }
+    if (inNacht) ctx.fillRect(startX, y.top, x.getPixelForValue(tijden.length - 1) - startX, y.bottom - y.top);
+    ctx.restore();
+  }
+};
+Chart.register(nachtPlugin);
+
+// ── Data ophalen ──────────────────────────────────────────────────────
+async function laden() {
+  // HARMONIE voor de onderste 180 m (fijne resolutie)
+  const harmVars = 'temperature_2m,temperature_80m,temperature_120m,temperature_180m';
+  let urlHarm = `https://api.open-meteo.com/v1/forecast?latitude=52.1&longitude=5.18&hourly=${harmVars}&models=knmi_harmonie_arome_netherlands&timezone=Europe%2FAmsterdam&forecast_hours=60`;
+
+  // GFS voor hogere lagen (950 → 500 hPa), ook met geopotential_height voor echte meters
+  const gfsVars = 'temperature_950hPa,temperature_900hPa,temperature_850hPa,temperature_800hPa,temperature_700hPa,temperature_600hPa,temperature_500hPa,geopotential_height_950hPa,geopotential_height_900hPa,geopotential_height_850hPa,geopotential_height_800hPa,geopotential_height_700hPa,geopotential_height_600hPa,geopotential_height_500hPa';
+  let urlGfs = `https://api.open-meteo.com/v1/forecast?latitude=52.1&longitude=5.18&hourly=${gfsVars}&models=gfs_seamless&timezone=Europe%2FAmsterdam&forecast_hours=60`;
+
+  if (OM_BASE) {
+    urlHarm = urlHarm.replace('https://api.open-meteo.com/v1/forecast', `${OM_BASE}/forecast`);
+    urlGfs = urlGfs.replace('https://api.open-meteo.com/v1/forecast', `${OM_BASE}/forecast`);
+  }
+
+  try {
+    const [rHarm, rGfs] = await Promise.all([fetch(urlHarm), fetch(urlGfs)]);
+    const dHarm = await rHarm.json();
+    const dGfs = await rGfs.json();
+    const h = dHarm.hourly;
+    const g = dGfs.hourly;
+    const tijden = h.time;
+    const labels = maakLabels(tijden);
+    // HARMONIE onderste 180 m
+    const t2 = h.temperature_2m;
+    const t80 = h.temperature_80m;
+    const t120 = h.temperature_120m;
+    const t180 = h.temperature_180m;
+    // GFS hoogte-niveaus — map op dezelfde tijden
+    const gIdx = {}; g.time.forEach((t,i) => { gIdx[t] = i; });
+    const pickG = (key) => tijden.map(t => {
+      const i = gIdx[t];
+      return i != null ? g[key]?.[i] ?? null : null;
+    });
+    const t950 = pickG('temperature_950hPa'); // ≈ 540 m
+    const t900 = pickG('temperature_900hPa'); // ≈ 990 m
+    const t850 = pickG('temperature_850hPa'); // ≈ 1390 m
+    const t800 = pickG('temperature_800hPa'); // ≈ 1940 m
+    const t700 = pickG('temperature_700hPa'); // ≈ 3010 m
+    const t600 = pickG('temperature_600hPa'); // ≈ 4200 m
+    const t500 = pickG('temperature_500hPa'); // ≈ 5560 m
+
+    const delta = t2.map((v, i) => (v != null && t180[i] != null) ? t180[i] - v : null);
+    // Hogere-laag inversie: T850 − T950 (≈ T op 1.4 km minus T op 500 m)
+    const deltaHoog = t950.map((v, i) => (v != null && t850[i] != null) ? t850[i] - v : null);
+
+    // Huidige status (eerste uur)
+    const nu = delta[0];
+    const statusEl = document.getElementById('huidig-status');
+    const emoji = statusEl.querySelector('.emoji');
+    const title = statusEl.querySelector('.titel');
+    const detail = statusEl.querySelector('.huidig-detail');
+    if (nu > 1.5) {
+      statusEl.className = 'huidig-inv sterk';
+      emoji.textContent = '⚠️';
+      title.textContent = `Sterke inversie (+${nu.toFixed(1)}°C)`;
+    } else if (nu > 0.3) {
+      statusEl.className = 'huidig-inv zwak';
+      emoji.textContent = '🌫️';
+      title.textContent = `Zwakke inversie (+${nu.toFixed(1)}°C)`;
+    } else {
+      statusEl.className = 'huidig-inv geen';
+      emoji.textContent = '✅';
+      title.textContent = `Normale opbouw (${nu>0?'+':''}${nu.toFixed(1)}°C)`;
+    }
+    detail.textContent = `2 m: ${t2[0].toFixed(1)}° · 80 m: ${t80[0].toFixed(1)}° · 120 m: ${t120[0].toFixed(1)}° · 180 m: ${t180[0].toFixed(1)}°`;
+
+    // Status verbergen
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('blok-temp').style.display = '';
+    document.getElementById('blok-temp-hoog').style.display = '';
+    document.getElementById('blok-delta').style.display = '';
+    document.getElementById('blok-delta-hoog').style.display = '';
+
+    // Helper — gedeelde scale-config
+    const xTickCfg = {
+      autoSkip: false,
+      font: function(ctx){
+        const raw = ctx.tick && ctx.tick.label;
+        const isDag = Array.isArray(raw);
+        return {size: isDag ? 10 : 8, weight: isDag ? 'bold' : 'normal'};
+      }
+    };
+
+    // ── TEMP CHART 1: HARMONIE onderste 180 m ──────────────────────
+    document.getElementById('leg-temp').innerHTML = `
+      <span><span class="leg-lijn" style="background:#cc2222"></span>2 m (bij de grond)</span>
+      <span><span class="leg-lijn" style="background:#ff6622"></span>80 m</span>
+      <span><span class="leg-lijn" style="background:#ffaa33"></span>120 m</span>
+      <span><span class="leg-lijn" style="background:#ffdd66"></span>180 m</span>
+      <span><span class="leg-blok" style="background:rgba(20,30,60,0.06)"></span>nacht</span>
+    `;
+    new Chart(document.getElementById('canvas-temp'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label:'2 m',   data: t2,   borderColor:'#cc2222', borderWidth:2.8, pointRadius:0, tension:0.3, fill:false},
+          {label:'80 m',  data: t80,  borderColor:'#ff6622', borderWidth:1.6, pointRadius:0, tension:0.3, fill:false, borderDash:[5,3]},
+          {label:'120 m', data: t120, borderColor:'#ffaa33', borderWidth:1.6, pointRadius:0, tension:0.3, fill:false, borderDash:[5,3]},
+          {label:'180 m', data: t180, borderColor:'#ffdd66', borderWidth:2,   pointRadius:0, tension:0.3, fill:false},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{callbacks:{title:(ctx)=>labels[ctx[0].dataIndex] || tijden[ctx[0].dataIndex].slice(5,16).replace('T',' ')}}
+        },
+        scales: {
+          x: {ticks: xTickCfg, grid:{color:'#eef1f5'}},
+          y: {ticks:{font:{size:10},callback:v=>v+'°C'}, grid:{color:'#eef1f5'}}
+        }
+      }
+    });
+
+    // ── TEMP CHART 2: GFS bovenlucht (500 m → 5.5 km) ──────────────
+    document.getElementById('leg-temp-hoog').innerHTML = `
+      <span><span class="leg-lijn" style="background:#d4a843"></span>~540 m (950 hPa)</span>
+      <span><span class="leg-lijn" style="background:#88bb44"></span>~990 m (900 hPa)</span>
+      <span><span class="leg-lijn" style="background:#22aa77"></span>~1.4 km (850 hPa)</span>
+      <span><span class="leg-lijn" style="background:#22aaaa"></span>~1.9 km (800 hPa)</span>
+      <span><span class="leg-lijn" style="background:#3377cc"></span>~3.0 km (700 hPa)</span>
+      <span><span class="leg-lijn" style="background:#5544aa"></span>~4.2 km (600 hPa)</span>
+      <span><span class="leg-lijn" style="background:#7744bb"></span>~5.5 km (500 hPa)</span>
+      <span><span class="leg-blok" style="background:rgba(20,30,60,0.06)"></span>nacht</span>
+    `;
+    new Chart(document.getElementById('canvas-temp-hoog'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label:'~540 m',  data: t950, borderColor:'#d4a843', borderWidth:2,   pointRadius:0, tension:0.3, fill:false},
+          {label:'~990 m',  data: t900, borderColor:'#88bb44', borderWidth:1.6, pointRadius:0, tension:0.3, fill:false, borderDash:[5,3]},
+          {label:'~1.4 km', data: t850, borderColor:'#22aa77', borderWidth:2,   pointRadius:0, tension:0.3, fill:false},
+          {label:'~1.9 km', data: t800, borderColor:'#22aaaa', borderWidth:1.6, pointRadius:0, tension:0.3, fill:false, borderDash:[5,3]},
+          {label:'~3.0 km', data: t700, borderColor:'#3377cc', borderWidth:2,   pointRadius:0, tension:0.3, fill:false},
+          {label:'~4.2 km', data: t600, borderColor:'#5544aa', borderWidth:1.6, pointRadius:0, tension:0.3, fill:false, borderDash:[5,3]},
+          {label:'~5.5 km', data: t500, borderColor:'#7744bb', borderWidth:2.2, pointRadius:0, tension:0.3, fill:false},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{callbacks:{title:(ctx)=>labels[ctx[0].dataIndex] || tijden[ctx[0].dataIndex].slice(5,16).replace('T',' ')}}
+        },
+        scales: {
+          x: {ticks: xTickCfg, grid:{color:'#eef1f5'}},
+          y: {ticks:{font:{size:10},callback:v=>v+'°C'}, grid:{color:'#eef1f5'}}
+        }
+      }
+    });
+
+    // ── DELTA CHART (area met positief/negatief gekleurd) ─────────
+    document.getElementById('leg-delta').innerHTML = `
+      <span><span class="leg-blok" style="background:#ff9988"></span>inversie (warmer boven)</span>
+      <span><span class="leg-blok" style="background:#a8c8f0"></span>normale opbouw (kouder boven)</span>
+    `;
+
+    // Twee datasets: positieve waarden rood gevuld, negatieve blauw gevuld
+    const posVals = delta.map(v => v > 0 ? v : 0);
+    const negVals = delta.map(v => v <= 0 ? v : 0);
+
+    new Chart(document.getElementById('canvas-delta'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label:'Inversie', data: posVals, borderColor:'#cc2222', backgroundColor:'rgba(255,100,80,0.55)', borderWidth:1.5, pointRadius:0, tension:0.3, fill:'origin'},
+          {label:'Normaal', data: negVals, borderColor:'#2266cc', backgroundColor:'rgba(100,150,230,0.45)', borderWidth:1.5, pointRadius:0, tension:0.3, fill:'origin'},
+          // Nul-lijn
+          {label:'0', data: labels.map(()=>0), borderColor:'rgba(0,0,0,0.45)', borderWidth:1, pointRadius:0, fill:false, borderDash:[3,3]},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{
+            filter:(item)=>item.datasetIndex<2,
+            callbacks:{
+              title:(ctx)=>tijden[ctx[0].dataIndex].slice(5,16).replace('T',' '),
+              label:(ctx)=>{
+                const v = delta[ctx.dataIndex];
+                if (v == null) return ' —';
+                const lbl = v > 0.3 ? 'inversie' : v < -0.3 ? 'normale opbouw' : 'neutraal';
+                return ` ΔT: ${v > 0 ? '+' : ''}${v.toFixed(1)}°C  (${lbl})`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {ticks:{font:{size:10},autoSkip:false,
+                font:function(ctx){
+                  const raw = ctx.tick && ctx.tick.label;
+                  const isDag = Array.isArray(raw);
+                  return {size: isDag ? 10 : 8, weight: isDag ? 'bold' : 'normal'};
+                }}, grid:{color:'#eef1f5'}},
+          y: {ticks:{font:{size:10},callback:v=>(v>0?'+':'')+v+'°C'}, grid:{color:'#eef1f5'}, suggestedMin:-4, suggestedMax:4}
+        }
+      }
+    });
+
+    // ── DELTA HOOG CHART (850 − 950 hPa, ~1.4 km vs ~0.5 km) ─────
+    document.getElementById('leg-delta-hoog').innerHTML = `
+      <span><span class="leg-blok" style="background:#ff9988"></span>inversie op hoogte</span>
+      <span><span class="leg-blok" style="background:#a8c8f0"></span>normale opbouw</span>
+      <span style="color:#888">GFS pressure levels 850 − 950 hPa</span>
+    `;
+    const posHoog = deltaHoog.map(v => v != null && v > 0 ? v : 0);
+    const negHoog = deltaHoog.map(v => v != null && v <= 0 ? v : 0);
+    new Chart(document.getElementById('canvas-delta-hoog'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label:'Inversie hoog', data: posHoog, borderColor:'#cc2222', backgroundColor:'rgba(255,100,80,0.55)', borderWidth:1.5, pointRadius:0, tension:0.3, fill:'origin'},
+          {label:'Normaal hoog', data: negHoog, borderColor:'#2266cc', backgroundColor:'rgba(100,150,230,0.45)', borderWidth:1.5, pointRadius:0, tension:0.3, fill:'origin'},
+          {label:'0', data: labels.map(()=>0), borderColor:'rgba(0,0,0,0.45)', borderWidth:1, pointRadius:0, fill:false, borderDash:[3,3]},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{
+            filter:(item)=>item.datasetIndex<2,
+            callbacks:{
+              title:(ctx)=>tijden[ctx[0].dataIndex].slice(5,16).replace('T',' '),
+              label:(ctx)=>{
+                const v = deltaHoog[ctx.dataIndex];
+                if (v == null) return ' —';
+                const lbl = v > 0.3 ? 'inversie op hoogte' : v < -0.3 ? 'normaal' : 'neutraal';
+                return ` Δ(850−950): ${v > 0 ? '+' : ''}${v.toFixed(1)}°C  (${lbl})`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {ticks:{font:{size:10},autoSkip:false,
+                font:function(ctx){
+                  const raw = ctx.tick && ctx.tick.label;
+                  const isDag = Array.isArray(raw);
+                  return {size: isDag ? 10 : 8, weight: isDag ? 'bold' : 'normal'};
+                }}, grid:{color:'#eef1f5'}},
+          y: {ticks:{font:{size:10},callback:v=>(v>0?'+':'')+v+'°C'}, grid:{color:'#eef1f5'}, suggestedMin:-6, suggestedMax:6}
+        }
+      }
+    });
+
+  } catch(e) {
+    document.getElementById('status').innerHTML = '⚠️ Kan data niet laden: ' + e.message;
+  }
+}
+
+function updateKlok(){
+  document.getElementById('klok').textContent = new Date().toLocaleTimeString('nl-NL');
+}
+updateKlok(); setInterval(updateKlok, 1000);
+laden();
+</script>
+</body>
+</html>
