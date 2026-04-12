@@ -555,6 +555,86 @@ body.scroll-mode { overflow-y: auto; }
 
   function lum(r,g,b) { return (0.299*r + 0.587*g + 0.114*b) / 255; }
 
+  // ── Meteorologische windveren (WMO wind barbs) ────────────────────────────
+  // Tekent een windveer op (cx, cy). dirRad = richting waar wind VANDAAN komt
+  // (wiskundig: hoek van noord, kloksgewijs). speedMs = windsnelheid in m/s.
+  // len = lengte schacht in pixels.
+  function drawWindBarb(ctx, cx, cy, dirRad, speedMs, len) {
+    var speedKt = speedMs * 1.944;
+    if (speedKt < 2.5) {
+      // Windstil: open cirkel
+      ctx.beginPath();
+      ctx.arc(cx, cy, len * 0.15, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    // Schacht: van centrum naar upwind (schacht wijst naar waar wind vandaan komt)
+    var dx = -Math.sin(dirRad);
+    var dy = Math.cos(dirRad);
+    var tailX = cx + dx * len * 0.5;
+    var tailY = cy + dy * len * 0.5;
+    var tipX = cx - dx * len * 0.5;
+    var tipY = cy - dy * len * 0.5;
+    // Schacht tekenen
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tailX, tailY);
+    ctx.stroke();
+    // Loodrecht op schacht (veren naar rechts kijkend vanuit tipX→tailX)
+    var px = -dy;
+    var py = -dx;
+    // Ontleed snelheid: vlaggen (50kt), hele veren (10kt), halve veren (5kt)
+    var rem = Math.round(speedKt / 5) * 5;
+    var flags = Math.floor(rem / 50); rem -= flags * 50;
+    var full = Math.floor(rem / 10); rem -= full * 10;
+    var half = Math.floor(rem / 5);
+    var barbLen = len * 0.38;
+    var spacing = len * 0.11;
+    var pos = 0; // afstand vanaf tail (upwind einde)
+    // Vlaggen (driehoeken, 50 kt)
+    for (var f = 0; f < flags; f++) {
+      var f1x = tailX - dx * pos;
+      var f1y = tailY - dy * pos;
+      var f2x = tailX - dx * (pos + spacing * 1.8);
+      var f2y = tailY - dy * (pos + spacing * 1.8);
+      var f3x = f1x + px * barbLen;
+      var f3y = f1y + py * barbLen;
+      ctx.beginPath();
+      ctx.moveTo(f1x, f1y);
+      ctx.lineTo(f2x, f2y);
+      ctx.lineTo(f3x, f3y);
+      ctx.closePath();
+      ctx.fill();
+      pos += spacing * 2;
+    }
+    // Hele veren (10 kt)
+    for (var fb = 0; fb < full; fb++) {
+      var bx1 = tailX - dx * pos;
+      var by1 = tailY - dy * pos;
+      var bx2 = bx1 + px * barbLen;
+      var by2 = by1 + py * barbLen;
+      ctx.beginPath();
+      ctx.moveTo(bx1, by1);
+      ctx.lineTo(bx2, by2);
+      ctx.stroke();
+      pos += spacing;
+    }
+    // Halve veren (5 kt) — halve lengte
+    for (var hb = 0; hb < half; hb++) {
+      // Als alleen 1 halve veer: iets van tail af plaatsen
+      if (flags === 0 && full === 0 && hb === 0) pos += spacing * 0.5;
+      var hx1 = tailX - dx * pos;
+      var hy1 = tailY - dy * pos;
+      var hx2 = hx1 + px * barbLen * 0.5;
+      var hy2 = hy1 + py * barbLen * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(hx1, hy1);
+      ctx.lineTo(hx2, hy2);
+      ctx.stroke();
+      pos += spacing;
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // DATA LADEN
   // ═══════════════════════════════════════════════════════════════════════════
@@ -916,58 +996,43 @@ body.scroll-mode { overflow-y: auto; }
       ctx.drawImage(overlayImg, sx, sy, sw, sh, 0, 0, cw, ch);
     }
 
-    // ── Wind+Druk of Wind kaart: windpijltjes ─────────────────────────────
+    // ── Wind+Druk of Wind kaart: windveren (WMO wind barbs) ────────────────
     if ((paramKey === "wind_druk" || paramKey === "wind") && paramCache["wind"]) {
       var wpd2 = paramCache["wind"];
       var wOff2 = stepIdx * wpd2.nLat * wpd2.nLon * 2;
-      // Dynamische stap: ~30 pijlen breed bij zoom 1, meer bij zoom
-      var barbStep2 = Math.max(3, Math.round(nLon / (30 * zoomLevel)));
+      // Dynamische stap: ~25 veren breed bij zoom 1
+      var barbStep2 = Math.max(3, Math.round(nLon / (25 * zoomLevel)));
+      var barbLen2 = Math.max(18, Math.round(cw / 28)) * Math.min(zoomLevel, 3);
 
-      // Bij wind kaart (met cijfers): verschuif pijl omhoog zodat die niet op het cijfer staat
-      var heeftCijfers = (paramKey === "wind");
-      var offsetY = heeftCijfers ? -8 : 0; // pixels omhoog verschuiven
-
-      // Twee passes: eerst witte outline, dan zwarte pijl
+      // Twee passes: eerst witte outline, dan zwarte veer
       var passes = [
-        {stroke:"white", fill:"white", lw:5, headW:12},
-        {stroke:"#111",  fill:"#111",  lw:2.5, headW:9},
+        {stroke:"white", fill:"white", lw:4.5},
+        {stroke:"#222",  fill:"#222",  lw:2},
       ];
       for (var pass = 0; pass < 2; pass++) {
         var p = passes[pass];
         ctx.strokeStyle = p.stroke;
         ctx.fillStyle = p.fill;
         ctx.lineWidth = p.lw;
+        ctx.lineCap = "round";
         for (var by = 0; by < nLat; by += barbStep2) {
           for (var bx = 0; bx < nLon; bx += barbStep2) {
             var bi2 = by * nLon + bx;
             var bu = wpd2.data[wOff2 + bi2];
             var bv = wpd2.data[wOff2 + wpd2.nLat * wpd2.nLon + bi2];
             var bspd = Math.sqrt(bu*bu + bv*bv);
-            if (bspd < 0.5) continue;
-            var bdir = Math.atan2(bu, bv); // pijl wijst mee met de wind
+            if (bspd < 0.3) continue;
+            // Wind richting: atan2(u,v) geeft richting MET de wind
+            // Windveer-conventie: schacht wijst naar waar wind VANDAAN komt
+            var bdir = Math.atan2(bu, bv) + Math.PI;
             var bpx = gx2px(bx);
-            var bpy = gy2px(nLat - 1 - by) + offsetY;
+            var bpy = gy2px(nLat - 1 - by);
             if (bpx < -30 || bpx > cw+30 || bpy < -30 || bpy > ch+30) continue;
-            var alen = Math.min(24, 10 + bspd * 1.5) * Math.min(zoomLevel, 3);
-            // Start punt = basis van de pijl (halverwege verschuiving)
-            var startX = bpx - Math.sin(bdir) * alen * 0.3;
-            var startY = bpy + Math.cos(bdir) * alen * 0.3;
-            var tipX = bpx + Math.sin(bdir) * alen * 0.7;
-            var tipY = bpy - Math.cos(bdir) * alen * 0.7;
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(tipX, tipY);
-            ctx.stroke();
-            // Pijlpunt
-            ctx.beginPath();
-            ctx.moveTo(tipX, tipY);
-            ctx.lineTo(tipX - Math.sin(bdir+0.4)*p.headW, tipY + Math.cos(bdir+0.4)*p.headW);
-            ctx.lineTo(tipX - Math.sin(bdir-0.4)*p.headW, tipY + Math.cos(bdir-0.4)*p.headW);
-            ctx.closePath();
-            ctx.fill();
+            drawWindBarb(ctx, bpx, bpy, bdir, bspd, barbLen2);
           }
         }
       }
+      ctx.lineCap = "butt";
     }
 
     // ── Combinatiekaart: windpijltjes + neerslagarcering ────────────────────
@@ -991,54 +1056,54 @@ body.scroll-mode { overflow-y: auto; }
         }
       }
 
-      // Windpijltjes
+      // Windveren
       var bs3 = Math.max(4, Math.round(nLon / (25 * zoomLevel)));
-      ctx.strokeStyle = "#333";
-      ctx.fillStyle = "#333";
-      ctx.lineWidth = 1.2;
-      for (var wy = 0; wy < nLat; wy += bs3) {
-        for (var wx = 0; wx < nLon; wx += bs3) {
-          var wi3 = wy * nLon + wx;
-          var wu = wpd3.data[wOff3 + wi3];
-          var wv = wpd3.data[wOff3 + wpd3.nLat * wpd3.nLon + wi3];
-          var wspd = Math.sqrt(wu*wu + wv*wv);
-          if (wspd < 0.3) continue;
-          var wdir = Math.atan2(wu, wv); // pijl wijst mee met de wind
-          var wpx = gx2px(wx);
-          var wpy = gy2px(nLat - 1 - wy);
-          if (wpx < -20 || wpx > cw+20 || wpy < -20 || wpy > ch+20) continue;
-          var wlen = Math.min(14, 5 + wspd * 0.8) * Math.min(zoomLevel, 3);
-          ctx.beginPath();
-          ctx.moveTo(wpx, wpy);
-          var wtx = wpx + Math.sin(wdir) * wlen;
-          var wty = wpy - Math.cos(wdir) * wlen;
-          ctx.lineTo(wtx, wty);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(wtx, wty);
-          ctx.lineTo(wtx - Math.sin(wdir+0.4)*3.5, wty + Math.cos(wdir+0.4)*3.5);
-          ctx.lineTo(wtx - Math.sin(wdir-0.4)*3.5, wty + Math.cos(wdir-0.4)*3.5);
-          ctx.closePath();
-          ctx.fill();
+      var bLen3 = Math.max(14, Math.round(cw / 35)) * Math.min(zoomLevel, 3);
+      var passes3 = [
+        {stroke:"white", fill:"white", lw:3.5},
+        {stroke:"#333",  fill:"#333",  lw:1.5},
+      ];
+      for (var pass3 = 0; pass3 < 2; pass3++) {
+        var p3 = passes3[pass3];
+        ctx.strokeStyle = p3.stroke;
+        ctx.fillStyle = p3.fill;
+        ctx.lineWidth = p3.lw;
+        ctx.lineCap = "round";
+        for (var wy = 0; wy < nLat; wy += bs3) {
+          for (var wx = 0; wx < nLon; wx += bs3) {
+            var wi3 = wy * nLon + wx;
+            var wu = wpd3.data[wOff3 + wi3];
+            var wv = wpd3.data[wOff3 + wpd3.nLat * wpd3.nLon + wi3];
+            var wspd = Math.sqrt(wu*wu + wv*wv);
+            if (wspd < 0.3) continue;
+            var wdir = Math.atan2(wu, wv) + Math.PI;
+            var wpx = gx2px(wx);
+            var wpy = gy2px(nLat - 1 - wy);
+            if (wpx < -20 || wpx > cw+20 || wpy < -20 || wpy > ch+20) continue;
+            drawWindBarb(ctx, wpx, wpy, wdir, wspd, bLen3);
+          }
         }
       }
+      ctx.lineCap = "butt";
     }
 
-    // ── Hoogte 500/850 hPa: windpijltjes uit comp 2,3 ──────────────────────
+    // ── Hoogte 500/850 hPa: windveren uit comp 2,3 ────────────────────────
     if ((paramKey === "hoogte_500" || paramKey === "hoogte_850") && pd && pd.nComp === 4) {
       var nPtsH2 = nLat * nLon;
       var uOff  = offset + 2 * nPtsH2;
       var vOff  = offset + 3 * nPtsH2;
-      var bsH = Math.max(3, Math.round(nLon / (16 * zoomLevel)));
-      var passes2 = [
-        {stroke:"white", fill:"white", lw:4, headW:10},
-        {stroke:"#111",  fill:"#111",  lw:2,   headW:8},
+      var bsH = Math.max(3, Math.round(nLon / (18 * zoomLevel)));
+      var bLenH = Math.max(18, Math.round(cw / 28)) * Math.min(zoomLevel, 3);
+      var passesH = [
+        {stroke:"white", fill:"white", lw:4.5},
+        {stroke:"#111",  fill:"#111",  lw:2},
       ];
       for (var passH = 0; passH < 2; passH++) {
-        var ph = passes2[passH];
+        var ph = passesH[passH];
         ctx.strokeStyle = ph.stroke;
         ctx.fillStyle = ph.fill;
         ctx.lineWidth = ph.lw;
+        ctx.lineCap = "round";
         for (var hy = 0; hy < nLat; hy += bsH) {
           for (var hx = 0; hx < nLon; hx += bsH) {
             var hi2 = hy * nLon + hx;
@@ -1047,28 +1112,15 @@ body.scroll-mode { overflow-y: auto; }
             if (isNaN(hu) || isNaN(hv)) continue;
             var hspd2 = Math.sqrt(hu*hu + hv*hv);
             if (hspd2 < 1) continue;
-            var hdir2 = Math.atan2(hu, hv);
+            var hdir2 = Math.atan2(hu, hv) + Math.PI;
             var hpx2 = gx2px(hx);
-            var hpy2 = gy2px(nLat - 1 - hy) - 10; // iets omhoog zodat label eronder kan
+            var hpy2 = gy2px(nLat - 1 - hy);
             if (hpx2 < -30 || hpx2 > cw+30 || hpy2 < -30 || hpy2 > ch+30) continue;
-            var alenH = Math.min(22, 8 + hspd2 * 0.6) * Math.min(zoomLevel, 3);
-            var sX = hpx2 - Math.sin(hdir2) * alenH * 0.3;
-            var sY = hpy2 + Math.cos(hdir2) * alenH * 0.3;
-            var tX = hpx2 + Math.sin(hdir2) * alenH * 0.7;
-            var tY = hpy2 - Math.cos(hdir2) * alenH * 0.7;
-            ctx.beginPath();
-            ctx.moveTo(sX, sY);
-            ctx.lineTo(tX, tY);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(tX, tY);
-            ctx.lineTo(tX - Math.sin(hdir2+0.4)*ph.headW, tY + Math.cos(hdir2+0.4)*ph.headW);
-            ctx.lineTo(tX - Math.sin(hdir2-0.4)*ph.headW, tY + Math.cos(hdir2-0.4)*ph.headW);
-            ctx.closePath();
-            ctx.fill();
+            drawWindBarb(ctx, hpx2, hpy2, hdir2, hspd2, bLenH);
           }
         }
       }
+      ctx.lineCap = "butt";
     }
 
     // Gridwaarden (cijfers) — minder dicht, met witte omlijning
