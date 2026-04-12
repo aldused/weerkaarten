@@ -90,6 +90,12 @@ GRID_STEP = 0.15  # ~16–17 km — ruim voldoende voor 500/850 hPa
 # Max coördinaten per bulk-call via POST (413 boven ~300)
 BATCH_SIZE = 200
 
+HOURLY_VARS_300 = [
+    "geopotential_height_300hPa",
+    "temperature_300hPa",
+    "wind_speed_300hPa",
+    "wind_direction_300hPa",
+]
 HOURLY_VARS_500 = [
     "geopotential_height_500hPa",
     "temperature_500hPa",
@@ -130,7 +136,10 @@ def fetch_level(
     Retourneert vier (n_steps, n_lat, n_lon) arrays:
       gp_hgt (m), T (°C), u (m/s), v (m/s)
     """
-    if level == 500:
+    if level == 300:
+        hourly_vars = HOURLY_VARS_300
+        prefix = "300hPa"
+    elif level == 500:
         hourly_vars = HOURLY_VARS_500
         prefix = "500hPa"
     elif level == 850:
@@ -251,6 +260,8 @@ def main() -> int:
     )
 
     t0 = time.time()
+    print("300 hPa ophalen...")
+    gp300, t300, u300, v300 = fetch_level(300, batches, tijden)
     print("500 hPa ophalen...")
     gp500, t500, u500, v500 = fetch_level(500, batches, tijden)
     print("850 hPa ophalen...")
@@ -278,6 +289,10 @@ def main() -> int:
         return out
 
     try:
+        gp300 = fill_nan(gp300)
+        t300 = fill_nan(t300)
+        u300 = fill_nan(u300)
+        v300 = fill_nan(v300)
         gp500 = fill_nan(gp500)
         t500 = fill_nan(t500)
         u500 = fill_nan(u500)
@@ -290,10 +305,25 @@ def main() -> int:
         print("[harmonie_openmeteo] scipy ontbreekt — NaN niet ingevuld")
 
     print("Exporteren...")
+    write_bin("harmonie_data_hoogte300.bin", (gp300, t300, u300, v300))
     write_bin("harmonie_data_hoogte500.bin", (gp500, t500, u500, v500))
     write_bin("harmonie_data_hoogte850.bin", (gp850, t850, u850, v850))
 
     # Meta bijwerken
+    meta_grid_300 = {
+        "file": "harmonie_data_hoogte300.bin",
+        "components": 4,
+        "label": "300 hPa — jetstream (temp/wind)",
+        "source": "open-meteo knmi_harmonie_arome_europe",
+        "grid": {
+            "n_lat": n_lat,
+            "n_lon": n_lon,
+            "lat_min": lat_min,
+            "lat_max": lat_max,
+            "lon_min": lon_min,
+            "lon_max": lon_max,
+        },
+    }
     meta_grid_500 = {
         "file": "harmonie_data_hoogte500.bin",
         "components": 4,
@@ -313,6 +343,7 @@ def main() -> int:
     meta_grid_850["label"] = "850 hPa — hoogte/temp/wind"
 
     meta.setdefault("parameters", {})
+    meta["parameters"]["hoogte_300"] = meta_grid_300
     meta["parameters"]["hoogte_500"] = meta_grid_500
     meta["parameters"]["hoogte_850"] = meta_grid_850
 
@@ -321,6 +352,7 @@ def main() -> int:
 
     print(
         f"[harmonie_openmeteo] klaar: "
+        f"{os.path.getsize('harmonie_data_hoogte300.bin') / 1024 / 1024:.1f} MB + "
         f"{os.path.getsize('harmonie_data_hoogte500.bin') / 1024 / 1024:.1f} MB + "
         f"{os.path.getsize('harmonie_data_hoogte850.bin') / 1024 / 1024:.1f} MB"
     )
