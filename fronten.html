@@ -216,7 +216,6 @@
     <label><input type="checkbox" id="chk-fronts" checked> Fronten</label>
     <label><input type="checkbox" id="chk-isobars" checked> Isobaren</label>
     <label><input type="checkbox" id="chk-pressure" checked> H/L systemen</label>
-    <label><input type="checkbox" id="chk-precip" checked> Neerslag</label>
   </div>
   <div id="legend">
     <b>Legenda</b>
@@ -225,7 +224,6 @@
     <div class="legend-row"><div class="legend-line" style="background:#7b2d8e;"></div> Occlusie</div>
     <div class="legend-row"><div class="legend-line" style="background: linear-gradient(to right, #e31a1c 50%, #2166ac 50%);"></div> Stationair</div>
     <div class="legend-row"><div class="legend-line" style="background:#888; height:1px;"></div> Isobaren</div>
-    <div class="legend-row"><div class="legend-swatch" style="background:rgba(76,175,80,0.25);"></div> Neerslag</div>
   </div>
 </div>
 
@@ -258,7 +256,6 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
 const frontLayer    = L.layerGroup().addTo(map);
 const isobarLayer   = L.layerGroup().addTo(map);
 const pressureLayer = L.layerGroup().addTo(map);
-const precipLayer   = L.layerGroup().addTo(map);
 
 // ===================================================================
 //  CUSTOM CANVAS FRONT SYMBOL LAYER
@@ -494,23 +491,20 @@ async function loadAllData() {
   frontLayer.clearLayers();
   isobarLayer.clearLayers();
   pressureLayer.clearLayers();
-  precipLayer.clearLayers();
   if (frontSymbolLayerObj) {
     map.removeLayer(frontSymbolLayerObj);
     frontSymbolLayerObj = null;
   }
 
   try {
-    const [frontsData, isobarsData, pressureData, precipData, metaData] = await Promise.all([
+    const [frontsData, isobarsData, pressureData, metaData] = await Promise.all([
       fetch('fronts.json').then(r => r.json()),
       fetch('isobars.json').then(r => r.json()),
       fetch('pressure_systems.json').then(r => r.json()),
-      fetch('precipitation.json').then(r => r.json()),
       fetch('fronts_meta.json').then(r => r.json())
     ]);
 
     renderMeta(metaData);
-    renderPrecipitation(precipData);
     renderIsobars(isobarsData);
     renderPressureSystems(pressureData);
     renderFronts(frontsData);
@@ -542,44 +536,6 @@ function renderMeta(meta) {
   }
 }
 
-// ===================================================================
-//  PRECIPITATION
-// ===================================================================
-function renderPrecipitation(data) {
-  if (!data || !data.features) return;
-  const intensityFill = {
-    light:    'rgba(76,175,80,0.15)',
-    moderate: 'rgba(56,142,60,0.25)',
-    heavy:    'rgba(30,100,50,0.35)'
-  };
-  for (const feature of data.features) {
-    if (feature.geometry.type !== 'Polygon' && feature.geometry.type !== 'MultiPolygon') continue;
-    const intensity = feature.properties.intensity || 'light';
-    const fillColor = intensityFill[intensity] || intensityFill.light;
-    // parse rgba for Leaflet fillColor/fillOpacity
-    const match = fillColor.match(/rgba\((\d+),(\d+),(\d+),([\d.]+)\)/);
-    let hexColor = '#4caf50';
-    let opacity  = 0.2;
-    if (match) {
-      hexColor = rgbToHex(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
-      opacity  = parseFloat(match[4]);
-    }
-    const layer = L.geoJSON(feature, {
-      style: {
-        color: hexColor,
-        weight: 0.5,
-        opacity: 0.4,
-        fillColor: hexColor,
-        fillOpacity: opacity
-      }
-    });
-    precipLayer.addLayer(layer);
-  }
-}
-
-function rgbToHex(r, g, b) {
-  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
-}
 
 // ===================================================================
 //  ISOBARS
@@ -694,10 +650,6 @@ document.getElementById('chk-isobars').addEventListener('change', function() {
 document.getElementById('chk-pressure').addEventListener('change', function() {
   if (this.checked) pressureLayer.addTo(map);
   else map.removeLayer(pressureLayer);
-});
-document.getElementById('chk-precip').addEventListener('change', function() {
-  if (this.checked) precipLayer.addTo(map);
-  else map.removeLayer(precipLayer);
 });
 
 // ===================================================================

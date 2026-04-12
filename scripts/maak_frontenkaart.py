@@ -41,10 +41,13 @@ LAT_MIN, LAT_MAX = 35.0, 72.0
 LON_MIN, LON_MAX = -15.0, 45.0
 
 # TFP drempelwaarde |∇θw| in K/m
-TFP_GRADIENT_THRESHOLD = 4e-6
+TFP_GRADIENT_THRESHOLD = 8e-6
 
 # Minimum aantal punten in een frontlijn
-MIN_FRONT_POINTS = 5
+MIN_FRONT_POINTS = 20
+
+# Minimum lengte van een frontlijn in graden (voorkomt kleine ronde artefacten)
+MIN_FRONT_LENGTH_DEG = 6.0
 
 # Gaussian smoothing sigma
 SMOOTH_SIGMA = 3
@@ -321,6 +324,15 @@ def compute_tfp_fronts(theta_w, lats, lons):
         # Spline smoothing
         coords_smooth = smooth_line(coords)
 
+        # Minimale lengte check (in graden)
+        total_len = sum(
+            np.sqrt((coords_smooth[i][0] - coords_smooth[i-1][0])**2 +
+                     (coords_smooth[i][1] - coords_smooth[i-1][1])**2)
+            for i in range(1, len(coords_smooth))
+        )
+        if total_len < MIN_FRONT_LENGTH_DEG:
+            continue
+
         # Frontclassificatie
         front_type, warm_side = classify_front(
             contour, lats, lons, dtheta_dx, dtheta_dy, grad_mag_safe
@@ -350,39 +362,128 @@ def classify_front(contour, lats, lons, dtheta_dx, dtheta_dy, grad_mag):
     warm_side is de richtingsvector die naar de warme kant wijst (richting
     hogere θw), genormaliseerd.
     """
-    # Gemiddelde gradient-richting langs contour
     rows = np.clip(contour[:, 0].astype(int), 0, dtheta_dx.shape[0] - 1)
     cols = np.clip(contour[:, 1].astype(int), 0, dtheta_dx.shape[1] - 1)
 
+    # Bereken warm_side: gemiddelde gradiëntrichting langs het front
     mean_dx = float(dtheta_dx[rows, cols].mean())
     mean_dy = float(dtheta_dy[rows, cols].mean())
     norm = max(np.sqrt(mean_dx**2 + mean_dy**2), 1e-12)
     warm_side = [round(mean_dx / norm, 4), round(mean_dy / norm, 4)]
 
-    # Gebruik u, v wind om frontbeweging te bepalen
-    # (wordt geïnjecteerd via globale variabelen bij de aanroep)
     u_vals = _u850
     v_vals = _v850
 
     if u_vals is None or v_vals is None:
         return "unknown", warm_side
 
-    u_front = float(u_vals[rows, cols].mean())
-    v_front = float(v_vals[rows, cols].mean())
+    # Verbeterde classificatie: sample op meerdere punten langs het front
+    # in plaats van alleen het gemiddelde te pakken
+    n_samples = min(len(rows), 20)
+    sample_idx = np.linspace(0, len(rows) - 1, n_samples, dtype=int)
 
-    # Dwars-front windcomponent: projectie van wind op ∇θw-richting
-    cross = u_front * (mean_dx / norm) + v_front * (mean_dy / norm)
+    cross_values = []
+    for idx in sample_idx:
+        r, c = rows[idx], cols[idx]
+        # Lokale gradiëntrichting
+        local_dx = float(dtheta_dx[r, c])
+        local_dy = float(dtheta_dy[r, c])
+        local_norm = max(np.sqrt(local_dx**2 + local_dy**2), 1e-12)
+        nx = local_dx / local_norm
+        ny = local_dy / local_norm
 
-    if abs(cross) < 2.0:
+        # Lokale wind
+        u = float(u_vals[r, c])
+        v = float(v_vals[r, c])
+
+        # Dwars-front windcomponent
+        cross_values.append(u * nx + v * ny)
+
+    cross_values = np.array(cross_values)
+
+    # Classificatie op basis van verdeling van cross-wind waarden
+    n_warm = np.sum(cross_values > 1.5)
+    n_cold = np.sum(cross_values < -1.5)
+    n_total = len(cross_values)
+    mean_cross = float(np.mean(cross_values))
+
+    # Gebruik mediaan i.p.v. gemiddelde — robuuster tegen uitschieters
+    median_cross = float(np.median(cross_values))
+
+    if abs(median_cross) < 1.0:
         front_type = "stationary"
-    elif cross > 0:
-        # Wind beweegt naar warme kant → koude lucht dringt voor
-        front_type = "cold"
-    else:
-        # Wind beweegt weg van warme kant → warme lucht dringt voor
+    elif median_cross > 0:
         front_type = "warm"
+    else:
+        front_type = "cold"
 
     return front_type, warm_side
+
+
+def reclassify_occlusions(fronts_fc, pressure_systems_fc):
+    """Herclassificeer fronten die dicht bij een lagedrukcentrum wikkelen
+    als occlusie. Een occlusie is een front dat:
+    1. Een significant deel dicht bij een L-centrum loopt
+    2. De gradiëntrichting verandert langs het front (draait rondom het centrum)
+    """
+    if not pressure_systems_fc.get("features") or not fronts_fc.get("features"):
+        return fronts_fc
+
+    # Verzamel L-centra
+    lows = []
+    for feat in pressure_systems_fc["features"]:
+        if feat["properties"]["type"] == "L":
+            lon, lat = feat["geometry"]["coordinates"]
+            lows.append((lat, lon, feat["properties"]["pressure"]))
+
+    if not lows:
+        return fronts_fc
+
+    OCCLUSION_RADIUS_DEG = 8.0  # ~900 km — fronten binnen deze afstand van L
+
+    for feat in fronts_fc["features"]:
+        coords = feat["geometry"]["coordinates"]  # [lon, lat] pairs
+        if len(coords) < 10:
+            continue
+
+        for low_lat, low_lon, low_p in lows:
+            # Bereken afstand van elk punt op het front tot dit L-centrum
+            distances = []
+            for lon, lat in coords:
+                dlat = lat - low_lat
+                dlon = (lon - low_lon) * np.cos(np.radians(low_lat))
+                distances.append(np.sqrt(dlat**2 + dlon**2))
+
+            distances = np.array(distances)
+            close_fraction = np.mean(distances < OCCLUSION_RADIUS_DEG)
+
+            # Minimum afstand tot L
+            min_dist = float(distances.min())
+
+            # Check of het front rondom het L-centrum draait:
+            # bereken de hoekverandering van het front t.o.v. het L-centrum
+            angles = []
+            for lon, lat in coords:
+                angle = np.arctan2(lat - low_lat, (lon - low_lon) * np.cos(np.radians(low_lat)))
+                angles.append(angle)
+            angles = np.array(angles)
+
+            # Totale hoekverandering (unwrapped)
+            angle_diffs = np.diff(np.unwrap(angles))
+            total_rotation = abs(float(np.sum(angle_diffs)))
+
+            # Occlusie criteria:
+            # - Het front draait minstens 120° rondom het L-centrum
+            #   (occlusies wikkelen typisch rondom een lagedruk)
+            # - Minimale afstand tot L < 6°
+            # - OF: meer dan 40% binnen radius EN min_dist < 5°
+            is_wrapping = total_rotation > (2 * np.pi / 3) and min_dist < 6.0
+            is_close = close_fraction > 0.4 and min_dist < 5.0
+            if is_wrapping or is_close:
+                feat["properties"]["type"] = "occluded"
+                break  # stop checking other lows
+
+    return fronts_fc
 
 
 # Globale variabelen voor wind bij 850 hPa (worden gevuld in main)
@@ -481,7 +582,7 @@ def find_pressure_centers(ds_sfc_list):
         lon = float(lons[j])
         features.append(Feature(
             geometry=Point([round(lon, 3), round(lat, 3)]),
-            properties={"type": "L", "pressure": round(center_p, 1)},
+            properties={"type": "L", "pressure": round(center_p)},
         ))
 
     for i, j in zip(*np.where(max_mask)):
@@ -496,7 +597,7 @@ def find_pressure_centers(ds_sfc_list):
         lon = float(lons[j])
         features.append(Feature(
             geometry=Point([round(lon, 3), round(lat, 3)]),
-            properties={"type": "H", "pressure": round(center_p, 1)},
+            properties={"type": "H", "pressure": round(center_p)},
         ))
 
     print(f"  {len(features)} drukmiddelpunten gevonden.")
@@ -626,8 +727,13 @@ def main():
         # 6. H/L
         pressure_systems_fc = find_pressure_centers(ds_sfc_list)
 
-        # 7. Neerslag
-        precipitation_fc = compute_precipitation(ds_sfc_list)
+        # 6b. Occlusie herclassificatie (na H/L detectie)
+        fronts_fc = reclassify_occlusions(fronts_fc, pressure_systems_fc)
+        from collections import Counter
+        types = Counter(f["properties"]["type"] for f in fronts_fc["features"])
+        print(f"  Na occlusie-herclassificatie: {dict(types)}")
+
+        # 7. (Neerslag overgeslagen — niet beschikbaar bij step=0 analyse)
 
         # 8. Metadata
         meta = make_metadata(ds_pl_list)
@@ -639,7 +745,6 @@ def main():
         ("fronts.json", fronts_fc),
         ("isobars.json", isobars_fc),
         ("pressure_systems.json", pressure_systems_fc),
-        ("precipitation.json", precipitation_fc),
     ]:
         path = os.path.join(OUTPUT_DIR, filename)
         with open(path, "w") as f:
