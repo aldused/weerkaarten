@@ -504,6 +504,14 @@ body.scroll-mode { overflow-y: auto; }
     [5900,[100,0,150]],[6000,[60,0,140]]
   ];
 
+  // 500 hPa temperatuur kleurschaal — bereik -45 tot -5°C
+  var T500_REF = [
+    [-45,[60,0,120]],[-40,[80,0,180]],[-36,[30,20,220]],[-32,[10,80,230]],
+    [-28,[10,140,230]],[-24,[20,200,220]],[-22,[60,220,180]],[-20,[120,230,120]],
+    [-18,[180,240,70]],[-16,[230,240,30]],[-14,[255,220,20]],[-12,[255,180,20]],
+    [-10,[255,130,10]],[-8,[240,70,10]],[-5,[200,0,40]]
+  ];
+
   // 850 hPa geopotentiële hoogte (m) — bereik ~1300–1600
   // Wordt vooral gebruikt als achtergrond — temperatuur is de hoofdinfo
   var GP850_REF = [
@@ -888,10 +896,9 @@ body.scroll-mode { overflow-y: auto; }
           if (derivedData) {
             val = derivedData[i];
           } else if (paramKey === "hoogte_500" || paramKey === "hoogte_850") {
-            // 4-component: gebruik gp_hgt (comp0) of temp (comp1) afhankelijk van paramKey
-            val = paramKey === "hoogte_850"
-              ? pd.data[offset + 1 * nLat * nLon + i]  // T voor 850 hPa (kleur=temp)
-              : pd.data[offset + 0 * nLat * nLon + i]; // gp_hgt voor 500 hPa
+            // 4-component: comp0=gp_hgt, comp1=temp, comp2=u, comp3=v
+            // Beide niveaus tonen temperatuur als kleurvulling
+            val = pd.data[offset + 1 * nLat * nLon + i]; // T (comp1)
           } else if (nComp === 1) {
             val = pd.data[offset + i];
           } else {
@@ -908,7 +915,7 @@ body.scroll-mode { overflow-y: auto; }
           }
 
           if (paramKey === "hoogte_500") {
-            c = interpColor(val, GP500_REF); // val = gp_hgt
+            c = interpColor(val, T500_REF); // val = T @ 500 hPa
           } else if (paramKey === "hoogte_850") {
             c = interpColor(val, T850_REF);  // val = T
           } else if (paramKey === "mist") {
@@ -1153,7 +1160,7 @@ body.scroll-mode { overflow-y: auto; }
         if (derivedData) {
           val = derivedData[gi];
         } else if (paramKey === "hoogte_500") {
-          val = pd.data[offset + 0 * nLat * nLon + gi]; // gp_hgt
+          val = pd.data[offset + 1 * nLat * nLon + gi]; // temperatuur (comp1)
         } else if (paramKey === "hoogte_850") {
           val = pd.data[offset + 1 * nLat * nLon + gi]; // temperatuur
         } else if (nComp === 1) {
@@ -1214,9 +1221,9 @@ body.scroll-mode { overflow-y: auto; }
           if (isNaN(val)) { txt = ""; bgc = null; }
           else { txt = val < 1000 ? Math.round(val).toString() : Math.round(val/100)/10 + "k"; bgc = boundaryColor(val, CLOUDBASE_LEVELS, CLOUDBASE_COLORS); }
         } else if (paramKey === "hoogte_500") {
-          // Geopotentiële hoogte in decameter (dam) — klassiek
-          txt = Math.round(val / 10).toString();
-          bgc = interpColor(val, GP500_REF);
+          // Temperatuur op 500 hPa
+          txt = Math.round(val).toString();
+          bgc = interpColor(val, T500_REF);
         } else if (paramKey === "hoogte_850") {
           // Temperatuur als label (hoofdwaarde op 850 hPa kaart)
           txt = Math.round(val).toString();
@@ -1332,14 +1339,14 @@ body.scroll-mode { overflow-y: auto; }
       else if (paramKey === "mist") { legLevels = MIST_LEVELS; legColors = MIST_COLORS; legLabel = "m zicht"; }
       else if (paramKey === "cloud_base") { legLevels = CLOUDBASE_LEVELS; legColors = CLOUDBASE_COLORS; legLabel = "m wolkenbasis"; }
       else if (paramKey === "hoogte_500") {
-        legLevels = [5100,5200,5300,5400,5500,5600,5700,5800];
-        legColors = legLevels.map(function(g){ return interpColor(g, GP500_REF); });
-        legLabel = "m geopot. hgt — pijl = wind";
+        legLevels = [-40,-35,-30,-25,-20,-15,-10,-5];
+        legColors = legLevels.map(function(t){ return interpColor(t, T500_REF); });
+        legLabel = "°C @ 500 hPa — windveer";
       }
       else if (paramKey === "hoogte_850") {
         legLevels = [-20,-15,-10,-5,0,5,10,15,20];
         legColors = legLevels.map(function(t){ return interpColor(t, T850_REF); });
-        legLabel = "°C @ 850 hPa — pijl = wind";
+        legLabel = "°C @ 850 hPa — windveer";
       }
 
       if (legLevels && legColors) {
@@ -1524,7 +1531,7 @@ body.scroll-mode { overflow-y: auto; }
           ["cape", "CAPE (J/kg)"],
         ]],
         ["Hoogtekaarten", [
-          ["hoogte_500", "500 hPa — hoogte + wind"],
+          ["hoogte_500", "500 hPa — temperatuur + wind"],
           ["hoogte_850", "850 hPa — temperatuur + wind"],
         ]],
       ];
