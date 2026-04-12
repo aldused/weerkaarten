@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frontenkaart Europa — Weerlab.nl</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: Arial, sans-serif; }
+
+  #header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    background: #1a3a5c;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    z-index: 1100;
+    gap: 16px;
+  }
+  #header h1 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  #header-timestamp {
+    font-size: 13px;
+    opacity: 0.85;
+    white-space: nowrap;
+  }
+
+  #map {
+    position: fixed;
+    top: 48px; left: 0; right: 0; bottom: 0;
+  }
+
+  /* Search bar */
+  #search-container {
+    position: absolute;
+    top: 10px; left: 10px;
+    z-index: 1000;
+    display: flex;
+    gap: 4px;
+  }
+  #search-input {
+    width: 220px;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    background: rgba(255,255,255,0.95);
+  }
+  #search-btn {
+    padding: 6px 12px;
+    background: #1a3a5c;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #search-btn:hover { background: #2a5080; }
+
+  /* Layer controls */
+  #layer-controls {
+    position: absolute;
+    top: 10px; right: 10px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.8;
+    min-width: 140px;
+  }
+  #layer-controls b {
+    display: block;
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  #layer-controls label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  #layer-controls input[type=checkbox] {
+    cursor: pointer;
+  }
+
+  /* Legend */
+  #legend {
+    position: absolute;
+    bottom: 28px; right: 10px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.9;
+    min-width: 160px;
+  }
+  #legend b {
+    display: block;
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .legend-line {
+    width: 36px;
+    height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .legend-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,0,0,0.15);
+    flex-shrink: 0;
+  }
+
+  /* Loading overlay */
+  #loading-overlay {
+    position: fixed;
+    top: 48px; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+  .loading-box {
+    background: #fff;
+    border-radius: 8px;
+    padding: 24px 36px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    text-align: center;
+    font-size: 15px;
+    color: #1a3a5c;
+  }
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #cde;
+    border-top-color: #1a3a5c;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Isobar labels */
+  .isobar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #666;
+    background: rgba(255,255,255,0.75);
+    padding: 1px 3px;
+    border-radius: 3px;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  /* H/L pressure labels */
+  .pressure-hl {
+    text-align: center;
+    line-height: 1.1;
+    white-space: nowrap;
+    text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+  }
+  .pressure-hl .hl-letter {
+    display: block;
+    font-size: 22px;
+    font-weight: 900;
+  }
+  .pressure-hl .hl-value {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Frontenkaart Europa</h1>
+  <span id="header-timestamp"></span>
+</div>
+
+<div id="map">
+  <!-- Leaflet controls are appended inside #map -->
+  <div id="search-container">
+    <input type="text" id="search-input" placeholder="Zoek plaats…" />
+    <button id="search-btn">Zoek</button>
+  </div>
+  <div id="layer-controls">
+    <b>Lagen</b>
+    <label><input type="checkbox" id="chk-fronts" checked> Fronten</label>
+    <label><input type="checkbox" id="chk-isobars" checked> Isobaren</label>
+    <label><input type="checkbox" id="chk-pressure" checked> H/L systemen</label>
+    <label><input type="checkbox" id="chk-precip" checked> Neerslag</label>
+  </div>
+  <div id="legend">
+    <b>Legenda</b>
+    <div class="legend-row"><div class="legend-line" style="background:#e31a1c;"></div> Warmtefront</div>
+    <div class="legend-row"><div class="legend-line" style="background:#2166ac;"></div> Koufront</div>
+    <div class="legend-row"><div class="legend-line" style="background:#7b2d8e;"></div> Occlusie</div>
+    <div class="legend-row"><div class="legend-line" style="background: linear-gradient(to right, #e31a1c 50%, #2166ac 50%);"></div> Stationair</div>
+    <div class="legend-row"><div class="legend-line" style="background:#888; height:1px;"></div> Isobaren</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:rgba(76,175,80,0.25);"></div> Neerslag</div>
+  </div>
+</div>
+
+<div id="loading-overlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    Kaart laden…
+  </div>
+</div>
+
+<script>
+// ===================================================================
+//  MAP INIT
+// ===================================================================
+const map = L.map('map', {
+  center: [52, 10],
+  zoom: 4,
+  minZoom: 3,
+  maxZoom: 8,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  subdomains: 'abcd',
+  maxZoom: 20
+}).addTo(map);
+
+// Layer groups
+const frontLayer    = L.layerGroup().addTo(map);
+const isobarLayer   = L.layerGroup().addTo(map);
+const pressureLayer = L.layerGroup().addTo(map);
+const precipLayer   = L.layerGroup().addTo(map);
+
+// ===================================================================
+//  CUSTOM CANVAS FRONT SYMBOL LAYER
+// ===================================================================
+const FrontSymbolLayer = L.Layer.extend({
+
+  initialize: function(geojson) {
+    this._geojson = geojson;
+    this._canvas = null;
+  },
+
+  onAdd: function(map) {
+    this._map = map;
+    // Create canvas and insert into overlayPane
+    this._canvas = L.DomUtil.create('canvas', 'front-canvas');
+    const pane = map.getPanes().overlayPane;
+    pane.appendChild(this._canvas);
+    this._draw();
+    map.on('moveend zoomend resize', this._draw, this);
+  },
+
+  onRemove: function(map) {
+    map.off('moveend zoomend resize', this._draw, this);
+    if (this._canvas && this._canvas.parentNode) {
+      this._canvas.parentNode.removeChild(this._canvas);
+    }
+    this._canvas = null;
+    this._map = null;
+  },
+
+  _draw: function() {
+    const map = this._map;
+    if (!map || !this._canvas) return;
+
+    const size = map.getSize();
+    const canvas = this._canvas;
+    canvas.width  = size.x;
+    canvas.height = size.y;
+    canvas.style.width  = size.x + 'px';
+    canvas.style.height = size.y + 'px';
+
+    // Align canvas with top-left of map container
+    const topLeft = map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(canvas, topLeft);
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size.x, size.y);
+
+    const features = this._geojson.features || [];
+    for (const feature of features) {
+      this._drawFront(ctx, map, feature);
+    }
+  },
+
+  _latLngToPoint: function(map, coord) {
+    // coord = [lon, lat]
+    const pt = map.latLngToContainerPoint(L.latLng(coord[1], coord[0]));
+    return pt;
+  },
+
+  _drawFront: function(ctx, map, feature) {
+    const type = feature.properties.type;
+    const coords = feature.geometry.coordinates;
+    if (!coords || coords.length < 2) return;
+
+    // Convert all coords to pixel points
+    const pts = coords.map(c => this._latLngToPoint(map, c));
+
+    // Determine warm_side (normal vector pointing to warm side)
+    const ws = feature.properties.warm_side; // [nx, ny] in geographic space
+
+    // Style per type
+    let lineColor, symbolColor, symbolColor2;
+    switch (type) {
+      case 'warm':       lineColor = '#e31a1c'; symbolColor = '#e31a1c'; break;
+      case 'cold':       lineColor = '#2166ac'; symbolColor = '#2166ac'; break;
+      case 'occluded':   lineColor = '#7b2d8e'; symbolColor = '#7b2d8e'; break;
+      case 'stationary': lineColor = '#e31a1c'; symbolColor = '#e31a1c'; symbolColor2 = '#2166ac'; break;
+      default:           lineColor = '#888';    symbolColor = '#888';
+    }
+
+    // Draw line
+    ctx.beginPath();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 3.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap  = 'round';
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.stroke();
+
+    // Draw symbols along the line
+    const SYMBOL_SPACING = 80; // pixels between symbols
+
+    // Walk along segments accumulating distance
+    let distAccum = SYMBOL_SPACING / 2; // start half-spacing in
+    let symbolIndex = 0;
+    let segDist = 0;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i];
+      const p1 = pts[i + 1];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      segDist = Math.sqrt(dx * dx + dy * dy);
+      if (segDist < 0.001) continue;
+
+      while (distAccum <= segDist) {
+        const t = distAccum / segDist;
+        const px = p0.x + t * dx;
+        const py = p0.y + t * dy;
+        const angle = Math.atan2(dy, dx); // direction of segment in pixels
+
+        // Determine which side symbols go on
+        // warm_side is a geographic direction vector; we need to determine
+        // if it points "above" or "below" the line in screen coords.
+        // We'll use the cross product of the line dir (screen) and the
+        // warm_side converted to screen space.
+        // For warm/cold/stationary we compute from warm_side property.
+        let warmAbove = true; // default: symbols on positive y side (below in screen)
+        if (ws) {
+          // ws = [nx, ny] in geo coords (x=east, y=north)
+          // In screen space: east = +x, north = -y
+          const wsScreenX =  ws[0];
+          const wsScreenY = -ws[1];
+          // Line direction in screen
+          const lineDirX = dx / segDist;
+          const lineDirY = dy / segDist;
+          // Cross product (z component): linedir × ws
+          const cross = lineDirX * wsScreenY - lineDirY * wsScreenX;
+          // cross > 0 means ws is to the left of line dir (above in typical coords)
+          warmAbove = (cross > 0);
+        }
+
+        this._drawSymbol(ctx, type, px, py, angle, warmAbove, symbolIndex, symbolColor, symbolColor2);
+        symbolIndex++;
+        distAccum += SYMBOL_SPACING;
+      }
+      distAccum -= segDist;
+    }
+  },
+
+  // Helper: draw a filled semicircle bulging in direction perpY (screen-space).
+  // The flat base is along the x-axis in rotated space; the dome points toward perpSign.
+  // ctx is already translated+rotated so the line runs along +x.
+  // perpSign: -1 = above line (negative y in screen), +1 = below line (positive y in screen).
+  _drawSemiCircle: function(ctx, r, perpSign, fillColor) {
+    // Arc from (-r,0) to (r,0) bulging toward perpSign*y
+    const startAngle = perpSign < 0 ? Math.PI : 0;
+    const endAngle   = perpSign < 0 ? 0       : Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(-r, 0);
+    ctx.arc(0, 0, r, startAngle, endAngle, perpSign < 0); // ccw if perpSign<0 (above)
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+  },
+
+  // Helper: draw a filled triangle pointing toward perpSign direction.
+  // Base sits on the line (y=0 in rotated space), tip points toward perpSign*y.
+  _drawTriangle: function(ctx, h, w, perpSign, fillColor) {
+    const tipY = -perpSign * h; // negative y = above = toward warm if warmAbove
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, 0);
+    ctx.lineTo( w / 2, 0);
+    ctx.lineTo(0, tipY);
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+  },
+
+  _drawSymbol: function(ctx, type, px, py, angle, warmAbove, idx, color, color2) {
+    const SEMI_R = 10; // semicircle radius px
+    const TRI_H  = 16; // triangle height px
+    const TRI_W  = 14; // triangle base width px
+
+    // In screen space: y increases downward.
+    // warmAbove=true  → warm side is above line → perpSign = -1 (negative y in screen)
+    // warmAbove=false → warm side is below line → perpSign = +1
+    const warmPerp = warmAbove ? -1 : 1;  // direction toward warm side
+    const coldPerp = -warmPerp;            // direction toward cold side
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(angle);
+
+    switch (type) {
+      case 'warm':
+        // Filled red semicircle bulging toward warm side
+        this._drawSemiCircle(ctx, SEMI_R, warmPerp, color);
+        break;
+
+      case 'cold':
+        // Filled blue triangle pointing toward cold side
+        this._drawTriangle(ctx, TRI_H, TRI_W, coldPerp, color);
+        break;
+
+      case 'occluded':
+        // Alternating semicircle and triangle, both toward same side (warm), purple
+        if (idx % 2 === 0) {
+          this._drawSemiCircle(ctx, SEMI_R, warmPerp, color);
+        } else {
+          this._drawTriangle(ctx, TRI_H, TRI_W, warmPerp, color);
+        }
+        break;
+
+      case 'stationary':
+        // Even: red semicircle above line; Odd: blue triangle below line
+        // Stationary fronts conventionally: semicircles on one side, triangles on the other
+        if (idx % 2 === 0) {
+          this._drawSemiCircle(ctx, SEMI_R, -1, color);   // red, always above
+        } else {
+          this._drawTriangle(ctx, TRI_H, TRI_W, 1, color2 || '#2166ac'); // blue, always below
+        }
+        break;
+    }
+
+    ctx.restore();
+  }
+});
+
+// ===================================================================
+//  DATA LOADING
+// ===================================================================
+let frontSymbolLayerObj = null;
+
+async function loadAllData() {
+  document.getElementById('loading-overlay').style.display = 'flex';
+
+  // Clear existing layers
+  frontLayer.clearLayers();
+  isobarLayer.clearLayers();
+  pressureLayer.clearLayers();
+  precipLayer.clearLayers();
+  if (frontSymbolLayerObj) {
+    map.removeLayer(frontSymbolLayerObj);
+    frontSymbolLayerObj = null;
+  }
+
+  try {
+    const [frontsData, isobarsData, pressureData, precipData, metaData] = await Promise.all([
+      fetch('fronts.json').then(r => r.json()),
+      fetch('isobars.json').then(r => r.json()),
+      fetch('pressure_systems.json').then(r => r.json()),
+      fetch('precipitation.json').then(r => r.json()),
+      fetch('fronts_meta.json').then(r => r.json())
+    ]);
+
+    renderMeta(metaData);
+    renderPrecipitation(precipData);
+    renderIsobars(isobarsData);
+    renderPressureSystems(pressureData);
+    renderFronts(frontsData);
+
+  } catch (err) {
+    console.error('Fout bij laden data:', err);
+    document.getElementById('header-timestamp').textContent = 'Fout bij laden data';
+  } finally {
+    document.getElementById('loading-overlay').style.display = 'none';
+  }
+}
+
+// ===================================================================
+//  META / TIMESTAMP
+// ===================================================================
+function renderMeta(meta) {
+  if (!meta || !meta.valid_time) return;
+  try {
+    const dt = new Date(meta.valid_time + 'Z');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = dt.getUTCFullYear();
+    const hh = String(dt.getUTCHours()).padStart(2, '0');
+    const model = meta.model || 'ECMWF IFS';
+    document.getElementById('header-timestamp').textContent =
+      `Analyse: ${dd}-${mm}-${yyyy} ${hh}:00 UTC \u2014 ${model}`;
+  } catch(e) {
+    document.getElementById('header-timestamp').textContent = meta.valid_time || '';
+  }
+}
+
+// ===================================================================
+//  PRECIPITATION
+// ===================================================================
+function renderPrecipitation(data) {
+  if (!data || !data.features) return;
+  const intensityFill = {
+    light:    'rgba(76,175,80,0.15)',
+    moderate: 'rgba(56,142,60,0.25)',
+    heavy:    'rgba(30,100,50,0.35)'
+  };
+  for (const feature of data.features) {
+    if (feature.geometry.type !== 'Polygon' && feature.geometry.type !== 'MultiPolygon') continue;
+    const intensity = feature.properties.intensity || 'light';
+    const fillColor = intensityFill[intensity] || intensityFill.light;
+    // parse rgba for Leaflet fillColor/fillOpacity
+    const match = fillColor.match(/rgba\((\d+),(\d+),(\d+),([\d.]+)\)/);
+    let hexColor = '#4caf50';
+    let opacity  = 0.2;
+    if (match) {
+      hexColor = rgbToHex(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]));
+      opacity  = parseFloat(match[4]);
+    }
+    const layer = L.geoJSON(feature, {
+      style: {
+        color: hexColor,
+        weight: 0.5,
+        opacity: 0.4,
+        fillColor: hexColor,
+        fillOpacity: opacity
+      }
+    });
+    precipLayer.addLayer(layer);
+  }
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+// ===================================================================
+//  ISOBARS
+// ===================================================================
+function renderIsobars(data) {
+  if (!data || !data.features) return;
+  for (const feature of data.features) {
+    if (feature.geometry.type !== 'LineString' && feature.geometry.type !== 'MultiLineString') continue;
+    const pressure = feature.properties.pressure;
+    const line = L.geoJSON(feature, {
+      style: { color: '#888', weight: 1, opacity: 0.6 }
+    });
+    isobarLayer.addLayer(line);
+
+    // Label at midpoint of geometry
+    if (pressure) {
+      const midpoint = getMidpoint(feature.geometry);
+      if (midpoint) {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="isobar-label">${Math.round(pressure)}</div>`,
+          iconAnchor: [16, 8]
+        });
+        isobarLayer.addLayer(L.marker(midpoint, { icon: icon }));
+      }
+    }
+  }
+}
+
+function getMidpoint(geometry) {
+  let coords;
+  if (geometry.type === 'LineString') {
+    coords = geometry.coordinates;
+  } else if (geometry.type === 'MultiLineString') {
+    coords = geometry.coordinates[0];
+  } else return null;
+  if (!coords || coords.length < 2) return null;
+  // Find the actual midpoint by total arc length
+  let totalLen = 0;
+  const lens = [];
+  for (let i = 0; i < coords.length - 1; i++) {
+    const dx = coords[i+1][0] - coords[i][0];
+    const dy = coords[i+1][1] - coords[i][1];
+    const d = Math.sqrt(dx*dx + dy*dy);
+    lens.push(d);
+    totalLen += d;
+  }
+  const half = totalLen / 2;
+  let cum = 0;
+  for (let i = 0; i < lens.length; i++) {
+    if (cum + lens[i] >= half) {
+      const t = (half - cum) / lens[i];
+      const lon = coords[i][0] + t * (coords[i+1][0] - coords[i][0]);
+      const lat = coords[i][1] + t * (coords[i+1][1] - coords[i][1]);
+      return L.latLng(lat, lon);
+    }
+    cum += lens[i];
+  }
+  const last = coords[coords.length - 1];
+  return L.latLng(last[1], last[0]);
+}
+
+// ===================================================================
+//  PRESSURE SYSTEMS (H/L)
+// ===================================================================
+function renderPressureSystems(data) {
+  if (!data || !data.features) return;
+  for (const feature of data.features) {
+    if (feature.geometry.type !== 'Point') continue;
+    const [lon, lat] = feature.geometry.coordinates;
+    const type     = feature.properties.type;
+    const pressure = feature.properties.pressure;
+    const color    = type === 'H' ? '#2166ac' : '#e31a1c';
+    const pressStr = pressure ? Math.round(pressure * 10) / 10 : '';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="pressure-hl" style="color:${color}">
+               <span class="hl-letter">${type}</span>
+               <span class="hl-value">${pressStr}</span>
+             </div>`,
+      iconAnchor: [16, 20]
+    });
+    pressureLayer.addLayer(L.marker(L.latLng(lat, lon), { icon: icon }));
+  }
+}
+
+// ===================================================================
+//  FRONTS (canvas layer)
+// ===================================================================
+function renderFronts(data) {
+  if (!data || !data.features) return;
+  frontSymbolLayerObj = new FrontSymbolLayer(data);
+  // Only add if checkbox is checked
+  if (document.getElementById('chk-fronts').checked) {
+    frontSymbolLayerObj.addTo(map);
+  }
+}
+
+// ===================================================================
+//  LAYER TOGGLE CHECKBOXES
+// ===================================================================
+document.getElementById('chk-fronts').addEventListener('change', function() {
+  if (frontSymbolLayerObj) {
+    if (this.checked) frontSymbolLayerObj.addTo(map);
+    else map.removeLayer(frontSymbolLayerObj);
+  }
+});
+document.getElementById('chk-isobars').addEventListener('change', function() {
+  if (this.checked) isobarLayer.addTo(map);
+  else map.removeLayer(isobarLayer);
+});
+document.getElementById('chk-pressure').addEventListener('change', function() {
+  if (this.checked) pressureLayer.addTo(map);
+  else map.removeLayer(pressureLayer);
+});
+document.getElementById('chk-precip').addEventListener('change', function() {
+  if (this.checked) precipLayer.addTo(map);
+  else map.removeLayer(precipLayer);
+});
+
+// ===================================================================
+//  SEARCH (Nominatim)
+// ===================================================================
+async function doSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  if (!query) return;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    const results = await fetch(url, { headers: { 'Accept-Language': 'nl' } }).then(r => r.json());
+    if (results && results.length > 0) {
+      const { lat, lon } = results[0];
+      map.setView([parseFloat(lat), parseFloat(lon)], Math.max(map.getZoom(), 6));
+    } else {
+      alert('Geen resultaten gevonden voor: ' + query);
+    }
+  } catch(e) {
+    alert('Zoekfout: ' + e.message);
+  }
+}
+
+document.getElementById('search-btn').addEventListener('click', doSearch);
+document.getElementById('search-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doSearch();
+});
+
+// ===================================================================
+//  AUTO-REFRESH (every 30 minutes)
+// ===================================================================
+setInterval(loadAllData, 30 * 60 * 1000);
+
+// ===================================================================
+//  INITIAL LOAD
+// ===================================================================
+loadAllData();
+</script>
+</body>
+</html>
