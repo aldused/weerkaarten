@@ -171,6 +171,10 @@ def verwerk_station(code, naam):
     vv_raw   = parse_values(root, 'VV')      # zicht in meters
     wwm_raw  = parse_values(root, 'wwM')     # kans op mist %
     wwz_raw  = parse_values(root, 'wwZ')     # kans op hagel %
+    wwt_raw  = parse_values(root, 'wwT')     # kans op onweer per uur %
+    fxh25_raw = parse_values(root, 'FXh25')  # kans windstoot >25kt (46 km/u) 12u %
+    fxh40_raw = parse_values(root, 'FXh40')  # kans windstoot >40kt (74 km/u) 12u %
+    fxh55_raw = parse_values(root, 'FXh55')  # kans windstoot >55kt (102 km/u) 12u %
 
     # Conversie Kelvin → Celsius
     tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
@@ -221,6 +225,10 @@ def verwerk_station(code, naam):
         "vv_min": [],
         "wwm": [],
         "wwz": [],
+        "wwt": [],           # onweerkans per uur
+        "fxh25": [],         # kans stoot >25kt 12u
+        "fxh40": [],         # kans stoot >40kt 12u
+        "fxh55": [],         # kans stoot >55kt 12u
         "wbgt_ochtend": [],  # 06-12h
         "wbgt_middag": [],   # 12-18h
         "rv_middag": [],     # laagste RV 12-18h
@@ -309,6 +317,18 @@ def verwerk_station(code, naam):
         # Hagelkans: max over hele dag (%)
         if i < len(wwz_raw) and wwz_raw[i] is not None:
             dd["wwz"].append(wwz_raw[i])
+
+        # Onweerkans: max over hele dag (%)
+        if i < len(wwt_raw) and wwt_raw[i] is not None:
+            dd["wwt"].append(wwt_raw[i])
+
+        # Windstootkansen: max over hele dag (12-uurs kansen)
+        if i < len(fxh25_raw) and fxh25_raw[i] is not None:
+            dd["fxh25"].append(fxh25_raw[i])
+        if i < len(fxh40_raw) and fxh40_raw[i] is not None:
+            dd["fxh40"].append(fxh40_raw[i])
+        if i < len(fxh55_raw) and fxh55_raw[i] is not None:
+            dd["fxh55"].append(fxh55_raw[i])
 
         # WBGT: berekenen voor ochtend (06-12h) en middag (12-18h)
         if 6 <= hour < 18:
@@ -410,6 +430,14 @@ def verwerk_station(code, naam):
         # Hagelkans max (%)
         r["wwZ"] = round(max(dd["wwz"])) if dd["wwz"] else None
 
+        # Onweerkans max (%)
+        r["wwT"] = round(max(dd["wwt"])) if dd["wwt"] else None
+
+        # Windstootkansen max (%)
+        r["FXh25"] = round(max(dd["fxh25"])) if dd["fxh25"] else None
+        r["FXh40"] = round(max(dd["fxh40"])) if dd["fxh40"] else None
+        r["FXh55"] = round(max(dd["fxh55"])) if dd["fxh55"] else None
+
         # WBGT max ochtend en middag
         r["WBGT_O"] = round(max(dd["wbgt_ochtend"]), 1) if dd["wbgt_ochtend"] else None
         r["WBGT_M"] = round(max(dd["wbgt_middag"]), 1) if dd["wbgt_middag"] else None
@@ -453,7 +481,7 @@ def bouw_json(stations, coords, output_file):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TN", "TG", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_O", "FX_O", "DD_O", "FF_M", "FX_M", "DD_M", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "WBGT_O", "WBGT_M", "RV_M"]
+    params = ["TX", "TN", "TG", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_O", "FX_O", "DD_O", "FF_M", "FX_M", "DD_M", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "wwT", "FXh25", "FXh40", "FXh55", "WBGT_O", "WBGT_M", "RV_M"]
 
     for d in dagen:
         dag_key = d.isoformat()
