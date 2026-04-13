@@ -688,6 +688,27 @@ function maakLabels(times){
 
 function getLab(times){return maakLabels(times);}
 
+// Compacte labels voor 2x2 grid: alleen dagnamen, geen tijden
+function maakLabelsCompact(times){
+  return times.map(t=>{
+    const d=new Date(t);
+    const h=d.getHours();
+    if(h===0)return ['', `${NL_DAGEN[d.getDay()]} ${d.getDate()}`];
+    return '';
+  });
+}
+// Compacte x-as config voor grid-cellen
+const xAsCompact={grid:{color:GRID},ticks:{color:TICK,maxRotation:0,autoSkip:false,
+  font:function(ctx){
+    const raw = ctx.tick && ctx.tick.label;
+    return {size: Array.isArray(raw) ? 10 : 8, weight: Array.isArray(raw) ? 'bold' : 'normal'};
+  },
+  color:function(ctx){
+    const raw = ctx.tick && ctx.tick.label;
+    return Array.isArray(raw) ? '#1a2b40' : 'transparent';
+  }
+},border:{color:GRID}};
+
 
 
 function medC(arr,j){
@@ -2177,7 +2198,11 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
 
   const cel=document.getElementById(`verg-cel-${idx}`);
   cel.innerHTML=`<div class="verg-cel-titel" id="verg-t-${idx}">${titel}</div><div style="position:relative;width:100%;height:300px"><canvas id="verg-canvas-${idx}"></canvas></div>`;
-  const labArr=getLab(apiTimes);
+  const labArr=maakLabelsCompact(apiTimes);
+  // Overschrijf x-as met compacte versie (alleen dagnamen, geen tijden)
+  for(const k of Object.keys(scales)){
+    if(k==='x'||k.startsWith('x')) scales[k]={...xAsCompact};
+  }
   vergCharts[idx]=new Chart(document.getElementById(`verg-canvas-${idx}`),{
     data:{labels:labArr,datasets},
     options:{...cfgBase,
@@ -2769,8 +2794,12 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
 
   const cel=document.getElementById(`verg-cel-${idx}`);
   cel.innerHTML=`<div class="verg-cel-titel">${titel}</div><div style="position:relative;width:100%;height:300px"><canvas id="verg-canvas-${idx}"></canvas></div>`;
+  // Compacte x-as voor grid-cellen
+  for(const k of Object.keys(scales)){
+    if(k==='x'||k.startsWith('x')) scales[k]={...xAsCompact};
+  }
   vergCharts[idx]=new Chart(document.getElementById(`verg-canvas-${idx}`),{
-    data:{labels:getLab(ts),datasets},
+    data:{labels:maakLabelsCompact(ts),datasets},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,...tooltipCb}},
       scales,barPercentage:type==='cloud'?1:0.9,categoryPercentage:type==='cloud'?1:0.8,
