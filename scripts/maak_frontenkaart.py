@@ -267,17 +267,98 @@ def compute_theta_w(ds_pl_list):
     theta_w = mpcalc.wet_bulb_potential_temperature(pressure, temp, dewpoint)
     theta_w_K = theta_w.to("kelvin").magnitude
 
-    return theta_w_K, lats_np, lons.values
+    # Maak xarray DataArray voor Berry et al. library
+    theta_w_da = xr.DataArray(
+        theta_w_K,
+        dims=["latitude", "longitude"],
+        coords={"latitude": lats_np, "longitude": lons.values},
+    )
+
+    return theta_w_da, lats_np, lons.values
 
 
-# ── Stap 4: TFP berekenen en frontlijnen extraheren ───────────────────────────
+# ── Stap 4: Front-detectie via Berry et al. (2011) ───────────────────────────
 
-def compute_tfp_fronts(theta_w, lats, lons):
-    """Berekent TFP en extraheert frontlijnen als GeoJSON Features."""
-    print("Computing TFP and extracting front lines...")
+def compute_fronts_berry(theta_w_da, ds_pl_list):
+    """Detecteert fronten via Berry et al. methode (coecms/frontdetection).
+    Geeft GeoJSON FeatureCollection terug met cold/warm/stationary fronten."""
+    import fronts_berry as flib
 
-    # Smooth θw
-    theta_smooth = gaussian_filter(theta_w, sigma=SMOOTH_SIGMA)
+    print("Computing fronts (Berry et al. method)...")
+
+    # Bereid wind DataArrays voor
+    u_da = ds_pl_list["u"]["u"].squeeze()
+    v_da = ds_pl_list["v"]["v"].squeeze()
+
+    # Zorg dat latitude oplopend is
+    if u_da.latitude.values[0] > u_da.latitude.values[-1]:
+        u_da = u_da.isel(latitude=slice(None, None, -1))
+        v_da = v_da.isel(latitude=slice(None, None, -1))
+
+    # Crop wind naar zelfde grid als theta_w
+    u_da = u_da.sel(
+        latitude=theta_w_da.latitude,
+        longitude=theta_w_da.longitude,
+        method="nearest",
+    )
+    v_da = v_da.sel(
+        latitude=theta_w_da.latitude,
+        longitude=theta_w_da.longitude,
+        method="nearest",
+    )
+
+    # Berry et al. front detectie
+    # threshold_i: intensiteitsdrempel (negatiever = strenger)
+    # threshhold_s: snelheidsdrempel warm/koud (m/s)
+    # numsmooth: aantal smoothing-passes
+    # minlength: minimale frontlengte in km
+    frontdata = flib.front(
+        theta_w_da,
+        u_da,
+        v_da,
+        threshold_i=-0.3e-10,    # standaard Berry drempel
+        threshhold_s=1.5,        # m/s voor warm/koud classificatie
+        numsmooth=9,             # 9 passes smoothing (Berry standaard)
+        minlength=500,           # minimaal 500 km (filtert kleine artefacten)
+        searchdist=1.12,         # graden zoekafstand voor lijn-joining
+        linejoin_set=1,          # graph-methode (sneller)
+    )
+
+    # Converteer Berry output naar GeoJSON
+    features = []
+
+    for front_type, lines in [
+        ("cold", frontdata["cold_fronts"]),
+        ("warm", frontdata["warm_fronts"]),
+        ("stationary", frontdata["stationary_fronts"]),
+    ]:
+        for line in lines:
+            lats_line = line[0]
+            lons_line = line[1]
+            if hasattr(lats_line, 'tolist'):
+                lats_line = lats_line.tolist()
+                lons_line = lons_line.tolist()
+            if len(lats_line) < 3:
+                continue
+
+            # GeoJSON [lon, lat] volgorde
+            coords = list(zip(lons_line, lats_line))
+
+            # Spline smoothing voor mooiere curves
+            coords_smooth = smooth_line(coords, n_out=200)
+
+            feat = Feature(
+                geometry=LineString(coords_smooth),
+                properties={"type": front_type},
+            )
+            features.append(feat)
+
+    print(f"  {len(features)} frontlijnen gevonden.")
+    from collections import Counter
+    types = Counter(f["properties"]["type"] for f in features)
+    print(f"  Types: {dict(types)}")
+
+    return FeatureCollection(features)
 
     # Dx, dy
     lats_xr = xr.DataArray(lats, dims=["latitude"])
@@ -351,144 +432,6 @@ def compute_tfp_fronts(theta_w, lats, lons):
     print(f"  {len(features)} frontlijnen gevonden.")
     return FeatureCollection(features)
 
-
-# ── Stap 5: Frontclassificatie ────────────────────────────────────────────────
-
-def classify_front(contour, lats, lons, dtheta_dx, dtheta_dy, grad_mag):
-    """Classificeert een front als warm/cold/occluded/stationary op basis van
-    de dwars-front windcomponent bij 850 hPa.
-
-    Geeft (front_type: str, warm_side: [dx, dy]) terug.
-    warm_side is de richtingsvector die naar de warme kant wijst (richting
-    hogere θw), genormaliseerd.
-    """
-    rows = np.clip(contour[:, 0].astype(int), 0, dtheta_dx.shape[0] - 1)
-    cols = np.clip(contour[:, 1].astype(int), 0, dtheta_dx.shape[1] - 1)
-
-    # Bereken warm_side: gemiddelde gradiëntrichting langs het front
-    mean_dx = float(dtheta_dx[rows, cols].mean())
-    mean_dy = float(dtheta_dy[rows, cols].mean())
-    norm = max(np.sqrt(mean_dx**2 + mean_dy**2), 1e-12)
-    warm_side = [round(mean_dx / norm, 4), round(mean_dy / norm, 4)]
-
-    u_vals = _u850
-    v_vals = _v850
-
-    if u_vals is None or v_vals is None:
-        return "unknown", warm_side
-
-    # Verbeterde classificatie: sample op meerdere punten langs het front
-    # in plaats van alleen het gemiddelde te pakken
-    n_samples = min(len(rows), 20)
-    sample_idx = np.linspace(0, len(rows) - 1, n_samples, dtype=int)
-
-    cross_values = []
-    for idx in sample_idx:
-        r, c = rows[idx], cols[idx]
-        # Lokale gradiëntrichting
-        local_dx = float(dtheta_dx[r, c])
-        local_dy = float(dtheta_dy[r, c])
-        local_norm = max(np.sqrt(local_dx**2 + local_dy**2), 1e-12)
-        nx = local_dx / local_norm
-        ny = local_dy / local_norm
-
-        # Lokale wind
-        u = float(u_vals[r, c])
-        v = float(v_vals[r, c])
-
-        # Dwars-front windcomponent
-        cross_values.append(u * nx + v * ny)
-
-    cross_values = np.array(cross_values)
-
-    # Classificatie op basis van verdeling van cross-wind waarden
-    n_warm = np.sum(cross_values > 1.5)
-    n_cold = np.sum(cross_values < -1.5)
-    n_total = len(cross_values)
-    mean_cross = float(np.mean(cross_values))
-
-    # Gebruik mediaan i.p.v. gemiddelde — robuuster tegen uitschieters
-    median_cross = float(np.median(cross_values))
-
-    if abs(median_cross) < 1.0:
-        front_type = "stationary"
-    elif median_cross > 0:
-        front_type = "warm"
-    else:
-        front_type = "cold"
-
-    return front_type, warm_side
-
-
-def reclassify_occlusions(fronts_fc, pressure_systems_fc):
-    """Herclassificeer fronten die dicht bij een lagedrukcentrum wikkelen
-    als occlusie. Een occlusie is een front dat:
-    1. Een significant deel dicht bij een L-centrum loopt
-    2. De gradiëntrichting verandert langs het front (draait rondom het centrum)
-    """
-    if not pressure_systems_fc.get("features") or not fronts_fc.get("features"):
-        return fronts_fc
-
-    # Verzamel L-centra
-    lows = []
-    for feat in pressure_systems_fc["features"]:
-        if feat["properties"]["type"] == "L":
-            lon, lat = feat["geometry"]["coordinates"]
-            lows.append((lat, lon, feat["properties"]["pressure"]))
-
-    if not lows:
-        return fronts_fc
-
-    OCCLUSION_RADIUS_DEG = 8.0  # ~900 km — fronten binnen deze afstand van L
-
-    for feat in fronts_fc["features"]:
-        coords = feat["geometry"]["coordinates"]  # [lon, lat] pairs
-        if len(coords) < 10:
-            continue
-
-        for low_lat, low_lon, low_p in lows:
-            # Bereken afstand van elk punt op het front tot dit L-centrum
-            distances = []
-            for lon, lat in coords:
-                dlat = lat - low_lat
-                dlon = (lon - low_lon) * np.cos(np.radians(low_lat))
-                distances.append(np.sqrt(dlat**2 + dlon**2))
-
-            distances = np.array(distances)
-            close_fraction = np.mean(distances < OCCLUSION_RADIUS_DEG)
-
-            # Minimum afstand tot L
-            min_dist = float(distances.min())
-
-            # Check of het front rondom het L-centrum draait:
-            # bereken de hoekverandering van het front t.o.v. het L-centrum
-            angles = []
-            for lon, lat in coords:
-                angle = np.arctan2(lat - low_lat, (lon - low_lon) * np.cos(np.radians(low_lat)))
-                angles.append(angle)
-            angles = np.array(angles)
-
-            # Totale hoekverandering (unwrapped)
-            angle_diffs = np.diff(np.unwrap(angles))
-            total_rotation = abs(float(np.sum(angle_diffs)))
-
-            # Occlusie criteria:
-            # - Het front draait minstens 120° rondom het L-centrum
-            #   (occlusies wikkelen typisch rondom een lagedruk)
-            # - Minimale afstand tot L < 6°
-            # - OF: meer dan 40% binnen radius EN min_dist < 5°
-            is_wrapping = total_rotation > (2 * np.pi / 3) and min_dist < 6.0
-            is_close = close_fraction > 0.4 and min_dist < 5.0
-            if is_wrapping or is_close:
-                feat["properties"]["type"] = "occluded"
-                break  # stop checking other lows
-
-    return fronts_fc
-
-
-# Globale variabelen voor wind bij 850 hPa (worden gevuld in main)
-_u850 = None
-_v850 = None
 
 
 # ── Stap 6: Isobaren ─────────────────────────────────────────────────────────
@@ -686,8 +629,6 @@ def make_metadata(ds_pl_list):
 # ── Hoofd functie ─────────────────────────────────────────────────────────────
 
 def main():
-    global _u850, _v850
-
     print("=== maak_frontenkaart.py ===")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -701,39 +642,17 @@ def main():
             print("FOUT: geen pressure-level data geladen. Script stopt.")
             sys.exit(1)
 
-        # 3. Wind opslaan in globale variabelen voor classificatie
-        if "u" in ds_pl_list and "v" in ds_pl_list:
-            u_da = ds_pl_list["u"]
-            v_da = ds_pl_list["v"]
-            u_raw = u_da["u"].squeeze().values
-            v_raw = v_da["v"].squeeze().values
+        # 3. θw berekenen
+        theta_w_da, lats, lons = compute_theta_w(ds_pl_list)
 
-            u_lats = u_da["latitude"].values
-            if u_lats[0] > u_lats[-1]:
-                u_raw = u_raw[::-1, :]
-                v_raw = v_raw[::-1, :]
-
-            _u850 = u_raw
-            _v850 = v_raw
-            print("  Wind bij 850 hPa geladen.")
-
-        # 4. θw en TFP
-        theta_w, lats, lons = compute_theta_w(ds_pl_list)
-        fronts_fc = compute_tfp_fronts(theta_w, lats, lons)
+        # 4. Front-detectie via Berry et al.
+        fronts_fc = compute_fronts_berry(theta_w_da, ds_pl_list)
 
         # 5. Isobaren
         isobars_fc = compute_isobars(ds_sfc_list)
 
         # 6. H/L
         pressure_systems_fc = find_pressure_centers(ds_sfc_list)
-
-        # 6b. Occlusie herclassificatie (na H/L detectie)
-        fronts_fc = reclassify_occlusions(fronts_fc, pressure_systems_fc)
-        from collections import Counter
-        types = Counter(f["properties"]["type"] for f in fronts_fc["features"])
-        print(f"  Na occlusie-herclassificatie: {dict(types)}")
-
-        # 7. (Neerslag overgeslagen — niet beschikbaar bij step=0 analyse)
 
         # 8. Metadata
         meta = make_metadata(ds_pl_list)
