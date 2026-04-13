@@ -13,6 +13,9 @@ bash "/Users/aldus/KNMI_Project/weerkaarten 2/scripts/icon_d2_update.sh" >> "$LO
 echo "$(date): ICON-D2-RUC starten..." >> "$LOG"
 bash "/Users/aldus/KNMI_Project/weerkaarten 2/scripts/icon_d2_ruc_update.sh" >> "$LOG" 2>&1
 
+echo "$(date): Saharastof starten..." >> "$LOG"
+bash "/Users/aldus/KNMI_Project/weerkaarten 2/scripts/saharastof_update.sh" >> "$LOG" 2>&1
+
 echo "$(date): === Klaar ===" >> "$LOG"
 
 # Log opschonen (max 5000 regels)

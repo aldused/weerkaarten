@@ -93,6 +93,7 @@ body.scroll-mode { overflow-y: auto; }
       <option value="harmonie">HARMONIE Cy43 (KNMI)</option>
       <option value="icond2">ICON-D2 (DWD)</option>
       <option value="icond2ruc">ICON-D2-RUC (DWD, uurlijks)</option>
+      <option value="saharastof">Saharastof (CAMS)</option>
     </select>
   </div>
   <div>
@@ -196,6 +197,7 @@ body.scroll-mode { overflow-y: auto; }
     harmonie: { meta: "harmonie_canvas_meta.json", label: "HARMONIE Cy43 (KNMI, 2km)" },
     icond2:   { meta: "icond2_canvas_meta.json",   label: "ICON-D2 (DWD, 2.2km)" },
     icond2ruc: { meta: "icond2ruc_canvas_meta.json", label: "ICON-D2-RUC (DWD, 2.2km, uurlijks)" },
+    saharastof: { meta: "saharastof_canvas_meta.json", label: "Saharastof (CAMS, 11km)" },
     ecmwf:    { meta: "ecmwf_canvas_meta.json",    label: "ECMWF IFS (25km)" },
   };
   var actiefModel = "harmonie";
@@ -543,6 +545,34 @@ body.scroll-mode { overflow-y: auto; }
     [26,[110,0,120]]
   ];
 
+  // Saharastof kleurschaal — bereik 0–1000 μg/m³ (logaritmisch gevoel)
+  var DUST_LEVELS = [0, 5, 10, 25, 50, 100, 250, 500, 1000];
+  var DUST_COLORS = [
+    [255,255,255],[255,240,200],[255,220,150],[255,190,100],
+    [240,150,50],[220,100,30],[180,50,20],[140,20,10],[80,0,0]
+  ];
+
+  // PM10 kleurschaal — μg/m³ (WHO-normen)
+  var PM10_LEVELS = [0, 10, 20, 35, 50, 75, 100, 150, 200];
+  var PM10_COLORS = [
+    [200,240,200],[150,220,150],[100,200,100],[200,220,80],
+    [255,220,50],[255,170,30],[240,100,20],[200,40,20],[140,0,40]
+  ];
+
+  // PM2.5 kleurschaal — μg/m³
+  var PM25_LEVELS = [0, 5, 10, 15, 25, 35, 50, 75, 100];
+  var PM25_COLORS = [
+    [200,240,200],[150,220,150],[100,200,100],[200,220,80],
+    [255,220,50],[255,170,30],[240,100,20],[200,40,20],[140,0,40]
+  ];
+
+  // AOD kleurschaal — 0–2.0
+  var AOD_LEVELS = [0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2, 2.0];
+  var AOD_COLORS = [
+    [240,248,255],[200,220,240],[160,190,220],[180,200,140],
+    [220,220,80],[255,200,40],[240,140,20],[200,60,20],[140,0,40]
+  ];
+
   // Theta-e (equivalent potentiële temperatuur) kleurschaal — bereik 280–340 K
   var THETAE_REF = [
     [280,[30,0,120]],[285,[20,40,180]],[290,[10,100,220]],[295,[20,170,220]],
@@ -688,13 +718,19 @@ body.scroll-mode { overflow-y: auto; }
       .then(function(d) { meta = d; return d; });
   }
 
+  var overlayCache = {}; // { filename: Image }
   function laadOverlay() {
+    var overlayFile = (meta && meta.overlay) ? meta.overlay : "harmonie_overlay.png";
+    if (overlayCache[overlayFile]) {
+      overlayImg = overlayCache[overlayFile];
+      return Promise.resolve(overlayImg);
+    }
     return new Promise(function(resolve) {
       var img = new Image();
       img.crossOrigin = "anonymous";
-      img.onload = function() { overlayImg = img; resolve(img); };
+      img.onload = function() { overlayImg = img; overlayCache[overlayFile] = img; resolve(img); };
       img.onerror = function() { resolve(null); };
-      img.src = DATA_URL + "harmonie_overlay.png?t=" + Date.now();
+      img.src = DATA_URL + overlayFile + "?t=" + Date.now();
     });
   }
 
@@ -979,6 +1015,14 @@ body.scroll-mode { overflow-y: auto; }
             c = interpColor(val, T850_REF);  // val = T
           } else if (paramKey === "theta_e") {
             c = interpColor(val, THETAE_REF);
+          } else if (paramKey === "dust") {
+            c = boundaryColor(val, DUST_LEVELS, DUST_COLORS);
+          } else if (paramKey === "pm10") {
+            c = boundaryColor(val, PM10_LEVELS, PM10_COLORS);
+          } else if (paramKey === "pm25") {
+            c = boundaryColor(val, PM25_LEVELS, PM25_COLORS);
+          } else if (paramKey === "aod") {
+            c = boundaryColor(val, AOD_LEVELS, AOD_COLORS);
           } else if (paramKey === "mist") {
             c = boundaryColor(val, MIST_LEVELS, MIST_COLORS);
           } else if (paramKey === "cloud_base") {
@@ -1050,9 +1094,12 @@ body.scroll-mode { overflow-y: auto; }
 
     ctx.drawImage(offCanvas, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
 
-    // Overlay (kustlijnen etc) — crop van de vaste overlay-extent naar model-extent + zoom
+    // Overlay (kustlijnen etc) — crop van de overlay-extent naar model-extent + zoom
     if (overlayImg) {
-      var OE = {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5};
+      var overlayFile2 = (meta && meta.overlay) ? meta.overlay : "harmonie_overlay.png";
+      var OE = overlayFile2 === "europa_overlay.png"
+        ? {lonMin: -15, lonMax: 35, latMin: 30, latMax: 62}
+        : {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5};
       var DE = {lonMin: meta.grid.lon_min, lonMax: meta.grid.lon_max,
                 latMin: meta.grid.lat_min, latMax: meta.grid.lat_max};
       var oW = OE.lonMax - OE.lonMin, oH = OE.latMax - OE.latMin;
@@ -1260,6 +1307,8 @@ body.scroll-mode { overflow-y: auto; }
     else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = 35; // 3+ cijfers
     else if (paramKey === "hoogte_300" || paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = 40; // "556" of temp
     else if (paramKey === "theta_e") labelAfstandPx = 40; // "312" K
+    else if (paramKey === "dust" || paramKey === "pm10" || paramKey === "pm25") labelAfstandPx = 35;
+    else if (paramKey === "aod") labelAfstandPx = 40;
     // Bereken stap op basis van canvas-pixels, niet gridpunten
     var pxPerGrid = cw * zoomLevel / nLon;
     var labelsPerRij = Math.round(cw / labelAfstandPx);
@@ -1355,6 +1404,18 @@ body.scroll-mode { overflow-y: auto; }
         } else if (paramKey === "theta_e") {
           txt = Math.round(val).toString();
           bgc = interpColor(val, THETAE_REF);
+        } else if (paramKey === "dust") {
+          if (val < 1) { txt = ""; bgc = null; }
+          else { txt = Math.round(val).toString(); bgc = boundaryColor(val, DUST_LEVELS, DUST_COLORS); }
+        } else if (paramKey === "pm10") {
+          txt = Math.round(val).toString();
+          bgc = boundaryColor(val, PM10_LEVELS, PM10_COLORS);
+        } else if (paramKey === "pm25") {
+          txt = Math.round(val).toString();
+          bgc = boundaryColor(val, PM25_LEVELS, PM25_COLORS);
+        } else if (paramKey === "aod") {
+          txt = val.toFixed(2);
+          bgc = boundaryColor(val, AOD_LEVELS, AOD_COLORS);
         }
 
         if (!txt) continue; // skip lege labels (bijv. geen neerslag)
@@ -1485,6 +1546,10 @@ body.scroll-mode { overflow-y: auto; }
         legColors = legLevels.map(function(t){ return interpColor(t, THETAE_REF); });
         legLabel = "K — Theta-e";
       }
+      else if (paramKey === "dust") { legLevels = DUST_LEVELS; legColors = DUST_COLORS; legLabel = "μg/m³ — Saharastof"; }
+      else if (paramKey === "pm10") { legLevels = PM10_LEVELS; legColors = PM10_COLORS; legLabel = "μg/m³ — PM10"; }
+      else if (paramKey === "pm25") { legLevels = PM25_LEVELS; legColors = PM25_COLORS; legLabel = "μg/m³ — PM2.5"; }
+      else if (paramKey === "aod")  { legLevels = AOD_LEVELS; legColors = AOD_COLORS; legLabel = "AOD 550nm"; }
 
       if (legLevels && legColors) {
         var barX = 20, barW = cw - 40, barH = 20, barY2 = legY + 6;
@@ -1543,7 +1608,8 @@ body.scroll-mode { overflow-y: auto; }
     ctx.fillStyle = "#555";
     ctx.font = "bold " + Math.max(11, Math.round(cw / 70)) + "px Arial";
     ctx.textAlign = "right";
-    ctx.fillText("\u00a9 Ed Aldus / KNMI", cw - 10, legY + legH - 6);
+    var copyrightTxt = (paramKey === "dust" || paramKey === "pm10" || paramKey === "pm25" || paramKey === "aod") ? "\u00a9 Ed Aldus / CAMS" : "\u00a9 Ed Aldus / KNMI";
+    ctx.fillText(copyrightTxt, cw - 10, legY + legH - 6);
 
     // ── Rode pin voor geselecteerde plaats ──
     if (pinPlaats) {
@@ -1586,7 +1652,7 @@ body.scroll-mode { overflow-y: auto; }
   // UI CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","mist","cloud_base","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi","hoogte_300","hoogte_500","hoogte_850","theta_e"];
+  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","mist","cloud_base","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi","hoogte_300","hoogte_500","hoogte_850","theta_e","dust","pm10","pm25","aod"];
   var nsomUren = 6;
   var DEFAULT_PARAMS = ["neerslag","temp","wind"];
   var layout = 1;
@@ -1637,43 +1703,56 @@ body.scroll-mode { overflow-y: auto; }
       var dropdown = document.createElement("select");
       dropdown.dataset.panel = i;
 
-      var groepen = [
-        ["Temperatuur & Vocht", [
-          ["temp", "Temperatuur 2m (\u00b0C)"],
-          ["dauwpunt", "Dauwpuntstemperatuur 2m (\u00b0C)"],
-          ["rv", "Relatieve vochtigheid 2m (%)"],
-          ["wbgt", "WBGT Hitteindex (\u00b0C)"],
-        ]],
-        ["Neerslag", [
-          ["neerslag", "Gesimuleerde radar (dBZ)"],
-          ["neerslag_mm", "Neerslag (mm/u)"],
-          ["nsomm", "Neerslagsom (cumulatief mm)"],
-        ]],
-        ["Wind & Druk", [
-          ["wind", "Wind 10m (Bft)"],
-          ["windstoten", "Windstoten 10m (km/u)"],
-          ["druk", "Luchtdruk zeeniveau (hPa)"],
-          ["wind_druk", "Wind + Luchtdruk (combinatie)"],
-        ]],
-        ["Bewolking & Zicht", [
-          ["bewolking", "Bewolking (hoog/midden/laag)"],
-          ["bewolking_laag", "Lage bewolking (%)"],
-          ["bewolking_mid", "Middelbare bewolking (%)"],
-          ["bewolking_hoog", "Hoge bewolking (%)"],
-          ["cloud_base", "Wolkenbasis (m boven grond)"],
-          ["zicht", "Horizontaal zicht (m/km)"],
-          ["mist", "Mist / slecht zicht"],
-        ]],
-        ["Instabiliteit", [
-          ["cape", "CAPE (J/kg)"],
-        ]],
-        ["Hoogtekaarten", [
-          ["hoogte_300", "300 hPa — jetstream (temp + wind)"],
-          ["hoogte_500", "500 hPa — temperatuur + wind"],
-          ["hoogte_850", "850 hPa — temperatuur + wind"],
-          ["theta_e", "Theta-e (equiv. pot. temperatuur)"],
-        ]],
-      ];
+      var modelNaam2 = vergelijkModus ? (i === 0 ? "harmonie" : "icond2") : actiefModel;
+      var groepen;
+      if (modelNaam2 === "saharastof") {
+        groepen = [
+          ["Saharastof & Luchtkwaliteit", [
+            ["dust", "Saharastof (μg/m³)"],
+            ["pm10", "PM10 fijnstof (μg/m³)"],
+            ["pm25", "PM2.5 fijnstof (μg/m³)"],
+            ["aod", "Aerosol Optical Depth (550nm)"],
+          ]],
+        ];
+      } else {
+        groepen = [
+          ["Temperatuur & Vocht", [
+            ["temp", "Temperatuur 2m (\u00b0C)"],
+            ["dauwpunt", "Dauwpuntstemperatuur 2m (\u00b0C)"],
+            ["rv", "Relatieve vochtigheid 2m (%)"],
+            ["wbgt", "WBGT Hitteindex (\u00b0C)"],
+          ]],
+          ["Neerslag", [
+            ["neerslag", "Gesimuleerde radar (dBZ)"],
+            ["neerslag_mm", "Neerslag (mm/u)"],
+            ["nsomm", "Neerslagsom (cumulatief mm)"],
+          ]],
+          ["Wind & Druk", [
+            ["wind", "Wind 10m (Bft)"],
+            ["windstoten", "Windstoten 10m (km/u)"],
+            ["druk", "Luchtdruk zeeniveau (hPa)"],
+            ["wind_druk", "Wind + Luchtdruk (combinatie)"],
+          ]],
+          ["Bewolking & Zicht", [
+            ["bewolking", "Bewolking (hoog/midden/laag)"],
+            ["bewolking_laag", "Lage bewolking (%)"],
+            ["bewolking_mid", "Middelbare bewolking (%)"],
+            ["bewolking_hoog", "Hoge bewolking (%)"],
+            ["cloud_base", "Wolkenbasis (m boven grond)"],
+            ["zicht", "Horizontaal zicht (m/km)"],
+            ["mist", "Mist / slecht zicht"],
+          ]],
+          ["Instabiliteit", [
+            ["cape", "CAPE (J/kg)"],
+          ]],
+          ["Hoogtekaarten", [
+            ["hoogte_300", "300 hPa — jetstream (temp + wind)"],
+            ["hoogte_500", "500 hPa — temperatuur + wind"],
+            ["hoogte_850", "850 hPa — temperatuur + wind"],
+            ["theta_e", "Theta-e (equiv. pot. temperatuur)"],
+          ]],
+        ];
+      }
 
       for (var g = 0; g < groepen.length; g++) {
         var optgroup = document.createElement("optgroup");
@@ -2228,6 +2307,8 @@ body.scroll-mode { overflow-y: auto; }
     laadMeta().then(function() {
       addDerivedParams(meta);
       modelData[actiefModel] = { meta: meta, paramCache: paramCache };
+      return laadOverlay();
+    }).then(function() {
       aantalUren = meta.uren;
       slider.max = aantalUren;
       slider.value = 1;
@@ -2256,6 +2337,12 @@ body.scroll-mode { overflow-y: auto; }
       dagDiv.appendChild(dagGroep);
       statusEl.textContent = "";
       bouwUurSidebar();
+      // Zet standaard parameter per model
+      if (actiefModel === "saharastof") {
+        for (var pi5 = 0; pi5 < panelParams.length; pi5++) panelParams[pi5] = "dust";
+      } else if (panelParams[0] === "dust" || panelParams[0] === "pm10" || panelParams[0] === "pm25" || panelParams[0] === "aod") {
+        for (var pi6 = 0; pi6 < panelParams.length; pi6++) panelParams[pi6] = "temp";
+      }
       bouwPanels();
       // Laad eerste parameter en render
       return laadParam(panelParams[0]);
