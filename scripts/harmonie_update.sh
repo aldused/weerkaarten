@@ -181,6 +181,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     write_bin('harmonie_data_cape.bin', all_data['cape'][1:])
     write_bin('harmonie_data_druk.bin', all_data['druk'][1:])
     write_bin('harmonie_data_dauwpunt.bin', all_data['dauwpunt'][1:])
+    write_bin('harmonie_data_onweer.bin', all_data['onweer'][1:])
     # straling verwijderd
 
     # Profiel
@@ -216,6 +217,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         'zicht':{'file':'harmonie_data_zicht.bin','components':1,'label':'Zicht'},
         'rv':{'file':'harmonie_data_rv.bin','components':1,'label':'Relatieve vochtigheid (%)'},
         'cape':{'file':'harmonie_data_cape.bin','components':1,'label':'CAPE (J/kg)'},
+        'onweer':{'file':'harmonie_data_onweer.bin','components':1,'label':'Onweerskans (%)'},
         'druk':{'file':'harmonie_data_druk.bin','components':1,'label':'Luchtdruk (hPa)'},
         'dauwpunt':{'file':'harmonie_data_dauwpunt.bin','components':1,'label':'Dauwpuntstemperatuur 2m (°C)'},
       },
