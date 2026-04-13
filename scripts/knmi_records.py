@@ -726,7 +726,17 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
     if not data:
         print(f"Geen data in {CSV_BESTAND}"); continue
 
-    # ── Winterswijk: geen correcties meer nodig (nieuwe data is al gecorrigeerd) ──
+    # ── Winterswijk: handmatige correcties op basis van broncontrole ──
+    correcties = {
+        '1909-06-07': {'tn': 2.3},   # was 2.4, bron: -0.1
+        '1909-06-08': {'tn': 2.5},   # was 2.6, bron: -0.1
+        '1915-09-30': {'tn': 3.5},   # was -3.5, teken-fout in bron
+    }
+    for rec in data:
+        if rec['datum'] in correcties:
+            for k, v in correcties[rec['datum']].items():
+                print(f"  Correctie {rec['datum']}: {k} {rec[k]} → {v}")
+                rec[k] = v
 
     print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")
 
