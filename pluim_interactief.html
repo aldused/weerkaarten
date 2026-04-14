@@ -1987,9 +1987,13 @@ function openVergelijking(){
   </div></div>`;
 
   for(let i=0;i<4;i++){
-    html+=`<div style="display:flex;flex-direction:column;gap:4px">
+    html+=`<div style="display:flex;flex-direction:column;gap:4px;position:relative">
       <label style="font-size:.65rem;color:#5a6a80;text-transform:uppercase;font-weight:600">Pluim ${i+1}</label>
-      <select id="verg-stn-${i}" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:5px 8px;font-size:.78rem">${stnHTML}</select>
+      <input id="verg-zoek-${i}" type="text" placeholder="Zoek plaats…" autocomplete="off"
+        style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:5px 8px;font-size:.78rem;width:150px"
+        oninput="vergZoekDebounce(${i})">
+      <input type="hidden" id="verg-stn-${i}" value="">
+      <div id="verg-zoek-res-${i}" style="display:none;position:absolute;top:58px;left:0;background:white;border:1px solid #d0d8e4;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;min-width:200px;max-height:200px;overflow-y:auto"></div>
       <select id="verg-type-${i}" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:5px 8px;font-size:.78rem">
         ${types.map(t=>`<option value="${t.val}">${t.lbl}</option>`).join('')}
       </select>
@@ -2002,21 +2006,78 @@ function openVergelijking(){
   ctrls.innerHTML=html;
   document.querySelector('.controls').after(ctrls);
 
+  // Standaard stations voor de 4 pluimen
+  const defaults=[
+    `${huidigStation.lat},${huidigStation.lon},${huidigStation.naam}`,
+    '52.928,4.789,Den Helder',
+    '50.911,5.770,Maastricht',
+    '53.123,6.586,Eelde'
+  ];
   for(let i=0;i<4;i++){
+    const zi=document.getElementById(`verg-zoek-${i}`);
     const se=document.getElementById(`verg-stn-${i}`);
     const te=document.getElementById(`verg-type-${i}`);
-    const os=localStorage.getItem(`verg-stn-${i}`);
+    const os=localStorage.getItem(`verg-stn-${i}`) || defaults[i];
     const ot=localStorage.getItem(`verg-type-${i}`);
-    // Probeer opgeslagen waarde; als die niet in de lijst staat gebruik huidigStation
     if(os){
       se.value=os;
-      if(!se.value) se.value=`${huidigStation.lat},${huidigStation.lon},${huidigStation.naam}`;
+      const delen=os.split(',');
+      if(delen.length>=3) zi.value=delen.slice(2).join(',');
     }
     if(ot) te.value=ot;
-    se.addEventListener('change',()=>localStorage.setItem(`verg-stn-${i}`,se.value));
     te.addEventListener('change',()=>localStorage.setItem(`verg-type-${i}`,te.value));
   }
 }
+
+let vergZoekTimers={};
+function vergZoekDebounce(idx){
+  clearTimeout(vergZoekTimers[idx]);
+  vergZoekTimers[idx]=setTimeout(()=>vergZoekPlaats(idx),400);
+}
+
+async function vergZoekPlaats(idx){
+  const input=document.getElementById(`verg-zoek-${idx}`);
+  const res=document.getElementById(`verg-zoek-res-${idx}`);
+  const q=input.value.trim();
+  if(q.length<2){res.style.display='none';return;}
+  res.innerHTML='<div style="padding:8px;color:#8888bb;font-size:.78rem">Zoeken…</div>';
+  res.style.display='';
+  try{
+    const ctrl=new AbortController();
+    setTimeout(()=>ctrl.abort(),10000);
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=nl`,{headers:{'Accept-Language':'nl'},signal:ctrl.signal});
+    const data=await r.json();
+    if(!data.length){res.innerHTML='<div style="padding:8px;color:#8888bb;font-size:.78rem">Niets gevonden</div>';return;}
+    res.innerHTML='';
+    data.forEach(d=>{
+      const naam=d.display_name.split(',')[0].trim();
+      const extra=d.display_name.split(',').slice(1,3).join(',').trim();
+      const div=document.createElement('div');
+      div.style.cssText='padding:6px 10px;cursor:pointer;font-size:.78rem;border-bottom:1px solid #f0f4f8';
+      div.onmouseover=()=>div.style.background='#f0f4f8';
+      div.onmouseout=()=>div.style.background='white';
+      div.innerHTML=`<strong>${escHtml(naam)}</strong> <span style="color:#8888bb;font-size:.72rem">${escHtml(extra)}</span>`;
+      div.onclick=()=>{
+        const val=`${d.lat},${d.lon},${naam}`;
+        document.getElementById(`verg-stn-${idx}`).value=val;
+        input.value=naam;
+        res.style.display='none';
+        localStorage.setItem(`verg-stn-${idx}`,val);
+      };
+      res.appendChild(div);
+    });
+  }catch(e){res.innerHTML='<div style="padding:8px;color:#ee4444;font-size:.78rem">Zoekfout</div>';}
+}
+
+// Sluit zoekresultaten bij klik buiten
+document.addEventListener('click',e=>{
+  for(let i=0;i<4;i++){
+    const res=document.getElementById(`verg-zoek-res-${i}`);
+    if(res&&!e.target.closest(`#verg-zoek-${i}`)&&!e.target.closest(`#verg-zoek-res-${i}`)){
+      res.style.display='none';
+    }
+  }
+});
 
 async function laadVergelijking(){
   Object.values(vergCharts).forEach(c=>{try{c.destroy();}catch(e){}});
