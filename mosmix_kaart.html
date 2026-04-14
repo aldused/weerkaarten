@@ -118,7 +118,6 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       <option value="RR">🌧 Totaal</option>
       <option value="RR_D">☀ Dag 06–18u</option>
       <option value="RR_N">🌙 Nacht 18–06u</option>
-      <option value="wwZ">🧊 Hagelkans</option>
     </select>
     <select class="param-select wind" data-cat="wind">
       <option value="" disabled selected>🌬 Wind</option>
@@ -130,20 +129,27 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       <option value="FX_O">🌅 Stoot ochtend</option>
       <option value="FX_M">☀ Stoot middag</option>
       <option value="FX_N">🌙 Stoot nacht</option>
-      <option value="FXh25">⚠ Kans stoot >46 km/u</option>
-      <option value="FXh40">🔴 Kans stoot >74 km/u</option>
-      <option value="FXh55">🟣 Kans stoot >102 km/u</option>
     </select>
     <select class="param-select kansen" data-cat="kansen">
       <option value="" disabled selected>⛈ Kansen</option>
       <option value="wwT">⛈ Onweerkans</option>
-<option value="Sad">❄ Sneeuwval (cm)</option>
+      <option value="wwZ">🧊 Hagelkans</option>
+      <option value="wwM">🌫 Mistkans</option>
+      <option value="FXh25">💨 Stoot >46 km/u</option>
+      <option value="FXh40">💨 Stoot >74 km/u</option>
+      <option value="FXh55">💨 Stoot >102 km/u</option>
+      <option value="Sad">❄ Sneeuwval (cm)</option>
+    </select>
+    <select class="param-select zon" data-cat="zon">
+      <option value="" disabled selected>🌅 Zon</option>
+      <option value="ZON_OP">🌅 Zonsopkomst</option>
+      <option value="ZON_ONDER">🌇 Zonsondergang</option>
+      <option value="DAGLENGTE">☀ Daglengte</option>
     </select>
     <select class="param-select weerbeeld" data-cat="weerbeeld">
       <option value="" disabled selected>☀ Weerbeeld</option>
       <option value="SQ">☀ Zon</option>
       <option value="Neff">☁ Bewolking</option>
-      <option value="wwM">🌫 Mistkans</option>
       <option value="VV">👁 Zicht</option>
     </select>
     <select class="param-select overig" data-cat="overig">
@@ -312,7 +318,67 @@ const PARAMS = {
   WBGT_M: { label:"WBGT middag 12–18u (°C)", eenheid:"°", decimalen:1,
     kleuren:[["#2171b5","<10"],["#66bb6a","13"],["#ffeb3b","18"],["#ff9800","22"],["#f44336","26"],["#b71c1c","30+"]],
     schaal:[5,30] },
+  ZON_OP:    { label:"Zonsopkomst", eenheid:"", decimalen:0, isTijd:true,
+    kleuren:[["#1a3a6b","vroeg"],["#2980b9",""],["#ffeb3b",""],["#ff9800","laat"]],
+    schaal:[300,540] },
+  ZON_ONDER: { label:"Zonsondergang", eenheid:"", decimalen:0, isTijd:true,
+    kleuren:[["#ffeb3b","vroeg"],["#ff9800",""],["#e74c3c",""],["#8e44ad","laat"]],
+    schaal:[1140,1380] },
+  DAGLENGTE: { label:"Daglengte (uur)", eenheid:"", decimalen:0, isTijd:true,
+    kleuren:[["#084594","kort"],["#2171b5",""],["#a5d6a7",""],["#ffeb3b",""],["#ff9800","lang"]],
+    schaal:[420,1020] },
 };
+
+// ── Zonsopkomst/ondergang berekening (astronomisch) ──
+function berekenZon(lat, lon, datum) {
+  const rad = Math.PI / 180;
+  const d = new Date(datum + 'T12:00:00');
+  const jd = Math.floor(d.getTime() / 86400000) + 2440587.5;
+  const n = jd - 2451545.0;
+  const Jstar = n - lon / 360;
+  const M = (357.5291 + 0.98560028 * Jstar) % 360;
+  const C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
+  const lambda = (M + C + 180 + 102.9372) % 360;
+  const delta = Math.asin(Math.sin(lambda * rad) * Math.sin(23.4397 * rad)) / rad;
+  const cosOmega = (Math.sin(-0.833 * rad) - Math.sin(lat * rad) * Math.sin(delta * rad)) /
+                   (Math.cos(lat * rad) * Math.cos(delta * rad));
+  if (cosOmega < -1 || cosOmega > 1) return null; // pooldag/nacht
+  const omega = Math.acos(cosOmega) / rad;
+  const Jtransit = 2451545.0 + Jstar + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * lambda * rad);
+  const Jrise = Jtransit - omega / 360;
+  const Jset = Jtransit + omega / 360;
+  // Naar lokale tijd (minuten sinds middernacht, CET/CEST)
+  const toMin = (jdVal) => {
+    const ms = (jdVal - 2440587.5) * 86400000;
+    const dt = new Date(ms);
+    const f = new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', hour:'numeric', minute:'numeric', hour12:false});
+    const p = f.formatToParts(dt);
+    const h = parseInt(p.find(x=>x.type==='hour').value);
+    const m = parseInt(p.find(x=>x.type==='minute').value);
+    return h * 60 + m;
+  };
+  return { op: toMin(Jrise), onder: toMin(Jset) };
+}
+
+function berekenZonData(dagKey, param) {
+  if (!mosmixData || !mosmixData.stations) return null;
+  const result = {};
+  for (const [naam, coords] of Object.entries(mosmixData.stations)) {
+    const zon = berekenZon(coords[1], coords[0], dagKey);
+    if (!zon) continue;
+    if (param === 'ZON_OP') result[naam] = zon.onder;
+    else if (param === 'ZON_ONDER') result[naam] = zon.op;
+    else if (param === 'DAGLENGTE') result[naam] = zon.onder - zon.op;
+  }
+  return result;
+}
+
+function minNaarTijd(min) {
+  const abs = Math.abs(Math.round(min));
+  const u = Math.floor(abs / 60);
+  const m = abs % 60;
+  return `${u}:${String(m).padStart(2,'0')}`;
+}
 
 function hexToRgb(hex) {
   return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
@@ -350,9 +416,9 @@ function tekenKaart() {
   if (!p) return;
 
   const dagObj = mosmixData.data[huidigDag];
-  if (!dagObj || !dagObj[huidigParam]) return;
-
-  const paramData = dagObj[huidigParam];
+  const isZon = ['ZON_OP','ZON_ONDER','DAGLENGTE'].includes(huidigParam);
+  const paramData = isZon ? berekenZonData(huidigDag, huidigParam) : (dagObj ? dagObj[huidigParam] : null);
+  if (!paramData) return;
   const stations = mosmixData.stations;
 
   // Sorteer stations op waarde voor ranking
@@ -361,7 +427,7 @@ function tekenKaart() {
     .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
 
   // Sorteer: hoog→laag voor de meeste, laag→hoog voor bewolking-inverse
-  const invertSort = ["TN","TG","TTD","gevoels","VV"];
+  const invertSort = ["TN","TG","TTD","gevoels","VV","ZON_OP"];
   items.sort((a,b) => invertSort.includes(huidigParam) ? a.val - b.val : b.val - a.val);
 
   // Teken elk station
@@ -370,7 +436,9 @@ function tekenKaart() {
     const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
 
     let tekst;
-    if (huidigParam === "DD") {
+    if (p.isTijd) {
+      tekst = minNaarTijd(item.val);
+    } else if (huidigParam === "DD") {
       tekst = windpijl(item.val) + " " + item.val.toFixed(0);
     } else if (p.bft) {
       tekst = kmhNaarBft(item.val) + " Bft";
@@ -482,7 +550,9 @@ function tekenKaart() {
     svg.appendChild(stn);
 
     let waardeTxt;
-    if (huidigParam === "VV" && item.val < 10) {
+    if (p.isTijd) {
+      waardeTxt = minNaarTijd(item.val);
+    } else if (huidigParam === "VV" && item.val < 10) {
       waardeTxt = Math.round(item.val * 1000) + " m";
     } else if (p.bft) {
       waardeTxt = kmhNaarBft(item.val) + " Bft";
@@ -594,7 +664,8 @@ function tekenGrid() {
 
   mosmixData.dagen.forEach(dagKey => {
     const dagObj = mosmixData.data[dagKey];
-    if (!dagObj || !dagObj[huidigParam]) return;
+    const isZonG = ['ZON_OP','ZON_ONDER','DAGLENGTE'].includes(huidigParam);
+    if (!isZonG && (!dagObj || !dagObj[huidigParam])) return;
     const d = new Date(dagKey + "T12:00:00");
     const label = dagLabel(d);
 
@@ -640,15 +711,16 @@ function tekenGrid() {
 function tekenKaartOpSvg(svg, dagKey, param) {
   const p = PARAMS[param];
   const dagObj = mosmixData.data[dagKey];
-  if (!dagObj || !dagObj[param]) return;
-  const paramData = dagObj[param];
+  const isZonS = ['ZON_OP','ZON_ONDER','DAGLENGTE'].includes(param);
+  const paramData = isZonS ? berekenZonData(dagKey, param) : (dagObj ? dagObj[param] : null);
+  if (!paramData) return;
   const stations = mosmixData.stations;
 
   let items = Object.entries(paramData)
     .filter(([naam]) => stations[naam])
     .map(([naam, val]) => ({naam, val, lon: stations[naam][0], lat: stations[naam][1]}));
 
-  const invertSort = ["TN","TG","TTD","gevoels","VV"];
+  const invertSort = ["TN","TG","TTD","gevoels","VV","ZON_OP"];
   items.sort((a,b) => invertSort.includes(param) ? a.val - b.val : b.val - a.val);
 
   items.forEach((item, idx) => {
@@ -656,7 +728,9 @@ function tekenKaartOpSvg(svg, dagKey, param) {
     const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
 
     let tekst;
-    if (param === "DD") {
+    if (p.isTijd) {
+      tekst = minNaarTijd(item.val);
+    } else if (param === "DD") {
       tekst = windpijl(item.val) + item.val.toFixed(0);
     } else if (p.bft) {
       tekst = kmhNaarBft(item.val) + " Bft";
