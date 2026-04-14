@@ -109,11 +109,26 @@ nl_maanden = ["","Jan","Feb","Mrt","Apr","Mei","Jun",
                "Juli","Aug","Sep","Okt","Nov","Dec"]
 
 # ── Data ophalen ──────────────────────────────────────────────────────────────
+def _marine_base():
+    """Gebruik commerciële API als key beschikbaar is."""
+    try:
+        from open_meteo import _load_key
+        key = _load_key()
+        if key:
+            return f"https://customer-marine-api.open-meteo.com/v1/marine", key
+    except Exception:
+        pass
+    return "https://marine-api.open-meteo.com/v1/marine", None
+
+_MARINE_URL, _MARINE_KEY = _marine_base()
+
 def haal_zeetemp(lat, lon):
-    url = (f"https://marine-api.open-meteo.com/v1/marine"
+    url = (f"{_MARINE_URL}"
            f"?latitude={lat}&longitude={lon}"
            f"&current=sea_surface_temperature"
            f"&timezone=Europe%2FAmsterdam")
+    if _MARINE_KEY:
+        url += f"&apikey={_MARINE_KEY}"
     try:
         r = requests.get(url, timeout=15)
         r.raise_for_status()
@@ -122,11 +137,13 @@ def haal_zeetemp(lat, lon):
         print(f"  x Fout ({lat},{lon}): {e}")
         return None
 
+import time as _time
 print(f"Zeewatertemperaturen ophalen voor {len(ALLE_STATIONS)} locaties...")
 resultaten = {}
 for naam, lat, lon in ALLE_STATIONS:
     print(f"  {naam}...", end=' ', flush=True)
     t = haal_zeetemp(lat, lon)
+    _time.sleep(1.0)  # rate limit voorkomen
     print(f"{t:.1f}°C" if t is not None else "geen data")
     if t is not None:
         resultaten[(naam, lat, lon)] = t
