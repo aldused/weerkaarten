@@ -138,7 +138,7 @@ def bronvermelding(ax, now_str2):
             ha="right", va="bottom", color="#555555")
 
 
-def teken_idw(ax, data_map, cmap, norm, alpha=0.45, power=2.5, resolutie=200):
+def teken_idw(ax, data_map, cmap, norm, alpha=0.82, power=2.5, resolutie=200):
     """
     Teken een IDW-geïnterpoleerd kleurenveld achter de stationslabels.
     data_map: dict naam → waarde
