@@ -146,6 +146,50 @@ const HEATMAP_ALPHA = 0.82;
 const HEATMAP_PARAMS = new Set(["ta"]); // alleen temperatuur
 let landMask = null;            // Uint8Array, 1=land 0=water
 
+// Vereenvoudigd grenpolygoon Nederland [lon, lat]
+const NL_GRENS = [
+  [3.36, 51.37],  // Zeeuws-Vlaanderen ZW
+  [3.74, 51.27],  // Zeeland kust
+  [4.23, 51.38],
+  [4.55, 51.48],  // Bergen op Zoom
+  [4.83, 51.42],  // grens België
+  [5.10, 51.27],
+  [5.47, 51.28],
+  [5.74, 51.00],
+  [5.86, 50.77],  // Maastricht-gebied
+  [6.04, 50.76],  // Vaals (meest zuidelijk)
+  [6.22, 50.92],
+  [6.37, 51.50],  // Venlo-omgeving
+  [6.38, 51.83],
+  [6.75, 51.92],
+  [6.84, 52.13],
+  [7.05, 52.25],
+  [7.20, 52.38],  // Twente grens
+  [7.05, 52.65],
+  [7.00, 53.00],
+  [6.85, 53.18],
+  [6.15, 53.52],  // Groningen noord
+  [5.43, 53.55],  // Friese kust
+  [4.65, 53.45],  // Den Helder-gebied
+  [4.55, 52.95],
+  [4.55, 52.46],
+  [4.01, 51.96],  // Hoek van Holland
+  [3.83, 51.72],
+  [3.55, 51.55],  // Westerschelde
+  [3.36, 51.37],
+];
+function inNederland(lon, lat){
+  let inside = false;
+  const n = NL_GRENS.length;
+  for(let i=0, j=n-1; i<n; j=i++){
+    const xi=NL_GRENS[i][0], yi=NL_GRENS[i][1];
+    const xj=NL_GRENS[j][0], yj=NL_GRENS[j][1];
+    if(((yi>lat)!==(yj>lat)) && (lon < (xj-xi)*(lat-yi)/(yj-yi)+xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
 function maakLandMask(){
   const img = document.getElementById("kaart-basis");
   const c = document.createElement("canvas");
@@ -213,7 +257,9 @@ function tekenHeatmap(){
   for(let y=0; y<h; y++){
     for(let x=0; x<w; x++){
       const idx = y * w + x;
-      if(!landMask.data[idx]){ // water — transparant
+      const lon = LON_MIN + (x + 0.5) / w * (LON_MAX - LON_MIN);
+      const lat = LAT_MAX - (y + 0.5) / h * (LAT_MAX - LAT_MIN);
+      if(!landMask.data[idx] || !inNederland(lon, lat)){ // water of buitenland
         buf[idx*4+3] = 0;
         continue;
       }
