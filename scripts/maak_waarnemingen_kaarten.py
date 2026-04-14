@@ -74,8 +74,8 @@ nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
                "Juli","Augustus","September","Oktober","November","December"]
 
 # ── Kleurenschalen ────────────────────────────────────────────────────────────
-cmap_tx   = mcolors.LinearSegmentedColormap.from_list("tx",   ["#084594","#4292c6","#9ecae1","#ffffcc","#fed976","#fd8d3c","#e31a1c","#800026"])
-cmap_tn   = mcolors.LinearSegmentedColormap.from_list("tn",   ["#1a3a6b","#2980b9","#a8d8ea","#e8f4f8","#ffffcc","#fed976","#fd8d3c"])
+cmap_tx   = mcolors.LinearSegmentedColormap.from_list("tx",   ["#084594","#2e8b57","#4caf50","#8bc34a","#cddc39","#ffeb3b","#ffc107","#ff9800","#f44336","#800026"])
+cmap_tn   = mcolors.LinearSegmentedColormap.from_list("tn",   ["#084594","#2e8b57","#4caf50","#8bc34a","#cddc39","#ffeb3b","#ffc107","#ff9800"])
 cmap_t10n = mcolors.LinearSegmentedColormap.from_list("t10n", ["#1a3a6b","#2980b9","#a8d8ea","#e8f4f8","#c8e6c9","#81c784","#388e3c"])
 cmap_rr   = mcolors.LinearSegmentedColormap.from_list("rr",   ["#ffffff","#c6dbef","#6baed6","#2171b5","#084594"])
 cmap_fx   = mcolors.LinearSegmentedColormap.from_list("fx",   ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"])
