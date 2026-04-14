@@ -137,6 +137,54 @@ def bronvermelding(ax, now_str2):
             transform=ax.transAxes, fontsize=6.5, style="italic",
             ha="right", va="bottom", color="#555555")
 
+
+def teken_idw(ax, data_map, cmap, norm, alpha=0.45, power=2.5, resolutie=200):
+    """
+    Teken een IDW-geïnterpoleerd kleurenveld achter de stationslabels.
+    data_map: dict naam → waarde
+    """
+    # Verzamel stations met geldige waarde en bekende coördinaten
+    punten = []
+    for naam, val in data_map.items():
+        if naam in COORDS and val is not None:
+            lon, lat = COORDS[naam]
+            punten.append((lon, lat, val))
+    if len(punten) < 3:
+        return
+
+    lons_p = np.array([p[0] for p in punten])
+    lats_p = np.array([p[1] for p in punten])
+    vals_p = np.array([p[2] for p in punten])
+
+    # Maak grid
+    n_lon = resolutie
+    n_lat = int(resolutie * (EXTENT[3] - EXTENT[2]) / (EXTENT[1] - EXTENT[0]))
+    grid_lon = np.linspace(EXTENT[0], EXTENT[1], n_lon)
+    grid_lat = np.linspace(EXTENT[2], EXTENT[3], n_lat)
+    glon, glat = np.meshgrid(grid_lon, grid_lat)
+
+    # IDW-interpolatie
+    result = np.zeros_like(glon)
+    for i in range(len(punten)):
+        dx = glon - lons_p[i]
+        dy = glat - lats_p[i]
+        d2 = dx * dx + dy * dy
+        d2 = np.maximum(d2, 1e-8)  # voorkom deling door 0
+        w = 1.0 / np.power(d2, power / 2)
+        result += w * vals_p[i]
+        if i == 0:
+            sum_w = w.copy()
+        else:
+            sum_w += w
+    result /= sum_w
+
+    # Teken als pcolormesh
+    ax.pcolormesh(glon, glat, result, cmap=cmap, norm=norm,
+                  transform=ccrs.PlateCarree(), zorder=1.5, alpha=alpha)
+    # Herteken water erbovenop zodat interpolatie alleen op land zichtbaar is
+    ax.add_feature(cfeature.OCEAN.with_scale("10m"), facecolor="#c8e0f0", zorder=2)
+    ax.add_feature(cfeature.LAKES.with_scale("10m"), facecolor="#c8e0f0", zorder=2.5)
+
 # ── Data laden ────────────────────────────────────────────────────────────────
 with open("toplijst.json") as f:
     toplijst = json.load(f)
@@ -184,6 +232,7 @@ for datum_str in alle_datums:
         gs  = gridspec.GridSpec(2,1,figure=fig,height_ratios=[0.085,1],hspace=0.01)
         maak_kaart_base(fig, gs, dag_nl, d, now_str, "Maximumtemperatuur (°C)")
         ax  = fig.get_axes()[1]
+        teken_idw(ax, tx_map, cmap_tx, norm_tx)
         for naam, (lon, lat) in COORDS.items():
             if naam in tx_map:
                 v = tx_map[naam]
@@ -199,6 +248,7 @@ for datum_str in alle_datums:
         gs  = gridspec.GridSpec(2,1,figure=fig,height_ratios=[0.085,1],hspace=0.01)
         maak_kaart_base(fig, gs, dag_nl, d, now_str, "Minimumtemperatuur (°C)")
         ax  = fig.get_axes()[1]
+        teken_idw(ax, tn_map, cmap_tn, norm_tn)
         for naam, (lon, lat) in COORDS.items():
             if naam in tn_map:
                 v = tn_map[naam]

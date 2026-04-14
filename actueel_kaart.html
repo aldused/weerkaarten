@@ -75,6 +75,7 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
     </div>
     <div class="kaart-container" onclick="openZoom()" style="cursor:zoom-in;">
       <img src="kaart_basis_nl.png" id="kaart-basis" alt="Basiskaart Nederland">
+      <canvas id="heatmap" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
       <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
     <div class="zoom-hint" onclick="openZoom()">🔍 klik voor vergroting</div>
@@ -127,11 +128,116 @@ function ns(tag){return document.createElementNS("http://www.w3.org/2000/svg",ta
 
 let stationData={}, huidigParam="ta";
 
+// ── Heatmap / IDW-interpolatie ──────────────────────────────────────────────
+const HEATMAP_RES = 4;          // elke 4e pixel berekenen, rest opschalen
+const IDW_POWER = 2.5;
+const HEATMAP_ALPHA = 0.55;
+const HEATMAP_PARAMS = new Set(["ta"]); // alleen temperatuur
+let landMask = null;            // Uint8Array, 1=land 0=water
+
+function maakLandMask(){
+  const img = document.getElementById("kaart-basis");
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, c.width, c.height).data;
+  // Werk op heatmap-resolutie
+  const w = Math.ceil(c.width / HEATMAP_RES);
+  const h = Math.ceil(c.height / HEATMAP_RES);
+  landMask = {w, h, data: new Uint8Array(w * h)};
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      const sx = Math.min(x * HEATMAP_RES, c.width-1);
+      const sy = Math.min(y * HEATMAP_RES, c.height-1);
+      const i = (sy * c.width + sx) * 4;
+      const r=px[i], g=px[i+1], b=px[i+2];
+      // Water = blauwachtig (b > r+20 && b > 180) of heel lichtblauw
+      const isWater = (b > r + 15 && b > 170) || (r>200 && g>220 && b>235 && b>r);
+      landMask.data[y * w + x] = isWater ? 0 : 1;
+    }
+  }
+}
+
+function tekenHeatmap(){
+  const hc = document.getElementById("heatmap");
+  const img = document.getElementById("kaart-basis");
+  const p = PARAMS[huidigParam];
+  if(!p || !HEATMAP_PARAMS.has(huidigParam)){
+    // Geen interpolatie voor deze parameter — wis canvas
+    hc.width = 1; hc.height = 1;
+    return;
+  }
+  if(!landMask) maakLandMask();
+
+  // Verzamel stations met geldige waarde
+  const punten = [];
+  Object.values(stationData).forEach(st => {
+    if(!st || st.lon==null || st.lat==null) return;
+    let val = st[huidigParam];
+    if(val==null) return;
+    // Pixelcoördinaten op het heatmap-grid
+    const px = (st.lon - LON_MIN) / (LON_MAX - LON_MIN) * landMask.w;
+    const py = (1 - (st.lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * landMask.h;
+    punten.push({x: px, y: py, val});
+  });
+  if(punten.length < 3) return;
+
+  const w = landMask.w, h = landMask.h;
+  hc.width = img.naturalWidth;
+  hc.height = img.naturalHeight;
+  const ctx = hc.getContext("2d");
+  ctx.clearRect(0, 0, hc.width, hc.height);
+
+  // IDW op laag-resolutie grid
+  const imgData = ctx.createImageData(w, h);
+  const buf = imgData.data;
+
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      const idx = y * w + x;
+      if(!landMask.data[idx]){ // water — transparant
+        buf[idx*4+3] = 0;
+        continue;
+      }
+      // IDW
+      let sumW = 0, sumWV = 0;
+      for(let i=0; i<punten.length; i++){
+        const dx = x - punten[i].x, dy = y - punten[i].y;
+        const d2 = dx*dx + dy*dy;
+        if(d2 < 0.5){ sumWV = punten[i].val; sumW = 1; break; }
+        const w_i = 1 / Math.pow(d2, IDW_POWER / 2);
+        sumW += w_i;
+        sumWV += w_i * punten[i].val;
+      }
+      const val = sumWV / sumW;
+      const [bg] = interpKleur(val, p.schaal, p.kleuren);
+      // Parse rgb
+      const m = bg.match(/\d+/g);
+      buf[idx*4]   = +m[0];
+      buf[idx*4+1] = +m[1];
+      buf[idx*4+2] = +m[2];
+      buf[idx*4+3] = Math.round(HEATMAP_ALPHA * 255);
+    }
+  }
+
+  // Opschalen naar volledige resolutie
+  const tmpC = document.createElement("canvas");
+  tmpC.width = w; tmpC.height = h;
+  tmpC.getContext("2d").putImageData(imgData, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(tmpC, 0, 0, hc.width, hc.height);
+}
+
 function tekenKaart(){
   const svg=document.getElementById("nl-kaart");
   svg.innerHTML="";
   const p=PARAMS[huidigParam];
   if(!p)return;
+
+  // Heatmap renderen vóór de bolletjes
+  tekenHeatmap();
 
   Object.values(stationData).forEach(st=>{
     if(!st||st.lon==null||st.lat==null)return;
@@ -258,6 +364,9 @@ function renderCanvas(cb){
   ctx.scale(scale,scale);
   tekenHeader(ctx,img.naturalWidth,header.offsetHeight);
   ctx.drawImage(img,0,header.offsetHeight);
+  // Heatmap-canvas mee-renderen
+  const hc=document.getElementById("heatmap");
+  if(hc.width>1) ctx.drawImage(hc,0,header.offsetHeight,img.naturalWidth,img.naturalHeight);
   const svgStr=new XMLSerializer().serializeToString(svg);
   const blob=new Blob([svgStr],{type:"image/svg+xml"});
   const url=URL.createObjectURL(blob);
