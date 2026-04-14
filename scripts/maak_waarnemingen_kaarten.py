@@ -74,15 +74,15 @@ nl_maanden = ["","Januari","Februari","Maart","April","Mei","Juni",
                "Juli","Augustus","September","Oktober","November","December"]
 
 # ── Kleurenschalen ────────────────────────────────────────────────────────────
-cmap_tx   = mcolors.LinearSegmentedColormap.from_list("tx",   ["#084594","#1565c0","#2e8b57","#388e3c","#43a047","#66bb6a","#8bc34a","#aed581","#cddc39","#e6ee3b","#ffeb3b","#fdd835","#fbc02d","#f9a825","#f57f17","#ef6c00","#e65100","#d84315","#b71c1c","#880e4f","#4a148c"])
-cmap_tn   = mcolors.LinearSegmentedColormap.from_list("tn",   ["#084594","#1565c0","#2e8b57","#388e3c","#66bb6a","#8bc34a","#cddc39","#ffeb3b","#fdd835","#fbc02d","#f9a825","#f57f17","#ef6c00"])
+cmap_tx   = mcolors.LinearSegmentedColormap.from_list("tx",   ["#084594","#1565c0","#64b5f6","#a5d6a7","#2e8b57","#388e3c","#43a047","#66bb6a","#8bc34a","#aed581","#cddc39","#e6ee3b","#ffeb3b","#fdd835","#fbc02d","#f9a825","#f57f17","#ef6c00","#e65100","#d84315","#b71c1c","#880e4f","#4a148c"])
+cmap_tn   = mcolors.LinearSegmentedColormap.from_list("tn",   ["#084594","#1565c0","#1e88e5","#42a5f5","#90caf9","#b2dfdb","#2e8b57","#66bb6a","#cddc39","#ffeb3b","#fbc02d","#f57f17","#ef6c00"])
 cmap_t10n = mcolors.LinearSegmentedColormap.from_list("t10n", ["#1a3a6b","#2980b9","#a8d8ea","#e8f4f8","#c8e6c9","#81c784","#388e3c"])
 cmap_rr   = mcolors.LinearSegmentedColormap.from_list("rr",   ["#ffffff","#c6dbef","#6baed6","#2171b5","#084594"])
 cmap_fx   = mcolors.LinearSegmentedColormap.from_list("fx",   ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"])
 cmap_ff   = mcolors.LinearSegmentedColormap.from_list("ff",   ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"])
 
-norm_tx   = mcolors.Normalize(vmin=-5,  vmax=30)
-norm_tn   = mcolors.Normalize(vmin=-15, vmax=20)
+norm_tx   = mcolors.Normalize(vmin=-5,  vmax=40)
+norm_tn   = mcolors.Normalize(vmin=-15, vmax=22)
 norm_t10n = mcolors.Normalize(vmin=-15, vmax=15)
 norm_rr   = mcolors.Normalize(vmin=0,   vmax=30)
 norm_fx   = mcolors.Normalize(vmin=0,   vmax=40)
