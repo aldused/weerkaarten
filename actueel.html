@@ -98,7 +98,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       <div style="text-align:right;"><div class="rechts" id="kaart-dag">–</div><div class="rechts-sub" id="kaart-param-label">Temperatuur (°C)</div></div>
     </div>
     <div class="kaart-container">
-      <img src="kaart_basis_nl.png" alt="Basiskaart Nederland">
+      <img src="kaart_basis_nl.png" id="kaart-basis" alt="Basiskaart Nederland">
+      <canvas id="heatmap" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
       <svg id="nl-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
     <div class="legenda" id="legenda"></div>
@@ -165,6 +166,93 @@ function interpKleur(val,schaal,stops){
 
 let stationData = {}, huidigParam = "ta";
 
+// ── Heatmap / IDW-interpolatie (alleen temperatuur) ─────────────────────────
+const HEATMAP_RES = 4;
+const IDW_POWER = 2.5;
+const HEATMAP_ALPHA = 0.55;
+let landMask = null;
+
+function maakLandMask(){
+  const img = document.getElementById("kaart-basis");
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, c.width, c.height).data;
+  const w = Math.ceil(c.width / HEATMAP_RES);
+  const h = Math.ceil(c.height / HEATMAP_RES);
+  landMask = {w, h, data: new Uint8Array(w * h)};
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      const sx = Math.min(x * HEATMAP_RES, c.width-1);
+      const sy = Math.min(y * HEATMAP_RES, c.height-1);
+      const i = (sy * c.width + sx) * 4;
+      const r=px[i], g=px[i+1], b=px[i+2];
+      const isWater = (b > r + 15 && b > 170) || (r>200 && g>220 && b>235 && b>r);
+      landMask.data[y * w + x] = isWater ? 0 : 1;
+    }
+  }
+}
+
+function tekenHeatmap(){
+  const hc = document.getElementById("heatmap");
+  const img = document.getElementById("kaart-basis");
+  const p = PARAMS[huidigParam];
+  if(!p || huidigParam !== "ta"){
+    hc.width = 1; hc.height = 1;
+    return;
+  }
+  if(!landMask) maakLandMask();
+
+  const punten = [];
+  Object.values(stationData).forEach(st => {
+    if(!st || st.lon==null || st.lat==null || st.ta==null) return;
+    const px = (st.lon - LON_MIN) / (LON_MAX - LON_MIN) * landMask.w;
+    const py = (1 - (st.lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * landMask.h;
+    punten.push({x: px, y: py, val: st.ta});
+  });
+  if(punten.length < 3) return;
+
+  const w = landMask.w, h = landMask.h;
+  hc.width = img.naturalWidth;
+  hc.height = img.naturalHeight;
+  const ctx = hc.getContext("2d");
+  ctx.clearRect(0, 0, hc.width, hc.height);
+
+  const imgData = ctx.createImageData(w, h);
+  const buf = imgData.data;
+
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      const idx = y * w + x;
+      if(!landMask.data[idx]){ buf[idx*4+3] = 0; continue; }
+      let sumW = 0, sumWV = 0;
+      for(let i=0; i<punten.length; i++){
+        const dx = x - punten[i].x, dy = y - punten[i].y;
+        const d2 = dx*dx + dy*dy;
+        if(d2 < 0.5){ sumWV = punten[i].val; sumW = 1; break; }
+        const w_i = 1 / Math.pow(d2, IDW_POWER / 2);
+        sumW += w_i;
+        sumWV += w_i * punten[i].val;
+      }
+      const val = sumWV / sumW;
+      const [bg] = interpKleur(val, p.schaal, p.kleuren);
+      const m = bg.match(/\d+/g);
+      buf[idx*4]   = +m[0];
+      buf[idx*4+1] = +m[1];
+      buf[idx*4+2] = +m[2];
+      buf[idx*4+3] = Math.round(HEATMAP_ALPHA * 255);
+    }
+  }
+
+  const tmpC = document.createElement("canvas");
+  tmpC.width = w; tmpC.height = h;
+  tmpC.getContext("2d").putImageData(imgData, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(tmpC, 0, 0, hc.width, hc.height);
+}
+
 function getVal(st, param) {
   let val = st[param];
   if (val == null) return null;
@@ -202,6 +290,8 @@ function tekenKaart() {
   const svg = document.getElementById("nl-kaart");
   svg.innerHTML = "";
   const p = PARAMS[huidigParam];
+
+  tekenHeatmap();
 
   Object.values(stationData).forEach(st => {
     if (!st || st.lon == null || st.lat == null) return;
@@ -380,6 +470,9 @@ function downloadKaart() {
 
   // Kaart
   ctx.drawImage(img, 0, hdrH, canvas.width, img.naturalHeight);
+  // Heatmap
+  const hc = document.getElementById("heatmap");
+  if(hc.width > 1) ctx.drawImage(hc, 0, hdrH, canvas.width, img.naturalHeight);
 
   // SVG overlay
   const svgData = new XMLSerializer().serializeToString(svg);
