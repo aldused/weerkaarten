@@ -2,16 +2,13 @@
 """
 haal_dwd_guidance.py
 Scrapt DWD Synoptische Übersicht (Kurzfrist + Mittelfrist),
-vertaalt naar Nederlands via Claude Haiku, slaat op als dwd_guidance.json.
+vertaalt naar Nederlands via lokaal Helsinki NLP model, slaat op als dwd_guidance.json.
 """
 
 import os, json, re, requests
 from datetime import datetime
-import anthropic
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-
-ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 URLS = {
     "kurzfrist": "https://www.dwd.de/DE/fachnutzer/hobbymet/wetter_deutschland/_functions/PlainTeaser_synUebersichten/nas_bericht_syn_ueb_kurzfrist_frueh.html",
@@ -20,29 +17,72 @@ URLS = {
 
 OUTPUT = "dwd_guidance.json"
 
+_model = None
+_tokenizer = None
 
-def vertaal_claude(tekst):
-    """Vertaal Duitse tekst naar Nederlands via Claude Haiku."""
+def _get_model():
+    global _model, _tokenizer
+    if _model is None:
+        from transformers import MarianMTModel, MarianTokenizer
+        name = "Helsinki-NLP/opus-mt-de-nl"
+        _tokenizer = MarianTokenizer.from_pretrained(name)
+        _model = MarianMTModel.from_pretrained(name)
+    return _model, _tokenizer
+
+
+def _vertaal_zin(tekst):
+    """Vertaal één stuk tekst (max ~400 tekens)."""
+    model, tokenizer = _get_model()
+    tokens = tokenizer([tekst], return_tensors="pt", padding=True, truncation=True, max_length=512)
+    vertaald = model.generate(**tokens)
+    return tokenizer.decode(vertaald[0], skip_special_tokens=True)
+
+
+def vertaal_lokaal(tekst):
+    """Vertaal Duitse tekst naar Nederlands via lokaal Helsinki NLP model."""
     if not tekst or not tekst.strip():
         return tekst
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=8000,
-        messages=[{
-            "role": "user",
-            "content": f"""Vertaal de volgende Duitse meteorologische tekst naar het Nederlands.
-Behoud exact dezelfde opmaak, regelafbrekingen en structuur.
-Vertaal alleen de tekst, voeg niets toe en laat niets weg.
-Meteorologische afkortingen (Bft, UTC, hPa, GWL, etc.) en plaatsnamen niet vertalen.
-SXEU/DWAV codes en datumregels niet vertalen.
+    # Splits op lege regels (alinea's) om opmaak te bewaren
+    alineas = re.split(r'(\n\s*\n)', tekst)
+    resultaat = []
 
-Tekst:
-{tekst}"""
-        }]
-    )
-    return message.content[0].text
+    for deel in alineas:
+        # Lege scheidingsregels ongewijzigd laten
+        if not deel.strip():
+            resultaat.append(deel)
+            continue
+
+        # Regels die niet vertaald moeten worden (codes, datums, afkortingen)
+        if re.match(r'^\s*(SXEU|DWAV|S\w{3}\d{2}|\d{6}/\d{4})', deel.strip()):
+            resultaat.append(deel)
+            continue
+
+        # Splits in stukken van max ~400 tekens op regelgrenzen
+        regels = deel.split('\n')
+        vertaalde_regels = []
+        buffer = ""
+
+        for regel in regels:
+            if len(buffer) + len(regel) < 400:
+                buffer += (" " if buffer else "") + regel.strip()
+            else:
+                if buffer:
+                    try:
+                        vertaalde_regels.append(_vertaal_zin(buffer))
+                    except Exception:
+                        vertaalde_regels.append(buffer)
+                buffer = regel.strip()
+
+        if buffer:
+            try:
+                vertaalde_regels.append(_vertaal_zin(buffer))
+            except Exception:
+                vertaalde_regels.append(buffer)
+
+        resultaat.append('\n'.join(vertaalde_regels))
+
+    return ''.join(resultaat)
 
 
 def scrape_dwd(url):
@@ -94,8 +134,8 @@ def main():
             origineel, uitgave = scrape_dwd(url)
             print(f"  Origineel: {len(origineel)} tekens")
 
-            print(f"  Vertalen via Claude...")
-            vertaald = vertaal_claude(origineel)
+            print(f"  Vertalen via lokaal model...")
+            vertaald = vertaal_lokaal(origineel)
             print(f"  Vertaald: {len(vertaald)} tekens")
 
             output[naam] = {
