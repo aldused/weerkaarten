@@ -950,24 +950,31 @@ function vulGrafiekDropdowns() {
   });
 }
 
-// Laad data
-fetch("neerslag_records.json?t=" + Date.now())
-  .then(r => r.json())
-  .then(d => {
-    data = d;
-    document.getElementById("n-stations").textContent = d.n_stations;
-    document.getElementById("bijgewerkt").textContent = "Bijgewerkt: " + d.bijgewerkt.substring(0,16).replace("T"," ");
-    vulLandelijk();
-    vulDroogste();
-    vulStationDropdown();
-    vulGrafiekDropdowns();
-    // URL-parameter: ?modus=droogste start direct in droogste modus
-    const urlModus = new URLSearchParams(location.search).get('modus');
-    if (urlModus === 'droogste') wisselModus('droogste');
-  })
-  .catch(e => {
-    document.querySelector(".info-balk").textContent = "Fout bij laden: " + e.message;
-  });
+// Laad data — twee bestanden: natste + droogste
+const t = Date.now();
+Promise.all([
+  fetch("neerslag_records.json?t=" + t).then(r => r.json()),
+  fetch("neerslag_droog.json?t=" + t).then(r => r.json())
+]).then(([natste, droogste]) => {
+  data = natste;
+  // Droogste landelijk samenvoegen
+  Object.assign(data.landelijk, droogste.landelijk);
+  // Droogste per station samenvoegen
+  for (const [nr, d] of Object.entries(droogste.stations || {})) {
+    if (data.stations[nr]) Object.assign(data.stations[nr], d);
+  }
+  document.getElementById("n-stations").textContent = data.n_stations;
+  document.getElementById("bijgewerkt").textContent = "Bijgewerkt: " + data.bijgewerkt.substring(0,16).replace("T"," ");
+  vulLandelijk();
+  vulDroogste();
+  vulStationDropdown();
+  vulGrafiekDropdowns();
+  // URL-parameter: ?modus=droogste start direct in droogste modus
+  const urlModus = new URLSearchParams(location.search).get('modus');
+  if (urlModus === 'droogste') wisselModus('droogste');
+}).catch(e => {
+  document.querySelector(".info-balk").textContent = "Fout bij laden: " + e.message;
+});
 </script>
 </body>
 </html>

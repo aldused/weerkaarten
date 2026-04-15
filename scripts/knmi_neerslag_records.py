@@ -422,24 +422,48 @@ def main():
 
     stationsnamen = {k: v["naam"] for k, v in stations.items()}
 
-    # Verwijder volledige data (_keys) uit per-station output (alleen top N behouden)
-    stations_export = {
-        nr: {k: v for k, v in rec.items() if not k.startswith("_")}
+    # Splits: natste keys in neerslag_records.json, droogste in neerslag_droog.json
+    DROOG_KEYS = {"droog_decade", "droog_maand", "droog_seizoen", "droog_jaar", "droge_periode"}
+    NATSTE_KEYS = lambda k: not k.startswith("_") and k not in DROOG_KEYS
+
+    stations_natste = {
+        nr: {k: v for k, v in rec.items() if NATSTE_KEYS(k)}
         for nr, rec in alle_records.items()
     }
+    stations_droog = {
+        nr: {k: v for k, v in rec.items() if k in DROOG_KEYS}
+        for nr, rec in alle_records.items()
+        if any(k in DROOG_KEYS for k in rec)
+    }
+
+    landelijk_natste = {k: v for k, v in landelijk.items() if k not in DROOG_KEYS}
+    landelijk_droog  = {k: v for k, v in landelijk.items() if k in DROOG_KEYS}
+
+    bijgewerkt = datetime.now().isoformat()
 
     output = {
-        "stations": stations_export,
-        "landelijk": landelijk,
+        "stations": stations_natste,
+        "landelijk": landelijk_natste,
         "stationsnamen": stationsnamen,
-        "bijgewerkt": datetime.now().isoformat(),
+        "bijgewerkt": bijgewerkt,
         "n_stations": len(alle_records),
         "n_totaal": len(stations)
     }
     with open(OUTPUT_JSON, "w") as f:
         json.dump(output, f, ensure_ascii=False)
 
+    droog_output = {
+        "stations": stations_droog,
+        "landelijk": landelijk_droog,
+        "bijgewerkt": bijgewerkt,
+    }
+    with open("neerslag_droog.json", "w") as f:
+        json.dump(droog_output, f, ensure_ascii=False)
+
     print(f"Klaar! {verwerkt} nieuw, {len(alle_records)} totaal van {len(stations)}.")
+    s1 = os.path.getsize(OUTPUT_JSON) // 1024
+    s2 = os.path.getsize("neerslag_droog.json") // 1024
+    print(f"neerslag_records.json: {s1} KB  |  neerslag_droog.json: {s2} KB")
     print(f"Tijd: {time.time()-t0:.0f}s")
 
 if __name__ == "__main__":
