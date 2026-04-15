@@ -232,7 +232,7 @@ def haal_t10n_knmi(station_id: str, dag: date, dt_range_10min: str = None) -> fl
     """
     T10N ophalen via de daggegevens API (validated daily observations).
     Fallback: laagste ta10 uit de 10-minuten API als daggegevens leeg zijn.
-    Wordt alleen gebruikt als Buienradar geen groundtemperature heeft voor dit station.
+    Primaire bron voor t10n (geeft tijdstip); Buienradar is de fallback.
     """
     s = f"{dag.isoformat()}T00:00:00Z"
     e = f"{(dag + timedelta(days=1)).isoformat()}T00:00:00Z"
@@ -482,12 +482,11 @@ def haal_dag(dag: date) -> dict:
             if br_st.get("fx") is not None:
                 res["fx"].append((br_st["fx"], naam, None))
 
-        # ── T10N: Buienradar groundtemperature altijd primair ─────────────────
+        # ── T10N: Buienradar primair (geen tijdstip), KNMI als fallback ──────────
         gt = br_st.get("t10n")
         if gt is not None:
             res["t10n"].append((gt, naam, None))  # BR heeft geen tijdstip
         else:
-            # BR-station ontbreekt in feed → KNMI als fallback
             try:
                 t10n_knmi, t10n_t = haal_t10n_knmi(station_id, dag, dt_range)
                 if t10n_knmi is not None:
