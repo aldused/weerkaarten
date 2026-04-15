@@ -579,13 +579,14 @@ vandaag_key = vandaag.isoformat()
 # Bewaar laagste t10n van de dag (momentopname Buienradar → cumulatief minimum)
 if vandaag_key in resultaten:
     oud = resultaten[vandaag_key]
-    # Bouw lookup van oude t10n waarden per station
-    oud_t10n = {item[1]: item[0] for item in oud.get("t10n", []) if len(item) >= 2}
+    # Bouw lookup van oude t10n waarden per station (waarde + tijdstip)
+    oud_t10n = {item[1]: (item[0], item[2] if len(item) > 2 else None) for item in oud.get("t10n", []) if len(item) >= 2}
     nieuw_t10n = []
     for item in nieuwe_dag.get("t10n", []):
         v, naam = item[0], item[1]
-        if naam in oud_t10n and oud_t10n[naam] < v:
-            nieuw_t10n.append([oud_t10n[naam], naam])  # oude waarde was lager
+        if naam in oud_t10n and oud_t10n[naam][0] < v:
+            oud_v, oud_t = oud_t10n[naam]
+            nieuw_t10n.append([oud_v, naam, oud_t])  # oude waarde was lager, bewaar tijdstip
         else:
             nieuw_t10n.append(item)
     # Voeg stations toe die alleen in de oude data zaten
