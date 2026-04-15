@@ -637,7 +637,12 @@ for STATION, STATION_NAAM in STATIONS:
 
 # ── Historische CSV-stations (gedigitaliseerde data) ──────────────────────────
 CSV_STATIONS = [
-    ("20", "Winterswijk", "Winterswijk_20_G_18940101_19701209.csv"),
+    ("20",  "Winterswijk",  "Winterswijk_20_G_18940101_19701209.csv"),
+]
+
+EPEN_STATIONS = [
+    ("130", "Epen",         "Epen_OostMaarland.csv", "130_H"),
+    ("170", "Oost-Maarland","Epen_OostMaarland.csv", "170_H"),
 ]
 
 def parse_historisch_csv(pad):
@@ -857,6 +862,160 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
         "tx_hoog": top10_max(data, "tx"), "tx_laag": top10_min(data, "tx"),
         "tn_hoog": top10_max(data, "tn"), "tn_laag": top10_min(data, "tn"),
         "tg_hoog": [], "tg_laag": [], "rh_hoog": top10_max(data, "rh"),
+        "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+        "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
+    }
+    records["maandranking"] = {}
+    records["seizoenranking"] = {}
+    records["tussenstand"] = None
+
+    with open(OUTPUT_JSON, "w") as f:
+        json.dump(records, f)
+    tx_rec = records["alltime"]["tx_hoog"]
+    tn_rec = records["alltime"]["tn_laag"]
+    print(f"  Alltime TX: {tx_rec[0] if tx_rec else 'geen data'}")
+    print(f"  Alltime TN: {tn_rec[0] if tn_rec else 'geen data'}")
+    print(f"  Opgeslagen: {OUTPUT_JSON}")
+
+# ── Epen/Oost-Maarland CSV-stations ──────────────────────────────────────────
+def parse_epen_csv(pad, csv_code):
+    """Parset het Epen/Oost-Maarland termijnstation CSV-formaat."""
+    import io as _io, pandas as _pd
+    try:
+        with open(pad, encoding="utf-8-sig") as f:
+            raw = f.read()
+        lines = raw.splitlines()
+        cleaned = []
+        for line in lines:
+            line = line.strip()
+            if line.startswith('"') and line.endswith('"'):
+                line = line[1:-1]
+            line = line.replace('""', '"')
+            cleaned.append(line)
+        df = _pd.read_csv(_io.StringIO("\n".join(cleaned)))
+        df = df[df["DS_CODE"] == csv_code].copy()
+    except Exception as e:
+        print(f"  CSV-fout ({csv_code}): {e}"); return []
+
+    records = []
+    for _, rij in df.iterrows():
+        datum_str = str(rij["IT_DATETIME"])[:8]
+        if len(datum_str) != 8 or not datum_str.isdigit():
+            continue
+        try:
+            jaar  = int(datum_str[:4])
+            maand = int(datum_str[4:6])
+            dag   = int(datum_str[6:8])
+        except:
+            continue
+        def g(col):
+            try:
+                v = rij.get(col)
+                return round(float(v), 1) if v is not None and str(v).strip() not in ("", "nan") else None
+            except:
+                return None
+        tx = g("REH1.TX"); tn = g("REH1.TN"); tg = g("REH1.TG")
+        if tx is None and tn is None:
+            continue
+        records.append({
+            'datum': f'{jaar:04d}-{maand:02d}-{dag:02d}',
+            'jaar': jaar, 'maand': maand, 'dag': dag,
+            'decade': min(((dag - 1) // 10) + 1, 3),
+            'seizoen': seizoen(maand),
+            'tx': tx, 'tn': tn, 'tg': tg, 'rh': None,
+            'fx': None, 'fg': None, 'fhx': None,
+            'pg': None, 'px': None, 'pn': None, 'sq': None,
+        })
+    return sorted(records, key=lambda r: r['datum'])
+
+for STATION, STATION_NAAM, CSV_BESTAND, CSV_CODE in EPEN_STATIONS:
+    if not os.path.exists(CSV_BESTAND):
+        print(f"CSV niet gevonden: {CSV_BESTAND} — sla over"); continue
+    print(f"\n=== Epen CSV-station: {STATION_NAAM} ({STATION}) ===")
+    OUTPUT_JSON = f"records_{STATION}.json"
+    data = parse_epen_csv(CSV_BESTAND, CSV_CODE)
+    if not data:
+        print(f"Geen data in {CSV_BESTAND} voor {CSV_CODE}"); continue
+    print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")
+
+    records = {
+        "station": STATION_NAAM, "station_nr": STATION,
+        "van": data[0]["datum"], "tm": data[-1]["datum"],
+        "gegenereerd": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "dag": {}, "decade": {}, "maand": {}, "seizoen": {}, "jaar": {}, "alltime": {},
+    }
+
+    dag_groepen = defaultdict(list)
+    for r in data: dag_groepen[(r["maand"], r["dag"])].append(r)
+    for (m, d), groep in dag_groepen.items():
+        msleutel = str(m); dsleutel = str(d)
+        if msleutel not in records["dag"]: records["dag"][msleutel] = {}
+        records["dag"][msleutel][dsleutel] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [], "rh_hoog": [],
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
+        }
+
+    dec_groepen = defaultdict(list)
+    for r in data: dec_groepen[(r["maand"], r["decade"])].append(r)
+    for (m, dec), groep in dec_groepen.items():
+        msleutel = str(m); dsleutel = str(dec)
+        if msleutel not in records["decade"]: records["decade"][msleutel] = {}
+        records["decade"][msleutel][dsleutel] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [], "rh_hoog": [],
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
+        }
+
+    mnd_groepen = defaultdict(list)
+    for r in data: mnd_groepen[r["maand"]].append(r)
+    for m, groep in mnd_groepen.items():
+        records["maand"][str(m)] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [], "rh_hoog": [],
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
+        }
+
+    sei_groepen = defaultdict(list)
+    for r in data: sei_groepen[r["seizoen"]].append(r)
+    for s, groep in sei_groepen.items():
+        records["seizoen"][s] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [], "rh_hoog": [],
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
+        }
+
+    jaar_groepen = defaultdict(list)
+    for r in data: jaar_groepen[r["jaar"]].append(r)
+    for j, groep in jaar_groepen.items():
+        records["jaar"][str(j)] = {
+            "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
+            "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
+            "tg_hoog": [], "tg_laag": [], "rh_hoog": [],
+            "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
+            "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
+            "sq_totaal": 0,
+            "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
+            "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
+            "ijsdagen":        sum(1 for r in groep if r["tx"] is not None and r["tx"] <  0),
+            "vorstdagen":      sum(1 for r in groep if r["tn"] is not None and r["tn"] <  0),
+            "zomerse_dagen":   sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 25),
+            "tropische_dagen": sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 30),
+            "hittegolven": [], "koudegolven": [],
+        }
+
+    records["alltime"] = {
+        "tx_hoog": top10_max(data, "tx"), "tx_laag": top10_min(data, "tx"),
+        "tn_hoog": top10_max(data, "tn"), "tn_laag": top10_min(data, "tn"),
+        "tg_hoog": [], "tg_laag": [], "rh_hoog": [],
         "fx_hoog": [], "fhx_hoog": [], "fg_hoog": [],
         "pg_hoog": [], "pg_laag": [], "px_hoog": [], "pn_laag": [], "sq_hoog": [],
     }
