@@ -1046,9 +1046,11 @@ function renderTabel(p, el, data) {
   const d = data.daily;
   const tijden = h.time;
   const n = Math.min(Math.floor(tijden.length / 24), d.time.length);
+  // UTC-offset voor TX/TN: MOSMIX definieert TX=max(06-18 UTC), TN=min(18-06 UTC)
+  // Open-Meteo levert lokale tijd → verschuif venster met UTC-offset (bijv. +2u voor CEST)
+  const utcOff = Math.round((data.utc_offset_seconds || 0) / 3600);
 
   const dagKoppen = [];
-  const stripIcoDag = [];
   const stripTX = [], stripTN = [], stripRR = [], stripFF = [], stripGust = [], stripDD = [];
   const stripVocht = [], stripBewolk = [], stripZon = [], stripUV = [], stripWBGT = [];
   const chartLabels = [], chartTX = [], chartTN = [], chartRR = [], chartZon = [];
@@ -1060,17 +1062,17 @@ function renderTabel(p, el, data) {
     const dagPer   = agregeer(h, base + 6,  base + 18);
     const nachtPer = agregeer(h, base + 18, base + 30);
 
-    // TX = max temp 06:00–18:00 inclusief (exact MOSMIX definitie: loc.hour >= 12 → periode 06–18u)
+    // TX = max temp 06:00–18:00 UTC (MOSMIX definitie), lokaal verschoven met utcOff
     const tx = (() => {
       const t = [];
-      for (let i = base + 6; i <= base + 18 && i < h.temperature_2m.length; i++)
+      for (let i = base + 6 + utcOff; i <= base + 18 + utcOff && i < h.temperature_2m.length; i++)
         if (h.temperature_2m[i] != null) t.push(h.temperature_2m[i]);
       return t.length ? Math.max(...t) : null;
     })();
-    // TN = min temp 18:00–06:00 volgend dag inclusief (MOSMIX: loc.hour < 12 → vorige dag)
+    // TN = min temp 18:00–06:00 UTC volgend dag (MOSMIX definitie), lokaal verschoven
     const tn = (() => {
       const t = [];
-      for (let i = base + 18; i <= base + 30 && i < h.temperature_2m.length; i++)
+      for (let i = base + 18 + utcOff; i <= base + 30 + utcOff && i < h.temperature_2m.length; i++)
         if (h.temperature_2m[i] != null) t.push(h.temperature_2m[i]);
       return t.length ? Math.min(...t) : null;
     })();
@@ -1108,7 +1110,7 @@ function renderTabel(p, el, data) {
       return 0.7 * tw + 0.2 * tg + 0.1 * tx;
     })();
 
-    const [icoDag, icoDagLbl] = dagPer ? dagIco(dagPer.code, zon) : ['–',''];
+    const [icoDag, icoDagLbl] = dagPer ? dagIco(dagPer.code, zon) : ['–','']; // nog gebruikt door grafiek/hover
     const txCls = tx != null ? txKlasse(tx) : '';
     const tnCls = tn != null ? tnKlasse(tn) : '';
     const rrCls = rrKlasse(rr);
@@ -1122,7 +1124,6 @@ function renderTabel(p, el, data) {
     const wbgtCls = wbgt == null ? '' : wbgt < 18 ? '' : wbgt < 23 ? 'wbgt-matig' : wbgt < 28 ? 'wbgt-hoog' : 'wbgt-zeer-hoog';
 
     dagKoppen.push(`<th><span class="dag-kop${isWE?' weekend-kop':''}">${dagLabel(datum)}</span><span class="dag-sub">${datumKort(datum)}</span></th>`);
-    stripIcoDag.push(`<td class="strip-ico" title="${escHtml(icoDagLbl)}">${icoDag}</td>`);
     stripTX.push(`<td class="strip-tx ${txCls}">${tx != null ? tx.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
     stripTN.push(`<td class="strip-tn ${tnCls}">${tn != null ? tn.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
     stripRR.push(`<td class="${rrCls}">${rr >= 0.1 ? rr.toFixed(1).replace('.',',') + ' mm' : '<span class="rr-geen">0</span>'}</td>`);
@@ -1149,7 +1150,6 @@ function renderTabel(p, el, data) {
       <table class="strip-tabel">
         <thead><tr><th></th>${dagKoppen.join('')}</tr></thead>
         <tbody>
-          <tr><td>☀ Dag</td>${stripIcoDag.join('')}</tr>
           <tr><td>TX</td>${stripTX.join('')}</tr>
           <tr><td>TN</td>${stripTN.join('')}</tr>
           <tr><td>🌧 Neerslag</td>${stripRR.join('')}</tr>
