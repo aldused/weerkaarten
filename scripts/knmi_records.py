@@ -640,9 +640,12 @@ CSV_STATIONS = [
     ("20",  "Winterswijk",  "Winterswijk_20_G_18940101_19701209.csv"),
 ]
 
+# Elk station: (nr, naam, [(csv_bestand, csv_code), ...])
 EPEN_STATIONS = [
-    ("130", "Epen",         "Epen_OostMaarland.csv", "130_H"),
-    ("170", "Oost-Maarland","Epen_OostMaarland.csv", "170_H"),
+    ("130", "Epen",         [("Epen_OostMaarland.csv", "130_H"),
+                              ("Epen_OostMaarlant_feb_1990.csv", "168_H")]),
+    ("170", "Oost-Maarland",[("Epen_OostMaarland.csv", "170_H"),
+                              ("Epen_OostMaarlant_feb_1990.csv", "170_H")]),
 ]
 
 def parse_historisch_csv(pad):
@@ -884,15 +887,22 @@ def parse_epen_csv(pad, csv_code):
     try:
         with open(pad, encoding="utf-8-sig") as f:
             raw = f.read()
-        lines = raw.splitlines()
-        cleaned = []
-        for line in lines:
-            line = line.strip()
-            if line.startswith('"') and line.endswith('"'):
-                line = line[1:-1]
-            line = line.replace('""', '"')
-            cleaned.append(line)
-        df = _pd.read_csv(_io.StringIO("\n".join(cleaned)))
+        # Probeer direct lezen; sommige bestanden hebben dubbele aanhalingstekens
+        try:
+            df = _pd.read_csv(_io.StringIO(raw), on_bad_lines='skip')
+            # Controleer of kolommen kloppen
+            if "IT_DATETIME" not in df.columns:
+                raise ValueError("kolom IT_DATETIME ontbreekt")
+        except Exception:
+            lines = raw.splitlines()
+            cleaned = []
+            for line in lines:
+                line = line.strip()
+                if line.startswith('"') and line.endswith('"'):
+                    line = line[1:-1]
+                line = line.replace('""', '"')
+                cleaned.append(line)
+            df = _pd.read_csv(_io.StringIO("\n".join(cleaned)), on_bad_lines='skip')
         df = df[df["DS_CODE"] == csv_code].copy()
     except Exception as e:
         print(f"  CSV-fout ({csv_code}): {e}"); return []
@@ -928,14 +938,20 @@ def parse_epen_csv(pad, csv_code):
         })
     return sorted(records, key=lambda r: r['datum'])
 
-for STATION, STATION_NAAM, CSV_BESTAND, CSV_CODE in EPEN_STATIONS:
-    if not os.path.exists(CSV_BESTAND):
-        print(f"CSV niet gevonden: {CSV_BESTAND} — sla over"); continue
+for STATION, STATION_NAAM, CSV_BRONNEN in EPEN_STATIONS:
     print(f"\n=== Epen CSV-station: {STATION_NAAM} ({STATION}) ===")
     OUTPUT_JSON = f"records_{STATION}.json"
-    data = parse_epen_csv(CSV_BESTAND, CSV_CODE)
+    # Combineer meerdere CSV-bronnen, dedup op datum (eerste bron wint)
+    data_dict = {}
+    for CSV_BESTAND, CSV_CODE in CSV_BRONNEN:
+        if not os.path.exists(CSV_BESTAND):
+            print(f"  CSV niet gevonden: {CSV_BESTAND} — sla over"); continue
+        for r in parse_epen_csv(CSV_BESTAND, CSV_CODE):
+            if r['datum'] not in data_dict:
+                data_dict[r['datum']] = r
+    data = sorted(data_dict.values(), key=lambda r: r['datum'])
     if not data:
-        print(f"Geen data in {CSV_BESTAND} voor {CSV_CODE}"); continue
+        print(f"Geen data voor {STATION_NAAM}"); continue
     print(f"Dagen ingelezen: {len(data)} (van {data[0]['datum']} t/m {data[-1]['datum']})")
 
     records = {
