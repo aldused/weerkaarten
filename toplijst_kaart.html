@@ -199,6 +199,46 @@ const HEATMAP_ALPHA = 0.82;
 const HEATMAP_PARAMS_TOP = new Set(["max","min","t10n"]);
 let landMask = null;
 
+
+function tekenIsolijnen(ctx, valGrid, w, h) {
+  let minV = Infinity, maxV = -Infinity;
+  for(let i=0; i<valGrid.length; i++){
+    if(landMask.data[i]){ minV = Math.min(minV, valGrid[i]); maxV = Math.max(maxV, valGrid[i]); }
+  }
+  const lo = Math.ceil(minV), hi = Math.floor(maxV);
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,0,0,0.40)";
+  ctx.lineWidth   = 1.7;
+  ctx.lineCap     = "round";
+  ctx.lineJoin    = "round";
+  for(let level = lo; level <= hi; level++){
+    ctx.beginPath();
+    for(let y=0; y<h-1; y++){
+      for(let x=0; x<w-1; x++){
+        const i00 = y*w + x;
+        if(!landMask.data[i00] || !landMask.data[i00+1] ||
+           !landMask.data[i00+w] || !landMask.data[i00+w+1]) continue;
+        const v00=valGrid[i00], v10=valGrid[i00+1];
+        const v01=valGrid[i00+w], v11=valGrid[i00+w+1];
+        const a0=v00>=level, a1=v10>=level, a2=v11>=level, a3=v01>=level;
+        const cs=(a0?8:0)|(a1?4:0)|(a2?2:0)|(a3?1:0);
+        if(cs===0 || cs===15) continue;
+        const sc = HEATMAP_RES;
+        const et = a0!==a1 ? {px:(x+(level-v00)/(v10-v00))*sc, py:y*sc}       : null;
+        const er = a1!==a2 ? {px:(x+1)*sc, py:(y+(level-v10)/(v11-v10))*sc}   : null;
+        const eb = a3!==a2 ? {px:(x+(level-v01)/(v11-v01))*sc, py:(y+1)*sc}   : null;
+        const el = a0!==a3 ? {px:x*sc, py:(y+(level-v00)/(v01-v00))*sc}       : null;
+        const pts = [et,er,eb,el].filter(p=>p!=null);
+        if(pts.length>=2){
+          ctx.moveTo(pts[0].px, pts[0].py); ctx.lineTo(pts[1].px, pts[1].py);
+          if(pts.length===4){ ctx.moveTo(pts[2].px, pts[2].py); ctx.lineTo(pts[3].px, pts[3].py); }
+        }
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 function maakLandMask(){
   const img = document.getElementById("kaart-basis");
   const c = document.createElement("canvas");
@@ -257,6 +297,7 @@ function tekenHeatmap(dagData, param){
 
   const imgData = ctx.createImageData(w, h);
   const buf = imgData.data;
+  const valGrid = new Float32Array(w * h);
   for(let y=0; y<h; y++){
     for(let x=0; x<w; x++){
       const idx = y * w + x;
@@ -271,6 +312,7 @@ function tekenHeatmap(dagData, param){
         sumWV += w_i * punten[i].val;
       }
       const val = sumWV / sumW;
+      valGrid[idx] = val;
       const [bg] = interpKleur(val, p.schaal, p.kleuren);
       const m = bg.match(/\d+/g);
       buf[idx*4]   = +m[0];
@@ -285,6 +327,7 @@ function tekenHeatmap(dagData, param){
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(tmpC, 0, 0, hc.width, hc.height);
+  tekenIsolijnen(ctx, valGrid, w, h);
 }
 
 function tekenKaart(dagData, param) {
