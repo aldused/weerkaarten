@@ -8,7 +8,7 @@ Verwerkt max 10 stations per run (caching).
 """
 
 import os, json, time, re, requests, zipfile, io
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from collections import defaultdict
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -111,6 +111,53 @@ def parse_neerslag_txt(tekst, cache_file):
     return data
 
 
+def bereken_droge_perioden(data, top_n=50):
+    """Bereken langste aaneengesloten droge perioden (RD=0)."""
+    if not data:
+        return []
+    geldig = sorted(
+        [r for r in data if r.get("rd") is not None and r["rd"] >= 0],
+        key=lambda x: x["d"]
+    )
+    if not geldig:
+        return []
+    perioden = []
+    streak_start = None
+    streak_count = 0
+    prev_date = None
+    prev_d = None
+    for rij in geldig:
+        d = rij["d"]
+        rd = rij["rd"]
+        curr = date(int(d[:4]), int(d[4:6]), int(d[6:8]))
+        if prev_date is not None and (curr - prev_date).days > 1:
+            if streak_count >= 3 and streak_start:
+                perioden.append({"dagen": streak_count,
+                    "van": f"{streak_start[:4]}-{streak_start[4:6]}-{streak_start[6:8]}",
+                    "tot": f"{prev_d[:4]}-{prev_d[4:6]}-{prev_d[6:8]}"})
+            streak_start = None
+            streak_count = 0
+        if rd == 0:
+            if streak_count == 0:
+                streak_start = d
+            streak_count += 1
+        else:
+            if streak_count >= 3 and streak_start:
+                perioden.append({"dagen": streak_count,
+                    "van": f"{streak_start[:4]}-{streak_start[4:6]}-{streak_start[6:8]}",
+                    "tot": f"{prev_d[:4]}-{prev_d[4:6]}-{prev_d[6:8]}"})
+            streak_start = None
+            streak_count = 0
+        prev_date = curr
+        prev_d = d
+    if streak_count >= 3 and streak_start and prev_d:
+        perioden.append({"dagen": streak_count,
+            "van": f"{streak_start[:4]}-{streak_start[4:6]}-{streak_start[6:8]}",
+            "tot": f"{prev_d[:4]}-{prev_d[4:6]}-{prev_d[6:8]}"})
+    perioden.sort(key=lambda x: -x["dagen"])
+    return perioden[:top_n]
+
+
 SEIZOEN_NAMEN = {"winter": "winter", "lente": "lente", "zomer": "zomer", "herfst": "herfst"}
 
 def seizoen_van_maand(mnd):
@@ -143,6 +190,10 @@ def bereken_records(data):
     mnd_data  = defaultdict(float)
     seizoen_data = defaultdict(float)
     jaar_data = defaultdict(float)
+    dec_count = defaultdict(int)
+    mnd_count = defaultdict(int)
+    seizoen_count = defaultdict(int)
+    jaar_count = defaultdict(int)
 
     for rij in data:
         rd = rij["rd"]
@@ -162,6 +213,10 @@ def bereken_records(data):
         mnd_data[(jaar,mnd)]     += rd_mm
         seizoen_data[sz_key]     += rd_mm
         jaar_data[jaar]          += rd_mm
+        dec_count[(jaar,mnd,dec)] += 1
+        mnd_count[(jaar,mnd)]     += 1
+        seizoen_count[sz_key]     += 1
+        jaar_count[jaar]          += 1
 
     dag_alle = sorted(
         [{"waarde": round(v,1), "datum": f"{k[:4]}-{k[4:6]}-{k[6:8]}"}
@@ -206,20 +261,69 @@ def bereken_records(data):
         for k, v in jaar_data.items()
     ], key=lambda x: x["jaar"])
 
+    # Droogste (ascending, met kwaliteitsfilters: minimumaantal meetdagen + min jaar 1900)
+    # Ook vereist: station heeft in diezelfde periode minstens 1 dag met rd>0 ooit
+    # (filter voor vroege nul-data artefacten)
+    heeft_regen = any(r["rd"] > 0 for r in data if r.get("rd") is not None)
+
+    droog_dec_alle = sorted([
+        {"waarde": round(v,1),
+         "label": f"{NL_MND[k[1]]} decade {k[2]}, {k[0]}",
+         "jaar": k[0], "mnd": k[1], "dec": k[2]}
+        for k,v in dec_data.items()
+        if dec_count[k] >= 7 and k[0] >= 1900 and heeft_regen
+    ], key=lambda x: x["waarde"])
+
+    droog_mnd_alle = sorted([
+        {"waarde": round(v,1),
+         "label": f"{NL_MND_LANG[k[1]]} {k[0]}",
+         "jaar": k[0], "mnd": k[1]}
+        for k,v in mnd_data.items()
+        if mnd_count[k] >= 20 and k[0] >= 1900 and heeft_regen
+    ], key=lambda x: x["waarde"])
+
+    droog_seizoen_alle = sorted([
+        {"waarde": round(v,1),
+         "label": f"{k[0]} {k[1]}" + (f"/{k[1]+1}" if k[0] == "winter" else ""),
+         "seizoen": k[0], "jaar": k[1]}
+        for k,v in seizoen_data.items()
+        if seizoen_count[k] >= 60 and k[1] >= 1900 and heeft_regen
+    ], key=lambda x: x["waarde"])
+
+    droog_jaar_alle = sorted([
+        {"waarde": round(v,1), "jaar": k}
+        for k,v in jaar_data.items()
+        if jaar_count[k] >= 300 and k >= 1900 and heeft_regen
+    ], key=lambda x: x["waarde"])
+
+    droge_perioden = [p for p in bereken_droge_perioden(data) if int(p["van"][:4]) >= 1900]
+
     return {
         "dag": dag_alle[:TOP_N], "decade": dec_alle[:TOP_N],
         "maand": mnd_alle[:TOP_N], "seizoen": seizoen_alle[:TOP_N],
         "jaar": jaar_alle[:TOP_N], "sneeuw": sneeuw_alle[:TOP_N],
         "jaar_reeks": jaar_reeks,
+        "droog_decade": droog_dec_alle[:TOP_N],
+        "droog_maand": droog_mnd_alle[:TOP_N],
+        "droog_seizoen": droog_seizoen_alle[:TOP_N],
+        "droog_jaar": droog_jaar_alle[:TOP_N],
+        "droge_periode": droge_perioden[:TOP_N],
         "_dag": dag_alle, "_decade": dec_alle,
         "_maand": mnd_alle, "_seizoen": seizoen_alle,
         "_jaar": jaar_alle, "_sneeuw": sneeuw_alle,
+        "_droog_decade": droog_dec_alle,
+        "_droog_maand": droog_mnd_alle,
+        "_droog_seizoen": droog_seizoen_alle,
+        "_droog_jaar": droog_jaar_alle,
+        "_droge_periode": droge_perioden,
     }
 
 
 def bereken_landelijk(alle_records, stations):
     dag_alle = []; dec_alle = []; mnd_alle = []
     seizoen_alle = []; jaar_alle = []; sneeuw_alle = []
+    droog_dec_alle = []; droog_mnd_alle = []; droog_seizoen_alle = []
+    droog_jaar_alle = []; droge_periode_alle = []
 
     for nr_str, rec in alle_records.items():
         info = stations.get(nr_str, {})
@@ -230,8 +334,13 @@ def bereken_landelijk(alle_records, stations):
         for r in rec.get("_seizoen", rec.get("seizoen", [])): seizoen_alle.append({**r, "station": nr_str, "naam": naam})
         for r in rec.get("_jaar",    rec.get("jaar", [])):    jaar_alle.append({**r,    "station": nr_str, "naam": naam})
         for r in rec.get("_sneeuw",  rec.get("sneeuw", [])):  sneeuw_alle.append({**r,  "station": nr_str, "naam": naam})
+        for r in rec.get("_droog_decade",  rec.get("droog_decade", [])):  droog_dec_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("_droog_maand",   rec.get("droog_maand", [])):   droog_mnd_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("_droog_seizoen", rec.get("droog_seizoen", [])): droog_seizoen_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("_droog_jaar",    rec.get("droog_jaar", [])):    droog_jaar_alle.append({**r, "station": nr_str, "naam": naam})
+        for r in rec.get("_droge_periode", rec.get("droge_periode", [])): droge_periode_alle.append({**r, "station": nr_str, "naam": naam})
 
-    # Per unieke periode alleen de top 3 stations bewaren (beheersbare grootte)
+    # Per unieke periode alleen de top N stations bewaren (beheersbare grootte)
     def top_per_groep(items, sleutel_fn, n=3):
         groepen = defaultdict(list)
         for r in items:
@@ -243,13 +352,29 @@ def bereken_landelijk(alle_records, stations):
         resultaat.sort(key=lambda x: -x["waarde"])
         return resultaat
 
+    def bottom_per_groep(items, sleutel_fn, n=3):
+        groepen = defaultdict(list)
+        for r in items:
+            groepen[sleutel_fn(r)].append(r)
+        resultaat = []
+        for vals in groepen.values():
+            vals.sort(key=lambda x: x["waarde"])  # ascending voor droogste
+            resultaat.extend(vals[:n])
+        resultaat.sort(key=lambda x: x["waarde"])
+        return resultaat
+
     return {
-        "dag":     top_per_groep(dag_alle,     lambda r: r["datum"][:7], n=10),  # top 10 per maand
+        "dag":     top_per_groep(dag_alle,     lambda r: r["datum"][:7], n=10),
         "decade":  top_per_groep(dec_alle,     lambda r: (r["jaar"], r["mnd"], r["dec"]), n=10),
         "maand":   top_per_groep(mnd_alle,     lambda r: (r["jaar"], r["mnd"]), n=10),
         "seizoen": top_per_groep(seizoen_alle, lambda r: (r["jaar"], r["seizoen"]), n=10),
         "jaar":    top_per_groep(jaar_alle,    lambda r: r["jaar"], n=10),
         "sneeuw":  top_per_groep(sneeuw_alle,  lambda r: r["datum"][:7], n=10),
+        "droog_decade":  bottom_per_groep(droog_dec_alle,     lambda r: (r["jaar"], r["mnd"], r["dec"]), n=5),
+        "droog_maand":   bottom_per_groep(droog_mnd_alle,     lambda r: (r["jaar"], r["mnd"]), n=5),
+        "droog_seizoen": bottom_per_groep(droog_seizoen_alle, lambda r: (r["jaar"], r["seizoen"]), n=5),
+        "droog_jaar":    bottom_per_groep(droog_jaar_alle,    lambda r: r["jaar"], n=5),
+        "droge_periode": sorted(droge_periode_alle, key=lambda x: -x["dagen"])[:25],
     }
 
 
