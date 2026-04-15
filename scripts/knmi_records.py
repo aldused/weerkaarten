@@ -151,7 +151,7 @@ def parse_csv(tekst):
             "jaar":    jaar,
             "maand":   maand,
             "dag":     dag,
-            "decade":  ((dag - 1) // 10) + 1,
+            "decade":  min(((dag - 1) // 10) + 1, 3),  # dag 31 → decade 3, niet 4
             "seizoen": seizoen(maand),
             "tx": val("TX"),
             "tn": val("TN"),
@@ -708,7 +708,7 @@ def parse_historisch_csv(pad):
         records.append({
             'datum': f'{jaar:04d}-{maand:02d}-{dag:02d}',
             'jaar': jaar, 'maand': maand, 'dag': dag,
-            'decade': ((dag - 1) // 10) + 1,
+            'decade': min(((dag - 1) // 10) + 1, 3),  # dag 31 → decade 3, niet 4
             'seizoen': seizoen(maand),
             'tx': tx, 'tn': tn, 'tg': None, 'rh': rh,
             'fx': None, 'fg': None, 'fhx': None,
@@ -730,7 +730,7 @@ for STATION, STATION_NAAM, CSV_BESTAND in CSV_STATIONS:
     correcties = {
         '1909-06-07': {'tn': 2.3},   # was 2.4, bron: -0.1
         '1909-06-08': {'tn': 2.5},   # was 2.6, bron: -0.1
-        '1915-09-30': {'tn': 3.5},   # was -3.5, teken-fout in bron
+        '1915-09-30': {'tn': 3.5},   # was 2.6 (fout in bron); CSV gecorrigeerd naar 35 (=3.5°C)
     }
     for rec in data:
         if rec['datum'] in correcties:
