@@ -536,15 +536,15 @@ function wmoLabel(code) {
   return WMO[code] || ["🌡","Code "+code];
 }
 
-// Dag-icoon met zonuren als primaire bron (bij geen neerslag)
+// Dag-icoon: relatieve zon t.o.v. daglichturen (seizoen- en breedtegraad-onafhankelijk)
 function dagIco(code, zon) {
   // Bij neerslag of onweer: altijd WMO-icoon
   if (code != null && code >= 51) return wmoLabel(code);
-  // Geen neerslag: zonuren bepalen het icoon
-  if (zon >= 8)  return ["☀️", "Zonnig"];
-  if (zon >= 5)  return ["🌤️", "Overwegend zonnig"];
-  if (zon >= 2)  return ["⛅", "Wisselend bewolkt"];
-  if (zon >= 0.5) return ["🌥️", "Bewolkt met opklaringen"];
+  const p = zon?.pct ?? 0;
+  if (p >= 0.70) return ["☀️",  "Zonnig"];
+  if (p >= 0.45) return ["🌤️", "Overwegend zonnig"];
+  if (p >= 0.20) return ["⛅",  "Wisselend bewolkt"];
+  if (p >= 0.05) return ["🌥️", "Bewolkt met opklaringen"];
   return ["☁️", "Bewolkt"];
 }
 
@@ -1075,14 +1075,16 @@ function renderTabel(p, el, data) {
       return t.length ? Math.min(...t) : null;
     })();
     const rr  = d.precipitation_sum[dag] ?? ((dagPer?.prec || 0) + (nachtPer?.prec || 0));
-    // Zonuren: tel uurwaarden direct_radiation > 120 W/m² (WMO-definitie zonneschijn)
+    // Zonuren: WMO-drempel 120 W/m², relatief t.o.v. daglichturen (> 10 W/m²)
     const zon = (() => {
       if (!h.direct_radiation) return null;
-      let n = 0;
+      let zonUur = 0, dagUur = 0;
       for (let i = base; i < Math.min(base + 24, h.direct_radiation.length); i++) {
-        if ((h.direct_radiation[i] ?? 0) > 120) n++;
+        const r = h.direct_radiation[i] ?? 0;
+        if (r > 10)  dagUur++;
+        if (r > 120) zonUur++;
       }
-      return n;
+      return { uur: zonUur, pct: dagUur > 0 ? zonUur / dagUur : 0 };
     })();
     const ff  = dagPer?.ffKmh  ?? null;
     const bft = kmhNaarBft(ff);
@@ -1100,7 +1102,7 @@ function renderTabel(p, el, data) {
                + Math.atan(tx + vocht) - Math.atan(vocht - 1.676331)
                + 0.00391838 * Math.pow(vocht, 1.5) * Math.atan(0.023101 * vocht)
                - 4.686035;
-      const solar = zon != null ? Math.min(zon / 12 * 800, 800) : 0;
+      const solar = zon != null ? Math.min(zon.pct * 800, 800) : 0;
       const wind  = Math.max(0.5, (ff ?? 10) / 3.6);
       const tg    = tx + 7.0 * (solar / 1000) - 1.5 * Math.pow(wind, 0.6);
       return 0.7 * tw + 0.2 * tg + 0.1 * tx;
@@ -1114,7 +1116,8 @@ function renderTabel(p, el, data) {
     const gustCls = ffKlasse(gustBft);
 
     // UV-klasse
-    const uvCls = uv == null ? '' : uv < 3 ? '' : uv < 6 ? 'uv-matig' : uv < 8 ? 'uv-hoog' : uv < 11 ? 'uv-zeer-hoog' : 'uv-extreem';
+    const uvAdj = uv != null ? uv - 0.5 : null;
+    const uvCls = uvAdj == null ? '' : uvAdj < 3 ? '' : uvAdj < 6 ? 'uv-matig' : uvAdj < 8 ? 'uv-hoog' : uvAdj < 11 ? 'uv-zeer-hoog' : 'uv-extreem';
     // WBGT-klasse
     const wbgtCls = wbgt == null ? '' : wbgt < 18 ? '' : wbgt < 23 ? 'wbgt-matig' : wbgt < 28 ? 'wbgt-hoog' : 'wbgt-zeer-hoog';
 
@@ -1128,15 +1131,15 @@ function renderTabel(p, el, data) {
     stripGust.push(`<td><span class="${gustCls}">${gust != null ? Math.round(gust) + ' km/h' : '–'}</span>${gust ? `<br><span style="font-size:0.8em;color:#aaa">Bft ${gustBft}</span>` : ''}</td>`);
     stripVocht.push(`<td>${vocht  != null ? Math.round(vocht)  + '%' : '–'}</td>`);
     stripBewolk.push(`<td>${bewolk != null ? Math.round(bewolk) + '%' : '–'}</td>`);
-    stripZon.push(`<td style="color:#c47a1a;font-weight:600">${zon != null ? zon + ' u' : '–'}</td>`);
-    stripUV.push(`<td class="${uvCls}">${uv != null ? uv.toFixed(1).replace('.',',') : '–'}</td>`);
+    stripZon.push(`<td style="color:#c47a1a;font-weight:600">${zon != null ? zon.uur + ' u' : '–'}</td>`);
+    stripUV.push(`<td class="${uvCls}">${uvAdj != null ? Math.floor(uvAdj) : '–'}</td>`);
     stripWBGT.push(`<td class="${wbgtCls}">${wbgt != null ? wbgt.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
 
     chartLabels.push(dagLabel(datum) + ' ' + datumKort(datum));
     chartTX.push(tx);
     chartTN.push(tn);
     chartRR.push(rr >= 0.1 ? parseFloat(rr.toFixed(1)) : 0);
-    chartZon.push(zon);
+    chartZon.push(zon?.uur ?? null);
   }
 
   const chartId = 'chart-' + p.id;

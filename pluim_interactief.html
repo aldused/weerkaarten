@@ -11,10 +11,11 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#f0f3f7;--bg2:#ffffff;--header:#003366;--panel:#ffffff;--border:#d0d8e4;--text:#1a2b40;--text2:#5a6a80;--accent:#0066cc;--red:#cc2222;--green:#228822;--yellow:#cc9900}
 body{font-family:Inter,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.header{background:var(--header);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #2ec4e8}
-.header h1{font-family:monospace;font-size:1.1rem;font-weight:700;color:white;letter-spacing:.02em}
+.header{background:var(--header);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:2px solid #2ec4e8}
+.header h1{font-size:1.05rem;font-weight:700;color:white}
 .header p{font-size:.72rem;color:#a8c4e8;margin-top:2px}
 .header-right{font-size:.72rem;color:#a8c4e8;text-align:right}
+.header-right strong{color:white}
 .controls{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
 .ctrl-groep{display:flex;flex-direction:column;gap:4px}
 .ctrl-groep label{font-size:.68rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
@@ -1939,17 +1940,20 @@ async function laadDauwpunt(lat,lon,naam,dagen,van,tot){
 }
 
 // ── 4 Pluimen vergelijking ──
-let vergDagen=7,vergModel='ecmwf';
+let vergDagen=7,vergModel='ecmwf',vergPreset='7';
 let vergCharts={};
 
 function setVergPeriode(d,btn){
-  vergDagen=d;
-  document.querySelectorAll('.vbtn').forEach(b=>{b.style.background='#1e3a5a';b.style.color='#aaa';b.style.border='1px solid #2a2a50';});
+  vergPreset=String(d);
+  vergDagen=d==='custom'?16:parseInt(d);
+  document.querySelectorAll('.vbtn').forEach(b=>{b.style.background='#e8ecf2';b.style.color='#666';b.style.border='1px solid #d0d8e4';});
   if(btn){btn.style.background='#2299ff';btn.style.color='white';btn.style.border='none';}
+  const wrap=document.getElementById('wrap-verg-custom');
+  if(wrap) wrap.style.display=d==='custom'?'flex':'none';
 }
 function setVergModel(m,btn){
   vergModel=m;
-  document.querySelectorAll('.vmbtn').forEach(b=>{b.style.background='#1e3a5a';b.style.color='#aaa';b.style.border='1px solid #2a2a50';});
+  document.querySelectorAll('.vmbtn').forEach(b=>{b.style.background='#e8ecf2';b.style.color='#666';b.style.border='1px solid #d0d8e4';});
   if(btn){btn.style.background='#2299ff';btn.style.color='white';btn.style.border='none';}
   const lbl=document.getElementById('verg-titel-lbl');
   if(lbl)lbl.textContent=m==='hres'?'4 Stations – HRES deterministisch':'4 Pluimen – '+m.toUpperCase()+' ENS';
@@ -1973,12 +1977,24 @@ function openVergelijking(){
   const types=[{val:'temp',lbl:'&#127777; Temp'},{val:'wind',lbl:'&#128168; Wind'},{val:'cloud',lbl:'&#9729;&#65039; Bewolking'},{val:'neerslag',lbl:'&#127783; Neerslag'},{val:'sneeuw',lbl:'&#10052;&#65039; Sneeuw'},{val:'onweer',lbl:'&#9928;&#65039; Onweer'},{val:'hoogte',lbl:'&#128225; 850/500 hPa'},{val:'dauwpunt',lbl:'&#128167; Dauwpunt'}];
   const btnStyle='padding:5px 10px;border-radius:5px;font-size:.75rem;font-weight:600;cursor:pointer';
 
+  const nu3=new Date();
+  const vd3=nu3.toISOString().slice(0,10);
+  const ov163=new Date(+nu3+16*86400000).toISOString().slice(0,10);
+  const ov73=new Date(+nu3+7*86400000).toISOString().slice(0,10);
+
   let html=`<div style="font-size:.75rem;color:#8888bb;font-weight:700;text-transform:uppercase;letter-spacing:.05em" id="verg-titel-lbl">4 Pluimen / Stations</div>`;
   html+=`<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:.65rem;color:#5a6a80;text-transform:uppercase;font-weight:600">Periode</label><div style="display:flex;gap:4px">
-    <button onclick="setVergPeriode(7,this)" class="vbtn" style="${btnStyle};background:#2299ff;border:none;color:white">7d</button>
-    <button onclick="setVergPeriode(10,this)" class="vbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">10d</button>
-    <button onclick="setVergPeriode(16,this)" class="vbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">16d</button>
-  </div></div>`;
+    <button onclick="setVergPeriode('7',this)" class="vbtn" style="${btnStyle};background:#2299ff;border:none;color:white">7d</button>
+    <button onclick="setVergPeriode('10',this)" class="vbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">10d</button>
+    <button onclick="setVergPeriode('16',this)" class="vbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">16d</button>
+    <button onclick="setVergPeriode('custom',this)" class="vbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">Datum…</button>
+  </div>
+  <div id="wrap-verg-custom" style="display:none;align-items:center;gap:5px;margin-top:4px">
+    <input type="date" id="verg-datum-van" value="${vd3}" min="${vd3}" max="${ov163}" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:4px 8px;font-size:.78rem">
+    <span style="color:#5a6a80">→</span>
+    <input type="date" id="verg-datum-tot" value="${ov73}" min="${vd3}" max="${ov163}" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:4px 8px;font-size:.78rem">
+  </div>
+  </div>`;
   html+=`<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:.65rem;color:#5a6a80;text-transform:uppercase;font-weight:600">Model</label><div style="display:flex;gap:4px">
     <button onclick="setVergModel('ecmwf',this)" class="vmbtn" style="${btnStyle};background:#2299ff;border:none;color:white">ECMWF</button>
     <button onclick="setVergModel('aifs',this)" class="vmbtn" style="${btnStyle};background:#e8ecf2;border:1px solid #d0d8e4;color:#666">AIFS</button>
@@ -2114,8 +2130,10 @@ async function laadVergelijking(){
     const sv=se.value.split(',');
     if(sv.length<3||!sv[0]||!sv[1]){continue;}
     const lat=sv[0],lon=sv[1],naam=sv[2]||'Onbekend';
+    const vv=vergPreset==='custom'?(document.getElementById('verg-datum-van')?.value||null):null;
+    const tv=vergPreset==='custom'?(document.getElementById('verg-datum-tot')?.value||null):null;
     try{
-      await laadVergPluim(i,lat,lon,naam,te.value,vergDagen,vergModel);
+      await laadVergPluim(i,lat,lon,naam,te.value,vergDagen,vergModel,vv,tv);
     }catch(e){
       const cel=document.getElementById(`verg-cel-${i}`);
       if(cel) cel.innerHTML=`<div style="color:#ee4444;padding:20px;font-size:.85rem">&#9888;&#65039; Fout bij ${naam}: ${e.message}</div>`;
@@ -2123,8 +2141,8 @@ async function laadVergelijking(){
   }
 }
 
-async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
-  if(model==='hres'){await laadVergHres(idx,lat,lon,naam,type,dagen);return;}
+async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
+  if(model==='hres'){await laadVergHres(idx,lat,lon,naam,type,dagen,van,tot);return;}
   const ensModel=model==='icon'?'icon_seamless':model==='aifs'?'ecmwf_aifs025':'ecmwf_ifs025';
   // GFS ensemble ondersteunt alleen temp en neerslag (geen wind/cloud members)
   if(model==='gfs'&&(type==='wind'||type==='cloud'||type==='onweer')){
@@ -2141,12 +2159,14 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
 
   if(type==='temp'||type==='neerslag'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
-    const times=ens.hourly.time,ts=times;
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
     apiTimes=ts;
     const tK=Object.keys(ens.hourly).filter(k=>k.startsWith('temperature_2m_member'));
     const pK=Object.keys(ens.hourly).filter(k=>k.startsWith('precipitation_member'));
-    const tA=tK.map(k=>ens.hourly[k]);
-    const pA=pK.map(k=>ens.hourly[k]);
+    const tA=tK.map(k=>fidx.map(i=>ens.hourly[k][i]));
+    const pA=pK.map(k=>fidx.map(i=>ens.hourly[k][i]));
     if(type==='temp'){
       const tMed=ts.map((_,j)=>medC(tA,j));
       const p25=ts.map((_,j)=>pctC(tA,j,25));
@@ -2175,10 +2195,12 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
     }
   }else if(type==='wind'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m&models=${ensModel}&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
-    const ts=ens.hourly.time;
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
     apiTimes=ts;
     const ffK=Object.keys(ens.hourly).filter(k=>k.startsWith('windspeed_10m_member'));
-    const ffA=ffK.map(k=>ens.hourly[k]);
+    const ffA=ffK.map(k=>fidx.map(i=>ens.hourly[k][i]));
     const ffMed=ts.map((_,j)=>medC(ffA,j));
     const p25=ts.map((_,j)=>pctC(ffA,j,25));
     const p75=ts.map((_,j)=>pctC(ffA,j,75));
@@ -2193,10 +2215,12 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
     tooltipCb={filter:item=>item.datasetIndex===ffA.length+2,callbacks:{label:ctx=>` Med: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'} km/u`}};
   }else if(type==='cloud'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
-    const ts=ens.hourly.time;
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
     apiTimes=ts;
     const ccK=Object.keys(ens.hourly).filter(k=>k.startsWith('cloudcover_member'));
-    const members=ccK.map(k=>ens.hourly[k]);
+    const members=ccK.map(k=>fidx.map(i=>ens.hourly[k][i]));
     const ccMed=ts.map((_,j)=>medC(members,j));
     const CATS=[['Onbewolkt',0,12,'rgba(245,230,66,0.85)'],['Licht',12,37,'rgba(220,210,140,0.75)'],['Half',37,62,'rgba(160,148,100,0.70)'],['Zwaar',62,87,'rgba(130,130,150,0.65)'],['Geheel',87,101,'rgba(55,55,70,0.80)']];
     titel=`${mLbl} – ${naam} – Bewolking`;
@@ -2212,12 +2236,14 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
     tooltipCb={filter:item=>item.datasetIndex<5,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}};
   }else if(type==='sneeuw'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=snowfall,temperature_2m&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
-    const ts=ens.hourly.time;
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
     apiTimes=ts;
     const sfK=Object.keys(ens.hourly).filter(k=>k.startsWith('snowfall_member'));
     const tK=Object.keys(ens.hourly).filter(k=>k.startsWith('temperature_2m_member'));
-    const sfA=sfK.map(k=>ens.hourly[k]);
-    const tA=tK.map(k=>ens.hourly[k]);
+    const sfA=sfK.map(k=>fidx.map(i=>ens.hourly[k][i]));
+    const tA=tK.map(k=>fidx.map(i=>ens.hourly[k][i]));
     const sfMed=ts.map((_,j)=>medC(sfA,j));
     const sfP25=ts.map((_,j)=>pctC(sfA,j,25));
     const sfP75=ts.map((_,j)=>pctC(sfA,j,75));
@@ -2242,12 +2268,14 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model){
     }}};
   }else if(type==='onweer'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cape,lifted_index&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
-    const ts=ens.hourly.time;
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
     apiTimes=ts;
     const cK=Object.keys(ens.hourly).filter(k=>k.startsWith('cape_member'));
     const liK=Object.keys(ens.hourly).filter(k=>k.startsWith('lifted_index_member'));
-    const cA=cK.map(k=>ens.hourly[k]);
-    const liA=liK.map(k=>ens.hourly[k]);
+    const cA=cK.map(k=>fidx.map(i=>ens.hourly[k][i]));
+    const liA=liK.map(k=>fidx.map(i=>ens.hourly[k][i]));
     const capeMed=ts.map((_,j)=>medC(cA,j));
     const kL=ts.map((_,j)=>cA.map(m=>m[j]).filter(v=>v!=null&&v>100).length/(cA.length||1)*100);
     const kM=ts.map((_,j)=>cA.map(m=>m[j]).filter(v=>v!=null&&v>500).length/(cA.length||1)*100);
@@ -2785,7 +2813,7 @@ function kiesRunParam(p){
 }
 
 // ── 4 Stations: HRES deterministisch ──
-async function laadVergHres(idx,lat,lon,naam,type,dagen){
+async function laadVergHres(idx,lat,lon,naam,type,dagen,van,tot){
   const url=type==='wind'
     ?`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,windgusts_10m&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`
     :`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
@@ -2793,7 +2821,9 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
     ?`https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m_previous_day1,windgusts_10m_previous_day1&models=ecmwf_ifs&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`
     :`https://previous-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m_previous_day1,precipitation_previous_day1&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
   const[hres,prev]=await Promise.all([fetchT(url),fetchT(prevUrl).catch(()=>null)]);
-  const ts=hres.hourly.time;
+  const allTimes=hres.hourly.time;
+  const fidx=filterT(allTimes,van,tot);
+  const ts=fidx.map(i=>allTimes[i]);
   const lab=getLab(ts);
 
   // Vorige run mapping
@@ -2816,7 +2846,7 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
     const pTemp=heeftPrev?ts.map(t=>pLookup[t]?.t??null):null;
     titel=`HRES – ${naam} – Temp`;
     datasets=[
-      {type:'line',data:hres.hourly.temperature_2m,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3},
+      {type:'line',data:fidx.map(i=>hres.hourly.temperature_2m[i]),borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3},
       ...(pTemp&&pTemp.some(v=>v!==null)?[{type:'line',data:pTemp,borderColor:'rgba(150,210,255,0.6)',borderWidth:1.2,borderDash:[3,2],pointRadius:0,fill:false,tension:0.3,spanGaps:true}]:[]),
       {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.4)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false},
       {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.3)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false},
@@ -2831,7 +2861,7 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
     titel=`HRES – ${naam} – Neerslag`;
     datasets=[
       ...(pPrec&&pPrec.some(v=>v!==null)?[{type:'bar',data:pPrec,backgroundColor:'rgba(34,153,255,0.2)',order:2,barPercentage:1,categoryPercentage:1}]:[]),
-      {type:'bar',data:hres.hourly.precipitation,backgroundColor:'rgba(34,153,255,0.5)',order:1,barPercentage:0.6,categoryPercentage:0.9},
+      {type:'bar',data:fidx.map(i=>hres.hourly.precipitation[i]),backgroundColor:'rgba(34,153,255,0.5)',order:1,barPercentage:0.6,categoryPercentage:0.9},
     ];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:{...yAs('left',' mm'),min:0,suggestedMax:10}};
     tooltipCb={callbacks:{label:ctx=>` ${ctx.datasetIndex===0&&pPrec?'Vorig':'HRES'}: ${ctx.parsed.y.toFixed(2)} mm/u`}};
@@ -2844,8 +2874,8 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
         {type:'line',data:pFF,borderColor:'rgba(34,153,255,0.35)',borderWidth:1,borderDash:[2,2],pointRadius:0,fill:false,tension:0.3},
         {type:'line',data:pFX,borderColor:'rgba(255,102,51,0.35)',borderWidth:1,borderDash:[2,2],pointRadius:0,fill:false,tension:0.3},
       ]:[]),
-      {type:'line',data:hres.hourly.windspeed_10m,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3},
-      {type:'line',data:hres.hourly.windgusts_10m,borderColor:'#ff6633',borderWidth:2,borderDash:[4,3],pointRadius:0,fill:false,tension:0.3},
+      {type:'line',data:fidx.map(i=>hres.hourly.windspeed_10m[i]),borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3},
+      {type:'line',data:fidx.map(i=>hres.hourly.windgusts_10m[i]),borderColor:'#ff6633',borderWidth:2,borderDash:[4,3],pointRadius:0,fill:false,tension:0.3},
     ];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:yAs('left',' km/u')};
     const base=pFF&&pFF.some(v=>v!==null)?2:0;
@@ -2855,12 +2885,13 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen){
   }else if(type==='cloud'){
     titel=`HRES – ${naam} – Bewolking`;
     const hres2=await fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
-    datasets=[{type:'bar',data:hres2.hourly.cloudcover,backgroundColor:'rgba(130,130,150,0.6)',order:1,barPercentage:1,categoryPercentage:1}];
+    const fidx2=filterT(hres2.hourly.time,van,tot);
+    datasets=[{type:'bar',data:fidx2.map(i=>hres2.hourly.cloudcover[i]),backgroundColor:'rgba(130,130,150,0.6)',order:1,barPercentage:1,categoryPercentage:1}];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:{...yAs('left','%'),min:0,max:100}};
     tooltipCb={callbacks:{label:ctx=>` Bewolking: ${ctx.parsed.y.toFixed(0)}%`}};
   }else{
     titel=`HRES – ${naam}`;
-    datasets=[{type:'line',data:hres.hourly.temperature_2m,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3}];
+    datasets=[{type:'line',data:fidx.map(i=>hres.hourly.temperature_2m[i]),borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0.3}];
     scales={x:{...cfgBase.scales.x},y:yAs('left','°C')};
     tooltipCb={};
   }
