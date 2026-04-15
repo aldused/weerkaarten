@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DWD ICON Meerdaagse Tabel – Weerlab.nl</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #f0f4f8;
+  color: #1a2b40;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  background: #003366;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 2px solid #2ec4e8;
+}
+.header h1 { color: white; font-size: 1.05em; font-weight: 700; }
+.header p  { color: #a8c4e8; font-size: 0.72em; margin-top: 2px; }
+.header-right { color: #a8c4e8; font-size: 0.72em; text-align: right; }
+.header-right strong { color: white; }
+
+/* ── Zoekbalk ── */
+.zoek-balk {
+  background: white;
+  border-bottom: 1px solid #d0d8e4;
+  padding: 10px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.zoek-balk label {
+  font-size: 0.72em;
+  font-weight: 700;
+  color: #5a6a80;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+#zoek-input {
+  flex: 1;
+  min-width: 180px;
+  max-width: 340px;
+  padding: 6px 12px;
+  border-radius: 18px;
+  border: 1.5px solid #c5d3e3;
+  font-size: 0.85em;
+  outline: none;
+  transition: border-color 0.15s;
+}
+#zoek-input:focus { border-color: #0066cc; }
+.btn-zoek {
+  padding: 6px 18px;
+  border-radius: 18px;
+  border: none;
+  background: #003366;
+  color: white;
+  font-size: 0.8em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-zoek:hover { background: #0052a3; }
+.btn-reset {
+  padding: 6px 14px;
+  border-radius: 18px;
+  border: 1px solid #bbb;
+  background: transparent;
+  color: #555;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-reset:hover { background: #fee; color: #c0392b; border-color: #c0392b; }
+.zoek-hint {
+  font-size: 0.72em;
+  color: #888;
+  font-style: italic;
+  align-self: center;
+}
+#zoek-status {
+  font-size: 0.75em;
+  color: #0066cc;
+  min-width: 120px;
+}
+
+/* ── Suggesties dropdown ── */
+.suggesties-wrap { position: relative; }
+#suggesties {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #c5d3e3;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 100;
+  min-width: 280px;
+  max-width: 400px;
+  display: none;
+}
+.sug-item {
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 0.82em;
+  border-bottom: 1px solid #eef2f6;
+  transition: background 0.1s;
+}
+.sug-item:last-child { border-bottom: none; }
+.sug-item:hover { background: #f0f7ff; }
+.sug-item .sug-naam { font-weight: 600; color: #1a2b40; }
+.sug-item .sug-land { color: #888; margin-left: 6px; font-size: 0.9em; }
+
+/* ── Content ── */
+.content {
+  padding: 14px 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Lege staat ── */
+.leeg-staat {
+  text-align: center;
+  padding: 60px 20px;
+  color: #8899aa;
+}
+.leeg-staat .groot { font-size: 3em; margin-bottom: 12px; }
+.leeg-staat h2 { font-size: 1.1em; font-weight: 600; margin-bottom: 8px; color: #4a6080; }
+.leeg-staat p { font-size: 0.85em; line-height: 1.7; }
+
+/* ── Locatie-kaart ── */
+.loc-kaart {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.loc-header {
+  background: #003366;
+  padding: 9px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.loc-naam { color: white; font-weight: 700; font-size: 0.95em; }
+.loc-coords { color: #a8c4e8; font-size: 0.7em; margin-top: 2px; }
+.loc-model { color: #7ec8e8; font-size: 0.68em; }
+.loc-acties { display: flex; gap: 6px; align-items: center; }
+.btn-fav {
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 0.72em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-fav:hover { background: rgba(255,255,255,0.25); }
+.btn-fav.actief { background: #e67e22; border-color: #e67e22; }
+.btn-sluiten {
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: transparent;
+  color: #ff8888;
+  font-size: 1em;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s;
+}
+.btn-sluiten:hover { background: rgba(255,80,80,0.2); }
+.btn-png {
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: transparent;
+  color: white;
+  font-size: 0.78em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-png:hover { background: rgba(255,255,255,0.18); }
+
+.loc-laden {
+  text-align: center;
+  padding: 30px;
+  color: #8899aa;
+  font-size: 0.85em;
+}
+.spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid #c5d3e3;
+  border-top-color: #0066cc;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Tabel ── */
+.tabel-wrap {
+  overflow-x: auto;
+  padding: 0;
+}
+.weer-tabel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82em;
+}
+.weer-tabel th {
+  background: #eef2f8;
+  color: #5a6a80;
+  font-weight: 700;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 7px 10px;
+  text-align: center;
+  border-bottom: 2px solid #d0d8e4;
+  white-space: nowrap;
+}
+.weer-tabel th:first-child { text-align: left; padding-left: 14px; }
+.weer-tabel td {
+  padding: 7px 10px;
+  text-align: center;
+  border-bottom: 1px solid #eef2f6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.weer-tabel td:first-child { text-align: left; padding-left: 14px; }
+.weer-tabel tr:last-child td { border-bottom: none; }
+.weer-tabel tr:nth-child(even) td { background: #fafbfc; }
+.weer-tabel tr:hover td { background: #f0f7ff; }
+
+/* Weekend-markering */
+.weer-tabel tr.weekend td { background: #fff8f0; }
+.weer-tabel tr.weekend:nth-child(even) td { background: #fff3e8; }
+.weer-tabel tr.weekend:hover td { background: #ffeedd; }
+
+/* Cel-stijlen */
+.cel-dag { font-weight: 700; }
+.cel-dag .wdag { color: #1a2b40; }
+.cel-dag .datum { color: #8899aa; font-size: 0.88em; font-weight: 400; margin-left: 4px; }
+.cel-weer { font-size: 1.1em; }
+.cel-tx { font-weight: 700; }
+.cel-tn { color: #2471a3; }
+.cel-neerslag { color: #1a5276; }
+.cel-wind { font-size: 0.9em; }
+.cel-vocht { color: #2e7d52; }
+.cel-bewolking { color: #555; }
+
+/* Temperatuurkleur */
+.tx-heet   { color: #c0392b; }
+.tx-warm   { color: #e67e22; }
+.tx-mild   { color: #27ae60; }
+.tx-koel   { color: #2471a3; }
+.tx-koud   { color: #1a0570; }
+
+/* Favorieten-balk ── */
+.fav-balk {
+  background: #f7f9fc;
+  border-bottom: 1px solid #e0e8f0;
+  padding: 7px 16px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-height: 38px;
+}
+.fav-label {
+  font-size: 0.68em;
+  font-weight: 700;
+  color: #8899aa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.fav-btn {
+  padding: 3px 12px;
+  border-radius: 12px;
+  border: 1px solid #c5d3e3;
+  background: white;
+  color: #2a4a70;
+  font-size: 0.75em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fav-btn:hover { background: #dce9f7; border-color: #4a90c4; }
+.fav-btn .fav-x {
+  color: #aaa;
+  font-size: 0.9em;
+  margin-left: 2px;
+  cursor: pointer;
+}
+.fav-btn .fav-x:hover { color: #e74c3c; }
+.fav-leeg { color: #aaa; font-size: 0.75em; font-style: italic; }
+
+/* Neerslag badge */
+.rr-geen  { color: #bbb; }
+.rr-licht { color: #5b9bd5; }
+.rr-matig { color: #1a5276; font-weight: 600; }
+.rr-zwaar { color: #0d3b6e; font-weight: 700; }
+
+/* Wind kleur */
+.ff-zwak   { color: #27ae60; }
+.ff-matig  { color: #e67e22; }
+.ff-sterk  { color: #c0392b; font-weight: 700; }
+
+/* ── Dag / Nacht rijen ── */
+.row-dag td    { background: #ffffff; border-bottom: none !important; padding-top: 7px; padding-bottom: 3px; }
+.row-nacht td  { background: #f3f6fc; border-bottom: 2px solid #dde6f2 !important; padding-top: 3px; padding-bottom: 7px; }
+.row-dag:hover td, .row-nacht:hover td { background: #eef5ff; }
+
+.row-dag.weekend td   { background: #fffaf5; border-bottom: none !important; }
+.row-nacht.weekend td { background: #fff5ec; border-bottom: 2px solid #f0d8c0 !important; }
+.row-dag.weekend:hover td, .row-nacht.weekend:hover td { background: #ffeedd; }
+
+/* Datum-cel (rowspan 2) */
+.cel-datum {
+  vertical-align: middle !important;
+  text-align: left !important;
+  padding: 6px 10px 6px 14px !important;
+  border-right: 2px solid #e0e8f0;
+  min-width: 72px;
+}
+.cel-datum .wdag  { font-weight: 700; display: block; color: #1a2b40; }
+.cel-datum .dtxt  { color: #8899aa; font-size: 0.88em; font-weight: 400; }
+
+/* Periode badge */
+.cel-periode { font-size: 0.78em; text-align: left !important; padding-left: 10px !important; white-space: nowrap; min-width: 68px; }
+.badge-dag   { color: #c47a1a; font-weight: 700; }
+.badge-nacht { color: #2a4a8a; font-weight: 700; }
+
+/* TN kleur (nacht) */
+.tn-vorst { color: #6a0dad; font-weight: 700; }
+.tn-koud  { color: #1a0570; }
+.tn-fris  { color: #2471a3; }
+.tn-mild  { color: #27ae60; }
+.tn-warm  { color: #e67e22; }
+
+/* UV-index kleur */
+.uv-matig     { color: #e6b800; font-weight: 600; }
+.uv-hoog      { color: #e67e22; font-weight: 600; }
+.uv-zeer-hoog { color: #c0392b; font-weight: 700; }
+.uv-extreem   { color: #8e44ad; font-weight: 700; }
+
+/* WBGT hittestress */
+.wbgt-matig    { color: #e6b800; font-weight: 600; }
+.wbgt-hoog     { color: #e67e22; font-weight: 700; }
+.wbgt-zeer-hoog{ color: #c0392b; font-weight: 700; }
+
+/* ── Strip-tabel ── */
+.strip-wrap {
+  overflow-x: auto;
+  border-top: 2px solid #e0e8f4;
+  background: #f7f9fc;
+}
+.strip-tabel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78em;
+  min-width: 600px;
+}
+.strip-tabel th {
+  background: #e8eef8;
+  color: #5a6a80;
+  font-size: 0.72em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 5px 8px;
+  text-align: center;
+  border-right: 1px solid #d0daea;
+  white-space: nowrap;
+}
+.strip-tabel th:first-child { text-align: left; padding-left: 12px; min-width: 80px; }
+.strip-tabel td {
+  padding: 4px 8px;
+  text-align: center;
+  border-right: 1px solid #e8eef8;
+  border-bottom: 1px solid #e8eef8;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.strip-tabel td:first-child { text-align: left; padding-left: 12px; font-weight: 600; color: #5a6a80; font-size: 0.9em; }
+.strip-tabel tr:last-child td { border-bottom: none; }
+.strip-tabel .dag-kop { font-weight: 700; display: block; font-size: 1em; }
+.strip-tabel .dag-kop.weekend-kop { color: #c47a1a; }
+.strip-tabel .dag-sub  { color: #aaa; font-size: 0.85em; }
+.strip-tabel .strip-tx { font-weight: 700; }
+.strip-tabel .strip-tn { font-size: 0.9em; }
+.strip-tabel .strip-ico { font-size: 1.2em; line-height: 1; }
+
+/* ── Grafiek ── */
+.grafiek-wrap {
+  padding: 14px 16px 10px;
+  background: white;
+  border-top: 1px solid #e0e8f4;
+}
+
+.footer {
+  text-align: center;
+  font-size: 0.68em;
+  color: #aaa;
+  padding: 10px 0 16px;
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <h1>DWD ICON — Meerdaagse Verwachting</h1>
+    <p>8 dagen · temperatuur · neerslag · wind · vochtigheid · bewolking · wereldwijd</p>
+  </div>
+  <div class="header-right">
+    <div>Model: <strong>DWD ICON Seamless</strong></div>
+    <div id="hdr-update" style="margin-top:2px;"></div>
+  </div>
+</div>
+
+<!-- Favorieten-balk -->
+<div class="fav-balk" id="fav-balk">
+  <span class="fav-label">⭐ Favorieten:</span>
+  <span class="fav-leeg" id="fav-leeg">Nog geen favorieten — voeg een plaats toe en klik ☆</span>
+</div>
+
+<!-- Zoekbalk -->
+<div class="zoek-balk">
+  <label>Zoek plaats:</label>
+  <div class="suggesties-wrap">
+    <input type="text" id="zoek-input" placeholder="bijv. Rotterdam, Innsbruck, Miami…" autocomplete="off" spellcheck="false">
+    <div id="suggesties"></div>
+  </div>
+  <button class="btn-zoek" onclick="startZoek()">Toevoegen</button>
+  <button class="btn-reset" onclick="resetAlles()" title="Verwijder alle plaatsen">↺ Reset</button>
+  <span id="zoek-status"></span>
+  <span class="zoek-hint">Max. 3 plaatsen</span>
+</div>
+
+<!-- Content -->
+<div class="content" id="content">
+  <div class="leeg-staat" id="leeg-staat">
+    <div class="groot">🌍</div>
+    <h2>Zoek een plaats</h2>
+    <p>Typ hierboven een plaatsnaam en klik op <strong>Toevoegen</strong>.<br>
+    Je kunt tot 3 plaatsen vergelijken, elk met een 8-daagse verwachting.</p>
+  </div>
+</div>
+
+<div class="footer">© Weerlab.nl · Data: <a href="https://open-meteo.com/" target="_blank" style="color:#aaa;">Open-Meteo</a> (DWD ICON) · Geocoding: OpenStreetMap Nominatim</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+const MAX_PLAATSEN = 3;
+const plaatsen = [];   // [{id, naam, land, lat, lon, data, favKey}]
+let favorieten = JSON.parse(localStorage.getItem('mosmix_tabel_favs') || '[]');
+// favorieten = [{naam, land, lat, lon}]
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const NL_DAGEN = ["zo","ma","di","wo","do","vr","za"];
+const NL_MNDKORT = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+function dagLabel(d) {
+  return NL_DAGEN[d.getDay()].charAt(0).toUpperCase() + NL_DAGEN[d.getDay()].slice(1);
+}
+function datumKort(d) {
+  return d.getDate() + " " + NL_MNDKORT[d.getMonth()];
+}
+function isWeekend(d) {
+  return d.getDay() === 0 || d.getDay() === 6;
+}
+function uniqId() { return '_' + Math.random().toString(36).slice(2,9); }
+
+// WMO weather codes → emoji + label
+const WMO = {
+  0:  ["☀️","Helder"],
+  1:  ["🌤","Licht bewolkt"],
+  2:  ["⛅","Half bewolkt"],
+  3:  ["☁️","Bewolkt"],
+  45: ["🌫","Mist"],
+  48: ["🌫","Rijp"],
+  51: ["🌦","Lichte motregen"],
+  53: ["🌦","Motregen"],
+  55: ["🌧","Zware motregen"],
+  61: ["🌧","Lichte regen"],
+  63: ["🌧","Regen"],
+  65: ["🌧","Zware regen"],
+  71: ["🌨","Lichte sneeuw"],
+  73: ["❄️","Sneeuw"],
+  75: ["❄️","Zware sneeuw"],
+  77: ["🌨","Sneeuwkorrels"],
+  80: ["🌦","Lichte bui"],
+  81: ["🌧","Regenbui"],
+  82: ["⛈","Zware bui"],
+  85: ["🌨","Sneeuwbui"],
+  86: ["🌨","Zware sneeuwbui"],
+  95: ["⛈","Onweer"],
+  96: ["⛈","Onweer + hagel"],
+  99: ["⛈","Onweer + zware hagel"],
+};
+function wmoLabel(code) {
+  if (code == null) return ["–",""];
+  return WMO[code] || ["🌡","Code "+code];
+}
+
+// Dag-icoon met zonuren als primaire bron (bij geen neerslag)
+function dagIco(code, zon) {
+  // Bij neerslag of onweer: altijd WMO-icoon
+  if (code != null && code >= 51) return wmoLabel(code);
+  // Geen neerslag: zonuren bepalen het icoon
+  if (zon >= 8)  return ["☀️", "Zonnig"];
+  if (zon >= 5)  return ["🌤️", "Overwegend zonnig"];
+  if (zon >= 2)  return ["⛅", "Wisselend bewolkt"];
+  if (zon >= 0.5) return ["🌥️", "Bewolkt met opklaringen"];
+  return ["☁️", "Bewolkt"];
+}
+
+// Windrichting pijl (graden → pijl)
+const WIND_PIJL = ["↑","↗","→","↘","↓","↙","←","↖"];
+function windPijl(deg) {
+  if (deg == null) return "";
+  return WIND_PIJL[Math.round(deg / 45) % 8];
+}
+// Windrichting tekst kort
+const WIND_TXT = ["N","NO","O","ZO","Z","ZW","W","NW"];
+function windTxt(deg) {
+  if (deg == null) return "–";
+  return WIND_TXT[Math.round(deg / 45) % 8];
+}
+
+// Beaufort van km/h
+function kmhNaarBft(kmh) {
+  if (!kmh) return 0;
+  const ms = kmh / 3.6;
+  const BFT = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+  let b = 0;
+  for (let i=0; i<BFT.length; i++) { if(ms >= BFT[i]) b=i+1; else break; }
+  return b;
+}
+
+// TX kleurklasse
+function txKlasse(tx) {
+  if (tx >= 30) return "tx-heet";
+  if (tx >= 23) return "tx-warm";
+  if (tx >= 14) return "tx-mild";
+  if (tx >= 5)  return "tx-koel";
+  return "tx-koud";
+}
+
+// Neerslag klasse
+function rrKlasse(rr) {
+  if (!rr || rr < 0.2) return "rr-geen";
+  if (rr < 2) return "rr-licht";
+  if (rr < 8) return "rr-matig";
+  return "rr-zwaar";
+}
+
+// Wind klasse
+function ffKlasse(bft) {
+  if (bft <= 3) return "ff-zwak";
+  if (bft <= 5) return "ff-matig";
+  return "ff-sterk";
+}
+
+function f1(v) { return v != null ? v.toFixed(1).replace('.',',') : "–"; }
+function fi(v) { return v != null ? Math.round(v) : "–"; }
+function fp(v) { return v != null ? Math.round(v) + "%" : "–"; }
+
+// ─── Geocoding ───────────────────────────────────────────────────────────────
+let zoekTimer = null;
+let huidigeSuggesties = [];
+
+const input = document.getElementById('zoek-input');
+const sugDiv = document.getElementById('suggesties');
+
+input.addEventListener('input', () => {
+  clearTimeout(zoekTimer);
+  const q = input.value.trim();
+  if (q.length < 2) { sugDiv.style.display='none'; return; }
+  zoekTimer = setTimeout(() => fetchSuggesties(q), 350);
+});
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); startZoek(); }
+  if (e.key === 'Escape') { sugDiv.style.display='none'; }
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.suggesties-wrap')) sugDiv.style.display='none';
+});
+
+async function fetchSuggesties(q) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1&accept-language=nl`, {
+      headers: { 'Accept-Language': 'nl' }
+    });
+    const data = await r.json();
+    huidigeSuggesties = data;
+    toonSuggesties(data);
+  } catch(e) { /* stil */ }
+}
+
+function toonSuggesties(data) {
+  if (!data.length) { sugDiv.style.display='none'; return; }
+  sugDiv.innerHTML = '';
+  data.slice(0,6).forEach((item, i) => {
+    const naam = item.display_name.split(',')[0].trim();
+    const land = item.address?.country || '';
+    const regio = [item.address?.state, item.address?.county, item.address?.city]
+      .filter(Boolean).slice(0,2).join(', ');
+    const el = document.createElement('div');
+    el.className = 'sug-item';
+    el.innerHTML = `<span class="sug-naam">${escHtml(naam)}</span>` +
+      `<span class="sug-land">${escHtml(regio ? regio + ' — ' + land : land)}</span>`;
+    el.addEventListener('click', () => {
+      const lat = parseFloat(item.lat);
+      const lon = parseFloat(item.lon);
+      const vollNaam = naam + (regio ? ', ' + regio.split(',')[0] : '') + (land ? ', ' + land : '');
+      sugDiv.style.display = 'none';
+      input.value = '';
+      voegToe(vollNaam, land, lat, lon);
+    });
+    sugDiv.appendChild(el);
+  });
+  sugDiv.style.display = 'block';
+}
+
+async function startZoek() {
+  const q = input.value.trim();
+  if (!q) return;
+  sugDiv.style.display = 'none';
+  const status = document.getElementById('zoek-status');
+  status.textContent = 'Zoeken…';
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1`, {
+      headers: { 'Accept-Language': 'nl' }
+    });
+    const data = await r.json();
+    if (!data.length) { status.textContent = 'Niet gevonden'; setTimeout(()=>status.textContent='',2500); return; }
+    const item = data[0];
+    const naam = item.display_name.split(',')[0].trim();
+    const land = item.address?.country || '';
+    const regio = item.address?.state || item.address?.county || '';
+    const vollNaam = naam + (regio ? ', ' + regio : '') + (land ? ', ' + land : '');
+    input.value = '';
+    voegToe(vollNaam, land, parseFloat(item.lat), parseFloat(item.lon));
+    status.textContent = '✓ ' + naam + ' toegevoegd';
+    status.style.color = '#27ae60';
+    setTimeout(() => { status.textContent = ''; status.style.color = ''; }, 2500);
+  } catch(e) {
+    status.textContent = 'Fout bij zoeken';
+    setTimeout(()=>status.textContent='',3000);
+  }
+}
+
+// ─── Plaatsen beheren ─────────────────────────────────────────────────────────
+function voegToe(naam, land, lat, lon) {
+  if (plaatsen.length >= MAX_PLAATSEN) {
+    alert('Maximaal 3 plaatsen. Sluit er eerst een.');
+    return;
+  }
+  // Check dubbel
+  if (plaatsen.find(p => Math.abs(p.lat - lat) < 0.01 && Math.abs(p.lon - lon) < 0.01)) {
+    alert('Deze plaats staat al in de lijst.');
+    return;
+  }
+  const id = uniqId();
+  const p = { id, naam, land, lat, lon, data: null };
+  plaatsen.push(p);
+  renderPlaats(p);
+  laadData(p);
+}
+
+function resetAlles() {
+  [...plaatsen].forEach(p => verwijder(p.id));
+}
+
+function verwijder(id) {
+  const idx = plaatsen.findIndex(p => p.id === id);
+  if (idx !== -1) plaatsen.splice(idx, 1);
+  const el = document.getElementById('loc-' + id);
+  if (el) el.remove();
+  if (!plaatsen.length) document.getElementById('leeg-staat').style.display = '';
+  updateHeader();
+}
+
+function updateHeader() {
+  document.getElementById('hdr-update').textContent =
+    'Bijgewerkt: ' + new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'});
+}
+
+// ─── Favorieten ──────────────────────────────────────────────────────────────
+function slaFavOp() { localStorage.setItem('mosmix_tabel_favs', JSON.stringify(favorieten)); }
+
+function isFavoriet(lat, lon) {
+  return favorieten.some(f => Math.abs(f.lat - lat) < 0.01 && Math.abs(f.lon - lon) < 0.01);
+}
+
+function toggleFavoriet(id) {
+  const p = plaatsen.find(x => x.id === id);
+  if (!p) return;
+  const bestaatIdx = favorieten.findIndex(f => Math.abs(f.lat - p.lat) < 0.01 && Math.abs(f.lon - p.lon) < 0.01);
+  if (bestaatIdx !== -1) {
+    favorieten.splice(bestaatIdx, 1);
+  } else {
+    favorieten.push({ naam: p.naam, land: p.land, lat: p.lat, lon: p.lon });
+  }
+  slaFavOp();
+  renderFavBalk();
+  // Update knop icoon
+  const btn = document.querySelector(`#loc-${id} .btn-fav`);
+  if (btn) {
+    const is = isFavoriet(p.lat, p.lon);
+    btn.textContent = is ? '★ Favoriet' : '☆ Opslaan';
+    btn.classList.toggle('actief', is);
+  }
+}
+
+function verwijderFavoriet(lat, lon) {
+  const idx = favorieten.findIndex(f => Math.abs(f.lat - lat) < 0.01 && Math.abs(f.lon - lon) < 0.01);
+  if (idx !== -1) { favorieten.splice(idx, 1); slaFavOp(); }
+  renderFavBalk();
+}
+
+function renderFavBalk() {
+  const balk = document.getElementById('fav-balk');
+  const leeg = document.getElementById('fav-leeg');
+  // Verwijder oude fav-btns
+  balk.querySelectorAll('.fav-btn').forEach(el => el.remove());
+  if (!favorieten.length) {
+    if (leeg) leeg.style.display = '';
+    return;
+  }
+  if (leeg) leeg.style.display = 'none';
+  favorieten.forEach(fav => {
+    const btn = document.createElement('button');
+    btn.className = 'fav-btn';
+    btn.title = `${fav.naam} (${fav.lat.toFixed(2)}, ${fav.lon.toFixed(2)})`;
+    btn.innerHTML = `${escHtml(fav.naam.split(',')[0])} <span class="fav-x" title="Verwijder favoriet">✕</span>`;
+    btn.addEventListener('click', (e) => {
+      if (e.target.classList.contains('fav-x')) {
+        verwijderFavoriet(fav.lat, fav.lon);
+      } else {
+        voegToe(fav.naam, fav.land, fav.lat, fav.lon);
+      }
+    });
+    balk.appendChild(btn);
+  });
+}
+
+// ─── Data ophalen (Open-Meteo / DWD ICON) ────────────────────────────────────
+async function laadData(p) {
+  const el = document.getElementById('loc-' + p.id);
+  if (!el) return;
+  const body = el.querySelector('.loc-body');
+  if (!body) return;
+  body.innerHTML = `<div class="loc-laden"><span class="spinner"></span> Verwachting laden voor ${escHtml(p.naam)}…</div>`;
+
+  try {
+    const url = new URL('https://api.open-meteo.com/v1/forecast');
+    url.searchParams.set('latitude',  p.lat.toFixed(4));
+    url.searchParams.set('longitude', p.lon.toFixed(4));
+    url.searchParams.set('timezone',  'auto');
+    url.searchParams.set('forecast_days', '8');
+    url.searchParams.set('models', 'icon_seamless');
+    url.searchParams.set('daily', 'precipitation_sum');
+    url.searchParams.set('hourly', [
+      'temperature_2m',
+      'precipitation',
+      'windspeed_10m',
+      'winddirection_10m',
+      'windgusts_10m',
+      'weathercode',
+      'relativehumidity_2m',
+      'cloudcover',
+      'direct_radiation',
+    ].join(','));
+
+    // UV apart ophalen zonder model-constraint (ICON levert geen UV)
+    const uvUrl = new URL('https://api.open-meteo.com/v1/forecast');
+    uvUrl.searchParams.set('latitude',  p.lat.toFixed(4));
+    uvUrl.searchParams.set('longitude', p.lon.toFixed(4));
+    uvUrl.searchParams.set('timezone',  'auto');
+    uvUrl.searchParams.set('forecast_days', '8');
+    uvUrl.searchParams.set('daily', 'uv_index_max');
+
+    const [r, uvR] = await Promise.all([fetch(url.toString()), fetch(uvUrl.toString())]);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (uvR.ok) {
+      const uvData = await uvR.json();
+      data._uvMax = uvData.daily?.uv_index_max || null;
+    }
+    p.data = data;
+    renderTabel(p, el, data);
+    updateHeader();
+  } catch(e) {
+    body.innerHTML = `<div class="loc-laden" style="color:#c0392b;">⚠ Fout bij ophalen data: ${escHtml(String(e))}</div>`;
+  }
+}
+
+// ─── Render functies ─────────────────────────────────────────────────────────
+function renderPlaats(p) {
+  document.getElementById('leeg-staat').style.display = 'none';
+
+  const div = document.createElement('div');
+  div.className = 'loc-kaart';
+  div.id = 'loc-' + p.id;
+
+  const isFav = isFavoriet(p.lat, p.lon);
+  div.innerHTML = `
+    <div class="loc-header">
+      <div>
+        <div class="loc-naam">📍 ${escHtml(p.naam)}</div>
+        <div class="loc-coords">${p.lat.toFixed(3)}°N, ${p.lon.toFixed(3)}°O · <span class="loc-model">DWD ICON Seamless</span></div>
+      </div>
+      <div class="loc-acties">
+        <button class="btn-fav ${isFav?'actief':''}" onclick="toggleFavoriet('${p.id}')">${isFav?'★ Favoriet':'☆ Opslaan'}</button>
+        <button class="btn-png" onclick="downloadTabelPng('${p.id}')" title="Download tabel als PNG">⬇ PNG</button>
+        <button class="btn-sluiten" onclick="verwijder('${p.id}')" title="Sluit">✕</button>
+      </div>
+    </div>
+    <div class="loc-body"></div>
+  `;
+
+  document.getElementById('content').appendChild(div);
+  setTimeout(() => div.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+}
+
+// WMO ernstniveau (alleen voor neerslag/onweer prioriteit)
+function codeGewicht(c) {
+  if (c >= 95) return 200 + c;
+  if (c >= 80) return 150 + c;
+  if (c >= 71) return 130 + c;
+  if (c >= 61) return 120 + c;
+  if (c >= 51) return 100 + c;
+  if (c >= 45) return  60 + c;
+  return c;
+}
+
+// Representatieve code: modus voor helder/bewolkt, prioriteit voor echte neerslag/onweer
+function ergstCode(codes) {
+  // Onweer → altijd prioriteit
+  const onweer = codes.filter(c => c >= 95);
+  if (onweer.length > 0)
+    return onweer.reduce((b,c) => codeGewicht(c) > codeGewicht(b) ? c : b, onweer[0]);
+
+  // Neerslag (>= 51) → prioriteit als >= 25% van de uren neerslag heeft
+  const neerslag = codes.filter(c => c >= 51 && c < 95);
+  if (neerslag.length >= Math.max(2, codes.length * 0.25))
+    return neerslag.reduce((b,c) => codeGewicht(c) > codeGewicht(b) ? c : b, neerslag[0]);
+
+  // Anders: modus (meest voorkomende code)
+  const freq = {};
+  codes.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+  return parseInt(Object.entries(freq).sort((a,b) => b[1] - a[1])[0][0]);
+}
+
+// Aggregeer uurwaarden over een bereik [van, tot) (absolute uurindices)
+function agregeer(h, van, tot) {
+  const totUur = h.temperature_2m.length;
+  const eind = Math.min(tot, totUur);
+  const temp=[], prec=[], windArr=[], gustArr=[], code=[], vocht=[], bewolk=[], ddArr=[];
+  for (let i=van; i<eind; i++) {
+    if (h.temperature_2m[i]      != null) temp.push(h.temperature_2m[i]);
+    if (h.precipitation[i]       != null) prec.push(h.precipitation[i]);
+    if (h.windspeed_10m[i]       != null) windArr.push(h.windspeed_10m[i]);
+    if (h.windgusts_10m?.[i]     != null) gustArr.push(h.windgusts_10m[i]);
+    if (h.winddirection_10m[i]   != null) ddArr.push(h.winddirection_10m[i]);
+    if (h.weathercode[i]         != null) code.push(h.weathercode[i]);
+    if (h.relativehumidity_2m[i] != null) vocht.push(h.relativehumidity_2m[i]);
+    if (h.cloudcover[i]          != null) bewolk.push(h.cloudcover[i]);
+  }
+  if (!temp.length) return null;
+  // Dominante windrichting via gemiddelde vectorsom
+  let sinS=0, cosS=0;
+  ddArr.forEach(d => { const r=d*Math.PI/180; sinS+=Math.sin(r); cosS+=Math.cos(r); });
+  const ddGem = ddArr.length ? (Math.atan2(sinS/ddArr.length, cosS/ddArr.length)*180/Math.PI+360)%360 : null;
+  return {
+    tMax:   Math.max(...temp),
+    tMin:   Math.min(...temp),
+    prec:   prec.length   ? prec.reduce((a,b)=>a+b,0) : null,
+    ffKmh:  windArr.length ? Math.max(...windArr) : null,
+    gustKmh: gustArr.length ? Math.max(...gustArr) : null,
+    ffDeg:  ddGem,
+    code:   code.length   ? ergstCode(code) : null,
+    vocht:  vocht.length  ? vocht.reduce((a,b)=>a+b,0)/vocht.length : null,
+    bewolk: bewolk.length ? bewolk.reduce((a,b)=>a+b,0)/bewolk.length : null,
+  };
+}
+
+function graden2kompas(deg) {
+  if (deg == null) return '–';
+  const richt = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+  return richt[Math.round(deg / 22.5) % 16];
+}
+
+function tnKlasse(tn) {
+  if (tn < 0)  return "tn-vorst";
+  if (tn < 5)  return "tn-koud";
+  if (tn < 12) return "tn-fris";
+  if (tn < 18) return "tn-mild";
+  return "tn-warm";
+}
+
+function periodeRij(per, isDag, isWE, datumCel) {
+  if (!per) return '';
+  const [ico, lbl] = wmoLabel(per.code);
+  const temp = isDag ? per.tMax : per.tMin;
+  const tempCls = isDag ? txKlasse(temp) : tnKlasse(temp);
+  const rrCls = rrKlasse(per.prec);
+  const bft = kmhNaarBft(per.ffKmh);
+  const ffCls = ffKlasse(bft);
+  const weStr = isWE ? ' weekend' : '';
+
+  const rrStr = per.prec != null && per.prec >= 0.1
+    ? f1(per.prec) + ' mm'
+    : `<span class="rr-geen">0</span>`;
+
+  const ffStr = per.ffKmh != null
+    ? `<span class="${ffCls}">${Math.round(per.ffKmh)} km/h</span>` +
+      `<br><span style="font-size:0.82em;color:#888">${windPijl(per.ffDeg)} ${windTxt(per.ffDeg)} Bft ${bft}</span>`
+    : '–';
+
+  const periodeHtml = isDag
+    ? `<span class="badge-dag">☀ Dag</span> <span style="font-size:0.72em;color:#aaa">06–18u</span>`
+    : `<span class="badge-nacht">🌙 Nacht</span> <span style="font-size:0.72em;color:#aaa">18–06u</span>`;
+
+  const rowCls = `row-${isDag?'dag':'nacht'}${weStr}`;
+
+  return `<tr class="${rowCls}">
+    ${datumCel}
+    <td class="cel-periode">${periodeHtml}</td>
+    <td class="cel-weer" title="${escHtml(lbl)}">${ico}</td>
+    <td class="cel-tx ${tempCls}">${temp != null ? temp.toFixed(1).replace('.',',') + '°' : '–'}</td>
+    <td class="cel-neerslag ${rrCls}">${rrStr}</td>
+    <td class="cel-wind">${ffStr}</td>
+    <td class="cel-vocht">${per.vocht != null ? Math.round(per.vocht) + '%' : '–'}</td>
+    <td class="cel-bewolking">${per.bewolk != null ? Math.round(per.bewolk) + '%' : '–'}</td>
+  </tr>`;
+}
+
+// Chart instances bijhouden voor cleanup
+const grafiekInstanties = {};
+
+async function downloadTabelPng(id) {
+  const kaart = document.getElementById('loc-' + id);
+  if (!kaart) return;
+  const wrap = kaart.querySelector('.strip-wrap');
+  if (!wrap) return;
+  const btn = kaart.querySelector('.btn-png');
+  const orig = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    const sc = 2;
+    const tabelCanvas = await html2canvas(wrap, {
+      backgroundColor: '#ffffff',
+      scale: sc,
+      useCORS: true,
+      logging: false
+    });
+
+    const naamRauw = kaart.querySelector('.loc-naam')?.textContent?.replace(/📍\s*/,'').trim() || '';
+    const datumStr = new Date().toLocaleDateString('nl-NL', { day:'numeric', month:'long', year:'numeric' });
+    const copyrightTekst = `© Ed Aldus | Data: DWD ICON Seamless | ${datumStr}`;
+
+    const headerH = 44 * sc;
+    const footerH = 26 * sc;
+    const W = tabelCanvas.width;
+    const H = tabelCanvas.height + headerH + footerH;
+
+    const out = document.createElement('canvas');
+    out.width  = W;
+    out.height = H;
+    const ctx = out.getContext('2d');
+
+    // Header achtergrond
+    ctx.fillStyle = '#003366';
+    ctx.fillRect(0, 0, W, headerH);
+
+    // Locatienaam in header
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${14 * sc}px 'Segoe UI', Arial, sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(naamRauw, 12 * sc, headerH / 2);
+
+    // Tabel
+    ctx.drawImage(tabelCanvas, 0, headerH);
+
+    // Footer achtergrond
+    ctx.fillStyle = '#f0f4f8';
+    ctx.fillRect(0, headerH + tabelCanvas.height, W, footerH);
+
+    // Copyright tekst
+    ctx.fillStyle = '#888888';
+    ctx.font = `${8 * sc}px 'Segoe UI', Arial, sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    ctx.fillText(copyrightTekst, W - 10 * sc, headerH + tabelCanvas.height + footerH / 2);
+
+    const naamBestand = naamRauw.replace(/[^\w\s,-]/g,'').trim().replace(/\s+/g,'_') || id;
+    const a = document.createElement('a');
+    a.download = 'tabel_' + naamBestand + '.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+function renderTabel(p, el, data) {
+  const h = data.hourly;
+  const d = data.daily;
+  const tijden = h.time;
+  const n = Math.min(Math.floor(tijden.length / 24), d.time.length);
+
+  const dagKoppen = [];
+  const stripIcoDag = [];
+  const stripTX = [], stripTN = [], stripRR = [], stripFF = [], stripGust = [], stripDD = [];
+  const stripVocht = [], stripBewolk = [], stripZon = [], stripUV = [], stripWBGT = [];
+  const chartLabels = [], chartTX = [], chartTN = [], chartRR = [], chartZon = [];
+
+  for (let dag = 0; dag < n; dag++) {
+    const base  = dag * 24;
+    const datum = new Date(tijden[base + 12]);
+    const isWE  = isWeekend(datum);
+    const dagPer   = agregeer(h, base + 6,  base + 18);
+    const nachtPer = agregeer(h, base + 18, base + 30);
+
+    // TX = max temp 06:00–18:00 inclusief (exact MOSMIX definitie: loc.hour >= 12 → periode 06–18u)
+    const tx = (() => {
+      const t = [];
+      for (let i = base + 6; i <= base + 18 && i < h.temperature_2m.length; i++)
+        if (h.temperature_2m[i] != null) t.push(h.temperature_2m[i]);
+      return t.length ? Math.max(...t) : null;
+    })();
+    // TN = min temp 18:00–06:00 volgend dag inclusief (MOSMIX: loc.hour < 12 → vorige dag)
+    const tn = (() => {
+      const t = [];
+      for (let i = base + 18; i <= base + 30 && i < h.temperature_2m.length; i++)
+        if (h.temperature_2m[i] != null) t.push(h.temperature_2m[i]);
+      return t.length ? Math.min(...t) : null;
+    })();
+    const rr  = d.precipitation_sum[dag] ?? ((dagPer?.prec || 0) + (nachtPer?.prec || 0));
+    // Zonuren: tel uurwaarden direct_radiation > 120 W/m² (WMO-definitie zonneschijn)
+    const zon = (() => {
+      if (!h.direct_radiation) return null;
+      let n = 0;
+      for (let i = base; i < Math.min(base + 24, h.direct_radiation.length); i++) {
+        if ((h.direct_radiation[i] ?? 0) > 120) n++;
+      }
+      return n;
+    })();
+    const ff  = dagPer?.ffKmh  ?? null;
+    const bft = kmhNaarBft(ff);
+    const gust = Math.max(dagPer?.gustKmh || 0, nachtPer?.gustKmh || 0) || null;
+    const gustBft = kmhNaarBft(gust);
+    const dd   = dagPer?.ffDeg ?? null;
+    const vocht  = dagPer?.vocht  ?? null;
+    const bewolk = dagPer?.bewolk ?? null;
+    const uv = data._uvMax?.[dag] ?? null;
+
+    // WBGT outdoor (Stull 2011 nattebol + globetemperatuur benadering)
+    const wbgt = (() => {
+      if (tx == null || vocht == null) return null;
+      const tw = tx * Math.atan(0.151977 * Math.pow(vocht + 8.313659, 0.5))
+               + Math.atan(tx + vocht) - Math.atan(vocht - 1.676331)
+               + 0.00391838 * Math.pow(vocht, 1.5) * Math.atan(0.023101 * vocht)
+               - 4.686035;
+      const solar = zon != null ? Math.min(zon / 12 * 800, 800) : 0;
+      const wind  = Math.max(0.5, (ff ?? 10) / 3.6);
+      const tg    = tx + 7.0 * (solar / 1000) - 1.5 * Math.pow(wind, 0.6);
+      return 0.7 * tw + 0.2 * tg + 0.1 * tx;
+    })();
+
+    const [icoDag, icoDagLbl] = dagPer ? dagIco(dagPer.code, zon) : ['–',''];
+    const txCls = tx != null ? txKlasse(tx) : '';
+    const tnCls = tn != null ? tnKlasse(tn) : '';
+    const rrCls = rrKlasse(rr);
+    const ffCls = ffKlasse(bft);
+    const gustCls = ffKlasse(gustBft);
+
+    // UV-klasse
+    const uvCls = uv == null ? '' : uv < 3 ? '' : uv < 6 ? 'uv-matig' : uv < 8 ? 'uv-hoog' : uv < 11 ? 'uv-zeer-hoog' : 'uv-extreem';
+    // WBGT-klasse
+    const wbgtCls = wbgt == null ? '' : wbgt < 18 ? '' : wbgt < 23 ? 'wbgt-matig' : wbgt < 28 ? 'wbgt-hoog' : 'wbgt-zeer-hoog';
+
+    dagKoppen.push(`<th><span class="dag-kop${isWE?' weekend-kop':''}">${dagLabel(datum)}</span><span class="dag-sub">${datumKort(datum)}</span></th>`);
+    stripIcoDag.push(`<td class="strip-ico" title="${escHtml(icoDagLbl)}">${icoDag}</td>`);
+    stripTX.push(`<td class="strip-tx ${txCls}">${tx != null ? tx.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
+    stripTN.push(`<td class="strip-tn ${tnCls}">${tn != null ? tn.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
+    stripRR.push(`<td class="${rrCls}">${rr >= 0.1 ? rr.toFixed(1).replace('.',',') + ' mm' : '<span class="rr-geen">0</span>'}</td>`);
+    stripDD.push(`<td style="font-size:0.85em;color:#555">${graden2kompas(dd)}</td>`);
+    stripFF.push(`<td><span class="${ffCls}">${ff != null ? Math.round(ff) + ' km/h' : '–'}</span>${ff ? `<br><span style="font-size:0.8em;color:#aaa">Bft ${bft}</span>` : ''}</td>`);
+    stripGust.push(`<td><span class="${gustCls}">${gust != null ? Math.round(gust) + ' km/h' : '–'}</span>${gust ? `<br><span style="font-size:0.8em;color:#aaa">Bft ${gustBft}</span>` : ''}</td>`);
+    stripVocht.push(`<td>${vocht  != null ? Math.round(vocht)  + '%' : '–'}</td>`);
+    stripBewolk.push(`<td>${bewolk != null ? Math.round(bewolk) + '%' : '–'}</td>`);
+    stripZon.push(`<td style="color:#c47a1a;font-weight:600">${zon != null ? zon + ' u' : '–'}</td>`);
+    stripUV.push(`<td class="${uvCls}">${uv != null ? uv.toFixed(1).replace('.',',') : '–'}</td>`);
+    stripWBGT.push(`<td class="${wbgtCls}">${wbgt != null ? wbgt.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
+
+    chartLabels.push(dagLabel(datum) + ' ' + datumKort(datum));
+    chartTX.push(tx);
+    chartTN.push(tn);
+    chartRR.push(rr >= 0.1 ? parseFloat(rr.toFixed(1)) : 0);
+    chartZon.push(zon);
+  }
+
+  const chartId = 'chart-' + p.id;
+
+  const strip = `
+    <div class="strip-wrap">
+      <table class="strip-tabel">
+        <thead><tr><th></th>${dagKoppen.join('')}</tr></thead>
+        <tbody>
+          <tr><td>☀ Dag</td>${stripIcoDag.join('')}</tr>
+          <tr><td>TX</td>${stripTX.join('')}</tr>
+          <tr><td>TN</td>${stripTN.join('')}</tr>
+          <tr><td>🌧 Neerslag</td>${stripRR.join('')}</tr>
+          <tr><td>🧭 Richting</td>${stripDD.join('')}</tr>
+          <tr><td>🌬 Wind</td>${stripFF.join('')}</tr>
+          <tr><td>💨 Windstoot</td>${stripGust.join('')}</tr>
+          <tr><td>💧 Vochtigheid</td>${stripVocht.join('')}</tr>
+          <tr><td>☁ Bewolking</td>${stripBewolk.join('')}</tr>
+          <tr><td>🌞 Zon</td>${stripZon.join('')}</tr>
+          <tr><td>🔆 UV-index</td>${stripUV.join('')}</tr>
+          <tr><td>🌡 WBGT</td>${stripWBGT.join('')}</tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  const grafiek = `<div class="grafiek-wrap"><canvas id="${chartId}" height="130"></canvas></div>`;
+
+  el.querySelector('.loc-body').innerHTML = strip + grafiek;
+
+  // Verwijder eventuele oude chart instantie
+  if (grafiekInstanties[p.id]) { grafiekInstanties[p.id].destroy(); }
+  renderGrafiek(p.id, chartId, chartLabels, chartTX, chartTN, chartRR, chartZon);
+}
+
+function renderGrafiek(pid, canvasId, labels, tx, tn, rr, zon) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+
+  const heeftRR  = rr.some(v => v > 0);
+  const heeftZon = zon.some(v => v != null && v > 0);
+
+  grafiekInstanties[pid] = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'line',
+          label: 'TX',
+          data: tx,
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(180, 210, 255, 0.22)',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: '#e74c3c',
+          pointBorderColor: 'white',
+          pointBorderWidth: 1.5,
+          fill: '+1',   // vul naar TN toe
+          tension: 0.4,
+          yAxisID: 'yTemp',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: 'TN',
+          data: tn,
+          borderColor: '#2980b9',
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: '#2980b9',
+          pointBorderColor: 'white',
+          pointBorderWidth: 1.5,
+          fill: false,
+          tension: 0.4,
+          yAxisID: 'yTemp',
+          order: 2,
+        },
+        {
+          type: 'bar',
+          label: 'Neerslag (mm)',
+          data: rr,
+          backgroundColor: 'rgba(52, 152, 219, 0.45)',
+          borderColor: 'rgba(52, 152, 219, 0.8)',
+          borderWidth: 1,
+          borderRadius: 3,
+          yAxisID: 'yRR',
+          order: 1,
+          hidden: false,
+        },
+        {
+          type: 'bar',
+          label: 'Zon (u)',
+          data: zon,
+          backgroundColor: 'rgba(255, 180, 0, 0.35)',
+          borderColor: 'rgba(230, 160, 0, 0.7)',
+          borderWidth: 1,
+          borderRadius: 3,
+          yAxisID: 'yZon',
+          order: 1,
+          hidden: !heeftZon,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { size: 11 }, boxWidth: 14, padding: 12, usePointStyle: true },
+        },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const v = ctx.raw;
+              if (v == null) return null;
+              if (ctx.dataset.label === 'Neerslag (mm)') return `Neerslag: ${v.toFixed(1)} mm`;
+              if (ctx.dataset.label === 'Zon (u)') return `Zon: ${v.toFixed(1)} u`;
+              return `${ctx.dataset.label}: ${v.toFixed(1).replace('.',',')}°`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { font: { size: 11 } },
+        },
+        yTemp: {
+          type: 'linear',
+          position: 'left',
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: {
+            font: { size: 11 },
+            callback: v => v.toFixed(0) + '°',
+          },
+          title: { display: true, text: '°C', font: { size: 10 }, color: '#888' },
+        },
+        yRR: {
+          type: 'linear',
+          position: 'right',
+          min: 0,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            font: { size: 10 },
+            callback: v => v + ' mm',
+            color: '#3498db',
+          },
+          title: { display: true, text: 'mm', font: { size: 10 }, color: '#3498db' },
+        },
+        yZon: {
+          type: 'linear',
+          position: 'right',
+          min: 0,
+          max: 16,
+          display: heeftZon,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            font: { size: 10 },
+            callback: v => v + ' u',
+            color: '#c47a1a',
+          },
+          title: { display: true, text: 'Zon (u)', font: { size: 10 }, color: '#c47a1a' },
+        },
+      },
+    },
+  });
+}
+
+// ─── XSS helper ──────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+renderFavBalk();
+
+// ─── Willekeurige startlocatie ────────────────────────────────────────────────
+const STARTPLAATSEN = [
+  { naam: 'Amsterdam, Nederland',          land: 'Nederland', lat: 52.374,  lon: 4.890  },
+  { naam: 'Málaga, Andalucía, Spanje',     land: 'Spanje',    lat: 36.720,  lon: -4.420 },
+  { naam: 'Innsbruck, Tirol, Oostenrijk',  land: 'Oostenrijk',lat: 47.269,  lon: 11.404 },
+  { naam: 'Reykjavik, IJsland',            land: 'IJsland',   lat: 64.135,  lon: -21.895},
+  { naam: 'Tokyo, Japan',                  land: 'Japan',     lat: 35.682,  lon: 139.759},
+  { naam: 'New York, VS',                  land: 'VS',        lat: 40.713,  lon: -74.006},
+  { naam: 'Cape Town, Zuid-Afrika',        land: 'Zuid-Afrika',lat:-33.925, lon: 18.424 },
+  { naam: 'Sydney, Australië',             land: 'Australië', lat: -33.869, lon: 151.209},
+  { naam: 'Tromsø, Noorwegen',             land: 'Noorwegen', lat: 69.650,  lon: 18.956 },
+  { naam: 'Dubai, VAE',                    land: 'VAE',       lat: 25.205,  lon: 55.270 },
+  { naam: 'Buenos Aires, Argentinië',      land: 'Argentinië',lat: -34.614, lon: -58.443},
+  { naam: 'Nairobi, Kenia',                land: 'Kenia',     lat: -1.292,  lon: 36.821 },
+];
+const start = STARTPLAATSEN[Math.floor(Math.random() * STARTPLAATSEN.length)];
+voegToe(start.naam, start.land, start.lat, start.lon);
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') startZoek();
+});
+</script>
+</body>
+</html>
