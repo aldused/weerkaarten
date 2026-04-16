@@ -175,14 +175,8 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
               <option value="alles">PNG: alles</option>
               <option value="temp">PNG: temperatuur</option>
               <option value="neerslag">PNG: neerslag</option>
-              <option value="kansen">PNG: kansen</option>
             </select>
-            <select id="png-formaat" style="background:#555;border:1px solid #777;color:white;border-radius:6px;padding:5px 6px;font-size:.72rem;cursor:pointer">
-              <option value="auto">auto</option>
-              <option value="social">social</option>
-              <option value="square">insta</option>
-              <option value="story">story</option>
-            </select>
+            <input type="number" id="png-breedte" placeholder="px breed" min="400" max="4000" step="10" style="background:#555;border:1px solid #777;color:white;border-radius:6px;padding:5px 6px;font-size:.72rem;width:90px" title="Gewenste breedte in pixels (leeg = origineel)">
             <input type="text" id="png-tekst" placeholder="Eigen tekst…" style="background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:5px 8px;font-size:.75rem;width:170px">
             <button class="btn-download" id="btn-download" onclick="downloadPng()">&#11015; PNG</button>
           </div>
@@ -3303,17 +3297,18 @@ function schaalCanvas(src,doelW,doelH){
 function downloadPng(){
   const{naam}=getStationInfo();
   const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
-  const formaat=document.getElementById('png-formaat')?.value||'auto';
+  const customW=parseInt(document.getElementById('png-breedte')?.value)||0;
   const deel=document.getElementById('png-deel')?.value||'alles';
   const eigenTekst=document.getElementById('png-tekst')?.value||'';
   const ids={temp:'canvas-temp',cloud:'canvas-cloud',wind:'canvas-wind',winddir:'canvas-winddir',
              sneeuw:'canvas-sneeuw',onweer:'canvas-onweer',weertype:'canvas-weertype',uv:'canvas-uv',runhistorie:'canvas-runhistorie',hoogte:'canvas-hoogte',
-             icon:'canvas-icon',aifs:'canvas-aifs',vergelijking:'canvas-vergelijking',vergaifs:'canvas-vergelijking',verggfs:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt'};
+             icon:'canvas-icon',aifs:'canvas-aifs',vergelijking:'canvas-vergelijking',vergaifs:'canvas-vergelijking',verggfs:'canvas-vergelijking',hres:'canvas-hres',dauwpunt:'canvas-dauwpunt',
+             dagkansen:'canvas-dagkansen',neerslagkansen:'canvas-neerslagkansen'};
   const neerslagIds={temp:'canvas-neerslag',icon:'canvas-icon-neerslag',aifs:'canvas-aifs-neerslag',vergelijking:'canvas-verg-neerslag',vergaifs:'canvas-verg-neerslag',verggfs:'canvas-verg-neerslag',hres:'canvas-hres-neerslag'};
-  const kansenIds={temp:'canvas-neer-kansen',icon:'canvas-icon-kansen',aifs:'canvas-aifs-kansen'};
+  const kansenIds={icon:'canvas-icon-kansen',aifs:'canvas-aifs-kansen'};
   const windIds={vergelijking:'canvas-verg-wind',vergaifs:'canvas-verg-wind',verggfs:'canvas-verg-wind',hres:'canvas-hres-wind'};
-  const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',aifs:'ECMWF AIFS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',weertype:'ECMWF ENS',uv:'ECMWF ENS',runhistorie:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',vergaifs:'ECMWF vs AIFS',verggfs:'ECMWF vs GFS',hres:'HRES operationeel',dauwpunt:'ECMWF ENS'};
-  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',aifs:'AIFS Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',weertype:'Weertype',uv:'UV-index',runhistorie:'Run-historie',hoogte:'850/500 hPa',vergelijking:'Vergelijking',vergaifs:'Vergelijking',verggfs:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid'};
+  const modelNamen={temp:'ECMWF ENS',icon:'ICON ENS',aifs:'ECMWF AIFS',cloud:'ECMWF ENS',wind:'ECMWF ENS',winddir:'ECMWF ENS',sneeuw:'ECMWF ENS',onweer:'ECMWF ENS',weertype:'ECMWF ENS',uv:'ECMWF ENS',runhistorie:'ECMWF ENS',hoogte:'ECMWF ENS',vergelijking:'ECMWF vs ICON',vergaifs:'ECMWF vs AIFS',verggfs:'ECMWF vs GFS',hres:'HRES operationeel',dauwpunt:'ECMWF ENS',dagkansen:'ECMWF ENS',neerslagkansen:'ECMWF ENS'};
+  const typeNamen={temp:'Temperatuur',icon:'ICON Temperatuur',aifs:'AIFS Temperatuur',cloud:'Bewolking',wind:'Wind',winddir:'Windrichting',sneeuw:'Sneeuwkans',onweer:'Onweer',weertype:'Weertype',uv:'UV-index',runhistorie:'Run-historie',hoogte:'850/500 hPa',vergelijking:'Vergelijking',vergaifs:'Vergelijking',verggfs:'Vergelijking',hres:'HRES operationeel',dauwpunt:'Dauwpunt & Vochtigheid',dagkansen:'Temperatuurkansen',neerslagkansen:'Neerslagkansen'};
 
   // Forceer chart update zodat gepinde crosshair op canvas staat
   if(crosshairPinned && actieveCharts.temp) actieveCharts.temp.update('none');
@@ -3345,13 +3340,14 @@ function downloadPng(){
 
   let uit=maakPngCanvas(canvassen,naam,typeLabel,modelNamen[actieveType]||'ECMWF ENS',eigenTekst||null);
 
-  if(formaat==='social') uit=schaalCanvas(uit,1200,630);
-  else if(formaat==='square') uit=schaalCanvas(uit,1080,1080);
-  else if(formaat==='story') uit=schaalCanvas(uit,1080,1920);
+  if(customW>0 && customW!==uit.width){
+    const customH=Math.round(uit.height*customW/uit.width);
+    uit=schaalCanvas(uit,customW,customH);
+  }
 
   const a=document.createElement('a');
   a.href=uit.toDataURL('image/png');
-  a.download=`pluim_${naam.toLowerCase().replace(/\s+/g,'_')}_${deel}_${formaat}_${ts}.png`;
+  a.download=`pluim_${naam.toLowerCase().replace(/\s+/g,'_')}_${deel}_${ts}.png`;
   a.click();
 }
 
