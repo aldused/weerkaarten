@@ -103,6 +103,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
           <option value="uv">&#9728;&#65039; UV-index</option>
           <option value="hoogte">&#128225; 850 / 500 hPa</option>
           <option value="dauwpunt">&#128167; Dauwpunt</option>
+          <option value="tempkansen">&#127777; % Temperatuurkansen</option>
         </optgroup>
         <optgroup label="Deterministisch / Archief">
           <option value="hres">&#9654;&#65038; HRES</option>
@@ -200,11 +201,6 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <div id="crosshair-info" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;gap:16px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
     <div style="position:relative;width:100%;height:380px"><canvas id="canvas-temp"></canvas></div>
   </div>
-  <div id="blok-temp-kansen" class="grafiek-blok" style="display:none;margin-top:4px">
-    <div class="grafiek-titel" id="titel-temp-kansen"></div>
-    <div class="legenda" id="leg-temp-kansen"></div>
-    <div style="position:relative;width:100%;height:140px"><canvas id="canvas-temp-kansen"></canvas></div>
-  </div>
   <div id="blok-neerslag" class="grafiek-blok" style="display:none;margin-top:8px">
     <div class="grafiek-titel" id="titel-neerslag"></div>
     <div class="legenda" id="leg-neerslag"></div>
@@ -214,6 +210,11 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <div class="grafiek-titel" id="titel-neer-kansen"></div>
     <div class="legenda" id="leg-neer-kansen"></div>
     <div style="position:relative;width:100%;height:140px"><canvas id="canvas-neer-kansen"></canvas></div>
+  </div>
+  <div id="blok-temp-kansen" class="grafiek-blok" style="display:none;margin-top:4px">
+    <div class="grafiek-titel" id="titel-temp-kansen"></div>
+    <div class="legenda" id="leg-temp-kansen"></div>
+    <div style="position:relative;width:100%;height:140px"><canvas id="canvas-temp-kansen"></canvas></div>
   </div>
   <div id="blok-cloud" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-cloud"></div>
@@ -910,7 +911,7 @@ function ensDatasets(arr,kleur){
 
 // ── Type knoppen + dropdown ──
 // Welke waarden horen bij de ECMWF-parameter dropdown
-const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','dauwpunt','hres','runhistorie'];
+const ECMWF_DROPDOWN_TYPES = ['temp','cloud','wind','winddir','sneeuw','onweer','weertype','uv','hoogte','dauwpunt','tempkansen','hres','runhistorie'];
 
 function setActieveType(val){
   actieveType = val;
@@ -940,6 +941,7 @@ function setActieveType(val){
     uv:'UV-index ENS',
     hoogte:'850 hPa temp &amp; 500 hPa hoogte',
     dauwpunt:'dauwpunt ENS + HRES',
+    tempkansen:'kans op >15°C / >20°C / >25°C / >30°C / vorst',
     hres:'deterministisch, geen ENS-spreiding',
     runhistorie:'7 opeenvolgende modelruns',
   };
@@ -1011,6 +1013,7 @@ async function laadData(){
     else if(actieveType==='vergaifs') await laadVergelijkingModel(lat,lon,naam,dagen,van,tot,'aifs');
     else if(actieveType==='verggfs') await laadVergelijkingModel(lat,lon,naam,dagen,van,tot,'gfs');
     else if(actieveType==='hres') await laadHres(lat,lon,naam,dagen,van,tot);
+    else if(actieveType==='tempkansen') await laadStandaloneTempKansen(lat,lon,naam,dagen,van,tot);
     document.getElementById('status').style.display='none';
     document.getElementById('png-opties').style.display='flex';
     document.getElementById('btn-reset').style.display='';
@@ -1120,7 +1123,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   document.getElementById('blok-temp-kansen').style.display='';
   document.getElementById('titel-temp-kansen').textContent=`ECMWF – ${naam}  Temperatuurkansen`;
   document.getElementById('leg-temp-kansen').innerHTML=legHtml([
-    ['rgba(180,230,120,0.7)','Kans >15°C','blok'],
+    ['rgba(60,170,40,0.75)','Kans >15°C','blok'],
     ['rgba(255,200,50,0.65)','Kans >20°C','blok'],
     ['rgba(255,120,20,0.70)','Kans >25°C','blok'],
     ['rgba(200,20,20,0.80)','Kans >30°C','blok'],
@@ -1129,7 +1132,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   chartTimestamps['canvas-temp-kansen']=ts;
   actieveCharts['temp-kansen']=new Chart(document.getElementById('canvas-temp-kansen'),{
     data:{labels:lab,datasets:[
-      {type:'bar',data:tK15,    backgroundColor:'rgba(180,230,120,0.60)',order:5,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:tK15,    backgroundColor:'rgba(60,170,40,0.70)',order:5,barPercentage:1,categoryPercentage:1},
       {type:'bar',data:tK20,    backgroundColor:'rgba(255,200,50,0.55)', order:4,barPercentage:1,categoryPercentage:1},
       {type:'bar',data:tK25,    backgroundColor:'rgba(255,120,20,0.65)', order:3,barPercentage:1,categoryPercentage:1},
       {type:'bar',data:tK30,    backgroundColor:'rgba(200,20,20,0.75)',  order:2,barPercentage:1,categoryPercentage:1},
@@ -1219,6 +1222,55 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
           const n=['>0.1mm','>1mm','>5mm'];
           return ` Kans ${n[ctx.datasetIndex]}: ${ctx.parsed.y.toFixed(0)}%`;
         }}
+      }},
+      scales:{x:cfgBase.scales.x,y:{...yAs('left','%'),min:0,max:100}}
+    }
+  });
+}
+
+// ── Temperatuurkansen standalone ──
+async function laadStandaloneTempKansen(lat,lon,naam,dagen,van,tot){
+  const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
+  if(!ens?.hourly?.time) throw new Error('Geen ensemble data ontvangen');
+  const times=ens.hourly.time;
+  const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
+  const tK=Object.keys(ens.hourly).filter(k=>k.startsWith('temperature_2m_member'));
+  const tA=tK.map(k=>idx.map(i=>ens.hourly[k][i]));
+  const n=tA.length;
+  const tK15=ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=15).length/n*100);
+  const tK20=ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=20).length/n*100);
+  const tK25=ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=25).length/n*100);
+  const tK30=ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=30).length/n*100);
+  const tKvriest=ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v<0).length/n*100);
+  const lab=getLab(ts);
+  // Grotere hoogte voor standalone weergave
+  document.getElementById('canvas-temp-kansen').parentElement.style.height='280px';
+  document.getElementById('blok-temp-kansen').style.display='';
+  document.getElementById('titel-temp-kansen').textContent=`ECMWF – ${naam}  Temperatuurkansen`;
+  document.getElementById('leg-temp-kansen').innerHTML=legHtml([
+    ['rgba(60,170,40,0.75)','Kans >15°C','blok'],
+    ['rgba(255,200,50,0.65)','Kans >20°C','blok'],
+    ['rgba(255,120,20,0.70)','Kans >25°C','blok'],
+    ['rgba(200,20,20,0.80)','Kans >30°C','blok'],
+    ['rgba(80,120,220,0.65)','Kans <0°C (vorst)','blok'],
+  ]);
+  chartTimestamps['canvas-temp-kansen']=ts;
+  actieveCharts['temp-kansen']=new Chart(document.getElementById('canvas-temp-kansen'),{
+    data:{labels:lab,datasets:[
+      {type:'bar',data:tK15,    backgroundColor:'rgba(60,170,40,0.70)', order:5,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:tK20,    backgroundColor:'rgba(255,200,50,0.55)',order:4,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:tK25,    backgroundColor:'rgba(255,120,20,0.65)',order:3,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:tK30,    backgroundColor:'rgba(200,20,20,0.75)', order:2,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:tKvriest,backgroundColor:'rgba(80,120,220,0.60)',order:1,barPercentage:1,categoryPercentage:1},
+    ]},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        callbacks:{label:ctx=>{
+          const nm=['>15°C','>20°C','>25°C','>30°C','<0°C (vorst)'];
+          const v=ctx.parsed.y;if(v<1)return null;
+          return ` Kans ${nm[ctx.datasetIndex]}: ${v.toFixed(0)}%`;
+        },filter:ctx=>ctx.parsed.y>=1}
       }},
       scales:{x:cfgBase.scales.x,y:{...yAs('left','%'),min:0,max:100}}
     }
@@ -2074,7 +2126,7 @@ function openVergelijking(){
   ctrls.id='verg-controls';
   ctrls.style.cssText='padding:12px 16px;background:white;border-bottom:1px solid #d0d8e4;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end';
 
-  const types=[{val:'temp',lbl:'&#127777; Temp'},{val:'wind',lbl:'&#128168; Wind'},{val:'cloud',lbl:'&#9729;&#65039; Bewolking'},{val:'neerslag',lbl:'&#127783; Neerslag'},{val:'sneeuw',lbl:'&#10052;&#65039; Sneeuw'},{val:'onweer',lbl:'&#9928;&#65039; Onweer'},{val:'weertype',lbl:'&#127780;&#65039; Weertype'},{val:'hoogte',lbl:'&#128225; 850/500 hPa'},{val:'dauwpunt',lbl:'&#128167; Dauwpunt'}];
+  const types=[{val:'temp',lbl:'&#127777; Temp'},{val:'wind',lbl:'&#128168; Wind'},{val:'cloud',lbl:'&#9729;&#65039; Bewolking'},{val:'neerslag',lbl:'&#127783; Neerslag'},{val:'sneeuw',lbl:'&#10052;&#65039; Sneeuw'},{val:'onweer',lbl:'&#9928;&#65039; Onweer'},{val:'weertype',lbl:'&#127780;&#65039; Weertype'},{val:'hoogte',lbl:'&#128225; 850/500 hPa'},{val:'dauwpunt',lbl:'&#128167; Dauwpunt'},{val:'tempkansen',lbl:'&#127777; % Tempkansen'}];
   const btnStyle='padding:5px 10px;border-radius:5px;font-size:.75rem;font-weight:600;cursor:pointer';
 
   const nu3=new Date();
@@ -2425,6 +2477,29 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
     }));
     scales={x:{...cfgBase.scales.x},y:{...yAs('left','%'),stacked:true,max:100,min:0}};
     tooltipCb={filter:item=>item.parsed.y>0.5,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}};
+  }else if(type==='tempkansen'){
+    const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
+    apiTimes=ts;
+    const tK=Object.keys(ens.hourly).filter(k=>k.startsWith('temperature_2m_member'));
+    const tA=tK.map(k=>fidx.map(i=>ens.hourly[k][i]));
+    const n=tA.length;
+    titel=`${mLbl} – ${naam} – Temp­kansen`;
+    datasets=[
+      {type:'bar',data:ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=15).length/n*100),backgroundColor:'rgba(60,170,40,0.70)', order:5,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=20).length/n*100),backgroundColor:'rgba(255,200,50,0.55)',order:4,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=25).length/n*100),backgroundColor:'rgba(255,120,20,0.65)',order:3,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v>=30).length/n*100),backgroundColor:'rgba(200,20,20,0.75)', order:2,barPercentage:1,categoryPercentage:1},
+      {type:'bar',data:ts.map((_,j)=>tA.map(m=>m[j]).filter(v=>v!=null&&v<0).length/n*100),  backgroundColor:'rgba(80,120,220,0.60)',order:1,barPercentage:1,categoryPercentage:1},
+    ];
+    scales={x:{...cfgBase.scales.x},y:{...yAs('left','%'),min:0,max:100}};
+    tooltipCb={callbacks:{label:ctx=>{
+      const nm=['>15°C','>20°C','>25°C','>30°C','<0°C'];
+      const v=ctx.parsed.y;if(v<1)return null;
+      return ` Kans ${nm[ctx.datasetIndex]}: ${v.toFixed(0)}%`;
+    },filter:ctx=>ctx.parsed.y>=1}};
   }
 
   const cel=document.getElementById(`verg-cel-${idx}`);
