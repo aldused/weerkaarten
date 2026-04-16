@@ -137,6 +137,37 @@ function interpKleur(val,schaal,stops){
 
 function ns(tag){return document.createElementNS("http://www.w3.org/2000/svg",tag);}
 
+// ── Nederland grens als dikke witte lijn ────────────────────────────────────
+let nlGrensData = null;
+async function laadNLGrens(){
+  if(nlGrensData) return;
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/NLD.geo.json');
+    nlGrensData = await r.json();
+  } catch(e){ console.warn('NL grens laden mislukt:', e); }
+}
+function tekenNLGrens(svg){
+  if(!nlGrensData) return;
+  const features = nlGrensData.features || [nlGrensData];
+  features.forEach(f => {
+    const g = f.geometry;
+    const rings = g.type === 'Polygon' ? g.coordinates : g.coordinates.flat(1);
+    rings.forEach(ring => {
+      const pts = ring.map(([lon,lat]) =>
+        `${lonToX(lon).toFixed(1)},${latToY(lat).toFixed(1)}`).join(' ');
+      const pl = ns('polyline');
+      pl.setAttribute('points', pts);
+      pl.setAttribute('fill', 'none');
+      pl.setAttribute('stroke', 'white');
+      pl.setAttribute('stroke-width', '3.5');
+      pl.setAttribute('stroke-linejoin', 'round');
+      pl.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(pl);
+    });
+  });
+}
+laadNLGrens(); // alvast ophalen bij laden
+
 let stationData={}, huidigParam="ta";
 
 // ── Heatmap / IDW-interpolatie ──────────────────────────────────────────────
@@ -327,6 +358,9 @@ function tekenKaart(){
   ts.setAttribute("fill","#888888");
   ts.textContent="Stand: "+document.getElementById("hdr-update").textContent;
   svg.appendChild(ts);
+
+  // Dikke witte NL-grens bovenop alles
+  tekenNLGrens(svg);
 }
 
 function maakLegenda(){
