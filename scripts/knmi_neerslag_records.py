@@ -271,7 +271,7 @@ def bereken_records(data):
          "label": f"{NL_MND[k[1]]} decade {k[2]}, {k[0]}",
          "jaar": k[0], "mnd": k[1], "dec": k[2]}
         for k,v in dec_data.items()
-        if dec_count[k] >= 7 and k[0] >= 1900 and heeft_regen
+        if dec_count[k] >= 7 and k[0] >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droog_mnd_alle = sorted([
@@ -279,7 +279,7 @@ def bereken_records(data):
          "label": f"{NL_MND_LANG[k[1]]} {k[0]}",
          "jaar": k[0], "mnd": k[1]}
         for k,v in mnd_data.items()
-        if mnd_count[k] >= 20 and k[0] >= 1900 and heeft_regen
+        if mnd_count[k] >= 20 and k[0] >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droog_seizoen_alle = sorted([
@@ -287,16 +287,16 @@ def bereken_records(data):
          "label": f"{k[0]} {k[1]}" + (f"/{k[1]+1}" if k[0] == "winter" else ""),
          "seizoen": k[0], "jaar": k[1]}
         for k,v in seizoen_data.items()
-        if seizoen_count[k] >= 60 and k[1] >= 1900 and heeft_regen
+        if seizoen_count[k] >= 60 and k[1] >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droog_jaar_alle = sorted([
         {"waarde": round(v,1), "jaar": k}
         for k,v in jaar_data.items()
-        if jaar_count[k] >= 300 and k >= 1900 and heeft_regen
+        if jaar_count[k] >= 300 and k >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
-    droge_perioden = [p for p in bereken_droge_perioden(data) if int(p["van"][:4]) >= 1900]
+    droge_perioden = [p for p in bereken_droge_perioden(data) if int(p["van"][:4]) >= 1880]
 
     return {
         "dag": dag_alle[:TOP_N], "decade": dec_alle[:TOP_N],
