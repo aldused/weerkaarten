@@ -11,6 +11,7 @@ import csv
 import json
 import glob
 import os
+import boto3
 
 # Kolommen die we nodig hebben (naast datum)
 KOLOMMEN = ['TX', 'TN', 'RH', 'FXX', 'SQ']
@@ -72,6 +73,22 @@ def parse_csv(filepath):
     return data
 
 
+R2_ENDPOINT  = "https://05da71c7c88b8ce49fbb2c2d0a570416.r2.cloudflarestorage.com"
+R2_ACCESS_KEY = "baf991003ce3e4075d91b89f8726bc0f"
+R2_SECRET_KEY = "0f33229e2e03fe7bc7f9fdf7f9fa0acd5336c40718c6e25fe0b6a631ade8ac97"
+R2_BUCKET    = "weerlab-dagdata"
+
+
+def upload_r2(s3, local_path, filename):
+    try:
+        s3.upload_file(local_path, R2_BUCKET, filename,
+            ExtraArgs={'ContentType': 'application/json'})
+        return True
+    except Exception as e:
+        print(f"    R2-upload mislukt voor {filename}: {e}")
+        return False
+
+
 def main():
     basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     csv_pattern = os.path.join(basedir, 'knmi_dagdata_*.csv')
@@ -82,6 +99,13 @@ def main():
         return
 
     print(f"Gevonden: {len(csv_files)} CSV-bestanden")
+
+    s3 = boto3.client('s3',
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY,
+        aws_secret_access_key=R2_SECRET_KEY,
+        region_name='auto'
+    )
 
     for csv_path in csv_files:
         filename = os.path.basename(csv_path)
@@ -108,7 +132,9 @@ def main():
         csv_size = os.path.getsize(csv_path)
         json_size = os.path.getsize(out_path)
         ratio = (1 - json_size / csv_size) * 100
-        print(f"  {stn}: {len(data)} dagen, {csv_size//1024}KB -> {json_size//1024}KB ({ratio:.0f}% kleiner)")
+        ok = upload_r2(s3, out_path, f'dagdata_{stn}.json')
+        r2_status = "→ R2 ✓" if ok else "→ R2 ✗"
+        print(f"  {stn}: {len(data)} dagen, {csv_size//1024}KB -> {json_size//1024}KB ({ratio:.0f}% kleiner) {r2_status}")
 
     print("Klaar!")
 
