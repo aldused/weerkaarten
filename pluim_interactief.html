@@ -1371,18 +1371,20 @@ async function laadDagKansen(lat,lon,naam,dagen,van,tot){
   });
   const dagKeys=Object.keys(dagSet).filter(k=>dagSet[k].maxima.some(v=>v!==-Infinity)).sort();
 
-  // Temperatuurbins °C (kolom-kleur conform KNMI)
+  // Temperatuurbins °C — 2°C stappen, kleurenschema conform KNMI
   const BINS=[
-    [-4, 0,'rgba(120,60,200,0.85)'],
-    [ 0, 4,'rgba(80,100,220,0.85)'],
-    [ 4, 8,'rgba(100,160,255,0.85)'],
-    [ 8,12,'rgba(30,140,220,0.85)'],
-    [12,16,'rgba(0,190,200,0.85)'],
-    [16,20,'rgba(200,230,100,0.85)'],
-    [20,24,'rgba(255,190,40,0.85)'],
-    [24,28,'rgba(255,120,30,0.85)'],
-    [28,32,'rgba(220,40,40,0.85)'],
-    [32,99,'rgba(160,0,30,0.90)'],
+    [-99, 6,'rgba(140,0,200,0.85)'],   // <6°C donkerpaars
+    [  6, 8,'rgba(210,80,230,0.85)'],  // 6–8  roze/magenta
+    [  8,10,'rgba(8,0,130,0.88)'],     // 8–10 donkerblauw
+    [ 10,12,'rgba(30,90,215,0.88)'],   // 10–12 helder blauw
+    [ 12,14,'rgba(0,195,230,0.85)'],   // 12–14 cyaan
+    [ 14,16,'rgba(200,215,222,0.85)'], // 14–16 lichtgrijs
+    [ 16,18,'rgba(248,232,195,0.85)'], // 16–18 crème
+    [ 18,20,'rgba(255,175,90,0.85)'],  // 18–20 perzik
+    [ 20,22,'rgba(215,80,40,0.85)'],   // 20–22 zalm/oranje
+    [ 22,24,'rgba(195,10,10,0.88)'],   // 22–24 rood
+    [ 24,26,'rgba(65,60,65,0.90)'],    // 24–26 donkergrijs
+    [ 26,99,'rgba(25,10,10,0.92)'],    // >26°C  zwartgrijs
   ];
 
   const dagLab=dagKeys.map(k=>{
@@ -1390,21 +1392,22 @@ async function laadDagKansen(lat,lon,naam,dagen,van,tot){
     return [`${['Zo','Ma','Di','Wo','Do','Vr','Za'][d.getDay()]}`,`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`];
   });
 
-  const binDatasets=BINS.map(([lo,hi,kleur])=>({
+  const binLbl=([lo,hi])=>lo<=-90?`<${hi}°C`:hi>=90?`>${lo}°C`:`${lo}–${hi}°C`;
+  const binDatasets=BINS.map((bin)=>({
     type:'bar',
-    label:`${lo<0?lo+'–'+hi:lo+'–'+hi}°C`,
+    label:binLbl(bin),
     data:dagKeys.map(k=>{
       const mx=dagSet[k].maxima.filter(v=>v!==-Infinity);
-      return mx.length?mx.filter(v=>v>=lo&&v<hi).length/mx.length*100:0;
+      return mx.length?mx.filter(v=>v>=bin[0]&&v<bin[1]).length/mx.length*100:0;
     }),
-    backgroundColor:kleur,
-    stack:'dag',barPercentage:0.75,categoryPercentage:0.8,
+    backgroundColor:bin[2],
+    stack:'dag',barPercentage:0.72,categoryPercentage:0.82,
   }));
 
   document.getElementById('blok-dagkansen').style.display='';
-  document.getElementById('titel-dagkansen').textContent=`ECMWF – ${naam}  Dagtemperatuur kansen (max 06–18 UTC)`;
+  document.getElementById('titel-dagkansen').textContent=`ECMWF – ${naam}  Dagmaximum temperatuur kansen (06–18 UTC)`;
   document.getElementById('leg-dagkansen').innerHTML=legHtml(
-    BINS.map(([lo,hi,k])=>[k,`${lo<0?lo:lo}–${hi>50?'≥'+lo:hi}°C`,'blok'])
+    BINS.filter(b=>b[0]>=-10).map(b=>[b[2],binLbl(b),'blok'])
   );
   actieveCharts['dagkansen']=new Chart(document.getElementById('canvas-dagkansen'),{
     data:{labels:dagLab,datasets:binDatasets},
@@ -1412,12 +1415,12 @@ async function laadDagKansen(lat,lon,naam,dagen,van,tot){
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
         callbacks:{
-          title:items=>{const d=dagKeys[items[0].dataIndex];const dt=new Date(d+'T12:00');return `${['Zo','Ma','Di','Wo','Do','Vr','Za'][dt.getDay()]} ${dt.getDate()} ${['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][dt.getMonth()]}`;},
-          label:ctx=>{const v=ctx.parsed.y;if(v<1)return null;return ` ${ctx.dataset.label}: ${v.toFixed(0)}%`;}
-        },filter:ctx=>ctx.parsed.y>=1
+          title:items=>{const d=dagKeys[items[0].dataIndex];const dt=new Date(d+'T12:00');return `${['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'][dt.getDay()]}, ${dt.getDate()} ${['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][dt.getMonth()]}`;},
+          label:ctx=>{const v=ctx.parsed.y;return ` ${ctx.dataset.label}: ${v<0.5?'0':v.toFixed(0)} %`;}
+        }
       }},
       scales:{
-        x:{grid:{color:GRID},ticks:{color:TICK,maxRotation:0,font:{size:10}},border:{color:GRID}},
+        x:{grid:{color:GRID},ticks:{color:TICK,maxRotation:0,font:{size:10},autoSkip:false},border:{color:GRID}},
         y:{...yAs('left','%'),stacked:true,min:0,max:100}
       }
     }
@@ -2736,13 +2739,14 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       tA2.forEach((m,mi)=>{if(m[j]!=null&&m[j]>dagSet2[key].maxima[mi])dagSet2[key].maxima[mi]=m[j];});
     });
     const dagKeys2=Object.keys(dagSet2).filter(k=>dagSet2[k].maxima.some(v=>v!==-Infinity)).sort();
-    const BINS2=[[-4,0,'rgba(120,60,200,0.85)'],[0,4,'rgba(80,100,220,0.85)'],[4,8,'rgba(100,160,255,0.85)'],[8,12,'rgba(30,140,220,0.85)'],[12,16,'rgba(0,190,200,0.85)'],[16,20,'rgba(200,230,100,0.85)'],[20,24,'rgba(255,190,40,0.85)'],[24,28,'rgba(255,120,30,0.85)'],[28,32,'rgba(220,40,40,0.85)'],[32,99,'rgba(160,0,30,0.90)']];
+    const BINS2=[[-99,6,'rgba(140,0,200,0.85)'],[6,8,'rgba(210,80,230,0.85)'],[8,10,'rgba(8,0,130,0.88)'],[10,12,'rgba(30,90,215,0.88)'],[12,14,'rgba(0,195,230,0.85)'],[14,16,'rgba(200,215,222,0.85)'],[16,18,'rgba(248,232,195,0.85)'],[18,20,'rgba(255,175,90,0.85)'],[20,22,'rgba(215,80,40,0.85)'],[22,24,'rgba(195,10,10,0.88)'],[24,26,'rgba(65,60,65,0.90)'],[26,99,'rgba(25,10,10,0.92)']];
+    const binLbl2=([lo,hi])=>lo<=-90?`<${hi}°C`:hi>=90?`>${lo}°C`:`${lo}–${hi}°C`;
     titel=`${mLbl} – ${naam} – Dagtemp`;
     apiTimes=dagKeys2.map(k=>k+'T00:00'); // T00:00 → maakLabelsCompact geeft dagnaam
-    datasets=BINS2.map(([lo,hi,kl])=>({
-      type:'bar',label:`${lo}–${hi>50?'≥'+lo:hi}°C`,
-      data:dagKeys2.map(k=>{const mx=dagSet2[k].maxima.filter(v=>v!==-Infinity);return mx.length?mx.filter(v=>v>=lo&&v<hi).length/mx.length*100:0;}),
-      backgroundColor:kl,stack:'dag',barPercentage:0.8,categoryPercentage:0.85,
+    datasets=BINS2.map(b=>({
+      type:'bar',label:binLbl2(b),
+      data:dagKeys2.map(k=>{const mx=dagSet2[k].maxima.filter(v=>v!==-Infinity);return mx.length?mx.filter(v=>v>=b[0]&&v<b[1]).length/mx.length*100:0;}),
+      backgroundColor:b[2],stack:'dag',barPercentage:0.78,categoryPercentage:0.85,
     }));
     scales={x:{...cfgBase.scales.x},y:{...yAs('left','%'),stacked:true,min:0,max:100}};
     tooltipCb={filter:ctx=>ctx.parsed.y>=1,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}};
