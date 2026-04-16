@@ -240,9 +240,21 @@ async function laadAlleTemps() {
   // Bouw batch-URL's (per 5 locaties combineren via multi-point)
   // Open-Meteo ondersteunt geen echte batch, maar we doen parallel
   const beloftes = STATIONS.map(([naam, lat, lon]) =>
-    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=sea_surface_temperature&timezone=Europe%2FAmsterdam`)
+    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=sea_surface_temperature&timezone=Europe%2FAmsterdam&forecast_days=1&past_days=1`)
       .then(r => r.json())
-      .then(d => ({ naam, lat, lon, t: d?.current?.sea_surface_temperature }))
+      .then(d => {
+        const temps = d?.hourly?.sea_surface_temperature || [];
+        const tijden = d?.hourly?.time || [];
+        const nu = Date.now();
+        let t = null;
+        // Meest recente niet-null waarde tot en met het huidige uur
+        for (let i = tijden.length - 1; i >= 0; i--) {
+          if (new Date(tijden[i]).getTime() <= nu && temps[i] != null) {
+            t = temps[i]; break;
+          }
+        }
+        return { naam, lat, lon, t };
+      })
       .catch(() => ({ naam, lat, lon, t: null }))
   );
 
