@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo: IDW vs Shepard+blur vs Contouren — MOSMIX</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; padding: 12px; }
+h1 { font-size: 16px; margin-bottom: 4px; color: #00205b; }
+.sub { font-size: 12px; color: #5a7090; margin-bottom: 12px; }
+.toolbar { background: white; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.toolbar-label { font-size: 11px; color: #5a7090; font-weight: 700; text-transform: uppercase; margin-right: 4px; }
+button { padding: 5px 12px; border-radius: 14px; border: 1px solid #c5d3e3;
+  background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; }
+button:hover { background: #dce9f7; }
+button.actief { background: #003366; color: white; border-color: #003366; }
+.panels { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (max-width: 900px){ .panels { grid-template-columns: 1fr; } }
+.panel { background: white; border-radius: 6px; box-shadow: 0 1px 6px rgba(0,0,0,.1); overflow: hidden; }
+.panel-header { background: #003366; color: white; padding: 8px 12px; }
+.panel-header h2 { font-size: 13px; font-weight: 700; }
+.panel-header .desc { font-size: 11px; color: #a8c8e8; margin-top: 2px; }
+.kaart-wrap { position: relative; }
+.kaart-wrap img { width: 100%; display: block; }
+.kaart-wrap canvas, .kaart-wrap svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.legenda { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 10px 10px; justify-content: center; font-size: 10px; color: #5a7090; }
+.legenda-blok { width: 10px; height: 10px; border-radius: 2px; border: 1px solid #ccc; display: inline-block; vertical-align: middle; margin-right: 3px; }
+.status { padding: 12px; text-align: center; color: #888; font-size: 12px; }
+.controls-rij { display:flex; gap:14px; flex-wrap:wrap; }
+.controls-groep { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.tweak { display:flex; gap:4px; align-items:center; font-size:11px; color:#5a7090; }
+.tweak input[type=range] { width: 100px; }
+.station-pt { fill: white; stroke: #000; stroke-width: 1; }
+.station-tx { font: 600 9px Arial; fill: #000; text-anchor: middle; paint-order: stroke; stroke: white; stroke-width: 2.5; stroke-linejoin: round; }
+.nl-grens { fill: none; stroke: white; stroke-width: 1.6; stroke-linejoin: round; opacity: 0.95; }
+</style>
+</head>
+<body>
+
+<h1>Demo: IDW-veld voor MOSMIX-kaarten</h1>
+<div class="sub">Test van interpolatie- en contour-opties · alle stations meegewogen</div>
+
+<div class="toolbar">
+  <div class="controls-rij">
+    <div class="controls-groep">
+      <span class="toolbar-label">Parameter:</span>
+      <div id="param-btns"></div>
+    </div>
+    <div class="controls-groep">
+      <span class="toolbar-label">Dag:</span>
+      <div id="dag-btns"></div>
+    </div>
+  </div>
+  <div class="controls-rij" style="margin-top:8px;">
+    <div class="tweak">α <input type="range" id="alpha" min="0.10" max="0.70" step="0.02" value="0.40"><span id="alpha-val">0.40</span></div>
+    <div class="tweak">power <input type="range" id="power" min="1.5" max="4" step="0.1" value="2.5"><span id="power-val">2.5</span></div>
+    <div class="tweak">kNN <input type="range" id="knn" min="3" max="20" step="1" value="8"><span id="knn-val">8</span></div>
+    <div class="tweak">blur <input type="range" id="blur" min="0" max="6" step="1" value="2"><span id="blur-val">2</span></div>
+    <div class="tweak">res <input type="range" id="res" min="2" max="8" step="1" value="3"><span id="res-val">3</span></div>
+    <button id="btn-stations" class="actief">Stations tonen</button>
+  </div>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <div class="panel-header"><h2>A · Huidig (pure IDW)</h2><div class="desc">Power-slider, alle stations, geen blur</div></div>
+    <div class="kaart-wrap">
+      <img src="kaart_basis_nl.png" id="img-a">
+      <canvas id="cv-a"></canvas>
+      <svg id="svg-a" viewBox="0 0 800 1100" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="legenda" id="leg-a"></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><h2>B · Shepard + blur + witte grens</h2><div class="desc">kNN-stations, Gaussian blur, NL-grens als witte lijn</div></div>
+    <div class="kaart-wrap">
+      <img src="kaart_basis_nl.png" id="img-b">
+      <canvas id="cv-b"></canvas>
+      <svg id="svg-b" viewBox="0 0 800 1100" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="legenda" id="leg-b"></div>
+  </div>
+</div>
+
+<div class="status" id="status">Laden…</div>
+
+<script src="nl_grens_coords.js"></script>
+<script>
+// ── Constants (gelijk aan mosmix_kaart.html) ─────────────────────────────────
+const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
+const SVG_W=800, SVG_H=1100;
+const EXCLUDE = new Set(); // alle stations meewegen
+
+const PARAMS = {
+  TX: { label:"Maximum temp (°C)", eenheid:"°", decimalen:1, contour:1, contourMajor:5,
+    kleuren:[["#084594",-5],["#1565c0",-3],["#64b5f6",0],["#a5d6a7",2],["#2e8b57",4],["#388e3c",6],["#43a047",8],["#66bb6a",9],["#7cb342",10],["#8bc34a",11],["#aed581",12],["#c5e17a",13],["#dce775",14],["#f0ef80",15],["#fff176",16],["#ffee58",17],["#fdd835",18],["#fbc02d",19],["#f9a825",20],["#ffa726",21],["#ff8f00",24],["#fb8c00",27],["#ef6c00",30],["#e65100",33],["#d84315",36],["#4a148c",40]],
+    schaal:[-5,40] },
+  TN: { label:"Min temp (°C)", eenheid:"°", decimalen:1, contour:1, contourMajor:5,
+    kleuren:[["#084594",-12],["#1565c0",-9],["#1e88e5",-6],["#42a5f5",-3],["#90caf9",-1],["#b2dfdb",0],["#2e8b57",3],["#66bb6a",6],["#cddc39",9],["#ffeb3b",12],["#fbc02d",15],["#f57f17",18],["#ef6c00",21]],
+    schaal:[-10,20] },
+  FF: { label:"Wind dag (Bft)", eenheid:" Bft", decimalen:0, bft:true, contour:1, contourMajor:2,
+    kleuren:[["#ffffff",0],["#c8e6c9",6],["#81c784",12],["#4caf50",20],["#ffee58",29],["#ffa726",39],["#ff7043",50],["#e53935",62],["#b71c1c",75],["#7b1fa2",89]],
+    schaal:[0,103] },
+  FX: { label:"Stoot dag (km/h)", eenheid:" km/h", decimalen:0, contour:10, contourMajor:20,
+    kleuren:[["#ffffff",20],["#c8e6c9",30],["#81c784",40],["#4caf50",50],["#ffee58",62],["#ffa726",75],["#ff7043",89],["#e53935",103],["#b71c1c",118]],
+    schaal:[20,120] },
+};
+
+const KMH_NAAR_BFT = [[1,0],[5,1],[11,2],[19,3],[28,4],[38,5],[49,6],[61,7],[74,8],[88,9],[102,10],[117,11]];
+function kmhNaarBft(k){ if(k==null)return null; for(const[g,b]of KMH_NAAR_BFT)if(k<g)return b; return 12; }
+
+// ── State ───────────────────────────────────────────────────────────────────
+let mosmixData=null, huidigParam="TX", huidigDag=null;
+let landMask=null;
+let alpha=0.40, power=2.5, knn=8, blur=2, res=3;
+let toonStations=true;
+
+// ── Kleurinterpolatie ───────────────────────────────────────────────────────
+function interpKleur(val, schaal, kleuren){
+  const colors = kleuren.map(c => {
+    const h=c[0].replace("#","");
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+  });
+  const [vmin,vmax]=schaal;
+  let t=(val-vmin)/(vmax-vmin); t=Math.max(0,Math.min(1,t));
+  let idx=Math.floor(t*(colors.length-1)), f=t*(colors.length-1)-idx;
+  if(idx>=colors.length-1){ idx=colors.length-2; f=1; }
+  const a=colors[idx], b=colors[idx+1];
+  return [Math.round(a[0]+f*(b[0]-a[0])), Math.round(a[1]+f*(b[1]-a[1])), Math.round(a[2]+f*(b[2]-a[2]))];
+}
+
+// ── Land mask uit NL_GRENS polygoon ────────────────────────────────────────
+// Zo ligt de heatmap-rand exact op dezelfde lijn als de border-overlay → geen offset.
+function maakLandMask(R){
+  const img = document.getElementById("img-a");
+  const baseW = img.naturalWidth, baseH = img.naturalHeight;
+  const c = document.createElement("canvas");
+  c.width = baseW; c.height = baseH;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#000"; // even-odd = land
+  ctx.beginPath();
+  for(const poly of NL_GRENS){
+    if(!poly || poly.length<2) continue;
+    poly.forEach(([lon,lat], i)=>{
+      const x = (lon-LON_MIN)/(LON_MAX-LON_MIN) * baseW;
+      const y = (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN)) * baseH;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.closePath();
+  }
+  ctx.fill("evenodd");
+  const px = ctx.getImageData(0,0,baseW,baseH).data;
+  const w = Math.ceil(baseW/R), h = Math.ceil(baseH/R);
+  const data = new Uint8Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    // landcel als één van de R*R bron-pixels gevuld is
+    let isLand=false;
+    for(let dy=0; dy<R && !isLand; dy++) for(let dx=0; dx<R && !isLand; dx++){
+      const sx = Math.min(x*R+dx, baseW-1), sy = Math.min(y*R+dy, baseH-1);
+      if(px[(sy*baseW+sx)*4+3] > 0) isLand=true;
+    }
+    data[y*w+x] = isLand ? 1 : 0;
+  }
+  return {w,h,data, baseW, baseH, R};
+}
+
+// ── Punten verzamelen voor huidige dag/param ────────────────────────────────
+function verzamelPunten(){
+  const dagObj = mosmixData.data?.[huidigDag];
+  const paramData = dagObj?.[huidigParam];
+  if(!paramData) return [];
+  const stations = mosmixData.stations;
+  const punten = [];
+  Object.entries(paramData).forEach(([naam,val])=>{
+    if(EXCLUDE.has(naam)) return;
+    if(!stations[naam] || val==null) return;
+    const [lon,lat] = stations[naam];
+    punten.push({naam, lon, lat, val});
+  });
+  return punten;
+}
+
+// ── IDW-veld bouwen ─────────────────────────────────────────────────────────
+function bouwVeld(mode){
+  // mode: "pure" (alle stations) of "shepard" (kNN)
+  if(!landMask) return null;
+  const punten = verzamelPunten();
+  if(punten.length<3) return null;
+  const w=landMask.w, h=landMask.h;
+  // pixel-coords van stations binnen grid
+  const sp = punten.map(p=>{
+    return {
+      x:(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*w,
+      y:(1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*h,
+      val: p.val
+    };
+  });
+  const veld = new Float32Array(w*h);
+  const mask = new Uint8Array(w*h);
+  const N = sp.length;
+  const useK = mode==="shepard" ? Math.min(knn, N) : N;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const idx=y*w+x;
+    if(!landMask.data[idx]){ mask[idx]=0; continue; }
+    // verzamel afstanden
+    if(mode==="pure"){
+      let sumW=0,sumWV=0, gotExact=false;
+      for(let i=0;i<N;i++){
+        const dx=x-sp[i].x, dy=y-sp[i].y;
+        const d2=dx*dx+dy*dy;
+        if(d2<0.5){ sumWV=sp[i].val; sumW=1; gotExact=true; break; }
+        const wi=1/Math.pow(d2, power/2);
+        sumW+=wi; sumWV+=wi*sp[i].val;
+      }
+      veld[idx]=sumWV/sumW; mask[idx]=1;
+    } else {
+      // shepard met kNN
+      const dArr=new Float64Array(N);
+      for(let i=0;i<N;i++){
+        const dx=x-sp[i].x, dy=y-sp[i].y;
+        dArr[i] = Math.sqrt(dx*dx+dy*dy);
+      }
+      // selecteer kNN via partial sort (eenvoudig via index-sort)
+      const idxs = new Int32Array(N); for(let i=0;i<N;i++) idxs[i]=i;
+      // partial sort top-K (selection sort eerste K elementen)
+      for(let k=0;k<useK;k++){
+        let mi=k;
+        for(let j=k+1;j<N;j++) if(dArr[idxs[j]]<dArr[idxs[mi]]) mi=j;
+        const t=idxs[k]; idxs[k]=idxs[mi]; idxs[mi]=t;
+      }
+      const R = dArr[idxs[useK-1]] + 1e-6;
+      let sumW=0,sumWV=0, gotExact=false;
+      for(let k=0;k<useK;k++){
+        const i=idxs[k];
+        const d=dArr[i];
+        if(d<0.7){ sumWV=sp[i].val; sumW=1; gotExact=true; break; }
+        // gemodificeerde Shepard: w = ((R-d)/(R*d))^p
+        const num = (R-d)/(R*d);
+        const wi = Math.pow(num, power);
+        sumW+=wi; sumWV+=wi*sp[i].val;
+      }
+      veld[idx]=sumWV/sumW; mask[idx]=1;
+    }
+  }
+  return {w,h,veld,mask};
+}
+
+// ── Gaussian blur (separable) op gemaskeerd veld ────────────────────────────
+function blurVeld(f, sigma){
+  if(sigma<=0) return f;
+  const w=f.w, h=f.h, veld=f.veld, mask=f.mask;
+  const radius = Math.max(1, Math.ceil(sigma*3));
+  const kernel = new Float32Array(radius*2+1);
+  let ks=0;
+  for(let i=-radius;i<=radius;i++){
+    const v = Math.exp(-(i*i)/(2*sigma*sigma));
+    kernel[i+radius]=v; ks+=v;
+  }
+  for(let i=0;i<kernel.length;i++) kernel[i]/=ks;
+  const tmp = new Float32Array(w*h);
+  // horizontaal
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(!mask[y*w+x]){ tmp[y*w+x]=0; continue; }
+    let s=0, ws=0;
+    for(let k=-radius;k<=radius;k++){
+      const xx=x+k; if(xx<0||xx>=w) continue;
+      if(!mask[y*w+xx]) continue;
+      const wt=kernel[k+radius];
+      s+=veld[y*w+xx]*wt; ws+=wt;
+    }
+    tmp[y*w+x] = ws>0 ? s/ws : veld[y*w+x];
+  }
+  const out = new Float32Array(w*h);
+  // verticaal
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(!mask[y*w+x]){ out[y*w+x]=0; continue; }
+    let s=0, ws=0;
+    for(let k=-radius;k<=radius;k++){
+      const yy=y+k; if(yy<0||yy>=h) continue;
+      if(!mask[yy*w+x]) continue;
+      const wt=kernel[k+radius];
+      s+=tmp[yy*w+x]*wt; ws+=wt;
+    }
+    out[y*w+x] = ws>0 ? s/ws : tmp[y*w+x];
+  }
+  return {w,h, veld: out, mask};
+}
+
+// ── Veld → canvas (kleurschaal, alpha) ──────────────────────────────────────
+function tekenVeldOpCanvas(canvas, f, param){
+  const p = PARAMS[param];
+  const w=f.w, h=f.h;
+  const img = document.getElementById("img-a");
+  canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const tmp = document.createElement("canvas");
+  tmp.width=w; tmp.height=h;
+  const tctx = tmp.getContext("2d");
+  const imgData = tctx.createImageData(w,h);
+  const buf = imgData.data;
+  for(let i=0;i<w*h;i++){
+    if(!f.mask[i]){ buf[i*4+3]=0; continue; }
+    let v = f.veld[i];
+    if(p.bft) v = kmhNaarBft(v);
+    const [r,g,b] = interpKleur(v, p.schaal, p.kleuren);
+    buf[i*4]=r; buf[i*4+1]=g; buf[i*4+2]=b;
+    buf[i*4+3]=Math.round(alpha*255);
+  }
+  tctx.putImageData(imgData,0,0);
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+  ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+  // wis dunne rand
+  ctx.clearRect(0,0,canvas.width,3); ctx.clearRect(0,canvas.height-3,canvas.width,3);
+  ctx.clearRect(0,0,3,canvas.height); ctx.clearRect(canvas.width-3,0,3,canvas.height);
+}
+
+// ── NL-grens als SVG-pad bovenop ────────────────────────────────────────────
+function tekenNlGrens(svg){
+  if(typeof NL_GRENS === 'undefined') return;
+  let d = "";
+  for(const poly of NL_GRENS){
+    if(!poly || poly.length<2) continue;
+    poly.forEach(([lon,lat],i)=>{
+      const x = (lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;
+      const y = (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;
+      d += (i===0?"M":"L") + x.toFixed(1) + " " + y.toFixed(1);
+    });
+    d += "Z";
+  }
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  path.setAttribute("d", d);
+  path.setAttribute("class","nl-grens");
+  svg.appendChild(path);
+}
+
+// ── Stations als SVG-puntjes ────────────────────────────────────────────────
+function tekenStations(svg, param){
+  const punten = verzamelPunten();
+  if(!toonStations) return;
+  for(const p of punten){
+    const x = (p.lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;
+    const y = (1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;
+    const c = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    c.setAttribute("cx", x.toFixed(1)); c.setAttribute("cy", y.toFixed(1));
+    c.setAttribute("r","2.5"); c.setAttribute("class","station-pt");
+    svg.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", x.toFixed(1)); t.setAttribute("y", (y-5).toFixed(1));
+    t.setAttribute("class","station-tx");
+    let v = p.val; if(PARAMS[param].bft) v = kmhNaarBft(v);
+    t.textContent = (PARAMS[param].decimalen ? v.toFixed(PARAMS[param].decimalen) : Math.round(v));
+    svg.appendChild(t);
+  }
+}
+
+// ── Volledige render ────────────────────────────────────────────────────────
+function render(){
+  if(!mosmixData || !huidigDag || !landMask) return;
+  // panel A: pure IDW met huidige slider-power, geen blur
+  const fA = bouwVeld("pure");
+  // panel B/C: shepard met kNN, daarna blur
+  let fB = bouwVeld("shepard");
+  if(fB && blur>0) fB = blurVeld(fB, blur);
+  if(fA) tekenVeldOpCanvas(document.getElementById("cv-a"), fA, huidigParam);
+  if(fB) tekenVeldOpCanvas(document.getElementById("cv-b"), fB, huidigParam);
+  for(const id of ["svg-a","svg-b"]){
+    const svg = document.getElementById(id);
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+  }
+  tekenNlGrens(document.getElementById("svg-a"));
+  tekenNlGrens(document.getElementById("svg-b"));
+  tekenStations(document.getElementById("svg-a"), huidigParam);
+  tekenStations(document.getElementById("svg-b"), huidigParam);
+  tekenLegenda();
+}
+
+function tekenLegenda(){
+  const p = PARAMS[huidigParam];
+  for(const id of ["leg-a","leg-b"]){
+    const el = document.getElementById(id);
+    el.innerHTML = "";
+    for(const [kleur,label] of p.kleuren){
+      const it = document.createElement("span");
+      it.className="legenda-item";
+      it.innerHTML = `<span class="legenda-blok" style="background:${kleur}"></span>${label}`;
+      el.appendChild(it);
+    }
+  }
+}
+
+// ── UI bouwen ───────────────────────────────────────────────────────────────
+function bouwParamBtns(){
+  const wrap = document.getElementById("param-btns");
+  Object.keys(PARAMS).forEach(k=>{
+    const b = document.createElement("button");
+    b.textContent = k;
+    if(k===huidigParam) b.classList.add("actief");
+    b.onclick = ()=>{
+      huidigParam=k;
+      [...wrap.children].forEach(c=>c.classList.remove("actief"));
+      b.classList.add("actief");
+      render();
+    };
+    wrap.appendChild(b);
+  });
+}
+function bouwDagBtns(){
+  const wrap = document.getElementById("dag-btns");
+  wrap.innerHTML = "";
+  const dagen = Object.keys(mosmixData.data || {}).sort();
+  dagen.forEach((d,i)=>{
+    const b = document.createElement("button");
+    const dt = new Date(d);
+    b.textContent = dt.toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"});
+    if(i===0){ b.classList.add("actief"); huidigDag=d; }
+    b.onclick = ()=>{
+      huidigDag=d;
+      [...wrap.children].forEach(c=>c.classList.remove("actief"));
+      b.classList.add("actief");
+      render();
+    };
+    wrap.appendChild(b);
+  });
+}
+
+function koppelSliders(){
+  const koppel = (id, fn) => {
+    const el = document.getElementById(id);
+    const lab = document.getElementById(id+"-val");
+    el.addEventListener("input", ()=>{
+      lab.textContent = el.value;
+      fn(parseFloat(el.value));
+      // res verandert mask grootte → opnieuw maken
+      if(id==="res"){ landMask = maakLandMask(res); }
+      render();
+    });
+  };
+  koppel("alpha", v=>alpha=v);
+  koppel("power", v=>power=v);
+  koppel("knn", v=>knn=v);
+  koppel("blur", v=>blur=v);
+  koppel("res", v=>res=v);
+  document.getElementById("btn-stations").onclick = (e)=>{
+    toonStations = !toonStations;
+    e.target.classList.toggle("actief", toonStations);
+    render();
+  };
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+async function init(){
+  document.getElementById("status").textContent = "Data laden…";
+  try {
+    const r = await fetch("mosmix_nl.json");
+    mosmixData = await r.json();
+  } catch(e){
+    document.getElementById("status").textContent = "Kon mosmix_nl.json niet laden: "+e.message;
+    return;
+  }
+  bouwParamBtns();
+  bouwDagBtns();
+  koppelSliders();
+  // wacht tot basisafbeelding geladen is
+  const img = document.getElementById("img-a");
+  await new Promise(res=>{
+    if(img.complete && img.naturalWidth) res();
+    else img.addEventListener("load", res, {once:true});
+  });
+  landMask = maakLandMask(res);
+  document.getElementById("status").textContent =
+    `${Object.keys(mosmixData.stations).length} stations · run ${mosmixData.run||""}`;
+  render();
+}
+init();
+</script>
+</body>
+</html>
