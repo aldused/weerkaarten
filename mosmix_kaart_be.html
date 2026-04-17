@@ -36,7 +36,12 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 .kaart-wrap { display: flex; justify-content: center; padding: 16px; }
 .kaart-container { position: relative; width: 100%; max-width: 1000px; }
 .kaart-container img { width: 100%; display: block; border-radius: 0 0 4px 4px; }
-.kaart-container canvas, .kaart-container svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.kaart-container svg.basemap { display: block; width: 100%; height: auto; background: #b8d4e8; border-radius: 0 0 4px 4px; }
+.kaart-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.kaart-container svg.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.basemap-land { fill: #f5efd9; }
+.basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+.be-buitengrens { fill: none; stroke: white; stroke-width: 2; stroke-linejoin: round; }
 .kaart-header-band {
   background: #003366; color: white;
   padding: 14px 18px; border-radius: 4px 4px 0 0;
@@ -58,7 +63,8 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
 .grid-card-header .sub { font-size: 9px; color: #a8c8e8; }
 .grid-card-body { position: relative; }
 .grid-card-body img { width: 100%; display: block; }
-.grid-card-body canvas, .grid-card-body svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.grid-card-body svg.basemap { display: block; width: 100%; height: auto; background: #b8d4e8; position: static; }
+.grid-card-body canvas, .grid-card-body svg.overlay-grid { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 .btn-grid { padding: 5px 14px; border-radius: 16px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; }
 .btn-grid.actief { background: #003366; color: white; border-color: #003366; }
 #lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:1000; justify-content:center; align-items:center; }
@@ -114,9 +120,9 @@ body { font-family: Arial, sans-serif; background: #f0f4f8; color: #1a2b40; }
       </div>
     </div>
     <div class="kaart-container" onclick="openZoom()" style="cursor:zoom-in;">
-      <img src="kaart_basis_be.png?v=2" id="kaart-basis" alt="Basiskaart België">
+      <svg class="basemap" id="basemap-svg" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
       <canvas id="heatmap"></canvas>
-      <svg id="be-kaart" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg class="overlay" id="be-kaart" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
     <div class="zoom-hint" onclick="openZoom()">🔍 klik voor vergroting</div>
   </div>
@@ -206,95 +212,224 @@ function interpKleur(val, schaal, stops) {
 
 function ns(tag) { return document.createElementNS("http://www.w3.org/2000/svg",tag); }
 
-// ── Heatmap / IDW-interpolatie (alleen TX en TN) ─────────────────────────────
-const HEATMAP_RES = 4;
-const IDW_POWER = 2.5;
-const HEATMAP_ALPHA = 0.28;
+// ── Heatmap: Modified Shepard + Gaussian blur (TX/TN/FF/FX) ─────────────────
+const HEATMAP_RES = 3;
+const BASEMAP_W = 2000;
+const BASEMAP_H = 1000;
+const SHEPARD_POWER = 2.5;
+const SHEPARD_KNN = 8;
+const BLUR_SIGMA = 2;
+const HEATMAP_ALPHA = 0.55;
 const HEATMAP_PARAMS_BE = new Set(["TX","TN","FF","FX"]);
 let landMask = null;
+let provincies = null;
 
-
-function maakLandMask(){
-  const img = document.getElementById("kaart-basis");
-  const c = document.createElement("canvas");
-  c.width = img.naturalWidth; c.height = img.naturalHeight;
-  const ctx = c.getContext("2d");
-  ctx.drawImage(img, 0, 0);
-  const px = ctx.getImageData(0, 0, c.width, c.height).data;
-  const w = Math.ceil(c.width / HEATMAP_RES);
-  const h = Math.ceil(c.height / HEATMAP_RES);
-  landMask = {w, h, data: new Uint8Array(w * h)};
-  for(let y=0; y<h; y++){
-    for(let x=0; x<w; x++){
-      let isWaterCell = false;
-      for(let dy=0; dy<HEATMAP_RES && !isWaterCell; dy++){
-        for(let dx=0; dx<HEATMAP_RES && !isWaterCell; dx++){
-          const sx = Math.min(x*HEATMAP_RES+dx, c.width-1);
-          const sy = Math.min(y*HEATMAP_RES+dy, c.height-1);
-          const i = (sy * c.width + sx) * 4;
-          const r=px[i], g=px[i+1], b=px[i+2];
-          if((b > r + 12 && b > 155) || (r>195 && g>215 && b>228 && b>r) || (r>235 && g>235 && b>235))
-            isWaterCell = true;
-        }
-      }
-      landMask.data[y * w + x] = isWaterCell ? 0 : 1;
+function bouwBasemap(svg){
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  if(!provincies) return;
+  const ringD = (ring) => {
+    let d = "";
+    ring.forEach(([lon,lat], i) => {
+      const x = lonToX(lon), y = latToY(lat);
+      d += (i===0?"M":"L") + x.toFixed(1) + " " + y.toFixed(1);
+    });
+    return d + "Z";
+  };
+  let d = "";
+  for(const feat of provincies.features){
+    const g = feat.geometry;
+    const polys = g.type==="Polygon" ? [g.coordinates] : g.coordinates;
+    for(const poly of polys){
+      for(const ring of poly) d += ringD(ring);
     }
   }
+  const landPath = document.createElementNS("http://www.w3.org/2000/svg","path");
+  landPath.setAttribute("d", d);
+  landPath.setAttribute("class","basemap-land");
+  landPath.setAttribute("fill-rule","evenodd");
+  svg.appendChild(landPath);
+  const provPath = document.createElementNS("http://www.w3.org/2000/svg","path");
+  provPath.setAttribute("d", d);
+  provPath.setAttribute("class","basemap-prov");
+  svg.appendChild(provPath);
+}
+
+function tekenBuitengrens(svg){
+  if(!provincies) return;
+  const ringD = (ring) => {
+    let d = "";
+    ring.forEach(([lon,lat], i) => {
+      const x = lonToX(lon), y = latToY(lat);
+      d += (i===0?"M":"L") + x.toFixed(1) + " " + y.toFixed(1);
+    });
+    return d + "Z";
+  };
+  let d = "";
+  for(const feat of provincies.features){
+    const g = feat.geometry;
+    const polys = g.type==="Polygon" ? [g.coordinates] : g.coordinates;
+    for(const poly of polys) d += ringD(poly[0]);
+  }
+  const p = document.createElementNS("http://www.w3.org/2000/svg","path");
+  p.setAttribute("d", d);
+  p.setAttribute("class","be-buitengrens");
+  svg.appendChild(p);
+}
+
+function maakLandMask(){
+  if(!provincies) return;
+  const c = document.createElement("canvas");
+  c.width = BASEMAP_W; c.height = BASEMAP_H;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  for(const feat of provincies.features){
+    const g = feat.geometry;
+    const polys = g.type==="Polygon" ? [g.coordinates] : g.coordinates;
+    for(const poly of polys){
+      for(const ring of poly){
+        ring.forEach(([lon,lat], i) => {
+          const x = lonToX(lon)/SVG_W * BASEMAP_W;
+          const y = latToY(lat)/SVG_H * BASEMAP_H;
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.closePath();
+      }
+    }
+  }
+  ctx.fill("evenodd");
+  const px = ctx.getImageData(0,0,BASEMAP_W,BASEMAP_H).data;
+  const R = HEATMAP_RES;
+  const w = Math.ceil(BASEMAP_W/R), h = Math.ceil(BASEMAP_H/R);
+  const data = new Uint8Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    let isLand=false;
+    for(let dy=0; dy<R && !isLand; dy++) for(let dx=0; dx<R && !isLand; dx++){
+      const sx = Math.min(x*R+dx, BASEMAP_W-1), sy = Math.min(y*R+dy, BASEMAP_H-1);
+      if(px[(sy*BASEMAP_W+sx)*4+3] > 0) isLand=true;
+    }
+    data[y*w+x] = isLand ? 1 : 0;
+  }
+  landMask = {w, h, data};
+}
+
+function _shepardVeld(paramData, stations, p){
+  const w=landMask.w, h=landMask.h;
+  const punten = [];
+  Object.entries(paramData).forEach(([naam, val]) => {
+    if(!stations[naam] || val == null) return;
+    const [lon, lat] = stations[naam];
+    punten.push({x: lonToX(lon)/SVG_W * w, y: latToY(lat)/SVG_H * h, val});
+  });
+  if(punten.length < 3) return null;
+  const N = punten.length;
+  const K = Math.min(SHEPARD_KNN, N);
+  const veld = new Float32Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const idx = y*w+x;
+    if(!landMask.data[idx]) continue;
+    const dArr = new Float64Array(N);
+    for(let i=0;i<N;i++){
+      const dx=x-punten[i].x, dy=y-punten[i].y;
+      dArr[i] = Math.sqrt(dx*dx+dy*dy);
+    }
+    const idxs = new Int32Array(N); for(let i=0;i<N;i++) idxs[i]=i;
+    for(let k=0;k<K;k++){
+      let mi=k;
+      for(let j=k+1;j<N;j++) if(dArr[idxs[j]]<dArr[idxs[mi]]) mi=j;
+      const t=idxs[k]; idxs[k]=idxs[mi]; idxs[mi]=t;
+    }
+    const R = dArr[idxs[K-1]] + 1e-6;
+    let sumW=0, sumWV=0;
+    for(let k=0;k<K;k++){
+      const i=idxs[k], d=dArr[i];
+      if(d<0.7){ sumWV=punten[i].val; sumW=1; break; }
+      const num = (R-d)/(R*d);
+      const wi = Math.pow(num, SHEPARD_POWER);
+      sumW+=wi; sumWV+=wi*punten[i].val;
+    }
+    veld[idx] = sumWV/sumW;
+  }
+  return veld;
+}
+
+function _blurVeld(veld){
+  const sigma = BLUR_SIGMA;
+  if(sigma<=0) return veld;
+  const w=landMask.w, h=landMask.h, mask=landMask.data;
+  const radius = Math.max(1, Math.ceil(sigma*3));
+  const kernel = new Float32Array(radius*2+1);
+  let ks=0;
+  for(let i=-radius;i<=radius;i++){
+    const v = Math.exp(-(i*i)/(2*sigma*sigma));
+    kernel[i+radius]=v; ks+=v;
+  }
+  for(let i=0;i<kernel.length;i++) kernel[i]/=ks;
+  const tmp = new Float32Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(!mask[y*w+x]){ tmp[y*w+x]=0; continue; }
+    let s=0, ws=0;
+    for(let k=-radius;k<=radius;k++){
+      const xx=x+k; if(xx<0||xx>=w) continue;
+      if(!mask[y*w+xx]) continue;
+      const wt=kernel[k+radius];
+      s+=veld[y*w+xx]*wt; ws+=wt;
+    }
+    tmp[y*w+x] = ws>0 ? s/ws : veld[y*w+x];
+  }
+  const out = new Float32Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(!mask[y*w+x]){ out[y*w+x]=0; continue; }
+    let s=0, ws=0;
+    for(let k=-radius;k<=radius;k++){
+      const yy=y+k; if(yy<0||yy>=h) continue;
+      if(!mask[yy*w+x]) continue;
+      const wt=kernel[k+radius];
+      s+=tmp[yy*w+x]*wt; ws+=wt;
+    }
+    out[y*w+x] = ws>0 ? s/ws : tmp[y*w+x];
+  }
+  return out;
 }
 
 function tekenHeatmapOpCanvas(hc, dagKey, param){
   const p = PARAMS[param];
   if(!p || !HEATMAP_PARAMS_BE.has(param)){ hc.width=1; hc.height=1; return; }
   if(!landMask) maakLandMask();
+  if(!landMask){ hc.width=1; hc.height=1; return; }
+
   const dagObj = mosmixData?.data?.[dagKey];
   const paramData = dagObj ? dagObj[param] : null;
   if(!paramData) return;
   const stations = mosmixData.stations;
-  const punten = [];
-  Object.entries(paramData).forEach(([naam, val]) => {
-    if(!stations[naam] || val == null) return;
-    const [lon, lat] = stations[naam];
-    const px = (lon - LON_MIN) / (LON_MAX - LON_MIN) * landMask.w;
-    const py = (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * landMask.h;
-    punten.push({x: px, y: py, val});
-  });
-  if(punten.length < 3) return;
-  const basisImg = document.getElementById("kaart-basis");
+
+  let veld = _shepardVeld(paramData, stations, p);
+  if(!veld) return;
+  veld = _blurVeld(veld);
+
   const w = landMask.w, h = landMask.h;
-  hc.width = basisImg.naturalWidth; hc.height = basisImg.naturalHeight;
+  hc.width = BASEMAP_W; hc.height = BASEMAP_H;
   const ctx = hc.getContext("2d");
   ctx.clearRect(0, 0, hc.width, hc.height);
-  const imgData = ctx.createImageData(w, h);
-  const buf = imgData.data;
-  for(let y=0; y<h; y++){
-    for(let x=0; x<w; x++){
-      const idx = y * w + x;
-      if(!landMask.data[idx]){ buf[idx*4+3] = 0; continue; }
-      let sumW = 0, sumWV = 0;
-      for(let i=0; i<punten.length; i++){
-        const dx = x - punten[i].x, dy = y - punten[i].y;
-        const d2 = dx*dx + dy*dy;
-        if(d2 < 0.5){ sumWV = punten[i].val; sumW = 1; break; }
-        const w_i = 1 / Math.pow(d2, IDW_POWER / 2);
-        sumW += w_i; sumWV += w_i * punten[i].val;
-      }
-      const val = sumWV / sumW;
-      const [bg] = interpKleur(val, p.schaal, p.kleuren);
-      const m = bg.match(/\d+/g);
-      buf[idx*4] = +m[0]; buf[idx*4+1] = +m[1]; buf[idx*4+2] = +m[2];
-      buf[idx*4+3] = Math.round(HEATMAP_ALPHA * 255);
-    }
-  }
+
   const tmpC = document.createElement("canvas");
   tmpC.width = w; tmpC.height = h;
-  tmpC.getContext("2d").putImageData(imgData, 0, 0);
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  const tctx = tmpC.getContext("2d");
+  const imgData = tctx.createImageData(w, h);
+  const buf = imgData.data;
+  for(let i=0;i<w*h;i++){
+    if(!landMask.data[i]){ buf[i*4+3]=0; continue; }
+    let v = veld[i];
+    if(p.bft) v = kmhNaarBft(v);
+    const [bg] = interpKleur(v, p.schaal, p.kleuren);
+    const m = bg.match(/\d+/g);
+    buf[i*4]=+m[0]; buf[i*4+1]=+m[1]; buf[i*4+2]=+m[2];
+    buf[i*4+3] = Math.round(HEATMAP_ALPHA*255);
+  }
+  tctx.putImageData(imgData, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(tmpC, 0, 0, hc.width, hc.height);
-  // Wis buitenste rand zodat er geen gekleurde zoom ontstaat
-  ctx.clearRect(0, 0, hc.width, 4);
-  ctx.clearRect(0, hc.height-4, hc.width, 4);
-  ctx.clearRect(0, 0, 4, hc.height);
-  ctx.clearRect(hc.width-4, 0, 4, hc.height);
 }
 
 function tekenHeatmap(){
@@ -317,17 +452,81 @@ function kmhNaarBft(kmh) {
   return 12;
 }
 
+// Heatmap-stationsstijl: kleine dot + groot getal met witte halo (TX/TN/FF/FX)
+function tekenHeatmapStation(svg, item, p, dagObj){
+  const cx = lonToX(item.lon), cy = latToY(item.lat);
+  const g = ns("g");
+  const dot = ns("circle");
+  dot.setAttribute("cx", cx.toFixed(1)); dot.setAttribute("cy", cy.toFixed(1));
+  dot.setAttribute("r","2"); dot.setAttribute("fill","#1a1a1a");
+  g.appendChild(dot);
+
+  let tekst;
+  if(p.bft) tekst = kmhNaarBft(item.val) + "";
+  else tekst = item.val.toFixed(p.decimalen);
+
+  const t = ns("text");
+  t.setAttribute("x", cx.toFixed(1)); t.setAttribute("y", (cy-7).toFixed(1));
+  t.setAttribute("text-anchor","middle");
+  t.setAttribute("font-family","Arial,sans-serif");
+  t.setAttribute("font-weight","700");
+  t.setAttribute("font-size","20");
+  t.setAttribute("fill","#1a1a1a");
+  t.setAttribute("paint-order","stroke");
+  t.setAttribute("stroke","white");
+  t.setAttribute("stroke-width","4");
+  t.setAttribute("stroke-linejoin","round");
+  t.textContent = tekst;
+  g.appendChild(t);
+
+  if(p.bft){
+    const ddData = dagObj?.["DD"];
+    const dd = ddData ? ddData[item.naam] : null;
+    const pijl = windpijl(dd);
+    if(pijl){
+      const pt = ns("text");
+      pt.setAttribute("x", (cx+12).toFixed(1)); pt.setAttribute("y", (cy+5).toFixed(1));
+      pt.setAttribute("text-anchor","middle");
+      pt.setAttribute("font-family","Arial,sans-serif");
+      pt.setAttribute("font-weight","900");
+      pt.setAttribute("font-size","18");
+      pt.setAttribute("fill","#1a1a1a");
+      pt.setAttribute("paint-order","stroke");
+      pt.setAttribute("stroke","white");
+      pt.setAttribute("stroke-width","3.5");
+      pt.setAttribute("stroke-linejoin","round");
+      pt.textContent = pijl;
+      g.appendChild(pt);
+    }
+  }
+  svg.appendChild(g);
+}
+
+function tekenCopyright(svg){
+  const cr = ns("text");
+  cr.setAttribute("x", SVG_W - 10); cr.setAttribute("y", SVG_H - 8);
+  cr.setAttribute("text-anchor", "end"); cr.setAttribute("font-size", "13");
+  cr.setAttribute("font-family", "Arial,sans-serif"); cr.setAttribute("font-style", "italic");
+  cr.setAttribute("fill", "#666");
+  cr.textContent = "© Ed Aldus / DWD MOSMIX";
+  svg.appendChild(cr);
+}
+
 function tekenKaart() {
   const svg = document.getElementById("be-kaart");
   svg.innerHTML = "";
   const p = PARAMS[huidigParam];
   if (!p) return;
 
+  // Witte BE-buitengrens onderaan overlay
+  tekenBuitengrens(svg);
+
   const dagObj = mosmixData.data[huidigDag];
   if (!dagObj || !dagObj[huidigParam]) return;
 
   const paramData = dagObj[huidigParam];
   const stations = mosmixData.stations;
+  const isHeatmap = HEATMAP_PARAMS_BE.has(huidigParam);
 
   let items = Object.entries(paramData)
     .filter(([naam]) => stations[naam])
@@ -337,7 +536,13 @@ function tekenKaart() {
   const invertSort = ["TN","TTD","gevoels","VV"];
   items.sort((a,b) => invertSort.includes(huidigParam) ? a.val - b.val : b.val - a.val);
 
-  // Teken elk station
+  if(isHeatmap){
+    items.forEach(item => tekenHeatmapStation(svg, item, p, dagObj));
+    tekenCopyright(svg);
+    return;
+  }
+
+  // Teken elk station (klassieke stijl)
   items.forEach((item, idx) => {
     const cx = lonToX(item.lon), cy = latToY(item.lat);
     const [bg, fg] = interpKleur(item.val, p.schaal, p.kleuren);
@@ -546,19 +751,25 @@ function tekenGrid() {
 
     const body = document.createElement("div");
     body.className = "grid-card-body";
-    const img = document.createElement("img");
-    img.src = "kaart_basis_be.png?v=2";
-    body.appendChild(img);
+    const baseSvg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+    baseSvg.setAttribute("viewBox","0 0 1000 500");
+    baseSvg.setAttribute("preserveAspectRatio","xMidYMid meet");
+    baseSvg.setAttribute("class","basemap");
+    baseSvg.style.cssText = "display:block;width:100%;height:auto;background:#b8d4e8;";
+    bouwBasemap(baseSvg);
+    body.appendChild(baseSvg);
 
     if(HEATMAP_PARAMS_BE.has(huidigParam)){
       const hc = document.createElement("canvas");
+      hc.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;";
       body.appendChild(hc);
-      const renderHm = () => { if(!landMask) maakLandMask(); tekenHeatmapOpCanvas(hc, dagKey, huidigParam); };
-      if(img.complete) renderHm(); else img.addEventListener("load", renderHm);
+      if(!landMask) maakLandMask();
+      tekenHeatmapOpCanvas(hc, dagKey, huidigParam);
     }
 
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 1000 500");
+    svg.setAttribute("class","overlay-grid");
     tekenKaartOpSvg(svg, dagKey, huidigParam);
     body.appendChild(svg);
     card.appendChild(body);
@@ -573,6 +784,9 @@ function tekenKaartOpSvg(svg, dagKey, param) {
   if (!dagObj || !dagObj[param]) return;
   const paramData = dagObj[param];
   const stations = mosmixData.stations;
+  const isHeatmap = HEATMAP_PARAMS_BE.has(param);
+
+  tekenBuitengrens(svg);
 
   let items = Object.entries(paramData)
     .filter(([naam]) => stations[naam])
@@ -580,6 +794,11 @@ function tekenKaartOpSvg(svg, dagKey, param) {
 
   const invertSort = ["TN","TTD","gevoels","VV"];
   items.sort((a,b) => invertSort.includes(param) ? a.val - b.val : b.val - a.val);
+
+  if(isHeatmap){
+    items.forEach(item => tekenHeatmapStation(svg, item, p, dagObj));
+    return;
+  }
 
   items.forEach((item, idx) => {
     const cx = lonToX(item.lon), cy = latToY(item.lat);
@@ -626,29 +845,52 @@ function update() {
 }
 
 function _exportCanvas(callback) {
-  const img = document.getElementById("kaart-basis");
+  const baseSvg = document.getElementById("basemap-svg");
   const hc  = document.getElementById("heatmap");
-  const svg = document.getElementById("be-kaart");
+  const overlay = document.getElementById("be-kaart");
   const header = document.getElementById("kaart-header");
+  const W = BASEMAP_W, H = BASEMAP_H;
   const canvas = document.createElement("canvas");
-  const scale = 2;
-  canvas.width = img.naturalWidth * scale;
-  canvas.height = (img.naturalHeight + header.offsetHeight) * scale;
+  canvas.width = W;
+  canvas.height = H + header.offsetHeight * 2;
   const ctx = canvas.getContext("2d");
-  ctx.scale(scale, scale);
-  tekenHeaderCanvas(ctx, img.naturalWidth, header.offsetHeight);
-  ctx.drawImage(img, 0, header.offsetHeight);
-  if(hc.width > 1) ctx.drawImage(hc, 0, header.offsetHeight, img.naturalWidth, img.naturalHeight);
-  const svgStr = new XMLSerializer().serializeToString(svg);
-  const blob = new Blob([svgStr],{type:"image/svg+xml"});
-  const url = URL.createObjectURL(blob);
-  const svgImg = new Image();
-  svgImg.onload = () => {
-    ctx.drawImage(svgImg, 0, header.offsetHeight, img.naturalWidth, img.naturalHeight);
-    URL.revokeObjectURL(url);
+  const headerH = header.offsetHeight * 2;
+  tekenHeaderCanvas(ctx, W, headerH);
+
+  const svgToImg = (svg, extraStyle) => new Promise(res => {
+    const clone = svg.cloneNode(true);
+    if(extraStyle){
+      const st = document.createElementNS("http://www.w3.org/2000/svg","style");
+      st.textContent = extraStyle;
+      clone.insertBefore(st, clone.firstChild);
+    }
+    clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
+    clone.setAttribute("width", W);
+    clone.setAttribute("height", H);
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], {type:"image/svg+xml"});
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); res(im); };
+    im.src = url;
+  });
+
+  const baseStyle = `
+    svg { background: #b8d4e8; }
+    .basemap-land { fill: #f5efd9; }
+    .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+  `;
+  const overlayStyle = `
+    .be-buitengrens { fill: none; stroke: white; stroke-width: 2; stroke-linejoin: round; }
+  `;
+
+  Promise.all([svgToImg(baseSvg, baseStyle), svgToImg(overlay, overlayStyle)]).then(([baseImg, ovImg]) => {
+    ctx.fillStyle = "#b8d4e8";
+    ctx.fillRect(0, headerH, W, H);
+    ctx.drawImage(baseImg, 0, headerH, W, H);
+    if(hc.width > 1) ctx.drawImage(hc, 0, headerH, W, H);
+    ctx.drawImage(ovImg, 0, headerH, W, H);
     callback(canvas);
-  };
-  svgImg.src = url;
+  });
 }
 
 function slaOp() {
@@ -702,10 +944,15 @@ function leesUrlParams() {
   }
 }
 
-const imgEl = document.getElementById("kaart-basis");
 function startLaad() {
   leesUrlParams();
-  fetch("mosmix_be.json?t="+Date.now()).then(r=>r.json()).then(data => {
+  Promise.all([
+    fetch("mosmix_be.json?t="+Date.now()).then(r=>r.json()),
+    fetch("be_provincies.geojson").then(r=>r.json())
+  ]).then(([data, prov]) => {
+    provincies = prov;
+    bouwBasemap(document.getElementById("basemap-svg"));
+    maakLandMask();
     mosmixData = data;
     // Run-info tonen
     let updateTekst = "Bijgewerkt: " + data.bijgewerkt.replace("T"," ");
@@ -746,11 +993,10 @@ function startLaad() {
     huidigDag = data.dagen[0];
     update();
   }).catch(e => {
-    document.getElementById("status").textContent = "Kon mosmix_be.json niet laden: " + e.message;
+    document.getElementById("status").textContent = "Kon data niet laden: " + e.message;
   });
 }
-if (imgEl.complete) startLaad();
-else { imgEl.onload = startLaad; imgEl.onerror = startLaad; }
+startLaad();
 </script>
 </body>
 </html>
