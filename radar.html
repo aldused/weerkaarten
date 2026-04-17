@@ -300,14 +300,20 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   function setupCanvas() {
     canvas = document.getElementById("radar-canvas");
     var dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(bgImg.width * dpr);
+    // Backing-pixels = logisch × dpr (scherp op HiDPI); CSS = logisch (object-fit doet de rest)
+    canvas.width  = Math.round(bgImg.width  * dpr);
     canvas.height = Math.round(bgImg.height * dpr);
+    canvas.style.width  = bgImg.width  + "px";
+    canvas.style.height = bgImg.height + "px";
     ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // alle drawcommands in logische pixels
   }
 
   function renderFrame() {
     if (!radarData || !bgImg) return;
+
+    // Logische canvas-afmetingen (CSS px); de dpr-scaling staat in ctx.transform
+    var W = bgImg.width, H = bgImg.height;
 
     // Crop-regio in bron pixels (bgImg)
     var srcW = bgImg.width / zoomLevel;
@@ -319,7 +325,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
 
     // 1. Achtergrond (met crop)
     ctx.drawImage(bgImg, viewX, viewY, srcW, srcH,
-                  0, 0, canvas.width, canvas.height);
+                  0, 0, W, H);
 
     // 2. Radar data op offscreen canvas (volledige resolutie)
     var offset = frameIdx * nLat * nLon;
@@ -349,7 +355,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     // Pixelated rendering voor de radar (past bij lage resolutie brondata)
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(offscreen, osSrcX, osSrcY, osSrcW, osSrcH,
-                  0, 0, canvas.width, canvas.height);
+                  0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
 
     // 4. Kaart overlay (kustlijnen, steden) met crop
@@ -357,30 +363,30 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
       var ovScale = ovlImg.width / bgImg.width;
       ctx.drawImage(ovlImg, viewX * ovScale, viewY * ovScale,
                     srcW * ovScale, srcH * ovScale,
-                    0, 0, canvas.width, canvas.height);
+                    0, 0, W, H);
     }
 
     // 5. Tijdstempel linksboven op canvas (zodat het meekomt in exports)
     var tijdTekst = meta.tijden_tekst ? meta.tijden_tekst[frameIdx] : "";
     ctx.save();
-    ctx.font = "bold " + Math.round(canvas.height * 0.022) + "px Arial";
+    ctx.font = "bold " + Math.round(H * 0.022) + "px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillText(tijdTekst, 12, Math.round(canvas.height * 0.032) + 2);
+    ctx.fillText(tijdTekst, 12, Math.round(H * 0.032) + 2);
     ctx.fillStyle = "white";
-    ctx.fillText(tijdTekst, 10, Math.round(canvas.height * 0.032));
+    ctx.fillText(tijdTekst, 10, Math.round(H * 0.032));
     ctx.restore();
 
     // 6. Copyright rechtsonder op canvas (in een venster)
     ctx.save();
     var cpTxt = "\u00a9 Ed Aldus / KNMI";
-    var cpFont = Math.round(canvas.height * 0.014);
+    var cpFont = Math.round(H * 0.014);
     ctx.font = "600 " + cpFont + "px Arial";
     var cpW = ctx.measureText(cpTxt).width;
     var padX = 8, padY = 5;
     var boxW = cpW + padX * 2;
     var boxH = cpFont + padY * 2;
-    var boxX = canvas.width - boxW - 10;
-    var boxY = canvas.height - boxH - 10;
+    var boxX = W - boxW - 10;
+    var boxY = H - boxH - 10;
     // Venster met afgeronde hoeken
     var r = 5;
     ctx.beginPath();
