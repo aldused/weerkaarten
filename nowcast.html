@@ -64,6 +64,20 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
 .huidig-waarde{font-size:1.2rem;font-weight:700;color:var(--text);margin-top:2px;font-family:monospace}
 .huidig-sub{font-size:.65rem;color:var(--text2);margin-top:1px}
 @media(max-width:640px){.header h1{font-size:.95rem}input[type=text]{min-width:160px}}
+/* ── Uurschema tabel ─────────────────────────────────────────────── */
+.uur-tabel-wrap{overflow-x:auto;margin-top:2px}
+.uur-tabel{width:100%;border-collapse:collapse;font-size:.78rem}
+.uur-tabel th{background:#003366;color:white;padding:5px 8px;text-align:center;font-size:.7rem;white-space:nowrap}
+.uur-tabel th:first-child{text-align:left}
+.uur-tabel td{padding:3px 8px;text-align:center;border-bottom:1px solid #edf0f5;white-space:nowrap}
+.uur-tabel td:first-child{text-align:left;font-weight:700;color:#003366}
+.uur-tabel tr.dag-kop td{background:#dde8f8;font-weight:700;color:#003366;font-size:.76rem;padding:4px 8px;text-align:left;border-bottom:2px solid #c0d0e8}
+.uur-tabel tr:hover:not(.dag-kop){background:#f5f8fc}
+.uur-tabel tr.huidig-uur{background:#fffbe0}
+.neer-cel.droog{color:#bbb}
+.neer-cel.licht{color:#3399ff;font-weight:600}
+.neer-cel.matig{color:#0055cc;font-weight:700}
+.neer-cel.zwaar{color:#7700aa;font-weight:700}
 </style>
 </head>
 <body>
@@ -71,7 +85,7 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
 <div class="header">
   <div>
     <h1>Nowcast 15-min – HARMONIE &amp; ICON-D2</h1>
-    <p id="header-sub">De komende 8 uur · Bron: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</p>
+    <p id="header-sub">Grafieken: 8 uur · Uurschema: 48 uur · Bron: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</p>
   </div>
   <div class="header-right">
     Ed Aldus WM<br>
@@ -236,6 +250,39 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
     <div class="legenda" id="leg-wind-2"></div>
     <div class="canvas-wrap hoog"><canvas id="canvas-wind-2"></canvas></div>
   </div>
+
+  <div class="grafiek-blok" id="blok-uur-tabel" style="display:none">
+    <div class="grafiek-head">
+      <div class="grafiek-titel">Uurschema komende 48 uur</div>
+      <div class="grafiek-head-right">
+        <div class="blok-loc"></div>
+        <div class="blok-copy">&copy; Ed Aldus &middot; HARMONIE <span style="color:#cc2222">&#9632;</span> · ICON-D2 <span style="color:#2266cc">&#9632;</span></div>
+      </div>
+    </div>
+    <div class="grafiek-sub">Geaggregeerd per uur &middot; neerslag = som/uur &middot; wind = gemiddeld/max stoot</div>
+    <div class="uur-tabel-wrap">
+      <table class="uur-tabel">
+        <thead><tr><th>Tijd</th><th>Temp (°C)</th><th>Neerl. (mm)</th><th>Wind</th><th>Stoot</th><th>Bewolk.</th></tr></thead>
+        <tbody id="tabel-uur-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grafiek-blok" id="blok-uur-tabel-2" style="display:none">
+    <div class="grafiek-head">
+      <div class="grafiek-titel"><span class="loc-tag b">B</span>Uurschema komende 48 uur</div>
+      <div class="grafiek-head-right">
+        <div class="blok-loc"></div>
+      </div>
+    </div>
+    <div class="grafiek-sub">Geaggregeerd per uur &middot; neerslag = som/uur &middot; wind = gemiddeld/max stoot</div>
+    <div class="uur-tabel-wrap">
+      <table class="uur-tabel">
+        <thead><tr><th>Tijd</th><th>Temp (°C)</th><th>Neerl. (mm)</th><th>Wind</th><th>Stoot</th><th>Bewolk.</th></tr></thead>
+        <tbody id="tabel-uur-body-2"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <div id="copyright">&copy; Ed Aldus WM &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
@@ -335,7 +382,7 @@ function toggleVergelijk(btn){
   document.getElementById('loc-tag-a').style.display = vergelijkActief ? '' : 'none';
   if (!vergelijkActief) {
     // Verberg loc2 grafieken
-    ['blok-temp-2','blok-neerslag-2','blok-wind-2'].forEach(id =>
+    ['blok-temp-2','blok-neerslag-2','blok-wind-2','blok-uur-tabel-2'].forEach(id =>
       document.getElementById(id).style.display = 'none');
     laatsteData2 = null;
   } else if (huidigNaam2) {
@@ -410,7 +457,7 @@ function bouwUrl(lat, lon){
   return `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
     + `&minutely_15=${variabelen}`
     + `&wind_speed_unit=kmh&timezone=Europe%2FAmsterdam`
-    + `&past_minutely_15=12&forecast_minutely_15=32`;
+    + `&past_minutely_15=12&forecast_minutely_15=192`;
 }
 
 async function laadData(){
@@ -455,9 +502,19 @@ function nuIndex(tijden){
 }
 
 function tekenChartsVoorLocatie(data, locNaam, suffix){
-  const h = data.harmonie.minutely_15;
-  const i = data.icond2.minutely_15;
-  if (!h || !h.time || !h.time.length) return;
+  const hFull = data.harmonie.minutely_15;
+  const iFull = data.icond2.minutely_15;
+  if (!hFull || !hFull.time || !hFull.time.length) return;
+
+  // Grafieken: eerste 44 punten = 3u terug + 8u vooruit (15-min resolutie)
+  const CHART_PTS = 44;
+  function sliceM15(m) {
+    const s = {};
+    for (const k in m) s[k] = Array.isArray(m[k]) ? m[k].slice(0, CHART_PTS) : m[k];
+    return s;
+  }
+  const h = sliceM15(hFull);
+  const i = sliceM15(iFull);
 
   const tijden = h.time;
   const labels = tijden.map(formatTime);
@@ -535,6 +592,8 @@ function tekenChartsVoorLocatie(data, locNaam, suffix){
   }
   document.getElementById('leg-wind' + suffix).innerHTML = legHtml(windLeg);
   drawChart('canvas-wind' + suffix, 'line', labels, windDatasets, {y: {title: {display: true, text: 'km/u'}, beginAtZero: true}}, nuIdx);
+
+  bouwUurTabel(data, locNaam, suffix);
 }
 
 function tekenCharts(){
@@ -571,7 +630,7 @@ function tekenCharts(){
   if (vergelijkActief && laatsteData2) {
     tekenChartsVoorLocatie(laatsteData2, huidigNaam2, '-2');
   } else {
-    ['blok-temp-2','blok-neerslag-2','blok-wind-2'].forEach(id =>
+    ['blok-temp-2','blok-neerslag-2','blok-wind-2','blok-uur-tabel-2'].forEach(id =>
       document.getElementById(id).style.display = 'none');
   }
 }
@@ -707,6 +766,123 @@ const waardenPlugin = {
     ctx.restore();
   }
 };
+
+// Wind direction (meteorologisch: vanwaar wind komt) → pijl richting beweging
+function dirPijl(deg) {
+  if (deg == null) return '';
+  const arr = ['↑','↗','→','↘','↓','↙','←','↖'];
+  return arr[Math.round(((deg + 180) % 360) / 45) % 8];
+}
+
+function bouwUurTabel(data, locNaam, suffix) {
+  const blok = document.getElementById('blok-uur-tabel' + suffix);
+  const tbody = document.getElementById('tabel-uur-body' + suffix);
+  if (!blok || !tbody) return;
+
+  const hFull = data.harmonie.minutely_15;
+  const iFull = data.icond2.minutely_15;
+  const src = (modelActief.harmonie && hFull?.time?.length) ? hFull : iFull;
+  if (!src?.time?.length) return;
+
+  // ICON-D2 indices gegroepeerd per uur (tijden kunnen licht afwijken)
+  const iHourMap = {};
+  if (modelActief.icond2 && iFull?.time) {
+    iFull.time.forEach((t, j) => {
+      const d = new Date(t);
+      const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
+      if (!iHourMap[k]) iHourMap[k] = [];
+      iHourMap[k].push(j);
+    });
+  }
+
+  // HARMONIE indices gegroepeerd per uur
+  const hourMap = {};
+  src.time.forEach((t, idx) => {
+    const d = new Date(t);
+    const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
+    if (!hourMap[k]) hourMap[k] = {dt: new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()), idxs: []};
+    hourMap[k].idxs.push(idx);
+  });
+
+  const nu = Date.now();
+  const dagNamen = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+  const maandNamen = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+
+  const html = [];
+  let huidigDag = null;
+
+  Object.values(hourMap)
+    .filter(g => g.dt.getTime() + 3600000 > nu)
+    .sort((a, b) => a.dt - b.dt)
+    .forEach(g => {
+      const dagStr = `${dagNamen[g.dt.getDay()]} ${g.dt.getDate()} ${maandNamen[g.dt.getMonth()]}`;
+      if (dagStr !== huidigDag) {
+        huidigDag = dagStr;
+        html.push(`<tr class="dag-kop"><td colspan="6">${dagStr}</td></tr>`);
+      }
+
+      const uur = String(g.dt.getHours()).padStart(2,'0') + ':00';
+      const idxs = g.idxs;
+      const avg = (arr) => { const v = idxs.map(i => arr?.[i]).filter(v => v != null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
+      const sum = (arr) => idxs.reduce((s,i) => s + (arr?.[i] || 0), 0);
+      const max = (arr) => { const v = idxs.map(i => arr?.[i]).filter(v => v != null); return v.length ? Math.max(...v) : null; };
+
+      // HARMONIE aggregatie
+      let hTemp = null, hPrecip = 0, hWind = null, hGust = null, hDir = null, hCloud = null;
+      if (modelActief.harmonie && hFull) {
+        hTemp   = avg(hFull.temperature_2m);
+        hPrecip = sum(hFull.precipitation);
+        hWind   = avg(hFull.wind_speed_10m);
+        hGust   = max(hFull.wind_gusts_10m);
+        hDir    = hFull.wind_direction_10m?.[idxs[Math.floor(idxs.length/2)]];
+        hCloud  = avg(hFull.cloud_cover);
+      }
+
+      // ICON-D2 temperatuur
+      let iTemp = null;
+      if (modelActief.icond2 && iFull) {
+        const k = `${g.dt.getFullYear()}-${g.dt.getMonth()}-${g.dt.getDate()}-${g.dt.getHours()}`;
+        const iIdxs = iHourMap[k] || [];
+        const iTemps = iIdxs.map(j => iFull.temperature_2m?.[j]).filter(v => v != null);
+        iTemp = iTemps.length ? iTemps.reduce((a,b)=>a+b,0)/iTemps.length : null;
+      }
+
+      // Temp cel
+      let tempHtml = '';
+      if (modelActief.harmonie && hTemp != null)
+        tempHtml += `<span style="color:#cc2222;font-weight:700">${Math.round(hTemp)}°</span>`;
+      if (modelActief.icond2 && iTemp != null)
+        tempHtml += `<span style="color:#2266cc;font-size:.85em;margin-left:4px">${Math.round(iTemp)}°</span>`;
+
+      // Neerslag cel
+      let neerKls = 'neer-cel droog', neerTxt = '–';
+      if (hPrecip > 0.05) {
+        neerTxt = hPrecip.toFixed(1);
+        neerKls = 'neer-cel ' + (hPrecip < 0.5 ? 'licht' : hPrecip < 2 ? 'matig' : 'zwaar');
+      }
+
+      // Wind cel
+      const bft  = hWind != null ? kmhToBft(hWind) : null;
+      const gBft = hGust != null ? kmhToBft(hGust) : null;
+      const windTxt  = bft  != null ? `${dirPijl(hDir)}&thinsp;${bft} Bft`  : '–';
+      const stootTxt = gBft != null ? `${gBft} Bft` : '–';
+      const cloudTxt = hCloud != null ? Math.round(hCloud) + '%' : '–';
+
+      const isHuidig = g.dt.getTime() <= nu && g.dt.getTime() + 3600000 > nu;
+      html.push(`<tr${isHuidig ? ' class="huidig-uur"' : ''}>
+        <td>${uur}</td>
+        <td>${tempHtml || '–'}</td>
+        <td class="${neerKls}">${neerTxt}</td>
+        <td>${windTxt}</td>
+        <td>${stootTxt}</td>
+        <td>${cloudTxt}</td>
+      </tr>`);
+    });
+
+  tbody.innerHTML = html.join('');
+  document.querySelectorAll(`#blok-uur-tabel${suffix} .blok-loc`).forEach(el => el.textContent = '· ' + locNaam);
+  blok.style.display = '';
+}
 
 function drawChart(canvasId, type, labels, datasets, scales, nuIdx){
   if (charts[canvasId]) charts[canvasId].destroy();
