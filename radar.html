@@ -148,13 +148,26 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   var DATA_BASE = "https://harmonie-data.weerlab.nl/";
   var META_URL = DATA_BASE + "radar_meta.json";
   var BIN_URL  = DATA_BASE + "radar_data.bin";
-  var BG_URL   = DATA_BASE + "radar_kaart_bg.png";
-  var OVL_URL  = DATA_BASE + "radar_kaart_overlay.png";
   var REFRESH_MS = 5 * 60 * 1000; // 5 minuten
+
+  // ── Vector basemap configuratie ─────────────────────────────────────────
+  // Server resampelt al naar PlateCarree dit bereik:
+  var PROJ_LON_MIN = 3.0,  PROJ_LON_MAX = 7.5;
+  var PROJ_LAT_MIN = 50.4, PROJ_LAT_MAX = 53.9;
+  // Geografische aspect ratio (op midden 52.15°N)
+  var LAT_MID = (PROJ_LAT_MIN + PROJ_LAT_MAX) / 2;
+  var KM_LON  = 111.32 * Math.cos(LAT_MID * Math.PI / 180);
+  var ASPECT  = ((PROJ_LAT_MAX - PROJ_LAT_MIN) * 111.32) /
+                ((PROJ_LON_MAX - PROJ_LON_MIN) * KM_LON);
+  var BASEMAP_W = 900;
+  var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);  // ~1140
+  function lonToX(lon){ return (lon - PROJ_LON_MIN) / (PROJ_LON_MAX - PROJ_LON_MIN) * BASEMAP_W; }
+  function latToY(lat){ return (PROJ_LAT_MAX - lat) / (PROJ_LAT_MAX - PROJ_LAT_MIN) * BASEMAP_H; }
 
   // ═══════════════════════════════════════════════════════════════════════
   // PLAATSEN (voor hover tooltip)
   // ═══════════════════════════════════════════════════════════════════════
+  // Volledige lijst voor hover-tooltip (uitgebreid)
   var PLAATSEN = [
     [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
     [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
@@ -166,6 +179,18 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     [52.36,4.63,"IJmuiden"],[52.35,5.23,"Amersfoort"],[52.22,5.97,"Apeldoorn"],
     [51.96,5.92,"Wageningen"],[52.96,5.94,"Assen"],[52.76,6.90,"Emmen"],
     [52.93,4.79,"Den Helder"],[51.98,5.10,"De Bilt"],[52.46,5.52,"Lelystad"],
+    [51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],[50.85,4.35,"Brussel"],
+  ];
+
+  // Compacte lijst voor labels op de kaart (geen overlap)
+  var STEDEN_LABEL = [
+    [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
+    [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
+    [51.84,5.86,"Arnhem"],[52.51,6.09,"Zwolle"],[51.69,5.30,"Den Bosch"],
+    [53.20,5.80,"Leeuwarden"],[52.22,6.90,"Enschede"],[51.56,4.47,"Breda"],
+    [52.93,4.79,"Den Helder"],[51.45,3.57,"Vlissingen"],[52.46,5.52,"Lelystad"],
+    [52.96,5.94,"Assen"],[52.70,5.75,"Emmeloord"],[51.59,4.78,"Tilburg"],
+    [51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],
   ];
 
   function dichtstbijzijnde(lat, lon) {
@@ -192,11 +217,12 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   }
   function pvToMmh(pv) { return dbzToMmh(pvToDbz(pv)); }
 
-  // Radar kleurenschaal (dBZ → RGB)
+  // Radar kleurenschaal (dBZ → RGB), interpolated tussen stops
+  // Klassieke NWS-stijl ramp + iets transparante onderkant voor minder visuele clutter
   var DBZ_LEVELS = [ 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70];
   var DBZ_COLORS = [
-    [180,180,180], // 5   lichtgrijs
-    [120,200,120], // 10  lichtgroen
+    [160,200,220], // 5   subtiel blauwgrijs (was lichtgrijs — minder ruis-aandacht)
+    [120,210,140], // 10  lichtgroen
     [40,180,40],   // 15  groen
     [0,140,0],     // 20  donkergroen
     [255,255,0],   // 25  geel
@@ -210,8 +236,33 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     [255,100,255], // 65  lichtpaars
     [255,255,255], // 70  wit (hagel)
   ];
+  // Alpha per niveau (lager voor zwakke echo's → minder ruis op de kaart)
+  var DBZ_ALPHA = [ 90, 140, 175, 200, 220, 230, 240, 245, 250, 250, 250, 250, 250, 255];
 
+  // Geïnterpoleerde dBZ → kleur (4 kanalen incl. alpha)
   function dbzColor(dbz) {
+    if (dbz < DBZ_LEVELS[0]) return null;
+    if (dbz >= DBZ_LEVELS[DBZ_LEVELS.length - 1]) {
+      var c = DBZ_COLORS[DBZ_COLORS.length - 1];
+      return [c[0], c[1], c[2], DBZ_ALPHA[DBZ_ALPHA.length - 1]];
+    }
+    for (var i = DBZ_LEVELS.length - 2; i >= 0; i--) {
+      if (dbz >= DBZ_LEVELS[i]) {
+        var t = (dbz - DBZ_LEVELS[i]) / (DBZ_LEVELS[i + 1] - DBZ_LEVELS[i]);
+        var c0 = DBZ_COLORS[i], c1 = DBZ_COLORS[i + 1];
+        var a0 = DBZ_ALPHA[i],  a1 = DBZ_ALPHA[i + 1];
+        return [
+          Math.round(c0[0] + t * (c1[0] - c0[0])),
+          Math.round(c0[1] + t * (c1[1] - c0[1])),
+          Math.round(c0[2] + t * (c1[2] - c0[2])),
+          Math.round(a0    + t * (a1    - a0))
+        ];
+      }
+    }
+    return null;
+  }
+  // Stapsgewijze versie voor de legenda (geen interpolatie)
+  function dbzColorStep(dbz) {
     if (dbz < DBZ_LEVELS[0]) return null;
     for (var i = DBZ_LEVELS.length - 1; i >= 0; i--) {
       if (dbz >= DBZ_LEVELS[i]) return DBZ_COLORS[i];
@@ -225,9 +276,10 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   var meta = null;
   var radarData = null;   // Uint8Array (alle frames aaneengeschakeld)
   var nLat = 0, nLon = 0, nFrames = 0;
-  var bgImg = null, ovlImg = null;
+  var nlGeo = null, beGeo = null, riverGeo = null;
   var canvas, ctx;
   var offscreen, offCtx;
+  var dprGlobal = 1;
   var frameIdx = 0;
   var playing = true;
   var animInterval = null;
@@ -244,48 +296,45 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   // DATA LADEN
   // ═══════════════════════════════════════════════════════════════════════
 
-  function loadImage(url) {
-    return new Promise(function(resolve, reject) {
-      var img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = function() { resolve(img); };
-      img.onerror = function() { reject(new Error("Kan " + url + " niet laden")); };
-      img.src = url + "?t=" + Date.now();
-    });
-  }
-
   function loadData() {
     var t = Date.now();
-    return Promise.all([
+    var fetches = [
       fetch(META_URL + "?t=" + t).then(function(r) { return r.json(); }),
       fetch(BIN_URL + "?t=" + t).then(function(r) { return r.arrayBuffer(); }),
-      loadImage(BG_URL),
-      loadImage(OVL_URL),
-    ]).then(function(results) {
+    ];
+    // GeoJSON's eenmalig laden (cacheable)
+    if (!nlGeo)    fetches.push(fetch("nl_provincies.geojson").then(function(r){return r.json();}));
+    else           fetches.push(Promise.resolve(nlGeo));
+    if (!beGeo)    fetches.push(fetch("be_provincies.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
+    else           fetches.push(Promise.resolve(beGeo));
+    if (!riverGeo) fetches.push(fetch("nl_rivieren.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
+    else           fetches.push(Promise.resolve(riverGeo));
+
+    return Promise.all(fetches).then(function(results) {
       meta = results[0];
       var buf = results[1];
-      bgImg = results[2];
-      ovlImg = results[3];
+      nlGeo    = results[2];
+      beGeo    = results[3];
+      riverGeo = results[4];
 
       // Parse binair header (16 bytes)
       var view = new DataView(buf);
       nLat = view.getUint16(0, true);
       nLon = view.getUint16(2, true);
       nFrames = view.getUint16(4, true);
-      // skip rest van header
       radarData = new Uint8Array(buf, 16);
 
       document.getElementById("slider").max = nFrames - 1;
       document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
 
-      // Maak offscreen canvas op data-resolutie
+      // Offscreen canvas op data-resolutie (450×350) voor de radar-raster
       offscreen = document.createElement("canvas");
       offscreen.width = nLon;
       offscreen.height = nLat;
       offCtx = offscreen.getContext("2d");
 
       setupCanvas();
-      frameIdx = nFrames - 1; // start bij nieuwste
+      frameIdx = nFrames - 1;
       document.getElementById("slider").value = frameIdx;
       renderFrame();
       document.getElementById("status").style.display = "none";
@@ -300,41 +349,115 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   function setupCanvas() {
     canvas = document.getElementById("radar-canvas");
     var dpr = window.devicePixelRatio || 1;
-    // Backing-pixels = logisch × dpr (scherp op HiDPI); CSS = logisch (object-fit doet de rest)
-    canvas.width  = Math.round(bgImg.width  * dpr);
-    canvas.height = Math.round(bgImg.height * dpr);
-    canvas.style.width  = bgImg.width  + "px";
-    canvas.style.height = bgImg.height + "px";
+    dprGlobal = dpr;
+    canvas.width  = Math.round(BASEMAP_W * dpr);
+    canvas.height = Math.round(BASEMAP_H * dpr);
+    canvas.style.width  = BASEMAP_W + "px";
+    canvas.style.height = BASEMAP_H + "px";
     ctx = canvas.getContext("2d");
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // alle drawcommands in logische pixels
+  }
+
+  // ── Geo path drawing helpers ────────────────────────────────────────────
+  function _drawGeoFeatures(c, geo, fill, stroke, lineWidth) {
+    if (!geo) return;
+    c.beginPath();
+    for (var f = 0; f < geo.features.length; f++) {
+      var g = geo.features[f].geometry;
+      if (!g) continue;
+      var polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      for (var p = 0; p < polys.length; p++) {
+        for (var r = 0; r < polys[p].length; r++) {
+          var ring = polys[p][r];
+          for (var i = 0; i < ring.length; i++) {
+            var x = lonToX(ring[i][0]);
+            var y = latToY(ring[i][1]);
+            if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+          }
+          c.closePath();
+        }
+      }
+    }
+    if (fill)   { c.fillStyle = fill; c.fill("evenodd"); }
+    if (stroke) { c.strokeStyle = stroke; c.lineWidth = lineWidth || 1; c.stroke(); }
+  }
+
+  function _drawGeoLines(c, geo, stroke, lineWidth) {
+    if (!geo) return;
+    c.beginPath();
+    for (var f = 0; f < geo.features.length; f++) {
+      var g = geo.features[f].geometry;
+      if (!g) continue;
+      var lines;
+      if (g.type === "LineString") lines = [g.coordinates];
+      else if (g.type === "MultiLineString") lines = g.coordinates;
+      else continue;
+      for (var l = 0; l < lines.length; l++) {
+        for (var i = 0; i < lines[l].length; i++) {
+          var x = lonToX(lines[l][i][0]);
+          var y = latToY(lines[l][i][1]);
+          if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        }
+      }
+    }
+    c.strokeStyle = stroke;
+    c.lineWidth = lineWidth || 1;
+    c.stroke();
+  }
+
+  function _drawBuitengrens(c, geo, stroke, lineWidth) {
+    if (!geo) return;
+    c.beginPath();
+    for (var f = 0; f < geo.features.length; f++) {
+      var g = geo.features[f].geometry;
+      if (!g) continue;
+      var polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      for (var p = 0; p < polys.length; p++) {
+        var ring = polys[p][0]; // alleen buitenring
+        for (var i = 0; i < ring.length; i++) {
+          var x = lonToX(ring[i][0]);
+          var y = latToY(ring[i][1]);
+          if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        }
+        c.closePath();
+      }
+    }
+    c.strokeStyle = stroke;
+    c.lineWidth = lineWidth || 1;
+    c.stroke();
   }
 
   function renderFrame() {
-    if (!radarData || !bgImg) return;
+    if (!radarData || !nlGeo) return;
+    var W = BASEMAP_W, H = BASEMAP_H;
 
-    // Logische canvas-afmetingen (CSS px); de dpr-scaling staat in ctx.transform
-    var W = bgImg.width, H = bgImg.height;
+    // World→canvas transform met dpr + zoom + pan (alles in BASEMAP-coords)
+    var s = dprGlobal * zoomLevel;
+    ctx.setTransform(s, 0, 0, s, -viewX * s, -viewY * s);
 
-    // Crop-regio in bron pixels (bgImg)
-    var srcW = bgImg.width / zoomLevel;
-    var srcH = bgImg.height / zoomLevel;
+    // Clip op het zichtbare gebied (full basemap)
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.save();
+    ctx.clip();
 
-    // Clamp viewX/viewY zodat de kaart altijd gevuld is
-    viewX = Math.max(0, Math.min(bgImg.width - srcW, viewX));
-    viewY = Math.max(0, Math.min(bgImg.height - srcH, viewY));
+    // 1. Oceaan-achtergrond
+    ctx.fillStyle = "#c8e0f0";
+    ctx.fillRect(0, 0, W, H);
 
-    // 1. Achtergrond (met crop)
-    ctx.drawImage(bgImg, viewX, viewY, srcW, srcH,
-                  0, 0, W, H);
+    // 2. Land NL + BE
+    _drawGeoFeatures(ctx, nlGeo, "#eaf3e8", null, 0);
+    _drawGeoFeatures(ctx, beGeo, "#eaf3e8", null, 0);
 
-    // 2. Radar data op offscreen canvas (volledige resolutie)
+    // 3. Rivieren (subtiel)
+    _drawGeoLines(ctx, riverGeo, "rgba(120,170,200,0.55)", 0.6);
+
+    // 4. Radar-raster op offscreen
     var offset = frameIdx * nLat * nLon;
     var imgData = offCtx.createImageData(nLon, nLat);
     var pixels = imgData.data;
-
     for (var i = 0; i < nLat * nLon; i++) {
       var pv = radarData[offset + i];
-      if (pv === 0 || pv === 255) continue; // geen data / buiten beeld
+      if (pv === 0 || pv === 255) continue;
       var dbz = 0.5 * pv - 32;
       var c = dbzColor(dbz);
       if (c) {
@@ -342,42 +465,56 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
         pixels[p]     = c[0];
         pixels[p + 1] = c[1];
         pixels[p + 2] = c[2];
-        pixels[p + 3] = 180; // semi-transparant
+        pixels[p + 3] = c[3];
       }
     }
     offCtx.putImageData(imgData, 0, 0);
 
-    // 3. Teken radar op hoofdcanvas (met crop, in offscreen-resolutie)
-    var osSrcX = (viewX / bgImg.width)  * nLon;
-    var osSrcY = (viewY / bgImg.height) * nLat;
-    var osSrcW = nLon / zoomLevel;
-    var osSrcH = nLat / zoomLevel;
-    // Pixelated rendering voor de radar (past bij lage resolutie brondata)
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(offscreen, osSrcX, osSrcY, osSrcW, osSrcH,
-                  0, 0, W, H);
+    // 5. Radar op basemap (vol bereik PROJ_LON/LAT) — met smoothing
     ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(offscreen, 0, 0, W, H);
 
-    // 4. Kaart overlay (kustlijnen, steden) met crop
-    if (ovlImg) {
-      var ovScale = ovlImg.width / bgImg.width;
-      ctx.drawImage(ovlImg, viewX * ovScale, viewY * ovScale,
-                    srcW * ovScale, srcH * ovScale,
-                    0, 0, W, H);
+    // 6. Provinciegrenzen subtiel
+    _drawGeoFeatures(ctx, nlGeo, null, "rgba(0,32,91,0.18)", 0.5);
+    _drawGeoFeatures(ctx, beGeo, null, "rgba(0,32,91,0.18)", 0.5);
+
+    // 7. Buitengrens NL + BE accent
+    _drawBuitengrens(ctx, nlGeo, "rgba(0,32,91,0.55)", 1.2);
+    _drawBuitengrens(ctx, beGeo, "rgba(0,32,91,0.45)", 1.0);
+
+    // 8. Steden — dot + label met witte halo (constante schermgrootte)
+    var fontWorldPx = 11 / zoomLevel;     // constant 11px op het scherm
+    var dotR        = 2.2 / zoomLevel;
+    var haloW       = 3.0 / zoomLevel;
+    var labelOffset = 5 / zoomLevel;
+    ctx.font = "600 " + fontWorldPx + "px Arial";
+    ctx.textBaseline = "middle";
+    for (var k = 0; k < STEDEN_LABEL.length; k++) {
+      var st = STEDEN_LABEL[k];
+      var sx = lonToX(st[1]), sy = latToY(st[0]);
+      ctx.beginPath();
+      ctx.arc(sx, sy, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = "#0a1929";
+      ctx.fill();
+      ctx.lineWidth = haloW;
+      ctx.strokeStyle = "rgba(255,255,255,0.92)";
+      ctx.strokeText(st[2], sx + labelOffset, sy);
+      ctx.fillStyle = "#0a1929";
+      ctx.fillText(st[2], sx + labelOffset, sy);
     }
 
-    // 5. Tijdstempel linksboven op canvas (zodat het meekomt in exports)
+    ctx.restore();
+
+    // 9. Tijdstempel + copyright in scherm-coordinaten (geen zoom invloed)
+    ctx.setTransform(dprGlobal, 0, 0, dprGlobal, 0, 0);
     var tijdTekst = meta.tijden_tekst ? meta.tijden_tekst[frameIdx] : "";
-    ctx.save();
     ctx.font = "bold " + Math.round(H * 0.022) + "px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.fillText(tijdTekst, 12, Math.round(H * 0.032) + 2);
     ctx.fillStyle = "white";
     ctx.fillText(tijdTekst, 10, Math.round(H * 0.032));
-    ctx.restore();
 
-    // 6. Copyright rechtsonder op canvas (in een venster)
-    ctx.save();
     var cpTxt = "\u00a9 Ed Aldus / KNMI";
     var cpFont = Math.round(H * 0.014);
     ctx.font = "600 " + cpFont + "px Arial";
@@ -409,7 +546,6 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     ctx.fillStyle = "#00205b";
     ctx.textBaseline = "middle";
     ctx.fillText(cpTxt, boxX + padX, boxY + boxH / 2 + 1);
-    ctx.restore();
 
     // Update UI labels
     document.getElementById("tijd-label").textContent = tijdTekst;
@@ -456,11 +592,11 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   function setZoom(level) {
     var oldZoom = zoomLevel;
     // Behoud het middelpunt bij in/uitzoomen
-    var centerX = viewX + bgImg.width  / oldZoom / 2;
-    var centerY = viewY + bgImg.height / oldZoom / 2;
+    var centerX = viewX + BASEMAP_W  / oldZoom / 2;
+    var centerY = viewY + BASEMAP_H / oldZoom / 2;
     zoomLevel = level;
-    viewX = centerX - bgImg.width  / level / 2;
-    viewY = centerY - bgImg.height / level / 2;
+    viewX = centerX - BASEMAP_W  / level / 2;
+    viewY = centerY - BASEMAP_H / level / 2;
     applyZoom();
   }
 
@@ -490,15 +626,15 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
       var rect = canvas.getBoundingClientRect();
       var fracX = (clientX - rect.left) / rect.width;
       var fracY = (clientY - rect.top) / rect.height;
-      var srcPixelX = viewX + fracX * (bgImg.width / zoomLevel);
-      var srcPixelY = viewY + fracY * (bgImg.height / zoomLevel);
+      var srcPixelX = viewX + fracX * (BASEMAP_W / zoomLevel);
+      var srcPixelY = viewY + fracY * (BASEMAP_H / zoomLevel);
       zoomLevel = newZoom;
       if (newZoom === 1) {
         viewX = 0; viewY = 0;
       } else {
         // Houd dezelfde bron-pixel onder de cursor
-        viewX = srcPixelX - fracX * (bgImg.width / newZoom);
-        viewY = srcPixelY - fracY * (bgImg.height / newZoom);
+        viewX = srcPixelX - fracX * (BASEMAP_W / newZoom);
+        viewY = srcPixelY - fracY * (BASEMAP_H / newZoom);
       }
       applyZoom();
     }
@@ -513,7 +649,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     // Helper: omreken display-pixel naar bron-pixel delta
     function displayToSourceScale() {
       var rect = canvas.getBoundingClientRect();
-      return (bgImg.width / zoomLevel) / rect.width;
+      return (BASEMAP_W / zoomLevel) / rect.width;
     }
 
     // Slepen om te pannen
@@ -640,11 +776,11 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
       if (fx < 0 || fx > 1 || fy < 0 || fy > 1) { tooltip.style.display = "none"; return; }
 
       // Reken om naar bron-pixel coord (rekening houdend met zoom+pan)
-      var srcPxX = viewX + fx * (bgImg.width  / zoomLevel);
-      var srcPxY = viewY + fy * (bgImg.height / zoomLevel);
+      var srcPxX = viewX + fx * (BASEMAP_W  / zoomLevel);
+      var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
       // Fractie in de totale bronafbeelding
-      var lonFrac = srcPxX / bgImg.width;
-      var latFrac = srcPxY / bgImg.height;
+      var lonFrac = srcPxX / BASEMAP_W;
+      var latFrac = srcPxY / BASEMAP_H;
       var lon = meta.grid.lon_min + lonFrac * (meta.grid.lon_max - meta.grid.lon_min);
       var lat = meta.grid.lat_max - latFrac * (meta.grid.lat_max - meta.grid.lat_min);
 
