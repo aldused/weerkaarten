@@ -80,7 +80,7 @@ def maak_kaart(fname, modus="bg"):
         ax.add_feature(cfeature.COASTLINE.with_scale("10m"),
                         edgecolor="#666666", linewidth=0.4, zorder=4)
         ax.add_feature(cfeature.BORDERS.with_scale("10m"),
-                        edgecolor="#888888", linewidth=0.5, linestyle="--", zorder=4)
+                        edgecolor="#666666", linewidth=0.6, zorder=4)
 
         # Stadsnamen
         halo = [pe.withStroke(linewidth=2.5, foreground="white")]
