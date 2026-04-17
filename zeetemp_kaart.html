@@ -428,18 +428,28 @@ async function laadData(){
   btn.disabled = true; btn.textContent = 'Ophalen...';
   setStatus('<span class="spinner"></span> Zeewatertemperaturen ophalen...');
 
+  const nu = new Date();
   const beloftes = STATIONS.map(([naam,lat,lon]) =>
-    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=sea_surface_temperature&timezone=Europe%2FAmsterdam`)
+    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=sea_surface_temperature&timezone=Europe%2FAmsterdam&forecast_days=1&past_days=1`)
       .then(r=>r.json())
-      .then(d=>({naam, lat, lon, t:d?.current?.sea_surface_temperature}))
+      .then(d=>{
+        const times = d?.hourly?.time || [];
+        const temps = d?.hourly?.sea_surface_temperature || [];
+        // Meest recente uur dat <= nu is en een geldige waarde heeft
+        let t = null;
+        for(let i=times.length-1;i>=0;i--){
+          if(temps[i]!=null && new Date(times[i])<=nu){ t=temps[i]; break; }
+        }
+        return {naam, lat, lon, t};
+      })
       .catch(()=>({naam, lat, lon, t:null}))
   );
 
   const res = await Promise.all(beloftes);
   stationData = res.filter(r=>r.t!=null).map(r=>({...r, x:0, y:0}));
 
-  const nu = new Date().toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-  setStatus(`${stationData.length} meetpunten geladen · ${nu}`);
+  const nuTxt = nu.toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  setStatus(`${stationData.length} meetpunten geladen · ${nuTxt}`);
   btn.disabled = false; btn.textContent = '\u21BB Vernieuwen';
   teken();
 }
