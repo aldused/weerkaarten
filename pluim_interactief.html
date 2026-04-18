@@ -208,7 +208,8 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <span class="sub-label" style="margin-left:8px">Model</span>
     <span class="pill actief" title="ECMWF IFS ENS (standaard)">&#127760; ECMWF</span>
     <button class="pill type-btn" data-type="aifs">&#129302; AIFS</button>
-    <button class="pill type-btn" data-type="icon">&#127465;&#127466; ICON</button>
+    <button class="pill" onclick="openHarmonie()" title="KNMI HarmonEPS Cy43 — 2.5 km, 6 members, 60u lead (opent aparte pluim)">&#127475;&#127473; HARMONIE 43</button>
+    <button class="pill type-btn" data-type="icon">&#127465;&#127466; ICON-D2</button>
 
     <span class="sub-label" style="margin-left:8px">Vergelijk</span>
     <button class="pill type-btn" data-type="vergelijking">+ ICON</button>
@@ -3722,6 +3723,24 @@ function restoreState(){
 // Sla state op na elke data-load
 const origLaadData=laadData;
 laadData=async function(){await origLaadData();saveState();};
+
+// ── Doorspringen naar HarmonEPS-pluim met huidige plaats ──
+function openHarmonie(){
+  const q = (document.getElementById('zoek-input')?.value || '').trim();
+  const url = `pluim_harmoneps.html${q?'?q='+encodeURIComponent(q):''}`;
+  // Binnen weerlab-iframe: schakel het parent-panel naar pluim-harm en laad HarmonEPS in die iframe
+  try {
+    if (window.parent !== window && typeof window.parent.openPanel === 'function'){
+      const fr = window.parent.document.querySelector('#panel-pluim-harm iframe');
+      if (fr) fr.src = url + (url.includes('?')?'&':'?') + 'v=' + Date.now();
+      window.parent.openPanel('pluim-harm');
+      return;
+    }
+  } catch(e){ /* cross-origin — val terug */ }
+  // Standalone: zelfde tab redirect
+  window.location.href = url;
+}
+window.openHarmonie = openHarmonie;
 
 // ── Auto-refresh ──
 let autoRefreshInterval=null;

@@ -24,10 +24,16 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
 .search-suggest div:hover,.search-suggest div.sel{background:#eef3fa}
 .search-suggest div.title{font-weight:600;color:var(--text)}
 .search-suggest div.addr{color:var(--text2);font-size:.78rem}
-.var-tabs{display:flex;gap:5px;flex-wrap:wrap}
-.var-btn{padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:#f5f7fa;color:var(--text2);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s}
-.var-btn:hover{border-color:var(--accent);color:var(--text)}
-.var-btn.actief{background:var(--accent);border-color:var(--accent);color:white}
+.param-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:6px;padding:12px 16px;background:#fafbfc;border-bottom:1px solid #eaedf2}
+.param-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;background:#fff;border:1px solid #e5ebf2;border-radius:10px;cursor:pointer;transition:all .15s;font-size:.74rem;color:#5a6a80;font-weight:600;text-align:center;line-height:1.2}
+.param-card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.06);color:var(--text)}
+.param-card.actief{background:linear-gradient(135deg,#0066cc,#004a99);color:#fff;border-color:#004a99;box-shadow:0 3px 8px rgba(0,102,204,.25)}
+.param-card .ico{font-size:1.35rem;line-height:1}
+@media (max-width:640px){
+  .param-grid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr));padding:8px}
+  .param-card{padding:8px 4px;font-size:.68rem}
+  .param-card .ico{font-size:1.1rem}
+}
 main{padding:14px 16px;max-width:1200px;margin:0 auto}
 .meta{font-size:.8rem;color:var(--text2);margin-bottom:10px;padding:0 4px}
 .meta strong{color:var(--text)}
@@ -52,13 +58,19 @@ main{padding:14px 16px;max-width:1200px;margin:0 auto}
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7a8898" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
     <input type="text" id="zoek" placeholder="Zoek plaats (bv. Alkmaar, Winterswijk, ...)" autocomplete="off">
   </div>
-  <div class="var-tabs">
-    <button class="var-btn actief" data-var="t2m_c">🌡 Temp 2 m</button>
-    <button class="var-btn" data-var="gust_kmh">💨 Windstoot</button>
-    <button class="var-btn" data-var="wind_kmh">🌬 Wind</button>
-    <button class="var-btn" data-var="precip_mm_per_h">🌧 Neerslag</button>
-    <button class="var-btn" data-var="vis_km">🌫 Zicht</button>
-  </div>
+</div>
+<div class="param-grid">
+  <div class="param-card actief" data-var="t2m_c"><span class="ico">🌡️</span>Temperatuur</div>
+  <div class="param-card" data-var="gust_kmh"><span class="ico">💨</span>Windstoot</div>
+  <div class="param-card" data-var="wind_kmh"><span class="ico">🌬️</span>Wind 10 m</div>
+  <div class="param-card" data-var="wind50_kmh"><span class="ico">🌀</span>Wind 50 m</div>
+  <div class="param-card" data-var="wind_dir_deg"><span class="ico">🧭</span>Windrichting</div>
+  <div class="param-card" data-var="precip_mm_per_h"><span class="ico">🌧️</span>Neerslag</div>
+  <div class="param-card" data-var="tcc_pct"><span class="ico">☁️</span>Bewolking</div>
+  <div class="param-card" data-var="rh_pct"><span class="ico">💧</span>RV 2 m</div>
+  <div class="param-card" data-var="msl_hpa"><span class="ico">🎯</span>Druk MSL</div>
+  <div class="param-card" data-var="pwat_mm"><span class="ico">💦</span>Precip. water</div>
+  <div class="param-card" data-var="vis_km"><span class="ico">🌫️</span>Zicht</div>
 </div>
 <div class="search-suggest" id="suggest"></div>
 <main>
@@ -79,7 +91,13 @@ const VAR_LABELS = {
   t2m_c: "Temperatuur 2 m (°C)",
   gust_kmh: "Windstoten 10 m (km/h)",
   wind_kmh: "Wind 10 m (km/h)",
+  wind50_kmh: "Wind 50 m (km/h)",
+  wind_dir_deg: "Windrichting 10 m (°)",
   precip_mm_per_h: "Neerslag (mm/u)",
+  tcc_pct: "Totale bewolking (%)",
+  rh_pct: "Relatieve vochtigheid 2 m (%)",
+  msl_hpa: "Luchtdruk MSL (hPa)",
+  pwat_mm: "Precipitable water (kg/m²)",
   vis_km: "Zicht (km)",
 };
 
@@ -173,9 +191,9 @@ window.kiesResultaat = async function(i){
 
 document.addEventListener('click', e=>{ if(!e.target.closest('.search-box,.search-suggest')) suggestBox.style.display='none'; });
 
-// Variable tabs
-document.querySelectorAll('.var-btn').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('.var-btn').forEach(x => x.classList.remove('actief'));
+// Parameter cards (zelfde UI-pattern als pluim_interactief)
+document.querySelectorAll('.param-card').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.param-card').forEach(x => x.classList.remove('actief'));
   b.classList.add('actief');
   huidigVar = b.dataset.var;
   render();
@@ -249,7 +267,15 @@ function render(){
 // Startup
 (async function(){
   await loadStationsIndex();
-  // Laad De Bilt als default
+  // URL-param ?q=<plaats> heeft voorrang
+  const params = new URLSearchParams(location.search);
+  const q = params.get('q');
+  if(q){
+    zoekInput.value = q;
+    await zoekPlaats(true);   // direct eerste Nominatim-hit kiezen
+    return;
+  }
+  // Anders: De Bilt als default
   const def = STATIONS_INDEX.find(s=>s.id==='debilt') || STATIONS_INDEX[0];
   zoekInput.value = def.naam;
   await laadStation(def, {queryNaam: def.naam, lat: def.lat, lon: def.lon, km: 0});
