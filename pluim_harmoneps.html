@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HARMONIE Ensemble Pluim – Ed Aldus WM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/3.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f0f3f7;--panel:#fff;--header:#003366;--border:#d0d8e4;--text:#1a2b40;--text2:#5a6a80;--accent:#0066cc}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--header);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:2px solid #2ec4e8}
+.header h1{font-size:1.05rem;font-weight:700;color:#fff}
+.header p{font-size:.72rem;color:#a8c4e8;margin-top:2px}
+.header-right{font-size:.72rem;color:#a8c4e8;text-align:right}
+.controls{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.ctrl-groep{display:flex;flex-direction:column;gap:4px}
+.ctrl-groep label{font-size:.68rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
+select{background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:.85rem;min-width:170px;cursor:pointer}
+.runlabel{font-size:.76rem;color:var(--text2);align-self:center}
+main{padding:14px 16px;display:grid;grid-template-columns:1fr;gap:14px;max-width:1200px;margin:0 auto}
+.chart-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.chart-card h2{font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+.chart-wrap{height:240px;position:relative}
+.foot{max-width:1200px;margin:0 auto;padding:4px 18px 20px;color:var(--text2);font-size:.72rem;line-height:1.5}
+.loading{padding:40px;text-align:center;color:var(--text2);font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>HARMONIE Ensemble Pluim</h1>
+    <p>KNMI HarmonEPS Cy43 · 6 members · 2.5 km native · 60u lead</p>
+  </div>
+  <div class="header-right" id="runLbl">…</div>
+</div>
+<div class="controls">
+  <div class="ctrl-groep">
+    <label for="stationSel">Station</label>
+    <select id="stationSel"></select>
+  </div>
+  <div class="ctrl-groep">
+    <label for="varSel">Variabele</label>
+    <select id="varSel">
+      <option value="t2m_c">Temperatuur 2 m (°C)</option>
+      <option value="gust_kmh">Windstoten (km/h)</option>
+      <option value="wind_kmh">Wind 10 m (km/h)</option>
+      <option value="precip_mm_per_h">Neerslag (mm/h)</option>
+      <option value="vis_km">Zicht (km)</option>
+    </select>
+  </div>
+  <div class="runlabel" id="stationMeta"></div>
+</div>
+<main>
+  <div class="chart-card">
+    <h2 id="chartTitle">—</h2>
+    <div class="chart-wrap"><canvas id="plume"></canvas></div>
+  </div>
+</main>
+<footer class="foot">
+  Data: KNMI Data Platform — HARMONIE-AROME Cy43 P2a EPS. Nearest-neighbour interpolatie naar station.
+  6 ensemble members (1 control + 5 perturbed), uurlijks, 0-60 uur lead-time.
+  Zwarte lijn = ensemble gemiddelde. Dunnere lijnen = individuele members.
+</footer>
+
+<script>
+const STATIONS = [
+  ["debilt","De Bilt"],["rotterdam","Rotterdam"],["eindhoven","Eindhoven"],
+  ["groningen","Groningen"],["maastricht","Maastricht"],["dekooy","Texel/De Kooy"],
+  ["vlissingen","Vlissingen"],["leeuwarden","Leeuwarden"],["eelde","Eelde"],
+  ["twente","Twente"],["amsterdam","Amsterdam"],["denhaag","Den Haag"],
+  ["deelen","Deelen"],["volkel","Volkel"],["schiphol","Schiphol"],
+];
+const VAR_LABELS = {
+  t2m_c: "Temperatuur 2 m (°C)",
+  gust_kmh: "Windstoten 10 m (km/h)",
+  wind_kmh: "Wind 10 m (km/h)",
+  precip_mm_per_h: "Neerslag (mm/u)",
+  vis_km: "Zicht (km)",
+};
+const sel = document.getElementById('stationSel');
+STATIONS.forEach(([id, nm]) => { const o=document.createElement('option'); o.value=id; o.textContent=nm; sel.appendChild(o); });
+sel.value = "debilt";
+const varSel = document.getElementById('varSel');
+const runLbl = document.getElementById('runLbl');
+const stationMeta = document.getElementById('stationMeta');
+const chartTitle = document.getElementById('chartTitle');
+let chart = null;
+let STATION_DATA = null;
+
+async function loadStation(id){
+  const r = await fetch(`pluim_harmoneps/${id}.json?v=${Date.now()}`);
+  if (!r.ok) throw new Error("geen data");
+  STATION_DATA = await r.json();
+  runLbl.innerHTML = `Run <strong>${STATION_DATA.run}</strong><br>${STATION_DATA.n_members} members`;
+  stationMeta.textContent = `Station ${STATION_DATA.station.naam} (${STATION_DATA.station.lat}°N ${STATION_DATA.station.lon}°E) → nearest grid ${STATION_DATA.grid_lat}°N ${STATION_DATA.grid_lon}°E`;
+  render();
+}
+
+function render(){
+  if (!STATION_DATA) return;
+  const v = varSel.value;
+  const label = VAR_LABELS[v];
+  chartTitle.textContent = label;
+  const times = STATION_DATA.times.map(t => new Date(t));
+  const members = STATION_DATA.vars[v] || [];
+  const COLORS = ['#cc2222','#228822','#0066cc','#cc9900','#8844cc','#44aacc'];
+  const datasets = members.map((series, mi) => ({
+    label: mi===0 ? 'Control' : `Member ${mi}`,
+    data: series,
+    borderColor: COLORS[mi % COLORS.length] + '99',
+    borderWidth: 1.2,
+    pointRadius: 0,
+    fill: false,
+  }));
+  // Mean
+  const mean = times.map((_,i) => {
+    const vals = members.map(m => m[i]).filter(x => x != null);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+  datasets.push({
+    label: 'Gemiddelde',
+    data: mean,
+    borderColor: '#111',
+    borderWidth: 2.2,
+    pointRadius: 0,
+    fill: false,
+  });
+
+  if (chart) chart.destroy();
+  const isPrecip = v === 'precip_mm_per_h';
+  chart = new Chart(document.getElementById('plume'), {
+    type: isPrecip ? 'bar' : 'line',
+    data: { labels: times, datasets: isPrecip
+      ? [{ label:'Gemiddelde', data: mean, backgroundColor:'#0066cccc' }]
+      : datasets
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      scales: {
+        x: { type:'time', time:{ unit:'hour', tooltipFormat:'dd MMM HH:mm', displayFormats:{ hour:'dd HH:mm' } }, grid:{display:false} },
+        y: { title:{ display:true, text: label } },
+      },
+      plugins: { legend: { display: !isPrecip, position:'bottom', labels:{boxWidth:10, font:{size:10}} }, tooltip:{ mode:'index', intersect:false } },
+    }
+  });
+}
+
+sel.addEventListener('change', () => loadStation(sel.value));
+varSel.addEventListener('change', render);
+loadStation(sel.value);
+</script>
+</body></html>
