@@ -154,7 +154,7 @@ for day, dag_data in data_per_day.items():
     maand_nl = nl_maanden[day.month]
 
     # Smaller 4:3-achtig formaat voor België
-    fig = plt.figure(figsize=(12, 9))
+    fig = plt.figure(figsize=(12, 10))
     gs  = GridSpec(2, 1, figure=fig, height_ratios=[0.09, 1], hspace=0.01)
 
     # ── Header ──
@@ -176,7 +176,7 @@ for day, dag_data in data_per_day.items():
 
     # ── Kaart ──
     ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
-    ax.set_aspect('auto')
+    ax.set_aspect(1.5708)  # 1/cos(50.45°) voor correcte geo-verhouding BE
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.OCEAN.with_scale("10m"),    facecolor="#c8e0f0", zorder=0)
     ax.add_feature(cfeature.LAND.with_scale("10m"),     facecolor="#eaf3e8", zorder=1)

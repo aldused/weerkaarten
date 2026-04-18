@@ -116,7 +116,7 @@ now_str2 = datetime.now().strftime("%d %b %Y %H:%M")
 
 for day, dag_data in data_per_day.items():
     dag_nl = nl_dagen[day.weekday()]
-    fig = plt.figure(figsize=(12, 9))
+    fig = plt.figure(figsize=(12, 10))
     gs = GridSpec(2, 1, figure=fig, height_ratios=[0.09, 1], hspace=0.01)
     ax_h = fig.add_subplot(gs[0])
     ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
@@ -129,7 +129,7 @@ for day, dag_data in data_per_day.items():
     ax_h.axhline(0,color="#4a90c4",linewidth=2)
 
     ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
-    ax.set_aspect('auto'); ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
+    ax.set_aspect(1.5708)  # 1/cos(50.45°) voor correcte geo-verhouding BE; ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.OCEAN.with_scale("10m"),facecolor="#c8e0f0",zorder=0)
     ax.add_feature(cfeature.LAND.with_scale("10m"),facecolor="#eaf3e8",zorder=1)
     ax.add_feature(cfeature.LAKES.with_scale("10m"),facecolor="#c8e0f0",zorder=2)

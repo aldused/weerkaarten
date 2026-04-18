@@ -15,10 +15,10 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 EXTENT = [1.5, 6.6, 49.2, 51.7]  # België + omgeving
 
-fig = plt.figure(figsize=(12, 6))
+fig = plt.figure(figsize=(12, 9.23))
 ax = fig.add_axes([0, 0, 1, 1], projection=ccrs.PlateCarree())
 ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
-ax.set_aspect('auto')
+ax.set_aspect(1.5708)  # 1/cos(50.45°) voor correcte geo-verhouding BE
 
 ax.add_feature(cfeature.OCEAN.with_scale("10m"),    facecolor="#c8e0f0", zorder=0)
 ax.add_feature(cfeature.LAND.with_scale("10m"),     facecolor="#eaf3e8", zorder=1)
