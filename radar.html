@@ -30,10 +30,10 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
 
 .zoom-btns { display: flex; gap: 3px; align-items: center; }
 .zoom-label { font-size: 11px; color: #5a7090; font-weight: 600; margin-right: 2px; }
-.zoom-btn { padding: 3px 8px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 11px; font-weight: 600; cursor: pointer; }
+.zoom-btn { padding: 3px 9px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 14px; font-weight: 700; cursor: pointer; min-width: 28px; line-height: 1; }
 .zoom-btn:hover { background: #1a3a5a; }
-.zoom-btn.actief { background: #003366; color: white; border-color: #2ec4e8; }
-.reset-btn { width: 24px; height: 24px; border-radius: 50%; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.zoom-info { font-size: 11px; color: #2ec4e8; font-weight: 700; min-width: 44px; text-align: center; padding: 3px 6px; border: 1px solid #2a4a6a; border-radius: 10px; background: #0a1929; }
+.reset-btn { padding: 3px 9px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 11px; cursor: pointer; }
 .reset-btn:hover { background: #1a3a5a; }
 
 .export-btns { display: flex; gap: 4px; margin-left: auto; }
@@ -108,12 +108,10 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
 
   <div class="zoom-btns">
     <span class="zoom-label">Zoom:</span>
-    <button class="zoom-btn actief" data-zoom="1">1x</button>
-    <button class="zoom-btn" data-zoom="2">2x</button>
-    <button class="zoom-btn" data-zoom="3">3x</button>
-    <button class="zoom-btn" data-zoom="4">4x</button>
-    <button class="zoom-btn" data-zoom="5">5x</button>
-    <button class="reset-btn" id="btn-reset" title="Reset zoom">&#8634;</button>
+    <button class="zoom-btn" id="btn-zoom-out" title="Uitzoomen">&minus;</button>
+    <div class="zoom-info" id="zoom-info">1.0×</div>
+    <button class="zoom-btn" id="btn-zoom-in" title="Inzoomen">+</button>
+    <button class="reset-btn" id="btn-reset" title="Reset zoom">reset</button>
   </div>
 
   <div class="export-btns">
@@ -151,23 +149,23 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   var REFRESH_MS = 5 * 60 * 1000; // 5 minuten
 
   // ── Vector basemap configuratie ─────────────────────────────────────────
-  // Server resampelt al naar PlateCarree dit bereik:
-  var PROJ_LON_MIN = 3.0,  PROJ_LON_MAX = 7.5;
-  var PROJ_LAT_MIN = 50.4, PROJ_LAT_MAX = 53.9;
-  // Geografische aspect ratio (op midden 52.15°N)
+  // Server resampelt naar PlateCarree dit bereik:
+  var PROJ_LON_MIN = 1.0,  PROJ_LON_MAX = 10.0;
+  var PROJ_LAT_MIN = 49.5, PROJ_LAT_MAX = 54.5;
+  // Geografische aspect ratio (op midden ~52°N)
   var LAT_MID = (PROJ_LAT_MIN + PROJ_LAT_MAX) / 2;
   var KM_LON  = 111.32 * Math.cos(LAT_MID * Math.PI / 180);
   var ASPECT  = ((PROJ_LAT_MAX - PROJ_LAT_MIN) * 111.32) /
                 ((PROJ_LON_MAX - PROJ_LON_MIN) * KM_LON);
-  var BASEMAP_W = 900;
-  var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);  // ~1140
+  var BASEMAP_W = 1100;
+  var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);
   function lonToX(lon){ return (lon - PROJ_LON_MIN) / (PROJ_LON_MAX - PROJ_LON_MIN) * BASEMAP_W; }
   function latToY(lat){ return (PROJ_LAT_MAX - lat) / (PROJ_LAT_MAX - PROJ_LAT_MIN) * BASEMAP_H; }
 
   // ═══════════════════════════════════════════════════════════════════════
   // PLAATSEN (voor hover tooltip)
   // ═══════════════════════════════════════════════════════════════════════
-  // Volledige lijst voor hover-tooltip (uitgebreid)
+  // Volledige lijst voor hover-tooltip (uitgebreid, incl. UK + DE)
   var PLAATSEN = [
     [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
     [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
@@ -180,6 +178,14 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     [51.96,5.92,"Wageningen"],[52.96,5.94,"Assen"],[52.76,6.90,"Emmen"],
     [52.93,4.79,"Den Helder"],[51.98,5.10,"De Bilt"],[52.46,5.52,"Lelystad"],
     [51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],[50.85,4.35,"Brussel"],
+    [50.85,5.69,"Maastricht"],[50.46,4.86,"Namen"],[50.41,4.44,"Charleroi"],
+    [51.21,3.22,"Brugge"],[51.05,2.62,"Duinkerke"],[50.62,3.07,"Lille"],
+    [53.55,9.99,"Hamburg"],[53.07,8.81,"Bremen"],[52.37,9.73,"Hannover"],
+    [51.51,7.47,"Dortmund"],[51.23,6.78,"Düsseldorf"],[50.94,6.96,"Köln"],
+    [51.45,7.01,"Essen"],[52.26,7.97,"Osnabrück"],[51.96,7.63,"Münster"],
+    [50.78,6.08,"Aken"],[53.86,8.71,"Cuxhaven"],[54.32,10.13,"Kiel"],
+    [51.51,-0.13,"Londen"],[52.63,1.30,"Norwich"],[51.07,1.19,"Dover"],
+    [53.41,-1.47,"Sheffield"],[53.48,-2.24,"Manchester"],
   ];
 
   // Compacte lijst voor labels op de kaart (geen overlap)
@@ -190,7 +196,11 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     [53.20,5.80,"Leeuwarden"],[52.22,6.90,"Enschede"],[51.56,4.47,"Breda"],
     [52.93,4.79,"Den Helder"],[51.45,3.57,"Vlissingen"],[52.46,5.52,"Lelystad"],
     [52.96,5.94,"Assen"],[52.70,5.75,"Emmeloord"],[51.59,4.78,"Tilburg"],
-    [51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],
+    [51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],[50.85,4.35,"Brussel"],
+    [50.85,5.69,"Maastricht"],[50.62,3.07,"Lille"],
+    [51.23,6.78,"Düsseldorf"],[50.94,6.96,"Köln"],[51.51,7.47,"Dortmund"],
+    [52.37,9.73,"Hannover"],[53.07,8.81,"Bremen"],[53.55,9.99,"Hamburg"],
+    [51.96,7.63,"Münster"],[52.63,1.30,"Norwich"],[51.07,1.19,"Dover"],
   ];
 
   function dichtstbijzijnde(lat, lon) {
@@ -276,7 +286,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   var meta = null;
   var radarData = null;   // Uint8Array (alle frames aaneengeschakeld)
   var nLat = 0, nLon = 0, nFrames = 0;
-  var nlGeo = null, beGeo = null, riverGeo = null;
+  var nlGeo = null, beGeo = null, riverGeo = null, euLandGeo = null;
   var canvas, ctx;
   var offscreen, offCtx;
   var dprGlobal = 1;
@@ -285,8 +295,9 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   var animInterval = null;
   var animSpeed = 400;
 
-  // Zoom & pan state (viewX, viewY = top-left van zichtbaar gebied in bron pixels)
-  var zoomLevel = 1;
+  // Zoom & pan state (vloeiend, 1.0–10.0)
+  var zoomLevel = 1.0;
+  var ZOOM_MIN = 1.0, ZOOM_MAX = 10.0;
   var viewX = 0, viewY = 0;
   var isDragging = false;
   var dragStartX = 0, dragStartY = 0;
@@ -309,6 +320,8 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     else           fetches.push(Promise.resolve(beGeo));
     if (!riverGeo) fetches.push(fetch("nl_rivieren.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
     else           fetches.push(Promise.resolve(riverGeo));
+    if (!euLandGeo) fetches.push(fetch("europa_land.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
+    else            fetches.push(Promise.resolve(euLandGeo));
 
     return Promise.all(fetches).then(function(results) {
       meta = results[0];
@@ -316,6 +329,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
       nlGeo    = results[2];
       beGeo    = results[3];
       riverGeo = results[4];
+      euLandGeo = results[5];
 
       // Parse binair header (16 bytes)
       var view = new DataView(buf);
@@ -444,7 +458,9 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     ctx.fillStyle = "#c8e0f0";
     ctx.fillRect(0, 0, W, H);
 
-    // 2. Land NL + BE
+    // 2. Europa-land (UK, DE, FR, DK) als basis — iets grijzer dan NL/BE
+    _drawGeoFeatures(ctx, euLandGeo, "#dde6d5", null, 0);
+    // 3. Land NL + BE — iets lichter, met klein contrast
     _drawGeoFeatures(ctx, nlGeo, "#eaf3e8", null, 0);
     _drawGeoFeatures(ctx, beGeo, "#eaf3e8", null, 0);
 
@@ -467,10 +483,16 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     }
     offCtx.putImageData(imgData, 0, 0);
 
-    // 5. Radar op basemap (vol bereik PROJ_LON/LAT) — met smoothing
+    // 5. Radar op basemap — plaats op precies het data-extent uit meta.grid
+    //    (zo blijft het correct ook als data-bereik en basemap niet helemaal
+    //    overlappen, bv. tijdens een uitrol-overgang).
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(offscreen, 0, 0, W, H);
+    var dgx = lonToX(meta.grid.lon_min);
+    var dgy = latToY(meta.grid.lat_max);
+    var dgw = lonToX(meta.grid.lon_max) - dgx;
+    var dgh = latToY(meta.grid.lat_min) - dgy;
+    ctx.drawImage(offscreen, dgx, dgy, dgw, dgh);
 
     // 6. Provinciegrenzen subtiel
     _drawGeoFeatures(ctx, nlGeo, null, "rgba(0,32,91,0.18)", 0.5);
@@ -547,6 +569,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
     document.getElementById("tijd-label").textContent = tijdTekst;
     document.getElementById("canvas-tijd").textContent = tijdTekst;
     document.getElementById("slider").value = frameIdx;
+    document.getElementById("zoom-info").textContent = zoomLevel.toFixed(1) + "×";
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -577,69 +600,56 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
   // ZOOM & PAN
   // ═══════════════════════════════════════════════════════════════════════
 
-  function applyZoom() {
-    // Update zoom knoppen
-    document.querySelectorAll(".zoom-btn").forEach(function(b) {
-      b.classList.toggle("actief", parseInt(b.getAttribute("data-zoom")) === zoomLevel);
-    });
-    renderFrame();  // herteken met nieuwe crop
+  function clampView() {
+    var visW = BASEMAP_W / zoomLevel;
+    var visH = BASEMAP_H / zoomLevel;
+    if (viewX < 0) viewX = 0;
+    if (viewY < 0) viewY = 0;
+    if (viewX + visW > BASEMAP_W) viewX = BASEMAP_W - visW;
+    if (viewY + visH > BASEMAP_H) viewY = BASEMAP_H - visH;
   }
 
-  function setZoom(level) {
-    var oldZoom = zoomLevel;
-    // Behoud het middelpunt bij in/uitzoomen
-    var centerX = viewX + BASEMAP_W  / oldZoom / 2;
-    var centerY = viewY + BASEMAP_H / oldZoom / 2;
-    zoomLevel = level;
-    viewX = centerX - BASEMAP_W  / level / 2;
-    viewY = centerY - BASEMAP_H / level / 2;
-    applyZoom();
+  function setZoomAt(newZoom, clientX, clientY) {
+    newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+    if (Math.abs(newZoom - zoomLevel) < 0.001) return;
+    var rect = canvas.getBoundingClientRect();
+    var fracX = clientX != null ? (clientX - rect.left) / rect.width  : 0.5;
+    var fracY = clientY != null ? (clientY - rect.top)  / rect.height : 0.5;
+    var srcX = viewX + fracX * (BASEMAP_W / zoomLevel);
+    var srcY = viewY + fracY * (BASEMAP_H / zoomLevel);
+    zoomLevel = newZoom;
+    if (zoomLevel <= ZOOM_MIN + 0.001) {
+      viewX = 0; viewY = 0;
+    } else {
+      viewX = srcX - fracX * (BASEMAP_W / zoomLevel);
+      viewY = srcY - fracY * (BASEMAP_H / zoomLevel);
+      clampView();
+    }
+    renderFrame();
   }
 
   function resetZoom() {
-    zoomLevel = 1;
-    viewX = 0;
-    viewY = 0;
-    applyZoom();
+    zoomLevel = 1.0;
+    viewX = 0; viewY = 0;
+    renderFrame();
   }
 
   function setupZoomPan() {
     var container = document.getElementById("canvas-container");
 
-    // Zoom knoppen
-    document.querySelectorAll(".zoom-btn").forEach(function(btn) {
-      btn.addEventListener("click", function() {
-        setZoom(parseInt(this.getAttribute("data-zoom")));
-      });
+    document.getElementById("btn-zoom-in").addEventListener("click", function() {
+      setZoomAt(zoomLevel * 1.4, null, null);
+    });
+    document.getElementById("btn-zoom-out").addEventListener("click", function() {
+      setZoomAt(zoomLevel / 1.4, null, null);
     });
     document.getElementById("btn-reset").addEventListener("click", resetZoom);
 
-    // Helper: zet zoom met muispositie als middelpunt
-    function zoomAtPoint(newZoom, clientX, clientY) {
-      newZoom = Math.max(1, Math.min(5, newZoom));
-      if (newZoom === zoomLevel) return;
-      // Bereken bron-pixel onder de cursor voor zoom
-      var rect = canvas.getBoundingClientRect();
-      var fracX = (clientX - rect.left) / rect.width;
-      var fracY = (clientY - rect.top) / rect.height;
-      var srcPixelX = viewX + fracX * (BASEMAP_W / zoomLevel);
-      var srcPixelY = viewY + fracY * (BASEMAP_H / zoomLevel);
-      zoomLevel = newZoom;
-      if (newZoom === 1) {
-        viewX = 0; viewY = 0;
-      } else {
-        // Houd dezelfde bron-pixel onder de cursor
-        viewX = srcPixelX - fracX * (BASEMAP_W / newZoom);
-        viewY = srcPixelY - fracY * (BASEMAP_H / newZoom);
-      }
-      applyZoom();
-    }
-
-    // Scroll-zoom
+    // Vloeiende scroll-zoom (continu)
     container.addEventListener("wheel", function(e) {
       e.preventDefault();
-      var step = e.deltaY < 0 ? 1 : -1;
-      zoomAtPoint(zoomLevel + step, e.clientX, e.clientY);
+      var factor = Math.exp(-e.deltaY * 0.0015);
+      setZoomAt(zoomLevel * factor, e.clientX, e.clientY);
     }, { passive: false });
 
     // Helper: omreken display-pixel naar bron-pixel delta
@@ -650,7 +660,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
 
     // Slepen om te pannen
     container.addEventListener("mousedown", function(e) {
-      if (zoomLevel <= 1) return;
+      if (zoomLevel <= ZOOM_MIN + 0.001) return;
       isDragging = true;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
@@ -665,7 +675,8 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
       var scale = displayToSourceScale();
       viewX = viewStartX - (e.clientX - dragStartX) * scale;
       viewY = viewStartY - (e.clientY - dragStartY) * scale;
-      applyZoom();
+      clampView();
+      renderFrame();
     });
 
     window.addEventListener("mouseup", function() {
@@ -683,7 +694,7 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
         var dx = e.touches[0].clientX - e.touches[1].clientX;
         var dy = e.touches[0].clientY - e.touches[1].clientY;
         lastTouchDist = Math.sqrt(dx * dx + dy * dy);
-      } else if (e.touches.length === 1 && zoomLevel > 1) {
+      } else if (e.touches.length === 1 && zoomLevel > ZOOM_MIN + 0.001) {
         isDragging = true;
         dragStartX = e.touches[0].clientX;
         dragStartY = e.touches[0].clientY;
@@ -698,19 +709,20 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
         var dx = e.touches[0].clientX - e.touches[1].clientX;
         var dy = e.touches[0].clientY - e.touches[1].clientY;
         var dist = Math.sqrt(dx * dx + dy * dy);
+        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         if (lastTouchDist > 0) {
-          var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
           var ratio = dist / lastTouchDist;
-          if (ratio > 1.15) { zoomAtPoint(zoomLevel + 1, midX, midY); lastTouchDist = dist; }
-          else if (ratio < 0.85) { zoomAtPoint(zoomLevel - 1, midX, midY); lastTouchDist = dist; }
+          setZoomAt(zoomLevel * ratio, midX, midY);
         }
+        lastTouchDist = dist;
       } else if (isDragging && e.touches.length === 1) {
         e.preventDefault();
         var scale = displayToSourceScale();
         viewX = viewStartX - (e.touches[0].clientX - dragStartX) * scale;
         viewY = viewStartY - (e.touches[0].clientY - dragStartY) * scale;
-        applyZoom();
+        clampView();
+        renderFrame();
       }
     }, { passive: false });
 
@@ -774,33 +786,31 @@ body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; disp
       // Reken om naar bron-pixel coord (rekening houdend met zoom+pan)
       var srcPxX = viewX + fx * (BASEMAP_W  / zoomLevel);
       var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
-      // Fractie in de totale bronafbeelding
-      var lonFrac = srcPxX / BASEMAP_W;
-      var latFrac = srcPxY / BASEMAP_H;
-      var lon = meta.grid.lon_min + lonFrac * (meta.grid.lon_max - meta.grid.lon_min);
-      var lat = meta.grid.lat_max - latFrac * (meta.grid.lat_max - meta.grid.lat_min);
-
-      // Data pixel
-      var col = Math.round(lonFrac * (nLon - 1));
-      var row = Math.round(latFrac * (nLat - 1));
-      if (col < 0 || col >= nLon || row < 0 || row >= nLat) {
-        tooltip.style.display = "none";
-        return;
-      }
-
-      var offset = frameIdx * nLat * nLon + row * nLon + col;
-      var pv = radarData[offset];
-      var mmh = pvToMmh(pv);
-      var dbz = pvToDbz(pv);
+      // lat/lon via basemap-extent (kan ruimer zijn dan data-extent)
+      var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
+      var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
 
       var plaats = dichtstbijzijnde(lat, lon);
       var lines = [];
       if (plaats) lines.push("<b>" + plaats + "</b>");
       lines.push(lat.toFixed(2) + "\u00b0N, " + lon.toFixed(2) + "\u00b0E");
-      if (pv > 0 && pv < 255 && dbz >= 5) {
-        lines.push(mmh.toFixed(1) + " mm/u (" + dbz.toFixed(0) + " dBZ)");
-      } else {
-        lines.push("Geen neerslag");
+
+      // Data alleen lezen als binnen het data-bereik
+      if (lon >= meta.grid.lon_min && lon <= meta.grid.lon_max &&
+          lat >= meta.grid.lat_min && lat <= meta.grid.lat_max) {
+        var dFracX = (lon - meta.grid.lon_min) / (meta.grid.lon_max - meta.grid.lon_min);
+        var dFracY = (meta.grid.lat_max - lat) / (meta.grid.lat_max - meta.grid.lat_min);
+        var col = Math.round(dFracX * (nLon - 1));
+        var row = Math.round(dFracY * (nLat - 1));
+        var offset = frameIdx * nLat * nLon + row * nLon + col;
+        var pv = radarData[offset];
+        var mmh = pvToMmh(pv);
+        var dbz = pvToDbz(pv);
+        if (pv > 0 && pv < 255 && dbz >= 5) {
+          lines.push(mmh.toFixed(1) + " mm/u (" + dbz.toFixed(0) + " dBZ)");
+        } else {
+          lines.push("Geen neerslag");
+        }
       }
 
       tooltip.innerHTML = lines.join("<br>");

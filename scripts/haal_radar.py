@@ -34,11 +34,11 @@ VERSION = "2.0"
 API_BASE = "https://api.dataplatform.knmi.nl/open-data/v1"
 N_FRAMES = 24  # 2 uur à 5 min
 
-# Target grid (PlateCarree, NL)
-LON_MIN, LON_MAX = 3.0, 7.5
-LAT_MIN, LAT_MAX = 50.4, 53.9
-TARGET_NLON = 450
-TARGET_NLAT = 350
+# Target grid (PlateCarree, NL + ruime omgeving — UK-kust, BE, NW-Duitsland)
+LON_MIN, LON_MAX = 1.0, 10.0
+LAT_MIN, LAT_MAX = 49.5, 54.5
+TARGET_NLON = 900
+TARGET_NLAT = 500
 
 # KNMI radar projectie
 KNMI_PROJ = Proj("+proj=stere +lat_0=90 +lon_0=0 +lat_ts=60 "
