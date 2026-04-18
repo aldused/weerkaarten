@@ -376,9 +376,23 @@ def verwerk_station(code, naam):
         r["TN"] = round(min(dd["tn"]), 1) if dd["tn"] else None
         r["TG"] = round(min(dd["tg"]), 1) if dd["tg"] else None
 
-        # Max temp per dagdeel uit uurlijkse TTT
-        r["TX_O"] = round(max(dd["tx_ochtend"]), 1) if dd["tx_ochtend"] else None
-        r["TX_M"] = round(max(dd["tx_middag"]), 1) if dd["tx_middag"] else None
+        # Max temp per dagdeel uit uurlijkse TTT.
+        # TTT is instantaan per uur; DWD's MOS-TX (12-uurs) ligt 0.5-1.5°C hoger door
+        # sub-uurlijke pieken en statistische calibratie. We ankeren het dagdeel met
+        # de TTT-piek aan TX zodat max(TX_O, TX_M) == TX; het andere dagdeel blijft
+        # op ruwe TTT (veilige ondergrens, want de echte dagpiek ligt daar niet).
+        tx_o_raw = round(max(dd["tx_ochtend"]), 1) if dd["tx_ochtend"] else None
+        tx_m_raw = round(max(dd["tx_middag"]), 1) if dd["tx_middag"] else None
+        tx_daily = round(max(dd["tx"]), 1) if dd["tx"] else None
+        if tx_daily is not None and (tx_o_raw is not None or tx_m_raw is not None):
+            ttt_peak = max(v for v in (tx_o_raw, tx_m_raw) if v is not None)
+            if tx_daily > ttt_peak:
+                if tx_m_raw is not None and (tx_o_raw is None or tx_m_raw >= tx_o_raw):
+                    tx_m_raw = tx_daily
+                else:
+                    tx_o_raw = tx_daily
+        r["TX_O"] = tx_o_raw
+        r["TX_M"] = tx_m_raw
 
         # Wind
         if dd["ff_dag"]:
