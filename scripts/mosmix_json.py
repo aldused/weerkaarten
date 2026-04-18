@@ -145,14 +145,14 @@ def sd_uit_neff(neff_gem, datum):
 # ── Hoofdverwerking per station ──────────────────────────────────────────────
 
 def verwerk_station(code, naam):
-    """Haal alle parameters op voor 1 station, return (data_dict, issue_time)."""
+    """Haal alle parameters op voor 1 station, return (data_dict, hourly_dict, issue_time)."""
     root = download_kmz(code)
     if root is None:
-        return {}, None
+        return {}, None, None
 
     times = get_times(root)
     if not times:
-        return {}, None
+        return {}, None, None
 
     issue_time = get_issue_time(root)
 
@@ -177,6 +177,9 @@ def verwerk_station(code, naam):
     fxh40_raw = parse_values(root, 'FXh40')  # kans windstoot >40kt (74 km/u) 12u %
     fxh55_raw = parse_values(root, 'FXh55')  # kans windstoot >55kt (102 km/u) 12u %
     sad_raw  = parse_values(root, 'Sad')     # sneeuwval 24u in cm (DWD: 0.01m → ×100)
+    nl_raw   = parse_values(root, 'Nl')      # lage bewolking %
+    nm_raw   = parse_values(root, 'Nm')      # midden bewolking %
+    nh_raw   = parse_values(root, 'Nh')      # hoge bewolking %
 
     # Conversie Kelvin → Celsius
     tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
@@ -491,24 +494,63 @@ def verwerk_station(code, naam):
 
         result[d] = r
 
-    return result, issue_time
+    # ── Uurlijkse data voor demo/tabel-pagina ──
+    def _r1(v): return round(v, 1) if v is not None else None
+    def _ri(v): return round(v) if v is not None else None
+    def _mskmh(v): return round(v * 3.6, 1) if v is not None else None
+
+    # Bereken RV uit T + Td per uur
+    rv_uurlijks = []
+    for i in range(len(times)):
+        t_val = ttt[i] if i < len(ttt) else None
+        td_val = td[i] if i < len(td) else None
+        if t_val is not None and td_val is not None:
+            rv = 100 * math.exp((17.625 * td_val) / (243.04 + td_val)) / math.exp((17.625 * t_val) / (243.04 + t_val))
+            rv_uurlijks.append(round(max(0, min(100, rv))))
+        else:
+            rv_uurlijks.append(None)
+
+    tijden_lokaal = [dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).strftime("%Y-%m-%dT%H:%M") for dt in times]
+
+    hourly = {
+        "tijden": tijden_lokaal,
+        "TTT":  [_r1(v) for v in ttt],
+        "Td":   [_r1(v) for v in td],
+        "RV":   rv_uurlijks,
+        "FF":   [_mskmh(v) for v in ff_raw],
+        "FX1":  [_mskmh(v) for v in fx_raw],
+        "DD":   [_ri(v) for v in dd_raw],
+        "RR1c": [_r1(v) for v in rr_raw],
+        "Neff": [_ri(v) for v in neff_raw],
+        "Nl":   [_ri(v) for v in nl_raw],
+        "Nm":   [_ri(v) for v in nm_raw],
+        "Nh":   [_ri(v) for v in nh_raw],
+        "VV":   [_ri(v) for v in vv_raw],
+        "SunD1":[_ri(v) for v in sd_raw],
+        "wwT":  [_ri(v) for v in wwt_raw],
+    }
+
+    return result, hourly, issue_time
 
 # ── JSON samenstellen ────────────────────────────────────────────────────────
 
-def bouw_json(stations, coords, output_file):
+def bouw_json(stations, coords, output_file, uurlijks_file=None):
     print(f"\n{'='*60}")
     print(f"  {output_file} — {len(stations)} stations")
     print(f"{'='*60}")
 
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
-    alle_data = {}  # {naam: {date: {param: val}}}
-    laatste_run = None  # IssueTime van het model
+    alle_data = {}       # {naam: {date: {param: val}}}
+    alle_uurlijks = {}   # {naam: {tijden:[], TTT:[], ...}}
+    laatste_run = None   # IssueTime van het model
 
     for code, naam in stations:
         print(f"  {naam} ({code})...")
-        station_data, issue_time = verwerk_station(code, naam)
+        station_data, station_hourly, issue_time = verwerk_station(code, naam)
         if station_data:
             alle_data[naam] = station_data
+        if station_hourly:
+            alle_uurlijks[naam] = station_hourly
         if issue_time is not None and (laatste_run is None or issue_time > laatste_run):
             laatste_run = issue_time
 
@@ -555,6 +597,33 @@ def bouw_json(stations, coords, output_file):
     size = os.path.getsize(output_file)
     print(f"\n  {output_file}: {size/1024:.0f} KB, {len(dagen)} dagen, {len(alle_data)} stations")
 
+    # ── Uurlijkse JSON (voor demo_mosmix_uurlijks.html) ──
+    if uurlijks_file is not None and alle_uurlijks:
+        # Knip uurlijkse data af op 10 dagen ná vandaag om bestand klein te houden
+        limiet = f"{dagen[-1]}T23:59" if dagen else None
+        uur_out = {}
+        for naam, h in alle_uurlijks.items():
+            if limiet:
+                idx = [i for i, t in enumerate(h["tijden"]) if t <= limiet]
+                if not idx:
+                    continue
+                einde = idx[-1] + 1
+                h_cut = {k: v[:einde] for k, v in h.items()}
+            else:
+                h_cut = h
+            uur_out[naam] = h_cut
+
+        uurlijks_output = {
+            "bijgewerkt": datetime.now().isoformat(timespec="minutes"),
+            "run": run_str,
+            "stations": coords,
+            "data": uur_out,
+        }
+        with open(uurlijks_file, "w") as f:
+            json.dump(uurlijks_output, f, ensure_ascii=False)
+        usize = os.path.getsize(uurlijks_file)
+        print(f"  {uurlijks_file}: {usize/1024:.0f} KB, {len(uur_out)} stations uurlijks")
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -562,8 +631,8 @@ def main():
     t0 = time.time()
     print(f"MOSMIX JSON generator — {datetime.now():%Y-%m-%d %H:%M}")
 
-    bouw_json(STATIONS_NL, COORDS_NL, "mosmix_nl.json")
-    bouw_json(STATIONS_BE, COORDS_BE, "mosmix_be.json")
+    bouw_json(STATIONS_NL, COORDS_NL, "mosmix_nl.json", "mosmix_uurlijks_nl.json")
+    bouw_json(STATIONS_BE, COORDS_BE, "mosmix_be.json", "mosmix_uurlijks_be.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
