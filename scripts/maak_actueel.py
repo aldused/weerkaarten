@@ -47,7 +47,8 @@ STATIONS = {
 
 def haal_station(wigos, naam, lon, lat):
     nu  = datetime.now(timezone.utc)
-    van = nu - timedelta(minutes=60)
+    # 3u terug ophalen zodat we per station een historie-array (ta/td) kunnen opslaan
+    van = nu - timedelta(minutes=180)
     dt  = f"{van.strftime('%Y-%m-%dT%H:%M:%SZ')}/{nu.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     params = {"datetime": dt, "parameter-name": "ta,td,ff,dd,fx,n,rh,vv,h,ww,tg,tgn,p0"}
     try:
@@ -57,7 +58,13 @@ def haal_station(wigos, naam, lon, lat):
             return None
         js = r.json()
         if not js.get("coverages"): return None
-        ranges = js["coverages"][0].get("ranges", {})
+        cov = js["coverages"][0]
+        ranges = cov.get("ranges", {})
+        # Tijden uit domain.axes.t.values (ISO-strings)
+        try:
+            tijden = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values", [])
+        except Exception:
+            tijden = []
         def laatste(key):
             vals = ranges.get(key, {}).get("values", [])
             for v in reversed(vals):
@@ -66,6 +73,29 @@ def haal_station(wigos, naam, lon, lat):
         def rnd(key, d=1):
             v = laatste(key)
             return round(v, d) if v is not None else None
+        # 3u-historie van ta/td/ff/dd/fx — voor nowcast OBS-overlay
+        ta_serie = ranges.get("ta", {}).get("values", [])
+        td_serie = ranges.get("td", {}).get("values", [])
+        ff_serie = ranges.get("ff", {}).get("values", [])
+        dd_serie = ranges.get("dd", {}).get("values", [])
+        fx_serie = ranges.get("fx", {}).get("values", [])
+        historie = []
+        for i, t in enumerate(tijden):
+            ta_v = ta_serie[i] if i < len(ta_serie) else None
+            td_v = td_serie[i] if i < len(td_serie) else None
+            ff_v = ff_serie[i] if i < len(ff_serie) else None
+            dd_v = dd_serie[i] if i < len(dd_serie) else None
+            fx_v = fx_serie[i] if i < len(fx_serie) else None
+            if all(v is None for v in (ta_v, td_v, ff_v)):
+                continue
+            historie.append({
+                "t": t,
+                "ta": round(ta_v, 1) if ta_v is not None else None,
+                "td": round(td_v, 1) if td_v is not None else None,
+                "ff": round(ff_v, 1) if ff_v is not None else None,
+                "dd": round(dd_v, 0) if dd_v is not None else None,
+                "fx": round(fx_v, 1) if fx_v is not None else None,
+            })
         return {
             "naam": naam, "lon": lon, "lat": lat,
             "ta": rnd("ta"), "td": rnd("td"),
@@ -74,6 +104,7 @@ def haal_station(wigos, naam, lon, lat):
             "rh": rnd("rh", 0), "vv": rnd("vv", 0),
             "h":  rnd("h",  0), "ww": rnd("ww", 0),
             "tg": rnd("tg"), "tgn": rnd("tgn"), "p0": rnd("p0"),
+            "historie": historie,
         }
     except Exception as e:
         print(f"  FOUT {naam}: {e}")

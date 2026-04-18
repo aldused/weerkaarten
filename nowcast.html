@@ -76,6 +76,14 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
 .conv-cel.hi{background:#fde8e8}.conv-cel.hi .conv-waarde{color:#cc2222}
 .conv-cel.severe{background:#f0d8f8}.conv-cel.severe .conv-waarde{color:#770099}
 /* ── Alarm-badges ───────────────────────────────────────────────── */
+.obs-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:8px 16px;background:#e8f4ec;border-top:1px solid #1a8c4a;border-bottom:1px solid #1a8c4a;font-size:.82rem}
+.obs-bar-titel{font-weight:700;color:#1a8c4a;font-size:.74rem;letter-spacing:.06em}
+.obs-item{display:inline-flex;align-items:baseline;gap:4px;color:var(--text)}
+.obs-item b{font-weight:700;font-size:.95rem}
+.obs-item .obs-delta{font-size:.72rem;color:var(--text2);font-weight:600}
+.obs-item .delta-warm{color:#cc2222}
+.obs-item .delta-koud{color:#2266cc}
+.obs-item .delta-ok{color:#1a8c4a}
 .alarms{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;background:#fafbfc;border-bottom:1px solid var(--border)}
 .alarms:empty{display:none}
 .alarm{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:14px;font-size:.74rem;font-weight:700;border:1.5px solid;letter-spacing:.02em}
@@ -204,6 +212,14 @@ button.klein.actief{background:var(--accent);color:white;border-color:var(--acce
   <div class="huidig-cel"><div class="huidig-label">Windstoot</div><div class="huidig-waarde" id="h-stoot">–</div><div class="huidig-sub" id="h-stootsub">HARMONIE</div></div>
   <div class="huidig-cel"><div class="huidig-label">Bewolking</div><div class="huidig-waarde" id="h-cloud">–</div><div class="huidig-sub" id="h-cloudsub">HARMONIE</div></div>
   <div class="huidig-cel"><div class="huidig-label">Druk MSLP</div><div class="huidig-waarde" id="h-druk">–</div><div class="huidig-sub" id="h-druksub">HARMONIE</div></div>
+</div>
+
+<div class="obs-bar" id="obs-bar" style="display:none">
+  <span class="obs-bar-titel">OBS vs MODEL</span>
+  <span class="obs-item" id="obs-item-temp"></span>
+  <span class="obs-item" id="obs-item-dauw"></span>
+  <span class="obs-item" id="obs-item-wind"></span>
+  <span class="obs-item" id="obs-item-stoot"></span>
 </div>
 
 <div class="conv" id="conv-strip" style="display:none">
@@ -608,7 +624,8 @@ function pushObsSample(station) {
   const tBucket = Math.floor(nu / (10 * 60 * 1000)) * (10 * 60 * 1000);
   // Verwijder bestaande sample voor deze 10-min bucket (overschrijven met nieuwste)
   const filtered = arr.filter(s => s.t !== tBucket && (nu - s.t) < OBS_HIST_MAX_MS);
-  filtered.push({t: tBucket, ta: station.ta ?? null, td: station.td ?? null});
+  filtered.push({t: tBucket, ta: station.ta ?? null, td: station.td ?? null,
+                 ff: station.ff ?? null, fx: station.fx ?? null, dd: station.dd ?? null});
   filtered.sort((a, b) => a.t - b.t);
   hist[key] = filtered;
   bewaarObsHistorie(hist);
@@ -748,8 +765,13 @@ function tekenChartsVoorLocatie(data, locNaam, suffix){
     const nPts = tempDatasets[0]?.data?.length || 44;
     const obsT = new Array(nPts).fill(null);
     const obsTd = new Array(nPts).fill(null);
-    // Stap 1: historische samples uit localStorage mappen op chart-tijden
-    const histArr = obsHistorieVoor(obsHuidig.naam);
+    // Stap 1a: KNMI 3u-historie uit actueel.json (als beschikbaar)
+    const knmiHist = (obsHuidig.historie || []).map(s => ({
+      t: new Date(s.t).getTime(), ta: s.ta, td: s.td
+    }));
+    // Stap 1b: aangevuld met eigen localStorage-buffer (langer venster)
+    const lokaalHist = obsHistorieVoor(obsHuidig.naam);
+    const histArr = knmiHist.concat(lokaalHist);
     const tijdMs = tijden.map(t => new Date(t).getTime());
     const STAP_MS = 15 * 60 * 1000;
     for (const s of histArr) {
@@ -820,6 +842,43 @@ function tekenChartsVoorLocatie(data, locNaam, suffix){
     windDatasets.push(iW);
     windDatasets.push(ds('ICON-D2 stoten', i.wind_gusts_10m, '#2266cc', [4,4]));
     windLeg.push(['#2266cc','ICON-D2 wind','lijn'], ['#2266cc','ICON-D2 stoten','dash']);
+  }
+  // OBS-wind toevoegen (KNMI ff/fx in m/s → km/u)
+  if (obsHuidig && !suffix) {
+    const nPts = windDatasets[0]?.data?.length || 44;
+    const obsFf = new Array(nPts).fill(null);
+    const obsFx = new Array(nPts).fill(null);
+    const obsDd = new Array(nPts).fill(null);
+    const knmiHist = (obsHuidig.historie || []).map(s => ({
+      t: new Date(s.t).getTime(), ff: s.ff, fx: s.fx, dd: s.dd
+    }));
+    const lokaalHist = obsHistorieVoor(obsHuidig.naam);
+    const histArr = knmiHist.concat(lokaalHist);
+    const tijdMs = tijden.map(t => new Date(t).getTime());
+    const STAP_MS = 15 * 60 * 1000;
+    for (const s of histArr) {
+      let bestI = -1, bestDiff = Infinity;
+      for (let k = 0; k < tijdMs.length; k++) {
+        const diff = Math.abs(tijdMs[k] - s.t);
+        if (diff < bestDiff) { bestDiff = diff; bestI = k; }
+      }
+      if (bestI >= 0 && bestDiff <= STAP_MS) {
+        if (s.ff != null) obsFf[bestI] = s.ff * 3.6;
+        if (s.fx != null) obsFx[bestI] = s.fx * 3.6;
+        if (s.dd != null) obsDd[bestI] = s.dd;
+      }
+    }
+    if (obsHuidig.ff != null) obsFf[nuIdx] = obsHuidig.ff * 3.6;
+    if (obsHuidig.fx != null) obsFx[nuIdx] = obsHuidig.fx * 3.6;
+    if (obsHuidig.dd != null) obsDd[nuIdx] = obsHuidig.dd;
+    const nObs = obsFf.filter(v => v != null).length;
+    const lijnAan = nObs >= 2;
+    windDatasets.push({label: 'OBS wind', data: obsFf, borderColor: '#1a8c4a', backgroundColor: '#1a8c4a',
+      pointRadius: 4, pointHoverRadius: 6, pointStyle: 'circle', showLine: lijnAan, spanGaps: true, borderWidth: 2.5, tension: 0.2});
+    windDatasets.push({label: 'OBS stoten', data: obsFx, borderColor: '#1a8c4a', backgroundColor: '#1a8c4a',
+      pointRadius: 3, pointHoverRadius: 5, pointStyle: 'rect', showLine: lijnAan, spanGaps: true, borderDash: [3,3], borderWidth: 1.5, tension: 0.2});
+    const obsLabel = `OBS (${obsHuidig.naam || 'KNMI'})${lijnAan ? '' : ' · alleen NU'}`;
+    windLeg.push(['#1a8c4a', obsLabel + ' wind', 'lijn'], ['#1a8c4a', obsLabel + ' stoten', 'dash']);
   }
   document.getElementById('leg-wind' + suffix).innerHTML = legHtml(windLeg);
   drawChart('canvas-wind' + suffix, 'line', labels, windDatasets, {y: {title: {display: true, text: 'km/u'}, beginAtZero: true}}, nuIdx, pluginOpts);
@@ -923,6 +982,7 @@ function tekenCharts(){
 
   // Convectieve parameters strip
   vulConvStrip(laatsteData);
+  vulObsBar(laatsteData);
 
   // Locatie 1
   tekenChartsVoorLocatie(laatsteData, huidigNaam, '');
@@ -1219,6 +1279,57 @@ function shearMs(spd1Kmh, dir1Deg, spd2Kmh, dir2Deg) {
 // ── Convectieve params strip vullen ───────────────────────────────────
 // API levert CAPE + freezing_level. CIN/LI/SI/K/TT/Shear berekenen we
 // zelf uit pressure-level data van ICON-D2 (HARMONIE heeft die niet).
+// ── OBS vs MODEL vergelijkings-balk ───────────────────────────────────
+function vulObsBar(data) {
+  const bar = document.getElementById('obs-bar');
+  if (!bar) return;
+  if (!obsHuidig) { bar.style.display = 'none'; return; }
+  const msH = data.harmonie?.minutely_15;
+  const msI = data.icond2?.minutely_15;
+  const nu = Date.now();
+  const huidigeIdx = (m) => {
+    if (!m?.time?.length) return -1;
+    let mi = 0;
+    for (let i = 0; i < m.time.length; i++) if (new Date(m.time[i]).getTime() <= nu) mi = i;
+    return mi;
+  };
+  const iH = huidigeIdx(msH), iI = huidigeIdx(msI);
+  const modelVal = (veld) => {
+    const a = (iH >= 0) ? msH?.[veld]?.[iH] : null;
+    const b = (iI >= 0) ? msI?.[veld]?.[iI] : null;
+    return {h: a, i: b};
+  };
+  // Bereken delta-kleur (model - obs); warm = rood, koud = blauw, klein = groen
+  const renderItem = (id, label, obsW, modelMv, eenheid, fmt = v => v.toFixed(1), drempelOk = 0.5) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (obsW == null) { el.innerHTML = ''; return; }
+    const obsTxt = `<b>${fmt(obsW)}${eenheid}</b>`;
+    const deltas = [];
+    if (modelMv.h != null) {
+      const d = modelMv.h - obsW;
+      const cls = Math.abs(d) <= drempelOk ? 'delta-ok' : (d > 0 ? 'delta-warm' : 'delta-koud');
+      deltas.push(`<span class="obs-delta ${cls}">H ${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>`);
+    }
+    if (modelMv.i != null) {
+      const d = modelMv.i - obsW;
+      const cls = Math.abs(d) <= drempelOk ? 'delta-ok' : (d > 0 ? 'delta-warm' : 'delta-koud');
+      deltas.push(`<span class="obs-delta ${cls}">I ${d >= 0 ? '+' : ''}${d.toFixed(1)}</span>`);
+    }
+    el.innerHTML = `${label} ${obsTxt} ${deltas.join(' ')}`;
+  };
+  renderItem('obs-item-temp', 'T', obsHuidig.ta, modelVal('temperature_2m'), '°', v => v.toFixed(1), 0.5);
+  renderItem('obs-item-dauw', 'Td', obsHuidig.td, modelVal('dew_point_2m'), '°', v => v.toFixed(1), 0.5);
+  // Wind: KNMI ff in m/s, model in km/u → vergelijken in km/u
+  const windObs = obsHuidig.ff != null ? obsHuidig.ff * 3.6 : null;
+  renderItem('obs-item-wind', 'Wind', windObs, modelVal('wind_speed_10m'), ' km/u', v => Math.round(v), 2);
+  const stootObs = obsHuidig.fx != null ? obsHuidig.fx * 3.6 : null;
+  renderItem('obs-item-stoot', 'Stoot', stootObs, modelVal('wind_gusts_10m'), ' km/u', v => Math.round(v), 3);
+  bar.style.display = '';
+  // Stationsnaam in titel
+  bar.querySelector('.obs-bar-titel').textContent = `OBS ${obsHuidig.naam || 'KNMI'} vs MODEL`;
+}
+
 function vulConvStrip(data) {
   const hH = data.harmonie?.hourly;
   const hI = data.icond2?.hourly;
