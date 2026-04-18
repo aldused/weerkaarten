@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEMO Regenradar — bredere extent + vloeiende zoom</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: Arial, sans-serif; background: #1a2b40; color: #e0e8f0; display: flex; flex-direction: column; overflow: hidden; }
+
+.header { background: #00205b; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; border-bottom: 2px solid #2ec4e8; }
+.header-titel { color: white; font-size: 17px; font-weight: 700; }
+.header-sub { color: #ffd166; font-size: 11px; font-weight: 700; }
+
+.banner { background: #2a1c00; color: #ffd166; padding: 6px 16px; font-size: 12px; border-bottom: 1px solid #5a4500; }
+.banner b { color: #ffeaa3; }
+
+.controls { background: #0a1929; padding: 6px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #1e3a5f; }
+.btn-play { width: 34px; height: 34px; border-radius: 50%; border: none; background: #003366; color: white; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-play:hover { background: #0055aa; }
+.btn-stap { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-stap:hover { background: #1a3a5a; }
+.slider-area { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 200px; }
+.slider-area input[type=range] { flex: 1; height: 4px; -webkit-appearance: none; background: #1e3a5f; border-radius: 2px; outline: none; cursor: pointer; }
+.slider-area input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #2ec4e8; cursor: pointer; border: 2px solid #0a1929; }
+.tijd-label { font-size: 14px; font-weight: 700; color: #2ec4e8; min-width: 140px; text-align: center; }
+
+.speed-btns { display: flex; gap: 3px; }
+.speed-btn { padding: 3px 10px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 11px; font-weight: 600; cursor: pointer; }
+.speed-btn:hover { background: #1a3a5a; }
+.speed-btn.actief { background: #003366; color: white; border-color: #2ec4e8; }
+
+.zoom-info { font-size: 11px; color: #2ec4e8; font-weight: 700; min-width: 60px; text-align: center; padding: 3px 8px; border: 1px solid #2a4a6a; border-radius: 10px; background: #0a1929; }
+.zoom-btn { padding: 3px 8px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 13px; font-weight: 600; cursor: pointer; min-width: 26px; }
+.zoom-btn:hover { background: #1a3a5a; }
+.reset-btn { padding: 3px 10px; border-radius: 10px; border: 1px solid #2a4a6a; background: #0a1929; color: #a8c4e8; font-size: 11px; cursor: pointer; }
+.reset-btn:hover { background: #1a3a5a; }
+
+.canvas-container { flex: 1; position: relative; overflow: hidden; background: #0d1b2a; display: flex; align-items: center; justify-content: center; cursor: grab; }
+.canvas-container.dragging { cursor: grabbing; }
+.canvas-container canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+
+.legenda { position: absolute; bottom: 16px; left: 16px; background: rgba(10,25,41,0.92); border-radius: 8px; padding: 10px 14px; border: 1px solid #2a4a6a; z-index: 20; pointer-events: none; }
+.legenda-titel { font-size: 11px; color: #e0e8f0; margin-bottom: 5px; font-weight: 700; }
+.legenda-bar { display: flex; height: 18px; border-radius: 3px; overflow: hidden; }
+.legenda-bar div { flex: 1; min-width: 22px; }
+.legenda-labels { display: flex; font-size: 10px; color: #a8c4e8; margin-top: 3px; }
+.legenda-labels span { flex: 1; min-width: 22px; text-align: center; }
+
+#tooltip { display: none; position: fixed; background: rgba(0,32,91,0.92); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+.status { text-align: center; padding: 8px; font-size: 11px; color: #5a7090; }
+.loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #1e3a5f; border-top: 2px solid #2ec4e8; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Demo-overlay: laat zien welk gebied nieuw is */
+.dashed-rect { position: absolute; pointer-events: none; border: 2px dashed #ffd166; z-index: 15; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4); }
+.dashed-rect-label { position: absolute; background: rgba(255,209,102,0.92); color: #2a1c00; padding: 2px 8px; font-size: 10px; font-weight: 700; border-radius: 0 0 4px 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="header-titel">Regenradar — DEMO bredere extent</div>
+    <div class="header-sub">PREVIEW</div>
+  </div>
+  <div>
+    <div class="header-sub" id="hdr-update">laden...</div>
+  </div>
+</div>
+
+<div class="banner">
+  <b>Demo:</b> nieuwe basemap (1°–10°E, 49,5°–54,5°N). Stippellijn toont huidig bereik (3–7,5°E / 50,4–53,9°N) — daarbuiten is grijs omdat de live data nog niet zover gaat. Na update van <code>haal_radar.py</code> vult de echo het hele kader. Zoom is nu vloeiend (1×–10×), gebruik scrollwiel of pinch.
+</div>
+
+<div class="controls">
+  <button class="btn-stap" id="btn-vorige">&#9664;</button>
+  <button class="btn-play" id="btn-play">&#10074;&#10074;</button>
+  <button class="btn-stap" id="btn-volgende">&#9654;</button>
+
+  <div class="slider-area">
+    <input type="range" id="slider" min="0" max="23" value="23" step="1">
+    <span class="tijd-label" id="tijd-label">--</span>
+  </div>
+
+  <div class="speed-btns">
+    <button class="speed-btn" data-ms="800">1x</button>
+    <button class="speed-btn actief" data-ms="400">2x</button>
+    <button class="speed-btn" data-ms="200">4x</button>
+    <button class="speed-btn" data-ms="100">8x</button>
+  </div>
+
+  <div style="display:flex;gap:4px;align-items:center;">
+    <button class="zoom-btn" id="btn-zoom-out" title="Uitzoomen">&minus;</button>
+    <div class="zoom-info" id="zoom-info">1.0×</div>
+    <button class="zoom-btn" id="btn-zoom-in" title="Inzoomen">+</button>
+    <button class="reset-btn" id="btn-reset" title="Reset">reset</button>
+  </div>
+</div>
+
+<div class="canvas-container" id="canvas-container">
+  <canvas id="radar-canvas"></canvas>
+  <div class="dashed-rect" id="huidig-bereik" style="display:none;">
+    <div class="dashed-rect-label">huidig bereik</div>
+  </div>
+  <div class="legenda" id="legenda"></div>
+</div>
+
+<div id="tooltip"></div>
+<div class="status" id="status">Laden... <span class="loading-spinner"></span></div>
+
+<script>
+(function() {
+  "use strict";
+
+  var DATA_BASE = "https://harmonie-data.weerlab.nl/";
+  var META_URL = DATA_BASE + "radar_meta.json";
+  var BIN_URL  = DATA_BASE + "radar_data.bin";
+
+  // ── NIEUWE bredere extent ───────────────────────────────────────────────
+  var PROJ_LON_MIN = 1.0,  PROJ_LON_MAX = 10.0;
+  var PROJ_LAT_MIN = 49.5, PROJ_LAT_MAX = 54.5;
+  var LAT_MID = (PROJ_LAT_MIN + PROJ_LAT_MAX) / 2;
+  var KM_LON  = 111.32 * Math.cos(LAT_MID * Math.PI / 180);
+  var ASPECT  = ((PROJ_LAT_MAX - PROJ_LAT_MIN) * 111.32) /
+                ((PROJ_LON_MAX - PROJ_LON_MIN) * KM_LON);
+  var BASEMAP_W = 1100;
+  var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);
+  function lonToX(lon){ return (lon - PROJ_LON_MIN) / (PROJ_LON_MAX - PROJ_LON_MIN) * BASEMAP_W; }
+  function latToY(lat){ return (PROJ_LAT_MAX - lat) / (PROJ_LAT_MAX - PROJ_LAT_MIN) * BASEMAP_H; }
+
+  // Huidig (smal) data-bereik
+  var DATA_LON_MIN = 3.0,  DATA_LON_MAX = 7.5;
+  var DATA_LAT_MIN = 50.4, DATA_LAT_MAX = 53.9;
+
+  var PLAATSEN = [
+    [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
+    [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
+    [51.84,5.86,"Arnhem"],[52.51,6.09,"Zwolle"],[51.69,5.30,"Den Bosch"],
+    [51.45,3.57,"Vlissingen"],[52.63,4.75,"Alkmaar"],[53.20,5.80,"Leeuwarden"],
+    [52.22,6.90,"Enschede"],[51.56,4.47,"Breda"],[52.93,4.79,"Den Helder"],
+    [52.46,5.52,"Lelystad"],[52.96,5.94,"Assen"],[52.70,5.75,"Emmeloord"],
+    [51.59,4.78,"Tilburg"],[51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],
+    [50.85,4.35,"Brussel"],[50.85,5.69,"Maastricht"],
+    [53.55,9.99,"Hamburg"],[53.07,8.81,"Bremen"],[52.37,9.73,"Hannover"],
+    [51.51,7.47,"Dortmund"],[51.23,6.78,"Düsseldorf"],[50.94,6.96,"Köln"],
+    [51.45,7.01,"Essen"],[52.26,7.97,"Osnabrück"],
+    [51.51,-0.13,"London"],[52.63,1.30,"Norwich"],[51.07,1.19,"Dover"],
+    [51.50,3.61,"Vlissingen"],[50.62,3.07,"Lille"],
+  ];
+
+  var STEDEN_LABEL = [
+    [52.37,4.89,"Amsterdam"],[52.09,5.12,"Utrecht"],[51.92,4.48,"Rotterdam"],
+    [52.08,4.31,"Den Haag"],[51.44,5.47,"Eindhoven"],[53.22,6.57,"Groningen"],
+    [51.84,5.86,"Arnhem"],[52.51,6.09,"Zwolle"],[51.69,5.30,"Den Bosch"],
+    [53.20,5.80,"Leeuwarden"],[52.22,6.90,"Enschede"],[51.56,4.47,"Breda"],
+    [52.93,4.79,"Den Helder"],[51.45,3.57,"Vlissingen"],[52.46,5.52,"Lelystad"],
+    [51.22,4.40,"Antwerpen"],[51.05,3.72,"Gent"],[50.85,4.35,"Brussel"],
+    [50.85,5.69,"Maastricht"],
+    [51.23,6.78,"Düsseldorf"],[50.94,6.96,"Köln"],[51.51,7.47,"Dortmund"],
+    [52.37,9.73,"Hannover"],[53.07,8.81,"Bremen"],[53.55,9.99,"Hamburg"],
+    [52.63,1.30,"Norwich"],[51.07,1.19,"Dover"],
+  ];
+
+  function dichtstbijzijnde(lat, lon) {
+    var best = null, bestD = 999;
+    for (var i = 0; i < PLAATSEN.length; i++) {
+      var dlat = PLAATSEN[i][0] - lat, dlon = PLAATSEN[i][1] - lon;
+      var d = Math.sqrt(dlat * dlat + dlon * dlon * 0.5);
+      if (d < bestD) { bestD = d; best = PLAATSEN[i]; }
+    }
+    if (bestD < 0.30) return best[2];
+    return null;
+  }
+
+  // dBZ kleurenschaal (zelfde als productie)
+  function pvToDbz(pv) { return 0.5 * pv - 32; }
+  function dbzToMmh(dbz) {
+    if (dbz <= 0) return 0;
+    return Math.pow(Math.pow(10, dbz / 10) / 200, 1 / 1.6);
+  }
+  function pvToMmh(pv) { return dbzToMmh(pvToDbz(pv)); }
+
+  var DBZ_LEVELS = [ 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70];
+  var DBZ_COLORS = [
+    [160,200,220],[120,210,140],[40,180,40],[0,140,0],[255,255,0],
+    [255,200,0],[255,150,0],[255,80,0],[255,0,0],[200,0,0],
+    [160,0,80],[200,0,200],[255,100,255],[255,255,255],
+  ];
+  var DBZ_ALPHA = [ 90, 140, 175, 200, 220, 230, 240, 245, 250, 250, 250, 250, 250, 255];
+
+  function dbzColor(dbz) {
+    if (dbz < DBZ_LEVELS[0]) return null;
+    if (dbz >= DBZ_LEVELS[DBZ_LEVELS.length - 1]) {
+      var c = DBZ_COLORS[DBZ_COLORS.length - 1];
+      return [c[0], c[1], c[2], DBZ_ALPHA[DBZ_ALPHA.length - 1]];
+    }
+    for (var i = DBZ_LEVELS.length - 2; i >= 0; i--) {
+      if (dbz >= DBZ_LEVELS[i]) {
+        var t = (dbz - DBZ_LEVELS[i]) / (DBZ_LEVELS[i + 1] - DBZ_LEVELS[i]);
+        var c0 = DBZ_COLORS[i], c1 = DBZ_COLORS[i + 1];
+        var a0 = DBZ_ALPHA[i],  a1 = DBZ_ALPHA[i + 1];
+        return [
+          Math.round(c0[0] + t * (c1[0] - c0[0])),
+          Math.round(c0[1] + t * (c1[1] - c0[1])),
+          Math.round(c0[2] + t * (c1[2] - c0[2])),
+          Math.round(a0    + t * (a1    - a0))
+        ];
+      }
+    }
+    return null;
+  }
+
+  // STATE
+  var meta = null;
+  var radarData = null;
+  var nLat = 0, nLon = 0, nFrames = 0;
+  var nlGeo = null, beGeo = null;
+  var canvas, ctx;
+  var offscreen, offCtx;
+  var dprGlobal = 1;
+  var frameIdx = 0;
+  var playing = true;
+  var animInterval = null;
+  var animSpeed = 400;
+
+  // Vloeiende zoom + pan
+  var zoomLevel = 1.0;     // float, 1.0 .. 10.0
+  var ZOOM_MIN = 1.0, ZOOM_MAX = 10.0;
+  var viewX = 0, viewY = 0;  // top-left in basemap-coords
+  var isDragging = false;
+  var dragStartX = 0, dragStartY = 0;
+  var viewStartX = 0, viewStartY = 0;
+
+  function loadData() {
+    var t = Date.now();
+    var fetches = [
+      fetch(META_URL + "?t=" + t).then(function(r) { return r.json(); }),
+      fetch(BIN_URL + "?t=" + t).then(function(r) { return r.arrayBuffer(); }),
+    ];
+    if (!nlGeo) fetches.push(fetch("nl_provincies.geojson").then(function(r){return r.json();}));
+    else        fetches.push(Promise.resolve(nlGeo));
+    if (!beGeo) fetches.push(fetch("be_provincies.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
+    else        fetches.push(Promise.resolve(beGeo));
+
+    return Promise.all(fetches).then(function(results) {
+      meta = results[0];
+      var buf = results[1];
+      nlGeo = results[2];
+      beGeo = results[3];
+
+      var view = new DataView(buf);
+      nLat = view.getUint16(0, true);
+      nLon = view.getUint16(2, true);
+      nFrames = view.getUint16(4, true);
+      radarData = new Uint8Array(buf, 16);
+
+      document.getElementById("slider").max = nFrames - 1;
+      document.getElementById("hdr-update").textContent = "Live data: " + meta.bijgewerkt;
+
+      offscreen = document.createElement("canvas");
+      offscreen.width = nLon;
+      offscreen.height = nLat;
+      offCtx = offscreen.getContext("2d");
+
+      setupCanvas();
+      frameIdx = nFrames - 1;
+      document.getElementById("slider").value = frameIdx;
+      renderFrame();
+      updateBereikRect();
+      document.getElementById("status").style.display = "none";
+      startAnimatie();
+    });
+  }
+
+  function setupCanvas() {
+    canvas = document.getElementById("radar-canvas");
+    var dpr = window.devicePixelRatio || 1;
+    dprGlobal = dpr;
+    canvas.width  = Math.round(BASEMAP_W * dpr);
+    canvas.height = Math.round(BASEMAP_H * dpr);
+    canvas.style.width  = BASEMAP_W + "px";
+    canvas.style.height = BASEMAP_H + "px";
+    ctx = canvas.getContext("2d");
+  }
+
+  function _drawGeoFeatures(c, geo, fill, stroke, lineWidth) {
+    if (!geo) return;
+    c.beginPath();
+    for (var f = 0; f < geo.features.length; f++) {
+      var g = geo.features[f].geometry;
+      if (!g) continue;
+      var polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      for (var p = 0; p < polys.length; p++) {
+        for (var r = 0; r < polys[p].length; r++) {
+          var ring = polys[p][r];
+          for (var i = 0; i < ring.length; i++) {
+            var x = lonToX(ring[i][0]);
+            var y = latToY(ring[i][1]);
+            if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+          }
+          c.closePath();
+        }
+      }
+    }
+    if (fill)   { c.fillStyle = fill; c.fill("evenodd"); }
+    if (stroke) { c.strokeStyle = stroke; c.lineWidth = lineWidth || 1; c.stroke(); }
+  }
+
+  function _drawBuitengrens(c, geo, stroke, lineWidth) {
+    if (!geo) return;
+    c.beginPath();
+    for (var f = 0; f < geo.features.length; f++) {
+      var g = geo.features[f].geometry;
+      if (!g) continue;
+      var polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      for (var p = 0; p < polys.length; p++) {
+        var ring = polys[p][0];
+        for (var i = 0; i < ring.length; i++) {
+          var x = lonToX(ring[i][0]);
+          var y = latToY(ring[i][1]);
+          if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        }
+        c.closePath();
+      }
+    }
+    c.strokeStyle = stroke;
+    c.lineWidth = lineWidth || 1;
+    c.stroke();
+  }
+
+  function renderFrame() {
+    if (!radarData || !nlGeo) return;
+    var W = BASEMAP_W, H = BASEMAP_H;
+
+    var s = dprGlobal * zoomLevel;
+    ctx.setTransform(s, 0, 0, s, -viewX * s, -viewY * s);
+
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.save();
+    ctx.clip();
+
+    // Oceaan / "buiten kaart" — uniform, zodat het direct duidelijk is
+    // dat NL/BE de enige getekende land-polygonen zijn (geen UK/DE/FR contour beschikbaar
+    // in deze demo — komt evt. later via een wereld-coastline geojson)
+    ctx.fillStyle = "#c8e0f0";
+    ctx.fillRect(0, 0, W, H);
+
+    // NL + BE precies ingetekend
+    _drawGeoFeatures(ctx, nlGeo, "#eaf3e8", null, 0);
+    _drawGeoFeatures(ctx, beGeo, "#eaf3e8", null, 0);
+
+    // Radar-raster — alleen op het smalle data-bereik plaatsen
+    var offset = frameIdx * nLat * nLon;
+    var imgData = offCtx.createImageData(nLon, nLat);
+    var pixels = imgData.data;
+    for (var i = 0; i < nLat * nLon; i++) {
+      var pv = radarData[offset + i];
+      if (pv === 0 || pv === 255) continue;
+      var dbz = 0.5 * pv - 32;
+      var c = dbzColor(dbz);
+      if (c) {
+        var p = i * 4;
+        pixels[p]     = c[0];
+        pixels[p + 1] = c[1];
+        pixels[p + 2] = c[2];
+        pixels[p + 3] = c[3];
+      }
+    }
+    offCtx.putImageData(imgData, 0, 0);
+
+    // Plaats radar in zijn echte data-extent (NIET volle basemap)
+    var dx = lonToX(DATA_LON_MIN);
+    var dy = latToY(DATA_LAT_MAX);
+    var dw = lonToX(DATA_LON_MAX) - lonToX(DATA_LON_MIN);
+    var dh = latToY(DATA_LAT_MIN) - latToY(DATA_LAT_MAX);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(offscreen, dx, dy, dw, dh);
+
+    // Subtiele arcering op het "nog te vullen" gebied
+    ctx.fillStyle = "rgba(120,120,120,0.18)";
+    ctx.fillRect(0, 0, W, dy);                    // boven data
+    ctx.fillRect(0, dy + dh, W, H - (dy + dh));   // onder data
+    ctx.fillRect(0, dy, dx, dh);                  // links data
+    ctx.fillRect(dx + dw, dy, W - (dx + dw), dh); // rechts data
+
+    // Provinciegrenzen
+    _drawGeoFeatures(ctx, nlGeo, null, "rgba(0,32,91,0.18)", 0.5);
+    _drawGeoFeatures(ctx, beGeo, null, "rgba(0,32,91,0.18)", 0.5);
+    _drawBuitengrens(ctx, nlGeo, "rgba(0,32,91,0.55)", 1.2);
+
+    // Stippellijn rond huidige extent
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,209,102,0.95)";
+    ctx.lineWidth = 1.6 / zoomLevel;
+    ctx.setLineDash([6 / zoomLevel, 4 / zoomLevel]);
+    ctx.strokeRect(dx, dy, dw, dh);
+    ctx.restore();
+
+    // Steden
+    var fontWorldPx = 11 / zoomLevel;
+    var dotR        = 2.2 / zoomLevel;
+    var haloW       = 3.0 / zoomLevel;
+    var labelOffset = 5 / zoomLevel;
+    ctx.font = "600 " + fontWorldPx + "px Arial";
+    ctx.textBaseline = "middle";
+    for (var k = 0; k < STEDEN_LABEL.length; k++) {
+      var st = STEDEN_LABEL[k];
+      var sx = lonToX(st[1]), sy = latToY(st[0]);
+      ctx.beginPath();
+      ctx.arc(sx, sy, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = "#0a1929";
+      ctx.fill();
+      ctx.lineWidth = haloW;
+      ctx.strokeStyle = "rgba(255,255,255,0.92)";
+      ctx.strokeText(st[2], sx + labelOffset, sy);
+      ctx.fillStyle = "#0a1929";
+      ctx.fillText(st[2], sx + labelOffset, sy);
+    }
+
+    ctx.restore();
+
+    // Tijdstempel + copyright
+    ctx.setTransform(dprGlobal, 0, 0, dprGlobal, 0, 0);
+    var tijdTekst = meta.tijden_tekst ? meta.tijden_tekst[frameIdx] : "";
+    ctx.font = "bold " + Math.round(H * 0.022) + "px Arial";
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillText(tijdTekst, 12, Math.round(H * 0.032) + 2);
+    ctx.fillStyle = "white";
+    ctx.fillText(tijdTekst, 10, Math.round(H * 0.032));
+
+    document.getElementById("tijd-label").textContent = tijdTekst;
+    document.getElementById("slider").value = frameIdx;
+    document.getElementById("zoom-info").textContent = zoomLevel.toFixed(1) + "×";
+  }
+
+  function updateBereikRect() {
+    // overlay-div toont stippelkader in HTML (extra duidelijk bij zoom)
+    // verbergen want we tekenen 'm nu in canvas
+    document.getElementById("huidig-bereik").style.display = "none";
+  }
+
+  function startAnimatie() {
+    stopAnimatie();
+    if (!playing) return;
+    animInterval = setInterval(function() {
+      frameIdx = (frameIdx + 1) % nFrames;
+      renderFrame();
+    }, animSpeed);
+  }
+
+  function stopAnimatie() {
+    if (animInterval) { clearInterval(animInterval); animInterval = null; }
+  }
+
+  function togglePlay() {
+    playing = !playing;
+    document.getElementById("btn-play").innerHTML = playing ? "&#10074;&#10074;" : "&#9654;";
+    if (playing) startAnimatie();
+    else stopAnimatie();
+  }
+
+  // ── Vloeiende zoom ──────────────────────────────────────────────────────
+  function clampView() {
+    var visW = BASEMAP_W / zoomLevel;
+    var visH = BASEMAP_H / zoomLevel;
+    if (viewX < 0) viewX = 0;
+    if (viewY < 0) viewY = 0;
+    if (viewX + visW > BASEMAP_W) viewX = BASEMAP_W - visW;
+    if (viewY + visH > BASEMAP_H) viewY = BASEMAP_H - visH;
+  }
+
+  function setZoomAt(newZoom, clientX, clientY) {
+    newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+    if (Math.abs(newZoom - zoomLevel) < 0.001) return;
+    var rect = canvas.getBoundingClientRect();
+    var fracX = clientX != null ? (clientX - rect.left) / rect.width  : 0.5;
+    var fracY = clientY != null ? (clientY - rect.top)  / rect.height : 0.5;
+    var srcX = viewX + fracX * (BASEMAP_W / zoomLevel);
+    var srcY = viewY + fracY * (BASEMAP_H / zoomLevel);
+    zoomLevel = newZoom;
+    if (zoomLevel <= ZOOM_MIN + 0.001) {
+      viewX = 0; viewY = 0;
+    } else {
+      viewX = srcX - fracX * (BASEMAP_W / zoomLevel);
+      viewY = srcY - fracY * (BASEMAP_H / zoomLevel);
+      clampView();
+    }
+    renderFrame();
+  }
+
+  function resetZoom() {
+    zoomLevel = 1.0;
+    viewX = 0; viewY = 0;
+    renderFrame();
+  }
+
+  function setupZoomPan() {
+    var container = document.getElementById("canvas-container");
+
+    document.getElementById("btn-zoom-in").addEventListener("click", function() {
+      setZoomAt(zoomLevel * 1.4, null, null);
+    });
+    document.getElementById("btn-zoom-out").addEventListener("click", function() {
+      setZoomAt(zoomLevel / 1.4, null, null);
+    });
+    document.getElementById("btn-reset").addEventListener("click", resetZoom);
+
+    // Vloeiende scroll-zoom (continu, geen vaste stappen)
+    container.addEventListener("wheel", function(e) {
+      e.preventDefault();
+      var factor = Math.exp(-e.deltaY * 0.0015);  // ~1.0015^-deltaY
+      setZoomAt(zoomLevel * factor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    function displayToSourceScale() {
+      var rect = canvas.getBoundingClientRect();
+      return (BASEMAP_W / zoomLevel) / rect.width;
+    }
+
+    container.addEventListener("mousedown", function(e) {
+      if (zoomLevel <= ZOOM_MIN + 0.001) return;
+      isDragging = true;
+      dragStartX = e.clientX; dragStartY = e.clientY;
+      viewStartX = viewX; viewStartY = viewY;
+      container.classList.add("dragging");
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", function(e) {
+      if (!isDragging) return;
+      var scale = displayToSourceScale();
+      viewX = viewStartX - (e.clientX - dragStartX) * scale;
+      viewY = viewStartY - (e.clientY - dragStartY) * scale;
+      clampView();
+      renderFrame();
+    });
+    window.addEventListener("mouseup", function() {
+      if (isDragging) {
+        isDragging = false;
+        document.getElementById("canvas-container").classList.remove("dragging");
+      }
+    });
+
+    // Touch: continue pinch + pan
+    var lastTouchDist = 0;
+    var lastTouchMid = null;
+
+    container.addEventListener("touchstart", function(e) {
+      if (e.touches.length === 2) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+        lastTouchMid = {
+          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+      } else if (e.touches.length === 1 && zoomLevel > ZOOM_MIN + 0.001) {
+        isDragging = true;
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        viewStartX = viewX; viewStartY = viewY;
+      }
+    }, { passive: true });
+
+    container.addEventListener("touchmove", function(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        if (lastTouchDist > 0) {
+          var ratio = dist / lastTouchDist;
+          setZoomAt(zoomLevel * ratio, midX, midY);
+        }
+        lastTouchDist = dist;
+        lastTouchMid = { x: midX, y: midY };
+      } else if (isDragging && e.touches.length === 1) {
+        e.preventDefault();
+        var scale = displayToSourceScale();
+        viewX = viewStartX - (e.touches[0].clientX - dragStartX) * scale;
+        viewY = viewStartY - (e.touches[0].clientY - dragStartY) * scale;
+        clampView();
+        renderFrame();
+      }
+    }, { passive: false });
+
+    container.addEventListener("touchend", function() {
+      isDragging = false;
+      lastTouchDist = 0;
+    });
+  }
+
+  function bouwLegenda() {
+    var el = document.getElementById("legenda");
+    var items = [
+      {mm: 0.1, label: "0.1"},{mm: 0.3, label: "0.3"},{mm: 1, label: "1"},
+      {mm: 2, label: "2"},{mm: 5, label: "5"},{mm: 10, label: "10"},
+      {mm: 30, label: "30"},{mm: 50, label: "50"},{mm: 100, label: "100"}
+    ];
+    var html = '<div class="legenda-titel">Neerslag (mm/u)</div>';
+    html += '<div class="legenda-bar">';
+    for (var i = 0; i < items.length; i++) {
+      var dbz = 10 * Math.log10(200 * Math.pow(items[i].mm, 1.6));
+      var c = dbzColor(dbz);
+      if (c) html += '<div style="background:rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')"></div>';
+    }
+    html += '</div><div class="legenda-labels">';
+    for (var j = 0; j < items.length; j++) html += '<span>' + items[j].label + '</span>';
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  function setupHover() {
+    var tooltip = document.getElementById("tooltip");
+    canvas.addEventListener("mousemove", function(e) {
+      if (!radarData || !meta || isDragging) { tooltip.style.display = "none"; return; }
+      var rect = canvas.getBoundingClientRect();
+      var fx = (e.clientX - rect.left) / rect.width;
+      var fy = (e.clientY - rect.top) / rect.height;
+      if (fx < 0 || fx > 1 || fy < 0 || fy > 1) { tooltip.style.display = "none"; return; }
+
+      var srcPxX = viewX + fx * (BASEMAP_W / zoomLevel);
+      var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
+      var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
+      var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
+
+      var lines = [];
+      var plaats = dichtstbijzijnde(lat, lon);
+      if (plaats) lines.push("<b>" + plaats + "</b>");
+      lines.push(lat.toFixed(2) + "\u00b0N, " + lon.toFixed(2) + "\u00b0E");
+
+      // Data alleen als binnen huidig data-bereik
+      if (lon >= DATA_LON_MIN && lon <= DATA_LON_MAX && lat >= DATA_LAT_MIN && lat <= DATA_LAT_MAX) {
+        var dFracX = (lon - DATA_LON_MIN) / (DATA_LON_MAX - DATA_LON_MIN);
+        var dFracY = (DATA_LAT_MAX - lat) / (DATA_LAT_MAX - DATA_LAT_MIN);
+        var col = Math.round(dFracX * (nLon - 1));
+        var row = Math.round(dFracY * (nLat - 1));
+        var off = frameIdx * nLat * nLon + row * nLon + col;
+        var pv = radarData[off];
+        var dbz = pvToDbz(pv);
+        var mmh = pvToMmh(pv);
+        if (pv > 0 && pv < 255 && dbz >= 5) {
+          lines.push(mmh.toFixed(1) + " mm/u (" + dbz.toFixed(0) + " dBZ)");
+        } else {
+          lines.push("Geen neerslag");
+        }
+      } else {
+        lines.push("<i style='color:#ffd166'>buiten huidig databereik</i>");
+      }
+
+      tooltip.innerHTML = lines.join("<br>");
+      tooltip.style.display = "block";
+      tooltip.style.left = (e.clientX + 14) + "px";
+      tooltip.style.top = (e.clientY + 14) + "px";
+    });
+    canvas.addEventListener("mouseleave", function() {
+      tooltip.style.display = "none";
+    });
+  }
+
+  function init() {
+    bouwLegenda();
+    document.getElementById("btn-play").addEventListener("click", togglePlay);
+    document.getElementById("btn-vorige").addEventListener("click", function() {
+      if (playing) togglePlay();
+      frameIdx = (frameIdx - 1 + nFrames) % nFrames;
+      renderFrame();
+    });
+    document.getElementById("btn-volgende").addEventListener("click", function() {
+      if (playing) togglePlay();
+      frameIdx = (frameIdx + 1) % nFrames;
+      renderFrame();
+    });
+    document.getElementById("slider").addEventListener("input", function() {
+      if (playing) togglePlay();
+      frameIdx = parseInt(this.value);
+      renderFrame();
+    });
+    document.querySelectorAll(".speed-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".speed-btn").forEach(function(b) { b.classList.remove("actief"); });
+        this.classList.add("actief");
+        animSpeed = parseInt(this.getAttribute("data-ms"));
+        if (playing) startAnimatie();
+      });
+    });
+
+    loadData().then(function() {
+      setupHover();
+      setupZoomPan();
+    }).catch(function(err) {
+      document.getElementById("status").textContent = "Fout: " + err.message;
+      console.error(err);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
