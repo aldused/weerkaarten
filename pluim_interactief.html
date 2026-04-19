@@ -2354,8 +2354,63 @@ function setVergModel(m,btn){
   document.querySelectorAll('.vmbtn').forEach(b=>b.classList.remove('actief'));
   if(btn) btn.classList.add('actief');
   const lbl=document.getElementById('verg-titel-lbl');
-  if(lbl)lbl.textContent=m==='hres'?'4 Stations – HRES deterministisch':'4 Pluimen – '+m.toUpperCase()+' ENS';
+  if(lbl){
+    const txt = m==='hres' ? '4 Stations – HRES deterministisch'
+              : m==='harmonie' ? '4 Pluimen – HARMONIE 43 (KNMI HarmonEPS, 60u)'
+              : '4 Pluimen – '+m.toUpperCase()+' ENS';
+    lbl.textContent = txt;
+  }
+  // HARMONIE-modus: render 4 mini-iframes met pluim_harmoneps.html
+  if (m === 'harmonie') {
+    renderVergHarmonie();
+    // Verberg de standaard 4-pluim cellen-rij + actie-bar
+    document.querySelectorAll('#verg-controls .vp-row, #verg-controls .action-bar')
+      .forEach(el => el.style.display='none');
+  } else {
+    const g = document.getElementById('verg-harmonie-grid');
+    if (g) g.remove();
+    document.querySelectorAll('#verg-controls .vp-row, #verg-controls .action-bar')
+      .forEach(el => el.style.display='');
+  }
 }
+
+function renderVergHarmonie(){
+  // Verwijder oude grid indien aanwezig
+  const old = document.getElementById('verg-harmonie-grid');
+  if (old) old.remove();
+  // Verberg standaard cellen-rij
+  const wrap = document.getElementById('vergelijking-wrap');
+  // Pak de huidige 4 stations uit de bestaande inputs
+  const stations = [];
+  for (let i = 0; i < 4; i++){
+    const inp = document.getElementById(`verg-zoek-${i}`);
+    const naam = (inp?.value || '').trim() || ['De Bilt','Den Helder','Maastricht','Eelde'][i];
+    stations.push(naam);
+  }
+  const grid = document.createElement('div');
+  grid.id = 'verg-harmonie-grid';
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px;background:#fafbfc;border-top:1px solid var(--border)';
+  grid.innerHTML = stations.map((s,i) => `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div style="padding:6px 12px;background:#eef3fa;font-size:.78rem;font-weight:600;display:flex;align-items:center;gap:6px">
+        <span style="background:#0066cc;color:#fff;border-radius:4px;padding:1px 6px;font-size:.7rem">${i+1}</span>
+        <input type="text" value="${s}" data-idx="${i}" oninput="vergHarmZoekDebounce(${i},this.value)"
+               style="flex:1;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:.78rem;font-family:Inter,sans-serif">
+      </div>
+      <iframe id="verg-harm-iframe-${i}" src="pluim_harmoneps.html?embedded=1&q=${encodeURIComponent(s)}&v=${Date.now()}" style="width:100%;height:520px;border:none;display:block"></iframe>
+    </div>
+  `).join('');
+  wrap.appendChild(grid);
+}
+let vergHarmTimer = {};
+function vergHarmZoekDebounce(i, q){
+  clearTimeout(vergHarmTimer[i]);
+  vergHarmTimer[i] = setTimeout(() => {
+    const fr = document.getElementById(`verg-harm-iframe-${i}`);
+    if (fr) fr.src = `pluim_harmoneps.html?embedded=1&q=${encodeURIComponent(q)}&v=${Date.now()}`;
+  }, 600);
+}
+window.vergHarmZoekDebounce = vergHarmZoekDebounce;
 
 function openVergelijking(){
   // Gebruik vaste stations lijst voor 4-pluimen dropdowns
@@ -2408,6 +2463,7 @@ function openVergelijking(){
     <span class="sub-label" style="margin-left:12px">Model</span>
     <button class="pill actief vmbtn" onclick="setVergModel('ecmwf',this)">ECMWF</button>
     <button class="pill vmbtn" onclick="setVergModel('aifs',this)">AIFS</button>
+    <button class="pill vmbtn" onclick="setVergModel('harmonie',this)">&#127475;&#127473; HARMONIE 43</button>
     <button class="pill vmbtn" onclick="setVergModel('icon',this)">ICON</button>
     <button class="pill vmbtn" onclick="setVergModel('hres',this)">HRES</button>
   </div>`;
