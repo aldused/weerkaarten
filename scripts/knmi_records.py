@@ -287,12 +287,13 @@ for STATION, STATION_NAAM in STATIONS:
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
             "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
-            "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
-            "fhx_hoog": top10_max(groep, "fhx"),
-            "fg_hoog":  top10_max(groep, "fg"),
+            "rh_hoog": top10_max(groep, "rh"), "rh_laag": top10_min(groep, "rh"),
+            "fx_hoog": top10_max(groep, "fx"), "fx_laag": top10_min(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"), "fhx_laag": top10_min(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),  "fg_laag":  top10_min(groep, "fg"),
             "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
             "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
-            "sq_hoog": top10_max(groep, "sq"),
+            "sq_hoog": top10_max(groep, "sq"), "sq_laag": top10_min(groep, "sq"),
         }
 
     # ── Decaderecords ──────────────────────────────────────────────────────────
@@ -306,12 +307,13 @@ for STATION, STATION_NAAM in STATIONS:
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
             "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
-            "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
-            "fhx_hoog": top10_max(groep, "fhx"),
-            "fg_hoog":  top10_max(groep, "fg"),
+            "rh_hoog": top10_max(groep, "rh"), "rh_laag": top10_min(groep, "rh"),
+            "fx_hoog": top10_max(groep, "fx"), "fx_laag": top10_min(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"), "fhx_laag": top10_min(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),  "fg_laag":  top10_min(groep, "fg"),
             "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
             "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
-            "sq_hoog": top10_max(groep, "sq"),
+            "sq_hoog": top10_max(groep, "sq"), "sq_laag": top10_min(groep, "sq"),
         }
 
     # ── Maandrecords ───────────────────────────────────────────────────────────
@@ -323,12 +325,13 @@ for STATION, STATION_NAAM in STATIONS:
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
             "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
-            "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
-            "fhx_hoog": top10_max(groep, "fhx"),
-            "fg_hoog":  top10_max(groep, "fg"),
+            "rh_hoog": top10_max(groep, "rh"), "rh_laag": top10_min(groep, "rh"),
+            "fx_hoog": top10_max(groep, "fx"), "fx_laag": top10_min(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"), "fhx_laag": top10_min(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),  "fg_laag":  top10_min(groep, "fg"),
             "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
             "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
-            "sq_hoog": top10_max(groep, "sq"),
+            "sq_hoog": top10_max(groep, "sq"), "sq_laag": top10_min(groep, "sq"),
         }
 
     # ── Seizoensrecords ────────────────────────────────────────────────────────
@@ -340,12 +343,13 @@ for STATION, STATION_NAAM in STATIONS:
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
             "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
-            "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
-            "fhx_hoog": top10_max(groep, "fhx"),
-            "fg_hoog":  top10_max(groep, "fg"),
+            "rh_hoog": top10_max(groep, "rh"), "rh_laag": top10_min(groep, "rh"),
+            "fx_hoog": top10_max(groep, "fx"), "fx_laag": top10_min(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"), "fhx_laag": top10_min(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),  "fg_laag":  top10_min(groep, "fg"),
             "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
             "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
-            "sq_hoog": top10_max(groep, "sq"),
+            "sq_hoog": top10_max(groep, "sq"), "sq_laag": top10_min(groep, "sq"),
         }
 
     # ── Jaarrecords ────────────────────────────────────────────────────────────
@@ -357,12 +361,13 @@ for STATION, STATION_NAAM in STATIONS:
             "tx_hoog": top10_max(groep, "tx"), "tx_laag": top10_min(groep, "tx"),
             "tn_hoog": top10_max(groep, "tn"), "tn_laag": top10_min(groep, "tn"),
             "tg_hoog": top10_max(groep, "tg"), "tg_laag": top10_min(groep, "tg"),
-            "rh_hoog": top10_max(groep, "rh"), "fx_hoog": top10_max(groep, "fx"),
-            "fhx_hoog": top10_max(groep, "fhx"),
-            "fg_hoog":  top10_max(groep, "fg"),
+            "rh_hoog": top10_max(groep, "rh"), "rh_laag": top10_min(groep, "rh"),
+            "fx_hoog": top10_max(groep, "fx"), "fx_laag": top10_min(groep, "fx"),
+            "fhx_hoog": top10_max(groep, "fhx"), "fhx_laag": top10_min(groep, "fhx"),
+            "fg_hoog":  top10_max(groep, "fg"),  "fg_laag":  top10_min(groep, "fg"),
             "pg_hoog": top10_max(groep, "pg"), "pg_laag": top10_min(groep, "pg"),
             "px_hoog": top10_max(groep, "px"), "pn_laag": top10_min(groep, "pn"),
-            "sq_hoog": top10_max(groep, "sq"),
+            "sq_hoog": top10_max(groep, "sq"), "sq_laag": top10_min(groep, "sq"),
             "sq_totaal": round(sum(r["sq"] for r in groep if r["sq"] is not None), 1),
             "zachte_dagen":    sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 15),
             "warme_dagen":     sum(1 for r in groep if r["tx"] is not None and r["tx"] >= 20),
@@ -421,12 +426,13 @@ for STATION, STATION_NAAM in STATIONS:
         "tx_hoog": top10_max(data, "tx"), "tx_laag": top10_min(data, "tx"),
         "tn_hoog": top10_max(data, "tn"), "tn_laag": top10_min(data, "tn"),
         "tg_hoog": top10_max(data, "tg"), "tg_laag": top10_min(data, "tg"),
-        "rh_hoog": top10_max(data, "rh"), "fx_hoog": top10_max(data, "fx"),
-        "fhx_hoog": top10_max(data, "fhx"),
-        "fg_hoog":  top10_max(data, "fg"),
+        "rh_hoog": top10_max(data, "rh"), "rh_laag": top10_min(data, "rh"),
+        "fx_hoog": top10_max(data, "fx"), "fx_laag": top10_min(data, "fx"),
+        "fhx_hoog": top10_max(data, "fhx"), "fhx_laag": top10_min(data, "fhx"),
+        "fg_hoog":  top10_max(data, "fg"),  "fg_laag":  top10_min(data, "fg"),
         "pg_hoog": top10_max(data, "pg"), "pg_laag": top10_min(data, "pg"),
         "px_hoog": top10_max(data, "px"), "pn_laag": top10_min(data, "pn"),
-        "sq_hoog": top10_max(data, "sq"),
+        "sq_hoog": top10_max(data, "sq"), "sq_laag": top10_min(data, "sq"),
     }
 
     # ── Maandranking ──────────────────────────────────────────────────────────
