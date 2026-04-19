@@ -208,7 +208,7 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
     <span class="sub-label" style="margin-left:8px">Model</span>
     <span class="pill actief" title="ECMWF IFS ENS (standaard)">&#127760; ECMWF</span>
     <button class="pill type-btn" data-type="aifs">&#129302; AIFS</button>
-    <button class="pill" onclick="openHarmonie()" title="KNMI HarmonEPS Cy43 — 2.5 km, 6 members, 60u lead (opent aparte pluim)">&#127475;&#127473; HARMONIE 43</button>
+    <button class="pill" onclick="toonHarmonie()" title="KNMI HarmonEPS Cy43 — 2.5 km, 6 members, 60u lead">&#127475;&#127473; HARMONIE 43</button>
     <button class="pill type-btn" data-type="icon">&#127465;&#127466; ICON-D2</button>
 
     <span class="sub-label" style="margin-left:8px">Vergelijk</span>
@@ -3724,23 +3724,39 @@ function restoreState(){
 const origLaadData=laadData;
 laadData=async function(){await origLaadData();saveState();};
 
-// ── Doorspringen naar HarmonEPS-pluim met huidige plaats ──
-function openHarmonie(){
+// ── HARMONIE inline tonen in pluim_interactief (iframe overlay) ──
+function toonHarmonie(){
   const q = (document.getElementById('zoek-input')?.value || '').trim();
-  const url = `pluim_harmoneps.html${q?'?q='+encodeURIComponent(q):''}`;
-  // Binnen weerlab-iframe: schakel het parent-panel naar pluim-harm en laad HarmonEPS in die iframe
-  try {
-    if (window.parent !== window && typeof window.parent.openPanel === 'function'){
-      const fr = window.parent.document.querySelector('#panel-pluim-harm iframe');
-      if (fr) fr.src = url + (url.includes('?')?'&':'?') + 'v=' + Date.now();
-      window.parent.openPanel('pluim-harm');
-      return;
-    }
-  } catch(e){ /* cross-origin — val terug */ }
-  // Standalone: zelfde tab redirect
-  window.location.href = url;
+  let host = document.getElementById('harmonie-host');
+  if (!host){
+    host = document.createElement('div');
+    host.id = 'harmonie-host';
+    host.style.cssText = 'background:var(--panel);border-top:1px solid var(--border);padding:0;margin:0';
+    host.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#eef3fa;border-bottom:1px solid var(--border)">
+        <div style="font-size:.82rem;font-weight:600;color:#1a2b40">🇳🇱 HARMONIE 43 — KNMI ensemble (2.5 km, 6 members, 60 u)</div>
+        <button onclick="sluitHarmonie()" style="border:none;background:transparent;font-size:.82rem;color:#5a6a80;cursor:pointer">✕ sluiten</button>
+      </div>
+      <iframe id="harmonie-iframe" style="width:100%;height:780px;border:none;display:block"></iframe>
+    `;
+    // plaats boven de bestaande grafiek-wrap
+    const wrap = document.getElementById('grafiek-wrap');
+    wrap.parentNode.insertBefore(host, wrap);
+  }
+  const fr = document.getElementById('harmonie-iframe');
+  fr.src = `pluim_harmoneps.html?v=${Date.now()}` + (q?`&q=${encodeURIComponent(q)}`:'');
+  // verberg het standaard ECMWF-grafiek-wrap zodat HARMONIE de focus krijgt
+  document.getElementById('grafiek-wrap').style.display = 'none';
+  document.getElementById('vergelijking-wrap').style.display = 'none';
+  host.scrollIntoView({behavior:'smooth', block:'start'});
 }
-window.openHarmonie = openHarmonie;
+function sluitHarmonie(){
+  const host = document.getElementById('harmonie-host');
+  if (host) host.remove();
+  document.getElementById('grafiek-wrap').style.display = '';
+}
+window.toonHarmonie = toonHarmonie;
+window.sluitHarmonie = sluitHarmonie;
 
 // ── Auto-refresh ──
 let autoRefreshInterval=null;
