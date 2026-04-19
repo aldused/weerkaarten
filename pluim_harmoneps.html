@@ -226,6 +226,11 @@ function render(){
   const label = VAR_LABELS[v];
   document.getElementById('chartTitle').textContent = label;
   const times = STATION_DATA.times.map(t => new Date(t));
+  const labels = times.map(d => {
+    const day = ['zo','ma','di','wo','do','vr','za'][d.getDay()];
+    const hh = String(d.getHours()).padStart(2,'0');
+    return `${day} ${hh}u`;
+  });
   const members = STATION_DATA.vars[v] || [];
   if(!members.length){
     if(chart) chart.destroy();
@@ -246,17 +251,20 @@ function render(){
     label: 'Gemiddelde', data: mean,
     borderColor: '#111', borderWidth: 2.4, pointRadius: 0, fill: false,
   });
+  const ctx = document.getElementById('plume');
+  const existing = Chart.getChart(ctx);
+  if (existing) existing.destroy();
   if (chart) chart.destroy();
   const isPrecip = v === 'precip_mm_per_h';
-  chart = new Chart(document.getElementById('plume'), {
+  chart = new Chart(ctx, {
     type: isPrecip ? 'bar' : 'line',
-    data: { labels: times, datasets: isPrecip
+    data: { labels: labels, datasets: isPrecip
       ? [{ label:'Gemiddelde', data: mean, backgroundColor:'#0066cccc' }]
       : datasets },
     options: {
       responsive:true, maintainAspectRatio:false,
       scales: {
-        x: { type:'time', time:{ unit:'hour', tooltipFormat:'dd MMM HH:mm', displayFormats:{ hour:'dd HH:mm' } }, grid:{display:false} },
+        x: { ticks:{ maxRotation:0, autoSkip:true, autoSkipPadding:14 }, grid:{display:false} },
         y: { title:{ display:true, text: label } },
       },
       plugins: { legend: { display: !isPrecip, position:'bottom', labels:{boxWidth:10, font:{size:10}} }, tooltip:{ mode:'index', intersect:false } },
