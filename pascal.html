@@ -120,6 +120,59 @@ aside.details .nosel { color:var(--muted); font-size:12px; font-style:italic; }
 
 footer.foot { max-width:1600px; margin:0 auto; padding:4px 20px 18px;
               color:var(--muted); font-size:11px; }
+
+/* ── Heatmap-sectie (naast kaart) ─────────────────────── */
+.heatmap-wrap { max-width:1600px; margin:0 auto; padding:8px 20px 28px; }
+.heatmap-wrap > h2 { font-size:15px; font-weight:700; color:var(--fg); margin:0 0 4px; letter-spacing:-0.01em; }
+.heatmap-wrap > .hm-intro { font-size:12px; color:var(--muted); margin-bottom:12px; }
+.crit-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; align-items:center; }
+.crit-group { display:flex; gap:3px; align-items:center; }
+.crit-group-lbl {
+  font-size:10px; font-weight:700; letter-spacing:0.08em;
+  color:var(--muted); text-transform:uppercase; padding:0 6px 0 8px;
+}
+.crit-tab {
+  padding:6px 12px; border-radius:999px;
+  background:var(--panel); border:1px solid var(--line);
+  font-size:12px; color:var(--fg); cursor:pointer;
+  font-family:inherit; font-weight:600;
+  transition:background 0.12s, border-color 0.12s;
+}
+.crit-tab:hover { background:var(--chip-hover); border-color:#94a3b8; }
+.crit-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.heatmap {
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:12px; padding:18px 20px;
+  box-shadow:0 1px 2px rgba(15,23,42,0.04); overflow-x:auto;
+}
+.heatmap-head { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+.heatmap-head h3 { margin:0; font-size:14px; font-weight:700; color:var(--fg); letter-spacing:-0.01em; }
+.heatmap-head .sub { font-size:12px; color:var(--muted); margin-top:3px; }
+.legend-mini { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+.legend-bar {
+  width:160px; height:10px; border-radius:999px;
+  background:linear-gradient(90deg, #f1f5f9 0%, #e0f2fe 20%, #bae6fd 40%, #fbbf24 60%, #f97316 80%, #dc2626 100%);
+}
+.hm-grid { display:grid; grid-template-columns:150px repeat(14, 1fr); gap:3px; min-width:900px; }
+.hm-dayhead {
+  font-size:10px; text-align:center; color:var(--muted);
+  padding:4px 2px; line-height:1.2; font-variant-numeric:tabular-nums;
+}
+.hm-dayhead b { color:var(--fg); font-weight:700; display:block; font-size:13px; }
+.hm-dayhead.today b { color:var(--accent); }
+.hm-prov {
+  padding:6px 10px; font-size:12.5px; font-weight:600; color:var(--fg);
+  display:flex; align-items:center; gap:6px; border-radius:6px; background:#f6f8fb;
+}
+.hm-prov .abbr { font-size:9.5px; color:var(--muted); font-weight:700; letter-spacing:0.05em; }
+.hm-cell {
+  height:28px; border-radius:5px; display:grid; place-items:center;
+  font-size:11px; font-weight:700; color:var(--fg);
+  font-variant-numeric:tabular-nums; cursor:pointer; transition:transform 0.1s;
+}
+.hm-cell:hover { transform:scale(1.08); box-shadow:0 2px 6px rgba(15,23,42,0.15); z-index:2; }
+.hm-cell.today { outline:2px solid var(--accent); }
+.hm-cell.active { outline:2px solid #0f172a; }
 </style>
 </head>
 <body>
@@ -253,6 +306,22 @@ document.addEventListener('DOMContentLoaded', function(){
     <div class="subname" id="detSub">Klik op een provincie in de kaart om de tijdserie per criterium te zien.</div>
     <div id="detBody"></div>
   </aside>
+</div>
+
+<div class="heatmap-wrap">
+  <h2>Overzicht per gebied × dag</h2>
+  <div class="hm-intro">Klik op een cel om het criterium en de dag te selecteren in de kaart hierboven.</div>
+  <div class="crit-tabs" id="critTabs"></div>
+  <div class="heatmap">
+    <div class="heatmap-head">
+      <div>
+        <h3 id="hmTitel">—</h3>
+        <div class="sub" id="hmSub"></div>
+      </div>
+      <div class="legend-mini"><span>0%</span><span class="legend-bar"></span><span>100%</span></div>
+    </div>
+    <div class="hm-grid" id="hmGrid"></div>
+  </div>
 </div>
 
 <footer class="foot">
@@ -541,5 +610,91 @@ buildChips();
 buildLegend();
 setupPlayback();
 render();
+
+// ─── Heatmap onderaan — gebruikt dezelfde DATA/DAYS/CRITERIA/ABBR ───
+const HM_GROUPS = [
+  { lbl:"Wind",   ids:["gust60","gust75","gust100"] },
+  { lbl:"Regen",  ids:["rr10","rr25","rr50","rr75"] },
+  { lbl:"Onweer", ids:["thunder","svr"] },
+  { lbl:"Zicht",  ids:["vis500","vis200","vis50"] },
+  { lbl:"Warmte", ids:["t25","t30","t35","t40"] },
+];
+const HM_SHORT = {
+  gust60:"≥60 km/h", gust75:"≥75 km/h", gust100:"≥100 km/h",
+  rr10:"≥10 mm", rr25:"≥25 mm", rr50:"≥50 mm", rr75:"≥75 mm",
+  thunder:"onweer", svr:"zwaar onweer",
+  vis500:"≤500 m", vis200:"≤200 m", vis50:"≤50 m",
+  t25:"≥25°C", t30:"≥30°C", t35:"≥35°C", t40:"≥40°C",
+};
+function hmColor(p){
+  if (p == null) return "#f6f8fb";
+  if (p < 5)  return "#f1f5f9";
+  if (p < 15) return "#e0f2fe";
+  if (p < 30) return "#bae6fd";
+  if (p < 50) return "#fde68a";
+  if (p < 70) return "#fb923c";
+  if (p < 85) return "#ef4444";
+  return "#991b1b";
+}
+function hmInk(p){ return (p != null && p >= 50) ? "#fff" : "#0f172a"; }
+function buildHmTabs(){
+  const host = document.getElementById('critTabs');
+  host.innerHTML = HM_GROUPS.map(g => `
+    <div class="crit-group">
+      <span class="crit-group-lbl">${g.lbl}</span>
+      ${g.ids.map(id => `<button class="crit-tab" data-crit="${id}">${HM_SHORT[id]}</button>`).join('')}
+    </div>`).join('');
+  host.addEventListener('click', e => {
+    const b = e.target.closest('.crit-tab'); if (!b) return;
+    STATE.critId = b.dataset.crit; render(); renderHM();
+  });
+}
+function renderHM(){
+  document.querySelectorAll('#critTabs .crit-tab').forEach(t => t.classList.toggle('active', t.dataset.crit === STATE.critId));
+  const crit = CRITERIA.find(c => c.id === STATE.critId);
+  document.getElementById('hmTitel').textContent = crit ? crit.label : STATE.critId;
+  document.getElementById('hmSub').innerHTML =
+    crit ? `Element: <b style="color:var(--fg)">${crit.element}</b> · drempel ${crit.drempel} · aggregatie ${crit.aggr}` : '';
+  const today = new Date().toISOString().slice(0,10);
+  const provs = Object.keys(DATA).filter(n => n !== "Nederland");
+  let cells = [`<div class="hm-prov" style="background:transparent;padding:6px 0;font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Gebied</div>`];
+  DAYS.forEach((d,i) => {
+    const dt = parseDay(d);
+    const dagNaam = DOW_NL[dt.getUTCDay()];
+    const nr = d.slice(8);
+    const mnd = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][parseInt(d.slice(5,7),10)-1];
+    const cls = (d === today) ? "today" : (i === STATE.dayIdx ? "active" : "");
+    cells.push(`<div class="hm-dayhead ${cls}" data-day="${i}" style="cursor:pointer">${dagNaam}<b>${nr}</b><small>${mnd}</small></div>`);
+  });
+  provs.forEach(name => {
+    const vals = (DATA[name] && DATA[name][STATE.critId]) || [];
+    cells.push(`<div class="hm-prov"><span class="abbr">${ABBR[name]||''}</span>${name}</div>`);
+    vals.forEach((p, i) => {
+      const tclass = DAYS[i] === today ? "today" : (i === STATE.dayIdx ? "active" : "");
+      cells.push(`<div class="hm-cell ${tclass}" data-day="${i}" data-prov="${name}" style="background:${hmColor(p)};color:${hmInk(p)};" title="${name} · ${DAYS[i]}: ${p}%">${p}</div>`);
+    });
+  });
+  if (DATA["Nederland"] && DATA["Nederland"][STATE.critId]) {
+    cells.push(`<div class="hm-prov" style="background:#eff6ff;border:1px solid #dbeafe;"><span class="abbr">NL</span>Nederland</div>`);
+    DATA["Nederland"][STATE.critId].forEach((p, i) => {
+      const tclass = DAYS[i] === today ? "today" : (i === STATE.dayIdx ? "active" : "");
+      cells.push(`<div class="hm-cell ${tclass}" data-day="${i}" style="background:${hmColor(p)};color:${hmInk(p)};border:1px solid var(--accent);" title="Nederland · ${DAYS[i]}: ${p}%">${p}</div>`);
+    });
+  }
+  document.getElementById('hmGrid').innerHTML = cells.join('');
+  // klik op cel of header = ga naar die dag (en optioneel provincie)
+  document.querySelectorAll('#hmGrid [data-day]').forEach(el => {
+    el.addEventListener('click', () => {
+      STATE.dayIdx = parseInt(el.dataset.day,10);
+      if (el.dataset.prov) STATE.selProv = el.dataset.prov;
+      render(); renderHM();
+    });
+  });
+}
+buildHmTabs();
+renderHM();
+// patch: als de kaart render() draait, ook heatmap actief criterium updaten
+const _origRender = render;
+render = function(){ _origRender(); renderHM(); };
 </script>
 </body></html>
