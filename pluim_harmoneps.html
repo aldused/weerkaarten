@@ -79,6 +79,21 @@ main{padding:14px 16px;max-width:1200px;margin:0 auto}
     <h2 id="chartTitle">—</h2>
     <div class="chart-wrap"><canvas id="plume"></canvas></div>
   </div>
+  <div class="chart-card" style="margin-top:14px">
+    <h2 style="font-size:.82rem;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Dagsamenvatting (alle 6 members)</h2>
+    <table id="dagTabel" style="width:100%;border-collapse:collapse;margin-top:8px;font-size:.85rem">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border);text-align:left">
+          <th style="padding:6px 10px">Dag</th>
+          <th style="padding:6px 10px;text-align:right">Minimum</th>
+          <th style="padding:6px 10px;text-align:right">Gemiddelde</th>
+          <th style="padding:6px 10px;text-align:right">Maximum</th>
+          <th style="padding:6px 10px;text-align:right">Spread (max-min)</th>
+        </tr>
+      </thead>
+      <tbody id="dagTabelBody"></tbody>
+    </table>
+  </div>
 </main>
 <footer class="foot">
   Data: KNMI Data Platform — HARMONIE-AROME Cy43 P2a EPS. Nearest-station aan je gekozen locatie (6 members, uurlijks, 0-60 uur lead).
@@ -238,10 +253,10 @@ function render(){
   }
   const COLORS = ['#cc2222','#228822','#0066cc','#cc9900','#8844cc','#44aacc'];
   const datasets = members.map((series, mi) => ({
-    label: mi===0 ? 'Control' : `Member ${mi}`,
+    label: mi===0 ? 'Oper' : `Member ${mi}`,
     data: series,
     borderColor: COLORS[mi % COLORS.length] + '99',
-    borderWidth: 1.2, pointRadius: 0, fill: false,
+    borderWidth: mi===0 ? 1.6 : 1.2, pointRadius: 0, fill: false,
   }));
   const mean = times.map((_,i) => {
     const vals = members.map(m => m[i]).filter(x => x != null);
@@ -255,6 +270,8 @@ function render(){
   const existing = Chart.getChart(ctx);
   if (existing) existing.destroy();
   if (chart) chart.destroy();
+  // Dagsamenvattingstabel
+  buildDagTabel(times, members, v);
   const isPrecip = v === 'precip_mm_per_h';
   chart = new Chart(ctx, {
     type: isPrecip ? 'bar' : 'line',
@@ -270,6 +287,66 @@ function render(){
       plugins: { legend: { display: !isPrecip, position:'bottom', labels:{boxWidth:10, font:{size:10}} }, tooltip:{ mode:'index', intersect:false } },
     }
   });
+}
+
+// ---- Dagsamenvattingstabel
+const DAG_NL = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MND_NL = ['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+function buildDagTabel(times, members, vName){
+  const body = document.getElementById('dagTabelBody');
+  if (!body) return;
+  // Groepeer indices per dag
+  const byDay = new Map();  // dateKey → [idx]
+  times.forEach((d,i) => {
+    const key = d.toISOString().slice(0,10);
+    if(!byDay.has(key)) byDay.set(key, {date:d, idxs:[]});
+    byDay.get(key).idxs.push(i);
+  });
+  // Per dag aggregeren
+  const isPrecip = vName === 'precip_mm_per_h';
+  const isCum = isPrecip;  // som over uren ipv min/max
+  const isAngle = vName === 'wind_dir_deg';
+  const unit = ({t2m_c:'°C', gust_kmh:'km/h', wind_kmh:'km/h', wind50_kmh:'km/h',
+                 wind_dir_deg:'°', precip_mm_per_h:'mm', tcc_pct:'%', rh_pct:'%',
+                 msl_hpa:'hPa', pwat_mm:'kg/m²', vis_km:'km'})[vName] || '';
+  const fmt = x => x==null ? '—' : (Math.abs(x) >= 100 ? Math.round(x) : x.toFixed(1)) + ' ' + unit;
+  const rows = [];
+  for (const [key, info] of byDay){
+    let allVals = [];
+    if (isCum){
+      // Per member: som over uren in dag
+      const sums = members.map(m => info.idxs.reduce((s,i)=>s+(m[i]||0),0));
+      allVals = sums;
+    } else {
+      // Vlak alle (member, uur) waarden
+      members.forEach(m => info.idxs.forEach(i => { if(m[i]!=null) allVals.push(m[i]); }));
+    }
+    if (!allVals.length){ rows.push({date:info.date, min:null, mean:null, max:null}); continue; }
+    const min = Math.min(...allVals), max = Math.max(...allVals);
+    const mean = allVals.reduce((a,b)=>a+b,0)/allVals.length;
+    rows.push({date:info.date, min, mean, max, spread:max-min});
+  }
+  body.innerHTML = rows.map(r => {
+    const day = DAG_NL[r.date.getDay()];
+    const dd = r.date.getDate(); const mm = MND_NL[r.date.getMonth()+1];
+    const label = `${day} ${dd} ${mm}`;
+    if (isCum){
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px;font-weight:600">${label}</td>
+        <td style="padding:6px 10px;text-align:right">${fmt(r.min)}</td>
+        <td style="padding:6px 10px;text-align:right;font-weight:600">${fmt(r.mean)}</td>
+        <td style="padding:6px 10px;text-align:right">${fmt(r.max)}</td>
+        <td style="padding:6px 10px;text-align:right;color:var(--text2)">${fmt(r.spread)}</td>
+      </tr>`;
+    }
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px;font-weight:600">${label}</td>
+      <td style="padding:6px 10px;text-align:right;color:#1e3a8a">${fmt(r.min)}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:600">${fmt(r.mean)}</td>
+      <td style="padding:6px 10px;text-align:right;color:#b91c1c">${fmt(r.max)}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--text2)">${fmt(r.spread)}</td>
+    </tr>`;
+  }).join('');
 }
 
 // Startup
