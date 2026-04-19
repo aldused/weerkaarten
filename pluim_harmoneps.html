@@ -82,15 +82,7 @@ main{padding:14px 16px;max-width:1200px;margin:0 auto}
   <div class="chart-card" style="margin-top:14px">
     <h2 style="font-size:.82rem;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Dagsamenvatting (alle 6 members)</h2>
     <table id="dagTabel" style="width:100%;border-collapse:collapse;margin-top:8px;font-size:.85rem">
-      <thead>
-        <tr style="border-bottom:2px solid var(--border);text-align:left">
-          <th style="padding:6px 10px">Dag</th>
-          <th style="padding:6px 10px;text-align:right">Minimum</th>
-          <th style="padding:6px 10px;text-align:right">Gemiddelde</th>
-          <th style="padding:6px 10px;text-align:right">Maximum</th>
-          <th style="padding:6px 10px;text-align:right">Spread (max-min)</th>
-        </tr>
-      </thead>
+      <thead id="dagTabelHead"></thead>
       <tbody id="dagTabelBody"></tbody>
     </table>
   </div>
@@ -276,60 +268,143 @@ function render(){
   chart = new Chart(ctx, {
     type: isPrecip ? 'bar' : 'line',
     data: { labels: labels, datasets: isPrecip
-      ? [{ label:'Gemiddelde', data: mean, backgroundColor:'#0066cccc' }]
+      ? [
+          // Range max per uur als achtergrond (lichtgrijs)
+          { type:'bar', label:'Maximum (alle members)', data: members[0].map((_,i)=>Math.max(...members.map(m=>m[i]||0))), backgroundColor:'rgba(150,180,210,0.35)', borderWidth:0, order:3 },
+          { type:'bar', label:'Gemiddelde', data: mean, backgroundColor:'#0066cc', borderWidth:0, order:2 },
+          // Per-member dunne lijntjes erover
+          ...members.map((s,mi) => ({ type:'line', label: mi===0?'Oper':`Member ${mi}`, data:s,
+              borderColor: COLORS[mi%COLORS.length]+'aa', borderWidth:1, pointRadius:0, fill:false, order:1, tension:0.2 }))
+        ]
       : datasets },
     options: {
       responsive:true, maintainAspectRatio:false,
-      scales: {
-        x: { ticks:{ maxRotation:0, autoSkip:true, autoSkipPadding:14 }, grid:{display:false} },
-        y: { title:{ display:true, text: label } },
-      },
+      scales: (function(){
+        const sc = {
+          x: { ticks:{ maxRotation:0, autoSkip:true, autoSkipPadding:14 }, grid:{display:false} },
+          y: { title:{ display:true, text: label } },
+        };
+        // Bft-as rechts voor wind/gust
+        if (v==='wind_kmh' || v==='gust_kmh' || v==='wind50_kmh'){
+          // Bft-grenzen in km/h (van Bft 0 tot 12)
+          const BFT_KMH = [0, 1.9, 11.9, 19.9, 28.9, 38.9, 49.9, 61.9, 74.9, 88.9, 102.9, 117.9];
+          sc.bft = { position:'right', title:{display:true, text:'Beaufort'}, grid:{display:false},
+            min: 0, max: 12,
+            ticks: { stepSize:1, callback: v => 'Bft '+v },
+            // Sync visuele schaal met km/h
+            afterBuildTicks: (axis) => {
+              // Map km/h naar Bft via lineaire interpolatie van schaal van linker-y
+              const yScale = axis.chart.scales.y;
+              if(!yScale) return;
+              axis.min = kmhToBft(yScale.min);
+              axis.max = kmhToBft(yScale.max);
+              axis.ticks = [];
+              for (let b=0; b<=12; b++){
+                if (b >= axis.min && b <= axis.max) axis.ticks.push({value:b, label:'Bft '+b});
+              }
+            }
+          };
+        }
+        return sc;
+      })(),
       plugins: { legend: { display: !isPrecip, position:'bottom', labels:{boxWidth:10, font:{size:10}} }, tooltip:{ mode:'index', intersect:false } },
     }
   });
 }
 
-// ---- Dagsamenvattingstabel
+// ---- Beaufort-conversie
+function kmhToBft(kmh){
+  const BFT = [0, 1.9, 11.9, 19.9, 28.9, 38.9, 49.9, 61.9, 74.9, 88.9, 102.9, 117.9];
+  for (let b=BFT.length-1; b>=0; b--){
+    if (kmh >= BFT[b]) return b + (BFT[b+1] ? (kmh-BFT[b])/(BFT[b+1]-BFT[b]) : 0);
+  }
+  return 0;
+}
+
+// ---- Drempels per criterium voor 'kans op' kolom
+const KANSEN = {
+  t2m_c: [{lbl:'≥20°C', test:v=>v>=20}, {lbl:'≥25°C', test:v=>v>=25}, {lbl:'≤0°C', test:v=>v<=0}],
+  gust_kmh: [{lbl:'≥60 km/h', test:v=>v>=60}, {lbl:'≥75', test:v=>v>=75}, {lbl:'≥100', test:v=>v>=100}],
+  wind_kmh: [{lbl:'≥40 km/h (Bft 6)', test:v=>v>=40}, {lbl:'≥50 (Bft 7)', test:v=>v>=50}, {lbl:'≥62 (Bft 8)', test:v=>v>=62}],
+  wind50_kmh: [{lbl:'≥40 km/h', test:v=>v>=40}, {lbl:'≥60', test:v=>v>=60}, {lbl:'≥80', test:v=>v>=80}],
+  precip_mm_per_h: [{lbl:'>0.5 mm', test:v=>v>0.5}, {lbl:'>2 mm/u', test:v=>v>2}, {lbl:'>5 mm/u', test:v=>v>5}],
+  tcc_pct: [{lbl:'≥80%', test:v=>v>=80}, {lbl:'≤30%', test:v=>v<=30}],
+  rh_pct: [{lbl:'≥95%', test:v=>v>=95}, {lbl:'≤40%', test:v=>v<=40}],
+  vis_km: [{lbl:'<5 km', test:v=>v<5}, {lbl:'<1 km', test:v=>v<1}, {lbl:'<0.2 km', test:v=>v<0.2}],
+  msl_hpa: [{lbl:'<1000 hPa', test:v=>v<1000}, {lbl:'>1025', test:v=>v>1025}],
+  pwat_mm: [{lbl:'>20 kg/m²', test:v=>v>20}, {lbl:'>30', test:v=>v>30}],
+  wind_dir_deg: [],
+};
+
 const DAG_NL = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
 const MND_NL = ['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
 function buildDagTabel(times, members, vName){
   const body = document.getElementById('dagTabelBody');
+  const head = document.getElementById('dagTabelHead');
   if (!body) return;
   // Groepeer indices per dag
-  const byDay = new Map();  // dateKey → [idx]
+  const byDay = new Map();
   times.forEach((d,i) => {
     const key = d.toISOString().slice(0,10);
     if(!byDay.has(key)) byDay.set(key, {date:d, idxs:[]});
     byDay.get(key).idxs.push(i);
   });
-  // Per dag aggregeren
   const isPrecip = vName === 'precip_mm_per_h';
-  const isCum = isPrecip;  // som over uren ipv min/max
-  const isAngle = vName === 'wind_dir_deg';
+  const isCum = isPrecip;
   const unit = ({t2m_c:'°C', gust_kmh:'km/h', wind_kmh:'km/h', wind50_kmh:'km/h',
                  wind_dir_deg:'°', precip_mm_per_h:'mm', tcc_pct:'%', rh_pct:'%',
                  msl_hpa:'hPa', pwat_mm:'kg/m²', vis_km:'km'})[vName] || '';
   const fmt = x => x==null ? '—' : (Math.abs(x) >= 100 ? Math.round(x) : x.toFixed(1)) + ' ' + unit;
+  const fmtPct = p => p==null ? '—' : (p===0?'—':Math.round(p)+'%');
+
+  // Header met evt. extra kans-kolommen
+  const kansen = KANSEN[vName] || [];
+  const kopKolommen = kansen.map(k => `<th style="padding:6px 10px;text-align:right;font-size:.78rem">Kans ${k.lbl}</th>`).join('');
+  head.innerHTML = `<tr style="border-bottom:2px solid var(--border);text-align:left">
+    <th style="padding:6px 10px">Dag</th>
+    <th style="padding:6px 10px;text-align:right">Minimum</th>
+    <th style="padding:6px 10px;text-align:right">Gemiddelde</th>
+    <th style="padding:6px 10px;text-align:right">Maximum</th>
+    <th style="padding:6px 10px;text-align:right">Spread</th>
+    ${kopKolommen}
+  </tr>`;
+
   const rows = [];
   for (const [key, info] of byDay){
     let allVals = [];
     if (isCum){
-      // Per member: som over uren in dag
       const sums = members.map(m => info.idxs.reduce((s,i)=>s+(m[i]||0),0));
       allVals = sums;
     } else {
-      // Vlak alle (member, uur) waarden
       members.forEach(m => info.idxs.forEach(i => { if(m[i]!=null) allVals.push(m[i]); }));
     }
-    if (!allVals.length){ rows.push({date:info.date, min:null, mean:null, max:null}); continue; }
+    // Kansen: per criterium het % members dat ergens in de dag de drempel haalt
+    const kansVals = kansen.map(k => {
+      let nHit = 0;
+      members.forEach(m => {
+        if (isCum){
+          const sum = info.idxs.reduce((s,i)=>s+(m[i]||0),0);
+          if (k.test(sum)) nHit++;
+        } else {
+          const memHit = info.idxs.some(i => m[i]!=null && k.test(m[i]));
+          if (memHit) nHit++;
+        }
+      });
+      return 100 * nHit / members.length;
+    });
+    if (!allVals.length){ rows.push({date:info.date, min:null, mean:null, max:null, kansVals}); continue; }
     const min = Math.min(...allVals), max = Math.max(...allVals);
     const mean = allVals.reduce((a,b)=>a+b,0)/allVals.length;
-    rows.push({date:info.date, min, mean, max, spread:max-min});
+    rows.push({date:info.date, min, mean, max, spread:max-min, kansVals});
   }
   body.innerHTML = rows.map(r => {
     const day = DAG_NL[r.date.getDay()];
     const dd = r.date.getDate(); const mm = MND_NL[r.date.getMonth()+1];
     const label = `${day} ${dd} ${mm}`;
+    const kansHtml = r.kansVals.map(p => {
+      const bg = p>=60?'#fee2e2':p>=20?'#fef3c7':p>0?'#ecfdf5':'';
+      return `<td style="padding:6px 10px;text-align:right;background:${bg};font-variant-numeric:tabular-nums;font-weight:${p>0?600:400}">${fmtPct(p)}</td>`;
+    }).join('');
     if (isCum){
       return `<tr style="border-bottom:1px solid var(--border)">
         <td style="padding:6px 10px;font-weight:600">${label}</td>
@@ -337,6 +412,7 @@ function buildDagTabel(times, members, vName){
         <td style="padding:6px 10px;text-align:right;font-weight:600">${fmt(r.mean)}</td>
         <td style="padding:6px 10px;text-align:right">${fmt(r.max)}</td>
         <td style="padding:6px 10px;text-align:right;color:var(--text2)">${fmt(r.spread)}</td>
+        ${kansHtml}
       </tr>`;
     }
     return `<tr style="border-bottom:1px solid var(--border)">
@@ -345,6 +421,7 @@ function buildDagTabel(times, members, vName){
       <td style="padding:6px 10px;text-align:right;font-weight:600">${fmt(r.mean)}</td>
       <td style="padding:6px 10px;text-align:right;color:#b91c1c">${fmt(r.max)}</td>
       <td style="padding:6px 10px;text-align:right;color:var(--text2)">${fmt(r.spread)}</td>
+      ${kansHtml}
     </tr>`;
   }).join('');
 }
