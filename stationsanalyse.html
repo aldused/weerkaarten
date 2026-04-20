@@ -1274,20 +1274,97 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   document.getElementById('tabel-title').textContent =
     `Detail ${perTxt} — ${stationNaam} — ${richtTekst} ${drempel}${info.eenheid} (${sInfo.label})`;
 
+  // Bewaar state zodat sorteren later kan zonder opnieuw te analyseren
+  detailState.resultaten = resultaten;
+  detailState.info = info;
+  detailState.isAlle = isAlle;
+  detailState.isHeelJaar = isHeelJaar;
+  detailState.maxAantal = resultaten.length > 0 ? Math.max(...resultaten.map(r => r.aantal)) : 0;
+  detailState.maxReeks = resultaten.length > 0 ? Math.max(...resultaten.map(r => r.langsteReeks)) : 0;
+  // Default sortering: jaar aflopend (nieuwste boven)
+  detailState.sortCol = 'jaar';
+  detailState.sortDir = 'desc';
+  renderDetailTabel();
+}
+
+// ── Detail-tabel state + sorteer-logica ──
+const detailState = {
+  resultaten: [],
+  info: null,
+  isAlle: false,
+  isHeelJaar: true,
+  maxAantal: 0,
+  maxReeks: 0,
+  sortCol: 'jaar',
+  sortDir: 'desc'
+};
+
+// Sorteer-sleutels per kolom (null/undefined gaat altijd naar onderkant)
+const SORT_KEYS = {
+  jaar:    r => r.sJaar,
+  eerste:  r => r.eersteDag ? r.eersteDag.sDag : null,
+  laatste: r => r.laatsteDag ? r.laatsteDag.sDag : null,
+  venster: r => (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : null,
+  aantal:  r => r.aantal,
+  reeks:   r => r.langsteReeks,
+  extreem: r => r.extremeVal
+};
+
+function sorteerDetail(col) {
+  // Klik op huidige kolom → draai richting om. Andere kolom → start desc.
+  if (detailState.sortCol === col) {
+    detailState.sortDir = detailState.sortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    detailState.sortCol = col;
+    detailState.sortDir = 'desc';
+  }
+  renderDetailTabel();
+}
+
+function renderDetailTabel() {
+  const {resultaten, info, isAlle, isHeelJaar, maxAantal, maxReeks, sortCol, sortDir} = detailState;
   const thead = document.getElementById('tabel-header');
-  const jaarKop = isHeelJaar ? 'Jaar' : 'Seizoen';
-  thead.innerHTML = `<th>${jaarKop}</th><th>Eerste dag</th><th>Laatste dag</th><th>Venster</th><th>Aantal dagen</th><th>Langste reeks</th><th>Extreem</th>`;
-
   const tbody = document.getElementById('tabel-body');
+  if (!resultaten) return;
+
+  const jaarKop = isHeelJaar ? 'Jaar' : 'Seizoen';
+  const kolommen = [
+    {id: 'jaar',    label: jaarKop},
+    {id: 'eerste',  label: 'Eerste dag'},
+    {id: 'laatste', label: 'Laatste dag'},
+    {id: 'venster', label: 'Venster'},
+    {id: 'aantal',  label: 'Aantal dagen'},
+    {id: 'reeks',   label: 'Langste reeks'},
+    {id: 'extreem', label: 'Extreem'}
+  ];
+  thead.innerHTML = kolommen.map(k => {
+    const pijl = k.id === sortCol ? (sortDir === 'desc' ? ' ▾' : ' ▴') : '';
+    const actief = k.id === sortCol ? ' style="background:#dce9f7;color:#0f2c4a"' : '';
+    return `<th data-sort="${k.id}"${actief}>${k.label}${pijl}</th>`;
+  }).join('');
+  thead.querySelectorAll('th').forEach(th => {
+    th.onclick = () => sorteerDetail(th.dataset.sort);
+  });
+
+  // Sorteer
+  const sleutel = SORT_KEYS[sortCol];
+  const richting = sortDir === 'desc' ? -1 : 1;
+  const gesorteerd = [...resultaten].sort((a, b) => {
+    const va = sleutel(a), vb = sleutel(b);
+    const aNull = va === null || va === undefined;
+    const bNull = vb === null || vb === undefined;
+    if (aNull && bNull) return 0;
+    if (aNull) return 1;   // null altijd onderaan
+    if (bNull) return -1;
+    if (va < vb) return -1 * richting;
+    if (va > vb) return 1 * richting;
+    // tie-breaker: altijd op sJaar desc
+    return b.sJaar - a.sJaar;
+  });
+
   tbody.innerHTML = '';
-
-  // Records vinden
-  const maxAantal = Math.max(...resultaten.map(r => r.aantal));
-  const maxReeks = Math.max(...resultaten.map(r => r.langsteReeks));
-
-  // Tabel van nieuw naar oud
   const stnStyle = 'font-size:0.85em;color:#5a7090;font-weight:400';
-  [...resultaten].reverse().forEach(r => {
+  gesorteerd.forEach(r => {
     const tr = document.createElement('tr');
     const eersteTd = r.eersteDag
       ? (isAlle && r.eersteDag.stationNaam
@@ -1306,8 +1383,6 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
       : '-';
 
     const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : '-';
-
-    // Bij "alle stations": toon gem. + (max in station) onder aantal-kolom
     const aantalTxt = isAlle
       ? `${r.aantal} <span style="${stnStyle}">(max ${r.maxAantal} — ${r.maxAantalStation})</span>`
       : r.aantal;
