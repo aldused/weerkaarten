@@ -627,8 +627,12 @@ function seizoensJaarLabel(sJaar, info) {
 
 // ── Init ──
 function init() {
-  // Vul station-dropdown gesorteerd op naam
+  // Vul station-dropdown: "Alle stations" bovenaan, dan op naam gesorteerd
   const sel = document.getElementById('sel-station');
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = '★ Alle stations (Nederlandrecord)';
+  sel.appendChild(optAll);
   const sorted = Object.entries(STATIONS).sort((a,b) => a[1].naam.localeCompare(b[1].naam));
   sorted.forEach(([stn, info]) => {
     const opt = document.createElement('option');
@@ -727,6 +731,101 @@ function getVal(rij, kolom) {
   return parseInt(s, 10);
 }
 
+// ── Analyseer één station → {resultaten, alleWaarden} ──
+function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw) {
+  const kolom = info.kolom;
+  const factor = info.factor;
+
+  // Groepeer rijen per seizoensjaar (winter: dec hoort bij volgend jaar)
+  const jarenMap = {};
+  data.forEach(rij => {
+    const datum = rij[kolomIndex['YYYYMMDD']];
+    const jaar = parseInt(datum.substring(0, 4));
+    const mm = parseInt(datum.substring(4, 6));
+    if (!inSeizoen(mm, sInfo)) return;
+    const sJaar = seizoensJaar(jaar, mm, sInfo);
+    if (sJaar < vanJaar || sJaar > totJaar) return;
+    if (!jarenMap[sJaar]) jarenMap[sJaar] = [];
+    jarenMap[sJaar].push(rij);
+  });
+
+  const minDagen = sInfo.maanden.length === 12 ? 300
+                 : sInfo.maanden.length >= 3 ? 60
+                 : Math.floor(sInfo.lengte * 0.7);
+
+  const resultaten = [];
+  const alleWaarden = [];
+  const jaren = Object.keys(jarenMap).map(Number).sort((a,b) => a - b);
+  const huidigJaar = new Date().getFullYear();
+
+  jaren.forEach(sJaar => {
+    const rijen = jarenMap[sJaar].slice().sort((a, b) => {
+      const da = a[kolomIndex['YYYYMMDD']], db = b[kolomIndex['YYYYMMDD']];
+      const ja = parseInt(da.substring(0,4)), jb = parseInt(db.substring(0,4));
+      const ma = parseInt(da.substring(4,6)), mb = parseInt(db.substring(4,6));
+      const dda = parseInt(da.substring(6,8)), ddb = parseInt(db.substring(6,8));
+      const sa = seizoensDag(ja, ma, dda, sInfo);
+      const sb = seizoensDag(jb, mb, ddb, sInfo);
+      return sa - sb;
+    });
+
+    let eersteDag = null, laatsteDag = null, aantal = 0, langsteReeks = 0, huidigeReeks = 0;
+    let extremeVal = null, extremeDatum = null;
+
+    rijen.forEach(rij => {
+      const raw = getVal(rij, kolom);
+      if (raw === null) return;
+
+      const isSpoor = (kolom === 'RH' && raw === -1);
+      const waarde = isSpoor ? 0 : raw;
+      const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde < drempelRaw;
+      const datum = rij[kolomIndex['YYYYMMDD']];
+      const jaar = parseInt(datum.substring(0, 4));
+      const mm = parseInt(datum.substring(4, 6));
+      const dd = parseInt(datum.substring(6, 8));
+      const sDag = seizoensDag(jaar, mm, dd, sInfo);
+      const datumStr = dd + ' ' + MND[mm - 1];
+
+      alleWaarden.push({waarde, jaar, mm, dd, isSpoor});
+
+      if (voldoet) {
+        aantal++;
+        if (eersteDag === null) eersteDag = {sDag, datum: datumStr, raw: datum};
+        laatsteDag = {sDag, datum: datumStr, raw: datum};
+        huidigeReeks++;
+        if (huidigeReeks > langsteReeks) langsteReeks = huidigeReeks;
+      } else {
+        huidigeReeks = 0;
+      }
+
+      if (richting === 'boven') {
+        if (extremeVal === null || waarde > extremeVal) {
+          extremeVal = waarde;
+          extremeDatum = datumStr;
+        }
+      } else {
+        if (extremeVal === null || waarde < extremeVal) {
+          extremeVal = waarde;
+          extremeDatum = datumStr;
+        }
+      }
+    });
+
+    if (rijen.length < minDagen && sJaar < huidigJaar) return;
+
+    resultaten.push({
+      sJaar,
+      jaarLabel: seizoensJaarLabel(sJaar, sInfo),
+      eersteDag, laatsteDag, aantal, langsteReeks,
+      extremeVal: extremeVal !== null ? extremeVal / factor : null,
+      extremeDatum,
+      aantalDagen: rijen.length
+    });
+  });
+
+  return {resultaten, alleWaarden};
+}
+
 // ── Analyse uitvoeren ──
 function startAnalyse() {
   const stn = document.getElementById('sel-station').value;
@@ -741,121 +840,126 @@ function startAnalyse() {
   if (isNaN(drempel)) return;
 
   document.getElementById('status').style.display = 'block';
-  document.getElementById('status').innerHTML = '<span class="spinner"></span> Data laden...';
   document.getElementById('resultaten').style.display = 'none';
 
+  const info = KOLOM_INFO[type];
+  const drempelRaw = drempel * info.factor;
+
+  if (stn === 'all') {
+    startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info);
+    return;
+  }
+
+  document.getElementById('status').innerHTML = '<span class="spinner"></span> Data laden...';
   laadCSV(stn).then(data => {
-    const info = KOLOM_INFO[type];
-    const kolom = info.kolom;
-    const factor = info.factor;
-
-    // Drempel omrekenen naar ruwe eenheid (0.1-waarden in CSV)
-    let drempelRaw = drempel * factor;
-
-    // Groepeer rijen per seizoensjaar (winter: dec hoort bij volgend jaar)
-    const jarenMap = {};
-    data.forEach(rij => {
-      const datum = rij[kolomIndex['YYYYMMDD']];
-      const jaar = parseInt(datum.substring(0, 4));
-      const mm = parseInt(datum.substring(4, 6));
-      if (!inSeizoen(mm, sInfo)) return;
-      const sJaar = seizoensJaar(jaar, mm, sInfo);
-      if (sJaar < vanJaar || sJaar > totJaar) return;
-      if (!jarenMap[sJaar]) jarenMap[sJaar] = [];
-      jarenMap[sJaar].push(rij);
-    });
-
-    // Minimum aantal dagen per seizoen om jaar mee te nemen
-    const minDagen = sInfo.maanden.length === 12 ? 300
-                   : sInfo.maanden.length >= 3 ? 60
-                   : Math.floor(sInfo.lengte * 0.7);
-
-    // Analyseer per seizoensjaar
-    const resultaten = [];
-    const alleWaarden = []; // voor top 10: {waarde, jaar, mm, dd, isSpoor}
-    const jaren = Object.keys(jarenMap).map(Number).sort((a,b) => a - b);
-    const huidigJaar = new Date().getFullYear();
-
-    jaren.forEach(sJaar => {
-      // Sorteer binnen seizoen op seizoensdag voor correcte chronologische volgorde (winter!)
-      const rijen = jarenMap[sJaar].slice().sort((a, b) => {
-        const da = a[kolomIndex['YYYYMMDD']], db = b[kolomIndex['YYYYMMDD']];
-        const ja = parseInt(da.substring(0,4)), jb = parseInt(db.substring(0,4));
-        const ma = parseInt(da.substring(4,6)), mb = parseInt(db.substring(4,6));
-        const dda = parseInt(da.substring(6,8)), ddb = parseInt(db.substring(6,8));
-        const sa = seizoensDag(ja, ma, dda, sInfo);
-        const sb = seizoensDag(jb, mb, ddb, sInfo);
-        return sa - sb;
-      });
-
-      let eersteDag = null, laatsteDag = null, aantal = 0, langsteReeks = 0, huidigeReeks = 0;
-      let extremeVal = null, extremeDatum = null;
-
-      rijen.forEach(rij => {
-        const raw = getVal(rij, kolom);
-        if (raw === null) return;
-
-        // Neerslag: -1 betekent <0.05mm → behandel als 0 voor vergelijking
-        const isSpoor = (kolom === 'RH' && raw === -1);
-        const waarde = isSpoor ? 0 : raw;
-
-        const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde < drempelRaw;
-        const datum = rij[kolomIndex['YYYYMMDD']];
-        const jaar = parseInt(datum.substring(0, 4));
-        const mm = parseInt(datum.substring(4, 6));
-        const dd = parseInt(datum.substring(6, 8));
-        const sDag = seizoensDag(jaar, mm, dd, sInfo);
-        const datumStr = dd + ' ' + MND[mm - 1];
-
-        // Verzamel voor top 10
-        alleWaarden.push({waarde, jaar, mm, dd, isSpoor});
-
-        if (voldoet) {
-          aantal++;
-          if (eersteDag === null) eersteDag = {sDag, datum: datumStr, raw: datum};
-          laatsteDag = {sDag, datum: datumStr, raw: datum};
-          huidigeReeks++;
-          if (huidigeReeks > langsteReeks) langsteReeks = huidigeReeks;
-        } else {
-          huidigeReeks = 0;
-        }
-
-        // Track extreme waarde binnen het seizoen
-        if (richting === 'boven') {
-          if (extremeVal === null || waarde > extremeVal) {
-            extremeVal = waarde;
-            extremeDatum = datumStr;
-          }
-        } else {
-          if (extremeVal === null || waarde < extremeVal) {
-            extremeVal = waarde;
-            extremeDatum = datumStr;
-          }
-        }
-      });
-
-      // Skip jaren met onvoldoende data (behalve het huidige lopende jaar)
-      if (rijen.length < minDagen && sJaar < huidigJaar) return;
-
-      resultaten.push({
-        sJaar,
-        jaarLabel: seizoensJaarLabel(sJaar, sInfo),
-        eersteDag, laatsteDag, aantal, langsteReeks,
-        extremeVal: extremeVal !== null ? extremeVal / factor : null,
-        extremeDatum,
-        aantalDagen: rijen.length
-      });
-    });
-
-    // Top 10 hoogste + laagste waarden binnen de filter
-    // Voor gelijke waarden: eerste sorteren op jaar (nieuwste eerst), dan op datum
+    const {resultaten, alleWaarden} = analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw);
     const top10Hoog = [...alleWaarden].sort((a, b) => b.waarde - a.waarde).slice(0, 10);
     const top10Laag = [...alleWaarden].sort((a, b) => a.waarde - b.waarde).slice(0, 10);
-
     toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Hoog, top10Laag);
   }).catch(err => {
     document.getElementById('status').innerHTML = `Fout: ${err.message}`;
   });
+}
+
+// ── Analyse: alle stations tegelijk (Nederlandrecords) ──
+async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info) {
+  const status = document.getElementById('status');
+  const ids = Object.keys(STATIONS);
+  status.innerHTML = `<span class="spinner"></span> Laden 0/${ids.length} stations...`;
+
+  let klaar = 0;
+  const taken = ids.map(async (id) => {
+    let data = null;
+    try { data = await laadCSV(id); } catch (e) { data = null; }
+    klaar++;
+    status.innerHTML = `<span class="spinner"></span> Laden ${klaar}/${ids.length} stations...`;
+    return {id, data};
+  });
+  const geladen = await Promise.all(taken);
+
+  status.innerHTML = `<span class="spinner"></span> Analyseren van ${geladen.filter(s => s.data).length} stations...`;
+  await new Promise(r => setTimeout(r, 30)); // yield voor UI-update
+
+  // Analyseer elk station
+  const perStation = {};
+  geladen.forEach(({id, data}) => {
+    if (!data) return;
+    perStation[id] = analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw);
+  });
+
+  // Top 10 globaal: voor elke unieke datum behoud alleen de hoogste/laagste waarde
+  const perDatumHoog = new Map();
+  const perDatumLaag = new Map();
+  Object.entries(perStation).forEach(([id, res]) => {
+    const naam = STATIONS[id].naam;
+    res.alleWaarden.forEach(w => {
+      const key = `${w.jaar}-${w.mm}-${w.dd}`;
+      const withStn = {...w, stationId: id, stationNaam: naam};
+      const curH = perDatumHoog.get(key);
+      if (!curH || w.waarde > curH.waarde) perDatumHoog.set(key, withStn);
+      const curL = perDatumLaag.get(key);
+      if (!curL || w.waarde < curL.waarde) perDatumLaag.set(key, withStn);
+    });
+  });
+  const top10Hoog = [...perDatumHoog.values()].sort((a, b) => b.waarde - a.waarde).slice(0, 10);
+  const top10Laag = [...perDatumLaag.values()].sort((a, b) => a.waarde - b.waarde).slice(0, 10);
+
+  // Aggregate per seizoensjaar: earliest first, latest last, gem. aantal, max aantal, extremen
+  const jaarNaar = {};
+  Object.entries(perStation).forEach(([id, res]) => {
+    const naam = STATIONS[id].naam;
+    res.resultaten.forEach(r => {
+      if (!jaarNaar[r.sJaar]) jaarNaar[r.sJaar] = [];
+      jaarNaar[r.sJaar].push({...r, stationId: id, stationNaam: naam});
+    });
+  });
+
+  const resultatenAgg = [];
+  Object.keys(jaarNaar).map(Number).sort((a, b) => a - b).forEach(sJaar => {
+    const alle = jaarNaar[sJaar];
+    const metEerste = alle.filter(x => x.eersteDag);
+    const metLaatste = alle.filter(x => x.laatsteDag);
+
+    let eersteDag = null;
+    if (metEerste.length > 0) {
+      const winnaar = metEerste.reduce((a, b) => a.eersteDag.sDag < b.eersteDag.sDag ? a : b);
+      eersteDag = {...winnaar.eersteDag, stationNaam: winnaar.stationNaam};
+    }
+    let laatsteDag = null;
+    if (metLaatste.length > 0) {
+      const winnaar = metLaatste.reduce((a, b) => a.laatsteDag.sDag > b.laatsteDag.sDag ? a : b);
+      laatsteDag = {...winnaar.laatsteDag, stationNaam: winnaar.stationNaam};
+    }
+
+    const gemAantal = alle.reduce((s, r) => s + r.aantal, 0) / alle.length;
+    const maxStn = alle.reduce((a, b) => a.aantal > b.aantal ? a : b);
+    const reeksStn = alle.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
+
+    const metExt = alle.filter(x => x.extremeVal !== null);
+    let extreem = null;
+    if (metExt.length > 0) {
+      extreem = richting === 'boven'
+        ? metExt.reduce((a, b) => a.extremeVal > b.extremeVal ? a : b)
+        : metExt.reduce((a, b) => a.extremeVal < b.extremeVal ? a : b);
+    }
+
+    resultatenAgg.push({
+      sJaar,
+      jaarLabel: seizoensJaarLabel(sJaar, sInfo),
+      eersteDag, laatsteDag,
+      aantal: Math.round(gemAantal * 10) / 10,
+      maxAantal: maxStn.aantal,
+      maxAantalStation: maxStn.stationNaam,
+      langsteReeks: reeksStn.langsteReeks,
+      langsteReeksStation: reeksStn.stationNaam,
+      extremeVal: extreem ? extreem.extremeVal : null,
+      extremeDatum: extreem ? extreem.extremeDatum : null,
+      extremeStation: extreem ? extreem.stationNaam : null,
+      aantalStations: alle.length
+    });
+  });
+
+  toonResultaten(resultatenAgg, type, drempel, richting, 'all', sInfo, top10Hoog, top10Laag);
 }
 
 // Format een waarde met de juiste eenheid (handelt spoor voor neerslag af)
@@ -864,20 +968,27 @@ function fmtWaarde(w, info, isSpoor) {
   return (w / info.factor).toFixed(1) + info.eenheid;
 }
 
-// Render een top-10 tabel
+// Render een top-10 tabel. Toont station-kolom als lijst-items stationNaam hebben.
 function renderTop10(bodyId, lijst, info) {
   const tbody = document.getElementById(bodyId);
+  const thead = tbody.parentElement.querySelector('thead tr');
+  const metStation = lijst.length > 0 && lijst[0].stationNaam;
+  thead.innerHTML = metStation
+    ? '<th style="width:38px">#</th><th>Station</th><th>Datum</th><th>Waarde</th>'
+    : '<th style="width:38px">#</th><th>Datum</th><th>Waarde</th>';
   tbody.innerHTML = '';
   if (lijst.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="color:#8899aa;padding:12px">geen data</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="color:#8899aa;padding:12px">geen data</td></tr>';
     return;
   }
   lijst.forEach((e, i) => {
     const tr = document.createElement('tr');
     if (i === 0) tr.className = 'record-1';
     const datum = `${e.dd} ${MND[e.mm - 1]} ${e.jaar}`;
+    const stationCel = metStation ? `<td style="text-align:left">${e.stationNaam}</td>` : '';
     tr.innerHTML = `
       <td class="rang">${i + 1}</td>
+      ${stationCel}
       <td>${datum}</td>
       <td class="waarde-cel">${fmtWaarde(e.waarde, info, e.isSpoor)}</td>
     `;
@@ -891,7 +1002,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   document.getElementById('resultaten').style.display = 'block';
 
   const info = KOLOM_INFO[type];
-  const stationNaam = STATIONS[stn]?.naam || stn;
+  const isAlle = stn === 'all';
+  const stationNaam = isAlle ? 'Alle stations (Nederlandrecord)' : (STATIONS[stn]?.naam || stn);
   const richtTekst = richting === 'boven' ? '≥' : '<';
   const isHeelJaar = sInfo.maanden.length === 12;
   const seizoenTxt = sInfo.kort;
@@ -906,7 +1018,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   if (metEerste.length > 0) {
     const vroegste = metEerste.reduce((a, b) => a.eersteDag.sDag < b.eersteDag.sDag ? a : b);
     document.getElementById('val-eerste').textContent = vroegste.eersteDag.datum;
-    document.getElementById('sub-eerste').textContent = `in ${vroegste.jaarLabel}`;
+    const stnSuf = vroegste.eersteDag.stationNaam ? ` — ${vroegste.eersteDag.stationNaam}` : '';
+    document.getElementById('sub-eerste').textContent = `in ${vroegste.jaarLabel}${stnSuf}`;
     document.getElementById('card-eerste').querySelector('.label').textContent =
       `Vroegste eerste dag ${inTxt}`;
   } else {
@@ -918,7 +1031,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   if (metLaatste.length > 0) {
     const laatst = metLaatste.reduce((a, b) => a.laatsteDag.sDag > b.laatsteDag.sDag ? a : b);
     document.getElementById('val-laatste').textContent = laatst.laatsteDag.datum;
-    document.getElementById('sub-laatste').textContent = `in ${laatst.jaarLabel}`;
+    const stnSuf = laatst.laatsteDag.stationNaam ? ` — ${laatst.laatsteDag.stationNaam}` : '';
+    document.getElementById('sub-laatste').textContent = `in ${laatst.jaarLabel}${stnSuf}`;
     document.getElementById('card-laatste').querySelector('.label').textContent =
       `Laatste dag ${inTxt} (record)`;
   } else {
@@ -932,17 +1046,20 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
     document.getElementById('val-aantal').textContent = gem.toFixed(1);
     document.getElementById('sub-aantal').textContent = `over ${resultaten.length} ${isHeelJaar ? 'jaar' : seizoenTxt + 's'}`;
 
-    // Meeste dagen
+    // Meeste dagen (bij alle stations: jaar met hoogste landelijk gemiddelde)
     const meeste = resultaten.reduce((a, b) => a.aantal > b.aantal ? a : b);
-    document.getElementById('card-aantal').querySelector('.label').textContent =
-      `Gem. dagen ${perTxt} (max ${meeste.aantal} in ${meeste.jaarLabel})`;
+    const aantalLabel = isAlle
+      ? `Gem. dagen ${perTxt} (per station) — max ${meeste.aantal.toFixed(1)} in ${meeste.jaarLabel}`
+      : `Gem. dagen ${perTxt} (max ${meeste.aantal} in ${meeste.jaarLabel})`;
+    document.getElementById('card-aantal').querySelector('.label').textContent = aantalLabel;
   }
 
   // Langste reeks
   if (resultaten.length > 0) {
     const langst = resultaten.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
     document.getElementById('val-reeks').textContent = langst.langsteReeks + ' dagen';
-    document.getElementById('sub-reeks').textContent = `in ${langst.jaarLabel}`;
+    const stnSuf = isAlle && langst.langsteReeksStation ? ` — ${langst.langsteReeksStation}` : '';
+    document.getElementById('sub-reeks').textContent = `in ${langst.jaarLabel}${stnSuf}`;
   }
 
   // ── Grafiek 1: Eerste & laatste dag per jaar/seizoen ──
@@ -1169,21 +1286,42 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   const maxReeks = Math.max(...resultaten.map(r => r.langsteReeks));
 
   // Tabel van nieuw naar oud
+  const stnStyle = 'font-size:0.85em;color:#5a7090;font-weight:400';
   [...resultaten].reverse().forEach(r => {
     const tr = document.createElement('tr');
-    const eersteTd = r.eersteDag ? r.eersteDag.datum : '-';
-    const laatsteTd = r.laatsteDag ? r.laatsteDag.datum : '-';
-    const extremeTd = r.extremeVal !== null ? `${r.extremeVal.toFixed(1)}${info.eenheid} (${r.extremeDatum})` : '-';
+    const eersteTd = r.eersteDag
+      ? (isAlle && r.eersteDag.stationNaam
+          ? `${r.eersteDag.datum} <span style="${stnStyle}">(${r.eersteDag.stationNaam})</span>`
+          : r.eersteDag.datum)
+      : '-';
+    const laatsteTd = r.laatsteDag
+      ? (isAlle && r.laatsteDag.stationNaam
+          ? `${r.laatsteDag.datum} <span style="${stnStyle}">(${r.laatsteDag.stationNaam})</span>`
+          : r.laatsteDag.datum)
+      : '-';
+    const extremeTd = r.extremeVal !== null
+      ? (isAlle && r.extremeStation
+          ? `${r.extremeVal.toFixed(1)}${info.eenheid} <span style="${stnStyle}">(${r.extremeDatum} — ${r.extremeStation})</span>`
+          : `${r.extremeVal.toFixed(1)}${info.eenheid} (${r.extremeDatum})`)
+      : '-';
 
     const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : '-';
+
+    // Bij "alle stations": toon gem. + (max in station) onder aantal-kolom
+    const aantalTxt = isAlle
+      ? `${r.aantal} <span style="${stnStyle}">(max ${r.maxAantal} — ${r.maxAantalStation})</span>`
+      : r.aantal;
+    const reeksTxt = isAlle
+      ? `${r.langsteReeks} <span style="${stnStyle}">(${r.langsteReeksStation})</span>`
+      : r.langsteReeks;
 
     tr.innerHTML = `
       <td style="font-weight:700">${r.jaarLabel}</td>
       <td>${eersteTd}</td>
       <td>${laatsteTd}</td>
       <td style="color:#6a5a00;font-weight:600">${venster !== '-' ? venster + ' d' : '-'}</td>
-      <td class="${r.aantal === maxAantal && maxAantal > 0 ? 'record-max' : ''}">${r.aantal}</td>
-      <td class="${r.langsteReeks === maxReeks && maxReeks > 0 ? 'record-max' : ''}">${r.langsteReeks}</td>
+      <td class="${!isAlle && r.aantal === maxAantal && maxAantal > 0 ? 'record-max' : ''}">${aantalTxt}</td>
+      <td class="${!isAlle && r.langsteReeks === maxReeks && maxReeks > 0 ? 'record-max' : ''}">${reeksTxt}</td>
       <td>${extremeTd}</td>
     `;
     tbody.appendChild(tr);
