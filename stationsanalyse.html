@@ -261,7 +261,7 @@ body {
 <div class="header">
   <div>
     <h1>Eerste &amp; Laatste &mdash; Historische dagdata</h1>
-    <p>Wanneer werd een drempel bereikt? &middot; Temperatuur, neerslag, wind &amp; zon &middot; alle KNMI-stations</p>
+    <p>Wanneer werd een drempel bereikt? &middot; Per jaar of per seizoen &middot; Temperatuur, neerslag, wind &amp; zon &middot; alle KNMI-stations</p>
   </div>
   <div class="header-right">
     <strong>Weerlab.nl</strong><br>
@@ -302,6 +302,29 @@ body {
 </div>
 
 <div class="controls" id="controls-row2" style="border-top:none;padding-top:4px">
+  <div class="ctrl-group">
+    <span class="ctrl-label">Seizoen:</span>
+    <select class="ctrl-select" id="sel-seizoen">
+      <option value="heel">Heel jaar</option>
+      <option value="lente">Lente (mrt-mei)</option>
+      <option value="zomer">Zomer (jun-aug)</option>
+      <option value="herfst">Herfst (sep-nov)</option>
+      <option value="winter">Winter (dec-feb)</option>
+      <option value="m1">Januari</option>
+      <option value="m2">Februari</option>
+      <option value="m3">Maart</option>
+      <option value="m4">April</option>
+      <option value="m5">Mei</option>
+      <option value="m6">Juni</option>
+      <option value="m7">Juli</option>
+      <option value="m8">Augustus</option>
+      <option value="m9">September</option>
+      <option value="m10">Oktober</option>
+      <option value="m11">November</option>
+      <option value="m12">December</option>
+    </select>
+  </div>
+  <div class="ctrl-separator"></div>
   <div class="ctrl-group">
     <span class="ctrl-label">Presets:</span>
     <div class="preset-btns" id="preset-container"></div>
@@ -420,40 +443,49 @@ const STATIONS = {
 // ── Presets per analyse-type ──
 const PRESETS = {
   temp: [
-    {label:'0°C (vorst)',val:0,richting:'onder'},
+    {label:'IJsdag (TX<0°C)',val:0,richting:'onder'},
+    {label:'10°C',val:10},
     {label:'15°C (lente)',val:15},
+    {label:'18°C',val:18},
     {label:'20°C (warm)',val:20},
     {label:'25°C (zomers)',val:25},
     {label:'30°C (tropisch)',val:30},
     {label:'35°C (extreem)',val:35}
   ],
   temp_min: [
+    {label:'-15°C (zeer streng)',val:-15,richting:'onder'},
     {label:'-10°C (streng)',val:-10,richting:'onder'},
     {label:'-5°C',val:-5,richting:'onder'},
-    {label:'0°C (vorst)',val:0,richting:'onder'},
+    {label:'Vorstdag (TN<0°C)',val:0,richting:'onder'},
+    {label:'15°C (warme nacht)',val:15},
     {label:'20°C (tropennacht)',val:20}
   ],
   neerslag: [
+    {label:'0.1 mm (meetbaar)',val:0.1},
     {label:'1 mm',val:1},
     {label:'5 mm',val:5},
     {label:'10 mm',val:10},
     {label:'20 mm',val:20},
     {label:'30 mm',val:30},
-    {label:'50 mm',val:50}
+    {label:'50 mm (zeer nat)',val:50},
+    {label:'droog (<0.1 mm)',val:0.1,richting:'onder'}
   ],
   wind: [
+    {label:'5 Bft (60)',val:60},
     {label:'6 Bft (75)',val:75},
     {label:'7 Bft (90)',val:90},
     {label:'8 Bft (105)',val:105},
     {label:'9 Bft (120)',val:120},
-    {label:'10 Bft (140)',val:140}
+    {label:'10 Bft (140)',val:140},
+    {label:'11 Bft (160, storm)',val:160}
   ],
   zon: [
-    {label:'0 uur',val:0},
-    {label:'5 uur',val:5},
-    {label:'8 uur',val:8},
-    {label:'10 uur',val:10},
-    {label:'12 uur',val:12}
+    {label:'geen zon (<0.1 uur)',val:0.1,richting:'onder'},
+    {label:'≥1 uur',val:1},
+    {label:'≥5 uur',val:5},
+    {label:'≥8 uur',val:8},
+    {label:'≥10 uur',val:10},
+    {label:'≥12 uur',val:12}
   ]
 };
 
@@ -474,16 +506,88 @@ let chart2Instance = null;
 
 // ── Maandnamen ──
 const MND = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const MND_VOL = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
 
 function dagNaarDatum(jaar, dagNr) {
-  const d = new Date(jaar, 0, dagNr);
-  return d.getDate() + ' ' + MND[d.getMonth()];
+  const d = new Date(Date.UTC(jaar, 0, 1) + (dagNr - 1) * 86400000);
+  return d.getUTCDate() + ' ' + MND[d.getUTCMonth()];
 }
 
 function datumNaarDagNr(yyyy, mm, dd) {
-  const start = new Date(yyyy, 0, 1);
-  const dag = new Date(yyyy, mm - 1, dd);
-  return Math.floor((dag - start) / 86400000) + 1;
+  return Math.round((Date.UTC(yyyy, mm - 1, dd) - Date.UTC(yyyy, 0, 1)) / 86400000) + 1;
+}
+
+// ── Seizoens-logica ──
+// spansYear=true betekent dec valt bij de winter van het VOLGENDE jaar (meteorologische winter)
+const SEIZOENEN = {
+  heel:   {label:'heel jaar',       kort:'jaar',   maanden:[1,2,3,4,5,6,7,8,9,10,11,12], lengte:366, spansYear:false, startM:1,  startD:1},
+  lente:  {label:'lente (mrt-mei)', kort:'lente',  maanden:[3,4,5],    lengte:92, spansYear:false, startM:3,  startD:1},
+  zomer:  {label:'zomer (jun-aug)', kort:'zomer',  maanden:[6,7,8],    lengte:92, spansYear:false, startM:6,  startD:1},
+  herfst: {label:'herfst (sep-nov)',kort:'herfst', maanden:[9,10,11],  lengte:91, spansYear:false, startM:9,  startD:1},
+  winter: {label:'winter (dec-feb)',kort:'winter', maanden:[12,1,2],   lengte:91, spansYear:true,  startM:12, startD:1}
+};
+
+function seizoenInfo(key) {
+  if (key && key.startsWith('m')) {
+    const m = parseInt(key.slice(1));
+    return {
+      label: MND_VOL[m-1],
+      kort: MND_VOL[m-1],
+      maanden: [m],
+      lengte: [31,29,31,30,31,30,31,31,30,31,30,31][m-1],
+      spansYear: false,
+      startM: m,
+      startD: 1
+    };
+  }
+  return SEIZOENEN[key] || SEIZOENEN.heel;
+}
+
+function inSeizoen(mm, info) {
+  return info.maanden.includes(mm);
+}
+
+// Voor winter: dec hoort bij het seizoensjaar Y+1 (winter 2024/25 = dec 2024 + jan/feb 2025)
+function seizoensJaar(jaar, mm, info) {
+  if (info.spansYear && mm === 12) return jaar + 1;
+  return jaar;
+}
+
+// Positie van een datum binnen het seizoen (1-based)
+function seizoensDag(jaar, mm, dd, info) {
+  if (info.maanden.length === 12) {
+    return datumNaarDagNr(jaar, mm, dd);
+  }
+  if (info.spansYear) {
+    // winter: dec 1..31 → 1..31; jan 1..31 → 32..62; feb 1..29 → 63..91
+    if (mm === 12) return dd;
+    if (mm === 1) return 31 + dd;
+    if (mm === 2) return 62 + dd;
+  }
+  // gebruik schrikkeljaar voor consistente offsets
+  const startDag = datumNaarDagNr(2024, info.startM, info.startD);
+  const curDag = datumNaarDagNr(2024, mm, dd);
+  return curDag - startDag + 1;
+}
+
+// Converteer een seizoensdag terug naar een leesbare datum
+function seizoensDagNaarDatum(sDag, info) {
+  if (info.maanden.length === 12) {
+    return dagNaarDatum(2024, sDag);
+  }
+  if (info.spansYear) {
+    if (sDag <= 31) return sDag + ' dec';
+    if (sDag <= 62) return (sDag - 31) + ' jan';
+    return (sDag - 62) + ' feb';
+  }
+  const startDag = datumNaarDagNr(2024, info.startM, info.startD);
+  return dagNaarDatum(2024, startDag + sDag - 1);
+}
+
+// Jaar-label voor winter: "2024/25", anders gewoon jaar
+function seizoensJaarLabel(sJaar, info) {
+  if (info.spansYear) return (sJaar - 1) + '/' + String(sJaar).slice(2);
+  return String(sJaar);
 }
 
 // ── Init ──
@@ -502,6 +606,9 @@ function init() {
   // Analyse-type change → update presets + eenheid
   document.getElementById('sel-analyse').addEventListener('change', updatePresets);
   updatePresets();
+
+  // Seizoen change → direct opnieuw analyseren
+  document.getElementById('sel-seizoen').addEventListener('change', startAnalyse);
 
   // Klok
   setInterval(() => {
@@ -593,6 +700,8 @@ function startAnalyse() {
   const drempel = parseFloat(document.getElementById('inp-drempel').value);
   const vanJaar = parseInt(document.getElementById('inp-van').value) || 0;
   const totJaar = parseInt(document.getElementById('inp-tot').value) || 9999;
+  const seizoenKey = document.getElementById('sel-seizoen').value;
+  const sInfo = seizoenInfo(seizoenKey);
 
   if (isNaN(drempel)) return;
 
@@ -607,26 +716,42 @@ function startAnalyse() {
 
     // Drempel omrekenen naar ruwe eenheid (0.1-waarden in CSV)
     let drempelRaw = drempel * factor;
-    // Wind-presets zijn al in 0.1 m/s → maar drempel UI is in 0.1 m/s bij wind
-    // Neerslag: -1 = <0.05mm
-    // Zon: SQ in 0.1 uur
 
-    // Groepeer per jaar
+    // Groepeer rijen per seizoensjaar (winter: dec hoort bij volgend jaar)
     const jarenMap = {};
     data.forEach(rij => {
       const datum = rij[kolomIndex['YYYYMMDD']];
       const jaar = parseInt(datum.substring(0, 4));
-      if (jaar < vanJaar || jaar > totJaar) return;
-      if (!jarenMap[jaar]) jarenMap[jaar] = [];
-      jarenMap[jaar].push(rij);
+      const mm = parseInt(datum.substring(4, 6));
+      if (!inSeizoen(mm, sInfo)) return;
+      const sJaar = seizoensJaar(jaar, mm, sInfo);
+      if (sJaar < vanJaar || sJaar > totJaar) return;
+      if (!jarenMap[sJaar]) jarenMap[sJaar] = [];
+      jarenMap[sJaar].push(rij);
     });
 
-    // Analyseer per jaar
+    // Minimum aantal dagen per seizoen om jaar mee te nemen
+    const minDagen = sInfo.maanden.length === 12 ? 300
+                   : sInfo.maanden.length >= 3 ? 60
+                   : Math.floor(sInfo.lengte * 0.7);
+
+    // Analyseer per seizoensjaar
     const resultaten = [];
     const jaren = Object.keys(jarenMap).map(Number).sort((a,b) => a - b);
+    const huidigJaar = new Date().getFullYear();
 
-    jaren.forEach(jaar => {
-      const rijen = jarenMap[jaar];
+    jaren.forEach(sJaar => {
+      // Sorteer binnen seizoen op seizoensdag voor correcte chronologische volgorde (winter!)
+      const rijen = jarenMap[sJaar].slice().sort((a, b) => {
+        const da = a[kolomIndex['YYYYMMDD']], db = b[kolomIndex['YYYYMMDD']];
+        const ja = parseInt(da.substring(0,4)), jb = parseInt(db.substring(0,4));
+        const ma = parseInt(da.substring(4,6)), mb = parseInt(db.substring(4,6));
+        const dda = parseInt(da.substring(6,8)), ddb = parseInt(db.substring(6,8));
+        const sa = seizoensDag(ja, ma, dda, sInfo);
+        const sb = seizoensDag(jb, mb, ddb, sInfo);
+        return sa - sb;
+      });
+
       let eersteDag = null, laatsteDag = null, aantal = 0, langsteReeks = 0, huidigeReeks = 0;
       let extremeVal = null, extremeDatum = null;
 
@@ -639,81 +764,91 @@ function startAnalyse() {
 
         const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde <= drempelRaw;
         const datum = rij[kolomIndex['YYYYMMDD']];
+        const jaar = parseInt(datum.substring(0, 4));
         const mm = parseInt(datum.substring(4, 6));
         const dd = parseInt(datum.substring(6, 8));
-        const dagNr = datumNaarDagNr(jaar, mm, dd);
+        const sDag = seizoensDag(jaar, mm, dd, sInfo);
+        const datumStr = dd + ' ' + MND[mm - 1];
 
         if (voldoet) {
           aantal++;
-          if (eersteDag === null) eersteDag = {dagNr, datum: dagNaarDatum(jaar, dagNr), raw: datum};
-          laatsteDag = {dagNr, datum: dagNaarDatum(jaar, dagNr), raw: datum};
+          if (eersteDag === null) eersteDag = {sDag, datum: datumStr, raw: datum};
+          laatsteDag = {sDag, datum: datumStr, raw: datum};
           huidigeReeks++;
           if (huidigeReeks > langsteReeks) langsteReeks = huidigeReeks;
         } else {
           huidigeReeks = 0;
         }
 
-        // Track extreme waarde
+        // Track extreme waarde binnen het seizoen
         if (richting === 'boven') {
           if (extremeVal === null || waarde > extremeVal) {
             extremeVal = waarde;
-            extremeDatum = dagNaarDatum(jaar, dagNr);
+            extremeDatum = datumStr;
           }
         } else {
           if (extremeVal === null || waarde < extremeVal) {
             extremeVal = waarde;
-            extremeDatum = dagNaarDatum(jaar, dagNr);
+            extremeDatum = datumStr;
           }
         }
       });
 
-      // Skip jaren zonder volledige data (< 300 dagen)
-      if (rijen.length < 300 && jaar < new Date().getFullYear()) return;
+      // Skip jaren met onvoldoende data (behalve het huidige lopende jaar)
+      if (rijen.length < minDagen && sJaar < huidigJaar) return;
 
       resultaten.push({
-        jaar, eersteDag, laatsteDag, aantal, langsteReeks,
+        sJaar,
+        jaarLabel: seizoensJaarLabel(sJaar, sInfo),
+        eersteDag, laatsteDag, aantal, langsteReeks,
         extremeVal: extremeVal !== null ? extremeVal / factor : null,
         extremeDatum,
         aantalDagen: rijen.length
       });
     });
 
-    toonResultaten(resultaten, type, drempel, richting, stn);
+    toonResultaten(resultaten, type, drempel, richting, stn, sInfo);
   }).catch(err => {
     document.getElementById('status').innerHTML = `Fout: ${err.message}`;
   });
 }
 
 // ── Resultaten tonen ──
-function toonResultaten(resultaten, type, drempel, richting, stn) {
+function toonResultaten(resultaten, type, drempel, richting, stn, sInfo) {
   document.getElementById('status').style.display = 'none';
   document.getElementById('resultaten').style.display = 'block';
 
   const info = KOLOM_INFO[type];
   const stationNaam = STATIONS[stn]?.naam || stn;
   const richtTekst = richting === 'boven' ? '≥' : '≤';
+  const isHeelJaar = sInfo.maanden.length === 12;
+  const seizoenTxt = sInfo.kort;
+  const perTxt = isHeelJaar ? 'per jaar' : `per ${seizoenTxt}`;
+  const inTxt = isHeelJaar ? 'in jaar' : `in ${seizoenTxt}`;
 
   // ── Overzicht ──
   const metEerste = resultaten.filter(r => r.eersteDag);
   const metLaatste = resultaten.filter(r => r.laatsteDag);
 
-  // Vroegste eerste dag ooit
+  // Vroegste eerste dag
   if (metEerste.length > 0) {
-    const vroegste = metEerste.reduce((a, b) => a.eersteDag.dagNr < b.eersteDag.dagNr ? a : b);
+    const vroegste = metEerste.reduce((a, b) => a.eersteDag.sDag < b.eersteDag.sDag ? a : b);
     document.getElementById('val-eerste').textContent = vroegste.eersteDag.datum;
-    document.getElementById('sub-eerste').textContent = `in ${vroegste.jaar}`;
-    document.getElementById('card-eerste').querySelector('.label').textContent = 'Vroegste eerste dag';
+    document.getElementById('sub-eerste').textContent = `in ${vroegste.jaarLabel}`;
+    document.getElementById('card-eerste').querySelector('.label').textContent =
+      `Vroegste eerste dag ${inTxt}`;
   } else {
     document.getElementById('val-eerste').textContent = '-';
     document.getElementById('sub-eerste').textContent = 'geen data';
   }
 
-  // Laatst in het jaar ooit
+  // Laatste dag (record)
   if (metLaatste.length > 0) {
-    const laatst = metLaatste.reduce((a, b) => a.laatsteDag.dagNr > b.laatsteDag.dagNr ? a : b);
+    const laatst = metLaatste.reduce((a, b) => a.laatsteDag.sDag > b.laatsteDag.sDag ? a : b);
     document.getElementById('val-laatste').textContent = laatst.laatsteDag.datum;
-    document.getElementById('sub-laatste').textContent = `in ${laatst.jaar}`;
-    document.getElementById('card-laatste').querySelector('.label').textContent = 'Laatste dag in jaar (record)';
+    document.getElementById('sub-laatste').textContent = `in ${laatst.jaarLabel}`;
+    document.getElementById('card-laatste').querySelector('.label').textContent =
+      `Laatste dag ${inTxt} (record)`;
   } else {
     document.getElementById('val-laatste').textContent = '-';
     document.getElementById('sub-laatste').textContent = 'geen data';
@@ -723,31 +858,32 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
   if (resultaten.length > 0) {
     const gem = resultaten.reduce((s, r) => s + r.aantal, 0) / resultaten.length;
     document.getElementById('val-aantal').textContent = gem.toFixed(1);
-    document.getElementById('sub-aantal').textContent = `over ${resultaten.length} jaar`;
+    document.getElementById('sub-aantal').textContent = `over ${resultaten.length} ${isHeelJaar ? 'jaar' : seizoenTxt + 's'}`;
 
     // Meeste dagen
     const meeste = resultaten.reduce((a, b) => a.aantal > b.aantal ? a : b);
     document.getElementById('card-aantal').querySelector('.label').textContent =
-      `Gem. dagen/jaar (max ${meeste.aantal} in ${meeste.jaar})`;
+      `Gem. dagen ${perTxt} (max ${meeste.aantal} in ${meeste.jaarLabel})`;
   }
 
   // Langste reeks
   if (resultaten.length > 0) {
     const langst = resultaten.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
     document.getElementById('val-reeks').textContent = langst.langsteReeks + ' dagen';
-    document.getElementById('sub-reeks').textContent = `in ${langst.jaar}`;
+    document.getElementById('sub-reeks').textContent = `in ${langst.jaarLabel}`;
   }
 
-  // ── Grafiek 1: Eerste & laatste dag per jaar ──
+  // ── Grafiek 1: Eerste & laatste dag per jaar/seizoen ──
   document.getElementById('chart1-title').textContent =
-    `Eerste en laatste dag ${richtTekst} ${drempel}${info.eenheid} per jaar — ${stationNaam}`;
+    `Eerste en laatste dag ${richtTekst} ${drempel}${info.eenheid} ${perTxt} — ${stationNaam} (${sInfo.label})`;
 
   const ctx1 = document.getElementById('chart1').getContext('2d');
   if (chart1Instance) chart1Instance.destroy();
 
-  const jaren = resultaten.map(r => r.jaar);
-  const eersteData = resultaten.map(r => r.eersteDag ? r.eersteDag.dagNr : null);
-  const laatsteData = resultaten.map(r => r.laatsteDag ? r.laatsteDag.dagNr : null);
+  const jaren = resultaten.map(r => r.sJaar);
+  const jaarLabels = resultaten.map(r => r.jaarLabel);
+  const eersteData = resultaten.map(r => r.eersteDag ? r.eersteDag.sDag : null);
+  const laatsteData = resultaten.map(r => r.laatsteDag ? r.laatsteDag.sDag : null);
 
   // Trendlijn berekenen (lineaire regressie)
   function trendlijn(xArr, yArr) {
@@ -817,6 +953,11 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
     });
   }
 
+  // y-as min/max afhankelijk van seizoen
+  const yMin = 1;
+  const yMax = sInfo.lengte;
+  const yStep = isHeelJaar ? 30 : (sInfo.lengte <= 31 ? 5 : 15);
+
   chart1Instance = new Chart(ctx1, {
     type: 'scatter',
     data: {datasets: datasets1},
@@ -827,9 +968,10 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
         tooltip: {
           callbacks: {
             label: function(ctx) {
-              const dagNr = ctx.parsed.y;
-              const jaar = ctx.parsed.x;
-              return `${ctx.dataset.label}: ${dagNaarDatum(jaar, dagNr)} (${jaar})`;
+              const sDag = ctx.parsed.y;
+              const sJaar = ctx.parsed.x;
+              const label = seizoensJaarLabel(sJaar, sInfo);
+              return `${ctx.dataset.label}: ${seizoensDagNaarDatum(Math.round(sDag), sInfo)} (${label})`;
             }
           }
         },
@@ -837,29 +979,34 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
       },
       scales: {
         x: {
-          title: {display: true, text: 'Jaar'},
-          ticks: {font: {size: 10}}
-        },
-        y: {
-          reverse: false,
-          title: {display: true, text: 'Dag in het jaar'},
+          title: {display: true, text: isHeelJaar ? 'Jaar' : `Seizoensjaar (${sInfo.kort})`},
           ticks: {
             font: {size: 10},
             callback: function(val) {
-              return dagNaarDatum(2024, Math.round(val)); // gebruik schrikkeljaar
+              return seizoensJaarLabel(Math.round(val), sInfo);
+            }
+          }
+        },
+        y: {
+          reverse: false,
+          title: {display: true, text: isHeelJaar ? 'Dag in het jaar' : `Dag in ${sInfo.kort}`},
+          ticks: {
+            font: {size: 10},
+            callback: function(val) {
+              return seizoensDagNaarDatum(Math.round(val), sInfo);
             },
-            stepSize: 30
+            stepSize: yStep
           },
-          min: 1,
-          max: 366
+          min: yMin,
+          max: yMax
         }
       }
     }
   });
 
-  // ── Grafiek 2: Aantal dagen per jaar ──
+  // ── Grafiek 2: Aantal dagen per jaar/seizoen ──
   document.getElementById('chart2-title').textContent =
-    `Aantal dagen ${richtTekst} ${drempel}${info.eenheid} per jaar — ${stationNaam}`;
+    `Aantal dagen ${richtTekst} ${drempel}${info.eenheid} ${perTxt} — ${stationNaam} (${sInfo.label})`;
 
   const ctx2 = document.getElementById('chart2').getContext('2d');
   if (chart2Instance) chart2Instance.destroy();
@@ -870,7 +1017,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
   chart2Instance = new Chart(ctx2, {
     type: 'bar',
     data: {
-      labels: jaren,
+      labels: jaarLabels,
       datasets: [{
         label: `Dagen ${richtTekst} ${drempel}${info.eenheid}`,
         data: aantalData,
@@ -927,10 +1074,11 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
 
   // ── Detail-tabel ──
   document.getElementById('tabel-title').textContent =
-    `Detail per jaar — ${stationNaam} — ${richtTekst} ${drempel}${info.eenheid}`;
+    `Detail ${perTxt} — ${stationNaam} — ${richtTekst} ${drempel}${info.eenheid} (${sInfo.label})`;
 
   const thead = document.getElementById('tabel-header');
-  thead.innerHTML = '<th>Jaar</th><th>Eerste dag</th><th>Laatste dag</th><th>Venster</th><th>Aantal dagen</th><th>Langste reeks</th><th>Extreem</th>';
+  const jaarKop = isHeelJaar ? 'Jaar' : 'Seizoen';
+  thead.innerHTML = `<th>${jaarKop}</th><th>Eerste dag</th><th>Laatste dag</th><th>Venster</th><th>Aantal dagen</th><th>Langste reeks</th><th>Extreem</th>`;
 
   const tbody = document.getElementById('tabel-body');
   tbody.innerHTML = '';
@@ -946,10 +1094,10 @@ function toonResultaten(resultaten, type, drempel, richting, stn) {
     const laatsteTd = r.laatsteDag ? r.laatsteDag.datum : '-';
     const extremeTd = r.extremeVal !== null ? `${r.extremeVal.toFixed(1)}${info.eenheid} (${r.extremeDatum})` : '-';
 
-    const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.dagNr - r.eersteDag.dagNr + 1) : '-';
+    const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : '-';
 
     tr.innerHTML = `
-      <td style="font-weight:700">${r.jaar}</td>
+      <td style="font-weight:700">${r.jaarLabel}</td>
       <td>${eersteTd}</td>
       <td>${laatsteTd}</td>
       <td style="color:#6a5a00;font-weight:600">${venster !== '-' ? venster + ' d' : '-'}</td>
