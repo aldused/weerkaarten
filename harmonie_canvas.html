@@ -2562,19 +2562,26 @@ body {
     capCtx.fillStyle = "#ffffff";
     capCtx.fillRect(0, 0, W, H);
 
-    // Configure encoder — baseline profile voor breedste compatibiliteit (avc1.42001f)
-    var codec = "avc1.42001f";
-    var support = await VideoEncoder.isConfigSupported({
-      codec: codec, width: W, height: H, bitrate: 6000000, framerate: fps
-    });
-    if (!support || !support.supported) {
-      // Probeer main profile
-      codec = "avc1.4d0028";
-      support = await VideoEncoder.isConfigSupported({
-        codec: codec, width: W, height: H, bitrate: 6000000, framerate: fps
-      });
-      if (!support || !support.supported) throw new Error("H.264 encoding niet ondersteund in deze browser");
+    // Probeer meerdere H.264 profielen/levels tot er een past bij de frame-afmetingen.
+    // Onze frames (tot ~1440×1800) passen pas vanaf level 4.0 — level 3.1 is te klein.
+    var kandidaten = [
+      "avc1.640028", // High 4.0 (tot 1920×1080) — breed ondersteund sinds 2010
+      "avc1.4D0028", // Main 4.0
+      "avc1.42002A", // Baseline 4.2
+      "avc1.640033", // High 5.1 (tot ~4K) — nieuwere hardware
+      "avc1.64001F", // High 3.1 — alleen als frames klein genoeg
+      "avc1.42001F"  // Baseline 3.1
+    ];
+    var codec = null;
+    for (var ki = 0; ki < kandidaten.length; ki++) {
+      try {
+        var sup = await VideoEncoder.isConfigSupported({
+          codec: kandidaten[ki], width: W, height: H, bitrate: 6000000, framerate: fps
+        });
+        if (sup && sup.supported) { codec = kandidaten[ki]; break; }
+      } catch (e) { /* volgende kandidaat */ }
     }
+    if (!codec) throw new Error("H.264 encoding niet ondersteund (frame " + W + "×" + H + ") — probeer WebM");
 
     var muxer = new Mp4Muxer.Muxer({
       target: new Mp4Muxer.ArrayBufferTarget(),
