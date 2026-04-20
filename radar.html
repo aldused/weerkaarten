@@ -39,6 +39,23 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .reset-btn { padding: 4px 11px; border-radius: 6px; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .reset-btn:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
 
+/* Gevoeligheid (zoals snelheid) */
+.sens-btns { display: inline-flex; background: #eef2f7; border-radius: 8px; padding: 2px; gap: 2px; }
+.sens-label { font-size: 10.5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 2px; align-self: center; }
+.sens-btn { padding: 5px 11px; border-radius: 6px; border: none; background: transparent; color: #334155; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.sens-btn:hover { color: #0f172a; background: rgba(255,255,255,0.6); }
+.sens-btn.actief { background: #ffffff; color: #0f172a; box-shadow: 0 1px 2px rgba(15,23,42,0.06); }
+
+/* Slider — nu-marker + forecast-zone */
+.slider-area { position: relative; }
+.slider-track-overlay { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; height: 14px; }
+.slider-now-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; box-shadow: 0 0 0 1px rgba(239,68,68,0.25); }
+.slider-now-label { position: absolute; top: -16px; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: #ef4444; letter-spacing: 0.05em; text-transform: uppercase; }
+.slider-fcst-zone { position: absolute; top: 4px; bottom: 4px; background: repeating-linear-gradient(45deg, rgba(245,158,11,0.18) 0 4px, rgba(245,158,11,0.08) 4px 8px); border-radius: 2px; }
+
+/* Forecast badge op canvas */
+.fcst-badge { position: absolute; top: 10px; left: 12px; background: rgba(245,158,11,0.95); color: #0f172a; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; pointer-events: none; z-index: 11; box-shadow: 0 1px 3px rgba(0,0,0,0.3); display: none; }
+
 .export-btns { display: flex; gap: 4px; margin-left: auto; }
 .export-btn { padding: 6px 12px; border-radius: 8px; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .export-btn:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
@@ -98,7 +115,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   <button class="btn-stap" id="btn-volgende">&#9654;</button>
 
   <div class="slider-area">
-    <input type="range" id="slider" min="0" max="23" value="23" step="1">
+    <div class="slider-track-overlay" id="slider-overlay"></div>
+    <input type="range" id="slider" min="0" max="47" value="23" step="1" style="position:relative;z-index:1;">
     <span class="tijd-label" id="tijd-label">--</span>
   </div>
 
@@ -107,6 +125,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     <button class="speed-btn actief" data-ms="400">2x</button>
     <button class="speed-btn" data-ms="200">4x</button>
     <button class="speed-btn" data-ms="100">8x</button>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:6px;">
+    <span class="sens-label">Gevoeligheid:</span>
+    <div class="sens-btns" id="sens-btns">
+      <button class="sens-btn" data-sens="subtiel">subtiel</button>
+      <button class="sens-btn actief" data-sens="normaal">normaal</button>
+      <button class="sens-btn" data-sens="vol">vol</button>
+    </div>
   </div>
 
   <div class="zoom-btns">
@@ -126,6 +153,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 <div class="canvas-container" id="canvas-container">
   <canvas id="radar-canvas"></canvas>
   <div class="canvas-tijd" id="canvas-tijd" style="display:none;"></div>
+  <div class="fcst-badge" id="fcst-badge">VOORSPELLING</div>
 
   <div class="legenda" id="legenda"></div>
 
@@ -249,8 +277,17 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     [255,100,255], // 65  lichtpaars
     [255,255,255], // 70  wit (hagel)
   ];
-  // Alpha per niveau (lager voor zwakke echo's → minder ruis op de kaart)
-  var DBZ_ALPHA = [ 90, 140, 175, 200, 220, 230, 240, 245, 250, 250, 250, 250, 250, 255];
+
+  // Gevoeligheidspresets — alpha per dBZ-niveau.
+  // 'subtiel' = oude default (lichte regen heel doorzichtig)
+  // 'normaal' = nieuwe default, lichte neerslag duidelijk zichtbaar
+  // 'vol'     = alles vol opaque, vergelijkbaar met Buienradar
+  var SENS_PRESETS = {
+    subtiel: [ 90, 140, 175, 200, 220, 230, 240, 245, 250, 250, 250, 250, 250, 255],
+    normaal: [170, 200, 220, 235, 245, 250, 252, 254, 255, 255, 255, 255, 255, 255],
+    vol:     [230, 245, 252, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255],
+  };
+  var DBZ_ALPHA = SENS_PRESETS.normaal.slice();
 
   // Geïnterpoleerde dBZ → kleur (4 kanalen incl. alpha)
   function dbzColor(dbz) {
@@ -298,6 +335,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var animInterval = null;
   var animSpeed = 400;
 
+  // Forecast / gevoeligheid
+  var frameTypes = null;     // ["history", ..., "forecast", ...]
+  var tNowIndex = -1;
+  var sensitivity = (function() {
+    try { return localStorage.getItem("radarSens") || "normaal"; }
+    catch(e) { return "normaal"; }
+  })();
+  DBZ_ALPHA = SENS_PRESETS[sensitivity] ? SENS_PRESETS[sensitivity].slice() : SENS_PRESETS.normaal.slice();
+
   // Zoom & pan state (vloeiend, 1.0–10.0)
   var zoomLevel = 1.0;
   var ZOOM_MIN = 1.0, ZOOM_MAX = 10.0;
@@ -344,6 +390,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       document.getElementById("slider").max = nFrames - 1;
       document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
 
+      frameTypes = meta.frame_types || null;
+      tNowIndex = (typeof meta.t_now_index === "number") ? meta.t_now_index : (nFrames - 1);
+      bouwSliderOverlay();
+
       // Offscreen canvas op data-resolutie (450×350) voor de radar-raster
       offscreen = document.createElement("canvas");
       offscreen.width = nLon;
@@ -351,7 +401,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       offCtx = offscreen.getContext("2d");
 
       setupCanvas();
-      frameIdx = nFrames - 1;
+      // Open op "nu" (laatste history-frame) i.p.v. einde forecast
+      frameIdx = (tNowIndex >= 0) ? tNowIndex : (nFrames - 1);
       document.getElementById("slider").value = frameIdx;
       renderFrame();
       document.getElementById("status").style.display = "none";
@@ -569,10 +620,47 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.fillText(cpTxt, boxX + padX, boxY + boxH / 2 + 1);
 
     // Update UI labels
-    document.getElementById("tijd-label").textContent = tijdTekst;
+    var isFcst = frameTypes && frameTypes[frameIdx] === "forecast";
+    var labelText = tijdTekst;
+    if (isFcst && tNowIndex >= 0) {
+      var minOffset = (frameIdx - tNowIndex) * 5;
+      labelText = "+" + minOffset + " min · " + tijdTekst;
+    }
+    document.getElementById("tijd-label").textContent = labelText;
     document.getElementById("canvas-tijd").textContent = tijdTekst;
     document.getElementById("slider").value = frameIdx;
     document.getElementById("zoom-info").textContent = zoomLevel.toFixed(1) + "×";
+    document.getElementById("fcst-badge").style.display = isFcst ? "block" : "none";
+  }
+
+  // ── Slider-overlay: forecast-zone + "nu"-marker ─────────────────────────
+  function bouwSliderOverlay() {
+    var overlay = document.getElementById("slider-overlay");
+    if (!overlay || nFrames < 2 || tNowIndex < 0) return;
+    overlay.innerHTML = "";
+
+    // Forecast-zone: rechts van t_now_index tot eind
+    if (tNowIndex < nFrames - 1) {
+      var fcstStart = (tNowIndex + 0.5) / (nFrames - 1) * 100;
+      var fcstEnd   = 100;
+      var zone = document.createElement("div");
+      zone.className = "slider-fcst-zone";
+      zone.style.left = fcstStart + "%";
+      zone.style.width = (fcstEnd - fcstStart) + "%";
+      overlay.appendChild(zone);
+    }
+
+    // Verticale "nu"-lijn op t_now_index
+    var nowPct = tNowIndex / (nFrames - 1) * 100;
+    var line = document.createElement("div");
+    line.className = "slider-now-line";
+    line.style.left = "calc(" + nowPct + "% - 1px)";
+    overlay.appendChild(line);
+    var lab = document.createElement("div");
+    lab.className = "slider-now-label";
+    lab.style.left = nowPct + "%";
+    lab.textContent = "nu";
+    overlay.appendChild(lab);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1162,6 +1250,24 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         this.classList.add("actief");
         animSpeed = parseInt(this.getAttribute("data-ms"));
         if (playing) startAnimatie();
+      });
+    });
+
+    // Gevoeligheid
+    document.querySelectorAll(".sens-btn").forEach(function(btn) {
+      // markeer actieve preset op basis van localStorage
+      if (btn.getAttribute("data-sens") === sensitivity) {
+        document.querySelectorAll(".sens-btn").forEach(function(b) { b.classList.remove("actief"); });
+        btn.classList.add("actief");
+      }
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".sens-btn").forEach(function(b) { b.classList.remove("actief"); });
+        this.classList.add("actief");
+        sensitivity = this.getAttribute("data-sens");
+        DBZ_ALPHA = SENS_PRESETS[sensitivity].slice();
+        try { localStorage.setItem("radarSens", sensitivity); } catch(e) {}
+        bouwLegenda();
+        renderFrame();
       });
     });
 
