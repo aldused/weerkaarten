@@ -2535,22 +2535,31 @@ body {
     return naam;
   }
 
-  function maakEvenMaat(n) { return (n % 2 === 0) ? n : n - 1; } // H.264 eist even afmetingen
+  function maakMult16(n) { return n - (n % 16); } // H.264 macroblocks = 16×16; safest om dimensies hierop af te ronden
 
   // MP4/H.264 via WebCodecs + mp4-muxer — X/Twitter/Instagram compatibel
   async function filmMp4(s0, s1, fps, srcCanvas) {
     if (!window.VideoEncoder || !window.Mp4Muxer) {
       throw new Error("WebCodecs/mp4-muxer niet beschikbaar — gebruik WebM");
     }
-    var W = maakEvenMaat(srcCanvas.width);
-    var H = maakEvenMaat(srcCanvas.height);
-    // Schaal grote canvassen terug — anders extreem trage encode
+    // Scale zodat max-breedte ≤1440, dimensies op multiples van 16 (macroblock-aligned)
     var MAX = 1440;
-    if (W > MAX) { var r = MAX / W; W = maakEvenMaat(Math.round(W * r)); H = maakEvenMaat(Math.round(H * r)); }
+    var srcW = srcCanvas.width, srcH = srcCanvas.height;
+    var scale = srcW > MAX ? (MAX / srcW) : 1;
+    var drawW = Math.round(srcW * scale);
+    var drawH = Math.round(srcH * scale);
+
+    // Voeg witte marge toe (top+bottom) zodat geen tekst tegen de rand loopt en encoder geen content crop toepast
+    var padY = 16;
+    var W = maakMult16(drawW);
+    var H = maakMult16(drawH + padY * 2);
 
     var capCanvas = document.createElement("canvas");
     capCanvas.width = W; capCanvas.height = H;
     var capCtx = capCanvas.getContext("2d");
+    // Wit vullen — voorkomt zwarte gebieden als bronkanvas transparantie bevat
+    capCtx.fillStyle = "#ffffff";
+    capCtx.fillRect(0, 0, W, H);
 
     // Configure encoder — baseline profile voor breedste compatibiliteit (avc1.42001f)
     var codec = "avc1.42001f";
@@ -2594,7 +2603,8 @@ body {
       if (!filmRecording) break;
       updateAlle(s);
       await new Promise(function(r) { setTimeout(r, frameMs); });
-      capCtx.drawImage(srcCanvas, 0, 0, W, H);
+      capCtx.fillStyle = "#ffffff"; capCtx.fillRect(0, 0, W, H);
+      capCtx.drawImage(srcCanvas, 0, padY, drawW, drawH);
       var vf = new VideoFrame(capCanvas, { timestamp: frameIdx * frameDur, duration: frameDur });
       encoder.encode(vf, { keyFrame: (frameIdx % Math.max(10, fps) === 0) });
       vf.close();
@@ -2603,7 +2613,8 @@ body {
     }
     // Hold-frames
     for (var h = 0; h < Math.max(3, Math.round(fps * 0.8)); h++) {
-      capCtx.drawImage(srcCanvas, 0, 0, W, H);
+      capCtx.fillStyle = "#ffffff"; capCtx.fillRect(0, 0, W, H);
+      capCtx.drawImage(srcCanvas, 0, padY, drawW, drawH);
       var vfh = new VideoFrame(capCanvas, { timestamp: frameIdx * frameDur, duration: frameDur });
       encoder.encode(vfh); vfh.close(); frameIdx++;
     }
