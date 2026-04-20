@@ -168,6 +168,19 @@ body {
   height: 300px;
 }
 
+/* ── Top 10 grid ── */
+.top10-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.top10-grid .detail-wrap { margin-bottom: 0; }
+.top10-grid .rang { font-weight: 700; color: #5a7090; width: 38px; }
+.top10-grid .waarde-cel { font-weight: 700; color: #1a2b40; font-variant-numeric: tabular-nums; }
+.top10-grid tr.record-1 td { background: #fff4d0; }
+.top10-grid tr.record-1 .waarde-cel { color: #b86e00; }
+
 /* ── Detailtabel ── */
 .detail-wrap {
   background: white;
@@ -253,6 +266,7 @@ body {
   .header-right { text-align: center; }
   .summary-cards { grid-template-columns: repeat(2, 1fr); }
   .chart-container { height: 250px; }
+  .top10-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -290,7 +304,7 @@ body {
     <span class="ctrl-label">Richting:</span>
     <select class="ctrl-select" id="sel-richting">
       <option value="boven">&ge; boven</option>
-      <option value="onder">&le; onder</option>
+      <option value="onder">&lt; onder</option>
     </select>
   </div>
   <div class="ctrl-separator"></div>
@@ -373,6 +387,27 @@ body {
     <div class="chart-wrap">
       <h2 id="chart2-title">Aantal dagen per jaar</h2>
       <div class="chart-container"><canvas id="chart2"></canvas></div>
+    </div>
+
+    <div class="top10-grid" id="top10-grid">
+      <div class="detail-wrap">
+        <h2 id="top10-hoog-title">Top 10 hoogste waarden</h2>
+        <div class="detail-scroll" style="max-height:none">
+          <table class="detail-tabel">
+            <thead><tr><th style="width:38px">#</th><th>Datum</th><th>Waarde</th></tr></thead>
+            <tbody id="top10-hoog-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="detail-wrap">
+        <h2 id="top10-laag-title">Top 10 laagste waarden</h2>
+        <div class="detail-scroll" style="max-height:none">
+          <table class="detail-tabel">
+            <thead><tr><th style="width:38px">#</th><th>Datum</th><th>Waarde</th></tr></thead>
+            <tbody id="top10-laag-body"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div class="detail-wrap">
@@ -737,6 +772,7 @@ function startAnalyse() {
 
     // Analyseer per seizoensjaar
     const resultaten = [];
+    const alleWaarden = []; // voor top 10: {waarde, jaar, mm, dd, isSpoor}
     const jaren = Object.keys(jarenMap).map(Number).sort((a,b) => a - b);
     const huidigJaar = new Date().getFullYear();
 
@@ -759,16 +795,20 @@ function startAnalyse() {
         const raw = getVal(rij, kolom);
         if (raw === null) return;
 
-        // Neerslag: -1 betekent <0.05mm → behandel als 0
-        const waarde = (kolom === 'RH' && raw === -1) ? 0 : raw;
+        // Neerslag: -1 betekent <0.05mm → behandel als 0 voor vergelijking
+        const isSpoor = (kolom === 'RH' && raw === -1);
+        const waarde = isSpoor ? 0 : raw;
 
-        const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde <= drempelRaw;
+        const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde < drempelRaw;
         const datum = rij[kolomIndex['YYYYMMDD']];
         const jaar = parseInt(datum.substring(0, 4));
         const mm = parseInt(datum.substring(4, 6));
         const dd = parseInt(datum.substring(6, 8));
         const sDag = seizoensDag(jaar, mm, dd, sInfo);
         const datumStr = dd + ' ' + MND[mm - 1];
+
+        // Verzamel voor top 10
+        alleWaarden.push({waarde, jaar, mm, dd, isSpoor});
 
         if (voldoet) {
           aantal++;
@@ -807,20 +847,52 @@ function startAnalyse() {
       });
     });
 
-    toonResultaten(resultaten, type, drempel, richting, stn, sInfo);
+    // Top 10 hoogste + laagste waarden binnen de filter
+    // Voor gelijke waarden: eerste sorteren op jaar (nieuwste eerst), dan op datum
+    const top10Hoog = [...alleWaarden].sort((a, b) => b.waarde - a.waarde).slice(0, 10);
+    const top10Laag = [...alleWaarden].sort((a, b) => a.waarde - b.waarde).slice(0, 10);
+
+    toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Hoog, top10Laag);
   }).catch(err => {
     document.getElementById('status').innerHTML = `Fout: ${err.message}`;
   });
 }
 
+// Format een waarde met de juiste eenheid (handelt spoor voor neerslag af)
+function fmtWaarde(w, info, isSpoor) {
+  if (isSpoor) return 'spoor';
+  return (w / info.factor).toFixed(1) + info.eenheid;
+}
+
+// Render een top-10 tabel
+function renderTop10(bodyId, lijst, info) {
+  const tbody = document.getElementById(bodyId);
+  tbody.innerHTML = '';
+  if (lijst.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:#8899aa;padding:12px">geen data</td></tr>';
+    return;
+  }
+  lijst.forEach((e, i) => {
+    const tr = document.createElement('tr');
+    if (i === 0) tr.className = 'record-1';
+    const datum = `${e.dd} ${MND[e.mm - 1]} ${e.jaar}`;
+    tr.innerHTML = `
+      <td class="rang">${i + 1}</td>
+      <td>${datum}</td>
+      <td class="waarde-cel">${fmtWaarde(e.waarde, info, e.isSpoor)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 // ── Resultaten tonen ──
-function toonResultaten(resultaten, type, drempel, richting, stn, sInfo) {
+function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Hoog, top10Laag) {
   document.getElementById('status').style.display = 'none';
   document.getElementById('resultaten').style.display = 'block';
 
   const info = KOLOM_INFO[type];
   const stationNaam = STATIONS[stn]?.naam || stn;
-  const richtTekst = richting === 'boven' ? '≥' : '≤';
+  const richtTekst = richting === 'boven' ? '≥' : '<';
   const isHeelJaar = sInfo.maanden.length === 12;
   const seizoenTxt = sInfo.kort;
   const perTxt = isHeelJaar ? 'per jaar' : `per ${seizoenTxt}`;
@@ -1071,6 +1143,15 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo) {
       }
     }]
   });
+
+  // ── Top 10 hoogste + laagste ──
+  const seizoenSuf = isHeelJaar ? '' : ` in ${seizoenTxt}`;
+  document.getElementById('top10-hoog-title').textContent =
+    `Top 10 hoogste ${info.naam.toLowerCase()}${seizoenSuf} — ${stationNaam}`;
+  document.getElementById('top10-laag-title').textContent =
+    `Top 10 laagste ${info.naam.toLowerCase()}${seizoenSuf} — ${stationNaam}`;
+  renderTop10('top10-hoog-body', top10Hoog || [], info);
+  renderTop10('top10-laag-body', top10Laag || [], info);
 
   // ── Detail-tabel ──
   document.getElementById('tabel-title').textContent =
