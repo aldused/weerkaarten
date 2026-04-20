@@ -49,17 +49,46 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .legenda-blok { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
 
 /* Stationslijst */
-.lijst-header { background: #f6f8fb; color: #0f172a; padding: 10px 14px; font-size: 12px; font-weight: 700; position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e3e8ef; text-transform: uppercase; letter-spacing: 0.06em; }
+.lijst-header { background: #f6f8fb; color: #0f172a; padding: 10px 14px; font-size: 12px; font-weight: 700; position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e3e8ef; text-transform: uppercase; letter-spacing: 0.06em; }
 .lijst-header select { background: #ffffff; border: 1px solid #e3e8ef; color: #0f172a; border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: inherit; font-weight: 600; }
-.station-rij { padding: 14px 18px; border-bottom: 1px solid #eff3f8; display: flex; align-items: center; gap: 10px; font-size: 12px; transition: background 0.1s; }
-.station-rij:hover { background: #f6f8fb; }
-.station-rij.top { background: #fffbeb; }
-.station-rij.bottom { background: #eff6ff; }
-.station-naam { font-weight: 700; color: #0f172a; min-width: 110px; flex-shrink: 0; }
-.station-waarden { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
-.station-val { font-size: 11px; color: #64748b; white-space: nowrap; font-family: "DM Mono", monospace; }
-.station-val b { color: #0f172a; }
-.station-val.highlight { background: #fef3c7; border-radius: 4px; padding: 1px 5px; }
+
+/* ── Tabel stations ── */
+.tabel-stations { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tabel-stations thead { position: sticky; top: 41px; z-index: 2; }
+.tabel-stations thead th {
+  background: #f6f8fb; color: #64748b;
+  padding: 8px 6px; text-align: right;
+  font-weight: 700; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  border-bottom: 1px solid #e3e8ef;
+  white-space: nowrap;
+  cursor: pointer; user-select: none;
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+.tabel-stations thead th:first-child { text-align: left; padding-left: 14px; }
+.tabel-stations thead th:last-child { padding-right: 14px; }
+.tabel-stations thead th:hover { color: #0f172a; }
+.tabel-stations thead th.actief { color: #00205b; background: #eff6ff; }
+.tabel-stations tbody td {
+  padding: 7px 6px; text-align: right;
+  border-bottom: 1px solid #eff3f8;
+  font-family: "DM Mono", ui-monospace, monospace;
+  color: #334155; white-space: nowrap;
+}
+.tabel-stations tbody td:first-child {
+  text-align: left; padding-left: 14px;
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600; color: #0f172a;
+}
+.tabel-stations tbody td:last-child { padding-right: 14px; }
+.tabel-stations tbody td.actief { color: #00205b; font-weight: 700; background: #fafbff; }
+.tabel-stations tbody td.leeg { color: #cbd5e1; }
+.tabel-stations tbody tr:hover td { background: #f6f8fb; }
+.tabel-stations tbody tr:hover td.actief { background: #eff6ff; }
+.tabel-stations tbody tr.top td { background: #fffbeb; }
+.tabel-stations tbody tr.top:hover td { background: #fef3c7; }
+.tabel-stations tbody tr.bottom td { background: #eff6ff; }
+.tabel-stations tbody tr.bottom:hover td { background: #dbeafe; }
 .auto-badge { display: inline-block; font-size: 10px; background: #eff6ff; color: #00205b; padding: 2px 8px; border-radius: 10px; font-weight: 600; border: 1px solid #dbeafe; }
 .btn-opslaan { padding: 7px 14px; border-radius: 8px; border: none; background: #00205b; color: white; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
 .btn-opslaan:hover { background: #003689; }
@@ -567,37 +596,55 @@ function tekenLijst() {
   const vals = items.map(st => getVal(st, huidigParam)).filter(v => v != null);
   const maxVal = Math.max(...vals), minVal = Math.min(...vals);
 
-  let html = "";
+  // Kolommen
+  const KOLOMMEN = [
+    { key: "naam", lbl: "Station",   eenheid: "" },
+    { key: "ta",   lbl: "T",         eenheid: "°C" },
+    { key: "td",   lbl: "Td",        eenheid: "°C" },
+    { key: "ff",   lbl: "Wind",      eenheid: "Bft" },
+    { key: "fx",   lbl: "Stoot",     eenheid: "km/h" },
+    { key: "n",    lbl: "Bew",       eenheid: "/8" },
+    { key: "rh",   lbl: "RV",        eenheid: "%" },
+    { key: "vv",   lbl: "Zicht",     eenheid: "" },
+    { key: "tg",   lbl: "GrasT",     eenheid: "°C" },
+    { key: "p0",   lbl: "Druk",      eenheid: "hPa" },
+  ];
+  function fmt(st, key) {
+    const v = key === "tg" ? (st.tg ?? st.tgn) : st[key];
+    if (v == null) return "–";
+    if (key === "ta" || key === "td" || key === "tg") return v.toFixed(1);
+    if (key === "ff") return msToBft(v);
+    if (key === "fx") return Math.round(v * 3.6);
+    if (key === "n")  return v;
+    if (key === "rh") return Math.round(v);
+    if (key === "vv") return v >= 10000 ? ">10k" : v >= 1000 ? (v/1000).toFixed(1) + "k" : Math.round(v);
+    if (key === "p0") return v.toFixed(1);
+    return v;
+  }
+
+  let html = '<table class="tabel-stations"><thead><tr>';
+  KOLOMMEN.forEach(k => {
+    const cls = k.key === huidigParam ? " actief" : "";
+    const sub = k.eenheid ? `<small style="display:block;font-size:9px;font-weight:500;opacity:0.7;text-transform:none;letter-spacing:0;">${k.eenheid}</small>` : "";
+    html += `<th class="th-${k.key}${cls}" data-key="${k.key}" onclick="kolomKlik('${k.key}')">${k.lbl}${sub}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
   items.forEach(st => {
     const val = getVal(st, huidigParam);
     const isTop = val != null && val === maxVal;
     const isBottom = val != null && val === minVal;
-    const cls = isTop ? " top" : isBottom ? " bottom" : "";
-
-    html += `<div class="station-rij${cls}">`;
-    html += `<div class="station-naam">${st.naam}</div>`;
-    html += `<div class="station-waarden">`;
-
-    // Alle waarden compact
-    const show = [
-      ["🌡", "ta", st.ta != null ? st.ta.toFixed(1) + "°" : "–"],
-      ["💧", "td", st.td != null ? st.td.toFixed(1) + "°" : "–"],
-      ["🌬", "ff", st.ff != null ? msToBft(st.ff) + " Bft" : "–"],
-      ["💨", "fx", st.fx != null ? Math.round(st.fx * 3.6) + " km/h" : "–"],
-      ["☁", "n", st.n != null ? st.n + "/8" : "–"],
-      ["💦", "rh", st.rh != null ? Math.round(st.rh) + "%" : "–"],
-      ["👁", "vv", st.vv != null ? (st.vv >= 10000 ? ">10km" : st.vv >= 1000 ? (st.vv/1000).toFixed(1) + "km" : Math.round(st.vv) + "m") : "–"],
-      ["🌿", "tg", (st.tg ?? st.tgn) != null ? (st.tg ?? st.tgn).toFixed(1) + "°" : "–"],
-      ["📊", "p0", st.p0 != null ? st.p0.toFixed(1) : "–"],
-    ];
-
-    show.forEach(([icon, key, txt]) => {
-      const hl = key === huidigParam ? " highlight" : "";
-      html += `<span class="station-val${hl}">${icon} <b>${txt}</b></span>`;
+    const rowCls = isTop ? "top" : isBottom ? "bottom" : "";
+    html += `<tr class="${rowCls}">`;
+    KOLOMMEN.forEach(k => {
+      if (k.key === "naam") { html += `<td>${st.naam}</td>`; return; }
+      const txt = fmt(st, k.key);
+      const cls = (k.key === huidigParam ? "actief" : "") + (txt === "–" ? " leeg" : "");
+      html += `<td class="${cls.trim()}">${txt}</td>`;
     });
-
-    html += `</div></div>`;
+    html += `</tr>`;
   });
+  html += "</tbody></table>";
 
   lijst.innerHTML = html;
   document.getElementById("n-stations").textContent = items.length;
@@ -646,9 +693,31 @@ document.querySelectorAll(".btn-param").forEach(btn => {
     document.querySelectorAll(".btn-param").forEach(b => b.classList.remove("actief"));
     btn.classList.add("actief");
     huidigParam = btn.dataset.param;
+    document.getElementById("sorteer").value = "param-desc";
     tekenAlles();
   });
 });
+
+// Klik op kolomkop in stations-tabel: switch param + toggle hoog/laag
+function kolomKlik(key) {
+  if (key === "naam") {
+    document.getElementById("sorteer").value = "naam";
+    tekenAlles();
+    return;
+  }
+  const sortSel = document.getElementById("sorteer");
+  if (key === huidigParam) {
+    // Toggle richting
+    sortSel.value = sortSel.value === "param-desc" ? "param-asc" : "param-desc";
+  } else {
+    huidigParam = key;
+    document.querySelectorAll(".btn-param").forEach(b => {
+      b.classList.toggle("actief", b.dataset.param === key);
+    });
+    sortSel.value = "param-desc";
+  }
+  tekenAlles();
+}
 
 // ── Download kaart als PNG (basemap-SVG + heatmap-canvas + overlay-SVG) ──
 function downloadKaart() {
