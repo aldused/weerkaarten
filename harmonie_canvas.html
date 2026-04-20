@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- mp4-muxer voor H.264 MP4 export (X/Twitter compatibel) — ~20KB -->
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/build/mp4-muxer.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -484,8 +486,8 @@ body {
       </div>
       <label for="film-format">Formaat:</label>
       <select id="film-format" style="padding:5px 8px;border:1px solid #c5d3e3;border-radius:5px;font-size:12px;">
-        <option value="mp4">MP4 (indien ondersteund)</option>
-        <option value="webm">WebM (altijd ondersteund)</option>
+        <option value="mp4" selected>MP4 / H.264 (X, Instagram, WhatsApp)</option>
+        <option value="webm">WebM / VP9 (kleiner, minder compatibel)</option>
       </select>
     </div>
     <div id="film-status" style="font-size:12px;color:#5a7090;margin-top:14px;min-height:18px;"></div>
@@ -2522,6 +2524,141 @@ body {
     return null;
   }
 
+  function downloadBlob(blob, ext) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var param = (panelParams && panelParams[0]) ? panelParams[0] : "kaart";
+    var naam = actiefModel + "_" + param + "_" + new Date().toISOString().replace(/[:T]/g,"-").slice(0,16) + "." + ext;
+    a.href = url; a.download = naam;
+    document.body.appendChild(a); a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    return naam;
+  }
+
+  function maakEvenMaat(n) { return (n % 2 === 0) ? n : n - 1; } // H.264 eist even afmetingen
+
+  // MP4/H.264 via WebCodecs + mp4-muxer — X/Twitter/Instagram compatibel
+  async function filmMp4(s0, s1, fps, srcCanvas) {
+    if (!window.VideoEncoder || !window.Mp4Muxer) {
+      throw new Error("WebCodecs/mp4-muxer niet beschikbaar — gebruik WebM");
+    }
+    var W = maakEvenMaat(srcCanvas.width);
+    var H = maakEvenMaat(srcCanvas.height);
+    // Schaal grote canvassen terug — anders extreem trage encode
+    var MAX = 1440;
+    if (W > MAX) { var r = MAX / W; W = maakEvenMaat(Math.round(W * r)); H = maakEvenMaat(Math.round(H * r)); }
+
+    var capCanvas = document.createElement("canvas");
+    capCanvas.width = W; capCanvas.height = H;
+    var capCtx = capCanvas.getContext("2d");
+
+    // Configure encoder — baseline profile voor breedste compatibiliteit (avc1.42001f)
+    var codec = "avc1.42001f";
+    var support = await VideoEncoder.isConfigSupported({
+      codec: codec, width: W, height: H, bitrate: 6000000, framerate: fps
+    });
+    if (!support || !support.supported) {
+      // Probeer main profile
+      codec = "avc1.4d0028";
+      support = await VideoEncoder.isConfigSupported({
+        codec: codec, width: W, height: H, bitrate: 6000000, framerate: fps
+      });
+      if (!support || !support.supported) throw new Error("H.264 encoding niet ondersteund in deze browser");
+    }
+
+    var muxer = new Mp4Muxer.Muxer({
+      target: new Mp4Muxer.ArrayBufferTarget(),
+      video: { codec: "avc", width: W, height: H, frameRate: fps },
+      fastStart: "in-memory"
+    });
+    var encoder = new VideoEncoder({
+      output: function(chunk, meta) { muxer.addVideoChunk(chunk, meta); },
+      error: function(e) { console.error("Encoder error:", e); }
+    });
+    encoder.configure({
+      codec: codec, width: W, height: H,
+      bitrate: 6000000, framerate: fps,
+      avc: { format: "avc" }
+    });
+
+    // Eerste frame pre-renderen
+    updateAlle(s0);
+    await new Promise(function(r) { setTimeout(r, 400); });
+
+    var frameMs = Math.max(60, Math.round(1000 / fps));
+    var totaal = s1 - s0 + 1;
+    var frameDur = Math.round(1000000 / fps); // microseconden
+    var frameIdx = 0;
+
+    for (var s = s0; s <= s1; s++) {
+      if (!filmRecording) break;
+      updateAlle(s);
+      await new Promise(function(r) { setTimeout(r, frameMs); });
+      capCtx.drawImage(srcCanvas, 0, 0, W, H);
+      var vf = new VideoFrame(capCanvas, { timestamp: frameIdx * frameDur, duration: frameDur });
+      encoder.encode(vf, { keyFrame: (frameIdx % Math.max(10, fps) === 0) });
+      vf.close();
+      frameIdx++;
+      filmStatus.textContent = "MP4-encode: frame " + (s - s0 + 1) + " / " + totaal + "…";
+    }
+    // Hold-frames
+    for (var h = 0; h < Math.max(3, Math.round(fps * 0.8)); h++) {
+      capCtx.drawImage(srcCanvas, 0, 0, W, H);
+      var vfh = new VideoFrame(capCanvas, { timestamp: frameIdx * frameDur, duration: frameDur });
+      encoder.encode(vfh); vfh.close(); frameIdx++;
+    }
+
+    await encoder.flush();
+    muxer.finalize();
+    encoder.close();
+
+    return new Blob([muxer.target.buffer], { type: "video/mp4" });
+  }
+
+  // WebM via MediaRecorder
+  async function filmWebm(s0, s1, fps, srcCanvas) {
+    var mime = pickMimeType("webm");
+    if (!mime) throw new Error("Geen video-codec beschikbaar");
+
+    var capCanvas = document.createElement("canvas");
+    capCanvas.width = srcCanvas.width;
+    capCanvas.height = srcCanvas.height;
+    var capCtx = capCanvas.getContext("2d");
+
+    updateAlle(s0);
+    await new Promise(function(r) { setTimeout(r, 400); });
+    capCtx.drawImage(srcCanvas, 0, 0);
+
+    var stream = capCanvas.captureStream(0);
+    var track = stream.getVideoTracks()[0];
+    var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
+    var chunks = [];
+    recorder.ondataavailable = function(e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    var klaar = new Promise(function(resolve) { recorder.onstop = resolve; });
+    recorder.start(200);
+    if (track.requestFrame) track.requestFrame();
+
+    var frameMs = Math.max(60, Math.round(1000 / fps));
+    var totaal = s1 - s0 + 1;
+
+    for (var s = s0; s <= s1; s++) {
+      if (!filmRecording) break;
+      updateAlle(s);
+      await new Promise(function(r) { setTimeout(r, frameMs); });
+      capCtx.drawImage(srcCanvas, 0, 0);
+      if (track.requestFrame) track.requestFrame();
+      filmStatus.textContent = "WebM-opname: frame " + (s - s0 + 1) + " / " + totaal + "…";
+    }
+    for (var h = 0; h < Math.max(3, Math.round(fps * 0.8)); h++) {
+      await new Promise(function(r) { setTimeout(r, frameMs); });
+      if (track.requestFrame) track.requestFrame();
+    }
+    recorder.stop();
+    await klaar;
+    track.stop();
+    return new Blob(chunks, { type: mime });
+  }
+
   async function startFilm() {
     if (filmRecording) return;
     var s0 = parseInt(filmStart.value), s1 = parseInt(filmEnd.value);
@@ -2532,73 +2669,24 @@ body {
     var srcCanvas = document.getElementById("panel-cvs-0");
     if (!srcCanvas) { filmStatus.textContent = "Geen kaart zichtbaar."; return; }
 
-    var mime = pickMimeType(voorkeur);
-    if (!mime) { filmStatus.textContent = "Geen video-codec beschikbaar in deze browser."; return; }
-
     filmRecording = true;
     filmStatus.textContent = "Opname start…";
     document.getElementById("film-start-btn").disabled = true;
 
     try {
-      // Capture-canvas op huidige bron-resolutie
-      var capCanvas = document.createElement("canvas");
-      capCanvas.width = srcCanvas.width;
-      capCanvas.height = srcCanvas.height;
-      var capCtx = capCanvas.getContext("2d");
-
-      // Eerste frame alvast renderen
-      updateAlle(s0);
-      await new Promise(function(r) { setTimeout(r, 400); });
-      capCtx.drawImage(srcCanvas, 0, 0);
-
-      var stream = capCanvas.captureStream(0);
-      var track = stream.getVideoTracks()[0];
-      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
-      var chunks = [];
-      recorder.ondataavailable = function(e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
-      var klaar = new Promise(function(resolve) { recorder.onstop = resolve; });
-
-      recorder.start(200); // timeslice voor regelmatige chunks
-      if (track.requestFrame) track.requestFrame();
-
-      var frameMs = Math.max(60, Math.round(1000 / fps));
-      var totaal = s1 - s0 + 1;
-
-      for (var s = s0; s <= s1; s++) {
-        if (!filmRecording) break;
-        updateAlle(s);
-        // Wacht tot render klaar is + frame-duur
-        await new Promise(function(r) { setTimeout(r, frameMs); });
-        capCtx.drawImage(srcCanvas, 0, 0);
-        if (track.requestFrame) track.requestFrame();
-        filmStatus.textContent = "Opname: frame " + (s - s0 + 1) + " / " + totaal + "…";
+      var blob, ext;
+      if (voorkeur === "mp4") {
+        blob = await filmMp4(s0, s1, fps, srcCanvas);
+        ext = "mp4";
+      } else {
+        blob = await filmWebm(s0, s1, fps, srcCanvas);
+        ext = "webm";
       }
-
-      // Extra hold-frames zodat laatste beeld even blijft staan
-      for (var h = 0; h < Math.max(3, Math.round(fps * 0.8)); h++) {
-        await new Promise(function(r) { setTimeout(r, frameMs); });
-        if (track.requestFrame) track.requestFrame();
-      }
-
-      filmStatus.textContent = "Opname afsluiten…";
-      recorder.stop();
-      await klaar;
-      track.stop();
-
-      var blob = new Blob(chunks, { type: mime });
-      var ext = mime.indexOf("mp4") === 0 ? "mp4" : "webm";
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      var param = (panelParams && panelParams[0]) ? panelParams[0] : "kaart";
-      var naam = actiefModel + "_" + param + "_" + new Date().toISOString().replace(/[:T]/g,"-").slice(0,16) + "." + ext;
-      a.href = url; a.download = naam;
-      document.body.appendChild(a); a.click();
-      setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 2000);
-
+      var naam = downloadBlob(blob, ext);
       filmStatus.textContent = "Klaar: " + naam + " (" + (blob.size/1024/1024).toFixed(1) + " MB)";
     } catch (err) {
       console.error(err);
-      filmStatus.textContent = "Fout: " + err.message;
+      filmStatus.textContent = "Fout: " + err.message + " — probeer WebM als alternatief.";
     } finally {
       filmRecording = false;
       document.getElementById("film-start-btn").disabled = false;
