@@ -246,7 +246,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         region_name='auto')
 
     R2_BUCKET = 'weerlab-harmonie'
-    bestanden = ['harmonie_canvas_meta.json', 'harmonie_overlay.png', 'harmonie_land.png']
+    bestanden = ['harmonie_canvas_meta.json', 'harmonie_overlay.png']
     for f2 in sorted(os.listdir('.')):
         if f2.startswith('harmonie_data_') and f2.endswith('.bin'):
             bestanden.append(f2)

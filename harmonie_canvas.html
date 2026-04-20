@@ -1070,7 +1070,6 @@ body {
 
   var meta = null;
   var overlayImg = null;
-  var landImg = null; // groene landmask (alleen Harmonie, alleen bewolkingskaarten)
   var paramCache = {}; // { paramKey: { header, data: Float32Array } }
 
   function laadMeta() {
@@ -1093,22 +1092,6 @@ body {
       img.onload = function() { overlayImg = img; overlayCache[overlayFile] = img; resolve(img); };
       img.onerror = function() { resolve(null); };
       img.src = DATA_URL + overlayFile + "?t=" + Date.now();
-    });
-  }
-
-  // Groene land-mask (alleen Harmonie-domein, transparante zee). Wordt alleen
-  // op bewolkingskaarten getekend als achtergrond onder de wolkenlaag.
-  var landCache = {};
-  function laadLand() {
-    if (actiefModel !== "harmonie") { landImg = null; return Promise.resolve(null); }
-    var landFile = "harmonie_land.png";
-    if (landCache[landFile]) { landImg = landCache[landFile]; return Promise.resolve(landImg); }
-    return new Promise(function(resolve) {
-      var img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = function() { landImg = img; landCache[landFile] = img; resolve(img); };
-      img.onerror = function() { landImg = null; resolve(null); };
-      img.src = DATA_URL + landFile + "?t=" + Date.now();
     });
   }
 
@@ -1323,8 +1306,7 @@ body {
     var pixels = imgData.data;
 
     if (paramKey === "bewolking") {
-      // Bewolking: 3-laags source-over compositing met behoud van alpha,
-      // zodat de groene land / lichtblauwe zee eronder zichtbaar blijft.
+      // Bewolking: 3-laags alpha compositing op lichtblauwe achtergrond
       for (var y = 0; y < nLat; y++) {
         for (var x = 0; x < nLon; x++) {
           var i = (nLat - 1 - y) * nLon + x;
@@ -1332,46 +1314,32 @@ body {
           var midden = pd.data[offset + 1 * nLat * nLon + i] || 0;
           var laag   = pd.data[offset + 2 * nLat * nLon + i] || 0;
 
-          var R = 0, G = 0, B = 0, A = 0;
+          // Start met lichtblauwe lucht
+          var r = 235, g = 245, b = 255;
 
-          // Hoog (lichtblauw-grijs)
+          // Hoog (wit)
           var ha = cloudHighRGBA(hoog);
-          var ca = ha[3] / 255;
-          var newA = ca + A * (1 - ca);
-          if (newA > 0.0001) {
-            R = (ha[0] * ca + R * A * (1 - ca)) / newA;
-            G = (ha[1] * ca + G * A * (1 - ca)) / newA;
-            B = (ha[2] * ca + B * A * (1 - ca)) / newA;
-          }
-          A = newA;
+          var a = ha[3] / 255;
+          r = r * (1-a) + ha[0] * a;
+          g = g * (1-a) + ha[1] * a;
+          b = b * (1-a) + ha[2] * a;
 
           // Midden (oker)
           var ma = cloudMidRGBA(midden);
-          ca = ma[3] / 255;
-          newA = ca + A * (1 - ca);
-          if (newA > 0.0001) {
-            R = (ma[0] * ca + R * A * (1 - ca)) / newA;
-            G = (ma[1] * ca + G * A * (1 - ca)) / newA;
-            B = (ma[2] * ca + B * A * (1 - ca)) / newA;
-          }
-          A = newA;
+          a = ma[3] / 255;
+          r = r * (1-a) + ma[0] * a;
+          g = g * (1-a) + ma[1] * a;
+          b = b * (1-a) + ma[2] * a;
 
-          // Laag (donkergrijs)
+          // Laag (grijs)
           var la = cloudLowRGBA(laag);
-          ca = la[3] / 255;
-          newA = ca + A * (1 - ca);
-          if (newA > 0.0001) {
-            R = (la[0] * ca + R * A * (1 - ca)) / newA;
-            G = (la[1] * ca + G * A * (1 - ca)) / newA;
-            B = (la[2] * ca + B * A * (1 - ca)) / newA;
-          }
-          A = newA;
+          a = la[3] / 255;
+          r = r * (1-a) + la[0] * a;
+          g = g * (1-a) + la[1] * a;
+          b = b * (1-a) + la[2] * a;
 
           var pi = (y * nLon + x) * 4;
-          pixels[pi]   = R;
-          pixels[pi+1] = G;
-          pixels[pi+2] = B;
-          pixels[pi+3] = Math.round(A * 255);
+          pixels[pi] = r; pixels[pi+1] = g; pixels[pi+2] = b; pixels[pi+3] = 255;
         }
       }
     } else {
@@ -1471,15 +1439,7 @@ body {
 
           var pi = (y * nLon + x) * 4;
           if (c) {
-            // Losse bewolkingslaag: alpha = percentage, zodat groene land / zee doorschijnt
-            if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") {
-              var frac = val / 100;
-              if (frac < 0) frac = 0; if (frac > 1) frac = 1;
-              pixels[pi] = c[0]; pixels[pi+1] = c[1]; pixels[pi+2] = c[2];
-              pixels[pi+3] = Math.round(frac * 255);
-            } else {
-              pixels[pi] = c[0]; pixels[pi+1] = c[1]; pixels[pi+2] = c[2]; pixels[pi+3] = 255;
-            }
+            pixels[pi] = c[0]; pixels[pi+1] = c[1]; pixels[pi+2] = c[2]; pixels[pi+3] = 255;
           } else {
             pixels[pi] = 255; pixels[pi+1] = 255; pixels[pi+2] = 255; pixels[pi+3] = 255;
           }
@@ -1496,29 +1456,6 @@ body {
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-
-    // Bewolkingskaarten: lichtblauwe zee + groen land als achtergrond onder de wolkenlaag
-    var isBewolkingKaart = (paramKey === "bewolking" || paramKey === "bewolking_laag" ||
-                            paramKey === "bewolking_mid" || paramKey === "bewolking_hoog");
-    if (isBewolkingKaart && actiefModel === "harmonie") {
-      ctx.fillStyle = "rgb(235,245,255)";
-      ctx.fillRect(0, 0, cw, ch);
-      if (landImg) {
-        var LE = {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5};
-        var DEL = {lonMin: meta.grid.lon_min, lonMax: meta.grid.lon_max,
-                   latMin: meta.grid.lat_min, latMax: meta.grid.lat_max};
-        var lW = LE.lonMax - LE.lonMin, lH = LE.latMax - LE.latMin;
-        var lsx0 = (DEL.lonMin - LE.lonMin) / lW * landImg.naturalWidth;
-        var lsy0 = (1 - (DEL.latMax - LE.latMin) / lH) * landImg.naturalHeight;
-        var lsw0 = (DEL.lonMax - DEL.lonMin) / lW * landImg.naturalWidth;
-        var lsh0 = (DEL.latMax - DEL.latMin) / lH * landImg.naturalHeight;
-        var lsx = lsx0 + vx0 * lsw0;
-        var lsy = lsy0 + vy0 * lsh0;
-        var lsw = vw * lsw0;
-        var lsh = vh * lsh0;
-        ctx.drawImage(landImg, lsx, lsy, lsw, lsh, 0, 0, cw, ch);
-      }
-    }
 
     ctx.drawImage(offCanvas, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
 
@@ -2989,7 +2926,7 @@ body {
     laadMeta().then(function() {
       addDerivedParams(meta);
       modelData[actiefModel] = { meta: meta, paramCache: paramCache };
-      return Promise.all([laadOverlay(), laadLand()]);
+      return laadOverlay();
     }).then(function() {
       aantalUren = meta.uren;
       slider.max = aantalUren;
@@ -3262,7 +3199,7 @@ body {
   // INIT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Promise.all([laadMeta(), laadOverlay(), laadLand()]).then(function() {
+  Promise.all([laadMeta(), laadOverlay()]).then(function() {
     // Voeg afgeleide parameters toe aan metadata
     addDerivedParams(meta);
     // Sla op in modelData voor vergelijkmodus
