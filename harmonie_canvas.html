@@ -1070,6 +1070,7 @@ body {
 
   var meta = null;
   var overlayImg = null;
+  var lsmData = null; // {nLat,nLon,data:Float32Array} — HARMONIE land-sea mask (alleen bewolkingskaart)
   var paramCache = {}; // { paramKey: { header, data: Float32Array } }
 
   function laadMeta() {
@@ -1077,6 +1078,17 @@ body {
     return fetch(DATA_URL + modelInfo.meta + "?t=" + Date.now())
       .then(function(r) { return r.json(); })
       .then(function(d) { meta = d; return d; });
+  }
+
+  // HARMONIE Land-Sea Mask — eenmalig laden, alleen voor bewolkingskaart
+  function laadLSM() {
+    return fetch(DATA_URL + "harmonie_data_lsm.bin?t=" + Date.now())
+      .then(function(r) { if (!r.ok) throw 0; return r.arrayBuffer(); })
+      .then(function(buf) {
+        var view = new DataView(buf);
+        lsmData = { nLat: view.getUint16(0, true), nLon: view.getUint16(2, true), data: new Float32Array(buf, 16) };
+      })
+      .catch(function() { lsmData = null; });
   }
 
   var overlayCache = {}; // { filename: Image }
@@ -1306,7 +1318,8 @@ body {
     var pixels = imgData.data;
 
     if (paramKey === "bewolking") {
-      // Bewolking: 3-laags alpha compositing op lichtblauwe achtergrond
+      // Bewolking: LSM-achtergrond (land groen, zee lichtblauw) + wolken-composit
+      var useLSM = (lsmData && lsmData.nLat === nLat && lsmData.nLon === nLon);
       for (var y = 0; y < nLat; y++) {
         for (var x = 0; x < nLon; x++) {
           var i = (nLat - 1 - y) * nLon + x;
@@ -1314,8 +1327,10 @@ body {
           var midden = pd.data[offset + 1 * nLat * nLon + i] || 0;
           var laag   = pd.data[offset + 2 * nLat * nLon + i] || 0;
 
-          // Start met lichtblauwe lucht
-          var r = 235, g = 245, b = 255;
+          // Achtergrond per gridcel: land (mosgroen) of zee (lichtblauw)
+          var r, g, b;
+          if (useLSM && lsmData.data[i] > 0.5) { r = 158; g = 205; b = 110; }
+          else                                  { r = 225; g = 238; b = 252; }
 
           // Hoog (wit)
           var ha = cloudHighRGBA(hoog);
@@ -3199,7 +3214,7 @@ body {
   // INIT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Promise.all([laadMeta(), laadOverlay()]).then(function() {
+  Promise.all([laadMeta(), laadOverlay(), laadLSM()]).then(function() {
     // Voeg afgeleide parameters toe aan metadata
     addDerivedParams(meta);
     // Sla op in modelData voor vergelijkmodus
