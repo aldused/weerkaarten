@@ -1057,6 +1057,39 @@ const xAsCompact={grid:{color:GRID},ticks:{color:TICK,maxRotation:0,autoSkip:fal
 
 
 
+// ── Beaufort-schaal ── km/u → Bft conversie voor wind-pluimen
+// Ondergrenzen per Bft-stap (km/u):
+const BFT_KMH = [1,6,12,20,29,39,50,62,75,89,103,118]; // Bft 1..12
+function kmhToBft(v){
+  if(v==null) return null;
+  let b=0;
+  for(let i=0;i<BFT_KMH.length;i++){ if(v>=BFT_KMH[i]) b=i+1; }
+  return b;
+}
+// Y-as tick-callback die Bft-labels toont op de exacte km/u-drempels
+function bftTickCallback(v){
+  const idx=BFT_KMH.indexOf(v);
+  if(idx>=0) return (idx+1)+' Bft';
+  if(v===0) return '0 Bft';
+  return '';
+}
+const BFT_TICKS = [0,...BFT_KMH]; // 0,1,6,12,20,29,...
+function bftAxis(side, max){
+  return {
+    position: side,
+    min: 0, max: max,
+    grid: side==='left' ? {color:'#eaedf2'} : {display:false},
+    ticks: {
+      color:'#5a6a80', font:{size:10, weight:'600'},
+      callback: bftTickCallback,
+    },
+    afterBuildTicks: function(axis){
+      axis.ticks = BFT_TICKS.filter(v=>v<=max).map(v=>({value:v}));
+    },
+    border: {color:'#eaedf2'}
+  };
+}
+
 function medC(arr,j){
   const v=arr.map(m=>m[j]).filter(x=>x!=null).sort((a,b)=>a-b);
   if(!v.length)return null;
@@ -1747,7 +1780,7 @@ async function laadWind(lat,lon,naam,dagen,van,tot){
   const yMax=Math.max(...ffA.flat().filter(v=>v!=null),...fxA.flat().filter(v=>v!=null))*1.1||60;
 
   document.getElementById('blok-wind').style.display='';
-  document.getElementById('titel-wind').textContent=`ECMWF – ${naam}  Wind (km/u)`;
+  document.getElementById('titel-wind').textContent=`ECMWF – ${naam}  Wind (Beaufort)`;
   document.getElementById('leg-wind').innerHTML=legHtml([
     ['rgba(22,120,30,0.32)','51 ensembleleden','lijn'],['rgba(68,187,68,0.22)','IQR','blok'],
     ['#2299ff','Mediaan wind','lijn'],['rgba(255,140,60,0.85)','Med. stoten','dash'],
@@ -1775,33 +1808,16 @@ async function laadWind(lat,lon,naam,dagen,van,tot){
           const names=['Med. wind','Med. stoten','HRES wind','HRES stoten'];
           const i=ctx.datasetIndex-ffA.length-2;
           if(i<0||i>=names.length)return null;
-          return ` ${names[i]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'} km/u`;
+          const v=ctx.parsed.y;
+          if(v==null) return ` ${names[i]}: –`;
+          return ` ${names[i]}: ${kmhToBft(v)} Bft`;
         }}
       }},
       scales:{
         x:cfgBase.scales.x,
         xH:{display:false,labels:hLab},
-        y:yAs('left',' km/u'),
-        yBft:{
-          position:'right',
-          grid:{display:false},
-          min:0, max:yMax,
-          ticks:{
-            color:'#888',
-            font:{size:9},
-            stepSize:1,
-            callback:function(v){
-              const bftKmh=[1,6,12,20,29,39,50,62,75,89,103,118];
-              for(let i=bftKmh.length-1;i>=0;i--){if(Math.abs(v-bftKmh[i])<1.5)return (i+1)+' Bft';}
-              if(v===0)return '0';
-              return '';
-            }
-          },
-          afterBuildTicks:function(axis){
-            axis.ticks=[0,1,6,12,20,29,39,50,62,75,89,103,118].filter(v=>v<=yMax).map(v=>({value:v}));
-          },
-          border:{color:'transparent'}
-        }
+        y:bftAxis('left',yMax),
+        yBft:bftAxis('right',yMax),
       },
     }
   });
@@ -3032,7 +3048,7 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
     const ffMed=ts.map((_,j)=>medC(ffA,j));
     const p25=ts.map((_,j)=>pctC(ffA,j,25));
     const p75=ts.map((_,j)=>pctC(ffA,j,75));
-    titel=`${mLbl} – ${naam} – Wind`;
+    titel=`${mLbl} – ${naam} – Wind (Bft)`;
     datasets=[
       ...ensDatasets(ffA,ensK),
       {type:'line',data:p25,borderColor:'transparent',backgroundColor:ensK,fill:'+1',pointRadius:0,tension:0.3,order:9},
@@ -3040,8 +3056,12 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       {type:'line',data:ffMed,borderColor:medK,borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:1},
       {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(240,180,60,0.65)',borderWidth:1,borderDash:[6,4],pointRadius:0,fill:false,order:11},
     ];
-    scales={x:{...cfgBase.scales.x},y:yAs('left',' km/u')};
-    tooltipCb={filter:item=>item.datasetIndex===ffA.length+2,callbacks:{label:ctx=>` Med: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'} km/u`}};
+    const _yMaxW = Math.max(...ffA.flat().filter(v=>v!=null))*1.1 || 60;
+    scales={x:{...cfgBase.scales.x}, y:bftAxis('left',_yMaxW), yR:bftAxis('right',_yMaxW)};
+    tooltipCb={filter:item=>item.datasetIndex===ffA.length+2,callbacks:{label:ctx=>{
+      const v=ctx.parsed.y;
+      return ` Med: ${v!=null?kmhToBft(v)+' Bft':'-'}`;
+    }}};
   }else if(type==='cloud'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
     const allTimes=ens.hourly.time;
@@ -3395,7 +3415,7 @@ async function laadVergelijkingModel(lat,lon,naam,dagen,van,tot,vsModel){
   )*1.1||60;
   const BFT_VERG=[{v:38.9,n:'Bft 7'},{v:49.9,n:'Bft 8'},{v:61.9,n:'Bft 9'}];
   document.getElementById('blok-verg-wind').style.display='';
-  document.getElementById('titel-verg-wind').textContent=`ECMWF vs ${label2} – ${naam}  Wind (km/u)`;
+  document.getElementById('titel-verg-wind').textContent=`ECMWF vs ${label2} – ${naam}  Wind (Bft)`;
   document.getElementById('leg-verg-wind').innerHTML=legHtml([
     ['rgba(68,221,68,0.4)','ECMWF IQR','blok'],['#ee3333','ECMWF mediaan','lijn'],
     [iqr2.replace('0.40','0.4'),label2+' IQR','blok'],[kleur2,label2+' mediaan','lijn'],
@@ -3416,11 +3436,10 @@ async function laadVergelijkingModel(lat,lon,naam,dagen,van,tot,vsModel){
     ]},
     options:{...cfgBase,plugins:{legend:{display:false},tooltip:{...ttCfg,
       filter:item=>item.datasetIndex>=4&&item.datasetIndex<=5,
-      callbacks:{label:ctx=>{const n=['ECMWF',label2];const i=ctx.datasetIndex-4;if(i<0||i>1)return null;return ` ${n[i]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'} km/u`;}}}},
-      scales:{x:cfgBase.scales.x,xWI:{display:false,labels:labWI},y:{...yAs('left',' km/u'),min:0,max:yMaxW},
-        yBft:{position:'right',grid:{display:false},min:0,max:yMaxW,ticks:{color:'#888',font:{size:9},stepSize:1,
-          callback:function(v){const b=[1,6,12,20,29,39,50,62,75,89,103,118];for(let i=b.length-1;i>=0;i--){if(Math.abs(v-b[i])<1.5)return(i+1)+' Bft';}return v===0?'0':'';},
-        },afterBuildTicks:function(a){a.ticks=[0,1,6,12,20,29,39,50,62,75,89,103,118].filter(v=>v<=yMaxW).map(v=>({value:v}));},border:{color:'transparent'}}}}
+      callbacks:{label:ctx=>{const n=['ECMWF',label2];const i=ctx.datasetIndex-4;if(i<0||i>1)return null;const v=ctx.parsed.y;return ` ${n[i]}: ${v!=null?kmhToBft(v)+' Bft':'-'}`;}}}},
+      scales:{x:cfgBase.scales.x,xWI:{display:false,labels:labWI},
+        y:bftAxis('left',yMaxW),
+        yBft:bftAxis('right',yMaxW)}}
   });
 }
 
@@ -3555,13 +3574,17 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
 
   // ── Wind ──
   document.getElementById('blok-hres-wind').style.display='';
-  document.getElementById('titel-hres-wind').textContent=`HRES – ${naam}  Wind (km/u)`;
+  document.getElementById('titel-hres-wind').textContent=`HRES – ${naam}  Wind (Beaufort)`;
   document.getElementById('leg-hres-wind').innerHTML=legHtml([
     ['#2299ff','Wind huidig','lijn'],['#ff6633','Stoten huidig','dash'],
     ...(pFF?[['rgba(34,153,255,0.4)','Wind vorig','lijn'],['rgba(255,102,51,0.4)','Stoten vorig','dash']]:[] ),
   ]);
   if(actieveCharts['hres-wind'])actieveCharts['hres-wind'].destroy();
   chartTimestamps['canvas-hres-wind']=ts;
+  const _yMaxHW = Math.max(
+    ...hFF.filter(v=>v!=null), ...hFX.filter(v=>v!=null),
+    ...(pFF?pFF.filter(v=>v!=null):[]), ...(pFX?pFX.filter(v=>v!=null):[])
+  )*1.1 || 60;
   actieveCharts['hres-wind']=new Chart(document.getElementById('canvas-hres-wind'),{
     data:{labels:lab,datasets:[
       ...(pFF?[
@@ -3579,10 +3602,11 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
           const namen=['Wind huidig','Stoten huidig'];
           const i=ctx.datasetIndex-base;
           if(i<0||i>=namen.length)return null;
-          return ` ${namen[i]}: ${ctx.parsed.y.toFixed(0)} km/u`;
+          const v=ctx.parsed.y;
+          return ` ${namen[i]}: ${v!=null?kmhToBft(v)+' Bft':'-'}`;
         }}
       }},
-      scales:{x:cfgBase.scales.x,y:yAs('left',' km/u')}
+      scales:{x:cfgBase.scales.x, y:bftAxis('left',_yMaxHW), yR:bftAxis('right',_yMaxHW)}
     }
   });
 }
