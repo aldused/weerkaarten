@@ -101,20 +101,33 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
 .sleek-hint{font-size:.7rem;color:#8899aa;padding:0 16px 8px;background:#fafbfc;border-bottom:1px solid #eaedf2}
 
 /* 4-Pluim sleek menu */
-.vp-subbar{display:flex;gap:14px;padding:10px 16px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #eaedf2}
-.vp-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 16px;background:#fafbfc;border-bottom:1px solid #eaedf2}
+.vp-header{background:linear-gradient(135deg,#0066cc,#003d82);color:#fff;padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.vp-header-title{font-size:.95rem;font-weight:700;letter-spacing:-0.01em}
+.vp-header-sub{font-size:.72rem;opacity:.82;font-family:var(--mono,monospace)}
+.vp-section{padding:12px 16px;background:#fff;border-bottom:1px solid #eaedf2}
+.vp-section + .vp-section{border-top:1px solid #f3f5f9}
+.vp-section-title{font-size:.68rem;color:#7a8898;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.vp-subbar{display:flex;gap:10px;padding:10px 16px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #eaedf2}
+.vp-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px 16px 12px;background:#fafbfc;border-bottom:1px solid #eaedf2}
 .vp-cel{background:#fff;border:1px solid #e5ebf2;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.03);position:relative}
 .vp-cel-titel{font-size:.7rem;color:#7a8898;text-transform:uppercase;letter-spacing:.05em;font-weight:700;display:flex;align-items:center;gap:6px}
 .vp-num{background:linear-gradient(135deg,#0066cc,#004a99);color:#fff;width:20px;height:20px;border-radius:50%;font-size:.7rem;display:inline-flex;align-items:center;justify-content:center;font-weight:700}
 .vp-loc{position:relative}
-.vp-loc input{width:100%;background:#f7f9fc;border:1px solid #e5ebf2;border-radius:7px;padding:7px 9px 7px 28px;font-size:.78rem;color:#1a2b40;font-family:inherit}
+.vp-loc input{width:100%;background:#f7f9fc;border:1px solid #e5ebf2;border-radius:7px;padding:7px 9px 7px 28px;font-size:.82rem;color:#1a2b40;font-family:inherit}
 .vp-loc input:focus{outline:none;border-color:var(--accent);background:#fff}
 .vp-loc .ico-s{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#9aa5b5;font-size:.85rem;pointer-events:none}
-.vp-params{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+/* Globale parameter-pills (nieuw: één keuze, geldt voor alle 4 pluimen) */
+.vp-global-params{display:flex;flex-wrap:wrap;gap:5px}
+.vp-gpill{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border:1px solid #dbe2ec;background:#fff;border-radius:999px;font-size:.78rem;color:#3b4a60;cursor:pointer;transition:all .12s;font-weight:600;font-family:inherit}
+.vp-gpill:hover{border-color:var(--accent);color:var(--accent);background:#f2f7ff}
+.vp-gpill.actief{background:linear-gradient(135deg,#0066cc,#004a99);border-color:#004a99;color:#fff;box-shadow:0 2px 6px rgba(0,102,204,.28)}
+.vp-gpill .gp-ico{font-size:.95rem;line-height:1}
+/* Legacy per-cel param grid (verborgen maar state-compatible) */
+.vp-params{display:none}
 .vp-pbtn{background:#f7f9fc;border:1px solid #e5ebf2;border-radius:6px;padding:5px 2px;text-align:center;cursor:pointer;transition:.12s;font-size:.95rem;line-height:1;color:#5a6a80}
 .vp-pbtn:hover{border-color:var(--accent);background:#fff;transform:translateY(-1px)}
 .vp-pbtn.actief{background:linear-gradient(135deg,#0066cc,#004a99);border-color:#004a99;box-shadow:0 1px 3px rgba(0,102,204,.25);color:#fff}
-.vp-plbl{font-size:.7rem;color:#5a6a80;text-align:center;font-weight:600;min-height:14px}
+.vp-plbl{font-size:.72rem;color:#3b4a60;text-align:center;font-weight:600;min-height:14px;background:#eef3fb;border-radius:6px;padding:3px 6px}
 .vp-zoek-res{display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:1px solid #d0d8e4;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:100;max-height:220px;overflow-y:auto}
 .vp-custom{display:none;align-items:center;gap:5px;margin-left:8px}
 .vp-custom input{background:white;border:1px solid #d0d8e4;color:#1a2b40;border-radius:6px;padding:4px 8px;font-size:.78rem}
@@ -2448,6 +2461,19 @@ async function laadScenario(lat,lon,naam,dagen,van,tot){
   crosshairData['canvas-scenario'] = {tA, tMed: CL.midden.med, hTemp: ts.map(t=>{const i=hTs.indexOf(t);return i>=0?hTemp[i]:null})};
   setTimeout(initCrosshair, 100);
 
+  // Per tijdstap: hoeveel members in elke cluster zitten (temperatuur-overlap met cluster P25–P75)
+  // Geeft een hover-kans "% kans op koel/gem/warm" per uur.
+  const memberClusterKey = new Map(); // original member idx → 'koel'|'midden'|'warm'
+  means.slice(0,third).forEach(x=>memberClusterKey.set(x.i,'koel'));
+  means.slice(third,2*third).forEach(x=>memberClusterKey.set(x.i,'midden'));
+  means.slice(2*third).forEach(x=>memberClusterKey.set(x.i,'warm'));
+  // Overall kansen op basis van cluster-grootte (constant over tijd — clustering is op horizon-mean)
+  const overallKans = {
+    koel:   Math.round(g1.length/n*100),
+    midden: Math.round(g2.length/n*100),
+    warm:   Math.round(g3.length/n*100),
+  };
+
   actieveCharts.scenario = new Chart(document.getElementById('canvas-scenario'),{
     data:{labels:lab,datasets:[
       ...clusterBand('koel',CL.koel),
@@ -2456,16 +2482,43 @@ async function laadScenario(lat,lon,naam,dagen,van,tot){
       {type:'line',data:hTemp,borderColor:'#1f4a8a',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:1,xAxisID:'xH',borderCapStyle:'round'},
     ]},
     options:{...cfgBase,
+      interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{
-        backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        backgroundColor:'rgba(255,255,255,0.97)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        padding:10,titleFont:{weight:'700',size:12},bodyFont:{size:11.5},
         filter:item=>[2,5,8,9].includes(item.datasetIndex),
-        callbacks:{label:ctx=>{
-          const labels=['Koel','Gemiddeld','Warm','HRES'];
-          const map={2:0,5:1,8:2,9:3};
-          const i=map[ctx.datasetIndex];
-          if(i==null)return null;
-          return ` ${labels[i]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C`;
-        }}
+        callbacks:{
+          title:items=>{
+            if(!items.length) return '';
+            const idx=items[0].dataIndex;
+            const t=ts[idx];
+            return t ? new Date(t).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+          },
+          label:ctx=>{
+            const keys=['koel','midden','warm'];
+            const labels=['Koel','Gemiddeld','Warm','HRES'];
+            const map={2:0,5:1,8:2,9:3};
+            const i=map[ctx.datasetIndex];
+            if(i==null)return null;
+            if(i===3){
+              return ` HRES: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C`;
+            }
+            const key=keys[i];
+            const c=colors[key];
+            const pct=overallKans[key];
+            return ` ${labels[i]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C  ·  kans ${pct}% (${c.count}/${n})`;
+          },
+          afterBody:items=>{
+            if(!items.length) return '';
+            const idx=items[0].dataIndex;
+            // Kans per cluster voor deze tijdstap op basis van waar members op dit uur liggen
+            const vals=tA.map((m,k)=>({v:m[idx],cluster:memberClusterKey.get(k)})).filter(x=>x.v!=null);
+            if(!vals.length) return '';
+            const sorted=vals.slice().sort((a,b)=>a.v-b.v);
+            const pMin=sorted[0].v, pMax=sorted[sorted.length-1].v;
+            return ['', `Spreiding nu: ${(pMax-pMin).toFixed(1)}°C  (min ${pMin.toFixed(1)}° → max ${pMax.toFixed(1)}°)`];
+          }
+        }
       }},
       scales:{
         x:cfgBase.scales.x,
@@ -2554,9 +2607,14 @@ window.vergHarmZoekDebounce = vergHarmZoekDebounce;
 function openVergelijking(){
   // Gebruik vaste stations lijst voor 4-pluimen dropdowns
   const stnHTML=VERG_STATIONS_HTML;
+  // Reset tracking: geen enkele cel is nu handmatig ingevuld → eerste keuze
+  // vult automatisch de andere drie (zie vergZoekPlaats).
+  vergManualSet=[false,false,false,false];
   document.getElementById('grafiek-wrap').style.display='none';
   document.getElementById('vergelijking-wrap').style.display='';
   document.getElementById('btn-reset').style.display='';
+  // Verberg de hoofd-pluim controls (param-grid, sub-bar, action-bar) — houd alleen zoekbalk & favorieten
+  document.querySelectorAll('.sleek > .param-grid, .sleek > #param-hint, .sleek > .sub-bar, .sleek > .action-bar').forEach(el=>el.style.display='none');
   window.scrollTo({top:0,behavior:'smooth'});
 
   const bestaand=document.getElementById('verg-controls');
@@ -2585,29 +2643,24 @@ function openVergelijking(){
   const ov163=new Date(+nu3+16*86400000).toISOString().slice(0,10);
   const ov73=new Date(+nu3+7*86400000).toISOString().slice(0,10);
 
-  let html=`<div class="vp-subbar">
-    <span class="sub-label" id="verg-titel-lbl">4 Pluimen / Stations</span>
-    <span class="sub-label" style="margin-left:8px">Periode</span>
-    <div class="seg">
-      <button class="actief vbtn" onclick="setVergPeriode('7',this)">7d</button>
-      <button class="vbtn" onclick="setVergPeriode('10',this)">10d</button>
-      <button class="vbtn" onclick="setVergPeriode('16',this)">16d</button>
-      <button class="vbtn" onclick="setVergPeriode('custom',this)">Datum…</button>
+  let html=`<div class="vp-header">
+    <div style="flex:1;min-width:0">
+      <div class="vp-header-title" id="verg-titel-lbl">⊞ 4 Pluimen vergelijking</div>
+      <div class="vp-header-sub">Kies locaties, parameter, periode en model — dan "Laden"</div>
     </div>
-    <div id="wrap-verg-custom" class="vp-custom">
-      <input type="date" id="verg-datum-van" value="${vd3}" min="${vd3}" max="${ov163}">
-      <span style="color:#5a6a80">→</span>
-      <input type="date" id="verg-datum-tot" value="${ov73}" min="${vd3}" max="${ov163}">
-    </div>
-    <span class="sub-label" style="margin-left:12px">Model</span>
-    <button class="pill actief vmbtn" onclick="setVergModel('ecmwf',this)">ECMWF</button>
-    <button class="pill vmbtn" onclick="setVergModel('aifs',this)">AIFS</button>
-    <button class="pill vmbtn" onclick="setVergModel('harmonie',this)">&#127475;&#127473; HARMONIE 43</button>
-    <button class="pill vmbtn" onclick="setVergModel('icon',this)">ICON</button>
-    <button class="pill vmbtn" onclick="setVergModel('hres',this)">HRES</button>
-  </div>`;
+    <button class="btn-sec" onclick="resetAlles()" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.35)">✕ Sluiten</button>
+  </div>
 
-  html+=`<div class="vp-row">`;
+  <div class="vp-section">
+    <div class="vp-section-title">① Parameter <span style="color:#aab5c7;font-weight:500;text-transform:none;letter-spacing:0">(geldt voor alle 4 pluimen)</span></div>
+    <div class="vp-global-params">
+      ${types.map((t,k)=>`<button class="vp-gpill${k===0?' actief':''}" data-val="${t.val}" onclick="setVergTypeAll('${t.val}',this)"><span class="gp-ico">${t.ico}</span>${t.lbl}</button>`).join('')}
+    </div>
+  </div>
+
+  <div class="vp-section">
+    <div class="vp-section-title">② Locaties</div>
+    <div class="vp-row" style="padding:0;background:transparent;border:none">`;
   for(let i=0;i<4;i++){
     html+=`<div class="vp-cel">
       <div class="vp-cel-titel"><span class="vp-num">${i+1}</span> Pluim</div>
@@ -2624,7 +2677,30 @@ function openVergelijking(){
       <input type="hidden" id="verg-type-${i}" value="temp">
     </div>`;
   }
-  html+=`</div>`;
+  html+=`</div></div>
+
+  <div class="vp-section" style="padding:10px 16px">
+    <div class="vp-subbar" style="padding:0;border:none;background:transparent">
+      <span class="sub-label">③ Periode</span>
+      <div class="seg">
+        <button class="actief vbtn" onclick="setVergPeriode('7',this)">7 d</button>
+        <button class="vbtn" onclick="setVergPeriode('10',this)">10 d</button>
+        <button class="vbtn" onclick="setVergPeriode('16',this)">16 d</button>
+        <button class="vbtn" onclick="setVergPeriode('custom',this)">Datum…</button>
+      </div>
+      <div id="wrap-verg-custom" class="vp-custom">
+        <input type="date" id="verg-datum-van" value="${vd3}" min="${vd3}" max="${ov163}">
+        <span style="color:#5a6a80">→</span>
+        <input type="date" id="verg-datum-tot" value="${ov73}" min="${vd3}" max="${ov163}">
+      </div>
+      <span class="sub-label" style="margin-left:14px">④ Model</span>
+      <button class="pill actief vmbtn" onclick="setVergModel('ecmwf',this)">&#127760; ECMWF</button>
+      <button class="pill vmbtn" onclick="setVergModel('aifs',this)">&#129302; AIFS</button>
+      <button class="pill vmbtn" onclick="setVergModel('harmonie',this)">&#127475;&#127473; HARMONIE 43</button>
+      <button class="pill vmbtn" onclick="setVergModel('icon',this)">&#127465;&#127466; ICON</button>
+      <button class="pill vmbtn" onclick="setVergModel('hres',this)">&#9654;&#65038; HRES</button>
+    </div>
+  </div>`;
 
   html+=`<div class="action-bar">
     <button class="btn-primary" onclick="laadVergelijking()">&#9654; Laden</button>
@@ -2659,6 +2735,9 @@ function openVergelijking(){
     te.value=ot;
     setVergType(i,ot);
   }
+  // Sync globale pill met param van cel 0 (of 'temp' als standaard)
+  const firstType = document.getElementById('verg-type-0')?.value || 'temp';
+  document.querySelectorAll('.vp-gpill').forEach(b=>b.classList.toggle('actief',b.dataset.val===firstType));
 }
 
 function setVergType(idx,val){
@@ -2672,7 +2751,18 @@ function setVergType(idx,val){
   if(lbl&&window._vergTypeLookup) lbl.textContent=window._vergTypeLookup[val]||val;
 }
 
+// Globale parameter voor alle 4 pluimen tegelijk
+function setVergTypeAll(val,btn){
+  for(let i=0;i<4;i++) setVergType(i,val);
+  document.querySelectorAll('.vp-gpill').forEach(b=>b.classList.toggle('actief',b.dataset.val===val));
+  if(btn && !btn.classList.contains('actief')) btn.classList.add('actief');
+}
+window.setVergTypeAll = setVergTypeAll;
+
 let vergZoekTimers={};
+// Tracking: welke cellen heeft de gebruiker handmatig gezet? Niet-handmatige cellen
+// worden automatisch mee-overgenomen wanneer één locatie wordt gekozen.
+let vergManualSet=[false,false,false,false];
 function vergZoekDebounce(idx){
   clearTimeout(vergZoekTimers[idx]);
   vergZoekTimers[idx]=setTimeout(()=>vergZoekPlaats(idx),400);
@@ -2684,7 +2774,7 @@ async function vergZoekPlaats(idx){
   const q=input.value.trim();
   if(q.length<2){res.style.display='none';return;}
   res.innerHTML='<div style="padding:8px;color:#8888bb;font-size:.78rem">Zoeken…</div>';
-  res.style.display='';
+  res.style.display='block';
   try{
     const ctrl=new AbortController();
     setTimeout(()=>ctrl.abort(),10000);
@@ -2706,15 +2796,19 @@ async function vergZoekPlaats(idx){
         input.value=naam;
         res.style.display='none';
         localStorage.setItem(`verg-stn-${idx}`,val);
-        // Als eerste vakje: vul alle andere vakjes ook in
-        if(idx===0){
-          for(let j=1;j<4;j++){
-            const otherInput=document.getElementById(`verg-zoek-${j}`);
-            const otherStn=document.getElementById(`verg-stn-${j}`);
-            otherInput.value=naam;
-            otherStn.value=val;
-            localStorage.setItem(`verg-stn-${j}`,val);
-          }
+        // Markeer deze cel als handmatig gekozen
+        vergManualSet[idx]=true;
+        // Neem locatie over naar alle cellen die nog NIET handmatig zijn gezet
+        // zodat je één plaats invoert en de andere drie automatisch volgen;
+        // handmatig gewijzigde cellen blijven intact.
+        for(let j=0;j<4;j++){
+          if(j===idx || vergManualSet[j]) continue;
+          const otherInput=document.getElementById(`verg-zoek-${j}`);
+          const otherStn=document.getElementById(`verg-stn-${j}`);
+          if(!otherInput||!otherStn) continue;
+          otherInput.value=naam;
+          otherStn.value=val;
+          localStorage.setItem(`verg-stn-${j}`,val);
         }
       };
       res.appendChild(div);
@@ -3873,6 +3967,8 @@ function downloadVergelijking(){
 function resetAlles(){
   document.getElementById('vergelijking-wrap').style.display='none';
   document.getElementById('grafiek-wrap').style.display='';
+  // Toon het hoofdmenu weer
+  document.querySelectorAll('.sleek > .param-grid, .sleek > #param-hint, .sleek > .sub-bar, .sleek > .action-bar').forEach(el=>el.style.display='');
   const c=document.getElementById('verg-controls');
   if(c)c.remove();
   verwijderAlles();
