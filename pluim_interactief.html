@@ -2988,7 +2988,7 @@ function openVergelijking(){
     {val:'sneeuw',ico:'&#10052;&#65039;',lbl:'Sneeuw'},
     {val:'onweer',ico:'&#9928;&#65039;',lbl:'Onweer'},
     {val:'weertype',ico:'&#127780;&#65039;',lbl:'Weertype'},
-    {val:'hoogte',ico:'&#128225;',lbl:'850/500 hPa'},
+    {val:'scenario',ico:'&#128260;',lbl:'Scenario'},
     {val:'dagkansen',ico:'&#128200;',lbl:'Temp-kansen'},
     {val:'neerslagkansen',ico:'&#128202;',lbl:'Neerslag-kansen'},
   ];
@@ -3244,7 +3244,7 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
 
   let datasets,scales,tooltipCb,titel;
 
-  if(type==='temp'||type==='neerslag'||type==='neerslagsom'){
+  if(type==='temp'||type==='neerslag'||type==='neerslagsom'||type==='scenario'){
     const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
     const allTimes=ens.hourly.time;
     const fidx=filterT(allTimes,van,tot);
@@ -3275,13 +3275,47 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       const pA6=blok6.agg, ts6=blok6.ts6;
       apiTimes=ts6;
       const pMed6=ts6.map((_,j)=>medC(pA6,j));
+      const _maxVal=Math.max(0.1, ...pA6.flatMap(m=>m.filter(v=>v!=null)));
+      const _sugMax=Math.max(2, Math.ceil(_maxVal*1.15));
       titel=`${mLbl} – ${naam} – Neerslag (mm/6u)`;
       datasets=[
-        ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.45)',borderWidth:0.9,pointRadius:0,fill:false,tension:0.3,order:10})),
-        {type:'line',data:pMed6,borderColor:medK,borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:1},
+        ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(25,120,25,0.75)',borderWidth:1.1,pointRadius:0,fill:false,tension:0.25,order:10})),
+        {type:'line',data:pMed6,borderColor:medK,borderWidth:2.4,pointRadius:0,fill:false,tension:0.25,order:1},
       ];
-      scales={x:{...cfgBase.scales.x},y:{...yAs('left',' mm/6u'),min:0,suggestedMax:5}};
+      scales={x:{...cfgBase.scales.x},y:{...yAs('left',' mm/6u'),min:0,suggestedMax:_sugMax}};
       tooltipCb={filter:item=>item.datasetIndex===pA6.length,callbacks:{label:ctx=>` Med: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'} mm/6u`}};
+    }else if(type==='scenario'){
+      // Scenario-clustering: 51 members in 3 groepen (koel/midden/warm)
+      // zelfde logica als main pluim maar compacter per 4-pluim-cel.
+      const n=tA.length;
+      const tMeds=tA.map((m,i)=>({i, mean:m.reduce((a,b)=>a+(b??0),0)/m.filter(v=>v!=null).length}));
+      tMeds.sort((a,b)=>a.mean-b.mean);
+      const third=Math.round(n/3);
+      const g1=tMeds.slice(0,third).map(x=>tA[x.i]);
+      const g2=tMeds.slice(third,2*third).map(x=>tA[x.i]);
+      const g3=tMeds.slice(2*third).map(x=>tA[x.i]);
+      const gStats=g=>({
+        med:ts.map((_,j)=>medC(g,j)),
+        p25:ts.map((_,j)=>pctC(g,j,25)),
+        p75:ts.map((_,j)=>pctC(g,j,75)),
+      });
+      const CL={koel:gStats(g1), mid:gStats(g2), warm:gStats(g3)};
+      const KL={koel:'#1e64c8', mid:'#8c8c96', warm:'#dc5028'};
+      const KK={koel:'30,100,200', mid:'140,140,150', warm:'220,80,40'};
+      const pct={koel:Math.round(g1.length/n*100), mid:Math.round(g2.length/n*100), warm:Math.round(g3.length/n*100)};
+      titel=`${mLbl} – ${naam} – Scenario (koel ${pct.koel}% · mid ${pct.mid}% · warm ${pct.warm}%)`;
+      const band=(k,d)=>[
+        {type:'line',data:d.p25,borderColor:'transparent',backgroundColor:`rgba(${KK[k]},0.14)`,fill:'+1',pointRadius:0,tension:0.3,order:9},
+        {type:'line',data:d.p75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
+        {type:'line',data:d.med,borderColor:KL[k],borderWidth:2,pointRadius:0,fill:false,tension:0.3,order:1},
+      ];
+      datasets=[...band('koel',CL.koel),...band('mid',CL.mid),...band('warm',CL.warm)];
+      scales={x:{...cfgBase.scales.x},y:yAs('left','°C')};
+      tooltipCb={filter:item=>[2,5,8].includes(item.datasetIndex),callbacks:{label:ctx=>{
+        const lbl=['Koel','Midden','Warm']; const keys=['koel','mid','warm'];
+        const i={2:0,5:1,8:2}[ctx.datasetIndex]; if(i==null) return null;
+        return ` ${lbl[i]}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'}°C · kans ${pct[keys[i]]}%`;
+      }}};
     }else{
       // type === 'neerslagsom' (cumulatief per member)
       // Cumulatieve som per uur per lid → zichtbaar als uiteenlopende spaghetti
