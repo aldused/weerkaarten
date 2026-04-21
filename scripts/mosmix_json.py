@@ -10,7 +10,7 @@ Output: ~200KB JSON i.p.v. ~73MB PNG's, ~10s i.p.v. ~3min.
 
 import os, json, re, math, requests, zipfile, io
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from collections import defaultdict
 
@@ -173,6 +173,14 @@ def verwerk_station(code, naam):
     wwz_raw  = parse_values(root, 'wwZ')     # kans op hagel %
     wwt_raw  = parse_values(root, 'wwT')     # kans op onweer per uur %
     wwch_raw = parse_values(root, 'wwCh')    # kans convectieve neerslag 12u %
+    # POP per drempel (12u-venster)
+    r_raw = {
+        "R101": parse_values(root, 'R101'),  # ≥0.1 mm (meetbare neerslag)
+        "R110": parse_values(root, 'R110'),  # ≥1.0 mm
+        "R130": parse_values(root, 'R130'),  # ≥3.0 mm
+        "R150": parse_values(root, 'R150'),  # ≥5.0 mm
+    }
+    r101_raw = r_raw["R101"]  # backwards-compat referentie (niet meer gebruikt hieronder)
     fxh25_raw = parse_values(root, 'FXh25')  # kans windstoot >25kt (46 km/u) 12u %
     fxh40_raw = parse_values(root, 'FXh40')  # kans windstoot >40kt (74 km/u) 12u %
     fxh55_raw = parse_values(root, 'FXh55')  # kans windstoot >55kt (102 km/u) 12u %
@@ -225,7 +233,10 @@ def verwerk_station(code, naam):
         "ff_middag": [], "fx_middag": [], "dd_middag": [],
         "ff_nacht": [], "fx_nacht": [], "dd_nacht": [],
         "rr": 0.0, "rr_dag": 0.0, "rr_nacht": 0.0,
-        "sd": 0.0, "heeft_sd": False, "neff": [],
+        "sd": 0.0, "heeft_sd": False, "neff": [], "nl": [], "nm": [], "nh": [],
+        "r_all": {k: [] for k in ("R101","R110","R130","R150")},
+        "r_d":   {k: None for k in ("R101","R110","R130","R150")},
+        "r_n":   {k: None for k in ("R101","R110","R130","R150")},
         "td_nacht": [],
         "gevoels_nacht": [],
         "vv_min": [],
@@ -233,6 +244,7 @@ def verwerk_station(code, naam):
         "wwz": [],
         "wwt": [],           # onweerkans per uur
         "wwch": [],          # kans convectieve neerslag 12u
+        "r101": [],          # kans ≥0.1 mm neerslag 12u (POP)
         "fxh25": [],         # kans stoot >25kt 12u
         "fxh40": [],         # kans stoot >40kt 12u
         "fxh55": [],         # kans stoot >55kt 12u
@@ -305,9 +317,15 @@ def verwerk_station(code, naam):
             dd["sd"] += sd_raw[i] / 3600.0
             dd["heeft_sd"] = True
 
-        # Bewolking: hele dag
+        # Bewolking: hele dag (totale + hoog/midden/laag)
         if i < len(neff_raw) and neff_raw[i] is not None:
             dd["neff"].append(neff_raw[i])
+        if i < len(nl_raw) and nl_raw[i] is not None:
+            dd["nl"].append(nl_raw[i])
+        if i < len(nm_raw) and nm_raw[i] is not None:
+            dd["nm"].append(nm_raw[i])
+        if i < len(nh_raw) and nh_raw[i] is not None:
+            dd["nh"].append(nh_raw[i])
 
         # Dauwpunt: nacht 0-12h
         if 0 <= hour < 12:
@@ -340,6 +358,18 @@ def verwerk_station(code, naam):
         # Kans convectieve neerslag: max over hele dag (%)
         if i < len(wwch_raw) and wwch_raw[i] is not None:
             dd["wwch"].append(wwch_raw[i])
+
+        # POP per drempel (R101/R110/R130/R150, 12u-venster).
+        # MOSMIX plaatst waarde op eindtijd; 12u-venster ervóór:
+        #   hour == 18 lokaal → venster 06-18 (dag) van dag d     → R*_D[d]
+        #   hour == 06 lokaal → venster 18-06 eindigend op dag d  → nacht van d-1
+        for _key, _raw in r_raw.items():
+            if i < len(_raw) and _raw[i] is not None:
+                dd["r_all"][_key].append(_raw[i])
+                if hour == 18:
+                    dd["r_d"][_key] = _raw[i]
+                elif hour == 6:
+                    daily[d - timedelta(days=1)]["r_n"][_key] = _raw[i]
 
         # Sneeuwval: som over hele dag (cm)
         if i < len(sad_raw) and sad_raw[i] is not None:
@@ -453,8 +483,11 @@ def verwerk_station(code, naam):
         else:
             r["SQ"] = None
 
-        # Bewolking
+        # Bewolking (gemiddelde per dag, in %)
         r["Neff"] = neff_gem
+        r["Nl"] = round(sum(dd["nl"]) / len(dd["nl"])) if dd["nl"] else None
+        r["Nm"] = round(sum(dd["nm"]) / len(dd["nm"])) if dd["nm"] else None
+        r["Nh"] = round(sum(dd["nh"]) / len(dd["nh"])) if dd["nh"] else None
 
         # Dauwpunt (minimum nachts)
         r["TTD"] = round(min(dd["td_nacht"]), 1) if dd["td_nacht"] else None
@@ -476,6 +509,13 @@ def verwerk_station(code, naam):
 
         # Kans convectieve neerslag max (%)
         r["wwCh"] = round(max(dd["wwch"])) if dd["wwch"] else None
+
+        # POP per drempel (%) — ≥0,1 / ≥1 / ≥3 / ≥5 mm, 12u-venster
+        for _key in ("R101","R110","R130","R150"):
+            vals = dd["r_all"][_key]
+            r[_key]        = round(max(vals)) if vals else None
+            r[_key + "_D"] = round(dd["r_d"][_key]) if dd["r_d"][_key] is not None else None
+            r[_key + "_N"] = round(dd["r_n"][_key]) if dd["r_n"][_key] is not None else None
 
         # Sneeuwval max (cm) — DWD levert in m, ×100 naar cm
         r["Sad"] = round(max(dd["sad"]) * 100, 1) if dd["sad"] else None
@@ -567,7 +607,10 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
 
     # Structureer data per dag per parameter
     data_out = {}
-    params = ["TX", "TX_O", "TX_M", "TN", "TG", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_O", "FX_O", "DD_O", "FF_M", "FX_M", "DD_M", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "wwT", "wwCh", "Sad", "FXh25", "FXh40", "FXh55", "WBGT_O", "WBGT_M", "RV_M"]
+    params = ["TX", "TX_O", "TX_M", "TN", "TG", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_O", "FX_O", "DD_O", "FF_M", "FX_M", "DD_M", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "wwT", "wwCh",
+        "R101","R101_D","R101_N", "R110","R110_D","R110_N",
+        "R130","R130_D","R130_N", "R150","R150_D","R150_N",
+        "Nl", "Nm", "Nh", "Sad", "FXh25", "FXh40", "FXh55", "WBGT_O", "WBGT_M", "RV_M"]
 
     for d in dagen:
         dag_key = d.isoformat()
