@@ -140,11 +140,19 @@
       </div>
     </div>
     <div class="chart-card">
-      <button class="dl-btn" id="dl-p" data-svg="chart-p" data-fn="neerslag_bars">⬇ PNG</button>
+      <button class="dl-btn" id="dl-p" data-svg="chart-p" data-fn="neerslag_ens">⬇ PNG</button>
       <svg viewBox="0 0 820 400" preserveAspectRatio="xMidYMid meet" id="chart-p"></svg>
       <div class="legend-box">
-        <div class="item"><span class="sw bar" style="background:#8dd58e"></span>Rain prev run</div>
-        <div class="item"><span class="sw bar" style="background:#1a7d2b"></span>Rain new run</div>
+        <div class="item"><span class="sw bar" style="background:#8dd58e"></span>ENS prev run</div>
+        <div class="item"><span class="sw bar" style="background:#1a7d2b"></span>ENS new run</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <button class="dl-btn" id="dl-p-op" data-svg="chart-p-op" data-fn="neerslag_op">⬇ PNG</button>
+      <svg viewBox="0 0 820 400" preserveAspectRatio="xMidYMid meet" id="chart-p-op"></svg>
+      <div class="legend-box">
+        <div class="item"><span class="sw bar" style="background:#8dd58e"></span>HRES prev run</div>
+        <div class="item"><span class="sw bar" style="background:#1a7d2b"></span>HRES new run</div>
       </div>
     </div>
   </div>
@@ -868,7 +876,8 @@ function IH_(M, H) { return H - M.top - M.bottom; }
 /* ──────────────────────────────────────────────────────────────
    Neerslag-pluim (12-uurs-staafjes)
    ────────────────────────────────────────────────────────────── */
-function drawPrecipChart(svgId, stationName, binsCurr, binsPrev, runStart) {
+function drawPrecipChart(svgId, stationName, binsCurr, binsPrev, runStart, labelPrefix) {
+  labelPrefix = labelPrefix || 'EC-Ens · ENS-mean 12h';
   const svg = document.getElementById(svgId);
   svg.innerHTML = '';
 
@@ -898,7 +907,7 @@ function drawPrecipChart(svgId, stationName, binsCurr, binsPrev, runStart) {
   const runStr = runStart.toISOString().slice(8, 10) + MON[runStart.getUTCMonth()]
                + '-' + String(runStart.getUTCHours()).padStart(2, '0') + 'Z';
   drawAxes(svg, W, H, M, x, y, yMin, yMax, 0.2, 'mm', tStart, tEnd,
-    `EC-Ens · ${stationName} · ${runStr} · ENS-mean 12h`);
+    `${labelPrefix} · ${stationName} · ${runStr}`);
 
   // bar-breedte: elk 12-u-blok is 12h breed in pixels
   const binW = (12 * 3600 * 1000) / tSpan * IW;
@@ -957,11 +966,17 @@ function renderStation(i) {
   const todayRunDate = ensStats.runStart.toISOString().slice(0, 10);
   const prevRun = findPrevRun(st.name, todayRunDate);
   drawTempChart('chart-t', st.name, ensStats, prevRun);
-  // 4. Neerslag-staafjes (ENS-mean 12h; prev uit cache)
+  // 4a. Neerslag-staafjes ENS-mean (prev uit cache)
   const binsCurr = compute12hEnsPrecipMean(d.ensData);
   const binsPrev = (prevRun && prevRun.precipBins) ? prevRun.precipBins : [];
   const runStart = new Date(d.ensData.hourly.time[0] + 'Z');
-  drawPrecipChart('chart-p', st.name, binsCurr, binsPrev, runStart);
+  drawPrecipChart('chart-p', st.name, binsCurr, binsPrev, runStart, 'EC-Ens · ENS-mean 12h');
+
+  // 4b. Neerslag-staafjes HRES operationeel (current + previous_day1)
+  const hresBinsCurr = compute12hPrecip(d.hresData.hourly, 'precipitation');
+  const hresBinsPrev = compute12hPrecip(d.hresData.hourly, 'precipitation_previous_day1');
+  const hresRunStart = new Date(d.hresData.hourly.time[0] + 'Z');
+  drawPrecipChart('chart-p-op', st.name, hresBinsCurr, hresBinsPrev, hresRunStart, 'EC-OP · HRES 12h');
 
   // update downloadnamen met stationsuffix
   const suffix = st.name.replace(/[^a-z0-9]/gi, '_');
