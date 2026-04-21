@@ -1500,51 +1500,130 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     }
   });
 
-  // ── Neerslag grafiek 1: spreiding p10-p90 + mediaan + HRES ──
-  const pP10=ts.map((_,j)=>pctC(pA,j,10));
-  const pP25=ts.map((_,j)=>pctC(pA,j,25));
-  const pP75=ts.map((_,j)=>pctC(pA,j,75));
-  const pP90=ts.map((_,j)=>pctC(pA,j,90));
+  // ── Neerslag-pluim (6-uurlijks, KNMI-stijl) ──
+  // Individuele members worden per 6u gesommeerd zodat elke run als aparte
+  // spaghetti-lijn zichtbaar wordt (bij uurlijkse waardes zakken kleine
+  // verschillen weg naar 0 en lopen alle lijnen samen op de bodem).
+  const blok6 = agg6h(pA, ts);                          // {ts6, lab6, agg: pA6}
+  const pA6 = blok6.agg;
+  const ts6 = blok6.ts6;
+  const lab6 = blok6.lab6;
+  const pMed6 = ts6.map((_,j)=>medC(pA6,j));
+  const pP10_6 = ts6.map((_,j)=>pctC(pA6,j,10));
+  const pP25_6 = ts6.map((_,j)=>pctC(pA6,j,25));
+  const pP75_6 = ts6.map((_,j)=>pctC(pA6,j,75));
+  const pP90_6 = ts6.map((_,j)=>pctC(pA6,j,90));
+  const hBlok6 = agg6h([hPrecip], hTs);                 // HRES in dezelfde 6u-blokken
+  const hPrecip6 = hBlok6.agg[0] || [];
+  // Map HRES op ensemble-ts6 voor xAxisID-loos plotten
+  const hPrecip6Map = {};
+  hBlok6.ts6.forEach((t,i)=>{ hPrecip6Map[t] = hPrecip6[i]; });
+  const hPrecip6Mapped = ts6.map(t => hPrecip6Map[t] ?? null);
+
   document.getElementById('blok-neerslag').style.display='';
-  document.getElementById('titel-neerslag').textContent=`ECMWF – ${naam}  Neerslag`;
+  document.getElementById('titel-neerslag').textContent=`ECMWF – ${naam}  Neerslag (mm per 6 uur)`;
   document.getElementById('leg-neerslag').innerHTML=legHtml([
-    ['rgba(40,160,40,0.35)','51 ensembleleden','lijn'],
-    ['rgba(40,160,40,0.09)','p10–p90','blok'],
-    ['rgba(40,160,40,0.20)','IQR p25–p75','blok'],
-    ['#ee3333','Mediaan','lijn'],
+    ['rgba(30,140,30,0.55)','51 ensembleleden','lijn'],
+    ['rgba(40,160,40,0.08)','p10–p90','blok'],
+    ['rgba(40,160,40,0.18)','IQR p25–p75','blok'],
+    ['#ee3333','Mediaan (P50)','lijn'],
     ['#1f4a8a','HRES deterministisch','dash'],
-    ...(mosBol ? [['#1a3a8a','MOSMIX dag'+mosLabel,'punt'],['#0a1a4a','MOSMIX nacht'+mosLabel,'punt']] : []),
   ]);
-  chartTimestamps['canvas-neerslag']=ts;
+  chartTimestamps['canvas-neerslag']=ts6;
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
-    data:{labels:lab,datasets:[
-      ...pA.map(m=>({type:'line',data:m,borderColor:'rgba(40,160,40,0.22)',borderWidth:0.9,pointRadius:0,fill:'origin',backgroundColor:'rgba(40,160,40,0.02)',tension:0.4,order:10})),
-      {type:'line',data:pP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.05,0.09),fill:'+1',pointRadius:0,tension:0.4,order:9},
-      {type:'line',data:pP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.4,order:9},
-      {type:'line',data:pP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.14,0.22),fill:'+1',pointRadius:0,tension:0.4,order:8},
-      {type:'line',data:pP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.4,order:8},
-      Object.assign({type:'line',data:pMed,borderColor:'#ee3333',borderWidth:2.8,pointRadius:0,fill:false,tension:0.4,order:1,borderCapStyle:'round'},{_glow:true}),
-      {type:'line',data:hPrecip,borderColor:'#1f4a8a',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:2,xAxisID:'xH',borderCapStyle:'round'},
-      ...(mosBol ? [
-        {type:'line',data:mosRrDagData,borderColor:'transparent',backgroundColor:'#1a3a8a',pointRadius:ctx=>mosRrDagData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
-        {type:'line',data:mosRrNachtData,borderColor:'transparent',backgroundColor:'#0a1a4a',pointRadius:ctx=>mosRrNachtData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'#6688aa',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
-      ] : []),
+    data:{labels:lab6,datasets:[
+      // Spaghetti: elke member als eigen dunne lijn
+      ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10})),
+      // P10–P90 band
+      {type:'line',data:pP10_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:pP90_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
+      // IQR band
+      {type:'line',data:pP25_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.3,order:8},
+      {type:'line',data:pP75_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8},
+      // Mediaan
+      Object.assign({type:'line',data:pMed6,borderColor:'#ee3333',borderWidth:2.6,pointRadius:0,fill:false,tension:0.3,order:1,borderCapStyle:'round'},{_glow:true}),
+      // HRES
+      {type:'line',data:hPrecip6Mapped,borderColor:'#1f4a8a',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.3,order:2,borderCapStyle:'round'},
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
-        filter:item=>item.datasetIndex>=4,
-        callbacks:{label:ctx=>{
-          if(ctx.datasetIndex===4)return ` Mediaan: ${ctx.parsed.y.toFixed(2)} mm/u`;
-          if(ctx.datasetIndex===5)return ` HRES: ${ctx.parsed.y.toFixed(2)} mm/u`;
-          if(mosBol&&ctx.datasetIndex===6)return ` MOSMIX dag: ${ctx.parsed.y?.toFixed(1)} mm`;
-          if(mosBol&&ctx.datasetIndex===7)return ` MOSMIX nacht: ${ctx.parsed.y?.toFixed(1)} mm`;
-        }}
+        mode:'index',intersect:false,
+        filter:item=>{const n=pA6.length;return item.datasetIndex===n+4 || item.datasetIndex===n+5;},
+        callbacks:{
+          title:items=>{
+            if(!items.length) return '';
+            const t=ts6[items[0].dataIndex];
+            if(!t) return '';
+            const d=new Date(t);
+            const eindH=d.getHours()||24;
+            const beginH=(eindH-6+24)%24;
+            return new Date(t).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}) + ` · ${String(beginH).padStart(2,'0')}–${String(eindH%24).padStart(2,'0')}u`;
+          },
+          label:ctx=>{
+            const n=pA6.length;
+            if(ctx.datasetIndex===n+4)return ` Mediaan: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'} mm/6u`;
+            if(ctx.datasetIndex===n+5)return ` HRES: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'} mm/6u`;
+            return null;
+          },
+          afterBody:items=>{
+            if(!items.length) return '';
+            const idx=items[0].dataIndex;
+            const vals=pA6.map(m=>m[idx]).filter(v=>v!=null);
+            if(!vals.length) return '';
+            const kans = vals.filter(v=>v>=0.3).length / vals.length * 100;
+            const max = Math.max(...vals);
+            return ['', `Kans op neerslag: ${Math.round(kans)}%  ·  max ${max.toFixed(1)} mm/6u`];
+          }
+        }
       }},
-      scales:{x:cfgBase.scales.x,xH:{display:false,labels:hLab},y:{...yAs('left',' mm'),min:0,suggestedMax:10}}
+      scales:{x:cfgBase.scales.x,y:{...yAs('left',' mm/6u'),min:0,suggestedMax:5}}
     }
   });
 
+}
+
+// ── 6-uurlijkse aggregatie van uurlijkse waardes ──
+// Lijnt blokken op klok-grenzen (00/06/12/18), gebruikt het einde van het blok
+// als tijdstempel (consistent met KNMI-notatie).
+function agg6h(members, timestamps){
+  const blocks=[];
+  let cur=null;
+  for(let i=0;i<timestamps.length;i++){
+    const d=new Date(timestamps[i]);
+    const h=d.getHours();
+    const blockEndHour=Math.floor(h/6)*6+6;                // 6/12/18/24
+    const end=new Date(d);
+    end.setHours(blockEndHour,0,0,0);
+    const key=end.getTime();
+    if(!cur||cur.key!==key){
+      cur={key, tEnd:end, hours:[]};
+      blocks.push(cur);
+    }
+    cur.hours.push(i);
+  }
+  const ts6=blocks.map(b=>{
+    const d=b.tEnd;
+    const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    const hh=String(d.getHours()).padStart(2,'0');
+    return `${y}-${mo}-${da}T${hh}:00`;
+  });
+  const agg=members.map(m=>blocks.map(b=>{
+    let s=0, any=false;
+    for(const i of b.hours){ if(m[i]!=null){ s+=m[i]; any=true; } }
+    return any?s:null;
+  }));
+  // Labels: dag-regel op 00:00, anders 06/12/18
+  const lab6=blocks.map(b=>{
+    const d=b.tEnd;
+    const h=d.getHours();
+    if(h===0){
+      const prev=new Date(d); prev.setDate(prev.getDate()-1);
+      return ['', `${NL_DAGEN[prev.getDay()]} ${prev.getDate()} ${NL_MND[prev.getMonth()]}`];
+    }
+    return `${String(h).padStart(2,'0')}:00`;
+  });
+  return {ts6, lab6, agg};
 }
 
 // ── Dagtemperatuur kansen (gestapeld staafdiagram per dag, KNMI-stijl) ──
