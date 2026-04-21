@@ -3,7 +3,9 @@
 # Dagelijkse dagdata-sync
 # Regenereert dagdata_*.json uit de CSV's (bijgewerkt door knmi_records.py
 # dat om 05:00 draait) en vult daarna aan met EDR-data t/m gisteren.
-# Geplanned om 05:30 via nl.edaldus.dagdata.plist.
+# Geplanned om 12:00 via nl.edaldus.dagdata.plist — EDR realtime heeft
+# ~10 uur lag na einde etmaal (00:00 UTC), dus om 12:00 lokale tijd (10:00
+# UTC) heeft de API consistent gisteren's data beschikbaar.
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -e
