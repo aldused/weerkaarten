@@ -2524,11 +2524,15 @@ body {
       "avc1.64001F", // High 3.1 — alleen als frames klein genoeg
       "avc1.42001F"  // Baseline 3.1
     ];
+    // Hoge bitrate i.v.m. smooth blauw/grijs gradiënten in wolken — anders block-artefacten.
+    // Bij lage fps (≤8) loont het om elk frame een I-frame te maken: grotere file maar
+    // geen inter-frame quantisatie-verlies.
+    var bitrate = 18000000;
     var codec = null;
     for (var ki = 0; ki < kandidaten.length; ki++) {
       try {
         var sup = await VideoEncoder.isConfigSupported({
-          codec: kandidaten[ki], width: W, height: H, bitrate: 6000000, framerate: fps
+          codec: kandidaten[ki], width: W, height: H, bitrate: bitrate, framerate: fps
         });
         if (sup && sup.supported) { codec = kandidaten[ki]; break; }
       } catch (e) { /* volgende kandidaat */ }
@@ -2546,9 +2550,14 @@ body {
     });
     encoder.configure({
       codec: codec, width: W, height: H,
-      bitrate: 6000000, framerate: fps,
+      bitrate: bitrate, framerate: fps,
+      bitrateMode: "variable",
+      latencyMode: "quality",
+      hardwareAcceleration: "prefer-hardware",
       avc: { format: "avc" }
     });
+    // Bij lage fps: elk frame keyframe (betere kwaliteit per-frame). Bij hogere fps: elke seconde.
+    var keyEveryN = (fps <= 8) ? 1 : fps;
 
     // Eerste frame pre-renderen
     updateAlle(s0);
@@ -2566,7 +2575,7 @@ body {
       capCtx.fillStyle = "#ffffff"; capCtx.fillRect(0, 0, W, H);
       capCtx.drawImage(srcCanvas, padX, padTop, drawW, drawH);
       var vf = new VideoFrame(capCanvas, { timestamp: frameIdx * frameDur, duration: frameDur });
-      encoder.encode(vf, { keyFrame: (frameIdx % Math.max(10, fps) === 0) });
+      encoder.encode(vf, { keyFrame: (frameIdx % keyEveryN === 0) });
       vf.close();
       frameIdx++;
       filmStatus.textContent = "MP4-encode: frame " + (s - s0 + 1) + " / " + totaal + "…";
