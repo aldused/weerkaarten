@@ -2593,8 +2593,10 @@ async function laadDauwpunt(lat,lon,naam,dagen,van,tot){
 }
 
 // ── Neerslagsom (accumulatie) — cumulatieve regen per ensemblelid ──
+// Toont onder het paraplu-icoon TWEE pluimen: bovenaan de 6-uurlijkse
+// neerslag-spaghetti (normaal) en daaronder de cumulatieve som.
 async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
-  document.getElementById('header-sub').textContent='51 ensembleleden · Cumulatieve neerslag · ECMWF IFS ENS';
+  document.getElementById('header-sub').textContent='51 ensembleleden · Neerslag (6u) + cumulatief · ECMWF IFS ENS';
   const [ens,hres] = await Promise.all([
     fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=precipitation&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
     fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
@@ -2605,6 +2607,66 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
   const ts=idx.map(i=>times[i]);
   const pK=Object.keys(ens.hourly).filter(k=>k.startsWith('precipitation_member'));
   const pA=pK.map(k=>idx.map(i=>ens.hourly[k][i]));
+
+  // ── (1) Normale 6-uurlijkse neerslag-pluim bovenaan ──
+  const blok6 = agg6h(pA, ts);
+  const pA6 = blok6.agg, ts6 = blok6.ts6, lab6 = blok6.lab6;
+  const pMed6  = ts6.map((_,j)=>medC(pA6,j));
+  const pP10_6 = ts6.map((_,j)=>pctC(pA6,j,10));
+  const pP25_6 = ts6.map((_,j)=>pctC(pA6,j,25));
+  const pP75_6 = ts6.map((_,j)=>pctC(pA6,j,75));
+  const pP90_6 = ts6.map((_,j)=>pctC(pA6,j,90));
+  const hIdx0 = filterT(hres.hourly.time,van,tot);
+  const hTs0  = hIdx0.map(i=>hres.hourly.time[i]);
+  const hPrecip0 = hIdx0.map(i=>hres.hourly.precipitation[i]);
+  const hBlok6 = agg6h([hPrecip0], hTs0);
+  const hPrecip6 = hBlok6.agg[0] || [];
+  const hPrecip6Map = {}; hBlok6.ts6.forEach((t,i)=>{ hPrecip6Map[t]=hPrecip6[i]; });
+  const hPrecip6Mapped = ts6.map(t=>hPrecip6Map[t] ?? null);
+  const nM = pA6.length;
+  document.getElementById('blok-neerslag').style.display='';
+  document.getElementById('titel-neerslag').textContent=`ECMWF – ${naam}  Neerslag (mm per 6 uur)`;
+  document.getElementById('leg-neerslag').innerHTML=legHtml([
+    ['rgba(30,140,30,0.55)','51 ensembleleden','lijn'],
+    ['rgba(40,160,40,0.08)','p10–p90','blok'],
+    ['rgba(40,160,40,0.18)','IQR p25–p75','blok'],
+    ['#ee3333','Mediaan (P50)','lijn'],
+    ['#1f4a8a','HRES deterministisch','dash'],
+  ]);
+  chartTimestamps['canvas-neerslag']=ts6;
+  if(actieveCharts.neerslag){try{actieveCharts.neerslag.destroy();}catch(e){}}
+  actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
+    data:{labels:lab6,datasets:[
+      ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10})),
+      {type:'line',data:pP10_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:pP90_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
+      {type:'line',data:pP25_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.3,order:8},
+      {type:'line',data:pP75_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8},
+      Object.assign({type:'line',data:pMed6,borderColor:'#ee3333',borderWidth:2.6,pointRadius:0,fill:false,tension:0.3,order:1,borderCapStyle:'round'},{_glow:true}),
+      {type:'line',data:hPrecip6Mapped,borderColor:'#1f4a8a',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.3,order:2,borderCapStyle:'round'},
+    ]},
+    options:{...cfgBase,
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
+        mode:'index',intersect:false,
+        filter:item=>item.datasetIndex===nM+4||item.datasetIndex===nM+5,
+        callbacks:{
+          title:items=>{
+            if(!items.length) return '';
+            const t=ts6[items[0].dataIndex]; if(!t) return '';
+            const d=new Date(t); const eindH=d.getHours()||24; const beginH=(eindH-6+24)%24;
+            return new Date(t).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}) + ` · ${String(beginH).padStart(2,'0')}–${String(eindH%24).padStart(2,'0')}u`;
+          },
+          label:ctx=>{
+            if(ctx.datasetIndex===nM+4) return ` Mediaan: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'} mm/6u`;
+            if(ctx.datasetIndex===nM+5) return ` HRES: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):'-'} mm/6u`;
+            return null;
+          }
+        }
+      }},
+      scales:{x:cfgBase.scales.x,y:{...yAs('left',' mm/6u'),min:0,suggestedMax:5}}
+    }
+  });
   // Cumulatief per lid: som per uur, loopt monotoon omhoog
   const pCum=pA.map(m=>{let s=0;return m.map(v=>{if(v!=null) s+=v; return s;});});
   const cumMed=ts.map((_,j)=>medC(pCum,j));
