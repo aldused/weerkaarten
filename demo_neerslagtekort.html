@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neerslagtekort P13 — weerlab.nl (demo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#f6f8fb;color:#0f172a;font-family:"DM Sans",ui-sans-serif,system-ui,sans-serif;font-size:14px}
+header{background:#fff;border-bottom:1px solid #e3e8ef;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+header h1{font-size:15px;font-weight:700}
+header h1 span{color:#00205b}
+.subtitle{font-size:11px;color:#64748b;margin-top:2px;font-family:"DM Mono",monospace}
+.container{max-width:1280px;margin:0 auto;padding:20px 16px 60px}
+.tab-bar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid #e3e8ef}
+.tab-btn{padding:8px 16px;background:transparent;border:none;border-bottom:2px solid transparent;color:#64748b;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:-1px;font-family:inherit}
+.tab-btn:hover{color:#0f172a}
+.tab-btn.active{color:#00205b;border-bottom-color:#00205b}
+
+.hero{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+@media(max-width:900px){.hero{grid-template-columns:1fr 1fr}}
+.kpi{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:14px 16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.kpi .lbl{font-size:10.5px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.kpi .val{font-size:26px;font-weight:700;color:#0f172a;font-family:"DM Mono",monospace;line-height:1}
+.kpi .val .u{font-size:13px;color:#94a3b8;font-weight:500;margin-left:2px}
+.kpi .sub{font-size:11.5px;color:#475569;margin-top:6px;line-height:1.4}
+.kpi.droog{border-left:3px solid #d97706}
+.kpi.nat{border-left:3px solid #00205b}
+.kpi.rang{border-left:3px solid #9333ea}
+.kpi.update{border-left:3px solid #64748b}
+
+.panel{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:16px 18px;margin-bottom:20px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.panel h2{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:12px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.panel h2 .cnt{font-size:10.5px;color:#64748b;font-weight:500;font-family:"DM Mono",monospace;text-transform:uppercase;letter-spacing:.06em}
+.chart-wrap{position:relative;height:460px}
+.chart-wrap.mini{height:110px}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:10px;font-size:11px;color:#475569;font-family:"DM Mono",monospace}
+.legend .lg{display:inline-flex;align-items:center;gap:5px}
+.legend .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+.legend .sw.dash{background:repeating-linear-gradient(90deg,currentColor 0,currentColor 3px,transparent 3px,transparent 6px)}
+.legend .sw.band{height:10px;border-radius:3px;opacity:.35}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+.toplist{background:#fff;border:1px solid #e3e8ef;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.toplist .hd{background:#fef3c7;border-left:3px solid #d97706;padding:10px 14px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.06em}
+.toplist .rw{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid #eff3f8;gap:10px}
+.toplist .rw:last-child{border-bottom:none}
+.toplist .rw:nth-child(even){background:#fafbfd}
+.toplist .rw:hover{background:#eef2f7}
+.toplist .rk{color:#94a3b8;font-size:11px;min-width:22px;font-family:"DM Mono",monospace;text-align:right}
+.toplist .rw:nth-child(2) .rk{color:#d4a843}
+.toplist .rw:nth-child(3) .rk{color:#94a3b8}
+.toplist .rw:nth-child(4) .rk{color:#cd7f32}
+.toplist .nm{flex:1;color:#0f172a;font-size:13px;font-weight:500}
+.toplist .vl{font-family:"DM Mono",monospace;font-weight:700;color:#d97706;font-size:14px}
+.toplist .bar{width:90px;height:8px;border-radius:3px;background:#f1f5f9;overflow:hidden;position:relative}
+.toplist .bar>i{display:block;height:100%;background:linear-gradient(90deg,#fbbf24,#d97706);border-radius:3px}
+
+.rankwrap{overflow-y:auto;max-height:560px;border-top:1px solid #e3e8ef}
+table.rank{width:100%;border-collapse:collapse;font-size:12.5px}
+table.rank th{position:sticky;top:0;background:#f6f8fb;color:#64748b;padding:8px 12px;text-align:right;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #e3e8ef;z-index:1}
+table.rank th:first-child{text-align:left}
+table.rank td{padding:5px 12px;text-align:right;border-bottom:1px solid #eff3f8;font-family:"DM Mono",monospace}
+table.rank td:first-child{text-align:left;font-weight:600;color:#0f172a;font-family:"DM Sans",sans-serif}
+table.rank tr:nth-child(even){background:#fafbfd}
+table.rank tr:hover{background:#eef2f7}
+table.rank tr.current{background:#fef3c7 !important;font-weight:700}
+table.rank tr.current td{color:#92400e}
+table.rank .bw{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+table.rank .bk{height:8px;border-radius:3px;background:#d97706;min-width:2px;opacity:.6}
+.filter-row{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid #e3e8ef;flex-wrap:wrap;align-items:center}
+.filter-row input,.filter-row select{font:inherit;font-size:12px;padding:5px 8px;border:1px solid #e3e8ef;border-radius:6px;background:#fff}
+
+.station-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.sc{background:#fff;border:1px solid #e3e8ef;border-radius:10px;padding:10px 12px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.sc:hover{box-shadow:0 2px 8px rgba(15,23,42,.08);border-color:#cbd5e1}
+.sc.active{border-color:#00205b;box-shadow:0 0 0 1px #00205b}
+.sc .sh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.sc .nm{font-size:12.5px;font-weight:700;color:#0f172a}
+.sc .vl{font-family:"DM Mono",monospace;font-size:14px;font-weight:700;color:#d97706}
+.sc .sb{font-size:10.5px;color:#94a3b8;font-family:"DM Mono",monospace;margin-bottom:4px}
+.sc .tag{display:inline-block;font-size:9px;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:3px;font-family:"DM Mono",monospace;text-transform:uppercase;letter-spacing:.04em}
+
+.info{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:12.5px;color:#78350f;line-height:1.6}
+.info strong{color:#78350f}
+
+footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"DM Mono",monospace}
+#loading{text-align:center;padding:80px;color:#94a3b8;font-family:"DM Mono",monospace}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Neerslagtekort <span>P13</span></h1>
+    <div class="subtitle" id="hdSubtitle">Laden…</div>
+  </div>
+  <div class="subtitle" id="hdGen"></div>
+</header>
+
+<div class="container">
+
+<div id="loading">Data laden…</div>
+
+<div id="main" style="display:none">
+
+  <div class="tab-bar">
+    <button class="tab-btn active" data-mode="jan">Vanaf 1 januari</button>
+    <button class="tab-btn" data-mode="apr">Vanaf 1 april (groeiseizoen)</button>
+  </div>
+
+  <div class="hero">
+    <div class="kpi droog">
+      <div class="lbl">Landelijk tekort nu</div>
+      <div class="val" id="kpiNow">–<span class="u">mm</span></div>
+      <div class="sub" id="kpiNowSub"></div>
+    </div>
+    <div class="kpi rang">
+      <div class="lbl">Rang t.o.v. alle jaren</div>
+      <div class="val" id="kpiRank">–</div>
+      <div class="sub" id="kpiRankSub"></div>
+    </div>
+    <div class="kpi droog">
+      <div class="lbl">Droogste station nu</div>
+      <div class="val" id="kpiDroog">–<span class="u">mm</span></div>
+      <div class="sub" id="kpiDroogSub"></div>
+    </div>
+    <div class="kpi update">
+      <div class="lbl">Data t/m</div>
+      <div class="val" id="kpiDate" style="font-size:18px">–</div>
+      <div class="sub" id="kpiDateSub">P13-neerslag; EV24 AWS</div>
+    </div>
+  </div>
+
+  <div class="info">
+    <strong>Neerslagtekort = cumulatieve (verdamping − neerslag)</strong> per dag, gefloord op 0.
+    Verdamping (Makkink EV24) komt van de dichtstbijzijnde AWS, gekoppeld aan elk van de 13 P13-neerslagstations.
+    Landelijk gemiddelde is het rekenkundig gemiddelde over alle beschikbare stations per dag.
+  </div>
+
+  <div class="panel">
+    <h2>Landelijk gemiddelde — <span id="modeLabel">2026 t.o.v. alle jaren sinds 1957</span></h2>
+    <div class="chart-wrap"><canvas id="chartMain"></canvas></div>
+    <div class="legend" id="legendMain"></div>
+  </div>
+
+  <div class="grid-2">
+    <div>
+      <div class="toplist">
+        <div class="hd">Top-10 droogste stations nu</div>
+        <div id="top10"></div>
+      </div>
+    </div>
+    <div>
+      <div class="toplist" style="background:#fff">
+        <div class="hd" style="background:#eff6ff;border-left-color:#00205b;color:#1e3a8a">Ranking — alle jaren op vandaag</div>
+        <div class="filter-row">
+          <input id="fYear" placeholder="zoek jaar…" style="flex:1;min-width:100px">
+          <select id="fSort">
+            <option value="rang">Rangorde (droogst eerst)</option>
+            <option value="jaar">Jaar (nieuwst eerst)</option>
+          </select>
+        </div>
+        <div class="rankwrap">
+          <table class="rank" id="rankTable">
+            <thead><tr><th>Jaar</th><th>Rang</th><th>Tekort (mm)</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Per station <span class="cnt" id="statCnt">13 stations</span></h2>
+    <div class="station-grid" id="stationGrid"></div>
+  </div>
+
+</div>
+</div>
+
+<footer>
+  weerlab.nl &middot; demo <span id="ftGen"></span> &middot; Bron: KNMI (neerslag P13 + EV24 AWS)
+</footer>
+
+<script src="tekort_data.js"></script>
+<script>
+(function(){
+  // Data injected in var TEKORT_DATA — probeer verschillende paden
+  function afterLoad(){
+    if (typeof TEKORT_DATA === 'undefined') {
+      document.getElementById('loading').innerHTML =
+        'Kan <code>tekort_data.js</code> niet vinden.<br>Verwacht naast deze HTML of in <code>weerkaarten 2/</code>.';
+      return;
+    }
+    init(TEKORT_DATA);
+  }
+  // Small delay to let script tag load
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', afterLoad);
+  else afterLoad();
+
+  var MAANDEN = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+  var MODE = 'jan';
+  var D = null;
+  var mainChart = null;
+  var miniCharts = {};
+
+  function nl(n, d){ if (d==null) d=1; return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toLocaleString('nl-NL',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function dateFromDoyJan(jaar, doy){ var d = new Date(jaar,0,1); d.setDate(d.getDate()+doy); return d; }
+  function dateFromDoyApr(jaar, doy){ var d = new Date(jaar,3,1); d.setDate(d.getDate()+doy); return d; }
+  function fmtDate(d){ return d.getDate()+' '+MAANDEN[d.getMonth()].slice(0,3); }
+
+  function init(data){
+    D = data;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('hdSubtitle').textContent =
+      '13 KNMI-neerslagstations · ' + data.meta.periode_jaren[0] + '–' + data.meta.periode_jaren[1];
+    document.getElementById('hdGen').textContent = 'gegenereerd ' + data.meta.gegenereerd;
+    document.getElementById('ftGen').textContent = data.meta.gegenereerd;
+    document.getElementById('kpiDate').textContent = data.meta.vandaag;
+
+    document.querySelectorAll('.tab-btn').forEach(function(b){
+      b.addEventListener('click', function(){
+        document.querySelectorAll('.tab-btn').forEach(function(x){x.classList.remove('active')});
+        b.classList.add('active');
+        MODE = b.dataset.mode;
+        render();
+      });
+    });
+
+    renderStationGrid();
+    render();
+    document.getElementById('fYear').addEventListener('input', fillRankTable);
+    document.getElementById('fSort').addEventListener('change', fillRankTable);
+  }
+
+  function curData(){
+    var isJan = MODE === 'jan';
+    return {
+      perJaar:  isJan ? D.landelijk.per_jaar_jan : D.landelijk.per_jaar_apr,
+      klimaat:  isJan ? D.landelijk.klimaat_jan  : D.landelijk.klimaat_apr,
+      ranking:  isJan ? D.landelijk.ranking_jan  : D.landelijk.ranking_apr,
+      doy:      isJan ? D.meta.vandaag_doy_jan   : D.meta.vandaag_doy_apr,
+      startM:   isJan ? 1 : 4,
+      startD:   1,
+      perStn:   isJan ? 'per_jan' : 'per_apr',
+      label:    isJan ? 'vanaf 1 januari' : 'vanaf 1 april',
+    };
+  }
+
+  function render(){
+    var c = curData();
+    document.getElementById('modeLabel').textContent = D.meta.huidig_jaar + ' t.o.v. alle jaren · ' + c.label;
+
+    // KPI's
+    var huidig = c.perJaar[D.meta.huidig_jaar] || {};
+    var doys = Object.keys(huidig).map(Number).sort(function(a,b){return a-b});
+    var laatsteDoy = doys.length ? doys[doys.length-1] : null;
+    var huidigTekort = laatsteDoy != null ? huidig[laatsteDoy] : null;
+    var huidigDatum  = laatsteDoy != null
+      ? (c.startM===1 ? dateFromDoyJan(D.meta.huidig_jaar, laatsteDoy) : dateFromDoyApr(D.meta.huidig_jaar, laatsteDoy))
+      : null;
+
+    document.getElementById('kpiNow').innerHTML =
+      (huidigTekort != null ? nl(huidigTekort,0) : '–') + '<span class="u"> mm</span>';
+    document.getElementById('kpiNowSub').textContent =
+      huidigDatum ? ('t/m ' + fmtDate(huidigDatum) + ' ' + D.meta.huidig_jaar) : 'geen data';
+
+    // Rang
+    var rang = c.ranking.find(function(e){return e.is_huidig});
+    document.getElementById('kpiRank').innerHTML = rang
+      ? (rang.rang + '<span class="u"> / ' + c.ranking.length + '</span>')
+      : '–';
+    var rangSub = '';
+    if (rang) {
+      var pct = Math.round(100 * rang.rang / c.ranking.length);
+      rangSub = 'droogste ' + pct + '% van ' + c.ranking.length + ' jaren';
+      if (rang.rang === 1) rangSub = '🥇 droogste ooit op deze datum';
+      else if (rang.rang <= 5) rangSub = 'top-' + rang.rang + ' droogste ooit';
+    }
+    document.getElementById('kpiRankSub').textContent = rangSub;
+
+    // Droogste station
+    var t = D.top10_nu[0];
+    document.getElementById('kpiDroog').innerHTML = t
+      ? (nl(t.tekort,0) + '<span class="u"> mm</span>')
+      : '–';
+    document.getElementById('kpiDroogSub').textContent = t ? t.naam : '';
+
+    drawMain(c);
+    fillTop10();
+    fillRankTable();
+    renderStationGrid();
+  }
+
+  function drawMain(c){
+    var ctx = document.getElementById('chartMain').getContext('2d');
+    if (mainChart) mainChart.destroy();
+
+    var klim = c.klimaat;
+    var labels = klim.map(function(e){
+      var d = c.startM===1 ? dateFromDoyJan(D.meta.huidig_jaar, e.doy) : dateFromDoyApr(D.meta.huidig_jaar, e.doy);
+      return fmtDate(d);
+    });
+
+    function serie(field){ return klim.map(function(e){return e[field]}); }
+
+    // Huidig jaar
+    var huidig = c.perJaar[D.meta.huidig_jaar] || {};
+    var huidigArr = klim.map(function(e){return huidig[e.doy] != null ? huidig[e.doy] : null});
+
+    // Referentiejaren
+    function jaarArr(jr){ var j = c.perJaar[jr] || {}; return klim.map(function(e){return j[e.doy] != null ? j[e.doy] : null}); }
+
+    var ds = [
+      // Max envelope (dotted orange)
+      {label:'Maximum 1957–nu', data: serie('max'), borderColor:'#f59e0b', backgroundColor:'transparent',
+        borderWidth:1.2, borderDash:[2,3], pointRadius:0, tension:.2, order:8},
+      // 5% droogste (p95 = hoog tekort = 5% jaren droger)
+      {label:'5% droogste jaren', data: serie('p95'), borderColor:'#84cc16', backgroundColor:'transparent',
+        borderWidth:2, pointRadius:0, tension:.2, order:6},
+      // Gemiddelde
+      {label:'Gemiddelde', data: serie('mean'), borderColor:'#2563eb', backgroundColor:'transparent',
+        borderWidth:2.2, pointRadius:0, tension:.2, order:5},
+      // Mediaan
+      {label:'Mediaan', data: serie('median'), borderColor:'#2563eb', backgroundColor:'transparent',
+        borderWidth:1.5, borderDash:[4,4], pointRadius:0, tension:.2, order:4},
+      // 1976
+      {label:'1976', data: jaarArr(1976), borderColor:'#dc2626', backgroundColor:'transparent',
+        borderWidth:1.8, pointRadius:0, tension:.2, order:3},
+      // 2018
+      {label:'2018', data: jaarArr(2018), borderColor:'#64748b', backgroundColor:'transparent',
+        borderWidth:1.6, pointRadius:0, tension:.2, order:3},
+      // 2003
+      {label:'2003', data: jaarArr(2003), borderColor:'#a855f7', backgroundColor:'transparent',
+        borderWidth:1.3, pointRadius:0, tension:.2, order:2},
+      // Huidig jaar (zwart dik, markeer laatste punt)
+      {label:D.meta.huidig_jaar + ' (nu)', data: huidigArr, borderColor:'#111827', backgroundColor:'#111827',
+        borderWidth:3.2, pointRadius:function(ctx){
+          var a = ctx.dataset.data;
+          var last = -1;
+          for (var i = 0; i < a.length; i++) if (a[i] != null) last = i;
+          return ctx.dataIndex === last ? 5 : 0;
+        }, tension:.2, order:1},
+    ];
+
+    mainChart = new Chart(ctx, {
+      type:'line',
+      data:{labels:labels, datasets:ds},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            mode:'index', intersect:false,
+            callbacks:{
+              label:function(ctx){ return ctx.dataset.label + ': ' + (ctx.parsed.y==null?'–':nl(ctx.parsed.y,0)+' mm'); }
+            }
+          }
+        },
+        scales:{
+          x:{ticks:{maxTicksLimit:12, color:'#64748b', font:{family:'DM Mono',size:10}}, grid:{color:'#f1f5f9'}},
+          y:{beginAtZero:true, ticks:{color:'#64748b', font:{family:'DM Mono',size:10}, callback:function(v){return v+' mm'}}, grid:{color:'#f1f5f9'}, title:{display:true, text:'Neerslagtekort (mm)', color:'#475569', font:{size:11}}}
+        }
+      }
+    });
+
+    document.getElementById('legendMain').innerHTML = [
+      ['#111827','solid', D.meta.huidig_jaar + ' (nu)'],
+      ['#2563eb','solid','gemiddelde'],
+      ['#2563eb','dash', 'mediaan'],
+      ['#84cc16','solid','5% droogste'],
+      ['#f59e0b','dash', 'maximum'],
+      ['#dc2626','solid','1976'],
+      ['#64748b','solid','2018'],
+      ['#a855f7','solid','2003'],
+    ].map(function(x){
+      return '<span class="lg"><span class="sw '+(x[1]==='dash'?'dash':'')+'" style="background:'+(x[1]==='dash'?'':x[0])+';color:'+x[0]+'"></span>'+x[2]+'</span>';
+    }).join('');
+  }
+
+  function fillTop10(){
+    var c = curData();
+    var top = D.top10_nu.slice(0,13);
+    var maxV = Math.max.apply(null, top.map(function(e){return e.tekort})) || 1;
+    document.getElementById('top10').innerHTML = top.map(function(e, i){
+      var pct = Math.round(100*e.tekort/maxV);
+      return '<div class="rw"><span class="rk">'+(i+1)+'</span>'
+        + '<span class="nm">'+e.naam+'</span>'
+        + '<span class="bar"><i style="width:'+pct+'%"></i></span>'
+        + '<span class="vl">'+nl(e.tekort,0)+' mm</span></div>';
+    }).join('');
+  }
+
+  function fillRankTable(){
+    var c = curData();
+    var list = c.ranking.slice();
+    var f = document.getElementById('fYear').value.trim();
+    var sort = document.getElementById('fSort').value;
+    if (f) list = list.filter(function(e){return String(e.jaar).indexOf(f) !== -1});
+    if (sort === 'jaar') list.sort(function(a,b){return b.jaar - a.jaar});
+    else list.sort(function(a,b){return a.rang - b.rang});
+    var maxV = Math.max.apply(null, c.ranking.map(function(e){return e.tekort})) || 1;
+    var body = document.querySelector('#rankTable tbody');
+    body.innerHTML = list.map(function(e){
+      var pct = Math.round(100*e.tekort/maxV);
+      return '<tr class="'+(e.is_huidig?'current':'')+'">'
+        + '<td>'+e.jaar+(e.is_huidig?' (nu)':'')+'</td>'
+        + '<td>#'+e.rang+'</td>'
+        + '<td>'+nl(e.tekort,0)+'</td>'
+        + '<td><div class="bw"><div class="bk" style="width:'+pct+'px"></div></div></td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  function renderStationGrid(){
+    var c = curData();
+    var grid = document.getElementById('stationGrid');
+    grid.innerHTML = '';
+    var stns = Object.keys(D.stations).sort(function(a,b){
+      var ta = D.stations[a][c.perStn][D.meta.huidig_jaar];
+      var tb = D.stations[b][c.perStn][D.meta.huidig_jaar];
+      var va = ta ? maxVal(ta) : 0;
+      var vb = tb ? maxVal(tb) : 0;
+      return vb - va;
+    });
+    stns.forEach(function(stn){
+      var info = D.stations[stn];
+      var cur = info[c.perStn][D.meta.huidig_jaar] || {};
+      var doys = Object.keys(cur).map(Number).sort(function(a,b){return a-b});
+      var lastDoy = doys.length ? doys[doys.length-1] : null;
+      var lastV = lastDoy != null ? cur[lastDoy] : null;
+
+      var el = document.createElement('div');
+      el.className = 'sc';
+      el.innerHTML =
+        '<div class="sh"><span class="nm">'+info.naam+'</span>'
+        + '<span class="vl">'+(lastV!=null?nl(lastV,0)+' mm':'–')+'</span></div>'
+        + '<div class="sb"><span class="tag">AWS '+info.aws+'</span> P13-stn '+stn+'</div>'
+        + '<div class="chart-wrap mini"><canvas></canvas></div>';
+      grid.appendChild(el);
+      drawMini(el.querySelector('canvas'), stn, c);
+    });
+    document.getElementById('statCnt').textContent = stns.length + ' stations · gesorteerd op huidig tekort';
+  }
+
+  function maxVal(obj){ var m = 0; for (var k in obj) if (obj[k]>m) m = obj[k]; return m; }
+
+  function drawMini(canvas, stn, c){
+    var info = D.stations[stn];
+    var per = info[c.perStn];
+    var years = Object.keys(per).map(Number);
+    var maxDoy = 0;
+    years.forEach(function(y){ Object.keys(per[y]).forEach(function(d){ d = +d; if (d>maxDoy) maxDoy = d; }); });
+    var labels = [];
+    for (var i = 0; i <= maxDoy; i++) labels.push(i);
+
+    function arr(y){ var j = per[y]||{}; return labels.map(function(d){return j[d]!=null?j[d]:null}); }
+
+    // Klimatologie: mean, max voor station zelf
+    var ds = [];
+    // Max envelope
+    var maxA = labels.map(function(d){
+      var m = null;
+      years.forEach(function(y){ if (y !== D.meta.huidig_jaar && per[y][d]!=null) { if (m==null || per[y][d]>m) m = per[y][d]; } });
+      return m;
+    });
+    ds.push({label:'max', data:maxA, borderColor:'rgba(245,158,11,.6)', backgroundColor:'rgba(245,158,11,.08)', fill:true, borderWidth:.8, borderDash:[2,2], pointRadius:0, tension:.2});
+    // Mean
+    var meanA = labels.map(function(d){
+      var s = 0, n = 0;
+      years.forEach(function(y){ if (y !== D.meta.huidig_jaar && per[y][d]!=null) { s += per[y][d]; n++; } });
+      return n ? s/n : null;
+    });
+    ds.push({label:'mean', data:meanA, borderColor:'#2563eb', backgroundColor:'transparent', borderWidth:1.4, pointRadius:0, tension:.2});
+    // 1976
+    if (per[1976]) ds.push({label:'1976', data:arr(1976), borderColor:'#dc2626', backgroundColor:'transparent', borderWidth:1, pointRadius:0, tension:.2});
+    // Huidig
+    ds.push({label:'nu', data:arr(D.meta.huidig_jaar), borderColor:'#111827', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:.2});
+
+    new Chart(canvas.getContext('2d'), {
+      type:'line',
+      data:{labels:labels, datasets:ds},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{legend:{display:false}, tooltip:{enabled:false}},
+        scales:{
+          x:{display:false},
+          y:{beginAtZero:true, ticks:{maxTicksLimit:3, color:'#94a3b8', font:{size:9, family:'DM Mono'}}, grid:{color:'#f6f8fb'}}
+        },
+        elements:{line:{borderCapStyle:'round'}}
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>
