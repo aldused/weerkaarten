@@ -252,6 +252,40 @@ body {
 }
 .btn-stap:hover { background: #eef2f7; color: #0f172a; }
 
+/* Tick-rail onder slider */
+.tick-rail-wrap {
+  background: #ffffff;
+  border-bottom: 1px solid #e3e8ef;
+  padding: 0 20px 8px;
+  position: relative;
+}
+.tick-rail {
+  position: relative;
+  height: 28px;
+  pointer-events: none;
+}
+.tick-rail .tick {
+  position: absolute; top: 0;
+  transform: translateX(-50%);
+  cursor: pointer; pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px;
+}
+.tick-rail .tick .streep { width: 1px; height: 5px; background: #cbd5e1; }
+.tick-rail .tick.major .streep { height: 9px; background: #64748b; }
+.tick-rail .tick.dag .streep { height: 11px; background: #00205b; width: 2px; }
+.tick-rail .tick .label {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 10px; color: #64748b; white-space: nowrap; line-height: 1.1;
+}
+.tick-rail .tick.major .label { color: #334155; font-weight: 600; }
+.tick-rail .tick.dag .label { color: #00205b; font-weight: 700; }
+.tick-rail .tick:hover .label { color: #00205b; }
+.tick-rail .tick:hover .streep { background: #00205b; }
+@media (max-width: 700px) {
+  .tick-rail-wrap { padding: 0 10px 8px; }
+}
+
 /* Zoek-input */
 #plaats-zoek {
   font-family: inherit !important;
@@ -304,6 +338,7 @@ body {
 [data-theme="dark"] .toolbar,
 [data-theme="dark"] #dag-knoppen,
 [data-theme="dark"] .slider-wrap,
+[data-theme="dark"] .tick-rail-wrap,
 [data-theme="dark"] #zoom-bar,
 [data-theme="dark"] #uur-sidebar {
   background: #111a2e !important;
@@ -364,6 +399,14 @@ body {
 }
 [data-theme="dark"] .slider-wrap input[type=range]::-webkit-slider-thumb { background: #2ec4e8 !important; }
 [data-theme="dark"] .slider-wrap input[type=range]::-moz-range-thumb { background: #2ec4e8 !important; }
+[data-theme="dark"] .tick-rail .tick .streep { background: rgba(255,255,255,0.2) !important; }
+[data-theme="dark"] .tick-rail .tick.major .streep { background: #94a3b8 !important; }
+[data-theme="dark"] .tick-rail .tick.dag .streep { background: #2ec4e8 !important; }
+[data-theme="dark"] .tick-rail .tick .label { color: #94a3b8 !important; }
+[data-theme="dark"] .tick-rail .tick.major .label { color: #cbd5e1 !important; }
+[data-theme="dark"] .tick-rail .tick.dag .label { color: #2ec4e8 !important; }
+[data-theme="dark"] .tick-rail .tick:hover .label { color: #f1f5f9 !important; }
+[data-theme="dark"] .tick-rail .tick:hover .streep { background: #2ec4e8 !important; }
 [data-theme="dark"] #plaats-zoek {
   background: #0e1629 !important; color: #f1f5f9 !important;
   border-color: rgba(255,255,255,0.08) !important;
@@ -468,6 +511,10 @@ body {
   <span class="uur-label" id="uur-label">+1h</span>
   <span class="tijd-label" id="tijd-label">--</span>
   <button class="btn" id="btn-film" title="Maak filmpje (mp4/webm) van geselecteerde tijdrange" style="margin-left:8px;">🎬 Film</button>
+</div>
+
+<div class="tick-rail-wrap" id="tick-rail-wrap">
+  <div class="tick-rail" id="tick-rail"></div>
 </div>
 
 <!-- Film-modal: tijdrange selectie voor mp4-export -->
@@ -2414,6 +2461,66 @@ body {
     updateUurSidebarActief();
   }
 
+  // ── Tick-rail onder slider (responsief, klikbaar) ─────────────────────────
+  var tickRail = document.getElementById("tick-rail");
+  function renderTickRail() {
+    if (!tickRail) return;
+    tickRail.innerHTML = "";
+    var tijdMeta = (vergelijkModus && modelData["harmonie"]) ? modelData["harmonie"].meta : meta;
+    if (!tijdMeta || !tijdMeta.tijden || !aantalUren) return;
+    var sliderRect = slider.getBoundingClientRect();
+    var wrapRect = tickRail.parentElement.getBoundingClientRect();
+    var halfThumb = 8;
+    var offsetLeft = sliderRect.left - wrapRect.left + halfThumb;
+    var trackWidth = sliderRect.width - halfThumb * 2;
+    if (trackWidth <= 0) return;
+    tickRail.style.marginLeft = offsetLeft + "px";
+    tickRail.style.width = trackWidth + "px";
+    var maxLabels = Math.max(3, Math.floor(trackWidth / 55));
+    var kandidaten = [1, 3, 6, 12, 24];
+    var stap = 24;
+    for (var k = 0; k < kandidaten.length; k++) {
+      if ((aantalUren / kandidaten[k]) <= maxLabels) { stap = kandidaten[k]; break; }
+    }
+    var DAGEN = ["zo","ma","di","wo","do","vr","za"];
+    var pad2 = function(n) { return String(n).padStart(2, "0"); };
+    for (var i = 0; i < aantalUren; i++) {
+      if (!tijdMeta.tijden[i]) continue;
+      var dt = new Date(tijdMeta.tijden[i]);
+      var uur = dt.getHours();
+      var isMidnight = (uur === 0);
+      var toonLabel = false, klasse = "";
+      if (isMidnight) { toonLabel = true; klasse = "dag"; }
+      else if (stap <= 6) {
+        if (uur % stap === 0) { toonLabel = true; klasse = "major"; }
+        else if (stap === 3) continue;
+        else if (stap === 6 && uur % 3 === 0) { /* minor streepje zonder label */ }
+        else continue;
+      } else if (stap === 12 && uur === 12) { toonLabel = true; klasse = "major"; }
+      else continue;
+      var pos = (i / (aantalUren - 1)) * 100;
+      var tick = document.createElement("div");
+      tick.className = "tick" + (klasse ? " " + klasse : "");
+      tick.style.left = pos + "%";
+      tick.title = DAGEN[dt.getDay()] + " " + pad2(dt.getDate()) + " " + pad2(uur) + ":00 LT";
+      var streep = document.createElement("div");
+      streep.className = "streep";
+      tick.appendChild(streep);
+      if (toonLabel) {
+        var lbl = document.createElement("div");
+        lbl.className = "label";
+        if (isMidnight) lbl.innerHTML = '<span class="dagnaam">' + DAGEN[dt.getDay()] + " " + pad2(dt.getDate()) + "</span>";
+        else lbl.textContent = pad2(uur) + "h";
+        tick.appendChild(lbl);
+      }
+      (function(idx) {
+        tick.addEventListener("click", function() { stopSpelen(); updateAlle(idx); });
+      })(i);
+      tickRail.appendChild(tick);
+    }
+  }
+  window.addEventListener("resize", renderTickRail);
+
   // Controls
   slider.addEventListener("input", function() { updateAlle(parseInt(this.value) - 1); });
   function startSpelen() { if(speelInterval)return; btnPlay.innerHTML="&#9646;&#9646;"; speelInterval=setInterval(function(){ var s=parseInt(slider.value); if(s>=aantalUren)s=0; updateAlle(s); }, speelSnelheid); }
@@ -2753,6 +2860,7 @@ body {
       bouwPanels();
       bouwUurSidebar();
       updateAlle(parseInt(slider.value) - 1);
+      renderTickRail();
     }).catch(function(e) {
       statusEl.textContent = "Fout bij laden: " + e;
       console.error(e);
@@ -2991,6 +3099,7 @@ body {
       return laadParam(panelParams[0]);
     }).then(function() {
       updateAlle(0);
+      renderTickRail();
     });
   });
 
@@ -3264,6 +3373,7 @@ body {
   }).then(function() {
     setLayout(1);
     statusEl.textContent = "";
+    renderTickRail();
   }).catch(function(e) {
     statusEl.textContent = "Fout: " + e;
     console.error(e);
