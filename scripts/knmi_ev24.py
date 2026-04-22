@@ -41,7 +41,7 @@ BASE_URL   = "https://daggegevens.knmi.nl/klimatologie/daggegevens"
 START_DATE = "19570101"
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR  = os.path.join(SCRIPT_DIR, "ev24_cache")
-CACHE_DAGEN = 3
+CACHE_DAGEN = 1
 
 
 def download_station(stn: int) -> str:
