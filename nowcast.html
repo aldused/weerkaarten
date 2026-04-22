@@ -320,7 +320,7 @@ button.klein.actief {
 <div class="header">
   <div>
     <h1>Nowcast 15-min – HARMONIE &amp; ICON-D2</h1>
-    <p id="header-sub">Grafieken: 8 uur · Uurschema: 48 uur · Bron: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</p>
+    <p id="header-sub">Grafieken: 24 uur · Uurschema: 48 uur · Bron: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</p>
   </div>
   <div class="header-right">
     Ed Aldus WM<br>
@@ -470,7 +470,7 @@ button.klein.actief {
         <div class="blok-copy">&copy; Ed Aldus &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
       </div>
     </div>
-    <div class="grafiek-sub">Per 15 minuten · &minus;3 uur tot +8 uur</div>
+    <div class="grafiek-sub">Per 15 minuten · &minus;3 uur tot +24 uur</div>
     <div class="legenda" id="leg-temp"></div>
     <div class="canvas-wrap"><canvas id="canvas-temp"></canvas></div>
   </div>
@@ -484,7 +484,7 @@ button.klein.actief {
         <div class="blok-copy">&copy; Ed Aldus &middot; Data: KNMI HARMONIE + DWD ICON-D2 via Open-Meteo</div>
       </div>
     </div>
-    <div class="grafiek-sub">Per 15 minuten · &minus;3 uur tot +8 uur</div>
+    <div class="grafiek-sub">Per 15 minuten · &minus;3 uur tot +24 uur</div>
     <div class="legenda" id="leg-temp-2"></div>
     <div class="canvas-wrap"><canvas id="canvas-temp-2"></canvas></div>
   </div>
@@ -901,8 +901,8 @@ function tekenChartsVoorLocatie(data, locNaam, suffix){
   const iFull = data.icond2.minutely_15;
   if (!hFull || !hFull.time || !hFull.time.length) return;
 
-  // Grafieken: eerste 44 punten = 3u terug + 8u vooruit (15-min resolutie)
-  const CHART_PTS = 44;
+  // Grafieken: 3u terug + 24u vooruit (15-min resolutie) = 12 + 96 = 108 punten
+  const CHART_PTS = 108;
   function sliceM15(m) {
     const s = {};
     for (const k in m) s[k] = Array.isArray(m[k]) ? m[k].slice(0, CHART_PTS) : m[k];
@@ -935,15 +935,13 @@ function tekenChartsVoorLocatie(data, locNaam, suffix){
     const hTemp = ds('HARMONIE temp', h.temperature_2m, '#cc2222');
     hTemp._showLabels = true; hTemp._labelSuffix = '°'; tempLabelSet = true;
     tempDatasets.push(hTemp);
-    tempDatasets.push(ds('HARMONIE dauwp.', h.dew_point_2m, '#cc2222', [4,4]));
-    tempLeg.push(['#cc2222','HARMONIE temp','lijn'], ['#cc2222','HARMONIE dauwpunt','dash']);
+    tempLeg.push(['#cc2222','HARMONIE temp','lijn']);
   }
   if (modelActief.icond2) {
     const iTemp = ds('ICON-D2 temp', i.temperature_2m, '#2266cc');
     if (!tempLabelSet) { iTemp._showLabels = true; iTemp._labelSuffix = '°'; }
     tempDatasets.push(iTemp);
-    tempDatasets.push(ds('ICON-D2 dauwp.', i.dew_point_2m, '#2266cc', [4,4]));
-    tempLeg.push(['#2266cc','ICON-D2 temp','lijn'], ['#2266cc','ICON-D2 dauwpunt','dash']);
+    tempLeg.push(['#2266cc','ICON-D2 temp','lijn']);
   }
   document.getElementById('leg-temp' + suffix).innerHTML = legHtml(tempLeg);
   // Voeg OBS-historie + huidige obs toe als groene lijn (alleen primair)
@@ -980,10 +978,8 @@ function tekenChartsVoorLocatie(data, locNaam, suffix){
     const lijnAan = nObs >= 2;
     tempDatasets.push({label: 'OBS temp', data: obsT, borderColor: '#1a8c4a', backgroundColor: '#1a8c4a',
       pointRadius: 4, pointHoverRadius: 6, pointStyle: 'circle', showLine: lijnAan, spanGaps: true, borderWidth: 2.5, tension: 0.2});
-    tempDatasets.push({label: 'OBS dauwpunt', data: obsTd, borderColor: '#1a8c4a', backgroundColor: '#1a8c4a',
-      pointRadius: 3, pointHoverRadius: 5, pointStyle: 'rect', showLine: lijnAan, spanGaps: true, borderDash: [3,3], borderWidth: 1.5, tension: 0.2});
     const obsLabel = `OBS (${obsHuidig.naam || 'KNMI'})${lijnAan ? '' : ' · alleen NU'}`;
-    tempLeg.push(['#1a8c4a', obsLabel + ' temp', 'lijn'], ['#1a8c4a', obsLabel + ' dauwp.', 'dash']);
+    tempLeg.push(['#1a8c4a', obsLabel + ' temp', 'lijn']);
     document.getElementById('leg-temp' + suffix).innerHTML = legHtml(tempLeg);
   }
   drawChart('canvas-temp' + suffix, 'line', labels, tempDatasets, {y: {title: {display: true, text: '°C'}}}, nuIdx, pluginOpts);
@@ -1606,7 +1602,8 @@ function vulConvStrip(data) {
   set('cv-pwat',  pwat, v => v,
     pwat == null ? '' : pwat > 30 ? 'hi' : pwat > 20 ? 'mid' : '');
 
-  document.getElementById('conv-strip').style.display = '';
+  // conv-strip blijft verborgen (gebruiker wil deze rij niet zien)
+  // document.getElementById('conv-strip').style.display = '';
 
   // Alarm-badges genereren op basis van zelfde data
   vulAlarms(data, {t2m, td2m, pSfc, wind10, dir10, cape, sh, t500, idx, ms, mi: ms ? (function(){let mi=0; for(let i=0;i<ms.time.length;i++) if(new Date(ms.time[i]).getTime()<=nu) mi=i; return mi;})() : 0});
