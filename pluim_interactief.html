@@ -2764,12 +2764,32 @@ async function laadScenario(lat,lon,naam,dagen,van,tot){
   const g2 = means.slice(third,2*third).map(x=>tA[x.i]);
   const g3 = means.slice(2*third).map(x=>tA[x.i]);
 
+  // Bepaal per ts welke kalenderdag dat is (lokaal), zodat we per-dag max kunnen pakken
+  const tsDay = ts.map(t=>t.slice(0,10));
+  const uniekeDagen = [...new Set(tsDay)];
+  function meanDailyMax(group){
+    // Per member: pak max per dag, dan gemiddelde over alle dagen → "gem. dagmax"
+    // Per cluster: gemiddelde van die member-waarden
+    const perMember = group.map(m=>{
+      const maxPerDag = uniekeDagen.map(d=>{
+        let mx = -Infinity;
+        for(let i=0;i<m.length;i++){
+          if(tsDay[i]===d && m[i]!=null && m[i]>mx) mx = m[i];
+        }
+        return mx===-Infinity ? null : mx;
+      }).filter(v=>v!=null);
+      return maxPerDag.length ? maxPerDag.reduce((a,b)=>a+b,0)/maxPerDag.length : null;
+    }).filter(v=>v!=null);
+    return perMember.length ? perMember.reduce((a,b)=>a+b,0)/perMember.length : 0;
+  }
   function stats(group){
     return {
       p25: ts.map((_,j)=>pctC(group,j,25)),
       p75: ts.map((_,j)=>pctC(group,j,75)),
       med: ts.map((_,j)=>medC(group,j)),
-      mean: group.reduce((s,m)=>s+m.reduce((a,b)=>a+(b??0),0)/m.length,0)/group.length,
+      // Cluster-gemiddelde over hele horizon, correct met null-handling
+      mean: (()=>{const perM=group.map(m=>{const v=m.filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}).filter(x=>x!=null);return perM.length?perM.reduce((a,b)=>a+b,0)/perM.length:0;})(),
+      meanDagmax: meanDailyMax(group),
     };
   }
   const CL = {koel:stats(g1), midden:stats(g2), warm:stats(g3)};
@@ -2804,7 +2824,7 @@ async function laadScenario(lat,lon,naam,dagen,van,tot){
     const pct = Math.round(c.count/n*100);
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:13px;border:1px solid ${c.hex};color:${c.hex};background:rgba(${c.rgb},0.08);font-size:.78rem;font-weight:600">
       <i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c.hex}"></i>
-      ${c.name}: <b>${c.count}/${n}</b> (${pct}%) · gem. ${CL[k].mean.toFixed(1)}°C</span>`;
+      ${c.name}: <b>${c.count}/${n}</b> (${pct}%) · gem. dagmax ${CL[k].meanDagmax.toFixed(1)}°C</span>`;
   }).join('');
   document.getElementById('leg-scenario').innerHTML = legHtml([
     [colors.koel.hex,'Koel scenario (mediaan + P25–P75)','lijn'],
