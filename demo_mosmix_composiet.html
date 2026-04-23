@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Demo — MOSMIX composietkaart</title>
+<title>MOSMIX Overzichtskaart</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -21,6 +21,8 @@
   .btn-dag.actief { background: #00205b; color: #fff; border-color: #00205b; }
   .toggle { margin-left: auto; display: flex; gap: 6px; align-items: center; font-size: 11px; color: #64748b; }
   .toggle input { cursor: pointer; }
+  .btn-png { padding: 6px 12px; border-radius: 8px; border: none; background: #00205b; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-png:hover { background: #003689; }
 
   .kaart-wrap { display: flex; justify-content: center; padding: 16px; }
   .kaart-container { position: relative; width: 100%; max-width: 820px; }
@@ -31,7 +33,7 @@
   .kaart-container svg.overlay .halo { pointer-events: all; cursor: pointer; transition: fill 0.12s; }
   .kaart-container svg.overlay .halo:hover { fill: rgba(255,255,255,0.75); }
   .station-tooltip {
-    position: absolute; bottom: 14px; right: 14px; width: 240px;
+    position: absolute; top: 14px; left: 14px; width: 240px;
     background: #fff; border: 1px solid #e3e8ef; border-radius: 8px;
     box-shadow: 0 4px 14px rgba(15,23,42,0.12);
     padding: 12px 14px; font-size: 12px; color: #334155;
@@ -64,7 +66,7 @@
 <body>
 
 <div class="header">
-  <div class="header-titel">MOSMIX composietkaart <span style="font-weight:500;color:#64748b;font-size:12px;">— demo</span></div>
+  <div class="header-titel">MOSMIX overzichtskaart</div>
   <div class="header-sub" id="hdr-update">Laden…</div>
 </div>
 
@@ -72,6 +74,7 @@
   <span class="toolbar-label">Dag</span>
   <div id="dag-btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
   <label class="toggle"><input type="checkbox" id="chk-all" checked> Alle 31 stations</label>
+  <button class="btn-png" onclick="slaOp()" title="Kaart opslaan als PNG">⬇ PNG</button>
 </div>
 
 <div class="kaart-wrap">
@@ -226,14 +229,23 @@ function tekenOverlay(){
   const stations = mosmixData.stations;
   const lijst = Object.keys(stations).filter(n => toonAlle || KERN.has(n));
 
-  // Dag/nacht-achtergrond als subtiele hint — overslaan voor cleanliness
+  // Extremen bepalen: warmst/koudst op TX, natst op RR (>0 vereist)
+  const extremen = { warmst:null, koudst:null, natst:null };
+  for(const n of lijst){
+    const tx = dag.TX?.[n], rr = dag.RR?.[n];
+    if(tx != null){
+      if(extremen.warmst == null || tx > dag.TX[extremen.warmst]) extremen.warmst = n;
+      if(extremen.koudst == null || tx < dag.TX[extremen.koudst]) extremen.koudst = n;
+    }
+    if(rr != null && rr > 0 && (extremen.natst == null || rr > dag.RR[extremen.natst])) extremen.natst = n;
+  }
 
   for(const naam of lijst){
     const [lon,lat] = stations[naam];
     const [dlo,dla] = OFFSET[naam] || [0,0];
     const ax = lonToX(lon),       ay = latToY(lat);       // echte positie (ankerlijn)
     const cx = lonToX(lon + dlo), cy = latToY(lat + dla); // badge-positie
-    tekenBadge(svg, naam, cx, cy, dag, ax, ay);
+    tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen);
   }
 }
 
@@ -260,7 +272,7 @@ function neerslagKleur(p){
   return "#0d47a1";
 }
 
-function tekenBadge(svg, naam, cx, cy, dag, ax, ay){
+function tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen){
   const tx = dag.TX?.[naam];
   const tn = dag.TN?.[naam];
   const rr   = dag.RR?.[naam];
@@ -287,6 +299,24 @@ function tekenBadge(svg, naam, cx, cy, dag, ax, ay){
   halo.setAttribute("stroke-width","0.6");
   halo.addEventListener("click", e => { e.stopPropagation(); toonStation(naam); });
   g.appendChild(halo);
+
+  // Extremen-marker (🔥 warmst, ❄ koudst, 💧 natst) aan rechterbovenkant van halo
+  const extr = extremen && (
+    (extremen.warmst === naam && {ico:"🔥", kleur:"#d84315"}) ||
+    (extremen.koudst === naam && {ico:"❄",  kleur:"#1565c0"}) ||
+    (extremen.natst  === naam && {ico:"💧", kleur:"#0d47a1"})
+  );
+  if(extr){
+    halo.setAttribute("stroke", extr.kleur);
+    halo.setAttribute("stroke-width","1.8");
+    halo.setAttribute("fill","rgba(255,255,255,0.75)");
+    const tag = document.createElementNS("http://www.w3.org/2000/svg","text");
+    tag.setAttribute("x", 22); tag.setAttribute("y", -22);
+    tag.setAttribute("text-anchor","middle");
+    tag.setAttribute("font-size","14");
+    tag.textContent = extr.ico;
+    g.appendChild(tag);
+  }
 
   // Ankerlijn + echte station-positie (alleen als badge verschoven is)
   if(ax != null && ay != null && (Math.abs(ax-cx) > 0.5 || Math.abs(ay-cy) > 0.5)){
@@ -416,6 +446,57 @@ function update(){
 }
 
 document.getElementById("chk-all").onchange = e => { toonAlle = e.target.checked; update(); };
+
+// PNG-export: basemap-SVG + overlay-SVG + kop-band gecomponeerd op canvas
+function slaOp(){
+  const baseSvg = document.getElementById("basemap-svg");
+  const ovSvg   = document.getElementById("overlay-svg");
+  const W = 1600, H = 2200, headerH = 120;   // 2× SVG-viewBox = scherpe PNG
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = headerH + H;
+  const ctx = canvas.getContext("2d");
+
+  // Header-band in donkerblauw met titels
+  ctx.fillStyle = "#003366";
+  ctx.fillRect(0, 0, W, headerH);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 30px DM Sans, sans-serif";
+  ctx.fillText("Composiet: max/min-temp, kans op neerslag & wind", 36, 52);
+  ctx.fillStyle = "#a8c8e8";
+  ctx.font = "500 18px DM Sans, sans-serif";
+  ctx.fillText(document.getElementById("kaart-sub").textContent, 36, 88);
+
+  const svgToImg = svg => new Promise(res => {
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
+    clone.setAttribute("width", W); clone.setAttribute("height", H);
+    // Inline stijlen voor portability
+    const st = document.createElementNS("http://www.w3.org/2000/svg","style");
+    st.textContent = `
+      .basemap-land { fill: #f5efd9; }
+      .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+      .halo { pointer-events: none; }
+      text { font-family: "DM Sans", sans-serif; }
+    `;
+    clone.insertBefore(st, clone.firstChild);
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], {type:"image/svg+xml"});
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); res(im); };
+    im.src = url;
+  });
+
+  Promise.all([svgToImg(baseSvg), svgToImg(ovSvg)]).then(([baseImg, ovImg]) => {
+    ctx.fillStyle = "#b8d4e8";
+    ctx.fillRect(0, headerH, W, H);
+    ctx.drawImage(baseImg, 0, headerH, W, H);
+    ctx.drawImage(ovImg,   0, headerH, W, H);
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `composiet_${huidigDag}.png`;
+    a.click();
+  });
+}
 
 // Tooltip-paneel
 function fmt(v, eenheid="", dec=1){
