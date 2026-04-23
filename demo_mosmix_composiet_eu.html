@@ -189,9 +189,14 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <script>
+// Per land: alleen eigen-land stations meetellen voor de warmst/koudst/natst-stats
+// (composiet-JSONs bevatten bewust grensstations t.b.v. de kaart — die tellen hier niet mee)
+const EIGEN_NL = ["Eelde","Terschelling","Vlieland","Leeuwarden","Den Helder","Amsterdam","De Bilt","Deelen","Hoogeveen","Enschede","Vlissingen","Hoek van Holland","Rotterdam Airport","Gilze Rijen","Eindhoven","Maastricht","Valkenburg","Volkel","IJsselmeer"];
+const EIGEN_BE = ["Brussel","Gent","Antwerpen","Kleine Brogel","Oostende","Charleroi","Bierset","Spa","St-Hubert","Florennes","Beauvechain","Brugge"];
+
 const LANDEN = [
-  { tag:"nl",  vlag:"🇳🇱", naam:"Nederland",         json:"mosmix_nl.json",  page:"demo_mosmix_composiet.html"        },
-  { tag:"be",  vlag:"🇧🇪", naam:"België",            json:"mosmix_be.json",  page:"demo_mosmix_composiet_be.html"     },
+  { tag:"nl",  vlag:"🇳🇱", naam:"Nederland",         json:"mosmix_nl.json",  page:"demo_mosmix_composiet.html",         eigen: EIGEN_NL },
+  { tag:"be",  vlag:"🇧🇪", naam:"België",            json:"mosmix_be.json",  page:"demo_mosmix_composiet_be.html",      eigen: EIGEN_BE },
   { tag:"fr",  vlag:"🇫🇷", naam:"Frankrijk",         json:"mosmix_fr.json",  page:"demo_mosmix_composiet_fr.html"     },
   { tag:"ibe", vlag:"🇪🇸🇵🇹", naam:"Iberia",         json:"mosmix_ibe.json", page:"demo_mosmix_composiet_iberia.html" },
   { tag:"de",  vlag:"🇩🇪", naam:"Duitsland",         json:"mosmix_de.json",  page:"demo_mosmix_composiet_de.html"     },
@@ -206,12 +211,14 @@ function fmt(v, eenheid="", dec=1){
   return n + eenheid;
 }
 
-function vandaagStats(data){
+function vandaagStats(data, eigen){
   const dag = data.dagen[0];
   const d = data.data[dag];
   if(!d) return null;
+  const alle = Object.keys(data.stations);
+  const namen = eigen ? alle.filter(n => eigen.includes(n)) : alle;
   let warmst=null, koudst=null, natst=null;
-  for(const n of Object.keys(data.stations)){
+  for(const n of namen){
     const tx = d.TX?.[n], rr = d.RR?.[n];
     if(tx != null){
       if(warmst == null || tx > d.TX[warmst]) warmst = n;
@@ -224,7 +231,7 @@ function vandaagStats(data){
     warmst: warmst && { naam: warmst, tx: d.TX[warmst] },
     koudst: koudst && { naam: koudst, tx: d.TX[koudst] },
     natst:  natst  && { naam: natst,  rr: d.RR[natst]  },
-    aantal: Object.keys(data.stations).length,
+    aantal: namen.length,
     bijgewerkt: data.bijgewerkt,
   };
 }
@@ -285,7 +292,7 @@ Promise.all(LANDEN.map(l =>
   const grid = document.getElementById("grid");
   LANDEN.forEach((land, i) => {
     const data = resultaten[i];
-    const stats = data ? vandaagStats(data) : null;
+    const stats = data ? vandaagStats(data, land.eigen) : null;
     grid.appendChild(bouwKaart(land, stats));
   });
   const ok = resultaten.filter(r => r).length;
