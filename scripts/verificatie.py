@@ -49,8 +49,9 @@ EDR_COLLECTIES = [
 ARCHIEF_FILE = "verificatie_archief.json"
 OUTPUT_FILE = "verificatie.json"
 MOSMIX_FILE = "mosmix_nl.json"
+MOSMIX_UURLIJKS_FILE = "mosmix_uurlijks_nl.json"
 
-PARAMS = ["TX", "TN", "RR", "FF"]
+PARAMS = ["TX", "TN", "RR", "FF", "FHX"]
 
 # ── Stap 1: Archiveer MOSMIX-voorspelling voor morgen ───────────────────────
 
@@ -66,6 +67,28 @@ def archiveer_mosmix():
         print(f"  Geen MOSMIX data voor morgen ({morgen})"); return
 
     dag_data = mosmix["data"][morgen]
+
+    # Max uurlijks FF per station uit mosmix_uurlijks_nl.json
+    fhx_per_station = {}
+    if os.path.exists(MOSMIX_UURLIJKS_FILE):
+        try:
+            uur = json.load(open(MOSMIX_UURLIJKS_FILE))
+            for naam, st in uur.get("data", {}).items():
+                tijden = st.get("tijden") or []
+                ff = st.get("FF") or []
+                best = None
+                for t, v in zip(tijden, ff):
+                    if v is None:
+                        continue
+                    if t[:10] != morgen:
+                        continue
+                    if best is None or v > best:
+                        best = v
+                if best is not None:
+                    fhx_per_station[naam] = round(best, 1)
+        except Exception as ex:
+            print(f"  Kon FHX niet berekenen uit uurlijks: {ex}")
+
     archief_entry = {
         "run": mosmix.get("run"),
         "gearchiveerd": datetime.now().isoformat(timespec="minutes"),
@@ -75,7 +98,10 @@ def archiveer_mosmix():
     for naam in MOSMIX_NL_STATIONS:
         station = {}
         for p in PARAMS:
-            val = dag_data.get(p, {}).get(naam)
+            if p == "FHX":
+                val = fhx_per_station.get(naam)
+            else:
+                val = dag_data.get(p, {}).get(naam)
             if val is not None:
                 station[p] = val
         if station:
@@ -152,9 +178,36 @@ def haal_knmi_obs_daily(datum_str):
     return observaties
 
 
-def haal_knmi_obs_10min(datum_str):
-    """Fallback: bereken dagwaarden uit 10-minuten observaties."""
+def _max_uurgemiddelde(tijden, waarden):
+    """Bereken hoogste uurgemiddelde: uur eindigend op HH:00 = mean van
+    10-min waarden met timestamps (HH-1):10, :20, :30, :40, :50, HH:00."""
     from datetime import datetime as dt
+    per_uur = {}
+    for t, v in zip(tijden, waarden):
+        if v is None:
+            continue
+        try:
+            ts = dt.fromisoformat(t.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        minuut = ts.minute
+        if minuut == 0:
+            uur_eind = ts
+        else:
+            # ts met minuten 10..50 hoort bij uur eindigend op volgende :00
+            uur_eind = ts.replace(minute=0) + timedelta(hours=1)
+        per_uur.setdefault(uur_eind, []).append(v)
+    beste = None
+    for vals in per_uur.values():
+        if len(vals) >= 5:  # min. 5 van 6 metingen aanwezig
+            mean = sum(vals) / len(vals)
+            if beste is None or mean > beste:
+                beste = mean
+    return beste
+
+
+def haal_knmi_obs_10min(datum_str):
+    """Fallback/aanvulling: bereken dagwaarden + FHX uit 10-minuten observaties."""
     s = f"{datum_str}T00:00:00Z"
     e = f"{datum_str}T23:59:59Z"
     base = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
@@ -172,9 +225,14 @@ def haal_knmi_obs_10min(datum_str):
             js = r.json()
             if not js.get("coverages"):
                 continue
-            ranges = js["coverages"][0].get("ranges", {})
+            cov = js["coverages"][0]
+            ranges = cov.get("ranges", {})
+            tijden = (cov.get("domain", {}).get("axes", {}).get("t", {}).get("values")
+                      or cov.get("domain", {}).get("axes", {}).get("time", {}).get("values")
+                      or [])
             ta_vals = [v for v in (ranges.get("ta", {}).get("values", []) or []) if v is not None]
-            ff_vals = [v for v in (ranges.get("ff", {}).get("values", []) or []) if v is not None]
+            ff_raw = ranges.get("ff", {}).get("values", []) or []
+            ff_vals = [v for v in ff_raw if v is not None]
             rg_vals = [v for v in (ranges.get("rg", {}).get("values", []) or []) if v is not None]
 
             obs = {}
@@ -185,6 +243,10 @@ def haal_knmi_obs_10min(datum_str):
                 obs["FF"] = round(sum(ff_vals) / len(ff_vals) * 3.6, 1)
             if rg_vals:
                 obs["RR"] = round(sum(max(0, v) for v in rg_vals) / 6, 1)
+            if tijden and ff_raw:
+                fhx = _max_uurgemiddelde(tijden, ff_raw)
+                if fhx is not None:
+                    obs["FHX"] = round(fhx * 3.6, 1)
             if obs:
                 observaties[naam] = obs
         except Exception as ex:
@@ -195,21 +257,23 @@ def haal_knmi_obs_10min(datum_str):
 
 
 def haal_knmi_obs(datum_str):
-    """Haal observaties op: eerst daily API, fallback naar 10-minuten API."""
+    """Haal observaties op: daily API voor TX/TN/RR/FF,
+    altijd 10-min voor FHX (niet in daily beschikbaar)."""
     print("  Probeer daily API...")
     observaties = haal_knmi_obs_daily(datum_str)
-    if len(observaties) >= 10:
-        print(f"  Daily API: {len(observaties)} stations")
-        return observaties
+    print(f"  Daily API: {len(observaties)} stations")
 
-    print(f"  Daily API: slechts {len(observaties)} stations, fallback naar 10-minuten API...")
+    print("  10-minuten API ophalen (voor FHX + aanvulling)...")
     obs_10min = haal_knmi_obs_10min(datum_str)
     print(f"  10-minuten API: {len(obs_10min)} stations")
 
-    # Merge: daily heeft voorrang, 10min vult aan
-    for naam, obs in obs_10min.items():
+    # Merge: daily heeft voorrang voor TX/TN/RR/FF; FHX altijd uit 10min
+    for naam, obs10 in obs_10min.items():
         if naam not in observaties:
-            observaties[naam] = obs
+            observaties[naam] = obs10
+        else:
+            if "FHX" in obs10:
+                observaties[naam]["FHX"] = obs10["FHX"]
     return observaties
 
 # ── Stap 3: Vergelijk en genereer output ───────────────────────────────────
@@ -308,7 +372,7 @@ def vergelijk():
             nieuwe_dagen += 1
             s = resultaat["samenvatting"]
             for p, v in s.items():
-                eenheid = "mm" if p == "RR" else ("km/h" if p == "FF" else "\u00b0C")
+                eenheid = "mm" if p == "RR" else ("km/h" if p in ("FF", "FHX") else "\u00b0C")
                 print(f"    {p}: MAE={v['mae']}{eenheid}  bias={v['bias']:+}{eenheid}  (n={v['n']})")
 
     if not historie:
