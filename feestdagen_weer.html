@@ -163,8 +163,17 @@ optgroup{color:var(--gold);font-size:11px;font-weight:600}
 .tile:hover{transform:translateY(-2px);border-color:#94a3b8}
 .tile.actief{border-color:var(--tile-accent,var(--gold));background:linear-gradient(135deg,var(--tile-bg1,rgba(212,168,67,0.1)),var(--tile-bg2,rgba(212,168,67,0.03)))}
 .tile-emoji{font-size:24px;display:block;margin-bottom:6px;line-height:1}
-.tile-naam{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:0.03em}
+.tile-naam{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:0.03em;display:block}
 .tile.actief .tile-naam{color:var(--tile-accent,var(--gold))}
+.tile-temps{
+  display:flex;justify-content:center;gap:6px;margin-top:6px;
+  font-size:10px;font-variant-numeric:tabular-nums;font-weight:600;
+  line-height:1;
+}
+.tile-temp-tx{color:#e05555}
+.tile-temp-tn{color:#5599ee}
+.tile-temp-sep{color:var(--text3);font-weight:400}
+.tile-temps-empty{color:var(--text3);font-weight:400}
 
 /* Kleurthema's per feestdag */
 .tile[data-fd="Nieuwjaarsdag"]{--tile-accent:#7ec8e8;--tile-bg1:rgba(126,200,232,0.12);--tile-bg2:rgba(126,200,232,0.03)}
@@ -735,7 +744,7 @@ function bouwFeestdagTiles() {
     const div = document.createElement('div');
     div.className = 'tile';
     div.dataset.fd = naam;
-    div.innerHTML = `<span class="tile-emoji">${meta.emoji}</span><span class="tile-naam">${naam}</span>`;
+    div.innerHTML = `<span class="tile-emoji">${meta.emoji}</span><span class="tile-naam">${naam}</span><span class="tile-temps" data-tile-temps><span class="tile-temps-empty">–</span></span>`;
     div.addEventListener('click', () => {
       huidigFeestdag = naam;
       activeerTile(naam);
@@ -798,10 +807,49 @@ function ververs() {
   // Toon/verberg het jaarpanel en de normale secties
   document.getElementById('jaar-panel').style.display = isJaar ? '' : 'none';
   if(isJaar) verversJaarPanel();
+  verversTileTemps();
   verversStats();
   verversRanking();
   verversAlleJaren();
   tekenChart();
+}
+
+// ── Tile-temperaturen (gem. max / gem. min per feestdag) ──
+function verversTileTemps() {
+  const [van, tot] = getJaarRange();
+  for(const naam of Object.keys(FEESTDAG_META)) {
+    const tile = document.querySelector(`.tile[data-fd="${naam}"] [data-tile-temps]`);
+    if(!tile) continue;
+
+    let rijen;
+    if(huidigStation === '__alle__') {
+      // Gemiddelde over alle stations: pak per jaar de waarde van De Bilt of eerste beschikbaar
+      const jaarMap = {};
+      for(const [stnNr, stnData] of Object.entries(DATA.data || {})) {
+        for(const r of (stnData[naam] || [])) {
+          if(r.jaar < van || r.jaar > tot) continue;
+          if(!jaarMap[r.jaar]) jaarMap[r.jaar] = r;
+        }
+      }
+      rijen = Object.values(jaarMap);
+    } else {
+      rijen = (DATA.data?.[huidigStation]?.[naam] || []).filter(r => r.jaar >= van && r.jaar <= tot);
+    }
+
+    const txW = rijen.map(r => r.TX).filter(v => v != null);
+    const tnW = rijen.map(r => r.TN).filter(v => v != null);
+
+    if(!txW.length && !tnW.length) {
+      tile.innerHTML = `<span class="tile-temps-empty">–</span>`;
+      continue;
+    }
+    const gemTX = txW.length ? (txW.reduce((a,b)=>a+b,0)/txW.length*0.1) : null;
+    const gemTN = tnW.length ? (tnW.reduce((a,b)=>a+b,0)/tnW.length*0.1) : null;
+    tile.innerHTML =
+      `<span class="tile-temp-tx">${gemTX==null?'–':gemTX.toFixed(1)+'°'}</span>` +
+      `<span class="tile-temp-sep">/</span>` +
+      `<span class="tile-temp-tn">${gemTN==null?'–':gemTN.toFixed(1)+'°'}</span>`;
+  }
 }
 
 // ── Jaar-panel: alle feestdagen voor één jaar ─────────
