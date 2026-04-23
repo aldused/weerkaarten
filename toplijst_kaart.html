@@ -237,9 +237,10 @@ const BLUR_SIGMA = 2;
 const HEATMAP_ALPHA = 0.55;
 const HEATMAP_PARAMS_TOP = new Set(["max","min","t10n","ff","fx"]);
 const CONTOUR_PARAMS_TOP = {
-  max:  { step: 1, major: 5, unit: "°" },
-  min:  { step: 1, major: 5, unit: "°" },
-  t10n: { step: 1, major: 5, unit: "°" },
+  max:  { step: 1,  major: 5,  unit: "°",    factor: 1 },
+  min:  { step: 1,  major: 5,  unit: "°",    factor: 1 },
+  t10n: { step: 1,  major: 5,  unit: "°",    factor: 1 },
+  fx:   { step: 10, major: 20, unit: " km/h", factor: 3.6 },
 };
 let landMask = null;
 let laatsteVeld = null;
@@ -508,10 +509,11 @@ function tekenContouren(svg, param){
   if(!conf) return;
   const {w, h, veld} = laatsteVeld;
   const mask = landMask.data;
+  const factor = conf.factor || 1;
   let vmin = Infinity, vmax = -Infinity;
   for(let i=0;i<w*h;i++){
     if(!mask[i]) continue;
-    const v = veld[i];
+    const v = veld[i]*factor;
     if(v < vmin) vmin = v;
     if(v > vmax) vmax = v;
   }
@@ -534,6 +536,7 @@ function tekenContouren(svg, param){
 
   for(let li = Math.round(lMin/step); li <= Math.round(lMax/step); li++){
     const level = li*step;
+    const fieldLevel = level / factor;
     const isMajor = (li % Math.round(conf.major/step)) === 0;
     const segs = [];
     for(let y=0; y<h-1; y++){
@@ -543,16 +546,16 @@ function tekenContouren(svg, param){
         if(!mask[i00] || !mask[i10] || !mask[i01] || !mask[i11]) continue;
         const v00 = veld[i00], v10 = veld[i10], v01 = veld[i01], v11 = veld[i11];
         let code = 0;
-        if(v00 >= level) code |= 1;
-        if(v10 >= level) code |= 2;
-        if(v11 >= level) code |= 4;
-        if(v01 >= level) code |= 8;
+        if(v00 >= fieldLevel) code |= 1;
+        if(v10 >= fieldLevel) code |= 2;
+        if(v11 >= fieldLevel) code |= 4;
+        if(v01 >= fieldLevel) code |= 8;
         if(code === 0 || code === 15) continue;
         const px = cellX(x), py = cellY(y);
         const lerp = (a,b) => {
           const d = b - a;
           if(Math.abs(d) < 1e-9) return 0.5;
-          return (level - a)/d;
+          return (fieldLevel - a)/d;
         };
         const eTop   = () => [px + lerp(v00,v10)*cw, py];
         const eRight = () => [px + cw, py + lerp(v10,v11)*ch];
