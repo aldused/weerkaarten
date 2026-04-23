@@ -145,6 +145,85 @@ COORDS_IBE = {
     "Beja":[-7.867,38.017],"Faro":[-7.967,37.017],
 }
 
+# Duitsland (alle 16 Bundesländer)
+STATIONS_DE = [
+    # Noord / kust
+    ("10020","Sylt"),("10015","Helgoland"),("10046","Kiel"),
+    ("10147","Hamburg"),("10129","Bremerhaven"),("10224","Bremen"),
+    ("10215","Oldenburg"),
+    # Mecklenburg-Vorpommern
+    ("10162","Schwerin"),("10170","Rostock"),("10091","Arkona"),
+    # Berlin / Brandenburg
+    ("10382","Berlin"),("10379","Potsdam"),("10496","Cottbus"),
+    # Niedersachsen / Sachsen-Anhalt binnenland
+    ("10338","Hannover"),("10442","Göttingen"),("10361","Magdeburg"),
+    ("10453","Brocken"),
+    # Nordrhein-Westfalen
+    ("10400","Düsseldorf"),("10410","Essen"),("10315","Münster"),
+    ("10513","Köln"),
+    # Hessen / Rheinland-Pfalz / Saarland
+    ("10438","Kassel"),("10637","Frankfurt"),("10609","Trier"),
+    ("10616","Hahn"),("10708","Saarbrücken"),
+    # Thüringen / Sachsen
+    ("10554","Erfurt"),("10548","Meiningen"),("10469","Leipzig"),
+    ("10488","Dresden"),("10499","Görlitz"),("10578","Fichtelberg"),
+    # Baden-Württemberg
+    ("10738","Stuttgart"),("10803","Freiburg"),("10929","Konstanz"),
+    ("10908","Feldberg-S"),
+    # Bayern
+    ("10763","Nürnberg"),("10776","Regensburg"),("10870","München"),
+    ("10948","Oberstdorf"),("10961","Zugspitze"),
+]
+
+COORDS_DE = {
+    "Sylt":[8.417,55.017],"Helgoland":[7.883,54.167],"Kiel":[10.150,54.383],
+    "Hamburg":[10.000,53.633],"Bremerhaven":[8.583,53.533],"Bremen":[8.800,53.050],
+    "Oldenburg":[8.167,53.183],
+    "Schwerin":[11.383,53.633],"Rostock":[12.083,54.183],"Arkona":[13.433,54.683],
+    "Berlin":[13.317,52.567],"Potsdam":[13.067,52.383],"Cottbus":[14.317,51.783],
+    "Hannover":[9.683,52.467],"Göttingen":[9.950,51.500],"Magdeburg":[11.583,52.117],
+    "Brocken":[10.617,51.800],
+    "Düsseldorf":[6.767,51.300],"Essen":[6.967,51.400],"Münster":[7.700,52.133],
+    "Köln":[7.167,50.867],
+    "Kassel":[9.450,51.300],"Frankfurt":[8.600,50.050],"Trier":[6.667,49.750],
+    "Hahn":[7.267,49.950],"Saarbrücken":[7.117,49.217],
+    "Erfurt":[10.967,50.983],"Meiningen":[10.383,50.567],"Leipzig":[12.233,51.417],
+    "Dresden":[13.750,51.133],"Görlitz":[14.950,51.167],"Fichtelberg":[12.950,50.433],
+    "Stuttgart":[9.217,48.683],"Freiburg":[7.833,48.017],"Konstanz":[9.183,47.683],
+    "Feldberg-S":[8.000,47.883],
+    "Nürnberg":[11.050,49.500],"Regensburg":[12.100,49.033],"München":[11.800,48.367],
+    "Oberstdorf":[10.283,47.400],"Zugspitze":[10.983,47.417],
+}
+
+# Britse Eilanden (UK + Ierland)
+STATIONS_GB = [
+    ("03005","Lerwick"),("03017","Kirkwall"),("03026","Stornoway"),
+    ("03059","Inverness"),("03066","Kinloss"),("03091","Aberdeen"),
+    ("03100","Tiree"),("03140","Glasgow"),("03160","Edinburgh"),
+    ("03204","Isle of Man"),("03245","Newcastle"),("03302","Valley"),
+    ("03334","Manchester"),("03347","Leeds"),("03492","Norwich"),
+    ("03502","Aberporth"),("03534","Birmingham"),("03628","Bristol Filton"),
+    ("03715","Cardiff"),("03772","London Heathrow"),("03776","London Gatwick"),
+    ("03808","Camborne"),("03827","Plymouth"),("03862","Bournemouth"),
+    ("03865","Southampton"),("03917","Belfast"),("03930","Liverpool"),
+    ("03953","Valentia"),("03955","Cork"),("03962","Shannon"),
+    ("03969","Dublin"),("03976","Belmullet"),("03980","Malin Head"),
+]
+
+COORDS_GB = {
+    "Lerwick":[-1.183,60.133],"Kirkwall":[-2.900,58.950],"Stornoway":[-6.317,58.217],
+    "Inverness":[-4.050,57.533],"Kinloss":[-3.567,57.650],"Aberdeen":[-2.217,57.200],
+    "Tiree":[-6.883,56.500],"Glasgow":[-4.433,55.867],"Edinburgh":[-3.350,55.950],
+    "Isle of Man":[-4.633,54.083],"Newcastle":[-1.683,55.033],"Valley":[-4.533,53.250],
+    "Manchester":[-2.267,53.350],"Leeds":[-1.550,53.800],"Norwich":[1.300,52.633],
+    "Aberporth":[-4.567,52.133],"Birmingham":[-1.750,52.450],"Bristol Filton":[-2.583,51.517],
+    "Cardiff":[-3.350,51.400],"London Heathrow":[-0.450,51.483],"London Gatwick":[-0.183,51.150],
+    "Camborne":[-5.333,50.217],"Plymouth":[-4.117,50.350],"Bournemouth":[-1.833,50.783],
+    "Southampton":[-1.400,50.900],"Belfast":[-6.217,54.650],"Liverpool":[-2.867,53.333],
+    "Valentia":[-10.233,51.933],"Cork":[-8.483,51.850],"Shannon":[-8.917,52.700],
+    "Dublin":[-6.250,53.433],"Belmullet":[-10.017,54.233],"Malin Head":[-7.333,55.367],
+}
+
 # ── MOSMIX helpers ───────────────────────────────────────────────────────────
 
 def strip_namespaces(s):
@@ -753,6 +832,8 @@ def main():
     bouw_json(STATIONS_BE, COORDS_BE, "mosmix_be.json", "mosmix_uurlijks_be.json")
     bouw_json(STATIONS_FR, COORDS_FR, "mosmix_fr.json", "mosmix_uurlijks_fr.json")
     bouw_json(STATIONS_IBE, COORDS_IBE, "mosmix_ibe.json", "mosmix_uurlijks_ibe.json")
+    bouw_json(STATIONS_DE, COORDS_DE, "mosmix_de.json", "mosmix_uurlijks_de.json")
+    bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
