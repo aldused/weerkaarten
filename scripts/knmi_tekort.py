@@ -127,12 +127,40 @@ def laad_rh_aws(aws: int) -> pd.Series:
 
 # ── Tekort-berekening ────────────────────────────────────────────────────────
 
-def tekort_per_jaar(rh: pd.Series, ev: pd.Series, start_maand: int, start_dag: int) -> pd.DataFrame:
+def bereken_ev24_klimatologie(ev: pd.Series) -> pd.Series:
     """
-    Geeft DataFrame met index=datum, kolommen=['tekort','jaar','doy_start'].
+    Daggemiddelde EV24 per (maand, dag) op basis van alle beschikbare jaren (≥1957).
+    Returnt Series indexed door (maand, dag) tuple → gemiddeld EV (mm/dag).
+    """
+    df = pd.DataFrame({"ev": ev.dropna()})
+    df["md"] = df.index.map(lambda d: (d.month, d.day))
+    return df.groupby("md")["ev"].mean()
+
+
+def tekort_per_jaar(rh: pd.Series, ev: pd.Series, start_maand: int, start_dag: int,
+                    ev_klim: pd.Series | None = None) -> pd.DataFrame:
+    """
     Tekort = cumsum(EV-RH) per jaar vanaf (start_maand, start_dag), gefloord op 0.
+    Voor dagen waar EV ontbreekt maar RH beschikbaar is, wordt ev_klim (daggemiddelde)
+    gebruikt als proxy. Kolom 'proxy' markeert die dagen (True = EV-proxy gebruikt).
     """
-    df = pd.DataFrame({"rh": rh, "ev": ev}).dropna()
+    if ev_klim is None:
+        ev_klim = bereken_ev24_klimatologie(ev)
+
+    rh_df = pd.DataFrame({"rh": rh})
+    ev_df = pd.DataFrame({"ev": ev})
+    df = rh_df.join(ev_df, how="left")  # Behoud RH, merge EV waar beschikbaar
+
+    def klim_lookup(idx):
+        return ev_klim.get((idx.month, idx.day), None)
+
+    # Vul ontbrekende EV met klimatologie
+    ev_missing = df["ev"].isna()
+    df["proxy"] = ev_missing
+    if ev_missing.any():
+        proxy_vals = df.index[ev_missing].map(klim_lookup)
+        df.loc[ev_missing, "ev"] = proxy_vals
+    df = df.dropna(subset=["rh", "ev"])
     df["diff"] = df["ev"] - df["rh"]
     df["jaar"] = df.index.year
 
@@ -144,10 +172,15 @@ def tekort_per_jaar(rh: pd.Series, ev: pd.Series, start_maand: int, start_dag: i
             continue
         cum = 0.0
         waarden = []
+        proxies = []
         for _, row in sel.iterrows():
             cum = max(0.0, cum + row["diff"])
             waarden.append(cum)
-        piece = pd.DataFrame({"tekort": waarden, "jaar": jaar}, index=sel.index)
+            proxies.append(bool(row["proxy"]))
+        piece = pd.DataFrame(
+            {"tekort": waarden, "jaar": jaar, "proxy": proxies},
+            index=sel.index
+        )
         pieces.append(piece)
 
     if not pieces:
@@ -395,17 +428,24 @@ def main():
     landelijk_dfs_apr = []
     landelijk_dfs_jan = []
 
+    # EV-klimatologie per station (daggemiddelde over 1957-heden)
+    print("\nEV24-klimatologie berekenen voor pre-1957 proxy …")
+    ev_klim_per_stn = {stn: bereken_ev24_klimatologie(ev_per_stn[stn]) for stn in actieve_stations}
+
     for stn in actieve_stations:
         rh = rh_per_stn[stn]
         ev = ev_per_stn[stn]
+        ev_klim = ev_klim_per_stn[stn]
 
-        tek_apr = tekort_per_jaar(rh, ev, 4, 1)
-        tek_jan = tekort_per_jaar(rh, ev, 1, 1)
+        tek_apr = tekort_per_jaar(rh, ev, 4, 1, ev_klim)
+        tek_jan = tekort_per_jaar(rh, ev, 1, 1, ev_klim)
 
         per_apr = per_jaar_op_doy(tek_apr, 4, 1)
         per_jan = per_jaar_op_doy(tek_jan, 1, 1)
 
         coords = P13_COORDS.get(stn, (None, None))
+        # Jaren die (deels) klimatologie-proxy gebruiken voor EV
+        proxy_jaren_jan = sorted({int(jr) for jr, grp in tek_jan.groupby("jaar") if grp["proxy"].any()})
         stations_data[stn] = {
             "naam":    P13_STATIONS[stn],
             "aws":     P13_TO_AWS[stn],
@@ -413,9 +453,11 @@ def main():
             "lat":     coords[1],
             "per_apr": per_apr,
             "per_jan": per_jan,
+            "proxy_jaren": proxy_jaren_jan,
+            "ev_start":   int(ev.index[0].year) if not ev.empty else None,
         }
-        landelijk_dfs_apr.append(tek_apr.rename(columns={"tekort": stn}).drop(columns=["jaar"]))
-        landelijk_dfs_jan.append(tek_jan.rename(columns={"tekort": stn}).drop(columns=["jaar"]))
+        landelijk_dfs_apr.append(tek_apr.rename(columns={"tekort": stn})[[stn]])
+        landelijk_dfs_jan.append(tek_jan.rename(columns={"tekort": stn})[[stn]])
 
     # Landelijk gemiddelde: per dag het gemiddelde over alle 13 stations (waar beschikbaar)
     print("\nLandelijk gemiddelde berekenen …")
@@ -604,6 +646,8 @@ def main():
             "forecast_tm": (forecast_start_date + pd.Timedelta(days=15)).strftime("%Y-%m-%d") if forecast_start_date is not None else None,
             "gegenereerd": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "periode_jaren": [int(min(land_per_jan.keys())), int(max(land_per_jan.keys()))],
+            "ev_echt_vanaf_jaar": min([info["ev_start"] for info in stations_data.values() if info["ev_start"]], default=1957),
+            "proxy_jaren_landelijk": sorted({jr for stn, info in stations_data.items() for jr in info.get("proxy_jaren", [])}),
         },
         "landelijk": {
             "per_jaar_apr": land_per_apr,

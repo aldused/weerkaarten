@@ -74,6 +74,8 @@ header h1 span{color:#00205b}
 .yp .yr{background:#fff;border:1px solid #e3e8ef;border-radius:4px;padding:2px 8px;font-size:11.5px;font-family:"DM Mono",monospace;cursor:pointer;user-select:none;transition:all .1s}
 .yp .yr:hover{border-color:#0ea5e9}
 .yp .yr.on{background:#00205b;color:#fff;border-color:#00205b}
+.yp .yr.proxy{border-style:dashed;color:#64748b}
+.yp .yr.proxy.on{background:#475569;border-color:#475569;color:#fff}
 
 .toplist{background:#fff;border:1px solid #e3e8ef;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.04)}
 .toplist .hd{background:#fef3c7;border-left:3px solid #d97706;padding:10px 14px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.06em}
@@ -100,6 +102,8 @@ table.rank tr:nth-child(even){background:#fafbfd}
 table.rank tr:hover{background:#eef2f7}
 table.rank tr.current{background:#fef3c7 !important;font-weight:700}
 table.rank tr.current td{color:#92400e}
+table.rank tr.proxy td:first-child{color:#64748b;font-style:italic}
+table.rank tr.proxy td:first-child::after{content:" *";color:#94a3b8;font-style:normal}
 table.rank .bw{display:flex;align-items:center;gap:6px;justify-content:flex-end}
 table.rank .bk{height:8px;border-radius:3px;background:#d97706;min-width:2px;opacity:.6}
 .filter-row{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid #e3e8ef;flex-wrap:wrap;align-items:center}
@@ -255,6 +259,11 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
     <strong>Neerslagtekort = cumulatieve (verdamping − neerslag)</strong> per dag, gefloord op 0.
     Verdamping (Makkink EV24) komt van de dichtstbijzijnde AWS, gekoppeld aan elk van de 13 P13-neerslagstations.
     Landelijk gemiddelde is het rekenkundig gemiddelde over alle beschikbare stations per dag.
+    <br><span style="color:#64748b;font-size:11.5px">
+      <strong>*</strong> Voor jaren vóór 1957 is geen Makkink-verdamping beschikbaar
+      (methode pas sinds 1957 gemeten). Voor die jaren wordt een klimatologische daggemiddelde-EV24 gebruikt
+      als proxy, gecombineerd met de werkelijke neerslag uit het P13-netwerk. Deze jaren zijn gemarkeerd met <em>*</em>.
+    </span>
   </div>
 
   <div class="panel">
@@ -382,9 +391,12 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
 
   function initYearPicker(){
     var years = Object.keys(D.landelijk.per_jaar_jan).map(Number).sort(function(a,b){return b-a});
+    var proxySet = new Set(D.meta.proxy_jaren_landelijk || []);
     var list = document.getElementById('yearPickerList');
     list.innerHTML = years.map(function(y){
-      return '<span class="yr'+(overlayJaren.has(y)?' on':'')+'" data-y="'+y+'">'+y+'</span>';
+      var cls = 'yr' + (overlayJaren.has(y)?' on':'') + (proxySet.has(y)?' proxy':'');
+      var ttl = proxySet.has(y) ? ' title="Pre-1957: verdamping klimatologisch geschat"' : '';
+      return '<span class="'+cls+'" data-y="'+y+'"'+ttl+'>'+y+'</span>';
     }).join('');
     list.querySelectorAll('.yr').forEach(function(el){
       el.addEventListener('click', function(){
@@ -764,9 +776,14 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
     else list.sort(function(a,b){return a.rang - b.rang});
     var maxV = Math.max.apply(null, c.ranking.map(function(e){return e.tekort})) || 1;
     var body = document.querySelector('#rankTable tbody');
+    var proxySet = new Set(D.meta.proxy_jaren_landelijk || []);
     body.innerHTML = list.map(function(e){
       var pct = Math.round(100*e.tekort/maxV);
-      return '<tr class="'+(e.is_huidig?'current':'')+'">'
+      var cls = [];
+      if (e.is_huidig) cls.push('current');
+      if (proxySet.has(e.jaar)) cls.push('proxy');
+      var ttl = proxySet.has(e.jaar) ? ' title="Pre-1957: verdamping klimatologisch geschat"' : '';
+      return '<tr class="'+cls.join(' ')+'"'+ttl+'>'
         + '<td>'+e.jaar+(e.is_huidig?' (nu)':'')+'</td>'
         + '<td>#'+e.rang+'</td>'
         + '<td>'+nl(e.tekort,0)+'</td>'
