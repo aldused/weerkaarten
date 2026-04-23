@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOSMIX België Overzichtskaart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; }
+  .header { background: #fff; padding: 12px 20px; border-bottom: 1px solid #e3e8ef; }
+  .header-titel { font-size: 15px; font-weight: 700; }
+  .header-sub { color: #64748b; font-size: 11px; margin-top: 2px; font-family: "DM Mono", monospace; }
+  .toolbar { background: #fff; padding: 10px 20px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #e3e8ef; }
+  .toolbar-label { font-size: 10.5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+  .btn-dag { padding: 6px 12px; border-radius: 8px; border: 1px solid #e3e8ef; background: #fff; color: #334155; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-dag:hover { background: #eef2f7; }
+  .btn-dag.actief { background: #c00; color: #fff; border-color: #c00; }
+  .toggle { margin-left: auto; display: flex; gap: 6px; align-items: center; font-size: 11px; color: #64748b; }
+  .toggle input { cursor: pointer; }
+  .btn-png { padding: 6px 12px; border-radius: 8px; border: none; background: #c00; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-png:hover { background: #900; }
+
+  .kaart-wrap { display: flex; justify-content: center; padding: 16px; }
+  .kaart-container { position: relative; width: 100%; max-width: 1000px; }
+  .kaart-header-band { background: #4a0c0c; color: #fff; padding: 14px 18px; border-radius: 4px 4px 0 0; }
+  .kaart-header-band .links { font-size: 15px; font-weight: 700; }
+  .kaart-header-band .sub { font-size: 11px; color: #f1b7b7; margin-top: 2px; }
+  .kaart-kaart { position: relative; }
+  .kaart-container svg.overlay .halo { pointer-events: all; cursor: pointer; transition: fill 0.12s; }
+  .kaart-container svg.overlay .halo:hover { fill: rgba(255,255,255,0.75); }
+  .station-tooltip {
+    position: absolute; top: 14px; left: 14px; width: 240px;
+    background: #fff; border: 1px solid #e3e8ef; border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(15,23,42,0.12);
+    padding: 12px 14px; font-size: 12px; color: #334155;
+    display: none; pointer-events: all; line-height: 1.45;
+  }
+  .station-tooltip.zichtbaar { display: block; }
+  .station-tooltip h5 { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .station-tooltip h5 .sluit { cursor: pointer; color: #94a3b8; font-weight: 400; font-size: 16px; padding: 0 4px; line-height: 1; }
+  .station-tooltip .rij { display: flex; justify-content: space-between; padding: 2px 0; }
+  .station-tooltip .rij b { color: #0f172a; font-weight: 600; }
+  .station-tooltip .rij span { font-family: "DM Mono", monospace; font-size: 11px; }
+  .kaart-container svg.basemap { display: block; width: 100%; height: auto; background: #b8d4e8; border-radius: 0 0 4px 4px; }
+  .kaart-container svg.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .basemap-land { fill: #f5efd9; }
+  .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+  .be-buitengrens { fill: none; stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
+
+  .legenda { max-width: 1000px; margin: 0 auto 24px; background: #fff; border: 1px solid #e3e8ef; border-radius: 8px; padding: 14px 20px; font-size: 12px; color: #334155; }
+  .legenda h4 { font-size: 11px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+  .legenda-inhoud { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: center; }
+  .legenda-svg { width: 300px; height: auto; display: block; background: #f5efd9; border-radius: 6px; padding: 4px; }
+  .legenda-notes { font-size: 12px; line-height: 1.55; color: #475569; }
+  .legenda-notes b { color: #0f172a; font-weight: 600; }
+  .legenda-notes code { font-family: "DM Mono", monospace; font-size: 11px; background: #eef2f7; padding: 1px 5px; border-radius: 3px; color: #0f172a; }
+  .legenda-notes > div + div { margin-top: 5px; }
+  @media (max-width: 640px){ .legenda-inhoud { grid-template-columns: 1fr; } .legenda-svg { width: 100%; max-width: 300px; } }
+  .status { text-align: center; color: #64748b; padding: 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-titel">MOSMIX België overzichtskaart</div>
+  <div class="header-sub" id="hdr-update">Laden…</div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Dag</span>
+  <div id="dag-btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <label class="toggle"><input type="checkbox" id="chk-all" checked> Alle 19 stations</label>
+  <button class="btn-png" onclick="slaOp()" title="Kaart opslaan als PNG">⬇ PNG</button>
+</div>
+
+<div class="kaart-wrap">
+  <div class="kaart-container">
+    <div class="kaart-header-band">
+      <div class="links">Composiet: max/min-temp, kans op neerslag &amp; wind</div>
+      <div class="sub" id="kaart-sub">Min-temp is de nacht vóór de weergegeven dag</div>
+    </div>
+    <div class="kaart-kaart">
+      <svg class="basemap" id="basemap-svg" viewBox="0 0 1000 770" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg class="overlay" id="overlay-svg" viewBox="0 0 1000 770" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="station-tooltip" id="station-tooltip"></div>
+    </div>
+  </div>
+</div>
+
+<div class="legenda">
+  <h4>Zo lees je één station</h4>
+  <div class="legenda-inhoud">
+    <svg class="legenda-svg" viewBox="-110 -45 340 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="0" cy="0" r="3.2" fill="#0f172a"/>
+      <text x="0" y="-14" text-anchor="middle" font-family="DM Sans, sans-serif" font-weight="700" font-size="15" fill="#c0392b" stroke="#fff" stroke-width="3" paint-order="stroke">14,8°</text>
+      <text x="0" y="20" text-anchor="middle" font-family="DM Sans, sans-serif" font-weight="700" font-size="11" fill="#2471a3" stroke="#fff" stroke-width="3" paint-order="stroke">🌙 5,0°</text>
+      <text x="-13" y="4" text-anchor="end" font-family="DM Sans, sans-serif" font-weight="700" font-size="10" fill="#1a7a4a" stroke="#fff" stroke-width="3" paint-order="stroke">70%</text>
+      <g transform="translate(26 0) rotate(225)">
+        <path d="M0 -9 L0 9 M0 -9 L-3.5 -4 M0 -9 L3.5 -4" stroke="#5d4037" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <text x="40" y="4" font-family="DM Sans, sans-serif" font-weight="700" font-size="10" fill="#5d4037" stroke="#fff" stroke-width="3" paint-order="stroke">4</text>
+      <g font-family="DM Sans, sans-serif" font-size="10" fill="#334155">
+        <line x1="10" y1="-14" x2="70" y2="-30" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="72" y="-27">Max-temp. (°C, dag)</text>
+        <line x1="10" y1="20" x2="70" y2="36" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="72" y="40">Min-temp. nacht ervóór (°C)</text>
+        <line x1="-40" y1="2" x2="-58" y2="-28" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="-105" y="-30" text-anchor="start">Kans op neerslag (%)</text>
+        <line x1="44" y1="0" x2="70" y2="-4" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="72" y="-1">Wind: pijl mét wind + Bft</text>
+      </g>
+    </svg>
+    <div class="legenda-notes">
+      <div><b>Bron:</b> DWD MOSMIX (combinatie ECMWF/ICON), per station uit <code>mosmix_be.json</code>.</div>
+      <div><b>Min-temp</b> = de minimum in de nacht vóór de gekozen dag (bijv. woensdag toont de nacht di→wo).</div>
+      <div><b>Neerslag-kans</b> komt uit DWD-veld <code>R101</code> (kans ≥ 0,1 mm in een 12u-venster, max per dag). Fallback = 0% bij RR&nbsp;=&nbsp;0, anders uit <code>wwCh</code>.</div>
+    </div>
+  </div>
+</div>
+
+<div class="status" id="status">Laden…</div>
+
+<script>
+const LON_MIN=1.5, LON_MAX=6.6, LAT_MIN=49.2, LAT_MAX=51.7;
+const SVG_W=1000, SVG_H=770;
+const lonToX = lon => (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W;
+const latToY = lat => (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H;
+const NL_DAGEN = ["zo","ma","di","wo","do","vr","za"];
+
+// Kernstations — mapping op namen zoals in mosmix_be.json
+const KERN = new Set(["Brussel","Antwerpen","Gent","Oostende","Bierset","St-Hubert"]);
+
+// Kleine weergave-verschuivingen om overlap te voorkomen
+const OFFSET = {
+  "Charleroi": [0, 0.08],   // iets naar boven t.o.v. Brussel
+  "Beauvechain": [0.15, 0],
+};
+
+let mosmixData=null, provincies=null, huidigDag=null, toonAlle=true;
+
+const TEMP_STOPS = [
+  [-5,"#084594"],[-3,"#1565c0"],[0,"#64b5f6"],[2,"#a5d6a7"],[4,"#2e8b57"],
+  [6,"#388e3c"],[8,"#43a047"],[10,"#7cb342"],[12,"#aed581"],[14,"#dce775"],
+  [16,"#fff176"],[18,"#fdd835"],[20,"#f9a825"],[22,"#ffa726"],[25,"#ef6c00"],
+  [28,"#e65100"],[32,"#d84315"],[36,"#4a148c"]
+];
+function tempKleur(t){
+  if(t == null) return "#334155";
+  let prev = TEMP_STOPS[0];
+  for(const stop of TEMP_STOPS){
+    if(t <= stop[0]){
+      if(stop === prev) return stop[1];
+      const [p0,c0]=prev,[p1,c1]=stop;
+      const f=(t-p0)/(p1-p0);
+      const hex=h=>parseInt(h.slice(1),16);
+      const a=hex(c0), b=hex(c1);
+      const mix=((a>>16)&255)+(((b>>16)&255)-((a>>16)&255))*f;
+      const mig=((a>>8)&255)+(((b>>8)&255)-((a>>8)&255))*f;
+      const mib=(a&255)+((b&255)-(a&255))*f;
+      return "#"+[mix,mig,mib].map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");
+    }
+    prev = stop;
+  }
+  return TEMP_STOPS[TEMP_STOPS.length-1][1];
+}
+
+// ─ Basemap ─
+function bouwBasemap(){
+  const svg = document.getElementById("basemap-svg");
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  if(!provincies) return;
+  const ringD = ring => ring.map(([lo,la],i)=>(i?"L":"M")+lonToX(lo).toFixed(1)+" "+latToY(la).toFixed(1)).join("")+"Z";
+
+  let d = "";
+  for(const f of provincies.features){
+    const polys = f.geometry.type==="Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for(const poly of polys) for(const ring of poly) d += ringD(ring);
+  }
+  const land = document.createElementNS("http://www.w3.org/2000/svg","path");
+  land.setAttribute("d",d); land.setAttribute("class","basemap-land"); land.setAttribute("fill-rule","evenodd");
+  svg.appendChild(land);
+  const prov = document.createElementNS("http://www.w3.org/2000/svg","path");
+  prov.setAttribute("d",d); prov.setAttribute("class","basemap-prov");
+  svg.appendChild(prov);
+
+  // Buitengrens: alleen buitenste ring per polygoon
+  let db = "";
+  for(const f of provincies.features){
+    const polys = f.geometry.type==="Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for(const poly of polys) db += ringD(poly[0]);
+  }
+  const bg = document.createElementNS("http://www.w3.org/2000/svg","path");
+  bg.setAttribute("d",db); bg.setAttribute("class","be-buitengrens");
+  svg.appendChild(bg);
+}
+
+// ─ Overlay ─
+function tekenOverlay(){
+  const svg = document.getElementById("overlay-svg");
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+  if(!mosmixData || !huidigDag) return;
+  const dag = mosmixData.data[huidigDag];
+  if(!dag) return;
+
+  const stations = mosmixData.stations;
+  const lijst = Object.keys(stations).filter(n => toonAlle || KERN.has(n));
+
+  const extremen = { warmst:null, koudst:null, natst:null };
+  for(const n of lijst){
+    const tx = dag.TX?.[n], rr = dag.RR?.[n];
+    if(tx != null){
+      if(extremen.warmst == null || tx > dag.TX[extremen.warmst]) extremen.warmst = n;
+      if(extremen.koudst == null || tx < dag.TX[extremen.koudst]) extremen.koudst = n;
+    }
+    if(rr != null && rr > 0 && (extremen.natst == null || rr > dag.RR[extremen.natst])) extremen.natst = n;
+  }
+
+  for(const naam of lijst){
+    const [lon,lat] = stations[naam];
+    const [dlo,dla] = OFFSET[naam] || [0,0];
+    const ax = lonToX(lon),       ay = latToY(lat);
+    const cx = lonToX(lon + dlo), cy = latToY(lat + dla);
+    tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen);
+  }
+}
+
+function kmhToBft(kmh){
+  if(kmh == null) return null;
+  const tabel = [1,5,11,19,28,38,49,61,74,88,102,117];
+  let b=0; while(b<tabel.length && kmh>tabel[b]) b++; return b;
+}
+function windKleur(bft){
+  if(bft<=2) return "#607d8b";
+  if(bft<=4) return "#5d4037";
+  if(bft<=6) return "#c0392b";
+  return "#6c3483";
+}
+function neerslagKleur(p){
+  if(p<=0)  return "#94a3b8";
+  if(p<30)  return "#64748b";
+  if(p<60)  return "#42a5f5";
+  if(p<85)  return "#1a7a4a";
+  return "#0d47a1";
+}
+
+function tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen){
+  const tx = dag.TX?.[naam];
+  const tn = dag.TN?.[naam];
+  const rr   = dag.RR?.[naam];
+  const r101 = dag.R101?.[naam];
+  let pop = null;
+  if(r101 != null){
+    pop = r101;
+  } else if(rr != null){
+    pop = rr < 0.1 ? 0 : Math.min(100, Math.max(50, dag.wwCh?.[naam] ?? 60));
+  }
+  const ff  = dag.FF?.[naam];
+  const dd  = dag.DD?.[naam];
+  const isKern = KERN.has(naam);
+
+  const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+  g.setAttribute("transform",`translate(${cx.toFixed(1)} ${cy.toFixed(1)})`);
+
+  const halo = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  halo.setAttribute("r", 32);
+  halo.setAttribute("class","halo");
+  halo.setAttribute("fill","rgba(255,255,255,0.45)");
+  halo.setAttribute("stroke","rgba(15,23,42,0.18)");
+  halo.setAttribute("stroke-width","0.6");
+  halo.addEventListener("click", e => { e.stopPropagation(); toonStation(naam); });
+  g.appendChild(halo);
+
+  const extr = extremen && (
+    (extremen.warmst === naam && {ico:"🔥", kleur:"#d84315"}) ||
+    (extremen.koudst === naam && {ico:"❄",  kleur:"#1565c0"}) ||
+    (extremen.natst  === naam && {ico:"💧", kleur:"#0d47a1"})
+  );
+  if(extr){
+    halo.setAttribute("stroke", extr.kleur);
+    halo.setAttribute("stroke-width","1.8");
+    halo.setAttribute("fill","rgba(255,255,255,0.75)");
+    const tag = document.createElementNS("http://www.w3.org/2000/svg","text");
+    tag.setAttribute("x", 22); tag.setAttribute("y", -22);
+    tag.setAttribute("text-anchor","middle");
+    tag.setAttribute("font-size","14");
+    tag.textContent = extr.ico;
+    g.appendChild(tag);
+  }
+
+  if(ax != null && ay != null && (Math.abs(ax-cx) > 0.5 || Math.abs(ay-cy) > 0.5)){
+    const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1", 0); line.setAttribute("y1", 0);
+    line.setAttribute("x2", (ax-cx).toFixed(1)); line.setAttribute("y2", (ay-cy).toFixed(1));
+    line.setAttribute("stroke","#0f172a"); line.setAttribute("stroke-width","1");
+    line.setAttribute("stroke-dasharray","2 2"); line.setAttribute("opacity","0.45");
+    g.appendChild(line);
+    const anchor = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    anchor.setAttribute("cx",(ax-cx).toFixed(1)); anchor.setAttribute("cy",(ay-cy).toFixed(1));
+    anchor.setAttribute("r", 2); anchor.setAttribute("fill","#0f172a");
+    g.appendChild(anchor);
+  }
+
+  const dot = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  dot.setAttribute("r", isKern ? 3.2 : 2);
+  dot.setAttribute("fill","#0f172a");
+  g.appendChild(dot);
+
+  const schaal = isKern ? 1.0 : 0.85;
+  const fontBig   = 15 * schaal;
+  const fontSmall = 11 * schaal;
+  const fontTiny  = 10 * schaal;
+
+  if(tx != null){
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", 0); t.setAttribute("y", -14);
+    t.setAttribute("text-anchor","middle");
+    t.setAttribute("font-family","DM Sans, sans-serif");
+    t.setAttribute("font-weight","700");
+    t.setAttribute("font-size", fontBig);
+    t.setAttribute("fill","#c0392b");
+    t.setAttribute("stroke","#fff"); t.setAttribute("stroke-width","3"); t.setAttribute("paint-order","stroke");
+    t.textContent = tx.toFixed(1).replace(".",",") + "°";
+    g.appendChild(t);
+  }
+
+  if(tn != null){
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", 0); t.setAttribute("y", 20);
+    t.setAttribute("text-anchor","middle");
+    t.setAttribute("font-family","DM Sans, sans-serif");
+    t.setAttribute("font-weight","700");
+    t.setAttribute("font-size", fontSmall);
+    t.setAttribute("fill","#2471a3");
+    t.setAttribute("stroke","#fff"); t.setAttribute("stroke-width","3"); t.setAttribute("paint-order","stroke");
+    t.textContent = "🌙 " + tn.toFixed(1).replace(".",",") + "°";
+    g.appendChild(t);
+  }
+
+  if(pop != null){
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", -13); t.setAttribute("y", 4);
+    t.setAttribute("text-anchor","end");
+    t.setAttribute("font-family","DM Sans, sans-serif");
+    t.setAttribute("font-weight","700");
+    t.setAttribute("font-size", fontTiny);
+    t.setAttribute("fill", neerslagKleur(pop));
+    t.setAttribute("stroke","#fff"); t.setAttribute("stroke-width","3"); t.setAttribute("paint-order","stroke");
+    t.textContent = Math.round(pop) + "%";
+    g.appendChild(t);
+  }
+
+  if(ff != null && dd != null){
+    const bft = kmhToBft(ff);
+    const kleur = windKleur(bft);
+    const hoek = (dd + 180) % 360;
+    const pijl = document.createElementNS("http://www.w3.org/2000/svg","g");
+    pijl.setAttribute("transform", `translate(26 0) rotate(${hoek})`);
+    const shaft = document.createElementNS("http://www.w3.org/2000/svg","path");
+    shaft.setAttribute("d","M0 -9 L0 9 M0 -9 L-3.5 -4 M0 -9 L3.5 -4");
+    shaft.setAttribute("stroke", kleur);
+    shaft.setAttribute("stroke-width","2");
+    shaft.setAttribute("stroke-linecap","round");
+    shaft.setAttribute("stroke-linejoin","round");
+    shaft.setAttribute("fill","none");
+    pijl.appendChild(shaft);
+    g.appendChild(pijl);
+
+    const b = document.createElementNS("http://www.w3.org/2000/svg","text");
+    b.setAttribute("x", 40); b.setAttribute("y", 4);
+    b.setAttribute("font-family","DM Sans, sans-serif");
+    b.setAttribute("font-weight","700");
+    b.setAttribute("font-size", fontTiny);
+    b.setAttribute("fill", kleur);
+    b.setAttribute("stroke","#fff"); b.setAttribute("stroke-width","3"); b.setAttribute("paint-order","stroke");
+    b.textContent = bft;
+    g.appendChild(b);
+  }
+
+  if(isKern){
+    const n = document.createElementNS("http://www.w3.org/2000/svg","text");
+    n.setAttribute("x", 0); n.setAttribute("y", 34);
+    n.setAttribute("text-anchor","middle");
+    n.setAttribute("font-family","DM Sans, sans-serif");
+    n.setAttribute("font-weight","600");
+    n.setAttribute("font-size", 9);
+    n.setAttribute("fill","#0f172a");
+    n.setAttribute("stroke","#fff"); n.setAttribute("stroke-width","3"); n.setAttribute("paint-order","stroke");
+    n.textContent = naam;
+    g.appendChild(n);
+  }
+
+  svg.appendChild(g);
+}
+
+function dagLabel(d){
+  return NL_DAGEN[d.getDay()] + " " + d.getDate() + "/" + (d.getMonth()+1);
+}
+
+function update(){
+  tekenOverlay();
+  const d = new Date(huidigDag + "T12:00:00");
+  const full = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][d.getDay()];
+  document.getElementById("kaart-sub").textContent =
+    `${full} ${d.getDate()}/${d.getMonth()+1} — min-temp = nacht van ${dagLabel(new Date(d-86400000))} op ${full}`;
+}
+
+document.getElementById("chk-all").onchange = e => { toonAlle = e.target.checked; update(); };
+
+function slaOp(){
+  const baseSvg = document.getElementById("basemap-svg");
+  const ovSvg   = document.getElementById("overlay-svg");
+  const W = 2000, H = 1540, headerH = 120;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = headerH + H;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#4a0c0c";
+  ctx.fillRect(0, 0, W, headerH);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 30px DM Sans, sans-serif";
+  ctx.fillText("Composiet België: max/min-temp, kans op neerslag & wind", 36, 52);
+  ctx.fillStyle = "#f1b7b7";
+  ctx.font = "500 18px DM Sans, sans-serif";
+  ctx.fillText(document.getElementById("kaart-sub").textContent, 36, 88);
+
+  const svgToImg = svg => new Promise(res => {
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
+    clone.setAttribute("width", W); clone.setAttribute("height", H);
+    const st = document.createElementNS("http://www.w3.org/2000/svg","style");
+    st.textContent = `
+      .basemap-land { fill: #f5efd9; }
+      .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+      .be-buitengrens { fill: none; stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
+      .halo { pointer-events: none; }
+      text { font-family: "DM Sans", sans-serif; }
+    `;
+    clone.insertBefore(st, clone.firstChild);
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], {type:"image/svg+xml"});
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); res(im); };
+    im.src = url;
+  });
+
+  Promise.all([svgToImg(baseSvg), svgToImg(ovSvg)]).then(([baseImg, ovImg]) => {
+    ctx.fillStyle = "#b8d4e8";
+    ctx.fillRect(0, headerH, W, H);
+    ctx.drawImage(baseImg, 0, headerH, W, H);
+    ctx.drawImage(ovImg,   0, headerH, W, H);
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `composiet_be_${huidigDag}.png`;
+    a.click();
+  });
+}
+
+function fmt(v, eenheid="", dec=1){
+  if(v == null) return "–";
+  const n = typeof v === "number" ? v.toFixed(dec).replace(".",",") : v;
+  return n + eenheid;
+}
+function toonStation(naam){
+  const tt = document.getElementById("station-tooltip");
+  const d  = mosmixData.data[huidigDag];
+  if(!d){ tt.classList.remove("zichtbaar"); return; }
+  const bft = kmhToBft(d.FF?.[naam]);
+  tt.innerHTML = `
+    <h5>${naam}<span class="sluit" onclick="document.getElementById('station-tooltip').classList.remove('zichtbaar')">×</span></h5>
+    <div class="rij"><b>Max / min</b><span>${fmt(d.TX?.[naam],"°")} / ${fmt(d.TN?.[naam],"°")}</span></div>
+    <div class="rij"><b>Gevoelstemp. (nacht)</b><span>${fmt(d.gevoels?.[naam],"°")}</span></div>
+    <div class="rij"><b>Dauwpunt min.</b><span>${fmt(d.TTD?.[naam],"°")}</span></div>
+    <div class="rij"><b>Neerslag dag / nacht</b><span>${fmt(d.RR_D?.[naam]," mm")} / ${fmt(d.RR_N?.[naam]," mm")}</span></div>
+    <div class="rij"><b>Bewolking</b><span>${fmt(d.Neff?.[naam],"%",0)}</span></div>
+    <div class="rij"><b>Wind / stoot</b><span>${fmt(d.FF?.[naam]," km/u",0)} · ${bft != null ? bft+" Bft":"–"} / ${fmt(d.FX?.[naam]," km/u",0)}</span></div>
+    <div class="rij"><b>Onweer / mist / hagel</b><span>${fmt(d.wwT?.[naam],"%",0)} / ${fmt(d.wwM?.[naam],"%",0)} / ${fmt(d.wwZ?.[naam],"%",0)}</span></div>
+  `;
+  tt.classList.add("zichtbaar");
+}
+
+Promise.all([
+  fetch("mosmix_be.json?t="+Date.now()).then(r=>r.json()),
+  fetch("be_provincies.geojson").then(r=>r.json())
+]).then(([data, prov])=>{
+  provincies = prov; mosmixData = data;
+  bouwBasemap();
+
+  document.getElementById("hdr-update").textContent = "Bijgewerkt: " + data.bijgewerkt.replace("T"," ");
+
+  const wrap = document.getElementById("dag-btns");
+  const vandaag = new Date().toISOString().slice(0,10);
+  data.dagen.forEach((key,i) => {
+    const d = new Date(key+"T12:00:00");
+    let lbl;
+    if(key === vandaag) lbl = "Vandaag";
+    else if(i===1 && data.dagen[0]===vandaag) lbl = "Morgen";
+    else lbl = dagLabel(d);
+    const btn = document.createElement("button");
+    btn.className = "btn-dag" + (i===0?" actief":"");
+    btn.textContent = lbl;
+    btn.onclick = () => {
+      huidigDag = key;
+      document.querySelectorAll(".btn-dag").forEach(b=>b.classList.remove("actief"));
+      btn.classList.add("actief");
+      update();
+    };
+    wrap.appendChild(btn);
+  });
+  huidigDag = data.dagen[0];
+  document.getElementById("status").textContent = "";
+  update();
+}).catch(e => {
+  document.getElementById("status").textContent = "Kon data niet laden: " + e.message;
+});
+</script>
+</body>
+</html>
