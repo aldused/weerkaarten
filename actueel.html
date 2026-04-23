@@ -262,8 +262,14 @@ const SHEPARD_KNN = 8;
 const BLUR_SIGMA = 2;
 const HEATMAP_ALPHA = 0.55;
 const HEATMAP_PARAMS = new Set(["ta","td","tg","ff","fx","rh"]);
+const CONTOUR_PARAMS = {
+  ta: { step: 1, major: 5, unit: "°" },
+  td: { step: 1, major: 5, unit: "°" },
+  tg: { step: 1, major: 5, unit: "°" },
+};
 let landMask = null;
 let provincies = null;
+let laatsteVeld = null;
 
 function bouwBasemap(svg){
   while(svg.firstChild) svg.removeChild(svg.firstChild);
@@ -435,6 +441,7 @@ function _stationVal(st, param){
 function tekenHeatmap(){
   const hc = document.getElementById("heatmap");
   const p = PARAMS[huidigParam];
+  laatsteVeld = null;
   if(!p || !HEATMAP_PARAMS.has(huidigParam)){ hc.width=1; hc.height=1; return; }
   if(!landMask) maakLandMask();
   if(!landMask){ hc.width=1; hc.height=1; return; }
@@ -450,6 +457,9 @@ function tekenHeatmap(){
   let veld = _shepardVeld(punten);
   if(!veld) return;
   veld = _blurVeld(veld);
+  // Cache voor contour-rendering (waarden in param-eigen eenheid,
+  // dus voor ff in m/s en voor fx in m/s — pas contourdrempels aan waar nodig)
+  laatsteVeld = {w, h, veld};
 
   hc.width = BASEMAP_W; hc.height = BASEMAP_H;
   const ctx = hc.getContext("2d");
@@ -474,6 +484,210 @@ function tekenHeatmap(){
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(tmpC, 0, 0, hc.width, hc.height);
+}
+
+// ── Contouren (marching squares op het geïnterpoleerde veld) ───────────────
+function _chainSegments(segs){
+  const key = p => p[0].toFixed(2)+","+p[1].toFixed(2);
+  const map = new Map();
+  const used = new Uint8Array(segs.length);
+  segs.forEach((s, i) => {
+    for(let e=0; e<2; e++){
+      const k = key(s[e]);
+      if(!map.has(k)) map.set(k, []);
+      map.get(k).push({seg:i, end:e});
+    }
+  });
+  const lines = [];
+  for(let i=0; i<segs.length; i++){
+    if(used[i]) continue;
+    used[i] = 1;
+    const line = [segs[i][0].slice(), segs[i][1].slice()];
+    let curKey = key(segs[i][1]);
+    while(true){
+      const cands = map.get(curKey) || [];
+      let next = null;
+      for(const c of cands){ if(!used[c.seg]){ next = c; break; } }
+      if(!next) break;
+      used[next.seg] = 1;
+      const np = segs[next.seg][1-next.end];
+      line.push(np.slice());
+      curKey = key(np);
+    }
+    curKey = key(segs[i][0]);
+    while(true){
+      const cands = map.get(curKey) || [];
+      let next = null;
+      for(const c of cands){ if(!used[c.seg]){ next = c; break; } }
+      if(!next) break;
+      used[next.seg] = 1;
+      const np = segs[next.seg][1-next.end];
+      line.unshift(np.slice());
+      curKey = key(np);
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+function _polylineLength(pl){
+  let L = 0;
+  for(let i=1;i<pl.length;i++){
+    L += Math.hypot(pl[i][0]-pl[i-1][0], pl[i][1]-pl[i-1][1]);
+  }
+  return L;
+}
+
+function tekenContouren(svg){
+  if(!laatsteVeld || !landMask) return;
+  const conf = CONTOUR_PARAMS[huidigParam];
+  if(!conf) return;
+  const {w, h, veld} = laatsteVeld;
+  const mask = landMask.data;
+
+  let vmin = Infinity, vmax = -Infinity;
+  for(let i=0;i<w*h;i++){
+    if(!mask[i]) continue;
+    const v = veld[i];
+    if(v < vmin) vmin = v;
+    if(v > vmax) vmax = v;
+  }
+  if(!isFinite(vmin)) return;
+
+  const step = conf.step;
+  const lMin = Math.ceil((vmin + 1e-6)/step)*step;
+  const lMax = Math.floor((vmax - 1e-6)/step)*step;
+  if(lMin > lMax) return;
+
+  const R = HEATMAP_RES;
+  const sx = SVG_W/BASEMAP_W, sy = SVG_H/BASEMAP_H;
+  const cw = R*sx, ch = R*sy;
+  const cellX = x => (x*R + R/2)*sx;
+  const cellY = y => (y*R + R/2)*sy;
+
+  const gLines = ns("g");
+  gLines.setAttribute("class","contours");
+  gLines.setAttribute("pointer-events","none");
+
+  const labels = [];
+
+  for(let li = Math.round(lMin/step); li <= Math.round(lMax/step); li++){
+    const level = li*step;
+    const isMajor = (li % Math.round(conf.major/step)) === 0;
+    const segs = [];
+    for(let y=0; y<h-1; y++){
+      const row0 = y*w, row1 = (y+1)*w;
+      for(let x=0; x<w-1; x++){
+        const i00 = row0+x, i10 = row0+x+1, i01 = row1+x, i11 = row1+x+1;
+        if(!mask[i00] || !mask[i10] || !mask[i01] || !mask[i11]) continue;
+        const v00 = veld[i00], v10 = veld[i10], v01 = veld[i01], v11 = veld[i11];
+        let code = 0;
+        if(v00 >= level) code |= 1;
+        if(v10 >= level) code |= 2;
+        if(v11 >= level) code |= 4;
+        if(v01 >= level) code |= 8;
+        if(code === 0 || code === 15) continue;
+        const px = cellX(x), py = cellY(y);
+        const lerp = (a,b) => {
+          const d = b - a;
+          if(Math.abs(d) < 1e-9) return 0.5;
+          return (level - a)/d;
+        };
+        const eTop   = () => [px + lerp(v00,v10)*cw, py];
+        const eRight = () => [px + cw, py + lerp(v10,v11)*ch];
+        const eBot   = () => [px + lerp(v01,v11)*cw, py + ch];
+        const eLeft  = () => [px, py + lerp(v00,v01)*ch];
+        switch(code){
+          case 1: case 14: segs.push([eLeft(),  eTop()  ]); break;
+          case 2: case 13: segs.push([eTop(),   eRight()]); break;
+          case 3: case 12: segs.push([eLeft(),  eRight()]); break;
+          case 4: case 11: segs.push([eRight(), eBot()  ]); break;
+          case 6: case 9:  segs.push([eTop(),   eBot()  ]); break;
+          case 7: case 8:  segs.push([eLeft(),  eBot()  ]); break;
+          case 5: {
+            const avg = (v00+v10+v01+v11)/4;
+            if(avg >= level){ segs.push([eLeft(), eTop()]); segs.push([eRight(), eBot()]); }
+            else            { segs.push([eLeft(), eBot()]); segs.push([eTop(),  eRight()]); }
+            break;
+          }
+          case 10: {
+            const avg = (v00+v10+v01+v11)/4;
+            if(avg >= level){ segs.push([eTop(), eRight()]); segs.push([eLeft(), eBot()]); }
+            else            { segs.push([eLeft(), eTop()]);  segs.push([eRight(), eBot()]); }
+            break;
+          }
+        }
+      }
+    }
+    if(segs.length === 0) continue;
+    const polylines = _chainSegments(segs);
+
+    let d = "";
+    for(const line of polylines){
+      if(line.length < 2) continue;
+      d += `M${line[0][0].toFixed(2)} ${line[0][1].toFixed(2)}`;
+      for(let i=1;i<line.length;i++) d += `L${line[i][0].toFixed(2)} ${line[i][1].toFixed(2)}`;
+    }
+    const path = ns("path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill","none");
+    path.setAttribute("stroke", isMajor ? "rgba(15,23,42,0.75)" : "rgba(15,23,42,0.32)");
+    path.setAttribute("stroke-width", isMajor ? "1.2" : "0.55");
+    path.setAttribute("stroke-linecap","round");
+    path.setAttribute("stroke-linejoin","round");
+    gLines.appendChild(path);
+
+    if(isMajor){
+      const cand = polylines
+        .map(pl => ({pl, len: _polylineLength(pl)}))
+        .filter(o => o.len > 90)
+        .sort((a,b) => b.len - a.len);
+      const placed = [];
+      for(const o of cand){
+        if(placed.length >= 3) break;
+        const pl = o.pl;
+        const midIdx = Math.floor(pl.length/2);
+        const mid = pl[midIdx];
+        const near = placed.some(q => Math.hypot(q[0]-mid[0], q[1]-mid[1]) < 110);
+        if(near) continue;
+        placed.push(mid);
+        const i0 = Math.max(0, midIdx - 3);
+        const i1 = Math.min(pl.length-1, midIdx + 3);
+        const ang = Math.atan2(pl[i1][1]-pl[i0][1], pl[i1][0]-pl[i0][0]);
+        labels.push({x: mid[0], y: mid[1], text: String(level) + conf.unit, ang});
+      }
+    }
+  }
+
+  svg.appendChild(gLines);
+
+  if(labels.length){
+    const gLabels = ns("g");
+    gLabels.setAttribute("class","contour-labels");
+    gLabels.setAttribute("pointer-events","none");
+    for(const lb of labels){
+      let deg = lb.ang * 180/Math.PI;
+      if(deg > 90) deg -= 180;
+      if(deg < -90) deg += 180;
+      const t = ns("text");
+      t.setAttribute("x", lb.x.toFixed(1));
+      t.setAttribute("y", lb.y.toFixed(1));
+      t.setAttribute("text-anchor","middle");
+      t.setAttribute("dominant-baseline","middle");
+      t.setAttribute("font-family","Arial,sans-serif");
+      t.setAttribute("font-weight","700");
+      t.setAttribute("font-size","13");
+      t.setAttribute("fill","#0f172a");
+      t.setAttribute("paint-order","stroke");
+      t.setAttribute("stroke","white");
+      t.setAttribute("stroke-width","3.5");
+      t.setAttribute("stroke-linejoin","round");
+      t.setAttribute("transform", `rotate(${deg.toFixed(1)} ${lb.x.toFixed(1)} ${lb.y.toFixed(1)})`);
+      t.textContent = lb.text;
+      gLabels.appendChild(t);
+    }
+    svg.appendChild(gLabels);
+  }
 }
 
 // Heatmap-stationsstijl: kleine dot + groot getal met witte halo
@@ -567,6 +781,7 @@ function tekenKaart() {
 
   tekenBuitengrens(svg);
   tekenHeatmap();
+  tekenContouren(svg);
 
   const isHeatmap = HEATMAP_PARAMS.has(huidigParam);
 
