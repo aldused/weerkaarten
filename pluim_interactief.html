@@ -141,6 +141,13 @@ select,input[type=date]{background:white;border:1px solid var(--border);color:va
   .sub-bar{gap:8px;padding:8px}
   .action-bar{padding:8px}
   .vp-row{grid-template-columns:1fr}
+  /* Lagere charts op tablet */
+  .grafiek-blok > div[style*="position:relative"]{height:280px !important}
+}
+@media(max-width:480px){
+  /* Compact op telefoon */
+  .grafiek-blok > div[style*="position:relative"]{height:230px !important}
+  #grafiek-wrap{padding:8px 8px}
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1053,11 +1060,14 @@ function maakLabelsCompact(times){
 const xAsCompact={grid:{color:GRID},ticks:{color:TICK,maxRotation:0,autoSkip:false,
   font:function(ctx){
     const raw = ctx.tick && ctx.tick.label;
-    return {size: Array.isArray(raw) ? 10 : 8, weight: Array.isArray(raw) ? 'bold' : 'normal'};
+    const isDag = Array.isArray(raw);
+    const w = window.innerWidth;
+    return {size: isDag ? (w<600?8.5:10) : 7, weight: isDag ? 'bold' : 'normal'};
   },
   color:function(ctx){
     const raw = ctx.tick && ctx.tick.label;
     if(Array.isArray(raw)) return '#1a2b40';
+    if(window.innerWidth < 480) return 'transparent'; // telefoon: geen tijden
     if(raw==='12:00') return '#999';
     return 'transparent';
   }
@@ -1241,15 +1251,18 @@ const cfgBase={
   scales:{
     x:{grid:{color:GRID,lineWidth:0.5},ticks:{color:TICK,maxRotation:0,autoSkip:false,
       font:function(ctx){
-        // Dag-labels zijn nu 2-regelige arrays (['', 'Vr 10 Apr']),
-        // tijdslabels zijn simpele strings ('06:00', '12:00', '18:00').
         const raw = ctx.tick && ctx.tick.label;
         const isDag = Array.isArray(raw);
-        return {size: isDag ? 10.5 : 8.5, weight: isDag ? '700' : '400'};
+        const w = window.innerWidth;
+        return {size: isDag ? (w<480?9:10.5) : (w<480?7:8.5), weight: isDag ? '700' : '400'};
       },
       color:function(ctx){
         const raw = ctx.tick && ctx.tick.label;
-        return Array.isArray(raw) ? '#1a2b40' : '#9aa5b5';
+        if(Array.isArray(raw)) return '#1a2b40';
+        const w = window.innerWidth;
+        if(w < 480) return 'transparent';          // telefoon: alleen dagkoppen
+        if(w < 768) return raw==='12:00' ? '#9aa5b5' : 'transparent'; // tablet: alleen 12u
+        return '#9aa5b5';                           // desktop: alles
       }
     },border:{color:'#d8dde6'}},
   }
@@ -1391,7 +1404,10 @@ const ov16=new Date(+nu2+16*86400000).toISOString().slice(0,10);
 });
 
 // ── Ophalen ──
+let _laadBusy=false;
 async function laadData(){
+  if(_laadBusy) return;
+  _laadBusy=true;
   const btn=document.getElementById('btn-laden');
   btn.disabled=true;btn.textContent='Ophalen…';
   document.getElementById('vergelijking-wrap').style.display='none';
@@ -1433,8 +1449,10 @@ async function laadData(){
     document.getElementById('run-info').textContent=bepaalRun();
   }catch(e){
     document.getElementById('status').innerHTML=`<span style="color:#ee4444">Fout: ${e.message}</span>`;
+  } finally {
+    _laadBusy=false;
+    btn.disabled=false;btn.textContent='▶ Ophalen';
   }
-  btn.disabled=false;btn.textContent='▶ Ophalen';
 }
 
 // ── Temp + Neerslag ──
@@ -3257,7 +3275,11 @@ document.addEventListener('click',e=>{
   }
 });
 
+let _vergBusy=false;
 async function laadVergelijking(){
+  if(_vergBusy) return;
+  _vergBusy=true;
+  try{
   Object.values(vergCharts).forEach(c=>{try{c.destroy();}catch(e){}});
   vergCharts={};
   const wrap=document.getElementById('vergelijking-wrap');
@@ -3292,6 +3314,7 @@ async function laadVergelijking(){
       if(cel) cel.innerHTML=`<div style="color:#ee4444;padding:20px;font-size:.85rem">&#9888;&#65039; Fout bij ${naam}: ${e.message}</div>`;
     }
   }
+  }finally{_vergBusy=false;}
 }
 
 async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
