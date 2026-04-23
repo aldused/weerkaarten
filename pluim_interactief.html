@@ -471,7 +471,7 @@ select, input[type=date], input[type=text] {
 
   <!-- ── Action bar ── -->
   <div class="action-bar">
-    <button class="btn-primary" id="btn-laden" onclick="laadData()">&#9654; Ophalen</button>
+    <button class="btn-primary" id="btn-laden" onclick="laadData()" style="display:none">&#9654; Ophalen</button>
     <button class="btn-sec green" id="btn-vergelijk" onclick="openVergelijking()">&#8862; 4 Stations</button>
     <button class="btn-sec" id="btn-auto" onclick="toggleAutoRefresh()">&#10227; Auto-refresh uit</button>
     <button class="btn-sec" id="btn-reset" onclick="resetAlles()" style="display:none;color:#c03030;border-color:#e8b0b0">&#8634; Reset</button>
@@ -491,7 +491,7 @@ select, input[type=date], input[type=text] {
 </div>
 
 <div id="grafiek-wrap">
-  <div id="status">Selecteer een station en klik op <strong>Ophalen</strong></div>
+  <div id="status">Selecteer een station of parameter om de pluim te laden</div>
   <div id="blok-temp" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-temp"></div>
     <div class="legenda" id="leg-temp"></div>
@@ -1350,13 +1350,8 @@ document.querySelectorAll('.type-btn').forEach(b=>{
 document.querySelectorAll('.param-card').forEach(c=>{
   c.addEventListener('click',()=>{
     setActieveType(c.dataset.param);
-    // Indien data al geladen: direct opnieuw laden met nieuwe parameter
-    if (document.getElementById('blok-temp').style.display !== 'none' ||
-        document.querySelector('.grafiek-blok[style*="display: block"], .grafiek-blok:not([style*="display: none"])')) {
-      // Alleen auto-reload als er een locatie actief is en niet in vergelijking-modus
-      if (huidigStation?.lat != null && document.getElementById('vergelijking-wrap').style.display === 'none') {
-        laadData();
-      }
+    if (huidigStation?.lat != null && document.getElementById('vergelijking-wrap').style.display === 'none') {
+      laadData();
     }
   });
 });
@@ -1373,6 +1368,9 @@ document.querySelectorAll('.periode-btn').forEach(b=>{
     b.classList.add('actief');
     actievePreset=b.dataset.preset;
     document.getElementById('wrap-custom').style.display=actievePreset==='custom'?'':'none';
+    if (actievePreset !== 'custom' && huidigStation?.lat != null && document.getElementById('vergelijking-wrap').style.display === 'none') {
+      laadData();
+    }
   });
 });
 
@@ -1384,6 +1382,12 @@ const ov16=new Date(+nu2+16*86400000).toISOString().slice(0,10);
   const el=document.getElementById(id);
   el.value=id==='datum-van'?vd:new Date(+nu2+7*86400000).toISOString().slice(0,10);
   el.min=vd;el.max=ov16;
+  el.addEventListener('change',()=>{
+    if (actievePreset==='custom' && document.getElementById('datum-van').value && document.getElementById('datum-tot').value
+        && huidigStation?.lat != null && document.getElementById('vergelijking-wrap').style.display === 'none') {
+      laadData();
+    }
+  });
 });
 
 // ── Ophalen ──
@@ -2931,6 +2935,7 @@ function setVergPeriode(d,btn){
   if(btn) btn.classList.add('actief');
   const wrap=document.getElementById('wrap-verg-custom');
   if(wrap) wrap.style.display=d==='custom'?'flex':'none';
+  if(d!=='custom') vergAutoLaad();
 }
 function setVergModel(m,btn){
   vergModel=m;
@@ -2954,6 +2959,7 @@ function setVergModel(m,btn){
     if (g) g.remove();
     document.querySelectorAll('#verg-controls .vp-row, #verg-controls .action-bar')
       .forEach(el => el.style.display='');
+    vergAutoLaad();
   }
 }
 
@@ -3038,7 +3044,7 @@ function openVergelijking(){
   let html=`<div class="vp-header">
     <div style="flex:1;min-width:0">
       <div class="vp-header-title" id="verg-titel-lbl">⊞ 4 Pluimen vergelijking</div>
-      <div class="vp-header-sub">Kies locaties, parameter, periode en model — dan "Laden"</div>
+      <div class="vp-header-sub">Kies locaties, parameter en periode — pluim laadt automatisch</div>
     </div>
     <button class="btn-sec" onclick="resetAlles()" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.35)">✕ Sluiten</button>
   </div>
@@ -3095,7 +3101,7 @@ function openVergelijking(){
   </div>`;
 
   html+=`<div class="action-bar">
-    <button class="btn-primary" onclick="laadVergelijking()">&#9654; Laden</button>
+    <button class="btn-primary" onclick="laadVergelijking()" style="display:none">&#9654; Laden</button>
     <span class="sub-label" style="margin-left:6px">Layout</span>
     <div class="seg">
       <button class="vlbtn actief" data-layout="grid" onclick="setVergLayout('grid',this)">⊞ 2×2</button>
@@ -3131,14 +3137,29 @@ function openVergelijking(){
       if(delen.length>=3) zi.value=delen.slice(2).join(',');
     }
     te.value=ot;
-    setVergType(i,ot);
+    setVergType(i,ot,false);
   }
   // Sync globale pill met param van cel 0 (of 'temp' als standaard)
   const firstType = document.getElementById('verg-type-0')?.value || 'temp';
   document.querySelectorAll('.vp-gpill').forEach(b=>b.classList.toggle('actief',b.dataset.val===firstType));
+
+  // Datum-inputs: auto-laden als beide ingevuld
+  ['verg-datum-van','verg-datum-tot'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('change',()=>{
+      if(vergPreset==='custom' && document.getElementById('verg-datum-van')?.value && document.getElementById('verg-datum-tot')?.value) {
+        vergAutoLaad();
+      }
+    });
+  });
 }
 
-function setVergType(idx,val){
+function vergAutoLaad(){
+  if(document.getElementById('verg-controls') && vergModel!=='harmonie') laadVergelijking();
+}
+window.vergAutoLaad=vergAutoLaad;
+
+function setVergType(idx,val,triggerLoad=true){
   document.getElementById(`verg-type-${idx}`).value=val;
   localStorage.setItem(`verg-type-${idx}`,val);
   const grid=document.getElementById(`verg-params-${idx}`);
@@ -3148,6 +3169,7 @@ function setVergType(idx,val){
   const lbl=document.getElementById(`verg-plbl-${idx}`);
   if(lbl&&window._vergTypeLookup) lbl.textContent=window._vergTypeLookup[val]||val;
   syncGlobalPill();
+  if(triggerLoad) vergAutoLaad();
 }
 
 // Highlight globale pill alleen wanneer alle 4 cellen dezelfde parameter hebben;
@@ -3161,9 +3183,10 @@ function syncGlobalPill(){
 
 // Globale parameter voor alle 4 pluimen tegelijk
 function setVergTypeAll(val,btn){
-  for(let i=0;i<4;i++) setVergType(i,val);
+  for(let i=0;i<4;i++) setVergType(i,val,false);
   document.querySelectorAll('.vp-gpill').forEach(b=>b.classList.toggle('actief',b.dataset.val===val));
   if(btn && !btn.classList.contains('actief')) btn.classList.add('actief');
+  vergAutoLaad();
 }
 window.setVergTypeAll = setVergTypeAll;
 
