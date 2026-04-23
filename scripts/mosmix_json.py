@@ -70,6 +70,81 @@ COORDS_BE = {
     "Calais":[1.954,50.819],"Saint-Quentin":[3.207,49.843],
 }
 
+STATIONS_FR = [
+    ("07015","Lille"),("P0437","Calais"),("07020","Cherbourg"),
+    ("07027","Caen"),("07037","Rouen"),("07110","Brest"),
+    ("07130","Rennes"),("07222","Nantes"),
+    ("07315","La Rochelle"),("07510","Bordeaux"),("07610","Biarritz"),
+    ("07149","Paris"),("07070","Reims"),("07180","Nancy"),
+    ("07190","Strasbourg"),("07249","Orléans"),("07240","Tours"),
+    ("07260","Nevers"),("07288","Besançon"),
+    ("07434","Limoges"),("07460","Clermont-Ferrand"),("07480","Lyon"),
+    ("07491","Chambéry"),("07577","Montélimar"),("07558","Millau"),
+    ("07630","Toulouse"),("07643","Montpellier"),
+    ("07650","Marseille"),("07690","Nice"),("07747","Perpignan"),
+    ("07761","Ajaccio"),("07790","Bastia"),
+]
+
+COORDS_FR = {
+    "Lille":[3.106,50.570],"Calais":[1.954,50.819],"Cherbourg":[-1.470,49.650],
+    "Caen":[-0.450,49.180],"Rouen":[1.175,49.383],"Brest":[-4.412,48.448],
+    "Rennes":[-1.733,48.069],"Nantes":[-1.611,47.150],
+    "La Rochelle":[-1.195,46.179],"Bordeaux":[-0.715,44.828],"Biarritz":[-1.529,43.468],
+    "Paris":[2.359,48.717],"Reims":[4.050,49.310],"Nancy":[6.214,48.683],
+    "Strasbourg":[7.640,48.550],"Orléans":[1.760,47.988],"Tours":[0.727,47.443],
+    "Nevers":[3.100,47.000],"Besançon":[5.984,47.248],
+    "Limoges":[1.179,45.861],"Clermont-Ferrand":[3.150,45.787],"Lyon":[4.944,45.725],
+    "Chambéry":[5.880,45.638],"Montélimar":[4.733,44.583],"Millau":[3.018,44.118],
+    "Toulouse":[1.378,43.629],"Montpellier":[3.964,43.577],
+    "Marseille":[5.216,43.437],"Nice":[7.216,43.667],"Perpignan":[2.871,42.740],
+    "Ajaccio":[8.793,41.917],"Bastia":[9.485,42.540],
+}
+
+# Iberia (Spanje + Portugal)
+STATIONS_IBE = [
+    # Spanje — noordkust
+    ("08001","La Coruña"),("08042","Santiago"),("08045","Vigo"),
+    ("08014","Gijón"),("08023","Santander"),("08025","Bilbao"),("08029","San Sebastián"),
+    # Spanje — noordelijk binnenland
+    ("08055","León"),("08075","Burgos"),("08140","Valladolid"),("08202","Salamanca"),
+    # Spanje — Ebro / NO
+    ("08160","Zaragoza"),("08171","Lérida"),("08181","Barcelona"),("08184","Gerona"),
+    # Spanje — centraal
+    ("08221","Madrid"),("08272","Toledo"),
+    # Spanje — Levante
+    ("08280","Albacete"),("08284","Valencia"),("08360","Alicante"),("08433","Murcia"),
+    # Spanje — zuid
+    ("08330","Badajoz"),("08390","Sevilla"),("08410","Córdoba"),("08419","Granada"),
+    ("08482","Málaga"),("08487","Almería"),
+    # Balearen
+    ("08306","Palma"),("08373","Ibiza"),("08314","Menorca"),
+    # Portugal
+    ("08551","Viana do Castelo"),("08545","Porto"),("08567","Vila Real"),
+    ("08548","Coimbra"),("08536","Lisboa"),("08571","Portalegre"),
+    ("08562","Beja"),("08554","Faro"),
+]
+
+COORDS_IBE = {
+    "La Coruña":[-8.417,43.367],"Santiago":[-8.433,42.900],"Vigo":[-8.633,42.217],
+    "Gijón":[-5.633,43.533],"Santander":[-3.800,43.483],"Bilbao":[-2.933,43.300],
+    "San Sebastián":[-1.800,43.350],
+    "León":[-5.650,42.583],"Burgos":[-3.633,42.367],"Valladolid":[-4.850,41.717],
+    "Salamanca":[-5.500,40.950],
+    "Zaragoza":[-1.017,41.667],"Lérida":[0.633,41.617],
+    "Barcelona":[2.067,41.283],"Gerona":[2.767,41.900],
+    "Madrid":[-3.550,40.450],"Toledo":[-4.050,39.883],
+    "Albacete":[-1.850,38.950],"Valencia":[-0.467,39.500],
+    "Alicante":[-0.550,38.283],"Murcia":[-0.800,37.783],
+    "Badajoz":[-6.817,38.883],"Sevilla":[-6.000,37.367],
+    "Córdoba":[-4.850,37.850],"Granada":[-3.783,37.183],
+    "Málaga":[-4.483,36.667],"Almería":[-2.383,36.850],
+    "Palma":[2.733,39.550],"Ibiza":[1.383,38.867],"Menorca":[4.233,39.867],
+    "Viana do Castelo":[-8.800,41.633],"Porto":[-8.683,41.233],
+    "Vila Real":[-7.717,41.267],"Coimbra":[-8.467,40.150],
+    "Lisboa":[-9.133,38.783],"Portalegre":[-7.417,39.283],
+    "Beja":[-7.867,38.017],"Faro":[-7.967,37.017],
+}
+
 # ── MOSMIX helpers ───────────────────────────────────────────────────────────
 
 def strip_namespaces(s):
@@ -676,6 +751,8 @@ def main():
 
     bouw_json(STATIONS_NL, COORDS_NL, "mosmix_nl.json", "mosmix_uurlijks_nl.json")
     bouw_json(STATIONS_BE, COORDS_BE, "mosmix_be.json", "mosmix_uurlijks_be.json")
+    bouw_json(STATIONS_FR, COORDS_FR, "mosmix_fr.json", "mosmix_uurlijks_fr.json")
+    bouw_json(STATIONS_IBE, COORDS_IBE, "mosmix_ibe.json", "mosmix_uurlijks_ibe.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
