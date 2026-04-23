@@ -174,6 +174,7 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
     <strong>Neerslagtekort = cumulatieve (verdamping − neerslag)</strong> per dag, gefloord op 0.
     Verdamping (Makkink EV24) komt van de dichtstbijzijnde AWS, gekoppeld aan elk van de 13 P13-neerslagstations.
     Landelijk gemiddelde is het rekenkundig gemiddelde over alle beschikbare stations per dag.
+    <span id="proxyNote"></span>
   </div>
 
   <div class="panel">
@@ -278,6 +279,12 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
     document.getElementById('main').style.display = 'block';
     document.getElementById('hdSubtitle').textContent =
       '13 KNMI-neerslagstations · ' + data.meta.periode_jaren[0] + '–' + data.meta.periode_jaren[1];
+    var pn = document.getElementById('proxyNote');
+    if (pn && data.meta.ev_echt_vanaf_jaar) {
+      pn.innerHTML = ' &nbsp;—&nbsp; <em style="color:#78350f">Pre-' + data.meta.ev_echt_vanaf_jaar
+        + ' verdamping gebaseerd op klimatologisch daggemiddelde (1957–nu); neerslag is wel echte meting. Jaren ≤'
+        + (data.meta.ev_echt_vanaf_jaar - 1) + ' gemarkeerd met *.</em>';
+    }
     document.getElementById('hdGen').textContent = 'gegenereerd ' + data.meta.gegenereerd;
     document.getElementById('ftGen').textContent = data.meta.gegenereerd;
     document.getElementById('kpiDate').textContent = data.meta.vandaag;
@@ -683,10 +690,12 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
     else list.sort(function(a,b){return a.rang - b.rang});
     var maxV = Math.max.apply(null, c.ranking.map(function(e){return e.tekort})) || 1;
     var body = document.querySelector('#rankTable tbody');
+    var proxyVanaf = D.meta.ev_echt_vanaf_jaar || 1957;
     body.innerHTML = list.map(function(e){
       var pct = Math.round(100*e.tekort/maxV);
+      var proxy = e.jaar < proxyVanaf ? '<span title="EV-proxy (klimatologie)" style="color:#d97706;cursor:help">*</span>' : '';
       return '<tr class="'+(e.is_huidig?'current':'')+'">'
-        + '<td>'+e.jaar+(e.is_huidig?' (nu)':'')+'</td>'
+        + '<td>'+e.jaar+proxy+(e.is_huidig?' (nu)':'')+'</td>'
         + '<td>#'+e.rang+'</td>'
         + '<td>'+nl(e.tekort,0)+'</td>'
         + '<td><div class="bw"><div class="bk" style="width:'+pct+'px"></div></div></td>'
@@ -721,9 +730,11 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
       }
       var topHTML = '';
       if (info.top5_historisch && info.top5_historisch.length) {
+        var proxyVanaf = D.meta.ev_echt_vanaf_jaar || 1957;
         topHTML = '<div class="sb" style="margin-top:4px;font-size:9.5px">top: '
           + info.top5_historisch.slice(0,3).map(function(x){
-              return '<span style="color:#475569">'+x.jaar+' ('+nl(x.tekort,0)+')</span>';
+              var p = x.jaar < proxyVanaf ? '<span style="color:#d97706">*</span>' : '';
+              return '<span style="color:#475569">'+x.jaar+p+' ('+nl(x.tekort,0)+')</span>';
             }).join(' · ')
           + '</div>';
       }
