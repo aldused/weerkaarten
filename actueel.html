@@ -172,7 +172,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 <div class="main">
   <div class="kaart-kolom">
     <div class="kaart-header-band">
-      <div><div class="links">Ed Aldus WM</div><div class="sub">Waarnemingen KNMI</div></div>
+      <div><div class="links">Ed Aldus WM</div><div class="sub" id="kaart-meting-sub">Waarnemingen KNMI</div></div>
       <div style="text-align:right;"><div class="rechts" id="kaart-dag">–</div><div class="rechts-sub" id="kaart-param-label">Temperatuur (°C)</div></div>
     </div>
     <div class="kaart-container">
@@ -252,6 +252,22 @@ function interpKleur(val,schaal,stops){
 }
 
 let stationData = {}, huidigParam = "ta";
+let meetTijdLokaal = null;
+
+// Pak de laatste historie-timestamp over alle stations heen (UTC → Europe/Amsterdam HH:MM)
+function laatsteMeetTijd(stations){
+  let maxMs = 0;
+  for(const st of Object.values(stations || {})){
+    if(!st || !Array.isArray(st.historie) || !st.historie.length) continue;
+    const last = st.historie[st.historie.length - 1];
+    if(!last || !last.t) continue;
+    const ms = Date.parse(last.t);
+    if(isFinite(ms) && ms > maxMs) maxMs = ms;
+  }
+  if(!maxMs) return null;
+  return new Date(maxMs).toLocaleTimeString("nl-NL",
+    {hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam"});
+}
 
 // ── Heatmap: Modified Shepard + Gaussian blur ───────────────────────────────
 const HEATMAP_RES = 3;
@@ -930,8 +946,19 @@ function laadActueel() {
     .then(([json, geo]) => {
       stationData = json.stations || {};
       const bw = json.bijgewerkt || "";
-      const tijdMatch = bw.match(/(\d{2}:\d{2})$/);
-      document.getElementById("klok-stand").textContent = tijdMatch ? tijdMatch[1] + " uur" : bw;
+      meetTijdLokaal = laatsteMeetTijd(stationData);
+      if(meetTijdLokaal){
+        document.getElementById("klok-stand").textContent = meetTijdLokaal + " uur";
+      } else {
+        const tijdMatch = bw.match(/(\d{2}:\d{2})$/);
+        document.getElementById("klok-stand").textContent = tijdMatch ? tijdMatch[1] + " uur" : bw;
+      }
+      const sub = document.getElementById("kaart-meting-sub");
+      if(sub){
+        sub.textContent = meetTijdLokaal
+          ? `Waarnemingen KNMI · meting ${meetTijdLokaal} uur`
+          : "Waarnemingen KNMI";
+      }
       if(!provincies){
         provincies = geo;
         bouwBasemap(document.getElementById("basemap-svg"));
