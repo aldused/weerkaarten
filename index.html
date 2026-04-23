@@ -1172,7 +1172,7 @@ function wisselGuidance(welke) {
 // Synop
 let synopLijst = [], synopIndex = 0;
 function laadSynop() {
-  fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
+  fetch("https://data.weerlab.nl/index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
     synopLijst = kaarten.filter(n => n.startsWith("kaart_synop_")).sort();
     if (!synopLijst.length) return;
     synopIndex = synopLijst.length - 1;
@@ -1215,14 +1215,14 @@ fetch("waarschuwingen.json?t=" + Date.now()).then(r=>r.json()).then(d => {
 }).catch(()=>{});
 
 // Lightbox
-function openLightbox(src, lijst) {
+function openLightbox(src, lijst) { src = kaartUrl(src);
   activeLijst = lijst; huidigIndex = lijst.indexOf(src);
   document.getElementById("lightbox-img").src = src;
   document.getElementById("lightbox").classList.add("actief");
 }
 function sluitLightbox() { document.getElementById("lightbox").classList.remove("actief"); }
-function volgendeLightbox() { if (huidigIndex < activeLijst.length-1) document.getElementById("lightbox-img").src = activeLijst[++huidigIndex]; }
-function vorigeLightbox()   { if (huidigIndex > 0) document.getElementById("lightbox-img").src = activeLijst[--huidigIndex]; }
+function volgendeLightbox() { if (huidigIndex < activeLijst.length-1) document.getElementById("lightbox-img").src = kaartUrl(activeLijst[++huidigIndex]); }
+function vorigeLightbox()   { if (huidigIndex > 0) document.getElementById("lightbox-img").src = kaartUrl(activeLijst[--huidigIndex]); }
 document.addEventListener("keydown", e => {
   if (e.key==="Escape") sluitLightbox();
   if (e.key==="ArrowRight") volgendeLightbox();
@@ -1230,6 +1230,10 @@ document.addEventListener("keydown", e => {
 });
 
 // Kaarten bouwen
+function kaartUrl(naam){
+  // toplijst-kaarten staan op R2 (data.weerlab.nl), overige kaarten nog in git-repo
+  return naam.startsWith("kaart_top_") ? "https://data.weerlab.nl/" + naam : naam;
+}
 function maakKaartItem(naam, lijst, isNacht) {
   function dagLabel(n) {
     const d = datumUitNaam(n);
@@ -1241,12 +1245,12 @@ function maakKaartItem(naam, lijst, isNacht) {
   const hint = document.createElement("span");
   hint.style.cssText = "font-size:0.72em;color:#666;background:#f0f4f8;padding:4px 10px;display:block;text-align:right;border-bottom:1px solid #e0e0e0;";
   hint.textContent = "🔍 klik voor vergroting";
-  const img = document.createElement("img"); img.src = naam; img.alt = label;
+  const img = document.createElement("img"); img.src = kaartUrl(naam); img.alt = label;
   img.onclick = () => openLightbox(naam, lijst);
   img.onerror = () => item.style.display = "none";
   const footer = document.createElement("div"); footer.className = "kaart-footer";
   const lbl = document.createElement("span"); lbl.className = "kaart-naam"; lbl.textContent = label;
-  const btn = document.createElement("a"); btn.className = "btn-down"; btn.href = naam; btn.download = naam; btn.textContent = "⬇ Download";
+  const btn = document.createElement("a"); btn.className = "btn-down"; btn.href = kaartUrl(naam); btn.download = naam; btn.textContent = "⬇ Download";
   footer.appendChild(lbl); footer.appendChild(btn);
   item.appendChild(hint); item.appendChild(img); item.appendChild(footer);
   return item;
@@ -1264,7 +1268,7 @@ function nachtLabel(naam) {
 }
 
 // Kaarten laden
-fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
+fetch("https://data.weerlab.nl/index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
   tempLijst      = kaarten.filter(n => n.startsWith("kaart_temp_") && !n.startsWith("kaart_temp_dag_") && !n.startsWith("kaart_temp_nacht_"));
   topVandaagLijst  = kaarten.filter(n => n.startsWith("kaart_top_") && n.includes("_vandaag"));
   topGisterenLijst = kaarten.filter(n => n.startsWith("kaart_top_") && n.includes("_gisteren"));
@@ -1281,7 +1285,7 @@ fetch("index.json?t=" + Date.now()).then(r=>r.json()).then(kaarten => {
 
 // ── Toplijst timestamp ophalen ──────────────────────────────────────────────
 function laadToplijstTijd() {
-  fetch("toplijst.json?t=" + Date.now())
+  fetch("https://data.weerlab.nl/toplijst.json?t=" + Date.now())
     .then(r => r.json())
     .then(data => {
       const datums = Object.keys(data).sort().reverse();
