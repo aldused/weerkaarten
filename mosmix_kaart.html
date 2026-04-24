@@ -521,6 +521,10 @@ const SHEPARD_KNN = 8;
 const BLUR_SIGMA = 2;
 const HEATMAP_ALPHA = 0.55;
 const HEATMAP_PARAMS_MOSMIX = new Set(["TX","TX_O","TX_M","TN","FF","FF_N","FF_O","FF_M","FX","FX_N","FX_O","FX_M"]);
+// Stations midden op water geven bij temperatuur een verkeerd beeld in heatmap+contouren;
+// value blijft zichtbaar op de kaart, alleen uit de IDW-input gehaald.
+const INTERPOLATIE_UITSLUITEN_TEMP = new Set(["IJsselmeer"]);
+const TEMP_PARAMS_MOSMIX = new Set(["TX","TX_O","TX_M","TN"]);
 const CONTOUR_PARAMS_MOSMIX = {
   TX:   { step: 1,  major: 5,  unit: "°",    factor: 1 },
   TX_O: { step: 1,  major: 5,  unit: "°",    factor: 1 },
@@ -714,9 +718,12 @@ function tekenHeatmapOpCanvas(hc, dagKey, param){
   if(!landMask){ hc.width=1; hc.height=1; return; }
 
   const dagObj = mosmixData?.data?.[dagKey];
-  const paramData = dagObj ? dagObj[param] : null;
+  let paramData = dagObj ? dagObj[param] : null;
   if(!paramData) return;
   const stations = mosmixData.stations;
+  if(TEMP_PARAMS_MOSMIX.has(param)){
+    paramData = Object.fromEntries(Object.entries(paramData).filter(([n]) => !INTERPOLATIE_UITSLUITEN_TEMP.has(n)));
+  }
 
   let veld = _shepardVeld(paramData, stations, p);
   if(!veld) return;
