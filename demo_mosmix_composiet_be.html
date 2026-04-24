@@ -318,6 +318,11 @@ function tekenOverlay(){
   const stations = mosmixData.stations;
   const lijst = Object.keys(stations).filter(n => toonAlle || KERN.has(n));
 
+  // Per-station data.
+  // - dag: daily-velden (TX/TN/RR/FF/DD)
+  // - ochtend/middag: TX_O/TX_M (anchored naar TX) + FF_O/M/DD_O/M + uurlijkse RR
+  // - avond/nacht (18-06 dag D = nacht D→D+1): TN van dag D+1 (TN daily = nacht vóór D);
+  //   RR/FF/DD via uurlijks want daily FF_N/RR_N mixt 0-5 + 18-23 van dezelfde dag D.
   const perStation = {};
   for(const n of lijst){
     if(huidigDagdeel === "dag"){
@@ -329,8 +334,42 @@ function tekenOverlay(){
         ff:   dag.FF?.[n] ?? null,
         dd:   dag.DD?.[n] ?? null
       };
-    } else {
-      perStation[n] = stationDagdeelStats(n, huidigDag, huidigDagdeel) || {tmax:null,tmin:null,pop:null,rr:null,ff:null,dd:null};
+    } else if(huidigDagdeel === "ochtend"){
+      const uur = stationDagdeelStats(n, huidigDag, "ochtend");
+      perStation[n] = {
+        tmax: dag.TX_O?.[n] ?? null,
+        tmin: null,
+        pop:  null,
+        rr:   uur?.rr ?? null,
+        ff:   dag.FF_O?.[n] ?? null,
+        dd:   dag.DD_O?.[n] ?? null
+      };
+    } else if(huidigDagdeel === "middag"){
+      const uur = stationDagdeelStats(n, huidigDag, "middag");
+      perStation[n] = {
+        tmax: dag.TX_M?.[n] ?? null,
+        tmin: null,
+        pop:  null,
+        rr:   uur?.rr ?? null,
+        ff:   dag.FF_M?.[n] ?? null,
+        dd:   dag.DD_M?.[n] ?? null
+      };
+    } else { // avond/nacht 18-06 van dag D = nacht D→D+1
+      // TN in daily json op dag X = min voor nacht vóór dag X (filter loc.hour<12).
+      // Voor nacht D→D+1 pakken we dus TN van dag D+1 (fallback: uurlijkse min).
+      // RR/FF/DD uit uurlijks, want daily *_N mixt 0-5 + 18-23 van dezelfde dag.
+      const idx = mosmixData.dagen.indexOf(huidigDag);
+      const volgende = idx >= 0 && idx+1 < mosmixData.dagen.length ? mosmixData.dagen[idx+1] : null;
+      const volgDag = volgende ? mosmixData.data[volgende] : null;
+      const uur = stationDagdeelStats(n, huidigDag, "avond");
+      perStation[n] = {
+        tmax: null,
+        tmin: volgDag?.TN?.[n] ?? uur?.tmin ?? null,
+        pop:  null,
+        rr:   uur?.rr ?? null,
+        ff:   uur?.ff ?? null,
+        dd:   uur?.dd ?? null
+      };
     }
   }
 
