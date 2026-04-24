@@ -146,7 +146,9 @@ table.vooruit .windpijl{display:inline-block;transform-origin:center;font-weight
   <span class="status" id="data-status">Laatst bijgewerkt: –</span>
   <button onclick="laadData()">↻ Ververs</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
-  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten">🗑️ Wissen</button>
+  <span class="status" style="margin-left:8px">Document:</span>
+  <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
   <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
   <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
 </div>
@@ -384,36 +386,44 @@ async function laadData(){
 
 document.getElementById('station-sel').addEventListener('change', laadData);
 
-/* ── Auto-save (lokaal) ── */
-const SAVE_KEY='wb_wm_draft_v1';
+/* ── Auto-save (lokaal, per dag) ── */
+const SAVE_PREFIX='wb_wm_draft_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function saveKey(){ return SAVE_PREFIX + huidigeDatum(); }
 function saveDraft(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{
     d[el.getAttribute('data-save')] = el.innerHTML;
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
-  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function leegForm(){
+  document.querySelectorAll('[data-save]').forEach(el=>{ el.innerHTML=''; });
+  const p=document.getElementById('plaats-in'); if(p) p.value='Rijnmond';
 }
 function restoreDraft(){
   try{
-    const j=localStorage.getItem(SAVE_KEY); if(!j) return;
+    const j=localStorage.getItem(saveKey());
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
-      if(d[k]!=null) el.innerHTML=d[k];
+      if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
     });
-    const p=document.getElementById('plaats-in'); if(p && d.plaats!=null) p.value=d.plaats;
+    const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rijnmond');
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
 }
 function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
   const el=document.getElementById('save-status'); if(!el) return;
   const t=new Date(ts);
-  el.textContent=`💾 ${voorvoegsel} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
 }
 function wisDraft(){
-  if(!confirm('Alle opgeslagen teksten wissen?')) return;
-  localStorage.removeItem(SAVE_KEY);
+  if(!confirm('Opgeslagen tekst van '+huidigeDatum()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
   location.reload();
 }
 let saveTimer;
@@ -424,6 +434,9 @@ document.addEventListener('input', e=>{
 document.addEventListener('blur', e=>{
   if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
 },true);
+
+document.getElementById('doc-datum').value = vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', restoreDraft);
 
 restoreDraft();
 laadData();

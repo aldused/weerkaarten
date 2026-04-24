@@ -103,6 +103,18 @@ table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700
 
 .doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.75rem;color:#888;text-align:center;display:flex;justify-content:space-between}
 
+/* Grafiek-panelen in Weerlab-stijl */
+.grafiek-panel{background:white;border:1px solid #d0d8e4;border-radius:4px;margin:14px 0;overflow:hidden}
+.grafiek-header{background:#003366;color:white;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+.grafiek-header .hdr-l{font-size:14px;font-weight:700}
+.grafiek-header .hdr-sub{font-size:10.5px;color:#a8c8e8;margin-top:2px}
+.grafiek-header .hdr-r{font-size:14px;font-weight:700;text-align:right}
+.grafiek-header .hdr-r-sub{font-size:10.5px;color:#a8c8e8}
+.grafiek-panel canvas{display:block;width:100%;height:auto;background:#f8fafc}
+.grafiek-acties{padding:6px 10px;text-align:right;border-top:1px solid #eee;background:#f8fafc}
+.grafiek-acties button{background:#1a5490;color:white;border:none;border-radius:3px;padding:5px 12px;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
+.grafiek-acties button:hover{background:#124270}
+
 @media print{
   *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
   html,body{background:white;padding:0;margin:0}
@@ -129,7 +141,9 @@ table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700
   <span class="status" id="data-status">–</span>
   <button onclick="laadData()">↻ Ververs</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
-  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten">🗑️ Wissen</button>
+  <span class="status" style="margin-left:8px">Document:</span>
+  <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
   <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
   <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
 </div>
@@ -464,36 +478,44 @@ document.getElementById('startuur-sel').addEventListener('change', ()=>{
   if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
 });
 
-/* ── Auto-save (lokaal) ── */
-const SAVE_KEY='wb_uurlijks_draft_v1';
+/* ── Auto-save (lokaal, per dag) ── */
+const SAVE_PREFIX='wb_uurlijks_draft_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function saveKey(){ return SAVE_PREFIX + huidigeDatum(); }
 function saveDraft(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{
     d[el.getAttribute('data-save')] = el.innerHTML;
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
-  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function leegForm(){
+  document.querySelectorAll('[data-save]').forEach(el=>{ el.innerHTML=''; });
+  const p=document.getElementById('plaats-in'); if(p) p.value='Rotterdam';
 }
 function restoreDraft(){
   try{
-    const j=localStorage.getItem(SAVE_KEY); if(!j) return;
+    const j=localStorage.getItem(saveKey());
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
-      if(d[k]!=null) el.innerHTML=d[k];
+      if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
     });
-    const p=document.getElementById('plaats-in'); if(p && d.plaats!=null) p.value=d.plaats;
+    const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rotterdam');
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
 }
 function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
   const el=document.getElementById('save-status'); if(!el) return;
   const t=new Date(ts);
-  el.textContent=`💾 ${voorvoegsel} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
 }
 function wisDraft(){
-  if(!confirm('Alle opgeslagen teksten wissen?')) return;
-  localStorage.removeItem(SAVE_KEY);
+  if(!confirm('Opgeslagen tekst van '+huidigeDatum()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
   location.reload();
 }
 let saveTimer;
@@ -504,6 +526,9 @@ document.addEventListener('input', e=>{
 document.addEventListener('blur', e=>{
   if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
 },true);
+
+document.getElementById('doc-datum').value = vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', restoreDraft);
 
 restoreDraft();
 laadData();
