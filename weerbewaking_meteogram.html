@@ -182,15 +182,15 @@
     <div class="chart-wrap">
       <div class="scale-left">
         <div class="scale-title">Bft</div>
-        <svg id="bftScale" width="66" height="600" viewBox="0 0 66 600"></svg>
+        <svg id="bftScale" width="66" height="650" viewBox="0 0 66 650"></svg>
       </div>
       <div class="scroll" id="scroll">
-        <svg id="chart" width="2400" height="600" viewBox="0 0 2400 600" preserveAspectRatio="none"></svg>
+        <svg id="chart" width="2400" height="650" viewBox="0 0 2400 650" preserveAspectRatio="none"></svg>
         <div class="tt" id="tt"></div>
       </div>
       <div class="scale-right">
         <div class="scale-title">Stoot km/u</div>
-        <svg id="gustScale" width="66" height="600" viewBox="0 0 66 600"></svg>
+        <svg id="gustScale" width="66" height="650" viewBox="0 0 66 650"></svg>
       </div>
     </div>
     <div class="legend">
@@ -224,7 +224,7 @@ function dirLetter(d){
 }
 
 /* ───── Geometry ───── */
-const W=2400,H=600,L=20,R=20,T=32;
+const W=2400,H=650,L=20,R=20,HEADER_H=50,T=HEADER_H+22;
 let colW=(W-L-R)/Math.max(1,N-1);
 const x=i=>L+i*colW;
 const pWindY=T,       pWindH=250;
@@ -274,6 +274,25 @@ function renderChart(){
   while(bftScaleEl.firstChild) bftScaleEl.removeChild(bftScaleEl.firstChild);
   while(gustScaleEl.firstChild) gustScaleEl.removeChild(gustScaleEl.firstChild);
   N1=N-1; colW=(W-L-R)/Math.max(1,N1);
+
+/* ─── Blauwe titelband bovenaan (vast aan grafiek, komt mee in PNG) ─── */
+{
+  const L0=new Date(startUTC.getTime()+2*3600*1000);
+  const dagen=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+  const mnd=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const dat=`${dagen[L0.getUTCDay()]} ${L0.getUTCDate()} ${mnd[L0.getUTCMonth()]}`;
+  const plaats=document.getElementById('hdr-plaats')?.textContent||'De Bilt';
+  svg.appendChild(el('rect',{x:0,y:0,width:W,height:HEADER_H,fill:'#00205b'}));
+  const a=el('text',{x:22,y:24,'font-size':'20','font-weight':'800',fill:'#ffffff','font-family':'Arial'});
+  a.textContent='Ed Aldus WM'; svg.appendChild(a);
+  const b=el('text',{x:22,y:42,'font-size':'13',fill:'#a8c4e8','font-family':'Arial','font-weight':'500'});
+  b.textContent='Uurlijkse verwachting · HARMONIE 2.5 km · '+plaats;
+  svg.appendChild(b);
+  const c=el('text',{x:W-22,y:24,'text-anchor':'end','font-size':'18','font-weight':'800',fill:'#ffffff','font-family':'Arial'});
+  c.textContent=dat.charAt(0).toUpperCase()+dat.slice(1); svg.appendChild(c);
+  const d=el('text',{x:W-22,y:42,'text-anchor':'end','font-size':'12.5',fill:'#a8c4e8','font-family':'Arial','font-weight':'500'});
+  d.textContent='Wind (Beaufort) · Temperatuur · Bewolking'; svg.appendChild(d);
+}
 
 /* ─── Dag/nacht ─── */
 for(let i=0;i<N1;i++){
@@ -368,6 +387,7 @@ for(let i=0;i<N;i+=2){
 const arrowY=pWindY+pWindH-46;
 for(let i=0;i<N;i++){
   const dir=winddir(i);
+  if(dir==null||isNaN(dir)) continue;
   const g=el('g',{transform:`translate(${x(i)},${arrowY}) rotate(${dir})`});
   g.appendChild(el('path',{d:'M0,-8 L0,8 M-3.5,3.5 L0,8 L3.5,3.5',
     stroke:'#0b1220','stroke-width':'1.4',fill:'none','stroke-linecap':'round','stroke-linejoin':'round'}));
@@ -510,11 +530,14 @@ updateHdrDatum();
 } /* einde renderChart */
 
 function updateHdrDatum(){
-  const el=document.getElementById('hdr-datum'); if(!el) return;
+  const el=document.getElementById('hdr-datum');
   const L0=new Date(startUTC.getTime()+2*3600*1000);
-  const dagen=['Zondag','Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag'];
+  const dagen=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   const mnd=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  el.textContent=`${dagen[L0.getUTCDay()]} ${L0.getUTCDate()} ${mnd[L0.getUTCMonth()]}`;
+  const datum=`${dagen[L0.getUTCDay()]} ${L0.getUTCDate()} ${mnd[L0.getUTCMonth()]}`;
+  window.__hdrDatum=datum;
+  window.__hdrPlaats=document.getElementById('hdr-plaats')?.textContent||'De Bilt';
+  if(el) el.textContent=datum.charAt(0).toUpperCase()+datum.slice(1);
 }
 
 /* ─── Tabel onder grafiek ─── */
