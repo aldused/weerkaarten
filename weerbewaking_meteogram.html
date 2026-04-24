@@ -282,15 +282,15 @@ function renderChart(){
   const mnd=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   const dat=`${dagen[L0.getUTCDay()]} ${L0.getUTCDate()} ${mnd[L0.getUTCMonth()]}`;
   const plaats=document.getElementById('hdr-plaats')?.textContent||'De Bilt';
-  svg.appendChild(el('rect',{x:0,y:0,width:W,height:HEADER_H,fill:'#00205b'}));
-  const a=el('text',{x:22,y:24,'font-size':'20','font-weight':'800',fill:'#ffffff','font-family':'Arial'});
+  svg.appendChild(el('rect',{x:0,y:0,width:W,height:HEADER_H,fill:'#00205b','data-hdr':'bg'}));
+  const a=el('text',{x:22,y:24,'font-size':'20','font-weight':'800',fill:'#ffffff','font-family':'Arial','data-hdr':'L1'});
   a.textContent='Ed Aldus WM'; svg.appendChild(a);
-  const b=el('text',{x:22,y:42,'font-size':'13',fill:'#a8c4e8','font-family':'Arial','font-weight':'500'});
+  const b=el('text',{x:22,y:42,'font-size':'13',fill:'#a8c4e8','font-family':'Arial','font-weight':'500','data-hdr':'L2'});
   b.textContent='Uurlijkse verwachting · HARMONIE 2.5 km · '+plaats;
   svg.appendChild(b);
-  const c=el('text',{x:W-22,y:24,'text-anchor':'end','font-size':'18','font-weight':'800',fill:'#ffffff','font-family':'Arial'});
+  const c=el('text',{x:W-22,y:24,'text-anchor':'end','font-size':'18','font-weight':'800',fill:'#ffffff','font-family':'Arial','data-hdr':'R1'});
   c.textContent=dat.charAt(0).toUpperCase()+dat.slice(1); svg.appendChild(c);
-  const d=el('text',{x:W-22,y:42,'text-anchor':'end','font-size':'12.5',fill:'#a8c4e8','font-family':'Arial','font-weight':'500'});
+  const d=el('text',{x:W-22,y:42,'text-anchor':'end','font-size':'12.5',fill:'#a8c4e8','font-family':'Arial','font-weight':'500','data-hdr':'R2'});
   d.textContent='Wind (Beaufort) · Temperatuur · Bewolking'; svg.appendChild(d);
 }
 
@@ -896,12 +896,20 @@ document.getElementById('btn-dl').addEventListener('click',async()=>{
   const b=+document.getElementById('dl-tot').value;
   const lo=Math.max(0,Math.min(a,b)),hi=Math.min(N-1,Math.max(a,b));
   const xLo=x(lo), xHi=x(hi), cw=xHi-xLo+40;
+  const xOrigin=xLo-20;
   // Serialize SVG-uitsnede naar PNG
   const clone=svg.cloneNode(true);
-  clone.setAttribute('viewBox',`${xLo-20} 0 ${cw} ${H}`);
+  clone.setAttribute('viewBox',`${xOrigin} 0 ${cw} ${H}`);
   clone.setAttribute('width',cw);clone.setAttribute('height',H);
   // verwijder hover
   const hv=clone.querySelector('#hover'); if(hv) hv.remove();
+  // Verschuif blauwe header zodat tekst altijd binnen het uitsneed-venster valt
+  const hdrBg=clone.querySelector('[data-hdr="bg"]');
+  if(hdrBg){ hdrBg.setAttribute('x',xOrigin); hdrBg.setAttribute('width',cw); }
+  const hL1=clone.querySelector('[data-hdr="L1"]'); if(hL1) hL1.setAttribute('x', xOrigin+22);
+  const hL2=clone.querySelector('[data-hdr="L2"]'); if(hL2) hL2.setAttribute('x', xOrigin+22);
+  const hR1=clone.querySelector('[data-hdr="R1"]'); if(hR1) hR1.setAttribute('x', xOrigin+cw-22);
+  const hR2=clone.querySelector('[data-hdr="R2"]'); if(hR2) hR2.setAttribute('x', xOrigin+cw-22);
   const xml=new XMLSerializer().serializeToString(clone);
   const blob=new Blob([xml],{type:'image/svg+xml;charset=utf-8'});
   const url=URL.createObjectURL(blob);
