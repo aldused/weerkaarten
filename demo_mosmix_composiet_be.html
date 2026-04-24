@@ -105,6 +105,15 @@
   <label class="toggle"><input type="checkbox" id="chk-all" checked> Alle 19 stations</label>
   <button class="btn-png" onclick="slaOp()" title="Kaart opslaan als PNG">⬇ PNG</button>
 </div>
+<div class="toolbar">
+  <span class="toolbar-label">Dagdeel</span>
+  <div id="dagdeel-btns" style="display:flex;gap:6px;flex-wrap:wrap">
+    <button class="btn-dag actief" data-dagdeel="dag">Hele dag</button>
+    <button class="btn-dag" data-dagdeel="ochtend">Ochtend 06–12</button>
+    <button class="btn-dag" data-dagdeel="middag">Middag 12–18</button>
+    <button class="btn-dag" data-dagdeel="avond">Avond/nacht 18–06</button>
+  </div>
+</div>
 
 <div class="kaart-wrap">
   <div class="kaart-container">
@@ -144,9 +153,10 @@
       </g>
     </svg>
     <div class="legenda-notes">
-      <div><b>Bron:</b> DWD MOSMIX (combinatie ECMWF/ICON), per station uit <code>mosmix_be.json</code>.</div>
-      <div><b>Min-temp</b> = de minimum in de nacht vóór de gekozen dag (bijv. woensdag toont de nacht di→wo).</div>
-      <div><b>Neerslag-kans</b> komt uit DWD-veld <code>R101</code> (kans ≥ 0,1 mm in een 12u-venster, max per dag). Fallback = 0% bij RR&nbsp;=&nbsp;0, anders uit <code>wwCh</code>.</div>
+      <div><b>Bron:</b> DWD MOSMIX (combinatie ECMWF/ICON), dagdata uit <code>mosmix_be.json</code>, dagdelen uit <code>mosmix_uurlijks_be.json</code>.</div>
+      <div><b>Hele dag:</b> TX (max, rood) + TN-nacht (min, blauw, 🌙) + POP% uit <code>R101</code>.</div>
+      <div><b>Ochtend 06-12 / Middag 12-18:</b> max-TTT in venster (rood) + neerslag-som in mm.</div>
+      <div><b>Avond/nacht 18-06:</b> min-TTT in venster (blauw) + neerslag-som in mm. Venster loopt door tot 06u van de volgende dag.</div>
     </div>
   </div>
 </div>
@@ -169,7 +179,62 @@ const OFFSET = {
   "Beauvechain": [0.15, 0],
 };
 
-let mosmixData=null, provincies=null, huidigDag=null, toonAlle=true;
+let mosmixData=null, uurlijksData=null, provincies=null, huidigDag=null, toonAlle=true, huidigDagdeel="dag";
+
+const DAGDEEL_LABELS = {
+  dag: "Hele dag",
+  ochtend: "Ochtend 06–12",
+  middag: "Middag 12–18",
+  avond: "Avond/nacht 18–06"
+};
+
+function dagdeelWindow(dag, dagdeel){
+  if(dagdeel === "ochtend") return {start: dag+"T06:00", end: dag+"T11:00"};
+  if(dagdeel === "middag")  return {start: dag+"T12:00", end: dag+"T17:00"};
+  if(dagdeel === "avond"){
+    const d = new Date(dag+"T12:00:00");
+    const nd = new Date(d.getTime()+86400000);
+    const nextDag = nd.toISOString().slice(0,10);
+    return {start: dag+"T18:00", end: nextDag+"T05:00"};
+  }
+  return null;
+}
+
+function stationDagdeelStats(naam, dag, dagdeel){
+  if(!uurlijksData) return null;
+  const s = uurlijksData.data?.[naam];
+  if(!s) return null;
+  const w = dagdeelWindow(dag, dagdeel);
+  if(!w) return null;
+  let tmin=Infinity, tmax=-Infinity, popHrs=0, totHrs=0, rrSum=0;
+  let ffSum=0, ffCnt=0, ddXSum=0, ddYSum=0, ddCnt=0;
+  for(let i=0;i<s.tijden.length;i++){
+    const t = s.tijden[i];
+    if(t < w.start || t > w.end) continue;
+    totHrs++;
+    const tt = s.TTT?.[i];
+    if(tt!=null){ if(tt<tmin) tmin=tt; if(tt>tmax) tmax=tt; }
+    const rr = s.RR1c?.[i];
+    if(rr!=null){ rrSum += rr; if(rr >= 0.1) popHrs++; }
+    const ff = s.FF?.[i];
+    if(ff!=null){ ffSum+=ff; ffCnt++; }
+    const dd = s.DD?.[i];
+    if(dd!=null){
+      ddXSum += Math.cos(dd*Math.PI/180);
+      ddYSum += Math.sin(dd*Math.PI/180);
+      ddCnt++;
+    }
+  }
+  if(totHrs===0) return null;
+  return {
+    tmax: tmax===-Infinity?null:tmax,
+    tmin: tmin===Infinity?null:tmin,
+    pop: totHrs ? Math.round(100*popHrs/totHrs) : null,
+    rr: rrSum,
+    ff: ffCnt? ffSum/ffCnt : null,
+    dd: ddCnt? ((Math.atan2(ddYSum, ddXSum)*180/Math.PI) + 360) % 360 : null
+  };
+}
 
 const TEMP_STOPS = [
   [-5,"#084594"],[-3,"#1565c0"],[0,"#64b5f6"],[2,"#a5d6a7"],[4,"#2e8b57"],
@@ -253,14 +318,32 @@ function tekenOverlay(){
   const stations = mosmixData.stations;
   const lijst = Object.keys(stations).filter(n => toonAlle || KERN.has(n));
 
+  const perStation = {};
+  for(const n of lijst){
+    if(huidigDagdeel === "dag"){
+      perStation[n] = {
+        tmax: dag.TX?.[n] ?? null,
+        tmin: dag.TN?.[n] ?? null,
+        pop:  dag.R101?.[n] ?? (dag.RR?.[n] != null ? (dag.RR[n] < 0.1 ? 0 : Math.min(100, Math.max(50, dag.wwCh?.[n] ?? 60))) : null),
+        rr:   dag.RR?.[n] ?? null,
+        ff:   dag.FF?.[n] ?? null,
+        dd:   dag.DD?.[n] ?? null
+      };
+    } else {
+      perStation[n] = stationDagdeelStats(n, huidigDag, huidigDagdeel) || {tmax:null,tmin:null,pop:null,rr:null,ff:null,dd:null};
+    }
+  }
+
+  const tempVeld = huidigDagdeel === "avond" ? "tmin" : "tmax";
   const extremen = { warmst:null, koudst:null, natst:null };
   for(const n of lijst){
-    const tx = dag.TX?.[n], rr = dag.RR?.[n];
-    if(tx != null){
-      if(extremen.warmst == null || tx > dag.TX[extremen.warmst]) extremen.warmst = n;
-      if(extremen.koudst == null || tx < dag.TX[extremen.koudst]) extremen.koudst = n;
+    const d = perStation[n];
+    const v = d[tempVeld];
+    if(v != null){
+      if(extremen.warmst == null || v > perStation[extremen.warmst][tempVeld]) extremen.warmst = n;
+      if(extremen.koudst == null || v < perStation[extremen.koudst][tempVeld]) extremen.koudst = n;
     }
-    if(rr != null && rr > 0 && (extremen.natst == null || rr > dag.RR[extremen.natst])) extremen.natst = n;
+    if(d.rr != null && d.rr > 0 && (extremen.natst == null || d.rr > perStation[extremen.natst].rr)) extremen.natst = n;
   }
 
   for(const naam of lijst){
@@ -268,7 +351,7 @@ function tekenOverlay(){
     const [dlo,dla] = OFFSET[naam] || [0,0];
     const ax = lonToX(lon),       ay = latToY(lat);
     const cx = lonToX(lon + dlo), cy = latToY(lat + dla);
-    tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen);
+    tekenBadge(svg, naam, cx, cy, perStation[naam], ax, ay, extremen);
   }
 }
 
@@ -291,19 +374,14 @@ function neerslagKleur(p){
   return "#0d47a1";
 }
 
-function tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen){
-  const tx = dag.TX?.[naam];
-  const tn = dag.TN?.[naam];
-  const rr   = dag.RR?.[naam];
-  const r101 = dag.R101?.[naam];
-  let pop = null;
-  if(r101 != null){
-    pop = r101;
-  } else if(rr != null){
-    pop = rr < 0.1 ? 0 : Math.min(100, Math.max(50, dag.wwCh?.[naam] ?? 60));
-  }
-  const ff  = dag.FF?.[naam];
-  const dd  = dag.DD?.[naam];
+function tekenBadge(svg, naam, cx, cy, d, ax, ay, extremen){
+  const isNachtDeel = huidigDagdeel === "avond";
+  const tx = huidigDagdeel === "dag" ? d.tmax : (isNachtDeel ? null : d.tmax);
+  const tn = huidigDagdeel === "dag" ? d.tmin : (isNachtDeel ? d.tmin : null);
+  const pop = d.pop;
+  const rr  = d.rr;
+  const ff  = d.ff;
+  const dd  = d.dd;
   const isKern = KERN.has(naam);
 
   const g = document.createElementNS("http://www.w3.org/2000/svg","g");
@@ -375,27 +453,36 @@ function tekenBadge(svg, naam, cx, cy, dag, ax, ay, extremen){
 
   if(tn != null){
     const t = document.createElementNS("http://www.w3.org/2000/svg","text");
-    t.setAttribute("x", 0); t.setAttribute("y", 20);
+    const dagMode = huidigDagdeel === "dag";
+    t.setAttribute("x", 0);
+    t.setAttribute("y", dagMode ? 20 : -14);
     t.setAttribute("text-anchor","middle");
     t.setAttribute("font-family","DM Sans, sans-serif");
     t.setAttribute("font-weight","700");
-    t.setAttribute("font-size", fontSmall);
+    t.setAttribute("font-size", dagMode ? fontSmall : fontBig);
     t.setAttribute("fill","#2471a3");
     t.setAttribute("stroke","#fff"); t.setAttribute("stroke-width","3"); t.setAttribute("paint-order","stroke");
-    t.textContent = "🌙 " + tn.toFixed(1).replace(".",",") + "°";
+    t.textContent = (dagMode ? "🌙 " : "") + tn.toFixed(1).replace(".",",") + "°";
     g.appendChild(t);
   }
 
-  if(pop != null){
+  if(huidigDagdeel === "dag" ? pop != null : rr != null){
     const t = document.createElementNS("http://www.w3.org/2000/svg","text");
     t.setAttribute("x", -13); t.setAttribute("y", 4);
     t.setAttribute("text-anchor","end");
     t.setAttribute("font-family","DM Sans, sans-serif");
     t.setAttribute("font-weight","700");
     t.setAttribute("font-size", fontTiny);
-    t.setAttribute("fill", neerslagKleur(pop));
+    if(huidigDagdeel === "dag"){
+      t.setAttribute("fill", neerslagKleur(pop));
+      t.textContent = Math.round(pop) + "%";
+    } else {
+      const v = rr || 0;
+      const kl = v < 0.1 ? "#94a3b8" : v < 1 ? "#42a5f5" : v < 5 ? "#1a7a4a" : "#0d47a1";
+      t.setAttribute("fill", kl);
+      t.textContent = v < 0.1 ? "0" : (v < 1 ? v.toFixed(1).replace(".",",") : Math.round(v)) + "mm";
+    }
     t.setAttribute("stroke","#fff"); t.setAttribute("stroke-width","3"); t.setAttribute("paint-order","stroke");
-    t.textContent = Math.round(pop) + "%";
     g.appendChild(t);
   }
 
@@ -450,11 +537,24 @@ function update(){
   tekenOverlay();
   const d = new Date(huidigDag + "T12:00:00");
   const full = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][d.getDay()];
-  document.getElementById("kaart-sub").textContent =
-    `${full} ${d.getDate()}/${d.getMonth()+1} — min-temp = nacht van ${dagLabel(new Date(d-86400000))} op ${full}`;
+  const sub = document.getElementById("kaart-sub");
+  if(huidigDagdeel === "dag"){
+    sub.textContent = `${full} ${d.getDate()}/${d.getMonth()+1} — min-temp = nacht van ${dagLabel(new Date(d-86400000))} op ${full}`;
+  } else {
+    sub.textContent = `${full} ${d.getDate()}/${d.getMonth()+1} — ${DAGDEEL_LABELS[huidigDagdeel]} (uit uurlijkse MOSMIX)`;
+  }
 }
 
 document.getElementById("chk-all").onchange = e => { toonAlle = e.target.checked; update(); };
+
+document.querySelectorAll("#dagdeel-btns .btn-dag").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("#dagdeel-btns .btn-dag").forEach(x => x.classList.remove("actief"));
+    btn.classList.add("actief");
+    huidigDagdeel = btn.dataset.dagdeel;
+    update();
+  };
+});
 
 function slaOp(){
   const baseSvg = document.getElementById("basemap-svg");
@@ -530,9 +630,10 @@ function toonStation(naam){
 
 Promise.all([
   fetch("mosmix_be.json?t="+Date.now()).then(r=>r.json()),
-  fetch("be_provincies.geojson").then(r=>r.json())
-]).then(([data, prov])=>{
-  provincies = prov; mosmixData = data;
+  fetch("be_provincies.geojson").then(r=>r.json()),
+  fetch("mosmix_uurlijks_be.json?t="+Date.now()).then(r=>r.json()).catch(()=>null)
+]).then(([data, prov, uur])=>{
+  provincies = prov; mosmixData = data; uurlijksData = uur;
   bouwBasemap();
 
   {
