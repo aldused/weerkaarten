@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking Rijnmond – demo</title>
+<script>
+  // Alleen toegankelijk na ontgrendelen op weerbewaking.html
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;padding:20px 10px}
+
+/* Pagina zoals in Word */
+.pagina{
+  max-width:800px;margin:0 auto 20px;background:white;padding:40px 50px;
+  box-shadow:0 2px 12px rgba(0,0,0,.08);border-radius:4px;
+}
+
+/* Toolbar (niet in print) */
+.toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:white;padding:12px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.9rem;padding:6px 10px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar button{font-family:inherit;font-size:.9rem;padding:7px 16px;background:#1a5490;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.toolbar button:hover{background:#124270}
+.toolbar .spacer{flex:1}
+.toolbar .status{font-size:.8rem;color:#888}
+
+/* Header van document */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2px solid #1a5490}
+.doc-header img.logo-l{height:155px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+.doc-opgesteld{margin-top:6px;font-size:.8rem;color:#555;font-style:italic}
+.doc-opgesteld .datum{font-weight:600;color:#333;font-style:normal}
+
+/* Titel */
+.titel{
+  font-size:1.6rem;font-weight:700;color:#1a5490;text-align:center;
+  text-transform:uppercase;letter-spacing:.02em;padding:12px 8px;
+  margin:20px 0 24px;border-top:1px solid #ccc;border-bottom:1px solid #ccc;
+  min-height:50px;outline:none;
+}
+.titel:focus{background:#fffbe8}
+.titel:empty::before{content:'KLIK HIER EN TYP DE TITEL...';color:#bbb;font-weight:500}
+
+/* Sectie kopjes */
+h2.kop{font-size:1.1rem;font-weight:700;color:#1a5490;margin:22px 0 10px;padding-bottom:4px;border-bottom:1px solid #e0e0e0}
+
+/* Bewerkbare tekstvakken */
+.tekstvak{
+  min-height:80px;padding:10px 12px;border:1px dashed #ccc;border-radius:3px;
+  font-size:.95rem;line-height:1.55;color:#333;outline:none;background:#fafafa;
+  text-align:justify;
+}
+.tekstvak:focus{background:#fffbe8;border-color:#1a5490;border-style:solid}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Tabellen */
+table.tabel{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:.9rem}
+table.tabel th,table.tabel td{border:1px solid #bbb;padding:6px 8px;text-align:center}
+table.tabel th{background:#1a5490;color:white;font-weight:600;font-size:.85rem}
+table.tabel td.label{text-align:left;background:#f0f4f8;font-weight:600;width:40%}
+
+/* Waarschuwingen */
+.waarsch-status{font-weight:700;font-size:.85rem;padding:4px 10px;border-radius:3px;display:inline-block;min-width:70px}
+.w-geen{background:#d4e8d4;color:#2d6a2d}
+.w-geel{background:#fff3b0;color:#8a6d00}
+.w-oranje{background:#ffcf9f;color:#b05a00}
+.w-rood{background:#ffb0b0;color:#a00000}
+select.status-sel{font-family:inherit;font-size:.85rem;padding:3px 6px;border:1px solid #ccc;border-radius:3px;font-weight:700}
+
+/* Vooruitzichten tabel */
+table.vooruit{width:100%;border-collapse:collapse;margin-top:8px;font-size:.85rem}
+table.vooruit th,table.vooruit td{border:1px solid #aaa;padding:6px 4px;text-align:center}
+table.vooruit th{background:#1a5490;color:white;font-size:.85rem}
+table.vooruit th.dag{width:11%}
+table.vooruit td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-size:.8rem;width:23%;padding-left:8px}
+table.vooruit .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1a5490;margin-right:3px}
+
+/* Footer */
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.75rem;color:#888;text-align:center;display:flex;justify-content:space-between}
+
+/* PRINT */
+@media print{
+  body{background:white;padding:0}
+  .toolbar{display:none}
+  .pagina{box-shadow:none;margin:0;padding:20mm;max-width:none;min-height:auto}
+  .pagina-2{page-break-before:always;break-before:page}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  .titel{border-top:1px solid #888;border-bottom:1px solid #888}
+  select.status-sel{border:none;appearance:none;-webkit-appearance:none;background:transparent;font-weight:700}
+  @page{size:A4;margin:10mm}
+}
+</style>
+</head>
+<body>
+
+<!-- Toolbar (niet zichtbaar in print) -->
+<div class="toolbar">
+  <label>Station:</label>
+  <select id="station-sel">
+    <option value="210">210 Valkenburg</option>
+    <option value="235">235 De Kooy (Den Helder)</option>
+    <option value="240">240 Schiphol</option>
+    <option value="260">260 De Bilt</option>
+    <option value="269">269 Lelystad</option>
+    <option value="270">270 Leeuwarden</option>
+    <option value="275">275 Deelen</option>
+    <option value="280">280 Eelde</option>
+    <option value="290">290 Twenthe</option>
+    <option value="310">310 Vlissingen</option>
+    <option value="330">330 Hoek van Holland</option>
+    <option value="344" selected>344 Rotterdam Airport</option>
+    <option value="350">350 Gilze-Rijen</option>
+    <option value="370">370 Eindhoven</option>
+    <option value="375">375 Volkel</option>
+    <option value="380">380 Maastricht</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="status" id="data-status">Laatst bijgewerkt: –</span>
+  <button onclick="laadData()">↻ Ververs</button>
+  <button onclick="window.print()">🖨️ Exporteer PDF</button>
+  <a href="weerbewaking.html" style="font-size:.85rem;color:#888;text-decoration:none;margin-left:8px">← Terug</a>
+</div>
+
+<!-- DOCUMENT -->
+<div class="pagina" id="doc">
+
+  <!-- Header met logo's -->
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Regionale Weersverwachting Rijnmond" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum">–</span></div>
+
+  <!-- Titel (invulbaar) -->
+  <div class="titel" contenteditable="true" data-placeholder="TITEL">VEEL ZON EN AANHOUDEND DROOG</div>
+
+  <!-- Weersituatie -->
+  <h2 class="kop">De weersituatie nader beschreven</h2>
+  <div class="tekstvak" contenteditable="true" data-placeholder="Beschrijf hier de grootschalige weersituatie (hogedrukgebieden, fronten, etc.)...">Voorlopig blijven hogedrukgebieden een stempel drukken op het Nederlandse weer. Vandaag ligt er een hogedrukgebied ten noordoosten van Schotland dat langzaam in betekenis afneemt. De rol van dit hogedrukgebied wordt morgen overgenomen door een hogedrukgebied bij IJsland, dat zich naar de Shetland Eilanden verplaatst en op zondag richting de Noorse Zee trekt. Er komt voorlopig dan ook geen verandering in het huidige weerbeeld.</div>
+
+  <!-- Verwachting komende dagen -->
+  <h2 class="kop">De weersverwachting voor de komende dagen</h2>
+  <div class="tekstvak" contenteditable="true" data-placeholder="Beschrijf vandaag, morgen en overmorgen...">De dag kan beginnen met lage bewolking of plaatselijk mist. Daarna wordt het opnieuw zonnig en blijft het droog. De middagtemperatuur komt uit op ongeveer 16 graden. Er waait een zwakke tot matige wind uit het noorden tot noordwesten.</div>
+
+  <!-- Waarschuwingen -->
+  <h2 class="kop">Waarschuwingen</h2>
+  <table class="tabel" id="waarsch-tabel">
+    <thead>
+      <tr><th style="width:25%">Periode</th><th style="width:25%">Datum</th><th>Status</th></tr>
+    </thead>
+    <tbody id="waarsch-body"></tbody>
+  </table>
+
+  <!-- Footer pagina 1 -->
+  <div class="doc-footer">
+    <span>Weerbewaking · Ed Aldus Weer en Media</span>
+    <span>1 / 2</span>
+  </div>
+</div>
+
+<!-- ========== PAGINA 2 ========== -->
+<div class="pagina pagina-2" id="doc-2">
+
+  <!-- Header (zelfde logo's) -->
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Regionale Weersverwachting Rijnmond" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum-2">–</span></div>
+
+  <!-- Verwachting daarna -->
+  <h2 class="kop">De weersverwachting voor daarna</h2>
+  <div class="tekstvak" contenteditable="true" data-placeholder="Vooruitblik dag 4 en verder...">Op Koningsdag en dinsdag zien we een mix van zon en bewolking en blijft het droog. De maximumtemperatuur bedraagt dan ongeveer 15 graden. Vanaf woensdag krijgt de zon weer helemaal de overhand.</div>
+
+  <!-- Vooruitzichten -->
+  <h2 class="kop">Vooruitzichten</h2>
+  <table class="vooruit" id="vooruit-tabel">
+    <thead>
+      <tr id="vooruit-dagen"><th class="rij-label"></th></tr>
+    </thead>
+    <tbody id="vooruit-body"></tbody>
+  </table>
+
+  <!-- Footer pagina 2 -->
+  <div class="doc-footer">
+    <span>Weerbewaking · Ed Aldus Weer en Media</span>
+    <span>2 / 2</span>
+  </div>
+
+</div>
+
+<script>
+/* ── Stationsmapping nummer → naam in mosmix_nl.json ── */
+const STATIONS = {
+  210:'Valkenburg', 235:'Den Helder', 240:'Amsterdam', 260:'De Bilt',
+  269:'Lelystad', 270:'Leeuwarden', 275:'Deelen', 280:'Eelde',
+  290:'Enschede', 310:'Vlissingen', 330:'Hoek van Holland',
+  344:'Rotterdam Airport', 350:'Gilze Rijen', 370:'Eindhoven',
+  375:'Volkel', 380:'Maastricht'
+};
+
+/* ── Hulpfuncties ── */
+const MAAND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const DAG=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const DAG_KORT=['ZO','MA','DI','WO','DO','VR','ZA'];
+
+function formatDatumVol(d){
+  return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]} ${d.getFullYear()} om ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} uur`;
+}
+function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function plusDag(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+
+/* Wind: m/s of km/h → BFT */
+function naarBFT(kmh){
+  if(kmh==null) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+/* Graden → letter (N, NNO, NO, ONO, O, …) */
+function naarRichting(deg){
+  if(deg==null) return '–';
+  const r=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW','N'];
+  return r[Math.round(deg/22.5)];
+}
+/* Korte letterversie voor tabel (N, NO, O, ZO, Z, ZW, W, NW) */
+function naarRichtingKort(deg){
+  if(deg==null) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+
+/* ── Dag-koppen in vooruitzichten ── */
+function bouwDagKoppen(startDatum){
+  const tr = document.getElementById('vooruit-dagen');
+  tr.innerHTML = '<th class="rij-label"></th>';
+  for(let i=1;i<=6;i++){
+    const d = plusDag(startDatum, i);
+    tr.insertAdjacentHTML('beforeend',
+      `<th class="dag">${DAG_KORT[d.getDay()]}<br><small style="font-weight:400;opacity:.85">${formatDMshort(d)}</small></th>`);
+  }
+}
+
+/* ── Vooruitzichten-rijen ── */
+function bouwVooruitzichtenRij(label, cellen){
+  return `<tr><td class="rij-label">${label}</td>${cellen.map(c=>`<td>${c}</td>`).join('')}</tr>`;
+}
+
+/* ── Waarschuwingen ── */
+function bouwWaarschuwingen(startDatum){
+  const rijen = [
+    {periode:'Vandaag',   datum: plusDag(startDatum,0)},
+    {periode:'Morgen',    datum: plusDag(startDatum,1)},
+    {periode:'Overmorgen',datum: plusDag(startDatum,2)}
+  ];
+  const tbody = document.getElementById('waarsch-body');
+  tbody.innerHTML = rijen.map((r,i)=>`
+    <tr>
+      <td class="label">${r.periode}</td>
+      <td>${formatDMshort(r.datum)}</td>
+      <td>
+        <select class="status-sel" data-idx="${i}" onchange="updateStatusKleur(this)">
+          <option value="GEEN">GEEN</option>
+          <option value="GEEL">GEEL</option>
+          <option value="ORANJE">ORANJE</option>
+          <option value="ROOD">ROOD</option>
+        </select>
+      </td>
+    </tr>`).join('');
+}
+function updateStatusKleur(sel){
+  const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
+  sel.className = 'status-sel ' + kl[sel.value];
+}
+
+/* ── Demo data (placeholder, uit voorbeeld-doc) ── */
+const DEMO_DATA = {
+  tmax:[16,16,15,15,16,17],
+  tmin:[3,5,4,6,6,5],
+  zon:[10,7,6,9,10,10],
+  nsk:[0,0,10,0,0,0],
+  nsm:[0,0,0,0,0,0],
+  bft:['3','3','3','3-4','3-4','3-4'],
+  ri:[315, 0, 45, 45, 45, 45]
+};
+
+/* ── Vul vooruitzichten met data ── */
+function vulVooruitzichten(data){
+  const tbody = document.getElementById('vooruit-body');
+  const rij = (lbl, arr, fmt=(v=>v)) => bouwVooruitzichtenRij(lbl, arr.map(fmt));
+  const windCel = (bft, deg) => {
+    const letter = naarRichtingKort(deg);
+    const rot = deg!=null ? deg : 0;
+    return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+  };
+  tbody.innerHTML = [
+    rij('Max. temperatuur (°C)', data.tmax),
+    rij('Min. temperatuur (°C)', data.tmin),
+    rij('Zonuren',                data.zon),
+    rij('Neerslagkans (%)',       data.nsk),
+    rij('Neerslag (mm)',          data.nsm),
+    rij('Windkracht (BFT)',       data.bft),
+    `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td>${windCel(null,d)}</td>`).join('')}</tr>`
+  ].join('');
+}
+
+/* ── Init/laad ── */
+async function laadData(){
+  const nu = new Date();
+  const dstr = formatDatumVol(nu);
+  document.getElementById('hdr-datum').textContent = dstr;
+  const d2 = document.getElementById('hdr-datum-2');
+  if(d2) d2.textContent = dstr;
+  bouwDagKoppen(nu);
+  bouwWaarschuwingen(nu);
+
+  const stationNr = document.getElementById('station-sel').value;
+  const stationNaam = STATIONS[stationNr];
+
+  // PROBEER ECHTE DATA
+  try{
+    const r = await fetch('mosmix_nl.json?_=' + Date.now());
+    if(!r.ok) throw new Error('geen data');
+    const j = await r.json();
+    const dagen = Object.keys(j.data).sort();
+    // Pak 6 dagen vanaf morgen (index 1 t/m 6), zoals in voorbeeld-doc
+    const zes = dagen.slice(1,7);
+    const pick = (fld, dt) => j.data[dt]?.[fld]?.[stationNaam];
+    const data = {
+      tmax: zes.map(dt => Math.round(pick('TX',dt) ?? NaN)),
+      tmin: zes.map(dt => {const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
+      zon:  zes.map(dt => {const v=pick('SQ',dt); return v==null?'–':Math.round(v)}),
+      nsk:  zes.map(dt => {const v=pick('R101',dt); return v==null?'–':Math.round(v*10)}), // R101 kans 0-1 → %? check
+      nsm:  zes.map(dt => {const v=pick('RR',dt); return v==null?'–':v.toFixed(1).replace('.0','')}),
+      bft:  zes.map(dt => naarBFT(pick('FF',dt))),
+      ri:   zes.map(dt => pick('DD',dt))
+    };
+    vulVooruitzichten(data);
+    document.getElementById('data-status').textContent = 'Laatst bijgewerkt: ' + (j.bijgewerkt||'onbekend');
+  }catch(e){
+    // Fallback: demo data
+    vulVooruitzichten(DEMO_DATA);
+    document.getElementById('data-status').textContent = 'Demo-data (bestand niet gevonden)';
+  }
+}
+
+document.getElementById('station-sel').addEventListener('change', laadData);
+laadData();
+</script>
+
+</body>
+</html>
