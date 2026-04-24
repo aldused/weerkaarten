@@ -121,32 +121,12 @@ table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700
 <body>
 
 <div class="toolbar">
-  <label>Station:</label>
-  <select id="station-sel">
-    <option value="Valkenburg">Valkenburg</option>
-    <option value="Den Helder">Den Helder</option>
-    <option value="Amsterdam">Schiphol (Amsterdam)</option>
-    <option value="De Bilt">De Bilt</option>
-    <option value="Leeuwarden">Leeuwarden</option>
-    <option value="Deelen">Deelen</option>
-    <option value="Eelde">Eelde</option>
-    <option value="Enschede">Twenthe (Enschede)</option>
-    <option value="Vlissingen">Vlissingen</option>
-    <option value="Hoek van Holland">Hoek van Holland</option>
-    <option value="Rotterdam Airport" selected>Rotterdam Airport</option>
-    <option value="Gilze Rijen">Gilze-Rijen</option>
-    <option value="Eindhoven">Eindhoven</option>
-    <option value="Volkel">Volkel</option>
-    <option value="Maastricht">Maastricht</option>
-    <option value="Terschelling">Terschelling</option>
-    <option value="Vlieland">Vlieland</option>
-    <option value="Hoogeveen">Hoogeveen</option>
-    <option value="IJsselmeer">IJsselmeer</option>
-  </select>
-  <label>Startuur:</label>
+  <label>Bron:</label>
+  <span style="font-size:.8rem;color:#1a5490;font-weight:700">HARMONIE 2×2 km</span>
+  <label style="margin-left:16px">Startuur:</label>
   <select id="startuur-sel"></select>
   <span class="spacer"></span>
-  <span class="status" id="data-status">Laatst bijgewerkt: –</span>
+  <span class="status" id="data-status">–</span>
   <button onclick="laadData()">↻ Ververs</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
@@ -164,8 +144,10 @@ table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700
 
   <div class="plaats-blok">
     <span class="label">Plaats</span>
-    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Vul een plaats in...">
+    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Typ een plaats en druk Enter...">
+    <button id="zoek-btn" style="background:#e8780c;color:white;border:none;border-radius:3px;padding:5px 12px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🔍 Zoek</button>
   </div>
+  <div id="geo-status" style="font-size:.72rem;color:#666;margin:4px 0 0 4px;min-height:14px"></div>
 
   <div class="subtitel" contenteditable="true" data-placeholder="Subtitel (bijv. WEER  |  EVENEMENT)">WEER  |  EVENEMENT</div>
   <div class="titel" contenteditable="true" data-placeholder="TITEL">GRIJS EN WATERKOUD</div>
@@ -252,40 +234,91 @@ function windCel(deg){
   return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
 }
 
-/* ── Data laden ── */
-let dataJson=null;
+/* ── HARMONIE data (2×2 km) ── */
+let harmonieMeta=null;
+let huidigePunt=null; // {lat,lon,naam,iLat,iLon,gi}
+let puntCache={}; // {gi: {param: [[comp,...], ...]}}
 
-async function laadJson(){
-  if(dataJson) return dataJson;
-  try{
-    const r=await fetch('mosmix_uurlijks_nl.json?_='+Date.now());
-    if(!r.ok) throw new Error('geen data');
-    dataJson=await r.json();
-    return dataJson;
-  }catch(e){ return null; }
+async function laadMeta(){
+  if(harmonieMeta) return harmonieMeta;
+  const r=await fetch('harmonie_canvas_meta.json?_='+Date.now());
+  harmonieMeta=await r.json();
+  return harmonieMeta;
 }
 
-function vulStartuurSelect(tijden){
+function latLonNaarGrid(meta,lat,lon){
+  const g=meta.grid;
+  const iLat=Math.round((lat-g.lat_min)/(g.lat_max-g.lat_min)*(g.n_lat-1));
+  const iLon=Math.round((lon-g.lon_min)/(g.lon_max-g.lon_min)*(g.n_lon-1));
+  if(iLat<0||iLat>=g.n_lat||iLon<0||iLon>=g.n_lon) return null;
+  return {iLat,iLon,gi:iLat*g.n_lon+iLon};
+}
+
+/* ── Geocoding via Nominatim ── */
+async function geocodePlaats(q){
+  const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de&q='+encodeURIComponent(q);
+  const r=await fetch(url);
+  if(!r.ok) throw new Error('geocode faalde');
+  const j=await r.json();
+  if(!j.length) return null;
+  return {lat:parseFloat(j[0].lat), lon:parseFloat(j[0].lon), naam:j[0].display_name};
+}
+
+/* ── Range-request voor 1 float (little-endian float32) ── */
+async function fetchFloat(url,offset){
+  const r=await fetch(url,{headers:{'Range':`bytes=${offset}-${offset+3}`}});
+  if(!r.ok && r.status!==206) throw new Error('range faalde '+r.status);
+  const buf=await r.arrayBuffer();
+  return new DataView(buf).getFloat32(0,true);
+}
+
+/* ── Haal puntdata uit een HARMONIE-bin voor alle nSteps ── */
+async function puntReeks(paramKey, gi, nSteps){
+  const meta=await laadMeta();
+  const info=meta.parameters[paramKey];
+  if(!info) throw new Error('param onbekend: '+paramKey);
+  const nPts=meta.grid.n_lat*meta.grid.n_lon;
+  const nComp=info.components;
+  const url=info.file;
+  const HEADER=16;
+  const offsets=[];
+  const idx=[]; // [step,comp]
+  for(let s=0;s<nSteps;s++){
+    for(let c=0;c<nComp;c++){
+      offsets.push(HEADER + ((s*nComp+c)*nPts + gi)*4);
+      idx.push([s,c]);
+    }
+  }
+  const vals=await Promise.all(offsets.map(o=>fetchFloat(url,o)));
+  const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
+  for(let k=0;k<vals.length;k++){ uit[idx[k][0]][idx[k][1]]=vals[k]; }
+  return uit; // [step][comp]
+}
+
+function vulStartuurSelect(tijden,nuSel){
   const sel=document.getElementById('startuur-sel');
   const nu=new Date();
-  // Zoek het eerste uur ≥ huidige uur
   let startIdx=0;
   for(let i=0;i<tijden.length;i++){
     const t=new Date(tijden[i]);
     if(t>=nu){ startIdx=i; break; }
   }
+  const behoud=sel.value;
   sel.innerHTML='';
-  // Toon alleen startopties waarbij we nog 12 uur data hebben
   const maxStart=Math.min(tijden.length-12, startIdx+48);
   for(let i=Math.max(0,startIdx-2); i<=maxStart; i++){
     const t=new Date(tijden[i]);
     const lbl=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
     const opt=document.createElement('option');
     opt.value=i; opt.textContent=lbl;
-    if(i===startIdx) opt.selected=true;
+    if(i===(nuSel!=null?parseInt(nuSel):startIdx)) opt.selected=true;
     sel.appendChild(opt);
   }
+  if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
 }
+
+function msNaarKmh(ms){ return ms*3.6; }
+function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):(+v).toFixed(d).replace(/\.0$/,'')); }
 
 async function laadData(){
   const nu=new Date();
@@ -294,103 +327,140 @@ async function laadData(){
   document.getElementById('footer-datum').textContent=formatDMshort(nu)+' '+String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
   bouwWaarschuwing(nu);
 
-  const station=document.getElementById('station-sel').value;
-  const j=await laadJson();
-  if(!j){
-    document.getElementById('data-status').textContent='Data niet beschikbaar';
-    return;
+  try{
+    const meta=await laadMeta();
+    if(document.getElementById('startuur-sel').options.length===0){
+      vulStartuurSelect(meta.tijden);
+    }
+    if(!huidigePunt){
+      // Eerste keer of na reload: zoek initiele plaats
+      await zoekEnLaad();
+      return;
+    }
+    const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+    await renderTabellen(startIdx);
+    document.getElementById('data-status').textContent='HARMONIE · run '+meta.run;
+  }catch(e){
+    document.getElementById('data-status').textContent='Fout: '+e.message;
   }
-  const s=j.data[station];
-  if(!s){
-    document.getElementById('data-status').textContent='Station niet in dataset';
-    return;
-  }
+}
 
-  // Vul startuur dropdown (één keer)
-  if(document.getElementById('startuur-sel').options.length===0){
-    vulStartuurSelect(s.tijden);
-  }
+async function renderTabellen(startIdx){
+  const meta=harmonieMeta;
+  const pt=huidigePunt;
+  const NSTEPS=12;
+  document.getElementById('data-status').textContent='HARMONIE laden…';
 
-  const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
-  const uren1=[], uren2=[];
+  // Haal alle param-reeksen parallel
+  const params=['temp','neerslag','wind','windstoten','bewolking','onweer'];
+  const reeksen={};
+  await Promise.all(params.map(async p=>{
+    try{
+      const r=await puntReeks(p, pt.gi, startIdx+NSTEPS);
+      reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
+    }catch(e){ reeksen[p]=null; }
+  }));
+
+  const tijden1=[], tijden2=[];
   const rijen1={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
   const rijen2={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
-
-  function vulRij(arr, tgt, i){
-    const t=new Date(s.tijden[i]);
-    tgt.label=formatDagLang(t);
-    const uur=`${String(t.getHours()).padStart(2,'0')}:00 uur`;
-    arr.push(uur);
-    const temp=s.TTT[i];
-    const dd=s.DD[i];
-    const ff=s.FF[i];
-    const fx=s.FX1[i];
-    const rr=s.RR1c[i];
-    const neff=s.Neff[i];
-    const wwT=s.wwT[i];
-    rijen1.temp._pushTo=rijen1.temp._pushTo||[];
-  }
-  function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):v.toFixed(d).replace('.0','')); }
-
-  // Eerste tabel: startIdx .. startIdx+5
   let dagLabel1='', dagLabel2='';
-  const tijden1=[], tijden2=[];
-  for(let k=0;k<6;k++){
-    const i=startIdx+k;
-    if(i>=s.tijden.length) break;
-    const t=new Date(s.tijden[i]);
+
+  for(let k=0;k<NSTEPS;k++){
+    const tijden=meta.tijden[startIdx+k];
+    if(!tijden) break;
+    const t=new Date(tijden);
+    const uur=`${String(t.getHours()).padStart(2,'0')}:00 uur`;
+    const rij = k<6 ? rijen1 : rijen2;
     if(k===0) dagLabel1=formatDagLang(t);
-    tijden1.push(`${String(t.getHours()).padStart(2,'0')}:00 uur`);
-    rijen1.temp.push(f(s.TTT[i],0));
-    rijen1.wind.push(windCel(s.DD[i]));
-    rijen1.bft.push(naarBFT(s.FF[i]));
-    rijen1.stoot.push(f(s.FX1[i],0));
-    rijen1.kansR.push(s.RR1c[i]>0.05?'+':'0'); // simpele indicatie
-    rijen1.regen.push(f(s.RR1c[i],1));
-    rijen1.kansO.push('0');
-    const neff=s.Neff[i]; rijen1.zon.push(neff==null?'–':Math.max(0,100-neff));
-  }
-  for(let k=6;k<12;k++){
-    const i=startIdx+k;
-    if(i>=s.tijden.length) break;
-    const t=new Date(s.tijden[i]);
     if(k===6) dagLabel2=formatDagLang(t);
-    tijden2.push(`${String(t.getHours()).padStart(2,'0')}:00 uur`);
-    rijen2.temp.push(f(s.TTT[i],0));
-    rijen2.wind.push(windCel(s.DD[i]));
-    rijen2.bft.push(naarBFT(s.FF[i]));
-    rijen2.stoot.push(f(s.FX1[i],0));
-    rijen2.kansR.push(s.RR1c[i]>0.05?'+':'0');
-    rijen2.regen.push(f(s.RR1c[i],1));
-    rijen2.kansO.push('0');
-    const neff=s.Neff[i]; rijen2.zon.push(neff==null?'–':Math.max(0,100-neff));
+    (k<6?tijden1:tijden2).push(uur);
+
+    const temp = reeksen.temp ? reeksen.temp[k][0] : null;
+    rij.temp.push(f(temp,0));
+
+    let wspd=null, wdir=null;
+    if(reeksen.wind){
+      const u=reeksen.wind[k][0], v=reeksen.wind[k][1];
+      wspd=Math.sqrt(u*u+v*v); // m/s
+      wdir=(Math.atan2(-u,-v)*180/Math.PI+360)%360; // meteo conv.
+    }
+    rij.wind.push(wdir==null?'–':windCel(wdir));
+    rij.bft.push(wspd==null?'–':naarBFT(msNaarKmh(wspd)));
+
+    let gust=null;
+    if(reeksen.windstoten){
+      const u=reeksen.windstoten[k][0], v=reeksen.windstoten[k][1];
+      gust=Math.sqrt(u*u+v*v);
+    }
+    rij.stoot.push(gust==null?'–':Math.round(msNaarKmh(gust)));
+
+    const rr = reeksen.neerslag ? reeksen.neerslag[k][0] : null;
+    rij.regen.push(rr==null?'–':f(rr,1));
+    // Simpele kans-heuristiek: veel regen → hoge kans
+    rij.kansR.push(rr==null?'–':(rr>0.5?100:rr>0.1?70:rr>0.02?30:0));
+
+    const thn = reeksen.onweer ? reeksen.onweer[k][0] : null;
+    // onweer is proxy (bv. CAPE-achtig); bucket in %
+    rij.kansO.push(thn==null?'–':(thn>0.7?80:thn>0.4?40:thn>0.1?10:0));
+
+    // bewolking heeft 3 comp (laag/mid/hoog 0-1); totaal ~ max
+    let cloudTot=null;
+    if(reeksen.bewolking){
+      const b=reeksen.bewolking[k];
+      cloudTot=Math.max(b[0]||0, b[1]||0, b[2]||0);
+    }
+    rij.zon.push(cloudTot==null?'–':Math.round((1-cloudTot)*100));
   }
 
-  const rijDef=(rij)=>[
-    {label:'Temperatuur (°C)', cellen:rij.temp},
-    {label:'Wind',             cellen:rij.wind},
-    {label:'Windkracht (BFT)', cellen:rij.bft},
-    {label:'Max. windstoot (km/u)', cellen:rij.stoot},
-    {label:'Kans op regen (%)',cellen:rij.kansR},
-    {label:'Regen (mm)',       cellen:rij.regen},
-    {label:'Kans op onweer (%)',cellen:rij.kansO},
-    {label:'Zon/helder (%)',   cellen:rij.zon}
+  const rijDef=(r)=>[
+    {label:'Temperatuur (°C)', cellen:r.temp},
+    {label:'Wind',             cellen:r.wind},
+    {label:'Windkracht (BFT)', cellen:r.bft},
+    {label:'Max. windstoot (km/u)', cellen:r.stoot},
+    {label:'Kans op regen (%)',cellen:r.kansR},
+    {label:'Regen (mm)',       cellen:r.regen},
+    {label:'Kans op onweer (%)',cellen:r.kansO},
+    {label:'Zon/helder (%)',   cellen:r.zon}
   ];
   bouwUurTabel(document.getElementById('uur-tabel-1'), dagLabel1, tijden1, rijDef(rijen1));
-  if(tijden2.length>0){
+  if(tijden2.length){
     bouwUurTabel(document.getElementById('uur-tabel-2'), dagLabel2, tijden2, rijDef(rijen2));
     document.getElementById('uur-tabel-2').style.display='';
+    document.querySelector('h2.kop + table.uur + h2.kop')?.style.setProperty('display','');
   } else {
     document.getElementById('uur-tabel-2').style.display='none';
   }
-  document.getElementById('data-status').textContent='Laatst bijgewerkt: '+(j.bijgewerkt||'onbekend');
+  document.getElementById('data-status').textContent='HARMONIE · run '+meta.run;
 }
 
-document.getElementById('station-sel').addEventListener('change', ()=>{
-  document.getElementById('startuur-sel').innerHTML='';
-  laadData();
+async function zoekEnLaad(){
+  const q=(document.getElementById('plaats-in').value||'').trim();
+  if(!q){ document.getElementById('geo-status').textContent=''; return; }
+  const geoEl=document.getElementById('geo-status');
+  geoEl.textContent='Zoeken…';
+  try{
+    const meta=await laadMeta();
+    const res=await geocodePlaats(q);
+    if(!res){ geoEl.textContent='Niet gevonden.'; return; }
+    const grid=latLonNaarGrid(meta,res.lat,res.lon);
+    if(!grid){ geoEl.textContent='Buiten HARMONIE-gebied.'; return; }
+    huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam,...grid};
+    geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')}  (${res.lat.toFixed(3)}, ${res.lon.toFixed(3)})`;
+    const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+    await renderTabellen(startIdx);
+  }catch(e){
+    geoEl.textContent='Fout: '+e.message;
+  }
+}
+
+document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
+document.getElementById('plaats-in').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); zoekEnLaad(); }
 });
-document.getElementById('startuur-sel').addEventListener('change', laadData);
+document.getElementById('startuur-sel').addEventListener('change', ()=>{
+  if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
+});
 laadData();
 
 /* ── Terug naar menu ── */
