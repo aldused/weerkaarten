@@ -163,12 +163,13 @@
    Stations
    ────────────────────────────────────────────────────────────── */
 const STATIONS = [
-  { name: 'De Bilt',                lat: 52.10, lon: 5.18 },
-  { name: 'Groningen (Eelde)',      lat: 53.13, lon: 6.58 },
-  { name: 'Twente',                 lat: 52.27, lon: 6.89 },
-  { name: 'Maastricht (Beek)',      lat: 50.91, lon: 5.77 },
-  { name: 'Schiphol / Den Helder',  lat: 52.31, lon: 4.77 },
-  { name: 'Vlissingen',             lat: 51.44, lon: 3.60 },
+  { name: 'De Bilt',           lat: 52.10, lon: 5.18 },
+  { name: 'Groningen (Eelde)', lat: 53.13, lon: 6.58 },
+  { name: 'Twente',            lat: 52.27, lon: 6.89 },
+  { name: 'Maastricht (Beek)', lat: 50.91, lon: 5.77 },
+  { name: 'Schiphol',          lat: 52.31, lon: 4.77 },
+  { name: 'Den Helder',        lat: 52.92, lon: 4.78 },
+  { name: 'Vlissingen',        lat: 51.44, lon: 3.60 },
 ];
 
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -239,15 +240,27 @@ STATIONS.forEach((st, i) => {
 /* ──────────────────────────────────────────────────────────────
    Fetch helpers
    ────────────────────────────────────────────────────────────── */
+async function fetchWithRetry(url, tries = 3) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+      await new Promise(res => setTimeout(res, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
 async function fetchEns(st) {
   const url = `https://ensemble-api.open-meteo.com/v1/ensemble`
     + `?latitude=${st.lat}&longitude=${st.lon}`
     + `&hourly=temperature_2m,precipitation`
     + `&models=ecmwf_ifs025`
     + `&forecast_days=16&timezone=UTC`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+  return fetchWithRetry(url);
 }
 async function fetchHresPrecipTempPrev(st) {
   const url = `https://previous-runs-api.open-meteo.com/v1/forecast`
@@ -255,9 +268,7 @@ async function fetchHresPrecipTempPrev(st) {
     + `&hourly=temperature_2m,temperature_2m_previous_day1,`
     + `precipitation,precipitation_previous_day1`
     + `&models=ecmwf_ifs025&forecast_days=16&timezone=UTC`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+  return fetchWithRetry(url);
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -941,13 +952,35 @@ function drawPrecipChart(svgId, stationName, binsCurr, binsPrev, runStart, label
    ────────────────────────────────────────────────────────────── */
 const stationData = new Map();   // stationIdx → { ensData, hresData }
 
-function renderStation(i) {
+async function ensureStationData(i) {
+  if (stationData.has(i)) return stationData.get(i);
   const st = STATIONS[i];
-  const d  = stationData.get(i);
-  if (!d) return;
+  const [ensData, hresData] = await Promise.all([
+    fetchEns(st),
+    fetchHresPrecipTempPrev(st),
+  ]);
+  const d = { ensData, hresData };
+  stationData.set(i, d);
+  return d;
+}
 
+async function renderStation(i) {
+  const st = STATIONS[i];
+  const loadstate = document.getElementById('loadstate');
   document.getElementById('coords').textContent =
     `· ${st.lat.toFixed(2)}°N ${st.lon.toFixed(2)}°E`;
+
+  let d = stationData.get(i);
+  if (!d) {
+    loadstate.textContent = `⏳ ${st.name} wordt opgehaald…`;
+    try {
+      d = await ensureStationData(i);
+      loadstate.textContent = `· ${stationData.size}/${STATIONS.length} stations geladen`;
+    } catch (e) {
+      loadstate.textContent = `❌ ${st.name}: ${e.message}`;
+      return;
+    }
+  }
 
   // 1. Normale temperatuur-pluim (spaghetti)
   drawNormalePluim('chart-n-t', st.name, d.ensData, d.hresData.hourly, {
@@ -990,7 +1023,9 @@ function renderStation(i) {
   const loadstate = document.getElementById('loadstate');
   const cacheStatus = { prevRuns: 0, storedNow: 0 };
 
-  const tasks = STATIONS.map(async (st, i) => {
+  // Sequentieel ophalen (voorkomt rate-limit van Open-Meteo bij 7 stations parallel)
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
     try {
       const [ensData, hresData] = await Promise.all([
         fetchEns(st),
@@ -998,18 +1033,18 @@ function renderStation(i) {
       ]);
       stationData.set(i, { ensData, hresData });
 
-      // Schrijf run naar cache voor prev-run-gebruik morgen
       const ensStats = compute6hEnsMinMax(ensData);
       const precipBins = compute12hEnsPrecipMean(ensData);
-      const prevRun  = findPrevRun(st.name, ensStats.runStart.toISOString().slice(0, 10));
+      const prevRun = findPrevRun(st.name, ensStats.runStart.toISOString().slice(0, 10));
       if (prevRun) cacheStatus.prevRuns++;
       writeRunToCache(st.name, ensStats.runStart, ensStats.series, precipBins);
       if (ensStats.runStart.getUTCHours() === 0) cacheStatus.storedNow++;
+
+      loadstate.textContent = `· ${stationData.size}/${STATIONS.length} stations geladen…`;
     } catch (e) {
       console.warn('Station fetch failed', st.name, e);
     }
-  });
-  await Promise.allSettled(tasks);
+  }
 
   const ok = stationData.size;
   loadstate.textContent = `· ${ok}/${STATIONS.length} stations geladen`;
