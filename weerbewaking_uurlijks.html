@@ -129,6 +129,8 @@ table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700
   <span class="status" id="data-status">–</span>
   <button onclick="laadData()">↻ Ververs</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten">🗑️ Wissen</button>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
   <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
 </div>
 
@@ -149,14 +151,14 @@ table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700
   </div>
   <div id="geo-status" style="font-size:.72rem;color:#666;margin:4px 0 0 4px;min-height:14px"></div>
 
-  <div class="subtitel" contenteditable="true" data-placeholder="Subtitel (bijv. WEER  |  EVENEMENT)">WEER  |  EVENEMENT</div>
-  <div class="titel" contenteditable="true" data-placeholder="TITEL">GRIJS EN WATERKOUD</div>
+  <div class="subtitel" contenteditable="true" data-save="subtitel" data-placeholder="Subtitel (bijv. WEER  |  EVENEMENT)">WEER  |  EVENEMENT</div>
+  <div class="titel" contenteditable="true" data-save="titel" data-placeholder="TITEL">GRIJS EN WATERKOUD</div>
 
   <h2 class="kop">De weersituatie nader beschreven</h2>
-  <div class="tekstvak" contenteditable="true" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Vandaag wordt het weer in Nederland bepaald door een hogedrukgebied boven Centraal-Europa. Het zorgt voor een zuidwestelijke stroming met de aanvoer van vochtige lucht.</div>
+  <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Vandaag wordt het weer in Nederland bepaald door een hogedrukgebied boven Centraal-Europa. Het zorgt voor een zuidwestelijke stroming met de aanvoer van vochtige lucht.</div>
 
   <h2 class="kop">De weersverwachting voor vandaag</h2>
-  <div class="tekstvak tekstvak-groot" contenteditable="true" data-placeholder="Beschrijf de verwachting voor vandaag...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
+  <div class="tekstvak tekstvak-groot" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting voor vandaag...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
 
   <h2 class="kop">Waarschuwing</h2>
   <table class="tabel" id="waarsch-tabel">
@@ -461,6 +463,49 @@ document.getElementById('plaats-in').addEventListener('keydown', e=>{
 document.getElementById('startuur-sel').addEventListener('change', ()=>{
   if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
 });
+
+/* ── Auto-save (lokaal) ── */
+const SAVE_KEY='wb_uurlijks_draft_v1';
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    d[el.getAttribute('data-save')] = el.innerHTML;
+  });
+  const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(SAVE_KEY); if(!j) return;
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null) el.innerHTML=d[k];
+    });
+    const p=document.getElementById('plaats-in'); if(p && d.plaats!=null) p.value=d.plaats;
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function wisDraft(){
+  if(!confirm('Alle opgeslagen teksten wissen?')) return;
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+}
+let saveTimer;
+function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+document.addEventListener('input', e=>{
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') debSave();
+});
+document.addEventListener('blur', e=>{
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
+},true);
+
+restoreDraft();
 laadData();
 
 /* ── Terug naar menu ── */

@@ -146,6 +146,8 @@ table.vooruit .windpijl{display:inline-block;transform-origin:center;font-weight
   <span class="status" id="data-status">Laatst bijgewerkt: –</span>
   <button onclick="laadData()">↻ Ververs</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten">🗑️ Wissen</button>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
   <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
 </div>
 
@@ -167,15 +169,15 @@ table.vooruit .windpijl{display:inline-block;transform-origin:center;font-weight
   </div>
 
   <!-- Titel (invulbaar) -->
-  <div class="titel" contenteditable="true" data-placeholder="TITEL">VEEL ZON EN AANHOUDEND DROOG</div>
+  <div class="titel" contenteditable="true" data-placeholder="TITEL" data-save="titel">VEEL ZON EN AANHOUDEND DROOG</div>
 
   <!-- Weersituatie -->
   <h2 class="kop">De weersituatie nader beschreven</h2>
-  <div class="tekstvak" contenteditable="true" data-placeholder="Beschrijf hier de grootschalige weersituatie (hogedrukgebieden, fronten, etc.)...">Voorlopig blijven hogedrukgebieden een stempel drukken op het Nederlandse weer. Vandaag ligt er een hogedrukgebied ten noordoosten van Schotland dat langzaam in betekenis afneemt. De rol van dit hogedrukgebied wordt morgen overgenomen door een hogedrukgebied bij IJsland, dat zich naar de Shetland Eilanden verplaatst en op zondag richting de Noorse Zee trekt. Er komt voorlopig dan ook geen verandering in het huidige weerbeeld.</div>
+  <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie (hogedrukgebieden, fronten, etc.)...">Voorlopig blijven hogedrukgebieden een stempel drukken op het Nederlandse weer. Vandaag ligt er een hogedrukgebied ten noordoosten van Schotland dat langzaam in betekenis afneemt. De rol van dit hogedrukgebied wordt morgen overgenomen door een hogedrukgebied bij IJsland, dat zich naar de Shetland Eilanden verplaatst en op zondag richting de Noorse Zee trekt. Er komt voorlopig dan ook geen verandering in het huidige weerbeeld.</div>
 
   <!-- Verwachting komende dagen -->
   <h2 class="kop">De weersverwachting voor de komende dagen</h2>
-  <div class="tekstvak tekstvak-groot" contenteditable="true" data-placeholder="Beschrijf vandaag, morgen en overmorgen (ruim, meerdere alinea's mogelijk)...">De dag kan beginnen met lage bewolking of plaatselijk mist. Daarna wordt het opnieuw zonnig en blijft het droog. De middagtemperatuur komt uit op ongeveer 16 graden. Er waait een zwakke tot matige wind uit het noorden tot noordwesten.</div>
+  <div class="tekstvak tekstvak-groot" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf vandaag, morgen en overmorgen (ruim, meerdere alinea's mogelijk)...">De dag kan beginnen met lage bewolking of plaatselijk mist. Daarna wordt het opnieuw zonnig en blijft het droog. De middagtemperatuur komt uit op ongeveer 16 graden. Er waait een zwakke tot matige wind uit het noorden tot noordwesten.</div>
 
   <!-- Footer pagina 1 -->
   <div class="doc-footer">
@@ -206,7 +208,7 @@ table.vooruit .windpijl{display:inline-block;transform-origin:center;font-weight
 
   <!-- Verwachting daarna -->
   <h2 class="kop">De weersverwachting voor daarna</h2>
-  <div class="tekstvak" contenteditable="true" data-placeholder="Vooruitblik dag 4 en verder...">Op Koningsdag en dinsdag zien we een mix van zon en bewolking en blijft het droog. De maximumtemperatuur bedraagt dan ongeveer 15 graden. Vanaf woensdag krijgt de zon weer helemaal de overhand.</div>
+  <div class="tekstvak" contenteditable="true" data-save="daarna" data-placeholder="Vooruitblik dag 4 en verder...">Op Koningsdag en dinsdag zien we een mix van zon en bewolking en blijft het droog. De maximumtemperatuur bedraagt dan ongeveer 15 graden. Vanaf woensdag krijgt de zon weer helemaal de overhand.</div>
 
   <!-- Vooruitzichten -->
   <h2 class="kop">Vooruitzichten</h2>
@@ -381,6 +383,49 @@ async function laadData(){
 }
 
 document.getElementById('station-sel').addEventListener('change', laadData);
+
+/* ── Auto-save (lokaal) ── */
+const SAVE_KEY='wb_wm_draft_v1';
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    d[el.getAttribute('data-save')] = el.innerHTML;
+  });
+  const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(SAVE_KEY); if(!j) return;
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null) el.innerHTML=d[k];
+    });
+    const p=document.getElementById('plaats-in'); if(p && d.plaats!=null) p.value=d.plaats;
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function wisDraft(){
+  if(!confirm('Alle opgeslagen teksten wissen?')) return;
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+}
+let saveTimer;
+function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+document.addEventListener('input', e=>{
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') debSave();
+});
+document.addEventListener('blur', e=>{
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
+},true);
+
+restoreDraft();
 laadData();
 
 /* ── Terug naar menu (werkt in iframe én standalone) ── */
