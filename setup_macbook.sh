@@ -102,21 +102,21 @@ maak_agent "nl.edaldus.toplijst" 600 \
 
 # Synopkaart + waarschuwingen — elke 10 min
 maak_agent "nl.edaldus.synopkaart" 600 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/haal_waarschuwingen.py && $PYTHON scripts/maak_synop_kaart.py && $PYTHON scripts/maak_actueel.py && git add waarschuwingen.json actueel.json kaart_synop_*.png && git diff --cached --quiet || (git commit -m \"Synop + waarschuwingen + toplijst update\" && git push)"
+    "bash \"$REPO_DIR/shell/upload_synopkaart.sh\""
 
 # METAR — elke 15 min
 maak_agent "nl.edaldus.metar" 900 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/haal_metar.py && git add metar_data.json && git diff --cached --quiet || (git commit -m \"METAR update \$(date '+%Y-%m-%d %H:%M')\" && git push)" \
+    "bash \"$REPO_DIR/upload_metar.sh\"" \
     "true"
 
 # Bulletin — elke 15 min
 maak_agent "nl.edaldus.bulletin" 900 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/haal_luchtvaart_bulletin.py && git add luchtvaart_bulletin.json && git diff --cached --quiet || (git commit -m \"Luchtvaart bulletin update \$(date '+%H:%M')\" && git push)" \
+    "bash \"$REPO_DIR/upload_bulletin.sh\"" \
     "true"
 
 # Guidance — elke 30 min
 maak_agent "nl.edaldus.guidance" 1800 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/haal_guidance.py && git add guidance.json && git diff --cached --quiet || (git commit -m \"Guidance update \$(date '+%H:%M')\" && git push)" \
+    "bash \"$REPO_DIR/upload_guidance.sh\"" \
     "true"
 
 # MOSMIX JSON — elk uur
