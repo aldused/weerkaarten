@@ -31,7 +31,7 @@ Access-applicatie van weerlab.nl zit.
 ## Herdeployen
 
 ```bash
-cd "/Users/aldus/KNMI_Project/weerkaarten 2/cloudflare-worker"
+cd "/Users/aldus/KNMI_Project/weerlab/cloudflare-worker"
 wrangler deploy
 ```
 

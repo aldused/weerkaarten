@@ -2,7 +2,7 @@
 # ICON-D2-RUC (Rapid Update Cycle) data update script
 # Download DWD ICON-D2-RUC GRIB2 data, exporteer naar binair, upload naar R2
 # RUC: elk uur een nieuwe run, 14 uur vooruit, 2.2 km resolutie
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 
 echo "$(date): ICON-D2-RUC update gestart"
 
@@ -15,7 +15,7 @@ import boto3
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-os.chdir("/Users/aldus/KNMI_Project/weerkaarten 2")
+os.chdir("/Users/aldus/KNMI_Project/weerlab")
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 EXTENT = [0.5, 11.3, 49.0, 56.0]  # Zelfde bereik als Harmonie/ICON-D2
 

@@ -4,7 +4,7 @@ maak_frontenkaart.py
 Downloads ECMWF open data, computes weather fronts (Hewson Thermal Front Parameter),
 isobars, pressure centres (H/L), and precipitation areas for Europe.
 
-Exports GeoJSON files to the weerkaarten 2/ directory:
+Exports GeoJSON files to the weerlab/ directory:
   - fronts.json
   - isobars.json
   - pressure_systems.json
@@ -65,7 +65,7 @@ PRECIP_THRESHOLDS = {
 # Aardstraal in meters
 EARTH_RADIUS = 6_371_000.0
 
-OUTPUT_DIR = "."   # cwd = weerkaarten 2/
+OUTPUT_DIR = "."   # cwd = weerlab/
 
 
 # ── Hulpfuncties ──────────────────────────────────────────────────────────────

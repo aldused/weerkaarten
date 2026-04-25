@@ -1,5 +1,5 @@
 #!/bin/bash
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 git checkout main 2>/dev/null || true
 git add -A
 if git diff --cached --quiet; then

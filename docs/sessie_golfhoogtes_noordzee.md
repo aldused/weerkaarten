@@ -93,7 +93,7 @@ Viking, North/South Utsire, Forties, Cromarty, Dogger, Fisher, German Bight, Hum
 
 ### Cron setup (elke 10 minuten)
 ```
-*/10 * * * * cd "/pad/naar/weerkaarten 2" && python3 haal_golfdata.py
+*/10 * * * * cd "/pad/naar/weerlab" && python3 haal_golfdata.py
 ```
 
 ---

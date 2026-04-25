@@ -1,5 +1,5 @@
 #!/bin/bash
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 source ~/.zshrc 2>/dev/null
 /usr/local/bin/python3 scripts/haal_guidance.py || exit 1
 /usr/local/bin/python3 scripts/haal_dwd_guidance.py || exit 1

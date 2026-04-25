@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd ~/KNMI_Project/"weerkaarten 2"
+cd ~/KNMI_Project/"weerlab"
 
 echo "=== Mappen aanmaken ==="
 mkdir -p scripts shell
@@ -67,13 +67,13 @@ sed -i '' 's|\$SCRIPT_DIR/haal_|\$SCRIPT_DIR/scripts/haal_|g' shell/upload_kaart
 
 echo "=== LaunchAgent plists aanpassen ==="
 # upload
-sed -i '' 's|weerkaarten 2/upload_kaarten.sh|weerkaarten 2/shell/upload_kaarten.sh|g' shell/nl.edaldus.weerkaarten.plist 2>/dev/null || true
+sed -i '' 's|weerlab/upload_kaarten.sh|weerlab/shell/upload_kaarten.sh|g' shell/nl.edaldus.weerkaarten.plist 2>/dev/null || true
 # backup
-sed -i '' 's|weerkaarten 2/backup_weerkaarten.sh|weerkaarten 2/shell/backup_weerkaarten.sh|g' shell/nl.edaldus.weerkaarten.backup.plist 2>/dev/null || true
+sed -i '' 's|weerlab/backup_weerkaarten.sh|weerlab/shell/backup_weerkaarten.sh|g' shell/nl.edaldus.weerkaarten.backup.plist 2>/dev/null || true
 # synop
-sed -i '' 's|weerkaarten 2/maak_synop_kaart.py|weerkaarten 2/scripts/maak_synop_kaart.py|g' shell/nl.edaldus.synopkaart.plist 2>/dev/null || true
+sed -i '' 's|weerlab/maak_synop_kaart.py|weerlab/scripts/maak_synop_kaart.py|g' shell/nl.edaldus.synopkaart.plist 2>/dev/null || true
 # records
-sed -i '' 's|weerkaarten 2/knmi_records.py|weerkaarten 2/scripts/knmi_records.py|g' shell/nl.edaldus.weerrecords.plist 2>/dev/null || true
+sed -i '' 's|weerlab/knmi_records.py|weerlab/scripts/knmi_records.py|g' shell/nl.edaldus.weerrecords.plist 2>/dev/null || true
 
 echo ""
 echo "=== Klaar! Controleer met: ls scripts/ shell/ ==="

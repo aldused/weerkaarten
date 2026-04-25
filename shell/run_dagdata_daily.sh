@@ -9,7 +9,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -e
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 
 echo "════════════════════════════════════════════════════"
 echo "  Dagdata daily sync — $(date '+%Y-%m-%d %H:%M')"

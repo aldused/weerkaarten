@@ -15,7 +15,7 @@ echo ""
 
 # ── 1. Project directory ──
 PROJECT_DIR="$HOME/KNMI_Project"
-REPO_DIR="$PROJECT_DIR/weerkaarten 2"
+REPO_DIR="$PROJECT_DIR/weerlab"
 
 if [ -d "$REPO_DIR/.git" ]; then
     echo "✅ Repository bestaat al: $REPO_DIR"
@@ -25,7 +25,7 @@ else
     echo "📦 Repository clonen..."
     mkdir -p "$PROJECT_DIR"
     cd "$PROJECT_DIR"
-    git clone https://github.com/aldused/weerkaarten.git "weerkaarten 2"
+    git clone https://github.com/aldused/weerkaarten.git "weerlab"
     cd "$REPO_DIR"
     echo "✅ Repository gekloond"
 fi

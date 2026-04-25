@@ -222,7 +222,7 @@ def main() -> int:
         print("[harmonie_openmeteo] geen Open-Meteo key — overslaan")
         return 0
 
-    work_dir = Path("/Users/aldus/KNMI_Project/weerkaarten 2")
+    work_dir = Path("/Users/aldus/KNMI_Project/weerlab")
     os.chdir(work_dir)
     meta_path = work_dir / META_FILE
     if not meta_path.exists():

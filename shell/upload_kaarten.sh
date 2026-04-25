@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="/Users/aldus/KNMI_Project/weerkaarten 2"
+SCRIPT_DIR="/Users/aldus/KNMI_Project/weerlab"
 cd "$SCRIPT_DIR"
 git checkout main 2>/dev/null || true
 

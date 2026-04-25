@@ -1,6 +1,6 @@
 #!/bin/bash
 # ECMWF IFS data update script
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 echo "$(date): ECMWF update gestart"
 
 /usr/local/bin/python3 << 'PYEOF'
@@ -12,7 +12,7 @@ from ecmwf.opendata import Client
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-os.chdir("/Users/aldus/KNMI_Project/weerkaarten 2")
+os.chdir("/Users/aldus/KNMI_Project/weerlab")
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 EXTENT = [0.5, 12.5, 47.5, 56.5]
 

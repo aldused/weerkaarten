@@ -5,7 +5,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -e
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 
 echo "════════════════════════════════════════════════════"
 echo "  Deploy Weerrecords update"

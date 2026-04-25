@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="/Users/aldus/KNMI_Project/weerkaarten 2"
+SCRIPT_DIR="/Users/aldus/KNMI_Project/weerlab"
 SCRIPTS="$SCRIPT_DIR/scripts"
 THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
 

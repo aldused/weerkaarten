@@ -18,7 +18,7 @@ from metpy.plots import SkewT, Hodograph
 from metpy.units import units
 
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
-OUTDIR = "/Users/aldus/KNMI_Project/weerkaarten 2"
+OUTDIR = "/Users/aldus/KNMI_Project/weerlab"
 
 # Drukniveaus (hPa) - standaard niveaus voor sounding
 PRESSURE_LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100]

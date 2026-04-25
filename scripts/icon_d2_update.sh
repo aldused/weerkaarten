@@ -1,7 +1,7 @@
 #!/bin/bash
 # ICON-D2 data update script
 # Download DWD ICON-D2 GRIB2 data, exporteer naar binair, upload naar R2
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 
 echo "$(date): ICON-D2 update gestart"
 
@@ -14,7 +14,7 @@ import boto3
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-os.chdir("/Users/aldus/KNMI_Project/weerkaarten 2")
+os.chdir("/Users/aldus/KNMI_Project/weerlab")
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 EXTENT = [0.5, 11.3, 49.0, 56.0]  # Zelfde bereik als Harmonie
 

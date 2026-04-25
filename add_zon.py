@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os
-os.chdir(os.path.expanduser("~/Desktop/KNMI_Project/weerkaarten 2"))
+os.chdir(os.path.expanduser("~/Desktop/KNMI_Project/weerlab"))
 
 with open('scripts/maak_toplijst.py', 'r') as f:
     c = f.read()

@@ -1,5 +1,5 @@
 import re, os
-os.chdir(os.path.expanduser("~/Desktop/KNMI_Project/weerkaarten 2"))
+os.chdir(os.path.expanduser("~/Desktop/KNMI_Project/weerlab"))
 c = open('historisch.html').read()
 
 # Verwijder dubbele copyright divs

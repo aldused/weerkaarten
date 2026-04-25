@@ -1,7 +1,7 @@
 #!/bin/bash
 # Harmonie 43 data update script
 # Draait het Python script en exporteert alle binaire data + overlay
-cd "/Users/aldus/KNMI_Project/weerkaarten 2"
+cd "/Users/aldus/KNMI_Project/weerlab"
 
 echo "$(date): Harmonie update gestart"
 
@@ -13,7 +13,7 @@ import eccodes
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-os.chdir('/Users/aldus/KNMI_Project/weerkaarten 2')
+os.chdir('/Users/aldus/KNMI_Project/weerlab')
 LOCAL_TZ = ZoneInfo('Europe/Amsterdam')
 EXTENT = [0.5, 12.5, 47.5, 56.5]
 KEY = 'eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6Ijk5YjZhMzkwMTlkYzQxYzlhMzJjNmNmY2MyNDgxNGRkIiwiaCI6Im11cm11cjEyOCJ9'
