@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MTG Satellietbeelden – Weerlab.nl</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display: flex; flex-direction: column; height: 100vh; }
+
+.header { background: #00205b; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #2ec4e8; flex-shrink: 0; }
+.header-titel { color: white; font-size: 14px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+.auto-status { color: #2ec4e8; font-size: 11px; font-weight: 600; text-align: right; }
+
+.toolbar { background: white; padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #dde6f0; flex-shrink: 0; }
+
+.groep-label { font-size: 10px; color: #8aa; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 2px; }
+.sep { width: 1px; background: #dde6f0; align-self: stretch; margin: 0 4px; }
+
+.btn { padding: 4px 12px; border-radius: 14px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.1s; white-space: nowrap; }
+.btn:hover { background: #dce9f7; }
+.btn.actief { background: #00205b; color: white; border-color: transparent; }
+.btn.actief.gebied { background: #1a6a3a; }
+.btn-refresh { padding: 4px 12px; border-radius: 14px; border: none; background: #2ec4e8; color: #00205b; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-auto { padding: 4px 12px; border-radius: 14px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-auto.actief { background: #1a6a3a; color: white; border-color: transparent; }
+.btn-download { padding: 4px 12px; border-radius: 14px; border: none; background: #003366; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-download:hover { background: #0055aa; }
+.btn-download.social { background: #1a6a3a; }
+.btn-download.social:hover { background: #238a4f; }
+
+/* Tijdlijn */
+.tijdlijn { background: #1a2b40; padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.tijdlijn label { color: #a8c4e8; font-size: 11px; font-weight: 600; white-space: nowrap; }
+#tijd-slider { flex: 1; accent-color: #2ec4e8; }
+#tijd-display { color: white; font-size: 13px; font-weight: 700; min-width: 80px; text-align: center; font-family: monospace; }
+.btn-play { background: none; border: 1px solid #2ec4e8; color: #2ec4e8; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.btn-play.actief { background: #2ec4e8; color: #00205b; }
+
+.beeld-wrap { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; background: #000; padding: 14px; }
+.sat-kaart { width: 100%; height: 100%; display: flex; flex-direction: column; background: #050b14; box-shadow: 0 4px 24px rgba(0,0,0,0.45); }
+.sat-header-band {
+  background: #003366; color: white;
+  padding: 13px 18px; min-height: 58px;
+  display: flex; justify-content: space-between; align-items: center; gap: 18px;
+  border-bottom: 2px solid #2ec4e8; flex-shrink: 0;
+}
+.sat-header-band .links { min-width: 0; }
+.sat-header-band .titel { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+.sat-header-band .sub { font-size: 11px; color: #a8c8e8; margin-top: 2px; }
+.sat-header-band .rechts { text-align: right; flex-shrink: 0; }
+.sat-header-band .tijd { font-size: 15px; font-weight: 700; }
+.sat-header-band .gebied { font-size: 11px; color: #a8c8e8; margin-top: 2px; }
+.sat-beeldvlak { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; background: #000; overflow: hidden; }
+#satelliet-img { width: 100%; height: 100%; object-fit: contain; display: block; transition: opacity 0.2s; }
+#satelliet-img.laden { opacity: 0.4; }
+
+.info-balk { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,32,91,0.88); color: white; font-size: 11px; padding: 5px 14px; border-radius: 12px; pointer-events: none; white-space: nowrap; }
+.laad-dot { position: absolute; top: 10px; right: 14px; width: 8px; height: 8px; border-radius: 50%; background: #2ec4e8; display: none; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+@media (max-width: 700px) {
+  .beeld-wrap { padding: 0; }
+  .sat-header-band { padding: 10px 12px; align-items: flex-start; flex-direction: column; gap: 4px; }
+  .sat-header-band .rechts { text-align: left; }
+  .info-balk { left: 8px; right: 8px; transform: none; white-space: normal; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- Pincode-gate (test-fase) -->
+<div id="pinOverlay" style="position:fixed;inset:0;background:#1f2937;display:none;z-index:999;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="background:#fff;padding:26px 32px;border-radius:12px;max-width:360px;text-align:center;color:#111827">
+    <h3 style="margin:0 0 8px 0">MTG Satellietbeelden</h3>
+    <p style="color:#6b7280;margin:0 0 16px 0;font-size:13px">Testpagina — vul pincode in om verder te gaan</p>
+    <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="5"
+           style="font-size:18px;text-align:center;padding:8px 12px;width:120px;border:1px solid #d1d5db;border-radius:6px;letter-spacing:4px">
+    <div id="pinErr" style="color:#b91c1c;font-size:12px;min-height:16px;margin:6px 0"></div>
+    <button id="pinOk" style="margin-top:4px;padding:6px 18px;background:#003366;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer">OK</button>
+  </div>
+</div>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Weerlab.nl — MTG Satellietbeelden</div>
+    <div class="header-sub">EUMETSAT Meteosat Third Generation · FCI · EUMETView</div>
+  </div>
+  <div class="auto-status" id="auto-status"></div>
+</div>
+
+<div class="toolbar">
+  <span class="groep-label">Product</span>
+  <button class="btn actief" data-layer="mtg_fd:rgb_truecolour" data-label="True Colour">True Colour</button>
+  <button class="btn" data-layer="mtg_fd:rgb_geocolour" data-label="GeoColour">GeoColour</button>
+  <button class="btn" data-layer="mtg_fd:ir105_hrfi" data-label="IR 10.5µm nacht/dag" title="Infrarood, ook bruikbaar in de nacht">IR nacht</button>
+  <button class="btn" data-layer="mtg_fd:rgb_dust" data-label="Stof RGB">Stof RGB</button>
+  <button class="btn" data-layer="mtg_fd:rgb_fog" data-label="Mist RGB">Mist RGB</button>
+  <div class="sep"></div>
+  <span class="groep-label">Gebied</span>
+  <button class="btn gebied" data-bbox="-1,49,9,54" data-w="1000" data-h="600" data-label="Benelux">Benelux</button>
+  <button class="btn gebied actief" data-bbox="-8,46,20,57" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
+  <button class="btn gebied" data-bbox="-15,30,40,72" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
+  <div class="sep"></div>
+  <button class="btn-refresh" id="btn-refresh">↻ Nu</button>
+  <button class="btn-auto" id="btn-auto">⏱ Auto</button>
+  <button class="btn-download" id="btn-download">⬇ PNG</button>
+  <button class="btn-download social" id="btn-download-social" title="Kleinere PNG voor social media">⬇ Social</button>
+</div>
+
+<div class="tijdlijn">
+  <label>Terugkijken:</label>
+  <button class="btn-play" id="btn-play" title="Animatie afspelen">▶</button>
+  <input type="range" id="tijd-slider" min="0" max="17" value="17" step="1">
+  <div id="tijd-display">nu</div>
+</div>
+
+<div class="beeld-wrap">
+  <div class="sat-kaart">
+    <div class="sat-header-band">
+      <div class="links">
+        <div class="titel" id="sat-header-product">MTG Satellietbeeld</div>
+        <div class="sub">Bron: EUMETSAT EUMETView / Meteosat Third Generation · © Ed Aldus / Weerlab</div>
+      </div>
+      <div class="rechts">
+        <div class="tijd" id="sat-header-tijd">laden...</div>
+        <div class="gebied" id="sat-header-gebied">NW-Europa</div>
+      </div>
+    </div>
+    <div class="sat-beeldvlak">
+      <img id="satelliet-img" src="" alt="MTG satellietbeeld">
+      <div class="laad-dot" id="laad-dot"></div>
+      <div class="info-balk" id="info-balk">Laden…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const PIN = '19976';
+  const gate = document.getElementById('pinOverlay');
+  const input = document.getElementById('pinInput');
+  const err = document.getElementById('pinErr');
+  const ok = document.getElementById('pinOk');
+  function show(){ gate.style.display='flex'; document.body.style.overflow='hidden'; setTimeout(()=>input.focus(),50); }
+  function hide(){ gate.style.display='none'; document.body.style.overflow=''; }
+  function tryPin(){
+    if(input.value === PIN){
+      try{ sessionStorage.setItem('satelliet_ok','1'); }catch(e){}
+      hide();
+    }else{
+      err.textContent='Onjuiste pincode'; input.value=''; input.focus();
+    }
+  }
+  ok.addEventListener('click', tryPin);
+  input.addEventListener('keydown', e => { if(e.key==='Enter') tryPin(); });
+  let unlocked = false;
+  try{ unlocked = sessionStorage.getItem('satelliet_ok') === '1'; }catch(e){}
+  if(!unlocked) show();
+});
+
+const WMS_URL = 'https://view.eumetsat.int/geoserver/wms';
+
+let actieveLayer = 'mtg_fd:rgb_truecolour';
+let actieveLabel = 'True Colour';
+let activeBbox = '-8,46,20,57';
+let activeW = 2048, activeH = 1200;
+let actiefGebiedLabel = 'NW-Europa';
+let actieveTijdstap = 17; // 17 = meest recent
+let autoRefreshTimer = null;
+let animatieTimer = null;
+let animatieActief = false;
+let laatsteUrl = '';
+
+// Genereer lijst van laatste 18 tijdstappen (10-min intervallen = 3 uur).
+// EUMETView publiceert near-real-time, maar met verwerkingstijd. Zonder TIME
+// gaf de WMS op 25-04-2026 om 14:32 NL als nieuwste beeld 14:10 NL terug.
+function tijdstappen() {
+  const stappen = [];
+  const nu = new Date();
+  // Rond af naar vorige 10 minuten, min circa 20 min vertraging.
+  const basis = new Date(nu);
+  basis.setUTCMinutes(Math.floor((nu.getUTCMinutes() - 20) / 10) * 10, 0, 0);
+  for (let i = 17; i >= 0; i--) {
+    const t = new Date(basis.getTime() - i * 10 * 60000);
+    stappen.push(t);
+  }
+  return stappen;
+}
+
+function formatTijd(d) {
+  return d.toLocaleTimeString('nl-NL', {
+    timeZone: 'Europe/Amsterdam',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }) + ' NL';
+}
+
+function formatDatumTijd(d) {
+  return d.toLocaleString('nl-NL', {
+    timeZone: 'Europe/Amsterdam',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }) + ' NL';
+}
+
+function isoTijd(d) {
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function wmsUrl(layerName, bbox, w, h, tijdstap) {
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const layers = layerName + ',osmgray:ne_10m_admin_0_boundary_lines_land';
+  const styles = ',osmgray:all_boundaries_light';
+  return WMS_URL +
+    '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0' +
+    '&LAYERS=' + encodeURIComponent(layers) +
+    '&STYLES=' + encodeURIComponent(styles) +
+    '&FORMAT=image/png&TRANSPARENT=FALSE' +
+    '&CRS=CRS:84&BBOX=' + bbox +
+    '&WIDTH=' + w + '&HEIGHT=' + h +
+    '&TIME=' + isoTijd(t) +
+    '&_t=' + t.getTime();
+}
+
+function laadSatelliet(tijdstap) {
+  const img = document.getElementById('satelliet-img');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  const headerProduct = document.getElementById('sat-header-product');
+  const headerTijd = document.getElementById('sat-header-tijd');
+  const headerGebied = document.getElementById('sat-header-gebied');
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const isNu = tijdstap === 17;
+
+  headerProduct.textContent = 'MTG · ' + actieveLabel;
+  headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
+  headerGebied.textContent = actiefGebiedLabel;
+  dot.style.display = 'block';
+  img.classList.add('laden');
+  info.textContent = 'Bron: EUMETSAT EUMETView / MTG · © Ed Aldus / Weerlab · laden…';
+
+  const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
+  laatsteUrl = url;
+  const tmp = new Image();
+  tmp.onload = () => {
+    img.src = url;
+    img.classList.remove('laden');
+    dot.style.display = 'none';
+    info.textContent = 'Bron: EUMETSAT EUMETView / Meteosat Third Generation · © Ed Aldus / Weerlab · tijden in NL-tijd';
+  };
+  tmp.onerror = () => {
+    img.classList.remove('laden');
+    dot.style.display = 'none';
+    info.textContent = actieveLabel + ' · laden mislukt';
+  };
+  tmp.src = url;
+}
+
+function updateTijdDisplay(tijdstap) {
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const el = document.getElementById('tijd-display');
+  el.textContent = tijdstap === 17 ? 'laatste (' + formatTijd(t) + ')' : formatTijd(t);
+}
+
+// Product knoppen
+document.querySelectorAll('.btn:not(.gebied)').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn:not(.gebied)').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    actieveLayer = btn.dataset.layer;
+    actieveLabel = btn.dataset.label;
+    laadSatelliet(actieveTijdstap);
+  });
+});
+
+// Gebied knoppen
+document.querySelectorAll('.btn.gebied').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn.gebied').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    activeBbox = btn.dataset.bbox;
+    activeW = parseInt(btn.dataset.w);
+    activeH = parseInt(btn.dataset.h);
+    actiefGebiedLabel = btn.dataset.label;
+    laadSatelliet(actieveTijdstap);
+  });
+});
+
+// Tijdslider
+const slider = document.getElementById('tijd-slider');
+slider.addEventListener('input', () => {
+  actieveTijdstap = parseInt(slider.value);
+  updateTijdDisplay(actieveTijdstap);
+  laadSatelliet(actieveTijdstap);
+});
+
+// Vernieuw knop
+document.getElementById('btn-refresh').addEventListener('click', () => {
+  actieveTijdstap = 17;
+  slider.value = 17;
+  updateTijdDisplay(17);
+  laadSatelliet(17);
+});
+
+function bestandsNaam(t, suffix = '') {
+  const stamp = t.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+  const product = actieveLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const gebied = actiefGebiedLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `weerlab-mtg-${product}-${gebied}${suffix}-${stamp}.png`;
+}
+
+function laadAfbeeldingVoorCanvas(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function downloadPng(social = false) {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const url = laatsteUrl || wmsUrl(actieveLayer, activeBbox, activeW, activeH, actieveTijdstap);
+  const naam = bestandsNaam(t, social ? '-social' : '');
+  const btn = document.getElementById(social ? 'btn-download-social' : 'btn-download');
+  const oudeTekst = btn.textContent;
+  btn.textContent = 'PNG maken…';
+  btn.disabled = true;
+
+  try {
+    const img = await laadAfbeeldingVoorCanvas(url);
+    const headerH = 86;
+    const footerH = 42;
+    const bronW = img.naturalWidth || activeW;
+    const bronH = img.naturalHeight || activeH;
+    const maxBreedte = social ? 1200 : bronW;
+    const schaal = Math.min(1, maxBreedte / bronW);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bronW * schaal);
+    canvas.height = Math.round((headerH + bronH + footerH) * schaal);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(schaal, schaal);
+
+    ctx.fillStyle = '#003366';
+    ctx.fillRect(0, 0, bronW, headerH);
+    ctx.fillStyle = '#2ec4e8';
+    ctx.fillRect(0, headerH - 3, bronW, 3);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px Arial, sans-serif';
+    ctx.fillText(`MTG · ${actieveLabel}`, 24, 36);
+    ctx.font = '18px Arial, sans-serif';
+    ctx.fillStyle = '#a8c8e8';
+    ctx.fillText('Bron: EUMETSAT EUMETView / Meteosat Third Generation', 24, 66);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px Arial, sans-serif';
+    ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === 17 ? ' · laatste beeld' : ''), bronW - 24, 36);
+    ctx.font = '18px Arial, sans-serif';
+    ctx.fillStyle = '#a8c8e8';
+    ctx.fillText(actiefGebiedLabel, bronW - 24, 66);
+    ctx.textAlign = 'left';
+
+    ctx.drawImage(img, 0, headerH);
+
+    ctx.fillStyle = '#00142d';
+    ctx.fillRect(0, headerH + bronH, bronW, footerH);
+    ctx.fillStyle = '#dcecff';
+    ctx.font = '18px Arial, sans-serif';
+    ctx.fillText('Bron: EUMETSAT EUMETView / MTG', 24, headerH + bronH + 27);
+    ctx.textAlign = 'right';
+    ctx.fillText('© Ed Aldus / Weerlab', bronW - 24, headerH + bronH + 27);
+
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = naam;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (err) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = naam;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    alert('Canvas-export werd door de browser geblokkeerd. Ik open daarom de ruwe EUMETView-PNG; de blauwe header staat dan niet in het bestand.');
+  } finally {
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-download').addEventListener('click', () => downloadPng(false));
+document.getElementById('btn-download-social').addEventListener('click', () => downloadPng(true));
+
+function startAutoRefresh() {
+  const btn = document.getElementById('btn-auto');
+  const status = document.getElementById('auto-status');
+  if (autoRefreshTimer) return;
+  autoRefreshTimer = setInterval(() => {
+    actieveTijdstap = 17;
+    slider.value = 17;
+    updateTijdDisplay(17);
+    laadSatelliet(17);
+  }, 10 * 60 * 1000);
+  btn.classList.add('actief');
+  btn.textContent = '⏱ Auto aan';
+  status.textContent = '● Auto-refresh elke 10 min';
+}
+
+function stopAutoRefresh() {
+  const btn = document.getElementById('btn-auto');
+  const status = document.getElementById('auto-status');
+  if (!autoRefreshTimer) return;
+  clearInterval(autoRefreshTimer);
+  autoRefreshTimer = null;
+  btn.classList.remove('actief');
+  btn.textContent = '⏱ Auto';
+  status.textContent = '';
+}
+
+// Auto-refresh (elke 10 minuten)
+document.getElementById('btn-auto').addEventListener('click', () => {
+  if (autoRefreshTimer) stopAutoRefresh();
+  else startAutoRefresh();
+});
+
+// Animatie afspelen
+document.getElementById('btn-play').addEventListener('click', () => {
+  const btn = document.getElementById('btn-play');
+  if (animatieActief) {
+    clearInterval(animatieTimer);
+    animatieActief = false;
+    btn.classList.remove('actief');
+    btn.textContent = '▶';
+    return;
+  }
+  animatieActief = true;
+  btn.classList.add('actief');
+  btn.textContent = '⏸';
+
+  let stap = 0;
+  slider.value = stap;
+  updateTijdDisplay(stap);
+  laadSatelliet(stap);
+
+  animatieTimer = setInterval(() => {
+    stap++;
+    if (stap > 17) {
+      clearInterval(animatieTimer);
+      animatieActief = false;
+      btn.classList.remove('actief');
+      btn.textContent = '▶';
+      return;
+    }
+    slider.value = stap;
+    actieveTijdstap = stap;
+    updateTijdDisplay(stap);
+    laadSatelliet(stap);
+  }, 800);
+});
+
+// Start
+updateTijdDisplay(17);
+laadSatelliet(17);
+startAutoRefresh();
+</script>
+</body>
+</html>
