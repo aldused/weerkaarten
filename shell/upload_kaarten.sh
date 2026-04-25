@@ -3,7 +3,6 @@ set -e
 
 SCRIPT_DIR="/Users/aldus/KNMI_Project/weerlab"
 cd "$SCRIPT_DIR"
-git checkout main 2>/dev/null || true
 
 echo "=== Ed Aldus WM — upload $(date) ==="
 
@@ -22,12 +21,10 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_index.py"                || { echo "FOUT: maak_index.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_p13_html.py"                     || { echo "FOUT: maak_p13_html.py"; exit 1; }
 
-git add -A
-
-if git diff --cached --quiet; then
-    echo "Niets gewijzigd, geen commit nodig."
-else
-    git commit -m "Kaarten update $(date '+%Y-%m-%d %H:%M')"
-    git push
-    echo "=== Upload klaar ==="
-fi
+"$SCRIPT_DIR/shell/r2_publish.sh" \
+    waarschuwingen.json guidance.json dwd_guidance.json luchtvaart_bulletin.json \
+    maanddata_*.json beta_debilt.json beta_verificatie.json grafiek_trend.json grafiek_trend_be.json \
+    toplijst.json index.json \
+    mosmix_nl.json mosmix_be.json mosmix_fr.json mosmix_ibe.json mosmix_de.json mosmix_gb.json \
+    mosmix_uurlijks_nl.json mosmix_uurlijks_be.json mosmix_uurlijks_fr.json \
+    mosmix_uurlijks_ibe.json mosmix_uurlijks_de.json mosmix_uurlijks_gb.json

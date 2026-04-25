@@ -11,16 +11,4 @@ echo "=== Toplijst update $(date) ==="
 
 # ── Upload naar R2 (data.weerlab.nl) ────────────────────────────────────────
 # Cache 60s bij Cloudflare edge — toplijst ververst elke ~10 min
-r2push() {
-    /opt/homebrew/bin/rclone copy "$1" r2:weerlab-data/ \
-        --header-upload "Cache-Control: public, max-age=60" \
-        --no-traverse
-}
-
-r2push toplijst.json
-r2push index.json
-
-# ── Git commit+push (vangnet tijdens overgang) ─────────────────────────────
-"$SCRIPT_DIR/shell/git_publish.sh" \
-    "Toplijst update $(date '+%Y-%m-%d %H:%M')" \
-    toplijst.json toplijst.html index.json
+"$SCRIPT_DIR/shell/r2_publish.sh" toplijst.json index.json

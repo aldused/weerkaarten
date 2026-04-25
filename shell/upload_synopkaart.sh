@@ -9,6 +9,6 @@ cd "$SCRIPT_DIR"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_waarschuwingen.py"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_toplijst.py"
 
-"$SCRIPT_DIR/shell/git_publish.sh" \
-  "Synop + waarschuwingen + toplijst update" \
-  kaart_synop*.png actueel.json waarschuwingen.json toplijst.json toplijst.html
+shopt -s nullglob
+"$SCRIPT_DIR/shell/r2_publish.sh" \
+  actueel.json waarschuwingen.json toplijst.json kaart_synop*.png

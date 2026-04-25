@@ -6,6 +6,5 @@ cd "$SCRIPT_DIR"
 
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_satelliet.py"
 
-"$SCRIPT_DIR/shell/git_publish.sh" \
-  "Satellietbeelden update $(date '+%H:%M')" \
+"$SCRIPT_DIR/shell/r2_publish.sh" \
   sat_visible.png sat_infrared.png

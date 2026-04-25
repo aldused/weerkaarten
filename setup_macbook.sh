@@ -97,7 +97,7 @@ PLIST
 
 # Toplijst — elke 10 min
 maak_agent "nl.edaldus.toplijst" 600 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/maak_toplijst.py && $PYTHON scripts/maak_index.py && git add toplijst.json toplijst.html index.json && git diff --cached --quiet || (git commit -m \"Toplijst update \$(date '+%Y-%m-%d %H:%M')\" && git push)" \
+    "bash \"$HOME/KNMI_Project/upload_toplijst.sh\"" \
     "true"
 
 # Synopkaart + waarschuwingen — elke 10 min
@@ -126,7 +126,7 @@ maak_agent "nl.edaldus.mosmix-json" 3600 \
 
 # Verwachting — elke 15 min
 maak_agent "nl.edaldus.verwachting" 900 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/haal_knmi_verwachting.py && git add knmi_verwachting.json && git diff --cached --quiet || (git commit -m \"KNMI verwachting update \$(date '+%Y-%m-%d %H:%M')\" && git push)"
+    "bash \"$REPO_DIR/upload_verwachting.sh\""
 
 # Weerkaarten (volledige update) — 4x per dag
 cat > "$LAUNCH_DIR/nl.edaldus.weerkaarten.plist" << PLIST
