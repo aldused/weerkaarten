@@ -476,7 +476,10 @@ body {
   </div>
   <div>
     <div class="header-sub"><span id="hdr-run">laden...</span></div>
-    <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+      <button id="btn-herlaad" onclick="herlaadData()" title="Data vernieuwen zonder reset" style="padding:2px 9px;font-size:11px;border:1px solid rgba(255,255,255,0.25);border-radius:4px;background:rgba(255,255,255,0.1);color:#a8c4e8;cursor:pointer;line-height:1.6;">↻</button>
+    </div>
   </div>
 </div>
 
@@ -3256,20 +3259,11 @@ body {
   // INIT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Promise.all([laadMeta(), laadOverlay(), laadLSM()]).then(function() {
-    // Voeg afgeleide parameters toe aan metadata
-    addDerivedParams(meta);
-    // Sla op in modelData voor vergelijkmodus
-    modelData[actiefModel] = { meta: meta, paramCache: paramCache };
-    aantalUren = meta.uren;
-    slider.max = aantalUren;
-    // Run-tijd — staat al in lokale tijd in meta.run
-    document.getElementById("hdr-run").textContent = "run: " + meta.run;
-    document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
-    statusEl.textContent = "";
-
-    // Dag-knoppen bouwen
+  function herbouwDagknoppen() {
     var dagDiv = document.getElementById("dag-knoppen");
+    // Verwijder alle knoppen maar bewaar het label
+    var bestaande = dagDiv.querySelectorAll("button");
+    bestaande.forEach(function(b) { b.remove(); });
     var nlDag = ["zo","ma","di","wo","do","vr","za"];
     var gezien = {};
     for (var di = 0; di < meta.tijden.length; di++) {
@@ -3288,6 +3282,83 @@ body {
         dagDiv.appendChild(dbtn);
       }
     }
+  }
+
+  function herlaadData() {
+    var bewaarLayout = layout;
+    var bewaarParams = panelParams.slice();
+    var bewaarStep  = parseInt(slider.value) - 1;
+    var bewaarZoom  = JSON.parse(JSON.stringify(panelZoom));
+
+    var btn = document.getElementById("btn-herlaad");
+    btn.textContent = "↻";
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+    statusEl.textContent = "Vernieuwen...";
+
+    // Cache leegmaken zodat alles vers wordt geladen
+    paramCache = {};
+    modelData  = {};
+    lsmData    = null;
+    overlayCache = {};
+
+    Promise.all([laadMeta(), laadOverlay(), laadLSM()]).then(function() {
+      addDerivedParams(meta);
+      modelData[actiefModel] = { meta: meta, paramCache: paramCache };
+      aantalUren = meta.uren;
+      slider.max = aantalUren;
+      document.getElementById("hdr-run").textContent = "run: " + meta.run;
+      document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
+      statusEl.textContent = "";
+      herbouwDagknoppen();
+      bouwUurSidebar();
+
+      // Alle zichtbare parameters herladen
+      var uniekeParams = [];
+      bewaarParams.forEach(function(p) { if (uniekeParams.indexOf(p) === -1) uniekeParams.push(p); });
+      return Promise.all(uniekeParams.map(function(p) { return laadParam(p).catch(function(){}); }));
+    }).then(function() {
+      // State herstellen zonder setLayout(1) reset
+      layout = bewaarLayout;
+      panelParams = bewaarParams;
+      panelZoom = bewaarZoom;
+      grid.className = "kaart-grid layout-" + bewaarLayout;
+      document.body.classList.toggle("scroll-mode", bewaarLayout === 1);
+      document.querySelectorAll(".layout-btn").forEach(function(b) {
+        b.classList.toggle("actief", parseInt(b.dataset.layout) === bewaarLayout);
+      });
+      bouwPanels();
+      // Slider positie bewaren (max kan veranderd zijn)
+      var nieuweMax = parseInt(slider.max);
+      slider.value = Math.min(bewaarStep + 1, nieuweMax);
+      updateAlle(parseInt(slider.value) - 1);
+      renderTickRail();
+      btn.textContent = "↻";
+      btn.disabled = false;
+      btn.style.opacity = "1";
+    }).catch(function(e) {
+      statusEl.textContent = "Fout bij vernieuwen: " + e;
+      btn.textContent = "↻";
+      btn.disabled = false;
+      btn.style.opacity = "1";
+      console.error(e);
+    });
+  }
+
+  Promise.all([laadMeta(), laadOverlay(), laadLSM()]).then(function() {
+    // Voeg afgeleide parameters toe aan metadata
+    addDerivedParams(meta);
+    // Sla op in modelData voor vergelijkmodus
+    modelData[actiefModel] = { meta: meta, paramCache: paramCache };
+    aantalUren = meta.uren;
+    slider.max = aantalUren;
+    // Run-tijd — staat al in lokale tijd in meta.run
+    document.getElementById("hdr-run").textContent = "run: " + meta.run;
+    document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
+    statusEl.textContent = "";
+
+    // Dag-knoppen bouwen
+    herbouwDagknoppen();
 
     // Uur-sidebar bouwen
     bouwUurSidebar();

@@ -33,31 +33,39 @@ BLACKLIST = {
     551: [(194801, 194812)],                         # Rijswijk GLD: heel 1948
     435: [(186601, 191912)],                         # Heemstede: 1866 t/m 1919
     836: [(191201, 195012)],                         # Gorinchem: 1912 t/m 1950
-    371: [(199701, 199701)],                         # Zeewolde: januari 1997
+    371: [(199001, 199012), (199701, 199701)],       # Zeewolde: heel 1990, januari 1997
     210: [(199701, 199701)],                         # Beverwijk: januari 1997
     902: [(199701, 199701)],                         # Eindhoven: januari 1997
     677: [(199701, 199701)],                         # Deventer: januari 1997
     473: [(199701, 199701)],                         # Rdam Waalhaven: januari 1997
     441: [(199701, 199701)],                         # Amsterdam: januari 1997
-    68:  [(192401, 192401)],                         # St Anna Parochie: januari 1924
+    915: [(199701, 199701)],                         # Eersel: januari 1997 (nul-data, werkelijk 1,0 mm)
+    68:  [(191101, 195112)],                         # St Anna Parochie: 1911 t/m 1951
     338: [(194202, 194202)],                         # Giethoorn: februari 1942
     825: [(194702, 194702)],                         # Kaatsheuvel: februari 1947
     292: [(192402, 192402), (191703, 191705)],       # Ruinen: feb 1924, mrt-mei 1917
     18:  [(193404, 193404)],                         # Nes Ameland: april 1934
-    663: [(192106, 192106)],                         # Lochem: juni 1921
+    663: [(192106, 192108)],                         # Lochem: jun-aug 1921
     451: [(191108, 191108)],                         # IJsselmonde: augustus 1911
+    748: [(191106, 191108)],                         # Sint Jansteen: jun-aug 1911
     229: [(194008, 194008)],                         # Zandvoort: augustus 1940
     227: [(193908, 193908)],                         # Anna Paulowna: augustus 1939
     149: [(194703, 194705)],                         # Zeijen: mrt-mei 1947
     552: [(192203, 192205)],                         # Oranje Nassaus Oord Renk: mrt-mei 1922
     15:  [(188501, 193012)],                         # Oost Vlieland: 1885 t/m 1930
     831: [(193111, 193111)],                         # Esbeek: november 1931
-    72:  [(192011, 192011)],                         # Franeker: november 1920
+    72:  [(192001, 192412)],                         # Franeker: 1920 t/m 1924
     166: [(192011, 192011)],                         # Marum: november 1920
     712: [(190312, 190312)],                         # Breskens Oud: december 1903
     515: [(193312, 193402)],                         # Amersfoort: dec 1933 t/m feb 1934
     207: [(193212, 193302)],                         # Grosthuizen: dec 1932 t/m feb 1933
     447: [(191703, 191705)],                         # Den Bommel: mrt-mei 1917
+    752: [(193501, 193512), (194401, 194412), (194501, 194512)],  # Haamstede: 1935, 1944, 1945
+    842: [(190001, 209912)],                         # Willemstad: volledig station uitgesloten
+    837: [(194101, 195312)],                         # Steenbergen: 1941 t/m 1953
+    904: [(191401, 192512)],                         # Someren: 1914 t/m 1925
+    440: [(199601, 199912)],                         # Scheveningen: 1996 t/m 1999
+    466: [(199601, 199912)],                         # Wassenaar: 1996 t/m 1999
 }
 
 def filter_blacklist(nr, data):
