@@ -166,8 +166,9 @@
   <span id="fav-chips" style="display:inline-flex;gap:4px;flex-wrap:wrap"></span>
   <span class="sep"></span>
   <span class="tbl">Model:</span>
-  <button class="btn actief" id="btn-mod-det" title="Deterministisch, open-meteo">HARM 2.5 km</button>
+  <button class="btn actief" id="btn-mod-det" title="HARMONIE deterministisch, open-meteo">HARM 2.5 km</button>
   <button class="btn" id="btn-mod-eps" title="Ensemble-gemiddelde van 6 members, dichtstbijzijnde station">HARM-EPS</button>
+  <button class="btn" id="btn-mod-icond2" title="ICON-D2 RUC (DWD), 1-2 dagen vooruit">ICON-D2</button>
   <span class="sep"></span>
   <span class="tbl">Download:</span>
   <span class="dl-wrap">
@@ -683,7 +684,47 @@ let model='det'; // 'det' = open-meteo HARMONIE, 'eps' = lokaal ensemble-gemidde
 
 async function fetchData(){
   if(model==='eps') return fetchHarmoneps(actief.lat,actief.lon);
+  if(model==='icond2') return fetchIconD2(actief.lat,actief.lon);
   return fetchHarmonie(actief.lat,actief.lon);
+}
+
+async function fetchIconD2(lat,lon){
+  const runEl=document.getElementById('hdr-run');
+  if(runEl) runEl.textContent='ICON-D2 · data laden…';
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+    `&hourly=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation`+
+    `&models=icon_d2&wind_speed_unit=kmh&timezone=UTC&forecast_hours=48`;
+  const urlDruk=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+    `&hourly=pressure_msl&models=icon_d2&timezone=UTC&forecast_hours=48`;
+  try{
+    const [r,rD]=await Promise.all([fetch(url),fetch(urlDruk)]);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const jD=rD.ok?await rD.json():null;
+    const h=j.hourly;
+    if(!h||!h.time||!h.time.length) throw new Error('geen hourly data');
+    N=Math.min(48,h.time.length); N1=N-1;
+    startUTC=new Date(h.time[0]+'Z');
+    DATA.temp=h.temperature_2m.slice(0,N);
+    DATA.wind=h.wind_speed_10m.slice(0,N).map(v=>v==null?null:Math.round(v));
+    DATA.gust=h.wind_gusts_10m.slice(0,N).map(v=>v==null?null:Math.round(v));
+    DATA.dir =h.wind_direction_10m.slice(0,N);
+    const drukArr=jD?.hourly?.pressure_msl||[];
+    DATA.druk=Array.from({length:N},(_,i)=>drukArr[i]==null?null:Math.round(drukArr[i]));
+    DATA.vocht=h.relative_humidity_2m.slice(0,N);
+    DATA.bewolking=h.cloud_cover.slice(0,N).map(v=>v==null?null:v/100);
+    DATA.bw_l=(h.cloud_cover_low||[]).slice(0,N);
+    DATA.bw_m=(h.cloud_cover_mid||[]).slice(0,N);
+    DATA.bw_h=(h.cloud_cover_high||[]).slice(0,N);
+    DATA.neerslag=h.precipitation.slice(0,N);
+    const d=startUTC;
+    const pad=n=>String(n).padStart(2,'0');
+    if(runEl) runEl.textContent=`ICON-D2 · run ${pad(d.getUTCDate())}-${pad(d.getUTCMonth()+1)} ${pad(d.getUTCHours())}:00 UTC`;
+    renderChart();
+  }catch(e){
+    if(runEl) runEl.textContent='ICON-D2-fout: '+e.message;
+    console.error('fetchIconD2',e);
+  }
 }
 
 async function fetchHarmonie(lat,lon){
@@ -729,7 +770,7 @@ async function fetchHarmonie(lat,lon){
 let epsIndex=null;
 async function loadEpsIndex(){
   if(epsIndex) return epsIndex;
-  const r=await fetch('weerkaarten%202/pluim_harmoneps/_index.json');
+  const r=await fetch('pluim_harmoneps/_index.json');
   epsIndex=await r.json();
   return epsIndex;
 }
@@ -775,7 +816,7 @@ async function fetchHarmoneps(lat,lon){
     const idx=await loadEpsIndex();
     const st=nearestStation(idx,lat,lon);
     if(!st) throw new Error('geen station gevonden');
-    const r=await fetch(`weerkaarten%202/pluim_harmoneps/${st.id}.json`);
+    const r=await fetch(`pluim_harmoneps/${st.id}.json`);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const j=await r.json();
     const v=j.vars;
@@ -812,20 +853,18 @@ function renderActief(){
   document.getElementById('btn-fav').classList.toggle('actief',isFav);
   fetchData();
 }
-document.getElementById('btn-mod-det').addEventListener('click',()=>{
-  if(model==='det') return;
-  model='det';
-  document.getElementById('btn-mod-det').classList.add('actief');
-  document.getElementById('btn-mod-eps').classList.remove('actief');
+function setModel(nieuw){
+  if(model===nieuw) return;
+  model=nieuw;
+  ['det','eps','icond2'].forEach(m=>{
+    const b=document.getElementById('btn-mod-'+m);
+    if(b) b.classList.toggle('actief', m===nieuw);
+  });
   fetchData();
-});
-document.getElementById('btn-mod-eps').addEventListener('click',()=>{
-  if(model==='eps') return;
-  model='eps';
-  document.getElementById('btn-mod-eps').classList.add('actief');
-  document.getElementById('btn-mod-det').classList.remove('actief');
-  fetchData();
-});
+}
+document.getElementById('btn-mod-det').addEventListener('click',()=>setModel('det'));
+document.getElementById('btn-mod-eps').addEventListener('click',()=>setModel('eps'));
+document.getElementById('btn-mod-icond2').addEventListener('click',()=>setModel('icond2'));
 function loadFavs(){try{return JSON.parse(localStorage.getItem(FAV_KEY)||'[]')}catch(e){return[]}}
 function saveFavs(f){localStorage.setItem(FAV_KEY,JSON.stringify(f))}
 function renderFavs(){
