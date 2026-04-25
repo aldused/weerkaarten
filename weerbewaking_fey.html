@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking W.M. — Feyenoord wedstrijd</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;padding:20px 10px}
+
+.pagina{max-width:800px;margin:0 auto 20px;background:white;padding:40px 50px;box-shadow:0 2px 12px rgba(0,0,0,.08);border-radius:4px}
+
+/* Toolbar */
+.toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:white;padding:12px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.9rem;padding:6px 10px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar button{font-family:inherit;font-size:.9rem;padding:7px 16px;background:#c00000;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.toolbar button:hover{background:#900000}
+.toolbar .spacer{flex:1}
+.toolbar .status{font-size:.8rem;color:#888}
+
+/* Header — zelfde stijl als andere docs maar met rode accent */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2px solid #c00000}
+.doc-header img.logo-l{height:185px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+.doc-opgesteld{margin-top:6px;font-size:.8rem;color:#555;font-style:italic}
+.doc-opgesteld .datum{font-weight:600;color:#333;font-style:normal}
+
+/* Plaats-invoer (rood) */
+.plaats-blok{margin:14px 0 4px;display:flex;align-items:center;gap:10px;background:#fff0f0;border:1px solid #c00000;border-left:4px solid #c00000;border-radius:4px;padding:8px 14px}
+.plaats-blok .label{font-size:.78rem;font-weight:700;color:#900000;text-transform:uppercase;letter-spacing:.06em}
+.plaats-blok .veld{flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#c00000;background:white;border:1px solid #f0a0a0;border-radius:3px;padding:5px 10px;outline:none}
+.plaats-blok .veld:focus{border-color:#c00000;background:#fffbfb;box-shadow:0 0 0 2px #f8c8c8}
+
+/* Titel — Feyenoord-rood */
+.titel{font-size:1.4rem;font-weight:700;color:#c00000;text-align:left;text-transform:uppercase;letter-spacing:.04em;padding:14px 0 6px;margin:14px 0 4px;outline:none;min-height:44px}
+.titel:focus{background:#fffbe8}
+.titel:empty::before{content:'WEERBERICHT: FEYENOORD – TEGENSTANDER';color:#bbb;font-weight:500}
+
+/* Sfeertekst (bv. ZONNIG!) */
+.sfeer{font-size:1.05rem;font-weight:700;color:#c00000;letter-spacing:.04em;margin:0 0 14px;outline:none;min-height:22px}
+.sfeer:focus{background:#fffbe8}
+.sfeer:empty::before{content:'SFEERTEKST (bijv. ZONNIG!)';color:#bbb;font-weight:500}
+
+h2.kop{font-size:.95rem;font-weight:700;color:#c00000;margin:18px 0 8px;padding-bottom:3px;border-bottom:1px solid #f0d0d0}
+
+.tekstvak{min-height:60px;padding:8px 10px;border:1px dashed #ccc;border-radius:3px;font-size:.85rem;line-height:1.5;color:#222;outline:none;background:#fafafa;text-align:justify}
+.tekstvak:focus{background:#fffbe8;border-color:#c00000;border-style:solid}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Waarschuwing */
+.waarsch-blok{margin:10px 0 4px;display:flex;align-items:center;gap:10px;font-size:.95rem;font-weight:700;color:#222}
+.waarsch-blok .lbl{color:#c00000;letter-spacing:.04em}
+select.status-sel{font-family:inherit;font-size:.85rem;padding:4px 10px;border:1px solid #ccc;border-radius:3px;font-weight:700}
+select.status-sel.w-geen{background:#d4e8d4;color:#2d6a2d;border-color:#2d6a2d}
+select.status-sel.w-geel{background:#fff3b0;color:#8a6d00;border-color:#8a6d00}
+select.status-sel.w-oranje{background:#ffcf9f;color:#b05a00;border-color:#b05a00}
+select.status-sel.w-rood{background:#ffb0b0;color:#a00000;border-color:#a00000}
+
+/* Uurverwachting-tabel — Feyenoord rood */
+table.uur{width:100%;border-collapse:collapse;margin-top:6px;font-size:.82rem;margin-bottom:12px}
+table.uur th,table.uur td{border:1px solid #aaa;padding:5px 4px;text-align:center}
+table.uur td[contenteditable="true"]{outline:none;cursor:text}
+table.uur td[contenteditable="true"]:hover{background:#fff5f5}
+table.uur td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #c00000}
+table.uur th{background:#c00000;color:white;font-size:.78rem;font-weight:700;line-height:1.2}
+table.uur th.daglabel{background:#222;color:white;text-align:left;padding-left:8px;font-size:.85rem}
+table.uur td.rij-label{text-align:left;background:#fff0f0;font-weight:700;font-size:.78rem;width:24%;padding-left:8px;color:#222}
+table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#c00000;margin-right:2px}
+
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.72rem;color:#888;text-align:center;font-style:italic}
+
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  select.status-sel{border:none;appearance:none;-webkit-appearance:none;background:transparent;font-weight:700;padding:0}
+  table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+  @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <label>Bron:</label>
+  <span style="font-size:.8rem;color:#c00000;font-weight:700">HARMONIE 2×2 km</span>
+  <label style="margin-left:16px">Startuur:</label>
+  <select id="startuur-sel"></select>
+  <label style="margin-left:8px">#uren:</label>
+  <select id="aantal-sel">
+    <option value="6" selected>6</option>
+    <option value="7">7</option>
+    <option value="8">8</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="status" id="data-status">–</span>
+  <button onclick="laadData()">↻ Ververs</button>
+  <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <span class="status" style="margin-left:8px">Document:</span>
+  <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
+  <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
+</div>
+
+<div class="pagina" id="doc">
+
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Weer en Media" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum">–</span></div>
+
+  <div class="plaats-blok">
+    <span class="label">Plaats</span>
+    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Typ een plaats en druk Enter...">
+    <button id="zoek-btn" style="background:#c00000;color:white;border:none;border-radius:3px;padding:5px 12px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🔍 Zoek</button>
+  </div>
+  <div id="geo-status" style="font-size:.72rem;color:#666;margin:4px 0 0 4px;min-height:14px"></div>
+
+  <div class="titel" contenteditable="true" data-save="titel">WEERBERICHT: FEYENOORD – AJAX</div>
+  <div class="sfeer" contenteditable="true" data-save="sfeer">ZONNIG!</div>
+
+  <h2 class="kop">De weersituatie nader beschreven</h2>
+  <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Een hogedrukgebied boven Rusland zorgt vandaag voor een fantastische weerdag. Met een zwakke oostenwind wordt droge en zachte lucht aangevoerd.</div>
+
+  <h2 class="kop">De weersverwachting voor vandaag</h2>
+  <div class="tekstvak" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting voor vandaag (incl. de wedstrijd)...">In Rotterdam is het vandaag stralend zonnig, ook tijdens de wedstrijd, en blijft het droog. Het wordt zacht voor de tijd van het jaar. De maximumtemperatuur komt uit op ongeveer 15 graden. De wind waait zwak en komt uit het oosten (windkracht 2).</div>
+
+  <div class="waarsch-blok">
+    <span class="lbl">WAARSCHUWING:</span>
+    <select class="status-sel" id="waarsch-sel" onchange="updateStatusKleur(this)">
+      <option value="GEEN">GEEN</option>
+      <option value="GEEL">GEEL</option>
+      <option value="ORANJE">ORANJE</option>
+      <option value="ROOD">ROOD</option>
+    </select>
+  </div>
+
+  <h2 class="kop" id="kop-uurtabel">Uurverwachting wedstrijd</h2>
+  <table class="uur" id="uur-tabel"></table>
+
+  <div class="doc-footer">© Ed Aldus Weer en Media aanvaardt geen aansprakelijkheid voor het niet of slechts ten-dele uitkomen van de verstrekte verwachtingen.</div>
+</div>
+
+<script>
+const MAAND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const DAG=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+
+function formatDatumVol(d){
+  return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]} ${d.getFullYear()} om ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} uur`;
+}
+function formatDagLang(d){ return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]}`; }
+
+function naarBFT(kmh){
+  if(kmh==null||isNaN(kmh)) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+function naarRichtingKort(deg){
+  if(deg==null||isNaN(deg)) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+function windCel(deg){
+  const letter=naarRichtingKort(deg);
+  const rot=(deg!=null&&!isNaN(deg))?deg:0;
+  return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+}
+function updateStatusKleur(sel){
+  const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
+  sel.className='status-sel '+kl[sel.value];
+}
+
+/* ── HARMONIE data (2×2 km) ── */
+let harmonieMeta=null;
+let huidigePunt=null;
+
+async function laadMeta(){
+  if(harmonieMeta) return harmonieMeta;
+  const r=await fetch('harmonie_canvas_meta.json?_='+Date.now());
+  harmonieMeta=await r.json();
+  return harmonieMeta;
+}
+function latLonNaarGrid(meta,lat,lon){
+  const g=meta.grid;
+  const iLat=Math.round((lat-g.lat_min)/(g.lat_max-g.lat_min)*(g.n_lat-1));
+  const iLon=Math.round((lon-g.lon_min)/(g.lon_max-g.lon_min)*(g.n_lon-1));
+  if(iLat<0||iLat>=g.n_lat||iLon<0||iLon>=g.n_lon) return null;
+  return {iLat,iLon,gi:iLat*g.n_lon+iLon};
+}
+async function geocodePlaats(q){
+  const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de&q='+encodeURIComponent(q);
+  const r=await fetch(url); if(!r.ok) throw new Error('geocode faalde');
+  const j=await r.json(); if(!j.length) return null;
+  return {lat:parseFloat(j[0].lat), lon:parseFloat(j[0].lon), naam:j[0].display_name};
+}
+async function fetchFloat(url,offset){
+  const r=await fetch(url,{headers:{'Range':`bytes=${offset}-${offset+3}`}});
+  if(!r.ok && r.status!==206) throw new Error('range faalde '+r.status);
+  const buf=await r.arrayBuffer();
+  return new DataView(buf).getFloat32(0,true);
+}
+async function puntReeks(paramKey, gi, nSteps){
+  const meta=await laadMeta();
+  const info=meta.parameters[paramKey];
+  if(!info) throw new Error('param onbekend: '+paramKey);
+  const nPts=meta.grid.n_lat*meta.grid.n_lon;
+  const nComp=info.components;
+  const url=info.file;
+  const HEADER=16;
+  const offsets=[]; const idx=[];
+  for(let s=0;s<nSteps;s++){
+    for(let c=0;c<nComp;c++){
+      offsets.push(HEADER + ((s*nComp+c)*nPts + gi)*4);
+      idx.push([s,c]);
+    }
+  }
+  const vals=await Promise.all(offsets.map(o=>fetchFloat(url,o)));
+  const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
+  for(let k=0;k<vals.length;k++){ uit[idx[k][0]][idx[k][1]]=vals[k]; }
+  return uit;
+}
+function vulStartuurSelect(tijden,nuSel){
+  const sel=document.getElementById('startuur-sel');
+  const nu=new Date();
+  let startIdx=0;
+  for(let i=0;i<tijden.length;i++){
+    const t=new Date(tijden[i]);
+    if(t>=nu){ startIdx=i; break; }
+  }
+  const behoud=sel.value;
+  sel.innerHTML='';
+  const nAant=parseInt(document.getElementById('aantal-sel').value||'6');
+  const maxStart=Math.min(tijden.length-nAant, startIdx+48);
+  for(let i=Math.max(0,startIdx-2); i<=maxStart; i++){
+    const t=new Date(tijden[i]);
+    const lbl=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
+    const opt=document.createElement('option');
+    opt.value=i; opt.textContent=lbl;
+    if(i===(nuSel!=null?parseInt(nuSel):startIdx)) opt.selected=true;
+    sel.appendChild(opt);
+  }
+  if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
+}
+
+function msNaarKmh(ms){ return ms*3.6; }
+function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):(+v).toFixed(d).replace(/\.0$/,'')); }
+
+function bouwUurTabel(tblEl, daglabel, uren, rijen){
+  const thHdr=`<tr><th class="daglabel" colspan="${uren.length+1}">${daglabel}</th></tr>
+               <tr><th style="width:24%"></th>${uren.map(u=>`<th>${u}</th>`).join('')}</tr>`;
+  const body=rijen.map(r=>`<tr><td class="rij-label">${r.label}</td>${r.cellen.map(c=>`<td contenteditable="true">${c}</td>`).join('')}</tr>`).join('');
+  tblEl.innerHTML=`<thead>${thHdr}</thead><tbody>${body}</tbody>`;
+}
+
+async function renderTabel(){
+  const meta=harmonieMeta; if(!meta) return;
+  const pt=huidigePunt; if(!pt) return;
+  const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+  const NSTEPS=parseInt(document.getElementById('aantal-sel').value||'6');
+  document.getElementById('data-status').textContent='HARMONIE laden…';
+
+  const params=['temp','neerslag','wind','windstoten','bewolking','onweer'];
+  const reeksen={};
+  await Promise.all(params.map(async p=>{
+    try{
+      const r=await puntReeks(p, pt.gi, startIdx+NSTEPS);
+      reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
+    }catch(e){ reeksen[p]=null; }
+  }));
+
+  const uren=[]; const rij={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
+  let dagLabel='';
+
+  for(let k=0;k<NSTEPS;k++){
+    const t0=meta.tijden[startIdx+k]; if(!t0) break;
+    const t=new Date(t0);
+    if(k===0) dagLabel=formatDagLang(t);
+    uren.push(`${String(t.getHours()).padStart(2,'0')} uur`);
+
+    const temp = reeksen.temp ? reeksen.temp[k][0] : null;
+    rij.temp.push(f(temp,0));
+
+    let wspd=null, wdir=null;
+    if(reeksen.wind){
+      const u=reeksen.wind[k][0], v=reeksen.wind[k][1];
+      wspd=Math.sqrt(u*u+v*v);
+      wdir=(Math.atan2(-u,-v)*180/Math.PI+360)%360;
+    }
+    rij.wind.push(wdir==null?'–':windCel(wdir));
+    rij.bft.push(wspd==null?'–':naarBFT(msNaarKmh(wspd)));
+
+    let gust=null;
+    if(reeksen.windstoten){
+      const u=reeksen.windstoten[k][0], v=reeksen.windstoten[k][1];
+      gust=Math.sqrt(u*u+v*v);
+    }
+    rij.stoot.push(gust==null?'–':Math.round(msNaarKmh(gust)));
+
+    const rr = reeksen.neerslag ? reeksen.neerslag[k][0] : null;
+    rij.regen.push(rr==null?'–':f(rr,1));
+    rij.kansR.push(rr==null?'–':(rr>0.5?100:rr>0.1?70:rr>0.02?30:0));
+
+    const thn = reeksen.onweer ? reeksen.onweer[k][0] : null;
+    rij.kansO.push(thn==null?'–':(thn>0.7?80:thn>0.4?40:thn>0.1?10:0));
+
+    let cloudTot=null;
+    if(reeksen.bewolking){
+      const b=reeksen.bewolking[k];
+      cloudTot=Math.max(b[0]||0, b[1]||0, b[2]||0);
+    }
+    rij.zon.push(cloudTot==null?'–':Math.round((1-cloudTot)*100));
+  }
+
+  const rijDef=[
+    {label:'Temperatuur (°C)', cellen:rij.temp},
+    {label:'Wind',             cellen:rij.wind},
+    {label:'Windkracht (BFT)', cellen:rij.bft},
+    {label:'Max. windstoot (km/u)', cellen:rij.stoot},
+    {label:'Kans op regen (%)',cellen:rij.kansR},
+    {label:'Regen (mm)',       cellen:rij.regen},
+    {label:'Kans op onweer (%)',cellen:rij.kansO},
+    {label:'Zon/helder (%)',   cellen:rij.zon}
+  ];
+  bouwUurTabel(document.getElementById('uur-tabel'), dagLabel, uren, rijDef);
+  document.getElementById('data-status').textContent='HARMONIE · run '+meta.run;
+}
+
+async function laadData(){
+  const nu=new Date();
+  document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
+  try{
+    const meta=await laadMeta();
+    if(document.getElementById('startuur-sel').options.length===0){
+      vulStartuurSelect(meta.tijden);
+    }
+    if(!huidigePunt){ await zoekEnLaad(); return; }
+    await renderTabel();
+  }catch(e){
+    document.getElementById('data-status').textContent='Fout: '+e.message;
+  }
+}
+
+async function zoekEnLaad(){
+  const q=(document.getElementById('plaats-in').value||'').trim();
+  if(!q){ document.getElementById('geo-status').textContent=''; return; }
+  const geoEl=document.getElementById('geo-status');
+  geoEl.textContent='Zoeken…';
+  try{
+    const meta=await laadMeta();
+    const res=await geocodePlaats(q);
+    if(!res){ geoEl.textContent='Niet gevonden.'; return; }
+    const grid=latLonNaarGrid(meta,res.lat,res.lon);
+    if(!grid){ geoEl.textContent='Buiten HARMONIE-gebied.'; return; }
+    huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam,...grid};
+    geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')}  (${res.lat.toFixed(3)}, ${res.lon.toFixed(3)})`;
+    await renderTabel();
+  }catch(e){
+    geoEl.textContent='Fout: '+e.message;
+  }
+}
+
+document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
+document.getElementById('plaats-in').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); zoekEnLaad(); }
+});
+document.getElementById('startuur-sel').addEventListener('change', renderTabel);
+document.getElementById('aantal-sel').addEventListener('change', ()=>{
+  if(harmonieMeta) vulStartuurSelect(harmonieMeta.tijden, document.getElementById('startuur-sel').value);
+  renderTabel();
+});
+
+/* ── PDF ── */
+function exporteerPDF(){
+  const doc=document.getElementById('doc').cloneNode(true);
+  doc.querySelectorAll('input').forEach(inp=>{
+    const span=document.createElement('span');
+    span.textContent=inp.value; span.style.cssText=inp.getAttribute('style')||'';
+    inp.parentNode.replaceChild(span,inp);
+  });
+  doc.querySelectorAll('select').forEach(sel=>{
+    const span=document.createElement('span');
+    span.textContent=sel.value; span.className=sel.className; span.style.cssText='font-weight:700;padding:2px 8px';
+    sel.parentNode.replaceChild(span,sel);
+  });
+  const opt={margin:0,filename:`fey_wedstrijd_${new Date().toISOString().slice(0,10)}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
+  html2pdf().set(opt).from(doc).save();
+}
+
+/* ── Auto-save per dag ── */
+const SAVE_PREFIX='wb_fey_draft_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function saveKey(){ return SAVE_PREFIX+huidigeDatum(); }
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
+  d.plaats=document.getElementById('plaats-in').value;
+  d.waarsch=document.getElementById('waarsch-sel').value;
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function leegForm(){
+  document.getElementById('plaats-in').value='Rotterdam';
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(saveKey());
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null) el.innerHTML=d[k];
+    });
+    if(d.plaats!=null) document.getElementById('plaats-in').value=d.plaats;
+    if(d.waarsch){
+      const s=document.getElementById('waarsch-sel');
+      s.value=d.waarsch; updateStatusKleur(s);
+    }
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function wisDraft(){
+  if(!confirm('Opgeslagen tekst van '+huidigeDatum()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
+  location.reload();
+}
+let saveTimer;
+function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+document.addEventListener('input', e=>{
+  const t=e.target;
+  if(t.closest('[data-save]') || t.id==='plaats-in') debSave();
+});
+document.addEventListener('change', e=>{
+  if(e.target.id==='waarsch-sel') saveDraft();
+});
+document.addEventListener('blur', e=>{
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
+},true);
+
+document.getElementById('doc-datum').value=vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', ()=>{ restoreDraft(); laadData(); });
+
+function gaTerug(){
+  if (window.self !== window.top) { window.location.href='weerbewaking.html'; }
+  else { window.location.href='index.html#weerbewaking'; }
+}
+
+updateStatusKleur(document.getElementById('waarsch-sel'));
+restoreDraft();
+laadData();
+</script>
+</body>
+</html>
