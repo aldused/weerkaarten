@@ -663,6 +663,17 @@ const nachtPlugin = {
 Chart.register(nachtPlugin);
 
 // ── Dag-grens plugin ── verticale lijn bij 00:00 van elke nieuwe dag
+// Lijn-charts (temp/dauwpunt/wind/winddir/neerslag) krijgen een dunnere/lichtere lijn;
+// stacked-bar charts (bewolking, kansen, weertype) krijgen een fellere lijn die door de bars heen prikt.
+const DAGGRENS_LICHT = new Set([
+  'canvas-temp','canvas-dauwpunt','canvas-wind','canvas-winddir',
+  'canvas-neerslag','canvas-neerslagsom',
+  'canvas-aifs','canvas-aifs-neerslag',
+  'canvas-icon','canvas-icon-neerslag',
+  'canvas-hres','canvas-hres-neerslag','canvas-hres-wind',
+  'canvas-vergelijking','canvas-verg-neerslag','canvas-verg-wind',
+]);
+const VERG_LICHT_TYPES = new Set(['temp','dauwpunt','wind','winddir','neerslag']);
 const dagGrensPlugin = {
   id: 'dagGrens',
   afterDatasetsDraw(chart) {
@@ -674,9 +685,12 @@ const dagGrensPlugin = {
     const xScale = chart.scales.x;
     const yScale = chart.scales.y || chart.scales.y1;
     if (!xScale || !yScale) return;
+    const id = chart.canvas.id;
+    const isVergLicht = id.startsWith('verg-canvas-') && VERG_LICHT_TYPES.has(actieveType);
+    const licht = DAGGRENS_LICHT.has(id) || isVergLicht;
     ctx.save();
-    ctx.strokeStyle = 'rgba(20,40,80,0.55)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = licht ? 'rgba(20,40,80,0.22)' : 'rgba(20,40,80,0.55)';
+    ctx.lineWidth = licht ? 1 : 2;
     ctx.setLineDash([]);
     for (let i = 1; i < ts.length; i++) {
       const cur = new Date(ts[i]);
