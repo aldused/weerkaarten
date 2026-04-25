@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking W.M. — Weersverwachting Rijnmond</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;padding:20px 10px}
+
+.pagina{max-width:800px;margin:0 auto 20px;background:white;padding:40px 50px;box-shadow:0 2px 12px rgba(0,0,0,.08);border-radius:4px}
+
+/* Toolbar */
+.toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:white;padding:12px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.9rem;padding:6px 10px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar button{font-family:inherit;font-size:.9rem;padding:7px 16px;background:#1f497d;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.toolbar button:hover{background:#143258}
+.toolbar .spacer{flex:1}
+.toolbar .status{font-size:.8rem;color:#888}
+
+/* Header — zelfde stijl als andere docs */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2px solid #1f497d}
+.doc-header img.logo-l{height:185px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+
+.doc-opgesteld{margin:14px 0 18px;font-size:.95rem;color:#1f497d;font-style:italic;font-weight:600}
+
+/* Sectiekopjes */
+h2.kop{font-size:1rem;font-weight:700;color:#1f497d;text-transform:uppercase;letter-spacing:.04em;margin:20px 0 6px;outline:none}
+h2.kop:focus{background:#fffbe8}
+
+.tekstvak{min-height:50px;padding:6px 8px;border:1px dashed #ccc;border-radius:3px;font-size:.92rem;line-height:1.55;color:#222;outline:none;background:#fafafa;text-align:justify;margin:0 0 10px}
+.tekstvak:focus{background:#fffbe8;border-color:#1f497d;border-style:solid}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Verberg-knop per sectie */
+.sectie{position:relative;margin:18px 0}
+.sectie .toggle-knop{position:absolute;right:0;top:0;font-family:inherit;font-size:.72rem;padding:3px 8px;background:#eee;border:1px solid #ccc;border-radius:3px;cursor:pointer;color:#555}
+.sectie .toggle-knop:hover{background:#e0e0e0}
+.sectie.verborgen{display:none}
+
+/* Footer */
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.72rem;color:#888;text-align:center;font-style:italic}
+
+/* PRINT */
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  .sectie .toggle-knop{display:none !important}
+  @page{size:A4;margin:0}
+}
+
+/* Koptekst-grootte */
+body{--kop-scale:1}
+.pagina .doc-opgesteld{font-size:calc(.95rem * var(--kop-scale))}
+.pagina h2.kop{font-size:calc(1rem * var(--kop-scale))}
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <label>Document datum:</label>
+  <input type="date" id="doc-datum">
+  <button onclick="zetVandaag()" style="background:#777" title="Zet datum op vandaag">Vandaag</button>
+  <span class="spacer"></span>
+  <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <label style="margin-left:8px">Koppen:</label>
+  <select id="kop-scale-sel" onchange="zetKopScale(this.value)">
+    <option value="0.8">80%</option>
+    <option value="0.9">90%</option>
+    <option value="1" selected>100%</option>
+    <option value="1.1">110%</option>
+    <option value="1.2">120%</option>
+    <option value="1.35">135%</option>
+    <option value="1.5">150%</option>
+  </select>
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
+  <button onclick="gaTerug()" style="background:#777">← Terug naar menu</button>
+</div>
+
+<!-- DOCUMENT -->
+<div class="pagina" id="doc">
+
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Weer en Media" onerror="this.style.display='none'">
+  </div>
+
+  <div class="doc-opgesteld">Opgesteld: <span id="hdr-datum">–</span></div>
+
+  <div class="sectie" id="sec-vandaag">
+    <button class="toggle-knop" onclick="verbergSectie('sec-vandaag')" title="Verberg deze sectie (avondbericht)">✕ verbergen</button>
+    <h2 class="kop"><span data-prefix="VANDAAG">VANDAAG</span>: <span class="dagnaam" data-offset="0">–</span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="vandaag" data-placeholder="Beschrijf het weer voor vandaag...">De dag begint landinwaarts met bewolking maar al snel wordt het overal zonnig. Het blijft droog en het wordt 16 graden. Aan zee wordt het 14 graden.</div>
+  </div>
+
+  <div class="sectie" id="sec-avond">
+    <button class="toggle-knop" onclick="verbergSectie('sec-avond')" title="Verberg deze sectie">✕ verbergen</button>
+    <h2 class="kop">VANAVOND EN VANNACHT:</h2>
+    <div class="tekstvak" contenteditable="true" data-save="avond" data-placeholder="Beschrijf de avond en de nacht...">Vanavond eerst nog zon, vannacht brede opklaringen en droog. Het koelt landinwaarts af naar 3 graden.</div>
+  </div>
+
+  <div class="sectie" id="sec-morgen">
+    <button class="toggle-knop" onclick="verbergSectie('sec-morgen')" title="Verberg deze sectie">✕ verbergen</button>
+    <h2 class="kop"><span data-prefix="MORGEN">MORGEN</span>: <span class="dagnaam" data-offset="1">–</span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf het weer voor morgen...">Volop zon en droog. Middagtemperatuur 15 of 16 graden.</div>
+  </div>
+
+  <div class="sectie" id="sec-komend">
+    <button class="toggle-knop" onclick="verbergSectie('sec-komend')" title="Verberg deze sectie">✕ verbergen</button>
+    <h2 class="kop">KOMENDE DAGEN:</h2>
+    <div class="tekstvak" contenteditable="true" data-save="komend" data-placeholder="Beschrijf de komende dagen...">Veel bewolking met af en toe zon en droog. In de avond kan er wel een bui voorkomen. De maximumtemperatuur bedraagt 16 graden.</div>
+  </div>
+
+  <!-- Knop om verborgen secties te tonen -->
+  <div id="verborgen-bar" style="display:none;margin:14px 0 0;font-size:.78rem;color:#888">
+    Verborgen secties: <span id="verborgen-lijst"></span>
+  </div>
+
+  <div class="doc-footer">© Ed Aldus Weer en Media aanvaardt geen aansprakelijkheid voor het niet of slechts ten-dele uitkomen van de verstrekte verwachtingen.</div>
+</div>
+
+<script>
+const DAGLANG=['ZONDAG','MAANDAG','DINSDAG','WOENSDAG','DONDERDAG','VRIJDAG','ZATERDAG'];
+const DAGLANG_KLEIN=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+function huidigeDatumObj(){
+  const v=document.getElementById('doc-datum').value;
+  if(!v) return new Date();
+  // Lokaal middag om DST-issues te vermijden
+  return new Date(v+'T12:00:00');
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+function updateOpgesteldKop(){
+  // "Opgesteld: zaterdag 25 april om 07:15 uur"
+  // We pakken de gekozen documentdatum + huidige tijd
+  const d=huidigeDatumObj();
+  const nu=new Date();
+  const dnaam=DAGLANG_KLEIN[d.getDay()];
+  const tekst=`${dnaam} ${d.getDate()} ${MND[d.getMonth()]} om ${pad2(nu.getHours())}:${pad2(nu.getMinutes())} uur`;
+  document.getElementById('hdr-datum').textContent=tekst;
+}
+
+function updateDagnamen(){
+  const basis=huidigeDatumObj();
+  document.querySelectorAll('.dagnaam').forEach(el=>{
+    const off=parseInt(el.getAttribute('data-offset')||'0');
+    const d=new Date(basis.getTime()+off*24*3600*1000);
+    el.textContent=DAGLANG[d.getDay()];
+  });
+}
+
+function verbergSectie(id){
+  document.getElementById(id).classList.add('verborgen');
+  saveDraft();
+  toonVerborgenBar();
+}
+function toonSectieWeer(id){
+  document.getElementById(id).classList.remove('verborgen');
+  saveDraft();
+  toonVerborgenBar();
+}
+function toonVerborgenBar(){
+  const verborgen=Array.from(document.querySelectorAll('.sectie.verborgen'));
+  const bar=document.getElementById('verborgen-bar');
+  const lijst=document.getElementById('verborgen-lijst');
+  if(verborgen.length===0){ bar.style.display='none'; return; }
+  bar.style.display='';
+  lijst.innerHTML=verborgen.map(s=>{
+    const k=s.querySelector('h2.kop')?.textContent.replace(':','').trim()||s.id;
+    return `<button onclick="toonSectieWeer('${s.id}')" style="margin:0 4px;padding:2px 8px;border:1px solid #ccc;background:#eef;border-radius:3px;cursor:pointer;font-family:inherit;font-size:.78rem">+ ${k}</button>`;
+  }).join('');
+}
+
+/* ── PDF ── */
+function exporteerPDF(){
+  const doc=document.getElementById('doc').cloneNode(true);
+  doc.querySelectorAll('button.toggle-knop').forEach(b=>b.remove());
+  const verborgenBar=doc.querySelector('#verborgen-bar'); if(verborgenBar) verborgenBar.remove();
+  const opt={margin:0,filename:`weersverwachting_rijnmond_${(document.getElementById('doc-datum').value||vandaagISO())}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
+  html2pdf().set(opt).from(doc).save();
+}
+
+/* ── Auto-save per dag ── */
+const SAVE_PREFIX='wb_rr_draft_';
+function huidigeDatumKey(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function saveKey(){ return SAVE_PREFIX+huidigeDatumKey(); }
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
+  d.verborgen = Array.from(document.querySelectorAll('.sectie.verborgen')).map(s=>s.id);
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function leegForm(){
+  // Reset secties zichtbaar; teksten leegmaken zodat placeholders verschijnen
+  document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+  toonVerborgenBar();
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(saveKey());
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatumKey()+')'; return; }
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null) el.innerHTML=d[k];
+    });
+    // Verborgen secties terugzetten
+    document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+    if(Array.isArray(d.verborgen)){
+      d.verborgen.forEach(id=>document.getElementById(id)?.classList.add('verborgen'));
+    }
+    toonVerborgenBar();
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatumKey()} · ${pad2(t.getHours())}:${pad2(t.getMinutes())}`;
+}
+function wisDraft(){
+  if(!confirm('Opgeslagen tekst van '+huidigeDatumKey()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
+  location.reload();
+}
+let saveTimer;
+function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+
+document.addEventListener('input', e=>{
+  if(e.target.closest('[data-save]')) debSave();
+});
+document.addEventListener('blur', e=>{
+  if(e.target.closest('[data-save]')) saveDraft();
+},true);
+
+document.getElementById('doc-datum').value=vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', ()=>{
+  updateOpgesteldKop();
+  updateDagnamen();
+  restoreDraft();
+});
+
+function zetVandaag(){
+  document.getElementById('doc-datum').value=vandaagISO();
+  updateOpgesteldKop();
+  updateDagnamen();
+  restoreDraft();
+}
+
+/* ── Koptekst-grootte ── */
+const KOP_KEY='wb_rr_kopscale';
+function zetKopScale(v){
+  document.body.style.setProperty('--kop-scale', v);
+  try{ localStorage.setItem(KOP_KEY, v); }catch(e){}
+}
+(function herstelKopScale(){
+  try{
+    const v=localStorage.getItem(KOP_KEY);
+    if(v){
+      document.body.style.setProperty('--kop-scale', v);
+      const sel=document.getElementById('kop-scale-sel');
+      if(sel) sel.value=v;
+    }
+  }catch(e){}
+})();
+
+function gaTerug(){
+  if (window.self !== window.top) { window.location.href='weerbewaking.html'; }
+  else { window.location.href='index.html#weerbewaking'; }
+}
+
+/* ── Init ── */
+updateOpgesteldKop();
+updateDagnamen();
+// Tijd-deel automatisch ververs elke minuut zodat "om HH:MM uur" actueel blijft
+setInterval(updateOpgesteldKop, 60*1000);
+restoreDraft();
+</script>
+</body>
+</html>
