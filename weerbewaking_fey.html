@@ -100,9 +100,12 @@ body{--kop-scale:1}
 <body>
 
 <div class="toolbar">
-  <label>Bron:</label>
-  <span style="font-size:.8rem;color:#c00000;font-weight:700">HARMONIE 2×2 km</span>
-  <label style="margin-left:16px">Startuur:</label>
+  <label>Model:</label>
+  <select id="model-sel">
+    <option value="harmonie" selected>HARMONIE 2×2 km</option>
+    <option value="icond2">ICON-D2 RUC (1 dag)</option>
+  </select>
+  <label style="margin-left:8px">Startuur:</label>
   <select id="startuur-sel"></select>
   <label style="margin-left:8px">#uren:</label>
   <select id="aantal-sel">
@@ -202,17 +205,25 @@ function updateStatusKleur(sel){
   sel.className='status-sel '+kl[sel.value];
 }
 
-/* ── HARMONIE data (2×2 km) ── */
+/* ── Model-data (HARMONIE / ICON-D2) ── */
 const HARM_BASE='https://harmonie-data.weerlab.nl/';
-let harmonieMeta=null;
+const MODELS={
+  harmonie: {meta:'harmonie_canvas_meta.json', label:'HARMONIE 2×2 km'},
+  icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 RUC'}
+};
+let huidigModel='harmonie';
+let metaCache={};       // {model: meta}
+let harmonieMeta=null;  // alias voor huidig model
 let huidigePunt=null;
 
 async function laadMeta(){
-  if(harmonieMeta) return harmonieMeta;
-  const r=await fetch(HARM_BASE+'harmonie_canvas_meta.json?_='+Date.now());
+  if(metaCache[huidigModel]){ harmonieMeta=metaCache[huidigModel]; return harmonieMeta; }
+  const r=await fetch(HARM_BASE+MODELS[huidigModel].meta+'?_='+Date.now());
   if(!r.ok) throw new Error('meta fetch '+r.status);
-  harmonieMeta=await r.json();
-  return harmonieMeta;
+  const j=await r.json();
+  metaCache[huidigModel]=j;
+  harmonieMeta=j;
+  return j;
 }
 function latLonNaarGrid(meta,lat,lon){
   const g=meta.grid;
@@ -344,9 +355,10 @@ async function renderTabel(){
   if(!meta || !pt){ bouwLegeTabel(); return; }
   const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
   const NSTEPS=parseInt(document.getElementById('aantal-sel').value||'6');
-  document.getElementById('data-status').textContent='HARMONIE laden…';
+  document.getElementById('data-status').textContent=MODELS[huidigModel].label+' laden…';
 
-  const params=['temp','neerslag','wind','windstoten','bewolking','onweer'];
+  const onweerParam = harmonieMeta.parameters.onweer ? 'onweer' : (harmonieMeta.parameters.cape ? 'cape' : null);
+  const params=['temp','neerslag','wind','windstoten','bewolking'].concat(onweerParam?[onweerParam]:[]);
   const reeksen={};
   await Promise.all(params.map(async p=>{
     try{
@@ -354,6 +366,17 @@ async function renderTabel(){
       reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
     }catch(e){ reeksen[p]=null; }
   }));
+  // Onweer-reeks normaliseren: cape→% via heuristiek
+  if(onweerParam==='cape' && reeksen.cape){
+    reeksen.onweer = reeksen.cape.map(arr=>{
+      const c=arr[0]; if(c==null) return [null];
+      // cape (J/kg) → ruwe onweerskans
+      const p = c<100?0 : c<500?20 : c<1000?40 : c<2000?60 : 80;
+      return [p/100];
+    });
+  } else {
+    reeksen.onweer = reeksen.onweer || null;
+  }
 
   const uren=[]; const rij={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
   let dagLabel='';
@@ -409,7 +432,7 @@ async function renderTabel(){
     {label:'Zon/helder (%)',   cellen:rij.zon}
   ];
   bouwUurTabel(document.getElementById('uur-tabel'), dagLabel, uren, rijDef);
-  document.getElementById('data-status').textContent='HARMONIE · run '+meta.run;
+  document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
 }
 
 async function laadData(){
@@ -425,7 +448,7 @@ async function laadData(){
     if(!huidigePunt){ await zoekEnLaad(); return; }
     await renderTabel();
   }catch(e){
-    document.getElementById('data-status').textContent='HARMONIE niet beschikbaar – tabel handmatig in te vullen ('+e.message+')';
+    document.getElementById('data-status').textContent=MODELS[huidigModel].label+' niet beschikbaar – tabel handmatig in te vullen ('+e.message+')';
     vulStartuurFallback();
   }
 }
@@ -449,6 +472,27 @@ async function zoekEnLaad(){
   }
 }
 
+document.getElementById('model-sel').addEventListener('change', async e=>{
+  huidigModel=e.target.value;
+  // Bij andere model: huidig punt opnieuw mappen (andere grid)
+  harmonieMeta=null;
+  document.getElementById('startuur-sel').innerHTML='';
+  if(huidigePunt){
+    try{
+      const meta=await laadMeta();
+      const grid=latLonNaarGrid(meta, huidigePunt.lat, huidigePunt.lon);
+      if(grid){ huidigePunt={...huidigePunt, ...grid}; }
+      vulStartuurSelect(meta.tijden);
+      await renderTabel();
+      document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
+    }catch(err){
+      document.getElementById('data-status').textContent='Model niet beschikbaar: '+err.message;
+      vulStartuurFallback(); bouwLegeTabel();
+    }
+  } else {
+    laadData();
+  }
+});
 document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
 document.getElementById('plaats-in').addEventListener('keydown', e=>{
   if(e.key==='Enter'){ e.preventDefault(); zoekEnLaad(); }

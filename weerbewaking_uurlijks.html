@@ -139,8 +139,11 @@ body{--kop-scale:1}
 <body>
 
 <div class="toolbar">
-  <label>Bron:</label>
-  <span style="font-size:.8rem;color:#1a5490;font-weight:700">HARMONIE 2×2 km</span>
+  <label>Model:</label>
+  <select id="model-sel">
+    <option value="harmonie" selected>HARMONIE 2×2 km</option>
+    <option value="icond2">ICON-D2 RUC (1 dag)</option>
+  </select>
   <label style="margin-left:16px">Startuur:</label>
   <select id="startuur-sel"></select>
   <span class="spacer"></span>
@@ -266,18 +269,26 @@ function windCel(deg){
   return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
 }
 
-/* ── HARMONIE data (2×2 km) ── */
+/* ── Model-data (HARMONIE / ICON-D2) ── */
 const HARM_BASE='https://harmonie-data.weerlab.nl/';
+const MODELS={
+  harmonie: {meta:'harmonie_canvas_meta.json', label:'HARMONIE 2×2 km'},
+  icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 RUC'}
+};
+let huidigModel='harmonie';
+let metaCache={};
 let harmonieMeta=null;
-let huidigePunt=null; // {lat,lon,naam,iLat,iLon,gi}
-let puntCache={}; // {gi: {param: [[comp,...], ...]}}
+let huidigePunt=null;
+let puntCache={};
 
 async function laadMeta(){
-  if(harmonieMeta) return harmonieMeta;
-  const r=await fetch(HARM_BASE+'harmonie_canvas_meta.json?_='+Date.now());
+  if(metaCache[huidigModel]){ harmonieMeta=metaCache[huidigModel]; return harmonieMeta; }
+  const r=await fetch(HARM_BASE+MODELS[huidigModel].meta+'?_='+Date.now());
   if(!r.ok) throw new Error('meta fetch '+r.status);
-  harmonieMeta=await r.json();
-  return harmonieMeta;
+  const j=await r.json();
+  metaCache[huidigModel]=j;
+  harmonieMeta=j;
+  return j;
 }
 
 function latLonNaarGrid(meta,lat,lon){
@@ -373,7 +384,7 @@ async function laadData(){
     }
     const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
     await renderTabellen(startIdx);
-    document.getElementById('data-status').textContent='HARMONIE · run '+meta.run;
+    document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
   }catch(e){
     document.getElementById('data-status').textContent='Fout: '+e.message;
   }
@@ -383,10 +394,11 @@ async function renderTabellen(startIdx){
   const meta=harmonieMeta;
   const pt=huidigePunt;
   const NSTEPS=12;
-  document.getElementById('data-status').textContent='HARMONIE laden…';
+  document.getElementById('data-status').textContent=MODELS[huidigModel].label+' laden…';
 
   // Haal alle param-reeksen parallel
-  const params=['temp','neerslag','wind','windstoten','bewolking','onweer'];
+  const onweerParam = harmonieMeta.parameters.onweer ? 'onweer' : (harmonieMeta.parameters.cape ? 'cape' : null);
+  const params=['temp','neerslag','wind','windstoten','bewolking'].concat(onweerParam?[onweerParam]:[]);
   const reeksen={};
   await Promise.all(params.map(async p=>{
     try{
@@ -394,6 +406,13 @@ async function renderTabellen(startIdx){
       reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
     }catch(e){ reeksen[p]=null; }
   }));
+  if(onweerParam==='cape' && reeksen.cape){
+    reeksen.onweer = reeksen.cape.map(arr=>{
+      const c=arr[0]; if(c==null) return [null];
+      const p = c<100?0 : c<500?20 : c<1000?40 : c<2000?60 : 80;
+      return [p/100];
+    });
+  }
 
   const tijden1=[], tijden2=[];
   const rijen1={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
@@ -494,6 +513,23 @@ document.getElementById('plaats-in').addEventListener('keydown', e=>{
 });
 document.getElementById('startuur-sel').addEventListener('change', ()=>{
   if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
+});
+document.getElementById('model-sel').addEventListener('change', async e=>{
+  huidigModel=e.target.value;
+  harmonieMeta=null;
+  document.getElementById('startuur-sel').innerHTML='';
+  try{
+    const meta=await laadMeta();
+    if(huidigePunt){
+      const grid=latLonNaarGrid(meta, huidigePunt.lat, huidigePunt.lon);
+      if(grid) huidigePunt={...huidigePunt, ...grid};
+    }
+    vulStartuurSelect(meta.tijden);
+    if(huidigePunt) await renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
+    document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
+  }catch(err){
+    document.getElementById('data-status').textContent='Model niet beschikbaar: '+err.message;
+  }
 });
 
 /* ── Auto-save (lokaal, per dag) ── */
