@@ -258,6 +258,24 @@ function vulStartuurSelect(tijden,nuSel){
   if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
 }
 
+/* Fallback startuur-select wanneer HARMONIE niet beschikbaar is */
+function vulStartuurFallback(){
+  const sel=document.getElementById('startuur-sel');
+  if(sel.options.length>0) return;
+  const nu=new Date();
+  const start=new Date(nu); start.setMinutes(0,0,0);
+  start.setHours(0); // begin bij middernacht van vandaag
+  for(let h=0;h<48;h++){
+    const t=new Date(start.getTime()+h*3600*1000);
+    const opt=document.createElement('option');
+    opt.value=h; opt.textContent=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
+    sel.appendChild(opt);
+  }
+  // Zet huidige uur als default
+  const huidig=Math.floor((nu - start)/3600000);
+  if(huidig>=0 && huidig<48) sel.value=huidig;
+}
+
 function msNaarKmh(ms){ return ms*3.6; }
 function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):(+v).toFixed(d).replace(/\.0$/,'')); }
 
@@ -268,9 +286,44 @@ function bouwUurTabel(tblEl, daglabel, uren, rijen){
   tblEl.innerHTML=`<thead>${thHdr}</thead><tbody>${body}</tbody>`;
 }
 
+function bouwLegeTabel(){
+  // Bepaal startuur uit fallback-select indien gevuld, anders huidig uur
+  const NSTEPS=parseInt(document.getElementById('aantal-sel').value||'6');
+  const sel=document.getElementById('startuur-sel');
+  const nu=new Date();
+  let start;
+  if(sel && sel.value!=='' && !harmonieMeta){
+    // fallback-mode: startuur = aantal uren vanaf middernacht vandaag
+    const md=new Date(nu); md.setHours(0,0,0,0);
+    start=new Date(md.getTime()+parseInt(sel.value)*3600000);
+  } else {
+    start=new Date(nu); start.setMinutes(0,0,0);
+    if(nu.getMinutes()>0) start.setHours(start.getHours()+1);
+  }
+  const uren=[];
+  for(let k=0;k<NSTEPS;k++){
+    const t=new Date(start.getTime()+k*3600*1000);
+    uren.push(`${String(t.getHours()).padStart(2,'0')} uur`);
+  }
+  const dagLabel=formatDagLang(start);
+  const leeg=Array(NSTEPS).fill('–');
+  const rijDef=[
+    {label:'Temperatuur (°C)', cellen:leeg.slice()},
+    {label:'Wind',             cellen:leeg.slice()},
+    {label:'Windkracht (BFT)', cellen:leeg.slice()},
+    {label:'Max. windstoot (km/u)', cellen:leeg.slice()},
+    {label:'Kans op regen (%)',cellen:leeg.slice()},
+    {label:'Regen (mm)',       cellen:leeg.slice()},
+    {label:'Kans op onweer (%)',cellen:leeg.slice()},
+    {label:'Zon/helder (%)',   cellen:leeg.slice()}
+  ];
+  bouwUurTabel(document.getElementById('uur-tabel'), dagLabel, uren, rijDef);
+}
+
 async function renderTabel(){
-  const meta=harmonieMeta; if(!meta) return;
-  const pt=huidigePunt; if(!pt) return;
+  const meta=harmonieMeta;
+  const pt=huidigePunt;
+  if(!meta || !pt){ bouwLegeTabel(); return; }
   const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
   const NSTEPS=parseInt(document.getElementById('aantal-sel').value||'6');
   document.getElementById('data-status').textContent='HARMONIE laden…';
@@ -344,6 +397,8 @@ async function renderTabel(){
 async function laadData(){
   const nu=new Date();
   document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
+  // Altijd eerst een lege tabel zodat de structuur zichtbaar is
+  bouwLegeTabel();
   try{
     const meta=await laadMeta();
     if(document.getElementById('startuur-sel').options.length===0){
@@ -352,7 +407,8 @@ async function laadData(){
     if(!huidigePunt){ await zoekEnLaad(); return; }
     await renderTabel();
   }catch(e){
-    document.getElementById('data-status').textContent='Fout: '+e.message;
+    document.getElementById('data-status').textContent='HARMONIE niet beschikbaar – tabel handmatig in te vullen ('+e.message+')';
+    vulStartuurFallback();
   }
 }
 
@@ -379,10 +435,17 @@ document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
 document.getElementById('plaats-in').addEventListener('keydown', e=>{
   if(e.key==='Enter'){ e.preventDefault(); zoekEnLaad(); }
 });
-document.getElementById('startuur-sel').addEventListener('change', renderTabel);
+document.getElementById('startuur-sel').addEventListener('change', ()=>{
+  if(harmonieMeta && huidigePunt) renderTabel();
+  else bouwLegeTabel();
+});
 document.getElementById('aantal-sel').addEventListener('change', ()=>{
-  if(harmonieMeta) vulStartuurSelect(harmonieMeta.tijden, document.getElementById('startuur-sel').value);
-  renderTabel();
+  if(harmonieMeta){
+    vulStartuurSelect(harmonieMeta.tijden, document.getElementById('startuur-sel').value);
+    if(huidigePunt) renderTabel(); else bouwLegeTabel();
+  } else {
+    bouwLegeTabel();
+  }
 });
 
 /* ── PDF ── */
