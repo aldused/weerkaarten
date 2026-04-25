@@ -34,14 +34,14 @@ trap cleanup EXIT
 git checkout main 2>/dev/null || true
 git add -- "$@" 2>/dev/null || true
 
-if git diff --cached --quiet; then
+if git diff --cached --quiet -- "$@"; then
   if [ "$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)" = "0" ]; then
     echo "Niets gewijzigd, geen commit nodig."
     exit 0
   fi
   echo "Geen nieuwe wijzigingen, maar er staan nog lokale commits klaar om te pushen."
 else
-  git commit -m "$MESSAGE"
+  git commit -m "$MESSAGE" -- "$@"
 fi
 
 for attempt in 1 2 3; do
