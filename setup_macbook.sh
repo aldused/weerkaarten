@@ -121,7 +121,7 @@ maak_agent "nl.edaldus.guidance" 1800 \
 
 # MOSMIX JSON — elk uur
 maak_agent "nl.edaldus.mosmix-json" 3600 \
-    "cd \"$REPO_DIR\" && $PYTHON scripts/mosmix_json.py && git add mosmix_nl.json mosmix_be.json && git diff --cached --quiet || (git commit -m \"MOSMIX JSON update \$(date '+%Y-%m-%d %H:%M')\" && git push)" \
+    "bash \"$REPO_DIR/upload_mosmix_json.sh\"" \
     "true"
 
 # Verwachting — elke 15 min
