@@ -202,13 +202,10 @@ def main() -> int:
         write_bin(WORK_DIR / f"{prefix}_data_zicht.bin", (arrays["visibility"],))
     write_bin(WORK_DIR / f"{prefix}_data_cape.bin", (arrays["cape"],))
 
-    first_time = datetime.fromisoformat(times[0]).replace(tzinfo=LOCAL_TZ)
-    run_dt = first_time - timedelta(hours=1)
     now = datetime.now(tz=LOCAL_TZ)
     meta = {
         "model": f"ECMWF IFS via Open-Meteo ({args.model})",
-        "run": run_dt.strftime("%a %d.%m.%Y %H:%M LT").lower(),
-        "run_utc": run_dt.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "run": f"geldig vanaf {times[0]} LT",
         "bijgewerkt": now.strftime("%d %b %Y %H:%M"),
         "uren": len(times),
         "tijden": times,
