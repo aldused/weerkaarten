@@ -471,6 +471,7 @@ body {
     <select id="model-select" style="padding:4px 10px;border-radius:6px;border:1px solid #4a7ab5;background:#003366;color:white;font-size:13px;font-weight:700;cursor:pointer;">
       <option value="harmonie">HARMONIE Cy43 (KNMI)</option>
       <option value="icond2">ICON-D2 (DWD)</option>
+      <option value="ecmwf">ECMWF IFS (Open-Meteo)</option>
       <option value="icond2ruc">ICON-D2-RUC (DWD, uurlijks)</option>
     </select>
   </div>
@@ -601,7 +602,7 @@ body {
     harmonie: { meta: "harmonie_canvas_meta.json", label: "HARMONIE Cy43 (KNMI, 2km)" },
     icond2:   { meta: "icond2_canvas_meta.json",   label: "ICON-D2 (DWD, 2.2km)" },
     icond2ruc: { meta: "icond2ruc_canvas_meta.json", label: "ICON-D2-RUC (DWD, 2.2km, uurlijks)" },
-    ecmwf:    { meta: "ecmwf_canvas_meta.json",    label: "ECMWF IFS (25km)" },
+    ecmwf:    { meta: "ecmwf_om_canvas_meta.json", label: "ECMWF IFS via Open-Meteo (Benelux)" },
   };
   var actiefModel = "harmonie";
   var vergelijkModus = false;
@@ -1152,11 +1153,22 @@ body {
   // ZOOM STATE per panel
   // ═══════════════════════════════════════════════════════════════════════════
   var panelZoom = {}; // panelIdx → {zoom, cx, cy} (cx,cy = center in 0-1 space)
+  var ECMWF_BENELUX_VIEW = {zoom: 1, lat: 51.55, lon: 4.85};
+  function defaultZoomState() {
+    if (actiefModel === "ecmwf" && meta && meta.grid) {
+      return {
+        zoom: ECMWF_BENELUX_VIEW.zoom,
+        cx: (ECMWF_BENELUX_VIEW.lon - meta.grid.lon_min) / (meta.grid.lon_max - meta.grid.lon_min),
+        cy: 1 - (ECMWF_BENELUX_VIEW.lat - meta.grid.lat_min) / (meta.grid.lat_max - meta.grid.lat_min)
+      };
+    }
+    return {zoom: 1, cx: 0.5, cy: 0.5};
+  }
   function getZoom(idx) {
-    if (!panelZoom[idx]) panelZoom[idx] = {zoom: 1, cx: 0.5, cy: 0.5};
+    if (!panelZoom[idx]) panelZoom[idx] = defaultZoomState();
     return panelZoom[idx];
   }
-  function resetZoom(idx) { panelZoom[idx] = {zoom: 1, cx: 0.5, cy: 0.5}; }
+  function resetZoom(idx) { panelZoom[idx] = defaultZoomState(); }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CANVAS RENDERER
@@ -1696,15 +1708,16 @@ body {
     // Gridwaarden (cijfers) — minder dicht, met witte omlijning
     // Gewenst aantal labels per rij (onafhankelijk van gridresolutie)
     // Pixel-afstand tussen labels (onafhankelijk van gridresolutie)
-    var labelAfstandPx = 22; // standaard: ~22px per label (temp, bft: 2 cijfers)
-    if (paramKey === "druk") labelAfstandPx = 50; // 4 cijfers breed
-    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "onweer" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = 35; // 3+ cijfers
-    else if (paramKey === "hoogte_300" || paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = 40; // "556" of temp
-    else if (paramKey === "theta_e") labelAfstandPx = 40; // "312" K
+    var labelAfstandPx = actiefModel === "ecmwf" ? 16 : 22; // ECMWF-grid is grover, dus meer cijfers kan
+    if (paramKey === "druk") labelAfstandPx = actiefModel === "ecmwf" ? 38 : 50; // 4 cijfers breed
+    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "onweer" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = actiefModel === "ecmwf" ? 26 : 35; // 3+ cijfers
+    else if (paramKey === "hoogte_300" || paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = actiefModel === "ecmwf" ? 30 : 40; // "556" of temp
+    else if (paramKey === "theta_e") labelAfstandPx = actiefModel === "ecmwf" ? 30 : 40; // "312" K
     // Bereken stap op basis van canvas-pixels, niet gridpunten
     var pxPerGrid = cw * zoomLevel / nLon;
     var labelsPerRij = Math.round(cw / labelAfstandPx);
-    var labelStep = Math.max(2, Math.round(nLon / (labelsPerRij * zoomLevel)));
+    var minLabelStep = (actiefModel === "ecmwf" && nLat <= 60 && nLon <= 80) ? 1 : 2;
+    var labelStep = Math.max(minLabelStep, Math.round(nLon / (labelsPerRij * zoomLevel)));
     var fontSize = Math.max(11, Math.round(ch / 80));
     ctx.font = "bold " + fontSize + "px Arial";
     ctx.textAlign = "center";
@@ -2067,6 +2080,12 @@ body {
 
   function bouwPanels() {
     grid.innerHTML = "";
+    function paramBeschikbaar(key) {
+      var info = meta && meta.parameters ? meta.parameters[key] : null;
+      if (info && !info.derived) return true;
+      if (info && info.derived) return info.needs.every(paramBeschikbaar);
+      return false;
+    }
     for (var i = 0; i < panelParams.length; i++) {
       var panel = document.createElement("div");
       panel.className = "kaart-panel";
@@ -2130,13 +2149,19 @@ body {
         var optgroup = document.createElement("optgroup");
         optgroup.label = groepen[g][0];
         for (var p = 0; p < groepen[g][1].length; p++) {
+          if (!paramBeschikbaar(groepen[g][1][p][0])) continue;
           var opt = document.createElement("option");
           opt.value = groepen[g][1][p][0];
           opt.textContent = groepen[g][1][p][1];
           if (opt.value === panelParams[i]) opt.selected = true;
           optgroup.appendChild(opt);
         }
-        dropdown.appendChild(optgroup);
+        if (optgroup.children.length) dropdown.appendChild(optgroup);
+      }
+      if (!paramBeschikbaar(panelParams[i])) {
+        var eersteOptie = dropdown.querySelector("option");
+        panelParams[i] = eersteOptie ? eersteOptie.value : "temp";
+        if (eersteOptie) eersteOptie.selected = true;
       }
 
       dropdown.addEventListener("change", function() {
@@ -2376,13 +2401,30 @@ body {
     }
   }
 
+  function leadHoursFor(tijdMeta, idx) {
+    if (!tijdMeta || !tijdMeta.tijden || !tijdMeta.tijden[idx]) return idx + 1;
+    if (tijdMeta.run_utc) {
+      var run = new Date(tijdMeta.run_utc);
+      var valid = new Date(tijdMeta.tijden[idx]);
+      var diff = Math.round((valid.getTime() - run.getTime()) / 3600000);
+      if (isFinite(diff) && diff > 0) return diff;
+    }
+    return idx + 1;
+  }
+
+  function leadLabel(tijdMeta, idx, compact) {
+    var h = leadHoursFor(tijdMeta, idx);
+    if (compact && h >= 72 && h % 24 === 0) return "+" + Math.round(h / 24) + "d";
+    return "+" + h + "h";
+  }
+
   function updateAlle(stepIdx) {
     stepIdx = Math.max(0, Math.min(stepIdx, aantalUren - 1));
     slider.value = stepIdx + 1;
-    uurLabel.textContent = "+" + (stepIdx+1) + "h";
 
     // Tijdlabel: in vergelijkmodus gebruik harmonie tijden
     var tijdMeta = vergelijkModus && modelData["harmonie"] ? modelData["harmonie"].meta : meta;
+    uurLabel.textContent = leadLabel(tijdMeta, stepIdx, false);
     if (tijdMeta && tijdMeta.tijden && tijdMeta.tijden[stepIdx]) {
       var dt = new Date(tijdMeta.tijden[stepIdx]);
       var dagen = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
@@ -2482,7 +2524,7 @@ body {
     var dagen = ["zo","ma","di","wo","do","vr","za"];
     var pad = function(n){ return String(n).padStart(2,"0"); };
     return dagen[t.getDay()] + " " + pad(t.getDate()) + "/" + pad(t.getMonth()+1) +
-           " " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + " LT  (+" + (idx+1) + "h)";
+           " " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + " LT  (" + leadLabel(meta, idx, false) + ")";
   }
   function vulFilmDropdowns() {
     filmStart.innerHTML = ""; filmEnd.innerHTML = "";
@@ -2943,10 +2985,11 @@ body {
   var uurSidebar = document.getElementById("uur-sidebar");
   function bouwUurSidebar() {
     uurSidebar.innerHTML = "";
+    var tijdMeta = (vergelijkModus && modelData["harmonie"]) ? modelData["harmonie"].meta : meta;
     for (var h = 1; h <= aantalUren; h++) {
       var btn = document.createElement("button");
       btn.className = "uur-btn";
-      btn.textContent = "+" + h + "h";
+      btn.textContent = leadLabel(tijdMeta, h - 1, true);
       btn.dataset.step = h;
       btn.addEventListener("click", function() {
         stopSpelen();
