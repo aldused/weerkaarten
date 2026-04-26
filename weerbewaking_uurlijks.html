@@ -68,6 +68,13 @@ body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;p
 .titel:empty::before{content:'KLIK HIER EN TYP DE TITEL...';color:#bbb;font-weight:500}
 
 h2.kop{font-size:.95rem;font-weight:700;color:#1a5490;margin:18px 0 8px;padding-bottom:3px;border-bottom:1px solid #e0e0e0}
+.tekst-sectie{position:relative}
+.sectie-sluit{
+  position:absolute;right:0;top:10px;width:22px;height:22px;border:1px solid #d8dee8;
+  border-radius:50%;background:white;color:#64748b;font-size:16px;line-height:18px;
+  cursor:pointer;font-family:inherit;font-weight:700
+}
+.sectie-sluit:hover{background:#fff4e6;border-color:#e8780c;color:#a04a00}
 
 .tekstvak{
   min-height:70px;padding:8px 10px;border:1px dashed #ccc;border-radius:3px;
@@ -152,6 +159,7 @@ body{--kop-scale:1}
     <option value="harmonie" selected>HARMONIE 2×2 km</option>
     <option value="icond2">ICON-D2 regulier</option>
     <option value="icond2ruc">ICON-D2 RUC (uurlijks)</option>
+    <option value="mix_harmonie_icond2ruc">Mix HARMONIE + ICON-D2 RUC</option>
   </select>
   <label style="margin-left:16px">Startuur:</label>
   <select id="startuur-sel"></select>
@@ -208,17 +216,20 @@ body{--kop-scale:1}
   <h2 class="kop">De weersituatie nader beschreven</h2>
   <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Vandaag wordt het weer in Nederland bepaald door een hogedrukgebied boven Centraal-Europa. Het zorgt voor een zuidwestelijke stroming met de aanvoer van vochtige lucht.</div>
 
-  <section id="sec-vandaag">
+  <section id="sec-vandaag" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-vandaag" title="Verberg vandaag">×</button>
     <h2 class="kop">De weersverwachting voor vandaag</h2>
     <div class="tekstvak" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting voor vandaag...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
   </section>
 
-  <section id="sec-morgen">
+  <section id="sec-morgen" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-morgen" title="Verberg morgen">×</button>
     <h2 class="kop">De weersverwachting voor morgen</h2>
     <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf de verwachting voor morgen...">Morgen is er een afwisseling van wolken en zon. Het blijft meestal droog, maar bij buien of kans op onweer kan dit hier alvast worden benoemd.</div>
   </section>
 
-  <section id="sec-komende">
+  <section id="sec-komende" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-komende" title="Verberg komende dagen">×</button>
     <h2 class="kop">De weersverwachting voor de komende dagen</h2>
     <div class="tekstvak" contenteditable="true" data-save="komende" data-placeholder="Beschrijf de verwachting voor de komende dagen...">De komende dagen blijft het wisselend met perioden met zon en wolken. De temperatuur blijft rond normale waarden voor de tijd van het jaar.</div>
   </section>
@@ -340,7 +351,8 @@ const HARM_BASE='https://harmonie-data.weerlab.nl/';
 const MODELS={
   harmonie: {meta:'harmonie_canvas_meta.json', label:'HARMONIE 2×2 km'},
   icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 regulier'},
-  icond2ruc:{meta:'icond2ruc_canvas_meta.json',label:'ICON-D2 RUC'}
+  icond2ruc:{meta:'icond2ruc_canvas_meta.json',label:'ICON-D2 RUC'},
+  mix_harmonie_icond2ruc:{label:'Mix HARMONIE + ICON-D2 RUC', members:['harmonie','icond2ruc']}
 };
 const SAMPLE_RADIUS_KM=10;
 const SAMPLE_EXTRA_POINTS=6;
@@ -349,13 +361,18 @@ let metaCache={};
 let harmonieMeta=null;
 let huidigePunt=null;
 
-async function laadMeta(){
-  if(metaCache[huidigModel]){ harmonieMeta=metaCache[huidigModel]; return harmonieMeta; }
-  const r=await fetch(HARM_BASE+MODELS[huidigModel].meta+'?_='+Date.now());
+async function laadMeta(modelKey=huidigModel){
+  const model=MODELS[modelKey];
+  const basisKey=model.members ? model.members[0] : modelKey;
+  if(metaCache[basisKey]){
+    if(modelKey===huidigModel) harmonieMeta=metaCache[basisKey];
+    return metaCache[basisKey];
+  }
+  const r=await fetch(HARM_BASE+MODELS[basisKey].meta+'?_='+Date.now());
   if(!r.ok) throw new Error('meta fetch '+r.status);
   const j=await r.json();
-  metaCache[huidigModel]=j;
-  harmonieMeta=j;
+  metaCache[basisKey]=j;
+  if(modelKey===huidigModel) harmonieMeta=j;
   return j;
 }
 
@@ -414,8 +431,8 @@ async function geocodePlaats(q){
 
 /* ── Haal puntdata uit een HARMONIE-bin voor alle nSteps ── */
 // Per (stap, component) één range-request voor alle gridpunten → ~7× minder requests.
-async function puntReeks(paramKey, gis, nSteps, limit=20){
-  const meta=await laadMeta();
+async function puntReeks(paramKey, gis, nSteps, limit=20, modelKey=huidigModel){
+  const meta=await laadMeta(modelKey);
   const info=meta.parameters[paramKey];
   if(!info) throw new Error('param onbekend: '+paramKey);
   const gridIndices=Array.isArray(gis)?gis:[gis];
@@ -459,6 +476,45 @@ async function puntReeks(paramKey, gis, nSteps, limit=20){
   }
   await Promise.all(Array(Math.min(limit,taken.length)).fill(0).map(worker));
   return resultaten; // [step][comp]
+}
+function gemiddeldeReeksen(reeksen){
+  const bruikbaar=reeksen.filter(Boolean);
+  if(!bruikbaar.length) return null;
+  const nSteps=Math.max(...bruikbaar.map(r=>r.length));
+  const uit=[];
+  for(let s=0;s<nSteps;s++){
+    const nComp=Math.max(...bruikbaar.map(r=>(r[s]||[]).length));
+    uit[s]=[];
+    for(let c=0;c<nComp;c++){
+      let som=0, n=0;
+      bruikbaar.forEach(r=>{
+        const v=r[s]?.[c];
+        if(Number.isFinite(v)){ som+=v; n++; }
+      });
+      uit[s][c]=n ? som/n : null;
+    }
+  }
+  return uit;
+}
+async function puntReeksVoorActiefModel(paramKey,startIdx,nSteps,baseTimes,pt){
+  const model=MODELS[huidigModel];
+  if(!model.members){
+    const r=await puntReeks(paramKey, pt.gis||pt.gi, startIdx+nSteps);
+    return r.slice(startIdx,startIdx+nSteps);
+  }
+  const perModel=await Promise.all(model.members.map(async memberKey=>{
+    const memberMeta=await laadMeta(memberKey);
+    if(!memberMeta.parameters[paramKey]) return null;
+    const memberGrids=sampleGridPointsForLocation(memberMeta,pt.lat,pt.lon);
+    if(!memberGrids.length) return null;
+    const memberIndexByTime=new Map((memberMeta.tijden||[]).map((t,i)=>[new Date(t).getTime(),i]));
+    const indices=baseTimes.map(t=>memberIndexByTime.get(new Date(t).getTime()));
+    const geldige=indices.filter(i=>Number.isInteger(i));
+    if(!geldige.length) return null;
+    const reeks=await puntReeks(paramKey,memberGrids.map(g=>g.gi),Math.max(...geldige)+1,20,memberKey);
+    return indices.map(i=>Number.isInteger(i) ? reeks[i] : null);
+  }));
+  return gemiddeldeReeksen(perModel);
 }
 
 function vulStartuurSelect(tijden,nuSel){
@@ -535,6 +591,7 @@ async function renderTabellen(startIdx){
   const meta=harmonieMeta;
   const pt=huidigePunt;
   const NSTEPS=12;
+  const baseTimes=meta.tijden.slice(startIdx,startIdx+NSTEPS);
   zetKnopLaden(true);
   zetLaadStatus(MODELS[huidigModel].label+' laden…');
 
@@ -545,8 +602,7 @@ async function renderTabellen(startIdx){
   let klaar=0;
   await Promise.all(params.map(async p=>{
     try{
-      const r=await puntReeks(p, pt.gis||pt.gi, startIdx+NSTEPS);
-      reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
+      reeksen[p]=await puntReeksVoorActiefModel(p,startIdx,NSTEPS,baseTimes,pt);
     }catch(e){ reeksen[p]=null; }
     klaar++;
     zetLaadStatus(MODELS[huidigModel].label+` laden… (${klaar}/${params.length})`);
@@ -672,6 +728,14 @@ document.getElementById('tabel-dag-sel').addEventListener('change', ()=>{
 });
 ['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{
   document.getElementById(id).addEventListener('change', ()=>{
+    updateTekstSecties();
+    saveDraft();
+  });
+});
+document.querySelectorAll('.sectie-sluit').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const check=document.getElementById(btn.dataset.toggleTarget);
+    if(check) check.checked=false;
     updateTekstSecties();
     saveDraft();
   });
