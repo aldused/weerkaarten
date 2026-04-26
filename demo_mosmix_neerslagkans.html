@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Demo — MOSMIX neerslagkans</title>
+<title>MOSMIX neerslagkans</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -40,13 +40,13 @@
   .legenda-notes { font-size: 11px; color: #475569; margin-top: 6px; }
   .legenda-notes code { font-family: "DM Mono", monospace; background: #eef2f7; padding: 1px 5px; border-radius: 3px; color: #0f172a; font-size: 10px; }
 
-  .disclaimer { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; border-radius: 6px; padding: 8px 12px; font-size: 11px; max-width: 820px; margin: 10px auto 0; }
+  .status { text-align: center; color: #64748b; padding: 8px; font-size: 12px; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div class="header-titel">MOSMIX neerslagkans <span style="font-weight:500;color:#64748b;font-size:12px;">— demo met mockup-data</span></div>
+  <div class="header-titel">MOSMIX neerslagkans</div>
   <div class="header-sub" id="hdr-update">Laden…</div>
 </div>
 
@@ -59,10 +59,6 @@
   <span class="sep"></span>
   <span class="toolbar-label">Dag</span>
   <div id="dag-btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-</div>
-
-<div class="disclaimer">
-  Waarden zijn <b>geplugt voorbeelddata</b> — plausibel patroon met regenzone uit noordwesten. Zodra de parser <code style="background:#fff;border:1px solid #fed7aa;padding:0 4px;border-radius:3px;font-family:DM Mono,monospace">R101/R110/R130/R150</code> ophaalt uit DWD-MOSMIX, tonen de kaarten echte kansen.
 </div>
 
 <div class="kaart-wrap">
@@ -96,6 +92,8 @@
   </div>
 </div>
 
+<div class="status" id="status">Laden…</div>
+
 <script>
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
 const SVG_W=800, SVG_H=1100;
@@ -123,25 +121,6 @@ let mosmixData=null, provincies=null;
 let keuzeDrempel = DREMPELS[0];
 let keuzeVenster = VENSTERS[0];
 let keuzeDag = 0;
-
-// ─ Mock-data generator ─────────────────────────────────────────────────────
-function mockKans(lon, lat, drempel, venster, dagOffset){
-  const dx = (lon - 3.5) / 3.5;
-  const dy = (53.5 - lat) / 2.8;
-  const afstand = Math.hypot(dx, dy);
-  let pop01 = 100 - afstand * 75;
-  if(dagOffset === 1) pop01 -= 20;
-  if(dagOffset === 2) pop01 -= 10;
-  if(dagOffset === 3) pop01 += 15;
-  if(venster === "N") pop01 -= 10;
-  if(venster === "D") pop01 += 5;
-  const seed = Math.sin(lon*37 + lat*53 + drempel*7 + (venster.charCodeAt(0)||0) + dagOffset*11) * 10000;
-  const ruis = (seed - Math.floor(seed) - 0.5) * 20;
-  pop01 += ruis;
-  pop01 = Math.max(0, Math.min(100, pop01));
-  const fac = drempel >= 5 ? 0.30 : drempel >= 3 ? 0.55 : drempel >= 1 ? 0.80 : 1.0;
-  return Math.round(Math.max(0, Math.min(100, pop01 * fac)));
-}
 
 // ─ Basemap ─────────────────────────────────────────────────────────────────
 function bouwBasemap(){
@@ -272,16 +251,16 @@ function tekenLegenda(){
 function maakDagBtns(){
   const wrap = document.getElementById("dag-btns");
   wrap.innerHTML = "";
-  const vandaag = new Date();
-  for(let i=0;i<5;i++){
-    const d = new Date(vandaag); d.setDate(d.getDate()+i);
+  const dagen = mosmixData?.dagen || [];
+  dagen.forEach((dag, i) => {
+    const d = new Date(dag+"T12:00:00");
     const lbl = i===0 ? "Vandaag" : i===1 ? "Morgen" : NL_DAGEN[d.getDay()] + " " + d.getDate() + "/" + (d.getMonth()+1);
     const btn = document.createElement("button");
     btn.className = "btn" + (i === keuzeDag ? " actief":"");
     btn.textContent = lbl;
     btn.onclick = () => { keuzeDag = i; update(); };
     wrap.appendChild(btn);
-  }
+  });
 }
 
 function maakDrempelBtns(){
@@ -307,25 +286,32 @@ function maakVensterBtns(){
 
 function update(){
   if(!mosmixData) return;
-  const waarden = Object.entries(mosmixData.stations).map(([n,[lon,lat]]) => ({
-    naam: n, lon, lat,
-    val: mockKans(lon, lat, keuzeDrempel.drempel, keuzeVenster.key, keuzeDag)
-  }));
-  tekenHeatmap(waarden);
-  tekenOverlay(waarden);
+  const dagKey = mosmixData.dagen?.[keuzeDag];
+  const suffix = keuzeVenster.key === "T" ? "" : "_" + keuzeVenster.key;
+  const param = keuzeDrempel.key + suffix;
+  const dagData = dagKey ? mosmixData.data?.[dagKey]?.[param] : null;
+  const waarden = Object.entries(mosmixData.stations)
+    .map(([n,[lon,lat]]) => ({ naam: n, lon, lat, val: dagData?.[n] }))
+    .filter(w => w.val != null && Number.isFinite(Number(w.val)))
+    .map(w => ({ ...w, val: Math.round(Number(w.val)) }));
+  if(waarden.length){
+    tekenHeatmap(waarden);
+    tekenOverlay(waarden);
+  } else {
+    document.getElementById("heatmap-svg").innerHTML = "";
+    document.getElementById("overlay-svg").innerHTML = "";
+  }
   tekenLegenda();
 
-  const d = new Date(); d.setDate(d.getDate()+keuzeDag);
+  const d = new Date(dagKey+"T12:00:00");
   const full = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][d.getDay()];
   document.getElementById("kaart-titel").textContent =
     `Kans op neerslag ${keuzeDrempel.naam.replace(" (meetbaar)","").replace(" (stevige bui)","")}`;
   document.getElementById("kaart-sub").textContent =
     `${full} ${d.getDate()}/${d.getMonth()+1} — ${keuzeVenster.naam.toLowerCase()}`;
-  const code = keuzeDrempel.drempel === 0.1 ? "R101" :
-               keuzeDrempel.drempel === 1   ? "R110" :
-               keuzeDrempel.drempel === 3   ? "R130" : "R150";
-  const suffix = keuzeVenster.key === "T" ? "" : "_" + keuzeVenster.key;
-  document.getElementById("kaart-drempel").textContent = `DWD MOSMIX ${code}${suffix}`;
+  document.getElementById("kaart-drempel").textContent = `DWD MOSMIX ${param}`;
+  document.getElementById("status").textContent =
+    waarden.length ? `${waarden.length} stations · live uit mosmix_nl.json` : `Geen waarden beschikbaar voor ${param}`;
 
   maakDrempelBtns(); maakVensterBtns(); maakDagBtns();
 }
@@ -337,7 +323,7 @@ Promise.all([
   mosmixData = data; provincies = prov;
   bouwBasemap();
   document.getElementById("hdr-update").textContent =
-    `Basiskaart uit ${Object.keys(data.stations).length} stations · mockup-waarden (nog geen R101 in data)`;
+    `Bijgewerkt ${data.bijgewerkt || "onbekend"} · run ${data.run || "onbekend"}`;
   maakDrempelBtns(); maakVensterBtns(); maakDagBtns();
   update();
 });
