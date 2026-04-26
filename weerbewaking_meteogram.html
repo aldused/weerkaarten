@@ -199,10 +199,10 @@
     <div class="chart-wrap">
       <div class="scale-left">
         <div class="scale-title">Bft</div>
-        <svg id="bftScale" width="66" height="680" viewBox="0 0 66 680"></svg>
+        <svg id="bftScale" width="66" height="700" viewBox="0 0 66 700"></svg>
       </div>
       <div class="scroll" id="scroll">
-        <svg id="chart" width="2400" height="680" viewBox="0 0 2400 680" preserveAspectRatio="none"></svg>
+        <svg id="chart" width="2400" height="700" viewBox="0 0 2400 700" preserveAspectRatio="none"></svg>
         <div class="tt" id="tt"></div>
         <div id="laad-overlay">
           <div class="spinner"></div>
@@ -211,7 +211,7 @@
       </div>
       <div class="scale-right">
         <div class="scale-title">Stoot km/u</div>
-        <svg id="gustScale" width="66" height="680" viewBox="0 0 66 680"></svg>
+        <svg id="gustScale" width="66" height="700" viewBox="0 0 66 700"></svg>
       </div>
     </div>
     <div class="legend">
@@ -219,7 +219,6 @@
       <span><svg width="22" height="10"><path d="M2 5L18 5M14 2L18 5L14 8" stroke="#0f172a" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>Richting</span>
       <span><b>38</b> Windstoot km/u (boven pijl)</span>
       <span><span class="dot" style="background:var(--temp)"></span>Temperatuur °C</span>
-      <span><i style="background:var(--druk)"></i>Luchtdruk hPa</span>
       <span><i style="background:var(--vocht)"></i>Rel. vochtigheid %</span>
       <span><i style="background:#94a3b8"></i>Bewolking</span>
       <span><i style="background:#3b82f6"></i>Neerslag mm/u</span>
@@ -247,11 +246,11 @@ function dirLetter(d){
 }
 
 /* ───── Geometry ───── */
-const W=2400,H=680,L=20,R=20,HEADER_H=50,T=HEADER_H+22;
+const W=2400,H=700,L=20,R=20,HEADER_H=50,T=HEADER_H+22;
 let colW=(W-L-R)/Math.max(1,N-1);
 const x=i=>L+i*colW;
 const pWindY=T,       pWindH=250;
-const pRainY=pWindY+pWindH, pRainH=44;
+const pRainY=pWindY+pWindH, pRainH=60;
 const pSunY=pRainY+pRainH,  pSunH=30;
 const pBotY=pSunY+pSunH,    pBotH=H-pBotY-26;
 const xAxisY=H-20;
@@ -267,23 +266,19 @@ const bftOf=v=>{for(let b=0;b<bftUpper.length;b++) if(v<bftUpper[b]) return b;re
 const bftColor=v=>bftCol[Math.min(12,bftOf(v))];
 
 /* Onder-paneel schaalfuncties (ook gebruikt door tooltip/hover) */
-let Tmin=-2,Tmax=26,Dmin=1010,Dmax=1035,Vmin=0,Vmax=100;
+let Tmin=-2,Tmax=26,Vmin=0,Vmax=100;
 const finiteVals=arr=>arr.filter(v=>v!=null&&Number.isFinite(+v)).map(Number);
 function updateScales(){
-  const temps=finiteVals(DATA.temp), drukken=finiteVals(DATA.druk);
+  const temps=finiteVals(DATA.temp);
   if(temps.length){
     const lo=Math.floor(Math.min(...temps)-2), hi=Math.ceil(Math.max(...temps)+2);
     Tmin=Math.min(lo,0); Tmax=Math.max(hi,Tmin+8);
   }
-  if(drukken.length){
-    Dmin=Math.floor(Math.min(...drukken)-3);
-    Dmax=Math.ceil(Math.max(...drukken)+3);
-    if(Dmax-Dmin<10){ const mid=(Dmin+Dmax)/2; Dmin=Math.floor(mid-5); Dmax=Math.ceil(mid+5); }
-  }
+
 }
 const ySafe=(v,lo,hi)=>v==null||!Number.isFinite(+v)?null:pBotY+14+(1-(v-lo)/(hi-lo))*(pBotH-28);
 const yT=v=>ySafe(v,Tmin,Tmax);
-const yD=v=>ySafe(v,Dmin,Dmax);
+
 const yV=v=>ySafe(v,Vmin,Vmax);
 
 const svgNS='http://www.w3.org/2000/svg';
@@ -462,17 +457,20 @@ for(let i=0;i<N;i++){
   }
 }
 
-/* ─── Neerslag ─── */
+/* ─── Neerslag (wortelschaal: kleine hoeveelheden ook zichtbaar) ─── */
 const maxRain=5;
-const yRain=v=>pRainY+pRainH-8-Math.min(v,maxRain)/maxRain*(pRainH-14);
-svg.appendChild(el('rect',{x:L,y:pRainY,width:W-L-R,height:pRainH,fill:'#f7faff'}));
-svg.appendChild(el('line',{x1:L,x2:W-R,y1:pRainY+pRainH-8,y2:pRainY+pRainH-8,stroke:'#dbe3ef'}));
+const rainBase=pRainY+pRainH-8;
+const rainTrack=pRainH-16;
+const yRain=v=>rainBase-Math.sqrt(Math.min(v,maxRain)/maxRain)*rainTrack;
+svg.appendChild(el('rect',{x:L,y:pRainY,width:W-L-R,height:pRainH,fill:'#f0f6ff'}));
+svg.appendChild(el('line',{x1:L,x2:W-R,y1:rainBase,y2:rainBase,stroke:'#bfdbfe'}));
 for(let i=0;i<N;i++){
-  const r=neerslag(i);if(r==null||!Number.isFinite(+r)||r<=0) continue;
-  svg.appendChild(el('rect',{x:x(i)-colW*0.42,y:yRain(r),width:colW*0.84,
-    height:pRainY+pRainH-8-yRain(r),rx:'1.5',ry:'1.5',fill:'url(#rainGrad)',opacity:'0.92'}));
-  if(r>=0.4){
-    const t=el('text',{x:x(i),y:yRain(r)-3,'text-anchor':'middle','font-size':'9.5',
+  const r=neerslag(i);if(r==null||!Number.isFinite(+r)||r<=0.05) continue;
+  const barTop=yRain(r);
+  svg.appendChild(el('rect',{x:x(i)-colW*0.42,y:barTop,width:colW*0.84,
+    height:rainBase-barTop,rx:'1.5',ry:'1.5',fill:'url(#rainGrad)',opacity:'0.92'}));
+  if(r>=0.3){
+    const t=el('text',{x:x(i),y:barTop-3,'text-anchor':'middle','font-size':'9.5',
       fill:'#1e3a8a','font-family':'Arial','font-weight':'700'});
     t.textContent=r.toFixed(1);svg.appendChild(t);
   }
@@ -518,16 +516,20 @@ for(let i=0;i<N;i++){
 cp+=`L ${x(N-1)} ${pBotY+pBotH} Z`;
 svg.appendChild(el('path',{d:cp,fill:'#94a3b8',opacity:'0.28'}));
 
+/* Vochtigheid: gevuld vlak + lijn */
 const vPts=Array.from({length:N},(_,i)=>[x(i),yV(vocht(i))]);
-svg.appendChild(el('path',{d:smoothPath(vPts),fill:'none',stroke:'var(--vocht)','stroke-width':'1.6',opacity:'0.9'}));
-const dPts=Array.from({length:N},(_,i)=>[x(i),yD(druk(i))]);
-svg.appendChild(el('path',{d:smoothPath(dPts),fill:'none',stroke:'var(--druk)','stroke-width':'1.8'}));
+const vFillPts=vPts.filter(p=>p[1]!==null&&Number.isFinite(p[1]));
+if(vFillPts.length>=2){
+  const vd=smoothPath(vFillPts);
+  const fill=vd+` L ${vFillPts.at(-1)[0]} ${pBotY+pBotH} L ${vFillPts[0][0]} ${pBotY+pBotH} Z`;
+  svg.appendChild(el('path',{d:fill,fill:'var(--vocht)',opacity:'0.13'}));
+}
+svg.appendChild(el('path',{d:smoothPath(vPts),fill:'none',stroke:'var(--vocht)','stroke-width':'2',opacity:'0.9'}));
 for(let i=6;i<N;i+=6){
-  if(vocht(i)==null||druk(i)==null||!Number.isFinite(vocht(i))||!Number.isFinite(druk(i))) continue;
-  const t=el('text',{x:x(i)+4,y:yV(vocht(i))+11,'font-size':'10',fill:'var(--vocht)','font-family':'Arial','font-weight':'700'});
-  t.textContent=vocht(i)+'%';svg.appendChild(t);
-  const t2=el('text',{x:x(i)+4,y:yD(druk(i))-5,'font-size':'10',fill:'var(--druk)','font-family':'Arial','font-weight':'700'});
-  t2.textContent=druk(i);svg.appendChild(t2);
+  const v=vocht(i);
+  if(v==null||!Number.isFinite(v)) continue;
+  const t=el('text',{x:x(i)+4,y:yV(v)+11,'font-size':'10',fill:'var(--vocht)','font-family':'Arial','font-weight':'700'});
+  t.textContent=v+'%';svg.appendChild(t);
 }
 
 const tPts=Array.from({length:N},(_,i)=>[x(i),yT(temp(i))]);
@@ -580,8 +582,7 @@ for(let i=0;i<N;i++){
     ['mm/u',pRainY+pRainH/2+3,'#1e3a8a'],
     ['zon', pSunY+pSunH/2+3,  '#b45309'],
     ['°C',  pBotY+16,'#f59e0b'],
-    ['hPa', pBotY+32,'#1e3a8a'],
-    ['%',   pBotY+48,'#15803d'],
+    ['%',   pBotY+32,'#15803d'],
   ];
   right.forEach(([txt,yy,c])=>{
     const t=el('text',{x:58,y:yy,'text-anchor':'end','font-size':'10',
@@ -616,7 +617,6 @@ hover.appendChild(el('line',{id:'h-line',x1:0,x2:0,y1:T,y2:xAxisY,stroke:'#00205
 hover.appendChild(el('circle',{id:'h-wind',r:'4',fill:'#fff',stroke:'#00205b','stroke-width':'2'}));
 hover.appendChild(el('circle',{id:'h-temp',r:'4',fill:'#fff',stroke:'#f59e0b','stroke-width':'2'}));
 hover.appendChild(el('circle',{id:'h-voch',r:'4',fill:'#fff',stroke:'#15803d','stroke-width':'2'}));
-hover.appendChild(el('circle',{id:'h-druk',r:'4',fill:'#fff',stroke:'#1e3a8a','stroke-width':'2'}));
 svg.appendChild(hover);
 const rngBand=el('rect',{class:'rng-band',fill:'#00205b',opacity:'0.07',y:T,height:H-T-20,x:0,width:0});
 svg.insertBefore(rngBand,svg.firstChild.nextSibling);
@@ -670,7 +670,7 @@ function buildTable(){
       <th title="lage bewolking %">laag</th>
       <th title="middelbare bewolking %">mid</th>
       <th title="hoge bewolking %">hoog</th>
-      <th>hPa</th><th>RV%</th></tr></thead><tbody>`;
+      <th>RV%</th></tr></thead><tbody>`;
     const num=(v,d=1)=>(v==null||isNaN(v))?'·':(+v).toFixed(d);
     const numI=v=>(v==null||isNaN(v))?'·':Math.round(+v);
     for(const {i,lt} of g.rows){
@@ -689,7 +689,6 @@ function buildTable(){
         <td>${cloudCell(bl)}</td>
         <td>${cloudCell(bm)}</td>
         <td>${cloudCell(bh)}</td>
-        <td>${numI(druk(i))}</td>
         <td>${numI(vocht(i))}</td>
       </tr>`;
     }
@@ -726,7 +725,6 @@ function showTT(i, clientX){
       <tr><td>Temp</td><td>${fmt(t,1,' °C')}</td></tr>
       <tr><td>Neerslag</td><td>${fmt(r,1,' mm/u')}</td></tr>
       <tr><td>Bewolking</td><td>${b==null||!Number.isFinite(+b)?'·':Math.round(b*100)+' %'}</td></tr>
-      <tr><td>Druk</td><td>${fmt(d,0,' hPa')}</td></tr>
       <tr><td>Vocht</td><td>${fmt(v,0,' %')}</td></tr>
     </table>`;
   tt.style.opacity='1';
@@ -748,7 +746,6 @@ function showTT(i, clientX){
   set('#h-wind',{cx:x(i),cy:yWind(w)});
   if(yT(t)!=null) set('#h-temp',{cx:x(i),cy:yT(t)});
   if(yV(v)!=null) set('#h-voch',{cx:x(i),cy:yV(v)});
-  if(yD(d)!=null) set('#h-druk',{cx:x(i),cy:yD(d)});
 }
 function hideTT(){tt.style.opacity='0';const hv=svg.querySelector('#hover');if(hv)hv.style.display='none';}
 
@@ -1260,7 +1257,6 @@ document.getElementById('btn-dl').addEventListener('click',async()=>{
     const legItems=[
       {l:'Windsnelheid (Beaufort)',  t:'hgrad', cc:['#dbeafe','#30d68d','#f0b04a','#e85b3a']},
       {l:'Temperatuur °C',           t:'dot',   cc:['#fbbf24']},
-      {l:'Luchtdruk hPa',           t:'bar',   cc:['#1e3a8a']},
       {l:'Rel. vochtigheid %',      t:'bar',   cc:['#15803d']},
       {l:'Bewolking',               t:'bar',   cc:['#94a3b8']},
       {l:'Neerslag mm/u',           t:'bar',   cc:['#3b82f6']},
