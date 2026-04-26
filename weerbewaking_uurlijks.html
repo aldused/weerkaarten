@@ -99,6 +99,11 @@ table.uur td[contenteditable="true"]:hover{background:#f6faff}
 table.uur td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #1a5490}
 table.uur th{background:#1a5490;color:white;font-size:.75rem;font-weight:600;line-height:1.2}
 table.uur th.daglabel{background:#e8780c;color:white;text-align:left;padding-left:8px;font-size:.8rem}
+table.uur th.daglabel .tabel-plaats{
+  font-weight:700;outline:none;border-bottom:1px dashed rgba(255,255,255,.5);
+  cursor:text;min-width:40px;display:inline-block;
+}
+table.uur th.daglabel .tabel-plaats:focus{background:rgba(0,0,0,.15);border-radius:2px;border-bottom-color:white}
 table.uur td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-size:.72rem;width:22%;padding-left:6px}
 table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1a5490;margin-right:2px}
 
@@ -308,8 +313,11 @@ function updateTekstSecties(){
 }
 
 /* ── Bouw één uurtabel (6 uren) ── */
-function bouwUurTabel(tblEl, daglabel, uren, rijen){
-  const thHdr=`<tr><th class="daglabel" colspan="${uren.length+1}">${daglabel}</th></tr>
+function bouwUurTabel(tblEl, daglabel, uren, rijen, plaatsnaam=''){
+  const plaatsHtml=plaatsnaam
+    ? `&nbsp; | &nbsp;<span class="tabel-plaats" contenteditable="true">${plaatsnaam}</span>`
+    : '';
+  const thHdr=`<tr><th class="daglabel" colspan="${uren.length+1}">${daglabel}${plaatsHtml}</th></tr>
                <tr><th style="width:22%"></th>${uren.map(u=>`<th>${u}</th>`).join('')}</tr>`;
   const body=rijen.map(r=>`<tr><td class="rij-label">${r.label}</td>${r.cellen.map(c=>`<td contenteditable="true">${c}</td>`).join('')}</tr>`).join('');
   tblEl.innerHTML=`<thead>${thHdr}</thead><tbody>${body}</tbody>`;
@@ -608,9 +616,10 @@ async function renderTabellen(startIdx){
     {label:'Kans op onweer (%)',cellen:r.kansO},
     {label:'Zon/helder (%)',   cellen:r.zon}
   ];
-  bouwUurTabel(document.getElementById('uur-tabel-1'), dagLabel1, tijden1, rijDef(rijen1));
+  const plaatsnaam=(document.getElementById('plaats-in').value||'').split(',')[0].trim();
+  bouwUurTabel(document.getElementById('uur-tabel-1'), dagLabel1, tijden1, rijDef(rijen1), plaatsnaam);
   if(tijden2.length){
-    bouwUurTabel(document.getElementById('uur-tabel-2'), dagLabel2, tijden2, rijDef(rijen2));
+    bouwUurTabel(document.getElementById('uur-tabel-2'), dagLabel2, tijden2, rijDef(rijen2), plaatsnaam);
     document.getElementById('uur-tabel-2').style.display='';
     document.querySelector('h2.kop + table.uur + h2.kop')?.style.setProperty('display','');
   } else {
@@ -852,20 +861,15 @@ function exporteerPDF(){
   });
   const datum=new Date().toISOString().slice(0,10);
   const plaats=(document.getElementById('plaats-in').value||'').replace(/\s+/g,'_').toLowerCase();
-  // Render eerst naar canvas om de werkelijke hoogte te meten
-  wrapper.style.cssText='background:white;width:780px;position:fixed;top:-9999px;left:0';
-  document.body.appendChild(wrapper);
-  html2canvas(wrapper,{scale:1.8,useCORS:true,backgroundColor:'#ffffff',logging:false}).then(canvas=>{
-    document.body.removeChild(wrapper);
-    const imgData=canvas.toDataURL('image/jpeg',0.97);
-    const pdfW=210; // A4-breedte mm
-    const pdfH=Math.ceil(canvas.height/canvas.width*pdfW)+4; // werkelijke hoogte mm
-    const JsPDF=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF;
-    if(!JsPDF){ alert('PDF-bibliotheek niet geladen'); return; }
-    const pdf=new JsPDF({unit:'mm',format:[pdfW,Math.max(pdfH,297)],orientation:'portrait'});
-    pdf.addImage(imgData,'JPEG',0,0,pdfW,pdfH);
-    pdf.save(`weerbewaking_uurlijks_${plaats}_${datum}.pdf`);
-  }).catch(e=>{ if(document.body.contains(wrapper)) document.body.removeChild(wrapper); alert('PDF mislukt: '+e.message); });
+  // Eén pagina: gebruik een ruim formaat zodat niets afgeknept wordt
+  html2pdf().set({
+    margin:0,
+    filename:`weerbewaking_uurlijks_${plaats}_${datum}.pdf`,
+    image:{type:'jpeg',quality:0.97},
+    html2canvas:{scale:1.8,useCORS:true,backgroundColor:'#ffffff'},
+    jsPDF:{unit:'mm',format:[210,380],orientation:'portrait'},
+    pagebreak:{mode:'avoid-all'}
+  }).from(wrapper).save();
 }
 </script>
 
