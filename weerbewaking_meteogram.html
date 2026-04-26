@@ -487,9 +487,17 @@ for(let i=0;i<N1;i++){
   const sun=sunriseSetUTC(actief.lat,actief.lon,dayStart);
   const utcH=d.getUTCHours();
   if(!sun||utcH<sun.rise||utcH>=sun.set) continue;
-  const bw=bewolking(i);
-  const effectief=(bw==null||!Number.isFinite(bw))?0:Math.max(0,bw-0.5)/0.5;
-  const zonFactor=Math.max(0,1-effectief);
+  // Gebruik laag+midden bewolking: die blokkeert de zon echt.
+  // Hoge cirrus (sluier) zit dan automatisch niet mee.
+  const bl=DATA.bw_l[i], bm=DATA.bw_m[i];
+  let block;
+  if(bl!=null&&Number.isFinite(bl)&&bm!=null&&Number.isFinite(bm)){
+    block=1-(1-bl/100)*(1-bm/100);
+  } else {
+    const bw=bewolking(i);
+    block=(bw==null||!Number.isFinite(bw))?0:bw;
+  }
+  const zonFactor=Math.max(0,1-block);
   if(zonFactor<=0.01) continue;
   const barH=zonFactor*(pSunH-6);
   svg.appendChild(el('rect',{x:x(i)-colW*0.42,y:pSunY+pSunH-4-barH,
