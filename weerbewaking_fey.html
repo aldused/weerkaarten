@@ -283,6 +283,20 @@ async function fetchFloat(url,offset){
   const buf=await r.arrayBuffer();
   return new DataView(buf).getFloat32(0,true);
 }
+// Beperkte parallelle fetches om R2 niet te overstelpen, met null-fallback bij uitvallers
+async function fetchFloatsBatched(url, offsets, limit=12){
+  const out=new Array(offsets.length);
+  let next=0;
+  async function worker(){
+    while(next<offsets.length){
+      const k=next++;
+      try{ out[k]=await fetchFloat(url, offsets[k]); }
+      catch(e){ out[k]=null; }
+    }
+  }
+  await Promise.all(Array(Math.min(limit, offsets.length)).fill(0).map(worker));
+  return out;
+}
 async function puntReeks(paramKey, gis, nSteps){
   const meta=await laadMeta();
   const info=meta.parameters[paramKey];
@@ -301,7 +315,7 @@ async function puntReeks(paramKey, gis, nSteps){
       });
     }
   }
-  const vals=await Promise.all(offsets.map(o=>fetchFloat(url,o)));
+  const vals=await fetchFloatsBatched(url, offsets);
   const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
   for(let s=0;s<nSteps;s++){
     for(let c=0;c<nComp;c++){
@@ -309,7 +323,7 @@ async function puntReeks(paramKey, gis, nSteps){
       for(let k=0;k<vals.length;k++){
         if(idx[k][0]!==s||idx[k][1]!==c) continue;
         const v=vals[k];
-        if(Number.isFinite(v)){ som+=v; n++; }
+        if(v!=null && Number.isFinite(v)){ som+=v; n++; }
       }
       uit[s][c]=n ? som/n : null;
     }

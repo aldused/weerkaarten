@@ -267,12 +267,17 @@ function naarRichtingKort(deg){
 
 function bouwWaarschuwing(startDatum){
   const tbody=document.getElementById('waarsch-body');
+  // Bewaar bestaande waarden zodat ze niet verloren gaan bij herbouw
+  const oudePeriode=tbody.querySelector('[data-save="waarsch-periode"]')?.textContent;
+  const oudeDatum=tbody.querySelector('[data-save="waarsch-datum"]')?.value;
+  const oudeStatus=tbody.querySelector('select.status-sel')?.value;
+  const isoDef=`${startDatum.getFullYear()}-${String(startDatum.getMonth()+1).padStart(2,'0')}-${String(startDatum.getDate()).padStart(2,'0')}`;
   tbody.innerHTML=`
     <tr>
-      <td class="label">Vandaag</td>
-      <td>${formatDMshort(startDatum)}</td>
+      <td class="label" contenteditable="true" data-save="waarsch-periode">${oudePeriode||'Vandaag'}</td>
+      <td><input type="date" data-save="waarsch-datum" value="${oudeDatum||isoDef}" style="font-family:inherit;font-size:.78rem;border:1px solid #ccc;border-radius:3px;padding:2px 4px;width:130px"></td>
       <td>
-        <select class="status-sel" onchange="updateStatusKleur(this)">
+        <select class="status-sel" data-save="waarsch-status" onchange="updateStatusKleur(this)">
           <option value="GEEN">GEEN</option>
           <option value="GEEL">GEEL</option>
           <option value="ORANJE">ORANJE</option>
@@ -280,6 +285,10 @@ function bouwWaarschuwing(startDatum){
         </select>
       </td>
     </tr>`;
+  if(oudeStatus){
+    const sel=tbody.querySelector('select.status-sel');
+    sel.value=oudeStatus; updateStatusKleur(sel);
+  }
 }
 function updateStatusKleur(sel){
   const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
@@ -398,6 +407,20 @@ async function fetchFloat(url,offset){
 }
 
 /* ── Haal puntdata uit een HARMONIE-bin voor alle nSteps ── */
+// Beperkte parallelle fetches om R2 niet te overstelpen, met null-fallback bij uitvallers
+async function fetchFloatsBatched(url, offsets, limit=12){
+  const out=new Array(offsets.length);
+  let next=0;
+  async function worker(){
+    while(next<offsets.length){
+      const k=next++;
+      try{ out[k]=await fetchFloat(url, offsets[k]); }
+      catch(e){ out[k]=null; }
+    }
+  }
+  await Promise.all(Array(Math.min(limit, offsets.length)).fill(0).map(worker));
+  return out;
+}
 async function puntReeks(paramKey, gis, nSteps){
   const meta=await laadMeta();
   const info=meta.parameters[paramKey];
@@ -417,7 +440,7 @@ async function puntReeks(paramKey, gis, nSteps){
       });
     }
   }
-  const vals=await Promise.all(offsets.map(o=>fetchFloat(url,o)));
+  const vals=await fetchFloatsBatched(url, offsets);
   const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
   for(let s=0;s<nSteps;s++){
     for(let c=0;c<nComp;c++){
@@ -425,7 +448,7 @@ async function puntReeks(paramKey, gis, nSteps){
       for(let k=0;k<vals.length;k++){
         if(idx[k][0]!==s||idx[k][1]!==c) continue;
         const v=vals[k];
-        if(Number.isFinite(v)){ som+=v; n++; }
+        if(v!=null && Number.isFinite(v)){ som+=v; n++; }
       }
       uit[s][c]=n ? som/n : null;
     }
@@ -658,7 +681,9 @@ function saveKey(){ return SAVE_PREFIX + huidigeDatum(); }
 function saveDraft(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{
-    d[el.getAttribute('data-save')] = el.innerHTML;
+    const k=el.getAttribute('data-save');
+    if(el.tagName==='INPUT' || el.tagName==='SELECT') d[k]=el.value;
+    else d[k]=el.innerHTML;
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
   d.tabelDag=document.getElementById('tabel-dag-sel')?.value||'vandaag';
@@ -681,7 +706,12 @@ function restoreDraft(){
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
-      if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
+      if(el.tagName==='INPUT' || el.tagName==='SELECT'){
+        if(d[k]!=null) el.value=d[k];
+        if(el.tagName==='SELECT' && el.classList.contains('status-sel')) updateStatusKleur(el);
+      } else {
+        if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
+      }
     });
     const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rotterdam');
     const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value=d.tabelDag||'vandaag';
