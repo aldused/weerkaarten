@@ -75,6 +75,9 @@ body{--kop-scale:1}
   <label>Document datum:</label>
   <input type="date" id="doc-datum">
   <button onclick="zetVandaag()" style="background:#777" title="Zet datum op vandaag">Vandaag</button>
+  <label style="margin-left:8px">Tijd:</label>
+  <input type="time" id="doc-tijd" title="Leeg = nu (auto). Vul in voor latere verzendtijd." style="width:90px">
+  <button onclick="zetTijdNu()" style="background:#777" title="Reset naar huidige tijd (auto)">↻ Nu</button>
   <span class="spacer"></span>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <label style="margin-left:8px">Koppen:</label>
@@ -153,11 +156,19 @@ function pad2(n){ return String(n).padStart(2,'0'); }
 
 function updateOpgesteldKop(){
   // "Opgesteld: zaterdag 25 april om 07:15 uur"
-  // We pakken de gekozen documentdatum + huidige tijd
+  // Datum komt uit doc-datum picker, tijd uit doc-tijd (handmatig) of huidige tijd (auto)
   const d=huidigeDatumObj();
-  const nu=new Date();
+  const tijdEl=document.getElementById('doc-tijd');
+  let uu, mm;
+  if(tijdEl && tijdEl.value){
+    const [h,m]=tijdEl.value.split(':');
+    uu=h; mm=m;
+  } else {
+    const nu=new Date();
+    uu=pad2(nu.getHours()); mm=pad2(nu.getMinutes());
+  }
   const dnaam=DAGLANG_KLEIN[d.getDay()];
-  const tekst=`${dnaam} ${d.getDate()} ${MND[d.getMonth()]} om ${pad2(nu.getHours())}:${pad2(nu.getMinutes())} uur`;
+  const tekst=`${dnaam} ${d.getDate()} ${MND[d.getMonth()]} om ${uu}:${mm} uur`;
   document.getElementById('hdr-datum').textContent=tekst;
 }
 
@@ -210,17 +221,19 @@ function saveDraft(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
   d.verborgen = Array.from(document.querySelectorAll('.sectie.verborgen')).map(s=>s.id);
+  d.tijd = document.getElementById('doc-tijd')?.value || '';
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
 }
 function leegForm(){
   // Reset secties zichtbaar; teksten leegmaken zodat placeholders verschijnen
   document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+  document.getElementById('doc-tijd').value='';
   toonVerborgenBar();
 }
 function restoreDraft(){
   try{
     const j=localStorage.getItem(saveKey());
-    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatumKey()+')'; return; }
+    if(!j){ leegForm(); updateOpgesteldKop(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatumKey()+')'; return; }
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
@@ -231,6 +244,8 @@ function restoreDraft(){
     if(Array.isArray(d.verborgen)){
       d.verborgen.forEach(id=>document.getElementById(id)?.classList.add('verborgen'));
     }
+    document.getElementById('doc-tijd').value = d.tijd || '';
+    updateOpgesteldKop();
     toonVerborgenBar();
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
@@ -261,6 +276,16 @@ document.getElementById('doc-datum').addEventListener('change', ()=>{
   updateDagnamen();
   restoreDraft();
 });
+document.getElementById('doc-tijd').addEventListener('change', ()=>{
+  updateOpgesteldKop();
+  saveDraft();
+});
+
+function zetTijdNu(){
+  document.getElementById('doc-tijd').value='';
+  updateOpgesteldKop();
+  saveDraft();
+}
 
 function zetVandaag(){
   document.getElementById('doc-datum').value=vandaagISO();
