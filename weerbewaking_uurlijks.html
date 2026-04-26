@@ -23,6 +23,7 @@ body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;p
 .toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:white;padding:12px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .toolbar label{font-size:.85rem;color:#555;font-weight:600}
 .toolbar select,.toolbar input{font-family:inherit;font-size:.9rem;padding:6px 10px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar input[type="checkbox"]{padding:0;border:0;border-radius:0;background:transparent;vertical-align:middle;margin-right:3px}
 .toolbar button{font-family:inherit;font-size:.9rem;padding:7px 16px;background:#1a5490;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600}
 .toolbar button:hover{background:#124270}
 .toolbar .spacer{flex:1}
@@ -147,6 +148,15 @@ body{--kop-scale:1}
   </select>
   <label style="margin-left:16px">Startuur:</label>
   <select id="startuur-sel"></select>
+  <label style="margin-left:8px">Uurtabel:</label>
+  <select id="tabel-dag-sel" title="Kies of de uurtabel voor vandaag of morgen begint">
+    <option value="vandaag" selected>Vandaag</option>
+    <option value="morgen">Morgen</option>
+  </select>
+  <label style="margin-left:8px">Tekst:</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-vandaag" checked> vandaag</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-morgen" checked> morgen</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-komende" checked> komende dagen</label>
   <span class="spacer"></span>
   <span class="status" id="data-status">–</span>
   <button onclick="laadData()">↻ Ververs</button>
@@ -191,8 +201,20 @@ body{--kop-scale:1}
   <h2 class="kop">De weersituatie nader beschreven</h2>
   <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Vandaag wordt het weer in Nederland bepaald door een hogedrukgebied boven Centraal-Europa. Het zorgt voor een zuidwestelijke stroming met de aanvoer van vochtige lucht.</div>
 
-  <h2 class="kop">De weersverwachting voor vandaag</h2>
-  <div class="tekstvak tekstvak-groot" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting voor vandaag...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
+  <section id="sec-vandaag">
+    <h2 class="kop">De weersverwachting voor vandaag</h2>
+    <div class="tekstvak" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting voor vandaag...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
+  </section>
+
+  <section id="sec-morgen">
+    <h2 class="kop">De weersverwachting voor morgen</h2>
+    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf de verwachting voor morgen...">Morgen is er een afwisseling van wolken en zon. Het blijft meestal droog, maar bij buien of kans op onweer kan dit hier alvast worden benoemd.</div>
+  </section>
+
+  <section id="sec-komende">
+    <h2 class="kop">De weersverwachting voor de komende dagen</h2>
+    <div class="tekstvak" contenteditable="true" data-save="komende" data-placeholder="Beschrijf de verwachting voor de komende dagen...">De komende dagen blijft het wisselend met perioden met zon en wolken. De temperatuur blijft rond normale waarden voor de tijd van het jaar.</div>
+  </section>
 
   <h2 class="kop">Waarschuwing</h2>
   <table class="tabel" id="waarsch-tabel">
@@ -222,6 +244,14 @@ function formatDatumVol(d){
 }
 function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 function formatDagLang(d){ return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]}`; }
+function dagStart(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function zelfdeDag(a,b){ return dagStart(a).getTime()===dagStart(b).getTime(); }
+function gekozenTabelDatum(){
+  const nu=new Date();
+  const d=dagStart(nu);
+  if(document.getElementById('tabel-dag-sel')?.value==='morgen') d.setDate(d.getDate()+1);
+  return d;
+}
 
 function naarBFT(kmh){
   if(kmh==null||isNaN(kmh)) return '–';
@@ -254,6 +284,18 @@ function bouwWaarschuwing(startDatum){
 function updateStatusKleur(sel){
   const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
   sel.className='status-sel '+kl[sel.value];
+}
+function updateTekstSecties(){
+  const koppels=[
+    ['toon-vandaag','sec-vandaag'],
+    ['toon-morgen','sec-morgen'],
+    ['toon-komende','sec-komende']
+  ];
+  koppels.forEach(([checkId,secId])=>{
+    const check=document.getElementById(checkId);
+    const sec=document.getElementById(secId);
+    if(sec && check) sec.style.display=check.checked?'':'none';
+  });
 }
 
 /* ── Bouw één uurtabel (6 uren) ── */
@@ -394,15 +436,27 @@ async function puntReeks(paramKey, gis, nSteps){
 function vulStartuurSelect(tijden,nuSel){
   const sel=document.getElementById('startuur-sel');
   const nu=new Date();
-  let startIdx=0;
+  const tabelDag=gekozenTabelDatum();
+  let startIdx=-1;
   for(let i=0;i<tijden.length;i++){
     const t=new Date(tijden[i]);
-    if(t>=nu){ startIdx=i; break; }
+    if(!zelfdeDag(t,tabelDag)) continue;
+    if(document.getElementById('tabel-dag-sel')?.value==='morgen' || t>=nu){
+      startIdx=i;
+      break;
+    }
   }
+  if(startIdx<0) startIdx=0;
   const behoud=sel.value;
   sel.innerHTML='';
-  const maxStart=Math.min(tijden.length-12, startIdx+48);
-  for(let i=Math.max(0,startIdx-2); i<=maxStart; i++){
+  const dagIdx=[];
+  for(let i=0;i<tijden.length;i++){
+    const t=new Date(tijden[i]);
+    if(zelfdeDag(t,tabelDag)) dagIdx.push(i);
+  }
+  const maxStart=tijden.length-12;
+  const opties=dagIdx.filter(i=>i<=maxStart && (document.getElementById('tabel-dag-sel')?.value==='morgen' || new Date(tijden[i])>=new Date(nu.getTime()-2*3600000)));
+  for(const i of opties){
     const t=new Date(tijden[i]);
     const lbl=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
     const opt=document.createElement('option');
@@ -411,6 +465,12 @@ function vulStartuurSelect(tijden,nuSel){
     sel.appendChild(opt);
   }
   if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
+  if(sel.options.length===0){
+    const opt=document.createElement('option');
+    opt.value=startIdx;
+    opt.textContent=document.getElementById('tabel-dag-sel')?.value==='morgen' ? 'Morgen niet beschikbaar' : 'Vandaag niet beschikbaar';
+    sel.appendChild(opt);
+  }
 }
 
 function msNaarKmh(ms){ return ms*3.6; }
@@ -566,6 +626,19 @@ document.getElementById('plaats-in').addEventListener('keydown', e=>{
 document.getElementById('startuur-sel').addEventListener('change', ()=>{
   if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
 });
+document.getElementById('tabel-dag-sel').addEventListener('change', ()=>{
+  if(harmonieMeta){
+    vulStartuurSelect(harmonieMeta.tijden);
+    if(huidigePunt) renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
+  }
+  saveDraft();
+});
+['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    updateTekstSecties();
+    saveDraft();
+  });
+});
 document.getElementById('model-sel').addEventListener('change', async e=>{
   huidigModel=e.target.value;
   harmonieMeta=null;
@@ -595,11 +668,18 @@ function saveDraft(){
     d[el.getAttribute('data-save')] = el.innerHTML;
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
+  d.tabelDag=document.getElementById('tabel-dag-sel')?.value||'vandaag';
+  d.toonVandaag=!!document.getElementById('toon-vandaag')?.checked;
+  d.toonMorgen=!!document.getElementById('toon-morgen')?.checked;
+  d.toonKomende=!!document.getElementById('toon-komende')?.checked;
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
 }
 function leegForm(){
   document.querySelectorAll('[data-save]').forEach(el=>{ el.innerHTML=''; });
   const p=document.getElementById('plaats-in'); if(p) p.value='Rotterdam';
+  ['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=true; });
+  const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value='vandaag';
+  updateTekstSecties();
 }
 function restoreDraft(){
   try{
@@ -611,6 +691,11 @@ function restoreDraft(){
       if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
     });
     const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rotterdam');
+    const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value=d.tabelDag||'vandaag';
+    if(d.toonVandaag!=null) document.getElementById('toon-vandaag').checked=!!d.toonVandaag;
+    if(d.toonMorgen!=null) document.getElementById('toon-morgen').checked=!!d.toonMorgen;
+    if(d.toonKomende!=null) document.getElementById('toon-komende').checked=!!d.toonKomende;
+    updateTekstSecties();
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
 }
