@@ -204,6 +204,7 @@
       <span><i style="background:var(--vocht)"></i>Rel. vochtigheid %</span>
       <span><i style="background:#94a3b8"></i>Bewolking</span>
       <span><i style="background:#3b82f6"></i>Neerslag mm/u</span>
+      <span><i style="background:linear-gradient(180deg,#fde047,#fbbf24)"></i>Zonneschijn</span>
     </div>
   </div>
   <div class="tbl-wrap" id="tbl-wrap">
@@ -227,12 +228,13 @@ function dirLetter(d){
 }
 
 /* ───── Geometry ───── */
-const W=2400,H=650,L=20,R=20,HEADER_H=50,T=HEADER_H+22;
+const W=2400,H=680,L=20,R=20,HEADER_H=50,T=HEADER_H+22;
 let colW=(W-L-R)/Math.max(1,N-1);
 const x=i=>L+i*colW;
 const pWindY=T,       pWindH=250;
 const pRainY=pWindY+pWindH, pRainH=44;
-const pBotY=pRainY+pRainH, pBotH=H-pBotY-26;
+const pSunY=pRainY+pRainH,  pSunH=30;
+const pBotY=pSunY+pSunH,    pBotH=H-pBotY-26;
 const xAxisY=H-20;
 
 const maxBft=8, maxGust=120;
@@ -279,6 +281,7 @@ const mkGrad=(id,stops,v=true)=>{
 defs.appendChild(mkGrad('gustGrad',[['0%','#1e293b','0.18'],['100%','#1e293b','0.02']]));
 defs.appendChild(mkGrad('nightGrad',[['0%','#64748b','0.12'],['100%','#0f172a','0.08']]));
 defs.appendChild(mkGrad('rainGrad',[['0%','#60a5fa','1'],['100%','#3b82f6','1']]));
+defs.appendChild(mkGrad('sunGrad',[['0%','#fde047','1'],['100%','#fbbf24','1']]));
 svg.appendChild(defs);
 
 const bftScaleEl=document.getElementById('bftScale');
@@ -325,25 +328,14 @@ function sunriseSetUTC(lat, lon, dayUTC){
   return {rise:noon-H, set:noon+H};
 }
 
-/* ─── Dag/nacht + zonneschijn ─── */
+/* ─── Dag/nacht ─── */
 for(let i=0;i<N1;i++){
   const d=new Date(startUTC.getTime()+i*3600*1000);
   const dayStart=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
   const sun=sunriseSetUTC(actief.lat,actief.lon,dayStart);
-  const utcH=d.getUTCHours()+d.getUTCMinutes()/60;
+  const utcH=d.getUTCHours();
   const isNight=!sun||utcH<sun.rise||utcH>=sun.set;
-  if(isNight){
-    svg.appendChild(el('rect',{x:x(i),y:T,width:colW+0.6,height:H-T-20,fill:'url(#nightGrad)'}));
-  } else {
-    const bw=bewolking(i);
-    // Sluierbewolking (cirrus) tot 60% laat zon door — pas daarboven afbouwen
-    const effectief=(bw==null||!Number.isFinite(bw))?0:Math.max(0,bw-0.6)/0.4;
-    const zonFactor=Math.max(0,1-effectief);
-    if(zonFactor>0.01){
-      svg.appendChild(el('rect',{x:x(i),y:T,width:colW+0.6,height:H-T-20,
-        fill:'#fbbf24',opacity:(zonFactor*0.5).toFixed(3)}));
-    }
-  }
+  if(isNight) svg.appendChild(el('rect',{x:x(i),y:T,width:colW+0.6,height:H-T-20,fill:'url(#nightGrad)'}));
 }
 
 /* ─── Uur-grid + dag-labels (lokale tijd = UTC+2) ─── */
@@ -467,6 +459,28 @@ for(let i=0;i<N;i++){
   }
 }
 
+/* ─── Zon-balkjes ─── */
+svg.appendChild(el('rect',{x:L,y:pSunY,width:W-L-R,height:pSunH,fill:'#fffbeb'}));
+svg.appendChild(el('line',{x1:L,x2:W-R,y1:pSunY+pSunH-4,y2:pSunY+pSunH-4,stroke:'#fde68a'}));
+for(let i=0;i<N1;i++){
+  const d=new Date(startUTC.getTime()+i*3600*1000);
+  const dayStart=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
+  const sun=sunriseSetUTC(actief.lat,actief.lon,dayStart);
+  const utcH=d.getUTCHours();
+  if(!sun||utcH<sun.rise||utcH>=sun.set) continue;
+  const bw=bewolking(i);
+  const effectief=(bw==null||!Number.isFinite(bw))?0:Math.max(0,bw-0.6)/0.4;
+  const zonFactor=Math.max(0,1-effectief);
+  if(zonFactor<=0.01) continue;
+  const barH=zonFactor*(pSunH-6);
+  svg.appendChild(el('rect',{x:x(i)-colW*0.42,y:pSunY+pSunH-4-barH,
+    width:colW*0.84,height:barH,rx:'1',fill:'url(#sunGrad)',opacity:'0.92'}));
+}
+{
+  const lbl=el('text',{x:L+6,y:pSunY+pSunH-8,'font-size':'9',fill:'#92400e','font-weight':'700','font-family':'Arial'});
+  lbl.textContent='zon';svg.appendChild(lbl);
+}
+
 /* ─── Onder-paneel ─── */
 const cloudY=v=>pBotY+4+(1-v)*(pBotH-8);
 let cp=`M ${x(0)} ${pBotY+pBotH} `;
@@ -507,7 +521,7 @@ for(let i=0;i<N;i++){
 }
 
 /* Panel-scheiders */
-[pRainY,pBotY].forEach(y=>svg.appendChild(el('line',{x1:L,x2:W-R,y1:y,y2:y,stroke:'#dfe6ef'})));
+[pRainY,pSunY,pBotY].forEach(y=>svg.appendChild(el('line',{x1:L,x2:W-R,y1:y,y2:y,stroke:'#dfe6ef'})));
 
 /* ─── LEFT SCALE (Bft + onderpaneel as-labels) ─── */
 (function(){
@@ -537,6 +551,7 @@ for(let i=0;i<N;i++){
   // labels rechts voor mm/u, °C, hPa, %
   const right=[
     ['mm/u',pRainY+pRainH/2+3,'#1e3a8a'],
+    ['zon', pSunY+pSunH/2+3,  '#b45309'],
     ['°C',  pBotY+16,'#f59e0b'],
     ['hPa', pBotY+32,'#1e3a8a'],
     ['%',   pBotY+48,'#15803d'],
