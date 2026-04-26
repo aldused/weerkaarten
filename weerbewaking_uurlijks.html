@@ -159,7 +159,7 @@ body{--kop-scale:1}
   <label style="font-weight:500"><input type="checkbox" id="toon-komende" checked> komende dagen</label>
   <span class="spacer"></span>
   <span class="status" id="data-status">–</span>
-  <button onclick="laadData()">↻ Ververs</button>
+  <button id="laad-btn" onclick="laadData()">⬇ Laad data in</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <span class="status" style="margin-left:8px">Document:</span>
   <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
@@ -398,30 +398,9 @@ async function geocodePlaats(q){
   return {lat:parseFloat(j[0].lat), lon:parseFloat(j[0].lon), naam:j[0].display_name};
 }
 
-/* ── Range-request voor 1 float (little-endian float32) ── */
-async function fetchFloat(url,offset){
-  const r=await fetch(url,{headers:{'Range':`bytes=${offset}-${offset+3}`}});
-  if(!r.ok && r.status!==206) throw new Error('range faalde '+r.status);
-  const buf=await r.arrayBuffer();
-  return new DataView(buf).getFloat32(0,true);
-}
-
 /* ── Haal puntdata uit een HARMONIE-bin voor alle nSteps ── */
-// Beperkte parallelle fetches om R2 niet te overstelpen, met null-fallback bij uitvallers
-async function fetchFloatsBatched(url, offsets, limit=12){
-  const out=new Array(offsets.length);
-  let next=0;
-  async function worker(){
-    while(next<offsets.length){
-      const k=next++;
-      try{ out[k]=await fetchFloat(url, offsets[k]); }
-      catch(e){ out[k]=null; }
-    }
-  }
-  await Promise.all(Array(Math.min(limit, offsets.length)).fill(0).map(worker));
-  return out;
-}
-async function puntReeks(paramKey, gis, nSteps){
+// Per (stap, component) één range-request voor alle gridpunten → ~7× minder requests.
+async function puntReeks(paramKey, gis, nSteps, limit=20){
   const meta=await laadMeta();
   const info=meta.parameters[paramKey];
   if(!info) throw new Error('param onbekend: '+paramKey);
@@ -430,30 +409,42 @@ async function puntReeks(paramKey, gis, nSteps){
   const nComp=info.components;
   const url=HARM_BASE+info.file;
   const HEADER=16;
-  const offsets=[];
-  const idx=[]; // [step,comp,point]
+  const minGi=Math.min(...gridIndices);
+  const maxGi=Math.max(...gridIndices);
+
+  // Bouw taaklist: één range-request per (stap, component)
+  const taken=[];
   for(let s=0;s<nSteps;s++){
     for(let c=0;c<nComp;c++){
-      gridIndices.forEach((gi,p)=>{
-        offsets.push(HEADER + ((s*nComp+c)*nPts + gi)*4);
-        idx.push([s,c,p]);
-      });
+      const base=HEADER + ((s*nComp+c)*nPts)*4;
+      taken.push({s,c,base});
     }
   }
-  const vals=await fetchFloatsBatched(url, offsets);
-  const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
-  for(let s=0;s<nSteps;s++){
-    for(let c=0;c<nComp;c++){
-      let som=0, n=0;
-      for(let k=0;k<vals.length;k++){
-        if(idx[k][0]!==s||idx[k][1]!==c) continue;
-        const v=vals[k];
-        if(v!=null && Number.isFinite(v)){ som+=v; n++; }
-      }
-      uit[s][c]=n ? som/n : null;
+
+  // Uitvoer: results[s][c] = gemiddelde over gridpunten
+  const resultaten=Array.from({length:nSteps},()=>new Array(nComp).fill(null));
+  let next=0;
+  async function worker(){
+    while(next<taken.length){
+      const k=next++;
+      const {s,c,base}=taken[k];
+      try{
+        const byteStart=base+minGi*4;
+        const byteEnd=base+maxGi*4+3;
+        const r=await fetch(url,{headers:{'Range':`bytes=${byteStart}-${byteEnd}`}});
+        if(!r.ok && r.status!==206) throw new Error('range faalde '+r.status);
+        const dv=new DataView(await r.arrayBuffer());
+        let som=0, n=0;
+        for(const gi of gridIndices){
+          const v=dv.getFloat32((gi-minGi)*4,true);
+          if(Number.isFinite(v)){ som+=v; n++; }
+        }
+        resultaten[s][c]=n ? som/n : null;
+      }catch(e){ resultaten[s][c]=null; }
     }
   }
-  return uit; // [step][comp]
+  await Promise.all(Array(Math.min(limit,taken.length)).fill(0).map(worker));
+  return resultaten; // [step][comp]
 }
 
 function vulStartuurSelect(tijden,nuSel){
@@ -513,25 +504,38 @@ async function laadData(){
     await renderTabellen(startIdx);
     document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
   }catch(e){
-    document.getElementById('data-status').textContent='Fout: '+e.message;
+    zetLaadStatus('Fout: '+e.message);
+    zetKnopLaden(false);
   }
+}
+
+function zetLaadStatus(tekst){ document.getElementById('data-status').textContent=tekst; }
+function zetKnopLaden(laden){
+  const btn=document.getElementById('laad-btn');
+  if(!btn) return;
+  btn.disabled=laden;
+  btn.textContent=laden ? '⏳ Laden…' : '⬇ Laad data in';
 }
 
 async function renderTabellen(startIdx){
   const meta=harmonieMeta;
   const pt=huidigePunt;
   const NSTEPS=12;
-  document.getElementById('data-status').textContent=MODELS[huidigModel].label+' laden…';
+  zetKnopLaden(true);
+  zetLaadStatus(MODELS[huidigModel].label+' laden…');
 
-  // Haal alle param-reeksen parallel
+  // Haal alle param-reeksen parallel, met voortgangsteller
   const onweerParam = harmonieMeta.parameters.onweer ? 'onweer' : (harmonieMeta.parameters.cape ? 'cape' : null);
   const params=['temp','neerslag','wind','windstoten','bewolking'].concat(onweerParam?[onweerParam]:[]);
   const reeksen={};
+  let klaar=0;
   await Promise.all(params.map(async p=>{
     try{
       const r=await puntReeks(p, pt.gis||pt.gi, startIdx+NSTEPS);
       reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
     }catch(e){ reeksen[p]=null; }
+    klaar++;
+    zetLaadStatus(MODELS[huidigModel].label+` laden… (${klaar}/${params.length})`);
   }));
   if(onweerParam==='cape' && reeksen.cape){
     reeksen.onweer = reeksen.cape.map(arr=>{
@@ -612,7 +616,8 @@ async function renderTabellen(startIdx){
   } else {
     document.getElementById('uur-tabel-2').style.display='none';
   }
-  document.getElementById('data-status').textContent='HARMONIE · run '+meta.run;
+  zetLaadStatus(MODELS[huidigModel].label+' · run '+meta.run);
+  zetKnopLaden(false);
 }
 
 async function zoekEnLaad(){
@@ -690,6 +695,12 @@ function saveDraft(){
   d.toonVandaag=!!document.getElementById('toon-vandaag')?.checked;
   d.toonMorgen=!!document.getElementById('toon-morgen')?.checked;
   d.toonKomende=!!document.getElementById('toon-komende')?.checked;
+  // Uur-tabellen (inclusief handmatige aanpassingen) bewaren
+  const t1=document.getElementById('uur-tabel-1');
+  const t2=document.getElementById('uur-tabel-2');
+  if(t1 && t1.innerHTML.trim()) d.uurTabel1=t1.innerHTML;
+  if(t2 && t2.innerHTML.trim()) d.uurTabel2=t2.innerHTML;
+  d.uurTabel2Zichtbaar=(t2 && t2.style.display!=='none');
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
 }
 function leegForm(){
@@ -702,7 +713,7 @@ function leegForm(){
 function restoreDraft(){
   try{
     const j=localStorage.getItem(saveKey());
-    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return false; }
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
@@ -719,8 +730,14 @@ function restoreDraft(){
     if(d.toonMorgen!=null) document.getElementById('toon-morgen').checked=!!d.toonMorgen;
     if(d.toonKomende!=null) document.getElementById('toon-komende').checked=!!d.toonKomende;
     updateTekstSecties();
+    // Uur-tabellen herstellen
+    const t1=document.getElementById('uur-tabel-1');
+    const t2=document.getElementById('uur-tabel-2');
+    if(d.uurTabel1 && t1){ t1.innerHTML=d.uurTabel1; }
+    if(d.uurTabel2 && t2){ t2.innerHTML=d.uurTabel2; t2.style.display=d.uurTabel2Zichtbaar===false?'none':''; }
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
-  }catch(e){}
+    return !!(d.uurTabel1);
+  }catch(e){ return false; }
 }
 function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
   const el=document.getElementById('save-status'); if(!el) return;
@@ -753,17 +770,42 @@ function zetKopScale(v){
 let saveTimer;
 function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
 document.addEventListener('input', e=>{
-  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') debSave();
+  const inSave=e.target.closest('[data-save]') || e.target.id==='plaats-in';
+  const inTabel=e.target.closest('#uur-tabel-1, #uur-tabel-2');
+  if(inSave || inTabel) debSave();
 });
 document.addEventListener('blur', e=>{
-  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
+  const inSave=e.target.closest('[data-save]') || e.target.id==='plaats-in';
+  const inTabel=e.target.closest('#uur-tabel-1, #uur-tabel-2');
+  if(inSave || inTabel) saveDraft();
 },true);
 
-document.getElementById('doc-datum').value = vandaagISO();
-document.getElementById('doc-datum').addEventListener('change', restoreDraft);
+/* ── Tab in uurverwachting-cel: direct alles selecteren ── */
+document.addEventListener('focus', e=>{
+  const td=e.target;
+  if(td.tagName==='TD' && td.contentEditable==='true'){
+    const sel=window.getSelection();
+    const range=document.createRange();
+    range.selectNodeContents(td);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}, true);
 
+document.getElementById('doc-datum').value = vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', ()=>{ bouwWaarschuwing(new Date()); restoreDraft(); });
+
+// Initialisatie: waarschuwing opbouwen, draft herstellen, meta laden (licht)
+const nu=new Date();
+document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
+document.getElementById('footer-datum').textContent=formatDMshort(nu)+' '+String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
+bouwWaarschuwing(nu);
 restoreDraft();
-laadData();
+// Meta ophalen voor startuur-select (klein JSON-bestand)
+laadMeta().then(meta=>{
+  if(document.getElementById('startuur-sel').options.length===0) vulStartuurSelect(meta.tijden);
+  zetLaadStatus(MODELS[huidigModel].label+' · run '+meta.run);
+}).catch(e=>{ zetLaadStatus('Meta: '+e.message); });
 
 /* ── Terug naar menu ── */
 function gaTerug(){
@@ -787,8 +829,8 @@ function exporteerPDF(){
     const hdr=c.querySelector('.doc-header');
     if(hdr){
       hdr.style.paddingBottom='4px';
-      const ll=hdr.querySelector('.logo-l'); if(ll) ll.style.height='130px';
-      const lr=hdr.querySelector('.logo-r'); if(lr) lr.style.height='75px';
+      const ll=hdr.querySelector('.logo-l'); if(ll) ll.style.height='90px';
+      const lr=hdr.querySelector('.logo-r'); if(lr) lr.style.height='60px';
     }
     c.querySelectorAll('h2.kop').forEach(h=>{ h.style.margin='10px 0 4px'; });
     c.querySelectorAll('.tekstvak').forEach(t=>{t.style.border='none';t.style.background='white';t.style.padding='4px 0'});
@@ -810,15 +852,20 @@ function exporteerPDF(){
   });
   const datum=new Date().toISOString().slice(0,10);
   const plaats=(document.getElementById('plaats-in').value||'').replace(/\s+/g,'_').toLowerCase();
-  const opt={
-    margin:0,
-    filename:`weerbewaking_uurlijks_${plaats}_${datum}.pdf`,
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  };
-  html2pdf().set(opt).from(wrapper).save();
+  // Render eerst naar canvas om de werkelijke hoogte te meten
+  wrapper.style.cssText='background:white;width:780px;position:fixed;top:-9999px;left:0';
+  document.body.appendChild(wrapper);
+  html2canvas(wrapper,{scale:1.8,useCORS:true,backgroundColor:'#ffffff',logging:false}).then(canvas=>{
+    document.body.removeChild(wrapper);
+    const imgData=canvas.toDataURL('image/jpeg',0.97);
+    const pdfW=210; // A4-breedte mm
+    const pdfH=Math.ceil(canvas.height/canvas.width*pdfW)+4; // werkelijke hoogte mm
+    const JsPDF=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF;
+    if(!JsPDF){ alert('PDF-bibliotheek niet geladen'); return; }
+    const pdf=new JsPDF({unit:'mm',format:[pdfW,Math.max(pdfH,297)],orientation:'portrait'});
+    pdf.addImage(imgData,'JPEG',0,0,pdfW,pdfH);
+    pdf.save(`weerbewaking_uurlijks_${plaats}_${datum}.pdf`);
+  }).catch(e=>{ if(document.body.contains(wrapper)) document.body.removeChild(wrapper); alert('PDF mislukt: '+e.message); });
 }
 </script>
 
