@@ -146,7 +146,7 @@
 <div class="header">
   <div>
     <div class="header-titel">Weerbewaking W.M. — uurlijkse verwachting</div>
-    <div class="header-sub"><span id="hdr-run">laden…</span> · HARMONIE 43 · 2×2 km</div>
+    <div class="header-sub"><span id="hdr-run">laden…</span> · 7-punts modelgemiddelde waar beschikbaar</div>
   </div>
   <div class="header-rechts">
     <div class="datum" id="hdr-datum">—</div>
@@ -168,7 +168,8 @@
   <span class="tbl">Model:</span>
   <button class="btn actief" id="btn-mod-det" title="HARMONIE deterministisch, open-meteo">HARM 2.5 km</button>
   <button class="btn" id="btn-mod-eps" title="Ensemble-gemiddelde van 6 members, dichtstbijzijnde station">HARM-EPS</button>
-  <button class="btn" id="btn-mod-icond2" title="ICON-D2 RUC (DWD), 1-2 dagen vooruit">ICON-D2</button>
+  <button class="btn" id="btn-mod-icond2" title="ICON-D2 RUC (DWD), 7-puntsgemiddelde rond de plaats">ICON-D2 RUC</button>
+  <button class="btn" id="btn-mod-mix" title="Eigen mix van HARMONIE en ICON-D2 RUC, beide als 7-puntsgemiddelde">Mix</button>
   <span class="sep"></span>
   <span class="tbl">Download:</span>
   <span class="dl-wrap">
@@ -219,6 +220,7 @@ const DATA={temp:[],wind:[],gust:[],dir:[],druk:[],vocht:[],bewolking:[],neersla
 const temp=i=>DATA.temp[i], wind=i=>DATA.wind[i], gust=i=>DATA.gust[i],
       winddir=i=>DATA.dir[i], druk=i=>DATA.druk[i], vocht=i=>DATA.vocht[i],
       bewolking=i=>DATA.bewolking[i], neerslag=i=>DATA.neerslag[i];
+let currentModelLabel='HARMONIE 2.5 km';
 function dirLetter(d){
   const s=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
   return s[Math.round(d/22.5)%16];
@@ -244,10 +246,24 @@ const bftOf=v=>{for(let b=0;b<bftUpper.length;b++) if(v<bftUpper[b]) return b;re
 const bftColor=v=>bftCol[Math.min(12,bftOf(v))];
 
 /* Onder-paneel schaalfuncties (ook gebruikt door tooltip/hover) */
-const Tmin=-2,Tmax=26,Dmin=1010,Dmax=1035,Vmin=0,Vmax=100;
-const yT=v=>pBotY+14+(1-(v-Tmin)/(Tmax-Tmin))*(pBotH-28);
-const yD=v=>pBotY+14+(1-(v-Dmin)/(Dmax-Dmin))*(pBotH-28);
-const yV=v=>pBotY+14+(1-(v-Vmin)/(Vmax-Vmin))*(pBotH-28);
+let Tmin=-2,Tmax=26,Dmin=1010,Dmax=1035,Vmin=0,Vmax=100;
+const finiteVals=arr=>arr.filter(v=>v!=null&&Number.isFinite(+v)).map(Number);
+function updateScales(){
+  const temps=finiteVals(DATA.temp), drukken=finiteVals(DATA.druk);
+  if(temps.length){
+    const lo=Math.floor(Math.min(...temps)-2), hi=Math.ceil(Math.max(...temps)+2);
+    Tmin=Math.min(lo,0); Tmax=Math.max(hi,Tmin+8);
+  }
+  if(drukken.length){
+    Dmin=Math.floor(Math.min(...drukken)-3);
+    Dmax=Math.ceil(Math.max(...drukken)+3);
+    if(Dmax-Dmin<10){ const mid=(Dmin+Dmax)/2; Dmin=Math.floor(mid-5); Dmax=Math.ceil(mid+5); }
+  }
+}
+const ySafe=(v,lo,hi)=>v==null||!Number.isFinite(+v)?null:pBotY+14+(1-(v-lo)/(hi-lo))*(pBotH-28);
+const yT=v=>ySafe(v,Tmin,Tmax);
+const yD=v=>ySafe(v,Dmin,Dmax);
+const yV=v=>ySafe(v,Vmin,Vmax);
 
 const svgNS='http://www.w3.org/2000/svg';
 const svg=document.getElementById('chart');
@@ -274,6 +290,7 @@ function renderChart(){
   svg.appendChild(defs);
   while(bftScaleEl.firstChild) bftScaleEl.removeChild(bftScaleEl.firstChild);
   while(gustScaleEl.firstChild) gustScaleEl.removeChild(gustScaleEl.firstChild);
+  updateScales();
   N1=N-1; colW=(W-L-R)/Math.max(1,N1);
 
 /* ─── Blauwe titelband bovenaan (vast aan grafiek, komt mee in PNG) ─── */
@@ -287,7 +304,7 @@ function renderChart(){
   const a=el('text',{x:22,y:24,'font-size':'20','font-weight':'800',fill:'#ffffff','font-family':'Arial','data-hdr':'L1'});
   a.textContent='Ed Aldus WM'; svg.appendChild(a);
   const b=el('text',{x:22,y:42,'font-size':'13',fill:'#a8c4e8','font-family':'Arial','font-weight':'500','data-hdr':'L2'});
-  b.textContent='Uurlijkse verwachting · HARMONIE 2.5 km · '+plaats;
+  b.textContent='Uurlijkse verwachting · '+currentModelLabel+' · '+plaats;
   svg.appendChild(b);
   const c=el('text',{x:W-22,y:24,'text-anchor':'end','font-size':'18','font-weight':'800',fill:'#ffffff','font-family':'Arial','data-hdr':'R1'});
   c.textContent=dat.charAt(0).toUpperCase()+dat.slice(1); svg.appendChild(c);
@@ -349,6 +366,7 @@ for(let b=1;b<=maxBft;b++){
 /* wind fill per segment (continu Bft) */
 for(let i=0;i<N1;i++){
   const w1=wind(i),w2=wind(i+1);
+  if(w1==null||w2==null||!Number.isFinite(w1)||!Number.isFinite(w2)) continue;
   const col=bftColor((w1+w2)/2);
   const baseY=pWindY+pWindH-22;
   svg.appendChild(el('polygon',{
@@ -359,6 +377,7 @@ for(let i=0;i<N1;i++){
 
 /* smooth helper */
 function smoothPath(pts){
+  pts=pts.filter(p=>p&&Number.isFinite(p[0])&&Number.isFinite(p[1]));
   if(pts.length<2) return '';
   let d=`M ${pts[0][0]} ${pts[0][1]}`;
   for(let i=0;i<pts.length-1;i++){
@@ -376,6 +395,7 @@ svg.appendChild(el('path',{d:smoothPath(windPts),fill:'none',stroke:'#0b1220','s
 
 /* Wind-labels = Beaufort-cijfer (1 teken), direct ónder de curve, niet boven (zo clasht het niet met stoot-getal) */
 for(let i=0;i<N;i+=2){
+  if(wind(i)==null||!Number.isFinite(wind(i))) continue;
   const b=bftOf(wind(i));
   svg.appendChild(el('circle',{cx:x(i),cy:yWind(wind(i))+14,r:'8.5',
     fill:bftCol[b],stroke:'#0b1220','stroke-width':'0.8'}));
@@ -395,6 +415,7 @@ for(let i=0;i<N;i++){
   svg.appendChild(g);
   if(i%2===0){
     const gu=gust(i);
+    if(gu==null||!Number.isFinite(gu)) continue;
     svg.appendChild(el('rect',{x:x(i)-12,y:arrowY-24,width:24,height:14,rx:3,ry:3,
       fill:bftColor(gu),opacity:'0.25'}));
     const t=el('text',{x:x(i),y:arrowY-13,'text-anchor':'middle','font-size':'10.5',
@@ -409,7 +430,7 @@ const yRain=v=>pRainY+pRainH-8-Math.min(v,maxRain)/maxRain*(pRainH-14);
 svg.appendChild(el('rect',{x:L,y:pRainY,width:W-L-R,height:pRainH,fill:'#f7faff'}));
 svg.appendChild(el('line',{x1:L,x2:W-R,y1:pRainY+pRainH-8,y2:pRainY+pRainH-8,stroke:'#dbe3ef'}));
 for(let i=0;i<N;i++){
-  const r=neerslag(i);if(r<=0) continue;
+  const r=neerslag(i);if(r==null||!Number.isFinite(+r)||r<=0) continue;
   svg.appendChild(el('rect',{x:x(i)-colW*0.42,y:yRain(r),width:colW*0.84,
     height:pRainY+pRainH-8-yRain(r),rx:'1.5',ry:'1.5',fill:'url(#rainGrad)',opacity:'0.92'}));
   if(r>=0.4){
@@ -422,7 +443,10 @@ for(let i=0;i<N;i++){
 /* ─── Onder-paneel ─── */
 const cloudY=v=>pBotY+4+(1-v)*(pBotH-8);
 let cp=`M ${x(0)} ${pBotY+pBotH} `;
-for(let i=0;i<N;i++) cp+=`L ${x(i)} ${cloudY(bewolking(i))} `;
+for(let i=0;i<N;i++){
+  const b=bewolking(i);
+  cp+=`L ${x(i)} ${cloudY(b==null||!Number.isFinite(b)?0:b)} `;
+}
 cp+=`L ${x(N-1)} ${pBotY+pBotH} Z`;
 svg.appendChild(el('path',{d:cp,fill:'#94a3b8',opacity:'0.28'}));
 
@@ -431,6 +455,7 @@ svg.appendChild(el('path',{d:smoothPath(vPts),fill:'none',stroke:'var(--vocht)',
 const dPts=Array.from({length:N},(_,i)=>[x(i),yD(druk(i))]);
 svg.appendChild(el('path',{d:smoothPath(dPts),fill:'none',stroke:'var(--druk)','stroke-width':'1.8'}));
 for(let i=6;i<N;i+=6){
+  if(vocht(i)==null||druk(i)==null||!Number.isFinite(vocht(i))||!Number.isFinite(druk(i))) continue;
   const t=el('text',{x:x(i)+4,y:yV(vocht(i))+11,'font-size':'10',fill:'var(--vocht)','font-family':'Arial','font-weight':'700'});
   t.textContent=vocht(i)+'%';svg.appendChild(t);
   const t2=el('text',{x:x(i)+4,y:yD(druk(i))-5,'font-size':'10',fill:'var(--druk)','font-family':'Arial','font-weight':'700'});
@@ -448,6 +473,7 @@ function tempColor(v){
 }
 for(let i=0;i<N;i++){
   const v=temp(i);
+  if(v==null||!Number.isFinite(v)) continue;
   svg.appendChild(el('circle',{cx:x(i),cy:yT(v),r:11,fill:tempColor(v),stroke:'#1e293b','stroke-width':'0.9'}));
   const t=el('text',{x:x(i),y:yT(v)+3.5,'text-anchor':'middle','font-size':'10.5','font-weight':'700',fill:'#0b1220','font-family':'Arial'});
   t.textContent=Math.round(v);svg.appendChild(t);
@@ -620,17 +646,18 @@ function fmtDate(i){
 function showTT(i, clientX){
   const w=wind(i),g=gust(i),dr=winddir(i),t=temp(i),d=druk(i),v=vocht(i),r=neerslag(i),b=bewolking(i);
   const swBft=bftColor(w), swG=bftColor(g);
+  const fmt=(x,d=0,unit='')=>x==null||!Number.isFinite(+x)?'·':(+x).toFixed(d)+unit;
   tt.innerHTML=`
     <div class="tt-hdr">${fmtDate(i)} <span style="color:#a8c4e8;font-weight:400">· +${i}h</span></div>
     <table>
-      <tr><td><span class="tt-swatch" style="background:${swBft}"></span>Wind</td><td>Bft ${bftOf(w)} · ${w} km/u</td></tr>
-      <tr><td><span class="tt-swatch" style="background:${swG}"></span>Stoot</td><td>${g} km/u</td></tr>
-      <tr><td>Richting</td><td>${dirLetter(dr)} (${Math.round(dr)}°)</td></tr>
-      <tr><td>Temp</td><td>${t.toFixed(1)} °C</td></tr>
-      <tr><td>Neerslag</td><td>${r.toFixed(1)} mm/u</td></tr>
-      <tr><td>Bewolking</td><td>${Math.round(b*100)} %</td></tr>
-      <tr><td>Druk</td><td>${d} hPa</td></tr>
-      <tr><td>Vocht</td><td>${v} %</td></tr>
+      <tr><td><span class="tt-swatch" style="background:${swBft}"></span>Wind</td><td>${w==null?'·':`Bft ${bftOf(w)} · ${w} km/u`}</td></tr>
+      <tr><td><span class="tt-swatch" style="background:${swG}"></span>Stoot</td><td>${fmt(g,0,' km/u')}</td></tr>
+      <tr><td>Richting</td><td>${dr==null||!Number.isFinite(+dr)?'·':`${dirLetter(dr)} (${Math.round(dr)}°)`}</td></tr>
+      <tr><td>Temp</td><td>${fmt(t,1,' °C')}</td></tr>
+      <tr><td>Neerslag</td><td>${fmt(r,1,' mm/u')}</td></tr>
+      <tr><td>Bewolking</td><td>${b==null||!Number.isFinite(+b)?'·':Math.round(b*100)+' %'}</td></tr>
+      <tr><td>Druk</td><td>${fmt(d,0,' hPa')}</td></tr>
+      <tr><td>Vocht</td><td>${fmt(v,0,' %')}</td></tr>
     </table>`;
   tt.style.opacity='1';
   // svg heeft vaste width=2400, dus SVG-coord == CSS-pixels binnen .scroll
@@ -649,9 +676,9 @@ function showTT(i, clientX){
   const set=(sel,attrs)=>{const n=hv.querySelector(sel);if(n)for(const k in attrs)n.setAttribute(k,attrs[k])};
   set('#h-line',{x1:x(i),x2:x(i)});
   set('#h-wind',{cx:x(i),cy:yWind(w)});
-  set('#h-temp',{cx:x(i),cy:yT(t)});
-  set('#h-voch',{cx:x(i),cy:yV(v)});
-  set('#h-druk',{cx:x(i),cy:yD(d)});
+  if(yT(t)!=null) set('#h-temp',{cx:x(i),cy:yT(t)});
+  if(yV(v)!=null) set('#h-voch',{cx:x(i),cy:yV(v)});
+  if(yD(d)!=null) set('#h-druk',{cx:x(i),cy:yD(d)});
 }
 function hideTT(){tt.style.opacity='0';const hv=svg.querySelector('#hover');if(hv)hv.style.display='none';}
 
@@ -680,12 +707,201 @@ document.getElementById('dl-tot').addEventListener('input',updateBand);
 /* ─── Plaats-zoek + favorieten ─── */
 const FAV_KEY='harm_wg_fav';
 let actief={naam:'De Bilt',lat:52.101,lon:5.178};
-let model='det'; // 'det' = open-meteo HARMONIE, 'eps' = lokaal ensemble-gemiddelde
+let model='det'; // det/icond2/mix gebruiken eigen 7-punts modeldata; eps blijft stationair ensemble
+
+const HARM_BASE='https://harmonie-data.weerlab.nl/';
+const GRID_MODELS={
+  harmonie:{meta:'harmonie_canvas_meta.json',label:'HARMONIE 2.5 km'},
+  icond2ruc:{meta:'icond2ruc_canvas_meta.json',label:'ICON-D2 RUC'},
+  mix:{label:'Mix HARMONIE + ICON-D2 RUC',members:['harmonie','icond2ruc']}
+};
+const SAMPLE_RADIUS_KM=10;
+const SAMPLE_EXTRA_POINTS=6;
+const gridMetaCache={};
+
+async function laadGridMeta(modelKey){
+  if(gridMetaCache[modelKey]) return gridMetaCache[modelKey];
+  const cfg=GRID_MODELS[modelKey];
+  const r=await fetch(HARM_BASE+cfg.meta+'?_='+Date.now());
+  if(!r.ok) throw new Error(cfg.label+' meta '+r.status);
+  const j=await r.json();
+  gridMetaCache[modelKey]=j;
+  return j;
+}
+function latLonNaarGrid(meta,lat,lon){
+  const g=meta.grid;
+  const iLat=Math.round((lat-g.lat_min)/(g.lat_max-g.lat_min)*(g.n_lat-1));
+  const iLon=Math.round((lon-g.lon_min)/(g.lon_max-g.lon_min)*(g.n_lon-1));
+  if(iLat<0||iLat>=g.n_lat||iLon<0||iLon>=g.n_lon) return null;
+  return {iLat,iLon,gi:iLat*g.n_lon+iLon};
+}
+function offsetLatLon(lat,lon,distanceKm,bearingDeg){
+  const br=bearingDeg*Math.PI/180;
+  const dLat=(distanceKm*Math.cos(br))/111.32;
+  const dLon=(distanceKm*Math.sin(br))/(111.32*Math.cos(lat*Math.PI/180));
+  return {lat:lat+dLat,lon:lon+dLon};
+}
+function sampleGridPointsForLocation(meta,lat,lon){
+  const punten=[{lat,lon}];
+  for(let i=0;i<SAMPLE_EXTRA_POINTS;i++) punten.push(offsetLatLon(lat,lon,SAMPLE_RADIUS_KM,i*360/SAMPLE_EXTRA_POINTS));
+  const uniek=[], gezien=new Set();
+  for(const p of punten){
+    const grid=latLonNaarGrid(meta,p.lat,p.lon);
+    if(grid&&!gezien.has(grid.gi)){ gezien.add(grid.gi); uniek.push(grid); }
+  }
+  return uniek;
+}
+async function puntReeksGrid(modelKey,paramKey,gis,nSteps,limit=18){
+  const meta=await laadGridMeta(modelKey);
+  const info=meta.parameters[paramKey];
+  if(!info) return null;
+  const gridIndices=Array.isArray(gis)?gis:[gis];
+  const nPts=meta.grid.n_lat*meta.grid.n_lon;
+  const nComp=info.components;
+  const url=HARM_BASE+info.file;
+  const HEADER=16;
+  const minGi=Math.min(...gridIndices), maxGi=Math.max(...gridIndices);
+  const taken=[];
+  for(let s=0;s<nSteps;s++) for(let c=0;c<nComp;c++) taken.push({s,c});
+  const uit=Array.from({length:nSteps},()=>new Array(nComp).fill(null));
+  let next=0;
+  async function worker(){
+    while(next<taken.length){
+      const {s,c}=taken[next++];
+      const base=HEADER+((s*nComp+c)*nPts)*4;
+      const r=await fetch(url,{headers:{Range:`bytes=${base+minGi*4}-${base+maxGi*4+3}`}});
+      if(!r.ok&&r.status!==206) continue;
+      const dv=new DataView(await r.arrayBuffer());
+      let som=0,n=0;
+      for(const gi of gridIndices){
+        const v=dv.getFloat32((gi-minGi)*4,true);
+        if(Number.isFinite(v)){ som+=v; n++; }
+      }
+      uit[s][c]=n?som/n:null;
+    }
+  }
+  await Promise.all(Array(Math.min(limit,taken.length)).fill(0).map(worker));
+  return uit;
+}
+function meanLinear(vals){
+  let s=0,n=0;
+  vals.forEach(v=>{ if(v!=null&&Number.isFinite(+v)){ s+=+v; n++; } });
+  return n?s/n:null;
+}
+function meanDirection(vals){
+  let sx=0,sy=0,n=0;
+  vals.forEach(d=>{
+    if(d==null||!Number.isFinite(+d)) return;
+    const r=+d*Math.PI/180; sx+=Math.sin(r); sy+=Math.cos(r); n++;
+  });
+  if(!n) return null;
+  return (Math.atan2(sx,sy)*180/Math.PI+360)%360;
+}
+function mergeDataObjects(datas,baseTimes){
+  const out={temp:[],wind:[],gust:[],dir:[],druk:[],vocht:[],bewolking:[],neerslag:[],bw_l:[],bw_m:[],bw_h:[]};
+  for(let i=0;i<baseTimes.length;i++){
+    out.temp[i]=meanLinear(datas.map(d=>d?.temp[i]));
+    out.wind[i]=meanLinear(datas.map(d=>d?.wind[i]));
+    out.gust[i]=meanLinear(datas.map(d=>d?.gust[i]));
+    out.dir[i]=meanDirection(datas.map(d=>d?.dir[i]));
+    out.druk[i]=meanLinear(datas.map(d=>d?.druk[i]));
+    out.vocht[i]=meanLinear(datas.map(d=>d?.vocht[i]));
+    out.neerslag[i]=meanLinear(datas.map(d=>d?.neerslag[i]));
+    out.bw_l[i]=meanLinear(datas.map(d=>d?.bw_l[i]));
+    out.bw_m[i]=meanLinear(datas.map(d=>d?.bw_m[i]));
+    out.bw_h[i]=meanLinear(datas.map(d=>d?.bw_h[i]));
+    const hoog=Math.max(0,(out.bw_h[i]??0)-40);
+    out.bewolking[i]=Math.max(hoog,out.bw_m[i]??0,out.bw_l[i]??0)/100;
+  }
+  return out;
+}
+function seriesToData(meta,series,indices=null){
+  const steps=indices||meta.tijden.map((_,i)=>i);
+  const out={temp:[],wind:[],gust:[],dir:[],druk:[],vocht:[],bewolking:[],neerslag:[],bw_l:[],bw_m:[],bw_h:[]};
+  steps.forEach((idx,k)=>{
+    const t=series.temp?.[idx]?.[0];
+    const w=series.wind?.[idx];
+    const g=series.windstoten?.[idx];
+    const rr=series.neerslag?.[idx]?.[0];
+    const b=series.bewolking?.[idx]||[];
+    const rv=series.rv?.[idx]?.[0];
+    let dr=series.druk?.[idx]?.[0];
+    if(dr!=null&&Number.isFinite(+dr)&&dr>2000) dr=dr/100;
+    if(dr!=null&&Number.isFinite(+dr)&&(dr<800||dr>1100)) dr=null;
+    out.temp[k]=t;
+    if(w&&Number.isFinite(w[0])&&Number.isFinite(w[1])){
+      out.wind[k]=Math.round(Math.sqrt(w[0]*w[0]+w[1]*w[1])*3.6);
+      out.dir[k]=(Math.atan2(-w[0],-w[1])*180/Math.PI+360)%360;
+    }else{ out.wind[k]=out.dir[k]=null; }
+    out.gust[k]=(g&&Number.isFinite(g[0])&&Number.isFinite(g[1]))?Math.round(Math.sqrt(g[0]*g[0]+g[1]*g[1])*3.6):null;
+    out.neerslag[k]=rr;
+    out.bw_h[k]=b[0]==null?null:Math.round(b[0]*100);
+    out.bw_m[k]=b[1]==null?null:Math.round(b[1]*100);
+    out.bw_l[k]=b[2]==null?null:Math.round(b[2]*100);
+    const hoog=Math.max(0,(out.bw_h[k]??0)-40);
+    out.bewolking[k]=Math.max(hoog,out.bw_m[k]??0,out.bw_l[k]??0)/100;
+    out.vocht[k]=rv==null?null:Math.round(rv);
+    out.druk[k]=dr==null?null:Math.round(dr);
+  });
+  return out;
+}
+async function gridDataForModel(modelKey,lat,lon,baseTimes=null){
+  const meta=await laadGridMeta(modelKey);
+  const grids=sampleGridPointsForLocation(meta,lat,lon);
+  if(!grids.length) throw new Error('buiten modelgebied');
+  const gis=grids.map(g=>g.gi);
+  const timeIndex=new Map(meta.tijden.map((t,i)=>[new Date(t).getTime(),i]));
+  const indices=baseTimes ? baseTimes.map(t=>timeIndex.get(new Date(t).getTime())) : null;
+  const validIndices=indices ? indices.filter(i=>Number.isInteger(i)) : meta.tijden.map((_,i)=>i);
+  if(!validIndices.length) return null;
+  const nSteps=indices ? Math.max(...validIndices)+1 : meta.tijden.length;
+  const params=['temp','wind','windstoten','neerslag','bewolking','rv','druk'];
+  const series={};
+  await Promise.all(params.map(async p=>{ series[p]=await puntReeksGrid(modelKey,p,gis,nSteps); }));
+  const data=seriesToData(meta,series,indices||null);
+  return {meta,data,times:(baseTimes||meta.tijden),points:grids.length};
+}
+function assignData(data,times,label,runText){
+  N=times.length; N1=N-1; startUTC=new Date(times[0]);
+  Object.keys(DATA).forEach(k=>{ DATA[k]=(data[k]||[]).slice(0,N); });
+  currentModelLabel=label;
+  const runEl=document.getElementById('hdr-run');
+  if(runEl) runEl.textContent=runText;
+  renderChart();
+}
 
 async function fetchData(){
   if(model==='eps') return fetchHarmoneps(actief.lat,actief.lon);
-  if(model==='icond2') return fetchIconD2(actief.lat,actief.lon);
-  return fetchHarmonie(actief.lat,actief.lon);
+  if(model==='icond2') return fetchGridSingle('icond2ruc');
+  if(model==='mix') return fetchGridMix();
+  return fetchGridSingle('harmonie');
+}
+
+async function fetchGridSingle(modelKey){
+  const cfg=GRID_MODELS[modelKey];
+  const runEl=document.getElementById('hdr-run');
+  if(runEl) runEl.textContent=cfg.label+' · 7-punts data laden…';
+  try{
+    const res=await gridDataForModel(modelKey,actief.lat,actief.lon);
+    assignData(res.data,res.times,cfg.label,`${cfg.label} · ${res.points} punten binnen 10 km · run ${res.meta.run}`);
+  }catch(e){
+    if(runEl) runEl.textContent=cfg.label+'-fout: '+e.message;
+    console.error('fetchGridSingle',e);
+  }
+}
+
+async function fetchGridMix(){
+  const runEl=document.getElementById('hdr-run');
+  if(runEl) runEl.textContent='Mix · HARMONIE + ICON-D2 RUC laden…';
+  try{
+    const harm=await gridDataForModel('harmonie',actief.lat,actief.lon);
+    const icon=await gridDataForModel('icond2ruc',actief.lat,actief.lon,harm.times);
+    const mixed=mergeDataObjects([harm.data,icon?.data],harm.times);
+    assignData(mixed,harm.times,GRID_MODELS.mix.label,`Mix · HARM ${harm.points}p + ICON-D2-RUC ${icon?.points||0}p · run ${harm.meta.run}`);
+  }catch(e){
+    if(runEl) runEl.textContent='Mix-fout: '+e.message;
+    console.error('fetchGridMix',e);
+  }
 }
 
 async function fetchIconD2(lat,lon){
@@ -812,6 +1028,7 @@ function meanCirc(matrix){
 async function fetchHarmoneps(lat,lon){
   const runEl=document.getElementById('hdr-run');
   if(runEl) runEl.textContent='HARMONIE-EPS · data laden…';
+  currentModelLabel='HARMONIE-EPS';
   try{
     const idx=await loadEpsIndex();
     const st=nearestStation(idx,lat,lon);
@@ -856,7 +1073,7 @@ function renderActief(){
 function setModel(nieuw){
   if(model===nieuw) return;
   model=nieuw;
-  ['det','eps','icond2'].forEach(m=>{
+  ['det','eps','icond2','mix'].forEach(m=>{
     const b=document.getElementById('btn-mod-'+m);
     if(b) b.classList.toggle('actief', m===nieuw);
   });
@@ -865,6 +1082,7 @@ function setModel(nieuw){
 document.getElementById('btn-mod-det').addEventListener('click',()=>setModel('det'));
 document.getElementById('btn-mod-eps').addEventListener('click',()=>setModel('eps'));
 document.getElementById('btn-mod-icond2').addEventListener('click',()=>setModel('icond2'));
+document.getElementById('btn-mod-mix').addEventListener('click',()=>setModel('mix'));
 function loadFavs(){try{return JSON.parse(localStorage.getItem(FAV_KEY)||'[]')}catch(e){return[]}}
 function saveFavs(f){localStorage.setItem(FAV_KEY,JSON.stringify(f))}
 function renderFavs(){
@@ -962,7 +1180,8 @@ document.getElementById('btn-dl').addEventListener('click',async()=>{
     c.toBlob(pngBlob=>{
       const pngUrl=URL.createObjectURL(pngBlob);
       const a=document.createElement('a');
-      a.href=pngUrl;a.download=`harmonie_meteogram_+${lo}h_+${hi}h.png`;
+      const modelSlug=(currentModelLabel||'meteogram').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+      a.href=pngUrl;a.download=`${modelSlug}_meteogram_+${lo}h_+${hi}h.png`;
       document.body.appendChild(a);a.click();a.remove();
       URL.revokeObjectURL(pngUrl);URL.revokeObjectURL(url);
     },'image/png');
