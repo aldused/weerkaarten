@@ -526,7 +526,7 @@ body {
   <div style="background:white; border-radius:10px; padding:22px 26px; max-width:440px; width:92%; box-shadow:0 4px 20px rgba(0,0,0,0.4); position:relative;">
     <button id="film-sluit" style="position:absolute; top:8px; right:12px; background:none; border:none; font-size:22px; cursor:pointer; color:#666;">&times;</button>
     <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:4px;">🎬 Maak filmpje</div>
-    <div style="font-size:11px; color:#64748b; margin-bottom:14px;">Exporteert de huidige kaart (paneel links) als video.</div>
+    <div style="font-size:11px; color:#64748b; margin-bottom:14px;">Exporteert de huidige kaart als video en onthoudt je laatste filmrange.</div>
     <div style="display:grid;grid-template-columns:70px 1fr;gap:10px 12px;align-items:center;font-size:13px;">
       <label for="film-start">Vanaf:</label><select id="film-start" style="padding:5px 8px;border:1px solid #c5d3e3;border-radius:5px;font-size:12px;"></select>
       <label for="film-end">Tot:</label><select id="film-end" style="padding:5px 8px;border:1px solid #c5d3e3;border-radius:5px;font-size:12px;"></select>
@@ -2523,6 +2523,7 @@ body {
   var filmStatus = document.getElementById("film-status");
   var filmFormat = document.getElementById("film-format");
   var filmRecording = false;
+  var FILM_SETTINGS_KEY = "weerlab_weerkaarten_film_settings_v1";
 
   function formatTijdOptie(idx) {
     var t = (meta && meta.tijden && meta.tijden[idx]) ? new Date(meta.tijden[idx]) : null;
@@ -2539,8 +2540,64 @@ body {
       var o1 = document.createElement("option"); o1.value = i; o1.textContent = formatTijdOptie(i); filmStart.appendChild(o1);
       var o2 = document.createElement("option"); o2.value = i; o2.textContent = formatTijdOptie(i); filmEnd.appendChild(o2);
     }
-    filmStart.value = cur;
-    filmEnd.value = Math.min(aantalUren - 1, cur + 24);
+    pasFilmSettingsToe(cur);
+  }
+
+  function leesFilmSettings() {
+    try {
+      return JSON.parse(localStorage.getItem(FILM_SETTINGS_KEY) || "{}") || {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function clampFilmIndex(value, fallback) {
+    var n = parseInt(value);
+    if (!Number.isFinite(n)) n = fallback;
+    if (!Number.isFinite(n)) n = 0;
+    return Math.max(0, Math.min(aantalUren - 1, n));
+  }
+
+  function pasFilmSettingsToe(cur) {
+    var saved = leesFilmSettings();
+    var startFallback = clampFilmIndex(cur, 0);
+    var start = clampFilmIndex(saved.start, startFallback);
+    var end = clampFilmIndex(saved.end, Math.min(aantalUren - 1, start + 24));
+    if (end < start) end = start;
+    filmStart.value = start;
+    filmEnd.value = end;
+
+    var fps = parseInt(saved.fps);
+    if (Number.isFinite(fps)) {
+      var minFps = parseInt(filmFps.min) || 2;
+      var maxFps = parseInt(filmFps.max) || 20;
+      filmFps.value = Math.max(minFps, Math.min(maxFps, fps));
+    }
+    if (saved.format && filmFormat.querySelector('option[value="' + saved.format + '"]')) {
+      filmFormat.value = saved.format;
+    }
+    filmFpsVal.textContent = filmFps.value + " fps";
+  }
+
+  function bewaarFilmSettings() {
+    try {
+      localStorage.setItem(FILM_SETTINGS_KEY, JSON.stringify({
+        start: parseInt(filmStart.value),
+        end: parseInt(filmEnd.value),
+        fps: parseInt(filmFps.value),
+        format: filmFormat.value
+      }));
+    } catch (err) {}
+  }
+
+  function syncFilmRange(bron) {
+    var s0 = parseInt(filmStart.value);
+    var s1 = parseInt(filmEnd.value);
+    if (Number.isFinite(s0) && Number.isFinite(s1) && s1 < s0) {
+      if (bron === "start") filmEnd.value = s0;
+      else filmStart.value = s1;
+    }
+    bewaarFilmSettings();
   }
 
   document.getElementById("btn-film").addEventListener("click", function() {
@@ -2554,7 +2611,13 @@ body {
   document.getElementById("film-sluit").addEventListener("click", sluitFilm);
   document.getElementById("film-annuleer").addEventListener("click", sluitFilm);
   filmOverlay.addEventListener("click", function(e) { if (e.target === filmOverlay) sluitFilm(); });
-  filmFps.addEventListener("input", function() { filmFpsVal.textContent = filmFps.value + " fps"; });
+  filmStart.addEventListener("change", function() { syncFilmRange("start"); });
+  filmEnd.addEventListener("change", function() { syncFilmRange("end"); });
+  filmFps.addEventListener("input", function() {
+    filmFpsVal.textContent = filmFps.value + " fps";
+    bewaarFilmSettings();
+  });
+  filmFormat.addEventListener("change", bewaarFilmSettings);
 
   function pickMimeType(voorkeur) {
     var kandidaten = (voorkeur === "mp4")
@@ -2735,6 +2798,7 @@ body {
     if (isNaN(s0) || isNaN(s1) || s1 < s0) { filmStatus.textContent = "Ongeldige tijdrange."; return; }
     var fps = parseInt(filmFps.value) || 6;
     var voorkeur = filmFormat.value;
+    bewaarFilmSettings();
 
     var srcCanvas = document.getElementById("panel-cvs-0");
     if (!srcCanvas) { filmStatus.textContent = "Geen kaart zichtbaar."; return; }
