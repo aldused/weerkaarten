@@ -41,11 +41,15 @@ h2.kop:focus{background:#fffbe8}
 .tekstvak:focus{background:#fffbe8;border-color:#1f497d;border-style:solid}
 .tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
 
-/* Verberg-knop per sectie */
+/* Verberg-knop per sectie + sectie-toggle bar bovenaan */
 .sectie{position:relative;margin:18px 0}
 .sectie .toggle-knop{position:absolute;right:0;top:0;font-family:inherit;font-size:.72rem;padding:3px 8px;background:#eee;border:1px solid #ccc;border-radius:3px;cursor:pointer;color:#555}
 .sectie .toggle-knop:hover{background:#e0e0e0}
 .sectie.verborgen{display:none}
+.sectie-toggle{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:14px 0 0;padding:8px 12px;background:#f5f8ff;border:1px solid #d0deef;border-radius:4px;font-size:.85rem}
+.sectie-toggle .label{font-size:.78rem;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
+.sectie-toggle label{display:inline-flex;gap:5px;align-items:center;cursor:pointer;color:#1f497d;font-weight:600}
+.sectie-toggle input[type=checkbox]{cursor:pointer;width:16px;height:16px}
 
 /* Footer */
 .doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.62rem;color:#888;text-align:center;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -106,33 +110,33 @@ body{--kop-scale:1}
 
   <div class="doc-opgesteld">Opgesteld: <span id="hdr-datum">–</span></div>
 
+  <!-- Sectie-toggles (alleen op scherm, niet in PDF) -->
+  <div class="sectie-toggle no-pdf">
+    <span class="label">Toon secties:</span>
+    <label><input type="checkbox" data-sec="sec-vandaag" checked> Vandaag</label>
+    <label><input type="checkbox" data-sec="sec-avond" checked> Vanavond + nacht</label>
+    <label><input type="checkbox" data-sec="sec-morgen" checked> Morgen</label>
+    <label><input type="checkbox" data-sec="sec-komend" checked> Komende dagen</label>
+  </div>
+
   <div class="sectie" id="sec-vandaag">
-    <button class="toggle-knop" onclick="verbergSectie('sec-vandaag')" title="Verberg deze sectie (avondbericht)">✕ verbergen</button>
     <h2 class="kop"><span data-prefix="VANDAAG">VANDAAG</span>: <span class="dagnaam" data-offset="0">–</span></h2>
     <div class="tekstvak" contenteditable="true" data-save="vandaag" data-placeholder="Beschrijf het weer voor vandaag...">De dag begint landinwaarts met bewolking maar al snel wordt het overal zonnig. Het blijft droog en het wordt 16 graden. Aan zee wordt het 14 graden.</div>
   </div>
 
   <div class="sectie" id="sec-avond">
-    <button class="toggle-knop" onclick="verbergSectie('sec-avond')" title="Verberg deze sectie">✕ verbergen</button>
     <h2 class="kop">VANAVOND EN VANNACHT:</h2>
     <div class="tekstvak" contenteditable="true" data-save="avond" data-placeholder="Beschrijf de avond en de nacht...">Vanavond eerst nog zon, vannacht brede opklaringen en droog. Het koelt landinwaarts af naar 3 graden.</div>
   </div>
 
   <div class="sectie" id="sec-morgen">
-    <button class="toggle-knop" onclick="verbergSectie('sec-morgen')" title="Verberg deze sectie">✕ verbergen</button>
     <h2 class="kop"><span data-prefix="MORGEN">MORGEN</span>: <span class="dagnaam" data-offset="1">–</span></h2>
     <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf het weer voor morgen...">Volop zon en droog. Middagtemperatuur 15 of 16 graden.</div>
   </div>
 
   <div class="sectie" id="sec-komend">
-    <button class="toggle-knop" onclick="verbergSectie('sec-komend')" title="Verberg deze sectie">✕ verbergen</button>
     <h2 class="kop">KOMENDE DAGEN:</h2>
     <div class="tekstvak" contenteditable="true" data-save="komend" data-placeholder="Beschrijf de komende dagen...">Veel bewolking met af en toe zon en droog. In de avond kan er wel een bui voorkomen. De maximumtemperatuur bedraagt 16 graden.</div>
-  </div>
-
-  <!-- Knop om verborgen secties te tonen -->
-  <div id="verborgen-bar" style="display:none;margin:14px 0 0;font-size:.78rem;color:#888">
-    Verborgen secties: <span id="verborgen-lijst"></span>
   </div>
 
 </div>
@@ -180,20 +184,31 @@ function updateDagnamen(){
   });
 }
 
-function verbergSectie(id){
-  document.getElementById(id).classList.add('verborgen');
-  saveDraft();
-  toonVerborgenBar();
+function pasSectieToe(id, zichtbaar){
+  const s=document.getElementById(id);
+  if(!s) return;
+  s.classList.toggle('verborgen', !zichtbaar);
 }
-function toonSectieWeer(id){
-  document.getElementById(id).classList.remove('verborgen');
-  saveDraft();
-  toonVerborgenBar();
+function syncCheckboxesNaarSecties(){
+  document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
+    pasSectieToe(cb.getAttribute('data-sec'), cb.checked);
+  });
 }
+function syncSectiesNaarCheckboxes(){
+  document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
+    const s=document.getElementById(cb.getAttribute('data-sec'));
+    if(s) cb.checked = !s.classList.contains('verborgen');
+  });
+}
+// Behouden voor compat (oude knoppen) — niet meer gebruikt
+function verbergSectie(id){ pasSectieToe(id,false); syncSectiesNaarCheckboxes(); saveDraft(); }
+function toonSectieWeer(id){ pasSectieToe(id,true); syncSectiesNaarCheckboxes(); saveDraft(); }
 function toonVerborgenBar(){
-  const verborgen=Array.from(document.querySelectorAll('.sectie.verborgen'));
+  // legacy stub — verborgen-bar is verwijderd
   const bar=document.getElementById('verborgen-bar');
   const lijst=document.getElementById('verborgen-lijst');
+  if(!bar) return;
+  const verborgen=Array.from(document.querySelectorAll('.sectie.verborgen'));
   if(verborgen.length===0){ bar.style.display='none'; return; }
   bar.style.display='';
   lijst.innerHTML=verborgen.map(s=>{
@@ -226,6 +241,7 @@ function saveDraft(){
 function leegForm(){
   // Reset secties zichtbaar; teksten leegmaken zodat placeholders verschijnen
   document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+  document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{cb.checked=true});
   document.getElementById('doc-tijd').value='';
   toonVerborgenBar();
 }
@@ -243,6 +259,7 @@ function restoreDraft(){
     if(Array.isArray(d.verborgen)){
       d.verborgen.forEach(id=>document.getElementById(id)?.classList.add('verborgen'));
     }
+    syncSectiesNaarCheckboxes();
     document.getElementById('doc-tijd').value = d.tijd || '';
     updateOpgesteldKop();
     toonVerborgenBar();
@@ -264,6 +281,12 @@ function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600)
 
 document.addEventListener('input', e=>{
   if(e.target.closest('[data-save]')) debSave();
+});
+document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
+  cb.addEventListener('change', ()=>{
+    pasSectieToe(cb.getAttribute('data-sec'), cb.checked);
+    saveDraft();
+  });
 });
 document.addEventListener('blur', e=>{
   if(e.target.closest('[data-save]')) saveDraft();
