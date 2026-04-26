@@ -1248,11 +1248,58 @@ document.getElementById('btn-dl').addEventListener('click',async()=>{
   const url=URL.createObjectURL(blob);
   const img=new Image();
   img.onload=()=>{
+    // Legenda-items: [label, type, kleur(en)]
+    const legItems=[
+      {l:'Windsnelheid (Beaufort)',  t:'hgrad', cc:['#dbeafe','#30d68d','#f0b04a','#e85b3a']},
+      {l:'Temperatuur °C',           t:'dot',   cc:['#fbbf24']},
+      {l:'Luchtdruk hPa',           t:'bar',   cc:['#1e3a8a']},
+      {l:'Rel. vochtigheid %',      t:'bar',   cc:['#15803d']},
+      {l:'Bewolking',               t:'bar',   cc:['#94a3b8']},
+      {l:'Neerslag mm/u',           t:'bar',   cc:['#3b82f6']},
+      {l:'Zonneschijn',             t:'vgrad', cc:['#fde047','#fbbf24']},
+    ];
+    const legH=44;
     const c=document.createElement('canvas');
-    c.width=cw*2;c.height=H*2;
+    c.width=cw*2;c.height=(H+legH)*2;
     const ctx=c.getContext('2d');ctx.scale(2,2);
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,cw,H);
+    // Chart
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,cw,H+legH);
     ctx.drawImage(img,0,0,cw,H);
+    // Legenda-balk
+    ctx.fillStyle='#f8fafc';ctx.fillRect(0,H,cw,legH);
+    ctx.strokeStyle='#dfe6ef';ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(0,H);ctx.lineTo(cw,H);ctx.stroke();
+    const swW=14,swH=3,swR=1,py=H+legH/2;
+    ctx.font='600 9.5px Arial';ctx.textBaseline='middle';
+    let cx=14;
+    legItems.forEach(item=>{
+      // Swatch tekenen
+      if(item.t==='hgrad'){
+        const g=ctx.createLinearGradient(cx,0,cx+swW,0);
+        item.cc.forEach((c,i)=>g.addColorStop(i/(item.cc.length-1),c));
+        ctx.fillStyle=g;
+      } else if(item.t==='vgrad'){
+        const g=ctx.createLinearGradient(0,py-swH/2,0,py+swH/2);
+        g.addColorStop(0,item.cc[0]);g.addColorStop(1,item.cc[1]);
+        ctx.fillStyle=g;
+      } else {
+        ctx.fillStyle=item.cc[0];
+      }
+      if(item.t==='dot'){
+        ctx.beginPath();ctx.arc(cx+swW/2,py,swW/2,0,Math.PI*2);ctx.fill();
+      } else {
+        const r=swR;const x0=cx,y0=py-swH/2,w=swW,h=swH;
+        ctx.beginPath();ctx.moveTo(x0+r,y0);ctx.arcTo(x0+w,y0,x0+w,y0+h,r);
+        ctx.arcTo(x0+w,y0+h,x0,y0+h,r);ctx.arcTo(x0,y0+h,x0,y0,r);
+        ctx.arcTo(x0,y0,x0+w,y0,r);ctx.closePath();ctx.fill();
+      }
+      cx+=swW+4;
+      // Label
+      ctx.fillStyle='#475569';
+      const tw=ctx.measureText(item.l).width;
+      ctx.fillText(item.l,cx,py);
+      cx+=tw+16;
+    });
     c.toBlob(pngBlob=>{
       const pngUrl=URL.createObjectURL(pngBlob);
       const a=document.createElement('a');
