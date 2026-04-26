@@ -103,7 +103,8 @@ body{--kop-scale:1}
   <label>Model:</label>
   <select id="model-sel">
     <option value="harmonie" selected>HARMONIE 2×2 km</option>
-    <option value="icond2">ICON-D2 RUC (1 dag)</option>
+    <option value="icond2">ICON-D2 regulier</option>
+    <option value="icond2ruc">ICON-D2 RUC (uurlijks)</option>
   </select>
   <label style="margin-left:8px">Startuur:</label>
   <select id="startuur-sel"></select>
@@ -145,7 +146,7 @@ body{--kop-scale:1}
 
   <div class="plaats-blok no-pdf">
     <span class="label">Plaats</span>
-    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Typ een plaats en druk Enter...">
+    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Plaats of coördinaten, bv. 52.10, 5.18">
     <button id="zoek-btn" style="background:#c00000;color:white;border:none;border-radius:3px;padding:5px 12px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🔍 Zoek</button>
   </div>
   <div id="geo-status" class="no-pdf" style="font-size:.72rem;color:#666;margin:4px 0 0 4px;min-height:14px"></div>
@@ -209,8 +210,11 @@ function updateStatusKleur(sel){
 const HARM_BASE='https://harmonie-data.weerlab.nl/';
 const MODELS={
   harmonie: {meta:'harmonie_canvas_meta.json', label:'HARMONIE 2×2 km'},
-  icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 RUC'}
+  icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 regulier'},
+  icond2ruc:{meta:'icond2ruc_canvas_meta.json',label:'ICON-D2 RUC'}
 };
+const SAMPLE_RADIUS_KM=10;
+const SAMPLE_EXTRA_POINTS=6;
 let huidigModel='harmonie';
 let metaCache={};       // {model: meta}
 let harmonieMeta=null;  // alias voor huidig model
@@ -232,7 +236,42 @@ function latLonNaarGrid(meta,lat,lon){
   if(iLat<0||iLat>=g.n_lat||iLon<0||iLon>=g.n_lon) return null;
   return {iLat,iLon,gi:iLat*g.n_lon+iLon};
 }
+function parseCoordinateQuery(q){
+  const nums=q.trim().replace(/[()]/g,'').match(/[-+]?\d+(?:[.,]\d+)?/g);
+  if(!nums || nums.length<2) return null;
+  const lat=parseFloat(nums[0].replace(',','.'));
+  const lon=parseFloat(nums[1].replace(',','.'));
+  if(!Number.isFinite(lat)||!Number.isFinite(lon)) return null;
+  if(lat<-90||lat>90||lon<-180||lon>180) return null;
+  return {lat,lon,naam:`${lat.toFixed(3)}, ${lon.toFixed(3)}`};
+}
+function offsetLatLon(lat,lon,distanceKm,bearingDeg){
+  const br=bearingDeg*Math.PI/180;
+  const dLat=(distanceKm*Math.cos(br))/111.32;
+  const dLon=(distanceKm*Math.sin(br))/(111.32*Math.cos(lat*Math.PI/180));
+  return {lat:lat+dLat, lon:lon+dLon};
+}
+function sampleGridPointsForLocation(meta,lat,lon){
+  const punten=[{lat,lon}];
+  for(let i=0;i<SAMPLE_EXTRA_POINTS;i++) punten.push(offsetLatLon(lat,lon,SAMPLE_RADIUS_KM,i*360/SAMPLE_EXTRA_POINTS));
+  const uniek=[];
+  const gezien=new Set();
+  for(const p of punten){
+    const grid=latLonNaarGrid(meta,p.lat,p.lon);
+    if(grid && !gezien.has(grid.gi)){
+      gezien.add(grid.gi);
+      uniek.push(grid);
+    }
+  }
+  return uniek;
+}
+function beschrijfSample(pt){
+  const n=(pt.gis&&pt.gis.length)||1;
+  return n>1 ? `${n} roosterpunten gemiddeld binnen ${SAMPLE_RADIUS_KM} km` : '1 roosterpunt';
+}
 async function geocodePlaats(q){
+  const coords=parseCoordinateQuery(q);
+  if(coords) return coords;
   const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de&q='+encodeURIComponent(q);
   const r=await fetch(url); if(!r.ok) throw new Error('geocode faalde');
   const j=await r.json(); if(!j.length) return null;
@@ -244,10 +283,11 @@ async function fetchFloat(url,offset){
   const buf=await r.arrayBuffer();
   return new DataView(buf).getFloat32(0,true);
 }
-async function puntReeks(paramKey, gi, nSteps){
+async function puntReeks(paramKey, gis, nSteps){
   const meta=await laadMeta();
   const info=meta.parameters[paramKey];
   if(!info) throw new Error('param onbekend: '+paramKey);
+  const gridIndices=Array.isArray(gis)?gis:[gis];
   const nPts=meta.grid.n_lat*meta.grid.n_lon;
   const nComp=info.components;
   const url=HARM_BASE+info.file;
@@ -255,13 +295,25 @@ async function puntReeks(paramKey, gi, nSteps){
   const offsets=[]; const idx=[];
   for(let s=0;s<nSteps;s++){
     for(let c=0;c<nComp;c++){
-      offsets.push(HEADER + ((s*nComp+c)*nPts + gi)*4);
-      idx.push([s,c]);
+      gridIndices.forEach((gi,p)=>{
+        offsets.push(HEADER + ((s*nComp+c)*nPts + gi)*4);
+        idx.push([s,c,p]);
+      });
     }
   }
   const vals=await Promise.all(offsets.map(o=>fetchFloat(url,o)));
   const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
-  for(let k=0;k<vals.length;k++){ uit[idx[k][0]][idx[k][1]]=vals[k]; }
+  for(let s=0;s<nSteps;s++){
+    for(let c=0;c<nComp;c++){
+      let som=0, n=0;
+      for(let k=0;k<vals.length;k++){
+        if(idx[k][0]!==s||idx[k][1]!==c) continue;
+        const v=vals[k];
+        if(Number.isFinite(v)){ som+=v; n++; }
+      }
+      uit[s][c]=n ? som/n : null;
+    }
+  }
   return uit;
 }
 function vulStartuurSelect(tijden,nuSel){
@@ -362,7 +414,7 @@ async function renderTabel(){
   const reeksen={};
   await Promise.all(params.map(async p=>{
     try{
-      const r=await puntReeks(p, pt.gi, startIdx+NSTEPS);
+      const r=await puntReeks(p, pt.gis||pt.gi, startIdx+NSTEPS);
       reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
     }catch(e){ reeksen[p]=null; }
   }));
@@ -416,7 +468,8 @@ async function renderTabel(){
     let cloudTot=null;
     if(reeksen.bewolking){
       const b=reeksen.bewolking[k];
-      cloudTot=Math.max(b[0]||0, b[1]||0, b[2]||0);
+      const hoog=Math.max(0,(b[0]||0)-0.4);
+      cloudTot=Math.max(hoog, b[1]||0, b[2]||0);
     }
     rij.zon.push(cloudTot==null?'–':Math.round((1-cloudTot)*100));
   }
@@ -462,10 +515,10 @@ async function zoekEnLaad(){
     const meta=await laadMeta();
     const res=await geocodePlaats(q);
     if(!res){ geoEl.textContent='Niet gevonden.'; return; }
-    const grid=latLonNaarGrid(meta,res.lat,res.lon);
-    if(!grid){ geoEl.textContent='Buiten HARMONIE-gebied.'; return; }
-    huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam,...grid};
-    geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')}  (${res.lat.toFixed(3)}, ${res.lon.toFixed(3)})`;
+    const grids=sampleGridPointsForLocation(meta,res.lat,res.lon);
+    if(!grids.length){ geoEl.textContent='Buiten modelgebied.'; return; }
+    huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam,...grids[0],gis:grids.map(g=>g.gi)};
+    geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')}  (${res.lat.toFixed(3)}, ${res.lon.toFixed(3)}) · ${beschrijfSample(huidigePunt)}`;
     await renderTabel();
   }catch(e){
     geoEl.textContent='Fout: '+e.message;
@@ -480,8 +533,8 @@ document.getElementById('model-sel').addEventListener('change', async e=>{
   if(huidigePunt){
     try{
       const meta=await laadMeta();
-      const grid=latLonNaarGrid(meta, huidigePunt.lat, huidigePunt.lon);
-      if(grid){ huidigePunt={...huidigePunt, ...grid}; }
+      const grids=sampleGridPointsForLocation(meta, huidigePunt.lat, huidigePunt.lon);
+      if(grids.length){ huidigePunt={...huidigePunt, ...grids[0], gis:grids.map(g=>g.gi)}; }
       vulStartuurSelect(meta.tijden);
       await renderTabel();
       document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
