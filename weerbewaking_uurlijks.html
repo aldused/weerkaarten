@@ -437,40 +437,33 @@ function vulStartuurSelect(tijden,nuSel){
   const sel=document.getElementById('startuur-sel');
   const nu=new Date();
   const tabelDag=gekozenTabelDatum();
-  let startIdx=-1;
+  // Default: eerste uur op de gekozen tabeldag dat >= nu is (of begin van die dag)
+  let defaultIdx=-1;
   for(let i=0;i<tijden.length;i++){
     const t=new Date(tijden[i]);
     if(!zelfdeDag(t,tabelDag)) continue;
     if(document.getElementById('tabel-dag-sel')?.value==='morgen' || t>=nu){
-      startIdx=i;
-      break;
+      defaultIdx=i; break;
     }
   }
-  if(startIdx<0) startIdx=0;
+  if(defaultIdx<0){
+    // Geen match op gekozen dag → eerste uur >= nu, of 0
+    for(let i=0;i<tijden.length;i++){ if(new Date(tijden[i])>=nu){ defaultIdx=i; break; } }
+    if(defaultIdx<0) defaultIdx=0;
+  }
   const behoud=sel.value;
   sel.innerHTML='';
-  const dagIdx=[];
-  for(let i=0;i<tijden.length;i++){
-    const t=new Date(tijden[i]);
-    if(zelfdeDag(t,tabelDag)) dagIdx.push(i);
-  }
-  const maxStart=tijden.length-12;
-  const opties=dagIdx.filter(i=>i<=maxStart && (document.getElementById('tabel-dag-sel')?.value==='morgen' || new Date(tijden[i])>=new Date(nu.getTime()-2*3600000)));
-  for(const i of opties){
+  // Toon ALLE uren van de hele run (HARMONIE 60u, ICON-D2 48u) — zo kun je ook morgen/overmorgen kiezen
+  const maxStart=Math.max(0, tijden.length-12);
+  for(let i=0;i<=maxStart;i++){
     const t=new Date(tijden[i]);
     const lbl=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
     const opt=document.createElement('option');
     opt.value=i; opt.textContent=lbl;
-    if(i===(nuSel!=null?parseInt(nuSel):startIdx)) opt.selected=true;
+    if(i===(nuSel!=null?parseInt(nuSel):defaultIdx)) opt.selected=true;
     sel.appendChild(opt);
   }
   if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
-  if(sel.options.length===0){
-    const opt=document.createElement('option');
-    opt.value=startIdx;
-    opt.textContent=document.getElementById('tabel-dag-sel')?.value==='morgen' ? 'Morgen niet beschikbaar' : 'Vandaag niet beschikbaar';
-    sel.appendChild(opt);
-  }
 }
 
 function msNaarKmh(ms){ return ms*3.6; }
