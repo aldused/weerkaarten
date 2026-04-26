@@ -312,11 +312,36 @@ function renderChart(){
   d.textContent='Wind (Beaufort) · Temperatuur · Bewolking'; svg.appendChild(d);
 }
 
-/* ─── Dag/nacht ─── */
+/* ─── Zonsop/-ondergang berekening ─── */
+function sunriseSetUTC(lat, lon, dayUTC){
+  const doy=Math.round((dayUTC-new Date(Date.UTC(dayUTC.getUTCFullYear(),0,1)))/86400000)+1;
+  const latR=lat*Math.PI/180;
+  const decl=-0.3927*Math.cos(2*Math.PI*(doy+10)/365);
+  const cosH=(Math.sin(-0.01454)-Math.sin(latR)*Math.sin(decl))/(Math.cos(latR)*Math.cos(decl));
+  if(cosH>=1) return null; // poolnacht
+  if(cosH<=-1) return {rise:0,set:24}; // middernachtzon
+  const H=Math.acos(cosH)*12/Math.PI;
+  const noon=12-lon/15;
+  return {rise:noon-H, set:noon+H};
+}
+
+/* ─── Dag/nacht + zonneschijn ─── */
 for(let i=0;i<N1;i++){
   const d=new Date(startUTC.getTime()+i*3600*1000);
-  const lt=(d.getUTCHours()+2)%24;
-  if(lt<6||lt>=21) svg.appendChild(el('rect',{x:x(i),y:T,width:colW+0.6,height:H-T-20,fill:'url(#nightGrad)'}));
+  const dayStart=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
+  const sun=sunriseSetUTC(actief.lat,actief.lon,dayStart);
+  const utcH=d.getUTCHours()+d.getUTCMinutes()/60;
+  const isNight=!sun||utcH<sun.rise||utcH>=sun.set;
+  if(isNight){
+    svg.appendChild(el('rect',{x:x(i),y:T,width:colW+0.6,height:H-T-20,fill:'url(#nightGrad)'}));
+  } else {
+    const bw=bewolking(i);
+    const zonFactor=(bw==null||!Number.isFinite(bw))?1:Math.max(0,1-bw);
+    if(zonFactor>0.01){
+      svg.appendChild(el('rect',{x:x(i),y:T,width:colW+0.6,height:H-T-20,
+        fill:'#fbbf24',opacity:(zonFactor*0.5).toFixed(3)}));
+    }
+  }
 }
 
 /* ─── Uur-grid + dag-labels (lokale tijd = UTC+2) ─── */
