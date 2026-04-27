@@ -99,6 +99,8 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   <button class="btn-auto" id="btn-auto">⏱ Auto</button>
   <button class="btn-download" id="btn-download">⬇ PNG</button>
   <button class="btn-download social" id="btn-download-social" title="Kleinere PNG voor social media">⬇ Social</button>
+  <button class="btn-download" id="btn-video" title="Timelapse downloaden">⬇ MP4</button>
+  <button class="btn-download social" id="btn-video-social" title="Kleinere timelapse voor social media">⬇ Social MP4</button>
 </div>
 
 <div class="tijdlijn">
@@ -220,6 +222,7 @@ function preloadFrame(tijdstap) {
 
   const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
   const img = new Image();
+  img.crossOrigin = 'anonymous';
   const promise = new Promise((resolve, reject) => {
     img.onload = () => resolve(img);
     img.onerror = reject;
@@ -268,6 +271,7 @@ function laadSatelliet(tijdstap) {
   info.textContent = 'Bron: EUMETSAT EUMETView / MTG · © Ed Aldus / Weerlab · laden…';
 
   const tmp = new Image();
+  tmp.crossOrigin = 'anonymous';
   tmp.onload = () => {
     img.src = url;
     frameCache.set(frameCacheKey(tijdstap), { img: tmp, promise: Promise.resolve(tmp), url });
@@ -336,11 +340,11 @@ document.getElementById('btn-refresh').addEventListener('click', () => {
   laadSatelliet(LAATSTE_TIJDSTAP);
 });
 
-function bestandsNaam(t, suffix = '') {
+function bestandsNaam(t, suffix = '', ext = 'png') {
   const stamp = t.toISOString().slice(0, 16).replace(/[-:T]/g, '');
   const product = actieveLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const gebied = actiefGebiedLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return `weerlab-mtg-${product}-${gebied}${suffix}-${stamp}.png`;
+  return `weerlab-mtg-${product}-${gebied}${suffix}-${stamp}.${ext}`;
 }
 
 function laadAfbeeldingVoorCanvas(url) {
@@ -431,6 +435,149 @@ async function downloadPng(social = false) {
 
 document.getElementById('btn-download').addEventListener('click', () => downloadPng(false));
 document.getElementById('btn-download-social').addEventListener('click', () => downloadPng(true));
+
+function kiesVideoMimeType() {
+  const opties = [
+    'video/mp4;codecs="avc1.42E01E"',
+    'video/mp4;codecs=h264',
+    'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+  return opties.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function downloadBlob(blob, naam) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = naam;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function wacht(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function timelapseFrames() {
+  const start = timelapseStartStap();
+  const frames = [];
+  for (let stap = start; stap <= LAATSTE_TIJDSTAP; stap++) {
+    await preloadFrame(stap);
+    const cached = frameCache.get(frameCacheKey(stap));
+    if (cached && cached.img.complete && cached.img.naturalWidth > 0) {
+      frames.push({ stap, img: cached.img, url: cached.url });
+    }
+  }
+  return frames;
+}
+
+function tekenVideoFrame(ctx, canvas, frame, schaal) {
+  const stappen = tijdstappen();
+  const t = stappen[frame.stap];
+  const w = canvas.width / schaal;
+  const h = canvas.height / schaal;
+
+  ctx.save();
+  ctx.scale(schaal, schaal);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+  ctx.filter = 'contrast(1.08) saturate(1.08) brightness(1.02)';
+  ctx.drawImage(frame.img, 0, 0, w, h);
+  ctx.filter = 'none';
+
+  ctx.fillStyle = 'rgba(0, 32, 91, 0.82)';
+  ctx.fillRect(18, 18, 430, 54);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px Arial, sans-serif';
+  ctx.fillText(`MTG · ${actieveLabel}`, 34, 42);
+  ctx.font = '17px Arial, sans-serif';
+  ctx.fillStyle = '#dcecff';
+  ctx.fillText(`${actiefGebiedLabel} · ${formatDatumTijd(t)}`, 34, 64);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(0, 20, 45, 0.72)';
+  ctx.fillRect(w - 306, h - 56, 288, 38);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px Arial, sans-serif';
+  ctx.fillText('© Ed Aldus / Weerlab', w - 30, h - 32);
+  ctx.restore();
+}
+
+async function downloadTimelapseVideo(social = false) {
+  const btn = document.getElementById(social ? 'btn-video-social' : 'btn-video');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  const oudeTekst = btn.textContent;
+  const mimeType = kiesVideoMimeType();
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream || !mimeType) {
+    alert('Deze browser ondersteunt geen video-export via MediaRecorder. Probeer Safari of een recente Chromium-browser.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Video maken…';
+  dot.style.display = 'block';
+  info.textContent = 'Laatste 10 beelden laden en video bouwen…';
+
+  try {
+    const frames = await timelapseFrames();
+    if (frames.length < 2) throw new Error('Te weinig frames beschikbaar voor video-export.');
+
+    const maxBreedte = social ? 1200 : activeW;
+    const schaal = Math.min(1, maxBreedte / activeW);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(activeW * schaal);
+    canvas.height = Math.round(activeH * schaal);
+    const ctx = canvas.getContext('2d');
+    const stream = canvas.captureStream(2);
+    const track = stream.getVideoTracks()[0];
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: social ? 2500000 : 7000000
+    });
+    const chunks = [];
+    recorder.ondataavailable = e => {
+      if (e.data && e.data.size) chunks.push(e.data);
+    };
+    const klaar = new Promise(resolve => {
+      recorder.onstop = resolve;
+    });
+
+    recorder.start();
+    for (const frame of frames) {
+      tekenVideoFrame(ctx, canvas, frame, schaal);
+      if (track && track.requestFrame) track.requestFrame();
+      await wacht(500);
+    }
+    tekenVideoFrame(ctx, canvas, frames[frames.length - 1], schaal);
+    if (track && track.requestFrame) track.requestFrame();
+    await wacht(700);
+    recorder.stop();
+    await klaar;
+    stream.getTracks().forEach(t => t.stop());
+
+    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const t = tijdstappen()[LAATSTE_TIJDSTAP];
+    const blob = new Blob(chunks, { type: mimeType });
+    downloadBlob(blob, bestandsNaam(t, social ? '-timelapse-social' : '-timelapse', ext));
+    info.textContent = `Timelapse-video klaar (${ext.toUpperCase()}) · Bron: EUMETSAT EUMETView / MTG`;
+  } catch (err) {
+    alert('Video-export is niet gelukt. Mogelijk blokkeert de browser canvas-export van de EUMETView-beelden.');
+    info.textContent = 'Video-export mislukt';
+  } finally {
+    dot.style.display = 'none';
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-video').addEventListener('click', () => downloadTimelapseVideo(false));
+document.getElementById('btn-video-social').addEventListener('click', () => downloadTimelapseVideo(true));
 
 function startAutoRefresh() {
   const btn = document.getElementById('btn-auto');
