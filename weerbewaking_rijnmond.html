@@ -304,6 +304,13 @@ function bouwVooruitzichtenRij(label, cellen){
   return `<tr><td class="rij-label">${label}</td>${cellen.map(c=>`<td contenteditable="true">${c}</td>`).join('')}</tr>`;
 }
 
+function formatKansPct(v){
+  if(v==null || !Number.isFinite(Number(v))) return '–';
+  const n = Number(v);
+  const pct = n >= 0 && n <= 1 ? n * 100 : n;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
 /* ── Waarschuwingen ── */
 function bouwWaarschuwingen(startDatum){
   const rijen = [
@@ -388,7 +395,7 @@ async function laadData(){
       tmax: zes.map(dt => Math.round(pick('TX',dt) ?? NaN)),
       tmin: zes.map(dt => {const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
       zon:  zes.map(dt => {const v=pick('SQ',dt); return v==null?'–':Math.round(v)}),
-      nsk:  zes.map(dt => {const v=pick('R101',dt); return v==null?'–':Math.round(v*10)}), // R101 kans 0-1 → %? check
+      nsk:  zes.map(dt => formatKansPct(pick('R101',dt))),
       nsm:  zes.map(dt => {const v=pick('RR',dt); return v==null?'–':v.toFixed(1).replace('.0','')}),
       bft:  zes.map(dt => naarBFT(pick('FF',dt))),
       ri:   zes.map(dt => pick('DD',dt))
@@ -469,6 +476,17 @@ document.addEventListener('input', e=>{
 document.addEventListener('blur', e=>{
   if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
 },true);
+
+/* ── Tab/focus in vooruitzicht-cel: bestaande waarde direct overschrijven ── */
+document.addEventListener('focus', e=>{
+  const td = e.target;
+  if(!td.matches || !td.matches('#vooruit-tabel td[contenteditable="true"]')) return;
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(td);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}, true);
 
 document.getElementById('doc-datum').value = vandaagISO();
 document.getElementById('doc-datum').addEventListener('change', restoreDraft);
