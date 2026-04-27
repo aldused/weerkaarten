@@ -341,7 +341,7 @@ function bouwUurTabel(tblEl, daglabel, uren, rijen, plaatsnaam=''){
     : '';
   const thHdr=`<tr><th class="daglabel" colspan="${uren.length+1}">${daglabel}${plaatsHtml}</th></tr>
                <tr><th style="width:22%"></th>${uren.map(u=>`<th>${u}</th>`).join('')}</tr>`;
-  const body=rijen.map(r=>`<tr><td class="rij-label">${r.label}</td>${r.cellen.map(c=>`<td contenteditable="true">${c}</td>`).join('')}</tr>`).join('');
+  const body=rijen.map(r=>`<tr><td class="rij-label">${r.label}</td>${r.cellen.map(c=>`<td contenteditable="true"${r.cls?' class="'+r.cls+'"':''}>${c}</td>`).join('')}</tr>`).join('');
   tblEl.innerHTML=`<thead>${thHdr}</thead><tbody>${body}</tbody>`;
 }
 
@@ -349,6 +349,12 @@ function windCel(deg){
   const letter=naarRichtingKort(deg);
   const rot=deg!=null?deg:0;
   return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+}
+const RICHTING_DEG={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function parseRichting(txt){
+  const m=(txt||'').toUpperCase().replace(/[^NOZW]/g,'').match(/^(NNO|NNW|NO|NW|N|ONO|OZO|O|ZZO|ZZW|ZO|ZW|Z|WNW|WZW|W)$/);
+  if(!m) return null;
+  return RICHTING_DEG[m[1]];
 }
 
 /* ── Model-data (HARMONIE / ICON-D2) ── */
@@ -676,7 +682,7 @@ async function renderTabellen(startIdx){
 
   const rijDef=(r)=>[
     {label:'Temperatuur (°C)', cellen:r.temp},
-    {label:'Wind',             cellen:r.wind},
+    {label:'Wind',             cellen:r.wind, cls:'wind-cel'},
     {label:'Windkracht (BFT)', cellen:r.bft},
     {label:'Max. windstoot (km/u)', cellen:r.stoot},
     {label:'Kans op regen (%)',cellen:r.kansR},
@@ -922,6 +928,11 @@ document.addEventListener('input', e=>{
 document.addEventListener('blur', e=>{
   const inSave=e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='doc-naam';
   const inTabel=e.target.closest('#uur-tabel-1, #uur-tabel-2');
+  // Wind-cel: parse richting en herrender pijl
+  if(e.target.matches && e.target.matches('td.wind-cel')){
+    const deg=parseRichting(e.target.textContent);
+    if(deg!=null) e.target.innerHTML=windCel(deg);
+  }
   if(inSave || inTabel) saveDraft();
 },true);
 
