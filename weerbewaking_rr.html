@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Weerbewaking W.M. — Weersverwachting Rijnmond</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
   if (sessionStorage.getItem('wb_unlocked') !== '1') {
     window.location.replace('weerbewaking.html');
@@ -215,13 +215,100 @@ function toonVerborgenBar(){
 }
 
 /* ── PDF ── */
-function exporteerPDF(){
-  const doc=document.getElementById('doc').cloneNode(true);
-  doc.querySelectorAll('.no-pdf').forEach(e=>e.remove());
-  doc.querySelectorAll('button.toggle-knop').forEach(b=>b.remove());
-  const verborgenBar=doc.querySelector('#verborgen-bar'); if(verborgenBar) verborgenBar.remove();
-  const opt={margin:0,filename:`Rijnmondweer.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
-  html2pdf().set(opt).from(doc).save();
+function schoonTekst(el){
+  return (el?.innerText || '').replace(/\u00a0/g,' ').replace(/[ \t]+\n/g,'\n').trim();
+}
+
+async function afbeeldingDataUrl(img){
+  if(!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return null;
+  try{
+    const canvas=document.createElement('canvas');
+    canvas.width=img.naturalWidth;
+    canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0);
+    return canvas.toDataURL('image/png');
+  }catch(e){
+    return null;
+  }
+}
+
+async function tekenLogo(pdf,img,x,y,maxW,maxH){
+  const data=await afbeeldingDataUrl(img);
+  if(!data) return;
+  const ratio=img.naturalWidth/img.naturalHeight;
+  let w=maxW, h=w/ratio;
+  if(h>maxH){ h=maxH; w=h*ratio; }
+  pdf.addImage(data,'PNG',x,y,w,h);
+}
+
+function extraPaginaIndienNodig(pdf,y,ruimte){
+  if(y+ruimte<=282) return y;
+  pdf.addPage();
+  return 18;
+}
+
+function schrijfParagraaf(pdf,tekst,x,y,maxW,lineH){
+  const stukken=tekst.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  if(!stukken.length) return y;
+  stukken.forEach((stuk,idx)=>{
+    const regels=pdf.splitTextToSize(stuk,maxW);
+    pdf.text(regels,x,y);
+    y+=regels.length*lineH;
+    if(idx<stukken.length-1) y+=lineH*.55;
+  });
+  return y;
+}
+
+async function exporteerPDF(){
+  const jsPDFCtor=(window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if(!jsPDFCtor){
+    alert('PDF-module is nog niet geladen. Probeer het over enkele seconden opnieuw.');
+    return;
+  }
+
+  updateOpgesteldKop();
+  const pdf=new jsPDFCtor({unit:'mm',format:'a4',orientation:'portrait'});
+  const blauw=[31,73,125];
+  const x=18, maxW=174;
+  let y=15;
+
+  await tekenLogo(pdf,document.querySelector('.logo-l'),18,12,60,34);
+  await tekenLogo(pdf,document.querySelector('.logo-r'),150,10,42,38);
+  y=50;
+  pdf.setDrawColor(...blauw);
+  pdf.setLineWidth(.6);
+  pdf.line(18,y,192,y);
+  y+=9;
+
+  pdf.setFont('helvetica','italic');
+  pdf.setFontSize(11);
+  pdf.setTextColor(...blauw);
+  pdf.text('Opgesteld: '+schoonTekst(document.getElementById('hdr-datum')),x,y);
+  y+=12;
+
+  const schaal=parseFloat(getComputedStyle(document.body).getPropertyValue('--kop-scale'))||1;
+  const secties=Array.from(document.querySelectorAll('#doc .sectie')).filter(s=>!s.classList.contains('verborgen'));
+  secties.forEach(sectie=>{
+    const kop=schoonTekst(sectie.querySelector('h2.kop'));
+    const tekst=schoonTekst(sectie.querySelector('.tekstvak'));
+    if(!kop && !tekst) return;
+    y=extraPaginaIndienNodig(pdf,y,22);
+    pdf.setFont('helvetica','bold');
+    pdf.setFontSize(11*schaal);
+    pdf.setTextColor(...blauw);
+    pdf.text(kop,x,y);
+    y+=7;
+    if(tekst){
+      pdf.setFont('helvetica','normal');
+      pdf.setFontSize(10.2);
+      pdf.setTextColor(34,34,34);
+      y=schrijfParagraaf(pdf,tekst,x,y,maxW,5.1);
+      y+=6;
+    }
+  });
+
+  pdf.save('Rijnmondweer.pdf');
 }
 
 /* ── Auto-save per dag ── */
