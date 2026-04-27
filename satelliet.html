@@ -154,6 +154,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   </div>
 </div>
 
+<script src="nl_grens_coords.js"></script>
 <script>
 const WMS_URL = 'https://view.eumetsat.int/geoserver/wms';
 const LAATSTE_TIJDSTAP = 17;
@@ -396,12 +397,53 @@ function tekenFeatureSet(ctx, geojson, rect, bbox, stijl) {
   ctx.restore();
 }
 
+function tekenCoordRingen(ctx, ringen, rect, bbox, stijl) {
+  if (!Array.isArray(ringen)) return;
+  ctx.save();
+  ctx.strokeStyle = stijl.stroke;
+  ctx.lineWidth = stijl.width;
+  ctx.globalAlpha = stijl.alpha ?? 1;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  if (stijl.shadow) {
+    ctx.shadowColor = stijl.shadow;
+    ctx.shadowBlur = stijl.shadowBlur || 2;
+  }
+  ctx.beginPath();
+  ringen.forEach(ring => tekenLijn(ctx, ring, rect, bbox));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function tekenNederlandContour(ctx, rect, bbox) {
+  if (typeof NL_GRENS === 'undefined') return;
+  const basis = Math.max(1, rect.dpr || 1);
+  tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
+    stroke: 'rgba(0,18,46,0.92)',
+    width: 5.4 * basis,
+    alpha: 1
+  });
+  tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
+    stroke: 'rgba(0,216,255,0.94)',
+    width: 2.5 * basis,
+    shadow: 'rgba(0,0,0,0.55)',
+    shadowBlur: 1.2 * basis
+  });
+  tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
+    stroke: 'rgba(255,255,255,0.82)',
+    width: 0.9 * basis,
+    alpha: 0.95
+  });
+}
+
 function tekenKaartOverlay(ctx, rect, bbox) {
-  if (!overlayGeladen) return;
-  tekenFeatureSet(ctx, overlayData.land, rect, bbox, { stroke: 'rgba(255,255,255,0.72)', width: 1.6 * rect.dpr, shadow: 'rgba(0,0,0,0.7)', shadowBlur: 2 * rect.dpr });
-  tekenFeatureSet(ctx, overlayData.nl, rect, bbox, { stroke: 'rgba(255,255,255,0.34)', width: 0.75 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
-  tekenFeatureSet(ctx, overlayData.be, rect, bbox, { stroke: 'rgba(255,255,255,0.28)', width: 0.7 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
-  tekenFeatureSet(ctx, overlayData.rivieren, rect, bbox, { stroke: 'rgba(130,205,255,0.34)', width: 0.6 * rect.dpr });
+  if (overlayGeladen) {
+    tekenFeatureSet(ctx, overlayData.land, rect, bbox, { stroke: 'rgba(255,255,255,0.56)', width: 1.25 * rect.dpr, shadow: 'rgba(0,0,0,0.7)', shadowBlur: 2 * rect.dpr });
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, { stroke: 'rgba(255,255,255,0.23)', width: 0.62 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
+    tekenFeatureSet(ctx, overlayData.be, rect, bbox, { stroke: 'rgba(255,255,255,0.28)', width: 0.7 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
+    tekenFeatureSet(ctx, overlayData.rivieren, rect, bbox, { stroke: 'rgba(130,205,255,0.34)', width: 0.6 * rect.dpr });
+  }
+  tekenNederlandContour(ctx, rect, bbox);
 }
 
 function tekenMarker(ctx, rect, bbox) {
