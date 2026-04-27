@@ -1234,6 +1234,10 @@ function wacht(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function volgendeAnimatieFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
 async function timelapseFrames() {
   const start = timelapseStartStap();
   const frames = [];
@@ -1261,6 +1265,7 @@ function tekenVideoFrame(ctx, canvas, frame, schaal) {
   ctx.filter = 'contrast(1.08) saturate(1.08) brightness(1.02)';
   ctx.drawImage(frame.img, 0, 0, w, h);
   ctx.filter = 'none';
+  tekenExportOverlay(ctx, 0, 0, w, h);
 
   ctx.fillStyle = 'rgba(0, 32, 91, 0.82)';
   ctx.fillRect(18, 18, 430, 54);
@@ -1306,8 +1311,16 @@ async function downloadTimelapseVideo(social = false) {
     canvas.width = Math.round(activeW * schaal);
     canvas.height = Math.round(activeH * schaal);
     const ctx = canvas.getContext('2d');
-    const stream = canvas.captureStream(2);
-    const track = stream.getVideoTracks()[0];
+    tekenVideoFrame(ctx, canvas, frames[0], schaal);
+    await volgendeAnimatieFrame();
+
+    let stream = canvas.captureStream(0);
+    let track = stream.getVideoTracks()[0];
+    if (!track || typeof track.requestFrame !== 'function') {
+      stream.getTracks().forEach(t => t.stop());
+      stream = canvas.captureStream(2);
+      track = stream.getVideoTracks()[0];
+    }
     const recorder = new MediaRecorder(stream, {
       mimeType,
       videoBitsPerSecond: social ? 2500000 : 7000000
@@ -1320,15 +1333,22 @@ async function downloadTimelapseVideo(social = false) {
       recorder.onstop = resolve;
     });
 
-    recorder.start();
+    const gestart = new Promise(resolve => {
+      recorder.onstart = resolve;
+    });
+    recorder.start(250);
+    await gestart;
+
     for (const frame of frames) {
       tekenVideoFrame(ctx, canvas, frame, schaal);
       if (track && track.requestFrame) track.requestFrame();
-      await wacht(500);
+      await volgendeAnimatieFrame();
+      await wacht(650);
     }
     tekenVideoFrame(ctx, canvas, frames[frames.length - 1], schaal);
     if (track && track.requestFrame) track.requestFrame();
-    await wacht(700);
+    await volgendeAnimatieFrame();
+    await wacht(900);
     recorder.stop();
     await klaar;
     stream.getTracks().forEach(t => t.stop());
@@ -1336,6 +1356,7 @@ async function downloadTimelapseVideo(social = false) {
     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
     const t = tijdstappen()[LAATSTE_TIJDSTAP];
     const blob = new Blob(chunks, { type: mimeType });
+    if (!blob.size) throw new Error('Lege video-export');
     downloadBlob(blob, bestandsNaam(t, social ? '-timelapse-social' : '-timelapse', ext));
     info.textContent = `Timelapse-video klaar (${ext.toUpperCase()}) · Bron: EUMETSAT EUMETView / MTG`;
   } catch (err) {
