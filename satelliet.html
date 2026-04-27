@@ -29,6 +29,8 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .btn-download:hover { background: #0055aa; }
 .btn-download.social { background: #1a6a3a; }
 .btn-download.social:hover { background: #238a4f; }
+.veld-mini { height: 24px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; padding: 2px 9px; }
+.sat-beeldvlak.plaats-punt { cursor: crosshair; }
 
 /* Tijdlijn */
 .tijdlijn { background: #1a2b40; padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
@@ -97,9 +99,28 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   <button class="btn gebied" data-bbox="-8,46,20,57" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
   <button class="btn gebied" data-bbox="-15,30,40,72" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
   <div class="sep"></div>
+  <span class="groep-label">Punt</span>
+  <select class="veld-mini" id="marker-preset" title="Plaats een punt op een bekende locatie">
+    <option value="">Kies plek...</option>
+    <option value="rotterdam">Rotterdam</option>
+    <option value="eindhoven">Eindhoven</option>
+    <option value="amsterdam">Amsterdam</option>
+    <option value="brussel">Brussel</option>
+    <option value="antwerpen">Antwerpen</option>
+  </select>
+  <select class="veld-mini" id="marker-color" title="Kleur van de punt">
+    <option value="#20c76a">Groen</option>
+    <option value="#e5332a">Rood</option>
+    <option value="#ffcf33">Geel</option>
+    <option value="#2ec4e8">Blauw</option>
+  </select>
+  <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om zelf een punt te plaatsen">Klikpunt</button>
+  <button class="btn" id="btn-marker-clear" title="Verwijder de geplaatste punt">Wis</button>
+  <div class="sep"></div>
   <button class="btn-refresh" id="btn-refresh">↻ Nu</button>
   <button class="btn-auto" id="btn-auto">⏱ Auto</button>
   <button class="btn-download" id="btn-download">⬇ PNG</button>
+  <button class="btn-download" id="btn-download-pdf">⬇ PDF</button>
   <button class="btn-download social" id="btn-download-social" title="Kleinere PNG voor social media">⬇ Social</button>
   <button class="btn-download" id="btn-video" title="Timelapse downloaden">⬇ MP4</button>
   <button class="btn-download social" id="btn-video-social" title="Kleinere timelapse voor social media">⬇ Social MP4</button>
@@ -160,8 +181,17 @@ const overlayBestanden = {
   be: 'be_provincies.geojson',
   rivieren: 'nl_rivieren.geojson'
 };
+const markerLocaties = {
+  rotterdam: { label: 'Rotterdam', lat: 51.9244, lon: 4.4777 },
+  eindhoven: { label: 'Eindhoven', lat: 51.4416, lon: 5.4697 },
+  amsterdam: { label: 'Amsterdam', lat: 52.3676, lon: 4.9041 },
+  brussel: { label: 'Brussel', lat: 50.8503, lon: 4.3517 },
+  antwerpen: { label: 'Antwerpen', lat: 51.2194, lon: 4.4025 }
+};
 let overlayData = {};
 let overlayGeladen = false;
+let markerPunt = null;
+let plaatsPuntModus = false;
 
 // Genereer lijst van laatste 18 tijdstappen (10-min intervallen = 3 uur).
 // EUMETView publiceert near-real-time, maar met verwerkingstijd. Zonder TIME
@@ -366,16 +396,62 @@ function tekenFeatureSet(ctx, geojson, rect, bbox, stijl) {
   ctx.restore();
 }
 
-function tekenOverlay() {
-  const rect = beeldRect();
-  const ctx = rect.canvas.getContext('2d');
-  ctx.clearRect(0, 0, rect.canvas.width, rect.canvas.height);
+function tekenKaartOverlay(ctx, rect, bbox) {
   if (!overlayGeladen) return;
-  const bbox = actieveBboxParts();
   tekenFeatureSet(ctx, overlayData.land, rect, bbox, { stroke: 'rgba(255,255,255,0.72)', width: 1.6 * rect.dpr, shadow: 'rgba(0,0,0,0.7)', shadowBlur: 2 * rect.dpr });
   tekenFeatureSet(ctx, overlayData.nl, rect, bbox, { stroke: 'rgba(255,255,255,0.34)', width: 0.75 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
   tekenFeatureSet(ctx, overlayData.be, rect, bbox, { stroke: 'rgba(255,255,255,0.28)', width: 0.7 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
   tekenFeatureSet(ctx, overlayData.rivieren, rect, bbox, { stroke: 'rgba(130,205,255,0.34)', width: 0.6 * rect.dpr });
+}
+
+function tekenMarker(ctx, rect, bbox) {
+  if (!markerPunt) return;
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  if (markerPunt.lon < minLon || markerPunt.lon > maxLon || markerPunt.lat < minLat || markerPunt.lat > maxLat) return;
+
+  const [x, y] = projecteer(markerPunt.lon, markerPunt.lat, rect, bbox);
+  const dpr = rect.dpr || 1;
+  const radius = 10 * dpr;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.72)';
+  ctx.shadowBlur = 8 * dpr;
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 4 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = markerPunt.kleur;
+  ctx.fill();
+  ctx.lineWidth = 2.4 * dpr;
+  ctx.strokeStyle = 'rgba(0,32,91,0.95)';
+  ctx.stroke();
+
+  if (markerPunt.label) {
+    ctx.font = `bold ${15 * dpr}px Arial, sans-serif`;
+    const tekst = markerPunt.label;
+    const tekstW = ctx.measureText(tekst).width;
+    const labelX = x + 15 * dpr;
+    const labelY = y - 30 * dpr;
+    const padX = 9 * dpr;
+    const padY = 6 * dpr;
+    ctx.shadowBlur = 6 * dpr;
+    ctx.fillStyle = 'rgba(0,32,91,0.88)';
+    ctx.fillRect(labelX, labelY, tekstW + padX * 2, 27 * dpr);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(tekst, labelX + padX, labelY + 19 * dpr);
+  }
+  ctx.restore();
+}
+
+function tekenOverlay() {
+  const rect = beeldRect();
+  const ctx = rect.canvas.getContext('2d');
+  ctx.clearRect(0, 0, rect.canvas.width, rect.canvas.height);
+  const bbox = actieveBboxParts();
+  tekenKaartOverlay(ctx, rect, bbox);
+  tekenMarker(ctx, rect, bbox);
 }
 
 function frameCacheKey(tijdstap) {
@@ -535,6 +611,72 @@ document.querySelectorAll('.btn.gebied').forEach(btn => {
   });
 });
 
+function actieveMarkerKleur() {
+  return document.getElementById('marker-color').value;
+}
+
+function plaatsMarker(lon, lat, label) {
+  markerPunt = { lon, lat, label, kleur: actieveMarkerKleur() };
+  tekenOverlay();
+}
+
+function zetPlaatsPuntModus(actief) {
+  plaatsPuntModus = actief;
+  const btn = document.getElementById('btn-marker-click');
+  const vlak = document.querySelector('.sat-beeldvlak');
+  btn.classList.toggle('actief', actief);
+  btn.textContent = actief ? 'Klik nu' : 'Klikpunt';
+  vlak.classList.toggle('plaats-punt', actief);
+}
+
+function schermNaarLonLat(clientX, clientY) {
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const vlakRect = vlak.getBoundingClientRect();
+  const rect = beeldRect();
+  const dpr = window.devicePixelRatio || 1;
+  const x = (clientX - vlakRect.left) * dpr;
+  const y = (clientY - vlakRect.top) * dpr;
+  if (x < rect.x || x > rect.x + rect.w || y < rect.y || y > rect.y + rect.h) return null;
+  const [minLon, minLat, maxLon, maxLat] = actieveBboxParts();
+  return {
+    lon: minLon + (x - rect.x) / rect.w * (maxLon - minLon),
+    lat: maxLat - (y - rect.y) / rect.h * (maxLat - minLat)
+  };
+}
+
+document.getElementById('marker-preset').addEventListener('change', e => {
+  const locatie = markerLocaties[e.target.value];
+  if (!locatie) return;
+  plaatsMarker(locatie.lon, locatie.lat, locatie.label);
+  zetPlaatsPuntModus(false);
+});
+
+document.getElementById('marker-color').addEventListener('change', e => {
+  if (!markerPunt) return;
+  markerPunt.kleur = e.target.value;
+  tekenOverlay();
+});
+
+document.getElementById('btn-marker-click').addEventListener('click', () => {
+  zetPlaatsPuntModus(!plaatsPuntModus);
+});
+
+document.getElementById('btn-marker-clear').addEventListener('click', () => {
+  markerPunt = null;
+  document.getElementById('marker-preset').value = '';
+  zetPlaatsPuntModus(false);
+  tekenOverlay();
+});
+
+document.querySelector('.sat-beeldvlak').addEventListener('click', e => {
+  if (!plaatsPuntModus) return;
+  const coords = schermNaarLonLat(e.clientX, e.clientY);
+  if (!coords) return;
+  plaatsMarker(coords.lon, coords.lat, 'Punt');
+  document.getElementById('marker-preset').value = '';
+  zetPlaatsPuntModus(false);
+});
+
 // Tijdslider
 const slider = document.getElementById('tijd-slider');
 slider.addEventListener('input', () => {
@@ -570,10 +712,70 @@ function laadAfbeeldingVoorCanvas(url) {
   });
 }
 
-async function downloadPng(social = false) {
+function tekenExportOverlay(ctx, x, y, w, h) {
+  const rect = { x, y, w, h, dpr: 1 };
+  const bbox = actieveBboxParts();
+  tekenKaartOverlay(ctx, rect, bbox);
+  tekenMarker(ctx, rect, bbox);
+}
+
+async function maakExportCanvas(social = false) {
   const stappen = tijdstappen();
   const t = stappen[actieveTijdstap];
   const product = productVoorTijd(t);
+  const url = laatsteUrl || wmsUrl(actieveLayer, activeBbox, activeW, activeH, actieveTijdstap);
+  const img = await laadAfbeeldingVoorCanvas(url);
+  const headerH = 86;
+  const footerH = 42;
+  const bronW = img.naturalWidth || activeW;
+  const bronH = img.naturalHeight || activeH;
+  const maxBreedte = social ? 1200 : bronW;
+  const schaal = Math.min(1, maxBreedte / bronW);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bronW * schaal);
+  canvas.height = Math.round((headerH + bronH + footerH) * schaal);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(schaal, schaal);
+
+  ctx.fillStyle = '#003366';
+  ctx.fillRect(0, 0, bronW, headerH);
+  ctx.fillStyle = '#2ec4e8';
+  ctx.fillRect(0, headerH - 3, bronW, 3);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px Arial, sans-serif';
+  ctx.fillText(`MTG · ${productLabel(product)}`, 24, 36);
+  ctx.font = '18px Arial, sans-serif';
+  ctx.fillStyle = '#a8c8e8';
+  ctx.fillText('Bron: EUMETSAT EUMETView / Meteosat Third Generation', 24, 66);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 26px Arial, sans-serif';
+  ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : ''), bronW - 24, 36);
+  ctx.font = '18px Arial, sans-serif';
+  ctx.fillStyle = '#a8c8e8';
+  ctx.fillText(actiefGebiedLabel, bronW - 24, 66);
+  ctx.textAlign = 'left';
+
+  ctx.filter = 'contrast(1.08) saturate(1.08) brightness(1.02)';
+  ctx.drawImage(img, 0, headerH);
+  ctx.filter = 'none';
+  tekenExportOverlay(ctx, 0, headerH, bronW, bronH);
+
+  ctx.fillStyle = '#00142d';
+  ctx.fillRect(0, headerH + bronH, bronW, footerH);
+  ctx.fillStyle = '#dcecff';
+  ctx.font = '18px Arial, sans-serif';
+  ctx.fillText('Bron: EUMETSAT EUMETView / MTG', 24, headerH + bronH + 27);
+  ctx.textAlign = 'right';
+  ctx.fillText('© Ed Aldus / Weerlab', bronW - 24, headerH + bronH + 27);
+  ctx.textAlign = 'left';
+
+  return { canvas, t, url };
+}
+
+async function downloadPng(social = false) {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
   const url = laatsteUrl || wmsUrl(actieveLayer, activeBbox, activeW, activeH, actieveTijdstap);
   const naam = bestandsNaam(t, social ? '-social' : '');
   const btn = document.getElementById(social ? 'btn-download-social' : 'btn-download');
@@ -582,50 +784,7 @@ async function downloadPng(social = false) {
   btn.disabled = true;
 
   try {
-    const img = await laadAfbeeldingVoorCanvas(url);
-    const headerH = 86;
-    const footerH = 42;
-    const bronW = img.naturalWidth || activeW;
-    const bronH = img.naturalHeight || activeH;
-    const maxBreedte = social ? 1200 : bronW;
-    const schaal = Math.min(1, maxBreedte / bronW);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bronW * schaal);
-    canvas.height = Math.round((headerH + bronH + footerH) * schaal);
-    const ctx = canvas.getContext('2d');
-    ctx.scale(schaal, schaal);
-
-    ctx.fillStyle = '#003366';
-    ctx.fillRect(0, 0, bronW, headerH);
-    ctx.fillStyle = '#2ec4e8';
-    ctx.fillRect(0, headerH - 3, bronW, 3);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px Arial, sans-serif';
-    ctx.fillText(`MTG · ${productLabel(product)}`, 24, 36);
-    ctx.font = '18px Arial, sans-serif';
-    ctx.fillStyle = '#a8c8e8';
-    ctx.fillText('Bron: EUMETSAT EUMETView / Meteosat Third Generation', 24, 66);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px Arial, sans-serif';
-    ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : ''), bronW - 24, 36);
-    ctx.font = '18px Arial, sans-serif';
-    ctx.fillStyle = '#a8c8e8';
-    ctx.fillText(actiefGebiedLabel, bronW - 24, 66);
-    ctx.textAlign = 'left';
-
-    ctx.filter = 'contrast(1.08) saturate(1.08) brightness(1.02)';
-    ctx.drawImage(img, 0, headerH);
-    ctx.filter = 'none';
-
-    ctx.fillStyle = '#00142d';
-    ctx.fillRect(0, headerH + bronH, bronW, footerH);
-    ctx.fillStyle = '#dcecff';
-    ctx.font = '18px Arial, sans-serif';
-    ctx.fillText('Bron: EUMETSAT EUMETView / MTG', 24, headerH + bronH + 27);
-    ctx.textAlign = 'right';
-    ctx.fillText('© Ed Aldus / Weerlab', bronW - 24, headerH + bronH + 27);
-
+    const { canvas } = await maakExportCanvas(social);
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
     a.download = naam;
@@ -649,6 +808,95 @@ async function downloadPng(social = false) {
 
 document.getElementById('btn-download').addEventListener('click', () => downloadPng(false));
 document.getElementById('btn-download-social').addEventListener('click', () => downloadPng(true));
+
+function dataUrlNaarBytes(dataUrl) {
+  const binair = atob(dataUrl.split(',')[1]);
+  const bytes = new Uint8Array(binair.length);
+  for (let i = 0; i < binair.length; i++) bytes[i] = binair.charCodeAt(i);
+  return bytes;
+}
+
+function maakPdfBlobVanCanvas(canvas) {
+  const jpegBytes = dataUrlNaarBytes(canvas.toDataURL('image/jpeg', 0.92));
+  const liggend = canvas.width >= canvas.height;
+  const pageW = liggend ? 842 : 595;
+  const pageH = liggend ? 595 : 842;
+  const marge = 18;
+  const schaal = Math.min((pageW - marge * 2) / canvas.width, (pageH - marge * 2) / canvas.height);
+  const drawW = canvas.width * schaal;
+  const drawH = canvas.height * schaal;
+  const drawX = (pageW - drawW) / 2;
+  const drawY = (pageH - drawH) / 2;
+  const inhoud = `q\n${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm\n/Im0 Do\nQ\n`;
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const offsets = [0];
+  let positie = 0;
+
+  function voegTekstToe(tekst) {
+    const bytes = encoder.encode(tekst);
+    chunks.push(bytes);
+    positie += bytes.length;
+  }
+
+  function voegBytesToe(bytes) {
+    chunks.push(bytes);
+    positie += bytes.length;
+  }
+
+  function object(nummer, inhoudTekst) {
+    offsets[nummer] = positie;
+    voegTekstToe(`${nummer} 0 obj\n${inhoudTekst}\nendobj\n`);
+  }
+
+  voegTekstToe('%PDF-1.4\n');
+  object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  object(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+
+  offsets[4] = positie;
+  voegTekstToe(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+  voegBytesToe(jpegBytes);
+  voegTekstToe('\nendstream\nendobj\n');
+
+  object(5, `<< /Length ${encoder.encode(inhoud).length} >>\nstream\n${inhoud}endstream`);
+  const xrefStart = positie;
+  voegTekstToe('xref\n0 6\n0000000000 65535 f \n');
+  for (let i = 1; i <= 5; i++) {
+    voegTekstToe(String(offsets[i]).padStart(10, '0') + ' 00000 n \n');
+  }
+  voegTekstToe(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
+
+  const totaal = new Uint8Array(positie);
+  let offset = 0;
+  for (const chunk of chunks) {
+    totaal.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new Blob([totaal], { type: 'application/pdf' });
+}
+
+async function downloadPdf() {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const btn = document.getElementById('btn-download-pdf');
+  const oudeTekst = btn.textContent;
+  btn.textContent = 'PDF maken…';
+  btn.disabled = true;
+
+  try {
+    const { canvas } = await maakExportCanvas(false);
+    const blob = maakPdfBlobVanCanvas(canvas);
+    downloadBlob(blob, bestandsNaam(t, '', 'pdf'));
+  } catch (err) {
+    alert('PDF-export is niet gelukt. Mogelijk blokkeert de browser canvas-export van de EUMETView-beelden.');
+  } finally {
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-download-pdf').addEventListener('click', downloadPdf);
 
 function kiesVideoMimeType() {
   const opties = [
