@@ -795,35 +795,65 @@ function drawNormalePluim(svgId, stationName, ensData, hresHourly, opts) {
 function downloadSvgAsPng(svgEl, filename) {
   const vb = svgEl.viewBox.baseVal;
   const w = vb.width, hh = vb.height;
+  // Supersample-factor (rasterize-resolutie); output blijft op 2× (retina-scherp).
+  const superScale = 4;
+  const outScale   = 2;
+
   const clone = svgEl.cloneNode(true);
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  clone.setAttribute('width',  w);
-  clone.setAttribute('height', hh);
+  clone.setAttribute('xmlns',       'http://www.w3.org/2000/svg');
+  clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+  clone.setAttribute('width',  w * superScale);
+  clone.setAttribute('height', hh * superScale);
+  clone.setAttribute('shape-rendering', 'geometricPrecision');
+  clone.setAttribute('text-rendering',  'optimizeLegibility');
+
+  // Inline-style mee-injecteren: parent-CSS gaat niet mee bij rasterisatie.
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleEl.textContent = 'text { font-family: Arial, Helvetica, sans-serif; }';
+  clone.insertBefore(styleEl, clone.firstChild);
+
   const serializer = new XMLSerializer();
   const svgStr = '<?xml version="1.0" standalone="no"?>\n'
                + serializer.serializeToString(clone);
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  const url  = URL.createObjectURL(blob);
+
   const img = new Image();
   img.onload = () => {
-    const scale = 1;
-    const canvas = document.createElement('canvas');
-    canvas.width  = Math.round(w * scale);
-    canvas.height = Math.round(hh * scale);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(b => {
+    // Hoge-res canvas (4×, voor antialiasing)
+    const hi = document.createElement('canvas');
+    hi.width  = Math.round(w  * superScale);
+    hi.height = Math.round(hh * superScale);
+    const hiCtx = hi.getContext('2d');
+    hiCtx.imageSmoothingEnabled = true;
+    hiCtx.imageSmoothingQuality = 'high';
+    hiCtx.fillStyle = '#ffffff';
+    hiCtx.fillRect(0, 0, hi.width, hi.height);
+    hiCtx.drawImage(img, 0, 0, hi.width, hi.height);
+
+    // Output op 2×-resolutie (downsample → soft antialiasing, niet onnodig groot)
+    const out = document.createElement('canvas');
+    out.width  = Math.round(w  * outScale);
+    out.height = Math.round(hh * outScale);
+    const outCtx = out.getContext('2d');
+    outCtx.imageSmoothingEnabled = true;
+    outCtx.imageSmoothingQuality = 'high';
+    outCtx.fillStyle = '#ffffff';
+    outCtx.fillRect(0, 0, out.width, out.height);
+    outCtx.drawImage(hi, 0, 0, out.width, out.height);
+
+    out.toBlob(b => {
+      if (!b) { alert('PNG-encode mislukt'); return; }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(b);
       a.download = filename + '.png';
       document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       URL.revokeObjectURL(url);
     }, 'image/png');
   };
-  img.onerror = () => {
+  img.onerror = (e) => {
+    console.error('SVG render fail', e);
     alert('Download mislukt: ' + filename);
     URL.revokeObjectURL(url);
   };
