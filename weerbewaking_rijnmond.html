@@ -161,6 +161,9 @@ body{--kop-scale:1}
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <span class="status" style="margin-left:8px">Document:</span>
   <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <input type="text" id="doc-naam" value="Rijnmond" placeholder="Naam document" title="Naam voor deze opgeslagen versie" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem;width:130px">
+  <select id="doc-kies" title="Kies een opgeslagen document voor deze datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem;min-width:130px"></select>
+  <button onclick="nieuwDocument()" title="Maak een tweede document voor dezelfde datum">＋ Nieuw</button>
   <label style="margin-left:8px">Koppen:</label>
   <select id="kop-scale-sel" onchange="zetKopScale(this.value)" title="Grootte van titel en koppen">
     <option value="0.8">80%</option>
@@ -419,11 +422,40 @@ async function laadData(){
 
 document.getElementById('station-sel').addEventListener('change', laadData);
 
-/* ── Auto-save (lokaal, per dag) ── */
+/* ── Auto-save (lokaal, per dag + per documentnaam) ── */
 const SAVE_PREFIX='wb_wm_draft_';
+const DOC_LIST_PREFIX='wb_wm_docs_';
 function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
-function saveKey(){ return SAVE_PREFIX + huidigeDatum(); }
+function docNaam(){ return (document.getElementById('doc-naam')?.value || 'Rijnmond').trim() || 'Rijnmond'; }
+function docSlug(naam){ return naam.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'document'; }
+function docListKey(){ return DOC_LIST_PREFIX + huidigeDatum(); }
+function saveKey(naam=docNaam()){ return SAVE_PREFIX + huidigeDatum() + '_' + docSlug(naam); }
+function leesDocLijst(){
+  try{ return JSON.parse(localStorage.getItem(docListKey()) || '[]').filter(Boolean); }catch(e){ return []; }
+}
+function schrijfDocLijst(lijst){
+  const uniek=[...new Set(lijst.filter(Boolean))];
+  try{ localStorage.setItem(docListKey(), JSON.stringify(uniek)); }catch(e){}
+  vulDocKiezer(uniek);
+}
+function registreerDocNaam(naam=docNaam()){
+  const lijst=leesDocLijst();
+  if(!lijst.includes(naam)) lijst.push(naam);
+  schrijfDocLijst(lijst);
+}
+function vulDocKiezer(lijst=leesDocLijst()){
+  const sel=document.getElementById('doc-kies'); if(!sel) return;
+  const huidig=docNaam();
+  sel.innerHTML='';
+  const namen=lijst.length?lijst:[huidig];
+  namen.forEach(naam=>{
+    const opt=document.createElement('option');
+    opt.value=naam; opt.textContent=naam;
+    sel.appendChild(opt);
+  });
+  if([...sel.options].some(o=>o.value===huidig)) sel.value=huidig;
+}
 function saveDraft(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{
@@ -431,7 +463,8 @@ function saveDraft(){
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
   const wt=document.getElementById('weergave-type'); if(wt) d.weergaveType=wt.value;
-  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+  d.docNaam=docNaam();
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); registreerDocNaam(d.docNaam); toonSaveStatus(d.__ts); }catch(e){}
 }
 function leegForm(){
   document.querySelectorAll('[data-save]').forEach(el=>{ el.innerHTML=''; });
@@ -440,9 +473,16 @@ function leegForm(){
 }
 function restoreDraft(){
   try{
-    const j=localStorage.getItem(saveKey());
-    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
+    vulDocKiezer();
+    let j=localStorage.getItem(saveKey());
+    // Migratie: oude key zonder docnaam-slug overnemen voor default Rijnmond
+    if(!j && docNaam()==='Rijnmond'){
+      const oud=localStorage.getItem(SAVE_PREFIX+huidigeDatum());
+      if(oud){ j=oud; try{ localStorage.setItem(saveKey(), oud); registreerDocNaam('Rijnmond'); localStorage.removeItem(SAVE_PREFIX+huidigeDatum()); }catch(e){} }
+    }
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+' · '+docNaam()+')'; return; }
     const d=JSON.parse(j);
+    if(d.docNaam && document.getElementById('doc-naam')) document.getElementById('doc-naam').value=d.docNaam;
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
       if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
@@ -451,6 +491,17 @@ function restoreDraft(){
     const wt=document.getElementById('weergave-type'); if(wt) wt.value=(d.weergaveType!=null?d.weergaveType:'Regio');
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
+}
+function nieuwDocument(){
+  saveDraft();
+  const naam=prompt('Naam voor het nieuwe document:', document.getElementById('plaats-in')?.value || 'Nieuw document');
+  if(!naam) return;
+  document.getElementById('doc-naam').value=naam.trim();
+  registreerDocNaam(docNaam());
+  leegForm();
+  const p=document.getElementById('plaats-in'); if(p) p.value=naam.trim();
+  saveDraft();
+  restoreDraft();
 }
 function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
   const el=document.getElementById('save-status'); if(!el) return;
@@ -475,8 +526,9 @@ function zetKopScale(v){
 })();
 
 function wisDraft(){
-  if(!confirm('Opgeslagen tekst van '+huidigeDatum()+' wissen?')) return;
+  if(!confirm('Opgeslagen document "'+docNaam()+'" van '+huidigeDatum()+' wissen?')) return;
   localStorage.removeItem(saveKey());
+  schrijfDocLijst(leesDocLijst().filter(n=>n!==docNaam()));
   location.reload();
 }
 let saveTimer;
@@ -485,9 +537,20 @@ document.addEventListener('input', e=>{
   if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type') debSave();
 });
 document.addEventListener('blur', e=>{
-  if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type') saveDraft();
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type' || e.target.id==='doc-naam') saveDraft();
 },true);
 document.getElementById('weergave-type').addEventListener('change', saveDraft);
+document.getElementById('doc-kies').addEventListener('change', e=>{
+  const nieuw=e.target.value;
+  saveDraft();
+  document.getElementById('doc-naam').value=nieuw;
+  restoreDraft();
+});
+document.getElementById('doc-naam').addEventListener('change', ()=>{
+  registreerDocNaam(docNaam());
+  vulDocKiezer();
+  saveDraft();
+});
 
 /* ── Tab/focus in vooruitzicht-cel: bestaande waarde direct overschrijven ── */
 document.addEventListener('focus', e=>{
@@ -501,7 +564,13 @@ document.addEventListener('focus', e=>{
 }, true);
 
 document.getElementById('doc-datum').value = vandaagISO();
-document.getElementById('doc-datum').addEventListener('change', restoreDraft);
+vulDocKiezer();
+document.getElementById('doc-datum').addEventListener('change', ()=>{
+  vulDocKiezer();
+  const eerste=leesDocLijst()[0] || 'Rijnmond';
+  document.getElementById('doc-naam').value=eerste;
+  restoreDraft();
+});
 
 restoreDraft();
 laadData();
