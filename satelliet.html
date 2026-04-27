@@ -555,43 +555,46 @@ function tekenKaartOverlay(ctx, rect, bbox) {
   tekenNederlandContour(ctx, rect, bbox);
 }
 
-function tekenMarker(ctx, rect, bbox) {
+function tekenMarker(ctx, rect, bbox, opties = {}) {
   if (!markerPunt) return;
   const [minLon, minLat, maxLon, maxLat] = bbox;
   if (markerPunt.lon < minLon || markerPunt.lon > maxLon || markerPunt.lat < minLat || markerPunt.lat > maxLat) return;
 
   const [x, y] = projecteer(markerPunt.lon, markerPunt.lat, rect, bbox);
   const dpr = rect.dpr || 1;
-  const radius = 10 * dpr;
+  const exportModus = opties.export === true;
+  const markerSchaal = exportModus ? 2.4 : 1;
+  const radius = 10 * dpr * markerSchaal;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.72)';
-  ctx.shadowBlur = 8 * dpr;
+  ctx.shadowBlur = 8 * dpr * markerSchaal;
   ctx.beginPath();
-  ctx.arc(x, y, radius + 4 * dpr, 0, Math.PI * 2);
+  ctx.arc(x, y, radius + 4 * dpr * markerSchaal, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
   ctx.fill();
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fillStyle = markerPunt.kleur;
   ctx.fill();
-  ctx.lineWidth = 2.4 * dpr;
+  ctx.lineWidth = 2.4 * dpr * markerSchaal;
   ctx.strokeStyle = 'rgba(0,32,91,0.95)';
   ctx.stroke();
 
   if (markerPunt.label) {
-    ctx.font = `bold ${15 * dpr}px Arial, sans-serif`;
+    const fontPx = (exportModus ? 34 : 15) * dpr;
+    ctx.font = `bold ${fontPx}px Arial, sans-serif`;
     const tekst = markerPunt.label;
     const tekstW = ctx.measureText(tekst).width;
-    const labelX = x + 15 * dpr;
-    const labelY = y - 30 * dpr;
-    const padX = 9 * dpr;
-    const padY = 6 * dpr;
-    ctx.shadowBlur = 6 * dpr;
+    const labelX = x + (exportModus ? 34 : 15) * dpr;
+    const labelY = y - (exportModus ? 64 : 30) * dpr;
+    const padX = (exportModus ? 18 : 9) * dpr;
+    const labelH = (exportModus ? 52 : 27) * dpr;
+    ctx.shadowBlur = (exportModus ? 12 : 6) * dpr;
     ctx.fillStyle = 'rgba(0,32,91,0.88)';
-    ctx.fillRect(labelX, labelY, tekstW + padX * 2, 27 * dpr);
+    ctx.fillRect(labelX, labelY, tekstW + padX * 2, labelH);
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(tekst, labelX + padX, labelY + 19 * dpr);
+    ctx.fillText(tekst, labelX + padX, labelY + (exportModus ? 37 : 19) * dpr);
   }
   ctx.restore();
 }
@@ -1025,7 +1028,7 @@ function tekenExportOverlay(ctx, x, y, w, h) {
   const rect = { x, y, w, h, dpr: 1 };
   const bbox = actieveBboxParts();
   tekenKaartOverlay(ctx, rect, bbox);
-  tekenMarker(ctx, rect, bbox);
+  tekenMarker(ctx, rect, bbox, { export: true });
 }
 
 async function maakExportCanvas(social = false) {
