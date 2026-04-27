@@ -45,6 +45,11 @@ body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;p
   border-radius:4px;padding:8px 14px;
 }
 .plaats-blok .label{font-size:.78rem;font-weight:700;color:#a04a00;text-transform:uppercase;letter-spacing:.06em}
+.plaats-blok .label-select{
+  font-family:inherit;font-size:.78rem;font-weight:700;color:#a04a00;text-transform:uppercase;letter-spacing:.06em;
+  background:white;border:1px solid #f0c08a;border-radius:3px;padding:5px 26px 5px 8px;outline:none;
+}
+.plaats-blok .label-select:focus{border-color:#e8780c;box-shadow:0 0 0 2px #fde1c4}
 .plaats-blok .veld{
   flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#d95a00;
   background:white;border:1px solid #f0c08a;border-radius:3px;
@@ -184,8 +189,11 @@ body{--kop-scale:1}
 
   <!-- Plaats (invulbaar, oranje) -->
   <div class="plaats-blok">
-    <span class="label">Plaats</span>
-    <input class="veld" type="text" id="plaats-in" value="Rijnmond" placeholder="Vul een plaats in...">
+    <select class="label-select" id="weergave-type" title="Label op de PDF">
+      <option value="Plaats">Plaats</option>
+      <option value="Regio" selected>Regio</option>
+    </select>
+    <input class="veld" type="text" id="plaats-in" value="Rijnmond" placeholder="Naam op de PDF, bijvoorbeeld Rijnmond">
   </div>
 
   <!-- Titel (invulbaar) -->
@@ -422,11 +430,13 @@ function saveDraft(){
     d[el.getAttribute('data-save')] = el.innerHTML;
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
+  const wt=document.getElementById('weergave-type'); if(wt) d.weergaveType=wt.value;
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
 }
 function leegForm(){
   document.querySelectorAll('[data-save]').forEach(el=>{ el.innerHTML=''; });
   const p=document.getElementById('plaats-in'); if(p) p.value='Rijnmond';
+  const wt=document.getElementById('weergave-type'); if(wt) wt.value='Regio';
 }
 function restoreDraft(){
   try{
@@ -438,6 +448,7 @@ function restoreDraft(){
       if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
     });
     const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rijnmond');
+    const wt=document.getElementById('weergave-type'); if(wt) wt.value=(d.weergaveType!=null?d.weergaveType:'Regio');
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
 }
@@ -471,11 +482,12 @@ function wisDraft(){
 let saveTimer;
 function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
 document.addEventListener('input', e=>{
-  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') debSave();
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type') debSave();
 });
 document.addEventListener('blur', e=>{
-  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type') saveDraft();
 },true);
+document.getElementById('weergave-type').addEventListener('change', saveDraft);
 
 /* ── Tab/focus in vooruitzicht-cel: bestaande waarde direct overschrijven ── */
 document.addEventListener('focus', e=>{
@@ -517,6 +529,15 @@ function exporteerPDF(){
     c.style.maxWidth = 'none';
     c.style.padding = '15mm 18mm';
     c.querySelectorAll('.tekstvak').forEach(t=>{t.style.border='none';t.style.background='white';t.style.padding='4px 0'});
+    c.querySelectorAll('.plaats-blok').forEach(blok=>{
+      const sel=blok.querySelector('#weergave-type');
+      if(sel){
+        const span=document.createElement('span');
+        span.className='label';
+        span.textContent=sel.value || 'Plaats';
+        sel.replaceWith(span);
+      }
+    });
     c.querySelectorAll('input.veld').forEach(inp=>{
       const span=document.createElement('span');
       span.className='veld';
