@@ -84,7 +84,8 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 
 <div class="toolbar">
   <span class="groep-label">Product</span>
-  <button class="btn actief" data-layer="mtg_fd:rgb_truecolour" data-label="True Colour">True Colour</button>
+  <button class="btn actief" data-layer="auto" data-label="Auto dag/nacht">Auto</button>
+  <button class="btn" data-layer="mtg_fd:rgb_truecolour" data-label="True Colour">True Colour</button>
   <button class="btn" data-layer="mtg_fd:rgb_geocolour" data-label="GeoColour">GeoColour</button>
   <button class="btn" data-layer="mtg_fd:ir105_hrfi" data-label="IR 10.5µm nacht/dag" title="Infrarood, ook bruikbaar in de nacht">IR nacht</button>
   <button class="btn" data-layer="mtg_fd:rgb_dust" data-label="Stof RGB">Stof RGB</button>
@@ -134,9 +135,13 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 const WMS_URL = 'https://view.eumetsat.int/geoserver/wms';
 const LAATSTE_TIJDSTAP = 17;
 const TIMELAPSE_AANTAL = 10;
+const PRODUCTEN = {
+  truecolour: { layer: 'mtg_fd:rgb_truecolour', label: 'True Colour' },
+  geocolour: { layer: 'mtg_fd:rgb_geocolour', label: 'GeoColour' }
+};
 
-let actieveLayer = 'mtg_fd:rgb_truecolour';
-let actieveLabel = 'True Colour';
+let actieveLayer = 'auto';
+let actieveLabel = 'Auto dag/nacht';
 let activeBbox = '-1,49,9,54';
 let activeW = 2400, activeH = 1440;
 let actiefGebiedLabel = 'Benelux';
@@ -189,10 +194,59 @@ function isoTijd(d) {
   return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
+function radialen(graden) {
+  return graden * Math.PI / 180;
+}
+
+function graden(radialen) {
+  return radialen * 180 / Math.PI;
+}
+
+function zonhoogte(tijd, lat = 52.1, lon = 5.2) {
+  const dagStart = Date.UTC(tijd.getUTCFullYear(), tijd.getUTCMonth(), tijd.getUTCDate());
+  const dagNummer = Math.floor((dagStart - Date.UTC(tijd.getUTCFullYear(), 0, 0)) / 86400000);
+  const uur = tijd.getUTCHours() + tijd.getUTCMinutes() / 60 + tijd.getUTCSeconds() / 3600;
+  const gamma = 2 * Math.PI / 365 * (dagNummer - 1 + (uur - 12) / 24);
+  const decl =
+    0.006918
+    - 0.399912 * Math.cos(gamma)
+    + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma)
+    + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma)
+    + 0.00148 * Math.sin(3 * gamma);
+  const tijdCorrectie = 229.18 * (
+    0.000075
+    + 0.001868 * Math.cos(gamma)
+    - 0.032077 * Math.sin(gamma)
+    - 0.014615 * Math.cos(2 * gamma)
+    - 0.040849 * Math.sin(2 * gamma)
+  );
+  const wareZonnetijd = uur * 60 + tijdCorrectie + 4 * lon;
+  const uurhoek = radialen(wareZonnetijd / 4 - 180);
+  const latRad = radialen(lat);
+  return graden(Math.asin(
+    Math.sin(latRad) * Math.sin(decl)
+    + Math.cos(latRad) * Math.cos(decl) * Math.cos(uurhoek)
+  ));
+}
+
+function productVoorTijd(tijd) {
+  if (actieveLayer !== 'auto') return { layer: actieveLayer, label: actieveLabel, automatisch: false };
+  return zonhoogte(tijd) >= 3
+    ? { ...PRODUCTEN.truecolour, automatisch: true }
+    : { ...PRODUCTEN.geocolour, automatisch: true };
+}
+
+function productLabel(product) {
+  return product.automatisch ? `Auto: ${product.label}` : product.label;
+}
+
 function wmsUrl(layerName, bbox, w, h, tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
-  const layers = layerName + ',osmgray:ne_10m_admin_0_boundary_lines_land';
+  const product = layerName === 'auto' ? productVoorTijd(t) : { layer: layerName };
+  const layers = product.layer + ',osmgray:ne_10m_admin_0_boundary_lines_land';
   const styles = ',osmgray:all_boundaries_light';
   return WMS_URL +
     '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0' +
@@ -208,7 +262,8 @@ function wmsUrl(layerName, bbox, w, h, tijdstap) {
 function frameCacheKey(tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
-  return [actieveLayer, activeBbox, activeW, activeH, isoTijd(t)].join('|');
+  const product = productVoorTijd(t);
+  return [product.layer, activeBbox, activeW, activeH, isoTijd(t)].join('|');
 }
 
 function timelapseStartStap() {
@@ -251,8 +306,9 @@ function laadSatelliet(tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
   const isNu = tijdstap === LAATSTE_TIJDSTAP;
+  const product = productVoorTijd(t);
 
-  headerProduct.textContent = 'MTG · ' + actieveLabel;
+  headerProduct.textContent = 'MTG · ' + productLabel(product);
   headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
   headerGebied.textContent = actiefGebiedLabel;
   const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
@@ -282,7 +338,7 @@ function laadSatelliet(tijdstap) {
   tmp.onerror = () => {
     img.classList.remove('laden');
     dot.style.display = 'none';
-    info.textContent = actieveLabel + ' · laden mislukt';
+    info.textContent = productLabel(product) + ' · laden mislukt';
   };
   tmp.src = url;
 }
@@ -360,6 +416,7 @@ function laadAfbeeldingVoorCanvas(url) {
 async function downloadPng(social = false) {
   const stappen = tijdstappen();
   const t = stappen[actieveTijdstap];
+  const product = productVoorTijd(t);
   const url = laatsteUrl || wmsUrl(actieveLayer, activeBbox, activeW, activeH, actieveTijdstap);
   const naam = bestandsNaam(t, social ? '-social' : '');
   const btn = document.getElementById(social ? 'btn-download-social' : 'btn-download');
@@ -387,7 +444,7 @@ async function downloadPng(social = false) {
     ctx.fillRect(0, headerH - 3, bronW, 3);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 28px Arial, sans-serif';
-    ctx.fillText(`MTG · ${actieveLabel}`, 24, 36);
+    ctx.fillText(`MTG · ${productLabel(product)}`, 24, 36);
     ctx.font = '18px Arial, sans-serif';
     ctx.fillStyle = '#a8c8e8';
     ctx.fillText('Bron: EUMETSAT EUMETView / Meteosat Third Generation', 24, 66);
@@ -479,6 +536,7 @@ async function timelapseFrames() {
 function tekenVideoFrame(ctx, canvas, frame, schaal) {
   const stappen = tijdstappen();
   const t = stappen[frame.stap];
+  const product = productVoorTijd(t);
   const w = canvas.width / schaal;
   const h = canvas.height / schaal;
 
@@ -494,7 +552,7 @@ function tekenVideoFrame(ctx, canvas, frame, schaal) {
   ctx.fillRect(18, 18, 430, 54);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 22px Arial, sans-serif';
-  ctx.fillText(`MTG · ${actieveLabel}`, 34, 42);
+  ctx.fillText(`MTG · ${productLabel(product)}`, 34, 42);
   ctx.font = '17px Arial, sans-serif';
   ctx.fillStyle = '#dcecff';
   ctx.fillText(`${actiefGebiedLabel} · ${formatDatumTijd(t)}`, 34, 64);
