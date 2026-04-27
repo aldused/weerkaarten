@@ -5,7 +5,8 @@
  * in de publieke HTML/JS van weerlab.nl staat. Gebruikt de customer-*
  * endpoints voor gegarandeerde performance (geen 429 rate limits).
  *
- * Routes (via Cloudflare Workers "Routes" gekoppeld aan weerlab.nl):
+ * Routes:
+ *   om.weerlab.nl/eumetview?...      -> view.eumetsat.int/geoserver/wms
  *   weerlab.nl/om/forecast?...      -> customer-api.open-meteo.com/v1/forecast
  *   weerlab.nl/om/ensemble?...      -> customer-ensemble-api.open-meteo.com/v1/ensemble
  *   weerlab.nl/om/previous?...      -> customer-previous-runs-api.open-meteo.com/v1/forecast
@@ -48,6 +49,10 @@ export default {
     }
 
     const url = new URL(request.url);
+    if (url.pathname === '/eumetview') {
+      return proxyEumetview(url, request, ctx);
+    }
+
     // Verwacht /om/<endpoint>
     const match = url.pathname.match(/^\/om\/([a-z-]+)\/?$/);
     if (!match) {
@@ -108,6 +113,45 @@ export default {
     return response;
   },
 };
+
+async function proxyEumetview(url, request, ctx) {
+  const upstream = new URL('https://view.eumetsat.int/geoserver/wms');
+  for (const [k, v] of url.searchParams) {
+    upstream.searchParams.set(k, v);
+  }
+
+  const cacheKey = new Request(upstream.toString(), request);
+  const cache = caches.default;
+  let response = await cache.match(cacheKey);
+
+  if (!response) {
+    const upstreamResp = await fetch(upstream.toString(), {
+      headers: { 'User-Agent': 'weerlab.nl-eumetview-proxy/1.0' },
+      cf: { cacheTtl: 90, cacheEverything: true },
+    });
+
+    response = new Response(upstreamResp.body, upstreamResp);
+    response.headers.set('Cache-Control', 'public, max-age=90');
+    response.headers.set('Content-Type', upstreamResp.headers.get('Content-Type') || 'image/png');
+    for (const [k, v] of Object.entries(CORS_HEADERS)) {
+      response.headers.set(k, v);
+    }
+    response.headers.delete('Server');
+    response.headers.delete('X-Cache');
+
+    if (upstreamResp.ok) {
+      ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    }
+  } else {
+    response = new Response(response.body, response);
+    response.headers.set('X-Cache-Status', 'HIT');
+    for (const [k, v] of Object.entries(CORS_HEADERS)) {
+      response.headers.set(k, v);
+    }
+  }
+
+  return response;
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
