@@ -662,6 +662,60 @@ const nachtPlugin = {
 };
 Chart.register(nachtPlugin);
 
+// ── Nacht-overlay voor bewolking-charts ──
+// Gebruikt echte zonsop/-onder; tekent een extra donkere laag over nachtbanden
+// zodat een wolkenloze nacht niet als zonovergoten oogt + maantje per band.
+let chartZonData = {}; // canvas-id → { sunrises:[ISO], sunsets:[ISO] }
+
+function _isNachtZon(tIso, sunrises, sunsets) {
+  const dKey = String(tIso).slice(0, 10);
+  const idx = sunrises.findIndex(s => s && s.startsWith(dKey));
+  if (idx < 0) { const h = new Date(tIso).getHours(); return h < 6 || h >= 20; }
+  return tIso < sunrises[idx] || tIso >= sunsets[idx];
+}
+
+const nachtBewolkingPlugin = {
+  id: 'nachtBewolking',
+  afterDatasetsDraw(chart) {
+    const id = chart.canvas.id;
+    const zon = chartZonData[id];
+    const ts = chartTimestamps[id];
+    if (!zon || !ts || !ts.length) return;
+    const ctx = chart.ctx;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y || chart.scales.y1;
+    if (!xScale || !yScale) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,30,55,0.32)';
+    const bands = [];
+    let inNacht = false, startX = 0;
+    for (let i = 0; i < ts.length; i++) {
+      const isNacht = _isNachtZon(ts[i], zon.sunrises, zon.sunsets);
+      const px = xScale.getPixelForValue(i);
+      if (isNacht && !inNacht) { inNacht = true; startX = px; }
+      if (!isNacht && inNacht) {
+        ctx.fillRect(startX, yScale.top, px - startX, yScale.bottom - yScale.top);
+        bands.push([startX, px]);
+        inNacht = false;
+      }
+    }
+    if (inNacht) {
+      const endX = xScale.getPixelForValue(ts.length - 1);
+      ctx.fillRect(startX, yScale.top, endX - startX, yScale.bottom - yScale.top);
+      bands.push([startX, endX]);
+    }
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    bands.forEach(([s, e]) => {
+      if (e - s < 26) return;
+      ctx.fillText('🌙', (s + e) / 2, yScale.top + 3);
+    });
+    ctx.restore();
+  }
+};
+Chart.register(nachtBewolkingPlugin);
+
 // ── Dag-grens plugin ── verticale lijn bij 00:00 van elke nieuwe dag
 // Lijn-charts (temp/dauwpunt/wind/winddir/neerslag) krijgen een dunnere/lichtere lijn;
 // stacked-bar charts (bewolking, kansen, weertype) krijgen een fellere lijn die door de bars heen prikt.
@@ -1836,8 +1890,9 @@ async function laadDagNeerslag(lat,lon,naam,dagen,van,tot){
 async function laadBewolking(lat,lon,naam,dagen,van,tot){
   const[ens,hres]=await Promise.all([
     fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
-    fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloudcover_low,cloudcover_mid,cloudcover_high&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
+    fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloudcover_low,cloudcover_mid,cloudcover_high&daily=sunrise,sunset&models=ecmwf_ifs&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
   ]);
+  if (hres.daily?.sunrise) chartZonData['canvas-cloud'] = {sunrises: hres.daily.sunrise, sunsets: hres.daily.sunset};
   const times=ens.hourly.time;
   const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
   const ccK=Object.keys(ens.hourly).filter(k=>k.startsWith('cloudcover_member'));
@@ -3474,7 +3529,11 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       return ` Med: ${v!=null?kmhToBft(v)+' Bft':'-'}`;
     }}};
   }else if(type==='cloud'){
-    const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
+    const [ens, sun] = await Promise.all([
+      fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
+      fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`).catch(()=>null),
+    ]);
+    if (sun?.daily?.sunrise) chartZonData[`verg-canvas-${idx}`] = {sunrises: sun.daily.sunrise, sunsets: sun.daily.sunset};
     const allTimes=ens.hourly.time;
     const fidx=filterT(allTimes,van,tot);
     const ts=fidx.map(i=>allTimes[i]);
