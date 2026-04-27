@@ -242,10 +242,14 @@ function productLabel(product) {
   return product.automatisch ? `Auto: ${product.label}` : product.label;
 }
 
+function productVoorLayer(layerName, tijd) {
+  return layerName === 'auto' ? productVoorTijd(tijd) : { layer: layerName, label: actieveLabel };
+}
+
 function wmsUrl(layerName, bbox, w, h, tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
-  const product = layerName === 'auto' ? productVoorTijd(t) : { layer: layerName };
+  const product = productVoorLayer(layerName, t);
   const layers = product.layer + ',osmgray:ne_10m_admin_0_boundary_lines_land';
   const styles = ',osmgray:all_boundaries_light';
   return WMS_URL +
@@ -262,7 +266,7 @@ function wmsUrl(layerName, bbox, w, h, tijdstap) {
 function frameCacheKey(tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
-  const product = productVoorTijd(t);
+  const product = productVoorLayer(actieveLayer, t);
   return [product.layer, activeBbox, activeW, activeH, isoTijd(t)].join('|');
 }
 
@@ -353,6 +357,28 @@ function laadSatelliet(tijdstap) {
     info.textContent = productLabel(product) + ' · laden mislukt';
   };
   tmp.src = url;
+}
+
+function toonTimelapseFrame(frame) {
+  const img = document.getElementById('satelliet-img');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  const headerProduct = document.getElementById('sat-header-product');
+  const headerTijd = document.getElementById('sat-header-tijd');
+  const headerGebied = document.getElementById('sat-header-gebied');
+  const stappen = tijdstappen();
+  const t = stappen[frame.stap];
+  const product = productVoorLayer(actieveLayer, t);
+  const isNu = frame.stap === LAATSTE_TIJDSTAP;
+
+  headerProduct.textContent = 'MTG · ' + productLabel(product);
+  headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
+  headerGebied.textContent = actiefGebiedLabel;
+  laatsteUrl = frame.url;
+  img.classList.remove('laden');
+  dot.style.display = 'none';
+  img.src = frame.url;
+  info.textContent = 'Timelapse speelt af · Bron: EUMETSAT EUMETView / MTG · tijden in NL-tijd';
 }
 
 function updateTijdDisplay(tijdstap) {
@@ -700,51 +726,54 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   btn.disabled = true;
   dot.style.display = 'block';
   info.textContent = 'Laatste 10 satellietbeelden laden voor timelapse…';
-  const { ok, geldig } = await preloadTimelapseFrames(versie);
+  await preloadTimelapseFrames(versie);
+  const frames = versie === selectieVersie ? await timelapseFrames() : [];
   btn.disabled = false;
   dot.style.display = 'none';
-  if (!ok) return;
-  if (geldig.length < 2) {
-    info.textContent = geldig.length === 0
+  if (versie !== selectieVersie) return;
+  if (frames.length < 2) {
+    info.textContent = frames.length === 0
       ? 'Geen beelden beschikbaar voor timelapse — probeer het later opnieuw'
       : 'Slechts 1 beeld beschikbaar — geen timelapse mogelijk';
     return;
   }
-  const ontbrekend = (LAATSTE_TIJDSTAP - timelapseStartStap() + 1) - geldig.length;
+  const ontbrekend = (LAATSTE_TIJDSTAP - timelapseStartStap() + 1) - frames.length;
 
   animatieActief = true;
   btn.classList.add('actief');
   btn.textContent = '⏸';
 
   let idx = 0;
-  let stap = geldig[idx];
+  let frame = frames[idx];
+  let stap = frame.stap;
   slider.value = stap;
   actieveTijdstap = stap;
   updateTijdDisplay(stap);
-  laadSatelliet(stap);
+  toonTimelapseFrame(frame);
 
   animatieTimer = setInterval(() => {
     idx++;
-    if (idx >= geldig.length) {
+    if (idx >= frames.length) {
       clearInterval(animatieTimer);
       animatieActief = false;
       btn.classList.remove('actief');
       btn.textContent = '▶';
-      const laatste = geldig[geldig.length - 1];
+      const laatste = frames[frames.length - 1].stap;
       actieveTijdstap = laatste;
       slider.value = laatste;
       updateTijdDisplay(laatste);
-      laadSatelliet(laatste);
+      toonTimelapseFrame(frames[frames.length - 1]);
       if (ontbrekend > 0) {
         document.getElementById('info-balk').textContent = `Timelapse afgespeeld · ${ontbrekend} beeld${ontbrekend === 1 ? '' : 'en'} ontbrak${ontbrekend === 1 ? '' : 'en'} bij EUMETSAT · Bron: EUMETSAT EUMETView / MTG`;
       }
       return;
     }
-    stap = geldig[idx];
+    frame = frames[idx];
+    stap = frame.stap;
     slider.value = stap;
     actieveTijdstap = stap;
     updateTijdDisplay(stap);
-    laadSatelliet(stap);
+    toonTimelapseFrame(frame);
   }, 650);
 });
 
