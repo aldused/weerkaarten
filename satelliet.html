@@ -30,6 +30,14 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .btn-download.social { background: #1a6a3a; }
 .btn-download.social:hover { background: #238a4f; }
 .veld-mini { height: 24px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; padding: 2px 9px; }
+.marker-zoekwrap { position: relative; display: flex; gap: 4px; align-items: center; }
+#marker-zoek { width: 150px; }
+.marker-suggest { display: none; position: absolute; top: 29px; left: 0; width: 260px; max-height: 230px; overflow-y: auto; background: white; border: 1px solid #bfd0e0; border-radius: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.18); z-index: 80; }
+.marker-suggest div { padding: 7px 9px; font-size: 12px; color: #24415f; cursor: pointer; border-bottom: 1px solid #eef3f8; }
+.marker-suggest div:last-child { border-bottom: none; }
+.marker-suggest div:hover, .marker-suggest div.sel { background: #e8f4ff; }
+.marker-suggest .titel { font-weight: 700; color: #00205b; }
+.marker-suggest .sub { color: #6a7f94; font-size: 11px; margin-top: 1px; }
 .sat-beeldvlak.plaats-punt { cursor: crosshair; }
 
 /* Tijdlijn */
@@ -100,6 +108,11 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   <button class="btn gebied" data-bbox="-15,30,40,72" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
   <div class="sep"></div>
   <span class="groep-label">Punt</span>
+  <div class="marker-zoekwrap">
+    <input class="veld-mini" id="marker-zoek" type="text" placeholder="Plaatsnaam..." autocomplete="off" title="Zoek een plaats en zet daar een pin">
+    <button class="btn" id="btn-marker-search" title="Zet een pin op de ingevoerde plaats">Pin</button>
+    <div class="marker-suggest" id="marker-suggest"></div>
+  </div>
   <select class="veld-mini" id="marker-preset" title="Plaats een punt op een bekende locatie">
     <option value="">Kies plek...</option>
     <option value="rotterdam">Rotterdam</option>
@@ -184,15 +197,28 @@ const overlayBestanden = {
 };
 const markerLocaties = {
   rotterdam: { label: 'Rotterdam', lat: 51.9244, lon: 4.4777 },
+  rotterdam_airport: { label: 'Rotterdam Airport', lat: 51.9569, lon: 4.4372 },
+  barendrecht: { label: 'Barendrecht', lat: 51.8567, lon: 4.5347 },
   eindhoven: { label: 'Eindhoven', lat: 51.4416, lon: 5.4697 },
   amsterdam: { label: 'Amsterdam', lat: 52.3676, lon: 4.9041 },
+  den_haag: { label: 'Den Haag', lat: 52.0705, lon: 4.3007 },
+  utrecht: { label: 'Utrecht', lat: 52.0907, lon: 5.1214 },
+  breda: { label: 'Breda', lat: 51.5719, lon: 4.7683 },
+  maastricht: { label: 'Maastricht', lat: 50.8514, lon: 5.6910 },
   brussel: { label: 'Brussel', lat: 50.8503, lon: 4.3517 },
-  antwerpen: { label: 'Antwerpen', lat: 51.2194, lon: 4.4025 }
+  antwerpen: { label: 'Antwerpen', lat: 51.2194, lon: 4.4025 },
+  gent: { label: 'Gent', lat: 51.0543, lon: 3.7174 },
+  brugge: { label: 'Brugge', lat: 51.2093, lon: 3.2247 },
+  luxemburg: { label: 'Luxemburg', lat: 49.6116, lon: 6.1319 }
 };
 let overlayData = {};
 let overlayGeladen = false;
 let markerPunt = null;
 let plaatsPuntModus = false;
+let markerZoekTimer = null;
+let markerZoekCtrl = null;
+let markerZoekResultaten = [];
+let markerSuggestIndex = 0;
 
 // Genereer lijst van laatste 18 tijdstappen (10-min intervallen = 3 uur).
 // EUMETView publiceert near-real-time, maar met verwerkingstijd. Zonder TIME
@@ -659,7 +685,102 @@ function actieveMarkerKleur() {
 
 function plaatsMarker(lon, lat, label) {
   markerPunt = { lon, lat, label, kleur: actieveMarkerKleur() };
+  document.getElementById('marker-zoek').value = label || '';
   tekenOverlay();
+}
+
+function normaliseerZoektekst(tekst) {
+  return tekst.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function lokaleMarkerMatches(query) {
+  const q = normaliseerZoektekst(query);
+  if (!q) return [];
+  return Object.values(markerLocaties)
+    .filter(p => normaliseerZoektekst(p.label).includes(q))
+    .sort((a, b) => {
+      const an = normaliseerZoektekst(a.label);
+      const bn = normaliseerZoektekst(b.label);
+      const as = an.startsWith(q) ? 0 : 1;
+      const bs = bn.startsWith(q) ? 0 : 1;
+      return as - bs || a.label.localeCompare(b.label, 'nl');
+    })
+    .slice(0, 6)
+    .map(p => ({ label: p.label, lat: p.lat, lon: p.lon, sub: 'Bekende locatie' }));
+}
+
+function escapeHtml(tekst) {
+  return String(tekst).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function toonMarkerSuggesties(resultaten) {
+  const box = document.getElementById('marker-suggest');
+  markerZoekResultaten = resultaten;
+  markerSuggestIndex = resultaten.length ? Math.max(0, Math.min(markerSuggestIndex, resultaten.length - 1)) : 0;
+  if (!resultaten.length) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = resultaten.map((r, i) =>
+    `<div class="${i === markerSuggestIndex ? 'sel' : ''}" data-idx="${i}"><div class="titel">${escapeHtml(r.label)}</div><div class="sub">${escapeHtml(r.sub || `${r.lat.toFixed(3)}°N, ${r.lon.toFixed(3)}°E`)}</div></div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function kiesMarkerResultaat(idx) {
+  const resultaat = markerZoekResultaten[idx];
+  if (!resultaat) return;
+  document.getElementById('marker-suggest').style.display = 'none';
+  document.getElementById('marker-preset').value = '';
+  plaatsMarker(resultaat.lon, resultaat.lat, resultaat.label);
+  zetPlaatsPuntModus(false);
+}
+
+async function zoekMarkerPlaats(direct = false) {
+  const input = document.getElementById('marker-zoek');
+  const q = input.value.trim();
+  if (q.length < 2) {
+    toonMarkerSuggesties([]);
+    return;
+  }
+
+  const lokaal = lokaleMarkerMatches(q);
+  toonMarkerSuggesties(lokaal);
+  if (direct && lokaal.length) {
+    kiesMarkerResultaat(0);
+    return;
+  }
+
+  if (markerZoekCtrl) markerZoekCtrl.abort();
+  markerZoekCtrl = new AbortController();
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=nl&countrycodes=nl,be,lu&addressdetails=1`;
+    const r = await fetch(url, { headers: { 'Accept-Language': 'nl' }, signal: markerZoekCtrl.signal });
+    if (!r.ok) throw new Error('zoekfout');
+    const extern = (await r.json()).map(item => {
+      const delen = item.display_name.split(',').map(s => s.trim());
+      return {
+        label: delen[0],
+        lat: parseFloat(item.lat),
+        lon: parseFloat(item.lon),
+        sub: delen.slice(1, 4).join(', ')
+      };
+    }).filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+    const gecombineerd = [...lokaal, ...extern.filter(ex => !lokaal.some(lo => normaliseerZoektekst(lo.label) === normaliseerZoektekst(ex.label)))].slice(0, 8);
+    toonMarkerSuggesties(gecombineerd);
+    if (direct && gecombineerd.length) kiesMarkerResultaat(0);
+  } catch (e) {
+    if (e.name !== 'AbortError' && direct && !lokaal.length) {
+      alert('Ik kan deze plaats niet vinden. Probeer een grotere plaatsnaam of gebruik Klikpunt.');
+    }
+  }
 }
 
 function zetPlaatsPuntModus(actief) {
@@ -699,6 +820,41 @@ document.getElementById('marker-color').addEventListener('change', e => {
   tekenOverlay();
 });
 
+document.getElementById('marker-zoek').addEventListener('input', () => {
+  clearTimeout(markerZoekTimer);
+  markerZoekTimer = setTimeout(() => zoekMarkerPlaats(false), 250);
+});
+
+document.getElementById('marker-zoek').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    zoekMarkerPlaats(true);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    markerSuggestIndex = Math.min(markerSuggestIndex + 1, Math.max(0, markerZoekResultaten.length - 1));
+    toonMarkerSuggesties(markerZoekResultaten);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    markerSuggestIndex = Math.max(markerSuggestIndex - 1, 0);
+    toonMarkerSuggesties(markerZoekResultaten);
+  } else if (e.key === 'Escape') {
+    document.getElementById('marker-suggest').style.display = 'none';
+  }
+});
+
+document.getElementById('btn-marker-search').addEventListener('click', () => zoekMarkerPlaats(true));
+
+document.getElementById('marker-suggest').addEventListener('mousedown', e => {
+  const item = e.target.closest('[data-idx]');
+  if (!item) return;
+  e.preventDefault();
+  kiesMarkerResultaat(parseInt(item.dataset.idx, 10));
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.marker-zoekwrap')) document.getElementById('marker-suggest').style.display = 'none';
+});
+
 document.getElementById('btn-marker-click').addEventListener('click', () => {
   zetPlaatsPuntModus(!plaatsPuntModus);
 });
@@ -706,6 +862,8 @@ document.getElementById('btn-marker-click').addEventListener('click', () => {
 document.getElementById('btn-marker-clear').addEventListener('click', () => {
   markerPunt = null;
   document.getElementById('marker-preset').value = '';
+  document.getElementById('marker-zoek').value = '';
+  document.getElementById('marker-suggest').style.display = 'none';
   zetPlaatsPuntModus(false);
   tekenOverlay();
 });
