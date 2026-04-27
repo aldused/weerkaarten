@@ -103,7 +103,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 
 <div class="tijdlijn">
   <label>Terugkijken:</label>
-  <button class="btn-play" id="btn-play" title="Animatie afspelen">▶</button>
+  <button class="btn-play" id="btn-play" title="Timelapse laatste 10 beelden">▶</button>
   <input type="range" id="tijd-slider" min="0" max="17" value="17" step="1">
   <div id="tijd-display">nu</div>
 </div>
@@ -130,17 +130,21 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 
 <script>
 const WMS_URL = 'https://view.eumetsat.int/geoserver/wms';
+const LAATSTE_TIJDSTAP = 17;
+const TIMELAPSE_AANTAL = 10;
 
 let actieveLayer = 'mtg_fd:rgb_truecolour';
 let actieveLabel = 'True Colour';
 let activeBbox = '-1,49,9,54';
 let activeW = 2400, activeH = 1440;
 let actiefGebiedLabel = 'Benelux';
-let actieveTijdstap = 17; // 17 = meest recent
+let actieveTijdstap = LAATSTE_TIJDSTAP;
 let autoRefreshTimer = null;
 let animatieTimer = null;
 let animatieActief = false;
 let laatsteUrl = '';
+let selectieVersie = 0;
+const frameCache = new Map();
 
 // Genereer lijst van laatste 18 tijdstappen (10-min intervallen = 3 uur).
 // EUMETView publiceert near-real-time, maar met verwerkingstijd. Zonder TIME
@@ -151,7 +155,7 @@ function tijdstappen() {
   // Rond af naar vorige 10 minuten, min circa 20 min vertraging.
   const basis = new Date(nu);
   basis.setUTCMinutes(Math.floor((nu.getUTCMinutes() - 20) / 10) * 10, 0, 0);
-  for (let i = 17; i >= 0; i--) {
+  for (let i = LAATSTE_TIJDSTAP; i >= 0; i--) {
     const t = new Date(basis.getTime() - i * 10 * 60000);
     stappen.push(t);
   }
@@ -199,6 +203,41 @@ function wmsUrl(layerName, bbox, w, h, tijdstap) {
     '&_t=' + t.getTime();
 }
 
+function frameCacheKey(tijdstap) {
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  return [actieveLayer, activeBbox, activeW, activeH, isoTijd(t)].join('|');
+}
+
+function timelapseStartStap() {
+  return Math.max(0, LAATSTE_TIJDSTAP - TIMELAPSE_AANTAL + 1);
+}
+
+function preloadFrame(tijdstap) {
+  const key = frameCacheKey(tijdstap);
+  const cached = frameCache.get(key);
+  if (cached) return cached.promise;
+
+  const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
+  const img = new Image();
+  const promise = new Promise((resolve, reject) => {
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+  });
+  frameCache.set(key, { img, promise, url });
+  if (frameCache.size > 60) frameCache.delete(frameCache.keys().next().value);
+  img.src = url;
+  return promise;
+}
+
+async function preloadTimelapseFrames(versie) {
+  const start = timelapseStartStap();
+  const stappen = [];
+  for (let stap = start; stap <= LAATSTE_TIJDSTAP; stap++) stappen.push(stap);
+  await Promise.allSettled(stappen.map(stap => preloadFrame(stap)));
+  return versie === selectieVersie;
+}
+
 function laadSatelliet(tijdstap) {
   const img = document.getElementById('satelliet-img');
   const info = document.getElementById('info-balk');
@@ -208,20 +247,30 @@ function laadSatelliet(tijdstap) {
   const headerGebied = document.getElementById('sat-header-gebied');
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
-  const isNu = tijdstap === 17;
+  const isNu = tijdstap === LAATSTE_TIJDSTAP;
 
   headerProduct.textContent = 'MTG · ' + actieveLabel;
   headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
   headerGebied.textContent = actiefGebiedLabel;
+  const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
+  laatsteUrl = url;
+  const cached = frameCache.get(frameCacheKey(tijdstap));
+  if (cached && cached.img.complete && cached.img.naturalWidth > 0) {
+    img.src = cached.url;
+    img.classList.remove('laden');
+    dot.style.display = 'none';
+    info.textContent = 'Timelapse-cache · Bron: EUMETSAT EUMETView / MTG · tijden in NL-tijd';
+    return;
+  }
+
   dot.style.display = 'block';
   img.classList.add('laden');
   info.textContent = 'Bron: EUMETSAT EUMETView / MTG · © Ed Aldus / Weerlab · laden…';
 
-  const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
-  laatsteUrl = url;
   const tmp = new Image();
   tmp.onload = () => {
     img.src = url;
+    frameCache.set(frameCacheKey(tijdstap), { img: tmp, promise: Promise.resolve(tmp), url });
     img.classList.remove('laden');
     dot.style.display = 'none';
     info.textContent = 'Bron: EUMETSAT EUMETView / Meteosat Third Generation · © Ed Aldus / Weerlab · tijden in NL-tijd';
@@ -238,7 +287,7 @@ function updateTijdDisplay(tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
   const el = document.getElementById('tijd-display');
-  el.textContent = tijdstap === 17 ? 'laatste (' + formatTijd(t) + ')' : formatTijd(t);
+  el.textContent = tijdstap === LAATSTE_TIJDSTAP ? 'laatste (' + formatTijd(t) + ')' : formatTijd(t);
 }
 
 // Product knoppen
@@ -248,6 +297,8 @@ document.querySelectorAll('.btn:not(.gebied)').forEach(btn => {
     btn.classList.add('actief');
     actieveLayer = btn.dataset.layer;
     actieveLabel = btn.dataset.label;
+    selectieVersie++;
+    frameCache.clear();
     laadSatelliet(actieveTijdstap);
   });
 });
@@ -261,6 +312,8 @@ document.querySelectorAll('.btn.gebied').forEach(btn => {
     activeW = parseInt(btn.dataset.w);
     activeH = parseInt(btn.dataset.h);
     actiefGebiedLabel = btn.dataset.label;
+    selectieVersie++;
+    frameCache.clear();
     laadSatelliet(actieveTijdstap);
   });
 });
@@ -275,10 +328,12 @@ slider.addEventListener('input', () => {
 
 // Vernieuw knop
 document.getElementById('btn-refresh').addEventListener('click', () => {
-  actieveTijdstap = 17;
-  slider.value = 17;
-  updateTijdDisplay(17);
-  laadSatelliet(17);
+  actieveTijdstap = LAATSTE_TIJDSTAP;
+  slider.value = LAATSTE_TIJDSTAP;
+  updateTijdDisplay(LAATSTE_TIJDSTAP);
+  selectieVersie++;
+  frameCache.clear();
+  laadSatelliet(LAATSTE_TIJDSTAP);
 });
 
 function bestandsNaam(t, suffix = '') {
@@ -335,7 +390,7 @@ async function downloadPng(social = false) {
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 26px Arial, sans-serif';
-    ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === 17 ? ' · laatste beeld' : ''), bronW - 24, 36);
+    ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : ''), bronW - 24, 36);
     ctx.font = '18px Arial, sans-serif';
     ctx.fillStyle = '#a8c8e8';
     ctx.fillText(actiefGebiedLabel, bronW - 24, 66);
@@ -382,10 +437,11 @@ function startAutoRefresh() {
   const status = document.getElementById('auto-status');
   if (autoRefreshTimer) return;
   autoRefreshTimer = setInterval(() => {
-    actieveTijdstap = 17;
-    slider.value = 17;
-    updateTijdDisplay(17);
-    laadSatelliet(17);
+    actieveTijdstap = LAATSTE_TIJDSTAP;
+    slider.value = LAATSTE_TIJDSTAP;
+    updateTijdDisplay(LAATSTE_TIJDSTAP);
+    selectieVersie++;
+    laadSatelliet(LAATSTE_TIJDSTAP);
   }, 10 * 60 * 1000);
   btn.classList.add('actief');
   btn.textContent = '⏱ Auto aan';
@@ -409,44 +465,62 @@ document.getElementById('btn-auto').addEventListener('click', () => {
   else startAutoRefresh();
 });
 
-// Animatie afspelen
-document.getElementById('btn-play').addEventListener('click', () => {
+// Timelapse van de laatste 10 beelden afspelen
+document.getElementById('btn-play').addEventListener('click', async () => {
   const btn = document.getElementById('btn-play');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
   if (animatieActief) {
     clearInterval(animatieTimer);
     animatieActief = false;
     btn.classList.remove('actief');
     btn.textContent = '▶';
+    info.textContent = 'Timelapse gepauzeerd · Bron: EUMETSAT EUMETView / MTG';
     return;
   }
+
+  const versie = selectieVersie;
+  btn.disabled = true;
+  dot.style.display = 'block';
+  info.textContent = 'Laatste 10 satellietbeelden laden voor timelapse…';
+  const nogActueel = await preloadTimelapseFrames(versie);
+  btn.disabled = false;
+  dot.style.display = 'none';
+  if (!nogActueel) return;
+
   animatieActief = true;
   btn.classList.add('actief');
   btn.textContent = '⏸';
 
-  let stap = 0;
+  let stap = timelapseStartStap();
   slider.value = stap;
+  actieveTijdstap = stap;
   updateTijdDisplay(stap);
   laadSatelliet(stap);
 
   animatieTimer = setInterval(() => {
     stap++;
-    if (stap > 17) {
+    if (stap > LAATSTE_TIJDSTAP) {
       clearInterval(animatieTimer);
       animatieActief = false;
       btn.classList.remove('actief');
       btn.textContent = '▶';
+      actieveTijdstap = LAATSTE_TIJDSTAP;
+      slider.value = LAATSTE_TIJDSTAP;
+      updateTijdDisplay(LAATSTE_TIJDSTAP);
+      laadSatelliet(LAATSTE_TIJDSTAP);
       return;
     }
     slider.value = stap;
     actieveTijdstap = stap;
     updateTijdDisplay(stap);
     laadSatelliet(stap);
-  }, 800);
+  }, 650);
 });
 
 // Start
-updateTijdDisplay(17);
-laadSatelliet(17);
+updateTijdDisplay(LAATSTE_TIJDSTAP);
+laadSatelliet(LAATSTE_TIJDSTAP);
 startAutoRefresh();
 </script>
 </body>
