@@ -520,6 +520,8 @@ select, input[type=date], input[type=text] {
     <div id="tldr-temp" class="tldr-chips" style="display:none"></div>
     <div class="legenda legenda-row" id="leg-row-temp" style="margin-bottom:6px">
       <span id="leg-temp" style="display:contents"></span>
+      <span class="tgl-pill tgl-banden on" id="tgl-banden" onclick="toggleBanden()" title="Toon/verberg p10–p90 en IQR-banden"><span class="dot"></span>Banden (p10–p90 + IQR)</span>
+      <span class="tgl-pill tgl-hres on" id="tgl-hres" onclick="toggleHres()" title="Toon/verberg HRES deterministisch"><span class="dot"></span>HRES</span>
       <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
     </div>
     <div id="crosshair-info" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;gap:16px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
@@ -530,6 +532,8 @@ select, input[type=date], input[type=text] {
     <div id="tldr-neerslag" class="tldr-chips" style="display:none"></div>
     <div class="legenda legenda-row" id="leg-row-neerslag" style="margin-bottom:6px">
       <span id="leg-neerslag" style="display:contents"></span>
+      <span class="tgl-pill tgl-banden on" id="tgl-banden-neerslag" onclick="toggleBanden()" title="Toon/verberg p10–p90 en IQR-banden"><span class="dot"></span>Banden (p10–p90 + IQR)</span>
+      <span class="tgl-pill tgl-hres on" id="tgl-hres-neerslag" onclick="toggleHres()" title="Toon/verberg HRES deterministisch"><span class="dot"></span>HRES</span>
       <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti-neerslag" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
     </div>
     <div id="crosshair-info-neerslag" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;gap:14px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
@@ -1421,9 +1425,14 @@ function ensDatasets(arr,kleur){
 }
 // Spaghetti toggle: default uit (rustige weergave) — gebruiker kan inschakelen
 window._toonSpaghetti = window._toonSpaghetti ?? false;
-function toggleSpaghetti(){
-  window._toonSpaghetti = !window._toonSpaghetti;
-  document.querySelectorAll('.tgl-spaghetti, #tgl-spaghetti').forEach(p=>p.classList.toggle('on', window._toonSpaghetti));
+function toggleSpaghetti(){ _toggleFlag('_toonSpaghetti','tgl-spaghetti','_isMember', false); }
+function toggleBanden(){    _toggleFlag('_toonBanden','tgl-banden','_isBand', true); }
+function toggleHres(){      _toggleFlag('_toonHres','tgl-hres','_isHres', true); }
+
+function _toggleFlag(flag, pillCls, mark, defaultOn){
+  if(window[flag] === undefined) window[flag] = defaultOn;
+  window[flag] = !window[flag];
+  document.querySelectorAll('.'+pillCls+', #'+pillCls).forEach(p=>p.classList.toggle('on', window[flag]));
   const allCharts = [
     ...Object.values(typeof actieveCharts !== 'undefined' ? actieveCharts : {}),
     ...Object.values(typeof vergCharts !== 'undefined' ? vergCharts : {}),
@@ -1432,11 +1441,15 @@ function toggleSpaghetti(){
     if(!ch?.data?.datasets) return;
     let changed = false;
     ch.data.datasets.forEach(d=>{
-      if(d._isMember){ d.hidden = !window._toonSpaghetti; changed = true; }
+      if(d[mark]){ d.hidden = !window[flag]; changed = true; }
     });
     if(changed) ch.update('none');
   });
 }
+// Defaults
+window._toonSpaghetti = window._toonSpaghetti ?? false;
+window._toonBanden    = window._toonBanden    ?? true;
+window._toonHres      = window._toonHres      ?? true;
 
 // tl;dr-chips boven de temperatuurgrafiek — sleutelgetallen uit het ensemble
 function renderTldrTemp({tMed, tP10, tP25, tP75, tP90, mosTxData, mosTnData}){
@@ -1756,12 +1769,12 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   actieveCharts.temp=new Chart(document.getElementById('canvas-temp'),{
     data:{labels:lab,datasets:[
       ...ensDatasets(tA,'rgba(22,120,30,0.28)'),
-      {type:'line',data:tP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'51,170,51',0.06,0.10),fill:'+1',pointRadius:0,tension:0.35,order:10},
-      {type:'line',data:tP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.35,order:10},
-      {type:'line',data:tP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'51,170,51',0.18,0.28),fill:'+1',pointRadius:0,tension:0.35,order:9},
-      {type:'line',data:tP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.35,order:9},
+      {type:'line',data:tP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'51,170,51',0.06,0.10),fill:'+1',pointRadius:0,tension:0.35,order:10,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:tP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.35,order:10,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:tP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'51,170,51',0.18,0.28),fill:'+1',pointRadius:0,tension:0.35,order:9,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:tP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.35,order:9,_isBand:true,hidden:!window._toonBanden},
       Object.assign({type:'line',data:tMed,borderColor:'#ee3333',borderWidth:2.8,pointRadius:0,fill:false,tension:0.35,order:1,borderCapStyle:'round'},{_glow:true}),
-      {type:'line',data:hTemp,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:2,xAxisID:'xH',borderCapStyle:'round'},
+      {type:'line',data:hTemp,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:2,xAxisID:'xH',borderCapStyle:'round',_isHres:true,hidden:!window._toonHres},
       {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:3},
       {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.35)',borderWidth:0.7,borderDash:[5,4],pointRadius:0,fill:false,order:3},
       ...(mosBol ? [
@@ -1780,8 +1793,9 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     }
   });
   // Sync spaghetti-toggle pill met huidige state
-  const _spag = document.getElementById('tgl-spaghetti');
-  if(_spag) _spag.classList.toggle('on', !!window._toonSpaghetti);
+  document.querySelectorAll('.tgl-spaghetti, #tgl-spaghetti').forEach(p=>p.classList.toggle('on', !!window._toonSpaghetti));
+  document.querySelectorAll('.tgl-banden, #tgl-banden').forEach(p=>p.classList.toggle('on', !!window._toonBanden));
+  document.querySelectorAll('.tgl-hres, #tgl-hres').forEach(p=>p.classList.toggle('on', !!window._toonHres));
   // Render tl;dr-chips boven de grafiek
   renderTldrTemp({tMed, tP10, tP25, tP75, tP90, mosTxData, mosTnData});
   // Temperatuur-pagina toont alleen de temperatuurpluim — neerslag heeft eigen tegel
@@ -2920,12 +2934,12 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
     data:{labels:lab6,datasets:[
       ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
-      {type:'line',data:pP10_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.3,order:9},
-      {type:'line',data:pP90_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
-      {type:'line',data:pP25_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.3,order:8},
-      {type:'line',data:pP75_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8},
+      {type:'line',data:pP10_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.3,order:9,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:pP90_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:pP25_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.3,order:8,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:pP75_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:8,_isBand:true,hidden:!window._toonBanden},
       Object.assign({type:'line',data:pMed6,borderColor:'#ee3333',borderWidth:2.6,pointRadius:0,fill:false,tension:0.3,order:1,borderCapStyle:'round'},{_glow:true}),
-      {type:'line',data:hPrecip6Mapped,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.3,order:2,borderCapStyle:'round'},
+      {type:'line',data:hPrecip6Mapped,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.3,order:2,borderCapStyle:'round',_isHres:true,hidden:!window._toonHres},
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
@@ -2976,12 +2990,12 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
   actieveCharts.neerslagsom=new Chart(document.getElementById('canvas-neerslagsom'),{
     data:{labels:lab6,datasets:[
       ...pCum6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.45)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.2,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
-      {type:'line',data:cumP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.2,order:9},
-      {type:'line',data:cumP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.2,order:9},
-      {type:'line',data:cumP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.2,order:8},
-      {type:'line',data:cumP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.2,order:8},
+      {type:'line',data:cumP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.2,order:9,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:cumP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.2,order:9,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:cumP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.2,order:8,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:cumP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.2,order:8,_isBand:true,hidden:!window._toonBanden},
       Object.assign({type:'line',data:cumMed,borderColor:'#ee3333',borderWidth:2.6,pointRadius:0,fill:false,tension:0.2,order:1,borderCapStyle:'round'},{_glow:true}),
-      {type:'line',data:hCumMapped,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.2,order:2,borderCapStyle:'round'},
+      {type:'line',data:hCumMapped,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.2,order:2,borderCapStyle:'round',_isHres:true,hidden:!window._toonHres},
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
@@ -3015,6 +3029,8 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
   });
   // Sync spaghetti-toggle pills + render tl;dr-chips voor neerslag
   document.querySelectorAll('.tgl-spaghetti, #tgl-spaghetti').forEach(p=>p.classList.toggle('on', !!window._toonSpaghetti));
+  document.querySelectorAll('.tgl-banden, #tgl-banden').forEach(p=>p.classList.toggle('on', !!window._toonBanden));
+  document.querySelectorAll('.tgl-hres, #tgl-hres').forEach(p=>p.classList.toggle('on', !!window._toonHres));
   const _cumLast = {
     p10: cumP10[cumP10.length-1] ?? 0,
     p50: cumMed[cumMed.length-1] ?? 0,
