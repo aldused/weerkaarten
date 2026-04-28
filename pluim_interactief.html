@@ -532,6 +532,7 @@ select, input[type=date], input[type=text] {
       <span id="leg-neerslag" style="display:contents"></span>
       <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti-neerslag" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
     </div>
+    <div id="crosshair-info-neerslag" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;gap:14px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
     <div style="position:relative;width:100%;height:220px"><canvas id="canvas-neerslag"></canvas></div>
   </div>
   <div id="blok-dagkansen" class="grafiek-blok" style="display:none">
@@ -790,24 +791,47 @@ Chart.register(dagGrensPlugin);
 let crosshairData = {};
 let crosshairPinned = null; // {idx, x, html, items} als gepind
 
-function crosshairBerekenItems(cd, idx) {
-  const ensVals = (cd.tA||[]).map(m => m[idx]).filter(v => v != null);
-  const maxVal = ensVals.length ? Math.max(...ensVals) : null;
-  const minVal = ensVals.length ? Math.min(...ensVals) : null;
-  const medVal = cd.tMed ? cd.tMed[idx] : null;
-  const hresVal = cd.hTemp ? cd.hTemp[idx] : null;
-  const mosTx = cd.mosTxData ? cd.mosTxData[idx] : null;
-  const mosTn = cd.mosTnData ? cd.mosTnData[idx] : null;
-  const ts = chartTimestamps['canvas-temp'];
-  const tijd = ts && ts[idx] ? new Date(ts[idx]).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
-
+function crosshairBerekenItems(cd, idx, canvasId='canvas-temp') {
+  const ts = chartTimestamps[canvasId] || [];
+  const mode = cd.mode || 'temp';
+  let tijd = '';
+  if(ts[idx]){
+    if(mode==='neerslag'){
+      const d=new Date(ts[idx]); const eindH=d.getHours()||24; const beginH=(eindH-6+24)%24;
+      tijd = d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}) + ` · ${String(beginH).padStart(2,'0')}–${String(eindH%24).padStart(2,'0')}u`;
+    } else {
+      tijd = new Date(ts[idx]).toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    }
+  }
   const items = [{t:tijd,c:'#555'}];
-  if (maxVal != null) items.push({t:`Max: ${maxVal.toFixed(1)}°`,c:'#cc6600'});
-  if (hresVal != null) items.push({t:`HRES: ${hresVal.toFixed(1)}°`,c:'#2299ff'});
-  if (medVal != null) items.push({t:`Med: ${medVal.toFixed(1)}°`,c:'#cc2222'});
-  if (minVal != null) items.push({t:`Min: ${minVal.toFixed(1)}°`,c:'#2266aa'});
-  if (mosTx != null) items.push({t:`MOS TX: ${mosTx.toFixed(1)}°`,c:'#ff4444'});
-  if (mosTn != null) items.push({t:`MOS TN: ${mosTn.toFixed(1)}°`,c:'#4488ff'});
+  const fmt = (v,u) => v!=null ? `${v.toFixed(1)}${u}` : '–';
+
+  if(mode==='temp'){
+    const med = cd.tMed?.[idx];
+    const p10 = cd.tP10?.[idx], p25 = cd.tP25?.[idx], p75 = cd.tP75?.[idx], p90 = cd.tP90?.[idx];
+    const hres = cd.hTemp?.[idx];
+    const mosTx = cd.mosTxData?.[idx], mosTn = cd.mosTnData?.[idx];
+    if(med!=null)  items.push({t:`Med: ${fmt(med,'°')}`, c:'#cc2222'});
+    if(p25!=null && p75!=null) items.push({t:`IQR: ${fmt(p25,'')}–${fmt(p75,'°')}`, c:'#225588'});
+    if(p10!=null && p90!=null) items.push({t:`p10–p90: ${fmt(p10,'')}–${fmt(p90,'°')}`, c:'#5a7a98'});
+    if(hres!=null) {
+      const dh = (med!=null) ? (hres-med) : null;
+      const delta = dh!=null ? ` (${dh>=0?'+':''}${dh.toFixed(1)})` : '';
+      items.push({t:`HRES: ${fmt(hres,'°')}${delta}`, c:'#cc0000'});
+    }
+    if(mosTx!=null) items.push({t:`MOS TX: ${fmt(mosTx,'°')}`, c:'#ff4444'});
+    if(mosTn!=null) items.push({t:`MOS TN: ${fmt(mosTn,'°')}`, c:'#4488ff'});
+  } else {
+    // mode==='neerslag' — twee panels (mm/6u + cumulatief) sharen idx
+    const mmMed = cd.mmMed?.[idx], mmP10 = cd.mmP10?.[idx], mmP90 = cd.mmP90?.[idx], mmHres = cd.mmHres?.[idx];
+    const cmMed = cd.cmMed?.[idx], cmP10 = cd.cmP10?.[idx], cmP90 = cd.cmP90?.[idx], cmHres = cd.cmHres?.[idx];
+    const dropProb = cd.mmA && cd.mmA.length ? (cd.mmA.map(m=>m[idx]).filter(v=>v!=null && v>=0.1).length / cd.mmA.length) : null;
+    if(mmMed!=null) items.push({t:`Med: ${fmt(mmMed,' mm')}`, c:'#1f7a5e'});
+    if(mmP10!=null && mmP90!=null) items.push({t:`p10–p90: ${fmt(mmP10,'')}–${fmt(mmP90,' mm')}`, c:'#5a7a78'});
+    if(mmHres!=null) items.push({t:`HRES: ${fmt(mmHres,' mm')}`, c:'#cc0000'});
+    if(dropProb!=null) items.push({t:`Kans ≥0.1 mm: ${Math.round(dropProb*100)}%`, c:'#666'});
+    if(cmMed!=null) items.push({t:`Cum: ${cmMed.toFixed(0)} mm (p10–p90: ${(cmP10??0).toFixed(0)}–${(cmP90??0).toFixed(0)})`, c:'#1f5a4a'});
+  }
 
   let html = items.map(it => `<span style="color:${it.c}">${it.t.includes(':')?it.t:`<b>${it.t}</b>`}</span>`).join('');
   return {items, html, idx};
@@ -838,14 +862,22 @@ function crosshairTekenBalk(ctx, items, x, yScale, xScale) {
   ctx.restore();
 }
 
+// Welke canvases krijgen een crosshair, en welke info-div hoort erbij
+const CROSSHAIR_TARGETS = {
+  'canvas-temp':       {info:'crosshair-info',          partners:[], dataLen:cd=>(cd.tMed||[]).length},
+  'canvas-neerslag':   {info:'crosshair-info-neerslag', partners:['canvas-neerslagsom'], dataLen:cd=>(cd.mmMed||[]).length},
+  'canvas-neerslagsom':{info:'crosshair-info-neerslag', partners:['canvas-neerslag'],    dataLen:cd=>(cd.mmMed||[]).length},
+};
+
 const crosshairPlugin = {
   id: 'crosshairInfo',
   afterEvent(chart, args) {
-    if (chart.canvas.id !== 'canvas-temp') return;
+    const cfg = CROSSHAIR_TARGETS[chart.canvas.id];
+    if (!cfg) return;
     const evt = args.event;
-    const info = document.getElementById('crosshair-info');
+    const info = document.getElementById(cfg.info);
     if (!info) return;
-    const cd = crosshairData['canvas-temp'];
+    const cd = crosshairData[chart.canvas.id];
     if (!cd) return;
 
     // Dubbelklik: pin/unpin
@@ -854,8 +886,8 @@ const crosshairPlugin = {
         crosshairPinned = null;
         info.style.background = '#f8f9fb';
       } else if (chart._chIdx != null) {
-        const r = crosshairBerekenItems(cd, chart._chIdx);
-        crosshairPinned = {idx: chart._chIdx, x: chart._chX, html: r.html, items: r.items};
+        const r = crosshairBerekenItems(cd, chart._chIdx, chart.canvas.id);
+        crosshairPinned = {idx: chart._chIdx, x: chart._chX, html: r.html, items: r.items, canvasId: chart.canvas.id};
         info.innerHTML = r.html + '<span style="color:#0d9488;font-size:.7rem;margin-left:8px">📌 vastgezet</span>';
         info.style.background = '#e8f8f5';
       }
@@ -868,30 +900,43 @@ const crosshairPlugin = {
     if (evt.type === 'mouseout') {
       chart._chIdx = null;
       info.style.display = 'none';
+      // Sync partners (verberg ook hun crosshair)
+      cfg.partners.forEach(pid => {
+        const p = Object.values(actieveCharts).find(c=>c?.canvas?.id===pid);
+        if(p){ p._chIdx = null; p.update('none'); }
+      });
       return;
     }
     if (evt.type !== 'mousemove') return;
     const xScale = chart.scales.x;
     if (!xScale) return;
     const idx = Math.round(xScale.getValueForPixel(evt.x));
-    if (idx < 0 || idx >= (cd.tMed||[]).length) { info.style.display = 'none'; chart._chIdx = null; return; }
+    const len = cfg.dataLen(cd);
+    if (idx < 0 || idx >= len) { info.style.display = 'none'; chart._chIdx = null; return; }
 
     chart._chIdx = idx;
     chart._chX = evt.x;
 
-    const r = crosshairBerekenItems(cd, idx);
+    const r = crosshairBerekenItems(cd, idx, chart.canvas.id);
     info.innerHTML = r.html;
     info.style.display = 'flex';
     info.style.background = '#f8f9fb';
+
+    // Sync partners (zelfde idx, zodat crosshair-lijn ook in het andere panel verschijnt)
+    cfg.partners.forEach(pid => {
+      const p = Object.values(actieveCharts).find(c=>c?.canvas?.id===pid);
+      if(p){ p._chIdx = idx; p._chX = null; p.update('none'); }
+    });
   },
   afterDraw(chart) {
-    if (chart.canvas.id !== 'canvas-temp') return;
+    const cfg = CROSSHAIR_TARGETS[chart.canvas.id];
+    if (!cfg) return;
     const xScale = chart.scales.x;
     const yScale = chart.scales.y;
     if (!xScale || !yScale) return;
 
     // Teken gepinde crosshair (blijft in PNG!)
-    if (crosshairPinned) {
+    if (crosshairPinned && (crosshairPinned.canvasId === chart.canvas.id || cfg.partners.includes(crosshairPinned.canvasId))) {
       const px = xScale.getPixelForValue(crosshairPinned.idx);
       const ctx = chart.ctx;
       ctx.save();
@@ -903,12 +948,15 @@ const crosshairPlugin = {
       ctx.lineTo(px, yScale.bottom);
       ctx.stroke();
       ctx.restore();
-      crosshairTekenBalk(ctx, crosshairPinned.items, px, yScale, xScale);
+      // Balk alleen tekenen op het canvas waarop is gepind
+      if (crosshairPinned.canvasId === chart.canvas.id) {
+        crosshairTekenBalk(ctx, crosshairPinned.items, px, yScale, xScale);
+      }
     }
 
     // Teken live crosshair (alleen op scherm, niet als gepind)
     if (!crosshairPinned && chart._chIdx != null) {
-      const px = chart._chX || xScale.getPixelForValue(chart._chIdx);
+      const px = chart._chX != null ? chart._chX : xScale.getPixelForValue(chart._chIdx);
       const ctx = chart.ctx;
       ctx.save();
       ctx.beginPath();
@@ -1703,7 +1751,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     ...(mosBol ? [['#ff4444','MOSMIX TX' + mosLabel,'punt'],['#4488ff','MOSMIX TN' + mosLabel,'punt']] : []),
   ]);
   chartTimestamps['canvas-temp']=ts;
-  crosshairData['canvas-temp']={tA, tMed, hTemp:hTempMapped, mosTxData, mosTnData};
+  crosshairData['canvas-temp']={tA, tMed, tP10, tP25, tP75, tP90, hTemp:hTempMapped, mosTxData, mosTnData, mode:'temp'};
   setTimeout(initCrosshair, 100);
   actieveCharts.temp=new Chart(document.getElementById('canvas-temp'),{
     data:{labels:lab,datasets:[
@@ -2973,6 +3021,15 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
     p90: cumP90[cumP90.length-1] ?? 0,
   };
   renderTldrNeerslag({pA6, pMed6, pP10_6, pP25_6, pP75_6, pP90_6, ts6, cumStats:_cumLast, nMembers:nM});
+
+  // Crosshair-data: zelfde stats voor beide neerslag-canvases (gedeelde tijdas ts6)
+  const _neerslagCD = {
+    mmA: pA6, mmMed: pMed6, mmP10: pP10_6, mmP25: pP25_6, mmP75: pP75_6, mmP90: pP90_6, mmHres: hPrecip6Mapped,
+    cmMed: cumMed, cmP10: cumP10, cmP25: cumP25, cmP75: cumP75, cmP90: cumP90, cmHres: hCumMapped,
+    mode: 'neerslag',
+  };
+  crosshairData['canvas-neerslag'] = _neerslagCD;
+  crosshairData['canvas-neerslagsom'] = _neerslagCD;
 }
 
 // ── Scenario-clustering: 51 members groeperen in koel/gemiddeld/warm ──
