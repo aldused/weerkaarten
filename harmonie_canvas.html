@@ -471,7 +471,8 @@ body {
     <select id="model-select" style="padding:4px 10px;border-radius:6px;border:1px solid #4a7ab5;background:#003366;color:white;font-size:13px;font-weight:700;cursor:pointer;">
       <option value="harmonie">HARMONIE Cy43 (KNMI)</option>
       <option value="icond2">ICON-D2 (DWD)</option>
-      <option value="ecmwf">ECMWF IFS (Open-Meteo)</option>
+      <option value="ecmwf">ECMWF IFS (00/12, 10 dagen)</option>
+      <option value="ecmwf_om">ECMWF IFS (16 dagen, Open-Meteo)</option>
       <option value="icond2ruc">ICON-D2-RUC (DWD, uurlijks)</option>
     </select>
   </div>
@@ -602,7 +603,8 @@ body {
     harmonie: { meta: "harmonie_canvas_meta.json", label: "HARMONIE Cy43 (KNMI, 2km)" },
     icond2:   { meta: "icond2_canvas_meta.json",   label: "ICON-D2 (DWD, 2.2km)" },
     icond2ruc: { meta: "icond2ruc_canvas_meta.json", label: "ICON-D2-RUC (DWD, 2.2km, uurlijks)" },
-    ecmwf:    { meta: "ecmwf_om_canvas_meta.json", label: "ECMWF IFS via Open-Meteo (Benelux)" },
+    ecmwf:    { meta: "ecmwf_canvas_meta.json",    label: "ECMWF IFS HRES 00/12 (10 dagen)" },
+    ecmwf_om: { meta: "ecmwf_om_canvas_meta.json", label: "ECMWF IFS via Open-Meteo (16 dagen)" },
   };
   var actiefModel = "harmonie";
   var vergelijkModus = false;
@@ -611,7 +613,7 @@ body {
 
   function addDerivedParams(m) {
     m.parameters["wbgt"] = {label: "WBGT Hitteindex (\u00b0C)", derived: true, needs: ["temp","rv"]};
-    m.parameters["nsomm"] = {label: "Neerslagsom " + nsomUren + "u (mm)", derived: true, needs: ["neerslag"]};
+    m.parameters["nsomm"] = {label: "Neerslagsom (cumulatief mm)", derived: true, needs: ["neerslag"]};
     m.parameters["neerslag_mm"] = {label: "Neerslag (mm/u)", derived: true, needs: ["neerslag"]};
     m.parameters["bewolking_laag"] = {label: "Lage bewolking (%)", derived: true, needs: ["bewolking"]};
     m.parameters["bewolking_mid"] = {label: "Middelbare bewolking (%)", derived: true, needs: ["bewolking"]};
@@ -1099,7 +1101,12 @@ body {
     var modelInfo = MODELS[actiefModel];
     return fetch(DATA_URL + modelInfo.meta + "?t=" + Date.now())
       .then(function(r) { return r.json(); })
-      .then(function(d) { meta = d; return d; });
+      .then(function(d) {
+        meta = d;
+        // Cumulatieve neerslag spant standaard de hele run.
+        nsomUren = (d && d.uren) ? d.uren : 60;
+        return d;
+      });
   }
 
   // HARMONIE Land-Sea Mask — eenmalig laden, alleen voor bewolkingskaart
@@ -1155,7 +1162,7 @@ body {
   var panelZoom = {}; // panelIdx → {zoom, cx, cy} (cx,cy = center in 0-1 space)
   var ECMWF_BENELUX_VIEW = {zoom: 1, lat: 51.55, lon: 4.85};
   function defaultZoomState() {
-    if (actiefModel === "ecmwf" && meta && meta.grid) {
+    if ((actiefModel === "ecmwf" || actiefModel === "ecmwf_om") && meta && meta.grid) {
       return {
         zoom: ECMWF_BENELUX_VIEW.zoom,
         cx: (ECMWF_BENELUX_VIEW.lon - meta.grid.lon_min) / (meta.grid.lon_max - meta.grid.lon_min),
@@ -1708,15 +1715,16 @@ body {
     // Gridwaarden (cijfers) — minder dicht, met witte omlijning
     // Gewenst aantal labels per rij (onafhankelijk van gridresolutie)
     // Pixel-afstand tussen labels (onafhankelijk van gridresolutie)
-    var labelAfstandPx = actiefModel === "ecmwf" ? 16 : 22; // ECMWF-grid is grover, dus meer cijfers kan
-    if (paramKey === "druk") labelAfstandPx = actiefModel === "ecmwf" ? 38 : 50; // 4 cijfers breed
-    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "onweer" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = actiefModel === "ecmwf" ? 26 : 35; // 3+ cijfers
-    else if (paramKey === "hoogte_300" || paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = actiefModel === "ecmwf" ? 30 : 40; // "556" of temp
-    else if (paramKey === "theta_e") labelAfstandPx = actiefModel === "ecmwf" ? 30 : 40; // "312" K
+    var isEcmwf = (actiefModel === "ecmwf" || actiefModel === "ecmwf_om");
+    var labelAfstandPx = isEcmwf ? 16 : 22; // ECMWF-grid is grover, dus meer cijfers kan
+    if (paramKey === "druk") labelAfstandPx = isEcmwf ? 38 : 50; // 4 cijfers breed
+    else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "onweer" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = isEcmwf ? 26 : 35; // 3+ cijfers
+    else if (paramKey === "hoogte_300" || paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = isEcmwf ? 30 : 40; // "556" of temp
+    else if (paramKey === "theta_e") labelAfstandPx = isEcmwf ? 30 : 40; // "312" K
     // Bereken stap op basis van canvas-pixels, niet gridpunten
     var pxPerGrid = cw * zoomLevel / nLon;
     var labelsPerRij = Math.round(cw / labelAfstandPx);
-    var minLabelStep = (actiefModel === "ecmwf" && nLat <= 60 && nLon <= 80) ? 1 : 2;
+    var minLabelStep = (isEcmwf && nLat <= 60 && nLon <= 80) ? 1 : 2;
     var labelStep = Math.max(minLabelStep, Math.round(nLon / (labelsPerRij * zoomLevel)));
     var fontSize = Math.max(11, Math.round(ch / 80));
     ctx.font = "bold " + fontSize + "px Arial";
@@ -1924,7 +1932,7 @@ body {
       }
       else if (paramKey === "wind_druk") { legLevels = [0,1,2,3,4,5,6,7,8,9,10,11]; legColors = WIND_COLORS; legLabel = "Bft + hPa"; }
       else if (paramKey === "wbgt") { legLevels = WBGT_LEVELS; legColors = WBGT_COLORS; legLabel = "\u00b0C WBGT"; }
-      else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm cumulatief (tot " + nsomUren + "u)"; }
+      else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm cumulatief vanaf t+0u"; }
       else if (paramKey === "neerslag_mm") { legLevels = NEERSLAG_MM_LEVELS; legColors = NEERSLAG_MM_COLORS; legLabel = "mm/u"; }
       else if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") { legLevels = CLOUD_PCT_LEVELS; legColors = CLOUD_PCT_COLORS; legLabel = "%"; }
       else if (paramKey === "mist") { legLevels = MIST_LEVELS; legColors = MIST_COLORS; legLabel = "m zicht"; }
@@ -3400,6 +3408,15 @@ body {
   }
 
   function herlaadData() {
+    // Snapshot oude state: bij netwerk-fout zetten we alles weer terug zodat
+    // de gebruiker zijn layout / parameters / zoom niet kwijt is.
+    var snap = {
+      meta: meta,
+      paramCache: paramCache,
+      modelData: modelData,
+      lsmData: lsmData,
+      overlayCache: overlayCache,
+    };
     var bewaarLayout = layout;
     var bewaarParams = panelParams.slice();
     var bewaarStep  = parseInt(slider.value) - 1;
@@ -3411,13 +3428,12 @@ body {
     btn.style.opacity = "0.5";
     statusEl.textContent = "Vernieuwen...";
 
-    // Cache leegmaken zodat alles vers wordt geladen
-    paramCache = {};
-    modelData  = {};
-    lsmData    = null;
-    overlayCache = {};
-
+    // Caches NIET vooraf legen — pas wisselen als nieuwe data binnen is.
     Promise.all([laadMeta(), laadOverlay(), laadLSM()]).then(function() {
+      // Nieuwe meta is nu actief; param-cache van vorige run weggooien
+      // zodat we verse arrays ophalen.
+      paramCache = {};
+      modelData  = {};
       addDerivedParams(meta);
       modelData[actiefModel] = { meta: meta, paramCache: paramCache };
       aantalUren = meta.uren;
@@ -3452,11 +3468,18 @@ body {
       btn.disabled = false;
       btn.style.opacity = "1";
     }).catch(function(e) {
-      statusEl.textContent = "Fout bij vernieuwen: " + e;
+      // Iets ging mis (CORS, netwerk, tijdelijke 404 bij publish-window).
+      // Zet alles terug zodat panelen / parameters / zoom intact blijven.
+      meta         = snap.meta;
+      paramCache   = snap.paramCache;
+      modelData    = snap.modelData;
+      lsmData      = snap.lsmData;
+      overlayCache = snap.overlayCache;
+      statusEl.textContent = "Vernieuwen mislukt — probeer het zo opnieuw";
       btn.textContent = "↻";
       btn.disabled = false;
       btn.style.opacity = "1";
-      console.error(e);
+      console.error("herlaadData:", e);
     });
   }
 
