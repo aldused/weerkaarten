@@ -224,6 +224,69 @@ COORDS_GB = {
     "Dublin":[-6.250,53.433],"Belmullet":[-10.017,54.233],"Malin Head":[-7.333,55.367],
 }
 
+# Alpenlanden (Oostenrijk + Zwitserland) — DWD MOSMIX 110xx (AT) + 066xx-067xx (CH)
+STATIONS_ALPS = [
+    # ── Zwitserland — steden
+    ("06700","Genève"),("06610","Payerne"),("06631","Bern"),
+    ("06601","Basel"),("06620","Schaffhausen"),
+    ("06650","Luzern"),("06670","Zürich"),("06681","St. Gallen"),
+    ("06734","Interlaken"),("06672","Altdorf"),
+    ("06720","Sion"),("06770","Lugano"),("06760","Locarno-Monti"),
+    ("06784","Davos"),("06790","Schiers"),("06753","Piotta"),
+    ("06685","Glarus"),
+    # ── Zwitserland — bergstations
+    ("06605","Chasseral"),("06750","Gütsch"),("06688","Crap Masegn"),
+    ("06780","Weissfluhjoch"),("06799","Naluns"),
+    ("06730","Jungfraujoch"),
+    # ── Oostenrijk — steden / lager
+    ("11101","Bregenz"),("11120","Innsbruck"),("11130","Kufstein"),
+    ("11150","Salzburg"),("11157","Aigen/Enns"),("11055","Schärding"),
+    ("11010","Linz"),("11070","Krems"),("11035","Wenen/Hohe Warte"),
+    ("11036","Wenen/Schwechat"),("11190","Eisenstadt"),
+    ("11380","Reichenau/Rax"),("11357","St. Wolfgang"),
+    ("11154","Gmunden"),("11240","Graz"),("11248","Bad Radkersburg"),
+    ("11231","Klagenfurt"),("11204","Lienz"),("11201","Sillian"),
+    ("11272","Spittal/Drau"),
+    # ── Oostenrijk — bergstations
+    ("11308","Warth"),("11128","Brenner"),("11149","Obertauern"),
+    ("11155","Feuerkogel"),("11340","Schmittenhöhe"),
+    ("11212","Villacher Alpe"),("11138","Rudolfshütte"),
+    ("11146","Sonnblick"),
+]
+
+COORDS_ALPS = {
+    # Zwitserland
+    "Genève":[6.130,46.250],"Payerne":[6.930,46.820],
+    "Bern":[7.450,46.980],"Basel":[7.580,47.530],
+    "Schaffhausen":[8.620,47.680],"Luzern":[8.300,47.020],
+    "Zürich":[8.530,47.480],"St. Gallen":[9.400,47.430],
+    "Interlaken":[7.870,46.670],"Altdorf":[8.630,46.870],
+    "Sion":[7.330,46.220],"Lugano":[8.970,46.000],
+    "Locarno-Monti":[8.780,46.170],"Davos":[9.850,46.820],
+    "Schiers":[9.670,46.970],"Piotta":[8.680,46.520],
+    "Glarus":[9.070,47.030],
+    "Chasseral":[7.050,47.130],"Gütsch":[8.620,46.650],
+    "Crap Masegn":[9.180,46.830],"Weissfluhjoch":[9.820,46.830],
+    "Naluns":[10.270,46.820],"Jungfraujoch":[7.980,46.530],
+    # Oostenrijk
+    "Bregenz":[9.750,47.500],"Innsbruck":[11.350,47.270],
+    "Kufstein":[12.170,47.580],"Salzburg":[13.000,47.800],
+    "Aigen/Enns":[14.130,47.530],"Schärding":[13.430,48.470],
+    "Linz":[14.180,48.230],"Krems":[15.620,48.420],
+    "Wenen/Hohe Warte":[16.370,48.250],"Wenen/Schwechat":[16.570,48.120],
+    "Eisenstadt":[16.530,47.850],
+    "Reichenau/Rax":[15.830,47.700],"St. Wolfgang":[13.450,47.730],
+    "Gmunden":[13.780,47.900],"Graz":[15.430,47.000],
+    "Bad Radkersburg":[15.980,46.680],"Klagenfurt":[14.330,46.650],
+    "Lienz":[12.800,46.830],"Sillian":[12.420,46.750],
+    "Spittal/Drau":[13.480,46.780],
+    "Warth":[10.180,47.250],"Brenner":[11.430,47.120],
+    "Obertauern":[13.570,47.250],"Feuerkogel":[13.720,47.820],
+    "Schmittenhöhe":[12.730,47.330],
+    "Villacher Alpe":[13.670,46.600],"Rudolfshütte":[12.630,47.130],
+    "Sonnblick":[12.950,47.050],
+}
+
 # Italië (vasteland + Sicilië + Sardinië + kleine eilanden) — DWD MOSMIX 16xxx
 STATIONS_IT = [
     # Alpen / noord
@@ -949,6 +1012,7 @@ def main():
     bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
     bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
     bouw_json(STATIONS_IT, COORDS_IT, "mosmix_it.json", "mosmix_uurlijks_it.json")
+    bouw_json(STATIONS_ALPS, COORDS_ALPS, "mosmix_alps.json", "mosmix_uurlijks_alps.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
