@@ -212,11 +212,14 @@ def format_tijd(dt, prefix=""):
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
-    print(f"=== Radar update {datetime.now(LOCAL_TZ).strftime('%H:%M')} ===")
+    now_utc = datetime.now(timezone.utc)
+    print(f"=== Radar update {now_utc.astimezone(LOCAL_TZ).strftime('%H:%M')} ===")
 
     # 1. Lijst historische bestanden (gauge-gecorrigeerd)
     print(f"1. Historie: lijst {DS_HISTORY[0]} v{DS_HISTORY[1]}...")
-    hist_files = lijst_bestanden(*DS_HISTORY, N_HIST_FRAMES)
+    hist_files = lijst_bestanden(*DS_HISTORY, N_HIST_FRAMES + 6)
+    hist_files = [f for f in hist_files if parse_timestamp(f["filename"]) <= now_utc]
+    hist_files = hist_files[-N_HIST_FRAMES:]
     if not hist_files:
         print("  Geen historische bestanden gevonden!")
         return
@@ -224,11 +227,17 @@ def main():
 
     # 2. Lijst nowcast (laatste run = 1 bestand met 25 frames)
     print(f"2. Nowcast: lijst {DS_FORECAST[0]} v{DS_FORECAST[1]}...")
-    fcst_files = lijst_bestanden(*DS_FORECAST, 1)
+    fcst_files = lijst_bestanden(*DS_FORECAST, 8)
     if not fcst_files:
         print("  Geen nowcast bestand gevonden — ga door zonder forecast.")
     else:
-        print(f"  Nowcast run: {fcst_files[-1]['filename']}")
+        nieuwste_hist_time = parse_timestamp(hist_files[-1]["filename"])
+        fcst_files = [f for f in fcst_files if parse_timestamp(f["filename"]) <= nieuwste_hist_time]
+        if fcst_files:
+            fcst_files = fcst_files[-1:]
+            print(f"  Nowcast run: {fcst_files[-1]['filename']}")
+        else:
+            print("  Geen passende nowcast run gevonden — ga door zonder forecast.")
 
     # 3. Skip als alles up-to-date
     nieuwste_hist = hist_files[-1]["filename"]

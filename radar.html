@@ -384,6 +384,28 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   })();
   DBZ_ALPHA = SENS_PRESETS[sensitivity] ? SENS_PRESETS[sensitivity].slice() : SENS_PRESETS.normaal.slice();
 
+  function parseFrameTime(idx) {
+    if (!meta || !meta.tijden || !meta.tijden[idx]) return null;
+    var dt = new Date(meta.tijden[idx]);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function bepaalNowIndex() {
+    var fallback = (typeof meta.t_now_index === "number") ? meta.t_now_index : (nFrames - 1);
+    if (!meta.tijden || !meta.tijden.length) return fallback;
+    var nowMs = Date.now();
+    var best = -1;
+    for (var i = 0; i < Math.min(nFrames, meta.tijden.length); i++) {
+      var dt = parseFrameTime(i);
+      if (dt && dt.getTime() <= nowMs) best = i;
+    }
+    return best >= 0 ? Math.min(best, fallback) : fallback;
+  }
+
+  function isFutureFrame(idx) {
+    return tNowIndex >= 0 && idx > tNowIndex;
+  }
+
   // Zoom & pan state (vloeiend, 1.0–10.0)
   var zoomLevel = 1.0;
   var ZOOM_MIN = 1.0, ZOOM_MAX = 10.0;
@@ -431,7 +453,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
 
       frameTypes = meta.frame_types || null;
-      tNowIndex = (typeof meta.t_now_index === "number") ? meta.t_now_index : (nFrames - 1);
+      tNowIndex = bepaalNowIndex();
       bouwSliderOverlay();
 
       // Offscreen canvas op data-resolutie (450×350) voor de radar-raster
@@ -660,10 +682,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.fillText(cpTxt, boxX + padX, boxY + boxH / 2 + 1);
 
     // Update UI labels
-    var isFcst = frameTypes && frameTypes[frameIdx] === "forecast";
+    var isFcst = isFutureFrame(frameIdx) || (frameTypes && frameTypes[frameIdx] === "forecast");
     var labelText = tijdTekst;
     if (isFcst && tNowIndex >= 0) {
-      var minOffset = (frameIdx - tNowIndex) * 5;
+      var minOffset = (frameIdx - tNowIndex) * (meta.interval_min || 5);
       labelText = "+" + minOffset + " min · " + tijdTekst;
     }
     document.getElementById("tijd-label").textContent = labelText;
