@@ -224,6 +224,71 @@ COORDS_GB = {
     "Dublin":[-6.250,53.433],"Belmullet":[-10.017,54.233],"Malin Head":[-7.333,55.367],
 }
 
+# Italië (vasteland + Sicilië + Sardinië + kleine eilanden) — DWD MOSMIX 16xxx
+STATIONS_IT = [
+    # Alpen / noord
+    ("16008","S. Valentino"),("16020","Bolzano"),("16022","Paganella"),
+    ("16033","Dobbiaco"),("16040","Tarvisio"),("16052","Pian Rosa"),
+    ("16054","Aosta"),
+    # Po-vlakte / Veneto / Friuli
+    ("16059","Turijn"),("16066","Malpensa"),("16080","Milaan"),
+    ("16076","Bergamo"),("16088","Brescia"),("16090","Verona"),
+    ("16094","Vicenza"),("16105","Venetië"),("16110","Triëst"),
+    ("16045","Udine"),
+    # Liguria / Piemonte
+    ("16117","Cuneo"),("16120","Genua"),
+    # Emilia / Toscana / Marche
+    ("16130","Parma"),("16140","Bologna"),("16149","Rimini"),
+    ("16158","Pisa"),("16170","Florence"),("16181","Perugia"),
+    ("16191","Ancona"),
+    # Lazio / Abruzzo
+    ("16206","Grosseto"),("16219","Terminillo"),("16226","L'Aquila"),
+    ("16230","Pescara"),("16242","Rome"),
+    # Zuid-vasteland
+    ("16252","Campobasso"),("16289","Napels"),("16300","Potenza"),
+    ("16270","Bari"),("16320","Brindisi"),("16362","Lamezia"),
+    ("16422","Reggio Calabria"),
+    # Tyrreense eilanden
+    ("16280","Ponza"),("16294","Capri"),
+    # Sicilië
+    ("16405","Palermo"),("16429","Trapani"),("16460","Catania"),
+    ("16420","Messina"),("16464","Siracusa"),
+    # Sardinië
+    ("16085","Porto Torres"),("16520","Alghero"),("16531","Olbia"),
+    ("16550","Capo Bellavista"),("16560","Cagliari"),
+]
+
+COORDS_IT = {
+    "S. Valentino":[10.530,46.770],"Bolzano":[11.330,46.470],
+    "Paganella":[11.030,46.150],"Dobbiaco":[12.220,46.730],
+    "Tarvisio":[13.580,46.500],"Pian Rosa":[7.700,45.930],
+    "Aosta":[7.350,45.730],
+    "Turijn":[7.650,45.220],"Malpensa":[8.730,45.620],
+    "Milaan":[9.280,45.430],"Bergamo":[9.700,45.670],
+    "Brescia":[10.280,45.420],"Verona":[10.870,45.380],
+    "Vicenza":[11.520,45.570],"Venetië":[12.330,45.500],
+    "Triëst":[13.750,45.650],"Udine":[13.030,45.980],
+    "Cuneo":[7.620,44.530],"Genua":[8.850,44.420],
+    "Parma":[10.280,44.820],"Bologna":[11.300,44.530],
+    "Rimini":[12.620,44.030],"Pisa":[10.380,43.680],
+    "Florence":[11.200,43.800],"Perugia":[12.500,43.080],
+    "Ancona":[13.370,43.620],
+    "Grosseto":[11.070,42.750],"Terminillo":[12.980,42.470],
+    "L'Aquila":[13.320,42.370],"Pescara":[14.200,42.430],
+    "Rome":[12.230,41.800],
+    "Campobasso":[14.650,41.570],"Napels":[14.300,40.850],
+    "Potenza":[15.800,40.630],"Bari":[16.780,41.130],
+    "Brindisi":[17.950,40.650],"Lamezia":[16.250,38.900],
+    "Reggio Calabria":[15.650,38.070],
+    "Ponza":[12.950,40.920],"Capri":[14.200,40.550],
+    "Palermo":[13.100,38.180],"Trapani":[12.500,37.920],
+    "Catania":[15.050,37.470],"Messina":[15.550,38.200],
+    "Siracusa":[15.280,37.070],
+    "Porto Torres":[8.380,40.830],"Alghero":[8.280,40.630],
+    "Olbia":[9.520,40.900],"Capo Bellavista":[9.720,39.930],
+    "Cagliari":[9.050,39.250],
+}
+
 # Griekenland (vasteland + eilanden) — DWD MOSMIX 166xx-stations
 STATIONS_GR = [
     # Noord-vasteland
@@ -883,6 +948,7 @@ def main():
     bouw_json(STATIONS_DE, COORDS_DE, "mosmix_de.json", "mosmix_uurlijks_de.json")
     bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
     bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
+    bouw_json(STATIONS_IT, COORDS_IT, "mosmix_it.json", "mosmix_uurlijks_it.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
