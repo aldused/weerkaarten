@@ -556,7 +556,13 @@ select, input[type=date], input[type=text] {
   </div>
   <div id="blok-wind" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-wind"></div>
-    <div class="legenda" id="leg-wind"></div>
+    <div id="tldr-wind" class="tldr-chips" style="display:none"></div>
+    <div class="legenda legenda-row" id="leg-row-wind" style="margin-bottom:6px">
+      <span id="leg-wind" style="display:contents"></span>
+      <span class="tgl-pill tgl-banden on" id="tgl-banden-wind" onclick="toggleBanden()" title="Toon/verberg IQR-band"><span class="dot"></span>Banden (IQR)</span>
+      <span class="tgl-pill tgl-hres on" id="tgl-hres-wind" onclick="toggleHres()" title="Toon/verberg HRES wind + stoten"><span class="dot"></span>HRES</span>
+      <span class="tgl-pill tgl-spaghetti on" id="tgl-spaghetti-wind" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Alle 51 leden</span>
+    </div>
     <div style="position:relative;width:100%;height:400px"><canvas id="canvas-wind"></canvas></div>
   </div>
   <div id="blok-winddir" class="grafiek-blok" style="display:none">
@@ -2175,12 +2181,12 @@ async function laadWind(lat,lon,naam,dagen,van,tot){
   actieveCharts.wind=new Chart(document.getElementById('canvas-wind'),{
     data:{labels:lab,datasets:[
       ...ensDatasets(ffA,'rgba(22,120,30,0.26)'),
-      {type:'line',data:ffP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'68,187,68',0.10,0.18),fill:'+1',pointRadius:0,tension:0.35,order:9},
-      {type:'line',data:ffP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.35,order:9},
+      {type:'line',data:ffP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'68,187,68',0.10,0.18),fill:'+1',pointRadius:0,tension:0.35,order:9,_isBand:true,hidden:!window._toonBanden},
+      {type:'line',data:ffP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0.35,order:9,_isBand:true,hidden:!window._toonBanden},
       Object.assign({type:'line',data:ffMed,borderColor:'#ee3333',borderWidth:2.8,pointRadius:0,fill:false,tension:0.35,order:1,borderCapStyle:'round'},{_glow:true,_glowColor:'rgba(238,51,51,0.5)',_glowBlur:7}),
       {type:'line',data:fxMed,borderColor:'rgba(255,140,60,0.85)',borderWidth:1.8,borderDash:[5,3],pointRadius:0,fill:false,tension:0.35,order:2,borderCapStyle:'round'},
-      {type:'line',data:hFF,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:3,xAxisID:'xH',borderCapStyle:'round'},
-      {type:'line',data:hFX,borderColor:'rgba(220,80,40,0.85)',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:4,xAxisID:'xH',borderCapStyle:'round'},
+      {type:'line',data:hFF,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:3,xAxisID:'xH',borderCapStyle:'round',_isHres:true,hidden:!window._toonHres},
+      {type:'line',data:hFX,borderColor:'rgba(220,80,40,0.85)',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0.35,order:4,xAxisID:'xH',borderCapStyle:'round',_isHres:true,hidden:!window._toonHres},
       {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(240,180,60,0.65)',borderWidth:1,borderDash:[6,4],pointRadius:0,fill:false,order:11},
       ...BFT.filter(b=>b.v<yMax).map(b=>({type:'line',data:Array(ts.length).fill(b.v),borderColor:'rgba(150,100,50,0.4)',borderWidth:0.7,borderDash:[3,4],pointRadius:0,fill:false,order:11})),
     ]},
@@ -2205,6 +2211,49 @@ async function laadWind(lat,lon,naam,dagen,van,tot){
       },
     }
   });
+  // Sync toggle pills + render tl;dr-chips voor wind
+  document.querySelectorAll('.tgl-spaghetti, #tgl-spaghetti').forEach(p=>p.classList.toggle('on', !!window._toonSpaghetti));
+  document.querySelectorAll('.tgl-banden, #tgl-banden').forEach(p=>p.classList.toggle('on', !!window._toonBanden));
+  document.querySelectorAll('.tgl-hres, #tgl-hres').forEach(p=>p.classList.toggle('on', !!window._toonHres));
+  renderTldrWind({ffA, fxA, ffMed, fxMed, hFF, hFX, ts});
+}
+
+// tl;dr-chips boven de windpluim — sleutelgetallen
+function renderTldrWind({ffA, fxA, ffMed, fxMed, hFF, hFX, ts}){
+  const el = document.getElementById('tldr-wind');
+  if(!el) return;
+  const valid = a => (a||[]).filter(v=>v!=null && !isNaN(v));
+  const med = valid(ffMed);
+  if(!med.length){ el.style.display='none'; el.innerHTML=''; return; }
+  const fmt = v => Math.round(v);
+  const medMin = Math.min(...med), medMax = Math.max(...med);
+  const gusts = valid(fxMed);
+  const gustMax = gusts.length ? Math.max(...gusts) : null;
+  // p90 over alle leden om "bandbreedte" piek te krijgen
+  const p90vals = ts.map((_,j)=>{
+    const col = ffA.map(m=>m[j]).filter(v=>v!=null);
+    if(!col.length) return null;
+    const s=[...col].sort((a,b)=>a-b);
+    return s[Math.floor(s.length*0.9)];
+  }).filter(v=>v!=null);
+  const p90Max = p90vals.length ? Math.max(...p90vals) : null;
+  // HRES windstoten max
+  const hFXValid = valid(hFX);
+  const hresGust = hFXValid.length ? Math.max(...hFXValid) : null;
+  // Aandeel uren met mediaan-vlaag ≥ 50 km/u (~Bft 7)
+  const stormHrs = gusts.filter(v=>v>=50).length;
+  const stormPct = gusts.length ? Math.round(stormHrs/gusts.length*100) : 0;
+
+  const chips = [];
+  const chip = (cls, ico, lbl, val) =>
+    `<span class="tldr-chip ${cls||''}"><span class="ico">${ico}</span><span><span class="lbl">${lbl}</span><span class="val">${val}</span></span></span>`;
+  chips.push(chip('cool','💨','Mediaan wind', `${fmt(medMin)}–${fmt(medMax)} km/u`));
+  if(p90Max!=null) chips.push(chip('','📈','Piek p90', `${fmt(p90Max)} km/u`));
+  if(gustMax!=null) chips.push(chip('warm','🌬️','Mediaan stoten max', `${fmt(gustMax)} km/u`));
+  if(hresGust!=null) chips.push(chip('warm','⚡','HRES stoten max', `${fmt(hresGust)} km/u`));
+  if(stormPct>=5) chips.push(chip(stormPct>=20?'alert':'warm','⚠️','Stoten ≥50 km/u', `${stormPct}% v/d uren`));
+  el.innerHTML = chips.join('');
+  el.style.display = chips.length ? 'flex' : 'none';
 }
 
 // ── Windrichting (gestapelde kansen per sector, Weerplaza-stijl) ──
