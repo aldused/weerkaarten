@@ -527,6 +527,7 @@ select, input[type=date], input[type=text] {
   </div>
   <div id="blok-neerslag" class="grafiek-blok" style="display:none;margin-top:8px">
     <div class="grafiek-titel" id="titel-neerslag"></div>
+    <div id="tldr-neerslag" class="tldr-chips" style="display:none"></div>
     <div class="legenda legenda-row" id="leg-row-neerslag" style="margin-bottom:6px">
       <span id="leg-neerslag" style="display:contents"></span>
       <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti-neerslag" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
@@ -1420,6 +1421,49 @@ function renderTldrTemp({tMed, tP10, tP25, tP75, tP90, mosTxData, mosTnData}){
   if(frostPct>0)   chips.push(chip(frostPct>=20?'alert':'', '❄️','Vorstkans', `${frostPct}%`));
   if(summerPct>0)  chips.push(chip('warm','☀️','Zomerse-dag-kans', `${summerPct}%`));
   if(heatPct>0)    chips.push(chip('alert','🥵','Tropisch ≥30°C', `${heatPct}%`));
+  el.innerHTML = chips.join('');
+  el.style.display = chips.length ? 'flex' : 'none';
+}
+
+// tl;dr-chips boven de neerslag-pluim — sleutelgetallen uit het ensemble
+function renderTldrNeerslag({pA6, pMed6, pP10_6, pP25_6, pP75_6, pP90_6, ts6, cumStats, nMembers}){
+  const el = document.getElementById('tldr-neerslag');
+  if(!el) return;
+  const valid = a => (a||[]).filter(v=>v!=null && !isNaN(v));
+  if(!pMed6 || !pMed6.length){ el.style.display='none'; el.innerHTML=''; return; }
+  const fmt0 = v => Math.round(v);
+  const fmt1 = v => (Math.round(v*10)/10);
+  // Cumulatieve eindwaarde komende periode
+  const cumP50 = cumStats?.p50 ?? 0;
+  const cumP10 = cumStats?.p10 ?? 0;
+  const cumP90 = cumStats?.p90 ?? 0;
+  // Kans op droog blok (p50 < 0.1 mm) — aandeel van 6u-blokken
+  const drogeBlokken = pMed6.filter(v=>v!=null && v<0.1).length;
+  const drogeKans = pMed6.length ? Math.round(drogeBlokken/pMed6.length*100) : 0;
+  // Piek-kans ≥10 mm/6u: hoogste kans dat een willekeurig lid in een blok ≥10 mm valt
+  let piekKans = 0, piekBlok = -1;
+  const nBlokken = (pA6 && pA6.length && pA6[0]?.length) || (ts6?.length || 0);
+  for(let j=0; j<nBlokken; j++){
+    const col = pA6.map(m=>m[j]).filter(v=>v!=null);
+    if(!col.length) continue;
+    const k = col.filter(v=>v>=10).length / col.length;
+    if(k>piekKans){ piekKans=k; piekBlok=j; }
+  }
+  // Natste blok = blok met hoogste mediaan
+  let natsteIdx=-1, natsteVal=-Infinity;
+  pMed6.forEach((v,i)=>{ if(v!=null && v>natsteVal){natsteVal=v; natsteIdx=i;} });
+  const natsteBlok = (natsteIdx>=0 && ts6?.[natsteIdx]) ? (()=>{
+    const d = new Date(ts6[natsteIdx]); const eindH=d.getHours()||24; const beginH=(eindH-6+24)%24;
+    return d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}) + ` ${String(beginH).padStart(2,'0')}–${String(eindH%24).padStart(2,'0')} u`;
+  })() : '–';
+
+  const chips = [];
+  const chip = (cls, ico, lbl, val) =>
+    `<span class="tldr-chip ${cls||''}"><span class="ico">${ico}</span><span><span class="lbl">${lbl}</span><span class="val">${val}</span></span></span>`;
+  chips.push(chip('rain','💧','Cumulatief 7 d', `${fmt0(cumP50)} mm  (p10–p90: ${fmt0(cumP10)}–${fmt0(cumP90)})`));
+  chips.push(chip('','☀️','Kans op droog blok', `${drogeKans}%`));
+  if(natsteVal>0.1) chips.push(chip('rain','🌧️','Natste blok', `${natsteBlok} (~${fmt1(natsteVal)} mm)`));
+  if(piekKans>=0.05) chips.push(chip(piekKans>=0.3?'alert':'rain','⛈️','Piek-kans ≥10 mm/6u', `${Math.round(piekKans*100)}%`));
   el.innerHTML = chips.join('');
   el.style.display = chips.length ? 'flex' : 'none';
 }
@@ -2924,6 +2968,14 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
       scales:{x:cfgBase.scales.x,y:{...yAs('left',' mm'),min:0}}
     }
   });
+  // Sync spaghetti-toggle pills + render tl;dr-chips voor neerslag
+  document.querySelectorAll('.tgl-spaghetti, #tgl-spaghetti').forEach(p=>p.classList.toggle('on', !!window._toonSpaghetti));
+  const _cumLast = {
+    p10: cumP10[cumP10.length-1] ?? 0,
+    p50: cumMed[cumMed.length-1] ?? 0,
+    p90: cumP90[cumP90.length-1] ?? 0,
+  };
+  renderTldrNeerslag({pA6, pMed6, pP10_6, pP25_6, pP75_6, pP90_6, ts6, cumStats:_cumLast, nMembers:nM});
 }
 
 // ── Scenario-clustering: 51 members groeperen in koel/gemiddeld/warm ──
