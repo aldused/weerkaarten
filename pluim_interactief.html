@@ -518,16 +518,19 @@ select, input[type=date], input[type=text] {
   <div id="blok-temp" class="grafiek-blok" style="display:none">
     <div class="grafiek-titel" id="titel-temp"></div>
     <div id="tldr-temp" class="tldr-chips" style="display:none"></div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px">
-      <div class="legenda" id="leg-temp" style="margin-bottom:0;flex:1;min-width:0"></div>
-      <span class="tgl-pill" id="tgl-spaghetti" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
+    <div class="legenda legenda-row" id="leg-row-temp" style="margin-bottom:6px">
+      <span id="leg-temp" style="display:contents"></span>
+      <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
     </div>
     <div id="crosshair-info" style="display:none;padding:6px 14px;background:#f8f9fb;border:1px solid #d0d8e4;border-radius:6px;margin-bottom:4px;font-size:.82rem;font-weight:600;gap:16px;flex-wrap:wrap;align-items:center;min-height:28px"></div>
     <div style="position:relative;width:100%;height:380px"><canvas id="canvas-temp"></canvas></div>
   </div>
   <div id="blok-neerslag" class="grafiek-blok" style="display:none;margin-top:8px">
     <div class="grafiek-titel" id="titel-neerslag"></div>
-    <div class="legenda" id="leg-neerslag"></div>
+    <div class="legenda legenda-row" id="leg-row-neerslag" style="margin-bottom:6px">
+      <span id="leg-neerslag" style="display:contents"></span>
+      <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti-neerslag" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden"><span class="dot"></span>🍝 Toon alle 51 leden</span>
+    </div>
     <div style="position:relative;width:100%;height:220px"><canvas id="canvas-neerslag"></canvas></div>
   </div>
   <div id="blok-dagkansen" class="grafiek-blok" style="display:none">
@@ -1371,9 +1374,12 @@ function ensDatasets(arr,kleur){
 window._toonSpaghetti = window._toonSpaghetti ?? false;
 function toggleSpaghetti(){
   window._toonSpaghetti = !window._toonSpaghetti;
-  const pill = document.getElementById('tgl-spaghetti');
-  if(pill) pill.classList.toggle('on', window._toonSpaghetti);
-  Object.values(actieveCharts || {}).forEach(ch=>{
+  document.querySelectorAll('.tgl-spaghetti, #tgl-spaghetti').forEach(p=>p.classList.toggle('on', window._toonSpaghetti));
+  const allCharts = [
+    ...Object.values(window.actieveCharts || {}),
+    ...Object.values(window.vergCharts || {}),
+  ];
+  allCharts.forEach(ch=>{
     if(!ch?.data?.datasets) return;
     let changed = false;
     ch.data.datasets.forEach(d=>{
@@ -1720,7 +1726,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
     data:{labels:lab6,datasets:[
       // Spaghetti: elke member als eigen dunne lijn
-      ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10})),
+      ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
       // P10–P90 band
       {type:'line',data:pP10_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.3,order:9},
       {type:'line',data:pP90_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
@@ -2817,7 +2823,7 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
   if(actieveCharts.neerslag){try{actieveCharts.neerslag.destroy();}catch(e){}}
   actieveCharts.neerslag=new Chart(document.getElementById('canvas-neerslag'),{
     data:{labels:lab6,datasets:[
-      ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10})),
+      ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.42)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.3,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
       {type:'line',data:pP10_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.3,order:9},
       {type:'line',data:pP90_6,borderColor:'transparent',fill:false,pointRadius:0,tension:0.3,order:9},
       {type:'line',data:pP25_6,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.3,order:8},
@@ -2877,7 +2883,7 @@ async function laadNeerslagsom(lat,lon,naam,dagen,van,tot){
 
   actieveCharts.neerslagsom=new Chart(document.getElementById('canvas-neerslagsom'),{
     data:{labels:lab,datasets:[
-      ...pCum.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.45)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.2,order:10})),
+      ...pCum.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.45)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.2,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
       {type:'line',data:cumP10,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.04,0.08),fill:'+1',pointRadius:0,tension:0.2,order:9},
       {type:'line',data:cumP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.2,order:9},
       {type:'line',data:cumP25,borderColor:'transparent',backgroundColor:ctx=>vGrad(ctx,'40,160,40',0.10,0.18),fill:'+1',pointRadius:0,tension:0.2,order:8},
@@ -3221,6 +3227,7 @@ function openVergelijking(){
       <div class="vp-header-title" id="verg-titel-lbl">⊞ 4 Pluimen vergelijking</div>
       <div class="vp-header-sub">Kies locaties, parameter en periode — pluim laadt automatisch</div>
     </div>
+    <span class="tgl-pill tgl-spaghetti" id="tgl-spaghetti-verg" onclick="toggleSpaghetti()" title="Toon/verberg alle 51 ensembleleden in alle 4 cellen" style="background:rgba(255,255,255,0.12);color:#fff;border-color:rgba(255,255,255,0.35)"><span class="dot"></span>🍝 Toon alle 51 leden</span>
     <button class="btn-sec" onclick="resetAlles()" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.35)">✕ Sluiten</button>
   </div>
 
@@ -3525,7 +3532,7 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       const _sugMax=Math.max(2, Math.ceil(_maxVal*1.15));
       titel=`${mLbl} – ${naam} – Neerslag (mm/6u)`;
       datasets=[
-        ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(25,120,25,0.75)',borderWidth:1.1,pointRadius:0,fill:false,tension:0.25,order:10})),
+        ...pA6.map(m=>({type:'line',data:m,borderColor:'rgba(25,120,25,0.75)',borderWidth:1.1,pointRadius:0,fill:false,tension:0.25,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
         {type:'line',data:pMed6,borderColor:medK,borderWidth:2.4,pointRadius:0,fill:false,tension:0.25,order:1},
       ];
       scales={x:{...cfgBase.scales.x},y:{...yAs('left',' mm/6u'),min:0,suggestedMax:_sugMax}};
@@ -3571,7 +3578,7 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       const cumP10=ts.map((_,j)=>pctC(pCum,j,10));
       titel=`${mLbl} – ${naam} – Neerslagsom`;
       datasets=[
-        ...pCum.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.55)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.25,order:10})),
+        ...pCum.map(m=>({type:'line',data:m,borderColor:'rgba(30,140,30,0.55)',borderWidth:0.8,pointRadius:0,fill:false,tension:0.25,order:10,_isMember:true,hidden:!window._toonSpaghetti})),
         {type:'line',data:cumP10,borderColor:'transparent',backgroundColor:'rgba(40,160,40,0.10)',fill:'+1',pointRadius:0,tension:0.25,order:9},
         {type:'line',data:cumP90,borderColor:'transparent',fill:false,pointRadius:0,tension:0.25,order:9},
         {type:'line',data:cumMed,borderColor:medK,borderWidth:2.2,pointRadius:0,fill:false,tension:0.25,order:1},
