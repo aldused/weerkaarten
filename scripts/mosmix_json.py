@@ -415,6 +415,62 @@ COORDS_GR = {
     "Tymbaki":[24.750,35.000],
 }
 
+# Scandinavië — Noorwegen + Zweden + Denemarken + Finland (vasteland, zonder Svalbard/Jan Mayen)
+STATIONS_SCAN = [
+    # Noorwegen (N→Z)
+    ("01049","Alta"),("01052","Hammerfest"),("01059","Lakselv"),("01089","Kirkenes"),
+    ("01112","Brønnøysund"),("01152","Bodø"),("01210","Ålesund"),("01223","Kristiansund"),
+    ("01241","Ørland"),("01271","Trondheim"),("01290","Namsos"),("01311","Bergen"),
+    ("01347","Sogndal"),("01368","Fagernes"),("01384","Oslo"),("01415","Stavanger"),
+    ("01452","Kristiansand"),("01475","Skien"),
+    # Zweden (N→Z)
+    ("02049","Gällivare"),("02128","Gunnarn"),("02186","Luleå"),("02226","Östersund"),
+    ("02286","Umeå"),("02293","Skellefteå"),("02324","Sveg"),("02366","Sundsvall"),
+    ("02378","Söderhamn"),("02418","Karlstad"),("02458","Uppsala"),("02460","Stockholm"),
+    ("02527","Göteborg"),("02550","Jönköping"),("02562","Linköping"),("02590","Visby"),
+    ("02604","Halmstad"),("02611","Helsingborg"),("02636","Malmö"),("02641","Växjö"),
+    ("02651","Kristianstad"),("02664","Ronneby"),("02670","Kalmar"),
+    # Denemarken (N→Z)
+    ("06030","Ålborg"),("06060","Karup"),("06070","Aarhus"),("06080","Esbjerg"),
+    ("06104","Billund"),("06110","Skrydstrup"),("06120","Odense"),("06180","Kopenhagen"),
+    ("06190","Rønne"),
+    # Finland (N→Z)
+    ("02807","Ivalo"),("02810","Enontekiö"),("02830","Kittilä"),("02836","Sodankylä"),
+    ("02869","Kuusamo"),("02897","Kajaani"),("02911","Vaasa"),("02917","Kuopio"),
+    ("02929","Joensuu"),("02935","Jyväskylä"),("02944","Tampere"),("02948","Savonlinna"),
+    ("02952","Pori"),("02970","Mariehamn"),("02972","Turku"),("02974","Helsinki"),
+]
+
+COORDS_SCAN = {
+    # Noorwegen
+    "Alta":[23.367,69.983],"Hammerfest":[23.667,70.667],"Lakselv":[24.983,70.067],
+    "Kirkenes":[29.900,69.733],"Brønnøysund":[12.217,65.450],"Bodø":[14.367,67.267],
+    "Ålesund":[6.117,62.567],"Kristiansund":[7.833,63.117],"Ørland":[9.600,63.700],
+    "Trondheim":[10.917,63.467],"Namsos":[11.583,64.467],"Bergen":[5.217,60.300],
+    "Sogndal":[7.133,61.150],"Fagernes":[9.300,61.000],"Oslo":[11.100,60.200],
+    "Stavanger":[5.633,58.883],"Kristiansand":[8.083,58.200],"Skien":[9.567,59.183],
+    # Zweden
+    "Gällivare":[20.650,67.150],"Gunnarn":[17.700,64.967],"Luleå":[22.133,65.550],
+    "Östersund":[14.500,63.200],"Umeå":[20.283,63.800],"Skellefteå":[21.083,64.633],
+    "Sveg":[14.367,62.033],"Sundsvall":[17.450,62.517],"Söderhamn":[17.100,61.267],
+    "Karlstad":[13.467,59.367],"Uppsala":[17.600,59.883],"Stockholm":[17.917,59.650],
+    "Göteborg":[12.500,57.667],"Jönköping":[14.083,57.767],"Linköping":[15.517,58.400],
+    "Visby":[18.350,57.667],"Halmstad":[12.833,56.683],"Helsingborg":[12.767,56.033],
+    "Malmö":[13.367,55.550],"Växjö":[14.733,56.933],"Kristianstad":[14.083,55.917],
+    "Ronneby":[15.283,56.267],"Kalmar":[16.300,56.683],
+    # Denemarken
+    "Ålborg":[9.867,57.100],"Karup":[9.117,56.300],"Aarhus":[10.617,56.300],
+    "Esbjerg":[8.550,55.517],"Billund":[9.150,55.733],"Skrydstrup":[9.267,55.233],
+    "Odense":[10.333,55.467],"Kopenhagen":[12.667,55.633],"Rønne":[14.750,55.067],
+    # Finland
+    "Ivalo":[27.417,68.617],"Enontekiö":[23.600,68.367],"Kittilä":[24.850,67.700],
+    "Sodankylä":[26.650,67.367],"Kuusamo":[29.183,65.967],"Kajaani":[27.683,64.283],
+    "Vaasa":[21.767,63.050],"Kuopio":[27.800,63.017],"Joensuu":[29.633,62.667],
+    "Jyväskylä":[25.683,62.400],"Tampere":[23.583,61.417],"Savonlinna":[28.950,61.950],
+    "Pori":[21.800,61.467],"Mariehamn":[19.900,60.117],"Turku":[22.267,60.517],
+    "Helsinki":[24.967,60.317],
+}
+
 # Turkije — alleen West-kust (Egeïsch) en Zuid-kust (Mediterraan)
 # DWD MOSMIX-stations zijn beperkt tot luchthavens met internationale ICAO.
 STATIONS_TR = [
@@ -1045,6 +1101,7 @@ def main():
     bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
     bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
     bouw_json(STATIONS_TR, COORDS_TR, "mosmix_tr.json", "mosmix_uurlijks_tr.json")
+    bouw_json(STATIONS_SCAN, COORDS_SCAN, "mosmix_scan.json", "mosmix_uurlijks_scan.json")
     bouw_json(STATIONS_IT, COORDS_IT, "mosmix_it.json", "mosmix_uurlijks_it.json")
     bouw_json(STATIONS_ALPS, COORDS_ALPS, "mosmix_alps.json", "mosmix_uurlijks_alps.json")
     bouw_json(STATIONS_IC, COORDS_IC, "mosmix_ic.json", "mosmix_uurlijks_ic.json")
