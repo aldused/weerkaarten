@@ -49,7 +49,7 @@ publish_ecmwf_short() {
 
 for FASE_STEP in 30 60 90; do
   echo "$(date): ECMWF Open Data fase t/m +${FASE_STEP}u starten..." >> "$LOG"
-  python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_opendata_short.py" \
+  /usr/local/bin/python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_opendata_short.py" \
     --max-step "$FASE_STEP" >> "$LOG" 2>&1
   STATUS=$?
   if [ $STATUS -eq 0 ]; then
@@ -77,7 +77,7 @@ publish_ecmwf_long() {
 
 for FASE_STEP in 60 120 180 240; do
   echo "$(date): ECMWF Open Data lang fase t/m +${FASE_STEP}u starten..." >> "$LOG"
-  python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_opendata_long.py" \
+  /usr/local/bin/python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_opendata_long.py" \
     --max-step "$FASE_STEP" >> "$LOG" 2>&1
   STATUS=$?
   if [ $STATUS -eq 0 ]; then
