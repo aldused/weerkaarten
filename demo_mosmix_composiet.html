@@ -112,7 +112,8 @@
     <button class="btn-dag actief" data-dagdeel="dag">Hele dag</button>
     <button class="btn-dag" data-dagdeel="ochtend">Ochtend 06–12</button>
     <button class="btn-dag" data-dagdeel="middag">Middag 12–18</button>
-    <button class="btn-dag" data-dagdeel="avond">Avond/nacht 18–06</button>
+    <button class="btn-dag" data-dagdeel="avond">Avond 18–00</button>
+    <button class="btn-dag" data-dagdeel="nacht">Nacht 00–06</button>
   </div>
 </div>
 
@@ -159,7 +160,8 @@
       <div><b>Bron:</b> DWD MOSMIX (combinatie ECMWF/ICON), dagdata uit <code>mosmix_nl.json</code>, dagdelen uit <code>mosmix_uurlijks_nl.json</code>.</div>
       <div><b>Hele dag:</b> TX (max, rood) + TN-nacht (min, blauw, 🌙) + POP% uit <code>R101</code>.</div>
       <div><b>Ochtend 06-12 / Middag 12-18:</b> <code>TX_O</code> / <code>TX_M</code> uit <code>mosmix_nl.json</code> (geankerd op TX zodat <code>max(TX_O, TX_M) == TX</code>) + neerslag-som in mm uit uurlijkse <code>RR1c</code>, wind uit <code>FF_O/M</code> en <code>DD_O/M</code>.</div>
-      <div><b>Avond/nacht 18-06:</b> <code>TN</code> (blauw) + <code>RR_N</code> (mm) + <code>FF_N/DD_N</code>. Venster loopt door tot 06u van de volgende dag.</div>
+      <div><b>Avond 18-00:</b> uurlijkse min-temp (blauw) + neerslag-som in mm + wind, uit <code>mosmix_uurlijks_nl.json</code> voor 18u-23u van de gekozen dag.</div>
+      <div><b>Nacht 00-06:</b> <code>TN</code> van de volgende dag (blauw) + neerslag-som + wind, uit 00u-05u van de volgende dag.</div>
     </div>
   </div>
 </div>
@@ -190,17 +192,19 @@ const DAGDEEL_LABELS = {
   dag: "Hele dag",
   ochtend: "Ochtend 06–12",
   middag: "Middag 12–18",
-  avond: "Avond/nacht 18–06"
+  avond: "Avond 18–00",
+  nacht: "Nacht 00–06"
 };
 
 function dagdeelWindow(dag, dagdeel){
   if(dagdeel === "ochtend") return {start: dag+"T06:00", end: dag+"T11:00"};
   if(dagdeel === "middag")  return {start: dag+"T12:00", end: dag+"T17:00"};
-  if(dagdeel === "avond"){
+  if(dagdeel === "avond")   return {start: dag+"T18:00", end: dag+"T23:00"};
+  if(dagdeel === "nacht"){
     const d = new Date(dag+"T12:00:00");
     const nd = new Date(d.getTime()+86400000);
     const nextDag = nd.toISOString().slice(0,10);
-    return {start: dag+"T18:00", end: nextDag+"T05:00"};
+    return {start: nextDag+"T00:00", end: nextDag+"T05:00"};
   }
   return null;
 }
@@ -372,13 +376,24 @@ function tekenOverlay(){
         ff:   dag.FF_M?.[n] ?? null,
         dd:   dag.DD_M?.[n] ?? null
       };
-    } else { // avond/nacht 18-06 van dag D = nacht D→D+1
-      // TN in daily json op dag X = min voor nacht vóór dag X (loc.hour<12).
-      // Voor nacht D→D+1 pakken we dus TN van dag D+1 (fallback: uurlijkse min).
+    } else if(huidigDagdeel === "avond"){
+      // Avond 18-00 van dag D — uitsluitend uit uurlijkse data.
+      const uur = stationDagdeelStats(n, huidigDag, "avond");
+      perStation[n] = {
+        tmax: null,
+        tmin: uur?.tmin ?? null,
+        pop:  null,
+        rr:   uur?.rr ?? null,
+        ff:   uur?.ff ?? null,
+        dd:   uur?.dd ?? null
+      };
+    } else { // nacht 00-06 van dag D+1
+      // TN in daily json op dag X = min voor nacht vóór dag X (loc.hour<12),
+      // dus voor nacht D→D+1 pakken we TN van dag D+1 (fallback: uurlijkse min).
       const idx = mosmixData.dagen.indexOf(huidigDag);
       const volgende = idx >= 0 && idx+1 < mosmixData.dagen.length ? mosmixData.dagen[idx+1] : null;
       const volgDag = volgende ? mosmixData.data[volgende] : null;
-      const uur = stationDagdeelStats(n, huidigDag, "avond");
+      const uur = stationDagdeelStats(n, huidigDag, "nacht");
       perStation[n] = {
         tmax: null,
         tmin: volgDag?.TN?.[n] ?? uur?.tmin ?? null,
@@ -391,7 +406,7 @@ function tekenOverlay(){
   }
 
   // Extremen op basis van de waarde die zichtbaar is: tmax voor dag/ochtend/middag, tmin voor avond/nacht
-  const tempVeld = huidigDagdeel === "avond" ? "tmin" : "tmax";
+  const tempVeld = (huidigDagdeel === "avond" || huidigDagdeel === "nacht") ? "tmin" : "tmax";
   const extremen = { warmst:null, koudst:null, natst:null };
   for(const n of lijst){
     const d = perStation[n];
@@ -438,7 +453,7 @@ function neerslagKleur(p){
 function tekenBadge(svg, naam, cx, cy, d, ax, ay, extremen){
   // In "Hele dag" tonen we TX (rood boven) en TN (blauw onder).
   // In dagdeel-mode tonen we één waarde: max (rood) voor ochtend/middag, min (blauw) voor avond/nacht.
-  const isNachtDeel = huidigDagdeel === "avond";
+  const isNachtDeel = huidigDagdeel === "avond" || huidigDagdeel === "nacht";
   const tx = huidigDagdeel === "dag" ? d.tmax : (isNachtDeel ? null : d.tmax);
   const tn = huidigDagdeel === "dag" ? d.tmin : (isNachtDeel ? d.tmin : null);
   const pop = d.pop;
