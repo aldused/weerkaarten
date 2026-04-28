@@ -75,16 +75,11 @@ def parse_zip(tekst):
             continue
     return data
 
-def haal_edr_dag(wigos, datum):
-    """Haal 1 dag op via EDR: eerst validated, dan realtime als fallback.
-    De EDR API gebruikt UTC-etmalen (00-00 UTC), terwijl de KNMI ZIP-bestanden
-    etmaalwaarden gebruiken (08-08 UTC). Hierdoor loopt de EDR-datum 1 dag
-    voor op de ZIP-conventie. We vragen daarom datum+1 op bij de EDR API."""
-    edr_datum = (date.fromisoformat(datum) + timedelta(days=1)).isoformat()
+def _edr_query(wigos, edr_datum):
+    """Vraag EDR voor een specifieke (UTC) datum. Returnt dict of None."""
     s = f"{edr_datum}T00:00:00Z"
     e = f"{edr_datum}T23:59:59Z"
     params = {"datetime": f"{s}/{e}", "parameter-name": "TX,TN,TG,RH,SQ"}
-
     for collectie in EDR_COLLECTIES:
         try:
             r = requests.get(
@@ -120,6 +115,19 @@ def haal_edr_dag(wigos, datum):
         except:
             continue
     return None
+
+def haal_edr_dag(wigos, datum):
+    """Haal 1 dag op via EDR: eerst validated, dan realtime als fallback.
+    De EDR API gebruikt UTC-etmalen (00-00 UTC), terwijl de KNMI ZIP-bestanden
+    etmaalwaarden gebruiken (08-08 UTC). Hierdoor loopt de EDR-datum 1 dag
+    voor op de ZIP-conventie. We vragen daarom eerst datum+1 op (matcht ZIP).
+    Als dat faalt — typisch voor de meest recente dag waarvoor het 0-0 UTC
+    etmaal nog niet voltooid is — vallen we terug op datum zelf (geeft een
+    iets afwijkende, maar bruikbare waarde voor gisteren)."""
+    res = _edr_query(wigos, (date.fromisoformat(datum) + timedelta(days=1)).isoformat())
+    if res:
+        return res
+    return _edr_query(wigos, datum)
 
 nu       = date.today()
 gisteren = nu - timedelta(days=1)
