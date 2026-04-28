@@ -224,6 +224,21 @@ COORDS_GB = {
     "Dublin":[-6.250,53.433],"Belmullet":[-10.017,54.233],"Malin Head":[-7.333,55.367],
 }
 
+# Canarische Eilanden — DWD MOSMIX 600xx (alleen 7 hoofdstations)
+STATIONS_IC = [
+    ("60005","La Palma"),("60015","Tenerife Noord"),
+    ("60020","Santa Cruz"),("60025","Tenerife Zuid"),
+    ("60030","Gran Canaria"),("60035","Fuerteventura"),
+    ("60040","Lanzarote"),
+]
+
+COORDS_IC = {
+    "La Palma":[-17.750,28.620],"Tenerife Noord":[-16.320,28.470],
+    "Santa Cruz":[-16.270,28.470],"Tenerife Zuid":[-16.570,28.050],
+    "Gran Canaria":[-15.380,27.930],"Fuerteventura":[-13.870,28.450],
+    "Lanzarote":[-13.600,28.950],
+}
+
 # Alpenlanden (Oostenrijk + Zwitserland) — DWD MOSMIX 110xx (AT) + 066xx-067xx (CH)
 STATIONS_ALPS = [
     # ── Zwitserland — steden
@@ -1013,6 +1028,7 @@ def main():
     bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
     bouw_json(STATIONS_IT, COORDS_IT, "mosmix_it.json", "mosmix_uurlijks_it.json")
     bouw_json(STATIONS_ALPS, COORDS_ALPS, "mosmix_alps.json", "mosmix_uurlijks_alps.json")
+    bouw_json(STATIONS_IC, COORDS_IC, "mosmix_ic.json", "mosmix_uurlijks_ic.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
