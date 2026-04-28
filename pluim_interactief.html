@@ -720,7 +720,7 @@ Chart.register(nachtBewolkingPlugin);
 // Lijn-charts (temp/dauwpunt/wind/winddir/neerslag) krijgen een dunnere/lichtere lijn;
 // stacked-bar charts (bewolking, kansen, weertype) krijgen een fellere lijn die door de bars heen prikt.
 const DAGGRENS_LICHT = new Set([
-  'canvas-temp','canvas-dauwpunt','canvas-wind','canvas-winddir',
+  'canvas-temp','canvas-dauwpunt','canvas-wind',
   'canvas-neerslag','canvas-neerslagsom',
   'canvas-aifs','canvas-aifs-neerslag',
   'canvas-icon','canvas-icon-neerslag',
@@ -2015,57 +2015,57 @@ async function laadWind(lat,lon,naam,dagen,van,tot){
   });
 }
 
-// ── Windrichting ──
+// ── Windrichting (gestapelde kansen per sector, Weerplaza-stijl) ──
+const WINDDIR_SECTORS = ['N','NO','O','ZO','Z','ZW','W','NW'];
+const WINDDIR_COLORS = {
+  N:'#2c8a3a', NO:'#5ec3eb', O:'#3b46c8', ZO:'#d18ad6',
+  Z:'#d83333', ZW:'#e69b3a', W:'#f5d142', NW:'#9bd17e'
+};
 async function laadWindrichting(lat,lon,naam,dagen,van,tot){
-  const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=winddirection_10m,windspeed_10m&models=ecmwf_ifs025&windspeed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
+  const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=winddirection_10m&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
   const times=ens.hourly.time;
   const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
   const ddK=Object.keys(ens.hourly).filter(k=>k.startsWith('winddirection_10m_member'));
-  const ffK=Object.keys(ens.hourly).filter(k=>k.startsWith('windspeed_10m_member'));
   const ddA=ddK.map(k=>idx.map(i=>ens.hourly[k][i]));
-  const ffA=ffK.map(k=>idx.map(i=>ens.hourly[k][i]));
-  const ddMed=ts.map((_,j)=>{
+  const N=ts.length;
+  const pct=WINDDIR_SECTORS.map(()=>new Array(N).fill(0));
+  for(let j=0;j<N;j++){
     const v=ddA.map(m=>m[j]).filter(x=>x!=null);
-    if(!v.length)return null;
-    const sinM=v.reduce((s,d)=>s+Math.sin(d*Math.PI/180),0)/v.length;
-    const cosM=v.reduce((s,d)=>s+Math.cos(d*Math.PI/180),0)/v.length;
-    return(Math.atan2(sinM,cosM)*180/Math.PI+360)%360;
-  });
-  const spread=ts.map((_,j)=>{
-    const v=ddA.map(m=>m[j]).filter(x=>x!=null);
-    if(v.length<2)return 0;
-    const sinM=v.reduce((s,d)=>s+Math.sin(d*Math.PI/180),0)/v.length;
-    const cosM=v.reduce((s,d)=>s+Math.cos(d*Math.PI/180),0)/v.length;
-    return Math.round((1-Math.sqrt(sinM**2+cosM**2))*180);
-  });
-  const ffMed=ts.map((_,j)=>medC(ffA,j));
+    if(!v.length){ for(let s=0;s<8;s++) pct[s][j]=null; continue; }
+    const counts=new Array(8).fill(0);
+    for(const d of v) counts[Math.floor(((d+22.5)%360)/45)]++;
+    for(let s=0;s<8;s++) pct[s][j]=counts[s]/v.length*100;
+  }
   const lab=getLab(ts);
   document.getElementById('blok-winddir').style.display='';
   document.getElementById('titel-winddir').textContent=`ECMWF – ${naam}  Windrichting`;
-  document.getElementById('leg-winddir').innerHTML=legHtml([
-    ['#0d9488','Mediaan richting','lijn'],['rgba(13,148,136,0.25)','Spreiding (°)','blok'],
-  ]);
+  document.getElementById('leg-winddir').innerHTML=legHtml(
+    WINDDIR_SECTORS.map(s=>[WINDDIR_COLORS[s],s,'blok'])
+  );
   chartTimestamps['canvas-winddir']=ts;
+  const datasets=WINDDIR_SECTORS.map((s,i)=>({
+    type:'bar',
+    label:s,
+    data:pct[i],
+    backgroundColor:WINDDIR_COLORS[s],
+    borderWidth:0,
+    barPercentage:1.0,
+    categoryPercentage:1.0,
+    stack:'wd'
+  }));
   actieveCharts.winddir=new Chart(document.getElementById('canvas-winddir'),{
-    data:{labels:lab,datasets:[
-      {type:'bar',data:spread,backgroundColor:'rgba(13,148,136,0.18)',yAxisID:'y2',order:3},
-      {type:'line',data:ddMed,borderColor:'#0d9488',borderWidth:2,pointRadius:3,pointBackgroundColor:'#0d9488',fill:false,tension:0.1,yAxisID:'y1',order:1},
-    ]},
+    data:{labels:lab,datasets},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
+        mode:'index',intersect:false,
         backgroundColor:'rgba(255,255,255,0.96)',titleColor:'#1a2b40',bodyColor:'#333',borderColor:'#d0d8e4',borderWidth:1,
-        callbacks:{label:ctx=>{
-          if(ctx.datasetIndex===1)return ` Richting: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'}°`;
-          if(ctx.datasetIndex===0)return ` Spreiding: ±${ctx.parsed.y.toFixed(0)}°`;
-        }}
+        itemSort:(a,b)=>b.parsed.y-a.parsed.y,
+        filter:item=>item.parsed.y>=2,
+        callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}
       }},
       scales:{
-        x:cfgBase.scales.x,
-        y1:{...yAs('left','°'),min:0,max:360,ticks:{...yAs('left','°').ticks,callback:v=>{
-          const dir=['N','NO','O','ZO','Z','ZW','W','NW','N'];
-          return `${dir[Math.round(v/45)%9]} (${v}°)`;
-        },stepSize:45}},
-        y2:{...yAs('right','°','rgba(13,148,136,0.7)'),grid:{display:false},max:180},
+        x:{...cfgBase.scales.x,stacked:true},
+        y:{...yAs('left','%'),min:0,max:100,stacked:true,ticks:{...yAs('left','%').ticks,stepSize:25}},
       }
     }
   });
@@ -3124,6 +3124,7 @@ function openVergelijking(){
     {val:'neerslag',ico:'&#127783;',lbl:'Neerslag'},
     {val:'neerslagsom',ico:'&#9748;&#65039;',lbl:'Neerslagsom'},
     {val:'wind',ico:'&#128168;',lbl:'Wind'},
+    {val:'winddir',ico:'&#129139;',lbl:'Windrichting'},
     {val:'cloud',ico:'&#9729;&#65039;',lbl:'Bewolking'},
     {val:'dauwpunt',ico:'&#128167;',lbl:'Dauwpunt'},
     {val:'sneeuw',ico:'&#10052;&#65039;',lbl:'Sneeuw'},
@@ -3528,6 +3529,36 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot){
       const v=ctx.parsed.y;
       return ` Med: ${v!=null?kmhToBft(v)+' Bft':'-'}`;
     }}};
+  }else if(type==='winddir'){
+    const ens=await fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=winddirection_10m&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
+    const allTimes=ens.hourly.time;
+    const fidx=filterT(allTimes,van,tot);
+    const ts=fidx.map(i=>allTimes[i]);
+    apiTimes=ts;
+    const ddK=Object.keys(ens.hourly).filter(k=>k.startsWith('winddirection_10m_member'));
+    const ddA=ddK.map(k=>fidx.map(i=>ens.hourly[k][i]));
+    const N=ts.length;
+    const pct=WINDDIR_SECTORS.map(()=>new Array(N).fill(0));
+    for(let j=0;j<N;j++){
+      const v=ddA.map(m=>m[j]).filter(x=>x!=null);
+      if(!v.length){ for(let s=0;s<8;s++) pct[s][j]=null; continue; }
+      const counts=new Array(8).fill(0);
+      for(const d of v) counts[Math.floor(((d+22.5)%360)/45)]++;
+      for(let s=0;s<8;s++) pct[s][j]=counts[s]/v.length*100;
+    }
+    titel=`${mLbl} – ${naam} – Windrichting`;
+    datasets=WINDDIR_SECTORS.map((s,i)=>({
+      type:'bar',
+      label:s,
+      data:pct[i],
+      backgroundColor:WINDDIR_COLORS[s],
+      borderWidth:0,
+      barPercentage:1.0,
+      categoryPercentage:1.0,
+      stack:'wd'
+    }));
+    scales={x:{...cfgBase.scales.x,stacked:true},y:{...yAs('left','%'),min:0,max:100,stacked:true,ticks:{...yAs('left','%').ticks,stepSize:25}}};
+    tooltipCb={mode:'index',intersect:false,itemSort:(a,b)=>b.parsed.y-a.parsed.y,filter:item=>item.parsed.y>=2,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}%`}};
   }else if(type==='cloud'){
     const [ens, sun] = await Promise.all([
       fetchT(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=cloudcover&models=${ensModel}&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`),
