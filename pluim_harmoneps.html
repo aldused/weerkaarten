@@ -368,6 +368,117 @@ function renderTldrHarmonie(v, times, members, mean){
   el.style.display = chips.length ? 'flex' : 'none';
 }
 
+// ── Bewolking als gestapelde kansen-staafjes (ECMWF-stijl) ──
+function renderHHCloud(times, labels, members){
+  const N = times.length;
+  const CATS = [
+    ['Onbewolkt',     0, 12, 'rgba(245,230,66,0.85)'],
+    ['Licht bewolkt', 12, 37, 'rgba(220,210,140,0.75)'],
+    ['Half bewolkt',  37, 62, 'rgba(160,148,100,0.70)'],
+    ['Zwaar bewolkt', 62, 87, 'rgba(130,130,150,0.65)'],
+    ['Geheel bewolkt',87,101, 'rgba(55,55,70,0.80)'],
+  ];
+  // Per uur: % van de 6 members in elke bin
+  const datasets = CATS.map(([naam, lo, hi, kleur]) => ({
+    type:'bar', label:naam,
+    data: times.map((_,j) => {
+      const col = members.map(m => m[j]).filter(v => v != null);
+      if(!col.length) return 0;
+      return col.filter(v => v >= lo && v < hi).length / col.length * 100;
+    }),
+    backgroundColor:kleur, order:2, stack:'ens', barPercentage:1, categoryPercentage:1,
+  }));
+  // Mediaan-lijn over leden (witte lijn over de bars heen)
+  const ccMed = times.map((_,j) => _pct(members.map(m=>m[j]), 50));
+  // tl;dr: zon/bewolkt cijfers
+  const allValues = members.flat().filter(x => x != null);
+  const sunHrs = allValues.filter(v => v <= 30).length;
+  const cloudHrs = allValues.filter(v => v >= 80).length;
+  const sunPct = allValues.length ? Math.round(sunHrs/allValues.length*100) : 0;
+  const cloudPct = allValues.length ? Math.round(cloudHrs/allValues.length*100) : 0;
+  const el = document.getElementById('tldr-harmonie');
+  if(el){
+    el.innerHTML = [
+      `<span class="tldr-chip warm"><span class="ico">☀️</span><span><span class="lbl">Zonkans (≤30%)</span><span class="val">${sunPct}%</span></span></span>`,
+      `<span class="tldr-chip cool"><span class="ico">☁️</span><span><span class="lbl">Zwaar bewolkt (≥80%)</span><span class="val">${cloudPct}%</span></span></span>`,
+    ].join('');
+    el.style.display = 'flex';
+  }
+  const ctx = document.getElementById('plume');
+  const existing = Chart.getChart(ctx); if (existing) existing.destroy();
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    data:{ labels, datasets:[
+      ...datasets,
+      {type:'line', label:'Mediaan', data:ccMed, borderColor:'#ffffff', borderWidth:1.6, pointRadius:0, fill:false, tension:0.3, order:1},
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:10}}},
+        tooltip:{ mode:'index', intersect:false,
+          callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'}%` } } },
+      scales:{
+        x:{ ticks:{ maxRotation:0, autoSkip:true, autoSkipPadding:14 }, grid:{display:false}, stacked:true },
+        y:{ title:{ display:true, text:'Bewolkingskans (%)' }, stacked:true, min:0, max:100 },
+      },
+    }
+  });
+}
+
+// ── Windrichting als gestapelde kansen per 8 sectoren (Weerplaza-stijl) ──
+function renderHHWindDir(times, labels, members){
+  const SECTORS = ['N','NO','O','ZO','Z','ZW','W','NW'];
+  const SECT_COLORS = {N:'#2c8a3a', NO:'#5ec3eb', O:'#3b46c8', ZO:'#d18ad6', Z:'#d83333', ZW:'#e69b3a', W:'#f5d142', NW:'#9bd17e'};
+  const N = times.length;
+  // Per uur: aandeel members per sector
+  const pct = SECTORS.map(()=>new Array(N).fill(0));
+  for (let j=0; j<N; j++){
+    const v = members.map(m => m[j]).filter(x => x != null);
+    if(!v.length){ for(let s=0;s<8;s++) pct[s][j] = null; continue; }
+    const counts = new Array(8).fill(0);
+    for (const d of v) counts[Math.floor(((d+22.5)%360)/45)]++;
+    for (let s=0; s<8; s++) pct[s][j] = counts[s]/v.length*100;
+  }
+  const datasets = SECTORS.map((s,i)=>({
+    type:'bar', label:s, data:pct[i],
+    backgroundColor:SECT_COLORS[s], stack:'wd', barPercentage:1, categoryPercentage:1,
+  }));
+  // tl;dr: dominante richting + wisselvalligheid
+  const totalCounts = new Array(8).fill(0);
+  let total = 0;
+  for (const m of members) for (const v of m){ if(v!=null){ totalCounts[Math.floor(((v+22.5)%360)/45)]++; total++; } }
+  const dom = totalCounts.indexOf(Math.max(...totalCounts));
+  const domPct = total ? Math.round(totalCounts[dom]/total*100) : 0;
+  // Wisselvalligheid: hoeveel sectoren samen ≥10% (een kleine entropie-proxy)
+  const aandelen = totalCounts.map(c => total ? c/total : 0);
+  const grootSectoren = aandelen.filter(a => a >= 0.10).length;
+  const el = document.getElementById('tldr-harmonie');
+  if(el){
+    const wissel = grootSectoren <= 2 ? 'Stabiel' : grootSectoren <= 4 ? 'Wat draaiend' : 'Sterk wisselend';
+    el.innerHTML = [
+      `<span class="tldr-chip cool"><span class="ico">🧭</span><span><span class="lbl">Dominante richting</span><span class="val">${SECTORS[dom]} (${domPct}%)</span></span></span>`,
+      `<span class="tldr-chip"><span class="ico">🔄</span><span><span class="lbl">Verdeling</span><span class="val">${wissel}</span></span></span>`,
+    ].join('');
+    el.style.display = 'flex';
+  }
+  const ctx = document.getElementById('plume');
+  const existing = Chart.getChart(ctx); if (existing) existing.destroy();
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:10}}},
+        tooltip:{ mode:'index', intersect:false,
+          callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'0'}%` } } },
+      scales:{
+        x:{ ticks:{ maxRotation:0, autoSkip:true, autoSkipPadding:14 }, grid:{display:false}, stacked:true },
+        y:{ title:{ display:true, text:'Sector-kans (%)' }, stacked:true, min:0, max:100 },
+      },
+    }
+  });
+}
+
 function render(){
   if (!STATION_DATA) return;
   const v = huidigVar;
@@ -385,6 +496,11 @@ function render(){
     document.getElementById('tldr-harmonie').style.display='none';
     return;
   }
+  // Stacked-bars views: bewolking-categorieën en windrichting-sectoren (zelfde stijl als ECMWF)
+  const legendaRow = document.getElementById('legenda-harmonie');
+  if (v === 'tcc_pct')      { legendaRow.style.display='none'; renderHHCloud(times, labels, members); buildDagTabel(times, members, v); return; }
+  if (v === 'wind_dir_deg') { legendaRow.style.display='none'; renderHHWindDir(times, labels, members); buildDagTabel(times, members, v); return; }
+  legendaRow.style.display='';
   const COLORS = ['#cc2222','#228822','#0066cc','#cc9900','#8844cc','#44aacc'];
   const datasets = members.map((series, mi) => ({
     label: mi===0 ? 'Oper' : `Member ${mi}`,
