@@ -31,14 +31,15 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .btn-download.social:hover { background: #238a4f; }
 .veld-mini { height: 24px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; padding: 2px 9px; }
 .marker-zoekwrap { position: relative; display: flex; gap: 4px; align-items: center; }
-#marker-zoek { width: 150px; }
+#marker-zoek { width: 170px; }
 .marker-suggest { display: none; position: absolute; top: 29px; left: 0; width: 260px; max-height: 230px; overflow-y: auto; background: white; border: 1px solid #bfd0e0; border-radius: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.18); z-index: 80; }
 .marker-suggest div { padding: 7px 9px; font-size: 12px; color: #24415f; cursor: pointer; border-bottom: 1px solid #eef3f8; }
 .marker-suggest div:last-child { border-bottom: none; }
 .marker-suggest div:hover, .marker-suggest div.sel { background: #e8f4ff; }
 .marker-suggest .titel { font-weight: 700; color: #00205b; }
 .marker-suggest .sub { color: #6a7f94; font-size: 11px; margin-top: 1px; }
-.sat-beeldvlak.plaats-punt { cursor: crosshair; }
+.sat-beeldvlak.plaats-punt, .sat-beeldvlak.plaats-punt * { cursor: crosshair; }
+#satelliet-img { pointer-events: none; }
 
 /* Tijdlijn */
 .tijdlijn { background: #1a2b40; padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
@@ -109,8 +110,8 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   <div class="sep"></div>
   <span class="groep-label">Punt</span>
   <div class="marker-zoekwrap">
-    <input class="veld-mini" id="marker-zoek" type="text" placeholder="Plaatsnaam..." autocomplete="off" title="Zoek een plaats en zet daar een pin">
-    <button class="btn" id="btn-marker-search" title="Zet een pin op de ingevoerde plaats">Pin</button>
+    <input class="veld-mini" id="marker-zoek" type="text" placeholder="Zoek plaats..." autocomplete="off" title="Zoek een plaats of typ een eigen label">
+    <button class="btn" id="btn-marker-search" title="Zoek de plaats en zet de pin daar">Zoek</button>
     <div class="marker-suggest" id="marker-suggest"></div>
   </div>
   <select class="veld-mini" id="marker-preset" title="Plaats een punt op een bekende locatie">
@@ -130,7 +131,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
     <option value="#ffcf33">Geel</option>
     <option value="#2ec4e8">Blauw</option>
   </select>
-  <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om zelf een punt te plaatsen">Klikpunt</button>
+  <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om de pin zelf te plaatsen">Plaats op kaart</button>
   <button class="btn" id="btn-marker-clear" title="Verwijder de geplaatste punt">Wis</button>
   <div class="sep"></div>
   <button class="btn-refresh" id="btn-refresh">↻ Nu</button>
@@ -153,7 +154,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   <div class="sat-kaart">
     <div class="sat-header-band">
       <div class="links">
-        <div class="titel" id="sat-header-product">MTG Satellietbeeld</div>
+        <div class="titel" id="sat-header-product">Satellietfoto</div>
         <div class="sub">Bron: EUMETSAT EUMETView / Meteosat Third Generation · © Ed Aldus / Weerlab</div>
       </div>
       <div class="rechts">
@@ -663,7 +664,7 @@ function laadSatelliet(tijdstap) {
   const isNu = tijdstap === LAATSTE_TIJDSTAP;
   const product = productVoorTijd(t);
 
-  headerProduct.textContent = 'MTG · ' + productLabel(product);
+  headerProduct.textContent = 'Satellietfoto';
   headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
   headerGebied.textContent = actiefGebiedLabel;
   const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
@@ -718,7 +719,7 @@ function toonTimelapseFrame(frame) {
   const product = productVoorLayer(actieveLayer, t);
   const isNu = frame.stap === LAATSTE_TIJDSTAP;
 
-  headerProduct.textContent = 'MTG · ' + productLabel(product);
+  headerProduct.textContent = 'Satellietfoto';
   headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
   headerGebied.textContent = actiefGebiedLabel;
   laatsteUrl = frame.url;
@@ -772,6 +773,8 @@ function actieveMarkerKleur() {
 function plaatsMarker(lon, lat, label) {
   markerPunt = { lon, lat, label, kleur: actieveMarkerKleur() };
   document.getElementById('marker-zoek').value = label || '';
+  const info = document.getElementById('info-balk');
+  if (info) info.textContent = `${label || 'Punt'} geplaatst · Bron: EUMETSAT EUMETView / MTG`;
   tekenOverlay();
 }
 
@@ -889,7 +892,7 @@ async function zoekMarkerPlaats(direct = false) {
   } catch (e) {
     if (e.name !== 'AbortError' && direct && !startResultaten.length) {
       const info = document.getElementById('info-balk');
-      info.textContent = 'Plaats niet gevonden. Gebruik eventueel coordinaten of Klikpunt.';
+      info.textContent = 'Plaats niet gevonden. Gebruik eventueel coordinaten of Plaats op kaart.';
     }
   }
 }
@@ -898,9 +901,17 @@ function zetPlaatsPuntModus(actief) {
   plaatsPuntModus = actief;
   const btn = document.getElementById('btn-marker-click');
   const vlak = document.querySelector('.sat-beeldvlak');
+  const input = document.getElementById('marker-zoek');
+  const info = document.getElementById('info-balk');
   btn.classList.toggle('actief', actief);
-  btn.textContent = actief ? 'Klik nu' : 'Klikpunt';
+  btn.textContent = actief ? 'Klik nu op kaart' : 'Plaats op kaart';
   vlak.classList.toggle('plaats-punt', actief);
+  if (actief && info) {
+    const naam = input.value.trim();
+    info.textContent = naam
+      ? `Klik op de satellietfoto om "${naam}" daar te plaatsen`
+      : 'Klik op de satellietfoto om zelf een pin te plaatsen';
+  }
 }
 
 function schermNaarLonLat(clientX, clientY) {
@@ -1055,10 +1066,10 @@ async function maakExportCanvas(social = false) {
   ctx.fillRect(0, headerH - 3, bronW, 3);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 28px Arial, sans-serif';
-  ctx.fillText(`MTG · ${productLabel(product)}`, 24, 36);
+  ctx.fillText('Satellietfoto', 24, 36);
   ctx.font = '18px Arial, sans-serif';
   ctx.fillStyle = '#a8c8e8';
-  ctx.fillText('Bron: EUMETSAT EUMETView / Meteosat Third Generation', 24, 66);
+  ctx.fillText(`${productLabel(product)} · Bron: EUMETSAT EUMETView / Meteosat Third Generation`, 24, 66);
   ctx.textAlign = 'right';
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 26px Arial, sans-serif';
@@ -1271,13 +1282,13 @@ function tekenVideoFrame(ctx, canvas, frame, schaal) {
   tekenExportOverlay(ctx, 0, 0, w, h);
 
   ctx.fillStyle = 'rgba(0, 32, 91, 0.82)';
-  ctx.fillRect(18, 18, 430, 54);
+  ctx.fillRect(18, 18, 640, 54);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 22px Arial, sans-serif';
-  ctx.fillText(`MTG · ${productLabel(product)}`, 34, 42);
+  ctx.fillText('Satellietfoto', 34, 42);
   ctx.font = '17px Arial, sans-serif';
   ctx.fillStyle = '#dcecff';
-  ctx.fillText(`${actiefGebiedLabel} · ${formatDatumTijd(t)}`, 34, 64);
+  ctx.fillText(`${productLabel(product)} · ${actiefGebiedLabel} · ${formatDatumTijd(t)}`, 34, 64);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(0, 20, 45, 0.72)';
