@@ -415,6 +415,24 @@ COORDS_GR = {
     "Tymbaki":[24.750,35.000],
 }
 
+# Turkije — alleen West-kust (Egeïsch) en Zuid-kust (Mediterraan)
+# DWD MOSMIX-stations zijn beperkt tot luchthavens met internationale ICAO.
+STATIONS_TR = [
+    # Westkust (Egeïsch, N→Z)
+    ("17219","Izmir"),("17289","Bodrum-Milas"),("17290","Bodrum"),
+    # Zuidkust (Mediterraan, W→O)
+    ("17295","Dalaman"),("17300","Antalya"),("17350","Adana"),
+]
+
+COORDS_TR = {
+    "Izmir":[27.150,38.267],
+    "Bodrum-Milas":[27.667,37.250],
+    "Bodrum":[27.433,37.033],
+    "Dalaman":[28.783,36.700],
+    "Antalya":[30.800,36.900],
+    "Adana":[35.417,37.000],
+}
+
 # ── MOSMIX helpers ───────────────────────────────────────────────────────────
 
 def strip_namespaces(s):
@@ -1026,6 +1044,7 @@ def main():
     bouw_json(STATIONS_DE, COORDS_DE, "mosmix_de.json", "mosmix_uurlijks_de.json")
     bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
     bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
+    bouw_json(STATIONS_TR, COORDS_TR, "mosmix_tr.json", "mosmix_uurlijks_tr.json")
     bouw_json(STATIONS_IT, COORDS_IT, "mosmix_it.json", "mosmix_uurlijks_it.json")
     bouw_json(STATIONS_ALPS, COORDS_ALPS, "mosmix_alps.json", "mosmix_uurlijks_alps.json")
     bouw_json(STATIONS_IC, COORDS_IC, "mosmix_ic.json", "mosmix_uurlijks_ic.json")
