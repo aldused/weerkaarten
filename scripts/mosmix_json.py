@@ -224,6 +224,54 @@ COORDS_GB = {
     "Dublin":[-6.250,53.433],"Belmullet":[-10.017,54.233],"Malin Head":[-7.333,55.367],
 }
 
+# Griekenland (vasteland + eilanden) — DWD MOSMIX 166xx-stations
+STATIONS_GR = [
+    # Noord-vasteland
+    ("16606","Serres"),("16622","Thessaloniki"),("16624","Kavala"),
+    ("16627","Alexandroupolis"),("16632","Kozani"),
+    # Centraal vasteland
+    ("16641","Kerkyra"),("16642","Ioannina"),("16643","Preveza"),
+    ("16648","Larissa"),("16675","Lamia"),
+    # Peloponnesos / west
+    ("16682","Andravida"),("16689","Patras"),("16710","Tripoli"),
+    ("16726","Kalamata"),
+    # Athene-regio
+    ("16699","Tanagra"),("16716","Athene"),
+    # Sporaden / Noord-Egeïsch
+    ("16650","Limnos"),("16667","Mytilini"),("16684","Skyros"),
+    ("16685","Kefalonia"),("16706","Chios"),("16723","Samos"),
+    # Cycladen
+    ("16666","Mykonos"),("16732","Naxos"),("16740","Syros"),
+    ("16741","Paros"),("16744","Santorini"),
+    # Dodekanesos / zuid-Egeïsch
+    ("16742","Kos"),("16743","Kythira"),("16749","Rhodos"),
+    ("16765","Karpathos"),
+    # Kreta
+    ("16746","Chania"),("16754","Heraklion"),("16759","Tymbaki"),
+]
+
+COORDS_GR = {
+    "Serres":[23.570,41.070],"Thessaloniki":[22.970,40.520],
+    "Kavala":[24.600,40.980],"Alexandroupolis":[25.920,40.850],
+    "Kozani":[21.780,40.300],
+    "Kerkyra":[19.920,39.620],"Ioannina":[20.820,39.700],
+    "Preveza":[20.770,38.920],"Larissa":[22.420,39.630],
+    "Lamia":[22.400,38.900],
+    "Andravida":[21.280,37.920],"Patras":[21.730,38.250],
+    "Tripoli":[22.400,37.530],"Kalamata":[22.020,37.070],
+    "Tanagra":[23.530,38.320],"Athene":[23.730,37.900],
+    "Limnos":[25.230,39.920],"Mytilini":[26.600,39.070],
+    "Skyros":[24.480,38.970],"Kefalonia":[20.500,38.120],
+    "Chios":[26.130,38.330],"Samos":[26.920,37.700],
+    "Mykonos":[25.350,37.430],"Naxos":[25.380,37.100],
+    "Syros":[24.950,37.420],"Paros":[25.130,37.020],
+    "Santorini":[25.430,36.420],
+    "Kos":[27.070,36.780],"Kythira":[23.020,36.280],
+    "Rhodos":[28.080,36.400],"Karpathos":[27.250,35.520],
+    "Chania":[24.120,35.480],"Heraklion":[25.180,35.330],
+    "Tymbaki":[24.750,35.000],
+}
+
 # ── MOSMIX helpers ───────────────────────────────────────────────────────────
 
 def strip_namespaces(s):
@@ -834,6 +882,7 @@ def main():
     bouw_json(STATIONS_IBE, COORDS_IBE, "mosmix_ibe.json", "mosmix_uurlijks_ibe.json")
     bouw_json(STATIONS_DE, COORDS_DE, "mosmix_de.json", "mosmix_uurlijks_de.json")
     bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
+    bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
 
     print(f"\nKlaar in {time.time()-t0:.0f}s")
 
