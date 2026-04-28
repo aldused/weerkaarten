@@ -698,12 +698,26 @@ function buildDagTabel(times, members, vName){
 // Startup
 (async function(){
   await loadStationsIndex();
-  // URL-param ?q=<plaats> heeft voorrang
   const params = new URLSearchParams(location.search);
   const q = params.get('q');
+  const latStr = params.get('lat');
+  const lonStr = params.get('lon');
+  // Als lat+lon meegegeven: direct nearest station kiezen (snel, geen Nominatim-call)
+  if(latStr && lonStr){
+    const lat = parseFloat(latStr), lon = parseFloat(lonStr);
+    if(!isNaN(lat) && !isNaN(lon)){
+      const {station, km} = nearestStation(lat, lon);
+      if(station){
+        zoekInput.value = q || station.naam;
+        await laadStation(station, {queryNaam: q || station.naam, lat, lon, km});
+        return;
+      }
+    }
+  }
+  // URL-param ?q=<plaats> als fallback (Nominatim-zoektocht)
   if(q){
     zoekInput.value = q;
-    await zoekPlaats(true);   // direct eerste Nominatim-hit kiezen
+    await zoekPlaats(true);
     return;
   }
   // Anders: De Bilt als default
