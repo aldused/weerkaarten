@@ -550,6 +550,12 @@ function naarBFT(kmh){
   for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
   return 12;
 }
+const RICHTING_DEG={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function parseRichting(txt){
+  const m=(txt||'').toUpperCase().replace(/[^NOZW]/g,'').match(/^(NNO|NNW|NO|NW|N|ONO|OZO|O|ZZO|ZZW|ZO|ZW|Z|WNW|WZW|W)$/);
+  if(!m) return null;
+  return RICHTING_DEG[m[1]];
+}
 function naarRichtingKort(deg){
   if(deg==null) return '–';
   const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
@@ -583,7 +589,7 @@ function vulVijfdaagse(data){
     rij('Min. temperatuur (°C)', data.tmin),
     rij('Kans op neerslag (%)',  data.nsk),
     rij('Windkracht (BFT)',      data.bft),
-    `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true">${windCel(d)}</td>`).join('')}</tr>`
+    `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true" class="wind-cel">${windCel(d)}</td>`).join('')}</tr>`
   ].join('');
 }
 async function laadVijfdaagse(){
@@ -622,6 +628,18 @@ document.addEventListener('focus', e=>{
     range.selectNodeContents(td);
     sel.removeAllRanges();
     sel.addRange(range);
+  }
+}, true);
+
+/* ── Wind-cel: parse richting bij blur en herrender pijl ── */
+function herrenderWindCel(deg){
+  const letter=['N','NO','O','ZO','Z','ZW','W','NW','N'][Math.round(deg/45)];
+  return `<span class="windpijl" style="transform:rotate(${deg}deg);display:inline-block">↓</span> ${letter}`;
+}
+document.addEventListener('blur', e=>{
+  if(e.target.matches && e.target.matches('td.wind-cel')){
+    const deg=parseRichting(e.target.textContent);
+    if(deg!=null) e.target.innerHTML=herrenderWindCel(deg);
   }
 }, true);
 
