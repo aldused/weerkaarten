@@ -323,6 +323,15 @@ body {
 #uur-sidebar .uur-btn.actief {
   background: #00205b; color: white; border-color: #00205b;
 }
+#uur-sidebar .uur-btn.nog-niet-geladen {
+  opacity: 0.32;
+  cursor: default;
+  pointer-events: none;
+  font-weight: 400;
+}
+[data-theme="dark"] #uur-sidebar .uur-btn.nog-niet-geladen {
+  opacity: 0.28;
+}
 
 /* Status-regel */
 .status {
@@ -473,6 +482,7 @@ body {
       <option value="icond2">ICON-D2 (DWD)</option>
       <option value="ecmwf">ECMWF IFS (00/12, 10 dagen)</option>
       <option value="ecmwf_om">ECMWF IFS (16 dagen, Open-Meteo)</option>
+      <option value="ecmwfshort">ECMWF IFS 06/18z (T+90)</option>
       <option value="icond2ruc">ICON-D2-RUC (DWD, uurlijks)</option>
     </select>
   </div>
@@ -605,6 +615,7 @@ body {
     icond2ruc: { meta: "icond2ruc_canvas_meta.json", label: "ICON-D2-RUC (DWD, 2.2km, uurlijks)" },
     ecmwf:    { meta: "ecmwf_canvas_meta.json",    label: "ECMWF IFS HRES 00/12 (10 dagen)" },
     ecmwf_om: { meta: "ecmwf_om_canvas_meta.json", label: "ECMWF IFS via Open-Meteo (16 dagen)" },
+    ecmwfshort: { meta: "ecmwf_short_canvas_meta.json", label: "ECMWF IFS 06/18z (T+90, ECMWF direct)" },
   };
   var actiefModel = "harmonie";
   var vergelijkModus = false;
@@ -3064,20 +3075,32 @@ body {
   function bouwUurSidebar() {
     uurSidebar.innerHTML = "";
     var tijdMeta = (vergelijkModus && modelData["harmonie"]) ? modelData["harmonie"].meta : meta;
-    for (var h = 1; h <= aantalUren; h++) {
+    // Voor pipelines die gefaseerd publiceren (zoals ECMWF short): toon de
+    // volledige range, maar dim uren die nog niet geladen zijn.
+    var maxGeladen = (typeof tijdMeta.geladen_tot === "number") ? tijdMeta.geladen_tot : null;
+    var totaalUren = (typeof tijdMeta.max_uren === "number") ? tijdMeta.max_uren : (aantalUren - 1);
+    var btnRange = Math.max(aantalUren, totaalUren + 1);
+    for (var h = 1; h <= btnRange; h++) {
       var btn = document.createElement("button");
       btn.className = "uur-btn";
       btn.textContent = leadLabel(tijdMeta, h - 1, true);
       btn.dataset.step = h;
-      btn.addEventListener("click", function() {
-        stopSpelen();
-        var s = parseInt(this.dataset.step) - 1;
-        updateAlle(s);
-      });
-      btn.addEventListener("mouseenter", function() {
-        var s = parseInt(this.dataset.step) - 1;
-        updateAlle(s);
-      });
+      var leadH = h - 1;
+      if (maxGeladen !== null && leadH > maxGeladen) {
+        btn.classList.add("nog-niet-geladen");
+        btn.disabled = true;
+        btn.title = "Wordt geladen — t/m +" + maxGeladen + "u beschikbaar";
+      } else {
+        btn.addEventListener("click", function() {
+          stopSpelen();
+          var s = parseInt(this.dataset.step) - 1;
+          updateAlle(s);
+        });
+        btn.addEventListener("mouseenter", function() {
+          var s = parseInt(this.dataset.step) - 1;
+          updateAlle(s);
+        });
+      }
       uurSidebar.appendChild(btn);
     }
     updateUurSidebarActief();
