@@ -329,7 +329,90 @@ async function exporteerPDF(){
     }
   });
 
+  // 5-daagse vooruitblik tabel
+  tekenVijfdaagseTabel(pdf, x, y, maxW, schaal, blauw);
+
   pdf.save('Rijnmondweer.pdf');
+}
+
+/* Teken de 5-daagse vooruitblik tabel in de PDF */
+function tekenVijfdaagseTabel(pdf, x, startY, maxW, schaal, blauw){
+  const tabel=document.getElementById('vijfdaagse-tabel');
+  if(!tabel) return;
+  // Lees data uit DOM
+  const dagheaders=Array.from(tabel.querySelectorAll('#vijfdaagse-dagen .dag')).map(th=>{
+    const small=th.querySelector('small');
+    const dag=(th.firstChild?.textContent||'').trim();
+    const datum=(small?.textContent||'').trim();
+    return {dag,datum};
+  });
+  if(dagheaders.length===0) return; // Tabel niet klaar
+  const rijen=Array.from(tabel.querySelectorAll('#vijfdaagse-body tr')).map(tr=>{
+    const cells=Array.from(tr.querySelectorAll('td'));
+    return {
+      label:(cells[0]?.textContent||'').trim(),
+      waarden:cells.slice(1).map(td=>(td.textContent||'').replace(/[↓↑←→]/g,'').trim())
+    };
+  });
+  if(rijen.length===0) return;
+
+  const colLabel=44;
+  const colDay=(maxW-colLabel)/dagheaders.length;
+  const rowH=6.2;
+  const totH=(rijen.length+1)*rowH;
+  let y=startY+4;
+  // Eventueel naar nieuwe pagina
+  y=extraPaginaIndienNodig(pdf, y, totH+12);
+
+  // Sectiekop
+  pdf.setFont('helvetica','bold');
+  pdf.setFontSize(11*schaal);
+  pdf.setTextColor(...blauw);
+  pdf.text('5-DAAGSE VOORUITBLIK', x, y);
+  y+=4.5;
+
+  // Header-rij (blauw)
+  let cx=x;
+  pdf.setFillColor(...blauw);
+  pdf.rect(cx, y, colLabel, rowH, 'F');
+  cx+=colLabel;
+  dagheaders.forEach(dh=>{
+    pdf.rect(cx, y, colDay, rowH, 'F');
+    pdf.setTextColor(255,255,255);
+    pdf.setFont('helvetica','bold');
+    pdf.setFontSize(8);
+    pdf.text(dh.dag, cx+colDay/2, y+3, {align:'center'});
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica','normal');
+    pdf.text(dh.datum, cx+colDay/2, y+5.4, {align:'center'});
+    cx+=colDay;
+  });
+  y+=rowH;
+
+  // Data-rijen
+  pdf.setDrawColor(170,170,170);
+  pdf.setLineWidth(0.2);
+  rijen.forEach(rij=>{
+    cx=x;
+    // Label-cel met lichte achtergrond
+    pdf.setFillColor(240,244,248);
+    pdf.rect(cx, y, colLabel, rowH, 'F');
+    pdf.rect(cx, y, colLabel, rowH, 'S');
+    pdf.setTextColor(34,34,34);
+    pdf.setFont('helvetica','bold');
+    pdf.setFontSize(8);
+    pdf.text(rij.label, cx+2, y+3.9);
+    cx+=colLabel;
+    // Waarde-cellen
+    pdf.setFont('helvetica','normal');
+    pdf.setFontSize(8.5);
+    rij.waarden.forEach(val=>{
+      pdf.rect(cx, y, colDay, rowH, 'S');
+      pdf.text(val||'–', cx+colDay/2, y+3.9, {align:'center'});
+      cx+=colDay;
+    });
+    y+=rowH;
+  });
 }
 
 /* ── Auto-save per dag ── */
@@ -543,6 +626,9 @@ document.addEventListener('focus', e=>{
 /* ── Init ── */
 updateOpgesteldKop();
 updateDagnamen();
+// Direct dag-koppen + lege rijen tonen, zodat tabel altijd aanwezig is (ook in PDF)
+bouwVijfdaagseDagKoppen(new Date());
+vulVijfdaagse({tmax:Array(5).fill('–'),tmin:Array(5).fill('–'),nsk:Array(5).fill('–'),bft:Array(5).fill('–'),ri:Array(5).fill(null)});
 laadVijfdaagse();
 // Tijd-deel automatisch ververs elke minuut zodat "om HH:MM uur" actueel blijft
 setInterval(updateOpgesteldKop, 60*1000);
