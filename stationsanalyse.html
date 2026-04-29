@@ -790,8 +790,8 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
 
       if (voldoet) {
         aantal++;
-        if (eersteDag === null) eersteDag = {sDag, datum: datumStr, raw: datum};
-        laatsteDag = {sDag, datum: datumStr, raw: datum};
+        if (eersteDag === null) eersteDag = {sDag, datum: datumStr, raw: datum, waarde: raw, isSpoor};
+        laatsteDag = {sDag, datum: datumStr, raw: datum, waarde: raw, isSpoor};
         huidigeReeks++;
         if (huidigeReeks > langsteReeks) langsteReeks = huidigeReeks;
       } else {
@@ -1017,7 +1017,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   // Vroegste eerste dag
   if (metEerste.length > 0) {
     const vroegste = metEerste.reduce((a, b) => a.eersteDag.sDag < b.eersteDag.sDag ? a : b);
-    document.getElementById('val-eerste').textContent = vroegste.eersteDag.datum;
+    const wTxt = fmtWaarde(vroegste.eersteDag.waarde, info, vroegste.eersteDag.isSpoor);
+    document.getElementById('val-eerste').textContent = `${vroegste.eersteDag.datum} (${wTxt})`;
     const stnSuf = vroegste.eersteDag.stationNaam ? ` — ${vroegste.eersteDag.stationNaam}` : '';
     document.getElementById('sub-eerste').textContent = `in ${vroegste.jaarLabel}${stnSuf}`;
     document.getElementById('card-eerste').querySelector('.label').textContent =
@@ -1030,7 +1031,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   // Laatste dag (record)
   if (metLaatste.length > 0) {
     const laatst = metLaatste.reduce((a, b) => a.laatsteDag.sDag > b.laatsteDag.sDag ? a : b);
-    document.getElementById('val-laatste').textContent = laatst.laatsteDag.datum;
+    const wTxt = fmtWaarde(laatst.laatsteDag.waarde, info, laatst.laatsteDag.isSpoor);
+    document.getElementById('val-laatste').textContent = `${laatst.laatsteDag.datum} (${wTxt})`;
     const stnSuf = laatst.laatsteDag.stationNaam ? ` — ${laatst.laatsteDag.stationNaam}` : '';
     document.getElementById('sub-laatste').textContent = `in ${laatst.jaarLabel}${stnSuf}`;
     document.getElementById('card-laatste').querySelector('.label').textContent =
@@ -1366,15 +1368,17 @@ function renderDetailTabel() {
   const stnStyle = 'font-size:0.85em;color:#5a7090;font-weight:400';
   gesorteerd.forEach(r => {
     const tr = document.createElement('tr');
+    const eersteW = r.eersteDag ? fmtWaarde(r.eersteDag.waarde, info, r.eersteDag.isSpoor) : '';
+    const laatsteW = r.laatsteDag ? fmtWaarde(r.laatsteDag.waarde, info, r.laatsteDag.isSpoor) : '';
     const eersteTd = r.eersteDag
       ? (isAlle && r.eersteDag.stationNaam
-          ? `${r.eersteDag.datum} <span style="${stnStyle}">(${r.eersteDag.stationNaam})</span>`
-          : r.eersteDag.datum)
+          ? `${r.eersteDag.datum} <span style="${stnStyle}">${eersteW} (${r.eersteDag.stationNaam})</span>`
+          : `${r.eersteDag.datum} <span style="${stnStyle}">${eersteW}</span>`)
       : '-';
     const laatsteTd = r.laatsteDag
       ? (isAlle && r.laatsteDag.stationNaam
-          ? `${r.laatsteDag.datum} <span style="${stnStyle}">(${r.laatsteDag.stationNaam})</span>`
-          : r.laatsteDag.datum)
+          ? `${r.laatsteDag.datum} <span style="${stnStyle}">${laatsteW} (${r.laatsteDag.stationNaam})</span>`
+          : `${r.laatsteDag.datum} <span style="${stnStyle}">${laatsteW}</span>`)
       : '-';
     const extremeTd = r.extremeVal !== null
       ? (isAlle && r.extremeStation
