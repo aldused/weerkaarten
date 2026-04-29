@@ -271,7 +271,15 @@ def main() -> int:
             existing = json.loads(meta_path.read_text())
             if (existing.get("run_utc") == run_iso
                     and existing.get("geladen_tot", 0) >= max_step):
-                print(f"Al gepubliceerd t/m stap {existing['geladen_tot']} voor deze run — skip.")
+                # We hebben deze fase al, maar werk wel het 'gecontroleerd_op'
+                # veld (en bijgewerkt) bij zodat de viewer ziet dat het systeem
+                # nog steeds elke ronde kijkt — anders lijkt de data oud.
+                now_local = datetime.now(tz=LOCAL_TZ)
+                stamp = now_local.strftime("%d %b %Y %H:%M")
+                existing["bijgewerkt"] = stamp
+                existing["gecontroleerd_op"] = stamp
+                meta_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False) + "\n")
+                print(f"Al gepubliceerd t/m stap {existing['geladen_tot']} voor deze run — skip (timestamp ververst).")
                 return 0
         except Exception:
             pass
