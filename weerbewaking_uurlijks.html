@@ -186,7 +186,7 @@ body{--kop-scale:1}
   <label style="font-weight:500"><input type="checkbox" id="toon-komende" checked> komende dagen</label>
   <span class="spacer"></span>
   <span class="status" id="data-status">–</span>
-  <button id="laad-btn" onclick="laadData()">⬇ Laad data in</button>
+  <button id="laad-btn" onclick="herlaadTabel()" style="background:#2a7a2a" title="Haal de uur- en vijfdaagse tabellen opnieuw op (overschrijft eigen aanpassingen)">↻ Ververs tabel</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <span class="status" style="margin-left:8px">Document:</span>
   <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
@@ -1073,6 +1073,51 @@ laadMeta().then(meta=>{
   if(document.getElementById('startuur-sel').options.length===0) vulStartuurSelect(meta.tijden);
   zetLaadStatus(MODELS[huidigModel].label+' · run '+meta.run);
 }).catch(e=>{ zetLaadStatus('Meta: '+e.message); });
+
+/* ── Tabel-persistentie (uur-tabel-1, uur-tabel-2, vijfdaagse) ── */
+const TABEL_KEY_PREFIX='wb_uurlijks_tabel_';
+const TABEL_IDS=['uur-tabel-1','uur-tabel-2','vijfdaagse-tabel'];
+function tabelSaveKey(){ return TABEL_KEY_PREFIX+huidigeDatum()+'_'+(docNaam?docNaam():''); }
+function saveTabel(){
+  const blob={__ts:Date.now()};
+  let any=false;
+  TABEL_IDS.forEach(id=>{
+    const t=document.getElementById(id);
+    if(t && t.innerHTML.trim()){ blob[id]=t.innerHTML; any=true; }
+  });
+  if(!any) return;
+  try{ localStorage.setItem(tabelSaveKey(), JSON.stringify(blob)); }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    let any=false;
+    TABEL_IDS.forEach(id=>{
+      if(d[id]){ const t=document.getElementById(id); if(t){ t.innerHTML=d[id]; any=true; } }
+    });
+    return any;
+  }catch(e){ return false; }
+}
+function herlaadTabel(){
+  if(!confirm('Tabellen opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadData();
+}
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#uur-tabel-1, #uur-tabel-2, #vijfdaagse-tabel')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
+// Auto-save na verse fetch (renderTabellen + laadVijfdaagse)
+const _origRenderTabellen=renderTabellen;
+renderTabellen=async function(...args){ const r=await _origRenderTabellen.apply(this,args); saveTabel(); return r; };
+const _origLaadVijfdaagse=laadVijfdaagse;
+laadVijfdaagse=async function(...args){ const r=await _origLaadVijfdaagse.apply(this,args); saveTabel(); return r; };
+// Bij laden: probeer eerst opgeslagen tabel terug te zetten
+restoreTabel();
 
 /* ── Terug naar menu ── */
 function gaTerug(){
