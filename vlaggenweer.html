@@ -30,9 +30,9 @@ td{border:1px solid #d6dee8;padding:6px 5px;vertical-align:middle}
 .day{background:#eaf3ff;color:#003b70;font-weight:900;width:13%;font-size:14px}.day small{display:block;color:#475569;font-weight:500;margin-top:5px;font-size:12px}
 .cell{min-height:88px}.green{background:#16a34a;color:white}.yellow{background:#facc15;color:#111827}.orange{background:#f97316;color:white}.red{background:#dc2626;color:white}.purple{background:#7c3aed;color:white}
 .cell-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}.dir{font-weight:900;font-size:16px}
-.wind-arrow{--rot:0deg;display:inline-block;width:34px;height:34px;flex:0 0 34px;color:currentColor;transform:rotate(var(--rot));transition:transform .25s ease;filter:drop-shadow(0 1px 1px rgba(0,0,0,.18))}
-.wind-arrow svg{width:100%;height:100%;display:block}
-.field{display:grid;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:5px;margin-top:2px;font-size:11px}.field label{font-weight:800;font-size:10px;letter-spacing:.01em;white-space:nowrap}.field .unit{font-weight:700;opacity:.9;font-size:10px}
+.wind-arrow{display:inline-block;width:34px;height:34px;flex:0 0 34px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.18))}
+.wind-arrow img{width:100%;height:100%;display:block}
+.field{display:grid;grid-template-columns:118px minmax(0,1fr);align-items:center;gap:5px;margin-top:2px;font-size:11px}.field label{font-weight:800;font-size:10px;letter-spacing:.01em;white-space:nowrap}.field .unit{display:none}
 input.val,select.dir-select{padding:2px 3px !important;font-size:11px !important}
 input.val{text-align:center}
 input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px solid rgba(0,0,0,.18);border-radius:6px;padding:5px 6px;background:rgba(255,255,255,.9);color:#111827}
@@ -61,13 +61,16 @@ input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px s
     <div class="sub">Rotterdam · HARMONIE dag 1-2, MOSMIX vanaf dag 3</div>
   </div>
   <div class="actions">
+    <button class="btn" type="button" onclick="refetchData()" title="Haal verwachting opnieuw op (overschrijft handmatige aanpassingen)">↻ Opnieuw ophalen</button>
     <button class="btn" type="button" onclick="downloadPdf()">Download PDF</button>
     <a class="btn sec" href="VLAGGENWEER.docx" download>Bewerkbare DOCX</a>
+    <button class="btn sec" type="button" onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen aanpassingen van vandaag">🗑️ Wissen</button>
     <a class="btn sec" href="weerbewaking.html">Terug</a>
   </div>
 </div>
 <main class="wrap">
   <div class="status" id="status">Vlaggenweer laden...</div>
+  <div id="save-status" style="font-size:.78rem;color:#2a7a2a;margin-bottom:6px;min-height:1em"></div>
   <section class="sheet" id="rapport">
     <div class="doc-head">
       <img class="flag" src="vlaggenweer_media/vlag_illustratie.png" onerror="this.src='VLAGGENWEER.png';this.style.objectPosition='left top'">
@@ -79,8 +82,8 @@ input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px s
       <img class="brand" src="vlaggenweer_media/ed_aldus_logo.jpeg" onerror="this.style.display='none'">
     </div>
     <div class="intro">
-      <h2 contenteditable="true">NOORDOOSTENWIND</h2>
-      <div class="text" contenteditable="true">Een hogedrukgebied ligt boven de Duitse Bocht. Een zwakke storing ligt momenteel boven de Britse Eilanden en komt langzaam dichterbij. Morgen krijgen we te maken met een hogedrukgebied nabij Schotland. Het verplaatst zich richting de Noordzee, waar het op woensdag aankomt. Dit zal bij ons zorgen voor fraai lenteweer.</div>
+      <h2 contenteditable="true" data-save="intro-h2">NOORDOOSTENWIND</h2>
+      <div class="text" contenteditable="true" data-save="intro-text">Een hogedrukgebied ligt boven de Duitse Bocht. Een zwakke storing ligt momenteel boven de Britse Eilanden en komt langzaam dichterbij. Morgen krijgen we te maken met een hogedrukgebied nabij Schotland. Het verplaatst zich richting de Noordzee, waar het op woensdag aankomt. Dit zal bij ons zorgen voor fraai lenteweer.</div>
     </div>
     <table id="vlag-table">
       <thead><tr><th style="width:15%">Dag</th><th>Ochtend</th><th>Middag</th><th>Avond/nacht</th></tr></thead>
@@ -111,7 +114,31 @@ function isoDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2
 function fmtDate(d){return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;}
 function directionLabel(deg){return deg==null?'-':DIRS[Math.round((((deg%360)+360)%360)/22.5)%16];}
 function flowDeg(deg){return deg==null?0:((((deg+180)%360)+360)%360);}
-function arrowMarkup(deg){return `<span class="wind-arrow" style="--rot:${flowDeg(deg)}deg" aria-hidden="true"><svg viewBox="0 0 60 60"><line x1="30" y1="52" x2="30" y2="26" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><polygon points="30,5 14,30 46,30" fill="currentColor"/></svg></span>`;}
+function arrowColorFor(cellColor){return cellColor==='yellow'?'#111827':'#ffffff';}
+const __ARROW_CACHE={};
+function arrowPngUrl(deg,color){
+  const flow=flowDeg(deg);
+  const key=`${Math.round(flow)}|${color}`;
+  if(__ARROW_CACHE[key]) return __ARROW_CACHE[key];
+  const size=120;
+  const c=document.createElement('canvas'); c.width=size; c.height=size;
+  const ctx=c.getContext('2d');
+  ctx.translate(size/2,size/2);
+  ctx.rotate(flow*Math.PI/180);
+  ctx.translate(-size/2,-size/2);
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineCap='round';
+  ctx.lineWidth=size*0.117;
+  ctx.beginPath(); ctx.moveTo(size/2, size*0.867); ctx.lineTo(size/2, size*0.433); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(size/2, size*0.083);
+  ctx.lineTo(size*0.233, size/2);
+  ctx.lineTo(size*0.767, size/2);
+  ctx.closePath(); ctx.fill();
+  const url=c.toDataURL('image/png');
+  __ARROW_CACHE[key]=url;
+  return url;
+}
+function arrowMarkup(deg,cellColor){return `<span class="wind-arrow" aria-hidden="true"><img alt="" src="${arrowPngUrl(deg,arrowColorFor(cellColor))}"></span>`;}
 function bftFromKmh(kmh){const g=[1,6,12,20,29,39,50,62,75,89,103,118];for(let i=0;i<g.length;i++) if(kmh<g[i]) return i; return 12;}
 function colorFor(bft,gust){if(bft>=11)return'purple';if(bft>=9)return'red';if(bft>=7)return'orange';if(bft>=5)return'yellow';return'green';}
 function msKmh(v){return v*3.6;}
@@ -157,10 +184,10 @@ function cellHtml(rec){
   const dir=directionLabel(deg);
   const options=DIRS.map(d=>`<option value="${d}" ${d===dir?'selected':''}>${d}</option>`).join('');
   return `<td class="cell ${rec.color}" data-source="${rec.source}">
-    <div class="cell-top">${arrowMarkup(deg)}<select class="dir-select" onchange="updateCell(this)">${options}</select></div>
+    <div class="cell-top">${arrowMarkup(deg,rec.color)}<select class="dir-select" onchange="updateCell(this)">${options}</select></div>
     <div class="field"><label>Bft</label><input class="val bft" type="number" min="0" max="12" value="${rec.bft??''}" oninput="updateCell(this)"><span class="unit"></span></div>
-    <div class="field"><label>Wind</label><input class="val wind" type="number" value="${rec.ff==null?'':Math.round(rec.ff)}" oninput="updateCell(this)"><span class="unit">km/u</span></div>
-    <div class="field"><label>Windstoot</label><input class="val gust" type="number" value="${rec.fx==null?'':Math.round(rec.fx)}" oninput="updateCell(this)"><span class="unit">km/u</span></div>
+    <div class="field"><label>Wind km/u</label><input class="val wind" type="number" value="${rec.ff==null?'':Math.round(rec.ff)}" oninput="updateCell(this)"><span class="unit"></span></div>
+    <div class="field"><label>Windstoot km/u</label><input class="val gust" type="number" value="${rec.fx==null?'':Math.round(rec.fx)}" oninput="updateCell(this)"><span class="unit"></span></div>
   </td>`;
 }
 function updateCell(el){
@@ -168,9 +195,12 @@ function updateCell(el){
   const dir=td.querySelector('.dir-select').value;
   const bft=parseInt(td.querySelector('.bft').value||'0',10);
   const gust=parseFloat(td.querySelector('.gust').value||'0');
-  td.querySelector('.wind-arrow').style.setProperty('--rot', flowDeg(DEG_BY_DIR[dir])+'deg');
   td.classList.remove('green','yellow','orange','red','purple');
-  td.classList.add(colorFor(bft,gust));
+  const newColor=colorFor(bft,gust);
+  td.classList.add(newColor);
+  const img=td.querySelector('.wind-arrow img');
+  if(img) img.src=arrowPngUrl(DEG_BY_DIR[dir],arrowColorFor(newColor));
+  debSave();
 }
 async function loadRows(){
   const status=document.getElementById('status');
@@ -231,9 +261,110 @@ function downloadPdf(){
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
   }).from(wrap).save();
 }
-loadRows().then(render).catch(e=>{
-  document.getElementById('status').textContent='Laden mislukt: '+e.message;
-});
+/* ── Auto-save per dag ── */
+const SAVE_PREFIX='vlag_draft_';
+function vandaagISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function saveKey(){return SAVE_PREFIX+vandaagISO();}
+function snapshotCells(){
+  const rows=[];
+  document.querySelectorAll('#vlag-table tbody tr').forEach(tr=>{
+    const day=tr.querySelector('.day');
+    const dayHtml=day?day.innerHTML:'';
+    const cells=[];
+    tr.querySelectorAll('td.cell').forEach(td=>{
+      const sel=td.querySelector('.dir-select');
+      cells.push({
+        dir: sel?sel.value:'-',
+        bft: td.querySelector('.bft')?.value??'',
+        ff:  td.querySelector('.wind')?.value??'',
+        fx:  td.querySelector('.gust')?.value??'',
+        color: ['green','yellow','orange','red','purple'].find(c=>td.classList.contains(c))||'green',
+        source: td.getAttribute('data-source')||''
+      });
+    });
+    rows.push({dayHtml, cells});
+  });
+  return rows;
+}
+function buildCellHtmlFromDraft(c){
+  const deg=DEG_BY_DIR[c.dir]??0;
+  const options=DIRS.map(d=>`<option value="${d}" ${d===c.dir?'selected':''}>${d}</option>`).join('');
+  return `<td class="cell ${c.color}" data-source="${c.source}">
+    <div class="cell-top">${arrowMarkup(deg,c.color)}<select class="dir-select" onchange="updateCell(this)">${options}</select></div>
+    <div class="field"><label>Bft</label><input class="val bft" type="number" min="0" max="12" value="${c.bft}" oninput="updateCell(this)"><span class="unit"></span></div>
+    <div class="field"><label>Wind km/u</label><input class="val wind" type="number" value="${c.ff}" oninput="updateCell(this)"><span class="unit"></span></div>
+    <div class="field"><label>Windstoot km/u</label><input class="val gust" type="number" value="${c.fx}" oninput="updateCell(this)"><span class="unit"></span></div>
+  </td>`;
+}
+function renderFromDraft(rows){
+  const tbody=document.querySelector('#vlag-table tbody');
+  tbody.innerHTML=rows.map(r=>`<tr><td class="day">${r.dayHtml}</td>${r.cells.map(buildCellHtmlFromDraft).join('')}</tr>`).join('');
+}
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{d[el.getAttribute('data-save')]=el.innerHTML;});
+  d.cells=snapshotCells();
+  try{localStorage.setItem(saveKey(),JSON.stringify(d));toonSaveStatus(d.__ts,'Opgeslagen');}catch(e){}
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(saveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null) el.innerHTML=d[k];
+    });
+    if(Array.isArray(d.cells)&&d.cells.length){renderFromDraft(d.cells);}
+    toonSaveStatus(d.__ts,'Hersteld uit opslag');
+    return true;
+  }catch(e){return false;}
+}
+function toonSaveStatus(ts,prefix){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${prefix} · ${vandaagISO()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function wisDraft(){
+  if(!confirm('Opgeslagen aanpassingen van '+vandaagISO()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
+  location.reload();
+}
+let saveTimer;
+function debSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDraft,600);}
+document.addEventListener('input',e=>{const t=e.target;if(t.closest('[data-save]')) debSave();});
+document.addEventListener('blur',e=>{if(e.target.closest('[data-save]')) saveDraft();},true);
+
+async function refetchData(){
+  if(localStorage.getItem(saveKey())){
+    if(!confirm('Opnieuw ophalen overschrijft je handmatige aanpassingen voor vandaag. Doorgaan?')) return;
+  }
+  document.getElementById('status').textContent='Verversen...';
+  try{
+    const rows=await loadRows();
+    render(rows);
+    saveDraft();
+  }catch(e){
+    document.getElementById('status').textContent='Verversen mislukt: '+e.message;
+  }
+}
+
+(async function init(){
+  if(restoreDraft()){
+    const now=new Date();
+    document.getElementById('doc-date').textContent=`${fmtDate(now)[0].toUpperCase()+fmtDate(now).slice(1)} ${now.getFullYear()} | ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} uur`;
+    document.getElementById('copyright').innerHTML=`© Ed Aldus Weer en Media · geen aansprakelijkheid voor (gedeeltelijk) niet uitkomen van de verwachtingen.`;
+    document.getElementById('status').textContent='Hersteld uit opslag. Klik "↻ Opnieuw ophalen" voor verse data.';
+    return;
+  }
+  try{
+    const rows=await loadRows();
+    render(rows);
+    saveDraft();
+  }catch(e){
+    document.getElementById('status').textContent='Laden mislukt: '+e.message;
+  }
+})();
 </script>
 </body>
 </html>

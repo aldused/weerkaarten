@@ -361,7 +361,14 @@ function wisDraft(){
   location.reload();
 }
 let saveTimer;
-function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+let hasPendingSave=false;
+function debSave(){ hasPendingSave=true; clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ hasPendingSave=false; saveDraft(); },600); }
+function saveDraftNow(){
+  if(!hasPendingSave) return;
+  hasPendingSave=false;
+  clearTimeout(saveTimer);
+  saveDraft();
+}
 
 document.addEventListener('input', e=>{
   if(e.target.closest('[data-save]')) debSave();
@@ -375,6 +382,11 @@ document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
 document.addEventListener('blur', e=>{
   if(e.target.closest('[data-save]')) saveDraft();
 },true);
+window.addEventListener('pagehide', saveDraftNow);
+window.addEventListener('beforeunload', saveDraftNow);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') saveDraftNow();
+});
 
 document.getElementById('doc-datum').value=vandaagISO();
 document.getElementById('doc-datum').addEventListener('change', ()=>{

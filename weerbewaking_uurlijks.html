@@ -919,7 +919,14 @@ function zetKopScale(v){
 })();
 
 let saveTimer;
-function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+let hasPendingSave=false;
+function debSave(){ hasPendingSave=true; clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ hasPendingSave=false; saveDraft(); },600); }
+function saveDraftNow(){
+  if(!hasPendingSave) return;
+  hasPendingSave=false;
+  clearTimeout(saveTimer);
+  saveDraft();
+}
 document.addEventListener('input', e=>{
   const inSave=e.target.closest('[data-save]') || e.target.id==='plaats-in';
   const inTabel=e.target.closest('#uur-tabel-1, #uur-tabel-2');
@@ -935,6 +942,11 @@ document.addEventListener('blur', e=>{
   }
   if(inSave || inTabel) saveDraft();
 },true);
+window.addEventListener('pagehide', saveDraftNow);
+window.addEventListener('beforeunload', saveDraftNow);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') saveDraftNow();
+});
 
 /* ── Tab in uurverwachting-cel: direct alles selecteren ── */
 document.addEventListener('focus', e=>{

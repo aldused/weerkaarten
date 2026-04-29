@@ -532,13 +532,25 @@ function wisDraft(){
   location.reload();
 }
 let saveTimer;
-function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+let hasPendingSave=false;
+function debSave(){ hasPendingSave=true; clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ hasPendingSave=false; saveDraft(); },600); }
+function saveDraftNow(){
+  if(!hasPendingSave) return;
+  hasPendingSave=false;
+  clearTimeout(saveTimer);
+  saveDraft();
+}
 document.addEventListener('input', e=>{
   if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type') debSave();
 });
 document.addEventListener('blur', e=>{
   if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type' || e.target.id==='doc-naam') saveDraft();
 },true);
+window.addEventListener('pagehide', saveDraftNow);
+window.addEventListener('beforeunload', saveDraftNow);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') saveDraftNow();
+});
 document.getElementById('weergave-type').addEventListener('change', saveDraft);
 document.getElementById('doc-kies').addEventListener('change', e=>{
   const nieuw=e.target.value;
