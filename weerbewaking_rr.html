@@ -51,6 +51,18 @@ h2.kop:focus{background:#fffbe8}
 .sectie-toggle label{display:inline-flex;gap:5px;align-items:center;cursor:pointer;color:#1f497d;font-weight:600}
 .sectie-toggle input[type=checkbox]{cursor:pointer;width:16px;height:16px}
 
+/* 5-daagse vooruitblik tabel */
+table.vijfdaagse{width:100%;border-collapse:collapse;margin:16px 0 8px;font-size:.85rem}
+table.vijfdaagse th,table.vijfdaagse td{border:1px solid #aaa;padding:5px 4px;text-align:center}
+table.vijfdaagse td[contenteditable="true"]{outline:none;cursor:text}
+table.vijfdaagse td[contenteditable="true"]:hover{background:#f6faff}
+table.vijfdaagse td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #1f497d}
+table.vijfdaagse th{background:#1f497d;color:white;font-size:.8rem}
+table.vijfdaagse th.dag{width:14%}
+table.vijfdaagse td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-size:.78rem;width:30%;padding-left:8px}
+table.vijfdaagse .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1f497d;margin-right:3px}
+h2.kop-vijfdaagse{font-size:.95rem;font-weight:700;color:#1f497d;text-transform:uppercase;letter-spacing:.04em;margin:20px 0 6px;outline:none}
+
 /* PRINT */
 @media print{
   *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
@@ -135,6 +147,15 @@ body{--kop-scale:1}
     <h2 class="kop">KOMENDE DAGEN:</h2>
     <div class="tekstvak" contenteditable="true" data-save="komend" data-placeholder="Beschrijf de komende dagen...">Veel bewolking met af en toe zon en droog. In de avond kan er wel een bui voorkomen. De maximumtemperatuur bedraagt 16 graden.</div>
   </div>
+
+  <!-- 5-daagse vooruitblik (uit MOS/MIX Rotterdam Airport) -->
+  <h2 class="kop-vijfdaagse">5-DAAGSE VOORUITBLIK</h2>
+  <table class="vijfdaagse" id="vijfdaagse-tabel">
+    <thead>
+      <tr id="vijfdaagse-dagen"><th class="rij-label"></th></tr>
+    </thead>
+    <tbody id="vijfdaagse-body"></tbody>
+  </table>
 
 </div>
 
@@ -434,9 +455,83 @@ function gaTerug(){
   else { window.location.href='index.html#weerbewaking'; }
 }
 
+/* ── 5-daagse vooruitblik (MOS/MIX Rotterdam Airport) ── */
+const DAG_KORT=['ZO','MA','DI','WO','DO','VR','ZA'];
+function plusDag(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function naarBFT(kmh){
+  if(kmh==null) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+function naarRichtingKort(deg){
+  if(deg==null) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+function formatKansPct(v){
+  if(v==null || !Number.isFinite(Number(v))) return '–';
+  return Math.max(0, Math.min(100, Math.round(Number(v))));
+}
+function bouwVijfdaagseDagKoppen(startDatum){
+  const tr=document.getElementById('vijfdaagse-dagen');
+  if(!tr) return;
+  tr.innerHTML='<th class="rij-label"></th>';
+  for(let i=0;i<5;i++){
+    const d=plusDag(startDatum,i);
+    tr.insertAdjacentHTML('beforeend',
+      `<th class="dag">${DAG_KORT[d.getDay()]}<br><small style="font-weight:400;opacity:.85">${formatDMshort(d)}</small></th>`);
+  }
+}
+function vulVijfdaagse(data){
+  const tbody=document.getElementById('vijfdaagse-body');
+  if(!tbody) return;
+  const windCel=(deg)=>{
+    const letter=naarRichtingKort(deg);
+    const rot=deg!=null?deg:0;
+    return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+  };
+  const rij=(lbl,arr,fmt=(v=>v))=>`<tr><td class="rij-label">${lbl}</td>${arr.map(v=>`<td contenteditable="true">${fmt(v)}</td>`).join('')}</tr>`;
+  tbody.innerHTML=[
+    rij('Max. temperatuur (°C)', data.tmax),
+    rij('Min. temperatuur (°C)', data.tmin),
+    rij('Kans op neerslag (%)',  data.nsk),
+    rij('Windkracht (BFT)',      data.bft),
+    `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true">${windCel(d)}</td>`).join('')}</tr>`
+  ].join('');
+}
+async function laadVijfdaagse(){
+  const nu=new Date();
+  bouwVijfdaagseDagKoppen(nu);
+  try{
+    const r=await fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now());
+    if(!r.ok) throw new Error('geen data');
+    const j=await r.json();
+    const dagen=Object.keys(j.data).sort();
+    const vijf=dagen.slice(0,5);
+    const pick=(fld,dt)=>j.data[dt]?.[fld]?.['Rotterdam Airport'];
+    vulVijfdaagse({
+      tmax: vijf.map(dt=>{const v=pick('TX',dt); return v==null?'–':Math.round(v)}),
+      tmin: vijf.map(dt=>{const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
+      nsk:  vijf.map(dt=>formatKansPct(pick('R101',dt))),
+      bft:  vijf.map(dt=>naarBFT(pick('FF',dt))),
+      ri:   vijf.map(dt=>pick('DD',dt))
+    });
+  }catch(e){
+    // Lege fallback met dashes
+    vulVijfdaagse({
+      tmax:Array(5).fill('–'), tmin:Array(5).fill('–'),
+      nsk:Array(5).fill('–'),  bft:Array(5).fill('–'),
+      ri: Array(5).fill(null)
+    });
+  }
+}
+
 /* ── Init ── */
 updateOpgesteldKop();
 updateDagnamen();
+laadVijfdaagse();
 // Tijd-deel automatisch ververs elke minuut zodat "om HH:MM uur" actueel blijft
 setInterval(updateOpgesteldKop, 60*1000);
 restoreDraft();
