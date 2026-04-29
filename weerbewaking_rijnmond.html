@@ -157,7 +157,7 @@ body{--kop-scale:1}
   </select>
   <span class="spacer"></span>
   <span class="status" id="data-status">Laatst bijgewerkt: –</span>
-  <button onclick="laadData()">↻ Ververs</button>
+  <button onclick="herlaadTabel()" title="Haal de vooruitzichten-tabel opnieuw op (overschrijft eigen aanpassingen)" style="background:#2a7a2a">↻ Ververs tabel</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <span class="status" style="margin-left:8px">Document:</span>
   <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
@@ -380,6 +380,66 @@ function vulVooruitzichten(data){
   ].join('');
 }
 
+/* KNMI-station → HARMONEPS-station-id (dichtstbijzijnde) */
+const STATION_HARMONEPS = {
+  210:'schiphol', 235:'dekooy', 240:'schiphol', 260:'debilt',
+  269:'lelystad', 270:'leeuwarden', 275:'deelen', 280:'eelde',
+  290:'twente', 310:'vlissingen', 330:'hoekvanholland',
+  344:'rotterdam', 350:'tilburg', 370:'eindhoven',
+  375:'volkel', 380:'maastricht'
+};
+
+/* HARMONEPS-POP per dag: % leden met ≥0.1 mm/h ergens in de lokale dag */
+function popPerDagHarmoneps(eps, dagDatums){
+  if(!eps || !eps.times || !eps.vars?.precip_mm_per_h) return dagDatums.map(()=>null);
+  const tijden=eps.times.map(t=>new Date(t).getTime());
+  const M=eps.n_members||eps.vars.precip_mm_per_h.length;
+  const THRESHOLD=0.1;
+  return dagDatums.map(d=>{
+    const start=new Date(d); start.setHours(0,0,0,0);
+    const eind=start.getTime()+24*3600*1000;
+    const idx=[];
+    for(let i=0;i<tijden.length;i++) if(tijden[i]>=start.getTime() && tijden[i]<eind) idx.push(i);
+    if(idx.length<6) return null;
+    let hits=0;
+    for(let m=0;m<M;m++){
+      const memb=eps.vars.precip_mm_per_h[m];
+      let any=false;
+      for(const i of idx){ if(memb[i]!=null && memb[i]>=THRESHOLD){ any=true; break; } }
+      if(any) hits++;
+    }
+    return Math.round(100*hits/M);
+  });
+}
+
+/* Tabel-persistentie (vooruitzichten-tabel + headers + datum-status) */
+const TABEL_KEY_PREFIX='wb_rijnmond_tabel_';
+function tabelSaveKey(){ return TABEL_KEY_PREFIX + vandaagISO() + '_' + (document.getElementById('station-sel')?.value||''); }
+function saveTabel(){
+  const tbody=document.getElementById('vooruit-body');
+  const dagen=document.getElementById('vooruit-dagen');
+  if(!tbody || !dagen || !tbody.innerHTML.trim()) return;
+  try{
+    localStorage.setItem(tabelSaveKey(), JSON.stringify({
+      __ts:Date.now(),
+      headers:dagen.innerHTML, body:tbody.innerHTML,
+      status:document.getElementById('data-status')?.textContent||''
+    }));
+  }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    if(!d.headers || !d.body) return false;
+    document.getElementById('vooruit-dagen').innerHTML=d.headers;
+    document.getElementById('vooruit-body').innerHTML=d.body;
+    if(d.status) document.getElementById('data-status').textContent=d.status+' (hersteld)';
+    return true;
+  }catch(e){ return false; }
+}
+
 /* ── Init/laad ── */
 async function laadData(){
   const nu = new Date();
@@ -392,36 +452,68 @@ async function laadData(){
 
   const stationNr = document.getElementById('station-sel').value;
   const stationNaam = STATIONS[stationNr];
+  const epsStation = STATION_HARMONEPS[stationNr];
 
-  // PROBEER ECHTE DATA
-  try{
-    const r = await fetch('https://data.weerlab.nl/mosmix_nl.json?_=' + Date.now());
-    if(!r.ok) throw new Error('geen data');
-    const j = await r.json();
+  // Parallel: MOSMIX + HARMONEPS station
+  const [mosmixR, epsJ] = await Promise.all([
+    fetch('https://data.weerlab.nl/mosmix_nl.json?_=' + Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+    epsStation
+      ? fetch('pluim_harmoneps/'+epsStation+'.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+      : Promise.resolve(null)
+  ]);
+
+  // Vooruitzichten lopen vanaf morgen → dag 0 = morgen, dag 1 = overmorgen
+  const popEps = popPerDagHarmoneps(epsJ, [plusDag(nu,1), plusDag(nu,2)]);
+
+  if(mosmixR){
+    const j = mosmixR;
     const dagen = Object.keys(j.data).sort();
-    // Vooruitzichten: 6 dagen vanaf morgen
     const zes = dagen.slice(1,7);
     const pick = (fld, dt, st=stationNaam) => j.data[dt]?.[fld]?.[st];
-    const data = {
+    const nsk = zes.map((dt,i)=>{
+      if(i<2 && popEps[i]!=null) return popEps[i]; // HARMONEPS voor eerste 2 dagen
+      return formatKansPct(pick('R101',dt));
+    });
+    vulVooruitzichten({
       tmax: zes.map(dt => Math.round(pick('TX',dt) ?? NaN)),
       tmin: zes.map(dt => {const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
       zon:  zes.map(dt => {const v=pick('SQ',dt); return v==null?'–':Math.round(v)}),
-      nsk:  zes.map(dt => formatKansPct(pick('R101',dt))),
+      nsk,
       nsm:  zes.map(dt => {const v=pick('RR',dt); return v==null?'–':v.toFixed(1).replace('.0','')}),
       bft:  zes.map(dt => naarBFT(pick('FF',dt))),
       ri:   zes.map(dt => pick('DD',dt))
-    };
-    vulVooruitzichten(data);
-
-    document.getElementById('data-status').textContent = 'Laatst bijgewerkt: ' + (j.bijgewerkt||'onbekend');
-  }catch(e){
-    // Fallback: demo data
+    });
+    document.getElementById('data-status').textContent =
+      'Laatst bijgewerkt: ' + (j.bijgewerkt||'onbekend') + (popEps.some(v=>v!=null)?' · POP HARMONEPS':'');
+  } else {
     vulVooruitzichten(DEMO_DATA);
     document.getElementById('data-status').textContent = 'Demo-data (bestand niet gevonden)';
   }
+  saveTabel();
 }
 
-document.getElementById('station-sel').addEventListener('change', laadData);
+/* Knop: ververs tabel (overschrijft eigen edits) */
+function herlaadTabel(){
+  if(!confirm('Vooruitzichten-tabel opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadData();
+}
+
+/* Auto-save tabel-cellen bij edit */
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#vooruit-tabel')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
+
+/* Bij stationswissel: pak opgeslagen tabel voor dat station, anders fetch */
+document.getElementById('station-sel').addEventListener('change', ()=>{
+  // Headers/dagkoppen bouwen voor de nieuwe lookup
+  const nu=new Date();
+  bouwDagKoppen(nu);
+  if(!restoreTabel()) laadData();
+});
 
 /* ── Auto-save (lokaal, per dag + per documentnaam) ── */
 const SAVE_PREFIX='wb_wm_draft_';
@@ -587,7 +679,16 @@ document.getElementById('doc-datum').addEventListener('change', ()=>{
 });
 
 restoreDraft();
-laadData();
+// Eerst headers + datum/waarschuwingen opbouwen, daarna tabel: hersteld of vers
+(function initTabel(){
+  const nu=new Date();
+  const dstr=formatDatumVol(nu);
+  document.getElementById('hdr-datum').textContent=dstr;
+  const d2=document.getElementById('hdr-datum-2'); if(d2) d2.textContent=dstr;
+  bouwDagKoppen(nu);
+  bouwWaarschuwingen(nu);
+  if(!restoreTabel()) laadData();
+})();
 
 /* ── Terug naar menu (werkt in iframe én standalone) ── */
 function gaTerug(){

@@ -95,6 +95,7 @@ body{--kop-scale:1}
   <input type="time" id="doc-tijd" title="Leeg = nu (auto). Vul in voor latere verzendtijd." style="width:90px">
   <button onclick="zetTijdNu()" style="background:#777" title="Reset naar huidige tijd (auto)">↻ Nu</button>
   <span class="spacer"></span>
+  <button onclick="herlaadTabel()" title="Haal de 5-daagse tabel-data opnieuw op (overschrijft eigen aanpassingen)" style="background:#2a7a2a">↻ Ververs tabel</button>
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <label style="margin-left:8px">Koppen:</label>
   <select id="kop-scale-sel" onchange="zetKopScale(this.value)">
@@ -645,32 +646,104 @@ function vulVijfdaagse(data){
     `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true" class="wind-cel">${windCel(d)}</td>`).join('')}</tr>`
   ].join('');
 }
+/* HARMONEPS-POP per dag: % leden met ≥0.1 mm/h ergens in de lokale dag */
+function popPerDagHarmoneps(eps, dagDatums){
+  if(!eps || !eps.times || !eps.vars?.precip_mm_per_h) return dagDatums.map(()=>null);
+  const tijden=eps.times.map(t=>new Date(t).getTime());
+  const M=eps.n_members||eps.vars.precip_mm_per_h.length;
+  const THRESHOLD=0.1;
+  return dagDatums.map(d=>{
+    const start=new Date(d); start.setHours(0,0,0,0);
+    const eind=start.getTime()+24*3600*1000;
+    const idx=[];
+    for(let i=0;i<tijden.length;i++) if(tijden[i]>=start.getTime() && tijden[i]<eind) idx.push(i);
+    if(idx.length<6) return null; // <6 uur dekking = onbetrouwbaar
+    let hits=0;
+    for(let m=0;m<M;m++){
+      const memb=eps.vars.precip_mm_per_h[m];
+      let any=false;
+      for(const i of idx){ if(memb[i]!=null && memb[i]>=THRESHOLD){ any=true; break; } }
+      if(any) hits++;
+    }
+    return Math.round(100*hits/M);
+  });
+}
+
+/* Tabel-persistentie (localStorage, per dag) */
+const TABEL_KEY_PREFIX='wb_rr_tabel_';
+function tabelSaveKey(){ return TABEL_KEY_PREFIX+vandaagISO(); }
+function saveTabel(){
+  const tbody=document.getElementById('vijfdaagse-body');
+  const dagen=document.getElementById('vijfdaagse-dagen');
+  if(!tbody || !dagen || !tbody.innerHTML.trim()) return;
+  try{
+    localStorage.setItem(tabelSaveKey(), JSON.stringify({
+      __ts:Date.now(), headers:dagen.innerHTML, body:tbody.innerHTML
+    }));
+  }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    if(!d.headers || !d.body) return false;
+    document.getElementById('vijfdaagse-dagen').innerHTML=d.headers;
+    document.getElementById('vijfdaagse-body').innerHTML=d.body;
+    return true;
+  }catch(e){ return false; }
+}
+
 async function laadVijfdaagse(){
   const nu=new Date();
   bouwVijfdaagseDagKoppen(nu);
-  try{
-    const r=await fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now());
-    if(!r.ok) throw new Error('geen data');
-    const j=await r.json();
-    const dagen=Object.keys(j.data).sort();
+  // Parallel: MOSMIX + HARMONEPS Rotterdam
+  const [mosmixJ, epsJ] = await Promise.all([
+    fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch('pluim_harmoneps/rotterdam.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+  ]);
+  // POP voor dag 0 + 1 uit HARMONEPS
+  const popEps = popPerDagHarmoneps(epsJ, [nu, plusDag(nu,1)]);
+
+  if(mosmixJ){
+    const dagen=Object.keys(mosmixJ.data).sort();
     const vijf=dagen.slice(0,5);
-    const pick=(fld,dt)=>j.data[dt]?.[fld]?.['Rotterdam Airport'];
+    const pick=(fld,dt)=>mosmixJ.data[dt]?.[fld]?.['Rotterdam Airport'];
+    const nsk = vijf.map((dt,i)=>{
+      if(i<2 && popEps[i]!=null) return popEps[i]; // HARMONEPS voor eerste 2 dagen
+      return formatKansPct(pick('R101',dt));
+    });
     vulVijfdaagse({
       tmax: vijf.map(dt=>{const v=pick('TX',dt); return v==null?'–':Math.round(v)}),
       tmin: vijf.map(dt=>{const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
-      nsk:  vijf.map(dt=>formatKansPct(pick('R101',dt))),
+      nsk,
       bft:  vijf.map(dt=>naarBFT(pick('FF',dt))),
       ri:   vijf.map(dt=>pick('DD',dt))
     });
-  }catch(e){
-    // Lege fallback met dashes
+  } else {
     vulVijfdaagse({
       tmax:Array(5).fill('–'), tmin:Array(5).fill('–'),
-      nsk:Array(5).fill('–'),  bft:Array(5).fill('–'),
-      ri: Array(5).fill(null)
+      nsk: popEps.map(v=>v==null?'–':v).concat(Array(3).fill('–')),
+      bft:Array(5).fill('–'), ri:Array(5).fill(null)
     });
   }
+  saveTabel();
 }
+
+/* Knop: ververs tabel (overschrijft eigen edits) */
+function herlaadTabel(){
+  if(!confirm('5-daagse tabel opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadVijfdaagse();
+}
+
+/* Auto-save tabel-cellen bij edit */
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#vijfdaagse-tabel')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
 
 /* ── Tab/focus in tabel-cel: bestaande waarde direct geselecteerd zodat typen overschrijft ── */
 document.addEventListener('focus', e=>{
@@ -699,10 +772,12 @@ document.addEventListener('blur', e=>{
 /* ── Init ── */
 updateOpgesteldKop();
 updateDagnamen();
-// Direct dag-koppen + lege rijen tonen, zodat tabel altijd aanwezig is (ook in PDF)
-bouwVijfdaagseDagKoppen(new Date());
-vulVijfdaagse({tmax:Array(5).fill('–'),tmin:Array(5).fill('–'),nsk:Array(5).fill('–'),bft:Array(5).fill('–'),ri:Array(5).fill(null)});
-laadVijfdaagse();
+// Eerst proberen opgeslagen tabel te herstellen — anders eerst placeholders + verse fetch
+if(!restoreTabel()){
+  bouwVijfdaagseDagKoppen(new Date());
+  vulVijfdaagse({tmax:Array(5).fill('–'),tmin:Array(5).fill('–'),nsk:Array(5).fill('–'),bft:Array(5).fill('–'),ri:Array(5).fill(null)});
+  laadVijfdaagse();
+}
 // Tijd-deel automatisch ververs elke minuut zodat "om HH:MM uur" actueel blijft
 setInterval(updateOpgesteldKop, 60*1000);
 restoreDraft();
