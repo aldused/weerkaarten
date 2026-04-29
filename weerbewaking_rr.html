@@ -646,26 +646,30 @@ function vulVijfdaagse(data){
     `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true" class="wind-cel">${windCel(d)}</td>`).join('')}</tr>`
   ].join('');
 }
-/* HARMONEPS-POP per dag: % leden met ≥0.1 mm/h ergens in de lokale dag */
-function popPerDagHarmoneps(eps, dagDatums){
-  if(!eps || !eps.times || !eps.vars?.precip_mm_per_h) return dagDatums.map(()=>null);
-  const tijden=eps.times.map(t=>new Date(t).getTime());
-  const M=eps.n_members||eps.vars.precip_mm_per_h.length;
-  const THRESHOLD=0.1;
-  return dagDatums.map(d=>{
-    const start=new Date(d); start.setHours(0,0,0,0);
-    const eind=start.getTime()+24*3600*1000;
-    const idx=[];
-    for(let i=0;i<tijden.length;i++) if(tijden[i]>=start.getTime() && tijden[i]<eind) idx.push(i);
-    if(idx.length<6) return null; // <6 uur dekking = onbetrouwbaar
-    let hits=0;
-    for(let m=0;m<M;m++){
-      const memb=eps.vars.precip_mm_per_h[m];
-      let any=false;
-      for(const i of idx){ if(memb[i]!=null && memb[i]>=THRESHOLD){ any=true; break; } }
-      if(any) hits++;
+/* KNMI-neerslagkans per dag (uit data.weerlab.nl/knmi_verwachting.json) */
+const KNMI_MND={januari:0,februari:1,maart:2,april:3,mei:4,juni:5,juli:6,augustus:7,september:8,oktober:9,november:10,december:11};
+function knmiDatumToDate(datumStr){
+  const m=(datumStr||'').trim().toLowerCase().match(/^(\d{1,2})\s+([a-zëï]+)/);
+  if(!m) return null;
+  const dag=parseInt(m[1]), mnd=KNMI_MND[m[2]];
+  if(mnd==null) return null;
+  const nu=new Date();
+  let d=new Date(nu.getFullYear(), mnd, dag, 12, 0, 0);
+  if((nu-d) > 180*24*3600*1000) d=new Date(nu.getFullYear()+1, mnd, dag, 12, 0, 0);
+  return d;
+}
+function popPerDagKnmi(knmiJ, dagDatums){
+  if(!knmiJ?.dagen) return dagDatums.map(()=>null);
+  return dagDatums.map(target=>{
+    const t=new Date(target); t.setHours(12,0,0,0);
+    for(const d of knmiJ.dagen){
+      const dd=knmiDatumToDate(d.datum);
+      if(dd && dd.toDateString()===t.toDateString()){
+        const m=(d.neerslagkans||'').match(/(\d+)/);
+        return m ? parseInt(m[1]) : null;
+      }
     }
-    return Math.round(100*hits/M);
+    return null;
   });
 }
 
@@ -697,21 +701,22 @@ function restoreTabel(){
 async function laadVijfdaagse(){
   const nu=new Date();
   bouwVijfdaagseDagKoppen(nu);
-  // Parallel: MOSMIX + HARMONEPS Rotterdam
-  const [mosmixJ, epsJ] = await Promise.all([
+  // Parallel: MOSMIX (temp/wind) + KNMI-verwachting (neerslagkans)
+  const [mosmixJ, knmiJ] = await Promise.all([
     fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
-    fetch('pluim_harmoneps/rotterdam.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+    fetch('https://data.weerlab.nl/knmi_verwachting.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
   ]);
-  // POP voor dag 0 + 1 uit HARMONEPS
-  const popEps = popPerDagHarmoneps(epsJ, [nu, plusDag(nu,1)]);
+  // Neerslagkans per dag uit KNMI (5 dagen vanaf vandaag)
+  const dagDatums=[0,1,2,3,4].map(i=>plusDag(nu,i));
+  const popKnmi = popPerDagKnmi(knmiJ, dagDatums);
 
   if(mosmixJ){
     const dagen=Object.keys(mosmixJ.data).sort();
     const vijf=dagen.slice(0,5);
     const pick=(fld,dt)=>mosmixJ.data[dt]?.[fld]?.['Rotterdam Airport'];
     const nsk = vijf.map((dt,i)=>{
-      if(i<2 && popEps[i]!=null) return popEps[i]; // HARMONEPS voor eerste 2 dagen
-      return formatKansPct(pick('R101',dt));
+      if(popKnmi[i]!=null) return popKnmi[i]; // KNMI heeft prioriteit
+      return formatKansPct(pick('R101',dt));   // anders MOSMIX
     });
     vulVijfdaagse({
       tmax: vijf.map(dt=>{const v=pick('TX',dt); return v==null?'–':Math.round(v)}),
@@ -723,7 +728,7 @@ async function laadVijfdaagse(){
   } else {
     vulVijfdaagse({
       tmax:Array(5).fill('–'), tmin:Array(5).fill('–'),
-      nsk: popEps.map(v=>v==null?'–':v).concat(Array(3).fill('–')),
+      nsk: popKnmi.map(v=>v==null?'–':v),
       bft:Array(5).fill('–'), ri:Array(5).fill(null)
     });
   }

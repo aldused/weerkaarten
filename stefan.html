@@ -76,9 +76,18 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
 // SHA-256 hash van wachtwoord "Chase"
 const PWD_HASH = '1ae6e6416a7ad654c3bc276ec2ee2a048f7a37b42970f3140d21d0abb625780d';
 const SESSION_KEY = 'stefan_unlocked';
+const PERSIST_KEY = 'stefan_unlocked_until'; // localStorage met expiry (ms-timestamp)
+const PERSIST_DAGEN = 90;
 
-// Sessie hersteld?
-if (sessionStorage.getItem(SESSION_KEY) === '1') ontgrendel();
+// Eerder ontgrendeld? sessionStorage (huidige sessie) of localStorage (binnen 90 dagen)
+function eerderOntgrendeld(){
+  if (sessionStorage.getItem(SESSION_KEY) === '1') return true;
+  const tot = parseInt(localStorage.getItem(PERSIST_KEY)||'0', 10);
+  if (tot && Date.now() < tot) return true;
+  if (tot && Date.now() >= tot) localStorage.removeItem(PERSIST_KEY); // verlopen
+  return false;
+}
+if (eerderOntgrendeld()) ontgrendel();
 
 document.getElementById('pwd').addEventListener('keydown', e=>{
   if (e.key === 'Enter') { e.preventDefault(); check(); }
@@ -90,6 +99,8 @@ async function check(){
   const h = await sha256(v);
   if (h === PWD_HASH){
     sessionStorage.setItem(SESSION_KEY, '1');
+    // Persistent (90 dagen) zodat na sluiten browser niet opnieuw hoeft
+    try{ localStorage.setItem(PERSIST_KEY, String(Date.now() + PERSIST_DAGEN*24*3600*1000)); }catch(e){}
     // Markeer ook wb_unlocked zodat de iframe-pagina (rr.html) zonder eigen PIN-redirect opent
     sessionStorage.setItem('wb_unlocked', '1');
     ontgrendel();
@@ -113,6 +124,8 @@ function ontgrendel(){
 function vergrendel(){
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem('wb_unlocked');
+  // Ook de 90-dagen-token vergeten — gebruiker kiest expliciet om uit te loggen
+  try{ localStorage.removeItem(PERSIST_KEY); }catch(e){}
   document.getElementById('login').classList.remove('verborgen');
   document.getElementById('frame').classList.remove('zichtbaar');
   document.getElementById('frame').src = 'about:blank';

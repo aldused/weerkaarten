@@ -380,35 +380,30 @@ function vulVooruitzichten(data){
   ].join('');
 }
 
-/* KNMI-station → HARMONEPS-station-id (dichtstbijzijnde) */
-const STATION_HARMONEPS = {
-  210:'schiphol', 235:'dekooy', 240:'schiphol', 260:'debilt',
-  269:'lelystad', 270:'leeuwarden', 275:'deelen', 280:'eelde',
-  290:'twente', 310:'vlissingen', 330:'hoekvanholland',
-  344:'rotterdam', 350:'tilburg', 370:'eindhoven',
-  375:'volkel', 380:'maastricht'
-};
-
-/* HARMONEPS-POP per dag: % leden met ≥0.1 mm/h ergens in de lokale dag */
-function popPerDagHarmoneps(eps, dagDatums){
-  if(!eps || !eps.times || !eps.vars?.precip_mm_per_h) return dagDatums.map(()=>null);
-  const tijden=eps.times.map(t=>new Date(t).getTime());
-  const M=eps.n_members||eps.vars.precip_mm_per_h.length;
-  const THRESHOLD=0.1;
-  return dagDatums.map(d=>{
-    const start=new Date(d); start.setHours(0,0,0,0);
-    const eind=start.getTime()+24*3600*1000;
-    const idx=[];
-    for(let i=0;i<tijden.length;i++) if(tijden[i]>=start.getTime() && tijden[i]<eind) idx.push(i);
-    if(idx.length<6) return null;
-    let hits=0;
-    for(let m=0;m<M;m++){
-      const memb=eps.vars.precip_mm_per_h[m];
-      let any=false;
-      for(const i of idx){ if(memb[i]!=null && memb[i]>=THRESHOLD){ any=true; break; } }
-      if(any) hits++;
+/* KNMI-neerslagkans per dag (uit data.weerlab.nl/knmi_verwachting.json) */
+const KNMI_MND={januari:0,februari:1,maart:2,april:3,mei:4,juni:5,juli:6,augustus:7,september:8,oktober:9,november:10,december:11};
+function knmiDatumToDate(datumStr){
+  const m=(datumStr||'').trim().toLowerCase().match(/^(\d{1,2})\s+([a-zëï]+)/);
+  if(!m) return null;
+  const dag=parseInt(m[1]), mnd=KNMI_MND[m[2]];
+  if(mnd==null) return null;
+  const nu=new Date();
+  let d=new Date(nu.getFullYear(), mnd, dag, 12, 0, 0);
+  if((nu-d) > 180*24*3600*1000) d=new Date(nu.getFullYear()+1, mnd, dag, 12, 0, 0);
+  return d;
+}
+function popPerDagKnmi(knmiJ, dagDatums){
+  if(!knmiJ?.dagen) return dagDatums.map(()=>null);
+  return dagDatums.map(target=>{
+    const t=new Date(target); t.setHours(12,0,0,0);
+    for(const d of knmiJ.dagen){
+      const dd=knmiDatumToDate(d.datum);
+      if(dd && dd.toDateString()===t.toDateString()){
+        const m=(d.neerslagkans||'').match(/(\d+)/);
+        return m ? parseInt(m[1]) : null;
+      }
     }
-    return Math.round(100*hits/M);
+    return null;
   });
 }
 
@@ -452,18 +447,16 @@ async function laadData(){
 
   const stationNr = document.getElementById('station-sel').value;
   const stationNaam = STATIONS[stationNr];
-  const epsStation = STATION_HARMONEPS[stationNr];
 
-  // Parallel: MOSMIX + HARMONEPS station
-  const [mosmixR, epsJ] = await Promise.all([
+  // Parallel: MOSMIX (alle velden) + KNMI-verwachting (neerslagkans per dag)
+  const [mosmixR, knmiJ] = await Promise.all([
     fetch('https://data.weerlab.nl/mosmix_nl.json?_=' + Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
-    epsStation
-      ? fetch('pluim_harmoneps/'+epsStation+'.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
-      : Promise.resolve(null)
+    fetch('https://data.weerlab.nl/knmi_verwachting.json?_=' + Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
   ]);
 
-  // Vooruitzichten lopen vanaf morgen → dag 0 = morgen, dag 1 = overmorgen
-  const popEps = popPerDagHarmoneps(epsJ, [plusDag(nu,1), plusDag(nu,2)]);
+  // Vooruitzichten lopen vanaf morgen → 6 dagen: morgen .. morgen+5
+  const dagDatums = [1,2,3,4,5,6].map(i=>plusDag(nu,i));
+  const popKnmi = popPerDagKnmi(knmiJ, dagDatums);
 
   if(mosmixR){
     const j = mosmixR;
@@ -471,8 +464,8 @@ async function laadData(){
     const zes = dagen.slice(1,7);
     const pick = (fld, dt, st=stationNaam) => j.data[dt]?.[fld]?.[st];
     const nsk = zes.map((dt,i)=>{
-      if(i<2 && popEps[i]!=null) return popEps[i]; // HARMONEPS voor eerste 2 dagen
-      return formatKansPct(pick('R101',dt));
+      if(popKnmi[i]!=null) return popKnmi[i]; // KNMI heeft prioriteit
+      return formatKansPct(pick('R101',dt));   // anders MOSMIX
     });
     vulVooruitzichten({
       tmax: zes.map(dt => Math.round(pick('TX',dt) ?? NaN)),
@@ -484,7 +477,7 @@ async function laadData(){
       ri:   zes.map(dt => pick('DD',dt))
     });
     document.getElementById('data-status').textContent =
-      'Laatst bijgewerkt: ' + (j.bijgewerkt||'onbekend') + (popEps.some(v=>v!=null)?' · POP HARMONEPS':'');
+      'Laatst bijgewerkt: ' + (j.bijgewerkt||'onbekend') + (popKnmi.some(v=>v!=null)?' · NSK uit KNMI':'');
   } else {
     vulVooruitzichten(DEMO_DATA);
     document.getElementById('data-status').textContent = 'Demo-data (bestand niet gevonden)';
