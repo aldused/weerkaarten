@@ -32,7 +32,7 @@ const ENDPOINTS = {
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Max-Age':       '86400',
 };
@@ -44,11 +44,19 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
+    const url = new URL(request.url);
+
+    // Sync-endpoints voor gedeelde drafts (Stefan ↔ jij)
+    //   GET om.weerlab.nl/draft/<key>   → laatste opgeslagen JSON of {}
+    //   PUT om.weerlab.nl/draft/<key>   → schrijft body als JSON naar KV
+    if (url.pathname.startsWith('/draft/')) {
+      return handleDraft(url, request, env);
+    }
+
     if (request.method !== 'GET') {
       return json({ error: 'Method not allowed' }, 405);
     }
 
-    const url = new URL(request.url);
     if (url.pathname === '/eumetview') {
       return proxyEumetview(url, request, ctx);
     }
@@ -158,4 +166,54 @@ function json(obj, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
+}
+
+/* ── Gedeelde draft-store voor weerbewaking-documenten ──
+ * Beide gebruikers (jij + Stefan) PUT'en naar dezelfde KV-key, de andere kant
+ * GET't periodiek dezelfde key. KV is eventually-consistent maar de propagatie
+ * is meestal binnen ~5 sec. Last-write-wins op basis van het __ts veld in body.
+ *
+ * Vereist KV-namespace gebonden als `DRAFTS` in wrangler.toml.
+ */
+async function handleDraft(url, request, env) {
+  if (!env.DRAFTS) {
+    return json({ error: 'KV-store DRAFTS niet gebonden' }, 500);
+  }
+  // Key: alles na /draft/ — beperkt tot veilig zeichen
+  const rawKey = decodeURIComponent(url.pathname.slice('/draft/'.length));
+  if (!/^[A-Za-z0-9_\-:.]{1,200}$/.test(rawKey)) {
+    return json({ error: 'Ongeldige key' }, 400);
+  }
+  const kvKey = `draft:${rawKey}`;
+
+  if (request.method === 'GET') {
+    const v = await env.DRAFTS.get(kvKey);
+    if (!v) {
+      return new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...CORS_HEADERS }
+      });
+    }
+    return new Response(v, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...CORS_HEADERS }
+    });
+  }
+
+  if (request.method === 'PUT') {
+    const body = await request.text();
+    if (body.length > 200 * 1024) {
+      return json({ error: 'Body te groot (max 200kB)' }, 413);
+    }
+    // Valideer dat body geldige JSON is
+    try { JSON.parse(body); } catch { return json({ error: 'Body moet JSON zijn' }, 400); }
+    // Bewaar 30 dagen — meer dan genoeg voor draft-syncs
+    await env.DRAFTS.put(kvKey, body, { expirationTtl: 60 * 60 * 24 * 30 });
+    return new Response('{"ok":true}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+    });
+  }
+
+  return json({ error: 'Method not allowed' }, 405);
 }

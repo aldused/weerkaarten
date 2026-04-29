@@ -419,14 +419,30 @@ function tekenVijfdaagseTabel(pdf, x, startY, maxW, schaal, blauw){
 
 /* ── Auto-save per dag ── */
 const SAVE_PREFIX='wb_rr_draft_';
+const SYNC_BASE='https://om.weerlab.nl/draft/';
 function huidigeDatumKey(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
 function saveKey(){ return SAVE_PREFIX+huidigeDatumKey(); }
-function saveDraft(){
+function syncUrl(){ return SYNC_BASE + saveKey(); }
+let laatstGeschrevenTs = 0;
+function bouwDraftObject(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
   d.verborgen = Array.from(document.querySelectorAll('.sectie.verborgen')).map(s=>s.id);
   d.tijd = document.getElementById('doc-tijd')?.value || '';
+  return d;
+}
+function saveDraft(){
+  const d=bouwDraftObject();
+  laatstGeschrevenTs=d.__ts;
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+  // Schrijf ook naar gedeelde KV (best-effort, blokkeert UI niet)
+  try{
+    fetch(syncUrl(),{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(d)
+    }).catch(()=>{});
+  }catch(e){}
 }
 function leegForm(){
   // Reset secties zichtbaar; teksten leegmaken zodat placeholders verschijnen
@@ -435,27 +451,64 @@ function leegForm(){
   document.getElementById('doc-tijd').value='';
   toonVerborgenBar();
 }
+function pasDraftToe(d, voorvoegsel='Hersteld'){
+  if(!d || typeof d!=='object') return false;
+  // Niet overschrijven als de gebruiker net iets typt en zijn versie nieuwer is
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    const k=el.getAttribute('data-save');
+    if(d[k]!=null) el.innerHTML=d[k];
+  });
+  document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+  if(Array.isArray(d.verborgen)){
+    d.verborgen.forEach(id=>document.getElementById(id)?.classList.add('verborgen'));
+  }
+  syncSectiesNaarCheckboxes();
+  if(d.tijd!=null) document.getElementById('doc-tijd').value = d.tijd;
+  updateOpgesteldKop();
+  toonVerborgenBar();
+  if(d.__ts){ laatstGeschrevenTs=d.__ts; toonSaveStatus(d.__ts, voorvoegsel); }
+  return true;
+}
 function restoreDraft(){
+  // Lokaal eerst (snel), daarna gedeelde KV checken (mogelijk nieuwer van andere kant)
+  let lokaal=null;
   try{
     const j=localStorage.getItem(saveKey());
-    if(!j){ leegForm(); updateOpgesteldKop(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatumKey()+')'; return; }
-    const d=JSON.parse(j);
-    document.querySelectorAll('[data-save]').forEach(el=>{
-      const k=el.getAttribute('data-save');
-      if(d[k]!=null) el.innerHTML=d[k];
-    });
-    // Verborgen secties terugzetten
-    document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
-    if(Array.isArray(d.verborgen)){
-      d.verborgen.forEach(id=>document.getElementById(id)?.classList.add('verborgen'));
-    }
-    syncSectiesNaarCheckboxes();
-    document.getElementById('doc-tijd').value = d.tijd || '';
-    updateOpgesteldKop();
-    toonVerborgenBar();
-    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+    if(j) lokaal=JSON.parse(j);
   }catch(e){}
+  if(lokaal){
+    pasDraftToe(lokaal, 'Hersteld');
+  } else {
+    leegForm(); updateOpgesteldKop();
+    document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatumKey()+')';
+  }
+  // Async: probeer KV — als die nieuwer is dan lokaal, overschrijven
+  haalGedeeldeDraft(true);
 }
+
+async function haalGedeeldeDraft(initieel=false){
+  if(document.activeElement && document.activeElement.matches && document.activeElement.matches('[data-save], [contenteditable], input, select, textarea')) {
+    // Gebruiker is aan het typen — niet overschrijven
+    return;
+  }
+  try{
+    const r=await fetch(syncUrl()+'?_='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return;
+    const d=await r.json();
+    if(!d || !d.__ts) return;
+    if(d.__ts > (laatstGeschrevenTs||0) + 500){
+      // Andere kant heeft nieuwere versie → toepassen
+      pasDraftToe(d, initieel?'Hersteld (gedeeld)':'Bijgewerkt door andere kant');
+      try{ localStorage.setItem(saveKey(), JSON.stringify(d)); }catch(e){}
+    }
+  }catch(e){ /* offline of KV niet beschikbaar — geen probleem, lokaal blijft werken */ }
+}
+// Periodiek pollen voor wijzigingen van de andere kant
+setInterval(()=>haalGedeeldeDraft(false), 8000);
+// Direct na visibility-change ook pollen (gebruiker kwam terug op tabblad)
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible') haalGedeeldeDraft(false);
+});
 function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
   const el=document.getElementById('save-status'); if(!el) return;
   const t=new Date(ts);
