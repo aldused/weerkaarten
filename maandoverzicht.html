@@ -104,6 +104,40 @@ tfoot td.sq { color: #e67e00; }
 [data-theme="dark"] .gk-dl:hover { background:#2ec4e8 !important; color:#0b1220 !important; }
 [data-theme="dark"] .grafiek-titel { color:#f1f5f9 !important; }
 /* Grafiek-canvas blijft wit voor leesbaarheid lijnen */
+
+/* ── Ranglijst-cards (top noteringen) ── */
+.rgl-wrap { padding: 14px 20px 4px; background: #ffffff; border-bottom: 1px solid #e3e8ef; }
+.rgl-titel { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.rgl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.rgl-card { background: #f8fafc; border: 1px solid #e3e8ef; border-radius: 10px; padding: 10px 12px; border-left: 4px solid #cbd5e1; }
+.rgl-card.tx { border-left-color: #c0392b; }
+.rgl-card.tn { border-left-color: #2471a3; }
+.rgl-card.tg { border-left-color: #475569; }
+.rgl-card.rr { border-left-color: #1a7a4a; }
+.rgl-card.sq { border-left-color: #e67e00; }
+.rgl-kop { display: flex; align-items: baseline; justify-content: space-between; }
+.rgl-naam { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+.rgl-rang { font-size: 10.5px; font-weight: 600; color: #64748b; font-family: "DM Mono", ui-monospace, monospace; }
+.rgl-uitleg { font-size: 11px; color: #64748b; margin: 3px 0 6px; }
+.rgl-uitleg b { color: #0f172a; font-weight: 700; }
+.rgl-verdeling { height: 6px; position: relative; background: linear-gradient(90deg, #dbeafe 0%, #fef3c7 50%, #fee2e2 100%); border-radius: 3px; margin-bottom: 8px; }
+.rgl-card.rr .rgl-verdeling, .rgl-card.sq .rgl-verdeling { background: linear-gradient(90deg, #fee2e2 0%, #fef3c7 50%, #dbeafe 100%); }
+.rgl-marker { position: absolute; top: -2px; bottom: -2px; width: 3px; background: #0f172a; border-radius: 2px; box-shadow: 0 0 0 2px #ffffff; }
+.rgl-top { display: flex; gap: 8px; font-size: 10px; color: #64748b; font-family: "DM Mono", ui-monospace, monospace; }
+.rgl-top .col { flex: 1; }
+.rgl-top .col-tt { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: #94a3b8; margin-bottom: 2px; }
+.rgl-top .row { display: flex; justify-content: space-between; padding: 1px 0; }
+.rgl-top .row.cur { color: #0f172a; font-weight: 700; background: #fef3c7; padding: 1px 3px; border-radius: 3px; margin: 1px -3px; }
+.rgl-top .jr { color: #94a3b8; }
+
+[data-theme="dark"] .rgl-wrap { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .rgl-titel { color:#94a3b8 !important; }
+[data-theme="dark"] .rgl-card { background:#0e1629 !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .rgl-naam { color:#cbd5e1 !important; }
+[data-theme="dark"] .rgl-uitleg { color:#94a3b8 !important; }
+[data-theme="dark"] .rgl-uitleg b { color:#f1f5f9 !important; }
+[data-theme="dark"] .rgl-marker { background:#f1f5f9 !important; box-shadow:0 0 0 2px #0e1629 !important; }
+[data-theme="dark"] .rgl-top .row.cur { background:rgba(245,158,11,0.25) !important; color:#f1f5f9 !important; }
 </style>
 <script>
   (function(){
@@ -135,6 +169,10 @@ tfoot td.sq { color: #e67e00; }
   </select>
   <select id="sj" onchange="sel()"></select>
   <span class="pijl" onclick="nav(1)">&#9654;</span>
+</div>
+<div class="rgl-wrap" id="rgl-wrap" style="display:none">
+  <div class="rgl-titel">Top noteringen — stand van zaken deze maand</div>
+  <div class="rgl-grid" id="rgl"></div>
 </div>
 <div class="stats" id="st"></div>
 <div class="tbl-wrap">
@@ -335,6 +373,99 @@ function ds(val, nm) {
 
 function f(v) { return v != null ? v.toFixed(1) : '&#8211;'; }
 
+// ── Ranglijst-cards: vergelijk maand-tot-eindDag in jaar J met dezelfde dagen-tot-eindDag in alle eerdere jaren ──
+var RGL_VARS = [
+  { veld:'tx', naam:'Gem. TX',   agg:'mean', eenheid:'°', hoog:'warmste',   laag:'koelste'  },
+  { veld:'tn', naam:'Gem. TN',   agg:'mean', eenheid:'°', hoog:'warmste',   laag:'koudste'  },
+  { veld:'tg', naam:'Gem. TG',   agg:'mean', eenheid:'°', hoog:'warmste',   laag:'koudste'  },
+  { veld:'rr', naam:'Neerslag',  agg:'sum',  eenheid:'mm', hoog:'natste',    laag:'droogste' },
+  { veld:'sq', naam:'Zonneschijn',agg:'sum', eenheid:'u', hoog:'zonnigste', laag:'somberste'}
+];
+
+function rglAgg(arr, agg) {
+  if (!arr.length) return null;
+  var s = 0; for (var i = 0; i < arr.length; i++) s += arr[i];
+  return agg === 'mean' ? s / arr.length : s;
+}
+
+function rglJaarwaarde(jaar, veld, agg, eindDag) {
+  var ms = String(M).padStart(2,'0'), arr = [];
+  for (var d = 1; d <= eindDag; d++) {
+    var k = jaar + '-' + ms + '-' + String(d).padStart(2,'0');
+    var o = D[k];
+    if (o && o[veld] != null) arr.push(o[veld]);
+  }
+  if (arr.length < Math.ceil(eindDag * 0.75)) return null;  // ≥75% data nodig
+  return rglAgg(arr, agg);
+}
+
+function rglRangUitleg(rang, totaal, hi, lo) {
+  if (rang === 1)              return '<b>' + hi + ' ooit</b> sinds 1901';
+  if (rang <= 3)               return '3-' + hi + ' sinds 1901';
+  if (rang <= 10)              return 'top-10 ' + hi;
+  if (rang === totaal)         return '<b>' + lo + ' ooit</b> sinds 1901';
+  if (rang >= totaal - 2)      return '3-' + lo + ' sinds 1901';
+  if (rang >= totaal - 9)      return 'top-10 ' + lo;
+  var p = (totaal - rang) / Math.max(totaal - 1, 1);
+  if (p >= 0.75)               return 'bovengemiddeld ' + hi.replace(/ste$/, '');
+  if (p <= 0.25)               return 'bovengemiddeld ' + lo.replace(/ste$/, '');
+  return 'middenmoot';
+}
+
+function bouwRanglijst(eindDag) {
+  if (eindDag < 1) { document.getElementById('rgl-wrap').style.display = 'none'; return; }
+  var alleJaren = {}, ks = Object.keys(D), ms = String(M).padStart(2,'0');
+  for (var i = 0; i < ks.length; i++) {
+    if (ks[i].slice(5,7) === ms) alleJaren[+ks[i].slice(0,4)] = true;
+  }
+  var jaren = Object.keys(alleJaren).map(Number).sort();
+  if (jaren.length < 5) { document.getElementById('rgl-wrap').style.display = 'none'; return; }
+
+  var html = '';
+  for (var v = 0; v < RGL_VARS.length; v++) {
+    var vd = RGL_VARS[v];
+    var rij = [];
+    for (var j = 0; j < jaren.length; j++) {
+      var w = rglJaarwaarde(jaren[j], vd.veld, vd.agg, eindDag);
+      if (w !== null) rij.push({ jaar: jaren[j], waarde: w });
+    }
+    if (rij.length < 5) continue;
+    rij.sort(function(a, b) { return b.waarde - a.waarde; });  // hoogste eerst (Tn-richting wordt later via labels gecorrigeerd)
+    var huidigIdx = rij.findIndex(function(x) { return x.jaar === J; });
+
+    // Voor Tn (laagIsExtreem) draaien we de ranking om: laagste = #1
+    var hoogIsExtreem = vd.veld !== 'tn';
+    if (!hoogIsExtreem) { rij.reverse(); huidigIdx = rij.findIndex(function(x){return x.jaar===J;}); }
+
+    var totaal = rij.length;
+    var rang = huidigIdx >= 0 ? huidigIdx + 1 : null;
+    var huidig = huidigIdx >= 0 ? rij[huidigIdx] : null;
+    var uitleg = rang ? rglRangUitleg(rang, totaal, vd.hoog, vd.laag) : 'geen data dit jaar';
+    var pct = rang ? ((totaal - rang) / Math.max(totaal - 1, 1)) * 100 : 50;
+
+    var top3 = rij.slice(0, 3);
+    var bot3 = rij.slice(-3).reverse();
+    function rij2html(arr) {
+      return arr.map(function(x) {
+        var cur = x.jaar === J ? ' cur' : '';
+        return '<div class="row' + cur + '"><span>' + x.waarde.toFixed(1) + vd.eenheid + '</span><span class="jr">' + x.jaar + '</span></div>';
+      }).join('');
+    }
+
+    html += '<div class="rgl-card ' + vd.veld + '">' +
+      '<div class="rgl-kop"><div class="rgl-naam">' + vd.naam + '</div>' +
+      (rang ? '<div class="rgl-rang">#' + rang + ' van ' + totaal + '</div>' : '') + '</div>' +
+      '<div class="rgl-uitleg">' + uitleg + '</div>' +
+      (rang ? '<div class="rgl-verdeling"><div class="rgl-marker" style="left:' + pct.toFixed(1) + '%"></div></div>' : '') +
+      '<div class="rgl-top">' +
+      '<div class="col"><div class="col-tt">3 ' + vd.hoog + '</div>' + rij2html(top3) + '</div>' +
+      '<div class="col"><div class="col-tt">3 ' + vd.laag + '</div>' + rij2html(bot3) + '</div>' +
+      '</div></div>';
+  }
+  document.getElementById('rgl').innerHTML = html;
+  document.getElementById('rgl-wrap').style.display = html ? '' : 'none';
+}
+
 function toon() {
   sync();
   var vd = new Date().toISOString().slice(0,10);
@@ -400,6 +531,15 @@ function toon() {
 
   document.getElementById('msg').style.display = 'none';
   document.getElementById('tbl').style.display = '';
+
+  // Bepaal "eindDag" voor ranglijst: hoeveel dagen van deze maand hebben echte data
+  var eindDag = 0;
+  for (var d = 1; d <= ad; d++) {
+    var k = J + '-' + ms + '-' + String(d).padStart(2,'0');
+    if (D[k] && D[k].tg != null) eindDag = d;
+  }
+  bouwRanglijst(eindDag);
+
   tekenGrafiek();
 }
 
