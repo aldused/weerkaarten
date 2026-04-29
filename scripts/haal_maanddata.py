@@ -9,15 +9,27 @@ from zoneinfo import ZoneInfo
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-STATIONS = [
-    (260, "De Bilt",           "0-20000-0-06260"),
-    (235, "Den Helder",        "0-20000-0-06235"),
-    (280, "Eelde",             "0-20000-0-06280"),
-    (310, "Vlissingen",        "0-20000-0-06310"),
-    (380, "Maastricht",        "0-20000-0-06380"),
-    (330, "Hoek van Holland",  "0-20000-0-06330"),
-    (344, "Rotterdam Airport", "0-20000-0-06344"),
+def _wigos(nr): return f"0-20000-0-06{nr}"
+# Volledige KNMI-stations-lijst (zelfde als knmi_records.py)
+_RUW = [
+    # Hoofdstations
+    (260, "De Bilt"), (344, "Rotterdam Airport"), (330, "Hoek van Holland"),
+    (235, "Den Helder"), (240, "Schiphol"), (270, "Leeuwarden"),
+    (280, "Eelde"), (290, "Twenthe"), (310, "Vlissingen"), (380, "Maastricht"),
+    # Overige stations
+    (210, "Valkenburg"), (215, "Voorschoten"), (225, "IJmuiden"),
+    (229, "Texelhors"), (242, "Vlieland"), (248, "Wijdenes"), (249, "Berkhout"),
+    (251, "Terschelling"), (257, "Wijk aan Zee"), (258, "Houtribdijk"),
+    (265, "Soesterberg"), (267, "Stavoren"), (269, "Lelystad"),
+    (273, "Marknesse"), (275, "Deelen"), (277, "Lauwersoog"),
+    (278, "Heino"), (279, "Hoogeveen"), (283, "Hupsel"), (286, "Nieuw Beerta"),
+    (319, "Westdorpe"), (323, "Wilhelminadorp"), (324, "Stavenisse"),
+    (331, "Tholen"), (340, "Woensdrecht"), (343, "Rotterdam Geulhaven"),
+    (348, "Cabauw"), (350, "Gilze-Rijen"), (356, "Herwijnen"),
+    (370, "Eindhoven"), (375, "Volkel"), (377, "Ell"),
+    (391, "Arcen"), (392, "Horst"),
 ]
+STATIONS = [(nr, naam, _wigos(nr)) for nr, naam in _RUW]
 
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 KNMI_KEY  = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
@@ -143,8 +155,12 @@ for station_nr, naam, wigos in STATIONS:
         laatste_zip = max(data.keys()) if data else "2000-01-01"
         laatste_datum = date.fromisoformat(laatste_zip)
 
-        # Vul aan met EDR API t/m gisteren (vandaag is nog niet volledig)
-        d = laatste_datum + timedelta(days=1)
+        # Vul aan met EDR API t/m gisteren — maximaal 14 dagen terug.
+        # Voorkomt urenlange runs voor gesloten/historische stations waarvan
+        # de ZIP jaren achterloopt; EDR heeft sowieso geen oudere data.
+        EDR_MAX_DAGEN_TERUG = 14
+        startdatum = max(laatste_datum + timedelta(days=1), gisteren - timedelta(days=EDR_MAX_DAGEN_TERUG))
+        d = startdatum
         aangevuld = 0
         while d <= gisteren:
             edr = haal_edr_dag(wigos, d.isoformat())
