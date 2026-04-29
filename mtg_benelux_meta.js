@@ -1,2 +1,2 @@
 const MTG_BENELUX_PRODUCT = "mtg_fd:rgb_truecolour";
-const MTG_BENELUX_TIJD = "2026-04-29T10:40:00Z";
+const MTG_BENELUX_TIJD = "2026-04-29T10:50:00Z";
