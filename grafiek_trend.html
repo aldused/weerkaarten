@@ -5,145 +5,233 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>10-daagse verwachting – Ed Aldus WM</title>
+<title>Trend 10 dagen — Ed Aldus WM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-    background: #f6f8fb;
-    color: #0f172a;
+    font-family: var(--wl-font-sans);
+    background: var(--wl-color-background);
+    color: var(--wl-color-text);
     font-size: 13px;
     font-feature-settings: "ss01","cv11";
   }
-
   .header {
-    background: #ffffff;
-    border-bottom: 1px solid #e3e8ef;
+    background: var(--wl-color-surface);
+    border-bottom: 1px solid var(--wl-color-border);
     padding: 12px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 8px;
   }
-  .header-links { display: flex; gap: 16px; align-items: center; }
-  .header-left h1 { color: #0f172a; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-  .header-left p  { color: #64748b; font-size: 11px; margin-top: 2px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; }
-  .header-right   { color: #64748b; font-size: 11px; text-align: right; line-height: 1.6; font-family: "DM Mono", ui-monospace, monospace; }
-  .header-right strong { color: #0f172a; }
-  .run-lbl { color: #00205b; font-size: 11px; font-weight: 600; }
+  .header-left h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--wl-color-text); }
+  .header-left p  { color: var(--wl-color-text-muted); font-size: 11px; margin-top: 2px; font-family: var(--wl-font-mono); font-weight: 500; }
+  .header-right   { color: var(--wl-color-text-muted); font-size: 11px; text-align: right; line-height: 1.6; font-family: var(--wl-font-mono); }
+  .header-right strong { color: var(--wl-color-text); }
+  .run-lbl { color: var(--wl-color-primary); font-size: 11px; font-weight: 600; }
 
-  .content { padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
+  .content { padding: 14px 16px 24px; max-width: 1400px; margin: 0 auto; }
 
-  /* Legenda toggle knoppen */
-  .legenda-hint {
-    font-size: 12px;
-    color: #78350f;
-    margin-bottom: 10px;
-    padding: 8px 12px;
-    background: #fef3c7;
-    border-radius: 8px;
-    border: 1px solid #fde68a;
+  /* Samenvattingskaarten */
+  .samenvatting {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px; margin-bottom: 12px;
   }
-
-  .legenda-rij {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
-    align-items: center;
+  .sm-kaart {
+    background: white;
+    border: 1px solid var(--wl-color-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: var(--wl-shadow-1);
+    display: flex; flex-direction: column; gap: 2px;
+    position: relative; overflow: hidden;
   }
-  .legenda-rij .lbl {
-    font-size: 10.5px;
-    font-weight: 600;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-right: 4px;
+  .sm-kaart::before {
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background: var(--accent-line, var(--wl-color-primary));
+  }
+  .sm-kaart .sm-lbl {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--wl-color-text-soft);
+  }
+  .sm-kaart .sm-waarde {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--wl-color-text); font-family: var(--wl-font-sans);
+    line-height: 1.1;
+  }
+  .sm-kaart .sm-detail {
+    font-size: 11.5px; color: var(--wl-color-text-muted);
+    font-family: var(--wl-font-mono);
+  }
+  .sm-kaart.warm    { --accent-line: #cc0000; }
+  .sm-kaart.koud    { --accent-line: #1d4ed8; }
+  .sm-kaart.nat     { --accent-line: #0d9488; }
+  .sm-kaart.wind    { --accent-line: #b45309; }
+
+  .toolbar {
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    box-shadow: var(--wl-shadow-1);
+  }
+  .toolbar-rij {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    margin-bottom: 6px;
+  }
+  .toolbar-rij:last-child { margin-bottom: 0; }
+  .toolbar-rij .lbl {
+    font-size: 10.5px; font-weight: 700; color: var(--wl-color-text-soft);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-right: 4px; min-width: 96px;
   }
   .station-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 11px;
-    border-radius: 8px;
-    border: 1px solid #e3e8ef;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    background: white;
-    color: #334155;
-    transition: all 0.15s;
-    user-select: none;
-    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 999px;
+    border: 1.5px solid var(--wl-color-border);
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    background: white; color: #334155;
+    transition: all 0.15s; user-select: none;
+    font-family: inherit;
   }
-  .station-btn:hover { border-color: #94a3b8; color: #0f172a; }
-  .station-btn.uit { opacity: 0.4; }
-  .station-btn .kleur-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
+  .station-btn:hover { border-color: var(--wl-color-text-soft); color: var(--wl-color-text); }
+  .station-btn.uit   { opacity: 0.35; background: var(--wl-color-background); }
+  .station-btn .kleur-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .station-btn .tabel-icon {
+    margin-left: 4px; padding: 2px 5px;
+    border-radius: 6px; font-size: 11px; line-height: 1;
+    color: var(--wl-color-text-muted); opacity: 0.55;
+    transition: all 0.12s;
   }
+  .station-btn:hover .tabel-icon { opacity: 1; background: var(--wl-color-background-soft); }
+  .station-btn .tabel-icon:hover { background: var(--wl-color-primary) !important; color: white !important; opacity: 1; }
 
-  /* Grafiek kaart */
+  /* Tabel modal */
+  .tabel-overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+    display: none; align-items: flex-start; justify-content: center;
+    z-index: 1000; padding: 40px 16px; overflow-y: auto;
+  }
+  .tabel-overlay.open { display: flex; }
+  .tabel-box {
+    background: white; border-radius: 12px;
+    max-width: 720px; width: 100%;
+    box-shadow: 0 20px 50px rgba(15,23,42,0.30);
+    overflow: hidden;
+  }
+  .tabel-head {
+    padding: 14px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--wl-color-border);
+  }
+  .tabel-head h3 {
+    font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tabel-head .stat-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .tabel-head .sluit {
+    width: 28px; height: 28px; border-radius: 8px;
+    border: 1px solid var(--wl-color-border); background: white;
+    cursor: pointer; font-size: 14px; line-height: 1; color: var(--wl-color-text-muted);
+  }
+  .tabel-head .sluit:hover { background: var(--wl-color-background); color: var(--wl-color-text); }
+  .tabel-body { padding: 14px 18px 18px; }
+  .tabel-body table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+  }
+  .tabel-body th, .tabel-body td {
+    padding: 7px 8px; text-align: right;
+    border-bottom: 1px solid var(--wl-color-border);
+    font-family: var(--wl-font-mono); font-weight: 500;
+    color: var(--wl-color-text);
+  }
+  .tabel-body th {
+    font-family: var(--wl-font-sans); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 10.5px; color: var(--wl-color-text-soft);
+    background: var(--wl-color-background-soft);
+  }
+  .tabel-body td:first-child, .tabel-body th:first-child { text-align: left; }
+  .tabel-body tr.vandaag td { background: rgba(204,0,0,0.04); font-weight: 700; }
+  .tabel-body td.tx { color: var(--wl-color-danger); }
+  .tabel-body td.tn { color: var(--wl-color-weather-blue); }
+  .tabel-body td.rr.heel-nat { color: #1e40af; font-weight: 700; }
+  .tabel-body td.rr.nat { color: #2563eb; }
+  .tabel-body td.dd { color: var(--wl-color-text-muted); font-family: var(--wl-font-sans); font-weight: 600; }
+
+  .quick-btn {
+    padding: 5px 11px; border-radius: 8px; border: 1px solid var(--wl-color-border);
+    background: white; color: #334155; font-size: 11.5px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; font-family: inherit;
+  }
+  .quick-btn:hover { background: var(--wl-color-background); border-color: var(--wl-color-text-soft); color: var(--wl-color-text); }
+  .quick-btn.actief { background: var(--wl-color-primary); color: white; border-color: var(--wl-color-primary); }
+
+  .overig-sectie {
+    margin-top: 8px;
+    border-top: 1px dashed var(--wl-color-border);
+    padding-top: 8px;
+  }
+  .overig-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 8px 12px;
+    background: var(--wl-color-background-soft);
+    border: 1px solid var(--wl-color-border);
+    border-radius: 8px;
+    color: var(--wl-color-text); font-size: 12.5px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .overig-toggle:hover { background: var(--wl-color-background); border-color: var(--wl-color-text-soft); }
+  .overig-toggle .chevron { transition: transform 0.2s; font-size: 12px; color: var(--wl-color-text-muted); }
+  .overig-toggle.open { background: white; border-color: var(--wl-color-border-strong); }
+  .overig-toggle.open .chevron { transform: rotate(180deg); }
+  .overig-toggle .telling { font-weight: 500; color: var(--wl-color-text-muted); font-size: 11.5px; }
+  .overige-rij { padding-top: 6px; }
+  .overige-rij.dicht { display: none; }
+
   .grafiek-kaart {
     background: white;
-    border: 1px solid #e3e8ef;
+    border: 1px solid var(--wl-color-border);
     border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    box-shadow: var(--wl-shadow-1);
     padding: 16px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
   .grafiek-titel {
-    font-size: 14px;
-    font-weight: 700;
-    color: #0f172a;
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    letter-spacing: -0.01em;
+    font-size: 14px; font-weight: 700; color: var(--wl-color-text);
+    margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 6px; letter-spacing: -0.01em;
   }
   .grafiek-sub {
-    font-size: 11px;
-    color: #64748b;
-    font-weight: 500;
-    font-family: "DM Mono", ui-monospace, monospace;
+    font-size: 11px; color: var(--wl-color-text-muted); font-weight: 500;
+    font-family: var(--wl-font-mono);
   }
   .canvas-wrapper { position: relative; }
-
   .download-btn {
-    padding: 5px 11px;
-    border-radius: 8px;
-    border: 1px solid #e3e8ef;
-    background: white;
-    color: #334155;
-    font-size: 11.5px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    padding: 5px 11px; border-radius: 8px;
+    border: 1px solid var(--wl-color-border);
+    background: white; color: #334155;
+    font-size: 11.5px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+    white-space: nowrap; font-family: inherit;
   }
-  .download-btn:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
+  .download-btn:hover { background: var(--wl-color-background); border-color: var(--wl-color-text-soft); color: var(--wl-color-text); }
 
   .footer {
-    text-align: right;
-    font-size: 11px;
-    color: #94a3b8;
-    margin-top: 6px;
-    padding-bottom: 8px;
-    font-family: "DM Mono", ui-monospace, monospace;
+    text-align: right; font-size: 11px; color: var(--wl-color-text-soft);
+    margin-top: 6px; padding-bottom: 8px;
+    font-family: var(--wl-font-mono);
   }
 
-  .laden { text-align: center; padding: 60px; color: #94a3b8; font-family: "DM Mono", ui-monospace, monospace; }
-  .fout  { text-align: center; padding: 40px; color: #dc2626; }
+  .laden { text-align: center; padding: 60px; color: var(--wl-color-text-soft); font-family: var(--wl-font-mono); }
+  .fout  { text-align: center; padding: 40px; color: var(--wl-color-danger); }
 
   /* ── DARK MODE ── */
   [data-theme="dark"] body { background:#0b1220 !important; color:#f1f5f9 !important; }
@@ -153,11 +241,21 @@
   [data-theme="dark"] .header-right { color:#94a3b8 !important; }
   [data-theme="dark"] .header-right strong { color:#f1f5f9 !important; }
   [data-theme="dark"] .run-lbl { color:#2ec4e8 !important; }
-  [data-theme="dark"] .legenda-hint { background:rgba(245,158,11,0.12) !important; border-color:rgba(245,158,11,0.3) !important; color:#fde68a !important; }
-  [data-theme="dark"] .legenda-rij .lbl { color:#64748b !important; }
-  [data-theme="dark"] .station-btn { background:#0e1629 !important; color:#cbd5e1 !important; border-color:rgba(255,255,255,0.08) !important; }
-  [data-theme="dark"] .station-btn:hover { border-color:rgba(255,255,255,0.2) !important; color:#f1f5f9 !important; }
-  /* Grafiek-kaarten blijven LICHT (leesbaarheid pluimen/lijnen) */
+  [data-theme="dark"] .toolbar { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; }
+  [data-theme="dark"] .toolbar-rij .lbl { color:#64748b !important; }
+  [data-theme="dark"] .station-btn { background:#0e1629 !important; color:#cbd5e1 !important; border-color:rgba(255,255,255,0.10) !important; }
+  [data-theme="dark"] .station-btn:hover { border-color:rgba(255,255,255,0.25) !important; color:#f1f5f9 !important; }
+  [data-theme="dark"] .station-btn.uit { background:#0a0f1c !important; }
+  [data-theme="dark"] .quick-btn { background:#0e1629 !important; color:#cbd5e1 !important; border-color:rgba(255,255,255,0.10) !important; }
+  [data-theme="dark"] .quick-btn:hover { background:#1f2a40 !important; color:#f1f5f9 !important; }
+  [data-theme="dark"] .quick-btn.actief { background:#2ec4e8 !important; color:#0b1220 !important; border-color:#2ec4e8 !important; }
+  [data-theme="dark"] .overig-sectie { border-top-color: rgba(255,255,255,0.10) !important; }
+  [data-theme="dark"] .overig-toggle { background:#0e1629 !important; color:#f1f5f9 !important; border-color:rgba(255,255,255,0.10) !important; }
+  [data-theme="dark"] .overig-toggle:hover { background:#1f2a40 !important; }
+  [data-theme="dark"] .overig-toggle.open { background:#1f2a40 !important; border-color:rgba(255,255,255,0.20) !important; }
+  [data-theme="dark"] .overig-toggle .telling,
+  [data-theme="dark"] .overig-toggle .chevron { color:#94a3b8 !important; }
+  /* Grafieken blijven licht voor leesbaarheid */
   [data-theme="dark"] .grafiek-kaart { background:#ffffff !important; border-color:rgba(255,255,255,0.12) !important; }
   [data-theme="dark"] .grafiek-titel { color:#0f172a !important; }
   [data-theme="dark"] .grafiek-sub { color:#64748b !important; }
@@ -177,8 +275,8 @@
 
 <div class="header">
   <div class="header-left">
-    <h1>Ed Aldus WM</h1>
-    <p>MOS ECMWF/ICON · 10-daagse verwachting</p>
+    <h1>Ed Aldus WM — Trend</h1>
+    <p>MOS/MIX 10 dagen · interactief</p>
   </div>
   <div class="header-right">
     <strong>DWD MOSMIX</strong><br>
@@ -193,308 +291,499 @@
 <script>
 const JSON_URL = "grafiek_trend.json?t=" + Date.now();
 
-// Smooth via moving average
-function smooth(arr, sigma=1.5) {
-  const out = [...arr];
-  for (let i = 0; i < arr.length; i++) {
-    if (arr[i] === null) continue;
-    let sum = 0, wsum = 0;
-    for (let j = 0; j < arr.length; j++) {
-      if (arr[j] === null) continue;
-      const w = Math.exp(-0.5 * ((i-j)/sigma)**2);
-      sum  += arr[j] * w;
-      wsum += w;
-    }
-    out[i] = wsum > 0 ? Math.round(sum/wsum * 10)/10 : arr[i];
-  }
-  return out;
+function gradenNaarKompas(deg) {
+  const punten = ["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW","W","WNW","NW","NNW"];
+  return punten[Math.round(deg / 22.5) % 16];
 }
 
-function maakTempGrafiek(data, zichtbaar) {
-  const datasets = [];
-  for (const [naam, sd] of Object.entries(data.temp)) {
-    const k = sd.kleur;
-    const hidden = !zichtbaar[naam];
-    datasets.push({
-      label: naam + " TX",
-      data: sd.tx,
-      borderColor: k,
-      backgroundColor: "transparent",
-      borderWidth: 2,
-      pointRadius: 4,
-      pointBackgroundColor: k,
-      tension: 0.4,
-      hidden,
-      station: naam,
-      type_: "tx",
-    });
-    datasets.push({
-      label: naam + " TN",
-      data: sd.tn,
-      borderColor: k,
-      backgroundColor: "transparent",
-      borderWidth: 1.5,
-      borderDash: [5,3],
-      pointRadius: 3,
-      pointBackgroundColor: k,
-      tension: 0.4,
-      hidden,
-      station: naam,
-      type_: "tn",
-    });
-  }
-  return {
-    type: "line",
-    data: { labels: data.dag_labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => {
-              if (ctx.parsed.y === null) return null;
-              const type = ctx.dataset.type_ === "tx" ? "TX" : "TN";
-              return `${ctx.dataset.station} ${type}: ${ctx.parsed.y.toFixed(1)}°C`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: { grid: { color: "#eeeeee" }, ticks: { color: "#5a7090", font: { size: 10 } } },
-        y: {
-          grid: { color: "#eeeeee" },
-          ticks: { color: "#5a7090", font: { size: 10 }, callback: v => v + "°C" }
-        }
+// Plugins ─────────────────────────────────────────────
+const dagNachtPlugin = {
+  id: "dagNacht",
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea, scales: { x } } = chart;
+    if (!x || !chartArea) return;
+    ctx.save();
+    const labels = chart.data.labels;
+    for (let i = 0; i < labels.length; i++) {
+      if (i % 2 === 1) {
+        const xs = x.getPixelForValue(i - 0.5);
+        const xe = x.getPixelForValue(i + 0.5);
+        ctx.fillStyle = "rgba(15, 23, 42, 0.025)";
+        ctx.fillRect(xs, chartArea.top, xe - xs, chartArea.bottom - chartArea.top);
       }
     }
-  };
-}
-
-function maakRRGrafiek(data, zichtbaar) {
-  const stations = Object.keys(data.rr);
-  const n = stations.length;
-  const datasets = stations.map((naam, idx) => ({
-    label: naam,
-    data: data.rr[naam].rr,
-    backgroundColor: data.rr[naam].kleur + "cc",
-    borderColor: data.rr[naam].kleur,
-    borderWidth: 1,
-    borderRadius: 2,
-    hidden: !zichtbaar[naam],
-    station: naam,
-  }));
-  return {
-    type: "bar",
-    data: { labels: data.dag_labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => ctx.parsed.y > 0 ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} mm` : null,
-            filter: item => item.parsed.y > 0,
-          }
-        }
-      },
-      scales: {
-        x: { grid: { color: "#eeeeee" }, ticks: { color: "#5a7090", font: { size: 10 } } },
-        y: {
-          grid: { color: "#eeeeee" },
-          ticks: { color: "#5a7090", font: { size: 10 }, callback: v => v + " mm" },
-          beginAtZero: true,
-        }
-      }
-    }
-  };
-}
-
-function maakWindGrafiek(data, zichtbaar) {
-  const datasets = Object.entries(data.wind).map(([naam, wd]) => ({
-    label: naam,
-    data: wd.bft,
-    borderColor: wd.kleur,
-    backgroundColor: "transparent",
-    borderWidth: 2,
-    pointRadius: 4,
-    pointBackgroundColor: wd.kleur,
-    tension: 0.4,
-    hidden: !zichtbaar[naam],
-    station: naam,
-  }));
-  return {
-    type: "line",
-    data: { labels: data.dag_labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => ctx.parsed.y !== null ? `${ctx.dataset.label}: Bft ${ctx.parsed.y}` : null,
-          }
-        }
-      },
-      scales: {
-        x: { grid: { color: "#eeeeee" }, ticks: { color: "#5a7090", font: { size: 10 } } },
-        y: {
-          grid: { color: "#eeeeee" },
-          ticks: { color: "#5a7090", font: { size: 10 }, callback: v => "Bft " + v, stepSize: 1 },
-          min: 0, max: 12,
-        }
-      }
-    }
-  };
-}
-
-function maakLegenda(stations, kleuren, zichtbaar, onChange) {
-  const div = document.createElement("div");
-  div.className = "legenda-rij";
-  const lbl = document.createElement("span");
-  lbl.className = "lbl";
-  lbl.textContent = "Stations:";
-  div.appendChild(lbl);
-  for (const naam of stations) {
-    const btn = document.createElement("div");
-    btn.className = "station-btn" + (zichtbaar[naam] ? "" : " uit");
-    btn.style.borderColor = kleuren[naam];
-    btn.innerHTML = `<div class="kleur-dot" style="background:${kleuren[naam]}"></div>${naam}`;
-    btn.addEventListener("click", () => {
-      zichtbaar[naam] = !zichtbaar[naam];
-      btn.classList.toggle("uit", !zichtbaar[naam]);
-      onChange(naam, zichtbaar[naam]);
-    });
-    div.appendChild(btn);
+    const x0 = x.getPixelForValue(0);
+    ctx.strokeStyle = "rgba(204, 0, 0, 0.5)";
+    ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x0, chartArea.top); ctx.lineTo(x0, chartArea.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(204, 0, 0, 0.85)";
+    ctx.font = "600 9px DM Mono, monospace";
+    ctx.fillText("vandaag", x0 + 4, chartArea.top + 10);
+    ctx.restore();
   }
-  return div;
-}
+};
+const crosshairPlugin = {
+  id: "crosshair",
+  afterDraw(chart) {
+    const active = chart.tooltip?.getActiveElements?.();
+    if (!active || !active.length) return;
+    const { ctx, chartArea } = chart;
+    const xPx = active[0].element.x;
+    ctx.save();
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.25)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xPx, chartArea.top); ctx.lineTo(xPx, chartArea.bottom); ctx.stroke();
+    ctx.restore();
+  }
+};
+const windRichtingPlugin = {
+  id: "windRichting",
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((ds, di) => {
+      if (ds.hidden || !ds.wdir) return;
+      const m = chart.getDatasetMeta(di);
+      if (!m || !m.data) return;
+      m.data.forEach((pt, idx) => {
+        const deg = ds.wdir[idx];
+        if (deg === null || deg === undefined || Number.isNaN(deg)) return;
+        const x = pt.x, y = pt.y - 14;
+        const rad = (deg + 180) * Math.PI / 180;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(rad);
+        ctx.fillStyle = ds.borderColor; ctx.strokeStyle = ds.borderColor; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -3); ctx.lineTo(3, -3); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      });
+    });
+  }
+};
+
+// State / helpers ──────────────────────────────────────
+function eqSets(a, b) { if (a.size !== b.size) return false; for (const x of a) if (!b.has(x)) return false; return true; }
 
 fetch(JSON_URL)
   .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
   .then(data => {
     document.getElementById("run-lbl").textContent = "run: " + data.gegenereerd;
 
+    const STATIONS = data.stations; // array van {naam, kleur, hoofd, regio}
+    const labels = data.dag_labels;
+
+    const zichtbaar = {};
+    for (const s of STATIONS) zichtbaar[s.naam] = !!s.hoofd;
+
+    // Bouw HTML ────────────────────────────────────────
     const content = document.getElementById("content");
     content.innerHTML = "";
 
-    // Zichtbaarheid state
-    const alleStations = Object.keys(data.temp);
-    const windStations  = Object.keys(data.wind);
-    const zichtbaar = {};
-    for (const s of alleStations) zichtbaar[s] = true;
-    for (const s of windStations)  zichtbaar[s] = true;
+    // Toolbar
+    const toolbar = document.createElement("div"); toolbar.className = "toolbar";
 
-    const kleuren = {};
-    for (const [n, d] of Object.entries(data.temp))  kleuren[n] = d.kleur;
-    for (const [n, d] of Object.entries(data.wind))  kleuren[n] = d.kleur;
+    const quickRij = document.createElement("div"); quickRij.className = "toolbar-rij";
+    quickRij.innerHTML = `<span class="lbl">Snel kiezen</span>
+      <button class="quick-btn" data-quick="hoofd">⭐ Hoofdstations</button>
+      <button class="quick-btn" data-quick="alle">Alle aan</button>
+      <button class="quick-btn" data-quick="geen">Alle uit</button>
+      <button class="quick-btn" data-quick="kust">🌊 Alleen kust</button>
+      <button class="quick-btn" data-quick="binnen">🏞 Alleen binnenland</button>`;
+    toolbar.appendChild(quickRij);
 
-    // Hint tekst
-    const hint = document.createElement("div");
-    hint.className = "legenda-hint";
-    hint.textContent = "💡 Klik op een station om het aan of uit te zetten in alle grafieken.";
-    content.appendChild(hint);
+    const hoofdRij = document.createElement("div"); hoofdRij.className = "toolbar-rij";
+    const hoofdLbl = document.createElement("span"); hoofdLbl.className = "lbl"; hoofdLbl.textContent = "Hoofdstations";
+    hoofdRij.appendChild(hoofdLbl);
 
-    // Helper: download knop
-    function maakDownloadBtn(label, getChart) {
-      const btn = document.createElement("button");
-      btn.className = "download-btn";
-      btn.textContent = "⬇ PNG";
-      btn.addEventListener("click", () => {
-        const chart = getChart();
-        const link = document.createElement("a");
-        link.href = chart.toBase64Image("image/png", 1.0);
-        link.download = `edaldus_${label}_${data.gegenereerd.replace(/[: ]/g,"_")}.png`;
-        link.click();
+    // Overige-sectie: brede toggleknop + verborgen pillen-rij
+    const overigSec = document.createElement("div"); overigSec.className = "overig-sectie";
+    const overigBtn = document.createElement("button");
+    overigBtn.className = "overig-toggle";
+    overigBtn.type = "button";
+    const overigRij = document.createElement("div"); overigRij.className = "toolbar-rij overige-rij dicht";
+
+    function maakPil(s) {
+      const btn = document.createElement("div");
+      btn.className = "station-btn" + (zichtbaar[s.naam] ? "" : " uit");
+      btn.style.borderColor = s.kleur;
+      const dot = `<div class="kleur-dot" style="background:${s.kleur}"></div>`;
+      const tabelIcon = `<span class="tabel-icon" title="Open tabel" data-tabel="${s.naam}">📋</span>`;
+      btn.innerHTML = `${dot}<span class="naam">${s.naam}</span>${tabelIcon}`;
+      btn.dataset.station = s.naam;
+      btn.addEventListener("click", (ev) => {
+        // klik op tabel-icon: open tabel, niet togglen
+        if (ev.target.closest(".tabel-icon")) {
+          ev.stopPropagation();
+          openTabel(s.naam);
+          return;
+        }
+        zichtbaar[s.naam] = !zichtbaar[s.naam];
+        btn.classList.toggle("uit", !zichtbaar[s.naam]);
+        updateAlleGrafieken(); updateQuickButtons(); updateOverigBtn(); updateSamenvatting();
       });
       return btn;
     }
+    const hoofdLijst = STATIONS.filter(s => s.hoofd);
+    const overigLijst = STATIONS.filter(s => !s.hoofd);
+    for (const s of hoofdLijst) hoofdRij.appendChild(maakPil(s));
+    for (const s of overigLijst) overigRij.appendChild(maakPil(s));
 
-    // ── Temperatuur ──────────────────────────────────────────────────────
-    const tempKaart = document.createElement("div");
-    tempKaart.className = "grafiek-kaart";
-
-    const tempLeg = maakLegenda(alleStations, kleuren, zichtbaar, (naam, vis) => {
-      tempChart.data.datasets.forEach(ds => {
-        if (ds.station === naam) ds.hidden = !vis;
-      });
-      rrChart.data.datasets.forEach(ds => {
-        if (ds.station === naam) ds.hidden = !vis;
-      });
-      tempChart.update();
-      rrChart.update();
+    // Aantal overige aan tellen voor in de toggle-tekst
+    function aantalOverigAan() {
+      return overigLijst.filter(s => zichtbaar[s.naam]).length;
+    }
+    function updateOverigBtn() {
+      const aan = aantalOverigAan();
+      const open = !overigRij.classList.contains("dicht");
+      overigBtn.classList.toggle("open", open);
+      const tellingTxt = aan > 0
+        ? `${aan} van ${overigLijst.length} aan`
+        : `${overigLijst.length} stations beschikbaar`;
+      overigBtn.innerHTML =
+        `<span><span style="margin-right:6px;">＋</span> Overige stations <span class="telling">— ${tellingTxt}</span></span>` +
+        `<span class="chevron">▾</span>`;
+    }
+    overigBtn.addEventListener("click", () => {
+      overigRij.classList.toggle("dicht");
+      updateOverigBtn();
     });
-    tempKaart.appendChild(tempLeg);
+    overigSec.appendChild(overigBtn);
+    overigSec.appendChild(overigRij);
 
-    const tempTitel = document.createElement("div");
-    tempTitel.className = "grafiek-titel";
-    tempTitel.innerHTML = `<span>Temperatuur <span class="grafiek-sub">— TX (max) &nbsp; - - TN (min)</span></span>`;
-    tempKaart.appendChild(tempTitel);
+    toolbar.append(hoofdRij, overigSec);
+    content.appendChild(toolbar);
+    updateOverigBtn();
 
-    const tempWrapper = document.createElement("div");
-    tempWrapper.className = "canvas-wrapper";
-    tempWrapper.style.height = "280px";
-    const tempCanvas = document.createElement("canvas");
-    tempWrapper.appendChild(tempCanvas);
-    tempKaart.appendChild(tempWrapper);
-    content.appendChild(tempKaart);
-
-    const tempChart = new Chart(tempCanvas, maakTempGrafiek(data, zichtbaar));
-    tempTitel.appendChild(maakDownloadBtn("temperatuur", () => tempChart));
-    tempKaart.appendChild(Object.assign(document.createElement("div"), {className:"footer", textContent:`© Ed Aldus | Data: DWD (MOSMIX)`}));
-
-    // ── Neerslag ─────────────────────────────────────────────────────────
-    const rrKaart = document.createElement("div");
-    rrKaart.className = "grafiek-kaart";
-    const rrTitel = document.createElement("div");
-    rrTitel.className = "grafiek-titel";
-    rrTitel.innerHTML = `<span>Neerslag <span class="grafiek-sub">(dagsom mm)</span></span>`;
-    rrKaart.appendChild(rrTitel);
-    const rrWrapper = document.createElement("div");
-    rrWrapper.className = "canvas-wrapper";
-    rrWrapper.style.height = "220px";
-    const rrCanvas = document.createElement("canvas");
-    rrWrapper.appendChild(rrCanvas);
-    rrKaart.appendChild(rrWrapper);
-    content.appendChild(rrKaart);
-
-    const rrChart = new Chart(rrCanvas, maakRRGrafiek(data, zichtbaar));
-    rrTitel.appendChild(maakDownloadBtn("neerslag", () => rrChart));
-    rrKaart.appendChild(Object.assign(document.createElement("div"), {className:"footer", textContent:`© Ed Aldus | Data: DWD (MOSMIX)`}));
-
-    // ── Wind ──────────────────────────────────────────────────────────────
-    const windKaart = document.createElement("div");
-    windKaart.className = "grafiek-kaart";
-
-    const windLeg = maakLegenda(windStations, kleuren, zichtbaar, (naam, vis) => {
-      windChart.data.datasets.forEach(ds => {
-        if (ds.station === naam) ds.hidden = !vis;
+    function updatePillen() {
+      document.querySelectorAll(".station-btn[data-station]").forEach(btn => {
+        btn.classList.toggle("uit", !zichtbaar[btn.dataset.station]);
       });
-      windChart.update();
+    }
+    function updateQuickButtons() {
+      const aanSet = new Set(STATIONS.filter(s => zichtbaar[s.naam]).map(s => s.naam));
+      const hoofdSet = new Set(STATIONS.filter(s => s.hoofd).map(s => s.naam));
+      const kustSet = new Set(STATIONS.filter(s => s.regio === "kust").map(s => s.naam));
+      const binnenSet = new Set(STATIONS.filter(s => s.regio === "binnen").map(s => s.naam));
+      let actief = null;
+      if (aanSet.size === STATIONS.length) actief = "alle";
+      else if (aanSet.size === 0) actief = "geen";
+      else if (eqSets(aanSet, hoofdSet)) actief = "hoofd";
+      else if (eqSets(aanSet, kustSet)) actief = "kust";
+      else if (eqSets(aanSet, binnenSet)) actief = "binnen";
+      document.querySelectorAll(".quick-btn").forEach(b => {
+        b.classList.toggle("actief", b.dataset.quick === actief);
+      });
+    }
+    document.querySelectorAll(".quick-btn").forEach(b => {
+      b.addEventListener("click", () => {
+        const q = b.dataset.quick;
+        for (const s of STATIONS) {
+          if (q === "alle")    zichtbaar[s.naam] = true;
+          if (q === "geen")    zichtbaar[s.naam] = false;
+          if (q === "hoofd")   zichtbaar[s.naam] = !!s.hoofd;
+          if (q === "kust")    zichtbaar[s.naam] = s.regio === "kust";
+          if (q === "binnen")  zichtbaar[s.naam] = s.regio === "binnen";
+        }
+        updatePillen(); updateAlleGrafieken(); updateQuickButtons();
+        updateOverigBtn(); updateSamenvatting();
+      });
     });
-    windKaart.appendChild(windLeg);
 
-    const windTitel = document.createElement("div");
-    windTitel.className = "grafiek-titel";
-    windTitel.innerHTML = `<span>Wind <span class="grafiek-sub">(max Bft, kuststations)</span></span>`;
-    windKaart.appendChild(windTitel);
-    const windWrapper = document.createElement("div");
-    windWrapper.className = "canvas-wrapper";
-    windWrapper.style.height = "240px";
-    const windCanvas = document.createElement("canvas");
-    windWrapper.appendChild(windCanvas);
-    windKaart.appendChild(windWrapper);
-    content.appendChild(windKaart);
+    // Grafiek-helpers ─────────────────────────────────
+    function tempCfg() {
+      const datasets = [];
+      for (const s of STATIONS) {
+        const sd = data.temp[s.naam] || { tx: [], tn: [] };
+        datasets.push({
+          label: s.naam, station: s.naam, type_: "tx", data: sd.tx,
+          borderColor: s.kleur, backgroundColor: s.kleur + "20",
+          borderWidth: 2.2, pointRadius: 3, pointHoverRadius: 5,
+          pointBackgroundColor: s.kleur, tension: 0.4,
+          hidden: !zichtbaar[s.naam],
+        });
+        datasets.push({
+          label: s.naam + " min", station: s.naam, type_: "tn", data: sd.tn,
+          borderColor: s.kleur, borderDash: [4,3],
+          borderWidth: 1.4, pointRadius: 2, pointHoverRadius: 4,
+          pointBackgroundColor: s.kleur, tension: 0.4,
+          hidden: !zichtbaar[s.naam],
+        });
+      }
+      return {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(15,23,42,0.92)", padding: 10,
+              titleFont: { size: 11, weight: "700" },
+              bodyFont: { size: 11, family: "DM Mono, monospace" },
+              callbacks: {
+                label: ctx => {
+                  if (ctx.parsed.y === null) return null;
+                  const t = ctx.dataset.type_ === "tx" ? "max" : "min";
+                  return `${ctx.dataset.station.padEnd(16)} ${t} ${ctx.parsed.y.toFixed(1)}°`;
+                },
+                labelColor: ctx => ({ borderColor: ctx.dataset.borderColor, backgroundColor: ctx.dataset.borderColor }),
+              },
+            },
+          },
+          scales: {
+            x: { grid: { color: "#eef2f7" }, ticks: { color: "#64748b", font: { size: 10 } } },
+            y: { grid: { color: "#eef2f7" }, ticks: { color: "#64748b", font: { size: 10 }, callback: v => v + "°" } },
+          },
+        },
+        plugins: [dagNachtPlugin, crosshairPlugin],
+      };
+    }
+    function rrCfg() {
+      const datasets = STATIONS.map(s => ({
+        label: s.naam, station: s.naam,
+        data: (data.rr[s.naam] || { rr: [] }).rr,
+        backgroundColor: s.kleur + "cc", borderColor: s.kleur,
+        borderWidth: 1, borderRadius: 3,
+        hidden: !zichtbaar[s.naam],
+      }));
+      return {
+        type: "bar",
+        data: { labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(15,23,42,0.92)", padding: 10,
+              titleFont: { size: 11, weight: "700" },
+              bodyFont: { size: 11, family: "DM Mono, monospace" },
+              callbacks: {
+                label: ctx => ctx.parsed.y > 0 ? `${ctx.dataset.station.padEnd(16)} ${ctx.parsed.y.toFixed(1)} mm` : null,
+                filter: item => item.parsed.y > 0,
+                labelColor: ctx => ({ borderColor: ctx.dataset.borderColor, backgroundColor: ctx.dataset.borderColor }),
+              },
+            },
+          },
+          scales: {
+            x: { grid: { color: "#eef2f7" }, ticks: { color: "#64748b", font: { size: 10 } } },
+            y: { grid: { color: "#eef2f7" }, ticks: { color: "#64748b", font: { size: 10 }, callback: v => v + " mm" }, beginAtZero: true },
+          },
+        },
+        plugins: [dagNachtPlugin, crosshairPlugin],
+      };
+    }
+    function windCfg() {
+      const datasets = STATIONS.map(s => {
+        const wd = data.wind[s.naam] || { bft: [], wdir: [] };
+        return {
+          label: s.naam, station: s.naam,
+          data: wd.bft, wdir: wd.wdir,
+          borderColor: s.kleur, backgroundColor: "transparent",
+          borderWidth: 2.2, pointRadius: 3, pointHoverRadius: 5,
+          pointBackgroundColor: s.kleur, tension: 0.4,
+          hidden: !zichtbaar[s.naam],
+        };
+      });
+      return {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          layout: { padding: { top: 22 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(15,23,42,0.92)", padding: 10,
+              titleFont: { size: 11, weight: "700" },
+              bodyFont: { size: 11, family: "DM Mono, monospace" },
+              callbacks: {
+                label: ctx => {
+                  if (ctx.parsed.y === null) return null;
+                  const dd = ctx.dataset.wdir?.[ctx.dataIndex];
+                  const ric = (dd === null || dd === undefined) ? "" : ` ${gradenNaarKompas(dd)} ${Math.round(dd)}°`;
+                  return `${ctx.dataset.station.padEnd(16)} Bft ${ctx.parsed.y}${ric}`;
+                },
+                labelColor: ctx => ({ borderColor: ctx.dataset.borderColor, backgroundColor: ctx.dataset.borderColor }),
+              },
+            },
+          },
+          scales: {
+            x: { grid: { color: "#eef2f7" }, ticks: { color: "#64748b", font: { size: 10 } } },
+            y: {
+              grid: { color: "#eef2f7" },
+              ticks: { color: "#64748b", font: { size: 10 }, callback: v => "Bft " + v, stepSize: 1 },
+              min: 0, max: 12,
+            },
+          },
+        },
+        plugins: [dagNachtPlugin, crosshairPlugin, windRichtingPlugin],
+      };
+    }
 
-    const windChart = new Chart(windCanvas, maakWindGrafiek(data, zichtbaar));
-    windTitel.appendChild(maakDownloadBtn("wind", () => windChart));
-    windKaart.appendChild(Object.assign(document.createElement("div"), {className:"footer", textContent:`© Ed Aldus | Data: DWD (MOSMIX)`}));
+    function maakKaart(titelHTML, height) {
+      const k = document.createElement("div"); k.className = "grafiek-kaart";
+      const t = document.createElement("div"); t.className = "grafiek-titel"; t.innerHTML = titelHTML;
+      const dl = document.createElement("button"); dl.className = "download-btn"; dl.textContent = "⬇ PNG";
+      t.appendChild(dl);
+      k.appendChild(t);
+      const w = document.createElement("div"); w.className = "canvas-wrapper"; w.style.height = height + "px";
+      const c = document.createElement("canvas");
+      w.appendChild(c); k.appendChild(w);
+      content.appendChild(k);
+      return { kaart: k, canvas: c, dlBtn: dl };
+    }
+
+    // Samenvatting
+    const samenvatting = document.createElement("div");
+    samenvatting.className = "samenvatting";
+    samenvatting.innerHTML = `
+      <div class="sm-kaart warm">
+        <span class="sm-lbl">Warmste piek</span>
+        <span class="sm-waarde" id="sm-warm">—</span>
+        <span class="sm-detail" id="sm-warm-d">—</span>
+      </div>
+      <div class="sm-kaart koud">
+        <span class="sm-lbl">Koudste nacht</span>
+        <span class="sm-waarde" id="sm-koud">—</span>
+        <span class="sm-detail" id="sm-koud-d">—</span>
+      </div>
+      <div class="sm-kaart nat">
+        <span class="sm-lbl">Natste dag</span>
+        <span class="sm-waarde" id="sm-nat">—</span>
+        <span class="sm-detail" id="sm-nat-d">—</span>
+      </div>
+      <div class="sm-kaart wind">
+        <span class="sm-lbl">Hardste wind</span>
+        <span class="sm-waarde" id="sm-wind">—</span>
+        <span class="sm-detail" id="sm-wind-d">—</span>
+      </div>
+    `;
+    content.appendChild(samenvatting);
+
+    function updateSamenvatting() {
+      const aanStations = STATIONS.filter(s => zichtbaar[s.naam]);
+      let warmTX = -Infinity, warmInfo = null;
+      let koudTN = Infinity, koudInfo = null;
+      let natRR = -Infinity, natInfo = null;
+      let windBft = -Infinity, windInfo = null;
+
+      for (const s of aanStations) {
+        const td = data.temp[s.naam] || { tx: [], tn: [] };
+        const rd = (data.rr[s.naam] || { rr: [] }).rr;
+        const wd = data.wind[s.naam] || { bft: [], wdir: [] };
+        for (let i = 0; i < labels.length; i++) {
+          const tx = td.tx?.[i], tn = td.tn?.[i], rr = rd?.[i], bf = wd.bft?.[i];
+          const dlbl = (labels[i] || "").replace("\n", " ");
+          if (tx !== null && tx !== undefined && tx > warmTX) { warmTX = tx; warmInfo = { st: s.naam, dag: dlbl }; }
+          if (tn !== null && tn !== undefined && tn < koudTN) { koudTN = tn; koudInfo = { st: s.naam, dag: dlbl }; }
+          if (rr !== null && rr !== undefined && rr > natRR)  { natRR = rr;  natInfo  = { st: s.naam, dag: dlbl }; }
+          if (bf !== null && bf !== undefined && bf > windBft) {
+            windBft = bf;
+            const dd = wd.wdir?.[i];
+            const ric = (dd === null || dd === undefined) ? "" : ` ${gradenNaarKompas(dd)}`;
+            windInfo = { st: s.naam, dag: dlbl, ric };
+          }
+        }
+      }
+      const txt = (id, v, sub) => {
+        document.getElementById(id).textContent = v;
+        document.getElementById(id + "-d").textContent = sub;
+      };
+      if (warmInfo)  txt("sm-warm",  warmTX.toFixed(1) + "°", `${warmInfo.st} · ${warmInfo.dag}`);
+      else           txt("sm-warm",  "—", "geen stations");
+      if (koudInfo)  txt("sm-koud",  koudTN.toFixed(1) + "°", `${koudInfo.st} · ${koudInfo.dag}`);
+      else           txt("sm-koud",  "—", "geen stations");
+      if (natInfo && natRR > 0)
+                     txt("sm-nat",   natRR.toFixed(1) + " mm", `${natInfo.st} · ${natInfo.dag}`);
+      else           txt("sm-nat",   "0 mm", "droog");
+      if (windInfo)  txt("sm-wind",  "Bft " + windBft, `${windInfo.st} · ${windInfo.dag}${windInfo.ric || ""}`);
+      else           txt("sm-wind",  "—", "geen stations");
+    }
+
+    const tempK = maakKaart(`<span>Temperatuur <span class="grafiek-sub">— TX (max) &nbsp; - - TN (min)</span></span>`, 340);
+    const rrK   = maakKaart(`<span>Neerslag <span class="grafiek-sub">(dagsom mm)</span></span>`, 240);
+    const windK = maakKaart(`<span>Wind <span class="grafiek-sub">(max Bft + richting per dag)</span></span>`, 300);
+
+    const tempChart = new Chart(tempK.canvas, tempCfg());
+    const rrChart   = new Chart(rrK.canvas,   rrCfg());
+    const windChart = new Chart(windK.canvas, windCfg());
+
+    function dlPng(chart, label) {
+      const link = document.createElement("a");
+      link.href = chart.toBase64Image("image/png", 1.0);
+      const stamp = (data.gegenereerd || "").replace(/[: ]/g,"_");
+      link.download = `edaldus_trend_${label}_${stamp}.png`;
+      link.click();
+    }
+    tempK.dlBtn.addEventListener("click", () => dlPng(tempChart, "temperatuur"));
+    rrK.dlBtn.addEventListener("click",   () => dlPng(rrChart,   "neerslag"));
+    windK.dlBtn.addEventListener("click", () => dlPng(windChart, "wind"));
+
+    function updateAlleGrafieken() {
+      for (const ch of [tempChart, rrChart, windChart]) {
+        ch.data.datasets.forEach(ds => { ds.hidden = !zichtbaar[ds.station]; });
+        ch.update("none");
+      }
+    }
+
+    const footer = document.createElement("div");
+    footer.className = "footer";
+    footer.textContent = `© Ed Aldus | Data: DWD (MOSMIX) — ${data.gegenereerd || ""}`;
+    content.appendChild(footer);
+
+    // Tabel modal ──────────────────────────────────────
+    const overlay = document.createElement("div");
+    overlay.className = "tabel-overlay";
+    overlay.innerHTML = `
+      <div class="tabel-box">
+        <div class="tabel-head">
+          <h3><span class="stat-dot" id="tab-dot"></span><span id="tab-titel">Station</span></h3>
+          <button class="sluit" id="tab-sluit" type="button">✕</button>
+        </div>
+        <div class="tabel-body" id="tab-body"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.remove("open"); });
+    document.getElementById("tab-sluit").addEventListener("click", () => overlay.classList.remove("open"));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") overlay.classList.remove("open"); });
+
+    function openTabel(stationNaam) {
+      const s = STATIONS.find(x => x.naam === stationNaam);
+      if (!s) return;
+      document.getElementById("tab-dot").style.background = s.kleur;
+      document.getElementById("tab-titel").textContent = `${s.naam} — 10 dagen`;
+      const td = data.temp[s.naam] || { tx: [], tn: [] };
+      const rd = (data.rr[s.naam] || { rr: [] }).rr;
+      const wd = data.wind[s.naam] || { bft: [], wdir: [] };
+
+      let html = `<table>
+        <thead><tr><th>Dag</th><th>TX</th><th>TN</th><th>Neerslag</th><th>Wind</th><th>Richting</th></tr></thead>
+        <tbody>`;
+      for (let i = 0; i < labels.length; i++) {
+        const dlbl = (labels[i] || "").replace("\n", " ");
+        const tx = td.tx?.[i];
+        const tn = td.tn?.[i];
+        const rr = rd?.[i] ?? 0;
+        const bf = wd.bft?.[i];
+        const dd = wd.wdir?.[i];
+        const rrCls = rr >= 5 ? "rr heel-nat" : rr >= 1 ? "rr nat" : "rr";
+        html += `<tr${i === 0 ? ' class="vandaag"' : ""}>
+          <td>${dlbl}</td>
+          <td class="tx">${tx === null || tx === undefined ? "—" : tx.toFixed(1) + "°"}</td>
+          <td class="tn">${tn === null || tn === undefined ? "—" : tn.toFixed(1) + "°"}</td>
+          <td class="${rrCls}">${rr ? rr.toFixed(1) + " mm" : "—"}</td>
+          <td>${bf === null || bf === undefined ? "—" : "Bft " + bf}</td>
+          <td class="dd">${dd === null || dd === undefined ? "—" : gradenNaarKompas(dd) + " " + Math.round(dd) + "°"}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+      document.getElementById("tab-body").innerHTML = html;
+      overlay.classList.add("open");
+    }
+
+    updateQuickButtons();
+    updateSamenvatting();
   })
   .catch(err => {
     document.getElementById("content").innerHTML =
