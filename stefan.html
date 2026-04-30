@@ -77,17 +77,74 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tex
 const PWD_HASH = '1ae6e6416a7ad654c3bc276ec2ee2a048f7a37b42970f3140d21d0abb625780d';
 const SESSION_KEY = 'stefan_unlocked';
 const PERSIST_KEY = 'stefan_unlocked_until'; // localStorage met expiry (ms-timestamp)
-const PERSIST_DAGEN = 90;
+const COOKIE_KEY = 'stefan_pwd_ok';           // cookie-backup (overleeft soms langer dan localStorage op iOS)
+const PERSIST_DAGEN = 365;
 
-// Eerder ontgrendeld? sessionStorage (huidige sessie) of localStorage (binnen 90 dagen)
+function zetCookie(naam, waarde, dagen){
+  try{
+    const exp = new Date(Date.now() + dagen*24*3600*1000).toUTCString();
+    document.cookie = `${naam}=${waarde}; expires=${exp}; path=/; SameSite=Lax`;
+  }catch(e){}
+}
+function leesCookie(naam){
+  try{
+    const m = document.cookie.match(new RegExp('(?:^|; )'+naam+'=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }catch(e){ return ''; }
+}
+function wisCookie(naam){
+  try{ document.cookie = naam+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax'; }catch(e){}
+}
+
+// Eerder ontgrendeld? sessionStorage / localStorage / cookie
 function eerderOntgrendeld(){
   if (sessionStorage.getItem(SESSION_KEY) === '1') return true;
   const tot = parseInt(localStorage.getItem(PERSIST_KEY)||'0', 10);
   if (tot && Date.now() < tot) return true;
   if (tot && Date.now() >= tot) localStorage.removeItem(PERSIST_KEY); // verlopen
+  if (leesCookie(COOKIE_KEY) === '1') return true;
   return false;
 }
-if (eerderOntgrendeld()) ontgrendel();
+
+// Magic-link: ?k=<wachtwoord> of #k=<wachtwoord> → automatisch unlocken en opslaan voor 1 jaar
+async function probeerMagicLink(){
+  let k = '';
+  try{
+    const u = new URL(window.location.href);
+    k = u.searchParams.get('k') || '';
+    if (!k && u.hash){
+      const h = new URLSearchParams(u.hash.replace(/^#/, ''));
+      k = h.get('k') || '';
+    }
+  }catch(e){}
+  if (!k) return false;
+  const h = await sha256(k);
+  if (h === PWD_HASH){
+    bewaarToegang();
+    // Verwijder ?k=... uit zichtbare URL maar laat #k=... staan zodat bookmark blijft werken
+    try{
+      const u = new URL(window.location.href);
+      if (u.searchParams.has('k')){
+        u.searchParams.delete('k');
+        history.replaceState(null, '', u.pathname + (u.search?u.search:'') + u.hash);
+      }
+    }catch(e){}
+    return true;
+  }
+  return false;
+}
+
+function bewaarToegang(){
+  sessionStorage.setItem(SESSION_KEY, '1');
+  sessionStorage.setItem('wb_unlocked', '1');
+  try{ localStorage.setItem(PERSIST_KEY, String(Date.now() + PERSIST_DAGEN*24*3600*1000)); }catch(e){}
+  zetCookie(COOKIE_KEY, '1', PERSIST_DAGEN);
+}
+
+(async function init(){
+  if (await probeerMagicLink()) { ontgrendel(); return; }
+  if (eerderOntgrendeld()) ontgrendel();
+})();
 
 document.getElementById('pwd').addEventListener('keydown', e=>{
   if (e.key === 'Enter') { e.preventDefault(); check(); }
@@ -98,11 +155,7 @@ async function check(){
   if (!v) return;
   const h = await sha256(v);
   if (h === PWD_HASH){
-    sessionStorage.setItem(SESSION_KEY, '1');
-    // Persistent (90 dagen) zodat na sluiten browser niet opnieuw hoeft
-    try{ localStorage.setItem(PERSIST_KEY, String(Date.now() + PERSIST_DAGEN*24*3600*1000)); }catch(e){}
-    // Markeer ook wb_unlocked zodat de iframe-pagina (rr.html) zonder eigen PIN-redirect opent
-    sessionStorage.setItem('wb_unlocked', '1');
+    bewaarToegang();
     ontgrendel();
   } else {
     document.getElementById('fout').textContent = 'Onjuist wachtwoord';
@@ -124,8 +177,9 @@ function ontgrendel(){
 function vergrendel(){
   sessionStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem('wb_unlocked');
-  // Ook de 90-dagen-token vergeten — gebruiker kiest expliciet om uit te loggen
+  // Ook de jaar-token + cookie vergeten — gebruiker kiest expliciet om uit te loggen
   try{ localStorage.removeItem(PERSIST_KEY); }catch(e){}
+  wisCookie(COOKIE_KEY);
   document.getElementById('login').classList.remove('verborgen');
   document.getElementById('frame').classList.remove('zichtbaar');
   document.getElementById('frame').src = 'about:blank';
