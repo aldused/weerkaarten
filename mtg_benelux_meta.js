@@ -1,2 +1,2 @@
-const MTG_BENELUX_PRODUCT = "mtg_fd:rgb_geocolour";
-const MTG_BENELUX_TIJD = "2026-04-30T04:50:00Z";
+const MTG_BENELUX_PRODUCT = "mtg_fd:rgb_cloudphase";
+const MTG_BENELUX_TIJD = "2026-04-30T05:10:00Z";
