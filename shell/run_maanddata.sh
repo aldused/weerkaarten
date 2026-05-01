@@ -19,4 +19,8 @@ echo ""
 echo "Uploaden naar R2…"
 shell/r2_publish.sh maanddata_*.json
 
+echo ""
+echo "Publiceren naar GitHub Pages (= weerlab.nl/maanddata_*.json bron)…"
+shell/git_publish.sh "maanddata: voorlopige EDR/10-min data t/m gisteren" maanddata_*.json
+
 echo "Klaar — $(date '+%Y-%m-%d %H:%M')"
