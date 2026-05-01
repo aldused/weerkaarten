@@ -21,10 +21,18 @@ echo "=== Ed Aldus WM — upload $(date) ==="
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/maak_index.py"                || { echo "FOUT: maak_index.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/maak_p13_html.py"                     || { echo "FOUT: maak_p13_html.py"; exit 1; }
 
-"$SCRIPT_DIR/shell/r2_publish.sh" \
-    waarschuwingen.json guidance.json dwd_guidance.json luchtvaart_bulletin.json \
-    maanddata_*.json beta_debilt.json beta_verificatie.json grafiek_trend.json grafiek_trend_be.json \
-    toplijst.json index.json \
-    mosmix_nl.json mosmix_be.json mosmix_fr.json mosmix_ibe.json mosmix_de.json mosmix_gb.json \
-    mosmix_uurlijks_nl.json mosmix_uurlijks_be.json mosmix_uurlijks_fr.json \
+PUBLISH_FILES=(
+    waarschuwingen.json guidance.json dwd_guidance.json luchtvaart_bulletin.json
+    maanddata_*.json beta_debilt.json beta_verificatie.json grafiek_trend.json grafiek_trend_be.json
+    toplijst.json index.json
+    mosmix_nl.json mosmix_be.json mosmix_fr.json mosmix_ibe.json mosmix_de.json mosmix_gb.json
+    mosmix_uurlijks_nl.json mosmix_uurlijks_be.json mosmix_uurlijks_fr.json
     mosmix_uurlijks_ibe.json mosmix_uurlijks_de.json mosmix_uurlijks_gb.json
+)
+
+"$SCRIPT_DIR/shell/r2_publish.sh" "${PUBLISH_FILES[@]}"
+
+# Ook naar GitHub Pages — weerlab.nl serveert deze JSON's relatief vanaf Pages,
+# niet vanaf R2. Zonder git_publish lopen beta/toplijst/index/maanddata/etc.
+# achter op de site (maandoverzicht-bug 2026-05-01).
+"$SCRIPT_DIR/shell/git_publish.sh" "data: kaarten-cyclus update" "${PUBLISH_FILES[@]}"

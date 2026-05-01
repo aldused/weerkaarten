@@ -12,3 +12,6 @@ echo "=== Toplijst update $(date) ==="
 # ── Upload naar R2 (data.weerlab.nl) ────────────────────────────────────────
 # Cache 60s bij Cloudflare edge — toplijst ververst elke ~10 min
 "$SCRIPT_DIR/shell/r2_publish.sh" toplijst.json index.json
+
+# ── Ook naar git (= GitHub Pages) — fetch is relatief vanaf weerlab.nl ───────
+"$SCRIPT_DIR/shell/git_publish.sh" "data: toplijst+index update" toplijst.json index.json
