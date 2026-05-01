@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Waarschuwingen Nederland · weerlab.nl</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--wl-color-background);
+  color: var(--wl-color-text);
+  font: var(--wl-text-body-md);
+}
+header {
+  background: var(--wl-color-surface);
+  border-bottom: 1px solid var(--wl-color-border);
+  padding: 14px 22px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+header h1 { margin: 0; font: var(--wl-text-headline-md); }
+header .sub { color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); }
+header .demo-tag {
+  background: var(--wl-color-warning-yellow);
+  color: #5a4500;
+  padding: 2px 8px;
+  border-radius: var(--wl-radius-sm);
+  font: var(--wl-text-label-md);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+header .controls { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+header button {
+  font: var(--wl-text-label-md);
+  padding: 7px 12px;
+  border: 1px solid var(--wl-color-border-strong);
+  border-radius: var(--wl-radius-md);
+  background: var(--wl-color-surface);
+  color: var(--wl-color-text);
+  cursor: pointer;
+}
+header button:hover { background: var(--wl-color-surface-muted); }
+header button.active {
+  background: var(--wl-color-accent);
+  color: #fff;
+  border-color: var(--wl-color-accent-strong);
+}
+
+main {
+  max-width: var(--wl-content-max);
+  margin: 0 auto;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--wl-color-surface);
+  border: 1px solid var(--wl-color-border);
+  border-radius: var(--wl-radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--wl-shadow-1);
+}
+.panel h2 { margin: 0 0 10px 0; font: var(--wl-text-headline-md); }
+
+.map-wrap { position: relative; }
+svg.nl {
+  width: 100%;
+  height: auto;
+  max-height: 720px;
+  display: block;
+}
+svg.nl path.prov {
+  stroke: #4a4a4a;
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: filter .15s, stroke-width .15s;
+}
+svg.nl path.prov:hover { filter: brightness(1.08); stroke-width: 1.2; }
+svg.nl path.prov.zh-highlight {
+  stroke: var(--wl-color-primary);
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 3px rgba(0, 32, 91, 0.55));
+}
+svg.nl text.plabel {
+  font: 600 9px/1 var(--wl-font-sans);
+  fill: #1a1a1a;
+  pointer-events: none;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(255,255,255,0.85);
+  stroke-width: 2.5;
+}
+svg.nl .water-bg { fill: #d8e6f2; }
+
+/* legenda onder de kaart */
+.legend-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wl-color-border);
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 720px) { .legend-block { grid-template-columns: 1fr; } }
+.legend-block h3 {
+  margin: 0 0 8px 0;
+  font: var(--wl-text-label-md);
+  color: var(--wl-color-text);
+}
+.legend-block .scale {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  font: var(--wl-text-body-sm);
+}
+.legend-block .sw {
+  width: 16px; height: 16px;
+  border: 1px solid rgba(0,0,0,0.2);
+  border-radius: 3px;
+}
+.legend-block .reasons {
+  display: grid;
+  gap: 8px;
+}
+.legend-block .reason {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  align-items: start;
+  font: var(--wl-text-body-sm);
+  line-height: 1.4;
+}
+.legend-block .reason .dot {
+  width: 10px; height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+.legend-block .reason b { display: block; font-weight: 600; }
+.legend-block .reason span.area { color: var(--wl-color-text-muted); font-size: 12px; }
+
+/* zijpaneel */
+aside .panel + .panel { margin-top: 14px; }
+.zh-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.zh-toggle .label { font: var(--wl-text-label-md); }
+.zh-toggle .label small { display: block; color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); margin-top: 2px; }
+.switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider {
+  position: absolute; inset: 0;
+  background: var(--wl-color-border-strong);
+  border-radius: 24px;
+  transition: .2s;
+  cursor: pointer;
+}
+.switch .slider::before {
+  content: ""; position: absolute;
+  width: 18px; height: 18px;
+  left: 3px; top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.switch input:checked + .slider { background: var(--wl-color-accent); }
+.switch input:checked + .slider::before { transform: translateX(20px); }
+
+.warning-list { display: grid; gap: 8px; }
+.warning-card {
+  display: grid;
+  grid-template-columns: 6px 1fr;
+  gap: 10px;
+  padding: 8px 10px 8px 8px;
+  background: var(--wl-color-surface-muted);
+  border-radius: var(--wl-radius-md);
+  border: 1px solid var(--wl-color-border);
+}
+.warning-card .bar { border-radius: 3px; }
+.warning-card .body b { display: block; font: var(--wl-text-label-md); }
+.warning-card .body .meta { color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); margin-top: 2px; }
+.warning-card .body .areas { font-size: 11.5px; margin-top: 4px; line-height: 1.4; }
+
+footer.attribution {
+  max-width: var(--wl-content-max);
+  margin: 0 auto;
+  padding: 12px 22px 24px;
+  color: var(--wl-color-text-muted);
+  font: var(--wl-text-body-sm);
+  text-align: center;
+}
+footer.attribution b { color: var(--wl-color-text); }
+
+.last-update { color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Waarschuwingen Nederland</h1>
+  <span class="sub last-update" id="lastUpdate"></span>
+  <div class="controls">
+    <button id="btnDownloadAll" title="Hele kaart downloaden als PNG">⬇ Hele kaart (PNG)</button>
+    <button id="btnDownloadZH" title="Alleen Zuid-Holland downloaden als PNG">⬇ Zuid-Holland (PNG)</button>
+    <button id="btnRefresh" title="Handmatig verversen">↻ Verversen</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="map-wrap">
+      <div id="mapHost"></div>
+    </div>
+    <div class="legend-block">
+      <div>
+        <h3>Waarschuwingsniveau</h3>
+        <div class="scale">
+          <div class="sw" style="background:#7cc47c"></div><div>Geen waarschuwing</div>
+          <div class="sw" style="background:#ffd633"></div><div>Code <b>geel</b> — wees alert</div>
+          <div class="sw" style="background:#ff8c1a"></div><div>Code <b>oranje</b> — wees voorbereid</div>
+          <div class="sw" style="background:#cc0000"></div><div>Code <b>rood</b> — onderneem actie</div>
+        </div>
+      </div>
+      <div>
+        <h3>Reden afgegeven waarschuwingen</h3>
+        <div class="reasons" id="reasonsList"></div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <h2>Zuid-Holland markeren</h2>
+      <div class="zh-toggle">
+        <div class="label">
+          Dikke contour om Zuid-Holland
+          <small>Accentkleur uit design tokens</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="zhToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Actieve waarschuwingen</h2>
+      <div class="warning-list" id="warningList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Bron</h2>
+      <div style="font: var(--wl-text-body-sm); color: var(--wl-color-text-muted); line-height:1.5">
+        Waarschuwingsdata: <b style="color:var(--wl-color-text)">KNMI</b> via knmi.nl/waarschuwingen, elke 15 min ververst.<br>
+        Visualisatie & kaart: <b style="color:var(--wl-color-text)">Ed Aldus</b> · weerlab.nl
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer class="attribution">
+  Data: <b>KNMI</b> · Visualisatie: <b>Ed Aldus / weerlab.nl</b> · Update-interval: 15 min
+</footer>
+
+<script>
+// ---------------- LIVE DATA uit waarschuwingen.json (scraper draait elke 15 min) ----------------
+let PROVINCE_CODES = {};
+let ACTIVE_WARNINGS = [];
+let DATA_GENERATED = null;
+
+async function loadWarnings() {
+  const res = await fetch("waarschuwingen.json?t=" + Date.now());
+  if (!res.ok) throw new Error("waarschuwingen.json: " + res.status);
+  const data = await res.json();
+  PROVINCE_CODES = {};
+  for (const [name, p] of Object.entries(data.provinces || {})) {
+    PROVINCE_CODES[name] = p.code || "groen";
+  }
+  ACTIVE_WARNINGS = (data.warnings || []).map(w => ({
+    code: w.code, fenomeen: w.fenomeen, detail: w.detail,
+    geldigheid: w.geldigheid, gebieden: w.gebieden || []
+  }));
+  DATA_GENERATED = data.generated || null;
+}
+
+// ---------------- KLEUREN ----------------
+const COLOR = {
+  groen:  "#7cc47c",
+  geel:   "#ffd633",
+  oranje: "#ff8c1a",
+  rood:   "#cc0000"
+};
+const DOT_COLOR = COLOR;
+
+// ---------------- KAART ----------------
+let GEO = null;
+let BOUNDS = null;
+
+async function loadGeo() {
+  const res = await fetch("nl_provincies_wadden.geojson");
+  GEO = await res.json();
+  BOUNDS = computeBounds();
+}
+
+function project(lon, lat) {
+  const lat0 = 52.2;
+  const x = (lon - 3.0) * Math.cos(lat0 * Math.PI / 180);
+  const y = -(lat - 50.6);
+  return [x, y];
+}
+function computeBounds() {
+  let xs = [], ys = [];
+  GEO.features.forEach(f => {
+    const walk = c => {
+      if (typeof c[0] === 'number') {
+        const [x, y] = project(c[0], c[1]);
+        xs.push(x); ys.push(y);
+      } else c.forEach(walk);
+    };
+    walk(f.geometry.coordinates);
+  });
+  return {
+    minx: Math.min(...xs), maxx: Math.max(...xs),
+    miny: Math.min(...ys), maxy: Math.max(...ys)
+  };
+}
+function pathFor(feature) {
+  const { minx, miny } = BOUNDS;
+  let d = '';
+  const polys = feature.geometry.type === 'Polygon'
+    ? [feature.geometry.coordinates]
+    : feature.geometry.coordinates;
+  polys.forEach(poly => {
+    poly.forEach(ring => {
+      ring.forEach((pt, i) => {
+        const [x, y] = project(pt[0], pt[1]);
+        d += (i === 0 ? 'M' : 'L') +
+             ((x - minx) * 100).toFixed(2) + ',' +
+             ((y - miny) * 100).toFixed(2) + ' ';
+      });
+      d += 'Z ';
+    });
+  });
+  return d;
+}
+function ringCentroid(ring) {
+  let A = 0, Cx = 0, Cy = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x0, y0] = project(ring[i][0], ring[i][1]);
+    const [x1, y1] = project(ring[i + 1][0], ring[i + 1][1]);
+    const f = x0 * y1 - x1 * y0;
+    A += f; Cx += (x0 + x1) * f; Cy += (y0 + y1) * f;
+  }
+  A *= 0.5;
+  if (A === 0) return { cx: 0, cy: 0, area: 0 };
+  return { cx: Cx / (6 * A), cy: Cy / (6 * A), area: Math.abs(A) };
+}
+function featureCentroid(feature) {
+  const polys = feature.geometry.type === 'Polygon'
+    ? [feature.geometry.coordinates]
+    : feature.geometry.coordinates;
+  let totA = 0, sx = 0, sy = 0;
+  polys.forEach(poly => {
+    const c = ringCentroid(poly[0]);
+    totA += c.area; sx += c.cx * c.area; sy += c.cy * c.area;
+  });
+  if (totA === 0) return [0, 0];
+  const cx = (sx / totA - BOUNDS.minx) * 100;
+  const cy = (sy / totA - BOUNDS.miny) * 100;
+  // Waddeneilanden: label iets omhoog voor leesbaarheid
+  if (feature.properties.statnaam === "Waddeneilanden") return [cx, cy - 1.5];
+  return [cx, cy];
+}
+const ABBR = {
+  "Groningen":"GR","Fryslân":"FR","Drenthe":"DR","Overijssel":"OV","Flevoland":"FL",
+  "Gelderland":"GD","Utrecht":"UT","Noord-Holland":"NH","Zuid-Holland":"ZH",
+  "Zeeland":"ZL","Noord-Brabant":"NB","Limburg":"LB","Waddeneilanden":"WA"
+};
+
+function renderMap(zhHighlight) {
+  const w = (BOUNDS.maxx - BOUNDS.minx) * 100;
+  const h = (BOUNDS.maxy - BOUNDS.miny) * 100;
+  const paths = GEO.features.map(f => {
+    const name = f.properties.statnaam;
+    const code = PROVINCE_CODES[name] || "groen";
+    const fill = COLOR[code];
+    const cls = 'prov' + (zhHighlight && name === "Zuid-Holland" ? ' zh-highlight' : '');
+    return `<path class="${cls}" data-name="${name}" d="${pathFor(f)}" fill="${fill}">
+              <title>${name}: code ${code}</title>
+            </path>`;
+  }).join('');
+  const labels = GEO.features.map(f => {
+    const [cx, cy] = featureCentroid(f);
+    const name = f.properties.statnaam;
+    return `<text class="plabel" x="${cx}" y="${cy}">${ABBR[name] || name}</text>`;
+  }).join('');
+  // Achtergrond water-rect groter dan bounds zodat de provincies "in zee liggen"
+  const pad = 6;
+  const svg = `<svg class="nl" viewBox="${-pad} ${-pad} ${(w + pad*2).toFixed(1)} ${(h + pad*2).toFixed(1)}" preserveAspectRatio="xMidYMid meet">
+    <rect class="water-bg" x="${-pad}" y="${-pad}" width="${w + pad*2}" height="${h + pad*2}"/>
+    ${paths}
+    ${labels}
+  </svg>`;
+  document.getElementById('mapHost').innerHTML = svg;
+}
+
+// ---------------- LEGENDA REASONS ----------------
+function renderReasons() {
+  const host = document.getElementById('reasonsList');
+  if (!ACTIVE_WARNINGS.length) {
+    host.innerHTML = '<div style="color:var(--wl-color-text-muted)">Geen actieve waarschuwingen.</div>';
+    return;
+  }
+  // Sorteer rood → oranje → geel
+  const order = { rood: 0, oranje: 1, geel: 2, groen: 3 };
+  const sorted = [...ACTIVE_WARNINGS].sort((a, b) => order[a.code] - order[b.code]);
+  host.innerHTML = sorted.map(w => `
+    <div class="reason">
+      <div class="dot" style="background:${DOT_COLOR[w.code]}"></div>
+      <div>
+        <b>${w.fenomeen}</b>
+        ${w.detail}
+        <span class="area">${w.gebieden.join(', ')} · ${w.geldigheid}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ---------------- ZIJPANEEL WAARSCHUWINGEN ----------------
+function renderWarningList() {
+  const host = document.getElementById('warningList');
+  const order = { rood: 0, oranje: 1, geel: 2, groen: 3 };
+  const sorted = [...ACTIVE_WARNINGS].sort((a, b) => order[a.code] - order[b.code]);
+  host.innerHTML = sorted.map(w => `
+    <div class="warning-card">
+      <div class="bar" style="background:${COLOR[w.code]}"></div>
+      <div class="body">
+        <b>Code ${w.code} — ${w.fenomeen}</b>
+        <div class="meta">${w.detail}</div>
+        <div class="areas">${w.gebieden.join(' · ')}</div>
+        <div class="meta" style="margin-top:4px">⏱ ${w.geldigheid}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ---------------- LAATST BIJGEWERKT ----------------
+function renderLastUpdate() {
+  const el = document.getElementById('lastUpdate');
+  if (!DATA_GENERATED) { el.textContent = "Laden…"; return; }
+  const d = new Date(DATA_GENERATED);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const dd = d.toLocaleDateString('nl-NL', { day:'numeric', month:'short' });
+  el.textContent = `KNMI · laatst opgehaald ${dd} ${hh}:${mm} · ververst elke 15 min`;
+}
+
+// ---------------- INIT ----------------
+async function refreshAll(zhHighlight){
+  await loadWarnings();
+  renderMap(zhHighlight);
+  renderReasons();
+  renderWarningList();
+  renderLastUpdate();
+}
+
+async function init() {
+  await loadGeo();
+  let zhHighlight = false;
+
+  try {
+    await refreshAll(zhHighlight);
+  } catch(e) {
+    document.getElementById('lastUpdate').textContent = "Fout bij laden: " + e.message;
+    console.error(e);
+  }
+
+  // Auto-refresh elke 15 min (matcht launchd-interval)
+  setInterval(() => {
+    refreshAll(document.getElementById('zhToggle').checked).catch(console.error);
+  }, 15 * 60 * 1000);
+
+  document.getElementById('zhToggle').addEventListener('change', e => {
+    zhHighlight = e.target.checked;
+    renderMap(zhHighlight);
+  });
+  document.getElementById('btnRefresh').addEventListener('click', () => {
+    refreshAll(document.getElementById('zhToggle').checked).catch(console.error);
+  });
+  document.getElementById('btnDownloadAll').addEventListener('click', () => {
+    downloadFullMapPNG(document.getElementById('zhToggle').checked);
+  });
+  document.getElementById('btnDownloadZH').addEventListener('click', () => {
+    downloadProvincePNG("Zuid-Holland");
+  });
+}
+init();
+
+// ---------------- DOWNLOAD AS PNG ----------------
+function svgToPNG(svgEl, scale, filename) {
+  const xml = new XMLSerializer().serializeToString(svgEl);
+  const svg64 = 'data:image/svg+xml;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(xml)));
+  const vb = svgEl.viewBox.baseVal;
+  const w = Math.max(1, vb.width || svgEl.clientWidth || 800);
+  const h = Math.max(1, vb.height || svgEl.clientHeight || 800);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  };
+  img.onerror = e => console.error('SVG→PNG fout', e);
+  img.src = svg64;
+}
+
+function escapeXML(s){
+  return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
+}
+function wrapLines(text, maxChars){
+  const words = String(text).split(/\s+/);
+  const lines = []; let cur = '';
+  for (const w of words){
+    if ((cur + ' ' + w).trim().length > maxChars && cur){ lines.push(cur); cur = w; }
+    else cur = (cur ? cur + ' ' : '') + w;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHighlight=false, warnings=[], badgeCodes=[], dateStr=""}){
+  let xs=[], ys=[];
+  features.forEach(f => {
+    const walk = c => {
+      if (typeof c[0] === 'number') {
+        const [x,y] = project(c[0],c[1]); xs.push(x); ys.push(y);
+      } else c.forEach(walk);
+    };
+    walk(f.geometry.coordinates);
+  });
+  const minx=Math.min(...xs), maxx=Math.max(...xs);
+  const miny=Math.min(...ys), maxy=Math.max(...ys);
+  const SCALE = 100;
+  const w = (maxx-minx)*SCALE;
+  const h = (maxy-miny)*SCALE;
+
+  const pathFor = (feat) => {
+    let d = '';
+    const polys = feat.geometry.type === 'Polygon' ? [feat.geometry.coordinates] : feat.geometry.coordinates;
+    polys.forEach(poly => poly.forEach(ring => {
+      ring.forEach((pt, i) => {
+        const [x,y] = project(pt[0], pt[1]);
+        d += (i===0 ? 'M' : 'L') + ((x-minx)*SCALE).toFixed(2) + ',' + ((y-miny)*SCALE).toFixed(2) + ' ';
+      });
+      d += 'Z ';
+    }));
+    return d;
+  };
+  const centroidFor = (feat) => {
+    const polys = feat.geometry.type==='Polygon' ? [feat.geometry.coordinates] : feat.geometry.coordinates;
+    let totA=0, sx=0, sy=0;
+    polys.forEach(poly => {
+      const c = ringCentroid(poly[0]);
+      totA += c.area; sx += c.cx*c.area; sy += c.cy*c.area;
+    });
+    if (totA === 0) return [0,0];
+    return [(sx/totA - minx)*SCALE, (sy/totA - miny)*SCALE];
+  };
+
+  // ---- Layout dimensies ----
+  const titleH = 24;
+  const subH = badgeCodes.length ? 18 : 0;        // code-badge regel boven kaart
+  const headerBlockH = titleH + subH + 8;
+  const mapAreaW = w + padding*2;
+  const mapAreaH = h + padding*2;
+
+  // Waarschuwingenlijst onder de kaart
+  const warnLineHeight = 5.5;
+  const warnRowGap = 4;
+  // bereken hoogte: per warning 1 titelregel + N detailregels (afgekapt op ~64 chars)
+  const wrappedWarns = warnings.map(w => {
+    const titel = `Code ${w.code} · ${w.fenomeen}`;
+    const detail = `${w.detail}`;
+    const meta = `${w.gebieden.join(', ')} · ${w.geldigheid}`;
+    return {
+      code: w.code,
+      titelLines: wrapLines(titel, 70),
+      detailLines: wrapLines(detail, 70),
+      metaLines: wrapLines(meta, 70)
+    };
+  });
+  const warnBlockH = warnings.length === 0
+    ? 0
+    : 14 + wrappedWarns.reduce((acc, w) => acc + (w.titelLines.length + w.detailLines.length + w.metaLines.length) * warnLineHeight + warnRowGap*2 + 4, 0) + 6;
+
+  const footerH = 14;
+  const totalW = Math.max(mapAreaW, 240);
+  const totalH = headerBlockH + mapAreaH + warnBlockH + footerH + padding;
+
+  // ---- Map paths ----
+  const paths = features.map(f => {
+    const name = f.properties.statnaam;
+    const code = PROVINCE_CODES[name] || "groen";
+    const fill = COLOR[code];
+    const isZH = name === "Zuid-Holland";
+    const stroke = (zhHighlight && isZH) ? "#00205b" : "#4a4a4a";
+    const sw = (zhHighlight && isZH) ? 2.4 : 0.5;
+    return `<path d="${pathFor(f)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  }).join('');
+  const labels = withLabels ? features.map(f => {
+    const [cx,cy] = centroidFor(f);
+    const ab = ABBR[f.properties.statnaam] || f.properties.statnaam;
+    return `<text x="${cx}" y="${cy}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" font-weight="600" fill="#1a1a1a" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" paint-order="stroke">${ab}</text>`;
+  }).join('') : '';
+
+  const mapOffsetX = padding;
+  const mapOffsetY = headerBlockH;
+
+  // ---- Top-left code badges (op de kaart-water-rand) ----
+  let badgesSVG = '';
+  if (badgeCodes.length){
+    let bx = padding + 2;
+    const by = headerBlockH + 4;
+    badgesSVG = badgeCodes.map(c => {
+      const txt = `Code ${c}`;
+      const tw = txt.length * 3.6 + 12;
+      const r = `<g><rect x="${bx}" y="${by}" width="${tw.toFixed(1)}" height="9" rx="2" ry="2" fill="${COLOR[c]}" stroke="rgba(0,0,0,0.35)" stroke-width="0.3"/>
+        <text x="${(bx+tw/2).toFixed(1)}" y="${(by+6.5).toFixed(1)}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="6" font-weight="700" fill="${c==='geel'?'#5a4500':'#fff'}">${escapeXML(txt)}</text></g>`;
+      bx += tw + 3;
+      return r;
+    }).join('');
+  }
+
+  // ---- Warnings list ----
+  let warnSVG = '';
+  if (warnings.length){
+    let cy = headerBlockH + mapAreaH + 4;
+    warnSVG += `<text x="${padding}" y="${(cy+6).toFixed(1)}" font-family="DM Sans, sans-serif" font-size="7" font-weight="700" fill="#0f172a">ACTIEVE WAARSCHUWINGEN</text>`;
+    cy += 10;
+    wrappedWarns.forEach(w => {
+      // gekleurde balk links
+      const blockHeight = (w.titelLines.length + w.detailLines.length + w.metaLines.length) * warnLineHeight + 4;
+      warnSVG += `<rect x="${padding}" y="${cy.toFixed(1)}" width="2" height="${blockHeight.toFixed(1)}" fill="${COLOR[w.code]}"/>`;
+      let ty = cy + 4.5;
+      w.titelLines.forEach(line => {
+        warnSVG += `<text x="${padding+5}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5.5" font-weight="700" fill="#0f172a">${escapeXML(line)}</text>`;
+        ty += warnLineHeight;
+      });
+      w.detailLines.forEach(line => {
+        warnSVG += `<text x="${padding+5}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5" fill="#334155">${escapeXML(line)}</text>`;
+        ty += warnLineHeight;
+      });
+      w.metaLines.forEach(line => {
+        warnSVG += `<text x="${padding+5}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="4.5" fill="#64748b">${escapeXML(line)}</text>`;
+        ty += warnLineHeight;
+      });
+      cy += blockHeight + warnRowGap;
+    });
+  }
+
+  const footerY = totalH - 4;
+  const titleSubY = titleH - 4;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW.toFixed(1)} ${totalH.toFixed(1)}" width="${(totalW*4).toFixed(0)}" height="${(totalH*4).toFixed(0)}">
+    <rect width="100%" height="100%" fill="#ffffff"/>
+    <text x="${padding}" y="${titleSubY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="11" font-weight="700" fill="#0f172a">${escapeXML(attribution)}</text>
+    <text x="${padding}" y="${(titleSubY+6).toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5" fill="#64748b">${escapeXML(dateStr)}</text>
+    <g transform="translate(${mapOffsetX},${mapOffsetY})">
+      <rect x="-${padding}" y="-${padding}" width="${(w+padding*2).toFixed(1)}" height="${(h+padding*2).toFixed(1)}" fill="#d8e6f2"/>
+      ${paths}
+      ${labels}
+    </g>
+    ${badgesSVG}
+    ${warnSVG}
+    <text x="${padding}" y="${footerY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5" fill="#64748b">Data: KNMI · Visualisatie: Ed Aldus / weerlab.nl</text>
+  </svg>`;
+}
+
+function activeCodesInOrder(warnings){
+  const order = ["rood","oranje","geel"];
+  const present = new Set(warnings.map(w => w.code));
+  return order.filter(c => present.has(c));
+}
+
+function downloadFullMapPNG(zhHighlight){
+  const date = new Date().toLocaleString('nl-NL', { dateStyle:'short', timeStyle:'short' });
+  const codes = activeCodesInOrder(ACTIVE_WARNINGS);
+  const svgStr = buildExportSVG({
+    features: GEO.features,
+    attribution: "Waarschuwingen Nederland — KNMI",
+    dateStr: date,
+    zhHighlight,
+    warnings: ACTIVE_WARNINGS,
+    badgeCodes: codes
+  });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = svgStr;
+  svgToPNG(wrap.firstElementChild, 1, `waarschuwingen_NL_${stamp()}.png`);
+}
+
+function downloadProvincePNG(provName){
+  const feat = GEO.features.find(f => f.properties.statnaam === provName);
+  if (!feat) { console.error('Provincie niet gevonden:', provName); return; }
+  const code = PROVINCE_CODES[provName] || "groen";
+  const date = new Date().toLocaleString('nl-NL', { dateStyle:'short', timeStyle:'short' });
+  const provWarns = ACTIVE_WARNINGS.filter(w => w.gebieden.includes(provName));
+  const codes = activeCodesInOrder(provWarns);
+  const svgStr = buildExportSVG({
+    features: [feat],
+    attribution: `Waarschuwing ${provName}${code !== "groen" ? " — Code "+code : ""}`,
+    dateStr: date,
+    padding: 12,
+    withLabels: false,
+    zhHighlight: provName === "Zuid-Holland",
+    warnings: provWarns,
+    badgeCodes: codes
+  });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = svgStr;
+  svgToPNG(wrap.firstElementChild, 1, `waarschuwing_${provName.replace(/\s+/g,'_')}_${stamp()}.png`);
+}
+
+function stamp(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+</script>
+</body>
+</html>
