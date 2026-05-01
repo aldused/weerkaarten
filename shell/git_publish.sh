@@ -31,6 +31,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Vorige run kan een autostash hebben achtergelaten (mislukte retry van
+# `git pull --rebase --autostash`). Eerst opruimen voor we wijzigingen maken,
+# anders gaan archiverende files (verificatie_archief.json e.d.) verloren.
+recover_stale_autostash() {
+  while git stash list | head -1 | grep -q "autostash"; do
+    if git stash pop --quiet 2>/dev/null; then
+      echo "Oude autostash hersteld in werkboom."
+    else
+      echo "FOUT: oude autostash kon niet worden gepopt (conflict). Handmatig oplossen met 'git stash list/pop'."
+      exit 1
+    fi
+  done
+}
+recover_stale_autostash
+
 git checkout main 2>/dev/null || true
 git add -- "$@" 2>/dev/null || true
 
@@ -49,6 +64,11 @@ for attempt in 1 2 3; do
     echo "Git publicatie klaar."
     exit 0
   fi
+
+  # Pull/rebase kan halverwege falen en de autostash niet poppen — als we dan
+  # gewoon retryen maakt git een NIEUWE autostash bovenop de oude en raakt de
+  # eerste voor altijd kwijt. Dus eerst herstellen voor we het opnieuw doen.
+  recover_stale_autostash
 
   if [ "$attempt" -lt 3 ]; then
     echo "Push/rebase poging $attempt mislukt; probeer opnieuw over 10s..."
