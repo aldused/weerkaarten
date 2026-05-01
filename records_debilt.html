@@ -1737,6 +1737,33 @@ function wisselHoofdtab(tab) {
   window.scrollTo({top:0, behavior:"smooth"});
 }
 
+function isPeriodeRanking(p, param) {
+  // Voor decade/maand/seizoen/jaar tonen we periode-aggregaten (sommen/gemiddelden per jaar)
+  // i.p.v. dag-extremen, voor de basis-parameters.
+  return ["decade","maand","seizoen","jaar"].includes(p) && ["tx","tn","tg","rh","sq"].includes(param);
+}
+
+function haalPeriodeRanking(sleutel) {
+  const p = huidigePeriode;
+  if (p === "maand") {
+    const m = document.getElementById("sel-maand").value;
+    return data.maandranking?.[m]?.[sleutel] || [];
+  }
+  if (p === "seizoen") {
+    const s = document.getElementById("sel-seizoen").value;
+    return data.seizoenranking?.[s]?.[sleutel] || [];
+  }
+  if (p === "decade") {
+    const m = document.getElementById("sel-dec-maand").value;
+    const d = document.getElementById("sel-dec-dec").value;
+    return data.decaderanking?.[m]?.[d]?.[sleutel] || [];
+  }
+  if (p === "jaar") {
+    return data.jaarranking?.[sleutel] || [];
+  }
+  return [];
+}
+
 function haalRecords() {
   // Bepaal de juiste sleutel voor dit param+richting
   function paramSleutel(param, richting) {
@@ -1751,6 +1778,11 @@ function haalRecords() {
   if (multiData) return samenvoegPeriodeRecords(multiData, sleutel);
 
   const p = huidigePeriode;
+
+  // Periode-aggregaat: tx/tn/tg-gemiddelde of rh/sq-som per jaar,
+  // gerangschikt voor de gekozen periode-categorie.
+  if (isPeriodeRanking(p, huidigeParam)) return haalPeriodeRanking(sleutel);
+
   if (p === "alltime") return data.alltime[sleutel];
   if (p === "jaar")    return data.jaar[document.getElementById("sel-jaar").value]?.[sleutel];
   if (p === "seizoen") return data.seizoen[document.getElementById("sel-seizoen").value]?.[sleutel];
@@ -2474,12 +2506,18 @@ function toon() {
   const periode  = periodeLabel();
 
   const isMulti = !!multiData;
+  const isRankingTitel = !isMulti && isPeriodeRanking(huidigePeriode, param);
+  const RANK_AGG = { tx:"gemiddelde", tn:"gemiddelde", tg:"gemiddelde", rh:"som", sq:"som" };
+  const titelParam = isRankingTitel ? `${RANK_AGG[param]} ${PARAM_LABELS[param]}` : PARAM_LABELS[param];
   document.getElementById("records-titel").textContent =
     isMulti
       ? `${huidigeRichting === "hoog" ? "Hoogste" : "Laagste"} ${PARAM_LABELS[param]} – ${document.querySelector("#sel-station option:checked").text}`
-      : `${huidigeRichting === "hoog" ? "Hoogste" : "Laagste"} ${PARAM_LABELS[param]} – ${data?.station}`;
+      : `${huidigeRichting === "hoog" ? "Hoogste" : "Laagste"} ${titelParam} – ${data?.station}`;
   document.getElementById("records-sub").textContent =
-    isMulti ? `Gecombineerde records` : `${data?.station_nr} · ${fmtDatum(data?.van)} t/m ${fmtDatum(data?.tm)}`;
+    isMulti ? `Gecombineerde records`
+            : (isRankingTitel
+                ? `Per ${huidigePeriode === "jaar" ? "kalenderjaar" : huidigePeriode} · ${data?.van.slice(0,4)}–${data?.tm.slice(0,4)}`
+                : `${data?.station_nr} · ${fmtDatum(data?.van)} t/m ${fmtDatum(data?.tm)}`);
   document.getElementById("records-periode").textContent = periode;
   document.getElementById("th-waarde").textContent = `${PARAM_LABELS[param]} (${eenheid})`;
 
@@ -2501,19 +2539,27 @@ function toon() {
     laden.style.display = "block"; tabel.style.display = "none"; return;
   }
 
+  // Periode-ranking → tweede element is jaartal i.p.v. datum
+  const isRanking = !isMulti && isPeriodeRanking(huidigePeriode, param);
+
   tbody.innerHTML = "";
   recs.forEach((rec, i) => {
     const rank = i + 1;
-    const [waardeRaw, datum] = rec;
+    const [waardeRaw, label] = rec;
 
     // FX: m/s → km/u; luchtdruk: al in hPa; FHX: m/s blijft m/s
     const waarde = param === "fx" ? Math.round(waardeRaw * 3.6 * 10) / 10 : waardeRaw;
 
-    const d = new Date(datum + "T12:00:00");
-    const dag  = String(d.getDate()).padStart(2,"0");
-    const mnd  = String(d.getMonth()+1).padStart(2,"0");
-    const jaar = d.getFullYear();
-    const datumStr = `${dag}-${mnd}-${jaar}`;
+    let datumStr;
+    if (isRanking) {
+      datumStr = label;  // bijv. "2024"
+    } else {
+      const dt = new Date(label + "T12:00:00");
+      const dag  = String(dt.getDate()).padStart(2,"0");
+      const mnd  = String(dt.getMonth()+1).padStart(2,"0");
+      const jaar = dt.getFullYear();
+      datumStr = `${dag}-${mnd}-${jaar}`;
+    }
 
     const waardeStr = ["tx","tn","tg"].includes(param)
       ? `${waarde.toFixed(1)}°`
