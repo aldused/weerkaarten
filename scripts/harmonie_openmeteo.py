@@ -43,7 +43,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 from open_meteo import _load_key, has_key  # noqa: E402
 
 
-def _post_bulk(latitudes, longitudes, hourly: list[str]) -> list:
+def _post_bulk(latitudes, longitudes, hourly: list[str], model: str = None) -> list:
     """Bulk-call via POST (GET URL wordt te lang bij honderden coördinaten).
 
     Let op: Open-Meteo verwacht alle niet-numerieke/niet-boolean velden als
@@ -56,7 +56,7 @@ def _post_bulk(latitudes, longitudes, hourly: list[str]) -> list:
     payload = {
         "latitude": [float(x) for x in latitudes],
         "longitude": [float(x) for x in longitudes],
-        "models": [MODEL],
+        "models": [model or MODEL],
         "hourly": list(hourly),
         "timezone": ["Europe/Amsterdam"],
         "forecast_days": 3,
@@ -82,6 +82,9 @@ def _post_bulk(latitudes, longitudes, hourly: list[str]) -> list:
     raise RuntimeError(f"Open-Meteo POST mislukt: {last_err}")
 
 MODEL = "knmi_harmonie_arome_europe"
+# CAPE zit niet in de KNMI Harmonie p1-output; DMI levert hetzelfde
+# Harmonie-AROME 43h model wél met CAPE in J/kg.
+CAPE_MODEL = "dmi_harmonie_arome_europe"
 META_FILE = "harmonie_canvas_meta.json"
 
 # Grid-resolutie voor de hoogtekaarten (graden)
@@ -201,6 +204,50 @@ def fetch_level(
     return gp, tt, uu, vv
 
 
+def fetch_cape(
+    batches: list[list[tuple[int, int, float, float]]],
+    times: list[str],
+) -> np.ndarray:
+    """Haal CAPE op via dmi_harmonie_arome_europe (KNMI Harmonie levert geen CAPE).
+
+    Retourneert een (n_steps, n_lat, n_lon) array in J/kg.
+    """
+    n_lat = max(lat_i for b in batches for (lat_i, _, _, _) in b) + 1
+    n_lon = max(lon_i for b in batches for (_, lon_i, _, _) in b) + 1
+    n_steps = len(times)
+
+    cape = np.full((n_steps, n_lat, n_lon), np.nan, dtype=np.float32)
+    time_set = set(times)
+
+    for bi, batch in enumerate(batches):
+        lats = [lat for (_, _, lat, _) in batch]
+        lons = [lon for (_, _, _, lon) in batch]
+        locs = _post_bulk(lats, lons, ["cape"], model=CAPE_MODEL)
+        if len(locs) != len(batch):
+            print(
+                f"  [waarschuwing] cape batch {bi}: {len(locs)} locaties terug "
+                f"voor {len(batch)} gevraagd"
+            )
+        for li, loc in enumerate(locs):
+            if li >= len(batch):
+                break
+            lat_i, lon_i, _, _ = batch[li]
+            h = loc.get("hourly") or {}
+            tlist = h.get("time") or []
+            c_list = h.get("cape") or []
+            idx_map = {t: k for k, t in enumerate(tlist) if t in time_set}
+            for step_i, tstr in enumerate(times):
+                k = idx_map.get(tstr)
+                if k is None:
+                    continue
+                v = c_list[k] if k < len(c_list) else None
+                if v is not None:
+                    cape[step_i, lat_i, lon_i] = float(v)
+        print(f"  cape batch {bi + 1}/{len(batches)}: {len(batch)} punten klaar")
+
+    return cape
+
+
 def write_bin(path: str, arrs: tuple[np.ndarray, ...]) -> None:
     """Schrijf 4-component binair bestand in het canvas-formaat.
 
@@ -266,6 +313,8 @@ def main() -> int:
     gp500, t500, u500, v500 = fetch_level(500, batches, tijden)
     print("850 hPa ophalen...")
     gp850, t850, u850, v850 = fetch_level(850, batches, tijden)
+    print("CAPE ophalen (DMI Harmonie)...")
+    cape = fetch_cape(batches, tijden)
     print(f"Ophalen klaar in {time.time() - t0:.1f}s")
 
     # Vul ontbrekende punten bij door nearest-neighbor
@@ -301,13 +350,16 @@ def main() -> int:
         t850 = fill_nan(t850)
         u850 = fill_nan(u850)
         v850 = fill_nan(v850)
+        cape = fill_nan(cape)
     except ImportError:
         print("[harmonie_openmeteo] scipy ontbreekt — NaN niet ingevuld")
+    cape = np.nan_to_num(cape, nan=0.0)
 
     print("Exporteren...")
     write_bin("harmonie_data_hoogte300.bin", (gp300, t300, u300, v300))
     write_bin("harmonie_data_hoogte500.bin", (gp500, t500, u500, v500))
     write_bin("harmonie_data_hoogte850.bin", (gp850, t850, u850, v850))
+    write_bin("harmonie_data_cape.bin", (cape,))
 
     # Meta bijwerken
     meta_grid_300 = {
@@ -342,19 +394,36 @@ def main() -> int:
     meta_grid_850["file"] = "harmonie_data_hoogte850.bin"
     meta_grid_850["label"] = "850 hPa — hoogte/temp/wind"
 
+    meta_grid_cape = {
+        "file": "harmonie_data_cape.bin",
+        "components": 1,
+        "label": "CAPE (J/kg)",
+        "source": "open-meteo dmi_harmonie_arome_europe",
+        "grid": {
+            "n_lat": n_lat,
+            "n_lon": n_lon,
+            "lat_min": lat_min,
+            "lat_max": lat_max,
+            "lon_min": lon_min,
+            "lon_max": lon_max,
+        },
+    }
+
     meta.setdefault("parameters", {})
     meta["parameters"]["hoogte_300"] = meta_grid_300
     meta["parameters"]["hoogte_500"] = meta_grid_500
     meta["parameters"]["hoogte_850"] = meta_grid_850
+    meta["parameters"]["cape"] = meta_grid_cape
 
     with meta_path.open("w") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
     print(
         f"[harmonie_openmeteo] klaar: "
-        f"{os.path.getsize('harmonie_data_hoogte300.bin') / 1024 / 1024:.1f} MB + "
-        f"{os.path.getsize('harmonie_data_hoogte500.bin') / 1024 / 1024:.1f} MB + "
-        f"{os.path.getsize('harmonie_data_hoogte850.bin') / 1024 / 1024:.1f} MB"
+        f"hoogte300 {os.path.getsize('harmonie_data_hoogte300.bin') / 1024 / 1024:.1f} MB + "
+        f"hoogte500 {os.path.getsize('harmonie_data_hoogte500.bin') / 1024 / 1024:.1f} MB + "
+        f"hoogte850 {os.path.getsize('harmonie_data_hoogte850.bin') / 1024 / 1024:.1f} MB + "
+        f"cape {os.path.getsize('harmonie_data_cape.bin') / 1024:.0f} kB"
     )
     return 0
 

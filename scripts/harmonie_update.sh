@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     TEMP_LEVELS = [2, 50, 100, 200, 300]
     WIND_LEVELS = [10, 50, 100, 200, 300]
 
-    all_data = {k: [] for k in ['temp','cum','hoog','mid','laag','uw','vw','ug','vg','zicht','rv','cape','onweer','druk','dauwpunt']}
+    all_data = {k: [] for k in ['temp','cum','hoog','mid','laag','uw','vw','ug','vg','zicht','rv','druk','dauwpunt']}
     all_stral_cum = []
     all_temp_prof = {l: [] for l in TEMP_LEVELS}
     all_wspd_prof = {l: [] for l in WIND_LEVELS}
@@ -89,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
 
     for gf in grib_files:
         temp=cum=hoog=mid=laag=uw=vw=ug=vg=zicht=druk=rv=dp=stral=None
-        cape_list=[]; onweer=None; druk_n=0
+        druk_n=0
         temps_p={}; u_w_p={}; v_w_p={}
         with open(gf,'rb') as fh:
             while True:
@@ -115,8 +115,6 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
                 elif ind==163 and lvl==10: vg=vals
                 elif ind==20 and zicht is None: zicht=vals
                 elif ind==117 and stral is None: stral=vals
-                elif ind==201: cape_list.append(vals)
-                elif ind==184 and onweer is None: onweer=vals
                 elif ind==1 and lvl==0:
                     druk_n+=1
                     if druk_n==1: druk=vals
@@ -134,8 +132,6 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         all_data['uw'].append(uw); all_data['vw'].append(vw)
         all_data['ug'].append(ug); all_data['vg'].append(vg)
         all_data['zicht'].append(zicht); all_data['rv'].append(rv); all_data['dauwpunt'].append(dp)
-        all_data['cape'].append(cape_list[-1] if cape_list else z)
-        all_data['onweer'].append(onweer if onweer is not None else z)
         all_data['druk'].append(druk)
         all_stral_cum.append(stral if stral is not None else z)
         for l in TEMP_LEVELS: all_temp_prof[l].append(temps_p.get(l,z))
@@ -178,11 +174,9 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     write_bin('harmonie_data_windstoten.bin', list(zip(all_data['ug'][1:],all_data['vg'][1:])), 2)
     write_bin('harmonie_data_zicht.bin', all_data['zicht'][1:])
     write_bin('harmonie_data_rv.bin', all_data['rv'][1:])
-    write_bin('harmonie_data_cape.bin', all_data['cape'][1:])
     write_bin('harmonie_data_druk.bin', all_data['druk'][1:])
     write_bin('harmonie_data_dauwpunt.bin', all_data['dauwpunt'][1:])
-    write_bin('harmonie_data_onweer.bin', all_data['onweer'][1:])
-    # straling verwijderd
+    # straling verwijderd; cape via DMI Harmonie / Open-Meteo (zie harmonie_openmeteo.py)
 
     # Profiel
     with open('harmonie_data_profiel.bin','wb') as f:
@@ -216,8 +210,6 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         'windstoten':{'file':'harmonie_data_windstoten.bin','components':2,'label':'Windstoten 10m (km/u)'},
         'zicht':{'file':'harmonie_data_zicht.bin','components':1,'label':'Zicht'},
         'rv':{'file':'harmonie_data_rv.bin','components':1,'label':'Relatieve vochtigheid (%)'},
-        'cape':{'file':'harmonie_data_cape.bin','components':1,'label':'CAPE (J/kg)'},
-        'onweer':{'file':'harmonie_data_onweer.bin','components':1,'label':'Onweerskans (%)'},
         'druk':{'file':'harmonie_data_druk.bin','components':1,'label':'Luchtdruk (hPa)'},
         'dauwpunt':{'file':'harmonie_data_dauwpunt.bin','components':1,'label':'Dauwpuntstemperatuur 2m (°C)'},
       },
