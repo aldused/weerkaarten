@@ -448,6 +448,53 @@ function renderMap(zhHighlight) {
   document.getElementById('mapHost').innerHTML = svg;
 }
 
+// ---------------- DATUM-HELPERS (Zaterdag → Zaterdag 2 mei) ----------------
+const _NL_DAYS_FULL = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+const _NL_MONTHS = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+function _refDate() {
+  return DATA_GENERATED ? new Date(DATA_GENERATED) : new Date();
+}
+function _nextDateForDay(dayName, ref) {
+  const target = _NL_DAYS_FULL.indexOf(dayName);
+  if (target < 0) return null;
+  const d = new Date(ref);
+  d.setHours(0,0,0,0);
+  const diff = (target - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+function _fmtDayDate(d) {
+  return _NL_DAYS_FULL[d.getDay()] + " " + d.getDate() + " " + _NL_MONTHS[d.getMonth()];
+}
+function expandGeldigheid(g) {
+  // "Zaterdag 17:00 - Zaterdag 22:00"  →  "Zaterdag 2 mei · 17:00 - 22:00"
+  // "Vrijdag 22:00 - Zaterdag 03:00"   →  "Vrijdag 1 mei 22:00 - Zaterdag 2 mei 03:00"
+  if (!g) return "";
+  const ref = _refDate();
+  const m = g.match(/^(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag)\s+(\d{1,2}:\d{2})\s*-\s*(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag)\s+(\d{1,2}:\d{2})$/);
+  if (!m) return g;
+  const [, d1, t1, d2, t2] = m;
+  const date1 = _nextDateForDay(d1, ref);
+  const date2 = _nextDateForDay(d2, ref);
+  if (!date1 || !date2) return g;
+  // Als d2 vóór d1 in de week valt, voeg 7 dagen toe (loopt over weekend)
+  if (date2 < date1) date2.setDate(date2.getDate() + 7);
+  if (d1 === d2) {
+    return `${_fmtDayDate(date1)} · ${t1} - ${t2}`;
+  }
+  return `${_fmtDayDate(date1)} ${t1} - ${_fmtDayDate(date2)} ${t2}`;
+}
+
+function startDayDateOf(geldigheid) {
+  if (!geldigheid) return null;
+  const ref = _refDate();
+  const m = geldigheid.match(/^(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag)\b/);
+  if (!m) return null;
+  const d = _nextDateForDay(m[1], ref);
+  return d ? _fmtDayDate(d) : null;
+}
+
 // ---------------- ZH KLEURPALET ----------------
 const ZH_COLOR = {
   navy:    { hex:"#00205b", stroke:"#00205b", shadow:"rgba(0,32,91,0.55)",   label:"Navy (KNMI)" },
@@ -499,7 +546,7 @@ function renderReasons() {
       <div>
         <b>${w.fenomeen}</b>
         ${w.detail}
-        <span class="area">${w.gebieden.join(', ')} · ${w.geldigheid}</span>
+        <span class="area">${w.gebieden.join(', ')} · ${expandGeldigheid(w.geldigheid)}</span>
       </div>
     </div>
   `).join('');
@@ -517,7 +564,7 @@ function renderWarningList() {
         <b>Code ${w.code} — ${w.fenomeen}</b>
         <div class="meta">${w.detail}</div>
         <div class="areas">${w.gebieden.join(' · ')}</div>
-        <div class="meta" style="margin-top:4px">⏱ ${w.geldigheid}</div>
+        <div class="meta" style="margin-top:4px">📅 ${expandGeldigheid(w.geldigheid)}</div>
       </div>
     </div>
   `).join('');
@@ -666,6 +713,7 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
   // ---- Side-by-side layout: titel boven, kaart links + info rechts, footer onder ----
   const PAD = 6;
   const titleH = 9;
+  const subtitleH = 5;       // datumregel onder de titel ("voor Zaterdag 2 mei")
   const titleGap = 3;
   const gap = 6;
   const footerH = 6;
@@ -679,7 +727,7 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
     code: w.code,
     titelLines:  wrapLines(`Code ${w.code} · ${w.fenomeen}`, 24),
     detailLines: wrapLines(w.detail || "", 30),
-    metaLines:   wrapLines(`${w.gebieden.join(', ')} · ${w.geldigheid}`, 30),
+    metaLines:   wrapLines(`${w.gebieden.join(', ')} · ${expandGeldigheid(w.geldigheid)}`, 30),
   }));
   const titelLH = 4.4, detailLH = 3.8, metaLH = 3.4, warnPad = 2;
   const warnHeights = wrappedWarns.map(w =>
@@ -688,7 +736,14 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
   const infoContentH = warnHeights.reduce((a,b)=>a+b+2, 0);
   const contentH = Math.max(mapAreaH, infoContentH);
   const totalW = PAD + mapAreaW + (infoW ? gap + infoW : 0) + PAD;
-  const totalH = PAD + titleH + titleGap + contentH + titleGap + footerH + PAD;
+  const headerTop = PAD + titleH + subtitleH + titleGap;  // y-pos van content-blok onder de titel
+  const totalH = headerTop + contentH + titleGap + footerH + PAD;
+
+  // Pak unieke startdagen voor subtitel ("voor Zaterdag 2 mei" of "voor 1–3 mei")
+  const startDates = [...new Set(warnings.map(w => startDayDateOf(w.geldigheid)).filter(Boolean))];
+  let subtitle = "";
+  if (startDates.length === 1) subtitle = "voor " + startDates[0];
+  else if (startDates.length > 1) subtitle = "voor " + startDates.join(" / ");
 
   // ---- Map paths ----
   const paths = features.map(f => {
@@ -707,13 +762,13 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
   }).join('') : '';
 
   const mapX = PAD + mapPadInner;
-  const mapY = PAD + titleH + titleGap + mapPadInner;
+  const mapY = headerTop + mapPadInner;
 
   // ---- Code-badges linksboven op de kaart ----
   let badgesSVG = '';
   if (badgeCodes.length){
     let bx = PAD + 2;
-    const by = PAD + titleH + titleGap + 2;
+    const by = headerTop + 2;
     const bh = 5;
     badgesSVG = badgeCodes.map(c => {
       const txt = `Code ${c}`;
@@ -725,11 +780,12 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
     }).join('');
   }
 
-  // ---- Info-kolom rechts (geen "ACTIEVE WAARSCHUWINGEN" header — staat al in titel) ----
+  // ---- Info-kolom rechts, verticaal gecentreerd t.o.v. de kaart ----
   let warnSVG = '';
   if (warnings.length){
     const ix = PAD + mapAreaW + gap;
-    let cy = PAD + titleH + titleGap;
+    const centerOffset = Math.max(0, (mapAreaH - infoContentH) / 2);
+    let cy = headerTop + centerOffset;
     wrappedWarns.forEach((w, i) => {
       const bh = warnHeights[i];
       warnSVG += `<rect x="${ix}" y="${cy.toFixed(1)}" width="1.2" height="${bh.toFixed(1)}" fill="${COLOR[w.code]}"/>`;
@@ -753,11 +809,16 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
   }
 
   const titleY = PAD + titleH - 2;
+  const subtitleY = titleY + subtitleH;
   const footerY = totalH - PAD;
+  const subtitleSVG = subtitle
+    ? `<text x="${PAD}" y="${subtitleY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="4" font-weight="500" fill="#334155">${escapeXML(subtitle)}</text>`
+    : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW.toFixed(1)} ${totalH.toFixed(1)}">
     <rect width="100%" height="100%" fill="#ffffff"/>
     <text x="${PAD}" y="${titleY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="6" font-weight="700" fill="#0f172a">${escapeXML(attribution)}</text>
     <text x="${(totalW-PAD).toFixed(1)}" y="${titleY.toFixed(1)}" text-anchor="end" font-family="DM Sans, sans-serif" font-size="3.2" fill="#64748b">${escapeXML(dateStr)}</text>
+    ${subtitleSVG}
     <g transform="translate(${mapX},${mapY})">
       <rect x="-${mapPadInner}" y="-${mapPadInner}" width="${mapAreaW.toFixed(1)}" height="${mapAreaH.toFixed(1)}" fill="#d8e6f2"/>
       ${paths}
