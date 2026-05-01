@@ -356,10 +356,26 @@ def bereken_records(data):
 
     droge_perioden = [p for p in bereken_droge_perioden(data) if int(p["van"][:4]) >= 1880]
 
+    # Per maand top-10 nat + top-10 droog (voor maand-filter per station)
+    def top_per_maand(items, n, asc):
+        groepen = defaultdict(list)
+        for r in items:
+            groepen[r["mnd"]].append(r)
+        out = {}
+        for mnd, vals in groepen.items():
+            vals_s = sorted(vals, key=(lambda x: x["waarde"]) if asc else (lambda x: -x["waarde"]))
+            out[str(mnd)] = vals_s[:n]
+        return out
+
+    maand_per_mnd       = top_per_maand(mnd_alle,        n=10, asc=False)
+    maand_per_mnd_droog = top_per_maand(droog_mnd_alle,  n=10, asc=True)
+
     return {
         "dag": dag_alle[:TOP_N], "decade": dec_alle[:TOP_N],
         "maand": mnd_alle[:TOP_N], "seizoen": seizoen_alle[:TOP_N],
         "jaar": jaar_alle[:TOP_N], "sneeuw": sneeuw_alle[:TOP_N],
+        "maand_per_mnd": maand_per_mnd,
+        "maand_per_mnd_droog": maand_per_mnd_droog,
         "jaar_reeks": jaar_reeks,
         "droog_decade": droog_dec_alle[:TOP_N],
         "droog_maand": droog_mnd_alle[:TOP_N],
@@ -481,7 +497,8 @@ def main():
     stationsnamen = {k: v["naam"] for k, v in stations.items()}
 
     # Splits: natste keys in neerslag_records.json, droogste in neerslag_droog.json
-    DROOG_KEYS = {"droog_decade", "droog_maand", "droog_seizoen", "droog_jaar", "droge_periode"}
+    DROOG_KEYS = {"droog_decade", "droog_maand", "droog_seizoen", "droog_jaar", "droge_periode",
+                  "maand_per_mnd_droog"}
     NATSTE_KEYS = lambda k: not k.startswith("_") and k not in DROOG_KEYS
 
     stations_natste = {
