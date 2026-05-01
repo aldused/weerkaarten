@@ -68,6 +68,18 @@ def _clean(text: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# KNMI gebruikt afkortingen Ma./Di./Wo./Do./Vr./Za./Zo. → voluit
+_DAY_FULL = {
+    "Ma": "Maandag", "Di": "Dinsdag", "Wo": "Woensdag", "Do": "Donderdag",
+    "Vr": "Vrijdag", "Za": "Zaterdag", "Zo": "Zondag",
+}
+_DAY_RE = re.compile(r"\b(Ma|Di|Wo|Do|Vr|Za|Zo)\.")
+
+
+def _expand_days(text: str) -> str:
+    return _DAY_RE.sub(lambda m: _DAY_FULL[m.group(1)], text)
+
+
 def _parse_warning_block(div) -> dict | None:
     classes = div.get("class") or []
     code = next((CLASS_TO_CODE[c] for c in classes if c in CLASS_TO_CODE), None)
@@ -78,9 +90,10 @@ def _parse_warning_block(div) -> dict | None:
     title_div = div.find(class_="warning-overview__xs-title")
     geldigheid = ""
     if title_div:
-        # Eerste tekstregel is meestal "Za. 17:00 - Za. 22:00"
+        # Eerste tekstregel is meestal "Za. 17:00 - Za. 22:00" → voluit
         geldigheid = _clean(title_div.get_text(" ", strip=True))
         geldigheid = re.sub(r"\s*Meer informatie\s*$", "", geldigheid).strip()
+        geldigheid = _expand_days(geldigheid)
     desc_div = div.find(class_="warning-overview__description")
     detail = ""
     if desc_div:

@@ -583,12 +583,11 @@ init();
 function svgToPNG(svgEl, scale, filename) {
   const xml = new XMLSerializer().serializeToString(svgEl);
   const svg64 = 'data:image/svg+xml;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(xml)));
-  // Mik op een PNG van ~1600 px breed → groot genoeg voor delen/printen
+  // 1 viewBox-unit = ~7 px → consistente fontgroottes ongeacht kaartgrootte
   const vb = svgEl.viewBox.baseVal;
   const vbW = Math.max(1, vb.width || 800);
   const vbH = Math.max(1, vb.height || 800);
-  const TARGET_W = 1600;
-  const sx = (scale || 1) * (TARGET_W / vbW);
+  const sx = (scale || 1) * 7;
   const img = new Image();
   img.onload = () => {
     const canvas = document.createElement('canvas');
@@ -664,34 +663,32 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
     return [(sx/totA - minx)*SCALE, (sy/totA - miny)*SCALE];
   };
 
-  // ---- Layout dimensies ----
-  const titleH = 16;
-  const headerBlockH = titleH + 4;                 // titel + kleine gap, badges zitten OP de kaart
-  const mapAreaW = w + padding*2;
-  const mapAreaH = h + padding*2;
+  // ---- Side-by-side layout: titel boven, kaart links + info rechts, footer onder ----
+  const PAD = 6;
+  const titleH = 9;
+  const titleGap = 3;
+  const gap = 6;
+  const footerH = 6;
+  const mapPadInner = 4;
+  const mapAreaW = w + mapPadInner*2;
+  const mapAreaH = h + mapPadInner*2;
+  const infoW = warnings.length ? 110 : 0;
 
-  // Waarschuwingenlijst onder de kaart
-  const warnLineHeight = 4.6;
-  const warnRowGap = 2;
-  // bereken hoogte: per warning 1 titelregel + N detailregels (afgekapt op ~64 chars)
-  const wrappedWarns = warnings.map(w => {
-    const titel = `Code ${w.code} · ${w.fenomeen}`;
-    const detail = `${w.detail}`;
-    const meta = `${w.gebieden.join(', ')} · ${w.geldigheid}`;
-    return {
-      code: w.code,
-      titelLines: wrapLines(titel, 70),
-      detailLines: wrapLines(detail, 70),
-      metaLines: wrapLines(meta, 70)
-    };
-  });
-  const warnBlockH = warnings.length === 0
-    ? 0
-    : 10 + wrappedWarns.reduce((acc, w) => acc + (w.titelLines.length + w.detailLines.length + w.metaLines.length) * warnLineHeight + 4, 0) + 2;
-
-  const footerH = 10;
-  const totalW = Math.max(mapAreaW, 240);
-  const totalH = headerBlockH + mapAreaH + warnBlockH + footerH + padding;
+  // Wrap info-tekst (kolombreedte ≈ infoW units, font 4 → ~28 chars/regel)
+  const wrappedWarns = warnings.map(w => ({
+    code: w.code,
+    titelLines:  wrapLines(`Code ${w.code} · ${w.fenomeen}`, 24),
+    detailLines: wrapLines(w.detail || "", 30),
+    metaLines:   wrapLines(`${w.gebieden.join(', ')} · ${w.geldigheid}`, 30),
+  }));
+  const titelLH = 4.4, detailLH = 3.8, metaLH = 3.4, warnPad = 2;
+  const warnHeights = wrappedWarns.map(w =>
+    w.titelLines.length*titelLH + w.detailLines.length*detailLH + w.metaLines.length*metaLH + warnPad*2
+  );
+  const infoContentH = warnHeights.reduce((a,b)=>a+b+2, 0);
+  const contentH = Math.max(mapAreaH, infoContentH);
+  const totalW = PAD + mapAreaW + (infoW ? gap + infoW : 0) + PAD;
+  const totalH = PAD + titleH + titleGap + contentH + titleGap + footerH + PAD;
 
   // ---- Map paths ----
   const paths = features.map(f => {
@@ -700,74 +697,75 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
     const fill = COLOR[code];
     const isZH = name === "Zuid-Holland";
     const stroke = (zhHighlight && isZH) ? (ZH_COLOR[currentZHColor]?.stroke || "#00205b") : "#4a4a4a";
-    const sw = (zhHighlight && isZH) ? 2.4 : 0.5;
+    const sw = (zhHighlight && isZH) ? 1.6 : 0.4;
     return `<path d="${pathFor(f)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
   }).join('');
   const labels = withLabels ? features.map(f => {
     const [cx,cy] = centroidFor(f);
     const ab = ABBR[f.properties.statnaam] || f.properties.statnaam;
-    return `<text x="${cx}" y="${cy}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="9" font-weight="600" fill="#1a1a1a" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" paint-order="stroke">${ab}</text>`;
+    return `<text x="${cx}" y="${cy}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="5" font-weight="700" fill="#1a1a1a" stroke="rgba(255,255,255,0.9)" stroke-width="1.4" paint-order="stroke">${ab}</text>`;
   }).join('') : '';
 
-  const mapOffsetX = padding;
-  const mapOffsetY = headerBlockH;
+  const mapX = PAD + mapPadInner;
+  const mapY = PAD + titleH + titleGap + mapPadInner;
 
-  // ---- Top-left code badges (op de kaart-water-rand) ----
+  // ---- Code-badges linksboven op de kaart ----
   let badgesSVG = '';
   if (badgeCodes.length){
-    let bx = padding + 2;
-    const by = headerBlockH + 2;
+    let bx = PAD + 2;
+    const by = PAD + titleH + titleGap + 2;
+    const bh = 5;
     badgesSVG = badgeCodes.map(c => {
       const txt = `Code ${c}`;
-      const tw = txt.length * 3.6 + 12;
-      const r = `<g><rect x="${bx}" y="${by}" width="${tw.toFixed(1)}" height="9" rx="2" ry="2" fill="${COLOR[c]}" stroke="rgba(0,0,0,0.35)" stroke-width="0.3"/>
-        <text x="${(bx+tw/2).toFixed(1)}" y="${(by+6.5).toFixed(1)}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="6" font-weight="700" fill="${c==='geel'?'#5a4500':'#fff'}">${escapeXML(txt)}</text></g>`;
-      bx += tw + 3;
+      const tw = txt.length * 1.9 + 6;
+      const r = `<g><rect x="${bx}" y="${by}" width="${tw.toFixed(1)}" height="${bh}" rx="1.2" ry="1.2" fill="${COLOR[c]}" stroke="rgba(0,0,0,0.35)" stroke-width="0.25"/>
+        <text x="${(bx+tw/2).toFixed(1)}" y="${(by+bh*0.75).toFixed(1)}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="3.2" font-weight="700" fill="${c==='geel'?'#5a4500':'#fff'}">${escapeXML(txt)}</text></g>`;
+      bx += tw + 1.5;
       return r;
     }).join('');
   }
 
-  // ---- Warnings list ----
+  // ---- Info-kolom rechts (geen "ACTIEVE WAARSCHUWINGEN" header — staat al in titel) ----
   let warnSVG = '';
   if (warnings.length){
-    let cy = headerBlockH + mapAreaH + 2;
-    warnSVG += `<text x="${padding}" y="${(cy+5).toFixed(1)}" font-family="DM Sans, sans-serif" font-size="6" font-weight="700" fill="#0f172a" letter-spacing="0.5">ACTIEVE WAARSCHUWINGEN</text>`;
-    cy += 7;
-    wrappedWarns.forEach(w => {
-      // gekleurde balk links
-      const blockHeight = (w.titelLines.length + w.detailLines.length + w.metaLines.length) * warnLineHeight + 2;
-      warnSVG += `<rect x="${padding}" y="${cy.toFixed(1)}" width="1.5" height="${blockHeight.toFixed(1)}" fill="${COLOR[w.code]}"/>`;
-      let ty = cy + 3.8;
+    const ix = PAD + mapAreaW + gap;
+    let cy = PAD + titleH + titleGap;
+    wrappedWarns.forEach((w, i) => {
+      const bh = warnHeights[i];
+      warnSVG += `<rect x="${ix}" y="${cy.toFixed(1)}" width="1.2" height="${bh.toFixed(1)}" fill="${COLOR[w.code]}"/>`;
+      let ty = cy + titelLH * 0.9;
       w.titelLines.forEach(line => {
-        warnSVG += `<text x="${padding+5}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5.5" font-weight="700" fill="#0f172a">${escapeXML(line)}</text>`;
-        ty += warnLineHeight;
+        warnSVG += `<text x="${(ix+3).toFixed(1)}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="4" font-weight="700" fill="#0f172a">${escapeXML(line)}</text>`;
+        ty += titelLH;
       });
+      ty += 0.5;
       w.detailLines.forEach(line => {
-        warnSVG += `<text x="${padding+5}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5" fill="#334155">${escapeXML(line)}</text>`;
-        ty += warnLineHeight;
+        warnSVG += `<text x="${(ix+3).toFixed(1)}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="3.4" fill="#334155">${escapeXML(line)}</text>`;
+        ty += detailLH;
       });
+      ty += 0.4;
       w.metaLines.forEach(line => {
-        warnSVG += `<text x="${padding+5}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="4.5" fill="#64748b">${escapeXML(line)}</text>`;
-        ty += warnLineHeight;
+        warnSVG += `<text x="${(ix+3).toFixed(1)}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="3" fill="#64748b">${escapeXML(line)}</text>`;
+        ty += metaLH;
       });
-      cy += blockHeight + warnRowGap;
+      cy += bh + 2;
     });
   }
 
-  const footerY = totalH - 3;
-  const titleSubY = titleH - 5;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW.toFixed(1)} ${totalH.toFixed(1)}" width="${(totalW*4).toFixed(0)}" height="${(totalH*4).toFixed(0)}">
+  const titleY = PAD + titleH - 2;
+  const footerY = totalH - PAD;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW.toFixed(1)} ${totalH.toFixed(1)}">
     <rect width="100%" height="100%" fill="#ffffff"/>
-    <text x="${padding}" y="${titleSubY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="9" font-weight="700" fill="#0f172a">${escapeXML(attribution)}</text>
-    <text x="${(totalW-padding).toFixed(1)}" y="${titleSubY.toFixed(1)}" text-anchor="end" font-family="DM Sans, sans-serif" font-size="4.5" fill="#64748b">${escapeXML(dateStr)}</text>
-    <g transform="translate(${mapOffsetX},${mapOffsetY})">
-      <rect x="-${padding}" y="-${padding}" width="${(w+padding*2).toFixed(1)}" height="${(h+padding*2).toFixed(1)}" fill="#d8e6f2"/>
+    <text x="${PAD}" y="${titleY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="6" font-weight="700" fill="#0f172a">${escapeXML(attribution)}</text>
+    <text x="${(totalW-PAD).toFixed(1)}" y="${titleY.toFixed(1)}" text-anchor="end" font-family="DM Sans, sans-serif" font-size="3.2" fill="#64748b">${escapeXML(dateStr)}</text>
+    <g transform="translate(${mapX},${mapY})">
+      <rect x="-${mapPadInner}" y="-${mapPadInner}" width="${mapAreaW.toFixed(1)}" height="${mapAreaH.toFixed(1)}" fill="#d8e6f2"/>
       ${paths}
       ${labels}
     </g>
     ${badgesSVG}
     ${warnSVG}
-    <text x="${padding}" y="${footerY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="5" fill="#64748b">Data: KNMI · Visualisatie: Ed Aldus / weerlab.nl</text>
+    <text x="${PAD}" y="${footerY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="3" fill="#64748b">Data: KNMI · Visualisatie: Ed Aldus / weerlab.nl</text>
   </svg>`;
 }
 
