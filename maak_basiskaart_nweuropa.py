@@ -14,14 +14,17 @@ ROOT = Path(__file__).resolve().parent
 
 LON_MIN, LON_MAX = -1.5, 8.5
 LAT_MIN, LAT_MAX = 48.0, 54.5
-W = 1080
-H = round(W * (LAT_MAX - LAT_MIN) / (LON_MAX - LON_MIN))  # equirectangular
-print(f"output: {W}x{H} px")
+W_FINAL = 1620
+H_FINAL = round(W_FINAL * (LAT_MAX - LAT_MIN) / (LON_MAX - LON_MIN))
+SS = 2  # super-sampling factor voor anti-aliasing
+W = W_FINAL * SS
+H = H_FINAL * SS
+print(f"render: {W}x{H} → output: {W_FINAL}x{H_FINAL} px")
 
-ZEE = (216, 227, 237)         # lichtblauw
-LAND = (232, 238, 222)        # lichtgroen
-GRENS_LAND = (140, 160, 175)  # donkerblauw-grijs voor landgrenzen
-GRENS_REGIO = (190, 200, 210) # licht voor regio-grenzen
+ZEE = (216, 227, 237)
+LAND = (232, 238, 222)
+GRENS_LAND = (90, 115, 140)    # donkerder voor zichtbaarheid
+GRENS_REGIO = (170, 185, 200)  # iets donkerder
 RIVIER = (180, 200, 220)
 
 
@@ -81,16 +84,19 @@ def main():
     teken_geojson(draw, ROOT / "europa_land.geojson", fill=LAND)
 
     print("regiogrenzen…")
-    teken_geojson(draw, ROOT / "nl_provincies.geojson", outline=GRENS_REGIO, width=1)
-    teken_geojson(draw, ROOT / "be_provincies.geojson", outline=GRENS_REGIO, width=1)
-    teken_geojson(draw, ROOT / "fr_regions.geojson", outline=GRENS_REGIO, width=1)
-    teken_geojson(draw, ROOT / "germany_bundeslander.geojson", outline=GRENS_REGIO, width=1)
+    teken_geojson(draw, ROOT / "nl_provincies.geojson", outline=GRENS_REGIO, width=2*SS)
+    teken_geojson(draw, ROOT / "be_provincies.geojson", outline=GRENS_REGIO, width=2*SS)
+    teken_geojson(draw, ROOT / "fr_regions.geojson", outline=GRENS_REGIO, width=2*SS)
+    teken_geojson(draw, ROOT / "germany_bundeslander.geojson", outline=GRENS_REGIO, width=2*SS)
 
     print("rivieren…")
-    teken_geojson(draw, ROOT / "nl_rivieren.geojson", outline=RIVIER, width=1)
+    teken_geojson(draw, ROOT / "nl_rivieren.geojson", outline=RIVIER, width=1*SS)
 
-    print("landgrenzen…")
-    teken_geojson(draw, ROOT / "europa_land.geojson", outline=GRENS_LAND, width=2)
+    print("landgrenzen (kustlijn + landsgrenzen)…")
+    teken_geojson(draw, ROOT / "europa_land.geojson", outline=GRENS_LAND, width=3*SS)
+
+    print(f"downscale {W}x{H} → {W_FINAL}x{H_FINAL} (LANCZOS)…")
+    img = img.resize((W_FINAL, H_FINAL), Image.LANCZOS)
 
     out = ROOT / "kaart_basis_nweuropa.png"
     img.save(out, optimize=True)
