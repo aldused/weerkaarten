@@ -156,8 +156,6 @@
   .kaart-viewport {
     position: relative;
     width: 100%;
-    max-width: 1100px;
-    aspect-ratio: 1620 / 1053;
     margin: 0 auto;
     overflow: hidden;
     background: #d8e3ed;
@@ -336,8 +334,8 @@
   </div>
 </div>
 
-<h1>Bliksem live — NW-Europa</h1>
-<div class="sub">Individuele ontladingen over BeNeLux, N-Frankrijk en W-Duitsland · realtime-feed</div>
+<h1 id="page-title">Bliksem live — Nederland</h1>
+<div class="sub" id="page-sub">Individuele ontladingen · realtime Blitzortung-feed</div>
 
 <div class="toolbar">
   <div class="controls-groep">
@@ -361,6 +359,11 @@
     <span class="toolbar-label">Cluster:</span>
     <button id="btn-cluster">Auto</button>
   </div>
+  <div class="controls-groep" style="margin-left:auto">
+    <span class="toolbar-label">Gebied:</span>
+    <button class="regio-btn actief" data-regio="nl">Nederland</button>
+    <button class="regio-btn" data-regio="nw">NW-Europa</button>
+  </div>
 </div>
 
 <div class="layout">
@@ -372,8 +375,8 @@
     </div>
     <div class="kaart-viewport" id="kaart-viewport">
       <div class="kaart-wrap" id="kaart-wrap">
-        <img src="kaart_basis_nweuropa.png" id="basis-kaart" alt="NW-Europa basis" crossorigin="anonymous">
-        <svg id="svg-strikes" class="events" viewBox="0 0 1080 702" preserveAspectRatio="none"></svg>
+        <img src="kaart_basis_nl.png" id="basis-kaart" alt="basiskaart" crossorigin="anonymous">
+        <svg id="svg-strikes" class="events" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
       </div>
       <div class="zoom-controls">
         <button class="zoom-btn" id="zoom-in" title="Inzoomen">+</button>
@@ -475,10 +478,41 @@ function unlockBliksem() {
 </script>
 
 <script>
-// ── Constants (NW-Europa: BeNeLux + N-Frankrijk + W-Duitsland) ─────
-const LON_MIN = -1.5, LON_MAX = 8.5;
-const LAT_MIN = 48.0, LAT_MAX = 54.5;
-const SVG_W = 1080, SVG_H = 702;
+// ── Regio-configuraties ───────────────────────────────────────────
+const REGIOS = {
+  nl: {
+    img: 'kaart_basis_nl.png',
+    bbox: [3.3, 50.45, 7.4, 53.8],   // [lon_min, lat_min, lon_max, lat_max]
+    svg:  [1080, 1470],
+    aspect: '1080 / 1470',
+    maxWidth: '760px',
+  },
+  nw: {
+    img: 'kaart_basis_nweuropa.png',
+    bbox: [-1.5, 48.0, 8.5, 54.5],
+    svg:  [1620, 1053],
+    aspect: '1620 / 1053',
+    maxWidth: '1200px',
+  },
+};
+let regio = 'nl';
+let LON_MIN, LON_MAX, LAT_MIN, LAT_MAX, SVG_W, SVG_H;
+function applyRegio(key) {
+  regio = key;
+  const cfg = REGIOS[key];
+  [LON_MIN, LAT_MIN, LON_MAX, LAT_MAX] = cfg.bbox;
+  [SVG_W, SVG_H] = cfg.svg;
+  const img = document.getElementById('basis-kaart');
+  if (img.getAttribute('src') !== cfg.img) img.src = cfg.img;
+  const svg = document.getElementById('svg-strikes');
+  svg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+  const vp = document.getElementById('kaart-viewport');
+  vp.style.aspectRatio = cfg.aspect;
+  vp.style.maxWidth = cfg.maxWidth;
+  const t = document.getElementById('page-title');
+  if (t) t.textContent = key === 'nl' ? 'Bliksem live — Nederland' : 'Bliksem live — NW-Europa';
+}
+applyRegio('nl');
 
 function lonLatToXY(lon, lat) {
   const x = (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W;
@@ -907,6 +941,16 @@ document.getElementById('btn-glow').addEventListener('click', e => {
   e.target.textContent = glowEnabled ? 'Aan' : 'Uit';
   render();
 });
+document.querySelectorAll('.regio-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.regio-btn').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    applyRegio(btn.dataset.regio);
+    zoom = 1; panX = 0; panY = 0;
+    applyTransform();
+    render();
+  });
+});
 document.getElementById('btn-cluster').addEventListener('click', e => {
   const modes = ['auto', 'on', 'off'];
   const labels = { auto: 'Auto', on: 'Aan', off: 'Uit' };
@@ -939,7 +983,7 @@ function downloadPNG() {
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 24px DM Sans, system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillText('Bliksem-ontladingen — NW-Europa', 16, headerH / 2 - 6);
+  ctx.fillText(regio === 'nl' ? 'Bliksem-ontladingen — Nederland' : 'Bliksem-ontladingen — NW-Europa', 16, headerH / 2 - 6);
   ctx.font = '13px DM Sans, system-ui, sans-serif';
   ctx.fillStyle = '#a8c8e8';
   const ts = new Date().toLocaleString('nl-NL', {
