@@ -10,7 +10,7 @@ Stations:
   Vlissingen    310
   Maastricht    380
 
-Parameters: TX, TN, TG (in 0.1°C → °C), RH (in 0.1mm → mm)
+Parameters: TX, TN, TG (in 0.1°C → °C), RH (in 0.1mm → mm), SQ (in 0.1u → uren)
 Data: etmgeg_{NR}.zip via cdn.knmi.nl
 
 Output: l5_records.json
@@ -34,7 +34,7 @@ L5_STATIONS = {
     380: "Maastricht",
 }
 
-PARAMS = ["TX", "TN", "TG", "RH"]
+PARAMS = ["TX", "TN", "TG", "RH", "SQ"]
 
 BASE_URL   = "https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/daggegevens/etmgeg_{nr}.zip"
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # projectroot
@@ -58,6 +58,7 @@ PARAM_LABELS = {
     "TN": "Min temperatuur (TN)",
     "TG": "Gem temperatuur (TG)",
     "RH": "Neerslag (RH)",
+    "SQ": "Zonuren (SQ)",
 }
 
 PARAM_EENHEID = {
@@ -65,6 +66,7 @@ PARAM_EENHEID = {
     "TN": "°C",
     "TG": "°C",
     "RH": "mm",
+    "SQ": "uur",
 }
 
 # ── Download & parse ──────────────────────────────────────────────────────────
@@ -135,7 +137,7 @@ def parse_daggegevens(tekst: str) -> pd.DataFrame:
                 if v == "" or v == "9":
                     return None
                 f = float(v)
-                if naam == "RH":
+                if naam in ("RH", "SQ"):
                     return 0.0 if f < 0 else f / 10.0
                 return f / 10.0  # TX/TN/TG: 0.1°C → °C
             except (ValueError, IndexError):
@@ -221,9 +223,10 @@ def top_n(series: pd.Series, n: int = TOP_N, ascending: bool = False) -> list:
 
 def bereken_records(dag: pd.Series, param: str) -> dict:
     """Berekent alle records voor één parameter-reeks."""
-    ascending_params = {"TN", "RH_droog"}  # niet gebruikt hier maar goed om te noteren
     is_temp = param in ("TX", "TN", "TG")
     is_neerslag = param == "RH"
+    is_zon = param == "SQ"
+    is_som = is_neerslag or is_zon  # som-aggregatie voor decade/maand/seizoen/jaar
 
     records = {}
 
@@ -234,32 +237,29 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
     if is_temp:
         records["laagste_dag"] = top_n(s, TOP_N, ascending=True)
 
-    # Decade (gemiddelde per decade voor temp, som voor neerslag)
+    # Decade (gemiddelde per decade voor temp, som voor neerslag/zon)
     labels = dag.index.to_series().apply(lambda d: f"{decade_label(d.month, d.day)} {d.year}")
-    if is_neerslag:
-        deca = dag.groupby(labels).sum()
-        records["hoogste_decade"] = top_n(deca, TOP_N, ascending=False)
+    if is_som:
+        deca = dag.groupby(labels).sum().round(1)
     else:
         deca = dag.groupby(labels).mean().round(1)
-        records["hoogste_decade"] = top_n(deca, TOP_N, ascending=False)
+    records["hoogste_decade"] = top_n(deca, TOP_N, ascending=False)
+    if is_temp or is_zon:
         records["laagste_decade"] = top_n(deca, TOP_N, ascending=True)
 
     # Maand
-    if is_neerslag:
-        maand = dag.groupby(dag.index.to_period("M")).sum()
+    if is_som:
+        maand = dag.groupby(dag.index.to_period("M")).sum().round(1)
     else:
         maand = dag.groupby(dag.index.to_period("M")).mean().round(1)
     maand.index = [f"{MAANDEN_NL[p.month]} {p.year}" for p in maand.index]
     records["hoogste_maand"] = top_n(maand, TOP_N, ascending=False)
-    if is_temp:
-        records["laagste_maand"] = top_n(maand, TOP_N, ascending=True)
-    elif is_neerslag:
-        records["laagste_maand"] = top_n(maand, TOP_N, ascending=True)
+    records["laagste_maand"] = top_n(maand, TOP_N, ascending=True)
 
     # Seizoen
     sei_labels = dag.index.to_series().apply(seizoen_jaar)
-    if is_neerslag:
-        sei = dag.groupby(sei_labels).sum()
+    if is_som:
+        sei = dag.groupby(sei_labels).sum().round(1)
     else:
         sei = dag.groupby(sei_labels).mean().round(1)
     sei_counts = dag.groupby(sei_labels).count()
@@ -271,8 +271,8 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
         records[f"laagste_{naam.lower()}"] = top_n(subset, TOP_N, ascending=True)
 
     # Jaar
-    if is_neerslag:
-        jaar = dag.groupby(dag.index.year).sum()
+    if is_som:
+        jaar = dag.groupby(dag.index.year).sum().round(1)
     else:
         jaar = dag.groupby(dag.index.year).mean().round(1)
     jaar_counts = dag.groupby(dag.index.year).count()
@@ -312,6 +312,8 @@ def jaar_statistieken(param_series: dict) -> list:
                 row["ijs_dagen"] = int((grp < -10.0).sum())
             elif param == "TG":
                 row["tg_gem"] = round(float(grp.mean()), 1)
+            elif param == "SQ":
+                row["sq_som"] = round(float(grp.sum()), 1)
         if len(row) > 1:
             result.append(row)
 
