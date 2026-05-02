@@ -12,8 +12,3 @@ cd "$SCRIPT_DIR"
 shopt -s nullglob
 "$SCRIPT_DIR/shell/r2_publish.sh" \
   actueel.json waarschuwingen.json toplijst.json kaart_synop*.png
-
-# JSON's worden relatief van weerlab.nl (= Pages) gefetcht — dus ook naar git.
-# kaart_synop*.png blijven R2-only (groot, niet getrackt in git).
-"$SCRIPT_DIR/shell/git_publish.sh" "data: synop-cyclus update" \
-  actueel.json waarschuwingen.json toplijst.json
