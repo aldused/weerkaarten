@@ -32,8 +32,8 @@ BLITZORTUNG_HOSTS = [
 ]
 SUBSCRIBE = json.dumps({"a": 111})  # 111 = Europa-regio
 
-# Default NL+ietsje buiten (BE, W-Duitsland)
-DEFAULT_BBOX = (3.0, 50.0, 8.0, 54.0)  # lon_min, lat_min, lon_max, lat_max
+# NW-Europa: BeNeLux + N-Frankrijk + W-Duitsland + ZO-Engeland
+DEFAULT_BBOX = (-1.5, 48.0, 8.5, 54.5)  # lon_min, lat_min, lon_max, lat_max
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "bliksem_strikes.json"
 
 WINDOW_SECONDS = 7200  # 2 uur

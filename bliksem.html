@@ -156,8 +156,8 @@
   .kaart-viewport {
     position: relative;
     width: 100%;
-    max-width: 640px;
-    aspect-ratio: 1080 / 1470;
+    max-width: 1100px;
+    aspect-ratio: 1080 / 702;
     margin: 0 auto;
     overflow: hidden;
     background: #d8e3ed;
@@ -336,8 +336,8 @@
   </div>
 </div>
 
-<h1>Bliksem live — Nederland</h1>
-<div class="sub">Individuele ontladingen op de Weerlab-basiskaart · demo-data</div>
+<h1>Bliksem live — NW-Europa</h1>
+<div class="sub">Individuele ontladingen over BeNeLux, N-Frankrijk en W-Duitsland · realtime-feed</div>
 
 <div class="toolbar">
   <div class="controls-groep">
@@ -372,8 +372,8 @@
     </div>
     <div class="kaart-viewport" id="kaart-viewport">
       <div class="kaart-wrap" id="kaart-wrap">
-        <img src="kaart_basis_nl.png" id="basis-kaart" alt="NL basis" crossorigin="anonymous">
-        <svg id="svg-strikes" class="events" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
+        <img src="kaart_basis_nweuropa.png" id="basis-kaart" alt="NW-Europa basis" crossorigin="anonymous">
+        <svg id="svg-strikes" class="events" viewBox="0 0 1080 702" preserveAspectRatio="none"></svg>
       </div>
       <div class="zoom-controls">
         <button class="zoom-btn" id="zoom-in" title="Inzoomen">+</button>
@@ -424,6 +424,16 @@
       </div>
     </div>
 
+    <div class="panel">
+      <div class="panel-header"><h2>Hoe lezen?</h2></div>
+      <div class="panel-body" style="font-size:12px;line-height:1.55;color:var(--text);">
+        <p style="margin-bottom:8px;"><b>Kleur</b> = leeftijd van de ontlading. Wit/geel is vers (laatste minuten), rood/paars is ouder. De pulserende witte stippen zijn nieuw binnengekomen onweer.</p>
+        <p style="margin-bottom:8px;"><b>Symbool</b> — een cirkel met bliksempictogram is een Cloud-Ground (CG, inslag op grond). Een kleinere transparante stip is een Intra-Cloud (IC, ontlading binnen of tussen wolken). Bij meerdere ontladingen dicht op elkaar wordt automatisch een cluster getoond met een aantal — klik om in te zoomen.</p>
+        <p style="margin-bottom:8px;"><b>Verplaatsing</b> — kijk naar het kleurverloop: een spoor van rood naar wit volgt de baan van een onweersbui. Hoge dichtheid = actieve cel, ijle stippen = naderend of zwakker.</p>
+        <p style="margin-bottom:0;"><b>Latency</b> — Blitzortung-feed is doorgaans &lt;30 sec achter realtime. Bij zwakke detectie (weinig stations triggeren tegelijk) kan een ontlading missen of als IC verschijnen ipv CG.</p>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -465,10 +475,10 @@ function unlockBliksem() {
 </script>
 
 <script>
-// ── Constants (zelfde bbox als andere weerlab kaarten) ─────────────
-const LON_MIN = 3.3, LON_MAX = 7.4;
-const LAT_MIN = 50.45, LAT_MAX = 53.8;
-const SVG_W = 1080, SVG_H = 1470;
+// ── Constants (NW-Europa: BeNeLux + N-Frankrijk + W-Duitsland) ─────
+const LON_MIN = -1.5, LON_MAX = 8.5;
+const LAT_MIN = 48.0, LAT_MAX = 54.5;
+const SVG_W = 1080, SVG_H = 702;
 
 function lonLatToXY(lon, lat) {
   const x = (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W;
@@ -911,25 +921,45 @@ document.getElementById('btn-cluster').addEventListener('click', e => {
 function downloadPNG() {
   const img = document.getElementById('basis-kaart');
   const baseW = img.naturalWidth, baseH = img.naturalHeight;
-  const footerH = 80;
+  const headerH = 60;
+  const legendW = 230;
+  const footerH = 60;
   const cv = document.createElement('canvas');
-  cv.width = baseW;
-  cv.height = baseH + footerH;
+  cv.width = baseW + legendW;
+  cv.height = headerH + baseH + footerH;
   const ctx = cv.getContext('2d');
 
-  // Achtergrond + basis-kaart
+  // Achtergrond
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.drawImage(img, 0, 0, baseW, baseH);
 
-  // Strikes: filter en teken
+  // Header
+  ctx.fillStyle = '#00205b';
+  ctx.fillRect(0, 0, cv.width, headerH);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 24px DM Sans, system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Bliksem-ontladingen — NW-Europa', 16, headerH / 2 - 6);
+  ctx.font = '13px DM Sans, system-ui, sans-serif';
+  ctx.fillStyle = '#a8c8e8';
+  const ts = new Date().toLocaleString('nl-NL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+  ctx.fillText(`Laatste ${windowMin} min · gegenereerd ${ts}`, 16, headerH / 2 + 14);
+
+  // Basis-kaart
+  ctx.drawImage(img, 0, headerH, baseW, baseH);
+
+  // Strikes: filter en teken (offset naar headerH)
   const now = Date.now();
   let visible = STRIKES.filter(s => (now - s.t) / 60000 <= windowMin);
   if (typeFilter !== 'all') visible = visible.filter(s => s.type === typeFilter);
 
   for (const s of visible) {
     const ageMin = (now - s.t) / 60000;
-    const [x, y] = lonLatToXY(s.lon, s.lat);
+    const [xRaw, yRaw] = lonLatToXY(s.lon, s.lat);
+    const x = xRaw, y = yRaw + headerH;
     const fill = colorForAge(ageMin);
     const stroke = strokeForAge(ageMin);
     if (s.type === 'CG') {
@@ -941,7 +971,6 @@ function downloadPNG() {
       ctx.lineWidth = 1.4;
       ctx.strokeStyle = stroke;
       ctx.stroke();
-      // Bliksem-zigzag in het midden
       ctx.beginPath();
       ctx.moveTo(x - 1.8, y - 4);
       ctx.lineTo(x + 1.4, y - 1);
@@ -968,22 +997,105 @@ function downloadPNG() {
     }
   }
 
-  // Footer met bronvermelding + timestamp
-  const fy = baseH;
+  // Legenda zijbalk
+  const lx = baseW;
+  ctx.fillStyle = '#f6f8fb';
+  ctx.fillRect(lx, headerH, legendW, baseH);
   ctx.fillStyle = '#00205b';
-  ctx.fillRect(0, fy, baseW, footerH);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 22px DM Sans, system-ui, sans-serif';
+  ctx.font = 'bold 13px DM Sans, system-ui, sans-serif';
   ctx.textBaseline = 'top';
-  ctx.fillText('Bliksem-ontladingen — weerlab.nl', 16, fy + 10);
-  ctx.font = '14px DM Sans, system-ui, sans-serif';
+  ctx.fillText('LEEFTIJD ONTLADING', lx + 14, headerH + 16);
+  const ages = [
+    ['#ffffff', '#cc0000', '< 2 min (vers)'],
+    ['#ffeb3b', 'rgba(0,0,0,0.4)', '2 – 10 min'],
+    ['#ff9800', 'rgba(0,0,0,0.4)', '10 – 30 min'],
+    ['#cc0000', 'rgba(0,0,0,0.4)', '30 – 60 min'],
+    ['#6d28d9', 'rgba(0,0,0,0.4)', '> 60 min'],
+  ];
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
+  let ly = headerH + 40;
+  for (const [c, str, lbl] of ages) {
+    ctx.beginPath();
+    ctx.arc(lx + 22, ly + 6, 6, 0, Math.PI * 2);
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = str;
+    ctx.stroke();
+    ctx.fillStyle = '#0f172a';
+    ctx.fillText(lbl, lx + 38, ly);
+    ly += 22;
+  }
+
+  ly += 10;
+  ctx.fillStyle = '#00205b';
+  ctx.font = 'bold 13px DM Sans, system-ui, sans-serif';
+  ctx.fillText('TYPE', lx + 14, ly);
+  ly += 22;
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
+  ctx.fillStyle = '#0f172a';
+  // CG icoon: cirkel + bliksempictogram
+  ctx.beginPath(); ctx.arc(lx + 22, ly + 6, 6, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffeb3b'; ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(lx + 20.2, ly + 2); ctx.lineTo(lx + 23.4, ly + 5);
+  ctx.lineTo(lx + 21.4, ly + 5.8); ctx.lineTo(lx + 24.1, ly + 10);
+  ctx.lineTo(lx + 20.6, ly + 6.5); ctx.lineTo(lx + 22.5, ly + 5.8); ctx.closePath();
+  ctx.fillStyle = '#000'; ctx.fill();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Cloud-Ground (CG)', lx + 38, ly);
+  ly += 20;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px DM Sans, system-ui, sans-serif';
+  ctx.fillText('inslag op grond', lx + 38, ly);
+  ly += 20;
+
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
+  ctx.beginPath(); ctx.arc(lx + 22, ly + 6, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffeb3b'; ctx.globalAlpha = 0.7; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Intra-Cloud (IC)', lx + 38, ly);
+  ly += 20;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px DM Sans, system-ui, sans-serif';
+  ctx.fillText('binnen wolk', lx + 38, ly);
+  ly += 26;
+
+  // Stats blok
+  ctx.fillStyle = '#00205b';
+  ctx.font = 'bold 13px DM Sans, system-ui, sans-serif';
+  ctx.fillText('OVERZICHT', lx + 14, ly);
+  ly += 22;
+  ctx.font = '12px DM Mono, monospace';
+  ctx.fillStyle = '#0f172a';
+  const cg = visible.filter(s => s.type === 'CG').length;
+  const last5 = visible.filter(s => (now - s.t) / 60000 <= 5).length;
+  for (const [k, v] of [
+    ['totaal', visible.length],
+    ['laatste 5 min', last5],
+    ['cloud-ground', cg],
+    ['intra-cloud', visible.length - cg],
+  ]) {
+    ctx.fillText(k, lx + 14, ly);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(v), lx + legendW - 14, ly);
+    ctx.textAlign = 'left';
+    ly += 18;
+  }
+
+  // Footer met bronvermelding
+  const fy = headerH + baseH;
+  ctx.fillStyle = '#003366';
+  ctx.fillRect(0, fy, cv.width, footerH);
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  ctx.font = 'bold 13px DM Sans, system-ui, sans-serif';
+  ctx.fillText('weerlab.nl — bliksem live', 16, fy + 10);
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
   ctx.fillStyle = '#a8c8e8';
-  const ts = new Date().toLocaleString('nl-NL', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
-  ctx.fillText(`Tijdvenster: laatste ${windowMin} min · ${visible.length} ontladingen · ${ts}`, 16, fy + 38);
-  ctx.fillText('Bron: Blitzortung.org en bijdragers (gratis bliksem-detectienetwerk)', 16, fy + 58);
+  ctx.fillText('Bron: Blitzortung.org en bijdragers (gratis bliksem-detectienetwerk via vrijwilligers-stations)', 16, fy + 32);
 
   // Download trigger
   cv.toBlob(blob => {
