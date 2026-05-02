@@ -252,9 +252,21 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
         maand = dag.groupby(dag.index.to_period("M")).sum().round(1)
     else:
         maand = dag.groupby(dag.index.to_period("M")).mean().round(1)
-    maand.index = [f"{MAANDEN_NL[p.month]} {p.year}" for p in maand.index]
+    maand_periods = list(maand.index)
+    maand.index = [f"{MAANDEN_NL[p.month]} {p.year}" for p in maand_periods]
     records["hoogste_maand"] = top_n(maand, TOP_N, ascending=False)
     records["laagste_maand"] = top_n(maand, TOP_N, ascending=True)
+
+    # Per kalendermaand: top-25 nat + droog (voor maand-filter in UI)
+    per_mnd_hoog = {}
+    per_mnd_laag = {}
+    for m in range(1, 13):
+        mask = [p.month == m for p in maand_periods]
+        sub = maand[mask]
+        per_mnd_hoog[str(m)] = top_n(sub, TOP_N, ascending=False)
+        per_mnd_laag[str(m)] = top_n(sub, TOP_N, ascending=True)
+    records["hoogste_maand_per"] = per_mnd_hoog
+    records["laagste_maand_per"] = per_mnd_laag
 
     # Seizoen
     sei_labels = dag.index.to_series().apply(seizoen_jaar)
