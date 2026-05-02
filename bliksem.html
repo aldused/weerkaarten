@@ -592,20 +592,34 @@ function renderPlaatsen() {
   layer.innerHTML = '';
   if (!PLAATSEN.length) return;
 
-  // Rang-filter per regio: NL toont rang 0-2 binnen bbox; Benelux rang 0-1 + grenssteden rang 2
+  // Rang-filter per regio (basisset op kaart altijd zichtbaar)
   const maxRang = regio === 'nl' ? 2 : 1;
 
-  for (const p of PLAATSEN) {
-    if (p.rang > maxRang) continue;
-    if (p.lon < LON_MIN || p.lon > LON_MAX || p.lat < LAT_MIN || p.lat > LAT_MAX) continue;
-    const [x, y] = lonLatToXY(p.lon, p.lat);
+  // Pop-drempel uit lookup: meer detail bij hogere zoom
+  // zoom 1 → niets extra; zoom 1.5 → pop>=80k; zoom 2.5 → pop>=30k; zoom 4 → pop>=10k; zoom 6+ → pop>=2000
+  let popMin = Infinity;
+  if (zoom >= 6) popMin = 2000;
+  else if (zoom >= 4) popMin = 10000;
+  else if (zoom >= 2.5) popMin = 30000;
+  else if (zoom >= 1.5) popMin = 80000;
 
+  // Inverse-scale per label zodat tekst constante schermgrootte houdt bij zoom
+  const invScale = 1 / Math.sqrt(zoom);
+
+  // Dedup: namen die al in basisset staan niet dubbel uit lookup tonen
+  const seen = new Set();
+
+  function add(naam, lat, lon, rang) {
+    if (seen.has(naam)) return;
+    if (lon < LON_MIN || lon > LON_MAX || lat < LAT_MIN || lat > LAT_MAX) return;
+    seen.add(naam);
+    const [x, y] = lonLatToXY(lon, lat);
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'plaats-label');
-    g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+    g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${invScale.toFixed(3)})`);
 
     const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    dot.setAttribute('r', p.rang === 0 ? '3.2' : '2.4');
+    dot.setAttribute('r', rang === 0 ? '3.2' : (rang === 1 ? '2.4' : '1.8'));
     dot.setAttribute('fill', '#222');
     dot.setAttribute('stroke', 'white');
     dot.setAttribute('stroke-width', '1');
@@ -614,17 +628,32 @@ function renderPlaatsen() {
     const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     txt.setAttribute('x', '5');
     txt.setAttribute('y', '4');
-    txt.setAttribute('font-size', p.rang === 0 ? '14' : '12');
-    txt.setAttribute('font-weight', p.rang === 0 ? '700' : '600');
+    txt.setAttribute('font-size', rang === 0 ? '14' : (rang === 1 ? '12' : '11'));
+    txt.setAttribute('font-weight', rang === 0 ? '700' : '600');
     txt.setAttribute('fill', '#1a1a1a');
     txt.setAttribute('paint-order', 'stroke');
     txt.setAttribute('stroke', 'white');
     txt.setAttribute('stroke-width', '3');
     txt.setAttribute('stroke-linejoin', 'round');
-    txt.textContent = p.naam;
+    txt.textContent = naam;
     g.appendChild(txt);
 
     layer.appendChild(g);
+  }
+
+  // Basisset (handgekozen labels)
+  for (const p of PLAATSEN) {
+    if (p.rang > maxRang) continue;
+    add(p.naam, p.lat, p.lon, p.rang);
+  }
+
+  // Extra labels uit lookup-DB op basis van zoom + populatie
+  if (popMin !== Infinity && PLAATSEN_LOOKUP.length) {
+    for (const p of PLAATSEN_LOOKUP) {
+      if (p.pop < popMin) continue;
+      const rang = p.pop >= 200000 ? 1 : 2;
+      add(p.naam, p.lat, p.lon, rang);
+    }
   }
 }
 
@@ -949,6 +978,7 @@ function applyTransform() {
   const wrap = document.getElementById('kaart-wrap');
   wrap.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
   document.getElementById('zoom-info').textContent = Math.round(zoom * 100) + '%';
+  renderPlaatsen();
 }
 
 function clampPan() {
