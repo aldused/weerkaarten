@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -39,6 +40,8 @@ DEFAULT_OUT = Path(__file__).resolve().parent.parent / "bliksem_strikes.json"
 WINDOW_SECONDS = 7200  # 2 uur
 WRITE_INTERVAL = 30    # secondes tussen file-writes
 RECONNECT_BACKOFF = [2, 5, 10, 30, 60, 120]  # exponentiaal terug naar 120s max
+
+R2_PUBLISH_SCRIPT = Path(__file__).resolve().parent / "r2_publish.sh"
 
 
 # ── Blitzortung LZW-decoder ──────────────────────────────────────────────────
@@ -189,8 +192,27 @@ class BlitzortungClient:
 
 
 # ── Periodieke writer ────────────────────────────────────────────────────────
+def publish_to_r2(out_path: Path, log: logging.Logger):
+    if not R2_PUBLISH_SCRIPT.exists():
+        log.warning("r2_publish.sh niet gevonden op %s", R2_PUBLISH_SCRIPT)
+        return
+    try:
+        result = subprocess.run(
+            [str(R2_PUBLISH_SCRIPT), str(out_path)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            log.warning("R2 upload faalde rc=%d: %s", result.returncode,
+                        (result.stderr or result.stdout).strip())
+    except subprocess.TimeoutExpired:
+        log.warning("R2 upload timeout")
+    except Exception as e:
+        log.warning("R2 upload fout: %s", e)
+
+
 def writer_loop(buffer: StrikeBuffer, out_path: Path, client: BlitzortungClient,
-                stop_event: threading.Event, log: logging.Logger):
+                stop_event: threading.Event, log: logging.Logger,
+                publish: bool = True):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     while not stop_event.is_set():
         try:
@@ -208,6 +230,8 @@ def writer_loop(buffer: StrikeBuffer, out_path: Path, client: BlitzortungClient,
             os.replace(tmp, out_path)
             log.info("geschreven: %d strikes in venster (totaal ontvangen %d)",
                      len(snap), client.message_count)
+            if publish:
+                publish_to_r2(out_path, log)
         except Exception as e:
             log.warning("write-fout: %s", e)
         stop_event.wait(WRITE_INTERVAL)
@@ -223,6 +247,8 @@ def main():
                         help="lon_min,lat_min,lon_max,lat_max")
     parser.add_argument("--window", type=int, default=WINDOW_SECONDS,
                         help=f"tijdvenster in seconden (default: {WINDOW_SECONDS})")
+    parser.add_argument("--no-publish", action="store_true",
+                        help="upload niet naar R2 (voor lokaal testen)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -250,7 +276,9 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     writer = threading.Thread(
-        target=writer_loop, args=(buffer, args.out, client, stop_event, log),
+        target=writer_loop,
+        args=(buffer, args.out, client, stop_event, log),
+        kwargs={"publish": not args.no_publish},
         daemon=True,
     )
     writer.start()
