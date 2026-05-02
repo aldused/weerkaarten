@@ -242,6 +242,20 @@ def seizoen_key(seizoen, jaar, mnd):
     return (seizoen, jaar)
 
 
+def seizoen_maanden(sz_key):
+    """Geeft de drie (jaar, maand) tuples die bij een seizoenkey horen."""
+    sz, jr = sz_key
+    if sz == "winter": return [(jr, 12), (jr + 1, 1), (jr + 1, 2)]
+    if sz == "lente":  return [(jr, 3),  (jr, 4),     (jr, 5)]
+    if sz == "zomer":  return [(jr, 6),  (jr, 7),     (jr, 8)]
+    return                    [(jr, 9),  (jr, 10),    (jr, 11)]  # herfst
+
+
+def seizoen_compleet(sz_key, mnd_count, min_per_maand=25):
+    """Een seizoen is compleet als alle 3 maanden minstens min_per_maand dagen hebben."""
+    return all(mnd_count.get(m, 0) >= min_per_maand for m in seizoen_maanden(sz_key))
+
+
 def bereken_records(data):
     dag_data  = {}
     dec_data  = defaultdict(float)
@@ -301,6 +315,7 @@ def bereken_records(data):
          "label": f"{k[0]} {k[1]}" + (f"/{k[1]+1}" if k[0] == "winter" else ""),
          "seizoen": k[0], "jaar": k[1]}
         for k,v in seizoen_data.items()
+        if seizoen_compleet(k, mnd_count)
     ], key=lambda x: -x["waarde"])
 
     jaar_alle = sorted([
@@ -345,7 +360,7 @@ def bereken_records(data):
          "label": f"{k[0]} {k[1]}" + (f"/{k[1]+1}" if k[0] == "winter" else ""),
          "seizoen": k[0], "jaar": k[1]}
         for k,v in seizoen_data.items()
-        if seizoen_count[k] >= 60 and k[1] >= 1880 and heeft_regen
+        if seizoen_compleet(k, mnd_count) and k[1] >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droog_jaar_alle = sorted([
