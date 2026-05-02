@@ -193,6 +193,10 @@
     pointer-events: none;
   }
   .kaart-wrap svg.events { pointer-events: auto; }
+  .plaats-label text {
+    font-family: 'DM Sans', sans-serif;
+    user-select: none;
+  }
   .zoom-controls {
     position: absolute;
     top: 10px; right: 10px;
@@ -390,6 +394,7 @@
     <div class="kaart-viewport" id="kaart-viewport">
       <div class="kaart-wrap" id="kaart-wrap">
         <img src="kaart_basis_nl.png" id="basis-kaart" alt="basiskaart" crossorigin="anonymous">
+        <svg id="svg-plaatsen" class="overlay" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
         <svg id="svg-strikes" class="events" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
       </div>
       <div class="zoom-controls">
@@ -403,7 +408,8 @@
     </div>
     <div class="footer-info">
       <span id="last-update">—</span> · <span id="source-info">bron: demo-data</span><br>
-      Bliksemgegevens: <a href="https://www.blitzortung.org/" target="_blank" rel="noopener">Blitzortung.org</a> en bijdragers — gratis bliksem-detectienetwerk gebaseerd op vrijwilligers-stations. Weergave: weerlab.nl
+      Bliksemgegevens: <a href="https://www.blitzortung.org/" target="_blank" rel="noopener">Blitzortung.org</a> en bijdragers — gratis bliksem-detectienetwerk gebaseerd op vrijwilligers-stations. Weergave: weerlab.nl<br>
+      © Ed Aldus / <a href="https://www.blitzortung.org/" target="_blank" rel="noopener">Blitzortung.org</a>
     </div>
   </div>
 
@@ -520,11 +526,14 @@ function applyRegio(key) {
   if (img.getAttribute('src') !== cfg.img) img.src = cfg.img;
   const svg = document.getElementById('svg-strikes');
   svg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+  const plaatsenSvg = document.getElementById('svg-plaatsen');
+  if (plaatsenSvg) plaatsenSvg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
   const vp = document.getElementById('kaart-viewport');
   vp.style.aspectRatio = cfg.aspect;
   vp.style.maxWidth = cfg.maxWidth;
   const t = document.getElementById('page-title');
   if (t) t.textContent = key === 'nl' ? 'Bliksem live — Nederland' : 'Bliksem live — Benelux';
+  renderPlaatsen();
 }
 applyRegio('nl');
 
@@ -532,6 +541,80 @@ function lonLatToXY(lon, lat) {
   const x = (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W;
   const y = (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H;
   return [x, y];
+}
+
+// ── Plaatsen ──────────────────────────────────────────────────────
+let PLAATSEN = [];
+async function loadPlaatsen() {
+  try {
+    const r = await fetch('plaatsen_benelux.json');
+    if (r.ok) {
+      const d = await r.json();
+      PLAATSEN = Array.isArray(d.plaatsen) ? d.plaatsen : [];
+    }
+  } catch (e) {
+    console.warn('plaatsen-load fout:', e);
+  }
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function nearestPlaats(lat, lon) {
+  if (!PLAATSEN.length) return null;
+  let best = null;
+  for (const p of PLAATSEN) {
+    const d = haversineKm(lat, lon, p.lat, p.lon);
+    if (!best || d < best.dist) best = { naam: p.naam, dist: d };
+  }
+  return best;
+}
+
+function renderPlaatsen() {
+  const layer = document.getElementById('svg-plaatsen');
+  if (!layer) return;
+  layer.innerHTML = '';
+  if (!PLAATSEN.length) return;
+
+  // Rang-filter per regio: NL toont rang 0-2 binnen bbox; Benelux rang 0-1 + grenssteden rang 2
+  const maxRang = regio === 'nl' ? 2 : 1;
+
+  for (const p of PLAATSEN) {
+    if (p.rang > maxRang) continue;
+    if (p.lon < LON_MIN || p.lon > LON_MAX || p.lat < LAT_MIN || p.lat > LAT_MAX) continue;
+    const [x, y] = lonLatToXY(p.lon, p.lat);
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'plaats-label');
+    g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('r', p.rang === 0 ? '3.2' : '2.4');
+    dot.setAttribute('fill', '#222');
+    dot.setAttribute('stroke', 'white');
+    dot.setAttribute('stroke-width', '1');
+    g.appendChild(dot);
+
+    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    txt.setAttribute('x', '5');
+    txt.setAttribute('y', '4');
+    txt.setAttribute('font-size', p.rang === 0 ? '14' : '12');
+    txt.setAttribute('font-weight', p.rang === 0 ? '700' : '600');
+    txt.setAttribute('fill', '#1a1a1a');
+    txt.setAttribute('paint-order', 'stroke');
+    txt.setAttribute('stroke', 'white');
+    txt.setAttribute('stroke-width', '3');
+    txt.setAttribute('stroke-linejoin', 'round');
+    txt.textContent = p.naam;
+    g.appendChild(txt);
+
+    layer.appendChild(g);
+  }
 }
 
 // (NL-grens-overlay verwijderd: zit al in basis-PNG)
@@ -808,7 +891,11 @@ function updateStats(visible) {
 function showTooltip(e, s, ageMin) {
   const tt = document.getElementById('strike-tooltip');
   const ageStr = ageMin < 1 ? `${Math.round(ageMin*60)}s` : `${ageMin.toFixed(1)} min`;
-  tt.innerHTML = `<b>${s.type}</b> · ${s.amp > 0 ? '+' : ''}${s.amp.toFixed(1)} kA<br>
+  const np = nearestPlaats(s.lat, s.lon);
+  const plaatsLine = np
+    ? `<b style="color:#fff">Bij ${np.naam}</b> (~${np.dist.toFixed(0)} km)<br>`
+    : '';
+  tt.innerHTML = `${plaatsLine}<b>${s.type}</b> · ${s.amp > 0 ? '+' : ''}${s.amp.toFixed(1)} kA<br>
     ${ageStr} geleden<br>
     ${s.lat.toFixed(3)}°N, ${s.lon.toFixed(3)}°E`;
   tt.style.display = 'block';
@@ -820,11 +907,22 @@ function moveTooltip(e) {
   tt.style.left = (e.clientX - wrap.left + 12) + 'px';
   tt.style.top = (e.clientY - wrap.top + 12) + 'px';
 }
+function clusterCenterLatLon(c) {
+  let latSum = 0, lonSum = 0;
+  for (const it of c.items) { latSum += it.s.lat; lonSum += it.s.lon; }
+  return [latSum / c.items.length, lonSum / c.items.length];
+}
+
 function showClusterTooltip(e, c, ageMin) {
   const tt = document.getElementById('strike-tooltip');
   const ageStr = ageMin < 1 ? `${Math.round(ageMin*60)}s` : `${ageMin.toFixed(1)} min`;
   const cgCount = c.items.filter(i => i.s.type === 'CG').length;
-  tt.innerHTML = `<b>Cluster · ${c.count} flashes</b><br>
+  const [cLat, cLon] = clusterCenterLatLon(c);
+  const np = nearestPlaats(cLat, cLon);
+  const plaatsLine = np
+    ? `<b style="color:#fff">Bij ${np.naam}</b> (~${np.dist.toFixed(0)} km)<br>`
+    : '';
+  tt.innerHTML = `${plaatsLine}<b>Cluster · ${c.count} flashes</b><br>
     CG: ${cgCount} · IC: ${c.count - cgCount}<br>
     Jongste: ${ageStr} geleden<br>
     <span style="color:#ffd54a;font-weight:600">↗ klik om in te zoomen</span>`;
@@ -981,7 +1079,7 @@ function downloadPNG() {
   const baseW = img.naturalWidth, baseH = img.naturalHeight;
   const headerH = 60;
   const legendW = 230;
-  const footerH = 60;
+  const footerH = 76;
   const cv = document.createElement('canvas');
   cv.width = baseW + legendW;
   cv.height = headerH + baseH + footerH;
@@ -1154,6 +1252,7 @@ function downloadPNG() {
   ctx.font = '12px DM Sans, system-ui, sans-serif';
   ctx.fillStyle = '#a8c8e8';
   ctx.fillText('Bron: Blitzortung.org en bijdragers (gratis bliksem-detectienetwerk via vrijwilligers-stations)', 16, fy + 32);
+  ctx.fillText('© Ed Aldus / Blitzortung.org', 16, fy + 50);
 
   // Download trigger
   cv.toBlob(blob => {
@@ -1170,6 +1269,7 @@ function downloadPNG() {
 }
 
 function initBliksem() {
+  loadPlaatsen().then(() => renderPlaatsen());
   loadLiveData();
   setInterval(loadLiveData, 30_000);
 }
