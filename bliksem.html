@@ -545,6 +545,7 @@ function lonLatToXY(lon, lat) {
 }
 
 // ── Plaatsen ──────────────────────────────────────────────────────
+let PLAATSEN_LOOKUP = [];
 async function loadPlaatsen() {
   try {
     const r = await fetch('plaatsen_benelux.json');
@@ -554,6 +555,15 @@ async function loadPlaatsen() {
     }
   } catch (e) {
     console.warn('plaatsen-load fout:', e);
+  }
+  try {
+    const r2 = await fetch('plaatsen_lookup.json');
+    if (r2.ok) {
+      const d2 = await r2.json();
+      PLAATSEN_LOOKUP = Array.isArray(d2.plaatsen) ? d2.plaatsen : [];
+    }
+  } catch (e) {
+    console.warn('plaatsen-lookup fout:', e);
   }
 }
 
@@ -566,9 +576,10 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 }
 
 function nearestPlaats(lat, lon) {
-  if (!PLAATSEN.length) return null;
+  const set = PLAATSEN_LOOKUP.length ? PLAATSEN_LOOKUP : PLAATSEN;
+  if (!set.length) return null;
   let best = null;
-  for (const p of PLAATSEN) {
+  for (const p of set) {
     const d = haversineKm(lat, lon, p.lat, p.lon);
     if (!best || d < best.dist) best = { naam: p.naam, dist: d };
   }
