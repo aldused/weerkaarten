@@ -5005,7 +5005,7 @@ function downloadPng(){
 }
 
 function _verzamelVergCanvassen(){
-  const canvassen=[]; const titels=[];
+  const canvassen=[]; const titels=[]; const types=[];
   for(let i=0;i<4;i++){
     const c=document.getElementById(`verg-canvas-${i}`);
     if(!c) continue;
@@ -5013,17 +5013,125 @@ function _verzamelVergCanvassen(){
     const tEl=cel?.querySelector('.verg-cel-titel');
     canvassen.push(c);
     titels.push(tEl?.textContent || `Pluim ${i+1}`);
+    types.push(document.getElementById(`verg-type-${i}`)?.value || 'temp');
   }
-  return {canvassen,titels};
+  return {canvassen,titels,types};
 }
 
-function _bouwVergComposite(canvassen,titels,kolommen){
-  const PAD=14, HDR=78, FOOT=30, TITL=40, GAP=10;
+// Structured legenda items per parameter-type voor PNG-rendering
+function vergCelLegItems(type){
+  switch(type){
+    case 'temp': return [
+      {kind:'line',color:'rgba(20,130,20,0.55)',label:'51 leden'},
+      {kind:'block',color:'rgba(20,130,20,0.40)',label:'IQR p25–p75'},
+      {kind:'line',color:'#ee3333',label:'Mediaan'},
+      {kind:'line',dash:true,color:'rgba(200,50,50,0.5)',label:'10°/20°C'},
+      {kind:'dot',color:'#ff4444',label:'MOSMIX TX'},
+      {kind:'dot',color:'#4488ff',label:'MOSMIX TN'},
+    ];
+    case 'neerslag': return [
+      {kind:'line',color:'rgba(25,120,25,0.75)',label:'51 leden (mm/6u)'},
+      {kind:'line',color:'#ee3333',label:'Mediaan'},
+    ];
+    case 'neerslagsom': return [
+      {kind:'line',color:'rgba(30,140,30,0.55)',label:'Cumulatief per lid'},
+      {kind:'block',color:'rgba(40,160,40,0.10)',label:'p10–p90'},
+      {kind:'line',color:'#ee3333',label:'Mediaan totaal'},
+    ];
+    case 'scenario': return [
+      {kind:'line',color:'#1e64c8',label:'Koel'},
+      {kind:'line',color:'#8c8c96',label:'Midden'},
+      {kind:'line',color:'#dc5028',label:'Warm'},
+    ];
+    case 'wind': return [
+      {kind:'line',color:'rgba(20,130,20,0.45)',label:'51 leden'},
+      {kind:'block',color:'rgba(68,187,68,0.22)',label:'IQR'},
+      {kind:'line',color:'#ee3333',label:'Mediaan'},
+      {kind:'line',dash:true,color:'rgba(255,140,60,0.85)',label:'Med. stoten'},
+    ];
+    case 'winddir': return [
+      {kind:'block',color:'#2c8a3a',label:'N'},
+      {kind:'block',color:'#5ec3eb',label:'NO'},
+      {kind:'block',color:'#3b46c8',label:'O'},
+      {kind:'block',color:'#d18ad6',label:'ZO'},
+      {kind:'block',color:'#d83333',label:'Z'},
+      {kind:'block',color:'#e69b3a',label:'ZW'},
+      {kind:'block',color:'#f5d142',label:'W'},
+      {kind:'block',color:'#9bd17e',label:'NW'},
+    ];
+    case 'cloud': return [
+      {kind:'block',color:'rgba(245,230,66,0.85)',label:'Onbewolkt'},
+      {kind:'block',color:'rgba(220,210,140,0.75)',label:'Licht'},
+      {kind:'block',color:'rgba(160,148,100,0.70)',label:'Half'},
+      {kind:'block',color:'rgba(130,130,150,0.65)',label:'Zwaar'},
+      {kind:'block',color:'rgba(55,55,70,0.80)',label:'Geheel'},
+    ];
+    case 'dauwpunt': return [
+      {kind:'line',color:'rgba(20,130,20,0.55)',label:'51 leden DP'},
+      {kind:'block',color:'rgba(51,170,51,0.20)',label:'IQR'},
+      {kind:'line',color:'#22aa22',label:'Mediaan DP'},
+      {kind:'line',dash:true,color:'rgba(100,220,180,0.7)',label:'RV%'},
+    ];
+    case 'sneeuw': return [{kind:'line',color:'#88aaff',label:'Sneeuwkans %'}];
+    case 'onweer': return [{kind:'line',color:'#ff8800',label:'Onweerkans %'}];
+    case 'weertype': return [
+      {kind:'block',color:'#f7c948',label:'Zon'},
+      {kind:'block',color:'#cfd8dc',label:'Bewolkt'},
+      {kind:'block',color:'#5fa8d3',label:'Regen'},
+      {kind:'block',color:'#a78bfa',label:'Onweer'},
+      {kind:'block',color:'#e0e7ff',label:'Sneeuw'},
+    ];
+    case 'dagkansen': return [{kind:'text',label:'Verdeling dag-max temperatuur per 2 °C bin'}];
+    case 'neerslagkansen': return [{kind:'text',label:'Kans op dagsom-neerslag per drempel'}];
+    default: return [];
+  }
+}
+
+function _drawVergLeg(ctx,items,x,y,maxW){
+  if(!items || !items.length) return;
+  ctx.save();
+  ctx.font='11px Inter,sans-serif';
+  ctx.textBaseline='middle';
+  let cx=x;
+  const cy=y+10;
+  const itemGap=12;
+  const xMax=x+maxW-4;
+  for(const it of items){
+    const labelW=ctx.measureText(it.label).width;
+    let glyphW=0;
+    if(it.kind==='line') glyphW=14+4;
+    else if(it.kind==='block'||it.kind==='dot') glyphW=9+4;
+    if(cx+glyphW+labelW>xMax && cx>x){ break; }
+    if(it.kind==='line'){
+      ctx.strokeStyle=it.color;
+      ctx.lineWidth=2;
+      if(it.dash) ctx.setLineDash([3,3]); else ctx.setLineDash([]);
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+14,cy);ctx.stroke();
+      ctx.setLineDash([]);
+      cx+=18;
+    } else if(it.kind==='block'){
+      ctx.fillStyle=it.color;
+      ctx.fillRect(cx,cy-4,9,9);
+      cx+=13;
+    } else if(it.kind==='dot'){
+      ctx.fillStyle=it.color;
+      ctx.beginPath();ctx.arc(cx+4.5,cy,4,0,Math.PI*2);ctx.fill();
+      cx+=13;
+    }
+    ctx.fillStyle='#5a6a80';
+    ctx.fillText(it.label,cx,cy);
+    cx+=labelW+itemGap;
+  }
+  ctx.restore();
+}
+
+function _bouwVergComposite(canvassen,titels,kolommen,types){
+  const PAD=14, HDR=78, FOOT=30, TITL=40, LEG=22, GAP=10;
   const cW=canvassen[0].width, cH=canvassen[0].height;
   const cols=kolommen;
   const rows=Math.ceil(canvassen.length/cols);
   const totW=cW*cols+PAD*(cols+1);
-  const totH=HDR+rows*(TITL+cH+GAP)+FOOT;
+  const totH=HDR+rows*(TITL+LEG+cH+GAP)+FOOT;
   const out=document.createElement('canvas');
   out.width=totW; out.height=totH;
   const ctx=out.getContext('2d');
@@ -5048,11 +5156,13 @@ function _bouwVergComposite(canvassen,titels,kolommen){
   canvassen.forEach((c,i)=>{
     const col=i%cols, row=Math.floor(i/cols);
     const x=PAD+col*(cW+PAD);
-    const y=HDR+row*(TITL+cH+GAP);
-    ctx.fillStyle='#ffffff'; ctx.fillRect(x,y,cW,TITL+cH);
+    const y=HDR+row*(TITL+LEG+cH+GAP);
+    ctx.fillStyle='#ffffff'; ctx.fillRect(x,y,cW,TITL+LEG+cH);
     ctx.fillStyle='#003366'; ctx.font='bold 19px Inter,sans-serif';
     ctx.fillText(titels[i],x+12,y+27);
-    ctx.drawImage(c,x,y+TITL);
+    const t=(types && types[i]) || 'temp';
+    _drawVergLeg(ctx,vergCelLegItems(t),x+12,y+TITL,cW-24);
+    ctx.drawImage(c,x,y+TITL+LEG);
   });
 
   ctx.fillStyle='#e8ecf2'; ctx.fillRect(0,totH-FOOT,totW,FOOT);
@@ -5063,10 +5173,10 @@ function _bouwVergComposite(canvassen,titels,kolommen){
 }
 
 function downloadVergelijking(){
-  const {canvassen,titels}=_verzamelVergCanvassen();
+  const {canvassen,titels,types}=_verzamelVergCanvassen();
   if(!canvassen.length)return;
   const cols = vergLayout==='stack' ? 1 : 2;
-  const out = _bouwVergComposite(canvassen,titels,cols);
+  const out = _bouwVergComposite(canvassen,titels,cols,types);
   const a=document.createElement('a');
   const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
   a.href=out.toDataURL('image/png');
@@ -5080,10 +5190,10 @@ function downloadVergelijkingPdf(){
     alert('PDF-bibliotheek nog niet geladen, probeer opnieuw.');
     return;
   }
-  const {canvassen,titels}=_verzamelVergCanvassen();
+  const {canvassen,titels,types}=_verzamelVergCanvassen();
   if(!canvassen.length)return;
   const cols = vergLayout==='stack' ? 1 : 2;
-  const composite = _bouwVergComposite(canvassen,titels,cols);
+  const composite = _bouwVergComposite(canvassen,titels,cols,types);
   const imgData = composite.toDataURL('image/png');
   // Oriëntatie: stack = portrait, grid = landscape
   const orient = vergLayout==='stack' ? 'p' : 'l';
