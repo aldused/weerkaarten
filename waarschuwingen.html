@@ -83,10 +83,8 @@ svg.nl path.prov {
   transition: filter .15s, stroke-width .15s;
 }
 svg.nl path.prov:hover { filter: brightness(1.08); stroke-width: 1.2; }
-svg.nl path.prov.zh-highlight {
-  stroke: var(--zh-stroke, #00205b);
+svg.nl path.prov.prov-highlight {
   stroke-width: 3.5;
-  filter: drop-shadow(0 0 3px var(--zh-shadow, rgba(0, 32, 91, 0.55)));
 }
 
 .zh-colors {
@@ -282,7 +280,23 @@ footer.attribution b { color: var(--wl-color-text); }
       </div>
       <div class="zh-colors" id="zhColors">
         <span class="label">Kleur:</span>
-        <!-- swatches worden in JS gevuld -->
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Utrecht markeren</h2>
+      <div class="zh-toggle">
+        <div class="label">
+          Dikke contour om Utrecht
+          <small>Aan/uit + kies kleur</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="utToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="zh-colors" id="utColors">
+        <span class="label">Kleur:</span>
       </div>
     </div>
 
@@ -420,15 +434,19 @@ const ABBR = {
   "Zeeland":"ZL","Noord-Brabant":"NB","Limburg":"LB","Waddeneilanden":"WA"
 };
 
-function renderMap(zhHighlight) {
+function renderMap() {
   const w = (BOUNDS.maxx - BOUNDS.minx) * 100;
   const h = (BOUNDS.maxy - BOUNDS.miny) * 100;
   const paths = GEO.features.map(f => {
     const name = f.properties.statnaam;
     const code = PROVINCE_CODES[name] || "groen";
     const fill = COLOR[code];
-    const cls = 'prov' + (zhHighlight && name === "Zuid-Holland" ? ' zh-highlight' : '');
-    return `<path class="${cls}" data-name="${name}" d="${pathFor(f)}" fill="${fill}">
+    const hl = isHighlighted(name);
+    const cls = 'prov' + (hl ? ' prov-highlight' : '');
+    const styleAttr = hl
+      ? `style="stroke:${highlightStrokeFor(name)};filter:drop-shadow(0 0 3px ${highlightShadowFor(name)})"`
+      : '';
+    return `<path class="${cls}" data-name="${name}" d="${pathFor(f)}" fill="${fill}" ${styleAttr}>
               <title>${name}: code ${code}</title>
             </path>`;
   }).join('');
@@ -437,10 +455,8 @@ function renderMap(zhHighlight) {
     const name = f.properties.statnaam;
     return `<text class="plabel" x="${cx}" y="${cy}">${ABBR[name] || name}</text>`;
   }).join('');
-  // Achtergrond water-rect groter dan bounds zodat de provincies "in zee liggen"
   const pad = 6;
-  const zhCol = ZH_COLOR[currentZHColor] || ZH_COLOR.navy;
-  const svg = `<svg class="nl" style="--zh-stroke:${zhCol.stroke};--zh-shadow:${zhCol.shadow}" viewBox="${-pad} ${-pad} ${(w + pad*2).toFixed(1)} ${(h + pad*2).toFixed(1)}" preserveAspectRatio="xMidYMid meet">
+  const svg = `<svg class="nl" viewBox="${-pad} ${-pad} ${(w + pad*2).toFixed(1)} ${(h + pad*2).toFixed(1)}" preserveAspectRatio="xMidYMid meet">
     <rect class="water-bg" x="${-pad}" y="${-pad}" width="${w + pad*2}" height="${h + pad*2}"/>
     ${paths}
     ${labels}
@@ -495,9 +511,9 @@ function startDayDateOf(geldigheid) {
   return d ? _fmtDayDate(d) : null;
 }
 
-// ---------------- ZH KLEURPALET ----------------
-const ZH_COLOR = {
-  navy:    { hex:"#00205b", stroke:"#00205b", shadow:"rgba(0,32,91,0.55)",   label:"Navy (KNMI)" },
+// ---------------- HIGHLIGHT KLEURPALET (gedeeld voor ZH + Utrecht) ----------------
+const HL_PALETTE = {
+  navy:    { hex:"#00205b", stroke:"#00205b", shadow:"rgba(0,32,91,0.55)",    label:"Navy (KNMI)" },
   cyan:    { hex:"#2ec4e8", stroke:"#0b7c95", shadow:"rgba(11,124,149,0.55)", label:"Accent" },
   purple:  { hex:"#6d28d9", stroke:"#6d28d9", shadow:"rgba(109,40,217,0.55)", label:"Paars" },
   magenta: { hex:"#ec4899", stroke:"#be185d", shadow:"rgba(190,24,93,0.55)",  label:"Magenta" },
@@ -505,30 +521,56 @@ const ZH_COLOR = {
   black:   { hex:"#0f172a", stroke:"#0f172a", shadow:"rgba(15,23,42,0.55)",   label:"Zwart" },
   white:   { hex:"#ffffff", stroke:"#ffffff", shadow:"rgba(0,0,0,0.55)",      label:"Wit" }
 };
-let currentZHColor = "navy";
+// Backward compat
+const ZH_COLOR = HL_PALETTE;
 
-function renderZHColors(){
-  const host = document.getElementById('zhColors');
+const HIGHLIGHTS = {
+  "Zuid-Holland": { toggleId:"zhToggle", swatchHostId:"zhColors", storageKey:"zh_color", colorKey:"navy" },
+  "Utrecht":      { toggleId:"utToggle", swatchHostId:"utColors", storageKey:"ut_color", colorKey:"red"  }
+};
+// Compat alias
+let currentZHColor = HIGHLIGHTS["Zuid-Holland"].colorKey;
+
+function isHighlighted(provName){
+  const h = HIGHLIGHTS[provName];
+  if (!h) return false;
+  const t = document.getElementById(h.toggleId);
+  return !!(t && t.checked);
+}
+function highlightStrokeFor(provName){
+  const h = HIGHLIGHTS[provName];
+  return h ? (HL_PALETTE[h.colorKey]?.stroke || "#00205b") : "#4a4a4a";
+}
+function highlightShadowFor(provName){
+  const h = HIGHLIGHTS[provName];
+  return h ? (HL_PALETTE[h.colorKey]?.shadow || "rgba(0,32,91,0.55)") : "rgba(0,0,0,0.4)";
+}
+
+function renderHighlightSwatches(provName){
+  const cfg = HIGHLIGHTS[provName];
+  const host = document.getElementById(cfg.swatchHostId);
   if (!host) return;
-  // Verwijder bestaande swatches (behoud label)
   [...host.querySelectorAll('.zh-swatch')].forEach(el => el.remove());
-  const enabled = document.getElementById('zhToggle').checked;
-  Object.entries(ZH_COLOR).forEach(([key, info]) => {
+  const enabled = document.getElementById(cfg.toggleId).checked;
+  Object.entries(HL_PALETTE).forEach(([key, info]) => {
     const sw = document.createElement('div');
-    sw.className = 'zh-swatch' + (key === currentZHColor ? ' selected' : '') + (enabled ? '' : ' disabled');
+    sw.className = 'zh-swatch' + (key === cfg.colorKey ? ' selected' : '') + (enabled ? '' : ' disabled');
     sw.style.background = info.hex;
     sw.title = info.label;
     sw.dataset.key = key;
     sw.addEventListener('click', () => {
-      if (!document.getElementById('zhToggle').checked) return;
-      currentZHColor = key;
-      try { localStorage.setItem('zh_color', key); } catch {}
-      renderZHColors();
-      renderMap(true);
+      if (!document.getElementById(cfg.toggleId).checked) return;
+      cfg.colorKey = key;
+      if (provName === "Zuid-Holland") currentZHColor = key;
+      try { localStorage.setItem(cfg.storageKey, key); } catch {}
+      renderHighlightSwatches(provName);
+      renderMap();
     });
     host.appendChild(sw);
   });
 }
+// Compat
+function renderZHColors(){ renderHighlightSwatches("Zuid-Holland"); }
 
 // ---------------- LEGENDA REASONS ----------------
 function renderReasons() {
@@ -582,9 +624,9 @@ function renderLastUpdate() {
 }
 
 // ---------------- INIT ----------------
-async function refreshAll(zhHighlight){
+async function refreshAll(){
   await loadWarnings();
-  renderMap(zhHighlight);
+  renderMap();
   renderReasons();
   renderWarningList();
   renderLastUpdate();
@@ -592,33 +634,41 @@ async function refreshAll(zhHighlight){
 
 async function init() {
   await loadGeo();
-  let zhHighlight = false;
-  try { currentZHColor = localStorage.getItem('zh_color') || 'navy'; } catch {}
-  if (!ZH_COLOR[currentZHColor]) currentZHColor = 'navy';
+
+  // Laad opgeslagen kleurkeuzes per provincie
+  Object.entries(HIGHLIGHTS).forEach(([prov, cfg]) => {
+    try {
+      const saved = localStorage.getItem(cfg.storageKey);
+      if (saved && HL_PALETTE[saved]) cfg.colorKey = saved;
+    } catch {}
+  });
+  currentZHColor = HIGHLIGHTS["Zuid-Holland"].colorKey;
 
   try {
-    await refreshAll(zhHighlight);
+    await refreshAll();
   } catch(e) {
     document.getElementById('lastUpdate').textContent = "Fout bij laden: " + e.message;
     console.error(e);
+    // toon alvast lege kaart zodat UI niet stuk is
+    renderMap();
   }
-  renderZHColors();
+  Object.keys(HIGHLIGHTS).forEach(p => renderHighlightSwatches(p));
 
-  // Auto-refresh elke 15 min (matcht launchd-interval)
-  setInterval(() => {
-    refreshAll(document.getElementById('zhToggle').checked).catch(console.error);
-  }, 15 * 60 * 1000);
+  // Auto-refresh elke 15 min
+  setInterval(() => { refreshAll().catch(console.error); }, 15 * 60 * 1000);
 
-  document.getElementById('zhToggle').addEventListener('change', e => {
-    zhHighlight = e.target.checked;
-    renderMap(zhHighlight);
-    renderZHColors();
+  // Toggles
+  Object.entries(HIGHLIGHTS).forEach(([prov, cfg]) => {
+    document.getElementById(cfg.toggleId).addEventListener('change', () => {
+      renderMap();
+      renderHighlightSwatches(prov);
+    });
   });
   document.getElementById('btnRefresh').addEventListener('click', () => {
-    refreshAll(document.getElementById('zhToggle').checked).catch(console.error);
+    refreshAll().catch(console.error);
   });
   document.getElementById('btnDownloadAll').addEventListener('click', () => {
-    downloadFullMapPNG(document.getElementById('zhToggle').checked);
+    downloadFullMapPNG();
   });
   document.getElementById('btnDownloadZH').addEventListener('click', () => {
     downloadProvincePNG("Zuid-Holland");
@@ -671,7 +721,7 @@ function wrapLines(text, maxChars){
   return lines;
 }
 
-function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHighlight=false, warnings=[], badgeCodes=[], dateStr=""}){
+function buildExportSVG({features, attribution, padding=8, withLabels=true, warnings=[], badgeCodes=[], dateStr="", forceHighlight=null}){
   let xs=[], ys=[];
   features.forEach(f => {
     const walk = c => {
@@ -750,9 +800,9 @@ function buildExportSVG({features, attribution, padding=8, withLabels=true, zhHi
     const name = f.properties.statnaam;
     const code = PROVINCE_CODES[name] || "groen";
     const fill = COLOR[code];
-    const isZH = name === "Zuid-Holland";
-    const stroke = (zhHighlight && isZH) ? (ZH_COLOR[currentZHColor]?.stroke || "#00205b") : "#4a4a4a";
-    const sw = (zhHighlight && isZH) ? 1.6 : 0.4;
+    const hl = (forceHighlight === name) || isHighlighted(name);
+    const stroke = hl ? highlightStrokeFor(name) : "#4a4a4a";
+    const sw = hl ? 1.6 : 0.4;
     return `<path d="${pathFor(f)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
   }).join('');
   const labels = withLabels ? features.map(f => {
@@ -836,14 +886,13 @@ function activeCodesInOrder(warnings){
   return order.filter(c => present.has(c));
 }
 
-function downloadFullMapPNG(zhHighlight){
+function downloadFullMapPNG(){
   const date = new Date().toLocaleString('nl-NL', { dateStyle:'short', timeStyle:'short' });
   const codes = activeCodesInOrder(ACTIVE_WARNINGS);
   const svgStr = buildExportSVG({
     features: GEO.features,
     attribution: "Waarschuwingen Nederland — KNMI",
     dateStr: date,
-    zhHighlight,
     warnings: ACTIVE_WARNINGS,
     badgeCodes: codes
   });
@@ -867,7 +916,7 @@ function downloadProvincePNG(provName){
     dateStr: date,
     padding: 12,
     withLabels: false,
-    zhHighlight: provName === "Zuid-Holland",
+    forceHighlight: HIGHLIGHTS[provName] ? provName : null,
     warnings: provWarns,
     badgeCodes: codes
   });
