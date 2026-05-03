@@ -10,7 +10,7 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
-body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; display: flex; flex-direction: column; overflow: hidden; font-feature-settings: "ss01","cv11"; }
+body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; font-feature-settings: "ss01","cv11"; scroll-behavior: smooth; }
 
 .header { background: #00205b; padding: 14px 22px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid #001640; color: #ffffff; }
 .header-titel { color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.15; }
@@ -18,9 +18,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .header-meta { color: #a8c4e8; font-size: 11px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; text-align: right; }
 .header-meta b { color: #ffffff; font-weight: 600; }
 
-/* Puntpaneel — verschijnt na klik op kaart */
-.punt-paneel { background: #ffffff; border-top: 1px solid #e3e8ef; padding: 12px 20px 14px; display: none; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
-.punt-paneel.actief { display: flex; }
+/* Puntpaneel — verschijnt na klik op kaart, slide-in animatie + auto-scroll */
+.punt-paneel { background: #ffffff; border-top: 3px solid #00205b; padding: 14px 20px 16px; display: none; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; box-shadow: 0 -4px 16px rgba(0,0,0,0.12); position: relative; }
+.punt-paneel.actief { display: flex; animation: slideUp 0.25s ease-out; }
+@keyframes slideUp { from { transform: translateY(60%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* Floating "info beneden" hint na klik */
+.info-hint { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #00205b; color: #ffffff; padding: 8px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; box-shadow: 0 4px 16px rgba(0,32,91,0.4); z-index: 50; opacity: 0; pointer-events: none; transition: opacity 0.3s; font-family: inherit; }
+.info-hint.tonen { opacity: 1; animation: bounceUp 0.4s; }
+@keyframes bounceUp { 0% { transform: translate(-50%, 30px); } 60% { transform: translate(-50%, -8px); } 100% { transform: translate(-50%, 0); } }
 .punt-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .punt-titel { font-size: 14px; font-weight: 700; color: #0f172a; }
 .punt-coord { font-family: "DM Mono", ui-monospace, monospace; font-size: 10.5px; color: #64748b; margin-top: 2px; }
@@ -368,6 +374,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   </table>
 </div>
 
+<div class="info-hint" id="info-hint">↓ Neerslag-info onder de kaart</div>
 <div id="tooltip"></div>
 <div class="status" id="status">Laden... <span class="loading-spinner"></span></div>
 
@@ -1518,6 +1525,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     }
     updateFavBtn();
     renderFrame();
+    // Scroll paneel in beeld + toon kort hint-bubble
+    setTimeout(function() {
+      paneel.scrollIntoView({ behavior: "smooth", block: "end" });
+      var hint = document.getElementById("info-hint");
+      if (hint) {
+        hint.classList.add("tonen");
+        setTimeout(function() { hint.classList.remove("tonen"); }, 1800);
+      }
+    }, 50);
   }
 
   function sluitPuntPaneel() {
@@ -2001,10 +2017,65 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // EXPORT: PNG
   // ═══════════════════════════════════════════════════════════════════════
 
+  // Bouw composite canvas met blauwe header boven + footer onder (zoals bliksem-export)
+  function bouwComposite(srcCanvas, frameIdxOpt) {
+    var fIdx = (typeof frameIdxOpt === "number") ? frameIdxOpt : frameIdx;
+    var headerH = 64;
+    var footerH = 48;
+    var srcW = srcCanvas.width;   // device pixels
+    var srcH = srcCanvas.height;
+    // Schaal header/footer op dpr van bron-canvas (canvas.width/BASEMAP_W = dprGlobal)
+    var k = srcW / BASEMAP_W;
+    var hH = Math.round(headerH * k);
+    var fH = Math.round(footerH * k);
+
+    var out = document.createElement("canvas");
+    out.width = srcW;
+    out.height = hH + srcH + fH;
+    var c = out.getContext("2d");
+
+    // ── Header (blauw)
+    c.fillStyle = "#00205b";
+    c.fillRect(0, 0, srcW, hH);
+    c.fillStyle = "#ffffff";
+    c.font = "bold " + Math.round(20 * k) + "px DM Sans, Arial, sans-serif";
+    c.textBaseline = "top";
+    c.fillText("Neerslagradar — Nederland", Math.round(20 * k), Math.round(12 * k));
+    c.fillStyle = "#a8c4e8";
+    c.font = "500 " + Math.round(12 * k) + "px DM Mono, monospace";
+    var tijdT = (radarMode !== "instant" && cumLabel) ? cumLabel : (meta.tijden_tekst ? meta.tijden_tekst[fIdx] : "");
+    c.fillText("KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast · " + tijdT, Math.round(20 * k), Math.round(38 * k));
+    var bijTxt = "Bijgewerkt: " + (meta.bijgewerkt || "");
+    c.textAlign = "right";
+    c.fillText(bijTxt, srcW - Math.round(20 * k), Math.round(38 * k));
+    c.textAlign = "left";
+
+    // ── Bron-canvas
+    c.drawImage(srcCanvas, 0, hH);
+
+    // ── Footer (blauw)
+    var fy = hH + srcH;
+    c.fillStyle = "#00205b";
+    c.fillRect(0, fy, srcW, fH);
+    c.fillStyle = "#ffffff";
+    c.font = "bold " + Math.round(13 * k) + "px DM Sans, Arial, sans-serif";
+    c.textBaseline = "middle";
+    c.fillText("weerlab.nl — neerslagradar", Math.round(20 * k), fy + fH / 2 - Math.round(7 * k));
+    c.fillStyle = "#a8c4e8";
+    c.font = "500 " + Math.round(11 * k) + "px DM Mono, monospace";
+    c.fillText("Bron: KNMI · pySTEPS-nowcast", Math.round(20 * k), fy + fH / 2 + Math.round(8 * k));
+    c.textAlign = "right";
+    c.fillText("© Ed Aldus / KNMI", srcW - Math.round(20 * k), fy + fH / 2);
+    c.textAlign = "left";
+
+    return out;
+  }
+
   function exportPNG() {
+    var comp = bouwComposite(canvas);
     var link = document.createElement("a");
     link.download = "regenradar_" + (meta.tijden[frameIdx] || "").replace(/[:\-T]/g, "").substring(0, 12) + ".png";
-    link.href = canvas.toDataURL("image/png");
+    link.href = comp.toDataURL("image/png");
     link.click();
   }
 
@@ -2022,17 +2093,20 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var wasPlaying = playing;
     if (playing) togglePlay();
 
-    // We maken een GIF door alle frames te renderen en te encoderen
+    // We maken een GIF door alle frames te renderen, te composite-en en te encoderen
     var savedFrame = frameIdx;
     var gifFrames = [];
-    var w = canvas.width;
-    var h = canvas.height;
+    // Bepaal output-grootte via één probe-composite
+    var probe = bouwComposite(canvas, frameIdx);
+    var w = probe.width;
+    var h = probe.height;
 
-    // Render alle frames naar image data
+    // Render alle frames naar composite image data
     for (var i = 0; i < nFrames; i++) {
       frameIdx = i;
       renderFrame();
-      gifFrames.push(ctx.getImageData(0, 0, w, h));
+      var comp = bouwComposite(canvas, i);
+      gifFrames.push(comp.getContext("2d").getImageData(0, 0, w, h));
       var pct = Math.round((i + 1) / nFrames * 30);
       barEl.style.width = pct + "%";
       pctEl.textContent = pct + "%";
