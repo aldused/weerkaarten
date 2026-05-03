@@ -301,6 +301,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       <button class="layer-btn actief" data-layer="rivieren" title="Rivieren">RIV</button>
       <button class="layer-btn actief" data-layer="steden" title="Stadsnamen">PLTS</button>
       <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (laatste 60 min)">⚡ BLI</button>
+      <button class="layer-btn" data-layer="cellen" title="Storm-cell tracking met richting/snelheid">🎯 CELL</button>
+      <button class="layer-btn" data-layer="hagel" title="Mogelijk hagel (>55 dBZ)">❄ HAGEL</button>
     </div>
   </div>
 
@@ -326,6 +328,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   <span class="fav-bar-label">Zoek plaats:</span>
   <input id="plaats-zoek" list="plaatsen-list" placeholder="bv. Amsterdam, Eindhoven..." autocomplete="off" style="padding:4px 10px;border-radius:6px;border:1px solid #e3e8ef;font-family:inherit;font-size:12px;min-width:180px;">
   <datalist id="plaatsen-list"></datalist>
+  <span class="fav-bar-label" style="margin-left:12px;">Events:</span>
+  <span id="events-chips"></span>
   <span class="fav-bar-label" style="margin-left:12px;">Favorieten:</span>
   <span class="fav-empty" id="fav-empty">geen — klik op kaart en druk ⭐ om op te slaan</span>
 </div>
@@ -661,6 +665,80 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     return tNowIndex >= 0 && idx > tNowIndex;
   }
 
+  // ── Storm-cell detectie via iteratieve flood-fill op dBZ-drempel ────────
+  function detecteerCellenVoorFrame(fIdx) {
+    if (cellsCache[fIdx]) return cellsCache[fIdx];
+    if (!radarData) return [];
+    var off = fIdx * nLat * nLon;
+    var visited = new Uint8Array(nLat * nLon);
+    var cells = [];
+    for (var i = 0; i < nLat * nLon; i++) {
+      if (visited[i]) continue;
+      var pv = radarData[off + i];
+      if (pv === 0 || pv === 255) { visited[i] = 1; continue; }
+      var dbz = 0.5 * pv - 32;
+      if (dbz < CELL_MIN_DBZ) { visited[i] = 1; continue; }
+
+      // Iteratieve BFS-flood-fill
+      var queue = [i];
+      visited[i] = 1;
+      var sumX = 0, sumY = 0, sumW = 0, peakDbz = dbz, area = 0;
+      while (queue.length) {
+        var idx = queue.pop();
+        var pv2 = radarData[off + idx];
+        var dbz2 = 0.5 * pv2 - 32;
+        var weight = Math.pow(10, dbz2 / 10) / 200;  // ruw mm/u
+        var col = idx % nLon, row = (idx / nLon) | 0;
+        sumX += col * weight; sumY += row * weight; sumW += weight;
+        area++;
+        if (dbz2 > peakDbz) peakDbz = dbz2;
+        // 4-connected neighbours
+        if (col + 1 < nLon)         { var n1 = idx + 1;     if (!visited[n1] && (radarData[off+n1]>0 && radarData[off+n1]<255 && 0.5*radarData[off+n1]-32 >= CELL_MIN_DBZ)) { visited[n1]=1; queue.push(n1); } else visited[n1]=1; }
+        if (col > 0)                { var n2 = idx - 1;     if (!visited[n2] && (radarData[off+n2]>0 && radarData[off+n2]<255 && 0.5*radarData[off+n2]-32 >= CELL_MIN_DBZ)) { visited[n2]=1; queue.push(n2); } else visited[n2]=1; }
+        if (row + 1 < nLat)         { var n3 = idx + nLon;  if (!visited[n3] && (radarData[off+n3]>0 && radarData[off+n3]<255 && 0.5*radarData[off+n3]-32 >= CELL_MIN_DBZ)) { visited[n3]=1; queue.push(n3); } else visited[n3]=1; }
+        if (row > 0)                { var n4 = idx - nLon;  if (!visited[n4] && (radarData[off+n4]>0 && radarData[off+n4]<255 && 0.5*radarData[off+n4]-32 >= CELL_MIN_DBZ)) { visited[n4]=1; queue.push(n4); } else visited[n4]=1; }
+      }
+      if (area >= CELL_MIN_PIX && sumW > 0) {
+        var cx = sumX / sumW, cy = sumY / sumW;
+        // grid → lat/lon
+        var lon = meta.grid.lon_min + (cx / (nLon - 1)) * (meta.grid.lon_max - meta.grid.lon_min);
+        var lat = meta.grid.lat_max - (cy / (nLat - 1)) * (meta.grid.lat_max - meta.grid.lat_min);
+        cells.push({ cx: cx, cy: cy, lat: lat, lon: lon, peakDbz: peakDbz, area: area, mass: sumW });
+      }
+    }
+    cellsCache[fIdx] = cells;
+    return cells;
+  }
+
+  function trackMotionVectors(fIdx) {
+    // Match cells aan vorig frame, bereken vx/vy in grid-cells per frame (5min)
+    var cur = detecteerCellenVoorFrame(fIdx);
+    if (fIdx <= 0) return cur;
+    var prev = detecteerCellenVoorFrame(fIdx - 1);
+    var maxDist = 25;  // max cell-verplaatsing per 5min in grid cells (~25km)
+    for (var i = 0; i < cur.length; i++) {
+      var c = cur[i];
+      var bestD = maxDist * maxDist, bestPrev = null;
+      for (var j = 0; j < prev.length; j++) {
+        var p = prev[j];
+        var dx = c.cx - p.cx, dy = c.cy - p.cy;
+        var d2 = dx * dx + dy * dy;
+        if (d2 < bestD) { bestD = d2; bestPrev = p; }
+      }
+      if (bestPrev) {
+        c.vx = c.cx - bestPrev.cx;
+        c.vy = c.cy - bestPrev.cy;
+        // km/h: 1 grid cell ≈ 1 km, 5 min interval → cells*60/5 = cells*12
+        c.snelheid = Math.sqrt(c.vx * c.vx + c.vy * c.vy) * 12;
+        c.richting = Math.atan2(-c.vy, c.vx) * 180 / Math.PI;  // -vy: noord boven
+      } else {
+        c.vx = 0; c.vy = 0; c.snelheid = 0;
+      }
+      c.naam = dichtstbijzijnde(c.lat, c.lon) || "";
+    }
+    return cur;
+  }
+
   // Bouw cumulatieve som-grid voor gekozen modus
   function bouwCumGrid() {
     if (radarMode === "instant" || !radarData || !meta) {
@@ -724,6 +802,25 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var STRIKES = [];
   var bliksemTimer = null;
 
+  // Vooraf gedefinieerde event-locaties — quick-jump
+  var EVENT_LOCATIES = [
+    { naam: "De Kuip",         lat: 51.8939, lon: 4.5232 },
+    { naam: "Soestdijk",       lat: 52.1789, lon: 5.2891 },
+    { naam: "Johan Cruijff ArenA", lat: 52.3144, lon: 4.9419 },
+    { naam: "Ahoy",            lat: 51.8859, lon: 4.4837 },
+    { naam: "Goffertpark",     lat: 51.8222, lon: 5.8453 },
+    { naam: "Megaland (Pinkpop)", lat: 50.8861, lon: 5.9747 },
+    { naam: "Biddinghuizen (Lowlands)", lat: 52.4528, lon: 5.7022 },
+    { naam: "Zandvoort circuit", lat: 52.3886, lon: 4.5408 },
+    { naam: "TT Assen",        lat: 52.9583, lon: 6.5236 },
+    { naam: "Malieveld",       lat: 52.0850, lon: 4.3208 }
+  ];
+
+  // Storm-cell tracking — detect + match tussen opeenvolgende frames
+  var cellsCache = {};        // frameIdx → [{cx, cy, mass, peakDbz, area, vx, vy, naam, eta}]
+  var CELL_MIN_DBZ = 35;
+  var CELL_MIN_PIX = 8;        // ~8 km²
+
   // Geselecteerd punt + favorieten + lagen
   var puntSel = null;          // {lat, lon, plaats}
   var favorieten = (function() {
@@ -738,6 +835,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   if (typeof layers.rivieren !== "boolean")   layers.rivieren = true;
   if (typeof layers.steden !== "boolean")     layers.steden = true;
   if (typeof layers.bliksem !== "boolean")    layers.bliksem = false;
+  if (typeof layers.cellen !== "boolean")     layers.cellen = false;
+  if (typeof layers.hagel !== "boolean")      layers.hagel = false;
 
   // ═══════════════════════════════════════════════════════════════════════
   // DATA LADEN
@@ -1037,6 +1136,97 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         ctx.strokeText(st[2], sxs + labelOffset, sys);
         ctx.fillStyle = "#0a1929";
         ctx.fillText(st[2], sxs + labelOffset, sys);
+      }
+    }
+
+    // 8a-1. Hagel-indicator (>55 dBZ pixels) — sterren-icoontjes in scherm-coords
+    if (layers.hagel && radarMode === "instant" && radarData) {
+      var ofH = frameIdx * nLat * nLon;
+      // Sample raster, niet elke pixel maar elke 4 (snelheid)
+      var step = (zoomLevel >= 5) ? 1 : (zoomLevel >= 2) ? 2 : 4;
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      ctx.lineWidth = 1.5;
+      ctx.font = "700 " + (zoomLevel >= 5 ? 13 : 11) + "px Arial";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      var hagelDrempel = 100;  // PV waarde voor 55 dBZ: PV = 2*(55+32) = 174? eigenlijk dBZ=0.5*PV-32 → PV=2*(dBZ+32) → 55 dBZ = PV 174
+      // Use exact: dBZ 55 → PV (55+32)*2 = 174
+      hagelDrempel = 174;
+      for (var hr = 0; hr < nLat; hr += step) {
+        for (var hc = 0; hc < nLon; hc += step) {
+          var hpv = radarData[ofH + hr * nLon + hc];
+          if (hpv >= hagelDrempel && hpv < 255) {
+            // grid → lon/lat → screen
+            var hlon = meta.grid.lon_min + (hc / (nLon - 1)) * (meta.grid.lon_max - meta.grid.lon_min);
+            var hlat = meta.grid.lat_max - (hr / (nLat - 1)) * (meta.grid.lat_max - meta.grid.lat_min);
+            var hwx = lonToX(hlon), hwy = latToY(hlat);
+            var hxs = (hwx - viewX) * zoomLevel;
+            var hys = (hwy - viewY) * zoomLevel;
+            if (hxs < -10 || hxs > W + 10 || hys < -10 || hys > H + 10) continue;
+            ctx.strokeText("✦", hxs, hys);
+            ctx.fillText("✦", hxs, hys);
+          }
+        }
+      }
+    }
+
+    // 8a-2. Storm-cell tracking — pijl + label op intense cellen
+    if (layers.cellen && radarMode === "instant") {
+      var celln = trackMotionVectors(frameIdx);
+      ctx.font = "700 12px DM Sans, Arial, sans-serif";
+      ctx.textBaseline = "middle";
+      for (var ci = 0; ci < celln.length; ci++) {
+        var cl = celln[ci];
+        var cwx = lonToX(cl.lon), cwy = latToY(cl.lat);
+        var cxs = (cwx - viewX) * zoomLevel;
+        var cys = (cwy - viewY) * zoomLevel;
+        if (cxs < -50 || cxs > W + 50 || cys < -20 || cys > H + 20) continue;
+
+        // Cirkel rond cel-centrum (grootte ~ area)
+        var rad = Math.min(40, 4 + Math.sqrt(cl.area) * 0.6);
+        ctx.beginPath();
+        ctx.arc(cxs, cys, rad, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255,255,255,0.95)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.strokeStyle = (cl.peakDbz >= 50) ? "#cc0000" : "#f59e0b";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Snelheid-pijl (alleen als beweging > 5 km/h)
+        if (cl.snelheid && cl.snelheid > 5) {
+          var ang = Math.atan2(cl.vy, cl.vx);  // grid-richting (y omlaag)
+          var alen = Math.min(60, 14 + cl.snelheid * 0.6);
+          var ex = cxs + Math.cos(ang) * alen;
+          var ey = cys + Math.sin(ang) * alen;
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "rgba(255,255,255,0.95)";
+          ctx.beginPath(); ctx.moveTo(cxs, cys); ctx.lineTo(ex, ey); ctx.stroke();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#0f172a";
+          ctx.beginPath(); ctx.moveTo(cxs, cys); ctx.lineTo(ex, ey); ctx.stroke();
+          // Pijlpunt
+          var ph = 8;
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - ph * Math.cos(ang - 0.4), ey - ph * Math.sin(ang - 0.4));
+          ctx.lineTo(ex - ph * Math.cos(ang + 0.4), ey - ph * Math.sin(ang + 0.4));
+          ctx.closePath();
+          ctx.fillStyle = "#0f172a";
+          ctx.fill();
+        }
+
+        // Label: "23 km/h Eindhoven" / piek-dBZ
+        var lbl = Math.round(cl.peakDbz) + " dBZ";
+        if (cl.snelheid > 5) lbl = Math.round(cl.snelheid) + " km/h · " + lbl;
+        if (cl.naam) lbl = cl.naam + " · " + lbl;
+        var labY = cys - rad - 6;
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "rgba(255,255,255,0.92)";
+        ctx.textAlign = "center";
+        ctx.strokeText(lbl, cxs, labY);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillText(lbl, cxs, labY);
       }
     }
 
@@ -1462,6 +1652,30 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     return -1;
   }
 
+  function bouwEventChips() {
+    var holder = document.getElementById("events-chips");
+    if (!holder) return;
+    holder.innerHTML = "";
+    EVENT_LOCATIES.forEach(function(ev) {
+      var chip = document.createElement("button");
+      chip.className = "fav-chip";
+      chip.style.background = "#fff7ed";
+      chip.style.borderColor = "#fdba74";
+      chip.style.color = "#9a3412";
+      chip.innerHTML = '🎤 ' + ev.naam;
+      chip.title = "Spring naar " + ev.naam + " (" + ev.lat.toFixed(3) + "°N, " + ev.lon.toFixed(3) + "°E)";
+      chip.addEventListener("click", function() {
+        zoomLevel = Math.max(zoomLevel, 8.0);
+        var srcX = lonToX(ev.lon), srcY = latToY(ev.lat);
+        viewX = srcX - (BASEMAP_W / zoomLevel) / 2;
+        viewY = srcY - (BASEMAP_H / zoomLevel) / 2;
+        clampView();
+        toonPunt(ev.lat, ev.lon, ev.naam);
+      });
+      holder.appendChild(chip);
+    });
+  }
+
   function bouwFavBar() {
     var bar = document.getElementById("fav-bar");
     var empty = document.getElementById("fav-empty");
@@ -1634,6 +1848,23 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     inp.addEventListener("change", doZoek);
     inp.addEventListener("keydown", function(e) {
       if (e.key === "Enter") { e.preventDefault(); doZoek(); }
+    });
+  }
+
+  function setupSneltoetsen() {
+    window.addEventListener("keydown", function(e) {
+      // Negeer als gebruiker in input typt
+      var t = e.target.tagName;
+      if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+      if (e.key === " ")           { e.preventDefault(); togglePlay(); }
+      else if (e.key === "ArrowLeft")  { if (playing) togglePlay(); frameIdx = (frameIdx - 1 + nFrames) % nFrames; renderFrame(); }
+      else if (e.key === "ArrowRight") { if (playing) togglePlay(); frameIdx = (frameIdx + 1) % nFrames; renderFrame(); }
+      else if (e.key === "+" || e.key === "=") { setZoomAt(zoomLevel * 1.4, null, null); }
+      else if (e.key === "-")      { setZoomAt(zoomLevel / 1.4, null, null); }
+      else if (e.key === "n" || e.key === "N") {
+        // Spring naar NU
+        if (tNowIndex >= 0) { if (playing) togglePlay(); frameIdx = tNowIndex; renderFrame(); }
+      }
     });
   }
 
@@ -2441,6 +2672,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       setupModusKnop();
       setupZoek();
       bouwFavBar();
+      bouwEventChips();
+      setupSneltoetsen();
       bouwCumGrid();
       if (radarMode !== "instant") renderFrame();
       if (layers.bliksem) startBliksemFetch();
@@ -2453,7 +2686,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
             if (newMeta.nieuwste !== meta.nieuwste) {
               console.log("Nieuwe radar data beschikbaar, herladen...");
               loadData().then(function() {
-                // Punt-paneel + cum-grid verversen na nieuwe data
+                // Cell-cache + cum-grid verversen na nieuwe data
+                cellsCache = {};
                 bouwCumGrid();
                 if (radarMode !== "instant") renderFrame();
                 if (puntSel) toonPunt(puntSel.lat, puntSel.lon, puntSel.plaats);
