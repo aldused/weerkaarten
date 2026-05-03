@@ -744,32 +744,37 @@ body {
   // KLEURSCHALEN (geport vanuit Python)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Neerslag: conversie mm/u → dBZ (Marshall-Palmer: Z = 200 * R^1.6)
-  // Dan dBZ kleurschaal zoals Infoplaza/KNMI radar
+  // Neerslag: conversie mm/u → dBZ
+  // V4-tuning: NEXRAD/KNMI convectieve Z-R (Z=300·R^1.4) + peak-boost factor 1.6
+  // boven 0.5 mm/u, om te compenseren dat Harmonie 1u-cumulatieve neerslag de
+  // instantane radarpiek onderschat (zie Wouter/Infoplaza referentie).
   function mmTodBZ(mm) {
     if (mm <= 0.005) return -10;
-    return 10 * Math.log10(200 * Math.pow(mm, 1.6));
+    var r = mm > 0.5 ? mm * 1.6 : mm;
+    return 10 * Math.log10(300 * Math.pow(r, 1.4));
   }
 
-  // dBZ levels en kleuren — Infoplaza-stijl met lage drempel
-  var DBZ_LEVELS = [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
+  // dBZ levels (elke 4 dBZ, 5..69) en kleuren — V4 getunde palet,
+  // monotoon helder oplopend, geen grijstrappen, geen wit-glitch.
+  var DBZ_LEVELS = [5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69];
   var DBZ_COLORS = [
-    [210,210,210],  // -5  zeer lichtgrijs (nauwelijks signaal)
-    [180,180,180],  //  0  lichtgrijs
-    [150,150,150],  //  5  grijs
-    [120,120,120],  // 10  donkergrijs
-    [0,200,0],      // 15  lichtgroen
-    [0,160,0],      // 20  groen
-    [0,120,0],      // 25  donkergroen
-    [255,255,0],    // 30  geel
-    [230,190,0],    // 35  donkergeel
-    [255,128,0],    // 40  oranje
-    [255,0,0],      // 45  rood
-    [192,0,0],      // 50  donkerrood
-    [160,0,160],    // 55  paars
-    [192,0,192],    // 60  donkerpaars
-    [255,0,255],    // 65  magenta
-    [200,200,200],  // 70  wit/grijs
+    [200,210,225],  //  5  zeer licht blauwgrijs (lichte motregen)
+    [165,195,225],  //  9  lichtblauw
+    [120,180,210],  // 13  blauw
+    [60,170,80],    // 17  groen-helder
+    [30,150,55],    // 21  groen
+    [10,130,30],    // 25  donkergroen
+    [180,200,20],   // 29  geelgroen
+    [240,220,0],    // 33  geel
+    [250,185,0],    // 37  donkergeel
+    [250,140,0],    // 41  oranje
+    [240,90,30],    // 45  rood-oranje
+    [220,30,30],    // 49  rood
+    [180,15,30],    // 53  donkerrood
+    [150,10,90],    // 57  bordeaux
+    [180,40,160],   // 61  paars
+    [220,80,210],   // 65  magenta
+    [250,180,250],  // 69  lichtroze
   ];
 
   // Bewaar ook mm/u levels voor de legenda
@@ -850,11 +855,12 @@ body {
     [220,220,50],[255,200,0],[255,150,0],[255,80,0],[230,0,0],[170,0,100]
   ];
 
-  // Neerslagsom kleuren (cumulatief mm)
+  // Neerslagsom kleuren (cumulatief mm) — 12 levels, 12 kleuren
   var NSOMLEVELS = [0.5, 1, 2, 5, 10, 15, 20, 30, 40, 50, 75, 100];
   var NSOMCOLORS = [
-    [180,220,255],[130,190,255],[80,160,230],[40,130,200],[0,100,180],
-    [40,180,80],[220,220,0],[255,180,0],[255,100,0],[230,0,0],[170,0,120]
+    [200,225,250],[150,200,245],[100,170,225],[50,140,205],[0,110,180],
+    [40,180,80],[180,210,30],[240,220,0],[250,160,0],[240,80,30],
+    [200,20,40],[140,10,100]
   ];
 
   // Stull (2011) wet-bulb berekening
@@ -1721,6 +1727,7 @@ body {
     var labelAfstandPx = isEcmwf ? 16 : 22; // ECMWF-grid is grover, dus meer cijfers kan
     if (paramKey === "druk") labelAfstandPx = isEcmwf ? 38 : 50; // 4 cijfers breed
     else if (paramKey === "rv" || paramKey === "windstoten" || paramKey === "zicht" || paramKey === "cape" || paramKey === "mist" || paramKey === "cloud_base") labelAfstandPx = isEcmwf ? 26 : 35; // 3+ cijfers
+    else if (paramKey === "neerslag_mm" || paramKey === "nsomm") labelAfstandPx = isEcmwf ? 28 : 38; // mm/u en cumul: 1-3 tekens, voorkom overlap
     else if (paramKey === "hoogte_300" || paramKey === "hoogte_500" || paramKey === "hoogte_850") labelAfstandPx = isEcmwf ? 30 : 40; // "556" of temp
     else if (paramKey === "theta_e") labelAfstandPx = isEcmwf ? 30 : 40; // "312" K
     // Bereken stap op basis van canvas-pixels, niet gridpunten
@@ -1898,10 +1905,10 @@ body {
     if (paramKey !== "bewolking") { // NB: bewolking_laag etc. vallen NIET hieronder
       var legLevels, legColors, legLabel;
       if (paramKey === "neerslag") {
-        // Toon dBZ schaal
-        legLevels = [5,10,15,20,25,30,35,40,45,50,55,60];
-        legColors = DBZ_COLORS.slice(2); // start bij 5 dBZ
-        legLabel = "dBZ (gesimuleerde radarreflectiviteit)";
+        // Toon dBZ schaal — gebruik dezelfde levels/kleuren als de pixelvulling
+        legLevels = DBZ_LEVELS;
+        legColors = DBZ_COLORS;
+        legLabel = "dBZ";
       }
       else if (paramKey === "temp") {
         legLevels = [-10,-5,0,5,10,15,20,25,30,35,40];
@@ -1930,7 +1937,7 @@ body {
       }
       else if (paramKey === "wind_druk") { legLevels = [0,1,2,3,4,5,6,7,8,9,10,11]; legColors = WIND_COLORS; legLabel = "Bft + hPa"; }
       else if (paramKey === "wbgt") { legLevels = WBGT_LEVELS; legColors = WBGT_COLORS; legLabel = "\u00b0C WBGT"; }
-      else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm cumulatief vanaf t+0u"; }
+      else if (paramKey === "nsomm") { legLevels = NSOMLEVELS; legColors = NSOMCOLORS; legLabel = "mm cumul."; }
       else if (paramKey === "neerslag_mm") { legLevels = NEERSLAG_MM_LEVELS; legColors = NEERSLAG_MM_COLORS; legLabel = "mm/u"; }
       else if (paramKey === "bewolking_laag" || paramKey === "bewolking_mid" || paramKey === "bewolking_hoog") { legLevels = CLOUD_PCT_LEVELS; legColors = CLOUD_PCT_COLORS; legLabel = "%"; }
       else if (paramKey === "mist") { legLevels = MIST_LEVELS; legColors = MIST_COLORS; legLabel = "m zicht"; }
