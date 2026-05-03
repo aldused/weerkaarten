@@ -1156,6 +1156,7 @@ function zoomToCluster(c) {
 document.getElementById('window-select').addEventListener('change', e => {
   const prev = windowMin;
   windowMin = parseInt(e.target.value);
+  try { localStorage.setItem('bliksem_window_min', String(windowMin)); } catch (_) {}
   // Wissel tussen 2u-snel en 24u-historie als drempel overschreden
   const wasLong = prev >= 180;
   const isLong = windowMin >= 180;
@@ -1411,7 +1412,21 @@ function tickKlok() {
     pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + ' LT';
 }
 
+function restoreWindowChoice() {
+  try {
+    const saved = parseInt(localStorage.getItem('bliksem_window_min') || '');
+    if (!Number.isFinite(saved)) return;
+    const sel = document.getElementById('window-select');
+    if (!sel) return;
+    const opt = Array.from(sel.options).find(o => parseInt(o.value) === saved);
+    if (!opt) return;
+    sel.value = opt.value;
+    windowMin = saved;
+  } catch (_) {}
+}
+
 function initBliksem() {
+  restoreWindowChoice();
   loadPlaatsen().then(() => renderPlaatsen());
   loadLiveData();
   setInterval(loadLiveData, 30_000);
