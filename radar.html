@@ -1583,32 +1583,49 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       }
     }
 
-    // 8a. Bliksem-strikes — gesynchroniseerd op huidige frame-tijd, niet wall-clock
+    // 8a. Bliksem-strikes — strict gesynchroniseerd: alleen strikes binnen huidige radar-frame
+    //     (radar = 5min, dus toon strikes [t_frame - 5min .. t_frame], met leeftijd-kleur fade)
     if (layers.bliksem && STRIKES.length) {
       var frameDt = parseFrameTime(frameIdx);
       var refMs = frameDt ? frameDt.getTime() : Date.now();
-      // Bij forecast-frames (toekomst) geen bliksem tonen
       var isToekomst = isFutureFrame(frameIdx) || (frameTypes && frameTypes[frameIdx] === "harmonie");
-      if (isToekomst) refMs = -1;  // skip alle
+      if (isToekomst) refMs = -1;
+      // Bij echte tijd (laatste history-frame): venster nog 10 min terug, anders frame-interval
+      var dtMin = meta.interval_min || 5;
+      var venster = dtMin * 2;  // 10 min: laatste 2 frames worth
       for (var bi = 0; bi < STRIKES.length && refMs > 0; bi++) {
         var sk = STRIKES[bi];
         var ageMin = (refMs - sk.t * 1000) / 60000;
-        if (ageMin < 0 || ageMin > 60) continue;
+        if (ageMin < 0 || ageMin > venster) continue;
         var bwx = lonToX(sk.lon), bwy = latToY(sk.lat);
         var bxs = (bwx - viewX) * zoomLevel;
         var bys = (bwy - viewY) * zoomLevel;
         if (bxs < -10 || bxs > W + 10 || bys < -10 || bys > H + 10) continue;
-        // Kleur op basis van leeftijd
-        var bcol;
-        if (ageMin < 2)       bcol = "rgba(255,255,255,0.95)";
-        else if (ageMin < 10) bcol = "rgba(255,235,59,0.92)";
-        else if (ageMin < 30) bcol = "rgba(255,152,0,0.88)";
-        else                   bcol = "rgba(204,0,0,0.82)";
-        var brad = ageMin < 2 ? 5 : (ageMin < 10 ? 4 : 3);
+        // Fade-kleur in venster (frisser → ouder)
+        var fr = ageMin / venster;  // 0..1
+        var bcol, brad;
+        if (fr < 0.2) {
+          bcol = "rgba(255,255,255,0.98)";  brad = 6;
+        } else if (fr < 0.5) {
+          bcol = "rgba(255,235,59,0.95)";   brad = 5;
+        } else if (fr < 0.8) {
+          bcol = "rgba(255,152,0,0.88)";    brad = 4;
+        } else {
+          bcol = "rgba(204,0,0,0.78)";       brad = 3;
+        }
+        // Glow (extra ring buiten)
+        if (fr < 0.3) {
+          ctx.beginPath();
+          ctx.arc(bxs, bys, brad + 4, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,255,255,0.18)";
+          ctx.fill();
+        }
+        // Donkere halo
         ctx.beginPath();
         ctx.arc(bxs, bys, brad + 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
         ctx.fill();
+        // Strike-dot
         ctx.beginPath();
         ctx.arc(bxs, bys, brad, 0, Math.PI * 2);
         ctx.fillStyle = bcol;
