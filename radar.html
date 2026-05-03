@@ -114,6 +114,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 /* Forecast badge op canvas */
 .fcst-badge { position: absolute; top: 10px; left: 12px; background: rgba(245,158,11,0.95); color: #0f172a; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; pointer-events: none; z-index: 11; box-shadow: 0 1px 3px rgba(0,0,0,0.3); display: none; }
 
+/* Zoom-overlay bovenop canvas (altijd zichtbaar) */
+.zoom-overlay { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 12; }
+.zoom-overlay button { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.95); color: #0f172a; font-size: 18px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; font-family: inherit; line-height: 1; }
+.zoom-overlay button:hover { background: #ffffff; border-color: #00205b; color: #00205b; }
+.zoom-overlay button.reset { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+.zoom-overlay .zoom-info-overlay { width: 36px; text-align: center; font-family: "DM Mono", ui-monospace, monospace; font-size: 10.5px; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.7); padding: 2px 0; pointer-events: none; }
+
 .export-btns { display: flex; gap: 4px; margin-left: auto; }
 .export-btn { padding: 6px 12px; border-radius: 8px; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .export-btn:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
@@ -186,6 +193,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 [data-theme="dark"] .punt-tabel tr.droog td { color: #64748b !important; }
 [data-theme="dark"] .fav-chip { background: #0e1629 !important; color: #cbd5e1 !important; border-color: rgba(255,255,255,0.08) !important; }
 [data-theme="dark"] .fav-chip:hover { background: rgba(255,255,255,0.05) !important; }
+[data-theme="dark"] #plaats-zoek { background: #0e1629 !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .zoom-overlay button { background: rgba(20,30,50,0.95) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.2) !important; }
+[data-theme="dark"] .zoom-overlay button:hover { background: rgba(40,60,90,0.98) !important; border-color: #2ec4e8 !important; color: #2ec4e8 !important; }
 [data-theme="dark"] .layer-toggles { background: rgba(255,255,255,0.05) !important; }
 [data-theme="dark"] .layer-btn { color: #cbd5e1 !important; }
 [data-theme="dark"] .layer-btn:hover { background: rgba(255,255,255,0.05) !important; color: #f1f5f9 !important; }
@@ -307,7 +317,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 </div>
 
 <div class="fav-bar" id="fav-bar">
-  <span class="fav-bar-label">Favorieten:</span>
+  <span class="fav-bar-label">Zoek plaats:</span>
+  <input id="plaats-zoek" list="plaatsen-list" placeholder="bv. Amsterdam, Eindhoven..." autocomplete="off" style="padding:4px 10px;border-radius:6px;border:1px solid #e3e8ef;font-family:inherit;font-size:12px;min-width:180px;">
+  <datalist id="plaatsen-list"></datalist>
+  <span class="fav-bar-label" style="margin-left:12px;">Favorieten:</span>
   <span class="fav-empty" id="fav-empty">geen — klik op kaart en druk ⭐ om op te slaan</span>
 </div>
 
@@ -315,6 +328,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   <canvas id="radar-canvas"></canvas>
   <div class="canvas-tijd" id="canvas-tijd" style="display:none;"></div>
   <div class="fcst-badge" id="fcst-badge">VERWACHTING</div>
+
+  <div class="zoom-overlay">
+    <button id="ovl-zoom-in" title="Inzoomen (dubbelklik op kaart)">+</button>
+    <div class="zoom-info-overlay" id="ovl-zoom-info">1.0×</div>
+    <button id="ovl-zoom-out" title="Uitzoomen (Shift+klik op kaart)">−</button>
+    <button id="ovl-zoom-reset" class="reset" title="Reset zoom (Esc)">⤢</button>
+  </div>
 
   <div class="legenda" id="legenda"></div>
 
@@ -454,13 +474,27 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   ];
 
   function dichtstbijzijnde(lat, lon) {
-    var best = null, bestD = 999;
-    for (var i = 0; i < PLAATSEN.length; i++) {
-      var dlat = PLAATSEN[i][0] - lat, dlon = PLAATSEN[i][1] - lon;
-      var d = Math.sqrt(dlat * dlat + dlon * dlon * 0.5);
-      if (d < bestD) { bestD = d; best = PLAATSEN[i]; }
+    // Gebruik PLAATSEN_BIG (uit plaatsen_lookup.json) als beschikbaar — veel completere lijst
+    if (PLAATSEN_BIG && PLAATSEN_BIG.length) {
+      var best = null, bestD = 999;
+      for (var i = 0; i < PLAATSEN_BIG.length; i++) {
+        var p = PLAATSEN_BIG[i];
+        var dlat = p.lat - lat, dlon = p.lon - lon;
+        // Gewogen op afstand + populatie (grotere plaats wint bij gelijke afstand)
+        var d = Math.sqrt(dlat * dlat + dlon * dlon * 0.5) - Math.log10((p.pop || 1000) + 1) * 0.005;
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      if (best && bestD < 0.20) return best.naam;
+      return null;
     }
-    if (bestD < 0.25) return best[2];
+    // Fallback naar oude compacte lijst
+    var bestF = null, bestDF = 999;
+    for (var j = 0; j < PLAATSEN.length; j++) {
+      var dlat2 = PLAATSEN[j][0] - lat, dlon2 = PLAATSEN[j][1] - lon;
+      var d2 = Math.sqrt(dlat2 * dlat2 + dlon2 * dlon2 * 0.5);
+      if (d2 < bestDF) { bestDF = d2; bestF = PLAATSEN[j]; }
+    }
+    if (bestDF < 0.25) return bestF[2];
     return null;
   }
 
@@ -580,6 +614,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var radarData = null;   // Uint8Array (alle frames aaneengeschakeld)
   var nLat = 0, nLon = 0, nFrames = 0;
   var nlGeo = null, beGeo = null, riverGeo = null, euLandGeo = null;
+  var PLAATSEN_BIG = null;  // [{naam, lat, lon, pop, land}] uit plaatsen_lookup.json (gefilterd binnen bbox)
   var canvas, ctx;
   var offscreen, offCtx;
   var dprGlobal = 1;
@@ -716,6 +751,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     else           fetches.push(Promise.resolve(riverGeo));
     if (!euLandGeo) fetches.push(fetch("europa_land.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
     else            fetches.push(Promise.resolve(euLandGeo));
+    if (!PLAATSEN_BIG) fetches.push(fetch("plaatsen_lookup.json").then(function(r){return r.json();}).catch(function(){return null;}));
+    else               fetches.push(Promise.resolve({plaatsen: PLAATSEN_BIG}));
 
     return Promise.all(fetches).then(function(results) {
       meta = results[0];
@@ -724,6 +761,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       beGeo    = results[3];
       riverGeo = results[4];
       euLandGeo = results[5];
+      var plData = results[6];
+      if (plData && plData.plaatsen && !PLAATSEN_BIG) {
+        // Filter binnen basemap-bbox + sorteer op pop desc
+        PLAATSEN_BIG = plData.plaatsen.filter(function(p) {
+          return p.lat >= PROJ_LAT_MIN && p.lat <= PROJ_LAT_MAX
+              && p.lon >= PROJ_LON_MIN && p.lon <= PROJ_LON_MAX;
+        }).sort(function(a, b) { return (b.pop || 0) - (a.pop || 0); });
+        bouwZoekDatalist();
+      }
 
       // Parse binair header (16 bytes)
       var view = new DataView(buf);
@@ -928,10 +974,28 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.restore();
 
     // 8. Steden — dot + label in SCREEN-coords (constant 11px, scherp op elke zoom).
-    //    Lijst wordt uitgebreid bij hogere zoom (medium ≥ 3, klein ≥ 6).
-    var labelLijst = STEDEN_LABEL;
-    if (zoomLevel >= 6.0)      labelLijst = STEDEN_LABEL.concat(STEDEN_DETAIL_M, STEDEN_DETAIL_S);
-    else if (zoomLevel >= 3.0) labelLijst = STEDEN_LABEL.concat(STEDEN_DETAIL_M);
+    //    Bij hoge zoom ook plaatsen_lookup.json (op pop gefilterd).
+    var labelLijst;
+    if (PLAATSEN_BIG) {
+      // Pop-drempel zakt bij hogere zoom: meer plaatsen zichtbaar
+      var popMin;
+      if      (zoomLevel >= 18) popMin = 500;
+      else if (zoomLevel >= 12) popMin = 2000;
+      else if (zoomLevel >= 8)  popMin = 8000;
+      else if (zoomLevel >= 5)  popMin = 25000;
+      else if (zoomLevel >= 3)  popMin = 80000;
+      else                       popMin = 300000;
+      labelLijst = [];
+      for (var pi = 0; pi < PLAATSEN_BIG.length; pi++) {
+        var pp = PLAATSEN_BIG[pi];
+        if ((pp.pop || 0) < popMin) break;  // gesorteerd dus break OK
+        labelLijst.push([pp.lat, pp.lon, pp.naam]);
+      }
+    } else {
+      labelLijst = STEDEN_LABEL;
+      if (zoomLevel >= 6.0)      labelLijst = STEDEN_LABEL.concat(STEDEN_DETAIL_M, STEDEN_DETAIL_S);
+      else if (zoomLevel >= 3.0) labelLijst = STEDEN_LABEL.concat(STEDEN_DETAIL_M);
+    }
 
     ctx.setTransform(dprGlobal, 0, 0, dprGlobal, 0, 0);
     ctx.save();
@@ -1083,6 +1147,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     document.getElementById("canvas-tijd").textContent = tijdTekst;
     document.getElementById("slider").value = frameIdx;
     document.getElementById("zoom-info").textContent = zoomLevel.toFixed(1) + "×";
+    var ovlZoom = document.getElementById("ovl-zoom-info");
+    if (ovlZoom) ovlZoom.textContent = zoomLevel.toFixed(1) + "×";
     document.getElementById("fcst-badge").style.display = isFcst ? "block" : "none";
   }
 
@@ -1504,6 +1570,57 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     cont.addEventListener("dblclick", function() { clearTimeout(clickTimer); });
   }
 
+  // Bouw datalist voor plaats-zoek autocomplete
+  function bouwZoekDatalist() {
+    var dl = document.getElementById("plaatsen-list");
+    if (!dl || !PLAATSEN_BIG) return;
+    // Top 800 op pop voor snelheid
+    var html = "";
+    var max = Math.min(800, PLAATSEN_BIG.length);
+    for (var i = 0; i < max; i++) {
+      var p = PLAATSEN_BIG[i];
+      var label = p.naam + (p.land && p.land !== "NL" ? " (" + p.land + ")" : "");
+      html += '<option value="' + label.replace(/"/g, "&quot;") + '"></option>';
+    }
+    dl.innerHTML = html;
+  }
+
+  function zoekPlaats(invoer) {
+    if (!PLAATSEN_BIG || !invoer) return null;
+    var q = invoer.trim().toLowerCase().replace(/\s*\([a-z]{2}\)\s*$/i, "");
+    if (!q) return null;
+    // Exact match eerst
+    for (var i = 0; i < PLAATSEN_BIG.length; i++) {
+      if (PLAATSEN_BIG[i].naam.toLowerCase() === q) return PLAATSEN_BIG[i];
+    }
+    // Anders prefix-match (hoogste pop wint)
+    for (var j = 0; j < PLAATSEN_BIG.length; j++) {
+      if (PLAATSEN_BIG[j].naam.toLowerCase().indexOf(q) === 0) return PLAATSEN_BIG[j];
+    }
+    return null;
+  }
+
+  function setupZoek() {
+    var inp = document.getElementById("plaats-zoek");
+    if (!inp) return;
+    function doZoek() {
+      var p = zoekPlaats(inp.value);
+      if (!p) return;
+      // Pan + zoom naar plaats
+      zoomLevel = Math.max(zoomLevel, 7.0);
+      var srcX = lonToX(p.lon), srcY = latToY(p.lat);
+      viewX = srcX - (BASEMAP_W / zoomLevel) / 2;
+      viewY = srcY - (BASEMAP_H / zoomLevel) / 2;
+      clampView();
+      toonPunt(p.lat, p.lon, p.naam);
+      inp.value = "";
+    }
+    inp.addEventListener("change", doZoek);
+    inp.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") { e.preventDefault(); doZoek(); }
+    });
+  }
+
   function setupMijnLocatie() {
     document.getElementById("btn-mijn-locatie").addEventListener("click", function() {
       if (!navigator.geolocation) {
@@ -1660,6 +1777,20 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       setZoomAt(zoomLevel / 1.4, null, null);
     });
     document.getElementById("btn-reset").addEventListener("click", resetZoom);
+
+    // Floating overlay-knoppen op canvas
+    document.getElementById("ovl-zoom-in").addEventListener("click", function() {
+      setZoomAt(zoomLevel * 1.4, null, null);
+    });
+    document.getElementById("ovl-zoom-out").addEventListener("click", function() {
+      setZoomAt(zoomLevel / 1.4, null, null);
+    });
+    document.getElementById("ovl-zoom-reset").addEventListener("click", resetZoom);
+
+    // Escape = reset
+    window.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") resetZoom();
+    });
 
     // Vloeiende scroll-zoom (continu)
     container.addEventListener("wheel", function(e) {
@@ -2234,6 +2365,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       setupMijnLocatie();
       setupLayerToggles();
       setupModusKnop();
+      setupZoek();
       bouwFavBar();
       bouwCumGrid();
       if (radarMode !== "instant") renderFrame();
