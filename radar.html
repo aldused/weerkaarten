@@ -1237,8 +1237,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       labelLijst = [];
       for (var pi = 0; pi < PLAATSEN_BIG.length; pi++) {
         var pp = PLAATSEN_BIG[pi];
-        if ((pp.pop || 0) < popMin) break;  // gesorteerd dus break OK
-        labelLijst.push([pp.lat, pp.lon, pp.naam]);
+        if ((pp.pop || 0) < popMin) break;
+        labelLijst.push([pp.lat, pp.lon, pp.naam, pp.pop || 0]);  // pop als 4e veld
       }
     } else {
       labelLijst = STEDEN_LABEL;
@@ -1253,32 +1253,90 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.clip();
 
     if (layers.steden) {
-      // Font groeit fors bij sterkere zoom — leesbaar op stadsniveau
-      var fontPx = 12;
-      if      (zoomLevel >= 12) fontPx = 22;
-      else if (zoomLevel >= 8)  fontPx = 18;
-      else if (zoomLevel >= 5)  fontPx = 15;
-      else if (zoomLevel >= 3)  fontPx = 13;
-      ctx.font = "700 " + fontPx + "px Arial";
+      // Font + symbool-tier op basis van pop, met collision-detection.
+      // Drie tiers: hoofdsteden (>500k), middel (>100k), klein (overig).
+      function tier(pop) {
+        if (pop >= 500000) return 2;
+        if (pop >= 100000) return 1;
+        return 0;
+      }
+      var basisFont = 12;
+      if      (zoomLevel >= 12) basisFont = 18;
+      else if (zoomLevel >= 8)  basisFont = 16;
+      else if (zoomLevel >= 5)  basisFont = 14;
+      else if (zoomLevel >= 3)  basisFont = 13;
       ctx.textBaseline = "middle";
-      var dotR = (zoomLevel >= 8) ? 4 : (zoomLevel >= 5) ? 3 : 2.2;
-      var haloW = (zoomLevel >= 5) ? 4.0 : 3.0;
-      var labelOffset = dotR + 4;
+
+      // Sorteer labelLijst op pop desc (al gesorteerd voor PLAATSEN_BIG, niet voor fallback)
+      labelLijst = labelLijst.slice().sort(function(a, b) { return (b[3] || 0) - (a[3] || 0); });
+      var geplaatst = [];  // bounding boxes [x0,y0,x1,y1]
+
+      function botst(b) {
+        for (var bi = 0; bi < geplaatst.length; bi++) {
+          var p = geplaatst[bi];
+          if (b[0] < p[2] && b[2] > p[0] && b[1] < p[3] && b[3] > p[1]) return true;
+        }
+        return false;
+      }
+
       for (var k = 0; k < labelLijst.length; k++) {
         var st = labelLijst[k];
         var wx = lonToX(st[1]), wy = latToY(st[0]);
-        // Wereld-coord → scherm-coord (zelfde transform als radar/grenzen)
         var sxs = (wx - viewX) * zoomLevel;
         var sys = (wy - viewY) * zoomLevel;
         if (sxs < -50 || sxs > W + 50 || sys < -10 || sys > H + 10) continue;
-        ctx.beginPath();
-        ctx.arc(sxs, sys, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = "#0a1929";
-        ctx.fill();
-        ctx.lineWidth = haloW;
-        ctx.strokeStyle = "rgba(255,255,255,0.92)";
+
+        var t = tier(st[3] || 0);
+        var fontPx = basisFont + (t === 2 ? 4 : t === 1 ? 2 : 0);
+        var dotR  = (t === 2 ? 5 : t === 1 ? 4 : 3);
+        var labelOffset = dotR + 5;
+        ctx.font = (t === 2 ? "800 " : "700 ") + fontPx + "px DM Sans, Arial, sans-serif";
+        var tw = ctx.measureText(st[2]).width;
+        // Bounding box rond label + dot
+        var bx = sxs - dotR - 2;
+        var by = sys - fontPx * 0.6;
+        var bw = labelOffset + tw + 4;
+        var bh = fontPx * 1.2;
+        var box = [bx, by, bx + bw, by + bh];
+        if (botst(box)) continue;
+        geplaatst.push(box);
+
+        // Symbool: ster voor tier 2, vierkant voor tier 1, cirkel voor tier 0
+        ctx.fillStyle = (t === 2) ? "#dc2626" : (t === 1) ? "#0f172a" : "#334155";
+        if (t === 2) {
+          // Ster
+          var sR = dotR + 2;
+          ctx.beginPath();
+          for (var sa = 0; sa < 10; sa++) {
+            var a = -Math.PI / 2 + sa * Math.PI / 5;
+            var rr2 = (sa % 2 === 0) ? sR : sR * 0.45;
+            var px = sxs + Math.cos(a) * rr2, py = sys + Math.sin(a) * rr2;
+            if (sa === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "rgba(255,255,255,0.95)";
+          ctx.stroke();
+        } else if (t === 1) {
+          ctx.fillRect(sxs - dotR, sys - dotR, dotR * 2, dotR * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.95)";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(sxs - dotR, sys - dotR, dotR * 2, dotR * 2);
+        } else {
+          ctx.beginPath();
+          ctx.arc(sxs, sys, dotR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "rgba(255,255,255,0.95)";
+          ctx.stroke();
+        }
+        // Tekst met sterke halo (dubbel: brede witte + smalle blauwe rand)
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 4.5;
+        ctx.strokeStyle = "rgba(255,255,255,0.95)";
         ctx.strokeText(st[2], sxs + labelOffset, sys);
-        ctx.fillStyle = "#0a1929";
+        ctx.fillStyle = (t === 2) ? "#7f1d1d" : "#0f172a";
         ctx.fillText(st[2], sxs + labelOffset, sys);
       }
     }
@@ -1502,6 +1560,46 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.fillText(tijdTekst, 12, Math.round(H * 0.032) + 2);
     ctx.fillStyle = "white";
     ctx.fillText(tijdTekst, 10, Math.round(H * 0.032));
+
+    // Schaal-balk linksonder \u2014 toont km gebaseerd op huidige zoom
+    (function tekenSchaalbalk() {
+      // 1 grid-pixel \u2248 KM_LON km bij midlat * (PROJ_LON_MAX-PROJ_LON_MIN)/BASEMAP_W
+      var degPerPx = (PROJ_LON_MAX - PROJ_LON_MIN) / BASEMAP_W;
+      var kmPerPx = degPerPx * KM_LON;
+      // Effectief op scherm: 1 source-px = zoomLevel screen-px
+      var kmPerScreenPx = kmPerPx / zoomLevel;
+      // Kies "mooie" lengte (1, 2, 5, 10, 20, 50, 100, 200, 500 km)
+      var doelPx = 120;  // streef ~120px breed
+      var doelKm = kmPerScreenPx * doelPx;
+      var keuzes = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+      var schaalKm = keuzes[0];
+      for (var sk = 0; sk < keuzes.length; sk++) {
+        if (keuzes[sk] >= doelKm) { schaalKm = keuzes[sk]; break; }
+        schaalKm = keuzes[sk];
+      }
+      var schaalPx = schaalKm / kmPerScreenPx;
+      var sbX = 14, sbY = H - 18;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillRect(sbX - 4, sbY - 18, schaalPx + 8, 22);
+      ctx.strokeStyle = "rgba(0,32,91,0.4)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sbX - 4, sbY - 18, schaalPx + 8, 22);
+      // Balk
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(sbX, sbY - 4, schaalPx, 4);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(sbX + 1, sbY - 3, schaalPx - 2, 2);
+      // Eindstreepjes
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(sbX, sbY - 8, 2, 8);
+      ctx.fillRect(sbX + schaalPx - 2, sbY - 8, 2, 8);
+      // Label
+      ctx.font = "700 11px DM Sans, Arial, sans-serif";
+      ctx.fillStyle = "#0f172a";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      ctx.fillText(schaalKm + " km", sbX + schaalPx + 6, sbY - 8);
+    })();
 
     var cpTxt = "\u00a9 Ed Aldus / KNMI";
     var cpFont = Math.round(H * 0.014);
