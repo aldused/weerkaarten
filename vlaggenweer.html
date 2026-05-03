@@ -48,6 +48,12 @@ input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px s
 .pdf-mode input.val,.pdf-mode select.dir-select{border:none;background:transparent;padding:0;color:inherit;appearance:none;-webkit-appearance:none}
 .pdf-mode .sheet{box-shadow:none;border:none}.pdf-mode .intro .text{background:transparent}
 .note{font-size:.78rem;color:#52677d;margin-top:10px}
+.mail-block{background:white;border:1px solid #cdd9e5;border-radius:10px;padding:14px 16px;margin:0 0 12px}
+.mail-block label{display:block;font-weight:800;color:#003b70;font-size:13px;margin-bottom:6px;letter-spacing:.02em;text-transform:uppercase}
+.mail-block textarea{width:100%;min-height:70px;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid #cdd9e5;border-radius:6px;resize:vertical;color:#0f2744;background:#fafdff;line-height:1.45}
+.mail-block textarea:focus{outline:none;border-color:#2ec4e8;box-shadow:0 0 0 2px rgba(46,196,232,.18);background:#fffef8}
+.mail-block .ontvangers{font-size:11.5px;color:#52677d;margin-top:6px}
+.mail-block .ontvangers code{background:#eef3f8;padding:1px 6px;border-radius:4px;font-size:11px}
 @media(max-width:760px){.header{align-items:flex-start;flex-direction:column}.actions{justify-content:flex-start}.wrap{padding:10px}.doc-head{padding:24px;gap:14px}.brand{display:none}.doc-title{font-size:30px}table{width:100%;margin:0 0 18px}.bft-legend{width:100%;margin:0 0 14px;grid-template-columns:1fr}.intro{margin:18px 0}.sheet{padding-bottom:10px}}
 </style>
 </head>
@@ -63,6 +69,7 @@ input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px s
   <div class="actions">
     <button class="btn" type="button" onclick="refetchData()" title="Haal verwachting opnieuw op (overschrijft handmatige aanpassingen)">↻ Opnieuw ophalen</button>
     <button class="btn" type="button" onclick="downloadPdf()">Download PDF</button>
+    <button class="btn" type="button" onclick="mailVlaggenweer()" title="Open mail-app met vlaggenweer naar de vaste ontvangers" style="background:#1d4ed8">📧 Mail</button>
     <a class="btn sec" href="VLAGGENWEER.docx" download>Bewerkbare DOCX</a>
     <button class="btn sec" type="button" onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen aanpassingen van vandaag">🗑️ Wissen</button>
     <a class="btn sec" href="weerbewaking.html">Terug</a>
@@ -71,6 +78,11 @@ input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px s
 <main class="wrap">
   <div class="status" id="status">Vlaggenweer laden...</div>
   <div id="save-status" style="font-size:.78rem;color:#2a7a2a;margin-bottom:6px;min-height:1em"></div>
+  <div class="mail-block">
+    <label for="mail-notes">Opmerkingen voor in de mail</label>
+    <textarea id="mail-notes" data-save="mail-notes" placeholder="Optionele tekst die mee gaat in de mail-body. Bijvoorbeeld: 'Voor morgenvroeg: rekening houden met windstoten in de avond.'"></textarea>
+    <div class="ontvangers">Wordt verstuurd naar: <code>jaap@semaphore-signs.nl</code> · <code>yoerie@lenn.nl</code> · <code>mark@helderred.nl</code></div>
+  </div>
   <section class="sheet" id="rapport">
     <div class="doc-head">
       <img class="flag" src="vlaggenweer_media/vlag_illustratie.png" onerror="this.src='VLAGGENWEER.png';this.style.objectPosition='left top'">
@@ -110,6 +122,8 @@ const DAYS=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zater
 const MONTHS=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
 const DIRS=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
 const DEG_BY_DIR={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+const MAIL_ONTVANGERS=['jaap@semaphore-signs.nl','yoerie@lenn.nl','mark@helderred.nl'];
+let firstRowDate=null;
 function isoDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmtDate(d){return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;}
 function directionLabel(deg){return deg==null?'-':DIRS[Math.round((((deg%360)+360)%360)/22.5)%16];}
@@ -228,6 +242,7 @@ async function loadRows(){
   return rows;
 }
 function render(rows){
+  firstRowDate = rows[0]?.date || null;
   const tbody=document.querySelector('#vlag-table tbody');
   tbody.innerHTML=rows.map(row=>{
     const d=fmtDate(row.date).split(' ');
@@ -302,8 +317,13 @@ function renderFromDraft(rows){
 }
 function saveDraft(){
   const d={__ts:Date.now()};
-  document.querySelectorAll('[data-save]').forEach(el=>{d[el.getAttribute('data-save')]=el.innerHTML;});
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    const k=el.getAttribute('data-save');
+    if(el.tagName==='TEXTAREA' || el.tagName==='INPUT') d[k]=el.value;
+    else d[k]=el.innerHTML;
+  });
   d.cells=snapshotCells();
+  d.firstRowDateISO = firstRowDate ? isoDate(firstRowDate) : null;
   try{localStorage.setItem(saveKey(),JSON.stringify(d));toonSaveStatus(d.__ts,'Opgeslagen');}catch(e){}
 }
 function restoreDraft(){
@@ -313,8 +333,11 @@ function restoreDraft(){
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
-      if(d[k]!=null) el.innerHTML=d[k];
+      if(d[k]==null) return;
+      if(el.tagName==='TEXTAREA' || el.tagName==='INPUT') el.value=d[k];
+      else el.innerHTML=d[k];
     });
+    if(d.firstRowDateISO) firstRowDate = new Date(d.firstRowDateISO+'T12:00:00');
     if(Array.isArray(d.cells)&&d.cells.length){renderFromDraft(d.cells);}
     toonSaveStatus(d.__ts,'Hersteld uit opslag');
     return true;
@@ -329,6 +352,15 @@ function wisDraft(){
   if(!confirm('Opgeslagen aanpassingen van '+vandaagISO()+' wissen?')) return;
   localStorage.removeItem(saveKey());
   location.reload();
+}
+function mailVlaggenweer(){
+  const d = firstRowDate || new Date();
+  const datumLabel = fmtDate(d);
+  const subject = `Vlaggenweer ${datumLabel}`;
+  const notes = (document.getElementById('mail-notes')?.value || '').trim();
+  const body = notes;
+  const url = `mailto:${MAIL_ONTVANGERS.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = url;
 }
 let saveTimer;
 function debSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDraft,600);}
