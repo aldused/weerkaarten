@@ -116,10 +116,10 @@ table.uur td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-s
 table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1a5490;margin-right:2px}
 
 /* 5-daagse vooruitblik */
-/* kop-dag (bewerkbare dagnaam in tekstsectie-koppen) */
-.kop .kop-dag{outline:none;border-bottom:1px dashed transparent;padding:0 2px;cursor:text}
-.kop .kop-dag:hover{border-bottom-color:#888}
-.kop .kop-dag:focus{background:#fffbe8;border-bottom-color:#1a5490}
+/* kop-dag-keuze (dropdown + zelf-datum in tekstsectie-koppen) */
+.kop-keuze{display:inline-flex;gap:4px;align-items:center;margin-left:6px;font-size:.78rem;font-weight:400;vertical-align:middle}
+.kop-keuze select,.kop-keuze input{font-family:inherit;font-size:.78rem;padding:2px 4px;border:1px solid #bbb;border-radius:3px;background:white;color:#333;font-weight:500}
+.kop-dag-tekst{display:inline-block}
 
 .doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.75rem;color:#888;display:flex;flex-direction:column;gap:4px}
 .doc-footer .footer-rij{display:flex;justify-content:space-between}
@@ -230,19 +230,43 @@ body{--kop-scale:1}
 
   <section id="sec-vandaag" class="tekst-sectie">
     <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-vandaag" title="Verberg sectie">×</button>
-    <h2 class="kop">De weersverwachting voor <span contenteditable="true" data-save="kop-vandaag" class="kop-dag" title="Klik om de dag aan te passen">vandaag</span></h2>
+    <h2 class="kop">De weersverwachting voor <span class="kop-dag-tekst" data-save="kop-vandaag-tekst">vandaag</span><span class="kop-keuze no-pdf">
+      <select class="kop-dag-sel" data-save="kop-vandaag-sel">
+        <option value="vandaag" selected>Vandaag</option>
+        <option value="morgen">Morgen</option>
+        <option value="komende">Komende dagen</option>
+        <option value="zelf">Zelf…</option>
+      </select>
+      <input type="date" class="kop-dag-datum" data-save="kop-vandaag-datum" style="display:none">
+    </span></h2>
     <div class="tekstvak" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
   </section>
 
   <section id="sec-morgen" class="tekst-sectie">
     <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-morgen" title="Verberg sectie">×</button>
-    <h2 class="kop">De weersverwachting voor <span contenteditable="true" data-save="kop-morgen" class="kop-dag" title="Klik om de dag aan te passen">morgen</span></h2>
+    <h2 class="kop">De weersverwachting voor <span class="kop-dag-tekst" data-save="kop-morgen-tekst">morgen</span><span class="kop-keuze no-pdf">
+      <select class="kop-dag-sel" data-save="kop-morgen-sel">
+        <option value="vandaag">Vandaag</option>
+        <option value="morgen" selected>Morgen</option>
+        <option value="komende">Komende dagen</option>
+        <option value="zelf">Zelf…</option>
+      </select>
+      <input type="date" class="kop-dag-datum" data-save="kop-morgen-datum" style="display:none">
+    </span></h2>
     <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf de verwachting...">Morgen is er een afwisseling van wolken en zon. Het blijft meestal droog, maar bij buien of kans op onweer kan dit hier alvast worden benoemd.</div>
   </section>
 
   <section id="sec-komende" class="tekst-sectie">
     <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-komende" title="Verberg sectie">×</button>
-    <h2 class="kop">De weersverwachting voor <span contenteditable="true" data-save="kop-komende" class="kop-dag" title="Klik om de dag aan te passen">de komende dagen</span></h2>
+    <h2 class="kop">De weersverwachting voor <span class="kop-dag-tekst" data-save="kop-komende-tekst">de komende dagen</span><span class="kop-keuze no-pdf">
+      <select class="kop-dag-sel" data-save="kop-komende-sel">
+        <option value="vandaag">Vandaag</option>
+        <option value="morgen">Morgen</option>
+        <option value="komende" selected>Komende dagen</option>
+        <option value="zelf">Zelf…</option>
+      </select>
+      <input type="date" class="kop-dag-datum" data-save="kop-komende-datum" style="display:none">
+    </span></h2>
     <div class="tekstvak" contenteditable="true" data-save="komende" data-placeholder="Beschrijf de verwachting...">De komende dagen blijft het wisselend met perioden met zon en wolken. De temperatuur blijft rond normale waarden voor de tijd van het jaar.</div>
   </section>
 
@@ -782,6 +806,11 @@ updateZelfDatumZichtbaar();
     saveDraft();
   });
 });
+document.querySelectorAll('.tekst-sectie').forEach(sec=>{
+  sec.querySelectorAll('.kop-dag-sel, .kop-dag-datum').forEach(el=>{
+    el.addEventListener('change', ()=>{ updateKopTekst(sec); saveDraft(); });
+  });
+});
 document.querySelectorAll('.sectie-sluit').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     const check=document.getElementById(btn.dataset.toggleTarget);
@@ -864,7 +893,35 @@ function saveDraft(){
   d.uurTabel2Zichtbaar=(t2 && t2.style.display!=='none');
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); registreerDocNaam(d.docNaam); toonSaveStatus(d.__ts); }catch(e){}
 }
-const KOP_DEFAULTS={'kop-vandaag':'vandaag','kop-morgen':'morgen','kop-komende':'de komende dagen'};
+const KOP_DEFAULTS={'kop-vandaag-tekst':'vandaag','kop-morgen-tekst':'morgen','kop-komende-tekst':'de komende dagen'};
+const KOP_DEFAULT_SEL={'kop-vandaag-sel':'vandaag','kop-morgen-sel':'morgen','kop-komende-sel':'komende'};
+function formatKopZelfDatum(dateStr){
+  if(!dateStr) return '';
+  const [y,m,d]=dateStr.split('-').map(Number);
+  if(!y||!m||!d) return '';
+  const dt=new Date(y, m-1, d);
+  return `${DAG[dt.getDay()]} ${dt.getDate()} ${MAAND[dt.getMonth()]}`;
+}
+function updateKopTekst(sec){
+  const sel=sec.querySelector('.kop-dag-sel');
+  const inp=sec.querySelector('.kop-dag-datum');
+  const tekst=sec.querySelector('.kop-dag-tekst');
+  if(!sel||!inp||!tekst) return;
+  inp.style.display = sel.value==='zelf' ? '' : 'none';
+  if(sel.value==='vandaag') tekst.textContent='vandaag';
+  else if(sel.value==='morgen') tekst.textContent='morgen';
+  else if(sel.value==='komende') tekst.textContent='de komende dagen';
+  else if(sel.value==='zelf'){
+    if(!inp.value){
+      const d=new Date(); d.setDate(d.getDate()+2);
+      inp.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    tekst.textContent=formatKopZelfDatum(inp.value)||'…';
+  }
+}
+function updateAlleKopTeksten(){
+  document.querySelectorAll('.tekst-sectie').forEach(updateKopTekst);
+}
 function leegForm(){
   document.querySelectorAll('[data-save]').forEach(el=>{
     const k=el.getAttribute('data-save');
@@ -873,7 +930,8 @@ function leegForm(){
       else if(el.type==='checkbox') el.checked=false;
       else el.value='';
     } else if(el.tagName==='SELECT'){
-      el.selectedIndex=0;
+      if(KOP_DEFAULT_SEL[k]!=null) el.value=KOP_DEFAULT_SEL[k];
+      else el.selectedIndex=0;
       if(el.classList.contains('status-sel')) updateStatusKleur(el);
     } else if(KOP_DEFAULTS[k]!=null){
       el.textContent=KOP_DEFAULTS[k];
@@ -886,6 +944,7 @@ function leegForm(){
   const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value='vandaag';
   const zelfD=document.getElementById('tabel-zelf-datum'); if(zelfD) zelfD.value='';
   if(typeof updateZelfDatumZichtbaar==='function') updateZelfDatumZichtbaar();
+  if(typeof updateAlleKopTeksten==='function') updateAlleKopTeksten();
   updateTekstSecties();
 }
 function restoreDraft(){
@@ -917,6 +976,7 @@ function restoreDraft(){
     if(d.toonMorgen!=null) document.getElementById('toon-morgen').checked=!!d.toonMorgen;
     if(d.toonKomende!=null) document.getElementById('toon-komende').checked=!!d.toonKomende;
     updateTekstSecties();
+    updateAlleKopTeksten();
     // Uur-tabellen herstellen
     const t1=document.getElementById('uur-tabel-1');
     const t2=document.getElementById('uur-tabel-2');
