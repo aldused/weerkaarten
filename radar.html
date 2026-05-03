@@ -1226,14 +1226,14 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     //    Bij hoge zoom ook plaatsen_lookup.json (op pop gefilterd).
     var labelLijst;
     if (PLAATSEN_BIG) {
-      // Pop-drempel zakt bij hogere zoom: meer plaatsen zichtbaar
+      // Pop-drempel zakt bij hogere zoom — niet te veel kleine dorpen
       var popMin;
-      if      (zoomLevel >= 18) popMin = 500;
-      else if (zoomLevel >= 12) popMin = 2000;
-      else if (zoomLevel >= 8)  popMin = 8000;
-      else if (zoomLevel >= 5)  popMin = 25000;
-      else if (zoomLevel >= 3)  popMin = 80000;
-      else                       popMin = 300000;
+      if      (zoomLevel >= 18) popMin = 4000;
+      else if (zoomLevel >= 12) popMin = 12000;
+      else if (zoomLevel >= 8)  popMin = 30000;
+      else if (zoomLevel >= 5)  popMin = 80000;
+      else if (zoomLevel >= 3)  popMin = 200000;
+      else                       popMin = 500000;
       labelLijst = [];
       for (var pi = 0; pi < PLAATSEN_BIG.length; pi++) {
         var pp = PLAATSEN_BIG[pi];
@@ -1253,16 +1253,17 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.clip();
 
     if (layers.steden) {
-      // Font groeit bij sterkere zoom (11/12/13/14 px)
-      var fontPx = 11;
-      if (zoomLevel >= 8)      fontPx = 14;
-      else if (zoomLevel >= 5) fontPx = 13;
-      else if (zoomLevel >= 3) fontPx = 12;
-      ctx.font = "600 " + fontPx + "px Arial";
+      // Font groeit fors bij sterkere zoom — leesbaar op stadsniveau
+      var fontPx = 12;
+      if      (zoomLevel >= 12) fontPx = 22;
+      else if (zoomLevel >= 8)  fontPx = 18;
+      else if (zoomLevel >= 5)  fontPx = 15;
+      else if (zoomLevel >= 3)  fontPx = 13;
+      ctx.font = "700 " + fontPx + "px Arial";
       ctx.textBaseline = "middle";
-      var dotR = (zoomLevel >= 5) ? 3 : 2.2;
-      var haloW = (zoomLevel >= 5) ? 3.5 : 3.0;
-      var labelOffset = dotR + 3;
+      var dotR = (zoomLevel >= 8) ? 4 : (zoomLevel >= 5) ? 3 : 2.2;
+      var haloW = (zoomLevel >= 5) ? 4.0 : 3.0;
+      var labelOffset = dotR + 4;
       for (var k = 0; k < labelLijst.length; k++) {
         var st = labelLijst[k];
         var wx = lonToX(st[1]), wy = latToY(st[0]);
@@ -1409,46 +1410,52 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       }
     }
 
-    // 8b. Geselecteerd punt-marker (rode pin + label)
+    // 8b. Geselecteerd punt-marker (rode pin + groot label)
     if (puntSel) {
       var mwx = lonToX(puntSel.lon), mwy = latToY(puntSel.lat);
       var mxs = (mwx - viewX) * zoomLevel;
       var mys = (mwy - viewY) * zoomLevel;
-      if (mxs > -50 && mxs < W + 50 && mys > -50 && mys < H + 50) {
+      if (mxs > -100 && mxs < W + 100 && mys > -100 && mys < H + 100) {
+        // Pin schaalt iets met zoom maar blijft groot
+        var pinR = (zoomLevel >= 8) ? 11 : 9;
         // Buitenring (witte halo)
         ctx.beginPath();
-        ctx.arc(mxs, mys, 9, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = 3;
+        ctx.arc(mxs, mys, pinR + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255,255,255,0.95)";
+        ctx.lineWidth = 4;
         ctx.stroke();
         // Rode pin
         ctx.beginPath();
-        ctx.arc(mxs, mys, 7, 0, Math.PI * 2);
+        ctx.arc(mxs, mys, pinR, 0, Math.PI * 2);
         ctx.fillStyle = "#ef4444";
         ctx.fill();
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.stroke();
         // Centerdot
         ctx.beginPath();
-        ctx.arc(mxs, mys, 2, 0, Math.PI * 2);
+        ctx.arc(mxs, mys, 3, 0, Math.PI * 2);
         ctx.fillStyle = "#ffffff";
         ctx.fill();
-        // Naam-label boven pin met witte achtergrond
+        // Naam-label boven pin (groter font, robuust leesbaar)
         if (puntSel.plaats) {
-          ctx.font = "700 14px DM Sans, Arial, sans-serif";
+          var lblFont = (zoomLevel >= 12) ? 26 : (zoomLevel >= 8) ? 22 : (zoomLevel >= 5) ? 19 : 17;
+          ctx.font = "800 " + lblFont + "px DM Sans, Arial, sans-serif";
           ctx.textBaseline = "middle";
           ctx.textAlign = "center";
-          var labY = mys - 24;
+          var labY = mys - pinR - lblFont * 0.85 - 4;
           var labText = puntSel.plaats;
           var tw = ctx.measureText(labText).width;
-          var padX = 8, padY = 4;
+          var padX = lblFont * 0.55, padY = lblFont * 0.25;
           var boxW = tw + padX * 2;
-          var boxH = 22;
+          var boxH = lblFont + padY * 2;
           var boxX = mxs - boxW / 2;
           var boxY = labY - boxH / 2;
-          // Achtergrond met afgeronde hoeken
-          var rr = 5;
+          // Achtergrond met afgeronde hoeken — schaduw + rode box met witte rand
+          var rr = lblFont * 0.35;
+          ctx.shadowColor = "rgba(0,0,0,0.45)";
+          ctx.shadowBlur = 8;
+          ctx.shadowOffsetY = 2;
           ctx.beginPath();
           ctx.moveTo(boxX + rr, boxY);
           ctx.lineTo(boxX + boxW - rr, boxY);
@@ -1462,17 +1469,21 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
           ctx.closePath();
           ctx.fillStyle = "#ef4444";
           ctx.fill();
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetY = 0;
           ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 2.5;
           ctx.stroke();
           // Tekst
           ctx.fillStyle = "#ffffff";
           ctx.fillText(labText, mxs, labY + 1);
           // Pijltje onder box naar pin
+          var arrW = lblFont * 0.4;
           ctx.beginPath();
-          ctx.moveTo(mxs - 5, boxY + boxH);
-          ctx.lineTo(mxs + 5, boxY + boxH);
-          ctx.lineTo(mxs, boxY + boxH + 5);
+          ctx.moveTo(mxs - arrW, boxY + boxH);
+          ctx.lineTo(mxs + arrW, boxY + boxH);
+          ctx.lineTo(mxs, boxY + boxH + arrW);
           ctx.closePath();
           ctx.fillStyle = "#ef4444";
           ctx.fill();
