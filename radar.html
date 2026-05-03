@@ -418,6 +418,16 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     </select>
   </div>
 
+  <div style="display:flex;align-items:center;gap:6px;" title="Verwachting-bron 0-48u: HARMONIE only, ICON-D2 only, beide gemiddeld (MOSMIX), of maximum (worst-case)">
+    <span class="zoom-label">Model:</span>
+    <select id="model-select" class="reset-btn" style="padding:5px 10px;">
+      <option value="ensemble">MOSMIX (HAR+ICON)/2</option>
+      <option value="harmonie">HARMONIE</option>
+      <option value="icond2">ICON-D2</option>
+      <option value="max">Worst-case (max)</option>
+    </select>
+  </div>
+
   <div style="display:flex;align-items:center;gap:6px;">
     <span class="zoom-label">Lagen:</span>
     <div class="layer-toggles">
@@ -783,7 +793,14 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var PLAATSEN_BIG = null;
   var harmonieGeladen = false;
   var harmonieLaatsteRun = null;
-  var nFramesNowcast = 0;   // aantal frames vóór HARMONIE-extensie (om opnieuw appenden te voorkomen)  // [{naam, lat, lon, pop, land}] uit plaatsen_lookup.json (gefilterd binnen bbox)
+  var nFramesNowcast = 0;
+  // ICOND2-blend
+  var icond2Cache = null;     // {meta, data, hLat, hLon, hN}
+  var icond2Geladen = false;
+  var modelBlend = (function() {
+    try { return localStorage.getItem("radarModelBlend") || "ensemble"; }
+    catch(e) { return "ensemble"; }
+  })();   // aantal frames vóór HARMONIE-extensie (om opnieuw appenden te voorkomen)  // [{naam, lat, lon, pop, land}] uit plaatsen_lookup.json (gefilterd binnen bbox)
   var canvas, ctx;
   var offscreen, offCtx;
   var dprGlobal = 1;
@@ -824,6 +841,26 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function isFutureFrame(idx) {
     return tNowIndex >= 0 && idx > tNowIndex;
+  }
+
+  // ── ICOND2-loader (parallel naast HARMONIE voor MOSMIX-ensemble) ────────
+  function laadIcond2() {
+    if (icond2Geladen) return Promise.resolve();
+    var t = Date.now();
+    return Promise.all([
+      fetch(DATA_BASE + "icond2_canvas_meta.json?t=" + t).then(function(r){return r.json();}),
+      fetch(DATA_BASE + "icond2_data_neerslag.bin?t=" + t).then(function(r){return r.arrayBuffer();})
+    ]).then(function(res) {
+      var iMeta = res[0];
+      var buf = res[1];
+      var iView = new DataView(buf, 0, 16);
+      var iLat = iView.getUint16(0, true);
+      var iLon = iView.getUint16(2, true);
+      var iN = iView.getUint16(4, true);
+      var iData = new Float32Array(buf, 16, iLat * iLon * iN);
+      icond2Cache = { meta: iMeta, data: iData, hLat: iLat, hLon: iLon, hN: iN };
+      icond2Geladen = true;
+    }).catch(function(e) { console.error("ICOND2 load fail:", e); });
   }
 
   // ── HARMONIE-extensie tot +24u ──────────────────────────────────────────
@@ -870,15 +907,45 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // Verzamel HARMONIE-frames die NA radar-laatste-tijd vallen
     var nieuweFrames = [];
+    // Bouw lookup van ICOND2-frames op tijd (epoch ms) → frameIdx, indien geladen
+    var icond2TijdMap = {};
+    if (icond2Cache && icond2Cache.meta && modelBlend !== "harmonie") {
+      var im = icond2Cache.meta;
+      for (var ii = 0; ii < im.tijden.length; ii++) {
+        var its = im.tijden[ii];
+        var iT = new Date(its.endsWith("Z") ? its : its + "Z").getTime();
+        icond2TijdMap[iT] = ii;
+      }
+    }
+
     for (var h = 0; h < hN; h++) {
       var hStr = hMeta.tijden[h];
       if (!hStr) continue;
-      // tijden hebben geen Z-suffix maar zijn UTC
       var hT = new Date(hStr.endsWith("Z") ? hStr : hStr + "Z").getTime();
-      if (hT <= radarLastT + 30 * 60 * 1000) continue;  // skip als overlap met nowcast
-      // Resample en converteer
-      var pvFrame = resampleHarmonieNaarRadar(hData, hLat, hLon, h, hMeta.grid);
-      nieuweFrames.push({ pv: pvFrame, t: hT, label: fmtTijd(new Date(hT)) });
+      if (hT <= radarLastT + 30 * 60 * 1000) continue;
+      // Resample HARMONIE → mm/u-grid
+      var hMm = resampleNaarRadarMm(hData, hLat, hLon, h, hMeta.grid);
+      // Blend met ICOND2 als beschikbaar voor zelfde tijd + modus != harmonie
+      var modelLabel = "HARMONIE";
+      var icond2Idx = icond2TijdMap[hT];
+      if (icond2Cache && typeof icond2Idx === "number" && modelBlend !== "harmonie") {
+        var iMm = resampleNaarRadarMm(icond2Cache.data, icond2Cache.hLat, icond2Cache.hLon, icond2Idx, icond2Cache.meta.grid);
+        if (modelBlend === "icond2") {
+          hMm = iMm;
+          modelLabel = "ICON-D2";
+        } else if (modelBlend === "max") {
+          for (var bi = 0; bi < hMm.length; bi++) if (iMm[bi] > hMm[bi]) hMm[bi] = iMm[bi];
+          modelLabel = "Max(HAR,ICON)";
+        } else {
+          // ensemble = mean
+          for (var bj = 0; bj < hMm.length; bj++) hMm[bj] = (hMm[bj] + iMm[bj]) * 0.5;
+          modelLabel = "MOSMIX (HAR+ICON)/2";
+        }
+      } else if (modelBlend === "icond2" && !icond2Cache) {
+        // user wil ICOND2 maar niet geladen — toon HARMONIE als fallback
+      }
+      var pvFrame = mmGridNaarPv(hMm);
+      nieuweFrames.push({ pv: pvFrame, t: hT, label: fmtTijd(new Date(hT)), model: modelLabel });
     }
     if (!nieuweFrames.length) return;
 
@@ -904,6 +971,50 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     // Update header sub
     var sub = document.getElementById("hdr-sub");
     if (sub) sub.textContent = "KNMI radar + pySTEPS-nowcast (0–2u) + HARMONIE 43 (2–60u)";
+  }
+
+  // Generieke resample: NWP-grid → radar-grid, geeft mm/u per radar-pixel terug (Float32Array)
+  function resampleNaarRadarMm(hData, hLat, hLon, frame, hGrid) {
+    var out = new Float32Array(nLat * nLon);
+    var off = frame * hLat * hLon;
+    var rLatMax = meta.grid.lat_max, rLatMin = meta.grid.lat_min;
+    var rLonMin = meta.grid.lon_min, rLonMax = meta.grid.lon_max;
+    var hLatMax = hGrid.lat_max, hLatMin = hGrid.lat_min;
+    var hLonMin = hGrid.lon_min, hLonMax = hGrid.lon_max;
+    for (var r = 0; r < nLat; r++) {
+      var lat = rLatMax - (r / (nLat - 1)) * (rLatMax - rLatMin);
+      var hr = (hLatMax - lat) / (hLatMax - hLatMin) * (hLat - 1);
+      if (hr < 0 || hr > hLat - 1) continue;
+      var hr0 = Math.floor(hr), hr1 = Math.min(hLat - 1, hr0 + 1);
+      var ty = hr - hr0;
+      for (var c = 0; c < nLon; c++) {
+        var lon = rLonMin + (c / (nLon - 1)) * (rLonMax - rLonMin);
+        var hc = (lon - hLonMin) / (hLonMax - hLonMin) * (hLon - 1);
+        if (hc < 0 || hc > hLon - 1) continue;
+        var hc0 = Math.floor(hc), hc1 = Math.min(hLon - 1, hc0 + 1);
+        var tx = hc - hc0;
+        var v00 = hData[off + hr0 * hLon + hc0];
+        var v01 = hData[off + hr0 * hLon + hc1];
+        var v10 = hData[off + hr1 * hLon + hc0];
+        var v11 = hData[off + hr1 * hLon + hc1];
+        var v = (1 - ty) * ((1 - tx) * v00 + tx * v01) + ty * ((1 - tx) * v10 + tx * v11);
+        out[r * nLon + c] = v;
+      }
+    }
+    return out;
+  }
+
+  // Convert mm/u-grid → uint8 PV-grid (Marshall-Palmer)
+  function mmGridNaarPv(mmGrid) {
+    var out = new Uint8Array(mmGrid.length);
+    for (var i = 0; i < mmGrid.length; i++) {
+      var v = mmGrid[i];
+      if (!(v > 0.05)) continue;
+      var dbz = 10 * Math.log10(200 * Math.pow(v, 1.6));
+      if (dbz < 5) continue;
+      out[i] = Math.max(1, Math.min(254, Math.round(2 * (dbz + 32))));
+    }
+    return out;
   }
 
   function resampleHarmonieNaarRadar(hData, hLat, hLon, frame, hGrid) {
@@ -2535,15 +2646,37 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function setupModusKnop() {
     var sel = document.getElementById("modus-select");
-    if (!sel) return;
-    sel.value = radarMode;
-    sel.addEventListener("change", function() {
-      radarMode = this.value;
-      try { localStorage.setItem("radarMode", radarMode); } catch(e) {}
-      bouwCumGrid();
-      renderFrame();
-      bouwLegenda();
-    });
+    if (sel) {
+      sel.value = radarMode;
+      sel.addEventListener("change", function() {
+        radarMode = this.value;
+        try { localStorage.setItem("radarMode", radarMode); } catch(e) {}
+        bouwCumGrid();
+        renderFrame();
+        bouwLegenda();
+      });
+    }
+    var modelSel = document.getElementById("model-select");
+    if (modelSel) {
+      modelSel.value = modelBlend;
+      modelSel.addEventListener("change", function() {
+        modelBlend = this.value;
+        try { localStorage.setItem("radarModelBlend", modelBlend); } catch(e) {}
+        // Herbouw HARMONIE-frames met nieuwe blend
+        if (harmonieGeladen) {
+          // Reset naar nowcast-only en re-append
+          if (nFramesNowcast > 0 && nFrames > nFramesNowcast) {
+            radarData = new Uint8Array(radarData.subarray(0, nFramesNowcast * nLat * nLon));
+            meta.tijden = meta.tijden.slice(0, nFramesNowcast);
+            meta.tijden_tekst = meta.tijden_tekst.slice(0, nFramesNowcast);
+            meta.frame_types = meta.frame_types.slice(0, nFramesNowcast);
+            nFrames = nFramesNowcast;
+            harmonieGeladen = false;
+            laadHarmonie();
+          }
+        }
+      });
+    }
   }
 
   // ── Bliksem-overlay ────────────────────────────────────────────────────
@@ -3447,9 +3580,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       bouwCumGrid();
       if (radarMode !== "instant") renderFrame();
       if (layers.bliksem) startBliksemFetch();
-      // HARMONIE-extensie laden in achtergrond (na 500ms zodat radar eerst rendert)
+      // HARMONIE + ICOND2 laden in achtergrond (na 500ms zodat radar eerst rendert)
       if (layers.harmonie) {
-        setTimeout(function() { laadHarmonie(); }, 500);
+        setTimeout(function() {
+          // Eerst ICOND2 laden zodat append-blend kan, dan HARMONIE
+          laadIcond2().then(function() { laadHarmonie(); });
+        }, 500);
       }
 
       // Auto-refresh
