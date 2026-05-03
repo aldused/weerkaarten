@@ -2118,35 +2118,32 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       c.fill();
     }
 
-    // X-as labels — gekozen op tijd-stappen (geen overlap)
+    // X-as labels — zelfde stap-keuze als slider-ticks (synced)
     c.fillStyle = "#64748b";
     c.font = (10 * scale).toFixed(1) + "px DM Mono, monospace";
     c.textAlign = "center";
     c.textBaseline = "top";
-    // Bepaal stap-uren zodat labels niet overlappen (~50px per label minimaal)
-    var labelMinSpacingPx = 48 * scale;
-    var totalH = (tEnd - t0) / 3600000;
-    var stappenU = [0.5, 1, 2, 3, 6, 12];
-    var stapU = 1;
-    for (var sp = 0; sp < stappenU.length; sp++) {
-      var pxStap = (stappenU[sp] * 3600000) / tSpan * plotW;
-      if (pxStap >= labelMinSpacingPx) { stapU = stappenU[sp]; break; }
+    var totalMin = (tEnd - t0) / 60000;
+    var keuzes = [15, 30, 60, 120, 180, 360, 720, 1440];
+    var minPxLabel = (plotW < 500) ? 110 : (plotW < 900) ? 90 : 100;
+    var stapMin = keuzes[keuzes.length - 1];
+    for (var sp = 0; sp < keuzes.length; sp++) {
+      var pxStap = (keuzes[sp] / totalMin) * plotW;
+      if (pxStap >= minPxLabel) { stapMin = keuzes[sp]; break; }
     }
-    // Genereer ticks-tijden geround op stapU vanaf t0
-    var startMs = t0;
-    var startD = new Date(startMs);
-    // Round naar volgende stap-uur
-    var stapMs = stapU * 3600000;
-    var firstTickMs = Math.ceil(startMs / stapMs) * stapMs;
+    var stapMs = stapMin * 60000;
+    var firstTickMs = Math.ceil(t0 / stapMs) * stapMs;
     var laatstX = -9999;
+    var lastDayShownSpark = new Date(t0).getDate();
+    var dgsSpark = ["zo","ma","di","wo","do","vr","za"];
     for (var tickMs = firstTickMs; tickMs <= tEnd; tickMs += stapMs) {
       var fx = (tickMs - t0) / tSpan * plotW + pad.left;
-      if (fx - laatstX < labelMinSpacingPx) continue;
+      if (fx - laatstX < minPxLabel) continue;
       var tdt = new Date(tickMs);
       var lbl = String(tdt.getHours()).padStart(2,"0") + ":" + String(tdt.getMinutes()).padStart(2,"0");
-      // Toon dag-marker als overgang (bv. ma 04 mei → 00:00)
-      if (tdt.getHours() === 0 && tdt.getMinutes() === 0) {
-        lbl = String(tdt.getDate()) + "/" + (tdt.getMonth() + 1);
+      if (tdt.getDate() !== lastDayShownSpark) {
+        lbl = dgsSpark[tdt.getDay()] + " " + lbl;
+        lastDayShownSpark = tdt.getDate();
       }
       c.fillText(lbl, fx, pad.top + plotH + 2 * scale);
       laatstX = fx;
