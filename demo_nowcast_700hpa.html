@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo · Nowcast met 700 hPa stuurwind blend</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --knmi-blue: #00205b;
+    --accent: #2ec4e8;
+    --bg: #f6f8fb;
+    --panel: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e3e8ef;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: var(--knmi-blue); margin-bottom: 4px; }
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h2 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .ctrl { margin-bottom: 14px; }
+  .ctrl label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #334155;
+  }
+  .ctrl label .val {
+    font-family: "DM Mono", ui-monospace, monospace;
+    color: var(--knmi-blue);
+    font-weight: 700;
+  }
+  .ctrl input[type=range] { width: 100%; accent-color: var(--knmi-blue); }
+  .canvases {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .canvas-card {
+    background: #0d1b2a;
+    border-radius: 12px;
+    padding: 12px;
+    color: #e0e8f0;
+  }
+  .canvas-card .ttl {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+    margin-bottom: 6px;
+  }
+  .canvas-card .ttl .accent { color: var(--accent); }
+  canvas {
+    width: 100%;
+    height: auto;
+    background: #0a1426;
+    border-radius: 6px;
+    display: block;
+    image-rendering: pixelated;
+  }
+  .scrubber {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+  }
+  .scrubber-row { display: flex; align-items: center; gap: 14px; }
+  .scrubber input[type=range] { flex: 1; accent-color: var(--accent); }
+  .scrubber .tijd {
+    font-family: "DM Mono", monospace;
+    font-weight: 700;
+    color: var(--knmi-blue);
+    min-width: 90px;
+    text-align: right;
+  }
+  .play {
+    background: var(--knmi-blue);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .legend {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+    font-size: 10px;
+    color: #94a3b8;
+  }
+  .legend-bar {
+    flex: 1;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(to right, #0a1426, #0e6cb3, #2ec4e8, #fbbf24, #ef4444, #b91c1c, #7c3aed);
+  }
+  .vec-info {
+    background: #f6f8fb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.55;
+    color: #334155;
+    margin-top: 6px;
+  }
+  .vec-info b { color: var(--knmi-blue); }
+  .footer-note {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Demo · Nowcast blend met 700 hPa stuurwind</h1>
+<div class="sub">Synthetisch regencel-patroon. Vergelijk pure radar-extrapolatie (links) met blend HARMONIE 700 hPa-stuurwind (rechts). Speel met sliders.</div>
+
+<div class="wrap">
+
+  <div class="panel">
+    <h2>Parameters</h2>
+
+    <div class="ctrl">
+      <label>700 hPa snelheid <span class="val" id="v-spd">45 km/u</span></label>
+      <input type="range" id="spd" min="0" max="120" step="5" value="45">
+    </div>
+
+    <div class="ctrl">
+      <label>700 hPa richting <span class="val" id="v-dir">240°</span></label>
+      <input type="range" id="dir" min="0" max="359" step="5" value="240">
+    </div>
+
+    <div class="ctrl">
+      <label>Radar-grond stuurwind <span class="val" id="v-rspd">25 km/u</span></label>
+      <input type="range" id="rspd" min="0" max="80" step="5" value="25">
+    </div>
+
+    <div class="ctrl">
+      <label>Radar-grond richting <span class="val" id="v-rdir">220°</span></label>
+      <input type="range" id="rdir" min="0" max="359" step="5" value="220">
+    </div>
+
+    <div class="ctrl">
+      <label>Blend-helft α (t bij 50%) <span class="val" id="v-half">60 min</span></label>
+      <input type="range" id="half" min="15" max="120" step="5" value="60">
+      <div class="vec-info" style="margin-top:8px;">
+        α(t) = t / (t + t<sub>½</sub>) · groeit van 0 (nu) → ~1 (lange termijn). Bij <b>+t<sub>½</sub></b> = 50% radar / 50% 700 hPa.
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Cel-decay (per uur) <span class="val" id="v-dec">15%</span></label>
+      <input type="range" id="dec" min="0" max="50" step="5" value="15">
+    </div>
+
+    <div class="vec-info" id="vecInfo"></div>
+  </div>
+
+  <div class="canvases">
+    <div class="canvas-card">
+      <div class="ttl">A · Pure pySTEPS-extrapolatie <span class="accent">(huidig)</span></div>
+      <canvas id="cnvA" width="320" height="320"></canvas>
+      <div class="legend">
+        <span>0</span><div class="legend-bar"></div><span>50+ mm/u</span>
+      </div>
+    </div>
+    <div class="canvas-card">
+      <div class="ttl">B · Blend 700 hPa <span class="accent">(voorstel)</span></div>
+      <canvas id="cnvB" width="320" height="320"></canvas>
+      <div class="legend">
+        <span>0</span><div class="legend-bar"></div><span>50+ mm/u</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrubber">
+    <div class="scrubber-row">
+      <button class="play" id="play">▶ Speel</button>
+      <input type="range" id="frame" min="0" max="24" step="1" value="0">
+      <div class="tijd" id="tijd">+0 min</div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Demo · synthetische data. Echte implementatie: HARMONIE 700 hPa u/v als steering-veld in pySTEPS S-PROG / advectie-blend.
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // ── synthetische regencellen ───────────────────────────────────────────────
+  const N = 120; // grid resolutie
+  const cells = [
+    { x: 30,  y: 90,  r: 12, peak: 35 },
+    { x: 55,  y: 70,  r: 18, peak: 50 },
+    { x: 80,  y: 95,  r: 9,  peak: 20 },
+    { x: 45,  y: 50,  r: 14, peak: 28 },
+    { x: 70,  y: 60,  r: 10, peak: 18 },
+  ];
+
+  function buildField(cellsArr) {
+    const f = new Float32Array(N * N);
+    for (const c of cellsArr) {
+      const r2 = c.r * c.r;
+      const x0 = Math.max(0, Math.floor(c.x - c.r * 2));
+      const x1 = Math.min(N, Math.ceil(c.x + c.r * 2));
+      const y0 = Math.max(0, Math.floor(c.y - c.r * 2));
+      const y1 = Math.min(N, Math.ceil(c.y + c.r * 2));
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const dx = x - c.x, dy = y - c.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 > r2 * 4) continue;
+          const v = c.peak * Math.exp(-d2 / (r2 * 0.7));
+          f[y * N + x] += v;
+        }
+      }
+    }
+    return f;
+  }
+
+  // colormap (0..50+ mm/u → KNMI-achtig)
+  function colorFor(v, img, idx) {
+    if (v < 0.1) { img[idx]=10; img[idx+1]=20; img[idx+2]=38; img[idx+3]=255; return; }
+    const stops = [
+      [0.1,   10, 30, 60],
+      [0.5,   14, 108, 179],
+      [1.5,   46, 196, 232],
+      [3,    250, 204, 21],
+      [8,    251, 146, 60],
+      [15,   239, 68, 68],
+      [30,   185, 28, 28],
+      [50,  124, 58, 237],
+    ];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (v <= stops[i+1][0]) {
+        const a = stops[i], b = stops[i+1];
+        const t = (v - a[0]) / (b[0] - a[0]);
+        img[idx]   = a[1] + (b[1]-a[1])*t;
+        img[idx+1] = a[2] + (b[2]-a[2])*t;
+        img[idx+2] = a[3] + (b[3]-a[3])*t;
+        img[idx+3] = 255;
+        return;
+      }
+    }
+    img[idx]=124; img[idx+1]=58; img[idx+2]=237; img[idx+3]=255;
+  }
+
+  function render(canvas, field) {
+    const ctx = canvas.getContext("2d");
+    const im = ctx.createImageData(N, N);
+    for (let i = 0; i < N*N; i++) {
+      colorFor(field[i], im.data, i*4);
+    }
+    // upscale via offscreen
+    const off = document.createElement("canvas");
+    off.width = N; off.height = N;
+    off.getContext("2d").putImageData(im, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+  }
+
+  // pijl-overlay (advectie-vector)
+  function drawArrow(canvas, ucell, vcell, label, color, slot) {
+    const ctx = canvas.getContext("2d");
+    const cx = canvas.width - 70, cy = 40 + (slot || 0) * 60;
+    const sc = 1.4;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    const ex = cx + ucell * sc;
+    const ey = cy - vcell * sc;
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    // pijlpunt
+    const ang = Math.atan2(cy - ey, ex - cx);
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - 8 * Math.cos(ang - Math.PI/6), ey + 8 * Math.sin(ang - Math.PI/6));
+    ctx.lineTo(ex - 8 * Math.cos(ang + Math.PI/6), ey + 8 * Math.sin(ang + Math.PI/6));
+    ctx.closePath();
+    ctx.fill();
+    // label
+    ctx.font = "bold 10px DM Mono, monospace";
+    ctx.fillStyle = color;
+    ctx.fillText(label, cx - 15, cy + 22);
+  }
+
+  // ── controls ───────────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  const sliders = ["spd","dir","rspd","rdir","half","dec","frame"];
+  const labels = {spd:"v-spd",dir:"v-dir",rspd:"v-rspd",rdir:"v-rdir",half:"v-half",dec:"v-dec"};
+
+  function fmtLabel(id, v) {
+    if (id === "spd" || id === "rspd") return v + " km/u";
+    if (id === "dir" || id === "rdir") return v + "°";
+    if (id === "half") return v + " min";
+    if (id === "dec")  return v + "%";
+    return v;
+  }
+
+  // wind dir → u/v (meteo: dir = waar de wind vandaan komt)
+  function dirSpdToUV(dir, spd) {
+    // km/u → grid-cells per 5 min. 1 cel ≈ 5 km (synth grid 600×600 km).
+    const kmPerCell = 5;
+    const cellsPer5min = (spd / 60) * 5 / kmPerCell; // (km/min) * 5 min / km/cell
+    const rad = (dir + 180) * Math.PI / 180; // naar wind GAAT
+    return {
+      u: cellsPer5min * Math.sin(rad),
+      v: -cellsPer5min * Math.cos(rad), // y omhoog = noord
+    };
+  }
+
+  // advect veld met (u,v) cells/frame (lineair)
+  function advect(field, u, v) {
+    const out = new Float32Array(N * N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const sx = x - u, sy = y - v;
+        const xi = Math.floor(sx), yi = Math.floor(sy);
+        const fx = sx - xi, fy = sy - yi;
+        if (xi < 0 || xi >= N-1 || yi < 0 || yi >= N-1) continue;
+        const i00 = yi*N + xi;
+        const i10 = i00 + 1;
+        const i01 = i00 + N;
+        const i11 = i01 + 1;
+        out[y*N + x] =
+          field[i00]*(1-fx)*(1-fy) +
+          field[i10]*fx*(1-fy) +
+          field[i01]*(1-fx)*fy +
+          field[i11]*fx*fy;
+      }
+    }
+    return out;
+  }
+
+  function decayField(field, factor) {
+    for (let i = 0; i < field.length; i++) field[i] *= factor;
+  }
+
+  // ── render-stap ────────────────────────────────────────────────────────────
+  let baseField = buildField(cells);
+
+  function update() {
+    const spd  = +$("spd").value;
+    const dir  = +$("dir").value;
+    const rspd = +$("rspd").value;
+    const rdir = +$("rdir").value;
+    const half = +$("half").value;
+    const dec  = +$("dec").value;
+    const fr   = +$("frame").value; // 0..24 = 0..120 min
+
+    Object.keys(labels).forEach(k => $(labels[k]).textContent = fmtLabel(k, $(k).value));
+    $("tijd").textContent = "+" + (fr*5) + " min";
+
+    const minutes = fr * 5;
+    const decayFrame = Math.pow(1 - dec/100, 5/60);
+
+    // A: pure radar-flow extrapolatie
+    const uvR = dirSpdToUV(rdir, rspd);
+    let fieldA = baseField.slice();
+    for (let f = 0; f < fr; f++) {
+      fieldA = advect(fieldA, uvR.u, uvR.v);
+      decayField(fieldA, decayFrame);
+    }
+
+    // B: blend met 700 hPa, α(t) = t/(t+t½)
+    const uv7 = dirSpdToUV(dir, spd);
+    let fieldB = baseField.slice();
+    for (let f = 0; f < fr; f++) {
+      const t = (f + 0.5) * 5; // mid-frame minuten
+      const alpha = t / (t + half);
+      const uB = (1 - alpha) * uvR.u + alpha * uv7.u;
+      const vB = (1 - alpha) * uvR.v + alpha * uv7.v;
+      fieldB = advect(fieldB, uB, vB);
+      decayField(fieldB, decayFrame);
+    }
+
+    render($("cnvA"), fieldA);
+    render($("cnvB"), fieldB);
+
+    // overlay-pijlen
+    const cnvA = $("cnvA"), cnvB = $("cnvB");
+    drawArrow(cnvA, uvR.u * 8, uvR.v * 8, "RADAR", "#fbbf24", 0);
+    drawArrow(cnvB, uvR.u * 8, uvR.v * 8, "RADAR", "#fbbf24", 0);
+    drawArrow(cnvB, uv7.u * 8, uv7.v * 8, "700hPa", "#2ec4e8", 1);
+
+    // info
+    const t = (fr + 0.5) * 5;
+    const alpha = t / (t + half);
+    $("vecInfo").innerHTML =
+      `<b>Bij +${fr*5} min:</b><br>` +
+      `α(t) = ${(alpha*100).toFixed(0)}% (700 hPa-aandeel)<br>` +
+      `Radar-vector: ${rspd} km/u uit ${rdir}°<br>` +
+      `700 hPa-vector: ${spd} km/u uit ${dir}°`;
+  }
+
+  sliders.forEach(id => $(id).addEventListener("input", update));
+
+  // play loop
+  let playing = false, timer = null;
+  $("play").addEventListener("click", () => {
+    playing = !playing;
+    $("play").textContent = playing ? "⏸ Pauze" : "▶ Speel";
+    if (playing) {
+      timer = setInterval(() => {
+        let v = +$("frame").value;
+        v = (v + 1) % 25;
+        $("frame").value = v;
+        update();
+      }, 250);
+    } else {
+      clearInterval(timer);
+    }
+  });
+
+  update();
+})();
+</script>
+
+</body>
+</html>

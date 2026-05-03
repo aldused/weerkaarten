@@ -532,6 +532,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   <div class="row"><span class="badge">❄ HAGEL</span><span class="uit">Pixels &gt;55 dBZ — mogelijk hagel (geen garantie; sterke buien hebben vaak hoge reflectiviteit).</span></div>
   <div class="row"><span class="badge">+24u HARMONIE</span><span class="uit">Verlengt verwachting na pySTEPS-nowcast (0–2u) met HARMONIE 43 NWP tot +24u (uurlijkse stappen).</span></div>
   <div class="row"><span class="badge" style="background:#fef3c7;color:#92400e;">VERWACHTING</span><span class="uit">Geel-gestreepte zone op slider/sparkline = forecast-frames (rechts van NU-lijn).</span></div>
+  <div class="row" id="row-blend-info" style="display:none;"><span class="badge" style="background:#dbeafe;color:#1e40af;">700 hPa-BLEND</span><span class="uit" id="blend-info-tekst">—</span></div>
   <div class="row"><span class="badge" style="background:#ef4444;color:#fff;">PIN</span><span class="uit">Klik kaart of zoek/event-knop = rode pin met plaatsnaam + neerslag-tijdreeks onderaan.</span></div>
 </div>
 
@@ -973,6 +974,40 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     if (sub) sub.textContent = "KNMI radar + pySTEPS-nowcast (0–2u) + HARMONIE 43 (2–60u)";
   }
 
+  function _windDir(u, v) {
+    // u=oost+, v=noord+ → richting waar wind vandaan komt
+    var dir = (Math.atan2(-u, -v) * 180 / Math.PI + 360) % 360;
+    return Math.round(dir);
+  }
+
+  function toonBlendInfo(blend) {
+    var row = document.getElementById("row-blend-info");
+    var txt = document.getElementById("blend-info-tekst");
+    var sub = document.getElementById("hdr-sub");
+    if (!row || !txt) return;
+    if (!blend || !blend.active) {
+      row.style.display = "none";
+      return;
+    }
+    row.style.display = "flex";
+    var u7 = blend.uv_700hpa_kmh || [0, 0];
+    var uR = blend.uv_radar_kmh || [0, 0];
+    var spd700 = Math.round(Math.hypot(u7[0], u7[1]));
+    var dir700 = _windDir(u7[0], u7[1]);
+    var spdR   = Math.round(Math.hypot(uR[0], uR[1]));
+    var dirR   = _windDir(uR[0], uR[1]);
+    var th = blend.t_half_min || 60;
+    txt.innerHTML =
+      "Nowcast bijgesteld met HARMONIE 700 hPa-stuurwind (" +
+      spd700 + " km/u uit " + dir700 + "°) t.o.v. radar-flow (" +
+      spdR + " km/u uit " + dirR + "°). Blend-helft t<sub>½</sub> = " + th +
+      " min · Δ = " + (blend.delta_kmh || 0) + " km/u.";
+    if (sub) {
+      sub.textContent = "KNMI radar + pySTEPS-nowcast + 700 hPa-blend (Δ" +
+        (blend.delta_kmh || 0) + " km/u) + HARMONIE 43 (2–60u)";
+    }
+  }
+
   // Generieke resample: NWP-grid → radar-grid, geeft mm/u per radar-pixel terug (Float32Array)
   function resampleNaarRadarMm(hData, hLat, hLon, frame, hGrid) {
     var out = new Float32Array(nLat * nLon);
@@ -1290,6 +1325,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       frameTypes = meta.frame_types || null;
       tNowIndex = bepaalNowIndex();
       bouwSliderOverlay();
+      toonBlendInfo(meta.blend_700hpa);
 
       // Offscreen canvas op data-resolutie (450×350) voor de radar-raster
       offscreen = document.createElement("canvas");

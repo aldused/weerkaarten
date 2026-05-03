@@ -49,6 +49,13 @@ LAT_MIN, LAT_MAX = 49.5, 54.5
 TARGET_NLON = 900
 TARGET_NLAT = 500
 
+# 700 hPa-blend (warp KNMI nowcast met HARMONIE 700 hPa stuurwind)
+T_HALF_MIN = 60.0           # α(t) = t / (t + t½) — bij +60 min: 50% blend
+BLEND_LAT, BLEND_LON = 52.1, 5.4   # NL-centrum voor 700 hPa-fetch
+KM_PER_CELL_X = ((LON_MAX - LON_MIN) / TARGET_NLON
+                 * 111.32 * np.cos(np.deg2rad((LAT_MIN + LAT_MAX) / 2)))
+KM_PER_CELL_Y = (LAT_MAX - LAT_MIN) / TARGET_NLAT * 111.32
+
 # KNMI radar projectie
 KNMI_PROJ = Proj("+proj=stere +lat_0=90 +lon_0=0 +lat_ts=60 "
                  "+a=6378137 +b=6356752 +x_0=0 +y_0=0 +units=km")
@@ -209,6 +216,109 @@ def format_tijd(dt, prefix=""):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 700 hPa-blend
+# ─────────────────────────────────────────────────────────────────────────────
+def _dirspd_to_uv(dir_deg, spd):
+    """Meteo-conventie: dir = waar wind vandaan komt. u=oost+, v=noord+."""
+    if dir_deg is None or spd is None:
+        return None
+    rad = np.deg2rad(dir_deg)
+    u = -spd * np.sin(rad)
+    v = -spd * np.cos(rad)
+    return float(u), float(v)
+
+
+def fetch_700hpa_wind():
+    """700 hPa-wind (km/u) over NL via Open-Meteo (KNMI HARMONIE-model).
+    Returns (u, v) eastward/northward in km/u, of None bij fout."""
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": BLEND_LAT,
+        "longitude": BLEND_LON,
+        "hourly": "wind_speed_700hPa,wind_direction_700hPa",
+        "models": "knmi_harmonie_arome_europe",
+        "forecast_days": 1,
+        "timezone": "UTC",
+    }
+    try:
+        r = requests.get(url, params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        h = data.get("hourly", {}) or {}
+        times = h.get("time") or []
+        spds = h.get("wind_speed_700hPa") or []
+        dirs = h.get("wind_direction_700hPa") or []
+        if not times:
+            return None
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        for i, ts in enumerate(times):
+            try:
+                tt = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+            if tt >= now:
+                spd = spds[i] if i < len(spds) else None
+                dr  = dirs[i] if i < len(dirs) else None
+                return _dirspd_to_uv(dr, spd)
+        return None
+    except Exception as e:
+        print(f"  700 hPa-fetch fout: {e}")
+        return None
+
+
+def estimate_radar_flow(frame_now, frame_prev):
+    """Phase correlation tussen twee opeenvolgende PV-frames (5 min apart).
+    Returns (u, v) in km/u eastward/northward, of None bij te weinig signaal."""
+    a = frame_prev.astype(np.float32)
+    b = frame_now.astype(np.float32)
+    a[a == 255] = 0.0
+    b[b == 255] = 0.0
+    if (a > 0).sum() < 200 or (b > 0).sum() < 200:
+        return None
+    a -= a.mean()
+    b -= b.mean()
+    A = np.fft.rfft2(a)
+    B = np.fft.rfft2(b)
+    R = A.conj() * B
+    R = R / (np.abs(R) + 1e-9)
+    r = np.fft.irfft2(R, s=a.shape)
+    py, px = np.unravel_index(np.argmax(r), r.shape)
+    H, W = r.shape
+    if py > H // 2: py -= H
+    if px > W // 2: px -= W
+    # px,py = displacement (cellen) van b t.o.v. a binnen 5 min
+    # rij 0 = LAT_MAX (noord), dus py>0 = naar zuid
+    dt_h = 5.0 / 60.0
+    u_kmh = px * KM_PER_CELL_X / dt_h
+    v_kmh = -py * KM_PER_CELL_Y / dt_h
+    if np.hypot(u_kmh, v_kmh) > 200:
+        return None
+    return float(u_kmh), float(v_kmh)
+
+
+def warp_forecast_frames(fcst_frames, uv_radar, uv_700, t_half_min=T_HALF_MIN):
+    """Warp KNMI-nowcast frames met cumulatieve blend-shift
+    Δ(t) = α(t) · (uv_700 − uv_radar) · t.   α(t) = t / (t + t½)."""
+    from scipy.ndimage import shift as ndshift
+    du = uv_700[0] - uv_radar[0]
+    dv = uv_700[1] - uv_radar[1]
+    out = []
+    log = []
+    for i, fr in enumerate(fcst_frames):
+        t_min = (i + 1) * 5.0
+        alpha = t_min / (t_min + t_half_min)
+        dx_km = alpha * du * (t_min / 60.0)
+        dy_km = alpha * dv * (t_min / 60.0)
+        sx = dx_km / KM_PER_CELL_X
+        sy = -dy_km / KM_PER_CELL_Y   # rij toeneemt naar zuid
+        shifted = ndshift(fr, shift=(sy, sx), order=0,
+                          mode="constant", cval=0, prefilter=False)
+        out.append(shifted.astype(np.uint8))
+        log.append((round(float(sx), 2), round(float(sy), 2)))
+    return out, log
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
@@ -288,6 +398,38 @@ def main():
         except Exception as e:
             print(f"  Nowcast download mislukt: {e}")
 
+    # 5b. 700 hPa-blend (warp KNMI nowcast met α(t)·(uv_700 − uv_radar))
+    blend_meta = {"active": False, "reason": "geen forecast"}
+    if fcst_frames and len(hist_frames) >= 2:
+        try:
+            uv7 = fetch_700hpa_wind()
+            uvR = estimate_radar_flow(hist_frames[-1], hist_frames[-2])
+            if uv7 is None:
+                blend_meta = {"active": False, "reason": "geen 700 hPa-data"}
+            elif uvR is None:
+                blend_meta = {"active": False, "reason": "te weinig radar-signaal"}
+            else:
+                spd_diff = float(np.hypot(uv7[0] - uvR[0], uv7[1] - uvR[1]))
+                print(f"  Radar-flow: ({uvR[0]:+.1f}, {uvR[1]:+.1f}) km/u")
+                print(f"  700 hPa:    ({uv7[0]:+.1f}, {uv7[1]:+.1f}) km/u")
+                print(f"  Δ-snelheid: {spd_diff:.1f} km/u")
+                fcst_frames, shift_log = warp_forecast_frames(fcst_frames, uvR, uv7)
+                blend_meta = {
+                    "active": True,
+                    "t_half_min": T_HALF_MIN,
+                    "uv_radar_kmh": [round(uvR[0], 1), round(uvR[1], 1)],
+                    "uv_700hpa_kmh": [round(uv7[0], 1), round(uv7[1], 1)],
+                    "delta_kmh": round(spd_diff, 1),
+                    "max_shift_cells": shift_log[-1] if shift_log else None,
+                    "bron_700hpa": "Open-Meteo / knmi_harmonie_arome_europe",
+                }
+                print(f"  Blend actief, max shift cellen = {shift_log[-1]}")
+        except Exception as e:
+            blend_meta = {"active": False, "reason": f"fout: {e}"}
+            print(f"  Blend fout: {e}")
+        if not blend_meta["active"]:
+            print(f"  Blend overgeslagen: {blend_meta['reason']}")
+
     # 6. Combineer
     all_frames = hist_frames + fcst_frames
     all_tijden = hist_tijden + fcst_tijden
@@ -322,8 +464,13 @@ def main():
     # 8. Metadata JSON
     print("6. Metadata schrijven...")
     lt_nu = datetime.now(LOCAL_TZ)
+    product_naam = "KNMI Regenradar (gauge-gecorrigeerd) + pySTEPS nowcast"
+    if blend_meta.get("active"):
+        product_naam += " + 700 hPa-blend"
+
     meta = {
-        "product": "KNMI Regenradar (gauge-gecorrigeerd) + pySTEPS nowcast",
+        "product": product_naam,
+        "blend_700hpa": blend_meta,
         "bijgewerkt": format_tijd(lt_nu),
         "nieuwste": nieuwste_hist,
         "nieuwste_forecast": nieuwste_fcst,
