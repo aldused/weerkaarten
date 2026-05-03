@@ -353,14 +353,66 @@ function wisDraft(){
   localStorage.removeItem(saveKey());
   location.reload();
 }
-function mailVlaggenweer(){
+const MAIL_ENDPOINT='https://mail.weerlab.nl/';
+function blobToBase64(blob){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=()=>rej(r.error||new Error('FileReader fout'));
+    r.readAsDataURL(blob);
+  });
+}
+async function mailVlaggenweer(){
   const d = firstRowDate || new Date();
   const datumLabel = fmtDate(d);
   const subject = `Vlaggenweer ${datumLabel}`;
   const notes = (document.getElementById('mail-notes')?.value || '').trim();
-  const body = notes;
-  const url = `mailto:${MAIL_ONTVANGERS.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.location.href = url;
+  if(!confirm(`Vlaggenweer mailen naar:\n\n• ${MAIL_ONTVANGERS.join('\n• ')}\n\nOnderwerp: ${subject}\n\nDoorgaan?`)) return;
+
+  const btn = document.querySelector('button[onclick="mailVlaggenweer()"]');
+  const origLabel = btn?.textContent;
+  if(btn){ btn.disabled=true; btn.textContent='⏳ PDF maken...'; }
+  const status = document.getElementById('save-status');
+  if(status) status.textContent='📧 Mail wordt voorbereid...';
+
+  try{
+    const wrap = document.createElement('div');
+    wrap.className = 'pdf-mode';
+    wrap.appendChild(freezeClone(document.getElementById('rapport')));
+    document.body.appendChild(wrap); wrap.style.position='absolute'; wrap.style.left='-9999px';
+
+    const pdfBlob = await html2pdf().set({
+      margin:0,
+      filename:'VLAGGENWEER.pdf',
+      image:{type:'jpeg',quality:.98},
+      html2canvas:{scale:2,useCORS:true,backgroundColor:'#f5f8fb'},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(wrap).output('blob');
+    wrap.remove();
+
+    if(btn) btn.textContent='⏳ Versturen...';
+    const pdfBase64 = await blobToBase64(pdfBlob);
+
+    const resp = await fetch(MAIL_ENDPOINT,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        subject,
+        body: notes,
+        pdfBase64,
+        filename: `Vlaggenweer_${isoDate(d)}.pdf`
+      })
+    });
+    const j = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
+
+    if(status) status.textContent=`📧 Verstuurd · ${j.recipients?.join(', ')||MAIL_ONTVANGERS.join(', ')}`;
+  }catch(e){
+    if(status) status.textContent='';
+    alert('Mail versturen mislukt: '+e.message);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=origLabel||'📧 Mail'; }
+  }
 }
 let saveTimer;
 function debSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDraft,600);}
