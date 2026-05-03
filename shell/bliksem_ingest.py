@@ -37,11 +37,14 @@ SUBSCRIBE = json.dumps({"a": 111})  # 111 = Europa-regio
 DEFAULT_BBOX = (-1.5, 48.0, 8.5, 54.5)  # lon_min, lat_min, lon_max, lat_max
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "bliksem_strikes.json"
 
-WINDOW_SECONDS = 7200  # 2 uur
-WRITE_INTERVAL = 30    # secondes tussen file-writes
+WINDOW_SECONDS = 86400  # 24 uur (master-buffer)
+SHORT_WINDOW_SECONDS = 7200  # 2 uur (snel-update bestand voor live view)
+WRITE_INTERVAL = 30      # snel-bestand: elke 30s
+LONG_WRITE_INTERVAL = 300  # 24u-bestand: elke 5 min
 RECONNECT_BACKOFF = [2, 5, 10, 30, 60, 120]  # exponentiaal terug naar 120s max
 
 R2_PUBLISH_SCRIPT = Path(__file__).resolve().parent / "r2_publish.sh"
+LONG_FILENAME = "bliksem_strikes_24h.json"
 
 
 # ── Blitzortung LZW-decoder ──────────────────────────────────────────────────
@@ -210,28 +213,45 @@ def publish_to_r2(out_path: Path, log: logging.Logger):
         log.warning("R2 upload fout: %s", e)
 
 
+def write_snapshot(out_path: Path, buffer: StrikeBuffer, client: BlitzortungClient,
+                   window_sec: int, log: logging.Logger, publish: bool):
+    snap_full = buffer.snapshot()
+    cutoff = time.time() - window_sec
+    snap = [s for s in snap_full if s["t"] >= cutoff] if window_sec < buffer.window else snap_full
+    payload = {
+        "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "window_seconds": window_sec,
+        "count": len(snap),
+        "received_total": client.message_count,
+        "kept_total": client.kept_count,
+        "strikes": snap,
+    }
+    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":")))
+    os.replace(tmp, out_path)
+    if publish:
+        publish_to_r2(out_path, log)
+    return len(snap)
+
+
 def writer_loop(buffer: StrikeBuffer, out_path: Path, client: BlitzortungClient,
                 stop_event: threading.Event, log: logging.Logger,
                 publish: bool = True):
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    long_path = out_path.parent / LONG_FILENAME
+    last_long_write = 0.0
     while not stop_event.is_set():
         try:
-            snap = buffer.snapshot()
-            payload = {
-                "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "window_seconds": buffer.window,
-                "count": len(snap),
-                "received_total": client.message_count,
-                "kept_total": client.kept_count,
-                "strikes": snap,
-            }
-            tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(payload, separators=(",", ":")))
-            os.replace(tmp, out_path)
-            log.info("geschreven: %d strikes in venster (totaal ontvangen %d)",
-                     len(snap), client.message_count)
-            if publish:
-                publish_to_r2(out_path, log)
+            short_count = write_snapshot(out_path, buffer, client,
+                                         SHORT_WINDOW_SECONDS, log, publish)
+            log.info("kort venster geschreven: %d strikes (ontvangen %d)",
+                     short_count, client.message_count)
+            now = time.time()
+            if now - last_long_write >= LONG_WRITE_INTERVAL:
+                long_count = write_snapshot(long_path, buffer, client,
+                                            buffer.window, log, publish)
+                last_long_write = now
+                log.info("24u venster geschreven: %d strikes", long_count)
         except Exception as e:
             log.warning("write-fout: %s", e)
         stop_event.wait(WRITE_INTERVAL)

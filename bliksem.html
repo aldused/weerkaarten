@@ -113,6 +113,16 @@
     color: var(--primary-strong);
     min-width: 50px;
   }
+  .window-select {
+    padding: 4px 8px;
+    border: 1px solid var(--border, #ccd);
+    border-radius: 4px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--primary-strong);
+    background: white;
+    cursor: pointer;
+  }
   .layout {
     display: grid;
     grid-template-columns: 1fr 280px;
@@ -358,8 +368,16 @@
   <div class="controls-groep">
     <span class="toolbar-label">Tijdvenster:</span>
     <div class="tijdvenster">
-      <input type="range" id="window-slider" min="5" max="120" step="5" value="60">
-      <span class="val" id="window-label">60 min</span>
+      <select id="window-select" class="window-select">
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="60" selected>1 uur</option>
+        <option value="120">2 uur</option>
+        <option value="360">6 uur</option>
+        <option value="720">12 uur</option>
+        <option value="1080">18 uur</option>
+        <option value="1440">24 uur</option>
+      </select>
     </div>
   </div>
   <div class="controls-groep">
@@ -704,8 +722,13 @@ let dataSource = 'demo';
 
 async function loadLiveData() {
   let d = null;
+  // Bij lange windows (≥3u) gebruik 24u-bestand; anders snel-bestand (2u)
+  const useLong = windowMin >= 180;
+  const url = useLong
+    ? 'https://data.weerlab.nl/bliksem_strikes_24h.json?_=' + Date.now()
+    : 'https://data.weerlab.nl/bliksem_strikes.json?_=' + Date.now();
   try {
-    const r = await fetch('https://data.weerlab.nl/bliksem_strikes.json?_=' + Date.now());
+    const r = await fetch(url);
     if (r.ok) {
       const txt = await r.text();
       if (txt.trim().startsWith('{')) d = JSON.parse(txt);
@@ -794,8 +817,9 @@ function render() {
   // gridPx in SVG-coördinaten (zelfde 1080x1470 ruimte)
   const baseGrid = 28;
   const gridPx = baseGrid / zoom;
+  // Bij lange tijdvensters (≥3u) altijd clusteren — anders te veel strikes om te renderen
   const useCluster = clusterMode === 'on'
-    || (clusterMode === 'auto' && visible.length > 200 && zoom < 2);
+    || (clusterMode === 'auto' && (windowMin >= 180 || (visible.length > 200 && zoom < 2)));
 
   if (useCluster) {
     const clusters = clusterStrikes(visible, gridPx);
@@ -1091,10 +1115,17 @@ function zoomToCluster(c) {
 })();
 
 // ── Controls ──────────────────────────────────────────────────────
-document.getElementById('window-slider').addEventListener('input', e => {
+document.getElementById('window-select').addEventListener('change', e => {
+  const prev = windowMin;
   windowMin = parseInt(e.target.value);
-  document.getElementById('window-label').textContent = windowMin + ' min';
-  render();
+  // Wissel tussen 2u-snel en 24u-historie als drempel overschreden
+  const wasLong = prev >= 180;
+  const isLong = windowMin >= 180;
+  if (wasLong !== isLong) {
+    loadLiveData().then(() => render());
+  } else {
+    render();
+  }
 });
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1159,15 +1190,21 @@ function downloadPNG() {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
-  ctx.fillText(`Laatste ${windowMin} min · gegenereerd ${ts}`, 16, headerH / 2 + 14);
+  const windowLabel = windowMin < 60
+    ? `${windowMin} min`
+    : (windowMin % 60 === 0 ? `${windowMin/60}u` : `${(windowMin/60).toFixed(1)}u`);
+  // Vooraf-tellen voor header-count
+  const _now = Date.now();
+  let _visible = STRIKES.filter(s => (_now - s.t) / 60000 <= windowMin);
+  if (typeFilter !== 'all') _visible = _visible.filter(s => s.type === typeFilter);
+  ctx.fillText(`Laatste ${windowLabel} · ${_visible.length.toLocaleString('nl-NL')} ontladingen · ${ts}`, 16, headerH / 2 + 14);
 
   // Basis-kaart
   ctx.drawImage(img, 0, headerH, baseW, baseH);
 
   // Strikes: filter en teken (offset naar headerH)
-  const now = Date.now();
-  let visible = STRIKES.filter(s => (now - s.t) / 60000 <= windowMin);
-  if (typeFilter !== 'all') visible = visible.filter(s => s.type === typeFilter);
+  const now = _now;
+  let visible = _visible;
 
   for (const s of visible) {
     const ageMin = (now - s.t) / 60000;
