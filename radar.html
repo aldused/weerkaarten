@@ -72,7 +72,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .footer-bron { color: #a8c4e8; }
 
 .controls { background: #ffffff; padding: 10px 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #e3e8ef; }
-.controls-row { background: #ffffff; padding: 6px 20px 12px; display: flex; gap: 12px; align-items: flex-start; border-bottom: 1px solid #e3e8ef; }
+.controls-row { background: #ffffff; padding: 6px 20px 12px; display: flex; gap: 12px; align-items: flex-start; border-bottom: 1px solid #e3e8ef; flex-wrap: wrap; }
+.window-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 4px; }
+.window-bar-label { font-size: 10.5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+.window-btn { padding: 6px 12px; border-radius: 999px; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.window-btn:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
+.window-btn.actief { background: #00205b; color: #ffffff; border-color: #00205b; }
 .slider-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 200px; position: relative; }
 .slider-row { display: flex; align-items: center; gap: 10px; position: relative; }
 .slider-ticks { position: relative; height: 22px; margin: 0 8px; font-family: "DM Mono", ui-monospace, monospace; font-size: 9.5px; color: #64748b; pointer-events: none; }
@@ -206,6 +211,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 [data-theme="dark"] .layer-btn { color: #cbd5e1 !important; }
 [data-theme="dark"] .layer-btn:hover { background: rgba(255,255,255,0.05) !important; color: #f1f5f9 !important; }
 [data-theme="dark"] .layer-btn.actief { background: #1a2540 !important; color: #f1f5f9 !important; }
+[data-theme="dark"] .window-btn { background: #0e1629 !important; color: #cbd5e1 !important; border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .window-btn:hover { background: rgba(255,255,255,0.05) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.2) !important; }
+[data-theme="dark"] .window-btn.actief { background: #2ec4e8 !important; color: #0a1426 !important; border-color: #2ec4e8 !important; }
+[data-theme="dark"] .window-bar-label { color: #94a3b8 !important; }
 [data-theme="dark"] .btn-stap,
 [data-theme="dark"] .zoom-btn,
 [data-theme="dark"] .reset-btn,
@@ -322,6 +331,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       </div>
     </div>
     <div class="slider-ticks" id="slider-ticks"></div>
+    <div class="window-bar" id="window-bar">
+      <span class="window-bar-label">Bereik:</span>
+      <button class="window-btn" data-window="-2u" title="Loop afgelopen 2 uur">−2u</button>
+      <button class="window-btn" data-window="+2u" title="Nowcast (NU tot +2u)">+2u</button>
+      <button class="window-btn" data-window="+6u" title="HARMONIE 6u verwachting">+6u</button>
+      <button class="window-btn" data-window="+12u" title="HARMONIE 12u verwachting">+12u</button>
+      <button class="window-btn" data-window="+24u" title="HARMONIE 24u verwachting">+24u</button>
+      <button class="window-btn actief" data-window="alles" title="Volledige reeks">Alles</button>
+    </div>
   </div>
 </div>
 
@@ -637,6 +655,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var playing = true;
   var animInterval = null;
   var animSpeed = 400;
+  // Animatie-window (frame-bereik). Default: alles
+  var animStart = 0, animEnd = -1;  // -1 = einde van array
+  var animWindow = "alles";
 
   // Forecast / gevoeligheid
   var frameTypes = null;     // ["history", ..., "forecast", ...]
@@ -1548,6 +1569,18 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     lab.textContent = "nu";
     overlay.appendChild(lab);
 
+    // Window-bereik markering (donkerblauwe band onder slider) als animWindow != alles
+    if (animWindow !== "alles") {
+      var r2 = getAnimRange();
+      if (r2.e > r2.s) {
+        var ws = r2.s / (nFrames - 1) * 100;
+        var we = r2.e / (nFrames - 1) * 100;
+        var winBox = document.createElement("div");
+        winBox.style.cssText = "position:absolute;top:4px;bottom:4px;left:" + ws + "%;width:" + (we - ws) + "%;background:rgba(0,32,91,0.18);border-radius:2px;border:1px solid rgba(0,32,91,0.35);";
+        overlay.appendChild(winBox);
+      }
+    }
+
     bouwSliderTicks();
   }
 
@@ -2193,13 +2226,67 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // ANIMATIE
   // ═══════════════════════════════════════════════════════════════════════
 
+  function getAnimRange() {
+    var s = animStart, e = (animEnd >= 0 ? animEnd : nFrames - 1);
+    if (s < 0) s = 0;
+    if (e >= nFrames) e = nFrames - 1;
+    if (s > e) { s = 0; e = nFrames - 1; }
+    return { s: s, e: e };
+  }
+
   function startAnimatie() {
     stopAnimatie();
     if (!playing) return;
     animInterval = setInterval(function() {
-      frameIdx = (frameIdx + 1) % nFrames;
+      var r = getAnimRange();
+      if (frameIdx < r.s || frameIdx >= r.e) frameIdx = r.s;
+      else frameIdx++;
       renderFrame();
     }, animSpeed);
+  }
+
+  function frameOpTijd(targetMs) {
+    var best = 0, bestD = Infinity;
+    for (var i = 0; i < nFrames; i++) {
+      var dt = parseFrameTime(i);
+      if (!dt) continue;
+      var d = Math.abs(dt.getTime() - targetMs);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  function zetWindow(naam) {
+    animWindow = naam;
+    if (tNowIndex < 0) { animStart = 0; animEnd = nFrames - 1; }
+    else {
+      var nowMs = parseFrameTime(tNowIndex).getTime();
+      if (naam === "-2u")      { animStart = 0;          animEnd = tNowIndex; }
+      else if (naam === "+2u") { animStart = tNowIndex;  animEnd = frameOpTijd(nowMs + 2 * 3600000); }
+      else if (naam === "+6u") { animStart = tNowIndex;  animEnd = frameOpTijd(nowMs + 6 * 3600000); }
+      else if (naam === "+12u"){ animStart = tNowIndex;  animEnd = frameOpTijd(nowMs + 12 * 3600000); }
+      else if (naam === "+24u"){ animStart = tNowIndex;  animEnd = frameOpTijd(nowMs + 24 * 3600000); }
+      else                      { animStart = 0;          animEnd = nFrames - 1; }
+    }
+    // UI sync
+    document.querySelectorAll(".window-btn").forEach(function(b) {
+      if (b.getAttribute("data-window") === naam) b.classList.add("actief");
+      else b.classList.remove("actief");
+    });
+    // Spring naar begin van window + restart animatie
+    var r = getAnimRange();
+    frameIdx = r.s;
+    bouwSliderOverlay();
+    if (playing) startAnimatie();
+    else renderFrame();
+  }
+
+  function setupWindowKnoppen() {
+    document.querySelectorAll(".window-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        zetWindow(btn.getAttribute("data-window"));
+      });
+    });
   }
 
   function stopAnimatie() {
@@ -2956,6 +3043,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       bouwFavBar();
       bouwEventChips();
       setupSneltoetsen();
+      setupWindowKnoppen();
       bouwCumGrid();
       if (radarMode !== "instant") renderFrame();
       if (layers.bliksem) startBliksemFetch();
