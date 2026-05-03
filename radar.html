@@ -1711,89 +1711,109 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     if (!overlay || nFrames < 2 || tNowIndex < 0) return;
     overlay.innerHTML = "";
 
-    // Forecast-zone: rechts van t_now_index tot eind
-    if (tNowIndex < nFrames - 1) {
-      var fcstStart = (tNowIndex + 0.5) / (nFrames - 1) * 100;
-      var fcstEnd   = 100;
+    // Bepaal slider-bereik (animWindow != alles → krimp naar window)
+    var r = getAnimRange();
+    var lo = r.s, hi = r.e;
+    if (hi <= lo) { lo = 0; hi = nFrames - 1; }
+    var span = hi - lo;
+
+    function pctVan(idx) { return (idx - lo) / span * 100; }
+
+    // Forecast-zone: rechts van tNow tot hi (binnen window)
+    if (tNowIndex >= lo && tNowIndex < hi) {
+      var fcstStart = pctVan(tNowIndex + 0.5);
       var zone = document.createElement("div");
       zone.className = "slider-fcst-zone";
       zone.style.left = fcstStart + "%";
-      zone.style.width = (fcstEnd - fcstStart) + "%";
+      zone.style.width = (100 - fcstStart) + "%";
       overlay.appendChild(zone);
     }
 
-    // Verticale "nu"-lijn op t_now_index
-    var nowPct = tNowIndex / (nFrames - 1) * 100;
-    var line = document.createElement("div");
-    line.className = "slider-now-line";
-    line.style.left = "calc(" + nowPct + "% - 1px)";
-    overlay.appendChild(line);
-    var lab = document.createElement("div");
-    lab.className = "slider-now-label";
-    lab.style.left = nowPct + "%";
-    lab.textContent = "nu";
-    overlay.appendChild(lab);
-
-    // Window-bereik markering (donkerblauwe band onder slider) als animWindow != alles
-    if (animWindow !== "alles") {
-      var r2 = getAnimRange();
-      if (r2.e > r2.s) {
-        var ws = r2.s / (nFrames - 1) * 100;
-        var we = r2.e / (nFrames - 1) * 100;
-        var winBox = document.createElement("div");
-        winBox.style.cssText = "position:absolute;top:4px;bottom:4px;left:" + ws + "%;width:" + (we - ws) + "%;background:rgba(0,32,91,0.18);border-radius:2px;border:1px solid rgba(0,32,91,0.35);";
-        overlay.appendChild(winBox);
-      }
+    // Verticale "nu"-lijn — alleen als binnen window
+    if (tNowIndex >= lo && tNowIndex <= hi) {
+      var nowPct = pctVan(tNowIndex);
+      var line = document.createElement("div");
+      line.className = "slider-now-line";
+      line.style.left = "calc(" + nowPct + "% - 1px)";
+      overlay.appendChild(line);
+      var lab = document.createElement("div");
+      lab.className = "slider-now-label";
+      lab.style.left = nowPct + "%";
+      lab.textContent = "nu";
+      overlay.appendChild(lab);
     }
 
     bouwSliderTicks();
   }
 
-  // Tijd-ticks onder slider — toont uurmarkeringen + "nu"-marker
+  // Tijd-ticks onder slider — alleen frames binnen window-bereik
   function bouwSliderTicks() {
     var ticks = document.getElementById("slider-ticks");
     if (!ticks || nFrames < 2) return;
     ticks.innerHTML = "";
 
-    var intervalMin = meta.interval_min || 5;
-    // 15-min ticks (eventueel 30 bij krappe schermbreedte)
+    var r = getAnimRange();
+    var lo = r.s, hi = r.e;
+    if (hi <= lo) { lo = 0; hi = nFrames - 1; }
+    var span = hi - lo;
+
     var sliderEl = document.getElementById("slider");
     var sliderW = (sliderEl && sliderEl.clientWidth) || 800;
-    var totalMin = (nFrames - 1) * intervalMin;
-    var nTicks15 = Math.ceil(totalMin / 15);
-    var pxPerTick = sliderW / Math.max(1, nTicks15);
-    var stepMin = (pxPerTick < 38) ? 30 : 15;
-    var stepFrames = Math.max(1, Math.round(stepMin / intervalMin));
 
-    function fmtHHMM(idx) {
-      var dt = parseFrameTime(idx);
-      if (!dt) return "";
-      var hh = String(dt.getHours()).padStart(2, "0");
-      var mm = String(dt.getMinutes()).padStart(2, "0");
-      return hh + ":" + mm;
+    // Bepaal stap-tijd (in minuten) gebaseerd op tijd-bereik
+    var t0 = parseFrameTime(lo), tEnd = parseFrameTime(hi);
+    if (!t0 || !tEnd) return;
+    var totalMin = (tEnd - t0) / 60000;
+    var keuzes = [15, 30, 60, 120, 180, 360];
+    var stepMin = 60;
+    for (var k = 0; k < keuzes.length; k++) {
+      var pxPerTick = (keuzes[k] / totalMin) * sliderW;
+      if (pxPerTick >= 50) { stepMin = keuzes[k]; break; }
+      stepMin = keuzes[k];
     }
+    var stepMs = stepMin * 60000;
 
-    // Eerst alle frames langs lopen om tick-indexen te bepalen, uitlijnen op tNow
-    var tickIdxs = [];
-    if (tNowIndex >= 0) {
-      for (var i = tNowIndex; i >= 0; i -= stepFrames) tickIdxs.unshift(i);
-      for (var j = tNowIndex + stepFrames; j < nFrames; j += stepFrames) tickIdxs.push(j);
-    } else {
-      for (var k = 0; k < nFrames; k += stepFrames) tickIdxs.push(k);
+    function fmtHHMM(d) {
+      return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
     }
+    function pctVan(idx) { return (idx - lo) / span * 100; }
 
-    for (var t = 0; t < tickIdxs.length; t++) {
-      var idx = tickIdxs[t];
-      var pct = idx / (nFrames - 1) * 100;
+    // Genereer ticks op vaste tijd-stappen vanaf eerste afgerond uur ≥ t0
+    var startMs = Math.ceil(t0.getTime() / stepMs) * stepMs;
+    var endMs = tEnd.getTime();
+    var lastIdxShown = -2;
+    for (var ms = startMs; ms <= endMs; ms += stepMs) {
+      // Vind frame-index dichtst bij ms binnen [lo..hi]
+      var bestI = -1, bestD = Infinity;
+      for (var ii = lo; ii <= hi; ii++) {
+        var d = Math.abs(parseFrameTime(ii).getTime() - ms);
+        if (d < bestD) { bestD = d; bestI = ii; }
+      }
+      if (bestI < 0 || bestI === lastIdxShown) continue;
+      lastIdxShown = bestI;
       var div = document.createElement("div");
       div.className = "slider-tick";
-      if (idx === tNowIndex) div.className += " now";
-      else if (isFutureFrame(idx)) div.className += " fcst";
-      div.style.left = pct + "%";
+      if (bestI === tNowIndex) div.className += " now";
+      else if (isFutureFrame(bestI) || (frameTypes && frameTypes[bestI] === "harmonie")) div.className += " fcst";
+      div.style.left = pctVan(bestI) + "%";
+      var dt = new Date(ms);
       var label = document.createElement("span");
-      label.textContent = (idx === tNowIndex) ? "NU " + fmtHHMM(idx) : fmtHHMM(idx);
+      label.textContent = (bestI === tNowIndex) ? "NU " + fmtHHMM(dt) : fmtHHMM(dt);
       div.appendChild(label);
       ticks.appendChild(div);
+    }
+    // Als NU binnen range maar geen tick op stap, voeg expliciet toe
+    if (tNowIndex >= lo && tNowIndex <= hi && lastIdxShown !== tNowIndex) {
+      var dn = parseFrameTime(tNowIndex);
+      if (dn) {
+        var dvN = document.createElement("div");
+        dvN.className = "slider-tick now";
+        dvN.style.left = pctVan(tNowIndex) + "%";
+        var lN = document.createElement("span");
+        lN.textContent = "NU " + fmtHHMM(dn);
+        dvN.appendChild(lN);
+        ticks.appendChild(dvN);
+      }
     }
   }
 
@@ -2188,15 +2208,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       if (e.shiftKey) return;
       if (dragMoved) return;
       if (!radarData || !meta) return;
-      var rect = canvas.getBoundingClientRect();
-      var fx = (e.clientX - rect.left) / rect.width;
-      var fy = (e.clientY - rect.top) / rect.height;
-      if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return;
+      var fxy = clientNaarBitmapFractie(e.clientX, e.clientY);
+      if (!fxy) return;
       // Defer 230ms zodat dblclick voorrang krijgt
       clearTimeout(clickTimer);
       clickTimer = setTimeout(function() {
-        var srcPxX = viewX + fx * (BASEMAP_W / zoomLevel);
-        var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
+        var srcPxX = viewX + fxy.fx * (BASEMAP_W / zoomLevel);
+        var srcPxY = viewY + fxy.fy * (BASEMAP_H / zoomLevel);
         var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
         var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
         toonPunt(lat, lon);
@@ -2450,6 +2468,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     // Spring naar begin van window + restart animatie
     var r = getAnimRange();
     frameIdx = r.s;
+    var sliderEl = document.getElementById("slider");
+    sliderEl.min = r.s;
+    sliderEl.max = r.e;
+    sliderEl.value = frameIdx;
     bouwSliderOverlay();
     if (playing) startAnimatie();
     else renderFrame();
@@ -2478,6 +2500,33 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // ZOOM & PAN
   // ═══════════════════════════════════════════════════════════════════════
 
+  // Reken client-coordinaten om naar bitmap-fractie (0..1), corrigeer object-fit:contain letterboxing
+  function clientNaarBitmapFractie(cx, cy) {
+    if (!canvas) return null;
+    var rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    var cAspect = BASEMAP_W / BASEMAP_H;
+    var rAspect = rect.width / rect.height;
+    var dispW, dispH, offX, offY;
+    if (rAspect > cAspect) {
+      // Box is breder dan bitmap → letterbox links/rechts
+      dispH = rect.height;
+      dispW = rect.height * cAspect;
+      offX = (rect.width - dispW) / 2;
+      offY = 0;
+    } else {
+      // Box is hoger dan bitmap → letterbox boven/onder
+      dispW = rect.width;
+      dispH = rect.width / cAspect;
+      offX = 0;
+      offY = (rect.height - dispH) / 2;
+    }
+    var fx = (cx - rect.left - offX) / dispW;
+    var fy = (cy - rect.top - offY) / dispH;
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
+    return { fx: fx, fy: fy };
+  }
+
   function clampView() {
     var visW = BASEMAP_W / zoomLevel;
     var visH = BASEMAP_H / zoomLevel;
@@ -2490,9 +2539,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   function setZoomAt(newZoom, clientX, clientY) {
     newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
     if (Math.abs(newZoom - zoomLevel) < 0.001) return;
-    var rect = canvas.getBoundingClientRect();
-    var fracX = clientX != null ? (clientX - rect.left) / rect.width  : 0.5;
-    var fracY = clientY != null ? (clientY - rect.top)  / rect.height : 0.5;
+    var fracX = 0.5, fracY = 0.5;
+    if (clientX != null && clientY != null) {
+      var fxy = clientNaarBitmapFractie(clientX, clientY);
+      if (fxy) { fracX = fxy.fx; fracY = fxy.fy; }
+    }
     var srcX = viewX + fracX * (BASEMAP_W / zoomLevel);
     var srcY = viewY + fracY * (BASEMAP_H / zoomLevel);
     zoomLevel = newZoom;
@@ -2558,10 +2609,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       }
     }, true);
 
-    // Helper: omreken display-pixel naar bron-pixel delta
+    // Helper: omreken display-pixel naar bron-pixel delta (rekening houdend met letterbox)
     function displayToSourceScale() {
       var rect = canvas.getBoundingClientRect();
-      return (BASEMAP_W / zoomLevel) / rect.width;
+      var cAspect = BASEMAP_W / BASEMAP_H;
+      var rAspect = rect.width / rect.height;
+      var dispW = (rAspect > cAspect) ? rect.height * cAspect : rect.width;
+      return (BASEMAP_W / zoomLevel) / Math.max(1, dispW);
     }
 
     // Slepen om te pannen — track muisdown locatie ook bij zoom 1 voor klik vs sleep
@@ -2695,11 +2749,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     canvas.addEventListener("mousemove", function(e) {
       if (!radarData || !meta || isDragging) { tooltip.style.display = "none"; return; }
-      var rect = canvas.getBoundingClientRect();
-      // Fractie binnen het zichtbare canvas (0..1)
-      var fx = (e.clientX - rect.left) / rect.width;
-      var fy = (e.clientY - rect.top) / rect.height;
-      if (fx < 0 || fx > 1 || fy < 0 || fy > 1) { tooltip.style.display = "none"; return; }
+      var fxy = clientNaarBitmapFractie(e.clientX, e.clientY);
+      if (!fxy) { tooltip.style.display = "none"; return; }
+      var fx = fxy.fx, fy = fxy.fy;
 
       // Reken om naar bron-pixel coord (rekening houdend met zoom+pan)
       var srcPxX = viewX + fx * (BASEMAP_W  / zoomLevel);
