@@ -446,6 +446,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 </div>
 
 <div class="info-hint" id="info-hint">↓ Neerslag-info onder de kaart</div>
+
+<div id="first-visit-hint" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,32,91,0.97);color:#fff;padding:22px 28px 18px;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.4);z-index:300;max-width:380px;font-size:14px;line-height:1.5;border:2px solid #2ec4e8;font-family:inherit;">
+  <div style="font-size:18px;font-weight:800;margin-bottom:8px;color:#2ec4e8;">💡 Tip — Klik op de kaart</div>
+  <div style="margin-bottom:14px;">Klik op een willekeurig punt of een <b>event-locatie</b> om een grafiek met neerslag-tijdreeks (history + verwachting) te zien onderaan de kaart.</div>
+  <div style="margin-bottom:14px;font-size:12.5px;color:#a8c4e8;">Of gebruik de <b>zoekbalk</b> voor een specifieke plaats. Met de <b>bereik-knoppen</b> kies je hoe ver vooruit (tot +24u via HARMONIE).</div>
+  <button id="first-visit-ok" style="background:#2ec4e8;color:#0a1426;border:none;padding:8px 18px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;">Begrepen</button>
+</div>
 <div id="tooltip"></div>
 <div class="status" id="status">Laden... <span class="loading-spinner"></span></div>
 
@@ -1702,6 +1709,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     document.getElementById("zoom-info").textContent = zoomLevel.toFixed(1) + "×";
     var ovlZoom = document.getElementById("ovl-zoom-info");
     if (ovlZoom) ovlZoom.textContent = zoomLevel.toFixed(1) + "×";
+
+    // Sparkline-pointer mee laten bewegen met huidig frame
+    if (puntSel) {
+      var sparkSerie = reeksVoorPunt(puntSel.lat, puntSel.lon);
+      if (sparkSerie) tekenSparkline(sparkSerie);
+    }
     document.getElementById("fcst-badge").style.display = isFcst ? "block" : "none";
   }
 
@@ -1964,7 +1977,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       c.fillRect(xPosArr[b] - barWArr[b] / 2, by, barWArr[b], bh);
     }
 
-    // Now-line
+    // Now-line (rood)
     if (tNowIndex >= 0 && tNowIndex < nF) {
       var nx = xPosArr[tNowIndex];
       c.strokeStyle = "#ef4444";
@@ -1975,6 +1988,21 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       c.textAlign = "center";
       c.textBaseline = "top";
       c.fillText("NU", nx, pad.top - 1);
+    }
+    // Huidig animatie-frame (cyan) — beweegt mee met de radar
+    if (frameIdx >= 0 && frameIdx < nF && frameIdx !== tNowIndex) {
+      var fx2 = xPosArr[frameIdx];
+      c.strokeStyle = "#00b8d4";
+      c.lineWidth = 2.5 * scale;
+      c.beginPath(); c.moveTo(fx2, pad.top); c.lineTo(fx2, pad.top + plotH); c.stroke();
+      // Klein driehoekje bovenaan
+      c.fillStyle = "#00b8d4";
+      c.beginPath();
+      c.moveTo(fx2, pad.top);
+      c.lineTo(fx2 - 4 * scale, pad.top - 6 * scale);
+      c.lineTo(fx2 + 4 * scale, pad.top - 6 * scale);
+      c.closePath();
+      c.fill();
     }
 
     // X-as labels — gekozen op tijd-stappen (geen overlap)
@@ -2272,6 +2300,24 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     inp.addEventListener("keydown", function(e) {
       if (e.key === "Enter") { e.preventDefault(); doZoek(); }
     });
+  }
+
+  function setupFirstVisitHint() {
+    var gezien = false;
+    try { gezien = !!localStorage.getItem("radarHintGezien"); } catch(e) {}
+    if (gezien) return;
+    var hint = document.getElementById("first-visit-hint");
+    if (!hint) return;
+    setTimeout(function() {
+      hint.style.display = "block";
+    }, 1200);
+    function sluit() {
+      hint.style.display = "none";
+      try { localStorage.setItem("radarHintGezien", "1"); } catch(e) {}
+    }
+    document.getElementById("first-visit-ok").addEventListener("click", sluit);
+    // Auto-sluit bij eerste klik op canvas
+    document.getElementById("canvas-container").addEventListener("click", sluit, { once: true });
   }
 
   function setupLagenInfo() {
@@ -3264,6 +3310,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       setupPuntPaneel();
       setupLayerToggles();
       setupLagenInfo();
+      setupFirstVisitHint();
       setupModusKnop();
       setupZoek();
       bouwFavBar();
