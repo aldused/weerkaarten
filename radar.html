@@ -10,7 +10,7 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
-body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; font-feature-settings: "ss01","cv11"; scroll-behavior: smooth; }
+body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; overflow-y: auto; font-feature-settings: "ss01","cv11"; scroll-behavior: smooth; }
 
 .header { background: #00205b; padding: 14px 22px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid #001640; color: #ffffff; }
 .header-titel { color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.15; }
@@ -19,7 +19,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .header-meta b { color: #ffffff; font-weight: 600; }
 
 /* Puntpaneel — verschijnt na klik op kaart, slide-in animatie + auto-scroll */
-.punt-paneel { background: #ffffff; border-top: 3px solid #00205b; padding: 14px 20px 16px; display: none; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; box-shadow: 0 -4px 16px rgba(0,0,0,0.12); position: relative; }
+.punt-paneel { background: #ffffff; border-top: 3px solid #00205b; padding: 14px 20px 16px; display: none; flex: 0 0 auto; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; box-shadow: 0 -4px 16px rgba(0,0,0,0.12); position: relative; }
 .punt-paneel.actief { display: flex; animation: slideUp 0.25s ease-out; }
 @keyframes slideUp { from { transform: translateY(60%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
@@ -136,7 +136,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .export-btn { padding: 6px 12px; border-radius: 8px; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .export-btn:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
 
-.canvas-container { flex: 1; position: relative; overflow: hidden; background: #0d1b2a; display: flex; align-items: center; justify-content: center; cursor: grab; }
+.canvas-container { flex: 1 1 auto; min-height: 360px; position: relative; overflow: hidden; background: #0d1b2a; display: flex; align-items: center; justify-content: center; cursor: grab; }
 .canvas-container.dragging { cursor: grabbing; }
 .canvas-container canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
@@ -310,7 +310,6 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       <button class="layer-btn actief" data-layer="rivieren" title="Rivieren">RIV</button>
       <button class="layer-btn actief" data-layer="steden" title="Stadsnamen">PLTS</button>
       <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (laatste 60 min)">⚡ BLI</button>
-      <button class="layer-btn" data-layer="cellen" title="Storm-cell tracking met richting/snelheid">🎯 CELL</button>
       <button class="layer-btn" data-layer="hagel" title="Mogelijk hagel (>55 dBZ)">❄ HAGEL</button>
       <button class="layer-btn actief" data-layer="harmonie" title="Verlengde verwachting via HARMONIE 43 (tot +24u)">+24u HARMONIE</button>
     </div>
@@ -853,11 +852,18 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   }
 
   function trackMotionVectors(fIdx) {
-    // Match cells aan vorig frame, bereken vx/vy in grid-cells per frame (5min)
+    // Match cells met vorig frame; gebruik echte tijdsverschil voor km/h
     var cur = detecteerCellenVoorFrame(fIdx);
     if (fIdx <= 0) return cur;
     var prev = detecteerCellenVoorFrame(fIdx - 1);
-    var maxDist = 25;  // max cell-verplaatsing per 5min in grid cells (~25km)
+    // Tijd-delta tussen frames (minuten)
+    var tCur = parseFrameTime(fIdx), tPrev = parseFrameTime(fIdx - 1);
+    var dtMin = (tCur && tPrev) ? Math.abs(tCur - tPrev) / 60000 : 5;
+    if (dtMin <= 0) dtMin = 5;
+    // Max realistische bui-snelheid 120 km/u → max grid-verplaatsing per dtMin
+    var maxKmh = 120;
+    var maxKm = maxKmh * (dtMin / 60);  // km in dt
+    var maxDist = maxKm;                 // 1 grid-cel ≈ 1 km
     for (var i = 0; i < cur.length; i++) {
       var c = cur[i];
       var bestD = maxDist * maxDist, bestPrev = null;
@@ -870,9 +876,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       if (bestPrev) {
         c.vx = c.cx - bestPrev.cx;
         c.vy = c.cy - bestPrev.cy;
-        // km/h: 1 grid cell ≈ 1 km, 5 min interval → cells*60/5 = cells*12
-        c.snelheid = Math.sqrt(c.vx * c.vx + c.vy * c.vy) * 12;
-        c.richting = Math.atan2(-c.vy, c.vx) * 180 / Math.PI;  // -vy: noord boven
+        // km/u: grid-cellen / dt-minuten * 60
+        c.snelheid = Math.sqrt(c.vx * c.vx + c.vy * c.vy) * (60 / dtMin);
+        c.richting = Math.atan2(-c.vy, c.vx) * 180 / Math.PI;
       } else {
         c.vx = 0; c.vy = 0; c.snelheid = 0;
       }
@@ -977,7 +983,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   if (typeof layers.rivieren !== "boolean")   layers.rivieren = true;
   if (typeof layers.steden !== "boolean")     layers.steden = true;
   if (typeof layers.bliksem !== "boolean")    layers.bliksem = false;
-  if (typeof layers.cellen !== "boolean")     layers.cellen = false;
+  layers.cellen = false;  // tijdelijk uitgeschakeld (nog niet betrouwbaar)
   if (typeof layers.hagel !== "boolean")      layers.hagel = false;
   if (typeof layers.harmonie !== "boolean")   layers.harmonie = true;  // +24u HARMONIE — default aan
 
