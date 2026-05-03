@@ -421,12 +421,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   <div style="display:flex;align-items:center;gap:6px;">
     <span class="zoom-label">Lagen:</span>
     <div class="layer-toggles">
-      <button class="layer-btn actief" data-layer="provincies" title="Provinciegrenzen">PROV</button>
-      <button class="layer-btn actief" data-layer="rivieren" title="Rivieren">RIV</button>
       <button class="layer-btn actief" data-layer="steden" title="Stadsnamen">PLTS</button>
-      <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (laatste 60 min)">⚡ BLI</button>
+      <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (laatste 10 min, gesynchroniseerd met radar-frame)">⚡ BLI <span id="bli-cnt" style="opacity:0.7;font-size:10px;"></span></button>
       <button class="layer-btn" data-layer="hagel" title="Mogelijk hagel (>55 dBZ)">❄ HAGEL</button>
-      <button class="layer-btn actief" data-layer="harmonie" title="Verlengde verwachting via HARMONIE 43 (tot +24u)">+24u HARMONIE</button>
+      <button class="layer-btn actief" data-layer="harmonie" title="Verlengde verwachting via HARMONIE 43 (tot +60u)">+24u HARMONIE</button>
     </div>
     <button class="reset-btn" id="btn-lagen-info" title="Uitleg lagen" style="margin-left:4px;font-weight:700;">ⓘ uitleg</button>
   </div>
@@ -1118,8 +1116,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     try { return JSON.parse(localStorage.getItem("radarLayers") || "{}"); }
     catch(e) { return {}; }
   })();
-  if (typeof layers.provincies !== "boolean") layers.provincies = true;
-  if (typeof layers.rivieren !== "boolean")   layers.rivieren = true;
+  layers.provincies = true;  // altijd aan (knop weggehaald)
+  layers.rivieren = true;     // altijd aan (knop weggehaald)
   if (typeof layers.steden !== "boolean")     layers.steden = true;
   if (typeof layers.bliksem !== "boolean")    layers.bliksem = false;
   layers.cellen = false;  // tijdelijk uitgeschakeld (nog niet betrouwbaar)
@@ -2553,15 +2551,23 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // ── Bliksem-overlay ────────────────────────────────────────────────────
   function fetchBliksem() {
     if (!layers.bliksem) return;
+    var cnt = document.getElementById("bli-cnt");
+    if (cnt) cnt.textContent = "(laden…)";
     // Gebruik 24h-feed zodat bliksem mee terug-scrubbt door historie-frames
     fetch("https://data.weerlab.nl/bliksem_strikes_24h.json?_=" + Date.now())
-      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function(d) {
         if (d && Array.isArray(d.strikes)) {
           STRIKES = d.strikes.map(function(s) { return { lat: s.lat, lon: s.lon, t: s.t, type: s.type }; });
+          if (cnt) cnt.textContent = STRIKES.length ? "(" + STRIKES.length + ")" : "(geen 24u)";
           renderFrame();
+        } else {
+          if (cnt) cnt.textContent = "(geen data)";
         }
-      }).catch(function() {});
+      }).catch(function(e) {
+        if (cnt) cnt.textContent = "(fout)";
+        console.error("Bliksem fetch fail:", e);
+      });
   }
   function startBliksemFetch() {
     fetchBliksem();
