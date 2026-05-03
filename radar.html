@@ -1352,13 +1352,17 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       }
     }
 
-    // 8a. Bliksem-strikes (cirkels gekleurd op leeftijd) — wereld→scherm coords
+    // 8a. Bliksem-strikes — gesynchroniseerd op huidige frame-tijd, niet wall-clock
     if (layers.bliksem && STRIKES.length) {
-      var nowMs = Date.now();
-      for (var bi = 0; bi < STRIKES.length; bi++) {
+      var frameDt = parseFrameTime(frameIdx);
+      var refMs = frameDt ? frameDt.getTime() : Date.now();
+      // Bij forecast-frames (toekomst) geen bliksem tonen
+      var isToekomst = isFutureFrame(frameIdx) || (frameTypes && frameTypes[frameIdx] === "harmonie");
+      if (isToekomst) refMs = -1;  // skip alle
+      for (var bi = 0; bi < STRIKES.length && refMs > 0; bi++) {
         var sk = STRIKES[bi];
-        var ageMin = (nowMs - sk.t * 1000) / 60000;
-        if (ageMin > 60) continue;
+        var ageMin = (refMs - sk.t * 1000) / 60000;
+        if (ageMin < 0 || ageMin > 60) continue;
         var bwx = lonToX(sk.lon), bwy = latToY(sk.lat);
         var bxs = (bwx - viewX) * zoomLevel;
         var bys = (bwy - viewY) * zoomLevel;
@@ -1674,26 +1678,31 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     return html;
   }
 
-  function tekenSparkline(serie) {
-    var cv = document.getElementById("punt-spark");
-    if (!cv || !serie || !serie.length) return;
-    var dpr = window.devicePixelRatio || 1;
-    var cssW = cv.clientWidth || 800;
-    var cssH = 70;
-    cv.width = Math.round(cssW * dpr);
-    cv.height = Math.round(cssH * dpr);
-    cv.style.height = cssH + "px";
-    var c = cv.getContext("2d");
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    c.clearRect(0, 0, cssW, cssH);
-
-    var pad = { top: 4, right: 4, bottom: 16, left: 28 };
+  // Render sparkline op een canvas-ctx (gebruikt voor zowel UI-paneel als PNG-export)
+  function renderSparklineOpCtx(c, cssW, cssH, serie, scale) {
+    scale = scale || 1;
+    var pad = { top: 4 * scale, right: 4 * scale, bottom: 16 * scale, left: 32 * scale };
     var plotW = cssW - pad.left - pad.right;
     var plotH = cssH - pad.top - pad.bottom;
     var nF = serie.length;
-    var barW = plotW / nF;
 
-    // Y-schaal: log-achtig (sqrt) tot max van serie + reserve
+    // Bouw x-positie per frame uit echte tijden (uniform via tijd, niet frame-index)
+    var t0 = (parseFrameTime(0) || new Date()).getTime();
+    var tEnd = (parseFrameTime(nF - 1) || new Date(t0 + nF*5*60000)).getTime();
+    var tSpan = Math.max(1, tEnd - t0);
+    var xPosArr = new Array(nF), barWArr = new Array(nF);
+    for (var ix = 0; ix < nF; ix++) {
+      var dt = parseFrameTime(ix);
+      var tx = dt ? (dt.getTime() - t0) / tSpan : ix / Math.max(1, nF - 1);
+      xPosArr[ix] = pad.left + tx * plotW;
+    }
+    // Bar-breedte = halve afstand tot buren (min 1px)
+    for (var ib = 0; ib < nF; ib++) {
+      var leftHalf  = ib > 0      ? (xPosArr[ib] - xPosArr[ib - 1]) / 2 : 4 * scale;
+      var rightHalf = ib < nF - 1 ? (xPosArr[ib + 1] - xPosArr[ib]) / 2 : 4 * scale;
+      barWArr[ib] = Math.max(1, Math.min(leftHalf, rightHalf) * 1.8);
+    }
+
     var maxMm = 0.5;
     for (var i = 0; i < nF; i++) if (serie[i].mmh > maxMm) maxMm = serie[i].mmh;
     maxMm = Math.max(1, Math.ceil(maxMm * 1.15));
@@ -1703,9 +1712,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       return pad.top + plotH - fr * plotH;
     }
 
-    // Forecast-zone achtergrond
+    c.clearRect(0, 0, cssW, cssH);
+
+    // Forecast-zone achtergrond (vanaf tNow)
     if (tNowIndex >= 0 && tNowIndex < nF - 1) {
-      var fxs = pad.left + (tNowIndex + 0.5) * barW;
+      var fxs = xPosArr[tNowIndex];
       c.fillStyle = "rgba(245,158,11,0.10)";
       c.fillRect(fxs, pad.top, pad.left + plotW - fxs, plotH);
     }
@@ -1713,7 +1724,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     // Y-as gridlines
     c.strokeStyle = "rgba(100,116,139,0.18)";
     c.lineWidth = 1;
-    c.font = "9.5px DM Mono, monospace";
+    c.font = (10 * scale).toFixed(1) + "px DM Mono, monospace";
     c.fillStyle = "#94a3b8";
     c.textBaseline = "middle";
     c.textAlign = "right";
@@ -1721,7 +1732,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     for (var ti = 0; ti < ticksY.length; ti++) {
       var y = yPx(ticksY[ti]);
       c.beginPath(); c.moveTo(pad.left, y); c.lineTo(pad.left + plotW, y); c.stroke();
-      c.fillText(ticksY[ti] < 1 ? ticksY[ti].toFixed(1) : Math.round(ticksY[ti]).toString(), pad.left - 4, y);
+      c.fillText(ticksY[ti] < 1 ? ticksY[ti].toFixed(1) : Math.round(ticksY[ti]).toString(), pad.left - 4 * scale, y);
     }
 
     // Bars
@@ -1729,56 +1740,94 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var s = serie[b];
       if (s.mmh <= 0.05) continue;
       var col = dbzColor(s.dbz != null ? s.dbz : 5) || [128, 128, 128, 200];
-      var bx = pad.left + b * barW + 0.5;
       var by = yPx(s.mmh);
       var bh = (pad.top + plotH) - by;
       c.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",0.92)";
-      c.fillRect(bx, by, Math.max(1, barW - 1), bh);
+      c.fillRect(xPosArr[b] - barWArr[b] / 2, by, barWArr[b], bh);
     }
 
     // Now-line
     if (tNowIndex >= 0 && tNowIndex < nF) {
-      var nx = pad.left + (tNowIndex + 0.5) * barW;
+      var nx = xPosArr[tNowIndex];
       c.strokeStyle = "#ef4444";
-      c.lineWidth = 2;
+      c.lineWidth = 2 * scale;
       c.beginPath(); c.moveTo(nx, pad.top); c.lineTo(nx, pad.top + plotH); c.stroke();
       c.fillStyle = "#ef4444";
-      c.font = "700 9px DM Sans, sans-serif";
+      c.font = "700 " + (10 * scale).toFixed(1) + "px DM Sans, sans-serif";
       c.textAlign = "center";
       c.textBaseline = "top";
       c.fillText("NU", nx, pad.top - 1);
     }
 
-    // X-as labels (uur)
+    // X-as labels — gekozen op tijd-stappen (geen overlap)
     c.fillStyle = "#64748b";
-    c.font = "9.5px DM Mono, monospace";
+    c.font = (10 * scale).toFixed(1) + "px DM Mono, monospace";
     c.textAlign = "center";
     c.textBaseline = "top";
-    var totalMin2 = (nF - 1) * (meta.interval_min || 5);
-    var stepMin2 = totalMin2 <= 90 ? 30 : totalMin2 <= 240 ? 60 : 120;
-    var stepF2 = Math.max(1, Math.round(stepMin2 / (meta.interval_min || 5)));
-    var startF = (tNowIndex >= 0) ? (tNowIndex % stepF2) : 0;
-    for (var x = startF; x < nF; x += stepF2) {
-      var dt = parseFrameTime(x);
-      if (!dt) continue;
-      var lbl = String(dt.getHours()).padStart(2,"0") + ":" + String(dt.getMinutes()).padStart(2,"0");
-      var xpx = pad.left + (x + 0.5) * barW;
-      c.fillText(lbl, xpx, pad.top + plotH + 2);
+    // Bepaal stap-uren zodat labels niet overlappen (~50px per label minimaal)
+    var labelMinSpacingPx = 48 * scale;
+    var totalH = (tEnd - t0) / 3600000;
+    var stappenU = [0.5, 1, 2, 3, 6, 12];
+    var stapU = 1;
+    for (var sp = 0; sp < stappenU.length; sp++) {
+      var pxStap = (stappenU[sp] * 3600000) / tSpan * plotW;
+      if (pxStap >= labelMinSpacingPx) { stapU = stappenU[sp]; break; }
     }
+    // Genereer ticks-tijden geround op stapU vanaf t0
+    var startMs = t0;
+    var startD = new Date(startMs);
+    // Round naar volgende stap-uur
+    var stapMs = stapU * 3600000;
+    var firstTickMs = Math.ceil(startMs / stapMs) * stapMs;
+    var laatstX = -9999;
+    for (var tickMs = firstTickMs; tickMs <= tEnd; tickMs += stapMs) {
+      var fx = (tickMs - t0) / tSpan * plotW + pad.left;
+      if (fx - laatstX < labelMinSpacingPx) continue;
+      var tdt = new Date(tickMs);
+      var lbl = String(tdt.getHours()).padStart(2,"0") + ":" + String(tdt.getMinutes()).padStart(2,"0");
+      // Toon dag-marker als overgang (bv. ma 04 mei → 00:00)
+      if (tdt.getHours() === 0 && tdt.getMinutes() === 0) {
+        lbl = String(tdt.getDate()) + "/" + (tdt.getMonth() + 1);
+      }
+      c.fillText(lbl, fx, pad.top + plotH + 2 * scale);
+      laatstX = fx;
+    }
+    return { xPosArr: xPosArr, pad: pad };
+  }
+
+  function tekenSparkline(serie) {
+    var cv = document.getElementById("punt-spark");
+    if (!cv || !serie || !serie.length) return;
+    var dpr = window.devicePixelRatio || 1;
+    var cssW = cv.clientWidth || 800;
+    var cssH = 80;
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssH * dpr);
+    cv.style.height = cssH + "px";
+    var c = cv.getContext("2d");
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var geom = renderSparklineOpCtx(c, cssW, cssH, serie, 1);
+    var nF = serie.length;
+    var pad = geom.pad, xPosArr = geom.xPosArr;
 
     // Sparkline-hover
     cv.onmousemove = function(e) {
       var rect = cv.getBoundingClientRect();
       var px = e.clientX - rect.left;
-      var idx = Math.floor((px - pad.left) / barW);
-      if (idx < 0 || idx >= nF) {
+      // Vind dichtstbijzijnde frame-index op tijd-as
+      var bestIdx = -1, bestD = 9999;
+      for (var k = 0; k < nF; k++) {
+        var d = Math.abs(xPosArr[k] - px);
+        if (d < bestD) { bestD = d; bestIdx = k; }
+      }
+      if (bestIdx < 0 || px < pad.left || px > rect.width - pad.right) {
         document.getElementById("punt-spark-info").textContent = "hover voor detail";
         return;
       }
-      var s2 = serie[idx];
-      var dt2 = parseFrameTime(idx);
+      var s2 = serie[bestIdx];
+      var dt2 = parseFrameTime(bestIdx);
       var hhmm = dt2 ? String(dt2.getHours()).padStart(2,"0") + ":" + String(dt2.getMinutes()).padStart(2,"0") : "";
-      var typ = (idx > tNowIndex) ? " (vw)" : "";
+      var typ = (bestIdx > tNowIndex) ? " (vw)" : "";
       var txt = hhmm + typ + " · " + s2.mmh.toFixed(1) + " mm/u · cum " + s2.cum.toFixed(1) + " mm";
       document.getElementById("punt-spark-info").textContent = txt;
     };
@@ -2119,7 +2168,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // ── Bliksem-overlay ────────────────────────────────────────────────────
   function fetchBliksem() {
     if (!layers.bliksem) return;
-    fetch("https://data.weerlab.nl/bliksem_strikes.json?_=" + Date.now())
+    // Gebruik 24h-feed zodat bliksem mee terug-scrubbt door historie-frames
+    fetch("https://data.weerlab.nl/bliksem_strikes_24h.json?_=" + Date.now())
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) {
         if (d && Array.isArray(d.strikes)) {
@@ -2504,11 +2554,16 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       c.font = "500 " + Math.round(13 * k) + "px DM Sans, Arial, sans-serif";
       c.fillText(sam, px, pyc + Math.round(46 * k));
 
-      // Sparkline
+      // Sparkline — render direct in composite voor scherpe tekst
       var sparkY = pyc + Math.round(72 * k);
       var sparkH = Math.round(95 * k);
       var sparkW = srcW - 2 * px;
-      c.drawImage(spark, px, sparkY, sparkW, sparkH);
+      c.save();
+      c.translate(px, sparkY);
+      // Haal serie op uit huidige punt-selectie
+      var serie = reeksVoorPunt(puntSel.lat, puntSel.lon);
+      if (serie) renderSparklineOpCtx(c, sparkW, sparkH, serie, k);
+      c.restore();
     }
 
     // ── Footer (blauw)
