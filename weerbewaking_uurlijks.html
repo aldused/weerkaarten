@@ -176,10 +176,12 @@ body{--kop-scale:1}
   <label style="margin-left:16px">Startuur:</label>
   <select id="startuur-sel"></select>
   <label style="margin-left:8px">Uurtabel:</label>
-  <select id="tabel-dag-sel" title="Kies of de uurtabel voor vandaag of morgen begint">
+  <select id="tabel-dag-sel" title="Kies of de uurtabel voor vandaag, morgen of een zelfgekozen dag begint">
     <option value="vandaag" selected>Vandaag</option>
     <option value="morgen">Morgen</option>
+    <option value="zelf">Zelf kiezen…</option>
   </select>
+  <input type="date" id="tabel-zelf-datum" style="display:none;font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem" title="Kies een dag voor de uurtabel">
   <label style="margin-left:8px">Tekst:</label>
   <label style="font-weight:500"><input type="checkbox" id="toon-vandaag" checked> vandaag</label>
   <label style="font-weight:500"><input type="checkbox" id="toon-morgen" checked> morgen</label>
@@ -292,9 +294,16 @@ function formatDagLang(d){ return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.g
 function dagStart(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
 function zelfdeDag(a,b){ return dagStart(a).getTime()===dagStart(b).getTime(); }
 function gekozenTabelDatum(){
-  const nu=new Date();
-  const d=dagStart(nu);
-  if(document.getElementById('tabel-dag-sel')?.value==='morgen') d.setDate(d.getDate()+1);
+  const sel=document.getElementById('tabel-dag-sel')?.value;
+  if(sel==='zelf'){
+    const inp=document.getElementById('tabel-zelf-datum')?.value;
+    if(inp){
+      const [y,m,d]=inp.split('-').map(Number);
+      return dagStart(new Date(y, m-1, d));
+    }
+  }
+  const d=dagStart(new Date());
+  if(sel==='morgen') d.setDate(d.getDate()+1);
   return d;
 }
 
@@ -554,12 +563,13 @@ function vulStartuurSelect(tijden,nuSel){
   const sel=document.getElementById('startuur-sel');
   const nu=new Date();
   const tabelDag=gekozenTabelDatum();
+  const dagSel=document.getElementById('tabel-dag-sel')?.value;
   // Default: eerste uur op de gekozen tabeldag dat >= nu is (of begin van die dag)
   let defaultIdx=-1;
   for(let i=0;i<tijden.length;i++){
     const t=new Date(tijden[i]);
     if(!zelfdeDag(t,tabelDag)) continue;
-    if(document.getElementById('tabel-dag-sel')?.value==='morgen' || t>=nu){
+    if(dagSel==='morgen' || dagSel==='zelf' || t>=nu){
       defaultIdx=i; break;
     }
   }
@@ -570,8 +580,8 @@ function vulStartuurSelect(tijden,nuSel){
   }
   const behoud=sel.value;
   sel.innerHTML='';
-  // Toon ALLE uren van de hele run (HARMONIE 60u, ICON-D2 48u) — zo kun je ook morgen/overmorgen kiezen
-  const maxStart=Math.max(0, tijden.length-12);
+  // Toon ALLE uren van de hele run; window verkort automatisch bij einde
+  const maxStart=Math.max(0, tijden.length-1);
   for(let i=0;i<=maxStart;i++){
     const t=new Date(tijden[i]);
     const lbl=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
@@ -684,7 +694,7 @@ function zetKnopLaden(laden){
 async function renderTabellen(startIdx){
   const meta=harmonieMeta;
   const pt=huidigePunt;
-  const NSTEPS=12;
+  const NSTEPS=Math.max(1, Math.min(12, meta.tijden.length - startIdx));
   const baseTimes=meta.tijden.slice(startIdx,startIdx+NSTEPS);
   zetKnopLaden(true);
   zetLaadStatus(MODELS[huidigModel].label+' laden…');
@@ -814,13 +824,32 @@ document.getElementById('plaats-in').addEventListener('input', syncTabelPlaats);
 document.getElementById('startuur-sel').addEventListener('change', ()=>{
   if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
 });
+function updateZelfDatumZichtbaar(){
+  const sel=document.getElementById('tabel-dag-sel')?.value;
+  const inp=document.getElementById('tabel-zelf-datum');
+  if(!inp) return;
+  inp.style.display = sel==='zelf' ? '' : 'none';
+  if(sel==='zelf' && !inp.value){
+    const d=new Date(); d.setDate(d.getDate()+2);
+    inp.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+}
 document.getElementById('tabel-dag-sel').addEventListener('change', ()=>{
+  updateZelfDatumZichtbaar();
   if(harmonieMeta){
     vulStartuurSelect(harmonieMeta.tijden);
     if(huidigePunt) renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
   }
   saveDraft();
 });
+document.getElementById('tabel-zelf-datum').addEventListener('change', ()=>{
+  if(harmonieMeta){
+    vulStartuurSelect(harmonieMeta.tijden);
+    if(huidigePunt) renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
+  }
+  saveDraft();
+});
+updateZelfDatumZichtbaar();
 ['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{
   document.getElementById(id).addEventListener('change', ()=>{
     updateTekstSecties();
@@ -896,6 +925,7 @@ function saveDraft(){
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
   d.tabelDag=document.getElementById('tabel-dag-sel')?.value||'vandaag';
+  d.tabelZelfDatum=document.getElementById('tabel-zelf-datum')?.value||'';
   d.toonVandaag=!!document.getElementById('toon-vandaag')?.checked;
   d.toonMorgen=!!document.getElementById('toon-morgen')?.checked;
   d.toonKomende=!!document.getElementById('toon-komende')?.checked;
@@ -924,6 +954,8 @@ function leegForm(){
   const p=document.getElementById('plaats-in'); if(p) p.value='Rotterdam';
   ['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=true; });
   const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value='vandaag';
+  const zelfD=document.getElementById('tabel-zelf-datum'); if(zelfD) zelfD.value='';
+  if(typeof updateZelfDatumZichtbaar==='function') updateZelfDatumZichtbaar();
   updateTekstSecties();
 }
 function restoreDraft(){
@@ -949,6 +981,8 @@ function restoreDraft(){
     });
     const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rotterdam');
     const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value=d.tabelDag||'vandaag';
+    const zelfD=document.getElementById('tabel-zelf-datum'); if(zelfD && d.tabelZelfDatum!=null) zelfD.value=d.tabelZelfDatum;
+    updateZelfDatumZichtbaar();
     if(d.toonVandaag!=null) document.getElementById('toon-vandaag').checked=!!d.toonVandaag;
     if(d.toonMorgen!=null) document.getElementById('toon-morgen').checked=!!d.toonMorgen;
     if(d.toonKomende!=null) document.getElementById('toon-komende').checked=!!d.toonKomende;
