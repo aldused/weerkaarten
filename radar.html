@@ -268,11 +268,23 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   </div>
 
   <div style="display:flex;align-items:center;gap:6px;">
+    <span class="zoom-label">Modus:</span>
+    <select id="modus-select" class="reset-btn" style="padding:5px 10px;">
+      <option value="instant">Instant (mm/u)</option>
+      <option value="cum_-1u">Som afgelopen 1u</option>
+      <option value="cum_-2u">Som afgelopen 2u</option>
+      <option value="cum_+1u">Som komende 1u</option>
+      <option value="cum_+2u">Som komende 2u</option>
+    </select>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:6px;">
     <span class="zoom-label">Lagen:</span>
     <div class="layer-toggles">
       <button class="layer-btn actief" data-layer="provincies" title="Provinciegrenzen">PROV</button>
       <button class="layer-btn actief" data-layer="rivieren" title="Rivieren">RIV</button>
       <button class="layer-btn actief" data-layer="steden" title="Stadsnamen">PLTS</button>
+      <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (laatste 60 min)">⚡ BLI</button>
     </div>
   </div>
 
@@ -527,6 +539,40 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     return null;
   }
 
+  // mm-cumulatieve kleurschaal — voor som-modi (1u/2u totaal)
+  var MM_LEVELS = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100];
+  var MM_COLORS = [
+    [200,220,235],   // 0.2  zeer licht blauwgrijs
+    [160,200,220],   // 0.5  blauwgrijs
+    [120,210,140],   // 1    lichtgroen
+    [40,180,40],     // 2    groen
+    [0,140,0],       // 5    donkergroen
+    [255,255,0],     // 10   geel
+    [255,150,0],     // 20   oranje
+    [255,0,0],       // 50   rood
+    [200,0,200]      // 100  paars
+  ];
+  function mmColor(mm) {
+    if (mm < MM_LEVELS[0]) return null;
+    if (mm >= MM_LEVELS[MM_LEVELS.length - 1]) {
+      var cl = MM_COLORS[MM_COLORS.length - 1];
+      return [cl[0], cl[1], cl[2], 245];
+    }
+    for (var i = MM_LEVELS.length - 2; i >= 0; i--) {
+      if (mm >= MM_LEVELS[i]) {
+        var t = (mm - MM_LEVELS[i]) / (MM_LEVELS[i + 1] - MM_LEVELS[i]);
+        var c0 = MM_COLORS[i], c1 = MM_COLORS[i + 1];
+        return [
+          Math.round(c0[0] + t * (c1[0] - c0[0])),
+          Math.round(c0[1] + t * (c1[1] - c0[1])),
+          Math.round(c0[2] + t * (c1[2] - c0[2])),
+          230
+        ];
+      }
+    }
+    return null;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════════════════
@@ -573,6 +619,47 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     return tNowIndex >= 0 && idx > tNowIndex;
   }
 
+  // Bouw cumulatieve som-grid voor gekozen modus
+  function bouwCumGrid() {
+    if (radarMode === "instant" || !radarData || !meta) {
+      cumGrid = null; cumLabel = ""; cumPiekMm = 0;
+      return;
+    }
+    var dtMin = meta.interval_min || 5;
+    var dtH = dtMin / 60;
+    var startIdx = 0, endIdx = 0;
+    if (radarMode === "cum_-1u")      { startIdx = Math.max(0, tNowIndex - 12); endIdx = tNowIndex; }
+    else if (radarMode === "cum_-2u") { startIdx = Math.max(0, tNowIndex - 24); endIdx = tNowIndex; }
+    else if (radarMode === "cum_+1u") { startIdx = tNowIndex; endIdx = Math.min(nFrames - 1, tNowIndex + 12); }
+    else if (radarMode === "cum_+2u") { startIdx = tNowIndex; endIdx = Math.min(nFrames - 1, tNowIndex + 24); }
+    else                              { startIdx = 0; endIdx = nFrames - 1; }
+
+    var n = nLat * nLon;
+    cumGrid = new Float32Array(n);
+    var piek = 0;
+    for (var f = startIdx; f <= endIdx; f++) {
+      var off = f * n;
+      for (var i = 0; i < n; i++) {
+        var pv = radarData[off + i];
+        if (pv === 0 || pv === 255) continue;
+        var dbz = 0.5 * pv - 32;
+        if (dbz < 5) continue;
+        var mmh = Math.pow(Math.pow(10, dbz / 10) / 200, 1 / 1.6);
+        cumGrid[i] += mmh * dtH;
+      }
+    }
+    for (var j = 0; j < n; j++) if (cumGrid[j] > piek) piek = cumGrid[j];
+    cumPiekMm = piek;
+
+    // Label
+    var startDt = parseFrameTime(startIdx), endDt = parseFrameTime(endIdx);
+    function hhmm(d) { return d ? String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0") : ""; }
+    var span = (endIdx - startIdx) * dtMin;
+    var spanLabel = (span >= 60) ? (span / 60) + "u" : span + "min";
+    var dir = radarMode.indexOf("+") >= 0 ? "komende " : "afgelopen ";
+    cumLabel = "Som " + dir + spanLabel + " (" + hhmm(startDt) + " → " + hhmm(endDt) + ") · piek " + piek.toFixed(1) + " mm";
+  }
+
   // Zoom & pan state (vloeiend, 1.0–10.0)
   var zoomLevel = 1.0;
   var ZOOM_MIN = 1.0, ZOOM_MAX = 25.0;
@@ -581,6 +668,19 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var dragStartX = 0, dragStartY = 0;
   var viewStartX = 0, viewStartY = 0;
   var dragMoved = false;       // klik vs sleep onderscheid
+
+  // Radar-modus: instant of cumulatief (1u/2u terug/vooruit)
+  var radarMode = (function() {
+    try { return localStorage.getItem("radarMode") || "instant"; }
+    catch(e) { return "instant"; }
+  })();
+  var cumGrid = null;        // Float32Array nLat*nLon — som mm voor huidige cum-modus
+  var cumLabel = "";          // bv. "Som afgelopen 1u (09:25 → 10:25)"
+  var cumPiekMm = 0;          // hoogste totaal voor schaling
+
+  // Bliksem-overlay
+  var STRIKES = [];
+  var bliksemTimer = null;
 
   // Geselecteerd punt + favorieten + lagen
   var puntSel = null;          // {lat, lon, plaats}
@@ -595,6 +695,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   if (typeof layers.provincies !== "boolean") layers.provincies = true;
   if (typeof layers.rivieren !== "boolean")   layers.rivieren = true;
   if (typeof layers.steden !== "boolean")     layers.steden = true;
+  if (typeof layers.bliksem !== "boolean")    layers.bliksem = false;
 
   // ═══════════════════════════════════════════════════════════════════════
   // DATA LADEN
@@ -762,21 +863,36 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     _drawGeoFeatures(ctx, nlGeo, "#eaf3e8", null, 0);
     _drawGeoFeatures(ctx, beGeo, "#eaf3e8", null, 0);
 
-    // 4. Radar-raster op offscreen
-    var offset = frameIdx * nLat * nLon;
+    // 4. Radar-raster op offscreen — instant of cumulatief
     var imgData = offCtx.createImageData(nLon, nLat);
     var pixels = imgData.data;
-    for (var i = 0; i < nLat * nLon; i++) {
-      var pv = radarData[offset + i];
-      if (pv === 0 || pv === 255) continue;
-      var dbz = 0.5 * pv - 32;
-      var c = dbzColor(dbz);
-      if (c) {
-        var p = i * 4;
-        pixels[p]     = c[0];
-        pixels[p + 1] = c[1];
-        pixels[p + 2] = c[2];
-        pixels[p + 3] = c[3];
+    if (radarMode !== "instant" && cumGrid) {
+      for (var ic = 0; ic < nLat * nLon; ic++) {
+        var mm = cumGrid[ic];
+        if (mm < MM_LEVELS[0]) continue;
+        var cmm = mmColor(mm);
+        if (cmm) {
+          var pc = ic * 4;
+          pixels[pc] = cmm[0];
+          pixels[pc + 1] = cmm[1];
+          pixels[pc + 2] = cmm[2];
+          pixels[pc + 3] = cmm[3];
+        }
+      }
+    } else {
+      var offset = frameIdx * nLat * nLon;
+      for (var i = 0; i < nLat * nLon; i++) {
+        var pv = radarData[offset + i];
+        if (pv === 0 || pv === 255) continue;
+        var dbz = 0.5 * pv - 32;
+        var c = dbzColor(dbz);
+        if (c) {
+          var p = i * 4;
+          pixels[p]     = c[0];
+          pixels[p + 1] = c[1];
+          pixels[p + 2] = c[2];
+          pixels[p + 3] = c[3];
+        }
       }
     }
     offCtx.putImageData(imgData, 0, 0);
@@ -824,11 +940,16 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.clip();
 
     if (layers.steden) {
-      ctx.font = "600 11px Arial";
+      // Font groeit bij sterkere zoom (11/12/13/14 px)
+      var fontPx = 11;
+      if (zoomLevel >= 8)      fontPx = 14;
+      else if (zoomLevel >= 5) fontPx = 13;
+      else if (zoomLevel >= 3) fontPx = 12;
+      ctx.font = "600 " + fontPx + "px Arial";
       ctx.textBaseline = "middle";
-      var dotR = 2.2;
-      var haloW = 3.0;
-      var labelOffset = 5;
+      var dotR = (zoomLevel >= 5) ? 3 : 2.2;
+      var haloW = (zoomLevel >= 5) ? 3.5 : 3.0;
+      var labelOffset = dotR + 3;
       for (var k = 0; k < labelLijst.length; k++) {
         var st = labelLijst[k];
         var wx = lonToX(st[1]), wy = latToY(st[0]);
@@ -845,6 +966,38 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         ctx.strokeText(st[2], sxs + labelOffset, sys);
         ctx.fillStyle = "#0a1929";
         ctx.fillText(st[2], sxs + labelOffset, sys);
+      }
+    }
+
+    // 8a. Bliksem-strikes (cirkels gekleurd op leeftijd) — wereld→scherm coords
+    if (layers.bliksem && STRIKES.length) {
+      var nowMs = Date.now();
+      for (var bi = 0; bi < STRIKES.length; bi++) {
+        var sk = STRIKES[bi];
+        var ageMin = (nowMs - sk.t * 1000) / 60000;
+        if (ageMin > 60) continue;
+        var bwx = lonToX(sk.lon), bwy = latToY(sk.lat);
+        var bxs = (bwx - viewX) * zoomLevel;
+        var bys = (bwy - viewY) * zoomLevel;
+        if (bxs < -10 || bxs > W + 10 || bys < -10 || bys > H + 10) continue;
+        // Kleur op basis van leeftijd
+        var bcol;
+        if (ageMin < 2)       bcol = "rgba(255,255,255,0.95)";
+        else if (ageMin < 10) bcol = "rgba(255,235,59,0.92)";
+        else if (ageMin < 30) bcol = "rgba(255,152,0,0.88)";
+        else                   bcol = "rgba(204,0,0,0.82)";
+        var brad = ageMin < 2 ? 5 : (ageMin < 10 ? 4 : 3);
+        ctx.beginPath();
+        ctx.arc(bxs, bys, brad + 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(bxs, bys, brad, 0, Math.PI * 2);
+        ctx.fillStyle = bcol;
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.stroke();
       }
     }
 
@@ -880,7 +1033,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // 9. Tijdstempel + copyright in scherm-coordinaten (geen zoom invloed)
     ctx.setTransform(dprGlobal, 0, 0, dprGlobal, 0, 0);
-    var tijdTekst = meta.tijden_tekst ? meta.tijden_tekst[frameIdx] : "";
+    var tijdTekst = (radarMode !== "instant" && cumLabel) ? cumLabel : (meta.tijden_tekst ? meta.tijden_tekst[frameIdx] : "");
     ctx.font = "bold " + Math.round(H * 0.022) + "px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.fillText(tijdTekst, 12, Math.round(H * 0.032) + 2);
@@ -972,13 +1125,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ticks.innerHTML = "";
 
     var intervalMin = meta.interval_min || 5;
-    // Bepaal tick-frequentie zodat ticks niet overlappen (~6 ticks)
+    // 15-min ticks (eventueel 30 bij krappe schermbreedte)
+    var sliderEl = document.getElementById("slider");
+    var sliderW = (sliderEl && sliderEl.clientWidth) || 800;
     var totalMin = (nFrames - 1) * intervalMin;
-    var stepMin;
-    if (totalMin <= 90)       stepMin = 15;
-    else if (totalMin <= 180) stepMin = 30;
-    else if (totalMin <= 360) stepMin = 60;
-    else                       stepMin = 120;
+    var nTicks15 = Math.ceil(totalMin / 15);
+    var pxPerTick = sliderW / Math.max(1, nTicks15);
+    var stepMin = (pxPerTick < 38) ? 30 : 15;
     var stepFrames = Math.max(1, Math.round(stepMin / intervalMin));
 
     function fmtHHMM(idx) {
@@ -1327,21 +1480,28 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       updateFavBtn();
     });
 
-    // Klik op canvas = punt-selectie (niet bij sleep)
+    // Klik op canvas = punt-selectie (niet bij sleep, niet bij shift, niet bij dblclick)
     var cont = document.getElementById("canvas-container");
+    var clickTimer = null;
     cont.addEventListener("click", function(e) {
+      if (e.shiftKey) return;
       if (dragMoved) return;
       if (!radarData || !meta) return;
       var rect = canvas.getBoundingClientRect();
       var fx = (e.clientX - rect.left) / rect.width;
       var fy = (e.clientY - rect.top) / rect.height;
       if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return;
-      var srcPxX = viewX + fx * (BASEMAP_W / zoomLevel);
-      var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
-      var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
-      var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
-      toonPunt(lat, lon);
+      // Defer 230ms zodat dblclick voorrang krijgt
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(function() {
+        var srcPxX = viewX + fx * (BASEMAP_W / zoomLevel);
+        var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
+        var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
+        var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
+        toonPunt(lat, lon);
+      }, 230);
     });
+    cont.addEventListener("dblclick", function() { clearTimeout(clickTimer); });
   }
 
   function setupMijnLocatie() {
@@ -1383,9 +1543,49 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         layers[key] = !layers[key];
         if (layers[key]) btn.classList.add("actief"); else btn.classList.remove("actief");
         try { localStorage.setItem("radarLayers", JSON.stringify(layers)); } catch(e) {}
+        if (key === "bliksem") {
+          if (layers.bliksem) startBliksemFetch();
+          else stopBliksemFetch();
+        }
         renderFrame();
       });
     });
+  }
+
+  function setupModusKnop() {
+    var sel = document.getElementById("modus-select");
+    if (!sel) return;
+    sel.value = radarMode;
+    sel.addEventListener("change", function() {
+      radarMode = this.value;
+      try { localStorage.setItem("radarMode", radarMode); } catch(e) {}
+      bouwCumGrid();
+      renderFrame();
+      bouwLegenda();
+    });
+  }
+
+  // ── Bliksem-overlay ────────────────────────────────────────────────────
+  function fetchBliksem() {
+    if (!layers.bliksem) return;
+    fetch("https://data.weerlab.nl/bliksem_strikes.json?_=" + Date.now())
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (d && Array.isArray(d.strikes)) {
+          STRIKES = d.strikes.map(function(s) { return { lat: s.lat, lon: s.lon, t: s.t, type: s.type }; });
+          renderFrame();
+        }
+      }).catch(function() {});
+  }
+  function startBliksemFetch() {
+    fetchBliksem();
+    if (bliksemTimer) clearInterval(bliksemTimer);
+    bliksemTimer = setInterval(fetchBliksem, 30 * 1000);
+  }
+  function stopBliksemFetch() {
+    if (bliksemTimer) { clearInterval(bliksemTimer); bliksemTimer = null; }
+    STRIKES = [];
+    renderFrame();
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1467,6 +1667,20 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var factor = Math.exp(-e.deltaY * 0.0015);
       setZoomAt(zoomLevel * factor, e.clientX, e.clientY);
     }, { passive: false });
+
+    // Dubbelklik = zoom in 2× op klik-positie
+    container.addEventListener("dblclick", function(e) {
+      e.preventDefault();
+      setZoomAt(zoomLevel * 2.0, e.clientX, e.clientY);
+    });
+    // Shift+klik = zoom uit 2× op klik-positie
+    container.addEventListener("click", function(e) {
+      if (e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        setZoomAt(zoomLevel / 2.0, e.clientX, e.clientY);
+      }
+    }, true);
 
     // Helper: omreken display-pixel naar bron-pixel delta
     function displayToSourceScale() {
@@ -1561,33 +1775,38 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function bouwLegenda() {
     var el = document.getElementById("legenda");
-    // mm/u waarden en bijbehorende dBZ niveaus
-    var items = [
-      {mm: 0.1, label: "0.1"},
-      {mm: 0.3, label: "0.3"},
-      {mm: 1,   label: "1"},
-      {mm: 2,   label: "2"},
-      {mm: 5,   label: "5"},
-      {mm: 10,  label: "10"},
-      {mm: 30,  label: "30"},
-      {mm: 50,  label: "50"},
-      {mm: 100, label: "100"},
-    ];
-    var html = '<div class="legenda-titel">Neerslag (mm/u)</div>';
-    html += '<div class="legenda-bar">';
-    for (var i = 0; i < items.length; i++) {
-      // Bereken dBZ voor deze mm/u waarde
-      var dbz = 10 * Math.log10(200 * Math.pow(items[i].mm, 1.6));
-      var c = dbzColor(dbz);
-      if (c) {
-        html += '<div style="background:rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')"></div>';
+    var html = "";
+    if (radarMode !== "instant") {
+      // Cumulatief: mm-totaal schaal
+      html = '<div class="legenda-titel">Som neerslag (mm)</div>';
+      html += '<div class="legenda-bar">';
+      for (var i = 0; i < MM_LEVELS.length; i++) {
+        var c2 = MM_COLORS[i];
+        html += '<div style="background:rgb(' + c2[0] + ',' + c2[1] + ',' + c2[2] + ')"></div>';
       }
+      html += '</div><div class="legenda-labels">';
+      for (var j = 0; j < MM_LEVELS.length; j++) {
+        html += '<span>' + MM_LEVELS[j] + '</span>';
+      }
+      html += '</div>';
+    } else {
+      // Instant: mm/u schaal (originele logica)
+      var items = [
+        {mm: 0.1, label: "0.1"}, {mm: 0.3, label: "0.3"}, {mm: 1, label: "1"},
+        {mm: 2, label: "2"}, {mm: 5, label: "5"}, {mm: 10, label: "10"},
+        {mm: 30, label: "30"}, {mm: 50, label: "50"}, {mm: 100, label: "100"}
+      ];
+      html = '<div class="legenda-titel">Neerslag (mm/u)</div>';
+      html += '<div class="legenda-bar">';
+      for (var k = 0; k < items.length; k++) {
+        var dbz = 10 * Math.log10(200 * Math.pow(items[k].mm, 1.6));
+        var c = dbzColor(dbz);
+        if (c) html += '<div style="background:rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')"></div>';
+      }
+      html += '</div><div class="legenda-labels">';
+      for (var l = 0; l < items.length; l++) html += '<span>' + items[l].label + '</span>';
+      html += '</div>';
     }
-    html += '</div><div class="legenda-labels">';
-    for (var j = 0; j < items.length; j++) {
-      html += '<span>' + items[j].label + '</span>';
-    }
-    html += '</div>';
     el.innerHTML = html;
   }
 
@@ -2014,7 +2233,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       setupPuntPaneel();
       setupMijnLocatie();
       setupLayerToggles();
+      setupModusKnop();
       bouwFavBar();
+      bouwCumGrid();
+      if (radarMode !== "instant") renderFrame();
+      if (layers.bliksem) startBliksemFetch();
 
       // Auto-refresh
       setInterval(function() {
@@ -2024,7 +2247,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
             if (newMeta.nieuwste !== meta.nieuwste) {
               console.log("Nieuwe radar data beschikbaar, herladen...");
               loadData().then(function() {
-                // Punt-paneel verversen na nieuwe data
+                // Punt-paneel + cum-grid verversen na nieuwe data
+                bouwCumGrid();
+                if (radarMode !== "instant") renderFrame();
                 if (puntSel) toonPunt(puntSel.lat, puntSel.lon, puntSel.plaats);
               });
             }
