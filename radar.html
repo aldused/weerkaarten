@@ -303,6 +303,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (laatste 60 min)">⚡ BLI</button>
       <button class="layer-btn" data-layer="cellen" title="Storm-cell tracking met richting/snelheid">🎯 CELL</button>
       <button class="layer-btn" data-layer="hagel" title="Mogelijk hagel (>55 dBZ)">❄ HAGEL</button>
+      <button class="layer-btn actief" data-layer="harmonie" title="Verlengde verwachting via HARMONIE 43 (tot +24u)">+24u HARMONIE</button>
     </div>
   </div>
 
@@ -625,7 +626,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var radarData = null;   // Uint8Array (alle frames aaneengeschakeld)
   var nLat = 0, nLon = 0, nFrames = 0;
   var nlGeo = null, beGeo = null, riverGeo = null, euLandGeo = null;
-  var PLAATSEN_BIG = null;  // [{naam, lat, lon, pop, land}] uit plaatsen_lookup.json (gefilterd binnen bbox)
+  var PLAATSEN_BIG = null;
+  var harmonieGeladen = false;
+  var harmonieLaatsteRun = null;
+  var nFramesNowcast = 0;   // aantal frames vóór HARMONIE-extensie (om opnieuw appenden te voorkomen)  // [{naam, lat, lon, pop, land}] uit plaatsen_lookup.json (gefilterd binnen bbox)
   var canvas, ctx;
   var offscreen, offCtx;
   var dprGlobal = 1;
@@ -663,6 +667,123 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function isFutureFrame(idx) {
     return tNowIndex >= 0 && idx > tNowIndex;
+  }
+
+  // ── HARMONIE-extensie tot +24u ──────────────────────────────────────────
+  function laadHarmonie() {
+    if (harmonieGeladen) return Promise.resolve();
+    var t = Date.now();
+    return Promise.all([
+      fetch(DATA_BASE + "harmonie_canvas_meta.json?t=" + t).then(function(r){return r.json();}),
+      fetch(DATA_BASE + "harmonie_data_neerslag.bin?t=" + t).then(function(r){return r.arrayBuffer();})
+    ]).then(function(res) {
+      var hMeta = res[0];
+      var buf = res[1];
+      var hView = new DataView(buf, 0, 16);
+      var hLat = hView.getUint16(0, true);
+      var hLon = hView.getUint16(2, true);
+      var hN = hView.getUint16(4, true);
+      var hData = new Float32Array(buf, 16, hLat * hLon * hN);
+      appendHarmonieFrames(hMeta, hData, hLat, hLon, hN);
+      harmonieGeladen = true;
+      harmonieLaatsteRun = hMeta.run_utc;
+    });
+  }
+
+  function appendHarmonieFrames(hMeta, hData, hLat, hLon, hN) {
+    if (!radarData || !meta) return;
+    // Bewaar oorspronkelijke nFrames vóór append
+    if (nFramesNowcast === 0) nFramesNowcast = nFrames;
+    // Reset naar nowcast-only state (in geval van re-load)
+    if (nFrames > nFramesNowcast) {
+      radarData = radarData.subarray(0, nFramesNowcast * nLat * nLon);
+      meta.tijden = meta.tijden.slice(0, nFramesNowcast);
+      meta.tijden_tekst = meta.tijden_tekst.slice(0, nFramesNowcast);
+      meta.frame_types = meta.frame_types.slice(0, nFramesNowcast);
+      nFrames = nFramesNowcast;
+    }
+
+    var radarLastT = new Date(meta.tijden[nFrames - 1]).getTime();
+    var dagen = ["zo","ma","di","wo","do","vr","za"];
+    var maanden = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+    function fmtTijd(d) {
+      return dagen[d.getDay()] + " " + d.getDate() + " " + maanden[d.getMonth()] + " " +
+             String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+    }
+
+    // Verzamel HARMONIE-frames die NA radar-laatste-tijd vallen
+    var nieuweFrames = [];
+    for (var h = 0; h < hN; h++) {
+      var hStr = hMeta.tijden[h];
+      if (!hStr) continue;
+      // tijden hebben geen Z-suffix maar zijn UTC
+      var hT = new Date(hStr.endsWith("Z") ? hStr : hStr + "Z").getTime();
+      if (hT <= radarLastT + 30 * 60 * 1000) continue;  // skip als overlap met nowcast
+      // Resample en converteer
+      var pvFrame = resampleHarmonieNaarRadar(hData, hLat, hLon, h, hMeta.grid);
+      nieuweFrames.push({ pv: pvFrame, t: hT, label: fmtTijd(new Date(hT)) });
+    }
+    if (!nieuweFrames.length) return;
+
+    // Bouw nieuwe radarData
+    var oudLen = radarData.length;
+    var nieuw = new Uint8Array(oudLen + nieuweFrames.length * nLat * nLon);
+    nieuw.set(radarData);
+    for (var i = 0; i < nieuweFrames.length; i++) {
+      nieuw.set(nieuweFrames[i].pv, oudLen + i * nLat * nLon);
+      meta.tijden.push(new Date(nieuweFrames[i].t).toISOString());
+      meta.tijden_tekst.push(nieuweFrames[i].label);
+      meta.frame_types.push("harmonie");
+    }
+    radarData = nieuw;
+    nFrames += nieuweFrames.length;
+    document.getElementById("slider").max = nFrames - 1;
+    bouwSliderOverlay();
+    bouwCumGrid();
+    cellsCache = {};
+    if (puntSel) toonPunt(puntSel.lat, puntSel.lon, puntSel.plaats);
+    renderFrame();
+
+    // Update header sub
+    var sub = document.getElementById("hdr-sub");
+    if (sub) sub.textContent = "KNMI radar + pySTEPS-nowcast (0–2u) + HARMONIE 43 (2–24u)";
+  }
+
+  function resampleHarmonieNaarRadar(hData, hLat, hLon, frame, hGrid) {
+    var out = new Uint8Array(nLat * nLon);
+    var off = frame * hLat * hLon;
+    var rLatMax = meta.grid.lat_max, rLatMin = meta.grid.lat_min;
+    var rLonMin = meta.grid.lon_min, rLonMax = meta.grid.lon_max;
+    var hLatMax = hGrid.lat_max, hLatMin = hGrid.lat_min;
+    var hLonMin = hGrid.lon_min, hLonMax = hGrid.lon_max;
+    for (var r = 0; r < nLat; r++) {
+      var lat = rLatMax - (r / (nLat - 1)) * (rLatMax - rLatMin);
+      // HARMONIE rij: aan lat_min ligt index 0, aan lat_max index hLat-1 — controleer via Open-Meteo conventie
+      // Veiliger: behandel HARMONIE als lat_min..lat_max van bottom naar top
+      var hr = (lat - hLatMin) / (hLatMax - hLatMin) * (hLat - 1);
+      if (hr < 0 || hr > hLat - 1) continue;
+      var hr0 = Math.floor(hr), hr1 = Math.min(hLat - 1, hr0 + 1);
+      var ty = hr - hr0;
+      for (var c = 0; c < nLon; c++) {
+        var lon = rLonMin + (c / (nLon - 1)) * (rLonMax - rLonMin);
+        var hc = (lon - hLonMin) / (hLonMax - hLonMin) * (hLon - 1);
+        if (hc < 0 || hc > hLon - 1) continue;
+        var hc0 = Math.floor(hc), hc1 = Math.min(hLon - 1, hc0 + 1);
+        var tx = hc - hc0;
+        var v00 = hData[off + hr0 * hLon + hc0];
+        var v01 = hData[off + hr0 * hLon + hc1];
+        var v10 = hData[off + hr1 * hLon + hc0];
+        var v11 = hData[off + hr1 * hLon + hc1];
+        var v = (1 - ty) * ((1 - tx) * v00 + tx * v01) + ty * ((1 - tx) * v10 + tx * v11);
+        if (!(v > 0.05)) { out[r * nLon + c] = 0; continue; }
+        // mm/u → dBZ via Marshall-Palmer
+        var dbz = 10 * Math.log10(200 * Math.pow(v, 1.6));
+        if (dbz < 5) { out[r * nLon + c] = 0; continue; }
+        var pv = Math.max(1, Math.min(254, Math.round(2 * (dbz + 32))));
+        out[r * nLon + c] = pv;
+      }
+    }
+    return out;
   }
 
   // ── Storm-cell detectie via iteratieve flood-fill op dBZ-drempel ────────
@@ -837,6 +958,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   if (typeof layers.bliksem !== "boolean")    layers.bliksem = false;
   if (typeof layers.cellen !== "boolean")     layers.cellen = false;
   if (typeof layers.hagel !== "boolean")      layers.hagel = false;
+  if (typeof layers.harmonie !== "boolean")   layers.harmonie = true;  // +24u HARMONIE — default aan
 
   // ═══════════════════════════════════════════════════════════════════════
   // DATA LADEN
@@ -1262,12 +1384,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       }
     }
 
-    // 8b. Geselecteerd punt-marker (rood pulserend)
+    // 8b. Geselecteerd punt-marker (rode pin + label)
     if (puntSel) {
       var mwx = lonToX(puntSel.lon), mwy = latToY(puntSel.lat);
       var mxs = (mwx - viewX) * zoomLevel;
       var mys = (mwy - viewY) * zoomLevel;
-      if (mxs > -20 && mxs < W + 20 && mys > -20 && mys < H + 20) {
+      if (mxs > -50 && mxs < W + 50 && mys > -50 && mys < H + 50) {
         // Buitenring (witte halo)
         ctx.beginPath();
         ctx.arc(mxs, mys, 9, 0, Math.PI * 2);
@@ -1287,6 +1409,50 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         ctx.arc(mxs, mys, 2, 0, Math.PI * 2);
         ctx.fillStyle = "#ffffff";
         ctx.fill();
+        // Naam-label boven pin met witte achtergrond
+        if (puntSel.plaats) {
+          ctx.font = "700 14px DM Sans, Arial, sans-serif";
+          ctx.textBaseline = "middle";
+          ctx.textAlign = "center";
+          var labY = mys - 24;
+          var labText = puntSel.plaats;
+          var tw = ctx.measureText(labText).width;
+          var padX = 8, padY = 4;
+          var boxW = tw + padX * 2;
+          var boxH = 22;
+          var boxX = mxs - boxW / 2;
+          var boxY = labY - boxH / 2;
+          // Achtergrond met afgeronde hoeken
+          var rr = 5;
+          ctx.beginPath();
+          ctx.moveTo(boxX + rr, boxY);
+          ctx.lineTo(boxX + boxW - rr, boxY);
+          ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + rr);
+          ctx.lineTo(boxX + boxW, boxY + boxH - rr);
+          ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - rr, boxY + boxH);
+          ctx.lineTo(boxX + rr, boxY + boxH);
+          ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - rr);
+          ctx.lineTo(boxX, boxY + rr);
+          ctx.quadraticCurveTo(boxX, boxY, boxX + rr, boxY);
+          ctx.closePath();
+          ctx.fillStyle = "#ef4444";
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          // Tekst
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(labText, mxs, labY + 1);
+          // Pijltje onder box naar pin
+          ctx.beginPath();
+          ctx.moveTo(mxs - 5, boxY + boxH);
+          ctx.lineTo(mxs + 5, boxY + boxH);
+          ctx.lineTo(mxs, boxY + boxH + 5);
+          ctx.closePath();
+          ctx.fillStyle = "#ef4444";
+          ctx.fill();
+          ctx.textAlign = "left";
+        }
       }
     }
 
@@ -1910,6 +2076,27 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         if (key === "bliksem") {
           if (layers.bliksem) startBliksemFetch();
           else stopBliksemFetch();
+        } else if (key === "harmonie") {
+          if (layers.harmonie) {
+            laadHarmonie();
+          } else {
+            // Verwijder HARMONIE-frames terug naar nowcast-only
+            if (nFramesNowcast > 0 && nFrames > nFramesNowcast) {
+              radarData = new Uint8Array(radarData.subarray(0, nFramesNowcast * nLat * nLon));
+              meta.tijden = meta.tijden.slice(0, nFramesNowcast);
+              meta.tijden_tekst = meta.tijden_tekst.slice(0, nFramesNowcast);
+              meta.frame_types = meta.frame_types.slice(0, nFramesNowcast);
+              nFrames = nFramesNowcast;
+              if (frameIdx >= nFrames) frameIdx = nFrames - 1;
+              document.getElementById("slider").max = nFrames - 1;
+              bouwSliderOverlay();
+              bouwCumGrid();
+              cellsCache = {};
+              harmonieGeladen = false;
+              var sub = document.getElementById("hdr-sub");
+              if (sub) sub.textContent = "KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast";
+            }
+          }
         }
         renderFrame();
       });
@@ -2248,21 +2435,29 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // EXPORT: PNG
   // ═══════════════════════════════════════════════════════════════════════
 
-  // Bouw composite canvas met blauwe header boven + footer onder (zoals bliksem-export)
+  // Bouw composite canvas met blauwe header boven + footer onder + (optioneel) puntpaneel
   function bouwComposite(srcCanvas, frameIdxOpt) {
     var fIdx = (typeof frameIdxOpt === "number") ? frameIdxOpt : frameIdx;
     var headerH = 64;
     var footerH = 48;
-    var srcW = srcCanvas.width;   // device pixels
+    var srcW = srcCanvas.width;
     var srcH = srcCanvas.height;
-    // Schaal header/footer op dpr van bron-canvas (canvas.width/BASEMAP_W = dprGlobal)
     var k = srcW / BASEMAP_W;
     var hH = Math.round(headerH * k);
     var fH = Math.round(footerH * k);
 
+    // Punt-paneel sectie (alleen als geselecteerd punt bestaat)
+    var spark = document.getElementById("punt-spark");
+    var heeftPunt = puntSel && spark && spark.width > 0;
+    var puntH = 0;
+    if (heeftPunt) {
+      // Headertekst (titel + coord + samenvatting) + sparkline
+      puntH = Math.round(180 * k);
+    }
+
     var out = document.createElement("canvas");
     out.width = srcW;
-    out.height = hH + srcH + fH;
+    out.height = hH + srcH + puntH + fH;
     var c = out.getContext("2d");
 
     // ── Header (blauw)
@@ -2275,7 +2470,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     c.fillStyle = "#a8c4e8";
     c.font = "500 " + Math.round(12 * k) + "px DM Mono, monospace";
     var tijdT = (radarMode !== "instant" && cumLabel) ? cumLabel : (meta.tijden_tekst ? meta.tijden_tekst[fIdx] : "");
-    c.fillText("KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast · " + tijdT, Math.round(20 * k), Math.round(38 * k));
+    var brn = harmonieGeladen ? "KNMI radar + pySTEPS-nowcast + HARMONIE 43" : "KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast";
+    c.fillText(brn + " · " + tijdT, Math.round(20 * k), Math.round(38 * k));
     var bijTxt = "Bijgewerkt: " + (meta.bijgewerkt || "");
     c.textAlign = "right";
     c.fillText(bijTxt, srcW - Math.round(20 * k), Math.round(38 * k));
@@ -2284,8 +2480,39 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     // ── Bron-canvas
     c.drawImage(srcCanvas, 0, hH);
 
+    // ── Punt-paneel (titel + samenvatting + sparkline)
+    if (heeftPunt) {
+      var py = hH + srcH;
+      c.fillStyle = "#ffffff";
+      c.fillRect(0, py, srcW, puntH);
+      c.fillStyle = "#00205b";
+      c.fillRect(0, py, srcW, Math.round(3 * k));
+      var px = Math.round(20 * k);
+      var pyc = py + Math.round(20 * k);
+      c.fillStyle = "#0f172a";
+      c.font = "700 " + Math.round(16 * k) + "px DM Sans, Arial, sans-serif";
+      c.textBaseline = "top";
+      c.fillText("Neerslag bij " + (puntSel.plaats || "punt"), px, pyc);
+      c.fillStyle = "#64748b";
+      c.font = "500 " + Math.round(11 * k) + "px DM Mono, monospace";
+      c.fillText(puntSel.lat.toFixed(3) + "°N · " + puntSel.lon.toFixed(3) + "°E", px, pyc + Math.round(22 * k));
+
+      // Samenvatting (strip HTML)
+      var samElm = document.getElementById("punt-samenvatting");
+      var sam = samElm ? samElm.textContent.trim() : "";
+      c.fillStyle = "#0f172a";
+      c.font = "500 " + Math.round(13 * k) + "px DM Sans, Arial, sans-serif";
+      c.fillText(sam, px, pyc + Math.round(46 * k));
+
+      // Sparkline
+      var sparkY = pyc + Math.round(72 * k);
+      var sparkH = Math.round(95 * k);
+      var sparkW = srcW - 2 * px;
+      c.drawImage(spark, px, sparkY, sparkW, sparkH);
+    }
+
     // ── Footer (blauw)
-    var fy = hH + srcH;
+    var fy = hH + srcH + puntH;
     c.fillStyle = "#00205b";
     c.fillRect(0, fy, srcW, fH);
     c.fillStyle = "#ffffff";
@@ -2294,7 +2521,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     c.fillText("weerlab.nl — neerslagradar", Math.round(20 * k), fy + fH / 2 - Math.round(7 * k));
     c.fillStyle = "#a8c4e8";
     c.font = "500 " + Math.round(11 * k) + "px DM Mono, monospace";
-    c.fillText("Bron: KNMI · pySTEPS-nowcast", Math.round(20 * k), fy + fH / 2 + Math.round(8 * k));
+    c.fillText("Bron: KNMI · pySTEPS · HARMONIE 43", Math.round(20 * k), fy + fH / 2 + Math.round(8 * k));
     c.textAlign = "right";
     c.fillText("© Ed Aldus / KNMI", srcW - Math.round(20 * k), fy + fH / 2);
     c.textAlign = "left";
@@ -2677,6 +2904,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       bouwCumGrid();
       if (radarMode !== "instant") renderFrame();
       if (layers.bliksem) startBliksemFetch();
+      // HARMONIE-extensie laden in achtergrond (na 500ms zodat radar eerst rendert)
+      if (layers.harmonie) {
+        setTimeout(function() { laadHarmonie(); }, 500);
+      }
 
       // Auto-refresh
       setInterval(function() {
