@@ -9,7 +9,7 @@
  * Stuurt mail met PDF-attachment naar de hardcoded RECIPIENTS via Resend.
  *
  * Setup (eenmalig):
- *   1. resend.com account → verifieer weerlab.nl domein (DNS records SPF/DKIM)
+ *   1. resend.com account → verifieer edaldus.nl domein (DNS records SPF/DKIM bij domeinregistrar)
  *   2. Maak API-key in Resend dashboard
  *   3. wrangler deploy
  *   4. wrangler secret put RESEND_API_KEY  (paste de key)
@@ -21,8 +21,8 @@ const RECIPIENTS = [
   'mark@helderred.nl',
 ];
 
-const FROM = 'Ed Aldus Weer en Media <vlaggenweer@weerlab.nl>';
-const REPLY_TO = 'ed@weerlab.nl';
+const FROM = 'Ed Aldus Weer en Media <info@edaldus.nl>';
+const REPLY_TO = 'info@edaldus.nl';
 
 const ALLOWED_ORIGINS = [
   'https://weerlab.nl',
