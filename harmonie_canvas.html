@@ -1010,6 +1010,50 @@ body {
 
   function lum(r,g,b) { return (0.299*r + 0.587*g + 0.114*b) / 255; }
 
+  // ── Windpijl: simpele pijl die downwind wijst (waar wind heen gaat) ─────────
+  // dirRad = richting waar wind VANDAAN komt (meteorologisch: 0 = uit N).
+  // De pijl wijst in de richting waar de wind HEEN gaat. Dus N-wind → pijl
+  // wijst naar zuiden. Lengte schaalt licht met snelheid.
+  function drawWindArrow(ctx, cx, cy, dirRad, speedMs, len) {
+    if (speedMs < 0.7) {
+      // Stille wind: open cirkeltje
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(2, len * 0.13), 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    // Eenheidsvector richting downwind (waar wind heen gaat)
+    var ux = -Math.sin(dirRad);  // +x op canvas = oost; sin(N→S)=0 dus N-wind: ux=0
+    var uy = Math.cos(dirRad);   // +y op canvas = zuid; cos(0)=1 dus N-wind: uy=+1 (omlaag)
+    // Lichte schaling met snelheid (saturatie boven ~12 m/s = ~6 Bft)
+    var scale = 0.55 + Math.min(speedMs, 12) / 12 * 0.45;
+    var L = len * scale;
+    var sx = cx - ux * L * 0.5;  // staart (upwind)
+    var sy = cy - uy * L * 0.5;
+    var tx = cx + ux * L * 0.5;  // tip (downwind)
+    var ty = cy + uy * L * 0.5;
+    // Schacht
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    // Pijlpunt (gevuld driehoekje) op downwind-tip
+    var aLen = L * 0.32;
+    var aWid = L * 0.22;
+    var perpx = -uy;
+    var perpy = ux;
+    var bx1 = tx - ux * aLen + perpx * aWid * 0.5;
+    var by1 = ty - uy * aLen + perpy * aWid * 0.5;
+    var bx2 = tx - ux * aLen - perpx * aWid * 0.5;
+    var by2 = ty - uy * aLen - perpy * aWid * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(bx1, by1);
+    ctx.lineTo(bx2, by2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // ── Meteorologische windveren (WMO wind barbs) ────────────────────────────
   // Tekent een windveer op (cx, cy). dirRad = richting waar wind VANDAAN komt
   // (wiskundig: hoek van noord, kloksgewijs). speedMs = windsnelheid in m/s.
@@ -1535,15 +1579,15 @@ body {
       ctx.drawImage(overlayImg, sx, sy, sw, sh, 0, 0, cw, ch);
     }
 
-    // ── Wind+Druk of Wind kaart: windveren (WMO wind barbs) ────────────────
+    // ── Wind+Druk of Wind kaart: windpijlen (downwind, waar wind heen gaat) ──
     if ((paramKey === "wind_druk" || paramKey === "wind") && paramCache["wind"]) {
       var wpd2 = paramCache["wind"];
       var wOff2 = stepIdx * wpd2.nLat * wpd2.nLon * 2;
-      // Dynamische stap: ~25 veren breed bij zoom 1
+      // Dynamische stap: ~25 pijlen breed bij zoom 1
       var barbStep2 = Math.max(3, Math.round(nLon / (25 * zoomLevel)));
       var barbLen2 = Math.max(18, Math.round(cw / 28)) * Math.min(zoomLevel, 3);
 
-      // Twee passes: eerst witte outline, dan zwarte veer
+      // Twee passes: eerst witte outline, dan donkere pijl
       var passes = [
         {stroke:"white", fill:"white", lw:4.5},
         {stroke:"#222",  fill:"#222",  lw:2},
@@ -1561,13 +1605,12 @@ body {
             var bv = wpd2.data[wOff2 + wpd2.nLat * wpd2.nLon + bi2];
             var bspd = Math.sqrt(bu*bu + bv*bv);
             if (bspd < 0.3) continue;
-            // Wind richting: atan2(u,v) geeft richting MET de wind
-            // Windveer-conventie: schacht wijst naar waar wind VANDAAN komt
+            // bdir = richting WAAR WIND VANDAAN KOMT (meteorologisch)
             var bdir = Math.atan2(bu, bv) + Math.PI;
             var bpx = gx2px(bx);
             var bpy = gy2px(nLat - 1 - by);
             if (bpx < -30 || bpx > cw+30 || bpy < -30 || bpy > ch+30) continue;
-            drawWindBarb(ctx, bpx, bpy, bdir, bspd, barbLen2);
+            drawWindArrow(ctx, bpx, bpy, bdir, bspd, barbLen2);
           }
         }
       }
@@ -1619,7 +1662,7 @@ body {
             var wpx = gx2px(wx);
             var wpy = gy2px(nLat - 1 - wy);
             if (wpx < -20 || wpx > cw+20 || wpy < -20 || wpy > ch+20) continue;
-            drawWindBarb(ctx, wpx, wpy, wdir, wspd, bLen3);
+            drawWindArrow(ctx, wpx, wpy, wdir, wspd, bLen3);
           }
         }
       }
