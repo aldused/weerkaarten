@@ -269,28 +269,42 @@ import cartopy.feature as cfeature
 
 nl_dagen = ["Ma","Di","Wo","Do","Vr","Za","Zo"]
 
-fig = plt.figure(figsize=(8, 11))
-gs = GridSpec(2, 1, figure=fig, height_ratios=[0.085, 1], hspace=0.01)
+fig = plt.figure(figsize=(8, 11.5))
+gs = GridSpec(3, 1, figure=fig, height_ratios=[0.085, 1, 0.035], hspace=0.01)
 
-# Header
+# Header — slate met cyaan accentband
 ax_h = fig.add_subplot(gs[0])
 ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
 ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,
-               facecolor="#003366", zorder=0, clip_on=False))
-ax_h.text(0.012, 0.62, "Ed Aldus WM", fontsize=11, color="white",
+               facecolor="#1e293b", zorder=0, clip_on=False))
+ax_h.text(0.012, 0.62, "Ed Aldus WM", fontsize=11, color="#ffffff",
           weight="bold", va="center", transform=ax_h.transAxes)
 ax_h.text(0.012, 0.22, "Actuele waarnemingen · KNMI", fontsize=7.5,
-          color="#a8c8e8", va="center", transform=ax_h.transAxes)
+          color="#94a3b8", va="center", transform=ax_h.transAxes,
+          family="monospace")
 ax_h.text(0.988, 0.62, f"Synoptische kaart · {now_str}",
-          fontsize=13, color="white", weight="bold",
+          fontsize=13, color="#ffffff", weight="bold",
           ha="right", va="center", transform=ax_h.transAxes)
 ax_h.text(0.988, 0.22, f"{dag_str}",
-          fontsize=8, color="#a8c8e8", ha="right", va="center",
-          transform=ax_h.transAxes)
-ax_h.axhline(0, color="#4a90c4", linewidth=1.5)
+          fontsize=8, color="#cbd5e1", ha="right", va="center",
+          transform=ax_h.transAxes, family="monospace")
+ax_h.axhline(0, color="#2ec4e8", linewidth=2.5)
 
 # Kaart
 ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
+# Footer — slate
+ax_f = fig.add_subplot(gs[2])
+ax_f.set_xlim(0,1); ax_f.set_ylim(0,1); ax_f.axis("off")
+ax_f.add_patch(plt.Rectangle((0,0),1,1,transform=ax_f.transAxes,
+               facecolor="#0f172a", zorder=0, clip_on=False))
+ax_f.text(0.012, 0.5, "weerlab.nl", fontsize=8, color="#f1f5f9",
+          weight="bold", va="center", transform=ax_f.transAxes)
+ax_f.text(0.085, 0.5, "·  Ed Aldus WM — KNMI 10-min in-situ",
+          fontsize=7, color="#94a3b8", va="center",
+          transform=ax_f.transAxes, family="monospace")
+ax_f.text(0.988, 0.5, now_str, fontsize=7, color="#cbd5e1",
+          ha="right", va="center", transform=ax_f.transAxes,
+          family="monospace")
 ax.set_aspect('auto')
 ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
 ax.add_feature(cfeature.OCEAN.with_scale("10m"),  facecolor="#d8ecf8", zorder=0)
