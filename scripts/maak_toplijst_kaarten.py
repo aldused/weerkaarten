@@ -62,16 +62,19 @@ def tekstkleur(rgba):
     return "white" if 0.299*r + 0.587*g + 0.114*b < 0.55 else "black"
 
 def maak_base(dag_label, subtitel, now_str):
-    fig = plt.figure(figsize=(8, 11))
-    gs  = gridspec.GridSpec(2, 1, figure=fig, height_ratios=[0.085, 1], hspace=0.01)
+    fig = plt.figure(figsize=(8, 11.4), facecolor="#f0f3f7")
+    gs  = gridspec.GridSpec(3, 1, figure=fig,
+                            height_ratios=[0.085, 1, 0.030], hspace=0.01)
+    # Slate header
     ax_h = fig.add_subplot(gs[0])
     ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
     ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,facecolor="#1e293b",zorder=0,clip_on=False))
     ax_h.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",weight="bold",va="center",transform=ax_h.transAxes)
-    ax_h.text(0.012,0.18,"Waarnemingen KNMI",fontsize=7.5,color="#94a3b8",va="center",transform=ax_h.transAxes)
+    ax_h.text(0.012,0.18,"Waarnemingen KNMI",fontsize=7.5,color="#94a3b8",va="center",transform=ax_h.transAxes,family="monospace")
     ax_h.text(0.988,0.62,dag_label,fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax_h.transAxes)
-    ax_h.text(0.988,0.18,f"{subtitel}  ·  {now_str}",fontsize=7,color="#94a3b8",ha="right",va="center",transform=ax_h.transAxes)
-    ax_h.axhline(0,color="#2ec4e8",linewidth=1.5)
+    ax_h.text(0.988,0.18,f"{subtitel}  ·  {now_str}",fontsize=7,color="#cbd5e1",ha="right",va="center",transform=ax_h.transAxes,family="monospace")
+    ax_h.axhline(0,color="#2ec4e8",linewidth=2.5)
+    # Kaart
     ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
     ax.set_aspect('auto'); ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.OCEAN.with_scale("10m"),    facecolor="#c8e0f0",zorder=0)
@@ -81,6 +84,13 @@ def maak_base(dag_label, subtitel, now_str):
     ax.add_feature(cfeature.COASTLINE.with_scale("10m"),edgecolor="#333333",linewidth=0.7,zorder=4)
     ax.add_feature(cfeature.BORDERS.with_scale("10m"),  edgecolor="#666666",linewidth=0.6,linestyle="--",zorder=4)
     ax.axis("off")
+    # Slate footer
+    ax_f = fig.add_subplot(gs[2])
+    ax_f.set_xlim(0,1); ax_f.set_ylim(0,1); ax_f.axis("off")
+    ax_f.add_patch(plt.Rectangle((0,0),1,1,transform=ax_f.transAxes,facecolor="#0f172a",zorder=0,clip_on=False))
+    ax_f.text(0.012,0.5,"weerlab.nl",fontsize=8,color="#f1f5f9",weight="bold",va="center",transform=ax_f.transAxes)
+    ax_f.text(0.13,0.5,"·  Ed Aldus WM — KNMI dagwaarden",fontsize=7,color="#94a3b8",va="center",transform=ax_f.transAxes,family="monospace")
+    ax_f.text(0.988,0.5,now_str,fontsize=7,color="#cbd5e1",ha="right",va="center",transform=ax_f.transAxes,family="monospace")
     return fig, ax
 
 def teken_station(ax, lon, lat, tekst, kleur, tijdstip=None):
@@ -112,7 +122,7 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             kleur = cmap_tx(norm_tx(v))
             teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tijdstip)
     bronvermelding(ax, now_str2)
-    plt.savefig(f"kaart_top_tx_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"kaart_top_tx_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # TN kaart
     fig, ax = maak_base(dag_label, "Minimum temperatuur (°C)", now_str)
@@ -123,7 +133,7 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             kleur = cmap_tn(norm_tn(v))
             teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tijdstip)
     bronvermelding(ax, now_str2)
-    plt.savefig(f"kaart_top_tn_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"kaart_top_tn_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # RR kaart
     fig, ax = maak_base(dag_label, "Neerslag (mm)", now_str)
@@ -134,7 +144,7 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             kleur = cmap_rr(norm_rr(v))
             teken_station(ax, lon, lat, f"{v:.1f}", kleur)
     bronvermelding(ax, now_str2)
-    plt.savefig(f"kaart_top_rr_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"kaart_top_rr_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # FX kaart
     fig, ax = maak_base(dag_label, "Max windstoot (km/h)", now_str)
@@ -146,7 +156,7 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             kleur = cmap_fx(norm_fx(v))
             teken_station(ax, lon, lat, f"{v_kmh:.0f}", kleur, tijdstip)
     bronvermelding(ax, now_str2)
-    plt.savefig(f"kaart_top_fx_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"kaart_top_fx_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # SQ kaart (zonuren)
     fig, ax = maak_base(dag_label, "Zonneschijnduur (uur)", now_str)
@@ -157,7 +167,7 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             kleur = cmap_sq(norm_sq(v))
             teken_station(ax, lon, lat, f"{v:.1f}", kleur)
     bronvermelding(ax, now_str2)
-    plt.savefig(f"kaart_top_sq_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"kaart_top_sq_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # T10N kaart (grastemperatuur)
     fig, ax = maak_base(dag_label, "Min grastemperatuur 10cm (°C)", now_str)
@@ -168,7 +178,7 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             kleur = cmap_t10n(norm_t10n(v))
             teken_station(ax, lon, lat, f"{v:.1f}°", kleur)
     bronvermelding(ax, now_str2)
-    plt.savefig(f"kaart_top_t10n_{fname_suffix}.png", dpi=150, bbox_inches="tight"); plt.close()
+    plt.savefig(f"kaart_top_t10n_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     print(f"  → 6 kaarten klaar voor {datum_str}")
 
