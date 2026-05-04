@@ -547,7 +547,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 <div class="footer">
   <div>
     <div class="footer-brand"><span class="accent">weerlab.nl</span> — neerslagradar</div>
-    <div class="footer-bron">Bron: KNMI (gauge-gecorrigeerde radarcomposiet) · pySTEPS-nowcast (extrapolatie 0–2u)</div>
+    <div class="footer-bron">Bron: KNMI (gauge-gecorrigeerde radarcomposiet) · pySTEPS-nowcast (extrapolatie 0–2u) · basemap: ESRI World Shaded Relief</div>
   </div>
   <div class="footer-bron">© Ed Aldus / KNMI</div>
 </div>
@@ -577,6 +577,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);
   function lonToX(lon){ return (lon - PROJ_LON_MIN) / (PROJ_LON_MAX - PROJ_LON_MIN) * BASEMAP_W; }
   function latToY(lat){ return (PROJ_LAT_MAX - lat) / (PROJ_LAT_MAX - PROJ_LAT_MIN) * BASEMAP_H; }
+
+  // Topo shaded-relief raster basemap (ESRI World Shaded Relief, eenmalig gegenereerd)
+  var BASEMAP_IMG_URL = "radar_basemap_topo.png";
+  var basemapImg = new Image();
+  basemapImg.onload = function() { if (typeof renderFrame === "function") renderFrame(); };
+  basemapImg.src = BASEMAP_IMG_URL;
 
   // ═══════════════════════════════════════════════════════════════════════
   // PLAATSEN (voor hover tooltip)
@@ -1424,20 +1430,21 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.save();
     ctx.clip();
 
-    // 1. Zee-achtergrond — Carto-light gradient (bovenkant donkerder)
-    var seaGrad = ctx.createLinearGradient(0, 0, 0, H);
-    seaGrad.addColorStop(0, "#aac6dc");
-    seaGrad.addColorStop(1, "#cadbe9");
-    ctx.fillStyle = seaGrad;
-    ctx.fillRect(0, 0, W, H);
+    // 1. Topo shaded-relief raster basemap (ESRI). Fallback: Carto-light fills.
+    if (basemapImg.complete && basemapImg.naturalWidth > 0) {
+      ctx.drawImage(basemapImg, 0, 0, W, H);
+    } else {
+      var seaGrad = ctx.createLinearGradient(0, 0, 0, H);
+      seaGrad.addColorStop(0, "#aac6dc");
+      seaGrad.addColorStop(1, "#cadbe9");
+      ctx.fillStyle = seaGrad;
+      ctx.fillRect(0, 0, W, H);
+      _drawGeoFeatures(ctx, euLandGeo, "#e2dccc", "rgba(80,90,100,0.35)", 0.6);
+      _drawGeoFeatures(ctx, nlGeo, "#efe9d8", "rgba(80,90,100,0.55)", 0.7);
+      _drawGeoFeatures(ctx, beGeo, "#efe9d8", "rgba(80,90,100,0.55)", 0.7);
+    }
 
-    // 2. Europa-land (UK, DE, FR, DK) — warm grijsbruin
-    _drawGeoFeatures(ctx, euLandGeo, "#e2dccc", "rgba(80,90,100,0.35)", 0.6);
-    // 3. Land NL + BE — lichter zandtint met fijne kustlijn
-    _drawGeoFeatures(ctx, nlGeo, "#efe9d8", "rgba(80,90,100,0.55)", 0.7);
-    _drawGeoFeatures(ctx, beGeo, "#efe9d8", "rgba(80,90,100,0.55)", 0.7);
-
-    // 3b. Meren (IJsselmeer/Lauwersmeer) — zelfde zee-toon
+    // 3b. Meren (IJsselmeer/Lauwersmeer) — water-tint over basemap
     if (lakesGeo) _drawGeoFeatures(ctx, lakesGeo, "#aac6dc", "rgba(80,110,140,0.6)", 0.7);
 
     // 4. Radar-raster op offscreen — instant of cumulatief
