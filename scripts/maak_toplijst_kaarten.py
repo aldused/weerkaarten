@@ -121,7 +121,6 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             lon, lat = COORDS[naam]
             kleur = cmap_tx(norm_tx(v))
             teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tijdstip)
-    bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_tx_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # TN kaart
@@ -132,7 +131,6 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             lon, lat = COORDS[naam]
             kleur = cmap_tn(norm_tn(v))
             teken_station(ax, lon, lat, f"{v:.1f}°", kleur, tijdstip)
-    bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_tn_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # RR kaart
@@ -143,7 +141,6 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             lon, lat = COORDS[naam]
             kleur = cmap_rr(norm_rr(v))
             teken_station(ax, lon, lat, f"{v:.1f}", kleur)
-    bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_rr_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # FX kaart
@@ -155,7 +152,6 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             v_kmh = v * 3.6
             kleur = cmap_fx(norm_fx(v))
             teken_station(ax, lon, lat, f"{v_kmh:.0f}", kleur, tijdstip)
-    bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_fx_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # SQ kaart (zonuren)
@@ -166,7 +162,6 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             lon, lat = COORDS[naam]
             kleur = cmap_sq(norm_sq(v))
             teken_station(ax, lon, lat, f"{v:.1f}", kleur)
-    bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_sq_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     # T10N kaart (grastemperatuur)
@@ -177,7 +172,6 @@ def maak_kaarten_voor_dag(datum_str, fname_suffix, dag_label, dag_data, now_str,
             lon, lat = COORDS[naam]
             kleur = cmap_t10n(norm_t10n(v))
             teken_station(ax, lon, lat, f"{v:.1f}°", kleur)
-    bronvermelding(ax, now_str2)
     plt.savefig(f"kaart_top_t10n_{fname_suffix}.png", dpi=150, facecolor="#f0f3f7"); plt.close()
 
     print(f"  → 6 kaarten klaar voor {datum_str}")
