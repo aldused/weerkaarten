@@ -34,9 +34,12 @@
 
   .kaart-wrap { display: flex; justify-content: center; padding: 16px; }
   .kaart-container { position: relative; width: 100%; max-width: 820px; }
-  .kaart-header-band { background: #003366; color: #fff; padding: 14px 18px; border-radius: 4px 4px 0 0; }
-  .kaart-header-band .links { font-size: 15px; font-weight: 700; }
-  .kaart-header-band .sub { font-size: 11px; color: #a8c8e8; margin-top: 2px; }
+  .kaart-header-band { background: #1e293b; color: #f1f5f9; padding: 16px 20px; border-radius: 4px 4px 0 0; border-bottom: 3px solid #2ec4e8; }
+  .kaart-header-band .links { font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em; line-height: 1.15; }
+  .kaart-header-band .sub { font-size: 11px; color: #94a3b8; margin-top: 5px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; letter-spacing: 0.04em; }
+  .kaart-footer-band { background: #0f172a; color: #94a3b8; padding: 10px 20px; border-radius: 0 0 4px 4px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 11px; }
+  .kaart-footer-band .merk { color: #f1f5f9; font-weight: 600; }
+  .kaart-footer-band .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: rgba(46,196,232,0.14); color: #7dd3fc; font-family: "DM Mono", ui-monospace, monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
   .kaart-kaart { position: relative; }
   .kaart-container svg.overlay .halo { pointer-events: all; cursor: pointer; transition: fill 0.12s; }
   .kaart-container svg.overlay .halo:hover { fill: rgba(255,255,255,0.75); }
@@ -497,20 +500,23 @@ document.getElementById("chk-all").onchange = e => { toonAlle = e.target.checked
 function slaOp(){
   const baseSvg = document.getElementById("basemap-svg");
   const ovSvg   = document.getElementById("overlay-svg");
-  const W = 1600, H = 2200, headerH = 120;   // 2× SVG-viewBox = scherpe PNG
+  const W = 1600, H = 2200, headerH = 130, footerH = 60;   // 2× SVG-viewBox = scherpe PNG
   const canvas = document.createElement("canvas");
-  canvas.width = W; canvas.height = headerH + H;
+  canvas.width = W; canvas.height = headerH + H + footerH;
   const ctx = canvas.getContext("2d");
 
-  // Header-band in donkerblauw met titels
-  ctx.fillStyle = "#003366";
+  // Header-band — slate met cyaan accent
+  ctx.fillStyle = "#1e293b";
   ctx.fillRect(0, 0, W, headerH);
+  ctx.fillStyle = "#2ec4e8";
+  ctx.fillRect(0, headerH-6, W, 6);
   ctx.fillStyle = "#ffffff";
-  ctx.font = "700 30px DM Sans, sans-serif";
-  ctx.fillText("Composiet: max/min-temp, kans op neerslag & wind", 36, 52);
-  ctx.fillStyle = "#a8c8e8";
-  ctx.font = "500 18px DM Sans, sans-serif";
-  ctx.fillText(document.getElementById("kaart-sub").textContent, 36, 88);
+  ctx.font = "800 30px 'DM Sans', Arial, sans-serif";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("Composiet: max/min-temp, kans op neerslag & wind", 36, 56);
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "500 18px 'DM Mono', 'Courier New', monospace";
+  ctx.fillText(document.getElementById("kaart-sub").textContent, 36, 94);
 
   const svgToImg = svg => new Promise(res => {
     const clone = svg.cloneNode(true);
@@ -537,6 +543,21 @@ function slaOp(){
     ctx.fillRect(0, headerH, W, H);
     ctx.drawImage(baseImg, 0, headerH, W, H);
     ctx.drawImage(ovImg,   0, headerH, W, H);
+
+    // Footer — slate
+    const fy = headerH + H;
+    ctx.fillStyle = "#0f172a"; ctx.fillRect(0, fy, W, footerH);
+    const fpad = 36;
+    const midY = fy + footerH/2 + 7;
+    ctx.fillStyle = "#f1f5f9"; ctx.font = "700 22px 'DM Sans', Arial, sans-serif"; ctx.textAlign = "left";
+    ctx.fillText("weerlab.nl", fpad, midY);
+    const merkW = ctx.measureText("weerlab.nl").width;
+    ctx.fillStyle = "#94a3b8"; ctx.font = "500 19px 'DM Sans', Arial, sans-serif";
+    ctx.fillText("·  Ed Aldus — weerdata & visualisaties", fpad + merkW + 6, midY);
+    ctx.fillStyle = "#7dd3fc"; ctx.font = "500 18px 'DM Mono', 'Courier New', monospace"; ctx.textAlign = "right";
+    ctx.fillText("DWD MOSMIX  ·  " + new Date().toLocaleString("nl-NL", {day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit"}), W - fpad, midY);
+    ctx.textAlign = "left";
+
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
     a.download = `composiet_${huidigDag}.png`;

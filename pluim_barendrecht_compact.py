@@ -126,17 +126,17 @@ fig.subplots_adjust(top=0.93)
 header_ax = fig.add_axes([0, 0.94, 1, 0.06])
 header_ax.set_xlim(0,1); header_ax.set_ylim(0,1); header_ax.axis("off")
 header_ax.add_patch(plt.Rectangle((0,0),1,1,transform=header_ax.transAxes,
-               facecolor="#003366",zorder=0,clip_on=False))
+               facecolor="#1e293b",zorder=0,clip_on=False))
 header_ax.text(0.012,0.65,"Ed Aldus WM",fontsize=13,color="white",
           weight="bold",va="center",transform=header_ax.transAxes)
 header_ax.text(0.012,0.22,f"ECMWF ENS · {n_leden} leden · {runtime}",
-          fontsize=8,color="#a8c8e8",va="center",transform=header_ax.transAxes)
+          fontsize=8,color="#94a3b8",va="center",transform=header_ax.transAxes)
 header_ax.text(0.988,0.65,"Ensemble pluim – Barendrecht",
           fontsize=15,color="white",weight="bold",
           ha="right",va="center",transform=header_ax.transAxes)
-header_ax.text(0.988,0.22,f"run: {now_str}",fontsize=8,color="#a8c8e8",
+header_ax.text(0.988,0.22,f"run: {now_str}",fontsize=8,color="#94a3b8",
           ha="right",va="center",transform=header_ax.transAxes)
-header_ax.axhline(0,color="#4a90c4",linewidth=2)
+header_ax.axhline(0,color="#2ec4e8",linewidth=2)
 
 import matplotlib.ticker as ticker
 
