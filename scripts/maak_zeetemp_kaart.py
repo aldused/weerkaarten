@@ -192,19 +192,19 @@ fig.patch.set_facecolor("#0d1520")
 # Header
 ax_hdr = fig.add_axes([0, 0.95, 1, 0.05])
 ax_hdr.set_xlim(0,1); ax_hdr.set_ylim(0,1); ax_hdr.axis("off")
-ax_hdr.add_patch(plt.Rectangle((0,0),1,1, facecolor="#001a33",
+ax_hdr.add_patch(plt.Rectangle((0,0),1,1, facecolor="#1e293b",
                                 transform=ax_hdr.transAxes, clip_on=False))
-ax_hdr.text(0.012, 0.58, "Ed Aldus WM", fontsize=13, color="white",
+ax_hdr.text(0.012, 0.58, "Ed Aldus WM", fontsize=13, color="#ffffff",
             weight="bold", va="center")
 ax_hdr.text(0.012, 0.15, "Data: Open-Meteo Marine API (CMEMS)",
-            fontsize=8, color="#a8c8e8", va="center")
+            fontsize=8, color="#94a3b8", va="center", family="monospace")
 ax_hdr.text(0.5, 0.62, "Zeewatertemperatuur Europa",
-            fontsize=16, color="white", weight="bold", ha="center", va="center")
-ax_hdr.text(0.988, 0.65, f"Actueel: {datumstr}", fontsize=9, color="#a8c8e8",
-            ha="right", va="center")
+            fontsize=16, color="#ffffff", weight="bold", ha="center", va="center")
+ax_hdr.text(0.988, 0.65, f"Actueel: {datumstr}", fontsize=9, color="#cbd5e1",
+            ha="right", va="center", family="monospace")
 ax_hdr.text(0.988, 0.18, "© Ed Aldus WM | weerlab.nl", fontsize=8,
-            color="#667788", ha="right", va="center")
-ax_hdr.axhline(0, color="#4a90c4", linewidth=1.5)
+            color="#94a3b8", ha="right", va="center", family="monospace")
+ax_hdr.axhline(0, color="#2ec4e8", linewidth=2.5)
 
 # Hoofdkaart: Europa (links)
 ax1 = fig.add_axes([0.01, 0.02, 0.54, 0.92],
@@ -220,7 +220,7 @@ teken_kaart(ax2, [-3, 10, 50, 58], resultaten, fontsize=9.5)
 # Titel Noordzee-paneel
 fig.text(0.77, 0.955, "Noordzee", fontsize=11, color="white",
          weight="bold", ha="center", va="center")
-fig.text(0.77, 0.935, "detail", fontsize=8.5, color="#a8c8e8",
+fig.text(0.77, 0.935, "detail", fontsize=8.5, color="#94a3b8",
          ha="center", va="center")
 
 # Referentiebox op hoofdkaart (stippelrand rondom Noordzee-detail)
@@ -239,7 +239,7 @@ teken_kaart(ax3, [-6, 36, 30, 48], resultaten, fontsize=9.0)
 
 fig.text(0.77, 0.505, "Middellandse Zee", fontsize=11, color="white",
          weight="bold", ha="center", va="center")
-fig.text(0.77, 0.485, "detail", fontsize=8.5, color="#a8c8e8",
+fig.text(0.77, 0.485, "detail", fontsize=8.5, color="#94a3b8",
          ha="center", va="center")
 
 # Referentiebox Middellandse Zee op hoofdkaart

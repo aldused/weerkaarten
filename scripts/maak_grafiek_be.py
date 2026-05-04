@@ -172,12 +172,12 @@ gs = gridspec.GridSpec(4, 1, figure=fig, height_ratios=[0.12, 1, 1, 1], hspace=0
 
 ax_h = fig.add_subplot(gs[0])
 ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
-ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,facecolor="#003366",zorder=0,clip_on=False))
+ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,facecolor="#1e293b",zorder=0,clip_on=False))
 ax_h.text(0.012, 0.65, "Ed Aldus WM", fontsize=11, color="white", weight="bold", va="center", transform=ax_h.transAxes)
-ax_h.text(0.012, 0.25, "MOS ECMWF/ICON", fontsize=7.5, color="#a8c8e8", va="center", transform=ax_h.transAxes)
+ax_h.text(0.012, 0.25, "MOS ECMWF/ICON", fontsize=7.5, color="#94a3b8", va="center", transform=ax_h.transAxes)
 ax_h.text(0.988, 0.65, "10-daagse verwachting België", fontsize=13, color="white", weight="bold", ha="right", va="center", transform=ax_h.transAxes)
-ax_h.text(0.988, 0.25, f"DWD MOSMIX  ·  run: {now_str}", fontsize=7, color="#a8c8e8", ha="right", va="center", transform=ax_h.transAxes)
-ax_h.axhline(0, color="#4a90c4", linewidth=1.5)
+ax_h.text(0.988, 0.25, f"DWD MOSMIX  ·  run: {now_str}", fontsize=7, color="#94a3b8", ha="right", va="center", transform=ax_h.transAxes)
+ax_h.axhline(0, color="#2ec4e8", linewidth=1.5)
 
 def smooth(y_list):
     xi = np.array([i for i, v in enumerate(y_list) if v is not None and not np.isnan(v)], dtype=float)

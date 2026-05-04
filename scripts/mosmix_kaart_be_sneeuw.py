@@ -140,12 +140,12 @@ for day, dag_data in data_per_day.items():
     ax_h.text(0.012,0.62,"Ed Aldus WM",fontsize=13,color="white",
               weight="bold",va="center",transform=ax_h.transAxes)
     ax_h.text(0.012,0.22,"Kans op sneeuw (max per dag)  ·  MOS ECMWF/ICON",
-              fontsize=8,color="#a8c8e8",va="center",transform=ax_h.transAxes)
+              fontsize=8,color="#94a3b8",va="center",transform=ax_h.transAxes)
     ax_h.text(0.988,0.65,f"Sneeuwkans België – {dag_nl} {day.day} {maand_nl}",
               fontsize=15,color="white",weight="bold",
               ha="right",va="center",transform=ax_h.transAxes)
     ax_h.text(0.988,0.20,f"DWD MOSMIX  ·  run: {now_str}",
-              fontsize=8,color="#a8c8e8",ha="right",va="center",transform=ax_h.transAxes)
+              fontsize=8,color="#94a3b8",ha="right",va="center",transform=ax_h.transAxes)
     ax_h.axhline(0,color="#4488cc",linewidth=2)
 
     # Kaart — lichtblauwe winterachtergrond

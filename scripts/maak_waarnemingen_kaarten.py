@@ -96,13 +96,13 @@ def maak_kaart_base(fig, gs, dag_nl, day, now_str, titel):
     # Header
     ax_h = fig.add_subplot(gs[0])
     ax_h.set_xlim(0,1); ax_h.set_ylim(0,1); ax_h.axis("off")
-    ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,facecolor="#003366",zorder=0,clip_on=False))
+    ax_h.add_patch(plt.Rectangle((0,0),1,1,transform=ax_h.transAxes,facecolor="#1e293b",zorder=0,clip_on=False))
     maand_nl = nl_maanden[day.month]
     ax_h.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",weight="bold",va="center",transform=ax_h.transAxes)
-    ax_h.text(0.012,0.18,"Waarnemingen KNMI",fontsize=7.5,color="#a8c8e8",va="center",transform=ax_h.transAxes)
+    ax_h.text(0.012,0.18,"Waarnemingen KNMI",fontsize=7.5,color="#94a3b8",va="center",transform=ax_h.transAxes)
     ax_h.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}",fontsize=13,color="white",weight="bold",ha="right",va="center",transform=ax_h.transAxes)
-    ax_h.text(0.988,0.18,f"{titel}  ·  {now_str}",fontsize=7,color="#a8c8e8",ha="right",va="center",transform=ax_h.transAxes)
-    ax_h.axhline(0,color="#4a90c4",linewidth=1.5)
+    ax_h.text(0.988,0.18,f"{titel}  ·  {now_str}",fontsize=7,color="#94a3b8",ha="right",va="center",transform=ax_h.transAxes)
+    ax_h.axhline(0,color="#2ec4e8",linewidth=1.5)
 
     # Kaart
     ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())

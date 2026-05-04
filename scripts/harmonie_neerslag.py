@@ -384,22 +384,45 @@ LABEL_STEP = 8  # toon waarde elke 8e gridpunt (~16 km)
 
 
 def _maak_kaart_basis(titel_links, titel_rechts_boven, titel_rechts_onder):
-    """Maak basis figuur met titel en cartopy axes. Wetterzentrale-stijl."""
-    fig = plt.figure(figsize=FIGSIZE, facecolor="white")
+    """Maak basis figuur met slate header/footer + cartopy axes."""
+    fig = plt.figure(figsize=FIGSIZE, facecolor="#f0f3f7")
 
-    # Layout: titel boven, kaart groot, legenda horizontal onder
-    ax_titel = fig.add_axes([0.01, 0.955, 0.98, 0.04])
-    ax = fig.add_axes([0.01, 0.06, 0.98, 0.89], projection=ccrs.PlateCarree())
-    ax_leg = fig.add_axes([0.15, 0.02, 0.70, 0.018])  # horizontaal onderaan
+    # Layout: slate header bovenin, kaart, legenda + slate footer
+    ax_titel  = fig.add_axes([0.0,  0.94, 1.0, 0.06])
+    ax_accent = fig.add_axes([0.0,  0.935, 1.0, 0.005])
+    ax        = fig.add_axes([0.01, 0.085, 0.98, 0.85], projection=ccrs.PlateCarree())
+    ax_leg    = fig.add_axes([0.15, 0.045, 0.70, 0.018])
+    ax_foot   = fig.add_axes([0.0,  0.0,  1.0, 0.03])
 
-    # Titel
+    # Slate header
     ax_titel.set_xlim(0, 1); ax_titel.set_ylim(0, 1); ax_titel.axis("off")
-    ax_titel.text(0.0, 0.55, titel_links, fontsize=14, weight="bold",
-                  va="center", transform=ax_titel.transAxes, color="#1a1a1a")
-    ax_titel.text(0.5, 0.55, titel_rechts_boven, fontsize=11, weight="bold",
-                  ha="center", va="center", transform=ax_titel.transAxes, color="#333333")
-    ax_titel.text(1.0, 0.55, titel_rechts_onder, fontsize=10,
-                  ha="right", va="center", transform=ax_titel.transAxes, color="#555555")
+    ax_titel.add_patch(plt.Rectangle((0,0),1,1,transform=ax_titel.transAxes,
+                       facecolor="#1e293b", zorder=0, clip_on=False))
+    ax_titel.text(0.012, 0.5, titel_links, fontsize=12, weight="bold",
+                  va="center", transform=ax_titel.transAxes, color="#ffffff")
+    ax_titel.text(0.5, 0.5, titel_rechts_boven, fontsize=13, weight="bold",
+                  ha="center", va="center", transform=ax_titel.transAxes, color="#ffffff")
+    ax_titel.text(0.988, 0.5, titel_rechts_onder, fontsize=10,
+                  ha="right", va="center", transform=ax_titel.transAxes,
+                  color="#cbd5e1", family="monospace")
+
+    # Cyaan accentband
+    ax_accent.set_xlim(0,1); ax_accent.set_ylim(0,1); ax_accent.axis("off")
+    ax_accent.add_patch(plt.Rectangle((0,0),1,1,transform=ax_accent.transAxes,
+                        facecolor="#2ec4e8", zorder=0, clip_on=False))
+
+    # Slate footer
+    ax_foot.set_xlim(0,1); ax_foot.set_ylim(0,1); ax_foot.axis("off")
+    ax_foot.add_patch(plt.Rectangle((0,0),1,1,transform=ax_foot.transAxes,
+                      facecolor="#0f172a", zorder=0, clip_on=False))
+    ax_foot.text(0.012, 0.5, "weerlab.nl", fontsize=9, color="#f1f5f9",
+                 weight="bold", va="center", transform=ax_foot.transAxes)
+    ax_foot.text(0.085, 0.5, "·  Ed Aldus WM — HARMONIE 43 OPER",
+                 fontsize=8, color="#94a3b8", va="center",
+                 transform=ax_foot.transAxes, family="monospace")
+    ax_foot.text(0.988, 0.5, "© Ed Aldus / KNMI", fontsize=8,
+                 color="#cbd5e1", ha="right", va="center",
+                 transform=ax_foot.transAxes, family="monospace")
 
     # Kaart
     ax.set_extent(EXTENT, crs=ccrs.PlateCarree())
@@ -424,13 +447,10 @@ def _maak_kaart_basis(titel_links, titel_rechts_boven, titel_rechts_onder):
         "cultural", "admin_1_states_provinces_lines", "10m",
         edgecolor="#666666", linewidth=0.35, facecolor="none"), zorder=9)
 
-    # Bronvermelding
+    # Bronvermelding op kaart
     ax.text(0.005, 0.005, "Data: HARMONIE43 OPER 0.029\u00b0",
             transform=ax.transAxes, fontsize=7, weight="bold",
             ha="left", va="bottom", color="#333333", zorder=20)
-    # Copyright rechtsonder in wit gebied onder de kaart
-    fig.text(0.98, 0.045, "\u00a9 Ed Aldus / KNMI",
-             fontsize=8, ha="right", va="top", color="#333333", weight="bold")
 
     return fig, ax, ax_leg
 
@@ -503,7 +523,7 @@ def render_kaart(lats, lons, precip_2d, tijdstip_str, uur_idx, run_str, output_d
     cb.set_label("Neerslagintensiteit (mm/u)", fontsize=8, labelpad=2)
 
     fname = os.path.join(output_dir, f"harmonie_neerslag_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
@@ -555,7 +575,7 @@ def render_temp_kaart(lats, lons, temp_2d, tijdstip_str, uur_idx, run_str, outpu
     cb.set_label("Temperatuur 2m (\u00b0C)", fontsize=8, labelpad=2)
 
     fname = os.path.join(output_dir, f"harmonie_temp_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
@@ -695,7 +715,7 @@ def _render_wind_kaart(lats, lons, u, v, tijdstip_str, uur_idx, run_str,
     cb.set_label(eenheid, fontsize=8, labelpad=2)
 
     fname = os.path.join(output_dir, f"{prefix}_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
@@ -802,7 +822,7 @@ def render_cape_kaart(lats, lons, cape, onweer, tijdstip_str, uur_idx, run_str, 
     cb.set_label("CAPE (J/kg) — gearceerd = onweersvlag actief", fontsize=7, labelpad=2)
 
     fname = os.path.join(output_dir, f"harmonie_cape_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
@@ -895,7 +915,7 @@ def render_druk_kaart(lats, lons, druk_pa, tijdstip_str, uur_idx, run_str, outpu
     cb.set_label("Luchtdruk zeeniveau (hPa)", fontsize=8, labelpad=2)
 
     fname = os.path.join(output_dir, f"harmonie_druk_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
@@ -982,7 +1002,7 @@ def render_zicht_kaart(lats, lons, zicht_m, tijdstip_str, uur_idx, run_str, outp
     cb.set_label("Zicht (km)", fontsize=8, labelpad=2)
 
     fname = os.path.join(output_dir, f"harmonie_zicht_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname
@@ -1049,7 +1069,7 @@ def render_bewolking_kaart(lats, lons, hoog, midden, laag, tijdstip_str, uur_idx
                     transform=ax_leg.transAxes, color="#333333")
 
     fname = os.path.join(output_dir, f"harmonie_bewolking_{uur_idx:02d}.png")
-    plt.savefig(fname, dpi=DPI, bbox_inches="tight", facecolor="white",
+    plt.savefig(fname, dpi=DPI, facecolor="#f0f3f7",
                 edgecolor="none", pad_inches=0.03)
     plt.close()
     return fname

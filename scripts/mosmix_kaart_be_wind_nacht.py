@@ -185,15 +185,15 @@ for day, dag_data in data_per_day.items():
     ax_h.text(0.012, 0.62, "Ed Aldus WM", fontsize=13, color="white",
               weight="bold", va="center", transform=ax_h.transAxes)
     ax_h.text(0.012, 0.22, "Windkracht nacht (18–06u)  ·  MOS ECMWF/ICON", fontsize=8,
-              color="#a8c8e8", va="center", transform=ax_h.transAxes)
+              color="#94a3b8", va="center", transform=ax_h.transAxes)
     ax_h.text(0.988, 0.65,
               f"Wind België – Nacht naar {next_dag_nl} {next_day.day} {nl_maanden[next_day.month]}",
               fontsize=15, color="white", weight="bold",
               ha="right", va="center", transform=ax_h.transAxes)
     ax_h.text(0.988, 0.20, f"DWD MOSMIX  ·  run: {now_str}",
-              fontsize=8, color="#a8c8e8", ha="right", va="center",
+              fontsize=8, color="#94a3b8", ha="right", va="center",
               transform=ax_h.transAxes)
-    ax_h.axhline(0, color="#4a90c4", linewidth=2)
+    ax_h.axhline(0, color="#2ec4e8", linewidth=2)
 
     ax = fig.add_subplot(gs[1], projection=ccrs.PlateCarree())
     ax.set_aspect(1.5708)  # 1/cos(50.45°) voor correcte geo-verhouding BE

@@ -138,11 +138,11 @@ for day, dag_data in data_per_day.items():
                    facecolor="#001a33",zorder=0,clip_on=False))
     ax_h.text(0.012,0.58,"Ed Aldus WM",fontsize=11,color="white",
               weight="bold",va="center",transform=ax_h.transAxes)
-    ax_h.text(0.012,0.18,"MOS ECMWF/ICON",fontsize=7.5,color="#a8c8e8",
+    ax_h.text(0.012,0.18,"MOS ECMWF/ICON",fontsize=7.5,color="#94a3b8",
               va="center",transform=ax_h.transAxes)
     ax_h.text(0.988,0.62,f"{dag_nl} {day.day} {maand_nl}",fontsize=13,color="white",
               weight="bold",ha="right",va="center",transform=ax_h.transAxes)
-    ax_h.text(0.988,0.18,f"DWD MOSMIX  ·  run: {now_str}",fontsize=7,color="#a8c8e8",
+    ax_h.text(0.988,0.18,f"DWD MOSMIX  ·  run: {now_str}",fontsize=7,color="#94a3b8",
               ha="right",va="center",transform=ax_h.transAxes)
     ax_h.axhline(0,color="#4488cc",linewidth=1.5)
 
