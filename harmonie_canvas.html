@@ -72,6 +72,17 @@ body.scroll-mode { overflow-y: auto; }
 .panel-selector select optgroup { background: #f0f4f8; color: #5a7090; font-weight: 700; font-style: normal; }
 .canvas-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; align-items: stretch; justify-content: center; }
 .canvas-wrap canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+.kaart-dl-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 5;
+  width: 30px; height: 30px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.2); background: rgba(30,41,59,0.85);
+  color: #f1f5f9; font-size: 14px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  backdrop-filter: blur(4px);
+}
+.kaart-dl-btn:hover { background: #1e293b; border-color: #2ec4e8; color: #2ec4e8; }
+[data-theme="dark"] .kaart-dl-btn { background: rgba(15,23,42,0.85); border-color: rgba(255,255,255,0.12); }
 
 .status { text-align: center; padding: 8px; font-size: 11px; color: #888; }
 .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top: 2px solid #003366; border-radius: 50%; animation: spin 0.6s linear infinite; }
@@ -286,23 +297,45 @@ body {
   .tick-rail-wrap { padding: 0 10px 8px; }
 }
 
-/* Zoek-input */
+/* Zoek-input — slate met cyaan focus, prominent */
+.zoek-wrap { position: relative; display: flex; align-items: center; }
+.zoek-wrap::before {
+  content: "🔍"; position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; pointer-events: none; opacity: 0.6;
+}
 #plaats-zoek {
   font-family: inherit !important;
-  padding: 6px 10px !important;
-  border: 1px solid #e3e8ef !important;
+  padding: 7px 10px 7px 28px !important;
+  border: 1px solid #1e293b !important;
   border-radius: 8px !important;
   font-size: 12px !important;
-  background: #ffffff;
-  color: #0f172a;
-  width: 160px !important;
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  width: 200px !important;
   outline: none;
+  font-weight: 500;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-#plaats-zoek:focus { border-color: #2ec4e8 !important; }
+#plaats-zoek::placeholder { color: #64748b; font-weight: 400; }
+#plaats-zoek:focus {
+  border-color: #2ec4e8 !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(46,196,232,0.15);
+}
 #plaats-suggest {
-  border: 1px solid #e3e8ef !important;
+  border: 1px solid #1e293b !important;
   border-radius: 8px !important;
-  box-shadow: 0 2px 6px rgba(15,23,42,0.06), 0 6px 18px rgba(15,23,42,0.05) !important;
+  box-shadow: 0 4px 12px rgba(15,23,42,0.18), 0 12px 28px rgba(15,23,42,0.10) !important;
+  width: 240px !important;
+}
+[data-theme="dark"] #plaats-zoek {
+  background: #0e1629 !important; color: #f1f5f9 !important;
+  border-color: #2ec4e8 !important;
+}
+[data-theme="dark"] #plaats-zoek::placeholder { color: #94a3b8; }
+[data-theme="dark"] #plaats-zoek:focus {
+  background: #111a2e !important;
+  box-shadow: 0 0 0 3px rgba(46,196,232,0.25);
 }
 
 /* Uur sidebar */
@@ -500,9 +533,7 @@ body {
   <div class="btn-groep">
     <button class="btn layout-btn actief" data-layout="1">1</button>
     <button class="btn layout-btn" data-layout="2">2</button>
-    <button class="btn layout-btn" data-layout="3">3</button>
   </div>
-  <button class="btn" id="btn-vergelijk" title="Harmonie vs ICON-D2 naast elkaar">⚡ Vergelijk</button>
   <span style="border-left:1px solid #dde6f0;height:18px;margin:0 4px;"></span>
   <span class="toolbar-label">Snelheid:</span>
   <div class="btn-groep">
@@ -570,9 +601,9 @@ body {
     <button class="zoom-btn" data-zoom="5">5×</button>
   </div>
   <span style="font-size:11px;color:#888;" id="zoom-hint"></span>
-  <div style="margin-left:auto;display:flex;gap:6px;align-items:center;position:relative;">
-    <input id="plaats-zoek" type="text" placeholder="Zoek plaats..." style="width:140px;padding:4px 8px;border:1px solid #c5d3e3;border-radius:4px;font-size:12px;outline:none;" autocomplete="off">
-    <div id="plaats-suggest" style="display:none;position:absolute;top:100%;left:0;background:white;border:1px solid #c5d3e3;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);max-height:200px;overflow-y:auto;z-index:50;width:200px;margin-top:2px;"></div>
+  <div class="zoek-wrap" style="margin-left:auto;position:relative;">
+    <input id="plaats-zoek" type="text" placeholder="Zoek plaats…" autocomplete="off">
+    <div id="plaats-suggest" style="display:none;position:absolute;top:100%;right:0;background:white;max-height:220px;overflow-y:auto;z-index:50;margin-top:4px;"></div>
   </div>
 </div>
 <div id="main-content">
@@ -2386,22 +2417,21 @@ body {
         toonMeteogram(gx, gy);
       });
       wrap.appendChild(cvs);
-      panel.appendChild(wrap);
 
-      // Download-balk per panel
-      var dlBar = document.createElement("div");
-      dlBar.style.cssText = "background:#00205b;padding:6px 0;text-align:center;border-radius:0 0 6px 6px;";
+      // Compacte download-knop rechtsboven kaart
       var dlBtn = document.createElement("button");
-      dlBtn.style.cssText = "background:none;border:none;color:white;font-size:13px;cursor:pointer;padding:4px 16px;font-family:inherit;";
-      dlBtn.textContent = "\uD83D\uDCBE Download kaart als PNG";
+      dlBtn.className = "kaart-dl-btn";
+      dlBtn.title = "Download kaart als PNG";
+      dlBtn.innerHTML = "&#x2B07;";
       (function(panelIdx) {
-        dlBtn.addEventListener("click", function() {
+        dlBtn.addEventListener("click", function(e) {
+          e.stopPropagation();
           downloadKaart(panelIdx);
         });
       })(i);
-      dlBar.appendChild(dlBtn);
-      panel.appendChild(dlBar);
+      wrap.appendChild(dlBtn);
 
+      panel.appendChild(wrap);
       grid.appendChild(panel);
     }
   }
