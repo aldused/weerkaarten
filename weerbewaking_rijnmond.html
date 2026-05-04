@@ -73,6 +73,10 @@ h2.kop{font-size:.95rem;font-weight:700;color:#1a5490;margin:18px 0 8px;padding-
 h2.kop .vooruit-plaats{font-weight:700;color:#1a5490;outline:none;padding:0 4px;border-radius:3px;min-width:60px;display:inline-block}
 h2.kop .vooruit-plaats:focus{background:#fffbe8}
 h2.kop .vooruit-plaats:empty::before{content:attr(data-placeholder);color:#aaa;font-weight:500;font-style:italic}
+h2.kop .kop-edit{outline:none;padding:0 4px;border-radius:3px;display:inline-block;min-width:60px}
+h2.kop .kop-edit:focus{background:#fffbe8}
+h2.kop .kop-edit:empty::before{content:attr(data-placeholder);color:#aaa;font-weight:500;font-style:italic}
+.kop-preset{font-family:inherit;font-size:.7rem;padding:1px 4px;margin-left:6px;border:1px solid #ccc;border-radius:3px;background:#f8f8f8;color:#555;font-weight:500;vertical-align:middle}
 
 /* Tekst-secties (vandaag/morgen/komende) — toggleable */
 .tekst-sectie{position:relative}
@@ -169,6 +173,7 @@ body{--kop-scale:1}
   <label style="font-weight:500"><input type="checkbox" id="toon-vandaag" checked> vandaag</label>
   <label style="font-weight:500"><input type="checkbox" id="toon-morgen" checked> morgen</label>
   <label style="font-weight:500"><input type="checkbox" id="toon-komende" checked> komende dagen</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-daarna" checked> daarna</label>
   <span class="spacer"></span>
   <span class="status" id="data-status">Laatst bijgewerkt: –</span>
   <button onclick="herlaadTabel()" title="Haal de vooruitzichten-tabel opnieuw op (overschrijft eigen aanpassingen)" style="background:#2a7a2a">↻ Ververs tabel</button>
@@ -267,8 +272,11 @@ body{--kop-scale:1}
   </table>
 
   <!-- Verwachting daarna -->
-  <h2 class="kop">De weersverwachting voor daarna</h2>
-  <div class="tekstvak" contenteditable="true" data-save="daarna" data-placeholder="Vooruitblik dag 4 en verder...">Op Koningsdag en dinsdag zien we een mix van zon en bewolking en blijft het droog. De maximumtemperatuur bedraagt dan ongeveer 15 graden. Vanaf woensdag krijgt de zon weer helemaal de overhand.</div>
+  <section id="sec-daarna" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-daarna" title="Verberg daarna">×</button>
+    <h2 class="kop"><span class="kop-edit" contenteditable="true" data-save="daarna-kop" data-placeholder="De weersverwachting voor daarna">De weersverwachting voor daarna</span><select class="kop-preset no-pdf" data-target="daarna-kop" title="Kies kop-tekst"><option value="">— preset kop —</option><option value="De weersverwachting voor daarna">De weersverwachting voor daarna</option><option value="De weersverwachting voor de komende dagen">De weersverwachting voor de komende dagen</option><option value="De weersverwachting voor het weekend">De weersverwachting voor het weekend</option><option value="Vooruitblik">Vooruitblik</option><option value="__custom__">Eigen tekst…</option></select></h2>
+    <div class="tekstvak" contenteditable="true" data-save="daarna" data-placeholder="Vooruitblik dag 4 en verder...">Op Koningsdag en dinsdag zien we een mix van zon en bewolking en blijft het droog. De maximumtemperatuur bedraagt dan ongeveer 15 graden. Vanaf woensdag krijgt de zon weer helemaal de overhand.</div>
+  </section>
 
   <!-- Vooruitzichten -->
   <h2 class="kop">Vooruitzichten <span contenteditable="true" data-save="vooruit-plaats" data-placeholder="(plaats)" class="vooruit-plaats"></span></h2>
@@ -581,6 +589,7 @@ function saveDraft(){
   d.toonVandaag=!!document.getElementById('toon-vandaag')?.checked;
   d.toonMorgen=!!document.getElementById('toon-morgen')?.checked;
   d.toonKomende=!!document.getElementById('toon-komende')?.checked;
+  d.toonDaarna=!!document.getElementById('toon-daarna')?.checked;
   d.docNaam=docNaam();
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); registreerDocNaam(d.docNaam); toonSaveStatus(d.__ts); }catch(e){}
 }
@@ -588,7 +597,8 @@ function updateTekstSecties(){
   const koppels=[
     ['toon-vandaag','sec-vandaag'],
     ['toon-morgen','sec-morgen'],
-    ['toon-komende','sec-komende']
+    ['toon-komende','sec-komende'],
+    ['toon-daarna','sec-daarna']
   ];
   koppels.forEach(([checkId,secId])=>{
     const check=document.getElementById(checkId);
@@ -605,7 +615,8 @@ function leegForm(){
   document.querySelectorAll('[data-save]').forEach(el=>{ el.innerHTML=''; });
   const p=document.getElementById('plaats-in'); if(p) p.value='Rijnmond';
   const wt=document.getElementById('weergave-type'); if(wt) wt.value='Regio';
-  ['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=true; });
+  ['toon-vandaag','toon-morgen','toon-komende','toon-daarna'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=true; });
+  const dk=document.querySelector('[data-save="daarna-kop"]'); if(dk) dk.textContent='De weersverwachting voor daarna';
   updateTekstSecties();
   syncVooruitPlaats();
 }
@@ -635,6 +646,9 @@ function restoreDraft(){
     document.getElementById('toon-vandaag').checked = d.toonVandaag!=null ? !!d.toonVandaag : true;
     document.getElementById('toon-morgen').checked  = d.toonMorgen!=null  ? !!d.toonMorgen  : true;
     document.getElementById('toon-komende').checked = d.toonKomende!=null ? !!d.toonKomende : true;
+    document.getElementById('toon-daarna').checked  = d.toonDaarna!=null  ? !!d.toonDaarna  : true;
+    const dkEl=document.querySelector('[data-save="daarna-kop"]');
+    if(dkEl && (d['daarna-kop']==null || d['daarna-kop']==='')) dkEl.textContent='De weersverwachting voor daarna';
     updateTekstSecties();
     syncVooruitPlaats();
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
@@ -700,10 +714,27 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden') saveDraftNow();
 });
 document.getElementById('weergave-type').addEventListener('change', saveDraft);
-['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{
+['toon-vandaag','toon-morgen','toon-komende','toon-daarna'].forEach(id=>{
   document.getElementById(id).addEventListener('change', ()=>{
     updateTekstSecties();
     saveDraft();
+  });
+});
+document.querySelectorAll('select.kop-preset').forEach(sel=>{
+  sel.addEventListener('change', ()=>{
+    const targetKey=sel.dataset.target;
+    const target=document.querySelector(`[data-save="${targetKey}"]`);
+    if(!target) return;
+    const v=sel.value;
+    if(v==='__custom__'){
+      target.focus();
+      const r=document.createRange(); r.selectNodeContents(target);
+      const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    } else if(v){
+      target.textContent=v;
+      saveDraft();
+    }
+    sel.value='';
   });
 });
 document.querySelectorAll('.sectie-sluit').forEach(btn=>{
