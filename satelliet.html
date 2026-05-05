@@ -54,6 +54,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .marker-suggest .titel { font-weight: 700; color: #00205b; }
 .marker-suggest .sub { color: #6a7f94; font-size: 11px; margin-top: 1px; }
 .sat-beeldvlak.plaats-punt, .sat-beeldvlak.plaats-punt * { cursor: crosshair; }
+.sat-beeldvlak.teken-pijl, .sat-beeldvlak.teken-pijl * { cursor: crosshair; }
 #satelliet-img { pointer-events: none; }
 
 /* Tijdlijn */
@@ -171,6 +172,10 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   </select>
   <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om de pin zelf te plaatsen">Plaats op kaart</button>
   <button class="btn" id="btn-marker-clear" title="Verwijder de geplaatste punt">Wis</button>
+  <div class="sep"></div>
+  <span class="groep-label">Pijl</span>
+  <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een trekrichting-pijl te tekenen">Pijl tekenen</button>
+  <button class="btn" id="btn-arrow-clear" title="Verwijder de getekende pijl">Wis pijl</button>
   <div class="sep"></div>
   <button class="btn-refresh" id="btn-refresh">↻ Nu</button>
   <button class="btn-auto" id="btn-auto">⏱ Auto</button>
@@ -336,6 +341,9 @@ let overlayData = {};
 let overlayGeladen = false;
 let markerPunt = null;
 let plaatsPuntModus = false;
+let pijlModus = false;
+let pijlTekent = false;
+let trekPijl = null;
 let markerZoekTimer = null;
 let markerZoekCtrl = null;
 let markerZoekResultaten = [];
@@ -823,6 +831,61 @@ function tekenMarker(ctx, rect, bbox, opties = {}) {
   ctx.restore();
 }
 
+function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
+  if (!trekPijl || !trekPijl.start || !trekPijl.eind) return;
+  const [sx, sy] = projecteer(trekPijl.start.lon, trekPijl.start.lat, rect, bbox);
+  const [ex, ey] = projecteer(trekPijl.eind.lon, trekPijl.eind.lat, rect, bbox);
+  const lengte = Math.hypot(ex - sx, ey - sy);
+  if (lengte < 12 * (rect.dpr || 1)) return;
+
+  const dpr = rect.dpr || 1;
+  const exportModus = opties.export === true;
+  const schaal = exportModus ? 1.75 : 1;
+  const lijn = (exportModus ? 8 : 5.2) * dpr * schaal;
+  const halo = lijn + 6 * dpr * schaal;
+  const kop = Math.min(lengte * 0.28, (exportModus ? 44 : 28) * dpr * schaal);
+  const hoek = Math.atan2(ey - sy, ex - sx);
+  const curve = Math.min(70 * dpr * schaal, lengte * 0.18);
+  const mx = (sx + ex) / 2;
+  const my = (sy + ey) / 2;
+  const cx = mx - Math.sin(hoek) * curve;
+  const cy = my + Math.cos(hoek) * curve;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,0.78)';
+  ctx.shadowBlur = 10 * dpr * schaal;
+
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo(cx, cy, ex, ey);
+  ctx.lineWidth = halo;
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.stroke();
+
+  ctx.shadowBlur = 5 * dpr * schaal;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo(cx, cy, ex, ey);
+  ctx.lineWidth = lijn;
+  ctx.strokeStyle = '#19d3ff';
+  ctx.stroke();
+
+  ctx.shadowBlur = 7 * dpr * schaal;
+  ctx.fillStyle = '#19d3ff';
+  ctx.strokeStyle = 'rgba(255,255,255,0.96)';
+  ctx.lineWidth = 2.3 * dpr * schaal;
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - kop * Math.cos(hoek - 0.48), ey - kop * Math.sin(hoek - 0.48));
+  ctx.lineTo(ex - kop * Math.cos(hoek + 0.48), ey - kop * Math.sin(hoek + 0.48));
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function tekenOverlay() {
   const rect = beeldRect();
   const ctx = rect.canvas.getContext('2d');
@@ -831,6 +894,7 @@ function tekenOverlay() {
   tekenKaartOverlay(ctx, rect, bbox);
   tekenObservaties(ctx, rect, bbox);
   tekenMarker(ctx, rect, bbox);
+  tekenTrekrichtingPijl(ctx, rect, bbox);
 }
 
 function frameCacheKey(tijdstap) {
@@ -1203,6 +1267,7 @@ async function zoekMarkerPlaats(direct = false) {
 
 function zetPlaatsPuntModus(actief) {
   plaatsPuntModus = actief;
+  if (actief) zetPijlModus(false);
   const btn = document.getElementById('btn-marker-click');
   const vlak = document.querySelector('.sat-beeldvlak');
   const input = document.getElementById('marker-zoek');
@@ -1218,6 +1283,25 @@ function zetPlaatsPuntModus(actief) {
   }
 }
 
+function zetPijlModus(actief) {
+  pijlModus = actief;
+  pijlTekent = false;
+  const btn = document.getElementById('btn-arrow-draw');
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const info = document.getElementById('info-balk');
+  if (actief) plaatsPuntModus = false;
+  btn.classList.toggle('actief', actief);
+  btn.textContent = actief ? 'Sleep pijl' : 'Pijl tekenen';
+  vlak.classList.toggle('teken-pijl', actief);
+  vlak.classList.toggle('plaats-punt', plaatsPuntModus);
+  const markerBtn = document.getElementById('btn-marker-click');
+  if (markerBtn && actief) {
+    markerBtn.classList.remove('actief');
+    markerBtn.textContent = 'Plaats op kaart';
+  }
+  if (actief && info) info.textContent = 'Sleep op de satellietfoto van herkomst naar trekrichting.';
+}
+
 function schermNaarLonLat(clientX, clientY) {
   const vlak = document.querySelector('.sat-beeldvlak');
   const vlakRect = vlak.getBoundingClientRect();
@@ -1231,6 +1315,40 @@ function schermNaarLonLat(clientX, clientY) {
     lon: minLon + (x - rect.x) / rect.w * (maxLon - minLon),
     lat: maxLat - (y - rect.y) / rect.h * (maxLat - minLat)
   };
+}
+
+function startPijlTekenen(e) {
+  if (!pijlModus) return;
+  const coords = schermNaarLonLat(e.clientX, e.clientY);
+  if (!coords) return;
+  e.preventDefault();
+  pijlTekent = true;
+  trekPijl = { start: coords, eind: coords };
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  tekenOverlay();
+}
+
+function beweegPijl(e) {
+  if (!pijlModus || !pijlTekent || !trekPijl) return;
+  const coords = schermNaarLonLat(e.clientX, e.clientY);
+  if (!coords) return;
+  trekPijl.eind = coords;
+  tekenOverlay();
+}
+
+function stopPijlTekenen(e) {
+  if (!pijlTekent) return;
+  pijlTekent = false;
+  e.currentTarget.releasePointerCapture?.(e.pointerId);
+  if (trekPijl) {
+    const rect = beeldRect();
+    const bbox = actieveBboxParts();
+    const [sx, sy] = projecteer(trekPijl.start.lon, trekPijl.start.lat, rect, bbox);
+    const [ex, ey] = projecteer(trekPijl.eind.lon, trekPijl.eind.lat, rect, bbox);
+    if (Math.hypot(ex - sx, ey - sy) < 18 * (rect.dpr || 1)) trekPijl = null;
+  }
+  zetPijlModus(false);
+  tekenOverlay();
 }
 
 document.getElementById('marker-preset').addEventListener('change', e => {
@@ -1294,7 +1412,25 @@ document.getElementById('btn-marker-clear').addEventListener('click', () => {
   tekenOverlay();
 });
 
-document.querySelector('.sat-beeldvlak').addEventListener('click', e => {
+const satBeeldvlak = document.querySelector('.sat-beeldvlak');
+
+document.getElementById('btn-arrow-draw').addEventListener('click', () => {
+  zetPijlModus(!pijlModus);
+});
+
+document.getElementById('btn-arrow-clear').addEventListener('click', () => {
+  trekPijl = null;
+  pijlTekent = false;
+  zetPijlModus(false);
+  tekenOverlay();
+});
+
+satBeeldvlak.addEventListener('pointerdown', startPijlTekenen);
+satBeeldvlak.addEventListener('pointermove', beweegPijl);
+satBeeldvlak.addEventListener('pointerup', stopPijlTekenen);
+satBeeldvlak.addEventListener('pointercancel', stopPijlTekenen);
+
+satBeeldvlak.addEventListener('click', e => {
   if (!plaatsPuntModus) return;
   const coords = schermNaarLonLat(e.clientX, e.clientY);
   if (!coords) return;
@@ -1409,6 +1545,7 @@ function tekenExportOverlay(ctx, x, y, w, h) {
   tekenKaartOverlay(ctx, rect, bbox);
   tekenObservaties(ctx, rect, bbox, { export: true });
   tekenMarker(ctx, rect, bbox, { export: true });
+  tekenTrekrichtingPijl(ctx, rect, bbox, { export: true });
 }
 
 async function maakExportCanvas(social = false) {
