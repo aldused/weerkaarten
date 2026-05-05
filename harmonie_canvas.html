@@ -60,9 +60,9 @@ body.scroll-mode { overflow-y: auto; }
 .kaart-grid.layout-2 .kaart-panel:nth-child(2) { border-right: none; }
 .kaart-grid.layout-4 .kaart-panel:nth-child(2n) { border-right: none; }
 .kaart-grid.layout-4 .kaart-panel:nth-child(n+3) { border-bottom: none; }
-.panel-selector { padding: 0; flex-shrink: 0; }
+.panel-selector { padding: 0; flex-shrink: 0; display: flex; align-items: stretch; border-bottom: 1px solid #e3e8ef; }
 .panel-selector select {
-  width: 100%; padding: 8px 12px; border: none; border-bottom: 2px solid #2ec4e8;
+  flex: 1 1 auto; min-width: 0; padding: 8px 12px; border: none; border-bottom: 2px solid #2ec4e8;
   background: #00205b; color: #ffffff; font-size: 13px; font-weight: 700;
   cursor: pointer; outline: none; -webkit-appearance: none; appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='2' fill='none'/%3E%3C/svg%3E");
@@ -70,6 +70,23 @@ body.scroll-mode { overflow-y: auto; }
 }
 .panel-selector select option { background: white; color: #1a2b40; font-weight: 600; }
 .panel-selector select optgroup { background: #f0f4f8; color: #5a7090; font-weight: 700; font-style: normal; }
+.sluier-toggle {
+  flex: 0 0 auto;
+  border: none;
+  border-left: 1px solid #e3e8ef;
+  border-bottom: 2px solid #2ec4e8;
+  background: #f8fafc;
+  color: #334155;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sluier-toggle:hover { background: #eef6ff; color: #0f172a; }
+.sluier-toggle.actief { background: #00205b; color: #ffffff; border-left-color: #00205b; }
+.sluier-toggle.verborgen { display: none; }
 .canvas-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; align-items: stretch; justify-content: center; }
 .canvas-wrap canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
 .kaart-dl-btn {
@@ -473,6 +490,14 @@ body {
 }
 [data-theme="dark"] .panel-selector select option { background: #0e1629; color: #f1f5f9; }
 [data-theme="dark"] .panel-selector select optgroup { background: #1a2540; color: #94a3b8; }
+[data-theme="dark"] .sluier-toggle {
+  background: #0e1629;
+  color: #cbd5e1;
+  border-left-color: rgba(255,255,255,0.08);
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+[data-theme="dark"] .sluier-toggle:hover { background: rgba(46,196,232,0.14); color: #f1f5f9; }
+[data-theme="dark"] .sluier-toggle.actief { background: #2ec4e8; color: #0b1220; border-left-color: #2ec4e8; }
 [data-theme="dark"] .canvas-wrap { background: linear-gradient(180deg, #0b1220 0%, #0e1629 100%) !important; }
 [data-theme="dark"] .kaart-panel { background: #111a2e !important; border-color: rgba(255,255,255,0.08) !important; }
 
@@ -480,7 +505,7 @@ body {
 .panel-selector select {
   background: #ffffff !important;
   color: #0f172a !important;
-  border-bottom: 1px solid #e3e8ef !important;
+  border-bottom: none !important;
   font-family: inherit !important;
   font-size: 13px !important;
   font-weight: 600 !important;
@@ -1541,6 +1566,7 @@ body {
           var hoog   = pd.data[cloudOffset + 0 * nLat * nLon + i] || 0;
           var midden = pd.data[cloudOffset + 1 * nLat * nLon + i] || 0;
           var laag   = pd.data[cloudOffset + 2 * nLat * nLon + i] || 0;
+          if (sluierUit) hoog = 0;
 
           // Achtergrond per gridcel: land (mosgroen) of zee (lichtblauw)
           var r, g, b, baseTone;
@@ -1581,14 +1607,18 @@ body {
             if (invPd) invDelta = invPd.data[sOffCu2 + i] || 0;
             var invScore = smoothstep(0.2, 1.6, invDelta);
             var moist = smoothstep(68, 92, rhVal) * (1 - smoothstep(3.5, 9, spread));
+            var altoMask = 1 - smoothstep(0.12, 0.45, midden);
             var spreadout = smoothstep(0.18, 0.72, laag)
               * moist
               * invScore
+              * altoMask
               * (1 - smoothstep(450, 1200, capeVal));
             if (spreadout > 0.03) {
               var sheet = clamp01(spreadout * (0.82 + texBroad * 0.36));
               var sheetRgb = blendRGB([r, g, b], [154, 162, 174], sheet * 0.55);
               sheetRgb = blendRGB(sheetRgb, [218, 224, 232], sheet * 0.30);
+              var stripePhase = ((x - y + stepIdx * 2) % 10 + 10) % 10;
+              if (stripePhase < 3) sheetRgb = blendRGB(sheetRgb, [44, 176, 238], sheet * 0.62);
               r = sheetRgb[0]; g = sheetRgb[1]; b = sheetRgb[2];
             }
 
@@ -2086,6 +2116,7 @@ body {
     ctx.font = "800 " + Math.max(14, Math.round(cw/48)) + "px " + sansFont;
     var paramLabel = meta.parameters[paramKey] ? meta.parameters[paramKey].label : paramKey;
     if (paramKey === "cumulus") paramLabel = "BETA! Stapelwolken/Uitgespreid";
+    if (sluierUit && (paramKey === "bewolking" || paramKey === "cumulus")) paramLabel += " · zonder sluier";
     ctx.fillText(paramLabel, cw/2, 21);
 
     // Regel 2: run (mono, slate-grijs, klein)
@@ -2213,29 +2244,47 @@ body {
     } else {
       // Bewolking legenda: lagen plus cumulus/uitspreiding wanneer actief
       var items = [
-        ["Hoog / sluier","rgb(245,249,255)"],
+        [sluierUit ? "Sluier uit" : "Hoog / sluier", sluierUit ? "rgba(245,249,255,0.28)" : "rgb(245,249,255)"],
         ["Midden / alto","rgb(214,190,116)"],
         ["Laag / stratus","rgb(100,109,123)"]
       ];
       if (paramKey === "cumulus") {
         items.push(["Cu-cel","rgb(44,176,238)"]);
-        items.push(["Uitgespreid","rgb(154,162,174)"]);
+        items.push(["Uitgespreid Cu","rgb(154,162,174)"]);
       }
       ctx.font = "bold " + Math.max(13, Math.round(cw / 60)) + "px Arial";
       var legSpacing = (cw - 40) / items.length;
       for (var bi = 0; bi < items.length; bi++) {
         var bx = 20 + bi * legSpacing;
         ctx.fillStyle = items[bi][1];
-        ctx.strokeStyle = items[bi][0].indexOf("Cu") >= 0 ? "#64748b" : "#999";
+        ctx.strokeStyle = items[bi][0] === "Cu-cel" ? "#64748b" : "#999";
         ctx.lineWidth = 1;
         ctx.fillRect(bx, legY + 8, 24, 22);
-        if (items[bi][0].indexOf("Cu") >= 0) {
+        if (items[bi][0] === "Cu-cel") {
           ctx.fillStyle = "rgba(205,248,255,0.72)";
           ctx.beginPath();
           ctx.arc(bx + 8, legY + 20, 7, 0, Math.PI * 2);
           ctx.arc(bx + 15, legY + 15, 8, 0, Math.PI * 2);
           ctx.arc(bx + 21, legY + 21, 6, 0, Math.PI * 2);
           ctx.fill();
+        }
+        if (items[bi][0].indexOf("Uitgespreid") >= 0) {
+          ctx.strokeStyle = "rgb(44,176,238)";
+          ctx.lineWidth = 2;
+          for (var si = -8; si < 28; si += 7) {
+            ctx.beginPath();
+            ctx.moveTo(bx + si, legY + 30);
+            ctx.lineTo(bx + si + 22, legY + 8);
+            ctx.stroke();
+          }
+        }
+        if (bi === 0 && sluierUit) {
+          ctx.strokeStyle = "#475569";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(bx + 2, legY + 28);
+          ctx.lineTo(bx + 22, legY + 10);
+          ctx.stroke();
         }
         ctx.strokeRect(bx, legY + 8, 24, 22);
         ctx.fillStyle = "#222";
@@ -2312,6 +2361,7 @@ body {
   var DEFAULT_PARAMS = ["neerslag","temp","wind"];
   var layout = 1;
   var panelParams = [PAGE_PARAMS.get("param") || "temp"];
+  var sluierUit = PAGE_PARAMS.get("sluierUit") === "1";
   var speelInterval = null, speelSnelheid = 400;
   var aantalUren = 60, startUur = 0; // 0-indexed in data
 
@@ -2322,6 +2372,37 @@ body {
   var btnPlay = document.getElementById("btn-play");
   var statusEl = document.getElementById("status");
   var tooltip = document.getElementById("tooltip");
+
+  function isSluierParam(key) {
+    return key === "bewolking" || key === "cumulus";
+  }
+
+  function updateSluierButton() {
+    document.querySelectorAll(".sluier-toggle").forEach(function(btn) {
+      var idx = parseInt(btn.dataset.panel);
+      var zichtbaar = isSluierParam(panelParams[idx]);
+      btn.classList.toggle("verborgen", !zichtbaar);
+      btn.classList.toggle("actief", sluierUit);
+      btn.textContent = sluierUit ? "Sluier: uit" : "Sluier: aan";
+      btn.setAttribute("aria-pressed", sluierUit ? "true" : "false");
+      btn.setAttribute(
+        "title",
+        sluierUit
+          ? "Hoge sluierbewolking wordt tijdelijk uit de bewolkingskaart gefilterd"
+          : "Filter hoge sluierbewolking uit de bewolkingskaart"
+      );
+    });
+  }
+
+  function syncSluierQuery() {
+    try {
+      var url = new URL(window.location.href);
+      if (sluierUit) url.searchParams.set("sluierUit", "1");
+      else url.searchParams.delete("sluierUit");
+      window.history.replaceState(null, "", url.toString());
+    } catch (err) {}
+  }
+  updateSluierButton();
 
   function setLayout(n) {
     layout = n;
@@ -2425,11 +2506,13 @@ body {
       dropdown.addEventListener("change", function() {
         var idx = parseInt(this.dataset.panel);
         panelParams[idx] = this.value;
+        updateSluierButton();
         if (vergelijkModus) {
           // Sync: zet beide panels op dezelfde parameter
           for (var pi3 = 0; pi3 < panelParams.length; pi3++) panelParams[pi3] = this.value;
           // Update alle dropdowns
           document.querySelectorAll(".kaart-panel select").forEach(function(s) { s.value = panelParams[0]; });
+          updateSluierButton();
           updateAlle(parseInt(slider.value) - 1);
         } else {
           ensureAndRender(idx, parseInt(slider.value) - 1);
@@ -2438,6 +2521,17 @@ body {
       });
 
       sel.appendChild(dropdown);
+      var sluierBtn = document.createElement("button");
+      sluierBtn.className = "sluier-toggle";
+      sluierBtn.type = "button";
+      sluierBtn.dataset.panel = i;
+      sluierBtn.addEventListener("click", function() {
+        sluierUit = !sluierUit;
+        updateSluierButton();
+        syncSluierQuery();
+        updateAlle(parseInt(slider.value) - 1);
+      });
+      sel.appendChild(sluierBtn);
       panel.appendChild(sel);
 
       var wrap = document.createElement("div");
@@ -2604,6 +2698,7 @@ body {
       panel.appendChild(wrap);
       grid.appendChild(panel);
     }
+    updateSluierButton();
   }
 
   function ensureAndRender(panelIdx, stepIdx) {
