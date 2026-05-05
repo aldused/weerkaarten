@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bliksem live — Weerlab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
   /* Pincode-gate */
   #gate {
@@ -271,18 +274,32 @@
     pointer-events: none;
   }
   .kaart-wrap svg.events { pointer-events: auto; }
+  .kaart-viewport > .overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 6;
+  }
+  .plaats-label,
   .plaats-label text {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'DM Sans', Arial, sans-serif;
     user-select: none;
   }
-  .plaats-label .plaats-dot.major { fill: #ef4444; stroke: #fff; stroke-width: 1.4; }
-  .plaats-label .plaats-dot.medium { fill: #334155; stroke: #fff; stroke-width: 1.1; }
-  .plaats-label .plaats-dot.small { fill: #475569; stroke: #fff; stroke-width: 0.9; opacity: .9; }
+  .plaats-label .label-bg {
+    stroke: rgba(30,41,59,0.12);
+    stroke-width: 1;
+    filter: drop-shadow(0 1px 4px rgba(15,23,42,0.14));
+  }
+  .plaats-label .plaats-dot {
+    stroke: rgba(255,255,255,0.95);
+    stroke-width: 1.8;
+  }
   .plaats-label text {
-    fill: #111827;
     paint-order: stroke;
-    stroke: rgba(255,255,255,.96);
-    stroke-width: 3.2;
+    stroke: rgba(255,255,255,0.88);
+    stroke-width: 2.6;
     stroke-linejoin: round;
   }
   .zoom-controls {
@@ -513,9 +530,9 @@
     <div class="kaart-viewport" id="kaart-viewport">
       <div class="kaart-wrap" id="kaart-wrap">
         <img src="kaart_basis_nl.png" id="basis-kaart" alt="basiskaart" crossorigin="anonymous">
-        <svg id="svg-plaatsen" class="overlay" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
         <svg id="svg-strikes" class="events" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
       </div>
+      <svg id="svg-plaatsen" class="overlay" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
       <div class="zoom-controls">
         <button class="zoom-btn" id="zoom-in" title="Inzoomen">+</button>
         <button class="zoom-btn" id="zoom-out" title="Uitzoomen">−</button>
@@ -679,7 +696,6 @@ function applyRegio(key) {
   vp.style.maxWidth = cfg.maxWidth;
   const t = document.getElementById('page-title');
   if (t) t.textContent = key === 'nl' ? 'Bliksem live — Nederland' : 'Bliksem live — Benelux';
-  if (typeof renderPlaatsen === 'function') renderPlaatsen();
 }
 applyRegio('nl');
 
@@ -735,69 +751,161 @@ function renderPlaatsen() {
   const layer = document.getElementById('svg-plaatsen');
   if (!layer) return;
   layer.innerHTML = '';
-  if (!PLAATSEN.length) return;
+  if (!PLAATSEN.length && !PLAATSEN_LOOKUP.length) return;
+  const vp = document.getElementById('kaart-viewport');
+  const wrap = document.getElementById('kaart-wrap');
+  if (!vp || !wrap || !vp.clientWidth || !vp.clientHeight || !wrap.clientWidth || !wrap.clientHeight) return;
+  const W = vp.clientWidth;
+  const H = vp.clientHeight;
+  layer.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  layer.setAttribute('width', W);
+  layer.setAttribute('height', H);
 
-  // Rang-filter per regio (basisset op kaart altijd zichtbaar)
+  // Zelfde aanpak als radar: labels in schermcoordinaten, met botsingscontrole.
   const maxRang = regio === 'nl' ? 2 : 1;
+  let popMin;
+  if      (zoom >= 12) popMin = 14000;
+  else if (zoom >= 8)  popMin = 35000;
+  else if (zoom >= 5)  popMin = 75000;
+  else if (zoom >= 3)  popMin = 180000;
+  else                 popMin = 260000;
 
-  // Pop-drempel uit lookup: meer detail bij hogere zoom
-  // zoom 1 → niets extra; zoom 1.5 → pop>=80k; zoom 2.5 → pop>=30k; zoom 4 → pop>=10k; zoom 6+ → pop>=2000
-  let popMin = Infinity;
-  if (zoom >= 6) popMin = 2000;
-  else if (zoom >= 4) popMin = 10000;
-  else if (zoom >= 2.5) popMin = 30000;
-  else if (zoom >= 1.5) popMin = 80000;
-
-  // Volledig tegenschalen: de kaart zoomt, maar plaatsnamen blijven scherp op schermformaat.
-  const invScale = 1 / Math.max(1, zoom);
-
-  // Dedup: namen die al in basisset staan niet dubbel uit lookup tonen
-  const seen = new Set();
-
-  function add(naam, lat, lon, rang, pop = 0) {
-    if (seen.has(naam)) return;
+  const labels = [];
+  const seen = {};
+  function addLabel(naam, lat, lon, rang = 2, pop = 0, land = '', boost = 0) {
+    if (!naam) return;
     if (lon < LON_MIN || lon > LON_MAX || lat < LAT_MIN || lat > LAT_MAX) return;
-    seen.add(naam);
-    const [x, y] = lonLatToXY(lon, lat);
+    if (rang > maxRang && pop < popMin) return;
+    const key = String(naam).toLowerCase() + '|' + Math.round(lat * 100) + '|' + Math.round(lon * 100);
+    if (seen[key]) return;
+    seen[key] = true;
+    labels.push({ naam, lat, lon, rang, pop: pop || 0, land: land || '', boost: boost || 0 });
+  }
+
+  for (const p of PLAATSEN) {
+    if (p.rang > maxRang) continue;
+    addLabel(p.naam, p.lat, p.lon, p.rang, p.pop || 0, p.land || 'NL', 900000);
+  }
+  for (const p of PLAATSEN_LOOKUP) {
+    if ((p.pop || 0) < popMin) continue;
+    const land = p.land || '';
+    const boost = land === 'NL' ? 650000 : (land === 'BE' ? 120000 : 0);
+    addLabel(p.naam, p.lat, p.lon, p.pop >= 200000 ? 1 : 2, p.pop || 0, land, boost);
+  }
+
+  labels.sort((a, b) => ((b.pop || 0) + (b.boost || 0)) - ((a.pop || 0) + (a.boost || 0)));
+
+  let basisFont = 11.5;
+  if      (zoom >= 12) basisFont = 13.5;
+  else if (zoom >= 8)  basisFont = 13;
+  else if (zoom >= 5)  basisFont = 12.5;
+  else if (zoom >= 3)  basisFont = 12;
+  let maxLabels;
+  if      (zoom >= 12) maxLabels = 145;
+  else if (zoom >= 8)  maxLabels = 118;
+  else if (zoom >= 5)  maxLabels = 86;
+  else if (zoom >= 3)  maxLabels = 58;
+  else                 maxLabels = 54;
+
+  const geplaatst = [];
+  let placedCount = 0;
+  function tier(pop) {
+    if (pop >= 600000) return 2;
+    if (pop >= 150000) return 1;
+    return 0;
+  }
+  function botst(b) {
+    for (const p of geplaatst) {
+      if (b[0] < p[2] && b[2] > p[0] && b[1] < p[3] && b[3] > p[1]) return true;
+    }
+    return false;
+  }
+  function pastBinnen(b) {
+    return b[0] >= 4 && b[1] >= 4 && b[2] <= W - 4 && b[3] <= H - 4;
+  }
+  function textWidth(txt, fontPx, weight) {
+    const c = textWidth._c || (textWidth._c = document.createElement('canvas'));
+    const ctx = c.getContext('2d');
+    ctx.font = `${weight} ${fontPx}px DM Sans, Arial, sans-serif`;
+    return ctx.measureText(txt).width;
+  }
+
+  for (const st of labels) {
+    if (placedCount >= maxLabels) break;
+    const [x, y] = lonLatToXY(st.lon, st.lat);
+    const sx = panX + (x / SVG_W) * wrap.clientWidth * zoom;
+    const sy = panY + (y / SVG_H) * wrap.clientHeight * zoom;
+    if (sx < -50 || sx > W + 50 || sy < -10 || sy > H + 10) continue;
+
+    const t = tier(st.pop || 0);
+    const fontPx = basisFont + (t === 2 ? 2.2 : t === 1 ? 1.1 : 0);
+    const dotR = t === 2 ? 4.2 : t === 1 ? 3.4 : 2.7;
+    const gap = dotR + 6;
+    const padX = t === 2 ? 4.5 : 3.5;
+    const padY = t === 2 ? 2.5 : 1.8;
+    const weight = t === 2 ? 800 : 700;
+    const tw = textWidth(st.naam, fontPx, weight);
+    const labelW = tw + padX * 2;
+    const labelH = fontPx + padY * 2;
+    const candidates = [
+      { align: 'start',  x: sx + gap,          y: sy - labelH / 2, tx: sx + gap + padX,    ty: sy },
+      { align: 'end',    x: sx - gap - labelW, y: sy - labelH / 2, tx: sx - gap - padX,    ty: sy },
+      { align: 'middle', x: sx - labelW / 2,   y: sy - gap - labelH, tx: sx,               ty: sy - gap - labelH / 2 },
+      { align: 'middle', x: sx - labelW / 2,   y: sy + gap,          tx: sx,               ty: sy + gap + labelH / 2 },
+    ];
+    let chosen = null;
+    for (const cc of candidates) {
+      const box = [
+        Math.min(sx - dotR - 3, cc.x) - 2,
+        Math.min(sy - dotR - 3, cc.y) - 2,
+        Math.max(sx + dotR + 3, cc.x + labelW) + 2,
+        Math.max(sy + dotR + 3, cc.y + labelH) + 2,
+      ];
+      if (!pastBinnen(box) || botst(box)) continue;
+      chosen = { ...cc, box };
+      break;
+    }
+    if (!chosen) continue;
+    geplaatst.push(chosen.box);
+    placedCount++;
+
+    const textColor = t === 2 ? '#0f172a' : (t === 1 ? '#1f2937' : '#334155');
+    const markerFill = t === 2 ? '#ef4444' : (t === 1 ? '#1f4f7a' : '#486476');
+    const bgFill = t === 2 ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.68)';
+
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'plaats-label');
-    g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${invScale.toFixed(3)})`);
 
-    const major = rang === 0 || pop >= 450000;
-    const medium = rang === 1 || pop >= 90000;
-    const dot = document.createElementNS('http://www.w3.org/2000/svg', major ? 'path' : 'circle');
-    dot.setAttribute('class', 'plaats-dot ' + (major ? 'major' : medium ? 'medium' : 'small'));
-    if (major) {
-      dot.setAttribute('d', 'M0,-5.4 L1.55,-1.65 L5.55,-1.65 L2.25,.62 L3.55,4.85 L0,2.35 L-3.55,4.85 L-2.25,.62 L-5.55,-1.65 L-1.55,-1.65 Z');
-    } else {
-      dot.setAttribute('r', medium ? '2.5' : '1.8');
-    }
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('class', 'label-bg');
+    bg.setAttribute('x', chosen.x.toFixed(1));
+    bg.setAttribute('y', chosen.y.toFixed(1));
+    bg.setAttribute('width', labelW.toFixed(1));
+    bg.setAttribute('height', labelH.toFixed(1));
+    bg.setAttribute('rx', '4');
+    bg.setAttribute('fill', bgFill);
+    g.appendChild(bg);
+
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('class', 'plaats-dot');
+    dot.setAttribute('cx', sx.toFixed(1));
+    dot.setAttribute('cy', sy.toFixed(1));
+    dot.setAttribute('r', dotR.toFixed(1));
+    dot.setAttribute('fill', markerFill);
     g.appendChild(dot);
 
     const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    txt.setAttribute('x', '5');
-    txt.setAttribute('y', '4');
-    txt.setAttribute('font-size', major ? '14' : (medium ? '12' : '10.5'));
-    txt.setAttribute('font-weight', major ? '800' : '700');
-    txt.textContent = naam;
+    txt.setAttribute('x', chosen.tx.toFixed(1));
+    txt.setAttribute('y', chosen.ty.toFixed(1));
+    txt.setAttribute('font-size', fontPx.toFixed(1));
+    txt.setAttribute('font-weight', String(weight));
+    txt.setAttribute('text-anchor', chosen.align);
+    txt.setAttribute('dominant-baseline', 'central');
+    txt.setAttribute('fill', textColor);
+    txt.textContent = st.naam;
     g.appendChild(txt);
 
     layer.appendChild(g);
-  }
-
-  // Basisset (handgekozen labels)
-  for (const p of PLAATSEN) {
-    if (p.rang > maxRang) continue;
-    add(p.naam, p.lat, p.lon, p.rang, p.pop || 0);
-  }
-
-  // Extra labels uit lookup-DB op basis van zoom + populatie
-  if (popMin !== Infinity && PLAATSEN_LOOKUP.length) {
-    for (const p of PLAATSEN_LOOKUP) {
-      if (p.pop < popMin) continue;
-      const rang = p.pop >= 200000 ? 1 : 2;
-      add(p.naam, p.lat, p.lon, rang, p.pop || 0);
-    }
   }
 }
 
