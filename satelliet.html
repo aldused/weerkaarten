@@ -30,8 +30,11 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .btn-download.social { background: #1a6a3a; }
 .btn-download.social:hover { background: #238a4f; }
 .veld-mini { height: 24px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; padding: 2px 9px; }
-.check-mini { height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; white-space: nowrap; user-select: none; }
-.check-mini input { accent-color: #00205b; }
+.check-mini { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; white-space: nowrap; user-select: none; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.check-mini:hover { background: #eef4fb; border-color: #94a3b8; }
+.check-mini input { accent-color: #2ec4e8; }
+.check-mini:has(input:checked) { background: #1e293b; border-color: #1e293b; color: #f1f5f9; }
+.check-mini:has(input:checked):hover { background: #0f172a; }
 .obs-wrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
 .obs-panel { display: none; position: absolute; top: 30px; left: 0; width: 315px; max-height: 390px; overflow: hidden; background: white; border: 1px solid #bfd0e0; border-radius: 8px; box-shadow: 0 10px 26px rgba(0,0,0,0.22); z-index: 90; }
 .obs-panel.open { display: block; }
@@ -841,48 +844,37 @@ function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
   const dpr = rect.dpr || 1;
   const exportModus = opties.export === true;
   const schaal = exportModus ? 1.75 : 1;
-  const lijn = (exportModus ? 8 : 5.2) * dpr * schaal;
-  const halo = lijn + 6 * dpr * schaal;
-  const kop = Math.min(lengte * 0.28, (exportModus ? 44 : 28) * dpr * schaal);
+  const lijn = (exportModus ? 7 : 4.5) * dpr * schaal;
+  const kop = Math.min(lengte * 0.28, (exportModus ? 38 : 24) * dpr * schaal);
   const hoek = Math.atan2(ey - sy, ex - sx);
-  const curve = Math.min(70 * dpr * schaal, lengte * 0.18);
-  const mx = (sx + ex) / 2;
-  const my = (sy + ey) / 2;
-  const cx = mx - Math.sin(hoek) * curve;
-  const cy = my + Math.cos(hoek) * curve;
+  const rood = '#dc2626';
 
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(0,0,0,0.78)';
-  ctx.shadowBlur = 10 * dpr * schaal;
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 6 * dpr * schaal;
 
+  // Strakke rechte rode lijn
   ctx.beginPath();
   ctx.moveTo(sx, sy);
-  ctx.quadraticCurveTo(cx, cy, ex, ey);
-  ctx.lineWidth = halo;
-  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-  ctx.stroke();
-
-  ctx.shadowBlur = 5 * dpr * schaal;
-  ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.quadraticCurveTo(cx, cy, ex, ey);
+  // Stop lijn vlak voor pijlpunt zodat dik niet doorblinkt
+  const stopX = ex - Math.cos(hoek) * kop * 0.55;
+  const stopY = ey - Math.sin(hoek) * kop * 0.55;
+  ctx.lineTo(stopX, stopY);
   ctx.lineWidth = lijn;
-  ctx.strokeStyle = '#19d3ff';
+  ctx.strokeStyle = rood;
   ctx.stroke();
 
-  ctx.shadowBlur = 7 * dpr * schaal;
-  ctx.fillStyle = '#19d3ff';
-  ctx.strokeStyle = 'rgba(255,255,255,0.96)';
-  ctx.lineWidth = 2.3 * dpr * schaal;
+  // Pijlpunt — gevuld rood, scherp
+  ctx.shadowBlur = 4 * dpr * schaal;
   ctx.beginPath();
   ctx.moveTo(ex, ey);
-  ctx.lineTo(ex - kop * Math.cos(hoek - 0.48), ey - kop * Math.sin(hoek - 0.48));
-  ctx.lineTo(ex - kop * Math.cos(hoek + 0.48), ey - kop * Math.sin(hoek + 0.48));
+  ctx.lineTo(ex - kop * Math.cos(hoek - 0.42), ey - kop * Math.sin(hoek - 0.42));
+  ctx.lineTo(ex - kop * Math.cos(hoek + 0.42), ey - kop * Math.sin(hoek + 0.42));
   ctx.closePath();
+  ctx.fillStyle = rood;
   ctx.fill();
-  ctx.stroke();
   ctx.restore();
 }
 
@@ -1241,7 +1233,7 @@ async function zoekMarkerPlaats(direct = false) {
   if (markerZoekCtrl) markerZoekCtrl.abort();
   markerZoekCtrl = new AbortController();
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=nl&countrycodes=nl,be,lu&addressdetails=1`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&accept-language=nl&countrycodes=nl,be,lu,de,fr,gb&addressdetails=1`;
     const r = await fetch(url, { headers: { 'Accept-Language': 'nl' }, signal: markerZoekCtrl.signal });
     if (!r.ok) throw new Error('zoekfout');
     const extern = (await r.json()).map(item => {
