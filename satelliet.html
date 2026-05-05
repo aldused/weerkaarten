@@ -670,6 +670,16 @@ function windKleur(bft) {
   return '#ff4d4d';
 }
 
+function windPijlVector(dd, len) {
+  const richtingVan = ((dd % 360) + 360) % 360;
+  const richtingNaar = (richtingVan + 180) % 360;
+  const rad = richtingNaar * Math.PI / 180;
+  return {
+    dx: Math.sin(rad) * len,
+    dy: -Math.cos(rad) * len
+  };
+}
+
 function isHelderStation(st) {
   return st && st.n != null && st.n <= 1;
 }
@@ -749,10 +759,12 @@ function tekenObsWindpijl(ctx, x, y, dd, ff, schaal) {
   if (dd == null || ff == null) return;
   const bft = msToBft(ff);
   const len = 25 * schaal + Math.min(18 * schaal, Math.max(0, ff) * 1.8 * schaal);
-  const rad = (dd - 180) * Math.PI / 180;
-  const dx = Math.sin(rad) * len;
-  const dy = -Math.cos(rad) * len;
+  const { dx, dy } = windPijlVector(dd, len);
   const kleur = windKleur(bft);
+  const startX = x - dx * 0.34;
+  const startY = y - dy * 0.34;
+  const eindX = x + dx * 0.66;
+  const eindY = y + dy * 0.66;
 
   ctx.save();
   ctx.lineWidth = 3.2 * schaal;
@@ -762,17 +774,17 @@ function tekenObsWindpijl(ctx, x, y, dd, ff, schaal) {
   ctx.shadowBlur = 5 * schaal;
   ctx.strokeStyle = kleur;
   ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + dx, y + dy);
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(eindX, eindY);
   ctx.stroke();
 
   const angle = Math.atan2(dy, dx);
   const head = 9 * schaal;
   ctx.fillStyle = kleur;
   ctx.beginPath();
-  ctx.moveTo(x + dx, y + dy);
-  ctx.lineTo(x + dx - head * Math.cos(angle - 0.55), y + dy - head * Math.sin(angle - 0.55));
-  ctx.lineTo(x + dx - head * Math.cos(angle + 0.55), y + dy - head * Math.sin(angle + 0.55));
+  ctx.moveTo(eindX, eindY);
+  ctx.lineTo(eindX - head * Math.cos(angle - 0.55), eindY - head * Math.sin(angle - 0.55));
+  ctx.lineTo(eindX - head * Math.cos(angle + 0.55), eindY - head * Math.sin(angle + 0.55));
   ctx.closePath();
   ctx.fill();
   ctx.restore();
