@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>MTG Satellietbeelden – Weerlab.nl</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -399,6 +400,7 @@ let lijnkleur = 'cyan';
 let obsData = null;
 let obsBijgewerkt = '';
 let obsLaatsteFout = '';
+let obsBron = '';
 let obsTimer = null;
 let obsLaden = false;
 let geselecteerdeObsStations = new Set(STANDAARD_OBS_STATIONS);
@@ -1360,8 +1362,9 @@ function obsStatusTekst() {
     : obsFilterModus === 'smart' ? ' · slim filter'
     : ' · alle stations';
   const tijd = obsBijgewerkt ? ` · ${obsBijgewerkt}` : '';
+  const bron = obsBron ? ` · ${obsBron}` : '';
   const fout = obsLaatsteFout ? ` · laatste refresh haperde, oude data blijft zichtbaar` : '';
-  return `${zichtbaar} zichtbaar van ${geselecteerd} geselecteerd${filter}${tijd}${fout}`;
+  return `${zichtbaar} zichtbaar van ${geselecteerd} geselecteerd${filter}${tijd}${bron}${fout}`;
 }
 
 function updateObsStatus() {
@@ -1405,17 +1408,31 @@ async function fetchJsonMetTimeout(url, timeoutMs) {
   }
 }
 
+function controleerObsVersheid(data, bron) {
+  if (!data || !data.stations) throw new Error(`${bron} bevat geen stations`);
+  if (data.bijgewerkt) {
+    const ts = new Date(data.bijgewerkt).getTime();
+    const maxLeeftijd = 2 * 60 * 60 * 1000;
+    if (Number.isFinite(ts) && Date.now() - ts > maxLeeftijd) {
+      throw new Error(`${bron} is verouderd (${data.bijgewerkt})`);
+    }
+  }
+  return data;
+}
+
 async function laadObservaties(force = false) {
   if (obsLaden) return obsData;
   if (obsData && !force) return obsData;
   obsLaden = true;
   updateObsStatus();
   try {
-    obsData = await fetchJsonMetTimeout(`actueel.json?t=${Date.now()}`, 5000);
+    obsData = controleerObsVersheid(await fetchJsonMetTimeout(`${ACTUEEL_URL}?t=${Date.now()}`, 8000), 'live Weerlab-data');
+    obsBron = 'live Weerlab-data';
     obsLaatsteFout = '';
   } catch (e) {
     try {
-      obsData = await fetchJsonMetTimeout(`${ACTUEEL_URL}?t=${Date.now()}`, 7000);
+      obsData = controleerObsVersheid(await fetchJsonMetTimeout(`actueel.json?t=${Date.now()}`, 5000), 'actueel.json');
+      obsBron = 'actueel.json';
       obsLaatsteFout = '';
     } catch (err) {
       obsLaatsteFout = err && err.message ? err.message : 'laadfout';
