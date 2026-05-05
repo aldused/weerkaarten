@@ -140,10 +140,10 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   </select>
   <div class="sep"></div>
   <span class="groep-label">Gebied</span>
-  <button class="btn gebied actief" data-bbox="2.65,50.55,7.65,53.95" data-w="2100" data-h="2750" data-label="Nederland HD">Nederland HD</button>
-  <button class="btn gebied" data-bbox="-1,49,9,54" data-w="2200" data-h="1760" data-label="Benelux">Benelux</button>
-  <button class="btn gebied" data-bbox="-8,46,20,57" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
-  <button class="btn gebied" data-bbox="-15,30,40,72" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
+  <button class="btn gebied actief" data-bbox="2.65,50.55,7.65,53.95" data-crs="EPSG:3857" data-w="2474" data-h="2750" data-label="Nederland HD">Nederland HD</button>
+  <button class="btn gebied" data-bbox="-1,49,9,54" data-crs="CRS:84" data-w="2200" data-h="1760" data-label="Benelux">Benelux</button>
+  <button class="btn gebied" data-bbox="-8,46,20,57" data-crs="CRS:84" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
+  <button class="btn gebied" data-bbox="-15,30,40,72" data-crs="CRS:84" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
   <select class="veld-mini" id="lijnkleur" title="Kleur van lands- en provinciegrenzen op de satellietfoto">
     <option value="cyan">Lijn cyaan</option>
     <option value="white">Lijn wit</option>
@@ -206,12 +206,12 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
       <button class="btn" id="btn-marker-clear" title="Verwijder het geplaatste plaatslabel">Wis plaats</button>
       <div class="sep"></div>
       <span class="groep-label">Pijl</span>
-      <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een trekrichting-pijl te tekenen">Pijl tekenen</button>
-      <button class="btn" id="btn-arrow-clear" title="Verwijder de getekende pijl">Wis pijl</button>
+      <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een of meer trekrichting-pijlen te tekenen">Pijl tekenen</button>
+      <button class="btn" id="btn-arrow-clear" title="Verwijder alle getekende pijlen">Wis pijlen</button>
       <div class="sep"></div>
       <span class="groep-label">Symbool</span>
-      <button class="btn" id="btn-sun-place" title="Klik daarna op de kaart om een zonnetje te plaatsen">Zon plaatsen</button>
-      <button class="btn" id="btn-sun-clear" title="Verwijder het zonnetje">Wis zon</button>
+      <button class="btn" id="btn-sun-place" title="Klik daarna op de kaart om een of meer zonnetjes te plaatsen">Zon plaatsen</button>
+      <button class="btn" id="btn-sun-clear" title="Verwijder alle zonnetjes">Wis zonnen</button>
       <div class="sep"></div>
       <span class="groep-label">Export</span>
       <button class="btn-download" id="btn-download">⬇ PNG</button>
@@ -269,7 +269,8 @@ const SAT_FILTER_NEDERLAND_HD_CSS = 'url(#sat-sharpen-hd) contrast(1.18) saturat
 let actieveLayer = 'auto';
 let actieveLabel = 'Auto beste beeld';
 let activeBbox = '2.65,50.55,7.65,53.95';
-let activeW = 2100, activeH = 2750;
+let activeCrs = 'EPSG:3857';
+let activeW = 2474, activeH = 2750;
 let actiefGebiedLabel = 'Nederland HD';
 let actieveTijdstap = LAATSTE_TIJDSTAP;
 let autoRefreshTimer = null;
@@ -382,11 +383,12 @@ let overlayData = {};
 let overlayGeladen = false;
 let markerPunt = null;
 let plaatsPuntModus = false;
-let zonPunt = null;
+let zonPunten = [];
 let zonPuntModus = false;
 let pijlModus = false;
 let pijlTekent = false;
 let trekPijl = null;
+let trekPijlen = [];
 let markerZoekTimer = null;
 let markerZoekCtrl = null;
 let markerZoekResultaten = [];
@@ -509,18 +511,43 @@ function productVoorLayer(layerName, tijd) {
   return { layer: layerName, label: actieveLabel || 'Satellietbeeld' };
 }
 
+const WEB_MERCATOR_R = 6378137;
+function lonLatNaarWebMercator(lon, lat) {
+  const veiligeLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const x = WEB_MERCATOR_R * lon * Math.PI / 180;
+  const y = WEB_MERCATOR_R * Math.log(Math.tan(Math.PI / 4 + veiligeLat * Math.PI / 360));
+  return [x, y];
+}
+
+function webMercatorNaarLonLat(x, y) {
+  const lon = x / WEB_MERCATOR_R * 180 / Math.PI;
+  const lat = (2 * Math.atan(Math.exp(y / WEB_MERCATOR_R)) - Math.PI / 2) * 180 / Math.PI;
+  return [lon, lat];
+}
+
+function bboxNaarProjectie(bbox, crs = activeCrs) {
+  const [minLon, minLat, maxLon, maxLat] = Array.isArray(bbox) ? bbox : bbox.split(',').map(Number);
+  if (crs === 'EPSG:3857') {
+    const [minX, minY] = lonLatNaarWebMercator(minLon, minLat);
+    const [maxX, maxY] = lonLatNaarWebMercator(maxLon, maxLat);
+    return [minX, minY, maxX, maxY];
+  }
+  return [minLon, minLat, maxLon, maxLat];
+}
+
 function wmsUrl(layerName, bbox, w, h, tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
   const product = productVoorLayer(layerName, t);
   const layers = product.layer;
   const styles = '';
+  const wmsBbox = bboxNaarProjectie(bbox, activeCrs).join(',');
   return WMS_URL +
     '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0' +
     '&LAYERS=' + encodeURIComponent(layers) +
     '&STYLES=' + encodeURIComponent(styles) +
     '&FORMAT=image/png&TRANSPARENT=FALSE' +
-    '&CRS=CRS:84&BBOX=' + bbox +
+    '&CRS=' + encodeURIComponent(activeCrs) + '&BBOX=' + wmsBbox +
     '&WIDTH=' + w + '&HEIGHT=' + h +
     '&TIME=' + isoTijd(t) +
     '&_t=' + t.getTime();
@@ -600,6 +627,14 @@ function beeldRect() {
 }
 
 function projecteer(lon, lat, rect, bbox) {
+  if (activeCrs === 'EPSG:3857') {
+    const [minX, minY, maxX, maxY] = bboxNaarProjectie(bbox, activeCrs);
+    const [xMerc, yMerc] = lonLatNaarWebMercator(lon, lat);
+    return [
+      rect.x + (xMerc - minX) / (maxX - minX) * rect.w,
+      rect.y + (maxY - yMerc) / (maxY - minY) * rect.h
+    ];
+  }
   const [minLon, minLat, maxLon, maxLat] = bbox;
   return [
     rect.x + (lon - minLon) / (maxLon - minLon) * rect.w,
@@ -974,11 +1009,8 @@ function tekenMarker(ctx, rect, bbox, opties = {}) {
 }
 
 function tekenZonSymbool(ctx, rect, bbox, opties = {}) {
-  if (!zonPunt) return;
+  if (!zonPunten.length) return;
   const [minLon, minLat, maxLon, maxLat] = bbox;
-  if (zonPunt.lon < minLon || zonPunt.lon > maxLon || zonPunt.lat < minLat || zonPunt.lat > maxLat) return;
-
-  const [x, y] = projecteer(zonPunt.lon, zonPunt.lat, rect, bbox);
   const dpr = rect.dpr || 1;
   const exportModus = opties.export === true;
   const schaal = (exportModus ? 2.15 : 1) * dpr;
@@ -989,39 +1021,43 @@ function tekenZonSymbool(ctx, rect, bbox, opties = {}) {
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(0,0,0,0.65)';
-  ctx.shadowBlur = 8 * schaal;
-  ctx.strokeStyle = '#ffcf33';
-  ctx.lineWidth = 3.2 * schaal;
-  for (let i = 0; i < 12; i++) {
-    const hoek = i * Math.PI / 6;
+  zonPunten.forEach(punt => {
+    if (!punt || punt.lon < minLon || punt.lon > maxLon || punt.lat < minLat || punt.lat > maxLat) return;
+    const [x, y] = projecteer(punt.lon, punt.lat, rect, bbox);
+    ctx.shadowColor = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur = 8 * schaal;
+    ctx.strokeStyle = '#ffcf33';
+    ctx.lineWidth = 3.2 * schaal;
+    for (let i = 0; i < 12; i++) {
+      const hoek = i * Math.PI / 6;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(hoek) * binnen, y + Math.sin(hoek) * binnen);
+      ctx.lineTo(x + Math.cos(hoek) * buiten, y + Math.sin(hoek) * buiten);
+      ctx.stroke();
+    }
     ctx.beginPath();
-    ctx.moveTo(x + Math.cos(hoek) * binnen, y + Math.sin(hoek) * binnen);
-    ctx.lineTo(x + Math.cos(hoek) * buiten, y + Math.sin(hoek) * buiten);
+    ctx.arc(x, y, kern + 4 * schaal, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,32,91,0.76)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, kern, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(x - 4 * schaal, y - 4 * schaal, 2 * schaal, x, y, kern);
+    grad.addColorStop(0, '#fff7ad');
+    grad.addColorStop(0.55, '#ffcf33');
+    grad.addColorStop(1, '#f59e0b');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 1.8 * schaal;
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
     ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.arc(x, y, kern + 4 * schaal, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,32,91,0.76)';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x, y, kern, 0, Math.PI * 2);
-  const grad = ctx.createRadialGradient(x - 4 * schaal, y - 4 * schaal, 2 * schaal, x, y, kern);
-  grad.addColorStop(0, '#fff7ad');
-  grad.addColorStop(0.55, '#ffcf33');
-  grad.addColorStop(1, '#f59e0b');
-  ctx.fillStyle = grad;
-  ctx.fill();
-  ctx.lineWidth = 1.8 * schaal;
-  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-  ctx.stroke();
+  });
   ctx.restore();
 }
 
-function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
-  if (!trekPijl || !trekPijl.start || !trekPijl.eind) return;
-  const [sx, sy] = projecteer(trekPijl.start.lon, trekPijl.start.lat, rect, bbox);
-  const [ex, ey] = projecteer(trekPijl.eind.lon, trekPijl.eind.lat, rect, bbox);
+function tekenEenTrekrichtingPijl(ctx, rect, bbox, pijl, opties = {}) {
+  if (!pijl || !pijl.start || !pijl.eind) return;
+  const [sx, sy] = projecteer(pijl.start.lon, pijl.start.lat, rect, bbox);
+  const [ex, ey] = projecteer(pijl.eind.lon, pijl.eind.lat, rect, bbox);
   const lengte = Math.hypot(ex - sx, ey - sy);
   if (lengte < 12 * (rect.dpr || 1)) return;
 
@@ -1062,6 +1098,11 @@ function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
   ctx.restore();
 }
 
+function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
+  trekPijlen.forEach(pijl => tekenEenTrekrichtingPijl(ctx, rect, bbox, pijl, opties));
+  if (trekPijl) tekenEenTrekrichtingPijl(ctx, rect, bbox, trekPijl, opties);
+}
+
 function tekenOverlay() {
   const rect = beeldRect();
   const ctx = rect.canvas.getContext('2d');
@@ -1078,7 +1119,7 @@ function frameCacheKey(tijdstap) {
   const stappen = tijdstappen();
   const t = stappen[tijdstap];
   const product = productVoorLayer(actieveLayer, t);
-  return [product.layer, activeBbox, activeW, activeH, isoTijd(t)].join('|');
+  return [product.layer, activeCrs, activeBbox, activeW, activeH, isoTijd(t)].join('|');
 }
 
 function timelapseStartStap() {
@@ -1219,6 +1260,7 @@ document.querySelectorAll('.btn.gebied').forEach(btn => {
     document.querySelectorAll('.btn.gebied').forEach(b => b.classList.remove('actief'));
     btn.classList.add('actief');
     activeBbox = btn.dataset.bbox;
+    activeCrs = btn.dataset.crs || 'CRS:84';
     activeW = parseInt(btn.dataset.w);
     activeH = parseInt(btn.dataset.h);
     actiefGebiedLabel = btn.dataset.label;
@@ -1496,13 +1538,13 @@ function zetZonPuntModus(actief) {
   const markerBtn = document.getElementById('btn-marker-click');
   const info = document.getElementById('info-balk');
   btn.classList.toggle('actief', actief);
-  btn.textContent = actief ? 'Klik zonplek' : 'Zon plaatsen';
+  btn.textContent = actief ? 'Klaar zon' : 'Zon plaatsen';
   vlak.classList.toggle('plaats-punt', actief || plaatsPuntModus);
   if (markerBtn && actief) {
     markerBtn.classList.remove('actief');
     markerBtn.textContent = 'Plaats op kaart';
   }
-  if (actief && info) info.textContent = 'Klik op de satellietfoto om een zonnetje te plaatsen.';
+  if (actief && info) info.textContent = 'Klik op de satellietfoto om zonnetjes te plaatsen; klik daarna op Klaar zon.';
 }
 
 function zetPijlModus(actief) {
@@ -1516,7 +1558,7 @@ function zetPijlModus(actief) {
     zonPuntModus = false;
   }
   btn.classList.toggle('actief', actief);
-  btn.textContent = actief ? 'Sleep pijl' : 'Pijl tekenen';
+  btn.textContent = actief ? 'Klaar pijlen' : 'Pijl tekenen';
   vlak.classList.toggle('teken-pijl', actief);
   vlak.classList.toggle('plaats-punt', plaatsPuntModus);
   const markerBtn = document.getElementById('btn-marker-click');
@@ -1529,7 +1571,7 @@ function zetPijlModus(actief) {
     sunBtn.classList.remove('actief');
     sunBtn.textContent = 'Zon plaatsen';
   }
-  if (actief && info) info.textContent = 'Sleep op de satellietfoto van herkomst naar trekrichting.';
+  if (actief && info) info.textContent = 'Sleep op de satellietfoto om een pijl te tekenen; herhaal voor extra pijlen.';
 }
 
 function schermNaarLonLat(clientX, clientY) {
@@ -1541,6 +1583,13 @@ function schermNaarLonLat(clientX, clientY) {
   const y = (clientY - vlakRect.top) * dpr;
   if (x < rect.x || x > rect.x + rect.w || y < rect.y || y > rect.y + rect.h) return null;
   const [minLon, minLat, maxLon, maxLat] = actieveBboxParts();
+  if (activeCrs === 'EPSG:3857') {
+    const [minX, minY, maxX, maxY] = bboxNaarProjectie([minLon, minLat, maxLon, maxLat], activeCrs);
+    const mercX = minX + (x - rect.x) / rect.w * (maxX - minX);
+    const mercY = maxY - (y - rect.y) / rect.h * (maxY - minY);
+    const [lon, lat] = webMercatorNaarLonLat(mercX, mercY);
+    return { lon, lat };
+  }
   return {
     lon: minLon + (x - rect.x) / rect.w * (maxLon - minLon),
     lat: maxLat - (y - rect.y) / rect.h * (maxLat - minLat)
@@ -1575,9 +1624,9 @@ function stopPijlTekenen(e) {
     const bbox = actieveBboxParts();
     const [sx, sy] = projecteer(trekPijl.start.lon, trekPijl.start.lat, rect, bbox);
     const [ex, ey] = projecteer(trekPijl.eind.lon, trekPijl.eind.lat, rect, bbox);
-    if (Math.hypot(ex - sx, ey - sy) < 18 * (rect.dpr || 1)) trekPijl = null;
+    if (Math.hypot(ex - sx, ey - sy) >= 18 * (rect.dpr || 1)) trekPijlen.push(trekPijl);
+    trekPijl = null;
   }
-  zetPijlModus(false);
   tekenOverlay();
 }
 
@@ -1649,6 +1698,7 @@ document.getElementById('btn-arrow-draw').addEventListener('click', () => {
 });
 
 document.getElementById('btn-arrow-clear').addEventListener('click', () => {
+  trekPijlen = [];
   trekPijl = null;
   pijlTekent = false;
   zetPijlModus(false);
@@ -1660,7 +1710,7 @@ document.getElementById('btn-sun-place').addEventListener('click', () => {
 });
 
 document.getElementById('btn-sun-clear').addEventListener('click', () => {
-  zonPunt = null;
+  zonPunten = [];
   zetZonPuntModus(false);
   tekenOverlay();
 });
@@ -1674,8 +1724,7 @@ satBeeldvlak.addEventListener('click', e => {
   if (zonPuntModus) {
     const coords = schermNaarLonLat(e.clientX, e.clientY);
     if (!coords) return;
-    zonPunt = coords;
-    zetZonPuntModus(false);
+    zonPunten.push(coords);
     tekenOverlay();
     return;
   }
