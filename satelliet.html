@@ -209,6 +209,10 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
       <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een trekrichting-pijl te tekenen">Pijl tekenen</button>
       <button class="btn" id="btn-arrow-clear" title="Verwijder de getekende pijl">Wis pijl</button>
       <div class="sep"></div>
+      <span class="groep-label">Symbool</span>
+      <button class="btn" id="btn-sun-place" title="Klik daarna op de kaart om een zonnetje te plaatsen">Zon plaatsen</button>
+      <button class="btn" id="btn-sun-clear" title="Verwijder het zonnetje">Wis zon</button>
+      <div class="sep"></div>
       <span class="groep-label">Export</span>
       <button class="btn-download" id="btn-download">⬇ PNG</button>
       <button class="btn-download" id="btn-download-pdf">⬇ PDF</button>
@@ -378,6 +382,8 @@ let overlayData = {};
 let overlayGeladen = false;
 let markerPunt = null;
 let plaatsPuntModus = false;
+let zonPunt = null;
+let zonPuntModus = false;
 let pijlModus = false;
 let pijlTekent = false;
 let trekPijl = null;
@@ -966,6 +972,51 @@ function tekenMarker(ctx, rect, bbox, opties = {}) {
   ctx.restore();
 }
 
+function tekenZonSymbool(ctx, rect, bbox, opties = {}) {
+  if (!zonPunt) return;
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  if (zonPunt.lon < minLon || zonPunt.lon > maxLon || zonPunt.lat < minLat || zonPunt.lat > maxLat) return;
+
+  const [x, y] = projecteer(zonPunt.lon, zonPunt.lat, rect, bbox);
+  const dpr = rect.dpr || 1;
+  const exportModus = opties.export === true;
+  const schaal = (exportModus ? 2.15 : 1) * dpr;
+  const kern = 11 * schaal;
+  const binnen = 17 * schaal;
+  const buiten = 27 * schaal;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,0.65)';
+  ctx.shadowBlur = 8 * schaal;
+  ctx.strokeStyle = '#ffcf33';
+  ctx.lineWidth = 3.2 * schaal;
+  for (let i = 0; i < 12; i++) {
+    const hoek = i * Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(hoek) * binnen, y + Math.sin(hoek) * binnen);
+    ctx.lineTo(x + Math.cos(hoek) * buiten, y + Math.sin(hoek) * buiten);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(x, y, kern + 4 * schaal, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,32,91,0.76)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, kern, 0, Math.PI * 2);
+  const grad = ctx.createRadialGradient(x - 4 * schaal, y - 4 * schaal, 2 * schaal, x, y, kern);
+  grad.addColorStop(0, '#fff7ad');
+  grad.addColorStop(0.55, '#ffcf33');
+  grad.addColorStop(1, '#f59e0b');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.lineWidth = 1.8 * schaal;
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.stroke();
+  ctx.restore();
+}
+
 function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
   if (!trekPijl || !trekPijl.start || !trekPijl.eind) return;
   const [sx, sy] = projecteer(trekPijl.start.lon, trekPijl.start.lat, rect, bbox);
@@ -1018,6 +1069,7 @@ function tekenOverlay() {
   tekenKaartOverlay(ctx, rect, bbox);
   tekenObservaties(ctx, rect, bbox);
   tekenMarker(ctx, rect, bbox);
+  tekenZonSymbool(ctx, rect, bbox);
   tekenTrekrichtingPijl(ctx, rect, bbox);
 }
 
@@ -1416,6 +1468,7 @@ async function zoekMarkerPlaats(direct = false) {
 function zetPlaatsPuntModus(actief) {
   plaatsPuntModus = actief;
   if (actief) zetPijlModus(false);
+  if (actief) zetZonPuntModus(false);
   const btn = document.getElementById('btn-marker-click');
   const vlak = document.querySelector('.sat-beeldvlak');
   const input = document.getElementById('marker-zoek');
@@ -1431,13 +1484,36 @@ function zetPlaatsPuntModus(actief) {
   }
 }
 
+function zetZonPuntModus(actief) {
+  zonPuntModus = actief;
+  if (actief) {
+    zetPijlModus(false);
+    plaatsPuntModus = false;
+  }
+  const btn = document.getElementById('btn-sun-place');
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const markerBtn = document.getElementById('btn-marker-click');
+  const info = document.getElementById('info-balk');
+  btn.classList.toggle('actief', actief);
+  btn.textContent = actief ? 'Klik zonplek' : 'Zon plaatsen';
+  vlak.classList.toggle('plaats-punt', actief || plaatsPuntModus);
+  if (markerBtn && actief) {
+    markerBtn.classList.remove('actief');
+    markerBtn.textContent = 'Plaats op kaart';
+  }
+  if (actief && info) info.textContent = 'Klik op de satellietfoto om een zonnetje te plaatsen.';
+}
+
 function zetPijlModus(actief) {
   pijlModus = actief;
   pijlTekent = false;
   const btn = document.getElementById('btn-arrow-draw');
   const vlak = document.querySelector('.sat-beeldvlak');
   const info = document.getElementById('info-balk');
-  if (actief) plaatsPuntModus = false;
+  if (actief) {
+    plaatsPuntModus = false;
+    zonPuntModus = false;
+  }
   btn.classList.toggle('actief', actief);
   btn.textContent = actief ? 'Sleep pijl' : 'Pijl tekenen';
   vlak.classList.toggle('teken-pijl', actief);
@@ -1446,6 +1522,11 @@ function zetPijlModus(actief) {
   if (markerBtn && actief) {
     markerBtn.classList.remove('actief');
     markerBtn.textContent = 'Plaats op kaart';
+  }
+  const sunBtn = document.getElementById('btn-sun-place');
+  if (sunBtn && actief) {
+    sunBtn.classList.remove('actief');
+    sunBtn.textContent = 'Zon plaatsen';
   }
   if (actief && info) info.textContent = 'Sleep op de satellietfoto van herkomst naar trekrichting.';
 }
@@ -1573,12 +1654,30 @@ document.getElementById('btn-arrow-clear').addEventListener('click', () => {
   tekenOverlay();
 });
 
+document.getElementById('btn-sun-place').addEventListener('click', () => {
+  zetZonPuntModus(!zonPuntModus);
+});
+
+document.getElementById('btn-sun-clear').addEventListener('click', () => {
+  zonPunt = null;
+  zetZonPuntModus(false);
+  tekenOverlay();
+});
+
 satBeeldvlak.addEventListener('pointerdown', startPijlTekenen);
 satBeeldvlak.addEventListener('pointermove', beweegPijl);
 satBeeldvlak.addEventListener('pointerup', stopPijlTekenen);
 satBeeldvlak.addEventListener('pointercancel', stopPijlTekenen);
 
 satBeeldvlak.addEventListener('click', e => {
+  if (zonPuntModus) {
+    const coords = schermNaarLonLat(e.clientX, e.clientY);
+    if (!coords) return;
+    zonPunt = coords;
+    zetZonPuntModus(false);
+    tekenOverlay();
+    return;
+  }
   if (!plaatsPuntModus) return;
   const coords = schermNaarLonLat(e.clientX, e.clientY);
   if (!coords) return;
@@ -1704,6 +1803,7 @@ function tekenExportOverlay(ctx, x, y, w, h) {
   tekenKaartOverlay(ctx, rect, bbox);
   tekenObservaties(ctx, rect, bbox, { export: true });
   tekenMarker(ctx, rect, bbox, { export: true });
+  tekenZonSymbool(ctx, rect, bbox, { export: true });
   tekenTrekrichtingPijl(ctx, rect, bbox, { export: true });
 }
 
