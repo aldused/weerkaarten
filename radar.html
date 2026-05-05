@@ -1568,19 +1568,33 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     //    Bij hoge zoom ook plaatsen_lookup.json (op pop gefilterd).
     var labelLijst;
     if (PLAATSEN_BIG) {
-      // Pop-drempel zakt bij hogere zoom — niet te veel kleine dorpen
+      // Pop-drempel zakt bij hogere zoom. NL krijgt voorrang, omdat dit een
+      // Nederlandse radar is en buitenlandse labels anders snel domineren.
       var popMin;
       if      (zoomLevel >= 18) popMin = 6000;
       else if (zoomLevel >= 12) popMin = 14000;
       else if (zoomLevel >= 8)  popMin = 35000;
       else if (zoomLevel >= 5)  popMin = 75000;
       else if (zoomLevel >= 3)  popMin = 180000;
-      else                       popMin = 500000;
+      else                       popMin = 140000;
       labelLijst = [];
+      var seenLabels = {};
+      function addLabel(lat, lon, naam, pop, land, boost) {
+        var key = String(naam || "").toLowerCase() + "|" + Math.round(lat * 100) + "|" + Math.round(lon * 100);
+        if (seenLabels[key]) return;
+        seenLabels[key] = true;
+        labelLijst.push([lat, lon, naam, pop || 0, land || "", boost || 0]);
+      }
+      for (var fi = 0; fi < STEDEN_LABEL.length; fi++) {
+        var fs = STEDEN_LABEL[fi];
+        addLabel(fs[0], fs[1], fs[2], 260000, "NL", 900000);
+      }
       for (var pi = 0; pi < PLAATSEN_BIG.length; pi++) {
         var pp = PLAATSEN_BIG[pi];
         if ((pp.pop || 0) < popMin) break;
-        labelLijst.push([pp.lat, pp.lon, pp.naam, pp.pop || 0]);  // pop als 4e veld
+        var land = pp.land || "";
+        var boost = land === "NL" ? 650000 : (land === "BE" ? 120000 : 0);
+        addLabel(pp.lat, pp.lon, pp.naam, pp.pop || 0, land, boost);
       }
     } else {
       labelLijst = STEDEN_LABEL;
@@ -1610,15 +1624,17 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       ctx.textBaseline = "middle";
       ctx.lineJoin = "round";
 
-      // Sorteer labelLijst op pop desc (al gesorteerd voor PLAATSEN_BIG, niet voor fallback)
-      labelLijst = labelLijst.slice().sort(function(a, b) { return (b[3] || 0) - (a[3] || 0); });
+      // Sorteer op gewogen prioriteit: eerst NL, dan grote steden net over de grens.
+      labelLijst = labelLijst.slice().sort(function(a, b) {
+        return ((b[3] || 0) + (b[5] || 0)) - ((a[3] || 0) + (a[5] || 0));
+      });
       var geplaatst = [];  // bounding boxes [x0,y0,x1,y1]
       var maxLabels;
       if      (zoomLevel >= 12) maxLabels = 145;
       else if (zoomLevel >= 8)  maxLabels = 118;
       else if (zoomLevel >= 5)  maxLabels = 86;
       else if (zoomLevel >= 3)  maxLabels = 58;
-      else                      maxLabels = 30;
+      else                      maxLabels = 54;
       var placedCount = 0;
 
       function botst(b) {
