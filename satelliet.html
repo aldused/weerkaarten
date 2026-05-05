@@ -79,17 +79,17 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .beeld-wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; position: relative; background: #000; padding: 14px; }
 .sat-kaart { width: 100%; height: 100%; display: flex; flex-direction: column; background: #050b14; box-shadow: 0 4px 24px rgba(0,0,0,0.45); }
 .sat-header-band {
-  background: #003366; color: white;
+  background: #1e293b; color: white;
   padding: 13px 18px; min-height: 58px;
   display: flex; justify-content: space-between; align-items: center; gap: 18px;
-  border-bottom: 2px solid #2ec4e8; flex-shrink: 0;
+  border-bottom: 3px solid #2ec4e8; flex-shrink: 0;
 }
 .sat-header-band .links { min-width: 0; }
 .sat-header-band .titel { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
-.sat-header-band .sub { font-size: 11px; color: #a8c8e8; margin-top: 2px; }
+.sat-header-band .sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .sat-header-band .rechts { text-align: right; flex-shrink: 0; }
 .sat-header-band .tijd { font-size: 15px; font-weight: 700; }
-.sat-header-band .gebied { font-size: 11px; color: #a8c8e8; margin-top: 2px; }
+.sat-header-band .gebied { font-size: 11px; color: #cbd5e1; margin-top: 2px; }
 .sat-beeldvlak { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; background: #000; overflow: hidden; }
 #satelliet-img {
   width: 100%; height: 100%; object-fit: contain; display: block;
@@ -140,7 +140,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
   </select>
   <div class="sep"></div>
   <span class="groep-label">Gebied</span>
-  <button class="btn gebied actief" data-bbox="2.65,50.55,7.65,53.95" data-w="2000" data-h="2750" data-label="Nederland HD">Nederland HD</button>
+  <button class="btn gebied actief" data-bbox="2.65,50.55,7.65,53.95" data-w="2100" data-h="2750" data-label="Nederland HD">Nederland HD</button>
   <button class="btn gebied" data-bbox="-1,49,9,54" data-w="2200" data-h="1760" data-label="Benelux">Benelux</button>
   <button class="btn gebied" data-bbox="-8,46,20,57" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
   <button class="btn gebied" data-bbox="-15,30,40,72" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
@@ -269,7 +269,7 @@ const SAT_FILTER_NEDERLAND_HD_CSS = 'url(#sat-sharpen-hd) contrast(1.18) saturat
 let actieveLayer = 'auto';
 let actieveLabel = 'Auto beste beeld';
 let activeBbox = '2.65,50.55,7.65,53.95';
-let activeW = 2000, activeH = 2750;
+let activeW = 2100, activeH = 2750;
 let actiefGebiedLabel = 'Nederland HD';
 let actieveTijdstap = LAATSTE_TIJDSTAP;
 let autoRefreshTimer = null;
@@ -1808,14 +1808,76 @@ function tekenExportOverlay(ctx, x, y, w, h) {
   tekenTrekrichtingPijl(ctx, rect, bbox, { export: true });
 }
 
+function tekenSatExportHeader(ctx, breedte, hoogte, t, product) {
+  ctx.save();
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, breedte, hoogte);
+  ctx.fillStyle = '#2ec4e8';
+  ctx.fillRect(0, hoogte - 6, breedte, 6);
+
+  const pad = 36;
+  const obsLabel = obsAan && obsData ? ' · actuele data' : '';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
+  ctx.fillText('Satellietfoto', pad, 58);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = "500 22px 'DM Mono', 'Courier New', monospace";
+  ctx.fillText(`${productLabel(product)} · EUMETSAT EUMETView / Meteosat Third Generation${obsLabel}`, pad, 94);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : ''), breedte - pad, 58);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = "500 22px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(actiefGebiedLabel, breedte - pad, 94);
+  ctx.restore();
+}
+
+function tekenSatExportFooter(ctx, breedte, y, hoogte, t) {
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, y, breedte, hoogte);
+
+  const pad = 36;
+  const midY = y + hoogte / 2 + 7;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = "700 22px 'DM Sans', Arial, sans-serif";
+  ctx.fillText('weerlab.nl', pad, midY);
+
+  const merkW = ctx.measureText('weerlab.nl').width;
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = "500 19px 'DM Sans', Arial, sans-serif";
+  ctx.fillText('·  Ed Aldus - satellietbeelden & actuele data', pad + merkW + 6, midY);
+
+  const bronTekst = `EUMETSAT MTG  ·  ${obsAan && obsBijgewerkt ? `KNMI ${obsBijgewerkt}` : formatDatumTijd(t)}`;
+  ctx.font = "500 18px 'DM Mono', 'Courier New', monospace";
+  const bronW = ctx.measureText(bronTekst).width;
+  const pillH = 30;
+  const pillW = bronW + 22;
+  const pillX = breedte - pad - pillW;
+  const pillY = y + hoogte / 2 - pillH / 2;
+  ctx.fillStyle = 'rgba(46,196,232,0.14)';
+  afgerondeRechthoek(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fill();
+  ctx.fillStyle = '#7dd3fc';
+  ctx.textAlign = 'right';
+  ctx.fillText(bronTekst, breedte - pad - 11, midY);
+  ctx.restore();
+}
+
 async function maakExportCanvas(social = false) {
   const stappen = tijdstappen();
   const t = stappen[actieveTijdstap];
   const product = productVoorTijd(t);
   const url = laatsteUrl || wmsUrl(actieveLayer, activeBbox, activeW, activeH, actieveTijdstap);
   const img = await laadAfbeeldingVoorCanvas(url);
-  const headerH = 86;
-  const footerH = 42;
+  const headerH = 130;
+  const footerH = 60;
   const bronW = img.naturalWidth || activeW;
   const bronH = img.naturalHeight || activeH;
   const maxBreedte = social ? 1200 : bronW;
@@ -1826,40 +1888,14 @@ async function maakExportCanvas(social = false) {
   const ctx = canvas.getContext('2d');
   ctx.scale(schaal, schaal);
 
-  ctx.fillStyle = '#003366';
-  ctx.fillRect(0, 0, bronW, headerH);
-  ctx.fillStyle = '#2ec4e8';
-  ctx.fillRect(0, headerH - 3, bronW, 3);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 28px Arial, sans-serif';
-  ctx.fillText('Satellietfoto', 24, 36);
-  ctx.font = '18px Arial, sans-serif';
-  ctx.fillStyle = '#a8c8e8';
-  const obsLabel = obsAan && obsData ? ' · KNMI 10-min temp/wind' : '';
-  ctx.fillText(`${productLabel(product)} · Bron: EUMETSAT EUMETView / Meteosat Third Generation${obsLabel}`, 24, 66);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 26px Arial, sans-serif';
-  ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : ''), bronW - 24, 36);
-  ctx.font = '18px Arial, sans-serif';
-  ctx.fillStyle = '#a8c8e8';
-  ctx.fillText(actiefGebiedLabel, bronW - 24, 66);
-  ctx.textAlign = 'left';
+  tekenSatExportHeader(ctx, bronW, headerH, t, product);
 
   ctx.filter = actiefSatFilterCanvas();
   ctx.drawImage(img, 0, headerH);
   ctx.filter = 'none';
   tekenExportOverlay(ctx, 0, headerH, bronW, bronH);
 
-  ctx.fillStyle = '#00142d';
-  ctx.fillRect(0, headerH + bronH, bronW, footerH);
-  ctx.fillStyle = '#dcecff';
-  ctx.font = '18px Arial, sans-serif';
-  const obsBron = obsAan && obsBijgewerkt ? ` · KNMI bijgewerkt ${obsBijgewerkt}` : '';
-  ctx.fillText(`Bron: EUMETSAT EUMETView / MTG${obsBron}`, 24, headerH + bronH + 27);
-  ctx.textAlign = 'right';
-  ctx.fillText('© Ed Aldus / Weerlab', bronW - 24, headerH + bronH + 27);
-  ctx.textAlign = 'left';
+  tekenSatExportFooter(ctx, bronW, headerH + bronH, footerH, t);
 
   return { canvas, t, url };
 }
