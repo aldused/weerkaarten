@@ -458,10 +458,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     </select>
   </div>
 
-  <div style="display:flex;align-items:center;gap:6px;" title="Verwachting-bron 0-48u: HARMONIE only, ICON-D2 only, beide gemiddeld (MOSMIX), of maximum (worst-case)">
+  <div style="display:flex;align-items:center;gap:6px;" title="Modelverwachting na de pySTEPS-nowcast: HARMONIE, ICON-D2, gemiddelde van beide, of maximum (worst-case)">
     <span class="zoom-label">Model:</span>
     <select id="model-select" class="reset-btn" style="padding:5px 10px;">
-      <option value="ensemble">MOSMIX (HAR+ICON)/2</option>
+      <option value="ensemble">Gemiddeld (HAR+ICON)/2</option>
       <option value="harmonie">HARMONIE</option>
       <option value="icond2">ICON-D2</option>
       <option value="max">Worst-case (max)</option>
@@ -586,11 +586,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 <div class="lagen-info-popover" id="lagen-info-popover">
   <button class="sluit" id="lagen-info-sluit" title="Sluiten">×</button>
   <h3>Lagen op de radar</h3>
-  <div class="row"><span class="badge">PROV</span><span class="uit">Provinciegrenzen — NL en BE provincies + buitengrens als donkere lijn.</span></div>
-  <div class="row"><span class="badge">RIV</span><span class="uit">Belangrijkste rivieren (Rijn, Maas, IJssel, Schelde, ...) als blauwe lijnen.</span></div>
   <div class="row"><span class="badge">PLTS</span><span class="uit">Stads/plaatsnamen — ster (rood) bij &gt;500k inwoners, vierkant bij &gt;100k, cirkel kleiner. Drempel daalt bij hogere zoom.</span></div>
   <div class="row"><span class="badge">❄ HAGEL</span><span class="uit">Pixels &gt;55 dBZ — mogelijk hagel (geen garantie; sterke buien hebben vaak hoge reflectiviteit).</span></div>
-  <div class="row"><span class="badge">+24u HARMONIE</span><span class="uit">Verlengt verwachting na pySTEPS-nowcast (0–2u) met HARMONIE 43 NWP tot +24u (uurlijkse stappen).</span></div>
+  <div class="row"><span class="badge">MODEL</span><span class="uit">Verlengt de verwachting na pySTEPS-nowcast (0–2u) met de gekozen modelbron: HARMONIE, ICON-D2, gemiddeld of worst-case.</span></div>
   <div class="row"><span class="badge" style="background:#fef3c7;color:#92400e;">VERWACHTING</span><span class="uit">De tijdlijn onder de kaart scheidt verleden, nowcast en modelverwachting. De gestreepte zone markeert forecast-frames rechts van NU.</span></div>
   <div class="row" id="row-blend-info" style="display:none;"><span class="badge" style="background:#dbeafe;color:#1e40af;">700 hPa-BLEND</span><span class="uit" id="blend-info-tekst">—</span></div>
   <div class="row"><span class="badge" style="background:#ef4444;color:#fff;">PIN</span><span class="uit">Klik kaart of zoek plaats = rode pin met plaatsnaam + neerslag-tijdreeks onderaan.</span></div>
@@ -888,6 +886,32 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var dt = new Date(meta.tijden[idx]);
     return isNaN(dt.getTime()) ? null : dt;
   }
+  function parseModelTimeMs(ts) {
+    if (!ts) return NaN;
+    // Model-meta wordt als lokale Nederlandse tijd zonder timezone geschreven.
+    // Niet als UTC parsen, anders schuift HARMONIE/ICON-D2 in de radar 1-2 uur op.
+    var dt = new Date(ts);
+    return isNaN(dt.getTime()) ? NaN : dt.getTime();
+  }
+  function modelBlendLabel() {
+    if (modelBlend === "icond2") return icond2Geladen ? "ICON-D2" : "HARMONIE fallback";
+    if (modelBlend === "max") return icond2Geladen ? "Worst-case (HARMONIE/ICON-D2)" : "HARMONIE";
+    if (modelBlend === "ensemble") return icond2Geladen ? "Gemiddeld HARMONIE/ICON-D2" : "HARMONIE";
+    return "HARMONIE 43";
+  }
+  function isModelFrame(idx) {
+    return !!(frameTypes && frameTypes[idx] === "harmonie");
+  }
+  function forecastOffsetText(idx) {
+    if (tNowIndex < 0) return "";
+    var t0 = parseFrameTime(tNowIndex);
+    var t1 = parseFrameTime(idx);
+    if (!t0 || !t1) return "";
+    var minOffset = Math.round((t1.getTime() - t0.getTime()) / 60000);
+    if (minOffset < 60) return "+" + minOffset + " min";
+    if (minOffset % 60 === 0) return "+" + (minOffset / 60) + " uur";
+    return "+" + (minOffset / 60).toFixed(1).replace(".", ",") + " uur";
+  }
 
   function bepaalNowIndex() {
     var fallback = (typeof meta.t_now_index === "number") ? meta.t_now_index : (nFrames - 1);
@@ -905,7 +929,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     return tNowIndex >= 0 && idx > tNowIndex;
   }
 
-  // ── ICOND2-loader (parallel naast HARMONIE voor MOSMIX-ensemble) ────────
+  // ── ICOND2-loader (parallel naast HARMONIE voor modelblend) ────────
   function laadIcond2() {
     if (icond2Geladen) return Promise.resolve();
     var t = Date.now();
@@ -925,7 +949,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     }).catch(function(e) { console.error("ICOND2 load fail:", e); });
   }
 
-  // ── HARMONIE-extensie tot +24u ──────────────────────────────────────────
+  // ── Model-extensie na de pySTEPS-nowcast ────────────────────────────────
   function laadHarmonie() {
     if (harmonieGeladen) return Promise.resolve();
     var t = Date.now();
@@ -956,6 +980,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       meta.tijden = meta.tijden.slice(0, nFramesNowcast);
       meta.tijden_tekst = meta.tijden_tekst.slice(0, nFramesNowcast);
       meta.frame_types = meta.frame_types.slice(0, nFramesNowcast);
+      if (meta.model_labels) meta.model_labels = meta.model_labels.slice(0, nFramesNowcast);
+      frameTypes = meta.frame_types;
       nFrames = nFramesNowcast;
     }
 
@@ -975,7 +1001,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var im = icond2Cache.meta;
       for (var ii = 0; ii < im.tijden.length; ii++) {
         var its = im.tijden[ii];
-        var iT = new Date(its.endsWith("Z") ? its : its + "Z").getTime();
+        var iT = parseModelTimeMs(its);
+        if (!Number.isFinite(iT)) continue;
         icond2TijdMap[iT] = ii;
       }
     }
@@ -983,7 +1010,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     for (var h = 0; h < hN; h++) {
       var hStr = hMeta.tijden[h];
       if (!hStr) continue;
-      var hT = new Date(hStr.endsWith("Z") ? hStr : hStr + "Z").getTime();
+      var hT = parseModelTimeMs(hStr);
+      if (!Number.isFinite(hT)) continue;
       if (hT <= radarLastT + 30 * 60 * 1000) continue;
       // Resample HARMONIE → mm/u-grid
       var hMm = resampleNaarRadarMm(hData, hLat, hLon, h, hMeta.grid);
@@ -1001,7 +1029,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         } else {
           // ensemble = mean
           for (var bj = 0; bj < hMm.length; bj++) hMm[bj] = (hMm[bj] + iMm[bj]) * 0.5;
-          modelLabel = "MOSMIX (HAR+ICON)/2";
+          modelLabel = "Gemiddeld HAR+ICON";
         }
       } else if (modelBlend === "icond2" && !icond2Cache) {
         // user wil ICOND2 maar niet geladen — toon HARMONIE als fallback
@@ -1015,14 +1043,17 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var oudLen = radarData.length;
     var nieuw = new Uint8Array(oudLen + nieuweFrames.length * nLat * nLon);
     nieuw.set(radarData);
+    if (!meta.model_labels) meta.model_labels = new Array(nFrames).fill("");
     for (var i = 0; i < nieuweFrames.length; i++) {
       nieuw.set(nieuweFrames[i].pv, oudLen + i * nLat * nLon);
       meta.tijden.push(new Date(nieuweFrames[i].t).toISOString());
       meta.tijden_tekst.push(nieuweFrames[i].label);
       meta.frame_types.push("harmonie");
+      meta.model_labels.push(nieuweFrames[i].model);
     }
     radarData = nieuw;
     nFrames += nieuweFrames.length;
+    frameTypes = meta.frame_types;
     document.getElementById("slider").max = nFrames - 1;
     bouwSliderOverlay();
     bouwCumGrid();
@@ -1032,7 +1063,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // Update header sub
     var sub = document.getElementById("hdr-sub");
-    if (sub) sub.textContent = "KNMI radar + pySTEPS-nowcast (0–2u) + HARMONIE 43 (2–60u)";
+    if (sub) sub.textContent = "KNMI radar + pySTEPS-nowcast (0–2u) + " + modelBlendLabel() + " (modelverwachting)";
   }
 
   function _windDir(u, v) {
@@ -1065,7 +1096,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       " min · Δ = " + (blend.delta_kmh || 0) + " km/u.";
     if (sub) {
       sub.textContent = "KNMI radar + pySTEPS-nowcast + 700 hPa-blend (Δ" +
-        (blend.delta_kmh || 0) + " km/u) + HARMONIE 43 (2–60u)";
+        (blend.delta_kmh || 0) + " km/u) + " + modelBlendLabel() + " (modelverwachting)";
     }
   }
 
@@ -1377,6 +1408,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       document.getElementById("hdr-update").textContent = "Bijgewerkt: " + meta.bijgewerkt;
 
       frameTypes = meta.frame_types || null;
+      meta.model_labels = meta.model_labels || new Array(nFrames).fill("");
       tNowIndex = bepaalNowIndex();
       bouwSliderOverlay();
       toonBlendInfo(meta.blend_700hpa);
@@ -2059,10 +2091,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // Update UI labels
     var isFcst = isFutureFrame(frameIdx) || (frameTypes && frameTypes[frameIdx] === "forecast");
+    var isModel = isModelFrame(frameIdx);
     var labelText = tijdTekst;
     if (isFcst && tNowIndex >= 0) {
-      var minOffset = (frameIdx - tNowIndex) * (meta.interval_min || 5);
-      labelText = "+" + minOffset + " min · " + tijdTekst;
+      var bronLabel = isModel
+        ? ((meta.model_labels && meta.model_labels[frameIdx]) || modelBlendLabel())
+        : "Nowcast";
+      labelText = forecastOffsetText(frameIdx) + " · " + bronLabel + " · " + tijdTekst;
     }
     document.getElementById("tijd-label").textContent = labelText;
     document.getElementById("canvas-tijd").textContent = tijdTekst;
@@ -2076,7 +2111,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var sparkSerie = reeksVoorPunt(puntSel.lat, puntSel.lon);
       if (sparkSerie) tekenSparkline(sparkSerie);
     }
-    document.getElementById("fcst-badge").style.display = isFcst ? "block" : "none";
+    var fcstBadge = document.getElementById("fcst-badge");
+    fcstBadge.textContent = isModel ? "MODELVERWACHTING" : "NOWCAST";
+    fcstBadge.style.display = isFcst ? "block" : "none";
   }
 
   // ── Slider-overlay: forecast-zone + "nu"-marker ─────────────────────────
@@ -2803,6 +2840,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
               meta.tijden = meta.tijden.slice(0, nFramesNowcast);
               meta.tijden_tekst = meta.tijden_tekst.slice(0, nFramesNowcast);
               meta.frame_types = meta.frame_types.slice(0, nFramesNowcast);
+              if (meta.model_labels) meta.model_labels = meta.model_labels.slice(0, nFramesNowcast);
+              frameTypes = meta.frame_types;
               nFrames = nFramesNowcast;
               if (frameIdx >= nFrames) frameIdx = nFrames - 1;
               document.getElementById("slider").max = nFrames - 1;
@@ -2846,6 +2885,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
             meta.tijden = meta.tijden.slice(0, nFramesNowcast);
             meta.tijden_tekst = meta.tijden_tekst.slice(0, nFramesNowcast);
             meta.frame_types = meta.frame_types.slice(0, nFramesNowcast);
+            if (meta.model_labels) meta.model_labels = meta.model_labels.slice(0, nFramesNowcast);
+            frameTypes = meta.frame_types;
             nFrames = nFramesNowcast;
             harmonieGeladen = false;
             laadHarmonie();
@@ -3321,7 +3362,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     c.fillStyle = "#94a3b8";
     c.font = "500 " + Math.round(12 * k) + "px 'DM Mono', monospace";
     var tijdT = (radarMode !== "instant" && cumLabel) ? cumLabel : (meta.tijden_tekst ? meta.tijden_tekst[fIdx] : "");
-    var brn = harmonieGeladen ? "KNMI radar + pySTEPS-nowcast + HARMONIE 43" : "KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast";
+    var brn = harmonieGeladen ? "KNMI radar + pySTEPS-nowcast + " + modelBlendLabel() : "KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast";
     c.fillText(brn + " · " + tijdT, Math.round(20 * k), Math.round(40 * k));
     var bijTxt = "Bijgewerkt: " + (meta.bijgewerkt || "");
     c.fillStyle = "#cbd5e1";
@@ -3383,7 +3424,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     c.fillText("·  neerslagradar", Math.round(20 * k) + merkW + Math.round(4 * k), fy + fH / 2 - Math.round(7 * k));
     c.fillStyle = "#94a3b8";
     c.font = "500 " + Math.round(11 * k) + "px 'DM Mono', monospace";
-    c.fillText("Bron: KNMI · pySTEPS · HARMONIE 43", Math.round(20 * k), fy + fH / 2 + Math.round(10 * k));
+    c.fillText("Bron: KNMI · pySTEPS · " + (harmonieGeladen ? modelBlendLabel() : "nowcast"), Math.round(20 * k), fy + fH / 2 + Math.round(10 * k));
     c.fillStyle = "#7dd3fc";
     c.textAlign = "right";
     c.fillText("© Ed Aldus / KNMI", srcW - Math.round(20 * k), fy + fH / 2);
