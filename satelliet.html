@@ -14,6 +14,12 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .auto-status { color: #2ec4e8; font-size: 11px; font-weight: 600; text-align: right; }
 
 .toolbar { background: white; padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #dde6f0; flex-shrink: 0; }
+.toolbar-more { flex-basis: 100%; margin-top: 2px; border-top: 1px solid #eef3f8; padding-top: 6px; }
+.toolbar-more summary { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 14px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #24415f; font-size: 12px; font-weight: 700; cursor: pointer; list-style: none; }
+.toolbar-more summary::-webkit-details-marker { display: none; }
+.toolbar-more summary::before { content: "▸"; color: #2a4a70; font-size: 11px; }
+.toolbar-more[open] summary::before { content: "▾"; }
+.toolbar-more-body { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 7px; }
 
 .groep-label { font-size: 10px; color: #8aa; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 2px; }
 .sep { width: 1px; background: #dde6f0; align-self: stretch; margin: 0 4px; }
@@ -29,6 +35,8 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .btn-download:hover { background: #0055aa; }
 .btn-download.social { background: #1a6a3a; }
 .btn-download.social:hover { background: #238a4f; }
+.btn-download.ai { background: #006b5f; }
+.btn-download.ai:hover { background: #008575; }
 .veld-mini { height: 24px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; padding: 2px 9px; }
 .check-mini { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; white-space: nowrap; user-select: none; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
 .check-mini:hover { background: #eef4fb; border-color: #94a3b8; }
@@ -68,7 +76,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 .btn-play { background: none; border: 1px solid #2ec4e8; color: #2ec4e8; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .btn-play.actief { background: #2ec4e8; color: #00205b; }
 
-.beeld-wrap { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; background: #000; padding: 14px; }
+.beeld-wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; position: relative; background: #000; padding: 14px; }
 .sat-kaart { width: 100%; height: 100%; display: flex; flex-direction: column; background: #050b14; box-shadow: 0 4px 24px rgba(0,0,0,0.45); }
 .sat-header-band {
   background: #003366; color: white;
@@ -105,6 +113,12 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="sat-sharpen-hd" color-interpolation-filters="sRGB">
+    <feConvolveMatrix order="3" preserveAlpha="true" divisor="1"
+      kernelMatrix="0 -0.14 0 -0.14 1.56 -0.14 0 -0.14 0"/>
+  </filter>
+</svg>
 
 <div class="header">
   <div>
@@ -116,24 +130,34 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
 
 <div class="toolbar">
   <span class="groep-label">Product</span>
-  <button class="btn actief" data-layer="auto" data-label="Auto dag/nacht">Auto</button>
-  <button class="btn" data-layer="mtg_fd:rgb_truecolour" data-label="True Colour">True Colour</button>
-  <button class="btn" data-layer="mtg_fd:rgb_geocolour" data-label="GeoColour">GeoColour</button>
-  <button class="btn" data-layer="mtg_fd:ir105_hrfi" data-label="IR 10.5µm nacht/dag" title="Infrarood, ook bruikbaar in de nacht">IR nacht</button>
-  <button class="btn" data-layer="mtg_fd:rgb_dust" data-label="Stof RGB">Stof RGB</button>
-  <button class="btn" data-layer="mtg_fd:rgb_fog" data-label="Mist RGB">Mist RGB</button>
+  <select class="veld-mini" id="product-select" title="Satellietproduct">
+    <option value="auto" data-label="Auto beste beeld">Auto beste beeld</option>
+    <option value="mtg_fd:rgb_truecolour" data-label="True Colour">True Colour</option>
+    <option value="mtg_fd:rgb_geocolour" data-label="GeoColour">GeoColour</option>
+    <option value="mtg_fd:ir105_hrfi" data-label="IR 10.5µm nacht/dag">IR nacht</option>
+    <option value="mtg_fd:rgb_dust" data-label="Stof RGB">Stof RGB</option>
+    <option value="mtg_fd:rgb_fog" data-label="Mist RGB">Mist RGB</option>
+  </select>
   <div class="sep"></div>
   <span class="groep-label">Gebied</span>
-  <button class="btn gebied actief" data-bbox="-1,49,9,54" data-w="2400" data-h="1440" data-label="Benelux">Benelux</button>
+  <button class="btn gebied actief" data-bbox="2.65,50.55,7.65,53.95" data-w="2400" data-h="1632" data-label="Nederland HD">Nederland HD</button>
+  <button class="btn gebied" data-bbox="-1,49,9,54" data-w="2400" data-h="1440" data-label="Benelux">Benelux</button>
   <button class="btn gebied" data-bbox="-8,46,20,57" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
   <button class="btn gebied" data-bbox="-15,30,40,72" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
+  <select class="veld-mini" id="lijnkleur" title="Kleur van lands- en provinciegrenzen op de satellietfoto">
+    <option value="cyan">Lijn cyaan</option>
+    <option value="white">Lijn wit</option>
+    <option value="amber">Lijn geel</option>
+    <option value="dark">Lijn donker</option>
+  </select>
   <div class="sep"></div>
-  <span class="groep-label">Meetstations</span>
-  <button class="btn actief" id="btn-obs-toggle" title="Toon of verberg temperatuur, windpijl en windkracht van geselecteerde KNMI-stations">Temp/wind aan</button>
-  <label class="check-mini" title="Aan: toon alleen meetstations waar vrijwel geen bewolking boven ligt. Uit: toon alle gekozen stations met temperatuur en wind.">
-    <input type="checkbox" id="obs-helder" checked>
-    alleen heldere stations
-  </label>
+  <span class="groep-label">Actuele data</span>
+  <button class="btn actief" id="btn-obs-toggle" title="Toon of verberg actuele temperatuur en wind van KNMI-stations">Data aan</button>
+  <select class="veld-mini" id="obs-filter" title="Welke actuele stationdata op de satellietfoto verschijnt">
+    <option value="all">Alle data</option>
+    <option value="smart">Slim filter</option>
+    <option value="clear">Alleen helder</option>
+  </select>
   <div class="obs-wrap">
     <button class="btn" id="btn-obs-stations" title="Kies welke Nederlandse KNMI-stations met temperatuur en wind op de satellietfoto komen">Kies stations</button>
     <div class="obs-panel" id="obs-panel">
@@ -150,43 +174,50 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
     </div>
   </div>
   <div class="sep"></div>
-  <span class="groep-label">Plaatslabel</span>
-  <div class="marker-zoekwrap">
-    <input class="veld-mini" id="marker-zoek" type="text" placeholder="Plaatsnaam..." autocomplete="off" title="Zoek een plaats of typ een eigen label">
-    <button class="btn" id="btn-marker-search" title="Zoek de plaats en zet het label daar">Zet plaats</button>
-    <div class="marker-suggest" id="marker-suggest"></div>
-  </div>
-  <select class="veld-mini" id="marker-preset" title="Plaats een label op een bekende locatie">
-    <option value="">Kies plaats...</option>
-    <option value="rotterdam">Rotterdam</option>
-    <option value="rotterdam_airport">Rotterdam Airport</option>
-    <option value="barendrecht">Barendrecht</option>
-    <option value="dordrecht">Dordrecht</option>
-    <option value="eindhoven">Eindhoven</option>
-    <option value="amsterdam">Amsterdam</option>
-    <option value="brussel">Brussel</option>
-    <option value="antwerpen">Antwerpen</option>
-  </select>
-  <select class="veld-mini" id="marker-color" title="Kleur van het plaatslabel">
-    <option value="#20c76a">Groen</option>
-    <option value="#e5332a">Rood</option>
-    <option value="#ffcf33">Geel</option>
-    <option value="#2ec4e8">Blauw</option>
-  </select>
-  <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om het plaatslabel zelf te plaatsen">Plaats op kaart</button>
-  <button class="btn" id="btn-marker-clear" title="Verwijder het geplaatste plaatslabel">Wis plaats</button>
-  <div class="sep"></div>
-  <span class="groep-label">Pijl</span>
-  <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een trekrichting-pijl te tekenen">Pijl tekenen</button>
-  <button class="btn" id="btn-arrow-clear" title="Verwijder de getekende pijl">Wis pijl</button>
-  <div class="sep"></div>
   <button class="btn-refresh" id="btn-refresh">↻ Nu</button>
   <button class="btn-auto" id="btn-auto">⏱ Auto</button>
-  <button class="btn-download" id="btn-download">⬇ PNG</button>
-  <button class="btn-download" id="btn-download-pdf">⬇ PDF</button>
-  <button class="btn-download social" id="btn-download-social" title="Kleinere PNG voor social media">⬇ Social</button>
-  <button class="btn-download" id="btn-video" title="Timelapse downloaden">⬇ MP4</button>
-  <button class="btn-download social" id="btn-video-social" title="Kleinere timelapse voor social media">⬇ Social MP4</button>
+  <details class="toolbar-more">
+    <summary>Export & annotatie</summary>
+    <div class="toolbar-more-body">
+      <span class="groep-label">Plaatslabel</span>
+      <div class="marker-zoekwrap">
+        <input class="veld-mini" id="marker-zoek" type="text" placeholder="Plaatsnaam..." autocomplete="off" title="Zoek een plaats of typ een eigen label">
+        <button class="btn" id="btn-marker-search" title="Zoek de plaats en zet het label daar">Zet plaats</button>
+        <div class="marker-suggest" id="marker-suggest"></div>
+      </div>
+      <select class="veld-mini" id="marker-preset" title="Plaats een label op een bekende locatie">
+        <option value="">Kies plaats...</option>
+        <option value="rotterdam">Rotterdam</option>
+        <option value="rotterdam_airport">Rotterdam Airport</option>
+        <option value="barendrecht">Barendrecht</option>
+        <option value="dordrecht">Dordrecht</option>
+        <option value="eindhoven">Eindhoven</option>
+        <option value="amsterdam">Amsterdam</option>
+        <option value="brussel">Brussel</option>
+        <option value="antwerpen">Antwerpen</option>
+      </select>
+      <select class="veld-mini" id="marker-color" title="Kleur van het plaatslabel">
+        <option value="#20c76a">Groen</option>
+        <option value="#e5332a">Rood</option>
+        <option value="#ffcf33">Geel</option>
+        <option value="#2ec4e8">Blauw</option>
+      </select>
+      <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om het plaatslabel zelf te plaatsen">Plaats op kaart</button>
+      <button class="btn" id="btn-marker-clear" title="Verwijder het geplaatste plaatslabel">Wis plaats</button>
+      <div class="sep"></div>
+      <span class="groep-label">Pijl</span>
+      <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een trekrichting-pijl te tekenen">Pijl tekenen</button>
+      <button class="btn" id="btn-arrow-clear" title="Verwijder de getekende pijl">Wis pijl</button>
+      <div class="sep"></div>
+      <span class="groep-label">Export</span>
+      <button class="btn-download" id="btn-download">⬇ PNG</button>
+      <button class="btn-download" id="btn-download-pdf">⬇ PDF</button>
+      <button class="btn-download social" id="btn-download-social" title="Kleinere PNG voor social media">⬇ Social</button>
+      <button class="btn-download ai" id="btn-download-ai" title="Schone hoge-res satellietcrop voor externe AI-upscale. De livekaart blijft brongetrouw.">⬇ AI-ready</button>
+      <button class="btn-download" id="btn-video" title="Timelapse downloaden">⬇ MP4</button>
+      <button class="btn-download social" id="btn-video-social" title="Kleinere timelapse voor social media">⬇ Social MP4</button>
+    </div>
+  </details>
 </div>
 
 <div class="tijdlijn">
@@ -205,7 +236,7 @@ body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display
       </div>
       <div class="rechts">
         <div class="tijd" id="sat-header-tijd">laden...</div>
-        <div class="gebied" id="sat-header-gebied">NW-Europa</div>
+        <div class="gebied" id="sat-header-gebied">Nederland HD</div>
       </div>
     </div>
     <div class="sat-beeldvlak">
@@ -227,12 +258,15 @@ const PRODUCTEN = {
   truecolour: { layer: 'mtg_fd:rgb_truecolour', label: 'True Colour' },
   geocolour: { layer: 'mtg_fd:rgb_geocolour', label: 'GeoColour' }
 };
+const SAT_FILTER_STANDAARD = 'contrast(1.08) saturate(1.08) brightness(1.02)';
+const SAT_FILTER_NEDERLAND_HD_CANVAS = 'contrast(1.18) saturate(1.16) brightness(1.035)';
+const SAT_FILTER_NEDERLAND_HD_CSS = 'url(#sat-sharpen-hd) contrast(1.18) saturate(1.16) brightness(1.035)';
 
 let actieveLayer = 'auto';
-let actieveLabel = 'Auto dag/nacht';
-let activeBbox = '-1,49,9,54';
-let activeW = 2400, activeH = 1440;
-let actiefGebiedLabel = 'Benelux';
+let actieveLabel = 'Auto beste beeld';
+let activeBbox = '2.65,50.55,7.65,53.95';
+let activeW = 2400, activeH = 1632;
+let actiefGebiedLabel = 'Nederland HD';
 let actieveTijdstap = LAATSTE_TIJDSTAP;
 let autoRefreshTimer = null;
 let animatieTimer = null;
@@ -241,7 +275,7 @@ let laatsteUrl = '';
 let selectieVersie = 0;
 const frameCache = new Map();
 const overlayBestanden = {
-  nl: 'nl_provincies.geojson',
+  nl: 'nl_provincies_wadden.geojson',
   be: 'be_provincies.geojson',
   rivieren: 'nl_rivieren.geojson'
 };
@@ -352,9 +386,11 @@ let markerZoekCtrl = null;
 let markerZoekResultaten = [];
 let markerSuggestIndex = 0;
 let obsAan = true;
-let obsAlleenHelder = true;
+let obsFilterModus = 'all';
+let lijnkleur = 'cyan';
 let obsData = null;
 let obsBijgewerkt = '';
+let obsLaatsteFout = '';
 let obsTimer = null;
 let obsLaden = false;
 let geselecteerdeObsStations = new Set(STANDAARD_OBS_STATIONS);
@@ -439,9 +475,22 @@ function zonhoogte(tijd, lat = 52.1, lon = 5.2) {
 
 function productVoorTijd(tijd) {
   if (actieveLayer !== 'auto') return { layer: actieveLayer, label: actieveLabel, automatisch: false };
+  if (isNederlandHdGebied()) return { ...PRODUCTEN.geocolour, automatisch: true };
   return zonhoogte(tijd) >= 3
     ? { ...PRODUCTEN.truecolour, automatisch: true }
     : { ...PRODUCTEN.geocolour, automatisch: true };
+}
+
+function isNederlandHdGebied() {
+  return /^Nederland\b/i.test(actiefGebiedLabel || '');
+}
+
+function actiefSatFilterCanvas() {
+  return isNederlandHdGebied() ? SAT_FILTER_NEDERLAND_HD_CANVAS : SAT_FILTER_STANDAARD;
+}
+
+function actiefSatFilterCss() {
+  return isNederlandHdGebied() ? SAT_FILTER_NEDERLAND_HD_CSS : SAT_FILTER_STANDAARD;
 }
 
 function productLabel(product) {
@@ -490,7 +539,31 @@ function actieveBboxParts() {
   return activeBbox.split(',').map(Number);
 }
 
+function pasKaartFormaatAan() {
+  const wrap = document.querySelector('.beeld-wrap');
+  const kaart = document.querySelector('.sat-kaart');
+  const header = document.querySelector('.sat-header-band');
+  if (!wrap || !kaart || !header || !activeW || !activeH) return;
+
+  const wrapW = wrap.clientWidth;
+  const wrapH = wrap.clientHeight;
+  const headerH = header.getBoundingClientRect().height || 58;
+  const beeldAspect = activeW / activeH;
+  const maxBeeldH = Math.max(160, wrapH - headerH);
+  let beeldW = maxBeeldH * beeldAspect;
+  let beeldH = maxBeeldH;
+
+  if (beeldW > wrapW) {
+    beeldW = wrapW;
+    beeldH = beeldW / beeldAspect;
+  }
+
+  kaart.style.width = Math.round(beeldW) + 'px';
+  kaart.style.height = Math.round(beeldH + headerH) + 'px';
+}
+
 function beeldRect() {
+  pasKaartFormaatAan();
   const vlak = document.querySelector('.sat-beeldvlak');
   const rect = vlak.getBoundingClientRect();
   const canvas = document.getElementById('sat-overlay');
@@ -716,13 +789,28 @@ function tekenObsLabel(ctx, x, y, st, opties) {
 function zichtbareObsStations(bbox) {
   if (!obsAan || !obsData || !obsData.stations) return [];
   const [minLon, minLat, maxLon, maxLat] = bbox;
-  return obsStationLijst().filter(st =>
+  const gekozenInBeeld = obsStationLijst().filter(st =>
     geselecteerdeObsStations.has(st.naam)
     && st.ta != null
     && st.lon >= minLon && st.lon <= maxLon
     && st.lat >= minLat && st.lat <= maxLat
-    && (!obsAlleenHelder || isHelderStation(st))
   );
+  if (obsFilterModus === 'all') return gekozenInBeeld;
+  const helder = gekozenInBeeld.filter(isHelderStation);
+  if (obsFilterModus === 'clear') return helder;
+  return helder.length ? helder : gekozenInBeeld;
+}
+
+function obsHeldereFallbackActief() {
+  if (!obsAan || obsFilterModus !== 'smart' || !obsData || !obsData.stations) return false;
+  const [minLon, minLat, maxLon, maxLat] = actieveBboxParts();
+  const gekozenInBeeld = obsStationLijst().filter(st =>
+    geselecteerdeObsStations.has(st.naam)
+    && st.ta != null
+    && st.lon >= minLon && st.lon <= maxLon
+    && st.lat >= minLat && st.lat <= maxLat
+  );
+  return gekozenInBeeld.length > 0 && gekozenInBeeld.every(st => !isHelderStation(st));
 }
 
 function tekenObservaties(ctx, rect, bbox, opties = {}) {
@@ -755,18 +843,61 @@ function tekenCoordRingen(ctx, ringen, rect, bbox, stijl) {
   ctx.restore();
 }
 
+function lijnStijl() {
+  const paletten = {
+    cyan: {
+      halo: 'rgba(0,18,46,0.62)',
+      hoofd: 'rgba(94,221,255,0.74)',
+      intern: 'rgba(190,242,255,0.30)'
+    },
+    white: {
+      halo: 'rgba(0,18,46,0.60)',
+      hoofd: 'rgba(255,255,255,0.78)',
+      intern: 'rgba(255,255,255,0.32)'
+    },
+    amber: {
+      halo: 'rgba(0,18,46,0.58)',
+      hoofd: 'rgba(255,207,86,0.78)',
+      intern: 'rgba(255,230,150,0.30)'
+    },
+    dark: {
+      halo: 'rgba(255,255,255,0.36)',
+      hoofd: 'rgba(0,20,45,0.82)',
+      intern: 'rgba(0,20,45,0.34)'
+    }
+  };
+  return paletten[lijnkleur] || paletten.cyan;
+}
+
 function tekenNederlandContour(ctx, rect, bbox) {
+  if (overlayGeladen && overlayData.nl) {
+    const dichtbij = actiefGebiedLabel === 'Benelux' || isNederlandHdGebied();
+    const basis = Math.max(1, rect.dpr || 1);
+    const stijl = lijnStijl();
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, {
+      stroke: stijl.halo,
+      width: (dichtbij ? 1.9 : 1.25) * basis,
+      alpha: dichtbij ? 0.72 : 0.50
+    });
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, {
+      stroke: stijl.hoofd,
+      width: (dichtbij ? 0.75 : 0.5) * basis,
+      shadow: 'rgba(0,0,0,0.42)',
+      shadowBlur: 0.55 * basis
+    });
+    return;
+  }
   if (typeof NL_GRENS === 'undefined') return;
   const basis = Math.max(1, rect.dpr || 1);
-  const isBenelux = actiefGebiedLabel === 'Benelux';
-  const halo = isBenelux ? 5.4 : 3.3;
-  const hoofd = isBenelux ? 2.5 : 1.45;
-  const rand = isBenelux ? 0.9 : 0.55;
-  const hoofdAlpha = isBenelux ? 0.94 : 0.72;
+  const dichtbij = actiefGebiedLabel === 'Benelux' || isNederlandHdGebied();
+  const halo = dichtbij ? 5.4 : 3.3;
+  const hoofd = dichtbij ? 2.5 : 1.45;
+  const rand = dichtbij ? 0.9 : 0.55;
+  const hoofdAlpha = dichtbij ? 0.94 : 0.72;
   tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
-    stroke: isBenelux ? 'rgba(0,18,46,0.92)' : 'rgba(0,18,46,0.68)',
+    stroke: dichtbij ? 'rgba(0,18,46,0.92)' : 'rgba(0,18,46,0.68)',
     width: halo * basis,
-    alpha: isBenelux ? 1 : 0.82
+    alpha: dichtbij ? 1 : 0.82
   });
   tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
     stroke: `rgba(0,216,255,${hoofdAlpha})`,
@@ -775,16 +906,17 @@ function tekenNederlandContour(ctx, rect, bbox) {
     shadowBlur: 1.2 * basis
   });
   tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
-    stroke: isBenelux ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.58)',
+    stroke: dichtbij ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.58)',
     width: rand * basis,
-    alpha: isBenelux ? 0.95 : 0.72
+    alpha: dichtbij ? 0.95 : 0.72
   });
 }
 
 function tekenKaartOverlay(ctx, rect, bbox) {
   if (overlayGeladen) {
-    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, { stroke: 'rgba(255,255,255,0.23)', width: 0.62 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
-    tekenFeatureSet(ctx, overlayData.be, rect, bbox, { stroke: 'rgba(255,255,255,0.28)', width: 0.7 * rect.dpr, shadow: 'rgba(0,0,0,0.45)', shadowBlur: 1 * rect.dpr });
+    const stijl = lijnStijl();
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, { stroke: stijl.intern, width: 0.38 * rect.dpr, shadow: 'rgba(0,0,0,0.28)', shadowBlur: 0.45 * rect.dpr });
+    tekenFeatureSet(ctx, overlayData.be, rect, bbox, { stroke: 'rgba(255,255,255,0.18)', width: 0.42 * rect.dpr, shadow: 'rgba(0,0,0,0.35)', shadowBlur: 0.55 * rect.dpr });
     tekenFeatureSet(ctx, overlayData.rivieren, rect, bbox, { stroke: 'rgba(130,205,255,0.34)', width: 0.6 * rect.dpr });
   }
   tekenNederlandContour(ctx, rect, bbox);
@@ -949,6 +1081,7 @@ function laadSatelliet(tijdstap) {
   headerGebied.textContent = actiefGebiedLabel;
   const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
   laatsteUrl = url;
+  img.style.filter = actiefSatFilterCss();
   const cached = frameCache.get(frameCacheKey(tijdstap));
   if (cached && cached.img.complete && cached.img.naturalWidth > 0) {
     img.src = cached.url;
@@ -1017,17 +1150,14 @@ function updateTijdDisplay(tijdstap) {
   el.textContent = tijdstap === LAATSTE_TIJDSTAP ? 'laatste (' + formatTijd(t) + ')' : formatTijd(t);
 }
 
-// Product knoppen
-document.querySelectorAll('.btn[data-layer]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.btn[data-layer]').forEach(b => b.classList.remove('actief'));
-    btn.classList.add('actief');
-    actieveLayer = btn.dataset.layer;
-    actieveLabel = btn.dataset.label || 'Satellietbeeld';
-    selectieVersie++;
-    frameCache.clear();
-    laadSatelliet(actieveTijdstap);
-  });
+// Productkeuze
+document.getElementById('product-select').addEventListener('change', e => {
+  const opt = e.target.selectedOptions[0];
+  actieveLayer = e.target.value;
+  actieveLabel = opt && opt.dataset.label ? opt.dataset.label : 'Satellietbeeld';
+  selectieVersie++;
+  frameCache.clear();
+  laadSatelliet(actieveTijdstap);
 });
 
 // Gebied knoppen
@@ -1039,11 +1169,17 @@ document.querySelectorAll('.btn.gebied').forEach(btn => {
     activeW = parseInt(btn.dataset.w);
     activeH = parseInt(btn.dataset.h);
     actiefGebiedLabel = btn.dataset.label;
+    pasKaartFormaatAan();
     selectieVersie++;
     frameCache.clear();
     laadSatelliet(actieveTijdstap);
     requestAnimationFrame(tekenOverlay);
   });
+});
+
+document.getElementById('lijnkleur').addEventListener('change', e => {
+  lijnkleur = e.target.value;
+  tekenOverlay();
 });
 
 function actieveMarkerKleur() {
@@ -1112,9 +1248,14 @@ function escapeHtml(tekst) {
 function obsStatusTekst() {
   const geselecteerd = geselecteerdeObsStations.size;
   const zichtbaar = zichtbareObsStations(actieveBboxParts()).length;
-  const helder = obsAlleenHelder ? ' · alleen heldere stations' : '';
+  const filter = obsHeldereFallbackActief()
+    ? ' · geen heldere stations, toont alle gekozen'
+    : obsFilterModus === 'clear' ? ' · alleen heldere stations'
+    : obsFilterModus === 'smart' ? ' · slim filter'
+    : ' · alle stations';
   const tijd = obsBijgewerkt ? ` · ${obsBijgewerkt}` : '';
-  return `${zichtbaar} zichtbaar van ${geselecteerd} geselecteerd${helder}${tijd}`;
+  const fout = obsLaatsteFout ? ` · laatste refresh haperde, oude data blijft zichtbaar` : '';
+  return `${zichtbaar} zichtbaar van ${geselecteerd} geselecteerd${filter}${tijd}${fout}`;
 }
 
 function updateObsStatus() {
@@ -1124,7 +1265,7 @@ function updateObsStatus() {
   if (autoStatus) {
     const delen = [];
     if (autoRefreshTimer) delen.push('● Auto-refresh elke 10 min');
-    if (obsAan) delen.push(`Temp/wind ${obsData ? obsStatusTekst() : 'laden...'}`);
+    if (obsAan) delen.push(`Actuele data ${obsData ? obsStatusTekst() : 'laden...'}`);
     autoStatus.textContent = delen.join(' · ');
   }
 }
@@ -1134,7 +1275,7 @@ function bouwObsPanel() {
   if (!lijst) return;
   const stations = obsStationLijst();
   if (!stations.length) {
-    lijst.innerHTML = '<div style="grid-column:1/-1;padding:10px;color:#6a7f94;font-size:12px">Zet Temp/wind aan om de KNMI-stations te laden.</div>';
+    lijst.innerHTML = '<div style="grid-column:1/-1;padding:10px;color:#6a7f94;font-size:12px">Zet actuele data aan om de KNMI-stations te laden.</div>';
     updateObsStatus();
     return;
   }
@@ -1146,19 +1287,34 @@ function bouwObsPanel() {
   updateObsStatus();
 }
 
+async function fetchJsonMetTimeout(url, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function laadObservaties(force = false) {
   if (obsLaden) return obsData;
   if (obsData && !force) return obsData;
   obsLaden = true;
   updateObsStatus();
   try {
-    let r = await fetch(`${ACTUEEL_URL}?t=${Date.now()}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    obsData = await r.json();
+    obsData = await fetchJsonMetTimeout(`actueel.json?t=${Date.now()}`, 5000);
+    obsLaatsteFout = '';
   } catch (e) {
-    const r = await fetch(`actueel.json?t=${Date.now()}`);
-    if (!r.ok) throw e;
-    obsData = await r.json();
+    try {
+      obsData = await fetchJsonMetTimeout(`${ACTUEEL_URL}?t=${Date.now()}`, 7000);
+      obsLaatsteFout = '';
+    } catch (err) {
+      obsLaatsteFout = err && err.message ? err.message : 'laadfout';
+      if (!obsData) throw err;
+    }
   } finally {
     obsLaden = false;
   }
@@ -1437,24 +1593,24 @@ document.getElementById('btn-obs-toggle').addEventListener('click', async () => 
   const btn = document.getElementById('btn-obs-toggle');
   btn.classList.toggle('actief', obsAan);
   if (obsAan) {
-    btn.textContent = 'Temp/wind aan';
+    btn.textContent = 'Data aan';
     startObsTimer();
     try {
       await laadObservaties(true);
-      document.getElementById('info-balk').textContent = `Temperatuur en wind aan · ${obsStatusTekst()}`;
+      document.getElementById('info-balk').textContent = `Actuele data aan · ${obsStatusTekst()}`;
     } catch (e) {
       document.getElementById('info-balk').textContent = 'KNMI-waarnemingen konden niet worden geladen';
     }
   } else {
-    btn.textContent = 'Temp/wind uit';
+    btn.textContent = 'Data uit';
     stopObsTimer();
     tekenOverlay();
   }
   updateObsStatus();
 });
 
-document.getElementById('obs-helder').addEventListener('change', e => {
-  obsAlleenHelder = e.target.checked;
+document.getElementById('obs-filter').addEventListener('change', e => {
+  obsFilterModus = e.target.value;
   tekenOverlay();
   updateObsStatus();
 });
@@ -1589,7 +1745,7 @@ async function maakExportCanvas(social = false) {
   ctx.fillText(actiefGebiedLabel, bronW - 24, 66);
   ctx.textAlign = 'left';
 
-  ctx.filter = 'contrast(1.08) saturate(1.08) brightness(1.02)';
+  ctx.filter = actiefSatFilterCanvas();
   ctx.drawImage(img, 0, headerH);
   ctx.filter = 'none';
   tekenExportOverlay(ctx, 0, headerH, bronW, bronH);
@@ -1604,6 +1760,27 @@ async function maakExportCanvas(social = false) {
   ctx.fillText('© Ed Aldus / Weerlab', bronW - 24, headerH + bronH + 27);
   ctx.textAlign = 'left';
 
+  return { canvas, t, url };
+}
+
+async function maakAiReadyCanvas() {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const url = laatsteUrl || wmsUrl(actieveLayer, activeBbox, activeW, activeH, actieveTijdstap);
+  const img = await laadAfbeeldingVoorCanvas(url);
+  const bronW = img.naturalWidth || activeW;
+  const bronH = img.naturalHeight || activeH;
+  const doelW = Math.min(3600, Math.max(bronW, 3200));
+  const schaal = doelW / bronW;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bronW * schaal);
+  canvas.height = Math.round(bronH * schaal);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.filter = actiefSatFilterCanvas();
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.filter = 'none';
   return { canvas, t, url };
 }
 
@@ -1642,6 +1819,34 @@ async function downloadPng(social = false) {
 
 document.getElementById('btn-download').addEventListener('click', () => downloadPng(false));
 document.getElementById('btn-download-social').addEventListener('click', () => downloadPng(true));
+
+async function downloadAiReadyPng() {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const btn = document.getElementById('btn-download-ai');
+  const info = document.getElementById('info-balk');
+  const oudeTekst = btn.textContent;
+  btn.textContent = 'AI-ready…';
+  btn.disabled = true;
+
+  try {
+    const { canvas } = await maakAiReadyCanvas();
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = bestandsNaam(t, '-ai-ready-clean');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    info.textContent = 'AI-ready PNG gemaakt · schoon satellietbeeld zonder header, labels of meetstations';
+  } catch (err) {
+    alert('AI-ready export is niet gelukt. Mogelijk blokkeert de browser canvas-export van de EUMETView-beelden.');
+  } finally {
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-download-ai').addEventListener('click', downloadAiReadyPng);
 
 function dataUrlNaarBytes(dataUrl) {
   const binair = atob(dataUrl.split(',')[1]);
@@ -1787,7 +1992,7 @@ function tekenVideoFrame(ctx, canvas, frame, schaal) {
   ctx.scale(schaal, schaal);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, w, h);
-  ctx.filter = 'contrast(1.08) saturate(1.08) brightness(1.02)';
+  ctx.filter = actiefSatFilterCanvas();
   ctx.drawImage(frame.img, 0, 0, w, h);
   ctx.filter = 'none';
   tekenExportOverlay(ctx, 0, 0, w, h);
@@ -2000,9 +2205,13 @@ document.getElementById('btn-play').addEventListener('click', async () => {
 });
 
 // Start
-window.addEventListener('resize', tekenOverlay);
+window.addEventListener('resize', () => {
+  pasKaartFormaatAan();
+  tekenOverlay();
+});
 herstelObsSelectie();
 bouwObsPanel();
+pasKaartFormaatAan();
 laadOverlayData();
 updateTijdDisplay(LAATSTE_TIJDSTAP);
 laadSatelliet(LAATSTE_TIJDSTAP);
