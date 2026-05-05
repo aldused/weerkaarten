@@ -238,6 +238,17 @@
     font-family: 'DM Sans', sans-serif;
     user-select: none;
   }
+  .plaats-label .plaats-dot.major { fill: #ef4444; stroke: #fff; stroke-width: 1.4; }
+  .plaats-label .plaats-dot.medium { fill: #334155; stroke: #fff; stroke-width: 1.1; }
+  .plaats-label .plaats-dot.small { fill: #475569; stroke: #fff; stroke-width: 0.9; opacity: .9; }
+  .plaats-label text {
+    fill: #111827;
+    paint-order: stroke;
+    stroke: rgba(255,255,255,.96);
+    stroke-width: 4;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.22));
+  }
   .zoom-controls {
     position: absolute;
     top: 10px; right: 10px;
@@ -274,6 +285,19 @@
     color: var(--primary-strong);
     z-index: 10;
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .kaart-time-badge {
+    position: absolute;
+    bottom: 10px; left: 74px;
+    background: rgba(0,32,91,0.94);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.25);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
   }
   .cluster-marker {
     cursor: pointer;
@@ -442,7 +466,7 @@
         <span class="meta" id="header-meta"><b id="header-total">0</b> ontladingen · <span id="header-rate">— /min</span></span>
       </span>
     </div>
-    <div class="kaart-hint">💡 Tip: klik op een cluster-bolletje om in te zoomen, of op een losse flash voor details + plaatsnaam.</div>
+    <div class="kaart-hint">Tip: klik op een cluster om in te zoomen. Wiel/dubbelklik zoomt op de muispositie; sleep om te schuiven.</div>
     <div class="kaart-viewport" id="kaart-viewport">
       <div class="kaart-wrap" id="kaart-wrap">
         <img src="kaart_basis_nl.png" id="basis-kaart" alt="basiskaart" crossorigin="anonymous">
@@ -456,6 +480,7 @@
         <button class="zoom-btn reset" id="btn-download" title="Download PNG">⬇</button>
       </div>
       <div class="zoom-info" id="zoom-info">100%</div>
+      <div class="kaart-time-badge" id="kaart-time-badge">—</div>
       <div id="strike-tooltip"></div>
     </div>
     <div class="panel-credits">
@@ -505,7 +530,7 @@
       <div class="panel-header"><h2>Hoe lezen?</h2></div>
       <div class="panel-body" style="font-size:12px;line-height:1.55;color:var(--text);">
         <p style="margin-bottom:8px;"><b>Kleur</b> = tijd sinds ontlading. Wit/geel is vers (laatste minuten), rood/paars is ouder. De pulserende witte stippen zijn nieuw binnengekomen onweer.</p>
-        <p style="margin-bottom:8px;"><b>Symbool</b> — een cirkel met bliksempictogram is een Cloud-Ground (CG, inslag op grond). Een kleinere transparante stip is een Intra-Cloud (IC, ontlading binnen of tussen wolken). Bij meerdere ontladingen dicht op elkaar wordt automatisch een cluster getoond met een aantal — klik om in te zoomen.</p>
+        <p style="margin-bottom:8px;"><b>Symbool</b> — een cirkel met bliksempictogram is Cloud-Ground (CG, ontlading tussen wolk en grond). Een kleinere transparante stip is Intra-Cloud (IC, ontlading binnen of tussen wolken). Bij meerdere ontladingen dicht op elkaar wordt automatisch een cluster getoond met een aantal — klik om in te zoomen.</p>
         <p style="margin-bottom:8px;"><b>Verplaatsing</b> — kijk naar het kleurverloop: een spoor van rood naar wit volgt de baan van een onweersbui. Hoge dichtheid = actieve cel, ijle stippen = naderend of zwakker.</p>
         <p style="margin-bottom:0;"><b>Latency</b> — Blitzortung-feed is doorgaans &lt;30 sec achter realtime. Bij zwakke detectie (weinig stations triggeren tegelijk) kan een ontlading missen of als IC verschijnen ipv CG.</p>
       </div>
@@ -572,6 +597,26 @@ const REGIOS = {
 let regio = 'nl';
 let LON_MIN, LON_MAX, LAT_MIN, LAT_MAX, SVG_W, SVG_H;
 let PLAATSEN = [];
+const WINDOW_KEY = 'bliksem_window_min';
+const WINDOW_CHOICES = [15, 30, 60, 120, 360, 720, 1080, 1440];
+function leesWindowChoice() {
+  try {
+    const saved = parseInt(localStorage.getItem(WINDOW_KEY) || '');
+    return WINDOW_CHOICES.includes(saved) ? saved : 60;
+  } catch (_) {
+    return 60;
+  }
+}
+let windowMin = leesWindowChoice();
+function pasWindowSelectToe() {
+  const sel = document.getElementById('window-select');
+  if (sel) sel.value = String(windowMin);
+}
+function windowLabel(min = windowMin) {
+  if (min < 60) return `${min} min`;
+  if (min % 60 === 0) return `${min / 60} uur`;
+  return `${(min / 60).toFixed(1).replace('.', ',')} uur`;
+}
 function applyRegio(key) {
   regio = key;
   const cfg = REGIOS[key];
@@ -588,7 +633,7 @@ function applyRegio(key) {
   vp.style.maxWidth = cfg.maxWidth;
   const t = document.getElementById('page-title');
   if (t) t.textContent = key === 'nl' ? 'Bliksem live — Nederland' : 'Bliksem live — Benelux';
-  renderPlaatsen();
+  if (typeof renderPlaatsen === 'function') renderPlaatsen();
 }
 applyRegio('nl');
 
@@ -657,13 +702,13 @@ function renderPlaatsen() {
   else if (zoom >= 2.5) popMin = 30000;
   else if (zoom >= 1.5) popMin = 80000;
 
-  // Inverse-scale per label zodat tekst constante schermgrootte houdt bij zoom
-  const invScale = 1 / Math.sqrt(zoom);
+  // Inverse-scale per label zodat tekst leesbaar blijft bij zoom, zoals op radar.
+  const invScale = 1 / Math.sqrt(Math.max(1, zoom));
 
   // Dedup: namen die al in basisset staan niet dubbel uit lookup tonen
   const seen = new Set();
 
-  function add(naam, lat, lon, rang) {
+  function add(naam, lat, lon, rang, pop = 0) {
     if (seen.has(naam)) return;
     if (lon < LON_MIN || lon > LON_MAX || lat < LAT_MIN || lat > LAT_MAX) return;
     seen.add(naam);
@@ -672,23 +717,22 @@ function renderPlaatsen() {
     g.setAttribute('class', 'plaats-label');
     g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${invScale.toFixed(3)})`);
 
-    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    dot.setAttribute('r', rang === 0 ? '3.2' : (rang === 1 ? '2.4' : '1.8'));
-    dot.setAttribute('fill', '#222');
-    dot.setAttribute('stroke', 'white');
-    dot.setAttribute('stroke-width', '1');
+    const major = rang === 0 || pop >= 450000;
+    const medium = rang === 1 || pop >= 90000;
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', major ? 'path' : 'circle');
+    dot.setAttribute('class', 'plaats-dot ' + (major ? 'major' : medium ? 'medium' : 'small'));
+    if (major) {
+      dot.setAttribute('d', 'M0,-5.4 L1.55,-1.65 L5.55,-1.65 L2.25,.62 L3.55,4.85 L0,2.35 L-3.55,4.85 L-2.25,.62 L-5.55,-1.65 L-1.55,-1.65 Z');
+    } else {
+      dot.setAttribute('r', medium ? '2.5' : '1.8');
+    }
     g.appendChild(dot);
 
     const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     txt.setAttribute('x', '5');
     txt.setAttribute('y', '4');
-    txt.setAttribute('font-size', rang === 0 ? '14' : (rang === 1 ? '12' : '11'));
-    txt.setAttribute('font-weight', rang === 0 ? '700' : '600');
-    txt.setAttribute('fill', '#1a1a1a');
-    txt.setAttribute('paint-order', 'stroke');
-    txt.setAttribute('stroke', 'white');
-    txt.setAttribute('stroke-width', '3');
-    txt.setAttribute('stroke-linejoin', 'round');
+    txt.setAttribute('font-size', major ? '14' : (medium ? '12' : '10.5'));
+    txt.setAttribute('font-weight', major ? '800' : '700');
     txt.textContent = naam;
     g.appendChild(txt);
 
@@ -698,7 +742,7 @@ function renderPlaatsen() {
   // Basisset (handgekozen labels)
   for (const p of PLAATSEN) {
     if (p.rang > maxRang) continue;
-    add(p.naam, p.lat, p.lon, p.rang);
+    add(p.naam, p.lat, p.lon, p.rang, p.pop || 0);
   }
 
   // Extra labels uit lookup-DB op basis van zoom + populatie
@@ -706,9 +750,57 @@ function renderPlaatsen() {
     for (const p of PLAATSEN_LOOKUP) {
       if (p.pop < popMin) continue;
       const rang = p.pop >= 200000 ? 1 : 2;
-      add(p.naam, p.lat, p.lon, rang);
+      add(p.naam, p.lat, p.lon, rang, p.pop || 0);
     }
   }
+}
+
+function tekenPlaatsenCanvas(ctx, yOffset = 0) {
+  const maxRang = regio === 'nl' ? 2 : 1;
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  const seen = new Set();
+  function add(p) {
+    if (!p || seen.has(p.naam)) return;
+    if (p.rang > maxRang) return;
+    if (p.lon < LON_MIN || p.lon > LON_MAX || p.lat < LAT_MIN || p.lat > LAT_MAX) return;
+    seen.add(p.naam);
+    const [x, y0] = lonLatToXY(p.lon, p.lat);
+    const y = y0 + yOffset;
+    const major = p.rang === 0 || (p.pop || 0) >= 450000;
+    const medium = p.rang === 1 || (p.pop || 0) >= 90000;
+    ctx.save();
+    ctx.translate(x, y);
+    if (major) {
+      ctx.beginPath();
+      const pts = [[0,-5.4],[1.55,-1.65],[5.55,-1.65],[2.25,.62],[3.55,4.85],[0,2.35],[-3.55,4.85],[-2.25,.62],[-5.55,-1.65],[-1.55,-1.65]];
+      pts.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+      ctx.closePath();
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.4;
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, medium ? 2.5 : 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = medium ? '#334155' : '#475569';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = medium ? 1.1 : 0.9;
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.font = `${major ? 800 : 700} ${major ? 14 : medium ? 12 : 10.5}px 'DM Sans', Arial, sans-serif`;
+    ctx.strokeStyle = 'rgba(255,255,255,.96)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(p.naam, x + 5, y + 4);
+    ctx.fillStyle = '#111827';
+    ctx.fillText(p.naam, x + 5, y + 4);
+  }
+  PLAATSEN.forEach(add);
+  ctx.restore();
 }
 
 // (NL-grens-overlay verwijderd: zit al in basis-PNG)
@@ -792,7 +884,6 @@ async function loadLiveData() {
 }
 
 // ── State ─────────────────────────────────────────────────────────
-let windowMin = 60;
 let typeFilter = 'all';
 let glowEnabled = true;
 let clusterMode = 'auto'; // 'auto' | 'on' | 'off'
@@ -988,6 +1079,8 @@ function updateStats(visible) {
   document.getElementById('stat-max').textContent = (maxAmp ? maxAmp.toFixed(1) : '0') + ' kA';
   document.getElementById('header-total').textContent = fmt(visible.length);
   document.getElementById('header-rate').textContent = (last5 / 5).toFixed(1) + ' /min';
+  const kaartBadge = document.getElementById('kaart-time-badge');
+  if (kaartBadge) kaartBadge.textContent = `Laatste ${windowLabel()} · ${new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}`;
 
   if (visible.length) {
     const last = new Date(visible[visible.length - 1].t);
@@ -1066,7 +1159,7 @@ function clampPan() {
 }
 
 function setZoom(newZoom, focusX, focusY) {
-  newZoom = Math.max(1, Math.min(8, newZoom));
+  newZoom = Math.max(1, Math.min(12, newZoom));
   if (newZoom === zoom) return;
   const vp = document.getElementById('kaart-viewport');
   const rect = vp.getBoundingClientRect();
@@ -1086,12 +1179,12 @@ function setZoom(newZoom, focusX, focusY) {
 function zoomToCluster(c) {
   const vp = document.getElementById('kaart-viewport');
   const wrap = document.getElementById('kaart-wrap');
-  const newZoom = Math.min(4, zoom * 2);
-  // SVG-coords (1080x1470) → wrap pixel-coords
+  const newZoom = Math.min(12, Math.max(zoom * 1.8, 3));
+  // SVG-coords → wrap pixel-coords (NL en Benelux hebben verschillende viewBoxen)
   const wrapW = wrap.clientWidth;
   const wrapH = wrap.clientHeight;
-  const wx = (c.x / 1080) * wrapW;
-  const wy = (c.y / 1470) * wrapH;
+  const wx = (c.x / SVG_W) * wrapW;
+  const wy = (c.y / SVG_H) * wrapH;
   zoom = newZoom;
   panX = vp.clientWidth / 2 - wx * zoom;
   panY = vp.clientHeight / 2 - wy * zoom;
@@ -1109,7 +1202,7 @@ function zoomToCluster(c) {
     const rect = vp.getBoundingClientRect();
     const fx = e.clientX - rect.left;
     const fy = e.clientY - rect.top;
-    const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+    const factor = Math.exp(-e.deltaY * 0.0014);
     setZoom(zoom * factor, fx, fy);
   }, { passive: false });
 
@@ -1142,9 +1235,52 @@ function zoomToCluster(c) {
     if (dragging) { dragging = false; vp.classList.remove('panning'); }
   });
 
+  vp.addEventListener('dblclick', e => {
+    if (e.target.closest('.strike, .cluster-marker, .zoom-btn')) return;
+    const rect = vp.getBoundingClientRect();
+    setZoom(zoom * 2, e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  let touchDist = 0;
+  let touchZoom = 1;
+  let touchPan = null;
+  vp.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      const a = e.touches[0], b = e.touches[1];
+      touchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      touchZoom = zoom;
+      touchPan = null;
+      e.preventDefault();
+    } else if (e.touches.length === 1) {
+      touchPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  }, { passive: false });
+  vp.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && touchDist > 0) {
+      const a = e.touches[0], b = e.touches[1];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const rect = vp.getBoundingClientRect();
+      const fx = (a.clientX + b.clientX) / 2 - rect.left;
+      const fy = (a.clientY + b.clientY) / 2 - rect.top;
+      setZoom(touchZoom * (dist / touchDist), fx, fy);
+      e.preventDefault();
+    } else if (e.touches.length === 1 && touchPan && zoom > 1.01) {
+      const t = e.touches[0];
+      panX += t.clientX - touchPan.x;
+      panY += t.clientY - touchPan.y;
+      touchPan = { x: t.clientX, y: t.clientY };
+      clampPan();
+      applyTransform();
+      e.preventDefault();
+    }
+  }, { passive: false });
+  window.addEventListener('touchend', e => {
+    if (e.touches && e.touches.length < 2) touchDist = 0;
+  });
+
   // Buttons
-  document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoom * 1.4));
-  document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom / 1.4));
+  document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoom * 1.6));
+  document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom / 1.6));
   document.getElementById('zoom-reset').addEventListener('click', () => {
     zoom = 1; panX = 0; panY = 0;
     applyTransform(); render();
@@ -1156,7 +1292,7 @@ function zoomToCluster(c) {
 document.getElementById('window-select').addEventListener('change', e => {
   const prev = windowMin;
   windowMin = parseInt(e.target.value);
-  try { localStorage.setItem('bliksem_window_min', String(windowMin)); } catch (_) {}
+  try { localStorage.setItem(WINDOW_KEY, String(windowMin)); } catch (_) {}
   // Wissel tussen 2u-snel en 24u-historie als drempel overschreden
   const wasLong = prev >= 180;
   const isLong = windowMin >= 180;
@@ -1231,17 +1367,15 @@ function downloadPNG() {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
-  const windowLabel = windowMin < 60
-    ? `${windowMin} min`
-    : (windowMin % 60 === 0 ? `${windowMin/60}u` : `${(windowMin/60).toFixed(1)}u`);
   // Vooraf-tellen voor header-count
   const _now = Date.now();
   let _visible = STRIKES.filter(s => (_now - s.t) / 60000 <= windowMin);
   if (typeFilter !== 'all') _visible = _visible.filter(s => s.type === typeFilter);
-  ctx.fillText(`Laatste ${windowLabel} · ${_visible.length.toLocaleString('nl-NL')} ontladingen · ${ts}`, 18, headerH / 2 + 14);
+  ctx.fillText(`Laatste ${windowLabel()} · ${_visible.length.toLocaleString('nl-NL')} ontladingen · ${ts}`, 18, headerH / 2 + 14);
 
   // Basis-kaart
   ctx.drawImage(img, 0, headerH, baseW, baseH);
+  tekenPlaatsenCanvas(ctx, headerH);
 
   // Strikes: filter en teken (offset naar headerH)
   const now = _now;
@@ -1351,7 +1485,7 @@ function downloadPNG() {
   ly += 20;
   ctx.fillStyle = '#64748b';
   ctx.font = '11px DM Sans, system-ui, sans-serif';
-  ctx.fillText('binnen wolk', lx + 38, ly);
+  ctx.fillText('binnen/tussen wolken', lx + 38, ly);
   ly += 26;
 
   // Stats blok
@@ -1399,9 +1533,13 @@ function downloadPNG() {
   cv.toBlob(blob => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+    const stamp = new Date().toLocaleString('sv-SE', {
+      timeZone: 'Europe/Amsterdam',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }).replace(' ', '_').replace(':', '');
     a.href = url;
-    a.download = `bliksem_nl_${stamp}.png`;
+    a.download = `Bliksemkaart_${stamp}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1420,27 +1558,19 @@ function tickKlok() {
     pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + ' LT';
 }
 
-function restoreWindowChoice() {
-  try {
-    const saved = parseInt(localStorage.getItem('bliksem_window_min') || '');
-    if (!Number.isFinite(saved)) return;
-    const sel = document.getElementById('window-select');
-    if (!sel) return;
-    const opt = Array.from(sel.options).find(o => parseInt(o.value) === saved);
-    if (!opt) return;
-    sel.value = opt.value;
-    windowMin = saved;
-  } catch (_) {}
-}
-
 function initBliksem() {
-  restoreWindowChoice();
+  windowMin = leesWindowChoice();
+  pasWindowSelectToe();
   loadPlaatsen().then(() => renderPlaatsen());
   loadLiveData();
   setInterval(loadLiveData, 30_000);
   tickKlok();
   setInterval(tickKlok, 1000);
 }
+document.addEventListener('DOMContentLoaded', () => {
+  windowMin = leesWindowChoice();
+  pasWindowSelectToe();
+});
 </script>
 
 </body>
