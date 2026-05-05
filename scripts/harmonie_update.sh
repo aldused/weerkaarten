@@ -176,6 +176,12 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     write_bin('harmonie_data_rv.bin', all_data['rv'][1:])
     write_bin('harmonie_data_druk.bin', all_data['druk'][1:])
     write_bin('harmonie_data_dauwpunt.bin', all_data['dauwpunt'][1:])
+    inversie=[np.maximum.reduce([
+        all_temp_prof[100][i]-all_temp_prof[2][i],
+        all_temp_prof[200][i]-all_temp_prof[2][i],
+        np.zeros_like(all_temp_prof[2][i])
+      ]) for i in range(1,len(grib_files))]
+    write_bin('harmonie_data_inversie.bin', inversie)
     # straling verwijderd; cape via DMI Harmonie / Open-Meteo (zie harmonie_openmeteo.py)
 
     # Profiel
@@ -212,6 +218,11 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         'rv':{'file':'harmonie_data_rv.bin','components':1,'label':'Relatieve vochtigheid (%)'},
         'druk':{'file':'harmonie_data_druk.bin','components':1,'label':'Luchtdruk (hPa)'},
         'dauwpunt':{'file':'harmonie_data_dauwpunt.bin','components':1,'label':'Dauwpuntstemperatuur 2m (°C)'},
+        'inversie':{'file':'harmonie_data_inversie.bin','components':1,'label':'Inversie-index 100/200m t.o.v. 2m (°C)'},
+        'profiel':{'file':'harmonie_data_profiel.bin','components':10,'label':'Temperatuur/windprofiel 2-300 m','levels':{
+          'temperature_m':[2,50,100,200,300],
+          'wind_speed_m':[10,50,100,200,300]
+        }},
       },
       'overlay':'harmonie_overlay.png'}
     with open('harmonie_canvas_meta.json','w') as f:

@@ -635,8 +635,9 @@ body {
   // ═══════════════════════════════════════════════════════════════════════════
   // DATA URL — Cloudflare R2 of lokaal
   // ═══════════════════════════════════════════════════════════════════════════
-  var DATA_URL = "https://harmonie-data.weerlab.nl/";
-  // Voor lokaal testen: var DATA_URL = "";
+  var PAGE_PARAMS = new URLSearchParams(window.location.search);
+  var DATA_URL = PAGE_PARAMS.get("localData") === "1" ? "" : "https://harmonie-data.weerlab.nl/";
+  // Voor lokaal testen: voeg ?localData=1 toe aan de URL.
   // Productie: var DATA_URL = "https://harmonie-data.weerlab.nl/";
 
   // Model configuratie: meta-bestand per model
@@ -660,6 +661,9 @@ body {
     m.parameters["bewolking_laag"] = {label: "Lage bewolking (%)", derived: true, needs: ["bewolking"]};
     m.parameters["bewolking_mid"] = {label: "Middelbare bewolking (%)", derived: true, needs: ["bewolking"]};
     m.parameters["bewolking_hoog"] = {label: "Hoge bewolking (%)", derived: true, needs: ["bewolking"]};
+    var cuNeeds = ["bewolking","cape","rv","dauwpunt","temp"];
+    if (m.parameters["inversie"]) cuNeeds.push("inversie");
+    m.parameters["cumulus"] = {label: "Stapelwolken / uitgespreide lage bewolking", derived: true, needs: cuNeeds};
     m.parameters["wind_druk"] = {label: "Wind (Bft) + Luchtdruk (hPa)", derived: true, needs: ["wind","druk"]};
     m.parameters["combi"] = {label: "Temp + Wind + Neerslag", derived: true, needs: ["temp","wind","neerslag"]};
     m.parameters["mist"] = {label: "Mist / zicht (m)", derived: true, needs: ["zicht"]};
@@ -917,10 +921,51 @@ body {
     [0,51,153],[0,0,204]
   ];
 
-  // Bewolking RGBA cmaps — achtergrond is licht [235,245,255], wolken donkerder
-  function cloudHighRGBA(frac) { var a = frac * 0.95; return [140,170,200, Math.round(a*255)]; }
-  function cloudMidRGBA(frac)  { var a = frac * 0.90; return [190,165,45,  Math.round(a*255)]; }
-  function cloudLowRGBA(frac)  { var a = frac * 0.95; return [70,70,60,    Math.round(a*255)]; }
+  // Bewolking RGBA cmaps — luchtig genoeg om stapelstructuur zichtbaar te houden.
+  function cloudHighRGBA(frac) { var a = frac * 0.62; return [245,249,255, Math.round(a*255)]; }
+  function cloudMidRGBA(frac)  { var a = frac * 0.55; return [214,190,116, Math.round(a*255)]; }
+  function cloudLowRGBA(frac)  { var a = frac * 0.72; return [100,109,123, Math.round(a*255)]; }
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  function smoothstep(edge0, edge1, x) {
+    var t = clamp01((x - edge0) / (edge1 - edge0));
+    return t * t * (3 - 2 * t);
+  }
+  function hashNoise(x, y, seed) {
+    var n = Math.sin((x * 127.1 + y * 311.7 + seed * 74.7)) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function valueNoise(x, y, seed) {
+    var x0 = Math.floor(x), y0 = Math.floor(y);
+    var xf = x - x0, yf = y - y0;
+    var u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    var a = hashNoise(x0, y0, seed), b = hashNoise(x0 + 1, y0, seed);
+    var c = hashNoise(x0, y0 + 1, seed), d = hashNoise(x0 + 1, y0 + 1, seed);
+    return (a * (1-u) + b * u) * (1-v) + (c * (1-u) + d * u) * v;
+  }
+  function cloudTexture(x, y, stepIdx, scale) {
+    return 0.52 * valueNoise(x / scale, y / scale, 11 + stepIdx)
+      + 0.31 * valueNoise(x / (scale * 0.45), y / (scale * 0.45), 29 + stepIdx)
+      + 0.17 * valueNoise(x / (scale * 0.20), y / (scale * 0.20), 47 + stepIdx);
+  }
+  function blendRGB(base, top, alpha) {
+    alpha = clamp01(alpha);
+    return [
+      base[0] * (1-alpha) + top[0] * alpha,
+      base[1] * (1-alpha) + top[1] * alpha,
+      base[2] * (1-alpha) + top[2] * alpha
+    ];
+  }
+  function sampleScalar(pd, stepIdx, targetX, targetY, targetNLat, targetNLon, compIdx) {
+    if (!pd) return NaN;
+    compIdx = compIdx || 0;
+    var colNorm = targetNLon <= 1 ? 0 : targetX / (targetNLon - 1);
+    var rowFromSouth = targetNLat - 1 - targetY;
+    var rowNorm = targetNLat <= 1 ? 0 : rowFromSouth / (targetNLat - 1);
+    var sx = Math.max(0, Math.min(pd.nLon - 1, Math.round(colNorm * (pd.nLon - 1))));
+    var sy = Math.max(0, Math.min(pd.nLat - 1, Math.round(rowNorm * (pd.nLat - 1))));
+    var nSrcPts = pd.nLat * pd.nLon;
+    return pd.data[stepIdx * nSrcPts * pd.nComp + compIdx * nSrcPts + sy * pd.nLon + sx];
+  }
 
   // Mist/zicht levels (m) — fog-gericht, lage zichtwaarden prominent rood/oranje
   var MIST_LEVELS =  [0, 100, 200, 500, 1000, 2000, 4000, 8000, 15000, 30000];
@@ -1225,6 +1270,7 @@ body {
     if (paramCache[paramKey]) return Promise.resolve(paramCache[paramKey]);
     var info = meta.parameters[paramKey];
     if (!info) return Promise.reject("Onbekende parameter: " + paramKey);
+    if (info.derived) return Promise.all(info.needs.map(laadParam));
 
     return fetch(DATA_URL + info.file + "?t=" + Date.now())
       .then(function(r) { return r.arrayBuffer(); })
@@ -1235,10 +1281,17 @@ body {
         var nSteps = view.getUint16(4, true);
         var nComp = view.getUint16(6, true);
         var data = new Float32Array(buf, 16); // skip 16-byte header
-        var result = { nLat: nLat, nLon: nLon, nSteps: nSteps, nComp: nComp, data: data };
+        var result = { nLat: nLat, nLon: nLon, nSteps: nSteps, nComp: nComp, data: data, grid: info.grid || meta.grid };
         paramCache[paramKey] = result;
         return result;
       });
+  }
+
+  function laadRenderParam(paramKey) {
+    var info = meta && meta.parameters ? meta.parameters[paramKey] : null;
+    if (!info) return Promise.reject("Onbekende parameter: " + paramKey);
+    if (info.derived) return Promise.all(info.needs.map(laadParam));
+    return laadParam(paramKey);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1355,6 +1408,38 @@ body {
           derivedData[kc] = lcl;
         }
       }
+    } else if (paramKey === "cumulus") {
+      var bpdCu = paramCache["bewolking"], cpdCu = paramCache["cape"], rpdCu = paramCache["rv"];
+      var tpdCu = paramCache["temp"], dpdCu = paramCache["dauwpunt"], ipdCu = paramCache["inversie"];
+      if (!bpdCu || !cpdCu || !rpdCu || !tpdCu || !dpdCu) return;
+      var nPtsCu = bpdCu.nLat * bpdCu.nLon;
+      derivedData = new Float32Array(nPtsCu);
+      var bOffCu = stepIdx * nPtsCu * 3;
+      var sOffCu = stepIdx * nPtsCu;
+      for (var kcu = 0; kcu < nPtsCu; kcu++) {
+        var rowCu = Math.floor(kcu / bpdCu.nLon);
+        var xCu = kcu - rowCu * bpdCu.nLon;
+        var yCu = bpdCu.nLat - 1 - rowCu;
+        var lowCu = bpdCu.data[bOffCu + 2 * nPtsCu + kcu] || 0;
+        var midCu = bpdCu.data[bOffCu + nPtsCu + kcu] || 0;
+        var capeCu = sampleScalar(cpdCu, stepIdx, xCu, yCu, bpdCu.nLat, bpdCu.nLon, 0) || 0;
+        var rhCu = rpdCu.data[sOffCu + kcu] || 0;
+        var spreadCu = (tpdCu.data[sOffCu + kcu] || 0) - (dpdCu.data[sOffCu + kcu] || 0);
+        var invDeltaCu = 0;
+        if (ipdCu) invDeltaCu = ipdCu.data[sOffCu + kcu] || 0;
+        var invCu = smoothstep(0.2, 1.6, invDeltaCu);
+        var moistCu = smoothstep(68, 92, rhCu) * (1 - smoothstep(3.5, 9, spreadCu));
+        var towerCu = smoothstep(0.14, 0.68, Math.max(lowCu, 0.45 * midCu))
+          * smoothstep(75, 520, capeCu)
+          * smoothstep(48, 82, rhCu)
+          * (1 - smoothstep(5, 13, spreadCu))
+          * (1 - 0.65 * invCu);
+        var spreadoutCu = smoothstep(0.18, 0.72, lowCu)
+          * moistCu
+          * invCu
+          * (1 - smoothstep(450, 1200, capeCu));
+        derivedData[kcu] = Math.max(towerCu, spreadoutCu) * 100;
+      }
     } else if (paramKey === "theta_e") {
       // Equivalent potentiële temperatuur
       // θe ≈ T_K * (1000/p_hPa)^0.286 * exp(Lv*ws/(Cp*T_K))
@@ -1394,6 +1479,7 @@ body {
     else if (paramKey.startsWith("bewolking_")) refParam = "bewolking";
     else if (paramKey === "mist") refParam = "zicht";
     else if (paramKey === "cloud_base") refParam = "temp";
+    else if (paramKey === "cumulus") refParam = "bewolking";
     else if (paramKey === "theta_e") refParam = "temp";
 
     var pd = isDerived ? paramCache[refParam] : paramCache[paramKey];
@@ -1442,41 +1528,89 @@ body {
     var imgData = offCtx.createImageData(nLon, nLat);
     var pixels = imgData.data;
 
-    if (paramKey === "bewolking") {
-      // Bewolking: LSM-achtergrond (land groen, zee lichtblauw) + wolken-composit
+    if (paramKey === "bewolking" || paramKey === "cumulus") {
+      // Bewolking: LSM-achtergrond + wolken-composit. Cumulus voegt twee regimes toe:
+      // losse cellen en uitgespreide stratocumulus onder een lage inversie.
       var useLSM = (lsmData && lsmData.nLat === nLat && lsmData.nLon === nLon);
+      var capePd = paramCache["cape"], rvPd = paramCache["rv"], tempPd = paramCache["temp"], dewPd = paramCache["dauwpunt"], invPd = paramCache["inversie"];
+      var hasCuData = paramKey === "cumulus" && capePd && rvPd && tempPd && dewPd;
+      var cloudOffset = stepIdx * nLat * nLon * 3;
       for (var y = 0; y < nLat; y++) {
         for (var x = 0; x < nLon; x++) {
           var i = (nLat - 1 - y) * nLon + x;
-          var hoog   = pd.data[offset + 0 * nLat * nLon + i] || 0;
-          var midden = pd.data[offset + 1 * nLat * nLon + i] || 0;
-          var laag   = pd.data[offset + 2 * nLat * nLon + i] || 0;
+          var hoog   = pd.data[cloudOffset + 0 * nLat * nLon + i] || 0;
+          var midden = pd.data[cloudOffset + 1 * nLat * nLon + i] || 0;
+          var laag   = pd.data[cloudOffset + 2 * nLat * nLon + i] || 0;
 
           // Achtergrond per gridcel: land (mosgroen) of zee (lichtblauw)
-          var r, g, b;
-          if (useLSM && lsmData.data[i] > 0.5) { r = 158; g = 205; b = 110; }
-          else                                  { r = 225; g = 238; b = 252; }
+          var r, g, b, baseTone;
+          if (useLSM && lsmData.data[i] > 0.5) baseTone = [164, 199, 126];
+          else                                 baseTone = [210, 235, 248];
+          r = baseTone[0]; g = baseTone[1]; b = baseTone[2];
+
+          var texFine = cloudTexture(x, y, stepIdx, 18);
+          var texBroad = cloudTexture(x + 41, y - 17, stepIdx, 42);
 
           // Hoog (wit)
           var ha = cloudHighRGBA(hoog);
-          var a = ha[3] / 255;
+          var a = (ha[3] / 255) * (0.80 + texBroad * 0.28);
           r = r * (1-a) + ha[0] * a;
           g = g * (1-a) + ha[1] * a;
           b = b * (1-a) + ha[2] * a;
 
           // Midden (oker)
           var ma = cloudMidRGBA(midden);
-          a = ma[3] / 255;
+          a = (ma[3] / 255) * (0.70 + texFine * 0.35);
           r = r * (1-a) + ma[0] * a;
           g = g * (1-a) + ma[1] * a;
           b = b * (1-a) + ma[2] * a;
 
           // Laag (grijs)
           var la = cloudLowRGBA(laag);
-          a = la[3] / 255;
+          a = (la[3] / 255) * (0.72 + texBroad * 0.32);
           r = r * (1-a) + la[0] * a;
           g = g * (1-a) + la[1] * a;
           b = b * (1-a) + la[2] * a;
+
+          if (hasCuData) {
+            var sOffCu2 = stepIdx * nLat * nLon;
+            var capeVal = sampleScalar(capePd, stepIdx, x, y, nLat, nLon, 0) || 0;
+            var rhVal = rvPd.data[sOffCu2 + i] || 0;
+            var spread = (tempPd.data[sOffCu2 + i] || 0) - (dewPd.data[sOffCu2 + i] || 0);
+            var invDelta = 0;
+            if (invPd) invDelta = invPd.data[sOffCu2 + i] || 0;
+            var invScore = smoothstep(0.2, 1.6, invDelta);
+            var moist = smoothstep(68, 92, rhVal) * (1 - smoothstep(3.5, 9, spread));
+            var spreadout = smoothstep(0.18, 0.72, laag)
+              * moist
+              * invScore
+              * (1 - smoothstep(450, 1200, capeVal));
+            if (spreadout > 0.03) {
+              var sheet = clamp01(spreadout * (0.82 + texBroad * 0.36));
+              var sheetRgb = blendRGB([r, g, b], [154, 162, 174], sheet * 0.55);
+              sheetRgb = blendRGB(sheetRgb, [218, 224, 232], sheet * 0.30);
+              r = sheetRgb[0]; g = sheetRgb[1]; b = sheetRgb[2];
+            }
+
+            var cuSeed = cloudTexture(x + 7, y + 19, stepIdx, 10);
+            var cuCell = smoothstep(0.50, 0.76, cuSeed);
+            var conv = smoothstep(0.14, 0.68, Math.max(laag, 0.45 * midden))
+              * smoothstep(75, 520, capeVal)
+              * smoothstep(48, 82, rhVal)
+              * (1 - smoothstep(5, 13, spread))
+              * (1 - 0.65 * invScore);
+            var cu = clamp01(conv * (0.35 + cuCell * 1.15));
+            if (cu > 0.02) {
+              var shade = 0.62 + texFine * 0.42;
+              var shadow = clamp01(cu * (1.05 - shade) * 0.75);
+              var highlight = clamp01(cu * (0.35 + shade * 0.75));
+              var rgb = [r, g, b];
+              rgb = blendRGB(rgb, [18, 92, 170], shadow * 0.85);
+              rgb = blendRGB(rgb, [44, 176, 238], cu * 0.70);
+              rgb = blendRGB(rgb, [205, 248, 255], highlight * 0.82);
+              r = rgb[0]; g = rgb[1]; b = rgb[2];
+            }
+          }
 
           var pi = (y * nLon + x) * 4;
           pixels[pi] = r; pixels[pi+1] = g; pixels[pi+2] = b; pixels[pi+3] = 255;
@@ -1528,6 +1662,11 @@ body {
               continue;
             }
             c = boundaryColor(val, CLOUDBASE_LEVELS, CLOUDBASE_COLORS);
+          } else if (paramKey === "cumulus") {
+            c = boundaryColor(val, [0,10,20,35,50,65,80,100], [
+              [235,245,255],[215,230,240],[195,210,225],[170,185,205],
+              [140,150,175],[112,120,150],[238,238,242]
+            ]);
           } else if (paramKey === "wind_druk") {
             // Geen aparte kleur — al getekend via vulling
             c = boundaryColor(val, [0,1,2,3,4,5,6,7,8,9,10,11], WIND_COLORS);
@@ -1946,6 +2085,7 @@ body {
     ctx.fillStyle = "#ffffff";
     ctx.font = "800 " + Math.max(14, Math.round(cw/48)) + "px " + sansFont;
     var paramLabel = meta.parameters[paramKey] ? meta.parameters[paramKey].label : paramKey;
+    if (paramKey === "cumulus") paramLabel = "BETA! Stapelwolken/Uitgespreid";
     ctx.fillText(paramLabel, cw/2, 21);
 
     // Regel 2: run (mono, slate-grijs, klein)
@@ -1979,7 +2119,7 @@ body {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, legY); ctx.lineTo(cw, legY); ctx.stroke();
 
-    if (paramKey !== "bewolking") { // NB: bewolking_laag etc. vallen NIET hieronder
+    if (paramKey !== "bewolking" && paramKey !== "cumulus") { // NB: bewolking_laag etc. vallen NIET hieronder
       var legLevels, legColors, legLabel;
       if (paramKey === "neerslag") {
         // Toon dBZ schaal — gebruik dezelfde levels/kleuren als de pixelvulling
@@ -2071,24 +2211,42 @@ body {
         ctx.fillText(legLabel, cw - 8, barY2 + barH + 14);
       }
     } else {
-      // Bewolking legenda: helder + drie wolkentypen
+      // Bewolking legenda: lagen plus cumulus/uitspreiding wanneer actief
       var items = [
-        ["Hoog (cirrus)","rgb(140,170,200)"],
-        ["Midden (alto)","rgb(190,165,45)"],
-        ["Laag (stratus)","rgb(70,70,60)"]
+        ["Hoog / sluier","rgb(245,249,255)"],
+        ["Midden / alto","rgb(214,190,116)"],
+        ["Laag / stratus","rgb(100,109,123)"]
       ];
+      if (paramKey === "cumulus") {
+        items.push(["Cu-cel","rgb(44,176,238)"]);
+        items.push(["Uitgespreid","rgb(154,162,174)"]);
+      }
       ctx.font = "bold " + Math.max(13, Math.round(cw / 60)) + "px Arial";
-      var legSpacing = cw / (items.length + 1);
+      var legSpacing = (cw - 40) / items.length;
       for (var bi = 0; bi < items.length; bi++) {
         var bx = 20 + bi * legSpacing;
         ctx.fillStyle = items[bi][1];
-        ctx.strokeStyle = "#999";
+        ctx.strokeStyle = items[bi][0].indexOf("Cu") >= 0 ? "#64748b" : "#999";
         ctx.lineWidth = 1;
         ctx.fillRect(bx, legY + 8, 24, 22);
+        if (items[bi][0].indexOf("Cu") >= 0) {
+          ctx.fillStyle = "rgba(205,248,255,0.72)";
+          ctx.beginPath();
+          ctx.arc(bx + 8, legY + 20, 7, 0, Math.PI * 2);
+          ctx.arc(bx + 15, legY + 15, 8, 0, Math.PI * 2);
+          ctx.arc(bx + 21, legY + 21, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.strokeRect(bx, legY + 8, 24, 22);
         ctx.fillStyle = "#222";
         ctx.textAlign = "left";
         ctx.fillText(items[bi][0], bx + 30, legY + 25);
+      }
+      if (paramKey === "cumulus") {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "600 " + Math.max(10, Math.round(cw / 85)) + "px Arial";
+        ctx.textAlign = "left";
+        ctx.fillText("grijs veld = lage bewolking die onder inversie kan uitspreiden", 20, legY + 48);
       }
     }
 
@@ -2149,11 +2307,11 @@ body {
   // UI CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","mist","cloud_base","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi","hoogte_300","hoogte_500","hoogte_850","theta_e"];
+  var PARAM_KEYS = ["neerslag","neerslag_mm","temp","bewolking","cumulus","bewolking_laag","bewolking_mid","bewolking_hoog","wind","windstoten","zicht","mist","cloud_base","rv","cape","druk","wbgt","nsomm","wind_druk","dauwpunt","combi","hoogte_300","hoogte_500","hoogte_850","theta_e"];
   var nsomUren = 60;
   var DEFAULT_PARAMS = ["neerslag","temp","wind"];
   var layout = 1;
-  var panelParams = ["temp"];
+  var panelParams = [PAGE_PARAMS.get("param") || "temp"];
   var speelInterval = null, speelSnelheid = 400;
   var aantalUren = 60, startUur = 0; // 0-indexed in data
 
@@ -2226,6 +2384,7 @@ body {
           ]],
           ["Bewolking & Zicht", [
             ["bewolking", "Bewolking (hoog/midden/laag)"],
+            ["cumulus", "Stapelwolken / inversie-uitspreiding"],
             ["bewolking_laag", "Lage bewolking (%)"],
             ["bewolking_mid", "Middelbare bewolking (%)"],
             ["bewolking_hoog", "Hoge bewolking (%)"],
@@ -2481,7 +2640,7 @@ body {
           var view = new DataView(buf);
           var result = { nLat: view.getUint16(0,true), nLon: view.getUint16(2,true),
                          nSteps: view.getUint16(4,true), nComp: view.getUint16(6,true),
-                         data: new Float32Array(buf, 16) };
+                         data: new Float32Array(buf, 16), grid: info.grid || useMeta.grid };
           useCache[key] = result;
           return result;
         });
@@ -3248,7 +3407,7 @@ body {
       bouwUurSidebar();
       bouwPanels();
       // Laad eerste parameter en render
-      return laadParam(panelParams[0]);
+      return laadRenderParam(panelParams[0]);
     }).then(function() {
       updateAlle(0);
       renderTickRail();
@@ -3549,7 +3708,7 @@ body {
       // Alle zichtbare parameters herladen
       var uniekeParams = [];
       bewaarParams.forEach(function(p) { if (uniekeParams.indexOf(p) === -1) uniekeParams.push(p); });
-      return Promise.all(uniekeParams.map(function(p) { return laadParam(p).catch(function(){}); }));
+      return Promise.all(uniekeParams.map(function(p) { return laadRenderParam(p).catch(function(){}); }));
     }).then(function() {
       // State herstellen zonder setLayout(1) reset
       layout = bewaarLayout;
@@ -3606,7 +3765,7 @@ body {
     bouwUurSidebar();
 
     // Laad eerste parameter
-    return laadParam(panelParams[0]);
+    return laadRenderParam(panelParams[0]);
   }).then(function() {
     setLayout(1);
     statusEl.textContent = "";
