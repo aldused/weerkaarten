@@ -124,9 +124,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .window-btn-groot.actief .b1 { color: #93c5fd; }
 .window-btn-groot.actief .b2 { color: #ffffff; }
 .timeline-precise { display: grid; grid-template-columns: minmax(180px, 1fr); gap: 4px; }
+.timeline-track { display: none; align-items: center; gap: 8px; min-width: 0; }
+.timeline-track-label { font-family: "DM Mono", ui-monospace, monospace; font-size: 11px; font-weight: 800; color: #64748b; white-space: nowrap; }
+.timeline-track .slider-wrap { min-width: 0; flex: 1; }
 [data-theme="dark"] .radar-timeline { background: #111a2e !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.25) !important; }
 [data-theme="dark"] .timeline-title { color: #f1f5f9 !important; }
 [data-theme="dark"] .timeline-help,
+[data-theme="dark"] .timeline-track-label,
 [data-theme="dark"] .window-bar-label { color: #94a3b8 !important; }
 [data-theme="dark"] .window-btn-groot { background: #0e1629 !important; border-color: rgba(255,255,255,0.1) !important; }
 [data-theme="dark"] .window-btn-groot .b1 { color: #64748b !important; }
@@ -137,13 +141,30 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 [data-theme="dark"] .window-btn-groot.actief .b2 { color: #0a1426 !important; }
 .slider-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 200px; position: relative; }
 .slider-row { display: flex; align-items: center; gap: 10px; position: relative; }
-.slider-ticks { position: relative; height: 26px; margin: 0 10px; font-family: "DM Mono", ui-monospace, monospace; font-size: 12px; color: #475569; pointer-events: none; font-weight: 600; }
+.slider-ticks { position: relative; height: 30px; margin: 0 10px; font-family: "DM Mono", ui-monospace, monospace; font-size: 12px; color: #475569; pointer-events: none; font-weight: 600; overflow: hidden; }
 .slider-tick { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.slider-tick span { white-space: nowrap; line-height: 1.1; }
 .slider-tick::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #00205b; box-shadow: 0 0 0 2px #ffffff; }
 .slider-tick.now { color: #ef4444; font-weight: 800; }
 .slider-tick.now::before { background: #ef4444; width: 10px; height: 10px; }
 .slider-tick.fcst { color: #b45309; }
 .slider-tick.fcst::before { background: #f59e0b; }
+
+@media (max-height: 780px) {
+  .radar-timeline { padding: 7px 18px 8px; gap: 7px; }
+  .timeline-head { display: none; }
+  .window-bar-groot { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+  .window-bar-label { display: none; }
+  .timeline-cluster { flex-wrap: nowrap; gap: 6px; }
+  .window-btn-groot { min-width: 74px; min-height: 36px; padding: 5px 9px; border-radius: 8px; }
+  .window-btn-groot .b1 { display: none; }
+  .window-btn-groot .b2 { font-size: 13px; white-space: nowrap; }
+  .timeline-precise { display: none; }
+  .timeline-track { display: flex; }
+  .slider-ticks { height: 18px; font-size: 10.5px; }
+  .slider-tick::before { width: 6px; height: 6px; }
+  .slider-tick.now::before { width: 8px; height: 8px; }
+}
 .btn-play { width: 34px; height: 34px; border-radius: 50%; border: none; background: #00205b; color: white; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .btn-play:hover { background: #003689; transform: scale(1.05); }
 .btn-stap { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -524,7 +545,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     </div>
   </div>
   <div class="timeline-precise">
-    <div class="slider-wrap">
+    <div class="slider-wrap" id="slider-wrap">
       <div class="slider-row">
         <div class="slider-area" style="flex:1;">
           <div class="slider-track-overlay" id="slider-overlay"></div>
@@ -533,6 +554,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       </div>
       <div class="slider-ticks" id="slider-ticks"></div>
     </div>
+  </div>
+  <div class="timeline-track" id="timeline-track">
+    <span class="timeline-track-label">Tijd</span>
   </div>
 </div>
 
@@ -2057,6 +2081,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   // ── Slider-overlay: forecast-zone + "nu"-marker ─────────────────────────
   function bouwSliderOverlay() {
+    syncCompactTimeline();
     var overlay = document.getElementById("slider-overlay");
     if (!overlay || nFrames < 2 || tNowIndex < 0) return;
     overlay.innerHTML = "";
@@ -2096,6 +2121,19 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     bouwSliderTicks();
   }
 
+  function syncCompactTimeline() {
+    var wrap = document.getElementById("slider-wrap");
+    var track = document.getElementById("timeline-track");
+    if (!wrap || !track) return;
+    var compact = window.matchMedia && window.matchMedia("(max-height: 780px)").matches;
+    if (compact && wrap.parentNode !== track) {
+      track.appendChild(wrap);
+    } else {
+      var precise = document.querySelector(".timeline-precise");
+      if (!compact && precise && wrap.parentNode !== precise) precise.appendChild(wrap);
+    }
+  }
+
   // Tijd-ticks onder slider — alleen frames binnen window-bereik
   function bouwSliderTicks() {
     var ticks = document.getElementById("slider-ticks");
@@ -2113,15 +2151,20 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     // Bepaal stap-tijd (in minuten) gebaseerd op tijd-bereik
     var t0 = parseFrameTime(lo), tEnd = parseFrameTime(hi);
     if (!t0 || !tEnd) return;
-    var totalMin = (tEnd - t0) / 60000;
-    var keuzes = [15, 30, 60, 120, 180, 360, 720, 1440];
-    // Mobile-first: minimaal ~85px per label voor leesbaarheid
-    var minPx = (sliderW < 500) ? 110 : (sliderW < 900) ? 90 : 100;
+    var totalMin = Math.max(1, (tEnd - t0) / 60000);
+    var keuzes = [30, 60, 120, 180, 360, 720, 1440];
+    // Lange verwachtingsreeksen hebben brede labels; kies veel ruimer dan
+    // vroeger, zodat tijdstippen niet over elkaar vallen bij compacte hoogte.
+    var compactTimeline = window.matchMedia && window.matchMedia("(max-height: 780px)").matches;
+    var minPx = compactTimeline ? 230 : ((sliderW < 600) ? 170 : (sliderW < 1000) ? 185 : 205);
     var stepMin = keuzes[keuzes.length - 1];
     for (var k = 0; k < keuzes.length; k++) {
       var pxPerTick = (keuzes[k] / totalMin) * sliderW;
       if (pxPerTick >= minPx) { stepMin = keuzes[k]; break; }
     }
+    if (totalMin > 18 * 60 && stepMin < 360) stepMin = 360;
+    if (totalMin > 42 * 60 && stepMin < 720) stepMin = 720;
+    if (compactTimeline && totalMin > 12 * 60 && stepMin < 720) stepMin = 720;
     var stepMs = stepMin * 60000;
 
     function fmtHHMM(d) {
@@ -2133,6 +2176,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var startMs = Math.ceil(t0.getTime() / stepMs) * stepMs;
     var endMs = tEnd.getTime();
     var lastIdxShown = -2;
+    var lastPctShown = -999;
     var lastDayShown = t0.getDate();
     for (var ms = startMs; ms <= endMs; ms += stepMs) {
       // Vind frame-index dichtst bij ms binnen [lo..hi]
@@ -2142,12 +2186,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         if (d < bestD) { bestD = d; bestI = ii; }
       }
       if (bestI < 0 || bestI === lastIdxShown) continue;
+      var pct = pctVan(bestI);
+      if (pct - lastPctShown < (compactTimeline ? 14 : 8)) continue;
       lastIdxShown = bestI;
+      lastPctShown = pct;
       var div = document.createElement("div");
       div.className = "slider-tick";
       if (bestI === tNowIndex) div.className += " now";
       else if (isFutureFrame(bestI) || (frameTypes && frameTypes[bestI] === "harmonie")) div.className += " fcst";
-      div.style.left = pctVan(bestI) + "%";
+      div.style.left = pct + "%";
       var dt = new Date(ms);
       var label = document.createElement("span");
       var dgs = ["zo","ma","di","wo","do","vr","za"];
@@ -2162,7 +2209,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       ticks.appendChild(div);
     }
     // Als NU binnen range maar geen tick op stap, voeg expliciet toe
-    if (tNowIndex >= lo && tNowIndex <= hi && lastIdxShown !== tNowIndex) {
+    if (tNowIndex >= lo && tNowIndex <= hi) {
       var dn = parseFrameTime(tNowIndex);
       if (dn) {
         var dvN = document.createElement("div");
@@ -3631,6 +3678,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function init() {
     bouwLegenda();
+    window.addEventListener("resize", function() {
+      syncCompactTimeline();
+      bouwSliderOverlay();
+    });
 
     // Play/pause
     document.getElementById("btn-play").addEventListener("click", togglePlay);
