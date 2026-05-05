@@ -93,6 +93,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .fav-chip .x { color: #94a3b8; font-size: 13px; line-height: 1; padding: 0 2px; border-radius: 50%; }
 .fav-chip .x:hover { color: #ef4444; background: #fee2e2; }
 .fav-empty { font-size: 11px; color: #94a3b8; font-style: italic; }
+.plaats-add-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #00205b; background: #00205b; color: #ffffff; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.plaats-add-btn:hover { background: #003689; border-color: #003689; }
 
 /* Layer toggles in controls */
 .layer-toggles { display: inline-flex; background: #eef2f7; border-radius: 8px; padding: 2px; gap: 2px; }
@@ -287,6 +289,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 [data-theme="dark"] .fav-chip { background: #0e1629 !important; color: #cbd5e1 !important; border-color: rgba(255,255,255,0.08) !important; }
 [data-theme="dark"] .fav-chip:hover { background: rgba(255,255,255,0.05) !important; }
 [data-theme="dark"] #plaats-zoek { background: #0e1629 !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .plaats-add-btn { background: #2ec4e8 !important; border-color: #2ec4e8 !important; color: #0a1426 !important; }
+[data-theme="dark"] .plaats-add-btn:hover { background: #7ddff2 !important; border-color: #7ddff2 !important; }
 [data-theme="dark"] .zoom-overlay button { background: rgba(20,30,50,0.95) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.2) !important; }
 [data-theme="dark"] .zoom-overlay button:hover { background: rgba(40,60,90,0.98) !important; border-color: #2ec4e8 !important; color: #2ec4e8 !important; }
 [data-theme="dark"] .layer-toggles { background: rgba(255,255,255,0.05) !important; }
@@ -461,7 +465,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
 <div class="fav-bar" id="fav-bar">
   <span class="fav-bar-label">Zoek plaats:</span>
-  <input id="plaats-zoek" list="plaatsen-list" placeholder="bv. Amsterdam, Eindhoven..." autocomplete="off" style="padding:4px 10px;border-radius:6px;border:1px solid #e3e8ef;font-family:inherit;font-size:12px;min-width:180px;">
+  <input id="plaats-zoek" list="plaatsen-list" placeholder="Plaats zoeken" autocomplete="off" style="padding:4px 10px;border-radius:6px;border:1px solid #e3e8ef;font-family:inherit;font-size:12px;min-width:180px;">
+  <button class="plaats-add-btn" id="btn-plaats-toevoegen" title="Zoek plaats en voeg toe aan favorieten">+ toevoegen</button>
   <datalist id="plaatsen-list"></datalist>
   <span class="fav-bar-label" style="margin-left:12px;">Favorieten:</span>
   <span class="fav-empty" id="fav-empty">geen — klik op kaart of zoek plaats, druk ⭐ om op te slaan</span>
@@ -1282,7 +1287,14 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   })();
   layers.provincies = true;  // altijd aan (knop weggehaald)
   layers.rivieren = true;     // altijd aan (knop weggehaald)
-  if (typeof layers.steden !== "boolean")     layers.steden = false;
+  if (typeof layers.steden !== "boolean")     layers.steden = true;
+  try {
+    if (localStorage.getItem("radarPlaatsenDefaultV2") !== "1") {
+      layers.steden = true;
+      localStorage.setItem("radarPlaatsenDefaultV2", "1");
+      localStorage.setItem("radarLayers", JSON.stringify(layers));
+    }
+  } catch(e) {}
   layers.bliksem = false;  // tijdelijk uit — wordt verbeterd
   layers.cellen = false;  // tijdelijk uitgeschakeld (nog niet betrouwbaar)
   if (typeof layers.hagel !== "boolean")      layers.hagel = false;
@@ -1475,14 +1487,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.clip();
 
     // 1. Rustige vector-basemap: minder speelgoedkleur, meer weerkaart.
+    var linePx = function(px) { return Math.max(0.08, px / Math.max(1, zoomLevel)); };
     ctx.fillStyle = "#d7e7f3";
     ctx.fillRect(0, 0, W, H);
-    _drawGeoFeatures(ctx, euLandGeo, "#e7eadf", "rgba(43,58,76,0.28)", 0.55);
+    _drawGeoFeatures(ctx, euLandGeo, "#e7eadf", "rgba(43,58,76,0.28)", linePx(0.65));
     _drawGeoFeatures(ctx, nlGeo, "#f0f2e9", null, 0);
     _drawGeoFeatures(ctx, beGeo, "#edf0e5", null, 0);
 
     // 3b. Meren — iets lichter dan zee, zodat water niet hard afsteekt.
-    if (lakesGeo) _drawGeoFeatures(ctx, lakesGeo, "#cfe2ee", "rgba(70,110,140,0.18)", 0.35);
+    if (lakesGeo) _drawGeoFeatures(ctx, lakesGeo, "#cfe2ee", "rgba(70,110,140,0.18)", linePx(0.4));
 
     // 4. Radar-raster op offscreen — instant of cumulatief
     var imgData = offCtx.createImageData(nLon, nLat);
@@ -1536,17 +1549,18 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // 6. Provinciegrenzen subtiel (uit te zetten via layer-toggle)
     if (layers.provincies) {
-      _drawGeoFeatures(ctx, nlGeo, null, "rgba(34,49,63,0.22)", 0.45);
-      _drawGeoFeatures(ctx, beGeo, null, "rgba(34,49,63,0.18)", 0.4);
+      _drawGeoFeatures(ctx, nlGeo, null, "rgba(34,49,63,0.20)", linePx(0.45));
+      _drawGeoFeatures(ctx, beGeo, null, "rgba(34,49,63,0.16)", linePx(0.4));
     }
 
     // 6b. Rivieren (uit te zetten via layer-toggle)
     if (layers.rivieren && riverGeo) {
-      _drawGeoLines(ctx, riverGeo, "rgba(62,123,164,0.42)", 0.55);
+      _drawGeoLines(ctx, riverGeo, "rgba(62,123,164,0.38)", linePx(0.55));
     }
 
-    // 7. Buitengrens NL accent — BE niet apart, anders dubbele lijn op NL-BE grens
-    _drawBuitengrens(ctx, nlGeo, "rgba(20,43,68,0.58)", 1.05);
+    // 7. Kust/buitengrens met vaste schermdikte; anders wordt de kust bij zoom te zwaar.
+    _drawBuitengrens(ctx, nlGeo, "rgba(255,255,255,0.62)", linePx(2.4));
+    _drawBuitengrens(ctx, nlGeo, "rgba(20,43,68,0.56)", linePx(0.95));
 
     ctx.restore();
 
@@ -1556,12 +1570,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     if (PLAATSEN_BIG) {
       // Pop-drempel zakt bij hogere zoom — niet te veel kleine dorpen
       var popMin;
-      if      (zoomLevel >= 18) popMin = 10000;
-      else if (zoomLevel >= 12) popMin = 25000;
-      else if (zoomLevel >= 8)  popMin = 60000;
-      else if (zoomLevel >= 5)  popMin = 120000;
-      else if (zoomLevel >= 3)  popMin = 300000;
-      else                       popMin = 700000;
+      if      (zoomLevel >= 18) popMin = 6000;
+      else if (zoomLevel >= 12) popMin = 14000;
+      else if (zoomLevel >= 8)  popMin = 35000;
+      else if (zoomLevel >= 5)  popMin = 75000;
+      else if (zoomLevel >= 3)  popMin = 180000;
+      else                       popMin = 500000;
       labelLijst = [];
       for (var pi = 0; pi < PLAATSEN_BIG.length; pi++) {
         var pp = PLAATSEN_BIG[pi];
@@ -1600,11 +1614,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       labelLijst = labelLijst.slice().sort(function(a, b) { return (b[3] || 0) - (a[3] || 0); });
       var geplaatst = [];  // bounding boxes [x0,y0,x1,y1]
       var maxLabels;
-      if      (zoomLevel >= 12) maxLabels = 95;
-      else if (zoomLevel >= 8)  maxLabels = 78;
-      else if (zoomLevel >= 5)  maxLabels = 58;
-      else if (zoomLevel >= 3)  maxLabels = 42;
-      else                      maxLabels = 24;
+      if      (zoomLevel >= 12) maxLabels = 145;
+      else if (zoomLevel >= 8)  maxLabels = 118;
+      else if (zoomLevel >= 5)  maxLabels = 86;
+      else if (zoomLevel >= 3)  maxLabels = 58;
+      else                      maxLabels = 30;
       var placedCount = 0;
 
       function botst(b) {
@@ -1630,8 +1644,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         var fontPx = basisFont + (t === 2 ? 2.2 : t === 1 ? 1.1 : 0);
         var dotR  = (t === 2 ? 4.2 : t === 1 ? 3.4 : 2.7);
         var gap = dotR + 6;
-        var padX = t === 2 ? 5 : 4;
-        var padY = t === 2 ? 3 : 2;
+        var padX = t === 2 ? 4.5 : 3.5;
+        var padY = t === 2 ? 2.5 : 1.8;
         ctx.font = (t === 2 ? "800 " : "700 ") + fontPx + "px DM Sans, Arial, sans-serif";
         var tw = ctx.measureText(st[2]).width;
         var labelW = tw + padX * 2;
@@ -1665,10 +1679,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
         ctx.save();
         ctx.shadowColor = "rgba(15,23,42,0.14)";
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = 4;
         ctx.shadowOffsetY = 1;
         roundRectPath(ctx, chosen.x, chosen.y, labelW, labelH, 4);
-        ctx.fillStyle = t === 2 ? "rgba(255,255,255,0.90)" : "rgba(255,255,255,0.76)";
+        ctx.fillStyle = t === 2 ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.68)";
         ctx.fill();
         ctx.shadowColor = "transparent";
         ctx.lineWidth = 1;
@@ -2576,8 +2590,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function setupZoek() {
     var inp = document.getElementById("plaats-zoek");
+    var addBtn = document.getElementById("btn-plaats-toevoegen");
     if (!inp) return;
-    function doZoek() {
+    function doZoek(voegToe) {
       var p = zoekPlaats(inp.value);
       if (!p) return;
       // Pan + zoom naar plaats
@@ -2587,12 +2602,19 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       viewY = srcY - (BASEMAP_H / zoomLevel) / 2;
       clampView();
       toonPunt(p.lat, p.lon, p.naam);
+      if (voegToe && isFavoriet(p.lat, p.lon) < 0) {
+        favorieten.push({ lat: p.lat, lon: p.lon, naam: p.naam });
+        try { localStorage.setItem("radarFavs", JSON.stringify(favorieten)); } catch(e) {}
+        bouwFavBar();
+        updateFavBtn();
+      }
       inp.value = "";
     }
-    inp.addEventListener("change", doZoek);
+    inp.addEventListener("change", function() { doZoek(false); });
     inp.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") { e.preventDefault(); doZoek(); }
+      if (e.key === "Enter") { e.preventDefault(); doZoek(false); }
     });
+    if (addBtn) addBtn.addEventListener("click", function() { doZoek(true); });
   }
 
   function setupFirstVisitHint() {
