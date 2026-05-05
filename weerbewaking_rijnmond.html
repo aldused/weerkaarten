@@ -316,6 +316,12 @@ function formatDatumVol(d){
 }
 function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 function plusDag(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function getDraftValue(key){
+  try{
+    const d=JSON.parse(localStorage.getItem(saveKey()) || '{}');
+    return d[key];
+  }catch(e){ return null; }
+}
 function exportNaam(...waarden){
   const rauw=(waarden.find(v=>(v||'').trim()) || 'Document').split(',')[0].trim();
   return rauw.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').replace(/^_+|_+$/g,'') || 'Document';
@@ -375,12 +381,17 @@ function bouwWaarschuwingen(startDatum){
     {periode:'Overmorgen',datum: plusDag(startDatum,2)}
   ];
   const tbody = document.getElementById('waarsch-body');
+  const oud = Array.from(tbody.querySelectorAll('tr')).map(tr=>({
+    periode: tr.querySelector('[data-save^="waarsch-periode-"]')?.textContent,
+    datum: tr.querySelector('[data-save^="waarsch-datum-"]')?.textContent,
+    status: tr.querySelector('select.status-sel')?.value
+  }));
   tbody.innerHTML = rijen.map((r,i)=>`
     <tr>
-      <td class="label">${r.periode}</td>
-      <td>${formatDMshort(r.datum)}</td>
+      <td class="label" contenteditable="true" data-save="waarsch-periode-${i}" data-placeholder="Periode">${oud[i]?.periode || getDraftValue(`waarsch-periode-${i}`) || r.periode}</td>
+      <td contenteditable="true" data-save="waarsch-datum-${i}" data-placeholder="Datum">${oud[i]?.datum || getDraftValue(`waarsch-datum-${i}`) || formatDMshort(r.datum)}</td>
       <td>
-        <select class="status-sel" data-idx="${i}" onchange="updateStatusKleur(this)">
+        <select class="status-sel" data-idx="${i}" data-save="waarsch-status-${i}" onchange="updateStatusKleur(this); saveDraft();">
           <option value="GEEN">GEEN</option>
           <option value="GEEL">GEEL</option>
           <option value="ORANJE">ORANJE</option>
@@ -388,6 +399,11 @@ function bouwWaarschuwingen(startDatum){
         </select>
       </td>
     </tr>`).join('');
+  tbody.querySelectorAll('select.status-sel').forEach((sel,i)=>{
+    const v = oud[i]?.status || getDraftValue(`waarsch-status-${i}`);
+    if(v) sel.value = v;
+    updateStatusKleur(sel);
+  });
 }
 function updateStatusKleur(sel){
   const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
@@ -590,7 +606,9 @@ function vulDocKiezer(lijst=leesDocLijst()){
 function saveDraft(){
   const d={__ts:Date.now()};
   document.querySelectorAll('[data-save]').forEach(el=>{
-    d[el.getAttribute('data-save')] = el.innerHTML;
+    const key = el.getAttribute('data-save');
+    if(el.matches('input, textarea, select')) d[key] = el.value;
+    else d[key] = el.innerHTML;
   });
   const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
   const wt=document.getElementById('weergave-type'); if(wt) d.weergaveType=wt.value;
@@ -645,7 +663,12 @@ function restoreDraft(){
     if(d.docNaam && document.getElementById('doc-naam')) document.getElementById('doc-naam').value=d.docNaam;
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
-      if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
+      if(el.matches('input, textarea, select')){
+        if(d[k]!=null) el.value=d[k];
+      } else {
+        if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
+      }
+      if(el.tagName==='SELECT' && el.classList.contains('status-sel')) updateStatusKleur(el);
     });
     // Migratie: oude data-save="verwachting" hield de "komende dagen" tekst
     if(d.verwachting != null && (d.komende == null || d.komende === '')){
