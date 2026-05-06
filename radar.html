@@ -89,6 +89,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 .layer-btn { padding: 5px 10px; border-radius: 6px; border: none; background: transparent; color: #334155; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
 .layer-btn:hover { color: #0f172a; background: rgba(255,255,255,0.6); }
 .layer-btn.actief { background: #ffffff; color: #0f172a; box-shadow: 0 1px 2px rgba(15,23,42,0.06); }
+.beta-layer-group { display: inline-flex; align-items: center; gap: 5px; padding-left: 8px; border-left: 1px solid #d8e0ec; }
+.beta-kop { font-size: 10px; color: #0f766e; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+.layer-btn.beta.actief { background: #0f766e; color: #ffffff; }
 
 .footer { background: #0f172a; padding: 9px 22px; color: #94a3b8; font-size: 11px; font-family: "DM Mono", ui-monospace, monospace; border-top: 3px solid #2ec4e8; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .footer-brand { color: #f1f5f9; font-weight: 800; font-size: 12px; letter-spacing: 0.02em; }
@@ -333,6 +336,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 [data-theme="dark"] .layer-btn { color: #cbd5e1 !important; }
 [data-theme="dark"] .layer-btn:hover { background: rgba(255,255,255,0.05) !important; color: #f1f5f9 !important; }
 [data-theme="dark"] .layer-btn.actief { background: #1a2540 !important; color: #f1f5f9 !important; }
+[data-theme="dark"] .beta-layer-group { border-color: rgba(255,255,255,0.10) !important; }
+[data-theme="dark"] .beta-kop { color: #5eead4 !important; }
+[data-theme="dark"] .layer-btn.beta.actief { background: #0f766e !important; color: #ffffff !important; }
 [data-theme="dark"] .window-btn-groot { background: #0e1629 !important; color: #cbd5e1 !important; border-color: rgba(255,255,255,0.08) !important; }
 [data-theme="dark"] .window-btn-groot:hover { background: rgba(255,255,255,0.05) !important; color: #f1f5f9 !important; border-color: rgba(255,255,255,0.2) !important; }
 [data-theme="dark"] .window-btn-groot.actief { background: #2ec4e8 !important; color: #0a1426 !important; border-color: #2ec4e8 !important; }
@@ -449,6 +455,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       <button class="layer-btn" data-layer="steden" title="Stadsnamen">PLTS</button>
       <button class="layer-btn" data-layer="bliksem" title="Bliksem-ontladingen (tijdelijk uit — wordt verbeterd)" style="display:none;">⚡ BLI <span id="bli-cnt" style="opacity:0.7;font-size:10px;"></span></button>
       <button class="layer-btn" data-layer="hagel" title="Mogelijk hagel (>55 dBZ)">❄ HAGEL</button>
+      <span class="beta-layer-group">
+        <span class="beta-kop">Beta</span>
+        <button class="layer-btn beta" data-layer="satellietBeta" title="MTG-satellietbeeld als achtergrond onder de radar">SAT</button>
+      </span>
     </div>
     <button class="reset-btn" id="btn-lagen-info" title="Uitleg lagen" style="margin-left:4px;font-weight:700;">ⓘ uitleg</button>
   </div>
@@ -577,6 +587,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   <h3>Lagen op de radar</h3>
   <div class="row"><span class="badge">PLTS</span><span class="uit">Stads/plaatsnamen — ster (rood) bij &gt;500k inwoners, vierkant bij &gt;100k, cirkel kleiner. Drempel daalt bij hogere zoom.</span></div>
   <div class="row"><span class="badge">❄ HAGEL</span><span class="uit">Pixels &gt;55 dBZ — mogelijk hagel (geen garantie; sterke buien hebben vaak hoge reflectiviteit).</span></div>
+  <div class="row"><span class="badge" style="background:#ccfbf1;color:#0f766e;">Beta SAT</span><span class="uit">MTG GeoColour als achtergrond onder de radar. Handig om wolkenstructuur en echte neerslag in één beeld te vergelijken.</span></div>
   <div class="row"><span class="badge">MODEL</span><span class="uit">Verlengt de verwachting na pySTEPS-nowcast (0–2u) met de gekozen modelbron: HARMONIE, ICON-D2, gemiddeld of worst-case.</span></div>
   <div class="row"><span class="badge" style="background:#fef3c7;color:#92400e;">VERWACHTING</span><span class="uit">De tijdlijn onder de kaart scheidt verleden, nowcast en modelverwachting. De gestreepte zone markeert forecast-frames rechts van NU.</span></div>
   <div class="row" id="row-blend-info" style="display:none;"><span class="badge" style="background:#dbeafe;color:#1e40af;">700 hPa-BLEND</span><span class="uit" id="blend-info-tekst">—</span></div>
@@ -613,6 +624,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var DATA_BASE = "https://harmonie-data.weerlab.nl/";
   var META_URL = DATA_BASE + "radar_meta.json";
   var BIN_URL  = DATA_BASE + "radar_data.bin";
+  var SAT_WMS_URL = "https://om.weerlab.nl/eumetview";
   var REFRESH_MS = 5 * 60 * 1000; // 5 minuten
 
   // ── Vector basemap configuratie ─────────────────────────────────────────
@@ -843,6 +855,9 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var harmonieGeladen = false;
   var harmonieLaatsteRun = null;
   var nFramesNowcast = 0;
+  var satBgCache = {};
+  var satBgLaden = {};
+  var satBgLaatsteKey = "";
   // ICOND2-blend
   var icond2Cache = null;     // {meta, data, hLat, hLon, hN}
   var icond2Geladen = false;
@@ -1366,6 +1381,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   layers.bliksem = false;  // tijdelijk uit — wordt verbeterd
   layers.cellen = false;  // tijdelijk uitgeschakeld (nog niet betrouwbaar)
   if (typeof layers.hagel !== "boolean")      layers.hagel = false;
+  if (typeof layers.satellietBeta !== "boolean") layers.satellietBeta = false;
   layers.harmonie = true;  // altijd aan (knop weggehaald)
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1547,6 +1563,69 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     c.closePath();
   }
 
+  function isoZonderMillis(d) {
+    return d.toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
+  function satellietTijdVoorFrame() {
+    var frameT = meta && meta.tijden && meta.tijden[frameIdx] ? new Date(meta.tijden[frameIdx]) : new Date();
+    if (!Number.isFinite(frameT.getTime())) frameT = new Date();
+    var maxT = new Date(Date.now() - 20 * 60 * 1000);
+    if (frameT.getTime() > maxT.getTime()) frameT = maxT;
+    var rounded = new Date(frameT);
+    rounded.setUTCMinutes(Math.floor(rounded.getUTCMinutes() / 10) * 10, 0, 0);
+    return rounded;
+  }
+
+  function satellietWmsUrl(tijd) {
+    return SAT_WMS_URL +
+      "?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0" +
+      "&LAYERS=" + encodeURIComponent("mtg_fd:rgb_geocolour") +
+      "&STYLES=&FORMAT=image/png&TRANSPARENT=FALSE" +
+      "&CRS=CRS%3A84&BBOX=" + [PROJ_LON_MIN, PROJ_LAT_MIN, PROJ_LON_MAX, PROJ_LAT_MAX].join(",") +
+      "&WIDTH=" + BASEMAP_W + "&HEIGHT=" + BASEMAP_H +
+      "&TIME=" + encodeURIComponent(isoZonderMillis(tijd)) +
+      "&_t=" + tijd.getTime();
+  }
+
+  function zorgSatellietAchtergrond() {
+    if (!layers.satellietBeta) return null;
+    var tijd = satellietTijdVoorFrame();
+    var key = isoZonderMillis(tijd);
+    satBgLaatsteKey = key;
+    if (satBgCache[key]) return satBgCache[key];
+    if (satBgLaden[key]) return null;
+    satBgLaden[key] = true;
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function() {
+      satBgCache[key] = img;
+      delete satBgLaden[key];
+      if (layers.satellietBeta && satBgLaatsteKey === key) renderFrame();
+    };
+    img.onerror = function() { delete satBgLaden[key]; };
+    img.src = satellietWmsUrl(tijd);
+    return null;
+  }
+
+  function tekenSatellietAchtergrond(c, W, H) {
+    if (!layers.satellietBeta) return false;
+    var img = zorgSatellietAchtergrond();
+    if (!img) return false;
+    c.save();
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
+    c.filter = "contrast(1.12) saturate(1.05) brightness(0.92)";
+    c.globalAlpha = 0.86;
+    c.drawImage(img, 0, 0, W, H);
+    c.filter = "none";
+    c.globalAlpha = 1;
+    c.fillStyle = "rgba(5, 12, 22, 0.10)";
+    c.fillRect(0, 0, W, H);
+    c.restore();
+    return true;
+  }
+
   function renderFrame() {
     if (!radarData || !nlGeo) return;
     updateKaartOverlayLayout();
@@ -1563,16 +1642,19 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     ctx.save();
     ctx.clip();
 
-    // 1. Rustige vector-basemap: minder speelgoedkleur, meer weerkaart.
+    // 1. Ondergrond: standaard vector-basemap, of beta MTG-satellietlaag.
     var linePx = function(px) { return Math.max(0.08, px / Math.max(1, zoomLevel)); };
-    ctx.fillStyle = "#d7e7f3";
-    ctx.fillRect(0, 0, W, H);
-    _drawGeoFeatures(ctx, euLandGeo, "#e7eadf", "rgba(43,58,76,0.28)", linePx(0.65));
-    _drawGeoFeatures(ctx, nlGeo, "#f0f2e9", null, 0);
-    _drawGeoFeatures(ctx, beGeo, "#edf0e5", null, 0);
+    var satBgActief = tekenSatellietAchtergrond(ctx, W, H);
+    if (!satBgActief) {
+      ctx.fillStyle = "#d7e7f3";
+      ctx.fillRect(0, 0, W, H);
+      _drawGeoFeatures(ctx, euLandGeo, "#e7eadf", "rgba(43,58,76,0.28)", linePx(0.65));
+      _drawGeoFeatures(ctx, nlGeo, "#f0f2e9", null, 0);
+      _drawGeoFeatures(ctx, beGeo, "#edf0e5", null, 0);
 
-    // 3b. Meren — iets lichter dan zee, zodat water niet hard afsteekt.
-    if (lakesGeo) _drawGeoFeatures(ctx, lakesGeo, "#cfe2ee", "rgba(70,110,140,0.18)", linePx(0.4));
+      // 3b. Meren — iets lichter dan zee, zodat water niet hard afsteekt.
+      if (lakesGeo) _drawGeoFeatures(ctx, lakesGeo, "#cfe2ee", "rgba(70,110,140,0.18)", linePx(0.4));
+    }
 
     // 4. Radar-raster op offscreen — instant of cumulatief
     var imgData = offCtx.createImageData(nLon, nLat);
