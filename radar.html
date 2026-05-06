@@ -25,7 +25,6 @@ html, body { height: 100%; }
 body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; overflow-y: auto; font-feature-settings: "ss01","cv11"; scroll-behavior: smooth; }
 
 .header { background: #1e293b; padding: 12px 22px 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-bottom: 4px solid #2ec4e8; color: #f1f5f9; box-shadow: 0 2px 10px rgba(15,23,42,0.18); }
-.header-kicker { color: #7dd3fc; font-size: 10.5px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 2px; }
 .header-titel { color: #f1f5f9; font-size: 19px; font-weight: 800; letter-spacing: 0; line-height: 1.12; }
 .header-sub { color: #cbd5e1; font-size: 12px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; margin-top: 3px; }
 .header-meta { color: #94a3b8; font-size: 11px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 700; text-align: right; border: 1px solid rgba(125,211,252,0.28); border-radius: 999px; padding: 5px 10px; background: rgba(15,23,42,0.28); }
@@ -219,8 +218,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
 .canvas-container { flex: 1 1 auto; min-height: 360px; position: relative; overflow: hidden; background: #0d1b2a; display: flex; align-items: center; justify-content: center; cursor: grab; }
 .canvas-container.dragging { cursor: grabbing; }
-.canvas-container canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-.kaart-brand { position: absolute; left: 12px; right: 12px; pointer-events: none; z-index: 13; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
+.canvas-container canvas { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.kaart-brand { position: absolute; left: 12px; right: auto; width: calc(100% - 24px); pointer-events: none; z-index: 13; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
 .kaart-brand-top { top: 10px; background: rgba(30,41,59,0.90); border-bottom: 3px solid #2ec4e8; color: #f1f5f9; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.28); }
 .kaart-brand-title { font-size: 14px; font-weight: 800; letter-spacing: 0; }
 .kaart-brand-sub { font-family: "DM Mono", ui-monospace, monospace; color: #cbd5e1; font-size: 10.5px; font-weight: 600; text-align: right; }
@@ -254,7 +253,6 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 @media (max-width: 900px) {
   .header { padding: 10px 14px; }
   .header-titel { font-size: 15px; }
-  .header-kicker { font-size: 9.5px; }
   .header-sub, .header-meta { font-size: 10.5px; }
   .controls { padding: 6px 12px; gap: 6px; }
   .controls-row { padding: 4px 12px 8px; }
@@ -274,7 +272,6 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 }
 @media (max-width: 600px) {
   .header-titel { font-size: 13px; }
-  .header-kicker { font-size: 9px; }
   .header-sub, .header-meta { font-size: 9.5px; }
   .kaart-brand { left: 8px; right: 8px; gap: 8px; }
   .kaart-brand-top { padding: 6px 8px; }
@@ -426,7 +423,6 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
 <div class="header">
   <div>
-    <div class="header-kicker">03 · Slate</div>
     <div class="header-titel">Neerslagradar — Nederland</div>
     <div class="header-sub" id="hdr-sub">KNMI composiet (gauge-gecorrigeerd) + pySTEPS-nowcast</div>
   </div>
@@ -1483,9 +1479,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     dprGlobal = dpr;
     canvas.width  = Math.round(BASEMAP_W * dpr);
     canvas.height = Math.round(BASEMAP_H * dpr);
-    canvas.style.width  = BASEMAP_W + "px";
-    canvas.style.height = BASEMAP_H + "px";
+    canvas.style.width  = "100%";
+    canvas.style.height = "100%";
     ctx = canvas.getContext("2d");
+    updateKaartOverlayLayout();
   }
 
   // ── Geo path drawing helpers ────────────────────────────────────────────
@@ -1574,6 +1571,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function renderFrame() {
     if (!radarData || !nlGeo) return;
+    updateKaartOverlayLayout();
     if (radarMode !== "instant") bouwCumGrid();
     var W = BASEMAP_W, H = BASEMAP_H;
 
@@ -3046,7 +3044,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // ═══════════════════════════════════════════════════════════════════════
 
   // Reken client-coordinaten om naar bitmap-fractie (0..1), corrigeer object-fit:contain letterboxing
-  function clientNaarBitmapFractie(cx, cy) {
+  function bitmapDisplayRect() {
     if (!canvas) return null;
     var rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
@@ -3066,12 +3064,47 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       offX = 0;
       offY = (rect.height - dispH) / 2;
     }
-    var fx = (cx - rect.left - offX) / dispW;
-    var fy = (cy - rect.top - offY) / dispH;
+    return {
+      left: rect.left + offX,
+      top: rect.top + offY,
+      width: dispW,
+      height: dispH,
+      canvasRect: rect
+    };
+  }
+
+  function clientNaarBitmapFractie(cx, cy) {
+    var bm = bitmapDisplayRect();
+    if (!bm) return null;
+    var fx = (cx - bm.left) / bm.width;
+    var fy = (cy - bm.top) / bm.height;
     if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
     return { fx: fx, fy: fy };
   }
 
+  function updateKaartOverlayLayout() {
+    var cont = document.getElementById("canvas-container");
+    var bm = bitmapDisplayRect();
+    if (!cont || !bm) return;
+    var cr = cont.getBoundingClientRect();
+    var left = Math.max(8, bm.left - cr.left + 12);
+    var width = Math.max(220, bm.width - 24);
+    var top = Math.max(8, bm.top - cr.top + 10);
+    var bottom = Math.max(8, cr.bottom - (bm.top + bm.height) + 10);
+    document.querySelectorAll(".kaart-brand").forEach(function(el) {
+      el.style.left = left + "px";
+      el.style.width = width + "px";
+    });
+    var topEl = document.querySelector(".kaart-brand-top");
+    var bottomEl = document.querySelector(".kaart-brand-bottom");
+    if (topEl) topEl.style.top = top + "px";
+    if (bottomEl) bottomEl.style.bottom = bottom + "px";
+    var leg = document.getElementById("legenda");
+    if (leg) {
+      leg.style.left = Math.max(8, bm.left - cr.left + 16) + "px";
+      leg.style.bottom = Math.max(54, cr.bottom - (bm.top + bm.height) + 16) + "px";
+    }
+  }
   function clampView() {
     var visW = BASEMAP_W / zoomLevel;
     var visH = BASEMAP_H / zoomLevel;
@@ -3156,11 +3189,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // Helper: omreken display-pixel naar bron-pixel delta (rekening houdend met letterbox)
     function displayToSourceScale() {
-      var rect = canvas.getBoundingClientRect();
-      var cAspect = BASEMAP_W / BASEMAP_H;
-      var rAspect = rect.width / rect.height;
-      var dispW = (rAspect > cAspect) ? rect.height * cAspect : rect.width;
-      return (BASEMAP_W / zoomLevel) / Math.max(1, dispW);
+      var bm = bitmapDisplayRect();
+      return (BASEMAP_W / zoomLevel) / Math.max(1, bm ? bm.width : BASEMAP_W);
     }
 
     // Slepen om te pannen — track muisdown locatie ook bij zoom 1 voor klik vs sleep
@@ -3758,6 +3788,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     bouwLegenda();
     window.addEventListener("resize", function() {
       syncCompactTimeline();
+      updateKaartOverlayLayout();
       bouwSliderOverlay();
     });
 
