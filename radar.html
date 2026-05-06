@@ -3727,10 +3727,12 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       recorder.ondataavailable = function(e) {
         if (e.data && e.data.size) chunks.push(e.data);
       };
-      var klaar = new Promise(function(resolve) { recorder.onstop = resolve; });
-      var gestart = new Promise(function(resolve) { recorder.onstart = resolve; });
+      var klaar = new Promise(function(resolve, reject) {
+        recorder.onstop = resolve;
+        recorder.onerror = function(e) { reject((e && e.error) || new Error("MediaRecorder-fout")); };
+      });
       recorder.start(250);
-      await gestart;
+      await wacht(80);
 
       for (var i = 0; i < frames.length; i++) {
         frameIdx = frames[i];
@@ -3738,14 +3740,18 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         tekenVideoCanvas(videoCanvas, bouwComposite(canvas, frameIdx), social ? 1080 : 1600);
         if (track && track.requestFrame) track.requestFrame();
         await volgendeAnimatieFrame();
-        await wacht(social ? 120 : 150);
+        await wacht(track && typeof track.requestFrame === "function" ? 40 : (social ? 180 : 220));
         var pct = Math.round((i + 1) / frames.length * 100);
         barEl.style.width = pct + "%";
         pctEl.textContent = pct + "%";
       }
-      await wacht(500);
+      if (track && track.requestFrame) track.requestFrame();
+      await wacht(350);
       recorder.stop();
-      await klaar;
+      await Promise.race([
+        klaar,
+        wacht(3000).then(function() { throw new Error("Video-recorder reageert niet"); })
+      ]);
       stream.getTracks().forEach(function(t) { t.stop(); });
 
       var ext = mimeType.indexOf("mp4") >= 0 ? "mp4" : "webm";
