@@ -858,6 +858,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var satBgCache = {};
   var satBgLaden = {};
   var satBgLaatsteKey = "";
+  var kaartExtraLaden = false;
+  var kaartExtraGeladen = false;
   // ICOND2-blend
   var icond2Cache = null;     // {meta, data, hLat, hLon, hN}
   var icond2Geladen = false;
@@ -1388,43 +1390,53 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   // DATA LADEN
   // ═══════════════════════════════════════════════════════════════════════
 
-  function loadData() {
-    var t = Date.now();
-    var fetches = [
-      fetch(META_URL + "?t=" + t).then(function(r) { return r.json(); }),
-      fetch(BIN_URL + "?t=" + t).then(function(r) { return r.arrayBuffer(); }),
+  function laadNietKritiekeKaartData() {
+    if (kaartExtraLaden || kaartExtraGeladen) return Promise.resolve();
+    kaartExtraLaden = true;
+    var taken = [
+      beGeo ? Promise.resolve(beGeo) : fetch("be_provincies.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
+      riverGeo ? Promise.resolve(riverGeo) : fetch("nl_rivieren.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
+      euLandGeo ? Promise.resolve(euLandGeo) : fetch("europa_land.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
+      lakesGeo ? Promise.resolve(lakesGeo) : fetch("nl_meren.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
+      PLAATSEN_BIG ? Promise.resolve({ plaatsen: PLAATSEN_BIG }) : fetch("plaatsen_lookup.json").then(function(r){return r.json();}).catch(function(){return null;})
     ];
-    // GeoJSON's eenmalig laden (cacheable)
-    if (!nlGeo)    fetches.push(fetch("nl_provincies.geojson").then(function(r){return r.json();}));
-    else           fetches.push(Promise.resolve(nlGeo));
-    if (!beGeo)    fetches.push(fetch("be_provincies.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
-    else           fetches.push(Promise.resolve(beGeo));
-    if (!riverGeo) fetches.push(fetch("nl_rivieren.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
-    else           fetches.push(Promise.resolve(riverGeo));
-    if (!euLandGeo) fetches.push(fetch("europa_land.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
-    else            fetches.push(Promise.resolve(euLandGeo));
-    if (!lakesGeo)  fetches.push(fetch("nl_meren.geojson").then(function(r){return r.json();}).catch(function(){return null;}));
-    else            fetches.push(Promise.resolve(lakesGeo));
-    if (!PLAATSEN_BIG) fetches.push(fetch("plaatsen_lookup.json").then(function(r){return r.json();}).catch(function(){return null;}));
-    else               fetches.push(Promise.resolve({plaatsen: PLAATSEN_BIG}));
-
-    return Promise.all(fetches).then(function(results) {
-      meta = results[0];
-      var buf = results[1];
-      nlGeo    = results[2];
-      beGeo    = results[3];
-      riverGeo = results[4];
-      euLandGeo = results[5];
-      lakesGeo  = results[6];
-      var plData = results[7];
+    return Promise.all(taken).then(function(results) {
+      beGeo = results[0];
+      riverGeo = results[1];
+      euLandGeo = results[2];
+      lakesGeo = results[3];
+      var plData = results[4];
       if (plData && plData.plaatsen && !PLAATSEN_BIG) {
-        // Filter binnen basemap-bbox + sorteer op pop desc
         PLAATSEN_BIG = plData.plaatsen.filter(function(p) {
           return p.lat >= PROJ_LAT_MIN && p.lat <= PROJ_LAT_MAX
               && p.lon >= PROJ_LON_MIN && p.lon <= PROJ_LON_MAX;
         }).sort(function(a, b) { return (b.pop || 0) - (a.pop || 0); });
         bouwZoekDatalist();
       }
+      kaartExtraGeladen = true;
+      renderFrame();
+    }).catch(function(err) {
+      console.warn("Extra kaartdata laden mislukt", err);
+    }).finally(function() {
+      kaartExtraLaden = false;
+    });
+  }
+
+  function loadData() {
+    var t = Date.now();
+    var fetches = [
+      fetch(META_URL + "?t=" + t).then(function(r) { return r.json(); }),
+      fetch(BIN_URL + "?t=" + t).then(function(r) { return r.arrayBuffer(); }),
+    ];
+    // Alleen de Nederlandse contour is kritisch voor de eerste radar-render.
+    // Details zoals steden, rivieren, meren en buurlanden laden daarna lui.
+    if (!nlGeo)    fetches.push(fetch("nl_provincies.geojson").then(function(r){return r.json();}));
+    else           fetches.push(Promise.resolve(nlGeo));
+
+    return Promise.all(fetches).then(function(results) {
+      meta = results[0];
+      var buf = results[1];
+      nlGeo    = results[2];
 
       // Parse binair header (16 bytes)
       var view = new DataView(buf);
@@ -1460,6 +1472,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       renderFrame();
       document.getElementById("status").style.display = "none";
       startAnimatie();
+      setTimeout(laadNietKritiekeKaartData, 0);
     });
   }
 
@@ -4102,12 +4115,18 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       bouwCumGrid();
       if (radarMode !== "instant") renderFrame();
       if (layers.bliksem) startBliksemFetch();
-      // HARMONIE + ICOND2 laden in achtergrond (na 500ms zodat radar eerst rendert)
+      // HARMONIE + ICOND2 laden in achtergrond, pas nadat de radar zichtbaar is.
+      // Dit voorkomt dat 60+ MB modeldata de eerste interactie verdringt.
       if (layers.harmonie) {
-        setTimeout(function() {
+        var laadModellen = function() {
           // Eerst ICOND2 laden zodat append-blend kan, dan HARMONIE
           laadIcond2().then(function() { laadHarmonie(); });
-        }, 500);
+        };
+        if ("requestIdleCallback" in window) {
+          requestIdleCallback(laadModellen, { timeout: 6000 });
+        } else {
+          setTimeout(laadModellen, 3500);
+        }
       }
 
       // Auto-refresh
