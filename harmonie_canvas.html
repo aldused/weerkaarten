@@ -1607,12 +1607,13 @@ body {
             if (invPd) invDelta = invPd.data[sOffCu2 + i] || 0;
             var invScore = smoothstep(0.2, 1.6, invDelta);
             var moist = smoothstep(68, 92, rhVal) * (1 - smoothstep(3.5, 9, spread));
-            var altoMask = 1 - smoothstep(0.12, 0.45, midden);
-            var spreadout = smoothstep(0.18, 0.72, laag)
+            var midCover = smoothstep(0.12, 0.45, midden);
+            var highCover = smoothstep(0.16, 0.58, hoog) * (1 - midCover * 0.45);
+            var lowSheetBase = smoothstep(0.18, 0.72, laag)
               * moist
               * invScore
-              * altoMask
               * (1 - smoothstep(450, 1200, capeVal));
+            var spreadout = lowSheetBase * (1 - midCover);
             if (spreadout > 0.03) {
               var sheet = clamp01(spreadout * (0.82 + texBroad * 0.36));
               var sheetRgb = blendRGB([r, g, b], [154, 162, 174], sheet * 0.55);
@@ -1620,6 +1621,17 @@ body {
               var stripePhase = ((x - y + stepIdx * 2) % 10 + 10) % 10;
               if (stripePhase < 3) sheetRgb = blendRGB(sheetRgb, [44, 176, 238], sheet * 0.62);
               r = sheetRgb[0]; g = sheetRgb[1]; b = sheetRgb[2];
+            }
+
+            var cuBelowLayer = lowSheetBase * clamp01(midCover * 0.85 + highCover * 0.55);
+            if (cuBelowLayer > 0.035) {
+              var stipple = cloudTexture(x + 103, y - 29, stepIdx, 6);
+              var stippleHit = stipple > 0.50 ? 1 : 0;
+              var stippleStrength = clamp01(cuBelowLayer * (0.35 + stippleHit * 0.75));
+              var underRgb = [r, g, b];
+              underRgb = blendRGB(underRgb, [132, 146, 158], stippleStrength * 0.28);
+              if (stippleHit) underRgb = blendRGB(underRgb, [205, 248, 255], stippleStrength * 0.62);
+              r = underRgb[0]; g = underRgb[1]; b = underRgb[2];
             }
 
             var cuSeed = cloudTexture(x + 7, y + 19, stepIdx, 10);
@@ -2260,6 +2272,7 @@ body {
       ];
       if (paramKey === "cumulus") {
         items.push(["Cu-cel","rgb(44,176,238)"]);
+        items.push(["Cu onder Ac/Ci","rgb(132,146,158)"]);
         items.push(["Uitgespreid Cu","rgb(154,162,174)"]);
       }
       ctx.font = "bold " + Math.max(13, Math.round(cw / 60)) + "px Arial";
@@ -2277,6 +2290,16 @@ body {
           ctx.arc(bx + 15, legY + 15, 8, 0, Math.PI * 2);
           ctx.arc(bx + 21, legY + 21, 6, 0, Math.PI * 2);
           ctx.fill();
+        }
+        if (items[bi][0].indexOf("onder") >= 0) {
+          ctx.fillStyle = "rgba(205,248,255,0.82)";
+          for (var ui = 0; ui < 7; ui++) {
+            var ux = bx + 5 + (ui % 3) * 8;
+            var uy = legY + 13 + Math.floor(ui / 3) * 7;
+            ctx.beginPath();
+            ctx.arc(ux, uy, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         if (items[bi][0].indexOf("Uitgespreid") >= 0) {
           ctx.strokeStyle = "rgb(44,176,238)";
