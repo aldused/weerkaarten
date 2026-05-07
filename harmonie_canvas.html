@@ -1648,7 +1648,10 @@ body {
               if (cuColor) {
                 var cuSeedV3 = cloudTexture(x + 7, y + 19, stepIdx, 10);
                 var cuCellV3 = 0.55 + 0.45 * smoothstep(0.35, 0.80, cuSeedV3);
-                var alphaV3 = clamp01(cuStrength * cuCellV3 * 0.95);
+                // Sterkere alpha voor congestus/Cb (cuColor[0] hoog → warm) zodat
+                // ze door cirrus-bleach heen blijven prikken.
+                var dominanceV3 = (cuColor[0] >= 240) ? 1.15 : 0.95;
+                var alphaV3 = clamp01(cuStrength * cuCellV3 * dominanceV3);
                 if (alphaV3 > 0.04) {
                   r = r * (1 - alphaV3) + cuColor[0] * alphaV3;
                   g = g * (1 - alphaV3) + cuColor[1] * alphaV3;
@@ -2389,6 +2392,52 @@ body {
           ctx.lineTo(bx + 22, legY + 10);
           ctx.stroke();
         }
+        // v3 Cu-symbolen: kleine wolk-iconen voor humilis/mediocris/congestus/Cb
+        if (CU_V3 && paramKey === "cumulus") {
+          var lbl = items[bi][0];
+          if (lbl === "Cu humilis") {
+            ctx.fillStyle = "rgba(255,255,255,0.55)";
+            ctx.beginPath();
+            ctx.arc(bx + 8, legY + 22, 3, 0, Math.PI * 2);
+            ctx.arc(bx + 14, legY + 21, 4, 0, Math.PI * 2);
+            ctx.arc(bx + 20, legY + 23, 3, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (lbl === "Cu mediocris") {
+            ctx.fillStyle = "rgba(255,255,255,0.6)";
+            ctx.beginPath();
+            ctx.arc(bx + 8, legY + 21, 4, 0, Math.PI * 2);
+            ctx.arc(bx + 15, legY + 18, 5, 0, Math.PI * 2);
+            ctx.arc(bx + 21, legY + 22, 4, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (lbl === "Cu congestus") {
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            ctx.beginPath();
+            ctx.arc(bx + 8, legY + 24, 4, 0, Math.PI * 2);
+            ctx.arc(bx + 14, legY + 18, 5, 0, Math.PI * 2);
+            ctx.arc(bx + 12, legY + 13, 3, 0, Math.PI * 2);
+            ctx.arc(bx + 20, legY + 22, 4, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (lbl === "Cb / shower") {
+            ctx.fillStyle = "rgba(255,255,255,0.85)";
+            ctx.beginPath();
+            ctx.arc(bx + 8, legY + 25, 4, 0, Math.PI * 2);
+            ctx.arc(bx + 14, legY + 19, 5, 0, Math.PI * 2);
+            ctx.arc(bx + 20, legY + 23, 4, 0, Math.PI * 2);
+            ctx.arc(bx + 13, legY + 12, 4, 0, Math.PI * 2);
+            ctx.fill();
+            // anvil-streep
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(bx + 6, legY + 11);
+            ctx.lineTo(bx + 22, legY + 11);
+            ctx.stroke();
+          } else if (lbl === "Sc spreadout") {
+            ctx.fillStyle = "rgba(120,110,90,0.45)";
+            ctx.fillRect(bx + 4, legY + 17, 16, 4);
+            ctx.fillRect(bx + 3, legY + 22, 18, 3);
+          }
+        }
         ctx.strokeRect(bx, legY + 8, 24, 22);
         ctx.fillStyle = "#222";
         ctx.textAlign = "left";
@@ -2736,6 +2785,29 @@ body {
           var tVal = paramCache["temp"].data[tOff2 + gi];
           var rVal = paramCache["rv"].data[rOff2 + gi];
           lines.push("WBGT: " + wbgt(tVal, rVal).toFixed(1) + "\u00b0C");
+        }
+        // Cu-categorie label (v3 flag) wanneer cumulus actief
+        if (CU_V3 && paramKey === "cumulus" && paramCache["bewolking"] && paramCache["cape"] && paramCache["rv"] && paramCache["temp"] && paramCache["dauwpunt"]) {
+          var bpdT = paramCache["bewolking"], cpdT = paramCache["cape"], rpdT = paramCache["rv"];
+          var tpdT = paramCache["temp"], dpdT = paramCache["dauwpunt"];
+          var ipdT = paramCache["inversie"], npdT = paramCache["neerslag"];
+          var nPtsT = bpdT.nLat * bpdT.nLon;
+          var bOffT = stepIdx * nPtsT * 3, sOffT = stepIdx * nPtsT;
+          var lowT = bpdT.data[bOffT + 2 * nPtsT + gi] || 0;
+          var midT = bpdT.data[bOffT + nPtsT + gi] || 0;
+          var capeT = cpdT.data[sOffT + gi] || 0;
+          var rhT = rpdT.data[sOffT + gi] || 0;
+          var spreadT = (tpdT.data[sOffT + gi] || 0) - (dpdT.data[sOffT + gi] || 0);
+          var invT = ipdT ? smoothstep(0.2, 1.6, ipdT.data[sOffT + gi] || 0) : 0;
+          var precT = npdT ? (npdT.data[sOffT + gi] || 0) : 0;
+          var convOK_T = (spreadT < 9) && (rhT > 50);
+          var catName = "geen Cu";
+          if (convOK_T && precT > 0.3 && capeT > 400) catName = "Cb / shower";
+          else if (convOK_T && capeT > 300 && (lowT > 0.35 || midT > 0.30)) catName = "Cu congestus";
+          else if (convOK_T && capeT > 100 && lowT > 0.15) catName = "Cu mediocris";
+          else if (convOK_T && capeT > 20 && spreadT < 8 && lowT > 0.05) catName = "Cu humilis";
+          else if (lowT > 0.35 && invT > 0.3 && capeT < 200) catName = "Sc spreadout";
+          lines.push("<b>Cu-type: " + catName + "</b>");
         }
         for (var pi2 = 0; pi2 < paramInfo.length; pi2++) {
           var pk = paramInfo[pi2][0], plabel = paramInfo[pi2][1], punit = paramInfo[pi2][2], pfmt = paramInfo[pi2][3];
