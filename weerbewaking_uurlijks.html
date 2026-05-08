@@ -188,6 +188,9 @@ body{--kop-scale:1}
   <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
   <span class="status" style="margin-left:8px">Document:</span>
   <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <label style="margin-left:8px" title="Tijdstip 'Opgesteld op…' aanpassen (leeg = nu)">Tijd:</label>
+  <input type="datetime-local" id="opgesteld-tijd" data-save="opgesteldTijd" title="Tijdstip 'Opgesteld op…' overschrijven (leeg = nu)" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <button type="button" onclick="wisOpgesteldTijd()" title="Tijd leegmaken (gebruik 'nu')" style="background:#777;padding:4px 8px;font-size:.78rem">✕</button>
   <input type="text" id="doc-naam" value="Rotterdam" placeholder="Naam document" title="Naam voor deze opgeslagen versie" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem;width:130px">
   <select id="doc-kies" title="Kies een opgeslagen document voor deze datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem;min-width:130px"></select>
   <button onclick="nieuwDocument()" title="Maak een tweede document voor dezelfde datum">＋ Nieuw</button>
@@ -309,6 +312,21 @@ function exportNaam(...waarden){
 }
 function exportStamp(d=new Date()){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function getOpgesteldDate(){
+  const v=document.getElementById('opgesteld-tijd')?.value;
+  if(v){ const d=new Date(v); if(!isNaN(d.getTime())) return d; }
+  return new Date();
+}
+function updateOpgesteldHeader(){
+  const d=getOpgesteldDate();
+  const h=document.getElementById('hdr-datum'); if(h) h.textContent=formatDatumVol(d);
+  const f=document.getElementById('footer-datum');
+  if(f) f.textContent=formatDMshort(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function wisOpgesteldTijd(){
+  const inp=document.getElementById('opgesteld-tijd');
+  if(inp){ inp.value=''; updateOpgesteldHeader(); if(typeof saveDraft==='function') saveDraft(); }
 }
 function dagStart(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
 function zelfdeDag(a,b){ return dagStart(a).getTime()===dagStart(b).getTime(); }
@@ -617,9 +635,7 @@ function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):(+v).toFi
 
 async function laadData(){
   const nu=new Date();
-  const dstr=formatDatumVol(nu);
-  document.getElementById('hdr-datum').textContent=dstr;
-  document.getElementById('footer-datum').textContent=formatDMshort(nu)+' '+String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
+  updateOpgesteldHeader();
   bouwWaarschuwing(nu);
 
   try{
@@ -1084,6 +1100,7 @@ document.getElementById('doc-datum').addEventListener('change', ()=>{
   document.getElementById('doc-naam').value=eerste;
   bouwWaarschuwing(new Date(huidigeDatum()+'T12:00:00'));
   restoreDraft();
+  updateOpgesteldHeader();
 });
 document.getElementById('doc-kies').addEventListener('change', e=>{
   const nieuw=e.target.value;
@@ -1091,6 +1108,7 @@ document.getElementById('doc-kies').addEventListener('change', e=>{
   document.getElementById('doc-naam').value=nieuw;
   bouwWaarschuwing(new Date(huidigeDatum()+'T12:00:00'));
   restoreDraft();
+  updateOpgesteldHeader();
 });
 document.getElementById('doc-naam').addEventListener('change', ()=>{
   registreerDocNaam(docNaam());
@@ -1100,10 +1118,12 @@ document.getElementById('doc-naam').addEventListener('change', ()=>{
 
 // Initialisatie: waarschuwing opbouwen, draft herstellen, meta laden (licht)
 const nu=new Date();
-document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
-document.getElementById('footer-datum').textContent=formatDMshort(nu)+' '+String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
+updateOpgesteldHeader();
 bouwWaarschuwing(nu);
 restoreDraft();
+updateOpgesteldHeader();
+document.getElementById('opgesteld-tijd').addEventListener('input', updateOpgesteldHeader);
+document.getElementById('opgesteld-tijd').addEventListener('change', ()=>{ updateOpgesteldHeader(); saveDraft(); });
 // Meta ophalen voor startuur-select (klein JSON-bestand)
 laadMeta().then(meta=>{
   if(document.getElementById('startuur-sel').options.length===0) vulStartuurSelect(meta.tijden);
