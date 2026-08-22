@@ -31,7 +31,8 @@ import tempfile
 import argparse
 import subprocess
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import matplotlib
@@ -55,6 +56,7 @@ OUTPUT_DIR = os.environ.get('WEERLAB_KAARTEN_OUTPUT_DIR',
                             os.path.join(BASE_DIR, 'benelux_neerslag'))
 FRAME_ROOT = os.path.join(OUTPUT_DIR, 'frames')
 HARMONIE_DIR = WEERLAB_DIR
+LOCAL_TZ = ZoneInfo('Europe/Amsterdam')
 
 PROJ    = ccrs.LambertConformal(central_longitude=4.9, central_latitude=51.5,
                                 standard_parallels=(49.0, 54.0))
@@ -74,6 +76,7 @@ MODELS = {
         'credit':      '© ECMWF (open data)',
         'extent':      [2.2, 8.2, 50.5, 54.2],
         'interp_step': 0.05,
+        'tijdzone':    'utc',
     },
     'harmonie': {
         'label':       'HARMONIE V46',
@@ -83,6 +86,7 @@ MODELS = {
         # geeft op X veel meer bruikbare pixels per provincie dan Benelux-breed.
         'extent':      [2.2, 8.2, 50.5, 54.2],
         'interp_step': 0.02,        # native ~0,018° lat / 0,029° lon
+        'tijdzone':    'local',
     },
 }
 
@@ -288,11 +292,25 @@ def build_cmap(var):
     return cmap, BoundaryNorm(var['levels'], cmap.N)
 
 
-def fmt_run(dt):
+def lokale_tijd(dt):
+    """Interpreteer modeltijden zonder tzinfo als UTC en zet ze om naar NL-tijd."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(LOCAL_TZ)
+
+
+def fmt_run(dt, lokaal=False):
+    if lokaal:
+        dt = lokale_tijd(dt)
+        return f'{dt.day:02d}.{dt.month:02d}. {dt.hour:02d}:{dt.minute:02d} LT'
     return f'{dt.day:02d}.{dt.month:02d}. {dt.hour:02d}z'
 
 
-def fmt_valid(dt):
+def fmt_valid(dt, lokaal=False):
+    if lokaal:
+        dt = lokale_tijd(dt)
+        return (f'{NL_DAGEN[dt.weekday()]} {dt.day:02d}.{dt.month:02d}. '
+                f'{dt.hour:02d}:{dt.minute:02d} LT')
     return f'{NL_DAGEN[dt.weekday()]} {dt.day:02d}.{dt.month:02d}. {dt.hour:02d}z'
 
 
@@ -802,15 +820,16 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     def van_boven(inch):
         return 1 - inch / fig_h
 
-    fig.text(0.014, van_boven(0.127), f'{model_label} ({fmt_run(run)})', fontsize=13.5,
+    lokaal = cfg.get('tijdzone') == 'local'
+    fig.text(0.014, van_boven(0.127), f'{model_label} ({fmt_run(run, lokaal)})', fontsize=13.5,
              fontweight='bold', va='top')
     # Bij een oplopende som staat "vanaf de run tot X"; bij andere velden de
     # geldigheidstijd.
     kop2 = f'{var["titel"]} ({var["eenheid"]}) — ' + (
-        f'vanaf {fmt_valid(run)}' if var['soort'] == 'som' else var['subtitel'])
+        f'vanaf {fmt_valid(run, lokaal)}' if var['soort'] == 'som' else var['subtitel'])
     fig.text(0.014, van_boven(0.477), kop2, fontsize=10.5, va='top', color='#444444')
-    geldig = (f'tot {fmt_valid(valid)}' if var['soort'] == 'som'
-              else fmt_valid(valid))
+    geldig = (f'tot {fmt_valid(valid, lokaal)}' if var['soort'] == 'som'
+              else fmt_valid(valid, lokaal))
     fig.text(0.988, van_boven(0.127), f'{geldig}  (+{lead}u)', fontsize=12,
              fontweight='bold', va='top', ha='right')
     span = (f'{step_txt} +{max_lead}u' if eind and max_lead else '')

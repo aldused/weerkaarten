@@ -149,10 +149,10 @@ def haal_data_knmi_grib(max_hours=MAX_HOURS):
     run_str_raw = parts[-1] if parts else ""
     try:
         run_dt = datetime.strptime(run_str_raw[:10], "%Y%m%d%H").replace(tzinfo=timezone.utc)
-        run_str = run_dt.astimezone(LOCAL_TZ).strftime("%d %b %Y %H:%M")
+        run_str = run_dt.astimezone(LOCAL_TZ).strftime("%d %b %Y %H:%M LT")
     except:
         run_dt = datetime.now(tz=LOCAL_TZ)
-        run_str = run_dt.strftime("%d %b %Y %H:%M")
+        run_str = run_dt.strftime("%d %b %Y %H:%M LT")
 
     # Download naar tijdelijke directory
     with tempfile.TemporaryDirectory(prefix="harmonie_") as tmpdir:
@@ -301,7 +301,7 @@ def haal_data_openmeteo(max_hours=MAX_HOURS):
             if val is not None:
                 grid_data[h, lat_i, lon_i] = val
 
-    run_str = datetime.now(tz=LOCAL_TZ).strftime("%d %b %Y %H:%M")
+    run_str = datetime.now(tz=LOCAL_TZ).strftime("%d %b %Y %H:%M LT")
     return lats, lons, grid_data, times_str, run_str
 
 
@@ -1183,7 +1183,7 @@ def main():
         run_dt = datetime.strptime(run_str_raw[:10], "%Y%m%d%H").replace(tzinfo=timezone.utc)
     except:
         run_dt = datetime.now(tz=timezone.utc)
-    run_str = run_dt.astimezone(LOCAL_TZ).strftime("%a %d.%m.%Y %Hz").lower()
+    run_str = run_dt.astimezone(LOCAL_TZ).strftime("%a %d.%m.%Y %H:%M LT").lower()
 
     # Download
     print("\n2. Downloaden + extracten...")

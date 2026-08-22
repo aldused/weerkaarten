@@ -188,6 +188,11 @@ function prefixVan(){
 }
 
 function fmt(d){
+  if (model === 'harmonie') {
+    return NL_DAG[d.getDay()] + ' ' + d.getDate() + ' ' + NL_MND[d.getMonth()] +
+           ' ' + String(d.getHours()).padStart(2,'0') + ':' +
+           String(d.getMinutes()).padStart(2,'0') + ' LT';
+  }
   return NL_DAG[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + NL_MND[d.getUTCMonth()] +
          ' ' + String(d.getUTCHours()).padStart(2,'0') + ' UTC';
 }
@@ -248,10 +253,12 @@ function stapOmschrijving(m){
 
 function mp4Bestandsnaam(run){
   const modelNaam = model === 'harmonie' ? 'HARMONIE_V46' : 'ECMWF_HRES';
-  const datum = run.getUTCFullYear() + '-' +
-    String(run.getUTCMonth() + 1).padStart(2, '0') + '-' +
-    String(run.getUTCDate()).padStart(2, '0');
-  const tijd = String(run.getUTCHours()).padStart(2, '0') + 'UTC';
+  const lokaal = model === 'harmonie';
+  const datum = (lokaal ? run.getFullYear() : run.getUTCFullYear()) + '-' +
+    String((lokaal ? run.getMonth() : run.getUTCMonth()) + 1).padStart(2, '0') + '-' +
+    String(lokaal ? run.getDate() : run.getUTCDate()).padStart(2, '0');
+  const tijd = String(lokaal ? run.getHours() : run.getUTCHours()).padStart(2, '0') +
+    (lokaal ? 'LT' : 'UTC');
   return modelNaam + '_' + datum + '_' + tijd + '_' + VELDEN[veld].bestand + '.mp4';
 }
 
@@ -319,8 +326,12 @@ async function laad(){
 
     const uurOud = (Date.now() - run.getTime()) / 3600e3;
     const pill = document.getElementById('run-pill');
-    pill.textContent = 'Run ' + String(run.getUTCHours()).padStart(2,'0') + 'z · ' +
-                       run.getUTCDate() + ' ' + NL_MND[run.getUTCMonth()].slice(0,3) +
+    const runUur = model === 'harmonie' ? run.getHours() : run.getUTCHours();
+    const runDag = model === 'harmonie' ? run.getDate() : run.getUTCDate();
+    const runMaand = model === 'harmonie' ? run.getMonth() : run.getUTCMonth();
+    pill.textContent = 'Run ' + String(runUur).padStart(2,'0') +
+                       (model === 'harmonie' ? ':00 LT' : 'z') + ' · ' +
+                       runDag + ' ' + NL_MND[runMaand].slice(0,3) +
                        ' · ' + uurOud.toFixed(0) + ' uur oud';
     if (uurOud > cfg.oudNa) pill.classList.add('oud');
 
