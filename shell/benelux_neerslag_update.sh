@@ -1,6 +1,7 @@
 #!/bin/bash
 # Kaartenstudio Nederland: bouwt bij elke nieuwe run per veld een GIF + mp4 + eindkaart en
-# zet die op R2. Velden: neerslagsom, windkracht, windstoten, temperatuur.
+# zet die op R2. Velden: neerslagsom, windkracht, windstoten, temperatuur en
+# voor HARMONIE V46 ook rechtstreeks modelzicht.
 #
 #   ECMWF HRES  vier runs per dag (00/06/12/18 UTC), steeds 3-uursstappen
 #               t/m +144u (48 frames).
@@ -46,6 +47,10 @@ VELDEN=(neerslag wind windstoten temp)
 bouw_model() {
   local MODEL="$1" ACHTERVOEGSEL="$2" MARKER="$3"
   local RUN GEDAAN VELD PREFIX GIF MP4 PNG META EXTRA=()
+  local MODEL_VELDEN=("${VELDEN[@]}")
+  if [ "$MODEL" = "harmonie" ]; then
+    MODEL_VELDEN+=(zicht)
+  fi
 
   RUN="$("$PY" "$GENERATOR" --model "$MODEL" --latest-run 2>/dev/null | tail -1)"
   if ! [[ "$RUN" =~ ^[0-9]{10}$ ]]; then
@@ -69,7 +74,7 @@ bouw_model() {
   # ── Per veld naar R2: run-gesleuteld + vaste "laatste"-namen ──────────────
   echo "$(date '+%F %T') [$MODEL] upload naar R2"
   local F
-  for VELD in "${VELDEN[@]}"; do
+  for VELD in "${MODEL_VELDEN[@]}"; do
     PREFIX="benelux_${VELD}${ACHTERVOEGSEL}"
     GIF="$OUT/${PREFIX}_${RUN}.gif"
     MP4="$OUT/${PREFIX}_${RUN}.mp4"
@@ -101,14 +106,14 @@ bouw_model() {
   done
 
   echo "$RUN" > "$MARKER"
-  echo "$(date '+%F %T') [$MODEL] klaar — run $RUN gepubliceerd (${#VELDEN[@]} velden)"
+  echo "$(date '+%F %T') [$MODEL] klaar — run $RUN gepubliceerd (${#MODEL_VELDEN[@]} velden)"
   return 0
 }
 
 STATUS=0
 # HARMONIE is de goedkope, snel verversende reeks: die eerst, zodat een lange
 # ECMWF-bouw hem nooit een uur laat wachten.
-bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v5_run" || STATUS=1
+bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v6_zicht_run" || STATUS=1
 bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_ecmwf_144_x_v2_run"  || STATUS=1
 
 # Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw

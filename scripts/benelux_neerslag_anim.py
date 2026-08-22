@@ -1,17 +1,16 @@
 """
 Nederlandse weerkaarten (animatie) — ECMWF HRES en HARMONIE
 
-Cumulatieve neerslag vanaf de run, in de stijl van de wxcharts-animaties:
-kleurvlak + mm-cijfers op een raster, verticale kleurschaal rechts, run/geldigheid
-in de kop. Per model een GIF, een mp4 en een losse totaalkaart.
+Sociale kaarten voor neerslagsom, windkracht, windstoten, temperatuur en zicht:
+kleurvlak + cijfers op een raster, verticale kleurschaal rechts en run/geldigheid
+in de kop. Per beschikbaar model een GIF, een mp4 en een losse eindkaart.
 
 Modellen:
   ecmwf     ECMWF IFS HRES 9 km uit open data (veld `tp`).
             Alle vier runs (00/06/12/18 UTC) lopen t/m +144u in 3-uursstappen.
   harmonie  KNMI HARMONIE V46 2,5 km, elk uur een nieuwe run, t/m +60u
             in uurstappen. Leest de cumulatieve som die de bestaande
-            harmonie46_update.sh-pijplijn al wegschrijft
-            (harmonie46_data_cumul.bin),
+            harmonie46_update.sh-pijplijn al wegschrijft, inclusief zicht,
             dus geen tweede download van de 865 MB-run-tar.
 
 Gebruik:
@@ -127,6 +126,15 @@ TEMP_COLORS = ['#3b0a52', '#5b2a8f', '#3949ab', '#3f7fc9', '#7fb8e0', '#c9e6f5',
 TEMP_UNDER  = '#1a0330'
 TEMP_OVER   = '#5d0b3a'
 
+# Horizontaal zicht (km). Slecht zicht krijgt waarschuwende paars/rood/oranje
+# tinten; goed zicht loopt via groen naar lichtblauw. Het KNMI-veld is op 50 km
+# afgetopt, daarom eindigt de schaal daar ook.
+ZICHT_LEVELS = [0, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 50]
+ZICHT_COLORS = ['#5b006e', '#a50026', '#d73027', '#f46d43', '#fdae61',
+                 '#fee08b', '#d9ef8b', '#91cfbd', '#d9eef7']
+ZICHT_UNDER  = '#2d0038'
+ZICHT_OVER   = '#f7fbff'
+
 
 def _fmt_mm(v):
     return f'{v:.0f}'
@@ -140,6 +148,10 @@ def _fmt_bft(v):
     """km/u → windkracht. De klassegrenzen zijn precies de kleurvlakgrenzen,
     dus het cijfer benoemt het vlak waar het in staat."""
     return f'{sum(1 for grens in BFT_GRENZEN if v >= grens)}'
+
+
+def _fmt_zicht(v):
+    return f'{v:.1f}' if v < 1 else f'{v:.0f}'
 
 
 # Soort bepaalt de kopregels: 'som' loopt op vanaf de run, 'moment' is de waarde
@@ -213,6 +225,26 @@ VARS = {
         'ecmwf_cache':  'temp',
         'harmonie':   ('harmonie46_data_temp.bin', 'canvas'),
     },
+    'zicht': {
+        'titel':      'zicht',
+        'eenheid':    'km',
+        'soort':      'moment',
+        'subtitel':   'horizontaal zicht aan het oppervlak',
+        'menu':       'Zicht',
+        'levels':     ZICHT_LEVELS,
+        'colors':     ZICHT_COLORS,
+        'over':       ZICHT_OVER,
+        'under':      ZICHT_UNDER,
+        'cb_klassen': None,
+        'label_min':  None,
+        'label_max':  10.0,
+        'label_fmt':  _fmt_zicht,
+        # ECMWF-open-data bevat geen rechtstreeks zichtveld. Deze kaart is
+        # daarom bewust alleen beschikbaar voor HARMONIE V46.
+        'ecmwf_params': [],
+        'ecmwf_cache':  'zicht',
+        'harmonie':   ('harmonie46_data_zicht.bin', 'canvas'),
+    },
 }
 
 # Merkstrook onder de kaart. Kleuren komen uit weerlab_design_tokens.css:
@@ -233,8 +265,8 @@ FOOTER_IN   = 0.58
 NL_DAGEN  = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
 
 
-# Vaste Nederlandse referentiepunten. De plaatsnaam komt compact onder het
-# grotere modelcijfer, zoals in de aangeleverde X-voorbeelden.
+# Vaste Nederlandse referentiepunten voor enkele grotere modelcijfers. De
+# plaatsnamen zelf worden bewust niet op de kaart gezet.
 PUNTEN = [
     ('Groningen',   53.22, 6.57),
     ('Leeuwarden',  53.20, 5.80),
@@ -364,6 +396,10 @@ def _ecmwf_veld(ds_vars, var_naam):
 def ecmwf_fields(var_naam='neerslag', run_hour=None, max_step=None, refresh=False):
     import cfgrib
     from ecmwf.opendata import Client
+
+    if not VARS[var_naam].get('ecmwf_params'):
+        raise SystemExit(f'{VARS[var_naam]["menu"]} is niet als rechtstreeks '
+                         'veld beschikbaar in ECMWF-open-data')
 
     os.makedirs(GRIB_DIR, exist_ok=True)
     client = Client(os.environ.get('ECMWF_OPEN_DATA_SOURCE', 'ecmwf'))
@@ -516,6 +552,8 @@ def _harmonie_veld(kubus, var_naam):
         return np.hypot(kubus[:, 0], kubus[:, 1]) * 3.6       # m/s → km/u
     if var_naam == 'temp':
         return kubus[:, 0]                         # staat al in °C in de bin
+    if var_naam == 'zicht':
+        return kubus[:, 0] / 1000.0                # m → km
     raise SystemExit(f'onbekend veld: {var_naam}')
 
 
@@ -645,12 +683,12 @@ def _bij_vast_punt(lo, la):
                for _, pla, plo in PUNTEN)
 
 
-def label_grid(lats_f, lons_f, field, extent, drempel=None):
+def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None):
     """Waardecijfers op een regelmatig raster (in graden).
 
-    drempel=None toont overal een cijfer (wind, temperatuur); voor de
-    neerslagsom heeft een veld vol nullen geen zeggingskracht, dus daar staat
-    een ondergrens.
+    drempel=None toont ook lage waarden; voor de neerslagsom staat er een
+    ondergrens. bovengrens wordt bij zicht gebruikt om alleen relevant beperkt
+    zicht te nummeren.
     """
     # Voor X zijn iets minder maar duidelijk grotere cijfers beter leesbaar dan
     # een fijn raster dat na het verkleinen dichtloopt.
@@ -662,7 +700,8 @@ def label_grid(lats_f, lons_f, field, extent, drempel=None):
             v = field[i, j]
             if _bij_vast_punt(lo, la):
                 continue
-            if np.isfinite(v) and (drempel is None or v >= drempel):
+            if (np.isfinite(v) and (drempel is None or v >= drempel) and
+                    (bovengrens is None or v <= bovengrens)):
                 yield lo, la, v
 
 
@@ -727,7 +766,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         edgecolor='#60717d', linewidth=0.38, facecolor='none'), zorder=4)
 
     # waardecijfers
-    for lo, la, v in label_grid(lats_f, lons_f, tp, extent, var['label_min']):
+    for lo, la, v in label_grid(lats_f, lons_f, tp, extent, var['label_min'],
+                                var.get('label_max')):
         txt = var['label_fmt'](v)
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=10.2,
@@ -746,7 +786,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         j = int(np.argmin(np.abs(lons_f - lo)))
         v = tp[i, j]
         if (not np.isfinite(v) or
-                (var['label_min'] is not None and v < var['label_min'])):
+                (var['label_min'] is not None and v < var['label_min']) or
+                (var.get('label_max') is not None and v > var['label_max'])):
             continue
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         ax.text(lo, la, var['label_fmt'](v), transform=PROJ_PC, zorder=8,
@@ -1102,6 +1143,8 @@ def main():
         return
 
     velden = list(VARS) if args.var == 'alle' else [args.var]
+    if args.model == 'ecmwf':
+        velden = [v for v in velden if VARS[v].get('ecmwf_params')]
 
     # Alle velden uit één momentopname, anders kan veld 4 uit een nieuwere run
     # komen dan veld 1 terwijl de meta één run noemt.
