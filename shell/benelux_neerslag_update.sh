@@ -1,12 +1,11 @@
 #!/bin/bash
-# GIF Benelux: bouwt bij elke nieuwe run per veld een GIF + mp4 + eindkaart en
+# Kaartenstudio Nederland: bouwt bij elke nieuwe run per veld een GIF + mp4 + eindkaart en
 # zet die op R2. Velden: neerslagsom, windkracht, windstoten, temperatuur.
 #
-#   ECMWF HRES  00/12 UTC t/m +360u (3-uursstappen t/m +144u, daarna 6-uurs,
-#               84 frames), 06/18 UTC t/m +144u (48 frames) — verder gaat de
-#               open data voor die twee runs niet.
-#   HARMONIE    elk uur een nieuwe KNMI-run, 60 frames van +1u t/m +60u. Leest
-#               de bins die harmonie_update.sh al wegschrijft, dus geen tweede
+#   ECMWF HRES  vier runs per dag (00/06/12/18 UTC), steeds 3-uursstappen
+#               t/m +144u (48 frames).
+#   HARMONIE V46 elk uur een nieuwe KNMI-run, 60 frames van +1u t/m +60u. Leest
+#               de bins die harmonie46_update.sh al wegschrijft, dus geen tweede
 #               download van de run-tar.
 #
 # Bedoeld voor launchd (elke 10 min checken, no-op als de run al gebouwd is).
@@ -15,6 +14,7 @@ set -uo pipefail
 
 ROOT="/Users/aldus/KNMI_Project"
 OUT="$ROOT/benelux_neerslag"
+GENERATOR="$ROOT/weerlab/scripts/benelux_neerslag_anim.py"
 PY="/usr/local/bin/python3"
 RCLONE="/opt/homebrew/bin/rclone"
 R2_DIR="r2:weerlab-data/benelux-neerslag"
@@ -47,7 +47,7 @@ bouw_model() {
   local MODEL="$1" ACHTERVOEGSEL="$2" MARKER="$3"
   local RUN GEDAAN VELD PREFIX GIF MP4 PNG META EXTRA=()
 
-  RUN="$("$PY" benelux_neerslag_anim.py --model "$MODEL" --latest-run 2>/dev/null | tail -1)"
+  RUN="$("$PY" "$GENERATOR" --model "$MODEL" --latest-run 2>/dev/null | tail -1)"
   if ! [[ "$RUN" =~ ^[0-9]{10}$ ]]; then
     echo "$(date '+%F %T') [$MODEL] FOUT: runlabel niet bepaald (bron onbereikbaar?)" >&2
     return 1
@@ -61,7 +61,7 @@ bouw_model() {
   if [ "$MODEL" = "ecmwf" ]; then
     EXTRA=(--run "$((10#${RUN: -2}))")
   fi
-  if ! "$PY" benelux_neerslag_anim.py --model "$MODEL" ${EXTRA[@]+"${EXTRA[@]}"}; then
+  if ! "$PY" "$GENERATOR" --model "$MODEL" ${EXTRA[@]+"${EXTRA[@]}"}; then
     echo "$(date '+%F %T') [$MODEL] FOUT: bouw mislukt — marker blijft op $GEDAAN" >&2
     return 1
   fi
@@ -108,11 +108,11 @@ bouw_model() {
 STATUS=0
 # HARMONIE is de goedkope, snel verversende reeks: die eerst, zodat een lange
 # ECMWF-bouw hem nooit een uur laat wachten.
-bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie_run" || STATUS=1
-bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_run"          || STATUS=1
+bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v2_run" || STATUS=1
+bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_ecmwf_144_x_v2_run"  || STATUS=1
 
-# ECMWF-GRIB's zijn met +360u groter; twee dagen bewaren blijft genoeg voor
-# een herbouw zonder opnieuw te downloaden.
+# Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw
+# te downloaden.
 find "$ROOT/grib_cache" -name 'benelux_tp_*.grib2*' -mtime +2 -delete 2>/dev/null
 
 exit "$STATUS"

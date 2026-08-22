@@ -5,7 +5,7 @@ ROOT="/Users/aldus/KNMI_Project/weerlab"
 PYTHON="/usr/local/bin/python3"
 
 cd "$ROOT" || exit 1
-echo "$(date): HARMONIE 46 testupdate gestart"
+echo "$(date): HARMONIE 46 update gestart"
 
 "$PYTHON" scripts/harmonie46_update.py "$@"
 status=$?
@@ -25,4 +25,4 @@ done
 
 R2_GZIP=1 bash shell/r2_publish_harmonie.sh "${files[@]}" || exit 1
 bash shell/r2_publish_point_source.sh harmonie46 harmonie46_canvas_meta.json || exit 1
-echo "$(date): HARMONIE 46 testupdate gepubliceerd"
+echo "$(date): HARMONIE 46 update gepubliceerd"
