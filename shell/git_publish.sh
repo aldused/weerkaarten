@@ -56,13 +56,21 @@ if [ "$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)" = "0" ]; then
   exit 0
 fi
 
-# 4. Schone werkboom -> gewone rebase, GEEN --autostash meer, dus ook geen
-#    achterblijvende autostash-stapel. Bij een zeldzaam conflict op dezelfde
-#    data-regel winnen onze net gegenereerde waarden (-X theirs = de replayed
-#    lokale commits). Bij een mislukte poging de rebase afbreken zodat een
-#    volgende poging (of job) niet in een halve rebase vastloopt.
+# 4. Meestal is origin/main al een voorouder van HEAD. Push dan direct: een
+#    generator mag ondertussen opnieuw tracked databestanden hebben gewijzigd,
+#    want voor een fast-forward push hoeft de werkboom niet schoon te zijn.
+#    Alleen wanneer origin echt nieuwe commits bevat is nog een rebase nodig.
+#    Dit voorkomt dat continue data-updates iedere publicatie blokkeren met
+#    "cannot pull with rebase: You have unstaged changes".
 for attempt in 1 2 3; do
-  if git pull --rebase -X theirs origin main && git push origin main; then
+  git fetch origin main
+
+  if git merge-base --is-ancestor origin/main HEAD; then
+    if git push origin main; then
+      echo "Git publicatie klaar."
+      exit 0
+    fi
+  elif git pull --rebase -X theirs origin main && git push origin main; then
     echo "Git publicatie klaar."
     exit 0
   fi
