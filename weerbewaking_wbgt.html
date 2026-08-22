@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WBGT rekentool — Weerbewaking</title>
+<script src="wbgt_core.js?v=20260605-tr2604"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0f1a;--bg2:#101827;--panel:#161f2e;--panel2:#111b2a;
+  --border:#263a55;--text:#d8e8f4;--muted:#7f99b4;--accent:#2ec4e8;
+  --brand:#1a5490;--warn:#f0c040;--danger:#ff7070;
+}
+body{font-family:Inter,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:22px}
+.wrap{max-width:1040px;margin:0 auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px;padding:18px 20px;border:1px solid var(--border);border-radius:8px;background:linear-gradient(180deg,#142033 0%,#101827 100%)}
+.eyebrow{font-size:.72rem;color:var(--accent);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}
+h1{font-size:1.35rem;color:white;line-height:1.15}
+.sub{font-size:.82rem;color:var(--muted);line-height:1.45;margin-top:6px;max-width:660px}
+.back{height:34px;padding:0 13px;border-radius:6px;border:1px solid #324866;background:#111b2a;color:var(--text);font:800 .78rem Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.back:hover{border-color:var(--accent);color:white}
+.tool{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.20);overflow:hidden}
+.card-h{padding:14px 16px;border-bottom:1px solid var(--border);background:#121d2d}
+.card-h strong{display:block;color:#fff;font-size:.94rem}
+.card-h span{display:block;color:var(--muted);font-size:.74rem;margin-top:3px;line-height:1.35}
+.inputs{padding:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:flex;flex-direction:column;gap:5px;font-size:.72rem;color:#9fc2df;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+input,select{width:100%;height:38px;border-radius:6px;border:1px solid #30465f;background:#0d1624;color:#fff;padding:0 10px;font:800 .95rem Inter,system-ui,sans-serif;outline:none}
+select{cursor:pointer}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46,196,232,.14)}
+.wide{grid-column:1/-1}
+.unit-row{display:grid;grid-template-columns:1fr 88px;gap:8px}
+.result{padding:18px;background:linear-gradient(180deg,#f8fbff 0%,#edf4fb 100%);color:#112033;min-height:100%}
+.result-label{font-size:.72rem;color:#526f8d;text-transform:uppercase;letter-spacing:.08em;font-weight:900;text-align:right}
+.result-value{font-size:3rem;line-height:1;font-weight:900;text-align:right;color:#12385f;margin-top:4px}
+.result-meta{text-align:right;font-size:.86rem;font-weight:900;color:#38536d;margin-top:7px}
+.risk{display:inline-block;border-radius:999px;padding:5px 10px;border:1px solid rgba(0,0,0,.14);font-weight:900}
+.hittekracht-panel{margin-top:16px;border:1px solid #d7e2ee;border-radius:8px;background:#fff;padding:12px 10px 14px;text-align:center}
+.hittekracht-panel svg{width:100%;max-width:238px;display:block;margin:0 auto}
+.hittekracht-title{display:inline-block;margin-top:-8px;background:#fff;padding:2px 10px;color:#111827;font-size:1.75rem;line-height:1;font-weight:900;letter-spacing:0;text-transform:lowercase}
+.hittekracht-axis{fill:#111827;font:800 13px Inter,Arial,sans-serif}
+.hittekracht-value{fill:#030712;font:900 54px Inter,Arial,sans-serif}
+.hittekracht-pointer{filter:drop-shadow(0 2px 4px rgba(15,23,42,.28))}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
+.tile{border:1px solid #d7e2ee;border-radius:7px;background:white;padding:10px}
+.tile .k{font-size:.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:900}
+.tile .v{font-size:1.02rem;color:#142238;font-weight:900;margin-top:4px;min-height:22px}
+.formula{margin-top:10px;border:1px solid #d7e2ee;border-radius:7px;background:white;padding:10px}
+.formula .k{font-size:.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:900}
+.formula .v{font-size:.9rem;color:#142238;font-weight:900;margin-top:4px;line-height:1.35}
+.actions{padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap}
+.actions button{height:32px;border-radius:6px;border:1px solid transparent;background:#1a5490;color:white;padding:0 11px;font:800 .78rem Inter,system-ui,sans-serif;cursor:pointer}
+.actions button:hover{background:#2467aa}
+.actions .sec{background:#253750;color:#cfe7f7;border-color:#324866}
+.png-toggle{height:32px;display:inline-flex;flex-direction:row;align-items:center;gap:8px;border:1px solid #324866;border-radius:6px;background:#111b2a;color:#cfe7f7;padding:0 10px;font:800 .76rem Inter,system-ui,sans-serif;letter-spacing:0;text-transform:none;cursor:pointer}
+.png-toggle input{width:15px;height:15px;padding:0;accent-color:#ffd60a;cursor:pointer}
+.note{padding:12px 16px;border-top:1px solid var(--border);font-size:.76rem;color:var(--muted);line-height:1.45;background:#111b2a}
+.defs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px}
+.def{background:#111b2a;border:1px solid var(--border);border-radius:8px;padding:12px}
+.def strong{display:block;color:#fff;font-size:.78rem;margin-bottom:4px}
+.def span{display:block;color:var(--muted);font-size:.74rem;line-height:1.4}
+.grades{margin-top:16px;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 14px 34px rgba(0,0,0,.18)}
+.grades-h{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:14px 16px;border-bottom:1px solid var(--border);background:#121d2d}
+.grades-h h2{font-size:1rem;color:#fff;line-height:1.2}
+.grades-h p{font-size:.74rem;color:var(--muted);line-height:1.4;margin-top:3px}
+.grades-h button{height:32px;border-radius:6px;border:1px solid transparent;background:#1a5490;color:white;padding:0 11px;font:800 .78rem Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.grades-h button:hover{background:#2467aa}
+.grade-table{width:100%;border-collapse:collapse;background:#f8fbff;color:#142238}
+.grade-table th,.grade-table td{padding:11px 13px;border-bottom:1px solid #d7e2ee;vertical-align:top;text-align:left}
+.grade-table th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:#526f8d;background:#ffffff}
+.grade-table td{font-size:.82rem;line-height:1.35}
+.grade-table .range{width:145px;font-weight:900;color:#fff;text-align:center}
+.grade-table .risk{display:table-cell;font-weight:900;color:#142238;background:transparent;border:0;padding:11px 13px;border-radius:0}
+.grade-low{background:#42b857}
+.grade-moderate{background:#f3f48c;color:#142238!important}
+.grade-high{background:#ff9f40}
+.grade-very-high{background:#ff3b30}
+.grade-extreme{background:#050505}
+.pdf-resource{margin-top:16px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 14px 34px rgba(0,0,0,.18)}
+.pdf-resource h2{font-size:1rem;color:#fff;line-height:1.2}
+.pdf-resource p{font-size:.74rem;color:var(--muted);line-height:1.4;margin-top:3px}
+.pdf-link{height:34px;display:inline-flex;align-items:center;border-radius:6px;border:1px solid transparent;background:#1a5490;color:white;text-decoration:none;padding:0 12px;font:800 .78rem Inter,system-ui,sans-serif;white-space:nowrap}
+.pdf-link:hover{background:#2467aa}
+.error{color:#b42318;font-weight:900}
+@media (max-width:820px){
+  body{padding:14px}
+  .header{flex-direction:column}
+  .tool{grid-template-columns:1fr}
+  .result-label,.result-value,.result-meta{text-align:left}
+  .grades-h{flex-direction:column}
+  .pdf-resource{flex-direction:column;align-items:flex-start}
+}
+@media (max-width:560px){
+  .inputs,.tiles,.defs{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="header">
+    <div>
+      <div class="eyebrow">Weerbewaking</div>
+      <h1>WBGT rekentool</h1>
+      <div class="sub">Controleer handmatig de WBGT met temperatuur, relatieve vochtigheid, wind en zonnestraling.</div>
+    </div>
+    <button class="back" type="button" onclick="gaTerug()">Terug naar weerbewaking</button>
+  </header>
+
+  <section class="tool">
+    <div class="card">
+      <div class="card-h">
+        <strong>Invoer</strong>
+        <span>Wind is standaard op 10 meter; de tool corrigeert volgens TR-26-04 naar 2 meter.</span>
+      </div>
+      <div class="inputs">
+        <label class="wide">Plaats
+          <input id="wbgt-place" type="text" value="De Bilt" placeholder="Vul plaatsnaam in">
+        </label>
+        <label class="wide">Geldig voor
+          <input id="wbgt-valid" type="text" value="" placeholder="maandag 25 mei 2026">
+        </label>
+        <label>Luchttemperatuur Ta (°C)
+          <input id="wbgt-ta" type="text" inputmode="decimal" value="30">
+        </label>
+        <label>Relatieve vochtigheid (%)
+          <input id="wbgt-rh" type="text" inputmode="decimal" value="60">
+        </label>
+        <label>Wind 10 meter
+          <div class="unit-row">
+            <input id="wbgt-wind" type="text" inputmode="decimal" value="2">
+            <select id="wbgt-wind-unit" aria-label="Wind-eenheid">
+              <option value="ms" selected>m/s</option>
+              <option value="kmh">km/u</option>
+            </select>
+          </div>
+        </label>
+        <label>Zonnestraling (W/m²)
+          <input id="wbgt-sr" type="text" inputmode="decimal" value="700">
+        </label>
+        <label>UV-index
+          <input id="wbgt-uv" type="text" inputmode="decimal" value="6">
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" data-preset="sun">Voorbeeld zon</button>
+        <button type="button" data-preset="shadow" class="sec">Schaduwtest</button>
+        <button type="button" data-preset="hot" class="sec">Zware hitte</button>
+        <button type="button" id="download-png">Download PNG</button>
+        <label class="png-toggle"><input id="png-hittekracht" type="checkbox" checked> Hittekracht in PNG</label>
+      </div>
+      <div class="note">De WBGT wordt berekend met natuurlijke natteboltemperatuur, zwarteboltemperatuur, luchttemperatuur en de KNMI-windcorrectie. De UV-index staat los van WBGT en is handmatig aanpasbaar.</div>
+      <div class="defs">
+        <div class="def"><strong>Tnw / Tw</strong><span>Natuurlijke natteboltemperatuur: temperatuur inclusief het koelende effect van verdamping.</span></div>
+        <div class="def"><strong>Tg bol</strong><span>Globetemperatuur van een zwarte bol: zon, warmtestraling en wind samen.</span></div>
+      </div>
+    </div>
+
+    <aside class="card result">
+      <div class="result-label">WBGT</div>
+      <div class="result-value" id="wbgt-result">-</div>
+      <div class="result-meta"><span class="risk" id="wbgt-risk">-</span></div>
+      <div class="hittekracht-panel" aria-label="Hittekrachtmeter">
+        <svg viewBox="0 0 240 188" role="img" aria-labelledby="hittekracht-title">
+          <title id="hittekracht-title">Hittekracht</title>
+          <path id="hk-seg-low" fill="none" stroke="#52d88d" stroke-width="24" stroke-linecap="butt"></path>
+          <path id="hk-seg-mid" fill="none" stroke="#f4d33b" stroke-width="24" stroke-linecap="butt"></path>
+          <path id="hk-seg-high" fill="none" stroke="#ff9f2f" stroke-width="24" stroke-linecap="butt"></path>
+          <path id="hk-seg-extreme" fill="none" stroke="#ff3b30" stroke-width="24" stroke-linecap="butt"></path>
+          <circle id="hk-pointer" class="hittekracht-pointer" r="6" fill="#ffffff" stroke="#111827" stroke-width="3"></circle>
+          <text id="hk-meter-value" class="hittekracht-value" x="120" y="104" text-anchor="middle">-</text>
+          <text class="hittekracht-axis" x="55" y="160" text-anchor="middle">0</text>
+          <text class="hittekracht-axis" x="185" y="160" text-anchor="middle">10</text>
+        </svg>
+        <div class="hittekracht-title">hittekracht</div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Tnw (nat bol)</div><div class="v" id="wbgt-tnw">-</div></div>
+        <div class="tile"><div class="k">Tw (psychrom.)</div><div class="v" id="wbgt-tw">-</div></div>
+        <div class="tile"><div class="k">Tg bol</div><div class="v" id="wbgt-tg">-</div></div>
+        <div class="tile"><div class="k">Wind 2 m</div><div class="v" id="wbgt-u1m">-</div></div>
+        <div class="tile"><div class="k">Hittekracht</div><div class="v" id="wbgt-hittekracht">-</div></div>
+        <div class="tile"><div class="k">UV-index</div><div class="v" id="wbgt-uv-output">-</div></div>
+      </div>
+      <div class="formula">
+        <div class="k">Formule (<span id="wbgt-modus">-</span>)</div>
+        <div class="v" id="wbgt-formula">-</div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="grades" id="wbgt-gradaties">
+    <div class="grades-h">
+      <div>
+        <h2>WBGT gradaties</h2>
+        <p>Risico-indeling voor sport en buitenactiviteit op basis van de berekende WBGT.</p>
+      </div>
+      <button type="button" id="download-table-png">Download tabel PNG</button>
+    </div>
+    <table class="grade-table" aria-label="WBGT gradaties en maatregelen">
+      <thead>
+        <tr>
+          <th>WBGT index</th>
+          <th>Risico</th>
+          <th>Te nemen maatregelen</th>
+        </tr>
+      </thead>
+      <tbody id="grade-body"></tbody>
+    </table>
+  </section>
+
+  <section class="pdf-resource">
+    <div>
+      <h2>Artikel sport en hitte</h2>
+      <p>Proloop-artikel als achtergrondinformatie bij WBGT, hittebelasting en sporten in warme omstandigheden.</p>
+    </div>
+    <a class="pdf-link" href="proloop-artikel-sport-en-hitte.pdf" download>Download PDF</a>
+  </section>
+</main>
+
+<script>
+const GRADATIES=[
+  {range:'< 19°C',risk:'Laag',cls:'grade-low',color:'#42b857',advies:'Normale activiteit mogelijk. Zorg voor voldoende vochtinname en blijf alert op kwetsbare personen.'},
+  {range:'19–23°C',risk:'Matig',cls:'grade-moderate',color:'#f3f48c',advies:'Let op risicogroepen. Neem extra drinkpauzes bij sport of langdurige buitenactiviteit.'},
+  {range:'23–28°C',risk:'Hoog',cls:'grade-high',color:'#ff9f40',advies:'Beperk zware inspanning. Plan regelmatige pauzes, schaduw en extra hydratatie in.'},
+  {range:'28–32°C',risk:'Erg hoog',cls:'grade-very-high',color:'#ff3b30',advies:'Intensieve activiteit wordt afgeraden. Kort programma in of verplaats inspanning naar een koeler moment.'},
+  {range:'> 32°C',risk:'Extreem',cls:'grade-extreme',color:'#050505',advies:'Gevaarlijk voor iedereen. Buitenactiviteiten staken of uitstellen; activeer het hitte- of noodplan.'}
+];
+function parseGetal(id){
+  const raw=(document.getElementById(id)?.value || '').trim().replace(',','.');
+  const v=parseFloat(raw);
+  return Number.isFinite(v) ? v : null;
+}
+function fmt(v,d=1,unit=''){
+  if(v==null || !Number.isFinite(v)) return '-';
+  return v.toFixed(d).replace('.',',')+unit;
+}
+function fmtUv(v){
+  if(v==null || !Number.isFinite(v)) return '-';
+  return Math.max(0,v).toFixed(1).replace('.',',');
+}
+function clampGetal(v,min,max){
+  return Math.max(min,Math.min(max,v));
+}
+function berekenHittekrachtKnmi(wbgt){
+  if(wbgt==null || !Number.isFinite(wbgt)) return null;
+  return clampGetal(Math.floor((wbgt - 14) / 2) + 1,0,10);
+}
+function hittekrachtHoek(v){
+  return 140 + clampGetal(v,0,10) / 10 * 260;
+}
+function svgPool(cx,cy,r,deg){
+  const rad=deg*Math.PI/180;
+  return {x:cx+r*Math.cos(rad),y:cy+r*Math.sin(rad)};
+}
+function svgBoogPad(cx,cy,r,startDeg,endDeg){
+  const start=svgPool(cx,cy,r,startDeg);
+  const end=svgPool(cx,cy,r,endDeg);
+  const largeArc=Math.abs(endDeg-startDeg)>180 ? 1 : 0;
+  return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} A ${r} ${r} 0 ${largeArc} 1 ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+}
+function renderHittekrachtMeter(waarde){
+  const segmenten=[
+    ['hk-seg-low',0,3],
+    ['hk-seg-mid',3,6],
+    ['hk-seg-high',6,8.5],
+    ['hk-seg-extreme',8.5,10]
+  ];
+  segmenten.forEach(([id,a,b])=>{
+    document.getElementById(id)?.setAttribute('d',svgBoogPad(120,116,78,hittekrachtHoek(a),hittekrachtHoek(b)));
+  });
+  const tekst=document.getElementById('hk-meter-value');
+  const pointer=document.getElementById('hk-pointer');
+  if(waarde==null || !Number.isFinite(waarde)){
+    if(tekst) tekst.textContent='-';
+    if(pointer) pointer.style.display='none';
+    return;
+  }
+  if(tekst) tekst.textContent=String(waarde);
+  const p=svgPool(120,116,78,hittekrachtHoek(waarde));
+  if(pointer){
+    pointer.style.display='';
+    pointer.setAttribute('cx',p.x.toFixed(1));
+    pointer.setAttribute('cy',p.y.toFixed(1));
+  }
+}
+function getPlaats(){
+  const plaats=(document.getElementById('wbgt-place')?.value || '').trim();
+  return plaats || 'Plaats onbekend';
+}
+function standaardGeldigVoor(){
+  const tekst=new Date().toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return tekst.charAt(0).toUpperCase()+tekst.slice(1);
+}
+function getGeldigVoor(){
+  const geldig=(document.getElementById('wbgt-valid')?.value || '').trim();
+  return geldig || standaardGeldigVoor();
+}
+function initialiseerGeldigVoor(){
+  const input=document.getElementById('wbgt-valid');
+  if(input && !input.value.trim()) input.value=standaardGeldigVoor();
+}
+function kortTekst(tekst,max){
+  const t=String(tekst || '').trim();
+  return t.length > max ? t.slice(0,Math.max(0,max-3)).trimEnd()+'...' : t;
+}
+function tekstkleur(hex){
+  const h=(hex || '').replace('#','');
+  if(h.length!==6) return '#172033';
+  const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+  return ((r*299+g*587+b*114)/1000) < 145 ? '#fff' : '#172033';
+}
+function windNaarMs(v){
+  if(v==null) return null;
+  return document.getElementById('wbgt-wind-unit')?.value === 'kmh' ? v/3.6 : v;
+}
+let laatsteWindUnit='ms';
+function verwerkWindUnitWijziging(){
+  const sel=document.getElementById('wbgt-wind-unit');
+  const input=document.getElementById('wbgt-wind');
+  const nieuweUnit=sel?.value || 'ms';
+  const waarde=parseGetal('wbgt-wind');
+  if(waarde!=null && nieuweUnit!==laatsteWindUnit){
+    const omgerekend=laatsteWindUnit==='ms' && nieuweUnit==='kmh' ? waarde*3.6 : waarde/3.6;
+    input.value=fmt(omgerekend,1,'');
+  }
+  laatsteWindUnit=nieuweUnit;
+  updateWbgt();
+}
+function naarBft(kmh){
+  if(kmh==null || !Number.isFinite(kmh)) return '-';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+function huidigeBerekening(){
+  const Ta=parseGetal('wbgt-ta');
+  const RH=parseGetal('wbgt-rh');
+  const windRaw=parseGetal('wbgt-wind');
+  const windUnit=document.getElementById('wbgt-wind-unit')?.value || 'ms';
+  const wind10=windNaarMs(windRaw);
+  const Sr=parseGetal('wbgt-sr');
+  const uv=parseGetal('wbgt-uv');
+  const plaats=getPlaats();
+  const geldigVoor=getGeldigVoor();
+  if(!window.WBGT || [Ta,RH,windRaw,wind10,Sr].some(v=>v==null)) return null;
+  const c=window.WBGT.wbgtComponents(Ta,RH,Sr,wind10,null,null);
+  const hittekracht=c ? berekenHittekrachtKnmi(c.WBGT) : null;
+  return c ? {Ta,RH,windRaw,windUnit,wind10,Sr,uv,plaats,geldigVoor,hittekracht,c} : null;
+}
+function formatWind1m(c,unit){
+  const kmh=c.u1m*3.6;
+  const bft=naarBft(c.u10*3.6);
+  if(unit === 'kmh') return `${fmt(kmh,1,' km/u')} (BFT ${bft})`;
+  return `${fmt(c.u1m,1,' m/s')} (BFT ${bft})`;
+}
+function stullWaarschuwing(Ta, RH){
+  if(Ta==null || RH==null) return '';
+  if(Ta < 5)  return '⚠ Ta < 5°C: Stull Tw minder nauwkeurig';
+  if(RH < 5)  return '⚠ RV < 5%: Stull Tw minder nauwkeurig';
+  return '';
+}
+function updateWbgt(){
+  const calc=huidigeBerekening();
+  const result=document.getElementById('wbgt-result');
+  const risk=document.getElementById('wbgt-risk');
+  if(!calc){
+    result.innerHTML='<span class="error">-</span>';
+    risk.textContent='Controleer invoer';
+    renderHittekrachtMeter(null);
+    return;
+  }
+  const {Ta,RH,c,windUnit,hittekracht}=calc;
+  const kleur=window.WBGT.wbgtColor(c.WBGT);
+  result.textContent=fmt(c.WBGT,1,' °C');
+  risk.textContent=c.risico || '-';
+  risk.style.background=kleur;
+  risk.style.color=tekstkleur(kleur);
+  document.getElementById('wbgt-tnw').textContent=fmt(c.Tnw,1,' °C');
+  document.getElementById('wbgt-tw').textContent=fmt(c.Tw,1,' °C');
+  document.getElementById('wbgt-tg').textContent=fmt(c.Tg,1,' °C');
+  document.getElementById('wbgt-u1m').textContent=formatWind1m(c,windUnit);
+  document.getElementById('wbgt-hittekracht').textContent=fmt(hittekracht,0,'');
+  renderHittekrachtMeter(hittekracht);
+  document.getElementById('wbgt-uv-output').textContent=fmtUv(calc.uv);
+  const hasSun=c.S>=50;
+  document.getElementById('wbgt-modus').textContent=hasSun ? 'buiten, zon' : 'schaduw / nacht';
+  document.getElementById('wbgt-formula').textContent=hasSun ? '0,7 × Tnw + 0,2 × Tg + 0,1 × Ta' : '0,7 × Tnw + 0,3 × Ta';
+  const warn=stullWaarschuwing(Ta,RH);
+  let warnEl=document.getElementById('wbgt-stull-warn');
+  if(!warnEl){
+    warnEl=document.createElement('div');
+    warnEl.id='wbgt-stull-warn';
+    warnEl.style.cssText='padding:8px 16px;font-size:.74rem;color:#f0c040;background:#1a1400;border-top:1px solid #3a2e00';
+    document.querySelector('.card').appendChild(warnEl);
+  }
+  warnEl.textContent=warn;
+  warnEl.style.display=warn?'block':'none';
+}
+function rondRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+function schrijfBlok(ctx,x,y,w,h,kop,waarde){
+  ctx.fillStyle='#ffffff';
+  rondRect(ctx,x,y,w,h,14); ctx.fill();
+  ctx.strokeStyle='#d7e2ee'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#64748b';
+  ctx.font='700 22px Inter, Arial, sans-serif';
+  ctx.fillText(kop,x+20,y+32);
+  ctx.fillStyle='#142238';
+  ctx.font='900 34px Inter, Arial, sans-serif';
+  ctx.fillText(waarde,x+20,y+76);
+}
+function tekenKaartHeader(ctx,breedte,hoogte,titel,subtitel){
+  ctx.fillStyle='#1e293b';
+  ctx.fillRect(0,0,breedte,hoogte);
+  ctx.fillStyle='#2ec4e8';
+  ctx.fillRect(0,hoogte-4,breedte,4);
+  const s=hoogte/70;
+  const padX=24*s;
+  ctx.textBaseline='alphabetic';
+  ctx.textAlign='left';
+  ctx.fillStyle='#ffffff';
+  ctx.font=`800 ${Math.round(21*s)}px Inter, Arial, sans-serif`;
+  ctx.fillText('Ed Aldus WM',padX,30*s);
+  ctx.fillStyle='#94a3b8';
+  ctx.font=`700 ${Math.round(13*s)}px Inter, Arial, sans-serif`;
+  ctx.fillText('Weerbewaking',padX,51*s);
+  ctx.textAlign='right';
+  ctx.fillStyle='#ffffff';
+  ctx.font=`900 ${Math.round(22*s)}px Inter, Arial, sans-serif`;
+  ctx.fillText(titel,breedte-padX,30*s);
+  ctx.fillStyle='#cbd5e1';
+  ctx.font=`700 ${Math.round(13*s)}px Inter, Arial, sans-serif`;
+  const isGeldig=String(subtitel || '').startsWith('Geldig:');
+  const subtitelY=isGeldig ? 60*s : 51*s;
+  if(isGeldig){
+    const tekstW=ctx.measureText(subtitel).width;
+    const boxPadX=12*s;
+    const boxPadY=6*s;
+    const boxH=24*s;
+    const boxX=breedte-padX-tekstW-boxPadX;
+    const boxY=subtitelY-boxH+boxPadY*.35;
+    ctx.fillStyle='#ffd60a';
+    rondRect(ctx,boxX,boxY,tekstW+boxPadX*2,boxH,5*s); ctx.fill();
+    ctx.strokeStyle='#fff3a3';
+    ctx.lineWidth=Math.max(2,Math.round(2*s));
+    rondRect(ctx,boxX,boxY,tekstW+boxPadX*2,boxH,5*s); ctx.stroke();
+    ctx.fillStyle='#111827';
+    ctx.textBaseline='middle';
+    ctx.fillText(subtitel,breedte-padX,boxY+boxH/2);
+    ctx.textBaseline='alphabetic';
+  } else {
+    ctx.fillText(subtitel,breedte-padX,subtitelY);
+  }
+  ctx.textAlign='left';
+}
+function tekenKaartFooter(ctx,breedte,y,hoogte,bron){
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(0,y,breedte,hoogte);
+  const s=hoogte/58;
+  const padX=24*s;
+  const midY=y+hoogte/2+5*s;
+  ctx.textBaseline='alphabetic';
+  ctx.textAlign='left';
+  ctx.fillStyle='#f1f5f9';
+  ctx.font=`800 ${Math.round(17*s)}px Inter, Arial, sans-serif`;
+  ctx.fillText('weerlab.nl',padX,midY);
+  const merkW=ctx.measureText('weerlab.nl').width;
+  ctx.fillStyle='#94a3b8';
+  ctx.font=`600 ${Math.round(14*s)}px Inter, Arial, sans-serif`;
+  ctx.fillText('· WBGT rekentool',padX+merkW+5*s,midY);
+  ctx.textAlign='right';
+  ctx.fillStyle='#7dd3fc';
+  ctx.font=`700 ${Math.round(13*s)}px Inter, Arial, sans-serif`;
+  ctx.fillText(bron,breedte-padX,midY);
+  ctx.textAlign='left';
+}
+function tekenZon(ctx,cx,cy,r){
+  ctx.save();
+  ctx.translate(cx,cy);
+  for(let i=0;i<24;i++){
+    const a=(Math.PI*2/24)*i;
+    const r1=r+24;
+    const r2=r+64+(i%2)*10;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a-.045)*r1,Math.sin(a-.045)*r1);
+    ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);
+    ctx.lineTo(Math.cos(a+.045)*r1,Math.sin(a+.045)*r1);
+    ctx.closePath();
+    ctx.fillStyle='rgba(250,181,48,.72)';
+    ctx.fill();
+  }
+  const g=ctx.createRadialGradient(-r*.35,-r*.35,r*.15,0,0,r);
+  g.addColorStop(0,'#fff4a3');
+  g.addColorStop(.55,'#ffd15a');
+  g.addColorStop(1,'#f59e0b');
+  ctx.shadowColor='rgba(245,158,11,.35)';
+  ctx.shadowBlur=34;
+  ctx.beginPath();
+  ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.fillStyle=g;
+  ctx.fill();
+  ctx.restore();
+}
+function pasFont(ctx,tekst,maxBreedte,startGrootte,minGrootte,gewicht='900'){
+  let grootte=startGrootte;
+  do{
+    ctx.font=`${gewicht} ${grootte}px Inter, Arial, sans-serif`;
+    if(ctx.measureText(tekst).width<=maxBreedte || grootte<=minGrootte) break;
+    grootte-=2;
+  }while(grootte>minGrootte);
+  return grootte;
+}
+function uvKleur(uv){
+  const v=Number.isFinite(uv) ? Math.max(0,uv) : 0;
+  if(v < 3) return '#42b857';
+  if(v < 6) return '#f2c94c';
+  if(v < 8) return '#f2994a';
+  if(v < 11) return '#eb5757';
+  return '#8b5cf6';
+}
+function tekenUvBadge(ctx,x,y,w,h,uv){
+  const kleur=uvKleur(uv);
+  ctx.save();
+  ctx.shadowColor='rgba(15,23,42,.14)';
+  ctx.shadowBlur=18;
+  ctx.shadowOffsetY=8;
+  ctx.fillStyle='rgba(255,255,255,.94)';
+  rondRect(ctx,x,y,w,h,18); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='rgba(18,56,95,.16)';
+  ctx.lineWidth=2;
+  rondRect(ctx,x,y,w,h,18); ctx.stroke();
+  ctx.fillStyle=kleur;
+  rondRect(ctx,x+12,y+14,8,h-28,4); ctx.fill();
+  ctx.textAlign='left';
+  ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#526f8d';
+  ctx.font='900 18px Inter, Arial, sans-serif';
+  ctx.fillText('UV-index',x+34,y+31);
+  ctx.fillStyle='#12385f';
+  ctx.font='900 38px Inter, Arial, sans-serif';
+  ctx.fillText(fmtUv(uv),x+34,y+66);
+}
+function tekenCanvasBoog(ctx,cx,cy,r,startDeg,endDeg,kleur,breedte=24){
+  ctx.beginPath();
+  ctx.arc(cx,cy,r,startDeg*Math.PI/180,endDeg*Math.PI/180,false);
+  ctx.strokeStyle=kleur;
+  ctx.lineWidth=breedte;
+  ctx.lineCap='butt';
+  ctx.stroke();
+}
+function tekenHittekrachtMeter(ctx,x,y,w,waarde){
+  const h=76;
+  const kleur=waarde==null || !Number.isFinite(waarde) ? '#94a3b8' :
+    waarde < 3 ? '#52d88d' : waarde < 6 ? '#f4d33b' : waarde < 8 ? '#ff9f2f' : '#ff3b30';
+  ctx.save();
+  ctx.shadowColor='rgba(15,23,42,.14)';
+  ctx.shadowBlur=18;
+  ctx.shadowOffsetY=8;
+  ctx.fillStyle='rgba(255,255,255,.94)';
+  rondRect(ctx,x,y,w,h,18); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='rgba(18,56,95,.16)';
+  ctx.lineWidth=2;
+  rondRect(ctx,x,y,w,h,18); ctx.stroke();
+
+  ctx.save();
+  ctx.translate(x+43,y+45);
+  ctx.scale(.42,.42);
+  tekenCanvasBoog(ctx,0,0,58,hittekrachtHoek(0),hittekrachtHoek(3),'#52d88d',18);
+  tekenCanvasBoog(ctx,0,0,58,hittekrachtHoek(3),hittekrachtHoek(6),'#f4d33b',18);
+  tekenCanvasBoog(ctx,0,0,58,hittekrachtHoek(6),hittekrachtHoek(8.5),'#ff9f2f',18);
+  tekenCanvasBoog(ctx,0,0,58,hittekrachtHoek(8.5),hittekrachtHoek(10),'#ff3b30',18);
+  if(waarde!=null && Number.isFinite(waarde)){
+    const p=svgPool(0,0,58,hittekrachtHoek(waarde));
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,8,0,Math.PI*2);
+    ctx.fillStyle='#ffffff';
+    ctx.fill();
+    ctx.strokeStyle='#111827';
+    ctx.lineWidth=4;
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.textAlign='left';
+  ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#526f8d';
+  ctx.font='900 18px Inter, Arial, sans-serif';
+  ctx.fillText('Hittekracht',x+84,y+31);
+  ctx.fillStyle='#12385f';
+  ctx.font='900 38px Inter, Arial, sans-serif';
+  ctx.fillText(waarde==null ? '-' : String(waarde),x+84,y+66);
+}
+function tekenWbgtLegenda(ctx,x,y,w){
+  ctx.textAlign='center';
+  ctx.fillStyle='#12385f';
+  ctx.font='900 26px Inter, Arial, sans-serif';
+  ctx.textAlign='left';
+  ctx.textBaseline='alphabetic';
+  ctx.fillText('WBGT legenda',x,y);
+  const top=y+20;
+  const h=94;
+  const bw=w/GRADATIES.length;
+  GRADATIES.forEach((g,i)=>{
+    const bx=x+i*bw;
+    ctx.fillStyle=g.color;
+    ctx.fillRect(bx,top,bw,h);
+    ctx.strokeStyle='rgba(255,255,255,.55)';
+    ctx.lineWidth=2;
+    ctx.strokeRect(bx,top,bw,h);
+    ctx.fillStyle=tekstkleur(g.color);
+    ctx.textAlign='center';
+    ctx.font='900 19px Inter, Arial, sans-serif';
+    ctx.fillText(g.range,bx+bw/2,top+34);
+    ctx.font='800 17px Inter, Arial, sans-serif';
+    ctx.fillText(g.risk,bx+bw/2,top+64);
+  });
+  ctx.textAlign='left';
+}
+function tekenGradatieTabel(ctx,x,y,w){
+  ctx.fillStyle='#12385f';
+  ctx.font='900 34px Inter, Arial, sans-serif';
+  ctx.fillText('WBGT gradaties',x,y);
+  const top=y+32;
+  const col=[150,170,w-320];
+  ctx.fillStyle='#ffffff';
+  rondRect(ctx,x,top,w,70+GRADATIES.length*74,16); ctx.fill();
+  ctx.strokeStyle='#d7e2ee'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#526f8d';
+  ctx.font='900 20px Inter, Arial, sans-serif';
+  ctx.fillText('WBGT index',x+20,top+42);
+  ctx.fillText('Risico',x+col[0]+30,top+42);
+  ctx.fillText('Te nemen maatregelen',x+col[0]+col[1]+30,top+42);
+  GRADATIES.forEach((g,i)=>{
+    const rowY=top+70+i*74;
+    ctx.fillStyle=g.color;
+    ctx.fillRect(x,rowY,col[0],74);
+    ctx.fillStyle=g.cls==='grade-moderate' ? '#142238' : '#ffffff';
+    ctx.font='900 24px Inter, Arial, sans-serif';
+    ctx.fillText(g.range,x+20,rowY+45);
+    ctx.fillStyle='#142238';
+    ctx.font='900 24px Inter, Arial, sans-serif';
+    ctx.fillText(g.risk,x+col[0]+30,rowY+45);
+    ctx.font='700 20px Inter, Arial, sans-serif';
+    const woorden=g.advies.split(' ');
+    let regel='', lineY=rowY+30;
+    woorden.forEach(woord=>{
+      const test=regel ? regel+' '+woord : woord;
+      if(ctx.measureText(test).width > col[2]-55){
+        ctx.fillText(regel,x+col[0]+col[1]+30,lineY);
+        regel=woord; lineY+=24;
+      } else {
+        regel=test;
+      }
+    });
+    if(regel) ctx.fillText(regel,x+col[0]+col[1]+30,lineY);
+    ctx.strokeStyle='#d7e2ee'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,rowY); ctx.lineTo(x+w,rowY); ctx.stroke();
+  });
+}
+function downloadPng(){
+  const calc=huidigeBerekening();
+  if(!calc) return;
+  const {uv,plaats,geldigVoor,c,hittekracht}=calc;
+  const toonHittekracht=document.getElementById('png-hittekracht')?.checked !== false;
+  const canvas=document.createElement('canvas');
+  canvas.width=1200; canvas.height=980;
+  const ctx=canvas.getContext('2d');
+  const headerH=92;
+  const footerH=72;
+  const bodyY=headerH;
+  const bodyH=canvas.height-headerH-footerH;
+  const now=new Date().toLocaleString('nl-NL',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  tekenKaartHeader(ctx,canvas.width,headerH,'WBGT/Hittekracht/UV-index',`Geldig: ${kortTekst(geldigVoor,42)}`);
+  const bg=ctx.createLinearGradient(0,bodyY,0,bodyY+bodyH);
+  bg.addColorStop(0,'#e9f8ff');
+  bg.addColorStop(.56,'#fff7df');
+  bg.addColorStop(1,'#f3f7fb');
+  ctx.fillStyle=bg;
+  ctx.fillRect(0,bodyY,canvas.width,bodyH);
+
+  const zonX=canvas.width/2;
+  const zonY=bodyY+300;
+  tekenZon(ctx,zonX,zonY,178);
+  ctx.textAlign='left';
+  ctx.textBaseline='middle';
+  ctx.fillStyle='#12385f';
+  pasFont(ctx,plaats,470,48,26,'900');
+  ctx.fillText(plaats,90,bodyY+82);
+  ctx.textAlign='center';
+  ctx.fillStyle='#7c3f00';
+  ctx.font='900 34px Inter, Arial, sans-serif';
+  ctx.fillText('WBGT',zonX,bodyY+230);
+  const wbgtTekst=fmt(c.WBGT,1,' °C');
+  pasFont(ctx,wbgtTekst,290,74,50,'900');
+  ctx.fillStyle='#3f2500';
+  ctx.fillText(wbgtTekst,zonX,bodyY+312);
+  tekenUvBadge(ctx,90,bodyY+338,264,76,uv);
+  if(toonHittekracht){
+    tekenHittekrachtMeter(ctx,846,bodyY+338,264,hittekracht);
+  }
+  /* Risicobadge onder de WBGT-waarde */
+  const risicoKleur=window.WBGT.wbgtColor(c.WBGT);
+  const risicoTekst=c.risico||'';
+  ctx.font='900 30px Inter, Arial, sans-serif';
+  const rw=ctx.measureText(risicoTekst).width+48;
+  const rx=canvas.width/2-rw/2;
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.18)'; ctx.shadowBlur=16; ctx.shadowOffsetY=4;
+  ctx.fillStyle=risicoKleur;
+  rondRect(ctx,rx,bodyY+390,rw,46,23); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle=tekstkleur(risicoKleur);
+  ctx.font='900 28px Inter, Arial, sans-serif';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(risicoTekst,canvas.width/2,bodyY+390+23);  /* 23 = helft van hoogte 46 */
+  tekenWbgtLegenda(ctx,90,bodyY+675,1020);
+  tekenKaartFooter(ctx,canvas.width,canvas.height-footerH,footerH,`© Ed Aldus | ${kortTekst(plaats,30)} | ${now}`);
+
+  const a=document.createElement('a');
+  const stamp=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  a.download=`weerbewaking_wbgt_${stamp}.png`;
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+}
+function downloadTablePng(){
+  const canvas=document.createElement('canvas');
+  canvas.width=1400; canvas.height=720;
+  const ctx=canvas.getContext('2d');
+  const headerH=92;
+  const footerH=72;
+  const now=new Date().toLocaleString('nl-NL',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  tekenKaartHeader(ctx,canvas.width,headerH,'WBGT gradaties',now);
+  ctx.fillStyle='#eef4fb';
+  ctx.fillRect(0,headerH,canvas.width,canvas.height-headerH-footerH);
+  tekenGradatieTabel(ctx,50,145,1300);
+  tekenKaartFooter(ctx,canvas.width,canvas.height-footerH,footerH,`© Ed Aldus | WBGT legenda | ${now}`);
+  const a=document.createElement('a');
+  const stamp=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  a.download=`weerbewaking_wbgt_gradaties_${stamp}.png`;
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+}
+function renderGradaties(){
+  const body=document.getElementById('grade-body');
+  body.innerHTML=GRADATIES.map(g=>`
+    <tr>
+      <td class="range ${g.cls}">${g.range}</td>
+      <td class="risk">${g.risk}</td>
+      <td>${g.advies}</td>
+    </tr>
+  `).join('');
+}
+function zetPreset(type){
+  const waarden={
+    sun:{ta:'30',rh:'60',wind:'2',unit:'ms',sr:'700',uv:'6'},
+    shadow:{ta:'30',rh:'60',wind:'2',unit:'ms',sr:'0',uv:'1'},
+    hot:{ta:'34',rh:'65',wind:'1',unit:'ms',sr:'850',uv:'8'}
+  }[type];
+  if(!waarden) return;
+  document.getElementById('wbgt-ta').value=waarden.ta;
+  document.getElementById('wbgt-rh').value=waarden.rh;
+  document.getElementById('wbgt-wind').value=waarden.wind;
+  document.getElementById('wbgt-wind-unit').value=waarden.unit;
+  laatsteWindUnit=waarden.unit;
+  document.getElementById('wbgt-sr').value=waarden.sr;
+  document.getElementById('wbgt-uv').value=waarden.uv;
+  updateWbgt();
+}
+function gaTerug(){
+  window.location.href='weerbewaking.html';
+}
+laatsteWindUnit=document.getElementById('wbgt-wind-unit')?.value || 'ms';
+initialiseerGeldigVoor();
+['wbgt-ta','wbgt-rh','wbgt-wind','wbgt-sr','wbgt-uv'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', updateWbgt);
+  document.getElementById(id).addEventListener('change', updateWbgt);
+});
+document.getElementById('wbgt-wind-unit').addEventListener('change', verwerkWindUnitWijziging);
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.addEventListener('click', ()=>zetPreset(btn.dataset.preset));
+});
+document.getElementById('download-png').addEventListener('click', downloadPng);
+document.getElementById('download-table-png').addEventListener('click', downloadTablePng);
+renderGradaties();
+updateWbgt();
+</script>
+</body>
+</html>

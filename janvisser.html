@@ -1,0 +1,1852 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Jan Visser — ENS Pluimen (echte data)</title>
+<style>
+  :root { --bg: #2a2f36; --ink: #e8e8e8; --muted: #9aa4b2; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "DM Sans", system-ui, sans-serif; padding: 20px;
+  }
+  .wrap { max-width: 1480px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 700; }
+  .sub { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+  .sub code { background: #1b1f25; padding: 1px 6px; border-radius: 4px; font-size: 11px; }
+
+  .station-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .station-bar label {
+    font-size: 13px; color: var(--muted); font-weight: 500;
+  }
+  .station-bar select {
+    background: #1b2330; color: var(--ink);
+    border: 1px solid #3a4a63; border-radius: 6px;
+    padding: 6px 10px; font-size: 14px; font-family: inherit;
+    cursor: pointer;
+  }
+  .station-bar select:hover { border-color: #5c7294; }
+  .station-bar .loading {
+    font-size: 12px; color: var(--muted);
+  }
+
+  .charts-stack {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .chart-card {
+    background: linear-gradient(180deg, #f5f3ef 0%, #e9edf0 55%, #dbe5ec 100%);
+    border: 1px solid #c0c8d0;
+    border-radius: 6px;
+    padding: 10px 12px 6px 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    color: #111;
+    font-family: Arial, Helvetica, sans-serif;
+    position: relative;
+    min-height: 320px;
+  }
+  .chart-card.plume {
+    background: #ffffff;
+    padding: 6px 10px 4px 10px;
+  }
+  .dl-btn {
+    position: absolute; top: 6px; right: 8px;
+    padding: 3px 9px; font-size: 11px;
+    background: #1a3a6d; color: #fff;
+    border: none; border-radius: 4px;
+    cursor: pointer; opacity: 0.82;
+    font-family: "DM Sans", system-ui;
+  }
+  .dl-btn:hover { opacity: 1; }
+  .plume-row { margin-bottom: 8px; }
+  .chart-card svg { display: block; width: 100%; height: auto; }
+  .chart-card text { font-family: Arial, Helvetica, sans-serif; }
+
+  .legend-box {
+    display: flex; justify-content: center; gap: 22px;
+    padding: 4px 12px; margin: 4px auto 0;
+    background: #ffffff; border: 1px solid #b8bec6; border-radius: 16px;
+    width: fit-content; font-size: 11px; color: #111;
+  }
+  .legend-box .item { display: flex; align-items: center; gap: 6px; }
+  .legend-box .sw {
+    display: inline-block; width: 22px; height: 0;
+    border-top-width: 2px; border-top-style: solid;
+  }
+  .legend-box .sw.previous {
+    border-top-width: 2px;
+    border-top-style: dashed;
+  }
+  .legend-box .sw.bar {
+    width: 12px; height: 12px; border: none; border-radius: 2px;
+  }
+
+  .loader, .err {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px; color: #333; font-family: "DM Sans", system-ui;
+  }
+  .err { color: #a31414; }
+
+  @media (max-width: 720px) {
+    body { padding: 10px; }
+    .chart-card { padding-left: 3px; padding-right: 5px; }
+    .legend-box { gap: 10px; flex-wrap: wrap; border-radius: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Wachtwoord-gate overlay -->
+<div id="gate" style="position:fixed;inset:0;background:#1a1f27;display:flex;align-items:center;justify-content:center;z-index:10000;">
+  <div style="text-align:center;max-width:360px;padding:30px;background:#242b36;border:1px solid #3a4a63;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);">
+    <div style="font-size:22px;font-weight:700;margin-bottom:6px;color:#e8e8e8;">Jan Visser — ECMWF Pluimen</div>
+    <div style="font-size:12px;color:#9aa4b2;margin-bottom:18px;">Privé-toegang vereist</div>
+    <form id="gateForm" autocomplete="off">
+      <input id="gatePass" type="password" placeholder="Wachtwoord" autofocus
+        style="width:100%;padding:10px 12px;background:#1b2330;color:#e8e8e8;border:1px solid #3a4a63;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <div id="gateErr" style="color:#e87474;font-size:11px;min-height:14px;margin-top:6px;text-align:left;"></div>
+      <button type="submit" style="margin-top:10px;width:100%;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">Inloggen</button>
+    </form>
+  </div>
+</div>
+
+<div class="wrap" id="content" style="display:none;">
+  <h1>Jan Visser — ECMWF Pluimen</h1>
+  <div class="sub">
+    Temperatuur: ECMWF IFS ENS (51 leden) ensemble-gemiddelde 6-uursmaxima/-minima · stippellijn = vorige ENS-run.
+    Neerslag: ECMWF IFS ENS ensemble-gemiddelde 12-uurs-sommen · donkergroen = nieuwste run, lichtgroen = gisteren.
+    Update <code id="updated">…</code> · volgende auto-ververs <code id="nextReload">…</code>.
+  </div>
+
+  <div class="station-bar">
+    <label for="stationSelect">Station:</label>
+    <select id="stationSelect"></select>
+    <span id="coords" class="loading"></span>
+    <span class="loading" id="loadstate">⏳ data ophalen…</span>
+  </div>
+
+  <div class="charts-stack">
+    <div class="chart-card plume">
+      <button class="dl-btn" id="dl-n-t" data-svg="chart-n-t" data-fn="pluim_temp">⬇ PNG</button>
+      <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-n-t"></svg>
+    </div>
+    <div class="chart-card plume">
+      <button class="dl-btn" id="dl-n-p" data-svg="chart-n-p" data-fn="pluim_neerslag">⬇ PNG</button>
+      <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-n-p"></svg>
+    </div>
+    <div class="chart-card">
+      <button class="dl-btn" id="dl-t" data-svg="chart-t" data-fn="temp_minmax">⬇ PNG</button>
+      <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-t"></svg>
+      <div class="legend-box">
+        <div class="item"><span class="sw previous" style="border-color:#1155cc"></span>TMin vorige ENS-run (stippellijn)</div>
+        <div class="item"><span class="sw" style="border-color:#1155cc"></span>TMin nieuwste ENS-run</div>
+        <div class="item"><span class="sw previous" style="border-color:#d62020"></span>TMax vorige ENS-run (stippellijn)</div>
+        <div class="item"><span class="sw" style="border-color:#d62020"></span>TMax nieuwste ENS-run</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <button class="dl-btn" id="dl-p" data-svg="chart-p" data-fn="neerslag_ens">⬇ PNG</button>
+      <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-p"></svg>
+      <div class="legend-box">
+        <div class="item"><span class="sw bar" style="background:#8dd58e"></span>Vorige ENS-run</div>
+        <div class="item"><span class="sw bar" style="background:#1a7d2b"></span>Nieuwste ENS-run</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <button class="dl-btn" id="dl-p-op" data-svg="chart-p-op" data-fn="neerslag_op">⬇ PNG</button>
+      <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-p-op"></svg>
+      <div class="legend-box">
+        <div class="item"><span class="sw bar" style="background:#8dd58e"></span>HRES prev run</div>
+        <div class="item"><span class="sw bar" style="background:#1a7d2b"></span>HRES new run</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <button class="dl-btn" id="dl-cl" data-svg="chart-cl" data-fn="bewolking">⬇ PNG</button>
+      <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-cl"></svg>
+      <div class="legend-box">
+        <div class="item"><span class="sw bar" style="background:#fff200"></span>Onbewolkt</div>
+        <div class="item"><span class="sw bar" style="background:#dcd87a"></span>Licht bewolkt</div>
+        <div class="item"><span class="sw bar" style="background:#8b8745"></span>Half bewolkt</div>
+        <div class="item"><span class="sw bar" style="background:#b0b3c5"></span>Zwaar bewolkt</div>
+        <div class="item"><span class="sw bar" style="background:#2c2e3e"></span>Geheel bewolkt</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="pluim_run_switcher_032667819e3a.js" data-required="temperature_2m,precipitation,cloud_cover"></script>
+<script>
+/* ──────────────────────────────────────────────────────────────
+   Stations
+   ────────────────────────────────────────────────────────────── */
+const STATIONS = [
+  { name: 'De Bilt',           lat: 52.10, lon: 5.18 },
+  { name: 'Groningen (Eelde)', lat: 53.13, lon: 6.58 },
+  { name: 'Twente',            lat: 52.27, lon: 6.89 },
+  { name: 'Maastricht (Beek)', lat: 50.91, lon: 5.77 },
+  { name: 'Schiphol',          lat: 52.31, lon: 4.77 },
+  { name: 'Den Helder',        lat: 52.92, lon: 4.78 },
+  { name: 'Vlissingen',        lat: 51.44, lon: 3.60 },
+];
+
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CHART_W = 1180;
+const CHART_H = 420;
+const FONT_Y_AXIS = 17;
+const FONT_UNIT = 17;
+const FONT_DAY = 18;
+const FONT_DATE = 16;
+const FONT_META = 16;
+const FONT_BADGE = 10;
+const FONT_TITLE = 22;
+const FONT_SUBTITLE = 16;
+const FONT_LEGEND = 16;
+
+/* ──────────────────────────────────────────────────────────────
+   localStorage-cache voor prev ENS-run
+   ────────────────────────────────────────────────────────────── */
+const CACHE_KEY = 'jvens_v3';   /* v3 = 6h temp + 12h ENS-mean neerslag */
+
+function loadCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveCache(c) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch {}
+}
+/**
+ * Cache-structuur:
+ *   { [stationName]: { [runISO]: {temp, precip} } }
+ * Bewaart laatste 10 runs per station, ongeacht runuur (00Z/06Z/12Z/18Z).
+ * Sleutel = volledige ISO timestamp van runStart zodat prev-selectie
+ * op tijd ipv datum gebeurt.
+ */
+const CACHE_KEEP = 10;
+function writeRunToCache(stationName, runStart, series6h, precip12h) {
+  const runISO = runStart.toISOString();
+  const cache = loadCache();
+  const st = cache[stationName] || {};
+  st[runISO] = {
+    temp: series6h.map(p => ({
+      t: p.t.toISOString(), mx: +p.tmaxMean.toFixed(2), mn: +p.tminMean.toFixed(2),
+    })),
+    precip: (precip12h || []).map(b => ({
+      t: b.start.toISOString(), v: +b.sum.toFixed(2),
+    })),
+  };
+  const runs = Object.keys(st).sort();
+  while (runs.length > CACHE_KEEP) delete st[runs.shift()];
+  cache[stationName] = st;
+  saveCache(cache);
+}
+/** Max-age voor ENS-prev: alleen runs binnen 48u tov huidige.
+ *  Voorkomt dat we bv. een 5-dagen-oude run als "prev" tonen wanneer
+ *  cron-cache een gat heeft (run-curve zou dan over verkeerde data-as
+ *  vallen en titel een misleidende datum tonen). */
+const PREV_MAX_AGE_MS = 48 * 3600 * 1000;
+function findPrevRun(stationName, currentRunStart) {
+  const cache = loadCache();
+  const st = cache[stationName] || {};
+  const currentISO = currentRunStart.toISOString();
+  const earlier = Object.keys(st).filter(k => k < currentISO).sort();
+  if (!earlier.length) return null;
+  const key   = earlier[earlier.length - 1];
+  const keyDate = new Date(key);
+  if (currentRunStart.getTime() - keyDate.getTime() > PREV_MAX_AGE_MS) {
+    return null;  // te oud, fallback naar HRES
+  }
+  const entry = st[key];
+  const temp = (entry.temp || []).map(p => ({
+    t: new Date(p.t), tmaxMean: p.mx, tminMean: p.mn,
+  }));
+  const precip = (entry.precip || []).map(p => ({
+    start: new Date(p.t), sum: p.v, n: 12,
+  }));
+  return { runISO: key, runDate: keyDate, series: temp, precipBins: precip };
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Dropdown vullen
+   ────────────────────────────────────────────────────────────── */
+const stationSelect = document.getElementById('stationSelect');
+STATIONS.forEach((st, i) => {
+  const opt = document.createElement('option');
+  opt.value = String(i);
+  opt.textContent = st.name;
+  stationSelect.appendChild(opt);
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Fetch helpers
+   ────────────────────────────────────────────────────────────── */
+async function fetchWithRetry(url, tries = 3) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+      await new Promise(res => setTimeout(res, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+// Force 00Z-aligned data: start_date = vandaag (UTC), eind = vandaag+15.
+// Open-meteo levert zo altijd hourly vanaf 00:00 ipv op run-init tijd.
+function todayUTCDateStr() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+function addDaysUTC(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+async function fetchEns(st) {
+  const runs = window.WeerlabPlumeRuns;
+  await runs?.ensureLocation?.(st.lat, st.lon);
+  if (runs?.state?.ready) await runs.state.ready;
+  const selectedMeta = runs?.state?.selectedRun
+    ? runs.archiveMeta(runs.state.selectedRun)
+    : runs?.state?.liveMeta;
+  const start = new Date(Number(selectedMeta?.last_run_initialisation_time) * 1000);
+  const end = new Date(Number(selectedMeta?.data_end_time) * 1000);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    throw new Error('Exact ECMWF-runvenster ontbreekt');
+  }
+  const url = `https://ensemble-api.open-meteo.com/v1/ensemble`
+    + `?latitude=${st.lat}&longitude=${st.lon}`
+    + `&hourly=temperature_2m,precipitation,cloud_cover`
+    + `&models=ecmwf_ifs025`
+    + `&start_hour=${encodeURIComponent(start.toISOString().slice(0,16))}`
+    + `&end_hour=${encodeURIComponent(end.toISOString().slice(0,16))}&timezone=GMT`
+    + `&temporal_resolution=native`;
+  const data = await fetchWithRetry(url);
+  return runs?.assertRunResponse ? runs.assertRunResponse(data, 'ECMWF-ensemble') : data;
+}
+
+function isoMinute(value) {
+  const date = new Date(String(value).endsWith('Z') ? value : `${value}Z`);
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 16) : null;
+}
+
+function ensembleTargetTimes(ensData) {
+  const hourly = ensData?.hourly || {};
+  const valueLength = Array.isArray(hourly.temperature_2m)
+    ? hourly.temperature_2m.length
+    : Math.max(0, (hourly.time || []).length - 1);
+  return (hourly.time || []).slice(0, valueLength).map(isoMinute).filter(Boolean);
+}
+
+function alignExactValues(sourceTimes, sourceValues, targetTimes) {
+  const values = new Map((sourceTimes || []).map((time, index) => [isoMinute(time), sourceValues?.[index]]));
+  return targetTimes.map(time => {
+    const value = values.get(time);
+    return value == null || !isFinite(value) ? null : value;
+  });
+}
+
+// Open-Meteo-neerslag hoort bij het voorafgaande interval. Sommeer daarom
+// alle uurlijkse HRES-vakken tussen twee opeenvolgende native ENS-tijden.
+function alignPrecipIntervals(sourceTimes, sourceValues, targetTimes) {
+  const points = (sourceTimes || []).map((time, index) => ({
+    ms: Date.parse(`${isoMinute(time)}Z`), value: sourceValues?.[index],
+  })).filter(point => Number.isFinite(point.ms));
+  let sourceIndex = 0;
+  let previousTarget = null;
+  return targetTimes.map(target => {
+    const targetMs = Date.parse(`${target}Z`);
+    let sum = 0, any = false;
+    while (sourceIndex < points.length && points[sourceIndex].ms <= targetMs) {
+      const point = points[sourceIndex++];
+      const inInterval = previousTarget == null
+        ? point.ms === targetMs
+        : point.ms > previousTarget;
+      if (inInterval && point.value != null && isFinite(point.value)) {
+        sum += Number(point.value);
+        any = true;
+      }
+    }
+    previousTarget = targetMs;
+    return any ? sum : null;
+  });
+}
+
+function alignHresRun(raw, targetTimes, expectedRun, label) {
+  const first = raw?.hourly?.time?.[0];
+  if (!first || Date.parse(`${isoMinute(first)}Z`) !== new Date(expectedRun).getTime()) {
+    throw new Error(`${label} hoort niet bij de gekozen ECMWF-run`);
+  }
+  return {
+    temperature: alignExactValues(raw.hourly.time, raw.hourly.temperature_2m, targetTimes),
+    precipitation: alignPrecipIntervals(raw.hourly.time, raw.hourly.precipitation, targetTimes),
+  };
+}
+
+async function fetchHresPrecipTempPrev(st, ensPromise) {
+  const runs = window.WeerlabPlumeRuns;
+  if (runs?.state?.ready) await runs.state.ready;
+  const selectedIso = runs?.selectedRunIso ? runs.selectedRunIso() : null;
+  if (!selectedIso) throw new Error('Exacte ECMWF-run voor HRES ontbreekt');
+  const selected = new Date(selectedIso);
+  const previous = new Date(selected.getTime() - 24 * 3600000);
+  const ensData = await ensPromise;
+  const targetTimes = ensembleTargetTimes(ensData);
+  if (!targetTimes.length) throw new Error('ECMWF-ensemble heeft geen geldige tijdas');
+
+  // Gearchiveerde runs bevatten reeds op timestamp uitgelijnde HRES-data.
+  // Dit is sneller en voorkomt dat een oude run opnieuw via een live API wordt gemengd.
+  const embedded = ensData.weerlab_hres;
+  if (embedded && Date.parse(embedded.run) === selected.getTime()
+      && embedded.aligned_to_ensemble === true) {
+    const embeddedTimes = (embedded.time || []).map(isoMinute);
+    const exactTimeline = embeddedTimes.length === targetTimes.length
+      && embeddedTimes.every((time, index) => time === targetTimes[index]);
+    if (!exactTimeline) throw new Error('Gearchiveerde HRES-tijdas wijkt af van de gekozen ENS-run');
+    return {
+      weerlab_run: selected.toISOString(),
+      hourly: {
+        time: targetTimes,
+        temperature_2m: embedded.temperature_2m.slice(),
+        precipitation: embedded.precipitation.slice(),
+        temperature_2m_previous_day1: null,
+        precipitation_previous_day1: null,
+      },
+    };
+  }
+
+  const oneRun = run => `https://single-runs-api.open-meteo.com/v1/forecast`
+    + `?latitude=${st.lat}&longitude=${st.lon}`
+    + `&hourly=temperature_2m,precipitation&models=ecmwf_ifs`
+    + `&run=${encodeURIComponent(run.toISOString().slice(0,16))}&forecast_days=16&timezone=GMT`;
+  const [currentResult, olderResult] = await Promise.allSettled([
+    fetchWithRetry(oneRun(selected)),
+    fetchWithRetry(oneRun(previous), 1),
+  ]);
+  if (currentResult.status !== 'fulfilled') throw currentResult.reason;
+  const current = alignHresRun(currentResult.value, targetTimes, selected, 'Operationele HRES');
+  let older = null;
+  if (olderResult.status === 'fulfilled') {
+    try { older = alignHresRun(olderResult.value, targetTimes, previous, 'Vorige HRES'); }
+    catch (error) { console.warn(error.message); }
+  }
+  return {
+    weerlab_run: selected.toISOString(),
+    hourly: {
+      time: targetTimes,
+      temperature_2m: current.temperature,
+      precipitation: current.precipitation,
+      temperature_2m_previous_day1: older?.temperature || null,
+      precipitation_previous_day1: older?.precipitation || null,
+    },
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Bereken per UTC-dag ENS-mean van TMAX / TMIN
+   ────────────────────────────────────────────────────────────── */
+/**
+ * Rolling 6-uurs TMax/TMin per ensemble-lid, daarna ensemble-gemiddeld.
+ * Bin-eindtijden op 00Z / 06Z / 12Z / 18Z (Speedwell-stijl).
+ * Elke bin gebruikt de 6 uurwaarden eindigend op dat tijdstip
+ *   (bv. 00Z-bin = 19Z..00Z).
+ */
+function compute6hEnsMinMax(data) {
+  const h = data.hourly;
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const memberKeys = Object.keys(h).filter(k => k.startsWith('temperature_2m'));
+  const runStart = times[0];
+
+  // bin-einde voor uur H: Math.ceil(H/6)*6 (met 24 → volgende dag 0)
+  const bins = new Map();
+  times.forEach((t, i) => {
+    const hh = t.getUTCHours();
+    let binEnd;
+    if (hh === 0) {
+      binEnd = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 0));
+    } else {
+      const endHr = Math.ceil(hh / 6) * 6;
+      if (endHr === 24) {
+        binEnd = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + 1, 0));
+      } else {
+        binEnd = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), endHr));
+      }
+    }
+    const k = binEnd.toISOString();
+    if (!bins.has(k)) bins.set(k, { end: binEnd, idxs: [] });
+    bins.get(k).idxs.push(i);
+  });
+
+  const out = [];
+  for (const bin of [...bins.values()].sort((a, b) => a.end - b.end)) {
+    // Het eerste vak start vóór de modelinitialisatie en is dus onvolledig.
+    // Volgende vakken mogen native 1-, 3- of 6-uurlijkse stappen bevatten.
+    if (!runStart || bin.end <= runStart) continue;
+    let sumMax = 0, sumMin = 0, nValid = 0;
+    for (const mk of memberKeys) {
+      const arr = h[mk];
+      let mx = -Infinity, mn = Infinity;
+      for (const i of bin.idxs) {
+        const v = arr[i];
+        if (v == null || !isFinite(v)) continue;
+        if (v > mx) mx = v;
+        if (v < mn) mn = v;
+      }
+      if (isFinite(mx) && isFinite(mn)) {
+        sumMax += mx; sumMin += mn; nValid++;
+      }
+    }
+    if (nValid < Math.ceil(memberKeys.length * 0.8)) continue;
+    out.push({
+      t: bin.end,
+      tmaxMean: sumMax / nValid,
+      tminMean: sumMin / nValid,
+    });
+  }
+  return { series: out, nMem: memberKeys.length, runStart };
+}
+
+/* Per UTC-dag TMAX / TMIN uit een enkele HRES-reeks */
+function computeDailyHresMinMax(h, field) {
+  const arr = h[field];
+  if (!arr) return [];
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const byDay = new Map();
+  times.forEach((t, i) => {
+    const k = t.toISOString().slice(0, 10);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(i);
+  });
+  const out = [];
+  for (const [k, idxs] of byDay) {
+    if (idxs.length < 20) continue;
+    let mx = -Infinity, mn = Infinity;
+    for (const i of idxs) {
+      const v = arr[i];
+      if (v == null || !isFinite(v)) continue;
+      if (v > mx) mx = v;
+      if (v < mn) mn = v;
+    }
+    if (isFinite(mx) && isFinite(mn)) {
+      out.push({ date: new Date(k + 'T00:00:00Z'), tmax: mx, tmin: mn });
+    }
+  }
+  return out;
+}
+
+/* ENS-mean 12-uurs-neerslag per bin (00-12 / 12-24 UTC) */
+function compute12hEnsPrecipMean(ensData) {
+  const h = ensData.hourly;
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const memberKeys = Object.keys(h).filter(k => k === 'precipitation' || k.startsWith('precipitation_member'));
+  if (!memberKeys.length) return [];
+  const runStart = times[0];
+
+  const bins = new Map();
+  times.forEach((t, i) => {
+    const hh = t.getUTCHours();
+    // De waarde op 12Z sluit 00–12 af; 00Z sluit 12–24 van de vorige dag af.
+    const start = hh === 0
+      ? new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 1, 12))
+      : new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), hh <= 12 ? 0 : 12));
+    const key = start.toISOString();
+    if (!bins.has(key)) {
+      bins.set(key, { start, idxs: [] });
+    }
+    bins.get(key).idxs.push(i);
+  });
+
+  const out = [];
+  for (const bin of [...bins.values()].sort((a, b) => a.start - b.start)) {
+    if (!runStart || bin.start < runStart) continue;
+    let sumMean = 0, validMem = 0;
+    for (const mk of memberKeys) {
+      const arr = h[mk];
+      let s = 0, any = false;
+      for (const i of bin.idxs) {
+        const v = arr[i];
+        if (v == null || !isFinite(v)) continue;
+        s += v; any = true;
+      }
+      if (any) { sumMean += s; validMem++; }
+    }
+    if (validMem >= Math.ceil(memberKeys.length * 0.8)) {
+      out.push({ start: bin.start, sum: sumMean / validMem, n: bin.idxs.length });
+    }
+  }
+  return out;
+}
+
+/* Sommeer 12-uurs-neerslag blokken (00-12 en 12-24 UTC) */
+function compute12hPrecip(h, field) {
+  const arr = h[field];
+  if (!arr) return [];
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const runStart = times[0];
+  const bins = new Map();
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    const v = arr[i];
+    if (v == null || !isFinite(v)) continue;
+    const hh = t.getUTCHours();
+    const start = hh === 0
+      ? new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 1, 12))
+      : new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), hh <= 12 ? 0 : 12));
+    const key = start.toISOString();
+    if (!bins.has(key)) {
+      bins.set(key, { start, sum: 0, n: 0 });
+    }
+    const b = bins.get(key);
+    b.sum += v; b.n += 1;
+  }
+  return [...bins.values()]
+    .filter(bin => runStart && bin.start >= runStart && bin.n > 0)
+    .sort((a, b) => a.start - b.start);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Generieke tekenhelpers
+   ────────────────────────────────────────────────────────────── */
+const ns = 'http://www.w3.org/2000/svg';
+function mkEl(svg, tag, attrs, text) {
+  const e = document.createElementNS(ns, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  svg.appendChild(e);
+  return e;
+}
+
+/* Gedeelde x-as tick/labels en rechthoekig logo */
+function drawAxes(svg, W, H, M, x, y, yMin, yMax, yStep, unitLabel, tStart, tEnd, titleRight, opts) {
+  opts = opts || {};
+  const tickStepHours = opts.tickStepHours || 12;
+  const yLabelMode    = opts.yLabelMode    || 'auto'; // 'auto' | 'int' | 'fixed1'
+  const IW = W - M.left - M.right;
+  const IH = H - M.top - M.bottom;
+
+  // kader
+  mkEl(svg, 'rect', { x: M.left, y: M.top, width: IW, height: IH,
+    fill: 'none', stroke: '#8a97a4', 'stroke-width': 1 });
+
+  // horizontale gridlijnen; elke 5° rustige stippel-grijze lijn
+  const yPixelStep = Math.abs(y(Math.min(yMax, yMin + yStep)) - y(yMin));
+  const yLabelEvery = Math.max(1, Math.ceil((FONT_Y_AXIS + 3) / Math.max(1, yPixelStep)));
+  let yTickIndex = 0;
+  for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax + 0.001; v += yStep) {
+    const yy = y(v);
+    const isInt = Math.abs(v - Math.round(v)) < 0.01;
+    const is5   = isInt && (Math.round(v) % 5 === 0);
+    const attrs = {
+      x1: M.left, y1: yy, x2: M.left + IW, y2: yy,
+      stroke: is5 ? '#9aa3ad' : (isInt ? '#b0b8c2' : '#d5dae0'),
+      'stroke-width': is5 ? 0.7 : (isInt ? 0.6 : 0.4),
+    };
+    if (is5) attrs['stroke-dasharray'] = '3,3';
+    mkEl(svg, 'line', attrs);
+    let lbl;
+    if (yLabelMode === 'int')         lbl = String(Math.round(v));
+    else if (yLabelMode === 'fixed1') lbl = v.toFixed(1);
+    else                              lbl = (yStep >= 1 && isInt) ? String(Math.round(v)) : v.toFixed(1);
+    if (yTickIndex % yLabelEvery === 0) {
+      mkEl(svg, 'text', {
+        x: M.left - 6, y: yy + 3,
+        'text-anchor': 'end',
+        'font-size': FONT_Y_AXIS,
+        'font-weight': is5 ? 600 : 400,
+        fill: '#222',
+      }, lbl);
+    }
+    yTickIndex++;
+  }
+  mkEl(svg, 'text', {
+    x: 10, y: M.top + IH / 2,
+    'text-anchor': 'middle', 'font-size': FONT_UNIT, fill: '#222',
+    transform: `rotate(-90 10 ${M.top + IH / 2})`,
+  }, unitLabel);
+
+  // x-as: gridlines per tick. Labels: 'perTick' (oude stijl, geroteerd) of
+  // 'dayCentered' (één leesbaar label per dag, midden 12Z, horizontaal).
+  const xLabelMode = opts.xLabelMode || 'perTick';
+  const tickStepMs = tickStepHours * 3600 * 1000;
+  for (let ms = tStart.getTime(); ms <= tEnd.getTime() + 1; ms += tickStepMs) {
+    const t = new Date(ms);
+    const xx = x(t);
+    const isDayStart = t.getUTCHours() === 0;
+    mkEl(svg, 'line', {
+      x1: xx, y1: M.top, x2: xx, y2: M.top + IH,
+      stroke: isDayStart ? '#aab2bc' : '#d5dae0',
+      'stroke-width': isDayStart ? 0.6 : 0.35,
+    });
+    if (xLabelMode === 'perTick') {
+      const dow = DOW_NL[t.getUTCDay()];
+      const monNl = MON_NL[t.getUTCMonth()].slice(0, 3);
+      const dd  = String(t.getUTCDate()).padStart(2, '0');
+      const hh  = String(t.getUTCHours()).padStart(2, '0');
+      const g = mkEl(svg, 'g', { transform: `translate(${xx}, ${M.top + IH + 4}) rotate(-90)` });
+      const t1 = document.createElementNS(ns, 'text');
+      t1.setAttribute('x', 0); t1.setAttribute('y', 3);
+      t1.setAttribute('text-anchor', 'end');
+      t1.setAttribute('font-size', FONT_DATE); t1.setAttribute('fill', '#222');
+      t1.textContent = `${dow} ${hh}`;
+      g.appendChild(t1);
+      const t2 = document.createElementNS(ns, 'text');
+      t2.setAttribute('x', 0); t2.setAttribute('y', 10);
+      t2.setAttribute('text-anchor', 'end');
+      t2.setAttribute('font-size', FONT_DATE); t2.setAttribute('fill', '#222');
+      t2.textContent = `${dd} ${monNl}`;
+      g.appendChild(t2);
+    }
+  }
+
+  // dayCentered: één horizontaal label per dag, gecentreerd tussen 00Z..24Z
+  if (xLabelMode === 'dayCentered') {
+    const dayMs = 24 * 3600 * 1000;
+    const firstMid = new Date(Date.UTC(tStart.getUTCFullYear(), tStart.getUTCMonth(), tStart.getUTCDate(), 12));
+    for (let ms = firstMid.getTime(); ms < tEnd.getTime(); ms += dayMs) {
+      const t = new Date(ms);
+      const xx = x(t);
+      const dow = DOW_NL[t.getUTCDay()];
+      const dd  = String(t.getUTCDate()).padStart(2, '0');
+      const monNl = MON_NL[t.getUTCMonth()].slice(0, 3);
+      mkEl(svg, 'text', {
+        x: xx, y: M.top + IH + 20,
+        'text-anchor': 'middle', 'font-size': FONT_DAY, 'font-weight': 700, fill: '#222',
+      }, dow);
+      mkEl(svg, 'text', {
+        x: xx, y: M.top + IH + 40,
+        'text-anchor': 'middle', 'font-size': FONT_DATE, 'font-weight': 600, fill: '#555',
+      }, `${dd} ${monNl}`);
+    }
+  }
+
+  // titel rechtsboven (laat ~70px ruimte voor de PNG-knop)
+  mkEl(svg, 'text', {
+    x: W - M.right - 70, y: 19,
+    'text-anchor': 'end', 'font-size': FONT_META,
+    'font-weight': 700, fill: '#a31414',
+  }, titleRight);
+
+  // copyright logo linksboven
+  const label = '© Jan Visser · ECMWF';
+  const padX = 4;
+  const w = Math.round(label.length * 5.4 + padX * 2);
+  const h = 17;
+  const x0 = M.left + 2;
+  const y0 = 4;
+  const defs = document.createElementNS(ns, 'defs');
+  const gid = 'badgeBlue-' + Math.random().toString(36).slice(2, 8);
+  defs.innerHTML = `
+    <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#25527c"/>
+      <stop offset="100%" stop-color="#25527c"/>
+    </linearGradient>`;
+  svg.insertBefore(defs, svg.firstChild);
+  mkEl(svg, 'rect', { x: x0 + 1, y: y0 + 1, width: w, height: h,
+    rx: 2, ry: 2, fill: '#17354f', opacity: 0.45 });
+  mkEl(svg, 'rect', { x: x0, y: y0, width: w, height: h,
+    rx: 2, ry: 2, fill: `url(#${gid})`, stroke: '#25527c', 'stroke-width': 0.5 });
+  mkEl(svg, 'text', {
+    x: x0 + w / 2, y: y0 + h / 2 + 3.4,
+    'text-anchor': 'middle', 'font-size': FONT_BADGE,
+    'font-weight': 700, fill: '#ffffff',
+  }, label);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   KNMI-stijl normale pluim (52 lijnen)
+   ────────────────────────────────────────────────────────────── */
+const DOW_NL       = ['zo','ma','di','wo','do','vr','za'];
+const DOW_NL_FULL  = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MON_NL       = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+
+function drawNormalePluim(svgId, stationName, ensData, hresHourly, opts) {
+  opts = Object.assign({
+    variable: 'temperature_2m',   // prefix van ens-velden
+    hresField: 'temperature_2m',  // veld in hresHourly
+    title: 'Temperatuur (°C)',
+    unit: '°C',
+    cumulative: false,            // true = precipitatie cumuleren
+    yStep: 5,
+    yMinorStep: null,
+    yMinFloor: null,              // bv. 0 voor neerslag
+  }, opts || {});
+
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = '';
+
+  const W = CHART_W, H = CHART_H;
+  const M = { top: 52, right: 60, bottom: 74, left: 60 };
+  const IW = W - M.left - M.right;
+  const IH = H - M.top - M.bottom;
+
+  const h = ensData.hourly;
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const memberKeys   = Object.keys(h).filter(k => k === opts.variable || k.startsWith(opts.variable + '_member'));
+  const perturbedKeys = memberKeys.filter(k => k !== opts.variable);        // 50 perturbed
+  const controlKey    = opts.variable;                                        // control
+  const hresSource    = hresHourly?.[opts.hresField] || null;
+  const hresIndex = new Map((hresHourly?.time || []).map((time, index) => [isoMinute(time), index]));
+  const hresArr = hresSource ? times.map(time => {
+    const index = hresIndex.get(time.toISOString().slice(0, 16));
+    const value = index == null ? null : hresSource[index];
+    return value == null || !isFinite(value) ? null : value;
+  }) : null;                                                                  // HRES exact op ENS-timestamp
+
+  // cumulatief maken indien gevraagd
+  function toCum(arr) {
+    if (!arr) return null;
+    const out = new Array(arr.length);
+    let s = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v != null && isFinite(v)) {
+        s += v;
+        out[i] = s;
+      } else {
+        // Ontbrekende ENS-uren niet als een kunstmatig vlakke lijn doortrekken.
+        out[i] = null;
+      }
+    }
+    return out;
+  }
+  const memArr = {};
+  for (const k of memberKeys) memArr[k] = opts.cumulative ? toCum(h[k]) : h[k];
+  const hresArrPlot = opts.cumulative ? toCum(hresArr) : hresArr;
+
+  // P50 per tijdstap over alle leden
+  const p50 = times.map((_, i) => {
+    const vals = memberKeys.map(k => memArr[k][i]).filter(v => v != null && isFinite(v));
+    if (!vals.length) return null;
+    vals.sort((a, b) => a - b);
+    const m = vals.length >>> 1;
+    return vals.length % 2 ? vals[m] : (vals[m - 1] + vals[m]) / 2;
+  });
+
+  // Bepaal de echte ENS-horizon uit de ruwe leden. Open-Meteo kan aan het
+  // einde nog operationele HRES-uren leveren terwijl de ENS-leden al null zijn.
+  // De kalenderdag waarin de ENS stopt is onvolledig en wordt niet getoond.
+  const minValidMembers = Math.max(1, Math.ceil(memberKeys.length * 0.8));
+  let lastEnsIndex = -1;
+  for (let i = times.length - 1; i >= 0; i--) {
+    let validMembers = 0;
+    for (const k of memberKeys) {
+      const v = h[k]?.[i];
+      if (v != null && isFinite(v)) validMembers++;
+    }
+    if (validMembers >= minValidMembers) {
+      lastEnsIndex = i;
+      break;
+    }
+  }
+
+  const tStart = new Date(Date.UTC(times[0].getUTCFullYear(), times[0].getUTCMonth(), times[0].getUTCDate()));
+  const lastEnsT = times[Math.max(0, lastEnsIndex)];
+  let tEnd = new Date(Date.UTC(lastEnsT.getUTCFullYear(), lastEnsT.getUTCMonth(), lastEnsT.getUTCDate()));
+  if (tEnd <= tStart) tEnd = new Date(tStart.getTime() + 24 * 3600 * 1000);
+  const tSpan = tEnd - tStart;
+
+  // y-range uitsluitend uit het zichtbare, gemeenschappelijke tijdvak.
+  let vals = [];
+  for (let i = 0; i < times.length && times[i] < tEnd; i++) {
+    for (const k of memberKeys) {
+      const v = memArr[k][i];
+      if (v != null && isFinite(v)) vals.push(v);
+    }
+    const hresV = hresArrPlot?.[i];
+    if (hresV != null && isFinite(hresV)) vals.push(hresV);
+  }
+  const dataMin = Math.min(...vals), dataMax = Math.max(...vals);
+  let yMin = Math.floor((dataMin - 1) / opts.yStep) * opts.yStep;
+  let yMax = Math.ceil ((dataMax + 1) / opts.yStep) * opts.yStep;
+  if (opts.yMinFloor != null && yMin < opts.yMinFloor) yMin = opts.yMinFloor;
+  if (yMax - yMin < opts.yStep) yMax = yMin + opts.yStep;
+
+  const x = t => M.left + ((t.getTime() - tStart.getTime()) / tSpan) * IW;
+  const y = v => M.top + (1 - (v - yMin) / (yMax - yMin)) * IH;
+  const ns = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, text) {
+    const e = document.createElementNS(ns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    svg.appendChild(e);
+    return e;
+  }
+
+  // witte achtergrond
+  el('rect', { x: 0, y: 0, width: W, height: H, fill: '#ffffff' });
+
+  // alternerende dag-strepen
+  for (let dMs = tStart.getTime(); dMs < tEnd.getTime(); dMs += 24 * 3600 * 1000) {
+    const dStart = new Date(dMs);
+    const dNext  = new Date(dMs + 24 * 3600 * 1000);
+    const day    = Math.round((dMs - tStart.getTime()) / (24 * 3600 * 1000));
+    if (day % 2 === 0) {
+      el('rect', {
+        x: x(dStart), y: M.top, width: x(dNext) - x(dStart), height: IH,
+        fill: '#eef0f2',
+      });
+    }
+  }
+
+  // Fijne verticale tijdverdeling per 6 uur. De daggrenzen zijn sterker,
+  // de 06/12/18Z-lijnen blijven bewust rustig achter de ensembleleden.
+  for (let ms = tStart.getTime(); ms <= tEnd.getTime(); ms += 6 * 3600 * 1000) {
+    const t = new Date(ms);
+    const isDayStart = t.getUTCHours() === 0;
+    el('line', {
+      x1: x(t), y1: M.top, x2: x(t), y2: M.top + IH,
+      stroke: isDayStart ? '#b2bac3' : '#d9dde2',
+      'stroke-width': isDayStart ? 0.75 : 0.4,
+    });
+  }
+
+  // Lichte tussenlijnen maken temperatuurverschillen per graad zichtbaar.
+  const minorStep = opts.yMinorStep;
+  if (minorStep && minorStep < opts.yStep && (yMax - yMin) / minorStep <= 60) {
+    for (let v = Math.ceil(yMin / minorStep) * minorStep; v <= yMax + 0.001; v += minorStep) {
+      const majorMultiple = Math.abs(v / opts.yStep - Math.round(v / opts.yStep)) < 0.001;
+      if (majorMultiple) continue;
+      el('line', {
+        x1: M.left, y1: y(v), x2: M.left + IW, y2: y(v),
+        stroke: '#e0e4e8', 'stroke-width': 0.35,
+      });
+    }
+  }
+
+  // Y-gridlijnen + labels aan BEIDE zijden
+  for (let v = yMin; v <= yMax; v += opts.yStep) {
+    const yy = y(v);
+    el('line', {
+      x1: M.left, y1: yy, x2: M.left + IW, y2: yy,
+      stroke: '#c5cbd1', 'stroke-width': 0.5,
+    });
+    el('text', {
+      x: M.left - 6, y: yy + 3,
+      'text-anchor': 'end', 'font-size': FONT_Y_AXIS, 'font-weight': 600, fill: '#333',
+    }, String(v));
+    el('text', {
+      x: M.left + IW + 6, y: yy + 3,
+      'text-anchor': 'start', 'font-size': FONT_Y_AXIS, 'font-weight': 600, fill: '#333',
+    }, String(v));
+  }
+
+  // kader
+  el('rect', { x: M.left, y: M.top, width: IW, height: IH,
+    fill: 'none', stroke: '#8a97a4', 'stroke-width': 1 });
+
+  // X-as labels: onder elke dag, midden — "ma" boven, "04-20" onder
+  for (let dMs = tStart.getTime(); dMs < tEnd.getTime(); dMs += 24 * 3600 * 1000) {
+    const dStart = new Date(dMs);
+    const dNext  = new Date(dMs + 24 * 3600 * 1000);
+    const xc = (x(dStart) + x(dNext)) / 2;
+    const dow = DOW_NL[dStart.getUTCDay()];
+    const mm  = String(dStart.getUTCMonth() + 1).padStart(2, '0');
+    const dd  = String(dStart.getUTCDate()).padStart(2, '0');
+    // tick onder as
+    el('line', {
+      x1: x(dStart), y1: M.top + IH, x2: x(dStart), y2: M.top + IH + 4,
+      stroke: '#8a97a4', 'stroke-width': 0.6,
+    });
+    el('text', { x: xc, y: M.top + IH + 20,
+      'text-anchor': 'middle', 'font-size': FONT_DAY, 'font-weight': 700, fill: '#333' }, dow);
+    el('text', { x: xc, y: M.top + IH + 40,
+      'text-anchor': 'middle', 'font-size': FONT_DATE, 'font-weight': 600, fill: '#555' }, `${dd}-${mm}`);
+  }
+  // sluit de laatste tick
+  el('line', {
+    x1: x(tEnd), y1: M.top + IH, x2: x(tEnd), y2: M.top + IH + 4,
+    stroke: '#8a97a4', 'stroke-width': 0.6,
+  });
+
+  // lijn-builder
+  function pathForArr(arr) {
+    let d = '';
+    let started = false;
+    for (let i = 0; i < times.length; i++) {
+      const v = arr[i];
+      if (times[i] >= tEnd)            { started = false; continue; }   // onvolledige ENS-slotdag skippen
+      if (v == null || !isFinite(v))   { started = false; continue; }
+      d += (started ? 'L' : 'M') + x(times[i]).toFixed(2) + ' ' + y(v).toFixed(2);
+      started = true;
+    }
+    return d;
+  }
+
+  // 1. 50 verstoorde runs — dunne groene lijnen
+  for (const k of perturbedKeys) {
+    el('path', {
+      d: pathForArr(memArr[k]),
+      fill: 'none', stroke: '#4fa24e', 'stroke-width': 0.55, opacity: 0.75,
+    });
+  }
+  // 2. P50 (mediaan) — donkerrood streepjes
+  el('path', {
+    d: pathForArr(p50),
+    fill: 'none', stroke: '#7a1b1b', 'stroke-width': 1.2,
+    'stroke-dasharray': '6,3',
+  });
+  // 3. Controle — zwart dikke streepjes
+  el('path', {
+    d: pathForArr(memArr[controlKey]),
+    fill: 'none', stroke: '#000', 'stroke-width': 1.3,
+    'stroke-dasharray': '4,3',
+  });
+  // 4. Hoge resolutie — rood doorgetrokken
+  if (hresArrPlot) {
+    el('path', {
+      d: pathForArr(hresArrPlot),
+      fill: 'none', stroke: '#d62020', 'stroke-width': 1.6,
+    });
+  }
+
+  // Blauw copyright-logo linksboven (zelfde stijl als andere pluimen)
+  (function drawBadge() {
+    const label = '© Jan Visser · ECMWF';
+    const padX = 4;
+    const bw = Math.round(label.length * 5.4 + padX * 2);
+    const bh = 17;
+    const x0 = M.left + 2;
+    const y0 = 4;
+    const defs = document.createElementNS(ns, 'defs');
+    const gid = 'badgePl-' + svgId;
+    defs.innerHTML = `
+      <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#25527c"/>
+        <stop offset="100%" stop-color="#25527c"/>
+      </linearGradient>`;
+    svg.insertBefore(defs, svg.firstChild);
+    el('rect', { x: x0 + 1, y: y0 + 1, width: bw, height: bh,
+      rx: 2, ry: 2, fill: '#17354f', opacity: 0.45 });
+    el('rect', { x: x0, y: y0, width: bw, height: bh, rx: 2, ry: 2,
+      fill: `url(#${gid})`, stroke: '#25527c', 'stroke-width': 0.5 });
+    el('text', {
+      x: x0 + bw / 2, y: y0 + bh / 2 + 3.4,
+      'text-anchor': 'middle', 'font-size': FONT_BADGE,
+      'font-weight': 700, fill: '#ffffff',
+    }, label);
+  })();
+
+  // Titel & subtitel
+  el('text', {
+    x: W / 2, y: 22,
+    'text-anchor': 'middle', 'font-size': FONT_TITLE,
+    'font-weight': 600, fill: '#1a3a6d',
+  }, opts.title);
+  const run = times[0];
+  const sub = `${stationName}, ${DOW_NL_FULL[run.getUTCDay()]} ${run.getUTCDate()} ${MON_NL[run.getUTCMonth()]} ${run.getUTCFullYear()} `
+            + `(Versie ${DOW_NL[run.getUTCDay()]} ${String(run.getUTCHours()).padStart(2,'0')} uur)`;
+  el('text', {
+    x: W / 2, y: 44,
+    'text-anchor': 'middle', 'font-size': FONT_SUBTITLE, 'font-weight': 600, fill: '#333',
+  }, sub);
+
+  // Legenda onderaan
+  const lgY = H - 10;
+  const items = [
+    { label: 'Verstoorde runs', color: '#4fa24e', w: 1.3, dash: null },
+    { label: 'Controle',        color: '#000',    w: 1.6, dash: '4,3' },
+    { label: 'Hoge resolutie',  color: '#d62020', w: 1.8, dash: null },
+    { label: 'Middelste (P50)', color: '#7a1b1b', w: 1.4, dash: '6,3' },
+  ];
+  // centreer legenda
+  const cellW = 150;
+  const totalW = items.length * cellW;
+  let lx = (W - totalW) / 2;
+  for (const it of items) {
+    const attrs = {
+      x1: lx, y1: lgY, x2: lx + 22, y2: lgY,
+      stroke: it.color, 'stroke-width': it.w,
+    };
+    if (it.dash) attrs['stroke-dasharray'] = it.dash;
+    el('line', attrs);
+    el('text', {
+      x: lx + 28, y: lgY + 4,
+      'font-size': FONT_LEGEND, 'font-weight': 600, fill: '#222',
+    }, it.label);
+    lx += cellW;
+  }
+
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Download SVG → PNG
+   ────────────────────────────────────────────────────────────── */
+function downloadSvgAsPng(svgEl, filename) {
+  const vb = svgEl.viewBox.baseVal;
+  const w = vb.width, hh = vb.height;
+  // Supersample-factor (rasterize-resolutie); output blijft op 2× (retina-scherp).
+  const superScale = 4;
+  const outScale   = 2;
+
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('xmlns',       'http://www.w3.org/2000/svg');
+  clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+  clone.setAttribute('width',  w * superScale);
+  clone.setAttribute('height', hh * superScale);
+  clone.setAttribute('shape-rendering', 'geometricPrecision');
+  clone.setAttribute('text-rendering',  'optimizeLegibility');
+
+  // Inline-style mee-injecteren: parent-CSS gaat niet mee bij rasterisatie.
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleEl.textContent = 'text { font-family: Arial, Helvetica, sans-serif; }';
+  clone.insertBefore(styleEl, clone.firstChild);
+
+  const serializer = new XMLSerializer();
+  const svgStr = '<?xml version="1.0" standalone="no"?>\n'
+               + serializer.serializeToString(clone);
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+
+  const img = new Image();
+  img.onload = () => {
+    // Hoge-res canvas (4×, voor antialiasing)
+    const hi = document.createElement('canvas');
+    hi.width  = Math.round(w  * superScale);
+    hi.height = Math.round(hh * superScale);
+    const hiCtx = hi.getContext('2d');
+    hiCtx.imageSmoothingEnabled = true;
+    hiCtx.imageSmoothingQuality = 'high';
+    hiCtx.fillStyle = '#ffffff';
+    hiCtx.fillRect(0, 0, hi.width, hi.height);
+    hiCtx.drawImage(img, 0, 0, hi.width, hi.height);
+
+    // Output op 2×-resolutie (downsample → soft antialiasing, niet onnodig groot)
+    const out = document.createElement('canvas');
+    out.width  = Math.round(w  * outScale);
+    out.height = Math.round(hh * outScale);
+    const outCtx = out.getContext('2d');
+    outCtx.imageSmoothingEnabled = true;
+    outCtx.imageSmoothingQuality = 'high';
+    outCtx.fillStyle = '#ffffff';
+    outCtx.fillRect(0, 0, out.width, out.height);
+    outCtx.drawImage(hi, 0, 0, out.width, out.height);
+
+    out.toBlob(b => {
+      if (!b) { alert('PNG-encode mislukt'); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = filename + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  };
+  img.onerror = (e) => {
+    console.error('SVG render fail', e);
+    alert('Download mislukt: ' + filename);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Temp-pluim
+   ────────────────────────────────────────────────────────────── */
+function drawTempChart(svgId, stationName, ensStats, prevRun, hresHourly) {
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = '';
+
+  const W = CHART_W, H = CHART_H;
+  const M = { top: 34, right: 32, bottom: 76, left: 58 };
+
+  if (!ensStats?.series?.length) {
+    mkEl(svg, 'text', { x: W / 2, y: H / 2, 'text-anchor': 'middle',
+      'font-size': FONT_TITLE, fill: '#a31414' }, 'Geen volledige 6-uursvakken beschikbaar');
+    return;
+  }
+
+  const ensMaxPts = ensStats.series.map(p => ({ t: p.t, v: p.tmaxMean }));
+  const ensMinPts = ensStats.series.map(p => ({ t: p.t, v: p.tminMean }));
+
+  // prev-curve: 1) ENS-mean uit lokale cache (gisteren-00Z), 2) HRES previous_day1 als fallback
+  // HRES previous_day1 = run van exact 24u eerder, dus de "gisteren 00Z" run
+  // tov huidige run (vandaag 00Z).
+  let prevMaxPts = [], prevMinPts = [], prevSource = null;
+  const prevDate = new Date(ensStats.runStart.getTime() - 24 * 3600 * 1000);
+  function prevDateLabel(d) {
+    return DOW_NL[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MON_NL[d.getUTCMonth()].slice(0,3)
+      + ' ' + String(d.getUTCHours()).padStart(2, '0') + 'Z';
+  }
+  if (prevRun && prevRun.series && prevRun.series.length) {
+    prevMaxPts = prevRun.series.map(p => ({ t: p.t, v: p.tmaxMean }));
+    prevMinPts = prevRun.series.map(p => ({ t: p.t, v: p.tminMean }));
+    prevSource = 'ENS ' + prevDateLabel(prevRun.runDate || prevDate);
+  } else if (hresHourly && hresHourly.temperature_2m_previous_day1) {
+    // 6h TMax/TMin uit HRES previous_day1 (deterministisch — ensemble-prev
+    // niet beschikbaar via API, dus HRES als referentie).
+    const prevBins = compute6hHresMinMax(hresHourly, 'temperature_2m_previous_day1');
+    prevMaxPts = prevBins.map(p => ({ t: p.t, v: p.tmax }));
+    prevMinPts = prevBins.map(p => ({ t: p.t, v: p.tmin }));
+    prevSource = 'HRES ' + prevDateLabel(prevDate);
+  }
+
+  const tStart = ensStats.series[0].t;
+  const tEnd   = ensStats.series[ensStats.series.length - 1].t;
+  const tSpan  = tEnd.getTime() - tStart.getTime();
+
+  const all = [...ensMaxPts, ...ensMinPts, ...prevMaxPts, ...prevMinPts].map(p => p.v);
+  let yMin = Math.floor(Math.min(...all)) - 1;
+  let yMax = Math.ceil (Math.max(...all)) + 1;
+  if (yMax - yMin < 10) { const mid = Math.round((yMin + yMax) / 2); yMin = mid - 5; yMax = mid + 5; }
+
+  const x = t => M.left + ((t.getTime() - tStart.getTime()) / tSpan) * IW_(M, W);
+  const y = v => M.top + (1 - (v - yMin) / (yMax - yMin)) * IH_(M, H);
+
+  function runLabelNL(d) {
+    return DOW_NL[d.getUTCDay()] + ' ' + d.getUTCDate() + ' '
+         + MON_NL[d.getUTCMonth()].slice(0,3) + ' '
+         + String(d.getUTCHours()).padStart(2,'0') + 'Z';
+  }
+  const runStr  = runLabelNL(ensStats.runStart);
+  const prevStr = prevSource ? ' · vs ' + prevSource : '';
+  drawAxes(svg, W, H, M, x, y, yMin, yMax, 1, 'C', tStart, tEnd,
+    `EC-Ens · ${stationName} · ${runStr}${prevStr}`,
+    { tickStepHours: 6, yLabelMode: 'int', xLabelMode: 'dayCentered' });
+
+  function pathFor(pts) {
+    let d = '';
+    let started = false;
+    for (const p of pts) {
+      if (p.t < tStart || p.t > tEnd) { started = false; continue; }
+      d += (started ? 'L' : 'M') + x(p.t).toFixed(2) + ' ' + y(p.v).toFixed(2);
+      started = true;
+    }
+    return d;
+  }
+
+  function addPointDetails(pts, color, label, previous) {
+    for (const p of pts) {
+      if (p.t < tStart || p.t > tEnd || p.v == null || !isFinite(p.v)) continue;
+      const dot = mkEl(svg, 'circle', {
+        cx: x(p.t).toFixed(2), cy: y(p.v).toFixed(2),
+        r: previous ? 1.6 : 2.1,
+        fill: previous ? '#ffffff' : color,
+        stroke: color, 'stroke-width': previous ? 1.1 : 0.7,
+      });
+      const title = document.createElementNS(ns, 'title');
+      title.textContent = `${label}: ${p.v.toFixed(1)} °C · ${p.t.toLocaleString('nl-NL', {
+        weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
+      })} UTC`;
+      dot.appendChild(title);
+    }
+  }
+
+  // Vorige run eerst, als duidelijke stippellijn achter de hoofdcurven.
+  if (prevMaxPts.length) {
+    mkEl(svg, 'path', { d: pathFor(prevMaxPts), fill: 'none',
+      stroke: '#d62020', 'stroke-width': 1.6, opacity: 0.95, 'stroke-dasharray': '8,5' });
+    mkEl(svg, 'path', { d: pathFor(prevMinPts), fill: 'none',
+      stroke: '#1155cc', 'stroke-width': 1.6, opacity: 0.95, 'stroke-dasharray': '8,5' });
+  }
+  mkEl(svg, 'path', { d: pathFor(ensMaxPts), fill: 'none', stroke: '#d62020', 'stroke-width': 2.1 });
+  mkEl(svg, 'path', { d: pathFor(ensMinPts), fill: 'none', stroke: '#1155cc', 'stroke-width': 2.1 });
+  addPointDetails(prevMaxPts, '#d62020', 'TMax vorige run', true);
+  addPointDetails(prevMinPts, '#1155cc', 'TMin vorige run', true);
+  addPointDetails(ensMaxPts, '#d62020', 'TMax nieuwste run', false);
+  addPointDetails(ensMinPts, '#1155cc', 'TMin nieuwste run', false);
+}
+
+// 6h TMax/TMin uit een enkele HRES-reeks (zelfde bin-conventie als compute6hEnsMinMax)
+function compute6hHresMinMax(h, field) {
+  const arr = h[field];
+  if (!arr) return [];
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const runStart = times[0];
+  const bins = new Map();
+  times.forEach((t, i) => {
+    const hh = t.getUTCHours();
+    let binEnd;
+    if (hh === 0) {
+      binEnd = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 0));
+    } else {
+      const endHr = Math.ceil(hh / 6) * 6;
+      if (endHr === 24) {
+        binEnd = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + 1, 0));
+      } else {
+        binEnd = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), endHr));
+      }
+    }
+    const k = binEnd.toISOString();
+    if (!bins.has(k)) bins.set(k, { end: binEnd, idxs: [] });
+    bins.get(k).idxs.push(i);
+  });
+  const out = [];
+  for (const bin of [...bins.values()].sort((a, b) => a.end - b.end)) {
+    if (!runStart || bin.end <= runStart) continue;
+    let mx = -Infinity, mn = Infinity;
+    for (const i of bin.idxs) {
+      const v = arr[i];
+      if (v == null || !isFinite(v)) continue;
+      if (v > mx) mx = v;
+      if (v < mn) mn = v;
+    }
+    if (isFinite(mx) && isFinite(mn)) out.push({ t: bin.end, tmax: mx, tmin: mn });
+  }
+  return out;
+}
+function IW_(M, W) { return W - M.left - M.right; }
+function IH_(M, H) { return H - M.top - M.bottom; }
+
+/* ──────────────────────────────────────────────────────────────
+   Neerslag-pluim (12-uurs-staafjes)
+   ────────────────────────────────────────────────────────────── */
+function drawPrecipChart(svgId, stationName, binsCurr, binsPrev, runStart, labelPrefix) {
+  labelPrefix = labelPrefix || 'EC-Ens · ENS-mean 12h';
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = '';
+
+  const W = CHART_W, H = CHART_H;
+  const M = { top: 34, right: 32, bottom: 88, left: 58 };
+  const IW = W - M.left - M.right, IH = H - M.top - M.bottom;
+
+  // tijdsdomein afleiden uit beide sets
+  const all = [...binsCurr, ...binsPrev];
+  if (!all.length) {
+    mkEl(svg, 'text', { x: W / 2, y: H / 2, 'text-anchor': 'middle',
+      'font-size': FONT_TITLE, fill: '#a31414' }, 'Geen neerslagdata beschikbaar');
+    return;
+  }
+  const tStart = new Date(Math.min(...all.map(b => b.start.getTime())));
+  const tEndRaw = new Date(Math.max(...all.map(b => b.start.getTime())) + 12 * 3600 * 1000);
+  const tEnd  = tEndRaw;
+  const tSpan = tEnd.getTime() - tStart.getTime();
+
+  const maxVal = Math.max(4.0, ...all.map(b => b.sum));     // minimaal 4mm schaal
+  // Adaptieve y-stap zodat labels niet over elkaar lopen
+  let yStep;
+  if      (maxVal <=  2) yStep = 0.2;
+  else if (maxVal <=  5) yStep = 0.5;
+  else if (maxVal <= 15) yStep = 1;
+  else if (maxVal <= 40) yStep = 2;
+  else                   yStep = 5;
+  const yMax = Math.ceil(maxVal / yStep) * yStep;
+  const yMin = 0;
+
+  const x = t => M.left + ((t.getTime() - tStart.getTime()) / tSpan) * IW;
+  const y = v => M.top + (1 - (v - yMin) / (yMax - yMin)) * IH;
+
+  const runStr = DOW_NL[runStart.getUTCDay()] + ' ' + runStart.getUTCDate() + ' '
+               + MON_NL[runStart.getUTCMonth()].slice(0,3) + ' '
+               + String(runStart.getUTCHours()).padStart(2, '0') + 'Z';
+  drawAxes(svg, W, H, M, x, y, yMin, yMax, yStep, 'mm', tStart, tEnd,
+    `${labelPrefix} · ${stationName} · ${runStr}`,
+    { tickStepHours: 12, yLabelMode: yStep >= 1 ? 'int' : 'fixed1', xLabelMode: 'dayCentered' });
+
+  // bar-breedte: elk 12-u-blok is 12h breed in pixels
+  const binW = (12 * 3600 * 1000) / tSpan * IW;
+  const barW = Math.max(1.5, binW * 0.22);
+  const gap  = 0.6;
+
+  function drawBars(bins, color, offset) {
+    for (const b of bins) {
+      const xCenter = x(new Date(b.start.getTime() + 6 * 3600 * 1000));
+      const xx = xCenter + offset - barW / 2;
+      const yy = y(b.sum);
+      const hh = (M.top + IH) - yy;
+      const rect = mkEl(svg, 'rect', {
+        x: xx.toFixed(2), y: yy.toFixed(2),
+        width: barW.toFixed(2), height: Math.max(0.5, hh).toFixed(2),
+        fill: color,
+      });
+      const title = document.createElementNS(ns, 'title');
+      const periodEnd = new Date(b.start.getTime() + 12 * 3600 * 1000);
+      title.textContent = `${b.sum.toFixed(1)} mm · ${b.start.toLocaleString('nl-NL', {
+        weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', timeZone: 'UTC'
+      })}–${String(periodEnd.getUTCHours()).padStart(2, '0')} UTC`;
+      rect.appendChild(title);
+    }
+  }
+
+  // lichtgroen (prev) links, donkergroen (new) rechts
+  drawBars(binsPrev, '#8dd58e', -(barW / 2 + gap));
+  drawBars(binsCurr, '#1a7d2b',  (barW / 2 + gap));
+}
+
+/* Bewolkings-categorieën (okta-gebaseerd) + kleuren — identiek aan pluim_6_plus */
+const CLOUD_CATS = [
+  { key: 'onbewolkt',    label: 'Onbewolkt',     lo:  0, hi:  12, color: '#f5e642' },
+  { key: 'licht',        label: 'Licht bewolkt', lo: 12, hi:  37, color: '#dcd28c' },
+  { key: 'half',         label: 'Half bewolkt',  lo: 37, hi:  62, color: '#a09464' },
+  { key: 'zwaar',        label: 'Zwaar bewolkt', lo: 62, hi:  87, color: '#828296' },
+  { key: 'geheel',       label: 'Geheel bewolkt',lo: 87, hi: 101, color: '#373746' },
+];
+
+/* Per uur: fractie ensemble-leden per categorie (som = 100%) */
+function compute1hCloudCategories(ensData) {
+  const h = ensData.hourly;
+  if (!h.cloud_cover) return [];
+  const times = h.time.map(t => new Date(t + 'Z'));
+  const memberKeys = Object.keys(h).filter(k =>
+    k === 'cloud_cover' || k.startsWith('cloud_cover_member'));
+  if (!memberKeys.length) return [];
+  const out = [];
+  for (let i = 0; i < times.length; i++) {
+    const vals = [];
+    for (const mk of memberKeys) {
+      const v = h[mk][i];
+      if (v == null || !isFinite(v)) continue;
+      vals.push(v);
+    }
+    if (!vals.length) continue;
+    const pct = CLOUD_CATS.map(c =>
+      vals.filter(v => v >= c.lo && v < c.hi).length / vals.length * 100
+    );
+    out.push({ t: times[i], pct });
+  }
+  return out;
+}
+
+/* Stacked bewolkings-kanspluim per uur (okta-cats) — pluim6plus-stijl */
+function drawCloudChart(svgId, stationName, cloudPts, runStart) {
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = '';
+  if (!cloudPts.length) {
+    mkEl(svg, 'text', { x: CHART_W / 2, y: CHART_H / 2, 'text-anchor': 'middle',
+      'font-size': FONT_TITLE, fill: '#a31414' }, 'Geen bewolkingsdata');
+    return;
+  }
+  const W = CHART_W, H = CHART_H;
+  const M = { top: 54, right: 58, bottom: 74, left: 58 };
+  const IW = W - M.left - M.right, IH = H - M.top - M.bottom;
+
+  const tStart = new Date(Date.UTC(cloudPts[0].t.getUTCFullYear(),
+    cloudPts[0].t.getUTCMonth(), cloudPts[0].t.getUTCDate(), 0));
+  const lastT = cloudPts[cloudPts.length - 1].t;
+  const tEnd = new Date(Date.UTC(lastT.getUTCFullYear(),
+    lastT.getUTCMonth(), lastT.getUTCDate(), 0));
+  const tSpan = tEnd - tStart;
+  const x = t => M.left + ((t.getTime() - tStart.getTime()) / tSpan) * IW;
+  const y = pct => M.top + (1 - pct / 100) * IH;
+
+  // Witte achtergrond plot
+  mkEl(svg, 'rect', { x: 0, y: 0, width: W, height: H, fill: '#ffffff' });
+
+  // alternerende dag-strepen (zelfde als drawNormalePluim)
+  for (let dMs = tStart.getTime(); dMs < tEnd.getTime(); dMs += 24 * 3600 * 1000) {
+    const dStart = new Date(dMs);
+    const dNext = new Date(dMs + 24 * 3600 * 1000);
+    const day = Math.round((dMs - tStart.getTime()) / (24 * 3600 * 1000));
+    if (day % 2 === 0) {
+      mkEl(svg, 'rect', {
+        x: x(dStart), y: M.top, width: x(dNext) - x(dStart), height: IH,
+        fill: '#eef0f2',
+      });
+    }
+  }
+
+  // Eén kolom per native modelstap (1, 3 of later 6 uur), zonder gaten.
+  const positiveSteps = cloudPts.slice(1).map((point, index) => point.t - cloudPts[index].t)
+    .filter(step => step > 0).sort((a, b) => a - b);
+  const fallbackStep = positiveSteps[Math.floor(positiveSteps.length / 2)] || 3 * 3600 * 1000;
+  for (let pointIndex = 0; pointIndex < cloudPts.length; pointIndex++) {
+    const p = cloudPts[pointIndex];
+    if (p.t >= tEnd) break;
+    const xx = x(p.t);
+    const nextTime = cloudPts[pointIndex + 1]?.t || new Date(p.t.getTime() + fallbackStep);
+    const colW = Math.max(0.5, x(new Date(Math.min(nextTime.getTime(), tEnd.getTime()))) - xx);
+    let cumPct = 0;
+    for (let c = 0; c < CLOUD_CATS.length; c++) {
+      const pct = p.pct[c];
+      if (pct <= 0.01) { cumPct += pct; continue; }
+      const yTop = y(cumPct + pct);
+      const yBot = y(cumPct);
+      mkEl(svg, 'rect', {
+        x: xx.toFixed(2), y: yTop.toFixed(2),
+        width: (colW + 0.5).toFixed(2),
+        height: Math.max(0.5, yBot - yTop).toFixed(2),
+        fill: CLOUD_CATS[c].color,
+      });
+      cumPct += pct;
+    }
+  }
+
+  // 6-uursraster en horizontale 20%-hulplijnen boven de kleurvlakken.
+  for (let ms = tStart.getTime(); ms <= tEnd.getTime(); ms += 6 * 3600 * 1000) {
+    const t = new Date(ms);
+    const isDayStart = t.getUTCHours() === 0;
+    mkEl(svg, 'line', {
+      x1: x(t), y1: M.top, x2: x(t), y2: M.top + IH,
+      stroke: isDayStart ? '#737d87' : '#aeb7c0',
+      'stroke-width': isDayStart ? 0.75 : 0.35,
+      opacity: isDayStart ? 0.7 : 0.45,
+    });
+  }
+  for (const v of [20, 40, 60, 80]) {
+    mkEl(svg, 'line', {
+      x1: M.left, y1: y(v), x2: M.left + IW, y2: y(v),
+      stroke: '#7f8993', 'stroke-width': 0.45, opacity: 0.55,
+    });
+  }
+
+  // Y-as labels 0/20/40/60/80/100 beide kanten
+  for (const v of [0, 20, 40, 60, 80, 100]) {
+    const yy = y(v);
+    mkEl(svg, 'text', { x: M.left - 4, y: yy + 3,
+      'text-anchor': 'end', 'font-size': FONT_Y_AXIS, 'font-weight': 600, fill: '#333' }, String(v));
+    mkEl(svg, 'text', { x: M.left + IW + 4, y: yy + 3,
+      'text-anchor': 'start', 'font-size': FONT_Y_AXIS, 'font-weight': 600, fill: '#333' }, String(v));
+  }
+
+  // Kader
+  mkEl(svg, 'rect', { x: M.left, y: M.top, width: IW, height: IH,
+    fill: 'none', stroke: '#8a97a4', 'stroke-width': 1 });
+
+  // X-as: dag-labels gecentreerd (zoals drawNormalePluim)
+  for (let dMs = tStart.getTime(); dMs < tEnd.getTime(); dMs += 24 * 3600 * 1000) {
+    const dStart = new Date(dMs);
+    const dNext = new Date(dMs + 24 * 3600 * 1000);
+    const xc = (x(dStart) + x(dNext)) / 2;
+    const dow = DOW_NL[dStart.getUTCDay()];
+    const mm = String(dStart.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dStart.getUTCDate()).padStart(2, '0');
+    mkEl(svg, 'line', {
+      x1: x(dStart), y1: M.top + IH, x2: x(dStart), y2: M.top + IH + 4,
+      stroke: '#8a97a4', 'stroke-width': 0.6,
+    });
+    mkEl(svg, 'text', { x: xc, y: M.top + IH + 20,
+      'text-anchor': 'middle', 'font-size': FONT_DAY, 'font-weight': 700,
+      fill: '#333' }, dow);
+    mkEl(svg, 'text', { x: xc, y: M.top + IH + 40,
+      'text-anchor': 'middle', 'font-size': FONT_DATE, 'font-weight': 600, fill: '#555' },
+      `${dd}-${mm}`);
+  }
+  mkEl(svg, 'line', {
+    x1: x(tEnd), y1: M.top + IH, x2: x(tEnd), y2: M.top + IH + 4,
+    stroke: '#8a97a4', 'stroke-width': 0.6,
+  });
+
+  // Copyright badge (consistent met overige pluimen)
+  const cLabel = '© Jan Visser · ECMWF';
+  const cPadX = 4;
+  const cw = Math.round(cLabel.length * 5.4 + cPadX * 2);
+  const ch = 17;
+  const cx0 = M.left + 2, cy0 = 4;
+  mkEl(svg, 'rect', { x: cx0 + 1, y: cy0 + 1, width: cw, height: ch,
+    rx: 2, ry: 2, fill: '#17354f', opacity: 0.45 });
+  mkEl(svg, 'rect', { x: cx0, y: cy0, width: cw, height: ch, rx: 2, ry: 2,
+    fill: '#25527c', stroke: '#25527c', 'stroke-width': 0.5 });
+  mkEl(svg, 'text', { x: cx0 + cw / 2, y: cy0 + ch / 2 + 3.4,
+    'text-anchor': 'middle', 'font-size': FONT_BADGE, 'font-weight': 700,
+    fill: '#ffffff' }, cLabel);
+
+  // Titel & subtitel gecentreerd boven plot (drawNormalePluim-stijl)
+  mkEl(svg, 'text', {
+    x: W / 2, y: 22,
+    'text-anchor': 'middle', 'font-size': FONT_TITLE,
+    'font-weight': 600, fill: '#1a3a6d',
+  }, 'Bewolking — kans per categorie');
+  const subRun = DOW_NL_FULL[runStart.getUTCDay()] + ' ' + runStart.getUTCDate()
+    + ' ' + MON_NL[runStart.getUTCMonth()] + ' ' + runStart.getUTCFullYear()
+    + ' (Versie ' + DOW_NL[runStart.getUTCDay()] + ' '
+    + String(runStart.getUTCHours()).padStart(2, '0') + ' uur)';
+  mkEl(svg, 'text', {
+    x: W / 2, y: 44,
+    'text-anchor': 'middle', 'font-size': FONT_SUBTITLE, 'font-weight': 600, fill: '#333',
+  }, `${stationName}, ${subRun}`);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Main
+   ────────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────
+   Data-cache in-memory voor alle stations
+   ────────────────────────────────────────────────────────────── */
+const stationData = new Map();   // stationIdx → { ensData, hresData }
+const stationPromises = new Map();
+const cachedStationRuns = new Set();
+let renderRequestId = 0;
+
+async function ensureStationData(i) {
+  if (stationData.has(i)) return stationData.get(i);
+  if (stationPromises.has(i)) return stationPromises.get(i);
+
+  const request = (async () => {
+    const st = STATIONS[i];
+    const ensPromise = fetchEns(st);
+    const [ensData, hresData] = await Promise.all([
+      ensPromise,
+      fetchHresPrecipTempPrev(st, ensPromise),
+    ]);
+    const expectedRun = window.WeerlabPlumeRuns?.selectedRunIso?.();
+    if (!expectedRun || Date.parse(hresData.weerlab_run) !== Date.parse(expectedRun)) {
+      throw new Error('ENS en operationele HRES horen niet bij dezelfde ECMWF-run');
+    }
+    if (!window.WeerlabPlumeRuns?.state?.selectedRun && window.WeerlabPlumeRuns?.fetchFreshMeta) {
+      const fresh = await window.WeerlabPlumeRuns.fetchFreshMeta();
+      if (Number(fresh?.last_run_initialisation_time) * 1000 !== Date.parse(expectedRun)) {
+        throw new Error('De ECMWF-bron wisselde tijdens het laden; vernieuw voor één exacte run');
+      }
+    }
+    const d = { ensData, hresData };
+    stationData.set(i, d);
+    return d;
+  })();
+
+  stationPromises.set(i, request);
+  try {
+    return await request;
+  } finally {
+    stationPromises.delete(i);
+  }
+}
+
+function cacheStationRun(i, d) {
+  if (cachedStationRuns.has(i)) return;
+  const st = STATIONS[i];
+  const ensStats = compute6hEnsMinMax(d.ensData);
+  const precipBins = compute12hEnsPrecipMean(d.ensData);
+  if (!ensStats.series.length && !precipBins.length) return;
+  writeRunToCache(st.name, ensStats.runStart, ensStats.series, precipBins);
+  cachedStationRuns.add(i);
+}
+
+const PANEL_IDS = ['chart-n-t', 'chart-n-p', 'chart-t', 'chart-p', 'chart-p-op', 'chart-cl'];
+
+function clearAllPanels(message) {
+  PANEL_IDS.forEach(svgId => {
+    const svg = document.getElementById(svgId);
+    svg.innerHTML = '';
+    mkEl(svg, 'text', { x: CHART_W / 2, y: CHART_H / 2, 'text-anchor': 'middle',
+      'font-size': 16, 'font-weight': 700, fill: '#a31414' },
+    message);
+  });
+  document.querySelectorAll('.dl-btn').forEach(button => { button.disabled = true; });
+}
+
+async function renderStation(i) {
+  const requestId = ++renderRequestId;
+  const st = STATIONS[i];
+  const loadstate = document.getElementById('loadstate');
+  document.getElementById('coords').textContent =
+    `· ${st.lat.toFixed(2)}°N ${st.lon.toFixed(2)}°E`;
+
+  let d = stationData.get(i);
+  if (!d) {
+    loadstate.textContent = `⏳ ${st.name} wordt opgehaald…`;
+    try {
+      d = await ensureStationData(i);
+      cacheStationRun(i, d);
+      if (requestId !== renderRequestId || Number(stationSelect.value) !== i) return;
+      loadstate.textContent = `· ${stationData.size}/${STATIONS.length} stations geladen`;
+    } catch (e) {
+      clearAllPanels(`Geen pluim getoond: ${e.message}`);
+      loadstate.textContent = `❌ ${st.name}: ${e.message}`;
+      return;
+    }
+  }
+
+  const runStart = new Date(d.ensData.hourly.time[0] + 'Z');
+  try {
+    drawNormalePluim('chart-n-t', st.name, d.ensData, d.hresData.hourly, {
+      variable: 'temperature_2m', hresField: 'temperature_2m',
+      title: 'Temperatuur (°C)', unit: '°C',
+      cumulative: false, yStep: 5, yMinorStep: 1,
+    });
+    drawNormalePluim('chart-n-p', st.name, d.ensData, d.hresData.hourly, {
+      variable: 'precipitation', hresField: 'precipitation',
+      title: 'Neerslag cumulatief (mm)', unit: 'mm',
+      cumulative: true, yStep: 5, yMinorStep: 1, yMinFloor: 0,
+    });
+    const ensStats = compute6hEnsMinMax(d.ensData);
+    const prevRun = findPrevRun(st.name, ensStats.runStart);
+    drawTempChart('chart-t', st.name, ensStats, prevRun, d.hresData.hourly);
+    const binsCurr = compute12hEnsPrecipMean(d.ensData);
+    const binsPrev = (prevRun && prevRun.precipBins) ? prevRun.precipBins : [];
+    drawPrecipChart('chart-p', st.name, binsCurr, binsPrev, runStart, 'EC-Ens · ENS-mean 12u-sommen');
+    const hresBinsCurr = compute12hPrecip(d.hresData.hourly, 'precipitation');
+    const hresBinsPrev = compute12hPrecip(d.hresData.hourly, 'precipitation_previous_day1');
+    drawPrecipChart('chart-p-op', st.name, hresBinsCurr, hresBinsPrev, runStart, 'EC-OP · HRES 12u-sommen');
+    const cloudPts = compute1hCloudCategories(d.ensData);
+    drawCloudChart('chart-cl', st.name, cloudPts, runStart);
+  } catch (error) {
+    console.error('Jan Visser-pluim kon niet als complete set worden getekend', error);
+    clearAllPanels(`Geen pluim getoond: ${error.message}`);
+    loadstate.textContent = `❌ ${st.name}: niet alle 6 grafieken van dezelfde run zijn compleet`;
+    return [{ error }];
+  }
+
+  // update downloadnamen met stationsuffix
+  const suffix = st.name.replace(/[^a-z0-9]/gi, '_');
+  document.querySelectorAll('.dl-btn').forEach(btn => {
+    btn.disabled = false;
+    const base = btn.id.replace(/^dl-/, '');
+    btn.dataset.fn = `${base.replace(/-/g,'_')}_${suffix}`;
+  });
+  loadstate.textContent = `· ${st.name} · alle 6 grafieken geladen uit één ECMWF-run`;
+  return [];
+}
+
+/* Server-side run-cache (door dagelijkse cron geüpload naar R2).
+   Bevat per station ENS-mean 6h temp + 12h precip voor laatste runs.
+   Wordt in localStorage gemerged zodat findPrevRun ook werkt bij eerste bezoek. */
+async function loadServerCache() {
+  try {
+    const r = await fetch('https://data.weerlab.nl/jvens.json?t=' + Date.now(),
+      { cache: 'no-cache' });
+    if (!r.ok) return 0;
+    const doc = await r.json();
+    if (!doc || !doc.stations) return 0;
+    const localCache = loadCache();
+    let merged = 0;
+    for (const [name, runs] of Object.entries(doc.stations)) {
+      const st = localCache[name] || {};
+      for (const [runISO, entry] of Object.entries(runs)) {
+        if (!st[runISO]) {
+          st[runISO] = entry;
+          merged++;
+        }
+      }
+      // beperk tot CACHE_KEEP recentste
+      const keys = Object.keys(st).sort();
+      while (keys.length > CACHE_KEEP) {
+        delete st[keys.shift()];
+      }
+      localCache[name] = st;
+    }
+    saveCache(localCache);
+    return merged;
+  } catch (e) {
+    console.warn('Server-cache laden faalde:', e);
+    return 0;
+  }
+}
+
+(async () => {
+  const loadstate = document.getElementById('loadstate');
+  // Cache en De Bilt tegelijk laden. Voorheen blokkeerde de eerste render
+  // totdat alle zeven stations sequentieel waren opgehaald.
+  let defaultIdx = 0;
+  const [cacheResult, firstResult] = await Promise.allSettled([
+    loadServerCache(),
+    ensureStationData(defaultIdx),
+  ]);
+  if (cacheResult.status === 'fulfilled' && cacheResult.value > 0) {
+    console.log(`Server-cache: ${cacheResult.value} runs gemerged.`);
+  }
+
+  if (firstResult.status === 'rejected') {
+    console.warn('De Bilt fetch failed', firstResult.reason);
+    for (let i = 1; i < STATIONS.length; i++) {
+      try {
+        await ensureStationData(i);
+        defaultIdx = i;
+        break;
+      } catch (e) {
+        console.warn('Station fetch failed', STATIONS[i].name, e);
+      }
+    }
+  }
+
+  if (!stationData.has(defaultIdx)) {
+    loadstate.textContent = '❌ Geen stationsdata beschikbaar';
+    return;
+  }
+
+  cacheStationRun(defaultIdx, stationData.get(defaultIdx));
+  stationSelect.value = String(defaultIdx);
+  stationSelect.onchange = () => renderStation(Number(stationSelect.value));
+  const initialPanelErrors = await renderStation(defaultIdx);
+
+  document.getElementById('updated').textContent =
+    new Date().toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' });
+  if (!initialPanelErrors.length) {
+    loadstate.textContent = `· ${STATIONS[defaultIdx].name} · alle 6 grafieken geladen · overige stations op achtergrond`;
+  }
+
+  // Download-knoppen
+  document.querySelectorAll('.dl-btn').forEach(btn => {
+    btn.onclick = () => {
+      const svgId = btn.dataset.svg;
+      const fn    = btn.dataset.fn || btn.id.replace(/^dl-/, '');
+      const svgEl = document.getElementById(svgId);
+      if (svgEl) downloadSvgAsPng(svgEl, fn);
+    };
+  });
+
+  // Overige stations pas na de eerste zichtbare pluim en bewust sequentieel
+  // voorladen om de Open-Meteo rate-limit te ontzien.
+  (async function preloadRemainingStations() {
+    for (let i = 0; i < STATIONS.length; i++) {
+      if (i === defaultIdx || stationData.has(i)) continue;
+      try {
+        const d = await ensureStationData(i);
+        cacheStationRun(i, d);
+      } catch (e) {
+        console.warn('Station preload failed', STATIONS[i].name, e);
+      }
+      loadstate.textContent = `· ${stationData.size}/${STATIONS.length} stations geladen`;
+    }
+  })();
+
+})();
+
+/* ──────────────────────────────────────────────────────────────
+   Auto-reload elke ochtend 09:30 CEST (07:30 UTC zomertijd,
+   08:30 UTC wintertijd). We berekenen "volgende 9:30 lokale tijd"
+   in Europe/Amsterdam tijd, dan setTimeout tot dan.
+   ────────────────────────────────────────────────────────────── */
+(function scheduleMorningReload() {
+  function nextLocalReload() {
+    const now = new Date();
+    // maak een Date voor vandaag 09:30 in lokale (NL) browser-tijd
+    const target = new Date(now);
+    target.setHours(9, 30, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    return target;
+  }
+  function schedule() {
+    const target = nextLocalReload();
+    const ms = target - new Date();
+    document.getElementById('nextReload').textContent =
+      target.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    setTimeout(() => location.reload(), Math.min(ms, 0x7fffffff));
+  }
+  schedule();
+})();
+</script>
+
+<!-- Wachtwoord-gate script -->
+<script>
+(function gate() {
+  const OK_HASH = '7e35d18ccf51c9ef7b5a82ea4cc53a9662075c283d18b89a827806be19d3c837';
+  const FLAG = 'jv_unlocked_v1';
+  async function sha256hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function unlock() {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+  }
+  if (sessionStorage.getItem(FLAG) === '1' || localStorage.getItem(FLAG) === '1') {
+    unlock();
+    return;
+  }
+  document.getElementById('gateForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const pw = document.getElementById('gatePass').value.trim();
+    const err = document.getElementById('gateErr');
+    const h = await sha256hex(pw);
+    if (h === OK_HASH) {
+      sessionStorage.setItem(FLAG, '1');
+      localStorage.setItem(FLAG, '1');    // onthoud over sessies heen
+      unlock();
+    } else {
+      err.textContent = 'Onjuist wachtwoord';
+      document.getElementById('gatePass').value = '';
+    }
+  });
+})();
+</script>
+</body>
+</html>

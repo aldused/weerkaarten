@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beta – Modelvergelijking temperatuur</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; font-feature-settings: "ss01","cv11"; }
+  .header { background: #ffffff; color: #0f172a; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #e3e8ef; }
+  .header-titel { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .header-sub { font-size: 11px; color: #64748b; margin-top: 2px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; }
+  .beta-badge { background: #fef3c7; color: #78350f; border: 1px solid #fde68a; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tab-balk { background: #ffffff; border-bottom: 1px solid #e3e8ef; display: flex; gap: 0; padding: 0 20px; }
+  .tab-knop { padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s; }
+  .tab-knop:hover { color: #0f172a; }
+  .tab-knop.actief { color: #00205b; border-bottom-color: #00205b; }
+  .station-balk { background: #ffffff; border-bottom: 1px solid #e3e8ef; padding: 10px 20px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .station-balk label { font-size: 10.5px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; white-space: nowrap; }
+  .station-btn { padding: 6px 13px; border-radius: 8px; border: 1px solid #e3e8ef; background: white; color: #334155; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
+  .station-btn:hover { border-color: #94a3b8; color: #0f172a; background: #eef2f7; }
+  .station-btn.actief { background: #00205b; border-color: #00205b; color: white; }
+  .content { max-width: 960px; margin: 20px auto; padding: 0 20px; }
+  .kaart { background: white; border: 1px solid #e3e8ef; border-radius: 12px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); padding: 18px 22px; margin-bottom: 16px; }
+  .kaart h2 { font-size: 14px; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .kaart-sub { font-size: 11px; color: #64748b; margin-bottom: 14px; font-family: "DM Mono", ui-monospace, monospace; }
+  .legenda { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78em; }
+  .legenda-item { display: flex; align-items: center; gap: 6px; }
+  .grafiek-wrapper { position: relative; height: 340px; }
+  .status { font-size: 0.75em; color: #888; margin-top: 10px; text-align: right; }
+  .status .ok { color: #27ae60; }
+  .status .fout { color: #e74c3c; }
+  .tabel { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tabel th { background: #f6f8fb; color: #64748b; padding: 10px 12px; text-align: left; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; border-bottom: 1px solid #e3e8ef; }
+  .tabel th.tx-kop { color: #c0392b; }
+  .tabel th.tn-kop { color: #2471a3; }
+  .tabel td { padding: 8px 12px; border-bottom: 1px solid #eff3f8; font-family: "DM Mono", ui-monospace, monospace; }
+  .tabel tr:last-child td { border-bottom: none; }
+  .tabel tr:hover td { background: #fafbfd; }
+  .tx { color: #cc2200; font-weight: bold; }
+  .tn { color: #1a5fb4; font-weight: bold; }
+  .obs { color: #1a7a4a; font-weight: bold; }
+  .verschil { font-size: 0.85em; }
+  .verschil-pos { color: #27ae60; }
+  .verschil-neg { color: #e74c3c; }
+  .verschil-nul { color: #888; }
+  .score-rij { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .score-kaartje { background: #f6f8fb; border: 1px solid #e3e8ef; border-radius: 10px; padding: 12px 16px; font-size: 12px; text-align: center; min-width: 120px; }
+  .score-kaartje .score-waarde { font-size: 22px; font-weight: 700; font-family: "DM Mono", ui-monospace, monospace; color: #0f172a; }
+  .score-kaartje .score-label { color: #94a3b8; font-size: 10.5px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .info-blok { background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 12px 16px; font-size: 12.5px; color: #1e40af; line-height: 1.6; }
+  .info-blok strong { color: #1e3a8a; }
+  .footer-cr { text-align: right; font-size: 0.70em; color: #94a3b8; font-style: italic; margin-top: 8px; padding-bottom: 8px; }
+  @media (max-width: 500px) { .grafiek-wrapper { height: 220px; } .content { padding: 0 10px; } .kaart { padding: 14px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div><div class="header-titel">Ed Aldus WM</div><div class="header-sub">Beta – Modelvergelijking temperatuur</div></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span class="beta-badge">BETA</span>
+    <a href="index.html" style="color:#00205b;font-size:12px;font-weight:600;text-decoration:none;padding:5px 11px;border:1px solid #e3e8ef;border-radius:8px;background:#ffffff;">← Terug</a>
+  </div>
+</div>
+<div class="tab-balk">
+  <div class="tab-knop actief" id="tab-verwachting">📈 Verwachting &amp; Verificatie</div>
+</div>
+<div class="station-balk">
+  <label>Station:</label>
+  <div class="station-btn actief" onclick="wisselStation('De Bilt')">De Bilt</div>
+  <div class="station-btn" onclick="wisselStation('Hoek van Holland')">Hoek v. Holland</div>
+  <div class="station-btn" onclick="wisselStation('Rotterdam')">Rotterdam</div>
+  <div class="station-btn" onclick="wisselStation('Enschede')">Enschede</div>
+  <div class="station-btn" onclick="wisselStation('Eelde')">Eelde</div>
+  <div class="station-btn" onclick="wisselStation('Maastricht')">Maastricht</div>
+  <div class="station-btn" onclick="wisselStation('Terschelling')">Terschelling</div>
+  <div class="station-btn" onclick="wisselStation('Vlissingen')">Vlissingen</div>
+  <div class="station-btn" onclick="wisselStation('Deelen')">Deelen</div>
+  <div class="station-btn" onclick="wisselStation('Gilze-Rijen')">Gilze-Rijen</div>
+  <span id="gegenereerd-lbl" style="font-size:0.75em;color:#5a7090;margin-left:8px;"></span>
+</div>
+
+<!-- Tab: Verwachting -->
+<div id="inhoud-verwachting" class="content">
+  <div class="kaart">
+    <h2 id="verw-titel">Temperatuurverwachting – De Bilt</h2>
+    <p class="kaart-sub">Groen vlak = gemeten periode · sterren = werkelijk gemeten waarden · stippellijnen = Harmonie</p>
+    <div class="legenda">
+      <div class="legenda-item"><div style="width:28px;height:3px;background:#cc2200;border-radius:2px;"></div><span>MOSMIX TX</span></div>
+      <div class="legenda-item"><div style="width:28px;height:3px;background:#1a5fb4;border-radius:2px;"></div><span>MOSMIX TN</span></div>
+      <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#27ae60 0,#27ae60 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TX</span></div>
+      <div class="legenda-item"><div style="width:28px;height:3px;background:repeating-linear-gradient(90deg,#8e44ad 0,#8e44ad 5px,transparent 5px,transparent 9px);"></div><span>Harmonie TN</span></div>
+      <div class="legenda-item"><div style="width:12px;height:12px;background:#e67e22;border-radius:50%;display:inline-block;"></div><span>Gemeten TX</span></div>
+      <div class="legenda-item"><div style="width:12px;height:12px;background:#0d3a7a;border-radius:50%;display:inline-block;"></div><span>Gemeten TN</span></div>
+    </div>
+    <div class="grafiek-wrapper"><canvas id="grafiek-verw"></canvas></div>
+    <div class="status" id="status-verw">Laden...</div>
+    <div class="score-rij" id="score-rij" style="margin-top:14px;"></div>
+    <div style="text-align:right;font-size:0.70em;color:#94a3b8;font-style:italic;margin-top:8px;">© Ed Aldus | Data: DWD (MOSMIX) &amp; KNMI (Harmonie via Open-Meteo)</div>
+  </div>
+  <div class="kaart">
+    <h2>Vergelijkingstabel</h2>
+    <p class="kaart-sub">MOSMIX (DWD) vs Harmonie (KNMI via Open-Meteo) · verschil in °C</p>
+    <table class="tabel">
+      <thead><tr>
+        <th>Datum</th>
+        <th class="tx-kop">MOSMIX TX</th><th class="tx-kop">Harmonie TX</th><th class="tx-kop" style="background:#1a7a4a;">Gemeten TX</th><th class="tx-kop">Δ MOS</th>
+        <th class="tn-kop">MOSMIX TN</th><th class="tn-kop">Harmonie TN</th><th class="tn-kop" style="background:#0d3a7a;">Gemeten TN</th><th class="tn-kop">Δ MOS</th>
+      </tr></thead>
+      <tbody id="tabel-verw-body"><tr><td colspan="9" style="text-align:center;color:#888;padding:16px;">Laden...</td></tr></tbody>
+    </table>
+    <div style="text-align:right;font-size:0.70em;color:#94a3b8;font-style:italic;margin-top:8px;">© Ed Aldus | Data: DWD (MOSMIX) &amp; KNMI (Harmonie via Open-Meteo)</div>
+  </div>
+  <div class="info-blok"><strong>Over deze pagina:</strong> MOSMIX is het statistisch gecorrigeerde model van DWD op basis van ECMWF en ICON. Harmonie is het hoge-resolutie model van KNMI/UWC-West. Harmonie-data worden live opgehaald.</div>
+</div>
+
+
+<script>
+const NL_DAGEN   = ["zo","ma","di","wo","do","vr","za"];
+const NL_MAANDEN = ["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+function datumLabel(str) { const d = new Date(str+"T12:00:00"); return `${NL_DAGEN[d.getDay()]} ${d.getDate()} ${NL_MAANDEN[d.getMonth()+1]}`; }
+function dKleur(v) { if (v===null||v===undefined) return "verschil-nul"; return Math.abs(v)<0.5?"verschil-nul":v>0?"verschil-pos":"verschil-neg"; }
+function dStr(v)   { if (v===null||v===undefined) return "–"; return (v>0?"+":"")+v.toFixed(1); }
+function tStr(v)   { return v!==null&&v!==undefined ? v.toFixed(1)+"°" : "–"; }
+
+let grafiekVerw=null, verwData=null, verifData=null;
+let huidigStation="De Bilt";
+
+function wisselStation(naam) {
+  huidigStation = naam;
+  document.querySelectorAll(".station-btn").forEach(b => {
+    b.classList.toggle("actief", b.textContent.trim() === naam ||
+      (naam === "Hoek van Holland" && b.textContent.trim() === "Hoek v. Holland"));
+  });
+  if (verwData) toonVerwachting();
+}
+
+async function laadVerwachting() {
+  try {
+    const r=await fetch("https://data.weerlab.nl/beta_debilt.json?t="+Date.now());
+    verwData=await r.json();
+    document.getElementById("gegenereerd-lbl").textContent="Bijgewerkt: "+verwData.gegenereerd;
+    toonVerwachting();
+  } catch(e) { document.getElementById("status-verw").innerHTML="<span class='fout'>MOSMIX data niet beschikbaar</span>"; }
+}
+
+async function toonVerwachting() {
+  const station=verwData.stations.find(s=>s.naam===huidigStation)||verwData.stations[0];
+  document.getElementById("verw-titel").textContent=`Temperatuurverwachting – ${station.naam}`;
+
+  // Combineer: verleden (uit verifData) + toekomst (uit verwData)
+  const toekomstDagen = station.data.map(d=>d.datum);
+  let verledenDagen = [], verledenTX = {}, verledenTN = {};
+  if (verifData) {
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (vs) {
+      vs.data.forEach(d => {
+        if (!toekomstDagen.includes(d.datum)) {
+          verledenDagen.push(d.datum);
+          verledenTX[d.datum] = d.obs_tx;
+          verledenTN[d.datum] = d.obs_tn;
+        }
+      });
+      verledenDagen.sort();
+    }
+  }
+
+  const dagen   = [...verledenDagen, ...toekomstDagen];
+  const labels  = dagen.map(datumLabel);
+  const mosTX   = dagen.map(d => { const v=station.data.find(x=>x.datum===d); return v?v.tx:null; });
+  const mosTN   = dagen.map(d => { const v=station.data.find(x=>x.datum===d); return v?v.tn:null; });
+  const obsTX   = dagen.map(d => verledenTX[d] ?? null);
+  const obsTN   = dagen.map(d => verledenTN[d] ?? null);
+
+  // Voor verleden dagen: gebruik gearchiveerde Harmonie-voorspelling indien beschikbaar
+  let harmTXVerif = Array(dagen.length).fill(null);
+  let harmTNVerif = Array(dagen.length).fill(null);
+  if (verifData) {
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (vs) {
+      for (let i=0; i<dagen.length; i++) {
+        const vd = vs.data.find(d=>d.datum===dagen[i]);
+        if (vd && vd.harm_tx !== undefined) {
+          harmTXVerif[i] = vd.harm_tx;
+          harmTNVerif[i] = vd.harm_tn;
+        }
+      }
+    }
+  }
+
+  let harmTX=Array(dagen.length).fill(null), harmTN=Array(dagen.length).fill(null);
+  try {
+    const vanDatum = toekomstDagen[0]; // alleen toekomst ophalen
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&daily=temperature_2m_max,temperature_2m_min&models=knmi_seamless&timezone=Europe/Amsterdam&forecast_days=7&start_date=${vanDatum}`;
+    const h=(await (await fetch(url)).json());
+    for(let i=0;i<dagen.length;i++){const idx=h.daily.time.indexOf(dagen[i]);if(idx>=0){harmTX[i]=Math.round(h.daily.temperature_2m_max[idx]*10)/10;harmTN[i]=Math.round(h.daily.temperature_2m_min[idx]*10)/10;}}
+    document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='ok'>✓ Harmonie</span>";
+  } catch(e) { document.getElementById("status-verw").innerHTML="<span class='ok'>✓ MOSMIX</span> &nbsp;·&nbsp; <span class='fout'>Harmonie niet beschikbaar</span>"; }
+
+  // Combineer: voor verleden gearchiveerde Harmonie, voor toekomst live Harmonie
+  const harmTXCombined = dagen.map((d,i) => harmTXVerif[i] ?? harmTX[i]);
+  const harmTNCombined = dagen.map((d,i) => harmTNVerif[i] ?? harmTN[i]);
+
+  // Voeg ook MOSMIX-voorspelling uit verificatiedata toe voor verleden dagen
+  const mosTXVerif = dagen.map(d => {
+    if (!verifData) return null;
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (!vs) return null;
+    const vd = vs.data.find(x=>x.datum===d);
+    return vd ? vd.mos_tx : null;
+  });
+  const mosTNVerif = dagen.map(d => {
+    if (!verifData) return null;
+    const vs = verifData.stations.find(s=>s.naam===huidigStation)||verifData.stations[0];
+    if (!vs) return null;
+    const vd = vs.data.find(x=>x.datum===d);
+    return vd ? vd.mos_tn : null;
+  });
+
+  // Combineer: gebruik mosTX uit verwData waar beschikbaar, anders uit verifData
+  const mosTXCombined = dagen.map((d,i) => mosTX[i] ?? mosTXVerif[i]);
+  const mosTNCombined = dagen.map((d,i) => mosTN[i] ?? mosTNVerif[i]);
+
+  // Aantal verleden dagen voor achtergrond shading
+  const aantalVerleden = verledenDagen.length;
+
+  const ctx=document.getElementById("grafiek-verw").getContext("2d");
+  if(grafiekVerw)grafiekVerw.destroy();
+
+  // Plugin voor groene achtergrond over verleden dagen
+  const verledenPlugin = {
+    id: "verledenAchtergrond",
+    beforeDraw(chart) {
+      if (aantalVerleden === 0) return;
+      const {ctx: c, chartArea, scales} = chart;
+      const x0 = chartArea.left;
+      const x1 = scales.x.getPixelForValue(aantalVerleden - 1) + (scales.x.getPixelForValue(1) - scales.x.getPixelForValue(0)) / 2;
+      c.save();
+      c.fillStyle = "rgba(39,174,96,0.07)";
+      c.fillRect(x0, chartArea.top, x1 - x0, chartArea.bottom - chartArea.top);
+      c.restore();
+    }
+  };
+
+  grafiekVerw=new Chart(ctx,{
+    type:"line",
+    plugins:[verledenPlugin],
+    data:{labels,datasets:[
+      {label:"MOSMIX TX",  data:mosTXCombined, borderColor:"#cc2200",borderWidth:2.5,pointRadius:4,tension:0.4,fill:false},
+      {label:"MOSMIX TN",  data:mosTNCombined, borderColor:"#1a5fb4",borderWidth:2.5,pointRadius:4,tension:0.4,fill:false},
+      {label:"Harmonie TX",data:harmTXCombined,borderColor:"#27ae60",borderWidth:2,borderDash:[6,4],pointRadius:3,tension:0.4,fill:false},
+      {label:"Harmonie TN",data:harmTNCombined,borderColor:"#8e44ad",borderWidth:2,borderDash:[6,4],pointRadius:3,tension:0.4,fill:false},
+      {label:"Gemeten TX", data:obsTX, borderColor:"#e67e22",backgroundColor:"#e67e22",borderWidth:2,pointRadius:obsTX.map(v=>v!==null?9:0),pointStyle:"circle",showLine:false},
+      {label:"Gemeten TN", data:obsTN, borderColor:"#0d3a7a",backgroundColor:"#0d3a7a",borderWidth:2,pointRadius:obsTN.map(v=>v!==null?9:0),pointStyle:"circle",showLine:false},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!==null?c.parsed.y.toFixed(1)+"°C":"–"}`}}
+      },
+      scales:{
+        y:{grid:{color:"#eeeeee"},ticks:{callback:v=>v+"°"}},
+        x:{grid:{color:"#f0f0f0"}}
+      }
+    }
+  });
+
+  const tbody=document.getElementById("tabel-verw-body");
+  tbody.innerHTML="";
+  for(let i=0;i<dagen.length;i++){
+    const dObsTX=(mosTX[i]!==null&&obsTX[i]!==null)?Math.round((obsTX[i]-mosTX[i])*10)/10:null;
+    const dObsTN=(mosTN[i]!==null&&obsTN[i]!==null)?Math.round((obsTN[i]-mosTN[i])*10)/10:null;
+    const heeftObs = obsTX[i]!==null||obsTN[i]!==null;
+    tbody.innerHTML+=`<tr${heeftObs?' style="background:#fff8f0;"':''}>
+      <td>${datumLabel(dagen[i])}</td>
+      <td class="tx">${tStr(mosTX[i])}</td><td class="tx">${tStr(harmTX[i])}</td>
+      <td class="obs" style="color:#e67e22">${tStr(obsTX[i])}</td>
+      <td class="verschil ${dKleur(dObsTX)}">${dStr(dObsTX)}</td>
+      <td class="tn">${tStr(mosTN[i])}</td><td class="tn">${tStr(harmTN[i])}</td>
+      <td class="obs" style="color:#0d3a7a">${tStr(obsTN[i])}</td>
+      <td class="verschil ${dKleur(dObsTN)}">${dStr(dObsTN)}</td>
+    </tr>`;
+  }
+
+  // MAE scores
+  function mae(pred, obs) {
+    const p = pred.map((v,i)=>[v,obs[i]]).filter(([a,b])=>a!==null&&b!==null);
+    return p.length ? Math.round(p.reduce((s,[a,b])=>s+Math.abs(a-b),0)/p.length*10)/10 : null;
+  }
+  const scoreRij = document.getElementById("score-rij");
+  const maeMosTX = mae(mosTXCombined, obsTX);
+  const maeMosTN = mae(mosTNCombined, obsTN);
+  const maeHaTX  = mae(harmTXCombined, obsTX);
+  const maeHaTN  = mae(harmTNCombined, obsTN);
+  if (scoreRij && maeMosTX !== null) {
+    scoreRij.innerHTML = `
+      <div style="font-size:0.72em;font-weight:600;color:#5a7090;text-transform:uppercase;letter-spacing:0.06em;width:100%;margin-bottom:4px;">Gemiddelde afwijking afgelopen dagen (MAE — lager = beter)</div>
+      ${[["MOSMIX TX",maeMosTX,"#cc2200"],["MOSMIX TN",maeMosTN,"#1a5fb4"],["Harmonie TX",maeHaTX,"#27ae60"],["Harmonie TN",maeHaTN,"#8e44ad"]]
+        .map(([l,v,k])=>`<div class="score-kaartje"><div class="score-waarde" style="color:${k}">${v!==null?v.toFixed(1)+"°":"–"}</div><div class="score-label">${l}</div></div>`).join("")}`;
+  } else if (scoreRij) {
+    scoreRij.innerHTML = "";
+  }
+}
+
+
+async function laadVerificatie() {
+  try {
+    const r = await fetch("https://data.weerlab.nl/beta_verificatie.json?t=" + Date.now());
+    verifData = await r.json();
+    if (verwData) toonVerwachting();
+  } catch(e) {}
+}
+
+laadVerwachting();
+laadVerificatie();
+</script>
+</body>
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zeewatertemperatuur Grid — CONCEPT</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a1528;--panel:#0f1f38;--header:#003366;--border:#1f3050;--text:#dde8f0;--text2:#7a99bb;--accent:#2299ff}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--header);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #2ec4e8;flex-wrap:wrap;gap:10px}
+.header h1{font-family:monospace;font-size:1rem;font-weight:700;color:white}
+.header p{font-size:.7rem;color:#a8c4e8;margin-top:2px}
+.header-right{font-size:.68rem;color:#a8c4e8;text-align:right;line-height:1.4}
+.concept-banner{background:linear-gradient(90deg,#3a2e10,#5a4520);color:#ffd07a;padding:6px 20px;font-size:.78rem;font-weight:600;border-bottom:2px solid #d4a843;text-align:center}
+
+.main{max-width:920px;margin:0 auto;padding:14px 16px}
+
+.controls{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px}
+.ctrl-groep{display:flex;flex-direction:column;gap:3px}
+.ctrl-groep label{font-size:.62rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+.btnrow{display:flex;gap:3px;flex-wrap:wrap}
+.btn{padding:4px 9px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text2);font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit}
+.btn:hover{border-color:var(--accent);color:var(--text)}
+.btn.actief{background:var(--accent);border-color:var(--accent);color:white}
+
+.kaart-wrap{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px}
+.kaart-titel{font-size:.88rem;font-weight:700;color:white;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.kaart-titel .stamp{font-size:.65rem;font-weight:400;color:var(--text2)}
+#map{width:100%;height:560px;border-radius:6px;background:#0a1525}
+.leaflet-container{background:#0a1525!important;font-family:Inter,sans-serif}
+.leaflet-popup-content-wrapper{background:#1a2b40;color:white;border-radius:6px}
+.leaflet-popup-tip{background:#1a2b40}
+
+.legenda-bar{margin-top:8px;display:flex;align-items:center;gap:12px;font-size:.68rem;color:var(--text2);flex-wrap:wrap}
+.kleurbalk{display:flex;align-items:center;gap:6px}
+.kleurbalk-strip{width:240px;height:12px;border-radius:3px;border:1px solid var(--border)}
+.info-rij{display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;font-size:.68rem;color:var(--text2)}
+.info-rij b{color:var(--text);font-weight:700}
+
+#status{text-align:center;padding:50px 20px;color:var(--text2);font-size:.85rem}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.uitleg{background:rgba(34,153,255,0.06);border:1px solid #1a3a5a;border-radius:8px;padding:10px 14px;font-size:.74rem;color:var(--text2);line-height:1.5}
+.uitleg strong{color:var(--text)}
+.uitleg ul{margin:4px 0 0 18px}
+.uitleg code{background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:.92em}
+
+#copyright{text-align:center;font-size:.65rem;color:#445566;padding:10px 0 16px;font-family:monospace}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Zeewatertemperatuur Noordzee — grid kaart</h1>
+    <p>Open-Meteo Marine API · Grid van ~50 km punten over de Noordzee</p>
+  </div>
+  <div class="header-right">
+    Concept — Ed Aldus WM<br>
+    <span id="klok"></span>
+  </div>
+</div>
+
+<div class="concept-banner">
+  🧪 CONCEPT — alternatieve visualisatie voor zeetemp.html, met dichte grid in plaats van losse stations
+</div>
+
+<div class="main">
+
+  <div class="controls">
+    <div class="ctrl-groep">
+      <label>Tijdstip</label>
+      <div class="btnrow">
+        <button class="btn actief" data-uur="0">Nu</button>
+        <button class="btn" data-uur="24">+1d</button>
+        <button class="btn" data-uur="72">+3d</button>
+        <button class="btn" data-uur="168">+7d</button>
+      </div>
+    </div>
+    <div class="ctrl-groep">
+      <label>Grid resolutie</label>
+      <div class="btnrow">
+        <button class="btn" data-res="1.0">1.0°</button>
+        <button class="btn actief" data-res="0.5">0.5°</button>
+        <button class="btn" data-res="0.25">0.25°</button>
+      </div>
+    </div>
+    <div class="ctrl-groep">
+      <label>Gebied</label>
+      <div class="btnrow">
+        <button class="btn actief" data-gebied="noordzee">Noordzee</button>
+        <button class="btn" data-gebied="europa">NW Europa</button>
+      </div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="font-size:.66rem;color:var(--text2);max-width:200px;text-align:right">
+      Hover over een cel voor de SST-waarde
+    </div>
+  </div>
+
+  <div id="status"><span class="spinner"></span>Marine API laden…</div>
+
+  <div id="kaart-blok" class="kaart-wrap" style="display:none">
+    <div class="kaart-titel">
+      <span id="kaart-titel-tekst">Zeewatertemperatuur Noordzee</span>
+      <span class="stamp" id="kaart-stamp"></span>
+    </div>
+    <div id="map"></div>
+    <div class="legenda-bar">
+      <div class="kleurbalk">
+        <span id="leg-min">–</span>
+        <div class="kleurbalk-strip" id="leg-strip"></div>
+        <span id="leg-max">–</span>
+      </div>
+      <div>
+        <span style="color:var(--text);font-weight:600">ECMWF WAM 0.25°</span> via Open-Meteo Marine API
+      </div>
+    </div>
+    <div class="info-rij">
+      <span>Punten: <b id="info-punten">–</b></span>
+      <span>Range: <b id="info-range">–</b></span>
+      <span>Gemiddelde: <b id="info-gem">–</b></span>
+      <span>Geladen in: <b id="info-tijd">–</b></span>
+    </div>
+  </div>
+
+  <div class="uitleg">
+    <strong>Wat zie je?</strong>
+    Een raster van punten over de Noordzee, elke ~50 km eentje. Per punt levert de Marine API de huidige SST. Die teken ik als gekleurd vierkantje op de Leaflet basemap. Land en heel ondiepe wateren krijgen geen waarde — die laat ik leeg, zodat de kustlijn van de basemap er door schijnt.
+    <ul>
+      <li><strong>Verschil met bestaande zeetemp.html:</strong> die toont losse meetstations (~30 stuks aan de kust); dit toont een vlakkenplot van de hele Noordzee inclusief het centrum.</li>
+      <li><strong>Resolutie:</strong> 0.5° &asymp; 50 km, ~600 punten waarvan ~440 op zee. Eén API-call duurt ~0.2 seconde. 0.25° = 4&times; meer detail maar ook meer punten.</li>
+      <li><strong>Tijd vooruit:</strong> Open-Meteo Marine levert 10 dagen vooruit. Knoppen voor Nu / +1d / +3d / +7d.</li>
+    </ul>
+  </div>
+</div>
+
+<div id="copyright">&copy; Ed Aldus WM &middot; Data: Open-Meteo Marine API (CMEMS/ECMWF WAM) &middot; Concept-pagina</div>
+
+<script>
+const OM_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
+  ? 'https://om.weerlab.nl/om'
+  : null;
+
+const GEBIEDEN = {
+  noordzee: {label:'Noordzee', latMin:50.5, latMax:60, lonMin:-3, lonMax:11, center:[55,4], zoom:5},
+  europa:   {label:'NW Europa', latMin:45, latMax:62, lonMin:-12, lonMax:18, center:[54,3], zoom:4},
+};
+
+// Kleurverloop: blauw (koud) → cyaan → groen → geel → rood (warm)
+function kleurSST(t, vmin, vmax) {
+  if (t == null) return null;
+  const f = Math.max(0, Math.min(1, (t - vmin) / (vmax - vmin)));
+  const stops = [
+    [0.00, [10, 30, 100]],
+    [0.18, [30, 80, 180]],
+    [0.36, [40, 170, 220]],
+    [0.54, [80, 200, 100]],
+    [0.72, [240, 220, 60]],
+    [0.86, [240, 130, 40]],
+    [1.00, [200, 30, 30]],
+  ];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (f >= stops[i][0] && f <= stops[i+1][0]) {
+      const t0 = stops[i][0], t1 = stops[i+1][0];
+      const lf = (f - t0) / (t1 - t0);
+      const c0 = stops[i][1], c1 = stops[i+1][1];
+      return [
+        Math.round(c0[0] + (c1[0] - c0[0]) * lf),
+        Math.round(c0[1] + (c1[1] - c0[1]) * lf),
+        Math.round(c0[2] + (c1[2] - c0[2]) * lf),
+      ];
+    }
+  }
+  return [200, 30, 30];
+}
+
+let map;
+let cellLayer;
+let stationLayer;
+let huidigeUur = 0;
+let huidigeRes = 0.5;
+let huidigGebied = 'noordzee';
+let laatsteData = null;
+
+// Initialiseer Leaflet kaart één keer
+function initKaart() {
+  const g = GEBIEDEN[huidigGebied];
+  map = L.map('map', {
+    center: g.center,
+    zoom: g.zoom,
+    zoomControl: true,
+    attributionControl: false,
+  });
+  // Donkere basemap (CartoDB Dark Matter — past bij thema, kustlijnen helder)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 12,
+    minZoom: 3,
+  }).addTo(map);
+  cellLayer = L.layerGroup().addTo(map);
+  stationLayer = L.layerGroup().addTo(map);
+}
+
+async function laden() {
+  document.getElementById('status').style.display = '';
+  document.getElementById('kaart-blok').style.display = 'none';
+
+  const g = GEBIEDEN[huidigGebied];
+  const step = huidigeRes;
+  const lats = [];
+  const lons = [];
+  for (let la = g.latMin; la <= g.latMax + 0.001; la += step) {
+    for (let lo = g.lonMin; lo <= g.lonMax + 0.001; lo += step) {
+      lats.push(Math.round(la * 100) / 100);
+      lons.push(Math.round(lo * 100) / 100);
+    }
+  }
+
+  const latStr = lats.join(',');
+  const lonStr = lons.join(',');
+  const forecastUren = Math.max(huidigeUur + 1, 3);
+  let url = `https://customer-marine-api.open-meteo.com/v1/marine?latitude=${latStr}&longitude=${lonStr}&hourly=sea_surface_temperature&forecast_hours=${forecastUren}&timezone=Europe%2FAmsterdam`;
+  if (OM_BASE) {
+    url = url.replace('https://customer-marine-api.open-meteo.com/v1/marine', `${OM_BASE}/marine`);
+  } else {
+    url = url.replace('https://customer-marine-api.open-meteo.com/v1/marine', 'https://marine-api.open-meteo.com/v1/marine');
+  }
+
+  try {
+    const t0 = performance.now();
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const dt = ((performance.now() - t0) / 1000).toFixed(2);
+    const punten = Array.isArray(d) ? d : [d];
+
+    laatsteData = {punten, lats, lons, dt, gebied: g};
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('kaart-blok').style.display = '';
+    if (!map) initKaart();
+    // Center bijwerken voor het gebied
+    map.setView(g.center, g.zoom);
+    setTimeout(() => map.invalidateSize(), 100);
+    teken();
+  } catch(e) {
+    document.getElementById('status').innerHTML = '⚠️ Kan Marine API niet laden: ' + e.message;
+  }
+}
+
+function teken() {
+  if (!laatsteData || !map) return;
+  const {punten, lats, lons, dt, gebied: g} = laatsteData;
+
+  // Verzamel SST waarden voor het huidige uur
+  const cellen = punten.map((p, i) => {
+    const sst = p?.hourly?.sea_surface_temperature?.[huidigeUur] ?? null;
+    return {lat: lats[i], lon: lons[i], sst};
+  });
+  const validSST = cellen.map(c => c.sst).filter(v => v != null);
+  const vmin = validSST.length ? Math.floor(Math.min(...validSST) * 2) / 2 : 0;
+  const vmax = validSST.length ? Math.ceil(Math.max(...validSST) * 2) / 2 : 20;
+  const gem = validSST.length ? validSST.reduce((s, v) => s + v, 0) / validSST.length : 0;
+
+  // Cellen tekenen als rectangles
+  cellLayer.clearLayers();
+  const half = huidigeRes / 2;
+  cellen.forEach(c => {
+    if (c.sst == null) return;
+    const k = kleurSST(c.sst, vmin, vmax);
+    const kleurStr = `rgb(${k[0]},${k[1]},${k[2]})`;
+    const bounds = [
+      [c.lat - half, c.lon - half],
+      [c.lat + half, c.lon + half],
+    ];
+    const rect = L.rectangle(bounds, {
+      color: kleurStr,
+      weight: 0,
+      fillColor: kleurStr,
+      fillOpacity: 0.72,
+    });
+    rect.bindTooltip(
+      `<b>${c.sst.toFixed(1)}°C</b><br>${c.lat.toFixed(2)}° N, ${c.lon.toFixed(2)}° E`,
+      {direction:'top', sticky:true, offset:[0,-4], opacity:0.95}
+    );
+    cellLayer.addLayer(rect);
+  });
+
+  // Stations als markers (de bestaande zeetemp stations)
+  stationLayer.clearLayers();
+  const stations = [
+    {n:'IJmuiden',lat:52.46,lon:4.55},
+    {n:'Hoek vH',lat:51.98,lon:4.10},
+    {n:'Vlissingen',lat:51.44,lon:3.60},
+    {n:'Den Helder',lat:52.93,lon:4.75},
+    {n:'Terschelling',lat:53.35,lon:5.20},
+    {n:'Aberdeen',lat:57.14,lon:-2.08},
+    {n:'Bergen',lat:60.39,lon:5.33},
+    {n:'Brest',lat:48.38,lon:-4.49},
+    {n:'Skagen',lat:57.72,lon:10.58},
+    {n:'Esbjerg',lat:55.47,lon:8.45},
+    {n:'Doggersbank',lat:54.85,lon:2.50},
+  ];
+  stations.forEach(s => {
+    if (s.lat < g.latMin || s.lat > g.latMax || s.lon < g.lonMin || s.lon > g.lonMax) return;
+    const m = L.circleMarker([s.lat, s.lon], {
+      radius: 4,
+      color: 'white',
+      weight: 1.5,
+      fillColor: '#ffffff',
+      fillOpacity: 0.9,
+    });
+    m.bindTooltip(s.n, {permanent:true, direction:'right', offset:[6,0], className:'station-label'});
+    stationLayer.addLayer(m);
+  });
+
+  // Update legenda
+  document.getElementById('leg-min').textContent = vmin.toFixed(1) + '°';
+  document.getElementById('leg-max').textContent = vmax.toFixed(1) + '°';
+  const stops = [];
+  for (let i = 0; i <= 100; i += 10) {
+    const k = kleurSST(vmin + (vmax - vmin) * i / 100, vmin, vmax);
+    stops.push(`rgb(${k[0]},${k[1]},${k[2]}) ${i}%`);
+  }
+  document.getElementById('leg-strip').style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+
+  document.getElementById('info-punten').textContent = `${validSST.length} zee / ${cellen.length} totaal`;
+  document.getElementById('info-range').textContent = `${vmin.toFixed(1)}° → ${vmax.toFixed(1)}°C`;
+  document.getElementById('info-gem').textContent = `${gem.toFixed(1)}°C`;
+  document.getElementById('info-tijd').textContent = `${dt}s`;
+
+  const referentietijd = new Date();
+  referentietijd.setHours(referentietijd.getHours() + huidigeUur);
+  const tijdLabel = huidigeUur === 0 ? 'nu' : `+${huidigeUur} u (${referentietijd.toLocaleString('nl-NL', {weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})})`;
+  document.getElementById('kaart-titel-tekst').textContent = `${g.label} — SST ${tijdLabel}`;
+  document.getElementById('kaart-stamp').textContent = `Grid ${huidigeRes}° · ${cellen.length} punten`;
+}
+
+// CSS voor station labels (toegevoegd via JS)
+const styleEl = document.createElement('style');
+styleEl.textContent = `
+.station-label{background:rgba(20,30,50,0.85)!important;color:white!important;border:1px solid rgba(255,255,255,0.15)!important;border-radius:3px!important;padding:1px 5px!important;font-size:10px!important;font-weight:600!important;box-shadow:none!important}
+.station-label::before{display:none!important}
+`;
+document.head.appendChild(styleEl);
+
+// Knoppen
+document.querySelectorAll('[data-uur]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-uur]').forEach(x => x.classList.remove('actief'));
+    b.classList.add('actief');
+    huidigeUur = parseInt(b.dataset.uur);
+    if (laatsteData) {
+      const heeft = laatsteData.punten[0]?.hourly?.sea_surface_temperature?.length > huidigeUur;
+      if (heeft) teken();
+      else laden();
+    }
+  };
+});
+document.querySelectorAll('[data-res]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-res]').forEach(x => x.classList.remove('actief'));
+    b.classList.add('actief');
+    huidigeRes = parseFloat(b.dataset.res);
+    laden();
+  };
+});
+document.querySelectorAll('[data-gebied]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-gebied]').forEach(x => x.classList.remove('actief'));
+    b.classList.add('actief');
+    huidigGebied = b.dataset.gebied;
+    laden();
+  };
+});
+
+function updateKlok() {
+  document.getElementById('klok').textContent = new Date().toLocaleTimeString('nl-NL');
+}
+updateKlok(); setInterval(updateKlok, 1000);
+
+laden();
+</script>
+</body>
+</html>

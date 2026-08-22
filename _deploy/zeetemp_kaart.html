@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zeewatertemperatuur Europa – Ed Aldus WM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1520;--bg2:#111926;--panel:#161f30;--border:#2a3a50;--text:#dde8f0;--text2:#7a99bb;--accent:#2299ff;--hdr:#0f3460}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+.header{background:var(--hdr);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1a4a80;flex-shrink:0;flex-wrap:wrap;gap:4px}
+@media(max-width:480px){
+  .btn{padding:5px 9px;font-size:.72rem}
+  #klok{display:none}
+  .header-acties{width:100%;gap:6px}
+  #btn-bericht{flex:1;min-width:0;white-space:normal;line-height:1.15}
+}
+.header h1{font-size:.9rem;font-weight:700;color:white}
+.header p{font-size:.65rem;color:#8aaccc;margin-top:0}
+.header-acties{display:flex;align-items:center;gap:10px}
+.btn{padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:white;font-size:.8rem;font-weight:600;cursor:pointer;font-family:Inter,sans-serif}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:wait}
+#btn-bericht{background:#f0a31a;color:#08111b;box-shadow:0 0 0 1px rgba(255,210,90,.45)}
+#status-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:5px 14px;font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.kaart-wrap{flex:1;display:flex;justify-content:center;align-items:center;overflow:hidden;position:relative;min-height:0}
+canvas{display:block}
+.legenda-bar{background:var(--panel);border-top:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:12px;flex-shrink:0}
+.legenda-bar span{font-size:.72rem;color:var(--text2)}
+.legenda-gradient{width:200px;height:12px;border-radius:4px}
+.copyright{font-size:.65rem;color:#445566;text-align:center;padding:4px;flex-shrink:0;border-top:1px solid var(--border)}
+/* Tooltip */
+#tooltip{position:fixed;display:none;background:rgba(13,21,32,0.95);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.8rem;color:var(--text);pointer-events:none;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.4)}
+#tooltip .tt-naam{font-weight:700;color:white;font-size:.85rem}
+#tooltip .tt-temp{font-size:1.4rem;font-weight:700;margin:2px 0}
+#tooltip .tt-coord{font-size:.7rem;color:var(--text2)}
+/* Kustbericht */
+.btn-secundair{background:#1d4d7a}
+#bericht-overlay{position:fixed;inset:0;background:rgba(5,10,18,0.72);display:none;z-index:200;justify-content:center;align-items:center;padding:20px}
+#bericht-overlay.open{display:flex}
+#bericht-venster{background:var(--panel);border:1px solid var(--border);border-radius:12px;max-width:680px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.5)}
+#bericht-kop{position:sticky;top:0;background:var(--hdr);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);border-radius:12px 12px 0 0}
+#bericht-kop h2{font-size:.95rem;color:white;font-weight:700}
+#bericht-sluit{background:none;border:none;color:#8aaccc;font-size:1.4rem;cursor:pointer;line-height:1;padding:2px 8px}
+#bericht-sluit:hover{color:white}
+#bericht-inhoud{padding:14px 18px;font-size:.85rem;line-height:1.55;color:var(--text)}
+#bericht-inhoud h3{font-size:.85rem;color:#66bbff;margin:14px 0 4px}
+#bericht-inhoud h3:first-child{margin-top:0}
+#bericht-inhoud p{margin:0 0 8px}
+#bericht-inhoud .mui-0{background:rgba(68,204,120,0.10);border-left:3px solid #44cc78;padding:8px 10px;border-radius:0 6px 6px 0;margin:6px 0 10px}
+#bericht-inhoud .mui-1{background:rgba(245,160,16,0.10);border-left:3px solid #f5a010;padding:8px 10px;border-radius:0 6px 6px 0;margin:6px 0 10px}
+#bericht-inhoud .mui-2{background:rgba(221,51,51,0.12);border-left:3px solid #dd3333;padding:8px 10px;border-radius:0 6px 6px 0;margin:6px 0 10px}
+#bericht-inhoud .golf-dagen{display:grid;gap:5px;margin:5px 0 12px;padding:8px 10px;background:rgba(34,153,255,.07);border:1px solid rgba(102,187,255,.18);border-radius:7px}
+#bericht-inhoud .golf-dagen-kop{font-size:.74rem;color:var(--text2);font-weight:600;margin-bottom:1px}
+#bericht-inhoud .golf-dag{display:grid;grid-template-columns:minmax(135px,1fr) auto;align-items:baseline;column-gap:12px}
+#bericht-inhoud .golf-dag-label{color:var(--text)}
+#bericht-inhoud .golf-dag-waarde{color:white}
+#bericht-inhoud .golf-dag-wind{grid-column:1/-1;color:#f5bd58;font-size:.75rem;margin-top:-1px}
+#bericht-inhoud .golf-dag-details{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:2px 12px;color:#9eb7ce;font-size:.74rem;line-height:1.4;margin-top:1px}
+#bericht-inhoud .golf-dag-stroming{color:#68d6d0}
+#bericht-inhoud .noordzee-aanvoer{display:grid;gap:7px;margin:5px 0 13px;padding:9px 10px;background:rgba(43,112,171,.13);border:1px solid rgba(102,187,255,.28);border-radius:8px}
+#bericht-inhoud .noordzee-dag{display:grid;grid-template-columns:minmax(135px,.7fr) 1.3fr;gap:1px 12px;padding-bottom:6px;border-bottom:1px solid rgba(122,153,187,.18)}
+#bericht-inhoud .noordzee-dag:last-child{padding-bottom:0;border-bottom:none}
+#bericht-inhoud .noordzee-dag-label{grid-row:1/3;color:white}
+#bericht-inhoud .noordzee-wind{color:#f5bd58}
+#bericht-inhoud .noordzee-deining{color:#83c9ff}
+#bericht-inhoud .zee-uitleg{font-size:.72rem;color:var(--text2);line-height:1.4;margin-top:-4px}
+@media(max-width:480px){
+  #bericht-overlay{padding:10px}
+  #bericht-inhoud .noordzee-dag{grid-template-columns:1fr}
+  #bericht-inhoud .noordzee-dag-label{grid-row:auto;margin-bottom:1px}
+}
+#bericht-inhoud .bron{font-size:.7rem;color:var(--text2);margin-top:14px;border-top:1px solid var(--border);padding-top:8px}
+#bericht-inhoud a{color:#66bbff}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Zeewatertemperatuur Europa</h1>
+    <p>Open-Meteo Marine API &middot; Statische kaart</p>
+  </div>
+  <div class="header-acties">
+    <span id="klok" style="font-size:.75rem;color:#8aaccc"></span>
+    <button class="btn btn-secundair" id="btn-bericht" onclick="toonBericht()">&#127754; Golfhoogte en temp Hollandse Kust</button>
+    <button class="btn" id="btn-laden" onclick="laadData()">&#8635; Vernieuwen</button>
+  </div>
+</div>
+
+<div id="status-bar">
+  <span id="status-tekst">Kaart wordt geladen...</span>
+</div>
+
+<div class="kaart-wrap" id="kaart-wrap">
+  <canvas id="kaart"></canvas>
+</div>
+
+<div class="legenda-bar">
+  <span>0 °C</span>
+  <canvas class="legenda-gradient" id="legenda" width="200" height="12"></canvas>
+  <span>28 °C</span>
+  <span style="margin-left:16px;color:#667788">© Ed Aldus WM | weerlab.nl | Data: Open-Meteo Marine API</span>
+</div>
+
+<div id="tooltip">
+  <div class="tt-naam"></div>
+  <div class="tt-temp"></div>
+  <div class="tt-coord"></div>
+</div>
+
+<div id="bericht-overlay" onclick="if(event.target===this)sluitBericht()">
+  <div id="bericht-venster">
+    <div id="bericht-kop">
+      <h2>Golfhoogte en temperatuur &ndash; Hollandse Kust</h2>
+      <button id="bericht-sluit" onclick="sluitBericht()" aria-label="Sluiten">&times;</button>
+    </div>
+    <div id="bericht-inhoud"></div>
+  </div>
+</div>
+
+<script>
+// ── Configuratie ────────────────────────────────────────────────────────────
+const EUROPA = {lonMin:-14, lonMax:32, latMin:34, latMax:65};
+const NOORDZEE = {lonMin:-5, lonMax:11, latMin:48.5, latMax:57.5, label:'Noordzee'};
+let zoomGebied = null; // null = Europa, of NOORDZEE
+function ext(){return zoomGebied || EUROPA;}
+
+const OCEAN = '#1a3a5a', LAND = '#2d3b4a', KUST = '#5a88aa', GRENS = '#3a4e60', BG = '#0d1520';
+
+const STATIONS = [
+  // Noordzee & Kanaal
+  ["Terschelling",53.35,5.20],["IJmuiden",52.46,4.55],["Hoek van Holland",51.98,4.10],
+  ["Vlissingen",51.44,3.60],["Zeebrugge",51.35,3.18],["Calais",50.95,1.85],
+  ["Dunkerque",51.03,2.37],["Cherbourg",49.65,-1.62],["Brest",48.38,-4.49],
+  ["Texel",53.05,4.75],["Den Helder",52.93,4.75],["Dover",51.11,1.32],
+  ["Brighton",50.82,-0.14],["Felixstowe",51.96,1.35],["Harlingen",53.18,5.41],
+  ["Schiermonnikoog",53.48,6.19],["Ameland",53.45,5.79],["Katwijk",52.20,4.40],
+  ["Oostende",51.23,2.92],["Boulogne",50.72,1.60],["Le Havre",49.49,0.10],
+  ["Aberdeen",57.14,-2.08],["Newcastle",55.00,-1.43],["Edinburgh",55.95,-3.19],
+  ["Humber",53.65,-0.18],
+  // Noorwegen & Denemarken
+  ["Bergen",60.39,5.33],["Stavanger",58.97,5.73],["Kristiansand",58.15,8.00],
+  ["Goteborg",57.70,11.97],["Esbjerg",55.47,8.45],["Thyboron",56.70,8.22],
+  ["Skagen",57.72,10.58],
+  // Baltische Zee
+  ["Kopenhagen",55.68,12.57],["Kiel",54.32,10.13],["Rostock",54.15,12.10],
+  ["Gdansk",54.35,18.65],["Tallinn",59.44,24.75],["Helsinki",60.17,24.94],
+  ["Stockholm",59.33,18.07],["Riga",56.95,24.11],
+  // Atlantische kust
+  ["Cork",51.90,-8.47],["Dublin",53.33,-6.25],["Galway",53.27,-9.06],
+  ["Blackpool",53.82,-3.05],["Bordeaux",45.55,-1.07],["Biarritz",43.48,-1.56],
+  ["Santander",43.46,-3.80],["A Coruna",43.37,-8.40],["Porto",41.15,-8.67],
+  ["Lissabon",38.71,-9.14],["Faro",37.02,-7.93],["Cadiz",36.53,-6.30],
+  // Middellandse Zee
+  ["Gibraltar",36.14,-5.35],["Malaga",36.72,-4.42],["Alicante",38.34,-0.48],
+  ["Barcelona",41.38,2.18],["Marseille",43.30,5.37],["Genua",44.41,8.93],
+  ["Napels",40.84,14.25],["Palermo",38.12,13.36],["Athene",37.98,23.73],
+  ["Izmir",38.42,27.14],["Istanbul",41.01,28.98],["Venetie",45.44,12.32],
+  ["Split",43.51,16.44],["Dubrovnik",42.65,18.09],["Valletta",35.90,14.51],
+];
+
+// ── Kleurschaal ─────────────────────────────────────────────────────────────
+const KLEUR_STOPS = [
+  [0,'#0a1a6e'],[5,'#1a5fa8'],[10,'#2299ee'],[14,'#44ccbb'],
+  [18,'#f5e642'],[22,'#f5a010'],[26,'#dd3333'],[30,'#880000'],
+];
+
+function parseHex(c){return [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];}
+
+function tempKleur(t){
+  if(t<=KLEUR_STOPS[0][0]) return KLEUR_STOPS[0][1];
+  if(t>=KLEUR_STOPS[KLEUR_STOPS.length-1][0]) return KLEUR_STOPS[KLEUR_STOPS.length-1][1];
+  for(let i=0;i<KLEUR_STOPS.length-1;i++){
+    const[t0,c0]=KLEUR_STOPS[i],[t1,c1]=KLEUR_STOPS[i+1];
+    if(t>=t0&&t<=t1){
+      const f=(t-t0)/(t1-t0);
+      const[r0,g0,b0]=parseHex(c0),[r1,g1,b1]=parseHex(c1);
+      const r=Math.round(r0+(r1-r0)*f),g=Math.round(g0+(g1-g0)*f),b=Math.round(b0+(b1-b0)*f);
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  return '#888';
+}
+
+function tekstKleur(t){return(t<12||t>24)?'white':'#111';}
+
+// ── Projectie ───────────────────────────────────────────────────────────────
+let W, H, PAD = 0;
+
+function lonToX(lon){const e=ext();return PAD + (lon-e.lonMin)/(e.lonMax-e.lonMin)*(W-2*PAD);}
+function latToY(lat){const e=ext();return PAD + (1-(lat-e.latMin)/(e.latMax-e.latMin))*(H-2*PAD);}
+function xToLon(x){const e=ext();return e.lonMin + (x-PAD)/(W-2*PAD)*(e.lonMax-e.lonMin);}
+function yToLat(y){const e=ext();return e.latMin + (1-(y-PAD)/(H-2*PAD))*(e.latMax-e.latMin);}
+
+// ── Canvas ──────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('kaart');
+const ctx = canvas.getContext('2d');
+let geoData = null;
+let stationData = []; // [{naam, lat, lon, t, x, y}]
+
+function resize(){
+  const wrap = document.getElementById('kaart-wrap');
+  const maxW = wrap.clientWidth;
+  const maxH = wrap.clientHeight;
+  const e = ext();
+  const aspect = (e.lonMax-e.lonMin)/(e.latMax-e.latMin);
+  if(maxW/maxH > aspect){
+    H = maxH; W = Math.round(H*aspect);
+  } else {
+    W = maxW; H = Math.round(W/aspect);
+  }
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W*dpr;
+  canvas.height = H*dpr;
+  canvas.style.width = W+'px';
+  canvas.style.height = H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  teken();
+}
+
+// ── GeoJSON laden ───────────────────────────────────────────────────────────
+async function laadGeo(){
+  setStatus('<span class="spinner"></span> Kustlijnen laden...');
+  try {
+    // world-atlas 110m land polygons (TopoJSON)
+    const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json');
+    const topo = await resp.json();
+    // Converteer TopoJSON naar GeoJSON geometries
+    geoData = topoToGeo(topo, topo.objects.land);
+    setStatus('Kustlijnen geladen, temperaturen ophalen...');
+  } catch(e){
+    setStatus('Fout bij laden kustlijnen: '+e.message);
+  }
+}
+
+// Minimale TopoJSON decoder (alleen wat we nodig hebben)
+function topoToGeo(topology, object){
+  const arcs = topology.arcs;
+  const transform = topology.transform;
+  const scale = transform ? transform.scale : [1,1];
+  const translate = transform ? transform.translate : [0,0];
+
+  // Decodeer arc-coordinaten (delta-encoded)
+  function decodeArc(arcIdx){
+    const arc = arcs[arcIdx < 0 ? ~arcIdx : arcIdx];
+    const coords = [];
+    let x=0, y=0;
+    for(const [dx,dy] of arc){
+      x += dx; y += dy;
+      coords.push([x*scale[0]+translate[0], y*scale[1]+translate[1]]);
+    }
+    if(arcIdx < 0) coords.reverse();
+    return coords;
+  }
+
+  function decodeRing(indices){
+    let coords = [];
+    for(const idx of indices){
+      const arc = decodeArc(idx);
+      // Skip eerste punt als het aansluit op vorige
+      if(coords.length>0) arc.shift();
+      coords = coords.concat(arc);
+    }
+    return coords;
+  }
+
+  // Verwerk geometries
+  const polygons = [];
+  function processGeom(geom){
+    if(geom.type==='GeometryCollection'){
+      geom.geometries.forEach(processGeom);
+    } else if(geom.type==='Polygon'){
+      polygons.push(geom.arcs.map(decodeRing));
+    } else if(geom.type==='MultiPolygon'){
+      for(const poly of geom.arcs){
+        polygons.push(poly.map(decodeRing));
+      }
+    }
+  }
+  processGeom(object);
+  return polygons;
+}
+
+// ── Tekenen ─────────────────────────────────────────────────────────────────
+function teken(){
+  // Achtergrond (oceaan)
+  ctx.fillStyle = OCEAN;
+  ctx.fillRect(0, 0, W, H);
+
+  // Land tekenen
+  if(geoData){
+    ctx.fillStyle = LAND;
+    ctx.strokeStyle = KUST;
+    ctx.lineWidth = 0.6;
+    for(const polygon of geoData){
+      ctx.beginPath();
+      for(const ring of polygon){
+        let first = true;
+        for(const[lon,lat] of ring){
+          const x = lonToX(lon), y = latToY(lat);
+          if(first){ctx.moveTo(x,y);first=false;}
+          else ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // Graticule (lichte rasterlijnen)
+  const e = ext();
+  const lonStep = zoomGebied ? 2 : 10;
+  const latStep = zoomGebied ? 1 : 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for(let lon=Math.ceil(e.lonMin/lonStep)*lonStep;lon<=e.lonMax;lon+=lonStep){
+    ctx.beginPath();
+    ctx.moveTo(lonToX(lon),latToY(e.latMin));
+    ctx.lineTo(lonToX(lon),latToY(e.latMax));
+    ctx.stroke();
+  }
+  for(let lat=Math.ceil(e.latMin/latStep)*latStep;lat<=e.latMax;lat+=latStep){
+    ctx.beginPath();
+    ctx.moveTo(lonToX(e.lonMin),latToY(lat));
+    ctx.lineTo(lonToX(e.lonMax),latToY(lat));
+    ctx.stroke();
+  }
+
+  // Temperatuurlabels
+  tekenLabels();
+
+  // Zoom-rechthoek met vergrootglas (alleen op Europa-weergave)
+  if(!zoomGebied){
+    tekenZoomRect();
+  } else {
+    tekenTerugKnop();
+  }
+}
+
+// ── Zoom-rechthoek + vergrootglas ──────────────────────────────────────────
+let zoomRectBounds = null; // {x,y,w,h} in canvas px
+let terugKnopBounds = null;
+
+function tekenZoomRect(){
+  const x1 = lonToX(NOORDZEE.lonMin), x2 = lonToX(NOORDZEE.lonMax);
+  const y1 = latToY(NOORDZEE.latMax), y2 = latToY(NOORDZEE.latMin);
+  const rx = x1, ry = y1, rw = x2-x1, rh = y2-y1;
+  zoomRectBounds = {x:rx, y:ry, w:rw, h:rh};
+
+  // Stippellijn
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6,4]);
+  ctx.strokeRect(rx, ry, rw, rh);
+  ctx.setLineDash([]);
+
+  // Vergrootglas icoon rechtsonder in de rechthoek
+  const ix = rx + rw - 8, iy = ry + rh - 8;
+  const r = Math.min(10, rw/8);
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(ix - r*1.2, iy - r*1.2, r, 0, Math.PI*2);
+  ctx.stroke();
+  // Handvat
+  ctx.beginPath();
+  ctx.moveTo(ix - r*0.4, iy - r*0.4);
+  ctx.lineTo(ix + 2, iy + 2);
+  ctx.stroke();
+
+  // Label
+  ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Noordzee 🔍', rx + 6, ry + 4);
+}
+
+function tekenTerugKnop(){
+  const bw = 100, bh = 28, bx = 12, by = 12;
+  terugKnopBounds = {x:bx, y:by, w:bw, h:bh};
+
+  ctx.fillStyle = 'rgba(34,153,255,0.85)';
+  roundRect(ctx, bx, by, bw, bh, 6);
+  ctx.fill();
+
+  ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = 'white';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('← Europa', bx + bw/2, by + bh/2);
+}
+
+function tekenLabels(){
+  if(!stationData.length) return;
+
+  const e = ext();
+  const fontSize = zoomGebied ? Math.max(12, Math.min(15, W/55)) : Math.max(9, Math.min(12, W/85));
+  ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Filter stations op zichtbaar gebied (met marge)
+  const marge = zoomGebied ? 0.5 : 0;
+  const zichtbaar = stationData.filter(s =>
+    s.lon >= e.lonMin-marge && s.lon <= e.lonMax+marge &&
+    s.lat >= e.latMin-marge && s.lat <= e.latMax+marge
+  );
+
+  // Bereken posities en afmetingen
+  const labels = zichtbaar.map(s => {
+    const x = lonToX(s.lon);
+    const y = latToY(s.lat);
+    s.x = x; s.y = y;
+    const label = s.t.toFixed(1)+'°';
+    const tw = ctx.measureText(label).width;
+    const pw = tw + 8, ph = fontSize + 6;
+    return { s, x, y, label, pw, ph };
+  });
+
+  // Reset niet-zichtbare stations buiten beeld
+  stationData.filter(s => !zichtbaar.includes(s)).forEach(s => { s.x = -999; s.y = -999; });
+
+  // Simpele collision avoidance: verschuif overlappende labels
+  const passes = zoomGebied ? 8 : 4;
+  for(let pass=0;pass<passes;pass++){
+    for(let i=0;i<labels.length;i++){
+      for(let j=i+1;j<labels.length;j++){
+        const a=labels[i], b=labels[j];
+        const ox = (a.pw/2+b.pw/2) - Math.abs(a.x-b.x);
+        const oy = (a.ph/2+b.ph/2) - Math.abs(a.y-b.y);
+        if(ox>0 && oy>0){
+          // Verschuif uit elkaar
+          const dx = a.x-b.x||0.5, dy = a.y-b.y||0.5;
+          const len = Math.hypot(dx,dy)||1;
+          const push = Math.min(ox,oy)*0.55;
+          a.x += (dx/len)*push; a.y += (dy/len)*push;
+          b.x -= (dx/len)*push; b.y -= (dy/len)*push;
+        }
+      }
+    }
+  }
+
+  // Update stationData posities voor tooltip
+  labels.forEach(l => { l.s.x = l.x; l.s.y = l.y; });
+
+  // Teken labels
+  for(const {s, x, y, label, pw, ph} of labels){
+    const kleur = tempKleur(s.t);
+    const tkleur = tekstKleur(s.t);
+
+    ctx.fillStyle = kleur;
+    ctx.globalAlpha = 0.92;
+    roundRect(ctx, x-pw/2, y-ph/2, pw, ph, 5);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = tkleur;
+    ctx.fillText(label, x, y+0.5);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// ── Data ophalen ────────────────────────────────────────────────────────────
+async function laadData(){
+  const btn = document.getElementById('btn-laden');
+  btn.disabled = true; btn.textContent = 'Ophalen...';
+  setStatus('<span class="spinner"></span> Zeewatertemperaturen ophalen...');
+
+  const nu = new Date();
+  const beloftes = STATIONS.map(([naam,lat,lon]) =>
+    fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=sea_surface_temperature&timezone=Europe%2FAmsterdam&forecast_days=1&past_days=1`)
+      .then(r=>r.json())
+      .then(d=>{
+        const times = d?.hourly?.time || [];
+        const temps = d?.hourly?.sea_surface_temperature || [];
+        // Meest recente uur dat <= nu is en een geldige waarde heeft
+        let t = null;
+        for(let i=times.length-1;i>=0;i--){
+          if(temps[i]!=null && new Date(times[i])<=nu){ t=temps[i]; break; }
+        }
+        return {naam, lat, lon, t};
+      })
+      .catch(()=>({naam, lat, lon, t:null}))
+  );
+
+  const res = await Promise.all(beloftes);
+  stationData = res.filter(r=>r.t!=null).map(r=>({...r, x:0, y:0}));
+
+  const nuTxt = nu.toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  setStatus(`${stationData.length} meetpunten geladen · ${nuTxt}`);
+  btn.disabled = false; btn.textContent = '\u21BB Vernieuwen';
+  teken();
+}
+
+function setStatus(html){document.getElementById('status-tekst').innerHTML=html;}
+
+// ── Kustbericht ─────────────────────────────────────────────────────────────
+// Per kustregio: bijbehorende meetpunten (voor zeewatertemperatuur), een
+// representatief golfpunt vlak voor de kust (Noordzee-zijde) en de
+// kompasrichting van strand naar open zee (voor aflandige-windbepaling).
+const KUST_REGIOS = [
+  {naam:'Waddeneilanden',  stations:['Texel','Terschelling','Ameland','Schiermonnikoog'], golf:{lat:53.50, lon:5.20}, zee:0},
+  {naam:'Noord-Holland',   stations:['Den Helder','IJmuiden'],                            golf:{lat:52.60, lon:4.50}, zee:280},
+  {naam:'Zuid-Holland',    stations:['Katwijk','Hoek van Holland'],                       golf:{lat:52.12, lon:4.15}, zee:300},
+  {naam:'Zeeland',         stations:['Vlissingen'],                                       golf:{lat:51.55, lon:3.35}, zee:300},
+];
+
+// Representatieve punten om de windopbouw over de lengte van de Noordzee
+// zichtbaar te maken. De berekende golfhoogte zelf komt uit het golfmodel;
+// deze punten zijn alleen extra context en worden niet bij de golf opgeteld.
+const NOORDZEE_WINDPUNTEN = [
+  {naam:'Zuid-Noorwegen',       lat:58.00, lon:5.00},
+  {naam:'Noordelijke Noordzee', lat:56.50, lon:4.00},
+  {naam:'Doggersbank',          lat:55.25, lon:3.25},
+  {naam:'Centrale Noordzee',    lat:54.25, lon:4.25},
+];
+
+let golfCache = null; // {sleutel, dagen, golven:{regionaam:[...]}, noordzeeWind:[...]}
+
+function nlGetal(x, dec=1){return x==null ? '–' : x.toFixed(dec).replace('.', ',');}
+
+const WINDSTREKEN = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+function windStreek(gr){return WINDSTREKEN[Math.round(((gr%360)+360)%360/22.5)%16];}
+
+function uurTekst(tijd){
+  if(!tijd || tijd.length < 13) return '';
+  return String(parseInt(tijd.slice(11,13),10)).padStart(2,'0') + ' uur';
+}
+
+function stroomNaarMs(waarde, eenheid){
+  if(waarde==null) return null;
+  if(eenheid === 'km/h') return waarde / 3.6;
+  if(eenheid === 'kn') return waarde * 0.514444;
+  return waarde;
+}
+
+function maxInVenster(times, waarden, datum, vanaf=9, tot=18){
+  let waarde = null, index = -1;
+  for(let i=0;i<times.length;i++){
+    if(!times[i]?.startsWith(datum)) continue;
+    const uur = parseInt(times[i].slice(11,13),10);
+    if(uur < vanaf || uur > tot || waarden[i]==null) continue;
+    if(waarde==null || waarden[i] > waarde){waarde=waarden[i];index=i;}
+  }
+  return {waarde,index};
+}
+
+// Beaufort uit m/s (officiële KNMI-grenzen)
+const BFT_GRENZEN = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+function msNaarBft(ms){let b=0;for(const g of BFT_GRENZEN){if(ms>=g)b++;else break;}return b;}
+
+// Kleinste hoekverschil tussen twee kompasrichtingen
+function hoekVerschil(a,b){const d=Math.abs(((a-b)%360+360)%360);return Math.min(d,360-d);}
+
+// Golfvensters: 09–18 uur vandaag, morgen en overmorgen. Na 18 uur is het
+// dagvenster van vandaag voorbij en begint het overzicht bij morgen.
+function golfVensters(){
+  const nu = new Date();
+  const uurNu = parseInt(nu.toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hour12:false}),10);
+  const eersteOffset = uurNu >= 18 ? 1 : 0;
+  const labels = ['vandaag','morgen','overmorgen'];
+  const dagen = [];
+  for(let offset=eersteOffset;offset<=2;offset++){
+    const doel = new Date(nu);
+    doel.setDate(doel.getDate()+offset);
+    dagen.push({
+      datum: doel.toLocaleDateString('sv-SE',{timeZone:'Europe/Amsterdam'}), // YYYY-MM-DD
+      dagLabel: labels[offset] + ' (' +
+        doel.toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam',day:'numeric',month:'long'}) + ')'
+    });
+  }
+  return dagen;
+}
+
+async function haalNoordzeeWind(dagen){
+  const fallback = dagen.map(dag=>({...dag,ms:null,bft:null,richting:null,punt:null}));
+  try{
+    const lat = NOORDZEE_WINDPUNTEN.map(p=>p.lat).join(',');
+    const lon = NOORDZEE_WINDPUNTEN.map(p=>p.lon).join(',');
+    const resp = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&cell_selection=nearest&timezone=Europe%2FAmsterdam&forecast_days=3`);
+    if(!resp.ok) throw new Error('Noordzee-wind niet beschikbaar');
+    const antwoord = await resp.json();
+    const reeksen = Array.isArray(antwoord) ? antwoord : [antwoord];
+
+    return dagen.map(dag=>{
+      let maxMs = null, richting = null, punt = null, tijd = null;
+      reeksen.forEach((reeks,puntIndex)=>{
+        const times = reeks?.hourly?.time || [];
+        const snelheden = reeks?.hourly?.wind_speed_10m || [];
+        const richtingen = reeks?.hourly?.wind_direction_10m || [];
+        const maximum = maxInVenster(times,snelheden,dag.datum,0,23);
+        if(maximum.waarde!=null && (maxMs==null || maximum.waarde > maxMs)){
+          maxMs = maximum.waarde;
+          richting = richtingen[maximum.index] ?? null;
+          punt = NOORDZEE_WINDPUNTEN[puntIndex]?.naam || 'Noordzee';
+          tijd = times[maximum.index] || null;
+        }
+      });
+      return {...dag,ms:maxMs,bft:maxMs==null?null:msNaarBft(maxMs),
+        richting:richting==null?null:windStreek(richting),punt,tijd};
+    });
+  }catch(_){
+    return fallback;
+  }
+}
+
+async function haalGolven(){
+  const dagen = golfVensters();
+  const sleutel = dagen.map(d=>d.datum).join('|');
+  if(golfCache && golfCache.sleutel === sleutel) return golfCache;
+
+  const beloftes = KUST_REGIOS.map(r =>
+    Promise.all([
+      fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${r.golf.lat}&longitude=${r.golf.lon}&hourly=wave_height,wave_direction,wave_period,wind_wave_height,wind_wave_direction,swell_wave_height,swell_wave_direction,swell_wave_period,ocean_current_velocity,ocean_current_direction&timezone=Europe%2FAmsterdam&forecast_days=3`).then(resp=>resp.json()),
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${r.golf.lat}&longitude=${r.golf.lon}&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=Europe%2FAmsterdam&forecast_days=3`).then(resp=>resp.json()),
+    ])
+      .then(([zee, weer])=>{
+        const times = zee?.hourly?.time || [];
+        const golven = zee?.hourly?.wave_height || [];
+        const golfRichtingen = zee?.hourly?.wave_direction || [];
+        const golfPeriodes = zee?.hourly?.wave_period || [];
+        const windzee = zee?.hourly?.wind_wave_height || [];
+        const windzeeRichtingen = zee?.hourly?.wind_wave_direction || [];
+        const deining = zee?.hourly?.swell_wave_height || [];
+        const deiningRichtingen = zee?.hourly?.swell_wave_direction || [];
+        const deiningPeriodes = zee?.hourly?.swell_wave_period || [];
+        const stroming = zee?.hourly?.ocean_current_velocity || [];
+        const stromingRichtingen = zee?.hourly?.ocean_current_direction || [];
+        const stromingEenheid = zee?.hourly_units?.ocean_current_velocity || 'km/h';
+        const wTimes = weer?.hourly?.time || [];
+        const wSnelheid = weer?.hourly?.wind_speed_10m || [];
+        const wRichting = weer?.hourly?.wind_direction_10m || [];
+        const landzijde = (r.zee + 180) % 360;
+
+        const perDag = dagen.map(dag=>{
+          const golfMax = maxInVenster(times,golven,dag.datum);
+          const windzeeMax = maxInVenster(times,windzee,dag.datum);
+          const deiningMax = maxInVenster(times,deining,dag.datum);
+          const stromingMax = maxInVenster(times,stroming,dag.datum);
+
+          // Aflandige wind in hetzelfde venster: wind uit de landzijde
+          // (>= 4 Bft gedurende minstens 3 uur), het oranje-vlag-criterium
+          let aflandigeUren = 0, maxMs = null, richtingBijMax = null;
+          for(let i=0;i<wTimes.length;i++){
+            if(!wTimes[i].startsWith(dag.datum)) continue;
+            const uur = parseInt(wTimes[i].slice(11,13),10);
+            if(uur < 9 || uur > 18 || wSnelheid[i]==null || wRichting[i]==null) continue;
+            const aflandigUur = hoekVerschil(wRichting[i], landzijde) <= 67.5;
+            if(aflandigUur && msNaarBft(wSnelheid[i]) >= 4){
+              aflandigeUren++;
+              if(maxMs==null || wSnelheid[i] > maxMs){ maxMs = wSnelheid[i]; richtingBijMax = wRichting[i]; }
+            }
+          }
+          const aflandig = aflandigeUren >= 3;
+          return {...dag,
+            golf:golfMax.waarde,
+            golfRichting:golfMax.index<0?null:golfRichtingen[golfMax.index] ?? null,
+            golfPeriode:golfMax.index<0?null:golfPeriodes[golfMax.index] ?? null,
+            windzee:windzeeMax.waarde,
+            windzeeRichting:windzeeMax.index<0?null:windzeeRichtingen[windzeeMax.index] ?? null,
+            deining:deiningMax.waarde,
+            deiningRichting:deiningMax.index<0?null:deiningRichtingen[deiningMax.index] ?? null,
+            deiningPeriode:deiningMax.index<0?null:deiningPeriodes[deiningMax.index] ?? null,
+            stroming:stroomNaarMs(stromingMax.waarde,stromingEenheid),
+            stromingRichting:stromingMax.index<0?null:stromingRichtingen[stromingMax.index] ?? null,
+            stromingTijd:stromingMax.index<0?null:times[stromingMax.index] || null,
+            aflandig,bft:aflandig?msNaarBft(maxMs):null,
+            richting:aflandig?windStreek(richtingBijMax):null};
+        });
+        return [r.naam, perDag];
+      })
+      .catch(()=>[r.naam, dagen.map(dag=>({...dag,golf:null,aflandig:false,bft:null,richting:null}))])
+  );
+
+  const [res,noordzeeWind] = await Promise.all([Promise.all(beloftes),haalNoordzeeWind(dagen)]);
+  golfCache = {sleutel,dagen,golven:Object.fromEntries(res),noordzeeWind};
+  return golfCache;
+}
+
+// Mui-advies op basis van maximale golfhoogte (vuistregel: bij hogere golven
+// staat er meer water tegen het strand en worden retourstromen krachtiger)
+function muiAdvies(maxGolf){
+  if(maxGolf==null) return {niveau:1, kop:'Geen golfgegevens',
+    tekst:'Golfgegevens zijn nu niet beschikbaar. Zwem alleen bij bewaakte stranden en volg aanwijzingen van de reddingsbrigade.'};
+  if(maxGolf < 0.6) return {niveau:0, kop:'Weinig kans op sterke muien',
+    tekst:'Bij deze rustige zee zijn muien zwak. Blijf wel opletten bij strandhoofden en openingen tussen zandbanken, daar kan altijd stroming staan.'};
+  if(maxGolf < 1.2) return {niveau:1, kop:'Muien mogelijk',
+    tekst:'Bij deze golfhoogte kunnen muien voorkomen, vooral rond strandhoofden en openingen in zandbanken. Zwem bij een bewaakt strand en houd kinderen in de gaten.'};
+  return {niveau:2, kop:'Verhoogde kans op krachtige muien',
+    tekst:'Bij deze golfhoogte ontstaan sterke retourstromen. Zwemmen in zee wordt afgeraden; ga in ieder geval niet verder dan kniediep en alleen bij bewaakt strand.'};
+}
+
+function regioTemp(regio){
+  const temps = stationData.filter(s=>regio.stations.includes(s.naam)).map(s=>s.t);
+  if(!temps.length) return null;
+  return {min:Math.min(...temps), max:Math.max(...temps)};
+}
+
+function sterksteDeiningLangsKust(golven,datum){
+  let beste = null;
+  for(const [regio,reeks] of Object.entries(golven)){
+    const dag = reeks.find(d=>d.datum===datum);
+    if(dag?.deining==null) continue;
+    if(!beste || dag.deining > beste.deining) beste = {...dag,regio};
+  }
+  return beste;
+}
+
+async function toonBericht(){
+  const overlay = document.getElementById('bericht-overlay');
+  const inhoud = document.getElementById('bericht-inhoud');
+  overlay.classList.add('open');
+  inhoud.innerHTML = '<p><span class="spinner"></span> Bericht wordt opgesteld...</p>';
+
+  if(!stationData.length) await laadData();
+  const {dagen, golven, noordzeeWind} = await haalGolven();
+  const hoofdDag = dagen[0];
+
+  let zwaarste = null, ergensAflandig = false;
+  let html = '<h3>Aanvoer over de Noordzee</h3><div class="noordzee-aanvoer">';
+  for(const dag of dagen){
+    const wind = noordzeeWind.find(w=>w.datum===dag.datum);
+    const deining = sterksteDeiningLangsKust(golven,dag.datum);
+    const windTxt = wind?.bft==null ? 'windgegevens niet beschikbaar'
+      : `${wind.richting} ${wind.bft} Bft bij ${wind.punt}${wind.tijd?' rond '+uurTekst(wind.tijd):''}`;
+    const deiningTxt = deining==null ? 'deining niet beschikbaar'
+      : `${nlGetal(deining.deining)} m uit ${deining.deiningRichting==null?'onbekende richting':windStreek(deining.deiningRichting)}` +
+        `${deining.deiningPeriode==null?'':' · '+nlGetal(deining.deiningPeriode)+' s'} (${deining.regio})`;
+    html += `<div class="noordzee-dag"><b class="noordzee-dag-label">${dag.dagLabel}</b>`;
+    html += `<span class="noordzee-wind">Wind op zee: ${windTxt}</span>`;
+    html += `<span class="noordzee-deining">Sterkste kustdeining: ${deiningTxt}</span></div>`;
+  }
+  html += `</div><p class="zee-uitleg">Deining is golfenergie die elders op de Noordzee is ontstaan. Wind op zee is de sterkste uurwind op vier representatieve punten; deze wordt niet nogmaals bij de berekende golfhoogte opgeteld.</p>`;
+
+  for(const regio of KUST_REGIOS){
+    const t = regioTemp(regio);
+    const dagGolven = golven[regio.naam] || [];
+    const hoofd = dagGolven[0] || {golf:null, aflandig:false};
+    const advies = muiAdvies(hoofd.golf);
+    if(!zwaarste || advies.niveau > zwaarste.niveau) zwaarste = advies;
+    if(hoofd.aflandig) ergensAflandig = true;
+
+    const tempTxt = t==null ? 'geen gegevens'
+      : (Math.abs(t.max-t.min) < 0.15 ? `${nlGetal(t.min)} °C` : `${nlGetal(t.min)} tot ${nlGetal(t.max)} °C`);
+    html += `<h3>${regio.naam}</h3>`;
+    html += `<p>Zeewater: <b>${tempTxt}</b>.</p>`;
+    html += `<div class="golf-dagen"><div class="golf-dagen-kop">Maximale golfhoogte tussen 09 en 18 uur</div>`;
+    for(const g of dagGolven){
+      html += `<div class="golf-dag"><span class="golf-dag-label">${g.dagLabel}</span><b class="golf-dag-waarde">${g.golf==null?'geen gegevens':nlGetal(g.golf)+' m'}</b>`;
+      const componenten = [];
+      if(g.windzee!=null) componenten.push(`Windzee max ${nlGetal(g.windzee)} m${g.windzeeRichting==null?'':' uit '+windStreek(g.windzeeRichting)}`);
+      if(g.deining!=null) componenten.push(`Deining max ${nlGetal(g.deining)} m${g.deiningRichting==null?'':' uit '+windStreek(g.deiningRichting)}${g.deiningPeriode==null?'':' · '+nlGetal(g.deiningPeriode)+' s'}`);
+      if(componenten.length) html += `<span class="golf-dag-details"><span>${componenten.join('</span><span>')}</span></span>`;
+      if(g.stroming!=null) html += `<span class="golf-dag-details golf-dag-stroming">Stroming max ${nlGetal(g.stroming)} m/s${g.stromingRichting==null?'':' naar '+windStreek(g.stromingRichting)}${g.stromingTijd?' rond '+uurTekst(g.stromingTijd):''}</span>`;
+      if(g.aflandig) html += `<span class="golf-dag-wind"><b>Aflandige wind</b> (${g.richting}, ${g.bft} Bft): pas op met luchtbedden en opblaasbanden.</span>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Aflandige wind ergens langs de kust: minstens niveau "let op" (oranje)
+  if(ergensAflandig && zwaarste.niveau < 1) zwaarste = {niveau:1, kop:'Let op: aflandige wind', tekst:zwaarste.tekst};
+
+  html += `<h3>Muien</h3>`;
+  html += `<div class="mui-${zwaarste.niveau}"><b>${zwaarste.kop}.</b> ${zwaarste.tekst}`;
+  if(ergensAflandig) html += ` Er staat ${hoofdDag.dagLabel.split(' ')[0]} aflandige wind: ga niet met een luchtbed of opblaasband de zee op.`;
+  html += `</div>`;
+  html += `<p>Een mui is een sterke stroom zeewaarts door een opening tussen zandbanken, vaak herkenbaar als een rustig ogende, donkere baan tussen de brekende golven. Kom je in een mui terecht: zwem niet tegen de stroom in, maar evenwijdig aan het strand tot je uit de stroming bent, en zwaai om hulp als dat niet lukt. <a href="https://www.reddingsbrigade.nl/wij/wat-wij-doen/voorlichting/muien/" target="_blank" rel="noopener">Meer over muien (Reddingsbrigade)</a>.</p>`;
+
+  const nuTxt = new Date().toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  html += `<p class="bron">Opgesteld ${nuTxt} · golven, deining en stroming: Open-Meteo Marine API · offshore wind: Open-Meteo Forecast API. Stroming is modeldata op circa 8 km en niet geschikt voor navigatie of directe voorspelling van muien. Windzee en deining zijn componenten en tellen niet lineair op. Mui-indicatie is een vuistregel op basis van golfhoogte, geen officiële waarschuwing. Volg altijd de aanwijzingen van de reddingsbrigade.</p>`;
+
+  inhoud.innerHTML = html;
+}
+
+function sluitBericht(){
+  document.getElementById('bericht-overlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') sluitBericht(); });
+
+// ── Tooltip ─────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+
+function inRect(mx, my, b){
+  return b && mx>=b.x && mx<=b.x+b.w && my>=b.y && my<=b.y+b.h;
+}
+
+canvas.addEventListener('mousemove', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // Check zoom-rect hover
+  if(!zoomGebied && inRect(mx,my,zoomRectBounds)){
+    tooltip.style.display='none';
+    canvas.style.cursor='pointer';
+    return;
+  }
+  // Check terug-knop hover
+  if(zoomGebied && inRect(mx,my,terugKnopBounds)){
+    tooltip.style.display='none';
+    canvas.style.cursor='pointer';
+    return;
+  }
+
+  let gevonden = null;
+  let minDist = zoomGebied ? 24 : 18;
+  for(const s of stationData){
+    if(s.x < -900) continue;
+    const d = Math.hypot(s.x-mx, s.y-my);
+    if(d<minDist){minDist=d;gevonden=s;}
+  }
+  if(gevonden){
+    tooltip.style.display='block';
+    tooltip.style.left=(e.clientX+14)+'px';
+    tooltip.style.top=(e.clientY-10)+'px';
+    tooltip.querySelector('.tt-naam').textContent=gevonden.naam;
+    tooltip.querySelector('.tt-temp').textContent=gevonden.t.toFixed(1)+' °C';
+    tooltip.querySelector('.tt-temp').style.color=tempKleur(gevonden.t);
+    tooltip.querySelector('.tt-coord').textContent=
+      `${gevonden.lat.toFixed(2)}°N  ${gevonden.lon.toFixed(2)}°${gevonden.lon>=0?'E':'W'}`;
+    canvas.style.cursor='pointer';
+  } else {
+    tooltip.style.display='none';
+    canvas.style.cursor='default';
+  }
+});
+
+canvas.addEventListener('click', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if(!zoomGebied && inRect(mx,my,zoomRectBounds)){
+    zoomGebied = NOORDZEE;
+    tooltip.style.display='none';
+    resize();
+    return;
+  }
+  if(zoomGebied && inRect(mx,my,terugKnopBounds)){
+    zoomGebied = null;
+    tooltip.style.display='none';
+    resize();
+    return;
+  }
+});
+
+canvas.addEventListener('mouseleave', ()=>{
+  tooltip.style.display='none';
+});
+
+// ── Legenda gradient ────────────────────────────────────────────────────────
+function tekenLegenda(){
+  const c = document.getElementById('legenda');
+  const lctx = c.getContext('2d');
+  const grad = lctx.createLinearGradient(0,0,200,0);
+  for(const[t,kleur] of KLEUR_STOPS){
+    grad.addColorStop(t/30, kleur);
+  }
+  lctx.fillStyle = grad;
+  lctx.beginPath();
+  lctx.roundRect(0,0,200,12,4);
+  lctx.fill();
+}
+
+// ── Klok ────────────────────────────────────────────────────────────────────
+function updateKlok(){
+  document.getElementById('klok').textContent=
+    new Date().toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+async function init(){
+  updateKlok(); setInterval(updateKlok, 30000);
+  tekenLegenda();
+  await laadGeo();
+  resize();
+  await laadData();
+}
+
+window.addEventListener('resize', resize);
+window.addEventListener('load', init);
+</script>
+</body>
+</html>

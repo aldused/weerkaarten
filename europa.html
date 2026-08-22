@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Europa — actuele waarnemingen · weerlab</title>
+<script>
+  // Forceer dat de pagina altijd binnen het weerlab.nl-frame draait
+  if (window.top === window.self) {
+    window.location.replace("index.html#europa");
+  }
+</script>
+<link rel="stylesheet" href="weerlab_design_tokens.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin:0; padding:0; height:100%; background:var(--wl-color-background); font:var(--wl-text-body-md); color:var(--wl-color-text); }
+  .app { display:grid; grid-template-rows:auto 1fr; height:100vh; }
+  header {
+    background:var(--wl-color-surface);
+    border-bottom:1px solid var(--wl-color-border);
+    padding:10px 16px;
+    display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+  }
+  h1 { margin:0; font:var(--wl-text-headline-md); color:var(--wl-color-primary); }
+  .meta { color:var(--wl-color-text-muted); font:var(--wl-text-body-sm); }
+  .obs-time { font-weight:600; color:var(--wl-color-text); }
+  .var-tabs { display:flex; gap:4px; margin-left:auto; }
+  .var-tabs button {
+    background:var(--wl-color-surface-muted); border:1px solid var(--wl-color-border);
+    color:var(--wl-color-text); padding:6px 12px; border-radius:var(--wl-radius-md);
+    font:var(--wl-text-label-md); cursor:pointer;
+  }
+  .var-tabs button:hover { background:var(--wl-color-primary-soft); }
+  .var-tabs button.active { background:var(--wl-color-primary); color:#fff; border-color:var(--wl-color-primary); }
+
+  /* Kaart in huisstijl: geen tegels, eigen palet */
+  #map { width:100%; height:100%; background:#dde6f1; }
+  .leaflet-container { background:#dde6f1; outline:none; }
+  .leaflet-control-attribution { background:rgba(255,255,255,.85); font:11px var(--wl-font-sans); color:var(--wl-color-text-muted); }
+  .leaflet-control-zoom a { background:var(--wl-color-surface); color:var(--wl-color-primary); border-color:var(--wl-color-border) !important; }
+
+  /* Stationslabels */
+  .obs-label {
+    font:600 11.5px/1 var(--wl-font-mono);
+    color:#fff;
+    text-shadow: 0 0 2px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.85);
+    white-space:nowrap;
+    cursor:pointer;
+    text-align:center;
+    transform: translate(-50%, -50%);
+    transition: transform .08s ease, box-shadow .08s ease;
+    box-shadow: 0 1px 2px rgba(15,23,42,.25);
+    padding:2px 4px;
+    border-radius:3px;
+  }
+  .obs-label:hover { transform: translate(-50%, -50%) scale(1.2); box-shadow: 0 2px 8px rgba(15,23,42,.45); z-index:1000; }
+  .obs-label.muted { color:rgba(255,255,255,.7); }
+
+  /* Popup */
+  .leaflet-popup-content-wrapper { border-radius:var(--wl-radius-md); box-shadow:var(--wl-shadow-3); }
+  .leaflet-popup-content { font:var(--wl-text-body-sm); margin:10px 14px; min-width:200px; }
+  .leaflet-popup-content h3 { margin:0 0 2px 0; font:var(--wl-text-headline-md); color:var(--wl-color-primary); }
+  .leaflet-popup-content .sub { color:var(--wl-color-text-muted); font:var(--wl-text-body-sm); margin-bottom:8px; }
+  .leaflet-popup-content table { border-collapse:collapse; font:var(--wl-text-data-sm); width:100%; }
+  .leaflet-popup-content td { padding:2px 0; }
+  .leaflet-popup-content td:last-child { text-align:right; font-weight:600; color:var(--wl-color-text); }
+  .leaflet-popup-content .ts { color:var(--wl-color-text-muted); margin-top:8px; padding-top:6px; border-top:1px solid var(--wl-color-border); font:var(--wl-text-body-sm); }
+  .leaflet-popup-content .raw { color:var(--wl-color-text-soft); font:11px var(--wl-font-mono); margin-top:4px; word-break:break-all; }
+
+  /* Legenda */
+  .legend {
+    position:absolute; bottom:16px; left:16px; z-index:500;
+    background:var(--wl-color-surface); border:1px solid var(--wl-color-border);
+    border-radius:var(--wl-radius-md); padding:10px 12px; box-shadow:var(--wl-shadow-2);
+    font:var(--wl-text-body-sm); min-width:240px;
+  }
+  .legend strong { color:var(--wl-color-primary); }
+  .legend .scale { display:flex; height:10px; width:260px; margin-top:6px; border-radius:3px; overflow:hidden; }
+  .legend .scale span { flex:1; }
+  .legend .ticks { display:flex; justify-content:space-between; font:var(--wl-text-data-sm); color:var(--wl-color-text-muted); margin-top:2px; }
+
+  .info {
+    position:absolute; top:16px; right:16px; z-index:500;
+    background:var(--wl-color-surface); border:1px solid var(--wl-color-border);
+    border-radius:var(--wl-radius-md); padding:8px 12px; max-width:300px;
+    font:var(--wl-text-body-sm); color:var(--wl-color-text-muted);
+    box-shadow:var(--wl-shadow-1);
+  }
+  .info b { color:var(--wl-color-text); }
+
+  .loader {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:600;
+    background:var(--wl-color-surface); border:1px solid var(--wl-color-border);
+    padding:12px 18px; border-radius:var(--wl-radius-md); box-shadow:var(--wl-shadow-2);
+    font:var(--wl-text-label-md); color:var(--wl-color-text-muted);
+  }
+  @media (max-width:600px){
+    header{padding:8px 10px;gap:8px}
+    h1{font-size:13px}
+    .var-tabs{flex-wrap:wrap;margin-left:0;gap:3px}
+    .var-tabs button{padding:4px 8px;font-size:11px}
+    .meta{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Europa — actuele waarnemingen</h1>
+    <span class="meta" id="src-info">METAR + SYNOP</span>
+    <span class="meta obs-time" id="obs-time">laden…</span>
+    <div class="var-tabs" id="vartabs">
+      <button data-var="t"   class="active">Temperatuur</button>
+      <button data-var="td">Dauwpunt</button>
+      <button data-var="wkn">Wind</button>
+      <button data-var="p">Druk</button>
+      <button data-var="rr1">Neerslag 1u</button>
+      <button data-var="rr24">Neerslag 24u</button>
+    </div>
+  </header>
+  <div style="position:relative">
+    <div id="map"></div>
+    <div class="loader" id="loader">Waarnemingen laden…</div>
+    <div class="info" id="info"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ───────────────────────────────────────────────────────────── Kleurschalen
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rgb=(r,g,b)=>`rgb(${r|0},${g|0},${b|0})`;
+function tempColor(v){
+  const stops=[
+    [-15,80,0,120],[-5,60,80,200],[0,80,170,230],[5,140,200,210],
+    [10,120,200,140],[15,220,210,90],[20,240,160,50],[25,225,80,50],
+    [30,180,30,30],[38,120,0,40]];
+  if(v<=stops[0][0]) return rgb(stops[0][1],stops[0][2],stops[0][3]);
+  if(v>=stops.at(-1)[0]) return rgb(...stops.at(-1).slice(1));
+  for(let i=0;i<stops.length-1;i++){
+    const [x1,r1,g1,b1]=stops[i],[x2,r2,g2,b2]=stops[i+1];
+    if(v>=x1&&v<=x2){const t=(v-x1)/(x2-x1);return rgb(lerp(r1,r2,t),lerp(g1,g2,t),lerp(b1,b2,t));}
+  }
+}
+function windColor(kn){
+  if(kn==null) return '#888';
+  if(kn<6)return '#94a3b8';
+  if(kn<12)return '#1d4ed8';
+  if(kn<20)return '#10b981';
+  if(kn<30)return '#e6b800';
+  if(kn<40)return '#e07000';
+  return '#cc0000';
+}
+function pColor(v){
+  if(v==null) return '#888';
+  if(v<1000)return '#6d28d9';
+  if(v<1010)return '#1d4ed8';
+  if(v<1015)return '#3a8fdc';
+  if(v<1020)return '#475569';
+  if(v<1025)return '#cc7000';
+  return '#cc0000';
+}
+function rrColor(v){
+  if(v==null) return '#888';
+  if(v<=0.05) return '#94a3b8';
+  if(v<1)   return '#7ec8e3';
+  if(v<3)   return '#3a8fdc';
+  if(v<8)   return '#1d4ed8';
+  if(v<15)  return '#6d28d9';
+  if(v<30)  return '#cc0000';
+  return '#7a0000';
+}
+
+// ───────────────────────────────────────────────────────────── Map
+const map = L.map('map', {
+  preferCanvas:true, worldCopyJump:false, minZoom:3, maxZoom:9,
+  zoomControl:true, attributionControl:true,
+}).setView([50, 12], 5);
+map.attributionControl.setPrefix('weerlab.nl');
+
+// Huisstijl-basemap: alleen landgrenzen uit Natural Earth
+fetch('data/europa_landen.geojson')
+  .then(r=>r.json())
+  .then(geo=>{
+    L.geoJSON(geo, {
+      style: {
+        fillColor: '#f6f8fb',
+        fillOpacity: 1,
+        color: '#94a3b8',
+        weight: 0.6,
+        opacity: 0.9,
+      },
+      interactive: false,
+      smoothFactor: 0.8,
+    }).addTo(map);
+  })
+  .catch(e=>console.warn('basemap geojson:', e));
+
+// ───────────────────────────────────────────────────────────── Data laden
+let STATIONS = [];
+let META = {};
+const labelLayer = L.layerGroup().addTo(map);
+let currentVar = 't';
+
+function degToCompass(d){
+  if(d==null) return '–';
+  const dirs=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+  return dirs[Math.round(d/22.5)%16];
+}
+function knToBft(kn){
+  if(kn==null) return null;
+  const ms = kn * 0.5144;
+  const grenzen = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+  for(let i=0;i<grenzen.length;i++) if(ms<grenzen[i]) return i;
+  return 12;
+}
+function fmtObsTime(iso){
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getUTCDate())}-${pad(d.getUTCMonth()+1)} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+}
+
+function valueOf(s){
+  switch(currentVar){
+    case 't':    return s.t  != null ? [s.t.toFixed(0),  tempColor(s.t)]  : null;
+    case 'td':   return s.td != null ? [s.td.toFixed(0), tempColor(s.td)] : null;
+    case 'wkn':  return s.wkn!= null ? [String(s.wkn),   windColor(s.wkn)] : null;
+    case 'p':    return s.p  != null ? [(s.p-1000).toFixed(0), pColor(s.p)] : null;
+    case 'rr1': {
+      if(s.src!=='SYNOP') return null;
+      const v = s.rr1 ?? 0;
+      return [v<0.05?'.':v.toFixed(v<10?1:0), rrColor(v)];
+    }
+    case 'rr24': {
+      if(s.src!=='SYNOP') return null;
+      const v = s.rr24 ?? 0;
+      return [v<0.05?'.':v.toFixed(v<10?1:0), rrColor(v)];
+    }
+  }
+}
+
+function popupHtml(s){
+  const wb = knToBft(s.wkn);
+  return `<h3>${s.naam || s.id}</h3>
+    <div class="sub">${s.id} · ${s.lat.toFixed(2)}, ${s.lon.toFixed(2)}</div>
+    <table>
+      <tr><td>Temperatuur</td><td>${s.t!=null ? s.t.toFixed(1)+' °C' : '–'}</td></tr>
+      <tr><td>Dauwpunt</td><td>${s.td!=null ? s.td.toFixed(1)+' °C' : '–'}</td></tr>
+      <tr><td>Wind</td><td>${s.wkn!=null ? `${degToCompass(s.wdir)} ${s.wkn} kn (${wb} Bft)` : '–'}</td></tr>
+      <tr><td>Druk</td><td>${s.p!=null ? s.p.toFixed(1)+' hPa' : '–'}</td></tr>
+      <tr><td>Zicht</td><td>${s.vis ?? '–'}</td></tr>
+      ${s.rr1 !=null ? `<tr><td>Neerslag 1u</td><td>${s.rr1.toFixed(1)} mm</td></tr>` : ''}
+      ${s.rr3 !=null ? `<tr><td>Neerslag 3u</td><td>${s.rr3.toFixed(1)} mm</td></tr>` : ''}
+      ${s.rr24!=null ? `<tr><td>Neerslag 24u</td><td>${s.rr24.toFixed(1)} mm</td></tr>` : ''}
+      ${s.wx ? `<tr><td>Weer (code)</td><td>${s.wx}</td></tr>` : ''}
+    </table>
+    <div class="ts">Waarneming: ${fmtObsTime(s.ts)} · bron ${s.src}</div>`;
+}
+
+function render(){
+  labelLayer.clearLayers();
+  const z = map.getZoom();
+  const bounds = map.getBounds().pad(0.1);
+  const padPx = z<=4 ? 22 : (z<=5 ? 16 : (z<=6 ? 11 : 6));
+
+  // Sorteer: hoogste/laagste eerst (extreme waarden krijgen voorrang bij decluttering)
+  const inView = STATIONS
+    .filter(s => bounds.contains([s.lat, s.lon]) && valueOf(s));
+  const ranked = inView.map(s=>{
+    let v;
+    if(currentVar==='wkn')        v = s.wkn ?? 0;
+    else if(currentVar==='p')     v = Math.abs((s.p ?? 1013) - 1013);
+    else if(currentVar==='rr1')   v = (s.rr1 ?? 0) * 4;          // neerslag voorrang
+    else if(currentVar==='rr24')  v = (s.rr24 ?? 0);
+    else                          v = Math.abs((currentVar==='t' ? s.t : s.td) - 12);
+    return {s, score: v};
+  }).sort((a,b)=> b.score - a.score);
+
+  const placed = [];
+  for(const {s} of ranked){
+    const [text, color] = valueOf(s);
+    const pt = map.latLngToContainerPoint([s.lat, s.lon]);
+    const w = text.length*7 + padPx, h = 14 + padPx;
+    let collide = false;
+    for(const [x,y,wW,hH] of placed){
+      if(Math.abs(pt.x-x) < (w+wW)/2 && Math.abs(pt.y-y) < (h+hH)/2){ collide=true; break; }
+    }
+    if(collide) continue;
+    placed.push([pt.x, pt.y, w, h]);
+
+    const icon = L.divIcon({
+      className:'',
+      html:`<div class="obs-label" style="background:${color}">${text}</div>`,
+      iconSize:[0,0]
+    });
+    L.marker([s.lat, s.lon], {icon, riseOnHover:true})
+      .bindTooltip(s.naam || s.id, {direction:'top', offset:[0,-10], opacity:.95})
+      .bindPopup(()=>popupHtml(s))
+      .addTo(labelLayer);
+  }
+
+  document.getElementById('info').innerHTML =
+    `<b>${placed.length}</b> van <b>${inView.length}</b> stations zichtbaar in beeld<br>
+     <span style="color:var(--wl-color-text-muted)">Zoom in voor meer detail · klik op een waarde</span>`;
+}
+
+map.on('zoomend moveend', () => { if(STATIONS.length) render(); });
+
+// ───────────────────────────────────────────────────────────── Legend
+function drawLegend(){
+  const el = document.getElementById('legend');
+  if(currentVar==='t' || currentVar==='td'){
+    const stops = [-10,-5,0,5,10,15,20,25,30,35];
+    el.innerHTML = `<strong>${currentVar==='t'?'Temperatuur':'Dauwpunt'} (°C)</strong>
+      <div class="scale">${stops.map(v=>`<span style="background:${tempColor(v)}"></span>`).join('')}</div>
+      <div class="ticks">${stops.map(v=>`<span>${v}</span>`).join('')}</div>`;
+  } else if(currentVar==='wkn'){
+    el.innerHTML = `<strong>Windsnelheid (knopen)</strong>
+      <div class="scale">${[3,9,15,25,35,45].map(v=>`<span style="background:${windColor(v)}"></span>`).join('')}</div>
+      <div class="ticks"><span>&lt;6</span><span>12</span><span>20</span><span>30</span><span>40</span><span>&gt;40</span></div>`;
+  } else if(currentVar==='p'){
+    el.innerHTML = `<strong>Luchtdruk (hPa, getoond als –1000)</strong>
+      <div class="scale">${[995,1005,1012,1018,1022,1028].map(v=>`<span style="background:${pColor(v)}"></span>`).join('')}</div>
+      <div class="ticks"><span>&lt;1000</span><span>1010</span><span>1015</span><span>1020</span><span>1025</span><span>&gt;1025</span></div>`;
+  } else if(currentVar==='rr1' || currentVar==='rr24'){
+    el.innerHTML = `<strong>Neerslag ${currentVar==='rr1'?'laatste uur':'laatste 24 uur'} (mm)</strong>
+      <div class="scale">${[0,0.5,2,5,10,20,40].map(v=>`<span style="background:${rrColor(v)}"></span>`).join('')}</div>
+      <div class="ticks"><span>0</span><span>1</span><span>3</span><span>8</span><span>15</span><span>30</span><span>&gt;30</span></div>
+      <div style="color:var(--wl-color-text-muted);margin-top:4px;font:var(--wl-text-body-sm)">Alleen SYNOP-stations · "." = geen neerslag</div>`;
+  }
+}
+
+// ───────────────────────────────────────────────────────────── Tabs
+document.getElementById('vartabs').addEventListener('click', e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  document.querySelectorAll('#vartabs button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  currentVar = e.target.dataset.var;
+  drawLegend();
+  render();
+});
+
+// ───────────────────────────────────────────────────────────── Init
+fetch('https://data.weerlab.nl/europa_obs.json?_=' + Date.now())
+  .then(r=>r.json())
+  .then(d=>{
+    META = d;
+    STATIONS = d.stations;
+    document.getElementById('loader').remove();
+    // Laatste obs-tijd = mediaan van station-timestamps
+    const times = STATIONS.map(s => new Date(s.ts).getTime()).sort();
+    const med = new Date(times[Math.floor(times.length/2)]);
+    document.getElementById('obs-time').textContent =
+      `Waarnemingen rond ${String(med.getUTCDate()).padStart(2,'0')}-${String(med.getUTCMonth()+1).padStart(2,'0')} ${String(med.getUTCHours()).padStart(2,'0')}:${String(med.getUTCMinutes()).padStart(2,'0')} UTC`;
+    document.getElementById('src-info').textContent =
+      `${d.count_metar} METAR + ${d.count_synop} SYNOP = ${d.count} stations`;
+    drawLegend();
+    render();
+  })
+  .catch(e=>{
+    document.getElementById('loader').textContent = 'Kon waarnemingen niet laden: ' + e.message;
+  });
+</script>
+</body>
+</html>

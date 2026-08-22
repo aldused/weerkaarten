@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Significant weer — vierluik</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "DM Sans", system-ui, sans-serif;
+    background: #aeb2b6;
+    color: #102036;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: #00205b;
+    color: #fff;
+    border-bottom: 3px solid #2ec4e8;
+  }
+  .topbar h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    white-space: nowrap;
+  }
+  .topbar h1 span { color: #2ec4e8; }
+  .group { display: flex; align-items: center; gap: 8px; }
+  .group .lbl { font-size: 11px; font-weight: 700; color: #a8c4e8; text-transform: uppercase; letter-spacing: .05em; }
+  button.ctrl {
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border-radius: 7px;
+    height: 32px;
+    min-width: 36px;
+    padding: 0 10px;
+    font: 700 13px "DM Sans", sans-serif;
+    cursor: pointer;
+  }
+  button.ctrl:hover { background: rgba(255,255,255,0.18); }
+  button.ctrl:disabled { opacity: .4; cursor: default; }
+  #btn-map-focus { border-color: #2ec4e8; color: #dff9ff; }
+  #btn-map-focus-exit {
+    display: none; position: fixed; z-index: 1200; top: 10px; right: 12px;
+    min-height: 36px; padding: 7px 11px; border: 1px solid rgba(46,196,232,.8);
+    border-radius: 8px; background: rgba(0,32,91,.9); color: #fff;
+    box-shadow: 0 5px 18px rgba(2,8,23,.4); backdrop-filter: blur(8px);
+    cursor: pointer; font: 800 11px/1.1 "DM Sans", system-ui, sans-serif;
+  }
+  #btn-map-focus-exit:hover { background: #063b78; border-color: #8cecff; }
+  #map-focus-controls {
+    display: none; position: fixed; z-index: 1200; left: 50%; bottom: 12px;
+    transform: translateX(-50%); align-items: center; gap: 7px;
+    grid-template-columns: auto auto clamp(150px, 28vw, 420px) auto auto;
+    grid-template-areas: "prev play slider time next";
+    padding: 7px 9px; border: 1px solid rgba(46,196,232,.75); border-radius: 10px;
+    background: rgba(0,32,91,.9); box-shadow: 0 5px 18px rgba(2,8,23,.4);
+    backdrop-filter: blur(8px);
+  }
+  #map-focus-controls button { min-width: 42px; height: 32px; }
+  #map-focus-prev { grid-area: prev; }
+  #map-focus-play { grid-area: play; }
+  #map-focus-slider { grid-area: slider; width: 100%; height: 30px; margin: 0; cursor: pointer; accent-color: #2ec4e8; }
+  #map-focus-valid { grid-area: time; min-width: 135px; color: #fff; text-align: center; font: 700 10px "DM Mono", monospace; }
+  #map-focus-next { grid-area: next; }
+  body.map-focus-mode .topbar { display: none; }
+  body.map-focus-mode #btn-map-focus-exit { display: inline-flex; align-items: center; gap: 6px; }
+  body.map-focus-mode #map-focus-controls { display: grid; }
+  body.map-focus-mode .grid {
+    width: 100vw; height: 100vh; flex: 1 1 100vh;
+    padding: 0; gap: 2px;
+  }
+  body.map-focus-mode .cell { border-radius: 0; box-shadow: none; }
+  input[type=range] { cursor: pointer; }
+  #time-range { width: clamp(180px, 32vw, 460px); }
+  #zoom-range { width: 130px; }
+  .valid {
+    font: 600 13px/1 "DM Mono", monospace;
+    color: #fff;
+    min-width: 150px;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.22);
+    border-radius: 7px;
+  }
+  .zoom-val { font: 600 12px "DM Mono", monospace; color: #a8c4e8; min-width: 38px; }
+  .grid {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 6px;
+    padding: 6px;
+    min-height: 0;
+  }
+  .cell {
+    position: relative;
+    overflow: hidden;
+    background: #cfd2d5;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  }
+  .cell iframe {
+    border: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    transform-origin: center center;
+    transition: transform .12s ease;
+  }
+  .cell-tag {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 5;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(0,32,91,0.88);
+    color: #fff;
+    font: 800 12px/1 "DM Sans", sans-serif;
+    letter-spacing: .02em;
+    pointer-events: none;
+  }
+  .cell-tag small { display: block; margin-top: 2px; font-weight: 600; font-size: 10px; opacity: .82; font-family: "DM Mono", monospace; letter-spacing: 0; }
+  .hint {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font: 600 13px "DM Sans", sans-serif;
+    color: #5a6470;
+    pointer-events: none;
+  }
+  .cell.oor::after {
+    content: "buiten bereik van dit model";
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: grid;
+    place-items: center;
+    background: rgba(180,185,190,0.62);
+    color: #1a2738;
+    font: 700 13px "DM Sans", sans-serif;
+    backdrop-filter: grayscale(0.6) blur(1px);
+    pointer-events: none;
+  }
+  @media (max-width: 760px) {
+    .topbar { gap: 10px; }
+    .topbar h1 { width: 100%; }
+    .grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); }
+    #map-focus-controls {
+      width: min(360px, calc(100vw - 24px)); box-sizing: border-box;
+      grid-template-columns: auto auto minmax(0, 1fr) auto;
+      grid-template-areas: "prev play time next" "slider slider slider slider";
+    }
+    #map-focus-valid { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+  <button id="btn-map-focus-exit" type="button" aria-label="Sluit de beeldvullende kaartmodus" title="Terug naar de bediening (Escape)">
+    <span aria-hidden="true">✕</span><span>Sluit beeldvullend</span>
+  </button>
+  <div id="map-focus-controls" role="group" aria-label="Tijd bedienen in beeldvullende kaartmodus">
+    <button class="ctrl" id="map-focus-prev" type="button" aria-label="Vorige uur" title="Vorig uur (pijl links)">‹</button>
+    <button class="ctrl" id="map-focus-play" type="button" aria-label="Afspelen">▶</button>
+    <input id="map-focus-slider" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Geldige tijd kiezen">
+    <span id="map-focus-valid" aria-live="polite">laden…</span>
+    <button class="ctrl" id="map-focus-next" type="button" aria-label="Volgende uur" title="Volgend uur (pijl rechts)">›</button>
+  </div>
+
+  <div class="topbar">
+    <h1>Significant weer — <span>vierluik</span></h1>
+    <div class="group">
+      <button class="ctrl" id="prev" title="Vorige uur" disabled>‹</button>
+      <button class="ctrl" id="play" title="Afspelen" disabled>▶</button>
+      <button class="ctrl" id="next" title="Volgende uur" disabled>›</button>
+      <input type="range" id="time-range" min="0" max="0" value="0" step="1" disabled>
+      <span class="valid" id="valid">laden…</span>
+    </div>
+    <div class="group">
+      <span class="lbl">Zoom</span>
+      <input type="range" id="zoom-range" min="60" max="200" value="100" step="5">
+      <span class="zoom-val" id="zoom-val">100%</span>
+      <button class="ctrl" id="reset-view" title="Zoom en positie terugzetten">⤢ Reset</button>
+    </div>
+    <div class="group" style="margin-left:auto">
+      <button class="ctrl" id="btn-map-focus" type="button" aria-pressed="false" title="Verberg de bediening en toon alleen de vier kaarten">⛶ Beeldvullend</button>
+      <button class="ctrl" id="back-single" title="Terug naar de losse significant-weerkaart">← Enkele kaart</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+<script>
+(function () {
+  "use strict";
+  const PARAMS = new URLSearchParams(location.search);
+  const LOCAL = PARAMS.get("localData") === "1" ? "&localData=1" : "";
+  // HARMONIE als hoofdmodel: langste reeks (60u) -> stuurt de tijdslider.
+  const MODELS = [
+    { key: "harmonie",  label: "HARMONIE",    master: true },
+    { key: "icond2",    label: "ICON-D2",     master: false },
+    { key: "icond2ruc", label: "ICON-RUC", master: false },
+    { key: "arome",     label: "AROME",       note: "beperkt gebied (NL/BE)", master: false }
+  ];
+  const DAGEN = ["zo", "ma", "di", "wo", "do", "vr", "za"];
+
+  const grid = document.getElementById("grid");
+  const frames = [];
+  MODELS.forEach(m => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = "laden…";
+    const ifr = document.createElement("iframe");
+    ifr.loading = "lazy";
+    ifr.src = `harmonie_significant.html?embed=1&notag=1&model=${m.key}&v=20260712-detail${LOCAL}`;
+    ifr.addEventListener("load", () => { hint.remove(); });
+    const tag = document.createElement("div");
+    tag.className = "cell-tag";
+    tag.innerHTML = m.label + (m.note ? `<small>${m.note}</small>` : "");
+    cell.appendChild(ifr);
+    cell.appendChild(tag);
+    cell.appendChild(hint);
+    grid.appendChild(cell);
+    frames.push({ model: m.key, ifr, master: m.master });
+  });
+
+  // ── Tijdas (van het hoofdmodel) ──
+  let tijden = [];
+  let idx = 0;
+  let timer = null;
+  const timeRange = document.getElementById("time-range");
+  const focusRange = document.getElementById("map-focus-slider");
+  const validEl = document.getElementById("valid");
+  const prevBtn = document.getElementById("prev");
+  const nextBtn = document.getElementById("next");
+  const playBtn = document.getElementById("play");
+
+  function fmt(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso || "--";
+    const p = n => String(n).padStart(2, "0");
+    return `${DAGEN[d.getDay()]} ${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:00`;
+  }
+
+  function broadcastValid() {
+    const iso = tijden[idx];
+    if (!iso) return;
+    validEl.textContent = fmt(iso);
+    document.getElementById("map-focus-valid").textContent = fmt(iso);
+    focusRange.setAttribute("aria-valuetext", fmt(iso));
+    focusRange.title = `${fmt(iso)} · versleep voor een ander uur`;
+    const t = new Date(iso).getTime();
+    frames.forEach(f => {
+      try { f.ifr.contentWindow.postMessage({ ns: "sigvier", cmd: "setValid", iso }, "*"); } catch {}
+      // Cel grijzen als het gevraagde moment buiten de reeks van dit model valt
+      // (±90 min speling). Dan toont het model zijn dichtstbijzijnde stap.
+      if (f.metaTijden && f.metaTijden.length) {
+        const t0 = new Date(f.metaTijden[0]).getTime();
+        const t1 = new Date(f.metaTijden[f.metaTijden.length - 1]).getTime();
+        const tol = 90 * 60 * 1000;
+        f.ifr.parentElement.classList.toggle("oor", t < t0 - tol || t > t1 + tol);
+      }
+    });
+  }
+
+  function setIdx(n) {
+    if (!tijden.length) return;
+    idx = Math.max(0, Math.min(tijden.length - 1, n));
+    timeRange.value = String(idx);
+    focusRange.value = String(idx);
+    broadcastValid();
+  }
+
+  function enableControls() {
+    timeRange.max = String(Math.max(0, tijden.length - 1));
+    focusRange.max = String(Math.max(0, tijden.length - 1));
+    timeRange.disabled = false;
+    focusRange.disabled = false;
+    prevBtn.disabled = nextBtn.disabled = playBtn.disabled = false;
+  }
+
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    playBtn.textContent = "▶";
+    document.getElementById("map-focus-play").textContent = "▶";
+    document.getElementById("map-focus-play").setAttribute("aria-label", "Afspelen");
+  }
+  function play() {
+    if (timer) { stop(); return; }
+    playBtn.textContent = "⏸";
+    document.getElementById("map-focus-play").textContent = "⏸";
+    document.getElementById("map-focus-play").setAttribute("aria-label", "Pauzeren");
+    timer = setInterval(() => {
+      if (idx >= tijden.length - 1) setIdx(0); else setIdx(idx + 1);
+    }, 700);
+  }
+
+  timeRange.addEventListener("input", () => { stop(); setIdx(parseInt(timeRange.value, 10)); });
+  prevBtn.addEventListener("click", () => { stop(); setIdx(idx - 1); });
+  nextBtn.addEventListener("click", () => { stop(); setIdx(idx + 1); });
+  playBtn.addEventListener("click", play);
+  document.getElementById("map-focus-prev").addEventListener("click", () => { stop(); setIdx(idx - 1); });
+  document.getElementById("map-focus-play").addEventListener("click", play);
+  document.getElementById("map-focus-next").addEventListener("click", () => { stop(); setIdx(idx + 1); });
+  focusRange.addEventListener("input", () => { stop(); setIdx(parseInt(focusRange.value, 10)); });
+
+  let mapFocusActive = false;
+  function setMapFocusMode(active, notifyParent) {
+    mapFocusActive = Boolean(active);
+    document.body.classList.toggle("map-focus-mode", mapFocusActive);
+    document.getElementById("btn-map-focus").setAttribute("aria-pressed", String(mapFocusActive));
+    if (notifyParent && window.parent !== window) {
+      window.parent.postMessage({ type:"weerlab-weerkaarten-focus", active:mapFocusActive }, window.location.origin);
+    }
+  }
+  document.getElementById("btn-map-focus").addEventListener("click", () => setMapFocusMode(true, true));
+  document.getElementById("btn-map-focus-exit").addEventListener("click", () => {
+    setMapFocusMode(false, true);
+    document.getElementById("btn-map-focus").focus({ preventScroll:true });
+  });
+  document.addEventListener("keydown", e => {
+    if (!mapFocusActive) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setMapFocusMode(false, true);
+      document.getElementById("btn-map-focus").focus({ preventScroll:true });
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault(); stop(); setIdx(idx - 1);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault(); stop(); setIdx(idx + 1);
+    }
+  });
+
+  // ── Geografische zoom + pan (alle 4 synchroon, scherp herrenderd) ──
+  const masterView = { zoom: 1, panLon: 0, panLat: 0 };
+  const zoomRange = document.getElementById("zoom-range");
+  const zoomVal = document.getElementById("zoom-val");
+
+  function broadcastView(target) {
+    const msg = { ns: "sigvier", cmd: "setView", zoom: masterView.zoom, panLon: masterView.panLon, panLat: masterView.panLat };
+    const list = target ? [target] : frames;
+    list.forEach(f => { try { f.ifr.contentWindow.postMessage(msg, "*"); } catch {} });
+  }
+
+  zoomRange.addEventListener("input", () => {
+    masterView.zoom = parseInt(zoomRange.value, 10) / 100;
+    zoomVal.textContent = zoomRange.value + "%";
+    broadcastView();
+  });
+
+  document.getElementById("reset-view").addEventListener("click", () => {
+    masterView.zoom = 1; masterView.panLon = 0; masterView.panLat = 0;
+    zoomRange.value = "100";
+    zoomVal.textContent = "100%";
+    broadcastView();
+  });
+
+  // Terug naar de losse significant-kaart. In de site-shell (index.html als
+  // parent) wisselt dit het product-tabblad; standalone navigeert het zelf.
+  document.getElementById("back-single").addEventListener("click", () => {
+    try {
+      if (window.parent !== window && typeof window.parent.openWeerkaartenProduct === "function") {
+        window.parent.openWeerkaartenProduct("significant");
+        return;
+      }
+    } catch {}
+    window.top.location.href = "harmonie_significant.html";
+  });
+
+  // ── Berichten van de iframes ──
+  window.addEventListener("message", (e) => {
+    const d = e.data;
+    if (e.origin === window.location.origin && d?.type === "weerlab-weerkaarten-focus-exit") {
+      setMapFocusMode(false, false);
+      return;
+    }
+    if (!d || d.ns !== "sigvier") return;
+    if (d.cmd === "panDelta") {
+      masterView.panLon += d.dLon || 0;
+      masterView.panLat += d.dLat || 0;
+      broadcastView();
+      return;
+    }
+    if (d.cmd === "meta") {
+      const f = frames.find(x => x.model === d.model);
+      if (f) f.metaTijden = d.tijden;
+      if (f) broadcastView(f); // nieuw geladen kaart op huidige zoom/pan zetten
+      if (tijden.length) broadcastValid();
+      // Tijdas zetten zodra het hoofdmodel binnen is (anders eerste beste).
+      const masterReady = frames.find(x => x.master && x.metaTijden);
+      const any = frames.find(x => x.metaTijden);
+      const src = masterReady || any;
+      if (src && (!tijden.length || src.master)) {
+        tijden = src.metaTijden.slice();
+        if (!timeRange.value || idx === 0) idx = Math.min(3, tijden.length - 1);
+        enableControls();
+        setIdx(idx);
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>

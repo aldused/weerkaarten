@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Radar basemap stijlen — vergelijking</title>
+<style>
+  body { font-family: "DM Sans", system-ui, sans-serif; background: #f6f8fb; padding: 18px; margin: 0; color: #0f172a; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #64748b; font-size: 12.5px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .card { background: #fff; border: 1px solid #e3e8ef; border-radius: 10px; overflow: hidden; }
+  .card h3 { margin: 0; padding: 8px 12px; font-size: 13px; background: #f6f8fb; border-bottom: 1px solid #e3e8ef; }
+  .card .desc { font-size: 11.5px; color: #64748b; padding: 0 12px 6px; line-height: 1.4; min-height: 38px; }
+  canvas { display: block; width: 100%; height: auto; background: #0d1b2a; }
+  .footer { font-size: 11.5px; color: #64748b; margin-top: 14px; }
+  @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Radar basemap — stijlvergelijking</h1>
+<div class="sub">Zelfde geojson + nep-radarblob bovenop, 3 stijlvarianten. Kies één → ik pas die toe in <code>radar.html</code>.</div>
+<div class="grid">
+  <div class="card">
+    <h3>1 · Huidig (klassiek pastel)</h3>
+    <div class="desc">Plat: licht-blauw zee, licht-groen land. Wat je nu hebt.</div>
+    <canvas id="c1"></canvas>
+  </div>
+  <div class="card">
+    <h3>2 · Carto-light (warm grijs)</h3>
+    <div class="desc">Warm beige-grijs land, koel blauw zee, fijne kustlijn — radar springt eruit.</div>
+    <canvas id="c2"></canvas>
+  </div>
+  <div class="card">
+    <h3>3 · Topo-shaded (reliëf)</h3>
+    <div class="desc">Land-tinten op pseudo-elevatie + zachte hillshade — meest "realistisch".</div>
+    <canvas id="c3"></canvas>
+  </div>
+  <div class="card">
+    <h3>4 · Strak (modern vlak)</h3>
+    <div class="desc">Vlak helder blauw, zacht olijfgrijs land, fijne grenzen — geen ruis.</div>
+    <canvas id="c4"></canvas>
+  </div>
+</div>
+<div class="footer">Data: NL/BE provincies + Europa-land + meren + rivieren (zelfde als radar.html). Radarblob = demo, niet echte data.</div>
+<script>
+(async function(){
+  // Bbox = radar.html
+  var LON_MIN=1.0, LON_MAX=10.0, LAT_MIN=49.5, LAT_MAX=54.5;
+  var W = 540, H = 600;
+  function lonToX(lon){ return (lon - LON_MIN) / (LON_MAX - LON_MIN) * W; }
+  function latToY(lat){ return (LAT_MAX - lat) / (LAT_MAX - LAT_MIN) * H; }
+
+  var [eu, nl, be, lakes, riv] = await Promise.all([
+    fetch('europa_land.geojson').then(r=>r.json()).catch(()=>null),
+    fetch('nl_provincies.geojson').then(r=>r.json()).catch(()=>null),
+    fetch('be_provincies.geojson').then(r=>r.json()).catch(()=>null),
+    fetch('nl_meren.geojson').then(r=>r.json()).catch(()=>null),
+    fetch('nl_rivieren.geojson').then(r=>r.json()).catch(()=>null),
+  ]);
+
+  function drawGeo(ctx, geo, fill, stroke, lw){
+    if(!geo || !geo.features) return;
+    ctx.beginPath();
+    geo.features.forEach(function(f){
+      var g = f.geometry; if(!g) return;
+      var polys = g.type === 'Polygon' ? [g.coordinates] : (g.type === 'MultiPolygon' ? g.coordinates : []);
+      polys.forEach(function(poly){
+        poly.forEach(function(ring){
+          for(var i=0;i<ring.length;i++){
+            var x = lonToX(ring[i][0]), y = latToY(ring[i][1]);
+            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+          }
+          ctx.closePath();
+        });
+      });
+    });
+    if(fill){ ctx.fillStyle = fill; ctx.fill('evenodd'); }
+    if(stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw||1; ctx.stroke(); }
+  }
+  function drawLines(ctx, geo, stroke, lw){
+    if(!geo || !geo.features) return;
+    ctx.strokeStyle = stroke; ctx.lineWidth = lw||1;
+    geo.features.forEach(function(f){
+      var g=f.geometry; if(!g) return;
+      var lines = g.type === 'LineString' ? [g.coordinates] : (g.type === 'MultiLineString' ? g.coordinates : []);
+      lines.forEach(function(line){
+        ctx.beginPath();
+        for(var i=0;i<line.length;i++){
+          var x=lonToX(line[i][0]), y=latToY(line[i][1]);
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      });
+    });
+  }
+
+  // Nep-radarblob (om contrast te zien)
+  function drawFakeRadar(ctx){
+    var grd = ctx.createRadialGradient(lonToX(5.3), latToY(52.0), 5, lonToX(5.3), latToY(52.0), 110);
+    grd.addColorStop(0, 'rgba(180,30,40,0.85)');
+    grd.addColorStop(0.3, 'rgba(255,180,30,0.75)');
+    grd.addColorStop(0.6, 'rgba(80,200,80,0.55)');
+    grd.addColorStop(1, 'rgba(80,200,80,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(lonToX(5.3), latToY(52.0), 110, 0, Math.PI*2); ctx.fill();
+
+    var grd2 = ctx.createRadialGradient(lonToX(3.5), latToY(53.2), 5, lonToX(3.5), latToY(53.2), 75);
+    grd2.addColorStop(0, 'rgba(255,180,30,0.7)');
+    grd2.addColorStop(0.5, 'rgba(80,200,80,0.5)');
+    grd2.addColorStop(1, 'rgba(80,200,80,0)');
+    ctx.fillStyle = grd2;
+    ctx.beginPath(); ctx.arc(lonToX(3.5), latToY(53.2), 75, 0, Math.PI*2); ctx.fill();
+  }
+
+  function setupCanvas(id){
+    var c = document.getElementById(id);
+    var dpr = window.devicePixelRatio || 1;
+    c.width = W*dpr; c.height = H*dpr;
+    c.style.height = (W*H/W)+'px';
+    var ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    return ctx;
+  }
+
+  // ── Stijl 1: Huidig ──
+  (function(){
+    var ctx = setupCanvas('c1');
+    ctx.fillStyle = '#c8e0f0'; ctx.fillRect(0,0,W,H);
+    drawGeo(ctx, eu,    '#dde6d5', null, 0);
+    drawGeo(ctx, nl,    '#eaf3e8', null, 0);
+    drawGeo(ctx, be,    '#eaf3e8', null, 0);
+    drawGeo(ctx, lakes, '#c8e0f0', 'rgba(120,160,180,0.55)', 0.7);
+    drawLines(ctx, riv, '#89b8d4', 0.8);
+    drawGeo(ctx, nl,    null, 'rgba(50,80,110,0.45)', 0.7);
+    drawGeo(ctx, be,    null, 'rgba(50,80,110,0.45)', 0.7);
+    drawFakeRadar(ctx);
+  })();
+
+  // ── Stijl 2: Carto-light (warm grijs) ──
+  (function(){
+    var ctx = setupCanvas('c2');
+    // Zee: warmer parels-blauw met subtiele gradient
+    var bg = ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0, '#aac6dc');
+    bg.addColorStop(1, '#cadbe9');
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+    // Land Europa = warmer grijsbruin
+    drawGeo(ctx, eu, '#e2dccc', null, 0);
+    // NL+BE = lichter zandtint
+    drawGeo(ctx, nl, '#efe9d8', null, 0);
+    drawGeo(ctx, be, '#efe9d8', null, 0);
+    // Kustlijn dunne donkere accent
+    drawGeo(ctx, eu, null, 'rgba(80,90,100,0.35)', 0.6);
+    drawGeo(ctx, nl, null, 'rgba(80,90,100,0.55)', 0.7);
+    drawGeo(ctx, be, null, 'rgba(80,90,100,0.55)', 0.7);
+    // Meren in zelfde zee-toon
+    drawGeo(ctx, lakes, '#aac6dc', 'rgba(80,110,140,0.6)', 0.7);
+    // Rivieren
+    drawLines(ctx, riv, 'rgba(110,150,180,0.8)', 0.9);
+    drawFakeRadar(ctx);
+  })();
+
+  // ── Stijl 3: Topo-shaded (reliëf) ──
+  (function(){
+    var ctx = setupCanvas('c3');
+    // Zee: dieper blauw met radial-gradient
+    ctx.fillStyle = '#7ea8c4'; ctx.fillRect(0,0,W,H);
+    // Land Europa = grasgroen basis
+    drawGeo(ctx, eu, '#c8d4a8', null, 0);
+    // NL+BE op pseudo-elevatie: laag = donker groen, midden = beige, randhoog = bruin
+    // Simulatie via radial gradient vanaf "Veluwe"-punt
+    ctx.save();
+    ctx.beginPath();
+    [nl, be].forEach(function(geo){
+      if(!geo) return;
+      geo.features.forEach(function(f){
+        var g=f.geometry; if(!g) return;
+        var polys = g.type==='Polygon'?[g.coordinates]:(g.type==='MultiPolygon'?g.coordinates:[]);
+        polys.forEach(function(poly){
+          poly.forEach(function(ring){
+            for(var i=0;i<ring.length;i++){
+              var x=lonToX(ring[i][0]), y=latToY(ring[i][1]);
+              if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+            }
+            ctx.closePath();
+          });
+        });
+      });
+    });
+    ctx.clip('evenodd');
+    var topo = ctx.createRadialGradient(lonToX(5.9), latToY(52.1), 10, lonToX(5.9), latToY(52.1), 280);
+    topo.addColorStop(0,    '#a89878');  // Veluwe / hoog
+    topo.addColorStop(0.25, '#cebd8e');  // overgang
+    topo.addColorStop(0.55, '#dccea0');  // beige laag
+    topo.addColorStop(1,    '#b8c896');  // groen polder
+    ctx.fillStyle = topo;
+    ctx.fillRect(0,0,W,H);
+    // Subtiele hillshade-stripes (NW-licht)
+    ctx.globalCompositeOperation = 'multiply';
+    var hs = ctx.createLinearGradient(0,0,W,H);
+    hs.addColorStop(0, 'rgba(255,255,255,0.85)');
+    hs.addColorStop(0.5,'rgba(255,255,255,1)');
+    hs.addColorStop(1, 'rgba(180,170,150,0.85)');
+    ctx.fillStyle = hs; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+
+    // Meren
+    drawGeo(ctx, lakes, '#7ea8c4', 'rgba(60,90,120,0.6)', 0.7);
+    // Rivieren
+    drawLines(ctx, riv, 'rgba(80,130,170,0.85)', 1.0);
+    // Kustlijnen + grenzen
+    drawGeo(ctx, eu, null, 'rgba(60,80,100,0.45)', 0.6);
+    drawGeo(ctx, nl, null, 'rgba(40,60,80,0.55)', 0.8);
+    drawGeo(ctx, be, null, 'rgba(40,60,80,0.55)', 0.8);
+    drawFakeRadar(ctx);
+  })();
+
+  // ── Stijl 4: Strak (modern vlak) ──
+  (function(){
+    var ctx = setupCanvas('c4');
+    ctx.fillStyle = '#b8d0e2'; ctx.fillRect(0,0,W,H);
+    drawGeo(ctx, eu, '#d8dcc8', null, 0);
+    drawGeo(ctx, nl, '#e3e6d2', null, 0);
+    drawGeo(ctx, be, '#e3e6d2', null, 0);
+    drawGeo(ctx, lakes, '#b8d0e2', null, 0);
+    // Provinciegrenzen subtiel
+    drawGeo(ctx, nl, null, 'rgba(0,32,91,0.18)', 0.5);
+    drawGeo(ctx, be, null, 'rgba(0,32,91,0.18)', 0.5);
+    // Buitengrens NL+BE iets dikker
+    drawGeo(ctx, eu, null, 'rgba(40,55,75,0.45)', 0.7);
+    drawGeo(ctx, nl, null, 'rgba(0,32,91,0.55)', 1.0);
+    drawGeo(ctx, be, null, 'rgba(0,32,91,0.55)', 1.0);
+    // Rivieren
+    drawLines(ctx, riv, 'rgba(70,130,180,0.55)', 0.7);
+    drawFakeRadar(ctx);
+  })();
+})();
+</script>
+</body>
+</html>

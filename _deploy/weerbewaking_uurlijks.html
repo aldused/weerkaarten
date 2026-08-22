@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking W.M. uurlijks</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="weerbewaking_sync.js?v=20260513"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#eef2f6;color:#222;padding:18px 10px 28px}
+
+.pagina{
+  max-width:800px;margin:0 auto 20px;background:white;padding:34px 46px;
+  box-shadow:0 14px 34px rgba(26,84,144,.10);border:1px solid #d9e2ec;border-radius:8px;
+}
+
+.toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:rgba(255,255,255,.96);padding:12px 14px;border:1px solid #d9e2ec;border-radius:8px;box-shadow:0 10px 24px rgba(26,84,144,.10);position:sticky;top:10px;z-index:20;backdrop-filter:blur(8px)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.86rem;padding:6px 9px;border:1px solid #cbd5e1;border-radius:6px;background:white;color:#1f2937}
+.toolbar input[type="checkbox"]{padding:0;border:0;border-radius:0;background:transparent;vertical-align:middle;margin-right:3px}
+.toolbar button{font-family:inherit;font-size:.86rem;padding:7px 13px;background:#1a5490;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+	.toolbar button:hover{background:#124270;transform:translateY(-1px)}
+	.toolbar .spacer{flex:1}
+	.toolbar .status{font-size:.8rem;color:#888}
+.toolbar .sync-toggle{display:inline-flex;align-items:center;gap:4px;color:#475569;font-weight:700}
+.toolbar .sync-status{font-size:.72rem;min-width:46px;color:#888}
+
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:2px solid #1a5490}
+.doc-header img.logo-l{height:165px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+.doc-opgesteld{margin-top:6px;font-size:.8rem;color:#555;font-style:italic}
+.doc-opgesteld .datum{font-weight:600;color:#333;font-style:normal}
+
+/* Plaats-invoer (oranje) */
+.plaats-blok{
+  margin:16px 0 6px;display:flex;align-items:center;gap:10px;
+  background:#fff8ef;border:1px solid #f0c08a;border-left:5px solid #e8780c;
+  border-radius:6px;padding:9px 14px;
+}
+.plaats-blok .label{font-size:.78rem;font-weight:700;color:#a04a00;text-transform:uppercase;letter-spacing:.06em}
+.plaats-blok .veld{
+  flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#d95a00;
+  background:white;border:1px solid #f0c08a;border-radius:3px;
+  padding:5px 10px;outline:none;
+}
+.plaats-blok .veld:focus{border-color:#e8780c;background:#fffef8;box-shadow:0 0 0 2px #fde1c4}
+
+/* Subtitel (bijv. "WEER | EVENEMENT") */
+.subtitel{
+  text-align:center;font-size:.95rem;font-weight:700;color:#1a5490;
+  letter-spacing:.15em;margin:14px 0 4px;padding:6px 8px;outline:none;min-height:24px;
+}
+.subtitel:focus{background:#fffbe8}
+.subtitel:empty::before{content:'Subtitel (bijv. WEER  |  EVENEMENT)';color:#bbb;font-weight:500;letter-spacing:0}
+
+.titel{
+  font-size:1.3rem;font-weight:700;color:#1a5490;text-align:center;
+  text-transform:uppercase;letter-spacing:.02em;padding:10px 8px;
+  margin:4px 0 18px;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;
+  min-height:44px;outline:none;
+}
+.titel:focus{background:#fffbe8}
+.titel:empty::before{content:'KLIK HIER EN TYP DE TITEL...';color:#bbb;font-weight:500}
+
+h2.kop{font-size:.95rem;font-weight:700;color:#1a5490;margin:18px 0 8px;padding-bottom:3px;border-bottom:1px solid #e0e0e0}
+.tekst-sectie{position:relative}
+.sectie-sluit{
+  position:absolute;right:0;top:10px;width:22px;height:22px;border:1px solid #d8dee8;
+  border-radius:50%;background:white;color:#64748b;font-size:16px;line-height:18px;
+  cursor:pointer;font-family:inherit;font-weight:700
+}
+.sectie-sluit:hover{background:#fff4e6;border-color:#e8780c;color:#a04a00}
+
+.tekstvak{
+  min-height:70px;padding:9px 11px;border:1px solid #dbe3ec;border-radius:6px;
+  font-size:.84rem;line-height:1.52;color:#333;outline:none;background:#fbfdff;
+  text-align:justify;
+}
+.tekstvak-groot{min-height:155px}
+.tekstvak:hover{border-color:#b7c7d9}
+.tekstvak:focus{background:#fffdf0;border-color:#1a5490;border-style:solid;box-shadow:0 0 0 2px rgba(26,84,144,.10)}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Waarschuwing-tabel */
+table.tabel{width:100%;max-width:780px;border-collapse:collapse;margin:6px auto 4px 0;font-size:.8rem}
+table.tabel th,table.tabel td{border:1px solid #bbb;padding:2px 8px;text-align:center;line-height:1.2}
+table.tabel th{background:#1a5490;color:white;font-weight:600;font-size:.75rem}
+table.tabel td.label{text-align:left;background:#f0f4f8;font-weight:600}
+table.tabel td.waarvoor-cel{text-align:left;outline:none;cursor:text;background:#fffdf3;box-shadow:inset 0 0 0 1px rgba(26,84,144,.22);font-weight:500;padding:3px 8px}
+table.tabel td.waarvoor-cel:hover{background:#fff8d8;box-shadow:inset 0 0 0 1px rgba(26,84,144,.45)}
+table.tabel td.waarvoor-cel:focus{background:#fffbe8;box-shadow:inset 0 0 0 2px #1a5490}
+table.tabel td.waarvoor-cel:empty::before{content:'Waarvoor (bv. wind, regen, gladheid)…';color:#aaa;font-style:italic;font-weight:400}
+
+.waarsch-status{font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:3px;display:inline-block;min-width:68px}
+.w-geen{background:#d4e8d4;color:#2d6a2d}
+.w-groen{background:#d4e8d4;color:#2d6a2d}
+.w-geel{background:#fff3b0;color:#8a6d00}
+.w-oranje{background:#ffcf9f;color:#b05a00}
+.w-rood{background:#ffb0b0;color:#a00000}
+select.status-sel{font-family:inherit;font-size:.78rem;padding:1px 6px;border:1px solid #ccc;border-radius:3px;font-weight:700}
+select.periode-sel{font-family:inherit;font-size:.78rem;padding:1px 6px;border:1px solid #b8c7d8;border-radius:3px;background:#fffdf3;font-weight:600;color:#1a5490;width:100%;max-width:160px;cursor:pointer}
+select.periode-sel:hover{background:#fff8d8;border-color:#1a5490}
+select.periode-sel:focus{background:#fffbe8;border-color:#1a5490;outline:none;box-shadow:0 0 0 2px rgba(26,84,144,.2)}
+@media print{ select.periode-sel{border:none;background:transparent;appearance:none;-webkit-appearance:none;padding:0;color:#1a5490;font-weight:700} }
+
+/* Uurverwachting-tabel */
+table.uur{width:100%;border-collapse:collapse;margin-top:6px;font-size:.78rem;margin-bottom:12px}
+table.uur th,table.uur td{border:1px solid #aebdcc;padding:4px 3px;text-align:center}
+table.uur td[contenteditable="true"]{outline:none;cursor:text}
+table.uur td[contenteditable="true"]:hover{background:#f6faff}
+table.uur td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #1a5490}
+table.uur th{background:#1a5490;color:white;font-size:.75rem;font-weight:600;line-height:1.2}
+table.uur th.daglabel{background:#e8780c;color:white;text-align:left;padding-left:8px;font-size:.8rem}
+table.uur th.daglabel .tabel-plaats{
+  font-weight:700;outline:none;border-bottom:1px dashed rgba(255,255,255,.5);
+  cursor:text;min-width:40px;display:inline-block;
+}
+table.uur th.daglabel .tabel-plaats:focus{background:rgba(0,0,0,.15);border-radius:2px;border-bottom-color:white}
+table.uur td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-size:.72rem;width:22%;padding-left:6px}
+table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1a5490;margin-right:2px}
+
+/* 5-daagse vooruitblik */
+/* kop-dag-keuze (dropdown + zelf-datum in tekstsectie-koppen) */
+.kop-keuze{display:inline-flex;gap:4px;align-items:center;margin-left:6px;font-size:.78rem;font-weight:400;vertical-align:middle}
+.kop-keuze select,.kop-keuze input{font-family:inherit;font-size:.78rem;padding:2px 4px;border:1px solid #bbb;border-radius:3px;background:white;color:#333;font-weight:500}
+.kop-dag-tekst{display:inline-block}
+
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.75rem;color:#888;display:flex;flex-direction:column;gap:4px}
+.doc-footer .footer-rij{display:flex;justify-content:space-between}
+.doc-footer .footer-disclaimer{font-size:.65rem;font-style:italic;text-align:center}
+
+/* Grafiek-panelen in Weerlab-stijl */
+.grafiek-panel{background:white;border:1px solid #d0d8e4;border-radius:4px;margin:14px 0;overflow:hidden}
+.grafiek-header{background:#003366;color:white;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+.grafiek-header .hdr-l{font-size:14px;font-weight:700}
+.grafiek-header .hdr-sub{font-size:10.5px;color:#a8c8e8;margin-top:2px}
+.grafiek-header .hdr-r{font-size:14px;font-weight:700;text-align:right}
+.grafiek-header .hdr-r-sub{font-size:10.5px;color:#a8c8e8}
+.grafiek-panel canvas{display:block;width:100%;height:auto;background:#f8fafc}
+.grafiek-acties{padding:6px 10px;text-align:right;border-top:1px solid #eee;background:#f8fafc}
+.grafiek-acties button{background:#1a5490;color:white;border:none;border-radius:3px;padding:5px 12px;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
+.grafiek-acties button:hover{background:#124270}
+
+/* Koptekst-grootte (instelbaar) */
+body{--kop-scale:1}
+.pagina .titel{font-size:calc(1.3rem * var(--kop-scale))}
+.pagina .subtitel{font-size:calc(.95rem * var(--kop-scale))}
+.pagina h2.kop{font-size:calc(.95rem * var(--kop-scale))}
+
+@media (max-width:700px){
+  body{padding:8px 6px 20px}
+  .pagina{padding:16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toolbar{padding:8px 10px;gap:6px;top:6px}
+  .toolbar button{font-size:.76rem;padding:5px 8px}
+  .toolbar select,.toolbar input{font-size:.78rem;padding:4px 7px}
+  .doc-header{flex-wrap:wrap;gap:8px}
+  .doc-header img.logo-l{height:70px}
+  .doc-header img.logo-r{height:40px;max-width:130px}
+  .plaats-blok{flex-wrap:wrap}
+  table.uur{font-size:.70rem}
+  table.uur th,table.uur td{padding:2px 3px}
+  .kop-preset,.kop-keuze select,.kop-keuze input{display:none}
+  .kop-dag-tekst{display:inline}
+}
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0;page-break-after:always;break-after:page}
+  .pagina-2{page-break-before:always;break-before:page;page-break-after:avoid;break-after:avoid}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  .titel{border-top:1px solid #888;border-bottom:1px solid #888}
+  select.status-sel{border:none;appearance:none;-webkit-appearance:none;background:transparent;font-weight:700;padding:0}
+  table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+  @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <label>Model:</label>
+  <select id="model-sel">
+    <option value="harmonie" selected>HARMONIE 2×2 km</option>
+    <option value="icond2">ICON-D2 regulier</option>
+    <option value="icond2ruc">ICON-D2 RUC (uurlijks)</option>
+    <option value="mix_harmonie_icond2ruc">Mix HARMONIE + ICON-D2 RUC</option>
+    <option value="mosmix">MOSMIX (DWD, uurlijks)</option>
+  </select>
+  <label style="margin-left:16px">Startuur:</label>
+  <select id="startuur-sel"></select>
+  <label style="margin-left:8px">Uurtabel:</label>
+  <select id="tabel-dag-sel" title="Kies of de uurtabel voor vandaag, morgen of een zelfgekozen dag begint">
+    <option value="vandaag" selected>Vandaag</option>
+    <option value="morgen">Morgen</option>
+    <option value="zelf">Zelf kiezen…</option>
+  </select>
+  <input type="date" id="tabel-zelf-datum" style="display:none;font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem" title="Kies een dag voor de uurtabel">
+  <label style="margin-left:8px">Tekst:</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-vandaag" checked> vandaag</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-morgen" checked> morgen</label>
+  <label style="font-weight:500"><input type="checkbox" id="toon-komende" checked> komende dagen</label>
+  <span class="spacer"></span>
+  <span class="status" id="data-status">–</span>
+  <button id="laad-btn" onclick="herlaadTabel()" style="background:#2a7a2a" title="Haal de uurtabellen opnieuw op (overschrijft eigen aanpassingen)">↻ Ververs tabel</button>
+  <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <span class="status" style="margin-left:8px">Document:</span>
+  <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <label style="margin-left:8px" title="Tijdstip 'Opgesteld op…' aanpassen (leeg = nu)">Tijd:</label>
+  <input type="datetime-local" id="opgesteld-tijd" data-save="opgesteldTijd" title="Tijdstip 'Opgesteld op…' overschrijven (leeg = nu)" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <button type="button" onclick="wisOpgesteldTijd()" title="Tijd leegmaken (gebruik 'nu')" style="background:#777;padding:4px 8px;font-size:.78rem">✕</button>
+  <input type="text" id="doc-naam" value="Rotterdam" placeholder="Naam document" title="Naam voor deze opgeslagen versie" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem;width:130px">
+  <select id="doc-kies" title="Kies een opgeslagen document voor deze datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem;min-width:130px"></select>
+  <button onclick="nieuwDocument()" title="Maak een tweede document voor dezelfde datum">＋ Nieuw</button>
+  <label style="margin-left:8px">Koppen:</label>
+  <select id="kop-scale-sel" onchange="zetKopScale(this.value)" title="Grootte van titel en koppen">
+    <option value="0.8">80%</option>
+    <option value="0.9">90%</option>
+    <option value="1" selected>100%</option>
+    <option value="1.1">110%</option>
+    <option value="1.2">120%</option>
+    <option value="1.35">135%</option>
+    <option value="1.5">150%</option>
+  </select>
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
+  <label class="sync-toggle no-pdf" title="Deel concepten via Cloudflare KV. Uit = alleen lokaal bewaren."><input type="checkbox" id="wb-live-sync" data-wb-sync-toggle> Live sync</label>
+  <span class="sync-status no-pdf" id="wb-live-sync-status" data-wb-sync-status></span>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
+  <button onclick="gaTerug()" style="background:#777">← Terug naar weerbewaking</button>
+</div>
+
+<!-- PAGINA -->
+<div class="pagina" id="doc">
+
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Weer en Media" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum">–</span></div>
+
+  <div class="plaats-blok no-pdf">
+    <span class="label">Plaats</span>
+    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Plaats of coördinaten, bv. 52.10, 5.18">
+    <button id="zoek-btn" style="background:#e8780c;color:white;border:none;border-radius:3px;padding:5px 12px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🔍 Zoek</button>
+  </div>
+  <div id="geo-status" class="no-pdf" style="font-size:.72rem;color:#666;margin:4px 0 0 4px;min-height:14px"></div>
+
+  <div class="subtitel" contenteditable="true" data-save="subtitel" data-placeholder="Subtitel (bijv. WEER  |  EVENEMENT)">WEER  |  EVENEMENT</div>
+  <div class="titel" contenteditable="true" data-save="titel" data-placeholder="TITEL">GRIJS EN WATERKOUD</div>
+
+  <h2 class="kop">De weersituatie nader beschreven</h2>
+  <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Vandaag wordt het weer in Nederland bepaald door een hogedrukgebied boven Centraal-Europa. Het zorgt voor een zuidwestelijke stroming met de aanvoer van vochtige lucht.</div>
+
+  <section id="sec-vandaag" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-vandaag" title="Verberg sectie">×</button>
+    <h2 class="kop"><span class="kop-dag-tekst" data-save="kop-vandaag-tekst">Vandaag</span><span class="kop-keuze no-pdf">
+      <select class="kop-dag-sel" data-save="kop-vandaag-sel">
+        <option value="vandaag" selected>Vandaag</option>
+        <option value="morgen">Morgen</option>
+        <option value="komende">Komende dagen</option>
+        <option value="zelf">Zelf…</option>
+      </select>
+      <input type="date" class="kop-dag-datum" data-save="kop-vandaag-datum" style="display:none">
+    </span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting...">Vandaag is het bewolkt en grijs. Er is kans op een enkel lichte bui, maar het blijft overwegend droog. De middagtemperatuur komt uit op ongeveer 9 graden. Er staat een matige wind uit het zuidwesten, windkracht 3 of 4.</div>
+  </section>
+
+  <section id="sec-morgen" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-morgen" title="Verberg sectie">×</button>
+    <h2 class="kop"><span class="kop-dag-tekst" data-save="kop-morgen-tekst">Morgen</span><span class="kop-keuze no-pdf">
+      <select class="kop-dag-sel" data-save="kop-morgen-sel">
+        <option value="vandaag">Vandaag</option>
+        <option value="morgen" selected>Morgen</option>
+        <option value="komende">Komende dagen</option>
+        <option value="zelf">Zelf…</option>
+      </select>
+      <input type="date" class="kop-dag-datum" data-save="kop-morgen-datum" style="display:none">
+    </span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf de verwachting...">Morgen is er een afwisseling van wolken en zon. Het blijft meestal droog, maar bij buien of kans op onweer kan dit hier alvast worden benoemd.</div>
+  </section>
+
+  <section id="sec-komende" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-komende" title="Verberg sectie">×</button>
+    <h2 class="kop"><span class="kop-dag-tekst" data-save="kop-komende-tekst">Overmorgen</span><span class="kop-keuze no-pdf">
+      <select class="kop-dag-sel" data-save="kop-komende-sel">
+        <option value="vandaag">Vandaag</option>
+        <option value="morgen">Morgen</option>
+        <option value="komende" selected>Komende dagen</option>
+        <option value="zelf">Zelf…</option>
+      </select>
+      <input type="date" class="kop-dag-datum" data-save="kop-komende-datum" style="display:none">
+    </span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="komende" data-placeholder="Beschrijf de verwachting...">De komende dagen blijft het wisselend met perioden met zon en wolken. De temperatuur blijft rond normale waarden voor de tijd van het jaar.</div>
+  </section>
+
+  <h2 class="kop">Waarschuwing</h2>
+  <table class="tabel" id="waarsch-tabel">
+    <thead><tr><th style="width:18%">Periode</th><th style="width:20%">Datum</th><th style="width:18%">Status</th><th>Waarvoor</th></tr></thead>
+    <tbody id="waarsch-body"></tbody>
+  </table>
+
+  <div style="margin-top:18px"></div>
+  <h2 class="kop">Uurverwachting</h2>
+  <table class="uur" id="uur-tabel-1"></table>
+
+  <h2 class="kop">Uurverwachting — vervolg</h2>
+  <table class="uur" id="uur-tabel-2"></table>
+
+  <div class="doc-footer">
+    <div class="footer-rij">
+      <span>Weerbewaking W.M. · uurlijks</span>
+      <span id="footer-datum">–</span>
+    </div>
+    <div class="footer-disclaimer">© Ed Aldus Weer en Media aanvaardt geen aansprakelijkheid voor het niet of slechts ten-dele uitkomen van de verstrekte verwachtingen.</div>
+  </div>
+</div>
+
+<script>
+/* Hulpmappings + functies (delen stijl met rijnmond) */
+const MAAND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const DAG=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+
+function formatDatumVol(d){
+  return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]} ${d.getFullYear()} om ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} uur`;
+}
+function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function formatDagLang(d){ return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]}`; }
+function exportNaam(...waarden){
+  const rauw=(waarden.find(v=>(v||'').trim()) || 'Document').split(',')[0].trim();
+  return rauw.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').replace(/^_+|_+$/g,'') || 'Document';
+}
+function exportStamp(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function getOpgesteldDate(){
+  const v=document.getElementById('opgesteld-tijd')?.value;
+  if(v){ const d=new Date(v); if(!isNaN(d.getTime())) return d; }
+  return new Date();
+}
+function updateOpgesteldHeader(){
+  const d=getOpgesteldDate();
+  const h=document.getElementById('hdr-datum'); if(h) h.textContent=formatDatumVol(d);
+  const f=document.getElementById('footer-datum');
+  if(f) f.textContent=formatDMshort(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function wisOpgesteldTijd(){
+  const inp=document.getElementById('opgesteld-tijd');
+  if(inp){ inp.value=''; updateOpgesteldHeader(); if(typeof saveDraft==='function') saveDraft(); }
+}
+function dagStart(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function zelfdeDag(a,b){ return dagStart(a).getTime()===dagStart(b).getTime(); }
+function gekozenTabelDatum(){
+  const sel=document.getElementById('tabel-dag-sel')?.value;
+  if(sel==='zelf'){
+    const inp=document.getElementById('tabel-zelf-datum')?.value;
+    if(inp){
+      const [y,m,d]=inp.split('-').map(Number);
+      return dagStart(new Date(y, m-1, d));
+    }
+  }
+  const d=dagStart(new Date());
+  if(sel==='morgen') d.setDate(d.getDate()+1);
+  return d;
+}
+
+function naarBFT(kmh){
+  if(kmh==null||isNaN(kmh)) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+function naarRichtingKort(deg){
+  if(deg==null||isNaN(deg)) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+
+const PERIODE_OPTIES=['Vandaag','Morgen','Overmorgen','Vannacht','Komende nacht','Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'];
+function periodeUitDatum(iso, basis){
+  if(!iso) return null;
+  const [y,m,d]=iso.split('-').map(Number);
+  if(!y||!m||!d) return null;
+  const doel=new Date(y, m-1, d); doel.setHours(0,0,0,0);
+  const ref=basis ? new Date(basis) : new Date();
+  ref.setHours(0,0,0,0);
+  const diff=Math.round((doel-ref)/86400000);
+  if(diff===0) return 'Vandaag';
+  if(diff===1) return 'Morgen';
+  if(diff===2) return 'Overmorgen';
+  if(diff>=3 && diff<=6) return DAG[doel.getDay()].charAt(0).toUpperCase()+DAG[doel.getDay()].slice(1);
+  return null;
+}
+function bouwWaarschuwing(startDatum){
+  const tbody=document.getElementById('waarsch-body');
+  // Bewaar bestaande waarden zodat ze niet verloren gaan bij herbouw
+  // én lees draft uit localStorage (voor migratie van oude contenteditable td)
+  let draft={};
+  try{ draft=JSON.parse(localStorage.getItem(saveKey()) || '{}'); }catch(e){}
+  const oudePeriode=tbody.querySelector('[data-save="waarsch-periode"]')?.value || tbody.querySelector('[data-save="waarsch-periode"]')?.textContent || draft['waarsch-periode'];
+  const oudeDatum=tbody.querySelector('[data-save="waarsch-datum"]')?.value || draft['waarsch-datum'];
+  const oudeStatus=tbody.querySelector('select.status-sel')?.value || draft['waarsch-status'];
+  const oudeWaarvoor=tbody.querySelector('[data-save="waarsch-waarvoor"]')?.innerHTML || draft['waarsch-waarvoor'];
+  const isoDef=`${startDatum.getFullYear()}-${String(startDatum.getMonth()+1).padStart(2,'0')}-${String(startDatum.getDate()).padStart(2,'0')}`;
+  const periodeBron=oudePeriode || periodeUitDatum(oudeDatum||isoDef, startDatum) || 'Vandaag';
+  const periodeOpties=PERIODE_OPTIES.includes(periodeBron) ? PERIODE_OPTIES : [periodeBron, ...PERIODE_OPTIES];
+  tbody.innerHTML=`
+    <tr>
+      <td class="label">
+        <select class="periode-sel" data-save="waarsch-periode" title="Kies de dag/periode">
+          ${periodeOpties.map(o=>`<option value="${o}"${o===periodeBron?' selected':''}>${o}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="date" data-save="waarsch-datum" value="${oudeDatum||isoDef}" style="font-family:inherit;font-size:.78rem;border:1px solid #ccc;border-radius:3px;padding:2px 4px;width:130px"></td>
+      <td>
+        <select class="status-sel" data-save="waarsch-status" onchange="updateStatusKleur(this)">
+          <option value="GROEN">GROEN</option>
+          <option value="GEEL">GEEL</option>
+          <option value="ORANJE">ORANJE</option>
+          <option value="ROOD">ROOD</option>
+        </select>
+      </td>
+      <td class="waarvoor-cel" contenteditable="true" data-save="waarsch-waarvoor" data-placeholder="Waarvoor (bv. wind, regen, gladheid)…">${oudeWaarvoor||''}</td>
+    </tr>`;
+  if(oudeStatus){
+    const sel=tbody.querySelector('select.status-sel');
+    sel.value=oudeStatus==='GEEN'?'GROEN':oudeStatus;
+  }
+  updateStatusKleur(tbody.querySelector('select.status-sel'));
+  // Bij datum-wissel automatisch de periode meeveranderen
+  const datumInp=tbody.querySelector('[data-save="waarsch-datum"]');
+  const periodeSel=tbody.querySelector('[data-save="waarsch-periode"]');
+  if(datumInp && periodeSel){
+    datumInp.addEventListener('change', ()=>{
+      const basis=new Date(huidigeDatum()+'T12:00:00');
+      const nieuwePeriode=periodeUitDatum(datumInp.value, basis);
+      if(nieuwePeriode){
+        if(!Array.from(periodeSel.options).some(o=>o.value===nieuwePeriode)){
+          const opt=document.createElement('option'); opt.value=nieuwePeriode; opt.textContent=nieuwePeriode;
+          periodeSel.insertBefore(opt, periodeSel.firstChild);
+        }
+        periodeSel.value=nieuwePeriode;
+      }
+      if(typeof saveDraft==='function') saveDraft();
+    });
+  }
+}
+function updateStatusKleur(sel){
+  const kl={GEEN:'w-geen',GROEN:'w-groen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
+  sel.className='status-sel '+kl[sel.value];
+}
+function updateTekstSecties(){
+  const koppels=[
+    ['toon-vandaag','sec-vandaag'],
+    ['toon-morgen','sec-morgen'],
+    ['toon-komende','sec-komende']
+  ];
+  koppels.forEach(([checkId,secId])=>{
+    const check=document.getElementById(checkId);
+    const sec=document.getElementById(secId);
+    if(sec && check) sec.style.display=check.checked?'':'none';
+  });
+}
+
+/* ── Bouw één uurtabel (6 uren) ── */
+function bouwUurTabel(tblEl, daglabel, uren, rijen, plaatsnaam=''){
+  const p=(plaatsnaam||'').trim();
+  const plaatsHtml=`&nbsp; | &nbsp;<span class="tabel-plaats" contenteditable="true">${p}</span>`;
+  const thHdr=`<tr><th class="daglabel" colspan="${uren.length+1}">${daglabel}${plaatsHtml}</th></tr>
+               <tr><th style="width:22%"></th>${uren.map(u=>`<th>${u}</th>`).join('')}</tr>`;
+  const body=rijen.map(r=>`<tr><td class="rij-label">${r.label}</td>${r.cellen.map(c=>`<td contenteditable="true"${r.cls?' class="'+r.cls+'"':''}>${c}</td>`).join('')}</tr>`).join('');
+  tblEl.innerHTML=`<thead>${thHdr}</thead><tbody>${body}</tbody>`;
+}
+function syncTabelPlaats(){
+  const p=(document.getElementById('plaats-in')?.value || '').split(',')[0].trim();
+  document.querySelectorAll('.tabel-plaats').forEach(sp=>{ sp.textContent=p; });
+}
+
+function windCel(deg){
+  const letter=naarRichtingKort(deg);
+  const rot=deg!=null?deg:0;
+  return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+}
+const RICHTING_DEG={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function parseRichting(txt){
+  const m=(txt||'').toUpperCase().replace(/[^NOZW]/g,'').match(/^(NNO|NNW|NO|NW|N|ONO|OZO|O|ZZO|ZZW|ZO|ZW|Z|WNW|WZW|W)$/);
+  if(!m) return null;
+  return RICHTING_DEG[m[1]];
+}
+
+/* ── Model-data (HARMONIE / ICON-D2) ── */
+const HARM_BASE='https://harmonie-data.weerlab.nl/';
+const MODELS={
+  harmonie: {meta:'harmonie_canvas_meta.json', label:'HARMONIE 2×2 km'},
+  icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 regulier'},
+  icond2ruc:{meta:'icond2ruc_canvas_meta.json',label:'ICON-D2 RUC'},
+  mix_harmonie_icond2ruc:{label:'Mix HARMONIE + ICON-D2 RUC', members:['harmonie','icond2ruc']}
+};
+const SAMPLE_RADIUS_KM=10;
+const SAMPLE_EXTRA_POINTS=6;
+
+/* ── MOSMIX (DWD) ── */
+const MOSMIX_STATIONS=[
+  {id:'06235',naam:'Den Helder', lat:52.92,lon:4.78},
+  {id:'06240',naam:'Schiphol',   lat:52.31,lon:4.79},
+  {id:'06260',naam:'De Bilt',    lat:52.10,lon:5.18},
+  {id:'06270',naam:'Leeuwarden', lat:53.23,lon:5.75},
+  {id:'06280',naam:'Eelde',      lat:53.13,lon:6.58},
+  {id:'06290',naam:'Twente',     lat:52.27,lon:6.90},
+  {id:'06310',naam:'Vlissingen', lat:51.44,lon:3.60},
+  {id:'06344',naam:'Rotterdam',  lat:51.95,lon:4.45},
+  {id:'06350',naam:'Gilze-Rijen',lat:51.57,lon:4.93},
+  {id:'06370',naam:'Eindhoven',  lat:51.45,lon:5.38},
+  {id:'06380',naam:'Maastricht', lat:50.91,lon:5.76},
+];
+const MOSMIX_BASE=window.location.hostname.includes('localhost')||window.location.hostname.includes('127.0.0.1')
+  ?'/data/':'https://data.weerlab.nl/';
+let mosmixDataCache={};
+
+function nearestMosmixStation(lat,lon){
+  let best=null,bestD=Infinity;
+  for(const st of MOSMIX_STATIONS){
+    const d=Math.hypot(st.lat-lat,st.lon-lon);
+    if(d<bestD){bestD=d;best=st;}
+  }
+  return best;
+}
+
+async function laadMosmixData(stationId){
+  if(mosmixDataCache[stationId]) return mosmixDataCache[stationId];
+  const r=await fetch(`${MOSMIX_BASE}mosmix_${stationId}.json?_=${Date.now()}`);
+  if(!r.ok) throw new Error(`MOSMIX ${stationId}: HTTP ${r.status}`);
+  const d=await r.json();
+  mosmixDataCache[stationId]=d;
+  return d;
+}
+
+function vulStartuurSelectMosmix(tijden){
+  const sel=document.getElementById('startuur-sel');
+  const dagSel=document.getElementById('tabel-dag-sel')?.value||'vandaag';
+  const now=new Date();
+  let targetDay;
+  if(dagSel==='morgen'){
+    targetDay=new Date(now); targetDay.setDate(targetDay.getDate()+1); targetDay.setHours(0,0,0,0);
+  } else if(dagSel==='zelf'){
+    const v=document.getElementById('tabel-zelf-datum')?.value;
+    targetDay=v?new Date(v+'T12:00:00'):new Date(now); targetDay.setHours(0,0,0,0);
+  } else {
+    targetDay=new Date(now); targetDay.setHours(0,0,0,0);
+  }
+  const saved=sel.value;
+  sel.innerHTML='';
+  let defaultIdx=0;
+  for(let i=0;i<tijden.length;i++){
+    const tUtc=new Date(tijden[i]);
+    const tLoc=new Date(tUtc.getTime()+2*3600000);// CEST approx
+    const opt=document.createElement('option');
+    opt.value=i;
+    opt.textContent=`${DAG[tLoc.getDay()].slice(0,2)} ${String(tLoc.getHours()).padStart(2,'0')}:00`;
+    if(tUtc>=now&&defaultIdx===0) defaultIdx=i;
+    sel.appendChild(opt);
+  }
+  if(saved&&sel.querySelector(`option[value="${saved}"]`)) sel.value=saved;
+  else sel.value=String(defaultIdx);
+}
+
+async function renderTabellenMosmix(){
+  const pt=huidigePunt;
+  if(!pt) return;
+  zetKnopLaden(true);
+  try{
+    const st=nearestMosmixStation(pt.lat,pt.lon);
+    mosmixDataCache={};
+    const data=await laadMosmixData(st.id);
+    vulStartuurSelectMosmix(data.tijden);
+    const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+    const NSTEPS=Math.min(12,data.tijden.length-startIdx);
+    const tijden1=[],tijden2=[];
+    const r1={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
+    const r2={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
+    let lbl1='',lbl2='';
+    for(let k=0;k<NSTEPS;k++){
+      const idx=startIdx+k;
+      const tUtc=new Date(data.tijden[idx]);
+      const tLoc=new Date(tUtc.getTime()+2*3600000);
+      const uur=`${String(tLoc.getHours()).padStart(2,'0')}:00 uur`;
+      const rij=k<6?r1:r2;
+      if(k===0) lbl1=formatDagLang(tLoc);
+      if(k===6) lbl2=formatDagLang(tLoc);
+      (k<6?tijden1:tijden2).push(uur);
+      rij.temp.push(f(data.temp[idx],0));
+      const dd=data.wind_dir[idx];
+      const ff=data.wind_ms[idx];
+      rij.wind.push(dd==null?'–':windCel(dd));
+      rij.bft.push(ff==null?'–':naarBFT(msNaarKmh(ff)));
+      rij.stoot.push(data.gust_ms[idx]==null?'–':Math.round(msNaarKmh(data.gust_ms[idx])));
+      rij.regen.push(f(data.regen[idx],1));
+      rij.kansR.push(data.kans_regen[idx]??'–');
+      rij.kansO.push(data.kans_onweer[idx]??'–');
+      rij.zon.push(data.zon[idx]??'–');
+    }
+    const rijDef=r=>[
+      {label:'Temperatuur (°C)', cellen:r.temp},
+      {label:'Wind',             cellen:r.wind,cls:'wind-cel'},
+      {label:'Windkracht (BFT)', cellen:r.bft},
+      {label:'Max. windstoot (km/u)',cellen:r.stoot},
+      {label:'Kans op regen (%)', cellen:r.kansR},
+      {label:'Regen (mm)',        cellen:r.regen},
+      {label:'Kans op onweer (%)',cellen:r.kansO},
+      {label:'Zon/helder (%)',    cellen:r.zon},
+    ];
+    const plaatsnaam=(document.getElementById('plaats-in').value||'').split(',')[0].trim();
+    const stNaam=`${plaatsnaam} · MOSMIX: ${st.naam}`;
+    bouwUurTabel(document.getElementById('uur-tabel-1'),lbl1,tijden1,rijDef(r1),stNaam);
+    if(tijden2.length){
+      bouwUurTabel(document.getElementById('uur-tabel-2'),lbl2,tijden2,rijDef(r2),stNaam);
+      document.getElementById('uur-tabel-2').style.display='';
+    } else {
+      document.getElementById('uur-tabel-2').style.display='none';
+    }
+    zetLaadStatus(`MOSMIX · ${st.naam} · run ${data.run?data.run.slice(0,16):'–'}`);
+    saveTabel();
+  }catch(e){
+    zetLaadStatus('MOSMIX fout: '+e.message);
+  }
+  zetKnopLaden(false);
+}
+let huidigModel='harmonie';
+let metaCache={};
+let harmonieMeta=null;
+let huidigePunt=null;
+
+async function laadMeta(modelKey=huidigModel){
+  const model=MODELS[modelKey];
+  const basisKey=model.members ? model.members[0] : modelKey;
+  if(metaCache[basisKey]){
+    if(modelKey===huidigModel) harmonieMeta=metaCache[basisKey];
+    return metaCache[basisKey];
+  }
+  const r=await fetch(HARM_BASE+MODELS[basisKey].meta+'?_='+Date.now());
+  if(!r.ok) throw new Error('meta fetch '+r.status);
+  const j=await r.json();
+  metaCache[basisKey]=j;
+  if(modelKey===huidigModel) harmonieMeta=j;
+  return j;
+}
+
+function latLonNaarGrid(meta,lat,lon){
+  const g=meta.grid;
+  const iLat=Math.round((lat-g.lat_min)/(g.lat_max-g.lat_min)*(g.n_lat-1));
+  const iLon=Math.round((lon-g.lon_min)/(g.lon_max-g.lon_min)*(g.n_lon-1));
+  if(iLat<0||iLat>=g.n_lat||iLon<0||iLon>=g.n_lon) return null;
+  return {iLat,iLon,gi:iLat*g.n_lon+iLon};
+}
+function parseCoordinateQuery(q){
+  const nums=q.trim().replace(/[()]/g,'').match(/[-+]?\d+(?:[.,]\d+)?/g);
+  if(!nums || nums.length<2) return null;
+  const lat=parseFloat(nums[0].replace(',','.'));
+  const lon=parseFloat(nums[1].replace(',','.'));
+  if(!Number.isFinite(lat)||!Number.isFinite(lon)) return null;
+  if(lat<-90||lat>90||lon<-180||lon>180) return null;
+  return {lat,lon,naam:`${lat.toFixed(3)}, ${lon.toFixed(3)}`};
+}
+function offsetLatLon(lat,lon,distanceKm,bearingDeg){
+  const br=bearingDeg*Math.PI/180;
+  const dLat=(distanceKm*Math.cos(br))/111.32;
+  const dLon=(distanceKm*Math.sin(br))/(111.32*Math.cos(lat*Math.PI/180));
+  return {lat:lat+dLat, lon:lon+dLon};
+}
+function sampleGridPointsForLocation(meta,lat,lon){
+  const punten=[{lat,lon}];
+  for(let i=0;i<SAMPLE_EXTRA_POINTS;i++) punten.push(offsetLatLon(lat,lon,SAMPLE_RADIUS_KM,i*360/SAMPLE_EXTRA_POINTS));
+  const uniek=[];
+  const gezien=new Set();
+  for(const p of punten){
+    const grid=latLonNaarGrid(meta,p.lat,p.lon);
+    if(grid && !gezien.has(grid.gi)){
+      gezien.add(grid.gi);
+      uniek.push(grid);
+    }
+  }
+  return uniek;
+}
+function beschrijfSample(pt){
+  const n=(pt.gis&&pt.gis.length)||1;
+  return n>1 ? `${n} roosterpunten gemiddeld binnen ${SAMPLE_RADIUS_KM} km` : '1 roosterpunt';
+}
+
+/* ── Geocoding via Nominatim ── */
+async function geocodePlaats(q){
+  const coords=parseCoordinateQuery(q);
+  if(coords) return coords;
+  const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de&q='+encodeURIComponent(q);
+  const r=await fetch(url);
+  if(!r.ok) throw new Error('geocode faalde');
+  const j=await r.json();
+  if(!j.length) return null;
+  return {lat:parseFloat(j[0].lat), lon:parseFloat(j[0].lon), naam:j[0].display_name};
+}
+
+/* ── Haal puntdata uit een HARMONIE-bin voor alle nSteps ── */
+// Per (stap, component) één range-request voor alle gridpunten → ~7× minder requests.
+async function puntReeks(paramKey, gis, nSteps, limit=20, modelKey=huidigModel){
+  const meta=await laadMeta(modelKey);
+  const info=meta.parameters[paramKey];
+  if(!info) throw new Error('param onbekend: '+paramKey);
+  const gridIndices=Array.isArray(gis)?gis:[gis];
+  const nPts=meta.grid.n_lat*meta.grid.n_lon;
+  const nComp=info.components;
+  const url=HARM_BASE+info.file;
+  const HEADER=16;
+  const minGi=Math.min(...gridIndices);
+  const maxGi=Math.max(...gridIndices);
+
+  // Bouw taaklist: één range-request per (stap, component)
+  const taken=[];
+  for(let s=0;s<nSteps;s++){
+    for(let c=0;c<nComp;c++){
+      const base=HEADER + ((s*nComp+c)*nPts)*4;
+      taken.push({s,c,base});
+    }
+  }
+
+  // Uitvoer: results[s][c] = gemiddelde over gridpunten
+  const resultaten=Array.from({length:nSteps},()=>new Array(nComp).fill(null));
+  let next=0;
+  async function worker(){
+    while(next<taken.length){
+      const k=next++;
+      const {s,c,base}=taken[k];
+      try{
+        const byteStart=base+minGi*4;
+        const byteEnd=base+maxGi*4+3;
+        const r=await fetch(url,{headers:{'Range':`bytes=${byteStart}-${byteEnd}`}});
+        if(!r.ok && r.status!==206) throw new Error('range faalde '+r.status);
+        const dv=new DataView(await r.arrayBuffer());
+        let som=0, n=0;
+        for(const gi of gridIndices){
+          const v=dv.getFloat32((gi-minGi)*4,true);
+          if(Number.isFinite(v)){ som+=v; n++; }
+        }
+        resultaten[s][c]=n ? som/n : null;
+      }catch(e){ resultaten[s][c]=null; }
+    }
+  }
+  await Promise.all(Array(Math.min(limit,taken.length)).fill(0).map(worker));
+  return resultaten; // [step][comp]
+}
+function gemiddeldeReeksen(reeksen){
+  const bruikbaar=reeksen.filter(Boolean);
+  if(!bruikbaar.length) return null;
+  const nSteps=Math.max(...bruikbaar.map(r=>r.length));
+  const uit=[];
+  for(let s=0;s<nSteps;s++){
+    const nComp=Math.max(...bruikbaar.map(r=>(r[s]||[]).length));
+    uit[s]=[];
+    for(let c=0;c<nComp;c++){
+      let som=0, n=0;
+      bruikbaar.forEach(r=>{
+        const v=r[s]?.[c];
+        if(Number.isFinite(v)){ som+=v; n++; }
+      });
+      uit[s][c]=n ? som/n : null;
+    }
+  }
+  return uit;
+}
+async function puntReeksVoorActiefModel(paramKey,startIdx,nSteps,baseTimes,pt){
+  const model=MODELS[huidigModel];
+  if(!model.members){
+    const r=await puntReeks(paramKey, pt.gis||pt.gi, startIdx+nSteps);
+    return r.slice(startIdx,startIdx+nSteps);
+  }
+  const perModel=await Promise.all(model.members.map(async memberKey=>{
+    const memberMeta=await laadMeta(memberKey);
+    if(!memberMeta.parameters[paramKey]) return null;
+    const memberGrids=sampleGridPointsForLocation(memberMeta,pt.lat,pt.lon);
+    if(!memberGrids.length) return null;
+    const memberIndexByTime=new Map((memberMeta.tijden||[]).map((t,i)=>[new Date(t).getTime(),i]));
+    const indices=baseTimes.map(t=>memberIndexByTime.get(new Date(t).getTime()));
+    const geldige=indices.filter(i=>Number.isInteger(i));
+    if(!geldige.length) return null;
+    const reeks=await puntReeks(paramKey,memberGrids.map(g=>g.gi),Math.max(...geldige)+1,20,memberKey);
+    return indices.map(i=>Number.isInteger(i) ? reeks[i] : null);
+  }));
+  return gemiddeldeReeksen(perModel);
+}
+
+function vulStartuurSelect(tijden,nuSel){
+  const sel=document.getElementById('startuur-sel');
+  const nu=new Date();
+  const tabelDag=gekozenTabelDatum();
+  const dagSel=document.getElementById('tabel-dag-sel')?.value;
+  // Default: eerste uur op de gekozen tabeldag dat >= nu is (of begin van die dag)
+  let defaultIdx=-1;
+  for(let i=0;i<tijden.length;i++){
+    const t=new Date(tijden[i]);
+    if(!zelfdeDag(t,tabelDag)) continue;
+    if(dagSel==='morgen' || dagSel==='zelf' || t>=nu){
+      defaultIdx=i; break;
+    }
+  }
+  if(defaultIdx<0){
+    // Geen match op gekozen dag → eerste uur >= nu, of 0
+    for(let i=0;i<tijden.length;i++){ if(new Date(tijden[i])>=nu){ defaultIdx=i; break; } }
+    if(defaultIdx<0) defaultIdx=0;
+  }
+  const behoud=sel.value;
+  sel.innerHTML='';
+  // Toon ALLE uren van de hele run; window verkort automatisch bij einde
+  const maxStart=Math.max(0, tijden.length-1);
+  for(let i=0;i<=maxStart;i++){
+    const t=new Date(tijden[i]);
+    const lbl=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
+    const opt=document.createElement('option');
+    opt.value=i; opt.textContent=lbl;
+    if(i===(nuSel!=null?parseInt(nuSel):defaultIdx)) opt.selected=true;
+    sel.appendChild(opt);
+  }
+  if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
+}
+
+function msNaarKmh(ms){ return ms*3.6; }
+function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):(+v).toFixed(d).replace(/\.0$/,'')); }
+
+async function laadData(){
+  const nu=new Date();
+  updateOpgesteldHeader();
+  bouwWaarschuwing(nu);
+
+  if(huidigModel==='mosmix'){
+    mosmixDataCache={};
+    if(!huidigePunt){ await zoekEnLaad(); return; }
+    await renderTabellenMosmix();
+    return;
+  }
+
+  try{
+    const meta=await laadMeta();
+    if(document.getElementById('startuur-sel').options.length===0){
+      vulStartuurSelect(meta.tijden);
+    }
+    if(!huidigePunt){
+      // Eerste keer of na reload: zoek initiele plaats
+      await zoekEnLaad();
+      return;
+    }
+    const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+    await renderTabellen(startIdx);
+    document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
+  }catch(e){
+    zetLaadStatus('Fout: '+e.message);
+    zetKnopLaden(false);
+  }
+}
+
+function zetLaadStatus(tekst){ document.getElementById('data-status').textContent=tekst; }
+function zetKnopLaden(laden){
+  const btn=document.getElementById('laad-btn');
+  if(!btn) return;
+  btn.disabled=laden;
+  btn.textContent=laden ? '⏳ Laden…' : '⬇ Laad data in';
+}
+
+async function renderTabellen(startIdx){
+  const meta=harmonieMeta;
+  const pt=huidigePunt;
+  const NSTEPS=Math.max(1, Math.min(12, meta.tijden.length - startIdx));
+  const baseTimes=meta.tijden.slice(startIdx,startIdx+NSTEPS);
+  zetKnopLaden(true);
+  zetLaadStatus(MODELS[huidigModel].label+' laden…');
+
+  // Haal alle param-reeksen parallel, met voortgangsteller
+  const onweerParam = harmonieMeta.parameters.onweer ? 'onweer' : (harmonieMeta.parameters.cape ? 'cape' : null);
+  const params=['temp','neerslag','wind','windstoten','bewolking'].concat(onweerParam?[onweerParam]:[]);
+  const reeksen={};
+  let klaar=0;
+  await Promise.all(params.map(async p=>{
+    try{
+      reeksen[p]=await puntReeksVoorActiefModel(p,startIdx,NSTEPS,baseTimes,pt);
+    }catch(e){ reeksen[p]=null; }
+    klaar++;
+    zetLaadStatus(MODELS[huidigModel].label+` laden… (${klaar}/${params.length})`);
+  }));
+  if(onweerParam==='cape' && reeksen.cape){
+    reeksen.onweer = reeksen.cape.map(arr=>{
+      const c=arr[0]; if(c==null) return [null];
+      const p = c<100?0 : c<500?20 : c<1000?40 : c<2000?60 : 80;
+      return [p/100];
+    });
+  }
+
+  const tijden1=[], tijden2=[];
+  const rijen1={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
+  const rijen2={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
+  let dagLabel1='', dagLabel2='';
+
+  for(let k=0;k<NSTEPS;k++){
+    const tijden=meta.tijden[startIdx+k];
+    if(!tijden) break;
+    const t=new Date(tijden);
+    const uur=`${String(t.getHours()).padStart(2,'0')}:00 uur`;
+    const rij = k<6 ? rijen1 : rijen2;
+    if(k===0) dagLabel1=formatDagLang(t);
+    if(k===6) dagLabel2=formatDagLang(t);
+    (k<6?tijden1:tijden2).push(uur);
+
+    const temp = reeksen.temp ? reeksen.temp[k][0] : null;
+    rij.temp.push(f(temp,0));
+
+    let wspd=null, wdir=null;
+    if(reeksen.wind){
+      const u=reeksen.wind[k][0], v=reeksen.wind[k][1];
+      wspd=Math.sqrt(u*u+v*v); // m/s
+      wdir=(Math.atan2(-u,-v)*180/Math.PI+360)%360; // meteo conv.
+    }
+    rij.wind.push(wdir==null?'–':windCel(wdir));
+    rij.bft.push(wspd==null?'–':naarBFT(msNaarKmh(wspd)));
+
+    let gust=null;
+    if(reeksen.windstoten){
+      const u=reeksen.windstoten[k][0], v=reeksen.windstoten[k][1];
+      gust=Math.sqrt(u*u+v*v);
+    }
+    rij.stoot.push(gust==null?'–':Math.round(msNaarKmh(gust)));
+
+    const rr = reeksen.neerslag ? reeksen.neerslag[k][0] : null;
+    rij.regen.push(rr==null?'–':f(rr,1));
+    // Simpele kans-heuristiek: veel regen → hoge kans
+    rij.kansR.push(rr==null?'–':(rr>0.5?100:rr>0.1?70:rr>0.02?30:0));
+
+    const thn = reeksen.onweer ? reeksen.onweer[k][0] : null;
+    // onweer is proxy (bv. CAPE-achtig); bucket in %
+    rij.kansO.push(thn==null?'–':(thn>0.7?80:thn>0.4?40:thn>0.1?10:0));
+
+    // Bewolking: 3 comp (hoog/midden/laag, 0-1). Hoge cirrusbewolking telt
+    // voor 20% mee omdat de zon er grotendeels doorheen schijnt.
+    let cloudTot=null;
+    if(reeksen.bewolking){
+      const b=reeksen.bewolking[k];
+      const hoog=(b[0]||0)*0.2;
+      cloudTot=Math.max(hoog, b[1]||0, b[2]||0);
+    }
+    rij.zon.push(cloudTot==null?'–':Math.round((1-cloudTot)*100));
+  }
+
+  const rijDef=(r)=>[
+    {label:'Temperatuur (°C)', cellen:r.temp},
+    {label:'Wind',             cellen:r.wind, cls:'wind-cel'},
+    {label:'Windkracht (BFT)', cellen:r.bft},
+    {label:'Max. windstoot (km/u)', cellen:r.stoot},
+    {label:'Kans op regen (%)',cellen:r.kansR},
+    {label:'Regen (mm)',       cellen:r.regen},
+    {label:'Kans op onweer (%)',cellen:r.kansO},
+    {label:'Zon/helder (%)',   cellen:r.zon}
+  ];
+  const plaatsnaam=(document.getElementById('plaats-in').value||'').split(',')[0].trim();
+  bouwUurTabel(document.getElementById('uur-tabel-1'), dagLabel1, tijden1, rijDef(rijen1), plaatsnaam);
+  if(tijden2.length){
+    bouwUurTabel(document.getElementById('uur-tabel-2'), dagLabel2, tijden2, rijDef(rijen2), plaatsnaam);
+    document.getElementById('uur-tabel-2').style.display='';
+    document.querySelector('h2.kop + table.uur + h2.kop')?.style.setProperty('display','');
+  } else {
+    document.getElementById('uur-tabel-2').style.display='none';
+  }
+  zetLaadStatus(MODELS[huidigModel].label+' · run '+meta.run);
+  zetKnopLaden(false);
+}
+
+async function zoekEnLaad(){
+  const q=(document.getElementById('plaats-in').value||'').trim();
+  if(!q){ document.getElementById('geo-status').textContent=''; return; }
+  const geoEl=document.getElementById('geo-status');
+  geoEl.textContent='Zoeken…';
+  try{
+    if(huidigModel==='mosmix'){
+      const res=await geocodePlaats(q);
+      if(!res){ geoEl.textContent='Niet gevonden.'; return; }
+      huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam};
+      const st=nearestMosmixStation(res.lat,res.lon);
+      geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')} · MOSMIX: ${st.naam}`;
+      await renderTabellenMosmix();
+      return;
+    }
+    const meta=await laadMeta();
+    const res=await geocodePlaats(q);
+    if(!res){ geoEl.textContent='Niet gevonden.'; return; }
+    const grids=sampleGridPointsForLocation(meta,res.lat,res.lon);
+    if(!grids.length){ geoEl.textContent='Buiten modelgebied.'; return; }
+    huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam,...grids[0],gis:grids.map(g=>g.gi)};
+    geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')}  (${res.lat.toFixed(3)}, ${res.lon.toFixed(3)}) · ${beschrijfSample(huidigePunt)}`;
+    const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+    await renderTabellen(startIdx);
+  }catch(e){
+    geoEl.textContent='Fout: '+e.message;
+  }
+}
+
+document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
+document.getElementById('plaats-in').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); zoekEnLaad(); }
+});
+document.getElementById('plaats-in').addEventListener('input', syncTabelPlaats);
+document.getElementById('startuur-sel').addEventListener('change', ()=>{
+  if(huidigePunt){ renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0')); }
+});
+function updateZelfDatumZichtbaar(){
+  const sel=document.getElementById('tabel-dag-sel')?.value;
+  const inp=document.getElementById('tabel-zelf-datum');
+  if(!inp) return;
+  inp.style.display = sel==='zelf' ? '' : 'none';
+  if(sel==='zelf' && !inp.value){
+    const d=new Date(); d.setDate(d.getDate()+2);
+    inp.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+}
+document.getElementById('tabel-dag-sel').addEventListener('change', ()=>{
+  updateZelfDatumZichtbaar();
+  if(harmonieMeta){
+    vulStartuurSelect(harmonieMeta.tijden);
+    if(huidigePunt) renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
+  }
+  saveDraft();
+});
+document.getElementById('tabel-zelf-datum').addEventListener('change', ()=>{
+  if(harmonieMeta){
+    vulStartuurSelect(harmonieMeta.tijden);
+    if(huidigePunt) renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
+  }
+  saveDraft();
+});
+updateZelfDatumZichtbaar();
+['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    updateTekstSecties();
+    saveDraft();
+  });
+});
+document.querySelectorAll('.tekst-sectie').forEach(sec=>{
+  sec.querySelectorAll('.kop-dag-sel, .kop-dag-datum').forEach(el=>{
+    el.addEventListener('change', ()=>{ updateKopTekst(sec); saveDraft(); });
+  });
+});
+document.querySelectorAll('.sectie-sluit').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const check=document.getElementById(btn.dataset.toggleTarget);
+    if(check) check.checked=false;
+    updateTekstSecties();
+    saveDraft();
+  });
+});
+document.getElementById('model-sel').addEventListener('change', async e=>{
+  huidigModel=e.target.value;
+  harmonieMeta=null;
+  mosmixDataCache={};
+  document.getElementById('startuur-sel').innerHTML='';
+  if(huidigModel==='mosmix'){
+    if(huidigePunt) await renderTabellenMosmix();
+    else zetLaadStatus('MOSMIX — voer een plaats in');
+    return;
+  }
+  try{
+    const meta=await laadMeta();
+    if(huidigePunt){
+      const grids=sampleGridPointsForLocation(meta, huidigePunt.lat, huidigePunt.lon);
+      if(grids.length) huidigePunt={...huidigePunt, ...grids[0], gis:grids.map(g=>g.gi)};
+    }
+    vulStartuurSelect(meta.tijden);
+    if(huidigePunt) await renderTabellen(parseInt(document.getElementById('startuur-sel').value||'0'));
+    document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
+  }catch(err){
+    document.getElementById('data-status').textContent='Model niet beschikbaar: '+err.message;
+  }
+});
+
+/* ── Auto-save (lokaal, per dag) ── */
+const SAVE_PREFIX='wb_uurlijks_draft_';
+const DOC_LIST_PREFIX='wb_uurlijks_docs_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function docNaam(){ return (document.getElementById('doc-naam')?.value || 'Rotterdam').trim() || 'Rotterdam'; }
+function docSlug(naam){ return naam.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'document'; }
+function docListKey(){ return DOC_LIST_PREFIX + huidigeDatum(); }
+function saveKey(naam=docNaam()){ return SAVE_PREFIX + huidigeDatum() + '_' + docSlug(naam); }
+function gedeeldeSyncBeschikbaar(){ return !!(window.WBSync && WBSync.isEnabled()); }
+async function schrijfGedeeldeDraft(d){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  try{
+    await WBSync.putJson(saveKey(d.docNaam || docNaam()), d);
+    toonSaveStatus(d.__ts, 'Document gedeeld opgeslagen');
+  }catch(e){}
+}
+async function schrijfGedeeldeDocLijst(lijst){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  try{ await WBSync.putJson(docListKey(), lijst); }catch(e){}
+}
+async function haalGedeeldeDocLijst(){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  try{
+    const remote = await WBSync.getJson(docListKey());
+    const remoteLijst = Array.isArray(remote) ? remote : (Array.isArray(remote?.names) ? remote.names : []);
+    if(!remoteLijst.length) return;
+    const merged = [...new Set([...leesDocLijst(), ...remoteLijst].filter(Boolean))];
+    localStorage.setItem(docListKey(), JSON.stringify(merged));
+    vulDocKiezer(merged);
+  }catch(e){}
+}
+async function haalGedeeldeDraft(initieel=false){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  if(document.activeElement && document.activeElement.matches && document.activeElement.matches('[data-save], [contenteditable], input, select, textarea')) return;
+  let lokaal=null;
+  try{ lokaal=JSON.parse(localStorage.getItem(saveKey()) || 'null'); }catch(e){}
+  const lokaleTs=Number(lokaal?.__ts || 0);
+  try{
+    const remote=await WBSync.getJson(saveKey());
+    const remoteTs=Number(remote?.__ts || 0);
+    if(remoteTs > lokaleTs + 500){
+      localStorage.setItem(saveKey(), JSON.stringify(remote));
+      if(remote.docNaam) registreerDocNaam(remote.docNaam);
+      restoreDraft();
+      toonSaveStatus(remoteTs, initieel ? 'Hersteld uit gedeelde opslag' : 'Bijgewerkt vanaf andere laptop');
+    } else if(lokaleTs && lokaleTs > remoteTs + 500){
+      await WBSync.putJson(saveKey(), lokaal);
+    } else if(initieel && !remoteTs && !lokaleTs && START_DOCUMENT.doc){
+      saveDraft();
+    }
+  }catch(e){}
+}
+function leesStartDocument(){
+  const params=new URLSearchParams(location.search);
+  const datum=params.get('datum') || params.get('date') || '';
+  const doc=(params.get('doc') || params.get('naam') || '').trim();
+  const eventType=params.get('eventType') || '';
+  return {
+    datum:/^\d{4}-\d{2}-\d{2}$/.test(datum) ? datum : '',
+    doc,
+    eventId:(params.get('eventId') || '').trim(),
+    eventType:eventType === 'wm' ? 'wm' : 'uur',
+    plaats:(params.get('plaats') || '').trim()
+  };
+}
+function syncEventDocumentKoppeling(){
+  if(!START_DOCUMENT?.eventId) return;
+  const naam=docNaam();
+  try{
+    const events=JSON.parse(localStorage.getItem('wb_eventen_v1') || '[]');
+    if(!Array.isArray(events)) throw new Error('events geen lijst');
+    const veld=START_DOCUMENT.eventType === 'wm' ? 'wmDoc' : 'hourlyDoc';
+    if(!naam) return;
+    const oud=START_DOCUMENT.doc || '';
+    let aangepast=false;
+    events.forEach(ev=>{
+      if(!ev) return;
+      const zelfdeEvent=ev.id===START_DOCUMENT.eventId;
+      const zelfdeDocument=oud && ev[veld]===oud && (!START_DOCUMENT.datum || ev.date===START_DOCUMENT.datum);
+      if(!zelfdeEvent && !zelfdeDocument) return;
+      if(ev[veld]===naam) return;
+      ev[veld]=naam;
+      ev.updated=Date.now();
+      aangepast=true;
+    });
+    if(aangepast){
+      START_DOCUMENT.doc=naam;
+      localStorage.setItem('wb_eventen_v1', JSON.stringify(events));
+    }
+  }catch(e){}
+  if(gedeeldeSyncBeschikbaar() && naam){
+    WBSync.updateSharedEventDocLink({
+      eventId: START_DOCUMENT.eventId,
+      eventType: START_DOCUMENT.eventType,
+      datum: START_DOCUMENT.datum,
+      oldDoc: START_DOCUMENT.doc || '',
+      newDoc: naam
+    }).then(()=>{ START_DOCUMENT.doc=naam; }).catch(()=>{});
+  }
+}
+function leesDocLijst(){
+  try{ return JSON.parse(localStorage.getItem(docListKey()) || '[]').filter(Boolean); }catch(e){ return []; }
+}
+function schrijfDocLijst(lijst){
+  const uniek=[...new Set(lijst.filter(Boolean))];
+  try{ localStorage.setItem(docListKey(), JSON.stringify(uniek)); }catch(e){}
+  schrijfGedeeldeDocLijst(uniek);
+  vulDocKiezer(uniek);
+}
+function registreerDocNaam(naam=docNaam()){
+  const lijst=leesDocLijst();
+  if(!lijst.includes(naam)) lijst.push(naam);
+  schrijfDocLijst(lijst);
+}
+function vulDocKiezer(lijst=leesDocLijst()){
+  const sel=document.getElementById('doc-kies'); if(!sel) return;
+  const huidig=docNaam();
+  sel.innerHTML='';
+  const namen=lijst.length?lijst:[huidig];
+  namen.forEach(naam=>{
+    const opt=document.createElement('option');
+    opt.value=naam; opt.textContent=naam;
+    sel.appendChild(opt);
+  });
+  if([...sel.options].some(o=>o.value===huidig)) sel.value=huidig;
+}
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    const k=el.getAttribute('data-save');
+    if(el.tagName==='INPUT' || el.tagName==='SELECT') d[k]=el.value;
+    else d[k]=el.innerHTML;
+  });
+  const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
+  d.tabelDag=document.getElementById('tabel-dag-sel')?.value||'vandaag';
+  d.tabelZelfDatum=document.getElementById('tabel-zelf-datum')?.value||'';
+  d.toonVandaag=!!document.getElementById('toon-vandaag')?.checked;
+  d.toonMorgen=!!document.getElementById('toon-morgen')?.checked;
+  d.toonKomende=!!document.getElementById('toon-komende')?.checked;
+  d.docNaam=docNaam();
+  // Uur-tabellen (inclusief handmatige aanpassingen) bewaren
+  const t1=document.getElementById('uur-tabel-1');
+  const t2=document.getElementById('uur-tabel-2');
+  if(t1 && t1.innerHTML.trim()) d.uurTabel1=t1.innerHTML;
+  if(t2 && t2.innerHTML.trim()) d.uurTabel2=t2.innerHTML;
+  d.uurTabel2Zichtbaar=(t2 && t2.style.display!=='none');
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); registreerDocNaam(d.docNaam); syncEventDocumentKoppeling(); toonSaveStatus(d.__ts); schrijfGedeeldeDraft(d); }catch(e){}
+}
+const KOP_DEFAULTS={'kop-vandaag-tekst':'Vandaag','kop-morgen-tekst':'Morgen','kop-komende-tekst':'Overmorgen'};
+const KOP_DEFAULT_SEL={'kop-vandaag-sel':'vandaag','kop-morgen-sel':'morgen','kop-komende-sel':'komende'};
+function formatKopZelfDatum(dateStr){
+  if(!dateStr) return '';
+  const [y,m,d]=dateStr.split('-').map(Number);
+  if(!y||!m||!d) return '';
+  const dt=new Date(y, m-1, d);
+  return `${DAG[dt.getDay()]} ${dt.getDate()} ${MAAND[dt.getMonth()]}`;
+}
+function updateKopTekst(sec){
+  const sel=sec.querySelector('.kop-dag-sel');
+  const inp=sec.querySelector('.kop-dag-datum');
+  const tekst=sec.querySelector('.kop-dag-tekst');
+  if(!sel||!inp||!tekst) return;
+  inp.style.display = sel.value==='zelf' ? '' : 'none';
+  if(sel.value==='vandaag') tekst.textContent='Vandaag';
+  else if(sel.value==='morgen') tekst.textContent='Morgen';
+  else if(sel.value==='komende') tekst.textContent='Overmorgen';
+  else if(sel.value==='zelf'){
+    if(!inp.value){
+      const d=new Date(); d.setDate(d.getDate()+2);
+      inp.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    tekst.textContent=formatKopZelfDatum(inp.value)||'…';
+  }
+}
+function updateAlleKopTeksten(){
+  document.querySelectorAll('.tekst-sectie').forEach(updateKopTekst);
+}
+function leegForm(){
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    const k=el.getAttribute('data-save');
+    if(el.tagName==='INPUT'){
+      if(el.type==='date') el.value='';
+      else if(el.type==='checkbox') el.checked=false;
+      else el.value='';
+    } else if(el.tagName==='SELECT'){
+      if(KOP_DEFAULT_SEL[k]!=null) el.value=KOP_DEFAULT_SEL[k];
+      else el.selectedIndex=0;
+      if(el.classList.contains('status-sel')) updateStatusKleur(el);
+    } else if(KOP_DEFAULTS[k]!=null){
+      el.textContent=KOP_DEFAULTS[k];
+    } else {
+      el.innerHTML='';
+    }
+  });
+  const p=document.getElementById('plaats-in'); if(p) p.value='Rotterdam';
+  ['toon-vandaag','toon-morgen','toon-komende'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=true; });
+  const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value='vandaag';
+  const zelfD=document.getElementById('tabel-zelf-datum'); if(zelfD) zelfD.value='';
+  if(typeof updateZelfDatumZichtbaar==='function') updateZelfDatumZichtbaar();
+  if(typeof updateAlleKopTeksten==='function') updateAlleKopTeksten();
+  updateTekstSecties();
+}
+function restoreDraft(){
+  try{
+    vulDocKiezer();
+    const j=localStorage.getItem(saveKey());
+    if(!j){
+      leegForm();
+      bouwWaarschuwing(new Date(huidigeDatum()+'T12:00:00'));
+      document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+' · '+docNaam()+')';
+      return false;
+    }
+    const d=JSON.parse(j);
+    if(d.docNaam && document.getElementById('doc-naam')) document.getElementById('doc-naam').value=d.docNaam;
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(el.tagName==='INPUT' || el.tagName==='SELECT'){
+        if(d[k]!=null) el.value=(k==='waarsch-status' && d[k]==='GEEN')?'GROEN':d[k];
+        if(el.tagName==='SELECT' && el.classList.contains('status-sel')) updateStatusKleur(el);
+      } else {
+        if(d[k]) el.innerHTML=d[k];
+      }
+    });
+    const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rotterdam');
+    const dag=document.getElementById('tabel-dag-sel'); if(dag) dag.value=d.tabelDag||'vandaag';
+    const zelfD=document.getElementById('tabel-zelf-datum'); if(zelfD && d.tabelZelfDatum!=null) zelfD.value=d.tabelZelfDatum;
+    updateZelfDatumZichtbaar();
+    if(d.toonVandaag!=null) document.getElementById('toon-vandaag').checked=!!d.toonVandaag;
+    if(d.toonMorgen!=null) document.getElementById('toon-morgen').checked=!!d.toonMorgen;
+    if(d.toonKomende!=null) document.getElementById('toon-komende').checked=!!d.toonKomende;
+    updateTekstSecties();
+    updateAlleKopTeksten();
+    // Uur-tabellen herstellen
+    const t1=document.getElementById('uur-tabel-1');
+    const t2=document.getElementById('uur-tabel-2');
+    if(d.uurTabel1 && t1){ t1.innerHTML=d.uurTabel1; }
+    if(d.uurTabel2 && t2){ t2.innerHTML=d.uurTabel2; t2.style.display=d.uurTabel2Zichtbaar===false?'none':''; }
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+    return !!(d.uurTabel1);
+  }catch(e){ return false; }
+}
+function toonSaveStatus(ts,voorvoegsel='Document opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${docNaam()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+async function wisDraft(){
+  if(!confirm('Opgeslagen document "'+docNaam()+'" van '+huidigeDatum()+' wissen?')) return;
+  const volgendeLijst=leesDocLijst().filter(n=>n!==docNaam());
+  localStorage.removeItem(saveKey());
+  try{ localStorage.setItem(docListKey(), JSON.stringify(volgendeLijst)); }catch(e){}
+  if(gedeeldeSyncBeschikbaar()){
+    await Promise.all([
+      WBSync.deleteKey(saveKey()).catch(()=>{}),
+      WBSync.putJson(docListKey(), volgendeLijst).catch(()=>{})
+    ]);
+  }
+  location.reload();
+}
+function nieuwDocument(){
+  saveDraft();
+  const naam=prompt('Naam voor het nieuwe document:', document.getElementById('plaats-in')?.value || 'Nieuw document');
+  if(!naam) return;
+  document.getElementById('doc-naam').value=naam.trim();
+  registreerDocNaam(docNaam());
+  leegForm();
+  const p=document.getElementById('plaats-in'); if(p) p.value=naam.trim();
+  saveDraft();
+  restoreDraft();
+}
+
+/* ── Koptekst-grootte ── */
+const KOP_KEY='wb_uurlijks_kopscale';
+function zetKopScale(v){
+  document.body.style.setProperty('--kop-scale', v);
+  try{ localStorage.setItem(KOP_KEY, v); }catch(e){}
+}
+(function herstelKopScale(){
+  try{
+    const v=localStorage.getItem(KOP_KEY);
+    if(v){
+      document.body.style.setProperty('--kop-scale', v);
+      const sel=document.getElementById('kop-scale-sel');
+      if(sel) sel.value=v;
+    }
+  }catch(e){}
+})();
+
+let saveTimer;
+let hasPendingSave=false;
+function debSave(){ hasPendingSave=true; clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ hasPendingSave=false; saveDraft(); },600); }
+function saveDraftNow(){
+  if(!hasPendingSave) return;
+  hasPendingSave=false;
+  clearTimeout(saveTimer);
+  saveDraft();
+}
+document.addEventListener('input', e=>{
+  const inSave=e.target.closest('[data-save]') || e.target.id==='plaats-in';
+  const inTabel=e.target.closest('#uur-tabel-1, #uur-tabel-2');
+  if(inSave || inTabel) debSave();
+});
+document.addEventListener('change', e=>{
+  // Selects firen 'change' i.p.v. 'input' in oudere browsers — opslaan via debSave
+  if(e.target.matches && e.target.matches('select[data-save], [data-save]')) debSave();
+});
+document.addEventListener('blur', e=>{
+  const inSave=e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='doc-naam';
+  const inTabel=e.target.closest('#uur-tabel-1, #uur-tabel-2');
+  // Wind-cel: parse richting en herrender pijl
+  if(e.target.matches && e.target.matches('td.wind-cel')){
+    const deg=parseRichting(e.target.textContent);
+    if(deg!=null) e.target.innerHTML=windCel(deg);
+  }
+  if(inSave || inTabel) saveDraft();
+},true);
+window.addEventListener('pagehide', saveDraftNow);
+window.addEventListener('beforeunload', saveDraftNow);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') saveDraftNow();
+});
+
+/* ── Tab in uurverwachting-cel: direct alles selecteren ── */
+document.addEventListener('focus', e=>{
+  const td=e.target;
+  if(td.tagName==='TD' && td.contentEditable==='true'){
+    const sel=window.getSelection();
+    const range=document.createRange();
+    range.selectNodeContents(td);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}, true);
+
+const START_DOCUMENT = leesStartDocument();
+if(START_DOCUMENT.plaats){
+  huidigModel='mosmix';
+  document.getElementById('model-sel').value='mosmix';
+}
+document.getElementById('doc-datum').value = START_DOCUMENT.datum || vandaagISO();
+vulDocKiezer();
+if(START_DOCUMENT.doc){
+  document.getElementById('doc-naam').value = START_DOCUMENT.doc;
+  registreerDocNaam(docNaam());
+  syncEventDocumentKoppeling();
+}
+vulDocKiezer();
+document.getElementById('doc-datum').addEventListener('change', ()=>{
+  vulDocKiezer();
+  const eerste=leesDocLijst()[0] || 'Rotterdam';
+  document.getElementById('doc-naam').value=eerste;
+  bouwWaarschuwing(new Date(huidigeDatum()+'T12:00:00'));
+  restoreDraft();
+  updateOpgesteldHeader();
+  haalGedeeldeDocLijst();
+  haalGedeeldeDraft(true);
+});
+document.getElementById('doc-kies').addEventListener('change', e=>{
+  const nieuw=e.target.value;
+  saveDraft();
+  document.getElementById('doc-naam').value=nieuw;
+  bouwWaarschuwing(new Date(huidigeDatum()+'T12:00:00'));
+  restoreDraft();
+  updateOpgesteldHeader();
+  haalGedeeldeDraft(true);
+  syncEventDocumentKoppeling();
+});
+document.getElementById('doc-naam').addEventListener('change', ()=>{
+  registreerDocNaam(docNaam());
+  vulDocKiezer();
+  saveDraft();
+});
+
+// Initialisatie: waarschuwing opbouwen, draft herstellen, meta laden (licht)
+const nu=new Date();
+updateOpgesteldHeader();
+bouwWaarschuwing(nu);
+restoreDraft();
+updateOpgesteldHeader();
+haalGedeeldeDocLijst();
+haalGedeeldeDraft(true);
+if(window.WBSync){
+  WBSync.initToggle({
+    onEnable(){
+      haalGedeeldeDocLijst();
+      haalGedeeldeDraft(true);
+    },
+    onDisable(){
+      toonSaveStatus(Date.now(), 'Alleen lokaal opgeslagen');
+    }
+  });
+}
+// Sync-interval: 5 min i.p.v. 30s (Workers-quota sparen); focus-event triggert sneller.
+setInterval(()=>{ if(document.visibilityState === 'visible') haalGedeeldeDraft(false); }, 300000);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') haalGedeeldeDraft(false);
+});
+document.getElementById('opgesteld-tijd').addEventListener('input', updateOpgesteldHeader);
+document.getElementById('opgesteld-tijd').addEventListener('change', ()=>{ updateOpgesteldHeader(); saveDraft(); });
+// Meta ophalen voor startuur-select (klein JSON-bestand), of MOSMIX auto-laden bij ?plaats=
+if(huidigModel==='mosmix' && START_DOCUMENT.plaats){
+  document.getElementById('plaats-in').value=START_DOCUMENT.plaats;
+  zetLaadStatus('MOSMIX laden…');
+  zoekEnLaad();
+} else {
+  laadMeta().then(meta=>{
+    if(document.getElementById('startuur-sel').options.length===0) vulStartuurSelect(meta.tijden);
+    zetLaadStatus(MODELS[huidigModel].label+' · run '+meta.run);
+  }).catch(e=>{ zetLaadStatus('Meta: '+e.message); });
+}
+
+/* ── Tabel-persistentie (uur-tabel-1, uur-tabel-2) ── */
+const TABEL_KEY_PREFIX='wb_uurlijks_tabel_';
+const TABEL_IDS=['uur-tabel-1','uur-tabel-2'];
+function tabelSaveKey(){ return TABEL_KEY_PREFIX+huidigeDatum()+'_'+(docNaam?docNaam():''); }
+function saveTabel(){
+  const blob={__ts:Date.now()};
+  let any=false;
+  TABEL_IDS.forEach(id=>{
+    const t=document.getElementById(id);
+    if(t && t.innerHTML.trim()){ blob[id]=t.innerHTML; any=true; }
+  });
+  if(!any) return;
+  try{ localStorage.setItem(tabelSaveKey(), JSON.stringify(blob)); }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    let any=false;
+    TABEL_IDS.forEach(id=>{
+      if(d[id]){ const t=document.getElementById(id); if(t){ t.innerHTML=d[id]; any=true; } }
+    });
+    if(any) syncTabelPlaats();
+    return any;
+  }catch(e){ return false; }
+}
+function herlaadTabel(){
+  if(!confirm('Tabellen opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadData();
+}
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#uur-tabel-1, #uur-tabel-2')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
+// Auto-save na verse fetch
+const _origRenderTabellen=renderTabellen;
+renderTabellen=async function(...args){ const r=await _origRenderTabellen.apply(this,args); saveTabel(); return r; };
+// Bij laden: probeer eerst opgeslagen tabel terug te zetten
+const tabelHersteld=restoreTabel();
+// Geen opgeslagen tabel voor vandaag → automatisch verse data ophalen
+if(!tabelHersteld && !document.getElementById('uur-tabel-1')?.innerHTML.trim()){
+  laadData();
+}
+
+/* ── Terug naar menu ── */
+function gaTerug(){
+  if (window.self !== window.top) {
+    window.location.href='weerbewaking.html';
+  } else {
+    window.location.href='index.html#weerbewaking';
+  }
+}
+
+/* ── PDF-export ── */
+function exporteerPDF(){
+  const wrapper=document.createElement('div');
+  wrapper.style.background='white';
+  wrapper.style.width='210mm';
+  wrapper.style.margin='0 auto';
+  document.querySelectorAll('.pagina').forEach(p=>{
+    const c=p.cloneNode(true);
+    c.style.boxShadow='none'; c.style.margin='0'; c.style.borderRadius='0';
+    c.style.maxWidth='none'; c.style.padding='5mm 14mm 6mm';
+    c.querySelectorAll('.no-pdf').forEach(e=>e.remove());
+    // Compact: kleine logo's, krap spacing zodat alles op A4 past
+    const hdr=c.querySelector('.doc-header');
+    if(hdr){
+      hdr.style.paddingBottom='3px';
+      const ll=hdr.querySelector('.logo-l'); if(ll) ll.style.height='130px';
+      const lr=hdr.querySelector('.logo-r'); if(lr) lr.style.height='75px';
+    }
+    c.querySelectorAll('h2.kop').forEach(h=>{ h.style.margin='6px 0 2px'; h.style.paddingBottom='2px'; });
+    c.querySelectorAll('.tekstvak').forEach(t=>{
+      t.style.border='none'; t.style.background='white';
+      t.style.padding='2px 0'; t.style.minHeight='auto';
+      t.style.fontSize='.78rem'; t.style.lineHeight='1.4';
+    });
+    // Uurverwachting-tabellen compacter
+    c.querySelectorAll('table.uur th, table.uur td').forEach(cel=>{
+      cel.style.padding='2px 3px'; cel.style.fontSize='.72rem';
+    });
+    c.querySelectorAll('table.uur').forEach(t=>{ t.style.marginTop='2px'; t.style.marginBottom='4px'; });
+    c.querySelectorAll('.doc-opgesteld').forEach(el=>{ el.style.margin='2px 0'; });
+    c.querySelectorAll('.subtitel').forEach(el=>{ el.style.margin='6px 0 2px'; });
+    c.querySelectorAll('.titel').forEach(el=>{ el.style.margin='2px 0 10px'; el.style.padding='6px 8px'; });
+    c.querySelectorAll('input.veld').forEach(inp=>{
+      const span=document.createElement('span');
+      span.className='veld';
+      span.textContent=inp.value;
+      span.style.cssText='flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#d95a00;background:white;border:1px solid #f0c08a;border-radius:3px;padding:5px 10px';
+      inp.replaceWith(span);
+    });
+    c.querySelectorAll('select.status-sel').forEach(s=>{
+      const span=document.createElement('span');
+      span.className='waarsch-status '+{GEEN:'w-geen',GROEN:'w-groen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'}[s.value];
+      span.textContent=s.value==='GEEN'?'GROEN':s.value;
+      s.replaceWith(span);
+    });
+    c.querySelectorAll('select.periode-sel').forEach(s=>{
+      const span=document.createElement('span');
+      span.style.cssText='font-weight:600;color:#1a5490';
+      span.textContent=s.value;
+      s.replaceWith(span);
+    });
+    c.querySelectorAll('[contenteditable]').forEach(e=>e.removeAttribute('contenteditable'));
+    // Toon uur-tabel-2 als die content heeft (kan display:none zijn vanuit opgeslagen staat)
+    const tbl2=c.querySelector('#uur-tabel-2');
+    if(tbl2 && tbl2.innerHTML.trim()) tbl2.style.display='';
+    wrapper.appendChild(c);
+  });
+  const datum=exportStamp();
+  const plaats=exportNaam(document.getElementById('plaats-in')?.value, docNaam());
+  document.body.appendChild(wrapper);
+  void wrapper.offsetHeight; // forceer reflow
+  // Rendeer via html2canvas; leid PDF-hoogte af uit canvas → nooit afknippen
+  html2canvas(wrapper,{scale:1.8,useCORS:true,backgroundColor:'#ffffff',logging:false})
+  .then(canvas=>{
+    const imgW=210; // mm
+    const imgH=canvas.height/canvas.width*imgW;
+    const pageH=Math.max(297,Math.ceil(imgH)+2);
+    const pdf=new jspdf.jsPDF({unit:'mm',format:[imgW,pageH],orientation:'portrait'});
+    pdf.addImage(canvas,'JPEG',0,0,imgW,imgH,undefined,'FAST');
+    pdf.save(`${plaats}_${datum}.pdf`);
+    wrapper.remove();
+  }).catch(err=>{
+    wrapper.remove();
+    alert('PDF-export is niet gelukt: '+err.message);
+  });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bliksem Benelux — Weerlab</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<!-- animatie-export: mp4-muxer (H.264 MP4, X/Twitter-compatibel) + gifenc (GIF) -->
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/build/mp4-muxer.min.js"></script>
+<script type="module">
+  // gifenc is ESM-only → importeren en op window plaatsen voor de inline-scripts
+  import { GIFEncoder, quantize, applyPalette } from "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
+  window.gifenc = { GIFEncoder: GIFEncoder, quantize: quantize, applyPalette: applyPalette };
+</script>
+<style>
+  /* primary is donker en blijft donker in dark-mode → tekst op donkere
+     oppervlakken oplichten zodat alles leesbaar blijft */
+  [data-theme="dark"] .brand .t { color: #7aa7ff; }
+  [data-theme="dark"] .brand .t span:first-child { color: #ffd54a; }
+  [data-theme="dark"] .seg button.on { color: #d7e4ff; }
+  [data-theme="dark"] .zoomctl button { color: #d7e4ff; }
+  [data-theme="dark"] .totalbig .n { color: #8fb6ff; }
+  [data-theme="dark"] .tp-jump button:hover { color: #d7e4ff; border-color: #4f6da0; }
+  [data-theme="dark"] .ghost-btn:hover { color: #d7e4ff; border-color: #4f6da0; }
+  [data-theme="dark"] .play { background: #1f3e74; }
+  [data-theme="dark"] .country .nm { color: var(--wl-color-text); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--wl-font-sans, "DM Sans", system-ui, sans-serif);
+    background: var(--wl-color-background);
+    color: var(--wl-color-text);
+    display: flex; flex-direction: column;
+    height: 100vh; overflow: hidden;
+  }
+
+  /* ── Topbar ─────────────────────────────────────────────────── */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 18px;
+    background: var(--wl-color-surface);
+    border-bottom: 1px solid var(--wl-color-border);
+    box-shadow: var(--wl-shadow-1);
+    z-index: 20; flex-shrink: 0;
+  }
+  .brand { display: flex; flex-direction: column; line-height: 1.1; }
+  .brand .t { font: var(--wl-text-headline-md); color: var(--wl-color-primary); display:flex; align-items:center; gap:8px;}
+  .brand .s { font-size: 11px; color: var(--wl-color-text-muted); margin-top: 2px; }
+  .live-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    padding: 3px 9px; border-radius: var(--wl-radius-full);
+    background: rgba(204,0,0,.10); color: var(--wl-color-danger);
+  }
+  .live-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wl-color-danger); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.35; transform:scale(.8);} }
+
+  .seg { display: inline-flex; background: var(--wl-color-background-soft); border-radius: var(--wl-radius-full); padding: 3px; gap: 2px; }
+  .seg button {
+    border: none; background: transparent; cursor: pointer;
+    font: var(--wl-text-label-md); color: var(--wl-color-text-muted);
+    padding: 6px 16px; border-radius: var(--wl-radius-full);
+    display: flex; align-items: center; gap: 7px; transition: .15s;
+  }
+  .seg button.on { background: var(--wl-color-surface); color: var(--wl-color-primary); box-shadow: var(--wl-shadow-1); }
+  .seg button svg { width: 15px; height: 15px; }
+
+  .spacer { flex: 1 1 auto; }
+  .ghost-btn {
+    border: 1px solid var(--wl-color-border-strong); background: var(--wl-color-surface);
+    color: var(--wl-color-text-muted); cursor: pointer;
+    width: 34px; height: 34px; border-radius: var(--wl-radius-md);
+    display: grid; place-items: center;
+  }
+  .ghost-btn:hover { color: var(--wl-color-primary); border-color: var(--wl-color-primary); }
+  .ghost-btn svg { width: 17px; height: 17px; }
+  .dl-btn {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    height: 34px; padding: 0 14px; border-radius: var(--wl-radius-md);
+    border: 1px solid var(--wl-color-primary); background: var(--wl-color-primary); color: #fff;
+    font: var(--wl-text-label-md);
+  }
+  .dl-btn:hover { background: var(--wl-color-primary-strong); }
+  .dl-btn svg { width: 16px; height: 16px; }
+  .dl-btn.busy { opacity: .6; pointer-events: none; }
+  .prov-sel { height: 34px; padding: 0 10px; border-radius: var(--wl-radius-md); border: 1px solid var(--wl-color-border-strong); background: var(--wl-color-surface); color: var(--wl-color-text); font: var(--wl-text-label-md); cursor: pointer; max-width: 170px; color-scheme: light dark; }
+  .prov-sel:hover { border-color: var(--wl-color-primary); }
+  @media (max-width: 720px){ .prov-sel { max-width: 130px; } }
+  [data-theme="dark"] .dl-btn { background: #1f3e74; border-color: #2c5398; }
+  @media (max-width: 720px){ .dl-btn span { display:none; } .dl-btn { padding: 0 9px; } }
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  .main { flex: 1 1 auto; display: flex; min-height: 0; }
+  .map-col { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+
+  .stage {
+    flex: 1 1 auto; position: relative; min-height: 0;
+    background: #0d1b2a; overflow: hidden; cursor: grab;
+  }
+  .stage.dragging { cursor: grabbing; }
+  #map { width: 100%; height: 100%; display: block; }
+
+  .map-overlay { position: absolute; pointer-events: none; }
+  .ov-tl { top: 12px; left: 14px; }
+  .ov-tr { top: 12px; right: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .ov-bl { bottom: 14px; left: 14px; }
+  .ov-br { bottom: 14px; right: 14px; }
+
+  .chip {
+    background: rgba(11,18,32,.72); color: #fff; backdrop-filter: blur(7px);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: var(--wl-radius-md); padding: 7px 11px;
+  }
+  .chip .big { font: 700 21px/1 var(--wl-font-mono, monospace); letter-spacing: -.01em; }
+  .chip .lbl { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; opacity: .72; margin-top: 3px; }
+
+  .zoomctl { pointer-events: auto; display: flex; flex-direction: column; background: var(--wl-color-surface); border-radius: var(--wl-radius-md); box-shadow: var(--wl-shadow-2); overflow: hidden; }
+  .zoomctl button { width: 34px; height: 34px; border: none; border-bottom: 1px solid var(--wl-color-border); background: var(--wl-color-surface); color: var(--wl-color-primary); font-size: 18px; font-weight: 700; cursor: pointer; }
+  .zoomctl button:last-child { border-bottom: none; }
+  .zoomctl button:hover { background: var(--wl-color-background-soft); }
+  .zoomctl button.rs { font-size: 13px; }
+
+  .scalebadge { pointer-events: none; font: var(--wl-text-data-sm); color: #fff; background: rgba(11,18,32,.6); padding: 3px 8px; border-radius: var(--wl-radius-sm); }
+
+  /* density legend */
+  .heatlegend { pointer-events: none; background: rgba(11,18,32,.72); backdrop-filter: blur(7px); border:1px solid rgba(255,255,255,.12); border-radius: var(--wl-radius-md); padding: 8px 10px; color:#fff; }
+  .heatlegend .ttl { font-size: 10px; letter-spacing:.08em; text-transform:uppercase; opacity:.75; margin-bottom:6px; }
+  .heatlegend .bar { height: 9px; width: 180px; border-radius: 5px; background: linear-gradient(90deg, #2b1a86 0%, #1e5fd0 22%, #16b3c4 42%, #4fd34d 58%, #e6c700 72%, #e07000 86%, #cc0000 100%); }
+  .heatlegend .ax { display:flex; justify-content: space-between; font: var(--wl-text-data-sm); margin-top: 4px; opacity:.85; }
+  .heatlegend .ax span:last-child { }
+
+  /* age legend (timeline) */
+  .agelegend { pointer-events:none; background: rgba(11,18,32,.72); backdrop-filter: blur(7px); border:1px solid rgba(255,255,255,.12); border-radius: var(--wl-radius-md); padding:8px 10px; color:#fff; }
+  .agelegend .ttl { font-size:10px; letter-spacing:.08em; text-transform:uppercase; opacity:.75; margin-bottom:6px;}
+  .agelegend .row { display:flex; align-items:center; gap:7px; font-size:11px; margin-bottom:3px; }
+  .agelegend .row:last-child{margin-bottom:0;}
+  .agelegend i { width:11px; height:11px; border-radius:50%; display:inline-block; }
+
+  /* ── Transport / timeline bar ───────────────────────────────── */
+  .transport { flex-shrink: 0; background: var(--wl-color-surface); border-top: 1px solid var(--wl-color-border); padding: 10px 16px 12px; }
+  .tp-top { display:flex; align-items:center; gap:14px; margin-bottom: 8px; }
+  .play {
+    width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; flex-shrink:0;
+    background: var(--wl-color-primary); color:#fff; display:grid; place-items:center; box-shadow: var(--wl-shadow-2);
+  }
+  .play:hover { background: var(--wl-color-primary-strong); }
+  .play svg { width: 18px; height: 18px; }
+  .tp-time { font: 700 16px/1 var(--wl-font-mono, monospace); color: var(--wl-color-text); min-width: 132px; }
+  .tp-time .d { font-size: 11px; font-weight: 500; color: var(--wl-color-text-muted); margin-top:3px; }
+  .pillset { display:flex; gap:6px; flex-wrap: wrap; align-items:center; }
+  .pillset .lab { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--wl-color-text-soft); margin-right:2px;}
+  .pillset button { border:1px solid var(--wl-color-border-strong); background:var(--wl-color-surface); color:var(--wl-color-text-muted); font:var(--wl-text-label-md); padding:5px 11px; border-radius:var(--wl-radius-full); cursor:pointer; }
+  .pillset button.on { background: var(--wl-color-primary); border-color:var(--wl-color-primary); color:#fff; }
+  .tp-jump { margin-left:auto; display:flex; gap:6px; }
+  .tp-jump button { border:1px solid var(--wl-color-border-strong); background:var(--wl-color-surface); color:var(--wl-color-text-muted); font:var(--wl-text-label-md); padding:6px 12px; border-radius:var(--wl-radius-md); cursor:pointer; }
+  .tp-jump button:hover { color:var(--wl-color-primary); border-color:var(--wl-color-primary); }
+  .tp-jump button.nu { color:var(--wl-color-danger); border-color: rgba(204,0,0,.4); font-weight:700; }
+
+  .track-wrap { position: relative; height: 56px; }
+  #hist { width: 100%; height: 56px; display:block; border-radius: var(--wl-radius-sm); cursor: pointer; }
+  #scrub { -webkit-appearance:none; appearance:none; position:absolute; inset:0; width:100%; height:100%; background:transparent; margin:0; cursor:pointer; }
+  #scrub::-webkit-slider-thumb { -webkit-appearance:none; width:4px; height:56px; background: var(--wl-color-primary); border-radius:2px; box-shadow: 0 0 0 1px rgba(255,255,255,.6), var(--wl-shadow-2); }
+  #scrub::-moz-range-thumb { width:4px; height:56px; border:none; background: var(--wl-color-primary); border-radius:2px; }
+  .track-axis { display:flex; justify-content:space-between; font: var(--wl-text-data-sm); color: var(--wl-color-text-soft); margin-top:3px; }
+
+  /* aangepaste periode */
+  .tinput { font: var(--wl-text-data-sm); padding: 4px 7px; border: 1px solid var(--wl-color-border-strong); border-radius: var(--wl-radius-sm); background: var(--wl-color-surface); color: var(--wl-color-text); color-scheme: light dark; }
+  .cf-dash { color: var(--wl-color-text-soft); }
+  .cf-dur { font: 700 12px var(--wl-font-mono, monospace); color: var(--wl-color-primary); }
+  [data-theme="dark"] .cf-dur { color: #8fb6ff; }
+  .cf-hint { font-size: 10px; color: var(--wl-color-text-soft); letter-spacing: .02em; }
+  .h-handle { position: absolute; top: 0; width: 16px; height: 56px; transform: translateX(-50%); cursor: ew-resize; z-index: 6; touch-action: none; }
+  .h-handle::before { content:''; position:absolute; left:50%; top:0; width:3px; height:56px; transform:translateX(-50%); background: var(--wl-color-primary); box-shadow: 0 0 0 1px rgba(255,255,255,.55); }
+  .h-handle::after { content:''; position:absolute; left:50%; top:20px; width:14px; height:16px; transform:translateX(-50%); background: var(--wl-color-primary); border-radius:3px; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  [data-theme="dark"] .h-handle::before, [data-theme="dark"] .h-handle::after { background: #7aa7ff; }
+  .track-wrap.custom #scrub { opacity: 0; pointer-events: none; }
+
+  /* ── Sidebar ────────────────────────────────────────────────── */
+  .sidebar { width: 290px; flex-shrink: 0; background: var(--wl-color-surface); border-left: 1px solid var(--wl-color-border); overflow-y: auto; padding: 14px; display:flex; flex-direction:column; gap:14px; }
+  @media (max-width: 1080px){ .sidebar{ width: 240px; } }
+  @media (max-width: 860px){ .sidebar{ display:none; } }
+
+  .card { background: var(--wl-color-surface); border:1px solid var(--wl-color-border); border-radius: var(--wl-radius-lg); overflow: hidden; }
+  .card h3 { font: var(--wl-text-label-md); color: var(--wl-color-text); padding: 11px 13px 0; display:flex; align-items:center; gap:7px; }
+  .card h3 small { margin-left:auto; font-size:10px; font-weight:600; color: var(--wl-color-text-soft); letter-spacing:.04em; }
+  .card .body { padding: 11px 13px 13px; }
+
+  .totalbig { display:flex; align-items:baseline; gap:8px; }
+  .totalbig .n { font: 700 34px/1 var(--wl-font-mono, monospace); color: var(--wl-color-primary); letter-spacing:-.02em; }
+  .totalbig .u { font-size: 12px; color: var(--wl-color-text-muted); }
+  .substat { display:flex; gap:14px; margin-top:9px; }
+  .substat div { font-size: 11px; color: var(--wl-color-text-muted); }
+  .substat b { display:block; font: 700 15px/1.2 var(--wl-font-mono, monospace); color: var(--wl-color-text); }
+
+  .country { display:flex; align-items:center; gap:10px; padding: 7px 0; }
+  .country + .country { border-top: 1px solid var(--wl-color-border); }
+  .flag { width: 22px; height: 15px; border-radius: 2px; flex-shrink:0; box-shadow: 0 0 0 1px rgba(0,0,0,.08); overflow:hidden; display:flex; flex-direction:column; }
+  .flag span { flex:1; }
+  .country .nm { font: var(--wl-text-label-md); flex-shrink:0; width: 40px; }
+  .country .barwrap { flex:1; height: 8px; background: var(--wl-color-background-soft); border-radius: 4px; overflow:hidden; }
+  .country .barwrap i { display:block; height:100%; border-radius:4px; background: linear-gradient(90deg,#e07000,#cc0000); transition: width .3s; }
+  .country .ct { font: 700 14px/1 var(--wl-font-mono, monospace); width: 52px; text-align:right; }
+
+  .legendmini { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--wl-color-text-muted); margin-top:4px; }
+
+  .minis { display:flex; gap:10px; }
+  .mini { flex:1; border:1px solid var(--wl-color-border); border-radius: var(--wl-radius-md); overflow:hidden; background: var(--wl-color-surface-muted); cursor:pointer; padding:0; font:inherit; text-align:left; transition:.15s; }
+  .mini:hover { border-color: var(--wl-color-primary); box-shadow: var(--wl-shadow-2); }
+  .mini canvas { width:100%; display:block; background:#0d1b2a; }
+  .mini-cap { padding:5px 8px; display:flex; flex-direction:column; gap:1px; }
+  .mini-cap b { font: var(--wl-text-label-md); color: var(--wl-color-text); }
+  .mini-cap span { font: 700 13px var(--wl-font-mono, monospace); color: var(--wl-color-primary); }
+  [data-theme="dark"] .mini-cap span { color:#8fb6ff; }
+
+  .footer-note { font-size: 10px; color: var(--wl-color-text-soft); line-height:1.5; }
+  .hidden { display: none !important; }
+  .tip { position: fixed; pointer-events:none; z-index: 100; background: rgba(11,18,32,.95); color:#fff; font: var(--wl-text-data-sm); padding:6px 9px; border-radius: var(--wl-radius-sm); box-shadow: var(--wl-shadow-3); display:none; white-space:nowrap; }
+
+  /* ── Animatie-export (film) ─────────────────────────────────── */
+  .film-btn {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    height: 34px; padding: 0 13px; border-radius: var(--wl-radius-md);
+    border: 1px solid var(--wl-color-border-strong); background: var(--wl-color-surface);
+    color: var(--wl-color-text-muted); font: var(--wl-text-label-md);
+  }
+  .film-btn:hover { color: var(--wl-color-primary); border-color: var(--wl-color-primary); }
+  @media (max-width: 720px){ .film-btn span { display:none; } .film-btn { padding: 0 9px; } }
+
+  .film-overlay {
+    position: fixed; inset: 0; z-index: 200; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(8,14,26,.55); backdrop-filter: blur(2px);
+  }
+  .film-overlay.open { display: flex; }
+  .film-card {
+    width: min(480px, 92vw); max-height: 92vh; overflow-y: auto;
+    background: var(--wl-color-surface); color: var(--wl-color-text);
+    border-radius: var(--wl-radius-lg); box-shadow: var(--wl-shadow-4);
+    border: 1px solid var(--wl-color-border);
+  }
+  .film-head { display:flex; align-items:center; gap:10px; padding: 16px 18px 10px; }
+  .film-head .t { font: var(--wl-text-headline-sm); color: var(--wl-color-text); }
+  .film-head .x { margin-left:auto; border:none; background:transparent; cursor:pointer; font-size:20px; line-height:1; color: var(--wl-color-text-muted); width:30px; height:30px; border-radius: var(--wl-radius-md); }
+  .film-head .x:hover { background: var(--wl-color-background-soft); color: var(--wl-color-text); }
+  .film-body { padding: 4px 18px 16px; display:flex; flex-direction:column; gap:14px; }
+  .film-row { display:flex; flex-direction:column; gap:5px; }
+  .film-row > label { font: var(--wl-text-label-sm); color: var(--wl-color-text-muted); }
+  .film-grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .film-card input[type="datetime-local"], .film-card select {
+    width:100%; height:34px; padding:0 9px; border-radius: var(--wl-radius-md);
+    border: 1px solid var(--wl-color-border-strong); background: var(--wl-color-background-soft);
+    color: var(--wl-color-text); font: var(--wl-text-data-sm); color-scheme: light dark;
+  }
+  .film-fmt { display:flex; gap:8px; }
+  .film-fmt button {
+    flex:1; height:38px; border-radius: var(--wl-radius-md); cursor:pointer;
+    border:1px solid var(--wl-color-border-strong); background: var(--wl-color-surface);
+    color: var(--wl-color-text-muted); font: var(--wl-text-label-md);
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .film-fmt button.on { border-color: var(--wl-color-primary); background: rgba(0,32,91,.07); color: var(--wl-color-primary); }
+  [data-theme="dark"] .film-fmt button.on { background: rgba(122,167,255,.12); color: #8fb6ff; border-color:#4f6da0; }
+  .film-range { display:flex; align-items:center; gap:10px; }
+  .film-range input[type="range"] { flex:1; }
+  .film-range .v { font: 700 13px/1 var(--wl-font-mono, monospace); color: var(--wl-color-text); min-width:48px; text-align:right; }
+  .film-est { font: var(--wl-text-data-sm); color: var(--wl-color-text-muted); line-height:1.5; }
+  .film-est b { color: var(--wl-color-text); }
+  .film-actions { display:flex; gap:10px; align-items:center; margin-top:2px; }
+  .film-go {
+    flex:1; height:40px; border:none; border-radius: var(--wl-radius-md); cursor:pointer;
+    background: var(--wl-color-primary); color:#fff; font: var(--wl-text-label-md);
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .film-go:hover { background: var(--wl-color-primary-strong); }
+  .film-go:disabled { opacity:.55; cursor:default; }
+  [data-theme="dark"] .film-go { background:#1f3e74; }
+  .film-prog { height:8px; border-radius: var(--wl-radius-full); background: var(--wl-color-background-soft); overflow:hidden; display:none; }
+  .film-prog.show { display:block; }
+  .film-prog i { display:block; height:100%; width:0; background: linear-gradient(90deg,#e07000,#cc0000); transition: width .15s; }
+  .film-status { font: var(--wl-text-data-sm); color: var(--wl-color-text-muted); min-height:16px; }
+  .film-status.err { color: var(--wl-color-danger); }
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="t">⚡ Bliksem Benelux</span>
+    <span class="s" id="sub">ontladingen · Blitzortung-netwerk</span>
+  </div>
+  <span class="live-pill" id="livepill"><span class="dot"></span>LIVE</span>
+
+  <div class="seg" id="modeseg" style="margin-left:18px;">
+    <button data-mode="timeline" class="on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Tijdlijn
+    </button>
+    <button data-mode="density">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+      Telkaart
+    </button>
+  </div>
+
+  <div class="spacer"></div>
+  <select id="provsel" class="prov-sel" title="Zoom naar provincie/gebied">
+    <option value="">📍 Heel Benelux</option>
+    <optgroup label="Nederland">
+      <option value="nl">🇳🇱 Heel Nederland</option>
+      <option value="groningen">Groningen</option>
+      <option value="friesland">Friesland</option>
+      <option value="drenthe">Drenthe</option>
+      <option value="overijssel">Overijssel</option>
+      <option value="flevoland">Flevoland</option>
+      <option value="gelderland">Gelderland</option>
+      <option value="utrecht">Utrecht</option>
+      <option value="noordholland">Noord-Holland</option>
+      <option value="zuidholland">Zuid-Holland</option>
+      <option value="zeeland">Zeeland</option>
+      <option value="brabant">Noord-Brabant</option>
+      <option value="limburgnl">Limburg</option>
+    </optgroup>
+    <optgroup label="België">
+      <option value="be">🇧🇪 Heel België</option>
+      <option value="westvl">West-Vlaanderen</option>
+      <option value="oostvl">Oost-Vlaanderen</option>
+      <option value="antwerpen">Antwerpen</option>
+      <option value="vlbrabant">Vlaams-Brabant</option>
+      <option value="limburgbe">Limburg (BE)</option>
+      <option value="brussel">Brussel</option>
+      <option value="waalsbrabant">Waals-Brabant</option>
+      <option value="henegouwen">Henegouwen</option>
+      <option value="namen">Namen</option>
+      <option value="luik">Luik</option>
+      <option value="luxbe">Luxemburg (BE)</option>
+    </optgroup>
+    <optgroup label="Luxemburg">
+      <option value="lu">🇱🇺 Heel Luxemburg</option>
+    </optgroup>
+  </select>
+  <button class="film-btn" id="filmbtn" title="Maak een mp4 of gif van een zelfgekozen periode">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 9l6-3v12l-6-3"/></svg>
+    <span>Animatie</span>
+  </button>
+  <button class="dl-btn" id="dlbtn" title="Download kaart van deze periode (PNG)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 4 5-4M5 21h14"/></svg>
+    <span>Download</span>
+  </button>
+  <button class="ghost-btn" id="themebtn" title="Licht / donker">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+</div>
+
+<div class="main">
+  <div class="map-col">
+    <div class="stage" id="stage">
+      <canvas id="map"></canvas>
+
+      <div class="map-overlay ov-tl">
+        <div class="chip"><div class="big" id="ov-clock">—</div><div class="lbl" id="ov-clocklbl">Tijdstip</div></div>
+      </div>
+
+      <div class="map-overlay ov-tr">
+        <div class="zoomctl">
+          <button id="zin">+</button>
+          <button id="zout">−</button>
+          <button id="zrs" class="rs">⌂</button>
+        </div>
+        <div class="chip" style="text-align:right;"><div class="big" id="ov-count">0</div><div class="lbl" id="ov-countlbl">ontladingen</div></div>
+      </div>
+
+      <!-- timeline legend -->
+      <div class="map-overlay ov-bl agelegend" id="agelegend">
+        <div class="ttl">Leeftijd flash</div>
+        <div class="row"><i style="background:#fff;box-shadow:0 0 7px #ffd400"></i> &lt; 2 min</div>
+        <div class="row"><i style="background:#ffd400"></i> 2 – 10 min</div>
+        <div class="row"><i style="background:#e07000"></i> 10 – 30 min</div>
+        <div class="row"><i style="background:#cc0000"></i> 30 – 60 min</div>
+        <div class="row"><i style="background:#6d28d9"></i> &gt; 60 min</div>
+      </div>
+
+      <!-- density legend -->
+      <div class="map-overlay ov-bl heatlegend hidden" id="heatlegend">
+        <div class="ttl" id="heat-ttl">Ontladingen / 5 km²</div>
+        <div class="bar"></div>
+        <div class="ax"><span>laag</span><span id="heat-max">hoog</span></div>
+      </div>
+
+      <div class="map-overlay ov-br">
+        <div class="scalebadge" id="scalebadge">— km</div>
+      </div>
+    </div>
+
+    <div class="transport">
+      <div class="tp-top">
+        <button class="play" id="playbtn" title="Afspelen (48 uur)">
+          <svg id="play-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <div class="tp-time"><span id="tp-clock">—</span><div class="d" id="tp-date">—</div></div>
+
+        <div class="pillset" id="winset">
+          <span class="lab" id="winlab">Spoor</span>
+          <button data-win="15">15 m</button>
+          <button data-win="30">30 m</button>
+          <button data-win="60" class="on">60 m</button>
+          <button data-win="120">2 u</button>
+        </div>
+
+        <div class="pillset hidden" id="hourset">
+          <span class="lab">Periode</span>
+          <button data-hrs="1">1 u</button>
+          <button data-hrs="3" class="on">3 u</button>
+          <button data-hrs="6">6 u</button>
+          <button data-hrs="12">12 u</button>
+          <button data-hrs="24">24 u</button>
+          <button data-hrs="custom">Aangepast…</button>
+        </div>
+
+        <div class="pillset hidden" id="customset">
+          <span class="lab">Van–tot</span>
+          <input type="datetime-local" id="cf-from" class="tinput" step="600">
+          <span class="cf-dash">–</span>
+          <input type="datetime-local" id="cf-to" class="tinput" step="600">
+          <span class="cf-dur" id="cf-dur">—</span>
+          <span class="cf-hint">of sleep de grepen ⬍</span>
+        </div>
+
+        <div class="tp-jump">
+          <button id="jump-live" class="nu">● NU</button>
+        </div>
+      </div>
+
+      <div class="track-wrap" id="track-wrap">
+        <canvas id="hist"></canvas>
+        <input type="range" id="scrub" min="0" max="1000" value="1000">
+        <div class="h-handle hidden" id="h-from"></div>
+        <div class="h-handle hidden" id="h-to"></div>
+      </div>
+      <div class="track-axis" id="track-axis"><span>−48 u</span><span>−36 u</span><span>−24 u</span><span>−12 u</span><span>nu</span></div>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="card">
+      <h3>Ontladingen <small id="scope-lbl">spoor 60 min</small></h3>
+      <div class="body">
+        <div class="totalbig"><span class="n" id="s-total">0</span><span class="u">ontladingen</span></div>
+        <div class="substat">
+          <div><b id="s-rate">0</b>per minuut (piek)</div>
+          <div><b id="s-area">0</b>actieve cellen</div>
+          <div><b id="s-strength">—</b>sterkte (stations)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Per land <small id="land-scope">spoor</small></h3>
+      <div class="body" id="country-list"></div>
+      <div class="body" style="padding-top:0;">
+        <div class="legendmini">Telt ontladingen binnen de landsgrenzen van het getoonde venster.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Afgelopen <small>klik = toon op kaart</small></h3>
+      <div class="body minis">
+        <button class="mini" data-h="12" title="Toon afgelopen 12 uur"><canvas id="mini12c"></canvas><div class="mini-cap"><b>12 uur</b><span id="mini12n">—</span></div></button>
+        <button class="mini" data-h="24" title="Toon afgelopen 24 uur"><canvas id="mini24c"></canvas><div class="mini-cap"><b>24 uur</b><span id="mini24n">—</span></div></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Drukste plekken <small>top 3</small></h3>
+      <div class="body" id="hotspots"><div class="footer-note">—</div></div>
+    </div>
+
+    <div class="card">
+      <div class="body">
+        <div class="footer-note">
+          Bron: <b>Blitzortung.org</b> vrijwilligersnetwerk · ontladingen NW-Europa, laatste 48 uur.
+          Aantallen kunnen afwijken van het KNMI (ander detectienetwerk).
+          Basiskaart identiek aan de Weerlab-neerslagradar (CARTO Voyager).
+          <span id="updated-note"></span>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<!-- ── Animatie-export modal ──────────────────────────────────── -->
+<div class="film-overlay" id="film-overlay">
+  <div class="film-card" role="dialog" aria-label="Animatie maken">
+    <div class="film-head">
+      <span class="t">🎬 Animatie maken</span>
+      <button class="x" id="film-x" title="Sluiten">×</button>
+    </div>
+    <div class="film-body">
+      <div class="film-row">
+        <label>Periode (van – tot)</label>
+        <div class="film-grid2">
+          <input type="datetime-local" id="film-from" step="600">
+          <input type="datetime-local" id="film-to" step="600">
+        </div>
+      </div>
+
+      <div class="film-row">
+        <label>Formaat</label>
+        <div class="film-fmt" id="film-fmt">
+          <button data-fmt="mp4" class="on">🎞️ MP4</button>
+          <button data-fmt="gif">🖼️ GIF</button>
+        </div>
+      </div>
+
+      <div class="film-row">
+        <label>Snelheid (frames per seconde)</label>
+        <div class="film-range">
+          <input type="range" id="film-fps" min="4" max="24" step="1" value="12">
+          <span class="v" id="film-fps-v">12 fps</span>
+        </div>
+      </div>
+
+      <div class="film-row">
+        <label>Detail (minuten data per frame)</label>
+        <div class="film-range">
+          <input type="range" id="film-step" min="1" max="30" step="1" value="5">
+          <span class="v" id="film-step-v">5 min</span>
+        </div>
+      </div>
+
+      <div class="film-est" id="film-est">—</div>
+
+      <div class="film-prog" id="film-prog"><i id="film-prog-bar"></i></div>
+      <div class="film-status" id="film-status"></div>
+
+      <div class="film-actions">
+        <button class="film-go" id="film-go">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <span id="film-go-lbl">Genereer &amp; download</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="benelux_grens_coords.js"></script>
+<script>
+"use strict";
+// ════════════════════════════════════════════════════════════════
+//  Projectie — identiek aan radar.html (PlateCarree-venster)
+// ════════════════════════════════════════════════════════════════
+var PROJ_LON_MIN = 1.0,  PROJ_LON_MAX = 10.0;
+var PROJ_LAT_MIN = 49.5, PROJ_LAT_MAX = 54.5;
+var KM_LAT = 111.32;
+var LAT_MID = (PROJ_LAT_MIN + PROJ_LAT_MAX) / 2;
+var KM_LON = KM_LAT * Math.cos(LAT_MID * Math.PI / 180);
+var ASPECT = ((PROJ_LAT_MAX - PROJ_LAT_MIN) * KM_LAT) / ((PROJ_LON_MAX - PROJ_LON_MIN) * KM_LON);
+var BASEMAP_W = 1800;
+var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);
+function lonToX(lon){ return (lon - PROJ_LON_MIN) / (PROJ_LON_MAX - PROJ_LON_MIN) * BASEMAP_W; }
+function latToY(lat){ return (PROJ_LAT_MAX - lat) / (PROJ_LAT_MAX - PROJ_LAT_MIN) * BASEMAP_H; }
+// km grootte van een graad voor schaalbalk
+var dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+// ════════════════════════════════════════════════════════════════
+//  State
+// ════════════════════════════════════════════════════════════════
+var STRIKES = [];           // {t(ms), lat, lon, type, sig, bx, by, country}
+var dataNow = Date.now();   // rand van de dataset (laatste update)
+var SPAN_MS = 48 * 3600 * 1000;
+var tMin = dataNow - SPAN_MS;
+
+var mode = "timeline";      // 'timeline' | 'density'
+var trailMin = 60;          // tijdlijn-spoor in minuten
+var densHours = 3;          // telkaart-periode in uren
+var customActive = false;   // telkaart: vrije van–tot range i.p.v. vaste periode
+var customFrom = dataNow - 3*3600*1000;
+var customTo = dataNow;
+var scrubT = dataNow;       // huidige tijdpositie
+var playing = false;
+
+var zoom = 1, viewX = 0, viewY = 0;
+
+var basemapCanvas = null;   // gebakken CARTO-ondergrond (BASEMAP_W×H)
+var densCanvas = null;      // gekleurde dichtheidskaart (BASEMAP_W×H)
+var densDirty = true;
+// benelux_grens_coords.js declareert NL_GRENS/BE_GRENS/LU_GRENS met `const`,
+// dus globaal-lexicaal (niet op window) → referentie via bare naam.
+var COUNTRIES = [
+  { id:"NL", naam:"NL", rings: (typeof NL_GRENS!=="undefined"?NL_GRENS:[]), col:["#ae1c28","#fff","#21468b"], ori:"column", border:true,  bar:"#cc0000" },
+  { id:"BE", naam:"BE", rings: (typeof BE_GRENS!=="undefined"?BE_GRENS:[]), col:["#000","#fae042","#ed2939"], ori:"row",    border:true,  bar:"#e6b800" },
+  { id:"LU", naam:"LU", rings: (typeof LU_GRENS!=="undefined"?LU_GRENS:[]), col:["#ed2939","#fff","#00a1de"], ori:"column", border:true,  bar:"#00a1de" },
+  // Duitsland: tellen via bundesländer-polygonen, géén overlay-grens (CARTO toont
+  // de landsgrens al; alle 42 ringen zouden ook de deelstaatgrenzen tonen).
+  { id:"DE", naam:"DE", rings: [], col:["#000","#dd0000","#ffce00"], ori:"column", border:false, bar:"#6d28d9" }
+];
+
+// ════════════════════════════════════════════════════════════════
+//  Point-in-polygon (even-odd over alle ringen van een land)
+// ════════════════════════════════════════════════════════════════
+function bboxOf(rings){
+  var x0=180,y0=90,x1=-180,y1=-90;
+  for(var r=0;r<rings.length;r++){var ring=rings[r];for(var i=0;i<ring.length;i++){var p=ring[i];if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1];}}
+  return [x0,y0,x1,y1];
+}
+COUNTRIES.forEach(function(c){ c.bbox = c.rings.length ? bboxOf(c.rings) : [0,0,0,0]; });
+function pipRings(lon, lat, rings){
+  var inside = false;
+  for(var r=0;r<rings.length;r++){
+    var ring = rings[r], n = ring.length, j = n-1;
+    for(var i=0;i<n;i++){
+      var xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+      if(((yi>lat)!==(yj>lat)) && (lon < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside = !inside;
+      j=i;
+    }
+  }
+  return inside;
+}
+// Gememoïseerd op een ~0,01° raster (≈ 1 km): landgrens verandert nooit, dus
+// de eerste ingest vult de cache en elke 30s-refresh is daarna gratis (anders
+// zou de PIP over alle ringen — incl. 2225 DE-punten — elke refresh opnieuw
+// lopen). Grover rasteren (0,05°) gaf tot ~3 km fout langs de landsgrenzen.
+var _coCache = {};
+function countryRaw(lon, lat){
+  for(var k=0;k<COUNTRIES.length;k++){
+    var c=COUNTRIES[k], b=c.bbox;
+    if(!c.rings.length) continue;
+    if(lon<b[0]||lon>b[2]||lat<b[1]||lat>b[3]) continue;
+    if(pipRings(lon, lat, c.rings)) return c.id;
+  }
+  return "XX"; // FR / zee / buiten
+}
+function countryOf(lon, lat){
+  var key=(Math.round(lon*100))+":"+(Math.round(lat*100));
+  var v=_coCache[key];
+  if(v===undefined){ v=countryRaw(lon,lat); _coCache[key]=v; }
+  return v;
+}
+// GeoJSON (Polygon/MultiPolygon) → platte lijst ringen [[lon,lat],…]
+function geojsonToRings(geo){
+  var rings=[];
+  (geo&&geo.features||[]).forEach(function(f){
+    var g=f.geometry; if(!g) return;
+    if(g.type==="Polygon") g.coordinates.forEach(function(r){ rings.push(r); });
+    else if(g.type==="MultiPolygon") g.coordinates.forEach(function(p){ p.forEach(function(r){ rings.push(r); }); });
+  });
+  return rings;
+}
+// Duitsland-polygonen laden (voor de per-land-telling) vóór de eerste ingest
+function loadCountries(){
+  return fetch("germany_bundeslander.geojson?_="+Date.now())
+    .then(function(r){ return r.ok?r.json():null; })
+    .then(function(geo){
+      var de=COUNTRIES.filter(function(c){return c.id==="DE";})[0];
+      if(geo && de){ de.rings=geojsonToRings(geo); de.bbox=bboxOf(de.rings); _coCache={}; }
+    })
+    .catch(function(e){ console.warn("DE-grenzen niet geladen:", e); });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Data laden
+// ════════════════════════════════════════════════════════════════
+function ingest(raw, updatedISO){
+  var out = [];
+  for(var i=0;i<raw.length;i++){
+    var s = raw[i];
+    if(s.lon < PROJ_LON_MIN || s.lon > PROJ_LON_MAX || s.lat < PROJ_LAT_MIN || s.lat > PROJ_LAT_MAX) continue;
+    out.push({
+      t: s.t * 1000, lat: s.lat, lon: s.lon,
+      type: s.type || "CG", sig: s.sig || 0,
+      bx: lonToX(s.lon), by: latToY(s.lat),
+      country: countryOf(s.lon, s.lat)
+    });
+  }
+  out.sort(function(a,b){return a.t-b.t;});
+  STRIKES = out;
+  dataNow = updatedISO ? Date.parse(updatedISO) : (out.length ? out[out.length-1].t : Date.now());
+  tMin = dataNow - SPAN_MS;
+  // scrubT bewust NIET aanraken: de 30s-auto-refresh mag een gebruiker die
+  // terugkijkt niet naar "nu" trekken (init zet scrubT zelf via setScrub).
+}
+
+// Data komt van R2 (data.weerlab.nl) net als radar.html; lokaal relatief.
+// 48u-bestand met terugval op 24u zolang het 48u-venster nog vol loopt.
+var LOKAAL = (location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.protocol==="file:");
+var DATA_BASE = LOKAAL ? "" : "https://data.weerlab.nl/";
+function fetchStrikes(){
+  var bust = "?_=" + Date.now();
+  function get(u){ return fetch(DATA_BASE + u + bust).then(function(r){ if(!r.ok) throw new Error(u+" http "+r.status); return r.json(); }); }
+  // 48u-bestand wordt maar elke 5 min geschreven → live-rand liep tot 5 min
+  // achter. Het 2u-bestand (elke 30s geschreven) vult de laatste minuten aan.
+  var lang = get("bliksem_strikes_48h.json").catch(function(){ return get("bliksem_strikes_24h.json"); });
+  var kort = get("bliksem_strikes.json").catch(function(){ return null; });
+  return Promise.all([lang, kort]).then(function(res){
+    var d = res[0], s = res[1];
+    d.strikes = d.strikes || [];
+    if(s && s.strikes && s.strikes.length){
+      var maxT = 0;
+      d.strikes.forEach(function(x){ if(x.t > maxT) maxT = x.t; });
+      // overlap-zone van 2 min ontdubbelen op ms-timestamp (zelfde sleutel
+      // als de daemon-dedup); daarbuiten is alles uit het korte bestand nieuw
+      var cut = maxT - 120, seen = {};
+      d.strikes.forEach(function(x){ if(x.t > cut) seen[x.t] = 1; });
+      s.strikes.forEach(function(x){ if(x.t > cut && !seen[x.t]){ d.strikes.push(x); seen[x.t] = 1; } });
+      if(s.updated && (!d.updated || Date.parse(s.updated) > Date.parse(d.updated))) d.updated = s.updated;
+    }
+    return d;
+  });
+}
+function loadData(){
+  return fetchStrikes()
+    .then(function(d){
+      ingest(d.strikes || [], d.updated);
+      var uren = Math.round(SPAN_MS/3600000);
+      document.getElementById("sub").textContent =
+        (STRIKES.length).toLocaleString("nl-NL") + " ontladingen · Blitzortung-netwerk · laatste " + uren + " uur";
+      document.getElementById("updated-note").textContent =
+        " Laatst bijgewerkt " + new Date(dataNow).toLocaleString("nl-NL", {hour:"2-digit",minute:"2-digit",day:"numeric",month:"short"}) + ".";
+    })
+    .catch(function(e){
+      console.warn("data-fout", e);
+      var sub = document.getElementById("sub");
+      if(STRIKES.length){
+        // refresh mislukt → laatste echte data laten staan, nooit demo tonen
+        sub.textContent = STRIKES.length.toLocaleString("nl-NL") +
+          " ontladingen · update mislukt " +
+          new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + " — laatste data getoond";
+      } else if(LOKAAL){
+        // alleen lokaal ontwikkelen zonder data-bestanden → synthetische storm
+        ingest(genDemo(), new Date().toISOString());
+        sub.textContent = "demo-data (live niet bereikbaar)";
+      } else {
+        sub.textContent = "geen data bereikbaar — automatische nieuwe poging over 30 s";
+      }
+    });
+}
+
+// fallback synthetische storm als het echte bestand ontbreekt
+function genDemo(){
+  var now = Date.now()/1000, out=[];
+  for(var i=0;i<6000;i++){
+    var age = Math.pow(Math.random(),1.7)*22*3600;
+    var prog = 1 - age/(22*3600);
+    var lat = 50.0 + prog*2.8 + (Math.random()-.5)*0.9;
+    var lon = 3.0 + prog*3.2 + (Math.random()-.5)*1.1;
+    out.push({t: now-age, lat:lat, lon:lon, type:"CG", pol:0, sig: 5+Math.floor(Math.random()*40)});
+  }
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Basiskaart — CARTO Voyager-tegels → PlateCarree-venster
+// ════════════════════════════════════════════════════════════════
+function isDark(){ return document.documentElement.getAttribute("data-theme")==="dark"; }
+function voyagerStyle(){ return isDark() ? "dark_nolabels" : "voyager_nolabels"; }
+var bakeBusy=false, bakeDone=false;
+function bakeBasemap(){
+  if(bakeBusy) return; bakeBusy=true;
+  var z=8, n=Math.pow(2,z);
+  function lon2tx(lo){return (lo+180)/360*n;}
+  function lat2ty(la){var r=la*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;}
+  function tx2lon(x){return x/n*360-180;}
+  function ty2lat(y){return Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;}
+  var txMin=Math.floor(lon2tx(PROJ_LON_MIN)), txMax=Math.floor(lon2tx(PROJ_LON_MAX));
+  var tyMin=Math.floor(lat2ty(PROJ_LAT_MAX)), tyMax=Math.floor(lat2ty(PROJ_LAT_MIN));
+  var tmp=document.createElement("canvas"); tmp.width=BASEMAP_W; tmp.height=BASEMAP_H;
+  var tc=tmp.getContext("2d");
+  tc.fillStyle=isDark()?"#0e1b2e":"#aac4da"; tc.fillRect(0,0,BASEMAP_W,BASEMAP_H);
+  tc.imageSmoothingEnabled=true; tc.imageSmoothingQuality="high";
+  var jobs=[]; for(var tx=txMin;tx<=txMax;tx++) for(var ty=tyMin;ty<=tyMax;ty++) jobs.push([tx,ty]);
+  var total=jobs.length, done=0, ok=0;
+  function fin(){
+    bakeBusy=false;
+    if(ok>=Math.ceil(total*0.6)){ basemapCanvas=tmp; bakeDone=true; draw(); if(typeof renderMinis==="function") renderMinis(); }
+  }
+  jobs.forEach(function(j){
+    var tx=j[0],ty=j[1],img=new Image(); img.crossOrigin="anonymous";
+    img.onload=function(){
+      var dx=lonToX(tx2lon(tx)), dy=latToY(ty2lat(ty));
+      var dw=lonToX(tx2lon(tx+1))-dx, dh=latToY(ty2lat(ty+1))-dy;
+      tc.drawImage(img,dx,dy,dw+1,dh+1); ok++; if(++done===total) fin();
+    };
+    img.onerror=function(){ if(++done===total) fin(); };
+    img.src="https://basemaps.cartocdn.com/rastertiles/"+voyagerStyle()+"/"+z+"/"+tx+"/"+ty+"@2x.png";
+  });
+}
+// scherpe tegels voor ingezoomd venster
+var liveTileCache={};
+function liveTile(z,tx,ty){
+  var key=z+"/"+tx+"/"+ty, t=liveTileCache[key];
+  if(t) return (t.complete && t.naturalWidth) ? t : null;
+  var img=new Image(); img.crossOrigin="anonymous";
+  img.onload=function(){ if(!playing) draw(); }; img.onerror=function(){img._err=1;};
+  img.src="https://basemaps.cartocdn.com/rastertiles/"+voyagerStyle()+"/"+z+"/"+tx+"/"+ty+"@2x.png";
+  liveTileCache[key]=img; return null;
+}
+// ════════════════════════════════════════════════════════════════
+//  Dichtheidskaart (telkaart) — teller-grid → palette
+// ════════════════════════════════════════════════════════════════
+// palette LUT (0..255 intensiteit → rgba)
+var PAL=null;
+function buildPalette(){
+  var stops=[[0,[43,26,134,0]],[0.04,[43,26,134,150]],[0.22,[30,95,208,210]],[0.42,[22,179,196,225]],
+            [0.58,[79,211,77,235]],[0.72,[230,199,0,245]],[0.86,[224,112,0,250]],[1,[204,0,0,255]]];
+  PAL=new Uint8ClampedArray(256*4);
+  for(var i=0;i<256;i++){
+    var f=i/255, a=stops[0], b=stops[stops.length-1];
+    for(var k=0;k<stops.length-1;k++){ if(f>=stops[k][0]&&f<=stops[k+1][0]){a=stops[k];b=stops[k+1];break;} }
+    var tt=(f-a[0])/((b[0]-a[0])||1);
+    for(var ch=0;ch<4;ch++) PAL[i*4+ch]=a[1][ch]+(b[1][ch]-a[1][ch])*tt;
+  }
+}
+// Grid-dichtheid: tel ontladingen per ~3 km cel, lichte blur, gamma-schaal en
+// bilineair opschalen → vloeiende meerkleuren-heatmap met echt dynamisch bereik
+// (8-bit additieve blobs verzadigen alles tot rood; een teller-grid niet).
+var DGW = 240;                                  // grid-breedte in cellen
+var DGH = Math.max(1, Math.round(DGW * BASEMAP_H / BASEMAP_W));
+var densMaxPerCell = 0;
+function blurGrid(g, w, h, passes){
+  // gescheiden box-blur, radius 1, n keer (cheap gaussiaan-benadering)
+  var tmp = new Float32Array(w*h);
+  for(var p=0;p<passes;p++){
+    for(var y=0;y<h;y++){ var row=y*w;
+      for(var x=0;x<w;x++){ var a=x>0?g[row+x-1]:g[row+x], b=g[row+x], c=x<w-1?g[row+x+1]:g[row+x]; tmp[row+x]=(a+b+c)/3; } }
+    for(var x2=0;x2<w;x2++){
+      for(var y2=0;y2<h;y2++){ var i=y2*w+x2; var a2=y2>0?tmp[i-w]:tmp[i], b2=tmp[i], c2=y2<h-1?tmp[i+w]:tmp[i]; g[i]=(a2+b2+c2)/3; } }
+  }
+}
+// Bouw een gekleurde dichtheidskaart (BASEMAP_W×H) voor het venster (lo,hi].
+// Hergebruikt door de hoofdkaart én de mini-kaartjes. Retourneert {canvas,rawMax}.
+function densityCanvasFor(lo, hi){
+  if(!PAL) buildPalette();
+  var grid = new Float32Array(DGW*DGH);
+  var cellW = BASEMAP_W/DGW, cellH = BASEMAP_H/DGH;
+  for(var i=0;i<STRIKES.length;i++){
+    var s=STRIKES[i]; if(s.t<=lo || s.t>hi) continue;
+    var gx=(s.bx/cellW)|0, gy=(s.by/cellH)|0;
+    if(gx<0||gy<0||gx>=DGW||gy>=DGH) continue;
+    grid[gy*DGW+gx]++;
+  }
+  var rawMax=0; for(var q=0;q<grid.length;q++) if(grid[q]>rawMax) rawMax=grid[q];
+  blurGrid(grid, DGW, DGH, 2);
+  var maxv=0; for(var m=0;m<grid.length;m++) if(grid[m]>maxv) maxv=grid[m];
+  maxv=Math.max(1, maxv);
+  var small=document.createElement("canvas"); small.width=DGW; small.height=DGH;
+  var sc=small.getContext("2d");
+  var img=sc.createImageData(DGW,DGH), d=img.data;
+  for(var c2=0;c2<grid.length;c2++){
+    var f=grid[c2]/maxv;
+    if(f<0.012){ d[c2*4+3]=0; continue; }
+    var norm=Math.pow(f,0.55);                 // gamma → onderkant beter zichtbaar
+    var idx=Math.min(255, Math.round(norm*255))*4;
+    d[c2*4]=PAL[idx]; d[c2*4+1]=PAL[idx+1]; d[c2*4+2]=PAL[idx+2]; d[c2*4+3]=PAL[idx+3];
+  }
+  sc.putImageData(img,0,0);
+  var acc=document.createElement("canvas"); acc.width=BASEMAP_W; acc.height=BASEMAP_H;
+  var ac=acc.getContext("2d");
+  ac.imageSmoothingEnabled=true; ac.imageSmoothingQuality="high";
+  ac.drawImage(small, 0,0,DGW,DGH, 0,0,BASEMAP_W,BASEMAP_H);
+  return { canvas: acc, rawMax: Math.round(rawMax) };
+}
+function buildDensity(){
+  var rg = windowRange();
+  var res = densityCanvasFor(rg.lo, rg.hi);
+  densCanvas = res.canvas; densDirty = false;
+  densMaxPerCell = res.rawMax;                  // piek ontladingen in één cel (~3 km)
+  var lbl=document.getElementById("heat-max"); if(lbl) lbl.textContent = "tot " + densMaxPerCell;
+}
+
+// ── Mini-kaartjes (afgelopen 12 / 24 uur) in de zijbalk ─────────────────────
+function sizeMini(cv){
+  var cssW=cv.clientWidth||118, cssH=Math.round(cssW*BASEMAP_H/BASEMAP_W);
+  cv.style.height=cssH+"px";
+  cv.width=Math.round(cssW*dpr); cv.height=Math.round(cssH*dpr);
+}
+function renderMini(cv, hours){
+  if(!cv) return 0;
+  var W=cv.width, H=cv.height, c=cv.getContext("2d");
+  c.clearRect(0,0,W,H);
+  if(basemapCanvas){ c.imageSmoothingEnabled=true; c.imageSmoothingQuality="high"; c.drawImage(basemapCanvas,0,0,BASEMAP_W,BASEMAP_H,0,0,W,H); }
+  else { c.fillStyle=isDark()?"#0e1b2e":"#aac4da"; c.fillRect(0,0,W,H); }
+  var lo=dataNow-hours*3600000, n=0;
+  for(var i=0;i<STRIKES.length;i++){ if(STRIKES[i].t>lo && STRIKES[i].t<=dataNow) n++; }
+  var res=densityCanvasFor(lo, dataNow);
+  c.globalAlpha=0.92; c.drawImage(res.canvas,0,0,BASEMAP_W,BASEMAP_H,0,0,W,H); c.globalAlpha=1;
+  c.lineWidth=0.7; c.strokeStyle=isDark()?"rgba(180,205,235,.5)":"rgba(40,60,90,.45)"; c.lineJoin="round";
+  COUNTRIES.forEach(function(co){ if(co.border===false) return; c.beginPath(); co.rings.forEach(function(ring){
+    for(var k=0;k<ring.length;k++){ var X=lonToX(ring[k][0])/BASEMAP_W*W, Y=latToY(ring[k][1])/BASEMAP_H*H; if(k===0)c.moveTo(X,Y); else c.lineTo(X,Y);} c.closePath(); }); c.stroke(); });
+  return n;
+}
+function renderMinis(){
+  var c12=document.getElementById("mini12c"), c24=document.getElementById("mini24c");
+  if(!c12||!c24||!STRIKES.length) return;
+  sizeMini(c12); sizeMini(c24);
+  var n12=renderMini(c12,12), n24=renderMini(c24,24);
+  var e12=document.getElementById("mini12n"), e24=document.getElementById("mini24n");
+  if(e12) e12.textContent=n12.toLocaleString("nl-NL")+" ontl.";
+  if(e24) e24.textContent=n24.toLocaleString("nl-NL")+" ontl.";
+}
+function selectPeriod(hours){
+  if(mode!=="density") setMode("density");
+  exitCustom();
+  densHours=hours;
+  document.querySelectorAll("#hourset button[data-hrs]").forEach(function(x){ x.classList.toggle("on", x.dataset.hrs===String(hours)); });
+  syncDensityLabels();
+  setScrub(dataNow);   // live-rand → laatste N uur
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Tekenen
+// ════════════════════════════════════════════════════════════════
+var canvas, ctx, stage;
+function sizeCanvas(){
+  stage=document.getElementById("stage");
+  canvas=document.getElementById("map");
+  var w=stage.clientWidth, h=stage.clientHeight;
+  // backing store volgt container; basemap-venster vult canvas (juiste aspect via projectie + letterbox)
+  canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr);
+  ctx=canvas.getContext("2d");
+}
+function clampView(){
+  var spanX=BASEMAP_W/zoom, spanY=BASEMAP_H/zoom;
+  if(viewX<0)viewX=0; if(viewY<0)viewY=0;
+  if(viewX>BASEMAP_W-spanX)viewX=BASEMAP_W-spanX;
+  if(viewY>BASEMAP_H-spanY)viewY=BASEMAP_H-spanY;
+}
+function ageColor(min){
+  if(min<2) return "#ffffff";
+  if(min<10) return "#ffd400";
+  if(min<30) return "#e07000";
+  if(min<60) return "#cc0000";
+  return "#6d28d9";
+}
+function draw(){
+  if(!ctx) sizeCanvas();
+  var cw=canvas.width, ch=canvas.height;
+  clampView();
+  var spanX=BASEMAP_W/zoom, spanY=BASEMAP_H/zoom;
+  // letterbox: basemap-aspect in canvas passen
+  var scale=Math.min(cw/spanX, ch/spanY);
+  var drawW=spanX*scale, drawH=spanY*scale;
+  var offX=(cw-drawW)/2, offY=(ch-drawH)/2;
+  ctx.save();
+  ctx.fillStyle=isDark()?"#0d1b2a":"#0d1b2a"; ctx.fillRect(0,0,cw,ch);
+  // clip naar kaartgebied
+  ctx.beginPath(); ctx.rect(offX,offY,drawW,drawH); ctx.clip();
+  // helper basemap→screen
+  function sx(bx){ return offX + (bx-viewX)/spanX*drawW; }
+  function sy(by){ return offY + (by-viewY)/spanY*drawH; }
+  // basiskaart
+  if(basemapCanvas){
+    ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+    ctx.drawImage(basemapCanvas, viewX, viewY, spanX, spanY, offX, offY, drawW, drawH);
+    drawLiveTilesLB(ctx, spanX, spanY, sx, sy, scale);
+  } else {
+    ctx.fillStyle=isDark()?"#0e1b2e":"#aac4da"; ctx.fillRect(offX,offY,drawW,drawH);
+  }
+
+  if(mode==="density"){
+    if(densDirty || !densCanvas) buildDensity();
+    ctx.globalAlpha=0.86;
+    ctx.drawImage(densCanvas, viewX, viewY, spanX, spanY, offX, offY, drawW, drawH);
+    ctx.globalAlpha=1;
+  }
+
+  // landsgrenzen
+  drawBorders(ctx, sx, sy, scale);
+  // steden
+  drawCities(ctx, sx, sy);
+
+  if(mode==="timeline"){
+    drawStrikes(ctx, sx, sy, scale);
+  }
+  ctx.restore();
+  updateScaleBadge(spanX, drawW);
+}
+function drawLiveTilesLB(c, spanX, spanY, sx, sy, scale){
+  if(!bakeDone) return;
+  var z=Math.round(Math.log2(((BASEMAP_W/(PROJ_LON_MAX-PROJ_LON_MIN))*zoom)*360/256));
+  if(z<=8) return; z=Math.min(z,15);
+  var n=Math.pow(2,z);
+  function lon2tx(lo){return (lo+180)/360*n;}
+  function lat2ty(la){var r=la*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;}
+  function tx2lon(x){return x/n*360-180;}
+  function ty2lat(y){return Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;}
+  var loW=PROJ_LON_MIN+(viewX/BASEMAP_W)*(PROJ_LON_MAX-PROJ_LON_MIN);
+  var loE=PROJ_LON_MIN+((viewX+spanX)/BASEMAP_W)*(PROJ_LON_MAX-PROJ_LON_MIN);
+  var laN=PROJ_LAT_MAX-(viewY/BASEMAP_H)*(PROJ_LAT_MAX-PROJ_LAT_MIN);
+  var laS=PROJ_LAT_MAX-((viewY+spanY)/BASEMAP_H)*(PROJ_LAT_MAX-PROJ_LAT_MIN);
+  var txMin=Math.floor(lon2tx(loW)), txMax=Math.floor(lon2tx(loE));
+  var tyMin=Math.floor(lat2ty(laN)), tyMax=Math.floor(lat2ty(laS));
+  if((txMax-txMin+1)*(tyMax-tyMin+1)>120) return;
+  c.imageSmoothingEnabled=true; c.imageSmoothingQuality="high";
+  for(var tx=txMin;tx<=txMax;tx++) for(var ty=tyMin;ty<=tyMax;ty++){
+    var img=liveTile(z,tx,ty); if(!img) continue;
+    var dx=lonToX(tx2lon(tx)), dy=latToY(ty2lat(ty));
+    var dw=lonToX(tx2lon(tx+1))-dx, dh=latToY(ty2lat(ty+1))-dy;
+    // sx(bx)=offX+(bx-viewX)*scale → tegelbreedte op scherm = dw*scale (was ×zoom te groot)
+    c.drawImage(img, sx(dx), sy(dy), dw*scale+0.6, dh*scale+0.6);
+  }
+}
+function drawBorders(c, sx, sy, scale){
+  c.lineWidth=Math.max(1, 1.6*scale*0.7);
+  c.strokeStyle=isDark()?"rgba(180,205,235,.55)":"rgba(40,60,90,.5)";
+  c.lineJoin="round";
+  COUNTRIES.forEach(function(co){
+    if(co.border===false) return;
+    c.beginPath();
+    co.rings.forEach(function(ring){
+      for(var i=0;i<ring.length;i++){
+        var X=sx(lonToX(ring[i][0])), Y=sy(latToY(ring[i][1]));
+        if(i===0) c.moveTo(X,Y); else c.lineTo(X,Y);
+      }
+      c.closePath();
+    });
+    c.stroke();
+  });
+}
+var CITIES=[
+  ["Amsterdam",4.90,52.37,1],["Rotterdam",4.48,51.92,1],["Den Haag",4.30,52.08,1],
+  ["Utrecht",5.12,52.09,1],["Eindhoven",5.47,51.44,1],["Groningen",6.57,53.22,1],
+  ["Maastricht",5.69,50.85,1],["Arnhem",5.91,51.98,0],["Zwolle",6.09,52.51,0],
+  ["Brussel",4.35,50.85,1],["Antwerpen",4.40,51.22,1],["Gent",3.72,51.05,0],
+  ["Brugge",3.22,51.21,0],["Luik",5.57,50.63,1],["Charleroi",4.44,50.41,0],
+  ["Luxemburg",6.13,49.61,1],["Köln",6.96,50.94,0],["Lille",3.06,50.63,0]
+];
+function drawCities(c, sx, sy){
+  var showMinor = zoom>=2.2;
+  c.textAlign="left"; c.textBaseline="middle";
+  CITIES.forEach(function(ci){
+    if(!ci[3] && !showMinor) return;
+    var X=sx(lonToX(ci[1])), Y=sy(latToY(ci[2]));
+    if(X<-20||Y<-20||X>canvas.width+20||Y>canvas.height+20) return;
+    c.beginPath(); c.arc(X,Y,ci[3]?3:2.3,0,6.283);
+    c.fillStyle=isDark()?"#e5ecf6":"#0f172a"; c.fill();
+    c.lineWidth=1.4; c.strokeStyle=isDark()?"rgba(11,18,32,.85)":"rgba(255,255,255,.9)"; c.stroke();
+    c.font=(ci[3]?"700 ":"600 ")+(ci[3]?13:11.5)*dpr+"px DM Sans, sans-serif";
+    c.lineWidth=3*dpr; c.strokeStyle=isDark()?"rgba(11,18,32,.85)":"rgba(255,255,255,.92)";
+    c.fillStyle=isDark()?"#cdd9ec":"#1f2a40";
+    c.strokeText(ci[0], X+6*dpr, Y); c.fillText(ci[0], X+6*dpr, Y);
+  });
+}
+var hoverStrike=null;
+function drawStrikes(c, sx, sy, scale){
+  var win = trailMin*60*1000;
+  var lo = scrubT - win;
+  // teken oudste eerst zodat jonge bovenop
+  var vis=[];
+  for(var i=0;i<STRIKES.length;i++){ var s=STRIKES[i]; if(s.t>lo && s.t<=scrubT) vis.push(s); }
+  var rScale = Math.min(1.8, Math.max(0.55, 0.55+0.16*zoom));
+  for(var k=0;k<vis.length;k++){
+    var s=vis[k];
+    var X=sx(s.bx), Y=sy(s.by);
+    if(X<-10||Y<-10||X>canvas.width+10||Y>canvas.height+10) continue;
+    var ageMin=(scrubT - s.t)/60000;
+    var col=ageColor(ageMin);
+    var r=(ageMin<2?4.4:ageMin<10?3.6:ageMin<30?3.0:2.6)*rScale*dpr;
+    if(ageMin<2){
+      c.beginPath(); c.arc(X,Y,r+5*dpr,0,6.283);
+      c.fillStyle="rgba(255,236,150,.30)"; c.fill();
+    }
+    c.beginPath(); c.arc(X,Y,r,0,6.283);
+    c.fillStyle=col; c.globalAlpha=ageMin<30?0.96:0.82; c.fill(); c.globalAlpha=1;
+    c.lineWidth=0.9*dpr; c.strokeStyle="rgba(0,0,0,.35)"; c.stroke();
+  }
+}
+function updateScaleBadge(spanX, drawW){
+  // bepaal "mooie" afstand voor ~110px
+  var kmPerPx = ((spanX/BASEMAP_W)*(PROJ_LON_MAX-PROJ_LON_MIN)*KM_LON)/drawW*dpr;
+  var targetKm = kmPerPx*110*dpr;
+  var nice=[5,10,20,25,50,100,150,200,300];
+  var km=nice[0]; for(var i=0;i<nice.length;i++){ if(nice[i]<=targetKm) km=nice[i]; }
+  document.getElementById("scalebadge").textContent = km+" km";
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Statistiek + per land + hotspots
+// ════════════════════════════════════════════════════════════════
+// Tijdvenster van de getoonde kaart. Telkaart kan een vrije van–tot range
+// hebben (customActive) — ook over middernacht heen (22:00 → 08:00).
+function windowRange(){
+  if(mode==="density"){
+    if(customActive) return { lo: Math.min(customFrom,customTo), hi: Math.max(customFrom,customTo) };
+    return { lo: scrubT - densHours*3600*1000, hi: scrubT };
+  }
+  return { lo: scrubT - trailMin*60*1000, hi: scrubT };
+}
+function currentWindow(){
+  var r=windowRange(), arr=[];
+  for(var i=0;i<STRIKES.length;i++){var s=STRIKES[i]; if(s.t>r.lo && s.t<=r.hi) arr.push(s);}
+  return arr;
+}
+// Ingezoomd (provincie of hand-zoom) tellen tellers alleen wat in beeld is;
+// eerder telden kop "Bliksem Limburg" en de chips tóch het hele NW-EU-venster.
+function isCropped(){ return zoom > 1.02; }
+function inViewFilter(arr){
+  if(!isCropped()) return arr;
+  var x0=viewX, x1=viewX+BASEMAP_W/zoom, y0=viewY, y1=viewY+BASEMAP_H/zoom;
+  return arr.filter(function(s){ return s.bx>=x0 && s.bx<=x1 && s.by>=y0 && s.by<=y1; });
+}
+function updatePanels(){
+  var arr=inViewFilter(currentWindow());
+  // totaal
+  document.getElementById("s-total").textContent = arr.length.toLocaleString("nl-NL");
+  document.getElementById("ov-count").textContent = arr.length.toLocaleString("nl-NL");
+  // piek per minuut (in venster, minuut-bins)
+  var perMin={}; var sigSum=0;
+  for(var i=0;i<arr.length;i++){ var m=Math.floor(arr[i].t/60000); perMin[m]=(perMin[m]||0)+1; sigSum+=arr[i].sig; }
+  var peak=0; for(var key in perMin){ if(perMin[key]>peak) peak=perMin[key]; }
+  document.getElementById("s-rate").textContent = peak.toLocaleString("nl-NL");
+  document.getElementById("s-strength").textContent = arr.length? (sigSum/arr.length).toFixed(0) : "—";
+  // actieve cellen (~30 km grid: 90 px bij 200 px/graad)
+  var cells={}; for(var j=0;j<arr.length;j++){ var s=arr[j]; var gx=Math.round(s.bx/90), gy=Math.round(s.by/90); cells[gx+":"+gy]=1; }
+  document.getElementById("s-area").textContent = Object.keys(cells).length;
+
+  // per land
+  var cc={NL:0,BE:0,LU:0,DE:0,XX:0};
+  for(var k=0;k<arr.length;k++){ cc[arr[k].country] = (cc[arr[k].country]||0)+1; }
+  var maxC=1; COUNTRIES.forEach(function(co){ if((cc[co.id]||0)>maxC) maxC=cc[co.id]; });
+  var list=document.getElementById("country-list");
+  list.innerHTML="";
+  COUNTRIES.forEach(function(co){
+    var n=cc[co.id]||0;
+    var row=document.createElement("div"); row.className="country";
+    var flag='<div class="flag" style="flex-direction:'+co.ori+'">'+co.col.map(function(c){return '<span style="background:'+c+'"></span>';}).join('')+'</div>';
+    row.innerHTML = flag +
+      '<span class="nm">'+co.id+'</span>'+
+      '<div class="barwrap"><i style="width:'+(n/maxC*100).toFixed(0)+'%"></i></div>'+
+      '<span class="ct">'+n.toLocaleString("nl-NL")+'</span>';
+    list.appendChild(row);
+  });
+  if(cc.XX){
+    var row2=document.createElement("div"); row2.className="country";
+    row2.innerHTML='<div class="flag" style="background:#94a3b8"></div><span class="nm" style="color:var(--wl-color-text-soft)">overig</span><div class="barwrap"><i style="width:'+(cc.XX/Math.max(maxC,cc.XX)*100).toFixed(0)+'%;background:#94a3b8"></i></div><span class="ct" style="color:var(--wl-color-text-soft)">'+cc.XX.toLocaleString("nl-NL")+'</span>';
+    list.appendChild(row2);
+  }
+
+  // hotspots — grid clusters, top 3
+  var grid={};
+  for(var h=0;h<arr.length;h++){ var s2=arr[h]; var gx=Math.round(s2.lon*4)/4, gy=Math.round(s2.lat*4)/4; var ky=gx+","+gy; if(!grid[ky])grid[ky]={n:0,lon:0,lat:0}; grid[ky].n++; grid[ky].lon+=s2.lon; grid[ky].lat+=s2.lat; }
+  var tops=Object.keys(grid).map(function(k){var g=grid[k]; return {n:g.n, lon:g.lon/g.n, lat:g.lat/g.n};}).sort(function(a,b){return b.n-a.n;}).slice(0,3);
+  var hs=document.getElementById("hotspots");
+  if(!tops.length){ hs.innerHTML='<div class="footer-note">Geen ontladingen in dit venster.</div>'; }
+  else hs.innerHTML = tops.map(function(t,i){
+    return '<div class="country" style="border:none;padding:5px 0"><span class="nm" style="width:18px;color:var(--wl-color-danger);font-weight:700">'+(i+1)+'</span><span style="flex:1;font-size:12px;color:var(--wl-color-text-muted)">'+t.lat.toFixed(2)+'°N, '+t.lon.toFixed(2)+'°E</span><span class="ct">'+t.n+'</span></div>';
+  }).join("");
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Tijd-UI: klok, scrubber, histogram
+// ════════════════════════════════════════════════════════════════
+function fmtClock(t){ return new Date(t).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}); }
+function fmtDate(t){ return new Date(t).toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"}); }
+function isLiveEdge(){ return scrubT >= dataNow - 60000; }
+function updateClock(){
+  var atLive=isLiveEdge();
+  document.getElementById("ov-clock").textContent = fmtClock(scrubT);
+  document.getElementById("ov-clocklbl").textContent = atLive ? "Nu (live)" : fmtDate(scrubT);
+  document.getElementById("tp-clock").textContent = fmtClock(scrubT);
+  document.getElementById("tp-date").textContent = atLive ? "live · meest recent" : fmtDate(scrubT);
+  document.getElementById("livepill").style.opacity = atLive ? "1" : "0.35";
+  document.getElementById("ov-countlbl").textContent = (mode==="density"
+    ? (customActive ? (fmtClock(Math.min(customFrom,customTo))+"–"+fmtClock(Math.max(customFrom,customTo))) : ("in "+densHours+" uur"))
+    : ("spoor "+trailMin+" min")) + (isCropped() ? " · in beeld" : "");
+}
+var HIST_BINS=144; // 20-min bins over 48u
+var histCounts=null;
+function computeHist(){
+  histCounts=new Float32Array(HIST_BINS);
+  var binMs=SPAN_MS/HIST_BINS;
+  for(var i=0;i<STRIKES.length;i++){
+    var b=Math.floor((STRIKES[i].t - tMin)/binMs);
+    if(b>=0&&b<HIST_BINS) histCounts[b]++;
+  }
+}
+function drawHist(){
+  var c=document.getElementById("hist");
+  var w=c.clientWidth, h=56;
+  c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+  var x=c.getContext("2d"); x.scale(dpr,dpr);
+  x.clearRect(0,0,w,h);
+  if(!histCounts) return;
+  var max=1; for(var i=0;i<HIST_BINS;i++) if(histCounts[i]>max) max=histCounts[i];
+  var bw=w/HIST_BINS;
+  var frac=(scrubT - tMin)/SPAN_MS;
+  var scrubX=frac*w;
+  for(var b=0;b<HIST_BINS;b++){
+    var bh=Math.pow(histCounts[b]/max,0.6)*(h-6);
+    var bx=b*bw;
+    var past = (bx+bw) <= scrubX;
+    x.fillStyle = past ? "rgba(0,32,91,.78)" : "rgba(148,163,184,.5)";
+    x.fillRect(bx, h-bh, Math.max(0.5,bw-0.6), bh);
+  }
+  // venster markeren in telkaart-modus (vaste periode óf vrije range)
+  if(mode==="density"){
+    var rg=windowRange();
+    var f0=Math.max(0,(rg.lo - tMin)/SPAN_MS), f1=Math.min(1,(rg.hi - tMin)/SPAN_MS);
+    x.fillStyle = customActive ? "rgba(0,32,91,.18)" : "rgba(204,0,0,.12)";
+    x.fillRect(f0*w, 0, (f1-f0)*w, h);
+    if(customActive){ x.strokeStyle="rgba(0,32,91,.85)"; x.lineWidth=1.5; x.strokeRect(f0*w+0.75,0.75,(f1-f0)*w-1.5,h-1.5); }
+  }
+  positionHandles();
+}
+function positionHandles(){
+  var hf=document.getElementById("h-from"), ht=document.getElementById("h-to");
+  if(!hf) return;
+  if(mode==="density" && customActive){
+    hf.style.left=((Math.min(customFrom,customTo)-tMin)/SPAN_MS*100)+"%";
+    ht.style.left=((Math.max(customFrom,customTo)-tMin)/SPAN_MS*100)+"%";
+    hf.classList.remove("hidden"); ht.classList.remove("hidden");
+  } else { hf.classList.add("hidden"); ht.classList.add("hidden"); }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Refresh-orchestratie
+// ════════════════════════════════════════════════════════════════
+function refresh(full){
+  if(mode==="density") densDirty=true;
+  draw();
+  updateClock();
+  updatePanels();
+  drawHist();
+}
+function setScrub(t){
+  scrubT=Math.max(tMin, Math.min(dataNow, t));
+  document.getElementById("scrub").value = Math.round((scrubT-tMin)/SPAN_MS*1000);
+  refresh();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Afspelen
+// ════════════════════════════════════════════════════════════════
+var playTimer=null, PLAY_STEP_MS=4*60*1000; // 4 min data per frame
+function setPlaying(p){
+  playing=p;
+  document.getElementById("play-ico").innerHTML = p
+    ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
+    : '<path d="M8 5v14l11-7z"/>';
+  if(p){
+    if(isLiveEdge()) scrubT = tMin; // vanaf begin als we aan de live-rand staan
+    playTimer=setInterval(function(){
+      scrubT += PLAY_STEP_MS;
+      if(scrubT>=dataNow){ scrubT=dataNow; setPlaying(false); }
+      document.getElementById("scrub").value=Math.round((scrubT-tMin)/SPAN_MS*1000);
+      refresh();
+    }, 60);
+  } else if(playTimer){ clearInterval(playTimer); playTimer=null; }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Events
+// ════════════════════════════════════════════════════════════════
+function setMode(m){
+  mode=m;
+  document.querySelectorAll("#modeseg button").forEach(function(b){ b.classList.toggle("on", b.dataset.mode===m); });
+  document.getElementById("agelegend").classList.toggle("hidden", m!=="timeline");
+  document.getElementById("heatlegend").classList.toggle("hidden", m!=="density");
+  document.getElementById("winset").classList.toggle("hidden", m!=="timeline");
+  document.getElementById("hourset").classList.toggle("hidden", m!=="density");
+  document.getElementById("customset").classList.toggle("hidden", !(m==="density" && customActive));
+  document.getElementById("track-wrap").classList.toggle("custom", m==="density" && customActive);
+  syncDensityLabels();
+  densDirty=true;
+  refresh();
+}
+function densScopeText(){ return customActive
+  ? (fmtClock(Math.min(customFrom,customTo))+"–"+fmtClock(Math.max(customFrom,customTo)))
+  : (densHours+" uur"); }
+function syncDensityLabels(){
+  document.getElementById("scope-lbl").textContent = mode==="timeline" ? ("spoor "+trailMin+" min") : (densScopeText()+" dichtheid");
+  document.getElementById("land-scope").textContent = mode==="timeline" ? "spoor" : (customActive?densScopeText():densHours+"u");
+  document.getElementById("heat-ttl").textContent = "Ontladingen "+(customActive?densScopeText():densHours+"u")+" (dichtheid)";
+}
+// klokuur (HH:MM lokaal) → tijdstip binnen het venster [tMin, dataNow].
+// 48u-venster bevat elk klokuur twee keer → kies de bezetting het dichtst bij
+// een referentie (de huidige greep), zodat tijd-typen logisch bijschuift.
+function timeToTs(hh,mm,ref){
+  if(ref===undefined) ref=dataNow;
+  var base=new Date(dataNow); base.setHours(hh,mm,0,0);
+  var best=null, bestd=Infinity;
+  for(var k=-2;k<=0;k++){
+    var t=base.getTime()+k*86400000;
+    if(t<tMin-1000 || t>dataNow+1000) continue;
+    var d=Math.abs(t-ref);
+    if(d<bestd){ bestd=d; best=t; }
+  }
+  if(best===null) best=Math.max(tMin, Math.min(dataNow, base.getTime()));
+  return best;
+}
+function toLocalDT(ts){ var d=new Date(ts); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())+"T"+pad2(d.getHours())+":"+pad2(d.getMinutes()); }
+function syncCustomInputs(){
+  var a=Math.min(customFrom,customTo), b=Math.max(customFrom,customTo);
+  var ff=document.getElementById("cf-from"), ft=document.getElementById("cf-to");
+  var lo=toLocalDT(tMin), hi=toLocalDT(dataNow);
+  if(ff){ ff.min=lo; ff.max=hi; ff.value=toLocalDT(a); }
+  if(ft){ ft.min=lo; ft.max=hi; ft.value=toLocalDT(b); }
+  var dur=document.getElementById("cf-dur"); if(dur) dur.textContent=fmtHours(b-a);
+}
+function enterCustom(){
+  customActive=true;
+  if(!(customFrom<customTo)){ customTo=scrubT; customFrom=scrubT-6*3600*1000; }
+  if(customFrom<tMin) customFrom=tMin; if(customTo>dataNow) customTo=dataNow;
+  document.getElementById("customset").classList.remove("hidden");
+  document.getElementById("track-wrap").classList.add("custom");
+  syncCustomInputs(); syncDensityLabels(); densDirty=true; refresh();
+}
+function exitCustom(){
+  customActive=false;
+  document.getElementById("customset").classList.add("hidden");
+  document.getElementById("track-wrap").classList.remove("custom");
+}
+function setCustomRange(a,b){
+  customFrom=Math.max(tMin,Math.min(dataNow,Math.min(a,b)));
+  customTo=Math.max(tMin,Math.min(dataNow,Math.max(a,b)));
+  syncCustomInputs(); syncDensityLabels(); densDirty=true; refresh();
+}
+function setupHandleDrag(id, isFrom){
+  var el=document.getElementById(id); if(!el) return;
+  var wrap=document.getElementById("track-wrap");
+  function move(clientX){
+    var r=wrap.getBoundingClientRect();
+    var frac=Math.max(0,Math.min(1,(clientX-r.left)/r.width)), ts=tMin+frac*SPAN_MS;
+    if(isFrom) customFrom=Math.max(tMin, Math.min(ts, customTo-60000));
+    else customTo=Math.min(dataNow, Math.max(ts, customFrom+60000));
+    syncCustomInputs(); syncDensityLabels(); densDirty=true; refresh();
+  }
+  el.addEventListener("mousedown", function(e){ e.preventDefault(); e.stopPropagation();
+    function mm(ev){ move(ev.clientX); }
+    function mu(){ window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",mu); }
+    window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu);
+  });
+  el.addEventListener("touchstart", function(e){ e.preventDefault();
+    function tm(ev){ if(ev.touches[0]) move(ev.touches[0].clientX); }
+    function te(){ window.removeEventListener("touchmove",tm); window.removeEventListener("touchend",te); }
+    window.addEventListener("touchmove",tm,{passive:false}); window.addEventListener("touchend",te);
+  }, {passive:false});
+}
+function bindEvents(){
+  document.querySelectorAll("#modeseg button").forEach(function(b){ b.onclick=function(){ setMode(b.dataset.mode); }; });
+  document.querySelectorAll("#winset button[data-win]").forEach(function(b){
+    b.onclick=function(){ document.querySelectorAll("#winset button[data-win]").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); trailMin=+b.dataset.win; document.getElementById("scope-lbl").textContent="spoor "+trailMin+" min"; refresh(); };
+  });
+  document.querySelectorAll("#hourset button[data-hrs]").forEach(function(b){
+    b.onclick=function(){
+      document.querySelectorAll("#hourset button[data-hrs]").forEach(function(x){x.classList.remove("on");});
+      b.classList.add("on");
+      if(b.dataset.hrs==="custom"){ enterCustom(); return; }
+      exitCustom(); densHours=+b.dataset.hrs; syncDensityLabels(); densDirty=true; refresh();
+    };
+  });
+  function applyCustomInputs(){
+    var a=Date.parse(document.getElementById("cf-from").value), b=Date.parse(document.getElementById("cf-to").value);
+    if(isNaN(a)||isNaN(b)) return;
+    setCustomRange(a,b);
+  }
+  document.getElementById("cf-from").addEventListener("change", applyCustomInputs);
+  document.getElementById("cf-to").addEventListener("change", applyCustomInputs);
+  setupHandleDrag("h-from", true);
+  setupHandleDrag("h-to", false);
+  document.querySelectorAll(".mini").forEach(function(b){ b.onclick=function(){ selectPeriod(+b.dataset.h); }; });
+  var scrub=document.getElementById("scrub");
+  scrub.oninput=function(){ if(playing) setPlaying(false); scrubT=tMin + (+scrub.value)/1000*SPAN_MS; refresh(); };
+  document.getElementById("playbtn").onclick=function(){ setPlaying(!playing); };
+  document.getElementById("jump-live").onclick=function(){ setPlaying(false); if(customActive){ exitCustom(); document.querySelectorAll('#hourset button[data-hrs]').forEach(function(x){x.classList.toggle('on', x.dataset.hrs==='3');}); densHours=3; syncDensityLabels(); } setScrub(dataNow); };
+  document.getElementById("dlbtn").onclick=exportPNG;
+
+  // animatie-export (mp4 / gif)
+  document.getElementById("filmbtn").onclick=openFilm;
+  document.getElementById("film-x").onclick=closeFilm;
+  document.getElementById("film-overlay").addEventListener("click", function(e){ if(e.target===this) closeFilm(); });
+  document.querySelectorAll("#film-fmt button").forEach(function(b){
+    b.onclick=function(){ if(filmRunning) return; document.querySelectorAll("#film-fmt button").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); filmFmt=b.dataset.fmt; filmSyncEst(); };
+  });
+  ["from","to"].forEach(function(id){ filmEl(id).addEventListener("change", filmSyncEst); });
+  filmEl("fps").addEventListener("input", filmSyncEst);
+  filmEl("step").addEventListener("input", filmSyncEst);
+  filmEl("go").onclick=startFilm;
+  window.addEventListener("keydown", function(e){ if(e.key==="Escape") closeFilm(); });
+
+  // zoom buttons
+  document.getElementById("zin").onclick=function(){ zoomAt(zoom*1.5); };
+  document.getElementById("zout").onclick=function(){ zoomAt(zoom/1.5); };
+  document.getElementById("zrs").onclick=function(){ zoom=1; viewX=0; viewY=0; var ps=document.getElementById("provsel"); if(ps) ps.value=""; refresh(); };
+
+  // zoom naar provincie/gebied
+  document.getElementById("provsel").onchange=function(){
+    var v=this.value;
+    if(!v){ zoom=1; viewX=0; viewY=0; refresh(); }
+    else if(REGIONS[v]) zoomToBbox(REGIONS[v]);
+  };
+
+  // theme
+  document.getElementById("themebtn").onclick=function(){
+    var d=isDark(); document.documentElement.setAttribute("data-theme", d?"light":"dark");
+    bakeDone=false; basemapCanvas=null; liveTileCache={}; bakeBusy=false; bakeBasemap(); densDirty=true; refresh(); renderMinis();
+  };
+
+  // pan + wheel zoom + hover
+  var st=document.getElementById("stage");
+  st.addEventListener("wheel", function(e){ e.preventDefault();
+    var rect=st.getBoundingClientRect();
+    var f=(e.clientX-rect.left)/rect.width, g=(e.clientY-rect.top)/rect.height;
+    zoomAt(zoom*(e.deltaY<0?1.18:1/1.18), f, g);
+  }, {passive:false});
+  var drag=false,lx=0,ly=0;
+  st.addEventListener("mousedown", function(e){ drag=true; lx=e.clientX; ly=e.clientY; st.classList.add("dragging"); });
+  window.addEventListener("mousemove", function(e){
+    if(drag){
+      var rect=st.getBoundingClientRect();
+      var spanX=BASEMAP_W/zoom, spanY=BASEMAP_H/zoom;
+      var scale=Math.min(canvas.width/spanX, canvas.height/spanY);
+      var dxv=(e.clientX-lx)*dpr/scale, dyv=(e.clientY-ly)*dpr/scale;
+      viewX-=dxv; viewY-=dyv; lx=e.clientX; ly=e.clientY; clampView(); draw();
+    } else if(mode==="timeline"){ hoverTip(e); }
+  });
+  window.addEventListener("mouseup", function(){ if(drag){drag=false; st.classList.remove("dragging"); if(isCropped()) refresh(); } });
+
+  window.addEventListener("resize", function(){ sizeCanvas(); densDirty=true; refresh(); });
+}
+function zoomAt(nz, fx, fy){
+  nz=Math.max(1, Math.min(10, nz));
+  if(fx===undefined){fx=0.5;fy=0.5;}
+  var spanX=BASEMAP_W/zoom, spanY=BASEMAP_H/zoom;
+  var bxF=viewX+fx*spanX, byF=viewY+fy*spanY;
+  zoom=nz;
+  var nsx=BASEMAP_W/zoom, nsy=BASEMAP_H/zoom;
+  viewX=bxF-fx*nsx; viewY=byF-fy*nsy;
+  clampView(); refresh();
+}
+// Bbox-en (lon_min,lat_min,lon_max,lat_max) per provincie/gebied voor "Zoom naar…"
+var REGIONS = {
+  // hele landen
+  nl:[3.30,50.72,7.25,53.62], be:[2.54,49.49,6.41,51.52], lu:[5.72,49.44,6.55,50.20],
+  groningen:[6.05,52.95,7.25,53.6], friesland:[5.2,52.8,6.45,53.55], drenthe:[6.05,52.58,7.1,53.22],
+  overijssel:[5.8,52.18,7.1,52.78], flevoland:[5.15,52.28,6.05,52.86], gelderland:[4.9,51.78,6.85,52.52],
+  utrecht:[4.78,51.92,5.65,52.34], noordholland:[4.45,52.13,5.42,53.22], zuidholland:[3.85,51.65,5.12,52.36],
+  zeeland:[3.32,51.18,4.4,51.8], brabant:[4.18,51.27,6.05,51.9], limburgnl:[5.5,50.74,6.27,51.8],
+  westvl:[2.5,50.68,3.55,51.42], oostvl:[3.28,50.68,4.35,51.42], antwerpen:[4.2,50.95,5.36,51.52],
+  vlbrabant:[4.18,50.6,5.12,51.06], limburgbe:[4.98,50.68,5.96,51.36], brussel:[4.24,50.76,4.5,50.95],
+  waalsbrabant:[4.22,50.54,4.96,50.79], henegouwen:[3.15,50.18,4.72,50.82], namen:[4.18,49.88,5.42,50.56],
+  luik:[5.08,50.18,6.42,50.82], luxbe:[4.98,49.45,6.12,50.28], luxemburg:[5.7,49.42,6.55,50.22]
+};
+function zoomToBbox(b){
+  var bx0=lonToX(b[0]), bx1=lonToX(b[2]), by0=latToY(b[3]), by1=latToY(b[1]);
+  var w=Math.abs(bx1-bx0), h=Math.abs(by1-by0), pad=1.14;
+  zoom=Math.max(1, Math.min(10, Math.min(BASEMAP_W/(w*pad), BASEMAP_H/(h*pad))));
+  var cx=(bx0+bx1)/2, cy=(by0+by1)/2;
+  viewX=cx-(BASEMAP_W/zoom)/2; viewY=cy-(BASEMAP_H/zoom)/2;
+  clampView(); refresh();
+}
+function hoverTip(e){
+  var rect=stage.getBoundingClientRect();
+  var spanX=BASEMAP_W/zoom, spanY=BASEMAP_H/zoom;
+  var scale=Math.min(canvas.width/spanX, canvas.height/spanY);
+  var drawW=spanX*scale, drawH=spanY*scale;
+  var offX=(canvas.width-drawW)/2, offY=(canvas.height-drawH)/2;
+  var mx=(e.clientX-rect.left)*dpr, my=(e.clientY-rect.top)*dpr;
+  var bx=viewX+(mx-offX)/drawW*spanX, by=viewY+(my-offY)/drawH*spanY;
+  // dichtstbijzijnde recente strike
+  var win=trailMin*60*1000, lo=scrubT-win, best=null, bd=14*14*dpr*dpr;
+  for(var i=STRIKES.length-1;i>=0;i--){ var s=STRIKES[i]; if(s.t<lo||s.t>scrubT) continue;
+    var d=(s.bx-bx)*(s.bx-bx)+(s.by-by)*(s.by-by); if(d<bd){bd=d;best=s;} }
+  var tip=document.getElementById("tip");
+  if(best){
+    var ageMin=(scrubT-best.t)/60000;
+    var ageStr= ageMin<1 ? Math.round(ageMin*60)+" s" : ageMin.toFixed(0)+" min";
+    var land = best.country==="XX"?"buiten Benelux":best.country;
+    tip.innerHTML="<b>"+land+"</b> · "+ageStr+" geleden<br>"+best.lat.toFixed(3)+"°N "+best.lon.toFixed(3)+"°E · "+best.sig+" stations";
+    tip.style.display="block"; tip.style.left=(e.clientX+12)+"px"; tip.style.top=(e.clientY+12)+"px";
+  } else tip.style.display="none";
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PNG-export — zelfstandig deelbaar kaartje van de gekozen periode
+// ════════════════════════════════════════════════════════════════
+function pad2(n){ return (n<10?"0":"")+n; }
+function fmtHours(ms){ var h=ms/3600000; return (Math.round(h*10)%10? h.toFixed(1) : h.toFixed(0))+" uur"; }
+function periodLabel(){
+  if(mode==="density"){
+    var a, b;
+    if(customActive){ a=Math.min(customFrom,customTo); b=Math.max(customFrom,customTo); }
+    else { a=scrubT - densHours*3600*1000; b=scrubT; }
+    var sameDay = new Date(a).toDateString()===new Date(b).toDateString();
+    return fmtClock(a)+" – "+fmtClock(b)+" · "+(sameDay?fmtDate(b):(fmtDate(a)+" → "+fmtDate(b)))+" · "+fmtHours(b-a);
+  }
+  return "spoor "+trailMin+" min · tot "+fmtClock(scrubT)+" · "+fmtDate(scrubT);
+}
+// Tegels voor de export-uitsnede (zelfde cache als de live-kaart) → scherp bij
+// ingezoomde provincie.
+function drawLiveTilesExport(c, vx, vy, sw, sh, scl){
+  if(!bakeDone) return;
+  var z=Math.round(Math.log2(((BASEMAP_W/(PROJ_LON_MAX-PROJ_LON_MIN))*zoom)*360/256));
+  if(z<=8) return; z=Math.min(z,15);
+  var n=Math.pow(2,z);
+  function lon2tx(lo){return (lo+180)/360*n;}
+  function lat2ty(la){var r=la*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;}
+  function tx2lon(t){return t/n*360-180;}
+  function ty2lat(t){return Math.atan(Math.sinh(Math.PI*(1-2*t/n)))*180/Math.PI;}
+  var loW=PROJ_LON_MIN+(vx/BASEMAP_W)*(PROJ_LON_MAX-PROJ_LON_MIN);
+  var loE=PROJ_LON_MIN+((vx+sw)/BASEMAP_W)*(PROJ_LON_MAX-PROJ_LON_MIN);
+  var laN=PROJ_LAT_MAX-(vy/BASEMAP_H)*(PROJ_LAT_MAX-PROJ_LAT_MIN);
+  var laS=PROJ_LAT_MAX-((vy+sh)/BASEMAP_H)*(PROJ_LAT_MAX-PROJ_LAT_MIN);
+  var txMin=Math.floor(lon2tx(loW)), txMax=Math.floor(lon2tx(loE));
+  var tyMin=Math.floor(lat2ty(laN)), tyMax=Math.floor(lat2ty(laS));
+  if((txMax-txMin+1)*(tyMax-tyMin+1)>240) return;
+  c.imageSmoothingEnabled=true; c.imageSmoothingQuality="high";
+  for(var tx=txMin;tx<=txMax;tx++) for(var ty=tyMin;ty<=tyMax;ty++){
+    var img=liveTile(z,tx,ty); if(!img) continue;
+    var dx=lonToX(tx2lon(tx)), dy=latToY(ty2lat(ty));
+    var dw=lonToX(tx2lon(tx+1))-dx, dh=latToY(ty2lat(ty+1))-dy;
+    c.drawImage(img, (dx-vx)*scl, (dy-vy)*scl, dw*scl+0.6, dh*scl+0.6);
+  }
+}
+// Render de HUIDIGE kaartuitsnede (zoom/pan) in een export-canvas mw×mh.
+// Bij zoom=1 = hele Benelux; ingezoomd op een provincie = die uitsnede.
+function renderMapInto(x, mw, mh){
+  var vx=viewX, vy=viewY, sw=BASEMAP_W/zoom, sh=BASEMAP_H/zoom, scl=mw/sw;
+  function eX(bx){ return (bx-vx)*scl; }
+  function eY(by){ return (by-vy)*scl; }
+  if(basemapCanvas){ x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high";
+    x.drawImage(basemapCanvas, vx,vy,sw,sh, 0,0,mw,mh); }
+  else { x.fillStyle=isDark()?"#0e1b2e":"#aac4da"; x.fillRect(0,0,mw,mh); }
+  drawLiveTilesExport(x, vx,vy,sw,sh, scl);
+  if(mode==="density"){ if(densDirty||!densCanvas) buildDensity();
+    x.globalAlpha=0.86; x.drawImage(densCanvas, vx,vy,sw,sh, 0,0,mw,mh); x.globalAlpha=1; }
+  // grenzen
+  x.lineWidth=Math.max(1, 1.4); x.strokeStyle=isDark()?"rgba(180,205,235,.6)":"rgba(40,60,90,.5)"; x.lineJoin="round";
+  COUNTRIES.forEach(function(co){ if(co.border===false) return; x.beginPath(); co.rings.forEach(function(ring){
+    for(var i=0;i<ring.length;i++){ var X=eX(lonToX(ring[i][0])), Y=eY(latToY(ring[i][1])); if(i===0)x.moveTo(X,Y); else x.lineTo(X,Y);} x.closePath(); }); x.stroke(); });
+  // steden — bij inzoomen ook de kleinere
+  var showMinor = zoom>=2.2;
+  x.textAlign="left"; x.textBaseline="middle";
+  CITIES.forEach(function(ci){ if(!ci[3] && !showMinor) return; var X=eX(lonToX(ci[1])), Y=eY(latToY(ci[2]));
+    if(X<-30||Y<-30||X>mw+30||Y>mh+30) return;
+    x.beginPath(); x.arc(X,Y,ci[3]?3:2.4,0,6.283); x.fillStyle=isDark()?"#e5ecf6":"#0f172a"; x.fill();
+    x.lineWidth=1.4; x.strokeStyle=isDark()?"rgba(11,18,32,.85)":"rgba(255,255,255,.9)"; x.stroke();
+    x.font=(ci[3]?"700 16px":"600 14px")+" DM Sans, sans-serif"; x.lineWidth=3.2; x.strokeStyle=isDark()?"rgba(11,18,32,.85)":"rgba(255,255,255,.92)";
+    x.fillStyle=isDark()?"#cdd9ec":"#1f2a40"; x.strokeText(ci[0],X+7,Y); x.fillText(ci[0],X+7,Y); });
+  // tijdlijn: ontladingen
+  if(mode==="timeline"){
+    var lo=scrubT-trailMin*60*1000;
+    for(var i=0;i<STRIKES.length;i++){ var st=STRIKES[i]; if(st.t<=lo||st.t>scrubT) continue;
+      var X=eX(st.bx), Y=eY(st.by); if(X<-10||Y<-10||X>mw+10||Y>mh+10) continue;
+      var ageMin=(scrubT-st.t)/60000, r=(ageMin<2?4.4:ageMin<10?3.6:ageMin<30?3:2.6);
+      x.beginPath(); x.arc(X,Y,r,0,6.283); x.fillStyle=ageColor(ageMin); x.globalAlpha=ageMin<30?0.95:0.8; x.fill(); x.globalAlpha=1;
+      x.lineWidth=0.8; x.strokeStyle="rgba(0,0,0,.35)"; x.stroke(); }
+  }
+}
+function rr(c,x,y,w,h,r){ c.beginPath(); if(c.roundRect) c.roundRect(x,y,w,h,r); else c.rect(x,y,w,h); }
+// Geometrie van het deelbare kaartje (header + kaart + footer) bij kaartbreedte MAPW.
+function cardGeo(MAPW){
+  var s=MAPW/BASEMAP_W, MAPH=Math.round(BASEMAP_H*s);
+  var PAD=30, HEADER=132, FOOTER=64;
+  return { MAPW:MAPW, MAPH:MAPH, PAD:PAD, HEADER:HEADER, FOOTER:FOOTER, cardW:MAPW+PAD*2, cardH:HEADER+MAPH+FOOTER };
+}
+
+// Tekent de complete weerlab-kaart (header + kaartuitsnede + footer) in context c.
+// Gedeeld door de PNG-still én elk animatieframe, zodat beide identiek ogen.
+// P = { title, subtitle, source, totalNum, totalLbl, arr, footerLeft }
+// De kaart zelf volgt de globale stand (scrubT / mode / zoom); de aanroeper zet die.
+function composeCard(c, G, P){
+  var MAPW=G.MAPW, MAPH=G.MAPH, PAD=G.PAD, HEADER=G.HEADER, FOOTER=G.FOOTER, cardW=G.cardW, cardH=G.cardH;
+  var dark=isDark();
+  var cardBg=dark?"#0f1728":"#ffffff", txt=dark?"#e5ecf6":"#0f172a", muted=dark?"#8292ac":"#64748b", accent=dark?"#8fb6ff":"#00205b";
+  c.fillStyle=cardBg; c.fillRect(0,0,cardW,cardH);
+  // header- en footerband met scheidingslijn
+  var bandBg=dark?"#0c1322":"#f6f8fb", sep=dark?"#1f2a40":"#e3e8ef";
+  c.fillStyle=bandBg; c.fillRect(0,0,cardW,HEADER);
+  c.fillStyle=bandBg; c.fillRect(0,cardH-FOOTER,cardW,FOOTER);
+  c.strokeStyle=sep; c.lineWidth=1;
+  c.beginPath(); c.moveTo(0,HEADER-0.5); c.lineTo(cardW,HEADER-0.5); c.stroke();
+  c.beginPath(); c.moveTo(0,cardH-FOOTER+0.5); c.lineTo(cardW,cardH-FOOTER+0.5); c.stroke();
+
+  var arr=P.arr;
+  var cc={NL:0,BE:0,LU:0,DE:0,XX:0}; for(var i=0;i<arr.length;i++) cc[arr[i].country]=(cc[arr[i].country]||0)+1;
+
+  // ── Header ──
+  c.textBaseline="alphabetic"; c.textAlign="left";
+  c.font="700 34px DM Sans, sans-serif"; c.fillStyle=txt;
+  c.fillText(P.title, PAD, 56);
+  c.font="500 17px DM Sans, sans-serif"; c.fillStyle=muted;
+  c.fillText(P.subtitle, PAD, 88);
+  c.font="600 13px DM Sans, sans-serif"; c.fillStyle=muted;
+  c.fillText(P.source, PAD, 114);
+  // totaal rechts
+  c.textAlign="right";
+  c.font="700 46px DM Sans, sans-serif"; c.fillStyle=accent;
+  c.fillText(P.totalNum.toLocaleString("nl-NL"), cardW-PAD, 60);
+  c.font="600 15px DM Sans, sans-serif"; c.fillStyle=muted;
+  c.fillText(P.totalLbl, cardW-PAD, 86);
+  c.textAlign="left";
+
+  // ── Kaart (afgerond, geclipt) ──
+  var mapX=PAD, mapY=HEADER;
+  c.save(); rr(c,mapX,mapY,MAPW,MAPH,14); c.clip();
+  c.translate(mapX,mapY);
+  renderMapInto(c, MAPW, MAPH);
+  c.translate(-mapX,-mapY); c.restore();
+  c.lineWidth=1; c.strokeStyle=dark?"#1f2a40":"#e3e8ef"; rr(c,mapX,mapY,MAPW,MAPH,14); c.stroke();
+
+  // ── Per-land paneel (rechtsboven op kaart) ──
+  var rows=COUNTRIES.map(function(co){ return [co.id, cc[co.id]||0, co.bar]; });
+  rows.push(["overig", cc.XX||0, "#94a3b8"]);
+  var maxC=1; rows.forEach(function(r){ if(r[1]>maxC) maxC=r[1]; });
+  var pw=232, ph=42+rows.length*26, px=mapX+MAPW-pw-16, py=mapY+16;
+  c.fillStyle="rgba(11,18,32,.74)"; rr(c,px,py,pw,ph,10); c.fill();
+  c.fillStyle="rgba(255,255,255,.82)"; c.font="700 11px DM Sans, sans-serif"; c.textAlign="left";
+  c.fillText("ONTLADINGEN PER LAND", px+14, py+24);
+  rows.forEach(function(rw,ri){ var ry=py+44+ri*26;
+    c.fillStyle="#fff"; c.font="700 14px DM Sans, sans-serif"; c.fillText(rw[0], px+14, ry);
+    // balk
+    c.fillStyle="rgba(255,255,255,.16)"; rr(c,px+74,ry-11,90,8,4); c.fill();
+    c.fillStyle=rw[2]; rr(c,px+74,ry-11,Math.max(2,90*rw[1]/maxC),8,4); c.fill();
+    c.fillStyle="#fff"; c.font="700 14px DM Sans, sans-serif"; c.textAlign="right";
+    c.fillText(rw[1].toLocaleString("nl-NL"), px+pw-14, ry); c.textAlign="left"; });
+
+  // ── Legenda (linksonder op kaart) ──
+  var lx=mapX+16, ly=mapY+MAPH-16;
+  if(mode==="density"){
+    var dlbl="ONTLADINGEN "+(customActive?densScopeText():densHours+"U")+" (DICHTHEID)";
+    var lw=Math.max(220, dlbl.length*7+24), lh=58, lY=ly-lh;
+    c.fillStyle="rgba(11,18,32,.74)"; rr(c,lx,lY,lw,lh,10); c.fill();
+    c.fillStyle="rgba(255,255,255,.82)"; c.font="700 11px DM Sans, sans-serif";
+    c.fillText(dlbl, lx+12, lY+22);
+    // gradient
+    if(!PAL) buildPalette();
+    var gx=lx+12, gy=lY+30, gw=lw-24, gh=10;
+    for(var q=0;q<gw;q++){ var idx=Math.round(q/gw*255)*4; c.fillStyle="rgb("+PAL[idx]+","+PAL[idx+1]+","+PAL[idx+2]+")"; c.fillRect(gx+q,gy,1,gh); }
+    c.fillStyle="rgba(255,255,255,.85)"; c.font="600 11px DM Mono, monospace"; c.textAlign="left";
+    c.fillText("laag", gx, gy+24); c.textAlign="right"; c.fillText("tot "+densMaxPerCell, gx+gw, gy+24); c.textAlign="left";
+  } else {
+    var ages=[["#ffffff","< 2 min"],["#ffd400","2 – 10 min"],["#e07000","10 – 30 min"],["#cc0000","30 – 60 min"],["#6d28d9","> 60 min"]];
+    var lw2=150, lh2=24+ages.length*20, lY2=ly-lh2;
+    c.fillStyle="rgba(11,18,32,.74)"; rr(c,lx,lY2,lw2,lh2,10); c.fill();
+    c.fillStyle="rgba(255,255,255,.82)"; c.font="700 11px DM Sans, sans-serif"; c.fillText("LEEFTIJD FLASH", lx+12, lY2+20);
+    ages.forEach(function(a,ai){ var ay=lY2+38+ai*20; c.fillStyle=a[0]; c.beginPath(); c.arc(lx+18,ay-4,5,0,6.283); c.fill();
+      c.fillStyle="rgba(255,255,255,.9)"; c.font="600 12px DM Sans, sans-serif"; c.fillText(a[1], lx+30, ay); });
+  }
+
+  // schaalbalk rechtsonder (echte afstand voor de getoonde uitsnede)
+  var kmPerPx=(PROJ_LON_MAX-PROJ_LON_MIN)*KM_LON/zoom/MAPW;
+  var niceKm=[2,5,10,20,25,50,100,150,200,300], tgt=kmPerPx*150, sk=niceKm[0];
+  for(var ni=0;ni<niceKm.length;ni++){ if(niceKm[ni]<=tgt) sk=niceKm[ni]; }
+  var barPx=sk/kmPerPx, bx0=mapX+MAPW-16-barPx, by0=mapY+MAPH-26;
+  c.fillStyle="rgba(11,18,32,.6)"; rr(c,bx0-10,by0-18,barPx+20,34,6); c.fill();
+  c.strokeStyle="#fff"; c.lineWidth=2.4; c.beginPath();
+  c.moveTo(bx0,by0); c.lineTo(bx0,by0-6); c.moveTo(bx0,by0); c.lineTo(bx0+barPx,by0);
+  c.lineTo(bx0+barPx,by0-6); c.stroke();
+  c.fillStyle="#fff"; c.font="600 12px DM Mono, monospace"; c.textAlign="center";
+  c.fillText(sk+" km", bx0+barPx/2, by0-9); c.textAlign="left";
+
+  // ── Footer ──
+  var footY=HEADER+MAPH+FOOTER/2+5;
+  c.textAlign="left"; c.fillStyle=muted; c.font="500 13px DM Sans, sans-serif";
+  c.fillText(P.footerLeft, PAD, footY);
+  c.textAlign="right"; c.font="700 16px DM Sans, sans-serif"; c.fillStyle=accent;
+  c.fillText("⚡ weerlab.nl", cardW-PAD, footY); c.textAlign="left";
+}
+
+function exportPNG(){
+  var btn=document.getElementById("dlbtn"); btn.classList.add("busy");
+  setTimeout(function(){
+    try{
+      var G=cardGeo(1440);
+      var cv=document.createElement("canvas"); cv.width=G.cardW; cv.height=G.cardH;
+      var c=cv.getContext("2d");
+      var arr=inViewFilter(currentWindow());   // kop en telling dekken dezelfde uitsnede
+      var regSel=document.getElementById("provsel");
+      var regName=(regSel && regSel.value) ? regSel.options[regSel.selectedIndex].text : "";
+      var now=new Date();
+      var footerLeft="Gegenereerd "+now.toLocaleString("nl-NL",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})+
+                 "  ·  piek "+document.getElementById("s-rate").textContent+"/min  ·  "+document.getElementById("s-area").textContent+" actieve cellen";
+      composeCard(c, G, {
+        title: "⚡ Bliksem "+(regName||"Benelux"),
+        subtitle: (mode==="density"?"Dichtheid ontladingen":"Ontladingen (tijdlijn)")+" · "+periodLabel(),
+        source: "Bron: Blitzortung.org · weerlab.nl",
+        totalNum: arr.length, totalLbl: isCropped()?"ontladingen in uitsnede":"ontladingen totaal",
+        arr: arr, footerLeft: footerLeft
+      });
+      var e=new Date(customActive?Math.max(customFrom,customTo):scrubT);
+      var regSlug=(regSel && regSel.value) ? regSel.value : "benelux";
+      var fn="bliksem_"+regSlug+"_"+(mode==="density"?("dichtheid_"+(customActive?"custom":densHours+"u")):("spoor_"+trailMin+"min"))+"_"+
+        e.getFullYear()+pad2(e.getMonth()+1)+pad2(e.getDate())+"_"+pad2(e.getHours())+pad2(e.getMinutes())+".png";
+      cv.toBlob(function(blob){
+        var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fn;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); },2000);
+        btn.classList.remove("busy");
+      }, "image/png");
+    }catch(err){ console.error("export-fout",err); btn.classList.remove("busy"); alert("Export mislukt: "+err.message); }
+  }, 30);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Animatie-export — mp4 / gif van een zelfgekozen periode
+//  Elk frame = hetzelfde weerlab-kaartje (header + kaart + footer) als
+//  de PNG-still, met de tijdlijn die door de gekozen periode loopt.
+// ════════════════════════════════════════════════════════════════
+var filmRunning=false, filmCancel=false, filmFmt="mp4";
+
+function filmEl(id){ return document.getElementById("film-"+id); }
+function filmRegName(){ var s=document.getElementById("provsel"); return (s&&s.value)?s.options[s.selectedIndex].text:""; }
+function filmRegSlug(){ var s=document.getElementById("provsel"); return (s&&s.value)?s.value:"benelux"; }
+
+function openFilm(){
+  // standaardperiode: actieve telkaart-range, anders de laatste 3 uur
+  var from = customActive ? Math.min(customFrom,customTo) : Math.max(tMin, dataNow-3*3600*1000);
+  var to   = customActive ? Math.max(customFrom,customTo) : dataNow;
+  var f=filmEl("from"), t=filmEl("to");
+  var lo=toLocalDT(tMin), hi=toLocalDT(dataNow);
+  f.min=lo; f.max=hi; f.value=toLocalDT(from);
+  t.min=lo; t.max=hi; t.value=toLocalDT(to);
+  filmSyncEst();
+  document.getElementById("film-overlay").classList.add("open");
+}
+function closeFilm(){ if(filmRunning){ filmCancel=true; return; } document.getElementById("film-overlay").classList.remove("open"); }
+
+function filmPlan(){
+  var from=Date.parse(filmEl("from").value), to=Date.parse(filmEl("to").value);
+  if(isNaN(from)||isNaN(to)) return null;
+  from=Math.max(tMin, Math.min(dataNow, from));
+  to  =Math.max(tMin, Math.min(dataNow, to));
+  if(to<=from) return null;
+  var fps=+filmEl("fps").value || 12;
+  var stepMs=(+filmEl("step").value || 5)*60000;
+  var maxFrames=(filmFmt==="gif")?180:600;
+  var span=to-from, n=Math.floor(span/stepMs)+1;
+  if(n>maxFrames){ stepMs=Math.ceil(span/(maxFrames-1)); n=Math.floor(span/stepMs)+1; }
+  return { from:from, to:to, fps:fps, stepMs:stepMs, n:n };
+}
+function filmSyncEst(){
+  filmEl("fps-v").textContent=filmEl("fps").value+" fps";
+  filmEl("step-v").textContent=filmEl("step").value+" min";
+  var p=filmPlan(), est=filmEl("est");
+  if(!p){ est.innerHTML='⚠️ Kies een geldige periode (van vóór tot).'; return; }
+  var secs=(p.n/p.fps), effStep=Math.round(p.stepMs/60000);
+  est.innerHTML='<b>'+p.n+'</b> frames · filmpje van <b>'+secs.toFixed(1)+' s</b> · '+effStep+' min data per frame'+
+    (filmFmt==="gif"?' · GIF wordt 640 px breed':' · MP4 ≈ 1280 px breed');
+}
+
+function filmStatus(msg, isErr){ var s=filmEl("status"); s.textContent=msg||""; s.classList.toggle("err", !!isErr); }
+function filmProgress(frac){
+  var p=filmEl("prog"); p.classList.toggle("show", frac!=null && frac>=0);
+  filmEl("prog-bar").style.width=Math.round((frac||0)*100)+"%";
+}
+
+// Render één frame (kaartje op tijdstip t) in context c bij geometrie G.
+// from = begin van de gekozen periode (voor de cumulatieve teller).
+function filmRenderFrame(c, G, t, from, fps){
+  scrubT=t;
+  var arr=[]; for(var i=0;i<STRIKES.length;i++){ var s=STRIKES[i]; if(s.t>from && s.t<=t) arr.push(s); }
+  arr=inViewFilter(arr);   // ingezoomd: teller volgt de getoonde uitsnede
+  composeCard(c, G, {
+    title: "⚡ Bliksem "+(filmRegName()||"Benelux"),
+    subtitle: "Tijdlijn-animatie · spoor "+trailMin+" min · "+fmtDate(t)+" "+fmtClock(t),
+    source: "Bron: Blitzortung.org · weerlab.nl",
+    totalNum: arr.length, totalLbl: isCropped()?"ontladingen in uitsnede":"ontladingen in periode",
+    arr: arr,
+    footerLeft: "Periode "+fmtDate(from)+" "+fmtClock(from)+" – "+fmtClock(t)+"  ·  spoor "+trailMin+" min  ·  "+fps+" fps"
+  });
+}
+
+function roundUpMult16(n){ return Math.ceil(n/16)*16; }
+function filmDownload(blob, ext){
+  var p=filmPlan(), a0=p?new Date(p.from):new Date(), b0=p?new Date(p.to):new Date();
+  var stamp=a0.getFullYear()+pad2(a0.getMonth()+1)+pad2(a0.getDate())+"_"+pad2(a0.getHours())+pad2(a0.getMinutes())+"-"+pad2(b0.getHours())+pad2(b0.getMinutes());
+  var fn="bliksem_animatie_"+filmRegSlug()+"_"+stamp+"."+ext;
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement("a"); a.href=url; a.download=fn;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); },3000);
+  return fn;
+}
+
+function filmMimeWebm(){
+  var k=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+  for(var i=0;i<k.length;i++){ if(window.MediaRecorder && MediaRecorder.isTypeSupported(k[i])) return k[i]; }
+  return null;
+}
+
+// MP4/H.264 via WebCodecs + mp4-muxer
+async function filmMp4(p, G, card, cardCtx){
+  if(!window.VideoEncoder || !window.Mp4Muxer) throw new Error("nofallback");
+  var MAX=1280, scale=card.width>MAX?(MAX/card.width):1;
+  var dw=Math.round(card.width*scale), dh=Math.round(card.height*scale);
+  var W=roundUpMult16(dw), H=roundUpMult16(dh);
+  var cap=document.createElement("canvas"); cap.width=W; cap.height=H;
+  var cc=cap.getContext("2d");
+  var bg=isDark()?"#0f1728":"#ffffff";
+
+  var kandidaten=["avc1.640028","avc1.4D0028","avc1.42002A","avc1.640033","avc1.64001F","avc1.42001F"];
+  var bitrate=14000000, codec=null;
+  for(var ki=0;ki<kandidaten.length;ki++){
+    try{ var sup=await VideoEncoder.isConfigSupported({codec:kandidaten[ki],width:W,height:H,bitrate:bitrate,framerate:p.fps});
+      if(sup&&sup.supported){ codec=kandidaten[ki]; break; } }catch(e){}
+  }
+  if(!codec) throw new Error("nofallback");
+
+  var muxer=new Mp4Muxer.Muxer({ target:new Mp4Muxer.ArrayBufferTarget(),
+    video:{codec:"avc",width:W,height:H,frameRate:p.fps}, fastStart:"in-memory" });
+  var encoder=new VideoEncoder({ output:function(chunk,meta){ muxer.addVideoChunk(chunk,meta); }, error:function(e){ console.error(e); } });
+  encoder.configure({ codec:codec, width:W, height:H, bitrate:bitrate, framerate:p.fps,
+    bitrateMode:"variable", latencyMode:"quality", hardwareAcceleration:"prefer-hardware", avc:{format:"avc"} });
+  var keyEveryN=(p.fps<=8)?1:p.fps, frameDur=Math.round(1000000/p.fps);
+
+  var idx=0;
+  for(var k=0;k<p.n;k++){
+    if(filmCancel) break;
+    var t=(k===p.n-1)?p.to:(p.from+k*p.stepMs);
+    filmRenderFrame(cardCtx, G, t, p.from, p.fps);
+    cc.fillStyle=bg; cc.fillRect(0,0,W,H);
+    cc.drawImage(card, 0,0, dw, dh);
+    var vf=new VideoFrame(cap, {timestamp: idx*frameDur, duration: frameDur});
+    encoder.encode(vf, {keyFrame:(idx%keyEveryN===0)}); vf.close(); idx++;
+    filmProgress(k/p.n); filmStatus("MP4 · frame "+(k+1)+" / "+p.n+"…");
+    await new Promise(function(r){ setTimeout(r,0); });
+  }
+  // hold-frames op het eind
+  for(var h=0; h<Math.max(3,Math.round(p.fps*0.8)) && !filmCancel; h++){
+    var vfh=new VideoFrame(cap, {timestamp: idx*frameDur, duration: frameDur}); encoder.encode(vfh); vfh.close(); idx++;
+  }
+  await encoder.flush(); muxer.finalize(); encoder.close();
+  return new Blob([muxer.target.buffer], {type:"video/mp4"});
+}
+
+// WebM-terugval via MediaRecorder (real-time)
+async function filmWebm(p, G, card, cardCtx){
+  var mime=filmMimeWebm(); if(!mime) throw new Error("Geen video-codec beschikbaar in deze browser.");
+  var cap=document.createElement("canvas"); cap.width=card.width; cap.height=card.height;
+  var cc=cap.getContext("2d");
+  filmRenderFrame(cardCtx, G, p.from, p.from, p.fps); cc.drawImage(card,0,0);
+  var stream=cap.captureStream(0), track=stream.getVideoTracks()[0];
+  var rec=new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:8000000});
+  var chunks=[]; rec.ondataavailable=function(e){ if(e.data&&e.data.size>0) chunks.push(e.data); };
+  var done=new Promise(function(res){ rec.onstop=res; });
+  rec.start(200); if(track.requestFrame) track.requestFrame();
+  var frameMs=Math.max(60, Math.round(1000/p.fps));
+  for(var k=0;k<p.n;k++){
+    if(filmCancel) break;
+    var t=(k===p.n-1)?p.to:(p.from+k*p.stepMs);
+    filmRenderFrame(cardCtx, G, t, p.from, p.fps); cc.drawImage(card,0,0);
+    if(track.requestFrame) track.requestFrame();
+    filmProgress(k/p.n); filmStatus("WebM · frame "+(k+1)+" / "+p.n+"…");
+    await new Promise(function(r){ setTimeout(r,frameMs); });
+  }
+  for(var h=0;h<Math.max(3,Math.round(p.fps*0.8));h++){ await new Promise(function(r){ setTimeout(r,frameMs); }); if(track.requestFrame) track.requestFrame(); }
+  rec.stop(); await done; track.stop();
+  return new Blob(chunks, {type:mime});
+}
+
+// GIF via gifenc
+async function filmGif(p, G, card, cardCtx){
+  if(!window.gifenc) throw new Error("GIF-encoder (gifenc) niet geladen.");
+  var GIFEncoder=gifenc.GIFEncoder, quantize=gifenc.quantize, applyPalette=gifenc.applyPalette;
+  var MAXW=640, scale=card.width>MAXW?(MAXW/card.width):1;
+  var gw=Math.round(card.width*scale), gh=Math.round(card.height*scale);
+  var g=document.createElement("canvas"); g.width=gw; g.height=gh;
+  var gc=g.getContext("2d"); gc.imageSmoothingEnabled=true; gc.imageSmoothingQuality="high";
+  var enc=GIFEncoder(), delay=Math.round(1000/p.fps);
+  for(var k=0;k<p.n;k++){
+    if(filmCancel) break;
+    var t=(k===p.n-1)?p.to:(p.from+k*p.stepMs);
+    filmRenderFrame(cardCtx, G, t, p.from, p.fps);
+    gc.drawImage(card, 0,0, gw, gh);
+    var data=gc.getImageData(0,0,gw,gh).data;
+    var palette=quantize(data, 256, {format:"rgb565"});
+    var index=applyPalette(data, palette, "rgb565");
+    enc.writeFrame(index, gw, gh, {palette:palette, delay:delay});
+    filmProgress(k/p.n); filmStatus("GIF · frame "+(k+1)+" / "+p.n+"…");
+    await new Promise(function(r){ setTimeout(r,0); });
+  }
+  // hold op eind: laatste frame nog eens met langere delay
+  if(!filmCancel){ var d2=gc.getImageData(0,0,gw,gh).data; var pal2=quantize(d2,256,{format:"rgb565"});
+    enc.writeFrame(applyPalette(d2,pal2,"rgb565"), gw, gh, {palette:pal2, delay:Math.max(600,delay*4)}); }
+  enc.finish();
+  return new Blob([enc.bytes()], {type:"image/gif"});
+}
+
+async function startFilm(){
+  if(filmRunning) return;
+  var p=filmPlan();
+  if(!p){ filmStatus("Kies eerst een geldige periode.", true); return; }
+  filmRunning=true; filmCancel=false;
+  setPlaying(false);
+  filmEl("go").disabled=true; filmEl("go-lbl").textContent="Bezig…";
+  filmProgress(0); filmStatus("Frames opbouwen…");
+
+  // huidige stand bewaren — animatie dwingt tijdlijn-modus af
+  var save={ scrubT:scrubT, mode:mode, customActive:customActive };
+  mode="timeline"; customActive=false;
+
+  var G=cardGeo(1440);
+  var card=document.createElement("canvas"); card.width=G.cardW; card.height=G.cardH;
+  var cardCtx=card.getContext("2d");
+
+  var blob, ext, fn;
+  try{
+    if(filmFmt==="gif"){ blob=await filmGif(p,G,card,cardCtx); ext="gif"; }
+    else {
+      try{ blob=await filmMp4(p,G,card,cardCtx); ext="mp4"; }
+      catch(e){
+        if(e && e.message==="nofallback"){ filmStatus("MP4 niet ondersteund — WebM maken…"); blob=await filmWebm(p,G,card,cardCtx); ext="webm"; }
+        else throw e;
+      }
+    }
+    if(filmCancel){ filmStatus("Geannuleerd."); }
+    else { fn=filmDownload(blob, ext); filmStatus("Klaar: "+fn+"  ("+(blob.size/1048576).toFixed(1)+" MB)"); filmProgress(1); }
+  }catch(err){
+    console.error("film-fout", err); filmStatus("Fout: "+err.message, true);
+  }finally{
+    // stand herstellen + kaart terugtekenen
+    scrubT=save.scrubT; mode=save.mode; customActive=save.customActive;
+    densDirty=true; refresh();
+    filmRunning=false; filmCancel=false;
+    filmEl("go").disabled=false; filmEl("go-lbl").textContent="Genereer & download";
+    if(fn) setTimeout(function(){ filmProgress(null); }, 1500);
+  }
+}
+
+// Bij openen: toon de actie. Is er recent (≤60 min) bliksem → live-rand.
+// Anders → centreer op het drukste uur van de afgelopen 24 u (laatste onweer),
+// zodat de kaart nooit leeg opent en je de afgelopen dag direct ziet.
+function openingTime(){
+  var liveLo = dataNow - 60*60000, liveN = 0;
+  for(var i=STRIKES.length-1;i>=0;i--){ if(STRIKES[i].t<=liveLo) break; if(STRIKES[i].t<=dataNow) liveN++; }
+  if(liveN >= 5) return dataNow;
+  var best=0, bestT=dataNow, step=10*60000, half=30*60000;
+  for(var t=tMin+half; t<=dataNow; t+=step){
+    var lo=t-half, hi=t+half, n=0;
+    for(var j=0;j<STRIKES.length;j++){ var s=STRIKES[j]; if(s.t>lo && s.t<=hi) n++; }
+    if(n>best){ best=n; bestT=t; }
+  }
+  return best ? bestT : dataNow;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════════════════════════
+(function init(){
+  // thema uit localStorage (zelfde sleutel als rest van weerlab)
+  try{ var th=localStorage.getItem("weerlab_theme"); if(th) document.documentElement.setAttribute("data-theme", th); }catch(e){}
+  sizeCanvas();
+  bindEvents();
+  buildPalette();
+  bakeBasemap();
+  // landgrenzen (incl. DE) eerst, dán data → countryOf kent Duitsland bij ingest
+  loadCountries().then(loadData).then(function(){
+    computeHist();
+    setMode("timeline");
+    setScrub(openingTime());
+    renderMinis();
+  });
+  // live auto-refresh elke 30s; alleen aan de live-rand schuift de tijd mee,
+  // wie terugkijkt blijft staan (setScrub klemt ook op het verschoven venster)
+  setInterval(function(){
+    if(playing || filmRunning) return;
+    var wasLive=isLiveEdge();
+    loadData().then(function(){
+      computeHist();
+      densDirty=true;
+      setScrub(wasLive ? dataNow : scrubT);
+      renderMinis();
+    });
+  }, 30000);
+})();
+</script>
+</body>
+</html>

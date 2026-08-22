@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo — Harmonie slider met tijd-ticks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "DM Sans", system-ui, sans-serif;
+  background: #f5f7fa; color: #0f172a;
+  padding: 20px;
+}
+h1 { font-size: 18px; margin-bottom: 4px; }
+p.subtitle { font-size: 13px; color: #64748b; margin-bottom: 18px; }
+.breedte-indicator {
+  font-family: "DM Mono", monospace; font-size: 11px;
+  color: #64748b; margin-bottom: 14px;
+}
+.breedte-indicator b { color: #00205b; }
+
+/* Toolbar — DAG knoppen */
+.dag-knoppen {
+  background: white; padding: 10px 16px;
+  display: flex; gap: 8px; align-items: center;
+  border-bottom: 1px solid #e3e8ef;
+  border-radius: 8px 8px 0 0;
+}
+.dag-label { font-size: 11px; color: #64748b; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; margin-right: 6px; }
+.dag-knoppen .btn {
+  background: #f1f5f9; border: 1px solid #e3e8ef;
+  padding: 5px 11px; border-radius: 8px;
+  color: #64748b; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dag-knoppen .btn:hover { background: #eef2f7; color: #0f172a; }
+.dag-knoppen .btn.actief { background: #00205b; color: white; border-color: #00205b; }
+
+/* Slider wrap */
+.slider-wrap {
+  background: #ffffff;
+  border-bottom: 1px solid #e3e8ef;
+  padding: 12px 20px 6px;
+  display: flex; gap: 12px; align-items: center;
+}
+.btn-stap {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: white; border: 1px solid #e3e8ef;
+  cursor: pointer; color: #00205b;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-play {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #00205b; color: white; border: none;
+  cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.slider-wrap input[type=range] {
+  flex: 1; height: 20px; -webkit-appearance: none; appearance: none;
+  background: transparent; outline: none; cursor: pointer;
+}
+.slider-wrap input[type=range]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: #eef2f7; border: 1px solid #e3e8ef;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: #00205b; border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(15,23,42,0.25);
+  margin-top: -6px;
+}
+.tijd-label {
+  font-family: "DM Mono", monospace;
+  font-size: 12.5px; font-weight: 500; min-width: 170px; text-align: center;
+}
+.uur-label {
+  font-family: "DM Mono", monospace;
+  font-size: 11px; color: #64748b; min-width: 36px;
+}
+
+/* ── NIEUW: Tick-rail onder slider ── */
+.tick-rail-wrap {
+  background: white;
+  padding: 0 20px 12px;
+  border-bottom: 1px solid #e3e8ef;
+  border-radius: 0 0 8px 8px;
+}
+.tick-rail-inner {
+  /* Aligneer met slider: correcties voor controls links */
+  margin-left: calc(28px + 36px + 28px + 12px*3);  /* 3 knoppen + gaps */
+  margin-right: calc(170px + 36px + 12px*2);       /* tijdlabel + uurlabel */
+  position: relative;
+  height: 32px;
+}
+.tick-rail {
+  position: relative; height: 100%;
+  /* Zorg dat eerste/laatste tick exact boven thumb-pos ligt (halve thumb = 8px) */
+  padding: 0 8px;
+}
+.tick {
+  position: absolute; top: 0;
+  transform: translateX(-50%);
+  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px;
+}
+.tick .streep {
+  width: 1px; height: 5px; background: #cbd5e1;
+}
+.tick.major .streep { height: 9px; background: #64748b; }
+.tick.dag .streep { height: 11px; background: #00205b; width: 2px; }
+.tick .label {
+  font-family: "DM Mono", monospace;
+  font-size: 10px; color: #64748b;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+.tick.dag .label { color: #00205b; font-weight: 700; }
+.tick.major .label { color: #334155; font-weight: 600; }
+.tick:hover .label { color: #00205b; }
+.tick:hover .streep { background: #00205b; }
+.tick .label .dagnaam { display: block; font-size: 9.5px; letter-spacing: 0.02em; }
+
+/* ── Varianten voor demo ── */
+.variant {
+  background: white; border: 1px solid #e3e8ef; border-radius: 10px;
+  margin-bottom: 24px; overflow: hidden;
+}
+.variant-titel {
+  padding: 10px 16px; background: #f1f5f9;
+  font-size: 12px; font-weight: 700; color: #334155;
+  border-bottom: 1px solid #e3e8ef;
+  display: flex; justify-content: space-between;
+}
+.variant-titel .hint { font-weight: 400; color: #64748b; font-size: 11px; }
+
+/* Simuleer smalle/brede breedtes via wrapper */
+.sim-smal { max-width: 600px; }
+.sim-middel { max-width: 1000px; }
+.sim-breed { max-width: 1400px; }
+
+@media (max-width: 700px) {
+  .tick-rail-inner {
+    margin-left: calc(28px + 36px + 28px + 12px*3);
+    margin-right: 8px;
+  }
+  .tijd-label { display: none; }
+  .uur-label { display: none; }
+}
+</style>
+</head>
+<body>
+
+<h1>Demo — Slider met tijd-ticks (responsief)</h1>
+<p class="subtitle">Voorstel voor harmonie_canvas.html: tick-rail onder de slider met klikbare datum/uur-labels die adaptief dichter of verder uit elkaar staan afhankelijk van beschikbare breedte.</p>
+<div class="breedte-indicator">Huidige vensterbreedte: <b id="vw">—</b> px → dichtheid: <b id="dichtheid">—</b></div>
+
+<!-- Variant 1: Breed scherm simulatie -->
+<div class="variant sim-breed">
+  <div class="variant-titel">Breed scherm (~1400px) <span class="hint">elke 3h tick, elke 6h label, dag-overgangen zwaarder</span></div>
+  <div class="dag-knoppen">
+    <span class="dag-label">Dag:</span>
+    <button class="btn actief">wo 22</button>
+    <button class="btn">do 23</button>
+    <button class="btn">vr 24</button>
+    <button class="btn">za 25</button>
+  </div>
+  <div class="slider-wrap">
+    <button class="btn-stap">◀</button>
+    <button class="btn-play">▶</button>
+    <button class="btn-stap">▶</button>
+    <input type="range" min="1" max="60" value="14" data-slider="s1">
+    <span class="uur-label">+14h</span>
+    <span class="tijd-label">woensdag 22 april 14:00 LT</span>
+  </div>
+  <div class="tick-rail-wrap"><div class="tick-rail-inner"><div class="tick-rail" data-rail="s1"></div></div></div>
+</div>
+
+<!-- Variant 2: Middel -->
+<div class="variant sim-middel">
+  <div class="variant-titel">Middel scherm (~1000px) <span class="hint">elke 6h tick+label, dag-overgangen zwaarder</span></div>
+  <div class="dag-knoppen">
+    <span class="dag-label">Dag:</span>
+    <button class="btn actief">wo 22</button>
+    <button class="btn">do 23</button>
+    <button class="btn">vr 24</button>
+  </div>
+  <div class="slider-wrap">
+    <button class="btn-stap">◀</button>
+    <button class="btn-play">▶</button>
+    <button class="btn-stap">▶</button>
+    <input type="range" min="1" max="60" value="14" data-slider="s2">
+    <span class="uur-label">+14h</span>
+    <span class="tijd-label">wo 22 apr 14:00 LT</span>
+  </div>
+  <div class="tick-rail-wrap"><div class="tick-rail-inner"><div class="tick-rail" data-rail="s2"></div></div></div>
+</div>
+
+<!-- Variant 3: Smal -->
+<div class="variant sim-smal">
+  <div class="variant-titel">Smal (~600px) <span class="hint">alleen 00/12 UTC + dagnamen</span></div>
+  <div class="dag-knoppen">
+    <span class="dag-label">Dag:</span>
+    <button class="btn actief">wo</button>
+    <button class="btn">do</button>
+    <button class="btn">vr</button>
+  </div>
+  <div class="slider-wrap">
+    <button class="btn-stap">◀</button>
+    <button class="btn-play">▶</button>
+    <button class="btn-stap">▶</button>
+    <input type="range" min="1" max="60" value="14" data-slider="s3">
+  </div>
+  <div class="tick-rail-wrap"><div class="tick-rail-inner" style="margin-left: calc(28px + 36px + 28px + 12px*3); margin-right: 8px;"><div class="tick-rail" data-rail="s3"></div></div></div>
+</div>
+
+<script>
+// ── Voorbeelddata: 60 uren vanaf wo 22 apr 2026 00:00 LT ──
+function genTijden() {
+  var start = new Date(2026, 3, 22, 0, 0, 0); // apr = maand 3
+  var out = [];
+  for (var i = 0; i < 60; i++) {
+    out.push(new Date(start.getTime() + i * 3600000));
+  }
+  return out;
+}
+var TIJDEN = genTijden();
+var DAGEN_KORT = ["zo","ma","di","wo","do","vr","za"];
+
+function pad(n) { return String(n).padStart(2,"0"); }
+
+// Bepaal welke ticks getoond worden op basis van beschikbare pixels
+// availablePx = breedte van tick-rail in pixels
+function kiesTickStap(availablePx, aantalUren) {
+  // Minimum ruimte per label ≈ 55px (voor "di 22 12h")
+  var maxLabels = Math.max(3, Math.floor(availablePx / 55));
+  var kandidaten = [1, 3, 6, 12, 24];
+  for (var k = 0; k < kandidaten.length; k++) {
+    if ((aantalUren / kandidaten[k]) <= maxLabels) return kandidaten[k];
+  }
+  return 24;
+}
+
+function renderRail(rail, aantalUren, labelStap) {
+  rail.innerHTML = "";
+  // Minor tick (streepje zonder label) op halve stap indien ruim
+  var minorStap = labelStap >= 6 ? labelStap / 2 : 0;
+
+  for (var i = 0; i < aantalUren; i++) {
+    var dt = TIJDEN[i];
+    var uur = dt.getHours();
+    var isMidnight = (uur === 0);
+    var toonLabel = false;
+    var klasse = "";
+
+    if (isMidnight) {
+      toonLabel = true; klasse = "dag";
+    } else if (labelStap <= 6) {
+      if (uur % labelStap === 0) { toonLabel = true; klasse = "major"; }
+      else if (minorStap && uur % minorStap === 0) { toonLabel = false; klasse = ""; }
+      else continue;
+    } else {
+      // labelStap = 12 of 24: toon alleen 12 LT extra
+      if (labelStap === 12 && uur === 12) { toonLabel = true; klasse = "major"; }
+      else continue;
+    }
+
+    var pos = (i / (aantalUren - 1)) * 100;
+    var tick = document.createElement("div");
+    tick.className = "tick" + (klasse ? " " + klasse : "");
+    tick.style.left = pos + "%";
+    tick.title = DAGEN_KORT[dt.getDay()] + " " + pad(dt.getDate()) + " " + pad(uur) + ":00";
+
+    var streep = document.createElement("div");
+    streep.className = "streep";
+    tick.appendChild(streep);
+
+    if (toonLabel) {
+      var lbl = document.createElement("div");
+      lbl.className = "label";
+      if (isMidnight) {
+        lbl.innerHTML = '<span class="dagnaam">' + DAGEN_KORT[dt.getDay()] + " " + pad(dt.getDate()) + '</span>';
+      } else {
+        lbl.textContent = pad(uur) + "h";
+      }
+      tick.appendChild(lbl);
+    }
+
+    // Klik → slider zetten
+    (function(idx){
+      tick.addEventListener("click", function() {
+        var slider = rail.closest(".variant").querySelector("input[type=range]");
+        slider.value = idx + 1;
+        slider.dispatchEvent(new Event("input"));
+      });
+    })(i);
+
+    rail.appendChild(tick);
+  }
+}
+
+function renderAll() {
+  document.querySelectorAll(".tick-rail").forEach(function(rail) {
+    var breedte = rail.getBoundingClientRect().width;
+    var stap = kiesTickStap(breedte, 60);
+    renderRail(rail, 60, stap);
+  });
+  document.getElementById("vw").textContent = window.innerWidth;
+  var eerste = document.querySelector(".tick-rail");
+  if (eerste) {
+    var b = eerste.getBoundingClientRect().width;
+    document.getElementById("dichtheid").textContent = "elke " + kiesTickStap(b, 60) + "h";
+  }
+}
+
+window.addEventListener("resize", renderAll);
+window.addEventListener("load", renderAll);
+renderAll();
+</script>
+
+</body>
+</html>

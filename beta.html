@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beta — weerlab.nl</title>
+<style>
+  :root {
+    --bg:     #0d1420;
+    --panel:  #172235;
+    --border: #2a3a55;
+    --accent: #88aaff;
+    --gold:   #ffcc66;
+    --text:   #e6ecf5;
+    --muted:  #8899bb;
+    --danger: #e04040;
+    --green:  #4ade80;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text);
+         font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+         min-height: 100vh; }
+
+  /* ── Gate ─────────────────────────────────────────────── */
+  #gate {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg); z-index: 999;
+  }
+  .gate-box {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 40px 48px;
+    text-align: center; max-width: 380px; width: 90%;
+  }
+  .gate-box h2 { color: var(--gold); font-size: 20px; margin-bottom: 6px; }
+  .gate-box p  { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .gate-box input[type=password] {
+    width: 100%; padding: 12px 16px; font-size: 20px; letter-spacing: 6px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; text-align: center; outline: none; margin-bottom: 12px;
+  }
+  .gate-box input[type=password]:focus { border-color: var(--accent); }
+  .gate-box button {
+    width: 100%; padding: 12px; font-size: 15px; font-weight: bold;
+    background: var(--accent); color: #0d1420; border: none; border-radius: 8px;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .gate-box button:hover { opacity: .85; }
+  #gate-error { color: var(--danger); font-size: 13px; margin-top: 10px; display: none; }
+
+  /* ── App ──────────────────────────────────────────────── */
+  #app { display: none; flex-direction: column; height: 100vh; }
+
+  /* Header */
+  .header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 10px 20px; display: flex; align-items: center; gap: 14px;
+    flex-shrink: 0;
+  }
+  .header-logo { font-size: 18px; font-weight: 800; color: var(--gold); letter-spacing: -.5px; }
+  .header-sub  { font-size: 12px; color: var(--muted); }
+  .beta-badge {
+    background: #c02020; color: #fff; font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 3px; letter-spacing: 1px;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; background: var(--panel);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+  }
+  .tab {
+    padding: 12px 22px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--muted); border-bottom: 3px solid transparent;
+    background: transparent; border-top: 0; border-right: 0; border-left: 0;
+    font-family: inherit; transition: color .15s, border-color .15s; white-space: nowrap; flex: 0 0 auto;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.actief { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Content area */
+  .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .tab-panel { display: none; flex: 1; overflow-y: auto; height: 100%; }
+  .tab-panel.actief { display: flex; flex-direction: column; }
+
+  /* iframe panels */
+  .tab-panel iframe { width: 100%; flex: 1; border: none; min-height: 90vh; }
+
+  /* ── Weerkaarten panel ─────────────────────────────────── */
+  .kaarten-wrap {
+    padding: 20px; max-width: 1400px; margin: 0 auto; width: 100%;
+  }
+  .kaarten-header {
+    display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;
+  }
+  .kaarten-header h2 { font-size: 16px; font-weight: 700; }
+  .run-info { font-size: 11px; color: var(--muted); }
+  #meta-error { color: var(--danger); font-size: 12px; }
+
+  /* Panel-overzichten */
+  .panel-blok { margin-bottom: 28px; }
+  .panel-titel {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+  }
+  .overzicht-img {
+    width: 100%; border-radius: 8px; border: 1px solid var(--border);
+    display: block; cursor: zoom-in; transition: width .1s;
+  }
+
+  /* Zoom slider */
+  .zoom-bar {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+  .zoom-bar label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .zoom-bar input[type=range] {
+    flex: 1; max-width: 260px; accent-color: var(--accent); cursor: pointer;
+  }
+  #zoom-pct { font-size: 11px; color: var(--accent); min-width: 36px; }
+
+  /* Lightbox */
+  #lightbox {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85);
+    z-index: 500; align-items: center; justify-content: center; cursor: zoom-out;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<!-- Gate -->
+<div id="gate">
+  <div class="gate-box">
+    <h2>🧪 Beta</h2>
+    <p>Experimentele tools — weerlab.nl</p>
+    <input type="password" id="pw-input" placeholder="••••••"
+           onkeydown="if(event.key==='Enter')checkPw()">
+    <button onclick="checkPw()">Toegang</button>
+    <div id="gate-error">Onjuist wachtwoord</div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="header">
+    <span class="header-logo">weerlab<span style="color:var(--muted)">.nl</span></span>
+    <span class="beta-badge">BETA</span>
+    <span class="header-sub">Experimentele tools</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab actief" type="button" data-tab="modelgrafiek">📈 HARMONIE / WeatherPro</button>
+    <button class="tab" type="button" data-tab="hres10">🌍 HRES 10-daags</button>
+    <button class="tab" type="button" data-tab="wolken">🌥️ Bewolking ICON-D2 / Harmonie</button>
+    <button class="tab" type="button" data-tab="multitemp">🌡️ Opers-Multi</button>
+    <button class="tab" type="button" data-tab="beslispluim">🧭 Beslispluim</button>
+    <button class="tab" type="button" data-tab="winterarchief">📊 Klimaatarchief</button>
+  </div>
+
+  <div class="content">
+
+    <!-- Tab: HARMONIE / WeatherPro modelvergelijking -->
+    <div class="tab-panel actief" id="tab-modelgrafiek">
+      <iframe id="iframe-modelgrafiek" src="" title="HARMONIE en WeatherPro uurverwachting"></iframe>
+    </div>
+
+    <!-- Tab: HRES 10-daags -->
+    <div class="tab-panel" id="tab-hres10">
+      <iframe id="iframe-hres10" src="" title="HRES 10-daags"></iframe>
+    </div>
+
+    <!-- Tab: Bewolking ICON-D2 / Harmonie -->
+    <div class="tab-panel" id="tab-wolken">
+      <iframe id="iframe-wolken" src="" title="Bewolking ICON-D2 / Harmonie"></iframe>
+    </div>
+
+    <!-- Tab: Opers-Multi -->
+    <div class="tab-panel" id="tab-multitemp">
+      <iframe id="iframe-multitemp" src="" title="Opers-Multi"></iframe>
+    </div>
+
+    <!-- Tab: Beslispluim -->
+    <div class="tab-panel" id="tab-beslispluim">
+      <iframe id="iframe-beslispluim" src="" title="Beslispluim"></iframe>
+    </div>
+
+    <!-- Tab: Winter- en jaarstatistieken -->
+    <div class="tab-panel" id="tab-winterarchief">
+      <iframe id="iframe-winterarchief" src="" title="Maand-, seizoen- en jaarstatistieken"></iframe>
+    </div>
+
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+// ── Auth ──────────────────────────────────────────────────
+const PW = '19976';
+const AUTH_KEY = 'beta_master';
+
+function checkPw() {
+  const v = document.getElementById('pw-input').value;
+  if (v === PW) {
+    localStorage.setItem(AUTH_KEY, '1');
+    showApp();
+  } else {
+    document.getElementById('gate-error').style.display = 'block';
+  }
+}
+
+function showApp() {
+  document.getElementById('gate').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'flex';
+  loadActivePanel();
+}
+
+// Lazy-load de iframe van de tab die bij opstart actief is
+function loadActivePanel() {
+  const panel = document.querySelector('.tab-panel.actief');
+  if (!panel) return;
+  const name = panel.id.replace('tab-', '');
+  if (IFRAME_SRCS[name] && !iframeLoaded[name]) {
+    document.getElementById('iframe-' + name).src = IFRAME_SRCS[name];
+    iframeLoaded[name] = true;
+  }
+}
+
+// Auto-login
+if (localStorage.getItem(AUTH_KEY) === '1') {
+  window.addEventListener('DOMContentLoaded', showApp);
+}
+
+// ── Tabs ──────────────────────────────────────────────────
+const IFRAME_SRCS = {
+  modelgrafiek: 'demo_harmonie_yr_grafiek.html?v=20260726-beta1',
+  hres10:   'beta_wxcharts.html?v=20260715-public3',
+  wolken:   'beta_wolkenkaart.html',
+  multitemp:'demo_multimodel_temp.html',
+  beslispluim: 'demo_beslispluim.html?v=20260715-beta2',
+  winterarchief: 'demo_winterstatistieken.html?v=20260715-beta4'
+};
+const iframeLoaded = {};
+
+function openTab(name, el, updateHash = true) {
+  if (!IFRAME_SRCS[name]) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('actief'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('actief'));
+  el.classList.add('actief');
+  document.getElementById('tab-' + name).classList.add('actief');
+
+  // Laad iframe lazy
+  if (IFRAME_SRCS[name] && !iframeLoaded[name]) {
+    const iframe = document.getElementById('iframe-' + name);
+    iframe.src = IFRAME_SRCS[name];
+    iframeLoaded[name] = true;
+  }
+  if (updateHash && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+}
+
+document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+  tab.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    openTab(tab.dataset.tab, tab);
+  });
+});
+
+function restoreTabFromHash() {
+  const name = location.hash.slice(1);
+  if (!IFRAME_SRCS[name]) return;
+  const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (tab) openTab(name, tab, false);
+}
+window.addEventListener('hashchange', restoreTabFromHash);
+window.addEventListener('DOMContentLoaded', restoreTabFromHash);
+
+// ── Zoom ──────────────────────────────────────────────────
+function setZoom(v) {
+  document.querySelectorAll('.overzicht-img').forEach(img => img.style.width = v + '%');
+  document.getElementById('zoom-pct').textContent = v + '%';
+}
+
+// ── Lightbox ──────────────────────────────────────────────
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+</script>
+</body>
+</html>

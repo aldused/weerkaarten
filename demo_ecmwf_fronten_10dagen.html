@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>ECMWF frontenkansen — 10 dagen | Weerlab</title>
+<link rel="preconnect" href="https://sites.ecmwf.int">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+*{box-sizing:border-box}
+:root{
+  --navy:#071d3c;
+  --navy-2:#0d315e;
+  --blue:#1665b5;
+  --cyan:#2ec4e8;
+  --orange:#ee7a31;
+  --red:#c83f42;
+  --cold:#2d64b4;
+  --warm:#ca454d;
+  --prob-05:#96b1b4;
+  --prob-20:#4edfe0;
+  --prob-40:#90ed46;
+  --prob-60:#f8dc55;
+  --prob-80:#ff7c4b;
+  --prob-95:#ad45ee;
+  --ink:var(--wl-color-text,#0f172a);
+  --muted:var(--wl-color-text-muted,#64748b);
+  --soft:var(--wl-color-text-soft,#94a3b8);
+  --line:var(--wl-color-border,#e3e8ef);
+  --line-strong:var(--wl-color-border-strong,#cbd5e1);
+  --paper:var(--wl-color-surface,#fff);
+  --canvas:var(--wl-color-background,#f6f8fb);
+  --mono:var(--wl-font-mono,"DM Mono",ui-monospace,monospace);
+  --sans:var(--wl-font-sans,"DM Sans",ui-sans-serif,system-ui,sans-serif);
+}
+html{min-height:100%;background:var(--canvas)}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--ink);
+  background:
+    radial-gradient(circle at 92% -8%,rgba(46,196,232,.14),transparent 32rem),
+    linear-gradient(180deg,#edf3f8 0,#f7f9fb 26rem);
+  font-family:var(--sans);
+  font-feature-settings:"ss01","cv11";
+}
+button,select,input{font:inherit}
+button,a,select,input[type="range"]{touch-action:manipulation}
+button{cursor:pointer}
+a{color:inherit}
+.skip-link{position:fixed;left:12px;top:8px;z-index:100;background:#fff;color:var(--navy);padding:8px 11px;border-radius:7px;transform:translateY(-150%)}
+.skip-link:focus{transform:none}
+.topbar{
+  min-height:66px;
+  padding:10px clamp(14px,3vw,30px);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  color:#fff;
+  background:linear-gradient(115deg,var(--navy),var(--navy-2) 70%,#0c4862);
+  border-bottom:3px solid var(--cyan);
+  box-shadow:0 8px 30px rgba(7,29,60,.18);
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand-mark{
+  width:39px;height:39px;flex:0 0 auto;
+  display:grid;place-items:center;
+  border-radius:9px;
+  color:var(--navy);
+  background:linear-gradient(145deg,#fff 0 55%,#bfeffc 56% 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);
+  font-size:12px;font-weight:900;letter-spacing:-.02em;
+}
+.brand h1{margin:0;font-size:17px;line-height:1.15;letter-spacing:-.01em}
+.brand p{margin:3px 0 0;color:#b9d2e4;font:500 10px/1.2 var(--mono);letter-spacing:.045em;text-transform:uppercase}
+.top-meta{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.source-pill,.demo-pill{
+  min-height:30px;
+  display:inline-flex;align-items:center;gap:7px;
+  padding:6px 10px;border:1px solid rgba(255,255,255,.18);border-radius:999px;
+  background:rgba(255,255,255,.09);
+  color:#dceaf2;font-size:10px;font-weight:700;text-decoration:none;white-space:nowrap;
+}
+.source-pill:hover{background:rgba(255,255,255,.15)}
+.source-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:#4cd58b;box-shadow:0 0 0 4px rgba(76,213,139,.13)}
+.demo-pill{color:#fff;background:rgba(238,122,49,.2);border-color:rgba(255,176,119,.34);font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.page{width:min(1480px,calc(100vw - 28px));margin:0 auto;padding:18px 0 30px}
+.intro{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:20px;
+  align-items:end;
+  margin-bottom:13px;
+}
+.eyebrow{margin:0 0 5px;color:var(--blue);font:700 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+.intro h2{margin:0;max-width:840px;font-size:clamp(24px,3.4vw,42px);line-height:1.03;letter-spacing:-.045em}
+.intro-copy{margin:8px 0 0;max-width:860px;color:var(--muted);font-size:13px;line-height:1.55}
+.run-card{
+  min-width:285px;
+  padding:11px 12px;
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 9px;align-items:center;
+  background:rgba(255,255,255,.86);border:1px solid var(--line);border-radius:11px;
+  box-shadow:var(--wl-shadow-1);
+}
+.run-light{grid-row:1/3;width:9px;height:9px;border-radius:50%;background:#f0a23a;box-shadow:0 0 0 4px rgba(240,162,58,.13)}
+.run-card.ready .run-light{background:#23a868;box-shadow:0 0 0 4px rgba(35,168,104,.12)}
+.run-card strong{font-size:11px}
+.run-card span{color:var(--muted);font:500 9.5px/1.35 var(--mono)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:13px;box-shadow:0 8px 28px rgba(31,51,73,.07)}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 326px;gap:13px;align-items:start}
+.viewer{overflow:hidden;min-width:0}
+.viewer-head{
+  min-height:64px;padding:11px 14px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  border-bottom:1px solid var(--line);background:#fbfcfd;
+}
+.valid-label{min-width:0}
+.valid-label .kicker{display:block;color:var(--soft);font:700 9px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.valid-label h3{margin:4px 0 0;font-size:17px;line-height:1.2;letter-spacing:-.02em}
+.valid-label p{margin:3px 0 0;color:var(--muted);font:500 10px/1.3 var(--mono)}
+.head-actions{display:flex;gap:6px;flex:0 0 auto}
+.small-btn,.player-btn,.speed-btn,.time-btn,.day-card,.overview-card{
+  border:1px solid var(--line-strong);background:#fff;color:var(--ink);
+  border-radius:8px;transition:border-color .14s,background .14s,color .14s,transform .14s;
+}
+.small-btn{min-height:34px;padding:6px 10px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;text-decoration:none}
+.small-btn:hover,.player-btn:hover,.speed-btn:hover,.time-btn:hover{border-color:#8eacc6;background:#f7fafc}
+.small-btn:focus-visible,.player-btn:focus-visible,.speed-btn:focus-visible,.time-btn:focus-visible,.day-card:focus-visible,.overview-card:focus-visible,.run-select:focus-visible,.timeline input:focus-visible{
+  outline:3px solid rgba(46,196,232,.4);outline-offset:2px;
+}
+.viewbar{
+  min-height:45px;padding:6px 12px;
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;
+  border-bottom:1px solid var(--line);background:#f4f7fa;
+}
+.zoom-controls{display:flex;align-items:center;gap:5px}
+.zoom-btn{
+  min-height:31px;padding:5px 9px;border:1px solid var(--line-strong);border-radius:7px;
+  color:var(--muted);background:#fff;font-size:9.5px;font-weight:700;
+}
+.zoom-btn:hover{border-color:#8eacc6;color:var(--ink)}
+.zoom-btn{min-width:31px;padding:4px;font:700 14px/1 var(--mono)}
+.zoom-value{min-width:43px;color:var(--muted);font:600 9px/1 var(--mono);text-align:center}
+.drag-hint{color:var(--soft);font:500 8.5px/1.2 var(--mono);white-space:nowrap}
+.map-stage{
+  position:relative;
+  min-height:350px;
+  aspect-ratio:819/562;
+  display:grid;place-items:center;
+  overflow:hidden;
+  touch-action:none;
+  cursor:grab;
+  background:
+    linear-gradient(45deg,rgba(34,66,92,.035) 25%,transparent 25%,transparent 75%,rgba(34,66,92,.035) 75%),
+    linear-gradient(45deg,rgba(34,66,92,.035) 25%,#edf2f5 25%,#edf2f5 75%,rgba(34,66,92,.035) 75%);
+  background-position:0 0,8px 8px;background-size:16px 16px;
+}
+.map-stage:focus-visible{outline:3px solid rgba(46,196,232,.65);outline-offset:-3px}
+.map-stage.dragging{cursor:grabbing}
+.map-stage.fitted{cursor:default}
+.map-stage img{
+  display:block;width:100%;height:100%;object-fit:contain;background:#fff;
+  transform-origin:50% 50%;will-change:transform;
+  image-rendering:auto;
+  transition:opacity .18s,transform .24s cubic-bezier(.2,.7,.2,1);
+  user-select:none;-webkit-user-drag:none;pointer-events:none;
+}
+.map-stage.dragging img{transition:opacity .18s}
+.map-stage.loading img{opacity:.28}
+.map-stage.error img{display:none}
+.load-state{
+  position:absolute;inset:auto;
+  display:none;align-items:center;gap:9px;
+  padding:9px 12px;border:1px solid rgba(255,255,255,.3);border-radius:999px;
+  color:#fff;background:rgba(7,29,60,.9);box-shadow:0 8px 24px rgba(8,30,50,.2);
+  font-size:10px;font-weight:700;
+}
+.loading .load-state,.error .load-state{display:flex}
+.load-state i{width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
+.error .load-state i{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.map-stamp{
+  position:absolute;left:10px;bottom:9px;
+  padding:5px 7px;border-radius:6px;
+  color:#fff;background:rgba(7,29,60,.83);backdrop-filter:blur(5px);
+  font:500 9px/1.2 var(--mono);pointer-events:none;
+}
+.player{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  gap:13px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);
+}
+.player-controls{display:flex;gap:5px}
+.player-btn,.speed-btn{height:36px;min-width:38px;padding:6px 9px;font-size:11px;font-weight:800}
+.player-btn.primary{min-width:76px;color:#fff;background:var(--navy-2);border-color:var(--navy-2)}
+.player-btn.primary:hover{background:#154a7c}
+.player-btn.primary.playing{background:var(--orange);border-color:var(--orange)}
+.timeline{min-width:0}
+.timeline input{display:block;width:100%;margin:0;accent-color:var(--orange);cursor:pointer}
+.timeline-labels{display:flex;justify-content:space-between;margin-top:4px;color:var(--soft);font:500 8.5px/1 var(--mono)}
+.player-side{display:flex;align-items:center;justify-content:flex-end;gap:7px}
+.frame-count{color:var(--muted);font:600 9px/1.2 var(--mono);white-space:nowrap}
+.sidebar-card{padding:13px}
+.side-head{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;margin-bottom:10px}
+.side-head h3{margin:0;font-size:14px}
+.side-head p{margin:3px 0 0;color:var(--muted);font-size:10px;line-height:1.35}
+.run-field{margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.run-field label{display:block;margin:0 0 5px;color:var(--soft);font:700 9px/1.2 var(--mono);letter-spacing:.07em;text-transform:uppercase}
+.run-select{width:100%;height:35px;padding:6px 30px 6px 9px;color:var(--ink);background:#fff;border:1px solid var(--line-strong);border-radius:8px;font-size:10px;font-weight:700}
+.day-list{display:grid;gap:6px}
+.day-row{
+  display:grid;grid-template-columns:76px minmax(0,1fr);gap:7px;align-items:stretch;
+  padding:5px;border:1px solid var(--line);border-radius:9px;background:#fbfcfd;
+}
+.day-row.active{border-color:#8eb5d8;background:#f1f7fc;box-shadow:inset 3px 0 0 var(--blue)}
+.day-card{
+  padding:6px 7px;text-align:left;border-color:transparent;background:transparent;min-width:0;
+}
+.day-card:hover{background:#fff;border-color:var(--line)}
+.day-card b{display:block;font-size:10px}
+.day-card span{display:block;margin-top:2px;color:var(--muted);font:500 8.5px/1.2 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-times{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.time-btn{min-width:0;padding:5px 3px;font:600 8.5px/1.2 var(--mono)}
+.time-btn span{display:block;color:var(--soft);font-size:7.5px;margin-top:2px}
+.time-btn.active{color:#fff;background:var(--blue);border-color:var(--blue)}
+.time-btn.active span{color:#dceeff}
+.legend{
+  margin-top:13px;padding:13px;
+  display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,.75fr);gap:18px;align-items:center;
+}
+.legend-title{display:block;margin-bottom:7px;font-size:10px}
+.probability-bar{
+  height:13px;border:1px solid rgba(15,23,42,.22);border-radius:3px;
+  background:linear-gradient(90deg,
+    var(--prob-05) 0 20%,
+    var(--prob-20) 20% 40%,
+    var(--prob-40) 40% 60%,
+    var(--prob-60) 60% 80%,
+    var(--prob-80) 80% 95%,
+    var(--prob-95) 95% 100%);
+}
+.probability-ticks{display:flex;justify-content:space-between;margin-top:5px;color:var(--muted);font:500 8px/1 var(--mono)}
+.feature-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+.legend-item{display:flex;align-items:center;gap:8px;min-width:0}
+.legend-line{width:29px;height:4px;border-radius:99px;background:linear-gradient(90deg,#225bb1 0 48%,#c6474d 52% 100%);flex:0 0 auto}
+.front-line{position:relative;width:30px;height:12px;flex:0 0 auto;--front:#64748b}
+.front-line::before{content:"";position:absolute;left:0;right:0;top:6px;height:3px;border-radius:99px;background:var(--front)}
+.front-line.warm{--front:#c83f42}
+.front-line.warm::after{content:"";position:absolute;left:10px;top:0;width:8px;height:5px;border:2px solid var(--front);border-bottom:0;border-radius:8px 8px 0 0;background:#fff}
+.front-line.cold{--front:#225bb1}
+.front-line.cold::after{content:"";position:absolute;left:11px;top:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid var(--front)}
+.front-line.occluded{--front:#7b2d8e;opacity:.52}
+.front-line.occluded::before{background:repeating-linear-gradient(90deg,var(--front) 0 5px,transparent 5px 8px)}
+.feature-dot{width:10px;height:10px;border-radius:50%;background:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 17%,transparent);flex:0 0 auto}
+.legend-item b{display:block;font-size:9.5px}
+.legend-item span{display:block;margin-top:2px;color:var(--muted);font-size:8.5px;line-height:1.25}
+.overview{margin-top:13px;padding:14px}
+.overview-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:11px}
+.overview-head h3{margin:0;font-size:15px}
+.overview-head p{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.4}
+.overview-note{color:var(--soft);font:500 9px/1.3 var(--mono);text-align:right}
+.overview-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.overview-card{display:block;overflow:hidden;padding:0;text-align:left;min-width:0;background:#fff}
+.overview-card:hover{border-color:#8eacc6;transform:translateY(-1px);box-shadow:0 6px 16px rgba(25,50,75,.1)}
+.overview-card.active{border-color:var(--blue);box-shadow:0 0 0 2px rgba(22,101,181,.13)}
+.thumb{position:relative;aspect-ratio:819/562;overflow:hidden;background:#edf2f5;border-bottom:1px solid var(--line)}
+.thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.thumb-lead{position:absolute;top:6px;left:6px;padding:3px 5px;border-radius:5px;color:#fff;background:rgba(7,29,60,.82);font:600 8px/1 var(--mono)}
+.overview-caption{padding:8px 9px}
+.overview-caption b{display:block;font-size:10px}
+.overview-caption span{display:block;margin-top:2px;color:var(--muted);font:500 8.5px/1.25 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.explain{
+  margin-top:13px;padding:13px 14px;
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:11px;align-items:start;
+  background:#fffaf4;border-color:#f1dcc7;
+}
+.info-mark{width:25px;height:25px;display:grid;place-items:center;border-radius:50%;background:#f4e1cd;color:#9b4e1c;font-weight:800}
+.explain strong{display:block;font-size:10.5px}
+.explain p{margin:3px 0 0;color:#765d4b;font-size:9.5px;line-height:1.5}
+.source-link{font-size:9px;font-weight:700;color:#8e4b1c;white-space:nowrap}
+.footer{margin-top:12px;color:var(--soft);font-size:9px;line-height:1.45;text-align:center}
+@media(max-width:1080px){
+  .workspace{grid-template-columns:minmax(0,1fr) 292px}
+  .overview-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .legend{grid-template-columns:1fr}
+}
+@media(max-width:820px){
+  .intro{grid-template-columns:1fr}.run-card{min-width:0;width:100%;max-width:430px}
+  .workspace{grid-template-columns:1fr}
+  .sidebar-card{order:-1}
+  .day-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .day-row{grid-template-columns:68px minmax(0,1fr)}
+  .overview-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .drag-hint{display:none}
+}
+@media(max-width:600px){
+  .topbar{padding:9px 12px}.brand p,.source-pill{display:none}.brand h1{font-size:15px}.demo-pill{font-size:8px}
+  .page{width:min(100% - 18px,1480px);padding-top:13px}
+  .intro h2{font-size:27px}.intro-copy{font-size:11.5px}
+  .viewer-head{align-items:flex-start}.head-actions{flex-direction:column}.small-btn{min-height:30px}
+  .viewbar{padding:6px 8px}
+  .map-stage{min-height:230px}
+  .player{grid-template-columns:1fr;gap:9px}.player-controls,.player-side{justify-content:center}.timeline{order:-1}
+  .day-list{grid-template-columns:1fr}
+  .legend{grid-template-columns:1fr}.feature-list{grid-template-columns:1fr 1fr}
+  .overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .overview-note{display:none}
+  .explain{grid-template-columns:auto minmax(0,1fr)}.source-link{grid-column:2}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#viewer">Naar de frontenkaart</a>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">WL</div>
+    <div>
+      <h1>ECMWF frontenkansen · 10 dagen</h1>
+      <p>ENS-kansvelden + controlerun · elke 12 uur</p>
+    </div>
+  </div>
+  <div class="top-meta">
+    <a class="source-pill" href="https://sites.ecmwf.int/charts/cdb/" target="_blank" rel="noopener">Live ECMWF CDB</a>
+    <span class="demo-pill">demo</span>
+  </div>
+</header>
+
+<main class="page">
+  <section class="intro" aria-labelledby="page-title">
+    <div>
+      <p class="eyebrow">Synoptisch overzicht · Europa en Noord-Atlantisch gebied</p>
+      <h2 id="page-title">ECMWF Fronten</h2>
+      <p class="intro-copy">De achtergrondkleuren tonen de ECMWF-ensemblekans op een front binnen één graad; de warmte- en koufronten uit de controlerun liggen er als lijnen overheen. Je ziet steeds de volledige ECMWF-kaart en kunt die zelf vergroten en verschuiven.</p>
+    </div>
+    <div class="run-card" id="run-card" role="status" aria-live="polite">
+      <i class="run-light" aria-hidden="true"></i>
+      <strong id="run-status">Laatste ECMWF-run zoeken…</strong>
+      <span id="run-detail">De kaartbron wordt gecontroleerd</span>
+    </div>
+  </section>
+
+  <div class="workspace">
+    <section class="card viewer" id="viewer" aria-labelledby="valid-title">
+      <header class="viewer-head">
+        <div class="valid-label">
+          <span class="kicker">Europa en Noord-Atlantisch gebied · 10-daagse frontkans</span>
+          <h3 id="valid-title">Frontenkaart laden…</h3>
+          <p id="valid-meta">ECMWF CDB · tijdstip wordt bepaald</p>
+        </div>
+        <div class="head-actions">
+          <button class="small-btn" id="nearest-btn" type="button">Dichtst bij nu</button>
+          <a class="small-btn" id="source-frame-link" href="https://sites.ecmwf.int/charts/cdb/" target="_blank" rel="noopener">Bronkaart ↗</a>
+        </div>
+      </header>
+
+      <div class="viewbar" aria-label="Kaart vergroten en verschuiven">
+        <div class="zoom-controls">
+          <span class="drag-hint">Scroll om te zoomen · sleep om te verschuiven</span>
+          <button class="zoom-btn" id="zoom-out-btn" type="button" aria-label="Kaart uitzoomen">−</button>
+          <span class="zoom-value" id="zoom-value">100%</span>
+          <button class="zoom-btn" id="zoom-in-btn" type="button" aria-label="Kaart inzoomen">+</button>
+        </div>
+      </div>
+
+      <div class="map-stage loading" id="map-stage" tabindex="0" role="region" aria-label="Volledige ECMWF-frontkanskaart. Zoom in en sleep om de kaart te verschuiven.">
+        <img id="front-map" alt="" decoding="async" draggable="false">
+        <div class="load-state" id="load-state"><i aria-hidden="true"></i><span>ECMWF-kaart laden…</span></div>
+        <span class="map-stamp" id="map-stamp">© ECMWF · CDB</span>
+      </div>
+
+      <div class="player" aria-label="Kaartanimatie bedienen">
+        <div class="player-controls">
+          <button class="player-btn" id="previous-btn" type="button" aria-label="Vorig kaartmoment">←</button>
+          <button class="player-btn primary" id="play-btn" type="button" aria-label="Animatie afspelen">Afspelen</button>
+          <button class="player-btn" id="next-btn" type="button" aria-label="Volgend kaartmoment">→</button>
+        </div>
+        <div class="timeline">
+          <input id="frame-range" type="range" min="0" max="19" step="1" value="0" aria-label="Tijdlijn met frontenkaarten">
+          <div class="timeline-labels"><span>Start</span><span>+2 d</span><span>+4 d</span><span>+6 d</span><span>+8 d</span><span>+10 d</span></div>
+        </div>
+        <div class="player-side">
+          <span class="frame-count" id="frame-count">1 / 20</span>
+          <button class="speed-btn" id="speed-btn" type="button" aria-label="Afspeelsnelheid">1×</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="card sidebar-card" aria-labelledby="day-title">
+      <div class="side-head">
+        <div>
+          <h3 id="day-title">Kies prognosedag</h3>
+          <p>Twee vaste kaartmomenten per dag.</p>
+        </div>
+      </div>
+      <div class="run-field">
+        <label for="run-select">ECMWF-modelrun</label>
+        <select class="run-select" id="run-select" disabled>
+          <option>Run laden…</option>
+        </select>
+      </div>
+      <div class="day-list" id="day-list" aria-label="Tien prognosedagen"></div>
+    </aside>
+  </div>
+
+  <section class="card legend" aria-label="Legenda ECMWF-frontenkansen">
+    <div class="probability-legend">
+      <strong class="legend-title">Kans op een front binnen 1 graad</strong>
+      <div class="probability-bar" aria-hidden="true"></div>
+      <div class="probability-ticks"><span>5%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>95%</span><span>100%</span></div>
+    </div>
+    <div class="feature-list">
+      <div class="legend-item"><i class="front-line warm"></i><div><b>Warmtefront</b><span>Rode lijn · controlerun</span></div></div>
+      <div class="legend-item"><i class="front-line cold"></i><div><b>Koufront</b><span>Blauwe lijn · controlerun</span></div></div>
+      <div class="legend-item"><i class="front-line occluded"></i><div><b>Occlusie</b><span>Niet apart benoemd in CDB</span></div></div>
+      <div class="legend-item"><i class="feature-dot" style="--c:#48a80f"></i><div><b>Kleine frontale golf</b><span>Groene stip</span></div></div>
+      <div class="legend-item"><i class="feature-dot" style="--c:#ff940e"></i><div><b>Frontale golf</b><span>Oranje stip</span></div></div>
+      <div class="legend-item"><i class="feature-dot" style="--c:#111"></i><div><b>Barotroop laag</b><span>Zwarte stip</span></div></div>
+    </div>
+  </section>
+
+  <section class="card overview" aria-labelledby="overview-title">
+    <div class="overview-head">
+      <div>
+        <h3 id="overview-title">De 10 dagen naast elkaar</h3>
+        <p>Steeds hetzelfde tijdstip van de gekozen ECMWF-run, zodat de ontwikkeling goed vergelijkbaar blijft.</p>
+      </div>
+      <span class="overview-note">Klik op een kaart om groot te bekijken</span>
+    </div>
+    <div class="overview-grid" id="overview-grid"></div>
+  </section>
+
+  <aside class="card explain">
+    <span class="info-mark" aria-hidden="true">i</span>
+    <div>
+      <strong>Dit is “Fronts Probabilities (Control overlay)” uit de ECMWF CDB.</strong>
+      <p>De kleurvakken geven aan hoeveel ensembleleden binnen één graad een front berekenen: grijs is 5–20%, paars 95–100%. Rood duidt het warmtefront en blauw het koufront van de controlerun aan. ECMWF CDB classificeert in dit product alleen warmte- en koufronten; een occlusie krijgt dus geen afzonderlijk paarse lijn. De volledige kaart wordt zonder regionale uitsnede geladen; met de knoppen, het scrollwiel of slepen kun je zelf het gewenste gebied bekijken. De ECMWF-bron zelf blijft een 819 × 562-pixel kaart op een 50-km-rooster.</p>
+    </div>
+    <a class="source-link" href="https://sites.ecmwf.int/charts/cdb/help/" target="_blank" rel="noopener">Uitleg ECMWF ↗</a>
+  </aside>
+
+  <footer class="footer">Bronkaarten © ECMWF · Extra-tropical Cyclone Database (CDB) · Product: Fronts Probabilities (Control overlay) · Weerlab toont dezelfde brondata met een eigen 10-daagse navigatie.</footer>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  const SOURCE_ROOT = "https://sites.ecmwf.int/charts/cdb";
+  const FRAME_COUNT = 20;
+  const DAY_COUNT = 10;
+  const STEP_HOURS = 12;
+  const speeds = [1, 1.5, 2];
+  const state = {
+    run: "",
+    frames: [],
+    frame: 0,
+    playing: false,
+    speedIndex: 0,
+    timer: 0,
+    knownRuns: [],
+    imageReady: false
+  };
+  const VIEW_PRESETS = {
+    europe:{
+      label:"Europa",
+      baseScale:1,
+      outputWidth:3276,
+      crop:null,
+      fallbackZoom:1,
+      fallbackFocusX:.5,
+      fallbackFocusY:.5
+    }
+  };
+  const viewState = {
+    mode:"europe",
+    zoom:1,
+    focusX:.5,
+    focusY:.5,
+    panX:0,
+    panY:0
+  };
+
+  const $ = id => document.getElementById(id);
+  const mapStage = $("map-stage");
+  const mapImage = $("front-map");
+  const loadState = $("load-state").querySelector("span");
+  const range = $("frame-range");
+  const playButton = $("play-btn");
+  const runSelect = $("run-select");
+  const dateTimeFormatter = new Intl.DateTimeFormat("nl-NL", {
+    timeZone:"Europe/Amsterdam",
+    weekday:"long",
+    day:"numeric",
+    month:"long",
+    hour:"2-digit",
+    minute:"2-digit"
+  });
+  const compactDateFormatter = new Intl.DateTimeFormat("nl-NL", {
+    timeZone:"Europe/Amsterdam",
+    weekday:"short",
+    day:"numeric",
+    month:"short"
+  });
+  const timeFormatter = new Intl.DateTimeFormat("nl-NL", {
+    timeZone:"Europe/Amsterdam",
+    hour:"2-digit",
+    minute:"2-digit"
+  });
+
+  function parseRun(run){
+    const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})Z$/.exec(run);
+    if(!match) return new Date(NaN);
+    return new Date(Date.UTC(+match[1], +match[2]-1, +match[3], +match[4]));
+  }
+
+  function formatRun(run){
+    const date = parseRun(run);
+    if(Number.isNaN(date.getTime())) return run;
+    return new Intl.DateTimeFormat("nl-NL", {
+      timeZone:"UTC",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hourCycle:"h23"
+    }).format(date).replace(",", "") + " UTC";
+  }
+
+  function formatValid(date){
+    return dateTimeFormatter.format(date).replace(" om ", " · ");
+  }
+
+  function clamp(value,min,max){
+    return Math.max(min,Math.min(max,value));
+  }
+
+  function applyMapTransform(){
+    const rect = mapStage.getBoundingClientRect();
+    if(!rect.width || !rect.height) return;
+    const zoom = clamp(viewState.zoom,1,3.5);
+    const baseX = -(viewState.focusX-.5) * rect.width * zoom;
+    const baseY = -(viewState.focusY-.5) * rect.height * zoom;
+    const maxX = rect.width * (zoom-1) / 2;
+    const maxY = rect.height * (zoom-1) / 2;
+    const translateX = clamp(baseX+viewState.panX,-maxX,maxX);
+    const translateY = clamp(baseY+viewState.panY,-maxY,maxY);
+    viewState.panX = translateX-baseX;
+    viewState.panY = translateY-baseY;
+    mapImage.style.transform = `translate3d(${translateX}px,${translateY}px,0) scale(${zoom})`;
+    const preset = VIEW_PRESETS[viewState.mode] || VIEW_PRESETS.europe;
+    $("zoom-value").textContent = `${Math.round(preset.baseScale*zoom*100)}%`;
+    mapStage.classList.toggle("fitted",zoom<=1.01);
+  }
+
+  function setViewPreset(name){
+    const preset = VIEW_PRESETS[name];
+    if(!preset) return;
+    viewState.mode = name;
+    viewState.zoom = 1;
+    viewState.focusX = .5;
+    viewState.focusY = .5;
+    viewState.panX = 0;
+    viewState.panY = 0;
+    if(state.frames.length) setFrame(state.frame);
+    else applyMapTransform();
+  }
+
+  function zoomMap(delta){
+    viewState.zoom = clamp(Math.round((viewState.zoom+delta)*100)/100,1,3.5);
+    applyMapTransform();
+  }
+
+  function panMap(dx,dy){
+    if(viewState.zoom<=1.01) return;
+    viewState.panX += dx;
+    viewState.panY += dy;
+    applyMapTransform();
+  }
+
+  function frameUrl(run,index){
+    const lead = index * STEP_HOURS;
+    return `${SOURCE_ROOT}/${run}/fronts_probs/front_probs_with_ctrl_overlain_T+${lead}.png`;
+  }
+
+  function hdFrameUrl(sourceUrl,viewName=viewState.mode){
+    const preset = VIEW_PRESETS[viewName] || VIEW_PRESETS.europe;
+    const crop = preset.crop;
+    const region = crop
+      ? `&cx=${crop.x}&cy=${crop.y}&cw=${crop.width}&ch=${crop.height}&precrop`
+      : "";
+    return `https://wsrv.nl/?url=${encodeURIComponent(sourceUrl)}${region}&w=${preset.outputWidth}&output=webp&q=98`;
+  }
+
+  function buildFallbackRuns(){
+    const candidates = [];
+    const now = new Date();
+    for(let offset=0;offset<8;offset++){
+      const date = new Date(now.getTime() - offset * 12 * 3600000);
+      const hour = date.getUTCHours() >= 12 ? 12 : 0;
+      const cycle = new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate(),hour));
+      const run = [
+        cycle.getUTCFullYear(),
+        String(cycle.getUTCMonth()+1).padStart(2,"0"),
+        String(cycle.getUTCDate()).padStart(2,"0")
+      ].join("") + "_" + String(hour).padStart(2,"0") + "Z";
+      if(!candidates.includes(run)) candidates.push(run);
+    }
+    return candidates;
+  }
+
+  function imageExists(src,timeout=6500){
+    return new Promise(resolve => {
+      const test = new Image();
+      const done = ok => {
+        clearTimeout(timer);
+        test.onload = test.onerror = null;
+        resolve(ok);
+      };
+      const timer = setTimeout(() => done(false),timeout);
+      test.onload = () => done(test.naturalWidth > 100);
+      test.onerror = () => done(false);
+      test.src = src;
+    });
+  }
+
+  async function findAvailableRuns(candidates){
+    const checks = await Promise.all(candidates.slice(0,6).map(run => imageExists(frameUrl(run,0))));
+    return candidates.slice(0,6).filter((run,index) => checks[index]);
+  }
+
+  function createFrames(run){
+    const start = parseRun(run);
+    return Array.from({length:FRAME_COUNT},(_,index) => {
+      const src = frameUrl(run,index);
+      return {
+        index,
+        lead:index * STEP_HOURS,
+        valid:new Date(start.getTime() + index * STEP_HOURS * 3600000),
+        src
+      };
+    });
+  }
+
+  function nearestFrame(){
+    if(!state.frames.length) return 0;
+    const diff = (Date.now() - parseRun(state.run).getTime()) / (STEP_HOURS * 3600000);
+    return Math.max(0,Math.min(FRAME_COUNT-1,Math.round(diff)));
+  }
+
+  function dayDateLabel(day){
+    const first = state.frames[day * 2];
+    const second = state.frames[day * 2 + 1];
+    const a = compactDateFormatter.format(first.valid);
+    const b = compactDateFormatter.format(second.valid);
+    return a === b ? a : `${a} → ${b}`;
+  }
+
+  function renderRunSelect(){
+    const options = state.knownRuns.slice(0,8);
+    runSelect.innerHTML = options.map((run,index) =>
+      `<option value="${run}"${run===state.run?" selected":""}>${index===0?"Nieuwste · ":""}${formatRun(run)}</option>`
+    ).join("");
+    runSelect.disabled = false;
+  }
+
+  function renderDayList(){
+    $("day-list").innerHTML = Array.from({length:DAY_COUNT},(_,day) => {
+      const first = state.frames[day*2];
+      const second = state.frames[day*2+1];
+      return `<div class="day-row" data-day="${day}">
+        <button class="day-card" type="button" data-frame="${first.index}" aria-label="Prognosedag ${day+1}, ${dayDateLabel(day)}">
+          <b>Dag ${day+1}</b><span>${dayDateLabel(day)}</span>
+        </button>
+        <div class="day-times">
+          <button class="time-btn" type="button" data-frame="${first.index}" aria-label="${formatValid(first.valid)}">
+            ${timeFormatter.format(first.valid)}<span>T+${first.lead}</span>
+          </button>
+          <button class="time-btn" type="button" data-frame="${second.index}" aria-label="${formatValid(second.valid)}">
+            ${timeFormatter.format(second.valid)}<span>T+${second.lead}</span>
+          </button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function renderOverview(){
+    $("overview-grid").innerHTML = Array.from({length:DAY_COUNT},(_,day) => {
+      const frame = state.frames[day*2];
+      return `<button class="overview-card" type="button" data-frame="${frame.index}" aria-label="Dag ${day+1} groot bekijken, ${formatValid(frame.valid)}">
+        <span class="thumb">
+          <img src="${frame.src}" alt="" loading="lazy" decoding="async">
+          <span class="thumb-lead">T+${frame.lead}</span>
+        </span>
+        <span class="overview-caption"><b>Dag ${day+1}</b><span>${formatValid(frame.valid)}</span></span>
+      </button>`;
+    }).join("");
+  }
+
+  function updateSelection(){
+    document.querySelectorAll("[data-frame]").forEach(button => {
+      const selected = +button.dataset.frame === state.frame;
+      button.classList.toggle("active",selected);
+      if(button.matches("button")) button.setAttribute("aria-pressed",String(selected));
+    });
+    document.querySelectorAll(".day-row").forEach(row => {
+      row.classList.toggle("active",+row.dataset.day === Math.floor(state.frame/2));
+    });
+    document.querySelectorAll(".overview-card").forEach(card => {
+      const sameDay = Math.floor(+card.dataset.frame/2) === Math.floor(state.frame/2);
+      card.classList.toggle("active",sameDay);
+      card.setAttribute("aria-pressed",String(sameDay));
+    });
+  }
+
+  function setFrame(index,{focus=false}={}){
+    if(!state.frames.length) return;
+    const next = Math.max(0,Math.min(FRAME_COUNT-1,+index));
+    const frame = state.frames[next];
+    const viewName = viewState.mode;
+    const preset = VIEW_PRESETS[viewName] || VIEW_PRESETS.europe;
+    if(mapImage.dataset.hd==="0" && preset.crop){
+      viewState.zoom = 1;
+      viewState.focusX = .5;
+      viewState.focusY = .5;
+      viewState.panX = 0;
+      viewState.panY = 0;
+    }
+    state.frame = next;
+    range.value = String(next);
+    $("frame-count").textContent = `${next+1} / ${FRAME_COUNT}`;
+    $("valid-title").textContent = formatValid(frame.valid);
+    $("valid-meta").textContent = `Nederlandse tijd · T+${frame.lead} uur · run ${formatRun(state.run)}`;
+    $("map-stamp").textContent = `© ECMWF · HD ${preset.label} + controlerun · T+${frame.lead}`;
+    $("source-frame-link").href = `${SOURCE_ROOT}/${state.run}/fronts_probs_ctrl.html`;
+    mapImage.alt = `ECMWF-ensemblekans op een front met warmte- en koufrontlijnen uit de controlerun, geldig ${formatValid(frame.valid)}, verwachting T plus ${frame.lead} uur`;
+    mapStage.classList.remove("error");
+    mapStage.classList.add("loading");
+    state.imageReady = false;
+    loadState.textContent = preset.crop ? "4K-regiouitsnede voorbereiden…" : "ECMWF-kaart voorbereiden…";
+    mapImage.dataset.frame = String(next);
+    mapImage.dataset.view = viewName;
+    mapImage.dataset.hd = "1";
+    mapImage.dataset.regional = preset.crop ? "1" : "0";
+    mapImage.src = hdFrameUrl(frame.src,viewName);
+    updateSelection();
+    [next-1,next+1,next+2].forEach(i => {
+      if(i>=0 && i<FRAME_COUNT){
+        const preload = new Image();
+        preload.src = hdFrameUrl(state.frames[i].src,viewName);
+      }
+    });
+    if(focus) $("viewer").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+
+  function stopPlayback(){
+    state.playing = false;
+    clearInterval(state.timer);
+    state.timer = 0;
+    playButton.textContent = "Afspelen";
+    playButton.classList.remove("playing");
+    playButton.setAttribute("aria-label","Animatie afspelen");
+  }
+
+  function startPlayback(){
+    if(state.frame >= FRAME_COUNT-1) setFrame(0);
+    state.playing = true;
+    playButton.textContent = "Pauze";
+    playButton.classList.add("playing");
+    playButton.setAttribute("aria-label","Animatie pauzeren");
+    const interval = 1250 / speeds[state.speedIndex];
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      if(!state.imageReady) return;
+      if(state.frame >= FRAME_COUNT-1){
+        stopPlayback();
+        return;
+      }
+      setFrame(state.frame+1);
+    },interval);
+  }
+
+  function setRun(run,{nearest=true}={}){
+    stopPlayback();
+    state.run = run;
+    state.frames = createFrames(run);
+    $("run-card").classList.add("ready");
+    $("run-status").textContent = "ECMWF-run beschikbaar";
+    $("run-detail").textContent = `${formatRun(run)} · 20 frontkanskaarten t/m T+228`;
+    renderRunSelect();
+    renderDayList();
+    renderOverview();
+    setFrame(nearest ? nearestFrame() : 0);
+  }
+
+  mapImage.addEventListener("load",() => {
+    if(+mapImage.dataset.frame !== state.frame || mapImage.dataset.view !== viewState.mode) return;
+    state.imageReady = true;
+    mapStage.classList.remove("loading","error");
+    applyMapTransform();
+  });
+  mapImage.addEventListener("error",() => {
+    if(+mapImage.dataset.frame !== state.frame || mapImage.dataset.view !== viewState.mode) return;
+    if(mapImage.dataset.hd==="1"){
+      const preset = VIEW_PRESETS[viewState.mode] || VIEW_PRESETS.europe;
+      mapImage.dataset.hd = "0";
+      mapImage.dataset.regional = "0";
+      viewState.zoom = preset.fallbackZoom;
+      viewState.focusX = preset.fallbackFocusX;
+      viewState.focusY = preset.fallbackFocusY;
+      viewState.panX = 0;
+      viewState.panY = 0;
+      loadState.textContent = "HD-versie niet bereikbaar · origineel laden…";
+      mapImage.src = state.frames[state.frame].src;
+      return;
+    }
+    state.imageReady = true;
+    mapStage.classList.remove("loading");
+    mapStage.classList.add("error");
+    loadState.textContent = "Deze ECMWF-kaart is tijdelijk niet bereikbaar.";
+  });
+
+  $("day-list").addEventListener("click",event => {
+    const button = event.target.closest("[data-frame]");
+    if(button) setFrame(+button.dataset.frame);
+  });
+  $("overview-grid").addEventListener("click",event => {
+    const button = event.target.closest("[data-frame]");
+    if(button) setFrame(+button.dataset.frame,{focus:true});
+  });
+  range.addEventListener("input",() => {
+    stopPlayback();
+    setFrame(+range.value);
+  });
+  $("previous-btn").addEventListener("click",() => {
+    stopPlayback();
+    setFrame(state.frame-1);
+  });
+  $("next-btn").addEventListener("click",() => {
+    stopPlayback();
+    setFrame(state.frame+1);
+  });
+  playButton.addEventListener("click",() => state.playing ? stopPlayback() : startPlayback());
+  $("speed-btn").addEventListener("click",() => {
+    state.speedIndex = (state.speedIndex+1)%speeds.length;
+    $("speed-btn").textContent = speeds[state.speedIndex] + "×";
+    if(state.playing) startPlayback();
+  });
+  $("nearest-btn").addEventListener("click",() => {
+    stopPlayback();
+    setFrame(nearestFrame());
+  });
+  runSelect.addEventListener("change",() => setRun(runSelect.value,{nearest:true}));
+  $("zoom-out-btn").addEventListener("click",() => zoomMap(-.25));
+  $("zoom-in-btn").addEventListener("click",() => zoomMap(.25));
+
+  const drag = {active:false,pointerId:null,x:0,y:0};
+  mapStage.addEventListener("pointerdown",event => {
+    if(viewState.zoom<=1.01) return;
+    drag.active = true;
+    drag.pointerId = event.pointerId;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    mapStage.classList.add("dragging");
+    mapStage.setPointerCapture(event.pointerId);
+  });
+  mapStage.addEventListener("pointermove",event => {
+    if(!drag.active || event.pointerId!==drag.pointerId) return;
+    const dx = event.clientX-drag.x;
+    const dy = event.clientY-drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    panMap(dx,dy);
+  });
+  function endDrag(event){
+    if(!drag.active || event.pointerId!==drag.pointerId) return;
+    drag.active = false;
+    drag.pointerId = null;
+    mapStage.classList.remove("dragging");
+  }
+  mapStage.addEventListener("pointerup",endDrag);
+  mapStage.addEventListener("pointercancel",endDrag);
+  mapStage.addEventListener("wheel",event => {
+    event.preventDefault();
+    zoomMap(event.deltaY<0 ? .25 : -.25);
+  },{passive:false});
+  mapStage.addEventListener("dblclick",event => {
+    event.preventDefault();
+    zoomMap(.5);
+  });
+  mapStage.addEventListener("keydown",event => {
+    const amount = event.shiftKey ? 55 : 24;
+    if(event.key==="ArrowLeft"){event.preventDefault();event.stopPropagation();panMap(amount,0);}
+    else if(event.key==="ArrowRight"){event.preventDefault();event.stopPropagation();panMap(-amount,0);}
+    else if(event.key==="ArrowUp"){event.preventDefault();event.stopPropagation();panMap(0,amount);}
+    else if(event.key==="ArrowDown"){event.preventDefault();event.stopPropagation();panMap(0,-amount);}
+    else if(event.key==="+" || event.key==="="){event.preventDefault();event.stopPropagation();zoomMap(.25);}
+    else if(event.key==="-" || event.key==="_"){event.preventDefault();event.stopPropagation();zoomMap(-.25);}
+  });
+  document.addEventListener("keydown",event => {
+    if(event.defaultPrevented) return;
+    if(/INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
+    if(event.key === "ArrowLeft"){
+      event.preventDefault();stopPlayback();setFrame(state.frame-1);
+    }else if(event.key === "ArrowRight"){
+      event.preventDefault();stopPlayback();setFrame(state.frame+1);
+    }else if(event.code === "Space"){
+      event.preventDefault();state.playing ? stopPlayback() : startPlayback();
+    }
+  });
+  document.addEventListener("visibilitychange",() => {
+    if(document.hidden) stopPlayback();
+  });
+  window.addEventListener("resize",applyMapTransform);
+
+  async function init(){
+    setViewPreset("europe");
+    const availableRuns = await findAvailableRuns(buildFallbackRuns());
+    if(!availableRuns.length){
+      $("run-status").textContent = "ECMWF-bron niet bereikbaar";
+      $("run-detail").textContent = "Probeer het later opnieuw of open de bronwebsite";
+      mapStage.classList.remove("loading");
+      mapStage.classList.add("error");
+      loadState.textContent = "Geen actuele ECMWF-frontenrun gevonden.";
+      return;
+    }
+    state.knownRuns = availableRuns;
+    setRun(availableRuns[0],{nearest:true});
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

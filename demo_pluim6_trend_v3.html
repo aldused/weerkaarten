@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pluim-trend (demo) – Ed Aldus WM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#eef2f7; --panel:#ffffff; --header:#16243a; --border:#d4dbe6;
+  --ink:#16243a; --ink2:#5a6a80; --ink3:#8a98ac; --accent:#2ec4e8; --accent2:#035e7a;
+  --temp:#cc2222; --tempband:#e8736b; --tempband2:#f3b6b1; --hres:#cc0000;
+  --rain:#1565c0; --rainband:#7fb4e6; --rainband2:#cfe2f6; --night:#eef1f6;
+}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.header{background:var(--header);padding:13px 22px;border-bottom:3px solid var(--accent);display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px 16px}
+.header h1{font-size:1.02rem;font-weight:700;color:#fff;letter-spacing:-.01em}
+.header h1 .demo{font-size:.62rem;font-weight:600;background:var(--accent);color:#06222c;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle;letter-spacing:.04em}
+.header .meta{font-size:.72rem;color:#9fb0c4;font-family:'DM Mono',monospace;font-weight:500;letter-spacing:.03em}
+.header .meta b{color:#fff;font-weight:600}
+.controls{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 22px;display:flex;flex-wrap:wrap;gap:18px 26px;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.ctrl{display:flex;flex-direction:column;gap:6px}
+.ctrl > span{font-size:.66rem;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em}
+.chips{display:flex;gap:6px}
+.chip{padding:6px 15px;border-radius:18px;border:1px solid var(--border);background:#f4f7fa;color:var(--ink2);font-size:.82rem;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip.actief{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.74rem;color:var(--ink2);align-items:center}
+.legend .it{display:inline-flex;align-items:center;gap:6px}
+.legend .sw{width:22px;height:10px;border-radius:2px;display:inline-block}
+.legend .ln{width:22px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+.uitleg{padding:11px 22px;font-size:.8rem;color:var(--ink2);background:#f7f9fc;border-bottom:1px solid var(--border);line-height:1.45}
+.uitleg b{color:var(--ink)}
+.wrap{max-width:1060px;margin:0 auto;padding:18px 16px 60px}
+.runpanel{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,40,80,.06)}
+.runpanel.nieuwste{box-shadow:0 0 0 2px var(--accent),0 2px 10px rgba(46,196,232,.25)}
+.rp-head{display:flex;align-items:baseline;gap:12px;padding:10px 16px 4px;flex-wrap:wrap}
+.rp-head .titel{font-size:.95rem;font-weight:700;color:var(--ink)}
+.rp-head .sub{font-size:.72rem;color:var(--ink3);font-family:'DM Mono',monospace}
+.rp-head .badge{font-size:.62rem;font-weight:700;background:var(--accent);color:#06222c;padding:2px 8px;border-radius:10px;letter-spacing:.04em}
+.rp-head .leeftijd{margin-left:auto;font-size:.72rem;color:var(--ink3);font-family:'DM Mono',monospace}
+.rp-svg{display:block;width:100%;height:auto}
+svg text{font-family:'DM Sans',sans-serif}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Pluim-trend — temp &amp; neerslag<span class="demo" id="bron">LIVE</span></h1>
+  <div class="meta">ECMWF IFS-ENS · 51 leden · <b>laatste 3 dagen, 00 &amp; 12 UTC</b> · <span id="status">laden…</span></div>
+</div>
+
+<div class="controls">
+  <div class="ctrl">
+    <span>Station</span>
+    <div class="chips" id="stations"></div>
+  </div>
+  <div class="ctrl">
+    <span>Legenda</span>
+    <div class="legend">
+      <span class="it"><span class="ln" style="border-color:#cc0000;border-top-width:3px"></span>Oper. (HRES)</span>
+      <span class="it"><span class="ln" style="border-color:#1111bb;border-top-width:3px"></span>Controle</span>
+      <span class="it"><span class="ln" style="border-color:#2d8a2d"></span>Leden (51)</span>
+      <span class="it"><span class="ln" style="border-color:#1a1a1a;border-top-style:dotted;border-top-width:2px"></span>gemiddelde</span>
+      <span class="it"><span class="ln" style="border-color:#dd00dd;border-top-style:dashed"></span>mediaan (P50)</span>
+    </div>
+  </div>
+</div>
+
+<div class="uitleg">
+  <b>Lees de trend verticaal:</b> nieuwste run staat boven, oudste onder. De runs delen dezelfde kalender-as,
+  dus een verticale lijn op bv. <b>za 4 jul</b> toont hoe achtereenvolgende runs die dag inschatten —
+  schuift de mediaan omhoog/omlaag of wordt de spreiding kleiner, dan zie je de trend.
+</div>
+
+<div class="wrap" id="wrap"></div>
+
+<script>
+// ---------- config ----------
+const STATIONS = [
+  {name:'De Bilt',    slug:'debilt'},
+  {name:'Rotterdam',  slug:'rotterdam'},
+  {name:'Maastricht', slug:'maastricht'},
+  {name:'Enschede',   slug:'enschede'},
+  {name:'Groningen',  slug:'groningen'},
+  {name:'Amsterdam',  slug:'amsterdam'},
+];
+const DAGEN = ['zo','ma','di','wo','do','vr','za'];
+const MAAND = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const HOUR = 3600e3, DAY = 86400e3;
+// weerbewaking-pluim palet
+const C_GREEN="#2d8a2d", C_BLUE="#1111bb", C_RED="#cc0000", C_BLACK="#1a1a1a", C_MAGENTA="#dd00dd";
+const C_NACHT="#ededed", C_GRID="#cccccc", C_GRID6="#dddddd", C_DAG="#222222", C_AXIS="#555";
+
+// databron: R2 (live) of lokaal bestand (?localData=1 i.v.m. CORS op localhost)
+const LOCAL = new URLSearchParams(location.search).has('localData');
+const DATA_BASE = LOCAL ? '' : 'https://data.weerlab.nl/';
+
+let AX0=0, AX1=0;                    // dynamische as-grenzen (ms), per render gezet
+let huidigStation='debilt';
+const _cache={};                     // slug -> gefetchte data
+
+function median(a){const v=a.filter(x=>x!=null&&!isNaN(x)).sort((x,y)=>x-y);if(!v.length)return null;const i=(v.length-1)/2;return (v[Math.floor(i)]+v[Math.ceil(i)])/2;}
+
+// ---------- echte data: laden + omzetten ----------
+async function loadStation(slug){
+  if(_cache[slug]) return _cache[slug];
+  const url = `${DATA_BASE}pluim_trend_${slug}.json`;
+  const r = await fetch(url, {cache:'no-store'});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  _cache[slug]=d; return d;
+}
+
+// gearchiveerde run → render-arrays (weerbewaking-stijl), geknipt op [AX0,AX1]
+function mean(arr){let s=0,c=0;for(const v of arr){if(v!=null&&!isNaN(v)){s+=v;c++;}}return c?s/c:null;}
+// Runs dragen al hun leden in `members`. De losse legacy-arrays worden niet
+// meer geschreven, maar runs die nog in het archief staan hebben alleen die.
+function membersOf(raw,base,legacy){
+  const generic=raw.members&&raw.members[base];
+  return Array.isArray(generic)?generic:(raw[legacy]||[]);
+}
+function convertRun(raw){
+  const n=raw.n, t0=raw.t0_ms;
+  const idx=[];
+  for(let i=0;i<n;i++){ const t=t0+i*HOUR; if(t>=AX0-1 && t<=AX1+1) idx.push(i); }
+  const times=idx.map(i=>t0+i*HOUR);
+
+  // temperatuur: alle leden ([0]=controle) + HRES + gemiddelde + mediaan
+  const tMembers=membersOf(raw,'temperature_2m','temp_members').map(m=>idx.map(i=>m[i]));
+  const tCtrl=tMembers.length?tMembers[0]:[];
+  const tHres=(raw.temp_hres&&raw.temp_hres.length)?idx.map(i=>raw.temp_hres[i]):[];
+  const tMean=times.map((_,k)=>mean(tMembers.map(m=>m[k])));
+  const tP50 =times.map((_,k)=>median(tMembers.map(m=>m[k])));
+
+  // neerslag: cumulatief per lid binnen het venster (klassieke ENS-neerslagpluim)
+  const pRaw=membersOf(raw,'precipitation','precip_members');
+  const pCum=pRaw.map(m=>{let s=0;return idx.map(i=>{const v=m[i];s+=(v==null||isNaN(v))?0:v;return +s.toFixed(1);});});
+  const pCtrl=pCum.length?pCum[0]:[];
+  const pMean=times.map((_,k)=>mean(pCum.map(m=>m[k])));
+
+  return { times, tMembers, tCtrl, tHres, tMean, tP50, pCum, pCtrl, pMean, runMs:Date.parse(raw.run) };
+}
+
+// ---------- SVG render ----------
+const W=1020, M={l:42,r:30,t:8}, PLOT_W=W-M.l-M.r;
+const TH=178, RH=84, GAP=20, LBL=32;
+const H = M.t+TH+GAP+RH+LBL;
+const TY0=M.t, TY1=M.t+TH;
+const RY0=M.t+TH+GAP, RY1=M.t+TH+GAP+RH;
+
+const xToPx = t => M.l + ((t-AX0)/(AX1-AX0))*PLOT_W;
+function yT(tmin,tmax){return v=> TY1 - ((v-tmin)/(tmax-tmin))*(TY1-TY0);}
+function yR(rmax){return v=> RY1 - (v/rmax)*(RY1-RY0);}
+
+// lijn uit parallel-arrays times[]/vals[] (slaat nulls over → start bij run-init)
+function pathArr(times, vals, yf){
+  let d='', st=false;
+  for(let i=0;i<times.length;i++){const v=vals[i]; if(v==null||isNaN(v)){st=false;continue;}
+    d+=(st?'L':'M')+xToPx(times[i]).toFixed(1)+','+yf(v).toFixed(1); st=true;}
+  return d;
+}
+// gevulde band tussen lo[] en hi[]
+function bandArr(times, lo, hi, yf){
+  const idx=[]; for(let i=0;i<times.length;i++) if(lo[i]!=null&&hi[i]!=null) idx.push(i);
+  if(!idx.length) return '';
+  let up='',dn='';
+  for(let k=0;k<idx.length;k++){const i=idx[k]; up+=(k?'L':'M')+xToPx(times[i]).toFixed(1)+','+yf(lo[i]).toFixed(1);}
+  for(let k=idx.length-1;k>=0;k--){const i=idx[k]; dn+='L'+xToPx(times[i]).toFixed(1)+','+yf(hi[i]).toFixed(1);}
+  return up+dn+'Z';
+}
+
+function runSvg(rd){
+  const {times, tMembers, tCtrl, tHres, tMean, tP50, pCum, pCtrl, pMean, runMs}=rd;
+  const tmin=0, tmax=40;
+  let pmax=0; for(const m of pCum) for(const v of m) if(v>pmax) pmax=v;
+  pmax=Math.max(5, Math.ceil(pmax/5)*5);
+  const yt=yT(tmin,tmax), yr=yR(pmax);
+  let s=`<svg viewBox="0 0 ${W} ${H}" class="rp-svg" xmlns="http://www.w3.org/2000/svg">`;
+
+  // witte plots
+  s+=`<rect x="${M.l}" y="${TY0}" width="${PLOT_W}" height="${TY1-TY0}" fill="#ffffff"/>`;
+  s+=`<rect x="${M.l}" y="${RY0}" width="${PLOT_W}" height="${RY1-RY0}" fill="#ffffff"/>`;
+
+  // nacht-arcering (~21–05 lokaal = 19–03 UTC) over beide plots
+  for(let t=AX0-DAY;t<AX1;t+=DAY){
+    const x0=Math.max(M.l,xToPx(t+19*HOUR)), x1=Math.min(M.l+PLOT_W,xToPx(t+27*HOUR));
+    if(x1>x0){
+      s+=`<rect x="${x0.toFixed(1)}" y="${TY0}" width="${(x1-x0).toFixed(1)}" height="${TY1-TY0}" fill="${C_NACHT}"/>`;
+      s+=`<rect x="${x0.toFixed(1)}" y="${RY0}" width="${(x1-x0).toFixed(1)}" height="${RY1-RY0}" fill="${C_NACHT}"/>`;
+    }
+  }
+  // 6-uur subgrid
+  for(let t=AX0;t<=AX1;t+=6*HOUR){
+    if((t-AX0)%DAY===0) continue;
+    const px=xToPx(t);
+    s+=`<line x1="${px.toFixed(1)}" y1="${TY0}" x2="${px.toFixed(1)}" y2="${TY1}" stroke="${C_GRID6}" stroke-width="0.6"/>`;
+    s+=`<line x1="${px.toFixed(1)}" y1="${RY0}" x2="${px.toFixed(1)}" y2="${RY1}" stroke="${C_GRID6}" stroke-width="0.6"/>`;
+  }
+  // daglijnen (dik) + datumlabels onder neerslag
+  for(let t=AX0;t<=AX1+1;t+=DAY){
+    const px=xToPx(t);
+    s+=`<line x1="${px.toFixed(1)}" y1="${TY0}" x2="${px.toFixed(1)}" y2="${RY1}" stroke="${C_DAG}" stroke-width="1.1"/>`;
+    const dt=new Date(t), lx=xToPx(t+DAY/2);
+    if(t<AX1){
+      s+=`<text x="${lx.toFixed(1)}" y="${RY1+15}" font-size="12" font-weight="600" text-anchor="middle" fill="${C_AXIS}">${DAGEN[dt.getUTCDay()]}</text>`;
+      s+=`<text x="${lx.toFixed(1)}" y="${RY1+27}" font-size="10.5" text-anchor="middle" fill="#999">${String(dt.getUTCDate()).padStart(2,'0')}-${String(dt.getUTCMonth()+1).padStart(2,'0')}</text>`;
+    }
+  }
+  // TEMP grid + dubbele y-as (0–40, stap 5)
+  for(let v=0;v<=40;v+=5){
+    const py=yt(v);
+    s+=`<line x1="${M.l}" y1="${py.toFixed(1)}" x2="${M.l+PLOT_W}" y2="${py.toFixed(1)}" stroke="${C_GRID}" stroke-width="0.7"/>`;
+    s+=`<text x="${M.l-6}" y="${(py+4).toFixed(1)}" font-size="10" text-anchor="end" fill="${C_AXIS}">${v}</text>`;
+    s+=`<text x="${M.l+PLOT_W+6}" y="${(py+4).toFixed(1)}" font-size="10" text-anchor="start" fill="${C_AXIS}">${v}</text>`;
+  }
+  // drempels 25/30°
+  for(const v of [25,30]){
+    const py=yt(v);
+    s+=`<line x1="${M.l}" y1="${py.toFixed(1)}" x2="${M.l+PLOT_W}" y2="${py.toFixed(1)}" stroke="${C_RED}" stroke-width="1" stroke-dasharray="6 4" opacity="0.65"/>`;
+    s+=`<text x="${M.l+PLOT_W-4}" y="${(py-3).toFixed(1)}" font-size="10" text-anchor="end" fill="${C_RED}" font-weight="600">${v}°</text>`;
+  }
+  // TEMP: leden (groen) → gemiddelde → P50 → controle → HRES (bovenop)
+  for(const m of tMembers) s+=`<path d="${pathArr(times,m,yt)}" fill="none" stroke="${C_GREEN}" stroke-width="0.6" stroke-opacity="0.7" stroke-linejoin="round"/>`;
+  if(tMean.length) s+=`<path d="${pathArr(times,tMean,yt)}" fill="none" stroke="${C_BLACK}" stroke-width="1.7" stroke-dasharray="1.5 3" stroke-linecap="round"/>`;
+  if(tP50.length)  s+=`<path d="${pathArr(times,tP50,yt)}" fill="none" stroke="${C_MAGENTA}" stroke-width="1.8" stroke-dasharray="8 5"/>`;
+  if(tCtrl.length) s+=`<path d="${pathArr(times,tCtrl,yt)}" fill="none" stroke="${C_BLUE}" stroke-width="2.1"/>`;
+  if(tHres.length) s+=`<path d="${pathArr(times,tHres,yt)}" fill="none" stroke="${C_RED}" stroke-width="2.3"/>`;
+  s+=`<text x="${M.l+4}" y="${TY0+13}" font-size="11.5" font-weight="700" fill="#333">Temperatuur (°C)</text>`;
+
+  // NEERSLAG grid + dubbele y-as (mm cumulatief)
+  for(const v of [0, pmax/2, pmax]){
+    const py=yr(v);
+    s+=`<line x1="${M.l}" y1="${py.toFixed(1)}" x2="${M.l+PLOT_W}" y2="${py.toFixed(1)}" stroke="${C_GRID}" stroke-width="0.7"/>`;
+    s+=`<text x="${M.l-6}" y="${(py+4).toFixed(1)}" font-size="10" text-anchor="end" fill="${C_AXIS}">${Math.round(v)}</text>`;
+    s+=`<text x="${M.l+PLOT_W+6}" y="${(py+4).toFixed(1)}" font-size="10" text-anchor="start" fill="${C_AXIS}">${Math.round(v)}</text>`;
+  }
+  for(const m of pCum) s+=`<path d="${pathArr(times,m,yr)}" fill="none" stroke="${C_GREEN}" stroke-width="0.6" stroke-opacity="0.7" stroke-linejoin="round"/>`;
+  if(pMean.length) s+=`<path d="${pathArr(times,pMean,yr)}" fill="none" stroke="${C_BLACK}" stroke-width="1.7" stroke-dasharray="1.5 3" stroke-linecap="round"/>`;
+  if(pCtrl.length) s+=`<path d="${pathArr(times,pCtrl,yr)}" fill="none" stroke="${C_BLUE}" stroke-width="2.1"/>`;
+  s+=`<text x="${M.l+4}" y="${RY0+13}" font-size="11.5" font-weight="700" fill="#333">Neerslag (mm, cumulatief)</text>`;
+
+  // run-init marker
+  if(runMs>AX0){
+    const xi=xToPx(runMs);
+    s+=`<line x1="${xi.toFixed(1)}" y1="${TY0}" x2="${xi.toFixed(1)}" y2="${RY1}" stroke="#888" stroke-width="1" stroke-dasharray="2 3"/>`;
+  }
+  // assenkaders
+  s+=`<rect x="${M.l}" y="${TY0}" width="${PLOT_W}" height="${TY1-TY0}" fill="none" stroke="${C_AXIS}" stroke-width="1"/>`;
+  s+=`<rect x="${M.l}" y="${RY0}" width="${PLOT_W}" height="${RY1-RY0}" fill="none" stroke="${C_AXIS}" stroke-width="1"/>`;
+  s+=`</svg>`;
+  return s;
+}
+
+// ---------- bouw ----------
+function runLabel(ms){
+  const d=new Date(ms);
+  const hh=String(d.getUTCHours()).padStart(2,'0');
+  return `${DAGEN[d.getUTCDay()]} ${d.getUTCDate()} ${MAAND[d.getUTCMonth()]} — ${hh} UTC`;
+}
+function leeftijd(ms, newestMs){
+  const h=Math.round((newestMs-ms)/HOUR);
+  return h<=0 ? 'nieuwste run' : `${h} uur ouder`;
+}
+function setStatus(txt, ok=true){
+  const el=document.getElementById('status'); if(el){ el.textContent=txt; el.style.color = ok?'':'#ffb3a7'; }
+}
+
+async function render(){
+  const wrap=document.getElementById('wrap');
+  wrap.innerHTML='<div style="padding:48px;text-align:center;color:var(--ink3)">Pluimen laden…</div>';
+  let data;
+  try { data=await loadStation(huidigStation); }
+  catch(e){
+    wrap.innerHTML=`<div style="padding:48px;text-align:center;color:#c0392b">Kon pluim-data niet laden (${e.message}).<br>
+      <span style="font-size:.82rem;color:var(--ink3)">Bron: ${LOCAL?'lokaal bestand':'data.weerlab.nl'} · archief draait 2×/dag, vult in ~3 dagen tot 6 runs.</span></div>`;
+    setStatus('geen data', false); return;
+  }
+  const runs=data.runs||[];
+  if(!runs.length){ wrap.innerHTML='<div style="padding:48px;text-align:center;color:var(--ink3)">Nog geen runs gearchiveerd.</div>'; setStatus('0 runs',false); return; }
+  const newest=runs[0];
+  AX0=newest.t0_ms; AX1=AX0+(newest.n-1)*HOUR;   // volle lengte nieuwste run
+  const newestMs=Date.parse(newest.run);
+  setStatus(`${runs.length}/6 runs · nieuwste ${runLabel(newestMs)}`);
+  wrap.innerHTML='';
+  runs.forEach((raw,i)=>{
+    const conv=convertRun(raw);
+    const div=document.createElement('div');
+    div.className='runpanel'+(i===0?' nieuwste':'');
+    div.innerHTML=
+      `<div class="rp-head">
+         <span class="titel">${runLabel(conv.runMs)}</span>
+         ${i===0?'<span class="badge">NIEUWSTE</span>':''}
+         <span class="sub">${data.station}</span>
+         <span class="leeftijd">${leeftijd(conv.runMs,newestMs)}</span>
+       </div>`+
+      runSvg(conv);
+    wrap.appendChild(div);
+  });
+}
+function buildChips(){
+  const c=document.getElementById('stations');
+  STATIONS.forEach(st=>{
+    const b=document.createElement('button');
+    b.className='chip'+(st.slug===huidigStation?' actief':'');
+    b.textContent=st.name; b.dataset.slug=st.slug;
+    b.onclick=()=>{ huidigStation=st.slug; [...c.children].forEach(x=>x.classList.toggle('actief',x.dataset.slug===st.slug)); render(); };
+    c.appendChild(b);
+  });
+}
+buildChips();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking 5 dagen</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
+<script src="weerbewaking_store.js?v=20260712-mod1"></script>
+<script src="weerbewaking_document.js?v=20260712-mod1"></script>
+<script src="weerbewaking_export.js?v=20260712-mod1"></script>
+<script src="weerbewaking_sync.js?v=20260712-mod1"></script>
+<script src="weerbewaking_wp.js?v=20260710"></script>
+<script>
+  // Alleen toegankelijk na ontgrendelen op weerbewaking.html
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#eef2f6;color:#222;padding:18px 10px 28px}
+
+/* Pagina zoals in Word */
+.pagina{
+  max-width:800px;margin:0 auto 20px;background:white;padding:34px 46px;
+  box-shadow:0 14px 34px rgba(26,84,144,.10);border:1px solid #d9e2ec;border-radius:8px;
+}
+
+/* Toolbar (niet in print) */
+.toolbar{max-width:800px;margin:0 auto 16px;display:block;background:rgba(255,255,255,.96);padding:14px;border:1px solid #d9e2ec;border-radius:8px;box-shadow:0 10px 24px rgba(26,84,144,.10);position:sticky;top:10px;z-index:20;backdrop-filter:blur(8px)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.86rem;padding:6px 9px;border:1px solid #cbd5e1;border-radius:6px;background:white;color:#1f2937}
+.toolbar input[type="hidden"]{display:none}
+.toolbar input[type="checkbox"]{padding:0;border:0;border-radius:0;background:transparent;vertical-align:middle;margin-right:3px}
+.toolbar button{font-family:inherit;font-size:.86rem;padding:7px 13px;background:#1a5490;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+	.toolbar button:hover{background:#124270;transform:translateY(-1px)}
+	.toolbar .spacer{flex:1}
+	.toolbar .status{font-size:.8rem;color:#888}
+	.toolbar .sync-toggle{display:inline-flex;align-items:center;gap:4px;color:#475569;font-weight:700}
+	.toolbar .sync-status{font-size:.72rem;min-width:46px;color:#888}
+.toolbar-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.toolbar-title{font-size:1rem;font-weight:800;color:#0f3f73;letter-spacing:.01em}
+.toolbar-sub{font-size:.76rem;color:#64748b;margin-top:3px}
+.toolbar-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.toolbar .btn-instellingen{background:#eef2f7;color:#1a5490;border:1px solid #cbd5e1}
+.toolbar .btn-instellingen:hover{background:#e2eaf3}
+.toolbar.instellingen-open .btn-instellingen{background:#1a5490;color:white;border-color:#1a5490}
+.toolbar-grid{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.toolbar.instellingen-open .toolbar-grid{display:grid}
+.toolbar-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:9px 10px;min-width:0}
+.toolbar-group.wide{grid-column:1/-1}
+.toolbar-group .group-label{font-size:.72rem;font-weight:800;color:#1a5490;text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.toolbar .field{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.toolbar .field span{font-size:.78rem;color:#475569;font-weight:700}
+.toolbar .check-row{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}
+.toolbar .button-success{background:#2a7a2a}
+.toolbar .button-secondary,.toolbar .button-back{background:#64748b}
+.toolbar .button-danger{background:#a44}
+.toolbar .button-small{padding:5px 9px;font-size:.78rem}
+.toolbar .button-back{white-space:nowrap}
+.toolbar #save-status{font-size:.72rem;color:#2a7a2a}
+
+/* Header van document */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:2px solid #1a5490}
+.doc-header img.logo-l{height:165px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+.doc-opgesteld{margin-top:6px;font-size:.8rem;color:#555;font-style:italic}
+.doc-opgesteld .datum{font-weight:600;color:#333;font-style:normal}
+
+/* Plaats-invoer (oranje, matchend met logo) */
+.plaats-blok{
+  margin:16px 0 6px;display:flex;align-items:center;gap:10px;
+  background:#fff8ef;border:1px solid #f0c08a;border-left:5px solid #e8780c;
+  border-radius:6px;padding:9px 14px;
+}
+.plaats-blok .label{font-size:.78rem;font-weight:700;color:#a04a00;text-transform:uppercase;letter-spacing:.06em}
+.plaats-blok .label-select{
+  font-family:inherit;font-size:.78rem;font-weight:700;color:#a04a00;text-transform:uppercase;letter-spacing:.06em;
+  background:white;border:1px solid #f0c08a;border-radius:3px;padding:5px 26px 5px 8px;outline:none;
+}
+.plaats-blok .label-select:focus{border-color:#e8780c;box-shadow:0 0 0 2px #fde1c4}
+.plaats-blok .veld{
+  flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#d95a00;
+  background:white;border:1px solid #f0c08a;border-radius:3px;
+  padding:5px 10px;outline:none;
+}
+.plaats-blok .veld:focus{border-color:#e8780c;background:#fffef8;box-shadow:0 0 0 2px #fde1c4}
+
+/* Titel */
+.titel{
+  font-size:1.3rem;font-weight:700;color:#1a5490;text-align:center;
+  text-transform:uppercase;letter-spacing:.02em;padding:10px 8px;
+  margin:16px 0 18px;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;
+  min-height:44px;outline:none;
+}
+.titel:focus{background:#fffbe8}
+.titel:empty::before{content:'KLIK HIER EN TYP DE TITEL...';color:#bbb;font-weight:500}
+
+/* Sectie kopjes */
+h2.kop{font-size:.95rem;font-weight:700;color:#1a5490;margin:18px 0 8px;padding-bottom:3px;border-bottom:1px solid #e0e0e0}
+h2.kop .vooruit-plaats{font-weight:700;color:#1a5490;outline:none;padding:0 4px;border-radius:3px;min-width:60px;display:inline-block}
+h2.kop .vooruit-plaats:focus{background:#fffbe8}
+h2.kop .vooruit-plaats:empty::before{content:attr(data-placeholder);color:#aaa;font-weight:500;font-style:italic}
+h2.kop .kop-edit{outline:none;padding:0 4px;border-radius:3px;display:inline-block;min-width:60px}
+h2.kop .kop-edit:focus{background:#fffbe8}
+h2.kop .kop-edit:empty::before{content:attr(data-placeholder);color:#aaa;font-weight:500;font-style:italic}
+.kop-preset{font-family:inherit;font-size:.7rem;padding:1px 4px;margin-left:6px;border:1px solid #ccc;border-radius:3px;background:#f8f8f8;color:#555;font-weight:500;vertical-align:middle}
+
+/* Tekst-secties (vandaag/morgen/komende) — toggleable */
+.tekst-sectie{position:relative}
+.sectie-sluit{
+  position:absolute;right:0;top:10px;width:22px;height:22px;border:1px solid #d8dee8;
+  border-radius:50%;background:white;color:#64748b;font-size:16px;line-height:18px;
+  cursor:pointer;font-family:inherit;font-weight:700
+}
+.sectie-sluit:hover{background:#fff4e6;border-color:#e8780c;color:#a04a00}
+
+/* Bewerkbare tekstvakken */
+.tekstvak{
+  min-height:70px;padding:9px 11px;border:1px solid #dbe3ec;border-radius:6px;
+  font-size:.84rem;line-height:1.52;color:#333;outline:none;background:#fbfdff;
+  text-align:justify;
+}
+.tekstvak-groot{min-height:155px}
+.tekstvak:hover{border-color:#b7c7d9}
+.tekstvak:focus{background:#fffdf0;border-color:#1a5490;border-style:solid;box-shadow:0 0 0 2px rgba(26,84,144,.10)}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Tabellen */
+table.tabel{width:100%;max-width:780px;border-collapse:collapse;margin:6px auto 4px 0;font-size:.8rem}
+table.tabel th,table.tabel td{border:1px solid #bbb;padding:2px 8px;text-align:center;line-height:1.2}
+table.tabel th{background:#1a5490;color:white;font-weight:600;font-size:.75rem}
+table.tabel td.label{text-align:left;background:#f0f4f8;font-weight:600}
+table.tabel td.waarsch-edit{
+  outline:none;
+  cursor:text;
+  background:#fffdf3;
+  box-shadow:inset 0 0 0 1px rgba(26,84,144,.22);
+}
+table.tabel td.waarsch-edit:hover{background:#fff8d8;box-shadow:inset 0 0 0 1px rgba(26,84,144,.45)}
+table.tabel td.waarsch-edit:focus{background:#fffbe8;box-shadow:inset 0 0 0 2px #1a5490}
+table.tabel td.waarvoor-cel{text-align:left;font-weight:500;padding:3px 8px}
+table.tabel td.waarvoor-cel:empty::before{content:'Waarvoor (bv. wind, regen, gladheid)…';color:#aaa;font-style:italic;font-weight:400}
+
+/* Waarschuwingen */
+.waarsch-status{font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:3px;display:inline-block;min-width:68px}
+.w-geen{background:#d4e8d4;color:#2d6a2d}
+.w-geel{background:#fff3b0;color:#8a6d00}
+.w-oranje{background:#ffcf9f;color:#b05a00}
+.w-rood{background:#ffb0b0;color:#a00000}
+select.status-sel{font-family:inherit;font-size:.78rem;padding:1px 6px;border:1px solid #ccc;border-radius:3px;font-weight:700}
+
+/* Vooruitzichten tabel */
+table.vooruit{width:100%;border-collapse:collapse;margin-top:6px;font-size:.78rem}
+table.vooruit th,table.vooruit td{border:1px solid #aebdcc;padding:5px 4px;text-align:center}
+table.vooruit td[contenteditable="true"]{outline:none;cursor:text}
+table.vooruit td[contenteditable="true"]:hover{background:#f6faff}
+table.vooruit td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #1a5490}
+table.vooruit th{background:#1a5490;color:white;font-size:.78rem}
+table.vooruit th.dag{width:11%}
+table.vooruit td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-size:.75rem;width:23%;padding-left:8px}
+table.vooruit .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1a5490;margin-right:3px}
+
+/* Footer */
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.75rem;color:#888;text-align:center;display:flex;justify-content:space-between}
+
+/* PRINT */
+/* Koptekst-grootte (instelbaar) */
+body{--kop-scale:1}
+.pagina .titel{font-size:calc(1.3rem * var(--kop-scale))}
+.pagina h2.kop{font-size:calc(.95rem * var(--kop-scale))}
+
+@media (max-width:700px){
+  body{padding:8px 6px 20px}
+  .pagina{padding:16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toolbar{padding:8px 10px;gap:6px;top:6px}
+  .toolbar-top{flex-direction:column}
+  .toolbar-actions{justify-content:flex-start}
+  .toolbar-grid{grid-template-columns:1fr}
+  .toolbar-group.wide{grid-column:auto}
+  .toolbar button{font-size:.76rem;padding:5px 8px}
+  .toolbar select,.toolbar input{font-size:.78rem;padding:4px 7px}
+  .doc-header{flex-wrap:wrap;gap:8px}
+  .doc-header img.logo-l{height:70px}
+  .doc-header img.logo-r{height:40px;max-width:130px}
+  .place-blok,.plaats-blok{flex-wrap:wrap}
+  table.tabel,table.vooruit{font-size:.72rem}
+  table.tabel th,table.tabel td,table.vooruit th,table.vooruit td{padding:2px 4px}
+  .kop-preset{display:none}
+}
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0;page-break-after:always;break-after:page}
+  .pagina-2{page-break-before:always;break-before:page;page-break-after:avoid;break-after:avoid}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  .titel{border-top:1px solid #888;border-bottom:1px solid #888}
+  select.status-sel{border:none;appearance:none;-webkit-appearance:none;background:transparent;font-weight:700;padding:0}
+  table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+  @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+
+<!-- Toolbar (niet zichtbaar in print) -->
+<div class="toolbar">
+  <div class="toolbar-top">
+    <div>
+      <div class="toolbar-title">Weerbewaking 5 dagen</div>
+      <div class="toolbar-sub"><span id="data-status">Laatst bijgewerkt: –</span> <span id="save-status"></span></div>
+    </div>
+    <div class="toolbar-actions">
+      <button type="button" onclick="zetNu()" title="Zet documentdatum op vandaag en 'Opgesteld op…' op de huidige tijd">📅 Nu</button>
+      <button type="button" class="button-success" onclick="herlaadTabel()" title="Haal de vooruitzichten-tabel opnieuw op (overschrijft eigen aanpassingen)">↻ Ververs tabel</button>
+      <button type="button" onclick="exporteerPDF()">Exporteer PDF</button>
+      <button type="button" class="btn-instellingen" onclick="toggleInstellingen()" title="Toon of verberg de instellingen">⚙ Instellingen</button>
+      <button type="button" class="button-back" onclick="gaTerug()">← Terug</button>
+    </div>
+  </div>
+
+  <div class="toolbar-grid">
+    <div class="toolbar-group">
+      <span class="group-label">Bron</span>
+      <label class="field"><span>Station</span>
+        <select id="station-sel">
+          <option value="210">210 Valkenburg</option>
+          <option value="235">235 De Kooy (Den Helder)</option>
+          <option value="240">240 Schiphol</option>
+          <option value="260">260 De Bilt</option>
+          <option value="269">269 Lelystad</option>
+          <option value="270">270 Leeuwarden</option>
+          <option value="275">275 Deelen</option>
+          <option value="280">280 Eelde</option>
+          <option value="290">290 Twenthe</option>
+          <option value="310">310 Vlissingen</option>
+          <option value="330">330 Hoek van Holland</option>
+          <option value="344" selected>344 Rotterdam Airport</option>
+          <option value="350">350 Gilze-Rijen</option>
+          <option value="370">370 Eindhoven</option>
+          <option value="375">375 Volkel</option>
+          <option value="380">380 Maastricht</option>
+        </select>
+      </label>
+      <label class="field"><span>Model</span>
+        <select id="bron-sel">
+          <option value="mosmix" selected>MOSMIX + KNMI</option>
+          <option value="weatherpro">WeatherPro</option>
+        </select>
+      </label>
+      <label class="field" id="wp-plaats-veld" style="display:none"><span>Plaats</span>
+        <input id="wp-plaats" type="text" placeholder="typ plaats (WeatherPro)" style="min-width:150px">
+      </label>
+    </div>
+
+    <div class="toolbar-group">
+      <span class="group-label">Tekst</span>
+      <span class="check-row">
+        <label><input type="checkbox" id="toon-vandaag" checked> vandaag</label>
+        <label><input type="checkbox" id="toon-morgen" checked> morgen</label>
+        <label><input type="checkbox" id="toon-komende" checked> komende dagen</label>
+        <label><input type="checkbox" id="toon-daarna" checked> daarna</label>
+      </span>
+    </div>
+
+    <div class="toolbar-group wide">
+      <span class="group-label">Formulier</span>
+      <label class="field"><span>Datum</span><input type="date" id="doc-datum"></label>
+      <label class="field" title="Tijdstip 'Opgesteld op…' aanpassen (leeg = nu)"><span>Opgesteld</span><input type="datetime-local" id="opgesteld-tijd" data-save="opgesteldTijd"></label>
+      <button type="button" class="button-secondary button-small" onclick="wisOpgesteldTijd()" title="Tijd leegmaken (gebruik nu)">✕</button>
+      <input type="hidden" id="doc-naam" value="Rijnmond">
+      <label class="field"><span>Open</span><select id="doc-kies" title="Kies een opgeslagen formulier voor deze datum"></select></label>
+      <button type="button" onclick="nieuwDocument()" title="Maak een tweede formulier voor dezelfde datum">＋ Nieuw formulier</button>
+    </div>
+
+    <div class="toolbar-group wide">
+      <span class="group-label">Weergave</span>
+      <label class="field"><span>Koppen</span>
+        <select id="kop-scale-sel" onchange="zetKopScale(this.value)" title="Grootte van titel en koppen">
+          <option value="0.8">80%</option>
+          <option value="0.9">90%</option>
+          <option value="1" selected>100%</option>
+          <option value="1.1">110%</option>
+          <option value="1.2">120%</option>
+          <option value="1.35">135%</option>
+          <option value="1.5">150%</option>
+        </select>
+      </label>
+      <button type="button" class="button-danger" onclick="wisDraft()" title="Wis opgeslagen teksten van deze dag">Wissen</button>
+      <label class="sync-toggle no-pdf" title="Deel concepten via Cloudflare KV. Uit = alleen lokaal bewaren."><input type="checkbox" id="wb-live-sync" data-wb-sync-toggle> Live sync</label>
+      <span class="sync-status no-pdf" id="wb-live-sync-status" data-wb-sync-status></span>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENT -->
+<div class="pagina" id="doc">
+
+  <!-- Header met logo's -->
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Regionale Weersverwachting Rijnmond" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum">–</span></div>
+
+  <!-- Plaats (invulbaar, oranje) -->
+  <div class="plaats-blok">
+    <select class="label-select" id="weergave-type" title="Label op de PDF">
+      <option value="Plaats">Plaats</option>
+      <option value="Regio" selected>Regio</option>
+    </select>
+    <input class="veld" type="text" id="plaats-in" value="Rijnmond" placeholder="Naam op de PDF, bijvoorbeeld Rijnmond">
+  </div>
+
+  <!-- Titel (invulbaar) -->
+  <div class="titel" contenteditable="true" data-placeholder="TITEL" data-save="titel">VEEL ZON EN AANHOUDEND DROOG</div>
+
+  <!-- Weersituatie -->
+  <h2 class="kop">De weersituatie nader beschreven</h2>
+  <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie (hogedrukgebieden, fronten, etc.)...">Voorlopig blijven hogedrukgebieden een stempel drukken op het Nederlandse weer. Vandaag ligt er een hogedrukgebied ten noordoosten van Schotland dat langzaam in betekenis afneemt. De rol van dit hogedrukgebied wordt morgen overgenomen door een hogedrukgebied bij IJsland, dat zich naar de Shetland Eilanden verplaatst en op zondag richting de Noorse Zee trekt. Er komt voorlopig dan ook geen verandering in het huidige weerbeeld.</div>
+
+  <!-- Verwachting per dagdeel (vandaag / morgen / komende dagen) -->
+  <section id="sec-vandaag" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-vandaag" title="Verberg vandaag">×</button>
+    <h2 class="kop"><span class="kop-edit" contenteditable="true" data-save="vandaag-kop" data-placeholder="Vandaag">Vandaag</span><select class="kop-preset no-pdf" data-target="vandaag-kop" title="Kies kop-tekst"><option value="">— preset kop —</option><option value="Vandaag">Vandaag</option><option value="Vanochtend">Vanochtend</option><option value="Vanmiddag">Vanmiddag</option><option value="Vanavond">Vanavond</option><option value="Vannacht">Vannacht</option><option value="__weekdag__">Weekdag (automatisch)…</option><option value="__custom__">Eigen tekst…</option></select></h2>
+    <div class="tekstvak" contenteditable="true" data-save="vandaag" data-placeholder="Beschrijf de verwachting voor vandaag..."></div>
+  </section>
+
+  <section id="sec-morgen" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-morgen" title="Verberg morgen">×</button>
+    <h2 class="kop"><span class="kop-edit" contenteditable="true" data-save="morgen-kop" data-placeholder="Morgen">Morgen</span><select class="kop-preset no-pdf" data-target="morgen-kop" title="Kies kop-tekst"><option value="">— preset kop —</option><option value="Morgen">Morgen</option><option value="Morgenochtend">Morgenochtend</option><option value="Morgenmiddag">Morgenmiddag</option><option value="Morgenavond">Morgenavond</option><option value="Overmorgen">Overmorgen</option><option value="__weekdag1__">Weekdag morgen (automatisch)…</option><option value="__custom__">Eigen tekst…</option></select></h2>
+    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf de verwachting voor morgen..."></div>
+  </section>
+
+  <section id="sec-komende" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-komende" title="Verberg komende dagen">×</button>
+    <h2 class="kop"><span class="kop-edit" contenteditable="true" data-save="komende-kop" data-placeholder="Komende dagen">Komende dagen</span><select class="kop-preset no-pdf" data-target="komende-kop" title="Kies kop-tekst"><option value="">— preset kop —</option><option value="Komende dagen">Komende dagen</option><option value="Het weekend">Het weekend</option><option value="De rest van de week">De rest van de week</option><option value="Overmorgen">Overmorgen</option><option value="__custom__">Eigen tekst…</option></select></h2>
+    <div class="tekstvak tekstvak-groot" contenteditable="true" data-save="komende" data-placeholder="Beschrijf vandaag, morgen en overmorgen (ruim, meerdere alinea's mogelijk)...">De dag kan beginnen met lage bewolking of plaatselijk mist. Daarna wordt het opnieuw zonnig en blijft het droog. De middagtemperatuur komt uit op ongeveer 16 graden. Er waait een zwakke tot matige wind uit het noorden tot noordwesten.</div>
+  </section>
+
+  <!-- Footer pagina 1 -->
+  <div class="doc-footer">
+    <span>Weerbewaking · Ed Aldus Weer en Media</span>
+    <span>1 / 2</span>
+  </div>
+</div>
+
+<!-- ========== PAGINA 2 ========== -->
+<div class="pagina pagina-2" id="doc-2">
+
+  <!-- Header (zelfde logo's) -->
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Regionale Weersverwachting Rijnmond" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum-2">–</span></div>
+
+  <!-- Waarschuwingen -->
+  <h2 class="kop">Waarschuwingen</h2>
+  <table class="tabel" id="waarsch-tabel">
+    <thead>
+      <tr><th style="width:18%">Periode</th><th style="width:18%">Datum</th><th style="width:18%">Status</th><th>Waarvoor</th></tr>
+    </thead>
+    <tbody id="waarsch-body"></tbody>
+  </table>
+
+  <!-- Verwachting daarna -->
+  <section id="sec-daarna" class="tekst-sectie">
+    <button type="button" class="sectie-sluit no-pdf" data-toggle-target="toon-daarna" title="Verberg daarna">×</button>
+    <h2 class="kop"><span class="kop-edit" contenteditable="true" data-save="daarna-kop" data-placeholder="Daarna">Daarna</span><select class="kop-preset no-pdf" data-target="daarna-kop" title="Kies kop-tekst"><option value="">— preset kop —</option><option value="Daarna">Daarna</option><option value="Komende dagen">Komende dagen</option><option value="Het weekend">Het weekend</option><option value="Vooruitblik">Vooruitblik</option><option value="__custom__">Eigen tekst…</option></select></h2>
+    <div class="tekstvak" contenteditable="true" data-save="daarna" data-placeholder="Vooruitblik dag 4 en verder...">Op Koningsdag en dinsdag zien we een mix van zon en bewolking en blijft het droog. De maximumtemperatuur bedraagt dan ongeveer 15 graden. Vanaf woensdag krijgt de zon weer helemaal de overhand.</div>
+  </section>
+
+  <!-- Vooruitzichten -->
+  <h2 class="kop">Vooruitzichten <span contenteditable="true" data-save="vooruit-plaats" data-placeholder="(plaats)" class="vooruit-plaats"></span></h2>
+  <table class="vooruit" id="vooruit-tabel">
+    <thead>
+      <tr id="vooruit-dagen"><th class="rij-label"></th></tr>
+    </thead>
+    <tbody id="vooruit-body"></tbody>
+  </table>
+
+  <!-- Footer pagina 2 -->
+  <div class="doc-footer">
+    <span>Weerbewaking · Ed Aldus Weer en Media</span>
+    <span>2 / 2</span>
+  </div>
+
+</div>
+
+<script>
+/* ── Stationsmapping nummer → naam in mosmix_nl.json ── */
+const STATIONS = {
+  210:'Valkenburg', 235:'Den Helder', 240:'Amsterdam', 260:'De Bilt',
+  269:'Lelystad', 270:'Leeuwarden', 275:'Deelen', 280:'Eelde',
+  290:'Enschede', 310:'Vlissingen', 330:'Hoek van Holland',
+  344:'Rotterdam Airport', 350:'Gilze Rijen', 370:'Eindhoven',
+  375:'Volkel', 380:'Maastricht'
+};
+/* Stationscoördinaten voor WeatherPro (lat, lon) */
+const STATION_COORDS = {
+  210:[52.171,4.430], 235:[52.928,4.781], 240:[52.318,4.790], 260:[52.101,5.177],
+  269:[52.458,5.526], 270:[53.224,5.752], 275:[52.056,5.874], 280:[53.125,6.585],
+  290:[52.274,6.891], 310:[51.442,3.596], 330:[51.992,4.122], 344:[51.962,4.447],
+  350:[51.566,4.936], 370:[51.451,5.377], 375:[51.659,5.707], 380:[50.906,5.762]
+};
+
+/* ── Hulpfuncties ── */
+const MAAND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const DAG=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const DAG_KORT=['ZO','MA','DI','WO','DO','VR','ZA'];
+const VOORUIT_DAGEN=5;
+
+function formatDatumVol(d){
+  return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]} ${d.getFullYear()} om ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} uur`;
+}
+function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function plusDag(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function getDraftValue(key){
+  try{
+    const d=JSON.parse(localStorage.getItem(saveKey()) || '{}');
+    return d[key];
+  }catch(e){ return null; }
+}
+function exportNaam(...waarden){
+  const rauw=(waarden.find(v=>(v||'').trim()) || 'Document').split(',')[0].trim();
+  return rauw.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').replace(/^_+|_+$/g,'') || 'Document';
+}
+function getOpgesteldDate(){
+  const v=document.getElementById('opgesteld-tijd')?.value;
+  if(v){ const d=new Date(v); if(!isNaN(d.getTime())) return d; }
+  return new Date();
+}
+function updateOpgesteldHeader(){
+  const dstr = formatDatumVol(getOpgesteldDate());
+  const h=document.getElementById('hdr-datum'); if(h) h.textContent=dstr;
+  const h2=document.getElementById('hdr-datum-2'); if(h2) h2.textContent=dstr;
+}
+function wisOpgesteldTijd(){
+  const inp=document.getElementById('opgesteld-tijd');
+  if(inp){ inp.value=''; updateOpgesteldHeader(); if(typeof saveDraft==='function') saveDraft(); }
+}
+/* Eén klik: documentdatum = vandaag, 'Opgesteld op…' = nu */
+function lokaalDatetime(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function zetNu(){
+  const datumEl=document.getElementById('doc-datum');
+  const wasAndereDatum = datumEl.value !== vandaagISO();
+  datumEl.value=vandaagISO();
+  if(wasAndereDatum) datumEl.dispatchEvent(new Event('change'));
+  const opg=document.getElementById('opgesteld-tijd');
+  if(opg) opg.value=lokaalDatetime();
+  updateOpgesteldHeader();
+  saveDraft();
+}
+/* Instellingen-paneel inklapbaar (standaard dicht) */
+const TOOLBAR_OPEN_KEY='wb_rijnmond_toolbar_open';
+function toggleInstellingen(force){
+  const tb=document.querySelector('.toolbar');
+  const open = force!=null ? !!force : !tb.classList.contains('instellingen-open');
+  tb.classList.toggle('instellingen-open', open);
+  try{ localStorage.setItem(TOOLBAR_OPEN_KEY, open?'1':'0'); }catch(e){}
+}
+try{ if(localStorage.getItem(TOOLBAR_OPEN_KEY)==='1') document.querySelector('.toolbar').classList.add('instellingen-open'); }catch(e){}
+
+/* Wind: m/s of km/h → BFT */
+function naarBFT(kmh){
+  if(kmh==null) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+/* Graden → letter (N, NNO, NO, ONO, O, …) */
+function naarRichting(deg){
+  if(deg==null) return '–';
+  const r=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW','N'];
+  return r[Math.round(deg/22.5)];
+}
+/* Korte letterversie voor tabel (N, NO, O, ZO, Z, ZW, W, NW) */
+function naarRichtingKort(deg){
+  if(deg==null) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+/* Letter → graden (voor herrendering pijl bij bewerken cel) */
+const RICHTING_DEG={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function parseRichting(txt){
+  const m=(txt||'').toUpperCase().replace(/[^NOZW]/g,'').match(/^(NNO|NNW|NO|NW|N|ONO|OZO|O|ZZO|ZZW|ZO|ZW|Z|WNW|WZW|W)$/);
+  if(!m) return null;
+  return RICHTING_DEG[m[1]];
+}
+function windCelHTML(deg){
+  const letter = (deg==null) ? '–' : naarRichtingKort(deg);
+  const rot = (deg!=null) ? deg : 0;
+  return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+}
+
+/* ── Dag-koppen in vooruitzichten ── */
+function bouwDagKoppen(startDatum){
+  const tr = document.getElementById('vooruit-dagen');
+  tr.innerHTML = '<th class="rij-label"></th>';
+  for(let i=1;i<=VOORUIT_DAGEN;i++){
+    const d = plusDag(startDatum, i);
+    tr.insertAdjacentHTML('beforeend',
+      `<th class="dag">${DAG_KORT[d.getDay()]}<br><small style="font-weight:400;opacity:.85">${formatDMshort(d)}</small></th>`);
+  }
+}
+
+/* ── Vooruitzichten-rijen ── */
+function bouwVooruitzichtenRij(label, cellen){
+  return `<tr><td class="rij-label">${label}</td>${cellen.map(c=>`<td contenteditable="true">${c}</td>`).join('')}</tr>`;
+}
+
+function formatKansPct(v){
+  // MOS/MIX R101 is reeds een percentage (0–100), niet een fractie
+  if(v==null || !Number.isFinite(Number(v))) return '–';
+  const n = Number(v);
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+/* ── Waarschuwingen ── */
+function bouwWaarschuwingen(startDatum){
+  const rijen = [
+    {periode:'Vandaag',   datum: plusDag(startDatum,0)},
+    {periode:'Morgen',    datum: plusDag(startDatum,1)},
+    {periode:'Overmorgen',datum: plusDag(startDatum,2)}
+  ];
+  const tbody = document.getElementById('waarsch-body');
+  const oud = Array.from(tbody.querySelectorAll('tr')).map(tr=>({
+    periode: tr.querySelector('[data-save^="waarsch-periode-"]')?.textContent,
+    datum: tr.querySelector('[data-save^="waarsch-datum-"]')?.textContent,
+    status: tr.querySelector('select.status-sel')?.value,
+    waarvoor: tr.querySelector('[data-save^="waarsch-waarvoor-"]')?.innerHTML
+  }));
+  tbody.innerHTML = rijen.map((r,i)=>`
+    <tr>
+      <td class="label waarsch-edit" contenteditable="true" data-save="waarsch-periode-${i}" data-placeholder="Periode" title="Klik om periode/dagnaam aan te passen">${oud[i]?.periode || getDraftValue(`waarsch-periode-${i}`) || r.periode}</td>
+      <td class="waarsch-edit" contenteditable="true" data-save="waarsch-datum-${i}" data-placeholder="Datum" title="Klik om datum aan te passen">${oud[i]?.datum || getDraftValue(`waarsch-datum-${i}`) || formatDMshort(r.datum)}</td>
+      <td>
+        <select class="status-sel" data-idx="${i}" data-save="waarsch-status-${i}" onchange="updateStatusKleur(this); saveDraft();">
+          <option value="GEEN">GEEN</option>
+          <option value="GEEL">GEEL</option>
+          <option value="ORANJE">ORANJE</option>
+          <option value="ROOD">ROOD</option>
+        </select>
+      </td>
+      <td class="waarvoor-cel waarsch-edit" contenteditable="true" data-save="waarsch-waarvoor-${i}" data-placeholder="Waarvoor (bv. wind, regen, gladheid)…">${oud[i]?.waarvoor || getDraftValue(`waarsch-waarvoor-${i}`) || ''}</td>
+    </tr>`).join('');
+  tbody.querySelectorAll('select.status-sel').forEach((sel,i)=>{
+    const v = oud[i]?.status || getDraftValue(`waarsch-status-${i}`);
+    if(v) sel.value = v;
+    updateStatusKleur(sel);
+  });
+}
+function updateStatusKleur(sel){
+  const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
+  sel.className = 'status-sel ' + kl[sel.value];
+}
+
+/* ── Demo data (placeholder, uit voorbeeld-doc) ── */
+const DEMO_DATA = {
+  tmax:[16,16,15,15,16,17],
+  tmin:[3,5,4,6,6,5],
+  zon:[10,7,6,9,10,10],
+  nsk:[0,0,10,0,0,0],
+  nsm:[0,0,0,0,0,0],
+  bft:['3','3','3','3-4','3-4','3-4'],
+  ri:[315, 0, 45, 45, 45, 45]
+};
+
+/* ── Vul vooruitzichten met data ── */
+function vulVooruitzichten(data){
+  const tbody = document.getElementById('vooruit-body');
+  const beperk = arr => (arr || []).slice(0, VOORUIT_DAGEN);
+  const rij = (lbl, arr, fmt=(v=>v)) => bouwVooruitzichtenRij(lbl, arr.map(fmt));
+  tbody.innerHTML = [
+    rij('Max. temperatuur (°C)', beperk(data.tmax)),
+    rij('Min. temperatuur (°C)', beperk(data.tmin)),
+    rij('Zonuren',                beperk(data.zon)),
+    rij('Neerslagkans (%)',       beperk(data.nsk)),
+    rij('Neerslag (mm)',          beperk(data.nsm)),
+    rij('Windkracht (BFT)',       beperk(data.bft)),
+    `<tr><td class="rij-label">Windrichting</td>${beperk(data.ri).map(d=>`<td class="wind-cel" contenteditable="true">${windCelHTML(d)}</td>`).join('')}</tr>`
+  ].join('');
+}
+
+/* KNMI-neerslagkans per dag (uit data.weerlab.nl/knmi_verwachting.json) */
+const KNMI_MND={januari:0,februari:1,maart:2,april:3,mei:4,juni:5,juli:6,augustus:7,september:8,oktober:9,november:10,december:11};
+function knmiDatumToDate(datumStr){
+  const m=(datumStr||'').trim().toLowerCase().match(/^(\d{1,2})\s+([a-zëï]+)/);
+  if(!m) return null;
+  const dag=parseInt(m[1]), mnd=KNMI_MND[m[2]];
+  if(mnd==null) return null;
+  const nu=new Date();
+  let d=new Date(nu.getFullYear(), mnd, dag, 12, 0, 0);
+  if((nu-d) > 180*24*3600*1000) d=new Date(nu.getFullYear()+1, mnd, dag, 12, 0, 0);
+  return d;
+}
+function popPerDagKnmi(knmiJ, dagDatums){
+  if(!knmiJ?.dagen) return dagDatums.map(()=>null);
+  return dagDatums.map(target=>{
+    const t=new Date(target); t.setHours(12,0,0,0);
+    for(const d of knmiJ.dagen){
+      const dd=knmiDatumToDate(d.datum);
+      if(dd && dd.toDateString()===t.toDateString()){
+        const m=(d.neerslagkans||'').match(/(\d+)/);
+        return m ? parseInt(m[1]) : null;
+      }
+    }
+    return null;
+  });
+}
+
+/* Tabel-persistentie (vooruitzichten-tabel + headers + datum-status) */
+const TABEL_KEY_PREFIX='wb_rijnmond_tabel_';
+function tabelSaveKey(){ return TABEL_KEY_PREFIX + vandaagISO() + '_' + (document.getElementById('station-sel')?.value||''); }
+function saveTabel(){
+  const tbody=document.getElementById('vooruit-body');
+  const dagen=document.getElementById('vooruit-dagen');
+  if(!tbody || !dagen || !tbody.innerHTML.trim()) return;
+  try{
+    localStorage.setItem(tabelSaveKey(), JSON.stringify({
+      __ts:Date.now(),
+      headers:dagen.innerHTML, body:tbody.innerHTML,
+      status:document.getElementById('data-status')?.textContent||''
+    }));
+  }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    if(!d.headers || !d.body) return false;
+    document.getElementById('vooruit-dagen').innerHTML=d.headers;
+    document.getElementById('vooruit-body').innerHTML=d.body;
+    if(d.status) document.getElementById('data-status').textContent=d.status+' (hersteld)';
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ── Init/laad ── */
+async function laadData(){
+  const nu = new Date();
+  updateOpgesteldHeader();
+  bouwDagKoppen(nu);
+  bouwWaarschuwingen(nu);
+
+  const stationNr = document.getElementById('station-sel').value;
+  const stationNaam = STATIONS[stationNr];
+
+  const bron = document.getElementById('bron-sel')?.value || 'mosmix';
+  if(bron==='weatherpro'){
+    try{
+      const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const keys = Array.from({length:VOORUIT_DAGEN},(_,i)=>ymd(plusDag(nu,i+1)));
+      const q=(document.getElementById('wp-plaats')?.value||'').trim();
+      let city=null, naam=stationNaam, gc=null;
+      if(q){
+        gc=await WeatherProSrc.geocode(q);
+        if(!gc) throw new Error('plaats niet gevonden');
+        naam=gc.naam.split(',')[0];
+        city=await WeatherProSrc.nearestFeedCity(gc.lat,gc.lon).catch(()=>null);
+      } else {
+        city=await WeatherProSrc.feedStation(stationNr).catch(()=>null);
+      }
+      if(city){
+        // Verse app-feed: exact dezelfde dagcijfers als de WeatherPro-app.
+        vulVooruitzichten(WeatherProSrc.dailyFromFeed(city,keys));
+        const opg=city.fetched?new Date(city.fetched).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'}):'';
+        document.getElementById('data-status').textContent =
+          'WeatherPro (app-feed) · '+city.name+(opg?' · opgehaald '+opg:'');
+      } else {
+        // Buiten de feed-lijst: point-forecast (zelfde bron, iets oudere run).
+        const c = gc ? [gc.lat,gc.lon] : (STATION_COORDS[stationNr] || STATION_COORDS[344]);
+        const wp = await WeatherProSrc.fetch(c[0],c[1],{days:VOORUIT_DAGEN+2});
+        vulVooruitzichten(WeatherProSrc.daily(wp,keys));
+        document.getElementById('data-status').textContent =
+          'WeatherPro point-forecast (oudere run dan app) · '+naam;
+      }
+    }catch(e){
+      document.getElementById('data-status').textContent = 'WeatherPro fout: '+e.message;
+    }
+    saveTabel();
+    return;
+  }
+
+  // Parallel: MOSMIX (alle velden) + KNMI-verwachting (neerslagkans per dag)
+  const [mosmixR, knmiJ] = await Promise.all([
+    fetch('https://data.weerlab.nl/mosmix_nl.json?_=' + Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch('https://data.weerlab.nl/knmi_verwachting.json?_=' + Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+  ]);
+
+  // Vooruitzichten lopen vanaf morgen: vijf dagen vooruit.
+  const dagDatums = Array.from({length:VOORUIT_DAGEN},(_,i)=>plusDag(nu,i+1));
+  const popKnmi = popPerDagKnmi(knmiJ, dagDatums);
+
+  if(mosmixR){
+    const j = mosmixR;
+    const dagen = Object.keys(j.data).sort();
+    const vijf = dagen.slice(1,1+VOORUIT_DAGEN);
+    const pick = (fld, dt, st=stationNaam) => j.data[dt]?.[fld]?.[st];
+    const nsk = vijf.map((dt,i)=>{
+      if(popKnmi[i]!=null) return popKnmi[i]; // KNMI heeft prioriteit
+      return formatKansPct(pick('R101',dt));   // anders MOSMIX
+    });
+    vulVooruitzichten({
+      tmax: vijf.map(dt => Math.round(pick('TX',dt) ?? NaN)),
+      tmin: vijf.map(dt => {const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
+      zon:  vijf.map(dt => {const v=pick('SQ',dt); return v==null?'–':Math.round(v)}),
+      nsk,
+      nsm:  vijf.map(dt => {const v=pick('RR',dt); return v==null?'–':v.toFixed(1).replace('.0','')}),
+      bft:  vijf.map(dt => naarBFT(pick('FF',dt))),
+      ri:   vijf.map(dt => pick('DD',dt))
+    });
+    document.getElementById('data-status').textContent =
+      'Laatst bijgewerkt: ' + (j.bijgewerkt||'onbekend') + (popKnmi.some(v=>v!=null)?' · NSK uit KNMI':'');
+  } else {
+    vulVooruitzichten(DEMO_DATA);
+    document.getElementById('data-status').textContent = 'Demo-data (bestand niet gevonden)';
+  }
+  saveTabel();
+}
+
+/* Knop: ververs tabel (overschrijft eigen edits) */
+function herlaadTabel(){
+  if(!confirm('Vooruitzichten-tabel opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadData();
+}
+
+/* Auto-save tabel-cellen bij edit */
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#vooruit-tabel')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
+
+/* Bij stationswissel: pak opgeslagen tabel voor dat station, anders fetch */
+document.getElementById('station-sel').addEventListener('change', ()=>{
+  // Headers/dagkoppen bouwen voor de nieuwe lookup
+  const nu=new Date();
+  updateOpgesteldHeader();
+  bouwDagKoppen(nu);
+  if(!restoreTabel()) laadData();
+});
+function toggleWpPlaats(){
+  const wp = document.getElementById('bron-sel').value==='weatherpro';
+  document.getElementById('wp-plaats-veld').style.display = wp?'':'none';
+}
+document.getElementById('bron-sel').addEventListener('change', ()=>{ toggleWpPlaats(); laadData(); });
+document.getElementById('wp-plaats').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); laadData(); } });
+document.getElementById('wp-plaats').addEventListener('change', ()=>laadData());
+toggleWpPlaats();
+
+/* ── Auto-save (lokaal, per dag + per documentnaam) ── */
+const SAVE_PREFIX='wb_wm_draft_';
+const DOC_LIST_PREFIX='wb_wm_docs_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function docNaam(){ return (document.getElementById('doc-naam')?.value || 'Rijnmond').trim() || 'Rijnmond'; }
+function docSlug(naam){ return naam.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'document'; }
+function docListKey(){ return DOC_LIST_PREFIX + huidigeDatum(); }
+function saveKey(naam=docNaam()){ return SAVE_PREFIX + huidigeDatum() + '_' + docSlug(naam); }
+function gedeeldeSyncBeschikbaar(){ return !!(window.WBSync && WBSync.isEnabled()); }
+async function schrijfGedeeldeDraft(d){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  try{
+    await WBSync.putJson(saveKey(d.docNaam || docNaam()), d);
+    toonSaveStatus(d.__ts, 'Document gedeeld opgeslagen');
+  }catch(e){}
+}
+async function schrijfGedeeldeDocLijst(lijst){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  try{ await WBSync.putJson(docListKey(), lijst); }catch(e){}
+}
+async function haalGedeeldeDocLijst(){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  try{
+    const remote = await WBSync.getJson(docListKey());
+    const remoteLijst = Array.isArray(remote) ? remote : (Array.isArray(remote?.names) ? remote.names : []);
+    if(!remoteLijst.length) return;
+    const merged = [...new Set([...leesDocLijst(), ...remoteLijst].filter(Boolean))];
+    localStorage.setItem(docListKey(), JSON.stringify(merged));
+    vulDocKiezer(merged);
+  }catch(e){}
+}
+async function haalGedeeldeDraft(initieel=false){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  if(document.activeElement && document.activeElement.matches && document.activeElement.matches('[data-save], [contenteditable], input, select, textarea')) return;
+  let lokaal=null;
+  try{ lokaal=JSON.parse(localStorage.getItem(saveKey()) || 'null'); }catch(e){}
+  const lokaleTs=Number(lokaal?.__ts || 0);
+  try{
+    const remote=await WBSync.getJson(saveKey());
+    const remoteTs=Number(remote?.__ts || 0);
+    if(remoteTs > lokaleTs + 500){
+      localStorage.setItem(saveKey(), JSON.stringify(remote));
+      if(remote.docNaam) registreerDocNaam(remote.docNaam);
+      restoreDraft();
+      toonSaveStatus(remoteTs, initieel ? 'Hersteld uit gedeelde opslag' : 'Bijgewerkt vanaf andere laptop');
+    } else if(lokaleTs && lokaleTs > remoteTs + 500){
+      await WBSync.putJson(saveKey(), lokaal);
+    } else if(initieel && !remoteTs && !lokaleTs && START_DOCUMENT.doc){
+      saveDraft();
+    }
+  }catch(e){}
+}
+function leesStartDocument(){
+  const params=new URLSearchParams(location.search);
+  const datum=params.get('datum') || params.get('date') || '';
+  const doc=(params.get('doc') || params.get('naam') || '').trim();
+  const plaats=(params.get('plaats') || '').trim();
+  const eventType=params.get('eventType') || '';
+  return {
+    datum:/^\d{4}-\d{2}-\d{2}$/.test(datum) ? datum : '',
+    doc,
+    plaats,
+    eventId:(params.get('eventId') || '').trim(),
+    eventType:eventType === 'uur' ? 'uur' : 'wm'
+  };
+}
+function syncEventDocumentKoppeling(){
+  if(!START_DOCUMENT?.eventId) return;
+  const naam=docNaam();
+  try{
+    const events=JSON.parse(localStorage.getItem('wb_eventen_v1') || '[]');
+    if(!Array.isArray(events)) throw new Error('events geen lijst');
+    const veld=START_DOCUMENT.eventType === 'uur' ? 'hourlyDoc' : 'wmDoc';
+    if(!naam) return;
+    const oud=START_DOCUMENT.doc || '';
+    let aangepast=false;
+    events.forEach(ev=>{
+      if(!ev) return;
+      const zelfdeEvent=ev.id===START_DOCUMENT.eventId;
+      const zelfdeDocument=oud && ev[veld]===oud && (!START_DOCUMENT.datum || ev.date===START_DOCUMENT.datum);
+      if(!zelfdeEvent && !zelfdeDocument) return;
+      if(ev[veld]===naam) return;
+      ev[veld]=naam;
+      ev.updated=Date.now();
+      aangepast=true;
+    });
+    if(aangepast){
+      START_DOCUMENT.doc=naam;
+      localStorage.setItem('wb_eventen_v1', JSON.stringify(events));
+    }
+  }catch(e){}
+  if(gedeeldeSyncBeschikbaar() && naam){
+    WBSync.updateSharedEventDocLink({
+      eventId: START_DOCUMENT.eventId,
+      eventType: START_DOCUMENT.eventType,
+      datum: START_DOCUMENT.datum,
+      oldDoc: START_DOCUMENT.doc || '',
+      newDoc: naam
+    }).then(()=>{ START_DOCUMENT.doc=naam; }).catch(()=>{});
+  }
+}
+function leesDocLijst(){
+  try{ return JSON.parse(localStorage.getItem(docListKey()) || '[]').filter(Boolean); }catch(e){ return []; }
+}
+function schrijfDocLijst(lijst){
+  const uniek=[...new Set(lijst.filter(Boolean))];
+  try{ localStorage.setItem(docListKey(), JSON.stringify(uniek)); }catch(e){}
+  schrijfGedeeldeDocLijst(uniek);
+  vulDocKiezer(uniek);
+}
+function registreerDocNaam(naam=docNaam()){
+  const lijst=leesDocLijst();
+  if(!lijst.includes(naam)) lijst.push(naam);
+  schrijfDocLijst(lijst);
+}
+function vulDocKiezer(lijst=leesDocLijst()){
+  const sel=document.getElementById('doc-kies'); if(!sel) return;
+  const huidig=docNaam();
+  sel.innerHTML='';
+  const namen=lijst.length?lijst:[huidig];
+  namen.forEach(naam=>{
+    const opt=document.createElement('option');
+    opt.value=naam; opt.textContent=naam;
+    sel.appendChild(opt);
+  });
+  if([...sel.options].some(o=>o.value===huidig)) sel.value=huidig;
+}
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    const key = el.getAttribute('data-save');
+    if(el.matches('input, textarea, select')) d[key] = el.value;
+    else d[key] = el.innerHTML;
+  });
+  const p=document.getElementById('plaats-in'); if(p) d.plaats=p.value;
+  const wt=document.getElementById('weergave-type'); if(wt) d.weergaveType=wt.value;
+  d.toonVandaag=!!document.getElementById('toon-vandaag')?.checked;
+  d.toonMorgen=!!document.getElementById('toon-morgen')?.checked;
+  d.toonKomende=!!document.getElementById('toon-komende')?.checked;
+  d.toonDaarna=!!document.getElementById('toon-daarna')?.checked;
+  d.docNaam=docNaam();
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); registreerDocNaam(d.docNaam); syncEventDocumentKoppeling(); toonSaveStatus(d.__ts); schrijfGedeeldeDraft(d); }catch(e){}
+}
+function updateTekstSecties(){
+  const koppels=[
+    ['toon-vandaag','sec-vandaag'],
+    ['toon-morgen','sec-morgen'],
+    ['toon-komende','sec-komende'],
+    ['toon-daarna','sec-daarna']
+  ];
+  koppels.forEach(([checkId,secId])=>{
+    const check=document.getElementById(checkId);
+    const sec=document.getElementById(secId);
+    if(sec && check) sec.style.display=check.checked?'':'none';
+  });
+}
+function syncVooruitPlaats(){
+  const p=(document.getElementById('plaats-in')?.value || '').split(',')[0].trim();
+  const vp=document.querySelector('.vooruit-plaats');
+  if(vp) vp.textContent=p;
+}
+function leegForm(){
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    if(el.matches('input, textarea')) el.value='';
+    else if(el.matches('select.status-sel')){ el.value='GEEN'; updateStatusKleur(el); }
+    else if(el.matches('select')) el.selectedIndex=0;
+    else el.innerHTML='';
+  });
+  const p=document.getElementById('plaats-in'); if(p) p.value='Rijnmond';
+  const wt=document.getElementById('weergave-type'); if(wt) wt.value='Regio';
+  ['toon-vandaag','toon-morgen','toon-komende','toon-daarna'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=true; });
+  const dk=document.querySelector('[data-save="daarna-kop"]'); if(dk) dk.textContent='Daarna';
+  const vk=document.querySelector('[data-save="vandaag-kop"]'); if(vk) vk.textContent='Vandaag';
+  const mk=document.querySelector('[data-save="morgen-kop"]'); if(mk) mk.textContent='Morgen';
+  const kk=document.querySelector('[data-save="komende-kop"]'); if(kk) kk.textContent='Komende dagen';
+  updateTekstSecties();
+  syncVooruitPlaats();
+  updateOpgesteldHeader();
+}
+function restoreDraft(){
+  try{
+    vulDocKiezer();
+    let j=localStorage.getItem(saveKey());
+    // Migratie: oude key zonder docnaam-slug overnemen voor default Rijnmond
+    if(!j && docNaam()==='Rijnmond'){
+      const oud=localStorage.getItem(SAVE_PREFIX+huidigeDatum());
+      if(oud){ j=oud; try{ localStorage.setItem(saveKey(), oud); registreerDocNaam('Rijnmond'); localStorage.removeItem(SAVE_PREFIX+huidigeDatum()); }catch(e){} }
+    }
+    if(!j){
+      leegForm();
+      if(START_DOCUMENT.plaats){
+        const p=document.getElementById('plaats-in');
+        if(p) p.value=START_DOCUMENT.plaats;
+        syncVooruitPlaats();
+      }
+      document.getElementById('save-status').textContent='💾 Nieuw formulier · '+huidigeDatum();
+      return;
+    }
+    const d=JSON.parse(j);
+    if(d.docNaam && document.getElementById('doc-naam')) document.getElementById('doc-naam').value=d.docNaam;
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(el.matches('input, textarea, select')){
+        if(d[k]!=null) el.value=d[k];
+      } else {
+        if(d[k]!=null) el.innerHTML=d[k]; else el.innerHTML='';
+      }
+      if(el.tagName==='SELECT' && el.classList.contains('status-sel')) updateStatusKleur(el);
+    });
+    // Migratie: oude data-save="verwachting" hield de "komende dagen" tekst
+    if(d.verwachting != null && (d.komende == null || d.komende === '')){
+      const kEl=document.querySelector('[data-save="komende"]');
+      if(kEl) kEl.innerHTML=d.verwachting;
+    }
+    const p=document.getElementById('plaats-in'); if(p) p.value=(d.plaats!=null?d.plaats:'Rijnmond');
+    const wt=document.getElementById('weergave-type'); if(wt) wt.value=(d.weergaveType!=null?d.weergaveType:'Regio');
+    document.getElementById('toon-vandaag').checked = d.toonVandaag!=null ? !!d.toonVandaag : true;
+    document.getElementById('toon-morgen').checked  = d.toonMorgen!=null  ? !!d.toonMorgen  : true;
+    document.getElementById('toon-komende').checked = d.toonKomende!=null ? !!d.toonKomende : true;
+    document.getElementById('toon-daarna').checked  = d.toonDaarna!=null  ? !!d.toonDaarna  : true;
+    const dkEl=document.querySelector('[data-save="daarna-kop"]');
+    if(dkEl && (d['daarna-kop']==null || d['daarna-kop']==='')) dkEl.textContent='Daarna';
+    const vkEl=document.querySelector('[data-save="vandaag-kop"]');
+    if(vkEl && (d['vandaag-kop']==null || d['vandaag-kop']==='')) vkEl.textContent='Vandaag';
+    const mkEl=document.querySelector('[data-save="morgen-kop"]');
+    if(mkEl && (d['morgen-kop']==null || d['morgen-kop']==='')) mkEl.textContent='Morgen';
+    const kkEl=document.querySelector('[data-save="komende-kop"]');
+    if(kkEl && (d['komende-kop']==null || d['komende-kop']==='')) kkEl.textContent='Komende dagen';
+    /* Migratie: strip "De weersverwachting voor " prefix uit opgeslagen koppen */
+    ['vandaag-kop','morgen-kop','komende-kop','daarna-kop'].forEach(key=>{
+      const el=document.querySelector(`[data-save="${key}"]`);
+      if(el && el.textContent.startsWith('De weersverwachting voor ')){
+        const rest=el.textContent.slice('De weersverwachting voor '.length);
+        el.textContent=rest.charAt(0).toUpperCase()+rest.slice(1);
+      }
+    });
+    updateTekstSecties();
+    syncVooruitPlaats();
+    updateOpgesteldHeader();
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function nieuwDocument(){
+  saveDraft();
+  const naam=prompt('Naam voor het nieuwe document:', document.getElementById('plaats-in')?.value || 'Nieuw document');
+  if(!naam) return;
+  document.getElementById('doc-naam').value=naam.trim();
+  registreerDocNaam(docNaam());
+  leegForm();
+  const p=document.getElementById('plaats-in'); if(p) p.value=naam.trim();
+  saveDraft();
+  restoreDraft();
+}
+function toonSaveStatus(ts,voorvoegsel='Document opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+/* ── Koptekst-grootte ── */
+const KOP_KEY='wb_rijnmond_kopscale';
+function zetKopScale(v){
+  document.body.style.setProperty('--kop-scale', v);
+  try{ localStorage.setItem(KOP_KEY, v); }catch(e){}
+}
+(function herstelKopScale(){
+  try{
+    const v=localStorage.getItem(KOP_KEY);
+    if(v){
+      document.body.style.setProperty('--kop-scale', v);
+      const sel=document.getElementById('kop-scale-sel');
+      if(sel) sel.value=v;
+    }
+  }catch(e){}
+})();
+
+async function wisDraft(){
+  if(!confirm('Opgeslagen document "'+docNaam()+'" van '+huidigeDatum()+' wissen?')) return;
+  const volgendeLijst=leesDocLijst().filter(n=>n!==docNaam());
+  localStorage.removeItem(saveKey());
+  try{ localStorage.setItem(docListKey(), JSON.stringify(volgendeLijst)); }catch(e){}
+  if(gedeeldeSyncBeschikbaar()){
+    await Promise.all([
+      WBSync.deleteKey(saveKey()).catch(()=>{}),
+      WBSync.putJson(docListKey(), volgendeLijst).catch(()=>{})
+    ]);
+  }
+  location.reload();
+}
+let saveTimer;
+let hasPendingSave=false;
+function debSave(){ hasPendingSave=true; clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ hasPendingSave=false; saveDraft(); },600); }
+function saveDraftNow(){
+  if(!hasPendingSave) return;
+  hasPendingSave=false;
+  clearTimeout(saveTimer);
+  saveDraft();
+}
+document.addEventListener('input', e=>{
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type') debSave();
+});
+document.addEventListener('blur', e=>{
+  // Wind-cel: parse letter en herrender pijl op de juiste rotatie
+  if(e.target.matches && e.target.matches('td.wind-cel')){
+    const deg=parseRichting(e.target.textContent);
+    if(deg!=null) e.target.innerHTML=windCelHTML(deg);
+    saveTabel();
+  }
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in' || e.target.id==='weergave-type' || e.target.id==='doc-naam') saveDraft();
+},true);
+window.addEventListener('pagehide', saveDraftNow);
+window.addEventListener('beforeunload', saveDraftNow);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') saveDraftNow();
+});
+document.getElementById('weergave-type').addEventListener('change', saveDraft);
+['toon-vandaag','toon-morgen','toon-komende','toon-daarna'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    updateTekstSecties();
+    saveDraft();
+  });
+});
+document.querySelectorAll('select.kop-preset').forEach(sel=>{
+  sel.addEventListener('change', ()=>{
+    const targetKey=sel.dataset.target;
+    const target=document.querySelector(`[data-save="${targetKey}"]`);
+    if(!target) return;
+    const v=sel.value;
+    if(v==='__custom__'){
+      target.focus();
+      const r=document.createRange(); r.selectNodeContents(target);
+      const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    } else if(v==='__weekdag__' || v==='__weekdag1__'){
+      const offset = v==='__weekdag1__' ? 1 : 0;
+      const iso = (document.getElementById('doc-datum')?.value) || vandaagISO();
+      const [y,m,dd] = iso.split('-').map(Number);
+      const base = new Date(y, m-1, dd);
+      const d = plusDag(base, offset);
+      const dn = DAG[d.getDay()]; target.textContent = dn.charAt(0).toUpperCase() + dn.slice(1);
+      saveDraft();
+    } else if(v){
+      target.textContent=v;
+      saveDraft();
+    }
+    sel.value='';
+  });
+});
+document.querySelectorAll('.sectie-sluit').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const check=document.getElementById(btn.dataset.toggleTarget);
+    if(check) check.checked=false;
+    updateTekstSecties();
+    saveDraft();
+  });
+});
+document.getElementById('plaats-in').addEventListener('input', syncVooruitPlaats);
+document.getElementById('doc-kies').addEventListener('change', e=>{
+  const nieuw=e.target.value;
+  saveDraft();
+  document.getElementById('doc-naam').value=nieuw;
+  restoreDraft();
+  haalGedeeldeDraft(true);
+  syncEventDocumentKoppeling();
+});
+document.getElementById('doc-naam').addEventListener('change', ()=>{
+  registreerDocNaam(docNaam());
+  vulDocKiezer();
+  saveDraft();
+});
+
+/* ── Tab/focus in tabel-cel: bestaande waarde direct geselecteerd zodat typen overschrijft ── */
+document.addEventListener('focus', e=>{
+  const td = e.target;
+  if(!td.matches) return;
+  if(!td.matches('#vooruit-tabel td[contenteditable="true"], #waarsch-tabel td[contenteditable="true"]')) return;
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(td);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}, true);
+
+const START_DOCUMENT = leesStartDocument();
+document.getElementById('doc-datum').value = START_DOCUMENT.datum || vandaagISO();
+vulDocKiezer();
+if(START_DOCUMENT.doc){
+  document.getElementById('doc-naam').value = START_DOCUMENT.doc;
+  registreerDocNaam(docNaam());
+  syncEventDocumentKoppeling();
+}
+vulDocKiezer();
+document.getElementById('doc-datum').addEventListener('change', ()=>{
+  vulDocKiezer();
+  // Behoud de huidige documentnaam als die op de nieuwe datum ook bestaat;
+  // val anders terug op het eerste document van die datum.
+  const lijst=leesDocLijst();
+  const huidig=docNaam();
+  document.getElementById('doc-naam').value = lijst.includes(huidig) ? huidig : (lijst[0] || 'Rijnmond');
+  restoreDraft();
+  updateOpgesteldHeader();
+  haalGedeeldeDocLijst();
+  haalGedeeldeDraft(true);
+});
+
+restoreDraft();
+// Eerst headers + datum/waarschuwingen opbouwen, daarna tabel: hersteld of vers
+(function initTabel(){
+  const nu=new Date();
+  updateOpgesteldHeader();
+  bouwDagKoppen(nu);
+  bouwWaarschuwingen(nu);
+  if(!restoreTabel()) laadData();
+})();
+haalGedeeldeDocLijst();
+haalGedeeldeDraft(true);
+if(window.WBSync){
+  WBSync.initToggle({
+    onEnable(){
+      haalGedeeldeDocLijst();
+      haalGedeeldeDraft(true);
+    },
+    onDisable(){
+      toonSaveStatus(Date.now(), 'Alleen lokaal opgeslagen');
+    }
+  });
+}
+// Sync-interval: 5 min i.p.v. 30s (Workers-quota sparen); focus-event triggert sneller.
+setInterval(()=>{ if(document.visibilityState === 'visible') haalGedeeldeDraft(false); }, 300000);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') haalGedeeldeDraft(false);
+});
+document.getElementById('opgesteld-tijd').addEventListener('input', updateOpgesteldHeader);
+document.getElementById('opgesteld-tijd').addEventListener('change', ()=>{ updateOpgesteldHeader(); saveDraft(); });
+
+/* ── Terug naar menu (werkt in iframe én standalone) ── */
+function gaTerug(){
+  if(window.WBDocument) return WBDocument.goHome();
+  window.location.href = window.self !== window.top ? 'weerbewaking.html' : 'index.html#weerbewaking';
+}
+
+/* ── PDF-export via html2pdf.js ── */
+function exporteerPDF(){
+  // 'Opgesteld op…' verversen: zonder handmatige tijd toont de PDF anders de laadtijd van de pagina
+  updateOpgesteldHeader();
+  // cloneNode kopieert niet altijd de live dropdown-keuze. Schrijf de actuele
+  // waarden eerst naar de option-attributen, zodat GEEL/ORANJE/ROOD in PDF klopt.
+  if(window.WBExport) WBExport.syncSelectValues(document);
+  const wrapper = document.createElement('div');
+  wrapper.style.background = 'white';
+  wrapper.style.width = '794px';
+  document.querySelectorAll('.pagina').forEach(p => {
+    const c = p.cloneNode(true);
+    c.querySelectorAll('.no-pdf').forEach(e=>e.remove());
+    c.style.boxShadow = 'none';
+    c.style.margin = '0';
+    c.style.borderRadius = '0';
+    c.style.maxWidth = 'none';
+    c.style.padding = '10mm 16mm 8mm';
+    // Compact: kleinere logo's, krappere kop-margins, minimale tekstvak-padding
+    const hdr=c.querySelector('.doc-header');
+    if(hdr){
+      hdr.style.paddingBottom='4px';
+      const ll=hdr.querySelector('.logo-l'); if(ll) ll.style.height='130px';
+      const lr=hdr.querySelector('.logo-r'); if(lr) lr.style.height='70px';
+    }
+    const opg=c.querySelector('.doc-opgesteld'); if(opg) opg.style.marginTop='4px';
+    c.querySelectorAll('h2.kop').forEach(h=>{ h.style.margin='10px 0 4px'; });
+    c.querySelectorAll('.tekstvak').forEach(t=>{
+      t.style.border='none';t.style.background='white';t.style.padding='4px 0';
+      t.style.minHeight='auto';
+    });
+    const ft=c.querySelector('.doc-footer'); if(ft) ft.style.marginTop='14px';
+    c.querySelectorAll('.plaats-blok').forEach(blok=>{
+      const sel=blok.querySelector('#weergave-type');
+      if(sel){
+        const span=document.createElement('span');
+        span.className='label';
+        span.textContent=sel.value || 'Plaats';
+        sel.replaceWith(span);
+      }
+    });
+    c.querySelectorAll('input.veld').forEach(inp=>{
+      const span=document.createElement('span');
+      span.className='veld';
+      span.textContent=inp.value;
+      span.style.cssText='flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#d95a00;background:white;border:1px solid #f0c08a;border-radius:3px;padding:5px 10px';
+      inp.replaceWith(span);
+    });
+    c.querySelectorAll('select.status-sel').forEach(s=>{
+      const span=document.createElement('span');
+      span.className='waarsch-status '+{GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'}[s.value];
+      span.textContent=s.value;
+      s.replaceWith(span);
+    });
+    c.querySelectorAll('[contenteditable]').forEach(e=>e.removeAttribute('contenteditable'));
+    wrapper.appendChild(c);
+  });
+  // Bestandsnaam: documentnaam + documentdatum, zonder tijd
+  const naam = exportNaam(document.getElementById('plaats-in')?.value, docNaam());
+  const datum = huidigeDatum();
+  const opt = {
+    margin: 0,
+    filename: `${naam}_${datum}.pdf`,
+    image: { type:'jpeg', quality:0.98 },
+    html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', scrollY: -window.scrollY },
+    jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+    pagebreak: { mode:['css','legacy'], before:'.pagina-2' }
+  };
+  const pdfWorker = window.WBExport
+    ? WBExport.html2pdfSave(wrapper,opt)
+    : Promise.resolve(html2pdf().set(opt).from(wrapper).save());
+  pdfWorker.catch(err=>console.warn('PDF-export mislukt:',err));
+}
+</script>
+
+</body>
+</html>

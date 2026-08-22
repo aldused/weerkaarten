@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOSMIX uurlijks per plaats · weerlab.nl</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#eef3f9;color:#1a2a44;min-height:100vh}
+.header{background:linear-gradient(135deg,#003366,#0a4f96);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.header .titel{font-size:16px;font-weight:700}
+.header .sub{font-size:11px;color:#a8c8e8}
+.demo-badge{background:#d4a843;color:#000;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.06em}
+
+.toolbar{background:#fff;border-bottom:1px solid #d8e0ea;padding:12px 20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:10;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.veld{display:flex;flex-direction:column;gap:4px}
+.veld label{font-size:10px;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:0.05em}
+.veld select{padding:7px 10px;border:1px solid #c0cedd;border-radius:8px;font-size:13px;min-width:200px;background:#fff;font-family:inherit;color:#1a2a44;cursor:pointer}
+.veld select:focus{outline:none;border-color:#4a90c4;box-shadow:0 0 0 3px rgba(74,144,196,0.15)}
+.veld select.nl{border-left:3px solid #ff6b35}
+.veld select.be{border-left:3px solid #fdd835}
+.veld select.vergelijk{border-left:3px solid #9333ea}
+
+.knop{padding:8px 14px;border:1px solid #c0cedd;border-radius:8px;font-size:12px;font-weight:600;background:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.knop:hover{background:#eaf2fb;border-color:#4a90c4}
+.knop.primary{background:#003366;color:#fff;border-color:#003366}
+.knop.primary:hover{background:#0a4f96}
+.acties{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+
+.container{max-width:1180px;margin:18px auto;padding:0 16px 60px}
+
+.plaats-kop{background:#fff;border:1px solid #d8e0ea;border-radius:12px;padding:16px 20px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap}
+.plaats-naam{font-size:24px;font-weight:700;color:#003366}
+.plaats-sub{font-size:12px;color:#6a7a92;margin-top:2px}
+.plaats-meta{font-size:11px;color:#7a8aa0;text-align:right}
+.plaats-meta b{color:#1a2a44}
+
+.dag-blok{margin-bottom:16px;background:#fff;border:1px solid #d8e0ea;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.dag-header{background:linear-gradient(135deg,#003366,#0a4f96);color:#fff;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dag-titel{font-size:14px;font-weight:700}
+.dag-extremen{display:flex;gap:16px;font-size:12px;color:#cfe0f2}
+.dag-extremen b{color:#fff;font-size:13px}
+
+.dag-tekst{padding:10px 18px;background:#f7fafd;border-bottom:1px solid #eef2f7;font-size:13px;line-height:1.55;color:#1a2a44}
+.dag-tekst b{color:#003366}
+.dag-tekst .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;margin-right:6px;vertical-align:1px}
+.dag-tekst .tag-zon{background:#fff3cd;color:#a16207}
+.dag-tekst .tag-wolk{background:#e5ebf2;color:#3a5470}
+.dag-tekst .tag-regen{background:#dbeafe;color:#1e40af}
+.dag-tekst .tag-onweer{background:#fee2e2;color:#991b1b}
+.dag-tekst .tag-wind{background:#fef3c7;color:#78350f}
+.dag-grafiek{padding:10px 12px 6px;background:#fafbfd;border-bottom:1px solid #eef2f7}
+.dag-grafiek svg{width:100%;height:120px;display:block}
+
+table.uurtabel{width:100%;border-collapse:collapse;font-size:12px}
+table.uurtabel th{background:#f3f6fb;color:#3a5470;font-weight:600;text-align:center;padding:7px 4px;border-bottom:1px solid #d8e0ea;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap}
+table.uurtabel td{text-align:center;padding:5px 3px;border-bottom:1px solid #eef2f7;white-space:nowrap}
+table.uurtabel tr:hover td{background:#f7fafd}
+table.uurtabel tr.nu td{background:#fff9e6}
+table.uurtabel tr.nu td:first-child{font-weight:700;color:#d97706}
+table.uurtabel tr.schemer td{background:#f5f7fb}
+table.uurtabel tr.schemer:hover td{background:#eef2f7}
+
+.cel-uur{color:#3a5470;font-weight:600;width:52px}
+.cel-t{font-weight:700;color:#fff;border-radius:4px;padding:2px 6px;min-width:42px;display:inline-block;font-size:12px}
+.cel-td{color:#1a7a4a;font-weight:500}
+.cel-rv{color:#6a7a92}
+.cel-wind{display:inline-flex;align-items:center;gap:4px;color:#3a5470}
+.cel-wind .bft{background:#eaf2fb;border:1px solid #c0cedd;border-radius:4px;padding:1px 5px;font-weight:700;font-size:11px;min-width:18px;display:inline-block}
+.cel-stoot{color:#b45309;font-weight:600}
+.cel-rr{color:#0369a1;font-weight:600}
+.cel-rr.droog{color:#cbd5e0}
+.cel-rr.spoor{color:#7dd3fc;font-weight:700}
+.cel-bw{font-size:11px;font-weight:600;color:#4a5568}
+.cel-vv{color:#4a5568}
+.cel-onweer{color:#c62828;font-weight:700}
+
+.kolomgroep-wolk{background:#eaf2fb !important}
+th.kolomgroep-wolk{border-left:1px solid #d8e0ea;border-right:1px solid #d8e0ea}
+
+.legenda{background:#fff;border:1px solid #d8e0ea;border-radius:10px;padding:12px 18px;margin-top:14px;font-size:11px;color:#4a5568;line-height:1.8}
+.legenda strong{color:#1a2a44}
+.legenda code{background:#eef2f7;padding:1px 5px;border-radius:3px;font-family:monospace}
+.legenda .wolk-s{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;margin:0 3px}
+
+.notitie{background:#fff8dc;border:1px solid #e5d3a0;color:#664d03;padding:10px 14px;border-radius:10px;font-size:12px;margin-bottom:16px;line-height:1.5}
+.status{color:#6a7a92;font-size:12px;padding:30px 20px;text-align:center}
+.copyright{text-align:center;margin-top:16px;padding:14px 10px;font-size:11px;color:#6a7a92;border-top:1px solid #d8e0ea}
+.copyright a{color:#4a90c4;text-decoration:none}
+.copyright a:hover{text-decoration:underline}
+.copyright strong{color:#1a2a44}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="titel">MOSMIX uurlijks per plaats <span class="demo-badge">NIEUW</span></div>
+    <div class="sub">DWD MOSMIX_L · uurlijks tot ~73u, daarna 3-uurlijks tot dag 10</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="veld">
+    <label>Nederland</label>
+    <select id="sel-nl" class="nl"></select>
+  </div>
+  <div class="veld">
+    <label>België</label>
+    <select id="sel-be" class="be"></select>
+  </div>
+  <div class="veld">
+    <label>Vergelijk met</label>
+    <select id="sel-vergelijk" class="vergelijk"><option value="">— geen —</option></select>
+  </div>
+  <div class="veld">
+    <label>Dag voor download</label>
+    <select id="sel-dag"><option value="">Alle dagen</option></select>
+  </div>
+  <div class="acties">
+    <button class="knop" id="btn-csv">⬇ CSV</button>
+    <button class="knop primary" id="btn-png">⬇ PNG</button>
+  </div>
+</div>
+
+<div class="container" id="hoofd">
+  <div class="notitie">
+    <strong>Live MOSMIX-data van DWD.</strong> Kies een plaats uit de NL- of BE-dropdown. Per dag zie je een grafiek (temperatuur + neerslag) en een uurlijkse tabel met dauwpunt, vochtigheid, wind + windstoot, neerslag, bewolking (laag/midden/hoog) en zicht. Nachtelijke uren zijn lichter gemarkeerd. Download als CSV of PNG.
+  </div>
+
+  <div id="plaats-kop" class="plaats-kop" style="display:none"></div>
+  <div id="uurtabellen"></div>
+  <div id="status" class="status">Data laden…</div>
+
+  <div class="legenda">
+    <strong>Kolommen:</strong>
+    <code>T</code> temperatuur (°C) · <code>Td</code> dauwpunt (°C) · <code>RV</code> relatieve vochtigheid (%) ·
+    <code>Wind</code> richting + Beaufort · <code>Stoot</code> km/u · <code>Neerslag</code> mm in afgelopen uur ·
+    <code>Zicht</code> km · <code>Zon</code> minuten in afgelopen uur ·
+    <code>⚡</code> kans op onweer (%).
+    <br>
+    <strong>Neerslag:</strong> <code>–</code> geen data · <code>0</code> droog · <code>·</code> spoor (&lt;0,1 mm) · getal in blauw = mm/u · donkerblauwe achtergrond = zwaardere bui.
+    <br>
+    <strong>Bewolking:</strong>
+    <span class="wolk-s" style="background:#8ba8d4"></span>Laag (onder 2 km)
+    <span class="wolk-s" style="background:#b4c9e0"></span>Midden (2–7 km)
+    <span class="wolk-s" style="background:#dde5ef"></span>Hoog (boven 7 km)
+    &nbsp;· waarden in % dekking.
+  </div>
+
+  <div class="copyright">
+    © <strong>weerlab.nl</strong> · Data: <a href="https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/" target="_blank" rel="noopener">DWD MOSMIX_L</a>
+    · Voorspelling, geen meting · <span id="cr-run">—</span>
+  </div>
+</div>
+
+<script>
+// ── Helpers ──
+const nl_dagen = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+const nl_maanden = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+// FF is in km/h (al geconverteerd door script). Bft-grenzen in km/h:
+function kmh_to_bft(kmh){
+  const v=[1,5,11,19,28,38,49,61,74,88,102,117]; // bovengrens per Bft
+  if (kmh==null) return null;
+  for(let b=0;b<v.length;b++) if(kmh<=v[b]) return b; return 12;
+}
+function bft_kleur(b){ return ["#d4e4f2","#d4e4f2","#d4e4f2","#c8e6c9","#a5d6a7","#fff59d","#ffcc80","#ffab91","#ef9a9a","#e57373","#d32f2f","#b71c1c","#7b1fa2"][Math.min(b,12)]; }
+function windpijl(dd){ if (dd==null) return ""; return ["↓","↙","←","↖","↑","↗","→","↘"][Math.round(dd/45)%8]; }
+function windrichting(dd){ if (dd==null) return ""; return ["N","NO","O","ZO","Z","ZW","W","NW"][Math.round(dd/45)%8]; }
+function t_kleur(t){
+  if (t==null) return "#9aa4b2";
+  if(t<-5) return "#1565c0"; if(t<0) return "#42a5f5"; if(t<5) return "#66bb6a";
+  if(t<10) return "#9ccc65"; if(t<15) return "#d4e157"; if(t<20) return "#ffca28";
+  if(t<25) return "#ff9800"; if(t<30) return "#f4511e"; return "#c62828";
+}
+function bewolkingCel(pct, laag){
+  if (pct==null) return '<div style="color:#bbc5d0">–</div>';
+  const bg = laag==="laag" ? `rgba(139,168,212,${Math.max(0.10,pct/100)})`
+          : (laag==="mid"  ? `rgba(180,201,224,${Math.max(0.10,pct/100)})`
+          :                  `rgba(221,229,239,${Math.max(0.10,pct/100)})`);
+  return `<div style="background:${bg};padding:2px 4px;border-radius:3px;color:${pct>60?'#1a2a44':'#4a5568'};font-weight:600;">${pct}</div>`;
+}
+
+// ── Data laden ──
+let UURLIJKS_NL = null, UURLIJKS_BE = null;
+let STATIONS_NL = [], STATIONS_BE = [];
+
+async function laadData() {
+  const [nl, be] = await Promise.all([
+    fetch("https://data.weerlab.nl/mosmix_uurlijks_nl.json?cb=" + Date.now()).then(r => r.json()),
+    fetch("https://data.weerlab.nl/mosmix_uurlijks_be.json?cb=" + Date.now()).then(r => r.json()),
+  ]);
+  UURLIJKS_NL = nl;
+  UURLIJKS_BE = be;
+  // Stationslijsten uit data zelf (sorted alfabetisch, alleen als we data hebben)
+  STATIONS_NL = Object.keys(nl.data).sort((a,b)=>a.localeCompare(b,'nl'));
+  STATIONS_BE = Object.keys(be.data).sort((a,b)=>a.localeCompare(b,'nl'));
+}
+
+function getBron(naam) {
+  if (UURLIJKS_NL && naam in UURLIJKS_NL.data) return {bron:UURLIJKS_NL, land:"NL"};
+  if (UURLIJKS_BE && naam in UURLIJKS_BE.data) return {bron:UURLIJKS_BE, land:"BE"};
+  return null;
+}
+
+// ── Automatische dagtekst ──
+function genereerDagtekst(rij) {
+  if (!rij.length) return "";
+  const Ts = rij.map(r=>r.T).filter(v=>v!=null);
+  if (!Ts.length) return "";
+  const Tmax = Math.max(...Ts), Tmin = Math.min(...Ts);
+  const TmaxIdx = rij.findIndex(r => r.T === Tmax);
+  const TminIdx = rij.findIndex(r => r.T === Tmin);
+  const TmaxUur = rij[TmaxIdx].uur, TminUur = rij[TminIdx].uur;
+
+  // Ochtend-temperatuur (6-12u) vs middag (12-18u)
+  const ochtendTs = rij.filter(r => r.uur>=6 && r.uur<12).map(r=>r.T).filter(v=>v!=null);
+  const middagTs = rij.filter(r => r.uur>=12 && r.uur<18).map(r=>r.T).filter(v=>v!=null);
+  const ochtendT = ochtendTs.length ? Math.max(...ochtendTs) : null;
+  const middagT = middagTs.length ? Math.max(...middagTs) : null;
+
+  // Bewolking-categorisering
+  const neffs = rij.filter(r => r.uur>=8 && r.uur<20).map(r=>r.neff).filter(v=>v!=null);
+  const neffGem = neffs.length ? neffs.reduce((a,b)=>a+b,0)/neffs.length : null;
+  let bewTag = "", bewWoord = "";
+  if (neffGem != null) {
+    if (neffGem < 25) { bewTag = '<span class="tag tag-zon">☀ Zonnig</span>'; bewWoord = "zonnig"; }
+    else if (neffGem < 50) { bewTag = '<span class="tag tag-zon">🌤 Halfbewolkt</span>'; bewWoord = "halfbewolkt"; }
+    else if (neffGem < 75) { bewTag = '<span class="tag tag-wolk">⛅ Bewolkt</span>'; bewWoord = "overwegend bewolkt"; }
+    else { bewTag = '<span class="tag tag-wolk">☁ Zwaar bewolkt</span>'; bewWoord = "zwaar bewolkt"; }
+  }
+
+  // Neerslag: onset, einde, totaal
+  const rrUren = rij.map((r,i) => (r.rr!=null && r.rr>=0.1) ? i : -1).filter(i => i>=0);
+  const rrTot = rij.reduce((s,r)=>s+(r.rr||0), 0);
+  let regenDeel = "";
+  let regenTag = "";
+  if (rrUren.length) {
+    const onset = rij[rrUren[0]].uur;
+    const einde = rij[rrUren[rrUren.length-1]].uur;
+    const peak = Math.max(...rij.filter((_,i)=>rrUren.includes(i)).map(r=>r.rr));
+    const zwaar = peak >= 3 ? "flinke buien" : peak >= 1 ? "buien" : "lichte regen";
+    regenTag = `<span class="tag tag-regen">🌧 ${rrTot.toFixed(1)} mm</span>`;
+    if (rrUren.length === 1) {
+      regenDeel = `rond ${String(onset).padStart(2,'0')} uur een buitje`;
+    } else if (einde - onset <= 4) {
+      regenDeel = `${zwaar} tussen ${String(onset).padStart(2,'0')} en ${String(einde).padStart(2,'0')} uur`;
+    } else if (onset < 6) {
+      regenDeel = `${zwaar} vanaf de nacht, afnemend na ${String(einde).padStart(2,'0')} uur`;
+    } else if (onset < 12) {
+      regenDeel = `${zwaar} vanaf de ochtend`;
+    } else if (onset < 18) {
+      regenDeel = `${zwaar} vanaf de middag`;
+    } else {
+      regenDeel = `${zwaar} vanaf de avond`;
+    }
+  } else if (rrTot > 0) {
+    regenTag = `<span class="tag tag-regen">🌧 spoor</span>`;
+    regenDeel = "af en toe een spatje";
+  }
+
+  // Wind
+  const ffMax = Math.max(...rij.map(r=>r.ff||0));
+  const fxMax = Math.max(...rij.map(r=>r.fx||0));
+  const maxIdx = rij.findIndex(r => (r.fx||0) === fxMax);
+  const windDD = rij[maxIdx]?.dd;
+  const bftMax = kmh_to_bft(ffMax);
+  const windWoord = bftMax <= 2 ? "zwakke" : bftMax <= 3 ? "matige" : bftMax <= 5 ? "vrij krachtige" : bftMax <= 6 ? "krachtige" : bftMax <= 7 ? "harde" : bftMax <= 8 ? "stormachtige" : "stormachtige tot stormachtige";
+  const richtNaam = {"N":"noordelijke","NO":"noordoostelijke","O":"oostelijke","ZO":"zuidoostelijke","Z":"zuidelijke","ZW":"zuidwestelijke","W":"westelijke","NW":"noordwestelijke"}[windrichting(windDD)] || "";
+  let windTag = "", windDeel = "";
+  if (bftMax >= 5) windTag = `<span class="tag tag-wind">💨 Bft ${bftMax}</span>`;
+  windDeel = `${windWoord} ${richtNaam} wind (Bft ${bftMax})`;
+  if (fxMax >= 50) windDeel += ` met stoten tot ${Math.round(fxMax)} km/u`;
+
+  // Onweer
+  const wwtMax = Math.max(...rij.map(r=>r.wwt||0));
+  const onweerTag = wwtMax >= 30 ? `<span class="tag tag-onweer">⚡ ${wwtMax}%</span>` : "";
+  const onweerDeel = wwtMax >= 30 ? `, kans op onweer tot ${wwtMax}%` : "";
+
+  // Temperatuur-woord
+  const Twarm = Tmax >= 25 ? "heet" : Tmax >= 20 ? "warm" : Tmax >= 15 ? "zacht" : Tmax >= 10 ? "koel" : Tmax >= 5 ? "fris" : Tmax >= 0 ? "koud" : "streng koud";
+  const Tkoud = Tmin <= -5 ? "strenge vorst" : Tmin < 0 ? "lichte vorst" : Tmin < 5 ? "koele nacht" : Tmin < 10 ? "zachte nacht" : "milde nacht";
+
+  // Zin samenstellen
+  const zin = `${Tkoud.charAt(0).toUpperCase()+Tkoud.slice(1)} (min <b>${Tmin.toFixed(1)}°</b> rond ${String(TminUur).padStart(2,'0')}u), ${bewWoord} met ${Twarm}e middag tot <b>${Tmax.toFixed(1)}°</b> om ${String(TmaxUur).padStart(2,'0')}u${regenDeel?'; '+regenDeel:''}. ${windDeel.charAt(0).toUpperCase()+windDeel.slice(1)}${onweerDeel}.`;
+
+  return `${bewTag}${regenTag}${onweerTag}${windTag}<span style="display:block;margin-top:4px">${zin}</span>`;
+}
+
+// ── Mini-grafiek per dag: T-lijn + RR-balken + nacht-band ──
+function maakGrafiek(rijen, vergRijen, vergNaam) {
+  const W = 1100, H = 120, PL = 34, PR = 34, PT = 10, PB = 24;
+  const IW = W - PL - PR, IH = H - PT - PB;
+  if (!rijen.length) return "";
+  const Ts = rijen.map(r => r.T).filter(v => v!=null);
+  const vergTs = vergRijen ? vergRijen.map(r => r.T).filter(v => v!=null) : [];
+  if (!Ts.length) return "";
+  const alleT = Ts.concat(vergTs);
+  const Tmin = Math.floor(Math.min(...alleT) - 1);
+  const Tmax = Math.ceil(Math.max(...alleT) + 1);
+  const RRs = rijen.map(r => r.rr).filter(v => v!=null);
+  const RRmax = Math.max(5, Math.ceil(Math.max(...(RRs.length?RRs:[0]))));
+  const xOf = i => PL + (i/(rijen.length-1 || 1)) * IW;
+  const yT  = t => PT + IH - ((t - Tmin)/(Tmax - Tmin) * IH);
+  const yR  = r => PT + IH - (r/RRmax * IH * 0.7);
+  // Achtergrond nacht-banden
+  let nachtRects = "";
+  rijen.forEach((r,i) => {
+    if (r.uur < 6 || r.uur >= 21) {
+      const w = IW/(rijen.length-1 || 1);
+      nachtRects += `<rect x="${xOf(i)-w/2}" y="${PT}" width="${w}" height="${IH}" fill="#eef2f7"/>`;
+    }
+  });
+  // RR balken
+  let rrBars = "";
+  rijen.forEach((r,i) => {
+    if (r.rr != null && r.rr > 0) {
+      const w = Math.max(3, IW/rijen.length * 0.8);
+      const hBar = Math.max(2, (PT+IH) - yR(r.rr)); // minimum 2 px zichtbaar
+      const y = (PT+IH) - hBar;
+      rrBars += `<rect x="${xOf(i)-w/2}" y="${y}" width="${w}" height="${hBar}" fill="#4a90c4" opacity="0.8"/>`;
+    }
+  });
+  // T-lijn hoofdstation (skip nulls)
+  let tPath = "", penDown = false;
+  rijen.forEach((r,i) => {
+    if (r.T == null) { penDown = false; return; }
+    tPath += (penDown ? " L" : " M") + xOf(i).toFixed(1) + "," + yT(r.T).toFixed(1);
+    penDown = true;
+  });
+  // T-lijn vergelijkingsstation
+  let vergPath = "";
+  if (vergRijen) {
+    let vp = false;
+    // Zoek per uur de overeenkomstige rij in vergRijen op basis van iso-tijd
+    rijen.forEach((r,i) => {
+      const mv = vergRijen.find(v => v.iso === r.iso);
+      if (!mv || mv.T == null) { vp = false; return; }
+      vergPath += (vp ? " L" : " M") + xOf(i).toFixed(1) + "," + yT(mv.T).toFixed(1);
+      vp = true;
+    });
+  }
+  // Y-as labels
+  let yLabels = "";
+  [Tmin, Math.round((Tmin+Tmax)/2), Tmax].forEach(t => {
+    yLabels += `<text x="${PL-4}" y="${yT(t)+3}" font-size="9" fill="#6a7a92" text-anchor="end">${t}°</text>`;
+    yLabels += `<line x1="${PL}" x2="${PL+IW}" y1="${yT(t)}" y2="${yT(t)}" stroke="#e0e6ee" stroke-width="0.5"/>`;
+  });
+  [0, RRmax].forEach(r => {
+    yLabels += `<text x="${PL+IW+4}" y="${yR(r)+3}" font-size="9" fill="#4a90c4" text-anchor="start">${r}mm</text>`;
+  });
+  // X-as: elk 3e uur
+  let xLabels = "";
+  rijen.forEach((r,i) => {
+    if (r.uur % 3 === 0) {
+      xLabels += `<text x="${xOf(i)}" y="${H-6}" font-size="9" fill="#6a7a92" text-anchor="middle">${String(r.uur).padStart(2,'0')}</text>`;
+    }
+  });
+  const legende = vergRijen
+    ? `<g font-size="10" font-family="'Segoe UI',Arial,sans-serif">
+         <rect x="${PL+6}" y="${PT+4}" width="10" height="2" fill="#c62828"/>
+         <text x="${PL+20}" y="${PT+8}" fill="#3a5470">${HUIDIG?.naam || ""}</text>
+         <rect x="${PL+120}" y="${PT+4}" width="10" height="2" fill="#9333ea"/>
+         <text x="${PL+134}" y="${PT+8}" fill="#3a5470">${vergNaam || ""}</text>
+       </g>` : "";
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${nachtRects}
+    ${yLabels}
+    ${rrBars}
+    ${vergPath ? `<path d="${vergPath}" fill="none" stroke="#9333ea" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round"/>` : ""}
+    <path d="${tPath}" fill="none" stroke="#c62828" stroke-width="2" stroke-linejoin="round"/>
+    ${legende}
+    ${xLabels}
+  </svg>`;
+}
+
+// ── Data transform: ruwe JSON → rijen per dag ──
+function bouwRijen(stationData) {
+  const n = stationData.tijden.length;
+  const rijen = [];
+  for (let i = 0; i < n; i++) {
+    const t = stationData.tijden[i]; // "2026-04-18T14:00"
+    const dt = new Date(t);
+    const uur = parseInt(t.slice(11,13), 10);
+    rijen.push({
+      tijd: dt, uur, iso: t, idx: i,
+      T: stationData.TTT[i],
+      Td: stationData.Td[i],
+      RV: stationData.RV[i],
+      ff: stationData.FF[i],     // km/h
+      fx: stationData.FX1[i],    // km/h
+      dd: stationData.DD[i],
+      rr: stationData.RR1c[i],
+      neff: stationData.Neff[i],
+      nl: stationData.Nl[i],
+      nm: stationData.Nm[i],
+      nh: stationData.Nh[i],
+      vv: stationData.VV[i],     // meters
+      sun: stationData.SunD1[i], // seconden
+      wwt: stationData.wwT[i],   // % onweer
+    });
+  }
+  return rijen;
+}
+
+// ── Render ──
+let HUIDIG = null; // {naam, land, lon, lat, station, rijen, run}
+function render(naam) {
+  const bronInfo = getBron(naam);
+  if (!bronInfo) {
+    document.getElementById("status").textContent = "Geen data beschikbaar voor " + naam;
+    return;
+  }
+  const {bron, land} = bronInfo;
+  const stationData = bron.data[naam];
+  const coords = bron.stations[naam] || [null, null];
+  const rijen = bouwRijen(stationData);
+
+  HUIDIG = {naam, land, lon:coords[0], lat:coords[1], rijen, run:bron.run, bijgewerkt:bron.bijgewerkt};
+
+  const info = document.getElementById("plaats-kop");
+  info.style.display = "";
+  const runD = bron.run ? new Date(bron.run) : null;
+  const runStr = runD ? `${runD.getUTCDate()} ${nl_maanden[runD.getUTCMonth()]} ${String(runD.getUTCHours()).padStart(2,'0')} UTC` : "–";
+  const latStr = coords[1] != null ? coords[1].toFixed(3) + "°N" : "";
+  const lonStr = coords[0] != null ? coords[0].toFixed(3) + "°E" : "";
+  info.innerHTML = `
+    <div>
+      <div class="plaats-naam">${naam}</div>
+      <div class="plaats-sub">${land} · ${latStr}, ${lonStr}</div>
+    </div>
+    <div class="plaats-meta">DWD MOSMIX_L<br>run: <b>${runStr}</b> · <b>${rijen.length}</b> uurstappen</div>
+  `;
+
+  document.getElementById("status").style.display = "none";
+
+  // Groepeer per dag
+  const perDag = {};
+  rijen.forEach(r => {
+    const k = r.iso.slice(0,10);
+    if (!perDag[k]) perDag[k] = [];
+    perDag[k].push(r);
+  });
+
+  const nu_ts = Date.now();
+  const wrap = document.getElementById("uurtabellen");
+  let html = "";
+
+  // Vul vergelijk-dropdown (alle stations NL+BE behalve het huidige)
+  const selVerg = document.getElementById("sel-vergelijk");
+  const selVergVorig = selVerg.value;
+  const vergOpties = [...STATIONS_NL.map(n=>[n,"NL"]), ...STATIONS_BE.map(n=>[n,"BE"])]
+    .filter(([n]) => n !== naam)
+    .sort((a,b) => a[0].localeCompare(b[0],'nl'));
+  selVerg.innerHTML = '<option value="">— geen —</option>' +
+    vergOpties.map(([n,l]) => `<option value="${n}">${n} (${l})</option>`).join('');
+  if (selVergVorig && selVergVorig !== naam && vergOpties.some(o=>o[0]===selVergVorig)) {
+    selVerg.value = selVergVorig;
+  }
+
+  // Bouw vergelijk-rijen als gekozen
+  const vergNaam = selVerg.value;
+  let vergPerDag = null;
+  if (vergNaam) {
+    const vb = getBron(vergNaam);
+    if (vb) {
+      const vRijen = bouwRijen(vb.bron.data[vergNaam]);
+      vergPerDag = {};
+      vRijen.forEach(r => {
+        const vk = r.iso.slice(0,10);
+        if (!vergPerDag[vk]) vergPerDag[vk] = [];
+        vergPerDag[vk].push(r);
+      });
+    }
+  }
+
+  // Vul dag-dropdown
+  const selDag = document.getElementById("sel-dag");
+  const selDagVorig = selDag.value;
+  const dagKeys = Object.keys(perDag).sort();
+  selDag.innerHTML = '<option value="">Alle dagen</option>' + dagKeys.map(k => {
+    const d = perDag[k][0].tijd;
+    return `<option value="${k}">${nl_dagen[d.getDay()]} ${d.getDate()} ${nl_maanden[d.getMonth()]}</option>`;
+  }).join('');
+  if (dagKeys.includes(selDagVorig)) selDag.value = selDagVorig;
+
+  // Copyright run-stempel bijwerken
+  const crRun = document.getElementById("cr-run");
+  if (crRun) crRun.textContent = runStr !== "–" ? `MOSMIX-run ${runStr}` : "—";
+
+  dagKeys.forEach(k => {
+    const rij = perDag[k];
+    const d = rij[0].tijd;
+    const dagNaam = nl_dagen[d.getDay()];
+    const datumStr = `${d.getDate()} ${nl_maanden[d.getMonth()]}`;
+
+    const Ts = rij.map(r=>r.T).filter(v=>v!=null);
+    const Tmax = Ts.length ? Math.max(...Ts).toFixed(1) : "–";
+    const Tmin = Ts.length ? Math.min(...Ts).toFixed(1) : "–";
+    const rrTot = rij.reduce((s,r)=>s+(r.rr||0), 0).toFixed(1);
+    const fxs = rij.map(r=>r.fx).filter(v=>v!=null);
+    const windMax = fxs.length ? Math.round(Math.max(...fxs)) : "–";
+    const sunTot = rij.reduce((s,r)=>s+(r.sun||0), 0) / 3600;
+
+    const dagtekst = genereerDagtekst(rij);
+    html += `<div class="dag-blok" data-dag="${k}">
+      <div class="dag-header">
+        <div class="dag-titel">${dagNaam} ${datumStr}</div>
+        <div class="dag-extremen">
+          <span>Min <b>${Tmin}°</b></span>
+          <span>Max <b>${Tmax}°</b></span>
+          <span>Neerslag <b>${rrTot} mm</b></span>
+          <span>Max stoot <b>${windMax} km/u</b></span>
+          <span>Zon <b>${sunTot.toFixed(1)} u</b></span>
+        </div>
+      </div>
+      <div class="dag-tekst">${dagtekst}</div>
+      <div class="dag-grafiek">${maakGrafiek(rij, vergPerDag?.[k], vergNaam)}</div>
+      <table class="uurtabel">
+        <thead><tr>
+          <th rowspan="2" title="Lokaal uur (Europe/Amsterdam)">Uur</th>
+          <th rowspan="2" title="Temperatuur op 2 m (°C)">T</th>
+          <th rowspan="2" title="Dauwpunt op 2 m (°C)">Td</th>
+          <th rowspan="2" title="Relatieve vochtigheid (%)">RV</th>
+          <th rowspan="2" title="Gemiddelde wind op 10 m · richting + Beaufort">Wind</th>
+          <th rowspan="2" title="Maximale windstoot afgelopen uur (km/u)">Stoot</th>
+          <th rowspan="2" title="Neerslag afgelopen uur (mm)">Neerslag</th>
+          <th colspan="3" class="kolomgroep-wolk" title="Bewolkingsdekking per hoogtelaag (%)">Bewolking %</th>
+          <th rowspan="2" title="Zicht (km)">Zicht</th>
+          <th rowspan="2" title="Zonneschijn afgelopen uur (minuten)">Zon</th>
+          <th rowspan="2" title="Kans op onweer afgelopen uur (%)">⚡</th>
+        </tr><tr>
+          <th class="kolomgroep-wolk" title="Lage bewolking onder 2 km (%)">Laag</th>
+          <th class="kolomgroep-wolk" title="Middelhoge bewolking 2–7 km (%)">Mid</th>
+          <th class="kolomgroep-wolk" title="Hoge bewolking boven 7 km (%)">Hoog</th>
+        </tr></thead><tbody>`;
+    rij.forEach(r => {
+      const isNu = Math.abs(r.tijd.getTime() - nu_ts) < 1800*1000;
+      const schemer = (r.uur < 6 || r.uur >= 21);
+      const cls = isNu ? 'nu' : (schemer ? 'schemer' : '');
+      const bft = kmh_to_bft(r.ff);
+      // Neerslag: null = geen data (–), 0 = droog (0), <0.1 = spoor (·), anders echte waarde
+      let rrVal, rrCls, rrBg = "";
+      if (r.rr == null) { rrVal = "–"; rrCls = "cel-rr droog"; }
+      else if (r.rr === 0) { rrVal = "0"; rrCls = "cel-rr droog"; }
+      else if (r.rr < 0.1) { rrVal = "·"; rrCls = "cel-rr spoor"; rrBg = "background:#f0f9ff"; }
+      else {
+        rrVal = r.rr.toFixed(1); rrCls = "cel-rr";
+        // Lineair kleurverloop: 0.1 mm licht → 5+ mm donker
+        const alpha = Math.min(0.75, 0.15 + r.rr / 6);
+        rrBg = `background:rgba(74,144,196,${alpha.toFixed(2)})`;
+      }
+      const vvKm = r.vv==null ? "–" : (r.vv/1000).toFixed(1);
+      const sunMin = r.sun==null ? "–" : Math.round(r.sun/60);
+      const wwtStr = r.wwt!=null && r.wwt>=5 ? r.wwt + "%" : "–";
+      html += `<tr${cls?' class="'+cls+'"':''}>
+        <td class="cel-uur">${String(r.uur).padStart(2,'0')}:00</td>
+        <td>${r.T==null?'–':`<span class="cel-t" style="background:${t_kleur(r.T)}">${r.T.toFixed(1)}°</span>`}</td>
+        <td class="cel-td">${r.Td==null?'–':r.Td.toFixed(1)+'°'}</td>
+        <td class="cel-rv">${r.RV==null?'–':r.RV+'%'}</td>
+        <td>${r.ff==null?'–':`<span class="cel-wind">${windpijl(r.dd)} <span class="bft" style="background:${bft_kleur(bft)}">${bft}</span> ${windrichting(r.dd)}</span>`}</td>
+        <td class="cel-stoot">${r.fx==null?'–':Math.round(r.fx)}</td>
+        <td class="${rrCls}" style="${rrBg}">${rrVal}</td>
+        <td>${bewolkingCel(r.nl,"laag")}</td>
+        <td>${bewolkingCel(r.nm,"mid")}</td>
+        <td>${bewolkingCel(r.nh,"hoog")}</td>
+        <td class="cel-vv">${vvKm}</td>
+        <td class="cel-vv">${sunMin}</td>
+        <td class="${r.wwt>=30?'cel-onweer':''}">${wwtStr}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  });
+  wrap.innerHTML = html;
+}
+
+// ── Dropdowns vullen ──
+function vulDropdowns() {
+  const selNL = document.getElementById("sel-nl");
+  const selBE = document.getElementById("sel-be");
+  selNL.innerHTML = '<option value="" disabled selected>— kies plaats —</option>' +
+    STATIONS_NL.map(n => `<option value="${n}">${n}</option>`).join('');
+  selBE.innerHTML = '<option value="" disabled selected>— kies plaats —</option>' +
+    STATIONS_BE.map(n => `<option value="${n}">${n}</option>`).join('');
+
+  selNL.addEventListener("change", e => {
+    if (e.target.value) { render(e.target.value); selBE.selectedIndex = 0; }
+  });
+  selBE.addEventListener("change", e => {
+    if (e.target.value) { render(e.target.value); selNL.selectedIndex = 0; }
+  });
+  document.getElementById("sel-vergelijk").addEventListener("change", () => {
+    if (HUIDIG) render(HUIDIG.naam);
+  });
+}
+
+// ── CSV download ──
+document.getElementById("btn-csv").addEventListener("click", () => {
+  if (!HUIDIG) return;
+  const dag = document.getElementById("sel-dag").value;
+  const rijenFilter = dag ? HUIDIG.rijen.filter(r => r.iso.slice(0,10) === dag) : HUIDIG.rijen;
+  const kop = ["datum","uur","T_C","Td_C","RV_pct","FF_kmh","FF_Bft","FX_kmh","DD_deg","RR_mm","Bew_laag_pct","Bew_mid_pct","Bew_hoog_pct","Neff_pct","VV_km","Zon_min","Onweer_pct"];
+  const metaRegels = [
+    `# Bron: DWD MOSMIX_L (opendata.dwd.de) · © weerlab.nl`,
+    `# Station: ${HUIDIG.naam} (${HUIDIG.land}) · ${HUIDIG.lat}N ${HUIDIG.lon}E`,
+    `# Run: ${HUIDIG.run || "?"} · Gegenereerd: ${new Date().toISOString().slice(0,16)}`,
+    `# ${dag ? "Dag: " + dag : "Alle dagen (" + rijenFilter.length + " uurstappen)"}`,
+  ];
+  const rijen = rijenFilter.map(r => [
+    r.iso.slice(0,10),
+    r.iso.slice(11,16),
+    r.T ?? "",
+    r.Td ?? "",
+    r.RV ?? "",
+    r.ff ?? "",
+    kmh_to_bft(r.ff) ?? "",
+    r.fx ?? "",
+    r.dd ?? "",
+    r.rr ?? "",
+    r.nl ?? "",
+    r.nm ?? "",
+    r.nh ?? "",
+    r.neff ?? "",
+    r.vv != null ? (r.vv/1000).toFixed(1) : "",
+    r.sun != null ? Math.round(r.sun/60) : "",
+    r.wwt ?? "",
+  ]);
+  const csv = [...metaRegels, kop.join(","), ...rijen.map(r => r.join(","))].join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const suffix = dag ? "_" + dag : "_alle";
+  a.download = `mosmix_${HUIDIG.naam.replace(/\s+/g,'_')}${suffix}.csv`;
+  a.click();
+});
+
+// ── PNG download (foreignObject SVG → canvas) ──
+document.getElementById("btn-png").addEventListener("click", async () => {
+  if (!HUIDIG) return;
+  const dag = document.getElementById("sel-dag").value;
+  const node = document.getElementById("hoofd");
+  const rect = node.getBoundingClientRect();
+  const W = Math.min(1400, Math.ceil(rect.width));
+  const clone = node.cloneNode(true);
+  clone.querySelector("#status")?.remove();
+  clone.querySelector(".notitie")?.remove();
+  // Filter dag-blokken als een specifieke dag gekozen is
+  if (dag) {
+    clone.querySelectorAll(".dag-blok").forEach(b => {
+      if (b.dataset.dag !== dag) b.remove();
+    });
+  }
+  // Meet hoogte door de clone tijdelijk off-screen te renderen
+  const meter = document.createElement("div");
+  meter.style.cssText = `position:absolute;left:-99999px;top:0;width:${W}px;visibility:hidden`;
+  meter.appendChild(clone.cloneNode(true));
+  document.body.appendChild(meter);
+  const H = Math.ceil(meter.firstChild.scrollHeight) + 40;
+  document.body.removeChild(meter);
+  const styleTag = document.createElement("style");
+  styleTag.textContent = document.querySelector("style").textContent;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+      <foreignObject width="100%" height="100%">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="background:#eef3f9;padding:16px;width:${W}px;font-family:'Segoe UI',Arial,sans-serif;">
+          ${styleTag.outerHTML}
+          ${clone.outerHTML}
+        </div>
+      </foreignObject>
+    </svg>`;
+  const blob = new Blob([svg], {type:"image/svg+xml"});
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = W * 2; canvas.height = H * 2;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(2,2);
+    ctx.fillStyle = "#eef3f9";
+    ctx.fillRect(0,0,W,H);
+    ctx.drawImage(img, 0, 0, W, H);
+    canvas.toBlob(b => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b);
+      const suffix = dag ? "_" + dag : "_alle";
+      a.download = `mosmix_${HUIDIG.naam.replace(/\s+/g,'_')}${suffix}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  };
+  img.onerror = () => alert("PNG-export lukte niet — probeer een andere browser of gebruik CSV.");
+  img.src = url;
+});
+
+// ── Init ──
+(async () => {
+  try {
+    await laadData();
+    vulDropdowns();
+    // Standaard: De Bilt
+    if (STATIONS_NL.includes("De Bilt")) {
+      document.getElementById("sel-nl").value = "De Bilt";
+      render("De Bilt");
+    } else if (STATIONS_NL.length) {
+      document.getElementById("sel-nl").value = STATIONS_NL[0];
+      render(STATIONS_NL[0]);
+    }
+  } catch (e) {
+    console.error(e);
+    document.getElementById("status").innerHTML = "Kon MOSMIX data niet laden: " + e.message;
+  }
+})();
+</script>
+</body>
+</html>

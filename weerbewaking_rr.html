@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking W.M. — Weersverwachting Rijnmond</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="weerbewaking_store.js?v=20260712-mod1"></script>
+<script src="weerbewaking_document.js?v=20260712-mod1"></script>
+<script src="weerbewaking_sync.js?v=20260712-mod1"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;padding:20px 10px}
+
+.pagina{max-width:800px;margin:0 auto 20px;background:white;padding:40px 50px;box-shadow:0 2px 12px rgba(0,0,0,.08);border-radius:4px}
+
+/* Toolbar */
+.toolbar{max-width:800px;margin:0 auto 16px;display:block;background:white;padding:14px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.86rem;padding:6px 9px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar button{font-family:inherit;font-size:.86rem;padding:7px 13px;background:#1f497d;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700}
+.toolbar button:hover{background:#143258}
+.toolbar .spacer{flex:1}
+.toolbar .status{font-size:.8rem;color:#888}
+.toolbar .sync-toggle{display:inline-flex;align-items:center;gap:4px;color:#555;font-weight:600}
+.toolbar .sync-status{font-size:.72rem;min-width:46px;color:#888}
+.toolbar-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.toolbar-title{font-size:1rem;font-weight:800;color:#1f497d;letter-spacing:.01em}
+.toolbar-sub{font-size:.76rem;color:#64748b;margin-top:3px}
+.toolbar-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.toolbar .btn-instellingen{background:#eef2f7;color:#1f497d;border:1px solid #cbd5e1}
+.toolbar .btn-instellingen:hover{background:#e2eaf3}
+.toolbar.instellingen-open .btn-instellingen{background:#1f497d;color:white;border-color:#1f497d}
+.toolbar-grid{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.toolbar.instellingen-open .toolbar-grid{display:grid}
+.toolbar-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:9px 10px;min-width:0}
+.toolbar-group.wide{grid-column:1/-1}
+.toolbar-group .group-label{font-size:.72rem;font-weight:800;color:#1f497d;text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.toolbar .field{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.toolbar .field span{font-size:.78rem;color:#475569;font-weight:700}
+.toolbar .button-success{background:#2a7a2a}
+.toolbar .button-danger{background:#a44}
+.toolbar .button-back{background:#64748b;white-space:nowrap}
+.toolbar #save-status{font-size:.72rem;color:#2a7a2a}
+
+/* Header — Rijnmond wordmark links + weericoon rechts (zoals in origineel doc) */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2px solid #1f497d;gap:20px}
+.doc-header img.logo-l{height:140px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:170px;width:auto;object-fit:contain}
+.doc-header .spacer{flex:1}
+
+.doc-opgesteld{margin:14px 0 18px;font-size:.95rem;color:#1f497d;font-style:italic;font-weight:600}
+
+/* Sectiekopjes */
+h2.kop{font-size:1rem;font-weight:700;color:#1f497d;text-transform:uppercase;letter-spacing:.04em;margin:20px 0 6px;outline:none}
+h2.kop:focus{background:#fffbe8}
+h2.kop [data-prefix][contenteditable="true"]{cursor:text;border-bottom:1px dashed transparent;transition:border-color .15s}
+h2.kop [data-prefix][contenteditable="true"]:hover{border-bottom-color:#1f497d}
+h2.kop [data-prefix][contenteditable="true"]:focus{background:#fffbe8;border-bottom-color:#1f497d}
+
+.tekstvak{min-height:50px;padding:6px 8px;border:1px dashed #ccc;border-radius:3px;font-size:.92rem;line-height:1.55;color:#222;outline:none;background:#fafafa;text-align:justify;margin:0 0 10px}
+.tekstvak:focus{background:#fffbe8;border-color:#1f497d;border-style:solid}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Verberg-knop per sectie + sectie-toggle bar bovenaan */
+.sectie{position:relative;margin:18px 0}
+.sectie .toggle-knop{position:absolute;right:0;top:0;font-family:inherit;font-size:.72rem;padding:3px 8px;background:#eee;border:1px solid #ccc;border-radius:3px;cursor:pointer;color:#555}
+.sectie .toggle-knop:hover{background:#e0e0e0}
+.sectie.verborgen{display:none}
+.sectie-toggle{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:14px 0 0;padding:8px 12px;background:#f5f8ff;border:1px solid #d0deef;border-radius:4px;font-size:.85rem}
+.sectie-toggle .label{font-size:.78rem;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
+.sectie-toggle label{display:inline-flex;gap:5px;align-items:center;cursor:pointer;color:#1f497d;font-weight:600}
+.sectie-toggle input[type=checkbox]{cursor:pointer;width:16px;height:16px}
+
+/* 5-daagse vooruitblik tabel */
+table.vijfdaagse{width:100%;border-collapse:collapse;margin:16px 0 8px;font-size:.85rem}
+table.vijfdaagse th,table.vijfdaagse td{border:1px solid #aaa;padding:5px 4px;text-align:center}
+table.vijfdaagse td[contenteditable="true"]{outline:none;cursor:text}
+table.vijfdaagse td[contenteditable="true"]:hover{background:#f6faff}
+table.vijfdaagse td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #1f497d}
+table.vijfdaagse th{background:#1f497d;color:white;font-size:.8rem}
+table.vijfdaagse th.dag{width:14%}
+table.vijfdaagse td.rij-label{text-align:left;background:#f0f4f8;font-weight:600;font-size:.78rem;width:30%;padding-left:8px}
+table.vijfdaagse .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#1f497d;margin-right:3px}
+h2.kop-vijfdaagse{font-size:.95rem;font-weight:700;color:#1f497d;text-transform:uppercase;letter-spacing:.04em;margin:20px 0 6px;outline:none}
+
+@media (max-width:700px){
+  body{padding:8px 6px 20px}
+  .pagina{padding:16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toolbar{padding:8px 10px}
+  .toolbar-top{flex-direction:column}
+  .toolbar-actions{justify-content:flex-start}
+  .toolbar-grid{grid-template-columns:1fr}
+  .toolbar-group.wide{grid-column:auto}
+  .toolbar button{font-size:.78rem;padding:5px 8px}
+  .toolbar select,.toolbar input{font-size:.78rem;padding:4px 7px}
+  .doc-header{flex-wrap:wrap;gap:8px}
+  table.vijfdaagse{font-size:.75rem}
+  table.vijfdaagse th,table.vijfdaagse td{padding:3px 4px}
+}
+/* PRINT */
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  .sectie .toggle-knop{display:none !important}
+  @page{size:A4;margin:0}
+}
+
+/* Koptekst-grootte */
+body{--kop-scale:1}
+.pagina .doc-opgesteld{font-size:calc(.95rem * var(--kop-scale))}
+.pagina h2.kop{font-size:calc(1rem * var(--kop-scale))}
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-top">
+    <div>
+      <div class="toolbar-title">Weersverwachting Rijnmond</div>
+      <div class="toolbar-sub"><span id="save-status"></span></div>
+    </div>
+    <div class="toolbar-actions">
+      <button type="button" onclick="zetNu()" title="Zet documentdatum op vandaag en de tijd op nu (auto)">📅 Nu</button>
+      <button type="button" class="button-success" onclick="herlaadTabel()" title="Haal de 5-daagse tabel-data opnieuw op (overschrijft eigen aanpassingen)">↻ Ververs tabel</button>
+      <button type="button" onclick="exporteerPDF()">Exporteer PDF</button>
+      <button type="button" class="btn-instellingen" onclick="toggleInstellingen()" title="Toon of verberg de instellingen">⚙ Instellingen</button>
+      <button type="button" class="button-back" onclick="gaTerug()">← Terug</button>
+    </div>
+  </div>
+
+  <div class="toolbar-grid">
+    <div class="toolbar-group wide">
+      <span class="group-label">Formulier</span>
+      <label class="field"><span>Datum</span><input type="date" id="doc-datum"></label>
+      <button type="button" onclick="zetVandaag()" class="button-back" title="Zet datum op vandaag">Vandaag</button>
+      <label class="field" title="Leeg = nu (auto). Vul in voor latere verzendtijd."><span>Tijd</span><input type="time" id="doc-tijd" style="width:90px"></label>
+      <button type="button" onclick="zetTijdNu()" class="button-back" title="Reset naar huidige tijd (auto)">↻ Nu</button>
+    </div>
+
+    <div class="toolbar-group wide">
+      <span class="group-label">Weergave</span>
+      <label class="field"><span>Koppen</span>
+        <select id="kop-scale-sel" onchange="zetKopScale(this.value)">
+          <option value="0.8">80%</option>
+          <option value="0.9">90%</option>
+          <option value="1" selected>100%</option>
+          <option value="1.1">110%</option>
+          <option value="1.2">120%</option>
+          <option value="1.35">135%</option>
+          <option value="1.5">150%</option>
+        </select>
+      </label>
+      <button type="button" class="button-danger" onclick="wisDraft()" title="Wis opgeslagen teksten van deze dag">Wissen</button>
+      <label class="sync-toggle no-pdf" title="Deel concepten via Cloudflare KV. Uit = alleen lokaal bewaren."><input type="checkbox" id="wb-live-sync" data-wb-sync-toggle> Live sync</label>
+      <span class="sync-status no-pdf" id="wb-live-sync-status" data-wb-sync-status></span>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENT -->
+<div class="pagina" id="doc">
+
+  <div class="doc-header">
+    <img class="logo-l" src="rijnmond_wordmark.png" alt="Rijnmond" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="weerbericht_icoon.jpg" alt="Weerbericht" onerror="this.style.display='none'">
+  </div>
+
+  <div class="doc-opgesteld">Opgesteld: <span id="hdr-datum">–</span></div>
+
+  <!-- Sectie-toggles (alleen op scherm, niet in PDF) -->
+  <div class="sectie-toggle no-pdf">
+    <span class="label">Toon secties:</span>
+    <label><input type="checkbox" data-sec="sec-vandaag" checked> Vandaag</label>
+    <label><input type="checkbox" data-sec="sec-avond" checked> Vanavond + nacht</label>
+    <label><input type="checkbox" data-sec="sec-morgen" checked> Morgen</label>
+    <label><input type="checkbox" data-sec="sec-komend" checked> Komende dagen</label>
+  </div>
+
+  <div class="sectie" id="sec-vandaag">
+    <h2 class="kop"><span data-prefix="VANDAAG" contenteditable="true" data-save="vandaag-prefix" title="Klik en typ bv. MIDDAG">VANDAAG</span>: <span class="dagnaam" data-offset="0">–</span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="vandaag" data-placeholder="Beschrijf het weer voor vandaag...">De dag begint landinwaarts met bewolking maar al snel wordt het overal zonnig. Het blijft droog en het wordt 16 graden. Aan zee wordt het 14 graden.</div>
+  </div>
+
+  <div class="sectie" id="sec-avond">
+    <h2 class="kop">VANAVOND EN VANNACHT:</h2>
+    <div class="tekstvak" contenteditable="true" data-save="avond" data-placeholder="Beschrijf de avond en de nacht...">Vanavond eerst nog zon, vannacht brede opklaringen en droog. Het koelt landinwaarts af naar 3 graden.</div>
+  </div>
+
+  <div class="sectie" id="sec-morgen">
+    <h2 class="kop"><span data-prefix="MORGEN">MORGEN</span>: <span class="dagnaam" data-offset="1">–</span></h2>
+    <div class="tekstvak" contenteditable="true" data-save="morgen" data-placeholder="Beschrijf het weer voor morgen...">Volop zon en droog. Middagtemperatuur 15 of 16 graden.</div>
+  </div>
+
+  <div class="sectie" id="sec-komend">
+    <h2 class="kop">KOMENDE DAGEN:</h2>
+    <div class="tekstvak" contenteditable="true" data-save="komend" data-placeholder="Beschrijf de komende dagen...">Veel bewolking met af en toe zon en droog. In de avond kan er wel een bui voorkomen. De maximumtemperatuur bedraagt 16 graden.</div>
+  </div>
+
+  <!-- 5-daagse vooruitblik (uit MOS/MIX Rotterdam Airport) -->
+  <h2 class="kop-vijfdaagse">5-DAAGSE VOORUITBLIK</h2>
+  <table class="vijfdaagse" id="vijfdaagse-tabel">
+    <thead>
+      <tr id="vijfdaagse-dagen"><th class="rij-label"></th></tr>
+    </thead>
+    <tbody id="vijfdaagse-body"></tbody>
+  </table>
+
+</div>
+
+<script>
+const DAGLANG=['ZONDAG','MAANDAG','DINSDAG','WOENSDAG','DONDERDAG','VRIJDAG','ZATERDAG'];
+const DAGLANG_KLEIN=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function exportNaam(...waarden){
+  const rauw=(waarden.find(v=>(v||'').trim()) || 'Document').split(',')[0].trim();
+  return rauw.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').replace(/^_+|_+$/g,'') || 'Document';
+}
+function huidigeDatumObj(){
+  const v=document.getElementById('doc-datum').value;
+  if(!v) return new Date();
+  // Lokaal middag om DST-issues te vermijden
+  return new Date(v+'T12:00:00');
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+function updateOpgesteldKop(){
+  // "Opgesteld: zaterdag 25 april om 07:15 uur"
+  // Datum komt uit doc-datum picker, tijd uit doc-tijd (handmatig) of huidige tijd (auto)
+  const d=huidigeDatumObj();
+  const tijdEl=document.getElementById('doc-tijd');
+  let uu, mm;
+  if(tijdEl && tijdEl.value){
+    const [h,m]=tijdEl.value.split(':');
+    uu=h; mm=m;
+  } else {
+    const nu=new Date();
+    uu=pad2(nu.getHours()); mm=pad2(nu.getMinutes());
+  }
+  const dnaam=DAGLANG_KLEIN[d.getDay()];
+  const tekst=`${dnaam} ${d.getDate()} ${MND[d.getMonth()]} om ${uu}:${mm} uur`;
+  document.getElementById('hdr-datum').textContent=tekst;
+}
+
+function updateDagnamen(){
+  const basis=huidigeDatumObj();
+  document.querySelectorAll('.dagnaam').forEach(el=>{
+    const off=parseInt(el.getAttribute('data-offset')||'0');
+    const d=new Date(basis.getTime()+off*24*3600*1000);
+    el.textContent=DAGLANG[d.getDay()];
+  });
+}
+
+function pasSectieToe(id, zichtbaar){
+  const s=document.getElementById(id);
+  if(!s) return;
+  s.classList.toggle('verborgen', !zichtbaar);
+}
+function syncCheckboxesNaarSecties(){
+  document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
+    pasSectieToe(cb.getAttribute('data-sec'), cb.checked);
+  });
+}
+function syncSectiesNaarCheckboxes(){
+  document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
+    const s=document.getElementById(cb.getAttribute('data-sec'));
+    if(s) cb.checked = !s.classList.contains('verborgen');
+  });
+}
+// Behouden voor compat (oude knoppen) — niet meer gebruikt
+function verbergSectie(id){ pasSectieToe(id,false); syncSectiesNaarCheckboxes(); saveDraft(); }
+function toonSectieWeer(id){ pasSectieToe(id,true); syncSectiesNaarCheckboxes(); saveDraft(); }
+function toonVerborgenBar(){
+  // legacy stub — verborgen-bar is verwijderd
+  const bar=document.getElementById('verborgen-bar');
+  const lijst=document.getElementById('verborgen-lijst');
+  if(!bar) return;
+  const verborgen=Array.from(document.querySelectorAll('.sectie.verborgen'));
+  if(verborgen.length===0){ bar.style.display='none'; return; }
+  bar.style.display='';
+  lijst.innerHTML=verborgen.map(s=>{
+    const k=s.querySelector('h2.kop')?.textContent.replace(':','').trim()||s.id;
+    return `<button onclick="toonSectieWeer('${s.id}')" style="margin:0 4px;padding:2px 8px;border:1px solid #ccc;background:#eef;border-radius:3px;cursor:pointer;font-family:inherit;font-size:.78rem">+ ${k}</button>`;
+  }).join('');
+}
+
+/* ── PDF ── */
+function schoonTekst(el){
+  return (el?.innerText || '').replace(/\u00a0/g,' ').replace(/[ \t]+\n/g,'\n').trim();
+}
+
+async function afbeeldingDataUrl(img){
+  if(!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return null;
+  try{
+    const canvas=document.createElement('canvas');
+    canvas.width=img.naturalWidth;
+    canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0);
+    return canvas.toDataURL('image/png');
+  }catch(e){
+    return null;
+  }
+}
+
+async function tekenLogo(pdf,img,x,y,maxW,maxH){
+  const data=await afbeeldingDataUrl(img);
+  if(!data) return;
+  const ratio=img.naturalWidth/img.naturalHeight;
+  let w=maxW, h=w/ratio;
+  if(h>maxH){ h=maxH; w=h*ratio; }
+  pdf.addImage(data,'PNG',x,y,w,h);
+}
+
+function extraPaginaIndienNodig(pdf,y,ruimte){
+  if(y+ruimte<=282) return y;
+  pdf.addPage();
+  return 18;
+}
+
+function schrijfParagraaf(pdf,tekst,x,y,maxW,lineH){
+  const stukken=tekst.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  if(!stukken.length) return y;
+  stukken.forEach((stuk,idx)=>{
+    const regels=pdf.splitTextToSize(stuk,maxW);
+    pdf.text(regels,x,y);
+    y+=regels.length*lineH;
+    if(idx<stukken.length-1) y+=lineH*.55;
+  });
+  return y;
+}
+
+async function exporteerPDF(){
+  const jsPDFCtor=(window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if(!jsPDFCtor){
+    alert('PDF-module is nog niet geladen. Probeer het over enkele seconden opnieuw.');
+    return;
+  }
+
+  updateOpgesteldKop();
+  const pdf=new jsPDFCtor({unit:'mm',format:'a4',orientation:'portrait'});
+  const blauw=[31,73,125];
+  const x=18, maxW=174;
+  let y=15;
+
+  await tekenLogo(pdf,document.querySelector('.logo-l'),18,12,60,34);
+  await tekenLogo(pdf,document.querySelector('.logo-r'),150,10,42,38);
+  y=50;
+  pdf.setDrawColor(...blauw);
+  pdf.setLineWidth(.6);
+  pdf.line(18,y,192,y);
+  y+=9;
+
+  pdf.setFont('helvetica','italic');
+  pdf.setFontSize(11);
+  pdf.setTextColor(...blauw);
+  pdf.text('Opgesteld: '+schoonTekst(document.getElementById('hdr-datum')),x,y);
+  y+=12;
+
+  const schaal=parseFloat(getComputedStyle(document.body).getPropertyValue('--kop-scale'))||1;
+  const secties=Array.from(document.querySelectorAll('#doc .sectie')).filter(s=>!s.classList.contains('verborgen'));
+  secties.forEach(sectie=>{
+    const kop=schoonTekst(sectie.querySelector('h2.kop'));
+    const tekst=schoonTekst(sectie.querySelector('.tekstvak'));
+    if(!kop && !tekst) return;
+    y=extraPaginaIndienNodig(pdf,y,22);
+    pdf.setFont('helvetica','bold');
+    pdf.setFontSize(11*schaal);
+    pdf.setTextColor(...blauw);
+    pdf.text(kop,x,y);
+    y+=7;
+    if(tekst){
+      pdf.setFont('helvetica','normal');
+      pdf.setFontSize(10.2);
+      pdf.setTextColor(34,34,34);
+      y=schrijfParagraaf(pdf,tekst,x,y,maxW,5.1);
+      y+=6;
+    }
+  });
+
+  // 5-daagse vooruitblik tabel
+  tekenVijfdaagseTabel(pdf, x, y, maxW, schaal, blauw);
+
+  // Bestandsnaam: documentnaam + documentdatum, zonder tijd
+  pdf.save(`${exportNaam('Rijnmondweer')}_${document.getElementById('doc-datum').value || vandaagISO()}.pdf`);
+}
+
+/* Teken de 5-daagse vooruitblik tabel in de PDF */
+function tekenVijfdaagseTabel(pdf, x, startY, maxW, schaal, blauw){
+  const tabel=document.getElementById('vijfdaagse-tabel');
+  if(!tabel) return;
+  // Lees data uit DOM
+  const dagheaders=Array.from(tabel.querySelectorAll('#vijfdaagse-dagen .dag')).map(th=>{
+    const small=th.querySelector('small');
+    const dag=(th.firstChild?.textContent||'').trim();
+    const datum=(small?.textContent||'').trim();
+    return {dag,datum};
+  });
+  if(dagheaders.length===0) return; // Tabel niet klaar
+  const rijen=Array.from(tabel.querySelectorAll('#vijfdaagse-body tr')).map(tr=>{
+    const cells=Array.from(tr.querySelectorAll('td'));
+    return {
+      label:(cells[0]?.textContent||'').trim(),
+      waarden:cells.slice(1).map(td=>(td.textContent||'').replace(/[↓↑←→]/g,'').trim())
+    };
+  });
+  if(rijen.length===0) return;
+
+  const colLabel=44;
+  const colDay=(maxW-colLabel)/dagheaders.length;
+  const rowH=6.2;
+  const totH=(rijen.length+1)*rowH;
+  let y=startY+4;
+  // Eventueel naar nieuwe pagina
+  y=extraPaginaIndienNodig(pdf, y, totH+12);
+
+  // Sectiekop
+  pdf.setFont('helvetica','bold');
+  pdf.setFontSize(11*schaal);
+  pdf.setTextColor(...blauw);
+  pdf.text('5-DAAGSE VOORUITBLIK', x, y);
+  y+=4.5;
+
+  // Header-rij: één doorlopende blauwe balk over de volle breedte (geen gaps tussen cellen)
+  pdf.setFillColor(...blauw);
+  pdf.rect(x, y, maxW, rowH, 'F');
+  // Teksten per dag-kolom op de balk plaatsen
+  let cx=x+colLabel;
+  pdf.setTextColor(255,255,255);
+  dagheaders.forEach(dh=>{
+    pdf.setFont('helvetica','bold');
+    pdf.setFontSize(8);
+    pdf.text(dh.dag, cx+colDay/2, y+3, {align:'center'});
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica','normal');
+    pdf.text(dh.datum, cx+colDay/2, y+5.4, {align:'center'});
+    cx+=colDay;
+  });
+  y+=rowH;
+
+  // Data-rijen
+  pdf.setDrawColor(170,170,170);
+  pdf.setLineWidth(0.2);
+  rijen.forEach(rij=>{
+    cx=x;
+    // Label-cel met lichte achtergrond
+    pdf.setFillColor(240,244,248);
+    pdf.rect(cx, y, colLabel, rowH, 'F');
+    pdf.rect(cx, y, colLabel, rowH, 'S');
+    pdf.setTextColor(34,34,34);
+    pdf.setFont('helvetica','bold');
+    pdf.setFontSize(8);
+    pdf.text(rij.label, cx+2, y+3.9);
+    cx+=colLabel;
+    // Waarde-cellen
+    pdf.setFont('helvetica','normal');
+    pdf.setFontSize(8.5);
+    rij.waarden.forEach(val=>{
+      pdf.rect(cx, y, colDay, rowH, 'S');
+      pdf.text(val||'–', cx+colDay/2, y+3.9, {align:'center'});
+      cx+=colDay;
+    });
+    y+=rowH;
+  });
+}
+
+/* ── Auto-save per dag ── */
+const SAVE_PREFIX='wb_rr_draft_';
+function huidigeDatumKey(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function saveKey(){ return SAVE_PREFIX+huidigeDatumKey(); }
+function gedeeldeSyncBeschikbaar(){ return !!(window.WBSync && WBSync.isEnabled()); }
+let laatstGeschrevenTs = 0;
+function bouwDraftObject(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
+  d.verborgen = Array.from(document.querySelectorAll('.sectie.verborgen')).map(s=>s.id);
+  d.tijd = document.getElementById('doc-tijd')?.value || '';
+  return d;
+}
+function saveDraft(){
+  const d=bouwDraftObject();
+  laatstGeschrevenTs=d.__ts;
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+  // Schrijf ook naar gedeelde KV (best-effort, blokkeert UI niet)
+  if(gedeeldeSyncBeschikbaar()) WBSync.putJson(saveKey(), d).catch(()=>{});
+}
+function leegForm(){
+  // Reset secties zichtbaar; teksten leegmaken zodat placeholders verschijnen
+  document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+  document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{cb.checked=true});
+  document.getElementById('doc-tijd').value='';
+  toonVerborgenBar();
+}
+function pasDraftToe(d, voorvoegsel='Hersteld'){
+  if(!d || typeof d!=='object') return false;
+  // Niet overschrijven als de gebruiker net iets typt en zijn versie nieuwer is
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    const k=el.getAttribute('data-save');
+    if(d[k]!=null) el.innerHTML=d[k];
+  });
+  document.querySelectorAll('.sectie').forEach(s=>s.classList.remove('verborgen'));
+  if(Array.isArray(d.verborgen)){
+    d.verborgen.forEach(id=>document.getElementById(id)?.classList.add('verborgen'));
+  }
+  syncSectiesNaarCheckboxes();
+  if(d.tijd!=null) document.getElementById('doc-tijd').value = d.tijd;
+  updateOpgesteldKop();
+  toonVerborgenBar();
+  if(d.__ts){ laatstGeschrevenTs=d.__ts; toonSaveStatus(d.__ts, voorvoegsel); }
+  return true;
+}
+function restoreDraft(){
+  // Lokaal eerst (snel), daarna gedeelde KV checken (mogelijk nieuwer van andere kant)
+  let lokaal=null;
+  try{
+    const j=localStorage.getItem(saveKey());
+    if(j) lokaal=JSON.parse(j);
+  }catch(e){}
+  if(lokaal){
+    pasDraftToe(lokaal, 'Hersteld');
+  } else {
+    leegForm(); updateOpgesteldKop();
+    document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatumKey()+')';
+  }
+  // Async: probeer KV — als die nieuwer is dan lokaal, overschrijven
+  haalGedeeldeDraft(true);
+}
+
+async function haalGedeeldeDraft(initieel=false){
+  if(!gedeeldeSyncBeschikbaar()) return;
+  if(document.activeElement && document.activeElement.matches && document.activeElement.matches('[data-save], [contenteditable], input, select, textarea')) {
+    // Gebruiker is aan het typen — niet overschrijven
+    return;
+  }
+  try{
+    const d=await WBSync.getJson(saveKey());
+    if(!d || !d.__ts) return;
+    if(d.__ts > (laatstGeschrevenTs||0) + 500){
+      // Andere kant heeft nieuwere versie → toepassen
+      pasDraftToe(d, initieel?'Hersteld (gedeeld)':'Bijgewerkt door andere kant');
+      try{ localStorage.setItem(saveKey(), JSON.stringify(d)); }catch(e){}
+    }
+  }catch(e){ /* offline of KV niet beschikbaar — geen probleem, lokaal blijft werken */ }
+}
+// Periodiek pollen voor wijzigingen van de andere kant
+if(window.WBSync){
+  WBSync.initToggle({
+    onEnable(){ haalGedeeldeDraft(true); },
+    onDisable(){ toonSaveStatus(Date.now(), 'Alleen lokaal opgeslagen'); }
+  });
+}
+// Sync-interval: 5 min i.p.v. 30s (Workers-quota sparen); focus-event triggert sneller.
+setInterval(()=>{ if(document.visibilityState==='visible') haalGedeeldeDraft(false); }, 300000);
+// Direct na visibility-change ook pollen (gebruiker kwam terug op tabblad)
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible') haalGedeeldeDraft(false);
+});
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatumKey()} · ${pad2(t.getHours())}:${pad2(t.getMinutes())}`;
+}
+function wisDraft(){
+  if(!confirm('Opgeslagen tekst van '+huidigeDatumKey()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
+  location.reload();
+}
+let saveTimer;
+let hasPendingSave=false;
+function debSave(){ hasPendingSave=true; clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ hasPendingSave=false; saveDraft(); },600); }
+function saveDraftNow(){
+  if(!hasPendingSave) return;
+  hasPendingSave=false;
+  clearTimeout(saveTimer);
+  saveDraft();
+}
+
+document.addEventListener('input', e=>{
+  if(e.target.closest('[data-save]')) debSave();
+});
+document.querySelectorAll('.sectie-toggle input[type=checkbox]').forEach(cb=>{
+  cb.addEventListener('change', ()=>{
+    pasSectieToe(cb.getAttribute('data-sec'), cb.checked);
+    saveDraft();
+  });
+});
+document.addEventListener('blur', e=>{
+  if(e.target.closest('[data-save]')) saveDraft();
+},true);
+window.addEventListener('pagehide', saveDraftNow);
+window.addEventListener('beforeunload', saveDraftNow);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden') saveDraftNow();
+});
+
+document.getElementById('doc-datum').value=vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', ()=>{
+  updateOpgesteldKop();
+  updateDagnamen();
+  restoreDraft();
+});
+document.getElementById('doc-tijd').addEventListener('change', ()=>{
+  updateOpgesteldKop();
+  saveDraft();
+});
+
+function zetTijdNu(){
+  document.getElementById('doc-tijd').value='';
+  updateOpgesteldKop();
+  saveDraft();
+}
+
+function zetVandaag(){
+  document.getElementById('doc-datum').value=vandaagISO();
+  updateOpgesteldKop();
+  updateDagnamen();
+  restoreDraft();
+}
+
+/* Eén klik: documentdatum = vandaag én tijd = nu (auto) */
+function zetNu(){
+  document.getElementById('doc-tijd').value='';
+  zetVandaag();
+  saveDraft();
+}
+/* Instellingen-paneel inklapbaar (standaard dicht) */
+const TOOLBAR_OPEN_KEY='wb_rr_toolbar_open';
+function toggleInstellingen(force){
+  const tb=document.querySelector('.toolbar');
+  const open = force!=null ? !!force : !tb.classList.contains('instellingen-open');
+  tb.classList.toggle('instellingen-open', open);
+  try{ localStorage.setItem(TOOLBAR_OPEN_KEY, open?'1':'0'); }catch(e){}
+}
+try{ if(localStorage.getItem(TOOLBAR_OPEN_KEY)==='1') document.querySelector('.toolbar').classList.add('instellingen-open'); }catch(e){}
+
+/* ── Koptekst-grootte ── */
+const KOP_KEY='wb_rr_kopscale';
+function zetKopScale(v){
+  document.body.style.setProperty('--kop-scale', v);
+  try{ localStorage.setItem(KOP_KEY, v); }catch(e){}
+}
+(function herstelKopScale(){
+  try{
+    const v=localStorage.getItem(KOP_KEY);
+    if(v){
+      document.body.style.setProperty('--kop-scale', v);
+      const sel=document.getElementById('kop-scale-sel');
+      if(sel) sel.value=v;
+    }
+  }catch(e){}
+})();
+
+function gaTerug(){
+  if(window.WBDocument) return WBDocument.goHome();
+  window.location.href=window.self !== window.top ? 'weerbewaking.html' : 'index.html#weerbewaking';
+}
+
+/* ── 5-daagse vooruitblik (MOS/MIX Rotterdam Airport) ── */
+const DAG_KORT=['ZO','MA','DI','WO','DO','VR','ZA'];
+function plusDag(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function formatDMshort(d){ return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function naarBFT(kmh){
+  if(kmh==null) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+const RICHTING_DEG={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function parseRichting(txt){
+  const m=(txt||'').toUpperCase().replace(/[^NOZW]/g,'').match(/^(NNO|NNW|NO|NW|N|ONO|OZO|O|ZZO|ZZW|ZO|ZW|Z|WNW|WZW|W)$/);
+  if(!m) return null;
+  return RICHTING_DEG[m[1]];
+}
+function naarRichtingKort(deg){
+  if(deg==null) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+function formatKansPct(v){
+  if(v==null || !Number.isFinite(Number(v))) return '–';
+  return Math.max(0, Math.min(100, Math.round(Number(v))));
+}
+function bouwVijfdaagseDagKoppen(startDatum){
+  const tr=document.getElementById('vijfdaagse-dagen');
+  if(!tr) return;
+  tr.innerHTML='<th class="rij-label"></th>';
+  for(let i=0;i<5;i++){
+    const d=plusDag(startDatum,i);
+    tr.insertAdjacentHTML('beforeend',
+      `<th class="dag">${DAG_KORT[d.getDay()]}<br><small style="font-weight:400;opacity:.85">${formatDMshort(d)}</small></th>`);
+  }
+}
+function vulVijfdaagse(data){
+  const tbody=document.getElementById('vijfdaagse-body');
+  if(!tbody) return;
+  const windCel=(deg)=>{
+    const letter=naarRichtingKort(deg);
+    const rot=deg!=null?deg:0;
+    return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+  };
+  const rij=(lbl,arr,fmt=(v=>v))=>`<tr><td class="rij-label">${lbl}</td>${arr.map(v=>`<td contenteditable="true">${fmt(v)}</td>`).join('')}</tr>`;
+  tbody.innerHTML=[
+    rij('Max. temperatuur (°C)', data.tmax),
+    rij('Min. temperatuur (°C)', data.tmin),
+    rij('Kans op neerslag (%)',  data.nsk),
+    rij('Windkracht (BFT)',      data.bft),
+    `<tr><td class="rij-label">Windrichting</td>${data.ri.map(d=>`<td contenteditable="true" class="wind-cel">${windCel(d)}</td>`).join('')}</tr>`
+  ].join('');
+}
+/* KNMI-neerslagkans per dag (uit data.weerlab.nl/knmi_verwachting.json) */
+const KNMI_MND={januari:0,februari:1,maart:2,april:3,mei:4,juni:5,juli:6,augustus:7,september:8,oktober:9,november:10,december:11};
+function knmiDatumToDate(datumStr){
+  const m=(datumStr||'').trim().toLowerCase().match(/^(\d{1,2})\s+([a-zëï]+)/);
+  if(!m) return null;
+  const dag=parseInt(m[1]), mnd=KNMI_MND[m[2]];
+  if(mnd==null) return null;
+  const nu=new Date();
+  let d=new Date(nu.getFullYear(), mnd, dag, 12, 0, 0);
+  if((nu-d) > 180*24*3600*1000) d=new Date(nu.getFullYear()+1, mnd, dag, 12, 0, 0);
+  return d;
+}
+function popPerDagKnmi(knmiJ, dagDatums){
+  if(!knmiJ?.dagen) return dagDatums.map(()=>null);
+  return dagDatums.map(target=>{
+    const t=new Date(target); t.setHours(12,0,0,0);
+    for(const d of knmiJ.dagen){
+      const dd=knmiDatumToDate(d.datum);
+      if(dd && dd.toDateString()===t.toDateString()){
+        const m=(d.neerslagkans||'').match(/(\d+)/);
+        return m ? parseInt(m[1]) : null;
+      }
+    }
+    return null;
+  });
+}
+
+/* Tabel-persistentie (localStorage, per dag) */
+const TABEL_KEY_PREFIX='wb_rr_tabel_';
+function tabelSaveKey(){ return TABEL_KEY_PREFIX+vandaagISO(); }
+function saveTabel(){
+  const tbody=document.getElementById('vijfdaagse-body');
+  const dagen=document.getElementById('vijfdaagse-dagen');
+  if(!tbody || !dagen || !tbody.innerHTML.trim()) return;
+  try{
+    localStorage.setItem(tabelSaveKey(), JSON.stringify({
+      __ts:Date.now(), headers:dagen.innerHTML, body:tbody.innerHTML
+    }));
+  }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    if(!d.headers || !d.body) return false;
+    document.getElementById('vijfdaagse-dagen').innerHTML=d.headers;
+    document.getElementById('vijfdaagse-body').innerHTML=d.body;
+    return true;
+  }catch(e){ return false; }
+}
+
+async function laadVijfdaagse(){
+  const nu=new Date();
+  bouwVijfdaagseDagKoppen(nu);
+  // Parallel: MOSMIX (temp/wind) + KNMI-verwachting (neerslagkans)
+  const [mosmixJ, knmiJ] = await Promise.all([
+    fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch('https://data.weerlab.nl/knmi_verwachting.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null)
+  ]);
+  // Neerslagkans per dag uit KNMI (5 dagen vanaf vandaag)
+  const dagDatums=[0,1,2,3,4].map(i=>plusDag(nu,i));
+  const popKnmi = popPerDagKnmi(knmiJ, dagDatums);
+
+  if(mosmixJ){
+    const dagen=Object.keys(mosmixJ.data).sort();
+    const vijf=dagen.slice(0,5);
+    const pick=(fld,dt)=>mosmixJ.data[dt]?.[fld]?.['Rotterdam Airport'];
+    const nsk = vijf.map((dt,i)=>{
+      if(popKnmi[i]!=null) return popKnmi[i]; // KNMI heeft prioriteit
+      return formatKansPct(pick('R101',dt));   // anders MOSMIX
+    });
+    vulVijfdaagse({
+      tmax: vijf.map(dt=>{const v=pick('TX',dt); return v==null?'–':Math.round(v)}),
+      tmin: vijf.map(dt=>{const v=pick('TN',dt); return v==null?'–':Math.round(v)}),
+      nsk,
+      bft:  vijf.map(dt=>naarBFT(pick('FF',dt))),
+      ri:   vijf.map(dt=>pick('DD',dt))
+    });
+  } else {
+    vulVijfdaagse({
+      tmax:Array(5).fill('–'), tmin:Array(5).fill('–'),
+      nsk: popKnmi.map(v=>v==null?'–':v),
+      bft:Array(5).fill('–'), ri:Array(5).fill(null)
+    });
+  }
+  saveTabel();
+}
+
+/* Knop: ververs tabel (overschrijft eigen edits) */
+function herlaadTabel(){
+  if(!confirm('5-daagse tabel opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadVijfdaagse();
+}
+
+/* Auto-save tabel-cellen bij edit */
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#vijfdaagse-tabel')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
+
+/* ── Tab/focus in tabel-cel: bestaande waarde direct geselecteerd zodat typen overschrijft ── */
+document.addEventListener('focus', e=>{
+  const td=e.target;
+  if(td.tagName==='TD' && td.contentEditable==='true'){
+    const sel=window.getSelection();
+    const range=document.createRange();
+    range.selectNodeContents(td);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}, true);
+
+/* ── Wind-cel: parse richting bij blur en herrender pijl ── */
+function herrenderWindCel(deg){
+  const letter=['N','NO','O','ZO','Z','ZW','W','NW','N'][Math.round(deg/45)];
+  return `<span class="windpijl" style="transform:rotate(${deg}deg);display:inline-block">↓</span> ${letter}`;
+}
+document.addEventListener('blur', e=>{
+  if(e.target.matches && e.target.matches('td.wind-cel')){
+    const deg=parseRichting(e.target.textContent);
+    if(deg!=null) e.target.innerHTML=herrenderWindCel(deg);
+  }
+}, true);
+
+/* ── Init ── */
+updateOpgesteldKop();
+updateDagnamen();
+// Eerst proberen opgeslagen tabel te herstellen — anders eerst placeholders + verse fetch
+if(!restoreTabel()){
+  bouwVijfdaagseDagKoppen(new Date());
+  vulVijfdaagse({tmax:Array(5).fill('–'),tmin:Array(5).fill('–'),nsk:Array(5).fill('–'),bft:Array(5).fill('–'),ri:Array(5).fill(null)});
+  laadVijfdaagse();
+}
+// Tijd-deel automatisch ververs elke minuut zodat "om HH:MM uur" actueel blijft
+setInterval(updateOpgesteldKop, 60*1000);
+restoreDraft();
+</script>
+</body>
+</html>

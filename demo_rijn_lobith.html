@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rijnafvoer bij Lobith — actueel & historie (demo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#00205b; --accent:#2ec4e8; --accent-strong:#035e7a;
+  --bg:#f6f8fb; --bg-soft:#eef2f7; --surface:#ffffff; --surface-muted:#f8fafc;
+  --border:#e3e8ef; --border-strong:#cbd5e1;
+  --text:#0f172a; --muted:#64748b; --soft:#94a3b8;
+  --water:#1d4ed8; --water-soft:rgba(29,78,216,.12);
+  --gemiddeld:#94a3b8; --ola:#e07000; --alarm:#cc0000; --record:#6d28d9;
+  --success:#10b981;
+  --font:"DM Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"DM Mono",ui-monospace,monospace;
+  --radius:12px;
+  --shadow:0 2px 4px rgba(15,23,42,.05),0 4px 12px rgba(15,23,42,.06);
+}
+:root[data-theme="dark"]{
+  --bg:#0b1220; --bg-soft:#0f1728; --surface:#121a2b; --surface-muted:#0e1629;
+  --border:#1f2a40; --border-strong:#334155;
+  --text:#e5ecf6; --muted:#8292ac; --soft:#5b6a84;
+  --water:#4f8bff; --water-soft:rgba(79,139,255,.16); --accent:#38d1f0;
+  --gemiddeld:#64748b;
+  --shadow:0 2px 4px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1220; --bg-soft:#0f1728; --surface:#121a2b; --surface-muted:#0e1629;
+    --border:#1f2a40; --border-strong:#334155;
+    --text:#e5ecf6; --muted:#8292ac; --soft:#5b6a84;
+    --water:#4f8bff; --water-soft:rgba(79,139,255,.16); --accent:#38d1f0;
+    --gemiddeld:#64748b;
+    --shadow:0 2px 4px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:960px;margin:0 auto;padding:24px 20px 60px;}
+header{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;justify-content:space-between;margin-bottom:6px;}
+h1{font:700 22px/1.2 var(--font);margin:0 0 4px;letter-spacing:-.01em;}
+.sub{color:var(--muted);font-size:13px;max-width:640px;}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:9999px;
+  font-size:11px;font-weight:600;background:var(--water-soft);color:var(--water);white-space:nowrap;}
+.badge.demo{background:rgba(224,112,0,.14);color:var(--ola);}
+.quote{margin:16px 0 22px;padding:12px 16px;border-left:3px solid var(--alarm);
+  background:var(--surface-muted);border-radius:0 8px 8px 0;color:var(--text);font-size:13.5px;}
+.quote b{color:var(--alarm);}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:26px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.card .lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.card .val{font:700 26px/1.05 var(--font);margin:6px 0 2px;font-variant-numeric:tabular-nums;}
+.card .val small{font-size:13px;font-weight:600;color:var(--muted);}
+.card .note{font-size:11.5px;color:var(--soft);}
+.card .accentbar{position:absolute;left:0;top:0;bottom:0;width:4px;}
+.card.nu .accentbar{background:var(--water);}
+.card.alarm .accentbar{background:var(--alarm);}
+.card.record .accentbar{background:var(--record);}
+.card.normaal .accentbar{background:var(--gemiddeld);}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 18px 10px;box-shadow:var(--shadow);margin-bottom:22px;}
+.panel h2{font:700 16px/1.25 var(--font);margin:0 0 2px;}
+.panel .desc{color:var(--muted);font-size:12.5px;margin-bottom:10px;}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0 0;font-size:11.5px;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:16px;height:0;border-top-width:2px;border-top-style:solid;display:inline-block;}
+.legend i.solid{border-top-style:solid;}
+.legend i.dash{border-top-style:dashed;}
+.chart{position:relative;width:100%;}
+svg{width:100%;height:auto;display:block;overflow:visible;}
+.tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:var(--text);color:var(--bg);font-size:11.5px;line-height:1.35;
+  padding:6px 9px;border-radius:7px;white-space:nowrap;transform:translate(-50%,-115%);z-index:5;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);font-variant-numeric:tabular-nums;}
+.tip b{font-weight:700;}
+.axis-lbl{fill:var(--soft);font-size:10.5px;font-family:var(--mono);}
+.grid{stroke:var(--border);stroke-width:1;}
+.reflbl{font-size:10.5px;font-weight:600;font-family:var(--font);}
+.foot{color:var(--soft);font-size:11.5px;margin-top:8px;}
+.foot a{color:var(--accent-strong);}
+.toggle{background:var(--surface);border:1px solid var(--border);border-radius:9999px;
+  padding:6px 12px;font:600 12px var(--font);color:var(--muted);cursor:pointer;}
+.expl{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:2px;}
+.expl div{background:var(--surface-muted);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.expl b{display:block;font-size:12px;color:var(--text);margin-bottom:2px;}
+.expl p{margin:0;font-size:11.5px;color:var(--muted);}
+@media (max-width:720px){
+  .cards{grid-template-columns:repeat(2,1fr);}
+  .expl{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Rijnafvoer bij Lobith — actueel &amp; historie</h1>
+      <div class="sub">Afvoer (debiet) van de Rijn waar hij Nederland binnenkomt bij Lobith, afgezet tegen langjarige drempels en historische laagterecords.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="badge" id="liveBadge">● live · RWS</span>
+      <button class="toggle" id="themeBtn">◐ thema</button>
+    </div>
+  </header>
+
+  <div class="quote">
+    Rijkswaterstaat slaat alarm: de Rijn zakt richting een <b>historisch lage afvoer van 800&nbsp;m³/s</b>.
+    Ter vergelijking: normaal voert de Rijn bij Lobith zo'n 2.200&nbsp;m³/s af.
+  </div>
+
+  <div class="cards">
+    <div class="card nu"><span class="accentbar"></span>
+      <div class="lbl">Afvoer nu</div>
+      <div class="val" id="nuVal">– <small>m³/s</small></div>
+      <div class="note" id="nuNote">laden…</div>
+      <div class="note" id="nuWater" style="margin-top:4px;color:var(--water);font-weight:600;"></div>
+    </div>
+    <div class="card alarm"><span class="accentbar"></span>
+      <div class="lbl">Alarmpeil</div>
+      <div class="val">800 <small>m³/s</small></div>
+      <div class="note">RWS-alarm juli 2026</div>
+    </div>
+    <div class="card record"><span class="accentbar"></span>
+      <div class="lbl">Record laag</div>
+      <div class="val">620 <small>m³/s</small></div>
+      <div class="note">1947 · laagste ooit</div>
+    </div>
+    <div class="card normaal"><span class="accentbar"></span>
+      <div class="lbl">Normaal</div>
+      <div class="val">2.200 <small>m³/s</small></div>
+      <div class="note">langjarig gemiddelde</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Actuele trend — afvoer laatste 60 dagen</h2>
+    <div class="desc">Etmaalgemiddelde afvoer bij Lobith t.o.v. de scheepvaartdrempel (OLA 1.020) en het alarmpeil van 800&nbsp;m³/s.</div>
+    <div class="chart"><div class="tip" id="tipA"></div><svg id="svgA" viewBox="0 0 720 300" role="img" aria-label="Afvoer laatste 60 dagen"></svg></div>
+    <div class="legend">
+      <span><i class="solid" style="border-color:var(--water)"></i> afvoer (RWS)</span>
+      <span><i class="dash" style="border-color:var(--gemiddeld)"></i> normaal 2.200</span>
+      <span><i class="dash" style="border-color:var(--ola)"></i> OLA 1.020 (scheepvaart)</span>
+      <span><i class="dash" style="border-color:var(--alarm)"></i> alarm 800</span>
+      <span><i class="dash" style="border-color:var(--record)"></i> record 620</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Historie — laagste afvoer in markante laagwaterjaren</h2>
+    <div class="desc">Laagste gemeten dagafvoer bij Lobith in eerdere droogtejaren, vergeleken met de drempels. Meetreeks vanaf 1901.</div>
+    <div class="chart"><div class="tip" id="tipB"></div><svg id="svgB" viewBox="0 0 720 300" role="img" aria-label="Historische laagterecords"></svg></div>
+    <div class="legend">
+      <span><i class="solid" style="border-color:var(--water)"></i> laagste afvoer dat jaar</span>
+      <span><i class="dash" style="border-color:var(--ola)"></i> OLA 1.020</span>
+      <span><i class="dash" style="border-color:var(--alarm)"></i> alarm 800</span>
+    </div>
+  </div>
+
+  <div class="expl">
+    <div><b>Afvoer (m³/s)</b><p>Hoeveel kubieke meter water de Rijn per seconde afvoert bij Lobith. Robuuster dan de waterstand, die ook van de rivierbodem afhangt.</p></div>
+    <div><b>OLA 1.020 m³/s</b><p>Overeengekomen Lage Afvoer: hieronder krijgt de scheepvaart hinder en moeten schepen minder laden.</p></div>
+    <div><b>800 m³/s</b><p>Alarmniveau uit het bericht — dicht bij het record van 620 m³/s uit 1947.</p></div>
+  </div>
+
+  <div class="foot">
+    Actuele afvoer &amp; 60-daagse reeks: <b>live</b> uit Rijkswaterstaat WaterWebservices (DDAPI 2.0), locatie Lobith (Bovenrijn, Tolkamer), grootheid Debiet.
+    Drempels &amp; historische records: RWS Waterinfo / waterberichtgeving.rws.nl — OLA 2022 = 1.020&nbsp;m³/s · record 1947 = 620&nbsp;m³/s · 2018 = 732&nbsp;m³/s · 2022 ≈ 650&nbsp;m³/s.
+    <span id="genLbl"></span>
+  </div>
+</div>
+
+<script>
+// ── Data (live uit rijn_lobith.json; fallback = klein voorbeeld) ───────────
+let REF = { gemiddeld:2200, ola:1020, alarm:800, record:620 };
+let serie = [];   // [{d:Date, q}]
+let HIST  = [];
+const NL = n => n.toLocaleString('nl-NL');
+
+function fallbackReeks(){
+  const out=[], end=new Date();
+  for(let i=59;i>=0;i--){const d=new Date(end);d.setDate(end.getDate()-i);
+    out.push({d, q: Math.round(1500-(1500-1000)*((59-i)/59)+Math.sin(i*0.7)*22)});}
+  return out;
+}
+
+async function init(){
+  try{
+    // Data staat op R2 (data.weerlab.nl); op localhost of met ?localData=1 lokaal.
+    const R2 = (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.search.includes('localData')) ? '' : 'https://data.weerlab.nl/';
+    const r=await fetch(R2+'rijn_lobith.json?t='+Date.now());
+    if(!r.ok) throw new Error('http '+r.status);
+    const j=await r.json();
+    if(j.drempels) REF=j.drempels;
+    serie=(j.reeks||[]).map(p=>({d:new Date(p.d+'T12:00:00'), q:p.q}));
+    if(!serie.length) throw new Error('lege reeks');
+    HIST=(j.historie||[]).map(h=>({...h}));
+    const nu = j.nu && j.nu.afvoer!=null ? j.nu.afvoer : serie[serie.length-1].q;
+    // huidig jaar als aparte "nu"-marker in de historie
+    HIST.push({jaar:new Date().getFullYear(), q:nu, note:'nu · koers ↓ 800', actueel:true});
+    document.getElementById('nuVal').innerHTML=NL(nu)+' <small>m³/s</small>';
+    const prev=serie.length>1?serie[serie.length-2].q:nu;
+    const trend=nu<prev?'dalend ▼':(nu>prev?'stijgend ▲':'gelijk');
+    const status=nu<REF.alarm?'onder alarmpeil':(nu<REF.ola?'onder OLA — scheepvaart hindert':'boven OLA');
+    document.getElementById('nuNote').textContent=trend+' · '+status;
+    if(j.nu && j.nu.waterstand_cm!=null){
+      const m=(j.nu.waterstand_cm/100).toFixed(2).replace('.',',');
+      document.getElementById('nuWater').textContent='💧 waterstand '+m+' m +NAP';
+    }
+    if(j.gegenereerd){
+      const g=new Date(j.gegenereerd);
+      document.getElementById('genLbl').textContent=' Bijgewerkt: '+
+        g.toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'.';
+    }
+  }catch(e){
+    serie=fallbackReeks();
+    HIST=[{jaar:1947,q:620,note:'record — laagste ooit'},
+          {jaar:2018,q:732,note:'okt'},{jaar:2022,q:650,note:'aug · naderde record'}];
+    document.getElementById('nuVal').innerHTML=NL(serie[serie.length-1].q)+' <small>m³/s</small>';
+    document.getElementById('nuNote').textContent='voorbeeld (RWS niet bereikbaar)';
+    const b=document.getElementById('liveBadge'); b.textContent='◆ voorbeeld (offline)'; b.classList.add('demo');
+  }
+  HIST.sort((a,b)=>b.q-a.q);
+  tekenAlles();
+}
+
+const SVGNS='http://www.w3.org/2000/svg';
+const el=(n,a)=>{const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+// ── LIJNGRAFIEK (actueel) ──────────────────────────────────────────────────
+function tekenLijn(){
+  const svg=document.getElementById('svgA'); svg.innerHTML='';
+  const W=720,H=300,mL=46,mR=64,mT=14,mB=28;
+  const x0=mL,x1=W-mR,y0=H-mB,y1=mT;
+  if(!serie.length) return;
+  const qs=serie.map(p=>p.q);
+  const dMin=Math.min(...qs), dMax=Math.max(...qs);
+  const yMin=Math.min(REF.record-40, dMin-40);
+  const yMax=Math.max(dMax+80, REF.ola+90);
+  const X=i=>x0+(x1-x0)*i/Math.max(1,serie.length-1);
+  const Y=q=>y0+(y1-y0)*(q-yMin)/(yMax-yMin);
+
+  // gridlines + y-as labels (dynamische ticks per 200)
+  for(let v=Math.ceil(yMin/200)*200; v<=yMax; v+=200){
+    svg.appendChild(el('line',{x1:x0,x2:x1,y1:Y(v),y2:Y(v),class:'grid','stroke-dasharray':v%400===0?'':'2 4',opacity:.6}));
+    const t=el('text',{x:x0-8,y:Y(v)+3,class:'axis-lbl','text-anchor':'end'});t.textContent=NL(v);svg.appendChild(t);
+  }
+  // x-as (elke ~10 dagen)
+  serie.forEach((p,i)=>{ if(i%10===0||i===serie.length-1){
+    const t=el('text',{x:X(i),y:y0+18,class:'axis-lbl','text-anchor':'middle'});
+    t.textContent=p.d.getDate()+'/'+(p.d.getMonth()+1);svg.appendChild(t);
+  }});
+
+  // referentielijnen (alleen binnen schaal)
+  [['ola',REF.ola,'var(--ola)','OLA 1.020'],
+   ['alarm',REF.alarm,'var(--alarm)','alarm 800'],
+   ['record',REF.record,'var(--record)','record 620']].forEach(([k,v,c,lab])=>{
+    if(v<yMin||v>yMax) return;
+    svg.appendChild(el('line',{x1:x0,x2:x1,y1:Y(v),y2:Y(v),stroke:c,'stroke-width':1.5,'stroke-dasharray':'5 4',opacity:.9}));
+    const t=el('text',{x:x1+6,y:Y(v)+3,class:'reflbl',fill:c});t.textContent=lab;svg.appendChild(t);
+  });
+  if(REF.gemiddeld>yMax){
+    const t=el('text',{x:x1+6,y:y1+9,class:'reflbl',fill:'var(--gemiddeld)'});
+    t.textContent='normaal '+NL(REF.gemiddeld)+' ↑';svg.appendChild(t);
+  }
+
+  // area + lijn
+  let dPath='',aPath=`M ${X(0)} ${y0} `;
+  serie.forEach((p,i)=>{const xx=X(i),yy=Y(p.q);dPath+=(i?'L':'M')+xx+' '+yy+' ';aPath+='L '+xx+' '+yy+' ';});
+  aPath+=`L ${X(serie.length-1)} ${y0} Z`;
+  svg.appendChild(el('path',{d:aPath,fill:'var(--water-soft)'}));
+  svg.appendChild(el('path',{d:dPath,fill:'none',stroke:'var(--water)','stroke-width':2.4,'stroke-linejoin':'round','stroke-linecap':'round'}));
+  // laatste punt
+  const lp=serie[serie.length-1];
+  svg.appendChild(el('circle',{cx:X(serie.length-1),cy:Y(lp.q),r:4.5,fill:'var(--water)',stroke:'var(--surface)','stroke-width':2}));
+
+  // hover
+  const tip=document.getElementById('tipA');
+  const cross=el('line',{x1:0,x2:0,y1:y1,y2:y0,stroke:'var(--border-strong)','stroke-width':1,opacity:0});svg.appendChild(cross);
+  const dot=el('circle',{r:4,fill:'var(--water)',stroke:'var(--surface)','stroke-width':2,opacity:0});svg.appendChild(dot);
+  const hit=el('rect',{x:x0,y:y1,width:x1-x0,height:y0-y1,fill:'transparent'});svg.appendChild(hit);
+  const box=svg.getBoundingClientRect();
+  function move(ev){
+    const r=svg.getBoundingClientRect();
+    const px=(ev.clientX-r.left)/r.width*W;
+    let i=Math.round((px-x0)/(x1-x0)*(serie.length-1));
+    i=Math.max(0,Math.min(serie.length-1,i));
+    const p=serie[i];
+    cross.setAttribute('x1',X(i));cross.setAttribute('x2',X(i));cross.setAttribute('opacity',.7);
+    dot.setAttribute('cx',X(i));dot.setAttribute('cy',Y(p.q));dot.setAttribute('opacity',1);
+    tip.style.opacity=1;
+    tip.style.left=(X(i)/W*100)+'%';
+    tip.style.top=(Y(p.q)/H*100)+'%';
+    tip.innerHTML='<b>'+NL(p.q)+' m³/s</b><br>'+p.d.getDate()+'/'+(p.d.getMonth()+1);
+  }
+  hit.addEventListener('mousemove',move);
+  hit.addEventListener('mouseleave',()=>{tip.style.opacity=0;cross.setAttribute('opacity',0);dot.setAttribute('opacity',0);});
+}
+
+// ── STAAFGRAFIEK (historie) ────────────────────────────────────────────────
+function tekenStaven(){
+  const svg=document.getElementById('svgB'); svg.innerHTML='';
+  const W=720,H=300,mL=58,mR=64,mT=18,mB=28;
+  const x0=mL,x1=W-mR,y0=H-mB,y1=mT;
+  const qMax=Math.max(REF.ola, ...HIST.map(h=>h.q))+110;
+  const X=q=>x0+(x1-x0)*q/qMax;
+  const n=HIST.length, band=(y0-y1)/n, bh=Math.min(26,band*0.62);
+
+  // x-gridlines
+  for(let v=0; v<=qMax; v+=200){
+    svg.appendChild(el('line',{x1:X(v),x2:X(v),y1:y1,y2:y0,class:'grid','stroke-dasharray':v?'2 4':'',opacity:.6}));
+    const t=el('text',{x:X(v),y:y0+18,class:'axis-lbl','text-anchor':'middle'});t.textContent=NL(v);svg.appendChild(t);
+  }
+
+  // referentielijnen OLA + alarm
+  [['OLA 1.020',REF.ola,'var(--ola)'],['alarm 800',REF.alarm,'var(--alarm)']].forEach(([lab,v,c])=>{
+    svg.appendChild(el('line',{x1:X(v),x2:X(v),y1:y1-2,y2:y0,stroke:c,'stroke-width':1.5,'stroke-dasharray':'5 4',opacity:.9}));
+    const t=el('text',{x:X(v),y:y1-5,class:'reflbl',fill:c,'text-anchor':'middle'});t.textContent=lab;svg.appendChild(t);
+  });
+
+  const tip=document.getElementById('tipB');
+  HIST.forEach((h,i)=>{
+    const cy=y1+band*i+band/2;
+    const w=X(h.q)-x0;
+    const isRec=h.jaar===1947, isNow=h.actueel;
+    const fill=isNow?'var(--water-soft)':(isRec?'var(--record)':'var(--water)');
+    // label jaar
+    const yl=el('text',{x:x0-10,y:cy+4,class:'axis-lbl','text-anchor':'end'});
+    yl.style.fill='var(--muted)';yl.style.fontFamily='var(--font)';yl.style.fontWeight=(isRec||isNow)?'700':'500';
+    yl.textContent=h.jaar;svg.appendChild(yl);
+    const bar=el('rect',{x:x0,y:cy-bh/2,width:Math.max(2,w),height:bh,rx:4,fill:fill});
+    if(isNow){bar.setAttribute('stroke','var(--water)');bar.setAttribute('stroke-width','1.5');bar.setAttribute('stroke-dasharray','4 3');}
+    svg.appendChild(bar);
+    // waarde-label aan eind
+    const vt=el('text',{x:x0+w+7,y:cy+4,class:'reflbl'});
+    vt.style.fill=isNow?'var(--water)':fill;vt.textContent=NL(h.q)+(isNow?' (nu)':'');svg.appendChild(vt);
+    // hover
+    const hit=el('rect',{x:x0,y:cy-band/2,width:x1-x0,height:band,fill:'transparent'});
+    hit.addEventListener('mousemove',()=>{
+      tip.style.opacity=1;tip.style.left=(X(h.q)/W*100)+'%';tip.style.top=((cy-bh/2)/H*100)+'%';
+      tip.innerHTML='<b>'+h.jaar+' · '+NL(h.q)+' m³/s</b><br>'+h.note;
+    });
+    hit.addEventListener('mouseleave',()=>tip.style.opacity=0);
+    svg.appendChild(hit);
+  });
+}
+
+function tekenAlles(){if(serie.length){tekenLijn();tekenStaven();}}
+init();
+window.addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(tekenAlles,150);});
+
+// thema-toggle
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  const next=cur==='dark'?'light':(cur==='light'?'dark':(matchMedia('(prefers-color-scheme:dark)').matches?'light':'dark'));
+  document.documentElement.setAttribute('data-theme',next);
+  setTimeout(tekenAlles,20);
+});
+</script>
+</body>
+</html>

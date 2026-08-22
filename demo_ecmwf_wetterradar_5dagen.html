@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECMWF WetterRadar-stijl 5 dagen - weerlab.nl</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#102033;font-family:Inter,"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#fff}
+button,input{font:inherit}
+#app{position:fixed;inset:0;background:#102033}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hud{position:absolute;z-index:5;user-select:none}
+.time-badge{top:22px;left:26px;display:flex;align-items:stretch;filter:drop-shadow(0 3px 8px rgba(0,0,0,.38))}
+.time-main{background:#066ca0;color:#ffd51b;padding:5px 8px 4px;border-radius:4px 0 0 4px;min-width:64px;text-align:center}
+.time-main strong{display:block;font-size:22px;line-height:1;font-weight:850;letter-spacing:0}
+.time-main span{display:block;margin-top:2px;font-size:11px;color:#fff;font-weight:800}
+.search-btn{width:42px;border:0;border-left:1px solid rgba(255,255,255,.25);border-radius:0 4px 4px 0;background:#ffc400;color:#fff;display:grid;place-items:center;cursor:pointer}
+.search-btn svg{width:24px;height:24px;stroke-width:3}
+.logo{top:32px;left:50%;transform:translateX(-50%);font-size:24px;font-weight:750;letter-spacing:.02em;text-shadow:0 2px 8px rgba(0,0,0,.45);opacity:.94}
+.logo span{color:#ffc400}
+.top-tools{top:20px;right:22px;display:flex;gap:4px;filter:drop-shadow(0 2px 7px rgba(0,0,0,.32))}
+.tool-btn{width:42px;height:38px;border:0;border-radius:2px;background:#075f89;color:#eaf6ff;display:grid;place-items:center;cursor:pointer}
+.tool-btn.active{background:#11415e}
+.tool-btn:hover{background:#0b75a8}
+.tool-btn svg{width:23px;height:23px;stroke-width:2.4}
+.zoom{top:78px;right:22px;display:flex;flex-direction:column;gap:9px;filter:drop-shadow(0 2px 7px rgba(0,0,0,.32))}
+.zoom button{width:47px;height:45px;border:0;border-radius:2px;background:#076a9b;color:#fff;font-size:30px;font-weight:800;line-height:1;cursor:pointer}
+.zoom button:hover{background:#0d7fb7}
+.scale{left:10px;bottom:20px;display:flex;align-items:flex-end;gap:7px;font-size:12px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.scale-line{width:72px;height:18px;border-left:2px solid #e8f7ff;border-bottom:2px solid #e8f7ff;border-right:2px solid #e8f7ff}
+.bottom-bar{left:50%;bottom:22px;transform:translateX(-50%);height:46px;min-width:min(820px,calc(100vw - 180px));display:grid;grid-template-columns:auto 1fr auto auto auto auto;align-items:center;background:#075f89;box-shadow:0 5px 18px rgba(0,0,0,.36);border-radius:2px;overflow:visible}
+.day-tabs{display:flex;height:46px}
+.day-tabs button{height:46px;min-width:82px;border:0;border-right:1px solid rgba(255,255,255,.14);background:#075f89;color:#d8f0ff;font-size:14px;font-weight:650;cursor:pointer;padding:0 13px}
+.day-tabs button:hover{background:#0b709f}
+.day-tabs button.active{background:#0a4c70;color:#fff;position:relative}
+.day-tabs button.active:before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:15px solid #0a4c70}
+.range-box{height:46px;display:flex;align-items:center;padding:0 14px;min-width:260px}
+#time-range{width:100%;accent-color:#f4c300}
+.nav-btn,.play-btn,.info-btn{height:46px;width:46px;border:0;border-left:1px solid rgba(255,255,255,.15);background:#075f89;color:#fff;cursor:pointer;display:grid;place-items:center}
+.nav-btn:hover,.play-btn:hover,.info-btn:hover{background:#0b709f}
+.play-btn svg,.nav-btn svg,.info-btn svg{width:25px;height:25px}
+.info-btn{background:#e4f5ff;color:#0a5c86;border-radius:4px;margin-left:8px;height:42px;width:42px}
+.status{position:absolute;inset:0;z-index:8;display:grid;place-items:center;background:rgba(10,22,35,.78);font-size:15px;font-weight:750;color:#eaf6ff}
+.status.hidden{display:none}
+.status .box{background:rgba(4,35,55,.9);border:1px solid rgba(255,255,255,.12);padding:14px 18px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.corner-note{right:10px;bottom:6px;font-size:11px;color:#cfe7f5;background:rgba(4,35,55,.72);padding:3px 6px;border-radius:2px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+@media(max-width:820px){
+  .logo{font-size:18px;top:18px}
+  .top-tools{top:68px;right:12px;flex-direction:column}
+  .zoom{top:258px;right:12px}
+  .time-badge{top:12px;left:12px}
+  .bottom-bar{left:10px;right:10px;bottom:12px;transform:none;min-width:0;grid-template-columns:1fr auto auto auto}
+  .day-tabs{grid-column:1 / -1;overflow:auto;width:100%;height:40px}
+  .day-tabs button{height:40px;min-width:70px;font-size:12px}
+  .range-box{min-width:0}
+  .scale,.corner-note{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="map"></canvas>
+
+  <div class="hud time-badge">
+    <div class="time-main"><strong id="time-hour">--:--</strong><span id="time-date">--</span></div>
+    <button class="search-btn" type="button" title="Rijssen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M16 16l5 5"/></svg>
+    </button>
+  </div>
+
+  <div class="hud logo">weer<span>lab</span></div>
+
+  <div class="hud top-tools" id="layer-tools" aria-label="Kaartlagen">
+    <button class="tool-btn active" type="button" data-layer="composite" title="Composiet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7l8-4 8 4-8 4-8-4Z"/><path d="M4 12l8 4 8-4"/><path d="M4 17l8 4 8-4"/></svg>
+    </button>
+    <button class="tool-btn" type="button" data-layer="clouds" title="Wolken">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 18H8a5 5 0 1 1 1.2-9.85A6 6 0 0 1 20 12.5 3 3 0 0 1 17 18Z"/></svg>
+    </button>
+    <button class="tool-btn" type="button" data-layer="rain" title="Neerslag">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3C8 8 6 11 6 15a6 6 0 0 0 12 0c0-4-2-7-6-12Z"/></svg>
+    </button>
+    <button class="tool-btn" type="button" data-layer="temp" title="Temperatuur">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0Z"/><path d="M12 8v8"/></svg>
+    </button>
+    <button class="tool-btn" type="button" data-layer="wind" title="Wind">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 8h10a3 3 0 1 0-3-3"/><path d="M4 13h14a3 3 0 1 1-3 3"/><path d="M4 18h7"/></svg>
+    </button>
+    <button class="tool-btn" type="button" data-layer="cape" title="Onweer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M13 2L4 14h7l-1 8 10-13h-7l0-7Z"/></svg>
+    </button>
+  </div>
+
+  <div class="hud zoom">
+    <button type="button" id="zoom-in" title="Inzoomen">+</button>
+    <button type="button" id="zoom-out" title="Uitzoomen">-</button>
+  </div>
+
+  <div class="hud scale"><span>50 km</span><span class="scale-line"></span></div>
+
+  <div class="hud bottom-bar">
+    <div class="day-tabs" id="day-tabs"></div>
+    <div class="range-box"><input id="time-range" type="range" min="0" max="120" value="0"></div>
+    <button class="nav-btn" type="button" id="prev-step" title="Vorige stap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 5l-7 7 7 7" stroke-width="2.6"/></svg></button>
+    <button class="nav-btn" type="button" id="next-step" title="Volgende stap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5l7 7-7 7" stroke-width="2.6"/></svg></button>
+    <button class="play-btn" type="button" id="play" title="Afspelen"><svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7Z"/></svg></button>
+    <button class="info-btn" type="button" title="ECMWF 5 dagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 10v7"/><path d="M12 7h.01"/></svg></button>
+  </div>
+
+  <div class="hud corner-note">ECMWF IFS + DWD MOSMIX · prototype</div>
+  <div class="status" id="status"><div class="box">ECMWF-composiet laden...</div></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var canvas = document.getElementById("map");
+  var ctx = canvas.getContext("2d");
+  var statusEl = document.getElementById("status");
+  var rangeEl = document.getElementById("time-range");
+  var DATA_URL = "";
+  var DATA_META = "ecmwf_nwe_canvas_meta.json";
+  var FILES = {
+    land: "europa_land.geojson",
+    nl: "nl_provincies.geojson",
+    be: "be_provincies.geojson",
+    de: "germany_bundeslander.geojson",
+    fr: "fr_regions.geojson",
+    rivers: "nl_rivieren.geojson"
+  };
+  var MOSMIX_BASE = "https://data.weerlab.nl/";
+  var MOSMIX_FILES = [
+    "mosmix_uurlijks_nl.json",
+    "mosmix_uurlijks_be.json",
+    "mosmix_uurlijks_de.json",
+    "mosmix_uurlijks_fr.json",
+    "mosmix_uurlijks_gb.json"
+  ].map(function(f) { return MOSMIX_BASE + f; });
+
+  var BASE_EXTENT = { lonMin: -6.5, lonMax: 14, latMin: 47, latMax: 57 };
+  var RIJSSEN = { name: "Rijssen", lat: 52.31, lon: 6.52 };
+  var state = {
+    step: 0,
+    start: 0,
+    end: 120,
+    zoom: 1,
+    centerLon: 3.9,
+    centerLat: 52.0,
+    layer: "composite",
+    playing: false,
+    timer: null
+  };
+  var meta = null;
+  var rasters = {};
+  var geo = {};
+  var stations = [];
+  var baseCache = null;
+  var renderId = 0;
+
+  var CITIES = [
+    ["Londen",51.51,-0.13,1],["Norwich",52.63,1.30,2],["Birmingham",52.49,-1.89,2],["Manchester",53.48,-2.24,2],["Liverpool",53.41,-2.99,2],["Leeds",53.80,-1.55,2],["York",53.96,-1.08,3],["Hull",53.74,-0.33,3],["Cambridge",52.20,0.12,3],["Southampton",50.91,-1.40,3],["Plymouth",50.38,-4.14,3],["Cardiff",51.48,-3.18,3],["Bristol",51.45,-2.59,3],
+    ["Amsterdam",52.37,4.90,1],["Rotterdam",51.92,4.48,1],["Zwolle",52.52,6.09,2],["Groningen",53.22,6.57,2],["Enschede",52.22,6.90,2],["Apeldoorn",52.21,5.97,2],["Eindhoven",51.44,5.48,2],
+    ["Brussel",50.85,4.35,1],["Antwerpen",51.22,4.40,2],["Brugge",51.21,3.22,2],["Luik",50.63,5.57,2],["Lille",50.63,3.06,2],["Calais",50.95,1.86,2],["Amiens",49.89,2.30,3],["Parijs",48.86,2.35,1],["Rouen",49.44,1.10,3],["Reims",49.26,4.03,3],["Nancy",48.69,6.18,3],["Metz",49.12,6.18,3],["Strasbourg",48.58,7.75,2],
+    ["Hamburg",53.55,9.99,1],["Bremen",53.08,8.80,2],["Hannover",52.37,9.74,2],["Munster",51.96,7.63,2],["Dortmund",51.51,7.47,1],["Dusseldorf",51.23,6.78,1],["Koln",50.94,6.96,1],["Aachen",50.78,6.08,2],["Essen",51.45,7.01,2],["Bielefeld",52.02,8.53,2],["Kassel",51.31,9.49,2],["Frankfurt",50.11,8.68,1],["Koblenz",50.36,7.59,3],["Saarbrucken",49.24,6.99,3],["Stuttgart",48.78,9.18,2],["Mannheim",49.49,8.47,2],["Nurnberg",49.45,11.08,2],["Leipzig",51.34,12.37,2],["Magdeburg",52.13,11.63,3],["Rostock",54.09,12.10,2],["Kiel",54.32,10.14,2],["Lubeck",53.87,10.69,3],["Berlin",52.52,13.40,1]
+  ];
+
+  function setStatus(text) {
+    if (!text) {
+      statusEl.classList.add("hidden");
+      return;
+    }
+    statusEl.querySelector(".box").textContent = text;
+    statusEl.classList.remove("hidden");
+  }
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function parseTime(t) { return new Date(t); }
+  function fmtDate(dt) {
+    return ["zo","ma","di","wo","do","vr","za"][dt.getDay()] + ", " + pad(dt.getDate()) + "." + pad(dt.getMonth() + 1) + ".";
+  }
+  function tabLabel(dt, idx) {
+    if (idx === 0) return "actueel";
+    if (idx === 1) return "vandaag";
+    if (idx === 2) return "morgen";
+    return ["zo","ma","di","wo","do","vr","za"][dt.getDay()];
+  }
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+  function frac(n) { return n - Math.floor(n); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function currentExtent() {
+    var z = state.zoom;
+    var w = (BASE_EXTENT.lonMax - BASE_EXTENT.lonMin) / z;
+    var h = (BASE_EXTENT.latMax - BASE_EXTENT.latMin) / z;
+    var lonMin = clamp(state.centerLon - w / 2, BASE_EXTENT.lonMin, BASE_EXTENT.lonMax - w);
+    var latMin = clamp(state.centerLat - h / 2, BASE_EXTENT.latMin, BASE_EXTENT.latMax - h);
+    return { lonMin: lonMin, lonMax: lonMin + w, latMin: latMin, latMax: latMin + h };
+  }
+
+  function project(lon, lat, w, h, ext) {
+    ext = ext || currentExtent();
+    return {
+      x: (lon - ext.lonMin) / (ext.lonMax - ext.lonMin) * w,
+      y: (1 - (lat - ext.latMin) / (ext.latMax - ext.latMin)) * h
+    };
+  }
+
+  function inView(lon, lat, ext) {
+    return lon >= ext.lonMin && lon <= ext.lonMax && lat >= ext.latMin && lat <= ext.latMax;
+  }
+
+  function resize() {
+    var dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    var w = Math.max(360, window.innerWidth);
+    var h = Math.max(360, window.innerHeight);
+    var pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) {
+      canvas.width = pw;
+      canvas.height = ph;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      baseCache = null;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: h, dpr: dpr };
+  }
+
+  function fetchJson(file) {
+    return fetch(DATA_URL + file + "?t=" + Date.now()).then(function(r) {
+      if (!r.ok) throw new Error(file + " niet gevonden");
+      return r.json();
+    });
+  }
+
+  function loadMeta() {
+    return fetchJson(DATA_META).then(function(d) { meta = d; return d; });
+  }
+
+  function loadRaster(key) {
+    if (rasters[key]) return Promise.resolve(rasters[key]);
+    var info = meta.parameters[key];
+    if (!info) return Promise.reject(new Error("Parameter ontbreekt: " + key));
+    return fetch(DATA_URL + info.file + "?t=" + Date.now()).then(function(r) {
+      if (!r.ok) throw new Error(info.file + " niet gevonden");
+      return r.arrayBuffer();
+    }).then(function(buf) {
+      var view = new DataView(buf);
+      var out = {
+        nLat: view.getUint16(0, true),
+        nLon: view.getUint16(2, true),
+        nSteps: view.getUint16(4, true),
+        nComp: view.getUint16(6, true),
+        data: new Float32Array(buf, 16)
+      };
+      rasters[key] = out;
+      return out;
+    });
+  }
+
+  function loadGeo() {
+    return Promise.all(Object.keys(FILES).map(function(k) {
+      return fetchJson(FILES[k]).then(function(d) { geo[k] = d; }).catch(function() { geo[k] = null; });
+    }));
+  }
+
+  function loadMosmix() {
+    return Promise.all(MOSMIX_FILES.map(function(file) {
+      return fetchJson(file).catch(function(){ return null; });
+    })).then(function(list) {
+      stations = [];
+      list.forEach(function(d) {
+        if (!d || !d.stations || !d.data) return;
+        Object.keys(d.stations).forEach(function(name) {
+          var co = d.stations[name];
+          var st = d.data[name];
+          if (co && st && st.tijden) stations.push({ name: name, lon: co[0], lat: co[1], data: st });
+        });
+      });
+    });
+  }
+
+  function nearestStep() {
+    var now = new Date();
+    for (var i = 0; i < meta.tijden.length; i++) {
+      if (parseTime(meta.tijden[i]) >= now) return i;
+    }
+    return Math.max(0, meta.tijden.length - 1);
+  }
+
+  function rasterValue(pd, step, lon, lat, comp) {
+    comp = comp || 0;
+    var g = meta.grid;
+    if (lon < g.lon_min || lon > g.lon_max || lat < g.lat_min || lat > g.lat_max) return NaN;
+    var x = (lon - g.lon_min) / (g.lon_max - g.lon_min) * (pd.nLon - 1);
+    var y = (lat - g.lat_min) / (g.lat_max - g.lat_min) * (pd.nLat - 1);
+    var x0 = Math.floor(x), y0 = Math.floor(y);
+    var x1 = Math.min(x0 + 1, pd.nLon - 1), y1 = Math.min(y0 + 1, pd.nLat - 1);
+    var fx = x - x0, fy = y - y0;
+    var pts = pd.nLat * pd.nLon;
+    var off = step * pts * pd.nComp + comp * pts;
+    function val(ix, iy) { return pd.data[off + iy * pd.nLon + ix]; }
+    var a = val(x0, y0), b = val(x1, y0), c = val(x0, y1), d = val(x1, y1);
+    if (![a,b,c,d].every(Number.isFinite)) return NaN;
+    return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+  }
+
+  function cloudTotal(lon, lat) {
+    var pd = rasters.bewolking;
+    if (!pd) return NaN;
+    var high = rasterValue(pd, state.step, lon, lat, 0);
+    var mid = rasterValue(pd, state.step, lon, lat, 1);
+    var low = rasterValue(pd, state.step, lon, lat, 2);
+    if (![high, mid, low].every(Number.isFinite)) return NaN;
+    high = clamp(high, 0, 1); mid = clamp(mid, 0, 1); low = clamp(low, 0, 1);
+    return 1 - (1 - low) * (1 - mid) * (1 - high);
+  }
+
+  function stationIndex(st, dt) {
+    var best = -1, bd = Infinity;
+    for (var i = 0; i < st.tijden.length; i++) {
+      var d = Math.abs(parseTime(st.tijden[i]) - dt);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+
+  function stationVal(st, key, idx) {
+    var arr = st[key];
+    if (!arr || idx < 0 || idx >= arr.length || arr[idx] == null) return NaN;
+    return Number(arr[idx]);
+  }
+
+  function drawGeoPath(c, data, opts, ext, w, h) {
+    if (!data) return;
+    var features = data.type === "FeatureCollection" ? data.features : [data];
+    c.save();
+    c.lineJoin = "round";
+    c.lineCap = "round";
+    c.strokeStyle = opts.stroke || "rgba(0,0,0,.35)";
+    c.fillStyle = opts.fill || "transparent";
+    c.lineWidth = opts.width || 1;
+    features.forEach(function(feat) {
+      var geom = feat.geometry || feat;
+      if (!geom) return;
+      if (geom.type === "Polygon") drawPolygon(c, geom.coordinates, opts, ext, w, h);
+      else if (geom.type === "MultiPolygon") geom.coordinates.forEach(function(poly){ drawPolygon(c, poly, opts, ext, w, h); });
+      else if (geom.type === "LineString") drawLine(c, geom.coordinates, ext, w, h);
+      else if (geom.type === "MultiLineString") geom.coordinates.forEach(function(line){ drawLine(c, line, ext, w, h); });
+    });
+    c.restore();
+  }
+
+  function drawPolygon(c, poly, opts, ext, w, h) {
+    c.beginPath();
+    poly.forEach(function(ring) {
+      ring.forEach(function(pt, i) {
+        var p = project(pt[0], pt[1], w, h, ext);
+        if (i === 0) c.moveTo(p.x, p.y);
+        else c.lineTo(p.x, p.y);
+      });
+      c.closePath();
+    });
+    if (opts.fill) c.fill("evenodd");
+    if (opts.stroke) c.stroke();
+  }
+
+  function drawLine(c, line, ext, w, h) {
+    c.beginPath();
+    line.forEach(function(pt, i) {
+      var p = project(pt[0], pt[1], w, h, ext);
+      if (i === 0) c.moveTo(p.x, p.y);
+      else c.lineTo(p.x, p.y);
+    });
+    c.stroke();
+  }
+
+  function buildBase(w, h, ext) {
+    var off = document.createElement("canvas");
+    off.width = w;
+    off.height = h;
+    var c = off.getContext("2d");
+    var sea = c.createLinearGradient(0, 0, 0, h);
+    sea.addColorStop(0, "#315f82");
+    sea.addColorStop(.55, "#244d69");
+    sea.addColorStop(1, "#19384f");
+    c.fillStyle = sea;
+    c.fillRect(0, 0, w, h);
+
+    drawGeoPath(c, geo.land, { fill: "#496f39", stroke: "rgba(10,20,18,.76)", width: 1.25 }, ext, w, h);
+
+    c.save();
+    c.globalCompositeOperation = "overlay";
+    for (var i = 0; i < 160; i++) {
+      var x = frac(Math.sin(i * 12.989) * 43758.5453) * w;
+      var y = frac(Math.sin(i * 78.233) * 17341.42) * h;
+      var r = 80 + frac(Math.sin(i * 9.13) * 9987.2) * 260;
+      var g = c.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, "rgba(255,255,220,.10)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = g;
+      c.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    c.restore();
+
+    drawGeoPath(c, geo.fr, { stroke: "rgba(18,37,31,.28)", width: .8 }, ext, w, h);
+    drawGeoPath(c, geo.de, { stroke: "rgba(18,37,31,.28)", width: .8 }, ext, w, h);
+    drawGeoPath(c, geo.be, { stroke: "rgba(18,37,31,.28)", width: .8 }, ext, w, h);
+    drawGeoPath(c, geo.nl, { stroke: "rgba(18,37,31,.34)", width: .8 }, ext, w, h);
+    drawGeoPath(c, geo.rivers, { stroke: "rgba(39,105,146,.38)", width: .65 }, ext, w, h);
+    drawGeoPath(c, geo.land, { stroke: "rgba(0,0,0,.74)", width: 1.1 }, ext, w, h);
+    return off;
+  }
+
+  function drawBase(w, h, ext) {
+    var key = [w, h, state.zoom.toFixed(2), ext.lonMin.toFixed(2), ext.latMin.toFixed(2)].join(":");
+    if (!baseCache || baseCache.key !== key) {
+      baseCache = { key: key, canvas: buildBase(w, h, ext) };
+    }
+    ctx.drawImage(baseCache.canvas, 0, 0);
+  }
+
+  function makeFieldCanvas(w, h, ext, mode) {
+    var fw = Math.max(240, Math.min(720, Math.round(w / 3)));
+    var fh = Math.max(160, Math.min(420, Math.round(h / 3)));
+    var off = document.createElement("canvas");
+    off.width = fw;
+    off.height = fh;
+    var c = off.getContext("2d");
+    var img = c.createImageData(fw, fh);
+    var rain = rasters.neerslag;
+    var temp = rasters.temp;
+    var gust = rasters.windstoten;
+    var cape = rasters.cape;
+    for (var y = 0; y < fh; y++) {
+      var lat = ext.latMax - (y + .5) / fh * (ext.latMax - ext.latMin);
+      for (var x = 0; x < fw; x++) {
+        var lon = ext.lonMin + (x + .5) / fw * (ext.lonMax - ext.lonMin);
+        var p = (y * fw + x) * 4;
+        var r = 0, g = 0, b = 0, a = 0;
+        if (mode === "temp") {
+          var tv = rasterValue(temp, state.step, lon, lat, 0);
+          var tc = tempColor(tv);
+          r = tc[0]; g = tc[1]; b = tc[2]; a = Number.isFinite(tv) ? 150 : 0;
+        } else if (mode === "wind") {
+          var gv = rasterValue(gust, state.step, lon, lat, 0) * 3.6;
+          var gc = gustColor(gv);
+          r = gc[0]; g = gc[1]; b = gc[2]; a = Number.isFinite(gv) ? 135 : 0;
+        } else if (mode === "cape") {
+          var cv = rasterValue(cape, state.step, lon, lat, 0);
+          var cc = capeColor(cv);
+          r = cc[0]; g = cc[1]; b = cc[2]; a = cv > 60 ? 145 : 0;
+        } else {
+          var cl = cloudTotal(lon, lat);
+          if (Number.isFinite(cl) && (mode === "clouds" || mode === "composite")) {
+            var noise = frac(Math.sin((x * 12.9898 + y * 78.233 + state.step * 3.71)) * 43758.5453);
+            var shade = clamp(185 + cl * 78 + (noise - .5) * 32, 150, 255);
+            r = shade; g = shade; b = shade;
+            a = Math.round(Math.pow(cl, .82) * (mode === "clouds" ? 220 : 165));
+          }
+          if (mode === "rain" || mode === "composite") {
+            var rv = rasterValue(rain, state.step, lon, lat, 0);
+            if (rv > .05) {
+              var rc = rainColor(rv);
+              var ra = clamp(70 + Math.log(1 + rv) * 85, 80, 235);
+              if (a > 0) {
+                var fa = ra / 255;
+                r = Math.round(rc[0] * fa + r * (1 - fa));
+                g = Math.round(rc[1] * fa + g * (1 - fa));
+                b = Math.round(rc[2] * fa + b * (1 - fa));
+                a = Math.max(a, ra);
+              } else {
+                r = rc[0]; g = rc[1]; b = rc[2]; a = ra;
+              }
+            }
+          }
+        }
+        img.data[p] = r; img.data[p+1] = g; img.data[p+2] = b; img.data[p+3] = a;
+      }
+    }
+    c.putImageData(img, 0, 0);
+    return off;
+  }
+
+  function tempColor(v) {
+    if (!Number.isFinite(v)) return [0,0,0];
+    var stops = [[-5,[41,98,255]],[0,[67,199,255]],[5,[78,205,107]],[10,[153,203,62]],[15,[238,213,55]],[20,[242,154,61]],[25,[229,82,70]],[30,[178,50,88]],[35,[105,35,135]]];
+    return interpStops(v, stops);
+  }
+  function rainColor(v) {
+    var stops = [[.05,[153,246,255]],[.2,[96,218,255]],[.6,[28,169,245]],[1.5,[0,124,218]],[3,[51,199,95]],[6,[245,215,36]],[12,[238,87,43]],[25,[169,30,120]]];
+    return interpStops(v, stops);
+  }
+  function gustColor(v) {
+    var stops = [[20,[160,230,255]],[35,[87,211,121]],[50,[245,220,76]],[65,[248,143,55]],[80,[232,71,75]],[100,[133,28,84]],[125,[92,22,118]]];
+    return interpStops(v, stops);
+  }
+  function capeColor(v) {
+    var stops = [[0,[0,0,0]],[100,[250,220,70]],[400,[245,150,35]],[800,[230,70,60]],[1500,[165,45,130]],[2500,[105,35,160]]];
+    return interpStops(v, stops);
+  }
+  function interpStops(v, stops) {
+    if (v <= stops[0][0]) return stops[0][1];
+    for (var i = 1; i < stops.length; i++) {
+      if (v <= stops[i][0]) {
+        var a = stops[i-1], b = stops[i];
+        var f = (v - a[0]) / (b[0] - a[0]);
+        return [
+          Math.round(a[1][0] + (b[1][0] - a[1][0]) * f),
+          Math.round(a[1][1] + (b[1][1] - a[1][1]) * f),
+          Math.round(a[1][2] + (b[1][2] - a[1][2]) * f)
+        ];
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+
+  function drawFields(w, h, ext) {
+    var mode = state.layer;
+    if (mode === "composite") mode = "composite";
+    var field = makeFieldCanvas(w, h, ext, mode);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(field, 0, 0, w, h);
+    ctx.restore();
+  }
+
+  function drawStationRain(w, h, ext) {
+    if (state.layer === "temp" || state.layer === "wind" || state.layer === "cape") return;
+    var dt = parseTime(meta.tijden[state.step]);
+    stations.forEach(function(st) {
+      if (!inView(st.lon, st.lat, ext)) return;
+      var idx = stationIndex(st.data, dt);
+      var rr = stationVal(st.data, "RR1c", idx);
+      if (!(rr > .08)) return;
+      var p = project(st.lon, st.lat, w, h, ext);
+      var rad = clamp(32 + Math.sqrt(rr) * 36, 34, 110) * state.zoom;
+      var col = rainColor(rr);
+      var g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+      g.addColorStop(0, "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",.72)");
+      g.addColorStop(.56, "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",.35)");
+      g.addColorStop(1, "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function drawWeatherIcon(x, y, type, scale) {
+    scale = scale || 1;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.lineWidth = 1.7;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (type === "sun") {
+      ctx.strokeStyle = "rgba(255,221,20,.78)";
+      for (var i = 0; i < 10; i++) {
+        var a = i / 10 * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.lineTo(Math.cos(a) * 15, Math.sin(a) * 15);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#ffd70a";
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+    } else if (type === "rain") {
+      drawCloudShape(0, 0, "rgba(210,219,224,.78)");
+      ctx.strokeStyle = "#55d9ff";
+      for (var r = -1; r <= 1; r++) {
+        ctx.beginPath(); ctx.moveTo(r * 6, 9); ctx.lineTo(r * 6 - 3, 15); ctx.stroke();
+      }
+    } else {
+      drawCloudShape(0, 0, "rgba(218,222,221,.74)");
+    }
+    ctx.restore();
+  }
+
+  function drawCloudShape(x, y, fill) {
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = "rgba(255,255,255,.26)";
+    ctx.beginPath();
+    ctx.arc(x - 7, y + 2, 6, Math.PI, Math.PI * 2);
+    ctx.arc(x, y - 2, 8, Math.PI, Math.PI * 2);
+    ctx.arc(x + 8, y + 2, 6, Math.PI, Math.PI * 2);
+    ctx.lineTo(x + 14, y + 8);
+    ctx.lineTo(x - 13, y + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawLabels(w, h, ext) {
+    var taken = [];
+    var temp = rasters.temp;
+    var rain = rasters.neerslag;
+    CITIES.sort(function(a,b){ return a[3] - b[3]; }).forEach(function(city) {
+      var name = city[0], lat = city[1], lon = city[2], prio = city[3];
+      if (!inView(lon, lat, ext)) return;
+      var p = project(lon, lat, w, h, ext);
+      if (p.x < 30 || p.x > w - 30 || p.y < 30 || p.y > h - 76) return;
+      var box = { x:p.x - 38, y:p.y - 23, w:76, h:46 };
+      if (prio > 1 && taken.some(function(b){ return !(box.x > b.x+b.w || box.x+box.w < b.x || box.y > b.y+b.h || box.y+box.h < b.y); })) return;
+      taken.push(box);
+      var tv = rasterValue(temp, state.step, lon, lat, 0);
+      var rr = rasterValue(rain, state.step, lon, lat, 0);
+      var cl = cloudTotal(lon, lat);
+      var type = rr > .22 ? "rain" : (cl > .72 ? "cloud" : "sun");
+      drawWeatherIcon(p.x - 18, p.y - 11, type, prio === 1 ? .88 : .78);
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "800 " + (prio === 1 ? 14 : 12) + "px Inter, Segoe UI, Arial";
+      ctx.lineWidth = 3.4;
+      ctx.strokeStyle = "rgba(42,44,42,.9)";
+      ctx.fillStyle = "#ffd400";
+      var ttxt = Number.isFinite(tv) ? String(Math.round(tv)) : "";
+      ctx.strokeText(ttxt, p.x - 34, p.y - 12);
+      ctx.fillText(ttxt, p.x - 34, p.y - 12);
+      ctx.font = "700 " + (prio === 1 ? 14 : 12) + "px Inter, Segoe UI, Arial";
+      ctx.strokeStyle = "rgba(38,40,41,.92)";
+      ctx.lineWidth = 4.2;
+      ctx.fillStyle = "rgba(238,242,244,.96)";
+      ctx.strokeText(name, p.x, p.y + 14);
+      ctx.fillText(name, p.x, p.y + 14);
+      ctx.restore();
+    });
+  }
+
+  function drawRijssen(w, h, ext) {
+    if (!inView(RIJSSEN.lon, RIJSSEN.lat, ext)) return;
+    var p = project(RIJSSEN.lon, RIJSSEN.lat, w, h, ext);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = "#e00015";
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawWind(w, h, ext) {
+    if (state.layer !== "wind") return;
+    var wind = rasters.wind;
+    if (!wind) return;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,.82)";
+    ctx.fillStyle = "rgba(255,255,255,.82)";
+    ctx.lineWidth = 1.3;
+    for (var lat = Math.ceil(ext.latMin); lat <= ext.latMax; lat += 1.25) {
+      for (var lon = Math.ceil(ext.lonMin); lon <= ext.lonMax; lon += 1.6) {
+        var u = rasterValue(wind, state.step, lon, lat, 0);
+        var v = rasterValue(wind, state.step, lon, lat, 1);
+        if (![u,v].every(Number.isFinite)) continue;
+        var p = project(lon, lat, w, h, ext);
+        var ang = Math.atan2(u, v);
+        var spd = Math.sqrt(u*u + v*v);
+        var len = clamp(10 + spd * 1.1, 10, 25);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(ang);
+        ctx.beginPath();
+        ctx.moveTo(0, -len/2); ctx.lineTo(0, len/2);
+        ctx.moveTo(0, -len/2); ctx.lineTo(-4, -len/2 + 7);
+        ctx.moveTo(0, -len/2); ctx.lineTo(4, -len/2 + 7);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  function updateHud() {
+    var dt = parseTime(meta.tijden[state.step]);
+    document.getElementById("time-hour").textContent = pad(dt.getHours()) + ":00";
+    document.getElementById("time-date").textContent = fmtDate(dt);
+    rangeEl.value = state.step;
+    var pct = (state.step - Number(rangeEl.min)) / Math.max(1, Number(rangeEl.max) - Number(rangeEl.min)) * 100;
+    rangeEl.style.background = "linear-gradient(90deg,#ffc400 0%,#ffc400 " + pct + "%,rgba(255,255,255,.28) " + pct + "%,rgba(255,255,255,.28) 100%)";
+    document.querySelectorAll("#day-tabs button").forEach(function(btn) {
+      if (btn.dataset.kind === "actual") btn.classList.toggle("active", state.step === state.start);
+      else btn.classList.toggle("active", sameDay(parseTime(btn.dataset.date), dt));
+    });
+  }
+
+  function render() {
+    if (!meta) return;
+    var myRender = ++renderId;
+    setStatus("Kaart renderen...");
+    requestAnimationFrame(function() {
+      if (myRender !== renderId) return;
+      var size = resize();
+      var ext = currentExtent();
+      drawBase(size.w, size.h, ext);
+      drawFields(size.w, size.h, ext);
+      drawStationRain(size.w, size.h, ext);
+      drawWind(size.w, size.h, ext);
+      drawLabels(size.w, size.h, ext);
+      drawRijssen(size.w, size.h, ext);
+      updateHud();
+      setStatus("");
+    });
+  }
+
+  function buildTabs() {
+    var tabs = document.getElementById("day-tabs");
+    var html = '<button type="button" data-kind="actual">actueel</button>';
+    var days = [];
+    for (var i = state.start; i <= state.end; i++) {
+      var dt = parseTime(meta.tijden[i]);
+      var key = dt.getFullYear() + "-" + pad(dt.getMonth()+1) + "-" + pad(dt.getDate());
+      if (!days.some(function(d){ return d.key === key; })) days.push({ key:key, dt:dt, idx:i });
+    }
+    days.slice(0, 6).forEach(function(d, i) {
+      html += '<button type="button" data-kind="day" data-date="' + d.key + '" data-index="' + d.idx + '">' + tabLabel(d.dt, i + 1) + '</button>';
+    });
+    tabs.innerHTML = html;
+    tabs.querySelectorAll("button").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        if (btn.dataset.kind === "actual") {
+          state.step = state.start;
+        } else {
+          var target = parseTime(btn.dataset.date);
+          var best = Number(btn.dataset.index);
+          for (var i = state.start; i <= state.end; i++) {
+            var dt = parseTime(meta.tijden[i]);
+            if (sameDay(dt, target) && dt.getHours() >= 12) { best = i; break; }
+          }
+          state.step = best;
+        }
+        render();
+      });
+    });
+  }
+
+  function bind() {
+    rangeEl.addEventListener("input", function() {
+      state.step = Number(rangeEl.value);
+      render();
+    });
+    document.getElementById("prev-step").addEventListener("click", function() {
+      state.step = Math.max(state.start, state.step - 1);
+      render();
+    });
+    document.getElementById("next-step").addEventListener("click", function() {
+      state.step = Math.min(state.end, state.step + 1);
+      render();
+    });
+    document.getElementById("play").addEventListener("click", function() {
+      state.playing = !state.playing;
+      document.getElementById("play-icon").innerHTML = state.playing ? '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>' : '<path d="M8 5v14l11-7Z"/>';
+      if (state.timer) clearInterval(state.timer);
+      if (state.playing) {
+        state.timer = setInterval(function() {
+          state.step = state.step >= state.end ? state.start : state.step + 1;
+          render();
+        }, 850);
+      }
+    });
+    document.querySelectorAll("#layer-tools button").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        state.layer = btn.dataset.layer;
+        document.querySelectorAll("#layer-tools button").forEach(function(b){ b.classList.toggle("active", b === btn); });
+        render();
+      });
+    });
+    document.getElementById("zoom-in").addEventListener("click", function() {
+      state.zoom = Math.min(2.2, state.zoom * 1.35);
+      state.centerLon = RIJSSEN.lon;
+      state.centerLat = RIJSSEN.lat;
+      baseCache = null;
+      render();
+    });
+    document.getElementById("zoom-out").addEventListener("click", function() {
+      state.zoom = Math.max(1, state.zoom / 1.35);
+      if (state.zoom === 1) { state.centerLon = 3.9; state.centerLat = 52.0; }
+      baseCache = null;
+      render();
+    });
+    window.addEventListener("resize", function() { baseCache = null; render(); });
+  }
+
+  function init() {
+    setStatus("ECMWF-composiet laden...");
+    Promise.all([loadMeta(), loadGeo(), loadMosmix()]).then(function() {
+      state.start = nearestStep();
+      state.end = Math.min(meta.tijden.length - 1, state.start + 120);
+      state.step = state.start;
+      rangeEl.min = state.start;
+      rangeEl.max = state.end;
+      rangeEl.value = state.step;
+      buildTabs();
+      bind();
+      return Promise.all([
+        loadRaster("neerslag"),
+        loadRaster("bewolking"),
+        loadRaster("temp"),
+        loadRaster("wind"),
+        loadRaster("windstoten"),
+        loadRaster("cape")
+      ]);
+    }).then(function() {
+      render();
+    }).catch(function(err) {
+      setStatus(err.message || String(err));
+      console.error(err);
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

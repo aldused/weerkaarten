@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kaarten Editor — Regio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #0f172a; }
+    #root { display: none; }
+    #pin-gate {
+      position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
+      padding: 24px; color: #e5eefc; font-family: Inter, system-ui, sans-serif;
+      background: radial-gradient(circle at 50% 32%, #18345f 0%, #0f172a 48%, #070b14 100%);
+    }
+    .pin-card {
+      width: min(390px, 100%); padding: 30px; border-radius: 18px; text-align: center;
+      background: rgba(15, 23, 42, .94); border: 1px solid rgba(96, 165, 250, .38);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .46);
+    }
+    .pin-icon { font-size: 42px; margin-bottom: 12px; }
+    .pin-card h1 { font-size: 21px; margin-bottom: 7px; }
+    .pin-card p { color: #94a3b8; font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+    .pin-input {
+      width: 100%; height: 54px; border-radius: 10px; border: 1px solid #475569;
+      background: #111c31; color: #fff; text-align: center; letter-spacing: 12px;
+      font: 800 24px/1 Inter, system-ui, sans-serif; outline: none;
+    }
+    .pin-input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, .18); }
+    .pin-submit {
+      width: 100%; height: 46px; margin-top: 12px; border: 0; border-radius: 10px;
+      background: #2563eb; color: #fff; font: 800 14px/1 Inter, system-ui, sans-serif;
+      cursor: pointer;
+    }
+    .pin-submit:hover { background: #3b82f6; }
+    #pin-error { min-height: 20px; margin-top: 10px; color: #fca5a5; font-size: 12px; }
+  </style>
+  <script>globalThis.WEERLAB_EDITOR_MODE = 'regio';</script>
+  <script src="./pluim_run_switcher_032667819e3a.js" data-editor-mode-aware="true" data-required="temperature_2m,precipitation,wind_speed_10m,cloud_cover,wind_gusts_10m"></script>
+  <script type="module" crossorigin src="./regio-editor-assets/weerbewaking_regio_kaart-DCFOt_3t.js?v=20260810-editor-pluim-v5"></script>
+</head>
+<body>
+  <div id="pin-gate">
+    <form class="pin-card" id="pin-form">
+      <div class="pin-icon">🔒</div>
+      <h1>Kaarten Editor</h1>
+      <p>Voer de viercijferige pincode in om de regio-editor te openen.</p>
+      <input class="pin-input" id="pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" aria-label="Pincode" required autofocus />
+      <button class="pin-submit" type="submit">Open editor</button>
+      <div id="pin-error" role="alert"></div>
+    </form>
+  </div>
+  <div id="root"></div>
+  <script>
+    (() => {
+      const PIN_HASH = 'b85bf0f7330be07933314afcfc04aa8e8bb33827eb03bdf2f65ff26fd32444f5';
+      const SESSION_KEY = 'landelijke_weerkaart_pin_ok';
+      const gate = document.getElementById('pin-gate');
+      const root = document.getElementById('root');
+      const form = document.getElementById('pin-form');
+      const input = document.getElementById('pin-input');
+      const error = document.getElementById('pin-error');
+      const unlock = () => {
+        gate.style.display = 'none';
+        root.style.display = 'block';
+      };
+      try {
+        if (sessionStorage.getItem(SESSION_KEY) === '1') unlock();
+      } catch (_) {}
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const value = input.value.trim();
+        if (!/^\d{4}$/.test(value)) {
+          error.textContent = 'Vul vier cijfers in.';
+          input.focus();
+          return;
+        }
+        const bytes = new TextEncoder().encode(value);
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+        if (hash === PIN_HASH) {
+          try { sessionStorage.setItem(SESSION_KEY, '1'); } catch (_) {}
+          error.textContent = '';
+          unlock();
+        } else {
+          error.textContent = 'Onjuiste pincode.';
+          input.value = '';
+          input.focus();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

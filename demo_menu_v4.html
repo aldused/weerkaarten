@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo — Menu v4: efficiënter navigeren</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+:root {
+  --sb-bg:      var(--wl-color-surface, #ffffff);
+  --sb-line:    var(--wl-color-border, #e3e8ef);
+  --sb-ink:     var(--wl-color-text, #0f172a);
+  --sb-ink-3:   var(--wl-color-text-muted, #64748b);
+  --sb-ink-4:   var(--wl-color-text-soft, #94a3b8);
+  --sb-brand:   var(--wl-color-primary, #00205b);
+  --sb-accent:  var(--wl-color-accent, #2ec4e8);
+  --sb-hover:   var(--wl-color-background-soft, #eef2f7);
+  --sb-active-bg: var(--wl-color-primary-soft, #eff6ff);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--wl-font-sans, "DM Sans", system-ui, sans-serif);
+  background: var(--wl-color-background, #f6f8fb);
+  color: var(--sb-ink);
+  padding: 24px;
+}
+h1 { font: var(--wl-text-headline-lg, 700 22px/1.2 sans-serif); color: var(--sb-brand); }
+.intro { max-width: 860px; margin: 8px 0 16px; font: var(--wl-text-body-md, 400 14px/1.5 sans-serif); color: var(--sb-ink-3); }
+
+.toggles {
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+  background: var(--sb-bg); border: 1px solid var(--sb-line);
+  border-radius: var(--wl-radius-md, 8px); padding: 10px 14px; margin-bottom: 20px;
+  font: var(--wl-text-label-md, 600 13px/1.25 sans-serif);
+}
+.toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.toggles .hint { font-weight: 400; color: var(--sb-ink-4); font-size: 12px; }
+
+.kolommen { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.kolom { width: 258px; flex-shrink: 0; }
+.kolom-kop {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; padding: 0 2px;
+  flex-wrap: wrap;
+}
+.kolom-kop h2 { font: var(--wl-text-headline-md, 700 16px/1.25 sans-serif); white-space: nowrap; }
+.telling {
+  font: var(--wl-text-data-sm, 500 12px/1.35 monospace);
+  background: var(--sb-brand); color: #fff;
+  padding: 1px 8px; border-radius: var(--wl-radius-full, 999px);
+}
+.kosten {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: var(--wl-radius-full, 999px);
+}
+.kosten.menu  { background: rgba(16,185,129,0.14); color: #067a58; }
+.kosten.werk  { background: rgba(224,112,0,0.13);  color: var(--wl-color-warning-orange, #e07000); }
+
+.sidebar {
+  background: var(--sb-bg); border: 1px solid var(--sb-line);
+  border-radius: var(--wl-radius-lg, 12px); box-shadow: var(--wl-shadow-2);
+  padding: 8px 0 12px; max-height: 78vh; overflow-y: auto;
+}
+.zoekmock {
+  margin: 6px 12px 8px; padding: 6px 10px; border: 1px solid var(--sb-line);
+  border-radius: var(--wl-radius-md, 8px); color: var(--sb-ink-4); font-size: 12px;
+  display: flex; justify-content: space-between; background: var(--wl-color-surface-muted, #f8fafc);
+}
+.zoekmock .kbd { border: 1px solid var(--sb-line); border-radius: 4px; padding: 0 5px; font-family: var(--wl-font-mono, monospace); font-size: 11px; }
+
+.nav-groep-titel {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px 4px; cursor: pointer; user-select: none;
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--sb-ink-3);
+}
+.nav-groep-titel::after {
+  content: "▾"; margin-left: auto; font-size: 9px; transition: transform 0.15s;
+}
+.nav-groep.dicht .nav-groep-titel::after { transform: rotate(-90deg); }
+.nav-groep.dicht .groep-inhoud { display: none; }
+.nav-groep.dicht .nav-groep-titel .aantal-dicht { display: inline; }
+.aantal-dicht { display: none; font-weight: 600; color: var(--sb-ink-4); text-transform: none; letter-spacing: 0; }
+
+.sub-kop {
+  padding: 7px 14px 2px 18px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--sb-ink-4);
+}
+.nav-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 14px 6px 18px; font-size: 13px; cursor: pointer;
+  border-left: 3px solid transparent; color: var(--sb-ink);
+}
+.nav-item:hover { background: var(--sb-hover); }
+.nav-item.actief { background: var(--sb-active-bg); border-left-color: var(--sb-accent); color: var(--sb-brand); font-weight: 600; }
+.nav-item .sub { margin-left: auto; font-size: 10px; color: var(--sb-ink-4); font-weight: 600; }
+.nav-item .merge {
+  margin-left: auto; font-size: 9px; font-weight: 800; padding: 1px 6px;
+  border-radius: var(--wl-radius-full, 999px);
+  background: rgba(46,196,232,0.16); color: var(--wl-color-accent-strong, #035e7a);
+}
+.nav-item .nieuw {
+  margin-left: auto; font-size: 9px; font-weight: 800; padding: 1px 6px;
+  border-radius: var(--wl-radius-full, 999px);
+  background: rgba(16,185,129,0.15); color: #067a58;
+}
+.ws-mock {
+  margin: 6px 10px; padding: 7px 10px; border-radius: var(--wl-radius-md, 8px);
+  border: 1px solid var(--sb-line); display: flex; gap: 8px; align-items: center;
+  font-size: 12px; font-weight: 700;
+}
+.ws-mock .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--wl-color-success, #10b981); flex-shrink: 0; }
+.divider { height: 1px; background: var(--sb-line); margin: 6px 12px; }
+
+.meer-knop {
+  padding: 4px 14px 4px 18px; font-size: 12px; color: var(--sb-ink-4); cursor: pointer;
+  font-weight: 600;
+}
+.meer-knop:hover { color: var(--sb-brand); }
+
+.uitleg {
+  margin-top: 10px; padding: 10px 12px; background: var(--sb-bg);
+  border: 1px solid var(--sb-line); border-radius: var(--wl-radius-md, 8px);
+  font: var(--wl-text-body-sm, 400 12px/1.45 sans-serif); color: var(--sb-ink-3);
+}
+.uitleg strong { color: var(--sb-ink); }
+.uitleg ul { margin: 4px 0 0 16px; }
+.uitleg li { margin-bottom: 3px; }
+
+/* Compacte modus */
+body.compact .nav-item { padding-top: 3px; padding-bottom: 3px; font-size: 12.5px; }
+body.compact .nav-groep-titel { padding-top: 6px; }
+body.compact .sub-kop { padding-top: 5px; }
+
+.advies {
+  max-width: 860px; margin-top: 26px; padding: 14px 16px;
+  background: var(--sb-active-bg); border: 1px solid var(--sb-accent);
+  border-radius: var(--wl-radius-md, 8px); font: var(--wl-text-body-md, 400 14px/1.5 sans-serif);
+}
+.advies h3 { font: var(--wl-text-headline-md, 700 16px/1.25 sans-serif); color: var(--sb-brand); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Menu v4 — drie richtingen naast elkaar</h1>
+<p class="intro">
+  Zelfde 36 producten, drie presentaties. Klik op groepstitels om in/uit te klappen —
+  precies zoals in het echte menu. Vinkjes hieronder werken op alle kolommen tegelijk.
+</p>
+
+<div class="toggles">
+  <label><input type="checkbox" id="chk-compact"> Compacte rijen <span class="hint">(6px minder per item ≈ 8 items extra in beeld)</span></label>
+  <label><input type="checkbox" id="chk-accordion"> Accordion <span class="hint">(één groep tegelijk open)</span></label>
+</div>
+
+<div class="kolommen" id="kolommen"></div>
+
+<div class="advies">
+  <h3>Advies: combineer B + C</h3>
+  Subkoppen in Klimaat en Actueel zijn puur menu-werk en lossen het scanprobleem direct op.
+  Consolidatie (kolom C) is de structurele oplossing: elk samengevoegd product krijgt een
+  interne schakelaar (zoals HARMONIE↔ICON-D2 in de wolkenkaart al doet) en het menu groeit
+  niet meer mee met elke variant. "Onlangs gebruikt" is een kleine JS-toevoeging naast de
+  bestaande favorieten. Accordion en compacte rijen zijn smaak — probeer ze hierboven.
+</div>
+
+<script>
+// ── Menudata ──────────────────────────────────────────────────────────────
+// A = huidig (index.html vandaag)
+const VAR_A = {
+  naam: "A · Huidig",
+  kosten: null,
+  uitleg: "<strong>36 items, 6 groepen.</strong> Klimaat (12) en Actueel (9) zijn lange, ongelede lijsten — daar zit de scan-pijn.",
+  onlangs: false,
+  groepen: [
+    { titel: "Verwachting", items: [
+      { n: "Weerkaarten", actief: true }, { n: "MOS/MIX 10 dagen" }, { n: "MOS/MIX Multi Europe" },
+      { n: "Nowcast 15-min" }, { n: "PASCAL Extreem Weer" } ]},
+    { titel: "Pluimen", items: [
+      { n: "Pluim viewer" }, { n: "Ensemble 6 pluim" }, { n: "Ensemble 6 pluim+" }, { n: "Pluim-trend" } ]},
+    { ws: true },
+    { titel: "Actueel", items: [
+      { n: "Neerslagradar" }, { n: "Bliksem Benelux" }, { n: "Satellietbeelden HD" },
+      { n: "Waarnemingen Nederland" }, { n: "Waarnemingen Europa" }, { n: "Toplijst & kaarten" },
+      { n: "Synoptisch" }, { n: "Kustdistricten" }, { n: "Zeewatertemperatuur" } ]},
+    { titel: "KNMI", items: [ { n: "Weersverwachting" }, { n: "Guidance KNMI/DWD" }, { n: "METAR / TAF" } ]},
+    { titel: "Statistiek", items: [ { n: "Maandoverzicht" }, { n: "Zomerstatistieken 2026" } ]},
+    { titel: "Klimaat", items: [
+      { n: "Hittegolven" }, { n: "Weerrecords" }, { n: "Dagrecords 6 dagen" }, { n: "Dagrecords per jaar" },
+      { n: "Extremenzoeker" }, { n: "Eerste & Laatste" }, { n: "P13 Neerslag" }, { n: "Droogtemonitor" },
+      { n: "KNMI Neerslagstations" }, { n: "Archief waarnemingen" }, { n: "Feestdagen Weer" }, { n: "Klimaatnormalen" } ]},
+  ],
+};
+
+// B = zelfde items, subkoppen + "meer" + onlangs — geen pagina-wijzigingen
+const VAR_B = {
+  naam: "B · Subkoppen",
+  kosten: "menu",
+  uitleg: "<strong>Zelfde 36 items</strong>, maar Actueel en Klimaat krijgen subkoppen en een " +
+          "<strong>·&nbsp;meer</strong>-staart voor de zeldzaam gebruikte items. Nieuw blok " +
+          "<strong>Onlangs</strong> (automatisch, laatste 4 geopende producten). Alleen menu-werk, geen pagina hoeft aangepast.",
+  onlangs: true,
+  groepen: [
+    { titel: "Verwachting", items: [
+      { n: "Weerkaarten", actief: true }, { n: "MOS/MIX 10 dagen" }, { n: "MOS/MIX Multi Europe" },
+      { n: "Nowcast 15-min" }, { n: "PASCAL Extreem Weer" } ]},
+    { titel: "Pluimen", items: [
+      { n: "Pluim viewer" }, { n: "Ensemble 6 pluim" }, { n: "Ensemble 6 pluim+" }, { n: "Pluim-trend" } ]},
+    { ws: true },
+    { titel: "Actueel", secties: [
+      { kop: "Beeld",    items: [ { n: "Neerslagradar" }, { n: "Bliksem Benelux" }, { n: "Satellietbeelden HD" } ]},
+      { kop: "Metingen", items: [ { n: "Waarnemingen Nederland" }, { n: "Waarnemingen Europa" }, { n: "Toplijst & kaarten" }, { n: "Synoptisch" } ]},
+      { kop: "Zee & kust", items: [ { n: "Kustdistricten" }, { n: "Zeewatertemperatuur" } ]},
+    ]},
+    { titel: "KNMI", items: [ { n: "Weersverwachting" }, { n: "Guidance KNMI/DWD" }, { n: "METAR / TAF" } ]},
+    { titel: "Statistiek", items: [ { n: "Maandoverzicht" }, { n: "Zomerstatistieken 2026" } ]},
+    { titel: "Klimaat", secties: [
+      { kop: "Hitte & records", items: [
+        { n: "Hittegolven" }, { n: "Weerrecords" }, { n: "Dagrecords 6 dagen" }, { n: "Dagrecords per jaar" },
+        { n: "Extremenzoeker" }, { n: "Eerste & Laatste" } ]},
+      { kop: "Neerslag & droogte", items: [ { n: "P13 Neerslag" }, { n: "Droogtemonitor" }, { n: "KNMI Neerslagstations" } ]},
+      { kop: "Archief", items: [ { n: "Archief waarnemingen" }, { n: "Feestdagen Weer" }, { n: "Klimaatnormalen" } ], meer: true },
+    ]},
+  ],
+};
+
+// C = consolidatie: verwante producten samengevoegd met interne schakelaar
+const VAR_C = {
+  naam: "C · Consolidatie",
+  kosten: "werk",
+  uitleg: "<strong>36 → 30 items.</strong> Verwante producten samengevoegd tot één pagina met interne " +
+          "schakelaar (badge toont hoeveel weergaven erin zitten): pluimen 4→1, MOS/MIX 2→1, " +
+          "waarnemingen NL/EU 2→1, dagrecords 2→1. Menu groeit niet meer mee met elke productvariant. " +
+          "Kost pagina-werk (tab/switch inbouwen), maar patroon bestaat al: wolkenkaart-modelswitcher, significant-modelswitch.",
+  onlangs: true,
+  groepen: [
+    { titel: "Verwachting", items: [
+      { n: "Weerkaarten", actief: true },
+      { n: "MOS/MIX", merge: "NL · EU" },
+      { n: "Nowcast 15-min" }, { n: "PASCAL Extreem Weer" },
+      { n: "Pluimen", merge: "4 weergaven" } ]},
+    { ws: true },
+    { titel: "Actueel", secties: [
+      { kop: "Beeld",    items: [ { n: "Neerslagradar" }, { n: "Bliksem Benelux" }, { n: "Satellietbeelden HD" } ]},
+      { kop: "Metingen", items: [ { n: "Waarnemingen", merge: "NL · EU" }, { n: "Toplijst & kaarten" }, { n: "Synoptisch" } ]},
+      { kop: "Zee & kust", items: [ { n: "Kustdistricten" }, { n: "Zeewatertemperatuur" } ]},
+    ]},
+    { titel: "KNMI", items: [ { n: "Weersverwachting" }, { n: "Guidance KNMI/DWD" }, { n: "METAR / TAF" } ]},
+    { titel: "Statistiek", items: [ { n: "Maandoverzicht" }, { n: "Zomerstatistieken 2026" } ]},
+    { titel: "Klimaat", secties: [
+      { kop: "Hitte & records", items: [
+        { n: "Hittegolven" }, { n: "Weerrecords" },
+        { n: "Dagrecords", merge: "6d · jaar" },
+        { n: "Extremenzoeker" }, { n: "Eerste & Laatste" } ]},
+      { kop: "Neerslag & droogte", items: [ { n: "P13 Neerslag" }, { n: "Droogtemonitor" }, { n: "KNMI Neerslagstations" } ]},
+      { kop: "Archief", items: [ { n: "Archief waarnemingen" }, { n: "Feestdagen Weer" }, { n: "Klimaatnormalen" } ], meer: true },
+    ]},
+  ],
+};
+
+// ── Renderen ──────────────────────────────────────────────────────────────
+function telItems(variant) {
+  let n = 1; // waarschuwingen
+  for (const g of variant.groepen) {
+    if (g.ws) continue;
+    if (g.items) n += g.items.length;
+    if (g.secties) for (const s of g.secties) n += s.items.length;
+  }
+  return n;
+}
+
+function maakItem(it) {
+  const d = document.createElement("div");
+  d.className = "nav-item" + (it.actief ? " actief" : "");
+  d.innerHTML = `<span>${it.n}</span>` +
+    (it.merge ? `<span class="merge">${it.merge}</span>` : "") +
+    (it.nieuw ? `<span class="nieuw">auto</span>` : "");
+  return d;
+}
+
+function maakGroep(g, kolomEl) {
+  if (g.ws) {
+    const w = document.createElement("div");
+    w.className = "ws-mock";
+    w.innerHTML = `<span class="dot"></span><span>KNMI Waarschuwingen</span>`;
+    return w;
+  }
+  const groep = document.createElement("div");
+  groep.className = "nav-groep";
+  const titel = document.createElement("div");
+  titel.className = "nav-groep-titel";
+  const n = (g.items ? g.items.length : g.secties.reduce((a, s) => a + s.items.length, 0));
+  titel.innerHTML = `<span>${g.titel}</span><span class="aantal-dicht">${n}</span>`;
+  titel.onclick = () => {
+    const dichtNu = groep.classList.contains("dicht");
+    if (document.getElementById("chk-accordion").checked && dichtNu) {
+      kolomEl.querySelectorAll(".nav-groep").forEach(el => el.classList.add("dicht"));
+    }
+    groep.classList.toggle("dicht");
+  };
+  groep.appendChild(titel);
+  const inhoud = document.createElement("div");
+  inhoud.className = "groep-inhoud";
+  if (g.items) g.items.forEach(it => inhoud.appendChild(maakItem(it)));
+  if (g.secties) {
+    for (const s of g.secties) {
+      const kop = document.createElement("div");
+      kop.className = "sub-kop";
+      kop.textContent = s.kop;
+      inhoud.appendChild(kop);
+      if (s.meer) {
+        // Verstopt achter "· meer" — zeldzaam gebruikte staart
+        const houder = document.createElement("div");
+        houder.style.display = "none";
+        s.items.forEach(it => houder.appendChild(maakItem(it)));
+        const knop = document.createElement("div");
+        knop.className = "meer-knop";
+        knop.textContent = `· meer (${s.items.length}) ▾`;
+        knop.onclick = () => {
+          const open = houder.style.display !== "none";
+          houder.style.display = open ? "none" : "block";
+          knop.textContent = open ? `· meer (${s.items.length}) ▾` : "· minder ▴";
+        };
+        // kop vervangt zichzelf: sectiekop + knop + houder
+        inhoud.appendChild(knop);
+        inhoud.appendChild(houder);
+      } else {
+        s.items.forEach(it => inhoud.appendChild(maakItem(it)));
+      }
+    }
+  }
+  groep.appendChild(inhoud);
+  return groep;
+}
+
+function maakKolom(variant) {
+  const kol = document.createElement("div");
+  kol.className = "kolom";
+  const kop = document.createElement("div");
+  kop.className = "kolom-kop";
+  kop.innerHTML = `<h2>${variant.naam}</h2><span class="telling">${telItems(variant)} items</span>` +
+    (variant.kosten === "menu" ? `<span class="kosten menu">alleen menu</span>` : "") +
+    (variant.kosten === "werk" ? `<span class="kosten werk">pagina-werk</span>` : "");
+  kol.appendChild(kop);
+
+  const sb = document.createElement("div");
+  sb.className = "sidebar";
+  const zoek = document.createElement("div");
+  zoek.className = "zoekmock";
+  zoek.innerHTML = `<span>🔍 Zoek product…</span><span class="kbd">/</span>`;
+  sb.appendChild(zoek);
+
+  if (variant.onlangs) {
+    const g = maakGroep({ titel: "Onlangs", items: [
+      { n: "Neerslagradar", nieuw: true }, { n: "Pluim viewer", nieuw: true },
+      { n: "Weerrecords", nieuw: true }, { n: "Satellietbeelden HD", nieuw: true },
+    ]}, sb);
+    sb.appendChild(g);
+    sb.appendChild(Object.assign(document.createElement("div"), { className: "divider" }));
+  }
+
+  for (const g of variant.groepen) sb.appendChild(maakGroep(g, sb));
+  kol.appendChild(sb);
+
+  const uitleg = document.createElement("div");
+  uitleg.className = "uitleg";
+  uitleg.innerHTML = variant.uitleg;
+  kol.appendChild(uitleg);
+  return kol;
+}
+
+const houder = document.getElementById("kolommen");
+[VAR_A, VAR_B, VAR_C].forEach(v => houder.appendChild(maakKolom(v)));
+
+document.getElementById("chk-compact").onchange = e =>
+  document.body.classList.toggle("compact", e.target.checked);
+</script>
+</body>
+</html>

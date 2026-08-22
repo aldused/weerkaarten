@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rijnmond Weerbericht — Stefan</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0b0f1a;--bg2:#111826;--panel:#161f2e;--border:#1e2d42;--text:#d8e8f4;--text2:#6a8aaa;--accent:#2ec4e8;--gold:#f0c040}
+html,body{height:100%}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden}
+
+/* ── Login-scherm ── */
+#login{
+  position:fixed;inset:0;z-index:999;
+  background:radial-gradient(ellipse at 50% 40%,#0f1e3a 0%,#070b14 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+}
+.logo{font-size:2.6rem;margin-bottom:4px}
+.titel{font-size:1.3rem;font-weight:700;color:white;letter-spacing:.04em}
+.sub{font-size:.85rem;color:var(--text2);text-align:center;max-width:320px;line-height:1.5}
+.veld-rij{display:flex;gap:8px;margin-top:8px}
+.veld{
+  font-family:Inter,sans-serif;font-size:1rem;padding:10px 14px;
+  border-radius:6px;border:1px solid var(--border);
+  background:var(--panel);color:var(--text);min-width:220px;outline:none;
+}
+.veld:focus{border-color:var(--accent);background:#1e2d42}
+.knop{
+  font-family:Inter,sans-serif;font-size:.95rem;font-weight:600;
+  padding:10px 22px;border-radius:6px;border:1px solid var(--accent);
+  background:rgba(46,196,232,.15);color:var(--accent);cursor:pointer;
+}
+.knop:hover{background:rgba(46,196,232,.25)}
+.fout{font-size:.8rem;color:#ff6666;height:18px;text-align:center}
+
+#login.verborgen{display:none}
+
+/* ── Iframe (weerbericht) ── */
+#frame{
+  position:fixed;inset:0;width:100%;height:100vh;border:none;
+  display:none;background:#f2f2f2;
+}
+#frame.zichtbaar{display:block}
+
+/* ── Top-knop voor uitloggen ── */
+#uit{
+  position:fixed;top:8px;right:10px;z-index:1000;
+  font-family:Inter,sans-serif;font-size:.72rem;font-weight:600;
+  padding:5px 10px;border-radius:5px;border:1px solid #c0c8d4;
+  background:rgba(255,255,255,.85);color:#444;cursor:pointer;
+  display:none;backdrop-filter:blur(4px);
+}
+#uit.zichtbaar{display:block}
+#uit:hover{background:white}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="logo">🔒</div>
+  <div class="titel">Rijnmond Weerbericht</div>
+  <div class="sub">Persoonlijke toegang.<br>Voer het wachtwoord in om verder te gaan.</div>
+  <div class="veld-rij">
+    <input class="veld" type="password" id="pwd" placeholder="Wachtwoord" autocomplete="current-password">
+    <button class="knop" onclick="check()">Inloggen</button>
+  </div>
+  <div class="fout" id="fout"></div>
+</div>
+
+<button id="uit" onclick="vergrendel()">🔒 Uitloggen</button>
+<iframe id="frame" title="Rijnmond Weerbericht"></iframe>
+
+<script>
+// SHA-256 hash van wachtwoord "Chase"
+const PWD_HASH = '1ae6e6416a7ad654c3bc276ec2ee2a048f7a37b42970f3140d21d0abb625780d';
+const SESSION_KEY = 'stefan_unlocked';
+const PERSIST_KEY = 'stefan_unlocked_until'; // localStorage met expiry (ms-timestamp)
+const COOKIE_KEY = 'stefan_pwd_ok';           // cookie-backup (overleeft soms langer dan localStorage op iOS)
+const PERSIST_DAGEN = 365;
+
+function zetCookie(naam, waarde, dagen){
+  try{
+    const exp = new Date(Date.now() + dagen*24*3600*1000).toUTCString();
+    document.cookie = `${naam}=${waarde}; expires=${exp}; path=/; SameSite=Lax`;
+  }catch(e){}
+}
+function leesCookie(naam){
+  try{
+    const m = document.cookie.match(new RegExp('(?:^|; )'+naam+'=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }catch(e){ return ''; }
+}
+function wisCookie(naam){
+  try{ document.cookie = naam+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax'; }catch(e){}
+}
+
+// Eerder ontgrendeld? sessionStorage / localStorage / cookie
+function eerderOntgrendeld(){
+  if (sessionStorage.getItem(SESSION_KEY) === '1') return true;
+  const tot = parseInt(localStorage.getItem(PERSIST_KEY)||'0', 10);
+  if (tot && Date.now() < tot) return true;
+  if (tot && Date.now() >= tot) localStorage.removeItem(PERSIST_KEY); // verlopen
+  if (leesCookie(COOKIE_KEY) === '1') return true;
+  return false;
+}
+
+// Magic-link: ?k=<wachtwoord> of #k=<wachtwoord> → automatisch unlocken en opslaan voor 1 jaar
+async function probeerMagicLink(){
+  let k = '';
+  try{
+    const u = new URL(window.location.href);
+    k = u.searchParams.get('k') || '';
+    if (!k && u.hash){
+      const h = new URLSearchParams(u.hash.replace(/^#/, ''));
+      k = h.get('k') || '';
+    }
+  }catch(e){}
+  if (!k) return false;
+  const h = await sha256(k);
+  if (h === PWD_HASH){
+    bewaarToegang();
+    // Verwijder ?k=... uit zichtbare URL maar laat #k=... staan zodat bookmark blijft werken
+    try{
+      const u = new URL(window.location.href);
+      if (u.searchParams.has('k')){
+        u.searchParams.delete('k');
+        history.replaceState(null, '', u.pathname + (u.search?u.search:'') + u.hash);
+      }
+    }catch(e){}
+    return true;
+  }
+  return false;
+}
+
+function bewaarToegang(){
+  sessionStorage.setItem(SESSION_KEY, '1');
+  sessionStorage.setItem('wb_unlocked', '1');
+  try{ localStorage.setItem(PERSIST_KEY, String(Date.now() + PERSIST_DAGEN*24*3600*1000)); }catch(e){}
+  zetCookie(COOKIE_KEY, '1', PERSIST_DAGEN);
+}
+
+(async function init(){
+  if (await probeerMagicLink()) { ontgrendel(); return; }
+  if (eerderOntgrendeld()) ontgrendel();
+})();
+
+document.getElementById('pwd').addEventListener('keydown', e=>{
+  if (e.key === 'Enter') { e.preventDefault(); check(); }
+});
+
+async function check(){
+  const v = document.getElementById('pwd').value;
+  if (!v) return;
+  const h = await sha256(v);
+  if (h === PWD_HASH){
+    bewaarToegang();
+    ontgrendel();
+  } else {
+    document.getElementById('fout').textContent = 'Onjuist wachtwoord';
+    document.getElementById('pwd').value = '';
+    setTimeout(()=>{ document.getElementById('fout').textContent=''; }, 1800);
+  }
+}
+
+function ontgrendel(){
+  // Zorg dat ook bij sessie-restore wb_unlocked gezet is
+  sessionStorage.setItem('wb_unlocked', '1');
+  document.getElementById('login').classList.add('verborgen');
+  const f = document.getElementById('frame');
+  f.src = 'weerbewaking_rr.html?_=' + Date.now();
+  f.classList.add('zichtbaar');
+  document.getElementById('uit').classList.add('zichtbaar');
+}
+
+function vergrendel(){
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem('wb_unlocked');
+  // Ook de jaar-token + cookie vergeten — gebruiker kiest expliciet om uit te loggen
+  try{ localStorage.removeItem(PERSIST_KEY); }catch(e){}
+  wisCookie(COOKIE_KEY);
+  document.getElementById('login').classList.remove('verborgen');
+  document.getElementById('frame').classList.remove('zichtbaar');
+  document.getElementById('frame').src = 'about:blank';
+  document.getElementById('uit').classList.remove('zichtbaar');
+  document.getElementById('pwd').value = '';
+  document.getElementById('pwd').focus();
+}
+
+async function sha256(s){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+</script>
+</body>
+</html>

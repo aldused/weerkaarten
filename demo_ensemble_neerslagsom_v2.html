@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#071b2d">
+<meta name="description" content="Live ensemblevergelijking van ECMWF ENS, GEFS, ICON-D2-EPS en KNMI HarmonEPS: mediaan, percentielwaaier, individuele leden, overschrijdingskansen en dagsommen.">
+<title>Ensemble-neerslag · vier modellen — Weerlab.nl</title>
+<style>
+*{box-sizing:border-box}
+:root{
+  --ink:#10263a;--muted:#607487;--line:#dce5ec;--paper:#fff;--wash:#f2f6f8;
+  --navy:#071b2d;--navy2:#0b2942;--cyan:#35d0d3;--ok:#168267;--warn:#bd6b18;
+  --ec:#2472e8;--gfs:#e47b2c;--icon:#a34dd8;--harm:#0b9f8c;
+}
+html,body{margin:0;min-height:100%;background:var(--wash);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input{font:inherit}
+button{color:inherit}
+.topbar{background:linear-gradient(125deg,var(--navy),#0b3150);color:#fff;border-bottom:3px solid var(--cyan)}
+.topbar-inner{max-width:1320px;margin:auto;padding:18px 22px 20px;display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.eyebrow{font-size:.69rem;text-transform:uppercase;letter-spacing:.15em;color:#81e6e7;font-weight:800;margin-bottom:5px}
+h1{font-size:clamp(1.35rem,2.8vw,2.15rem);line-height:1.08;margin:0;letter-spacing:-.035em}
+.subtitle{color:#b9cad8;font-size:.82rem;margin-top:7px;max-width:760px;line-height:1.45}
+.live{display:flex;align-items:center;gap:8px;color:#d8e9f4;font-size:.76rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:999px;padding:7px 11px;white-space:nowrap}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#4be0a8;box-shadow:0 0 0 4px rgba(75,224,168,.14)}
+.controls{background:#fff;border-bottom:1px solid var(--line);box-shadow:0 3px 12px rgba(28,57,76,.05)}
+.controls-inner{max-width:1320px;margin:auto;padding:12px 22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.search{position:relative;min-width:260px;max-width:460px;flex:1}
+.searchbox{height:42px;display:flex;align-items:center;gap:8px;border:1px solid #cbd8e2;border-radius:10px;background:#fff;padding:0 12px;transition:.15s}
+.searchbox:focus-within{border-color:#3188c8;box-shadow:0 0 0 3px rgba(49,136,200,.13)}
+.searchbox svg{flex:none;color:#688094}
+.searchbox input{min-width:0;flex:1;border:0;outline:0;color:var(--ink);background:transparent}
+.locate-btn,.refresh-btn{height:38px;border:1px solid #cdd9e3;border-radius:9px;background:#f7fafb;padding:0 12px;cursor:pointer;font-size:.77rem;font-weight:750}
+.locate-btn:hover,.refresh-btn:hover{background:#edf4f7;border-color:#9db4c5}
+.suggestions{position:absolute;z-index:30;left:0;right:0;top:47px;background:#fff;border:1px solid #cbd8e2;border-radius:10px;box-shadow:0 12px 30px rgba(13,42,61,.17);overflow:hidden;display:none}
+.suggestion{width:100%;border:0;border-bottom:1px solid #edf1f4;background:#fff;text-align:left;padding:9px 12px;cursor:pointer}
+.suggestion:last-child{border-bottom:0}.suggestion:hover,.suggestion:focus{background:#edf6fa;outline:0}
+.suggestion b{display:block;font-size:.82rem}.suggestion small{display:block;color:var(--muted);font-size:.7rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.location-meta{color:var(--muted);font-size:.74rem;line-height:1.35;min-width:190px}.location-meta b{color:var(--ink)}
+main{max-width:1320px;margin:auto;padding:18px 22px 34px}
+.notice{display:none;border:1px solid #f0c38b;background:#fff8ec;color:#7c4c12;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:.78rem}
+.insight{position:relative;overflow:hidden;background:linear-gradient(120deg,#0b2942,#123e5e);color:#fff;border-radius:14px;padding:18px 20px;margin-bottom:14px;min-height:102px;display:flex;gap:16px;align-items:center}
+.insight:after{content:"";position:absolute;width:230px;height:230px;border-radius:50%;right:-78px;top:-108px;border:42px solid rgba(53,208,211,.08)}
+.insight-icon{position:relative;z-index:1;flex:none;width:45px;height:45px;border-radius:13px;display:grid;place-items:center;background:rgba(53,208,211,.12);border:1px solid rgba(53,208,211,.3);font-size:1.35rem}
+.insight-copy{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:18px 28px;width:100%}.signal+.signal{border-left:1px solid rgba(255,255,255,.16);padding-left:28px}.insight-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.13em;font-weight:850;color:#7fe4e5;margin-bottom:5px}
+.insight-title{font-size:clamp(.98rem,2vw,1.24rem);font-weight:800;letter-spacing:-.015em}.insight-text{font-size:.78rem;color:#c6d8e5;margin-top:5px;line-height:1.5;max-width:930px}
+.model-groups{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}.model-group{background:#eaf0f4;border:1px solid #d8e2e9;border-radius:13px;padding:10px}.model-group-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:1px 3px 9px}.model-group-title{font-size:.76rem;font-weight:850;color:#29475d}.model-group-meta{font-size:.62rem;color:var(--muted);text-align:right}.model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.model-card{--model:#7790a2;background:#fff;border:1px solid var(--line);border-top:4px solid var(--model);border-radius:11px;padding:13px 14px;min-height:186px;box-shadow:0 2px 7px rgba(31,61,79,.04)}
+.model-card.ec{--model:var(--ec)}.model-card.gfs{--model:var(--gfs)}.model-card.icon{--model:var(--icon)}.model-card.harm{--model:var(--harm)}
+.model-head{display:flex;justify-content:space-between;align-items:flex-start;gap:7px}.model-name{font-size:.86rem;font-weight:850;line-height:1.15}.model-run{font-size:.64rem;color:var(--muted);margin-top:3px}
+.run-badge{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;font-weight:850;border-radius:999px;background:#edf3f6;padding:4px 6px;white-space:nowrap;color:#4e677a}
+.model-value{font-size:1.65rem;letter-spacing:-.05em;font-weight:850;line-height:1.05;margin-top:12px;font-variant-numeric:tabular-nums}.model-value small{font-size:.66rem;letter-spacing:0;color:var(--muted);font-weight:750;margin-left:4px}
+.model-mean{font-size:.68rem;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}.model-mean b{color:#3a5266;font-weight:800}
+.spreadbar{position:relative;height:20px;margin-top:9px}
+.spreadbar i{position:absolute;top:7px;height:6px;border-radius:4px;background:var(--model);opacity:.18}
+.spreadbar u{position:absolute;top:5px;height:10px;border-radius:3px;background:var(--model);opacity:.42}
+.spreadbar s{position:absolute;top:2px;width:2.5px;height:16px;border-radius:2px;background:var(--model)}
+.spreadbar em{position:absolute;top:2px;width:0;border-left:2px dashed #55708a;height:16px;opacity:.75}
+.spread-axis{display:flex;justify-content:space-between;font:600 .56rem ui-monospace,monospace;color:#8ea0ad;margin-top:-2px}
+.model-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.chip{font-size:.6rem;font-weight:800;border-radius:999px;padding:3px 7px;background:#eef4f7;color:#43606f;white-space:nowrap}
+.chip.hot{background:#fdeee3;color:#a5541a}.chip.dry{background:#eef1f3;color:#6a7c88}.chip.wet{background:#e6f2fb;color:#1f5f9c}
+.model-foot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid #edf1f4;margin-top:9px;padding-top:7px;font-size:.64rem;color:var(--muted)}
+.skeleton{color:transparent!important;border-radius:5px;background:linear-gradient(90deg,#eef2f4 25%,#f8fafb 45%,#eef2f4 65%);background-size:300% 100%;animation:shimmer 1.4s infinite}
+@keyframes shimmer{to{background-position:-100% 0}}
+.panel{background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:0 2px 8px rgba(31,61,79,.04);margin-bottom:14px}
+.panel-head{padding:15px 17px 11px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.panel-kicker{color:#2a718d;font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;font-weight:850}.panel h2{font-size:1rem;margin:3px 0 0;letter-spacing:-.015em}.panel-sub{font-size:.7rem;color:var(--muted);margin-top:4px;line-height:1.45}
+.panel-tools{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.horizon-pills{display:flex;gap:5px;flex-wrap:wrap}.pill{border:1px solid #d3dee6;background:#f7fafb;border-radius:999px;padding:6px 10px;font-size:.68rem;font-weight:800;cursor:pointer}.pill:hover{border-color:#8aa6b8}.pill.active{background:var(--navy2);border-color:var(--navy2);color:#fff}
+.legend{display:flex;gap:8px 14px;flex-wrap:wrap;align-items:center;padding:0 17px 7px}
+.legend-btn{border:0;background:transparent;padding:2px 0;display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:750;cursor:pointer;color:#3e5668}.legend-btn.off{opacity:.35;text-decoration:line-through}.legend-line{width:20px;height:3px;border-radius:3px;background:var(--c)}
+.legend-sep{width:1px;height:15px;background:#dde5eb}
+.view-toggle{border:1px solid #d6e0e7;background:#f8fbfc;border-radius:999px;padding:4px 9px;font-size:.64rem;font-weight:800;cursor:pointer;color:#4a6376;display:flex;align-items:center;gap:5px}
+.view-toggle.on{background:#e8f3f9;border-color:#9fc3d9;color:#1c5a80}
+.view-toggle .tick{width:7px;height:7px;border-radius:2px;border:1.5px solid currentColor;opacity:.55}.view-toggle.on .tick{background:currentColor;opacity:1}
+.fan-key{display:flex;gap:9px;align-items:center;font-size:.62rem;color:var(--muted);margin-left:auto}
+.fan-key i{display:inline-block;width:16px;height:9px;border-radius:2px;background:#5a7d99}.fan-key i.wide{opacity:.18}.fan-key i.narrow{opacity:.38}
+.chart-wrap{position:relative;height:430px;margin:0 8px 8px;touch-action:pan-y}.chart-wrap canvas{display:block;position:absolute;inset:0;width:100%;height:100%}
+.chart-wrap canvas.overlay{pointer-events:none}
+.chart-tooltip{position:absolute;display:none;z-index:5;pointer-events:none;min-width:210px;background:rgba(7,27,45,.96);color:#fff;border-radius:9px;padding:9px 10px;box-shadow:0 8px 22px rgba(4,21,34,.24);font-size:.66rem;line-height:1.45}
+.tip-time{font-weight:850;color:#a8ecec;border-bottom:1px solid rgba(255,255,255,.14);padding-bottom:5px;margin-bottom:5px}
+.tip-model{display:flex;justify-content:space-between;gap:15px;margin-top:5px}.tip-name{display:flex;align-items:center;gap:5px;font-weight:800}.tip-dot{width:7px;height:7px;border-radius:50%;background:var(--c)}.tip-val{font-weight:850;font-variant-numeric:tabular-nums}
+.tip-sub{color:#a9c0d0;font-size:.6rem;margin:1px 0 0 12px;font-variant-numeric:tabular-nums}
+.chart-note{padding:0 17px 13px;color:var(--muted);font-size:.64rem;line-height:1.45}
+.prob-layout{display:grid;grid-template-columns:1fr minmax(250px,330px);gap:18px;padding:0 17px 6px;align-items:start}
+.prob-chart{position:relative;height:320px;touch-action:pan-y}.prob-chart canvas{position:absolute;inset:0;width:100%;height:100%}
+.prob-side{border:1px solid var(--line);border-radius:11px;padding:12px;background:#fafcfd}
+.prob-side h3{margin:0;font-size:.78rem;letter-spacing:-.01em}
+.prob-side p{margin:4px 0 9px;font-size:.66rem;color:var(--muted);line-height:1.5}
+.dot-wrap{position:relative;height:118px}.dot-wrap canvas{position:absolute;inset:0;width:100%;height:100%}
+.prob-stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.prob-stats div{background:#fff;border:1px solid #e4ecf1;border-radius:8px;padding:7px 8px}
+.prob-stats span{display:block;color:var(--muted);font-size:.58rem;line-height:1.3}
+.prob-stats b{font-size:.82rem;font-variant-numeric:tabular-nums}
+.hslider{width:100%;accent-color:#123e5e;margin-top:2px}
+.thr-key{display:flex;gap:9px 13px;flex-wrap:wrap;padding:0 17px 8px;font-size:.65rem;font-weight:750;color:#40596b}
+.thr-key span{display:flex;align-items:center;gap:5px}.thr-key i{width:15px;height:3px;border-radius:3px;background:var(--c)}
+.day-matrix{padding:2px 17px 14px;overflow-x:auto}
+.day-grid{display:grid;gap:4px;min-width:520px;grid-template-columns:minmax(96px,1.1fr) repeat(4,minmax(64px,1fr))}
+.day-grid .dh{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;font-weight:850;color:#516a7d;text-align:center;padding-bottom:2px}
+.day-grid .dh:first-child{text-align:left}
+.day-grid .dl{font-size:.7rem;font-weight:800;color:#28455a;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.day-grid .dl small{font-weight:650;color:var(--muted);font-size:.6rem}
+.dcell{border:1px solid rgba(20,50,72,.08);border-radius:7px;padding:6px 4px 5px;text-align:center;min-height:50px;display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:default}
+.dcell b{font-size:.85rem;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
+.dcell span{font-size:.55rem;opacity:.78;font-variant-numeric:tabular-nums}
+.dcell .pop{height:3px;border-radius:2px;background:currentColor;opacity:.35;margin:1px auto 0}
+.dcell.empty{background:repeating-linear-gradient(135deg,#f7f9fa,#f7f9fa 5px,#f1f4f6 5px,#f1f4f6 10px);color:#a5b3bd;font-size:.6rem;align-items:center}
+.dscale{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;padding:0 17px 12px;font-size:.6rem;color:var(--muted)}
+.dscale u{text-decoration:none;display:flex;align-items:center;gap:4px}.dscale i{width:15px;height:10px;border-radius:2px;border:1px solid rgba(20,50,72,.1)}
+.map-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.map-model{border:1px solid #d3dee6;background:#f7fafb;border-radius:999px;padding:6px 10px;font-size:.68rem;font-weight:800;cursor:pointer}.map-model.active{color:#fff;background:var(--c);border-color:var(--c)}
+.map-layout{display:grid;grid-template-columns:minmax(300px,460px) 1fr;gap:26px;padding:0 17px 17px;align-items:center}.weerlab-map{width:100%;max-width:460px;filter:drop-shadow(0 5px 13px rgba(24,48,66,.12))}.weerlab-map-head{background:#1e293b;color:#fff;padding:12px 14px;border-radius:5px 5px 0 0;border-bottom:3px solid #2ec4e8;display:flex;justify-content:space-between;align-items:center;gap:12px}.weerlab-map-head span{font-size:.78rem;font-weight:850}.weerlab-map-head b{font:600 .62rem "DM Mono",ui-monospace,monospace;color:#cbd5e1;text-align:right}.map-canvas-wrap{position:relative;width:100%;aspect-ratio:800/1100;background:#b8d4e8;overflow:hidden}.map-canvas-wrap canvas{width:100%;height:100%;display:block}.map-loading{position:absolute;inset:0;display:grid;place-items:center;background:rgba(244,249,251,.86);color:#36566d;font-size:.75rem;font-weight:800}.weerlab-map-foot{background:#0f172a;color:#94a3b8;padding:8px 13px;border-radius:0 0 5px 5px;display:flex;justify-content:space-between;gap:10px;font-size:.58rem}.weerlab-map-foot b{color:#f1f5f9}.map-side{min-width:0}.map-time{font-size:1.05rem;font-weight:850;color:var(--ink)}.map-description{font-size:.72rem;color:var(--muted);line-height:1.55;margin:5px 0 14px}.map-slider{width:100%;accent-color:#123e5e}.map-scale{display:grid;grid-template-columns:repeat(8,1fr);height:15px;border-radius:4px;overflow:hidden;margin-top:18px;border:1px solid rgba(15,23,42,.12)}.map-scale i{display:block}.map-scale-labels{display:grid;grid-template-columns:repeat(9,1fr);color:var(--muted);font:500 .55rem "DM Mono",ui-monospace,monospace;margin-top:5px}.map-scale-labels span{text-align:center;transform:translateX(-50%)}.map-scale-labels span:first-child{text-align:left;transform:none}.map-scale-labels span:last-child{text-align:right;transform:none}.map-stat{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.map-stat div{background:#f4f8fa;border:1px solid #e0e8ed;border-radius:8px;padding:8px}.map-stat span{display:block;color:var(--muted);font-size:.6rem}.map-stat b{font-size:.88rem;font-variant-numeric:tabular-nums}
+.table-wrap{overflow-x:auto;border-top:1px solid #edf1f4}
+table{width:100%;border-collapse:separate;border-spacing:0;min-width:620px;font-size:.73rem}
+th,td{padding:10px 13px;text-align:center;border-bottom:1px solid #edf1f4;border-right:1px solid #edf1f4}th:last-child,td:last-child{border-right:0}tr:last-child td{border-bottom:0}
+thead th{background:#f6f9fa;color:#516a7d;font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;font-weight:850}tbody th{text-align:left;white-space:nowrap;color:#284358}.cell-main{display:block;font-weight:850;font-size:.88rem;font-variant-numeric:tabular-nums}.cell-range{display:block;color:var(--muted);font-size:.61rem;margin-top:2px;font-variant-numeric:tabular-nums}.na{color:#9baab5;font-size:.67rem}.model-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--c)}
+.method{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:15px 17px 17px;border-top:1px solid #edf1f4}.method-item{font-size:.68rem;color:var(--muted);line-height:1.55}.method-item b{display:block;color:var(--ink);font-size:.72rem;margin-bottom:2px}
+.footer{font-size:.65rem;color:#748797;line-height:1.55;padding:2px 3px}.footer a{color:#2a718d}
+@media(max-width:1000px){.prob-layout{grid-template-columns:1fr}}
+@media(max-width:900px){.model-groups{grid-template-columns:1fr}.method{grid-template-columns:1fr}.chart-wrap{height:380px}.insight-copy{grid-template-columns:1fr}.signal+.signal{border-left:0;border-top:1px solid rgba(255,255,255,.16);padding-left:0;padding-top:14px}.map-layout{grid-template-columns:1fr}.weerlab-map{margin:auto}}
+@media(max-width:560px){.topbar-inner,.controls-inner,main{padding-left:12px;padding-right:12px}.model-grid{grid-template-columns:1fr 1fr;gap:7px}.model-group{padding:7px}.model-card{padding:11px 10px;min-height:180px}.model-value{font-size:1.35rem}.insight{padding:15px}.insight-icon{display:none}.chart-wrap{height:350px;margin-left:0;margin-right:3px}.panel-head{padding:13px 12px 9px}.legend,.thr-key,.prob-layout,.day-matrix,.dscale{padding-left:12px;padding-right:12px}.location-meta{width:100%}.refresh-btn{margin-left:auto}.fan-key{margin-left:0;width:100%}
+.day-grid{min-width:0;gap:3px;grid-template-columns:minmax(60px,.85fr) repeat(4,minmax(46px,1fr))}
+.day-grid .dh{font-size:.53rem;letter-spacing:.03em}.day-grid .dl{font-size:.63rem;gap:3px}.day-grid .dl small{font-size:.54rem}
+.dcell{padding:5px 1px 4px;min-height:42px;border-radius:5px}.dcell b{font-size:.76rem}.dcell span{font-size:.5rem}
+.model-dot{width:6px;height:6px;margin-right:3px}}
+@media(prefers-reduced-motion:reduce){.skeleton{animation:none}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <div class="eyebrow">Weerlab · ensemblemonitor</div>
+      <h1>Hoeveel regen zit er in de nieuwste runs?</h1>
+      <div class="subtitle">ECMWF ENS, GEFS, ICON-D2-EPS en KNMI HarmonEPS naast elkaar — met de mediaan als hoofdgetal, de volledige spreiding van de leden, overschrijdingskansen en dagsommen.</div>
+    </div>
+    <div class="live"><span class="live-dot"></span><span id="liveText">Nieuwste runs laden…</span></div>
+  </div>
+</header>
+
+<section class="controls" aria-label="Locatiekeuze">
+  <div class="controls-inner">
+    <div class="search">
+      <div class="searchbox">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input id="placeInput" value="De Bilt" placeholder="Zoek plaats in Nederland…" autocomplete="off" aria-label="Zoek plaats">
+      </div>
+      <div class="suggestions" id="suggestions" role="listbox"></div>
+    </div>
+    <button class="locate-btn" id="locateBtn" title="Gebruik mijn locatie">◎ Mijn locatie</button>
+    <button class="refresh-btn" id="refreshBtn" title="Laad de nieuwste modeldata opnieuw">↻ Vernieuw</button>
+    <div class="location-meta" id="locationMeta"><b>De Bilt</b><br>52,101° N · 5,178° O</div>
+  </div>
+</section>
+
+<main>
+  <div class="notice" id="notice" role="status"></div>
+  <section class="insight" aria-live="polite">
+    <div class="insight-icon">☔</div>
+    <div class="insight-copy">
+      <div class="signal">
+        <div class="insight-label">Globaal · 14 dagen</div>
+        <div class="insight-title" id="globalInsightTitle">ECMWF en GEFS worden doorgerekend…</div>
+        <div class="insight-text" id="globalInsightText">De twee mondiale ensembles worden over dezelfde lange looptijd vergeleken.</div>
+      </div>
+      <div class="signal">
+        <div class="insight-label">Fijnmazig · beschikbare looptijd</div>
+        <div class="insight-title" id="regionalInsightTitle">ICON-D2 en HarmonEPS worden doorgerekend…</div>
+        <div class="insight-text" id="regionalInsightText">De regionale modellen worden alleen binnen hun eigen korte looptijd vergeleken.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="model-groups" aria-label="Modeloverzicht">
+    <div class="model-group">
+      <div class="model-group-head"><div class="model-group-title">🌍 Mondiale ensembles</div><div class="model-group-meta">middellange termijn · tot 14 dagen</div></div>
+      <div class="model-grid" id="globalModelGrid"></div>
+    </div>
+    <div class="model-group">
+      <div class="model-group-head"><div class="model-group-title">🔎 Fijnmazige ensembles</div><div class="model-group-meta">korte termijn · circa 44–60 uur</div></div>
+      <div class="model-grid" id="regionalModelGrid"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Mondiale ensembles · ECMWF versus GEFS</div>
+        <h2>Neerslagontwikkeling op de middellange termijn</h2>
+        <div class="panel-sub" id="globalChartSubtitle">Dikke lijn = mediaan · waaier = P25–P75 en P10–P90 · stippellijn = ensemblegemiddelde</div>
+      </div>
+      <div class="panel-tools">
+        <div class="horizon-pills" id="globalHorizonPills">
+          <button class="pill" data-hours="120">5 dagen</button>
+          <button class="pill" data-hours="240">10 dagen</button>
+          <button class="pill active" data-hours="336">14 dagen</button>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="globalLegend"></div>
+    <div class="chart-wrap" id="globalChartWrap">
+      <canvas id="globalRainChart" role="img" aria-label="Cumulatieve neerslag ECMWF en GEFS"></canvas>
+      <canvas class="overlay" id="globalRainOverlay" aria-hidden="true"></canvas>
+      <div class="chart-tooltip" id="globalChartTooltip"></div>
+    </div>
+    <div class="chart-note">Neerslag is scheef verdeeld: enkele natte leden trekken het gemiddelde omhoog. De <b>mediaan</b> is daarom het beste "meest waarschijnlijke" getal, het <b>gemiddelde</b> zegt meer over de verwachte totaalhoeveelheid over veel gevallen. Liggen beide ver uiteen, dan hangt de verwachting aan een paar natte leden.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Fijnmazige ensembles · ICON-D2 versus HARMONIE</div>
+        <h2>Detailverwachting voor de korte termijn</h2>
+        <div class="panel-sub" id="regionalChartSubtitle">De volledige beschikbare modeluren worden getoond; niets wordt kunstmatig verlengd.</div>
+      </div>
+      <div class="panel-tools">
+        <div class="horizon-pills" id="regionalHorizonPills">
+          <button class="pill" data-hours="24">24 uur</button>
+          <button class="pill" data-hours="36">36 uur</button>
+          <button class="pill active" data-hours="full">Volledige looptijd</button>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="regionalLegend"></div>
+    <div class="chart-wrap" id="regionalChartWrap">
+      <canvas id="regionalRainChart" role="img" aria-label="Cumulatieve neerslag ICON-D2 en HarmonEPS"></canvas>
+      <canvas class="overlay" id="regionalRainOverlay" aria-hidden="true"></canvas>
+      <div class="chart-tooltip" id="regionalChartTooltip"></div>
+    </div>
+    <div class="chart-note">HarmonEPS heeft slechts 6 leden; ICON-D2-EPS 20. Bij zulke kleine ensembles is de spreiding een grove schatting — daar wordt de band getoond als laagste tot hoogste lid in plaats van P10–P90.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Kansverdeling</div>
+        <h2>Kans dat een drempel wordt gehaald</h2>
+        <div class="panel-sub" id="probSubtitle">Aandeel ensembleleden waarvan de neerslagsom vanaf nu boven de drempel uitkomt.</div>
+      </div>
+      <div class="panel-tools">
+        <div class="horizon-pills" id="probModelPills">
+          <button class="pill active" data-model="ecmwf">ECMWF</button>
+          <button class="pill" data-model="gfs">GEFS</button>
+          <button class="pill" data-model="icon">ICON-D2</button>
+          <button class="pill" data-model="harm">HARMONIE</button>
+        </div>
+      </div>
+    </div>
+    <div class="thr-key" id="thrKey"></div>
+    <div class="prob-layout">
+      <div class="prob-chart" id="probChartWrap">
+        <canvas id="probChart" role="img" aria-label="Overschrijdingskansen per drempel"></canvas>
+        <canvas class="overlay" id="probOverlay" aria-hidden="true"></canvas>
+      </div>
+      <div class="prob-side">
+        <h3 id="dotTitle">Ledenverdeling op +120 uur</h3>
+        <p id="dotSub">Elke stip is één ensemblelid met zijn eigen neerslagsom. Klonteren de stippen, dan zijn de leden het eens; liggen ze ver uiteen, dan hangt de uitkomst aan het scenario.</p>
+        <div class="dot-wrap"><canvas id="dotChart" role="img" aria-label="Verdeling van de individuele ensembleleden"></canvas></div>
+        <input class="hslider" id="probSlider" type="range" min="6" max="336" step="6" value="120" aria-label="Looptijd voor ledenverdeling">
+        <div class="prob-stats">
+          <div><span>Mediaan (P50)</span><b id="dotMedian">—</b></div>
+          <div><span>Gemiddelde</span><b id="dotMean">—</b></div>
+          <div><span>Droge leden (&lt;0,1 mm)</span><b id="dotDry">—</b></div>
+          <div><span>Natste lid</span><b id="dotMax">—</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="chart-note">De kans is puur het aandeel leden dat de drempel haalt — geen gekalibreerde klimatologische kans. Bij weinig leden (HarmonEPS 6) verspringt zo'n kans met stappen van ruim 16%; lees die dan als richting, niet als exact percentage.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Timing</div>
+        <h2>Op welke dag valt het?</h2>
+        <div class="panel-sub">Mediane dagsom per kalenderdag (lokale tijd). Klein cijfer = kans op meetbare neerslag die dag; het balkje eronder toont diezelfde kans. Beweeg over een vak voor P25–P75 en het gemiddelde.</div>
+      </div>
+    </div>
+    <div class="day-matrix"><div class="day-grid" id="dayGrid"></div></div>
+    <div class="dscale" id="dayScale"></div>
+    <div class="chart-note">Een <b>0</b> betekent dat minstens de helft van de leden die dag droog blijft — de kans eronder laat zien hoeveel leden wél neerslag geven. Een gearceerd vak betekent uitsluitend dat het model niet zo ver doorloopt; er wordt niets geëxtrapoleerd. De eerste dag is een deeldag en telt alleen de uren vanaf nu.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div><div class="panel-kicker">Ruimtelijke verdeling</div><h2>Waar valt de berekende neerslag?</h2><div class="panel-sub">Nederlandkaart van de cumulatieve ensemblegemiddelde neerslag vanaf nu tot de gekozen tijdstap.</div></div>
+      <div class="map-controls" id="mapModelControls">
+        <button class="map-model active" data-model="ecmwf" style="--c:var(--ec)">ECMWF</button>
+        <button class="map-model" data-model="gfs" style="--c:var(--gfs)">GEFS</button>
+        <button class="map-model" data-model="icon" style="--c:var(--icon)">ICON-D2</button>
+        <button class="map-model" data-model="harm" style="--c:var(--harm)">HARMONIE</button>
+      </div>
+    </div>
+    <div class="map-layout">
+      <div class="weerlab-map">
+        <div class="weerlab-map-head"><span>Ensemble-neerslagsom</span><b id="mapFramePeriod">vanaf nu</b></div>
+        <div class="map-canvas-wrap"><canvas id="nlRainMap" role="img" aria-label="Nederlandkaart cumulatieve ensemble-neerslag met provinciegrenzen"></canvas><div class="map-loading" id="mapLoading">Kaartgegevens laden…</div></div>
+        <div class="weerlab-map-foot"><b>WEERLAB.NL</b><span>Ensemblegemiddelde · cumulatief</span></div>
+      </div>
+      <div class="map-side">
+        <div class="map-time" id="mapTimeLabel">ECMWF · +120 uur</div>
+        <div class="map-description" id="mapDescription">Kies met de schuif een tijdstap. De kaart laat de ruimtelijke neerslagverdeling zien; de grafieken hierboven blijven de exacte verwachting voor de gekozen plaats tonen.</div>
+        <input class="map-slider" id="mapTimeSlider" type="range" min="12" max="336" step="12" value="120" aria-label="Tijdstap voor Nederlandkaart">
+        <div class="map-scale" id="mapScale" aria-label="Vaste neerslagschaal"><i style="background:#86ecff"></i><i style="background:#36b9ff"></i><i style="background:#0877e8"></i><i style="background:#25bd69"></i><i style="background:#ffe12e"></i><i style="background:#ff941f"></i><i style="background:#e93632"></i><i style="background:#a52bd1"></i></div>
+        <div class="map-scale-labels"><span>0,1</span><span>0,5</span><span>1</span><span>2</span><span>5</span><span>10</span><span>20</span><span>40</span><span>80+ mm</span></div>
+        <div class="map-stat"><div><span>Landelijk kaartgemiddelde</span><b id="mapMean">—</b></div><div><span>Hoogste kaartwaarde</span><b id="mapMax">—</b></div></div>
+      </div>
+    </div>
+    <div class="chart-note">De kaart toont het <b>ensemblegemiddelde</b> (het enige veld dat als kaartlaag beschikbaar is), terwijl de grafieken hierboven de mediaan als hoofdlijn gebruiken. Bij buiig weer ligt het kaartbeeld daardoor systematisch iets natter dan de mediaan voor de gekozen plaats. De vaste kleurtrap loopt van 0,1 tot 80+ mm en verandert niet wanneer je van model wisselt.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><div class="panel-kicker">Samenvatting per modelgroep</div><h2>Neerslagsom per eerlijke vergelijkingsperiode</h2><div class="panel-sub">Grote waarde = ensemblemediaan; daaronder het gemiddelde en de spreiding van de individuele ledensommen.</div></div></div>
+    <div class="table-wrap"><table id="globalComparisonTable" aria-label="Vergelijking ECMWF en GEFS"></table></div>
+    <div class="table-wrap"><table id="regionalComparisonTable" aria-label="Vergelijking ICON-D2 en HarmonEPS"></table></div>
+    <div class="method">
+      <div class="method-item"><b>Mediaan of gemiddelde?</b>De mediaan is de middelste ledensom: de helft van de leden zit eronder, de helft erboven. Bij buien ligt het gemiddelde daar duidelijk boven, omdat een paar zeer natte leden het optrekken. Voor "wat krijg ik waarschijnlijk" gebruik je de mediaan, voor waterbalans of totaalvolume het gemiddelde.</div>
+      <div class="method-item"><b>Wat betekent de waaier?</b>De donkere band is P25–P75 (de middelste helft van de leden), de lichte band P10–P90 (80% van de leden). Een brede band betekent dat de exacte hoeveelheid onzeker is. Bij minder dan tien leden wordt de lichte band de laagste–hoogste ledensom.</div>
+      <div class="method-item"><b>Wat is "vanaf nu"?</b>Alle modellen starten op hetzelfde eerstvolgende hele UTC-uur. De reeds verstreken uren van de modelrun tellen niet mee. Uurwaarden zijn sommen over het voorgaande uur, dus dagsommen lopen van 00 tot 24 uur lokale tijd.</div>
+    </div>
+  </section>
+
+  <div class="footer">Bronnen: ECMWF Open Data, NOAA/NCEP GEFS en DWD ICON-D2-EPS via <a href="https://open-meteo.com/en/docs/ensemble-api" target="_blank" rel="noopener">Open-Meteo Ensemble API</a>; KNMI HARMONIE-AROME Cy43 P2a EPS via KNMI Data Platform. HarmonEPS gebruikt het dichtstbijzijnde beschikbare native roosterpunt. © Ed Aldus WM.</div>
+</main>
+
+<script src="nl_grens_coords.js"></script>
+<script src="nl_kaart_geo.js"></script>
+<script>
+"use strict";
+const MODELS={
+  ecmwf:{id:"ecmwf",short:"ECMWF",name:"ECMWF ENS",slug:"ecmwf_ifs025",meta:"https://ensemble-api.open-meteo.com/data/ecmwf_ifs025_ensemble/static/meta.json",members:51,color:"#2472e8",cls:"ec"},
+  gfs:{id:"gfs",short:"GEFS",name:"NOAA GEFS",slug:"gfs_seamless",meta:"https://ensemble-api.open-meteo.com/data/ncep_gefs025/static/meta.json",members:31,color:"#e47b2c",cls:"gfs"},
+  icon:{id:"icon",short:"ICON-D2",name:"ICON-D2-EPS",slug:"icon_d2",meta:"https://ensemble-api.open-meteo.com/data/dwd_icon_d2_eps/static/meta.json",members:20,color:"#a34dd8",cls:"icon"},
+  harm:{id:"harm",short:"HARMONIE",name:"KNMI HarmonEPS",members:6,color:"#0b9f8c",cls:"harm"}
+};
+const ORDER=["ecmwf","gfs","icon","harm"];
+const GROUPS={global:{ids:["ecmwf","gfs"],horizons:[{h:120,label:"5 dagen"},{h:240,label:"10 dagen"},{h:336,label:"14 dagen"}]},regional:{ids:["icon","harm"],horizons:[{h:12,label:"12 uur"},{h:24,label:"24 uur"},{h:36,label:"36 uur"}]}};
+const THRESHOLDS={global:[1,5,10,20,30],regional:[.5,1,3,5,10]};
+const THR_COLORS=["#4aa8e0","#2472e8","#6b4fd8","#b7399f","#d9463a"];
+const SMALL_ENSEMBLE=10;                          // onder dit aantal leden geen P10/P90 maar min–max
+const state={lat:52.101,lon:5.178,place:"De Bilt",startMs:0,data:{},hidden:new Set(),loading:false,request:0,harmStation:null,harmIndex:null,
+  mapModel:"ecmwf",mapCache:new Map(),mapRequest:0,
+  view:{global:{spag:false,mean:true},regional:{spag:true,mean:true}},
+  probModel:"ecmwf",probHours:120};
+const $=s=>document.querySelector(s);
+const notice=$("#notice");
+const CHARTS={
+  global:{ids:GROUPS.global.ids,canvas:$("#globalRainChart"),overlay:$("#globalRainOverlay"),wrap:$("#globalChartWrap"),tooltip:$("#globalChartTooltip"),hours:336,hoverX:null,legend:$("#globalLegend")},
+  regional:{ids:GROUPS.regional.ids,canvas:$("#regionalRainChart"),overlay:$("#regionalRainOverlay"),wrap:$("#regionalChartWrap"),tooltip:$("#regionalChartTooltip"),hours:48,hoverX:null,legend:$("#regionalLegend")}
+};
+let searchTimer=null,searchAbort=null;
+
+function apiBase(){return location.protocol==="https:"&&/(^|\.)weerlab\.nl$/.test(location.hostname)?"https://om.weerlab.nl/om/ensemble":"https://ensemble-api.open-meteo.com/v1/ensemble";}
+function cacheBust(url){return url+(url.includes("?")?"&":"?")+"v="+Date.now();}
+async function fetchJSON(url,timeout=25000){
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeout);
+  try{const r=await fetch(url,{cache:"no-store",signal:ctrl.signal});if(!r.ok)throw new Error(`HTTP ${r.status}`);return await r.json();}
+  finally{clearTimeout(timer);}
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function mean(a){let s=0,n=0;for(const v of a){s+=v;n++;}return n?s/n:0;}
+function quantile(values,p){if(!values.length)return 0;const a=[...values].sort((x,y)=>x-y);return qs(a,p);}
+function qs(sorted,p){const i=(sorted.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return sorted[lo]+(sorted[hi]-sorted[lo])*(i-lo);}
+// aandeel waarden >= thr, via binaire zoektocht in de gesorteerde ledenarray
+function pAtLeast(sorted,thr){let lo=0,hi=sorted.length;while(lo<hi){const m=(lo+hi)>>1;if(sorted[m]<thr)lo=m+1;else hi=m;}return sorted.length?(sorted.length-lo)/sorted.length:0;}
+function fmt(v,d=1){return Number(v).toLocaleString("nl-NL",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtCoord(v){return Math.abs(v).toLocaleString("nl-NL",{minimumFractionDigits:3,maximumFractionDigits:3});}
+function formatRun(ms){if(!ms)return "run onbekend";const d=new Date(ms),day=d.toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"});return `${day} ${String(d.getUTCHours()).padStart(2,"0")}Z`;}
+function formatValid(ms){return new Date(ms).toLocaleString("nl-NL",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Amsterdam"});}
+function parseRun(run){const m=String(run||"").match(/^(\d{4})(\d{2})(\d{2})(\d{2})Z$/);return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4]):null;}
+function showNotice(msg){notice.textContent=msg;notice.style.display=msg?"block":"none";}
+function setLocationMeta(extra=""){$("#locationMeta").innerHTML=`<b>${esc(state.place)}</b><br>${fmtCoord(state.lat)}° N · ${fmtCoord(state.lon)}° O${extra?` · ${esc(extra)}`:""}`;}
+const dayKeyFmt=new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit"});
+const dayLabelFmt=new Intl.DateTimeFormat("nl-NL",{timeZone:"Europe/Amsterdam",weekday:"short",day:"numeric",month:"short"});
+function groupOf(id){return GROUPS.global.ids.includes(id)?"global":"regional";}
+// bij kleine ensembles is P10/P90 betekenisloos; toon dan de uiterste leden
+function bandOf(d){return d&&d.memberCount<SMALL_ENSEMBLE?{lo:"min",hi:"max",label:"laagste–hoogste lid"}:{lo:"p10",hi:"p90",label:"P10–P90"};}
+
+function renderSkeletons(){
+  const html=id=>{const m=MODELS[id];return `<article class="model-card ${m.cls}"><div class="model-head"><div><div class="model-name">${m.name}</div><div class="model-run skeleton">nieuwste run laden</div></div><span class="run-badge">${m.members} leden</span></div><div class="model-value skeleton">00,0 mm</div><div class="model-mean skeleton">gemiddelde 0,0 mm</div><div class="spreadbar"></div><div class="model-chips"><span class="chip skeleton">kans 00%</span></div><div class="model-foot"><span>vanaf nu</span><span>laden…</span></div></article>`;};
+  $("#globalModelGrid").innerHTML=GROUPS.global.ids.map(html).join("");
+  $("#regionalModelGrid").innerHTML=GROUPS.regional.ids.map(html).join("");
+}
+
+function memberKeys(hourly){return Object.keys(hourly||{}).filter(k=>k==="precipitation"||/^precipitation_member\d+$/.test(k)).sort((a,b)=>a==="precipitation"?-1:b==="precipitation"?1:a.localeCompare(b,undefined,{numeric:true}));}
+
+/* Bouwt per tijdstap de volledige ledenverdeling van de cumulatieve som op.
+   memberCum/memberRate staan kolomgewijs (per lid één reeks) zodat spaghettilijnen
+   in één pass getekend kunnen worden; per punt bewaren we de gesorteerde kopie
+   voor percentielen en overschrijdingskansen. */
+function buildSeries(times,arrays,runMs,expectedMembers){
+  const n=arrays.length||0,totals=new Float64Array(n),points=[],cumCols=[],rateCols=[];
+  let started=false,lastMs=0;
+  for(let i=0;i<times.length;i++){
+    const rawTime=String(times[i]);
+    const t=Date.parse(rawTime+(/(?:Z|[+-]\d{2}:\d{2})$/.test(rawTime)?"":"Z"));
+    if(!Number.isFinite(t)||t<state.startMs||t<(runMs||0))continue;
+    let any=false;const rate=new Float32Array(n);
+    for(let j=0;j<n;j++){const v=arrays[j]?.[i];if(Number.isFinite(v)){const r=Math.max(0,v);rate[j]=r;totals[j]+=r;any=true;}}
+    if(!any){if(started)break;continue;}
+    started=true;
+    const cum=Float64Array.from(totals),sorted=Float64Array.from(totals).sort();
+    let dry=0;for(let j=0;j<n;j++)if(cum[j]<.1)dry++;
+    points.push({t,h:(t-state.startMs)/36e5,sorted,
+      mean:mean(cum),min:sorted[0],max:sorted[n-1],
+      p10:qs(sorted,.1),p25:qs(sorted,.25),p50:qs(sorted,.5),p75:qs(sorted,.75),p90:qs(sorted,.9),
+      dry:n?dry/n:0});
+    cumCols.push(cum);rateCols.push(rate);
+    lastMs=t;
+  }
+  // kolomgewijs omzetten: memberCum[j][i]
+  const len=points.length,memberCum=[],memberRate=[];
+  for(let j=0;j<n;j++){const c=new Float64Array(len),r=new Float32Array(len);for(let i=0;i<len;i++){c[i]=cumCols[i][j];r[i]=rateCols[i][j];}memberCum.push(c);memberRate.push(r);}
+  return {points,memberCum,memberRate,runMs,memberCount:n||expectedMembers,coverageHours:lastMs?Math.max(0,(lastMs-state.startMs)/36e5):0};
+}
+
+async function loadOpenMeteo(id,runMs){
+  const m=MODELS[id],days=id==="icon"?4:16;
+  const q=new URLSearchParams({latitude:state.lat,longitude:state.lon,hourly:"precipitation",models:m.slug,forecast_days:String(days),timezone:"UTC",cell_selection:"land"});
+  const json=await fetchJSON(`${apiBase()}?${q}`);
+  if(!json.hourly?.time)throw new Error("geen uurdata");
+  const keys=memberKeys(json.hourly),arrays=keys.map(k=>json.hourly[k]);
+  if(!arrays.length)throw new Error("geen ensembleleden");
+  return {...buildSeries(json.hourly.time,arrays,runMs,m.members),gridLat:json.latitude,gridLon:json.longitude};
+}
+async function loadMeta(id){const j=await fetchJSON(cacheBust(MODELS[id].meta),12000);return Number(j.last_run_initialisation_time)*1000;}
+function haversine(a,b,c,d){const r=Math.PI/180,x=(c-a)*r,y=(d-b)*r,q=Math.sin(x/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(y/2)**2;return 12742*Math.asin(Math.sqrt(q));}
+async function loadHarmonie(){
+  const index=await fetchJSON(cacheBust("pluim_harmoneps/_index.json"));
+  if(!Array.isArray(index)||!index.length)throw new Error("stationsindex ontbreekt");
+  state.harmIndex=index;
+  const station=index.reduce((best,s)=>{const km=haversine(state.lat,state.lon,+s.lat,+s.lon);return !best||km<best.km?{...s,km}:best;},null);
+  const j=await fetchJSON(cacheBust(`pluim_harmoneps/${encodeURIComponent(station.id)}.json`));
+  const arrays=j.vars?.precip_mm_per_h;
+  if(!j.times||!Array.isArray(arrays)||!arrays.length)throw new Error("geen HarmonEPS-leden");
+  state.harmStation=station;
+  return {...buildSeries(j.times,arrays,parseRun(j.run),6),gridLat:j.grid_lat,gridLon:j.grid_lon,station};
+}
+
+async function loadAll(){
+  if(state.loading)return;state.loading=true;const request=++state.request;
+  showNotice("");renderSkeletons();state.data={};state.harmStation=null;state.harmIndex=null;state.mapCache.clear();
+  state.startMs=Math.ceil(Date.now()/36e5)*36e5;
+  $("#liveText").textContent="Nieuwste runs ophalen…";
+  $("#refreshBtn").disabled=true;
+  try{
+    const meta=await Promise.allSettled(["ecmwf","gfs","icon"].map(async id=>[id,await loadMeta(id)]));
+    const runs={};meta.forEach((r,i)=>{if(r.status==="fulfilled")runs[r.value[0]]=r.value[1];else runs[["ecmwf","gfs","icon"][i]]=null;});
+    const jobs=[...(["ecmwf","gfs","icon"].map(id=>loadOpenMeteo(id,runs[id]).then(v=>[id,v]))),loadHarmonie().then(v=>["harm",v])];
+    const results=await Promise.allSettled(jobs);if(request!==state.request)return;
+    results.forEach((r,i)=>{const id=ORDER[i];state.data[id]=r.status==="fulfilled"?r.value[1]:{error:r.reason?.message||"laden mislukt",points:[]};});
+    renderAll();
+    const ok=ORDER.filter(id=>state.data[id]?.points?.length).length;
+    $("#liveText").textContent=`${ok}/4 nieuwste runs · bijgewerkt ${new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"})}`;
+    if(ok<4)showNotice(`${4-ok} model${ok===3?"":"len"} kon niet worden geladen. De overige modeldata blijft zichtbaar.`);
+  }catch(e){showNotice(`Laden mislukt: ${e.message}`);renderAll();}
+  finally{if(request===state.request){state.loading=false;$("#refreshBtn").disabled=false;}}
+}
+
+function pointAt(data,h,tolerance=2){
+  if(!data?.points?.length)return null;let best=null,dist=Infinity;
+  for(const p of data.points){const d=Math.abs(p.h-h);if(d<dist){best=p;dist=d;}}
+  return dist<=tolerance?best:null;
+}
+function horizonPoint(data,h){if(!data?.points?.length||data.coverageHours<h-2)return null;return pointAt(data,h,2.1);}
+
+/* Dagsommen per lid, gegroepeerd op lokale kalenderdag.
+   Uurwaarden zijn sommen over het vóórgaande uur, dus de dag wordt bepaald
+   door het begin van het interval (t - 1 uur). Resultaat wordt gecachet. */
+function dailyStats(d){
+  if(!d?.points?.length)return [];
+  if(d._daily)return d._daily;
+  const n=d.memberCount,byDay=new Map();
+  d.points.forEach((p,i)=>{
+    const key=dayKeyFmt.format(new Date(p.t-36e5));
+    let e=byDay.get(key);
+    if(!e){e={key,sums:new Float64Array(n),hours:0,t:p.t-36e5};byDay.set(key,e);}
+    e.hours++;
+    for(let j=0;j<n;j++)e.sums[j]+=d.memberRate[j][i];
+  });
+  const days=[...byDay.values()].map(e=>{
+    const sorted=Float64Array.from(e.sums).sort();
+    return {key:e.key,t:e.t,hours:e.hours,partial:e.hours<24,
+      label:dayLabelFmt.format(new Date(e.t)),
+      mean:mean(e.sums),p25:qs(sorted,.25),p50:qs(sorted,.5),p75:qs(sorted,.75),max:sorted[n-1],
+      pop:pAtLeast(sorted,.1),p5:pAtLeast(sorted,5),p10mm:pAtLeast(sorted,10)};
+  });
+  d._daily=days;return days;
+}
+
+function renderCards(){
+  const card=id=>{
+    const m=MODELS[id],d=state.data[id];
+    if(!d?.points?.length)return `<article class="model-card ${m.cls}"><div class="model-head"><div><div class="model-name">${m.name}</div><div class="model-run">niet beschikbaar</div></div><span class="run-badge">${m.members} leden</span></div><div class="model-value" style="font-size:1rem;margin-top:18px;color:#8a9aa6">Geen data</div><div class="model-mean">${esc(d?.error||"model buiten bereik")}</div></article>`;
+    const isGlobal=groupOf(id)==="global",cover=Math.floor(d.coverageHours),h=isGlobal?Math.min(336,cover):cover;
+    const p=pointAt(d,h,2.1)||d.points.at(-1),band=bandOf(d),lo=p[band.lo],hi=p[band.hi];
+    const threshold=isGlobal?20:5,chance=pAtLeast(p.sorted,threshold);
+    const place=id==="harm"&&d.station?`${d.station.naam} · ${fmt(d.station.km,0)} km`:"gekozen locatie";
+    const spanLabel=isGlobal?(h>=330?"14d":`${Math.round(h/24)}d`):`${Math.round(h)}u`;
+    // spreidingsbalk: schaal op het natste lid, met mediaan als streep en gemiddelde als stippel
+    const top=Math.max(hi,p.max,p.mean,.5),pc=v=>clamp(v/top*100,0,100);
+    const skew=p.mean>0&&p.p50>=0?p.mean-p.p50:0;
+    return `<article class="model-card ${m.cls}">
+      <div class="model-head"><div><div class="model-name">${m.name}</div><div class="model-run">run ${formatRun(d.runMs)}</div></div><span class="run-badge">${d.memberCount} leden</span></div>
+      <div class="model-value">${fmt(p.p50)}<small>mm mediaan / ${spanLabel}</small></div>
+      <div class="model-mean">gemiddelde <b>${fmt(p.mean)} mm</b> · ${band.label} ${fmt(lo)}–${fmt(hi)}</div>
+      <div class="spreadbar" title="${band.label}: ${fmt(lo)}–${fmt(hi)} mm · P25–P75: ${fmt(p.p25)}–${fmt(p.p75)} mm">
+        <i style="left:${pc(lo)}%;width:${Math.max(1,pc(hi)-pc(lo))}%"></i>
+        <u style="left:${pc(p.p25)}%;width:${Math.max(1,pc(p.p75)-pc(p.p25))}%"></u>
+        <s style="left:calc(${pc(p.p50)}% - 1px)"></s>
+        <em style="left:${pc(p.mean)}%" title="gemiddelde"></em>
+      </div>
+      <div class="spread-axis"><span>0</span><span>${fmt(top,top<10?1:0)} mm</span></div>
+      <div class="model-chips">
+        <span class="chip ${chance>=.5?"hot":""}">kans ≥${fmt(threshold,0)} mm: ${fmt(chance*100,0)}%</span>
+        <span class="chip ${p.dry>=.5?"dry":""}">droog: ${fmt(p.dry*100,0)}%</span>
+        ${skew>Math.max(1,p.p50*.35)?`<span class="chip wet">natte staart +${fmt(skew)} mm</span>`:""}
+      </div>
+      <div class="model-foot"><span>${esc(place)}</span><span>tot +${Math.round(d.coverageHours)}u</span></div>
+    </article>`;
+  };
+  $("#globalModelGrid").innerHTML=GROUPS.global.ids.map(card).join("");
+  $("#regionalModelGrid").innerHTML=GROUPS.regional.ids.map(card).join("");
+}
+
+function renderInsight(){
+  const setSignal=(ids,h,titleEl,textEl,label)=>{
+    const rows=ids.map(id=>({id,d:state.data[id],p:horizonPoint(state.data[id],h)})).filter(x=>x.p);
+    if(rows.length<2){$(titleEl).textContent=`Nog niet genoeg data voor de ${label}`;$(textEl).textContent="De afzonderlijke beschikbare modeluitkomst blijft hieronder zichtbaar.";return;}
+    rows.sort((a,b)=>b.p.p50-a.p.p50);
+    const wet=rows[0],dry=rows[1],spread=wet.p.p50-dry.p.p50,avg=mean(rows.map(x=>x.p.p50));
+    const agreement=spread<=Math.max(.8,avg*.25)?"dicht bij elkaar":"duidelijk uiteen";
+    const wetBand=bandOf(wet.d),skew=wet.p.mean-wet.p.p50;
+    $(titleEl).textContent=spread<.15?`Beide modellen komen op vrijwel dezelfde neerslagsom uit`:`${MODELS[wet.id].short} is het natst; de modellen liggen ${agreement}`;
+    const tail=skew>Math.max(1,wet.p.p50*.35)
+      ? ` De verdeling van ${MODELS[wet.id].short} is scheef: het gemiddelde ligt op ${fmt(wet.p.mean)} mm, dus een deel van de leden is fors natter dan de mediaan.`
+      : ` De leden van ${MODELS[wet.id].short} liggen redelijk symmetrisch rond de mediaan (gemiddelde ${fmt(wet.p.mean)} mm).`;
+    $(textEl).textContent=`Tot +${Math.round(h)} uur komt ${MODELS[wet.id].short} op een mediaan van ${fmt(wet.p.p50)} mm (${wetBand.label} ${fmt(wet.p[wetBand.lo])}–${fmt(wet.p[wetBand.hi])}) en ${MODELS[dry.id].short} op ${fmt(dry.p.p50)} mm. Verschil: ${fmt(spread)} mm.${tail}`;
+  };
+  setSignal(GROUPS.global.ids,336,"#globalInsightTitle","#globalInsightText","mondiale vergelijking");
+  const common=Math.floor(Math.min(...GROUPS.regional.ids.map(id=>state.data[id]?.coverageHours||Infinity)));
+  setSignal(GROUPS.regional.ids,Math.max(12,Number.isFinite(common)?common:12),"#regionalInsightTitle","#regionalInsightText","fijnmazige vergelijking");
+}
+
+function cellFor(d,p){
+  if(!p)return `<td class="na">niet beschikbaar</td>`;
+  const band=bandOf(d);
+  return `<td><span class="cell-main">${fmt(p.p50)} mm</span><span class="cell-range">gem ${fmt(p.mean)} · ${band.label} ${fmt(p[band.lo])}–${fmt(p[band.hi])}</span></td>`;
+}
+function renderTable(){
+  const make=(ids,horizons,caption,includeFull=false)=>{
+    let html=`<thead><tr><th scope="col">${caption}</th>${ids.map(id=>`<th scope="col"><span class="model-dot" style="--c:${MODELS[id].color}"></span>${MODELS[id].short}</th>`).join("")}</tr></thead><tbody>`;
+    for(const hz of horizons){html+=`<tr><th scope="row">${hz.label}</th>`;for(const id of ids)html+=cellFor(state.data[id],horizonPoint(state.data[id],hz.h));html+="</tr>";}
+    if(includeFull){html+=`<tr><th scope="row">Volledige modelrun</th>`;for(const id of ids){const d=state.data[id],p=d?.points?.at(-1);html+=p?`<td><span class="cell-main">${fmt(p.p50)} mm</span><span class="cell-range">t/m +${Math.round(d.coverageHours)}u · gem ${fmt(p.mean)} · ${bandOf(d).label} ${fmt(p[bandOf(d).lo])}–${fmt(p[bandOf(d).hi])}</span></td>`:`<td class="na">niet beschikbaar</td>`;}html+="</tr>";}
+    return html+"</tbody>";
+  };
+  $("#globalComparisonTable").innerHTML=make(GROUPS.global.ids,GROUPS.global.horizons,"Mondiaal vanaf nu");
+  $("#regionalComparisonTable").innerHTML=make(GROUPS.regional.ids,GROUPS.regional.horizons,"Fijnmazig vanaf nu",true);
+}
+
+function renderLegend(){
+  for(const [key,chart] of Object.entries(CHARTS)){
+    const v=state.view[key];
+    chart.legend.innerHTML=chart.ids.map(id=>`<button class="legend-btn ${state.hidden.has(id)?"off":""}" data-model="${id}" data-chart="${key}" style="--c:${MODELS[id].color}"><span class="legend-line"></span>${MODELS[id].name}</button>`).join("")
+      +`<span class="legend-sep"></span>`
+      +`<button class="view-toggle ${v.spag?"on":""}" data-view="spag" data-chart="${key}"><span class="tick"></span>Losse leden</button>`
+      +`<button class="view-toggle ${v.mean?"on":""}" data-view="mean" data-chart="${key}"><span class="tick"></span>Gemiddelde</button>`
+      +`<span class="fan-key"><i class="wide"></i>P10–P90<i class="narrow"></i>P25–P75</span>`;
+  }
+  document.querySelectorAll(".legend-btn").forEach(b=>b.onclick=()=>{const id=b.dataset.model;state.hidden.has(id)?state.hidden.delete(id):state.hidden.add(id);renderLegend();drawChart(b.dataset.chart);});
+  document.querySelectorAll(".view-toggle").forEach(b=>b.onclick=()=>{const k=b.dataset.chart;state.view[k][b.dataset.view]=!state.view[k][b.dataset.view];renderLegend();drawChart(k);});
+}
+
+function renderAll(){
+  CHARTS.regional.hours=Math.max(48,Math.ceil(Math.max(...GROUPS.regional.ids.map(id=>state.data[id]?.coverageHours||0))/6)*6);
+  renderCards();renderInsight();renderTable();renderLegend();
+  drawChart("global");drawChart("regional");
+  syncProbModel();renderDayMatrix();
+  setLocationMeta(state.harmStation?`HARMONIE: ${state.harmStation.naam}`:"");
+  $("#globalChartSubtitle").textContent=`Vanaf ${formatValid(state.startMs)} · dikke lijn = mediaan, waaier = P25–P75 en P10–P90`;
+  $("#regionalChartSubtitle").textContent=`Vanaf ${formatValid(state.startMs)} · laatste beschikbare uren: ICON-D2 +${Math.round(state.data.icon?.coverageHours||0)}u, HARMONIE +${Math.round(state.data.harm?.coverageHours||0)}u`;
+  syncMapModel(true);
+}
+
+/* ---------- cumulatieve grafieken ---------- */
+// kies een nette stapgrootte voor 5 gridlijnen, zodat de as niet onnodig ver boven de data uitloopt
+function niceMax(v){
+  if(!(v>0))return 1;
+  const target=v/5,exp=Math.pow(10,Math.floor(Math.log10(target))),m=target/exp;
+  const step=(m<=1?1:m<=1.5?1.5:m<=2?2:m<=2.5?2.5:m<=3?3:m<=4?4:m<=5?5:m<=6?6:m<=8?8:10)*exp;
+  return Math.max(1,step*5);
+}
+function sizeCanvas(canvas,w,h){const dpr=Math.min(devicePixelRatio||1,2);const bw=Math.round(w*dpr),bh=Math.round(h*dpr);if(canvas.width!==bw||canvas.height!==bh){canvas.width=bw;canvas.height=bh;}const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);return ctx;}
+function axes(ctx,w,h,p,ymax,xMax,yTitle,yFmt){
+  const cw=w-p.l-p.r,ch=h-p.t-p.b;
+  ctx.font="11px Inter,system-ui,sans-serif";ctx.textBaseline="middle";ctx.lineWidth=1;
+  for(let i=0;i<=5;i++){const v=ymax*i/5,yy=p.t+ch-v/ymax*ch;ctx.strokeStyle="#e5ebef";ctx.beginPath();ctx.moveTo(p.l,yy);ctx.lineTo(w-p.r,yy);ctx.stroke();ctx.fillStyle="#6d8190";ctx.textAlign="right";ctx.fillText(yFmt(v),p.l-8,yy);}
+  const step=xMax<=48?6:xMax<=120?24:48;ctx.textAlign="center";ctx.textBaseline="top";
+  for(let hx=0;hx<=xMax;hx+=step){const xx=p.l+hx/xMax*cw;ctx.strokeStyle="#eef2f4";ctx.beginPath();ctx.moveTo(xx,p.t);ctx.lineTo(xx,p.t+ch);ctx.stroke();ctx.fillStyle="#6d8190";ctx.fillText(hx===0?"nu":hx<48?`+${hx}u`:`+${Math.round(hx/24)}d`,xx,p.t+ch+10);}
+  ctx.save();ctx.translate(13,p.t+ch/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.textBaseline="top";ctx.fillStyle="#5d7282";ctx.font="10px Inter,system-ui,sans-serif";ctx.fillText(yTitle,0,0);ctx.restore();
+}
+function drawChart(key){
+  const chart=CHARTS[key],v=state.view[key],r=chart.wrap.getBoundingClientRect();
+  const w=Math.max(320,r.width),h=Math.max(280,r.height),p={l:w<600?43:55,r:18,t:18,b:42};
+  const ctx=sizeCanvas(chart.canvas,w,h),cw=w-p.l-p.r,ch=h-p.t-p.b,xMax=chart.hours;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+  let ymax=0;
+  for(const id of chart.ids){
+    if(state.hidden.has(id))continue;const d=state.data[id];if(!d?.points?.length)continue;
+    const hiKey=v.spag?"max":bandOf(d).hi;
+    for(const q of d.points)if(q.h<=xMax)ymax=Math.max(ymax,q[hiKey],v.mean?q.mean:0);
+  }
+  ymax=niceMax(ymax*1.08||5);
+  const x=hx=>p.l+clamp(hx,0,xMax)/xMax*cw,y=val=>p.t+ch-clamp(val,0,ymax)/ymax*ch;
+  axes(ctx,w,h,p,ymax,xMax,"cumulatieve neerslag (mm)",val=>fmt(val,val<10?1:0));
+  for(const id of chart.ids){
+    if(state.hidden.has(id))continue;
+    const d=state.data[id],m=MODELS[id];if(!d?.points?.length)continue;
+    const idx=[];d.points.forEach((q,i)=>{if(q.h>=0&&q.h<=xMax)idx.push(i);});
+    if(idx.length<2)continue;
+    const band=bandOf(d);
+    // buitenband en binnenband als gestapelde vlakken
+    for(const [loK,hiK,alpha] of [[band.lo,band.hi,"14"],["p25","p75","22"]]){
+      ctx.beginPath();
+      idx.forEach((i,k)=>{const q=d.points[i],xx=x(q.h),yy=y(q[hiK]);k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});
+      for(let k=idx.length-1;k>=0;k--){const q=d.points[idx[k]];ctx.lineTo(x(q.h),y(q[loK]));}
+      ctx.closePath();ctx.fillStyle=m.color+alpha;ctx.fill();
+    }
+    if(v.spag){
+      ctx.strokeStyle=m.color+"3a";ctx.lineWidth=.9;ctx.lineJoin="round";
+      for(const col of d.memberCum){ctx.beginPath();idx.forEach((i,k)=>{const xx=x(d.points[i].h),yy=y(col[i]);k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});ctx.stroke();}
+    }
+    if(v.mean){
+      ctx.save();ctx.setLineDash([5,4]);ctx.beginPath();
+      idx.forEach((i,k)=>{const q=d.points[i],xx=x(q.h),yy=y(q.mean);k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});
+      ctx.strokeStyle=m.color;ctx.lineWidth=1.6;ctx.globalAlpha=.85;ctx.stroke();ctx.restore();
+    }
+    ctx.beginPath();
+    idx.forEach((i,k)=>{const q=d.points[i],xx=x(q.h),yy=y(q.p50);k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});
+    ctx.strokeStyle=m.color;ctx.lineWidth=2.6;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke();
+    const last=d.points[idx.at(-1)];
+    ctx.beginPath();ctx.arc(x(last.h),y(last.p50),3.6,0,Math.PI*2);ctx.fillStyle=m.color;ctx.fill();
+    ctx.strokeStyle="#fff";ctx.lineWidth=1.4;ctx.stroke();
+  }
+  chart.geom={x,xMax,p,cw,ch,w,h};
+  sizeCanvas(chart.overlay,w,h);
+  drawCrosshair(key);
+}
+function drawCrosshair(key){
+  const chart=CHARTS[key],g=chart.geom;if(!g)return;
+  const ctx=chart.overlay.getContext("2d");ctx.clearRect(0,0,g.w,g.h);
+  if(chart.hoverX==null)return;
+  const hx=clamp((chart.hoverX-g.p.l)/g.cw*g.xMax,0,g.xMax),xx=g.x(hx);
+  ctx.strokeStyle="#5c7080";ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(xx,g.p.t);ctx.lineTo(xx,g.p.t+g.ch);ctx.stroke();ctx.setLineDash([]);
+}
+function updateTooltip(key,clientX,clientY){
+  const chart=CHARTS[key],rect=chart.canvas.getBoundingClientRect(),g=chart.geom;if(!g)return;
+  chart.hoverX=clientX-rect.left;
+  const hx=clamp((chart.hoverX-g.p.l)/g.cw*g.xMax,0,g.xMax),time=state.startMs+hx*36e5;
+  const rows=chart.ids.filter(id=>!state.hidden.has(id)).map(id=>({id,d:state.data[id],p:pointAt(state.data[id],hx,2.5)})).filter(x=>x.p);
+  if(!rows.length){chart.tooltip.style.display="none";chart.hoverX=null;drawCrosshair(key);return;}
+  chart.tooltip.innerHTML=`<div class="tip-time">${formatValid(time)} · +${Math.round(hx)}u</div>`+rows.map(x=>{
+    const band=bandOf(x.d);
+    return `<div class="tip-model"><span class="tip-name"><span class="tip-dot" style="--c:${MODELS[x.id].color}"></span>${MODELS[x.id].short}</span><span class="tip-val">${fmt(x.p.p50)} mm</span></div>`+
+      `<div class="tip-sub">gem ${fmt(x.p.mean)} · P25–P75 ${fmt(x.p.p25)}–${fmt(x.p.p75)} · ${band.label} ${fmt(x.p[band.lo])}–${fmt(x.p[band.hi])}</div>`+
+      `<div class="tip-sub">${fmt(x.p.dry*100,0)}% van de leden nog droog</div>`;
+  }).join("");
+  chart.tooltip.style.display="block";
+  const tw=chart.tooltip.offsetWidth,th=chart.tooltip.offsetHeight;
+  let left=chart.hoverX+14,top=clientY-rect.top-th/2;
+  if(left+tw>rect.width-5)left=chart.hoverX-tw-14;
+  chart.tooltip.style.left=clamp(left,4,rect.width-tw-4)+"px";
+  chart.tooltip.style.top=clamp(top,4,rect.height-th-4)+"px";
+  drawCrosshair(key);
+}
+for(const [key,chart] of Object.entries(CHARTS)){
+  chart.canvas.addEventListener("pointermove",e=>updateTooltip(key,e.clientX,e.clientY));
+  chart.canvas.addEventListener("pointerleave",()=>{chart.hoverX=null;chart.tooltip.style.display="none";drawCrosshair(key);});
+}
+document.querySelectorAll(".horizon-pills .pill[data-hours]").forEach(b=>b.onclick=()=>{
+  const key=b.closest(".horizon-pills").id.startsWith("global")?"global":"regional",chart=CHARTS[key];
+  b.parentElement.querySelectorAll(".pill").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+  chart.hours=b.dataset.hours==="full"?Math.max(48,Math.ceil(Math.max(...chart.ids.map(id=>state.data[id]?.coverageHours||0))/6)*6):+b.dataset.hours;
+  chart.hoverX=null;chart.tooltip.style.display="none";drawChart(key);
+});
+
+/* ---------- overschrijdingskansen + ledenverdeling ---------- */
+function thresholdsFor(id){return THRESHOLDS[groupOf(id)];}
+function renderThrKey(){
+  const thr=thresholdsFor(state.probModel);
+  $("#thrKey").innerHTML=thr.map((t,i)=>`<span><i style="--c:${THR_COLORS[i]}"></i>≥ ${fmt(t,t<1?1:0)} mm</span>`).join("");
+}
+function drawProbChart(){
+  const wrap=$("#probChartWrap"),canvas=$("#probChart"),d=state.data[state.probModel];
+  const r=wrap.getBoundingClientRect(),w=Math.max(300,r.width),h=Math.max(240,r.height),p={l:w<520?52:58,r:16,t:16,b:40};
+  const ctx=sizeCanvas(canvas,w,h),cw=w-p.l-p.r,ch=h-p.t-p.b;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+  if(!d?.points?.length){ctx.fillStyle="#8a9aa6";ctx.font="12px Inter,system-ui,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("Geen data voor dit model",w/2,h/2);sizeCanvas($("#probOverlay"),w,h);return;}
+  const xMax=Math.max(6,Math.ceil(d.coverageHours/6)*6),thr=thresholdsFor(state.probModel);
+  const x=hx=>p.l+clamp(hx,0,xMax)/xMax*cw,y=v=>p.t+ch-clamp(v,0,100)/100*ch;
+  axes(ctx,w,h,p,100,xMax,"kans (%)",v=>`${fmt(v,0)}%`);
+  thr.forEach((t,i)=>{
+    ctx.beginPath();
+    d.points.forEach((q,k)=>{const xx=x(q.h),yy=y(pAtLeast(q.sorted,t)*100);k?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});
+    ctx.strokeStyle=THR_COLORS[i];ctx.lineWidth=2.2;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke();
+    const last=d.points.at(-1),lv=pAtLeast(last.sorted,t)*100;
+    if(lv>1){ctx.beginPath();ctx.arc(x(last.h),y(lv),3,0,Math.PI*2);ctx.fillStyle=THR_COLORS[i];ctx.fill();}
+  });
+  // markeer de looptijd die in de ledenverdeling rechts wordt getoond
+  const hs=clamp(state.probHours,0,xMax),xs=x(hs);
+  ctx.strokeStyle="#33506a";ctx.lineWidth=1.2;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(xs,p.t);ctx.lineTo(xs,p.t+ch);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle="#33506a";ctx.font="700 10px Inter,system-ui,sans-serif";ctx.textAlign=xs>w-70?"right":"left";ctx.textBaseline="top";
+  ctx.fillText(`+${Math.round(hs)}u`,xs+(xs>w-70?-5:5),p.t+2);
+  sizeCanvas($("#probOverlay"),w,h);
+}
+function drawDotChart(){
+  const canvas=$("#dotChart"),wrap=canvas.parentElement,d=state.data[state.probModel];
+  const r=wrap.getBoundingClientRect(),w=Math.max(220,r.width),h=Math.max(100,r.height),p={l:8,r:8,t:12,b:24};
+  const ctx=sizeCanvas(canvas,w,h),cw=w-p.l-p.r,ch=h-p.t-p.b;
+  ctx.clearRect(0,0,w,h);
+  const pt=d?.points?.length?pointAt(d,state.probHours,3):null;
+  if(!pt){ctx.fillStyle="#9baab5";ctx.font="11px Inter,system-ui,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("Buiten de looptijd van dit model",w/2,h/2);
+    ["#dotMedian","#dotMean","#dotDry","#dotMax"].forEach(s=>$(s).textContent="—");return;}
+  const m=MODELS[state.probModel],band=bandOf(d),vmax=Math.max(pt.max,1),x=v=>p.l+clamp(v,0,vmax)/vmax*cw;
+  // as
+  ctx.strokeStyle="#dde5eb";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.l,p.t+ch);ctx.lineTo(p.l+cw,p.t+ch);ctx.stroke();
+  ctx.font="10px Inter,system-ui,sans-serif";ctx.fillStyle="#8ea0ad";ctx.textBaseline="top";
+  for(let i=0;i<=4;i++){const v=vmax*i/4,xx=x(v);ctx.textAlign=i===0?"left":i===4?"right":"center";ctx.fillText(fmt(v,vmax<10?1:0),xx,p.t+ch+5);
+    if(i){ctx.strokeStyle="#f0f4f6";ctx.beginPath();ctx.moveTo(xx,p.t);ctx.lineTo(xx,p.t+ch);ctx.stroke();}}
+  // banden
+  ctx.fillStyle=m.color+"18";ctx.fillRect(x(pt[band.lo]),p.t,Math.max(1,x(pt[band.hi])-x(pt[band.lo])),ch);
+  ctx.fillStyle=m.color+"22";ctx.fillRect(x(pt.p25),p.t,Math.max(1,x(pt.p75)-x(pt.p25)),ch);
+  // beeswarm: leden op waarde, overlappende stippen stapelen omhoog.
+  // eerst tellen hoe hoog de hoogste stapel wordt, dan de onderlinge afstand daarop schalen
+  const n=d.memberCount,ki=d.points.indexOf(pt),binW=7;
+  const values=[];for(let j=0;j<n;j++)values.push(d.memberCum[j][ki]);
+  values.sort((a,b)=>a-b);
+  const counts=new Map();let tallest=1;
+  for(const v of values){const bin=Math.round(x(v)/binW),k=(counts.get(bin)||0)+1;counts.set(bin,k);if(k>tallest)tallest=k;}
+  const gap=Math.min(6.6,(ch-12)/tallest),rad=clamp(gap*.47,1.1,3.1),stacks=new Map();
+  for(const v of values){
+    const xx=x(v),bin=Math.round(xx/binW),k=stacks.get(bin)||0;stacks.set(bin,k+1);
+    ctx.beginPath();ctx.arc(xx,p.t+ch-rad-2-k*gap,rad,0,Math.PI*2);
+    ctx.fillStyle=v<.1?"#b7c4cd":m.color+"cc";ctx.fill();
+    if(rad>=2){ctx.strokeStyle="#fff";ctx.lineWidth=1;ctx.stroke();}
+  }
+  // mediaan en gemiddelde
+  ctx.strokeStyle=m.color;ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(x(pt.p50),p.t);ctx.lineTo(x(pt.p50),p.t+ch);ctx.stroke();
+  ctx.strokeStyle="#44607a";ctx.lineWidth=1.6;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(x(pt.mean),p.t);ctx.lineTo(x(pt.mean),p.t+ch);ctx.stroke();ctx.setLineDash([]);
+  $("#dotMedian").textContent=`${fmt(pt.p50)} mm`;
+  $("#dotMean").textContent=`${fmt(pt.mean)} mm`;
+  $("#dotDry").textContent=`${fmt(pt.dry*100,0)}% (${Math.round(pt.dry*n)}/${n})`;
+  $("#dotMax").textContent=`${fmt(pt.max)} mm`;
+  $("#dotTitle").textContent=`Ledenverdeling op +${Math.round(pt.h)} uur`;
+  $("#dotSub").textContent=`${MODELS[state.probModel].name} · ${n} leden · geldig ${formatValid(pt.t)}. Dikke streep = mediaan, stippellijn = gemiddelde, gearceerde banden = P25–P75 en ${band.label}.`;
+}
+function syncProbModel(){
+  const d=state.data[state.probModel],max=Math.max(6,Math.floor(d?.coverageHours||6));
+  const slider=$("#probSlider"),isGlobal=groupOf(state.probModel)==="global",step=isGlobal?6:3;
+  slider.min=step;slider.max=max;slider.step=step;
+  if(state.probHours>max||state.probHours<step)state.probHours=isGlobal?Math.min(120,max):Math.min(24,max);
+  state.probHours=Math.round(state.probHours/step)*step;
+  slider.value=state.probHours;
+  document.querySelectorAll("#probModelPills .pill").forEach(b=>b.classList.toggle("active",b.dataset.model===state.probModel));
+  renderThrKey();drawProbChart();drawDotChart();
+  $("#probSubtitle").textContent=d?.points?.length
+    ? `${MODELS[state.probModel].name} · ${d.memberCount} leden · looptijd tot +${Math.round(d.coverageHours)} uur. Kans = aandeel leden waarvan de som vanaf nu boven de drempel uitkomt.`
+    : "Dit model is nu niet beschikbaar.";
+}
+document.querySelectorAll("#probModelPills .pill").forEach(b=>b.onclick=()=>{state.probModel=b.dataset.model;syncProbModel();});
+$("#probSlider").addEventListener("input",e=>{state.probHours=+e.target.value;drawProbChart();drawDotChart();});
+
+/* ---------- dagmatrix ---------- */
+function dayColor(v){
+  if(!(v>0))return "#f8fafb";
+  if(v<.5)return "#eaf6fd";if(v<1)return "#d6edfb";if(v<3)return "#b6ddf6";if(v<5)return "#8ec9ef";
+  if(v<10)return "#5fb0e4";if(v<20)return "#3387cf";if(v<30)return "#2263a8";return "#17457c";
+}
+function dayInk(v){return v>=10?"#fff":"#173347";}
+const DAY_STEPS=[0,.5,1,3,5,10,20,30];
+function renderDayMatrix(){
+  const grid=$("#dayGrid"),ids=ORDER;
+  const perModel=ids.map(id=>({id,days:dailyStats(state.data[id])}));
+  // alleen dagen tonen waar minstens één model een noemenswaardig deel van de dag dekt
+  const hoursPerKey=new Map();
+  for(const m of perModel)for(const day of m.days)hoursPerKey.set(day.key,Math.max(hoursPerKey.get(day.key)||0,day.hours));
+  const keys=[...hoursPerKey.entries()].filter(([,h])=>h>=6).map(([k])=>k).sort();
+  if(!keys.length){grid.innerHTML="";$("#dayScale").innerHTML="";return;}
+  let html=`<div class="dh">Dag</div>`+ids.map(id=>`<div class="dh"><span class="model-dot" style="--c:${MODELS[id].color}"></span>${MODELS[id].short}</div>`).join("");
+  for(const key of keys){
+    const any=perModel.map(m=>m.days.find(x=>x.key===key)).find(Boolean);
+    html+=`<div class="dl">${esc(any.label)}${any.partial?` <small>${any.hours}u</small>`:""}</div>`;
+    for(const m of perModel){
+      const day=m.days.find(x=>x.key===key);
+      if(!day){html+=`<div class="dcell empty">—</div>`;continue;}
+      const bg=dayColor(day.p50),ink=dayInk(day.p50);
+      const title=`${MODELS[m.id].name} · ${day.label}${day.partial?` (${day.hours} uur)`:""}
+mediaan ${fmt(day.p50)} mm · gemiddelde ${fmt(day.mean)} mm
+P25–P75 ${fmt(day.p25)}–${fmt(day.p75)} mm · natste lid ${fmt(day.max)} mm
+kans op meetbare neerslag ${fmt(day.pop*100,0)}% · kans ≥5 mm ${fmt(day.p5*100,0)}% · kans ≥10 mm ${fmt(day.p10mm*100,0)}%`;
+      // droge mediaan krijgt een dof "0" — een streepje betekent uitsluitend: model reikt niet zo ver
+      const shown=day.p50<.05?`<b style="opacity:.45">0</b>`:`<b>${fmt(day.p50)}</b>`;
+      html+=`<div class="dcell" style="background:${bg};color:${ink}" title="${esc(title)}">${shown}<span>${fmt(day.pop*100,0)}%</span><i class="pop" style="width:${Math.max(4,Math.round(day.pop*100*.42))}%"></i></div>`;
+    }
+  }
+  grid.innerHTML=html;
+  $("#dayScale").innerHTML=`<b style="color:#516a7d;font-size:.6rem;text-transform:uppercase;letter-spacing:.07em">Mediane dagsom</b>`+
+    DAY_STEPS.map((v,i)=>`<u><i style="background:${dayColor(i?v:0)}"></i>${i?`${fmt(v,v<1?1:0)}${i===DAY_STEPS.length-1?"+":""}`:"droog"}</u>`).join("")+`<span>mm</span>`;
+}
+
+/* ---------- Nederlandkaart in de vaste Weerlab-stijl ---------- */
+const MAP_MEAN_MODELS={ecmwf:"ecmwf_ifs025_ensemble_mean",gfs:"ncep_gefs_ensemble_mean_seamless",icon:"dwd_icon_d2_eps_ensemble_mean"};
+const MAP_BOUNDS={minLon:3.3,maxLon:7.4,minLat:50.45,maxLat:53.8};
+const mapCanvas=$("#nlRainMap"),mapSlider=$("#mapTimeSlider");
+let mapTimer=null,mapGeo=null,mapGeoPromise=null,mapLast=null,mapResizeTimer=null;
+function pointInRing(lon,lat,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j],cross=((a[1]>lat)!==(b[1]>lat))&&(lon<(b[0]-a[0])*(lat-a[1])/(b[1]-a[1])+a[0]);if(cross)inside=!inside;}return inside;}
+function insideNL(lon,lat){return typeof NL_GRENS!=="undefined"&&Array.isArray(NL_GRENS)&&NL_GRENS.some(r=>pointInRing(lon,lat,r));}
+function mapGrid(){const out=[];for(let lat=50.62;lat<=53.62;lat+=.20)for(let lon=3.30;lon<=7.30;lon+=.24)if(insideNL(lon,lat))out.push({lat:+lat.toFixed(3),lon:+lon.toFixed(3)});return out;}
+function parseAnyTime(s){const raw=String(s);return Date.parse(raw+(/(?:Z|[+-]\d{2}:\d{2})$/.test(raw)?"":"Z"));}
+function sumMeanResponse(j,hours){
+  const times=j?.hourly?.time||[],arr=j?.hourly?.precipitation||[],end=state.startMs+hours*36e5;let sum=0,valid=0;
+  for(let i=0;i<times.length;i++){const t=parseAnyTime(times[i]),v=arr[i];if(t>=state.startMs&&t<=end&&Number.isFinite(v)){sum+=Math.max(0,v);valid++;}}
+  return valid?sum:null;
+}
+async function loadMeanGrid(id,hours){
+  const pts=mapGrid(),chunks=[];
+  for(let i=0;i<pts.length;i+=60)chunks.push(pts.slice(i,i+60));
+  const batches=await Promise.all(chunks.map(async chunk=>{
+    const q=new URLSearchParams({latitude:chunk.map(p=>p.lat).join(","),longitude:chunk.map(p=>p.lon).join(","),hourly:"precipitation",models:MAP_MEAN_MODELS[id],forecast_days:id==="icon"?"4":"16",timezone:"UTC",cell_selection:"land"});
+    const raw=await fetchJSON(`${apiBase()}?${q}`,40000),rows=Array.isArray(raw)?raw:[raw];
+    return chunk.map((p,i)=>({...p,v:sumMeanResponse(rows[i],hours)})).filter(p=>Number.isFinite(p.v));
+  }));
+  return batches.flat();
+}
+async function loadHarmGrid(hours){
+  const index=state.harmIndex||await fetchJSON(cacheBust("pluim_harmoneps/_index.json")),end=state.startMs+hours*36e5;
+  const rows=await Promise.all(index.map(async s=>{
+    try{const j=await fetchJSON(cacheBust(`pluim_harmoneps/${encodeURIComponent(s.id)}.json`),25000),times=j.times||[],members=j.vars?.precip_mm_per_h||[],totals=members.map(()=>0);let valid=0;
+      times.forEach((t,i)=>{const ms=parseAnyTime(t);if(ms<state.startMs||ms>end)return;members.forEach((a,k)=>{if(Number.isFinite(a[i])){totals[k]+=Math.max(0,a[i]);valid++;}});});
+      return valid?{lat:+s.lat,lon:+s.lon,v:mean(totals)}:null;
+    }catch(e){return null;}
+  }));
+  return rows.filter(Boolean);
+}
+async function loadMapGeo(){
+  if(mapGeo)return mapGeo;
+  if(window.WEERLAB_MAP_GEO){mapGeo=window.WEERLAB_MAP_GEO;return mapGeo;}
+  if(!mapGeoPromise)mapGeoPromise=Promise.all([
+    fetchJSON("nl_provincies.geojson"),fetchJSON("nl_meren.geojson"),fetchJSON("nl_rivieren.geojson")
+  ]).then(([provinces,lakes,rivers])=>(mapGeo={provinces,lakes,rivers}));
+  return mapGeoPromise;
+}
+function geoPath(ctx,geo,x,y){
+  if(!geo?.features)return;
+  for(const feature of geo.features){const g=feature.geometry;if(!g)continue;
+    const polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
+    for(const poly of polys)for(const ring of poly){ring.forEach((p,i)=>i?ctx.lineTo(x(p[0]),y(p[1])):ctx.moveTo(x(p[0]),y(p[1])));ctx.closePath();}
+  }
+}
+function lineGeo(ctx,geo,x,y){
+  if(!geo?.features)return;
+  for(const feature of geo.features){const g=feature.geometry;if(!g)continue;const lines=g.type==="LineString"?[g.coordinates]:g.type==="MultiLineString"?g.coordinates:[];
+    for(const line of lines){ctx.beginPath();line.forEach((p,i)=>i?ctx.lineTo(x(p[0]),y(p[1])):ctx.moveTo(x(p[0]),y(p[1])));ctx.stroke();}
+  }
+}
+function nlPath(ctx,x,y){for(const ring of NL_GRENS){ring.forEach((p,i)=>i?ctx.lineTo(x(p[0]),y(p[1])):ctx.moveTo(x(p[0]),y(p[1])));ctx.closePath();}}
+function mapColor(v){
+  if(v<.1)return null;
+  if(v<.5)return "rgba(134,236,255,.94)";
+  if(v<1)return "rgba(54,185,255,.94)";
+  if(v<2)return "rgba(8,119,232,.94)";
+  if(v<5)return "rgba(37,189,105,.94)";
+  if(v<10)return "rgba(255,225,46,.95)";
+  if(v<20)return "rgba(255,148,31,.95)";
+  if(v<40)return "rgba(233,54,50,.96)";
+  return "rgba(165,43,209,.96)";
+}
+function mapValueAt(lon,lat,points){
+  let ws=0,vs=0;
+  for(const p of points){const dx=(p.lon-lon)*Math.cos(lat*Math.PI/180),dy=p.lat-lat,d2=dx*dx+dy*dy;if(d2>.65)continue;const wt=1/Math.pow(d2+.006,1.35);ws+=wt;vs+=wt*p.v;}
+  return ws?vs/ws:null;
+}
+function drawNLMap(points,id,hours){
+  if(!mapGeo)return;
+  mapLast={points,id,hours};
+  const box=mapCanvas.parentElement.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),w=Math.max(280,box.width),h=Math.max(385,box.height);mapCanvas.width=Math.round(w*dpr);mapCanvas.height=Math.round(h*dpr);const ctx=mapCanvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+  const x=lon=>(lon-MAP_BOUNDS.minLon)/(MAP_BOUNDS.maxLon-MAP_BOUNDS.minLon)*w,y=lat=>(MAP_BOUNDS.maxLat-lat)/(MAP_BOUNDS.maxLat-MAP_BOUNDS.minLat)*h,lonAt=px=>MAP_BOUNDS.minLon+px/w*(MAP_BOUNDS.maxLon-MAP_BOUNDS.minLon),latAt=py=>MAP_BOUNDS.maxLat-py/h*(MAP_BOUNDS.maxLat-MAP_BOUNDS.minLat),vals=points.map(p=>p.v),rawMax=Math.max(0,...vals),step=w<390?3.5:3;
+  const sea=ctx.createLinearGradient(0,0,0,h);sea.addColorStop(0,"#a9c9df");sea.addColorStop(1,"#c7ddea");ctx.fillStyle=sea;ctx.fillRect(0,0,w,h);
+  ctx.beginPath();nlPath(ctx,x,y);ctx.fillStyle="#f5efd9";ctx.fill("evenodd");
+  ctx.beginPath();geoPath(ctx,mapGeo.provinces,x,y);ctx.fillStyle="#f5efd9";ctx.fill("evenodd");
+  ctx.save();ctx.beginPath();nlPath(ctx,x,y);ctx.clip("evenodd");
+  for(let py=0;py<h;py+=step)for(let px=0;px<w;px+=step){const lon=lonAt(px),lat=latAt(py);if(!insideNL(lon,lat))continue;const color=mapColor(mapValueAt(lon,lat,points));if(color){ctx.fillStyle=color;ctx.fillRect(px,py,step+.7,step+.7);}}
+  ctx.restore();
+  ctx.beginPath();geoPath(ctx,mapGeo.lakes,x,y);ctx.fillStyle="#a9c9df";ctx.fill("evenodd");ctx.strokeStyle="rgba(69,112,139,.65)";ctx.lineWidth=.65;ctx.stroke();
+  ctx.strokeStyle="rgba(82,142,177,.85)";ctx.lineWidth=.75;lineGeo(ctx,mapGeo.rivers,x,y);
+  ctx.beginPath();geoPath(ctx,mapGeo.provinces,x,y);ctx.strokeStyle="rgba(255,255,255,.9)";ctx.lineWidth=.9;ctx.stroke();
+  ctx.beginPath();nlPath(ctx,x,y);ctx.strokeStyle="rgba(36,65,82,.78)";ctx.lineWidth=1.15;ctx.lineJoin="round";ctx.stroke();
+  const placeV=mapValueAt(state.lon,state.lat,points),px=x(state.lon),py=y(state.lat),label=`${state.place}  ${placeV==null?"—":fmt(placeV)} mm`;ctx.font="750 11px Inter,system-ui,sans-serif";const tw=ctx.measureText(label).width+14,lx=clamp(px+9,4,w-tw-4),ly=clamp(py-24,4,h-25);ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(lx,ly,tw,21);ctx.strokeStyle="rgba(31,55,71,.32)";ctx.lineWidth=1;ctx.strokeRect(lx+.5,ly+.5,tw-1,20);ctx.fillStyle="#152f42";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(label,lx+7,ly+10.5);ctx.beginPath();ctx.arc(px,py,4.3,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#0f2637";ctx.stroke();
+  $("#mapMean").textContent=`${fmt(mean(vals))} mm`;$("#mapMax").textContent=`${fmt(rawMax)} mm`;$("#mapTimeLabel").textContent=`${MODELS[id].name} · +${hours} uur · ${formatValid(state.startMs+hours*36e5)}`;$("#mapFramePeriod").textContent=`${MODELS[id].short} · +${hours} uur`;
+}
+async function updateMap(){
+  const id=state.mapModel,coverage=Math.floor(state.data[id]?.coverageHours||0),hours=Math.min(+mapSlider.value,coverage||+mapSlider.value),key=`${id}:${state.data[id]?.runMs||0}:${hours}`,request=++state.mapRequest;$("#mapLoading").style.display="grid";$("#mapLoading").textContent=`${MODELS[id].short}-kaart laden…`;
+  try{await loadMapGeo();let points=state.mapCache.get(key);if(!points){points=id==="harm"?await loadHarmGrid(hours):await loadMeanGrid(id,hours);state.mapCache.set(key,points);}if(request!==state.mapRequest)return;if(!points.length)throw new Error("geen kaartpunten");drawNLMap(points,id,hours);$("#mapDescription").textContent=`Cumulatieve ensemblegemiddelde neerslag vanaf nu tot +${hours} uur. ${points.length} ruimtelijke punten gebruikt.`;}
+  catch(e){$("#mapLoading").textContent=`Kaart niet beschikbaar: ${e.message}`;return;}
+  $("#mapLoading").style.display="none";
+}
+function syncMapModel(reload=true){
+  const id=state.mapModel,d=state.data[id],max=Math.max(12,Math.floor(d?.coverageHours||12)),isGlobal=groupOf(id)==="global",step=isGlobal?24:6,min=isGlobal?24:12;mapSlider.min=min;mapSlider.max=max;mapSlider.step=step;const fallback=isGlobal?120:Math.min(36,max);if(+mapSlider.value>max||+mapSlider.value<min||(+mapSlider.value-min)%step!==0)mapSlider.value=fallback;document.querySelectorAll(".map-model").forEach(b=>b.classList.toggle("active",b.dataset.model===id));if(reload&&d?.points?.length)updateMap();
+}
+document.querySelectorAll(".map-model").forEach(b=>b.onclick=()=>{state.mapModel=b.dataset.model;syncMapModel(true);});
+mapSlider.addEventListener("input",()=>{$("#mapTimeLabel").textContent=`${MODELS[state.mapModel].name} · +${mapSlider.value} uur`;clearTimeout(mapTimer);mapTimer=setTimeout(updateMap,280);});
+
+let resizeTimer=null;
+window.addEventListener("resize",()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{drawChart("global");drawChart("regional");drawProbChart();drawDotChart();if(mapLast)drawNLMap(mapLast.points,mapLast.id,mapLast.hours);},140);
+});
+
+$("#refreshBtn").onclick=loadAll;
+$("#locateBtn").onclick=()=>{
+  if(!navigator.geolocation){showNotice("Locatiebepaling wordt door deze browser niet ondersteund.");return;}
+  $("#locateBtn").textContent="Locatie bepalen…";navigator.geolocation.getCurrentPosition(p=>{state.lat=p.coords.latitude;state.lon=p.coords.longitude;state.place="Mijn locatie";$("#placeInput").value=state.place;setLocationMeta();$("#locateBtn").textContent="◎ Mijn locatie";loadAll();},e=>{$("#locateBtn").textContent="◎ Mijn locatie";showNotice(`Locatie niet beschikbaar: ${e.message}`);},{enableHighAccuracy:false,timeout:10000});
+};
+
+const placeInput=$("#placeInput"),suggestions=$("#suggestions");
+placeInput.addEventListener("input",()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchPlaces,300);});
+placeInput.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchPlaces(true);}if(e.key==="Escape")suggestions.style.display="none";});
+document.addEventListener("click",e=>{if(!e.target.closest(".search"))suggestions.style.display="none";});
+async function searchPlaces(autoPick=false){
+  const q=placeInput.value.trim();if(q.length<2){suggestions.style.display="none";return;}
+  if(searchAbort)searchAbort.abort();searchAbort=new AbortController();
+  try{const url=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=7&language=nl&format=json&countryCode=NL`;const r=await fetch(url,{signal:searchAbort.signal});if(!r.ok)throw new Error("zoeken mislukt");const j=await r.json(),results=(j.results||[]).filter(x=>x.country_code==="NL");if(autoPick&&results[0])return choosePlace(results[0]);renderSuggestions(results);}catch(e){if(e.name!=="AbortError")showNotice("Plaatsen zoeken lukt op dit moment niet.");}
+}
+function renderSuggestions(results){suggestions.innerHTML="";if(!results.length){suggestions.style.display="none";return;}results.forEach(r=>{const b=document.createElement("button");b.className="suggestion";b.type="button";const title=document.createElement("b"),small=document.createElement("small");title.textContent=r.name;small.textContent=[r.admin1,r.country].filter(Boolean).join(", ");b.append(title,small);b.onclick=()=>choosePlace(r);suggestions.appendChild(b);});suggestions.style.display="block";}
+function choosePlace(r){state.lat=+r.latitude;state.lon=+r.longitude;state.place=r.name;placeInput.value=r.name;suggestions.style.display="none";setLocationMeta();const u=new URL(location.href);u.searchParams.set("lat",state.lat.toFixed(4));u.searchParams.set("lon",state.lon.toFixed(4));u.searchParams.set("plaats",state.place);history.replaceState(null,"",u);loadAll();}
+
+const params=new URLSearchParams(location.search),pLat=+params.get("lat"),pLon=+params.get("lon");
+if(Number.isFinite(pLat)&&Number.isFinite(pLon)&&pLat>=49&&pLat<=54.5&&pLon>=2.5&&pLon<=8){state.lat=pLat;state.lon=pLon;state.place=params.get("plaats")||"Gekozen locatie";placeInput.value=state.place;setLocationMeta();}
+renderSkeletons();loadAll();
+setInterval(async()=>{
+  if(state.loading||document.hidden)return;
+  try{
+    const checks=await Promise.all(["ecmwf","gfs","icon"].map(loadMeta));
+    let changed=["ecmwf","gfs","icon"].some((id,i)=>state.data[id]?.runMs&&checks[i]>state.data[id].runMs);
+    if(!changed&&state.harmStation?.id&&state.data.harm?.runMs){
+      const latestHarm=await fetchJSON(cacheBust(`pluim_harmoneps/${encodeURIComponent(state.harmStation.id)}.json`),12000);
+      changed=(parseRun(latestHarm.run)||0)>state.data.harm.runMs;
+    }
+    if(changed)loadAll();
+  }catch(e){}
+},5*60*1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hittekracht gemeten – KNMI-stations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; font-feature-settings: "ss01","cv11"; }
+.header { background: #ffffff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #e3e8ef; }
+.header-titel { color: #0f172a; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.header-sub { color: #64748b; font-size: 11px; margin-top: 2px; font-family: "DM Mono", monospace; font-weight: 500; }
+.toolbar { background: #ffffff; padding: 10px 20px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #e3e8ef; }
+.toolbar-label { font-size: 10.5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 2px; }
+.btn-dag { padding: 6px 13px; border-radius: 8px; border: 1px solid #e3e8ef; background: #ffffff; color: #334155; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.12s; white-space: nowrap; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
+.btn-dag:hover { background: #eef2f7; border-color: #94a3b8; color: #0f172a; }
+.btn-dag.actief { background: #00205b; color: white; border-color: #00205b; }
+.btn-opslaan { padding: 7px 14px; border-radius: 8px; border: none; background: #00205b; color: white; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: auto; font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
+.btn-opslaan:hover { background: #003689; }
+.kaart-wrap { display: flex; justify-content: center; padding: 16px; }
+.kaart-container { position: relative; width: 100%; max-width: 800px; }
+.kaart-container svg.basemap { display: block; width: 100%; height: auto; background: #b8d4e8; border-radius: 0 0 4px 4px; }
+.kaart-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.kaart-container svg.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.basemap-land { fill: #f5efd9; }
+.basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.6; }
+.kaart-header-band {
+  background: #1e293b; color: #f1f5f9;
+  padding: 16px 20px; border-radius: 4px 4px 0 0;
+  border-bottom: 3px solid #2ec4e8;
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+}
+.kaart-header-band .links { font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em; line-height: 1.15; }
+.kaart-header-band .sub { font-size: 11px; color: #94a3b8; margin-top: 5px; font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; letter-spacing: 0.04em; }
+.kaart-header-band .rechts { font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em; line-height: 1.15; text-align: right; }
+.kaart-header-band .rechts-sub { font-size: 11px; color: #cbd5e1; margin-top: 5px; font-weight: 500; }
+.kaart-footer-band {
+  background: #0f172a; color: #94a3b8;
+  padding: 10px 20px; border-radius: 0 0 4px 4px;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  font-size: 11px;
+}
+.kaart-footer-band .merk { color: #f1f5f9; font-weight: 600; }
+.kaart-footer-band .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: rgba(46,196,232,0.14); color: #7dd3fc; font-family: "DM Mono", ui-monospace, monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
+.nl-buitengrens { fill: none; stroke: white; stroke-width: 2; stroke-linejoin: round; }
+.legenda { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 16px; justify-content: center; }
+.legenda-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #5a7090; }
+.legenda-blok { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
+.status { text-align: center; padding: 12px; font-size: 12px; color: #888; }
+
+/* ── DARK MODE ── */
+[data-theme="dark"] body { background:#0b1220 !important; color:#f1f5f9 !important; }
+[data-theme="dark"] .header, [data-theme="dark"] .toolbar { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .header-titel { color:#f1f5f9 !important; }
+[data-theme="dark"] .header-sub { color:#94a3b8 !important; }
+[data-theme="dark"] .toolbar-label { color:#64748b !important; }
+[data-theme="dark"] .btn-dag { background:#0e1629 !important; color:#cbd5e1 !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .btn-dag:hover { background:rgba(255,255,255,0.05) !important; color:#f1f5f9 !important; border-color:rgba(255,255,255,0.2) !important; }
+[data-theme="dark"] .btn-dag.actief { background:#2ec4e8 !important; color:#0b1220 !important; border-color:#2ec4e8 !important; }
+[data-theme="dark"] .legenda-item { color:#94a3b8 !important; }
+[data-theme="dark"] .status { color:#94a3b8 !important; }
+</style>
+<script>
+  (function(){
+    function apply(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
+    var saved = "light"; try { saved = localStorage.getItem("weerlab_theme") || "light"; } catch {}
+    apply(saved);
+    window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
+  })();
+</script>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Hittekracht gemeten <span style="background:#f97316;color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.06em;text-transform:uppercase;vertical-align:middle;">demo</span></div>
+    <div class="header-sub">KNMI Dataplatform · officiële WBGT/hittekracht (TR-26-04) · <span id="hdr-datum">laden…</span></div>
+  </div>
+  <div id="hdr-update" style="font-size:11px;color:#a8c4e8;"></div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Weergave:</span>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;" id="weergave-btns">
+    <button class="btn-dag" data-w="nu">Nu gemeten</button>
+    <button class="btn-dag" data-w="max">Max vandaag</button>
+  </div>
+  <button class="btn-opslaan" onclick="slaOp()">⬇ Opslaan PNG</button>
+</div>
+
+<div id="status" class="status">Laden…</div>
+
+<div class="kaart-wrap" id="kaart-wrap" style="display:none;">
+  <div style="width:100%;max-width:800px;">
+    <div class="kaart-header-band">
+      <div>
+        <div class="links">Ed Aldus WM</div>
+        <div class="sub" id="kaart-run-label">KNMI-waarnemingen</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="rechts" id="kaart-dag-label">-</div>
+        <div class="rechts-sub" id="kaart-sub-label">Gemeten hittekracht</div>
+      </div>
+    </div>
+    <div class="kaart-container">
+      <svg class="basemap" id="basemap-svg" viewBox="0 0 800 1100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
+      <canvas id="heatmap" width="800" height="1100"></canvas>
+      <svg class="overlay" id="nl-overlay" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="kaart-footer-band">
+      <span class="merk">weerlab.nl</span>
+      <span class="pill" id="kaart-bron-pill">HITTEKRACHT · GEMETEN</span>
+      <span id="footer-run">KNMI Dataplatform</span>
+    </div>
+  </div>
+</div>
+
+<div class="legenda" id="legenda-wrap" style="display:none;">
+  <div id="legenda-items" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;"></div>
+</div>
+
+<script>
+// ── Projectie (zelfde als mosmix_kaart_hittekracht.html) ─────────────────────
+const SVG_W = 800, SVG_H = 1100;
+const LON_MIN = 3.3, LON_MAX = 7.4, LAT_MIN = 50.45, LAT_MAX = 53.8;
+function lonToX(lon) { return (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W; }
+function latToY(lat) { return (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H; }
+
+// ── Hittekracht kleurschaal (0-10) ────────────────────────────────────────────
+const HK_STOPS = [
+  [0,   [220, 242, 255]],
+  [1,   [180, 230, 250]],
+  [2,   [140, 215, 180]],
+  [3,   [160, 220, 120]],
+  [4,   [220, 235,  80]],
+  [5,   [255, 235,  60]],
+  [6,   [255, 185,  30]],
+  [7,   [255, 125,   0]],
+  [8,   [230,  50,   0]],
+  [9,   [180,   0,  30]],
+  [10,  [110,  20, 140]],
+];
+
+function hkRgb(v) {
+  v = Math.max(0, Math.min(10, isFinite(v) ? v : 0));
+  for (let i = 0; i < HK_STOPS.length - 1; i++) {
+    const [v0, c0] = HK_STOPS[i], [v1, c1] = HK_STOPS[i + 1];
+    if (v >= v0 && v <= v1) {
+      const t = (v - v0) / (v1 - v0);
+      return [0,1,2].map(j => Math.round(c0[j] + t * (c1[j] - c0[j])));
+    }
+  }
+  return HK_STOPS[HK_STOPS.length - 1][1];
+}
+
+const HK_LEGENDA = [
+  { v: 0.5, label: "0–1 · Geen" },
+  { v: 2,   label: "2–3 · Minimaal" },
+  { v: 4,   label: "4 · Licht" },
+  { v: 5,   label: "5 · Matig-licht" },
+  { v: 6,   label: "6 · Matig" },
+  { v: 7,   label: "7 · Hoog" },
+  { v: 8,   label: "8 · Erg hoog" },
+  { v: 9,   label: "9 · Extreem" },
+  { v: 10,  label: "10 · Zeer extreem" },
+];
+
+// ── Data globals ──────────────────────────────────────────────────────────────
+let gemeten = null;
+let provincies = null;
+let activeWeergave = "nu";
+
+// ── Basemap (provincie-GeoJSON) ───────────────────────────────────────────────
+function _provRingD(ring) {
+  let d = "";
+  ring.forEach(([lon, lat], i) => {
+    const x = lonToX(lon).toFixed(1), y = latToY(lat).toFixed(1);
+    d += (i === 0 ? "M" : "L") + x + " " + y;
+  });
+  return d + "Z";
+}
+
+function _provAllD() {
+  let d = "";
+  for (const feat of provincies.features) {
+    const g = feat.geometry;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    for (const poly of polys) for (const ring of poly) d += _provRingD(ring);
+  }
+  return d;
+}
+
+function bouwBasemap() {
+  const svg = document.getElementById("basemap-svg");
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  if (!provincies) return;
+  const d = _provAllD();
+  const land = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  land.setAttribute("d", d);
+  land.setAttribute("class", "basemap-land");
+  land.setAttribute("fill-rule", "evenodd");
+  svg.appendChild(land);
+  const prov = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  prov.setAttribute("d", d);
+  prov.setAttribute("class", "basemap-prov");
+  svg.appendChild(prov);
+}
+
+function tekenBuitengrens(svg) {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  if (!provincies) return;
+  let d = "";
+  for (const feat of provincies.features) {
+    const g = feat.geometry;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    for (const poly of polys) d += _provRingD(poly[0]);
+  }
+  const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  p.setAttribute("d", d);
+  p.setAttribute("class", "nl-buitengrens");
+  svg.appendChild(p);
+}
+
+// ── Waarden per weergave ──────────────────────────────────────────────────────
+function stationWaarden(weergave) {
+  const uit = [];
+  for (const [sid, s] of Object.entries(gemeten.stations || {})) {
+    const hk = weergave === "nu" ? s.hk_nu : s.hk_max;
+    const wbgt = weergave === "nu" ? s.wbgt_nu : s.wbgt_max;
+    if (!Number.isFinite(hk)) continue;
+    uit.push({ sid, naam: s.naam, lat: s.lat, lon: s.lon, hk, wbgt, tijdMax: s.tijd_max });
+  }
+  return uit;
+}
+
+// ── IDW heatmap ───────────────────────────────────────────────────────────────
+const CANVAS_W = 800, CANVAS_H = 1100;
+const GRID = 3;
+
+function buildProvCanvasPath(ctx) {
+  ctx.beginPath();
+  for (const feat of provincies.features) {
+    const g = feat.geometry;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    for (const poly of polys) {
+      for (const ring of poly) {
+        ring.forEach(([lon, lat], i) => {
+          const x = lonToX(lon) / SVG_W * CANVAS_W;
+          const y = latToY(lat) / SVG_H * CANVAS_H;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+      }
+    }
+  }
+}
+
+function tekenHeatmap(weergave) {
+  const canvas = document.getElementById("heatmap");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const punten = stationWaarden(weergave).map(({ lon, lat, hk }) => ({
+    px: lonToX(lon) / SVG_W * CANVAS_W,
+    py: latToY(lat) / SVG_H * CANVAS_H,
+    hk
+  }));
+  if (punten.length === 0) return;
+
+  function idw(cx, cy) {
+    let num = 0, den = 0;
+    for (const { px, py, hk } of punten) {
+      const d2 = (cx - px) ** 2 + (cy - py) ** 2;
+      if (d2 < 0.01) return hk;
+      const w = 1 / (d2 ** 1.25);
+      num += w * hk; den += w;
+    }
+    return num / den;
+  }
+
+  ctx.save();
+  buildProvCanvasPath(ctx);
+  ctx.clip("evenodd");
+
+  for (let py = 0; py < CANVAS_H; py += GRID) {
+    for (let px = 0; px < CANVAS_W; px += GRID) {
+      const hk = idw(px + GRID / 2, py + GRID / 2);
+      const [r, g, b] = hkRgb(hk);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.72)`;
+      ctx.fillRect(px, py, GRID, GRID);
+    }
+  }
+  ctx.restore();
+}
+
+// ── Station labels in SVG overlay ─────────────────────────────────────────────
+function tekenLabels(weergave) {
+  const svg = document.getElementById("nl-overlay");
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  tekenBuitengrens(svg);
+
+  for (const st of stationWaarden(weergave)) {
+    const cx = lonToX(st.lon);
+    const cy = latToY(st.lat);
+    const [r, g, b] = hkRgb(st.hk);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const txtKleur = lum < 0.55 ? "white" : "#111";
+
+    const g_el = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", cx);
+    circle.setAttribute("cy", cy);
+    circle.setAttribute("r", 14);
+    circle.setAttribute("fill", `rgb(${r},${g},${b})`);
+    circle.setAttribute("stroke", "rgba(255,255,255,0.85)");
+    circle.setAttribute("stroke-width", "1.8");
+    g_el.appendChild(circle);
+
+    const tv = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    tv.setAttribute("x", cx);
+    tv.setAttribute("y", cy + 1);
+    tv.setAttribute("text-anchor", "middle");
+    tv.setAttribute("dominant-baseline", "middle");
+    tv.setAttribute("font-size", "11");
+    tv.setAttribute("font-weight", "700");
+    tv.setAttribute("font-family", "DM Mono, monospace");
+    tv.setAttribute("fill", txtKleur);
+    tv.textContent = st.hk;
+    g_el.appendChild(tv);
+
+    const tn = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    tn.setAttribute("x", cx);
+    tn.setAttribute("y", cy - 18);
+    tn.setAttribute("text-anchor", "middle");
+    tn.setAttribute("font-size", "9");
+    tn.setAttribute("font-weight", "500");
+    tn.setAttribute("font-family", "DM Sans, sans-serif");
+    tn.setAttribute("fill", "rgba(15,23,42,0.8)");
+    tn.textContent = st.naam;
+    g_el.appendChild(tn);
+
+    const titel = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    titel.textContent = `${st.naam}: hittekracht ${st.hk} (WBGT ${st.wbgt?.toFixed(1)}°C)` +
+      (weergave === "max" && st.tijdMax ? ` om ${utcNaarLokaal(st.tijdMax)}` : "");
+    g_el.appendChild(titel);
+
+    svg.appendChild(g_el);
+  }
+}
+
+// ── Tijd & labels ─────────────────────────────────────────────────────────────
+function utcNaarLokaal(iso) {
+  try {
+    return new Intl.DateTimeFormat("nl-NL", {
+      timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit"
+    }).format(new Date(iso));
+  } catch { return iso; }
+}
+
+const DAGNAMEN_VOLUIT = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+const MAANDEN = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+
+function dagVoluitLabel(dagKey) {
+  const d = new Date(dagKey + "T12:00:00Z");
+  return `${DAGNAMEN_VOLUIT[d.getUTCDay()]} ${d.getUTCDate()} ${MAANDEN[d.getUTCMonth()]}`;
+}
+
+// ── Weergave-knoppen ──────────────────────────────────────────────────────────
+function selectWeergave(w) {
+  activeWeergave = w;
+  document.querySelectorAll("#weergave-btns button").forEach(b =>
+    b.classList.toggle("actief", b.dataset.w === w));
+  tekenHeatmap(w);
+  tekenLabels(w);
+  const tijd = utcNaarLokaal(gemeten.laatste_tijd);
+  document.getElementById("kaart-dag-label").textContent = dagVoluitLabel(gemeten.dag);
+  document.getElementById("kaart-sub-label").textContent =
+    w === "nu" ? `Gemeten hittekracht · ${tijd} uur` : "Maximum hittekracht vandaag (gemeten)";
+  document.getElementById("kaart-run-label").textContent =
+    `KNMI-waarnemingen · 10 min · t/m ${tijd} uur`;
+  document.getElementById("footer-run").textContent =
+    `KNMI Dataplatform · WBGT 3.0 · ${gemeten.n_bestanden} waarnemingsronden`;
+}
+
+function bouwLegenda() {
+  const wrap = document.getElementById("legenda-items");
+  wrap.innerHTML = "";
+  for (const { v, label } of HK_LEGENDA) {
+    const [r, g, b] = hkRgb(v);
+    const el = document.createElement("div");
+    el.className = "legenda-item";
+    el.innerHTML = `<span class="legenda-blok" style="background:rgb(${r},${g},${b})"></span>${label}`;
+    wrap.appendChild(el);
+  }
+  document.getElementById("legenda-wrap").style.display = "";
+}
+
+// ── PNG export (zelfde opzet als mosmix_kaart_hittekracht.html) ───────────────
+function svgDataUrl(svg, cssText = "") {
+  const clone = svg.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (cssText) {
+    const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    style.textContent = cssText;
+    clone.insertBefore(style, clone.firstChild);
+  }
+  const xml = new XMLSerializer().serializeToString(clone);
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+}
+
+function laadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function pasCanvasTekst(ctx, tekst, maxBreedte) {
+  const str = String(tekst || "");
+  if (ctx.measureText(str).width <= maxBreedte) return str;
+  let kort = str;
+  while (kort.length > 1 && ctx.measureText(kort + "...").width > maxBreedte) {
+    kort = kort.slice(0, -1);
+  }
+  return kort + "...";
+}
+
+async function slaOp() {
+  const ratio = 2;
+  const w = 800, headerH = 86, mapH = 1100, footerH = 44, legendH = 54;
+  const out = document.createElement("canvas");
+  out.width = w * ratio;
+  out.height = (headerH + mapH + footerH + legendH) * ratio;
+  const ctx = out.getContext("2d");
+  ctx.scale(ratio, ratio);
+
+  ctx.fillStyle = "#1e293b";
+  ctx.fillRect(0, 0, w, headerH);
+  ctx.fillStyle = "#2ec4e8";
+  ctx.fillRect(0, headerH - 3, w, 3);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 16px 'DM Sans', Arial, sans-serif";
+  ctx.fillText("Ed Aldus WM", 20, 32);
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "500 11px 'DM Mono', monospace";
+  ctx.fillText(pasCanvasTekst(ctx, document.getElementById("kaart-run-label").textContent || "KNMI-waarnemingen", 500), 20, 54);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 18px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(pasCanvasTekst(ctx, document.getElementById("kaart-dag-label").textContent || "", 260), w - 20, 32);
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "500 11px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(pasCanvasTekst(ctx, document.getElementById("kaart-sub-label").textContent || "Gemeten hittekracht", 300), w - 20, 54);
+  ctx.textAlign = "left";
+
+  ctx.fillStyle = "#b8d4e8";
+  ctx.fillRect(0, headerH, w, mapH);
+  const svgCss = ".basemap-land{fill:#f5efd9}.basemap-prov{fill:none;stroke:rgba(255,255,255,0.7);stroke-width:0.6}.nl-buitengrens{fill:none;stroke:white;stroke-width:2;stroke-linejoin:round}";
+  const baseImg = await laadImage(svgDataUrl(document.getElementById("basemap-svg"), svgCss));
+  const overlayImg = await laadImage(svgDataUrl(document.getElementById("nl-overlay"), svgCss));
+  ctx.drawImage(baseImg, 0, headerH, w, mapH);
+  ctx.drawImage(document.getElementById("heatmap"), 0, headerH, w, mapH);
+  ctx.drawImage(overlayImg, 0, headerH, w, mapH);
+
+  const footerY = headerH + mapH;
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, footerY, w, footerH);
+  ctx.fillStyle = "#f1f5f9";
+  ctx.font = "600 11px 'DM Sans', Arial, sans-serif";
+  ctx.fillText("weerlab.nl", 20, footerY + 27);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#7dd3fc";
+  ctx.font = "600 10px 'DM Mono', monospace";
+  ctx.fillText(document.getElementById("kaart-bron-pill").textContent || "HITTEKRACHT · GEMETEN", w / 2, footerY + 27);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "400 11px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(pasCanvasTekst(ctx, document.getElementById("footer-run").textContent || "KNMI Dataplatform", 410), w - 20, footerY + 27);
+  ctx.textAlign = "left";
+
+  const legendY = footerY + footerH;
+  ctx.fillStyle = "#f6f8fb";
+  ctx.fillRect(0, legendY, w, legendH);
+  ctx.font = "400 10px 'DM Sans', Arial, sans-serif";
+  const legendItems = HK_LEGENDA.map(({ v, label }) => {
+    const [r, g, b] = hkRgb(v);
+    return { label, kleur: `rgb(${r},${g},${b})`, width: 18 + ctx.measureText(label).width + 10 };
+  });
+  const legendTotal = legendItems.reduce((sum, item) => sum + item.width, 0) - 10;
+  let lx = Math.max(16, (w - legendTotal) / 2);
+  const ly = legendY + 22;
+  for (const item of legendItems) {
+    ctx.fillStyle = item.kleur;
+    ctx.fillRect(lx, ly - 9, 12, 12);
+    ctx.strokeStyle = "rgba(15,23,42,0.18)";
+    ctx.strokeRect(lx, ly - 9, 12, 12);
+    ctx.fillStyle = "#5a7090";
+    ctx.fillText(item.label, lx + 18, ly + 1);
+    lx += item.width;
+  }
+
+  const a = document.createElement("a");
+  a.download = `hittekracht_gemeten_${activeWeergave}_${gemeten?.dag || "kaart"}.png`;
+  a.href = out.toDataURL("image/png");
+  a.click();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+// Absolute URL t.o.v. het huidige document, zodat fetch ook werkt in contexten
+// zonder geldige base-URL (relatieve fetch faalt daar met "Failed to parse URL").
+function absUrl(pad) {
+  const basis = document.baseURI || location.href;
+  return new URL(pad, basis).href;
+}
+
+Promise.all([
+  fetch(absUrl("hittekracht_gemeten.json?" + Date.now())).then(r => r.json()),
+  fetch(absUrl("nl_provincies.geojson")).then(r => r.json()),
+]).then(([g, prov]) => {
+  gemeten = g;
+  provincies = prov;
+  bouwBasemap();
+  bouwLegenda();
+  document.getElementById("hdr-datum").textContent =
+    `${dagVoluitLabel(g.dag)} · laatste waarneming ${utcNaarLokaal(g.laatste_tijd)} uur`;
+  document.getElementById("status").style.display = "none";
+  document.getElementById("kaart-wrap").style.display = "";
+  document.querySelectorAll("#weergave-btns button").forEach(b =>
+    b.addEventListener("click", () => selectWeergave(b.dataset.w)));
+  selectWeergave("nu");
+}).catch(e => {
+  const s = document.getElementById("status");
+  if (location.protocol === "file:") {
+    s.textContent = "Open deze pagina via http (weerlab.nl of een lokale server) — " +
+      "een los bestand (file://) mag geen data laden.";
+  } else {
+    s.textContent = "Laden mislukt: " + e.message;
+  }
+});
+</script>
+</body>
+</html>

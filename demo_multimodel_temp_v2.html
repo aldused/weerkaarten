@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multimodel temperatuur – Weerlab.nl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', 'Segoe UI', Inter, Arial, sans-serif;
+  background: #f0f4f8;
+  color: #1a2b40;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  background: #003366;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 2px solid #2ec4e8;
+}
+.header h1 { color: #fff; font-size: 1.05em; font-weight: 700; }
+.header h1 span { color: #2ec4e8; }
+.header p  { color: #a8c4e8; font-size: 0.72em; margin-top: 2px; }
+.loc-info { color: #a8c4e8; font-size: 0.78em; text-align: right; line-height: 1.5; }
+.loc-info .loc-name { color: #fff; font-weight: 600; font-size: 1.15em; }
+.loc-info .sun { font-variant-numeric: tabular-nums; }
+
+/* ── Controls ── */
+.controls {
+  background: #fff;
+  border-bottom: 1px solid #d0d8e4;
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  position: relative;
+}
+.search-wrap { position: relative; }
+#search {
+  padding: 6px 12px;
+  border: 1px solid #c5d3e3;
+  border-radius: 10px;
+  font-size: 0.85em;
+  font-family: inherit;
+  width: 230px;
+  outline: none;
+}
+#search:focus { border-color: #2ec4e8; box-shadow: 0 0 0 2px rgba(46,196,232,0.25); }
+.suggest {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #d0d8e4;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  z-index: 20;
+  overflow: hidden;
+  display: none;
+}
+.suggest div { padding: 7px 12px; cursor: pointer; font-size: 0.85em; }
+.suggest div:hover, .suggest div.active { background: #eaf6fb; }
+.suggest div small { color: #7a8aa0; }
+.quick { display: flex; gap: 5px; flex-wrap: wrap; }
+.quick button {
+  padding: 5px 11px;
+  border-radius: 12px;
+  border: 1px solid #c5d3e3;
+  background: #f4f7fb;
+  color: #2a4a70;
+  font-size: 0.74em;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.quick button:hover { background: #eaf6fb; border-color: #2ec4e8; }
+.spacer { margin-left: auto; }
+.note { color: #7a8aa0; font-size: 0.7em; }
+
+/* ── Chart ── */
+.chart-card {
+  background: #fff;
+  margin: 14px;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+  padding: 14px 14px 6px;
+}
+.chart-box { position: relative; height: 62vh; min-height: 420px; }
+#status {
+  text-align: center;
+  color: #5a6a80;
+  padding: 30px;
+  font-size: 0.9em;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 12px 6px 8px;
+  justify-content: center;
+}
+.legend .item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74em;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+}
+.legend .item.off { opacity: 0.35; text-decoration: line-through; }
+.legend .swatch { width: 22px; height: 3px; border-radius: 2px; }
+.footer { color: #7a8aa0; font-size: 0.7em; text-align: center; padding: 4px 0 18px; }
+.btn-download {
+  padding: 5px 13px;
+  border-radius: 12px;
+  border: 1px solid #c5d3e3;
+  background: #f4f7fb;
+  color: #2a4a70;
+  font-size: 0.74em;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-download:hover { background: #eaf6fb; border-color: #2ec4e8; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Multimodel <span>temperatuur</span></h1>
+    <p>2 m temperatuur · alle beschikbare modellen · Open-Meteo + MOSMIX (DWD)</p>
+  </div>
+  <div class="loc-info">
+    <div class="loc-name" id="locName">Rotterdam</div>
+    <div id="locCoord">51.9225&deg;N, 4.4792&deg;E</div>
+    <div class="sun">&#9728; <span id="sunrise">–</span> &nbsp; &#9790; <span id="sunset">–</span></div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="Zoek plaats…" autocomplete="off">
+    <div class="suggest" id="suggest"></div>
+  </div>
+  <div class="quick" id="quick"></div>
+  <div class="spacer"></div>
+  <span class="note" id="runInfo"></span>
+  <button class="btn-download" id="btnDownload" onclick="downloadPNG()">&#128247; PNG</button>
+</div>
+
+<div class="chart-card">
+  <div class="chart-box">
+    <div id="status">Modellen laden…</div>
+    <canvas id="chart" style="display:none"></canvas>
+  </div>
+  <div class="legend" id="legend"></div>
+</div>
+<div class="footer">Demo · Weerlab.nl · databron Open-Meteo (ECMWF / DWD / Météo-France / KNMI / UKMO / NCEP / ECCC / JMA) · MOSMIX = DWD statistisch nabewerkte stationsverwachting</div>
+
+<script>
+// ── Modellen (Open-Meteo deterministische slugs) ──────────────────────────
+// width = lijndikte; thuismodel (HARMONIE-NL) en UKMO dik, zoals Wetterzentrale
+const MODELS = [
+  { slug:'knmi_harmonie_arome_netherlands', label:'HARMONIE (KNMI-NL)', color:'#111111', width:2.6 },
+  { slug:'knmi_harmonie_arome_europe',      label:'HARMONIE (KNMI-EU)', color:'#4aa3df', width:1.6 },
+  { slug:'meteofrance_arome_france_hd',     label:'AROME',     color:'#6fce5e', width:1.4 },
+  { slug:'meteofrance_arpege_europe',       label:'ARPEGE',    color:'#d9c63f', width:1.4 },
+  { slug:'dwd_icon',                        label:'ICON',      color:'#34c2bf', width:1.4 },
+  { slug:'dwd_icon_eu',                     label:'ICON-EU',   color:'#1f8f8c', width:1.2 },
+  { slug:'dwd_icon_d2',                     label:'ICON-D2',   color:'#86dad7', width:1.2 },
+  { slug:'gfs_seamless',                    label:'GFS',       color:'#e8902e', width:1.4 },
+  { slug:'ecmwf_ifs025',                    label:'ECMWF',     color:'#e8722e', width:1.8 },
+  { slug:'ecmwf_aifs025_single',            label:'AIFS',      color:'#9b59d6', width:1.4 },
+  { slug:'ukmo_global_deterministic_10km',  label:'UKMO',      color:'#0f7a72', width:2.6 },
+  { slug:'gem_global',                      label:'GEM',       color:'#8a8f99', width:1.4 },
+  { slug:'jma_seamless',                    label:'JMA',       color:'#d64a8a', width:1.2 },
+  { slug:'metno_seamless',                  label:'MET Norway',color:'#5b6cff', width:1.2 },
+  { slug:'cma_grapes_global',               label:'CMA',       color:'#c0653a', width:1.2 },
+];
+
+// ── MOSMIX: DWD statistisch nabewerkte puntverwachting (bias-gecorrigeerd) ──
+// Dient als "beste schatting"-referentie tussen de ruwe modellen. Alleen
+// getoond als er een MOSMIX-station binnen MOSMIX_MAX_KM van de gekozen
+// locatie ligt (31 stations NL/BE/DE-grensstrook in het uurbestand).
+const MOSMIX_MAX_KM = 40;
+const MOSMIX_KLEUR  = '#c400c4';
+const MOSMIX_URL = (location.protocol === 'file:' || ['localhost','127.0.0.1'].includes(location.hostname))
+  ? 'mosmix_uurlijks_nl.json'
+  : 'https://data.weerlab.nl/mosmix_uurlijks_nl.json';
+let mosmixCache = null;
+
+function afstandKm(lat1, lon1, lat2, lon2) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*rad) * Math.cos(lat2*rad) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+async function haalMosmix(lat, lon) {
+  try {
+    if (!mosmixCache) mosmixCache = await fetchJSON(MOSMIX_URL + '?cb=' + Date.now());
+    let best = null, bestKm = Infinity;
+    for (const [naam, co] of Object.entries(mosmixCache.stations || {})) {
+      const km = afstandKm(lat, lon, co[1], co[0]);   // stations: [lon, lat]
+      if (km < bestKm) { bestKm = km; best = naam; }
+    }
+    if (!best || bestKm > MOSMIX_MAX_KM) return null;
+    const s = mosmixCache.data?.[best];
+    if (!s?.tijden || !s?.TTT?.some(x => x != null)) return null;
+    return { station: best, km: bestKm, time: s.tijden, temp: s.TTT };
+  } catch (e) { return null; }
+}
+
+const QUICK = [
+  { n:'Rotterdam',   lat:51.9225, lon:4.4792 },
+  { n:'De Bilt',     lat:52.1015, lon:5.1779 },
+  { n:'Groningen',   lat:53.2194, lon:6.5665 },
+  { n:'Maastricht',  lat:50.8514, lon:5.6910 },
+  { n:'Den Helder',  lat:52.9588, lon:4.7606 },
+  { n:'Vlissingen',  lat:51.4426, lon:3.5736 },
+];
+
+const FORECAST_DAYS = 7;
+const API = 'https://api.open-meteo.com/v1/forecast';
+let chart = null;
+let huidigePlaats = '';      // voor plaatslabel rechtsonder + PNG-download
+let huidigeDatasets = [];    // voor legend in PNG-download
+
+const fmtClock = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+const MND = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const DAG = ['zo','ma','di','wo','do','vr','za'];
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+// Batch modellen in één multi-model request (response: temperature_2m_<slug>).
+// Scheelt 15 losse requests → minder kans op rate-limit. Eén kapotte batch
+// dropt alleen z'n eigen modellen (.catch() → []).
+const BATCH_SIZE = 8;
+async function haalBatch(batch, lat, lon) {
+  const slugs = batch.map(m => m.slug).join(',');
+  const url = `${API}?latitude=${lat}&longitude=${lon}`
+            + `&hourly=temperature_2m&models=${slugs}`
+            + `&timezone=Europe%2FAmsterdam&forecast_days=${FORECAST_DAYS}`;
+  try {
+    const j = await fetchJSON(url);
+    const t = j?.hourly?.time;
+    if (!t) return [];
+    return batch.map(m => {
+      const v = j.hourly['temperature_2m_' + m.slug];
+      if (!v || !v.some(x => x != null)) return null;
+      return { ...m, time: t, temp: v };
+    }).filter(Boolean);
+  } catch (e) { return []; }
+}
+
+async function laad(lat, lon, naam) {
+  huidigePlaats = naam;
+  document.getElementById('locName').textContent  = naam;
+  document.getElementById('locCoord').innerHTML   =
+    `${(+lat).toFixed(4)}°N, ${(+lon).toFixed(4)}°E`;
+  document.getElementById('status').style.display = '';
+  document.getElementById('status').textContent   = 'Modellen laden…';
+  document.getElementById('chart').style.display  = 'none';
+
+  // Zon op/onder (best match) + alle modellen parallel
+  const sunP = fetchJSON(`${API}?latitude=${lat}&longitude=${lon}`
+            + `&daily=sunrise,sunset&timezone=Europe%2FAmsterdam&forecast_days=1`).catch(()=>null);
+  const mosP = haalMosmix(lat, lon);
+  const batches = [];
+  for (let i = 0; i < MODELS.length; i += BATCH_SIZE) batches.push(MODELS.slice(i, i + BATCH_SIZE));
+  const results = (await Promise.all(batches.map(b => haalBatch(b, lat, lon)))).flat();
+  const sun = await sunP;
+  const mosmix = await mosP;
+
+  if (sun?.daily?.sunrise) {
+    document.getElementById('sunrise').textContent = fmtClock(new Date(sun.daily.sunrise[0]));
+    document.getElementById('sunset').textContent  = fmtClock(new Date(sun.daily.sunset[0]));
+  }
+
+  const ok = results.filter(Boolean);
+  if (!ok.length) {
+    document.getElementById('status').textContent = 'Geen modeldata beschikbaar voor deze locatie.';
+    return;
+  }
+
+  // Gemeenschappelijke tijd-as = langste reeks
+  let times = [];
+  for (const r of ok) if (r.time.length > times.length) times = r.time;
+  const idx = new Map(times.map((t,i) => [t,i]));
+  const TIMES = times.map(t => new Date(t));
+
+  const mapTemp = (mt, mv) => {
+    const data = new Array(times.length).fill(null);
+    for (let i = 0; i < mt.length; i++) { const j = idx.get(mt[i]); if (j != null) data[j] = mv[i]; }
+    return data;
+  };
+
+  const datasets = ok.map(r => ({
+    label: r.label, data: mapTemp(r.time, r.temp),
+    borderColor: r.color, backgroundColor: r.color,
+    borderWidth: r.width, borderDash: r.dash || [],
+    pointRadius: 0, pointHoverRadius: 4, tension: 0.35, spanGaps: true, _slug: r.slug,
+  }));
+
+  // MOSMIX bovenaan: dikke magenta stippellijn = statistisch beste schatting.
+  // Tijden in het R2-bestand zijn lokale tijd, zelfde ISO-formaat als Open-Meteo,
+  // dus mapTemp kan ze direct op de gemeenschappelijke as leggen.
+  if (mosmix) {
+    datasets.unshift({
+      label: `MOSMIX (${mosmix.station})`,
+      data: mapTemp(mosmix.time, mosmix.temp),
+      borderColor: MOSMIX_KLEUR, backgroundColor: MOSMIX_KLEUR,
+      borderWidth: 3, borderDash: [8, 5],
+      pointRadius: 0, pointHoverRadius: 4, tension: 0.35, spanGaps: true, _slug: 'mosmix',
+    });
+  }
+
+  const gemist = MODELS.length - ok.length;
+  document.getElementById('runInfo').textContent =
+    `${ok.length} modellen geladen` + (gemist ? ` · ${gemist} niet beschikbaar` : '')
+    + (mosmix ? ` · MOSMIX: ${mosmix.station} (${mosmix.km < 1 ? '<1' : Math.round(mosmix.km)} km)`
+              : ' · geen MOSMIX-station binnen 40 km');
+
+  teken(TIMES, datasets);
+  bouwLegend(datasets);
+}
+
+// Zachte rode stippel-referentielijnen bij 25/30/35° (onder de modellijnen)
+const DREMPELS = [25, 30, 35];
+const drempelPlugin = {
+  id: 'drempels',
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    const y = scales.y; if (!y) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(204,0,0,0.22)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    DREMPELS.forEach(t => {
+      if (t < y.min || t > y.max) return;
+      const py = y.getPixelForValue(t);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, py);
+      ctx.lineTo(chartArea.right, py);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+};
+
+// Plaatsnaam rechtsonder in de grafiek (zit ook in de PNG-download)
+const plaatsLabelPlugin = {
+  id: 'plaatsLabel',
+  afterDraw(chart) {
+    if (!huidigePlaats) return;
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.font = '600 14px "DM Sans", sans-serif';
+    ctx.fillStyle = 'rgba(35,55,85,0.5)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(huidigePlaats, chartArea.right - 10, chartArea.bottom - 8);
+    ctx.restore();
+  }
+};
+
+function teken(TIMES, datasets) {
+  document.getElementById('status').style.display = 'none';
+  const cv = document.getElementById('chart');
+  cv.style.display = '';
+  if (chart) chart.destroy();
+  huidigeDatasets = datasets;
+
+  chart = new Chart(cv, {
+    type: 'line',
+    plugins: [drempelPlugin, plaatsLabelPlugin],
+    data: { labels: TIMES.map((_,i)=>i), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          itemSort: (a,b) => b.parsed.y - a.parsed.y,
+          backgroundColor: 'rgba(255,255,255,0.97)',
+          titleColor: '#1a2b40', bodyColor: '#1a2b40',
+          borderColor: '#cdd8e6', borderWidth: 1,
+          padding: 10, boxPadding: 4, usePointStyle: true,
+          titleFont: { family:'DM Sans', weight:'600', size:13 },
+          bodyFont:  { family:'DM Mono', size:12 },
+          callbacks: {
+            title: (items) => {
+              const d = TIMES[items[0].dataIndex];
+              return `${DAG[d.getDay()]} ${d.getDate()} ${MND[d.getMonth()]} ${fmtClock(d)}`;
+            },
+            label: (it) => ` ${it.dataset.label}: ${it.parsed.y == null ? '–' : it.parsed.y.toFixed(1)}°`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#eef2f7' },
+          ticks: {
+            font: { family:'DM Sans', size:11 }, color:'#5a6a80',
+            maxRotation: 0, autoSkip: false,
+            callback: (val, i) => {
+              const d = TIMES[i]; if (!d) return '';
+              const h = d.getHours();
+              if (h === 0) return [DAG[d.getDay()], `${d.getDate()} ${MND[d.getMonth()]}`];  // weekdag + datum
+              if (h === 12) return '12:00';
+              return '';
+            }
+          }
+        },
+        y: {
+          title: { display: true, text: '2 m temperatuur (°C)', font:{family:'DM Sans', size:11}, color:'#5a6a80' },
+          grid: { color: '#eef2f7' },
+          ticks: { font:{family:'DM Mono', size:11}, color:'#5a6a80', callback: v => v + '°' }
+        }
+      }
+    }
+  });
+}
+
+function bouwLegend(datasets) {
+  const box = document.getElementById('legend');
+  box.innerHTML = '';
+  datasets.forEach((ds, i) => {
+    const el = document.createElement('div');
+    el.className = 'item';
+    const dash = ds.borderDash && ds.borderDash.length;   // MOSMIX: gestreept swatch
+    const bg = dash
+      ? `repeating-linear-gradient(90deg, ${ds.borderColor} 0 5px, transparent 5px 8px)`
+      : ds.borderColor;
+    el.innerHTML = `<span class="swatch" style="background:${bg}"></span>${ds.label}`;
+    el.onclick = () => {
+      const meta = chart.getDatasetMeta(i);
+      meta.hidden = meta.hidden === null ? !chart.data.datasets[i].hidden : !meta.hidden;
+      el.classList.toggle('off', meta.hidden);
+      chart.update();
+    };
+    box.appendChild(el);
+  });
+}
+
+// ── Download PNG (kop + grafiek + legend + voet, weerlab-stijl) ─────────────
+function downloadPNG() {
+  const cv = document.getElementById('chart');
+  if (!cv || !chart) return;
+  const plaats = huidigePlaats || 'locatie';
+  const ds = huidigeDatasets;
+  const p2 = n => String(n).padStart(2, '0');
+  const nu = new Date();
+  const ts = `${nu.getFullYear()}${p2(nu.getMonth()+1)}${p2(nu.getDate())}_${p2(nu.getHours())}${p2(nu.getMinutes())}`;
+
+  const cw = cv.width, ch = cv.height;            // device-px (scherp)
+  const pad = 26, headerH = 60, footerH = 38;
+  const cols = 5, rowH = 30;
+  const legRows = Math.ceil(ds.length / cols);
+  const legendH = legRows * rowH + 18;
+  const W = cw + pad * 2;
+  const H = headerH + ch + legendH + footerH;
+
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const ctx = off.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+
+  // Kop (navy)
+  ctx.fillStyle = '#003366'; ctx.fillRect(0, 0, W, headerH);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px "DM Sans","Segoe UI",sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Multimodel temperatuur — ${plaats}`, pad, headerH / 2);
+  ctx.fillStyle = '#a8c4e8';
+  ctx.font = '14px "DM Sans","Segoe UI",sans-serif';
+  ctx.textAlign = 'right';
+  const nMod = ds.filter(d => d._slug !== 'mosmix').length;
+  const metMos = ds.some(d => d._slug === 'mosmix');
+  ctx.fillText(`Ed Aldus · 2 m temp · ${nMod} modellen${metMos ? ' + MOSMIX' : ''}`, W - pad, headerH / 2);
+
+  // Grafiek
+  ctx.drawImage(cv, pad, headerH, cw, ch);
+
+  // Legend (kleur-lijntje + label, in kolommen)
+  const legY = headerH + ch + 12;
+  const colW = cw / cols;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ds.forEach((d, i) => {
+    const x = pad + (i % cols) * colW;
+    const y = legY + Math.floor(i / cols) * rowH + rowH / 2;
+    ctx.strokeStyle = d.borderColor;
+    ctx.lineWidth = Math.max(2.5, d.borderWidth);
+    ctx.setLineDash(d.borderDash && d.borderDash.length ? d.borderDash : []);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 30, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#1a2b40';
+    ctx.font = '600 14px "DM Sans","Segoe UI",sans-serif';
+    ctx.fillText(d.label, x + 38, y);
+  });
+
+  // Voet
+  ctx.fillStyle = '#8899aa';
+  ctx.font = '13px "DM Sans","Segoe UI",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('© Ed Aldus / weerlab.nl — Data: Open-Meteo (ECMWF · DWD · Météo-France · KNMI · UKMO · NCEP · ECCC · JMA) · MOSMIX (DWD)', W / 2, H - footerH / 2);
+
+  const link = document.createElement('a');
+  link.download = `multimodel_temp_${plaats.toLowerCase().replace(/\s+/g,'_')}_${ts}.png`;
+  link.href = off.toDataURL('image/png', 1.0);
+  link.click();
+}
+
+// ── Zoeken (Open-Meteo geocoding) ──────────────────────────────────────────
+const zoek = document.getElementById('search');
+const sugg = document.getElementById('suggest');
+let sIdx = -1, sItems = [];
+let debounce;
+
+zoek.addEventListener('input', () => {
+  clearTimeout(debounce);
+  const q = zoek.value.trim();
+  if (q.length < 2) { sugg.style.display = 'none'; return; }
+  debounce = setTimeout(async () => {
+    try {
+      const j = await fetchJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=nl`);
+      sItems = j?.results || [];
+      sIdx = -1;
+      if (!sItems.length) { sugg.style.display = 'none'; return; }
+      sugg.innerHTML = sItems.map((r,i) =>
+        `<div data-i="${i}">${r.name} <small>${[r.admin1, r.country_code].filter(Boolean).join(', ')}</small></div>`).join('');
+      sugg.querySelectorAll('div').forEach(d => d.onclick = () => kies(+d.dataset.i));
+      sugg.style.display = 'block';
+    } catch (e) { sugg.style.display = 'none'; }
+  }, 250);
+});
+
+zoek.addEventListener('keydown', (e) => {
+  const items = sugg.querySelectorAll('div');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') { sIdx = Math.min(sIdx+1, items.length-1); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { sIdx = Math.max(sIdx-1, 0); e.preventDefault(); }
+  else if (e.key === 'Enter') { kies(sIdx < 0 ? 0 : sIdx); return; }
+  else return;
+  items.forEach((d,i) => d.classList.toggle('active', i === sIdx));
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-wrap')) sugg.style.display = 'none';
+});
+
+function kies(i) {
+  const r = sItems[i]; if (!r) return;
+  sugg.style.display = 'none';
+  zoek.value = r.name;
+  laad(r.latitude, r.longitude, r.name);
+}
+
+// ── Quick-knoppen ──────────────────────────────────────────────────────────
+const qbox = document.getElementById('quick');
+QUICK.forEach(s => {
+  const b = document.createElement('button');
+  b.textContent = s.n;
+  b.onclick = () => { zoek.value = ''; laad(s.lat, s.lon, s.n); };
+  qbox.appendChild(b);
+});
+
+// ── Start: Rotterdam (zoals screenshot) ─────────────────────────────────────
+laad(51.9225, 4.4792, 'Rotterdam');
+</script>
+</body>
+</html>

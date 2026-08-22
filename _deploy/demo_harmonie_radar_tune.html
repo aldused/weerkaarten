@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harmonie radar tuning — vergelijking — Ed Aldus WM</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: "DM Sans", Arial, sans-serif; background: #0e1b2c; color: #e6eef7; padding: 12px; }
+h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.sub { font-size: 12px; color: #9bb0c8; margin-bottom: 12px; }
+.bar { display:flex; gap:10px; align-items:center; margin-bottom: 10px; flex-wrap:wrap; }
+.bar input[type=range] { flex:1; min-width: 280px; }
+.tijd { font-family: "DM Mono", monospace; font-size: 13px; color:#ffd479; min-width:280px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.panel { background: #0a1422; border: 1px solid #1d2f47; border-radius: 6px; padding: 6px 8px; }
+.panel h2 { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.panel .desc { font-size: 11px; color: #9bb0c8; margin-bottom: 6px; min-height: 28px; }
+.panel canvas { width: 100%; display: block; image-rendering: pixelated; background: #fff; border-radius: 4px; }
+.legend { width: 100%; height: 26px; margin-top: 4px; display:flex; }
+.legend .lbl { font-family:"DM Mono", monospace; font-size: 9px; color:#9bb0c8; text-align:center; flex:1; padding-top:18px; border-right:1px solid #0a1422; }
+.note { font-size: 11px; color:#7a90a8; margin-top: 8px; line-height: 1.5; }
+.kbd { font-family: "DM Mono", monospace; background: #1d2f47; padding: 1px 5px; border-radius: 3px; font-size: 10px; }
+@media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Harmonie 43 — gesimuleerde radar — kalibratie-vergelijk</h1>
+<div class="sub">Vier renderings van dezelfde Harmonie 43 mm/u-data. V1 = huidig op weerlab.nl. V2/V3/V4 = voorstellen.</div>
+
+<div class="bar">
+  <button id="play" style="padding:4px 10px;">▶</button>
+  <input id="slider" type="range" min="0" max="0" value="13" step="1">
+  <div class="tijd" id="tijdLabel">—</div>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>V1 — Huidig (Marshall-Palmer Z=200·R<sup>1.6</sup>)</h2>
+    <div class="desc">Levels elke 5 dBZ. 4 grijstinten −5/0/5/10 dBZ. Donkergroen op 25, donkergeel op 35, donkerrood op 50.</div>
+    <canvas id="cv1"></canvas>
+    <div class="legend" id="lg1"></div>
+  </div>
+  <div class="panel">
+    <h2>V2 — Kleurschaal getuned (zelfde Z-R)</h2>
+    <div class="desc">Marshall-Palmer ongewijzigd. Kleurschaal monotoon helder oplopend, geen grijstrappen, geen wit-glitch op 70.</div>
+    <canvas id="cv2"></canvas>
+    <div class="legend" id="lg2"></div>
+  </div>
+  <div class="panel">
+    <h2>V3 — V2 + NEXRAD Z-R (Z=300·R<sup>1.4</sup>)</h2>
+    <div class="desc">Convectieve Z-R relatie (KNMI/NEXRAD-stijl). Lichte regen oogt iets sterker, zware buien iets feller.</div>
+    <canvas id="cv3"></canvas>
+    <div class="legend" id="lg3"></div>
+  </div>
+  <div class="panel">
+    <h2>V4 — V3 + peak-boost (1.6× R bij &gt;0.5 mm/u)</h2>
+    <div class="desc">Compenseert dat 1u-gemiddelde mm/u de instantane radar-piek onderschat. Convectieve cellen krijgen hun rode kern terug.</div>
+    <canvas id="cv4"></canvas>
+    <div class="legend" id="lg4"></div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Vergelijking met Wouter / Infoplaza:</strong> Wouter toont waarschijnlijk de Harmonie native simulated reflectivity (REFC), instantaan. Wij hebben alleen het 1u-cumulatieve neerslagveld in de KNMI Open Data publicatie van Harmonie 43, dus we *moeten* via Z-R reconstrueren. V4 lijkt het meest op zijn output. Toets: <span class="kbd">←</span>/<span class="kbd">→</span> stappen, spatie speelt.
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// Loader
+// ════════════════════════════════════════════════════════════════════════════
+const META_URL = "harmonie_canvas_meta.json";
+const BIN_URL  = "harmonie_data_neerslag.bin";
+const OVERLAY_URL = "harmonie_overlay.png";
+
+let meta, nLat, nLon, nSteps, dataAll, overlayImg;
+let stepIdx = 13;
+let playing = false, playTimer = null;
+
+const cvs = ["cv1","cv2","cv3","cv4"].map(id => document.getElementById(id));
+const ctxs = cvs.map(c => c.getContext("2d"));
+const lgs = ["lg1","lg2","lg3","lg4"].map(id => document.getElementById(id));
+
+// ════════════════════════════════════════════════════════════════════════════
+// Z-R conversies
+// ════════════════════════════════════════════════════════════════════════════
+function mmTodBZ_MP(mm) {  // Marshall-Palmer (huidig)
+  if (mm <= 0.005) return -10;
+  return 10 * Math.log10(200 * Math.pow(mm, 1.6));
+}
+function mmTodBZ_NEXRAD(mm) {  // NEXRAD convectief
+  if (mm <= 0.005) return -10;
+  return 10 * Math.log10(300 * Math.pow(mm, 1.4));
+}
+function mmTodBZ_NEXRADBoost(mm) {  // NEXRAD + 1.6x peak boost (boven 0.5 mm/u)
+  if (mm <= 0.005) return -10;
+  let r = mm > 0.5 ? mm * 1.6 : mm;
+  return 10 * Math.log10(300 * Math.pow(r, 1.4));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Kleurschalen
+// ════════════════════════════════════════════════════════════════════════════
+
+// V1 — huidig
+const DBZ_LEVELS_V1 = [-5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
+const DBZ_COLORS_V1 = [
+  [210,210,210],[180,180,180],[150,150,150],[120,120,120],
+  [0,200,0],[0,160,0],[0,120,0],
+  [255,255,0],[230,190,0],
+  [255,128,0],[255,0,0],[192,0,0],
+  [160,0,160],[192,0,192],[255,0,255],[200,200,200]
+];
+
+// V2/V3/V4 — getuned colormap
+// Smooth gradient: licht-wit-blauw → cyaan → groen → geel → oranje → rood → magenta → roze
+// Levels elke 4 dBZ vanaf 5: [5,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,69,73]
+const DBZ_LEVELS_V2 = [5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69];
+const DBZ_COLORS_V2 = [
+  [200,210,225],  //  5  zeer licht blauwgrijs (lichte motregen)
+  [165,195,225],  //  9  lichtblauw
+  [120,180,210],  // 13  blauw
+  [60,170,80],    // 17  groen-helder
+  [30,150,55],    // 21  groen
+  [10,130,30],    // 25  donkergroen
+  [180,200,20],   // 29  geelgroen
+  [240,220,0],    // 33  geel
+  [250,185,0],    // 37  donkergeel
+  [250,140,0],    // 41  oranje
+  [240,90,30],    // 45  rood-oranje
+  [220,30,30],    // 49  rood
+  [180,15,30],    // 53  donkerrood
+  [150,10,90],    // 57  bordeaux
+  [180,40,160],   // 61  paars
+  [220,80,210],   // 65  magenta
+  [250,180,250],  // 69  lichtroze
+];
+
+// ════════════════════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════════════════════
+function boundaryColor(val, levels, colors) {
+  if (val < levels[0]) return null;
+  for (let i = 0; i < levels.length - 1; i++) {
+    if (val < levels[i+1]) return colors[i];
+  }
+  return colors[levels.length - 1];
+}
+
+function fmtTijd(iso, plus) {
+  const dt = new Date(iso);
+  const dagen = ["zo","ma","di","wo","do","vr","za"];
+  const mnd = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+  return dagen[dt.getDay()] + " " + dt.getDate() + " " + mnd[dt.getMonth()] + " " +
+    String(dt.getHours()).padStart(2,"0") + ":" + String(dt.getMinutes()).padStart(2,"0") +
+    " LT · +" + plus + "u";
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Renderpanel
+// ════════════════════════════════════════════════════════════════════════════
+function renderPanel(canvas, ctx, mmFn, levels, colors) {
+  // mmFn: function(mm) → dBZ
+  const offCanvas = canvas._off || (canvas._off = document.createElement("canvas"));
+  offCanvas.width = nLon; offCanvas.height = nLat;
+  const offCtx = offCanvas.getContext("2d");
+  const imgData = offCtx.createImageData(nLon, nLat);
+  const px = imgData.data;
+
+  const off = stepIdx * nLat * nLon;
+  for (let y = 0; y < nLat; y++) {
+    for (let x = 0; x < nLon; x++) {
+      const i = (nLat - 1 - y) * nLon + x;
+      const v = dataAll[off + i];
+      const dbz = mmFn(v);
+      let c = null;
+      if (dbz >= levels[0]) c = boundaryColor(dbz, levels, colors);
+      const pi = (y * nLon + x) * 4;
+      if (c) { px[pi]=c[0]; px[pi+1]=c[1]; px[pi+2]=c[2]; px[pi+3]=255; }
+      else   { px[pi]=255; px[pi+1]=255; px[pi+2]=255; px[pi+3]=255; }
+    }
+  }
+  offCtx.putImageData(imgData, 0, 0);
+
+  // Schaal naar canvas
+  const W = canvas.clientWidth;
+  const H = Math.round(W * nLat / nLon);
+  canvas.width = W; canvas.height = H;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(offCanvas, 0, 0, W, H);
+
+  // Overlay (kustlijnen)
+  if (overlayImg) {
+    const OE = {lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5};
+    const DE = {lonMin: meta.grid.lon_min, lonMax: meta.grid.lon_max,
+                latMin: meta.grid.lat_min, latMax: meta.grid.lat_max};
+    const oW = OE.lonMax - OE.lonMin, oH = OE.latMax - OE.latMin;
+    const sx = (DE.lonMin - OE.lonMin) / oW * overlayImg.naturalWidth;
+    const sy = (1 - (DE.latMax - OE.latMin) / oH) * overlayImg.naturalHeight;
+    const sw = (DE.lonMax - DE.lonMin) / oW * overlayImg.naturalWidth;
+    const sh = (DE.latMax - DE.latMin) / oH * overlayImg.naturalHeight;
+    ctx.drawImage(overlayImg, sx, sy, sw, sh, 0, 0, W, H);
+  }
+}
+
+function renderLegend(el, levels, colors) {
+  el.innerHTML = "";
+  const n = Math.min(levels.length, colors.length);
+  for (let i = 0; i < n; i++) {
+    const c = colors[i];
+    const d = document.createElement("div");
+    d.className = "lbl";
+    d.style.background = "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";
+    d.style.color = "#222";
+    d.textContent = levels[i];
+    el.appendChild(d);
+  }
+}
+
+function renderAll() {
+  renderPanel(cvs[0], ctxs[0], mmTodBZ_MP,         DBZ_LEVELS_V1, DBZ_COLORS_V1);
+  renderPanel(cvs[1], ctxs[1], mmTodBZ_MP,         DBZ_LEVELS_V2, DBZ_COLORS_V2);
+  renderPanel(cvs[2], ctxs[2], mmTodBZ_NEXRAD,     DBZ_LEVELS_V2, DBZ_COLORS_V2);
+  renderPanel(cvs[3], ctxs[3], mmTodBZ_NEXRADBoost,DBZ_LEVELS_V2, DBZ_COLORS_V2);
+  renderLegend(lgs[0], DBZ_LEVELS_V1.slice(2), DBZ_COLORS_V1.slice(2)); // start bij 5
+  renderLegend(lgs[1], DBZ_LEVELS_V2, DBZ_COLORS_V2);
+  renderLegend(lgs[2], DBZ_LEVELS_V2, DBZ_COLORS_V2);
+  renderLegend(lgs[3], DBZ_LEVELS_V2, DBZ_COLORS_V2);
+
+  document.getElementById("tijdLabel").textContent =
+    fmtTijd(meta.tijden[stepIdx], stepIdx + 1);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════════════════════════════════════
+async function init() {
+  meta = await fetch(META_URL).then(r => r.json());
+  nLat = meta.grid.n_lat; nLon = meta.grid.n_lon;
+  nSteps = meta.tijden.length;
+
+  const buf = await fetch(BIN_URL).then(r => r.arrayBuffer());
+  // Header: HHHH (n_lat, n_lon, n_steps, n_comp) + 8 bytes pad = 16 bytes
+  const header = new Uint16Array(buf, 0, 4);
+  // header[0]=n_lat, header[1]=n_lon, header[2]=n_steps, header[3]=n_comp
+  dataAll = new Float32Array(buf, 16);
+
+  overlayImg = new Image();
+  overlayImg.crossOrigin = "anonymous";
+  await new Promise(res => { overlayImg.onload = res; overlayImg.src = OVERLAY_URL; });
+
+  document.getElementById("slider").max = nSteps - 1;
+  document.getElementById("slider").value = stepIdx;
+  renderAll();
+}
+
+document.getElementById("slider").addEventListener("input", e => {
+  stepIdx = parseInt(e.target.value, 10);
+  renderAll();
+});
+document.getElementById("play").addEventListener("click", () => {
+  playing = !playing;
+  document.getElementById("play").textContent = playing ? "⏸" : "▶";
+  if (playing) {
+    playTimer = setInterval(() => {
+      stepIdx = (stepIdx + 1) % nSteps;
+      document.getElementById("slider").value = stepIdx;
+      renderAll();
+    }, 350);
+  } else {
+    clearInterval(playTimer);
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft")  { stepIdx = Math.max(0, stepIdx-1); document.getElementById("slider").value = stepIdx; renderAll(); }
+  if (e.key === "ArrowRight") { stepIdx = Math.min(nSteps-1, stepIdx+1); document.getElementById("slider").value = stepIdx; renderAll(); }
+  if (e.key === " ") { e.preventDefault(); document.getElementById("play").click(); }
+});
+window.addEventListener("resize", () => renderAll());
+
+init().catch(err => {
+  document.body.innerHTML += "<pre style='color:red;background:#fff;padding:10px;'>Init fout: " + err.message + "</pre>";
+});
+</script>
+</body>
+</html>

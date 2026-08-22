@@ -1,0 +1,2885 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>MTG Satellietbeelden – Weerlab.nl</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #000; color: #1a2b40; display: flex; flex-direction: column; height: 100vh; }
+
+.header { background: #00205b; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #2ec4e8; flex-shrink: 0; }
+.header-titel { color: white; font-size: 14px; font-weight: 700; }
+.header-sub { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+.auto-status { color: #2ec4e8; font-size: 11px; font-weight: 600; text-align: right; }
+
+.toolbar { background: white; padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #dde6f0; flex-shrink: 0; }
+.toolbar-more { flex-basis: 100%; margin-top: 2px; border-top: 1px solid #eef3f8; padding-top: 6px; }
+.toolbar-more summary { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 14px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #24415f; font-size: 12px; font-weight: 700; cursor: pointer; list-style: none; }
+.toolbar-more summary::-webkit-details-marker { display: none; }
+.toolbar-more summary::before { content: "▸"; color: #2a4a70; font-size: 11px; }
+.toolbar-more[open] summary::before { content: "▾"; }
+.toolbar-more-body { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 7px; }
+.control-card { background: #fff; border: 1px solid #dbe6f2; border-radius: 8px; padding: 9px; box-shadow: 0 1px 2px rgba(15,32,56,0.04); }
+.control-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: #00205b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.control-title::after { content: ""; flex: 1; height: 1px; background: #e6edf5; }
+.control-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.control-row:first-of-type { margin-top: 0; }
+.control-row .groep-label { flex: 0 0 64px; margin: 0; }
+.button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.button-row.wide { grid-template-columns: 1fr 1fr; }
+.gebied-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 7px; }
+.control-card .veld-mini { min-width: 0; }
+.control-card select.veld-mini { width: 100%; }
+.control-card .btn,
+.control-card .btn-refresh,
+.control-card .btn-auto,
+.control-card .btn-download,
+.control-card .check-mini { min-width: 0; }
+.toolbar-more.control-card { padding: 0; overflow: hidden; }
+.toolbar-more.control-card summary { width: 100%; height: auto; min-height: 38px; border: 0; border-radius: 0; background: #fff; justify-content: flex-start; padding: 10px 11px; color: #00205b; text-transform: uppercase; letter-spacing: .05em; }
+.toolbar-more.control-card .toolbar-more-body { border-top: 1px solid #e6edf5; padding: 9px; }
+.annotatie-groep { width: 100%; display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid #e6edf5; }
+.annotatie-groep:last-child { padding-bottom: 0; border-bottom: 0; }
+.annotatie-groep .groep-label { margin: 0 0 1px; }
+
+.groep-label { font-size: 10px; color: #8aa; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 2px; }
+.sep { width: 1px; background: #dde6f0; align-self: stretch; margin: 0 4px; }
+
+.btn { padding: 4px 12px; border-radius: 14px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.1s; white-space: nowrap; }
+.btn:hover { background: #dce9f7; }
+.btn.actief { background: #00205b; color: white; border-color: transparent; }
+.btn.actief.gebied { background: #1a6a3a; }
+.btn-refresh { padding: 4px 12px; border-radius: 14px; border: none; background: #2ec4e8; color: #00205b; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-auto { padding: 4px 12px; border-radius: 14px; border: 1px solid #c5d3e3; background: #f0f4f8; color: #2a4a70; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-auto.actief { background: #1a6a3a; color: white; border-color: transparent; }
+.btn-radar.actief { background: #0f766e; color: white; border-color: transparent; }
+.btn-download { padding: 4px 12px; border-radius: 14px; border: none; background: #003366; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-download:hover { background: #0055aa; }
+.btn-download.social { background: #1a6a3a; }
+.btn-download.social:hover { background: #238a4f; }
+.btn-download.ai { background: #006b5f; }
+.btn-download.ai:hover { background: #008575; }
+.veld-mini { height: 24px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; padding: 2px 9px; }
+.check-mini { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 600; white-space: nowrap; user-select: none; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.check-mini:hover { background: #eef4fb; border-color: #94a3b8; }
+.check-mini input { accent-color: #2ec4e8; }
+.check-mini:has(input:checked) { background: #1e293b; border-color: #1e293b; color: #f1f5f9; }
+.check-mini:has(input:checked):hover { background: #0f172a; }
+.obs-wrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.obs-panel { display: none; position: absolute; top: 30px; left: 0; width: 315px; max-height: 390px; overflow: hidden; background: white; border: 1px solid #bfd0e0; border-radius: 8px; box-shadow: 0 10px 26px rgba(0,0,0,0.22); z-index: 90; }
+.obs-panel.open { display: block; }
+.obs-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #e8eef5; background: #f8fbff; }
+.obs-panel-head b { font-size: 12px; color: #00205b; }
+.obs-panel-actions { display: flex; gap: 4px; }
+.obs-mini-btn { border: 1px solid #c5d3e3; background: white; border-radius: 12px; color: #24415f; font-size: 11px; font-weight: 700; padding: 3px 7px; cursor: pointer; }
+.obs-mini-btn:hover { background: #e8f4ff; }
+.obs-list { max-height: 292px; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.obs-station { display: flex; align-items: center; gap: 5px; padding: 5px 6px; border-radius: 6px; font-size: 11px; color: #24415f; cursor: pointer; }
+.obs-station:hover { background: #eef6ff; }
+.obs-station input { accent-color: #00205b; }
+.obs-panel-foot { padding: 7px 10px; border-top: 1px solid #e8eef5; font-size: 11px; color: #6a7f94; line-height: 1.35; }
+.marker-zoekwrap { position: relative; display: flex; gap: 4px; align-items: center; }
+#marker-zoek { width: 170px; }
+.marker-suggest { display: none; position: absolute; top: 29px; left: 0; width: 260px; max-height: 230px; overflow-y: auto; background: white; border: 1px solid #bfd0e0; border-radius: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.18); z-index: 80; }
+.marker-suggest div { padding: 7px 9px; font-size: 12px; color: #24415f; cursor: pointer; border-bottom: 1px solid #eef3f8; }
+.marker-suggest div:last-child { border-bottom: none; }
+.marker-suggest div:hover, .marker-suggest div.sel { background: #e8f4ff; }
+.marker-suggest .titel { font-weight: 700; color: #00205b; }
+.marker-suggest .sub { color: #6a7f94; font-size: 11px; margin-top: 1px; }
+.sat-beeldvlak.plaats-punt, .sat-beeldvlak.plaats-punt * { cursor: crosshair; }
+.sat-beeldvlak.teken-pijl, .sat-beeldvlak.teken-pijl * { cursor: crosshair; }
+#satelliet-img { pointer-events: none; }
+
+/* Tijdlijn */
+.tijdlijn { background: #1a2b40; padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.tijdlijn label { color: #a8c4e8; font-size: 11px; font-weight: 600; white-space: nowrap; }
+#tijd-slider { flex: 1; accent-color: #2ec4e8; }
+#tijd-display { color: white; font-size: 13px; font-weight: 700; min-width: 80px; text-align: center; font-family: monospace; }
+.btn-play { background: none; border: 1px solid #2ec4e8; color: #2ec4e8; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.btn-play.actief { background: #2ec4e8; color: #00205b; }
+
+.sat-workspace { flex: 1; min-height: 0; display: flex; background: #000; }
+.sat-side { order: 2; width: 300px; flex: 0 0 300px; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; background: #f8fbff; border-left: 1px solid #20364f; }
+.sat-side .toolbar { flex-direction: column; align-items: stretch; gap: 9px; padding: 10px; border-bottom: 1px solid #dde6f0; background: #eef4fb; }
+.sat-side .toolbar .groep-label { margin: 3px 0 -2px; }
+.sat-side .toolbar .btn,
+.sat-side .toolbar .btn-refresh,
+.sat-side .toolbar .btn-auto,
+.sat-side .toolbar .btn-download,
+.sat-side .toolbar .veld-mini,
+.sat-side .toolbar .check-mini { width: 100%; justify-content: center; text-align: center; }
+.sat-side .toolbar .control-row .veld-mini { width: 100%; }
+.sat-side .toolbar .sep { width: 100%; height: 1px; min-height: 1px; margin: 3px 0; }
+.sat-side .toolbar-more { flex-basis: auto; width: 100%; margin-top: 3px; }
+.sat-side .toolbar-more-body { flex-direction: column; align-items: stretch; }
+.sat-side .marker-zoekwrap { flex-direction: column; align-items: stretch; }
+.sat-side .obs-wrap { display: block; }
+.sat-side #marker-zoek { width: 100%; }
+.sat-side .marker-suggest { width: 100%; left: 0; }
+.sat-side .tijdlijn { flex-wrap: wrap; padding: 10px; border-top: 1px solid #dde6f0; border-bottom: none; }
+.sat-side .tijdlijn label { width: 100%; color: #a8c4e8; }
+.sat-side #tijd-slider { min-width: 0; flex-basis: 100%; order: 3; }
+.sat-side #tijd-display { color: #ffffff; min-width: 0; flex: 1; }
+.sat-zoom-panel { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 6px; }
+.sat-zoom-panel .btn { min-width: 0; padding: 4px 8px; font-size: 15px; line-height: 1; }
+.sat-zoom-label { height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #c5d3e3; border-radius: 14px; background: #f8fbff; color: #24415f; font-size: 12px; font-weight: 800; font-family: monospace; }
+.beeld-wrap { order: 1; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: auto; position: relative; background: #000; padding: 14px; }
+.sat-kaart { width: 100%; height: 100%; flex: 0 0 auto; display: flex; flex-direction: column; background: #050b14; box-shadow: 0 4px 24px rgba(0,0,0,0.45); }
+.sat-header-band {
+  background: #1e293b; color: white;
+  padding: 13px 18px; min-height: 58px;
+  display: flex; justify-content: space-between; align-items: center; gap: 18px;
+  border-bottom: 3px solid #2ec4e8; flex-shrink: 0;
+}
+.sat-header-band .links { min-width: 0; }
+.sat-header-band .titel { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+.sat-header-band .sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.sat-header-band .rechts { text-align: right; flex-shrink: 0; }
+.sat-header-band .tijd { font-size: 15px; font-weight: 700; }
+.sat-header-band .gebied { font-size: 11px; color: #cbd5e1; margin-top: 2px; }
+.sat-beeldvlak { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; background: #000; overflow: hidden; }
+#satelliet-img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+  filter: contrast(1.08) saturate(1.08) brightness(1.02);
+  transition: opacity 0.2s;
+  position: relative; z-index: 1;
+}
+#satelliet-img.laden { opacity: 0.4; }
+#sat-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+
+.info-balk { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,32,91,0.88); color: white; font-size: 11px; padding: 5px 14px; border-radius: 12px; pointer-events: none; white-space: nowrap; }
+.laad-dot { position: absolute; top: 10px; right: 14px; width: 8px; height: 8px; border-radius: 50%; background: #2ec4e8; display: none; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+@media (max-width: 700px) {
+  body { height: auto; min-height: 100vh; }
+  .sat-workspace { display: block; min-height: auto; }
+  .sat-side { width: 100%; display: block; border-left: none; overflow: visible; }
+  .sat-side .toolbar { flex-direction: column; align-items: stretch; }
+  .sat-side .toolbar .btn,
+  .sat-side .toolbar .btn-refresh,
+  .sat-side .toolbar .btn-auto,
+  .sat-side .toolbar .btn-download,
+  .sat-side .toolbar .veld-mini,
+  .sat-side .toolbar .check-mini { width: 100%; }
+  .sat-side .toolbar-more-body { flex-direction: column; align-items: stretch; }
+  .sat-side .marker-zoekwrap { flex-direction: column; align-items: stretch; }
+  .sat-side .obs-wrap { display: block; }
+  .sat-zoom-panel { display: inline-grid; grid-template-columns: 34px 74px 34px; }
+  .sat-side .tijdlijn { flex-wrap: nowrap; }
+  .sat-side .tijdlijn label { width: auto; color: #a8c4e8; }
+  .sat-side #tijd-slider { flex-basis: auto; order: 0; }
+  .sat-side #tijd-display { color: white; flex: 0 0 auto; min-width: 80px; }
+  .beeld-wrap { padding: 0; }
+  .sat-kaart { min-height: 70vh; }
+  .sat-header-band { padding: 10px 12px; align-items: flex-start; flex-direction: column; gap: 4px; }
+  .sat-header-band .rechts { text-align: left; }
+  .info-balk { left: 8px; right: 8px; transform: none; white-space: normal; text-align: center; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="sat-sharpen-hd" color-interpolation-filters="sRGB">
+    <feConvolveMatrix order="3" preserveAlpha="true" divisor="1"
+      kernelMatrix="0 -0.14 0 -0.14 1.56 -0.14 0 -0.14 0"/>
+  </filter>
+</svg>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Weerlab.nl — MTG Satellietbeelden</div>
+    <div class="header-sub">EUMETSAT Meteosat Third Generation · FCI · EUMETView</div>
+  </div>
+  <div class="auto-status" id="auto-status"></div>
+</div>
+
+<div class="sat-workspace">
+  <aside class="sat-side">
+    <div class="toolbar">
+      <section class="control-card">
+        <div class="control-title">Beeld</div>
+        <div class="control-row">
+          <span class="groep-label">Product</span>
+          <select class="veld-mini" id="product-select" title="Satellietproduct">
+            <option value="auto" data-label="Auto beste beeld">Auto beste beeld</option>
+            <option value="mtg_fd:rgb_truecolour" data-label="True Colour">True Colour</option>
+            <option value="mtg_fd:rgb_geocolour" data-label="GeoColour">GeoColour</option>
+            <option value="mtg_fd:ir105_hrfi" data-label="IR 10.5µm nacht/dag">IR nacht</option>
+            <option value="mtg_fd:rgb_dust" data-label="Stof RGB">Stof RGB</option>
+            <option value="mtg_fd:rgb_fog" data-label="Mist RGB">Mist RGB</option>
+          </select>
+        </div>
+        <div class="gebied-grid">
+          <button class="btn gebied actief" data-bbox="2.65,50.55,7.65,53.95" data-crs="EPSG:3857" data-w="1600" data-h="1779" data-export-w="2474" data-export-h="2750" data-label="Nederland HD">Nederland HD</button>
+          <button class="btn gebied" data-bbox="-1,49,9,54" data-crs="CRS:84" data-w="2200" data-h="1760" data-label="Benelux">Benelux</button>
+          <button class="btn gebied" data-bbox="-8,46,20,57" data-crs="CRS:84" data-w="2048" data-h="1200" data-label="NW-Europa">NW-Europa</button>
+          <button class="btn gebied" data-bbox="-15,30,40,72" data-crs="CRS:84" data-w="2048" data-h="1400" data-label="Europa">Europa</button>
+        </div>
+        <div class="control-row">
+          <span class="groep-label">Grenzen</span>
+          <select class="veld-mini" id="lijnkleur" title="Kleur van lands- en provinciegrenzen op de satellietfoto">
+            <option value="cyan">Lijn cyaan</option>
+            <option value="white">Lijn wit</option>
+            <option value="amber">Lijn geel</option>
+            <option value="dark">Lijn donker</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="control-card">
+        <div class="control-title">Actuele lagen</div>
+        <div class="button-row">
+          <button class="btn btn-radar" id="btn-radar-toggle" title="Leg de actuele KNMI-neerslagradar semi-transparant over het satellietbeeld">Radar uit</button>
+          <button class="btn actief" id="btn-obs-toggle" title="Toon of verberg actuele temperatuur en wind van KNMI-stations">Data aan</button>
+        </div>
+        <div class="control-row">
+          <span class="groep-label">Stations</span>
+          <select class="veld-mini" id="obs-filter" title="Welke actuele stationdata op de satellietfoto verschijnt">
+            <option value="all">Alle data</option>
+            <option value="smart">Slim filter</option>
+            <option value="clear">Alleen helder</option>
+          </select>
+        </div>
+        <div class="obs-wrap">
+          <button class="btn" id="btn-obs-stations" title="Kies welke Nederlandse KNMI-stations met temperatuur en wind op de satellietfoto komen">Kies stations</button>
+          <div class="obs-panel" id="obs-panel">
+            <div class="obs-panel-head">
+              <b>KNMI-stations</b>
+              <div class="obs-panel-actions">
+                <button class="obs-mini-btn" type="button" id="obs-all">Alles</button>
+                <button class="obs-mini-btn" type="button" id="obs-basic">Basis</button>
+                <button class="obs-mini-btn" type="button" id="obs-none">Geen</button>
+              </div>
+            </div>
+            <div class="obs-list" id="obs-list"></div>
+            <div class="obs-panel-foot" id="obs-status">Nog geen KNMI-waarnemingen geladen.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="control-card">
+        <div class="control-title">Update & grootte</div>
+        <div class="button-row wide">
+          <button class="btn-refresh" id="btn-refresh">↻ Nu</button>
+          <button class="btn-auto" id="btn-auto">⏱ Auto</button>
+        </div>
+        <div class="control-row">
+          <span class="groep-label">Zoom</span>
+          <div class="sat-zoom-panel">
+            <button class="btn" id="btn-zoom-uit" title="Satellietbeeld kleiner">−</button>
+            <button class="sat-zoom-label" id="sat-zoom-label" title="Klik om terug te zetten naar passend beeld">100%</button>
+            <button class="btn" id="btn-zoom-in" title="Satellietbeeld groter">+</button>
+          </div>
+        </div>
+      </section>
+
+      <details class="toolbar-more control-card">
+        <summary>Annotatie & export</summary>
+        <div class="toolbar-more-body">
+          <div class="annotatie-groep">
+            <span class="groep-label">Plaatslabel</span>
+            <div class="marker-zoekwrap">
+              <input class="veld-mini" id="marker-zoek" type="text" placeholder="Plaatsnaam..." autocomplete="off" title="Zoek een plaats of typ een eigen label">
+              <button class="btn" id="btn-marker-search" title="Zoek de plaats en zet het label daar">Zet plaats</button>
+              <div class="marker-suggest" id="marker-suggest"></div>
+            </div>
+            <select class="veld-mini" id="marker-preset" title="Plaats een label op een bekende locatie">
+              <option value="">Kies plaats...</option>
+              <option value="rotterdam">Rotterdam</option>
+              <option value="rotterdam_airport">Rotterdam Airport</option>
+              <option value="barendrecht">Barendrecht</option>
+              <option value="dordrecht">Dordrecht</option>
+              <option value="de_bilt">De Bilt</option>
+              <option value="maastricht">Maastricht</option>
+              <option value="enschede">Enschede</option>
+              <option value="den_helder">Den Helder</option>
+              <option value="hoek_van_holland">Hoek van Holland</option>
+              <option value="eindhoven">Eindhoven</option>
+              <option value="amsterdam">Amsterdam</option>
+              <option value="brussel">Brussel</option>
+              <option value="antwerpen">Antwerpen</option>
+            </select>
+            <select class="veld-mini" id="marker-color" title="Kleur van het plaatslabel">
+              <option value="#20c76a">Groen</option>
+              <option value="#e5332a">Rood</option>
+              <option value="#ffcf33">Geel</option>
+              <option value="#2ec4e8">Blauw</option>
+            </select>
+            <div class="button-row">
+              <button class="btn" id="btn-marker-click" title="Klik daarna op de kaart om het plaatslabel zelf te plaatsen">Plaats kaart</button>
+              <button class="btn" id="btn-marker-clear" title="Verwijder het geplaatste plaatslabel">Wis plaats</button>
+            </div>
+          </div>
+          <div class="annotatie-groep">
+            <span class="groep-label">Tekenen</span>
+            <div class="button-row">
+              <button class="btn" id="btn-arrow-draw" title="Sleep op de satellietfoto om een of meer trekrichting-pijlen te tekenen">Pijl</button>
+              <button class="btn" id="btn-arrow-clear" title="Verwijder alle getekende pijlen">Wis pijlen</button>
+              <button class="btn" id="btn-sun-place" title="Klik daarna op de kaart om een of meer zonnetjes te plaatsen">Zon</button>
+              <button class="btn" id="btn-sun-clear" title="Verwijder alle zonnetjes">Wis zonnen</button>
+            </div>
+          </div>
+          <div class="annotatie-groep">
+            <span class="groep-label">Export</span>
+            <div class="button-row">
+              <button class="btn-download" id="btn-download">PNG</button>
+              <button class="btn-download" id="btn-download-pdf">PDF</button>
+              <button class="btn-download social" id="btn-download-social" title="Kleinere PNG voor social media">Social</button>
+              <button class="btn-download ai" id="btn-download-ai" title="Schone hoge-res satellietcrop voor externe AI-upscale. De livekaart blijft brongetrouw.">AI-ready</button>
+              <button class="btn-download" id="btn-video" title="Timelapse downloaden">MP4</button>
+              <button class="btn-download social" id="btn-video-social" title="Kleinere timelapse voor social media">Social MP4</button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="tijdlijn">
+      <label>Terugkijken:</label>
+      <button class="btn-play" id="btn-play" title="Timelapse laatste 10 beelden">▶</button>
+      <input type="range" id="tijd-slider" min="0" max="17" value="17" step="1">
+      <div id="tijd-display">nu</div>
+    </div>
+  </aside>
+
+  <div class="beeld-wrap">
+  <div class="sat-kaart">
+    <div class="sat-header-band">
+      <div class="links">
+        <div class="titel" id="sat-header-product">Satellietfoto</div>
+        <div class="sub">Bron: EUMETSAT EUMETView / Meteosat Third Generation · © Ed Aldus / Weerlab</div>
+      </div>
+      <div class="rechts">
+        <div class="tijd" id="sat-header-tijd">laden...</div>
+        <div class="gebied" id="sat-header-gebied">Nederland HD</div>
+      </div>
+    </div>
+    <div class="sat-beeldvlak">
+      <img id="satelliet-img" src="" alt="MTG satellietbeeld">
+      <canvas id="sat-overlay"></canvas>
+      <div class="laad-dot" id="laad-dot"></div>
+      <div class="info-balk" id="info-balk">Laden…</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="nl_grens_coords.js"></script>
+<script>
+const WMS_URL = 'https://om.weerlab.nl/eumetview';
+const ACTUEEL_URL = 'https://data.weerlab.nl/actueel.json';
+const RADAR_DATA_BASE = 'https://harmonie-data.weerlab.nl/';
+const RADAR_META_URL = RADAR_DATA_BASE + 'radar_meta.json';
+const RADAR_BIN_URL = RADAR_DATA_BASE + 'radar_data.bin';
+const LAATSTE_TIJDSTAP = 17;
+const TIMELAPSE_AANTAL = 10;
+const SAT_PUBLICATIE_DELAY_MIN = 30;
+const PRODUCTEN = {
+  truecolour: { layer: 'mtg_fd:rgb_truecolour', label: 'True Colour' },
+  geocolour: { layer: 'mtg_fd:rgb_geocolour', label: 'GeoColour' }
+};
+const SAT_FILTER_STANDAARD = 'contrast(1.08) saturate(1.08) brightness(1.02)';
+const SAT_FILTER_NEDERLAND_HD_CANVAS = 'contrast(1.18) saturate(1.16) brightness(1.035)';
+const SAT_FILTER_NEDERLAND_HD_CSS = 'url(#sat-sharpen-hd) contrast(1.18) saturate(1.16) brightness(1.035)';
+
+let actieveLayer = 'auto';
+let actieveLabel = 'Auto beste beeld';
+let activeBbox = '2.65,50.55,7.65,53.95';
+let activeCrs = 'EPSG:3857';
+let activeW = 1600, activeH = 1779;
+let activeExportW = 2474, activeExportH = 2750;
+let actiefGebiedLabel = 'Nederland HD';
+let actieveTijdstap = LAATSTE_TIJDSTAP;
+let beeldZoom = 1;
+let autoRefreshTimer = null;
+let animatieTimer = null;
+let animatieActief = false;
+let laatsteUrl = '';
+let selectieVersie = 0;
+let satLoadToken = 0;
+const frameCache = new Map();
+const overlayBestanden = {
+  nl: 'nl_provincies_wadden.geojson',
+  be: 'be_provincies.geojson',
+  rivieren: 'nl_rivieren.geojson'
+};
+const markerLocaties = {
+  rotterdam: { label: 'Rotterdam', lat: 51.9244, lon: 4.4777 },
+  rotterdam_airport: { label: 'Rotterdam Airport', lat: 51.9569, lon: 4.4372 },
+  barendrecht: { label: 'Barendrecht', lat: 51.8567, lon: 4.5347 },
+  dordrecht: { label: 'Dordrecht', lat: 51.8133, lon: 4.6901 },
+  eindhoven: { label: 'Eindhoven', lat: 51.4416, lon: 5.4697 },
+  amsterdam: { label: 'Amsterdam', lat: 52.3676, lon: 4.9041 },
+  den_haag: { label: 'Den Haag', lat: 52.0705, lon: 4.3007 },
+  utrecht: { label: 'Utrecht', lat: 52.0907, lon: 5.1214 },
+  breda: { label: 'Breda', lat: 51.5719, lon: 4.7683 },
+  maastricht: { label: 'Maastricht', lat: 50.8514, lon: 5.6910 },
+  enschede: { label: 'Enschede', lat: 52.2215, lon: 6.8937 },
+  den_helder: { label: 'Den Helder', lat: 52.9563, lon: 4.7608 },
+  de_bilt: { label: 'De Bilt', lat: 52.101, lon: 5.178 },
+  hoek_van_holland: { label: 'Hoek van Holland', lat: 51.978, lon: 4.131 },
+  brussel: { label: 'Brussel', lat: 50.8503, lon: 4.3517 },
+  antwerpen: { label: 'Antwerpen', lat: 51.2194, lon: 4.4025 },
+  gent: { label: 'Gent', lat: 51.0543, lon: 3.7174 },
+  brugge: { label: 'Brugge', lat: 51.2093, lon: 3.2247 },
+  luxemburg: { label: 'Luxemburg', lat: 49.6116, lon: 6.1319 }
+};
+const STANDAARD_OBS_STATIONS = [
+  'Den Helder', 'Vlieland', 'Leeuwarden', 'Eelde', 'Schiphol', 'De Bilt',
+  'Lelystad', 'Twenthe', 'Rotterdam', 'Hoek van Holland', 'Vlissingen',
+  'Eindhoven', 'Maastricht'
+];
+const EXTRA_OBS_STATIONS = ['De Bilt', 'Maastricht', 'Twenthe', 'Den Helder', 'Hoek van Holland'];
+const markerPlaatsen = [
+  { label: 'Groningen', lat: 53.22, lon: 6.57 },
+  { label: 'Arnhem', lat: 51.98, lon: 5.91 },
+  { label: 'Zwolle', lat: 52.51, lon: 6.09 },
+  { label: 'Den Bosch', lat: 51.69, lon: 5.30 },
+  { label: 'Vlissingen', lat: 51.45, lon: 3.57 },
+  { label: 'Alkmaar', lat: 52.63, lon: 4.75 },
+  { label: 'Leeuwarden', lat: 53.20, lon: 5.80 },
+  { label: 'Enschede', lat: 52.22, lon: 6.90 },
+  { label: 'Leiden', lat: 52.16, lon: 4.49 },
+  { label: 'Dordrecht', lat: 51.81, lon: 4.67 },
+  { label: 'Haarlem', lat: 52.38, lon: 4.64 },
+  { label: 'Tilburg', lat: 51.56, lon: 5.09 },
+  { label: 'Amersfoort', lat: 52.16, lon: 5.38 },
+  { label: 'Apeldoorn', lat: 52.22, lon: 5.97 },
+  { label: 'Assen', lat: 52.99, lon: 6.56 },
+  { label: 'Emmen', lat: 52.76, lon: 6.90 },
+  { label: 'Den Helder', lat: 52.93, lon: 4.79 },
+  { label: 'De Bilt', lat: 52.10, lon: 5.18 },
+  { label: 'Lelystad', lat: 52.51, lon: 5.47 },
+  { label: 'Middelburg', lat: 51.50, lon: 3.61 },
+  { label: 'Goes', lat: 51.50, lon: 3.89 },
+  { label: 'Delft', lat: 52.01, lon: 4.36 },
+  { label: 'Nieuwegein', lat: 52.03, lon: 5.09 },
+  { label: 'Hilversum', lat: 52.22, lon: 5.18 },
+  { label: 'Roosendaal', lat: 51.53, lon: 4.46 },
+  { label: 'Bergen op Zoom', lat: 51.50, lon: 4.29 },
+  { label: 'Hoorn', lat: 52.64, lon: 5.06 },
+  { label: 'Deventer', lat: 52.25, lon: 6.16 },
+  { label: 'Sneek', lat: 53.03, lon: 5.66 },
+  { label: 'Heerenveen', lat: 52.96, lon: 5.92 },
+  { label: 'Drachten', lat: 53.10, lon: 6.10 },
+  { label: 'Nijmegen', lat: 51.84, lon: 5.86 },
+  { label: 'Venlo', lat: 51.37, lon: 6.17 },
+  { label: 'Roermond', lat: 51.17, lon: 5.99 },
+  { label: 'Heerlen', lat: 50.88, lon: 5.97 },
+  { label: 'Gouda', lat: 52.00, lon: 4.71 },
+  { label: 'Oss', lat: 51.77, lon: 5.52 },
+  { label: 'Capelle aan den IJssel', lat: 51.89, lon: 4.53 },
+  { label: 'Ridderkerk', lat: 51.87, lon: 4.60 },
+  { label: 'Gorinchem', lat: 51.83, lon: 4.97 },
+  { label: 'Zwijndrecht', lat: 51.82, lon: 4.66 },
+  { label: 'Zoetermeer', lat: 52.06, lon: 4.49 },
+  { label: 'Spijkenisse', lat: 51.85, lon: 4.32 },
+  { label: 'Hellevoetsluis', lat: 51.83, lon: 4.13 },
+  { label: 'Brielle', lat: 51.90, lon: 4.16 },
+  { label: 'Terneuzen', lat: 51.33, lon: 3.83 },
+  { label: 'Hulst', lat: 51.28, lon: 4.05 },
+  { label: 'Moerdijk', lat: 51.69, lon: 4.62 },
+  { label: 'Oosterhout', lat: 51.64, lon: 4.86 },
+  { label: 'Dongen', lat: 51.63, lon: 5.03 },
+  { label: 'Oirschot', lat: 51.50, lon: 5.30 },
+  { label: 'Deurne', lat: 51.46, lon: 5.78 },
+  { label: 'Asten', lat: 51.40, lon: 5.75 },
+  { label: 'Valkenswaard', lat: 51.35, lon: 5.46 },
+  { label: 'Best', lat: 51.51, lon: 5.39 },
+  { label: 'Geldrop', lat: 51.42, lon: 5.55 },
+  { label: 'Uden', lat: 51.66, lon: 5.62 },
+  { label: 'Veghel', lat: 51.62, lon: 5.55 },
+  { label: 'Weert', lat: 51.25, lon: 5.71 },
+  { label: 'Sittard', lat: 50.99, lon: 5.84 },
+  { label: 'Geleen', lat: 50.97, lon: 5.83 },
+  { label: 'Texel', lat: 53.05, lon: 4.80 },
+  { label: 'Vlieland', lat: 53.25, lon: 4.92 },
+  { label: 'Terschelling', lat: 53.36, lon: 5.22 },
+  { label: 'Ameland', lat: 53.44, lon: 5.79 },
+  { label: 'Schiermonnikoog', lat: 53.48, lon: 6.15 },
+  { label: 'Luik', lat: 50.63, lon: 5.57 },
+  { label: 'Hasselt', lat: 50.93, lon: 5.33 },
+  { label: 'Leuven', lat: 50.88, lon: 4.70 },
+  { label: 'Mechelen', lat: 51.13, lon: 4.34 },
+  { label: 'Kortrijk', lat: 50.95, lon: 3.12 },
+  { label: 'Oostende', lat: 51.10, lon: 2.97 }
+];
+let overlayData = {};
+let overlayGeladen = false;
+let markerPunt = null;
+let plaatsPuntModus = false;
+let zonPunten = [];
+let zonPuntModus = false;
+let pijlModus = false;
+let pijlTekent = false;
+let trekPijl = null;
+let trekPijlen = [];
+let markerZoekTimer = null;
+let markerZoekCtrl = null;
+let markerZoekResultaten = [];
+let markerSuggestIndex = 0;
+let obsAan = true;
+let obsFilterModus = 'all';
+let lijnkleur = 'cyan';
+let obsData = null;
+let obsBijgewerkt = '';
+let obsLaatsteFout = '';
+let obsBron = '';
+let obsTimer = null;
+let obsLaden = false;
+let geselecteerdeObsStations = new Set(STANDAARD_OBS_STATIONS);
+let radarAan = false;
+let radarMeta = null;
+let radarData = null;
+let radarDims = { nLat: 0, nLon: 0, nFrames: 0 };
+let radarLaden = false;
+let radarLaatsteFout = '';
+let radarFrameCache = new Map();
+let radarOffscreen = null;
+let radarOffCtx = null;
+
+// Genereer lijst van laatste 18 tijdstappen (10-min intervallen = 3 uur).
+// EUMETView publiceert near-real-time, maar met verwerkingstijd. Zonder TIME
+// gaf de WMS op 25-04-2026 om 14:32 NL als nieuwste beeld 14:10 NL terug.
+function tijdstappen() {
+  const stappen = [];
+  const nu = new Date();
+  // Rond af naar vorige 10 minuten, met EUMETSAT-publicatievertraging.
+  const basis = new Date(nu);
+  basis.setUTCMinutes(Math.floor((nu.getUTCMinutes() - SAT_PUBLICATIE_DELAY_MIN) / 10) * 10, 0, 0);
+  for (let i = LAATSTE_TIJDSTAP; i >= 0; i--) {
+    const t = new Date(basis.getTime() - i * 10 * 60000);
+    stappen.push(t);
+  }
+  return stappen;
+}
+
+function formatTijd(d) {
+  return d.toLocaleTimeString('nl-NL', {
+    timeZone: 'Europe/Amsterdam',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }) + ' NL';
+}
+
+function formatDatumTijd(d) {
+  return d.toLocaleString('nl-NL', {
+    timeZone: 'Europe/Amsterdam',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }) + ' NL';
+}
+
+function isoTijd(d) {
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function radialen(graden) {
+  return graden * Math.PI / 180;
+}
+
+function graden(radialen) {
+  return radialen * 180 / Math.PI;
+}
+
+function zonhoogte(tijd, lat = 52.1, lon = 5.2) {
+  const dagStart = Date.UTC(tijd.getUTCFullYear(), tijd.getUTCMonth(), tijd.getUTCDate());
+  const dagNummer = Math.floor((dagStart - Date.UTC(tijd.getUTCFullYear(), 0, 0)) / 86400000);
+  const uur = tijd.getUTCHours() + tijd.getUTCMinutes() / 60 + tijd.getUTCSeconds() / 3600;
+  const gamma = 2 * Math.PI / 365 * (dagNummer - 1 + (uur - 12) / 24);
+  const decl =
+    0.006918
+    - 0.399912 * Math.cos(gamma)
+    + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma)
+    + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma)
+    + 0.00148 * Math.sin(3 * gamma);
+  const tijdCorrectie = 229.18 * (
+    0.000075
+    + 0.001868 * Math.cos(gamma)
+    - 0.032077 * Math.sin(gamma)
+    - 0.014615 * Math.cos(2 * gamma)
+    - 0.040849 * Math.sin(2 * gamma)
+  );
+  const wareZonnetijd = uur * 60 + tijdCorrectie + 4 * lon;
+  const uurhoek = radialen(wareZonnetijd / 4 - 180);
+  const latRad = radialen(lat);
+  return graden(Math.asin(
+    Math.sin(latRad) * Math.sin(decl)
+    + Math.cos(latRad) * Math.cos(decl) * Math.cos(uurhoek)
+  ));
+}
+
+function productVoorTijd(tijd) {
+  if (actieveLayer !== 'auto') return { layer: actieveLayer, label: actieveLabel, automatisch: false };
+  if (isNederlandHdGebied()) return { ...PRODUCTEN.geocolour, automatisch: true };
+  return zonhoogte(tijd) >= 3
+    ? { ...PRODUCTEN.truecolour, automatisch: true }
+    : { ...PRODUCTEN.geocolour, automatisch: true };
+}
+
+function isNederlandHdGebied() {
+  return /^Nederland\b/i.test(actiefGebiedLabel || '');
+}
+
+function actiefSatFilterCanvas() {
+  return isNederlandHdGebied() ? SAT_FILTER_NEDERLAND_HD_CANVAS : SAT_FILTER_STANDAARD;
+}
+
+function actiefSatFilterCss() {
+  return isNederlandHdGebied() ? SAT_FILTER_NEDERLAND_HD_CSS : SAT_FILTER_STANDAARD;
+}
+
+function productLabel(product) {
+  const label = product && product.label ? product.label : 'Satellietbeeld';
+  return product && product.automatisch ? `Auto: ${label}` : label;
+}
+
+function productVoorLayer(layerName, tijd) {
+  if (!layerName || layerName === 'auto') return productVoorTijd(tijd);
+  return { layer: layerName, label: actieveLabel || 'Satellietbeeld' };
+}
+
+const WEB_MERCATOR_R = 6378137;
+function lonLatNaarWebMercator(lon, lat) {
+  const veiligeLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const x = WEB_MERCATOR_R * lon * Math.PI / 180;
+  const y = WEB_MERCATOR_R * Math.log(Math.tan(Math.PI / 4 + veiligeLat * Math.PI / 360));
+  return [x, y];
+}
+
+function webMercatorNaarLonLat(x, y) {
+  const lon = x / WEB_MERCATOR_R * 180 / Math.PI;
+  const lat = (2 * Math.atan(Math.exp(y / WEB_MERCATOR_R)) - Math.PI / 2) * 180 / Math.PI;
+  return [lon, lat];
+}
+
+function bboxNaarProjectie(bbox, crs = activeCrs) {
+  const [minLon, minLat, maxLon, maxLat] = Array.isArray(bbox) ? bbox : bbox.split(',').map(Number);
+  if (crs === 'EPSG:3857') {
+    const [minX, minY] = lonLatNaarWebMercator(minLon, minLat);
+    const [maxX, maxY] = lonLatNaarWebMercator(maxLon, maxLat);
+    return [minX, minY, maxX, maxY];
+  }
+  return [minLon, minLat, maxLon, maxLat];
+}
+
+function wmsUrl(layerName, bbox, w, h, tijdstap) {
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const product = productVoorLayer(layerName, t);
+  const layers = product.layer;
+  const styles = '';
+  const wmsBbox = bboxNaarProjectie(bbox, activeCrs).join(',');
+  return WMS_URL +
+    '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0' +
+    '&LAYERS=' + encodeURIComponent(layers) +
+    '&STYLES=' + encodeURIComponent(styles) +
+    '&FORMAT=image/png&TRANSPARENT=FALSE' +
+    '&CRS=' + encodeURIComponent(activeCrs) + '&BBOX=' + wmsBbox +
+    '&WIDTH=' + w + '&HEIGHT=' + h +
+    '&TIME=' + isoTijd(t) +
+    '&_t=' + t.getTime();
+}
+
+async function laadOverlayData() {
+  try {
+    const entries = await Promise.all(Object.entries(overlayBestanden).map(async ([key, url]) => {
+      const r = await fetch(url + '?_=' + Date.now());
+      if (!r.ok) throw new Error(url + ' ' + r.status);
+      return [key, await r.json()];
+    }));
+    overlayData = Object.fromEntries(entries);
+    overlayGeladen = true;
+    tekenOverlay();
+  } catch (e) {
+    overlayGeladen = false;
+  }
+}
+
+function actieveBboxParts() {
+  return activeBbox.split(',').map(Number);
+}
+
+function pasKaartFormaatAan() {
+  const wrap = document.querySelector('.beeld-wrap');
+  const kaart = document.querySelector('.sat-kaart');
+  const header = document.querySelector('.sat-header-band');
+  if (!wrap || !kaart || !header || !activeW || !activeH) return;
+
+  const wrapW = wrap.clientWidth;
+  const wrapH = wrap.clientHeight;
+  const headerH = header.getBoundingClientRect().height || 58;
+  const beeldAspect = activeW / activeH;
+  const maxBeeldH = Math.max(160, wrapH - headerH);
+  let beeldW = maxBeeldH * beeldAspect;
+  let beeldH = maxBeeldH;
+
+  if (beeldW > wrapW) {
+    beeldW = wrapW;
+    beeldH = beeldW / beeldAspect;
+  }
+
+  beeldW *= beeldZoom;
+  beeldH *= beeldZoom;
+
+  kaart.style.width = Math.round(beeldW) + 'px';
+  kaart.style.height = Math.round(beeldH + headerH) + 'px';
+}
+
+function updateZoomLabel() {
+  const label = document.getElementById('sat-zoom-label');
+  if (label) label.textContent = Math.round(beeldZoom * 100) + '%';
+}
+
+function stelBeeldZoomIn(nieuweZoom) {
+  beeldZoom = Math.max(0.85, Math.min(2.5, nieuweZoom));
+  updateZoomLabel();
+  pasKaartFormaatAan();
+  tekenOverlay();
+}
+
+function beeldRect() {
+  pasKaartFormaatAan();
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const rect = vlak.getBoundingClientRect();
+  const canvas = document.getElementById('sat-overlay');
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(rect.width * dpr));
+  const h = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  const imgRatio = activeW / activeH;
+  const boxRatio = rect.width / rect.height;
+  let drawW, drawH, x, y;
+  if (boxRatio > imgRatio) {
+    drawH = rect.height;
+    drawW = drawH * imgRatio;
+    x = (rect.width - drawW) / 2;
+    y = 0;
+  } else {
+    drawW = rect.width;
+    drawH = drawW / imgRatio;
+    x = 0;
+    y = (rect.height - drawH) / 2;
+  }
+  return { canvas, dpr, x: x * dpr, y: y * dpr, w: drawW * dpr, h: drawH * dpr };
+}
+
+function projecteer(lon, lat, rect, bbox) {
+  if (activeCrs === 'EPSG:3857') {
+    const [minX, minY, maxX, maxY] = bboxNaarProjectie(bbox, activeCrs);
+    const [xMerc, yMerc] = lonLatNaarWebMercator(lon, lat);
+    return [
+      rect.x + (xMerc - minX) / (maxX - minX) * rect.w,
+      rect.y + (maxY - yMerc) / (maxY - minY) * rect.h
+    ];
+  }
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  return [
+    rect.x + (lon - minLon) / (maxLon - minLon) * rect.w,
+    rect.y + (maxLat - lat) / (maxLat - minLat) * rect.h
+  ];
+}
+
+const BFT_DREMPELS = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7];
+function msToBft(ms) {
+  if (ms == null || Number.isNaN(ms)) return null;
+  let bft = 0;
+  for (let i = 0; i < BFT_DREMPELS.length; i++) {
+    if (ms >= BFT_DREMPELS[i]) bft = i + 1;
+    else break;
+  }
+  return bft;
+}
+
+function tempKleur(temp) {
+  if (temp == null) return '#ffffff';
+  if (temp <= 0) return '#6ed1ff';
+  if (temp < 10) return '#ffffff';
+  if (temp < 20) return '#ffdf6e';
+  if (temp < 27) return '#ff963f';
+  return '#ff4d4d';
+}
+
+function windKleur(bft) {
+  if (bft == null) return '#ffffff';
+  if (bft <= 3) return '#dcecff';
+  if (bft <= 5) return '#ffdf6e';
+  if (bft <= 7) return '#ff963f';
+  return '#ff4d4d';
+}
+
+function windPijlVector(dd, len) {
+  const richtingVan = ((dd % 360) + 360) % 360;
+  const rad = richtingVan * Math.PI / 180;
+  return {
+    dx: -Math.sin(rad) * len,
+    dy: Math.cos(rad) * len
+  };
+}
+
+function isHelderStation(st) {
+  return st && st.n != null && st.n <= 1;
+}
+
+function obsStationLijst() {
+  const stations = obsData && obsData.stations ? Object.values(obsData.stations) : [];
+  return stations
+    .filter(st => st && st.naam && Number.isFinite(st.lat) && Number.isFinite(st.lon))
+    .sort((a, b) => a.lat === b.lat ? a.naam.localeCompare(b.naam, 'nl') : b.lat - a.lat);
+}
+
+function bewaarObsSelectie() {
+  try {
+    localStorage.setItem('satelliet_obs_stations', JSON.stringify([...geselecteerdeObsStations]));
+  } catch {}
+}
+
+function herstelObsSelectie() {
+  try {
+    const opgeslagen = JSON.parse(localStorage.getItem('satelliet_obs_stations') || 'null');
+    if (Array.isArray(opgeslagen) && opgeslagen.length) geselecteerdeObsStations = new Set(opgeslagen);
+  } catch {}
+  EXTRA_OBS_STATIONS.forEach(naam => geselecteerdeObsStations.add(naam));
+}
+
+function tekenLijn(ctx, coords, rect, bbox) {
+  let gestart = false;
+  for (const p of coords) {
+    if (!Array.isArray(p) || p.length < 2) continue;
+    const [x, y] = projecteer(p[0], p[1], rect, bbox);
+    if (!gestart) { ctx.moveTo(x, y); gestart = true; }
+    else ctx.lineTo(x, y);
+  }
+}
+
+function tekenGeometry(ctx, geom, rect, bbox) {
+  if (!geom) return;
+  if (geom.type === 'LineString') tekenLijn(ctx, geom.coordinates, rect, bbox);
+  if (geom.type === 'MultiLineString') geom.coordinates.forEach(line => tekenLijn(ctx, line, rect, bbox));
+  if (geom.type === 'Polygon') geom.coordinates.forEach(ring => tekenLijn(ctx, ring, rect, bbox));
+  if (geom.type === 'MultiPolygon') geom.coordinates.forEach(poly => poly.forEach(ring => tekenLijn(ctx, ring, rect, bbox)));
+}
+
+function tekenFeatureSet(ctx, geojson, rect, bbox, stijl) {
+  if (!geojson || !geojson.features) return;
+  ctx.save();
+  ctx.strokeStyle = stijl.stroke;
+  ctx.lineWidth = stijl.width;
+  ctx.globalAlpha = stijl.alpha ?? 1;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  if (stijl.shadow) {
+    ctx.shadowColor = stijl.shadow;
+    ctx.shadowBlur = stijl.shadowBlur || 2;
+  }
+  ctx.beginPath();
+  geojson.features.forEach(f => tekenGeometry(ctx, f.geometry, rect, bbox));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function afgerondeRechthoek(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function tekenObsWindpijl(ctx, x, y, dd, ff, schaal) {
+  if (dd == null || ff == null) return;
+  const bft = msToBft(ff);
+  const len = 25 * schaal + Math.min(18 * schaal, Math.max(0, ff) * 1.8 * schaal);
+  const { dx, dy } = windPijlVector(dd, len);
+  const kleur = windKleur(bft);
+  const startX = x - dx * 0.34;
+  const startY = y - dy * 0.34;
+  const eindX = x + dx * 0.66;
+  const eindY = y + dy * 0.66;
+
+  ctx.save();
+  ctx.lineWidth = 3.2 * schaal;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,0.82)';
+  ctx.shadowBlur = 5 * schaal;
+  ctx.strokeStyle = kleur;
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(eindX, eindY);
+  ctx.stroke();
+
+  const angle = Math.atan2(dy, dx);
+  const head = 9 * schaal;
+  ctx.fillStyle = kleur;
+  ctx.beginPath();
+  ctx.moveTo(eindX, eindY);
+  ctx.lineTo(eindX - head * Math.cos(angle - 0.55), eindY - head * Math.sin(angle - 0.55));
+  ctx.lineTo(eindX - head * Math.cos(angle + 0.55), eindY - head * Math.sin(angle + 0.55));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function tekenObsLabel(ctx, x, y, st, opties) {
+  const exportModus = opties.export === true;
+  const schaal = (exportModus ? 2.05 : 1) * (opties.schaal || 1);
+  const temp = st.ta;
+  const bft = msToBft(st.ff);
+  const tempTekst = temp == null ? '--' : temp.toFixed(1).replace('.', ',') + '°';
+  const gust = st.fx != null && !Number.isNaN(st.fx) ? Math.round(st.fx * 3.6) : null;
+  const bftTekst = bft == null ? '' : `${bft} Bft`;
+  const gustTekst = gust == null ? '' : `st ${gust}`;
+
+  ctx.save();
+  ctx.font = `bold ${15 * schaal}px Arial, sans-serif`;
+  const tempW = ctx.measureText(tempTekst).width;
+  ctx.font = `bold ${10 * schaal}px Arial, sans-serif`;
+  const bftW = bftTekst ? ctx.measureText(bftTekst).width : 0;
+  const gustW = gustTekst ? ctx.measureText(gustTekst).width : 0;
+  const w = Math.max(42 * schaal, tempW + 17 * schaal, bftW + 16 * schaal, gustW + 16 * schaal);
+  const h = gustTekst ? 44 * schaal : bftTekst ? 34 * schaal : 24 * schaal;
+  const rx = x - w / 2;
+  const ry = y - h - 12 * schaal;
+
+  ctx.shadowColor = 'rgba(0,0,0,0.78)';
+  ctx.shadowBlur = 8 * schaal;
+  ctx.fillStyle = 'rgba(0,22,50,0.84)';
+  afgerondeRechthoek(ctx, rx, ry, w, h, 6 * schaal);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1.2 * schaal;
+  ctx.strokeStyle = 'rgba(255,255,255,0.54)';
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = tempKleur(temp);
+  ctx.font = `bold ${15 * schaal}px Arial, sans-serif`;
+  ctx.fillText(tempTekst, x, ry + 12 * schaal);
+  if (bftTekst) {
+    ctx.fillStyle = '#dcecff';
+    ctx.font = `bold ${10 * schaal}px Arial, sans-serif`;
+    ctx.fillText(bftTekst, x, ry + 25 * schaal);
+  }
+  if (gustTekst) {
+    ctx.fillStyle = '#ffdf6e';
+    ctx.font = `bold ${9 * schaal}px Arial, sans-serif`;
+    ctx.fillText(gustTekst, x, ry + 36 * schaal);
+  }
+
+  ctx.beginPath();
+  ctx.arc(x, y, 3.2 * schaal, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.lineWidth = 1.4 * schaal;
+  ctx.strokeStyle = '#00205b';
+  ctx.stroke();
+  ctx.restore();
+}
+
+function zichtbareObsStations(bbox) {
+  if (!obsAan || !obsData || !obsData.stations) return [];
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const gekozenInBeeld = obsStationLijst().filter(st =>
+    geselecteerdeObsStations.has(st.naam)
+    && st.ta != null
+    && st.lon >= minLon && st.lon <= maxLon
+    && st.lat >= minLat && st.lat <= maxLat
+  );
+  if (obsFilterModus === 'all') return gekozenInBeeld;
+  const helder = gekozenInBeeld.filter(isHelderStation);
+  if (obsFilterModus === 'clear') return helder;
+  return helder.length ? helder : gekozenInBeeld;
+}
+
+function obsHeldereFallbackActief() {
+  if (!obsAan || obsFilterModus !== 'smart' || !obsData || !obsData.stations) return false;
+  const [minLon, minLat, maxLon, maxLat] = actieveBboxParts();
+  const gekozenInBeeld = obsStationLijst().filter(st =>
+    geselecteerdeObsStations.has(st.naam)
+    && st.ta != null
+    && st.lon >= minLon && st.lon <= maxLon
+    && st.lat >= minLat && st.lat <= maxLat
+  );
+  return gekozenInBeeld.length > 0 && gekozenInBeeld.every(st => !isHelderStation(st));
+}
+
+function tekenObservaties(ctx, rect, bbox, opties = {}) {
+  const stations = zichtbareObsStations(bbox);
+  if (!stations.length) return;
+  const exportModus = opties.export === true;
+  const gebiedBoost = isNederlandHdGebied() ? 1.12 : actiefGebiedLabel === 'Benelux' ? 1.09 : 1;
+  const schaal = (exportModus ? 1.1 : Math.max(0.9, Math.min(1.12, rect.w / 1650))) * gebiedBoost;
+  stations.forEach(st => {
+    const [x, y] = projecteer(st.lon, st.lat, rect, bbox);
+    tekenObsWindpijl(ctx, x, y, st.dd, st.ff, schaal);
+    tekenObsLabel(ctx, x, y, st, { export: exportModus, schaal });
+  });
+}
+
+function tekenCoordRingen(ctx, ringen, rect, bbox, stijl) {
+  if (!Array.isArray(ringen)) return;
+  ctx.save();
+  ctx.strokeStyle = stijl.stroke;
+  ctx.lineWidth = stijl.width;
+  ctx.globalAlpha = stijl.alpha ?? 1;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  if (stijl.shadow) {
+    ctx.shadowColor = stijl.shadow;
+    ctx.shadowBlur = stijl.shadowBlur || 2;
+  }
+  ctx.beginPath();
+  ringen.forEach(ring => tekenLijn(ctx, ring, rect, bbox));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function lijnStijl() {
+  const paletten = {
+    cyan: {
+      halo: 'rgba(0,18,46,0.62)',
+      hoofd: 'rgba(94,221,255,0.74)',
+      intern: 'rgba(190,242,255,0.30)'
+    },
+    white: {
+      halo: 'rgba(0,18,46,0.60)',
+      hoofd: 'rgba(255,255,255,0.78)',
+      intern: 'rgba(255,255,255,0.32)'
+    },
+    amber: {
+      halo: 'rgba(0,18,46,0.58)',
+      hoofd: 'rgba(255,207,86,0.78)',
+      intern: 'rgba(255,230,150,0.30)'
+    },
+    dark: {
+      halo: 'rgba(255,255,255,0.36)',
+      hoofd: 'rgba(0,20,45,0.82)',
+      intern: 'rgba(0,20,45,0.34)'
+    }
+  };
+  return paletten[lijnkleur] || paletten.cyan;
+}
+
+function tekenNederlandContour(ctx, rect, bbox) {
+  if (overlayGeladen && overlayData.nl) {
+    const dichtbij = actiefGebiedLabel === 'Benelux' || isNederlandHdGebied();
+    const basis = Math.max(1, rect.dpr || 1);
+    const stijl = lijnStijl();
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, {
+      stroke: stijl.halo,
+      width: (dichtbij ? 1.9 : 1.25) * basis,
+      alpha: dichtbij ? 0.72 : 0.50
+    });
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, {
+      stroke: stijl.hoofd,
+      width: (dichtbij ? 0.75 : 0.5) * basis,
+      shadow: 'rgba(0,0,0,0.42)',
+      shadowBlur: 0.55 * basis
+    });
+    return;
+  }
+  if (typeof NL_GRENS === 'undefined') return;
+  const basis = Math.max(1, rect.dpr || 1);
+  const dichtbij = actiefGebiedLabel === 'Benelux' || isNederlandHdGebied();
+  const halo = dichtbij ? 5.4 : 3.3;
+  const hoofd = dichtbij ? 2.5 : 1.45;
+  const rand = dichtbij ? 0.9 : 0.55;
+  const hoofdAlpha = dichtbij ? 0.94 : 0.72;
+  tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
+    stroke: dichtbij ? 'rgba(0,18,46,0.92)' : 'rgba(0,18,46,0.68)',
+    width: halo * basis,
+    alpha: dichtbij ? 1 : 0.82
+  });
+  tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
+    stroke: `rgba(0,216,255,${hoofdAlpha})`,
+    width: hoofd * basis,
+    shadow: 'rgba(0,0,0,0.55)',
+    shadowBlur: 1.2 * basis
+  });
+  tekenCoordRingen(ctx, NL_GRENS, rect, bbox, {
+    stroke: dichtbij ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.58)',
+    width: rand * basis,
+    alpha: dichtbij ? 0.95 : 0.72
+  });
+}
+
+function tekenKaartOverlay(ctx, rect, bbox) {
+  if (overlayGeladen) {
+    const stijl = lijnStijl();
+    tekenFeatureSet(ctx, overlayData.nl, rect, bbox, { stroke: stijl.intern, width: 0.38 * rect.dpr, shadow: 'rgba(0,0,0,0.28)', shadowBlur: 0.45 * rect.dpr });
+    tekenFeatureSet(ctx, overlayData.be, rect, bbox, { stroke: 'rgba(255,255,255,0.18)', width: 0.42 * rect.dpr, shadow: 'rgba(0,0,0,0.35)', shadowBlur: 0.55 * rect.dpr });
+    tekenFeatureSet(ctx, overlayData.rivieren, rect, bbox, { stroke: 'rgba(130,205,255,0.34)', width: 0.6 * rect.dpr });
+  }
+  tekenNederlandContour(ctx, rect, bbox);
+}
+
+function tekenMarker(ctx, rect, bbox, opties = {}) {
+  if (!markerPunt) return;
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  if (markerPunt.lon < minLon || markerPunt.lon > maxLon || markerPunt.lat < minLat || markerPunt.lat > maxLat) return;
+
+  const [x, y] = projecteer(markerPunt.lon, markerPunt.lat, rect, bbox);
+  const dpr = rect.dpr || 1;
+  const exportModus = opties.export === true;
+  const markerSchaal = exportModus ? 2.4 : 1;
+  const radius = 10 * dpr * markerSchaal;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.72)';
+  ctx.shadowBlur = 8 * dpr * markerSchaal;
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 4 * dpr * markerSchaal, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = markerPunt.kleur;
+  ctx.fill();
+  ctx.lineWidth = 2.4 * dpr * markerSchaal;
+  ctx.strokeStyle = 'rgba(0,32,91,0.95)';
+  ctx.stroke();
+
+  if (markerPunt.label) {
+    const fontPx = (exportModus ? 34 : 15) * dpr;
+    ctx.font = `bold ${fontPx}px Arial, sans-serif`;
+    const tekst = markerPunt.label;
+    const tekstW = ctx.measureText(tekst).width;
+    const labelX = x + (exportModus ? 34 : 15) * dpr;
+    const labelY = y - (exportModus ? 64 : 30) * dpr;
+    const padX = (exportModus ? 18 : 9) * dpr;
+    const labelH = (exportModus ? 52 : 27) * dpr;
+    ctx.shadowBlur = (exportModus ? 12 : 6) * dpr;
+    ctx.fillStyle = 'rgba(0,32,91,0.88)';
+    ctx.fillRect(labelX, labelY, tekstW + padX * 2, labelH);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(tekst, labelX + padX, labelY + (exportModus ? 37 : 19) * dpr);
+  }
+  ctx.restore();
+}
+
+function tekenZonSymbool(ctx, rect, bbox, opties = {}) {
+  if (!zonPunten.length) return;
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const dpr = rect.dpr || 1;
+  const exportModus = opties.export === true;
+  const schaal = (exportModus ? 2.15 : 1) * dpr;
+  const kern = 11 * schaal;
+  const binnen = 17 * schaal;
+  const buiten = 27 * schaal;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  zonPunten.forEach(punt => {
+    if (!punt || punt.lon < minLon || punt.lon > maxLon || punt.lat < minLat || punt.lat > maxLat) return;
+    const [x, y] = projecteer(punt.lon, punt.lat, rect, bbox);
+    ctx.shadowColor = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur = 8 * schaal;
+    ctx.strokeStyle = '#ffcf33';
+    ctx.lineWidth = 3.2 * schaal;
+    for (let i = 0; i < 12; i++) {
+      const hoek = i * Math.PI / 6;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(hoek) * binnen, y + Math.sin(hoek) * binnen);
+      ctx.lineTo(x + Math.cos(hoek) * buiten, y + Math.sin(hoek) * buiten);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, kern + 4 * schaal, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,32,91,0.76)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, kern, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(x - 4 * schaal, y - 4 * schaal, 2 * schaal, x, y, kern);
+    grad.addColorStop(0, '#fff7ad');
+    grad.addColorStop(0.55, '#ffcf33');
+    grad.addColorStop(1, '#f59e0b');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 1.8 * schaal;
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function tekenEenTrekrichtingPijl(ctx, rect, bbox, pijl, opties = {}) {
+  if (!pijl || !pijl.start || !pijl.eind) return;
+  const [sx, sy] = projecteer(pijl.start.lon, pijl.start.lat, rect, bbox);
+  const [ex, ey] = projecteer(pijl.eind.lon, pijl.eind.lat, rect, bbox);
+  const lengte = Math.hypot(ex - sx, ey - sy);
+  if (lengte < 12 * (rect.dpr || 1)) return;
+
+  const dpr = rect.dpr || 1;
+  const exportModus = opties.export === true;
+  const schaal = exportModus ? 1.75 : 1;
+  const lijn = (exportModus ? 7 : 4.5) * dpr * schaal;
+  const kop = Math.min(lengte * 0.28, (exportModus ? 38 : 24) * dpr * schaal);
+  const hoek = Math.atan2(ey - sy, ex - sx);
+  const rood = '#dc2626';
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 6 * dpr * schaal;
+
+  // Strakke rechte rode lijn
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  // Stop lijn vlak voor pijlpunt zodat dik niet doorblinkt
+  const stopX = ex - Math.cos(hoek) * kop * 0.55;
+  const stopY = ey - Math.sin(hoek) * kop * 0.55;
+  ctx.lineTo(stopX, stopY);
+  ctx.lineWidth = lijn;
+  ctx.strokeStyle = rood;
+  ctx.stroke();
+
+  // Pijlpunt — gevuld rood, scherp
+  ctx.shadowBlur = 4 * dpr * schaal;
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - kop * Math.cos(hoek - 0.42), ey - kop * Math.sin(hoek - 0.42));
+  ctx.lineTo(ex - kop * Math.cos(hoek + 0.42), ey - kop * Math.sin(hoek + 0.42));
+  ctx.closePath();
+  ctx.fillStyle = rood;
+  ctx.fill();
+  ctx.restore();
+}
+
+function tekenTrekrichtingPijl(ctx, rect, bbox, opties = {}) {
+  trekPijlen.forEach(pijl => tekenEenTrekrichtingPijl(ctx, rect, bbox, pijl, opties));
+  if (trekPijl) tekenEenTrekrichtingPijl(ctx, rect, bbox, trekPijl, opties);
+}
+
+const RADAR_DBZ_LEVELS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70];
+const RADAR_DBZ_COLORS = [
+  [160, 200, 220], [120, 210, 140], [40, 180, 40], [0, 140, 0],
+  [255, 255, 0], [255, 200, 0], [255, 150, 0], [255, 80, 0],
+  [255, 0, 0], [200, 0, 0], [160, 0, 80], [200, 0, 200],
+  [255, 100, 255], [255, 255, 255]
+];
+const RADAR_DBZ_ALPHA = [145, 175, 202, 218, 232, 240, 246, 250, 252, 252, 252, 252, 252, 255];
+
+function radarDbzKleur(dbz) {
+  if (dbz < RADAR_DBZ_LEVELS[0]) return null;
+  if (dbz >= RADAR_DBZ_LEVELS[RADAR_DBZ_LEVELS.length - 1]) {
+    const c = RADAR_DBZ_COLORS[RADAR_DBZ_COLORS.length - 1];
+    return [c[0], c[1], c[2], RADAR_DBZ_ALPHA[RADAR_DBZ_ALPHA.length - 1]];
+  }
+  for (let i = RADAR_DBZ_LEVELS.length - 2; i >= 0; i--) {
+    if (dbz >= RADAR_DBZ_LEVELS[i]) {
+      const t = (dbz - RADAR_DBZ_LEVELS[i]) / (RADAR_DBZ_LEVELS[i + 1] - RADAR_DBZ_LEVELS[i]);
+      const c0 = RADAR_DBZ_COLORS[i];
+      const c1 = RADAR_DBZ_COLORS[i + 1];
+      const a0 = RADAR_DBZ_ALPHA[i];
+      const a1 = RADAR_DBZ_ALPHA[i + 1];
+      return [
+        Math.round(c0[0] + t * (c1[0] - c0[0])),
+        Math.round(c0[1] + t * (c1[1] - c0[1])),
+        Math.round(c0[2] + t * (c1[2] - c0[2])),
+        Math.round(a0 + t * (a1 - a0))
+      ];
+    }
+  }
+  return null;
+}
+
+async function fetchArrayBufferMetTimeout(url, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.arrayBuffer();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function laadRadarData(force = false) {
+  if (radarLaden) return;
+  if (radarData && radarMeta && !force) return;
+  radarLaden = true;
+  radarLaatsteFout = '';
+  updateRadarKnop();
+  try {
+    let meta, buf;
+    try {
+      [meta, buf] = await Promise.all([
+        fetchJsonMetTimeout(`${RADAR_META_URL}?t=${Date.now()}`, 8000),
+        fetchArrayBufferMetTimeout(`${RADAR_BIN_URL}?t=${Date.now()}`, 12000)
+      ]);
+    } catch (liveErr) {
+      [meta, buf] = await Promise.all([
+        fetchJsonMetTimeout(`radar_meta.json?t=${Date.now()}`, 5000),
+        fetchArrayBufferMetTimeout(`radar_data.bin?t=${Date.now()}`, 9000)
+      ]);
+    }
+    const view = new DataView(buf);
+    const nLat = view.getUint16(0, true);
+    const nLon = view.getUint16(2, true);
+    const nFrames = view.getUint16(4, true);
+    const data = new Uint8Array(buf, 16);
+    if (!meta || !meta.grid || !nLat || !nLon || !nFrames || data.length < nLat * nLon * nFrames) {
+      throw new Error('radarbestand onvolledig');
+    }
+    radarMeta = meta;
+    radarData = data;
+    radarDims = { nLat, nLon, nFrames };
+    radarFrameCache.clear();
+    radarOffscreen = document.createElement('canvas');
+    radarOffscreen.width = nLon;
+    radarOffscreen.height = nLat;
+    radarOffCtx = radarOffscreen.getContext('2d');
+  } catch (e) {
+    radarLaatsteFout = e && e.message ? e.message : 'radar laden mislukt';
+    throw e;
+  } finally {
+    radarLaden = false;
+    updateRadarKnop();
+  }
+}
+
+function radarFrameIndexVoorTijd(tijd) {
+  if (!radarMeta || !Array.isArray(radarMeta.tijden) || !radarMeta.tijden.length) return -1;
+  const doel = tijd.getTime();
+  let beste = -1;
+  let besteVerschil = Infinity;
+  radarMeta.tijden.forEach((iso, idx) => {
+    const ts = new Date(iso).getTime();
+    if (!Number.isFinite(ts)) return;
+    const verschil = Math.abs(ts - doel);
+    if (verschil < besteVerschil) {
+      besteVerschil = verschil;
+      beste = idx;
+    }
+  });
+  return beste;
+}
+
+function radarFrameCanvas(frameIdx) {
+  if (!radarData || !radarOffCtx || frameIdx < 0 || frameIdx >= radarDims.nFrames) return null;
+  const cached = radarFrameCache.get(frameIdx);
+  if (cached) return cached;
+  const { nLat, nLon } = radarDims;
+  const imgData = radarOffCtx.createImageData(nLon, nLat);
+  const pixels = imgData.data;
+  const offset = frameIdx * nLat * nLon;
+  for (let i = 0; i < nLat * nLon; i++) {
+    const pv = radarData[offset + i];
+    if (pv === 0 || pv === 255) continue;
+    const kleur = radarDbzKleur(0.5 * pv - 32);
+    if (!kleur) continue;
+    const p = i * 4;
+    pixels[p] = kleur[0];
+    pixels[p + 1] = kleur[1];
+    pixels[p + 2] = kleur[2];
+    pixels[p + 3] = kleur[3];
+  }
+  radarOffCtx.putImageData(imgData, 0, 0);
+  const frameCanvas = document.createElement('canvas');
+  frameCanvas.width = nLon;
+  frameCanvas.height = nLat;
+  frameCanvas.getContext('2d').drawImage(radarOffscreen, 0, 0);
+  radarFrameCache.set(frameIdx, frameCanvas);
+  if (radarFrameCache.size > 18) radarFrameCache.delete(radarFrameCache.keys().next().value);
+  return frameCanvas;
+}
+
+function tekenRadarLegenda(ctx, rect, tekst) {
+  const dpr = rect.dpr || 1;
+  const x = rect.x + 12 * dpr;
+  const y = rect.y + rect.h - 38 * dpr;
+  const w = 238 * dpr;
+  const h = 25 * dpr;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,20,45,0.70)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.24)';
+  ctx.lineWidth = 1 * dpr;
+  afgerondeRechthoek(ctx, x, y, w, h, 7 * dpr);
+  ctx.fill();
+  ctx.stroke();
+  ctx.font = `700 ${10.5 * dpr}px Arial, sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#e5f7ff';
+  ctx.fillText(tekst, x + 10 * dpr, y + h / 2);
+  const sx = x + 128 * dpr;
+  const sy = y + 8 * dpr;
+  const sw = 90 * dpr;
+  const sh = 9 * dpr;
+  const grad = ctx.createLinearGradient(sx, sy, sx + sw, sy);
+  ['#78d28c', '#28b428', '#ffff00', '#ff9600', '#ff0000', '#c800c8'].forEach((kleur, i, arr) => {
+    grad.addColorStop(i / (arr.length - 1), kleur);
+  });
+  ctx.fillStyle = grad;
+  ctx.fillRect(sx, sy, sw, sh);
+  ctx.strokeStyle = 'rgba(255,255,255,0.42)';
+  ctx.strokeRect(sx, sy, sw, sh);
+  ctx.restore();
+}
+
+function tekenRadarOverlay(ctx, rect, bbox, opties = {}) {
+  if (!radarAan || !radarMeta || !radarData) return;
+  const stappen = tijdstappen();
+  const stap = Number.isInteger(opties.tijdstap) ? opties.tijdstap : actieveTijdstap;
+  const t = stappen[stap] || stappen[LAATSTE_TIJDSTAP] || new Date();
+  const frameIdx = radarFrameIndexVoorTijd(t);
+  const frameCanvas = radarFrameCanvas(frameIdx);
+  if (!frameCanvas || !radarMeta.grid) return;
+
+  const g = radarMeta.grid;
+  const linksBoven = projecteer(g.lon_min, g.lat_max, rect, bbox);
+  const rechtsOnder = projecteer(g.lon_max, g.lat_min, rect, bbox);
+  const x = linksBoven[0];
+  const y = linksBoven[1];
+  const w = rechtsOnder[0] - linksBoven[0];
+  const h = rechtsOnder[1] - linksBoven[1];
+  if (!Number.isFinite(x + y + w + h) || w <= 0 || h <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = opties.export ? 0.76 : 0.68;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(frameCanvas, x, y, w, h);
+  ctx.restore();
+
+  if (!opties.export) {
+    const tijdTekst = radarMeta.tijden_tekst && radarMeta.tijden_tekst[frameIdx] ? radarMeta.tijden_tekst[frameIdx] : 'actueel';
+    tekenRadarLegenda(ctx, rect, `Radar ${tijdTekst}`);
+  }
+}
+
+function radarStatusTekst() {
+  if (!radarAan) return '';
+  if (radarLaden) return ' · radar laden...';
+  if (radarLaatsteFout) return ' · radar niet geladen';
+  if (radarMeta && radarMeta.bijgewerkt) return ` · radar ${radarMeta.bijgewerkt}`;
+  return ' · radar aan';
+}
+
+function updateRadarKnop() {
+  const btn = document.getElementById('btn-radar-toggle');
+  if (!btn) return;
+  btn.classList.toggle('actief', radarAan);
+  btn.textContent = radarAan ? (radarLaden ? 'Radar laden…' : 'Radar aan') : 'Radar uit';
+}
+
+function tekenOverlay() {
+  const rect = beeldRect();
+  const ctx = rect.canvas.getContext('2d');
+  ctx.clearRect(0, 0, rect.canvas.width, rect.canvas.height);
+  const bbox = actieveBboxParts();
+  tekenKaartOverlay(ctx, rect, bbox);
+  tekenRadarOverlay(ctx, rect, bbox);
+  tekenObservaties(ctx, rect, bbox);
+  tekenMarker(ctx, rect, bbox);
+  tekenZonSymbool(ctx, rect, bbox);
+  tekenTrekrichtingPijl(ctx, rect, bbox);
+}
+
+function frameCacheKey(tijdstap) {
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const product = productVoorLayer(actieveLayer, t);
+  return [product.layer, activeCrs, activeBbox, activeW, activeH, isoTijd(t)].join('|');
+}
+
+function timelapseStartStap() {
+  return Math.max(0, LAATSTE_TIJDSTAP - TIMELAPSE_AANTAL + 1);
+}
+
+function preloadFrame(tijdstap) {
+  const key = frameCacheKey(tijdstap);
+  const cached = frameCache.get(key);
+  if (cached) return cached.promise;
+
+  const url = wmsUrl(actieveLayer, activeBbox, activeW, activeH, tijdstap);
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.decoding = 'async';
+  if (tijdstap === actieveTijdstap) img.fetchPriority = 'high';
+  const entry = { img, url, failed: false };
+  entry.promise = new Promise((resolve, reject) => {
+    img.onload = () => {
+      if (img.naturalWidth === 0) {
+        entry.failed = true;
+        frameCache.delete(key);
+        reject(new Error('leeg beeld'));
+        return;
+      }
+      resolve(img);
+    };
+    img.onerror = () => {
+      entry.failed = true;
+      frameCache.delete(key);
+      reject(new Error('laadfout'));
+    };
+  });
+  frameCache.set(key, entry);
+  if (frameCache.size > 60) frameCache.delete(frameCache.keys().next().value);
+  img.src = url;
+  return entry.promise;
+}
+
+async function preloadTimelapseFrames(versie) {
+  const start = timelapseStartStap();
+  const stappen = [];
+  for (let stap = start; stap <= LAATSTE_TIJDSTAP; stap++) stappen.push(stap);
+  const resultaten = await Promise.allSettled(stappen.map(stap => preloadFrame(stap)));
+  if (versie !== selectieVersie) return { ok: false, geldig: [] };
+  const geldig = stappen.filter((_, i) => resultaten[i].status === 'fulfilled');
+  return { ok: true, geldig };
+}
+
+async function laadSatelliet(tijdstap) {
+  const token = ++satLoadToken;
+  const img = document.getElementById('satelliet-img');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  const headerProduct = document.getElementById('sat-header-product');
+  const headerTijd = document.getElementById('sat-header-tijd');
+  const headerGebied = document.getElementById('sat-header-gebied');
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const isNu = tijdstap === LAATSTE_TIJDSTAP;
+  const product = productVoorTijd(t);
+
+  headerProduct.textContent = 'Satellietfoto';
+  headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
+  headerGebied.textContent = actiefGebiedLabel;
+  img.style.filter = actiefSatFilterCss();
+
+  dot.style.display = 'block';
+  img.classList.add('laden');
+  info.textContent = 'Bron: EUMETSAT EUMETView / MTG · © Ed Aldus / Weerlab · laden…';
+
+  const eersteStap = Math.max(0, Math.min(LAATSTE_TIJDSTAP, tijdstap));
+  const laatstePoging = Math.max(0, eersteStap - 8);
+  let laatsteFout = '';
+
+  for (let stap = eersteStap; stap >= laatstePoging; stap--) {
+    const pogingTijd = stappen[stap];
+    const pogingProduct = productVoorLayer(actieveLayer, pogingTijd);
+    try {
+      await preloadFrame(stap);
+      if (token !== satLoadToken) return;
+      const cached = frameCache.get(frameCacheKey(stap));
+      const url = cached && cached.url ? cached.url : wmsUrl(actieveLayer, activeBbox, activeW, activeH, stap);
+      laatsteUrl = url;
+      img.src = url;
+      img.classList.remove('laden');
+      dot.style.display = 'none';
+      headerTijd.textContent = formatTijd(pogingTijd) + (stap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : '');
+      headerGebied.textContent = actiefGebiedLabel;
+      info.textContent = stap === tijdstap
+        ? 'Bron: EUMETSAT EUMETView / Meteosat Third Generation · © Ed Aldus / Weerlab · tijden in NL-tijd'
+        : `Nieuwste beeld nog niet beschikbaar · toont ${formatTijd(pogingTijd)} · Bron: EUMETSAT EUMETView / MTG`;
+      requestAnimationFrame(tekenOverlay);
+      return;
+    } catch (e) {
+      laatsteFout = e && e.message ? e.message : 'laadfout';
+      if (token === satLoadToken) {
+        info.textContent = `${productLabel(pogingProduct)} · probeert ouder beeld…`;
+      }
+    }
+  }
+
+  if (token !== satLoadToken) return;
+  img.classList.remove('laden');
+  dot.style.display = 'none';
+  info.textContent = `${productLabel(product)} · laden mislukt (${laatsteFout || 'geen beeld beschikbaar'})`;
+}
+
+function toonTimelapseFrame(frame) {
+  const img = document.getElementById('satelliet-img');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  const headerProduct = document.getElementById('sat-header-product');
+  const headerTijd = document.getElementById('sat-header-tijd');
+  const headerGebied = document.getElementById('sat-header-gebied');
+  const stappen = tijdstappen();
+  const t = stappen[frame.stap];
+  const product = productVoorLayer(actieveLayer, t);
+  const isNu = frame.stap === LAATSTE_TIJDSTAP;
+
+  headerProduct.textContent = 'Satellietfoto';
+  headerTijd.textContent = formatTijd(t) + (isNu ? ' · laatste beeld' : '');
+  headerGebied.textContent = actiefGebiedLabel;
+  laatsteUrl = frame.url;
+  img.classList.remove('laden');
+  dot.style.display = 'none';
+  img.src = frame.url;
+  requestAnimationFrame(tekenOverlay);
+  info.textContent = 'Timelapse speelt af · Bron: EUMETSAT EUMETView / MTG · tijden in NL-tijd';
+}
+
+function updateTijdDisplay(tijdstap) {
+  const stappen = tijdstappen();
+  const t = stappen[tijdstap];
+  const el = document.getElementById('tijd-display');
+  el.textContent = tijdstap === LAATSTE_TIJDSTAP ? 'laatste (' + formatTijd(t) + ')' : formatTijd(t);
+}
+
+// Productkeuze
+document.getElementById('product-select').addEventListener('change', e => {
+  const opt = e.target.selectedOptions[0];
+  actieveLayer = e.target.value;
+  actieveLabel = opt && opt.dataset.label ? opt.dataset.label : 'Satellietbeeld';
+  selectieVersie++;
+  frameCache.clear();
+  laadSatelliet(actieveTijdstap);
+});
+
+// Gebied knoppen
+document.querySelectorAll('.btn.gebied').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn.gebied').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    activeBbox = btn.dataset.bbox;
+    activeCrs = btn.dataset.crs || 'CRS:84';
+    activeW = parseInt(btn.dataset.w);
+    activeH = parseInt(btn.dataset.h);
+    activeExportW = parseInt(btn.dataset.exportW || btn.dataset.w);
+    activeExportH = parseInt(btn.dataset.exportH || btn.dataset.h);
+    actiefGebiedLabel = btn.dataset.label;
+    pasKaartFormaatAan();
+    selectieVersie++;
+    frameCache.clear();
+    laadSatelliet(actieveTijdstap);
+    requestAnimationFrame(tekenOverlay);
+  });
+});
+
+document.getElementById('lijnkleur').addEventListener('change', e => {
+  lijnkleur = e.target.value;
+  tekenOverlay();
+});
+
+document.getElementById('btn-radar-toggle').addEventListener('click', async () => {
+  radarAan = !radarAan;
+  updateRadarKnop();
+  const info = document.getElementById('info-balk');
+  if (!radarAan) {
+    if (info) info.textContent = 'Radarlaag uit · Bron: EUMETSAT EUMETView / MTG';
+    tekenOverlay();
+    updateObsStatus();
+    return;
+  }
+  if (info) info.textContent = 'Radarlaag laden · KNMI radar + pySTEPS-nowcast';
+  try {
+    await laadRadarData(false);
+    if (info) info.textContent = 'Radarlaag aan · KNMI gauge-gecorrigeerde radar + pySTEPS-nowcast · tijden gesynchroniseerd';
+  } catch (e) {
+    radarAan = false;
+    if (info) info.textContent = 'Radarlaag laden mislukt · satellietbeeld blijft beschikbaar';
+  }
+  updateRadarKnop();
+  tekenOverlay();
+  updateObsStatus();
+});
+
+async function zorgRadarKlaarVoorExport() {
+  if (!radarAan) return;
+  try { await laadRadarData(false); }
+  catch (e) { console.warn('Radarlaag niet beschikbaar voor export', e); }
+}
+
+function actieveMarkerKleur() {
+  return document.getElementById('marker-color').value;
+}
+
+function plaatsMarker(lon, lat, label) {
+  markerPunt = { lon, lat, label, kleur: actieveMarkerKleur() };
+  document.getElementById('marker-zoek').value = label || '';
+  const info = document.getElementById('info-balk');
+  if (info) info.textContent = `${label || 'Plaatslabel'} geplaatst · Bron: EUMETSAT EUMETView / MTG`;
+  tekenOverlay();
+}
+
+function normaliseerZoektekst(tekst) {
+  return tekst.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function alleMarkerPlaatsen() {
+  const gezien = new Set();
+  return [...Object.values(markerLocaties), ...markerPlaatsen].filter(p => {
+    const key = normaliseerZoektekst(p.label);
+    if (gezien.has(key)) return false;
+    gezien.add(key);
+    return true;
+  });
+}
+
+function lokaleMarkerMatches(query) {
+  const q = normaliseerZoektekst(query);
+  if (!q) return [];
+  return alleMarkerPlaatsen()
+    .filter(p => normaliseerZoektekst(p.label).includes(q))
+    .sort((a, b) => {
+      const an = normaliseerZoektekst(a.label);
+      const bn = normaliseerZoektekst(b.label);
+      const as = an.startsWith(q) ? 0 : 1;
+      const bs = bn.startsWith(q) ? 0 : 1;
+      return as - bs || a.label.localeCompare(b.label, 'nl');
+    })
+    .slice(0, 6)
+    .map(p => ({ label: p.label, lat: p.lat, lon: p.lon, sub: 'Bekende locatie' }));
+}
+
+function parseMarkerCoordinaten(tekst) {
+  const matches = [...tekst.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m => Number(m[0].replace(',', '.')));
+  if (matches.length < 2 || !matches.every(Number.isFinite)) return null;
+  let lat = matches[0];
+  let lon = matches[1];
+  if (Math.abs(lat) <= 20 && Math.abs(lon) > 20) [lat, lon] = [lon, lat];
+  if (lat < 45 || lat > 57 || lon < -8 || lon > 13) return null;
+  const labelTekst = tekst.replace(/-?\d+(?:[.,]\d+)?/g, '').replace(/[(),;]/g, ' ').replace(/\s+/g, ' ').trim();
+  return { label: labelTekst || 'Eigen plaatslabel', lat, lon, sub: 'Eigen coordinaten' };
+}
+
+function escapeHtml(tekst) {
+  return String(tekst).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function obsStationLabel(naam) {
+  return naam === 'Twenthe' ? 'Enschede' : naam;
+}
+
+function obsStatusTekst() {
+  const geselecteerd = geselecteerdeObsStations.size;
+  const zichtbaar = zichtbareObsStations(actieveBboxParts()).length;
+  const filter = obsHeldereFallbackActief()
+    ? ' · geen heldere stations, toont alle gekozen'
+    : obsFilterModus === 'clear' ? ' · alleen heldere stations'
+    : obsFilterModus === 'smart' ? ' · slim filter'
+    : ' · alle stations';
+  const tijd = obsBijgewerkt ? ` · ${obsBijgewerkt}` : '';
+  const bron = obsBron ? ` · ${obsBron}` : '';
+  const fout = obsLaatsteFout ? ` · laatste refresh haperde, oude data blijft zichtbaar` : '';
+  return `${zichtbaar} zichtbaar van ${geselecteerd} geselecteerd${filter}${tijd}${bron}${fout}`;
+}
+
+function updateObsStatus() {
+  const panelStatus = document.getElementById('obs-status');
+  const autoStatus = document.getElementById('auto-status');
+  if (panelStatus) panelStatus.textContent = obsData ? obsStatusTekst() : 'Nog geen KNMI-waarnemingen geladen.';
+  if (autoStatus) {
+    const delen = [];
+    if (autoRefreshTimer) delen.push('● Auto-refresh elke 10 min');
+    if (obsAan) delen.push(`Actuele data ${obsData ? obsStatusTekst() : 'laden...'}`);
+    if (radarAan) delen.push(radarStatusTekst().replace(/^ · /, ''));
+    autoStatus.textContent = delen.join(' · ');
+  }
+}
+
+function bouwObsPanel() {
+  const lijst = document.getElementById('obs-list');
+  if (!lijst) return;
+  const stations = obsStationLijst();
+  if (!stations.length) {
+    lijst.innerHTML = '<div style="grid-column:1/-1;padding:10px;color:#6a7f94;font-size:12px">Zet actuele data aan om de KNMI-stations te laden.</div>';
+    updateObsStatus();
+    return;
+  }
+  lijst.innerHTML = stations.map(st => {
+    const checked = geselecteerdeObsStations.has(st.naam) ? ' checked' : '';
+    const helder = isHelderStation(st) ? ' · helder' : st.n == null ? '' : ` · ${st.n.toFixed(0)} oktas`;
+    const label = obsStationLabel(st.naam);
+    return `<label class="obs-station" title="${escapeHtml(st.naam + helder)}"><input type="checkbox" value="${escapeHtml(st.naam)}"${checked}>${escapeHtml(label)}</label>`;
+  }).join('');
+  updateObsStatus();
+}
+
+async function fetchJsonMetTimeout(url, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function controleerObsVersheid(data, bron) {
+  if (!data || !data.stations) throw new Error(`${bron} bevat geen stations`);
+  if (data.bijgewerkt) {
+    const ts = new Date(data.bijgewerkt).getTime();
+    const maxLeeftijd = 2 * 60 * 60 * 1000;
+    if (Number.isFinite(ts) && Date.now() - ts > maxLeeftijd) {
+      throw new Error(`${bron} is verouderd (${data.bijgewerkt})`);
+    }
+  }
+  return data;
+}
+
+async function laadObservaties(force = false) {
+  if (obsLaden) return obsData;
+  if (obsData && !force) return obsData;
+  obsLaden = true;
+  updateObsStatus();
+  try {
+    obsData = controleerObsVersheid(await fetchJsonMetTimeout(`${ACTUEEL_URL}?t=${Date.now()}`, 8000), 'live Weerlab-data');
+    obsBron = 'live Weerlab-data';
+    obsLaatsteFout = '';
+  } catch (e) {
+    try {
+      obsData = controleerObsVersheid(await fetchJsonMetTimeout(`actueel.json?t=${Date.now()}`, 5000), 'actueel.json');
+      obsBron = 'actueel.json';
+      obsLaatsteFout = '';
+    } catch (err) {
+      obsLaatsteFout = err && err.message ? err.message : 'laadfout';
+      if (!obsData) throw err;
+    }
+  } finally {
+    obsLaden = false;
+  }
+  obsBijgewerkt = obsData && obsData.bijgewerkt ? obsData.bijgewerkt : '';
+  bouwObsPanel();
+  tekenOverlay();
+  updateObsStatus();
+  return obsData;
+}
+
+function startObsTimer() {
+  if (obsTimer) return;
+  obsTimer = setInterval(() => {
+    if (obsAan) laadObservaties(true).catch(() => updateObsStatus());
+  }, 10 * 60 * 1000);
+}
+
+function stopObsTimer() {
+  if (!obsTimer) return;
+  clearInterval(obsTimer);
+  obsTimer = null;
+}
+
+function stelObsSelectieIn(namen) {
+  geselecteerdeObsStations = new Set(namen);
+  bewaarObsSelectie();
+  bouwObsPanel();
+  tekenOverlay();
+}
+
+function toonMarkerSuggesties(resultaten) {
+  const box = document.getElementById('marker-suggest');
+  markerZoekResultaten = resultaten;
+  markerSuggestIndex = resultaten.length ? Math.max(0, Math.min(markerSuggestIndex, resultaten.length - 1)) : 0;
+  if (!resultaten.length) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = resultaten.map((r, i) =>
+    `<div class="${i === markerSuggestIndex ? 'sel' : ''}" data-idx="${i}"><div class="titel">${escapeHtml(r.label)}</div><div class="sub">${escapeHtml(r.sub || `${r.lat.toFixed(3)}°N, ${r.lon.toFixed(3)}°E`)}</div></div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function kiesMarkerResultaat(idx) {
+  const resultaat = markerZoekResultaten[idx];
+  if (!resultaat) return;
+  document.getElementById('marker-suggest').style.display = 'none';
+  document.getElementById('marker-preset').value = '';
+  plaatsMarker(resultaat.lon, resultaat.lat, resultaat.label);
+  zetPlaatsPuntModus(false);
+}
+
+async function zoekMarkerPlaats(direct = false) {
+  const input = document.getElementById('marker-zoek');
+  const q = input.value.trim();
+  if (q.length < 2) {
+    toonMarkerSuggesties([]);
+    return;
+  }
+
+  const lokaal = lokaleMarkerMatches(q);
+  const coord = parseMarkerCoordinaten(q);
+  const startResultaten = coord ? [coord, ...lokaal] : lokaal;
+  toonMarkerSuggesties(startResultaten);
+  if (direct && startResultaten.length) {
+    kiesMarkerResultaat(0);
+    return;
+  }
+
+  if (markerZoekCtrl) markerZoekCtrl.abort();
+  markerZoekCtrl = new AbortController();
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&accept-language=nl&countrycodes=nl,be,lu,de,fr,gb&addressdetails=1`;
+    const r = await fetch(url, { headers: { 'Accept-Language': 'nl' }, signal: markerZoekCtrl.signal });
+    if (!r.ok) throw new Error('zoekfout');
+    const extern = (await r.json()).map(item => {
+      const delen = item.display_name.split(',').map(s => s.trim());
+      return {
+        label: delen[0],
+        lat: parseFloat(item.lat),
+        lon: parseFloat(item.lon),
+        sub: delen.slice(1, 4).join(', ')
+      };
+    }).filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+    const basis = coord ? [coord, ...lokaal] : lokaal;
+    const gecombineerd = [...basis, ...extern.filter(ex => !basis.some(lo => normaliseerZoektekst(lo.label) === normaliseerZoektekst(ex.label)))].slice(0, 8);
+    toonMarkerSuggesties(gecombineerd);
+    if (direct && gecombineerd.length) kiesMarkerResultaat(0);
+  } catch (e) {
+    if (e.name !== 'AbortError' && direct && !startResultaten.length) {
+      const info = document.getElementById('info-balk');
+      info.textContent = 'Plaats niet gevonden. Gebruik eventueel coordinaten of Plaats op kaart.';
+    }
+  }
+}
+
+function zetPlaatsPuntModus(actief) {
+  plaatsPuntModus = actief;
+  if (actief) zetPijlModus(false);
+  if (actief) zetZonPuntModus(false);
+  const btn = document.getElementById('btn-marker-click');
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const input = document.getElementById('marker-zoek');
+  const info = document.getElementById('info-balk');
+  btn.classList.toggle('actief', actief);
+  btn.textContent = actief ? 'Klik nu op kaart' : 'Plaats op kaart';
+  vlak.classList.toggle('plaats-punt', actief);
+  if (actief && info) {
+    const naam = input.value.trim();
+    info.textContent = naam
+      ? `Klik op de satellietfoto om "${naam}" daar te plaatsen`
+      : 'Klik op de satellietfoto om zelf een plaatslabel te plaatsen';
+  }
+}
+
+function zetZonPuntModus(actief) {
+  zonPuntModus = actief;
+  if (actief) {
+    zetPijlModus(false);
+    plaatsPuntModus = false;
+  }
+  const btn = document.getElementById('btn-sun-place');
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const markerBtn = document.getElementById('btn-marker-click');
+  const info = document.getElementById('info-balk');
+  btn.classList.toggle('actief', actief);
+  btn.textContent = actief ? 'Klaar zon' : 'Zon plaatsen';
+  vlak.classList.toggle('plaats-punt', actief || plaatsPuntModus);
+  if (markerBtn && actief) {
+    markerBtn.classList.remove('actief');
+    markerBtn.textContent = 'Plaats op kaart';
+  }
+  if (actief && info) info.textContent = 'Klik op de satellietfoto om zonnetjes te plaatsen; klik daarna op Klaar zon.';
+}
+
+function zetPijlModus(actief) {
+  pijlModus = actief;
+  pijlTekent = false;
+  const btn = document.getElementById('btn-arrow-draw');
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const info = document.getElementById('info-balk');
+  if (actief) {
+    plaatsPuntModus = false;
+    zonPuntModus = false;
+  }
+  btn.classList.toggle('actief', actief);
+  btn.textContent = actief ? 'Klaar pijlen' : 'Pijl tekenen';
+  vlak.classList.toggle('teken-pijl', actief);
+  vlak.classList.toggle('plaats-punt', plaatsPuntModus);
+  const markerBtn = document.getElementById('btn-marker-click');
+  if (markerBtn && actief) {
+    markerBtn.classList.remove('actief');
+    markerBtn.textContent = 'Plaats op kaart';
+  }
+  const sunBtn = document.getElementById('btn-sun-place');
+  if (sunBtn && actief) {
+    sunBtn.classList.remove('actief');
+    sunBtn.textContent = 'Zon plaatsen';
+  }
+  if (actief && info) info.textContent = 'Sleep op de satellietfoto om een pijl te tekenen; herhaal voor extra pijlen.';
+}
+
+function schermNaarLonLat(clientX, clientY) {
+  const vlak = document.querySelector('.sat-beeldvlak');
+  const vlakRect = vlak.getBoundingClientRect();
+  const rect = beeldRect();
+  const dpr = window.devicePixelRatio || 1;
+  const x = (clientX - vlakRect.left) * dpr;
+  const y = (clientY - vlakRect.top) * dpr;
+  if (x < rect.x || x > rect.x + rect.w || y < rect.y || y > rect.y + rect.h) return null;
+  const [minLon, minLat, maxLon, maxLat] = actieveBboxParts();
+  if (activeCrs === 'EPSG:3857') {
+    const [minX, minY, maxX, maxY] = bboxNaarProjectie([minLon, minLat, maxLon, maxLat], activeCrs);
+    const mercX = minX + (x - rect.x) / rect.w * (maxX - minX);
+    const mercY = maxY - (y - rect.y) / rect.h * (maxY - minY);
+    const [lon, lat] = webMercatorNaarLonLat(mercX, mercY);
+    return { lon, lat };
+  }
+  return {
+    lon: minLon + (x - rect.x) / rect.w * (maxLon - minLon),
+    lat: maxLat - (y - rect.y) / rect.h * (maxLat - minLat)
+  };
+}
+
+function startPijlTekenen(e) {
+  if (!pijlModus) return;
+  const coords = schermNaarLonLat(e.clientX, e.clientY);
+  if (!coords) return;
+  e.preventDefault();
+  pijlTekent = true;
+  trekPijl = { start: coords, eind: coords };
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  tekenOverlay();
+}
+
+function beweegPijl(e) {
+  if (!pijlModus || !pijlTekent || !trekPijl) return;
+  const coords = schermNaarLonLat(e.clientX, e.clientY);
+  if (!coords) return;
+  trekPijl.eind = coords;
+  tekenOverlay();
+}
+
+function stopPijlTekenen(e) {
+  if (!pijlTekent) return;
+  pijlTekent = false;
+  e.currentTarget.releasePointerCapture?.(e.pointerId);
+  if (trekPijl) {
+    const rect = beeldRect();
+    const bbox = actieveBboxParts();
+    const [sx, sy] = projecteer(trekPijl.start.lon, trekPijl.start.lat, rect, bbox);
+    const [ex, ey] = projecteer(trekPijl.eind.lon, trekPijl.eind.lat, rect, bbox);
+    if (Math.hypot(ex - sx, ey - sy) >= 18 * (rect.dpr || 1)) trekPijlen.push(trekPijl);
+    trekPijl = null;
+  }
+  tekenOverlay();
+}
+
+document.getElementById('marker-preset').addEventListener('change', e => {
+  const locatie = markerLocaties[e.target.value];
+  if (!locatie) return;
+  plaatsMarker(locatie.lon, locatie.lat, locatie.label);
+  zetPlaatsPuntModus(false);
+});
+
+document.getElementById('marker-color').addEventListener('change', e => {
+  if (!markerPunt) return;
+  markerPunt.kleur = e.target.value;
+  tekenOverlay();
+});
+
+document.getElementById('marker-zoek').addEventListener('input', () => {
+  clearTimeout(markerZoekTimer);
+  markerZoekTimer = setTimeout(() => zoekMarkerPlaats(false), 250);
+});
+
+document.getElementById('marker-zoek').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    zoekMarkerPlaats(true);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    markerSuggestIndex = Math.min(markerSuggestIndex + 1, Math.max(0, markerZoekResultaten.length - 1));
+    toonMarkerSuggesties(markerZoekResultaten);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    markerSuggestIndex = Math.max(markerSuggestIndex - 1, 0);
+    toonMarkerSuggesties(markerZoekResultaten);
+  } else if (e.key === 'Escape') {
+    document.getElementById('marker-suggest').style.display = 'none';
+  }
+});
+
+document.getElementById('btn-marker-search').addEventListener('click', () => zoekMarkerPlaats(true));
+
+document.getElementById('marker-suggest').addEventListener('mousedown', e => {
+  const item = e.target.closest('[data-idx]');
+  if (!item) return;
+  e.preventDefault();
+  kiesMarkerResultaat(parseInt(item.dataset.idx, 10));
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.marker-zoekwrap')) document.getElementById('marker-suggest').style.display = 'none';
+});
+
+document.getElementById('btn-marker-click').addEventListener('click', () => {
+  zetPlaatsPuntModus(!plaatsPuntModus);
+});
+
+document.getElementById('btn-marker-clear').addEventListener('click', () => {
+  markerPunt = null;
+  document.getElementById('marker-preset').value = '';
+  document.getElementById('marker-zoek').value = '';
+  document.getElementById('marker-suggest').style.display = 'none';
+  zetPlaatsPuntModus(false);
+  tekenOverlay();
+});
+
+const satBeeldvlak = document.querySelector('.sat-beeldvlak');
+
+document.getElementById('btn-arrow-draw').addEventListener('click', () => {
+  zetPijlModus(!pijlModus);
+});
+
+document.getElementById('btn-arrow-clear').addEventListener('click', () => {
+  trekPijlen = [];
+  trekPijl = null;
+  pijlTekent = false;
+  zetPijlModus(false);
+  tekenOverlay();
+});
+
+document.getElementById('btn-sun-place').addEventListener('click', () => {
+  zetZonPuntModus(!zonPuntModus);
+});
+
+document.getElementById('btn-sun-clear').addEventListener('click', () => {
+  zonPunten = [];
+  zetZonPuntModus(false);
+  tekenOverlay();
+});
+
+satBeeldvlak.addEventListener('pointerdown', startPijlTekenen);
+satBeeldvlak.addEventListener('pointermove', beweegPijl);
+satBeeldvlak.addEventListener('pointerup', stopPijlTekenen);
+satBeeldvlak.addEventListener('pointercancel', stopPijlTekenen);
+
+satBeeldvlak.addEventListener('click', e => {
+  if (zonPuntModus) {
+    const coords = schermNaarLonLat(e.clientX, e.clientY);
+    if (!coords) return;
+    zonPunten.push(coords);
+    tekenOverlay();
+    return;
+  }
+  if (!plaatsPuntModus) return;
+  const coords = schermNaarLonLat(e.clientX, e.clientY);
+  if (!coords) return;
+  const eigenLabel = document.getElementById('marker-zoek').value.trim();
+  plaatsMarker(coords.lon, coords.lat, eigenLabel || 'Plaatslabel');
+  document.getElementById('marker-preset').value = '';
+  zetPlaatsPuntModus(false);
+});
+
+document.getElementById('btn-obs-toggle').addEventListener('click', async () => {
+  obsAan = !obsAan;
+  const btn = document.getElementById('btn-obs-toggle');
+  btn.classList.toggle('actief', obsAan);
+  if (obsAan) {
+    btn.textContent = 'Data aan';
+    startObsTimer();
+    try {
+      await laadObservaties(true);
+      document.getElementById('info-balk').textContent = `Actuele data aan · ${obsStatusTekst()}`;
+    } catch (e) {
+      document.getElementById('info-balk').textContent = 'KNMI-waarnemingen konden niet worden geladen';
+    }
+  } else {
+    btn.textContent = 'Data uit';
+    stopObsTimer();
+    tekenOverlay();
+  }
+  updateObsStatus();
+});
+
+document.getElementById('obs-filter').addEventListener('change', e => {
+  obsFilterModus = e.target.value;
+  tekenOverlay();
+  updateObsStatus();
+});
+
+document.getElementById('btn-obs-stations').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('obs-panel').classList.toggle('open');
+  if (!obsData) laadObservaties(false).catch(() => updateObsStatus());
+});
+
+document.getElementById('obs-panel').addEventListener('click', e => {
+  e.stopPropagation();
+});
+
+document.getElementById('obs-list').addEventListener('change', e => {
+  const input = e.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  if (input.checked) geselecteerdeObsStations.add(input.value);
+  else geselecteerdeObsStations.delete(input.value);
+  bewaarObsSelectie();
+  tekenOverlay();
+  updateObsStatus();
+});
+
+document.getElementById('obs-all').addEventListener('click', () => {
+  stelObsSelectieIn(obsStationLijst().map(st => st.naam));
+});
+
+document.getElementById('obs-basic').addEventListener('click', () => {
+  stelObsSelectieIn(STANDAARD_OBS_STATIONS);
+});
+
+document.getElementById('obs-none').addEventListener('click', () => {
+  stelObsSelectieIn([]);
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.obs-wrap')) document.getElementById('obs-panel').classList.remove('open');
+});
+
+// Tijdslider
+const slider = document.getElementById('tijd-slider');
+slider.addEventListener('input', () => {
+  actieveTijdstap = parseInt(slider.value);
+  updateTijdDisplay(actieveTijdstap);
+  laadSatelliet(actieveTijdstap);
+});
+
+// Vernieuw knop
+document.getElementById('btn-refresh').addEventListener('click', () => {
+  actieveTijdstap = LAATSTE_TIJDSTAP;
+  slider.value = LAATSTE_TIJDSTAP;
+  updateTijdDisplay(LAATSTE_TIJDSTAP);
+  selectieVersie++;
+  frameCache.clear();
+  laadSatelliet(LAATSTE_TIJDSTAP);
+  if (obsAan) laadObservaties(true).catch(() => updateObsStatus());
+  if (radarAan) laadRadarData(true).then(tekenOverlay).catch(() => updateObsStatus());
+});
+
+document.getElementById('btn-zoom-in').addEventListener('click', () => {
+  stelBeeldZoomIn(beeldZoom + 0.15);
+});
+document.getElementById('btn-zoom-uit').addEventListener('click', () => {
+  stelBeeldZoomIn(beeldZoom - 0.15);
+});
+document.getElementById('sat-zoom-label').addEventListener('click', () => {
+  stelBeeldZoomIn(1);
+});
+updateZoomLabel();
+
+function bestandsNaam(t, suffix = '', ext = 'png') {
+  const delen = new Intl.DateTimeFormat('nl-NL', {
+    timeZone: 'Europe/Amsterdam',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(t).reduce((acc, p) => {
+    if (p.type !== 'literal') acc[p.type] = p.value;
+    return acc;
+  }, {});
+  const stamp = `${delen.year}-${delen.month}-${delen.day}_${delen.hour}${delen.minute}`;
+  const toevoeging = suffix ? '_' + suffix.replace(/^-+/, '').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') : '';
+  return `Satellietfoto_${stamp}${toevoeging}.${ext}`;
+}
+
+function laadAfbeeldingVoorCanvas(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.decoding = 'async';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function exportWmsUrl(tijdstap = actieveTijdstap) {
+  return wmsUrl(actieveLayer, activeBbox, activeExportW, activeExportH, tijdstap);
+}
+
+function tekenExportOverlay(ctx, x, y, w, h, opties = {}) {
+  const rect = { x, y, w, h, dpr: 1 };
+  const bbox = actieveBboxParts();
+  tekenKaartOverlay(ctx, rect, bbox);
+  tekenRadarOverlay(ctx, rect, bbox, { export: true, tijdstap: opties.tijdstap });
+  tekenObservaties(ctx, rect, bbox, { export: true });
+  tekenMarker(ctx, rect, bbox, { export: true });
+  tekenZonSymbool(ctx, rect, bbox, { export: true });
+  tekenTrekrichtingPijl(ctx, rect, bbox, { export: true });
+}
+
+function tekenSatExportHeader(ctx, breedte, hoogte, t, product) {
+  ctx.save();
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, breedte, hoogte);
+  ctx.fillStyle = '#2ec4e8';
+  ctx.fillRect(0, hoogte - 6, breedte, 6);
+
+  const pad = 36;
+  const obsLabel = obsAan && obsData ? ' · actuele data' : '';
+  const radarLabel = radarAan && radarData ? ' · radar' : '';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
+  ctx.fillText('Satellietfoto', pad, 58);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = "500 22px 'DM Mono', 'Courier New', monospace";
+  ctx.fillText(`${productLabel(product)} · EUMETSAT EUMETView / Meteosat Third Generation${obsLabel}${radarLabel}`, pad, 94);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 46px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(formatDatumTijd(t) + (actieveTijdstap === LAATSTE_TIJDSTAP ? ' · laatste beeld' : ''), breedte - pad, 58);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = "500 22px 'DM Sans', Arial, sans-serif";
+  ctx.fillText(actiefGebiedLabel, breedte - pad, 94);
+  ctx.restore();
+}
+
+function tekenSatExportFooter(ctx, breedte, y, hoogte, t) {
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, y, breedte, hoogte);
+
+  const pad = 36;
+  const midY = y + hoogte / 2 + 7;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = "700 22px 'DM Sans', Arial, sans-serif";
+  ctx.fillText('weerlab.nl', pad, midY);
+
+  const merkW = ctx.measureText('weerlab.nl').width;
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = "500 19px 'DM Sans', Arial, sans-serif";
+  ctx.fillText('·  Ed Aldus - satellietbeelden & actuele data', pad + merkW + 6, midY);
+
+  const radarBron = radarAan && radarMeta && radarMeta.bijgewerkt ? ` · radar ${radarMeta.bijgewerkt}` : '';
+  const bronTekst = `EUMETSAT MTG  ·  ${obsAan && obsBijgewerkt ? `KNMI ${obsBijgewerkt}` : formatDatumTijd(t)}${radarBron}`;
+  ctx.font = "500 18px 'DM Mono', 'Courier New', monospace";
+  const bronW = ctx.measureText(bronTekst).width;
+  const pillH = 30;
+  const pillW = bronW + 22;
+  const pillX = breedte - pad - pillW;
+  const pillY = y + hoogte / 2 - pillH / 2;
+  ctx.fillStyle = 'rgba(46,196,232,0.14)';
+  afgerondeRechthoek(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fill();
+  ctx.fillStyle = '#7dd3fc';
+  ctx.textAlign = 'right';
+  ctx.fillText(bronTekst, breedte - pad - 11, midY);
+  ctx.restore();
+}
+
+async function maakExportCanvas(social = false) {
+  await zorgRadarKlaarVoorExport();
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const product = productVoorTijd(t);
+  const url = exportWmsUrl(actieveTijdstap);
+  const img = await laadAfbeeldingVoorCanvas(url);
+  const headerH = 130;
+  const footerH = 60;
+  const bronW = img.naturalWidth || activeW;
+  const bronH = img.naturalHeight || activeH;
+  const maxBreedte = social ? 1200 : bronW;
+  const schaal = Math.min(1, maxBreedte / bronW);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bronW * schaal);
+  canvas.height = Math.round((headerH + bronH + footerH) * schaal);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(schaal, schaal);
+
+  tekenSatExportHeader(ctx, bronW, headerH, t, product);
+
+  ctx.filter = actiefSatFilterCanvas();
+  ctx.drawImage(img, 0, headerH);
+  ctx.filter = 'none';
+  tekenExportOverlay(ctx, 0, headerH, bronW, bronH);
+
+  tekenSatExportFooter(ctx, bronW, headerH + bronH, footerH, t);
+
+  return { canvas, t, url };
+}
+
+async function maakAiReadyCanvas() {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const url = exportWmsUrl(actieveTijdstap);
+  const img = await laadAfbeeldingVoorCanvas(url);
+  const bronW = img.naturalWidth || activeW;
+  const bronH = img.naturalHeight || activeH;
+  const doelW = Math.min(3600, Math.max(bronW, 3200));
+  const schaal = doelW / bronW;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bronW * schaal);
+  canvas.height = Math.round(bronH * schaal);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.filter = actiefSatFilterCanvas();
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.filter = 'none';
+  return { canvas, t, url };
+}
+
+async function downloadPng(social = false) {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const url = exportWmsUrl(actieveTijdstap);
+  const naam = bestandsNaam(t, social ? '-social' : '');
+  const btn = document.getElementById(social ? 'btn-download-social' : 'btn-download');
+  const oudeTekst = btn.textContent;
+  btn.textContent = 'PNG maken…';
+  btn.disabled = true;
+
+  try {
+    const { canvas } = await maakExportCanvas(social);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = naam;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (err) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = naam;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    alert('Canvas-export werd door de browser geblokkeerd. Ik open daarom de ruwe EUMETView-PNG; de blauwe header staat dan niet in het bestand.');
+  } finally {
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-download').addEventListener('click', () => downloadPng(false));
+document.getElementById('btn-download-social').addEventListener('click', () => downloadPng(true));
+
+async function downloadAiReadyPng() {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const btn = document.getElementById('btn-download-ai');
+  const info = document.getElementById('info-balk');
+  const oudeTekst = btn.textContent;
+  btn.textContent = 'AI-ready…';
+  btn.disabled = true;
+
+  try {
+    const { canvas } = await maakAiReadyCanvas();
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = bestandsNaam(t, '-ai-ready-clean');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    info.textContent = 'AI-ready PNG gemaakt · schoon satellietbeeld zonder header, labels of meetstations';
+  } catch (err) {
+    alert('AI-ready export is niet gelukt. Mogelijk blokkeert de browser canvas-export van de EUMETView-beelden.');
+  } finally {
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-download-ai').addEventListener('click', downloadAiReadyPng);
+
+function dataUrlNaarBytes(dataUrl) {
+  const binair = atob(dataUrl.split(',')[1]);
+  const bytes = new Uint8Array(binair.length);
+  for (let i = 0; i < binair.length; i++) bytes[i] = binair.charCodeAt(i);
+  return bytes;
+}
+
+function maakPdfBlobVanCanvas(canvas) {
+  const jpegBytes = dataUrlNaarBytes(canvas.toDataURL('image/jpeg', 0.92));
+  const liggend = canvas.width >= canvas.height;
+  const pageW = liggend ? 842 : 595;
+  const pageH = liggend ? 595 : 842;
+  const marge = 18;
+  const schaal = Math.min((pageW - marge * 2) / canvas.width, (pageH - marge * 2) / canvas.height);
+  const drawW = canvas.width * schaal;
+  const drawH = canvas.height * schaal;
+  const drawX = (pageW - drawW) / 2;
+  const drawY = (pageH - drawH) / 2;
+  const inhoud = `q\n${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm\n/Im0 Do\nQ\n`;
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const offsets = [0];
+  let positie = 0;
+
+  function voegTekstToe(tekst) {
+    const bytes = encoder.encode(tekst);
+    chunks.push(bytes);
+    positie += bytes.length;
+  }
+
+  function voegBytesToe(bytes) {
+    chunks.push(bytes);
+    positie += bytes.length;
+  }
+
+  function object(nummer, inhoudTekst) {
+    offsets[nummer] = positie;
+    voegTekstToe(`${nummer} 0 obj\n${inhoudTekst}\nendobj\n`);
+  }
+
+  voegTekstToe('%PDF-1.4\n');
+  object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  object(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+
+  offsets[4] = positie;
+  voegTekstToe(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+  voegBytesToe(jpegBytes);
+  voegTekstToe('\nendstream\nendobj\n');
+
+  object(5, `<< /Length ${encoder.encode(inhoud).length} >>\nstream\n${inhoud}endstream`);
+  const xrefStart = positie;
+  voegTekstToe('xref\n0 6\n0000000000 65535 f \n');
+  for (let i = 1; i <= 5; i++) {
+    voegTekstToe(String(offsets[i]).padStart(10, '0') + ' 00000 n \n');
+  }
+  voegTekstToe(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
+
+  const totaal = new Uint8Array(positie);
+  let offset = 0;
+  for (const chunk of chunks) {
+    totaal.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new Blob([totaal], { type: 'application/pdf' });
+}
+
+async function downloadPdf() {
+  const stappen = tijdstappen();
+  const t = stappen[actieveTijdstap];
+  const btn = document.getElementById('btn-download-pdf');
+  const oudeTekst = btn.textContent;
+  btn.textContent = 'PDF maken…';
+  btn.disabled = true;
+
+  try {
+    const { canvas } = await maakExportCanvas(false);
+    const blob = maakPdfBlobVanCanvas(canvas);
+    downloadBlob(blob, bestandsNaam(t, '', 'pdf'));
+  } catch (err) {
+    alert('PDF-export is niet gelukt. Mogelijk blokkeert de browser canvas-export van de EUMETView-beelden.');
+  } finally {
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-download-pdf').addEventListener('click', downloadPdf);
+
+function kiesVideoMimeType() {
+  const opties = [
+    'video/mp4;codecs="avc1.42E01E"',
+    'video/mp4;codecs=h264',
+    'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+  return opties.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function downloadBlob(blob, naam) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = naam;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function wacht(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function volgendeAnimatieFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
+async function timelapseFrames() {
+  const start = timelapseStartStap();
+  const frames = [];
+  for (let stap = start; stap <= LAATSTE_TIJDSTAP; stap++) {
+    try { await preloadFrame(stap); } catch (e) { /* skip ontbrekend beeld */ }
+    const cached = frameCache.get(frameCacheKey(stap));
+    if (cached && !cached.failed && cached.img.complete && cached.img.naturalWidth > 0) {
+      frames.push({ stap, img: cached.img, url: cached.url });
+    }
+  }
+  return frames;
+}
+
+function tekenVideoFrame(ctx, canvas, frame, schaal) {
+  const stappen = tijdstappen();
+  const t = stappen[frame.stap];
+  const product = productVoorTijd(t);
+  const w = canvas.width / schaal;
+  const h = canvas.height / schaal;
+
+  ctx.save();
+  ctx.scale(schaal, schaal);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+  ctx.filter = actiefSatFilterCanvas();
+  ctx.drawImage(frame.img, 0, 0, w, h);
+  ctx.filter = 'none';
+  tekenExportOverlay(ctx, 0, 0, w, h, { tijdstap: frame.stap });
+
+  ctx.fillStyle = 'rgba(0, 32, 91, 0.82)';
+  ctx.fillRect(18, 18, 640, 54);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px Arial, sans-serif';
+  ctx.fillText('Satellietfoto', 34, 42);
+  ctx.font = '17px Arial, sans-serif';
+  ctx.fillStyle = '#dcecff';
+  const obsLabel = obsAan && obsData ? ' · KNMI temp/wind' : '';
+  const radarLabel = radarAan && radarData ? ' · radar' : '';
+  ctx.fillText(`${productLabel(product)} · ${actiefGebiedLabel} · ${formatDatumTijd(t)}${obsLabel}${radarLabel}`, 34, 64);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(0, 20, 45, 0.72)';
+  ctx.fillRect(w - 306, h - 56, 288, 38);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px Arial, sans-serif';
+  ctx.fillText('© Ed Aldus / Weerlab', w - 30, h - 32);
+  ctx.restore();
+}
+
+async function downloadTimelapseVideo(social = false) {
+  const btn = document.getElementById(social ? 'btn-video-social' : 'btn-video');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  const oudeTekst = btn.textContent;
+  const mimeType = kiesVideoMimeType();
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream || !mimeType) {
+    alert('Deze browser ondersteunt geen video-export via MediaRecorder. Probeer Safari of een recente Chromium-browser.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Video maken…';
+  dot.style.display = 'block';
+  info.textContent = 'Laatste 10 beelden laden en video bouwen…';
+
+  try {
+    await zorgRadarKlaarVoorExport();
+    const frames = await timelapseFrames();
+    if (frames.length < 2) throw new Error('Te weinig frames beschikbaar voor video-export.');
+
+    const maxBreedte = social ? 1200 : activeW;
+    const schaal = Math.min(1, maxBreedte / activeW);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(activeW * schaal);
+    canvas.height = Math.round(activeH * schaal);
+    const ctx = canvas.getContext('2d');
+    tekenVideoFrame(ctx, canvas, frames[0], schaal);
+    await volgendeAnimatieFrame();
+
+    let stream = canvas.captureStream(0);
+    let track = stream.getVideoTracks()[0];
+    if (!track || typeof track.requestFrame !== 'function') {
+      stream.getTracks().forEach(t => t.stop());
+      stream = canvas.captureStream(2);
+      track = stream.getVideoTracks()[0];
+    }
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: social ? 2500000 : 7000000
+    });
+    const chunks = [];
+    recorder.ondataavailable = e => {
+      if (e.data && e.data.size) chunks.push(e.data);
+    };
+    const klaar = new Promise(resolve => {
+      recorder.onstop = resolve;
+    });
+
+    const gestart = new Promise(resolve => {
+      recorder.onstart = resolve;
+    });
+    recorder.start(250);
+    await gestart;
+
+    for (const frame of frames) {
+      tekenVideoFrame(ctx, canvas, frame, schaal);
+      if (track && track.requestFrame) track.requestFrame();
+      await volgendeAnimatieFrame();
+      await wacht(650);
+    }
+    tekenVideoFrame(ctx, canvas, frames[frames.length - 1], schaal);
+    if (track && track.requestFrame) track.requestFrame();
+    await volgendeAnimatieFrame();
+    await wacht(900);
+    recorder.stop();
+    await klaar;
+    stream.getTracks().forEach(t => t.stop());
+
+    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const t = tijdstappen()[LAATSTE_TIJDSTAP];
+    const blob = new Blob(chunks, { type: mimeType });
+    if (!blob.size) throw new Error('Lege video-export');
+    downloadBlob(blob, bestandsNaam(t, social ? '-timelapse-social' : '-timelapse', ext));
+    info.textContent = `Timelapse-video klaar (${ext.toUpperCase()}) · Bron: EUMETSAT EUMETView / MTG`;
+  } catch (err) {
+    console.warn('Video-export mislukt', err);
+    info.textContent = 'MP4-export lukt hier niet door browserbeveiliging van de EUMETView-beelden. PNG/PDF en afspelen blijven werken.';
+  } finally {
+    dot.style.display = 'none';
+    btn.textContent = oudeTekst;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-video').addEventListener('click', () => downloadTimelapseVideo(false));
+document.getElementById('btn-video-social').addEventListener('click', () => downloadTimelapseVideo(true));
+
+function startAutoRefresh() {
+  const btn = document.getElementById('btn-auto');
+  if (autoRefreshTimer) return;
+  autoRefreshTimer = setInterval(() => {
+    actieveTijdstap = LAATSTE_TIJDSTAP;
+    slider.value = LAATSTE_TIJDSTAP;
+    updateTijdDisplay(LAATSTE_TIJDSTAP);
+    selectieVersie++;
+    laadSatelliet(LAATSTE_TIJDSTAP);
+    if (obsAan) laadObservaties(true).catch(() => updateObsStatus());
+  }, 10 * 60 * 1000);
+  btn.classList.add('actief');
+  btn.textContent = '⏱ Auto aan';
+  updateObsStatus();
+}
+
+function stopAutoRefresh() {
+  const btn = document.getElementById('btn-auto');
+  if (!autoRefreshTimer) return;
+  clearInterval(autoRefreshTimer);
+  autoRefreshTimer = null;
+  btn.classList.remove('actief');
+  btn.textContent = '⏱ Auto';
+  updateObsStatus();
+}
+
+// Auto-refresh (elke 10 minuten)
+document.getElementById('btn-auto').addEventListener('click', () => {
+  if (autoRefreshTimer) stopAutoRefresh();
+  else startAutoRefresh();
+});
+
+// Timelapse van de laatste 10 beelden afspelen
+document.getElementById('btn-play').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-play');
+  const info = document.getElementById('info-balk');
+  const dot = document.getElementById('laad-dot');
+  if (animatieActief) {
+    clearInterval(animatieTimer);
+    animatieActief = false;
+    btn.classList.remove('actief');
+    btn.textContent = '▶';
+    info.textContent = 'Timelapse gepauzeerd · Bron: EUMETSAT EUMETView / MTG';
+    return;
+  }
+
+  const versie = selectieVersie;
+  btn.disabled = true;
+  dot.style.display = 'block';
+  info.textContent = 'Laatste 10 satellietbeelden laden voor timelapse…';
+  await preloadTimelapseFrames(versie);
+  const frames = versie === selectieVersie ? await timelapseFrames() : [];
+  btn.disabled = false;
+  dot.style.display = 'none';
+  if (versie !== selectieVersie) return;
+  if (frames.length < 2) {
+    info.textContent = frames.length === 0
+      ? 'Geen beelden beschikbaar voor timelapse — probeer het later opnieuw'
+      : 'Slechts 1 beeld beschikbaar — geen timelapse mogelijk';
+    return;
+  }
+  const ontbrekend = (LAATSTE_TIJDSTAP - timelapseStartStap() + 1) - frames.length;
+
+  animatieActief = true;
+  btn.classList.add('actief');
+  btn.textContent = '⏸';
+
+  let idx = 0;
+  let frame = frames[idx];
+  let stap = frame.stap;
+  slider.value = stap;
+  actieveTijdstap = stap;
+  updateTijdDisplay(stap);
+  toonTimelapseFrame(frame);
+
+  animatieTimer = setInterval(() => {
+    idx++;
+    if (idx >= frames.length) {
+      clearInterval(animatieTimer);
+      animatieActief = false;
+      btn.classList.remove('actief');
+      btn.textContent = '▶';
+      const laatste = frames[frames.length - 1].stap;
+      actieveTijdstap = laatste;
+      slider.value = laatste;
+      updateTijdDisplay(laatste);
+      toonTimelapseFrame(frames[frames.length - 1]);
+      if (ontbrekend > 0) {
+        document.getElementById('info-balk').textContent = `Timelapse afgespeeld · ${ontbrekend} beeld${ontbrekend === 1 ? '' : 'en'} ontbrak${ontbrekend === 1 ? '' : 'en'} bij EUMETSAT · Bron: EUMETSAT EUMETView / MTG`;
+      }
+      return;
+    }
+    frame = frames[idx];
+    stap = frame.stap;
+    slider.value = stap;
+    actieveTijdstap = stap;
+    updateTijdDisplay(stap);
+    toonTimelapseFrame(frame);
+  }, 650);
+});
+
+// Start
+window.addEventListener('resize', () => {
+  pasKaartFormaatAan();
+  tekenOverlay();
+});
+herstelObsSelectie();
+bouwObsPanel();
+pasKaartFormaatAan();
+laadOverlayData();
+updateTijdDisplay(LAATSTE_TIJDSTAP);
+laadSatelliet(LAATSTE_TIJDSTAP);
+startAutoRefresh();
+startObsTimer();
+laadObservaties(false).catch(() => updateObsStatus());
+</script>
+</body>
+</html>

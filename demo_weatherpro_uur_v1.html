@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WeatherPro uurverwachting — Rotterdam (demo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --wl-primary:#00205b; --wl-primary-strong:#003366; --wl-secondary:#0b3a8a;
+  --wl-accent:#2ec4e8; --wl-accent-strong:#035e7a;
+  --wl-bg:#f6f8fb; --wl-bg-soft:#eef2f7; --wl-surface:#ffffff; --wl-surface-muted:#f8fafc;
+  --wl-border:#e3e8ef; --wl-border-strong:#cbd5e1;
+  --wl-text:#0f172a; --wl-text-muted:#64748b; --wl-text-soft:#94a3b8;
+  --wl-danger:#cc0000; --wl-warn-y:#e6b800; --wl-warn-o:#e07000; --wl-success:#10b981;
+  --wl-blue:#1d4ed8; --wl-teal:#0d9488; --wl-purple:#6d28d9;
+  --wl-wind:#00205b;
+  --wl-night:#00205b;
+  --font-sans:"DM Sans",ui-sans-serif,system-ui,sans-serif;
+  --font-mono:"DM Mono",ui-monospace,monospace;
+  --shadow-2:0 2px 4px rgba(15,23,42,.05),0 4px 12px rgba(15,23,42,.06);
+  --shadow-3:0 8px 24px rgba(15,23,42,.10);
+}
+[data-theme="dark"]{
+  --wl-bg:#0b1220; --wl-bg-soft:#0f1728; --wl-surface:#121a2b; --wl-surface-muted:#0e1629;
+  --wl-border:#1f2a40; --wl-border-strong:#334155;
+  --wl-text:#e5ecf6; --wl-text-muted:#8292ac; --wl-text-soft:#5b6a84;
+  --wl-accent:#38d1f0; --wl-night:#38507e; --wl-wind:#7ba7e6;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--wl-bg);color:var(--wl-text);
+  padding:20px 12px 48px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto}
+
+/* Header */
+.hero{background:linear-gradient(135deg,var(--wl-primary) 0%,var(--wl-secondary) 100%);
+  color:#fff;border-radius:16px;padding:20px 24px;box-shadow:var(--shadow-3);
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.hero h1{font-size:22px;font-weight:800;letter-spacing:.01em;line-height:1.15}
+.hero .loc{font-size:15px;font-weight:600;color:var(--wl-accent);margin-top:2px}
+.hero .meta{font-size:12px;color:#c7d6ef;margin-top:10px;line-height:1.55}
+.hero .meta b{color:#fff;font-weight:700}
+.badge{display:inline-block;background:var(--wl-warn-o);color:#fff;font-size:10.5px;font-weight:800;
+  text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:999px;vertical-align:middle;margin-left:8px}
+.hero-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.now{text-align:right}
+.now .t{font-size:40px;font-weight:800;line-height:1;font-family:var(--font-mono)}
+.now .d{font-size:11px;color:#c7d6ef;margin-top:4px}
+.theme-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.25);
+  border-radius:8px;padding:6px 12px;font:600 12px var(--font-sans);cursor:pointer}
+.theme-btn:hover{background:rgba(255,255,255,.24)}
+
+/* Card */
+.card{background:var(--wl-surface);border:1px solid var(--wl-border);border-radius:14px;
+  box-shadow:var(--shadow-2);margin-top:16px;overflow:hidden}
+.card-hd{padding:11px 16px;background:var(--wl-surface-muted);border-bottom:1px solid var(--wl-border);
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card-hd h2{font-size:14px;font-weight:700;color:var(--wl-primary)}
+[data-theme="dark"] .card-hd h2{color:var(--wl-accent)}
+.card-hd .sub{font-size:11px;color:var(--wl-text-muted)}
+
+/* Meteogram */
+.mg-scroll{overflow-x:auto}
+svg.meteogram{display:block;width:100%;min-width:760px;height:auto;font-family:var(--font-sans)}
+.axis-lbl{fill:var(--wl-text-soft);font-size:9.5px}
+.panel-lbl{fill:var(--wl-text-muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.grid-ln{stroke:var(--wl-border);stroke-width:1}
+.day-sep{stroke:var(--wl-border-strong);stroke-width:1;stroke-dasharray:2 3}
+.day-lbl{fill:var(--wl-text);font-size:11px;font-weight:700}
+.night-band{fill:var(--wl-night);opacity:.055}
+[data-theme="dark"] .night-band{opacity:.16}
+.val-lbl{fill:var(--wl-text);font-size:9px;font-weight:600;font-family:var(--font-mono)}
+
+/* Legend */
+.legend{display:flex;flex-wrap:wrap;gap:7px 18px;padding:10px 16px;font-size:11px;
+  color:var(--wl-text-muted);border-top:1px solid var(--wl-border);background:var(--wl-surface-muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:15px;height:4px;border-radius:2px;display:inline-block}
+.legend i.dash{background:repeating-linear-gradient(90deg,currentColor 0 4px,transparent 4px 7px);height:3px}
+.legend .sq{width:11px;height:11px;border-radius:2px}
+
+/* Table */
+.tbl-tools{padding:10px 16px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--wl-border)}
+.tbl-tools button{font:600 12px var(--font-sans);padding:6px 12px;border-radius:8px;cursor:pointer;
+  background:var(--wl-primary);color:#fff;border:none}
+.tbl-tools button.ghost{background:var(--wl-surface);color:var(--wl-primary);border:1px solid var(--wl-border-strong)}
+[data-theme="dark"] .tbl-tools button.ghost{color:var(--wl-accent)}
+.tbl-wrap{overflow-x:auto;display:none}
+.tbl-wrap.open{display:block}
+table.data{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--font-mono);min-width:720px}
+table.data th,table.data td{padding:4px 7px;text-align:center;border-bottom:1px solid var(--wl-border);white-space:nowrap}
+table.data th{background:var(--wl-surface-muted);color:var(--wl-text-muted);font:700 9.5px var(--font-sans);
+  text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0}
+table.data td.uur{font-weight:600;color:var(--wl-primary);background:var(--wl-surface-muted)}
+[data-theme="dark"] table.data td.uur{color:var(--wl-accent)}
+tr.dagrij td{background:var(--wl-bg-soft);color:var(--wl-primary);font:800 11px var(--font-sans);
+  text-align:left;letter-spacing:.02em;text-transform:capitalize}
+[data-theme="dark"] tr.dagrij td{color:var(--wl-accent)}
+.tw{color:var(--wl-danger);font-weight:600}.tc{color:var(--wl-blue);font-weight:600}
+.rr{color:var(--wl-blue)}.zon{color:var(--wl-warn-o)}
+
+/* Notes */
+.notes{margin-top:16px;padding:14px 18px;background:var(--wl-surface-muted);border:1px solid var(--wl-border);
+  border-radius:12px;font-size:12px;color:var(--wl-text-muted);line-height:1.6}
+.notes b{color:var(--wl-text)}
+.notes ul{margin:6px 0 0 18px}
+.notes code{font-family:var(--font-mono);background:var(--wl-bg-soft);padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div>
+      <h1>WeatherPro — Uurverwachting <span class="badge">Demo · voorbeelddata</span></h1>
+      <div class="loc">Rotterdam · 51.92 °N, 4.50 °O</div>
+      <div class="meta" id="runmeta"></div>
+    </div>
+    <div class="hero-right">
+      <button class="theme-btn" id="themeBtn">🌙 Donker</button>
+      <div class="now" id="nowbox"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <h2>Meteogram</h2>
+      <div class="sub">7½ dagen · 3-uurs stappen</div>
+    </div>
+    <div class="mg-scroll"><svg class="meteogram" id="mg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>Uurtabel</h2><div class="sub">alle parameters per tijdstap</div></div>
+    <div class="tbl-tools">
+      <button id="tblToggle">Tabel tonen</button>
+      <button class="ghost" id="csvBtn">Download CSV</button>
+    </div>
+    <div class="tbl-wrap" id="tblWrap"></div>
+  </div>
+
+  <div class="notes">
+    <b>Over deze demo.</b> Data komt rechtstreeks uit de <b>WeatherPro</b>-app (MeteoGroup) op de Mac —
+    CoreData-store <code>CDmeteo4.sqlite</code>, locatie Rotterdam (uid&nbsp;1811359). Dit is de laatst
+    opgehaalde run, ontdubbeld naar de nieuwste verwachting per uur.
+    <ul>
+      <li><b>Windsnelheid/stoten</b> in knopen (kn) — WeatherPro slaat de eenheid niet gelabeld op; afgeleid.</li>
+      <li><b>Bewolking</b> in achtsten (octa 0–8), <b>zon</b> in minuten per 3-uursvenster (max&nbsp;180).</li>
+      <li>Tijden zijn lokale tijd (Europe/Amsterdam).</li>
+      <li>Voor de weerbewaking-site: dit vervangt/aanvult de bestaande <code>weerbewaking_uurlijks</code>-pagina
+        met WeatherPro als extra bron. Live-koppeling volgt (nu vaste voorbeelddata).</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+/* ---------- WeatherPro Rotterdam — laatste run 2026-05-19 07:08 ---------- */
+const RUN = "2026-05-19T07:08";
+const DATA = [{"t":"2026-05-19T12:00","tt":15.7,"td":10,"ff":12,"ffg":24,"dd":181,"n":7,"rr":0.14,"pop":50,"ppp":1013.9,"sun":0,"ww":25},{"t":"2026-05-19T15:00","tt":15,"td":11.9,"ff":12,"ffg":23,"dd":180,"n":8,"rr":0.58,"pop":96,"ppp":1013.1,"sun":0,"ww":25},{"t":"2026-05-19T18:00","tt":14,"td":12.3,"ff":10,"ffg":19,"dd":183,"n":8,"rr":1.07,"pop":99,"ppp":1012.8,"sun":0,"ww":61},{"t":"2026-05-19T21:00","tt":13.1,"td":12.8,"ff":9,"ffg":18,"dd":188,"n":7,"rr":0.4,"pop":80,"ppp":1013.3,"sun":0,"ww":61},{"t":"2026-05-20T00:00","tt":12.4,"td":12.4,"ff":8,"ffg":15,"dd":203,"n":6,"rr":0.4,"pop":70,"ppp":1013.7,"sun":0,"ww":25},{"t":"2026-05-20T03:00","tt":11.8,"td":11.4,"ff":8,"ffg":16,"dd":216,"n":5,"rr":0.1,"pop":45,"ppp":1014.3,"sun":0,"ww":25},{"t":"2026-05-20T06:00","tt":13.4,"td":12,"ff":10,"ffg":21,"dd":218,"n":5,"rr":0.11,"pop":40,"ppp":1015.9,"sun":44,"ww":25},{"t":"2026-05-20T09:00","tt":15.1,"td":12,"ff":13,"ffg":26,"dd":233,"n":7,"rr":0.71,"pop":80,"ppp":1017.6,"sun":8,"ww":95},{"t":"2026-05-20T12:00","tt":16.8,"td":11.6,"ff":14,"ffg":28,"dd":243,"n":6,"rr":0.56,"pop":70,"ppp":1019.2,"sun":41,"ww":25},{"t":"2026-05-20T15:00","tt":17.5,"td":11.2,"ff":14,"ffg":27,"dd":249,"n":3,"rr":0.18,"pop":30,"ppp":1020.5,"sun":105,"ww":4},{"t":"2026-05-20T18:00","tt":15.9,"td":11.3,"ff":10,"ffg":20,"dd":242,"n":2,"rr":0.02,"pop":0,"ppp":1021.9,"sun":140,"ww":3},{"t":"2026-05-20T21:00","tt":13.7,"td":12.4,"ff":8,"ffg":15,"dd":227,"n":4,"rr":0,"pop":0,"ppp":1023.6,"sun":35,"ww":4},{"t":"2026-05-21T00:00","tt":12.8,"td":12.5,"ff":7,"ffg":13,"dd":232,"n":4,"rr":0,"pop":0,"ppp":1024.8,"sun":0,"ww":4},{"t":"2026-05-21T03:00","tt":12,"td":12,"ff":6,"ffg":11,"dd":229,"n":4,"rr":0,"pop":0,"ppp":1025.2,"sun":0,"ww":4},{"t":"2026-05-21T06:00","tt":14.2,"td":13.6,"ff":7,"ffg":13,"dd":231,"n":6,"rr":0,"pop":0,"ppp":1026.4,"sun":34,"ww":6},{"t":"2026-05-21T09:00","tt":17,"td":13.2,"ff":8,"ffg":16,"dd":241,"n":7,"rr":0,"pop":0,"ppp":1027.3,"sun":28,"ww":7},{"t":"2026-05-21T12:00","tt":18.7,"td":12.7,"ff":9,"ffg":17,"dd":243,"n":6,"rr":0,"pop":0,"ppp":1027.8,"sun":39,"ww":6},{"t":"2026-05-21T15:00","tt":19.8,"td":12.3,"ff":8,"ffg":15,"dd":257,"n":3,"rr":0,"pop":0,"ppp":1027.5,"sun":110,"ww":3},{"t":"2026-05-21T18:00","tt":18.6,"td":11.8,"ff":3,"ffg":6,"dd":281,"n":2,"rr":0,"pop":0,"ppp":1027.2,"sun":138,"ww":2},{"t":"2026-05-21T21:00","tt":14.8,"td":12.2,"ff":2,"ffg":4,"dd":141,"n":1,"rr":0,"pop":0,"ppp":1027.7,"sun":52,"ww":1},{"t":"2026-05-22T00:00","tt":13.2,"td":11,"ff":2,"ffg":4,"dd":130,"n":2,"rr":0,"pop":0,"ppp":1027.7,"sun":0,"ww":2},{"t":"2026-05-22T03:00","tt":12.6,"td":10.9,"ff":3,"ffg":5,"dd":141,"n":2,"rr":0,"pop":0,"ppp":1027.5,"sun":0,"ww":2},{"t":"2026-05-22T06:00","tt":16,"td":13.4,"ff":4,"ffg":8,"dd":143,"n":2,"rr":0,"pop":0,"ppp":1027.9,"sun":94,"ww":2},{"t":"2026-05-22T09:00","tt":21.8,"td":14.8,"ff":5,"ffg":11,"dd":143,"n":1,"rr":0,"pop":0,"ppp":1027.8,"sun":147,"ww":2},{"t":"2026-05-22T12:00","tt":24.8,"td":13.4,"ff":5,"ffg":12,"dd":144,"n":2,"rr":0,"pop":0,"ppp":1027.1,"sun":140,"ww":2},{"t":"2026-05-22T15:00","tt":25.9,"td":13.1,"ff":5,"ffg":19,"dd":140,"n":3,"rr":0,"pop":0,"ppp":1026,"sun":133,"ww":3},{"t":"2026-05-22T18:00","tt":24.4,"td":14.2,"ff":4,"ffg":9,"dd":122,"n":1,"rr":0,"pop":0,"ppp":1025.1,"sun":152,"ww":1},{"t":"2026-05-22T21:00","tt":19.4,"td":14.6,"ff":4,"ffg":8,"dd":118,"n":1,"rr":0,"pop":0,"ppp":1025.1,"sun":56,"ww":1},{"t":"2026-05-23T00:00","tt":16.8,"td":13.4,"ff":4,"ffg":6,"dd":126,"n":2,"rr":0,"pop":0,"ppp":1024.8,"sun":0,"ww":2},{"t":"2026-05-23T03:00","tt":15.8,"td":12.8,"ff":3,"ffg":5,"dd":134,"n":2,"rr":0,"pop":0,"ppp":1024.3,"sun":0,"ww":2},{"t":"2026-05-23T06:00","tt":18.4,"td":14.7,"ff":4,"ffg":7,"dd":143,"n":2,"rr":0,"pop":0,"ppp":1024.3,"sun":98,"ww":2},{"t":"2026-05-23T09:00","tt":23.2,"td":15.8,"ff":5,"ffg":10,"dd":175,"n":2,"rr":0,"pop":0,"ppp":1024.6,"sun":143,"ww":1},{"t":"2026-05-23T12:00","tt":25.4,"td":14.3,"ff":5,"ffg":15,"dd":294,"n":2,"rr":0,"pop":10,"ppp":1025.1,"sun":129,"ww":2},{"t":"2026-05-23T15:00","tt":25.4,"td":14,"ff":6,"ffg":13,"dd":353,"n":2,"rr":0.07,"pop":25,"ppp":1025.4,"sun":137,"ww":2},{"t":"2026-05-23T18:00","tt":22.5,"td":13.5,"ff":6,"ffg":11,"dd":12,"n":1,"rr":0.1,"pop":30,"ppp":1025.8,"sun":149,"ww":1},{"t":"2026-05-23T21:00","tt":18.4,"td":14.2,"ff":5,"ffg":9,"dd":28,"n":3,"rr":0.12,"pop":35,"ppp":1026.7,"sun":43,"ww":3},{"t":"2026-05-24T00:00","tt":15.8,"td":14,"ff":4,"ffg":7,"dd":31,"n":2,"rr":0.11,"pop":35,"ppp":1027.3,"sun":0,"ww":2},{"t":"2026-05-24T03:00","tt":15,"td":13.6,"ff":4,"ffg":6,"dd":35,"n":1,"rr":0.08,"pop":25,"ppp":1027.6,"sun":0,"ww":1},{"t":"2026-05-24T06:00","tt":17.4,"td":15,"ff":4,"ffg":8,"dd":49,"n":0,"rr":0.06,"pop":15,"ppp":1028.4,"sun":110,"ww":0},{"t":"2026-05-24T09:00","tt":22,"td":15.3,"ff":6,"ffg":11,"dd":45,"n":1,"rr":0.04,"pop":20,"ppp":1028.9,"sun":162,"ww":1},{"t":"2026-05-24T12:00","tt":25,"td":14.4,"ff":7,"ffg":12,"dd":47,"n":1,"rr":0,"pop":0,"ppp":1029.3,"sun":162,"ww":1},{"t":"2026-05-24T15:00","tt":25.2,"td":13.8,"ff":9,"ffg":15,"dd":27,"n":0,"rr":0,"pop":0,"ppp":1029.3,"sun":173,"ww":0},{"t":"2026-05-24T18:00","tt":22.8,"td":13.2,"ff":8,"ffg":14,"dd":35,"n":0,"rr":0,"pop":0,"ppp":1029.3,"sun":173,"ww":0},{"t":"2026-05-24T21:00","tt":18,"td":13.8,"ff":7,"ffg":13,"dd":48,"n":0,"rr":0,"pop":0,"ppp":1030.3,"sun":57,"ww":0},{"t":"2026-05-25T00:00","tt":15.2,"td":13,"ff":5,"ffg":10,"dd":50,"n":0,"rr":0,"pop":0,"ppp":1030.9,"sun":0,"ww":0},{"t":"2026-05-25T03:00","tt":14.1,"td":11.4,"ff":5,"ffg":8,"dd":55,"n":0,"rr":0,"pop":0,"ppp":1031.1,"sun":0,"ww":0},{"t":"2026-05-25T06:00","tt":16.7,"td":12.2,"ff":6,"ffg":10,"dd":63,"n":0,"rr":0,"pop":0,"ppp":1031.4,"sun":120,"ww":0},{"t":"2026-05-25T09:00","tt":22,"td":12.8,"ff":8,"ffg":14,"dd":64,"n":0,"rr":0,"pop":0,"ppp":1031.4,"sun":180,"ww":0},{"t":"2026-05-25T12:00","tt":25.2,"td":13,"ff":8,"ffg":13,"dd":67,"n":0,"rr":0,"pop":0,"ppp":1031.3,"sun":180,"ww":0},{"t":"2026-05-25T15:00","tt":25.8,"td":13.1,"ff":8,"ffg":14,"dd":51,"n":0,"rr":0,"pop":0,"ppp":1030.4,"sun":180,"ww":0},{"t":"2026-05-25T18:00","tt":23.4,"td":13,"ff":8,"ffg":14,"dd":48,"n":0,"rr":0,"pop":0,"ppp":1029.7,"sun":180,"ww":0},{"t":"2026-05-25T21:00","tt":18.7,"td":13,"ff":7,"ffg":13,"dd":59,"n":0,"rr":0,"pop":0,"ppp":1030.1,"sun":60,"ww":0},{"t":"2026-05-26T00:00","tt":15.7,"td":11.8,"ff":6,"ffg":9,"dd":63,"n":0,"rr":0,"pop":0,"ppp":1030.2,"sun":0,"ww":0},{"t":"2026-05-26T03:00","tt":14.7,"td":10.4,"ff":5,"ffg":9,"dd":67,"n":0,"rr":0,"pop":0,"ppp":1029.7,"sun":0,"ww":0},{"t":"2026-05-26T06:00","tt":17.1,"td":11.7,"ff":6,"ffg":11,"dd":75,"n":0,"rr":0,"pop":0,"ppp":1029.5,"sun":120,"ww":0},{"t":"2026-05-26T09:00","tt":22.2,"td":12.4,"ff":8,"ffg":14,"dd":73,"n":0,"rr":0,"pop":0,"ppp":1029,"sun":180,"ww":0},{"t":"2026-05-26T12:00","tt":25.6,"td":12.1,"ff":7,"ffg":13,"dd":75,"n":0,"rr":0,"pop":0,"ppp":1028.2,"sun":180,"ww":0},{"t":"2026-05-26T15:00","tt":26.2,"td":12.2,"ff":8,"ffg":15,"dd":53,"n":0,"rr":0.04,"pop":15,"ppp":1027,"sun":177,"ww":0},{"t":"2026-05-26T18:00","tt":24.1,"td":12.8,"ff":8,"ffg":13,"dd":50,"n":0,"rr":0.08,"pop":25,"ppp":1026.1,"sun":176,"ww":0},{"t":"2026-05-26T21:00","tt":19.4,"td":13.7,"ff":6,"ffg":11,"dd":51,"n":0,"rr":0.09,"pop":25,"ppp":1026.4,"sun":58,"ww":0},{"t":"2026-05-27T00:00","tt":16.4,"td":13.7,"ff":5,"ffg":8,"dd":51,"n":0,"rr":0.08,"pop":25,"ppp":1026.2,"sun":0,"ww":0}];
+
+const DAGEN=["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+const MND=["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+const WW={0:["☀️","Onbewolkt"],1:["🌤️","Vrijwel onbewolkt"],2:["⛅","Licht bewolkt"],3:["🌥️","Half bewolkt"],
+  4:["☁️","Zwaar bewolkt"],5:["🌫️","Nevel"],6:["🌫️","Mist"],7:["☁️","Betrokken"],
+  25:["🌦️","Buien"],61:["🌧️","Regen"],62:["🌧️","Regen"],63:["🌧️","Regen"],95:["⛈️","Onweer"]};
+function wwGlyph(c,n){ if(WW[c]) return WW[c][0]; if(n>=7)return"☁️"; if(n>=4)return"🌥️"; if(n>=2)return"⛅"; return"☀️"; }
+function P(o){ const t=o.t; return {y:+t.slice(0,4),mo:+t.slice(5,7),d:+t.slice(8,10),h:+t.slice(11,13),
+  date:new Date(t+":00")}; }
+
+/* ---------------- Meteogram ---------------- */
+const NS="http://www.w3.org/2000/svg";
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+function line(pts,stroke,w,dash){const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const a={d,fill:"none",stroke,"stroke-width":w,"stroke-linejoin":"round","stroke-linecap":"round"};
+  if(dash)a["stroke-dasharray"]=dash; return el("path",a);}
+
+function buildMeteogram(){
+  const svg=document.getElementById("mg");
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  const N=DATA.length, padL=46, padR=14, W=980, plotW=W-padL-padR;
+  const step=plotW/(N-1);
+  const X=i=>padL+i*step;
+  // panel stack
+  const P0=P(DATA[0]);
+  const rows=[
+    {id:"sym",h:48},
+    {id:"temp",h:150,lbl:"Temperatuur °C"},
+    {id:"neer",h:104,lbl:"Neerslag mm · kans %"},
+    {id:"wind",h:118,lbl:"Wind kn"},
+    {id:"cloud",h:96,lbl:"Bewolking octa · zon"},
+    {id:"druk",h:84,lbl:"Luchtdruk hPa"},
+    {id:"axis",h:30}
+  ];
+  let yTop={}, cy=8;
+  rows.forEach(r=>{yTop[r.id]=cy; cy+=r.h;});
+  const H=cy+4;
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+
+  // night bands + day separators across full height
+  const bandTop=yTop.temp, bandBot=yTop.druk+rows.find(r=>r.id==="druk").h;
+  let seg=null;
+  for(let i=0;i<N;i++){
+    const p=P(DATA[i]); const night=(p.h>=21||p.h<6);
+    if(night&&seg===null) seg=i;
+    if((!night||i===N-1)&&seg!==null){
+      const a=X(seg)-step/2, b=X(night?i:i-1)+step/2;
+      svg.appendChild(el("rect",{class:"night-band",x:Math.max(padL,a),y:bandTop,
+        width:Math.min(X(N-1),b)-Math.max(padL,a),height:bandBot-bandTop}));
+      seg=null;
+    }
+  }
+  // day separators + labels at each 00:00
+  for(let i=0;i<N;i++){
+    const p=P(DATA[i]);
+    if(p.h===0||i===0){
+      const x=X(i);
+      if(i>0) svg.appendChild(el("line",{class:"day-sep",x1:x,y1:bandTop,x2:x,y2:bandBot}));
+      svg.appendChild(el("text",{x:x+4,y:yTop.sym+11,class:"day-lbl"},))
+        .appendChild(document.createTextNode(DAGEN[p.date.getDay()].slice(0,2)+" "+p.d+" "+MND[p.mo-1]));
+    }
+  }
+
+  const series=k=>DATA.map(o=>o[k]);
+  function yscale(vals,top,h,pad,minF,maxF){
+    let mn=Math.min(...vals),mx=Math.max(...vals);
+    if(minF!==undefined)mn=Math.min(mn,minF); if(maxF!==undefined)mx=Math.max(mx,maxF);
+    if(mx===mn)mx=mn+1; const rng=mx-mn;
+    return {Y:v=>top+pad+(h-2*pad)*(1-(v-mn)/rng), mn,mx};
+  }
+  function gridY(top,h,ys,ticks,unit){
+    ticks.forEach(v=>{const y=ys.Y(v);
+      svg.appendChild(el("line",{class:"grid-ln",x1:padL,y1:y,x2:W-padR,y2:y}));
+      const tx=el("text",{x:padL-5,y:y+3,class:"axis-lbl","text-anchor":"end"});
+      tx.appendChild(document.createTextNode(v)); svg.appendChild(tx);
+    });
+  }
+  function niceTicks(mn,mx,n){const s=(mx-mn)/n;const p=Math.pow(10,Math.floor(Math.log10(s)));
+    const st=[1,2,2.5,5,10].map(m=>m*p).find(m=>m>=s)||p;
+    const out=[];for(let v=Math.ceil(mn/st)*st;v<=mx+1e-6;v+=st)out.push(+v.toFixed(2));return out;}
+  const panelLabel=(id,txt)=>{const t=el("text",{x:padL,y:yTop[id]+12,class:"panel-lbl"});
+    t.appendChild(document.createTextNode(txt));svg.appendChild(t);};
+
+  /* --- symbol strip (every 2nd tijdstap to avoid crowding) --- */
+  DATA.forEach((o,i)=>{ if(i%2===0){
+    const g=el("text",{x:X(i),y:yTop.sym+40,"text-anchor":"middle","font-size":"15"});
+    g.appendChild(document.createTextNode(wwGlyph(o.ww,o.n))); svg.appendChild(g);
+  }});
+
+  /* --- temp --- */
+  {const r=rows.find(x=>x.id==="temp"); panelLabel("temp",r.lbl);
+   const tt=series("tt"),td=series("td");
+   const ys=yscale(tt.concat(td),yTop.temp,r.h,20);
+   gridY(yTop.temp,r.h,ys,niceTicks(ys.mn,ys.mx,4));
+   // area under tt
+   const ttp=tt.map((v,i)=>[X(i),ys.Y(v)]);
+   const base=ys.Y(ys.mn);
+   const area=el("path",{d:"M"+ttp[0][0]+" "+base+" "+ttp.map(p=>"L"+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ")+" L"+ttp[ttp.length-1][0]+" "+base+" Z",
+     fill:"var(--wl-danger)","opacity":"0.07"}); svg.appendChild(area);
+   svg.appendChild(line(td.map((v,i)=>[X(i),ys.Y(v)]),"var(--wl-teal)",1.6,"4 3"));
+   svg.appendChild(line(ttp,"var(--wl-danger)",2.4));
+   // value labels at local maxima (daily peaks) & at 03:00 mins
+   DATA.forEach((o,i)=>{const p=P(o);
+     if(p.h===15||p.h===3){const t=el("text",{x:X(i),y:ys.Y(o.tt)+(p.h===15?-7:14),class:"val-lbl","text-anchor":"middle"});
+       t.appendChild(document.createTextNode(o.tt.toFixed(0)+"°"));svg.appendChild(t);}
+   });
+  }
+
+  /* --- neerslag + kans --- */
+  {const r=rows.find(x=>x.id==="neer"); panelLabel("neer",r.lbl);
+   const rr=series("rr"),pop=series("pop");
+   const top=yTop.neer, h=r.h, pad=18, base=top+h-pad;
+   const mxrr=Math.max(0.5,Math.max(...rr));
+   // pop grid (right, 0-100)
+   [0,50,100].forEach(v=>{const y=base-(h-2*pad)*(v/100);
+     svg.appendChild(el("line",{class:"grid-ln",x1:padL,y1:y,x2:W-padR,y2:y}));
+     const tx=el("text",{x:W-padR+3,y:y+3,class:"axis-lbl","text-anchor":"start",fill:"var(--wl-purple)"});
+     tx.appendChild(document.createTextNode(v));svg.appendChild(tx);});
+   // rr bars
+   const bw=Math.max(3,step*0.55);
+   rr.forEach((v,i)=>{ if(v>0){const bh=(h-2*pad)*(v/mxrr);
+     svg.appendChild(el("rect",{x:X(i)-bw/2,y:base-bh,width:bw,height:bh,rx:1.5,fill:"var(--wl-blue)","opacity":"0.85"}));}});
+   // rr axis labels (left)
+   [0,mxrr].forEach((v,k)=>{const y=k?top+pad:base;
+     const tx=el("text",{x:padL-5,y:y+3,class:"axis-lbl","text-anchor":"end",fill:"var(--wl-blue)"});
+     tx.appendChild(document.createTextNode(v.toFixed(v<1?1:0)));svg.appendChild(tx);});
+   // pop line
+   svg.appendChild(line(pop.map((v,i)=>[X(i),base-(h-2*pad)*(v/100)]),"var(--wl-purple)",1.8,"1 3"));
+  }
+
+  /* --- wind --- */
+  {const r=rows.find(x=>x.id==="wind"); panelLabel("wind",r.lbl);
+   const ff=series("ff"),ffg=series("ffg"),dd=series("dd");
+   const ys=yscale([0].concat(ffg),yTop.wind+8,r.h-14,14,0);
+   gridY(yTop.wind+8,r.h-14,ys,niceTicks(0,ys.mx,3));
+   // gust area
+   svg.appendChild(line(ffg.map((v,i)=>[X(i),ys.Y(v)]),"var(--wl-accent-strong)",1.4,"3 2"));
+   svg.appendChild(line(ff.map((v,i)=>[X(i),ys.Y(v)]),"var(--wl-wind)",2.2));
+   // direction arrows along bottom
+   const ay=yTop.wind+r.h-9;
+   DATA.forEach((o,i)=>{ if(i%2===0){
+     const g=el("g",{transform:`translate(${X(i)},${ay}) rotate(${o.dd})`});
+     // arrow points FROM wind direction (meteo): shaft along dd, head where wind goes
+     g.appendChild(el("line",{x1:0,y1:-5,x2:0,y2:5,stroke:"var(--wl-wind)","stroke-width":1.3}));
+     g.appendChild(el("path",{d:"M0 6 L-2.4 1.5 L2.4 1.5 Z",fill:"var(--wl-wind)"}));
+     svg.appendChild(g);
+   }});
+  }
+
+  /* --- cloud + zon --- */
+  {const r=rows.find(x=>x.id==="cloud"); panelLabel("cloud",r.lbl);
+   const n=series("n"),sun=series("sun");
+   const top=yTop.cloud+6, h=r.h-12, base=top+h;
+   // zon bars (yellow, min/180)
+   const bw=Math.max(3,step*0.55);
+   sun.forEach((v,i)=>{ if(v>0){const bh=h*(v/180);
+     svg.appendChild(el("rect",{x:X(i)-bw/2,y:base-bh,width:bw,height:bh,rx:1.5,fill:"var(--wl-warn-y)","opacity":"0.75"}));}});
+   // cloud octa line/area (0-8)
+   const cy=v=>base-h*(v/8);
+   const cp=n.map((v,i)=>[X(i),cy(v)]);
+   svg.appendChild(el("path",{d:"M"+cp[0][0]+" "+base+" "+cp.map(p=>"L"+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ")+" L"+cp[cp.length-1][0]+" "+base+" Z",
+     fill:"var(--wl-text-soft)","opacity":"0.28"}));
+   svg.appendChild(line(cp,"var(--wl-text-muted)",1.6));
+   [0,4,8].forEach(v=>{const y=cy(v);const tx=el("text",{x:padL-5,y:y+3,class:"axis-lbl","text-anchor":"end"});
+     tx.appendChild(document.createTextNode(v));svg.appendChild(tx);});
+  }
+
+  /* --- druk --- */
+  {const r=rows.find(x=>x.id==="druk"); panelLabel("druk",r.lbl);
+   const ppp=series("ppp");
+   const ys=yscale(ppp,yTop.druk+6,r.h-6,14);
+   gridY(yTop.druk+6,r.h-6,ys,niceTicks(ys.mn,ys.mx,3));
+   svg.appendChild(line(ppp.map((v,i)=>[X(i),ys.Y(v)]),"var(--wl-accent-strong)",2));
+  }
+
+  /* --- x-axis time ticks --- */
+  DATA.forEach((o,i)=>{const p=P(o);
+    if(p.h%6===0){const x=X(i);
+      const tx=el("text",{x,y:yTop.axis+12,class:"axis-lbl","text-anchor":"middle"});
+      tx.appendChild(document.createTextNode(String(p.h).padStart(2,"0")));svg.appendChild(tx);}
+  });
+}
+
+/* ---------------- Legend ---------------- */
+function buildLegend(){
+  const L=document.getElementById("legend");
+  const items=[
+    ["i","var(--wl-danger)","Temperatuur"],
+    ["i dash","var(--wl-teal)","Dauwpunt"],
+    ["sq","var(--wl-blue)","Neerslag (mm/3u)"],
+    ["i dash","var(--wl-purple)","Neerslagkans"],
+    ["i","var(--wl-wind)","Wind"],
+    ["i dash","var(--wl-accent-strong)","Windstoten"],
+    ["sq","var(--wl-warn-y)","Zonneschijn"],
+    ["i","var(--wl-text-muted)","Bewolking (octa)"],
+    ["i","var(--wl-accent-strong)","Luchtdruk"]
+  ];
+  L.innerHTML=items.map(([c,col,t])=>
+    `<span><i class="${c}" style="${c.includes('dash')?'color':'background'}:${col}"></i>${t}</span>`).join("");
+}
+
+/* ---------------- Tabel ---------------- */
+function buildTable(){
+  const w=document.getElementById("tblWrap");
+  let h=`<table class="data"><thead><tr>
+    <th>uur</th><th>weer</th><th>temp</th><th>dauwp</th><th>wind</th><th>stoot</th><th>ri</th>
+    <th>bew</th><th>neersl</th><th>kans</th><th>druk</th><th>zon</th></tr></thead><tbody>`;
+  let lastDay="";
+  const dirTxt=d=>["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW","W","WNW","NW","NNW"][Math.round(d/22.5)%16];
+  DATA.forEach(o=>{const p=P(o);const dk=o.t.slice(0,10);
+    if(dk!==lastDay){lastDay=dk;
+      h+=`<tr class="dagrij"><td colspan="12">${DAGEN[p.date.getDay()]} ${p.d} ${MND[p.mo-1]}</td></tr>`;}
+    const tc=o.tt>=20?"tw":(o.tt<8?"tc":"");
+    h+=`<tr><td class="uur">${String(p.h).padStart(2,"0")}:00</td>
+      <td>${wwGlyph(o.ww,o.n)}</td>
+      <td class="${tc}">${o.tt.toFixed(1)}°</td>
+      <td>${o.td.toFixed(1)}°</td>
+      <td>${o.ff}</td><td>${o.ffg}</td><td>${dirTxt(o.dd)}</td>
+      <td>${o.n}</td>
+      <td class="rr">${o.rr>0?o.rr.toFixed(1):"–"}</td>
+      <td>${o.pop>0?o.pop+"%":"–"}</td>
+      <td>${o.ppp.toFixed(0)}</td>
+      <td class="zon">${o.sun>0?o.sun:"–"}</td></tr>`;
+  });
+  h+="</tbody></table>";
+  w.innerHTML=h;
+}
+
+/* ---------------- meta / run ---------------- */
+function fmtRun(){
+  const p=P({t:RUN});
+  document.getElementById("runmeta").innerHTML=
+    `Bron: <b>WeatherPro</b> (MeteoGroup) · Run <b>${DAGEN[p.date.getDay()]} ${p.d} ${MND[p.mo-1]} ${p.y}, ${String(p.h).padStart(2,"0")}:${RUN.slice(14)} u</b><br>`+
+    `Geldig t/m ${(()=>{const l=P(DATA[DATA.length-1]);return `${l.d} ${MND[l.mo-1]} ${String(l.h).padStart(2,"0")}:00`;})()} · 61 tijdstappen`;
+  const first=DATA[0], fp=P(first);
+  document.getElementById("nowbox").innerHTML=
+    `<div class="t">${first.tt.toFixed(0)}°</div><div class="d">${wwGlyph(first.ww,first.n)} bij start · ${fp.d} ${MND[fp.mo-1]} ${String(fp.h).padStart(2,"0")}:00</div>`;
+}
+
+/* ---------------- CSV ---------------- */
+function downloadCSV(){
+  const hdr=["datetime_local","temp_C","dewpoint_C","wind_kt","gust_kt","dir_deg","cloud_octa","precip_mm","precip_prob_pct","pressure_hPa","sun_min","ww"];
+  const rows=DATA.map(o=>[o.t,o.tt,o.td,o.ff,o.ffg,o.dd,o.n,o.rr,o.pop,o.ppp,o.sun,o.ww].join(","));
+  const blob=new Blob([hdr.join(",")+"\n"+rows.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="weatherpro_rotterdam.csv";a.click();
+}
+
+/* ---------------- init ---------------- */
+document.getElementById("tblToggle").onclick=e=>{
+  const w=document.getElementById("tblWrap");w.classList.toggle("open");
+  e.target.textContent=w.classList.contains("open")?"Tabel verbergen":"Tabel tonen";
+};
+document.getElementById("csvBtn").onclick=downloadCSV;
+document.getElementById("themeBtn").onclick=e=>{
+  const dark=document.documentElement.getAttribute("data-theme")==="dark";
+  document.documentElement.setAttribute("data-theme",dark?"light":"dark");
+  e.target.textContent=dark?"🌙 Donker":"☀️ Licht";
+  buildMeteogram();
+};
+fmtRun(); buildMeteogram(); buildLegend(); buildTable();
+window.addEventListener("resize",()=>{clearTimeout(window._rz);window._rz=setTimeout(buildMeteogram,150);});
+</script>
+</body>
+</html>

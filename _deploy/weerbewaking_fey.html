@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking W.M. — Feyenoord wedstrijd</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;padding:20px 10px}
+
+.pagina{max-width:800px;margin:0 auto 20px;background:white;padding:40px 50px;box-shadow:0 2px 12px rgba(0,0,0,.08);border-radius:4px}
+
+/* Toolbar */
+.toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:white;padding:12px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.9rem;padding:6px 10px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar button{font-family:inherit;font-size:.9rem;padding:7px 16px;background:#c00000;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.toolbar button:hover{background:#900000}
+.toolbar .spacer{flex:1}
+.toolbar .status{font-size:.8rem;color:#888}
+
+/* Header — zelfde stijl als andere docs maar met rode accent */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2px solid #c00000}
+.doc-header img.logo-l{height:215px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+.doc-opgesteld{margin-top:6px;font-size:.8rem;color:#555;font-style:italic}
+.doc-opgesteld .datum{font-weight:600;color:#333;font-style:normal}
+
+/* Plaats-invoer (rood) */
+.plaats-blok{margin:14px 0 4px;display:flex;align-items:center;gap:10px;background:#fff0f0;border:1px solid #c00000;border-left:4px solid #c00000;border-radius:4px;padding:8px 14px}
+.plaats-blok .label{font-size:.78rem;font-weight:700;color:#900000;text-transform:uppercase;letter-spacing:.06em}
+.plaats-blok .veld{flex:1;font-family:inherit;font-size:1rem;font-weight:700;color:#c00000;background:white;border:1px solid #f0a0a0;border-radius:3px;padding:5px 10px;outline:none}
+.plaats-blok .veld:focus{border-color:#c00000;background:#fffbfb;box-shadow:0 0 0 2px #f8c8c8}
+
+/* Titel — Feyenoord-rood (zelfde grootte als sfeertekst) */
+.titel{font-size:1.05rem;font-weight:700;color:#c00000;text-align:left;text-transform:uppercase;letter-spacing:.04em;padding:8px 0 4px;margin:14px 0 4px;outline:none;min-height:24px}
+.titel:focus{background:#fffbe8}
+.titel:empty::before{content:'WEERBERICHT: FEYENOORD – TEGENSTANDER';color:#bbb;font-weight:500}
+
+/* Sfeertekst (bv. ZONNIG!) — Ed Aldus Weer en Media blauw */
+.sfeer{font-size:1.05rem;font-weight:700;color:#1f497d;letter-spacing:.04em;margin:14px 0 14px;outline:none;min-height:22px}
+.sfeer:focus{background:#fffbe8}
+.sfeer:empty::before{content:'SFEERTEKST (bijv. ZONNIG!)';color:#bbb;font-weight:500}
+
+h2.kop{font-size:.95rem;font-weight:700;color:#c00000;margin:18px 0 8px;padding-bottom:3px;border-bottom:1px solid #f0d0d0}
+
+.tekstvak{min-height:60px;padding:8px 10px;border:1px dashed #ccc;border-radius:3px;font-size:.85rem;line-height:1.5;color:#222;outline:none;background:#fafafa;text-align:justify}
+.tekstvak:focus{background:#fffbe8;border-color:#c00000;border-style:solid}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* Waarschuwing */
+.waarsch-blok{margin:10px 0 4px;display:flex;align-items:center;gap:10px;font-size:.95rem;font-weight:700;color:#222;flex-wrap:wrap}
+.waarsch-blok .lbl{color:#c00000;letter-spacing:.04em}
+.waarsch-blok .waarsch-voor{flex:1;min-width:180px;font-weight:500;font-size:.9rem;color:#222;outline:none;padding:3px 8px;border:1px solid #ccc;border-radius:3px;background:#fafafa;min-height:20px}
+.waarsch-blok .waarsch-voor:focus{background:#fffbe8;border-color:#c00000}
+.waarsch-blok .waarsch-voor:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic;font-weight:400}
+select.status-sel{font-family:inherit;font-size:.85rem;padding:4px 10px;border:1px solid #ccc;border-radius:3px;font-weight:700}
+select.status-sel.w-geen{background:#d4e8d4;color:#2d6a2d;border-color:#2d6a2d}
+select.status-sel.w-geel{background:#fff3b0;color:#8a6d00;border-color:#8a6d00}
+select.status-sel.w-oranje{background:#ffcf9f;color:#b05a00;border-color:#b05a00}
+select.status-sel.w-rood{background:#ffb0b0;color:#a00000;border-color:#a00000}
+
+/* Uurverwachting-tabel — Feyenoord rood */
+table.uur{width:100%;border-collapse:collapse;margin-top:6px;font-size:.82rem;margin-bottom:12px}
+table.uur th,table.uur td{border:1px solid #aaa;padding:5px 4px;text-align:center}
+table.uur td[contenteditable="true"]{outline:none;cursor:text}
+table.uur td[contenteditable="true"]:hover{background:#fff5f5}
+table.uur td[contenteditable="true"]:focus{background:#fffbe8;box-shadow:inset 0 0 0 1px #c00000}
+table.uur th{background:#c00000;color:white;font-size:.78rem;font-weight:700;line-height:1.2}
+table.uur th.daglabel{background:#222;color:white;text-align:left;padding-left:8px;font-size:.85rem}
+table.uur th.daglabel .tabel-plaats{
+  font-weight:700;outline:none;border-bottom:1px dashed rgba(255,255,255,.5);
+  cursor:text;min-width:40px;display:inline-block;
+}
+table.uur th.daglabel .tabel-plaats:focus{background:rgba(255,255,255,.15);border-radius:2px;border-bottom-color:white}
+table.uur td.rij-label{text-align:left;background:#fff0f0;font-weight:700;font-size:.78rem;width:24%;padding-left:8px;color:#222}
+table.uur .windpijl{display:inline-block;transform-origin:center;font-weight:700;color:#c00000;margin-right:2px}
+
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.62rem;color:#888;text-align:center;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Koptekst-grootte (instelbaar) */
+body{--kop-scale:1}
+.pagina .titel{font-size:calc(1.05rem * var(--kop-scale))}
+.pagina .sfeer{font-size:calc(1.05rem * var(--kop-scale))}
+.pagina h2.kop{font-size:calc(.95rem * var(--kop-scale))}
+
+@media (max-width:700px){
+  body{padding:8px 6px 20px}
+  .pagina{padding:16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toolbar{padding:8px 10px;gap:6px}
+  .toolbar button{font-size:.78rem;padding:5px 8px}
+  .toolbar select,.toolbar input{font-size:.78rem;padding:4px 7px}
+  .doc-header{flex-wrap:wrap;gap:8px}
+  .doc-header img.logo-l{height:70px}
+  .doc-header img.logo-r{height:40px;max-width:130px}
+  .plaats-blok{flex-wrap:wrap}
+  table.uur{font-size:.72rem}
+  table.uur th,table.uur td{padding:3px 3px}
+  .kop-preset{display:none}
+}
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  select.status-sel{border:none;appearance:none;-webkit-appearance:none;background:transparent;font-weight:700;padding:0}
+  table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+  @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <label>Model:</label>
+  <select id="model-sel">
+    <option value="harmonie" selected>HARMONIE 2×2 km</option>
+    <option value="icond2">ICON-D2 regulier</option>
+    <option value="icond2ruc">ICON-D2 RUC (uurlijks)</option>
+  </select>
+  <label style="margin-left:8px">Startuur:</label>
+  <select id="startuur-sel"></select>
+  <label style="margin-left:8px">#uren:</label>
+  <select id="aantal-sel">
+    <option value="6" selected>6</option>
+    <option value="7">7</option>
+    <option value="8">8</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="status" id="data-status">–</span>
+  <button onclick="herlaadTabel()" title="Haal de uurtabel opnieuw op (overschrijft eigen aanpassingen)" style="background:#2a7a2a">↻ Ververs tabel</button>
+  <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <span class="status" style="margin-left:8px">Document:</span>
+  <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <label style="margin-left:8px">Koppen:</label>
+  <select id="kop-scale-sel" onchange="zetKopScale(this.value)" title="Grootte van titel en koppen">
+    <option value="0.8">80%</option>
+    <option value="0.9">90%</option>
+    <option value="1" selected>100%</option>
+    <option value="1.1">110%</option>
+    <option value="1.2">120%</option>
+    <option value="1.35">135%</option>
+    <option value="1.5">150%</option>
+  </select>
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
+  <button onclick="gaTerug()" style="background:#777">← Terug naar weerbewaking</button>
+</div>
+
+<div class="pagina" id="doc">
+
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Weer en Media" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum">–</span></div>
+
+  <div class="plaats-blok no-pdf">
+    <span class="label">Plaats</span>
+    <input class="veld" type="text" id="plaats-in" value="Rotterdam" placeholder="Plaats of coördinaten, bv. 52.10, 5.18">
+    <button id="zoek-btn" style="background:#c00000;color:white;border:none;border-radius:3px;padding:5px 12px;font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer">🔍 Zoek</button>
+  </div>
+  <div id="geo-status" class="no-pdf" style="font-size:.72rem;color:#666;margin:4px 0 0 4px;min-height:14px"></div>
+
+  <div class="titel" contenteditable="true" data-save="titel">WEERBERICHT: FEYENOORD – AJAX</div>
+  <div class="sfeer" contenteditable="true" data-save="sfeer">ZONNIG!</div>
+
+  <h2 class="kop">De weersituatie nader beschreven</h2>
+  <div class="tekstvak" contenteditable="true" data-save="situatie" data-placeholder="Beschrijf hier de grootschalige weersituatie...">Een hogedrukgebied boven Rusland zorgt vandaag voor een fantastische weerdag. Met een zwakke oostenwind wordt droge en zachte lucht aangevoerd.</div>
+
+  <h2 class="kop">Vandaag</h2>
+  <div class="tekstvak" contenteditable="true" data-save="verwachting" data-placeholder="Beschrijf de verwachting voor vandaag (incl. de wedstrijd)...">In Rotterdam is het vandaag stralend zonnig, ook tijdens de wedstrijd, en blijft het droog. Het wordt zacht voor de tijd van het jaar. De maximumtemperatuur komt uit op ongeveer 15 graden. De wind waait zwak en komt uit het oosten (windkracht 2).</div>
+
+  <div class="waarsch-blok">
+    <span class="lbl">WAARSCHUWING:</span>
+    <select class="status-sel" id="waarsch-sel" onchange="updateStatusKleur(this)">
+      <option value="GEEN">GEEN</option>
+      <option value="GEEL">GEEL</option>
+      <option value="ORANJE">ORANJE</option>
+      <option value="ROOD">ROOD</option>
+    </select>
+    <span class="lbl" style="margin-left:6px">VOOR:</span>
+    <span id="waarsch-voor" class="waarsch-voor" contenteditable="true" data-save="waarschVoor" data-placeholder="bv. zware windstoten, onweer, gladheid…"></span>
+  </div>
+
+  <h2 class="kop" id="kop-uurtabel">Uurverwachting wedstrijd</h2>
+  <table class="uur" id="uur-tabel"></table>
+
+  <div class="doc-footer">© Ed Aldus Weer en Media aanvaardt geen aansprakelijkheid voor het niet of slechts ten-dele uitkomen van de verstrekte verwachtingen.</div>
+</div>
+
+<script>
+const MAAND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const DAG=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+
+function formatDatumVol(d){
+  return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]} ${d.getFullYear()} om ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} uur`;
+}
+function formatDagLang(d){ return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]}`; }
+
+function naarBFT(kmh){
+  if(kmh==null||isNaN(kmh)) return '–';
+  const grens=[1,6,12,20,29,39,50,62,75,89,103,118];
+  for(let i=0;i<grens.length;i++) if(kmh<grens[i]) return i;
+  return 12;
+}
+function naarRichtingKort(deg){
+  if(deg==null||isNaN(deg)) return '–';
+  const r=['N','NO','O','ZO','Z','ZW','W','NW','N'];
+  return r[Math.round(deg/45)];
+}
+function windCel(deg){
+  const letter=naarRichtingKort(deg);
+  const rot=(deg!=null&&!isNaN(deg))?deg:0;
+  return `<span class="windpijl" style="transform:rotate(${rot}deg);display:inline-block">↓</span> ${letter}`;
+}
+/* Letter → graden (voor herrendering pijl bij bewerken cel) */
+const RICHTING_DEG={N:0,NNO:22.5,NO:45,ONO:67.5,O:90,OZO:112.5,ZO:135,ZZO:157.5,Z:180,ZZW:202.5,ZW:225,WZW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+function parseRichting(txt){
+  const m=(txt||'').toUpperCase().replace(/[^NOZW]/g,'').match(/^(NNO|NNW|NO|NW|N|ONO|OZO|O|ZZO|ZZW|ZO|ZW|Z|WNW|WZW|W)$/);
+  if(!m) return null;
+  return RICHTING_DEG[m[1]];
+}
+function updateStatusKleur(sel){
+  const kl={GEEN:'w-geen',GEEL:'w-geel',ORANJE:'w-oranje',ROOD:'w-rood'};
+  sel.className='status-sel '+kl[sel.value];
+}
+
+/* ── Model-data (HARMONIE / ICON-D2) ── */
+const HARM_BASE='https://harmonie-data.weerlab.nl/';
+const MODELS={
+  harmonie: {meta:'harmonie_canvas_meta.json', label:'HARMONIE 2×2 km'},
+  icond2:   {meta:'icond2_canvas_meta.json',   label:'ICON-D2 regulier'},
+  icond2ruc:{meta:'icond2ruc_canvas_meta.json',label:'ICON-D2 RUC'}
+};
+const SAMPLE_RADIUS_KM=10;
+const SAMPLE_EXTRA_POINTS=6;
+let huidigModel='harmonie';
+let metaCache={};       // {model: meta}
+let harmonieMeta=null;  // alias voor huidig model
+let huidigePunt=null;
+
+async function laadMeta(){
+  if(metaCache[huidigModel]){ harmonieMeta=metaCache[huidigModel]; return harmonieMeta; }
+  const r=await fetch(HARM_BASE+MODELS[huidigModel].meta+'?_='+Date.now());
+  if(!r.ok) throw new Error('meta fetch '+r.status);
+  const j=await r.json();
+  metaCache[huidigModel]=j;
+  harmonieMeta=j;
+  return j;
+}
+function latLonNaarGrid(meta,lat,lon){
+  const g=meta.grid;
+  const iLat=Math.round((lat-g.lat_min)/(g.lat_max-g.lat_min)*(g.n_lat-1));
+  const iLon=Math.round((lon-g.lon_min)/(g.lon_max-g.lon_min)*(g.n_lon-1));
+  if(iLat<0||iLat>=g.n_lat||iLon<0||iLon>=g.n_lon) return null;
+  return {iLat,iLon,gi:iLat*g.n_lon+iLon};
+}
+function parseCoordinateQuery(q){
+  const nums=q.trim().replace(/[()]/g,'').match(/[-+]?\d+(?:[.,]\d+)?/g);
+  if(!nums || nums.length<2) return null;
+  const lat=parseFloat(nums[0].replace(',','.'));
+  const lon=parseFloat(nums[1].replace(',','.'));
+  if(!Number.isFinite(lat)||!Number.isFinite(lon)) return null;
+  if(lat<-90||lat>90||lon<-180||lon>180) return null;
+  return {lat,lon,naam:`${lat.toFixed(3)}, ${lon.toFixed(3)}`};
+}
+function offsetLatLon(lat,lon,distanceKm,bearingDeg){
+  const br=bearingDeg*Math.PI/180;
+  const dLat=(distanceKm*Math.cos(br))/111.32;
+  const dLon=(distanceKm*Math.sin(br))/(111.32*Math.cos(lat*Math.PI/180));
+  return {lat:lat+dLat, lon:lon+dLon};
+}
+function sampleGridPointsForLocation(meta,lat,lon){
+  const punten=[{lat,lon}];
+  for(let i=0;i<SAMPLE_EXTRA_POINTS;i++) punten.push(offsetLatLon(lat,lon,SAMPLE_RADIUS_KM,i*360/SAMPLE_EXTRA_POINTS));
+  const uniek=[];
+  const gezien=new Set();
+  for(const p of punten){
+    const grid=latLonNaarGrid(meta,p.lat,p.lon);
+    if(grid && !gezien.has(grid.gi)){
+      gezien.add(grid.gi);
+      uniek.push(grid);
+    }
+  }
+  return uniek;
+}
+function beschrijfSample(pt){
+  const n=(pt.gis&&pt.gis.length)||1;
+  return n>1 ? `${n} roosterpunten gemiddeld binnen ${SAMPLE_RADIUS_KM} km` : '1 roosterpunt';
+}
+async function geocodePlaats(q){
+  const coords=parseCoordinateQuery(q);
+  if(coords) return coords;
+  const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=nl,be,de&q='+encodeURIComponent(q);
+  const r=await fetch(url); if(!r.ok) throw new Error('geocode faalde');
+  const j=await r.json(); if(!j.length) return null;
+  return {lat:parseFloat(j[0].lat), lon:parseFloat(j[0].lon), naam:j[0].display_name};
+}
+async function fetchFloat(url,offset){
+  const r=await fetch(url,{headers:{'Range':`bytes=${offset}-${offset+3}`}});
+  if(!r.ok && r.status!==206) throw new Error('range faalde '+r.status);
+  const buf=await r.arrayBuffer();
+  return new DataView(buf).getFloat32(0,true);
+}
+// Beperkte parallelle fetches om R2 niet te overstelpen, met null-fallback bij uitvallers
+async function fetchFloatsBatched(url, offsets, limit=12){
+  const out=new Array(offsets.length);
+  let next=0;
+  async function worker(){
+    while(next<offsets.length){
+      const k=next++;
+      try{ out[k]=await fetchFloat(url, offsets[k]); }
+      catch(e){ out[k]=null; }
+    }
+  }
+  await Promise.all(Array(Math.min(limit, offsets.length)).fill(0).map(worker));
+  return out;
+}
+async function puntReeks(paramKey, gis, nSteps){
+  const meta=await laadMeta();
+  const info=meta.parameters[paramKey];
+  if(!info) throw new Error('param onbekend: '+paramKey);
+  const gridIndices=Array.isArray(gis)?gis:[gis];
+  const nPts=meta.grid.n_lat*meta.grid.n_lon;
+  const nComp=info.components;
+  const url=HARM_BASE+info.file;
+  const HEADER=16;
+  const offsets=[]; const idx=[];
+  for(let s=0;s<nSteps;s++){
+    for(let c=0;c<nComp;c++){
+      gridIndices.forEach((gi,p)=>{
+        offsets.push(HEADER + ((s*nComp+c)*nPts + gi)*4);
+        idx.push([s,c,p]);
+      });
+    }
+  }
+  const vals=await fetchFloatsBatched(url, offsets);
+  const uit=[]; for(let s=0;s<nSteps;s++) uit.push([]);
+  for(let s=0;s<nSteps;s++){
+    for(let c=0;c<nComp;c++){
+      let som=0, n=0;
+      for(let k=0;k<vals.length;k++){
+        if(idx[k][0]!==s||idx[k][1]!==c) continue;
+        const v=vals[k];
+        if(v!=null && Number.isFinite(v)){ som+=v; n++; }
+      }
+      uit[s][c]=n ? som/n : null;
+    }
+  }
+  return uit;
+}
+function vulStartuurSelect(tijden,nuSel){
+  const sel=document.getElementById('startuur-sel');
+  const nu=new Date();
+  // Default: eerste uur >= nu (of begin run als alles al voorbij is)
+  let defaultIdx=0;
+  for(let i=0;i<tijden.length;i++){
+    const t=new Date(tijden[i]);
+    if(t>=nu){ defaultIdx=i; break; }
+  }
+  const behoud=sel.value;
+  sel.innerHTML='';
+  const nAant=parseInt(document.getElementById('aantal-sel').value||'6');
+  // Toon ALLE uren van de hele run zodat morgen / overmorgen ook gekozen kunnen worden
+  const maxStart=Math.max(0, tijden.length-nAant);
+  for(let i=0;i<=maxStart;i++){
+    const t=new Date(tijden[i]);
+    const dagKort=DAG[t.getDay()].slice(0,2);
+    const lbl=`${dagKort} ${String(t.getHours()).padStart(2,'0')}:00`;
+    const opt=document.createElement('option');
+    opt.value=i; opt.textContent=lbl;
+    if(i===(nuSel!=null?parseInt(nuSel):defaultIdx)) opt.selected=true;
+    sel.appendChild(opt);
+  }
+  if(behoud && sel.querySelector(`option[value="${behoud}"]`)) sel.value=behoud;
+}
+
+/* Fallback startuur-select wanneer HARMONIE niet beschikbaar is */
+function vulStartuurFallback(){
+  const sel=document.getElementById('startuur-sel');
+  if(sel.options.length>0) return;
+  const nu=new Date();
+  const start=new Date(nu); start.setMinutes(0,0,0);
+  start.setHours(0); // begin bij middernacht van vandaag
+  for(let h=0;h<48;h++){
+    const t=new Date(start.getTime()+h*3600*1000);
+    const opt=document.createElement('option');
+    opt.value=h; opt.textContent=`${DAG[t.getDay()].slice(0,2)} ${String(t.getHours()).padStart(2,'0')}:00`;
+    sel.appendChild(opt);
+  }
+  // Zet huidige uur als default
+  const huidig=Math.floor((nu - start)/3600000);
+  if(huidig>=0 && huidig<48) sel.value=huidig;
+}
+
+function msNaarKmh(ms){ return ms*3.6; }
+function f(v,d=1){ return v==null||isNaN(v)?'–':(d===0?Math.round(v):(+v).toFixed(d).replace(/\.0$/,'')); }
+
+function bouwUurTabel(tblEl, daglabel, uren, rijen, plaatsnaam=''){
+  const plaatsHtml=plaatsnaam
+    ? `&nbsp; | &nbsp;<span class="tabel-plaats" contenteditable="true">${plaatsnaam}</span>`
+    : '';
+  const thHdr=`<tr><th class="daglabel" colspan="${uren.length+1}">${daglabel}${plaatsHtml}</th></tr>
+               <tr><th style="width:24%"></th>${uren.map(u=>`<th>${u}</th>`).join('')}</tr>`;
+  const body=rijen.map(r=>{
+    const celCls=r.cls?` class="${r.cls}"`:'';
+    return `<tr><td class="rij-label">${r.label}</td>${r.cellen.map(c=>`<td contenteditable="true"${celCls}>${c}</td>`).join('')}</tr>`;
+  }).join('');
+  tblEl.innerHTML=`<thead>${thHdr}</thead><tbody>${body}</tbody>`;
+}
+
+function bouwLegeTabel(){
+  // Bepaal startuur uit fallback-select indien gevuld, anders huidig uur
+  const NSTEPS=parseInt(document.getElementById('aantal-sel').value||'6');
+  const sel=document.getElementById('startuur-sel');
+  const nu=new Date();
+  let start;
+  if(sel && sel.value!=='' && !harmonieMeta){
+    // fallback-mode: startuur = aantal uren vanaf middernacht vandaag
+    const md=new Date(nu); md.setHours(0,0,0,0);
+    start=new Date(md.getTime()+parseInt(sel.value)*3600000);
+  } else {
+    start=new Date(nu); start.setMinutes(0,0,0);
+    if(nu.getMinutes()>0) start.setHours(start.getHours()+1);
+  }
+  const uren=[];
+  for(let k=0;k<NSTEPS;k++){
+    const t=new Date(start.getTime()+k*3600*1000);
+    uren.push(`${String(t.getHours()).padStart(2,'0')} uur`);
+  }
+  const dagLabel=formatDagLang(start);
+  const leeg=Array(NSTEPS).fill('–');
+  const rijDef=[
+    {label:'Temperatuur (°C)', cellen:leeg.slice()},
+    {label:'Wind',             cellen:leeg.slice(), cls:'wind-cel'},
+    {label:'Windkracht (BFT)', cellen:leeg.slice()},
+    {label:'Max. windstoot (km/u)', cellen:leeg.slice()},
+    {label:'Kans op regen (%)',cellen:leeg.slice()},
+    {label:'Regen (mm)',       cellen:leeg.slice()},
+    {label:'Kans op onweer (%)',cellen:leeg.slice()},
+    {label:'Zon/helder (%)',   cellen:leeg.slice()}
+  ];
+  const plaatsnaam=(document.getElementById('plaats-in').value||'').split(',')[0].trim();
+  bouwUurTabel(document.getElementById('uur-tabel'), dagLabel, uren, rijDef, plaatsnaam);
+}
+
+async function renderTabel(){
+  const meta=harmonieMeta;
+  const pt=huidigePunt;
+  if(!meta || !pt){ bouwLegeTabel(); return; }
+  const startIdx=parseInt(document.getElementById('startuur-sel').value||'0');
+  const NSTEPS=parseInt(document.getElementById('aantal-sel').value||'6');
+  document.getElementById('data-status').textContent=MODELS[huidigModel].label+' laden…';
+
+  const onweerParam = harmonieMeta.parameters.onweer ? 'onweer' : (harmonieMeta.parameters.cape ? 'cape' : null);
+  const params=['temp','neerslag','wind','windstoten','bewolking'].concat(onweerParam?[onweerParam]:[]);
+  const reeksen={};
+  await Promise.all(params.map(async p=>{
+    try{
+      const r=await puntReeks(p, pt.gis||pt.gi, startIdx+NSTEPS);
+      reeksen[p]=r.slice(startIdx, startIdx+NSTEPS);
+    }catch(e){ reeksen[p]=null; }
+  }));
+  // Onweer-reeks normaliseren: cape→% via heuristiek
+  if(onweerParam==='cape' && reeksen.cape){
+    reeksen.onweer = reeksen.cape.map(arr=>{
+      const c=arr[0]; if(c==null) return [null];
+      // cape (J/kg) → ruwe onweerskans
+      const p = c<100?0 : c<500?20 : c<1000?40 : c<2000?60 : 80;
+      return [p/100];
+    });
+  } else {
+    reeksen.onweer = reeksen.onweer || null;
+  }
+
+  const uren=[]; const rij={temp:[],wind:[],bft:[],stoot:[],kansR:[],regen:[],kansO:[],zon:[]};
+  let dagLabel='';
+
+  for(let k=0;k<NSTEPS;k++){
+    const t0=meta.tijden[startIdx+k]; if(!t0) break;
+    const t=new Date(t0);
+    if(k===0) dagLabel=formatDagLang(t);
+    uren.push(`${String(t.getHours()).padStart(2,'0')} uur`);
+
+    const temp = reeksen.temp ? reeksen.temp[k][0] : null;
+    rij.temp.push(f(temp,0));
+
+    let wspd=null, wdir=null;
+    if(reeksen.wind){
+      const u=reeksen.wind[k][0], v=reeksen.wind[k][1];
+      wspd=Math.sqrt(u*u+v*v);
+      wdir=(Math.atan2(-u,-v)*180/Math.PI+360)%360;
+    }
+    rij.wind.push(wdir==null?'–':windCel(wdir));
+    rij.bft.push(wspd==null?'–':naarBFT(msNaarKmh(wspd)));
+
+    let gust=null;
+    if(reeksen.windstoten){
+      const u=reeksen.windstoten[k][0], v=reeksen.windstoten[k][1];
+      gust=Math.sqrt(u*u+v*v);
+    }
+    rij.stoot.push(gust==null?'–':Math.round(msNaarKmh(gust)));
+
+    const rr = reeksen.neerslag ? reeksen.neerslag[k][0] : null;
+    rij.regen.push(rr==null?'–':f(rr,1));
+    rij.kansR.push(rr==null?'–':(rr>0.5?100:rr>0.1?70:rr>0.02?30:0));
+
+    const thn = reeksen.onweer ? reeksen.onweer[k][0] : null;
+    rij.kansO.push(thn==null?'–':(thn>0.7?80:thn>0.4?40:thn>0.1?10:0));
+
+    let cloudTot=null;
+    if(reeksen.bewolking){
+      const b=reeksen.bewolking[k];
+      const hoog=(b[0]||0)*0.2;
+      cloudTot=Math.max(hoog, b[1]||0, b[2]||0);
+    }
+    rij.zon.push(cloudTot==null?'–':Math.round((1-cloudTot)*100));
+  }
+
+  const rijDef=[
+    {label:'Temperatuur (°C)', cellen:rij.temp},
+    {label:'Wind',             cellen:rij.wind, cls:'wind-cel'},
+    {label:'Windkracht (BFT)', cellen:rij.bft},
+    {label:'Max. windstoot (km/u)', cellen:rij.stoot},
+    {label:'Kans op regen (%)',cellen:rij.kansR},
+    {label:'Regen (mm)',       cellen:rij.regen},
+    {label:'Kans op onweer (%)',cellen:rij.kansO},
+    {label:'Zon/helder (%)',   cellen:rij.zon}
+  ];
+  const plaatsnaam=(document.getElementById('plaats-in').value||'').split(',')[0].trim();
+  bouwUurTabel(document.getElementById('uur-tabel'), dagLabel, uren, rijDef, plaatsnaam);
+  document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
+}
+
+async function laadData(){
+  const nu=new Date();
+  document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
+  // Altijd eerst een lege tabel zodat de structuur zichtbaar is
+  bouwLegeTabel();
+  try{
+    const meta=await laadMeta();
+    if(document.getElementById('startuur-sel').options.length===0){
+      vulStartuurSelect(meta.tijden);
+    }
+    if(!huidigePunt){ await zoekEnLaad(); return; }
+    await renderTabel();
+  }catch(e){
+    document.getElementById('data-status').textContent=MODELS[huidigModel].label+' niet beschikbaar – tabel handmatig in te vullen ('+e.message+')';
+    vulStartuurFallback();
+  }
+}
+
+async function zoekEnLaad(){
+  const q=(document.getElementById('plaats-in').value||'').trim();
+  if(!q){ document.getElementById('geo-status').textContent=''; return; }
+  const geoEl=document.getElementById('geo-status');
+  geoEl.textContent='Zoeken…';
+  try{
+    const meta=await laadMeta();
+    const res=await geocodePlaats(q);
+    if(!res){ geoEl.textContent='Niet gevonden.'; return; }
+    const grids=sampleGridPointsForLocation(meta,res.lat,res.lon);
+    if(!grids.length){ geoEl.textContent='Buiten modelgebied.'; return; }
+    huidigePunt={lat:res.lat,lon:res.lon,naam:res.naam,...grids[0],gis:grids.map(g=>g.gi)};
+    geoEl.textContent=`📍 ${res.naam.split(',').slice(0,3).join(',')}  (${res.lat.toFixed(3)}, ${res.lon.toFixed(3)}) · ${beschrijfSample(huidigePunt)}`;
+    await renderTabel();
+  }catch(e){
+    geoEl.textContent='Fout: '+e.message;
+  }
+}
+
+document.getElementById('model-sel').addEventListener('change', async e=>{
+  huidigModel=e.target.value;
+  // Bij andere model: huidig punt opnieuw mappen (andere grid)
+  harmonieMeta=null;
+  document.getElementById('startuur-sel').innerHTML='';
+  if(huidigePunt){
+    try{
+      const meta=await laadMeta();
+      const grids=sampleGridPointsForLocation(meta, huidigePunt.lat, huidigePunt.lon);
+      if(grids.length){ huidigePunt={...huidigePunt, ...grids[0], gis:grids.map(g=>g.gi)}; }
+      vulStartuurSelect(meta.tijden);
+      await renderTabel();
+      document.getElementById('data-status').textContent=MODELS[huidigModel].label+' · run '+meta.run;
+    }catch(err){
+      document.getElementById('data-status').textContent='Model niet beschikbaar: '+err.message;
+      vulStartuurFallback(); bouwLegeTabel();
+    }
+  } else {
+    laadData();
+  }
+});
+document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
+document.getElementById('plaats-in').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); zoekEnLaad(); }
+});
+document.getElementById('startuur-sel').addEventListener('change', ()=>{
+  if(harmonieMeta && huidigePunt) renderTabel();
+  else bouwLegeTabel();
+});
+document.getElementById('aantal-sel').addEventListener('change', ()=>{
+  if(harmonieMeta){
+    vulStartuurSelect(harmonieMeta.tijden, document.getElementById('startuur-sel').value);
+    if(huidigePunt) renderTabel(); else bouwLegeTabel();
+  } else {
+    bouwLegeTabel();
+  }
+});
+
+/* ── PDF ── */
+function exporteerPDF(){
+  const doc=document.getElementById('doc').cloneNode(true);
+  // Houd de kloon buiten beeld, maar wel in een container met vaste breedte.
+  // Een los DOM-element heeft geen layout en produceert daarom een lege PDF.
+  const stage=document.createElement('div');
+  stage.style.cssText='position:fixed;left:-10000px;top:0;width:794px;z-index:999999;pointer-events:none;overflow:visible;background:white';
+  doc.style.position='static';
+  doc.style.width='794px';
+  doc.style.maxWidth='none';
+  doc.style.margin='0';
+  doc.style.boxShadow='none';
+  doc.querySelectorAll('.no-pdf').forEach(e=>e.remove());
+
+  // Compact PDF-mode: kleinere logo's, krappere padding zodat alles op 1 vel past
+  doc.style.padding='8mm 16mm 10mm';
+  const hdr=doc.querySelector('.doc-header');
+  if(hdr){
+    hdr.style.paddingBottom='4px';
+    const ll=hdr.querySelector('.logo-l'); if(ll) ll.style.height='130px';
+    const lr=hdr.querySelector('.logo-r'); if(lr) lr.style.height='75px';
+  }
+  const opg=doc.querySelector('.doc-opgesteld'); if(opg){ opg.style.marginTop='4px'; }
+  const titel=doc.querySelector('.titel'); if(titel){ titel.style.margin='8px 0 0'; titel.style.padding='4px 0 0'; titel.style.minHeight='auto'; }
+  const sfeer=doc.querySelector('.sfeer'); if(sfeer){ sfeer.style.margin='10px 0 8px'; sfeer.style.minHeight='auto'; }
+  doc.querySelectorAll('h2.kop').forEach(h=>{ h.style.margin='10px 0 4px'; });
+  doc.querySelectorAll('.tekstvak').forEach(t=>{ t.style.minHeight='auto'; t.style.padding='4px 6px'; });
+  const wb=doc.querySelector('.waarsch-blok'); if(wb){ wb.style.margin='6px 0 2px'; }
+  const ft=doc.querySelector('.doc-footer'); if(ft){ ft.style.marginTop='14px'; ft.style.paddingTop='6px'; }
+
+  doc.querySelectorAll('input').forEach(inp=>{
+    const span=document.createElement('span');
+    span.textContent=inp.value; span.style.cssText=inp.getAttribute('style')||'';
+    inp.parentNode.replaceChild(span,inp);
+  });
+  doc.querySelectorAll('select').forEach(sel=>{
+    const span=document.createElement('span');
+    span.textContent=sel.value; span.className=sel.className; span.style.cssText='font-weight:700;padding:2px 8px';
+    sel.parentNode.replaceChild(span,sel);
+  });
+  stage.appendChild(doc);
+  document.body.appendChild(stage);
+  const renderHeight=Math.max(1,Math.ceil(doc.scrollHeight || doc.getBoundingClientRect().height));
+  const naam=exportNaam(document.getElementById('plaats-in')?.value, document.querySelector('[data-save="titel"]')?.textContent);
+  const opt={margin:0,filename:`${naam}_${exportStamp()}.pdf`,image:{type:'jpeg',quality:.97},html2canvas:{scale:1.8,useCORS:true,backgroundColor:'#ffffff',scrollX:0,scrollY:0,windowWidth:794,windowHeight:renderHeight},jsPDF:{unit:'mm',format:[210,380],orientation:'portrait'},pagebreak:{mode:'avoid-all'}};
+  const pdfWorker=html2pdf().set(opt).from(doc).save();
+  if(pdfWorker && typeof pdfWorker.then==='function') pdfWorker.then(()=>stage.remove()).catch(()=>stage.remove());
+  else setTimeout(()=>stage.remove(),2000);
+}
+
+/* ── Auto-save per dag ── */
+const SAVE_PREFIX='wb_fey_draft_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function exportNaam(...waarden){
+  const rauw=(waarden.find(v=>(v||'').trim()) || 'Document').split(',')[0].trim();
+  return rauw.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').replace(/^_+|_+$/g,'') || 'Document';
+}
+function exportStamp(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function saveKey(){ return SAVE_PREFIX+huidigeDatum(); }
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
+  d.plaats=document.getElementById('plaats-in').value;
+  d.waarsch=document.getElementById('waarsch-sel').value;
+  d.waarschVoor=document.getElementById('waarsch-voor')?.innerHTML||'';
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function leegForm(){
+  document.getElementById('plaats-in').value='Rotterdam';
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(saveKey());
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null) el.innerHTML=d[k];
+    });
+    if(d.plaats!=null) document.getElementById('plaats-in').value=d.plaats;
+    if(d.waarsch){
+      const s=document.getElementById('waarsch-sel');
+      s.value=d.waarsch; updateStatusKleur(s);
+    }
+    const voor=document.getElementById('waarsch-voor');
+    if(voor && d.waarschVoor!=null) voor.innerHTML=d.waarschVoor;
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function wisDraft(){
+  if(!confirm('Opgeslagen tekst van '+huidigeDatum()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
+  location.reload();
+}
+
+/* ── Koptekst-grootte ── */
+const KOP_KEY='wb_fey_kopscale';
+function zetKopScale(v){
+  document.body.style.setProperty('--kop-scale', v);
+  try{ localStorage.setItem(KOP_KEY, v); }catch(e){}
+}
+(function herstelKopScale(){
+  try{
+    const v=localStorage.getItem(KOP_KEY);
+    if(v){
+      document.body.style.setProperty('--kop-scale', v);
+      const sel=document.getElementById('kop-scale-sel');
+      if(sel) sel.value=v;
+    }
+  }catch(e){}
+})();
+let saveTimer;
+function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+document.addEventListener('input', e=>{
+  const t=e.target;
+  if(t.closest('[data-save]') || t.id==='plaats-in') debSave();
+});
+document.addEventListener('change', e=>{
+  if(e.target.id==='waarsch-sel') saveDraft();
+});
+document.addEventListener('blur', e=>{
+  // Wind-cel: parse letter en herrender pijl op de juiste rotatie
+  if(e.target.matches && e.target.matches('td.wind-cel')){
+    const deg=parseRichting(e.target.textContent);
+    if(deg!=null) e.target.innerHTML=windCel(deg);
+    saveTabel();
+  }
+  if(e.target.closest('[data-save]') || e.target.id==='plaats-in') saveDraft();
+},true);
+
+document.getElementById('doc-datum').value=vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', ()=>{ restoreDraft(); laadData(); });
+
+function gaTerug(){
+  if (window.self !== window.top) { window.location.href='weerbewaking.html'; }
+  else { window.location.href='index.html#weerbewaking'; }
+}
+
+/* ── Tab/focus in tabel-cel: bestaande waarde direct geselecteerd zodat typen overschrijft ── */
+document.addEventListener('focus', e=>{
+  const td=e.target;
+  if(td.tagName==='TD' && td.contentEditable==='true'){
+    const sel=window.getSelection();
+    const range=document.createRange();
+    range.selectNodeContents(td);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}, true);
+
+updateStatusKleur(document.getElementById('waarsch-sel'));
+restoreDraft();
+
+/* ── Tabel-persistentie (uur-tabel) ── */
+const TABEL_KEY_PREFIX='wb_fey_tabel_';
+function tabelSaveKey(){ return TABEL_KEY_PREFIX+huidigeDatum(); }
+function saveTabel(){
+  const t=document.getElementById('uur-tabel');
+  if(!t || !t.innerHTML.trim()) return;
+  try{ localStorage.setItem(tabelSaveKey(), JSON.stringify({__ts:Date.now(), html:t.innerHTML})); }catch(e){}
+}
+function restoreTabel(){
+  try{
+    const j=localStorage.getItem(tabelSaveKey());
+    if(!j) return false;
+    const d=JSON.parse(j);
+    if(!d.html) return false;
+    document.getElementById('uur-tabel').innerHTML=d.html;
+    return true;
+  }catch(e){ return false; }
+}
+function herlaadTabel(){
+  if(!confirm('Uurtabel opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  laadData();
+}
+let tabelSaveTimer;
+document.addEventListener('input', e=>{
+  if(e.target.closest && e.target.closest('#uur-tabel')){
+    clearTimeout(tabelSaveTimer);
+    tabelSaveTimer=setTimeout(saveTabel, 600);
+  }
+});
+// Wrap renderTabel zodat na elke verse fetch direct opgeslagen wordt
+const _origRenderTabel=renderTabel;
+renderTabel=async function(...args){ const r=await _origRenderTabel.apply(this,args); saveTabel(); return r; };
+
+if(!restoreTabel()) laadData();
+</script>
+</body>
+</html>

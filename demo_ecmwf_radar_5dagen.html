@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECMWF radarprognose 5 dagen - weerlab.nl</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,Arial,sans-serif;background:#eef3f7;color:#172033}
+body{overflow:hidden}
+button,input{font:inherit}
+.app{height:100vh;display:grid;grid-template-rows:auto auto 1fr auto;min-width:0}
+.topbar{background:#ffffff;border-bottom:1px solid #dbe5ef;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.brand{display:flex;flex-direction:column;gap:2px;min-width:0}
+.brand-title{font-size:17px;font-weight:800;letter-spacing:0;color:#111827;white-space:nowrap}
+.brand-sub{font-size:12px;color:#66758a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-pill{border:1px solid #cfdbe7;background:#f6f9fc;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:650;color:#34465c;white-space:nowrap}
+.toolbar{background:#ffffff;border-bottom:1px solid #dbe5ef;padding:10px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tool-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;color:#7a8ca3;margin-right:2px}
+.place-search{display:flex;align-items:center;gap:8px;position:relative;min-width:260px}
+.searchbox{position:relative;min-width:220px}
+#place-search{width:100%;border:1px solid #cfdbe7;background:#ffffff;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;color:#172033;outline:none}
+#place-search:focus{border-color:#0f5e8f;box-shadow:0 0 0 3px rgba(15,94,143,.13)}
+#place-suggestions{display:none;position:absolute;top:calc(100% + 5px);left:0;width:min(340px,80vw);max-height:276px;overflow:auto;z-index:20;background:#ffffff;border:1px solid #cfdbe7;border-radius:8px;box-shadow:0 14px 34px rgba(15,23,42,.16);padding:4px}
+#place-suggestions.open{display:block}
+.suggestion{width:100%;border:0;background:transparent;border-radius:6px;padding:9px 10px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;color:#172033}
+.suggestion:hover,.suggestion.active{background:#edf6fb}
+.suggestion strong{font-size:13px}
+.suggestion span{font-size:10px;font-weight:850;color:#66758a;letter-spacing:.04em}
+.seg{display:inline-flex;align-items:center;gap:3px;background:#edf2f7;border-radius:8px;padding:3px}
+.seg button{border:0;background:transparent;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:750;color:#405168;cursor:pointer;white-space:nowrap}
+.seg button:hover{background:rgba(255,255,255,.72);color:#172033}
+.seg button.active{background:#ffffff;color:#082f49;box-shadow:0 1px 2px rgba(15,23,42,.08)}
+.ghost-btn{border:1px solid #cfdbe7;background:#ffffff;color:#31445c;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:750;cursor:pointer}
+.ghost-btn:hover{border-color:#9eb1c6;background:#f7fafc}
+.map-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;min-height:0}
+.map-stage{position:relative;min-width:0;min-height:0;background:#d8e7f0;overflow:hidden}
+#map-canvas{display:block;width:100%;height:100%;cursor:crosshair}
+.map-hud{position:absolute;left:16px;top:16px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.hud-main,.hud-secondary{background:rgba(255,255,255,.92);border:1px solid rgba(174,191,207,.72);box-shadow:0 8px 22px rgba(28,45,65,.12);border-radius:8px;padding:9px 12px}
+.hud-main strong{display:block;font-size:18px;line-height:1.15;color:#101828}
+.hud-main span,.hud-secondary{font-size:12px;color:#41546b;font-weight:650}
+.hud-secondary{max-width:330px;line-height:1.45}
+.legend{position:absolute;left:16px;right:16px;bottom:16px;background:rgba(255,255,255,.94);border:1px solid rgba(174,191,207,.75);border-radius:8px;padding:9px 12px;box-shadow:0 8px 22px rgba(28,45,65,.12)}
+.legend-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
+.legend-title{font-size:12px;font-weight:850;color:#203044}
+.legend-unit{font-size:11px;font-weight:700;color:#66758a}
+.legend-bar{height:13px;border-radius:5px;overflow:hidden;border:1px solid rgba(22,31,47,.18);display:grid}
+.legend-ticks{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;font-weight:750;color:#55667d}
+.side{background:#f9fbfd;border-left:1px solid #dbe5ef;min-width:0;overflow:auto}
+.panel{padding:16px;border-bottom:1px solid #dbe5ef}
+.panel h2{margin:0 0 10px;font-size:13px;letter-spacing:.03em;text-transform:uppercase;color:#52657d}
+.place-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.place-title strong{font-size:20px;color:#111827}
+.place-title span{font-size:11px;color:#66758a;font-weight:700}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.metric{background:#ffffff;border:1px solid #dce6f0;border-radius:8px;padding:10px;min-height:66px}
+.metric .k{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#77879b;font-weight:800;margin-bottom:5px}
+.metric .v{font-size:22px;font-weight:850;color:#162033;line-height:1}
+.metric .u{font-size:11px;font-weight:800;color:#64748b;margin-left:2px}
+.mosmix-box{background:#ffffff;border:1px solid #dce6f0;border-radius:8px;padding:12px;line-height:1.45}
+.mosmix-box strong{font-size:13px;color:#172033}
+.mosmix-row{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:#4b5d73}
+.mosmix-row b{color:#172033}
+.note{font-size:11px;line-height:1.5;color:#66758a;margin-top:10px}
+.timeline{background:#ffffff;border-top:1px solid #dbe5ef;padding:10px 18px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}
+.play-row{display:flex;align-items:center;gap:6px}
+.round-btn{width:34px;height:34px;border-radius:50%;border:1px solid #cfdbe7;background:#ffffff;color:#26384f;font-size:13px;font-weight:900;cursor:pointer;display:grid;place-items:center}
+.round-btn:hover{background:#eef5fb;border-color:#aebed0}
+.round-btn.primary{background:#0f5e8f;color:#ffffff;border-color:#0f5e8f}
+.range-wrap{min-width:0}
+#time-range{width:100%;accent-color:#0f5e8f}
+.day-row{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.day-row button{border:1px solid #cfdbe7;background:#ffffff;color:#34465c;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:800;cursor:pointer;min-width:54px}
+.day-row button:hover{background:#f3f7fb}
+.day-row button.active{background:#0f5e8f;color:#ffffff;border-color:#0f5e8f}
+.status{position:absolute;inset:0;display:grid;place-items:center;background:rgba(238,243,247,.88);z-index:5;font-size:14px;font-weight:750;color:#41546b}
+.status.hidden{display:none}
+.error{color:#9f1239}
+@media (max-width:980px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100vh;grid-template-rows:auto auto auto auto}
+  .map-layout{grid-template-columns:1fr}
+  .map-stage{height:70vh;min-height:500px}
+  .side{border-left:0;border-top:1px solid #dbe5ef}
+  .timeline{grid-template-columns:1fr}
+  .day-row{justify-content:flex-start}
+}
+@media (max-width:640px){
+  .topbar,.toolbar,.timeline{padding-left:12px;padding-right:12px}
+  .brand-title{font-size:15px}
+  .brand-sub{white-space:normal}
+  .run-pill{display:none}
+  .place-search,.searchbox{width:100%;min-width:0}
+  .seg{max-width:100%;overflow:auto}
+  .seg button{padding:7px 9px}
+  .map-stage{height:62vh;min-height:430px}
+  .map-hud{left:10px;top:10px;right:10px}
+  .hud-secondary{display:none}
+  .legend{left:10px;right:10px;bottom:10px}
+  .metric-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-title">ECMWF radarprognose 5 dagen</div>
+      <div class="brand-sub">ECMWF raster met MOSMIX stationcheck</div>
+    </div>
+    <div class="run-pill" id="run-pill">Run laden...</div>
+  </header>
+
+  <section class="toolbar" aria-label="Kaartlagen">
+    <div class="place-search">
+      <span class="tool-label">Plaats</span>
+      <div class="searchbox">
+        <input id="place-search" type="search" placeholder="Zoek plaats..." autocomplete="off">
+        <div id="place-suggestions" role="listbox" aria-label="Plaatsen"></div>
+      </div>
+    </div>
+    <span class="tool-label">Laag</span>
+    <div class="seg" id="layer-buttons">
+      <button type="button" data-layer="rain24" class="active">24u regen</button>
+      <button type="button" data-layer="radar">Radar</button>
+      <button type="button" data-layer="temp">Temp</button>
+      <button type="button" data-layer="cloud">Wolken</button>
+      <button type="button" data-layer="gust">Stoten</button>
+    </div>
+    <button class="ghost-btn" type="button" id="btn-now">Nu</button>
+    <button class="ghost-btn" type="button" id="btn-export">PNG</button>
+  </section>
+
+  <main class="map-layout">
+    <section class="map-stage" id="map-stage">
+      <canvas id="map-canvas"></canvas>
+      <div class="map-hud">
+        <div class="hud-main">
+          <strong id="time-title">--</strong>
+          <span id="time-sub">ECMWF IFS</span>
+        </div>
+        <div class="hud-secondary" id="hud-note">Laden...</div>
+      </div>
+      <div class="legend">
+        <div class="legend-top">
+          <div class="legend-title" id="legend-title">Legenda</div>
+          <div class="legend-unit" id="legend-unit"></div>
+        </div>
+        <div class="legend-bar" id="legend-bar"></div>
+        <div class="legend-ticks" id="legend-ticks"></div>
+      </div>
+      <div class="status" id="status">Data laden...</div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="place-title">
+          <strong id="place-name">Kies plaats</strong>
+          <span id="place-coords">Nog geen punt</span>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><div class="k">ECMWF 24u</div><div class="v"><span id="m-rain24">--</span><span class="u">mm</span></div></div>
+          <div class="metric"><div class="k">ECMWF uur</div><div class="v"><span id="m-rain">--</span><span class="u">mm</span></div></div>
+          <div class="metric"><div class="k">Temp</div><div class="v"><span id="m-temp">--</span><span class="u">&deg;C</span></div></div>
+          <div class="metric"><div class="k">Windstoot</div><div class="v"><span id="m-gust">--</span><span class="u">km/u</span></div></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>MOSMIX correctielaag</h2>
+        <div class="mosmix-box">
+          <strong id="mosmix-station">Dichtstbijzijnde station laden...</strong>
+          <div class="mosmix-row"><span>24u regen</span><b id="mm-rain24">-- mm</b></div>
+          <div class="mosmix-row"><span>Uurregen</span><b id="mm-rain">-- mm</b></div>
+          <div class="mosmix-row"><span>Onweerkans</span><b id="mm-thunder">-- %</b></div>
+          <div class="mosmix-row"><span>Windstoot</span><b id="mm-gust">-- km/u</b></div>
+        </div>
+        <div class="note">ECMWF levert het vlak en de 5-daagse continuiteit. MOSMIX kan als lokale bias-check dienen, vooral voor kansvelden en stationgevoelige details.</div>
+      </section>
+      <section class="panel">
+        <h2>Concept</h2>
+        <div class="note">Default is de 24-uurs neerslagsom, vergelijkbaar met een periode-prognose. De radar-laag toont uurlijkse ECMWF neerslag als gesimuleerde reflectiviteit. Dit prototype gebruikt de bestaande canvas-pipeline en kan dus later in de gewone modelkaart-viewer landen.</div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="timeline">
+    <div class="play-row">
+      <button class="round-btn" type="button" id="btn-prev" aria-label="Vorige stap">&#9664;</button>
+      <button class="round-btn primary" type="button" id="btn-play" aria-label="Afspelen">&#9654;</button>
+      <button class="round-btn" type="button" id="btn-next" aria-label="Volgende stap">&#9654;</button>
+    </div>
+    <div class="range-wrap">
+      <input type="range" id="time-range" min="0" max="120" value="0">
+    </div>
+    <div class="day-row" id="day-row"></div>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var DATA_URL = "https://data.weerlab.nl/";
+  var OVERLAY_EXTENT = { lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5 };
+  var state = { layer: "rain24", step: 0, start: 0, end: 120, playing: false, timer: null };
+  var meta = null;
+  var overlayImg = null;
+  var mosmix = null;
+  var nearestMosmix = null;
+  var places = [];
+  var selectedPlace = null;
+  var currentSuggestions = [];
+  var cache = {};
+  var renderToken = 0;
+
+  var canvas = document.getElementById("map-canvas");
+  var ctx = canvas.getContext("2d");
+  var statusEl = document.getElementById("status");
+  var rangeEl = document.getElementById("time-range");
+  var placeInput = document.getElementById("place-search");
+  var suggestBox = document.getElementById("place-suggestions");
+
+  var LAYERS = {
+    rain24: {
+      label: "24u neerslagsom",
+      unit: "mm per 24 uur",
+      param: "neerslag",
+      note: "ECMWF neerslag opgeteld over de komende 24 uur vanaf het gekozen tijdstip.",
+      legend: { levels: [0.2, 1, 3, 5, 10, 15, 25, 40, 60], colors: ["#dbeafe","#93c5fd","#38bdf8","#22c55e","#facc15","#fb923c","#ef4444","#a21caf","#581c87"] }
+    },
+    radar: {
+      label: "Gesimuleerde radar",
+      unit: "dBZ",
+      param: "neerslag",
+      note: "Uurlijkse ECMWF neerslag omgerekend naar gesimuleerde radarreflectiviteit.",
+      legend: { levels: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60], colors: ["#969696","#787878","#00c800","#00a000","#007800","#ffff00","#e6be00","#ff8000","#ff0000","#c00000","#a000a0","#c000c0"] }
+    },
+    temp: {
+      label: "Temperatuur 2m",
+      unit: "C",
+      param: "temp",
+      note: "ECMWF 2m-temperatuur op het 0,25 graden raster.",
+      legend: { levels: [-5, 0, 5, 10, 15, 20, 25, 30, 35], colors: ["#1d4ed8","#38bdf8","#22c55e","#84cc16","#facc15","#fb923c","#ef4444","#b91c1c","#86198f"] }
+    },
+    cloud: {
+      label: "Bewolking totaal",
+      unit: "%",
+      param: "bewolking",
+      note: "Samengestelde ECMWF bewolkingsfractie uit lage, middelbare en hoge bewolking.",
+      legend: { levels: [0, 10, 25, 40, 55, 70, 85, 100], colors: ["#fff7ad","#f8fafc","#d8e2ed","#b6c5d6","#91a4ba","#6d8099","#4b5f78","#263447"] }
+    },
+    gust: {
+      label: "Windstoten 10m",
+      unit: "km/u",
+      param: "windstoten",
+      note: "ECMWF windstoten op 10 meter, omgerekend naar kilometer per uur.",
+      legend: { levels: [20, 35, 50, 65, 80, 95, 110, 130], colors: ["#dbeafe","#86efac","#fef08a","#fdba74","#fb7185","#dc2626","#7f1d1d","#701a75"] }
+    }
+  };
+
+  function showStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle("hidden", !text);
+    statusEl.classList.toggle("error", !!isError);
+  }
+
+  function loadImage(src) {
+    return new Promise(function(resolve) {
+      var img = new Image();
+      img.onload = function(){ resolve(img); };
+      img.onerror = function(){ resolve(null); };
+      img.src = src + "?t=" + Date.now();
+    });
+  }
+
+  function loadMeta() {
+    return fetch(DATA_URL + "ecmwf_om_canvas_meta.json?t=" + Date.now()).then(function(r) {
+      if (!r.ok) throw new Error("ECMWF metadata niet gevonden");
+      return r.json();
+    });
+  }
+
+  function loadMosmix() {
+    return fetch(DATA_URL + "mosmix_uurlijks_nl.json?t=" + Date.now()).then(function(r) {
+      if (!r.ok) throw new Error("MOSMIX niet gevonden");
+      return r.json();
+    }).catch(function(){ return null; });
+  }
+
+  function fetchPlacesFile(file) {
+    return fetch(DATA_URL + file + "?t=" + Date.now()).then(function(r) {
+      if (!r.ok) throw new Error("Plaatsen niet gevonden");
+      return r.json();
+    }).then(function(data) {
+      return Array.isArray(data.plaatsen) ? data.plaatsen : [];
+    });
+  }
+
+  function loadPlaces() {
+    return Promise.all([
+      fetchPlacesFile("plaatsen_benelux.json").catch(function(){ return []; }),
+      fetchPlacesFile("plaatsen_lookup.json").catch(function(){ return []; })
+    ]).then(function(res) {
+      var seen = {};
+      var out = [];
+      res[0].concat(res[1]).forEach(function(place) {
+        var key = foldText(placeName(place)) + "|" + Number(place.lat).toFixed(3) + "|" + Number(place.lon).toFixed(3);
+        if (seen[key]) return;
+        seen[key] = true;
+        out.push(place);
+      });
+      return out;
+    });
+  }
+
+  function loadParam(key) {
+    if (cache[key]) return Promise.resolve(cache[key]);
+    var info = meta.parameters[key];
+    if (!info) return Promise.reject(new Error("Parameter ontbreekt: " + key));
+    return fetch(DATA_URL + info.file + "?t=" + Date.now()).then(function(r) {
+      if (!r.ok) throw new Error("Databestand niet gevonden: " + info.file);
+      return r.arrayBuffer();
+    }).then(function(buf) {
+      var view = new DataView(buf);
+      var out = {
+        nLat: view.getUint16(0, true),
+        nLon: view.getUint16(2, true),
+        nSteps: view.getUint16(4, true),
+        nComp: view.getUint16(6, true),
+        data: new Float32Array(buf, 16)
+      };
+      cache[key] = out;
+      return out;
+    });
+  }
+
+  function loadParamSafe(key) {
+    return loadParam(key).catch(function(){ return null; });
+  }
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function parseTime(t) { return new Date(t); }
+  function sameDate(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+  function dayName(dt) {
+    return ["zo","ma","di","wo","do","vr","za"][dt.getDay()] + " " + dt.getDate() + "/" + (dt.getMonth() + 1);
+  }
+  function longTime(dt) {
+    return dayName(dt) + " " + pad2(dt.getHours()) + ":00";
+  }
+  function leadHours(idx) {
+    if (!meta || !meta.tijden || !meta.tijden[0]) return idx;
+    return Math.round((parseTime(meta.tijden[idx]) - parseTime(meta.tijden[0])) / 3600000);
+  }
+
+  function foldText(text) {
+    return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function placeName(place) {
+    return place ? (place.naam || place.name || "Eigen punt") : "";
+  }
+
+  function placeCountry(place) {
+    if (!place) return "";
+    if (place.land) return String(place.land).toUpperCase();
+    if (place.nl) return "NL";
+    if (place.be) return "BE";
+    if (place.de) return "DE";
+    if (place.fr) return "FR";
+    if (place.lu) return "LU";
+    if (place.uk) return "UK";
+    return "";
+  }
+
+  function placeInGrid(place) {
+    if (!meta || !meta.grid || !place) return true;
+    var lat = Number(place.lat);
+    var lon = Number(place.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+    var g = meta.grid;
+    return lat >= g.lat_min - 0.02 && lat <= g.lat_max + 0.02 && lon >= g.lon_min - 0.02 && lon <= g.lon_max + 0.02;
+  }
+
+  function coordText(place) {
+    if (!place) return "Nog geen punt";
+    return Number(place.lat).toFixed(2) + "N, " + Number(place.lon).toFixed(2) + "E";
+  }
+
+  function findStartIndex() {
+    var now = new Date();
+    var best = 0;
+    for (var i = 0; i < meta.tijden.length; i++) {
+      if (parseTime(meta.tijden[i]) >= now) return i;
+      best = i;
+    }
+    return Math.max(0, Math.min(best, meta.tijden.length - 1));
+  }
+
+  function project(lon, lat, width, height) {
+    var g = meta.grid;
+    return {
+      x: (lon - g.lon_min) / (g.lon_max - g.lon_min) * width,
+      y: (1 - (lat - g.lat_min) / (g.lat_max - g.lat_min)) * height
+    };
+  }
+
+  function sampleScalar(pd, step, lat, lon, comp) {
+    comp = comp || 0;
+    var g = meta.grid;
+    var x = (lon - g.lon_min) / (g.lon_max - g.lon_min) * (pd.nLon - 1);
+    var y = (lat - g.lat_min) / (g.lat_max - g.lat_min) * (pd.nLat - 1);
+    if (x < 0 || y < 0 || x > pd.nLon - 1 || y > pd.nLat - 1) return NaN;
+    var x0 = Math.floor(x), y0 = Math.floor(y);
+    var x1 = Math.min(x0 + 1, pd.nLon - 1), y1 = Math.min(y0 + 1, pd.nLat - 1);
+    var fx = x - x0, fy = y - y0;
+    var pts = pd.nLat * pd.nLon;
+    var off = step * pts * pd.nComp + comp * pts;
+    function v(ix, iy) { return pd.data[off + iy * pd.nLon + ix]; }
+    var v00 = v(x0, y0), v10 = v(x1, y0), v01 = v(x0, y1), v11 = v(x1, y1);
+    if (![v00, v10, v01, v11].every(Number.isFinite)) return NaN;
+    return v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
+  }
+
+  function rain24At(pd, step, lat, lon) {
+    var total = 0;
+    var count = 0;
+    for (var s = step; s < Math.min(step + 24, pd.nSteps); s++) {
+      var v = sampleScalar(pd, s, lat, lon, 0);
+      if (Number.isFinite(v)) {
+        total += Math.max(0, v);
+        count++;
+      }
+    }
+    return count ? total : NaN;
+  }
+
+  function mmToDbz(mm) {
+    if (mm <= 0.005) return -10;
+    return 10 * Math.log10(200 * Math.pow(mm, 1.6));
+  }
+
+  function hexToRgb(hex) {
+    return [parseInt(hex.slice(1,3), 16), parseInt(hex.slice(3,5), 16), parseInt(hex.slice(5,7), 16)];
+  }
+
+  function colorFor(v, layerKey) {
+    if (!Number.isFinite(v)) return null;
+    if (layerKey === "radar") v = mmToDbz(v);
+    var legend = LAYERS[layerKey].legend;
+    var levels = legend.levels;
+    var colors = legend.colors;
+    if ((layerKey === "rain24" && v < 0.2) || (layerKey === "radar" && v < 5)) return null;
+    if (v <= levels[0]) return hexToRgb(colors[0]);
+    for (var i = 1; i < levels.length; i++) {
+      if (v <= levels[i]) return hexToRgb(colors[i]);
+    }
+    return hexToRgb(colors[colors.length - 1]);
+  }
+
+  function buildField(layerKey, pd, step) {
+    var pts = pd.nLat * pd.nLon;
+    var out = new Float32Array(pts);
+    if (layerKey === "rain24") {
+      for (var s = step; s < Math.min(step + 24, pd.nSteps); s++) {
+        var off = s * pts * pd.nComp;
+        for (var i = 0; i < pts; i++) out[i] += Math.max(0, pd.data[off + i] || 0);
+      }
+      return out;
+    }
+    if (layerKey === "cloud") {
+      var offC = step * pts * pd.nComp;
+      for (var c = 0; c < pts; c++) {
+        var high = Math.max(0, Math.min(1, pd.data[offC + c] || 0));
+        var mid = Math.max(0, Math.min(1, pd.data[offC + pts + c] || 0));
+        var low = Math.max(0, Math.min(1, pd.data[offC + 2 * pts + c] || 0));
+        out[c] = (1 - (1 - low) * (1 - mid) * (1 - high)) * 100;
+      }
+      return out;
+    }
+    var off = step * pts * pd.nComp;
+    for (var j = 0; j < pts; j++) {
+      var val = pd.data[off + j];
+      if (layerKey === "gust") val *= 3.6;
+      out[j] = val;
+    }
+    return out;
+  }
+
+  function resizeCanvas() {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    var dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    var w = Math.max(320, Math.round(rect.width));
+    var h = Math.max(320, Math.round(rect.height));
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: h, dpr: dpr };
+  }
+
+  function drawBasemap(w, h) {
+    var grd = ctx.createLinearGradient(0, 0, 0, h);
+    grd.addColorStop(0, "#dcebf4");
+    grd.addColorStop(1, "#eef5f8");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(71,92,115,.20)";
+    ctx.lineWidth = 1;
+    for (var gx = 0; gx <= 5; gx++) {
+      var x = gx / 5 * w;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (var gy = 0; gy <= 5; gy++) {
+      var y = gy / 5 * h;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+  }
+
+  function drawOverlay(w, h) {
+    if (!overlayImg || !meta) return;
+    var g = meta.grid;
+    var oW = OVERLAY_EXTENT.lonMax - OVERLAY_EXTENT.lonMin;
+    var oH = OVERLAY_EXTENT.latMax - OVERLAY_EXTENT.latMin;
+    var sx = (g.lon_min - OVERLAY_EXTENT.lonMin) / oW * overlayImg.naturalWidth;
+    var sy = (1 - (g.lat_max - OVERLAY_EXTENT.latMin) / oH) * overlayImg.naturalHeight;
+    var sw = (g.lon_max - g.lon_min) / oW * overlayImg.naturalWidth;
+    var sh = (g.lat_max - g.lat_min) / oH * overlayImg.naturalHeight;
+    ctx.save();
+    ctx.globalAlpha = 0.88;
+    ctx.drawImage(overlayImg, sx, sy, sw, sh, 0, 0, w, h);
+    ctx.restore();
+  }
+
+  function drawPin(w, h) {
+    if (!selectedPlace) return;
+    var p = project(selectedPlace.lon, selectedPlace.lat, w, h);
+    if (p.x < -20 || p.y < -20 || p.x > w + 20 || p.y > h + 20) return;
+    ctx.save();
+    ctx.shadowColor = "rgba(15,23,42,.28)";
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = "#f97316";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.font = "700 12px Inter, Segoe UI, Arial";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    var label = placeName(selectedPlace);
+    if (label.length > 24) label = label.slice(0, 22) + "..";
+    var tw = ctx.measureText(label).width;
+    var lx = Math.min(Math.max(p.x + 10, 6), w - tw - 24);
+    var ly = Math.min(Math.max(p.y - 13, 6), h - 32);
+    ctx.fillStyle = "rgba(255,255,255,.94)";
+    ctx.strokeStyle = "rgba(15,23,42,.12)";
+    roundRect(ctx, lx, ly, tw + 16, 26, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#172033";
+    ctx.fillText(label, lx + 8, ly + 13);
+    ctx.restore();
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.lineTo(x + w - r, y);
+    c.quadraticCurveTo(x + w, y, x + w, y + r);
+    c.lineTo(x + w, y + h - r);
+    c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    c.lineTo(x + r, y + h);
+    c.quadraticCurveTo(x, y + h, x, y + h - r);
+    c.lineTo(x, y + r);
+    c.quadraticCurveTo(x, y, x + r, y);
+    c.closePath();
+  }
+
+  function drawMosmixMarkers(w, h, layerKey, step) {
+    if (!mosmix || !mosmix.stations || !mosmix.data) return;
+    if (layerKey !== "rain24" && layerKey !== "radar") return;
+    ctx.save();
+    ctx.font = "800 10px Inter, Segoe UI, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    Object.keys(mosmix.stations).forEach(function(name) {
+      var co = mosmix.stations[name];
+      var st = mosmix.data[name];
+      if (!co || !st || !st.tijden) return;
+      var idx = closestMosmixIndex(st, parseTime(meta.tijden[step]));
+      if (idx < 0) return;
+      var val = layerKey === "rain24" ? mosmixRain24(st, idx) : safeVal(st.RR1c, idx);
+      if (!Number.isFinite(val) || val < (layerKey === "rain24" ? 1 : 0.2)) return;
+      var p = project(co[0], co[1], w, h);
+      if (p.x < -20 || p.y < -20 || p.x > w + 20 || p.y > h + 20) return;
+      var col = colorFor(val, layerKey === "rain24" ? "rain24" : "radar") || [15,94,143];
+      ctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",.85)";
+      ctx.strokeStyle = "rgba(255,255,255,.95)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (val >= (layerKey === "rain24" ? 4 : 1)) {
+        var txt = layerKey === "rain24" ? Math.round(val) : val.toFixed(1);
+        ctx.fillStyle = "rgba(255,255,255,.92)";
+        roundRect(ctx, p.x - 12, p.y - 22, 24, 15, 5);
+        ctx.fill();
+        ctx.fillStyle = "#172033";
+        ctx.fillText(txt, p.x, p.y - 14);
+      }
+    });
+    ctx.restore();
+  }
+
+  function renderLegend() {
+    var layer = LAYERS[state.layer];
+    var bar = document.getElementById("legend-bar");
+    var ticks = document.getElementById("legend-ticks");
+    document.getElementById("legend-title").textContent = layer.label;
+    document.getElementById("legend-unit").textContent = layer.unit;
+    bar.style.gridTemplateColumns = "repeat(" + layer.legend.colors.length + ",1fr)";
+    bar.innerHTML = layer.legend.colors.map(function(c){ return "<span style=\"background:" + c + "\"></span>"; }).join("");
+    ticks.innerHTML = layer.legend.levels.map(function(v){ return "<span>" + v + "</span>"; }).join("");
+  }
+
+  function drawField(w, h, pd, values, layerKey) {
+    var off = document.createElement("canvas");
+    off.width = pd.nLon;
+    off.height = pd.nLat;
+    var octx = off.getContext("2d");
+    var img = octx.createImageData(pd.nLon, pd.nLat);
+    var alpha = layerKey === "temp" || layerKey === "cloud" || layerKey === "gust" ? 210 : 190;
+    for (var y = 0; y < pd.nLat; y++) {
+      for (var x = 0; x < pd.nLon; x++) {
+        var dataIndex = (pd.nLat - 1 - y) * pd.nLon + x;
+        var px = (y * pd.nLon + x) * 4;
+        var col = colorFor(values[dataIndex], layerKey);
+        if (col) {
+          img.data[px] = col[0];
+          img.data[px + 1] = col[1];
+          img.data[px + 2] = col[2];
+          img.data[px + 3] = alpha;
+        } else {
+          img.data[px + 3] = 0;
+        }
+      }
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(off, 0, 0, w, h);
+    ctx.restore();
+  }
+
+  function updateTimeLabels() {
+    var dt = parseTime(meta.tijden[state.step]);
+    document.getElementById("time-title").textContent = longTime(dt);
+    document.getElementById("time-sub").textContent = "ECMWF IFS - T+" + leadHours(state.step) + " uur";
+    document.getElementById("hud-note").textContent = LAYERS[state.layer].note;
+    rangeEl.value = state.step;
+    document.querySelectorAll("#day-row button").forEach(function(btn) {
+      var btnDate = new Date(btn.dataset.date);
+      btn.classList.toggle("active", sameDate(btnDate, dt));
+    });
+  }
+
+  function render() {
+    if (!meta) return;
+    var myToken = ++renderToken;
+    var layer = LAYERS[state.layer];
+    showStatus("Kaart renderen...");
+    renderLegend();
+    updateTimeLabels();
+    loadParam(layer.param).then(function(pd) {
+      if (myToken !== renderToken) return;
+      var size = resizeCanvas();
+      drawBasemap(size.w, size.h);
+      var field = buildField(state.layer, pd, state.step);
+      drawField(size.w, size.h, pd, field, state.layer);
+      drawMosmixMarkers(size.w, size.h, state.layer, state.step);
+      drawOverlay(size.w, size.h);
+      drawPin(size.w, size.h);
+      updateMetrics();
+      showStatus("");
+    }).catch(function(err) {
+      showStatus(err.message || String(err), true);
+    });
+  }
+
+  function fmt(v, digits) {
+    if (!Number.isFinite(v)) return "--";
+    return v.toFixed(digits);
+  }
+
+  function setLocalMetricsEmpty() {
+    document.getElementById("m-rain24").textContent = "--";
+    document.getElementById("m-rain").textContent = "--";
+    document.getElementById("m-temp").textContent = "--";
+    document.getElementById("m-gust").textContent = "--";
+  }
+
+  function updateMetrics() {
+    if (!selectedPlace) {
+      setLocalMetricsEmpty();
+      updateMosmixPanel();
+      document.getElementById("hud-note").textContent = LAYERS[state.layer].note;
+      return;
+    }
+    var metricStep = state.step;
+    var metricLayer = state.layer;
+    var metricPlace = selectedPlace;
+    Promise.all([
+      loadParamSafe("neerslag"),
+      loadParamSafe("temp"),
+      loadParamSafe("windstoten"),
+      loadParamSafe("bewolking")
+    ]).then(function(res) {
+      if (metricStep !== state.step || metricLayer !== state.layer || metricPlace !== selectedPlace) return;
+      var rain = res[0], temp = res[1], gust = res[2], cloud = res[3];
+      var rainHour = rain ? sampleScalar(rain, state.step, selectedPlace.lat, selectedPlace.lon, 0) : NaN;
+      var rainDay = rain ? rain24At(rain, state.step, selectedPlace.lat, selectedPlace.lon) : NaN;
+      var t = temp ? sampleScalar(temp, state.step, selectedPlace.lat, selectedPlace.lon, 0) : NaN;
+      var g = gust ? sampleScalar(gust, state.step, selectedPlace.lat, selectedPlace.lon, 0) * 3.6 : NaN;
+      document.getElementById("m-rain24").textContent = fmt(rainDay, 1);
+      document.getElementById("m-rain").textContent = fmt(rainHour, 1);
+      document.getElementById("m-temp").textContent = fmt(t, 1);
+      document.getElementById("m-gust").textContent = fmt(g, 0);
+      var localName = placeName(selectedPlace);
+      var layerDetail = "";
+      if (cloud) {
+        var c0 = sampleScalar(cloud, state.step, selectedPlace.lat, selectedPlace.lon, 0);
+        var c1 = sampleScalar(cloud, state.step, selectedPlace.lat, selectedPlace.lon, 1);
+        var c2 = sampleScalar(cloud, state.step, selectedPlace.lat, selectedPlace.lon, 2);
+        if ([c0, c1, c2].every(Number.isFinite)) {
+          var total = (1 - (1 - c2) * (1 - c1) * (1 - c0)) * 100;
+          if (state.layer === "cloud") layerDetail = " " + localName + ": " + fmt(total, 0) + "% bewolking.";
+        }
+      }
+      if (state.layer === "rain24") layerDetail = " " + localName + ": " + fmt(rainDay, 1) + " mm in de komende 24 uur.";
+      if (state.layer === "radar") layerDetail = " " + localName + ": " + fmt(rainHour, 1) + " mm in dit uur.";
+      if (state.layer === "temp") layerDetail = " " + localName + ": " + fmt(t, 1) + " graden.";
+      if (state.layer === "gust") layerDetail = " " + localName + ": " + fmt(g, 0) + " km/u.";
+      document.getElementById("hud-note").textContent = LAYERS[state.layer].note + layerDetail;
+      updateMosmixPanel();
+    });
+  }
+
+  function distanceKm(lat1, lon1, lat2, lon2) {
+    var r = 6371;
+    var p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+    var dp = (lat2 - lat1) * Math.PI / 180;
+    var dl = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+    return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function findNearestMosmix() {
+    if (!selectedPlace || !mosmix || !mosmix.stations) return null;
+    var best = null;
+    Object.keys(mosmix.stations).forEach(function(name) {
+      var co = mosmix.stations[name];
+      var d = distanceKm(selectedPlace.lat, selectedPlace.lon, co[1], co[0]);
+      if (!best || d < best.dist) best = { name: name, lon: co[0], lat: co[1], dist: d };
+    });
+    return best;
+  }
+
+  function closestMosmixIndex(st, dt) {
+    if (!st || !st.tijden) return -1;
+    var best = -1, bestDiff = Infinity;
+    for (var i = 0; i < st.tijden.length; i++) {
+      var diff = Math.abs(parseTime(st.tijden[i]) - dt);
+      if (diff < bestDiff) { best = i; bestDiff = diff; }
+    }
+    return best;
+  }
+
+  function safeVal(arr, idx) {
+    if (!arr || idx < 0 || idx >= arr.length || arr[idx] == null) return NaN;
+    return Number(arr[idx]);
+  }
+
+  function mosmixRain24(st, idx) {
+    var total = 0, count = 0;
+    for (var i = idx; i < Math.min(idx + 24, st.RR1c ? st.RR1c.length : 0); i++) {
+      var v = safeVal(st.RR1c, i);
+      if (Number.isFinite(v)) { total += Math.max(0, v); count++; }
+    }
+    return count ? total : NaN;
+  }
+
+  function updateMosmixPanel() {
+    if (!selectedPlace) {
+      document.getElementById("mosmix-station").textContent = "Geen plaats gekozen";
+      document.getElementById("mm-rain24").textContent = "-- mm";
+      document.getElementById("mm-rain").textContent = "-- mm";
+      document.getElementById("mm-thunder").textContent = "-- %";
+      document.getElementById("mm-gust").textContent = "-- km/u";
+      return;
+    }
+    if (!nearestMosmix || !mosmix || !mosmix.data[nearestMosmix.name]) {
+      document.getElementById("mosmix-station").textContent = "Geen MOSMIX station beschikbaar";
+      document.getElementById("mm-rain24").textContent = "-- mm";
+      document.getElementById("mm-rain").textContent = "-- mm";
+      document.getElementById("mm-thunder").textContent = "-- %";
+      document.getElementById("mm-gust").textContent = "-- km/u";
+      return;
+    }
+    var st = mosmix.data[nearestMosmix.name];
+    var idx = closestMosmixIndex(st, parseTime(meta.tijden[state.step]));
+    document.getElementById("mosmix-station").textContent = nearestMosmix.name + " - " + Math.round(nearestMosmix.dist) + " km";
+    document.getElementById("mm-rain24").textContent = fmt(mosmixRain24(st, idx), 1) + " mm";
+    document.getElementById("mm-rain").textContent = fmt(safeVal(st.RR1c, idx), 1) + " mm";
+    document.getElementById("mm-thunder").textContent = fmt(safeVal(st.wwT, idx), 0) + " %";
+    document.getElementById("mm-gust").textContent = fmt(safeVal(st.FX1, idx), 0) + " km/u";
+  }
+
+  function updatePlacePanel() {
+    document.getElementById("place-name").textContent = selectedPlace ? placeName(selectedPlace) : "Kies plaats";
+    document.getElementById("place-coords").textContent = coordText(selectedPlace);
+  }
+
+  function selectPlace(place) {
+    var lat = Number(place.lat);
+    var lon = Number(place.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    selectedPlace = {
+      name: placeName(place),
+      lat: lat,
+      lon: lon,
+      land: placeCountry(place)
+    };
+    nearestMosmix = findNearestMosmix();
+    placeInput.value = selectedPlace.name === "Eigen punt" ? "" : selectedPlace.name;
+    hideSuggestions();
+    updatePlacePanel();
+    render();
+  }
+
+  function searchPlaces(query) {
+    var q = foldText(query).trim();
+    if (!q) {
+      return places.filter(placeInGrid).slice(0, 10);
+    }
+    var matches = [];
+    for (var i = 0; i < places.length; i++) {
+      var place = places[i];
+      if (!placeInGrid(place)) continue;
+      var name = foldText(placeName(place));
+      var pos = name.indexOf(q);
+      if (pos >= 0) {
+        matches.push({ place: place, pos: pos, pop: Number(place.pop || 0), name: name });
+      }
+    }
+    matches.sort(function(a, b) {
+      return a.pos - b.pos || b.pop - a.pop || a.name.localeCompare(b.name);
+    });
+    return matches.slice(0, 10).map(function(item){ return item.place; });
+  }
+
+  function hideSuggestions() {
+    suggestBox.classList.remove("open");
+    suggestBox.innerHTML = "";
+    currentSuggestions = [];
+  }
+
+  function renderSuggestions(matches) {
+    currentSuggestions = matches || [];
+    suggestBox.innerHTML = "";
+    if (!currentSuggestions.length) {
+      hideSuggestions();
+      return;
+    }
+    currentSuggestions.forEach(function(place, idx) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "suggestion";
+      btn.dataset.index = idx;
+      var strong = document.createElement("strong");
+      var span = document.createElement("span");
+      strong.textContent = placeName(place);
+      span.textContent = placeCountry(place) || "LOC";
+      btn.appendChild(strong);
+      btn.appendChild(span);
+      btn.addEventListener("mousedown", function(ev) {
+        ev.preventDefault();
+        selectPlace(currentSuggestions[Number(btn.dataset.index)]);
+      });
+      suggestBox.appendChild(btn);
+    });
+    suggestBox.classList.add("open");
+  }
+
+  function updateSuggestions() {
+    renderSuggestions(searchPlaces(placeInput.value));
+  }
+
+  function pointFromCanvasEvent(ev) {
+    if (!meta || !meta.grid) return null;
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.max(0, Math.min(rect.width, ev.clientX - rect.left));
+    var y = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
+    var g = meta.grid;
+    return {
+      name: "Eigen punt",
+      lon: g.lon_min + (x / rect.width) * (g.lon_max - g.lon_min),
+      lat: g.lat_max - (y / rect.height) * (g.lat_max - g.lat_min)
+    };
+  }
+
+  function initPlaceFromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    var lat = Number(params.get("lat"));
+    var lon = Number(params.get("lon"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    var name = params.get("plaats") || params.get("place") || "Eigen punt";
+    var place = { name: name, lat: lat, lon: lon, land: params.get("land") || "" };
+    if (!placeInGrid(place)) return;
+    selectedPlace = place;
+    nearestMosmix = findNearestMosmix();
+    placeInput.value = name === "Eigen punt" ? "" : name;
+    updatePlacePanel();
+  }
+
+  function buildDayButtons() {
+    var row = document.getElementById("day-row");
+    var seen = {};
+    var html = "";
+    for (var i = state.start; i <= state.end; i++) {
+      var dt = parseTime(meta.tijden[i]);
+      var key = dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
+      if (seen[key]) continue;
+      seen[key] = true;
+      html += "<button type=\"button\" data-date=\"" + key + "\" data-index=\"" + i + "\">" + dayName(dt) + "</button>";
+    }
+    row.innerHTML = html;
+    row.querySelectorAll("button").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var idx = Number(btn.dataset.index);
+        var targetDate = new Date(btn.dataset.date);
+        for (var j = state.start; j <= state.end; j++) {
+          var dt = parseTime(meta.tijden[j]);
+          if (sameDate(dt, targetDate) && dt.getHours() >= 12) { idx = j; break; }
+        }
+        state.step = Math.min(state.end, Math.max(state.start, idx));
+        render();
+      });
+    });
+  }
+
+  function updateRange() {
+    rangeEl.min = state.start;
+    rangeEl.max = state.end;
+    rangeEl.value = state.step;
+  }
+
+  function setLayer(layerKey) {
+    state.layer = layerKey;
+    document.querySelectorAll("#layer-buttons button").forEach(function(btn) {
+      btn.classList.toggle("active", btn.dataset.layer === layerKey);
+    });
+    render();
+  }
+
+  function stepBy(delta) {
+    state.step = Math.max(state.start, Math.min(state.end, state.step + delta));
+    render();
+  }
+
+  function togglePlay() {
+    state.playing = !state.playing;
+    document.getElementById("btn-play").innerHTML = state.playing ? "&#10074;&#10074;" : "&#9654;";
+    if (state.timer) clearInterval(state.timer);
+    if (!state.playing) return;
+    state.timer = setInterval(function() {
+      if (state.step >= state.end) {
+        state.step = state.start;
+      } else {
+        state.step++;
+      }
+      render();
+    }, 700);
+  }
+
+  function exportPng() {
+    var a = document.createElement("a");
+    var dt = meta && meta.tijden[state.step] ? meta.tijden[state.step].replace(/[:T]/g, "-") : "kaart";
+    a.download = "ecmwf-radarprognose-" + state.layer + "-" + dt + ".png";
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  }
+
+  function bindEvents() {
+    document.querySelectorAll("#layer-buttons button").forEach(function(btn) {
+      btn.addEventListener("click", function(){ setLayer(btn.dataset.layer); });
+    });
+    document.getElementById("btn-prev").addEventListener("click", function(){ stepBy(-1); });
+    document.getElementById("btn-next").addEventListener("click", function(){ stepBy(1); });
+    document.getElementById("btn-play").addEventListener("click", togglePlay);
+    document.getElementById("btn-now").addEventListener("click", function(){ state.step = state.start; render(); });
+    document.getElementById("btn-export").addEventListener("click", exportPng);
+    rangeEl.addEventListener("input", function(){ state.step = Number(rangeEl.value); render(); });
+    placeInput.addEventListener("input", updateSuggestions);
+    placeInput.addEventListener("focus", updateSuggestions);
+    placeInput.addEventListener("keydown", function(ev) {
+      if (ev.key === "Enter") {
+        if (currentSuggestions.length) selectPlace(currentSuggestions[0]);
+        ev.preventDefault();
+      } else if (ev.key === "Escape") {
+        hideSuggestions();
+        placeInput.blur();
+      }
+    });
+    placeInput.addEventListener("blur", function() {
+      setTimeout(hideSuggestions, 140);
+    });
+    canvas.addEventListener("click", function(ev) {
+      var point = pointFromCanvasEvent(ev);
+      if (point) selectPlace(point);
+    });
+    window.addEventListener("resize", function(){ render(); });
+  }
+
+  function init() {
+    showStatus("ECMWF en MOSMIX laden...");
+    Promise.all([
+      loadMeta(),
+      loadImage(DATA_URL + "harmonie_overlay.png"),
+      loadMosmix(),
+      loadPlaces()
+    ]).then(function(res) {
+      meta = res[0];
+      overlayImg = res[1];
+      mosmix = res[2];
+      places = res[3] || [];
+      state.start = findStartIndex();
+      state.end = Math.min(meta.tijden.length - 1, state.start + 120);
+      state.step = state.start;
+      document.getElementById("run-pill").textContent = (meta.model || "ECMWF IFS") + " - " + (meta.run || "");
+      updatePlacePanel();
+      initPlaceFromUrl();
+      buildDayButtons();
+      updateRange();
+      bindEvents();
+      return Promise.allSettled([loadParam("neerslag"), loadParam("temp"), loadParam("windstoten"), loadParam("bewolking")]);
+    }).then(function(){ render(); }).catch(function(err) {
+      showStatus(err.message || String(err), true);
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

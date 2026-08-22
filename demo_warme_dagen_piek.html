@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DEMO · Warme dagen + heetste dag per jaar</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --blauw:#f6f8fb; --blauw2:#ffffff; --accent:#00205b; --rood:#dc2626;
+    --blauwt:#2563eb; --tekst:#0f172a; --tekst2:#64748b; --rand:#e3e8ef;
+    --kaart:#ffffff; --kaart2:#eef2f7;
+    --piek:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:var(--blauw);color:var(--tekst);padding:20px;}
+  .wrap{max-width:980px;margin:0 auto;}
+  .demobar{background:#fef3c7;border:1px solid #fcd34d;color:#92400e;border-radius:10px;
+           padding:8px 14px;font-size:0.82em;margin-bottom:16px;}
+  h1{font-size:1.45em;margin:0 0 2px;}
+  .sub{color:var(--tekst2);font-size:0.86em;margin-bottom:18px;}
+  .thr-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+  .thr-tab{border:1px solid var(--rand);background:var(--kaart);border-radius:10px;
+           padding:8px 14px;cursor:pointer;font-size:0.82em;transition:.15s;line-height:1.25;}
+  .thr-tab .tl{font-weight:700;display:block;}
+  .thr-tab .td{color:var(--tekst2);font-size:0.85em;}
+  .thr-tab.actief{color:#fff;border-color:transparent;}
+  .thr-tab.actief .td{color:rgba(255,255,255,.85);}
+  .card{background:var(--kaart);border:1px solid var(--rand);border-radius:14px;
+        padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+  .card h2{font-size:1.02em;margin:0 0 2px;}
+  .card .csub{color:var(--tekst2);font-size:0.8em;margin-bottom:12px;}
+  .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;}
+  .pcard{background:var(--kaart);border:1px solid var(--rand);border-radius:14px;
+         padding:14px;text-align:center;}
+  .pcard.p1{border-color:#fbbf24;box-shadow:0 0 0 2px #fde68a inset;}
+  .pcard .medal{font-size:1.5em;}
+  .pcard .rang{font-size:0.7em;letter-spacing:.08em;text-transform:uppercase;color:var(--tekst2);}
+  .pcard .jaar{font-size:1.9em;font-weight:700;line-height:1.1;}
+  .pcard .temp{font-size:1.05em;font-weight:600;color:var(--piek);}
+  .pcard .meta{font-size:0.75em;color:var(--tekst2);margin-top:2px;}
+  .chartbox{position:relative;height:300px;}
+  table{width:100%;border-collapse:collapse;font-size:0.84em;}
+  th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--rand);}
+  th:first-child,td:first-child,th.l,td.l{text-align:left;}
+  th{color:var(--tekst2);font-weight:600;cursor:pointer;user-select:none;font-size:0.92em;}
+  tbody tr:hover{background:var(--kaart2);}
+  .piekcel{color:var(--piek);font-weight:700;}
+  .tabwrap{max-height:340px;overflow:auto;}
+  .legend{display:flex;gap:16px;align-items:center;font-size:0.78em;color:var(--tekst2);margin-bottom:8px;}
+  .legdot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+  .legline{display:inline-block;width:18px;height:0;border-top:2px solid var(--piek);margin-right:5px;vertical-align:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="demobar">⚙️ <b>DEMO met echte data (1950–2026, alle stations).</b> Voorstel: bij “Warme dagen” naast het <b>aantal</b> ook de <b>heetste dag van het jaar</b> tonen — de hoogste TX over álle stations. 2026 = lopend jaar.</div>
+
+  <h1>🔥 Warme dagen <span style="color:var(--tekst2);font-weight:400;">— met heetste dag per jaar</span></h1>
+  <div class="sub" id="sub">Alle stations · nationale piektemperatuur per jaar</div>
+
+  <div class="thr-tabs" id="thrtabs"></div>
+
+  <div class="podium" id="podium"></div>
+
+  <div class="card">
+    <h2 id="bartitel"></h2>
+    <div class="csub" id="barsub"></div>
+    <div class="legend">
+      <span><span class="legdot" id="leg-bar"></span><span id="leg-bar-txt"></span></span>
+      <span><span class="legline"></span>Heetste dag (°C, rechter-as)</span>
+    </div>
+    <div class="chartbox"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Tabel per jaar</h2>
+    <div class="csub">Klik op een kolomkop om te sorteren.</div>
+    <div class="tabwrap">
+      <table>
+        <thead><tr>
+          <th class="l" data-k="jaar">Jaar</th>
+          <th data-k="cnt">Aantal dagen</th>
+          <th data-k="piek">Heetste dag</th>
+          <th class="l" data-k="stn">Station</th>
+          <th class="l" data-k="datum">Datum</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = [{"jaar":1950,"c20":107,"c25":31,"c30":4,"c35":0,"piek":31.7,"stn":"Winterswijk","datum":"7 jun"},{"jaar":1951,"c20":105,"c25":28,"c30":1,"c35":0,"piek":31.2,"stn":"Eindhoven","datum":"31 jul"},{"jaar":1952,"c20":98,"c25":28,"c30":6,"c35":0,"piek":34.0,"stn":"Volkel","datum":"2 jul"},{"jaar":1953,"c20":114,"c25":36,"c30":4,"c35":0,"piek":32.7,"stn":"Twenthe","datum":"13 aug"},{"jaar":1954,"c20":73,"c25":19,"c30":4,"c35":0,"piek":30.9,"stn":"Eindhoven","datum":"3 aug"},{"jaar":1955,"c20":106,"c25":34,"c30":3,"c35":0,"piek":31.3,"stn":"Eindhoven","datum":"17 jul"},{"jaar":1956,"c20":75,"c25":18,"c30":0,"c35":0,"piek":29.7,"stn":"Maastricht","datum":"9 jul"},{"jaar":1957,"c20":84,"c25":24,"c30":11,"c35":1,"piek":36.4,"stn":"Eindhoven","datum":"6 jul"},{"jaar":1958,"c20":106,"c25":29,"c30":2,"c35":0,"piek":30.7,"stn":"Volkel","datum":"6 sep"},{"jaar":1959,"c20":152,"c25":60,"c30":11,"c35":2,"piek":36.2,"stn":"Gilze-Rijen","datum":"9 jul"},{"jaar":1960,"c20":103,"c25":18,"c30":3,"c35":0,"piek":30.3,"stn":"Maastricht","datum":"23 jun"},{"jaar":1961,"c20":92,"c25":27,"c30":6,"c35":0,"piek":33.1,"stn":"Winterswijk","datum":"2 jul"},{"jaar":1962,"c20":74,"c25":10,"c30":0,"c35":0,"piek":29.8,"stn":"Maastricht","datum":"3 sep"},{"jaar":1963,"c20":88,"c25":24,"c30":3,"c35":0,"piek":32.2,"stn":"Twenthe","datum":"3 aug"},{"jaar":1964,"c20":113,"c25":43,"c30":10,"c35":1,"piek":35.5,"stn":"Volkel","datum":"27 aug"},{"jaar":1965,"c20":84,"c25":14,"c30":0,"c35":0,"piek":29.5,"stn":"Volkel","datum":"5 aug"},{"jaar":1966,"c20":95,"c25":28,"c30":6,"c35":0,"piek":31.7,"stn":"Eindhoven","datum":"13 aug"},{"jaar":1967,"c20":102,"c25":28,"c30":3,"c35":0,"piek":33.3,"stn":"Eindhoven","datum":"13 jul"},{"jaar":1968,"c20":108,"c25":26,"c30":3,"c35":1,"piek":35.4,"stn":"Winterswijk","datum":"2 jul"},{"jaar":1969,"c20":118,"c25":47,"c30":11,"c35":0,"piek":34.3,"stn":"Eelde","datum":"29 jul"},{"jaar":1970,"c20":108,"c25":34,"c30":3,"c35":0,"piek":31.5,"stn":"Volkel","datum":"27 jun"},{"jaar":1971,"c20":112,"c25":33,"c30":3,"c35":0,"piek":31.2,"stn":"Volkel","datum":"9 jul"},{"jaar":1972,"c20":76,"c25":15,"c30":5,"c35":0,"piek":32.5,"stn":"Eelde","datum":"19 jul"},{"jaar":1973,"c20":109,"c25":44,"c30":13,"c35":1,"piek":35.5,"stn":"IJmuiden","datum":"25 jul"},{"jaar":1974,"c20":86,"c25":17,"c30":3,"c35":1,"piek":35.5,"stn":"IJmuiden","datum":"2 jul"},{"jaar":1975,"c20":112,"c25":43,"c30":14,"c35":0,"piek":34.7,"stn":"Eelde","datum":"10 aug"},{"jaar":1976,"c20":120,"c25":59,"c30":24,"c35":4,"piek":36.7,"stn":"Volkel","datum":"3 jul"},{"jaar":1977,"c20":87,"c25":20,"c30":1,"c35":0,"piek":31.5,"stn":"Hoek van Holland","datum":"13 jun"},{"jaar":1978,"c20":71,"c25":15,"c30":3,"c35":0,"piek":32.8,"stn":"Deelen","datum":"30 jul"},{"jaar":1979,"c20":92,"c25":24,"c30":1,"c35":0,"piek":30.3,"stn":"Deelen","datum":"3 jun"},{"jaar":1980,"c20":85,"c25":19,"c30":2,"c35":0,"piek":31.7,"stn":"Eelde","datum":"14 jun"},{"jaar":1981,"c20":101,"c25":29,"c30":5,"c35":0,"piek":31.5,"stn":"Volkel","datum":"9 jul"},{"jaar":1982,"c20":117,"c25":44,"c30":12,"c35":0,"piek":33.5,"stn":"Eelde","datum":"3 jun"},{"jaar":1983,"c20":98,"c25":53,"c30":11,"c35":0,"piek":33.5,"stn":"Volkel","datum":"17 jul"},{"jaar":1984,"c20":78,"c25":20,"c30":5,"c35":0,"piek":32.7,"stn":"Gilze-Rijen","datum":"30 jul"},{"jaar":1985,"c20":105,"c25":22,"c30":3,"c35":0,"piek":31.0,"stn":"Eelde","datum":"27 mei"},{"jaar":1986,"c20":94,"c25":32,"c30":6,"c35":1,"piek":35.9,"stn":"Maastricht","datum":"3 aug"},{"jaar":1987,"c20":81,"c25":20,"c30":3,"c35":0,"piek":31.4,"stn":"Maastricht","datum":"30 jun"},{"jaar":1988,"c20":93,"c25":19,"c30":1,"c35":0,"piek":30.2,"stn":"Eelde","datum":"26 mei"},{"jaar":1989,"c20":117,"c25":52,"c30":5,"c35":0,"piek":33.8,"stn":"Maastricht","datum":"22 jul"},{"jaar":1990,"c20":106,"c25":42,"c30":12,"c35":2,"piek":36.3,"stn":"Arcen","datum":"4 aug"},{"jaar":1991,"c20":103,"c25":37,"c30":12,"c35":1,"piek":35.0,"stn":"Volkel","datum":"11 jul"},{"jaar":1992,"c20":126,"c25":57,"c30":10,"c35":0,"piek":32.7,"stn":"Nieuw Beerta","datum":"9 aug"},{"jaar":1993,"c20":107,"c25":35,"c30":3,"c35":0,"piek":31.3,"stn":"Arcen","datum":"9 jun"},{"jaar":1994,"c20":113,"c25":49,"c30":21,"c35":2,"piek":36.3,"stn":"Volkel","datum":"4 aug"},{"jaar":1995,"c20":121,"c25":63,"c30":24,"c35":1,"piek":35.9,"stn":"Arcen","datum":"21 jul"},{"jaar":1996,"c20":94,"c25":34,"c30":7,"c35":0,"piek":34.8,"stn":"Volkel","datum":"7 jun"},{"jaar":1997,"c20":122,"c25":44,"c30":12,"c35":0,"piek":34.1,"stn":"Volkel","datum":"25 aug"},{"jaar":1998,"c20":114,"c25":27,"c30":9,"c35":0,"piek":34.4,"stn":"Westdorpe","datum":"10 aug"},{"jaar":1999,"c20":129,"c25":53,"c30":14,"c35":0,"piek":32.7,"stn":"Hoek van Holland","datum":"2 aug"},{"jaar":2000,"c20":119,"c25":37,"c30":6,"c35":0,"piek":34.6,"stn":"Ell","datum":"20 jun"},{"jaar":2001,"c20":117,"c25":46,"c30":13,"c35":0,"piek":34.2,"stn":"Maastricht","datum":"26 aug"},{"jaar":2002,"c20":124,"c25":42,"c30":9,"c35":0,"piek":34.9,"stn":"Westdorpe","datum":"30 jul"},{"jaar":2003,"c20":133,"c25":66,"c30":20,"c35":6,"piek":37.8,"stn":"Arcen","datum":"7 aug"},{"jaar":2004,"c20":116,"c25":43,"c30":8,"c35":0,"piek":33.6,"stn":"Soesterberg","datum":"9 aug"},{"jaar":2005,"c20":132,"c25":52,"c30":10,"c35":0,"piek":34.7,"stn":"Gilze-Rijen","datum":"20 jun"},{"jaar":2006,"c20":138,"c25":69,"c30":24,"c35":2,"piek":37.1,"stn":"Westdorpe","datum":"19 jul"},{"jaar":2007,"c20":127,"c25":34,"c30":5,"c35":0,"piek":32.9,"stn":"Maastricht","datum":"15 jul"},{"jaar":2008,"c20":122,"c25":41,"c30":7,"c35":0,"piek":34.3,"stn":"Eelde","datum":"2 jul"},{"jaar":2009,"c20":143,"c25":44,"c30":9,"c35":1,"piek":37.0,"stn":"Ell","datum":"20 aug"},{"jaar":2010,"c20":120,"c25":48,"c30":13,"c35":3,"piek":36.2,"stn":"Arcen","datum":"9 jul"},{"jaar":2011,"c20":134,"c25":49,"c30":4,"c35":0,"piek":34.5,"stn":"Hupsel","datum":"28 jun"},{"jaar":2012,"c20":119,"c25":39,"c30":7,"c35":2,"piek":36.7,"stn":"Ell","datum":"19 aug"},{"jaar":2013,"c20":113,"c25":48,"c30":13,"c35":1,"piek":36.9,"stn":"Arcen","datum":"2 aug"},{"jaar":2014,"c20":141,"c25":47,"c30":7,"c35":1,"piek":36.5,"stn":"Hoek van Holland","datum":"19 jul"},{"jaar":2015,"c20":104,"c25":49,"c30":15,"c35":3,"piek":38.2,"stn":"Maastricht","datum":"2 jul"},{"jaar":2016,"c20":138,"c25":53,"c30":13,"c35":1,"piek":35.2,"stn":"Eindhoven","datum":"20 jul"},{"jaar":2017,"c20":135,"c25":52,"c30":10,"c35":1,"piek":35.2,"stn":"Arcen","datum":"22 jun"},{"jaar":2018,"c20":155,"c25":104,"c30":25,"c35":5,"piek":38.2,"stn":"Arcen","datum":"26 jul"},{"jaar":2019,"c20":134,"c25":69,"c30":19,"c35":4,"piek":40.7,"stn":"Gilze-Rijen","datum":"25 jul"},{"jaar":2020,"c20":147,"c25":60,"c30":20,"c35":7,"piek":37.0,"stn":"Arcen","datum":"8 aug"},{"jaar":2021,"c20":121,"c25":47,"c30":3,"c35":0,"piek":34.0,"stn":"Hupsel","datum":"17 jun"},{"jaar":2022,"c20":141,"c25":74,"c30":24,"c35":2,"piek":39.5,"stn":"Maastricht","datum":"19 jul"},{"jaar":2023,"c20":149,"c25":60,"c30":16,"c35":0,"piek":34.8,"stn":"Arcen","datum":"9 jul"},{"jaar":2024,"c20":139,"c25":59,"c30":11,"c35":0,"piek":34.9,"stn":"Nieuw Beerta","datum":"13 aug"},{"jaar":2025,"c20":144,"c25":66,"c30":18,"c35":2,"piek":39.0,"stn":"Maastricht","datum":"2 jul"},{"jaar":2026,"c20":41,"c25":20,"c30":8,"c35":1,"piek":35.1,"stn":"Ell","datum":"19 jun"}];
+
+const THRS = [
+  {key:"c20", t:20, label:"Warme dagen",         col:"#eab308"},
+  {key:"c25", t:25, label:"Zomerse dagen",        col:"#f59e0b"},
+  {key:"c30", t:30, label:"Tropische dagen",      col:"#f97316"},
+  {key:"c35", t:35, label:"Extreem warme dagen",  col:"#ef4444"},
+];
+let cur = 3;                 // start op ≥35 (zoals in de video)
+let sort = {k:"jaar", dir:-1};
+let chart = null;
+
+const tabs = document.getElementById("thrtabs");
+THRS.forEach((th,i)=>{
+  const d=document.createElement("div");
+  d.className="thr-tab"; d.dataset.i=i;
+  d.innerHTML=`<span class="tl">${th.label}</span><span class="td">≥ ${th.t}°C</span>`;
+  d.onclick=()=>{cur=i; render();};
+  tabs.appendChild(d);
+});
+
+function render(){
+  const th=THRS[cur];
+  document.querySelectorAll(".thr-tab").forEach((d,i)=>{
+    const a=i===cur; d.classList.toggle("actief",a);
+    d.style.background=a?th.col:"";
+  });
+  const years=DATA.map(r=>r.jaar);
+  const counts=DATA.map(r=>r[th.key]);
+  const pieks=DATA.map(r=>r.piek);
+
+  // podium: heetste jaren op PIEK-temperatuur
+  const byPeak=[...DATA].sort((a,b)=>b.piek-a.piek).slice(0,3);
+  const medals=["🥇","🥈","🥉"], rang=["Heetste dag ooit","2e plek","3e plek"];
+  document.getElementById("podium").innerHTML=byPeak.map((r,i)=>`
+    <div class="pcard${i===0?' p1':''}">
+      <div class="medal">${medals[i]}</div>
+      <div class="rang">${rang[i]}</div>
+      <div class="jaar">${r.jaar}</div>
+      <div class="temp">${r.piek.toFixed(1)}°C</div>
+      <div class="meta">${r.stn} · ${r.datum}</div>
+    </div>`).join("");
+
+  // titels
+  document.getElementById("bartitel").textContent=`Aantal ${th.label.toLowerCase()} (≥${th.t}°C) per jaar — alle stations`;
+  document.getElementById("barsub").textContent=`Staaf = aantal dagen ergens in NL ≥${th.t}°C · rode lijn = heetste dag van dat jaar (hoogste TX over alle stations).`;
+  document.getElementById("leg-bar").style.background=th.col;
+  document.getElementById("leg-bar-txt").textContent=`Aantal dagen ≥${th.t}°C`;
+
+  // chart
+  if(chart) chart.destroy();
+  chart=new Chart(document.getElementById("chart").getContext("2d"),{
+    data:{labels:years,
+      datasets:[
+        {type:"bar",label:`dagen ≥${th.t}°C`,data:counts,backgroundColor:th.col+"cc",
+         borderRadius:2,yAxisID:"y",order:2},
+        {type:"line",label:"heetste dag",data:pieks,borderColor:"#b91c1c",
+         backgroundColor:"#b91c1c",borderWidth:1.5,pointRadius:2,tension:.3,yAxisID:"y1",order:1},
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{
+          title:i=>i[0].label,
+          label:c=>c.dataset.type==="line"
+            ? `Heetste dag: ${c.parsed.y.toFixed(1)}°C`
+            : `Dagen ≥${th.t}°C: ${c.parsed.y}`,
+          afterBody:i=>{const r=DATA[i[0].dataIndex];
+            return `→ ${r.piek.toFixed(1)}°C in ${r.stn} (${r.datum})`;}
+        }}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:"#94a3b8",maxTicksLimit:18,font:{size:10}}},
+        y:{position:"left",beginAtZero:true,title:{display:true,text:"aantal dagen",color:"#94a3b8",font:{size:10}},
+           grid:{color:"rgba(15,23,42,.06)"},ticks:{color:"#94a3b8"}},
+        y1:{position:"right",suggestedMin:28,suggestedMax:42,
+           title:{display:true,text:"°C heetste dag",color:"#b91c1c",font:{size:10}},
+           grid:{drawOnChartArea:false},ticks:{color:"#b91c1c",callback:v=>v+"°"}},
+      }}
+  });
+
+  // tabel
+  const rows=[...DATA].sort((a,b)=>{
+    let va,vb;
+    if(sort.k==="cnt"){va=a[th.key];vb=b[th.key];}
+    else if(sort.k==="stn"||sort.k==="datum"){va=a[sort.k];vb=b[sort.k];}
+    else {va=a[sort.k];vb=b[sort.k];}
+    if(va<vb)return -sort.dir; if(va>vb)return sort.dir; return b.jaar-a.jaar;
+  });
+  document.getElementById("tbody").innerHTML=rows.map(r=>`
+    <tr>
+      <td class="l">${r.jaar}${r.jaar===2026?' <span style="font-size:.8em;color:var(--tekst2)">(lopend)</span>':''}</td>
+      <td>${r[th.key]||"–"}</td>
+      <td class="piekcel">${r.piek.toFixed(1)}°C</td>
+      <td class="l">${r.stn}</td>
+      <td class="l">${r.datum}</td>
+    </tr>`).join("");
+}
+
+document.querySelectorAll("th[data-k]").forEach(th=>{
+  th.onclick=()=>{const k=th.dataset.k;
+    if(sort.k===k) sort.dir*=-1; else {sort.k=k; sort.dir=(k==="stn"||k==="datum")?1:-1;}
+    render();};
+});
+
+render();
+</script>
+</body>
+</html>

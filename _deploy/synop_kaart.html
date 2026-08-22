@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synoptische kaart – Ed Aldus WM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"DM Sans", ui-sans-serif, system-ui, sans-serif;
+  background:#f6f8fb;
+  color:#0f172a;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  font-feature-settings:"ss01","cv11";
+}
+.header{background:#ffffff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e3e8ef;flex-wrap:wrap;gap:6px}
+.header-titel{color:#0f172a;font-size:15px;font-weight:700;letter-spacing:-0.01em}
+.header-sub{color:#64748b;font-size:11px;margin-top:2px;font-family:"DM Mono", ui-monospace, monospace;font-weight:500}
+.toolbar{background:#ffffff;padding:10px 20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #e3e8ef}
+.synop-workspace{
+  flex:1;
+  min-height:0;
+  display:flex;
+  background:#f1f5f9;
+}
+.synop-controls{
+  order:2;
+  flex:0 0 312px;
+  width:312px;
+  min-height:0;
+  overflow-y:auto;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  background:#f8fbff;
+  border-left:1px solid #dbe4ef;
+}
+.control-card{
+  background:#ffffff;
+  border:1px solid #dbe4ef;
+  border-radius:8px;
+  padding:10px;
+  box-shadow:0 1px 2px rgba(15,23,42,0.04);
+}
+.control-title{
+  margin-bottom:8px;
+  color:#64748b;
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+}
+.synop-controls .toolbar{
+  padding:0;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  border-bottom:0;
+  background:transparent;
+}
+.synop-controls .toolbar-label,
+.synop-controls .toolbar-help{
+  grid-column:1/-1;
+}
+.synop-controls .btn{
+  width:100%;
+  min-width:0;
+  text-align:center;
+}
+.btn{padding:6px 13px;border-radius:8px;border:1px solid #e3e8ef;background:#ffffff;color:#334155;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.12s;font-family:"DM Sans", ui-sans-serif, system-ui, sans-serif}
+.btn:hover{background:#eef2f7;border-color:#94a3b8;color:#0f172a}
+.btn.act{background:#00205b;color:white;border-color:#00205b}
+.kaart-wrap{
+  order:1;
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  overflow:auto;
+  padding:12px;
+}
+.kaart-box{width:min(100%,720px);margin:0 auto}
+.kaart-header{background:#1e293b;color:#f1f5f9;padding:9px 12px;border-radius:4px 4px 0 0;border-bottom:3px solid #2ec4e8;display:flex;justify-content:space-between;align-items:center}
+.kaart-header .l{font-size:12px;font-weight:800;color:#ffffff;letter-spacing:-0.01em}
+.kaart-header .ls{font-size:10px;color:#94a3b8;margin-top:2px;font-family:"DM Mono",ui-monospace,monospace;font-weight:500;letter-spacing:.04em}
+.kaart-header .r{font-size:12px;font-weight:800;text-align:right;color:#ffffff}
+.kaart-header .rs{font-size:10px;color:#cbd5e1;font-family:"DM Mono",ui-monospace,monospace;font-weight:500}
+.kaart-footer{background:#0f172a;color:#f1f5f9;padding:6px 12px;border-radius:0 0 4px 4px;display:flex;justify-content:space-between;align-items:center;font-size:10px}
+.kaart-footer .merk{font-weight:700;color:#f1f5f9}
+.kaart-footer .src{color:#94a3b8;font-family:"DM Mono",ui-monospace,monospace;font-weight:500}
+.kaart-container{position:relative;background:#d8ecf8;cursor:zoom-in}
+.kaart-container img{width:100%;display:block}
+.kaart-container svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all}
+.legenda{display:flex;gap:8px;flex-wrap:wrap;padding:6px 14px 10px;justify-content:center}
+.synop-controls .legenda{padding:0;justify-content:flex-start}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;color:#5a7090}
+.laden{text-align:center;padding:40px;color:#7a90a8;font-size:13px}
+.copyright-note{font-size:10px;color:#94a3b8;line-height:1.45}
+#popup{display:none;position:fixed;background:white;border:1px solid #c5d3e3;border-radius:10px;padding:14px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:100;min-width:200px;max-width:260px}
+#popup h3{font-size:13px;font-weight:700;color:#003366;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:6px}
+#popup-close{position:absolute;top:8px;right:12px;cursor:pointer;font-size:16px;color:#7a90a8}
+.popup-rij{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-bottom:1px solid #f5f5f5}
+.popup-label{color:#7a90a8}
+.popup-val{font-weight:600;color:#1a2b40}
+.ververs-btn{margin-left:auto;font-size:11.5px;color:#00205b;cursor:pointer;text-decoration:none;font-weight:600;padding:5px 11px;border:1px solid #e3e8ef;border-radius:8px;background:#ffffff}
+.ververs-btn:hover{background:#eef2f7;border-color:#94a3b8}
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:1000;justify-content:center;align-items:flex-start;overflow-y:auto;padding:20px;cursor:zoom-out}
+#lightbox.actief{display:flex}
+#lightbox-inner{position:relative;width:90vw;max-width:680px;flex-shrink:0;cursor:default}
+#lightbox-inner img{width:100%;display:block;border-radius:4px}
+#lightbox-inner svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#lightbox-sluit{position:fixed;top:16px;right:22px;font-size:2em;color:white;cursor:pointer;z-index:1001;line-height:1}
+
+/* ── DARK MODE ── */
+[data-theme="dark"] body { background:#0b1220 !important; color:#f1f5f9 !important; }
+[data-theme="dark"] .header,
+[data-theme="dark"] .toolbar { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .header-titel { color:#f1f5f9 !important; }
+[data-theme="dark"] .header-sub { color:#94a3b8 !important; }
+[data-theme="dark"] .btn {
+  background:#0e1629 !important; color:#cbd5e1 !important;
+  border-color:rgba(255,255,255,0.08) !important;
+}
+[data-theme="dark"] .btn:hover { background:rgba(255,255,255,0.05) !important; color:#f1f5f9 !important; border-color:rgba(255,255,255,0.2) !important; }
+[data-theme="dark"] .btn.act { background:#2ec4e8 !important; color:#0b1220 !important; border-color:#2ec4e8 !important; }
+[data-theme="dark"] .ververs-btn { background:#0e1629 !important; color:#2ec4e8 !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .ververs-btn:hover { background:rgba(255,255,255,0.05) !important; }
+[data-theme="dark"] #popup { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; color:#f1f5f9 !important; }
+[data-theme="dark"] #popup h3 { color:#f1f5f9 !important; border-color:rgba(255,255,255,0.08) !important; }
+[data-theme="dark"] .popup-label { color:#94a3b8 !important; }
+[data-theme="dark"] .popup-val { color:#f1f5f9 !important; }
+[data-theme="dark"] .leg { color:#94a3b8 !important; }
+[data-theme="dark"] .laden { color:#94a3b8 !important; }
+[data-theme="dark"] .synop-workspace,
+[data-theme="dark"] .kaart-wrap{background:#0b1220 !important}
+[data-theme="dark"] .synop-controls{
+  background:#0e1629 !important;
+  border-left-color:rgba(255,255,255,0.08) !important;
+}
+[data-theme="dark"] .control-card{
+  background:#111a2e !important;
+  border-color:rgba(255,255,255,0.08) !important;
+}
+@media(max-width:900px){
+  body{
+    min-height:100%;
+    overflow-y:auto;
+  }
+  .synop-workspace{
+    flex-direction:column;
+    min-height:100vh;
+    overflow:visible;
+  }
+  .synop-controls{
+    order:1;
+    width:100%;
+    flex:0 0 auto;
+    overflow:visible;
+    border-left:0;
+    border-bottom:1px solid #dbe4ef;
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    align-items:start;
+  }
+  .synop-controls .control-card:nth-child(3){
+    grid-column:1/-1;
+  }
+  .kaart-wrap{
+    order:2;
+    min-height:72vh;
+    overflow:auto;
+  }
+  .kaart-box{width:min(100%,620px)}
+}
+@media(max-width:620px){
+  .header{padding:10px 12px}
+  .synop-controls{
+    grid-template-columns:1fr;
+    padding:8px;
+  }
+  .kaart-wrap{
+    padding:8px;
+    min-height:68vh;
+  }
+}
+</style>
+<script>
+  (function(){
+    function apply(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
+    var saved = "light"; try { saved = localStorage.getItem("weerlab_theme") || "light"; } catch {}
+    apply(saved);
+    window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
+  })();
+</script>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-titel">Ed Aldus WM — Synoptische kaart</div>
+    <div class="header-sub">KNMI 10-minuten waarnemingen · <span id="hdr-tijd">laden…</span></div>
+  </div>
+  <span class="ververs-btn" onclick="laad()">↻ Vernieuwen</span>
+</div>
+
+<div class="laden" id="laden">Waarnemingen ophalen…</div>
+
+<div id="inhoud" class="synop-workspace" style="display:none">
+  <div class="kaart-wrap">
+    <div class="kaart-box">
+      <div class="kaart-header">
+        <div><div class="l">Ed Aldus WM</div><div class="ls">Actuele waarnemingen KNMI</div></div>
+        <div style="text-align:right"><div class="r" id="krt-tijd">–</div><div class="rs" id="krt-datum">–</div></div>
+      </div>
+      <div class="kaart-container" id="kaart-container" onclick="openZoom()">
+        <img src="kaart_basis_nl.png" id="kaart-basis" alt="Nederland">
+        <svg id="svg-kaart" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="kaart-footer">
+        <span class="merk">weerlab.nl</span>
+        <span class="src">© Ed Aldus WM · KNMI 10-min</span>
+      </div>
+      <div style="text-align:center;font-size:11px;color:#888;padding:3px 0;cursor:pointer" onclick="openZoom()">🔍 klik voor vergroting</div>
+    </div>
+  </div>
+
+  <aside class="synop-controls" aria-label="Bediening synoptische kaart">
+    <div class="control-card">
+      <div class="control-title">Lagen</div>
+      <div class="toolbar">
+        <span class="toolbar-label" style="font-size:12px;color:#7a90a8;font-weight:600">Toon:</span>
+        <button class="btn act" data-v="ta" onclick="toggleLayer(this)">🌡 Temp</button>
+        <button class="btn act" data-v="n" onclick="toggleLayer(this)">☁ Bewolking</button>
+        <button class="btn act" data-v="wind" onclick="toggleLayer(this)">💨 Wind</button>
+        <button class="btn act" data-v="td" onclick="toggleLayer(this)">💧 Dauwpunt</button>
+        <button class="btn" data-v="rh" onclick="toggleLayer(this)">% Vochtigheid</button>
+        <button class="btn" data-v="vv" onclick="toggleLayer(this)">👁 Zicht</button>
+        <button class="btn" data-v="h" onclick="toggleLayer(this)">↕ Wolkenhoogte</button>
+        <span class="toolbar-help" style="font-size:11px;color:#aaa;margin-left:4px">klik station voor details</span>
+      </div>
+    </div>
+
+    <div class="control-card">
+      <div class="control-title">Legenda</div>
+      <div class="legenda">
+        <div class="leg"><svg width="16" height="16"><circle cx="8" cy="8" r="6" fill="#1a2b40" stroke="#1a2b40" stroke-width="1.5"/></svg>8 oktas (bewolkt)</div>
+        <div class="leg"><svg width="16" height="16"><circle cx="8" cy="8" r="6" fill="white" stroke="#1a2b40" stroke-width="1.5"/></svg>0 oktas (helder)</div>
+        <div class="leg"><svg width="16" height="16"><text x="8" y="12" text-anchor="middle" font-size="11" fill="#cc2200" font-weight="bold">7.4</text></svg>Temp °C</div>
+        <div class="leg"><svg width="16" height="16"><text x="8" y="12" text-anchor="middle" font-size="11" fill="#1a5fb4">5.1</text></svg>Dauwpunt</div>
+        <div class="leg"><svg width="20" height="16"><line x1="10" y1="2" x2="10" y2="14" stroke="#003366" stroke-width="2" marker-end="url(#arr)"/></svg>Wind</div>
+      </div>
+    </div>
+
+    <div class="control-card">
+      <div class="control-title">Update</div>
+      <div class="copyright-note" id="copyright"></div>
+    </div>
+  </aside>
+</div>
+
+<div id="lightbox" onclick="sluitZoom()">
+  <span id="lightbox-sluit" onclick="sluitZoom()">✕</span>
+  <div id="lightbox-inner" onclick="event.stopPropagation()">
+    <img src="kaart_basis_nl.png" id="lightbox-basis" alt="Nederland">
+    <svg id="lightbox-svg" viewBox="0 0 800 1100" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+</div>
+
+<div id="popup">
+  <span id="popup-close" onclick="sluitPopup()">✕</span>
+  <h3 id="popup-naam">Station</h3>
+  <div id="popup-inhoud"></div>
+</div>
+
+<script>
+const KNMI_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9";
+const BASE_URL = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations";
+const HEADERS  = {"Authorization": KNMI_KEY};
+
+const STATIONS = [
+  {n:"Den Helder",    w:"0-20000-0-06235", lat:52.928, lon:4.789},
+  {n:"Vlieland",      w:"0-20000-0-06242", lat:53.250, lon:4.920},
+  {n:"Terschelling",  w:"0-20000-0-06251", lat:53.392, lon:5.350},
+  {n:"Leeuwarden",    w:"0-20000-0-06270", lat:53.224, lon:5.774},
+  {n:"Schiphol",      w:"0-20000-0-06240", lat:52.309, lon:4.781},
+  {n:"Wijk aan Zee",  w:"0-20000-0-06257", lat:52.490, lon:4.600},
+  {n:"De Bilt",       w:"0-20000-0-06260", lat:52.101, lon:5.178},
+  {n:"Stavoren",      w:"0-20000-0-06267", lat:52.890, lon:5.380},
+  {n:"Lelystad",      w:"0-20000-0-06269", lat:52.458, lon:5.530},
+  {n:"Marknesse",     w:"0-20000-0-06273", lat:52.703, lon:5.888},
+  {n:"Deelen",        w:"0-20000-0-06275", lat:52.060, lon:5.885},
+  {n:"Lauwersoog",    w:"0-20000-0-06277", lat:53.410, lon:6.200},
+  {n:"Hoogeveen",     w:"0-20000-0-06279", lat:52.730, lon:6.520},
+  {n:"Eelde",         w:"0-20000-0-06280", lat:53.123, lon:6.586},
+  {n:"Hupsel",        w:"0-20000-0-06283", lat:52.069, lon:6.657},
+  {n:"Nieuw Beerta",  w:"0-20000-0-06286", lat:53.195, lon:7.150},
+  {n:"Twenthe",       w:"0-20000-0-06290", lat:52.275, lon:6.889},
+  {n:"Vlissingen",    w:"0-20000-0-06310", lat:51.442, lon:3.596},
+  {n:"Westdorpe",     w:"0-20000-0-06319", lat:51.226, lon:3.862},
+  {n:"Wilhelminadorp",w:"0-20000-0-06323", lat:51.527, lon:3.884},
+  {n:"Hoek v. Holland",w:"0-20000-0-06330",lat:51.978, lon:4.131},
+  {n:"Woensdrecht",   w:"0-20000-0-06340", lat:51.450, lon:4.342},
+  {n:"Rotterdam",     w:"0-20000-0-06344", lat:51.957, lon:4.437},
+  {n:"Cabauw",        w:"0-20000-0-06348", lat:51.971, lon:4.926},
+  {n:"Gilze-Rijen",   w:"0-20000-0-06350", lat:51.567, lon:4.931},
+  {n:"Herwijnen",     w:"0-20000-0-06356", lat:51.859, lon:5.140},
+  {n:"Eindhoven",     w:"0-20000-0-06370", lat:51.451, lon:5.377},
+  {n:"Volkel",        w:"0-20000-0-06375", lat:51.657, lon:5.707},
+  {n:"Ell",           w:"0-20000-0-06377", lat:51.198, lon:5.763},
+  {n:"Maastricht",    w:"0-20000-0-06380", lat:50.911, lon:5.770},
+];
+
+const LON_MIN=3.3,LON_MAX=7.4,LAT_MIN=50.45,LAT_MAX=53.8;
+const SVG_W=800,SVG_H=1100;
+function lx(lon){return(lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;}
+function ly(lat){return(1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;}
+
+const NL_DAGEN=["zo","ma","di","wo","do","vr","za"];
+const NL_MAANDEN=["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+let obsData={};
+let zichtbareLagen=new Set(["ta","n","wind","td"]);
+
+const BFT=[0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
+function msToBft(ms){let b=0;for(let i=0;i<BFT.length;i++){if(ms>=BFT[i])b=i+1;else break;}return b;}
+
+function laatste(ranges,key){
+  const vals=(ranges[key]||{}).values||[];
+  for(let i=vals.length-1;i>=0;i--){if(vals[i]!=null)return vals[i];}
+  return null;
+}
+
+async function fetchStation(st){
+  const nu=new Date();
+  const van=new Date(nu-60*60*1000);
+  const fmt=d=>d.toISOString().replace('.000Z','Z').slice(0,20)+'Z';
+  const params=new URLSearchParams({
+    datetime:`${fmt(van)}/${fmt(nu)}`,
+    "parameter-name":"ta,td,ff,dd,fx,n,rh,vv,h,ww"
+  });
+  try{
+    const r=await fetch(`${BASE_URL}/locations/${st.w}?${params}`,{headers:HEADERS});
+    if(!r.ok) return null;
+    const js=await r.json();
+    if(!js.coverages) return null;
+    const ranges=js.coverages[0].ranges||{};
+    return{
+      ta:laatste(ranges,"ta"),
+      td:laatste(ranges,"td"),
+      ff:laatste(ranges,"ff"),
+      dd:laatste(ranges,"dd"),
+      fx:laatste(ranges,"fx"),
+      n: laatste(ranges,"n"),
+      rh:laatste(ranges,"rh"),
+      vv:laatste(ranges,"vv"),
+      h: laatste(ranges,"h"),
+      ww:laatste(ranges,"ww"),
+    };
+  }catch(e){return null;}
+}
+
+function ns(tag){return document.createElementNS("http://www.w3.org/2000/svg",tag);}
+
+function tekenOktas(svg,cx,cy,n,R){
+  const bg=ns("circle");
+  bg.setAttribute("cx",cx);bg.setAttribute("cy",cy);bg.setAttribute("r",R);
+  bg.setAttribute("fill","white");bg.setAttribute("stroke","#1a2b40");bg.setAttribute("stroke-width","1.5");
+  svg.appendChild(bg);
+
+  if(n===null||n===9){
+    const c=ns("circle");
+    c.setAttribute("cx",cx);c.setAttribute("cy",cy);c.setAttribute("r",R);
+    c.setAttribute("fill","#cccccc");c.setAttribute("stroke","#888");c.setAttribute("stroke-width","1");
+    svg.appendChild(c);
+    return;
+  }
+  if(n>0){
+    const frac=Math.min(n/8,1);
+    const startAngle=Math.PI/2;
+    const endAngle=startAngle-frac*2*Math.PI;
+    const steps=60;
+    let pts=[[cx,cy]];
+    for(let i=0;i<=steps;i++){
+      const a=startAngle+(endAngle-startAngle)*(i/steps);
+      pts.push([cx+R*Math.cos(a),cy+R*Math.sin(a)]);
+    }
+    const poly=ns("polygon");
+    poly.setAttribute("points",pts.map(p=>p.join(",")).join(" "));
+    poly.setAttribute("fill","#1a2b40");
+    svg.appendChild(poly);
+  }
+  const ring=ns("circle");
+  ring.setAttribute("cx",cx);ring.setAttribute("cy",cy);ring.setAttribute("r",R);
+  ring.setAttribute("fill","none");ring.setAttribute("stroke","#1a2b40");ring.setAttribute("stroke-width","1.5");
+  svg.appendChild(ring);
+}
+
+function tekenWindpijl(svg,cx,cy,dd,ff,R){
+  if(dd==null||ff==null) return;
+  const bft=msToBft(Math.round(ff));
+  const kleur=bft<=3?"#003366":bft<=5?"#e67e22":bft<=7?"#e74c3c":"#8e44ad";
+  const rad=(dd-180)*Math.PI/180;
+  const len=R+20;
+  const dx=Math.sin(rad)*len;
+  const dy=-Math.cos(rad)*len;
+
+  const line=ns("line");
+  line.setAttribute("x1",cx);line.setAttribute("y1",cy);
+  line.setAttribute("x2",cx+dx);line.setAttribute("y2",cy+dy);
+  line.setAttribute("stroke",kleur);line.setAttribute("stroke-width","2");
+  svg.appendChild(line);
+
+  const hs=8;
+  const angle=Math.atan2(dy,dx);
+  const hx1=cx+dx-hs*Math.cos(angle-0.5);
+  const hy1=cy+dy-hs*Math.sin(angle-0.5);
+  const hx2=cx+dx-hs*Math.cos(angle+0.5);
+  const hy2=cy+dy-hs*Math.sin(angle+0.5);
+  const arr=ns("polygon");
+  arr.setAttribute("points",`${cx+dx},${cy+dy} ${hx1},${hy1} ${hx2},${hy2}`);
+  arr.setAttribute("fill",kleur);
+  svg.appendChild(arr);
+}
+
+function txtLabel(svg,x,y,tekst,kleur,size,bold){
+  const bg=ns("rect");
+  const w=tekst.length*size*0.62+4;
+  bg.setAttribute("x",x-w/2);bg.setAttribute("y",y-size+1);
+  bg.setAttribute("width",w);bg.setAttribute("height",size+2);
+  bg.setAttribute("rx","2");bg.setAttribute("fill","rgba(255,255,255,0.82)");
+  svg.appendChild(bg);
+  const t=ns("text");
+  t.setAttribute("x",x);t.setAttribute("y",y);
+  t.setAttribute("text-anchor","middle");t.setAttribute("font-size",size);
+  t.setAttribute("font-family","Arial,sans-serif");t.setAttribute("fill",kleur);
+  if(bold) t.setAttribute("font-weight","bold");
+  t.textContent=tekst;
+  svg.appendChild(t);
+}
+
+function teken(){
+  const svg=document.getElementById("svg-kaart");
+  svg.innerHTML="";
+
+  STATIONS.forEach(st=>{
+    const obs=obsData[st.n];
+    if(!obs) return;
+    const x=lx(st.lon),y=ly(st.lat);
+    const R=10;
+    const g=ns("g");
+    g.style.cursor="pointer";
+    g.addEventListener("click",e=>{e.stopPropagation();toonPopup(st,obs,e);});
+
+    // Bewolking
+    if(zichtbareLagen.has("n")){
+      tekenOktas(g,x,y,obs.n,R);
+    } else {
+      const dot=ns("circle");
+      dot.setAttribute("cx",x);dot.setAttribute("cy",y);dot.setAttribute("r",3);
+      dot.setAttribute("fill","#003366");
+      g.appendChild(dot);
+    }
+
+    // Wind
+    if(zichtbareLagen.has("wind") && obs.ff!=null){
+      tekenWindpijl(g,x,y,obs.dd,obs.ff,R);
+      const bft=msToBft(Math.round(obs.ff));
+      txtLabel(g,x,y+R+14,`Bft ${bft}`,"#003366",9,true);
+    }
+
+    // Temperatuur (rechtsboven)
+    if(zichtbareLagen.has("ta") && obs.ta!=null){
+      txtLabel(g,x+R+16,y-R-2,obs.ta.toFixed(1)+"°","#cc2200",11,true);
+    }
+
+    // Dauwpunt (rechtsonder)
+    if(zichtbareLagen.has("td") && obs.td!=null){
+      txtLabel(g,x+R+16,y+R+2,obs.td.toFixed(1)+"°","#1a5fb4",10,false);
+    }
+
+    // Vochtigheid (linksonder)
+    if(zichtbareLagen.has("rh") && obs.rh!=null){
+      txtLabel(g,x-R-14,y+R+2,obs.rh.toFixed(0)+"%","#555",9,false);
+    }
+
+    // Zicht (linksonder lager)
+    if(zichtbareLagen.has("vv") && obs.vv!=null){
+      const vv=obs.vv>=10000?"10km+":obs.vv>=1000?(obs.vv/1000).toFixed(1)+"km":obs.vv.toFixed(0)+"m";
+      txtLabel(g,x-R-14,y+R+14,vv,"#888",9,false);
+    }
+
+    // Wolkenhoogte (rechtsboven hoger)
+    if(zichtbareLagen.has("h") && obs.h!=null && obs.n>0){
+      const hm=Math.round(obs.h*0.3048/50)*50;
+      txtLabel(g,x+R+16,y-R-14,hm+"m","#1a7a4a",9,false);
+    }
+
+    svg.appendChild(g);
+  });
+
+  // Copyright
+  const cr=ns("text");
+  cr.setAttribute("x",SVG_W-10);cr.setAttribute("y",SVG_H-14);
+  cr.setAttribute("text-anchor","end");cr.setAttribute("font-size","18");
+  cr.setAttribute("fill","#999");cr.setAttribute("font-style","italic");
+  cr.setAttribute("font-family","Arial,sans-serif");
+  cr.textContent="© Ed Aldus | Data: KNMI";
+  svg.appendChild(cr);
+}
+
+function toggleLayer(btn){
+  const v=btn.dataset.v;
+  if(zichtbareLagen.has(v)){zichtbareLagen.delete(v);btn.classList.remove("act");}
+  else{zichtbareLagen.add(v);btn.classList.add("act");}
+  teken();
+}
+
+function toonPopup(st,obs,e){
+  const popup=document.getElementById("popup");
+  const rijen=[
+    ["Temperatuur", obs.ta!=null?obs.ta.toFixed(1)+"°C":"–"],
+    ["Dauwpunt",    obs.td!=null?obs.td.toFixed(1)+"°C":"–"],
+    ["Vochtigheid", obs.rh!=null?obs.rh.toFixed(0)+"%":"–"],
+    ["Bewolking",   obs.n!=null?obs.n+" oktas":"–"],
+    ["Wind",        obs.ff!=null?`${obs.ff.toFixed(1)} m/s (Bft ${msToBft(Math.round(obs.ff))})  ${obs.dd!=null?obs.dd.toFixed(0)+"°":""}` :"–"],
+    ["Windstoot",   obs.fx!=null?(obs.fx*3.6).toFixed(0)+" km/h":"–"],
+    ["Zicht",       obs.vv!=null?(obs.vv>=10000?"≥10 km":obs.vv>=1000?(obs.vv/1000).toFixed(1)+" km":obs.vv.toFixed(0)+" m"):"–"],
+    ["Wolkenhoogte",obs.h!=null&&obs.n>0?Math.round(obs.h*0.3048/50)*50+" m":"–"],
+  ];
+  document.getElementById("popup-naam").textContent=st.n;
+  document.getElementById("popup-inhoud").innerHTML=rijen.map(([l,v])=>
+    `<div class="popup-rij"><span class="popup-label">${l}</span><span class="popup-val">${v}</span></div>`
+  ).join("");
+  popup.style.display="block";
+  const px=Math.min(e.clientX+12,window.innerWidth-280);
+  const py=Math.min(e.clientY-10,window.innerHeight-300);
+  popup.style.left=px+"px";popup.style.top=py+"px";
+}
+
+function openZoom(){
+  const svg=document.getElementById('svg-kaart');
+  const lbSvg=document.getElementById('lightbox-svg');
+  lbSvg.innerHTML=svg.innerHTML;
+  document.getElementById('lightbox').classList.add('actief');
+}
+function sluitZoom(){document.getElementById('lightbox').classList.remove('actief');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')sluitZoom();});
+
+function sluitPopup(){document.getElementById("popup").style.display="none";}
+document.addEventListener("click",e=>{
+  if(!e.target.closest("#popup")&&!e.target.closest("svg")) sluitPopup();
+});
+
+async function laad(){
+  document.getElementById("laden").style.display="block";
+  document.getElementById("inhoud").style.display="none";
+
+  try{
+    const lokaal = new URLSearchParams(window.location.search).get("localData") === "1";
+    const actueelUrl = (lokaal ? "actueel.json" : "https://data.weerlab.nl/actueel.json") + "?t=" + Date.now();
+    const r=await fetch(actueelUrl);
+    const js=await r.json();
+    const stations=js.stations||{};
+    obsData={};
+    Object.values(stations).forEach(st=>{
+      obsData[st.naam]=st;
+    });
+    const nu=new Date();
+    const tijdStr=js.bijgewerkt||nu.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+    document.getElementById("hdr-tijd").textContent=tijdStr;
+    document.getElementById("krt-tijd").textContent=tijdStr;
+    document.getElementById("krt-datum").textContent=`${NL_DAGEN[nu.getDay()]} ${nu.getDate()} ${NL_MAANDEN[nu.getMonth()+1]}`;
+    document.getElementById("copyright").textContent=`© Ed Aldus | Data: KNMI 10-min | Bijgewerkt: ${tijdStr}`;
+  }catch(e){
+    document.getElementById("laden").innerHTML="Kon actueel.json niet laden: "+e.message;
+    return;
+  }
+
+  document.getElementById("laden").style.display="none";
+  document.getElementById("inhoud").style.display="flex";
+  teken();
+}
+
+laad();
+setInterval(laad,10*60*1000);
+</script>
+</body>
+</html>

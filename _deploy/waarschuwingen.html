@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waarschuwingen Nederland · weerlab.nl</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--wl-color-background);
+  color: var(--wl-color-text);
+  font: var(--wl-text-body-md);
+}
+header {
+  background: var(--wl-color-surface);
+  border-bottom: 1px solid var(--wl-color-border);
+  padding: 14px 22px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+header h1 { margin: 0; font: var(--wl-text-headline-md); }
+header .sub { color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); }
+header .demo-tag {
+  background: var(--wl-color-warning-yellow);
+  color: #5a4500;
+  padding: 2px 8px;
+  border-radius: var(--wl-radius-sm);
+  font: var(--wl-text-label-md);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+header .controls { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+header button {
+  font: var(--wl-text-label-md);
+  padding: 7px 12px;
+  border: 1px solid var(--wl-color-border-strong);
+  border-radius: var(--wl-radius-md);
+  background: var(--wl-color-surface);
+  color: var(--wl-color-text);
+  cursor: pointer;
+}
+header button:hover { background: var(--wl-color-surface-muted); }
+header button.active {
+  background: var(--wl-color-accent);
+  color: #fff;
+  border-color: var(--wl-color-accent-strong);
+}
+
+main {
+  max-width: var(--wl-content-max);
+  margin: 0 auto;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--wl-color-surface);
+  border: 1px solid var(--wl-color-border);
+  border-radius: var(--wl-radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--wl-shadow-1);
+}
+.panel h2 { margin: 0 0 10px 0; font: var(--wl-text-headline-md); }
+
+.map-wrap { position: relative; }
+svg.nl {
+  width: 100%;
+  height: auto;
+  max-height: 720px;
+  display: block;
+}
+svg.nl path.prov {
+  stroke: #4a4a4a;
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: filter .15s, stroke-width .15s;
+}
+svg.nl path.prov:hover { filter: brightness(1.08); stroke-width: 1.2; }
+svg.nl path.prov.prov-highlight {
+  stroke-width: 1;
+}
+svg.nl path.prov.prov-selected:not(.prov-highlight) {
+  stroke: #334155;
+  stroke-width: 1.8;
+  stroke-dasharray: 4 2;
+}
+
+.zh-colors {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.zh-colors .label {
+  font: var(--wl-text-body-sm);
+  color: var(--wl-color-text-muted);
+  margin-right: 2px;
+}
+.zh-swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--wl-color-border-strong);
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s;
+}
+.zh-swatch:hover { transform: scale(1.08); }
+.zh-swatch.selected {
+  box-shadow: 0 0 0 2px var(--wl-color-text), 0 0 0 4px #fff;
+}
+.zh-swatch.disabled { opacity: 0.4; cursor: not-allowed; }
+.zh-swatch.disabled:hover { transform: none; }
+svg.nl text.plabel {
+  font: 600 9px/1 var(--wl-font-sans);
+  fill: #1a1a1a;
+  pointer-events: none;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(255,255,255,0.85);
+  stroke-width: 2.5;
+}
+svg.nl .water-bg { fill: #d8e6f2; }
+
+/* legenda onder de kaart */
+.legend-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wl-color-border);
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 720px) { .legend-block { grid-template-columns: 1fr; } }
+.legend-block h3 {
+  margin: 0 0 8px 0;
+  font: var(--wl-text-label-md);
+  color: var(--wl-color-text);
+}
+.legend-block .scale {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  font: var(--wl-text-body-sm);
+}
+.legend-block .sw {
+  width: 16px; height: 16px;
+  border: 1px solid rgba(0,0,0,0.2);
+  border-radius: 3px;
+}
+.legend-block .reasons {
+  display: grid;
+  gap: 8px;
+}
+.legend-block .reason {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  align-items: start;
+  font: var(--wl-text-body-sm);
+  line-height: 1.4;
+}
+.legend-block .reason .dot {
+  width: 10px; height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+.legend-block .reason b { display: block; font-weight: 600; }
+.legend-block .reason span.area { color: var(--wl-color-text-muted); font-size: 12px; }
+
+/* zijpaneel */
+aside .panel + .panel { margin-top: 14px; }
+.zh-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.zh-toggle .label { font: var(--wl-text-label-md); }
+.zh-toggle .label small { display: block; color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); margin-top: 2px; }
+.switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider {
+  position: absolute; inset: 0;
+  background: var(--wl-color-border-strong);
+  border-radius: 24px;
+  transition: .2s;
+  cursor: pointer;
+}
+.switch .slider::before {
+  content: ""; position: absolute;
+  width: 18px; height: 18px;
+  left: 3px; top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.switch input:checked + .slider { background: var(--wl-color-accent); }
+.switch input:checked + .slider::before { transform: translateX(20px); }
+
+.warning-list { display: grid; gap: 8px; }
+.warning-card {
+  display: grid;
+  grid-template-columns: 6px 1fr;
+  gap: 10px;
+  padding: 8px 10px 8px 8px;
+  background: var(--wl-color-surface-muted);
+  border-radius: var(--wl-radius-md);
+  border: 1px solid var(--wl-color-border);
+}
+.warning-card .bar { border-radius: 3px; }
+.warning-card .body b { display: block; font: var(--wl-text-label-md); }
+.warning-card .body .meta { color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); margin-top: 2px; }
+.warning-card .body .areas { font-size: 11.5px; margin-top: 4px; line-height: 1.4; }
+
+footer.attribution {
+  max-width: var(--wl-content-max);
+  margin: 0 auto;
+  padding: 12px 22px 24px;
+  color: var(--wl-color-text-muted);
+  font: var(--wl-text-body-sm);
+  text-align: center;
+}
+footer.attribution b { color: var(--wl-color-text); }
+
+.last-update { color: var(--wl-color-text-muted); font: var(--wl-text-body-sm); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Waarschuwingen Nederland</h1>
+  <span class="sub last-update" id="lastUpdate"></span>
+  <div class="controls">
+    <button id="btnDownloadAll" title="Hele kaart downloaden als PNG">⬇ Hele kaart (PNG)</button>
+    <button id="btnDownloadProv" title="Geselecteerde provincie downloaden als PNG" disabled style="opacity:.5">⬇ Provincie (PNG)</button>
+    <button id="btnRefresh" title="Handmatig verversen">↻ Verversen</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="map-wrap">
+      <div id="mapHost"></div>
+    </div>
+    <div class="legend-block">
+      <div>
+        <h3>Waarschuwingsniveau</h3>
+        <div class="scale">
+          <div class="sw" style="background:#7cc47c"></div><div>Geen waarschuwing</div>
+          <div class="sw" style="background:#ffd633"></div><div>Code <b>geel</b> — wees alert</div>
+          <div class="sw" style="background:#ff8c1a"></div><div>Code <b>oranje</b> — wees voorbereid</div>
+          <div class="sw" style="background:#cc0000"></div><div>Code <b>rood</b> — onderneem actie</div>
+        </div>
+      </div>
+      <div>
+        <h3>Reden afgegeven waarschuwingen</h3>
+        <div class="reasons" id="reasonsList"></div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel" id="provPanel">
+      <h2 id="provPanelTitle">Provincie</h2>
+      <div id="provPanelContent">
+        <p style="color:var(--wl-color-text-muted);font:var(--wl-text-body-sm);margin:0">Klik op een provincie op de kaart om te markeren of downloaden.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Actieve waarschuwingen</h2>
+      <div class="warning-list" id="warningList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Bron</h2>
+      <div style="font: var(--wl-text-body-sm); color: var(--wl-color-text-muted); line-height:1.5">
+        Waarschuwingsdata: <b style="color:var(--wl-color-text)">KNMI</b> via knmi.nl/waarschuwingen, elke 15 min ververst.<br>
+        Visualisatie & kaart: <b style="color:var(--wl-color-text)">Ed Aldus</b> · weerlab.nl
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer class="attribution">
+  Data: <b>KNMI</b> · Visualisatie: <b>Ed Aldus / weerlab.nl</b> · Update-interval: 15 min
+</footer>
+
+<script>
+// ---------------- LIVE DATA uit waarschuwingen.json (scraper draait elke 15 min) ----------------
+let PROVINCE_CODES = {};
+let ACTIVE_WARNINGS = [];
+let DATA_GENERATED = null;
+
+async function loadWarnings() {
+  const res = await fetch("https://data.weerlab.nl/waarschuwingen.json?t=" + Date.now());
+  if (!res.ok) throw new Error("waarschuwingen.json: " + res.status);
+  const data = await res.json();
+  PROVINCE_CODES = {};
+  for (const [name, p] of Object.entries(data.provinces || {})) {
+    PROVINCE_CODES[name] = p.code || "groen";
+  }
+  ACTIVE_WARNINGS = (data.warnings || []).map(w => ({
+    code: w.code, fenomeen: w.fenomeen, detail: w.detail,
+    geldigheid: w.geldigheid, gebieden: w.gebieden || []
+  }));
+  DATA_GENERATED = data.generated || null;
+}
+
+// ---------------- KLEUREN ----------------
+const COLOR = {
+  groen:  "#7cc47c",
+  geel:   "#ffd633",
+  oranje: "#ff8c1a",
+  rood:   "#cc0000"
+};
+const DOT_COLOR = COLOR;
+
+// ---------------- KAART ----------------
+let GEO = null;
+let BOUNDS = null;
+
+async function loadGeo() {
+  const res = await fetch("nl_provincies_wadden.geojson");
+  GEO = await res.json();
+  BOUNDS = computeBounds();
+}
+
+function project(lon, lat) {
+  const lat0 = 52.2;
+  const x = (lon - 3.0) * Math.cos(lat0 * Math.PI / 180);
+  const y = -(lat - 50.6);
+  return [x, y];
+}
+function computeBounds() {
+  let xs = [], ys = [];
+  GEO.features.forEach(f => {
+    const walk = c => {
+      if (typeof c[0] === 'number') {
+        const [x, y] = project(c[0], c[1]);
+        xs.push(x); ys.push(y);
+      } else c.forEach(walk);
+    };
+    walk(f.geometry.coordinates);
+  });
+  return {
+    minx: Math.min(...xs), maxx: Math.max(...xs),
+    miny: Math.min(...ys), maxy: Math.max(...ys)
+  };
+}
+function pathFor(feature) {
+  const { minx, miny } = BOUNDS;
+  let d = '';
+  const polys = feature.geometry.type === 'Polygon'
+    ? [feature.geometry.coordinates]
+    : feature.geometry.coordinates;
+  polys.forEach(poly => {
+    poly.forEach(ring => {
+      ring.forEach((pt, i) => {
+        const [x, y] = project(pt[0], pt[1]);
+        d += (i === 0 ? 'M' : 'L') +
+             ((x - minx) * 100).toFixed(2) + ',' +
+             ((y - miny) * 100).toFixed(2) + ' ';
+      });
+      d += 'Z ';
+    });
+  });
+  return d;
+}
+function ringCentroid(ring) {
+  let A = 0, Cx = 0, Cy = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x0, y0] = project(ring[i][0], ring[i][1]);
+    const [x1, y1] = project(ring[i + 1][0], ring[i + 1][1]);
+    const f = x0 * y1 - x1 * y0;
+    A += f; Cx += (x0 + x1) * f; Cy += (y0 + y1) * f;
+  }
+  A *= 0.5;
+  if (A === 0) return { cx: 0, cy: 0, area: 0 };
+  return { cx: Cx / (6 * A), cy: Cy / (6 * A), area: Math.abs(A) };
+}
+function featureCentroid(feature) {
+  const polys = feature.geometry.type === 'Polygon'
+    ? [feature.geometry.coordinates]
+    : feature.geometry.coordinates;
+  let totA = 0, sx = 0, sy = 0;
+  polys.forEach(poly => {
+    const c = ringCentroid(poly[0]);
+    totA += c.area; sx += c.cx * c.area; sy += c.cy * c.area;
+  });
+  if (totA === 0) return [0, 0];
+  const cx = (sx / totA - BOUNDS.minx) * 100;
+  const cy = (sy / totA - BOUNDS.miny) * 100;
+  // Waddeneilanden: label iets omhoog voor leesbaarheid
+  if (feature.properties.statnaam === "Waddeneilanden") return [cx, cy - 1.5];
+  return [cx, cy];
+}
+const ABBR = {
+  "Groningen":"GR","Fryslân":"FR","Drenthe":"DR","Overijssel":"OV","Flevoland":"FL",
+  "Gelderland":"GD","Utrecht":"UT","Noord-Holland":"NH","Zuid-Holland":"ZH",
+  "Zeeland":"ZL","Noord-Brabant":"NB","Limburg":"LB","Waddeneilanden":"WA"
+};
+
+function renderMap() {
+  const w = (BOUNDS.maxx - BOUNDS.minx) * 100;
+  const h = (BOUNDS.maxy - BOUNDS.miny) * 100;
+  const paths = GEO.features.map(f => {
+    const name = f.properties.statnaam;
+    const code = PROVINCE_CODES[name] || "groen";
+    const fill = COLOR[code];
+    const hl = isHighlighted(name);
+    const isSel = name === selectedProvince;
+    const cls = 'prov' + (hl ? ' prov-highlight' : '') + (isSel ? ' prov-selected' : '');
+    const styleAttr = hl
+      ? `style="stroke:${highlightStrokeFor(name)}"`
+      : '';
+    return `<path class="${cls}" data-name="${name}" d="${pathFor(f)}" fill="${fill}" ${styleAttr}>
+              <title>${name}: code ${code}</title>
+            </path>`;
+  }).join('');
+  const labels = GEO.features.map(f => {
+    const [cx, cy] = featureCentroid(f);
+    const name = f.properties.statnaam;
+    return `<text class="plabel" x="${cx}" y="${cy}">${ABBR[name] || name}</text>`;
+  }).join('');
+  const pad = 6;
+  const svg = `<svg class="nl" viewBox="${-pad} ${-pad} ${(w + pad*2).toFixed(1)} ${(h + pad*2).toFixed(1)}" preserveAspectRatio="xMidYMid meet">
+    <rect class="water-bg" x="${-pad}" y="${-pad}" width="${w + pad*2}" height="${h + pad*2}"/>
+    ${paths}
+    ${labels}
+  </svg>`;
+  document.getElementById('mapHost').innerHTML = svg;
+}
+
+// ---------------- DATUM-HELPERS (Zaterdag → Zaterdag 2 mei) ----------------
+const _NL_DAYS_FULL = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+const _NL_MONTHS = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+function _refDate() {
+  return DATA_GENERATED ? new Date(DATA_GENERATED) : new Date();
+}
+function _nextDateForDay(dayName, ref) {
+  const target = _NL_DAYS_FULL.indexOf(dayName);
+  if (target < 0) return null;
+  const d = new Date(ref);
+  d.setHours(0,0,0,0);
+  const diff = (target - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+function _fmtDayDate(d) {
+  return _NL_DAYS_FULL[d.getDay()] + " " + d.getDate() + " " + _NL_MONTHS[d.getMonth()];
+}
+function expandGeldigheid(g) {
+  // "Zaterdag 17:00 - Zaterdag 22:00"  →  "Zaterdag 2 mei · 17:00 - 22:00"
+  // "Vrijdag 22:00 - Zaterdag 03:00"   →  "Vrijdag 1 mei 22:00 - Zaterdag 2 mei 03:00"
+  if (!g) return "";
+  const ref = _refDate();
+  const m = g.match(/^(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag)\s+(\d{1,2}:\d{2})\s*-\s*(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag)\s+(\d{1,2}:\d{2})$/);
+  if (!m) return g;
+  const [, d1, t1, d2, t2] = m;
+  const date1 = _nextDateForDay(d1, ref);
+  const date2 = _nextDateForDay(d2, ref);
+  if (!date1 || !date2) return g;
+  // Als d2 vóór d1 in de week valt, voeg 7 dagen toe (loopt over weekend)
+  if (date2 < date1) date2.setDate(date2.getDate() + 7);
+  if (d1 === d2) {
+    return `${_fmtDayDate(date1)} · ${t1} - ${t2}`;
+  }
+  return `${_fmtDayDate(date1)} ${t1} - ${_fmtDayDate(date2)} ${t2}`;
+}
+
+function startDayDateOf(geldigheid) {
+  if (!geldigheid) return null;
+  const ref = _refDate();
+  const m = geldigheid.match(/^(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag)\b/);
+  if (!m) return null;
+  const d = _nextDateForDay(m[1], ref);
+  return d ? _fmtDayDate(d) : null;
+}
+
+// ---------------- HIGHLIGHT KLEURPALET ----------------
+const HL_PALETTE = {
+  navy:    { hex:"#00205b", stroke:"#00205b", shadow:"rgba(0,32,91,0.55)",    label:"Navy (KNMI)" },
+  cyan:    { hex:"#2ec4e8", stroke:"#0b7c95", shadow:"rgba(11,124,149,0.55)", label:"Accent" },
+  purple:  { hex:"#6d28d9", stroke:"#6d28d9", shadow:"rgba(109,40,217,0.55)", label:"Paars" },
+  magenta: { hex:"#ec4899", stroke:"#be185d", shadow:"rgba(190,24,93,0.55)",  label:"Magenta" },
+  red:     { hex:"#cc0000", stroke:"#cc0000", shadow:"rgba(204,0,0,0.55)",    label:"Rood" },
+  black:   { hex:"#0f172a", stroke:"#0f172a", shadow:"rgba(15,23,42,0.55)",   label:"Zwart" },
+  white:   { hex:"#ffffff", stroke:"#ffffff", shadow:"rgba(0,0,0,0.55)",      label:"Wit" }
+};
+
+// Dynamische highlight-state per provincie
+const provHighlights = {};
+
+function getProvHL(name) {
+  if (!provHighlights[name]) {
+    let colorKey = 'navy';
+    try {
+      const saved = localStorage.getItem('hl_color_' + name);
+      if (saved && HL_PALETTE[saved]) colorKey = saved;
+    } catch {}
+    provHighlights[name] = { enabled: false, colorKey };
+  }
+  return provHighlights[name];
+}
+
+function isHighlighted(provName) {
+  return getProvHL(provName).enabled;
+}
+function highlightStrokeFor(provName) {
+  return HL_PALETTE[getProvHL(provName).colorKey]?.stroke || "#00205b";
+}
+function highlightShadowFor(provName) {
+  return HL_PALETTE[getProvHL(provName).colorKey]?.shadow || "rgba(0,32,91,0.55)";
+}
+
+// ---------------- GESELECTEERDE PROVINCIE PANEL ----------------
+let selectedProvince = null;
+
+function renderProvPanel() {
+  const title = document.getElementById('provPanelTitle');
+  const content = document.getElementById('provPanelContent');
+  const btn = document.getElementById('btnDownloadProv');
+
+  if (!selectedProvince) {
+    title.textContent = 'Provincie';
+    content.innerHTML = '<p style="color:var(--wl-color-text-muted);font:var(--wl-text-body-sm);margin:0">Klik op een provincie op de kaart om te markeren of downloaden.</p>';
+    btn.textContent = '⬇ Provincie (PNG)';
+    btn.disabled = true;
+    btn.style.opacity = '.5';
+    return;
+  }
+
+  const hl = getProvHL(selectedProvince);
+  title.textContent = selectedProvince;
+  btn.textContent = `⬇ ${selectedProvince} (PNG)`;
+  btn.disabled = false;
+  btn.style.opacity = '1';
+
+  content.innerHTML = `
+    <div class="zh-toggle">
+      <div class="label">
+        Dikke contour
+        <small>Aan/uit + kies kleur</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="provToggle" ${hl.enabled ? 'checked' : ''}>
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="zh-colors" id="provColors">
+      <span class="label">Kleur:</span>
+    </div>
+  `;
+
+  renderProvSwatches();
+
+  document.getElementById('provToggle').addEventListener('change', e => {
+    getProvHL(selectedProvince).enabled = e.target.checked;
+    renderMap();
+    renderProvSwatches();
+  });
+}
+
+function renderProvSwatches() {
+  const host = document.getElementById('provColors');
+  if (!host || !selectedProvince) return;
+  [...host.querySelectorAll('.zh-swatch')].forEach(el => el.remove());
+  const hl = getProvHL(selectedProvince);
+  Object.entries(HL_PALETTE).forEach(([key, info]) => {
+    const sw = document.createElement('div');
+    sw.className = 'zh-swatch' + (key === hl.colorKey ? ' selected' : '') + (hl.enabled ? '' : ' disabled');
+    sw.style.background = info.hex;
+    sw.title = info.label;
+    sw.addEventListener('click', () => {
+      if (!getProvHL(selectedProvince).enabled) return;
+      getProvHL(selectedProvince).colorKey = key;
+      try { localStorage.setItem('hl_color_' + selectedProvince, key); } catch {}
+      renderProvSwatches();
+      renderMap();
+    });
+    host.appendChild(sw);
+  });
+}
+
+// ---------------- LEGENDA REASONS ----------------
+function renderReasons() {
+  const host = document.getElementById('reasonsList');
+  if (!ACTIVE_WARNINGS.length) {
+    host.innerHTML = '<div style="color:var(--wl-color-text-muted)">Geen actieve waarschuwingen.</div>';
+    return;
+  }
+  // Sorteer rood → oranje → geel
+  const order = { rood: 0, oranje: 1, geel: 2, groen: 3 };
+  const sorted = [...ACTIVE_WARNINGS].sort((a, b) => order[a.code] - order[b.code]);
+  host.innerHTML = sorted.map(w => `
+    <div class="reason">
+      <div class="dot" style="background:${DOT_COLOR[w.code]}"></div>
+      <div>
+        <b>${w.fenomeen}</b>
+        ${w.detail}
+        <span class="area">${w.gebieden.join(', ')} · ${expandGeldigheid(w.geldigheid)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ---------------- ZIJPANEEL WAARSCHUWINGEN ----------------
+function renderWarningList() {
+  const host = document.getElementById('warningList');
+  const order = { rood: 0, oranje: 1, geel: 2, groen: 3 };
+  const sorted = [...ACTIVE_WARNINGS].sort((a, b) => order[a.code] - order[b.code]);
+  host.innerHTML = sorted.map(w => `
+    <div class="warning-card">
+      <div class="bar" style="background:${COLOR[w.code]}"></div>
+      <div class="body">
+        <b>Code ${w.code} — ${w.fenomeen}</b>
+        <div class="meta">${w.detail}</div>
+        <div class="areas">${w.gebieden.join(' · ')}</div>
+        <div class="meta" style="margin-top:4px">📅 ${expandGeldigheid(w.geldigheid)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ---------------- LAATST BIJGEWERKT ----------------
+function renderLastUpdate() {
+  const el = document.getElementById('lastUpdate');
+  if (!DATA_GENERATED) { el.textContent = "Laden…"; return; }
+  const d = new Date(DATA_GENERATED);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const dd = d.toLocaleDateString('nl-NL', { day:'numeric', month:'short' });
+  el.textContent = `KNMI · laatst opgehaald ${dd} ${hh}:${mm} · ververst elke 15 min`;
+}
+
+// ---------------- INIT ----------------
+async function refreshAll(){
+  await loadWarnings();
+  renderMap();
+  renderReasons();
+  renderWarningList();
+  renderLastUpdate();
+}
+
+async function init() {
+  await loadGeo();
+
+  // Toon meteen lege kaart zodat UI niet leeg blijft tijdens fetch
+  renderMap();
+  document.getElementById('lastUpdate').textContent = "Bezig met ophalen…";
+
+  try {
+    await refreshAll();
+  } catch(e) {
+    document.getElementById('lastUpdate').textContent = "Fout bij laden: " + e.message;
+    console.error('[waarschuwingen] fetch error:', e);
+    renderMap();
+  }
+
+  // Auto-refresh elke 15 min
+  setInterval(() => { refreshAll().catch(console.error); }, 15 * 60 * 1000);
+
+  // Klik op provincie → selecteer + toon panel
+  document.getElementById('mapHost').addEventListener('click', e => {
+    const path = e.target.closest('path.prov');
+    if (!path) return;
+    selectedProvince = path.dataset.name;
+    renderMap();
+    renderProvPanel();
+  });
+
+  document.getElementById('btnRefresh').addEventListener('click', () => {
+    refreshAll().catch(console.error);
+  });
+  document.getElementById('btnDownloadAll').addEventListener('click', () => {
+    downloadFullMapPNG();
+  });
+  document.getElementById('btnDownloadProv').addEventListener('click', () => {
+    if (selectedProvince) downloadProvincePNG(selectedProvince);
+  });
+}
+init();
+
+// ---------------- DOWNLOAD AS PNG ----------------
+function svgToPNG(svgEl, scale, filename) {
+  const xml = new XMLSerializer().serializeToString(svgEl);
+  const svg64 = 'data:image/svg+xml;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(xml)));
+  // 1 viewBox-unit = ~7 px → consistente fontgroottes ongeacht kaartgrootte
+  const vb = svgEl.viewBox.baseVal;
+  const vbW = Math.max(1, vb.width || 800);
+  const vbH = Math.max(1, vb.height || 800);
+  const sx = (scale || 1) * 7;
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(vbW * sx);
+    canvas.height = Math.round(vbH * sx);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  };
+  img.onerror = e => console.error('SVG→PNG fout', e);
+  img.src = svg64;
+}
+
+function escapeXML(s){
+  return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
+}
+function wrapLines(text, maxChars){
+  const words = String(text).split(/\s+/);
+  const lines = []; let cur = '';
+  for (const w of words){
+    if ((cur + ' ' + w).trim().length > maxChars && cur){ lines.push(cur); cur = w; }
+    else cur = (cur ? cur + ' ' : '') + w;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function buildExportSVG({features, attribution, padding=8, withLabels=true, warnings=[], badgeCodes=[], dateStr="", forceHighlight=null}){
+  let xs=[], ys=[];
+  features.forEach(f => {
+    const walk = c => {
+      if (typeof c[0] === 'number') {
+        const [x,y] = project(c[0],c[1]); xs.push(x); ys.push(y);
+      } else c.forEach(walk);
+    };
+    walk(f.geometry.coordinates);
+  });
+  const minx=Math.min(...xs), maxx=Math.max(...xs);
+  const miny=Math.min(...ys), maxy=Math.max(...ys);
+  const SCALE = 100;
+  const w = (maxx-minx)*SCALE;
+  const h = (maxy-miny)*SCALE;
+
+  const pathFor = (feat) => {
+    let d = '';
+    const polys = feat.geometry.type === 'Polygon' ? [feat.geometry.coordinates] : feat.geometry.coordinates;
+    polys.forEach(poly => poly.forEach(ring => {
+      ring.forEach((pt, i) => {
+        const [x,y] = project(pt[0], pt[1]);
+        d += (i===0 ? 'M' : 'L') + ((x-minx)*SCALE).toFixed(2) + ',' + ((y-miny)*SCALE).toFixed(2) + ' ';
+      });
+      d += 'Z ';
+    }));
+    return d;
+  };
+  const centroidFor = (feat) => {
+    const polys = feat.geometry.type==='Polygon' ? [feat.geometry.coordinates] : feat.geometry.coordinates;
+    let totA=0, sx=0, sy=0;
+    polys.forEach(poly => {
+      const c = ringCentroid(poly[0]);
+      totA += c.area; sx += c.cx*c.area; sy += c.cy*c.area;
+    });
+    if (totA === 0) return [0,0];
+    return [(sx/totA - minx)*SCALE, (sy/totA - miny)*SCALE];
+  };
+
+  // ---- Side-by-side layout: titel boven, kaart links + info rechts, footer onder ----
+  const PAD = 6;
+  const titleH = 9;
+  const subtitleH = 5;       // datumregel onder de titel ("voor Zaterdag 2 mei")
+  const titleGap = 3;
+  const gap = 6;
+  const footerH = 6;
+  const mapPadInner = 4;
+  const mapAreaW = w + mapPadInner*2;
+  const mapAreaH = h + mapPadInner*2;
+  const infoW = warnings.length ? 110 : 0;
+
+  // Wrap info-tekst (kolombreedte ≈ infoW units, font 4 → ~28 chars/regel)
+  const wrappedWarns = warnings.map(w => ({
+    code: w.code,
+    titelLines:  wrapLines(`Code ${w.code} · ${w.fenomeen}`, 24),
+    detailLines: wrapLines(w.detail || "", 30),
+    metaLines:   wrapLines(`${w.gebieden.join(', ')} · ${expandGeldigheid(w.geldigheid)}`, 30),
+  }));
+  const titelLH = 4.4, detailLH = 3.8, metaLH = 3.4, warnPad = 2;
+  const warnHeights = wrappedWarns.map(w =>
+    w.titelLines.length*titelLH + w.detailLines.length*detailLH + w.metaLines.length*metaLH + warnPad*2
+  );
+  const infoContentH = warnHeights.reduce((a,b)=>a+b+2, 0);
+  const contentH = Math.max(mapAreaH, infoContentH);
+  const totalW = PAD + mapAreaW + (infoW ? gap + infoW : 0) + PAD;
+  const headerTop = PAD + titleH + subtitleH + titleGap;  // y-pos van content-blok onder de titel
+  const totalH = headerTop + contentH + titleGap + footerH + PAD;
+
+  // Pak unieke startdagen voor subtitel ("voor Zaterdag 2 mei" of "voor 1–3 mei")
+  const startDates = [...new Set(warnings.map(w => startDayDateOf(w.geldigheid)).filter(Boolean))];
+  let subtitle = "";
+  if (startDates.length === 1) subtitle = "voor " + startDates[0];
+  else if (startDates.length > 1) subtitle = "voor " + startDates.join(" / ");
+
+  // ---- Map paths ----
+  const paths = features.map(f => {
+    const name = f.properties.statnaam;
+    const code = PROVINCE_CODES[name] || "groen";
+    const fill = COLOR[code];
+    const hl = (forceHighlight === name) || isHighlighted(name);
+    const stroke = hl ? highlightStrokeFor(name) : "#4a4a4a";
+    const sw = hl ? 1.6 : 0.4;
+    return `<path d="${pathFor(f)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  }).join('');
+  const labels = withLabels ? features.map(f => {
+    const [cx,cy] = centroidFor(f);
+    const ab = ABBR[f.properties.statnaam] || f.properties.statnaam;
+    return `<text x="${cx}" y="${cy}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="5" font-weight="700" fill="#1a1a1a" stroke="rgba(255,255,255,0.9)" stroke-width="1.4" paint-order="stroke">${ab}</text>`;
+  }).join('') : '';
+
+  const mapX = PAD + mapPadInner;
+  const mapY = headerTop + mapPadInner;
+
+  // ---- Code-badges linksboven op de kaart ----
+  let badgesSVG = '';
+  if (badgeCodes.length){
+    let bx = PAD + 2;
+    const by = headerTop + 2;
+    const bh = 5;
+    badgesSVG = badgeCodes.map(c => {
+      const txt = `Code ${c}`;
+      const tw = txt.length * 1.9 + 6;
+      const r = `<g><rect x="${bx}" y="${by}" width="${tw.toFixed(1)}" height="${bh}" rx="1.2" ry="1.2" fill="${COLOR[c]}" stroke="rgba(0,0,0,0.35)" stroke-width="0.25"/>
+        <text x="${(bx+tw/2).toFixed(1)}" y="${(by+bh*0.75).toFixed(1)}" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="3.2" font-weight="700" fill="${c==='geel'?'#5a4500':'#fff'}">${escapeXML(txt)}</text></g>`;
+      bx += tw + 1.5;
+      return r;
+    }).join('');
+  }
+
+  // ---- Info-kolom rechts, verticaal gecentreerd t.o.v. de kaart ----
+  let warnSVG = '';
+  if (warnings.length){
+    const ix = PAD + mapAreaW + gap;
+    const centerOffset = Math.max(0, (mapAreaH - infoContentH) / 2);
+    let cy = headerTop + centerOffset;
+    wrappedWarns.forEach((w, i) => {
+      const bh = warnHeights[i];
+      warnSVG += `<rect x="${ix}" y="${cy.toFixed(1)}" width="1.2" height="${bh.toFixed(1)}" fill="${COLOR[w.code]}"/>`;
+      let ty = cy + titelLH * 0.9;
+      w.titelLines.forEach(line => {
+        warnSVG += `<text x="${(ix+3).toFixed(1)}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="4" font-weight="700" fill="#0f172a">${escapeXML(line)}</text>`;
+        ty += titelLH;
+      });
+      ty += 0.5;
+      w.detailLines.forEach(line => {
+        warnSVG += `<text x="${(ix+3).toFixed(1)}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="3.4" fill="#334155">${escapeXML(line)}</text>`;
+        ty += detailLH;
+      });
+      ty += 0.4;
+      w.metaLines.forEach(line => {
+        warnSVG += `<text x="${(ix+3).toFixed(1)}" y="${ty.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="3" fill="#64748b">${escapeXML(line)}</text>`;
+        ty += metaLH;
+      });
+      cy += bh + 2;
+    });
+  }
+
+  const titleY = PAD + titleH - 2;
+  const subtitleY = titleY + subtitleH;
+  const footerY = totalH - PAD;
+  const subtitleSVG = subtitle
+    ? `<text x="${PAD}" y="${subtitleY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="4" font-weight="500" fill="#334155">${escapeXML(subtitle)}</text>`
+    : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW.toFixed(1)} ${totalH.toFixed(1)}">
+    <rect width="100%" height="100%" fill="#ffffff"/>
+    <text x="${PAD}" y="${titleY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="6" font-weight="700" fill="#0f172a">${escapeXML(attribution)}</text>
+    <text x="${(totalW-PAD).toFixed(1)}" y="${titleY.toFixed(1)}" text-anchor="end" font-family="DM Sans, sans-serif" font-size="3.2" fill="#64748b">${escapeXML(dateStr)}</text>
+    ${subtitleSVG}
+    <g transform="translate(${mapX},${mapY})">
+      <rect x="-${mapPadInner}" y="-${mapPadInner}" width="${mapAreaW.toFixed(1)}" height="${mapAreaH.toFixed(1)}" fill="#d8e6f2"/>
+      ${paths}
+      ${labels}
+    </g>
+    ${badgesSVG}
+    ${warnSVG}
+    <text x="${PAD}" y="${footerY.toFixed(1)}" font-family="DM Sans, sans-serif" font-size="3" fill="#64748b">Data: KNMI · Visualisatie: Ed Aldus / weerlab.nl</text>
+  </svg>`;
+}
+
+function activeCodesInOrder(warnings){
+  const order = ["rood","oranje","geel"];
+  const present = new Set(warnings.map(w => w.code));
+  return order.filter(c => present.has(c));
+}
+
+function downloadFullMapPNG(){
+  const date = new Date().toLocaleString('nl-NL', { dateStyle:'short', timeStyle:'short' });
+  const codes = activeCodesInOrder(ACTIVE_WARNINGS);
+  const svgStr = buildExportSVG({
+    features: GEO.features,
+    attribution: "Waarschuwingen Nederland — KNMI",
+    dateStr: date,
+    warnings: ACTIVE_WARNINGS,
+    badgeCodes: codes
+  });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = svgStr;
+  svgToPNG(wrap.firstElementChild, 1, `waarschuwingen_NL_${stamp()}.png`);
+}
+
+function downloadProvincePNG(provName){
+  const feat = GEO.features.find(f => f.properties.statnaam === provName);
+  if (!feat) { console.error('Provincie niet gevonden:', provName); return; }
+  const code = PROVINCE_CODES[provName] || "groen";
+  const date = new Date().toLocaleString('nl-NL', { dateStyle:'short', timeStyle:'short' });
+  const provWarns = ACTIVE_WARNINGS
+    .filter(w => w.gebieden.includes(provName))
+    .map(w => ({ ...w, gebieden: [provName] }));
+  const codes = activeCodesInOrder(provWarns);
+  const svgStr = buildExportSVG({
+    features: [feat],
+    attribution: `Waarschuwing ${provName}${code !== "groen" ? " — Code "+code : ""}`,
+    dateStr: date,
+    padding: 12,
+    withLabels: false,
+    forceHighlight: provName,
+    warnings: provWarns,
+    badgeCodes: codes
+  });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = svgStr;
+  svgToPNG(wrap.firstElementChild, 1, `waarschuwing_${provName.replace(/\s+/g,'_')}_${stamp()}.png`);
+}
+
+function stamp(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+</script>
+</body>
+</html>

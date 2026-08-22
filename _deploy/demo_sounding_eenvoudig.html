@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atmosferisch profiel — eenvoudig (demo) — weerlab.nl</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--wl-font-sans);
+  background: var(--wl-color-background);
+  color: var(--wl-color-text);
+  padding: var(--wl-space-md);
+}
+
+.wrap { max-width: 980px; margin: 0 auto; }
+
+/* Header */
+.head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: var(--wl-space-md);
+}
+.head h1 { font: var(--wl-text-headline-lg); color: var(--wl-color-primary); }
+.head .meta { font: var(--wl-text-body-sm); color: var(--wl-color-text-muted); }
+
+/* Station + tijd-bar */
+.bar {
+  display: flex; gap: var(--wl-space-sm); flex-wrap: wrap;
+  background: var(--wl-color-surface);
+  padding: var(--wl-space-sm);
+  border-radius: var(--wl-radius-md);
+  border: 1px solid var(--wl-color-border);
+  margin-bottom: var(--wl-space-md);
+  align-items: center;
+}
+.chip {
+  padding: 6px 12px; border-radius: var(--wl-radius-full);
+  background: var(--wl-color-surface-muted); border: 1px solid var(--wl-color-border);
+  font: var(--wl-text-label-md); cursor: pointer; color: var(--wl-color-text);
+}
+.chip:hover { border-color: var(--wl-color-accent); }
+.chip.active { background: var(--wl-color-primary); color: #fff; border-color: var(--wl-color-primary); }
+.bar .spacer { flex: 1; }
+.bar select {
+  padding: 6px 12px; border-radius: var(--wl-radius-md);
+  border: 1px solid var(--wl-color-border-strong); background: #fff;
+  font: var(--wl-text-label-md);
+}
+
+/* Verhaal-paneel */
+.story {
+  background: var(--wl-color-primary-soft);
+  border-left: 4px solid var(--wl-color-primary);
+  padding: var(--wl-space-md) var(--wl-space-lg);
+  border-radius: var(--wl-radius-md);
+  margin-bottom: var(--wl-space-md);
+  font: var(--wl-text-body-md); font-size: 15px; line-height: 1.55;
+  color: var(--wl-color-text);
+}
+.story strong { color: var(--wl-color-primary-strong); }
+
+/* Kerngetal-tegels */
+.tiles {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--wl-space-sm);
+  margin-bottom: var(--wl-space-md);
+}
+.tile {
+  background: var(--wl-color-surface);
+  border: 1px solid var(--wl-color-border);
+  border-radius: var(--wl-radius-md);
+  padding: var(--wl-space-md);
+  display: flex; flex-direction: column; gap: 4px;
+  position: relative; overflow: hidden;
+}
+.tile .icon { font-size: 24px; line-height: 1; }
+.tile .label { font: var(--wl-text-body-sm); color: var(--wl-color-text-muted); text-transform: uppercase; letter-spacing: 0.4px; font-size: 11px; font-weight: 600; }
+.tile .value { font: var(--wl-text-headline-md); font-size: 18px; }
+.tile .sub { font: var(--wl-text-body-sm); color: var(--wl-color-text-muted); }
+.tile.green .value { color: var(--wl-color-success); }
+.tile.yellow .value { color: var(--wl-color-warning-yellow); }
+.tile.orange .value { color: var(--wl-color-warning-orange); }
+.tile.red .value { color: var(--wl-color-danger); }
+.tile.blue .value { color: var(--wl-color-weather-blue); }
+
+@media (max-width: 720px) {
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Atmosfeer-strip */
+.strip-wrap {
+  background: var(--wl-color-surface);
+  border: 1px solid var(--wl-color-border);
+  border-radius: var(--wl-radius-md);
+  padding: var(--wl-space-md);
+  margin-bottom: var(--wl-space-md);
+}
+.strip-title { font: var(--wl-text-headline-md); margin-bottom: var(--wl-space-sm); color: var(--wl-color-primary); }
+.strip-sub { font: var(--wl-text-body-sm); color: var(--wl-color-text-muted); margin-bottom: var(--wl-space-md); }
+.strip-svg { display: block; width: 100%; height: 460px; }
+
+/* Expert-toggle */
+.expert {
+  text-align: center; margin: var(--wl-space-md) 0;
+}
+.expert button {
+  background: transparent; border: 1px dashed var(--wl-color-border-strong);
+  color: var(--wl-color-text-muted);
+  padding: 8px 16px; border-radius: var(--wl-radius-md); cursor: pointer;
+  font: var(--wl-text-label-md);
+}
+.expert button:hover { border-color: var(--wl-color-primary); color: var(--wl-color-primary); }
+.expert-content { display: none; margin-top: var(--wl-space-md); }
+.expert-content.open { display: block; }
+.expert-content img {
+  max-width: 100%; border-radius: var(--wl-radius-md); border: 1px solid var(--wl-color-border);
+}
+.expert-placeholder {
+  background: var(--wl-color-surface); border: 1px dashed var(--wl-color-border-strong);
+  border-radius: var(--wl-radius-md); padding: var(--wl-space-xl);
+  text-align: center; color: var(--wl-color-text-muted); font: var(--wl-text-body-md);
+}
+
+/* Footer */
+.foot {
+  text-align: center; font: var(--wl-text-body-sm);
+  color: var(--wl-color-text-soft); margin-top: var(--wl-space-lg);
+}
+.demo-banner {
+  background: var(--wl-color-warning-yellow); color: #000;
+  padding: 6px 12px; border-radius: var(--wl-radius-sm);
+  font: var(--wl-text-label-md); display: inline-block; margin-bottom: var(--wl-space-md);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="demo-banner">DEMO — voorbeelddata</span>
+
+  <div class="head">
+    <h1>Atmosferisch profiel</h1>
+    <div class="meta">HARMONIE AROME · weerlab.nl</div>
+  </div>
+
+  <div class="bar">
+    <button class="chip active">De Bilt</button>
+    <button class="chip">Schiphol</button>
+    <button class="chip">Eindhoven</button>
+    <button class="chip">Maastricht</button>
+    <button class="chip">Groningen</button>
+    <button class="chip">Vlissingen</button>
+    <span class="spacer"></span>
+    <select>
+      <option>donderdag 7 mei · 14:00</option>
+      <option>donderdag 7 mei · 17:00</option>
+      <option>donderdag 7 mei · 20:00</option>
+      <option>vrijdag 8 mei · 08:00</option>
+    </select>
+  </div>
+
+  <!-- VERHAAL -->
+  <div class="story">
+    Op <strong>2,5 km hoogte</strong> drijft een laag <strong>vlakke cumulus</strong>; de wolkenbasis ligt rond 1200 m.
+    De <strong>vriesgrens</strong> zit op 1800 m, dus neerslag valt als regen.
+    Boven 2 km zit een <strong>warme deksel</strong> (inversie) die buiengroei tegenhoudt — vandaag <strong>geen onweer</strong>.
+    Hoog in de atmosfeer waait een <strong>straalstroom</strong> van 200 km/h vanuit het westen.
+  </div>
+
+  <!-- KERNTEGELS -->
+  <div class="tiles">
+    <div class="tile blue">
+      <div class="icon">☁️</div>
+      <div class="label">Wolkenbasis</div>
+      <div class="value">1200 m</div>
+      <div class="sub">laag</div>
+    </div>
+    <div class="tile blue">
+      <div class="icon">❄️</div>
+      <div class="label">Vriesgrens</div>
+      <div class="value">1800 m</div>
+      <div class="sub">regen aan grond</div>
+    </div>
+    <div class="tile green">
+      <div class="icon">⚡</div>
+      <div class="label">Onweerskans</div>
+      <div class="value">Geen</div>
+      <div class="sub">stabiele lucht</div>
+    </div>
+    <div class="tile orange">
+      <div class="icon">💨</div>
+      <div class="label">Sterkste wind</div>
+      <div class="value">W 200 km/h</div>
+      <div class="sub">op 9 km (jet)</div>
+    </div>
+  </div>
+
+  <!-- ATMOSFEER-STRIP -->
+  <div class="strip-wrap">
+    <div class="strip-title">De atmosfeer van onder naar boven</div>
+    <div class="strip-sub">Verticale doorsnede tot 12 km. Lees als thermometer: links = hoogte, blokken = wat er op die hoogte gebeurt.</div>
+
+    <svg class="strip-svg" viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg">
+      <!-- helper: y = 30 + (12 - hoogte_km) * 33  -->
+      <!-- top y=30 (12km), bottom y=426 (0km), 1km = 33px -->
+
+      <!-- Achtergrond verloop: blauw boven naar lichtblauw onder -->
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0b3a8a"/>
+          <stop offset="50%" stop-color="#3b82f6"/>
+          <stop offset="100%" stop-color="#bfdbfe"/>
+        </linearGradient>
+        <pattern id="cloud-pat" width="20" height="10" patternUnits="userSpaceOnUse">
+          <ellipse cx="10" cy="5" rx="9" ry="4" fill="#ffffff" opacity="0.85"/>
+        </pattern>
+      </defs>
+
+      <!-- Hemel-band -->
+      <rect x="80" y="30" width="180" height="396" fill="url(#sky)" opacity="0.25" rx="6"/>
+
+      <!-- Hoogte-as -->
+      <g font-family="DM Sans, sans-serif" font-size="11" fill="#64748b">
+        <line x1="80" y1="30" x2="80" y2="426" stroke="#cbd5e1" stroke-width="1"/>
+        <!-- Tickmarks elke 2 km -->
+        <g>
+          <line x1="76" y1="30" x2="80" y2="30" stroke="#cbd5e1"/>
+          <text x="72" y="34" text-anchor="end">12 km</text>
+
+          <line x1="76" y1="96" x2="80" y2="96" stroke="#cbd5e1"/>
+          <text x="72" y="100" text-anchor="end">10 km</text>
+
+          <line x1="76" y1="162" x2="80" y2="162" stroke="#cbd5e1"/>
+          <text x="72" y="166" text-anchor="end">8 km</text>
+
+          <line x1="76" y1="228" x2="80" y2="228" stroke="#cbd5e1"/>
+          <text x="72" y="232" text-anchor="end">6 km</text>
+
+          <line x1="76" y1="294" x2="80" y2="294" stroke="#cbd5e1"/>
+          <text x="72" y="298" text-anchor="end">4 km</text>
+
+          <line x1="76" y1="360" x2="80" y2="360" stroke="#cbd5e1"/>
+          <text x="72" y="364" text-anchor="end">2 km</text>
+
+          <line x1="76" y1="426" x2="80" y2="426" stroke="#cbd5e1"/>
+          <text x="72" y="430" text-anchor="end">grond</text>
+        </g>
+      </g>
+
+      <!-- Grond -->
+      <rect x="80" y="426" width="800" height="14" fill="#475569"/>
+      <text x="170" y="436" font-family="DM Sans" font-size="10" fill="#fff" text-anchor="middle">aarde · 2 m</text>
+
+      <!-- Wolkenlaag cumulus 1.2 - 2.5 km : y = 30 + (12-2.5)*33 = 343.5  ;  30+(12-1.2)*33 = 386.4 -->
+      <rect x="90" y="344" width="160" height="42" fill="url(#cloud-pat)" opacity="0.95" rx="4"/>
+      <text x="170" y="368" font-family="DM Sans" font-size="11" fill="#1e293b" text-anchor="middle" font-weight="600">cumulus 1,2–2,5 km</text>
+
+      <!-- Inversie band 2.0 - 2.2 km : y top = 30+(12-2.2)*33 = 353.4 ; bot = 30+(12-2.0)*33 = 360 -->
+      <rect x="80" y="354" width="180" height="6" fill="#e07000" opacity="0.6"/>
+      <text x="270" y="360" font-family="DM Sans" font-size="11" fill="#e07000" font-weight="600">↑ deksel: inversie +3°C op 2,1 km — buien geblokkeerd</text>
+
+      <!-- Vriesgrens 0°C op 1.8 km : y = 30 + (12-1.8)*33 = 366.6 -->
+      <line x1="80" y1="367" x2="260" y2="367" stroke="#1d4ed8" stroke-width="2" stroke-dasharray="4,3"/>
+      <text x="270" y="371" font-family="DM Sans" font-size="11" fill="#1d4ed8" font-weight="600">0°C grens op 1,8 km — neerslag = regen</text>
+
+      <!-- Tropopauze ~10 km : y = 96 -->
+      <line x1="80" y1="96" x2="260" y2="96" stroke="#6d28d9" stroke-width="1.5" stroke-dasharray="2,2"/>
+      <text x="270" y="92" font-family="DM Sans" font-size="11" fill="#6d28d9" font-weight="600">tropopauze ≈ 10 km</text>
+
+      <!-- Jet stream pijl op ~9 km : y = 30 + (12-9)*33 = 129 -->
+      <g>
+        <path d="M 90 129 L 240 129" stroke="#6d28d9" stroke-width="6" stroke-linecap="round" opacity="0.85"/>
+        <polygon points="240,121 256,129 240,137" fill="#6d28d9"/>
+        <text x="270" y="133" font-family="DM Sans" font-size="11" fill="#6d28d9" font-weight="600">straalstroom W 200 km/h op 9 km</text>
+      </g>
+
+      <!-- Wind-pijltjes per 1 km, dummy data -->
+      <!-- Format: hoogte_km, richting (deg, 270 = vanuit west), speed_kmh -->
+      <g font-family="DM Sans" font-size="10" fill="#475569">
+        <!-- Kolom met "WIND" label -->
+        <text x="540" y="18" font-weight="700" fill="#0f172a">Wind per hoogte</text>
+        <text x="540" y="32" fill="#64748b" font-size="10">pijl wijst heen waar wind heen waait · kleur = snelheid</text>
+
+        <!-- Helper: alle pijlen op x=540, y per hoogte. richting roteert pijl. -->
+        <!-- 0.01 km grond -->
+        <g transform="translate(540,420) rotate(90)">
+          <line x1="-12" y1="0" x2="12" y2="0" stroke="#10b981" stroke-width="2"/>
+          <polygon points="12,-4 18,0 12,4" fill="#10b981"/>
+        </g>
+        <text x="565" y="424">grond · ZW 25 km/h</text>
+
+        <!-- 1 km : y=393 -->
+        <g transform="translate(540,393) rotate(110)">
+          <line x1="-14" y1="0" x2="14" y2="0" stroke="#10b981" stroke-width="2"/>
+          <polygon points="14,-4 20,0 14,4" fill="#10b981"/>
+        </g>
+        <text x="565" y="397">1 km · WZW 35 km/h</text>
+
+        <!-- 2 km : y=360 -->
+        <g transform="translate(540,360) rotate(135)">
+          <line x1="-16" y1="0" x2="16" y2="0" stroke="#e6b800" stroke-width="2.5"/>
+          <polygon points="16,-5 22,0 16,5" fill="#e6b800"/>
+        </g>
+        <text x="565" y="364">2 km · W 60 km/h</text>
+
+        <!-- 3 km : y=327 -->
+        <g transform="translate(540,327) rotate(140)">
+          <line x1="-18" y1="0" x2="18" y2="0" stroke="#e6b800" stroke-width="2.5"/>
+          <polygon points="18,-5 24,0 18,5" fill="#e6b800"/>
+        </g>
+        <text x="565" y="331">3 km · W 75 km/h</text>
+
+        <!-- 5 km : y=261 -->
+        <g transform="translate(540,261) rotate(140)">
+          <line x1="-22" y1="0" x2="22" y2="0" stroke="#e07000" stroke-width="3"/>
+          <polygon points="22,-6 30,0 22,6" fill="#e07000"/>
+        </g>
+        <text x="575" y="265">5 km · W 110 km/h</text>
+
+        <!-- 7 km : y=195 -->
+        <g transform="translate(540,195) rotate(140)">
+          <line x1="-24" y1="0" x2="24" y2="0" stroke="#e07000" stroke-width="3"/>
+          <polygon points="24,-7 32,0 24,7" fill="#e07000"/>
+        </g>
+        <text x="580" y="199">7 km · W 150 km/h</text>
+
+        <!-- 9 km : y=129  (jet, in paars) -->
+        <g transform="translate(540,129) rotate(140)">
+          <line x1="-28" y1="0" x2="28" y2="0" stroke="#6d28d9" stroke-width="3.5"/>
+          <polygon points="28,-8 38,0 28,8" fill="#6d28d9"/>
+        </g>
+        <text x="590" y="133" fill="#6d28d9" font-weight="600">9 km · W 200 km/h ★</text>
+
+        <!-- 11 km : y=63 -->
+        <g transform="translate(540,63) rotate(140)">
+          <line x1="-22" y1="0" x2="22" y2="0" stroke="#e07000" stroke-width="2.5"/>
+          <polygon points="22,-6 30,0 22,6" fill="#e07000"/>
+        </g>
+        <text x="575" y="67">11 km · W 130 km/h</text>
+      </g>
+
+      <!-- Schaal-legenda voor wind kleuren rechtsonder -->
+      <g font-family="DM Sans" font-size="10" fill="#64748b" transform="translate(540,440)">
+        <text x="0" y="0" font-weight="600" fill="#0f172a">Wind:</text>
+        <rect x="40" y="-8" width="14" height="10" fill="#10b981"/><text x="58" y="0">&lt; 50</text>
+        <rect x="100" y="-8" width="14" height="10" fill="#e6b800"/><text x="118" y="0">50–100</text>
+        <rect x="170" y="-8" width="14" height="10" fill="#e07000"/><text x="188" y="0">100–180</text>
+        <rect x="245" y="-8" width="14" height="10" fill="#6d28d9"/><text x="263" y="0">jet &gt; 180 km/h</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- EXPERT TOGGLE -->
+  <div class="expert">
+    <button onclick="toggleExpert()">▼ Toon technisch profiel (Skew-T + hodograaf)</button>
+  </div>
+  <div class="expert-content" id="expert">
+    <div class="expert-placeholder">
+      Hier komt het oude Skew-T diagram + hodograaf + technische tabellen<br>
+      (CAPE, CIN, LI, LFC, EL, SRH, schering — voor meteorologen)
+    </div>
+  </div>
+
+  <div class="foot">
+    weerlab.nl · concept eenvoudige sounding · {{datum}}
+  </div>
+
+</div>
+
+<script>
+function toggleExpert() {
+  document.getElementById('expert').classList.toggle('open');
+}
+</script>
+</body>
+</html>

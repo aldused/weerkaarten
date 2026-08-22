@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Event Weertabel · Weerbewaking</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html{background:#0e1622}
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:#0e1622;color:#e2e8f0;min-height:100vh}
+.page{max-width:1000px;margin:0 auto;padding:24px 16px 56px}
+h1{font-size:1.2rem;font-weight:800;color:#e2e8f0;margin:0 0 18px;letter-spacing:.01em}
+
+/* ── controls ── */
+.controls{background:#141f31;border:1px solid #1e3050;border-radius:10px;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.ctrl-label{display:flex;flex-direction:column;gap:5px;font-size:.74rem;font-weight:700;color:#7a9ab8;text-transform:uppercase;letter-spacing:.06em}
+.ctrl-label input,.ctrl-label select{background:#0e1622;border:1px solid #1e3050;border-radius:6px;color:#e2e8f0;padding:8px 10px;font-size:.88rem;font-family:inherit;outline:none}
+.ctrl-label input:focus,.ctrl-label select:focus{border-color:#3b82f6}
+.full{grid-column:1/-1}
+.duur-btns{display:flex;gap:8px;margin-top:2px}
+.duur-btn{background:#0e1622;border:1px solid #1e3050;color:#7a9ab8;border-radius:6px;padding:7px 20px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .12s}
+.duur-btn:hover{border-color:#3b82f6;color:#e2e8f0}
+.duur-btn.actief{background:#1e3a8a;border-color:#3b82f6;color:#fff}
+.acties{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:4px}
+.btn{border:none;border-radius:7px;padding:9px 20px;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .12s}
+.btn-gen{background:#1e40af;color:#fff}
+.btn-gen:hover{background:#2563eb}
+.btn-png{background:#0f3b21;border:1px solid #22c55e;color:#86efac}
+.btn-png:hover{background:#14532d}
+.bijgewerkt{font-size:.72rem;color:#4a6a8a;margin-left:auto}
+
+/* ── tabel (export-gebied, witte achtergrond) ── */
+#tabel-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.geen-data{color:#4a6a8a;font-size:.88rem;padding:32px 0;text-align:center}
+.et-outer{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.45);display:inline-block;min-width:100%}
+.et-titel{font-family:Inter,Arial,sans-serif;font-size:1rem;font-weight:800;color:#003878;padding:11px 16px 9px;background:#fff;border-bottom:2px solid #003878;letter-spacing:.01em}
+table.et{border-collapse:collapse;font-family:Inter,Arial,sans-serif;font-size:.81rem;width:100%}
+table.et .et-dag{background:#E87722;color:#fff;font-weight:800;font-size:.86rem;padding:7px 14px;text-align:left}
+table.et .et-kop{background:#003878;color:#fff;font-weight:700;text-align:center;padding:6px 10px;white-space:nowrap}
+table.et .et-rij-lbl{background:#f3f7fd;color:#003878;font-weight:700;padding:6px 13px;white-space:nowrap;border-right:1px solid #dae4f0;text-align:left}
+table.et td{text-align:center;padding:5px 10px;color:#1a2e4a;white-space:nowrap;outline:none;cursor:text}
+table.et td:focus{background:#fffbe6!important;outline:2px solid #f59e0b;outline-offset:-2px}
+table.et tr.r-wit td,table.et tr.r-wit th{background:#fff}
+table.et tr.r-blauw td,table.et tr.r-blauw th.et-rij-lbl{background:#eaf1fb}
+table.et tr.r-wit th.et-rij-lbl,table.et tr.r-blauw th.et-rij-lbl{background:#f3f7fd}
+.pijl{display:inline-block;line-height:1}
+
+@media(max-width:600px){
+  .controls{grid-template-columns:1fr}
+  .full{grid-column:1}
+  .acties{grid-column:1}
+  .bijgewerkt{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div style="margin-bottom:12px"><a href="weerbewaking.html" style="color:#7a9ab8;font-size:.8rem;text-decoration:none;display:inline-flex;align-items:center;gap:5px">← Weerbewaking</a></div>
+  <h1>⛅ Event Weertabel</h1>
+
+  <div class="controls">
+    <label class="ctrl-label full">
+      Evenementnaam
+      <input type="text" id="evt-naam" placeholder="bijv. Bevrijdingsfestival Rotterdam" maxlength="80">
+    </label>
+    <label class="ctrl-label">
+      Station / plaats
+      <select id="station-sel"></select>
+    </label>
+    <label class="ctrl-label">
+      Model
+      <select id="bron-sel">
+        <option value="mosmix" selected>MOS/MIX (DWD)</option>
+        <option value="weatherpro">WeatherPro</option>
+      </select>
+    </label>
+    <label class="ctrl-label" id="wp-plaats-veld" style="display:none">
+      Plaats (WeatherPro)
+      <input type="text" id="wp-plaats" placeholder="typ plaats, of leeg = station">
+    </label>
+    <label class="ctrl-label">
+      Startdatum en uur
+      <input type="datetime-local" id="start-dt">
+    </label>
+    <label class="ctrl-label">
+      Duur
+      <div class="duur-btns">
+        <button class="duur-btn" id="btn-6h" onclick="setDuur(6)">6 uur</button>
+        <button class="duur-btn actief" id="btn-12h" onclick="setDuur(12)">12 uur</button>
+      </div>
+    </label>
+    <div class="acties">
+      <button class="btn btn-gen" onclick="maakTabel()">Tabel genereren</button>
+      <button class="btn btn-png" onclick="downloadPNG()">↓ PNG opslaan</button>
+      <span class="bijgewerkt" id="lbl-bijgewerkt"></span>
+    </div>
+  </div>
+
+  <div id="tabel-wrap">
+    <div class="geen-data">Voer een evenement in en klik op "Tabel genereren".</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="weerbewaking_wp.js?v=20260710"></script>
+<script>
+/* Stationscoördinaten voor WeatherPro (lat, lon) */
+const STATION_COORDS = {
+  'Amsterdam':[52.318,4.790], 'De Bilt':[52.101,5.177], 'Deelen':[52.056,5.874],
+  'Den Helder':[52.928,4.781], 'Eelde':[53.125,6.585], 'Eindhoven':[51.451,5.377],
+  'Enschede':[52.274,6.891], 'Gilze Rijen':[51.566,4.936], 'Hoek van Holland':[51.992,4.122],
+  'Hoogeveen':[52.750,6.575], 'Leeuwarden':[53.224,5.752], 'Maastricht':[50.906,5.762],
+  'Rotterdam Airport':[51.962,4.447], 'Terschelling':[53.362,5.346], 'Valkenburg':[52.171,4.430],
+  'Vlieland':[53.241,4.790], 'Vlissingen':[51.442,3.596], 'Volkel':[51.659,5.707], 'IJsselmeer':[52.6,5.4]
+};
+let wpCacheEvent = {};   // station → WeatherPro-stData (client-side cache)
+let alleData = {};   // stationNaam → uurlijks data-object
+let dagData  = {};   // datum (YYYY-MM-DD) → {TX:{station:val}, ...}
+let bijgewerkt = '';
+let duur = 12;
+
+const DAG   = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MAAND = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+
+/* ── wind ── */
+const RICHTINGEN = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+function grToRichting(gr){ return gr != null ? RICHTINGEN[Math.round(gr/22.5)%16] : '–'; }
+function grToPijlHtml(gr){
+  if(gr==null) return '–';
+  return `<span class="pijl" style="transform:rotate(${gr}deg);display:inline-block">↓</span>`;
+}
+
+/* ── BFT (FF/FX1 al in km/h in de JSON) ── */
+const BFT_KMH = [1,6,12,20,29,39,50,62,75,89,103,118];
+function kmhToBft(kmh){
+  if(kmh==null) return '–';
+  for(let i=0;i<BFT_KMH.length;i++) if(kmh<BFT_KMH[i]) return i;
+  return 12;
+}
+function fmtKmh(v){ return v!=null ? Math.round(v) : '–'; }
+
+/* ── laden ── */
+async function laadAlles(){
+  const t = Date.now();
+  const [uurRes, dagRes] = await Promise.allSettled([
+    fetch(`https://data.weerlab.nl/mosmix_uurlijks_nl.json?t=${t}`).then(r=>r.json()),
+    fetch(`https://data.weerlab.nl/mosmix_nl.json?t=${t}`).then(r=>r.json())
+  ]);
+  if(uurRes.status==='fulfilled'){
+    const d = uurRes.value;
+    bijgewerkt = d.bijgewerkt || '';
+    Object.entries(d.data||{}).forEach(([naam,data])=>{ alleData[naam]=data; });
+  }
+  if(dagRes.status==='fulfilled'){
+    dagData = dagRes.value.data || {};
+  }
+  vulStationSel();
+  document.getElementById('lbl-bijgewerkt').textContent = bijgewerkt ? `MOS/MIX run: ${bijgewerkt}` : '';
+}
+
+const NL_STATIONS = new Set(['Amsterdam','De Bilt','Deelen','Den Helder','Eelde','Eindhoven','Enschede','Gilze Rijen','Hoek van Holland','Hoogeveen','Leeuwarden','Maastricht','Rotterdam Airport','Terschelling','Valkenburg','Vlieland','Vlissingen','Volkel','IJsselmeer']);
+
+function vulStationSel(){
+  const sel = document.getElementById('station-sel');
+  let stations = Object.keys(alleData).filter(s=>NL_STATIONS.has(s));
+  if(!stations.length) stations = Object.keys(STATION_COORDS);   // fallback voor WeatherPro
+  stations = stations.sort((a,b)=>a.localeCompare(b,'nl'));
+  sel.innerHTML = stations.map(s=>`<option value="${s}">${s}</option>`).join('');
+  const voorkeur = ['Rotterdam Airport','De Bilt','Eindhoven'];
+  for(const v of voorkeur){
+    const opt = [...sel.options].find(o=>o.value===v);
+    if(opt){ sel.value = opt.value; break; }
+  }
+}
+
+function defaultStart(){
+  const nu = new Date();
+  nu.setMinutes(0,0,0);
+  nu.setHours(nu.getHours()+1);
+  // datetime-local verwacht lokale tijd zonder 'Z'
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('start-dt').value =
+    `${nu.getFullYear()}-${pad(nu.getMonth()+1)}-${pad(nu.getDate())}T${pad(nu.getHours())}:00`;
+}
+
+function setDuur(h){
+  duur = h;
+  document.getElementById('btn-6h').classList.toggle('actief', h===6);
+  document.getElementById('btn-12h').classList.toggle('actief', h===12);
+}
+
+/* ── tabel ── */
+function fmtUur(t){ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':00 uur'; }
+function fmtDag(t){ const d=new Date(t); return `${DAG[d.getDay()]} ${d.getDate()} ${MAAND[d.getMonth()]}`; }
+
+function dagSleutel(utcStr){
+  /* lokale datum (CEST = UTC+2) als YYYY-MM-DD */
+  const d = new Date(new Date(utcStr).getTime() + 2*3600*1000);
+  return d.toISOString().split('T')[0];
+}
+
+function maakBlok(uren, stData, startIdx, offset, statKort, titel){
+  const s = k => (stData[k]||[]).slice(startIdx+offset, startIdx+offset+6);
+  const TTT=s('TTT'), FF=s('FF'), FX1=s('FX1'), DD=s('DD'), RR1c=s('RR1c'), Neff=s('Neff'), RV=s('RV');
+  const dagTxt = fmtDag(uren[offset]);
+
+  /* TX (MOS-dagmax) uit mosmix_nl.json */
+  const datSleutel = dagSleutel(uren[offset]);
+  const txVal = dagData[datSleutel]?.TX?.[statKort] ?? null;
+  const txTxt = txVal != null ? `${Math.round(txVal)}` : '–';
+  const txHtml = ` &nbsp;|&nbsp; Dagmax: <strong><span contenteditable="true" spellcheck="false" style="outline:none;cursor:text;min-width:1.5em;display:inline-block">${txTxt}</span>°C</strong>`;
+
+  const rijen = [
+    { lbl:'Temperatuur (°C)',      klasse:'r-wit',   vals: TTT.map(v=>v!=null?Math.round(v):'–') },
+    { lbl:'Luchtvochtigheid (%)',  klasse:'r-blauw', vals: RV.map(v=>v!=null?Math.round(v):'–') },
+    { lbl:'Wind', klasse:'r-wit', wind:true,
+      cells: DD.map(d=>{
+        const gr = d ?? null;
+        const rot = gr ?? 0;
+        const richt = grToRichting(gr);
+        const pijl = gr!=null ? `<span class="pijl" style="transform:rotate(${rot}deg);display:inline-block;pointer-events:none">↓</span> ` : '';
+        return `<td spellcheck="false">${pijl}<span class="dir-tekst" contenteditable="true" spellcheck="false" style="outline:none;cursor:text">${richt}</span></td>`;
+      }).join('')
+    },
+    { lbl:'Windkracht (BFT)',      klasse:'r-blauw', vals: FF.map(v=>kmhToBft(v)) },
+    { lbl:'Max. windstoot (km/u)', klasse:'r-wit',   vals: FX1.map(v=>fmtKmh(v)) },
+    { lbl:'Neerslag (mm)',         klasse:'r-blauw', vals: RR1c.map(v=>v!=null?v.toFixed(1):'–') },
+    { lbl:'Zon/helder (%)',        klasse:'r-wit',   vals: Neff.map(v=>v!=null?Math.max(0,100-v):'–') },
+  ];
+  const colHeaders = uren.slice(offset, offset+6).map(t=>`<th class="et-kop">${fmtUur(t)}</th>`).join('');
+  return `
+    <div class="et-outer">
+      <div class="et-titel">${escHtml(titel)}</div>
+      <table class="et">
+        <tr><th class="et-dag" colspan="7">${dagTxt} &nbsp;|&nbsp; <strong><span contenteditable="true" spellcheck="false" style="outline:none;cursor:text;min-width:2em;display:inline-block">${escHtml(statKort)}</span></strong>${txHtml}</th></tr>
+        <tr>
+          <th class="et-kop" style="text-align:left;padding-left:13px;min-width:175px"></th>
+          ${colHeaders}
+        </tr>
+        ${rijen.map(r=>`
+          <tr class="${r.klasse}">
+            <th class="et-rij-lbl">${r.lbl}</th>
+            ${r.wind ? r.cells : r.vals.map(v=>`<td contenteditable="true" spellcheck="false">${v}</td>`).join('')}
+          </tr>`).join('')}
+      </table>
+      <div style="font-family:Inter,Arial,sans-serif;font-size:.68rem;color:#7a9ab8;text-align:right;padding:5px 12px 6px;background:#fff">© Ed Aldus Weer en Media</div>
+    </div>`;
+}
+
+/* Event-stationnaam -> feed-slug (verse app-feed via R2) */
+const EVENT_WP_SLUGS = {
+  'Amsterdam':'schiphol','De Bilt':'debilt','Deelen':'deelen','Den Helder':'denhelder',
+  'Eelde':'eelde','Eindhoven':'eindhoven','Enschede':'enschede','Gilze Rijen':'gilzerijen',
+  'Hoek van Holland':'hoekvanholland','Hoogeveen':'hoogeveen','Leeuwarden':'leeuwarden',
+  'Maastricht':'maastricht','Rotterdam Airport':'rotterdam','Terschelling':'terschelling',
+  'Valkenburg':'valkenburg_zh','Vlieland':'vlieland','Vlissingen':'vlissingen','Volkel':'volkel'
+};
+async function laadWeatherProStation(station, coords){
+  if(!wpCacheEvent[station]){
+    // Eerst de verse app-feed (exact dezelfde cijfers als de app);
+    // alleen buiten de feed-lijst de point-forecast (iets oudere run).
+    let city=null;
+    if(coords) city=await WeatherProSrc.nearestFeedCity(coords[0],coords[1]).catch(()=>null);
+    else if(EVENT_WP_SLUGS[station]) city=await WeatherProSrc.feedCity(EVENT_WP_SLUGS[station]).catch(()=>null);
+    let H, days, viaFeed=!!city;
+    if(city){
+      H=WeatherProSrc.feedHours(city); days=city.days;
+    } else {
+      const c = coords || STATION_COORDS[station];
+      if(!c) throw new Error('geen coördinaten voor '+station);
+      const wp = await WeatherProSrc.fetch(c[0], c[1], {days:8});
+      H=wp.hours; days=wp.days;
+    }
+    wpCacheEvent[station] = {
+      tijden: H.map(h=>h.iso),
+      TTT: H.map(h=>h.tt), RV: H.map(h=>h.rh), DD: H.map(h=>h.dd),
+      FF: H.map(h=>h.ff), FX1: H.map(h=>h.ffg), RR1c: H.map(h=>h.rr),
+      Neff: H.map(h=>h.n!=null?Math.round(h.n/8*100):null), _days: days, _viaFeed: viaFeed
+    };
+  }
+  const st = wpCacheEvent[station];
+  // Backup zodat terugschakelen naar MOS/MIX de originele data terugkrijgt
+  if(!wpBackup[station]){
+    wpBackup[station] = { data: alleData[station],
+      tx: Object.fromEntries(Object.entries(dagData).map(([dk,dv])=>[dk, dv?.TX?.[station]])) };
+  }
+  alleData[station] = st;
+  Object.entries(st._days).forEach(([dk,dv])=>{
+    dagData[dk] = dagData[dk] || {}; dagData[dk].TX = dagData[dk].TX || {};
+    dagData[dk].TX[station] = Math.round(dv.txv ?? dv.tx);
+  });
+  document.getElementById('lbl-bijgewerkt').textContent =
+    st._viaFeed ? 'WeatherPro (app-feed)' : 'WeatherPro point-forecast (oudere run dan app)';
+}
+let wpBackup = {};
+function herstelMosmixData(){
+  for(const [station,b] of Object.entries(wpBackup)){
+    if(b.data!==undefined) alleData[station]=b.data; else delete alleData[station];
+    for(const [dk,tx] of Object.entries(b.tx||{})){
+      if(!dagData[dk]||!dagData[dk].TX) continue;
+      if(tx!==undefined) dagData[dk].TX[station]=tx; else delete dagData[dk].TX[station];
+    }
+  }
+  wpBackup={};
+}
+
+async function maakTabel(){
+  let station = document.getElementById('station-sel').value;
+  const bron    = document.getElementById('bron-sel')?.value || 'mosmix';
+  if(bron==='mosmix'){ herstelMosmixData(); document.getElementById('lbl-bijgewerkt').textContent = bijgewerkt ? `MOS/MIX run: ${bijgewerkt}` : ''; }
+  if(bron==='weatherpro'){
+    try{
+      wpCacheEvent={};   // vers genereren = vers ophalen (feed-cache dempt)
+      const q=(document.getElementById('wp-plaats')?.value||'').trim();
+      let coords=null;
+      if(q){ const g=await WeatherProSrc.geocode(q); if(!g) throw new Error('plaats niet gevonden'); station=g.naam.split(',')[0]; coords=[g.lat,g.lon]; }
+      await laadWeatherProStation(station, coords);
+    }
+    catch(e){ document.getElementById('tabel-wrap').innerHTML='<div class="geen-data">WeatherPro fout: '+e.message+'</div>'; return; }
+  }
+  const naam    = document.getElementById('evt-naam').value.trim() || 'Evenement';
+  const startStr= document.getElementById('start-dt').value;
+  if(!startStr){ alert('Kies een startdatum en -uur.'); return; }
+
+  const startDt = new Date(startStr);
+  const stData  = alleData[station];
+  if(!stData){ document.getElementById('tabel-wrap').innerHTML='<div class="geen-data">Geen data voor dit station.</div>'; return; }
+
+  const tijden = stData.tijden || [];
+  const startIdx = tijden.findIndex(t => new Date(t) >= startDt);
+  if(startIdx < 0){ document.getElementById('tabel-wrap').innerHTML='<div class="geen-data">Geen data beschikbaar voor dit tijdstip (max ~9 dagen vooruit).</div>'; return; }
+
+  const statKort = station.replace(/\s*\([A-Z]+\)$/,'');
+  const total = duur;
+  const uren  = tijden.slice(startIdx, startIdx+total);
+
+  let html;
+  if(total === 6){
+    html = `<div id="export-tabel">${maakBlok(uren, stData, startIdx, 0, statKort, `Uurverwachting — ${naam}`)}</div>`;
+  } else {
+    html = `<div id="export-tabel" style="display:flex;flex-direction:column;gap:14px">
+      ${maakBlok(uren, stData, startIdx, 0, statKort, `Uurverwachting — ${naam}`)}
+      ${maakBlok(uren, stData, startIdx, 6, statKort, `Uurverwachting — vervolg`)}
+    </div>`;
+  }
+
+  document.getElementById('tabel-wrap').innerHTML = html;
+}
+
+function richtingToGr(r){
+  const idx = RICHTINGEN.indexOf((r||'').toUpperCase().trim());
+  return idx >= 0 ? idx * 22.5 : null;
+}
+
+/* pijl live updaten als gebruiker richting aanpast */
+document.addEventListener('input', function(e){
+  const el = e.target;
+  if(!el.classList.contains('dir-tekst')) return;
+  const pijl = el.closest('td')?.querySelector('.pijl');
+  if(!pijl) return;
+  const gr = richtingToGr(el.textContent);
+  if(gr !== null) pijl.style.transform = `rotate(${gr}deg)`;
+});
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ── PNG export ── */
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+
+async function downloadPNG(){
+  const el = document.getElementById('export-tabel');
+  if(!el){ alert('Genereer eerst een tabel.'); return; }
+  try{
+    const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false});
+    const naam = (document.getElementById('evt-naam').value||'event').replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_\-]/g,'');
+    const url = canvas.toDataURL('image/png');
+    if(isIOS()){ window.open(url, '_blank'); return; }
+    const a = document.createElement('a');
+    a.download = `weertabel_${naam}.png`;
+    a.href = url;
+    a.click();
+  } catch(e){ alert('PNG export mislukt: '+e.message); }
+}
+
+function toggleWpPlaats(){
+  document.getElementById('wp-plaats-veld').style.display =
+    document.getElementById('bron-sel').value==='weatherpro' ? '' : 'none';
+}
+document.getElementById('bron-sel').addEventListener('change', toggleWpPlaats);
+
+laadAlles();
+defaultStart();
+toggleWpPlaats();
+</script>
+</body>
+</html>

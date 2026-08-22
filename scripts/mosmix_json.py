@@ -1,0 +1,1211 @@
+#!/usr/bin/env python3
+"""
+mosmix_json.py
+Haalt alle MOSMIX data op van DWD en schrijft mosmix_nl.json + mosmix_be.json.
+Vervangt ~30 afzonderlijke PNG-generatiescripts door 1 snel JSON-script.
+
+Parameters: TX, TN, TG, RR, FF, FX, DD, SQ, TTD, Neff, gevoels
+Output: ~200KB JSON i.p.v. ~73MB PNG's, ~10s i.p.v. ~3min.
+"""
+
+import os, json, re, math, time, requests, zipfile, io
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+from collections import defaultdict
+from wbgt_core import rh_from_td
+
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
+
+
+def coord_voor_station(naam):
+    """Return (lon, lat) voor MOSMIX-stationnaam, of None als onbekend."""
+    for coords in (
+        globals().get("COORDS_NL", {}),
+        globals().get("COORDS_BE", {}),
+        globals().get("COORDS_FR", {}),
+        globals().get("COORDS_DE", {}),
+        globals().get("COORDS_ALPS", {}),
+        globals().get("COORDS_IBERIA", {}),
+        globals().get("COORDS_IT", {}),
+        globals().get("COORDS_GB", {}),
+        globals().get("COORDS_SCAN", {}),
+        globals().get("COORDS_GR", {}),
+        globals().get("COORDS_TR", {}),
+        globals().get("COORDS_EE", {}),
+        globals().get("COORDS_CE", {}),
+        globals().get("COORDS_BALKAN", {}),
+    ):
+        if naam in coords:
+            return coords[naam]
+    return None
+
+# ── Stationslijsten ──────────────────────────────────────────────────────────
+
+STATIONS_NL = [
+    ("06280","Eelde"),("06250","Terschelling"),("06242","Vlieland"),
+    ("06270","Leeuwarden"),("06235","Den Helder"),("06240","Amsterdam"),
+    ("06260","De Bilt"),("06275","Deelen"),("06279","Hoogeveen"),
+    ("06290","Enschede"),("06310","Vlissingen"),("06330","Hoek van Holland"),
+    ("06344","Rotterdam Airport"),("06350","Gilze Rijen"),("06370","Eindhoven"),
+    ("06380","Maastricht"),("06431","Gent"),("06450","Antwerpen"),
+    ("K1176","Kleve"),("06451","Brussel"),("06479","Kleine Brogel"),
+    ("E207","Dollart"),("P0122","Wielen"),("10405","Weeze"),
+    ("06210","Valkenburg"),("06375","Volkel"),("10406","Bocholt"),
+    ("H512","Nettetal"),("E5305","IJsselmeer"),("K1083","Borkum"),
+    ("10500","Geilenkirchen"),
+]
+
+COORDS_NL = {
+    "Eelde":[6.586,53.123],"Terschelling":[5.350,53.392],"Vlieland":[4.920,53.250],
+    "Leeuwarden":[5.774,53.224],"Den Helder":[4.789,52.928],"Amsterdam":[4.781,52.309],
+    "De Bilt":[5.178,52.101],"Deelen":[5.885,52.060],"Hoogeveen":[6.520,52.730],
+    "Enschede":[6.889,52.275],"Vlissingen":[3.596,51.442],"Hoek van Holland":[4.131,51.978],
+    "Rotterdam Airport":[4.437,51.957],"Gilze Rijen":[4.931,51.567],
+    "Eindhoven":[5.377,51.451],"Maastricht":[5.770,50.911],"Gent":[3.720,51.054],
+    "Antwerpen":[4.405,51.219],"Brussel":[4.484,50.901],"Kleine Brogel":[5.470,51.168],
+    "Dollart":[7.220,53.230],"Wielen":[6.450,52.320],"IJsselmeer":[5.433,52.618],
+    "Valkenburg":[4.417,52.270],"Kleve":[6.140,51.790],"Weeze":[6.141,51.603],
+    "Bocholt":[6.617,51.838],"Nettetal":[6.276,51.317],"Geilenkirchen":[6.117,50.967],
+    "Borkum":[6.749,53.586],"Volkel":[5.707,51.657],
+}
+
+STATIONS_BE = [
+    ("06451","Brussel"),("06431","Gent"),("06450","Antwerpen"),
+    ("06479","Kleine Brogel"),("06407","Oostende"),("06449","Charleroi"),
+    ("06478","Bierset"),("06490","Spa"),("06476","St-Hubert"),
+    ("06456","Florennes"),("07015","Lille"),("F9600","Heinerschied"),
+    ("06458","Beauvechain"),("H908","Monschau"),("P0155","Brugge"),
+    ("07075","Charleville"),("07017","Cambrai"),("P0437","Calais"),
+    ("07061","Saint-Quentin"),
+]
+
+COORDS_BE = {
+    "Brussel":[4.484,50.901],"Gent":[3.720,51.054],"Antwerpen":[4.405,51.219],
+    "Kleine Brogel":[5.470,51.168],"Oostende":[2.862,51.199],
+    "Charleroi":[4.453,50.460],"Bierset":[5.453,50.638],
+    "Spa":[5.910,50.493],"St-Hubert":[5.404,50.035],
+    "Florennes":[4.648,50.243],"Lille":[3.106,50.563],
+    "Heinerschied":[6.080,50.030],"Beauvechain":[4.768,50.758],
+    "Monschau":[6.243,50.560],"Brugge":[3.217,51.200],
+    "Charleville":[4.647,49.783],"Cambrai":[3.164,50.222],
+    "Calais":[1.954,50.819],"Saint-Quentin":[3.207,49.843],
+}
+
+STATIONS_FR = [
+    ("07015","Lille"),("P0437","Calais"),("07020","Cherbourg"),
+    ("07027","Caen"),("07037","Rouen"),("07110","Brest"),
+    ("07130","Rennes"),("07222","Nantes"),
+    ("07315","La Rochelle"),("07510","Bordeaux"),("07610","Biarritz"),
+    ("07149","Paris"),("07070","Reims"),("07180","Nancy"),
+    ("07190","Strasbourg"),("07249","Orléans"),("07240","Tours"),
+    ("07260","Nevers"),("07288","Besançon"),
+    ("07434","Limoges"),("07460","Clermont-Ferrand"),("07480","Lyon"),
+    ("07491","Chambéry"),("07577","Montélimar"),("07558","Millau"),
+    ("07630","Toulouse"),("07643","Montpellier"),
+    ("07650","Marseille"),("07690","Nice"),("07747","Perpignan"),
+    ("07761","Ajaccio"),("07790","Bastia"),
+]
+
+COORDS_FR = {
+    "Lille":[3.106,50.570],"Calais":[1.954,50.819],"Cherbourg":[-1.470,49.650],
+    "Caen":[-0.450,49.180],"Rouen":[1.175,49.383],"Brest":[-4.412,48.448],
+    "Rennes":[-1.733,48.069],"Nantes":[-1.611,47.150],
+    "La Rochelle":[-1.195,46.179],"Bordeaux":[-0.715,44.828],"Biarritz":[-1.529,43.468],
+    "Paris":[2.359,48.717],"Reims":[4.050,49.310],"Nancy":[6.214,48.683],
+    "Strasbourg":[7.640,48.550],"Orléans":[1.760,47.988],"Tours":[0.727,47.443],
+    "Nevers":[3.100,47.000],"Besançon":[5.984,47.248],
+    "Limoges":[1.179,45.861],"Clermont-Ferrand":[3.150,45.787],"Lyon":[4.944,45.725],
+    "Chambéry":[5.880,45.638],"Montélimar":[4.733,44.583],"Millau":[3.018,44.118],
+    "Toulouse":[1.378,43.629],"Montpellier":[3.964,43.577],
+    "Marseille":[5.216,43.437],"Nice":[7.216,43.667],"Perpignan":[2.871,42.740],
+    "Ajaccio":[8.793,41.917],"Bastia":[9.485,42.540],
+}
+
+# Iberia (Spanje + Portugal)
+STATIONS_IBE = [
+    # Spanje — noordkust
+    ("08001","La Coruña"),("08042","Santiago"),("08045","Vigo"),
+    ("08014","Gijón"),("08023","Santander"),("08025","Bilbao"),("08029","San Sebastián"),
+    # Spanje — noordelijk binnenland
+    ("08055","León"),("08075","Burgos"),("08140","Valladolid"),("08202","Salamanca"),
+    # Spanje — Ebro / NO
+    ("08160","Zaragoza"),("08171","Lérida"),("08181","Barcelona"),("08184","Gerona"),
+    # Spanje — centraal
+    ("08221","Madrid"),("08272","Toledo"),
+    # Spanje — Levante
+    ("08280","Albacete"),("08284","Valencia"),("08360","Alicante"),("08433","Murcia"),
+    # Spanje — zuid
+    ("08330","Badajoz"),("08390","Sevilla"),("08410","Córdoba"),("08419","Granada"),
+    ("08482","Málaga"),("08487","Almería"),
+    # Balearen
+    ("08306","Palma"),("08373","Ibiza"),("08314","Menorca"),
+    # Portugal
+    ("08551","Viana do Castelo"),("08545","Porto"),("08567","Vila Real"),
+    ("08548","Coimbra"),("08536","Lisboa"),("08571","Portalegre"),
+    ("08562","Beja"),("08554","Faro"),
+]
+
+COORDS_IBE = {
+    "La Coruña":[-8.417,43.367],"Santiago":[-8.433,42.900],"Vigo":[-8.633,42.217],
+    "Gijón":[-5.633,43.533],"Santander":[-3.800,43.483],"Bilbao":[-2.933,43.300],
+    "San Sebastián":[-1.800,43.350],
+    "León":[-5.650,42.583],"Burgos":[-3.633,42.367],"Valladolid":[-4.850,41.717],
+    "Salamanca":[-5.500,40.950],
+    "Zaragoza":[-1.017,41.667],"Lérida":[0.633,41.617],
+    "Barcelona":[2.067,41.283],"Gerona":[2.767,41.900],
+    "Madrid":[-3.550,40.450],"Toledo":[-4.050,39.883],
+    "Albacete":[-1.850,38.950],"Valencia":[-0.467,39.500],
+    "Alicante":[-0.550,38.283],"Murcia":[-0.800,37.783],
+    "Badajoz":[-6.817,38.883],"Sevilla":[-6.000,37.367],
+    "Córdoba":[-4.850,37.850],"Granada":[-3.783,37.183],
+    "Málaga":[-4.483,36.667],"Almería":[-2.383,36.850],
+    "Palma":[2.733,39.550],"Ibiza":[1.383,38.867],"Menorca":[4.233,39.867],
+    "Viana do Castelo":[-8.800,41.633],"Porto":[-8.683,41.233],
+    "Vila Real":[-7.717,41.267],"Coimbra":[-8.467,40.150],
+    "Lisboa":[-9.133,38.783],"Portalegre":[-7.417,39.283],
+    "Beja":[-7.867,38.017],"Faro":[-7.967,37.017],
+}
+
+# Duitsland (alle 16 Bundesländer)
+STATIONS_DE = [
+    # Noord / kust
+    ("10020","Sylt"),("10015","Helgoland"),("10046","Kiel"),
+    ("10147","Hamburg"),("10129","Bremerhaven"),("10224","Bremen"),
+    ("10215","Oldenburg"),
+    # Mecklenburg-Vorpommern
+    ("10162","Schwerin"),("10170","Rostock"),("10091","Arkona"),
+    # Berlin / Brandenburg
+    ("10382","Berlin"),("10379","Potsdam"),("10496","Cottbus"),
+    # Niedersachsen / Sachsen-Anhalt binnenland
+    ("10338","Hannover"),("10442","Göttingen"),("10361","Magdeburg"),
+    ("10453","Brocken"),
+    # Nordrhein-Westfalen
+    ("10400","Düsseldorf"),("10410","Essen"),("10315","Münster"),
+    ("10513","Köln"),
+    # Hessen / Rheinland-Pfalz / Saarland
+    ("10438","Kassel"),("10637","Frankfurt"),("10609","Trier"),
+    ("10616","Hahn"),("10708","Saarbrücken"),
+    # Thüringen / Sachsen
+    ("10554","Erfurt"),("10548","Meiningen"),("10469","Leipzig"),
+    ("10488","Dresden"),("10499","Görlitz"),("10578","Fichtelberg"),
+    # Baden-Württemberg
+    ("10738","Stuttgart"),("10803","Freiburg"),("10929","Konstanz"),
+    ("10908","Feldberg-S"),
+    # Bayern
+    ("10763","Nürnberg"),("10776","Regensburg"),("10870","München"),
+    ("10948","Oberstdorf"),("10961","Zugspitze"),
+]
+
+COORDS_DE = {
+    "Sylt":[8.417,55.017],"Helgoland":[7.883,54.167],"Kiel":[10.150,54.383],
+    "Hamburg":[10.000,53.633],"Bremerhaven":[8.583,53.533],"Bremen":[8.800,53.050],
+    "Oldenburg":[8.167,53.183],
+    "Schwerin":[11.383,53.633],"Rostock":[12.083,54.183],"Arkona":[13.433,54.683],
+    "Berlin":[13.317,52.567],"Potsdam":[13.067,52.383],"Cottbus":[14.317,51.783],
+    "Hannover":[9.683,52.467],"Göttingen":[9.950,51.500],"Magdeburg":[11.583,52.117],
+    "Brocken":[10.617,51.800],
+    "Düsseldorf":[6.767,51.300],"Essen":[6.967,51.400],"Münster":[7.700,52.133],
+    "Köln":[7.167,50.867],
+    "Kassel":[9.450,51.300],"Frankfurt":[8.600,50.050],"Trier":[6.667,49.750],
+    "Hahn":[7.267,49.950],"Saarbrücken":[7.117,49.217],
+    "Erfurt":[10.967,50.983],"Meiningen":[10.383,50.567],"Leipzig":[12.233,51.417],
+    "Dresden":[13.750,51.133],"Görlitz":[14.950,51.167],"Fichtelberg":[12.950,50.433],
+    "Stuttgart":[9.217,48.683],"Freiburg":[7.833,48.017],"Konstanz":[9.183,47.683],
+    "Feldberg-S":[8.000,47.883],
+    "Nürnberg":[11.050,49.500],"Regensburg":[12.100,49.033],"München":[11.800,48.367],
+    "Oberstdorf":[10.283,47.400],"Zugspitze":[10.983,47.417],
+}
+
+# Britse Eilanden (UK + Ierland)
+STATIONS_GB = [
+    ("03005","Lerwick"),("03017","Kirkwall"),("03026","Stornoway"),
+    ("03059","Inverness"),("03066","Kinloss"),("03091","Aberdeen"),
+    ("03100","Tiree"),("03140","Glasgow"),("03160","Edinburgh"),
+    ("03204","Isle of Man"),("03245","Newcastle"),("03302","Valley"),
+    ("03334","Manchester"),("03347","Leeds"),("03492","Norwich"),
+    ("03502","Aberporth"),("03534","Birmingham"),("03628","Bristol Filton"),
+    ("03715","Cardiff"),("03772","London Heathrow"),("03776","London Gatwick"),
+    ("03808","Camborne"),("03827","Plymouth"),("03862","Bournemouth"),
+    ("03865","Southampton"),("03917","Belfast"),("03930","Liverpool"),
+    ("03953","Valentia"),("03955","Cork"),("03962","Shannon"),
+    ("03969","Dublin"),("03976","Belmullet"),("03980","Malin Head"),
+]
+
+COORDS_GB = {
+    "Lerwick":[-1.183,60.133],"Kirkwall":[-2.900,58.950],"Stornoway":[-6.317,58.217],
+    "Inverness":[-4.050,57.533],"Kinloss":[-3.567,57.650],"Aberdeen":[-2.217,57.200],
+    "Tiree":[-6.883,56.500],"Glasgow":[-4.433,55.867],"Edinburgh":[-3.350,55.950],
+    "Isle of Man":[-4.633,54.083],"Newcastle":[-1.683,55.033],"Valley":[-4.533,53.250],
+    "Manchester":[-2.267,53.350],"Leeds":[-1.550,53.800],"Norwich":[1.300,52.633],
+    "Aberporth":[-4.567,52.133],"Birmingham":[-1.750,52.450],"Bristol Filton":[-2.583,51.517],
+    "Cardiff":[-3.350,51.400],"London Heathrow":[-0.450,51.483],"London Gatwick":[-0.183,51.150],
+    "Camborne":[-5.333,50.217],"Plymouth":[-4.117,50.350],"Bournemouth":[-1.833,50.783],
+    "Southampton":[-1.400,50.900],"Belfast":[-6.217,54.650],"Liverpool":[-2.867,53.333],
+    "Valentia":[-10.233,51.933],"Cork":[-8.483,51.850],"Shannon":[-8.917,52.700],
+    "Dublin":[-6.250,53.433],"Belmullet":[-10.017,54.233],"Malin Head":[-7.333,55.367],
+}
+
+# Canarische Eilanden — DWD MOSMIX 600xx (alleen 7 hoofdstations)
+STATIONS_IC = [
+    ("60005","La Palma"),("60015","Tenerife Noord"),
+    ("60020","Santa Cruz"),("60025","Tenerife Zuid"),
+    ("60030","Gran Canaria"),("60035","Fuerteventura"),
+    ("60040","Lanzarote"),
+]
+
+COORDS_IC = {
+    "La Palma":[-17.750,28.620],"Tenerife Noord":[-16.320,28.470],
+    "Santa Cruz":[-16.270,28.470],"Tenerife Zuid":[-16.570,28.050],
+    "Gran Canaria":[-15.380,27.930],"Fuerteventura":[-13.870,28.450],
+    "Lanzarote":[-13.600,28.950],
+}
+
+# Alpenlanden (Oostenrijk + Zwitserland) — DWD MOSMIX 110xx (AT) + 066xx-067xx (CH)
+STATIONS_ALPS = [
+    # ── Zwitserland — steden
+    ("06700","Genève"),("06610","Payerne"),("06631","Bern"),
+    ("06601","Basel"),("06620","Schaffhausen"),
+    ("06650","Luzern"),("06670","Zürich"),("06681","St. Gallen"),
+    ("06734","Interlaken"),("06672","Altdorf"),
+    ("06720","Sion"),("06770","Lugano"),("06760","Locarno-Monti"),
+    ("06784","Davos"),("06790","Schiers"),("06753","Piotta"),
+    ("06685","Glarus"),
+    # ── Zwitserland — bergstations
+    ("06605","Chasseral"),("06750","Gütsch"),("06688","Crap Masegn"),
+    ("06780","Weissfluhjoch"),("06799","Naluns"),
+    ("06730","Jungfraujoch"),
+    # ── Oostenrijk — steden / lager
+    ("11101","Bregenz"),("11120","Innsbruck"),("11130","Kufstein"),
+    ("11150","Salzburg"),("11157","Aigen/Enns"),("11055","Schärding"),
+    ("11010","Linz"),("11070","Krems"),("11035","Wenen/Hohe Warte"),
+    ("11036","Wenen/Schwechat"),("11190","Eisenstadt"),
+    ("11380","Reichenau/Rax"),("11357","St. Wolfgang"),
+    ("11154","Gmunden"),("11240","Graz"),("11248","Bad Radkersburg"),
+    ("11231","Klagenfurt"),("11204","Lienz"),("11201","Sillian"),
+    ("11272","Spittal/Drau"),
+    # ── Oostenrijk — bergstations
+    ("11308","Warth"),("11128","Brenner"),("11149","Obertauern"),
+    ("11155","Feuerkogel"),("11340","Schmittenhöhe"),
+    ("11212","Villacher Alpe"),("11138","Rudolfshütte"),
+    ("11146","Sonnblick"),
+]
+
+COORDS_ALPS = {
+    # Zwitserland
+    "Genève":[6.130,46.250],"Payerne":[6.930,46.820],
+    "Bern":[7.450,46.980],"Basel":[7.580,47.530],
+    "Schaffhausen":[8.620,47.680],"Luzern":[8.300,47.020],
+    "Zürich":[8.530,47.480],"St. Gallen":[9.400,47.430],
+    "Interlaken":[7.870,46.670],"Altdorf":[8.630,46.870],
+    "Sion":[7.330,46.220],"Lugano":[8.970,46.000],
+    "Locarno-Monti":[8.780,46.170],"Davos":[9.850,46.820],
+    "Schiers":[9.670,46.970],"Piotta":[8.680,46.520],
+    "Glarus":[9.070,47.030],
+    "Chasseral":[7.050,47.130],"Gütsch":[8.620,46.650],
+    "Crap Masegn":[9.180,46.830],"Weissfluhjoch":[9.820,46.830],
+    "Naluns":[10.270,46.820],"Jungfraujoch":[7.980,46.530],
+    # Oostenrijk
+    "Bregenz":[9.750,47.500],"Innsbruck":[11.350,47.270],
+    "Kufstein":[12.170,47.580],"Salzburg":[13.000,47.800],
+    "Aigen/Enns":[14.130,47.530],"Schärding":[13.430,48.470],
+    "Linz":[14.180,48.230],"Krems":[15.620,48.420],
+    "Wenen/Hohe Warte":[16.370,48.250],"Wenen/Schwechat":[16.570,48.120],
+    "Eisenstadt":[16.530,47.850],
+    "Reichenau/Rax":[15.830,47.700],"St. Wolfgang":[13.450,47.730],
+    "Gmunden":[13.780,47.900],"Graz":[15.430,47.000],
+    "Bad Radkersburg":[15.980,46.680],"Klagenfurt":[14.330,46.650],
+    "Lienz":[12.800,46.830],"Sillian":[12.420,46.750],
+    "Spittal/Drau":[13.480,46.780],
+    "Warth":[10.180,47.250],"Brenner":[11.430,47.120],
+    "Obertauern":[13.570,47.250],"Feuerkogel":[13.720,47.820],
+    "Schmittenhöhe":[12.730,47.330],
+    "Villacher Alpe":[13.670,46.600],"Rudolfshütte":[12.630,47.130],
+    "Sonnblick":[12.950,47.050],
+}
+
+# Italië (vasteland + Sicilië + Sardinië + kleine eilanden) — DWD MOSMIX 16xxx
+STATIONS_IT = [
+    # Alpen / noord
+    ("16008","S. Valentino"),("16020","Bolzano"),("16022","Paganella"),
+    ("16033","Dobbiaco"),("16040","Tarvisio"),("16052","Pian Rosa"),
+    ("16054","Aosta"),
+    # Po-vlakte / Veneto / Friuli
+    ("16059","Turijn"),("16066","Malpensa"),("16080","Milaan"),
+    ("16076","Bergamo"),("16088","Brescia"),("16090","Verona"),
+    ("16094","Vicenza"),("16105","Venetië"),("16110","Triëst"),
+    ("16045","Udine"),
+    # Liguria / Piemonte
+    ("16117","Cuneo"),("16120","Genua"),
+    # Emilia / Toscana / Marche
+    ("16130","Parma"),("16140","Bologna"),("16149","Rimini"),
+    ("16158","Pisa"),("16170","Florence"),("16181","Perugia"),
+    ("16191","Ancona"),
+    # Lazio / Abruzzo
+    ("16206","Grosseto"),("16219","Terminillo"),("16226","L'Aquila"),
+    ("16230","Pescara"),("16242","Rome"),
+    # Zuid-vasteland
+    ("16252","Campobasso"),("16289","Napels"),("16300","Potenza"),
+    ("16270","Bari"),("16320","Brindisi"),("16362","Lamezia"),
+    ("16422","Reggio Calabria"),
+    # Tyrreense eilanden
+    ("16280","Ponza"),("16294","Capri"),
+    # Sicilië
+    ("16405","Palermo"),("16429","Trapani"),("16460","Catania"),
+    ("16420","Messina"),("16464","Siracusa"),
+    # Sardinië
+    ("16085","Porto Torres"),("16520","Alghero"),("16531","Olbia"),
+    ("16550","Capo Bellavista"),("16560","Cagliari"),
+]
+
+COORDS_IT = {
+    "S. Valentino":[10.530,46.770],"Bolzano":[11.330,46.470],
+    "Paganella":[11.030,46.150],"Dobbiaco":[12.220,46.730],
+    "Tarvisio":[13.580,46.500],"Pian Rosa":[7.700,45.930],
+    "Aosta":[7.350,45.730],
+    "Turijn":[7.650,45.220],"Malpensa":[8.730,45.620],
+    "Milaan":[9.280,45.430],"Bergamo":[9.700,45.670],
+    "Brescia":[10.280,45.420],"Verona":[10.870,45.380],
+    "Vicenza":[11.520,45.570],"Venetië":[12.330,45.500],
+    "Triëst":[13.750,45.650],"Udine":[13.030,45.980],
+    "Cuneo":[7.620,44.530],"Genua":[8.850,44.420],
+    "Parma":[10.280,44.820],"Bologna":[11.300,44.530],
+    "Rimini":[12.620,44.030],"Pisa":[10.380,43.680],
+    "Florence":[11.200,43.800],"Perugia":[12.500,43.080],
+    "Ancona":[13.370,43.620],
+    "Grosseto":[11.070,42.750],"Terminillo":[12.980,42.470],
+    "L'Aquila":[13.320,42.370],"Pescara":[14.200,42.430],
+    "Rome":[12.230,41.800],
+    "Campobasso":[14.650,41.570],"Napels":[14.300,40.850],
+    "Potenza":[15.800,40.630],"Bari":[16.780,41.130],
+    "Brindisi":[17.950,40.650],"Lamezia":[16.250,38.900],
+    "Reggio Calabria":[15.650,38.070],
+    "Ponza":[12.950,40.920],"Capri":[14.200,40.550],
+    "Palermo":[13.100,38.180],"Trapani":[12.500,37.920],
+    "Catania":[15.050,37.470],"Messina":[15.550,38.200],
+    "Siracusa":[15.280,37.070],
+    "Porto Torres":[8.380,40.830],"Alghero":[8.280,40.630],
+    "Olbia":[9.520,40.900],"Capo Bellavista":[9.720,39.930],
+    "Cagliari":[9.050,39.250],
+}
+
+# Griekenland (vasteland + eilanden) — DWD MOSMIX 166xx-stations
+STATIONS_GR = [
+    # Noord-vasteland
+    ("16606","Serres"),("16622","Thessaloniki"),("16624","Kavala"),
+    ("16627","Alexandroupolis"),("16632","Kozani"),
+    # Centraal vasteland
+    ("16641","Kerkyra"),("16642","Ioannina"),("16643","Preveza"),
+    ("16648","Larissa"),("16675","Lamia"),
+    # Peloponnesos / west
+    ("16682","Andravida"),("16689","Patras"),("16710","Tripoli"),
+    ("16726","Kalamata"),
+    # Athene-regio
+    ("16699","Tanagra"),("16716","Athene"),
+    # Sporaden / Noord-Egeïsch
+    ("16650","Limnos"),("16667","Mytilini"),("16684","Skyros"),
+    ("16685","Kefalonia"),("16706","Chios"),("16723","Samos"),
+    # Cycladen
+    ("16666","Mykonos"),("16732","Naxos"),("16740","Syros"),
+    ("16741","Paros"),("16744","Santorini"),
+    # Dodekanesos / zuid-Egeïsch
+    ("16742","Kos"),("16743","Kythira"),("16749","Rhodos"),
+    ("16765","Karpathos"),
+    # Kreta
+    ("16746","Chania"),("16754","Heraklion"),("16759","Tymbaki"),
+]
+
+COORDS_GR = {
+    "Serres":[23.570,41.070],"Thessaloniki":[22.970,40.520],
+    "Kavala":[24.600,40.980],"Alexandroupolis":[25.920,40.850],
+    "Kozani":[21.780,40.300],
+    "Kerkyra":[19.920,39.620],"Ioannina":[20.820,39.700],
+    "Preveza":[20.770,38.920],"Larissa":[22.420,39.630],
+    "Lamia":[22.400,38.900],
+    "Andravida":[21.280,37.920],"Patras":[21.730,38.250],
+    "Tripoli":[22.400,37.530],"Kalamata":[22.020,37.070],
+    "Tanagra":[23.530,38.320],"Athene":[23.730,37.900],
+    "Limnos":[25.230,39.920],"Mytilini":[26.600,39.070],
+    "Skyros":[24.480,38.970],"Kefalonia":[20.500,38.120],
+    "Chios":[26.130,38.330],"Samos":[26.920,37.700],
+    "Mykonos":[25.350,37.430],"Naxos":[25.380,37.100],
+    "Syros":[24.950,37.420],"Paros":[25.130,37.020],
+    "Santorini":[25.430,36.420],
+    "Kos":[27.070,36.780],"Kythira":[23.020,36.280],
+    "Rhodos":[28.080,36.400],"Karpathos":[27.250,35.520],
+    "Chania":[24.120,35.480],"Heraklion":[25.180,35.330],
+    "Tymbaki":[24.750,35.000],
+}
+
+# Scandinavië — Noorwegen + Zweden + Denemarken + Finland (vasteland, zonder Svalbard/Jan Mayen)
+STATIONS_SCAN = [
+    # Noorwegen (N→Z)
+    ("01049","Alta"),("01052","Hammerfest"),("01059","Lakselv"),("01089","Kirkenes"),
+    ("01112","Brønnøysund"),("01152","Bodø"),("01210","Ålesund"),("01223","Kristiansund"),
+    ("01241","Ørland"),("01271","Trondheim"),("01290","Namsos"),("01311","Bergen"),
+    ("01347","Sogndal"),("01368","Fagernes"),("01384","Oslo"),("01415","Stavanger"),
+    ("01452","Kristiansand"),("01475","Skien"),
+    # Zweden (N→Z)
+    ("02049","Gällivare"),("02128","Gunnarn"),("02186","Luleå"),("02226","Östersund"),
+    ("02286","Umeå"),("02293","Skellefteå"),("02324","Sveg"),("02366","Sundsvall"),
+    ("02378","Söderhamn"),("02418","Karlstad"),("02458","Uppsala"),("02460","Stockholm"),
+    ("02527","Göteborg"),("02550","Jönköping"),("02562","Linköping"),("02590","Visby"),
+    ("02604","Halmstad"),("02611","Helsingborg"),("02636","Malmö"),("02641","Växjö"),
+    ("02651","Kristianstad"),("02664","Ronneby"),("02670","Kalmar"),
+    # Denemarken (N→Z)
+    ("06030","Ålborg"),("06060","Karup"),("06070","Aarhus"),("06080","Esbjerg"),
+    ("06104","Billund"),("06110","Skrydstrup"),("06120","Odense"),("06180","Kopenhagen"),
+    ("06190","Rønne"),
+    # Finland (N→Z)
+    ("02807","Ivalo"),("02810","Enontekiö"),("02830","Kittilä"),("02836","Sodankylä"),
+    ("02869","Kuusamo"),("02897","Kajaani"),("02911","Vaasa"),("02917","Kuopio"),
+    ("02929","Joensuu"),("02935","Jyväskylä"),("02944","Tampere"),("02948","Savonlinna"),
+    ("02952","Pori"),("02970","Mariehamn"),("02972","Turku"),("02974","Helsinki"),
+]
+
+COORDS_SCAN = {
+    # Noorwegen
+    "Alta":[23.367,69.983],"Hammerfest":[23.667,70.667],"Lakselv":[24.983,70.067],
+    "Kirkenes":[29.900,69.733],"Brønnøysund":[12.217,65.450],"Bodø":[14.367,67.267],
+    "Ålesund":[6.117,62.567],"Kristiansund":[7.833,63.117],"Ørland":[9.600,63.700],
+    "Trondheim":[10.917,63.467],"Namsos":[11.583,64.467],"Bergen":[5.217,60.300],
+    "Sogndal":[7.133,61.150],"Fagernes":[9.300,61.000],"Oslo":[11.100,60.200],
+    "Stavanger":[5.633,58.883],"Kristiansand":[8.083,58.200],"Skien":[9.567,59.183],
+    # Zweden
+    "Gällivare":[20.650,67.150],"Gunnarn":[17.700,64.967],"Luleå":[22.133,65.550],
+    "Östersund":[14.500,63.200],"Umeå":[20.283,63.800],"Skellefteå":[21.083,64.633],
+    "Sveg":[14.367,62.033],"Sundsvall":[17.450,62.517],"Söderhamn":[17.100,61.267],
+    "Karlstad":[13.467,59.367],"Uppsala":[17.600,59.883],"Stockholm":[17.917,59.650],
+    "Göteborg":[12.500,57.667],"Jönköping":[14.083,57.767],"Linköping":[15.517,58.400],
+    "Visby":[18.350,57.667],"Halmstad":[12.833,56.683],"Helsingborg":[12.767,56.033],
+    "Malmö":[13.367,55.550],"Växjö":[14.733,56.933],"Kristianstad":[14.083,55.917],
+    "Ronneby":[15.283,56.267],"Kalmar":[16.300,56.683],
+    # Denemarken
+    "Ålborg":[9.867,57.100],"Karup":[9.117,56.300],"Aarhus":[10.617,56.300],
+    "Esbjerg":[8.550,55.517],"Billund":[9.150,55.733],"Skrydstrup":[9.267,55.233],
+    "Odense":[10.333,55.467],"Kopenhagen":[12.667,55.633],"Rønne":[14.750,55.067],
+    # Finland
+    "Ivalo":[27.417,68.617],"Enontekiö":[23.600,68.367],"Kittilä":[24.850,67.700],
+    "Sodankylä":[26.650,67.367],"Kuusamo":[29.183,65.967],"Kajaani":[27.683,64.283],
+    "Vaasa":[21.767,63.050],"Kuopio":[27.800,63.017],"Joensuu":[29.633,62.667],
+    "Jyväskylä":[25.683,62.400],"Tampere":[23.583,61.417],"Savonlinna":[28.950,61.950],
+    "Pori":[21.800,61.467],"Mariehamn":[19.900,60.117],"Turku":[22.267,60.517],
+    "Helsinki":[24.967,60.317],
+}
+
+# Turkije — alleen West-kust (Egeïsch) en Zuid-kust (Mediterraan)
+# DWD MOSMIX-stations zijn beperkt tot luchthavens met internationale ICAO.
+STATIONS_TR = [
+    # Westkust (Egeïsch, N→Z)
+    ("17219","Izmir"),("17289","Bodrum-Milas"),("17290","Bodrum"),
+    # Zuidkust (Mediterraan, W→O)
+    ("17295","Dalaman"),("17300","Antalya"),("17350","Adana"),
+]
+
+COORDS_TR = {
+    "Izmir":[27.150,38.267],
+    "Bodrum-Milas":[27.667,37.250],
+    "Bodrum":[27.433,37.033],
+    "Dalaman":[28.783,36.700],
+    "Antalya":[30.800,36.900],
+    "Adana":[35.417,37.000],
+}
+
+# Centraal Europa — Polen + Tsjechië + Slowakije + Hongarije
+STATIONS_CE = [
+    # ── Polen (N→Z, W→O)
+    ("12120","Szczecin"),("12150","Kołobrzeg"),("12160","Łeba"),
+    ("12200","Gdańsk"),("12295","Olsztyn"),("12330","Toruń"),
+    ("12375","Warszawa"),("12415","Łódź"),("12465","Suwałki"),
+    ("12475","Białystok"),("12510","Wrocław"),("12520","Jelenia Góra"),
+    ("12580","Częstochowa"),("12610","Rzeszów"),("12640","Lublin"),
+    ("12700","Kraków"),("12800","Katowice"),
+    # ── Tsjechië
+    ("11518","Praha"),("11603","Plzeň"),("11709","Ostrava"),
+    ("11723","Brno"),("11803","České Budějovice"),
+    # ── Slowakije
+    ("11812","Bratislava"),("11948","Košice"),("11952","Sliač"),
+    # ── Hongarije
+    ("12843","Budapest"),("12880","Szombathely"),("12918","Debrecen"),
+    ("12900","Pécs"),
+]
+
+COORDS_CE = {
+    "Szczecin":[14.617,53.400],"Kołobrzeg":[15.583,54.183],"Łeba":[17.533,54.767],
+    "Gdańsk":[18.467,54.383],"Olsztyn":[20.083,53.767],"Toruń":[18.783,53.050],
+    "Warszawa":[20.967,52.167],"Łódź":[19.400,51.733],"Suwałki":[22.933,54.100],
+    "Białystok":[23.167,53.100],"Wrocław":[16.883,51.100],"Jelenia Góra":[15.733,50.900],
+    "Częstochowa":[19.083,50.567],"Rzeszów":[22.033,50.117],"Lublin":[22.400,51.233],
+    "Kraków":[19.783,50.067],"Katowice":[19.083,50.467],
+    "Praha":[14.267,50.100],"Plzeň":[13.433,49.750],"Ostrava":[18.117,49.683],
+    "Brno":[16.700,49.150],"České Budějovice":[14.417,48.950],
+    "Bratislava":[17.200,48.167],"Košice":[21.233,48.683],"Sliač":[19.133,48.633],
+    "Budapest":[19.000,47.433],"Szombathely":[16.633,47.267],"Debrecen":[21.617,47.483],
+    "Pécs":[18.233,46.000],
+}
+
+# Balkan — Slovenië + Kroatië + Bosnië + Servië + Montenegro + N-Macedonië + Albanië + Bulgarije
+STATIONS_BALKAN = [
+    # ── Slovenië
+    ("13212","Ljubljana"),("13228","Maribor"),
+    # ── Kroatië (W→O, N→Z)
+    ("13271","Zagreb"),("13425","Rijeka"),("13270","Osijek"),
+    ("13272","Zadar"),("13388","Split"),("13480","Dubrovnik"),
+    # ── Bosnië
+    ("13462","Sarajevo"),("13420","Mostar"),("13491","Banja Luka"),
+    # ── Servië
+    ("13333","Beograd"),("13348","Niš"),("13362","Novi Sad"),
+    # ── Montenegro
+    ("13564","Podgorica"),("13562","Tivat"),
+    # ── Noord-Macedonië
+    ("13597","Skopje"),
+    # ── Albanië
+    ("13600","Tirana"),
+    # ── Bulgarije
+    ("15614","Sofia"),("15540","Varna"),("15553","Burgas"),("15626","Plovdiv"),
+]
+
+COORDS_BALKAN = {
+    "Ljubljana":[14.500,46.067],"Maribor":[15.683,46.483],
+    "Zagreb":[16.067,45.733],"Rijeka":[14.567,45.217],"Osijek":[18.567,45.550],
+    "Zadar":[15.367,44.117],"Split":[16.300,43.533],"Dubrovnik":[18.267,42.567],
+    "Sarajevo":[18.333,43.867],"Mostar":[17.800,43.333],"Banja Luka":[17.300,44.783],
+    "Beograd":[20.283,44.817],"Niš":[21.900,43.333],"Novi Sad":[19.817,45.333],
+    "Podgorica":[19.250,42.367],"Tivat":[18.717,42.400],
+    "Skopje":[21.617,41.967],
+    "Tirana":[19.783,41.333],
+    "Sofia":[23.383,42.683],"Varna":[27.917,43.200],"Burgas":[27.467,42.467],
+    "Plovdiv":[24.767,42.133],
+}
+
+# Oost-Europa — Roemenië + Moldavië + Oekraïne + Baltische Staten
+STATIONS_EE = [
+    # ── Baltische Staten
+    ("26038","Tallinn"),("26059","Tartu"),("26130","Pärnu"),
+    ("26220","Riga"),("26310","Liepāja"),("26380","Ventspils"),
+    ("26410","Klaipėda"),("26508","Kaunas"),("26600","Vilnius"),
+    # ── Roemenië (N→Z, W→O)
+    ("15015","Iași"),("15100","Bacău"),("15120","Galați"),
+    ("15200","Constanța"),("15260","Craiova"),("15315","București"),
+    ("15360","Timișoara"),("15420","Cluj-Napoca"),("15450","Sibiu"),
+    # ── Moldavië
+    ("33978","Chișinău"),
+    # ── Oekraïne (west, in bedrijf)
+    ("33001","Uzhhorod"),("33036","Lviv"),("33106","Lutsk"),
+    ("33177","Rivne"),("33246","Kyiv"),("33301","Vinnytsia"),
+]
+
+COORDS_EE = {
+    "Tallinn":[24.800,59.433],"Tartu":[26.717,58.317],"Pärnu":[24.467,58.417],
+    "Riga":[23.967,56.967],"Liepāja":[21.017,56.517],"Ventspils":[21.533,57.400],
+    "Klaipėda":[21.083,55.700],"Kaunas":[24.083,54.883],"Vilnius":[25.283,54.633],
+    "Iași":[27.617,47.167],"Bacău":[26.917,46.533],"Galați":[28.067,45.467],
+    "Constanța":[28.633,44.217],"Craiova":[23.883,44.317],"București":[26.100,44.500],
+    "Timișoara":[21.317,45.733],"Cluj-Napoca":[23.683,46.783],"Sibiu":[24.100,45.800],
+    "Chișinău":[28.933,47.017],
+    "Uzhhorod":[22.267,48.633],"Lviv":[23.950,49.817],"Lutsk":[25.267,50.683],
+    "Rivne":[26.167,50.600],"Kyiv":[30.917,50.400],"Vinnytsia":[28.617,49.233],
+}
+
+# ── MOSMIX helpers ───────────────────────────────────────────────────────────
+
+def strip_namespaces(s):
+    s = re.sub(r'<(/?)\w+:', r'<\1', s)
+    s = re.sub(r'\b\w+:(\w+=)', r'\1', s)
+    return re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', s)
+
+def download_kmz(station, pogingen=3):
+    """Download + parse MOSMIX-L KMZ. Retry bij transiente fouten (rate-limit,
+    timeout, 5xx) — een 404 betekent 'station bestaat niet' en wordt niet herhaald."""
+    url = (f"https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/"
+           f"single_stations/{station}/kml/MOSMIX_L_LATEST_{station}.kmz")
+    r = None
+    for poging in range(1, pogingen + 1):
+        try:
+            r = requests.get(url, timeout=30); r.raise_for_status()
+            z = zipfile.ZipFile(io.BytesIO(r.content))
+            return ET.fromstring(strip_namespaces(z.read(z.namelist()[0]).decode("utf-8")))
+        except requests.HTTPError as e:
+            # 404 = station bestaat niet → niet opnieuw proberen
+            if r is not None and r.status_code == 404:
+                print(f"  x {station}: {e}"); return None
+            if poging < pogingen:
+                time.sleep(2 * poging); continue
+            print(f"  x {station}: {e}"); return None
+        except Exception as e:
+            if poging < pogingen:
+                time.sleep(2 * poging); continue
+            print(f"  x {station}: {e}"); return None
+
+def get_issue_time(root):
+    """Lees de IssueTime uit de MOSMIX XML (= model run tijdstip)."""
+    el = root.find('.//IssueTime')
+    if el is not None and el.text:
+        try:
+            return datetime.strptime(el.text.strip()[:19], "%Y-%m-%dT%H:%M:%S")
+        except:
+            pass
+    return None
+
+def get_times(root):
+    times = []
+    for ts in root.findall('.//ForecastTimeSteps/TimeStep'):
+        try: times.append(datetime.strptime((ts.text or '').strip()[:19], "%Y-%m-%dT%H:%M:%S"))
+        except: pass
+    return times
+
+def parse_values(root, name):
+    for fc in root.findall('.//Forecast'):
+        if fc.get('elementName') == name:
+            val = fc.find('value')
+            if val is not None and val.text:
+                res = []
+                for t in val.text.strip().split():
+                    if t == '-': res.append(None)
+                    else:
+                        try: res.append(float(t))
+                        except: res.append(None)
+                return res
+    return []
+
+# ── Gevoelstemperatuur ───────────────────────────────────────────────────────
+
+def windchill(t_c, ff_ms):
+    """Windchill formule (Environment Canada / KNMI)."""
+    v_kmh = ff_ms * 3.6
+    if t_c >= 10.0 or v_kmh <= 4.8:
+        return t_c
+    wc = 13.12 + 0.6215*t_c - 11.37*(v_kmh**0.16) + 0.3965*t_c*(v_kmh**0.16)
+    return round(wc, 1)
+
+# ── Astronomische daglengte (voor zon-schatting) ─────────────────────────────
+
+def max_daglengte(datum, lat_deg=52.0):
+    dag_nr = datum.timetuple().tm_yday
+    decl = math.radians(-23.45 * math.cos(math.radians(360/365 * (dag_nr + 10))))
+    lat = math.radians(lat_deg)
+    cos_ha = -math.tan(lat) * math.tan(decl)
+    cos_ha = max(-1.0, min(1.0, cos_ha))
+    return 2 * math.degrees(math.acos(cos_ha)) / 15.0
+
+def sd_uit_neff(neff_gem, datum):
+    dl = max_daglengte(datum)
+    return round(max(0.0, dl * (1.0 - neff_gem / 100.0) * 0.75), 1)
+
+# ── Hoofdverwerking per station ──────────────────────────────────────────────
+
+def verwerk_station(code, naam):
+    """Haal alle parameters op voor 1 station, return (data_dict, hourly_dict, issue_time)."""
+    root = download_kmz(code)
+    if root is None:
+        return {}, None, None
+
+    times = get_times(root)
+    if not times:
+        return {}, None, None
+
+    issue_time = get_issue_time(root)
+    station_coord = coord_voor_station(naam)
+    lon_lat = station_coord if station_coord is not None else (None, None)
+    lon, lat = lon_lat
+
+    # Ruwe waarden ophalen
+    tx_raw   = parse_values(root, 'TX')
+    tn_raw   = parse_values(root, 'TN')
+    tg_raw   = parse_values(root, 'TG')     # DWD: min. temp 5cm boven grond, laatste 12u
+    ttt_raw  = parse_values(root, 'TTT')
+    ff_raw   = parse_values(root, 'FF')
+    fx_raw   = parse_values(root, 'FX1')
+    dd_raw   = parse_values(root, 'DD')
+    rr_raw   = parse_values(root, 'RR1c')
+    sd_raw   = parse_values(root, 'SunD1')
+    td_raw   = parse_values(root, 'Td')
+    neff_raw = parse_values(root, 'Neff')
+    vv_raw   = parse_values(root, 'VV')      # zicht in meters
+    wwm_raw  = parse_values(root, 'wwM')     # kans op mist %
+    wwz_raw  = parse_values(root, 'wwZ')     # kans op hagel %
+    wwt_raw  = parse_values(root, 'wwT')     # kans op onweer per uur %
+    wwch_raw = parse_values(root, 'wwCh')    # kans convectieve neerslag 12u %
+    # POP per drempel (12u-venster)
+    r_raw = {
+        "R101": parse_values(root, 'R101'),  # ≥0.1 mm (meetbare neerslag)
+        "R110": parse_values(root, 'R110'),  # ≥1.0 mm
+        "R130": parse_values(root, 'R130'),  # ≥3.0 mm
+        "R150": parse_values(root, 'R150'),  # ≥5.0 mm
+    }
+    r101_raw = r_raw["R101"]  # backwards-compat referentie (niet meer gebruikt hieronder)
+    fxh25_raw = parse_values(root, 'FXh25')  # kans windstoot >25kt (46 km/u) 12u %
+    fxh40_raw = parse_values(root, 'FXh40')  # kans windstoot >40kt (74 km/u) 12u %
+    fxh55_raw = parse_values(root, 'FXh55')  # kans windstoot >55kt (102 km/u) 12u %
+    sad_raw  = parse_values(root, 'Sad')     # sneeuwval 24u in cm (DWD: 0.01m → ×100)
+    nl_raw   = parse_values(root, 'Nl')      # lage bewolking %
+    nm_raw   = parse_values(root, 'Nm')      # midden bewolking %
+    nh_raw   = parse_values(root, 'Nh')      # hoge bewolking %
+
+    # Conversie Kelvin → Celsius
+    tx = [v - 273.15 if v and v > 200 else None for v in tx_raw]
+    tn = [v - 273.15 if v and v > 200 else None for v in tn_raw]
+    tg = [v - 273.15 if v and v > 200 else None for v in tg_raw]
+    ttt = [v - 273.15 if v and v > 200 else None for v in ttt_raw]
+    td = [v - 273.15 if v and v > 200 else None for v in td_raw]
+
+    # Dagaggregatie
+    daily = defaultdict(lambda: {
+        "tx": [], "tn": [], "tg": [],
+        "tx_ochtend": [], "tx_middag": [],
+        "ff_dag": [], "fx_dag": [], "dd_dag": [],
+        "ff_ochtend": [], "fx_ochtend": [], "dd_ochtend": [],
+        "ff_middag": [], "fx_middag": [], "dd_middag": [],
+        "ff_nacht": [], "fx_nacht": [], "dd_nacht": [],
+        "rr": 0.0, "rr_dag": 0.0, "rr_nacht": 0.0,
+        "sd": 0.0, "heeft_sd": False, "neff": [], "nl": [], "nm": [], "nh": [],
+        "r_all": {k: [] for k in ("R101","R110","R130","R150")},
+        "r_d":   {k: None for k in ("R101","R110","R130","R150")},
+        "r_n":   {k: None for k in ("R101","R110","R130","R150")},
+        "td_nacht": [],
+        "gevoels_nacht": [],
+        "vv_min": [],
+        "wwm": [],
+        "wwz": [],
+        "wwt": [],           # onweerkans per uur
+        "wwch": [],          # kans convectieve neerslag 12u
+        "r101": [],          # kans ≥0.1 mm neerslag 12u (POP)
+        "fxh25": [],         # kans stoot >25kt 12u
+        "fxh40": [],         # kans stoot >40kt 12u
+        "fxh55": [],         # kans stoot >55kt 12u
+        "sad": [],           # sneeuwval 24u
+        "rv_middag": [],     # laagste RV 12-18h
+    })
+
+    for i, dt in enumerate(times):
+        loc = dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        d = loc.date()
+        hour = loc.hour
+        dd = daily[d]
+
+        # TX: max temp, geldig ≥12h lokaal
+        if i < len(tx) and tx[i] is not None and hour >= 12:
+            dd["tx"].append(tx[i])
+
+        # TN: min temp, geldig <12h lokaal
+        if i < len(tn) and tn[i] is not None and hour < 12:
+            dd["tn"].append(tn[i])
+
+        # TG: min. temp 5cm boven grond (DWD, 12-uurs min), geldig <12h lokaal
+        if i < len(tg) and tg[i] is not None and hour < 12:
+            dd["tg"].append(tg[i])
+
+        # Uurlijkse temperatuur voor max per dagdeel (06-12u en 12-18u)
+        if i < len(ttt) and ttt[i] is not None:
+            if 6 <= hour < 12:
+                dd["tx_ochtend"].append(ttt[i])
+            elif 12 <= hour < 18:
+                dd["tx_middag"].append(ttt[i])
+
+        # Wind: dag 6-18h
+        if 6 <= hour < 18:
+            if i < len(ff_raw) and ff_raw[i] is not None:
+                dd["ff_dag"].append(ff_raw[i])
+                dd["dd_dag"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
+                if hour < 12:
+                    dd["ff_ochtend"].append(ff_raw[i])
+                    dd["dd_ochtend"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
+                else:
+                    dd["ff_middag"].append(ff_raw[i])
+                    dd["dd_middag"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
+            if i < len(fx_raw) and fx_raw[i] is not None:
+                dd["fx_dag"].append(fx_raw[i])
+                if hour < 12:
+                    dd["fx_ochtend"].append(fx_raw[i])
+                else:
+                    dd["fx_middag"].append(fx_raw[i])
+        # Wind: nacht 18-06h
+        else:
+            if i < len(ff_raw) and ff_raw[i] is not None:
+                dd["ff_nacht"].append(ff_raw[i])
+                dd["dd_nacht"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
+            if i < len(fx_raw) and fx_raw[i] is not None:
+                dd["fx_nacht"].append(fx_raw[i])
+
+        # Neerslag: hele dag + dag/nacht apart
+        if i < len(rr_raw) and rr_raw[i] is not None:
+            dd["rr"] += rr_raw[i]
+            if 6 <= hour < 18:
+                dd["rr_dag"] += rr_raw[i]
+            else:
+                dd["rr_nacht"] += rr_raw[i]
+
+        # Zon: SunD1 (seconden afgelopen uur)
+        if i < len(sd_raw) and sd_raw[i] is not None:
+            dd["sd"] += sd_raw[i] / 3600.0
+            dd["heeft_sd"] = True
+
+        # Bewolking: hele dag (totale + hoog/midden/laag)
+        if i < len(neff_raw) and neff_raw[i] is not None:
+            dd["neff"].append(neff_raw[i])
+        if i < len(nl_raw) and nl_raw[i] is not None:
+            dd["nl"].append(nl_raw[i])
+        if i < len(nm_raw) and nm_raw[i] is not None:
+            dd["nm"].append(nm_raw[i])
+        if i < len(nh_raw) and nh_raw[i] is not None:
+            dd["nh"].append(nh_raw[i])
+
+        # Dauwpunt: nacht 0-12h
+        if 0 <= hour < 12:
+            if i < len(td) and td[i] is not None:
+                dd["td_nacht"].append(td[i])
+
+        # Gevoelstemperatuur: nacht 0-12h
+        if 0 <= hour < 12:
+            t_val = ttt[i] if i < len(ttt) else None
+            f_val = ff_raw[i] if i < len(ff_raw) else None
+            if t_val is not None and f_val is not None:
+                dd["gevoels_nacht"].append(windchill(t_val, f_val))
+
+        # Zicht / mist: minimum over hele dag (meters)
+        if i < len(vv_raw) and vv_raw[i] is not None:
+            dd["vv_min"].append(vv_raw[i])
+
+        # Mistkans: max over 00-12h lokaal (%)
+        if hour < 12 and i < len(wwm_raw) and wwm_raw[i] is not None:
+            dd["wwm"].append(wwm_raw[i])
+
+        # Hagelkans: max over hele dag (%)
+        if i < len(wwz_raw) and wwz_raw[i] is not None:
+            dd["wwz"].append(wwz_raw[i])
+
+        # Onweerkans: max over hele dag (%)
+        if i < len(wwt_raw) and wwt_raw[i] is not None:
+            dd["wwt"].append(wwt_raw[i])
+
+        # Kans convectieve neerslag: max over hele dag (%)
+        if i < len(wwch_raw) and wwch_raw[i] is not None:
+            dd["wwch"].append(wwch_raw[i])
+
+        # POP per drempel (R101/R110/R130/R150, 12u-venster).
+        # MOSMIX plaatst waarde op eindtijd; 12u-venster ervóór:
+        #   hour == 18 lokaal → venster 06-18 (dag) van dag d     → R*_D[d]
+        #   hour == 06 lokaal → venster 18-06 eindigend op dag d  → nacht van d-1
+        for _key, _raw in r_raw.items():
+            if i < len(_raw) and _raw[i] is not None:
+                dd["r_all"][_key].append(_raw[i])
+                if hour == 18:
+                    dd["r_d"][_key] = _raw[i]
+                elif hour == 6:
+                    daily[d - timedelta(days=1)]["r_n"][_key] = _raw[i]
+
+        # Sneeuwval: som over hele dag (cm)
+        if i < len(sad_raw) and sad_raw[i] is not None:
+            dd["sad"].append(sad_raw[i])
+
+        # Windstootkansen: max over hele dag (12-uurs kansen)
+        if i < len(fxh25_raw) and fxh25_raw[i] is not None:
+            dd["fxh25"].append(fxh25_raw[i])
+        if i < len(fxh40_raw) and fxh40_raw[i] is not None:
+            dd["fxh40"].append(fxh40_raw[i])
+        if i < len(fxh55_raw) and fxh55_raw[i] is not None:
+            dd["fxh55"].append(fxh55_raw[i])
+
+        # Relatieve vochtigheid middag (12-18h)
+        if 12 <= hour < 18:
+            t_val = ttt[i] if i < len(ttt) else None
+            td_val = td[i] if i < len(td) else None
+            if t_val is not None and td_val is not None:
+                dd["rv_middag"].append(round(rh_from_td(t_val, td_val)))
+
+    # Aggregeer naar eindwaarden per dag
+    result = {}
+    for d, dd in daily.items():
+        r = {}
+        r["TX"] = round(max(dd["tx"]), 1) if dd["tx"] else None
+        r["TN"] = round(min(dd["tn"]), 1) if dd["tn"] else None
+        r["TG"] = round(min(dd["tg"]), 1) if dd["tg"] else None
+
+        # Max temp per dagdeel uit uurlijkse TTT.
+        # TTT is instantaan per uur; DWD's MOS-TX (12-uurs) ligt 0.5-1.5°C hoger door
+        # sub-uurlijke pieken en statistische calibratie. We ankeren het dagdeel met
+        # de TTT-piek aan TX zodat max(TX_O, TX_M) == TX; het andere dagdeel blijft
+        # op ruwe TTT (veilige ondergrens, want de echte dagpiek ligt daar niet).
+        tx_o_raw = round(max(dd["tx_ochtend"]), 1) if dd["tx_ochtend"] else None
+        tx_m_raw = round(max(dd["tx_middag"]), 1) if dd["tx_middag"] else None
+        tx_daily = round(max(dd["tx"]), 1) if dd["tx"] else None
+        if tx_daily is not None and (tx_o_raw is not None or tx_m_raw is not None):
+            ttt_peak = max(v for v in (tx_o_raw, tx_m_raw) if v is not None)
+            if tx_daily > ttt_peak:
+                if tx_m_raw is not None and (tx_o_raw is None or tx_m_raw >= tx_o_raw):
+                    tx_m_raw = tx_daily
+                else:
+                    tx_o_raw = tx_daily
+        r["TX_O"] = tx_o_raw
+        r["TX_M"] = tx_m_raw
+
+        # Wind
+        if dd["ff_dag"]:
+            r["FF"] = round(sum(dd["ff_dag"]) / len(dd["ff_dag"]) * 3.6, 1)  # km/h
+            # DD bij max FF
+            max_idx = dd["ff_dag"].index(max(dd["ff_dag"]))
+            r["DD"] = round(dd["dd_dag"][max_idx]) if max_idx < len(dd["dd_dag"]) and dd["dd_dag"][max_idx] is not None else None
+        else:
+            r["FF"] = None
+            r["DD"] = None
+
+        r["FX"] = round(max(dd["fx_dag"]) * 3.6, 1) if dd["fx_dag"] else None
+
+        # Wind ochtend (06-12h)
+        if dd["ff_ochtend"]:
+            r["FF_O"] = round(sum(dd["ff_ochtend"]) / len(dd["ff_ochtend"]) * 3.6, 1)
+            max_idx_o = dd["ff_ochtend"].index(max(dd["ff_ochtend"]))
+            r["DD_O"] = round(dd["dd_ochtend"][max_idx_o]) if max_idx_o < len(dd["dd_ochtend"]) and dd["dd_ochtend"][max_idx_o] is not None else None
+        else:
+            r["FF_O"] = None
+            r["DD_O"] = None
+        r["FX_O"] = round(max(dd["fx_ochtend"]) * 3.6, 1) if dd["fx_ochtend"] else None
+
+        # Wind middag (12-18h)
+        if dd["ff_middag"]:
+            r["FF_M"] = round(sum(dd["ff_middag"]) / len(dd["ff_middag"]) * 3.6, 1)
+            max_idx_m = dd["ff_middag"].index(max(dd["ff_middag"]))
+            r["DD_M"] = round(dd["dd_middag"][max_idx_m]) if max_idx_m < len(dd["dd_middag"]) and dd["dd_middag"][max_idx_m] is not None else None
+        else:
+            r["FF_M"] = None
+            r["DD_M"] = None
+        r["FX_M"] = round(max(dd["fx_middag"]) * 3.6, 1) if dd["fx_middag"] else None
+
+        # Wind nacht (18-06h)
+        if dd["ff_nacht"]:
+            r["FF_N"] = round(sum(dd["ff_nacht"]) / len(dd["ff_nacht"]) * 3.6, 1)
+            max_idx_n = dd["ff_nacht"].index(max(dd["ff_nacht"]))
+            r["DD_N"] = round(dd["dd_nacht"][max_idx_n]) if max_idx_n < len(dd["dd_nacht"]) and dd["dd_nacht"][max_idx_n] is not None else None
+        else:
+            r["FF_N"] = None
+            r["DD_N"] = None
+        r["FX_N"] = round(max(dd["fx_nacht"]) * 3.6, 1) if dd["fx_nacht"] else None
+
+        # Neerslag
+        r["RR"] = round(dd["rr"], 1)
+        r["RR_D"] = round(dd["rr_dag"], 1)
+        r["RR_N"] = round(dd["rr_nacht"], 1)
+
+        # Zon
+        neff_gem = round(sum(dd["neff"]) / len(dd["neff"])) if dd["neff"] else None
+        if dd["heeft_sd"]:
+            r["SQ"] = round(dd["sd"], 1)
+        elif neff_gem is not None:
+            r["SQ"] = sd_uit_neff(neff_gem, d)
+        else:
+            r["SQ"] = None
+
+        # Bewolking (gemiddelde per dag, in %)
+        r["Neff"] = neff_gem
+        r["Nl"] = round(sum(dd["nl"]) / len(dd["nl"])) if dd["nl"] else None
+        r["Nm"] = round(sum(dd["nm"]) / len(dd["nm"])) if dd["nm"] else None
+        r["Nh"] = round(sum(dd["nh"]) / len(dd["nh"])) if dd["nh"] else None
+
+        # Dauwpunt (minimum nachts)
+        r["TTD"] = round(min(dd["td_nacht"]), 1) if dd["td_nacht"] else None
+
+        # Gevoelstemperatuur (minimum nachts)
+        r["gevoels"] = round(min(dd["gevoels_nacht"]), 1) if dd["gevoels_nacht"] else None
+
+        # Zicht minimum (km)
+        r["VV"] = round(min(dd["vv_min"]) / 1000, 1) if dd["vv_min"] else None
+
+        # Mistkans max (%)
+        r["wwM"] = round(max(dd["wwm"])) if dd["wwm"] else None
+
+        # Hagelkans max (%)
+        r["wwZ"] = round(max(dd["wwz"])) if dd["wwz"] else None
+
+        # Onweerkans max (%)
+        r["wwT"] = round(max(dd["wwt"])) if dd["wwt"] else None
+
+        # Kans convectieve neerslag max (%)
+        r["wwCh"] = round(max(dd["wwch"])) if dd["wwch"] else None
+
+        # POP per drempel (%) — ≥0,1 / ≥1 / ≥3 / ≥5 mm, 12u-venster
+        for _key in ("R101","R110","R130","R150"):
+            vals = dd["r_all"][_key]
+            r[_key]        = round(max(vals)) if vals else None
+            r[_key + "_D"] = round(dd["r_d"][_key]) if dd["r_d"][_key] is not None else None
+            r[_key + "_N"] = round(dd["r_n"][_key]) if dd["r_n"][_key] is not None else None
+
+        # Sneeuwval max (cm) — DWD levert in m, ×100 naar cm
+        r["Sad"] = round(max(dd["sad"]) * 100, 1) if dd["sad"] else None
+
+        # Windstootkansen max (%)
+        r["FXh25"] = round(max(dd["fxh25"])) if dd["fxh25"] else None
+        r["FXh40"] = round(max(dd["fxh40"])) if dd["fxh40"] else None
+        r["FXh55"] = round(max(dd["fxh55"])) if dd["fxh55"] else None
+
+        # Laagste relatieve vochtigheid middag
+        r["RV_M"] = round(min(dd["rv_middag"])) if dd["rv_middag"] else None
+
+        result[d] = r
+
+    # ── Uurlijkse data voor demo/tabel-pagina ──
+    def _r1(v): return round(v, 1) if v is not None else None
+    def _ri(v): return round(v) if v is not None else None
+    def _mskmh(v): return round(v * 3.6, 1) if v is not None else None
+
+    # Bereken RV uit T + Td per uur
+    rv_uurlijks = []
+    for i in range(len(times)):
+        t_val = ttt[i] if i < len(ttt) else None
+        td_val = td[i] if i < len(td) else None
+        if t_val is not None and td_val is not None:
+            rv_uurlijks.append(round(rh_from_td(t_val, td_val)))
+        else:
+            rv_uurlijks.append(None)
+
+    tijden_lokaal = [dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).strftime("%Y-%m-%dT%H:%M") for dt in times]
+
+    hourly = {
+        "tijden": tijden_lokaal,
+        "TTT":  [_r1(v) for v in ttt],
+        "Td":   [_r1(v) for v in td],
+        "RV":   rv_uurlijks,
+        "FF":   [_mskmh(v) for v in ff_raw],
+        "FX1":  [_mskmh(v) for v in fx_raw],
+        "DD":   [_ri(v) for v in dd_raw],
+        "RR1c": [_r1(v) for v in rr_raw],
+        "Neff": [_ri(v) for v in neff_raw],
+        "Nl":   [_ri(v) for v in nl_raw],
+        "Nm":   [_ri(v) for v in nm_raw],
+        "Nh":   [_ri(v) for v in nh_raw],
+        "VV":   [_ri(v) for v in vv_raw],
+        "SunD1":[_ri(v) for v in sd_raw],
+        "wwT":  [_ri(v) for v in wwt_raw],
+    }
+
+    return result, hourly, issue_time
+
+# ── JSON samenstellen ────────────────────────────────────────────────────────
+
+def bouw_json(stations, coords, output_file, uurlijks_file=None):
+    print(f"\n{'='*60}")
+    print(f"  {output_file} — {len(stations)} stations")
+    print(f"{'='*60}")
+
+    vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
+    alle_data = {}       # {naam: {date: {param: val}}}
+    alle_uurlijks = {}   # {naam: {tijden:[], TTT:[], ...}}
+    laatste_run = None   # IssueTime van het model
+
+    for code, naam in stations:
+        print(f"  {naam} ({code})...")
+        station_data, station_hourly, issue_time = verwerk_station(code, naam)
+        if station_data:
+            alle_data[naam] = station_data
+        if station_hourly:
+            alle_uurlijks[naam] = station_hourly
+        if issue_time is not None and (laatste_run is None or issue_time > laatste_run):
+            laatste_run = issue_time
+
+    # Bepaal 10 dagen vanaf vandaag
+    alle_datums = set()
+    for naam, sd in alle_data.items():
+        for d in sd.keys():
+            if d >= vandaag:
+                alle_datums.add(d)
+    dagen = sorted(alle_datums)[:10]
+
+    if not dagen:
+        # Loud naar stderr: bestaand JSON-bestand wordt NIET overschreven en blijft
+        # dus staan tot een volgende run wél data oplevert. Zonder dit signaal kan
+        # een week oude verwachting ongemerkt naar R2 blijven uploaden.
+        import sys
+        print(f"  [STALE] GEEN verse data voor {output_file} — bestand niet "
+              f"overschreven, oude inhoud blijft.", file=sys.stderr)
+        print("  GEEN DATA!"); return
+
+    # Structureer data per dag per parameter
+    data_out = {}
+    params = ["TX", "TX_O", "TX_M", "TN", "TG", "RR", "RR_D", "RR_N", "FF", "FX", "DD", "FF_O", "FX_O", "DD_O", "FF_M", "FX_M", "DD_M", "FF_N", "FX_N", "DD_N", "SQ", "TTD", "Neff", "gevoels", "VV", "wwM", "wwZ", "wwT", "wwCh",
+        "R101","R101_D","R101_N", "R110","R110_D","R110_N",
+        "R130","R130_D","R130_N", "R150","R150_D","R150_N",
+        "Nl", "Nm", "Nh", "Sad", "FXh25", "FXh40", "FXh55", "RV_M"]
+
+    for d in dagen:
+        dag_key = d.isoformat()
+        data_out[dag_key] = {}
+        for p in params:
+            data_out[dag_key][p] = {}
+            for naam in alle_data:
+                val = alle_data[naam].get(d, {}).get(p)
+                if val is not None:
+                    data_out[dag_key][p][naam] = val
+
+    # Run-tijd formatteren (bijv. "2026-04-01T09:00:00Z")
+    run_str = laatste_run.strftime("%Y-%m-%dT%H:%M:%SZ") if laatste_run else None
+
+    output = {
+        "bijgewerkt": datetime.now().isoformat(timespec="minutes"),
+        "run": run_str,
+        "stations": coords,
+        "dagen": [d.isoformat() for d in dagen],
+        "data": data_out,
+    }
+
+    with open(output_file, "w") as f:
+        json.dump(output, f, ensure_ascii=False)
+
+    # Bestandsgrootte
+    size = os.path.getsize(output_file)
+    print(f"\n  {output_file}: {size/1024:.0f} KB, {len(dagen)} dagen, {len(alle_data)} stations")
+
+    # ── Uurlijkse JSON (voor demo_mosmix_uurlijks.html) ──
+    if uurlijks_file is not None and alle_uurlijks:
+        # Knip uurlijkse data af op 10 dagen ná vandaag om bestand klein te houden
+        limiet = f"{dagen[-1]}T23:59" if dagen else None
+        uur_out = {}
+        for naam, h in alle_uurlijks.items():
+            if limiet:
+                idx = [i for i, t in enumerate(h["tijden"]) if t <= limiet]
+                if not idx:
+                    continue
+                einde = idx[-1] + 1
+                h_cut = {k: v[:einde] for k, v in h.items()}
+            else:
+                h_cut = h
+            uur_out[naam] = h_cut
+
+        uurlijks_output = {
+            "bijgewerkt": datetime.now().isoformat(timespec="minutes"),
+            "run": run_str,
+            "stations": coords,
+            "data": uur_out,
+        }
+        with open(uurlijks_file, "w") as f:
+            json.dump(uurlijks_output, f, ensure_ascii=False)
+        usize = os.path.getsize(uurlijks_file)
+        print(f"  {uurlijks_file}: {usize/1024:.0f} KB, {len(uur_out)} stations uurlijks")
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    import time
+    t0 = time.time()
+    print(f"MOSMIX JSON generator — {datetime.now():%Y-%m-%d %H:%M}")
+
+    bouw_json(STATIONS_NL, COORDS_NL, "mosmix_nl.json", "mosmix_uurlijks_nl.json")
+    bouw_json(STATIONS_BE, COORDS_BE, "mosmix_be.json", "mosmix_uurlijks_be.json")
+    bouw_json(STATIONS_FR, COORDS_FR, "mosmix_fr.json", "mosmix_uurlijks_fr.json")
+    bouw_json(STATIONS_IBE, COORDS_IBE, "mosmix_ibe.json", "mosmix_uurlijks_ibe.json")
+    bouw_json(STATIONS_DE, COORDS_DE, "mosmix_de.json", "mosmix_uurlijks_de.json")
+    bouw_json(STATIONS_GB, COORDS_GB, "mosmix_gb.json", "mosmix_uurlijks_gb.json")
+    bouw_json(STATIONS_GR, COORDS_GR, "mosmix_gr.json", "mosmix_uurlijks_gr.json")
+    bouw_json(STATIONS_TR, COORDS_TR, "mosmix_tr.json", "mosmix_uurlijks_tr.json")
+    bouw_json(STATIONS_SCAN, COORDS_SCAN, "mosmix_scan.json", "mosmix_uurlijks_scan.json")
+    bouw_json(STATIONS_IT, COORDS_IT, "mosmix_it.json", "mosmix_uurlijks_it.json")
+    bouw_json(STATIONS_ALPS, COORDS_ALPS, "mosmix_alps.json", "mosmix_uurlijks_alps.json")
+    bouw_json(STATIONS_IC, COORDS_IC, "mosmix_ic.json", "mosmix_uurlijks_ic.json")
+    bouw_json(STATIONS_CE, COORDS_CE, "mosmix_ce.json", "mosmix_uurlijks_ce.json")
+    bouw_json(STATIONS_BALKAN, COORDS_BALKAN, "mosmix_balkan.json", "mosmix_uurlijks_balkan.json")
+    bouw_json(STATIONS_EE, COORDS_EE, "mosmix_ee.json", "mosmix_uurlijks_ee.json")
+
+    print(f"\nKlaar in {time.time()-t0:.0f}s")
+
+if __name__ == "__main__":
+    main()

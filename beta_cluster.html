@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Z500 Clusterkaarten — ECMWF ENS</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --breedte: 960px; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: #0f172a;
+    color: #f8fafc;
+    padding: 11px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid #1e3a5f;
+  }
+  .header-titel { font-size: 1rem; font-weight: 700; }
+  .header-sub   { font-size: .76rem; color: #64748b; font-family: 'DM Mono', monospace; }
+  .meta-chip    { margin-left: auto; font-size: .73rem; color: #475569;
+                  background: #1e293b; padding: 3px 10px; border-radius: 999px;
+                  white-space: nowrap; }
+
+  /* Info-knop */
+  .info-btn {
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22);
+    color: #e2e8f0; border-radius: 50%; width: 24px; height: 24px;
+    font-size: .8rem; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: background .15s;
+  }
+  .info-btn:hover { background: rgba(255,255,255,.22); }
+
+  /* Info-modal */
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 100; align-items: flex-start; justify-content: center;
+    padding: 48px 16px; overflow-y: auto;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: white; border-radius: 12px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.25);
+    max-width: 660px; width: 100%; overflow: hidden;
+  }
+  .modal-hdr {
+    background: #0f172a; color: white; padding: 13px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-hdr h2 { font-size: .95rem; font-weight: 700; }
+  .modal-sluit { background: none; border: none; color: #94a3b8;
+                 font-size: 1.2rem; cursor: pointer; line-height: 1; }
+  .modal-sluit:hover { color: white; }
+  .modal-body { padding: 18px 20px; font-size: .85rem; line-height: 1.75; color: #334155; }
+  .modal-body h3 {
+    font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: #64748b; margin: 16px 0 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px;
+  }
+  .modal-body h3:first-child { margin-top: 0; }
+  .modal-body p { margin-bottom: 7px; }
+  .modal-body strong { color: #0f172a; }
+  .modal-body a { color: #2563eb; }
+
+  tabel { width: 100%; border-collapse: collapse; font-size: .8rem; margin: 6px 0; }
+  tabel th { background: #f8fafc; padding: 5px 9px; border: 1px solid #e2e8f0;
+             font-weight: 600; color: #475569; text-align: left; }
+  tabel td { padding: 5px 9px; border: 1px solid #e2e8f0; }
+
+  .kleur-rij  { display: flex; gap: 14px; flex-wrap: wrap; margin: 6px 0; }
+  .kleur-chip { display: flex; align-items: center; gap: 6px; font-size: .79rem; color: #334155; }
+  .kleur-blok { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+
+  /* Toolbar */
+  .toolbar {
+    background: #1e293b; padding: 8px 16px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    border-bottom: 1px solid #334155;
+  }
+  .toolbar label { font-size: .77rem; color: #94a3b8; white-space: nowrap; }
+  .toolbar input[type=range] { width: 180px; accent-color: #3b82f6; cursor: pointer; }
+  .zoom-px { font-size: .77rem; color: #e2e8f0; font-variant-numeric: tabular-nums; min-width: 48px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 3px; padding: 10px 16px 0; background: #1e293b; flex-wrap: wrap; }
+  .tab-btn {
+    background: #334155; color: #94a3b8;
+    border: none; border-radius: 6px 6px 0 0;
+    padding: 7px 18px; font-size: .83rem; font-weight: 600;
+    cursor: pointer; transition: background .15s, color .15s;
+    font-family: inherit;
+  }
+  .tab-btn:hover { background: #475569; color: #f1f5f9; }
+  .tab-btn.actief { background: #f1f5f9; color: #0f172a; }
+
+  /* Kaart */
+  .kaart-wrap { padding: 14px 16px; display: none; }
+  .kaart-wrap.actief { display: block; }
+  .kaart-box {
+    background: white; border-radius: 8px;
+    box-shadow: 0 2px 14px rgba(0,0,0,.09);
+    overflow: hidden; display: inline-block;
+    width: var(--breedte); max-width: 100%;
+  }
+  .kaart-box img { width: 100%; height: auto; display: block; }
+  .kaart-leeg {
+    padding: 52px 20px; text-align: center;
+    color: #94a3b8; font-size: .9rem;
+  }
+
+  footer {
+    padding: 14px 16px; font-size: .72rem;
+    color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0;
+    margin-top: 8px;
+  }
+  footer a { color: #3b82f6; }
+</style>
+</head>
+<body>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal-bg" onclick="sluitModal(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h2>ℹ️ Z500 Ensemble-scenario's — methodologie</h2>
+      <button class="modal-sluit" onclick="sluitModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <h3>Wat zie ik?</h3>
+      <p>De 51 leden (50 perturbed + controle) van het <strong>ECMWF IFS Ensemble (ENS)</strong> worden geclusterd in
+      weersscenario's op basis van de <strong>500 hPa geopotentiaalvelden</strong>.
+      Per scenario wordt het meest representatieve ENS-lid geplot.</p>
+
+      <h3>Tijdsintervallen</h3>
+      <table is="tabel" style="width:100%;border-collapse:collapse;font-size:.8rem;margin:6px 0">
+        <thead><tr>
+          <th style="background:#f8fafc;padding:5px 9px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Tab</th>
+          <th style="background:#f8fafc;padding:5px 9px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Uren</th>
+          <th style="background:#f8fafc;padding:5px 9px;border:1px solid #e2e8f0;font-weight:600;color:#475569">Stappen</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding:5px 9px;border:1px solid #e2e8f0">Dag 3–4</td><td style="padding:5px 9px;border:1px solid #e2e8f0">72–96h</td><td style="padding:5px 9px;border:1px solid #e2e8f0">5 × 6h gemiddeld</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid #e2e8f0">Dag 5–7</td><td style="padding:5px 9px;border:1px solid #e2e8f0">120–168h</td><td style="padding:5px 9px;border:1px solid #e2e8f0">9 × 6h gemiddeld</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid #e2e8f0">Dag 8–10</td><td style="padding:5px 9px;border:1px solid #e2e8f0">192–240h</td><td style="padding:5px 9px;border:1px solid #e2e8f0">9 × 6h gemiddeld</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Clustermethode</h3>
+      <p><strong>1. EOF-decompositie</strong> — het ensemble wordt gecomprimeerd naar de leading EOFs
+      die ≥ 80% van de ENS-variantie verklaren.</p>
+      <p><strong>2. K-means</strong> op de EOF-scores, 2–6 clusters.
+      Optimaal aantal bepaald via silhouettescore (plus een minimumdrempel per interval).</p>
+      <p><strong>3. Representatief lid</strong> = ENS-lid met kleinste RMS-afstand tot het clustercentroïde.</p>
+
+      <h3>Kaart lezen</h3>
+      <p><strong>Isopletenlijnen</strong> — z500 in dam. Dun elke 4 dam, dik elke 8 dam.</p>
+      <p><strong>Kleurvlak</strong> — afwijking repr. lid t.o.v. ENS-gemiddelde:</p>
+      <div class="kleur-rij">
+        <div class="kleur-chip"><div class="kleur-blok" style="background:#2166ac"></div>blauw = lager z500 (trog)</div>
+        <div class="kleur-chip"><div class="kleur-blok" style="background:#d73027"></div>rood = hoger z500 (rug)</div>
+        <div class="kleur-chip"><div class="kleur-blok" style="background:#f7f7f7;border:1px solid #ccc"></div>wit = nabij gemiddelde</div>
+      </div>
+      <p>Percentage en lid-nummer staan als badge linksboven in elk kaartpaneel.
+      Scenario-kleuren: blauw (sc.1), groen (sc.2), rood (sc.3), paars (sc.4).</p>
+
+      <h3>Databron</h3>
+      <p>ECMWF IFS ENS 51 leden · 500 hPa geopotentiaal ·
+      <a href="https://open-meteo.com" target="_blank">Open-Meteo ensemble API</a> ·
+      2.5° grid · 400 punten over Europa<br>
+      Methodologie: <a href="https://www.ecmwf.int/en/forecasts/documentation-and-support/ens-cluster-products" target="_blank">ECMWF ENS Cluster Products</a></p>
+
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="header-titel">🌐 Z500 Ensemble-scenario's — ECMWF IFS ENS</div>
+    <div class="header-sub">EOF + k-means clustering · 2–6 clusters · representatief lid per scenario</div>
+  </div>
+  <button class="info-btn" onclick="openModal()" title="Methodologie">i</button>
+  <div class="meta-chip" id="meta-chip">Laden…</div>
+</div>
+
+<!-- Breedte-slider -->
+<div class="toolbar">
+  <label for="zoom-sl">🔍 Breedte:</label>
+  <input type="range" id="zoom-sl" min="400" max="2000" step="10" value="960"
+         oninput="stelBreedte(+this.value)">
+  <span class="zoom-px" id="zoom-lbl">960px</span>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn actief" data-int="int1">📅 72–96h · dag 3–4</button>
+  <button class="tab-btn"        data-int="int2">📅 120–168h · dag 5–7</button>
+  <button class="tab-btn"        data-int="int3">📅 192–240h · dag 8–10</button>
+</div>
+
+<!-- Kaartpanelen -->
+<div id="wrap-int1" class="kaart-wrap actief">
+  <div class="kaart-box" id="box-int1"><div class="kaart-leeg">Laden…</div></div>
+</div>
+<div id="wrap-int2" class="kaart-wrap">
+  <div class="kaart-box" id="box-int2"><div class="kaart-leeg">Laden…</div></div>
+</div>
+<div id="wrap-int3" class="kaart-wrap">
+  <div class="kaart-box" id="box-int3"><div class="kaart-leeg">Laden…</div></div>
+</div>
+
+<footer>
+  ECMWF IFS ENS 51 leden · <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> ·
+  500 hPa geopotentiaal · 2.5° grid · weerlab.nl
+</footer>
+
+<script>
+const R2 = 'https://data.weerlab.nl';
+const INTS = ['int1','int2','int3'];
+const SK = 'beta_cluster_breedte';
+
+// Modal
+function openModal()  { document.getElementById('modal-bg').classList.add('open'); }
+function sluitModal(e) {
+  if (!e || e.target === document.getElementById('modal-bg'))
+    document.getElementById('modal-bg').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') sluitModal(); });
+
+// Breedte
+function stelBreedte(px, opslaan=true) {
+  document.documentElement.style.setProperty('--breedte', px+'px');
+  document.getElementById('zoom-lbl').textContent = px+'px';
+  document.getElementById('zoom-sl').value = px;
+  if(opslaan) try { localStorage.setItem(SK, px); } catch {}
+}
+(function(){
+  try { const v=+localStorage.getItem(SK); if(v>=400&&v<=2000) stelBreedte(v,false); } catch {}
+})();
+
+// Tabs
+function wisselTab(int) {
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('actief', b.dataset.int===int));
+  document.querySelectorAll('.kaart-wrap').forEach(d =>
+    d.classList.toggle('actief', d.id==='wrap-'+int));
+  try { localStorage.setItem('beta_cluster_tab', int); } catch {}
+}
+document.querySelectorAll('.tab-btn').forEach(b =>
+  b.addEventListener('click', () => wisselTab(b.dataset.int)));
+
+// Datum formatteren
+function fmtDt(s) {
+  if(!s) return '';
+  const d = new Date(s.replace('T',' ')+':00Z');
+  if(isNaN(d)) return s;
+  return `${String(d.getUTCDate()).padStart(2,'0')}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')} UTC`;
+}
+
+// Kaart laden
+function laadKaart(id, bestand) {
+  const box = document.getElementById('box-'+id);
+  if(!bestand) { box.innerHTML='<div class="kaart-leeg">Niet beschikbaar</div>'; return; }
+  const url = R2+'/'+bestand;
+  const img = new Image();
+  img.onload  = () => { box.innerHTML=''; box.appendChild(img); };
+  img.onerror = () => { box.innerHTML=`<div class="kaart-leeg">Niet gevonden:<br><code>${url}</code></div>`; };
+  img.src = url+'?t='+Date.now();
+  img.style.cssText = 'width:100%;height:auto;display:block;';
+}
+
+// Meta + kaarten
+fetch(R2+'/cluster_z500_meta.json?t='+Date.now())
+  .then(r => r.ok ? r.json() : null)
+  .catch(() => null)
+  .then(meta => {
+    if(!meta) {
+      document.getElementById('meta-chip').textContent = 'Kaarten niet beschikbaar';
+      INTS.forEach(i => { document.getElementById('box-'+i).innerHTML=
+        '<div class="kaart-leeg">Nog niet gegenereerd — draai het script</div>'; });
+      return;
+    }
+    document.getElementById('meta-chip').textContent =
+      'Bijgewerkt: '+fmtDt(meta.bijgewerkt)+(meta.run?' · Run: '+meta.run:'');
+    INTS.forEach(i => laadKaart(i, meta.bestanden?.[i]));
+  });
+
+// Herstel tab
+try { const t=localStorage.getItem('beta_cluster_tab');
+  if(t&&INTS.includes(t)) wisselTab(t); } catch {}
+</script>
+</body>
+</html>

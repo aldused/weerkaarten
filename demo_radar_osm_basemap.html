@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>DEMO — OSM straatkaart onder KNMI-radar</title>
+<style>
+  :root {
+    --slate:#0f172a; --slate2:#1e293b; --line:#e3e8ef; --bg:#f6f8fb;
+    --accent:#2563eb; --txt:#0f172a; --muted:#64748b;
+    --radius:12px; --shadow:0 6px 24px rgba(15,23,42,.16);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--txt); }
+  .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .note {
+    background:#fff8e6; border:1px solid #f4d36a; border-radius:10px;
+    padding:10px 13px; font-size:12.5px; color:#7a5a00; margin:0 0 14px; line-height:1.5;
+  }
+  .note b { color:#5c4400; }
+  .stage { position:relative; border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); background:#aab9c9; }
+  canvas { display:block; width:100%; height:auto; touch-action:none; cursor:grab; }
+  canvas:active { cursor:grabbing; }
+  /* overlay-koppen */
+  .ov-top, .ov-bot {
+    position:absolute; left:10px; right:10px; display:flex; align-items:center; gap:10px;
+    background:rgba(15,23,42,.82); color:#fff; padding:8px 12px; border-radius:10px;
+    backdrop-filter:blur(4px); font-size:13px; pointer-events:none;
+  }
+  .ov-top { top:10px; }
+  .ov-bot { bottom:10px; font-size:11px; opacity:.92; }
+  .ov-top .t { font-weight:700; }
+  .ov-top .z { margin-left:auto; font-variant-numeric:tabular-nums; opacity:.85; }
+  /* knoppenbalk */
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0 0; }
+  .bar .lbl { font-size:12px; color:var(--muted); margin-right:2px; }
+  button.tg, button.zm {
+    border:1px solid var(--line); background:#fff; color:var(--txt);
+    padding:7px 13px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer;
+    transition:.12s; display:inline-flex; align-items:center; gap:6px;
+  }
+  button.tg:hover, button.zm:hover { border-color:var(--accent); }
+  button.tg.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .zoomctl { margin-left:auto; display:flex; gap:6px; }
+  button.zm { width:40px; justify-content:center; font-size:18px; padding:6px 0; }
+  .legend { display:flex; align-items:center; gap:0; margin:14px 0 0; font-size:11px; color:var(--muted); }
+  .legend .sw { width:30px; height:12px; }
+  .legend .cap { margin-right:8px; font-weight:600; color:var(--txt); }
+  .legend .tick { width:30px; text-align:center; }
+  .hint { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.55; }
+  .hint code { background:#eef2f7; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DEMO — OpenStreetMap straatkaart onder de KNMI-radar</h1>
+  <p class="sub">Proof-of-concept: straat-tiles (Web Mercator) gereprojecteerd in het bestaande PlateCarree-canvas, met de echte KNMI-kleurschaal erover. Voorbeeld-neerslag.</p>
+
+  <div class="note">
+    <b>Wat dit aantoont:</b> de straatkaart blijft scherp op élke zoom (tiles per zoomniveau), terwijl de
+    <b>radarlaag jouw eigen KNMI-data + kleuren</b> houdt — niets van de pipeline verandert, alleen de ondergrond.
+    Tegels hier = CARTO/OSM (demo). Productie zou <b>MapTiler (EU-hosting, GDPR)</b> gebruiken i.p.v. publieke OSM-tiles.
+  </div>
+
+  <div class="stage">
+    <canvas id="map" width="1040" height="720"></canvas>
+    <div class="ov-top">
+      <span class="t">Neerslagradar — DEMO</span>
+      <span class="z" id="zlabel"></span>
+    </div>
+    <div class="ov-bot" id="attrib">© OpenStreetMap-bijdragers · © CARTO · demo-tegels</div>
+  </div>
+
+  <div class="bar">
+    <span class="lbl">Lagen:</span>
+    <button class="tg on" id="tg-street">🗺 Straatkaart</button>
+    <button class="tg on" id="tg-radar">🌧 Radar</button>
+    <button class="tg" id="tg-labels">🏷 Plaatsnamen apart</button>
+    <div class="zoomctl">
+      <button class="zm" id="zm-out" title="Uitzoomen">−</button>
+      <button class="zm" id="zm-in" title="Inzoomen">+</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"><span class="cap">Neerslag (mm/u)</span></div>
+
+  <p class="hint">
+    Sleep om te pannen, <b>+/−</b> of scroll om te zoomen. Zoom in tot straatniveau om te zien dat de bui
+    exact boven een wijk/straat te plaatsen is — dát is wat OSM toevoegt t.o.v. de huidige topo-ondergrond.
+    Radar = <b>voorbeelddata</b>; in productie blijft het de echte KNMI 1 km gauge-gecorrigeerde radar + nowcast.
+  </p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var cv = document.getElementById("map");
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height;
+
+  // ── KNMI-kleurschaal (overgenomen uit radar.html) ─────────────────────────
+  var MM_LEVELS = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100];
+  var MM_COLORS = [
+    [178,218,248],[120,185,240],[70,148,228],[42,108,212],[16,52,168],
+    [255,255,0],[255,150,0],[255,0,0],[200,0,200]
+  ];
+  function mmColor(mm){
+    if (mm < MM_LEVELS[0]) return null;
+    if (mm >= MM_LEVELS[MM_LEVELS.length-1]) return MM_COLORS[MM_COLORS.length-1];
+    for (var i=MM_LEVELS.length-2;i>=0;i--){
+      if (mm>=MM_LEVELS[i]){
+        var t=(mm-MM_LEVELS[i])/(MM_LEVELS[i+1]-MM_LEVELS[i]);
+        var a=MM_COLORS[i],b=MM_COLORS[i+1];
+        return [a[0]+(b[0]-a[0])*t|0, a[1]+(b[1]-a[1])*t|0, a[2]+(b[2]-a[2])*t|0];
+      }
+    }
+    return MM_COLORS[0];
+  }
+  // legenda opbouwen
+  (function(){
+    var L=document.getElementById("legend");
+    for (var i=0;i<MM_COLORS.length;i++){
+      var c=MM_COLORS[i];
+      var sw=document.createElement("span"); sw.className="sw";
+      sw.style.background="rgb("+c[0]+","+c[1]+","+c[2]+")";
+      L.appendChild(sw);
+    }
+    var ticks=document.createElement("div"); ticks.className="legend"; ticks.style.marginTop="2px";
+    var cap=document.createElement("span"); cap.className="cap"; cap.style.visibility="hidden"; cap.textContent="Neerslag (mm/u)";
+    ticks.appendChild(cap);
+    for (var j=0;j<MM_LEVELS.length;j++){
+      var tk=document.createElement("span"); tk.className="tick"; tk.textContent=MM_LEVELS[j];
+      ticks.appendChild(tk);
+    }
+    L.parentNode.insertBefore(ticks, L.nextSibling);
+  })();
+
+  // ── View (PlateCarree, zoals radar.html) ──────────────────────────────────
+  // ppd = schermpixels per graad lengte; lat krijgt geografische correctie.
+  var view = { lon: 4.478, lat: 51.92, ppd: 520 };  // start: regio Rotterdam
+  function latPPD(){ return view.ppd / Math.cos(view.lat*Math.PI/180); }
+  function lonToX(lon){ return W/2 + (lon-view.lon)*view.ppd; }
+  function latToY(lat){ return H/2 - (lat-view.lat)*latPPD(); }
+  function xToLon(x){ return view.lon + (x-W/2)/view.ppd; }
+  function yToLat(y){ return view.lat - (y-H/2)/latPPD(); }
+
+  // ── Web-Mercator tile-math ────────────────────────────────────────────────
+  function lon2tx(lon,z){ return (lon+180)/360*Math.pow(2,z); }
+  function lat2ty(lat,z){ var r=lat*Math.PI/180; return (1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z); }
+  function tx2lon(x,z){ return x/Math.pow(2,z)*360 - 180; }
+  function ty2lat(y,z){ var n=Math.PI*(1-2*y/Math.pow(2,z)); return Math.atan(Math.sinh(n))*180/Math.PI; }
+
+  function tileZoom(){
+    // kies z zodat 1 tile ≈ 256 schermpixels breed
+    var degPerTileAtZ0 = 360;
+    var z = Math.round(Math.log2(degPerTileAtZ0*view.ppd/256));
+    return Math.max(2, Math.min(19, z));
+  }
+
+  // ── Tile-cache ────────────────────────────────────────────────────────────
+  var tileCache = {};   // key style+z/x/y -> Image
+
+  // ── Synthetische neerslag (voorbeeld) ─────────────────────────────────────
+  // Een paar langgerekte buienkernen rond Rotterdam/Zuid-Holland.
+  var BLOBS = [
+    {lon:4.40, lat:51.96, rl:0.42, rt:0.10, ang:-25, peak:38},
+    {lon:4.62, lat:51.86, rl:0.30, rt:0.09, ang:-20, peak:22},
+    {lon:4.18, lat:52.02, rl:0.22, rt:0.07, ang:-30, peak:14},
+    {lon:4.70, lat:52.05, rl:0.18, rt:0.06, ang:10,  peak:7},
+    {lon:4.30, lat:51.80, rl:0.26, rt:0.08, ang:-15, peak:18}
+  ];
+  function precip(lon,lat){
+    var mm=0;
+    for (var i=0;i<BLOBS.length;i++){
+      var b=BLOBS[i];
+      var dlon=(lon-b.lon)*Math.cos(b.lat*Math.PI/180), dlat=lat-b.lat;
+      var a=b.ang*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+      var u=(dlon*ca+dlat*sa)/b.rl, v=(-dlon*sa+dlat*ca)/b.rt;
+      mm += b.peak*Math.exp(-(u*u+v*v));
+    }
+    return mm;
+  }
+  // radar-offscreen op ~1 km resolutie (zoals echte KNMI-data) → smoothing erover
+  var roff=document.createElement("canvas"), rctx=roff.getContext("2d");
+  function drawRadar(){
+    var minLon=xToLon(0), maxLon=xToLon(W), maxLat=yToLat(0), minLat=yToLat(H);
+    var kmLon=111.32*Math.cos(view.lat*Math.PI/180);
+    var gw=Math.max(8, Math.min(360, Math.round((maxLon-minLon)*kmLon)));   // ~1 cel/km
+    var gh=Math.max(8, Math.min(360, Math.round((maxLat-minLat)*111.32)));
+    roff.width=gw; roff.height=gh;
+    var img=rctx.createImageData(gw,gh), px=img.data;
+    for (var j=0;j<gh;j++){
+      var lat=maxLat-(j+0.5)/gh*(maxLat-minLat);
+      for (var i=0;i<gw;i++){
+        var lon=minLon+(i+0.5)/gw*(maxLon-minLon);
+        var c=mmColor(precip(lon,lat));
+        if (!c) continue;
+        var p=(j*gw+i)*4;
+        px[p]=c[0]; px[p+1]=c[1]; px[p+2]=c[2]; px[p+3]=215;
+      }
+    }
+    rctx.putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+    ctx.drawImage(roff, 0,0, W,H);
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  var layers={street:true,radar:true,labelsOnTop:false};
+  var rafPending=false;
+  function scheduleRender(){ if(rafPending) return; rafPending=true;
+    // rAF voor vsync-soepele pan; setTimeout-fallback wanneer de tab verborgen
+    // is (rAF wordt dan niet aangeroepen).
+    if (document.hidden) setTimeout(render,16); else requestAnimationFrame(render);
+  }
+  function render(){
+    rafPending=false;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle="#aab9c9"; ctx.fillRect(0,0,W,H);
+    if (layers.street) drawTiles(layers.labelsOnTop ? false : null /*incl labels*/);
+    if (layers.radar)  drawRadar();
+    if (layers.street && layers.labelsOnTop) drawTiles(true); // plaatsnamen bovenop radar
+    document.getElementById("zlabel").textContent = "tile-z "+tileZoom()+" · "+Math.round(view.ppd)+" px/°";
+    var dn = document.getElementById("attrib");
+    dn.textContent = "© OpenStreetMap-bijdragers · © CARTO · demo-tegels (productie: MapTiler EU)";
+  }
+  // NB: voyager (incl. labels) gebruiken we als 'street' standaard; toggle
+  // 'Plaatsnamen apart' tekent labels-tiles bovenóp de radar zodat namen leesbaar blijven.
+  function drawTiles(labelsMode){
+    var labelsOnly = (labelsMode===true);
+    var nolabels   = (labelsMode===false);
+    var z=tileZoom(), n=Math.pow(2,z);
+    var minLon=xToLon(0), maxLon=xToLon(W), maxLat=yToLat(0), minLat=yToLat(H);
+    var x0=Math.floor(lon2tx(minLon,z)), x1=Math.floor(lon2tx(maxLon,z));
+    var y0=Math.floor(lat2ty(maxLat,z)), y1=Math.floor(lat2ty(minLat,z));
+    var style = labelsOnly ? "L" : (nolabels ? "N" : "V");
+    for (var tx=x0;tx<=x1;tx++) for (var ty=y0;ty<=y1;ty++){
+      var xx=((tx%n)+n)%n;
+      var img=getTileStyled(z,xx,ty,style,scheduleRender);
+      if (!img) continue;
+      var dx=lonToX(tx2lon(tx,z)), dy=latToY(ty2lat(ty,z));
+      var dw=lonToX(tx2lon(tx+1,z))-dx, dh=latToY(ty2lat(ty+1,z))-dy;
+      ctx.drawImage(img, dx, dy, dw+1, dh+1);
+    }
+  }
+  function styleName(s){ return s==="L"?"voyager_only_labels":s==="N"?"voyager_nolabels":"voyager"; }
+  function getTileStyled(z,x,y,s,onload){
+    var key=s+z+"/"+x+"/"+y, t=tileCache[key];
+    if (t){ return (t.complete && t.naturalWidth)?t:null; }
+    var img=new Image(); img.crossOrigin="anonymous";
+    img.onload=onload; img.onerror=function(){img._err=true;};
+    img.src="https://basemaps.cartocdn.com/rastertiles/"+styleName(s)+"/"+z+"/"+x+"/"+y+"@2x.png";
+    tileCache[key]=img; return null;
+  }
+
+  // ── Interactie ────────────────────────────────────────────────────────────
+  function zoomAt(factor, cx, cy){
+    var lon=xToLon(cx), lat=yToLat(cy);
+    view.ppd=Math.max(40, Math.min(120000, view.ppd*factor));
+    // houd punt onder cursor vast
+    view.lon = lon - (cx-W/2)/view.ppd;
+    view.lat = lat + (cy-H/2)/latPPD();
+    scheduleRender();
+  }
+  cv.addEventListener("wheel",function(e){ e.preventDefault();
+    var r=cv.getBoundingClientRect(), sx=W/r.width, sy=H/r.height;
+    zoomAt(Math.exp(-e.deltaY*0.0015),(e.clientX-r.left)*sx,(e.clientY-r.top)*sy);
+  },{passive:false});
+  var drag=null;
+  cv.addEventListener("pointerdown",function(e){ drag={x:e.clientX,y:e.clientY,lon:view.lon,lat:view.lat}; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove",function(e){ if(!drag)return;
+    var r=cv.getBoundingClientRect(), sx=W/r.width, sy=H/r.height;
+    view.lon=drag.lon-(e.clientX-drag.x)*sx/view.ppd;
+    view.lat=drag.lat+(e.clientY-drag.y)*sy/latPPD();
+    scheduleRender();
+  });
+  cv.addEventListener("pointerup",function(){ drag=null; });
+  document.getElementById("zm-in").onclick=function(){ zoomAt(1.6,W/2,H/2); };
+  document.getElementById("zm-out").onclick=function(){ zoomAt(1/1.6,W/2,H/2); };
+  function tg(id,key,extra){ var b=document.getElementById(id); b.onclick=function(){
+    layers[key]=!layers[key]; b.classList.toggle("on",layers[key]); extra&&extra(); scheduleRender(); }; }
+  tg("tg-street","street");
+  tg("tg-radar","radar");
+  document.getElementById("tg-labels").onclick=function(){
+    layers.labelsOnTop=!layers.labelsOnTop;
+    this.classList.toggle("on",layers.labelsOnTop); scheduleRender();
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HARMONIE significant weer demo - Weerlab.nl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  background: #eef2f6;
+  color: #20242c;
+  font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.page {
+  min-height: 100vh;
+  padding: 12px;
+}
+.sheet {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #d5dbe4;
+  box-shadow: 0 16px 42px rgba(28, 36, 48, 0.16);
+}
+.map-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 0.78;
+  min-height: 680px;
+  overflow: hidden;
+  background: #cfd2d5;
+}
+#weather-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.map-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+}
+.tool-btn {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #15191f;
+  font: 800 21px/1 "DM Sans", sans-serif;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.15);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.tool-btn:hover { background: #ffffff; }
+.tool-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 64px;
+  min-width: max-content;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: rgba(18, 24, 33, 0.88);
+  color: #ffffff;
+  font: 700 12px/1.1 "DM Sans", sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-4px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+.tool-btn:hover::after,
+.tool-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+.download-icon {
+  position: relative;
+  width: 27px;
+  height: 29px;
+  display: block;
+}
+.download-icon::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 1px;
+  width: 4px;
+  height: 17px;
+  border-radius: 2px;
+  background: #07090d;
+}
+.download-icon::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  width: 16px;
+  height: 16px;
+  border-right: 4px solid #07090d;
+  border-bottom: 4px solid #07090d;
+  transform: rotate(45deg);
+}
+.zoom-icon {
+  position: relative;
+  width: 27px;
+  height: 27px;
+  border: 4px solid #242933;
+  border-radius: 50%;
+  display: block;
+}
+.zoom-icon::after {
+  content: "";
+  position: absolute;
+  right: -11px;
+  bottom: -7px;
+  width: 15px;
+  height: 4px;
+  border-radius: 2px;
+  background: #242933;
+  transform: rotate(45deg);
+}
+.labels-icon {
+  width: 32px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #242933;
+  font: 900 20px/1 "DM Sans", sans-serif;
+  letter-spacing: 0;
+}
+.labels-icon::before {
+  content: "Aa";
+}
+.status-pill {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 4;
+  max-width: min(520px, calc(100% - 92px));
+  padding: 8px 11px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #26313f;
+  font: 700 12px/1.2 "DM Mono", ui-monospace, monospace;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.12);
+}
+.status-pill.error {
+  color: #8f1d1d;
+  background: rgba(255, 245, 245, 0.94);
+}
+.map-credit {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.74);
+  color: #e9edf4;
+  font: 500 12px/1.2 Arial, sans-serif;
+}
+.map-controls {
+  padding: 10px 28px;
+  background: #ffffff;
+  border-bottom: 1px solid #e3e8ef;
+}
+.footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  padding: 26px 28px 28px;
+  background: #ffffff;
+}
+.footer-main { min-width: 0; }
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+h1 {
+  margin: 0;
+  color: #2b2e35;
+  font-size: clamp(32px, 3.2vw, 48px);
+  line-height: 1.02;
+  letter-spacing: 0;
+  font-weight: 800;
+}
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(74px, 1fr));
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.legend-item {
+  min-height: 24px;
+  padding: 2px 5px 3px;
+  color: #000000;
+  font-size: 12px;
+  line-height: 0.98;
+  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.legend-item small {
+  font-size: 9px;
+  font-weight: 800;
+}
+.legend-item.dark { color: #ffffff; }
+.subtitle {
+  color: #4a4e56;
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.35;
+  letter-spacing: 0.03em;
+}
+.subtitle .mono {
+  font-family: "DM Mono", ui-monospace, monospace;
+  letter-spacing: 0;
+}
+.fineprint {
+  margin-top: 18px;
+  color: #42464f;
+  font-size: clamp(15px, 1.15vw, 22px);
+  line-height: 1.45;
+}
+.footer-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+}
+.valid-block {
+  text-align: right;
+  color: #2d3036;
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.1;
+}
+.valid-block .label { font-size: 21px; }
+.cloud-scale {
+  width: 180px;
+  text-align: left;
+}
+.cloud-scale .label {
+  font-size: 21px;
+  font-weight: 700;
+  color: #111111;
+  margin-bottom: 4px;
+}
+.cloud-bar {
+  height: 20px;
+  border: 1px solid #777;
+  background: linear-gradient(90deg, #f2f2f2, #dddddd, #bdbdbd, #8f8f8f, #5e5e5e);
+}
+.cloud-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 18px;
+  color: #111111;
+  line-height: 1.2;
+}
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 13px;
+  margin-top: auto;
+}
+.model-badge {
+  width: 78px;
+  height: 50px;
+  border-radius: 50%;
+  border: 3px solid #1b73d8;
+  color: #1b73d8;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 800;
+}
+.weerlab-logo {
+  color: #30343a;
+  font-size: 19px;
+  line-height: 1.05;
+  font-weight: 800;
+}
+.weerlab-logo span { color: #1184ef; }
+.controls {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(180px, 1fr) auto minmax(170px, 230px);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding-top: 8px;
+}
+.play-btn, .step-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #172033;
+  border-radius: 6px;
+  height: 34px;
+  min-width: 38px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.play-btn:hover, .step-btn:hover { background: #eef2f7; }
+#time-range {
+  width: 100%;
+  accent-color: #1683f7;
+}
+.lead-label {
+  min-width: 62px;
+  font: 700 13px/1 "DM Mono", ui-monospace, monospace;
+  color: #4b5563;
+}
+.view-select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #172033;
+  font: 700 13px/1 "DM Sans", sans-serif;
+  padding: 0 30px 0 10px;
+  cursor: pointer;
+}
+.view-select:hover { background: #eef2f7; }
+@media (max-width: 1040px) {
+  .footer { grid-template-columns: 1fr; }
+  .footer-side { align-items: flex-start; }
+  .valid-block { text-align: left; }
+  .brand-row { justify-content: flex-start; }
+  .legend-grid { grid-template-columns: repeat(4, minmax(110px, 1fr)); }
+}
+@media (max-width: 680px) {
+  .page { padding: 0; }
+  .sheet { border-left: 0; border-right: 0; }
+  .map-stage { min-height: 560px; aspect-ratio: 0.78; }
+  .map-controls { padding: 9px 16px; }
+  .footer { padding: 20px 16px 24px; gap: 16px; }
+  .legend-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .legend-item { font-size: 12px; min-height: 28px; }
+  .legend-item small { font-size: 9px; }
+  .controls { grid-template-columns: auto auto auto 1fr auto; }
+  .view-select { grid-column: 1 / -1; }
+  .tool-btn { width: 44px; height: 44px; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+  <section class="sheet">
+    <div class="map-stage" id="map-stage">
+      <canvas id="weather-canvas" aria-label="HARMONIE bewolking en significant weer"></canvas>
+      <div class="map-toolbar">
+        <button class="tool-btn" id="download-btn" title="Download kaart" aria-label="Download kaart" data-tip="Download kaart"><span class="download-icon"></span></button>
+        <button class="tool-btn" id="city-btn" title="Plaatsnamen aan/uit" aria-label="Plaatsnamen aan of uit" data-tip="Plaatsnamen aan/uit"><span class="labels-icon"></span></button>
+      </div>
+      <div class="status-pill" id="status">Data laden...</div>
+      <div class="map-credit">Map data: eigen basislaag, grenzen via Weerlab overlay</div>
+    </div>
+
+    <div class="map-controls">
+      <div class="controls" aria-label="Tijdstap bediening">
+        <button class="step-btn" id="prev-btn" title="Vorige uur">&lt;</button>
+        <button class="play-btn" id="play-btn" title="Afspelen">play</button>
+        <button class="step-btn" id="next-btn" title="Volgende uur">&gt;</button>
+        <input type="range" id="time-range" min="0" max="59" value="3" step="1">
+        <span class="lead-label" id="lead-label">+4h</span>
+        <select class="view-select" id="view-select" aria-label="Kies kaartuitsnede"></select>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="footer-main">
+        <div class="title-row">
+          <h1>Bewolking en significant weer</h1>
+        </div>
+        <div class="legend-grid" aria-label="Legenda significant weer">
+          <div class="legend-item" style="background:#fff42a">Mist<small>zicht laag</small></div>
+          <div class="legend-item" style="background:#c7c31f">Mist<small>aanvriezend</small></div>
+          <div class="legend-item" style="background:#32ff3f">Regen<small>licht</small></div>
+          <div class="legend-item" style="background:#2fc533">Regen<small>matig</small></div>
+          <div class="legend-item dark" style="background:#008b10">Regen<small>sterk</small></div>
+          <div class="legend-item" style="background:#989898">Onweer<small>in de buurt</small></div>
+          <div class="legend-item" style="background:#f04df0">Onweer<small>licht/matig</small></div>
+          <div class="legend-item dark" style="background:#bd18c4">Onweer<small>sterk</small></div>
+          <div class="legend-item" style="background:#ffc08a">Natte sneeuw<small>licht</small></div>
+          <div class="legend-item" style="background:#ff9238">Natte sneeuw<small>matig/sterk</small></div>
+          <div class="legend-item" style="background:#50ddeb">Sneeuw<small>licht</small></div>
+          <div class="legend-item" style="background:#468cf0">Sneeuw<small>matig</small></div>
+          <div class="legend-item dark" style="background:#3569bd">Sneeuw<small>sterk</small></div>
+          <div class="legend-item" style="background:#ff4040">IJzel<small>licht</small></div>
+          <div class="legend-item dark" style="background:#d00000">IJzel<small>matig/sterk</small></div>
+        </div>
+        <div class="subtitle">
+          Nederland<br>
+          HARMONIE 43 significant-weather composiet <span class="mono" id="run-label"></span>
+        </div>
+        <div class="fineprint">
+          Eigen demo-rendering op basis van HARMONIE bewolking, neerslag, wind en CAPE. De kaart is bedoeld als visuele proef voor een operationele laag binnen Weerlab.nl.
+        </div>
+      </div>
+
+      <aside class="footer-side">
+        <div class="valid-block">
+          <div class="label">Prognose voor</div>
+          <div id="valid-label">--</div>
+        </div>
+        <div class="cloud-scale">
+          <div class="label">Bewolking</div>
+          <div class="cloud-bar"></div>
+          <div class="cloud-ticks"><span>0%</span><span>100%</span></div>
+        </div>
+        <div class="brand-row">
+          <div class="model-badge">HARM<br>43</div>
+          <div class="weerlab-logo">weerlab<span>.nl</span><br><small>Ed Aldus WM</small></div>
+        </div>
+      </aside>
+    </footer>
+  </section>
+</main>
+
+<script>
+(function() {
+  "use strict";
+
+  const PAGE_PARAMS = new URLSearchParams(window.location.search);
+  const DATA_URL = PAGE_PARAMS.get("localData") === "1" ? "" : "https://harmonie-data.weerlab.nl/";
+  const META_FILE = "harmonie_canvas_meta.json";
+  const VIEW_PRESETS = [
+    { name: "Nederland ruim", lonMin: 0.90, lonMax: 8.75, latMin: 49.40, latMax: 54.90 },
+    { name: "Nederland detail", lonMin: 2.70, lonMax: 7.25, latMin: 50.55, latMax: 53.85 },
+    { name: "Benelux", lonMin: 0.55, lonMax: 11.15, latMin: 49.05, latMax: 55.05 },
+    { name: "Groningen", lonMin: 6.12, lonMax: 7.35, latMin: 52.86, latMax: 53.66 },
+    { name: "Friesland", lonMin: 4.62, lonMax: 6.38, latMin: 52.74, latMax: 53.58 },
+    { name: "Drenthe", lonMin: 6.03, lonMax: 7.12, latMin: 52.55, latMax: 53.25 },
+    { name: "Overijssel", lonMin: 5.72, lonMax: 7.18, latMin: 52.03, latMax: 52.86 },
+    { name: "Flevoland", lonMin: 4.95, lonMax: 6.08, latMin: 52.20, latMax: 52.88 },
+    { name: "Noord-Holland", lonMin: 4.15, lonMax: 5.55, latMin: 52.05, latMax: 53.36 },
+    { name: "Zuid-Holland", lonMin: 3.65, lonMax: 5.35, latMin: 51.64, latMax: 52.36 },
+    { name: "Utrecht", lonMin: 4.72, lonMax: 5.67, latMin: 51.84, latMax: 52.35 },
+    { name: "Gelderland", lonMin: 5.03, lonMax: 6.95, latMin: 51.70, latMax: 52.48 },
+    { name: "Zeeland", lonMin: 3.18, lonMax: 4.48, latMin: 51.14, latMax: 51.92 },
+    { name: "Noord-Brabant", lonMin: 4.22, lonMax: 6.18, latMin: 51.18, latMax: 51.86 },
+    { name: "Limburg", lonMin: 5.52, lonMax: 6.28, latMin: 50.74, latMax: 51.58 }
+  ];
+  const DATA_EXTENT = { lonMin: 0.522, lonMax: 11.281, latMin: 49.0, latMax: 56.002 };
+  const OVERLAY_EXTENT = { lonMin: 0.5, lonMax: 12.5, latMin: 47.5, latMax: 56.5 };
+  const LABEL_PLACES = new Set([
+    "Amsterdam", "Almere", "Rotterdam", "Den Helder", "Den Haag", "Utrecht", "Groningen", "Leeuwarden",
+    "Zwolle", "Enschede", "Arnhem", "Nijmegen", "Eindhoven", "Breda",
+    "Maastricht", "Middelburg", "Antwerpen", "Brussel", "Gent", "Luik",
+    "Calais", "Duinkerken", "Lille", "Valenciennes", "Amiens",
+    "Düsseldorf", "Köln", "Münster", "Osnabrück", "Aken"
+  ]);
+  const LABEL_PRIORITY = [
+    "Amsterdam", "Almere", "Rotterdam", "Den Helder", "Utrecht", "Groningen", "Leeuwarden", "Zwolle",
+    "Enschede", "Arnhem", "Nijmegen", "Eindhoven", "Breda", "Maastricht",
+    "Middelburg", "Den Haag", "Antwerpen", "Brussel", "Gent", "Luik",
+    "Calais", "Duinkerken", "Lille", "Valenciennes", "Amiens",
+    "Düsseldorf", "Köln", "Münster", "Osnabrück", "Aken"
+  ];
+  const LABEL_RANK = new Map(LABEL_PRIORITY.map((naam, idx) => [naam, idx]));
+  const LABEL_OFFSETS = new Map([
+    ["Amsterdam", { align: "right", dx: -8, dy: -8 }],
+    ["Almere", { dx: 8, dy: 9 }]
+  ]);
+  const FALLBACK_PLACES = [
+    { naam: "Groningen", lat: 53.219, lon: 6.566, rang: 1 },
+    { naam: "Leeuwarden", lat: 53.201, lon: 5.799, rang: 1 },
+    { naam: "Zwolle", lat: 52.516, lon: 6.083, rang: 1 },
+    { naam: "Enschede", lat: 52.220, lon: 6.890, rang: 1 },
+    { naam: "Amsterdam", lat: 52.371, lon: 4.892, rang: 0 },
+    { naam: "Almere", lat: 52.350, lon: 5.264, rang: 1 },
+    { naam: "Utrecht", lat: 52.090, lon: 5.121, rang: 0 },
+    { naam: "Den Haag", lat: 52.078, lon: 4.310, rang: 0 },
+    { naam: "Rotterdam", lat: 51.926, lon: 4.479, rang: 0 },
+    { naam: "Arnhem", lat: 51.985, lon: 5.899, rang: 1 },
+    { naam: "Nijmegen", lat: 51.812, lon: 5.837, rang: 1 },
+    { naam: "Breda", lat: 51.571, lon: 4.768, rang: 1 },
+    { naam: "Eindhoven", lat: 51.441, lon: 5.470, rang: 0 },
+    { naam: "Maastricht", lat: 50.851, lon: 5.691, rang: 1 },
+    { naam: "Middelburg", lat: 51.499, lon: 3.611, rang: 2 },
+    { naam: "Antwerpen", lat: 51.220, lon: 4.402, rang: 0 },
+    { naam: "Gent", lat: 51.054, lon: 3.717, rang: 1 },
+    { naam: "Brussel", lat: 50.851, lon: 4.351, rang: 0 },
+    { naam: "Luik", lat: 50.633, lon: 5.567, rang: 1 },
+    { naam: "Calais", lat: 50.951, lon: 1.858, rang: 2 },
+    { naam: "Duinkerken", lat: 51.034, lon: 2.377, rang: 2 },
+    { naam: "Lille", lat: 50.629, lon: 3.057, rang: 1 },
+    { naam: "Valenciennes", lat: 50.357, lon: 3.523, rang: 2 },
+    { naam: "Amiens", lat: 49.894, lon: 2.295, rang: 2 },
+    { naam: "Aken", lat: 50.776, lon: 6.084, rang: 2 },
+    { naam: "Köln", lat: 50.937, lon: 6.960, rang: 1 },
+    { naam: "Düsseldorf", lat: 51.227, lon: 6.773, rang: 1 },
+    { naam: "Münster", lat: 51.960, lon: 7.626, rang: 2 },
+    { naam: "Osnabrück", lat: 52.279, lon: 8.047, rang: 2 }
+  ];
+
+  const canvas = document.getElementById("weather-canvas");
+  const stage = document.getElementById("map-stage");
+  const statusEl = document.getElementById("status");
+  const timeRange = document.getElementById("time-range");
+  const validLabel = document.getElementById("valid-label");
+  const runLabel = document.getElementById("run-label");
+  const leadLabel = document.getElementById("lead-label");
+  const viewSelect = document.getElementById("view-select");
+  const playBtn = document.getElementById("play-btn");
+  const prevBtn = document.getElementById("prev-btn");
+  const nextBtn = document.getElementById("next-btn");
+  const downloadBtn = document.getElementById("download-btn");
+  const cityBtn = document.getElementById("city-btn");
+
+  let meta = null;
+  let overlayImg = null;
+  let places = [];
+  let step = parseInt(PAGE_PARAMS.get("step") || "3", 10);
+  let viewIndex = 0;
+  let showCities = true;
+  let timer = null;
+  let current = null;
+  let requestSeq = 0;
+  let dataVersion = "";
+  const stepCache = new Map();
+
+  const legendColors = {
+    rainLight: [50, 255, 63],
+    rainModerate: [47, 197, 51],
+    rainStrong: [0, 139, 16],
+    stormModerate: [240, 77, 240],
+    stormStrong: [189, 24, 196]
+  };
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle("error", !!isError);
+  }
+
+  function populateViewSelect() {
+    viewSelect.innerHTML = VIEW_PRESETS
+      .map((view, idx) => `<option value="${idx}">${view.name}</option>`)
+      .join("");
+    viewSelect.value = String(viewIndex);
+  }
+
+  function setView(nextIndex) {
+    viewIndex = Math.max(0, Math.min(VIEW_PRESETS.length - 1, nextIndex));
+    viewSelect.value = String(viewIndex);
+    render();
+    setStatus(`${VIEW_PRESETS[viewIndex].name} - ${formatValid(meta && meta.tijden ? meta.tijden[step] : "")}`);
+  }
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+
+  function formatValid(iso) {
+    if (!iso) return "--";
+    const d = new Date(iso);
+    const dagen = ["zo.", "ma.", "di.", "wo.", "do.", "vr.", "za."];
+    return `${dagen[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:00 LT`;
+  }
+
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+  function cloudFrac(v) {
+    if (!Number.isFinite(v)) return 0;
+    return clamp01(v > 1.5 ? v / 100 : v);
+  }
+
+  function fitRange(center, span, minLimit, maxLimit) {
+    const maxSpan = maxLimit - minLimit;
+    const fittedSpan = Math.min(span, maxSpan);
+    let min = center - fittedSpan / 2;
+    let max = center + fittedSpan / 2;
+    if (min < minLimit) {
+      max += minLimit - min;
+      min = minLimit;
+    }
+    if (max > maxLimit) {
+      min -= max - maxLimit;
+      max = maxLimit;
+    }
+    return {
+      min: Math.max(minLimit, min),
+      max: Math.min(maxLimit, max)
+    };
+  }
+
+  function getRenderView(w, h) {
+    const base = VIEW_PRESETS[viewIndex];
+    const centerLat = (base.latMin + base.latMax) / 2;
+    const centerLon = (base.lonMin + base.lonMax) / 2;
+    const cosLat = Math.cos(centerLat * Math.PI / 180);
+    let latSpan = base.latMax - base.latMin;
+    let lonSpan = base.lonMax - base.lonMin;
+    const targetAspect = Math.max(0.45, w / Math.max(1, h));
+    const projectedAspect = (lonSpan * cosLat) / Math.max(0.01, latSpan);
+
+    if (projectedAspect > targetAspect) {
+      latSpan = lonSpan * cosLat / targetAspect;
+    } else {
+      lonSpan = latSpan * targetAspect / cosLat;
+    }
+
+    const lonRange = fitRange(centerLon, lonSpan, DATA_EXTENT.lonMin, DATA_EXTENT.lonMax);
+    const latRange = fitRange(centerLat, latSpan, DATA_EXTENT.latMin, DATA_EXTENT.latMax);
+    return {
+      name: base.name,
+      lonMin: lonRange.min,
+      lonMax: lonRange.max,
+      latMin: latRange.min,
+      latMax: latRange.max
+    };
+  }
+
+  function project(lat, lon, w, h, renderView) {
+    const view = renderView || getRenderView(w, h);
+    return {
+      x: (lon - view.lonMin) / (view.lonMax - view.lonMin) * w,
+      y: (view.latMax - lat) / (view.latMax - view.latMin) * h
+    };
+  }
+
+  function sampleIndex(grid, lat, lon) {
+    const x = Math.round((lon - grid.lon_min) / (grid.lon_max - grid.lon_min) * (grid.n_lon - 1));
+    const y = Math.round((lat - grid.lat_min) / (grid.lat_max - grid.lat_min) * (grid.n_lat - 1));
+    if (x < 0 || y < 0 || x >= grid.n_lon || y >= grid.n_lat) return -1;
+    return y * grid.n_lon + x;
+  }
+
+  function sampleScalar(pd, lat, lon, comp) {
+    const idx = sampleIndex(pd.grid, lat, lon);
+    if (idx < 0) return NaN;
+    return pd.data[(comp || 0) * pd.nPts + idx];
+  }
+
+  function rainColor(mm, cape) {
+    if (!Number.isFinite(mm) || mm < 0.08) return null;
+    const convective = (cape > 120 && mm > 0.45) || (cape > 350 && mm > 0.2);
+    if (convective) {
+      if (mm > 3.2 || cape > 750) return legendColors.stormStrong;
+      return legendColors.stormModerate;
+    }
+    if (mm < 0.7) return legendColors.rainLight;
+    if (mm < 3.0) return legendColors.rainModerate;
+    return legendColors.rainStrong;
+  }
+
+  function blend(a, b, f) {
+    return [
+      Math.round(a[0] * (1 - f) + b[0] * f),
+      Math.round(a[1] * (1 - f) + b[1] * f),
+      Math.round(a[2] * (1 - f) + b[2] * f)
+    ];
+  }
+
+  function noise(x, y) {
+    const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return s - Math.floor(s);
+  }
+
+  async function fetchJSON(path) {
+    const r = await fetch(DATA_URL + path + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error(path + " niet beschikbaar");
+    return r.json();
+  }
+
+  async function fetchPageJSON(path) {
+    const r = await fetch(path + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error(path + " niet beschikbaar");
+    return r.json();
+  }
+
+  async function loadOverlay(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("overlay niet beschikbaar"));
+      img.src = DATA_URL + file + dataVersion;
+    });
+  }
+
+  async function loadStepParam(paramKey, stepIdx) {
+    const info = meta.parameters[paramKey];
+    const grid = info.grid || meta.grid;
+    const nLat = grid.n_lat;
+    const nLon = grid.n_lon;
+    const nComp = info.components || 1;
+    const nPts = nLat * nLon;
+    const byteLength = nPts * nComp * 4;
+    const byteStart = 16 + stepIdx * byteLength;
+    const byteEnd = byteStart + byteLength - 1;
+    const url = DATA_URL + info.file + dataVersion;
+    const response = await fetch(url, {
+      headers: { Range: `bytes=${byteStart}-${byteEnd}` },
+      cache: "no-store"
+    });
+    if (!response.ok && response.status !== 206) {
+      throw new Error(info.file + " niet beschikbaar");
+    }
+    const buf = await response.arrayBuffer();
+    let data;
+    if (response.status === 206 || buf.byteLength === byteLength) {
+      data = new Float32Array(buf, 0, byteLength / 4);
+    } else if (buf.byteLength >= byteStart + byteLength) {
+      data = new Float32Array(buf, byteStart, byteLength / 4);
+    } else {
+      throw new Error(info.file + " heeft onverwachte lengte");
+    }
+    return { key: paramKey, grid, nLat, nLon, nComp, nPts, data };
+  }
+
+  async function loadStep(stepIdx) {
+    const cacheKey = String(stepIdx);
+    const cached = stepCache.get(cacheKey);
+    if (cached && cached.cloud && cached.rain) return cached;
+    setStatus(`HARMONIE stap +${stepIdx + 1}h laden...`);
+    const bundle = await Promise.all([
+      loadStepParam("bewolking", stepIdx),
+      loadStepParam("neerslag", stepIdx),
+      loadStepParam("cape", stepIdx).catch(() => null)
+    ]).then(([cloud, rain, cape]) => ({ cloud, rain, wind: null, cape }));
+    stepCache.set(cacheKey, bundle);
+    loadStepParam("wind", stepIdx).then(wind => {
+      const latest = stepCache.get(cacheKey);
+      if (!latest) return;
+      latest.wind = wind;
+      if (current === latest) render();
+    }).catch(() => {});
+    return bundle;
+  }
+
+  function drawPixelWeather(ctx, w, h, bundle) {
+    const cloud = bundle.cloud;
+    const rain = bundle.rain;
+    const cape = bundle.cape;
+    const blockPx = Math.max(15, Math.round(w / 48));
+    const ow = Math.ceil(w / blockPx);
+    const oh = Math.ceil(h / blockPx);
+    const off = document.createElement("canvas");
+    off.width = ow;
+    off.height = oh;
+    const octx = off.getContext("2d");
+    const img = octx.createImageData(ow, oh);
+    const p = img.data;
+    const view = getRenderView(w, h);
+
+    for (let y = 0; y < oh; y++) {
+      const lat = view.latMax - (y + 0.5) / oh * (view.latMax - view.latMin);
+      for (let x = 0; x < ow; x++) {
+        const lon = view.lonMin + (x + 0.5) / ow * (view.lonMax - view.lonMin);
+        const idx = sampleIndex(cloud.grid, lat, lon);
+        let rgb = [222, 224, 226];
+        if (idx >= 0) {
+          const high = cloudFrac(cloud.data[idx]);
+          const mid = cloudFrac(cloud.data[cloud.nPts + idx]);
+          const low = cloudFrac(cloud.data[cloud.nPts * 2 + idx]);
+          const cover = clamp01(Math.max(low * 1.05, mid * 0.98, high * 0.72));
+          const layerDark = clamp01(low * 0.20 + mid * 0.12);
+          const texture = (noise(x, y) - 0.5) * 18;
+          const tone = Math.round(235 - cover * 150 - layerDark * 40 + texture);
+          rgb = [tone, tone, tone].map(v => Math.max(62, Math.min(244, v)));
+
+          const rainIdx = sampleIndex(rain.grid, lat, lon);
+          if (rainIdx >= 0) {
+            const mm = rain.data[rainIdx];
+            const capeVal = cape ? sampleScalar(cape, lat, lon, 0) : 0;
+            const rc = rainColor(mm, capeVal);
+            if (rc) {
+              const alpha = mm > 5 ? 0.96 : 0.90;
+              rgb = blend(rgb, rc, alpha);
+            }
+          }
+        }
+        const pi = (y * ow + x) * 4;
+        p[pi] = rgb[0];
+        p[pi + 1] = rgb[1];
+        p[pi + 2] = rgb[2];
+        p[pi + 3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, w, h);
+    ctx.restore();
+  }
+
+  function drawOverlay(ctx, w, h) {
+    if (!overlayImg) return;
+    const view = getRenderView(w, h);
+    const sx = (view.lonMin - OVERLAY_EXTENT.lonMin) / (OVERLAY_EXTENT.lonMax - OVERLAY_EXTENT.lonMin) * overlayImg.naturalWidth;
+    const sy = (OVERLAY_EXTENT.latMax - view.latMax) / (OVERLAY_EXTENT.latMax - OVERLAY_EXTENT.latMin) * overlayImg.naturalHeight;
+    const sw = (view.lonMax - view.lonMin) / (OVERLAY_EXTENT.lonMax - OVERLAY_EXTENT.lonMin) * overlayImg.naturalWidth;
+    const sh = (view.latMax - view.latMin) / (OVERLAY_EXTENT.latMax - OVERLAY_EXTENT.latMin) * overlayImg.naturalHeight;
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.drawImage(overlayImg, sx, sy, sw, sh, 0, 0, w, h);
+    ctx.restore();
+  }
+
+  function drawArrow(ctx, cx, cy, u, v, speed, len) {
+    if (!Number.isFinite(speed) || speed < 0.4) return;
+    const ux = u / speed;
+    const uy = -v / speed;
+    const scale = 0.72 + Math.min(speed, 16) / 16 * 0.35;
+    const L = len * scale;
+    const tx = cx + ux * L * 0.5;
+    const ty = cy + uy * L * 0.5;
+    const sx = cx - ux * L * 0.5;
+    const sy = cy - uy * L * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    const head = L * 0.35;
+    const width = L * 0.24;
+    const px = -uy;
+    const py = ux;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - ux * head + px * width, ty - uy * head + py * width);
+    ctx.lineTo(tx - ux * head - px * width, ty - uy * head - py * width);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawWind(ctx, w, h, bundle) {
+    const wind = bundle.wind;
+    if (!wind) return;
+    const view = getRenderView(w, h);
+    const dx = (view.lonMax - view.lonMin) / 24;
+    const dy = (view.latMax - view.latMin) / 13;
+    const len = Math.max(16, Math.min(25, w / 58));
+    ctx.save();
+    ctx.lineCap = "round";
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.lineWidth = pass === 0 ? 2.4 : 1.15;
+      ctx.strokeStyle = pass === 0 ? "rgba(255,255,255,0.58)" : "rgba(20,24,30,0.60)";
+      ctx.fillStyle = pass === 0 ? "rgba(255,255,255,0.58)" : "rgba(20,24,30,0.60)";
+      let row = 0;
+      for (let lat = view.latMax - dy * 0.45; lat >= view.latMin + dy * 0.25; lat -= dy, row++) {
+        const offset = row % 2 ? dx * 0.5 : 0;
+        for (let lon = view.lonMin + dx * 0.15 + offset; lon <= view.lonMax - dx * 0.12; lon += dx) {
+          const idx = sampleIndex(wind.grid, lat, lon);
+          if (idx < 0) continue;
+          const u = wind.data[idx];
+          const v = wind.data[wind.nPts + idx];
+          const speed = Math.sqrt(u * u + v * v);
+          const pt = project(lat, lon, w, h, view);
+          drawArrow(ctx, pt.x, pt.y, u, v, speed, len);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawPlaces(ctx, w, h) {
+    if (!showCities || !places.length) {
+      cityBtn.dataset.rendered = "0";
+      return;
+    }
+    const view = getRenderView(w, h);
+    const boxes = [];
+    let renderedLabels = 0;
+    ctx.save();
+    ctx.textBaseline = "middle";
+    const labelPlaces = places
+      .filter(place => LABEL_PLACES.has(place.naam))
+      .sort((a, b) => (LABEL_RANK.get(a.naam) ?? 999) - (LABEL_RANK.get(b.naam) ?? 999));
+    for (const place of labelPlaces) {
+      if (place.lon < view.lonMin || place.lon > view.lonMax || place.lat < view.latMin || place.lat > view.latMax) continue;
+      const pt = project(place.lat, place.lon, w, h, view);
+      const fs = place.rang === 0 ? 13 : (place.rang === 1 ? 12 : 11);
+      ctx.font = `800 ${fs}px Arial, sans-serif`;
+      const tw = ctx.measureText(place.naam).width;
+      const offset = LABEL_OFFSETS.get(place.naam) || {};
+      const labelY = pt.y + (offset.dy ?? -7);
+      const labelX = offset.align === "right" ? pt.x - tw + (offset.dx ?? -8) : pt.x + (offset.dx ?? 8);
+      const box = { x: labelX - 3, y: labelY - fs * 0.55 - 3, w: tw + 6, h: fs + 6 };
+      if (boxes.some(b => !(box.x > b.x + b.w || box.x + box.w < b.x || box.y > b.y + b.h || box.y + box.h < b.y))) continue;
+      boxes.push(box);
+
+      ctx.fillStyle = "rgba(255,255,255,0.82)";
+      ctx.strokeStyle = "rgba(50,50,50,0.82)";
+      ctx.lineWidth = 1.4;
+      ctx.fillRect(pt.x - 4, pt.y - 4, 8, 8);
+      ctx.strokeRect(pt.x - 4, pt.y - 4, 8, 8);
+
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(0,0,0,0.62)";
+      ctx.strokeText(place.naam, labelX, labelY);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(0,0,0,0.92)";
+      ctx.strokeText(place.naam, labelX, labelY);
+      ctx.fillStyle = "rgba(255,255,255,0.96)";
+      ctx.fillText(place.naam, labelX, labelY);
+      renderedLabels++;
+    }
+    cityBtn.dataset.rendered = String(renderedLabels);
+    ctx.restore();
+  }
+
+  function drawNoData(ctx, w, h, text) {
+    ctx.fillStyle = "#d9dde2";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#333944";
+    ctx.font = "700 18px DM Sans, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, w / 2, h / 2);
+  }
+
+  function render() {
+    const rect = stage.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(320, Math.round(rect.width));
+    const h = Math.max(300, Math.round(rect.height));
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!current) {
+      drawNoData(ctx, w, h, "Data laden...");
+      return;
+    }
+    drawPixelWeather(ctx, w, h, current);
+    drawWind(ctx, w, h, current);
+    drawOverlay(ctx, w, h);
+    drawPlaces(ctx, w, h);
+  }
+
+  async function setStep(nextStep) {
+    if (!meta) return;
+    step = Math.max(0, Math.min(meta.uren - 1, nextStep));
+    const requestedStep = step;
+    const requestId = ++requestSeq;
+    timeRange.value = String(step);
+    leadLabel.textContent = `+${step + 1}h`;
+    validLabel.textContent = formatValid(meta.tijden[step]);
+    try {
+      const loaded = await loadStep(requestedStep);
+      if (requestId !== requestSeq) return;
+      current = loaded;
+      render();
+      setStatus(`${VIEW_PRESETS[viewIndex].name} - ${formatValid(meta.tijden[requestedStep])}`);
+    } catch (err) {
+      if (requestId !== requestSeq) return;
+      setStatus(err.message || "Data laden mislukt", true);
+      current = null;
+      render();
+    }
+  }
+
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    playBtn.textContent = "play";
+  }
+
+  function togglePlay() {
+    if (timer) { stop(); return; }
+    playBtn.textContent = "stop";
+    timer = setInterval(() => {
+      const next = step >= (meta.uren - 1) ? 0 : step + 1;
+      setStep(next);
+    }, 650);
+  }
+
+  function downloadPNG() {
+    try {
+      const a = document.createElement("a");
+      a.download = `weerlab_harmonie_significant_${step + 1}h.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } catch {
+      setStatus("PNG-download is niet beschikbaar door browser/CORS-beveiliging", true);
+    }
+  }
+
+  async function init() {
+    try {
+      meta = await fetchJSON(META_FILE);
+      dataVersion = "?v=" + encodeURIComponent(meta.bijgewerkt || meta.run || "live");
+      populateViewSelect();
+      runLabel.textContent = meta.run ? `(${meta.run})` : "";
+      timeRange.max = String((meta.uren || 60) - 1);
+      if (!Number.isFinite(step) || step < 0) step = 3;
+      if (step >= meta.uren) step = Math.max(0, meta.uren - 1);
+      loadOverlay(meta.overlay || "harmonie_overlay.png").then(img => {
+        overlayImg = img;
+        render();
+      }).catch(() => {});
+      fetchPageJSON("plaatsen_benelux.json").then(placesData => {
+        places = placesData.plaatsen && placesData.plaatsen.length ? placesData.plaatsen : FALLBACK_PLACES;
+        cityBtn.dataset.count = String(places.length);
+        render();
+      }).catch(() => {
+        places = FALLBACK_PLACES;
+        cityBtn.dataset.count = String(places.length);
+        render();
+      });
+      await setStep(step);
+    } catch (err) {
+      setStatus(err.message || "Initialisatie mislukt", true);
+      render();
+    }
+  }
+
+  timeRange.addEventListener("input", () => {
+    stop();
+    setStep(parseInt(timeRange.value, 10));
+  });
+  playBtn.addEventListener("click", togglePlay);
+  prevBtn.addEventListener("click", () => { stop(); setStep(step - 1); });
+  nextBtn.addEventListener("click", () => { stop(); setStep(step + 1); });
+  downloadBtn.addEventListener("click", downloadPNG);
+  viewSelect.addEventListener("change", () => {
+    setView(parseInt(viewSelect.value, 10));
+  });
+  cityBtn.addEventListener("click", () => {
+    showCities = !showCities;
+    cityBtn.style.opacity = showCities ? "1" : "0.45";
+    render();
+  });
+  window.addEventListener("resize", render);
+  if (window.ResizeObserver) new ResizeObserver(render).observe(stage);
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEMO — MOSMIX Centraal Europa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  (function(){
+    function apply(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
+    var saved = "light"; try { saved = localStorage.getItem("weerlab_theme") || "light"; } catch {}
+    apply(saved);
+    window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
+  })();
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background: #f6f8fb; color: #0f172a; }
+  .demo-banner { background: #fbbf24; color: #78350f; padding: 6px 20px; font-size: 12px; font-weight: 600; text-align: center; }
+  .header { background: #fff; padding: 12px 20px; border-bottom: 1px solid #e3e8ef; }
+  .header-titel { font-size: 15px; font-weight: 700; }
+  .header-sub { color: #64748b; font-size: 11px; margin-top: 2px; font-family: "DM Mono", monospace; }
+  .toolbar { background: #fff; padding: 10px 20px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #e3e8ef; }
+  .toolbar-label { font-size: 10.5px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+  .btn-dag { padding: 6px 12px; border-radius: 8px; border: 1px solid #e3e8ef; background: #fff; color: #334155; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-dag:hover { background: #eef2f7; }
+  .btn-dag.actief { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .toggle { margin-left: auto; display: flex; gap: 6px; align-items: center; font-size: 11px; color: #64748b; }
+  .toggle input { cursor: pointer; }
+  .kaart-wrap { display: flex; justify-content: center; padding: 16px; }
+  .kaart-container { position: relative; width: 100%; max-width: 980px; }
+  .kaart-header-band { background: #1e3a5f; color: #fff; padding: 14px 18px; border-radius: 4px 4px 0 0; }
+  .kaart-header-band .links { font-size: 15px; font-weight: 700; }
+  .kaart-header-band .sub { font-size: 11px; color: #cbd5e1; margin-top: 2px; }
+  .kaart-kaart { position: relative; }
+  .kaart-container svg.overlay .halo { pointer-events: all; cursor: pointer; transition: fill 0.12s; }
+  .kaart-container svg.overlay .halo:hover { fill: rgba(255,255,255,0.75); }
+  .station-tooltip {
+    position: absolute; top: 14px; left: 14px; width: 240px;
+    background: #fff; border: 1px solid #e3e8ef; border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(15,23,42,0.12);
+    padding: 12px 14px; font-size: 12px; color: #334155;
+    display: none; pointer-events: all; line-height: 1.45;
+  }
+  .station-tooltip.zichtbaar { display: block; }
+  .station-tooltip h5 { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .station-tooltip h5 .sluit { cursor: pointer; color: #94a3b8; font-weight: 400; font-size: 16px; padding: 0 4px; line-height: 1; }
+  .station-tooltip .rij { display: flex; justify-content: space-between; padding: 2px 0; }
+  .station-tooltip .rij b { color: #0f172a; font-weight: 600; }
+  .station-tooltip .rij span { font-family: "DM Mono", monospace; font-size: 11px; }
+  .kaart-container svg.basemap { display: block; width: 100%; height: auto; background: #b8d4e8; border-radius: 0 0 4px 4px; }
+  .kaart-container svg.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .basemap-land { fill: #f5efd9; }
+  .basemap-prov { fill: none; stroke: rgba(255,255,255,0.7); stroke-width: 0.5; }
+  .ce-buitengrens { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
+  .status { text-align: center; color: #64748b; padding: 8px; font-size: 12px; }
+  [data-theme="dark"] body { background:#0b1220 !important; color:#f1f5f9 !important; }
+  [data-theme="dark"] .header, [data-theme="dark"] .toolbar { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; }
+  [data-theme="dark"] .header-titel { color:#f1f5f9 !important; }
+  [data-theme="dark"] .header-sub { color:#94a3b8 !important; }
+  [data-theme="dark"] .btn-dag { background:#0e1629 !important; color:#cbd5e1 !important; border-color:rgba(255,255,255,0.08) !important; }
+  [data-theme="dark"] .btn-dag.actief { background:#60a5fa !important; color:#0b1220 !important; border-color:#60a5fa !important; }
+  [data-theme="dark"] .toggle { color:#94a3b8 !important; }
+  [data-theme="dark"] .station-tooltip { background:#111a2e !important; border-color:rgba(255,255,255,0.08) !important; color:#cbd5e1 !important; }
+  [data-theme="dark"] .station-tooltip h5 { color:#f1f5f9 !important; }
+  [data-theme="dark"] .station-tooltip .rij b { color:#f1f5f9 !important; }
+  [data-theme="dark"] .demo-banner { background:#92400e !important; color:#fef3c7 !important; }
+</style>
+</head>
+<body>
+<div class="demo-banner">⚠ DEMO met voorbeelddata — niet live</div>
+<div class="header">
+  <div class="header-titel">MOSMIX Centraal Europa overzichtskaart — Polen · Tsjechië · Slowakije · Hongarije</div>
+  <div class="header-sub" id="hdr-update">Bijgewerkt: 2026-05-20 09:42  ·  Run: 20-05-2026 00 UTC (voorbeelddata)</div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Dag</span>
+  <div id="dag-btns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <label class="toggle"><input type="checkbox" id="chk-all" checked> Alle stations</label>
+</div>
+
+<div class="kaart-wrap">
+  <div class="kaart-container">
+    <div class="kaart-header-band">
+      <div class="links">Composiet: max/min-temp, kans op neerslag &amp; wind</div>
+      <div class="sub" id="kaart-sub">Min-temp is de nacht vóór de weergegeven dag</div>
+    </div>
+    <div class="kaart-kaart">
+      <svg class="basemap" id="basemap-svg" viewBox="0 0 1000 1240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg class="overlay" id="overlay-svg" viewBox="0 0 1000 1240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="station-tooltip" id="station-tooltip"></div>
+    </div>
+  </div>
+</div>
+<div class="status" id="status">Laden…</div>
+
+<script>
+const LON_MIN=12.0, LON_MAX=24.5, LAT_MIN=45.3, LAT_MAX=55.2;
+const SVG_W=1000, SVG_H=1240;
+const lonToX = lon => (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W;
+const latToY = lat => (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H;
+const NL_DAGEN = ["zo","ma","di","wo","do","vr","za"];
+
+const KERN = new Set([
+  "Warszawa","Kraków","Gdańsk","Wrocław","Katowice","Lublin","Białystok","Szczecin",
+  "Praha","Brno","Ostrava","Bratislava","Košice","Budapest","Debrecen","Pécs",
+]);
+
+const OFFSET = {
+  "Warszawa":    [ 0.40,-0.10],"Łódź":        [-0.40, 0.10],
+  "Kraków":      [-0.40,-0.10],"Katowice":    [-0.50, 0.20],
+  "Częstochowa": [ 0.40, 0.20],"Wrocław":     [-0.40, 0.10],
+  "Jelenia Góra":[-0.50, 0.10],"Rzeszów":     [ 0.40,-0.10],
+  "Lublin":      [ 0.40, 0.20],"Białystok":   [ 0.40, 0.20],
+  "Suwałki":     [-0.40, 0.20],"Toruń":       [-0.50, 0.20],
+  "Gdańsk":      [ 0.40, 0.20],"Kołobrzeg":   [-0.50, 0.20],
+  "Szczecin":    [-0.50,-0.10],"Praha":       [-0.40, 0.20],
+  "Plzeň":       [-0.40,-0.10],"Brno":        [ 0.40,-0.10],
+  "Ostrava":     [ 0.40, 0.10],"Bratislava":  [-0.40,-0.20],
+  "Sliač":       [-0.40, 0.10],"Budapest":    [ 0.40, 0.10],
+  "Debrecen":    [ 0.40, 0.10],
+};
+
+// ── Voorbeeld-data ──────────────────────────────────────────────────────────
+const DEMO_STATIONS = {
+  "Szczecin":[14.617,53.400],"Kołobrzeg":[15.583,54.183],"Łeba":[17.533,54.767],
+  "Gdańsk":[18.467,54.383],"Olsztyn":[20.083,53.767],"Toruń":[18.783,53.050],
+  "Warszawa":[20.967,52.167],"Łódź":[19.400,51.733],"Suwałki":[22.933,54.100],
+  "Białystok":[23.167,53.100],"Wrocław":[16.883,51.100],"Jelenia Góra":[15.733,50.900],
+  "Częstochowa":[19.083,50.567],"Rzeszów":[22.033,50.117],"Lublin":[22.400,51.233],
+  "Kraków":[19.783,50.067],"Katowice":[19.083,50.467],
+  "Praha":[14.267,50.100],"Plzeň":[13.433,49.750],"Ostrava":[18.117,49.683],
+  "Brno":[16.700,49.150],"České Budějovice":[14.417,48.950],
+  "Bratislava":[17.200,48.167],"Košice":[21.233,48.683],"Sliač":[19.133,48.633],
+  "Budapest":[19.000,47.433],"Szombathely":[16.633,47.267],"Debrecen":[21.617,47.483],
+  "Pécs":[18.233,46.000],
+};
+
+// Realistische mei-waarden per regio
+const DEMO_TX = {
+  "Szczecin":20.1,"Kołobrzeg":17.8,"Łeba":16.4,"Gdańsk":19.3,"Olsztyn":21.7,
+  "Toruń":22.4,"Warszawa":23.1,"Łódź":22.6,"Suwałki":20.9,"Białystok":21.4,
+  "Wrocław":23.8,"Jelenia Góra":20.1,"Częstochowa":22.9,"Rzeszów":22.3,
+  "Lublin":22.8,"Kraków":23.5,"Katowice":23.2,
+  "Praha":22.7,"Plzeň":22.1,"Ostrava":22.4,"Brno":24.3,"České Budějovice":21.8,
+  "Bratislava":25.1,"Košice":23.7,"Sliač":22.0,
+  "Budapest":26.4,"Szombathely":24.8,"Debrecen":24.9,"Pécs":26.1,
+};
+const DEMO_TN = {
+  "Szczecin":8.4,"Kołobrzeg":8.9,"Łeba":9.1,"Gdańsk":9.3,"Olsztyn":7.6,
+  "Toruń":8.1,"Warszawa":9.2,"Łódź":8.7,"Suwałki":6.3,"Białystok":7.1,
+  "Wrocław":9.4,"Jelenia Góra":7.2,"Częstochowa":8.3,"Rzeszów":8.8,
+  "Lublin":8.6,"Kraków":10.1,"Katowice":10.3,
+  "Praha":9.6,"Plzeň":8.9,"Ostrava":9.8,"Brno":11.2,"České Budějovice":8.4,
+  "Bratislava":12.4,"Košice":10.7,"Sliač":9.1,
+  "Budapest":14.2,"Szombathely":12.6,"Debrecen":12.8,"Pécs":13.9,
+};
+const DEMO_RR = {
+  "Szczecin":0.0,"Kołobrzeg":0.3,"Łeba":0.0,"Gdańsk":0.0,"Olsztyn":0.0,
+  "Toruń":0.0,"Warszawa":0.0,"Łódź":0.0,"Suwałki":0.0,"Białystok":2.1,
+  "Wrocław":0.0,"Jelenia Góra":1.4,"Częstochowa":0.0,"Rzeszów":3.2,
+  "Lublin":0.0,"Kraków":1.8,"Katowice":0.0,
+  "Praha":0.0,"Plzeň":0.0,"Ostrava":4.6,"Brno":0.0,"České Budějovice":0.0,
+  "Bratislava":0.0,"Košice":6.3,"Sliač":5.1,
+  "Budapest":0.0,"Szombathely":0.0,"Debrecen":0.0,"Pécs":0.0,
+};
+const DEMO_R101 = {
+  "Szczecin":5,"Kołobrzeg":18,"Łeba":8,"Gdańsk":10,"Olsztyn":5,
+  "Toruń":5,"Warszawa":8,"Łódź":5,"Suwałki":12,"Białystok":45,
+  "Wrocław":10,"Jelenia Góra":38,"Częstochowa":8,"Rzeszów":55,
+  "Lublin":12,"Kraków":35,"Katowice":12,
+  "Praha":8,"Plzeň":5,"Ostrava":62,"Brno":10,"České Budějovice":5,
+  "Bratislava":5,"Košice":72,"Sliač":68,
+  "Budapest":5,"Szombathely":5,"Debrecen":8,"Pécs":5,
+};
+const DEMO_FF = {
+  "Szczecin":18,"Kołobrzeg":22,"Łeba":25,"Gdańsk":20,"Olsztyn":15,
+  "Toruń":16,"Warszawa":14,"Łódź":13,"Suwałki":17,"Białystok":12,
+  "Wrocław":16,"Jelenia Góra":14,"Częstochowa":13,"Rzeszów":11,
+  "Lublin":14,"Kraków":12,"Katowice":14,
+  "Praha":15,"Plzeň":13,"Ostrava":12,"Brno":16,"České Budějovice":11,
+  "Bratislava":18,"Košice":10,"Sliač":12,
+  "Budapest":19,"Szombathely":16,"Debrecen":17,"Pécs":14,
+};
+const DEMO_DD = {
+  "Szczecin":250,"Kołobrzeg":255,"Łeba":260,"Gdańsk":245,"Olsztyn":240,
+  "Toruń":245,"Warszawa":240,"Łódź":250,"Suwałki":235,"Białystok":230,
+  "Wrocław":255,"Jelenia Góra":260,"Częstochowa":250,"Rzeszów":220,
+  "Lublin":245,"Kraków":230,"Katowice":255,
+  "Praha":260,"Plzeň":265,"Ostrava":240,"Brno":250,"České Budějovice":265,
+  "Bratislava":255,"Košice":225,"Sliač":230,
+  "Budapest":255,"Szombathely":260,"Debrecen":245,"Pécs":260,
+};
+
+const DEMO_DATA = {
+  stations: DEMO_STATIONS,
+  dagen: ["2026-05-20","2026-05-21","2026-05-22","2026-05-23","2026-05-24"],
+  bijgewerkt: "2026-05-20T09:42",
+  run: "2026-05-20T00:00:00Z",
+  data: {
+    "2026-05-20": { TX: DEMO_TX, TN: DEMO_TN, RR: DEMO_RR, R101: DEMO_R101, FF: DEMO_FF, DD: DEMO_DD,
+      gevoels:{}, TTD:{}, RR_D: DEMO_RR, RR_N: {}, Neff: {}, FX: {}, wwT: {}, wwM: {}, wwZ: {} },
+  },
+};
+// Vul overige dagen met lichte variatie
+["2026-05-21","2026-05-22","2026-05-23","2026-05-24"].forEach((dag, i) => {
+  const tx2 = {}, tn2 = {}, rr2 = {}, r101_2 = {}, ff2 = {}, dd2 = {};
+  for(const n of Object.keys(DEMO_TX)){
+    tx2[n] = +(DEMO_TX[n] + (Math.random()-0.5)*3).toFixed(1);
+    tn2[n] = +(DEMO_TN[n] + (Math.random()-0.5)*2).toFixed(1);
+    rr2[n] = Math.max(0, +(DEMO_RR[n] + (Math.random()-0.4)*2).toFixed(1));
+    r101_2[n] = Math.max(0, Math.min(100, Math.round(DEMO_R101[n] + (Math.random()-0.5)*15)));
+    ff2[n] = Math.max(0, Math.round(DEMO_FF[n] + (Math.random()-0.5)*6));
+    dd2[n] = (DEMO_DD[n] + Math.round((Math.random()-0.5)*30) + 360) % 360;
+  }
+  DEMO_DATA.data[dag] = { TX: tx2, TN: tn2, RR: rr2, R101: r101_2, FF: ff2, DD: dd2,
+    gevoels:{}, TTD:{}, RR_D: rr2, RR_N: {}, Neff: {}, FX: {}, wwT: {}, wwM: {}, wwZ: {} };
+});
+
+let mosmixData=null, provincies=null, huidigDag=null, toonAlle=true;
+
+function kmhToBft(kmh){
+  if(kmh == null) return null;
+  const tabel = [1,5,11,19,28,38,49,61,74,88,102,117];
+  let b=0; while(b<tabel.length && kmh>tabel[b]) b++; return b;
+}
+function windKleur(bft){
+  if(bft<=2) return "#607d8b"; if(bft<=4) return "#5d4037";
+  if(bft<=6) return "#c0392b"; return "#6c3483";
+}
+function neerslagKleur(p){
+  if(p<=0) return "#94a3b8"; if(p<30) return "#64748b";
+  if(p<60) return "#42a5f5"; if(p<85) return "#1a7a4a";
+  return "#0d47a1";
+}
+
+function bouwBasemap(){
+  const svg = document.getElementById("basemap-svg");
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  if(!provincies) return;
+  const ringD = ring => ring.map(([lo,la],i)=>(i?"L":"M")+lonToX(lo).toFixed(1)+" "+latToY(la).toFixed(1)).join("")+"Z";
+  let d = "";
+  for(const f of provincies.features){
+    const polys = f.geometry.type==="Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for(const poly of polys) for(const ring of poly) d += ringD(ring);
+  }
+  const land = document.createElementNS("http://www.w3.org/2000/svg","path");
+  land.setAttribute("d",d); land.setAttribute("class","basemap-land"); land.setAttribute("fill-rule","evenodd");
+  svg.appendChild(land);
+  const prov = document.createElementNS("http://www.w3.org/2000/svg","path");
+  prov.setAttribute("d",d); prov.setAttribute("class","basemap-prov"); svg.appendChild(prov);
+  let db = "";
+  for(const f of provincies.features){
+    const polys = f.geometry.type==="Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for(const poly of polys) db += ringD(poly[0]);
+  }
+  const bg = document.createElementNS("http://www.w3.org/2000/svg","path");
+  bg.setAttribute("d",db); bg.setAttribute("class","ce-buitengrens"); svg.appendChild(bg);
+
+  const label = (x,y,tekst,anchor,size,kleur,opacity) => {
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x",x); t.setAttribute("y",y);
+    t.setAttribute("text-anchor", anchor||"middle");
+    t.setAttribute("font-family","DM Sans, sans-serif"); t.setAttribute("font-weight","700");
+    t.setAttribute("font-size", size||22); t.setAttribute("fill", kleur||"#ffffff");
+    t.setAttribute("opacity", opacity||"0.72"); t.setAttribute("letter-spacing","2");
+    t.textContent = tekst; svg.appendChild(t);
+  };
+  label(lonToX(19.5),latToY(52.0),"Polen",     "middle",28);
+  label(lonToX(15.8),latToY(49.8),"Tsjechië",  "middle",20);
+  label(lonToX(19.5),latToY(48.7),"Slowakije", "middle",18);
+  label(lonToX(18.5),latToY(47.0),"Hongarije", "middle",22);
+  label(lonToX(12.5),latToY(53.8),"Duitsland", "middle",13,"#94a3b8");
+  label(lonToX(24.2),latToY(54.8),"Litouwen",  "middle",11,"#94a3b8");
+  label(lonToX(23.5),latToY(53.3),"Wit-Rusland","middle",11,"#94a3b8");
+  label(lonToX(24.0),latToY(51.5),"Oekraïne",  "middle",11,"#94a3b8");
+  label(lonToX(22.0),latToY(45.5),"Roemenië",  "middle",11,"#94a3b8");
+  label(lonToX(16.5),latToY(45.5),"Kroatië",   "middle",11,"#94a3b8");
+  label(lonToX(14.0),latToY(46.8),"Slovenië",  "middle",11,"#94a3b8");
+  label(lonToX(13.5),latToY(48.2),"Oostenrijk","middle",11,"#94a3b8");
+  label(lonToX(17.5),latToY(54.8),"Oostzee",   "middle",13,"#22557a");
+}
+
+function tekenOverlay(){
+  const svg = document.getElementById("overlay-svg");
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  if(!mosmixData || !huidigDag) return;
+  const dag = mosmixData.data[huidigDag];
+  if(!dag) return;
+  const stations = mosmixData.stations;
+  const lijst = Object.keys(stations).filter(n => toonAlle || KERN.has(n));
+  const extremen = { warmst:null, koudst:null, natst:null };
+  for(const n of lijst){
+    const tx = dag.TX?.[n], rr = dag.RR?.[n];
+    if(tx != null){
+      if(extremen.warmst==null||tx>dag.TX[extremen.warmst]) extremen.warmst=n;
+      if(extremen.koudst==null||tx<dag.TX[extremen.koudst]) extremen.koudst=n;
+    }
+    if(rr!=null&&rr>0&&(extremen.natst==null||rr>dag.RR[extremen.natst])) extremen.natst=n;
+  }
+  for(const naam of lijst){
+    const [lon,lat] = stations[naam];
+    const [dlo,dla] = OFFSET[naam]||[0,0];
+    const ax=lonToX(lon), ay=latToY(lat);
+    const cx=lonToX(lon+dlo), cy=latToY(lat+dla);
+    tekenBadge(svg,naam,cx,cy,dag,ax,ay,extremen);
+  }
+}
+
+function tekenBadge(svg,naam,cx,cy,dag,ax,ay,extremen){
+  const tx=dag.TX?.[naam], tn=dag.TN?.[naam];
+  const rr=dag.RR?.[naam], r101=dag.R101?.[naam];
+  let pop=null;
+  if(r101!=null){pop=r101;}else if(rr!=null){pop=rr<0.1?0:Math.min(100,Math.max(50,60));}
+  const ff=dag.FF?.[naam], dd=dag.DD?.[naam];
+  const isKern=KERN.has(naam);
+  const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+  g.setAttribute("transform",`translate(${cx.toFixed(1)} ${cy.toFixed(1)})`);
+  const halo=document.createElementNS("http://www.w3.org/2000/svg","circle");
+  halo.setAttribute("r",26); halo.setAttribute("class","halo");
+  halo.setAttribute("fill","rgba(255,255,255,0.45)");
+  halo.setAttribute("stroke","rgba(15,23,42,0.18)"); halo.setAttribute("stroke-width","0.6");
+  halo.addEventListener("click",e=>{e.stopPropagation();toonStation(naam);});
+  g.appendChild(halo);
+  const extr=extremen&&(
+    (extremen.warmst===naam&&{ico:null,kleur:"#d84315",sw:3})||
+    (extremen.koudst===naam&&{ico:"❄",kleur:"#1565c0",sw:1.8})||
+    (extremen.natst===naam&&{ico:"💧",kleur:"#0d47a1",sw:1.8})
+  );
+  if(extr){
+    halo.setAttribute("stroke",extr.kleur); halo.setAttribute("stroke-width",extr.sw);
+    halo.setAttribute("fill","rgba(255,255,255,0.75)");
+    if(extr.ico){const tag=document.createElementNS("http://www.w3.org/2000/svg","text");
+      tag.setAttribute("x",18);tag.setAttribute("y",-18);
+      tag.setAttribute("text-anchor","middle");tag.setAttribute("font-size","13");
+      tag.textContent=extr.ico;g.appendChild(tag);}
+  }
+  if(ax!=null&&ay!=null&&(Math.abs(ax-cx)>0.5||Math.abs(ay-cy)>0.5)){
+    const line=document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1",0);line.setAttribute("y1",0);
+    line.setAttribute("x2",(ax-cx).toFixed(1));line.setAttribute("y2",(ay-cy).toFixed(1));
+    line.setAttribute("stroke","#0f172a");line.setAttribute("stroke-width","1");
+    line.setAttribute("stroke-dasharray","2 2");line.setAttribute("opacity","0.45");
+    g.appendChild(line);
+    const anch=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    anch.setAttribute("cx",(ax-cx).toFixed(1));anch.setAttribute("cy",(ay-cy).toFixed(1));
+    anch.setAttribute("r",1.8);anch.setAttribute("fill","#0f172a");g.appendChild(anch);
+  }
+  const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+  dot.setAttribute("r",isKern?3.0:1.8);dot.setAttribute("fill","#0f172a");g.appendChild(dot);
+  const sc=isKern?1.0:0.85;
+  const fB=13*sc,fS=10*sc,fT=9*sc;
+  if(tx!=null){const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x",0);t.setAttribute("y",-12);t.setAttribute("text-anchor","middle");
+    t.setAttribute("font-family","DM Sans, sans-serif");t.setAttribute("font-weight","700");
+    t.setAttribute("font-size",fB);t.setAttribute("fill","#c0392b");
+    t.setAttribute("stroke","#fff");t.setAttribute("stroke-width","3");t.setAttribute("paint-order","stroke");
+    t.textContent=tx.toFixed(1).replace(".",",")+"°";g.appendChild(t);}
+  if(tn!=null){const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x",0);t.setAttribute("y",16);t.setAttribute("text-anchor","middle");
+    t.setAttribute("font-family","DM Sans, sans-serif");t.setAttribute("font-weight","700");
+    t.setAttribute("font-size",fS);t.setAttribute("fill","#2471a3");
+    t.setAttribute("stroke","#fff");t.setAttribute("stroke-width","3");t.setAttribute("paint-order","stroke");
+    t.textContent="🌙 "+tn.toFixed(1).replace(".",",")+"°";g.appendChild(t);}
+  if(pop!=null){const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x",-11);t.setAttribute("y",4);t.setAttribute("text-anchor","end");
+    t.setAttribute("font-family","DM Sans, sans-serif");t.setAttribute("font-weight","700");
+    t.setAttribute("font-size",fT);t.setAttribute("fill",neerslagKleur(pop));
+    t.setAttribute("stroke","#fff");t.setAttribute("stroke-width","3");t.setAttribute("paint-order","stroke");
+    t.textContent=Math.round(pop)+"%";g.appendChild(t);}
+  if(ff!=null&&dd!=null){
+    const bft=kmhToBft(ff),kleur=windKleur(bft),hoek=(dd+180)%360;
+    const pijl=document.createElementNS("http://www.w3.org/2000/svg","g");
+    pijl.setAttribute("transform",`translate(22 0) rotate(${hoek})`);
+    const shaft=document.createElementNS("http://www.w3.org/2000/svg","path");
+    shaft.setAttribute("d","M0 -8 L0 8 M0 -8 L-3 -4 M0 -8 L3 -4");
+    shaft.setAttribute("stroke",kleur);shaft.setAttribute("stroke-width","2");
+    shaft.setAttribute("stroke-linecap","round");shaft.setAttribute("stroke-linejoin","round");
+    shaft.setAttribute("fill","none");pijl.appendChild(shaft);g.appendChild(pijl);
+    const b=document.createElementNS("http://www.w3.org/2000/svg","text");
+    b.setAttribute("x",34);b.setAttribute("y",4);
+    b.setAttribute("font-family","DM Sans, sans-serif");b.setAttribute("font-weight","700");
+    b.setAttribute("font-size",fT);b.setAttribute("fill",kleur);
+    b.setAttribute("stroke","#fff");b.setAttribute("stroke-width","3");b.setAttribute("paint-order","stroke");
+    b.textContent=bft;g.appendChild(b);}
+  if(isKern){const n=document.createElementNS("http://www.w3.org/2000/svg","text");
+    n.setAttribute("x",0);n.setAttribute("y",30);n.setAttribute("text-anchor","middle");
+    n.setAttribute("font-family","DM Sans, sans-serif");n.setAttribute("font-weight","600");
+    n.setAttribute("font-size",8.5);n.setAttribute("fill","#0f172a");
+    n.setAttribute("stroke","#fff");n.setAttribute("stroke-width","3");n.setAttribute("paint-order","stroke");
+    n.textContent=naam;g.appendChild(n);}
+  svg.appendChild(g);
+}
+
+function dagLabel(d){ return NL_DAGEN[d.getDay()]+" "+d.getDate()+"/"+(d.getMonth()+1); }
+function update(){
+  tekenOverlay();
+  const d=new Date(huidigDag+"T12:00:00");
+  const full=["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][d.getDay()];
+  document.getElementById("kaart-sub").textContent=
+    `${full} ${d.getDate()}/${d.getMonth()+1} — min-temp = nacht van ${dagLabel(new Date(d-86400000))} op ${full}`;
+}
+document.getElementById("chk-all").onchange=e=>{toonAlle=e.target.checked;update();};
+
+function fmt(v,eenheid="",dec=1){
+  if(v==null)return"–";
+  const n=typeof v==="number"?v.toFixed(dec).replace(".",","):v;
+  return n+eenheid;
+}
+function toonStation(naam){
+  const tt=document.getElementById("station-tooltip");
+  const d=mosmixData.data[huidigDag];
+  if(!d){tt.classList.remove("zichtbaar");return;}
+  const bft=kmhToBft(d.FF?.[naam]);
+  tt.innerHTML=`
+    <h5>${naam}<span class="sluit" onclick="document.getElementById('station-tooltip').classList.remove('zichtbaar')">×</span></h5>
+    <div class="rij"><b>Max / min</b><span>${fmt(d.TX?.[naam],"°")} / ${fmt(d.TN?.[naam],"°")}</span></div>
+    <div class="rij"><b>Wind / stoot</b><span>${fmt(d.FF?.[naam]," km/u",0)} · ${bft!=null?bft+" Bft":"–"}</span></div>
+    <div class="rij"><b>Neerslag kans</b><span>${fmt(d.R101?.[naam],"%",0)}</span></div>
+  `;
+  tt.classList.add("zichtbaar");
+}
+
+const CE_GEOJSON = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Tsjechi\u00eb","country":"CZE"},"geometry":{"type":"Polygon","coordinates":[[[14.810393,50.858447],[14.867857,50.86439],[14.982062,50.859067],[14.981132,50.90909],[14.996635,50.959216],[15.001182,51.012443],[15.073632,51.002624],[15.13151,51.005828],[15.227111,50.977406],[15.268763,50.94299],[15.265352,50.88227],[15.307727,50.844753],[15.352995,50.812972],[15.441775,50.800208],[15.641866,50.755766],[15.76744,50.744191],[15.848159,50.675151],[15.941486,50.68838],[15.993163,50.649364],[16.024479,50.608592],[16.086491,50.64678],[16.160284,50.628642],[16.211754,50.649106],[16.268288,50.660423],[16.331644,50.644042],[16.416806,50.586629],[16.391175,50.539914],[16.352624,50.492785],[16.287719,50.492785],[16.232011,50.456766],[16.190153,50.424158],[16.24493,50.376823],[16.334227,50.371862],[16.371021,50.318377],[16.437787,50.297965],[16.477578,50.255332],[16.535042,50.207738],[16.557263,50.154718],[16.618654,50.10702],[16.701233,50.094928],[16.754253,50.13229],[16.795284,50.174406],[16.857606,50.187739],[16.907009,50.211768],[16.957755,50.217143],[17.008398,50.20996],[16.998373,50.26701],[16.945249,50.306905],[16.909283,50.359925],[16.865874,50.408449],[16.915794,50.431083],[16.98194,50.416355],[17.084672,50.397958],[17.131698,50.376823],[17.187612,50.378476],[17.24611,50.322149],[17.316803,50.318635],[17.334786,50.270008],[17.388013,50.272643],[17.429561,50.239777],[17.516998,50.268354],[17.606398,50.258225],[17.676368,50.297396],[17.731971,50.291763],[17.721429,50.242722],[17.717915,50.191098],[17.648669,50.167998],[17.589448,50.163244],[17.632753,50.106348],[17.690734,50.10547],[17.731971,50.06909],[17.763287,50.025216],[17.839355,49.973643],[17.912116,49.975814],[17.959761,49.995812],[18.032418,50.00284],[18.002446,50.046765],[18.091639,50.017207],[18.162023,49.98124],[18.208738,49.958295],[18.260105,49.94057],[18.306923,49.909668],[18.368832,49.932044],[18.481797,49.896645],[18.544428,49.912975],[18.567269,49.861454],[18.566753,49.804765],[18.60768,49.74296],[18.637343,49.700327],[18.695427,49.688854],[18.742246,49.669683],[18.792579,49.660794],[18.81573,49.599299],[18.83454,49.547623],[18.792269,49.509537],[18.732531,49.480288],[18.675583,49.485043],[18.600446,49.485973],[18.535643,49.481684],[18.481797,49.429077],[18.439215,49.395074],[18.387642,49.389751],[18.361586,49.330191],[18.190031,49.276942],[18.136495,49.233068],[18.105075,49.169765],[18.102905,49.09225],[18.075516,49.047188],[18.012885,49.019128],[17.959244,49.021867],[17.90085,48.993031],[17.878733,48.933552],[17.820131,48.923371],[17.744891,48.872574],[17.535084,48.812991],[17.467905,48.838105],[17.411225,48.830216],[17.260269,48.857794],[17.167458,48.859758],[17.113715,48.83392],[17.049946,48.774027],[16.974808,48.649874],[16.945043,48.604166],[16.896674,48.696977],[16.818125,48.710775],[16.744332,48.729637],[16.691001,48.732065],[16.651004,48.766223],[16.545791,48.796299],[16.492254,48.79971],[16.43572,48.794542],[16.384974,48.737078],[16.318724,48.733512],[16.177751,48.746535],[16.085354,48.742866],[16.032334,48.758059],[15.931771,48.806428],[15.888363,48.835056],[15.840097,48.850094],[15.787904,48.872263],[15.726823,48.854952],[15.603729,48.887353],[15.544187,48.902612],[15.471851,48.936704],[15.405912,48.954687],[15.357853,48.97081],[15.28871,48.975358],[15.243234,48.95293],[15.161792,48.937221],[15.137401,48.993031],[15.059576,48.997217],[15.003973,49.009774],[14.964595,48.971741],[14.968316,48.912674],[14.947025,48.822396],[14.939584,48.762813],[14.86765,48.775577],[14.815457,48.780331],[14.78042,48.743124],[14.722749,48.693411],[14.700219,48.646102],[14.695671,48.589542],[14.645442,48.592901],[14.600586,48.617576],[14.548807,48.610936],[14.482144,48.624475],[14.421166,48.597061],[14.353366,48.571429],[14.216527,48.58117],[14.07483,48.591712],[14.015196,48.620393],[14.026151,48.670054],[13.98233,48.706485],[13.915047,48.73098],[13.855929,48.759299],[13.796191,48.779814],[13.747925,48.843376],[13.673356,48.876346],[13.621783,48.909057],[13.573414,48.951018],[13.522395,48.969342],[13.482257,48.937634],[13.427273,48.959958],[13.384175,48.993031],[13.329915,49.066929],[13.287333,49.10057],[13.206821,49.107495],[13.162586,49.135142],[13.055823,49.238184],[13.011278,49.267795],[12.95433,49.31911],[12.88467,49.339573],[12.797751,49.327843],[12.729331,49.391147],[12.663082,49.418897],[12.627218,49.460186],[12.61554,49.513775],[12.568721,49.538838],[12.546603,49.595579],[12.501955,49.619711],[12.496374,49.669993],[12.433949,49.6918],[12.388577,49.732314],[12.436739,49.769263],[12.456376,49.817115],[12.51291,49.870239],[12.462681,49.931269],[12.451312,49.980568],[12.399222,49.992764],[12.24688,50.044957],[12.218044,50.088572],[12.178564,50.132962],[12.163784,50.193785],[12.089887,50.230837],[12.110971,50.276622],[12.076141,50.315173],[12.149315,50.311711],[12.178047,50.268767],[12.232514,50.259104],[12.258455,50.21089],[12.283363,50.162211],[12.308685,50.217091],[12.344652,50.26639],[12.398189,50.315173],[12.450175,50.339357],[12.510223,50.38876],[12.625358,50.399922],[12.678792,50.393721],[12.725094,50.423435],[12.788139,50.434339],[12.918363,50.4054],[12.982442,50.42297],[13.009624,50.492681],[13.06037,50.490614],[13.160106,50.497022],[13.232349,50.58203],[13.284646,50.568956],[13.321853,50.60239],[13.365985,50.627092],[13.42934,50.594329],[13.482257,50.620891],[13.523288,50.66218],[13.556567,50.706725],[13.691753,50.711841],[13.749062,50.72321],[13.816552,50.72135],[13.869572,50.735251],[13.892516,50.780416],[13.948843,50.797211],[14.015713,50.801758],[14.190792,50.847905],[14.232133,50.879376],[14.346545,50.880203],[14.381892,50.920872],[14.31833,50.937512],[14.28381,50.974822],[14.263553,51.021435],[14.319363,51.040012],[14.369386,51.022442],[14.425817,51.020944],[14.482144,51.037196],[14.542295,50.998749],[14.575575,50.95069],[14.617123,50.920872],[14.611852,50.870953],[14.662185,50.834366],[14.737529,50.810698],[14.79458,50.831627],[14.810393,50.858447]]]}},{"type":"Feature","properties":{"name":"Hongarije","country":"HUN"},"geometry":{"type":"Polygon","coordinates":[[[22.877601,47.946739],[22.836053,47.902452],[22.779622,47.882298],[22.75182,47.827676],[22.691669,47.8107],[22.637719,47.771555],[22.562994,47.757215],[22.454371,47.787394],[22.407345,47.743082],[22.322079,47.735873],[22.27309,47.723755],[22.232162,47.688253],[22.200743,47.647945],[22.169117,47.601385],[22.09956,47.570948],[22.037445,47.539322],[21.988869,47.492942],[22.000238,47.427184],[21.981531,47.366102],[21.919003,47.349669],[21.862159,47.297424],[21.844589,47.249934],[21.823298,47.203321],[21.789398,47.150301],[21.763767,47.105214],[21.69421,47.069169],[21.632819,47.022686],[21.648528,46.942976],[21.594371,46.910006],[21.583416,46.847943],[21.51572,46.821588],[21.48151,46.764976],[21.501767,46.703507],[21.436241,46.673741],[21.396037,46.626354],[21.337643,46.620411],[21.295268,46.585039],[21.278938,46.528401],[21.245142,46.47688],[21.280695,46.416393],[21.21517,46.402905],[21.168661,46.362753],[21.155949,46.298932],[21.105616,46.278675],[21.051459,46.236094],[20.999162,46.251597],[20.924438,46.259555],[20.866974,46.257126],[20.798658,46.267616],[20.739333,46.237489],[20.736646,46.186691],[20.683523,46.144678],[20.607558,46.129485],[20.548957,46.15615],[20.468549,46.174134],[20.283237,46.1438],[20.242826,46.108091],[20.188462,46.140389],[20.138026,46.136461],[20.088623,46.154135],[20.034983,46.142973],[19.92915,46.16354],[19.873649,46.152992],[19.79045,46.129072],[19.711889,46.15871],[19.647824,46.173875],[19.589739,46.165969],[19.525247,46.156409],[19.499305,46.108608],[19.453727,46.07755],[19.404738,46.060239],[19.362156,46.029646],[19.306966,46.026649],[19.263454,45.981432],[19.148009,45.984068],[19.088478,46.018846],[19.048584,45.963449],[18.981818,45.950788],[18.901306,45.931203],[18.845392,45.913943],[18.794852,45.903039],[18.723849,45.89844],[18.674343,45.910377],[18.629281,45.886864],[18.585459,45.82692],[18.530269,45.79085],[18.465467,45.783718],[18.411723,45.743204],[18.351158,45.758397],[18.300516,45.751834],[18.229822,45.781238],[18.12895,45.785372],[18.080477,45.771729],[17.975367,45.792141],[17.906234,45.792141],[17.858062,45.771729],[17.809176,45.814414],[17.687323,45.840614],[17.646912,45.883712],[17.591102,45.936215],[17.511933,45.95394],[17.426667,45.956731],[17.365276,45.956731],[17.316596,45.973784],[17.275875,46.012025],[17.254068,46.070832],[17.208593,46.116566],[17.116195,46.123129],[17.052943,46.153463],[16.974808,46.210565],[16.940702,46.251493],[16.896054,46.286271],[16.875073,46.342857],[16.837659,46.381873],[16.776474,46.39288],[16.712395,46.412672],[16.677462,46.44869],[16.61111,46.478069],[16.521089,46.498532],[16.500832,46.544809],[16.430242,46.604392],[16.376395,46.629093],[16.410502,46.668367],[16.366216,46.696467],[16.325546,46.733273],[16.298157,46.775802],[16.327509,46.825463],[16.282241,46.859932],[16.179486,46.858468],[16.094035,46.862774],[16.159148,46.910316],[16.217025,46.937395],[16.252992,46.973516],[16.325856,47.00044],[16.387764,47.002042],[16.441404,46.99522],[16.481919,47.04421],[16.460835,47.0963],[16.50476,47.125833],[16.447089,47.139708],[16.41877,47.183659],[16.421354,47.243035],[16.473237,47.276805],[16.43882,47.336569],[16.433963,47.39685],[16.589406,47.425633],[16.640875,47.452919],[16.677359,47.509866],[16.66754,47.560096],[16.647697,47.606139],[16.575453,47.624949],[16.509617,47.64314],[16.425901,47.654276],[16.47303,47.691767],[16.521399,47.711533],[16.567805,47.754192],[16.689865,47.729568],[16.730379,47.685902],[16.797455,47.675463],[16.850165,47.712929],[16.902668,47.682026],[16.98194,47.695436],[17.054804,47.702025],[17.048706,47.763649],[17.049119,47.818684],[17.004367,47.852377],[17.051186,47.872893],[17.087463,47.922632],[17.148338,48.005443],[17.220892,48.015055],[17.272671,48.00534],[17.337887,47.998725],[17.472039,47.888809],[17.526609,47.872118],[17.572601,47.829536],[17.639884,47.819201],[17.719245,47.773669],[17.825713,47.750006],[17.883532,47.752521],[18.11262,47.762486],[18.23592,47.753882],[18.347851,47.776775],[18.552593,47.792846],[18.633829,47.779824],[18.692843,47.777963],[18.750307,47.81362],[18.814916,47.832194],[18.748757,47.870723],[18.754751,47.951803],[18.794232,47.993144],[18.838467,48.040015],[18.933595,48.054349],[18.996494,48.066214],[19.098503,48.070736],[19.222526,48.060582],[19.29322,48.087764],[19.428199,48.085852],[19.481735,48.111328],[19.503026,48.189411],[19.623226,48.227006],[19.676969,48.200392],[19.73309,48.202899],[19.76916,48.167449],[19.821663,48.157914],[19.884295,48.129621],[19.973902,48.158379],[20.034983,48.175872],[20.096995,48.198429],[20.134512,48.246669],[20.187636,48.248994],[20.249027,48.264187],[20.324268,48.279948],[20.370157,48.334338],[20.409017,48.413713],[20.465968,48.46379],[20.480538,48.518538],[20.572522,48.536573],[20.784085,48.569052],[20.845477,48.545823],[20.945832,48.518978],[21.0065,48.518151],[21.063861,48.506239],[21.186748,48.513707],[21.238011,48.513448],[21.28824,48.519934],[21.338573,48.549854],[21.424563,48.561275],[21.472725,48.544997],[21.5151,48.507118],[21.574631,48.495568],[21.613388,48.440352],[21.67757,48.372346],[21.727697,48.340901],[21.789398,48.335526],[21.841178,48.353174],[21.914765,48.36909],[21.981531,48.374723],[22.077856,48.375808],[22.13284,48.404798],[22.201983,48.418157],[22.271849,48.403455],[22.298721,48.349143],[22.308126,48.293694],[22.357116,48.243103],[22.418404,48.238969],[22.469047,48.244136],[22.55576,48.177164],[22.583045,48.124816],[22.693219,48.101768],[22.745722,48.116289],[22.801429,48.090968],[22.844321,48.061047],[22.851349,48.008802],[22.877601,47.946739]]]}},{"type":"Feature","properties":{"name":"Slowakije","country":"SVK"},"geometry":{"type":"Polygon","coordinates":[[[22.539637,49.0722],[22.520103,49.009826],[22.466566,48.980526],[22.427292,48.929469],[22.402384,48.878826],[22.362283,48.844255],[22.36342,48.787617],[22.32766,48.743021],[22.310297,48.681681],[22.25552,48.656773],[22.219036,48.620935],[22.153717,48.585873],[22.148343,48.508823],[22.13284,48.404798],[22.077856,48.375808],[22.018015,48.379735],[21.929338,48.372914],[21.841178,48.353174],[21.789398,48.335526],[21.727697,48.340901],[21.67757,48.372346],[21.621553,48.429655],[21.600366,48.481641],[21.537734,48.495232],[21.49939,48.535075],[21.439135,48.558329],[21.372679,48.550345],[21.32183,48.54758],[21.276561,48.50872],[21.219924,48.518719],[21.109336,48.489109],[21.035956,48.514637],[20.981489,48.516859],[20.891365,48.541095],[20.815814,48.563807],[20.572522,48.536573],[20.51051,48.533783],[20.482811,48.489367],[20.435579,48.442393],[20.370157,48.334338],[20.324268,48.279948],[20.272385,48.252456],[20.217815,48.267598],[20.170892,48.244033],[20.118079,48.229719],[20.078082,48.193545],[19.99695,48.167914],[19.928633,48.130087],[19.846261,48.152669],[19.785593,48.14869],[19.756551,48.200315],[19.686994,48.196904],[19.643896,48.224809],[19.531241,48.21065],[19.493621,48.150705],[19.428199,48.085852],[19.29322,48.087764],[19.233482,48.06208],[19.098503,48.070736],[19.038662,48.064871],[18.981818,48.061615],[18.838467,48.040015],[18.794232,47.993144],[18.743176,47.971052],[18.744726,47.910513],[18.778006,47.851447],[18.717234,47.788118],[18.663698,47.775896],[18.597448,47.79065],[18.347851,47.776775],[18.273024,47.756259],[18.11262,47.762486],[17.883532,47.752521],[17.825713,47.750006],[17.741997,47.76538],[17.676678,47.789177],[17.61911,47.829226],[17.560406,47.837986],[17.517308,47.876252],[17.36941,47.981207],[17.272671,48.00534],[17.220892,48.015055],[17.148338,48.005443],[17.092631,48.02725],[17.064829,48.07903],[17.047465,48.130991],[16.98194,48.161299],[16.969951,48.216645],[16.955275,48.268786],[16.913313,48.296691],[16.891713,48.347024],[16.84448,48.365602],[16.86081,48.443788],[16.901221,48.496602],[16.946903,48.539726],[16.945043,48.604166],[16.974808,48.649874],[17.025348,48.746328],[17.084362,48.793715],[17.167458,48.859758],[17.260269,48.857794],[17.374371,48.819605],[17.429561,48.838157],[17.498497,48.816763],[17.727217,48.86291],[17.77941,48.911744],[17.841215,48.920994],[17.886897,48.947246],[17.914079,49.010498],[18.012885,49.019128],[18.075516,49.047188],[18.102905,49.09225],[18.101458,49.142945],[18.117788,49.202579],[18.160576,49.2587],[18.324597,49.311255],[18.385162,49.342261],[18.416788,49.385462],[18.481797,49.429077],[18.527995,49.454864],[18.600446,49.485973],[18.675583,49.485043],[18.732531,49.480288],[18.792269,49.509537],[18.932208,49.504318],[18.958253,49.448146],[18.962284,49.389183],[19.045793,49.402774],[19.096643,49.394609],[19.172504,49.402257],[19.204543,49.442823],[19.220459,49.493001],[19.265005,49.521475],[19.315027,49.523955],[19.43378,49.595165],[19.481735,49.573513],[19.535479,49.492846],[19.573926,49.445252],[19.634801,49.441324],[19.684514,49.389079],[19.760065,49.397658],[19.78952,49.309188],[19.751797,49.219064],[19.831998,49.185888],[19.887809,49.214],[19.937935,49.22511],[20.01731,49.183872],[20.07002,49.183097],[20.08604,49.243042],[20.130171,49.303917],[20.191976,49.328618],[20.284374,49.338643],[20.307422,49.386599],[20.370467,49.38169],[20.422143,49.382982],[20.522085,49.374352],[20.579136,49.383395],[20.636084,49.39833],[20.689517,49.4005],[20.778297,49.331202],[20.833591,49.322055],[20.884337,49.300299],[20.942422,49.295855],[20.996682,49.339367],[21.054043,49.354766],[21.053526,49.414453],[21.10944,49.424581],[21.157292,49.405151],[21.211242,49.411094],[21.260542,49.449438],[21.330408,49.427785],[21.42787,49.409802],[21.48151,49.415228],[21.601193,49.426493],[21.648632,49.407063],[21.708576,49.390888],[21.757566,49.348927],[21.819577,49.377246],[21.874561,49.348358],[21.928408,49.330788],[21.99321,49.278182],[22.012434,49.211054],[22.111549,49.188627],[22.165706,49.171108],[22.208494,49.144185],[22.262858,49.130594],[22.318151,49.131989],[22.390085,49.093025],[22.505013,49.083413],[22.539637,49.0722]]]}},{"type":"Feature","properties":{"name":"Polen","country":"POL"},"geometry":{"type":"Polygon","coordinates":[[[18.833196,49.510261],[18.820174,49.590256],[18.792579,49.660794],[18.742246,49.669683],[18.695427,49.688854],[18.637343,49.700327],[18.60768,49.74296],[18.566753,49.804765],[18.593831,49.852204],[18.559208,49.907187],[18.505051,49.896697],[18.407486,49.923155],[18.328524,49.92884],[18.27261,49.918298],[18.22052,49.954885],[18.162023,49.98124],[18.098151,49.989043],[18.033245,50.041805],[17.999862,49.996588],[17.941571,49.992764],[17.875735,49.968682],[17.774553,50.015191],[17.74303,50.060563],[17.690734,50.10547],[17.632753,50.106348],[17.584177,50.145881],[17.648669,50.167998],[17.717915,50.191098],[17.721429,50.242722],[17.731971,50.291763],[17.684533,50.312382],[17.646705,50.271093],[17.516998,50.268354],[17.44,50.242722],[17.388013,50.272643],[17.334786,50.270008],[17.316803,50.318635],[17.24611,50.322149],[17.195053,50.351915],[17.145444,50.376719],[17.095628,50.393669],[16.98194,50.416355],[16.915794,50.431083],[16.865771,50.422401],[16.897914,50.378218],[16.926543,50.319255],[16.987831,50.284942],[17.012842,50.231664],[16.960339,50.231974],[16.907009,50.211768],[16.857606,50.187739],[16.795284,50.174406],[16.754253,50.13229],[16.701233,50.094928],[16.618654,50.10702],[16.566668,50.142212],[16.545894,50.188824],[16.50476,50.227995],[16.452153,50.284994],[16.371021,50.318377],[16.343736,50.36995],[16.288649,50.371862],[16.232011,50.402609],[16.198008,50.440023],[16.247411,50.464983],[16.303428,50.49604],[16.362029,50.501208],[16.395516,50.545701],[16.331644,50.644042],[16.268288,50.660423],[16.211754,50.649106],[16.160284,50.628642],[16.086491,50.64678],[16.024479,50.608592],[15.993163,50.649364],[15.958023,50.686881],[15.882265,50.674221],[15.797619,50.729773],[15.684345,50.731426],[15.441775,50.800208],[15.390822,50.790648],[15.341006,50.83173],[15.28778,50.854881],[15.25605,50.899892],[15.269796,50.952653],[15.170164,50.977975],[15.119211,50.982471],[15.02299,51.009652],[14.970693,50.998697],[14.997771,50.930174],[14.984129,50.867697],[14.867857,50.86439],[14.810393,50.858447],[14.860209,50.916842],[14.910645,50.992651],[14.955293,51.064042],[14.97338,51.116132],[14.991364,51.18897],[15.022059,51.23677],[15.004903,51.291289],[14.963768,51.328393],[14.950648,51.396539],[14.945061,51.449186],[14.888321,51.475748],[14.818558,51.492595],[14.732155,51.515823],[14.712724,51.567422],[14.743937,51.606644],[14.732465,51.658347],[14.67097,51.700773],[14.638103,51.742631],[14.60224,51.788313],[14.595936,51.842418],[14.653296,51.878617],[14.695568,51.931457],[14.699082,51.992512],[14.730294,52.035895],[14.761403,52.076667],[14.696394,52.106691],[14.703216,52.165163],[14.712104,52.215444],[14.668903,52.260997],[14.606581,52.275751],[14.569167,52.338512],[14.539815,52.421866],[14.591595,52.449797],[14.632316,52.496745],[14.644821,52.576921],[14.549943,52.636194],[14.490102,52.650638],[14.442353,52.679964],[14.397705,52.727119],[14.275955,52.78572],[14.21601,52.817992],[14.152758,52.828327],[14.164954,52.895661],[14.150485,52.943643],[14.192859,52.981651],[14.253734,53.000875],[14.312645,53.029219],[14.356777,53.066684],[14.38954,53.131668],[14.380651,53.189855],[14.44163,53.251841],[14.400185,53.288609],[14.370316,53.392298],[14.359878,53.444077],[14.328458,53.48609],[14.296936,53.529137],[14.298899,53.587893],[14.276058,53.636624],[14.263863,53.699876],[14.301606,53.734849],[14.356212,53.708441],[14.403575,53.687812],[14.458669,53.677883],[14.51238,53.666449],[14.579112,53.607245],[14.62379,53.639228],[14.575938,53.659654],[14.544932,53.704047],[14.575938,53.769517],[14.620372,53.814846],[14.569102,53.824164],[14.441173,53.869615],[14.393809,53.899319],[14.415701,53.853013],[14.356212,53.834459],[14.303071,53.823065],[14.226573,53.871975],[14.175289,53.906478],[14.226573,53.934027],[14.367035,53.916978],[14.445567,53.934027],[14.517345,53.965237],[14.781912,54.034613],[15.010102,54.06981],[15.288341,54.138861],[15.468516,54.167141],[15.665782,54.198432],[15.859711,54.249986],[16.020844,54.261786],[16.131521,54.283515],[16.069347,54.263007],[16.17921,54.263007],[16.21518,54.299628],[16.137706,54.290269],[16.213552,54.316107],[16.275401,54.358588],[16.231781,54.322577],[16.288829,54.340237],[16.336762,54.358588],[16.281586,54.358588],[16.323985,54.401313],[16.439789,54.488267],[16.501313,54.532416],[16.569591,54.557196],[16.778494,54.575141],[16.85963,54.59394],[16.939952,54.606024],[17.035818,54.66706],[17.337413,54.74901],[17.715668,54.790432],[17.885427,54.824123],[18.152354,54.838324],[18.316905,54.838324],[18.375824,54.815131],[18.75172,54.69009],[18.813975,54.643215],[18.755382,54.654486],[18.707774,54.701239],[18.654552,54.71015],[18.556977,54.74901],[18.49822,54.765367],[18.447765,54.789984],[18.413097,54.746527],[18.459809,54.706041],[18.481944,54.659613],[18.525157,54.616685],[18.562836,54.560004],[18.567556,54.48786],[18.588064,54.433661],[18.649913,54.413804],[18.70045,54.395819],[18.885916,54.350165],[18.954356,54.358588],[19.377208,54.377631],[19.459972,54.401028],[19.531016,54.414944],[19.59254,54.452379],[19.680276,54.436678],[19.758256,54.434256],[19.964703,54.427842],[20.35207,54.415749],[20.640838,54.406784],[20.929606,54.397818],[21.287413,54.386759],[21.720772,54.373271],[21.998946,54.364667],[22.27712,54.356063],[22.510388,54.348777],[22.698387,54.342937],[22.76722,54.35627],[22.811344,54.392633],[22.918838,54.381126],[22.973305,54.37539],[23.035317,54.346503],[23.050096,54.294827],[23.117069,54.303457],[23.197271,54.267851],[23.316023,54.236277],[23.364082,54.208269],[23.423304,54.172508],[23.462991,54.13494],[23.496167,54.044558],[23.469502,54.000684],[23.49038,53.95061],[23.497201,53.885549],[23.520662,53.837335],[23.52986,53.78416],[23.56469,53.742405],[23.567068,53.681014],[23.590942,53.611251],[23.675795,53.455705],[23.722924,53.397104],[23.782972,53.270936],[23.818628,53.227967],[23.848084,53.183809],[23.893663,53.151951],[23.870305,53.101256],[23.867928,53.051027],[23.909682,53.012734],[23.917537,52.95881],[23.905445,52.906539],[23.920426,52.772625],[23.908752,52.699859],[23.736153,52.614903],[23.569031,52.585887],[23.480458,52.554416],[23.392298,52.509638],[23.270548,52.395123],[23.230447,52.365074],[23.165645,52.289393],[23.189726,52.240533],[23.284191,52.219734],[23.374831,52.200949],[23.427231,52.17679],[23.487693,52.181622],[23.512497,52.124442],[23.579366,52.121548],[23.625255,52.089716],[23.664943,52.011168],[23.628666,51.946339],[23.621431,51.895567],[23.594559,51.843297],[23.617504,51.786504],[23.56035,51.754542],[23.556939,51.701393],[23.532444,51.6515],[23.5434,51.592743],[23.572752,51.539672],[23.614817,51.49722],[23.662772,51.480192],[23.689437,51.416423],[23.665563,51.365806],[23.628666,51.325964],[23.687267,51.2924],[23.742664,51.216255],[23.816045,51.178789],[23.863587,51.148274],[23.895523,51.076108],[23.915987,51.020866],[23.955054,50.983556],[23.979342,50.937512],[24.046935,50.898031],[24.130237,50.868937],[24.067295,50.834831],[23.992881,50.836226],[23.959498,50.788891],[24.025851,50.767032],[24.05417,50.717164],[24.082798,50.669156],[24.085279,50.604406],[24.102539,50.543634],[24.010658,50.492785],[24.003217,50.437698],[23.928699,50.390827],[23.747522,50.38938],[23.695742,50.376771],[23.658677,50.327005],[23.565311,50.257812],[23.481595,50.215954],[23.436429,50.193475],[23.207916,50.03395],[23.141254,49.985477],[22.993046,49.854426],[22.951188,49.826624],[22.906746,49.7812],[22.826648,49.697381],[22.777348,49.680483],[22.741692,49.633664],[22.665831,49.567363],[22.660146,49.493001],[22.673065,49.435847],[22.7142,49.39063],[22.737764,49.275391],[22.702934,49.195034],[22.748823,49.14558],[22.796469,49.11137],[22.853416,49.084757],[22.847525,49.033701],[22.795022,49.019025],[22.744482,49.045535],[22.685778,49.042796],[22.618288,49.054216],[22.560721,49.085532],[22.505013,49.083413],[22.426775,49.085635],[22.339442,49.12646],[22.262858,49.130594],[22.208494,49.144185],[22.165706,49.171108],[22.111549,49.188627],[22.040752,49.197463],[22.005819,49.242887],[21.964478,49.308568],[21.874561,49.348358],[21.819577,49.377246],[21.768004,49.353474],[21.708576,49.390888],[21.65876,49.402464],[21.601193,49.426493],[21.529569,49.421222],[21.444406,49.409905],[21.330408,49.427785],[21.274391,49.447267],[21.211242,49.411094],[21.157292,49.405151],[21.10944,49.424581],[21.053526,49.414453],[21.080708,49.366342],[21.017249,49.352441],[20.964022,49.308103],[20.900564,49.2926],[20.849301,49.320505],[20.79411,49.323657],[20.689517,49.4005],[20.636084,49.39833],[20.579136,49.383395],[20.522085,49.374352],[20.437543,49.402515],[20.370467,49.38169],[20.317653,49.391612],[20.289335,49.343087],[20.207169,49.334199],[20.16035,49.305622],[20.111051,49.275856],[20.080355,49.208109],[20.01731,49.183872],[19.965737,49.215653],[19.905896,49.222785],[19.854219,49.191262],[19.785903,49.188162],[19.789624,49.259475],[19.783629,49.357557],[19.726578,49.388873],[19.627044,49.401868],[19.594804,49.441583],[19.535479,49.492846],[19.517289,49.543282],[19.474191,49.578732],[19.347067,49.532998],[19.284228,49.524162],[19.234102,49.507212],[19.20444,49.460548],[19.179738,49.410267],[19.11659,49.39094],[19.067601,49.406133],[19.007139,49.388098],[18.956703,49.400448],[18.953396,49.461685],[18.833196,49.510261]]]}}]};
+(function(prov){
+  provincies=prov; mosmixData=DEMO_DATA;
+  bouwBasemap();
+  const wrap=document.getElementById("dag-btns");
+  const vandaag=new Date().toISOString().slice(0,10);
+  DEMO_DATA.dagen.forEach((key,i)=>{
+    const d=new Date(key+"T12:00:00");
+    let lbl;
+    if(key===vandaag)lbl="Vandaag";
+    else if(i===1&&DEMO_DATA.dagen[0]===vandaag)lbl="Morgen";
+    else lbl=dagLabel(d);
+    const btn=document.createElement("button");
+    btn.className="btn-dag"+(i===0?" actief":"");
+    btn.textContent=lbl;
+    btn.onclick=()=>{
+      huidigDag=key;
+      document.querySelectorAll(".btn-dag").forEach(b=>b.classList.remove("actief"));
+      btn.classList.add("actief");update();
+    };
+    wrap.appendChild(btn);
+  });
+  huidigDag=DEMO_DATA.dagen[0];
+  document.getElementById("status").textContent="";
+  update();
+})(CE_GEOJSON);
+</script>
+</body>
+</html>

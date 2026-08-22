@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weerbewaking W.M. — Gladheid</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
+<script>
+  if (sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Calibri','Segoe UI',sans-serif;background:#f2f2f2;color:#222;padding:20px 10px}
+
+.pagina{max-width:800px;margin:0 auto 20px;background:white;padding:40px 50px;box-shadow:0 2px 12px rgba(0,0,0,.08);border-radius:4px}
+
+/* Toolbar */
+.toolbar{max-width:800px;margin:0 auto 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:white;padding:12px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.toolbar label{font-size:.85rem;color:#555;font-weight:600}
+.toolbar select,.toolbar input{font-family:inherit;font-size:.9rem;padding:6px 10px;border:1px solid #ccc;border-radius:4px;background:white}
+.toolbar button{font-family:inherit;font-size:.9rem;padding:7px 16px;background:#1a5490;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.toolbar button:hover{background:#124270}
+.toolbar .spacer{flex:1}
+.toolbar .status{font-size:.8rem;color:#888}
+
+/* Header — zelfde stijl als andere docs */
+.doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2px solid #1a5490}
+.doc-header img.logo-l{height:215px;width:auto;object-fit:contain}
+.doc-header img.logo-r{height:75px;max-width:250px;object-fit:contain}
+.doc-header .spacer{flex:1}
+.doc-opgesteld{margin-top:8px;font-size:.8rem;color:#555;font-style:italic}
+.doc-opgesteld .datum{font-weight:600;color:#333;font-style:normal}
+
+/* Titel */
+.titel{font-size:1.2rem;font-weight:700;color:#0070c0;text-align:left;letter-spacing:.2em;padding:12px 0 8px;margin:14px 0 12px;outline:none}
+.titel:focus{background:#fffbe8}
+
+/* 72-uur kop */
+h2.kop-zwart{font-size:.95rem;font-weight:700;color:#1a1a1a;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.02em}
+.gebied{font-size:.9rem;font-weight:700;color:#0070c0;margin:4px 0 10px;outline:none}
+.gebied:focus{background:#fffbe8}
+
+/* Intro/tekstvak */
+.tekstvak{min-height:40px;padding:6px 8px;border:1px dashed #ccc;border-radius:3px;font-size:.85rem;line-height:1.5;color:#222;outline:none;background:#fafafa;text-align:justify;margin:6px 0 10px}
+.tekstvak:focus{background:#fffbe8;border-color:#1a5490;border-style:solid}
+.tekstvak:empty::before{content:attr(data-placeholder);color:#aaa;font-style:italic}
+
+/* 72-uur tabel */
+table.t72{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:.82rem}
+table.t72 td{border:1px solid #bfbfbf;padding:4px 8px;vertical-align:top}
+table.t72 td.dagkop{font-weight:700;color:#0070c0;font-size:.82rem;padding:6px 8px}
+table.t72 td.pcthdr{font-weight:700;text-align:center;width:40px}
+table.t72 td.lbl{font-size:.8rem;color:#222}
+table.t72 td.val{font-weight:700;text-align:center;width:40px;background:#fff}
+table.t72 td[contenteditable="true"]{outline:none;cursor:text}
+table.t72 td[contenteditable="true"]:hover{outline:1px solid #1a5490}
+table.t72 td[contenteditable="true"]:focus{outline:2px solid #1a5490;background:#fffbe8 !important}
+
+/* Vijfdaagse tabel */
+table.v5{width:100%;border-collapse:collapse;margin:8px 0 10px;font-size:.82rem}
+table.v5 td, table.v5 th{border:1px solid #bfbfbf;padding:4px 6px;text-align:center}
+table.v5 th{background:white;color:#111;border-top:2px solid #808080;border-bottom:2px solid #808080;border-left:none;border-right:none;font-weight:700}
+table.v5 td.lbl{text-align:left;font-weight:700;font-style:italic;color:#0070c0;padding-left:8px;background:white}
+table.v5 td.val{font-weight:700;background:white}
+table.v5 td[contenteditable="true"]{outline:none;cursor:text}
+table.v5 td[contenteditable="true"]:hover{outline:1px solid #1a5490}
+table.v5 td[contenteditable="true"]:focus{outline:2px solid #1a5490;background:#fffbe8 !important}
+
+/* Footer */
+.doc-footer{margin-top:36px;padding-top:10px;border-top:1px solid #e0e0e0;font-size:.62rem;color:#888;text-align:center;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Koptekst-grootte (instelbaar) */
+body{--kop-scale:1}
+.pagina .titel{font-size:calc(1.2rem * var(--kop-scale))}
+.pagina h2.kop-rood{font-size:calc(.92rem * var(--kop-scale))}
+.pagina h2.kop-zwart{font-size:calc(.92rem * var(--kop-scale))}
+.pagina .gebied{font-size:calc(.9rem * var(--kop-scale))}
+
+@media (max-width:700px){
+  body{padding:8px 6px 20px}
+  .pagina{padding:16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toolbar{padding:8px 10px;gap:6px}
+  .toolbar button{font-size:.78rem;padding:5px 8px}
+  .toolbar select,.toolbar input{font-size:.78rem;padding:4px 7px}
+  .doc-header{flex-wrap:wrap;gap:8px}
+  .doc-header img.logo-l{height:70px}
+  .doc-header img.logo-r{height:40px;max-width:130px}
+  table.t72,table.v5{font-size:.75rem}
+  table.t72 td,table.v5 td,table.v5 th{padding:3px 5px}
+}
+/* PRINT */
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  html,body{background:white;padding:0;margin:0}
+  .toolbar{display:none !important}
+  .pagina{box-shadow:none;margin:0;padding:15mm 18mm;max-width:none;border-radius:0}
+  .tekstvak{border:none;background:white;padding:4px 0}
+  .tekstvak:empty::before{content:''}
+  table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+  @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <label>Station:</label>
+  <select id="station-sel">
+    <option value="330">330 Hoek van Holland</option>
+    <option value="344" selected>344 Rotterdam Airport</option>
+    <option value="240">240 Schiphol</option>
+    <option value="260">260 De Bilt</option>
+    <option value="310">310 Vlissingen</option>
+    <option value="350">350 Gilze-Rijen</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="status" id="data-status">Laatst bijgewerkt: –</span>
+  <button onclick="herlaadTabel()" title="Haal de tabellen opnieuw op (overschrijft eigen aanpassingen)" style="background:#2a7a2a">↻ Ververs tabel</button>
+  <button onclick="exporteerPDF()">🖨️ Exporteer PDF</button>
+  <span class="status" style="margin-left:8px">Document:</span>
+  <input type="date" id="doc-datum" style="font-family:inherit;padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:.8rem">
+  <label style="margin-left:8px">Koppen:</label>
+  <select id="kop-scale-sel" onchange="zetKopScale(this.value)" title="Grootte van titel en koppen">
+    <option value="0.8">80%</option>
+    <option value="0.9">90%</option>
+    <option value="1" selected>100%</option>
+    <option value="1.1">110%</option>
+    <option value="1.2">120%</option>
+    <option value="1.35">135%</option>
+    <option value="1.5">150%</option>
+  </select>
+  <button onclick="wisDraft()" style="background:#a44" title="Wis opgeslagen teksten van deze dag">🗑️ Wissen</button>
+  <span id="save-status" style="font-size:.72rem;color:#2a7a2a;min-width:140px;text-align:right"></span>
+  <button onclick="gaTerug()" style="background:#777">← Terug naar weerbewaking</button>
+</div>
+
+<!-- DOCUMENT -->
+<div class="pagina" id="doc">
+
+  <div class="doc-header">
+    <img class="logo-l" src="weerbewaking_logo.png" alt="Weerbewaking" onerror="this.style.display='none'">
+    <div class="spacer"></div>
+    <img class="logo-r" src="rijnmond_logo.jpg" alt="Regionale Weersverwachting Rijnmond" onerror="this.style.display='none'">
+  </div>
+  <div class="doc-opgesteld">Opgesteld op <span class="datum" id="hdr-datum">–</span></div>
+
+  <div class="titel" contenteditable="true" data-save="titel">G L A D H E I D – W E E R B E R I C H T</div>
+
+  <h2 class="kop-zwart">Verwachting komende 72 uur</h2>
+  <div class="gebied" contenteditable="true" data-save="gebied">ROTTERDAM | BARENDRECHT | RIDDERKERK | ALBRANDSWAARD</div>
+  <div class="tekstvak" contenteditable="true" data-save="intro-tekst" data-placeholder="Korte inleiding over de komende 72 uur (temperaturen, gladheidsrisico, ruitkrabben)..."></div>
+
+  <table class="t72">
+    <tbody>
+      <tr>
+        <td class="dagkop" id="t72-kop-0" contenteditable="true" data-save="t72-kop-0">–</td>
+        <td class="pcthdr">%</td>
+        <td class="dagkop" id="t72-kop-1" contenteditable="true" data-save="t72-kop-1">–</td>
+        <td class="pcthdr">%</td>
+        <td class="dagkop" id="t72-kop-2" contenteditable="true" data-save="t72-kop-2">–</td>
+        <td class="pcthdr">%</td>
+      </tr>
+      <tr>
+        <td class="lbl">Vorst op 1,5 meter</td><td class="val" contenteditable="true" data-save="t72-v15-0">0</td>
+        <td class="lbl">Vorst op 1,5 meter</td><td class="val" contenteditable="true" data-save="t72-v15-1">0</td>
+        <td class="lbl">Vorst op 1,5 meter</td><td class="val" contenteditable="true" data-save="t72-v15-2">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Vorst a/d grond</td><td class="val" contenteditable="true" data-save="t72-vgr-0">0</td>
+        <td class="lbl">Vorst a/d grond</td><td class="val" contenteditable="true" data-save="t72-vgr-1">0</td>
+        <td class="lbl">Vorst a/d grond</td><td class="val" contenteditable="true" data-save="t72-vgr-2">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Gladheid bruggen</td><td class="val" contenteditable="true" data-save="t72-gbr-0">0</td>
+        <td class="lbl">Gladheid bruggen</td><td class="val" contenteditable="true" data-save="t72-gbr-1">0</td>
+        <td class="lbl">Gladheid bruggen</td><td class="val" contenteditable="true" data-save="t72-gbr-2">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Gladheid wegen</td><td class="val" contenteditable="true" data-save="t72-gwg-0">0</td>
+        <td class="lbl">Gladheid wegen</td><td class="val" contenteditable="true" data-save="t72-gwg-1">0</td>
+        <td class="lbl">Gladheid wegen</td><td class="val" contenteditable="true" data-save="t72-gwg-2">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Sneeuw</td><td class="val" contenteditable="true" data-save="t72-sne-0">0</td>
+        <td class="lbl">Sneeuw</td><td class="val" contenteditable="true" data-save="t72-sne-1">0</td>
+        <td class="lbl">Sneeuw</td><td class="val" contenteditable="true" data-save="t72-sne-2">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">IJZEL</td><td class="val" contenteditable="true" data-save="t72-ijz-0">0</td>
+        <td class="lbl">IJZEL</td><td class="val" contenteditable="true" data-save="t72-ijz-1">0</td>
+        <td class="lbl">IJZEL</td><td class="val" contenteditable="true" data-save="t72-ijz-2">0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="kop-zwart">Vijfdaagse</h2>
+  <div class="tekstvak" contenteditable="true" data-save="v5-tekst" data-placeholder="Korte toelichting op de vijfdaagse..."></div>
+
+  <table class="v5">
+    <thead>
+      <tr>
+        <th style="min-width:140px"></th>
+        <th class="dag" id="v5-d0">–</th>
+        <th class="dag" id="v5-d1">–</th>
+        <th class="dag" id="v5-d2">–</th>
+        <th class="dag" id="v5-d3">–</th>
+        <th class="dag" id="v5-d4">–</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="lbl">Max. Temp</td>
+        <td class="val" contenteditable="true" data-save="v5-tx-0"></td>
+        <td class="val" contenteditable="true" data-save="v5-tx-1"></td>
+        <td class="val" contenteditable="true" data-save="v5-tx-2"></td>
+        <td class="val" contenteditable="true" data-save="v5-tx-3"></td>
+        <td class="val" contenteditable="true" data-save="v5-tx-4"></td>
+      </tr>
+      <tr>
+        <td class="lbl">Min. Temp</td>
+        <td class="val" contenteditable="true" data-save="v5-tn-0"></td>
+        <td class="val" contenteditable="true" data-save="v5-tn-1"></td>
+        <td class="val" contenteditable="true" data-save="v5-tn-2"></td>
+        <td class="val" contenteditable="true" data-save="v5-tn-3"></td>
+        <td class="val" contenteditable="true" data-save="v5-tn-4"></td>
+      </tr>
+      <tr>
+        <td class="lbl">Vorst op 1,5 mtr %</td>
+        <td class="val" contenteditable="true" data-save="v5-v15-0">0</td>
+        <td class="val" contenteditable="true" data-save="v5-v15-1">0</td>
+        <td class="val" contenteditable="true" data-save="v5-v15-2">0</td>
+        <td class="val" contenteditable="true" data-save="v5-v15-3">0</td>
+        <td class="val" contenteditable="true" data-save="v5-v15-4">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Vorst a/d grond %</td>
+        <td class="val" contenteditable="true" data-save="v5-vgr-0">0</td>
+        <td class="val" contenteditable="true" data-save="v5-vgr-1">0</td>
+        <td class="val" contenteditable="true" data-save="v5-vgr-2">0</td>
+        <td class="val" contenteditable="true" data-save="v5-vgr-3">0</td>
+        <td class="val" contenteditable="true" data-save="v5-vgr-4">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Sneeuw %</td>
+        <td class="val" contenteditable="true" data-save="v5-sne-0">0</td>
+        <td class="val" contenteditable="true" data-save="v5-sne-1">0</td>
+        <td class="val" contenteditable="true" data-save="v5-sne-2">0</td>
+        <td class="val" contenteditable="true" data-save="v5-sne-3">0</td>
+        <td class="val" contenteditable="true" data-save="v5-sne-4">0</td>
+      </tr>
+      <tr>
+        <td class="lbl">Gladheid %</td>
+        <td class="val" contenteditable="true" data-save="v5-gld-0">0</td>
+        <td class="val" contenteditable="true" data-save="v5-gld-1">0</td>
+        <td class="val" contenteditable="true" data-save="v5-gld-2">0</td>
+        <td class="val" contenteditable="true" data-save="v5-gld-3">0</td>
+        <td class="val" contenteditable="true" data-save="v5-gld-4">0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="kop-zwart" id="kop-langetermijn">Zeer lange termijn t/m –</h2>
+  <div class="tekstvak" contenteditable="true" data-save="lt-tekst" data-placeholder="Toelichting op de zeer lange termijn (ca. 14 dagen)..."></div>
+
+  <div class="doc-footer">© Ed Aldus Weer en Media aanvaardt geen aansprakelijkheid voor het niet of slechts ten-dele uitkomen van de verstrekte verwachtingen.</div>
+</div>
+
+<script>
+const DAGKORT=['zo','ma','di','wo','do','vr','za'];
+const DAGLANG=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MND=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const STATIONS={210:'Valkenburg',235:'Den Helder',240:'Schiphol',260:'De Bilt',270:'Leeuwarden',275:'Deelen',280:'Eelde',290:'Twenthe',310:'Vlissingen',330:'Hoek van Holland',344:'Rotterdam Airport',350:'Gilze-Rijen',370:'Eindhoven',375:'Volkel',380:'Maastricht'};
+
+function formatDatumVol(d){
+  const u=String(d.getHours()).padStart(2,'0'),m=String(d.getMinutes()).padStart(2,'0');
+  return `${DAGLANG[d.getDay()]} ${d.getDate()} ${MND[d.getMonth()]} om ${u}:${m} uur`;
+}
+
+/* Vul datum-kopjes van 72u-tabel en vijfdaagse */
+function vulKoppen(dagen){
+  // 72u tabel: eerste 3 dagen (Dag + dagnaam datum)
+  for(let i=0;i<3;i++){
+    const el=document.querySelector(`[data-save="t72-kop-${i}"]`);
+    if(!el) continue;
+    if(dagen[i] && !el.dataset.userEdit){
+      const d=new Date(dagen[i]+'T12:00:00');
+      el.textContent=`${DAGLANG[d.getDay()].charAt(0).toUpperCase()+DAGLANG[d.getDay()].slice(1)} ${d.getDate()} ${MND[d.getMonth()]}`;
+    }
+  }
+  // Vijfdaagse: dagen 1..5 (vanaf morgen)
+  for(let i=0;i<5;i++){
+    const th=document.getElementById('v5-d'+i);
+    if(!th) continue;
+    const dt=dagen[i+1];
+    if(!dt){ th.textContent='–'; continue; }
+    const d=new Date(dt+'T12:00:00');
+    th.textContent=DAGKORT[d.getDay()].toUpperCase();
+  }
+  // Lange termijn (+14 dagen)
+  if(dagen[0]){
+    const d0=new Date(dagen[0]+'T12:00:00');
+    const d14=new Date(d0.getTime()+14*24*3600*1000);
+    document.getElementById('kop-langetermijn').textContent=`Zeer lange termijn t/m ${DAGLANG[d14.getDay()]} ${d14.getDate()} ${MND[d14.getMonth()]}`;
+  }
+}
+
+async function laadData(){
+  const nu=new Date();
+  document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
+
+  const stationNr=document.getElementById('station-sel').value;
+  const stationNaam=STATIONS[stationNr];
+
+  try{
+    const r=await fetch('https://data.weerlab.nl/mosmix_nl.json?_='+Date.now());
+    if(!r.ok) throw new Error('geen data');
+    const j=await r.json();
+    const alleDagen=Object.keys(j.data).sort();
+    const zes=alleDagen.slice(0,6);
+    vulKoppen(zes);
+
+    const pick=(fld,dt)=>j.data[dt]?.[fld]?.[stationNaam];
+
+    // Vijfdaagse (dag 1..5)
+    for(let i=0;i<5;i++){
+      const dt=zes[i+1]; if(!dt) continue;
+      const tx=pick('TX',dt), tn=pick('TN',dt);
+      const elX=document.querySelector(`[data-save="v5-tx-${i}"]`);
+      const elN=document.querySelector(`[data-save="v5-tn-${i}"]`);
+      if(elX && !elX.dataset.userEdit) elX.textContent=(tx!=null?Math.round(tx):'–');
+      if(elN && !elN.dataset.userEdit) elN.textContent=(tn!=null?Math.round(tn):'–');
+    }
+
+    document.getElementById('data-status').textContent='Laatst bijgewerkt: '+(j.bijgewerkt||'onbekend');
+  }catch(e){
+    document.getElementById('data-status').textContent='MOS/MIX niet geladen ('+e.message+')';
+  }
+}
+
+document.getElementById('station-sel').addEventListener('change', laadData);
+
+/* ── PDF ── */
+function exporteerPDF(){
+  const doc=document.getElementById('doc').cloneNode(true);
+  doc.querySelectorAll('.no-pdf').forEach(e=>e.remove());
+  doc.querySelectorAll('input').forEach(inp=>{
+    const span=document.createElement('span');
+    span.textContent=inp.value; span.style.cssText=inp.getAttribute('style')||'';
+    inp.parentNode.replaceChild(span,inp);
+  });
+  const hdr=doc.querySelector('.doc-header');
+  if(hdr){
+    const ll=hdr.querySelector('.logo-l'); if(ll) ll.style.height='215px';
+    const lr=hdr.querySelector('.logo-r'); if(lr) lr.style.height='75px';
+  }
+  doc.style.padding='15mm 18mm';
+  const opt={margin:0,filename:`${exportNaam(document.querySelector('[data-save="gebied"]')?.textContent, document.querySelector('[data-save="titel"]')?.textContent)}_${exportStamp()}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,scrollY:-window.scrollY},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}};
+  html2pdf().set(opt).from(doc).save();
+}
+
+/* ── Auto-save per dag ── */
+const SAVE_PREFIX='wb_gladheid_draft_';
+function vandaagISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function huidigeDatum(){ const el=document.getElementById('doc-datum'); return (el && el.value) ? el.value : vandaagISO(); }
+function exportNaam(...waarden){
+  const rauw=(waarden.find(v=>(v||'').trim()) || 'Document').split('|')[0].split(',')[0].trim();
+  return rauw.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').replace(/^_+|_+$/g,'') || 'Document';
+}
+function exportStamp(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function saveKey(){ return SAVE_PREFIX+huidigeDatum(); }
+function saveDraft(){
+  const d={__ts:Date.now()};
+  document.querySelectorAll('[data-save]').forEach(el=>{ d[el.getAttribute('data-save')]=el.innerHTML; });
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+}
+function leegForm(){
+  document.querySelectorAll('[data-save]').forEach(el=>{ delete el.dataset.userEdit; });
+}
+function restoreDraft(){
+  try{
+    const j=localStorage.getItem(saveKey());
+    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
+    const d=JSON.parse(j);
+    document.querySelectorAll('[data-save]').forEach(el=>{
+      const k=el.getAttribute('data-save');
+      if(d[k]!=null){ el.innerHTML=d[k]; el.dataset.userEdit='1'; }
+    });
+    if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
+  }catch(e){}
+}
+function toonSaveStatus(ts,voorvoegsel='Opgeslagen'){
+  const el=document.getElementById('save-status'); if(!el) return;
+  const t=new Date(ts);
+  el.textContent=`💾 ${voorvoegsel} · ${huidigeDatum()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function wisDraft(){
+  if(!confirm('Opgeslagen tekst van '+huidigeDatum()+' wissen?')) return;
+  localStorage.removeItem(saveKey());
+  location.reload();
+}
+
+/* ── Koptekst-grootte ── */
+const KOP_KEY='wb_gladheid_kopscale';
+function zetKopScale(v){
+  document.body.style.setProperty('--kop-scale', v);
+  try{ localStorage.setItem(KOP_KEY, v); }catch(e){}
+}
+(function herstelKopScale(){
+  try{
+    const v=localStorage.getItem(KOP_KEY);
+    if(v){
+      document.body.style.setProperty('--kop-scale', v);
+      const sel=document.getElementById('kop-scale-sel');
+      if(sel) sel.value=v;
+    }
+  }catch(e){}
+})();
+let saveTimer;
+function debSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDraft,600); }
+document.addEventListener('input', e=>{
+  const t=e.target;
+  if(t.closest('[data-save]')) debSave();
+  if(t.hasAttribute && t.hasAttribute('data-save')) t.dataset.userEdit='1';
+});
+document.addEventListener('blur', e=>{
+  if(e.target.closest('[data-save]')) saveDraft();
+},true);
+
+document.getElementById('doc-datum').value=vandaagISO();
+document.getElementById('doc-datum').addEventListener('change', ()=>{ restoreDraft(); laadData(); });
+
+/* ── Terug ── */
+function gaTerug(){
+  if (window.self !== window.top) { window.location.href='weerbewaking.html'; }
+  else { window.location.href='index.html#weerbewaking'; }
+}
+
+restoreDraft();
+laadData();
+
+/* Expliciet "Ververs tabel": wist userEdit-flags zodat verse data alle cellen overschrijft */
+function herlaadTabel(){
+  if(!confirm('Tabellen opnieuw ophalen? Eigen aanpassingen worden overschreven.')) return;
+  document.querySelectorAll('[data-save]').forEach(el=>{ delete el.dataset.userEdit; });
+  laadData();
+}
+</script>
+</body>
+</html>

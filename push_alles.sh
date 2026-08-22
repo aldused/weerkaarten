@@ -1,0 +1,11 @@
+#!/bin/bash
+cd "/Users/aldus/KNMI_Project/weerlab"
+git checkout main 2>/dev/null || true
+git add -A
+if git diff --cached --quiet; then
+    echo "Niets te pushen."
+else
+    git commit -m "Handmatige push alles $(date '+%Y-%m-%d %H:%M')"
+    git push origin main
+    echo "=== Klaar! ==="
+fi

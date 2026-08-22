@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECMWF 5 dagen – weerlab.nl</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#0c1c2e;font-family:Inter,"Segoe UI",system-ui,Arial,sans-serif;color:#fff}
+#map{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+#map:active{cursor:grabbing}
+.hud{position:fixed;z-index:6;user-select:none}
+
+/* Time badge */
+.time-badge{top:18px;left:20px;display:flex;align-items:stretch;border-radius:5px;overflow:hidden;box-shadow:0 3px 14px rgba(0,0,0,.55);filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
+.time-main{background:#0668a0;padding:5px 10px 4px;min-width:70px;text-align:center}
+.time-hour{display:block;font-size:24px;font-weight:900;color:#ffd51b;line-height:1;letter-spacing:-.5px}
+.time-date{display:block;font-size:11px;color:#cde8ff;font-weight:700;margin-top:2px}
+
+/* Logo */
+.logo{top:28px;left:50%;transform:translateX(-50%);font-size:22px;font-weight:800;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.5);white-space:nowrap;pointer-events:none}
+.logo span{color:#ffc400}
+
+/* Layer buttons */
+.layers{top:16px;right:18px;display:flex;gap:5px}
+.layers button{width:40px;height:36px;border:0;border-radius:3px;background:rgba(6,100,155,.75);backdrop-filter:blur(4px);color:#d8efff;display:grid;place-items:center;cursor:pointer;transition:background .15s}
+.layers button.active{background:rgba(8,58,92,.9)}
+.layers button:hover:not(.active){background:rgba(8,118,175,.8)}
+.layers button svg{width:21px;height:21px;stroke-width:2.2}
+
+/* Zoom */
+.zoom{top:72px;right:18px;display:flex;flex-direction:column;gap:8px}
+.zoom button{width:38px;height:36px;border:0;border-radius:3px;background:rgba(6,100,155,.75);backdrop-filter:blur(4px);color:#fff;font-size:26px;font-weight:800;line-height:1;cursor:pointer;display:grid;place-items:center;transition:background .15s}
+.zoom button:hover{background:rgba(8,118,175,.85)}
+
+/* Scale */
+.scale{bottom:78px;left:14px;display:flex;align-items:flex-end;gap:6px;font-size:11px;color:#cde8ff;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.scale-line{width:68px;height:14px;border-left:2px solid #b0d4f0;border-bottom:2px solid #b0d4f0;border-right:2px solid #b0d4f0}
+
+/* Bottom bar */
+.bottom-bar{bottom:16px;left:50%;transform:translateX(-50%);height:48px;min-width:min(840px,calc(100vw - 160px));display:grid;grid-template-columns:auto 1fr auto auto auto;align-items:stretch;background:rgba(5,82,125,.88);backdrop-filter:blur(8px);border-radius:4px;box-shadow:0 6px 22px rgba(0,0,0,.45);overflow:hidden}
+#day-tabs{display:flex;height:48px}
+#day-tabs button{height:48px;min-width:86px;border:0;border-right:1px solid rgba(255,255,255,.12);background:transparent;color:#c8e8ff;font-size:13.5px;font-weight:700;cursor:pointer;padding:0 14px;transition:background .12s;position:relative}
+#day-tabs button:hover{background:rgba(255,255,255,.08)}
+#day-tabs button.active{background:rgba(0,0,0,.22);color:#fff}
+#day-tabs button.active::before{content:'';position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);width:28px;height:3px;background:#ffc400;border-radius:2px 2px 0 0}
+.slider-box{display:flex;align-items:center;padding:0 16px;min-width:240px}
+#time-range{width:100%;accent-color:#ffc400;cursor:pointer}
+.ctrl{width:48px;height:48px;border:0;border-left:1px solid rgba(255,255,255,.12);background:transparent;color:#d8efff;cursor:pointer;display:grid;place-items:center;transition:background .12s}
+.ctrl:hover{background:rgba(255,255,255,.1)}
+.ctrl svg{width:24px;height:24px}
+
+/* Credit */
+.credit{bottom:4px;right:10px;font-size:10px;color:rgba(180,210,235,.6);pointer-events:none}
+
+/* Status overlay */
+.status{position:fixed;inset:0;z-index:10;display:grid;place-items:center;background:rgba(8,20,36,.7)}
+.status.hidden{display:none}
+.status .box{background:rgba(4,30,52,.92);border:1px solid rgba(255,255,255,.12);padding:16px 22px;border-radius:8px;font-size:14px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.4);color:#e0f0ff}
+.status .progress{width:200px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;margin-top:10px;overflow:hidden}
+.status .progress-bar{height:100%;background:#ffc400;border-radius:2px;transition:width .3s}
+
+@media(max-width:700px){
+  .logo{font-size:17px;top:22px}
+  .layers{top:62px;right:10px;flex-direction:column}
+  .zoom{top:240px;right:10px}
+  .time-badge{top:10px;left:10px}
+  .bottom-bar{left:8px;right:8px;bottom:8px;transform:none;min-width:0;grid-template-columns:1fr auto auto auto}
+  #day-tabs{grid-column:1/-1;border-bottom:1px solid rgba(255,255,255,.12);height:36px}
+  #day-tabs button{height:36px;min-width:64px;font-size:12px}
+  .credit,.scale{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<div class="hud time-badge">
+  <div class="time-main">
+    <strong class="time-hour" id="t-hour">--:--</strong>
+    <span class="time-date" id="t-date">--</span>
+  </div>
+</div>
+
+<div class="hud logo">weer<span>lab</span>.nl</div>
+
+<div class="hud layers" id="layers" aria-label="Kaartlagen">
+  <button type="button" class="active" data-layer="composite" title="Composiet (wolken+neerslag)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+  </button>
+  <button type="button" data-layer="clouds" title="Bewolking">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+  </button>
+  <button type="button" data-layer="rain" title="Neerslag">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 16.2A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/><line x1="8" y1="19" x2="8.01" y2="19"/><line x1="8" y1="23" x2="8.01" y2="23"/><line x1="12" y1="21" x2="12.01" y2="21"/><line x1="12" y1="17" x2="12.01" y2="17"/><line x1="16" y1="19" x2="16.01" y2="19"/><line x1="16" y1="23" x2="16.01" y2="23"/></svg>
+  </button>
+  <button type="button" data-layer="temp" title="Temperatuur 2m">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+  </button>
+  <button type="button" data-layer="wind" title="Wind">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+  </button>
+  <button type="button" data-layer="cape" title="Onweersenergie (CAPE)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+  </button>
+</div>
+
+<div class="hud zoom">
+  <button type="button" id="zoom-in" title="Inzoomen">+</button>
+  <button type="button" id="zoom-out" title="Uitzoomen">−</button>
+</div>
+
+<div class="hud scale"><span>50 km</span><div class="scale-line"></div></div>
+
+<div class="hud bottom-bar">
+  <div id="day-tabs"></div>
+  <div class="slider-box"><input id="time-range" type="range" min="0" max="119" value="0"></div>
+  <button class="ctrl" type="button" id="prev" title="Vorige stap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M15 6l-7 6 7 6"/></svg></button>
+  <button class="ctrl" type="button" id="next" title="Volgende stap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M9 6l7 6-7 6"/></svg></button>
+  <button class="ctrl" type="button" id="play" title="Afspelen"><svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7Z"/></svg></button>
+</div>
+
+<div class="hud credit" id="credit">ECMWF IFS via Open-Meteo · weerlab.nl</div>
+
+<div class="status" id="status">
+  <div class="box">
+    <div id="status-text">Laden...</div>
+    <div class="progress"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ─── SIMPLEX NOISE ───────────────────────────────────────────────────────────
+var _G2=[[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+var _P=(function(){
+  var p=new Uint8Array(256);
+  for(var i=0;i<256;i++)p[i]=i;
+  var s=31337;
+  for(var i=255;i>0;i--){s=(s*1664525+1013904223)>>>0;var j=s%(i+1);var t=p[i];p[i]=p[j];p[j]=t;}
+  var r=new Uint8Array(512);
+  for(var i=0;i<512;i++)r[i]=p[i&255];
+  return r;
+})();
+function _dot(g,x,y){return g[0]*x+g[1]*y;}
+function s2(xi,yi){
+  var F=0.366025403,G=0.211324865;
+  var s=(xi+yi)*F,i=Math.floor(xi+s),j=Math.floor(yi+s),t=(i+j)*G;
+  var x0=xi-(i-t),y0=yi-(j-t),i1,j1;
+  if(x0>y0){i1=1;j1=0;}else{i1=0;j1=1;}
+  var x1=x0-i1+G,y1=y0-j1+G,x2=x0-1+2*G,y2=y0-1+2*G;
+  var g0=_P[(i+_P[j&255])&255]&7,g1=_P[(i+i1+_P[(j+j1)&255])&255]&7,g2=_P[(i+1+_P[(j+1)&255])&255]&7;
+  var t0=.5-x0*x0-y0*y0,n0=t0<0?0:(t0*t0)*(t0*t0)*_dot(_G2[g0],x0,y0);
+  var t1=.5-x1*x1-y1*y1,n1=t1<0?0:(t1*t1)*(t1*t1)*_dot(_G2[g1],x1,y1);
+  var t2=.5-x2*x2-y2*y2,n2=t2<0?0:(t2*t2)*(t2*t2)*_dot(_G2[g2],x2,y2);
+  return 70*(n0+n1+n2);
+}
+function fbm(x,y,oct,lac,per){
+  var v=0,a=.5,f=1,mx=0;
+  for(var i=0;i<oct;i++){v+=s2(x*f,y*f)*a;mx+=a;a*=per;f*=lac;}
+  return v/mx;
+}
+// ─── NOISE LOOKUP in pre-computed texture ────────────────────────────────────
+function noiseAt(lon,lat,level){
+  var nc=noiseCache,ne=nc.ext;
+  var tx=clamp((lon-ne.lonMin)/(ne.lonMax-ne.lonMin)*(nc.fw-1),0,nc.fw-1);
+  var ty=clamp((ne.latMax-lat)/(ne.latMax-ne.latMin)*(nc.fh-1),0,nc.fh-1);
+  var x0=Math.floor(tx),y0=Math.floor(ty);
+  var x1=Math.min(x0+1,nc.fw-1),y1=Math.min(y0+1,nc.fh-1);
+  var fx=tx-x0,fy=ty-y0;
+  var fw=nc.fw,nd=nc.data;
+  function ni(x,y){return(y*fw+x)*3+level;}
+  var a=nd[ni(x0,y0)],b=nd[ni(x1,y0)],c=nd[ni(x0,y1)],d=nd[ni(x1,y1)];
+  return a*(1-fx)*(1-fy)+b*fx*(1-fy)+c*(1-fx)*fy+d*fx*fy;
+}
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+var EXT={lonMin:-6.5,lonMax:14,latMin:47,latMax:57};
+var META='ecmwf_nwe_canvas_meta.json';
+var MOSMIX_BASE='https://data.weerlab.nl/';
+var MOSMIX=['mosmix_uurlijks_nl.json','mosmix_uurlijks_be.json','mosmix_uurlijks_de.json','mosmix_uurlijks_fr.json','mosmix_uurlijks_gb.json'].map(function(f){return MOSMIX_BASE+f;});
+var GEOFILES={land:'europa_land.geojson',nl:'nl_provincies.geojson',be:'be_provincies.geojson',de:'germany_bundeslander.geojson',fr:'fr_regions.geojson',rivers:'nl_rivieren.geojson'};
+
+var CITIES=[
+  ['Londen',51.51,-0.13,1],['Birmingham',52.48,-1.89,2],['Manchester',53.48,-2.24,2],
+  ['Cardiff',51.48,-3.18,2],['Glasgow',55.86,-4.25,2],['Leeds',53.80,-1.55,2],
+  ['Liverpool',53.41,-2.99,2],['York',53.96,-1.08,3],['Hull',53.74,-0.33,3],
+  ['Cambridge',52.20,0.12,3],['Southampton',50.91,-1.40,3],['Plymouth',50.38,-4.14,3],
+  ['Norwich',52.63,1.30,3],['Bristol',51.45,-2.59,3],
+  ['Amsterdam',52.37,4.90,1],['Rotterdam',51.92,4.48,1],['Den Haag',52.08,4.31,2],
+  ['Utrecht',52.09,5.12,2],['Zwolle',52.52,6.09,2],['Groningen',53.22,6.57,2],
+  ['Enschede',52.22,6.90,2],['Eindhoven',51.44,5.48,2],['Maastricht',50.85,5.69,2],
+  ['Brussel',50.85,4.35,1],['Antwerpen',51.22,4.40,2],['Gent',51.05,3.72,2],
+  ['Brugge',51.21,3.22,2],['Luik',50.63,5.57,2],['Namen',50.47,4.87,3],
+  ['Lille',50.63,3.06,2],['Calais',50.95,1.86,2],['Amiens',49.89,2.30,3],
+  ['Parijs',48.86,2.35,1],['Rouen',49.44,1.10,3],['Reims',49.26,4.03,3],
+  ['Nancy',48.69,6.18,3],['Metz',49.12,6.18,3],['Strasbourg',48.58,7.75,2],
+  ['Hamburg',53.55,9.99,1],['Bremen',53.08,8.80,2],['Hannover',52.37,9.74,2],
+  ['Kiel',54.32,10.14,2],['Rostock',54.09,12.10,2],['Lubeck',53.87,10.69,3],
+  ['Dortmund',51.51,7.47,1],['Essen',51.46,7.01,2],['Dusseldorf',51.23,6.78,1],
+  ['Koln',50.94,6.96,1],['Aachen',50.78,6.08,2],['Munster',51.96,7.63,2],
+  ['Bielefeld',52.02,8.53,2],['Kassel',51.31,9.49,2],['Frankfurt',50.11,8.68,1],
+  ['Koblenz',50.36,7.59,3],['Stuttgart',48.78,9.18,2],['Mannheim',49.49,8.47,2],
+  ['Nurnberg',49.45,11.08,2],['Leipzig',51.34,12.37,2],['Magdeburg',52.13,11.63,3],
+  ['Berlin',52.52,13.40,1]
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+var state={step:0,start:0,end:119,zoom:1,cLon:3.9,cLat:52.0,layer:'composite',playing:false,timer:null};
+var meta=null,rasters={},geo={},stations=[],noiseCache=null,baseCache=null,rId=0;
+
+// ─── DOM ─────────────────────────────────────────────────────────────────────
+var canvas=document.getElementById('map');
+var ctx=canvas.getContext('2d');
+var statusEl=document.getElementById('status');
+var statusTxt=document.getElementById('status-text');
+var progressBar=document.getElementById('progress-bar');
+var rangeEl=document.getElementById('time-range');
+
+function setStatus(t,pct){
+  if(!t){statusEl.classList.add('hidden');return;}
+  statusTxt.textContent=t;
+  if(pct!==undefined)progressBar.style.width=pct+'%';
+  statusEl.classList.remove('hidden');
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+function pad(n){return String(n).padStart(2,'0');}
+function parseTime(t){return new Date(t);}
+function fmtDate(dt){return ['zo','ma','di','wo','do','vr','za'][dt.getDay()]+' '+pad(dt.getDate())+'.'+pad(dt.getMonth()+1)+'.';}
+function tabLabel(dt,i){if(i===0)return'vandaag';if(i===1)return'morgen';return['zo','ma','di','wo','do','vr','za'][dt.getDay()];}
+function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+
+function currentExtent(){
+  var z=state.zoom;
+  var lw=(EXT.lonMax-EXT.lonMin)/z,lh=(EXT.latMax-EXT.latMin)/z;
+  var ln=clamp(state.cLon-lw/2,EXT.lonMin,EXT.lonMax-lw);
+  var lt=clamp(state.cLat-lh/2,EXT.latMin,EXT.latMax-lh);
+  return{lonMin:ln,lonMax:ln+lw,latMin:lt,latMax:lt+lh};
+}
+function project(lon,lat,w,h,ext){
+  return{x:(lon-ext.lonMin)/(ext.lonMax-ext.lonMin)*w,y:(1-(lat-ext.latMin)/(ext.latMax-ext.latMin))*h};
+}
+function inView(lon,lat,ext){return lon>=ext.lonMin&&lon<=ext.lonMax&&lat>=ext.latMin&&lat<=ext.latMax;}
+
+// ─── DATA LOADING ────────────────────────────────────────────────────────────
+// Resolve URLs against page location (works on both http:// and file://)
+var _base=(function(){var a=document.createElement('a');a.href='.';return a.href;})();
+function _url(f){return (/^https?:/.test(f)?f:_base+f)+'?v='+Date.now();}
+function fetchJson(f){return fetch(_url(f)).then(function(r){if(!r.ok)throw new Error(f);return r.json();});}
+
+function loadRaster(key){
+  if(rasters[key])return Promise.resolve(rasters[key]);
+  var info=meta.parameters[key];
+  if(!info)return Promise.reject(new Error('Geen param: '+key));
+  return fetch(_url(info.file)).then(function(r){
+    if(!r.ok)throw new Error(info.file);
+    return r.arrayBuffer();
+  }).then(function(buf){
+    var v=new DataView(buf);
+    var nL=v.getUint16(0,true),nN=v.getUint16(2,true),nS=v.getUint16(4,true),nC=v.getUint16(6,true);
+    rasters[key]={nLat:nL,nLon:nN,nSteps:nS,nComp:nC,data:new Float32Array(buf,16)};
+    return rasters[key];
+  });
+}
+
+function loadMosmix(){
+  return Promise.all(MOSMIX.map(function(f){return fetchJson(f).catch(function(){return null;});})).then(function(list){
+    stations=[];
+    list.forEach(function(d){
+      if(!d||!d.stations||!d.data)return;
+      Object.keys(d.stations).forEach(function(name){
+        var co=d.stations[name],st=d.data[name];
+        if(co&&st&&st.tijden)stations.push({name:name,lon:co[0],lat:co[1],data:st});
+      });
+    });
+  });
+}
+
+function rasterValue(pd,step,lon,lat,comp){
+  comp=comp||0;
+  var g=meta.grid;
+  if(lon<g.lon_min||lon>g.lon_max||lat<g.lat_min||lat>g.lat_max)return NaN;
+  var x=(lon-g.lon_min)/(g.lon_max-g.lon_min)*(pd.nLon-1);
+  var y=(lat-g.lat_min)/(g.lat_max-g.lat_min)*(pd.nLat-1);
+  var x0=Math.floor(x),y0=Math.floor(y);
+  var x1=Math.min(x0+1,pd.nLon-1),y1=Math.min(y0+1,pd.nLat-1);
+  var fx=x-x0,fy=y-y0;
+  var pts=pd.nLat*pd.nLon;
+  var off=step*pts*pd.nComp+comp*pts;
+  function val(ix,iy){return pd.data[off+iy*pd.nLon+ix];}
+  var a=val(x0,y0),b=val(x1,y0),c=val(x0,y1),d=val(x1,y1);
+  if(![a,b,c,d].every(Number.isFinite))return NaN;
+  return a*(1-fx)*(1-fy)+b*fx*(1-fy)+c*(1-fx)*fy+d*fx*fy;
+}
+
+// ─── COLORS ──────────────────────────────────────────────────────────────────
+function interp(v,stops){
+  if(v<=stops[0][0])return stops[0][1].slice();
+  for(var i=1;i<stops.length;i++){
+    if(v<=stops[i][0]){
+      var a=stops[i-1],b=stops[i],f=(v-a[0])/(b[0]-a[0]);
+      return[Math.round(a[1][0]+(b[1][0]-a[1][0])*f),Math.round(a[1][1]+(b[1][1]-a[1][1])*f),Math.round(a[1][2]+(b[1][2]-a[1][2])*f)];
+    }
+  }
+  return stops[stops.length-1][1].slice();
+}
+function precipColor(v){return interp(v,[[.06,[185,242,255]],[.2,[95,212,255]],[.5,[28,168,245]],[1,[0,118,220]],[2.5,[28,198,88]],[5,[245,218,36]],[10,[240,88,42]],[25,[175,28,125]]]);}
+function tempColor(v){return interp(v,[[-12,[42,80,195]],[-5,[58,158,238]],[0,[82,208,182]],[5,[88,202,88]],[10,[168,212,52]],[15,[242,218,48]],[20,[246,158,58]],[25,[238,82,62]],[30,[188,48,92]],[35,[118,32,145]]]);}
+function windColor(v){return interp(v,[[0,[120,190,240]],[5,[90,188,118]],[10,[240,222,68]],[15,[250,158,52]],[20,[242,68,68]],[30,[145,28,92]]]);}
+function capeColor(v){return interp(v,[[0,[20,25,30]],[60,[252,222,58]],[250,[248,158,32]],[600,[238,72,52]],[1200,[178,38,135]],[2500,[98,28,168]]]);}
+
+// ─── GEO DRAWING ─────────────────────────────────────────────────────────────
+function geoPath(c,data,opts,ext,w,h){
+  if(!data)return;
+  var feats=data.type==='FeatureCollection'?data.features:[data];
+  c.save();c.lineJoin='round';c.lineCap='round';
+  c.strokeStyle=opts.stroke||'transparent';c.fillStyle=opts.fill||'transparent';c.lineWidth=opts.lw||1;
+  feats.forEach(function(feat){
+    var g=feat.geometry||feat;if(!g)return;
+    if(g.type==='Polygon')polyPath(c,g.coordinates,opts,ext,w,h);
+    else if(g.type==='MultiPolygon')g.coordinates.forEach(function(p){polyPath(c,p,opts,ext,w,h);});
+    else if(g.type==='LineString')linePath(c,g.coordinates,ext,w,h);
+    else if(g.type==='MultiLineString')g.coordinates.forEach(function(l){linePath(c,l,ext,w,h);});
+  });
+  c.restore();
+}
+function polyPath(c,poly,opts,ext,w,h){
+  c.beginPath();
+  poly.forEach(function(ring){ring.forEach(function(pt,i){var p=project(pt[0],pt[1],w,h,ext);i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y);});c.closePath();});
+  if(opts.fill)c.fill('evenodd');
+  if(opts.stroke)c.stroke();
+}
+function linePath(c,line,ext,w,h){
+  c.beginPath();
+  line.forEach(function(pt,i){var p=project(pt[0],pt[1],w,h,ext);i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y);});
+  c.stroke();
+}
+function clipToLand(c,ext,w,h){
+  c.beginPath();
+  if(!geo.land)return;
+  var feats=geo.land.type==='FeatureCollection'?geo.land.features:[geo.land];
+  feats.forEach(function(feat){
+    var g=feat.geometry||feat;if(!g)return;
+    if(g.type==='Polygon')g.coordinates.forEach(function(ring){ring.forEach(function(pt,i){var p=project(pt[0],pt[1],w,h,ext);i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y);});c.closePath();});
+    else if(g.type==='MultiPolygon')g.coordinates.forEach(function(poly){poly.forEach(function(ring){ring.forEach(function(pt,i){var p=project(pt[0],pt[1],w,h,ext);i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y);});c.closePath();});});
+  });
+}
+
+// ─── TERRAIN BASEMAP ─────────────────────────────────────────────────────────
+function buildBase(w,h,ext){
+  var off=document.createElement('canvas');off.width=w;off.height=h;
+  var c=off.getContext('2d');
+
+  // Deep ocean gradient
+  var og=c.createLinearGradient(0,0,w,h);
+  og.addColorStop(0,'#162e4a');og.addColorStop(.5,'#112540');og.addColorStop(1,'#0c1c32');
+  c.fillStyle=og;c.fillRect(0,0,w,h);
+
+  // Subtle ocean depth variation with noise
+  var onw=Math.round(w/5),onh=Math.round(h/5);
+  var onc=document.createElement('canvas');onc.width=onw;onc.height=onh;
+  var onx=onc.getContext('2d');var oni=onx.createImageData(onw,onh);
+  for(var oy=0;oy<onh;oy++){
+    for(var ox=0;ox<onw;ox++){
+      var olon=ext.lonMin+(ox+.5)/onw*(ext.lonMax-ext.lonMin);
+      var olat=ext.latMax-(oy+.5)/onh*(ext.latMax-ext.latMin);
+      var on=fbm(olon*.18,olat*.22,4,2,.5)*.5+.5;
+      var ov=Math.round(on*28);
+      var op=(oy*onw+ox)*4;
+      oni.data[op]=ov;oni.data[op+1]=ov+8;oni.data[op+2]=ov+18;oni.data[op+3]=80;
+    }
+  }
+  onx.putImageData(oni,0,0);
+  c.save();c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';
+  c.drawImage(onc,0,0,w,h);c.restore();
+
+  // Land: coast glow
+  c.save();
+  c.shadowColor='rgba(55,110,70,.5)';c.shadowBlur=18;
+  geoPath(c,geo.land,{fill:'#3a6028'},ext,w,h);
+  c.restore();
+
+  // Land fill clipped with terrain gradient + texture
+  c.save();clipToLand(c,ext,w,h);c.clip('evenodd');
+
+  // Lat-dependent terrain color (slight north–south tint)
+  var tg=c.createLinearGradient(0,0,0,h);
+  tg.addColorStop(0,'#354f2a');tg.addColorStop(.3,'#3e5e30');
+  tg.addColorStop(.65,'#4a6e36');tg.addColorStop(1,'#52763c');
+  c.fillStyle=tg;c.fillRect(0,0,w,h);
+
+  // Terrain noise texture
+  var tnw=Math.round(w/3),tnh=Math.round(h/3);
+  var tnc=document.createElement('canvas');tnc.width=tnw;tnc.height=tnh;
+  var tnx=tnc.getContext('2d');var tni=tnx.createImageData(tnw,tnh);
+  for(var ty=0;ty<tnh;ty++){
+    var tlat=ext.latMax-(ty+.5)/tnh*(ext.latMax-ext.latMin);
+    for(var tx=0;tx<tnw;tx++){
+      var tlon=ext.lonMin+(tx+.5)/tnw*(ext.lonMax-ext.lonMin);
+      var tn=fbm(tlon*.55,tlat*.62,4,2,.52)*.5+.5;
+      var tv=Math.round(tn*255);
+      var tp=(ty*tnw+tx)*4;
+      tni.data[tp]=tv;tni.data[tp+1]=tv;tni.data[tp+2]=tv;tni.data[tp+3]=255;
+    }
+  }
+  tnx.putImageData(tni,0,0);
+  c.save();c.globalCompositeOperation='soft-light';c.globalAlpha=.28;
+  c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';
+  c.drawImage(tnc,0,0,w,h);
+  c.restore();
+
+  c.restore(); // end land clip
+
+  // Admin borders (subtle)
+  geoPath(c,geo.fr,{stroke:'rgba(0,0,0,.18)',lw:.7},ext,w,h);
+  geoPath(c,geo.de,{stroke:'rgba(0,0,0,.18)',lw:.7},ext,w,h);
+  geoPath(c,geo.be,{stroke:'rgba(0,0,0,.2)',lw:.8},ext,w,h);
+  geoPath(c,geo.nl,{stroke:'rgba(0,0,0,.24)',lw:.9},ext,w,h);
+
+  // Rivers
+  if(geo.rivers)geoPath(c,geo.rivers,{stroke:'rgba(45,115,165,.5)',lw:.8},ext,w,h);
+
+  // Coastlines
+  geoPath(c,geo.land,{stroke:'rgba(6,22,38,.88)',lw:1.5},ext,w,h);
+
+  return off;
+}
+
+// ─── NOISE TEXTURE ───────────────────────────────────────────────────────────
+function buildNoiseTexture(fw,fh){
+  return new Promise(function(resolve){
+    setTimeout(function(){
+      var nd=new Float32Array(fw*fh*3);
+      // Three decorrelated noise fields for high/mid/low clouds
+      // Lower frequency = larger cloud systems (cirrus sheets)
+      // Higher frequency = smaller patchier clouds (cumulus)
+      var sH=0.20,sM=0.31,sL=0.45;
+      for(var y=0;y<fh;y++){
+        var lat=EXT.latMax-(y+.5)/fh*(EXT.latMax-EXT.latMin);
+        for(var x=0;x<fw;x++){
+          var lon=EXT.lonMin+(x+.5)/fw*(EXT.lonMax-EXT.lonMin);
+          var i=(y*fw+x)*3;
+          nd[i]  =fbm(lon*sH,         lat*sH*1.12,        5,2.0,.53); // high
+          nd[i+1]=fbm(lon*sM+43.7,    lat*sM*1.08+29.3,   5,1.9,.51); // mid
+          nd[i+2]=fbm(lon*sL+91.2,    lat*sL*1.06+67.8,   6,1.85,.49);// low
+        }
+      }
+      resolve({fw:fw,fh:fh,ext:{lonMin:EXT.lonMin,lonMax:EXT.lonMax,latMin:EXT.latMin,latMax:EXT.latMax},data:nd});
+    },0);
+  });
+}
+
+// ─── CLOUD CANVAS ────────────────────────────────────────────────────────────
+function cloudDensity(tcc,noise){
+  if(tcc<0.03)return 0;
+  if(tcc>0.96)return clamp(.70+noise*.20+.10,0,1);
+  var n01=noise*.5+.5; // -1..1 → 0..1
+  var thresh=1-tcc;
+  if(n01<=thresh)return 0;
+  return Math.pow(clamp((n01-thresh)/tcc,0,1),.66);
+}
+
+function makeCloudCanvas(w,h,ext,step){
+  if(!noiseCache)return null;
+  var fw=Math.round(w*.55),fh=Math.round(h*.55);
+  fw=clamp(fw,280,640);fh=clamp(fh,180,420);
+  var off=document.createElement('canvas');off.width=fw;off.height=fh;
+  var c=off.getContext('2d');
+  var img=c.createImageData(fw,fh);
+  var bw=rasters.bewolking;if(!bw)return null;
+
+  for(var y=0;y<fh;y++){
+    var lat=ext.latMax-(y+.5)/fh*(ext.latMax-ext.latMin);
+    for(var x=0;x<fw;x++){
+      var lon=ext.lonMin+(x+.5)/fw*(ext.lonMax-ext.lonMin);
+      // TCC per level (comp 0=hoog, 1=midden, 2=laag)
+      var tH=clamp(rasterValue(bw,step,lon,lat,0),0,1);
+      var tM=clamp(rasterValue(bw,step,lon,lat,1),0,1);
+      var tL=clamp(rasterValue(bw,step,lon,lat,2),0,1);
+      if(tH+tM+tL<0.03){var pp=(y*fw+x)*4;img.data[pp+3]=0;continue;}
+      // Noise (from pre-computed texture, bilinear interpolated)
+      var nH=noiseAt(lon,lat,0),nM=noiseAt(lon,lat,1),nL=noiseAt(lon,lat,2);
+      // Cloud density per layer
+      var dH=cloudDensity(tH,nH),dM=cloudDensity(tM,nM),dL=cloudDensity(tL,nL);
+      if(dH+dM+dL<0.02){var pp=(y*fw+x)*4;img.data[pp+3]=0;continue;}
+
+      // Layer composite: high (cirrus, bright/thin) → mid (altostratus) → low (stratus, dark)
+      var r=248,g=252,b=255,a=0;
+
+      if(dH>0.02){
+        var aH=dH*148;
+        a=aH;r=250;g=253;b=255; // bright white, translucent
+      }
+      if(dM>0.02){
+        var aM=dM*195;
+        var fM=a>0?aM/(aM+a):1;
+        r=Math.round(225*fM+r*(1-fM));g=Math.round(230*fM+g*(1-fM));b=Math.round(240*fM+b*(1-fM));
+        a=Math.max(a,aM);
+      }
+      if(dL>0.02){
+        var aL=dL*232;
+        var fL=a>0?aL/(aL+a):1;
+        // Low clouds: slightly cooler grey, more opaque
+        var shade=168+dL*28; // darker base for thick stratus
+        r=Math.round(shade*fL+r*(1-fL));g=Math.round((shade+8)*fL+g*(1-fL));b=Math.round((shade+20)*fL+b*(1-fL));
+        a=Math.max(a,aL);
+      }
+      var pp=(y*fw+x)*4;
+      img.data[pp]=r;img.data[pp+1]=g;img.data[pp+2]=b;img.data[pp+3]=Math.min(255,Math.round(a));
+    }
+  }
+  c.putImageData(img,0,0);
+  return off;
+}
+
+// ─── PRECIPITATION CANVAS (with blur glow) ───────────────────────────────────
+function makePrecipCanvas(w,h,ext,step){
+  var fw=Math.round(w/2),fh=Math.round(h/2);
+  var pd=rasters.neerslag;if(!pd)return null;
+  // Raw field
+  var raw=document.createElement('canvas');raw.width=fw;raw.height=fh;
+  var rc=raw.getContext('2d');var ri=rc.createImageData(fw,fh);
+  for(var y=0;y<fh;y++){
+    var lat=ext.latMax-(y+.5)/fh*(ext.latMax-ext.latMin);
+    for(var x=0;x<fw;x++){
+      var lon=ext.lonMin+(x+.5)/fw*(ext.lonMax-ext.lonMin);
+      var v=rasterValue(pd,step,lon,lat,0);
+      if(v>0.05){
+        var col=precipColor(v);
+        var al=clamp(60+Math.log(1+v)*105,72,248);
+        var p=(y*fw+x)*4;
+        ri.data[p]=col[0];ri.data[p+1]=col[1];ri.data[p+2]=col[2];ri.data[p+3]=Math.round(al);
+      }
+    }
+  }
+  rc.putImageData(ri,0,0);
+  // Output with glow: blurred background + sharp foreground
+  var out=document.createElement('canvas');out.width=fw;out.height=fh;
+  var oc=out.getContext('2d');
+  // Glow pass
+  oc.save();
+  if(typeof oc.filter==='string'||oc.filter!==undefined){
+    oc.filter='blur(5px)';oc.globalAlpha=.55;oc.drawImage(raw,0,0);
+    oc.filter='blur(2px)';oc.globalAlpha=.35;oc.drawImage(raw,0,0);
+    oc.filter='none';oc.globalAlpha=1;
+  }
+  oc.restore();
+  oc.drawImage(raw,0,0);
+  return out;
+}
+
+// ─── TEMPERATURE CANVAS ──────────────────────────────────────────────────────
+function makeTempCanvas(w,h,ext,step){
+  var fw=Math.round(w/2),fh=Math.round(h/2);
+  var td=rasters.temp;if(!td)return null;
+  var off=document.createElement('canvas');off.width=fw;off.height=fh;
+  var c=off.getContext('2d');var img=c.createImageData(fw,fh);
+  for(var y=0;y<fh;y++){
+    var lat=ext.latMax-(y+.5)/fh*(ext.latMax-ext.latMin);
+    for(var x=0;x<fw;x++){
+      var lon=ext.lonMin+(x+.5)/fw*(ext.lonMax-ext.lonMin);
+      var v=rasterValue(td,step,lon,lat,0);
+      if(Number.isFinite(v)){
+        var col=tempColor(v);var p=(y*fw+x)*4;
+        img.data[p]=col[0];img.data[p+1]=col[1];img.data[p+2]=col[2];img.data[p+3]=168;
+      }
+    }
+  }
+  c.putImageData(img,0,0);return off;
+}
+
+// ─── CAPE CANVAS ─────────────────────────────────────────────────────────────
+function makeCapeCanvas(w,h,ext,step){
+  var fw=Math.round(w/2),fh=Math.round(h/2);
+  var cd=rasters.cape;if(!cd)return null;
+  var raw=document.createElement('canvas');raw.width=fw;raw.height=fh;
+  var c=raw.getContext('2d');var img=c.createImageData(fw,fh);
+  for(var y=0;y<fh;y++){
+    var lat=ext.latMax-(y+.5)/fh*(ext.latMax-ext.latMin);
+    for(var x=0;x<fw;x++){
+      var lon=ext.lonMin+(x+.5)/fw*(ext.lonMax-ext.lonMin);
+      var v=rasterValue(cd,step,lon,lat,0);
+      if(Number.isFinite(v)&&v>25){
+        var col=capeColor(v);
+        var al=clamp(65+Math.log(1+v/40)*95,65,225);var p=(y*fw+x)*4;
+        img.data[p]=col[0];img.data[p+1]=col[1];img.data[p+2]=col[2];img.data[p+3]=Math.round(al);
+      }
+    }
+  }
+  c.putImageData(img,0,0);
+  var out=document.createElement('canvas');out.width=fw;out.height=fh;
+  var oc=out.getContext('2d');
+  oc.save();if(typeof oc.filter==='string'){oc.filter='blur(4px)';oc.globalAlpha=.5;oc.drawImage(raw,0,0);oc.filter='none';oc.globalAlpha=1;}
+  oc.restore();oc.drawImage(raw,0,0);return out;
+}
+
+// ─── DAY / NIGHT OVERLAY ─────────────────────────────────────────────────────
+function solarEl(lat,lon,dt){
+  var d=(dt.getTime()-950486400000)/86400000; // days since 2000-02-14 (approx J2000)
+  var g=(357.529+.98560028*d)*Math.PI/180;
+  var L=(280.459+.98564736*d+1.915*Math.sin(g)+.020*Math.sin(2*g))*Math.PI/180;
+  var e=23.439*Math.PI/180;
+  var decl=Math.asin(Math.sin(e)*Math.sin(L));
+  var B=2*Math.PI*((d%365+365)%365)/365;
+  var eqtMin=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
+  var lh=dt.getUTCHours()+dt.getUTCMinutes()/60+lon/15+eqtMin/60;
+  var ha=(lh-12)*15*Math.PI/180;
+  var latR=lat*Math.PI/180;
+  return Math.asin(clamp(Math.sin(latR)*Math.sin(decl)+Math.cos(latR)*Math.cos(decl)*Math.cos(ha),-1,1))*180/Math.PI;
+}
+function makeNightCanvas(w,h,ext,step){
+  var fw=Math.round(w/4),fh=Math.round(h/4);
+  var dt=parseTime(meta.tijden[step]);
+  var off=document.createElement('canvas');off.width=fw;off.height=fh;
+  var c=off.getContext('2d');var img=c.createImageData(fw,fh);
+  for(var y=0;y<fh;y++){
+    var lat=ext.latMax-(y+.5)/fh*(ext.latMax-ext.latMin);
+    for(var x=0;x<fw;x++){
+      var lon=ext.lonMin+(x+.5)/fw*(ext.lonMax-ext.lonMin);
+      var el=solarEl(lat,lon,dt);
+      var dk=0;
+      if(el<10){
+        if(el<-12)dk=.72;
+        else if(el<0)dk=.72*(-el/12);
+        else dk=.28*(1-el/10);
+      }
+      if(dk>0.01){
+        var p=(y*fw+x)*4;
+        img.data[p]=4;img.data[p+1]=12;img.data[p+2]=32;img.data[p+3]=Math.round(dk*255);
+      }
+    }
+  }
+  c.putImageData(img,0,0);return off;
+}
+
+// ─── WIND ARROWS ─────────────────────────────────────────────────────────────
+function drawWind(w,h,ext){
+  var wd=rasters.wind;if(!wd)return;
+  ctx.save();
+  ctx.strokeStyle='rgba(245,248,252,.76)';ctx.fillStyle='rgba(245,248,252,.76)';ctx.lineWidth=1.35;ctx.lineCap='round';
+  var dLon=1.75/state.zoom,dLat=1.35/state.zoom;
+  for(var lat=Math.ceil(ext.latMin);lat<=ext.latMax;lat+=dLat){
+    for(var lon=Math.ceil(ext.lonMin*10)/10;lon<=ext.lonMax;lon+=dLon){
+      var u=rasterValue(wd,state.step,lon,lat,0),v=rasterValue(wd,state.step,lon,lat,1);
+      if(![u,v].every(Number.isFinite))continue;
+      var spd=Math.sqrt(u*u+v*v),ang=Math.atan2(u,v);
+      var len=clamp(9+spd*1.15,9,26);
+      var p=project(lon,lat,w,h,ext);
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(ang);
+      ctx.beginPath();ctx.moveTo(0,-len/2);ctx.lineTo(0,len/2);
+      ctx.moveTo(0,-len/2);ctx.lineTo(-4.5,-len/2+8);ctx.moveTo(0,-len/2);ctx.lineTo(4.5,-len/2+8);
+      ctx.stroke();ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+// ─── CITY LABELS ─────────────────────────────────────────────────────────────
+function stNear(st,dt){var b=-1,bd=Infinity;for(var i=0;i<st.tijden.length;i++){var d=Math.abs(parseTime(st.tijden[i])-dt);if(d<bd){bd=d;b=i;}}return b;}
+function stVal(st,k,i){var a=st[k];if(!a||i<0||i>=a.length||a[i]==null)return NaN;return+a[i];}
+
+function sunIcon(x,y,sc){
+  ctx.save();ctx.translate(x,y);ctx.scale(sc,sc);
+  ctx.strokeStyle='rgba(255,212,8,.88)';ctx.lineWidth=1.9;ctx.lineCap='round';
+  for(var i=0;i<8;i++){var a=i*Math.PI/4;ctx.beginPath();ctx.moveTo(Math.cos(a)*9,Math.sin(a)*9);ctx.lineTo(Math.cos(a)*14,Math.sin(a)*14);ctx.stroke();}
+  ctx.fillStyle='#ffd30a';ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);ctx.fill();ctx.restore();
+}
+function cloudShape(c,x,y,fill){
+  c.fillStyle=fill||'rgba(205,215,225,.82)';c.strokeStyle='rgba(255,255,255,.28)';c.lineWidth=.8;
+  c.beginPath();c.arc(x-6,y+2,5.5,Math.PI,0);c.arc(x+.5,y-2,7,Math.PI,0);c.arc(x+8,y+2,5,Math.PI,0);
+  c.lineTo(x+14,y+9);c.lineTo(x-12,y+9);c.closePath();c.fill();c.stroke();
+}
+function cloudIcon(x,y,sc,dark){ctx.save();ctx.translate(x,y);ctx.scale(sc,sc);cloudShape(ctx,0,0,dark?'rgba(170,185,205,.82)':'rgba(210,220,230,.82)');ctx.restore();}
+function rainIcon(x,y,sc){
+  ctx.save();ctx.translate(x,y);ctx.scale(sc,sc);
+  cloudShape(ctx,0,0,'rgba(175,192,215,.82)');
+  ctx.strokeStyle='rgba(70,192,255,.9)';ctx.lineWidth=1.7;ctx.lineCap='round';
+  for(var i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(i*5.5,10);ctx.lineTo(i*5.5-2.5,17);ctx.stroke();}
+  ctx.restore();
+}
+
+function drawLabels(w,h,ext){
+  var dt=parseTime(meta.tijden[state.step]);
+  var taken=[];
+  CITIES.sort(function(a,b){return a[3]-b[3];}).forEach(function(city){
+    var name=city[0],lat=city[1],lon=city[2],prio=city[3];
+    if(!inView(lon,lat,ext))return;
+    var p=project(lon,lat,w,h,ext);
+    if(p.x<44||p.x>w-44||p.y<44||p.y>h-90)return;
+    var box={x:p.x-44,y:p.y-28,w:88,h:56};
+    if(prio>1&&taken.some(function(b){return!(box.x>b.x+b.w||box.x+box.w<b.x||box.y>b.y+b.h||box.y+box.h<b.y);}))return;
+    taken.push(box);
+    // Values
+    var tv=NaN,rr=NaN,cl=NaN;
+    var st=stations.find(function(s){return s.name===name;});
+    if(st){
+      var idx=stNear(st.data,dt);
+      tv=stVal(st.data,'TTT',idx);
+      rr=stVal(st.data,'RR1c',idx);cl=stVal(st.data,'Neff',idx);if(Number.isFinite(cl))cl/=100;
+    }
+    if(!Number.isFinite(tv)&&rasters.temp)tv=rasterValue(rasters.temp,state.step,lon,lat,0);
+    if(!Number.isFinite(rr)&&rasters.neerslag)rr=rasterValue(rasters.neerslag,state.step,lon,lat,0);
+    if(!Number.isFinite(cl)&&rasters.bewolking){
+      var h0=clamp(rasterValue(rasters.bewolking,state.step,lon,lat,0),0,1);
+      var m0=clamp(rasterValue(rasters.bewolking,state.step,lon,lat,1),0,1);
+      var l0=clamp(rasterValue(rasters.bewolking,state.step,lon,lat,2),0,1);
+      cl=1-(1-h0)*(1-m0)*(1-l0);
+    }
+    var type=rr>0.18?'rain':cl>0.65?'cloud':'sun';
+    var sc=prio===1?.92:.80;
+    var ix=p.x-22,iy=p.y-15;
+    if(type==='sun')sunIcon(ix,iy,sc);
+    else if(type==='rain')rainIcon(ix,iy,sc);
+    else cloudIcon(ix,iy,sc,cl>0.82);
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+    // Temp
+    if(Number.isFinite(tv)){
+      ctx.font='800 '+(prio===1?15:13)+'px Inter,"Segoe UI",Arial,sans-serif';
+      ctx.lineWidth=3.5;ctx.strokeStyle='rgba(12,20,14,.95)';ctx.fillStyle='#ffd400';
+      var ts=Math.round(tv)+'°';
+      ctx.strokeText(ts,p.x-31,p.y-15);ctx.fillText(ts,p.x-31,p.y-15);
+    }
+    // Name
+    ctx.font=(prio===1?'700':'600')+' '+(prio===1?14:12)+'px Inter,"Segoe UI",Arial,sans-serif';
+    ctx.lineWidth=4.2;ctx.strokeStyle='rgba(6,14,8,.96)';ctx.fillStyle='rgba(240,246,244,.97)';
+    ctx.strokeText(name,p.x,p.y+16);ctx.fillText(name,p.x,p.y+16);
+    ctx.restore();
+  });
+}
+
+// ─── RESIZE ──────────────────────────────────────────────────────────────────
+function resize(){
+  var dpr=Math.max(1,Math.min(window.devicePixelRatio||1,2));
+  var cw=window.innerWidth,ch=window.innerHeight;
+  var pw=Math.round(cw*dpr),ph=Math.round(ch*dpr);
+  if(canvas.width!==pw||canvas.height!==ph){
+    canvas.width=pw;canvas.height=ph;
+    canvas.style.width=cw+'px';canvas.style.height=ch+'px';
+    baseCache=null;
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return{w:cw,h:ch};
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function render(){
+  if(!meta||!noiseCache)return;
+  var myId=++rId;
+  requestAnimationFrame(function(){
+    if(myId!==rId)return;
+    var sz=resize(),w=sz.w,h=sz.h;
+    var ext=currentExtent();
+
+    // 1. Terrain basemap (cached)
+    var bk=[w,h,state.zoom.toFixed(3),ext.lonMin.toFixed(3),ext.latMin.toFixed(3)].join(':');
+    if(!baseCache||baseCache.key!==bk){baseCache={key:bk,c:buildBase(w,h,ext)};}
+    ctx.drawImage(baseCache.c,0,0);
+
+    // 2. Weather fields
+    ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    var layer=state.layer;
+    if(layer==='composite'||layer==='clouds'){
+      var cc=makeCloudCanvas(w,h,ext,state.step);
+      if(cc)ctx.drawImage(cc,0,0,w,h);
+    }
+    if(layer==='composite'||layer==='rain'){
+      var pc=makePrecipCanvas(w,h,ext,state.step);
+      if(pc)ctx.drawImage(pc,0,0,w,h);
+    }
+    if(layer==='temp'){var tc=makeTempCanvas(w,h,ext,state.step);if(tc)ctx.drawImage(tc,0,0,w,h);}
+    if(layer==='cape'){var cc2=makeCapeCanvas(w,h,ext,state.step);if(cc2)ctx.drawImage(cc2,0,0,w,h);}
+    ctx.restore();
+
+    // 3. Day/night
+    var nc=makeNightCanvas(w,h,ext,state.step);
+    ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(nc,0,0,w,h);ctx.restore();
+
+    // 4. Wind arrows (wind layer only)
+    if(layer==='wind')drawWind(w,h,ext);
+
+    // 5. Labels
+    drawLabels(w,h,ext);
+
+    updateHUD();
+  });
+}
+
+// ─── HUD ─────────────────────────────────────────────────────────────────────
+function updateHUD(){
+  var dt=parseTime(meta.tijden[state.step]);
+  document.getElementById('t-hour').textContent=pad(dt.getHours())+':00';
+  document.getElementById('t-date').textContent=fmtDate(dt);
+  rangeEl.value=state.step;
+  var pct=(state.step-0)/Math.max(1,state.end)*100;
+  rangeEl.style.background='linear-gradient(90deg,#ffc400 '+pct+'%,rgba(255,255,255,.22) '+pct+'%)';
+  var cur=parseTime(meta.tijden[state.step]);
+  document.querySelectorAll('#day-tabs button').forEach(function(btn){
+    btn.classList.toggle('active',sameDay(cur,parseTime(btn.dataset.date)));
+  });
+}
+
+// ─── TABS ────────────────────────────────────────────────────────────────────
+function buildTabs(){
+  var tabs=document.getElementById('day-tabs');
+  var days=[],seen={};
+  for(var i=state.start;i<=state.end;i++){
+    var dt=parseTime(meta.tijden[i]);
+    var k=dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());
+    if(!seen[k]){seen[k]=true;days.push({k:k,dt:dt,idx:i});}
+  }
+  tabs.innerHTML=days.slice(0,6).map(function(d,i){
+    return'<button type="button" data-date="'+d.k+'" data-idx="'+d.idx+'">'+tabLabel(d.dt,i)+'</button>';
+  }).join('');
+  tabs.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var target=parseTime(btn.dataset.date);
+      var best=+btn.dataset.idx;
+      for(var i=state.start;i<=state.end;i++){
+        var dt=parseTime(meta.tijden[i]);
+        if(sameDay(dt,target)&&dt.getHours()>=12){best=i;break;}
+      }
+      state.step=best;render();
+    });
+  });
+}
+
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+function bind(){
+  rangeEl.addEventListener('input',function(){state.step=+rangeEl.value;render();});
+  document.getElementById('prev').addEventListener('click',function(){state.step=Math.max(0,state.step-1);render();});
+  document.getElementById('next').addEventListener('click',function(){state.step=Math.min(state.end,state.step+1);render();});
+  var pi=document.getElementById('play-icon');
+  document.getElementById('play').addEventListener('click',function(){
+    state.playing=!state.playing;
+    pi.innerHTML=state.playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M8 5v14l11-7Z"/>';
+    if(state.timer)clearInterval(state.timer);
+    if(state.playing)state.timer=setInterval(function(){state.step=state.step>=state.end?0:state.step+1;render();},780);
+  });
+  document.getElementById('zoom-in').addEventListener('click',function(){state.zoom=Math.min(3.5,state.zoom*1.45);baseCache=null;render();});
+  document.getElementById('zoom-out').addEventListener('click',function(){state.zoom=Math.max(1,state.zoom/1.45);baseCache=null;render();});
+  document.querySelectorAll('#layers button').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      state.layer=btn.dataset.layer;
+      document.querySelectorAll('#layers button').forEach(function(b){b.classList.toggle('active',b===btn);});
+      render();
+    });
+  });
+  window.addEventListener('resize',function(){baseCache=null;render();});
+
+  // Mouse pan
+  var drag=null;
+  canvas.addEventListener('mousedown',function(e){drag={x:e.clientX,y:e.clientY,cl:state.cLon,ct:state.cLat};});
+  canvas.addEventListener('mousemove',function(e){
+    if(!drag)return;
+    var ext=currentExtent();
+    var dlon=(drag.x-e.clientX)/canvas.clientWidth*(ext.lonMax-ext.lonMin);
+    var dlat=(e.clientY-drag.y)/canvas.clientHeight*(ext.latMax-ext.latMin);
+    var hw=(ext.lonMax-ext.lonMin)/2,hh=(ext.latMax-ext.latMin)/2;
+    state.cLon=clamp(drag.cl+dlon,EXT.lonMin+hw,EXT.lonMax-hw);
+    state.cLat=clamp(drag.ct+dlat,EXT.latMin+hh,EXT.latMax-hh);
+    baseCache=null;render();
+  });
+  canvas.addEventListener('mouseup',function(){drag=null;});
+  canvas.addEventListener('mouseleave',function(){drag=null;});
+
+  // Touch pan
+  var td=null;
+  canvas.addEventListener('touchstart',function(e){var t=e.touches[0];td={x:t.clientX,y:t.clientY,cl:state.cLon,ct:state.cLat};},{passive:true});
+  canvas.addEventListener('touchmove',function(e){
+    e.preventDefault();if(!td)return;
+    var t=e.touches[0],ext=currentExtent();
+    var dlon=(td.x-t.clientX)/canvas.clientWidth*(ext.lonMax-ext.lonMin);
+    var dlat=(t.clientY-td.y)/canvas.clientHeight*(ext.latMax-ext.latMin);
+    var hw=(ext.lonMax-ext.lonMin)/2,hh=(ext.latMax-ext.latMin)/2;
+    state.cLon=clamp(td.cl+dlon,EXT.lonMin+hw,EXT.lonMax-hw);
+    state.cLat=clamp(td.ct+dlat,EXT.latMin+hh,EXT.latMax-hh);
+    baseCache=null;render();
+  },{passive:false});
+  canvas.addEventListener('touchend',function(){td=null;});
+
+  // Scroll zoom
+  canvas.addEventListener('wheel',function(e){
+    e.preventDefault();
+    var factor=e.deltaY>0?0.85:1.18;
+    state.zoom=clamp(state.zoom*factor,1,3.5);
+    baseCache=null;render();
+  },{passive:false});
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+function init(){
+  setStatus('Metadata laden…',5);
+  fetchJson(META).then(function(d){
+    meta=d;
+    state.end=Math.min(d.tijden.length-1,119);
+    rangeEl.max=state.end;
+    // Start at nearest future step
+    var now=new Date();
+    for(var i=0;i<d.tijden.length;i++){if(parseTime(d.tijden[i])>=now){state.step=i;break;}}
+    document.getElementById('credit').textContent=(d.model||'ECMWF IFS')+' · weerlab.nl';
+    setStatus('Rasterdata laden…',20);
+    return Promise.all([
+      loadRaster('bewolking'),loadRaster('neerslag'),loadRaster('temp'),
+      loadRaster('wind'),loadRaster('windstoten'),loadRaster('cape')
+    ]);
+  }).then(function(){
+    setStatus('Kaartlagen laden…',55);
+    return Promise.all([
+      fetchJson('europa_land.geojson').then(function(d){geo.land=d;}).catch(function(){}),
+      fetchJson('nl_provincies.geojson').then(function(d){geo.nl=d;}).catch(function(){}),
+      fetchJson('be_provincies.geojson').then(function(d){geo.be=d;}).catch(function(){}),
+      fetchJson('germany_bundeslander.geojson').then(function(d){geo.de=d;}).catch(function(){}),
+      fetchJson('fr_regions.geojson').then(function(d){geo.fr=d;}).catch(function(){}),
+      fetchJson('nl_rivieren.geojson').then(function(d){geo.rivers=d;}).catch(function(){}),
+      loadMosmix().catch(function(){})
+    ]);
+  }).then(function(){
+    buildTabs();bind();
+    setStatus('Wolkentextuur berekenen…',80);
+    var sz=resize();
+    var fw=clamp(Math.round(sz.w*.55),300,660);
+    var fh=clamp(Math.round(sz.h*.55),190,440);
+    return buildNoiseTexture(fw,fh);
+  }).then(function(nc){
+    noiseCache=nc;
+    setStatus('',100);
+    render();
+  }).catch(function(err){
+    setStatus('Fout: '+err.message);
+    console.error(err);
+  });
+}
+
+init();
+})();
+</script>
+</body>
+</html>

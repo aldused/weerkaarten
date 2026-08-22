@@ -1,0 +1,3087 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kleurpluimen - Weerlab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background: #8a8070;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(18px, 4vw, 44px) 14px;
+}
+.kaart {
+  background: #b0a488;
+  border-radius: 8px;
+  padding: clamp(18px, 3vw, 30px) clamp(16px, 3vw, 34px) 26px;
+  width: 100%;
+  max-width: 1080px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.32);
+}
+.terug-rij {
+  display: flex;
+  margin-bottom: 12px;
+}
+.terug-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255,255,255,0.86);
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.26);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+.terug-link:hover {
+  color: white;
+  background: rgba(255,255,255,0.22);
+}
+h1 {
+  font-size: clamp(2rem, 5vw, 3.8rem);
+  font-weight: 900;
+  color: white;
+  letter-spacing: 0;
+  line-height: 1.05;
+  margin-bottom: 2px;
+}
+h1 .stn { font-weight: 500; opacity: 0.82; }
+.lijn {
+  height: 1.5px;
+  background: rgba(255,255,255,0.35);
+  margin: 14px 0 18px;
+}
+.balk {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+.zoek-wrap { position: relative; min-width: 0; }
+.zoek-rij {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.16);
+  border: 1.5px solid rgba(255,255,255,0.34);
+  border-radius: 8px;
+  padding: 6px;
+}
+#zoek-input,
+#extra-input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  outline: none;
+  color: white;
+  background: transparent;
+  font: 700 0.9rem/1.2 Inter, sans-serif;
+}
+#zoek-input::placeholder,
+#extra-input::placeholder { color: rgba(255,255,255,0.62); }
+.extra-rij {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.11);
+  border: 1.5px solid rgba(255,255,255,0.24);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.extra-rij::before {
+  content: "Extra";
+  color: rgba(255,255,255,0.72);
+  font: 900 0.68rem/1 Inter, sans-serif;
+  text-transform: uppercase;
+}
+.zoek-btn {
+  border: 1px solid rgba(255,255,255,0.32);
+  background: rgba(255,255,255,0.18);
+  color: white;
+  border-radius: 6px;
+  padding: 7px 11px;
+  font: 800 0.78rem/1 Inter, sans-serif;
+  cursor: pointer;
+}
+.zoek-btn:hover { background: rgba(255,255,255,0.26); }
+#zoek-resultaten {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #6f6554;
+  border: 1px solid rgba(255,255,255,0.22);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.24);
+}
+.zoek-item {
+  padding: 9px 12px;
+  color: rgba(255,255,255,0.9);
+  font-size: 0.82rem;
+  line-height: 1.25;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.zoek-item:last-child { border-bottom: none; }
+.zoek-item:hover { background: rgba(255,255,255,0.12); }
+.zoek-item span { color: rgba(255,255,255,0.58); font-size: 0.75rem; }
+.datum-controls {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.range-wrap,
+.highlight-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.16);
+  border: 1.5px solid rgba(255,255,255,0.34);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: rgba(255,255,255,0.82);
+  font: 800 0.72rem/1 Inter, sans-serif;
+  white-space: nowrap;
+}
+.range-wrap label,
+.highlight-wrap label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.range-wrap input,
+.highlight-wrap input,
+.highlight-wrap select {
+  width: 118px;
+  border: none;
+  outline: none;
+  border-radius: 6px;
+  padding: 6px 4px;
+  color: white;
+  background: rgba(255,255,255,0.08);
+  font: 800 0.72rem/1 Inter, sans-serif;
+  color-scheme: dark;
+}
+.highlight-wrap select { width: 82px; cursor: pointer; }
+.range-wrap input:focus,
+.highlight-wrap input:focus,
+.highlight-wrap select:focus,
+.highlight-clear:focus { box-shadow: 0 0 0 2px rgba(255,255,255,0.32); }
+.highlight-clear {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.86);
+  font: 900 1rem/1 Inter, sans-serif;
+  cursor: pointer;
+}
+.highlight-clear:hover { background: rgba(255,255,255,0.22); color: white; }
+#laadstatus {
+  grid-column: 1 / -1;
+  justify-self: end;
+  align-self: center;
+  color: rgba(255,255,255,0.68);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: right;
+  white-space: normal;
+}
+.param-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0 0 12px;
+  padding: 0 2px 4px;
+}
+.param-btn {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.82);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: 800 0.78rem/1 Inter, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.param-btn:hover { background: rgba(255,255,255,0.22); color: white; }
+.param-btn.actief {
+  background: white;
+  color: #5f5649;
+  border-color: rgba(255,255,255,0.9);
+}
+.download-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  border: 1px solid rgba(255,255,255,0.48);
+  background: rgba(255,255,255,0.88);
+  color: #5f5649;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font: 900 0.78rem/1 Inter, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.download-btn:hover { background: white; }
+.download-btn:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+.download-btn[hidden] { display: none !important; }
+.download-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-left: auto;
+}
+.download-actions[hidden] { display: none !important; }
+.download-actions .download-btn { margin-left: 0; }
+.download-all-btn {
+  background: rgba(255,255,255,0.16);
+  color: white;
+}
+.download-all-btn:hover { background: rgba(255,255,255,0.25); }
+.samenvatting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.chip {
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.24);
+  color: rgba(255,255,255,0.92);
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.chart-wrap {
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.chart-wrap svg { display: block; width: 100%; height: auto; }
+.thunder-card[hidden] { display: none !important; }
+.thunder-card {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.24);
+  background: rgba(34,24,42,0.42);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+}
+.thunder-bolt {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(255,226,86,0.96), rgba(236,127,54,0.94));
+  color: #2d1c08;
+  font-size: 1.6rem;
+  font-weight: 900;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.42);
+  box-shadow: 0 5px 18px rgba(39,21,12,0.22);
+}
+.thunder-copy { min-width: 0; }
+.thunder-kop {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: white;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.thunder-kop span {
+  color: rgba(255,255,255,0.70);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.thunder-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.thunder-basis {
+  margin-top: 9px;
+  color: rgba(255,255,255,0.70);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+.thunder-day {
+  min-height: 50px;
+  border-radius: 7px;
+  border: 1px solid var(--risk-stroke);
+  background: var(--risk-fill);
+  color: var(--risk-text);
+  padding: 6px 7px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.thunder-day .d {
+  display: block;
+  font-size: 0.60rem;
+  font-weight: 900;
+  opacity: 0.82;
+  white-space: nowrap;
+}
+.thunder-day strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.96rem;
+  line-height: 1;
+}
+.single-view[hidden], .multi-view[hidden] { display: none !important; }
+.multi-view {
+  display: grid;
+  gap: 14px;
+}
+.multi-card {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  padding: 12px;
+}
+.multi-head {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.multi-title {
+  color: white;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+.multi-status {
+  color: rgba(255,255,255,0.64);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: right;
+}
+.multi-card .samenvatting { margin: 0 0 10px; }
+.multi-card .legenda { margin-top: 10px; }
+.legenda {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: 0.76rem;
+  color: rgba(255,255,255,0.78);
+  align-items: center;
+  font-weight: 700;
+}
+.leg-item { display: flex; align-items: center; gap: 7px; }
+.leg-ln { width: 24px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.leg-bnd { width: 18px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.leg-swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.42); flex-shrink: 0; }
+.voet {
+  margin-top: 12px;
+  color: rgba(255,255,255,0.54);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+@media (max-width: 560px) {
+  body { padding: 0; background: #b0a488; }
+  .kaart { border-radius: 0; min-height: 100vh; box-shadow: none; }
+  .balk { grid-template-columns: 1fr; }
+  .datum-controls { justify-content: stretch; }
+  .range-wrap { flex-wrap: wrap; }
+  .highlight-wrap { flex-wrap: wrap; }
+  .range-wrap label { flex: 1 1 130px; }
+  .highlight-wrap label { flex: 1 1 150px; }
+  .range-wrap input { width: 100%; }
+  .highlight-wrap input { width: 100%; }
+  #laadstatus { white-space: normal; }
+  .param-btn { flex: 1 1 auto; }
+  .download-actions { flex: 1 1 100%; margin-left: 0; }
+  .download-actions .download-btn { width: 100%; }
+  .thunder-card { grid-template-columns: 1fr; }
+  .thunder-bolt { width: 100%; height: 34px; }
+  .legenda { gap: 10px 14px; }
+  .multi-head { align-items: flex-start; flex-direction: column; }
+  .multi-status { text-align: left; }
+}
+body.embedded { padding: 0; background: #eef4f9; }
+body.embedded .kaart {
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 0;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255,255,255,0.035) 1px, transparent 1px),
+    linear-gradient(145deg, #10243e, #1a5260);
+  background-size: 42px 42px, 42px 42px, auto;
+}
+body.embedded .terug-rij { display: flex; }
+body.embedded .kaart { padding: 18px; }
+body.embedded h1 { font-size: clamp(1.35rem, 3.2vw, 2.15rem); margin-top: 0; }
+body.embedded .voet { display: none; }
+body.embedded .multi-card,
+body.embedded .zoek-rij,
+body.embedded .chip {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.18);
+}
+body.embedded .param-btn,
+body.embedded .download-btn {
+  border-color: rgba(255,255,255,0.22);
+}
+</style>
+</head>
+<body>
+<div class="kaart">
+  <div class="terug-rij">
+    <a class="terug-link" href="index.html#weerbewaking" onclick="gaTerugKleurpluim();return false;">← Terug naar weerbewaking</a>
+  </div>
+  <h1><span id="pluim-titel">Temperatuurpluim</span> <span class="stn" id="stn-label">Rotterdam</span></h1>
+  <div class="lijn"></div>
+
+  <div class="balk">
+    <div class="zoek-wrap">
+      <div class="zoek-rij">
+        <input id="zoek-input" type="text" value="Rotterdam" placeholder="Zoek plaats..." autocomplete="off">
+        <button class="zoek-btn" id="zoek-btn" type="button">Zoek</button>
+      </div>
+      <div id="zoek-resultaten"></div>
+      <div class="extra-rij">
+        <input id="extra-input" type="text" placeholder="Extra tekst achter plaats..." autocomplete="off" aria-label="Extra tekst achter plaats">
+      </div>
+    </div>
+    <div class="datum-controls">
+      <div class="range-wrap" aria-label="Pluimperiode">
+        <label>Van <input id="range-start" type="date"></label>
+        <label>Tot <input id="range-end" type="date"></label>
+      </div>
+      <div class="highlight-wrap" aria-label="Dag- of periodemarkering">
+        <label>Markeer van <input id="highlight-start" type="date"></label>
+        <label>t/m <input id="highlight-end" type="date"></label>
+        <select id="highlight-color" title="Markeringskleur">
+          <option value="red" selected>Rood</option>
+          <option value="blue">Blauw</option>
+          <option value="yellow">Geel</option>
+          <option value="purple">Paars</option>
+        </select>
+        <button class="highlight-clear" id="highlight-clear" type="button" title="Markering wissen">×</button>
+      </div>
+    </div>
+    <span id="laadstatus" aria-live="polite"></span>
+  </div>
+
+  <div class="param-tabs" role="tablist" aria-label="Pluimtype">
+    <button class="param-btn actief" type="button" data-param="temp">Temperatuur</button>
+    <button class="param-btn" type="button" data-param="rain">Neerslagkans</button>
+    <button class="param-btn" type="button" data-param="rainmm">Neerslag (mm)</button>
+    <button class="param-btn" type="button" data-param="raincum">Neerslagsom</button>
+    <button class="param-btn" type="button" data-param="wind">Wind</button>
+    <button class="param-btn" type="button" data-param="gust">Windstoten</button>
+    <button class="param-btn" type="button" data-param="cloud">Zon/bewolking</button>
+    <button class="param-btn" type="button" data-param="thunder">Onweer</button>
+    <button class="param-btn" type="button" data-param="multi">8-pluim</button>
+    <div class="download-actions" id="download-actions" hidden>
+      <button class="download-btn" id="download-4pluim" type="button">Download PNG</button>
+      <button class="download-btn download-all-btn" id="download-all-pluimen" type="button">Download alle 8 als ZIP</button>
+    </div>
+  </div>
+
+  <div id="single-view" class="single-view">
+    <div class="samenvatting" id="samenvatting" aria-live="polite"></div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 820 350" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <section class="thunder-card" id="thunder-card" hidden aria-live="polite"></section>
+    <div class="legenda" id="legenda"></div>
+    <div id="tx-toggle-row" style="margin:8px 0 0;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="param-btn" id="tgl-tx-dag" type="button" onclick="toggleDailyTxRange()" title="Toon per dag de MOS/MIX maximumtemperatuur uit Weerlab, beschikbaar tot 10 dagen vooruit">
+        <span class="tgl-lbl">MOS/MIX Tx</span> <span style="opacity:.6;font-size:.72em">10 dagen</span>
+      </button>
+    </div>
+  </div>
+  <div id="multi-view" class="multi-view" hidden></div>
+  <div class="voet">&copy; Ed Aldus WM · Data: Open-Meteo / ECMWF IFS ENS</div>
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const DOW_NL = ['zo','ma','di','wo','do','vr','za'];
+const MAAND_NL = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const ROTTERDAM = { lat: 51.9244, lon: 4.4777, naam: 'Rotterdam' };
+const MAX_FORECAST_DAYS = 15;
+const MS_DAY = 24 * 60 * 60 * 1000;
+const CLOUD_CATS = [
+  { label: 'Onbewolkt', lo: 0, hi: 12, color: '#f5e642' },
+  { label: 'Licht bewolkt', lo: 12, hi: 37, color: '#dcd28c' },
+  { label: 'Half bewolkt', lo: 37, hi: 62, color: '#a09464' },
+  { label: 'Zwaar bewolkt', lo: 62, hi: 87, color: '#828296' },
+  { label: 'Geheel bewolkt', lo: 87, hi: 101, color: '#373746' },
+];
+const SPATIAL_SAMPLE_OFFSETS_KM = [
+  [0, 0],
+  [10, 0], [-10, 0], [0, 10], [0, -10],
+];
+const SPATIAL_FETCH_CONCURRENCY = 5;
+
+const _fetchCache = {};
+const _fetchInflight = {};
+const _statsCache = {};
+const _statsInflight = {};
+const CACHE_TTL = 10 * 60 * 1000;
+const OM_PROXY_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
+  ? 'https://om.weerlab.nl/om'
+  : null;
+
+function rewriteOM(url) {
+  if (!OM_PROXY_BASE) return url;
+  const map = [
+    ['https://ensemble-api.open-meteo.com/v1/ensemble', `${OM_PROXY_BASE}/ensemble`],
+    ['https://api.open-meteo.com/v1/forecast', `${OM_PROXY_BASE}/forecast`],
+  ];
+  for (const [from, to] of map) {
+    if (url.startsWith(from)) return to + url.slice(from.length);
+  }
+  return url;
+}
+
+async function fetchJson(url, ms = 30000, retries = 3) {
+  url = rewriteOM(url);
+  const cached = _fetchCache[url];
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  if (_fetchInflight[url]) return _fetchInflight[url];
+
+  _fetchInflight[url] = (async () => {
+    for (let poging = 0; poging < retries; poging++) {
+      const ctrl = new AbortController();
+      const id = setTimeout(() => ctrl.abort(), ms);
+      try {
+        const r = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(id);
+        if (r.status === 429 && poging < retries - 1) {
+          await new Promise(res => setTimeout(res, 2000 * (poging + 1)));
+          continue;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        _fetchCache[url] = { data, ts: Date.now() };
+        return data;
+      } catch (e) {
+        clearTimeout(id);
+        if (poging === retries - 1) throw new Error(e.name === 'AbortError' ? 'time-out' : e.message);
+        await new Promise(res => setTimeout(res, 1200 * (poging + 1)));
+      }
+    }
+  })().finally(() => { delete _fetchInflight[url]; });
+  return _fetchInflight[url];
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function hexToRgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function colorFromScale(scale, value) {
+  for (let i = 0; i < scale.length - 1; i++) {
+    const [v0, c0] = scale[i];
+    const [v1, c1] = scale[i + 1];
+    if (value <= v1) {
+      const f = Math.max(0, Math.min(1, (value - v0) / (v1 - v0)));
+      const [r0,g0,b0] = hexToRgb(c0);
+      const [r1,g1,b1] = hexToRgb(c1);
+      return `rgb(${Math.round(lerp(r0,r1,f))},${Math.round(lerp(g0,g1,f))},${Math.round(lerp(b0,b1,f))})`;
+    }
+  }
+  return scale[scale.length - 1][1];
+}
+
+function scaleStops(scale, yMin, yMax) {
+  const range = yMax - yMin || 1;
+  return Array.from(new Set([
+    yMin,
+    yMax,
+    ...scale.map(([value]) => Math.max(yMin, Math.min(yMax, value))),
+  ]))
+    .sort((a, b) => b - a)
+    .map(value => ({
+      offset: Math.max(0, Math.min(1, (yMax - value) / range)),
+      color: colorFromScale(scale, value),
+    }));
+}
+
+function mk(parent, tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function percentiel(arr, p) {
+  const s = arr.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const idx = (p / 100) * (s.length - 1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return s[lo] + (s[hi] - s[lo]) * (idx - lo);
+}
+
+function isoDateLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function parseIsoDate(iso) {
+  const parts = String(iso || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return null;
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function isoDateTimeLocal(d) {
+  return `${isoDateLocal(d)}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function afstandKm(lat1, lon1, lat2, lon2) {
+  const rad = Math.PI / 180;
+  const p1 = lat1 * rad;
+  const p2 = lat2 * rad;
+  const dp = (lat2 - lat1) * rad;
+  const dl = (lon2 - lon1) * rad;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function offsetPointKm(lat, lon, northKm, eastKm) {
+  const dLat = northKm / 111.32;
+  const cosLat = Math.max(0.2, Math.cos(lat * Math.PI / 180));
+  const dLon = eastKm / (111.32 * cosLat);
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
+function spatialSamplePoints(station = currentStation) {
+  return SPATIAL_SAMPLE_OFFSETS_KM.map(([northKm, eastKm], idx) => ({
+    ...offsetPointKm(station.lat, station.lon, northKm, eastKm),
+    idx,
+    northKm,
+    eastKm,
+  }));
+}
+
+function trimToLastFinite(times, members) {
+  let last = -1;
+  for (let i = times.length - 1; i >= 0; i--) {
+    if (members.some(member => Number.isFinite(member?.[i]))) {
+      last = i;
+      break;
+    }
+  }
+  if (last < 0) return { times, members };
+  return {
+    times: times.slice(0, last + 1),
+    members: members.map(member => member.slice(0, last + 1)),
+  };
+}
+
+function aggregateMembersByHours(times, members, hours = 6) {
+  const groups = [];
+  const byKey = new Map();
+  times.forEach((t, i) => {
+    const d = new Date(t);
+    const start = new Date(d);
+    start.setHours(Math.floor(d.getHours() / hours) * hours, 0, 0, 0);
+    const key = isoDateTimeLocal(start);
+    if (!byKey.has(key)) {
+      const group = { key, start, idxs: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    byKey.get(key).idxs.push(i);
+  });
+  return {
+    times: groups.map(group => group.key),
+    members: members.map(member => groups.map(group => {
+      const vals = group.idxs.map(i => member[i]).filter(Number.isFinite);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+    })),
+  };
+}
+
+function cumulativeMembers(members) {
+  return members.map(member => {
+    let sum = 0;
+    let seen = false;
+    return member.map(value => {
+      if (!Number.isFinite(value)) return seen ? sum : null;
+      sum += Math.max(0, value);
+      seen = true;
+      return sum;
+    });
+  });
+}
+
+function initRangeInputs() {
+  const startEl = document.getElementById('range-start');
+  const endEl = document.getElementById('range-end');
+  const today = new Date();
+  const minIso = isoDateLocal(today);
+  const maxIso = isoDateLocal(addDays(today, MAX_FORECAST_DAYS - 1));
+  [startEl, endEl].forEach(el => {
+    el.min = minIso;
+    el.max = maxIso;
+  });
+  startEl.value = minIso;
+  endEl.value = maxIso;
+  syncHighlightBounds();
+}
+
+function selectedRange() {
+  const startEl = document.getElementById('range-start');
+  const endEl = document.getElementById('range-end');
+  const today = new Date();
+  const minDate = parseIsoDate(startEl.min) || today;
+  const maxDate = parseIsoDate(endEl.max) || addDays(today, MAX_FORECAST_DAYS - 1);
+  let start = parseIsoDate(startEl.value) || minDate;
+  let end = parseIsoDate(endEl.value) || maxDate;
+  if (start < minDate) start = minDate;
+  if (start > maxDate) start = maxDate;
+  if (end < start) end = start;
+  if (end > maxDate) end = maxDate;
+  startEl.value = isoDateLocal(start);
+  endEl.value = isoDateLocal(end);
+  return {
+    start,
+    end,
+    startIso: isoDateLocal(start),
+    endIso: isoDateLocal(end),
+    endExclusive: addDays(end, 1),
+  };
+}
+
+function selectedRangeDays() {
+  const { start, end } = selectedRange();
+  return Math.max(1, Math.round((end - start) / MS_DAY) + 1);
+}
+
+function dateInputShouldWait(el) {
+  if (!el) return false;
+  if (!el.value) return document.activeElement === el;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(el.value)) return true;
+  return el.validity && !el.validity.valid;
+}
+
+function bindDateCommit(ids, commit) {
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', () => {
+      if (dateInputShouldWait(el)) {
+        el.dataset.pendingDateCommit = '1';
+        return;
+      }
+      delete el.dataset.pendingDateCommit;
+      commit(id);
+    });
+    el.addEventListener('blur', () => {
+      delete el.dataset.pendingDateCommit;
+      commit(id);
+    });
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
+      }
+    });
+  });
+}
+
+const DAY_HIGHLIGHT_COLORS = {
+  red: { fill: 'rgba(225, 70, 70, 0.30)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  blue: { fill: 'rgba(70, 165, 255, 0.28)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  yellow: { fill: 'rgba(255, 214, 80, 0.28)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  purple: { fill: 'rgba(170, 95, 255, 0.28)', stroke: 'rgba(255, 255, 255, 0.42)' },
+};
+
+function syncHighlightBounds() {
+  const inputs = ['highlight-start', 'highlight-end']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  if (!inputs.length) return;
+  const { startIso, endIso } = selectedRange();
+  inputs.forEach(el => {
+    el.min = startIso;
+    el.max = endIso;
+    if (el.value && (el.value < startIso || el.value > endIso)) el.value = '';
+  });
+}
+
+function syncHighlightPeriod(changedId) {
+  const startEl = document.getElementById('highlight-start');
+  const endEl = document.getElementById('highlight-end');
+  if (!startEl || !endEl) return;
+  if (changedId === 'highlight-start' && startEl.value && !endEl.value) endEl.value = startEl.value;
+  if (changedId === 'highlight-end' && endEl.value && !startEl.value) startEl.value = endEl.value;
+  if (startEl.value && endEl.value && endEl.value < startEl.value) {
+    const oldStart = startEl.value;
+    startEl.value = endEl.value;
+    endEl.value = oldStart;
+  }
+}
+
+function selectedHighlight() {
+  const startEl = document.getElementById('highlight-start');
+  const endEl = document.getElementById('highlight-end');
+  const startValue = startEl?.value || endEl?.value;
+  const endValue = endEl?.value || startEl?.value;
+  if (!startValue || !endValue) return null;
+  const startIso = startValue <= endValue ? startValue : endValue;
+  const endIso = startValue <= endValue ? endValue : startValue;
+  const palette = DAY_HIGHLIGHT_COLORS[document.getElementById('highlight-color')?.value] || DAY_HIGHLIGHT_COLORS.red;
+  return { startIso, endIso, ...palette };
+}
+
+function highlightBoundsForTimes(ts, startIso, endIso, xF, leftEdge, rightEdge) {
+  if (!ts.length) return null;
+  const timeAt = index => new Date(ts[index]).getTime();
+  const xAt = targetTime => {
+    const firstTime = timeAt(0);
+    const lastTime = timeAt(ts.length - 1);
+    if (targetTime <= firstTime) return leftEdge;
+    if (targetTime >= lastTime) return rightEdge;
+    for (let i = 1; i < ts.length; i++) {
+      const previousTime = timeAt(i - 1);
+      const nextTime = timeAt(i);
+      if (targetTime <= nextTime) {
+        const fraction = (targetTime - previousTime) / (nextTime - previousTime);
+        return xF(i - 1) + fraction * (xF(i) - xF(i - 1));
+      }
+    }
+    return rightEdge;
+  };
+  const start = parseIsoDate(startIso);
+  const endDate = parseIsoDate(endIso);
+  if (!start || !endDate) return null;
+  const end = addDays(endDate, 1);
+  const left = xAt(start.getTime());
+  const right = xAt(end.getTime());
+  if (right <= left) return null;
+  return { left, right };
+}
+
+function drawNightBands(bg, ts, xF, top, IH, IW, leftEdge) {
+  let nightStart = null;
+  for (let i = 0; i <= ts.length; i++) {
+    const h = i < ts.length ? new Date(ts[i]).getHours() : -1;
+    const isNight = h < 6 || h >= 21;
+    if (isNight && nightStart === null) {
+      nightStart = i === 0 ? leftEdge : xF(i);
+    } else if (!isNight && nightStart !== null) {
+      mk(bg, 'rect', { x: nightStart.toFixed(1), y: top, width: Math.max(0, xF(i) - nightStart).toFixed(1), height: IH, fill: 'rgba(0,0,0,0.20)', 'pointer-events': 'none' });
+      nightStart = null;
+    }
+    if (i === ts.length && nightStart !== null) {
+      mk(bg, 'rect', { x: nightStart.toFixed(1), y: top, width: Math.max(0, leftEdge + IW - nightStart).toFixed(1), height: IH, fill: 'rgba(0,0,0,0.20)', 'pointer-events': 'none' });
+    }
+  }
+}
+
+function drawDayHighlight(group, ts, xF, leftEdge, rightEdge, top, height) {
+  const highlight = selectedHighlight();
+  const bounds = highlight && highlightBoundsForTimes(ts, highlight.startIso, highlight.endIso, xF, leftEdge, rightEdge);
+  if (!bounds) return;
+  const x = bounds.left;
+  const width = Math.max(0, bounds.right - bounds.left);
+  mk(group, 'rect', {
+    x: x.toFixed(1),
+    y: top,
+    width: width.toFixed(1),
+    height,
+    fill: highlight.fill,
+    stroke: highlight.stroke,
+    'stroke-width': 1.2,
+    'pointer-events': 'none',
+  });
+  [x, x + width].forEach(xx => {
+    mk(group, 'line', {
+      x1: xx.toFixed(1),
+      y1: top,
+      x2: xx.toFixed(1),
+      y2: top + height,
+      stroke: 'rgba(255,255,255,0.62)',
+      'stroke-width': 1.8,
+      'pointer-events': 'none',
+    });
+  });
+}
+
+function smoothPath(pts) {
+  if (pts.length < 2) return '';
+  let d = `M${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(i + 2, pts.length - 1)];
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
+  }
+  return d;
+}
+
+function smoothPointsY(pts, passes = 0) {
+  if (!passes || pts.length < 5) return pts;
+  let out = pts.map(p => [p[0], p[1]]);
+  for (let pass = 0; pass < passes; pass++) {
+    out = out.map((p, i, arr) => {
+      if (i < 2 || i > arr.length - 3) return p;
+      const y = (arr[i - 2][1] + arr[i - 1][1] * 2 + arr[i][1] * 3 + arr[i + 1][1] * 2 + arr[i + 2][1]) / 9;
+      return [p[0], y];
+    });
+  }
+  return out;
+}
+
+function bandPath(topPts, botPts) {
+  if (topPts.length < 2 || botPts.length < 2) return '';
+  return smoothPath(topPts) + ' L' +
+    [...botPts].reverse().map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L') + ' Z';
+}
+
+function linearAreaPath(topPts, botPts) {
+  if (topPts.length < 2 || botPts.length < 2) return '';
+  const top = topPts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
+  const bot = [...botPts].reverse().map(p => `L${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
+  return `${top} ${bot} Z`;
+}
+
+function fmtDag(t) {
+  const d = new Date(t);
+  return `${DOW_NL[d.getDay()]} ${d.getDate()} ${MAAND_NL[d.getMonth()]}`;
+}
+
+function fmtValue(v, cfg) {
+  if (!Number.isFinite(v)) return '-';
+  const n = cfg.decimals == null ? Math.round(v) : v.toFixed(cfg.decimals);
+  return `${n}${cfg.unit}`;
+}
+
+function kmhToBft(kmh) {
+  const limits = [1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103, 118];
+  for (let i = 0; i < limits.length; i++) {
+    if (kmh < limits[i]) return i;
+  }
+  return 12;
+}
+
+function capeDuiding(cape) {
+  if (!Number.isFinite(cape) || cape < 100) return 'stabiel';
+  if (cape < 500) return 'licht onstabiel';
+  if (cape < 1000) return 'matig onstabiel';
+  if (cape < 2000) return 'flink onstabiel';
+  if (cape < 3000) return 'zeer onstabiel';
+  if (cape < 4000) return 'extreem onstabiel';
+  return 'uitzonderlijk onstabiel';
+}
+
+function thunderChanceColor(chance) {
+  if (!Number.isFinite(chance) || chance < 10) return { fill: 'rgba(255,255,255,0.32)', stroke: 'rgba(255,255,255,0.50)', text: '#26323c' };
+  if (chance < 25) return { fill: 'rgba(241,216,99,0.92)', stroke: 'rgba(255,255,255,0.72)', text: '#2e2b16' };
+  if (chance < 50) return { fill: 'rgba(239,161,64,0.94)', stroke: 'rgba(255,255,255,0.72)', text: '#2e1c0e' };
+  if (chance < 75) return { fill: 'rgba(217,87,59,0.94)', stroke: 'rgba(255,255,255,0.76)', text: '#ffffff' };
+  return { fill: 'rgba(115,46,135,0.94)', stroke: 'rgba(255,255,255,0.78)', text: '#ffffff' };
+}
+
+function makeDailyThunderStats(stats) {
+  const days = new Map();
+  stats.forEach(s => {
+    const dayIso = isoDateLocal(new Date(s.t));
+    const chance = s.extra?.thunderChance;
+    const cape = s.p90;
+    if (!days.has(dayIso)) {
+      days.set(dayIso, { t: s.t, iso: dayIso, chance: 0, cape: 0 });
+    }
+    const day = days.get(dayIso);
+    if (Number.isFinite(chance) && chance > day.chance) {
+      day.chance = chance;
+      day.t = s.t;
+    }
+    if (Number.isFinite(cape) && cape > day.cape) day.cape = cape;
+  });
+  return [...days.values()];
+}
+
+const PARAMS = {
+  temp: {
+    title: 'Temperatuurpluim',
+    hourly: 'temperature_2m',
+    prefix: 'temperature_2m_member',
+    unit: '°',
+    decimals: 0,
+    yStep: 5,
+    minRange: 15,
+    rangePad: 1,
+    statusSuffix: 'mediaan + P10-P90 marge',
+    lineLabel: 'Mediaan (P50)',
+    bandLabel: 'Marge P10-P90',
+    bandFill: 'rgba(255,255,255,0.38)',
+    bandEdgeColor: 'rgba(7,24,45,0.82)',
+    bandEdgeWidth: 1.8,
+    medianHaloColor: 'rgba(7,24,45,0.92)',
+    medianHaloWidth: 7,
+    medianColor: '#ffffff',
+    medianWidth: 3.4,
+    smoothScale: true,
+    backgroundOpacity: 0.74,
+    dayLineColor: 'rgba(7,24,45,0.13)',
+    gridLineColor: 'rgba(255,255,255,0.48)',
+    gridLineWidth: 0.9,
+    gridLineDash: '4 4',
+    curveSmoothPasses: 2,
+    scale: [[-8,'#3d7158'],[0,'#589464'],[4,'#74a866'],[8,'#94b967'],[12,'#b8c465'],[15,'#d1c56a'],[18,'#dfb768'],[21,'#e3a061'],[25,'#d98259'],[30,'#c96358'],[40,'#934a55']],
+    makeStats(times, members) {
+      const stats = makeDefaultStats(times, members);
+      stats.dailyMax = makeDailyMaxStats(times, members);
+      return stats;
+    },
+    summary(stats) {
+      const vals = (stats.dailyMax || stats).filter(s => Number.isFinite(s.p50));
+      const warm = vals.reduce((a,b) => b.p50 > a.p50 ? b : a, vals[0]);
+      const cool = vals.reduce((a,b) => b.p50 < a.p50 ? b : a, vals[0]);
+      const spread = vals.reduce((a,b) => (b.p90-b.p10) > (a.p90-a.p10) ? b : a, vals[0]);
+      return [
+        `Hoogste maximumtemperatuur: ${fmtValue(warm.p50, this)} · ${fmtDag(warm.t)}`,
+        `Laagste maximumtemperatuur: ${fmtValue(cool.p50, this)} · ${fmtDag(cool.t)}`,
+        `Meeste onzekerheid maximum: ±${Math.round((spread.p90-spread.p10)/2)}°`,
+      ];
+    },
+  },
+  rain: {
+    title: 'Neerslagkanspluim',
+    hourly: 'precipitation',
+    prefix: 'precipitation_member',
+    spatialAverage: true,
+    unit: '%',
+    decimals: 0,
+    yMin: 0,
+    yMax: 100,
+    yStep: 20,
+    statusSuffix: '6-uurs neerslagkans + stevige neerslag',
+    lineLabel: 'Kans op neerslag per 6 uur',
+    bandLabel: 'Kans op minstens 1 mm per 6 uur',
+    scale: [[0,'#7fb65d'],[20,'#8bcf9d'],[40,'#5fb7c9'],[60,'#3287bf'],[80,'#19559b'],[100,'#102f67']],
+    makeStats(times, members) {
+      const agg = aggregateMembersByHours(times, members, 6);
+      return agg.times.map((t, i) => {
+        const vals = agg.members.map(m => m[i]).filter(Number.isFinite);
+        const n = vals.length || 1;
+        const chance = vals.filter(v => v >= 0.1).length / n * 100;
+        const heavy = vals.filter(v => v >= 1.0).length / n * 100;
+        return { t, p10: heavy, p50: chance, p90: chance, extra: { p90mm: percentiel(vals, 90) || 0 } };
+      });
+    },
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p50));
+      const peak = vals.reduce((a, b) => {
+        const ar = Math.round(a.p50), br = Math.round(b.p50);
+        if (br !== ar) return br > ar ? b : a;
+        if ((b.extra?.p90mm || 0) !== (a.extra?.p90mm || 0)) return (b.extra.p90mm > a.extra.p90mm) ? b : a;
+        return new Date(b.t) > new Date(a.t) ? b : a;
+      }, vals[0]);
+      const heavy = vals.reduce((a,b) => b.p10 > a.p10 ? b : a, vals[0]);
+      const wet = vals.reduce((a,b) => b.extra.p90mm > a.extra.p90mm ? b : a, vals[0]);
+      return [
+        `Hoogste neerslagkans: ${Math.round(peak.p50)}% · ${fmtDag(peak.t)}`,
+        `Kans ≥1 mm/6u: ${Math.round(heavy.p10)}%`,
+        `Natste 6-uurs signaal: ${wet.extra.p90mm.toFixed(1)} mm`,
+      ];
+    },
+  },
+  rainmm: {
+    title: 'Neerslagpluim (mm)',
+    hourly: 'precipitation',
+    prefix: 'precipitation_member',
+    spatialAverage: true,
+    unit: ' mm',
+    decimals: 1,
+    yMin: 0,
+    yStep: 2,
+    minRange: 8,
+    rangePad: 1,
+    sampleStep: 1,
+    statusSuffix: '6-uurs hoeveelheid in mm',
+    lineLabel: 'Mediaan (middelste waarde)',
+    bandLabel: '80% kans (P10-P90)',
+    bandFill: 'rgba(50, 133, 86, 0.62)',
+    bandEdgeColor: 'rgba(13, 78, 46, 0.72)',
+    bandEdgeWidth: 1.25,
+    medianHaloColor: 'rgba(255,255,255,0.92)',
+    medianHaloWidth: 5.2,
+    medianColor: '#111111',
+    medianWidth: 2.7,
+    smoothScale: true,
+    backgroundOpacity: 0.2,
+    dayLineColor: 'rgba(0,0,0,0.2)',
+    gridLineColor: 'rgba(255,255,255,0.32)',
+    gridLineWidth: 0.7,
+    curveSmoothPasses: 1,
+    scale: [[0,'#d7f3c9'],[0.5,'#addf9d'],[1,'#75c486'],[2,'#3ca06f'],[5,'#19744e'],[10,'#0f4a34'],[20,'#072d1f']],
+    makeStats(times, members) {
+      const agg = aggregateMembersByHours(times, members, 6);
+      return agg.times.map((t, i) => {
+        const vals = agg.members.map(m => m[i]).filter(Number.isFinite);
+        return {
+          t,
+          pMin: vals.length ? Math.min(...vals) : 0,
+          p10: percentiel(vals, 10) || 0,
+          p50: percentiel(vals, 50) || 0,
+          p90: percentiel(vals, 90) || 0,
+          pMax: vals.length ? Math.max(...vals) : 0,
+          extra: { chance: vals.length ? vals.filter(v => v >= 0.1).length / vals.length * 100 : 0 },
+        };
+      });
+    },
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p90));
+      const wet = vals.reduce((a,b) => b.p90 > a.p90 ? b : a, vals[0]);
+      const med = vals.reduce((a,b) => b.p50 > a.p50 ? b : a, vals[0]);
+      const spread = vals.reduce((a,b) => (b.p90 - b.p10) > (a.p90 - a.p10) ? b : a, vals[0]);
+      return [
+        `Natste 6-uurs signaal: ${wet.p90.toFixed(1)} mm · ${fmtDag(wet.t)}`,
+        `Breedste 80%-marge: ${spread.p10.toFixed(1)}-${spread.p90.toFixed(1)} mm`,
+        `Mediaan max 6u: ${med.p50.toFixed(1)} mm`,
+      ];
+    },
+  },
+  raincum: {
+    title: 'Neerslagsom cumulatief',
+    hourly: 'precipitation',
+    prefix: 'precipitation_member',
+    spatialAverage: true,
+    unit: ' mm',
+    decimals: 0,
+    yMin: 0,
+    yStep: 5,
+    minRange: 20,
+    rangePad: 2,
+    rebaseCumulative: true,
+    statusSuffix: 'lopende neerslagsom vanaf start',
+    lineLabel: 'Mediaan lopende som',
+    bandLabel: 'Marge P10-P90',
+    bandFill: 'rgba(255,255,255,0.34)',
+    bandEdgeColor: 'rgba(6,38,25,0.70)',
+    bandEdgeWidth: 1.6,
+    medianHaloColor: 'rgba(6,38,25,0.82)',
+    medianHaloWidth: 6,
+    medianColor: '#ffffff',
+    medianWidth: 3,
+    scale: [[0,'#d7f3c9'],[2,'#addf9d'],[5,'#75c486'],[10,'#3ca06f'],[20,'#19744e'],[35,'#0f4a34'],[60,'#072d1f']],
+    makeStats(times, members) {
+      const stats = makeDefaultStats(times, cumulativeMembers(members));
+      stats.rebaseCumulative = true;
+      return stats;
+    },
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p50));
+      if (!vals.length) return [];
+      const last = vals[vals.length - 1];
+      const spread = vals.reduce((a,b) => (b.p90-b.p10) > (a.p90-a.p10) ? b : a, vals[0]);
+      return [
+        `Mediaan totaalsom: ${last.p50.toFixed(1)} mm`,
+        `P10-P90 einde: ${last.p10.toFixed(1)}-${last.p90.toFixed(1)} mm`,
+        `Meeste onzekerheid: ±${((spread.p90-spread.p10)/2).toFixed(1)} mm · ${fmtDag(spread.t)}`,
+      ];
+    },
+  },
+  wind: {
+    title: 'Windpluim',
+    hourly: 'windspeed_10m',
+    prefix: 'windspeed_10m_member',
+    extraQuery: '&windspeed_unit=kmh',
+    unit: ' km/u',
+    decimals: 0,
+    yMin: 0,
+    yStep: 10,
+    minRange: 40,
+    rangePad: 5,
+    leftAxis: 96,
+    rightAxis: 'bft',
+    statusSuffix: 'mediaan + spreiding',
+    lineLabel: 'Ensemble mediaan',
+    bandLabel: 'Onzekerheidsband (P10-P90)',
+    scale: [[0,'#4d9b4d'],[15,'#9bc95c'],[25,'#d9c750'],[35,'#ef9a3a'],[50,'#d9573b'],[65,'#9f3251'],[90,'#50245f']],
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p50));
+      const peak = vals.reduce((a,b) => b.p50 > a.p50 ? b : a, vals[0]);
+      const spread = vals.reduce((a,b) => (b.p90-b.p10) > (a.p90-a.p10) ? b : a, vals[0]);
+      const gusty = vals.reduce((a,b) => b.p90 > a.p90 ? b : a, vals[0]);
+      return [
+        `Meeste wind: ${fmtValue(peak.p50, this)} (${kmhToBft(peak.p50)} Bft) · ${fmtDag(peak.t)}`,
+        `Bovenkant ensemble: ${fmtValue(gusty.p90, this)} (${kmhToBft(gusty.p90)} Bft)`,
+        `Meeste onzekerheid: ±${Math.round((spread.p90-spread.p10)/2)} km/u`,
+      ];
+    },
+  },
+  gust: {
+    title: 'Windstotenpluim',
+    hourly: 'wind_gusts_10m',
+    prefix: 'wind_gusts_10m_member',
+    extraQuery: '&wind_speed_unit=kmh',
+    unit: ' km/u',
+    decimals: 0,
+    yMin: 0,
+    yStep: 10,
+    minRange: 60,
+    rangePad: 5,
+    leftAxis: 96,
+    statusSuffix: 'maximale windstoten in km/u',
+    lineLabel: 'Ensemble mediaan windstoot',
+    bandLabel: 'Onzekerheidsband windstoten (P10-P90)',
+    scale: [[0,'#4d9b4d'],[25,'#9bc95c'],[40,'#d9c750'],[55,'#ef9a3a'],[70,'#d9573b'],[85,'#9f3251'],[110,'#50245f'],[130,'#281235']],
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p50));
+      const peak = vals.reduce((a,b) => b.p50 > a.p50 ? b : a, vals[0]);
+      const high = vals.reduce((a,b) => b.p90 > a.p90 ? b : a, vals[0]);
+      const spread = vals.reduce((a,b) => (b.p90-b.p10) > (a.p90-a.p10) ? b : a, vals[0]);
+      return [
+        `Hoogste mediane windstoot: ${fmtValue(peak.p50, this)} · ${fmtDag(peak.t)}`,
+        `Bovenkant ensemble: ${fmtValue(high.p90, this)} · ${fmtDag(high.t)}`,
+        `Meeste onzekerheid: ±${Math.round((spread.p90-spread.p10)/2)} km/u`,
+      ];
+    },
+  },
+  cloud: {
+    title: 'Zon/bewolkingspluim',
+    hourly: 'cloudcover',
+    prefix: 'cloudcover_member',
+    unit: '%',
+    decimals: 0,
+    yMin: 0,
+    yMax: 100,
+    yStep: 20,
+    render: 'stacked',
+    statusSuffix: 'kans per bewolkingsklasse',
+    legendItems: CLOUD_CATS,
+    stackItems: CLOUD_CATS,
+    scale: [[0,'#eef2f4'],[100,'#eef2f4']],
+    makeStats(times, members) {
+      return times.map((t, i) => {
+        const cloudVals = members.map(m => Number.isFinite(m[i]) ? Math.max(0, Math.min(100, m[i])) : null)
+          .filter(Number.isFinite);
+        const sunVals = cloudVals.map(v => 100 - v);
+        const stack = CLOUD_CATS.map(cat => {
+          if (!cloudVals.length) return 0;
+          return cloudVals.filter(v => v >= cat.lo && v < cat.hi).length / cloudVals.length * 100;
+        });
+        return {
+          t,
+          p10: percentiel(cloudVals, 10),
+          p50: percentiel(cloudVals, 50),
+          p90: percentiel(cloudVals, 90),
+          extra: {
+            stack,
+            cloudP10: percentiel(cloudVals, 10),
+            cloudP50: percentiel(cloudVals, 50),
+            cloudP90: percentiel(cloudVals, 90),
+            sunP10: percentiel(sunVals, 10),
+            sunP50: percentiel(sunVals, 50),
+            sunP90: percentiel(sunVals, 90),
+          },
+        };
+      });
+    },
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p50));
+      const sun = vals.reduce((a,b) => b.extra.sunP50 > a.extra.sunP50 ? b : a, vals[0]);
+      const cloud = vals.reduce((a,b) => b.extra.cloudP50 > a.extra.cloudP50 ? b : a, vals[0]);
+      const spread = vals.reduce((a,b) => (b.extra.cloudP90-b.extra.cloudP10) > (a.extra.cloudP90-a.extra.cloudP10) ? b : a, vals[0]);
+      return [
+        `Zonnigste moment: ${Math.round(sun.extra.sunP50)}% zon · ${fmtDag(sun.t)}`,
+        `Meeste bewolking: ${Math.round(cloud.extra.cloudP50)}% bewolkt · ${fmtDag(cloud.t)}`,
+        `Meeste spreiding bewolking: ±${Math.round((spread.extra.cloudP90-spread.extra.cloudP10)/2)}%`,
+      ];
+    },
+  },
+  thunder: {
+    title: 'Onweerpluim',
+    hourly: 'cape',
+    hourlyQuery: 'cape,precipitation',
+    prefix: 'cape_member',
+    spatialAverage: true,
+    unit: ' J/kg',
+    decimals: 0,
+    yMin: 0,
+    yMax: 5000,
+    yStep: 500,
+    leftAxis: 78,
+    rightAxis: 'percent',
+    render: 'bars',
+    barValue: 'p90',
+    statusSuffix: 'onweerkans per dag + buienenergie',
+    barLabel: 'Staafjes: buienenergie (CAPE, P90)',
+    percentLine: { key: 'thunderChance', label: 'Kans op onweer (%)', color: 'white' },
+    dailyThunderLabels: true,
+    legendItems: [
+      { color: '#dfe5de', label: '0 stabiel' },
+      { color: '#f0d66b', label: '100-500 licht' },
+      { color: '#f0a64a', label: '500-1000 matig' },
+      { color: '#d9573b', label: '1000-2000 flink' },
+      { color: '#9f3251', label: '2000-3000 zeer' },
+      { color: '#50245f', label: '3000-4000 extreem' },
+      { color: '#120722', label: '>4000 uitzonderlijk' },
+    ],
+    scale: [[0,'#dfe5de'],[100,'#e9e3a8'],[500,'#f0d66b'],[1000,'#f0a64a'],[2000,'#d9573b'],[3000,'#9f3251'],[4000,'#50245f'],[5000,'#120722']],
+    makeStats(times, members, hourly) {
+      const precipKeys = getMemberKeys(hourly || {}, { prefix: 'precipitation_member' });
+      const stats = times.map((t, i) => {
+        const capeVals = members.map(m => m[i]).filter(Number.isFinite);
+        const n = capeVals.length || 1;
+        const pass = threshold => capeVals.filter(v => v >= threshold).length / n * 100;
+        let thunderHits = 0;
+        let thunderN = 0;
+        members.forEach((member, memberIdx) => {
+          const cape = member?.[i];
+          const precip = hourly?.[precipKeys[memberIdx]]?.[i];
+          if (!Number.isFinite(cape)) return;
+          thunderN++;
+          const wetEnough = !precipKeys.length || (Number.isFinite(precip) && precip >= 0.1);
+          if (cape >= 500 && wetEnough) thunderHits++;
+        });
+        const thunderChance = thunderN ? thunderHits / thunderN * 100 : 0;
+        return {
+          t,
+          p10: percentiel(capeVals, 10) || 0,
+          p50: percentiel(capeVals, 50) || 0,
+          p90: percentiel(capeVals, 90) || 0,
+          extra: {
+            light: pass(100),
+            strong: pass(500),
+            severe: pass(1500),
+            thunderChance,
+          },
+        };
+      });
+      stats.dailyThunder = makeDailyThunderStats(stats);
+      return stats;
+    },
+    summary(stats) {
+      const vals = stats.filter(s => Number.isFinite(s.p90));
+      const peak = vals.reduce((a,b) => b.p90 > a.p90 ? b : a, vals[0]);
+      const daily = stats.dailyThunder?.length ? stats.dailyThunder : makeDailyThunderStats(vals);
+      const storm = daily.reduce((a,b) => {
+        if (Math.round(b.chance) !== Math.round(a.chance)) return b.chance > a.chance ? b : a;
+        return b.cape > a.cape ? b : a;
+      }, daily[0]);
+      return [
+        `Hoogste onweerkans: ${Math.round(storm.chance)}% · ${fmtDag(storm.t)}`,
+        `Buienenergie max: ${Math.round(peak.p90)} J/kg · ${capeDuiding(peak.p90)}`,
+      ];
+    },
+  },
+};
+
+const QUERY = new URLSearchParams(window.location.search);
+const EMBEDDED = QUERY.get('embedded') === '1';
+const QUERY_STATIONS = {
+  'rotterdam': ROTTERDAM,
+  'rotterdamairport': { lat: 51.957, lon: 4.437, naam: 'Rotterdam Airport' },
+  'debilt': { lat: 52.101, lon: 5.178, naam: 'De Bilt' },
+  'schiphol': { lat: 52.309, lon: 4.781, naam: 'Schiphol' },
+  'eelde': { lat: 53.123, lon: 6.586, naam: 'Eelde' },
+  'vlissingen': { lat: 51.442, lon: 3.596, naam: 'Vlissingen' },
+  'maastricht': { lat: 50.911, lon: 5.77, naam: 'Maastricht' },
+  'eindhoven': { lat: 51.451, lon: 5.377, naam: 'Eindhoven' },
+};
+function queryKey(s) { return String(s || '').toLowerCase().replace(/[\s_-]/g, ''); }
+const initialStationKey = queryKey(QUERY.get('station') || QUERY.get('st'));
+let currentStation = { ...(QUERY_STATIONS[initialStationKey] || ROTTERDAM) };
+let currentParam = (QUERY.get('param') && (QUERY.get('param') === 'multi' || PARAMS[QUERY.get('param')])) ? QUERY.get('param') : 'temp';
+const MULTI_PARAMS = ['temp', 'rain', 'rainmm', 'raincum', 'wind', 'gust', 'cloud', 'thunder'];
+const ALL_DOWNLOAD_PARAMS = ['temp', 'rain', 'rainmm', 'raincum', 'wind', 'gust', 'cloud', 'thunder'];
+const DOWNLOAD_LABELS = {
+  temp: 'temperatuur',
+  rain: 'neerslagkans',
+  rainmm: 'neerslag',
+  raincum: 'neerslagsom',
+  wind: 'wind',
+  gust: 'windstoten',
+  cloud: 'zon bewolking',
+  thunder: 'onweer',
+  multi: '8pluim',
+};
+let zoekTimer = null;
+let loadSeq = 0;
+let lastSingleChartData = null;
+if (EMBEDDED) document.body.classList.add('embedded');
+document.getElementById('zoek-input').value = currentStation.naam;
+document.getElementById('extra-input').value = (QUERY.get('extra') || '').trim();
+
+function gaTerugKleurpluim() {
+  if (window.self !== window.top) {
+    window.location.href = 'weerbewaking.html';
+  } else {
+    window.location.href = 'index.html#weerbewaking';
+  }
+}
+
+function makeDefaultStats(times, members) {
+  return times.map((t, i) => {
+    const vals = members.map(m => m[i]).filter(Number.isFinite);
+    return { t, p10: percentiel(vals, 10), p50: percentiel(vals, 50), p90: percentiel(vals, 90) };
+  });
+}
+
+function makeDailyMaxStats(times, members) {
+  const days = [];
+  const byDay = new Map();
+  times.forEach((t, i) => {
+    const d = new Date(t);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!byDay.has(key)) {
+      const entry = { t, idxs: [] };
+      byDay.set(key, entry);
+      days.push(entry);
+    }
+    byDay.get(key).idxs.push(i);
+  });
+  return days.map(day => {
+    const maxima = members.map(member => {
+      const vals = day.idxs.map(i => member[i]).filter(Number.isFinite);
+      return vals.length ? Math.max(...vals) : null;
+    }).filter(Number.isFinite);
+    if (!maxima.length) return null;
+    return {
+      t: day.t,
+      pMin: Math.min(...maxima),
+      p10: percentiel(maxima, 10),
+      p50: percentiel(maxima, 50),
+      p90: percentiel(maxima, 90),
+      pMax: Math.max(...maxima),
+    };
+  }).filter(s => s && Number.isFinite(s.p50));
+}
+
+function sliceForSelectedRange(times, stats) {
+  const { start, endExclusive } = selectedRange();
+  const startMs = start.getTime();
+  const endMs = endExclusive.getTime();
+  let first = times.findIndex(t => new Date(t).getTime() >= startMs);
+  if (first < 0) first = 0;
+  let last = first;
+  while (last < times.length && new Date(times[last]).getTime() < endMs) last++;
+  const slicedStats = stats.slice(first, last).map(s => ({ ...s, extra: s.extra ? { ...s.extra } : s.extra }));
+  if (stats.dailyMax) {
+    slicedStats.dailyMax = stats.dailyMax.filter(s => {
+      const t = new Date(s.t).getTime();
+      return t >= startMs && t < endMs;
+    });
+  }
+  if (stats.dailyThunder) {
+    slicedStats.dailyThunder = stats.dailyThunder.filter(s => {
+      const t = new Date(s.t).getTime();
+      return t >= startMs && t < endMs;
+    });
+  }
+  if (stats.rebaseCumulative) {
+    const keys = ['p10', 'p50', 'p90', 'pMin', 'pMax'];
+    const baseline = {};
+    keys.forEach(key => {
+      const firstFinite = slicedStats.find(s => Number.isFinite(s[key]));
+      if (firstFinite) baseline[key] = firstFinite[key];
+    });
+    slicedStats.forEach(s => {
+      keys.forEach(key => {
+        if (Number.isFinite(s[key]) && Number.isFinite(baseline[key])) {
+          s[key] = Math.max(0, s[key] - baseline[key]);
+        }
+      });
+    });
+    slicedStats.rebaseCumulative = true;
+  }
+  if (stats.spatialPoints) slicedStats.spatialPoints = stats.spatialPoints;
+  if (stats.spatialRadiusKm) slicedStats.spatialRadiusKm = stats.spatialRadiusKm;
+  return { times: times.slice(first, last), stats: slicedStats };
+}
+
+function updateSummary(stats, cfg, el = document.getElementById('samenvatting')) {
+  const valid = stats.some(s => Number.isFinite(s.p50));
+  if (!valid) { el.innerHTML = ''; return; }
+  el.innerHTML = cfg.summary(stats).map(t => `<span class="chip">${escHtml(t)}</span>`).join('');
+}
+
+function makeThunderCardData(stats, cfg) {
+  if (!cfg.dailyThunderLabels) return null;
+  const days = stats.dailyThunder?.length ? stats.dailyThunder : makeDailyThunderStats(stats);
+  if (!days.length) return null;
+  const best = days.reduce((a, b) => {
+    if (Math.round(b.chance) !== Math.round(a.chance)) return b.chance > a.chance ? b : a;
+    return b.cape > a.cape ? b : a;
+  }, days[0]);
+  return {
+    title: `Onweerskans per dag in ${currentStation?.naam || 'Rotterdam'}`,
+    bestLabel: `hoogste: ${Math.round(best.chance)}% · ${fmtDag(best.t)}`,
+    basis: `${stats.spatialPoints > 1 ? `Gebiedsgemiddelde van ${stats.spatialPoints} punten rond de gekozen plaats. ` : ''}Gebaseerd op ECMWF-ensembleleden met tegelijk voldoende buienenergie (CAPE ≥ 500 J/kg) en neerslagsignaal (≥ 0,1 mm/uur). De dagkans is het hoogste uursignaal van die dag.`,
+    days: days.map(day => {
+      const dt = parseIsoDate(day.iso) || new Date(day.t);
+      const chance = Math.round(day.chance);
+      const color = thunderChanceColor(chance);
+      return {
+        label: `${DOW_NL[dt.getDay()]} ${dt.getDate()} ${MAAND_NL[dt.getMonth()]}`,
+        chance,
+        cape: day.cape,
+        fill: color.fill,
+        stroke: color.stroke,
+        text: color.text,
+      };
+    }),
+  };
+}
+
+function renderThunderCard(stats, cfg, el) {
+  if (!el) return;
+  const card = makeThunderCardData(stats, cfg);
+  if (!card) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  const dayHtml = card.days.map(day => {
+    const style = `--risk-fill:${day.fill};--risk-stroke:${day.stroke};--risk-text:${day.text};`;
+    return `
+      <div class="thunder-day" style="${style}" title="Onweerkans ${day.chance}% · ${capeDuiding(day.cape)}">
+        <span class="d">${escHtml(day.label)}</span>
+        <strong>${day.chance}%</strong>
+      </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="thunder-bolt" aria-hidden="true">⚡</div>
+    <div class="thunder-copy">
+      <div class="thunder-kop">
+        <div>${escHtml(card.title)}</div>
+        <span>${escHtml(card.bestLabel)}</span>
+      </div>
+      <div class="thunder-days">${dayHtml}</div>
+      <div class="thunder-basis">${escHtml(card.basis)}</div>
+    </div>`;
+  el.hidden = false;
+}
+
+function updateLegend(cfg, el = document.getElementById('legenda')) {
+  if (cfg.render === 'stacked') {
+    const items = cfg.legendItems || cfg.stackItems || [];
+    el.innerHTML = items.map(item => `
+      <div class="leg-item">
+        <div class="leg-swatch" style="background:${item.color};"></div>
+        ${escHtml(item.label)}
+      </div>`).join('');
+    return;
+  }
+  if (cfg.render === 'bars') {
+    let html = `
+      <div class="leg-item">
+        <div class="leg-bnd" style="background:rgba(255,255,255,0.7); border:1px solid rgba(0,0,0,.18);"></div>
+        ${escHtml(cfg.barLabel || 'Staafjes')}
+      </div>`;
+    const items = cfg.legendItems ? [...cfg.legendItems] : [
+      { color: '#f0c84a', label: 'weinig bewolking / zonnig' },
+      { color: '#4b5563', label: 'veel bewolking' },
+    ];
+    if (cfg.percentLine) {
+      items.push({ type: 'line', color: cfg.percentLine.color || 'white', label: cfg.percentLine.label });
+    }
+    html += items.map(item => `
+      <div class="leg-item">
+        ${item.type === 'line'
+          ? `<div class="leg-ln" style="background:${item.color}; box-shadow:0 1px 4px rgba(0,0,0,.5);"></div>`
+          : `<div class="leg-swatch" style="background:${item.color};"></div>`}
+        ${escHtml(item.label)}
+      </div>`).join('');
+    el.innerHTML = html;
+    return;
+  }
+  el.innerHTML = `
+    <div class="leg-item">
+      <div class="leg-ln" style="background:${cfg.medianColor || 'white'}; box-shadow:0 0 0 2px ${cfg.medianHaloColor || 'rgba(0,0,0,.5)'},0 1px 4px rgba(0,0,0,.5);"></div>
+      ${escHtml(cfg.lineLabel)}
+    </div>
+    <div class="leg-item">
+      <div class="leg-bnd" style="background:${cfg.bandFill || 'rgba(0,0,0,0.28)'}; border:1px solid ${cfg.bandEdgeColor || 'rgba(0,0,0,.15)'};"></div>
+      ${escHtml(cfg.bandLabel)}
+    </div>
+    ${showDailyTxRange && cfg.hourly === 'temperature_2m' ? `
+    <div class="leg-item">
+      <div class="leg-ln" style="background:#ffd264; box-shadow:0 1px 4px rgba(0,0,0,.5);"></div>
+      MOS/MIX maximumtemperatuur (10 dagen)
+    </div>` : ''}`;
+}
+
+function calcRange(stats, cfg) {
+  if (cfg.yMin != null && cfg.yMax != null) return { yMin: cfg.yMin, yMax: cfg.yMax };
+  const rangeKeys = Array.isArray(cfg.rangeKeys) && cfg.rangeKeys.length ? cfg.rangeKeys : ['p10', 'p90'];
+  const all = stats.flatMap(s => rangeKeys.map(key => s[key])).filter(Number.isFinite);
+  if (cfg.hourly === 'temperature_2m' && showDailyTxRange && stats.dailyMax) {
+    stats.dailyMax.forEach(s => {
+      const v = mosmixDailyTx[isoDateLocal(new Date(s.t))];
+      if (Number.isFinite(v)) all.push(v);
+    });
+  }
+  if (!all.length) throw new Error('Geen data ontvangen');
+  const pad = cfg.rangePad ?? 0;
+  let yMin = cfg.yMin ?? Math.floor((Math.min(...all) - pad) / cfg.yStep) * cfg.yStep;
+  let yMax = cfg.yMax ?? Math.ceil((Math.max(...all) + pad) / cfg.yStep) * cfg.yStep;
+  if (cfg.yMin === 0) yMin = 0;
+  while (yMax - yMin < (cfg.minRange || cfg.yStep * 4)) { yMax += cfg.yStep; if (cfg.yMin !== 0) yMin -= cfg.yStep; }
+  return { yMin, yMax };
+}
+
+function drawChart(svg, times, stats, cfg, opts = {}) {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const W = 820, H = opts.height || 350;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const M = { top: 16, right: cfg.rightAxis ? 58 : 20, bottom: 68, left: cfg.leftAxis || 58 };
+  const IW = W - M.left - M.right;
+  const IH = H - M.top - M.bottom;
+  const ranged = sliceForSelectedRange(times, stats);
+  const ts = ranged.times;
+  const st = ranged.stats;
+  const nMax = ts.length;
+  const { yMin, yMax } = calcRange(st, cfg);
+  const yRange = yMax - yMin || 1;
+  const xF = i => M.left + (i / Math.max(1, nMax - 1)) * IW;
+  const yF = v => M.top + (1 - (v - yMin) / yRange) * IH;
+  const yPercentF = v => M.top + (1 - Math.max(0, Math.min(100, v)) / 100) * IH;
+
+  updateSummary(st, cfg, opts.summaryEl);
+  updateLegend(cfg, opts.legendEl);
+  if (Object.prototype.hasOwnProperty.call(opts, 'thunderCardEl')) {
+    renderThunderCard(st, cfg, opts.thunderCardEl);
+  }
+
+  const defs = mk(svg, 'defs', {});
+  const clipId = opts.clipId || `chartClip-${Math.random().toString(36).slice(2)}`;
+  const clipPath = mk(defs, 'clipPath', { id: clipId });
+  mk(clipPath, 'rect', { x: M.left, y: M.top, width: IW, height: IH });
+
+  const bg = mk(svg, 'g', { 'clip-path': `url(#${clipId})` });
+  if (cfg.smoothScale) {
+    const gradId = `${clipId}-scale`;
+    const grad = mk(defs, 'linearGradient', {
+      id: gradId,
+      x1: 0, y1: M.top, x2: 0, y2: M.top + IH,
+      gradientUnits: 'userSpaceOnUse',
+    });
+    scaleStops(cfg.scale, yMin, yMax).forEach(stop => {
+      mk(grad, 'stop', {
+        offset: `${(stop.offset * 100).toFixed(2)}%`,
+        'stop-color': stop.color,
+      });
+    });
+    mk(bg, 'rect', {
+      x: M.left, y: M.top, width: IW, height: IH,
+      fill: `url(#${gradId})`,
+      opacity: cfg.backgroundOpacity ?? 0.82,
+    });
+  } else {
+    for (let v = yMin; v < yMax; v += cfg.yStep) {
+      const bandTop = Math.min(yMax, v + cfg.yStep);
+      const yy = yF(bandTop);
+      const hh = yF(v) - yy;
+      mk(bg, 'rect', {
+        x: M.left, y: yy.toFixed(1), width: IW, height: Math.max(0, hh).toFixed(1),
+        fill: colorFromScale(cfg.scale, v + cfg.yStep / 2),
+        opacity: cfg.render === 'bars' ? 0.28 : (cfg.render === 'stacked' ? 0.16 : 0.88),
+      });
+    }
+  }
+
+  for (let i = 1; i < ts.length; i++) {
+    const t = new Date(ts[i]);
+    if (t.getHours() === 0) {
+      const xx = xF(i).toFixed(1);
+      mk(bg, 'line', { x1: xx, y1: M.top, x2: xx, y2: M.top + IH, stroke: cfg.dayLineColor || 'rgba(0,0,0,0.28)', 'stroke-width': 1.5 });
+    }
+  }
+
+  const step = cfg.sampleStep || 3;
+  const lineStep = cfg.render === 'bars' ? step : 1;
+  const subsample = arr => arr.filter((_, i) => i % step === 0);
+  const sampledPoints = key => st.map((s, i) => (
+    i % lineStep === 0 && Number.isFinite(s[key]) ? [xF(i), yF(s[key])] : null
+  )).filter(Boolean);
+  const sampledBand = () => st.map((s, i) => (
+    i % lineStep === 0 && Number.isFinite(s.p90) && Number.isFinite(s.p10)
+      ? { top: [xF(i), yF(s.p90)], bot: [xF(i), yF(s.p10)] }
+      : null
+  )).filter(Boolean);
+
+  if (cfg.render === 'stacked') {
+    const stackItems = cfg.stackItems || cfg.legendItems || [];
+    for (let catIdx = 0; catIdx < stackItems.length; catIdx++) {
+      const topPts = [];
+      const botPts = [];
+      st.forEach((s, i) => {
+        const stack = s.extra?.stack;
+        if (!Array.isArray(stack)) return;
+        const base = Math.max(0, Math.min(100, stack.slice(0, catIdx).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0)));
+        const top = Math.max(0, Math.min(100, base + (Number.isFinite(stack[catIdx]) ? stack[catIdx] : 0)));
+        topPts.push([xF(i), yPercentF(top)]);
+        botPts.push([xF(i), yPercentF(base)]);
+      });
+      const d = linearAreaPath(topPts, botPts);
+      if (d) mk(bg, 'path', { d, fill: stackItems[catIdx]?.color || '#dfe5de', opacity: 0.95, stroke: 'none' });
+    }
+    for (let i = 1; i < ts.length; i++) {
+      const t = new Date(ts[i]);
+      if (t.getHours() === 0) {
+        const xx = xF(i).toFixed(1);
+        mk(bg, 'line', { x1: xx, y1: M.top, x2: xx, y2: M.top + IH, stroke: 'rgba(255,255,255,0.46)', 'stroke-width': 1 });
+      }
+    }
+  } else if (cfg.render === 'bars') {
+    const spacing = IW / Math.max(1, nMax - 1);
+    const rangeW = cfg.barRange
+      ? Math.max(5, spacing * (cfg.rangeWidthFactor ?? 0.78))
+      : Math.max(3, spacing * 2.25);
+    const fullRangeW = cfg.barFullRange
+      ? Math.max(rangeW + 1, spacing * (cfg.fullRangeWidthFactor ?? 0.95))
+      : rangeW;
+    const barW = cfg.barRange
+      ? Math.max(3, spacing * (cfg.barWidthFactor ?? 0.38))
+      : Math.max(3, spacing * 2.25);
+    st.forEach((s, i) => {
+      const barValue = cfg.barValue ? s[cfg.barValue] : s.p50;
+      if (i % step !== 0 || !Number.isFinite(barValue)) return;
+      const fill = cfg.barColor ? cfg.barColor(s, barValue) : colorFromScale(cfg.scale, barValue);
+      const rangeValue = cfg.rangeColorValue && Number.isFinite(s[cfg.rangeColorValue]) ? s[cfg.rangeColorValue] : barValue;
+      const rangeFill = cfg.barColor ? cfg.barColor(s, rangeValue) : colorFromScale(cfg.scale, rangeValue);
+      const drawRange = (low, high, width, opacity, stroke, capStroke, haloStroke) => {
+        if (!Number.isFinite(low) || !Number.isFinite(high)) return;
+        const hi = Math.max(low, high);
+        const lo = Math.max(yMin, Math.min(low, high));
+        const rangeTop = yF(hi);
+        const rangeBot = yF(lo);
+        const rangeH = Math.max(1.6, rangeBot - rangeTop);
+        mk(bg, 'rect', {
+          x: (xF(i) - width / 2).toFixed(1),
+          y: rangeTop.toFixed(1),
+          width: width.toFixed(1),
+          height: rangeH.toFixed(1),
+          rx: 2,
+          fill: rangeFill,
+          opacity,
+          stroke,
+          'stroke-width': 0.9,
+        });
+        const capY = [yF(hi), yF(lo)];
+        capY.forEach(yy => {
+          mk(bg, 'line', {
+            x1: (xF(i) - width / 2).toFixed(1),
+            y1: yy.toFixed(1),
+            x2: (xF(i) + width / 2).toFixed(1),
+            y2: yy.toFixed(1),
+            stroke: haloStroke,
+            'stroke-width': 2.6,
+          });
+          mk(bg, 'line', {
+            x1: (xF(i) - width / 2).toFixed(1),
+            y1: yy.toFixed(1),
+            x2: (xF(i) + width / 2).toFixed(1),
+            y2: yy.toFixed(1),
+            stroke: capStroke,
+            'stroke-width': 1.35,
+          });
+        });
+      };
+      if (cfg.barFullRange && Number.isFinite(s.pMin) && Number.isFinite(s.pMax)) {
+        drawRange(s.pMin, s.pMax, fullRangeW, cfg.fullRangeOpacity ?? 0.2, cfg.fullRangeStroke || 'rgba(3,23,15,0.66)', cfg.rangeCapStroke || 'rgba(255,255,255,0.86)', cfg.rangeHaloStroke || 'rgba(0,0,0,0.34)');
+      }
+      if (cfg.barRange && Number.isFinite(s.p10) && Number.isFinite(s.p90)) {
+        drawRange(s.p10, s.p90, rangeW, cfg.rangeOpacity ?? 0.52, cfg.rangeStroke || 'rgba(6,38,25,0.72)', cfg.rangeCapStroke || 'rgba(255,255,255,0.92)', cfg.rangeHaloStroke || 'rgba(0,0,0,0.38)');
+      }
+      // Main bar (P50 or barValue)
+      const h = M.top + IH - yF(barValue);
+      if (h > 0.5) mk(bg, 'rect', {
+        x: (xF(i) - barW / 2).toFixed(1),
+        y: yF(barValue).toFixed(1),
+        width: barW.toFixed(1),
+        height: h.toFixed(1),
+        rx: 1.5,
+        fill,
+        stroke: 'rgba(255,255,255,0.46)',
+        'stroke-width': 0.6,
+        opacity: 0.96,
+      });
+    });
+    if (cfg.percentLine) {
+      const pctPts = subsample(st.map((s, i) => {
+        const v = s.extra?.[cfg.percentLine.key];
+        return Number.isFinite(v) ? [xF(i), yPercentF(v)] : null;
+      }).filter(Boolean));
+      const pctD = smoothPath(pctPts);
+      if (pctD) {
+        mk(bg, 'path', { d: pctD, fill: 'none', stroke: 'rgba(0,0,0,0.48)', 'stroke-width': 4.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+        mk(bg, 'path', { d: pctD, fill: 'none', stroke: cfg.percentLine.color || 'white', 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+      }
+    }
+  } else {
+    const bandPts = sampledBand();
+    const smoothPasses = cfg.curveSmoothPasses || 0;
+    const topPts = smoothPointsY(bandPts.map(p => p.top), smoothPasses);
+    const botPts = smoothPointsY(bandPts.map(p => p.bot), smoothPasses);
+    const bandD = bandPath(topPts, botPts);
+    if (bandD) mk(bg, 'path', { d: bandD, fill: cfg.bandFill || 'rgba(0,0,0,0.27)', stroke: 'none' });
+    const topD = smoothPath(topPts);
+    const botD = smoothPath(botPts);
+    if (cfg.bandEdgeColor && topD && botD) {
+      const edgeAttrs = {
+        fill: 'none',
+        stroke: cfg.bandEdgeColor,
+        'stroke-width': cfg.bandEdgeWidth || 1.4,
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+      };
+      mk(bg, 'path', { d: topD, ...edgeAttrs });
+      mk(bg, 'path', { d: botD, ...edgeAttrs });
+    }
+    (cfg.referenceLines || []).forEach(line => {
+      if (!Number.isFinite(line.value) || line.value < yMin || line.value > yMax) return;
+      const yy = yF(line.value).toFixed(1);
+      mk(bg, 'line', {
+        x1: M.left, y1: yy, x2: M.left + IW, y2: yy,
+        stroke: line.color || 'rgba(7,24,45,0.55)',
+        'stroke-width': line.width || 1,
+        'stroke-dasharray': line.dash || '5 6',
+        'stroke-linecap': 'round',
+      });
+    });
+
+    const medPts = smoothPointsY(sampledPoints('p50'), smoothPasses);
+    const medD = smoothPath(medPts);
+    if (medD) {
+      mk(bg, 'path', { d: medD, fill: 'none', stroke: cfg.medianHaloColor || 'rgba(0,0,0,0.45)', 'stroke-width': cfg.medianHaloWidth || 5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+      mk(bg, 'path', { d: medD, fill: 'none', stroke: cfg.medianColor || 'white', 'stroke-width': cfg.medianWidth || 2.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+    }
+  }
+
+  // ─── MOS/MIX maximumtemperatuur (toggle) ───────────────────────────────
+  if (showDailyTxRange && ranged.stats.dailyMax?.length) {
+    // Bouw noon-index per dag
+    const noonByDay = new Map();
+    for (let i = 0; i < ts.length; i++) {
+      const t = new Date(ts[i]);
+      const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
+      const dist = Math.abs(t.getHours() - 12);
+      if (!noonByDay.has(key) || dist < noonByDay.get(key).dist) noonByDay.set(key, { idx: i, dist });
+    }
+    const bh = 5; // half-breedte box (10px totaal)
+    for (const day of ranged.stats.dailyMax) {
+      const dt = new Date(day.t);
+      const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+      const isoDay = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      const noon = noonByDay.get(key);
+      if (!noon) continue;
+      const xx = xF(noon.idx);
+      const mosTx = mosmixDailyTx[isoDay];
+      if (Number.isFinite(mosTx)) {
+        const yyTx = yF(mosTx);
+        mk(bg, 'line', {
+          x1: (xx - bh - 3).toFixed(1), y1: yyTx.toFixed(1),
+          x2: (xx + bh + 3).toFixed(1), y2: yyTx.toFixed(1),
+          stroke: '#ffd264', 'stroke-width': 2.4, 'stroke-linecap': 'round',
+        });
+        const labelTxt = `${Math.round(mosTx)}°`;
+        let chipY = yyTx - 10;
+        if (chipY - 8 < M.top + 2) chipY = yyTx + 18;
+        if (chipY + 5 > M.top + IH - 2) chipY = yyTx - 10;
+        mk(bg, 'rect', {
+          x: (xx - 11).toFixed(1), y: (chipY - 8).toFixed(1),
+          width: 22, height: 13, rx: 3,
+          fill: 'rgba(0,0,0,0.55)',
+        });
+        mk(bg, 'text', {
+          x: xx.toFixed(1), y: chipY.toFixed(1),
+          'text-anchor': 'middle', 'dominant-baseline': 'auto',
+          'font-size': 9.5, 'font-weight': 800, 'font-family': 'Inter,sans-serif',
+          fill: '#ffd264',
+        }, labelTxt);
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
+  drawDayHighlight(bg, ts, xF, M.left, M.left + IW, M.top, IH);
+
+  mk(svg, 'rect', { x: M.left, y: M.top, width: IW, height: IH, fill: 'none', stroke: 'rgba(0,0,0,0.35)', 'stroke-width': 1.2 });
+
+  for (let v = Math.ceil(yMin / cfg.yStep) * cfg.yStep; v <= yMax; v += cfg.yStep) {
+    const yy = yF(v);
+    const gridAttrs = {
+      x1: M.left,
+      y1: yy.toFixed(1),
+      x2: M.left + IW,
+      y2: yy.toFixed(1),
+      stroke: cfg.gridLineColor || 'rgba(255,255,255,0.09)',
+      'stroke-width': cfg.gridLineWidth ?? 0.5,
+    };
+    if (cfg.gridLineDash) gridAttrs['stroke-dasharray'] = cfg.gridLineDash;
+    mk(svg, 'line', gridAttrs);
+    mk(svg, 'text', {
+      x: M.left - 7, y: (yy + 4.5).toFixed(1),
+      'text-anchor': 'end', 'font-size': 12.5, 'font-weight': 800,
+      'font-family': 'Inter, sans-serif', fill: 'white',
+      style: 'text-shadow:0 1px 4px rgba(0,0,0,0.6)',
+    }, fmtValue(v, cfg));
+    if (cfg.rightAxis === 'bft') {
+      mk(svg, 'text', {
+        x: M.left + IW + 7, y: (yy + 4.5).toFixed(1),
+        'text-anchor': 'start', 'font-size': 12.5, 'font-weight': 800,
+        'font-family': 'Inter, sans-serif', fill: 'white',
+        style: 'text-shadow:0 1px 4px rgba(0,0,0,0.6)',
+      }, `${kmhToBft(v)} Bft`);
+    }
+  }
+  if (cfg.rightAxis === 'percent') {
+    for (let p = 0; p <= 100; p += 20) {
+      const yy = yPercentF(p);
+      mk(svg, 'text', {
+        x: M.left + IW + 7, y: (yy + 4.5).toFixed(1),
+        'text-anchor': 'start', 'font-size': 12.5, 'font-weight': 800,
+        'font-family': 'Inter, sans-serif', fill: 'white',
+        style: 'text-shadow:0 1px 4px rgba(0,0,0,0.6)',
+      }, `${p}%`);
+    }
+  }
+
+  const dagSet = new Set();
+  let dagIndex = 0;
+  for (let i = 0; i < ts.length; i++) {
+    const t = new Date(ts[i]);
+    const dagKey = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
+    if (dagSet.has(dagKey)) continue;
+    dagSet.add(dagKey);
+    let bestIdx = i, bestDist = Infinity;
+    for (let j = i; j < Math.min(i + 24, ts.length); j++) {
+      const d = Math.abs(new Date(ts[j]).getHours() - 12);
+      if (d < bestDist) { bestDist = d; bestIdx = j; }
+    }
+    const xx = xF(bestIdx);
+    const dag = new Date(ts[bestIdx]);
+    mk(svg, 'line', { x1: xx.toFixed(1), y1: M.top + IH, x2: xx.toFixed(1), y2: M.top + IH + 6, stroke: 'rgba(255,255,255,0.4)', 'stroke-width': 1.2 });
+    mk(svg, 'text', {
+      x: xx.toFixed(1), y: (M.top + IH + 40).toFixed(1),
+      'text-anchor': 'middle', 'font-size': 14, 'font-weight': 800,
+      'font-family': 'Inter, sans-serif', fill: 'white',
+      style: 'text-shadow:0 1px 4px rgba(0,0,0,0.5)',
+    }, DOW_NL[dag.getDay()]);
+    if (dagIndex === 0 || (dagIndex + 1) % 5 === 0) {
+      mk(svg, 'text', {
+        x: xx.toFixed(1), y: (M.top + IH + 56).toFixed(1),
+        'text-anchor': 'middle', 'font-size': 11.5, 'font-weight': 800,
+        'font-family': 'Inter, sans-serif', fill: 'rgba(255,255,255,0.72)',
+        style: 'text-shadow:0 1px 4px rgba(0,0,0,0.45)',
+      }, `${dag.getDate()} ${MAAND_NL[dag.getMonth()]}`);
+    }
+    dagIndex++;
+  }
+  for (let i = 1; i < ts.length; i++) {
+    const t = new Date(ts[i]);
+    const h = t.getHours();
+    if (h === 0 || h === 12) {
+      const xx = xF(i);
+      mk(svg, 'line', { x1: xx.toFixed(1), y1: (M.top + IH).toFixed(1), x2: xx.toFixed(1), y2: (M.top + IH + 5).toFixed(1), stroke: 'rgba(255,255,255,0.45)', 'stroke-width': 1 });
+      mk(svg, 'text', {
+        x: xx.toFixed(1), y: (M.top + IH + 16).toFixed(1),
+        'text-anchor': 'middle', 'font-size': 9, 'font-weight': 600,
+        'font-family': 'Inter, sans-serif', fill: 'rgba(255,255,255,0.52)',
+        style: 'text-shadow:0 1px 3px rgba(0,0,0,0.4)',
+      }, h === 0 ? '0h' : '12h');
+    }
+  }
+}
+
+function getMemberKeys(hourly, cfg) {
+  return Object.keys(hourly).filter(k => k.startsWith(cfg.prefix)).sort((a, b) => a.localeCompare(b));
+}
+
+function chartTimesForStats(times, stats) {
+  return stats.length === times.length ? times : stats.map(s => s.t);
+}
+
+function buildDataUrl(cfg, point = currentStation) {
+  return `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${point.lat}&longitude=${point.lon}` +
+    `&hourly=${cfg.hourlyQuery || cfg.hourly}&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${MAX_FORECAST_DAYS}${cfg.extraQuery || ''}`;
+}
+
+async function loadPointStatsForParam(param, cfg, point = currentStation) {
+  const data = await fetchJson(buildDataUrl(cfg, point));
+  if (!data?.hourly?.time) throw new Error('Geen ensembledata ontvangen');
+  const keys = getMemberKeys(data.hourly, cfg);
+  if (!keys.length) throw new Error('Geen leden ontvangen');
+  const trimmed = trimToLastFinite(data.hourly.time, keys.map(k => data.hourly[k]));
+  const times = trimmed.times;
+  const members = trimmed.members;
+  const stats = cfg.makeStats ? cfg.makeStats(times, members, data.hourly) : makeDefaultStats(times, members);
+  return { times: chartTimesForStats(times, stats), stats, keys };
+}
+
+function averageNumber(values) {
+  const finite = values.filter(Number.isFinite);
+  if (!finite.length) return null;
+  return finite.reduce((a, b) => a + b, 0) / finite.length;
+}
+
+function averageStatsByTime(statsList, cfg, spatialPoints) {
+  const usable = statsList.filter(stats => Array.isArray(stats) && stats.length);
+  if (!usable.length) return [];
+  const len = Math.min(...usable.map(stats => stats.length));
+  const averaged = [];
+  for (let i = 0; i < len; i++) {
+    const rowStats = usable.map(stats => stats[i]).filter(Boolean);
+    const row = { t: rowStats[0].t };
+    ['p10', 'p50', 'p90', 'pMin', 'pMax'].forEach(key => {
+      const v = averageNumber(rowStats.map(s => s[key]));
+      if (Number.isFinite(v)) row[key] = v;
+    });
+    const extraKeys = new Set();
+    rowStats.forEach(s => Object.keys(s.extra || {}).forEach(key => {
+      if (Number.isFinite(s.extra[key])) extraKeys.add(key);
+    }));
+    if (extraKeys.size) {
+      row.extra = {};
+      extraKeys.forEach(key => {
+        const v = averageNumber(rowStats.map(s => s.extra?.[key]));
+        if (Number.isFinite(v)) row.extra[key] = v;
+      });
+    }
+    averaged.push(row);
+  }
+  averaged.spatialPoints = spatialPoints;
+  averaged.spatialRadiusKm = 14;
+  if (cfg.rebaseCumulative) averaged.rebaseCumulative = true;
+  if (cfg.dailyThunderLabels) averaged.dailyThunder = makeDailyThunderStats(averaged);
+  return averaged;
+}
+
+async function settleWithConcurrency(items, limit, mapper) {
+  const settled = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const idx = next++;
+      try {
+        settled[idx] = { status: 'fulfilled', value: await mapper(items[idx], idx) };
+      } catch (reason) {
+        settled[idx] = { status: 'rejected', reason };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return settled;
+}
+
+async function loadSpatialStatsForParam(param, cfg) {
+  const points = spatialSamplePoints();
+  const settled = await settleWithConcurrency(
+    points,
+    SPATIAL_FETCH_CONCURRENCY,
+    point => loadPointStatsForParam(param, cfg, point)
+  );
+  const results = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
+  if (results.length < 3) throw new Error(`Te weinig omgevingspunten geladen (${results.length}/${points.length})`);
+  const stats = averageStatsByTime(results.map(result => result.stats), cfg, results.length);
+  return {
+    param,
+    cfg,
+    times: stats.map(s => s.t),
+    stats,
+    keys: results[0].keys,
+    spatialPoints: results.length,
+  };
+}
+
+async function loadStatsForParam(param) {
+  const cfg = PARAMS[param];
+  const point = currentStation;
+  const key = [
+    param,
+    Number(point.lat).toFixed(4),
+    Number(point.lon).toFixed(4),
+    MAX_FORECAST_DAYS,
+  ].join('|');
+  const cached = _statsCache[key];
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  if (_statsInflight[key]) return _statsInflight[key];
+
+  _statsInflight[key] = (async () => {
+    const data = cfg.spatialAverage
+      ? await loadSpatialStatsForParam(param, cfg)
+      : { param, cfg, ...(await loadPointStatsForParam(param, cfg)), spatialPoints: 1 };
+    _statsCache[key] = { data, ts: Date.now() };
+    return data;
+  })().finally(() => { delete _statsInflight[key]; });
+  return _statsInflight[key];
+}
+
+function statusTextForResult(result, memberLabel = 'ensemble-leden') {
+  const spatial = result.spatialPoints > 1 ? ` · ${result.spatialPoints} omgevingspunten` : '';
+  return `${result.keys.length} ${memberLabel}${spatial} · ${selectedRangeDays()} dagen · ${result.cfg.statusSuffix}`;
+}
+
+function renderMultiShell() {
+  const view = document.getElementById('multi-view');
+  view.innerHTML = MULTI_PARAMS.map(param => {
+    const cfg = PARAMS[param];
+    return `
+      <section class="multi-card" data-card="${param}">
+        <div class="multi-head">
+          <div class="multi-title">${escHtml(cfg.title)}</div>
+          <div class="multi-status" id="multi-status-${param}">Laden...</div>
+        </div>
+        <div class="samenvatting" id="multi-summary-${param}" aria-live="polite"></div>
+        <div class="chart-wrap">
+          <svg id="multi-chart-${param}" viewBox="0 0 820 290" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="legenda" id="multi-legend-${param}"></div>
+      </section>`;
+  }).join('');
+}
+
+function setDownloadButtons({
+  mainDisabled = false,
+  mainLabel = 'Download PNG',
+  allDisabled = mainDisabled,
+  allLabel = 'Download alle 8 als ZIP',
+} = {}) {
+  const wrap = document.getElementById('download-actions');
+  const btn = document.getElementById('download-4pluim');
+  const allBtn = document.getElementById('download-all-pluimen');
+  wrap.hidden = false;
+  btn.disabled = mainDisabled;
+  btn.textContent = mainLabel;
+  allBtn.disabled = allDisabled;
+  allBtn.textContent = allLabel;
+}
+
+function syncDownloadButton(disabled = false, label = 'Download PNG') {
+  setDownloadButtons({
+    mainDisabled: disabled,
+    mainLabel: label,
+    allDisabled: disabled,
+    allLabel: disabled ? 'Even wachten...' : 'Download alle 8 als ZIP',
+  });
+}
+
+function drawRoundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function drawRoundedChartImage(ctx, img, x, y, w, h) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.24)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 4;
+  drawRoundRect(ctx, x, y, w, h, 8);
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  drawRoundRect(ctx, x, y, w, h, 8);
+  ctx.clip();
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+
+  drawRoundRect(ctx, x, y, w, h, 8);
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawChipRow(ctx, chips, x, y, maxW) {
+  let cx = x;
+  let cy = y;
+  const h = 30;
+  ctx.font = '800 17px Inter, sans-serif';
+  chips.forEach(chip => {
+    const w = Math.min(maxW, Math.ceil(ctx.measureText(chip).width + 28));
+    if (cx > x && cx + w > x + maxW) {
+      cx = x;
+      cy += h + 8;
+    }
+    drawRoundRect(ctx, cx, cy, w, h, 15);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText(chip, cx + 14, cy + 21);
+    cx += w + 8;
+  });
+  return cy + h;
+}
+
+function drawWrappedPngText(ctx, text, x, y, maxW, lineH, maxLines = 3) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    const test = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(test).width > maxW) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  });
+  if (line) lines.push(line);
+  const visible = lines.slice(0, maxLines);
+  visible.forEach((txt, idx) => ctx.fillText(txt, x, y + idx * lineH));
+  return y + Math.max(1, visible.length) * lineH;
+}
+
+function measureThunderPngCard(card, maxW) {
+  if (!card) return 0;
+  const pad = 16;
+  const contentW = Math.max(220, maxW - pad * 2 - 58);
+  const tileGap = 8;
+  const minTileW = 76;
+  const cols = Math.max(1, Math.min(card.days.length, Math.floor((contentW + tileGap) / (minTileW + tileGap))));
+  const rows = Math.ceil(card.days.length / cols);
+  return pad + 26 + 12 + rows * 48 + Math.max(0, rows - 1) * tileGap + 12 + 38 + pad;
+}
+
+function drawThunderPngCard(ctx, card, x, y, w) {
+  if (!card) return y;
+  const h = measureThunderPngCard(card, w);
+  const pad = 16;
+  const bolt = 46;
+  const gap = 14;
+  drawRoundRect(ctx, x, y, w, h, 10);
+  ctx.fillStyle = 'rgba(34,24,42,0.44)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  drawRoundRect(ctx, x + pad, y + pad, bolt, bolt, 8);
+  ctx.fillStyle = '#f3b342';
+  ctx.fill();
+  ctx.fillStyle = '#2d1c08';
+  ctx.font = '900 30px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('⚡', x + pad + bolt / 2, y + pad + 33);
+  ctx.textAlign = 'left';
+
+  const contentX = x + pad + bolt + gap;
+  const contentW = w - pad * 2 - bolt - gap;
+  ctx.fillStyle = 'white';
+  ctx.font = '900 22px Inter, sans-serif';
+  ctx.fillText(card.title, contentX, y + pad + 20);
+  ctx.fillStyle = 'rgba(255,255,255,0.70)';
+  ctx.font = '800 16px Inter, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(card.bestLabel, x + w - pad, y + pad + 20);
+  ctx.textAlign = 'left';
+
+  const tileGap = 8;
+  const cols = Math.max(1, Math.min(card.days.length, Math.floor((contentW + tileGap) / (76 + tileGap))));
+  const tileW = (contentW - tileGap * Math.max(0, cols - 1)) / cols;
+  const tileH = 48;
+  let ty = y + pad + 38;
+  card.days.forEach((day, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const tx = contentX + col * (tileW + tileGap);
+    const tileY = ty + row * (tileH + tileGap);
+    drawRoundRect(ctx, tx, tileY, tileW, tileH, 7);
+    ctx.fillStyle = day.fill;
+    ctx.fill();
+    ctx.strokeStyle = day.stroke;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = day.text;
+    ctx.font = '900 11px Inter, sans-serif';
+    ctx.fillText(day.label, tx + 7, tileY + 15);
+    ctx.font = '900 20px Inter, sans-serif';
+    ctx.fillText(`${day.chance}%`, tx + 7, tileY + 38);
+  });
+
+  const rows = Math.ceil(card.days.length / cols);
+  ctx.fillStyle = 'rgba(255,255,255,0.70)';
+  ctx.font = '800 14px Inter, sans-serif';
+  drawWrappedPngText(ctx, card.basis, contentX, ty + rows * tileH + Math.max(0, rows - 1) * tileGap + 22, contentW, 18, 2);
+  return y + h;
+}
+
+function svgToImage(svg, width = 820, height = 290) {
+  let source = new XMLSerializer().serializeToString(svg);
+  if (!/^<svg[^>]+xmlns=/.test(source)) {
+    source = source.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+  if (!/^<svg[^>]+width=/.test(source)) {
+    source = source.replace('<svg', `<svg width="${width}" height="${height}"`);
+  }
+  const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  return new Promise((resolve, reject) => {
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('PNG kon grafiek niet lezen'));
+    };
+    img.src = url;
+  });
+}
+
+function slugTekst(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'plaats';
+}
+
+function extraTekst() {
+  return (document.getElementById('extra-input')?.value || '').trim().replace(/\s+/g, ' ');
+}
+
+function displayStationNaam() {
+  const extra = extraTekst();
+  return extra ? `${currentStation.naam} ${extra}` : currentStation.naam;
+}
+
+function syncStationLabel() {
+  document.getElementById('stn-label').textContent = displayStationNaam();
+}
+
+function shortDateFromIso(iso) {
+  const d = parseIsoDate(iso);
+  if (!d) return '0000';
+  return `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function downloadName(param = currentParam) {
+  const plaats = slugTekst(displayStationNaam());
+  const type = slugTekst(DOWNLOAD_LABELS[param] || param || 'pluim');
+  return `${plaats}_${type}.png`;
+}
+
+function drawPngHeader(ctx, title, station, x, y, maxW) {
+  let titleSize = 64;
+  let stationSize = 46;
+  while (titleSize > 42) {
+    ctx.font = `900 ${Math.round(titleSize)}px Inter, sans-serif`;
+    const titleW = ctx.measureText(title).width;
+    ctx.font = `500 ${Math.round(stationSize)}px Inter, sans-serif`;
+    const stationW = ctx.measureText(station).width;
+    if (titleW + 30 + stationW <= maxW) break;
+    titleSize -= 2;
+    stationSize -= 1.5;
+  }
+
+  ctx.fillStyle = 'white';
+  ctx.font = `900 ${Math.round(titleSize)}px Inter, sans-serif`;
+  ctx.fillText(title, x, y);
+  const titleW = ctx.measureText(title).width;
+  ctx.font = `500 ${Math.round(stationSize)}px Inter, sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.84)';
+  ctx.fillText(station, x + titleW + 30, y);
+}
+
+function drawLegendLine(ctx, legends, x, y, maxW) {
+  ctx.fillStyle = 'rgba(255,255,255,0.76)';
+  ctx.font = '800 17px Inter, sans-serif';
+  let lx = x;
+  let ly = y;
+  legends.forEach(label => {
+    const text = `• ${label}`;
+    const tw = ctx.measureText(text).width + 26;
+    if (lx > x && lx + tw > x + maxW) {
+      lx = x;
+      ly += 28;
+    }
+    if (tw <= maxW) {
+      ctx.fillText(text, lx, ly);
+      lx += tw;
+    }
+  });
+  return ly;
+}
+
+function downloadBlob(blob, filename) {
+  if (!blob) throw new Error('PNG kon niet worden gemaakt');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+const ZIP_ENCODER = new TextEncoder();
+let zipCrcTable = null;
+
+function getZipCrcTable() {
+  if (zipCrcTable) return zipCrcTable;
+  zipCrcTable = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    zipCrcTable[n] = c >>> 0;
+  }
+  return zipCrcTable;
+}
+
+function crc32(bytes) {
+  const table = getZipCrcTable();
+  let c = 0xffffffff;
+  for (const b of bytes) c = table[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function zipDateTime(date = new Date()) {
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, date: dosDate };
+}
+
+async function makeZip(entries) {
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const stamp = zipDateTime();
+
+  for (const entry of entries) {
+    const nameBytes = ZIP_ENCODER.encode(entry.path.replace(/^\/+/, ''));
+    const data = new Uint8Array(await entry.blob.arrayBuffer());
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0x0800, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, stamp.time, true);
+    localView.setUint16(12, stamp.date, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    chunks.push(local, data);
+    central.push({ nameBytes, crc, size: data.length, offset });
+    offset += local.length + data.length;
+  }
+
+  const centralStart = offset;
+  for (const entry of central) {
+    const header = new Uint8Array(46 + entry.nameBytes.length);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0x02014b50, true);
+    view.setUint16(4, 20, true);
+    view.setUint16(6, 20, true);
+    view.setUint16(8, 0x0800, true);
+    view.setUint16(10, 0, true);
+    view.setUint16(12, stamp.time, true);
+    view.setUint16(14, stamp.date, true);
+    view.setUint32(16, entry.crc, true);
+    view.setUint32(20, entry.size, true);
+    view.setUint32(24, entry.size, true);
+    view.setUint16(28, entry.nameBytes.length, true);
+    view.setUint32(42, entry.offset, true);
+    header.set(entry.nameBytes, 46);
+    chunks.push(header);
+    offset += header.length;
+  }
+
+  const centralSize = offset - centralStart;
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, central.length, true);
+  endView.setUint16(10, central.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, centralStart, true);
+  chunks.push(end);
+  return new Blob(chunks, { type: 'application/zip' });
+}
+
+async function renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCard }) {
+  const scale = 2;
+  const W = 1400;
+  const margin = 64;
+  const headerH = 152;
+  const chartW = W - margin * 2 - 36;
+  const chartH = Math.round(chartW * 350 / 820);
+  const thunderH = thunderCard ? measureThunderPngCard(thunderCard, W - margin * 2) + 18 : 0;
+  const cardH = chartH + 206 + thunderH;
+  const footerH = 70;
+  const H = headerH + cardH + footerH;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * scale;
+  canvas.height = H * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = '#8a8070';
+  ctx.fillRect(0, 0, W, H);
+  drawRoundRect(ctx, 28, 28, W - 56, H - 56, 14);
+  ctx.fillStyle = '#b0a488';
+  ctx.fill();
+
+  drawPngHeader(ctx, cfg.title, displayStationNaam(), margin, 92, W - margin * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.36)';
+  ctx.fillRect(margin, 118, W - margin * 2, 2);
+
+  const cardY = headerH;
+  drawRoundRect(ctx, margin - 18, cardY, W - margin * 2 + 36, cardH, 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.68)';
+  ctx.font = '800 17px Inter, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(status || '', W - margin, cardY + 36);
+  ctx.textAlign = 'left';
+
+  const chipBottom = drawChipRow(ctx, chips, margin, cardY + 58, W - margin * 2);
+  const chartY = Math.max(cardY + 100, chipBottom + 14);
+  const img = await svgToImage(svg, 820, 350);
+  drawRoundedChartImage(ctx, img, margin, chartY, chartW, chartH);
+
+  let detailY = chartY + chartH + 28;
+  if (thunderCard) {
+    detailY = drawThunderPngCard(ctx, thunderCard, margin, detailY, W - margin * 2) + 22;
+  }
+  drawLegendLine(ctx, legends, margin, detailY + 6, W - margin * 2);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.56)';
+  ctx.font = '800 16px Inter, sans-serif';
+  ctx.fillText('Ed Aldus WM · Data: Open-Meteo / ECMWF IFS ENS', margin, H - 36);
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+}
+
+function buildDetachedSingleChart(param, cfg, times, stats) {
+  const svg = document.createElementNS(NS, 'svg');
+  const summaryEl = document.createElement('div');
+  const legendEl = document.createElement('div');
+  drawChart(svg, times, stats, cfg, {
+    height: 350,
+    summaryEl,
+    legendEl,
+    clipId: `downloadClip-${param}-${Date.now()}`,
+  });
+  return {
+    svg,
+    chips: Array.from(summaryEl.querySelectorAll('.chip')).map(chip => chip.textContent || ''),
+    legends: Array.from(legendEl.querySelectorAll('.leg-item')).map(el => el.textContent.replace(/\s+/g, ' ').trim()),
+    thunderCard: makeThunderCardData(sliceForSelectedRange(times, stats).stats, cfg),
+  };
+}
+
+async function downloadMultiPng() {
+  if (currentParam !== 'multi') return;
+  const btn = document.getElementById('download-4pluim');
+  const cards = MULTI_PARAMS.map(param => document.querySelector(`[data-card="${param}"]`));
+  if (cards.some(card => !card) || document.getElementById('multi-view').hidden) return;
+
+  syncDownloadButton(true, 'PNG maken...');
+  try {
+    const scale = 2;
+    const W = 1400;
+    const margin = 64;
+    const cardGap = 28;
+    const headerH = 142;
+    const chartW = W - margin * 2 - 36;
+    const chartH = Math.round(chartW * 290 / 820);
+    const cardH = chartH + 206;
+    const footerH = 70;
+    const H = headerH + (cardH * cards.length) + (cardGap * (cards.length - 1)) + footerH;
+    const canvas = document.createElement('canvas');
+    canvas.width = W * scale;
+    canvas.height = H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = '#8a8070';
+    ctx.fillRect(0, 0, W, H);
+    drawRoundRect(ctx, 28, 28, W - 56, H - 56, 14);
+    ctx.fillStyle = '#b0a488';
+    ctx.fill();
+
+    drawPngHeader(ctx, '8-pluim', displayStationNaam(), margin, 92, W - margin * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.36)';
+    ctx.fillRect(margin, 118, W - margin * 2, 2);
+
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const y = headerH + i * (cardH + cardGap);
+      drawRoundRect(ctx, margin - 18, y, W - margin * 2 + 36, cardH, 10);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      const title = card.querySelector('.multi-title')?.textContent || '';
+      const status = card.querySelector('.multi-status')?.textContent || '';
+      ctx.fillStyle = 'white';
+      ctx.font = '900 30px Inter, sans-serif';
+      ctx.fillText(title, margin, y + 38);
+      ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      ctx.font = '800 17px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(status, W - margin, y + 36);
+      ctx.textAlign = 'left';
+
+      const chips = Array.from(card.querySelectorAll('.chip')).map(chip => chip.textContent || '');
+      const chipBottom = drawChipRow(ctx, chips, margin, y + 54, W - margin * 2);
+      const chartY = Math.max(y + 96, chipBottom + 14);
+      const img = await svgToImage(card.querySelector('svg'));
+      drawRoundedChartImage(ctx, img, margin, chartY, chartW, chartH);
+
+      const legends = Array.from(card.querySelectorAll('.leg-item')).map(el => el.textContent.replace(/\s+/g, ' ').trim());
+      drawLegendLine(ctx, legends, margin, chartY + chartH + 34, W - margin * 2);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.56)';
+    ctx.font = '800 16px Inter, sans-serif';
+    ctx.fillText('Ed Aldus WM · Data: Open-Meteo / ECMWF IFS ENS', margin, H - 36);
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+    const url = blob ? URL.createObjectURL(blob) : canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = downloadName('multi');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (blob) setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) {
+    console.error(e);
+    document.getElementById('laadstatus').textContent = 'PNG maken mislukt: ' + e.message;
+  } finally {
+    syncDownloadButton(false);
+  }
+}
+
+async function downloadSinglePng() {
+  if (currentParam === 'multi') return;
+  const cfg = PARAMS[currentParam];
+  const svg = document.getElementById('chart');
+  if (!cfg || !svg || document.getElementById('single-view').hidden) return;
+
+  syncDownloadButton(true, 'PNG maken...');
+  try {
+    const status = document.getElementById('laadstatus').textContent || '';
+    const chips = Array.from(document.querySelectorAll('#samenvatting .chip')).map(chip => chip.textContent || '');
+    const legends = Array.from(document.querySelectorAll('#legenda .leg-item')).map(el => el.textContent.replace(/\s+/g, ' ').trim());
+    const thunderCard = cfg.dailyThunderLabels && lastSingleChartData?.param === currentParam
+      ? makeThunderCardData(sliceForSelectedRange(lastSingleChartData.times, lastSingleChartData.stats).stats, cfg)
+      : null;
+    const blob = await renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCard });
+    downloadBlob(blob, downloadName(currentParam));
+  } catch (e) {
+    console.error(e);
+    document.getElementById('laadstatus').textContent = 'PNG maken mislukt: ' + e.message;
+  } finally {
+    syncDownloadButton(false);
+  }
+}
+
+async function downloadAllPngs() {
+  const status = document.getElementById('laadstatus');
+  setDownloadButtons({
+    mainDisabled: true,
+    mainLabel: 'Even wachten...',
+    allDisabled: true,
+    allLabel: 'ZIP maken...',
+  });
+  try {
+    const entries = [];
+    const plaats = slugTekst(displayStationNaam());
+    status.textContent = '8 pluimen laden...';
+    const [results] = await Promise.all([
+      Promise.all(ALL_DOWNLOAD_PARAMS.map(loadStatsForParam)),
+      showDailyTxRange ? fetchMosmixTx(currentStation.lat, currentStation.lon) : Promise.resolve(),
+    ]);
+    for (let i = 0; i < ALL_DOWNLOAD_PARAMS.length; i++) {
+      const param = ALL_DOWNLOAD_PARAMS[i];
+      const result = results[i];
+      const { cfg, times, stats } = result;
+      status.textContent = `${cfg.title} PNG maken...`;
+      setDownloadButtons({
+        mainDisabled: true,
+        mainLabel: 'Even wachten...',
+        allDisabled: true,
+        allLabel: `${i + 1}/${ALL_DOWNLOAD_PARAMS.length} in ZIP...`,
+      });
+      const { svg, chips, legends, thunderCard } = buildDetachedSingleChart(param, cfg, times, stats);
+      const statusText = statusTextForResult(result);
+      const blob = await renderSinglePngBlob({ cfg, svg, chips, legends, status: statusText, thunderCard });
+      const filename = downloadName(param);
+      entries.push({ path: filename, blob });
+    }
+    const zipBlob = await makeZip(entries);
+    downloadBlob(zipBlob, `${plaats}_pluimen.zip`);
+    status.textContent = `ZIP opgeslagen met ${ALL_DOWNLOAD_PARAMS.length} PNG's`;
+  } catch (e) {
+    console.error(e);
+    status.textContent = 'ZIP maken mislukt: ' + e.message;
+  } finally {
+    syncDownloadButton(false);
+  }
+}
+
+function downloadCurrentPng() {
+  return currentParam === 'multi' ? downloadMultiPng() : downloadSinglePng();
+}
+
+async function loadMulti(seq) {
+  const status = document.getElementById('laadstatus');
+  document.getElementById('pluim-titel').textContent = '8-pluim';
+  syncStationLabel();
+  document.getElementById('single-view').hidden = true;
+  document.getElementById('multi-view').hidden = false;
+  renderMultiShell();
+  syncDownloadButton(true, 'Laden...');
+  status.textContent = '8 pluimen laden...';
+
+  const results = [];
+  let completed = 0;
+  let failed = 0;
+  const mosmixPromise = showDailyTxRange
+    ? fetchMosmixTx(currentStation.lat, currentStation.lon)
+    : Promise.resolve();
+
+  const updateMultiProgress = () => {
+    if (seq !== loadSeq) return;
+    const suffix = failed ? ` · ${failed} niet geladen` : '';
+    status.textContent = `${completed}/${MULTI_PARAMS.length} pluimen geladen${suffix}`;
+  };
+
+  try {
+    await Promise.all(MULTI_PARAMS.map(async param => {
+      try {
+        if (param === 'temp') await mosmixPromise;
+        const result = await loadStatsForParam(param);
+        if (seq !== loadSeq) return;
+        results.push(result);
+        const { param: resultParam, cfg, times, stats } = result;
+        drawChart(
+          document.getElementById(`multi-chart-${resultParam}`),
+          times,
+          stats,
+          cfg,
+          {
+            height: 290,
+            summaryEl: document.getElementById(`multi-summary-${resultParam}`),
+            legendEl: document.getElementById(`multi-legend-${resultParam}`),
+            clipId: `multiClip-${resultParam}`,
+          }
+        );
+        document.getElementById(`multi-status-${resultParam}`).textContent =
+          statusTextForResult(result, 'leden');
+      } catch (e) {
+        if (seq !== loadSeq) return;
+        failed++;
+        const cardStatus = document.getElementById(`multi-status-${param}`);
+        if (cardStatus) cardStatus.textContent = 'Niet geladen';
+        console.error(e);
+      } finally {
+        if (seq === loadSeq) {
+          completed++;
+          updateMultiProgress();
+        }
+      }
+    }));
+    if (seq !== loadSeq) return;
+    if (failed || !results.length) throw new Error(`${failed || MULTI_PARAMS.length} pluimen niet geladen`);
+    const memberCount = Math.max(...results.map(r => r.keys.length));
+    const spatialMax = Math.max(...results.map(r => r.spatialPoints || 1));
+    const spatialText = spatialMax > 1 ? ` · tot ${spatialMax} omgevingspunten` : '';
+    status.textContent = `${memberCount} ensemble-leden${spatialText} · ${selectedRangeDays()} dagen · 8-pluim onder elkaar`;
+    syncDownloadButton(false);
+  } catch (e) {
+    if (seq !== loadSeq) return;
+    status.textContent = 'Fout bij laden: ' + e.message;
+    document.querySelectorAll('.multi-status').forEach(el => { el.textContent = 'Niet geladen'; });
+    syncDownloadButton(true, 'Download PNG');
+    console.error(e);
+  }
+}
+
+let showDailyTxRange = false;
+let mosmixDailyCache = null;   // ruwe JSON van mosmix_nl.json
+let mosmixHourlyCache = null;  // fallback: mosmix_uurlijks_nl.json
+let mosmixDailyTx = {};        // { 'YYYY-MM-DD': Tx_waarde }
+let mosmixStationName = '';
+
+function mosmixStatusInfo() {
+  if (!mosmixStationName) return '';
+  const dagen = Object.keys(mosmixDailyTx).length || 10;
+  return ` · MOS/MIX: ${mosmixStationName} (${Math.min(10, dagen)} dagen)`;
+}
+
+async function fetchMosmixTx(lat, lon) {
+  // Alleen voor NL-gebied
+  if (lat < 50.4 || lat > 54.0 || lon < 2.5 || lon > 8.0) {
+    mosmixDailyTx = {};
+    mosmixStationName = '';
+    return;
+  }
+  try {
+    if (!mosmixDailyCache) {
+      const r = await fetch('mosmix_nl.json');
+      if (!r.ok) throw new Error('MOSMIX niet beschikbaar');
+      mosmixDailyCache = await r.json();
+    }
+    const coords = mosmixDailyCache.stations;  // { naam: [lon, lat] }
+    if (!coords) { mosmixDailyTx = {}; mosmixStationName = ''; return; }
+
+    let best = null, bestDist = Infinity;
+    for (const [naam, [slon, slat]] of Object.entries(coords)) {
+      const d = afstandKm(lat, lon, slat, slon);
+      if (d < bestDist) { bestDist = d; best = naam; }
+    }
+    mosmixStationName = best || '';
+
+    const byDay = {};
+    for (const day of mosmixDailyCache.dagen || []) {
+      const v = mosmixDailyCache.data?.[day]?.TX?.[best];
+      if (Number.isFinite(v)) byDay[day] = v;
+    }
+    if (Object.keys(byDay).length) {
+      mosmixDailyTx = byDay;
+      return;
+    }
+
+    if (!mosmixHourlyCache) {
+      const r = await fetch('mosmix_uurlijks_nl.json');
+      if (!r.ok) throw new Error('MOSMIX uurlijk niet beschikbaar');
+      mosmixHourlyCache = await r.json();
+    }
+    const st = mosmixHourlyCache.data?.[best];
+    if (!st) { mosmixDailyTx = {}; return; }
+    const tijden = st.tijden || [], ttt = st.TTT || [];
+    tijden.forEach((t, i) => {
+      const day = t.slice(0, 10);
+      const hour = parseInt(t.slice(11, 13), 10);
+      if (hour < 6 || hour > 20) return;
+      const v = ttt[i];
+      if (Number.isFinite(v) && (byDay[day] === undefined || v > byDay[day])) byDay[day] = v;
+    });
+    mosmixDailyTx = byDay;
+  } catch {
+    mosmixDailyTx = {};
+    mosmixStationName = '';
+  }
+}
+
+function toggleDailyTxRange() {
+  showDailyTxRange = !showDailyTxRange;
+  const btn = document.getElementById('tgl-tx-dag');
+  if (btn) {
+    btn.classList.toggle('actief', showDailyTxRange);
+    btn.querySelector('.tgl-lbl').textContent = showDailyTxRange ? 'MOS/MIX Tx aan' : 'MOS/MIX Tx';
+  }
+  loadCurrent();
+}
+
+async function loadCurrent() {
+  const seq = ++loadSeq;
+  if (currentParam === 'multi') {
+    lastSingleChartData = null;
+    loadMulti(seq);
+    return;
+  }
+
+  const cfg = PARAMS[currentParam];
+  const status = document.getElementById('laadstatus');
+  document.getElementById('pluim-titel').textContent = cfg.title;
+  syncStationLabel();
+  document.getElementById('single-view').hidden = false;
+  document.getElementById('multi-view').hidden = true;
+  document.getElementById('tx-toggle-row').hidden = currentParam !== 'temp';
+  syncDownloadButton(true, 'Laden...');
+  status.textContent = 'Laden...';
+
+  try {
+    const [result] = await Promise.all([
+      loadStatsForParam(currentParam),
+      currentParam === 'temp' ? fetchMosmixTx(currentStation.lat, currentStation.lon) : Promise.resolve(),
+    ]);
+    if (seq !== loadSeq) return;
+    const { times, stats } = result;
+    lastSingleChartData = { param: currentParam, times, stats };
+    drawChart(document.getElementById('chart'), times, stats, cfg, {
+      thunderCardEl: document.getElementById('thunder-card'),
+    });
+    const mosInfo = currentParam === 'temp' && showDailyTxRange ? mosmixStatusInfo() : '';
+    status.textContent = `${statusTextForResult(result)}${mosInfo}`;
+    syncDownloadButton(false);
+  } catch (e) {
+    if (seq !== loadSeq) return;
+    document.getElementById('samenvatting').innerHTML = '';
+    document.getElementById('legenda').innerHTML = '';
+    lastSingleChartData = null;
+    renderThunderCard([], {}, document.getElementById('thunder-card'));
+    status.textContent = 'Fout bij laden: ' + e.message;
+    syncDownloadButton(true, 'Download PNG');
+    console.error(e);
+  }
+}
+
+function setParam(param) {
+  if (param !== 'multi' && !PARAMS[param]) return;
+  currentParam = param;
+  document.querySelectorAll('.param-btn').forEach(btn => btn.classList.toggle('actief', btn.dataset.param === param));
+  loadCurrent();
+}
+
+function setStation(lat, lon, naam) {
+  currentStation = { lat: Number(lat), lon: Number(lon), naam };
+  document.getElementById('zoek-input').value = naam;
+  sluitZoek();
+  loadCurrent();
+}
+
+function sluitZoek() {
+  document.getElementById('zoek-resultaten').style.display = 'none';
+}
+
+async function zoekPlaats(neemEerste = false) {
+  const q = document.getElementById('zoek-input').value.trim();
+  const res = document.getElementById('zoek-resultaten');
+  if (q.length < 2) return;
+  res.innerHTML = '<div class="zoek-item">Zoeken...</div>';
+  res.style.display = 'block';
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 10000);
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=nl`;
+    const r = await fetch(url, { headers: { 'Accept-Language': 'nl' }, signal: ctrl.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.length) {
+      res.innerHTML = '<div class="zoek-item">Niets gevonden</div>';
+      return;
+    }
+    if (neemEerste) {
+      const d = data[0];
+      setStation(d.lat, d.lon, d.display_name.split(',')[0].trim());
+      return;
+    }
+    res.innerHTML = '';
+    data.forEach(d => {
+      const naam = d.display_name.split(',')[0].trim();
+      const extra = d.display_name.split(',').slice(1, 3).join(',').trim();
+      const div = document.createElement('div');
+      div.className = 'zoek-item';
+      div.innerHTML = `<strong>${escHtml(naam)}</strong> <span>${escHtml(extra)}</span>`;
+      div.addEventListener('click', () => setStation(d.lat, d.lon, naam));
+      res.appendChild(div);
+    });
+  } catch (e) {
+    res.innerHTML = '<div class="zoek-item">Zoekfout</div>';
+  }
+}
+
+document.querySelectorAll('.param-btn').forEach(btn => {
+  btn.addEventListener('click', () => setParam(btn.dataset.param));
+});
+
+document.getElementById('zoek-input').addEventListener('input', () => {
+  clearTimeout(zoekTimer);
+  zoekTimer = setTimeout(() => zoekPlaats(false), 350);
+});
+
+document.getElementById('zoek-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    zoekPlaats(true);
+  }
+  if (e.key === 'Escape') sluitZoek();
+});
+
+document.getElementById('zoek-btn').addEventListener('click', () => zoekPlaats(true));
+document.getElementById('extra-input').addEventListener('input', syncStationLabel);
+document.getElementById('download-4pluim').addEventListener('click', downloadCurrentPng);
+document.getElementById('download-all-pluimen').addEventListener('click', downloadAllPngs);
+bindDateCommit(['range-start', 'range-end'], () => {
+  selectedRange();
+  syncHighlightBounds();
+  loadCurrent();
+});
+bindDateCommit(['highlight-start', 'highlight-end'], id => {
+  syncHighlightBounds();
+  syncHighlightPeriod(id);
+  loadCurrent();
+});
+document.getElementById('highlight-color').addEventListener('change', () => {
+  loadCurrent();
+});
+document.getElementById('highlight-clear').addEventListener('click', () => {
+  document.getElementById('highlight-start').value = '';
+  document.getElementById('highlight-end').value = '';
+  loadCurrent();
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.zoek-wrap')) sluitZoek();
+});
+
+initRangeInputs();
+document.querySelectorAll('.param-btn').forEach(btn => btn.classList.toggle('actief', btn.dataset.param === currentParam));
+loadCurrent();
+</script>
+</body>
+</html>

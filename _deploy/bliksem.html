@@ -1,0 +1,1820 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bliksem live — Weerlab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script>
+  try {
+    if (window.self !== window.top) document.documentElement.classList.add('embedded');
+  } catch (_) {
+    document.documentElement.classList.add('embedded');
+  }
+</script>
+<style>
+  /* Pincode-gate */
+  #gate {
+    position: fixed; inset: 0;
+    background: #1a1f27;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+  #gate .box {
+    text-align: center; max-width: 340px; padding: 28px;
+    background: #242b36;
+    border: 1px solid #3a4a63;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  #gate .titel { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #e8e8e8; }
+  #gate .sub { font-size: 12px; color: #9aa4b2; margin-bottom: 18px; }
+  #gate input {
+    width: 100%; padding: 12px;
+    background: #1b2330; color: #e8e8e8;
+    border: 1px solid #3a4a63;
+    border-radius: 6px;
+    font-size: 16px; box-sizing: border-box;
+    text-align: center; letter-spacing: 0.3em;
+    font-family: 'DM Mono', monospace;
+  }
+  #gate .err { color: #e87474; font-size: 11px; min-height: 14px; margin-top: 6px; }
+  #gate button {
+    margin-top: 10px; width: 100%; padding: 10px;
+    background: #2563eb; color: #fff; border: none;
+    border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  #gate button:hover { background: #1d4ed8; }
+  body.locked > *:not(#gate) { display: none !important; }
+</style>
+<style>
+  :root {
+    --primary: #00205b;
+    --primary-strong: #003366;
+    --accent: #2ec4e8;
+    --bg: #f6f8fb;
+    --surface: #ffffff;
+    --border: #e3e8ef;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --danger: #cc0000;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 0;
+    min-height: 100vh;
+  }
+  .header {
+    background: #1e293b;
+    padding: 12px 22px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    border-bottom: 4px solid var(--accent);
+    color: #f1f5f9;
+    box-shadow: 0 2px 10px rgba(15,23,42,0.18);
+  }
+  .header-kicker {
+    color: #7dd3fc;
+    font-size: 10.5px;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .header-titel {
+    color: #f1f5f9;
+    font-size: 19px;
+    font-weight: 800;
+    line-height: 1.12;
+  }
+  .header-sub {
+    color: #cbd5e1;
+    font-size: 12px;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-weight: 500;
+    margin-top: 3px;
+  }
+  .header-meta {
+    color: #94a3b8;
+    font-size: 11px;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-weight: 700;
+    text-align: right;
+    border: 1px solid rgba(125,211,252,0.28);
+    border-radius: 999px;
+    padding: 5px 10px;
+    background: rgba(15,23,42,0.28);
+  }
+  .page-main { padding: 12px; }
+  html.embedded .header,
+  html.embedded .footer {
+    display: none;
+  }
+  html.embedded .page-main {
+    padding: 8px 12px 10px;
+  }
+  .footer {
+    background: #0f172a;
+    padding: 9px 22px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-family: 'DM Mono', ui-monospace, monospace;
+    border-top: 3px solid var(--accent);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .footer-brand { color: #f1f5f9; font-weight: 800; font-size: 12px; letter-spacing: 0.02em; }
+  .footer-brand .accent { color: var(--accent); }
+  .footer-copy { color: #cbd5e1; font-weight: 700; }
+  .toolbar {
+    background: var(--surface);
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .toolbar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 4px;
+  }
+  .controls-groep { display: flex; gap: 6px; align-items: center; }
+  button {
+    padding: 5px 12px;
+    border-radius: 14px;
+    border: 1px solid #c5d3e3;
+    background: #f0f4f8;
+    color: #2a4a70;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: #dce9f7; }
+  button.actief {
+    background: var(--primary-strong);
+    color: white;
+    border-color: var(--primary-strong);
+  }
+  .tijdvenster {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .tijdvenster input[type=range] { width: 140px; }
+  .tijdvenster .val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 600;
+    color: var(--primary-strong);
+    min-width: 50px;
+  }
+  .window-select {
+    padding: 4px 8px;
+    border: 1px solid var(--border, #ccd);
+    border-radius: 4px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--primary-strong);
+    background: white;
+    cursor: pointer;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 12px;
+  }
+  @media (min-width: 1181px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr) 300px;
+      align-items: start;
+    }
+  }
+  @media (max-width: 1180px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .kaart-panel {
+    background: var(--surface);
+    border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.1);
+    overflow: hidden;
+  }
+  @media (min-width: 1181px) {
+    .kaart-panel {
+      min-width: 0;
+    }
+  }
+  .panel-header {
+    background: var(--primary-strong);
+    color: white;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-header h2 { font-size: 13px; font-weight: 700; }
+  .panel-header .meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #a8c8e8;
+  }
+  .panel-header .klok {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #ffe7a8;
+    font-weight: 700;
+    margin-right: 10px;
+    letter-spacing: 0.02em;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .kaart-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted, #555);
+    background: #fff8e1;
+    border-left: 3px solid #ffc107;
+    padding: 6px 10px;
+    margin: 0 0 8px;
+    border-radius: 4px;
+  }
+  html.embedded .kaart-hint {
+    display: none;
+  }
+  html.embedded .panel-header {
+    padding: 7px 10px;
+  }
+  html.embedded .panel-header .meta,
+  html.embedded .panel-header .klok {
+    font-size: 10px;
+  }
+  .kaart-viewport {
+    position: relative;
+    width: 100%;
+    margin: 0 auto;
+    overflow: hidden;
+    background: #d8e3ed;
+    cursor: grab;
+  }
+  @media (min-width: 1181px) {
+    .kaart-viewport {
+      width: 100%;
+      max-width: 100%;
+      aspect-ratio: var(--kaart-ratio, 1080 / 1470);
+    }
+  }
+  .kaart-viewport.panning { cursor: grabbing; }
+  .kaart-wrap {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+  .kaart-wrap img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  .kaart-wrap svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .kaart-wrap svg.events { pointer-events: auto; }
+  .kaart-viewport > .overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 6;
+  }
+  .plaats-label,
+  .plaats-label text {
+    font-family: 'DM Sans', Arial, sans-serif;
+    user-select: none;
+  }
+  .plaats-label .label-bg {
+    stroke: rgba(30,41,59,0.12);
+    stroke-width: 1;
+    filter: drop-shadow(0 1px 4px rgba(15,23,42,0.14));
+  }
+  .plaats-label .plaats-dot {
+    stroke: rgba(255,255,255,0.95);
+    stroke-width: 1.8;
+  }
+  .plaats-label text {
+    paint-order: stroke;
+    stroke: rgba(255,255,255,0.88);
+    stroke-width: 2.6;
+    stroke-linejoin: round;
+  }
+  .zoom-controls {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+  .zoom-btn {
+    width: 32px; height: 32px;
+    background: white;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--primary);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    border-radius: 0;
+  }
+  .zoom-btn:hover { background: var(--bg); }
+  .zoom-btn:last-child { border-bottom: none; }
+  .zoom-btn.reset { font-size: 12px; font-weight: 600; }
+  .zoom-info {
+    position: absolute;
+    bottom: 10px; left: 10px;
+    background: rgba(255,255,255,0.95);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--primary-strong);
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .kaart-time-badge {
+    position: absolute;
+    bottom: 10px; left: 74px;
+    background: rgba(0,32,91,0.94);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.25);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .cluster-marker {
+    cursor: pointer;
+    transition: filter 0.15s ease;
+  }
+  .cluster-marker:hover {
+    filter: brightness(1.15) drop-shadow(0 0 4px rgba(0,0,0,0.4));
+  }
+  .cluster-marker text {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    fill: white;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: rgba(0,0,0,0.4);
+    stroke-width: 0.5px;
+  }
+  .nl-grens {
+    fill: none;
+    stroke: rgba(255,255,255,0.85);
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+  }
+  .strike {
+    cursor: pointer;
+  }
+  .strike:hover circle.flash { stroke: white; stroke-width: 2; }
+  @keyframes flash-pulse {
+    0% { r: 4; opacity: 1; }
+    100% { r: 22; opacity: 0; }
+  }
+  circle.glow-recent {
+    fill: rgba(255, 255, 200, 0.5);
+    animation: flash-pulse 1.4s ease-out infinite;
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  @media (min-width: 1181px) {
+    .sidebar {
+      order: 2;
+      min-width: 0;
+    }
+    .sidebar .toolbar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      margin-bottom: 0;
+    }
+    .sidebar .controls-groep {
+      flex-wrap: wrap;
+      align-items: stretch;
+    }
+    .sidebar .toolbar-label {
+      width: 100%;
+      margin-right: 0;
+    }
+    .sidebar button,
+    .sidebar .window-select {
+      flex: 1 1 auto;
+    }
+  }
+  .panel {
+    background: var(--surface);
+    border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.1);
+    overflow: hidden;
+  }
+  .panel-body { padding: 12px; }
+  .stats-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .stats-row:last-child { margin-bottom: 0; }
+  .stats-row .num {
+    font-family: 'DM Mono', monospace;
+    font-weight: 700;
+    color: var(--primary-strong);
+  }
+  .stats-row .num.danger { color: var(--danger); }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+  .legend-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.2);
+    flex-shrink: 0;
+  }
+  .legend-symbol {
+    width: 16px; text-align: center;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  #strike-tooltip {
+    position: absolute;
+    background: rgba(0, 32, 91, 0.96);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  @media (max-width: 640px) {
+    .header { padding: 10px 14px; }
+    .header-titel { font-size: 15px; }
+    .header-kicker { font-size: 9.5px; }
+    .header-sub, .header-meta { font-size: 10.5px; }
+    .footer { padding: 9px 14px; }
+  }
+</style>
+</head>
+<body class="locked">
+
+<div id="gate">
+  <div class="box">
+    <div class="titel">Bliksem live</div>
+    <div class="sub">Pincode vereist</div>
+    <form id="gateForm" autocomplete="off">
+      <input id="gatePass" type="password" inputmode="numeric" placeholder="•••••" autofocus maxlength="10">
+      <div id="gateErr" class="err"></div>
+      <button type="submit">Toegang</button>
+    </form>
+  </div>
+</div>
+
+<div class="header">
+  <div>
+    <div class="header-kicker">04 · Live detectie</div>
+    <div class="header-titel" id="page-title">Bliksem live — Nederland</div>
+    <div class="header-sub" id="page-sub">Individuele ontladingen · realtime Blitzortung-feed</div>
+  </div>
+  <div class="header-meta" id="page-header-meta">weerlab.nl · laden…</div>
+</div>
+
+<main class="page-main">
+
+<div class="layout">
+
+  <div class="kaart-panel">
+    <div class="panel-header">
+      <h2><span class="live-dot"></span>Bliksem-ontladingen</h2>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="klok" id="header-klok">—</span>
+        <span class="meta" id="header-meta"><b id="header-total">0</b> ontladingen · <span id="header-rate">— /min</span></span>
+      </span>
+    </div>
+    <div class="kaart-hint">Tip: klik op een cluster om in te zoomen. Wiel/dubbelklik zoomt op de muispositie; sleep om te schuiven.</div>
+    <div class="kaart-viewport" id="kaart-viewport">
+      <div class="kaart-wrap" id="kaart-wrap">
+        <img src="kaart_basis_nl.png" id="basis-kaart" alt="basiskaart" crossorigin="anonymous">
+        <svg id="svg-strikes" class="events" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
+      </div>
+      <svg id="svg-plaatsen" class="overlay" viewBox="0 0 1080 1470" preserveAspectRatio="none"></svg>
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="zoom-in" title="Inzoomen">+</button>
+        <button class="zoom-btn" id="zoom-out" title="Uitzoomen">−</button>
+        <button class="zoom-btn reset" id="zoom-reset" title="Reset">⌂</button>
+        <button class="zoom-btn reset" id="btn-download" title="Download PNG">⬇</button>
+      </div>
+      <div class="zoom-info" id="zoom-info">100%</div>
+      <div class="kaart-time-badge" id="kaart-time-badge">—</div>
+      <div id="strike-tooltip"></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="toolbar">
+      <div class="controls-groep">
+        <span class="toolbar-label">Tijdvenster:</span>
+        <div class="tijdvenster">
+          <select id="window-select" class="window-select">
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+            <option value="60" selected>1 uur</option>
+            <option value="120">2 uur</option>
+            <option value="360">6 uur</option>
+            <option value="720">12 uur</option>
+            <option value="1080">18 uur</option>
+            <option value="1440">24 uur</option>
+          </select>
+        </div>
+      </div>
+      <div class="controls-groep">
+        <span class="toolbar-label">Type:</span>
+        <button class="filter-btn actief" data-filter="all">Alle</button>
+        <button class="filter-btn" data-filter="CG">Cloud-Ground</button>
+        <button class="filter-btn" data-filter="IC">Intra-Cloud</button>
+      </div>
+      <div class="controls-groep">
+        <span class="toolbar-label">Glow:</span>
+        <button class="actief" id="btn-glow">Aan</button>
+      </div>
+      <div class="controls-groep">
+        <span class="toolbar-label">Cluster:</span>
+        <button id="btn-cluster">Auto</button>
+      </div>
+      <div class="controls-groep">
+        <span class="toolbar-label">Gebied:</span>
+        <button class="regio-btn actief" data-regio="nl">Nederland</button>
+        <button class="regio-btn" data-regio="benelux">Benelux</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h2>Statistieken</h2></div>
+      <div class="panel-body">
+        <div class="stats-row"><span>Totaal (zichtbaar)</span><span class="num" id="stat-total">0</span></div>
+        <div class="stats-row"><span>Laatste 5 min</span><span class="num" id="stat-5min">0</span></div>
+        <div class="stats-row"><span>Laatste 15 min</span><span class="num" id="stat-15min">0</span></div>
+        <div class="stats-row"><span>Cloud-Ground</span><span class="num" id="stat-cg">0</span></div>
+        <div class="stats-row"><span>Positief / negatief</span><span class="num" id="stat-pos">0 / 0</span></div>
+        <div class="stats-row"><span>Sterkste flash</span><span class="num danger" id="stat-max">— kA</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h2>Legenda — tijd sinds ontlading</h2></div>
+      <div class="panel-body">
+        <div class="legend-item"><span class="legend-dot" style="background:#ffffff; box-shadow:0 0 6px #ff0">≡</span> &lt; 2 min (pulserend)</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#ffeb3b"></span> 2 – 10 min</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#ff9800"></span> 10 – 30 min</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#cc0000"></span> 30 – 60 min</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#6d28d9"></span> &gt; 60 min</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h2>Symbolen</h2></div>
+      <div class="panel-body">
+        <div class="legend-item"><span class="legend-symbol" style="color:var(--danger)">⚡</span> Cloud-Ground (negatief)</div>
+        <div class="legend-item"><span class="legend-symbol" style="color:var(--primary-strong)">⚡</span> Cloud-Ground (positief)</div>
+        <div class="legend-item"><span class="legend-symbol" style="color:var(--text-muted)">●</span> Intra-Cloud</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h2>Hoe lezen?</h2></div>
+      <div class="panel-body" style="font-size:12px;line-height:1.55;color:var(--text);">
+        <p style="margin-bottom:8px;"><b>Kleur</b> = tijd sinds ontlading. Wit/geel is vers (laatste minuten), rood/paars is ouder. De pulserende witte stippen zijn nieuw binnengekomen onweer.</p>
+        <p style="margin-bottom:8px;"><b>Symbool</b> — een cirkel met bliksempictogram is Cloud-Ground (CG, ontlading tussen wolk en grond). Een kleinere transparante stip is Intra-Cloud (IC, ontlading binnen of tussen wolken). Bij meerdere ontladingen dicht op elkaar wordt automatisch een cluster getoond met een aantal — klik om in te zoomen.</p>
+        <p style="margin-bottom:8px;"><b>Verplaatsing</b> — kijk naar het kleurverloop: een spoor van rood naar wit volgt de baan van een onweersbui. Hoge dichtheid = actieve cel, ijle stippen = naderend of zwakker.</p>
+        <p style="margin-bottom:0;"><b>Latency</b> — Blitzortung-feed is doorgaans &lt;30 sec achter realtime. Bij zwakke detectie (weinig stations triggeren tegelijk) kan een ontlading missen of als IC verschijnen ipv CG.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</main>
+
+<div class="footer">
+  <div>
+    <div class="footer-brand"><span class="accent">weerlab.nl</span> — bliksem live</div>
+    <div>Bron: Blitzortung.org en bijdragers · tijden in Nederlandse tijd</div>
+  </div>
+  <div class="footer-copy">© Ed Aldus / Blitzortung.org</div>
+</div>
+
+<script>
+// ── Pincode-gate ──────────────────────────────────────────────────
+const GATE_FLAG = 'bliksem_unlocked_v1';
+const GATE_HASH = 'd7965153309ac8fa634b8007b4cbad8a1450f42b2b27d29be31cf938142e92c6';
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function unlockBliksem() {
+  document.getElementById('gate').remove();
+  document.body.classList.remove('locked');
+  if (typeof initBliksem === 'function') initBliksem();
+}
+(function () {
+  if (sessionStorage.getItem(GATE_FLAG) === '1' || localStorage.getItem(GATE_FLAG) === '1') {
+    document.addEventListener('DOMContentLoaded', unlockBliksem);
+    return;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('gateForm').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const pw = document.getElementById('gatePass').value.trim();
+      const err = document.getElementById('gateErr');
+      const h = await sha256hex(pw);
+      if (h === GATE_HASH) {
+        sessionStorage.setItem(GATE_FLAG, '1');
+        localStorage.setItem(GATE_FLAG, '1');
+        unlockBliksem();
+      } else {
+        err.textContent = 'Onjuiste pincode';
+        document.getElementById('gatePass').value = '';
+      }
+    });
+  });
+})();
+</script>
+
+<script>
+// ── Regio-configuraties ───────────────────────────────────────────
+const REGIOS = {
+  nl: {
+    img: 'kaart_basis_nl.png',
+    bbox: [3.3, 50.45, 7.4, 53.8],   // [lon_min, lat_min, lon_max, lat_max]
+    svg:  [1080, 1470],
+    aspect: '1080 / 1470',
+    maxWidth: '1000px',
+  },
+  benelux: {
+    img: 'kaart_basis_benelux.png',
+    bbox: [1.0, 49.0, 9.0, 54.0],
+    svg:  [1494, 1500],
+    aspect: '1494 / 1500',
+    maxWidth: '1100px',
+  },
+};
+let regio = 'nl';
+let LON_MIN, LON_MAX, LAT_MIN, LAT_MAX, SVG_W, SVG_H;
+let PLAATSEN = [];
+function isEmbeddedView() {
+  try {
+    return window.self !== window.top;
+  } catch (_) {
+    return true;
+  }
+}
+const WINDOW_KEY = 'bliksem_window_min';
+const WINDOW_CHOICES = [15, 30, 60, 120, 360, 720, 1080, 1440];
+function leesWindowChoice() {
+  try {
+    const saved = parseInt(localStorage.getItem(WINDOW_KEY) || '');
+    return WINDOW_CHOICES.includes(saved) ? saved : 60;
+  } catch (_) {
+    return 60;
+  }
+}
+let windowMin = leesWindowChoice();
+function pasWindowSelectToe() {
+  const sel = document.getElementById('window-select');
+  if (sel) sel.value = String(windowMin);
+}
+function windowLabel(min = windowMin) {
+  if (min < 60) return `${min} min`;
+  if (min % 60 === 0) return `${min / 60} uur`;
+  return `${(min / 60).toFixed(1).replace('.', ',')} uur`;
+}
+function applyRegio(key) {
+  regio = key;
+  const cfg = REGIOS[key];
+  [LON_MIN, LAT_MIN, LON_MAX, LAT_MAX] = cfg.bbox;
+  [SVG_W, SVG_H] = cfg.svg;
+  const img = document.getElementById('basis-kaart');
+  if (img.getAttribute('src') !== cfg.img) img.src = cfg.img;
+  const svg = document.getElementById('svg-strikes');
+  svg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+  const plaatsenSvg = document.getElementById('svg-plaatsen');
+  if (plaatsenSvg) plaatsenSvg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+  const vp = document.getElementById('kaart-viewport');
+  vp.style.aspectRatio = cfg.aspect;
+  vp.style.setProperty('--kaart-ratio', cfg.aspect);
+  resizeKaartViewport();
+  const t = document.getElementById('page-title');
+  if (t) t.textContent = key === 'nl' ? 'Bliksem live — Nederland' : 'Bliksem live — Benelux';
+}
+applyRegio('nl');
+
+function resizeKaartViewport() {
+  const vp = document.getElementById('kaart-viewport');
+  if (!vp || !SVG_W || !SVG_H) return;
+  const cfg = REGIOS[regio];
+  const cfgMax = parseInt(cfg.maxWidth, 10) || 1000;
+  const rect = vp.getBoundingClientRect();
+  const bottomPad = isEmbeddedView() ? 10 : 16;
+  const availableH = Math.max(360, window.innerHeight - rect.top - bottomPad);
+  const maxByHeight = Math.floor(availableH * SVG_W / SVG_H);
+  const responsiveMax = Math.max(360, Math.min(cfgMax, maxByHeight));
+  vp.style.width = '100%';
+  vp.style.maxWidth = `${responsiveMax}px`;
+}
+
+function lonLatToXY(lon, lat) {
+  const x = (lon - LON_MIN) / (LON_MAX - LON_MIN) * SVG_W;
+  const y = (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H;
+  return [x, y];
+}
+
+// ── Plaatsen ──────────────────────────────────────────────────────
+let PLAATSEN_LOOKUP = [];
+async function loadPlaatsen() {
+  try {
+    const r = await fetch('plaatsen_benelux.json');
+    if (r.ok) {
+      const d = await r.json();
+      PLAATSEN = Array.isArray(d.plaatsen) ? d.plaatsen : [];
+    }
+  } catch (e) {
+    console.warn('plaatsen-load fout:', e);
+  }
+  try {
+    const r2 = await fetch('plaatsen_lookup.json');
+    if (r2.ok) {
+      const d2 = await r2.json();
+      PLAATSEN_LOOKUP = Array.isArray(d2.plaatsen) ? d2.plaatsen : [];
+    }
+  } catch (e) {
+    console.warn('plaatsen-lookup fout:', e);
+  }
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function nearestPlaats(lat, lon) {
+  const set = PLAATSEN_LOOKUP.length ? PLAATSEN_LOOKUP : PLAATSEN;
+  if (!set.length) return null;
+  let best = null;
+  for (const p of set) {
+    const d = haversineKm(lat, lon, p.lat, p.lon);
+    if (!best || d < best.dist) best = { naam: p.naam, dist: d };
+  }
+  return best;
+}
+
+function renderPlaatsen() {
+  const layer = document.getElementById('svg-plaatsen');
+  if (!layer) return;
+  layer.innerHTML = '';
+  if (!PLAATSEN.length && !PLAATSEN_LOOKUP.length) return;
+  const vp = document.getElementById('kaart-viewport');
+  const wrap = document.getElementById('kaart-wrap');
+  if (!vp || !wrap || !vp.clientWidth || !vp.clientHeight || !wrap.clientWidth || !wrap.clientHeight) return;
+  const W = vp.clientWidth;
+  const H = vp.clientHeight;
+  layer.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  layer.setAttribute('width', W);
+  layer.setAttribute('height', H);
+
+  // Zelfde aanpak als radar: labels in schermcoordinaten, met botsingscontrole.
+  const maxRang = regio === 'nl' ? 2 : 1;
+  let popMin;
+  if      (zoom >= 12) popMin = 14000;
+  else if (zoom >= 8)  popMin = 35000;
+  else if (zoom >= 5)  popMin = 75000;
+  else if (zoom >= 3)  popMin = 180000;
+  else                 popMin = 260000;
+
+  const labels = [];
+  const seen = {};
+  function addLabel(naam, lat, lon, rang = 2, pop = 0, land = '', boost = 0) {
+    if (!naam) return;
+    if (lon < LON_MIN || lon > LON_MAX || lat < LAT_MIN || lat > LAT_MAX) return;
+    if (rang > maxRang && pop < popMin) return;
+    const key = String(naam).toLowerCase() + '|' + Math.round(lat * 100) + '|' + Math.round(lon * 100);
+    if (seen[key]) return;
+    seen[key] = true;
+    labels.push({ naam, lat, lon, rang, pop: pop || 0, land: land || '', boost: boost || 0 });
+  }
+
+  for (const p of PLAATSEN) {
+    if (p.rang > maxRang) continue;
+    addLabel(p.naam, p.lat, p.lon, p.rang, p.pop || 0, p.land || 'NL', 900000);
+  }
+  for (const p of PLAATSEN_LOOKUP) {
+    if ((p.pop || 0) < popMin) continue;
+    const land = p.land || '';
+    const boost = land === 'NL' ? 650000 : (land === 'BE' ? 120000 : 0);
+    addLabel(p.naam, p.lat, p.lon, p.pop >= 200000 ? 1 : 2, p.pop || 0, land, boost);
+  }
+
+  labels.sort((a, b) => ((b.pop || 0) + (b.boost || 0)) - ((a.pop || 0) + (a.boost || 0)));
+
+  let basisFont = 11.5;
+  if      (zoom >= 12) basisFont = 13.5;
+  else if (zoom >= 8)  basisFont = 13;
+  else if (zoom >= 5)  basisFont = 12.5;
+  else if (zoom >= 3)  basisFont = 12;
+  let maxLabels;
+  if      (zoom >= 12) maxLabels = 145;
+  else if (zoom >= 8)  maxLabels = 118;
+  else if (zoom >= 5)  maxLabels = 86;
+  else if (zoom >= 3)  maxLabels = 58;
+  else                 maxLabels = 54;
+
+  const geplaatst = [];
+  let placedCount = 0;
+  function tier(pop) {
+    if (pop >= 600000) return 2;
+    if (pop >= 150000) return 1;
+    return 0;
+  }
+  function botst(b) {
+    for (const p of geplaatst) {
+      if (b[0] < p[2] && b[2] > p[0] && b[1] < p[3] && b[3] > p[1]) return true;
+    }
+    return false;
+  }
+  function pastBinnen(b) {
+    return b[0] >= 4 && b[1] >= 4 && b[2] <= W - 4 && b[3] <= H - 4;
+  }
+  function textWidth(txt, fontPx, weight) {
+    const c = textWidth._c || (textWidth._c = document.createElement('canvas'));
+    const ctx = c.getContext('2d');
+    ctx.font = `${weight} ${fontPx}px DM Sans, Arial, sans-serif`;
+    return ctx.measureText(txt).width;
+  }
+
+  for (const st of labels) {
+    if (placedCount >= maxLabels) break;
+    const [x, y] = lonLatToXY(st.lon, st.lat);
+    const sx = panX + (x / SVG_W) * wrap.clientWidth * zoom;
+    const sy = panY + (y / SVG_H) * wrap.clientHeight * zoom;
+    if (sx < -50 || sx > W + 50 || sy < -10 || sy > H + 10) continue;
+
+    const t = tier(st.pop || 0);
+    const fontPx = basisFont + (t === 2 ? 2.2 : t === 1 ? 1.1 : 0);
+    const dotR = t === 2 ? 4.2 : t === 1 ? 3.4 : 2.7;
+    const gap = dotR + 6;
+    const padX = t === 2 ? 4.5 : 3.5;
+    const padY = t === 2 ? 2.5 : 1.8;
+    const weight = t === 2 ? 800 : 700;
+    const tw = textWidth(st.naam, fontPx, weight);
+    const labelW = tw + padX * 2;
+    const labelH = fontPx + padY * 2;
+    const candidates = [
+      { align: 'start',  x: sx + gap,          y: sy - labelH / 2, tx: sx + gap + padX,    ty: sy },
+      { align: 'end',    x: sx - gap - labelW, y: sy - labelH / 2, tx: sx - gap - padX,    ty: sy },
+      { align: 'middle', x: sx - labelW / 2,   y: sy - gap - labelH, tx: sx,               ty: sy - gap - labelH / 2 },
+      { align: 'middle', x: sx - labelW / 2,   y: sy + gap,          tx: sx,               ty: sy + gap + labelH / 2 },
+    ];
+    let chosen = null;
+    for (const cc of candidates) {
+      const box = [
+        Math.min(sx - dotR - 3, cc.x) - 2,
+        Math.min(sy - dotR - 3, cc.y) - 2,
+        Math.max(sx + dotR + 3, cc.x + labelW) + 2,
+        Math.max(sy + dotR + 3, cc.y + labelH) + 2,
+      ];
+      if (!pastBinnen(box) || botst(box)) continue;
+      chosen = { ...cc, box };
+      break;
+    }
+    if (!chosen) continue;
+    geplaatst.push(chosen.box);
+    placedCount++;
+
+    const textColor = t === 2 ? '#0f172a' : (t === 1 ? '#1f2937' : '#334155');
+    const markerFill = t === 2 ? '#ef4444' : (t === 1 ? '#1f4f7a' : '#486476');
+    const bgFill = t === 2 ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.68)';
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'plaats-label');
+
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('class', 'label-bg');
+    bg.setAttribute('x', chosen.x.toFixed(1));
+    bg.setAttribute('y', chosen.y.toFixed(1));
+    bg.setAttribute('width', labelW.toFixed(1));
+    bg.setAttribute('height', labelH.toFixed(1));
+    bg.setAttribute('rx', '4');
+    bg.setAttribute('fill', bgFill);
+    g.appendChild(bg);
+
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('class', 'plaats-dot');
+    dot.setAttribute('cx', sx.toFixed(1));
+    dot.setAttribute('cy', sy.toFixed(1));
+    dot.setAttribute('r', dotR.toFixed(1));
+    dot.setAttribute('fill', markerFill);
+    g.appendChild(dot);
+
+    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    txt.setAttribute('x', chosen.tx.toFixed(1));
+    txt.setAttribute('y', chosen.ty.toFixed(1));
+    txt.setAttribute('font-size', fontPx.toFixed(1));
+    txt.setAttribute('font-weight', String(weight));
+    txt.setAttribute('text-anchor', chosen.align);
+    txt.setAttribute('dominant-baseline', 'central');
+    txt.setAttribute('fill', textColor);
+    txt.textContent = st.naam;
+    g.appendChild(txt);
+
+    layer.appendChild(g);
+  }
+}
+
+function tekenPlaatsenCanvas(ctx, yOffset = 0) {
+  const maxRang = regio === 'nl' ? 2 : 1;
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  const seen = new Set();
+  function add(p) {
+    if (!p || seen.has(p.naam)) return;
+    if (p.rang > maxRang) return;
+    if (p.lon < LON_MIN || p.lon > LON_MAX || p.lat < LAT_MIN || p.lat > LAT_MAX) return;
+    seen.add(p.naam);
+    const [x, y0] = lonLatToXY(p.lon, p.lat);
+    const y = y0 + yOffset;
+    const major = p.rang === 0 || (p.pop || 0) >= 450000;
+    const medium = p.rang === 1 || (p.pop || 0) >= 90000;
+    ctx.save();
+    ctx.translate(x, y);
+    if (major) {
+      ctx.beginPath();
+      const pts = [[0,-5.4],[1.55,-1.65],[5.55,-1.65],[2.25,.62],[3.55,4.85],[0,2.35],[-3.55,4.85],[-2.25,.62],[-5.55,-1.65],[-1.55,-1.65]];
+      pts.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+      ctx.closePath();
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.4;
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, medium ? 2.5 : 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = medium ? '#334155' : '#475569';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = medium ? 1.1 : 0.9;
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.font = `${major ? 800 : 700} ${major ? 14 : medium ? 12 : 10.5}px 'DM Sans', Arial, sans-serif`;
+    ctx.strokeStyle = 'rgba(255,255,255,.96)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(p.naam, x + 5, y + 4);
+    ctx.fillStyle = '#111827';
+    ctx.fillText(p.naam, x + 5, y + 4);
+  }
+  PLAATSEN.forEach(add);
+  ctx.restore();
+}
+
+// (NL-grens-overlay verwijderd: zit al in basis-PNG)
+
+// ── Demo: simuleer een squall line over NL ─────────────────────────
+const NOW = Date.now();
+function generateDemoStrikes() {
+  const strikes = [];
+  const N = 320;
+  for (let i = 0; i < N; i++) {
+    const ageMin = Math.pow(Math.random(), 1.4) * 90;
+    const t = NOW - ageMin * 60_000;
+    const progress = 1 - ageMin / 90;
+    let lat, lon;
+
+    if (Math.random() < 0.18) {
+      // Lokaal cluster Veluwe
+      lat = 52.1 + (Math.random() - 0.5) * 0.4;
+      lon = 5.85 + (Math.random() - 0.5) * 0.5;
+    } else if (Math.random() < 0.12) {
+      // Cluster Z-Limburg
+      lat = 51.0 + (Math.random() - 0.5) * 0.3;
+      lon = 5.8 + (Math.random() - 0.5) * 0.4;
+    } else {
+      // Squall line SW -> NE
+      lat = 51.2 + progress * 1.4 + (Math.random() - 0.5) * 0.7;
+      lon = 4.0 + progress * 2.7 + (Math.random() - 0.5) * 0.8;
+    }
+
+    // Filter strikes die ver buiten NL bbox vallen
+    if (lat < LAT_MIN || lat > LAT_MAX || lon < LON_MIN || lon > LON_MAX) continue;
+
+    strikes.push({
+      t: t,
+      lat: lat,
+      lon: lon,
+      type: Math.random() < 0.65 ? 'CG' : 'IC',
+      amp: (Math.random() * 60 + 5) * (Math.random() < 0.55 ? -1 : 1)
+    });
+  }
+  return strikes.sort((a, b) => a.t - b.t);
+}
+
+const DEMO_STRIKES = generateDemoStrikes();
+let STRIKES = DEMO_STRIKES;
+let dataSource = 'demo';
+
+async function loadLiveData() {
+  let d = null;
+  // Bij lange windows (≥3u) gebruik 24u-bestand; anders snel-bestand (2u)
+  const useLong = windowMin >= 180;
+  const url = useLong
+    ? 'https://data.weerlab.nl/bliksem_strikes_24h.json?_=' + Date.now()
+    : 'https://data.weerlab.nl/bliksem_strikes.json?_=' + Date.now();
+  try {
+    const r = await fetch(url);
+    if (r.ok) {
+      const txt = await r.text();
+      if (txt.trim().startsWith('{')) d = JSON.parse(txt);
+    }
+  } catch (e) {
+    console.warn('live data fetch fout:', e);
+  }
+  if (d && Array.isArray(d.strikes)) {
+    STRIKES = d.strikes.map(s => ({
+      t: s.t * 1000,
+      lat: s.lat,
+      lon: s.lon,
+      type: s.type || 'CG',
+      amp: s.pol ? (s.pol > 0 ? 25 : -25) : 0,
+      sig: s.sig || 0,
+    }));
+  } else {
+    STRIKES = [];
+  }
+  render();
+}
+
+// ── State ─────────────────────────────────────────────────────────
+let typeFilter = 'all';
+let glowEnabled = true;
+let clusterMode = 'auto'; // 'auto' | 'on' | 'off'
+let zoom = 1;
+let panX = 0, panY = 0;
+let tooltipSticky = false;
+
+// ── Kleur op leeftijd ─────────────────────────────────────────────
+function colorForAge(ageMin) {
+  if (ageMin < 2) return '#ffffff';
+  if (ageMin < 10) return '#ffeb3b';
+  if (ageMin < 30) return '#ff9800';
+  if (ageMin < 60) return '#cc0000';
+  return '#6d28d9';
+}
+function strokeForAge(ageMin) {
+  if (ageMin < 2) return '#cc0000';
+  if (ageMin < 10) return '#b8860b';
+  return 'rgba(0,0,0,0.5)';
+}
+
+// ── Cluster strikes per grid ─────────────────────────────────────
+function clusterStrikes(strikes, gridPx) {
+  const buckets = new Map();
+  for (const s of strikes) {
+    const [x, y] = lonLatToXY(s.lon, s.lat);
+    const gx = Math.floor(x / gridPx);
+    const gy = Math.floor(y / gridPx);
+    const key = gx + ':' + gy;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push({ s, x, y });
+  }
+  const clusters = [];
+  for (const [, arr] of buckets) {
+    if (arr.length === 1) {
+      clusters.push({ single: true, ...arr[0] });
+    } else {
+      const cx = arr.reduce((a, b) => a + b.x, 0) / arr.length;
+      const cy = arr.reduce((a, b) => a + b.y, 0) / arr.length;
+      const youngest = arr.reduce((m, b) => b.s.t > m.t ? b.s : m, arr[0].s);
+      clusters.push({ single: false, x: cx, y: cy, count: arr.length, items: arr, youngest });
+    }
+  }
+  return clusters;
+}
+
+// ── Render strikes ────────────────────────────────────────────────
+function render() {
+  const svg = document.getElementById('svg-strikes');
+  svg.innerHTML = '';
+  const now = Date.now();
+
+  let visible = STRIKES.filter(s => (now - s.t) / 60000 <= windowMin);
+  if (typeFilter !== 'all') visible = visible.filter(s => s.type === typeFilter);
+
+  // Cluster-beslissing
+  // Bij hoger zoom-niveau wordt grid kleiner → meer detail
+  // gridPx in SVG-coördinaten (zelfde 1080x1470 ruimte)
+  const baseGrid = 28;
+  const gridPx = baseGrid / zoom;
+  // Bij lange tijdvensters (≥3u) altijd clusteren — anders te veel strikes om te renderen
+  const useCluster = clusterMode === 'on'
+    || (clusterMode === 'auto' && (windowMin >= 180 || (visible.length > 200 && zoom < 2)));
+
+  if (useCluster) {
+    const clusters = clusterStrikes(visible, gridPx);
+    for (const c of clusters) {
+      if (c.single) {
+        renderSingleStrike(svg, c.s, c.x, c.y);
+      } else {
+        renderCluster(svg, c);
+      }
+    }
+  } else {
+    visible.forEach(s => {
+      const [x, y] = lonLatToXY(s.lon, s.lat);
+      renderSingleStrike(svg, s, x, y);
+    });
+  }
+
+  updateStats(visible);
+}
+
+function renderSingleStrike(svg, s, x, y) {
+  const now = Date.now();
+  const ageMin = (now - s.t) / 60000;
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'strike');
+  g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(1/Math.sqrt(zoom)).toFixed(2)})`);
+
+  if (ageMin < 2 && glowEnabled) {
+    const glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    glow.setAttribute('class', 'glow-recent');
+    glow.setAttribute('r', '4');
+    g.appendChild(glow);
+  }
+
+  if (s.type === 'CG') {
+    const r = ageMin < 2 ? 7 : ageMin < 10 ? 6 : 5;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('class', 'flash');
+    c.setAttribute('r', r);
+    c.setAttribute('fill', colorForAge(ageMin));
+    c.setAttribute('stroke', strokeForAge(ageMin));
+    c.setAttribute('stroke-width', '1.2');
+    c.setAttribute('opacity', '0.9');
+    g.appendChild(c);
+
+    const bolt = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    bolt.setAttribute('d', 'M -1.5 -3.5 L 1.2 -0.8 L -0.5 -0.2 L 1.8 3.5 L -1.2 0.4 L 0.4 -0.2 Z');
+    bolt.setAttribute('fill', s.amp > 0 ? '#003366' : '#000');
+    bolt.setAttribute('stroke', 'white');
+    bolt.setAttribute('stroke-width', '0.4');
+    bolt.setAttribute('opacity', ageMin < 30 ? '1' : '0.7');
+    g.appendChild(bolt);
+  } else {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('class', 'flash');
+    c.setAttribute('r', '3');
+    c.setAttribute('fill', colorForAge(ageMin));
+    c.setAttribute('stroke', 'rgba(0,0,0,0.4)');
+    c.setAttribute('stroke-width', '0.8');
+    c.setAttribute('opacity', '0.7');
+    g.appendChild(c);
+  }
+
+  g.addEventListener('mouseenter', e => { if (!tooltipSticky) showTooltip(e, s, ageMin); });
+  g.addEventListener('mousemove', e => { if (!tooltipSticky) moveTooltip(e); });
+  g.addEventListener('mouseleave', () => { if (!tooltipSticky) hideTooltip(); });
+  g.addEventListener('click', e => {
+    e.stopPropagation();
+    tooltipSticky = false;
+    showTooltip(e, s, ageMin);
+    tooltipSticky = true;
+  });
+
+  svg.appendChild(g);
+}
+
+function renderCluster(svg, c) {
+  const now = Date.now();
+  const ageMin = (now - c.youngest.t) / 60000;
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'cluster-marker');
+  g.setAttribute('transform', `translate(${c.x.toFixed(1)},${c.y.toFixed(1)}) scale(${(1/Math.sqrt(zoom)).toFixed(2)})`);
+
+  // Grootte op count (log-scale), kleur op leeftijd jongste flash
+  const r = Math.min(22, 8 + Math.log2(c.count) * 2.5);
+  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  ring.setAttribute('r', r + 3);
+  ring.setAttribute('fill', 'rgba(255,255,255,0.4)');
+  ring.setAttribute('stroke', 'none');
+  g.appendChild(ring);
+
+  const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circ.setAttribute('r', r);
+  circ.setAttribute('fill', colorForAge(ageMin));
+  circ.setAttribute('stroke', strokeForAge(ageMin));
+  circ.setAttribute('stroke-width', '1.5');
+  circ.setAttribute('opacity', '0.92');
+  g.appendChild(circ);
+
+  const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  txt.setAttribute('font-size', Math.max(10, r * 0.85));
+  txt.textContent = c.count;
+  if (ageMin < 10) txt.setAttribute('fill', '#000');
+  g.appendChild(txt);
+
+  g.addEventListener('mouseenter', e => showClusterTooltip(e, c, ageMin));
+  g.addEventListener('mousemove', e => moveTooltip(e));
+  g.addEventListener('mouseleave', hideTooltip);
+  // Klik om in te zoomen op cluster
+  g.addEventListener('click', () => zoomToCluster(c));
+
+  svg.appendChild(g);
+}
+
+function updateStats(visible) {
+  const now = Date.now();
+  const last5 = visible.filter(s => (now - s.t) / 60000 <= 5).length;
+  const last15 = visible.filter(s => (now - s.t) / 60000 <= 15).length;
+  const cg = visible.filter(s => s.type === 'CG');
+  const pos = cg.filter(s => s.amp > 0).length;
+  const neg = cg.length - pos;
+  const maxAmp = visible.length ? visible.reduce((m, s) => Math.abs(s.amp) > Math.abs(m) ? s.amp : m, 0) : 0;
+
+  const fmt = n => n.toLocaleString('nl-NL');
+  document.getElementById('stat-total').textContent = fmt(visible.length);
+  document.getElementById('stat-5min').textContent = fmt(last5);
+  document.getElementById('stat-15min').textContent = fmt(last15);
+  document.getElementById('stat-cg').textContent = fmt(cg.length);
+  document.getElementById('stat-pos').textContent = `${pos} / ${neg}`;
+  document.getElementById('stat-max').textContent = (maxAmp ? maxAmp.toFixed(1) : '0') + ' kA';
+  document.getElementById('header-total').textContent = fmt(visible.length);
+  document.getElementById('header-rate').textContent = (last5 / 5).toFixed(1) + ' /min';
+  const pageMeta = document.getElementById('page-header-meta');
+  if (pageMeta) pageMeta.textContent = `Laatste ${windowLabel()} · ${fmt(visible.length)} ontladingen`;
+  const kaartBadge = document.getElementById('kaart-time-badge');
+  if (kaartBadge) kaartBadge.textContent = `Laatste ${windowLabel()} · ${new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}`;
+
+}
+
+// ── Tooltip ────────────────────────────────────────────────────────
+function showTooltip(e, s, ageMin) {
+  const tt = document.getElementById('strike-tooltip');
+  const ageStr = ageMin < 1 ? `${Math.round(ageMin*60)}s` : `${ageMin.toFixed(1)} min`;
+  const np = nearestPlaats(s.lat, s.lon);
+  const plaatsLine = np
+    ? `<b style="color:#fff">Bij ${np.naam}</b> (~${np.dist.toFixed(0)} km)<br>`
+    : '';
+  tt.innerHTML = `${plaatsLine}<b>${s.type}</b> · ${s.amp > 0 ? '+' : ''}${s.amp.toFixed(1)} kA<br>
+    ${ageStr} geleden<br>
+    ${s.lat.toFixed(3)}°N, ${s.lon.toFixed(3)}°E`;
+  tt.style.display = 'block';
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  const tt = document.getElementById('strike-tooltip');
+  const wrap = document.getElementById('kaart-wrap').getBoundingClientRect();
+  tt.style.left = (e.clientX - wrap.left + 12) + 'px';
+  tt.style.top = (e.clientY - wrap.top + 12) + 'px';
+}
+function clusterCenterLatLon(c) {
+  let latSum = 0, lonSum = 0;
+  for (const it of c.items) { latSum += it.s.lat; lonSum += it.s.lon; }
+  return [latSum / c.items.length, lonSum / c.items.length];
+}
+
+function showClusterTooltip(e, c, ageMin) {
+  const tt = document.getElementById('strike-tooltip');
+  const ageStr = ageMin < 1 ? `${Math.round(ageMin*60)}s` : `${ageMin.toFixed(1)} min`;
+  const cgCount = c.items.filter(i => i.s.type === 'CG').length;
+  const [cLat, cLon] = clusterCenterLatLon(c);
+  const np = nearestPlaats(cLat, cLon);
+  const plaatsLine = np
+    ? `<b style="color:#fff">Bij ${np.naam}</b> (~${np.dist.toFixed(0)} km)<br>`
+    : '';
+  tt.innerHTML = `${plaatsLine}<b>Cluster · ${c.count} flashes</b><br>
+    CG: ${cgCount} · IC: ${c.count - cgCount}<br>
+    Jongste: ${ageStr} geleden<br>
+    <span style="color:#ffd54a;font-weight:600">↗ klik om in te zoomen</span>`;
+  tt.style.display = 'block';
+  moveTooltip(e);
+}
+function hideTooltip() {
+  document.getElementById('strike-tooltip').style.display = 'none';
+}
+
+// ── Pan & Zoom ────────────────────────────────────────────────────
+function applyTransform() {
+  const wrap = document.getElementById('kaart-wrap');
+  wrap.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  document.getElementById('zoom-info').textContent = Math.round(zoom * 100) + '%';
+  renderPlaatsen();
+}
+
+function clampPan() {
+  const vp = document.getElementById('kaart-viewport');
+  const wrap = document.getElementById('kaart-wrap');
+  const vpW = vp.clientWidth;
+  const vpH = vp.clientHeight;
+  const baseW = wrap.clientWidth;
+  const baseH = wrap.clientHeight;
+  const sw = baseW * zoom;
+  const sh = baseH * zoom;
+  const minX = Math.min(0, vpW - sw);
+  const minY = Math.min(0, vpH - sh);
+  panX = Math.max(minX, Math.min(0, panX));
+  panY = Math.max(minY, Math.min(0, panY));
+}
+
+function setZoom(newZoom, focusX, focusY) {
+  newZoom = Math.max(1, Math.min(12, newZoom));
+  if (newZoom === zoom) return;
+  const vp = document.getElementById('kaart-viewport');
+  const rect = vp.getBoundingClientRect();
+  // Standaard: zoom rond midden viewport
+  if (focusX === undefined) focusX = rect.width / 2;
+  if (focusY === undefined) focusY = rect.height / 2;
+  // Houd het punt onder cursor stabiel
+  const ratio = newZoom / zoom;
+  panX = focusX - (focusX - panX) * ratio;
+  panY = focusY - (focusY - panY) * ratio;
+  zoom = newZoom;
+  clampPan();
+  applyTransform();
+  render();
+}
+
+function zoomToCluster(c) {
+  const vp = document.getElementById('kaart-viewport');
+  const wrap = document.getElementById('kaart-wrap');
+  const newZoom = Math.min(12, Math.max(zoom * 1.8, 3));
+  // SVG-coords → wrap pixel-coords (NL en Benelux hebben verschillende viewBoxen)
+  const wrapW = wrap.clientWidth;
+  const wrapH = wrap.clientHeight;
+  const wx = (c.x / SVG_W) * wrapW;
+  const wy = (c.y / SVG_H) * wrapH;
+  zoom = newZoom;
+  panX = vp.clientWidth / 2 - wx * zoom;
+  panY = vp.clientHeight / 2 - wy * zoom;
+  clampPan();
+  applyTransform();
+  render();
+}
+
+(function setupPanZoom() {
+  const vp = document.getElementById('kaart-viewport');
+
+  // Wheel zoom
+  vp.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = vp.getBoundingClientRect();
+    const fx = e.clientX - rect.left;
+    const fy = e.clientY - rect.top;
+    const factor = Math.exp(-e.deltaY * 0.0014);
+    setZoom(zoom * factor, fx, fy);
+  }, { passive: false });
+
+  // Click op lege ruimte → sluit sticky tooltip
+  vp.addEventListener('click', e => {
+    if (e.target.closest('.strike, .cluster-marker, .zoom-btn')) return;
+    if (tooltipSticky) {
+      tooltipSticky = false;
+      hideTooltip();
+    }
+  });
+
+  // Drag pan
+  let dragging = false, lastX = 0, lastY = 0;
+  vp.addEventListener('mousedown', e => {
+    if (e.target.closest('.strike, .cluster-marker, .zoom-btn')) return;
+    dragging = true;
+    lastX = e.clientX; lastY = e.clientY;
+    vp.classList.add('panning');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    panX += e.clientX - lastX;
+    panY += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    clampPan();
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; vp.classList.remove('panning'); }
+  });
+
+  vp.addEventListener('dblclick', e => {
+    if (e.target.closest('.strike, .cluster-marker, .zoom-btn')) return;
+    const rect = vp.getBoundingClientRect();
+    setZoom(zoom * 2, e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  let touchDist = 0;
+  let touchZoom = 1;
+  let touchPan = null;
+  vp.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      const a = e.touches[0], b = e.touches[1];
+      touchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      touchZoom = zoom;
+      touchPan = null;
+      e.preventDefault();
+    } else if (e.touches.length === 1) {
+      touchPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  }, { passive: false });
+  vp.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && touchDist > 0) {
+      const a = e.touches[0], b = e.touches[1];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const rect = vp.getBoundingClientRect();
+      const fx = (a.clientX + b.clientX) / 2 - rect.left;
+      const fy = (a.clientY + b.clientY) / 2 - rect.top;
+      setZoom(touchZoom * (dist / touchDist), fx, fy);
+      e.preventDefault();
+    } else if (e.touches.length === 1 && touchPan && zoom > 1.01) {
+      const t = e.touches[0];
+      panX += t.clientX - touchPan.x;
+      panY += t.clientY - touchPan.y;
+      touchPan = { x: t.clientX, y: t.clientY };
+      clampPan();
+      applyTransform();
+      e.preventDefault();
+    }
+  }, { passive: false });
+  window.addEventListener('touchend', e => {
+    if (e.touches && e.touches.length < 2) touchDist = 0;
+  });
+
+  // Buttons
+  document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoom * 1.6));
+  document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom / 1.6));
+  document.getElementById('zoom-reset').addEventListener('click', () => {
+    zoom = 1; panX = 0; panY = 0;
+    applyTransform(); render();
+  });
+  document.getElementById('btn-download').addEventListener('click', downloadPNG);
+})();
+
+// ── Controls ──────────────────────────────────────────────────────
+document.getElementById('window-select').addEventListener('change', e => {
+  const prev = windowMin;
+  windowMin = parseInt(e.target.value);
+  try { localStorage.setItem(WINDOW_KEY, String(windowMin)); } catch (_) {}
+  // Wissel tussen 2u-snel en 24u-historie als drempel overschreden
+  const wasLong = prev >= 180;
+  const isLong = windowMin >= 180;
+  if (wasLong !== isLong) {
+    loadLiveData().then(() => render());
+  } else {
+    render();
+  }
+});
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    typeFilter = btn.dataset.filter;
+    render();
+  });
+});
+document.getElementById('btn-glow').addEventListener('click', e => {
+  glowEnabled = !glowEnabled;
+  e.target.classList.toggle('actief', glowEnabled);
+  e.target.textContent = glowEnabled ? 'Aan' : 'Uit';
+  render();
+});
+document.querySelectorAll('.regio-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.regio-btn').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    applyRegio(btn.dataset.regio);
+    zoom = 1; panX = 0; panY = 0;
+    applyTransform();
+    render();
+  });
+});
+document.getElementById('btn-cluster').addEventListener('click', e => {
+  const modes = ['auto', 'on', 'off'];
+  const labels = { auto: 'Auto', on: 'Aan', off: 'Uit' };
+  const idx = modes.indexOf(clusterMode);
+  clusterMode = modes[(idx + 1) % modes.length];
+  e.target.textContent = labels[clusterMode];
+  e.target.classList.toggle('actief', clusterMode !== 'off');
+  render();
+});
+
+// ── Download als PNG ──────────────────────────────────────────────
+function downloadPNG() {
+  const img = document.getElementById('basis-kaart');
+  const baseW = img.naturalWidth, baseH = img.naturalHeight;
+  const headerH = 70;
+  const legendW = 230;
+  const footerH = 80;
+  const cv = document.createElement('canvas');
+  cv.width = baseW + legendW;
+  cv.height = headerH + baseH + footerH;
+  const ctx = cv.getContext('2d');
+
+  // Achtergrond
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  // Header — slate met cyaan accent
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, cv.width, headerH);
+  ctx.fillStyle = '#2ec4e8';
+  ctx.fillRect(0, headerH - 3, cv.width, 3);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 22px 'DM Sans', system-ui, sans-serif";
+  ctx.textBaseline = 'middle';
+  ctx.fillText(regio === 'nl' ? 'Bliksem-ontladingen — Nederland' : 'Bliksem-ontladingen — Benelux', 18, headerH / 2 - 8);
+  ctx.font = "500 12px 'DM Mono', ui-monospace, monospace";
+  ctx.fillStyle = '#94a3b8';
+  const ts = new Date().toLocaleString('nl-NL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+  // Vooraf-tellen voor header-count
+  const _now = Date.now();
+  let _visible = STRIKES.filter(s => (_now - s.t) / 60000 <= windowMin);
+  if (typeFilter !== 'all') _visible = _visible.filter(s => s.type === typeFilter);
+  ctx.fillText(`Laatste ${windowLabel()} · ${_visible.length.toLocaleString('nl-NL')} ontladingen · ${ts}`, 18, headerH / 2 + 14);
+
+  // Basis-kaart
+  ctx.drawImage(img, 0, headerH, baseW, baseH);
+  tekenPlaatsenCanvas(ctx, headerH);
+
+  // Strikes: filter en teken (offset naar headerH)
+  const now = _now;
+  let visible = _visible;
+
+  for (const s of visible) {
+    const ageMin = (now - s.t) / 60000;
+    const [xRaw, yRaw] = lonLatToXY(s.lon, s.lat);
+    const x = xRaw, y = yRaw + headerH;
+    const fill = colorForAge(ageMin);
+    const stroke = strokeForAge(ageMin);
+    if (s.type === 'CG') {
+      const r = ageMin < 2 ? 9 : ageMin < 10 ? 7 : 6;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 1.8, y - 4);
+      ctx.lineTo(x + 1.4, y - 1);
+      ctx.lineTo(x - 0.6, y - 0.2);
+      ctx.lineTo(x + 2.1, y + 4);
+      ctx.lineTo(x - 1.4, y + 0.5);
+      ctx.lineTo(x + 0.5, y - 0.2);
+      ctx.closePath();
+      ctx.fillStyle = s.amp > 0 ? '#003366' : '#000';
+      ctx.fill();
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.globalAlpha = 0.75;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.stroke();
+    }
+  }
+
+  // Legenda zijbalk
+  const lx = baseW;
+  ctx.fillStyle = '#f6f8fb';
+  ctx.fillRect(lx, headerH, legendW, baseH);
+  ctx.fillStyle = '#1e293b';
+  ctx.font = "700 12px 'DM Sans', system-ui, sans-serif";
+  ctx.textBaseline = 'top';
+  ctx.fillText('LEEFTIJD ONTLADING', lx + 14, headerH + 16);
+  const ages = [
+    ['#ffffff', '#cc0000', '< 2 min (vers)'],
+    ['#ffeb3b', 'rgba(0,0,0,0.4)', '2 – 10 min'],
+    ['#ff9800', 'rgba(0,0,0,0.4)', '10 – 30 min'],
+    ['#cc0000', 'rgba(0,0,0,0.4)', '30 – 60 min'],
+    ['#6d28d9', 'rgba(0,0,0,0.4)', '> 60 min'],
+  ];
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
+  let ly = headerH + 40;
+  for (const [c, str, lbl] of ages) {
+    ctx.beginPath();
+    ctx.arc(lx + 22, ly + 6, 6, 0, Math.PI * 2);
+    ctx.fillStyle = c;
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = str;
+    ctx.stroke();
+    ctx.fillStyle = '#0f172a';
+    ctx.fillText(lbl, lx + 38, ly);
+    ly += 22;
+  }
+
+  ly += 10;
+  ctx.fillStyle = '#00205b';
+  ctx.font = 'bold 13px DM Sans, system-ui, sans-serif';
+  ctx.fillText('TYPE', lx + 14, ly);
+  ly += 22;
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
+  ctx.fillStyle = '#0f172a';
+  // CG icoon: cirkel + bliksempictogram
+  ctx.beginPath(); ctx.arc(lx + 22, ly + 6, 6, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffeb3b'; ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(lx + 20.2, ly + 2); ctx.lineTo(lx + 23.4, ly + 5);
+  ctx.lineTo(lx + 21.4, ly + 5.8); ctx.lineTo(lx + 24.1, ly + 10);
+  ctx.lineTo(lx + 20.6, ly + 6.5); ctx.lineTo(lx + 22.5, ly + 5.8); ctx.closePath();
+  ctx.fillStyle = '#000'; ctx.fill();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Cloud-Ground (CG)', lx + 38, ly);
+  ly += 20;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px DM Sans, system-ui, sans-serif';
+  ctx.fillText('inslag op grond', lx + 38, ly);
+  ly += 20;
+
+  ctx.font = '12px DM Sans, system-ui, sans-serif';
+  ctx.beginPath(); ctx.arc(lx + 22, ly + 6, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffeb3b'; ctx.globalAlpha = 0.7; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Intra-Cloud (IC)', lx + 38, ly);
+  ly += 20;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px DM Sans, system-ui, sans-serif';
+  ctx.fillText('binnen/tussen wolken', lx + 38, ly);
+  ly += 26;
+
+  // Stats blok
+  ctx.fillStyle = '#00205b';
+  ctx.font = 'bold 13px DM Sans, system-ui, sans-serif';
+  ctx.fillText('OVERZICHT', lx + 14, ly);
+  ly += 22;
+  ctx.font = '12px DM Mono, monospace';
+  ctx.fillStyle = '#0f172a';
+  const cg = visible.filter(s => s.type === 'CG').length;
+  const last5 = visible.filter(s => (now - s.t) / 60000 <= 5).length;
+  for (const [k, v] of [
+    ['totaal', visible.length],
+    ['laatste 5 min', last5],
+    ['cloud-ground', cg],
+    ['intra-cloud', visible.length - cg],
+  ]) {
+    ctx.fillText(k, lx + 14, ly);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(v), lx + legendW - 14, ly);
+    ctx.textAlign = 'left';
+    ly += 18;
+  }
+
+  // Footer — slate met cyaan merk-accent
+  const fy = headerH + baseH;
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, fy, cv.width, footerH);
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = "700 13px 'DM Sans', system-ui, sans-serif";
+  ctx.fillText('weerlab.nl', 18, fy + 12);
+  const merkW = ctx.measureText('weerlab.nl').width;
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = "500 12px 'DM Sans', system-ui, sans-serif";
+  ctx.fillText('·  bliksem live', 18 + merkW + 4, fy + 12);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = "500 11px 'DM Sans', system-ui, sans-serif";
+  ctx.fillText('Bron: Blitzortung.org en bijdragers (gratis bliksem-detectienetwerk via vrijwilligers-stations)', 18, fy + 36);
+  ctx.fillStyle = '#7dd3fc';
+  ctx.font = "500 11px 'DM Mono', ui-monospace, monospace";
+  ctx.fillText('© Ed Aldus / Blitzortung.org', 18, fy + 56);
+
+  // Download trigger
+  cv.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toLocaleString('sv-SE', {
+      timeZone: 'Europe/Amsterdam',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }).replace(' ', '_').replace(':', '');
+    a.href = url;
+    a.download = `Bliksemkaart_${stamp}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+}
+
+function tickKlok() {
+  const el = document.getElementById('header-klok');
+  if (!el) return;
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dagen = ['zo','ma','di','wo','do','vr','za'];
+  const mnd = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  el.textContent = dagen[d.getDay()] + ' ' + d.getDate() + ' ' + mnd[d.getMonth()] + ' · ' +
+    pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + ' LT';
+}
+
+function initBliksem() {
+  resizeKaartViewport();
+  windowMin = leesWindowChoice();
+  pasWindowSelectToe();
+  loadPlaatsen().then(() => renderPlaatsen());
+  loadLiveData();
+  setInterval(loadLiveData, 30_000);
+  tickKlok();
+  setInterval(tickKlok, 1000);
+}
+document.addEventListener('DOMContentLoaded', () => {
+  windowMin = leesWindowChoice();
+  pasWindowSelectToe();
+  resizeKaartViewport();
+});
+window.addEventListener('resize', () => {
+  resizeKaartViewport();
+  clampPan();
+  applyTransform();
+  render();
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weerbewaking – Ed Aldus WM</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0b0f1a;--bg2:#111826;--panel:#161f2e;--border:#1e2d42;--text:#d8e8f4;--text2:#6a8aaa;--accent:#2ec4e8;--gold:#f0c040}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── PIN-SCHERM ── */
+#pin-scherm{
+  position:fixed;inset:0;z-index:999;
+  background:radial-gradient(ellipse at 50% 40%,#0f1e3a 0%,#070b14 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;
+}
+.pin-logo{font-size:3rem;margin-bottom:4px}
+.pin-titel{font-size:1.3rem;font-weight:700;color:white;letter-spacing:.04em}
+.pin-sub{font-size:.8rem;color:var(--text2)}
+.pin-dots{display:flex;gap:14px;margin:8px 0}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--text2);transition:all .2s}
+.pin-dot.gevuld{background:var(--accent);border-color:var(--accent);box-shadow:0 0 8px rgba(46,196,232,0.5)}
+.pin-dot.fout{background:#cc2222;border-color:#cc2222}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,72px);gap:10px}
+.pin-key{
+  height:72px;border-radius:12px;border:1px solid var(--border);
+  background:var(--panel);color:var(--text);
+  font-size:1.5rem;font-weight:600;cursor:pointer;
+  font-family:Inter,sans-serif;transition:all .1s;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;
+}
+.pin-key:hover{background:#1e2d42;border-color:var(--accent);color:white}
+.pin-key:active{transform:scale(0.94);background:#0f3060}
+.pin-key.wis{font-size:1rem;color:var(--text2)}
+.pin-fout-tekst{font-size:.8rem;color:#cc5555;height:18px;text-align:center}
+#pin-scherm.verborgen{display:none}
+
+/* ── HEADER ── */
+.header{background:#071428;border-bottom:2px solid var(--accent);padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:1rem;font-weight:700;color:white;display:flex;align-items:center;gap:8px}
+.header-sub{font-size:.7rem;color:var(--text2);margin-top:2px}
+#klok{font-size:.8rem;color:var(--text2)}
+.btn-slot{padding:5px 12px;border-radius:6px;background:rgba(240,192,64,0.12);border:1px solid var(--gold);color:var(--gold);font-size:.75rem;font-weight:600;cursor:pointer;font-family:Inter,sans-serif}
+.btn-slot:hover{background:rgba(240,192,64,0.22)}
+
+/* ── INHOUD ── */
+#inhoud{padding:28px 20px;display:none;max-width:1120px;margin:0 auto}
+.inhoud-titel{font-size:.9rem;color:var(--text2);margin-bottom:16px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.overzicht.verborgen{display:none}
+.planner{
+  display:none;margin-bottom:28px;background:linear-gradient(180deg,#121d2d 0%,#101827 100%);
+  border:1px solid var(--border);border-radius:8px;padding:18px;
+}
+.planner.zichtbaar{display:block}
+	.planner-kop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+	.planner-kop .inhoud-titel{margin-bottom:4px}
+	.planner-kop h2{font-size:1.05rem;color:white;letter-spacing:.08em}
+	.planner-kop .planner-meta{font-size:.76rem;color:var(--text2);line-height:1.45;margin-top:4px}
+	.planner-kop .planner-sync{font-size:.72rem;color:#8fb1cf;line-height:1.35;margin-top:5px;font-weight:700}
+	.planner-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+	.sync-toggle{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;color:#9fc2df;font-weight:800;white-space:nowrap}
+	.sync-toggle input{accent-color:var(--accent)}
+	.sync-status{font-size:.68rem;color:#7f99b4;font-weight:800;min-width:46px}
+	.planner-terug{
+  height:32px;border-radius:6px;border:1px solid #324866;background:#111b2a;color:var(--text);
+  padding:0 12px;font:700 .75rem Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap;
+}
+.planner-terug:hover{border-color:var(--accent);color:white}
+.event-form{
+  display:grid;grid-template-columns:.95fr .95fr .62fr 1.45fr 1.05fr 1.05fr 1.05fr auto auto;
+  gap:10px;align-items:end;margin-bottom:16px;padding:12px;background:rgba(7,20,40,.52);
+  border:1px solid rgba(255,255,255,.06);border-radius:8px;
+}
+.event-form label{display:flex;flex-direction:column;gap:4px;font-size:.68rem;color:var(--text2);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.event-form input,.event-form select{
+  width:100%;height:34px;border-radius:6px;border:1px solid #263a55;background:#0c1422;color:var(--text);
+  padding:0 10px;font:600 .8rem Inter,system-ui,sans-serif;min-width:0;
+}
+.event-form input::placeholder{color:#526f8d}
+.event-form button,.event-actie{
+  height:34px;border:1px solid transparent;border-radius:6px;padding:0 11px;
+  font:700 .76rem Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap;
+}
+.event-form .btn-save{background:var(--accent);color:#04131a}
+.event-form .btn-cancel{display:none;background:#26364e;color:var(--text);border-color:#324866}
+.planner.bewerkt .btn-cancel{display:inline-block}
+.planner-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.maand-kaart{background:#101827;border:1px solid #223148;border-radius:8px;min-height:210px;display:flex;flex-direction:column;overflow:hidden}
+.maand-kop{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #223148;background:#0d1726}
+.maand-kop strong{font-size:.86rem;color:#fff;letter-spacing:.08em}
+.maand-kop span{font-size:.68rem;color:var(--text2)}
+.event-lijst{display:flex;flex-direction:column;gap:8px;padding:12px;flex:1}
+.event-rij{display:grid;grid-template-columns:48px 1fr;gap:10px;padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:8px;background:#141f30}
+.event-dag{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:6px;background:rgba(46,196,232,.12);color:var(--accent);font-weight:800;min-height:48px}
+.event-dag .wd{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em}
+.event-dag .nr{font-size:1.15rem;line-height:1.05}
+.event-body{min-width:0}
+.event-titel{font-size:.85rem;font-weight:800;color:#fff;line-height:1.25;overflow-wrap:anywhere}
+.event-loc{font-size:.72rem;color:var(--text2);margin-top:2px;overflow-wrap:anywhere}
+.event-duur{font-size:.7rem;color:#7fd7ef;margin-top:4px;font-weight:700}
+.event-docs{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.event-pill{font-size:.64rem;color:#9fc2df;background:rgba(159,194,223,.1);border:1px solid rgba(159,194,223,.18);border-radius:999px;padding:2px 7px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.event-statussen{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.event-status{
+  height:24px;border-radius:999px;padding:0 8px;font:800 .62rem Inter,system-ui,sans-serif;
+  border:1px solid rgba(255,255,255,.14);white-space:nowrap;cursor:default;
+}
+.event-status.ok{color:#9ff0bf;background:rgba(34,170,85,.14);border-color:rgba(34,170,85,.34)}
+.event-status.miss{color:#f6d28a;background:rgba(240,192,64,.12);border-color:rgba(240,192,64,.32)}
+.event-knoppen{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.event-actie{height:28px;padding:0 8px;border-color:#2b405e;background:#1a2940;color:#d9ecf8}
+.event-actie:hover{border-color:var(--accent);color:white}
+.event-actie.sec{background:#111b2a;color:#86a5c3}
+.event-actie.del{border-color:rgba(210,80,80,.45);color:#ff8f8f;background:rgba(120,30,30,.18)}
+.event-leeg{color:var(--text2);font-size:.78rem;line-height:1.45;padding:6px 2px}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.menu-scheiding{grid-column:1/-1;margin-top:6px;padding:8px 0 2px;border-top:1px solid rgba(255,255,255,.07);color:var(--text2);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em}
+.menu-kaart{
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:18px 20px;text-decoration:none;color:var(--text);
+  display:flex;flex-direction:column;gap:8px;min-height:130px;
+  transition:all .15s;cursor:pointer;
+}
+.menu-kaart:hover{border-color:var(--accent);background:#1a2640;transform:translateY(-1px)}
+.menu-kaart.menu-button{text-align:left;font-family:Inter,system-ui,sans-serif;width:100%}
+.menu-kaart.agenda{border-color:rgba(46,196,232,.42);background:linear-gradient(180deg,#172338 0%,#151f30 100%)}
+.menu-kaart.wbgt-highlight{
+  color:#211b09;border-color:#ffd60a;
+  background:linear-gradient(180deg,#ffe45c 0%,#f0c040 100%);
+  box-shadow:0 0 0 1px rgba(255,214,10,.32),0 16px 34px rgba(255,180,0,.20);
+}
+.menu-kaart.wbgt-highlight:hover{border-color:#fff3a3;background:linear-gradient(180deg,#fff06f 0%,#f3c94d 100%)}
+.menu-kaart.wbgt-highlight .icoon,.menu-kaart.wbgt-highlight .titel{color:#111827}
+.menu-kaart.wbgt-highlight .omschrijving{color:#3f3410}
+.menu-kaart.wbgt-highlight .tag{background:rgba(17,24,39,.14);color:#211b09}
+.menu-kaart .icoon{font-size:1.8rem}
+.menu-kaart .titel{font-size:1rem;font-weight:700;color:white}
+.menu-kaart .omschrijving{font-size:.8rem;color:var(--text2);line-height:1.4;flex:1}
+.menu-kaart.binnenkort{opacity:.5;cursor:default}
+.menu-kaart.binnenkort:hover{transform:none;border-color:var(--border);background:var(--panel)}
+.menu-kaart .tag{display:inline-block;font-size:.65rem;color:var(--text2);background:rgba(255,255,255,.05);padding:2px 7px;border-radius:3px;align-self:flex-start}
+@media (max-width:980px){
+  .event-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .planner-grid{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .planner{padding:14px}
+  .event-form{grid-template-columns:1fr}
+  .planner-kop{flex-direction:column}
+  .planner-terug{width:100%}
+}
+</style>
+</head>
+<body>
+<script>
+  if (window.self === window.top) {
+    window.location.replace('index.html#weerbewaking');
+  }
+</script>
+
+<!-- ── PIN-SCHERM ── -->
+<div id="pin-scherm">
+  <div class="pin-logo">🔒</div>
+  <div class="pin-titel">Weerbewaking</div>
+  <div class="pin-sub">Voer de pincode in</div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+    <div class="pin-dot" id="d4"></div>
+  </div>
+  <div class="pin-fout-tekst" id="pin-fout"></div>
+  <div class="pin-keypad">
+    <button class="pin-key" onclick="pinDruk('1')">1</button>
+    <button class="pin-key" onclick="pinDruk('2')">2</button>
+    <button class="pin-key" onclick="pinDruk('3')">3</button>
+    <button class="pin-key" onclick="pinDruk('4')">4</button>
+    <button class="pin-key" onclick="pinDruk('5')">5</button>
+    <button class="pin-key" onclick="pinDruk('6')">6</button>
+    <button class="pin-key" onclick="pinDruk('7')">7</button>
+    <button class="pin-key" onclick="pinDruk('8')">8</button>
+    <button class="pin-key" onclick="pinDruk('9')">9</button>
+    <button class="pin-key wis" onclick="pinWis()">⌫</button>
+    <button class="pin-key" onclick="pinDruk('0')">0</button>
+    <button class="pin-key wis" onclick="pinReset()" style="font-size:.75rem">✕</button>
+  </div>
+</div>
+
+<!-- ── PAGINA ── -->
+<div class="header">
+  <div>
+    <h1>🔒 Weerbewaking</h1>
+    <div class="header-sub">Ed Aldus WM · persoonlijk dashboard</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="klok"></span>
+    <button class="btn-slot" onclick="vergrendel()">🔒 Vergrendel</button>
+  </div>
+</div>
+
+<div id="inhoud">
+  <section class="planner" id="event-planner">
+    <div class="planner-kop">
+      <div>
+        <div class="inhoud-titel">Evenementenplanning</div>
+        <h2>MEI · JUNI · JULI · AUGUSTUS · SEPTEMBER · OKTOBER</h2>
+        <div class="planner-meta" id="planner-meta">Gedeelde planning wordt geladen.</div>
+        <div class="planner-sync" id="planner-sync-status">Evenementen worden gedeeld met alle laptops.</div>
+      </div>
+      <div class="planner-actions">
+        <label class="sync-toggle" title="Live-sync van conceptdocumenten (verwachtingen). Evenementen zelf worden altijd gedeeld."><input type="checkbox" id="wb-live-sync" data-wb-sync-toggle> Live sync docs</label>
+        <span class="sync-status" id="wb-live-sync-status" data-wb-sync-status></span>
+        <button class="planner-terug" type="button" onclick="toonOverzicht()">← Terug naar weerbewaking</button>
+      </div>
+    </div>
+
+    <form class="event-form" id="event-form" onsubmit="bewaarEvent(event)">
+      <input type="hidden" id="event-id">
+      <label>Datum
+        <input type="date" id="event-datum" required>
+      </label>
+      <label>T/m
+        <input type="date" id="event-einddatum" required>
+      </label>
+      <label>Dagen
+        <input type="number" id="event-dagen" min="1" max="31" step="1" value="1" required>
+      </label>
+      <label>Evenement
+        <input type="text" id="event-naam" placeholder="Naam evenement" required>
+      </label>
+      <label>Locatie
+        <input type="text" id="event-locatie" placeholder="Plaats / terrein">
+      </label>
+      <label>WM-document
+        <select id="event-wm-doc"></select>
+      </label>
+      <label>Uurlijks-doc
+        <select id="event-uur-doc"></select>
+      </label>
+      <button class="btn-save" type="submit" id="event-save-btn">Opslaan</button>
+      <button class="btn-cancel" type="button" onclick="resetEventForm()">Annuleer</button>
+    </form>
+
+    <div class="planner-grid" id="planner-grid"></div>
+  </section>
+
+  <section class="overzicht" id="menu-overzicht">
+    <div class="inhoud-titel">Onderdelen</div>
+    <div class="menu-grid">
+      <button class="menu-kaart menu-button agenda" type="button" onclick="toonPlanner()">
+        <div class="icoon">📅</div>
+        <div class="titel">Evenementenplanning</div>
+        <div class="omschrijving">Plan evenementen van juni t/m oktober en koppel ze direct aan WM- en uurlijkse documenten.</div>
+        <span class="tag" id="event-card-count">Agenda · jun-okt</span>
+      </button>
+    <a class="menu-kaart" href="weerbewaking_rijnmond.html">
+      <div class="icoon">📝</div>
+      <div class="titel">Weerbewaking 5 dagen</div>
+      <div class="omschrijving">Regionale verwachting met auto-data uit MOS/MIX, exporteerbaar als PDF.</div>
+      <span class="tag">MOS/MIX · 5 dagen</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_uurlijks.html">
+      <div class="icoon">⏱️</div>
+      <div class="titel">Weerbewaking W.M. uurlijks</div>
+      <div class="omschrijving">Uurverwachting voor een zelfgekozen plaats, 12 uur vooruit.</div>
+      <span class="tag">HARMONIE 43 · 2×2 km</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_ridderkerk_rhoon_dekuip.html?v=20260723-webleesbaar" style="border:2px solid #22aa55;box-shadow:0 0 0 1px rgba(34,170,85,.18)">
+      <div class="icoon">📍</div>
+      <div class="titel">Weerbewaking Ridderkerk / Rhoon / De Kuip</div>
+      <div class="omschrijving">Zelfde basis als Weerbewaking 5 dagen, klaar voor de aparte aanpassingen voor deze locaties.</div>
+      <span class="tag">MOS/MIX · 6 dagen</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_gladheid.html">
+      <div class="icoon">❄️</div>
+      <div class="titel">Gladheid – weerbericht</div>
+      <div class="omschrijving">Vandaag/morgen/overmorgen + zesdaagse gladheidstabel met max/min, kans op gladheid, sneeuw &amp; ijzel. Auto-vulling uit MOS/MIX.</div>
+      <span class="tag">MOS/MIX · 6 dagen</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_rr.html">
+      <div class="icoon">🌤️</div>
+      <div class="titel">Weersverwachting Rijnmond</div>
+      <div class="omschrijving">Kort weerbericht: vandaag / vanavond + nacht / morgen / komende dagen. Datum, tijd en dagnamen automatisch.</div>
+      <span class="tag">vrije tekst · 4 secties</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_fey.html" style="border-color:#c00000">
+      <div class="icoon">⚽</div>
+      <div class="titel">Feyenoord wedstrijd</div>
+      <div class="omschrijving">Weerbericht voor de wedstrijd: 6-uurs HARMONIE-tabel met instelbaar startuur en bewerkbare uren.</div>
+      <span class="tag" style="background:rgba(204,0,0,.15);color:#ff7070">HARMONIE 2×2 km · 6 uur</span>
+    </a>
+    <a class="menu-kaart" href="vlaggenweer.html">
+      <div class="icoon">🚩</div>
+      <div class="titel">Vlaggenweer</div>
+      <div class="omschrijving">Bekijk het vlaggenweer-document met windrichting, windkracht en advies voor ochtend, middag en avond.</div>
+      <span class="tag">MOSMIX Rotterdam · preview + DOCX</span>
+    </a>
+    <div class="menu-scheiding">Hulpmiddelen &amp; pluimen</div>
+    <a class="menu-kaart wbgt-highlight" href="weerbewaking_wbgt.html">
+      <div class="icoon">WBGT</div>
+      <div class="titel">WBGT rekentool</div>
+      <div class="omschrijving">Handmatige controleberekening met temperatuur, vochtigheid, wind en zonnestraling.</div>
+      <span class="tag">ISO/Stull · Hittekracht</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_meteogram.html">
+      <div class="icoon">📈</div>
+      <div class="titel">Meteogram (wind + temp)</div>
+      <div class="omschrijving">Uurlijkse verwachting wind &amp; temperatuur/bewolking, 60 uur vooruit. Download als PNG.</div>
+      <span class="tag">HARMONIE 2.5 km · HARM-EPS</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_pluim.html?v=20260722-00utc-run">
+      <div class="icoon">📊</div>
+      <div class="titel">Ensemble pluim (A4 print)</div>
+      <div class="omschrijving">6-paneel ECMWF ensemble pluim — Rotterdam, Wateringen, Dordrecht, Soestdijk, Eindhoven, Rhoon, Ridderkerk. PNG-download A4 landscape.</div>
+      <span class="tag">ECMWF IFS-ENS · 50 leden · 15 dagen</span>
+    </a>
+    <a class="menu-kaart" href="kleurpluim.html?v=20260722-00utc-run">
+      <div class="icoon">🌡️</div>
+      <div class="titel">Kleurpluimen</div>
+      <div class="omschrijving">Eenvoudige kleurpluimen voor temperatuur, neerslagkans, neerslag in mm, cumulatieve neerslag, wind, windstoten, zon/bewolking en onweer. Start op Rotterdam en zoekt elke plaats.</div>
+      <span class="tag">ECMWF IFS-ENS · 50 leden · 15 dagen</span>
+    </a>
+    <a class="menu-kaart" href="weerbewaking_event_tabel.html">
+      <div class="icoon">📋</div>
+      <div class="titel">Event Weertabel</div>
+      <div class="omschrijving">Uurlijkse weertabel voor een evenement: kies station, startuur en duur (6 of 12 uur). Download als PNG.</div>
+      <span class="tag">MOS/MIX · NL/BE/DE · 9 dagen</span>
+    </a>
+
+    </div>
+  </section>
+</div>
+
+<script src="weerbewaking_sync.js?v=20260513"></script>
+<script>
+// ── Pincode (hash opgeslagen, niet plaintext) ──
+// Standaard pin: 1234 → wijzig dit door de hash hieronder te vervangen
+// Pincode opgeslagen als SHA-256 hash
+const PIN_HASH = 'd7965153309ac8fa634b8007b4cbad8a1450f42b2b27d29be31cf938142e92c6';
+const SESSION_KEY = 'wb_unlocked';
+
+let ingevoerd = '';
+
+// Check sessie
+if (sessionStorage.getItem(SESSION_KEY) === '1') ontgrendel();
+
+async function pinDruk(c) {
+  if (ingevoerd.length >= 5) return;
+  ingevoerd += c;
+  updateDots();
+  if (ingevoerd.length === 5) {
+    const hash = await sha256(ingevoerd);
+    if (hash === PIN_HASH) {
+      sessionStorage.setItem(SESSION_KEY, '1');
+      // Kort groen flash
+      document.querySelectorAll('.pin-dot').forEach(d => { d.style.background='#22aa44'; d.style.borderColor='#22aa44'; });
+      setTimeout(ontgrendel, 300);
+    } else {
+      document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('fout'));
+      document.getElementById('pin-fout').textContent = 'Onjuiste pincode';
+      setTimeout(() => { pinReset(); document.getElementById('pin-fout').textContent = ''; }, 800);
+    }
+  }
+}
+
+function pinWis() {
+  if (ingevoerd.length > 0) { ingevoerd = ingevoerd.slice(0, -1); updateDots(); }
+}
+
+function pinReset() {
+  ingevoerd = '';
+  updateDots();
+  document.querySelectorAll('.pin-dot').forEach(d => d.classList.remove('fout'));
+}
+
+function updateDots() {
+  for (let i = 0; i < 5; i++) {
+    const d = document.getElementById('d' + i);
+    d.classList.remove('fout');
+    d.classList.toggle('gevuld', i < ingevoerd.length);
+  }
+}
+
+function ontgrendel() {
+  document.getElementById('pin-scherm').classList.add('verborgen');
+  document.getElementById('inhoud').style.display = 'block';
+  toonOverzicht(false);
+}
+
+function vergrendel() {
+  sessionStorage.removeItem(SESSION_KEY);
+  ingevoerd = '';
+  updateDots();
+  document.getElementById('pin-fout').textContent = '';
+  document.getElementById('pin-scherm').classList.remove('verborgen');
+  document.getElementById('inhoud').style.display = 'none';
+}
+
+// SHA-256 via Web Crypto API
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Keyboard support
+document.addEventListener('keydown', e => {
+  if (document.getElementById('pin-scherm').classList.contains('verborgen')) return;
+  if (e.key >= '0' && e.key <= '9') pinDruk(e.key);
+  else if (e.key === 'Backspace') pinWis();
+  else if (e.key === 'Escape') pinReset();
+});
+
+// Klok
+function updateKlok() {
+  document.getElementById('klok').textContent =
+    new Date().toLocaleString('nl-NL', { timeZone:'Europe/Amsterdam', weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+updateKlok(); setInterval(updateKlok, 30000);
+
+function toonPlanner(scroll=true, pushHistory=true){
+  const overzicht = document.getElementById('menu-overzicht');
+  const planner = document.getElementById('event-planner');
+  if(overzicht) overzicht.classList.add('verborgen');
+  if(planner) planner.classList.add('zichtbaar');
+  renderPlanner();
+  if(scroll) window.scrollTo({top:0, behavior:'smooth'});
+  // Voeg een parent-history entry toe zodat browser-back terugkeert naar het overzicht
+  // i.p.v. helemaal uit weerbewaking te gaan.
+  if(pushHistory && window.self !== window.top){
+    try{
+      const ouder = window.parent;
+      const hash = ouder.location.hash || '#weerbewaking';
+      ouder.history.pushState({wbView:'planner'}, '', hash);
+    }catch(e){}
+  }
+}
+
+function toonOverzicht(scroll=true){
+  const overzicht = document.getElementById('menu-overzicht');
+  const planner = document.getElementById('event-planner');
+  if(planner) planner.classList.remove('zichtbaar');
+  if(overzicht) overzicht.classList.remove('verborgen');
+  if(scroll) window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ── Evenementenplanner ──
+const EVENT_STORE_KEY = 'wb_eventen_v1';
+const EVENT_BACKUP_KEY = 'wb_eventen_backup_v1';
+const EVENT_STATE_KEY = 'wb_eventen_state_v1';
+const DOC_CACHE_VERSION = '20260603-pdf2';
+const PLANNER_MONTHS = [5, 6, 7, 8, 9]; // juni t/m oktober
+const MAANDEN_LANG = ['JANUARI','FEBRUARI','MAART','APRIL','MEI','JUNI','JULI','AUGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DECEMBER'];
+const MAAND_KORT = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const DAG_KORT = ['zo','ma','di','wo','do','vr','za'];
+const gedeeldeDocStatus = new Map();
+const docLijstSyncGeladen = new Set();
+const docLijstSyncBezig = new Set();
+let planningSyncGestart = false;
+let docStatusTimer = null;
+let docStatusBezig = false;
+
+function plannerJaar(){
+  return new Date().getFullYear();
+}
+
+function isoDatum(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function parseISO(iso){
+  const [y,m,d] = String(iso || '').split('-').map(Number);
+  if(!y || !m || !d) return null;
+  return new Date(y, m-1, d);
+}
+
+function addDagen(datum, dagen){
+  const d = new Date(datum);
+  d.setDate(d.getDate() + dagen);
+  return d;
+}
+
+function dagenTussen(start, eind){
+  const a = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const b = new Date(eind.getFullYear(), eind.getMonth(), eind.getDate());
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function eventEindDatum(ev){
+  const start = parseISO(ev.date);
+  const eind = parseISO(ev.endDate) || start;
+  if(!start) return null;
+  return (!eind || eind < start) ? start : eind;
+}
+
+function eventDuur(ev){
+  const start = parseISO(ev.date);
+  const eind = eventEindDatum(ev);
+  if(!start || !eind) return 1;
+  return dagenTussen(start, eind) + 1;
+}
+
+function formatKorteDatum(d){
+  if(!d) return '';
+  return d.getDate() + ' ' + MAAND_KORT[d.getMonth()];
+}
+
+function eventDuurLabel(ev){
+  const dagen = eventDuur(ev);
+  const eind = eventEindDatum(ev);
+  if(dagen <= 1) return '1 dag';
+  return 't/m ' + formatKorteDatum(eind) + ' · ' + dagen + ' dagen';
+}
+
+function defaultEventDatum(){
+  const nu = new Date();
+  if(nu.getFullYear() === plannerJaar() && PLANNER_MONTHS.includes(nu.getMonth())) return isoDatum(nu);
+  return plannerJaar() + '-05-01';
+}
+
+function escapeHTML(str){
+  return String(str == null ? '' : str).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[ch]));
+}
+
+function cacheBustDocUrl(url){
+  if(!/^weerbewaking_.*\.html(?:[?#]|$)/.test(url || '')) return url;
+  const [zonderHash, hash=''] = url.split('#');
+  const [base, query=''] = zonderHash.split('?');
+  const params = new URLSearchParams(query);
+  params.set('v', DOC_CACHE_VERSION);
+  return base + '?' + params.toString() + (hash ? '#' + hash : '');
+}
+
+function docSlug(naam){
+  return String(naam || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'document';
+}
+
+function docDraftKey(type, datum, naam){
+  if(window.WBSync) return WBSync.docDraftKey(type, datum, naam);
+  const prefix = type === 'wm' ? 'wb_wm_draft_' : 'wb_uurlijks_draft_';
+  return prefix + datum + '_' + docSlug(naam);
+}
+
+function docIsOpgeslagen(type, datum, naam){
+  try{
+    const key = docDraftKey(type, datum, naam);
+    return !!(datum && naam && (localStorage.getItem(key) || gedeeldeDocStatus.get(key)));
+  }
+  catch(e){ return false; }
+}
+
+function docStatusKnop(type, datum, naam){
+  const opgeslagen = docIsOpgeslagen(type, datum, naam);
+  const label = type === 'wm' ? 'WM' : 'Uur';
+  return `<button type="button" class="event-status ${opgeslagen ? 'ok' : 'miss'}" disabled>${label} ${opgeslagen ? 'opgeslagen' : 'nog niet opgeslagen'}</button>`;
+}
+
+function leesEvents(){
+  if(window.WBSync) return WBSync.readLocalEventState().events;
+  try{
+    const lijst = JSON.parse(localStorage.getItem(EVENT_STORE_KEY) || '[]');
+    return Array.isArray(lijst) ? lijst.filter(e => e && e.date && e.title) : [];
+  }catch(e){ return []; }
+}
+
+function zetPlannerSyncStatus(tekst){
+  const el = document.getElementById('planner-sync-status');
+  if(el) el.textContent = tekst;
+}
+
+function schrijfEventState(state){
+  if(window.WBSync){
+    const normaal = WBSync.writeLocalEventState(state);
+    renderPlanner();
+    // Evenementen worden altijd gedeeld (los van live-sync toggle voor drafts),
+    // zodat elke laptop dezelfde planning ziet.
+    WBSync.pushEventState(normaal)
+      .then(()=>zetPlannerSyncStatus('Evenementen gedeeld met alle laptops.'))
+      .catch(()=>zetPlannerSyncStatus('Lokaal opgeslagen; gedeelde sync volgt zodra verbinding lukt.'));
+    return;
+  }
+  schrijfEvents(state.events || []);
+}
+
+function schrijfEvents(events){
+  if(window.WBSync){
+    const state = WBSync.readLocalEventState();
+    state.events = events.map(ev => WBSync.normalizeEvent(ev)).filter(Boolean);
+    state.__ts = Date.now();
+    schrijfEventState(state);
+    return;
+  }
+  try{
+    const huidig = localStorage.getItem(EVENT_STORE_KEY);
+    if(huidig) localStorage.setItem(EVENT_BACKUP_KEY, JSON.stringify({ts:Date.now(), data:huidig}));
+  }catch(e){}
+  localStorage.setItem(EVENT_STORE_KEY, JSON.stringify(events));
+  renderPlanner();
+}
+
+function updateEventKoppeling(id, type, docNaam){
+  const state = window.WBSync ? WBSync.readLocalEventState() : null;
+  const events = state ? state.events : leesEvents();
+  const ev = events.find(item => item.id === id);
+  if(!ev) return;
+  if(type === 'wm') ev.wmDoc = docNaam || '';
+  else ev.hourlyDoc = docNaam || '';
+  ev.updated = Date.now();
+  if(state){
+    state.events = events;
+    state.__ts = ev.updated;
+    schrijfEventState(state);
+  } else {
+    schrijfEvents(events);
+  }
+}
+
+function leesDocNamen(prefix, datum){
+  try{
+    const lijst = JSON.parse(localStorage.getItem(prefix + datum) || '[]');
+    return [...new Set((Array.isArray(lijst) ? lijst : []).filter(Boolean))];
+  }catch(e){ return []; }
+}
+
+async function laadGedeeldeDocLijst(prefix, datum){
+  if(!window.WBSync || !WBSync.isEnabled() || !datum) return;
+  const key = prefix + datum;
+  if(docLijstSyncGeladen.has(key) || docLijstSyncBezig.has(key)) return;
+  docLijstSyncBezig.add(key);
+  try{
+    const remote = await WBSync.getJson(key);
+    const remoteLijst = Array.isArray(remote) ? remote : (Array.isArray(remote?.names) ? remote.names : []);
+    if(remoteLijst.length){
+      const lokaal = leesDocNamen(prefix, datum);
+      const merged = [...new Set([...lokaal, ...remoteLijst].filter(Boolean))];
+      localStorage.setItem(key, JSON.stringify(merged));
+      updateEventDocSelects();
+    }
+    docLijstSyncGeladen.add(key);
+  }catch(e){
+    // Lokaal blijft bruikbaar; bij een volgende datum/focus proberen we opnieuw.
+  }finally{
+    docLijstSyncBezig.delete(key);
+  }
+}
+
+function vulDocSelect(sel, prefix, datum, eventNaam, gewensteWaarde){
+  if(!sel) return;
+  const namen = leesDocNamen(prefix, datum);
+  sel.innerHTML = '';
+  const geen = document.createElement('option');
+  geen.value = '';
+  geen.textContent = 'Later koppelen';
+  sel.appendChild(geen);
+
+  const nieuw = document.createElement('option');
+  nieuw.value = '__event__';
+  nieuw.textContent = 'Nieuw/open met eventnaam';
+  sel.appendChild(nieuw);
+
+  namen.forEach(naam => {
+    const opt = document.createElement('option');
+    opt.value = naam;
+    opt.textContent = naam;
+    sel.appendChild(opt);
+  });
+
+  const waarden = [...sel.options].map(o => o.value);
+  if(waarden.includes(gewensteWaarde)) sel.value = gewensteWaarde;
+  else sel.value = eventNaam ? '__event__' : '';
+}
+
+function updateEventDocSelects(){
+  const datum = document.getElementById('event-datum')?.value || defaultEventDatum();
+  const naam = (document.getElementById('event-naam')?.value || '').trim();
+  const wmSel = document.getElementById('event-wm-doc');
+  const uurSel = document.getElementById('event-uur-doc');
+  const wm = wmSel ? (!wmSel.dataset.touched && naam && !wmSel.value ? '__event__' : wmSel.value) : '';
+  const uur = uurSel ? (!uurSel.dataset.touched && naam && !uurSel.value ? '__event__' : uurSel.value) : '';
+  vulDocSelect(wmSel, 'wb_wm_docs_', datum, naam, wm);
+  vulDocSelect(uurSel, 'wb_uurlijks_docs_', datum, naam, uur);
+  laadGedeeldeDocLijst('wb_wm_docs_', datum);
+  laadGedeeldeDocLijst('wb_uurlijks_docs_', datum);
+}
+
+function syncEventEindDatum(){
+  const startEl = document.getElementById('event-datum');
+  const eindEl = document.getElementById('event-einddatum');
+  const dagenEl = document.getElementById('event-dagen');
+  if(!startEl || !eindEl || !dagenEl || !startEl.value) return;
+  const start = parseISO(startEl.value);
+  let eind = parseISO(eindEl.value);
+  if(!eind || eind < start){
+    eind = start;
+    eindEl.value = startEl.value;
+  }
+  eindEl.min = startEl.value;
+  dagenEl.value = String(dagenTussen(start, eind) + 1);
+}
+
+function syncEventDagen(){
+  const startEl = document.getElementById('event-datum');
+  const eindEl = document.getElementById('event-einddatum');
+  const dagenEl = document.getElementById('event-dagen');
+  if(!startEl || !eindEl || !dagenEl || !startEl.value) return;
+  const start = parseISO(startEl.value);
+  const dagen = Math.max(1, Math.min(31, parseInt(dagenEl.value || '1', 10) || 1));
+  dagenEl.value = String(dagen);
+  eindEl.min = startEl.value;
+  eindEl.value = isoDatum(addDagen(start, dagen - 1));
+}
+
+function resolvedDocNaam(waarde, titel){
+  if(waarde === '__event__') return titel;
+  return waarde || '';
+}
+
+function bewaarEvent(e){
+  e.preventDefault();
+  const idEl = document.getElementById('event-id');
+  const datum = document.getElementById('event-datum').value;
+  const eindDatum = document.getElementById('event-einddatum').value || datum;
+  const titel = document.getElementById('event-naam').value.trim();
+  if(!datum || !titel) return;
+  const eind = eventEindDatum({date: datum, endDate: eindDatum});
+
+  const state = window.WBSync ? WBSync.readLocalEventState() : null;
+  const bestaand = state ? state.events : leesEvents();
+  const id = idEl.value || ('evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7));
+  const updated = Date.now();
+  const item = {
+    id,
+    date: datum,
+    endDate: isoDatum(eind),
+    days: eventDuur({date: datum, endDate: isoDatum(eind)}),
+    title: titel,
+    location: document.getElementById('event-locatie').value.trim(),
+    wmDoc: resolvedDocNaam(document.getElementById('event-wm-doc').value, titel),
+    hourlyDoc: resolvedDocNaam(document.getElementById('event-uur-doc').value, titel),
+    updated
+  };
+  const volgende = bestaand.filter(ev => ev.id !== id);
+  volgende.push(item);
+  if(state){
+    state.events = volgende;
+    state.__ts = updated;
+    if(state.deleted) delete state.deleted[id];
+    schrijfEventState(state);
+  } else {
+    schrijfEvents(volgende);
+  }
+  resetEventForm();
+}
+
+function resetEventForm(){
+  document.getElementById('event-planner').classList.remove('bewerkt');
+  document.getElementById('event-id').value = '';
+  document.getElementById('event-datum').value = defaultEventDatum();
+  document.getElementById('event-einddatum').value = defaultEventDatum();
+  document.getElementById('event-einddatum').min = defaultEventDatum();
+  document.getElementById('event-dagen').value = '1';
+  document.getElementById('event-naam').value = '';
+  document.getElementById('event-locatie').value = '';
+  delete document.getElementById('event-wm-doc').dataset.touched;
+  delete document.getElementById('event-uur-doc').dataset.touched;
+  document.getElementById('event-save-btn').textContent = 'Opslaan';
+  updateEventDocSelects();
+}
+
+function bewerkEvent(id){
+  const ev = leesEvents().find(item => item.id === id);
+  if(!ev) return;
+  document.getElementById('event-planner').classList.add('bewerkt');
+  document.getElementById('event-id').value = ev.id;
+  document.getElementById('event-datum').value = ev.date;
+  document.getElementById('event-einddatum').min = ev.date;
+  document.getElementById('event-einddatum').value = isoDatum(eventEindDatum(ev));
+  document.getElementById('event-dagen').value = String(eventDuur(ev));
+  document.getElementById('event-naam').value = ev.title;
+  document.getElementById('event-locatie').value = ev.location || '';
+  document.getElementById('event-wm-doc').dataset.touched = '1';
+  document.getElementById('event-uur-doc').dataset.touched = '1';
+  vulDocSelect(document.getElementById('event-wm-doc'), 'wb_wm_docs_', ev.date, ev.title, ev.wmDoc || '');
+  vulDocSelect(document.getElementById('event-uur-doc'), 'wb_uurlijks_docs_', ev.date, ev.title, ev.hourlyDoc || '');
+  document.getElementById('event-save-btn').textContent = 'Bijwerken';
+  document.getElementById('event-naam').focus();
+}
+
+function wisEvent(id){
+  const ev = leesEvents().find(item => item.id === id);
+  if(!ev) return;
+  if(!confirm('Evenement "' + ev.title + '" definitief verwijderen? De gekoppelde documenten blijven bestaan.')) return;
+  if(window.WBSync){
+    const state = WBSync.readLocalEventState();
+    const ts = Date.now();
+    state.events = state.events.filter(item => item.id !== id);
+    state.deleted = state.deleted || {};
+    state.deleted[id] = ts;
+    state.__ts = ts;
+    schrijfEventState(state);
+  } else {
+    schrijfEvents(leesEvents().filter(item => item.id !== id));
+  }
+  if(document.getElementById('event-id').value === id) resetEventForm();
+}
+
+function ontkoppelEventDoc(type, id){
+  const ev = leesEvents().find(item => item.id === id);
+  if(!ev) return;
+  const label = type === 'wm' ? 'WM-document' : 'Uurlijks-document';
+  if(!confirm(label + ' loskoppelen van "' + ev.title + '"? Het document zelf blijft bewaard.')) return;
+  updateEventKoppeling(id, type, '');
+}
+
+function openEventDoc(type, id){
+  const ev = leesEvents().find(item => item.id === id);
+  if(!ev) return;
+  const doc = (type === 'wm' ? ev.wmDoc : ev.hourlyDoc) || ev.title;
+  const pagina = type === 'wm' ? 'weerbewaking_rijnmond.html' : 'weerbewaking_uurlijks.html';
+  const extra = ev.location ? '&plaats=' + encodeURIComponent(ev.location) : '';
+  window.location.href = cacheBustDocUrl(pagina + '?datum=' + encodeURIComponent(ev.date) + '&doc=' + encodeURIComponent(doc) + '&eventId=' + encodeURIComponent(ev.id) + '&eventType=' + encodeURIComponent(type) + extra);
+}
+
+async function controleerDocStatussen(events){
+  if(!window.WBSync || docStatusBezig) return;
+  docStatusBezig = true;
+  const keys = [...new Set(events.flatMap(ev => {
+    const wm = ev.wmDoc || ev.title;
+    const uur = ev.hourlyDoc || ev.title;
+    return [
+      docDraftKey('wm', ev.date, wm),
+      docDraftKey('uur', ev.date, uur)
+    ];
+  }))];
+  let veranderd = false;
+  for(const key of keys){
+    let status = false;
+    try{
+      status = !!localStorage.getItem(key) || await WBSync.sharedKeyHasData(key);
+    }catch(e){}
+    if(gedeeldeDocStatus.get(key) !== status){
+      gedeeldeDocStatus.set(key, status);
+      veranderd = true;
+    }
+  }
+  docStatusBezig = false;
+  if(veranderd) renderPlanner();
+}
+
+function planDocStatusControle(events){
+  clearTimeout(docStatusTimer);
+  docStatusTimer = setTimeout(()=>controleerDocStatussen(events), 250);
+}
+
+async function syncGedeeldePlanning(initieel=false){
+  if(!window.WBSync) return;
+  try{
+    const resultaat = await WBSync.syncEventState();
+    if(resultaat.localChanged) {
+      updateEventDocSelects();
+      renderPlanner();
+    }
+    zetPlannerSyncStatus(initieel ? 'Evenementen geladen van alle laptops.' : 'Evenementen bijgewerkt vanaf andere laptops.');
+  }catch(e){
+    zetPlannerSyncStatus('Evenementen lokaal beschikbaar; deel-sync probeert opnieuw.');
+  }
+}
+
+function startGedeeldePlanningSync(){
+  if(planningSyncGestart || !window.WBSync) return;
+  planningSyncGestart = true;
+  try{ WBSync.writeLocalEventState(WBSync.readLocalEventState()); }catch(e){}
+  WBSync.initToggle({
+    onEnable(){
+      WBSync.migrateLocalStorage(['wb_wm_draft_','wb_uurlijks_draft_','wb_wm_docs_','wb_uurlijks_docs_','wb_rrdk_draft_','wb_rrdk_docs_','wb_rrdk_tabel_']).catch(()=>{});
+      syncGedeeldePlanning(true);
+      updateEventDocSelects();
+      renderPlanner();
+    },
+    onDisable(){
+      renderPlanner();
+    }
+  });
+  if(WBSync.isEnabled()){
+    WBSync.migrateLocalStorage(['wb_wm_draft_','wb_uurlijks_draft_','wb_wm_docs_','wb_uurlijks_docs_','wb_rrdk_draft_','wb_rrdk_docs_','wb_rrdk_tabel_']).catch(()=>{});
+  }
+  // Evenementenplanning altijd syncen, los van de live-sync toggle voor drafts.
+  syncGedeeldePlanning(true);
+  // Sync-interval: 5 minuten i.p.v. 30 seconden om Cloudflare Workers-quota te sparen.
+  // Bij tab-focus / visibilitychange wordt sowieso direct opnieuw gesynchroniseerd.
+  setInterval(()=>{ if(document.visibilityState === 'visible') syncGedeeldePlanning(false); }, 300000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible') syncGedeeldePlanning(false);
+  });
+}
+
+function renderPlanner(){
+  const grid = document.getElementById('planner-grid');
+  if(!grid) return;
+  const jaar = plannerJaar();
+  const events = leesEvents().sort((a,b) => (a.date || '').localeCompare(b.date || '') || (a.title || '').localeCompare(b.title || ''));
+  const totaal = events.filter(ev => {
+    const d = parseISO(ev.date);
+    return d && d.getFullYear() === jaar && PLANNER_MONTHS.includes(d.getMonth());
+  }).length;
+  const meta = document.getElementById('planner-meta');
+  if(meta) meta.textContent = jaar + ' · ' + totaal + ' event' + (totaal === 1 ? '' : 's') + ' gepland';
+  const cardCount = document.getElementById('event-card-count');
+  if(cardCount) cardCount.textContent = totaal + ' event' + (totaal === 1 ? '' : 's') + ' · jun-okt';
+
+  grid.innerHTML = PLANNER_MONTHS.map(maand => {
+    const maandEvents = events.filter(ev => {
+      const d = parseISO(ev.date);
+      return d && d.getFullYear() === jaar && d.getMonth() === maand;
+    });
+    const body = maandEvents.length ? maandEvents.map(ev => {
+      const d = parseISO(ev.date);
+      const wm = ev.wmDoc || ev.title;
+      const uur = ev.hourlyDoc || ev.title;
+      const duur = eventDuurLabel(ev);
+      const wmStatus = docStatusKnop('wm', ev.date, wm);
+      const uurStatus = docStatusKnop('uur', ev.date, uur);
+      return `
+        <article class="event-rij">
+          <div class="event-dag"><span class="wd">${DAG_KORT[d.getDay()]}</span><span class="nr">${d.getDate()}</span></div>
+          <div class="event-body">
+            <div class="event-titel">${escapeHTML(ev.title)}</div>
+            ${ev.location ? `<div class="event-loc">${escapeHTML(ev.location)}</div>` : ''}
+            <div class="event-duur">${escapeHTML(duur)}</div>
+            <div class="event-docs">
+              <span class="event-pill">WM: ${escapeHTML(wm)}</span>
+              <span class="event-pill">Uur: ${escapeHTML(uur)}</span>
+            </div>
+            <div class="event-statussen">${wmStatus}${uurStatus}</div>
+            <div class="event-knoppen">
+              <button type="button" class="event-actie" onclick="openEventDoc('wm','${escapeHTML(ev.id)}')">WM</button>
+              <button type="button" class="event-actie" onclick="openEventDoc('uur','${escapeHTML(ev.id)}')">Uurlijks</button>
+              ${ev.wmDoc ? `<button type="button" class="event-actie sec" onclick="ontkoppelEventDoc('wm','${escapeHTML(ev.id)}')">Los WM</button>` : ''}
+              ${ev.hourlyDoc ? `<button type="button" class="event-actie sec" onclick="ontkoppelEventDoc('uur','${escapeHTML(ev.id)}')">Los uur</button>` : ''}
+              <button type="button" class="event-actie sec" onclick="bewerkEvent('${escapeHTML(ev.id)}')">Bewerk</button>
+              <button type="button" class="event-actie del" onclick="wisEvent('${escapeHTML(ev.id)}')">Verwijder</button>
+            </div>
+          </div>
+        </article>`;
+    }).join('') : '<div class="event-leeg">Nog geen evenementen.</div>';
+    return `
+      <section class="maand-kaart">
+        <div class="maand-kop"><strong>${MAANDEN_LANG[maand]}</strong><span>${maandEvents.length} gepland</span></div>
+        <div class="event-lijst">${body}</div>
+      </section>`;
+  }).join('');
+  planDocStatusControle(events);
+}
+
+function initPlanner(){
+  const form = document.getElementById('event-form');
+  if(!form) return;
+  document.getElementById('event-datum').value = defaultEventDatum();
+  document.getElementById('event-einddatum').value = defaultEventDatum();
+  document.getElementById('event-einddatum').min = defaultEventDatum();
+  document.getElementById('event-dagen').value = '1';
+  document.getElementById('event-datum').addEventListener('change', () => {
+    syncEventDagen();
+    updateEventDocSelects();
+  });
+  document.getElementById('event-einddatum').addEventListener('change', syncEventEindDatum);
+  document.getElementById('event-dagen').addEventListener('change', syncEventDagen);
+  document.getElementById('event-dagen').addEventListener('input', syncEventDagen);
+  document.getElementById('event-naam').addEventListener('input', updateEventDocSelects);
+  document.getElementById('event-wm-doc').addEventListener('change', e => { e.currentTarget.dataset.touched = '1'; });
+  document.getElementById('event-uur-doc').addEventListener('change', e => { e.currentTarget.dataset.touched = '1'; });
+  updateEventDocSelects();
+  renderPlanner();
+  startGedeeldePlanningSync();
+}
+window.addEventListener('focus', () => { syncGedeeldePlanning(false); updateEventDocSelects(); renderPlanner(); });
+window.addEventListener('storage', () => { updateEventDocSelects(); renderPlanner(); });
+initPlanner();
+
+/* ── Iframe-navigatie: parent-history bijwerken zodat de browser-back keurig terug komt
+       naar deze weerbewaking-hoofdpagina i.p.v. helemaal voorbij #weerbewaking. ── */
+(function setupIframeBack(){
+  if(window.self === window.top) return; // alleen wanneer ingebed in index.html
+  let ouder;
+  try{ ouder = window.parent; if(!ouder || !ouder.document) return; }
+  catch(e){ return; }
+
+  // Eén keer een popstate-handler op de parent installeren
+  if(!ouder.__wbBackHandlerInstalled){
+    ouder.__wbBackHandlerInstalled = true;
+    ouder.addEventListener('popstate', function(){
+      try{
+        const iframe = ouder.document.querySelector('#panel-weerbewaking iframe');
+        if(!iframe) return;
+        const path = iframe.contentWindow?.location?.pathname || '';
+        const naam = path.split('/').pop() || '';
+        // 1) Iframe staat op een sub-pagina (Ridderkerk/Uurlijks/Fey/Kleurpluim/…) → terug naar home
+        if(naam && naam !== 'weerbewaking.html' && (/^weerbewaking_/.test(naam) || naam === 'kleurpluim.html')){
+          iframe.contentWindow.location.replace('weerbewaking.html');
+          return;
+        }
+        // 2) Iframe staat op weerbewaking.html maar de planner is open → terug naar overzicht
+        try{
+          const innerDoc = iframe.contentDocument;
+          const planner = innerDoc && innerDoc.getElementById('event-planner');
+          if(planner && planner.classList.contains('zichtbaar')){
+            if(typeof iframe.contentWindow.toonOverzicht === 'function'){
+              iframe.contentWindow.toonOverzicht();
+            } else {
+              planner.classList.remove('zichtbaar');
+              const ov = innerDoc.getElementById('menu-overzicht');
+              if(ov) ov.classList.remove('verborgen');
+            }
+          }
+        }catch(e){}
+      }catch(err){}
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    const link = e.target.closest && e.target.closest('a.menu-kaart[href]');
+    if(!link) return;
+    const href = link.getAttribute('href') || '';
+    if(!href || /^(https?:|mailto:|javascript:|#)/i.test(href)) return;
+    e.preventDefault();
+    try{
+      const subHash = {
+        'weerbewaking_wbgt.html': '#weerbewaking-wbgt',
+      };
+      const hash = subHash[href] || '#weerbewaking';
+      ouder.history.pushState({wbSub: href}, '', hash);
+    }catch(err){}
+    // Vervang de iframe-URL zodat de iframe geen eigen extra history-entry maakt;
+    // de parent-pushState is dan het enige terugkeerpunt.
+    window.location.replace(cacheBustDocUrl(href));
+  });
+})();
+</script>
+</body>
+</html>

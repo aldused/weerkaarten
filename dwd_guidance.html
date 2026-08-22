@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DWD Guidance (NL)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#333;padding:16px 20px}
+
+.koptekst{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.koptekst h2{font-size:1.05em;color:#00205b}
+.koptekst .bron{font-size:0.75em;color:#888}
+
+.tabs{display:flex;gap:4px;margin-bottom:0}
+.tab{padding:8px 16px;background:#dce6f0;border:1px solid #b0c4d8;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-size:0.82em;color:#333;font-weight:600}
+.tab:hover{background:#c8d8ec}
+.tab.actief{background:white;border-bottom:1px solid white;color:#00205b}
+
+.inhoud{background:white;border:1px solid #b0c4d8;border-radius:0 6px 6px 6px;padding:16px 20px;min-height:300px}
+
+.meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e8ecf0;flex-wrap:wrap;gap:8px}
+.meta-info{font-size:0.78em;color:#888}
+.meta-info strong{color:#333}
+
+.toggle{font-size:0.75em;padding:5px 10px;background:#e8ecf0;border:1px solid #c8d4e0;border-radius:5px;color:#555;cursor:pointer}
+.toggle:hover{background:#d0d8e4}
+.toggle.actief{background:#003366;color:white;border-color:#003366}
+
+.tekst{font-size:0.9em;line-height:1.72;color:#334155;max-width:980px}
+.tekst p{margin:0 0 14px;max-width:86ch}
+.tekst p.inleiding{font-size:1.02em;line-height:1.65;color:#1e293b;font-weight:500;padding:12px 14px;background:#f7f9fc;border-left:4px solid #2b6cb0;border-radius:0 7px 7px 0}
+.tekst h3{color:#00205b;font-size:1em;margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid #e3e8ef;font-weight:700}
+.tekst h3:first-child{margin-top:0}
+.tekst h4{display:flex;align-items:center;gap:9px;color:#173b70;background:linear-gradient(90deg,#eaf3ff 0,#f8fbff 72%,transparent 100%);border-left:4px solid #2b6cb0;border-radius:0 7px 7px 0;padding:8px 12px;font-size:.88em;margin:24px 0 10px;font-weight:750;letter-spacing:.01em;max-width:86ch}
+.tekst h4::before{content:"";width:7px;height:7px;border-radius:50%;background:#2b6cb0;box-shadow:0 0 0 3px rgba(43,108,176,.13);flex:0 0 auto}
+.tekst h5{display:flex;align-items:center;gap:7px;color:#475569;font-size:.8em;margin:18px 0 8px;font-weight:700;max-width:86ch}
+.tekst h5::before{content:"☾";color:#64748b;font-size:1.05em}
+.tekst .code-regel{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#64748b;font-size:.78em;margin-bottom:10px}
+
+@media(max-width:620px){
+  body{padding:12px 10px}
+  .inhoud{padding:14px 13px}
+  .tab{padding:8px 10px}
+  .tekst p{max-width:none}
+}
+
+.laden{text-align:center;padding:40px;color:#999;font-size:0.85em}
+.laden::after{content:"";display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#003366;border-radius:50%;animation:draai .7s linear infinite;margin-left:8px;vertical-align:middle}
+@keyframes draai{to{transform:rotate(360deg)}}
+
+.fout{background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:12px;color:#cc2200;font-size:0.85em}
+</style>
+</head>
+<body>
+
+<div class="koptekst">
+  <h2>🇩🇪 DWD Synoptische Guidance</h2>
+  <span class="bron">Automatisch vertaald met meteorologische vakwoordenlijst · Bron: Deutscher Wetterdienst</span>
+</div>
+
+<div class="tabs">
+  <div class="tab actief" id="tab-kort" onclick="wisselTab('kurzfrist')">Korte termijn (0–3 dagen)</div>
+  <div class="tab" id="tab-mid" onclick="wisselTab('mittelfrist')">Middellange termijn (4–7 dagen)</div>
+</div>
+
+<div class="inhoud">
+  <div class="meta">
+    <div class="meta-info">
+      Uitgegeven: <strong id="uitgegeven">–</strong> · Opgehaald: <strong id="opgehaald">–</strong>
+    </div>
+    <button class="toggle" id="taalToggle" onclick="wisselTaal()">Toon origineel (Duits)</button>
+  </div>
+  <div id="tekst" class="tekst">
+    <div class="laden">Guidance ophalen</div>
+  </div>
+</div>
+
+<script>
+const state = { tab: "kurzfrist", origineel: false, data: null };
+
+function wisselTab(tab) {
+  state.tab = tab;
+  document.getElementById("tab-kort").classList.toggle("actief", tab === "kurzfrist");
+  document.getElementById("tab-mid").classList.toggle("actief", tab === "mittelfrist");
+  render();
+}
+
+function wisselTaal() {
+  state.origineel = !state.origineel;
+  const btn = document.getElementById("taalToggle");
+  btn.textContent = state.origineel ? "Toon vertaling (NL)" : "Toon origineel (Duits)";
+  btn.classList.toggle("actief", state.origineel);
+  render();
+}
+
+function formateer(tekst, origineel = false) {
+  if (!tekst) return "";
+
+  const escapeHtml = waarde => String(waarde).replace(/[&<>"']/g, teken => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;"
+  })[teken]);
+
+  const sectieKop = /^(?:GWL\b|Synoptische\b|Modelvergelijking\b|Modellvergleich\b|Voorspelling\b|Vorhersage\b|Beoordeling\b|Bewertung\b|Vergelijking\b|Vergleich\b|Evaluatie\b|Konsistenz\b|Kans op\b|Waarschijnlijk(?:heid|heden)\b|Wahrscheinlichkeiten\b|Basis voor\b|Basis für\b)/i;
+  const labelKop = /^(ROOKPLUIMEN|RAUCHFAHNEN|ROEBFAHNEN|CLUSTERS?|CONCLUSIE|FAZIT|ONWEER|GEWIT+ER|HITTE|HITZE|BELANGRIJKSTE PUNTEN|SCHLAGZEILE):\s*(.*)$/i;
+  const dagen = "maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|weekend|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag";
+  const dagMarker = new RegExp(`^DAG:\\s*(${dagen})$`, "i");
+  const dagKop = new RegExp(`^(?:(?:op|komende|aanstaande)\\s+)?(${dagen})(?:\\.{2,}|[,.:])?\\s+(.+)$`, "i");
+  const nachtKop = new RegExp(`^(?:in|tijdens) de nacht (?:naar|tot|van)\\s+(?:de\\s+)?(${dagen})\\b`, "i");
+
+  let schoon = String(tekst)
+    .replace(/\r\n?/g, "\n")
+    .replace(/(?:_\s*){8,}/g, "\n\n")
+    .replace(/(?:-\s*){12,}/g, "\n\n")
+    .replace(/^\s*=+\s*$/gm, "\n")
+    .replace(/^\s*S[XA-Z]{3}\d{2}\s+DWAV.*$/gmi, "")
+    .replace(/^\s*(?:(?:S\s+Y)|SY)\s+N\s+O\s+P\s+T.*$/gmi, "")
+    .replace(/^\s*(?:ausgegeben am|uitgegeven op|gepubliceerd op).*$/gmi, "")
+    .replace(/\n[ \t]*\n+/g, "\n\n")
+    .trim();
+
+  const blokken = schoon.split(/\n{2,}/).map(blok =>
+    blok.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim()
+  ).filter(Boolean);
+
+  function alineasVan(blok, inleiding = false) {
+    let zinnen;
+    if (typeof Intl !== "undefined" && Intl.Segmenter) {
+      const segmenter = new Intl.Segmenter(origineel ? "de" : "nl", { granularity: "sentence" });
+      zinnen = Array.from(segmenter.segment(blok), deel => deel.segment.trim()).filter(Boolean);
+    } else {
+      zinnen = blok.match(/[^.!?]+(?:[.!?]+|$)/g) || [blok];
+    }
+
+    const groepen = [];
+    let groep = [];
+    let lengte = 0;
+    zinnen.forEach(zin => {
+      if (groep.length && (groep.length >= 3 || lengte + zin.length > 620)) {
+        groepen.push(groep.join(" "));
+        groep = [];
+        lengte = 0;
+      }
+      groep.push(zin);
+      lengte += zin.length + 1;
+    });
+    if (groep.length) groepen.push(groep.join(" "));
+
+    return groepen.map((alinea, index) => {
+      const klasse = inleiding && index === 0 ? ' class="inleiding"' : "";
+      return `<p${klasse}>${escapeHtml(alinea)}</p>`;
+    }).join("");
+  }
+
+  let eersteAlinea = true;
+  let tijdlijnActief = false;
+  return blokken.map(blok => {
+    if (sectieKop.test(blok) && blok.length < 170) {
+      tijdlijnActief = /^Synoptische\b/i.test(blok);
+      const gwl = blok.match(/^(GWL[^:]*):\s*(.*)$/i);
+      if (gwl) {
+        const code = gwl[2] ? `<div class="code-regel">${escapeHtml(gwl[2])}</div>` : "";
+        return `<h3>${escapeHtml(gwl[1])}</h3>${code}`;
+      }
+      return `<h3>${escapeHtml(blok.replace(/:$/, ""))}</h3>`;
+    }
+
+    const marker = blok.match(dagMarker);
+    if (marker) {
+      tijdlijnActief = true;
+      return `<h4>${escapeHtml(marker[1])}</h4>`;
+    }
+
+    const dag = blok.match(dagKop);
+    if (dag && tijdlijnActief) {
+      eersteAlinea = false;
+      return `<h4>${escapeHtml(dag[1])}</h4>${alineasVan(blok)}`;
+    }
+
+    const nacht = blok.match(nachtKop);
+    if (nacht && tijdlijnActief) {
+      eersteAlinea = false;
+      return `<h5>Nacht naar ${escapeHtml(nacht[1])}</h5>${alineasVan(blok)}`;
+    }
+
+    const label = blok.match(labelKop);
+    if (label) {
+      const nlLabel = {
+        RAUCHFAHNEN:"PLUIMEN", ROEBFAHNEN:"PLUIMEN", ROOKPLUIMEN:"PLUIMEN",
+        CLUSTER:"CLUSTERS", FAZIT:"CONCLUSIE", HITZE:"HITTE"
+      }[label[1].toUpperCase()] || (/^GEWIT+ER$/i.test(label[1]) ? "ONWEER" : label[1]);
+      const kop = origineel ? label[1] : nlLabel;
+      const rest = label[2] ? alineasVan(label[2]) : "";
+      return `<h4>${escapeHtml(kop)}</h4>${rest}`;
+    }
+
+    if (/^[A-Z]{4}\d{2}\s+[A-Z]{4}\s+\d{6}$/.test(blok)) {
+      return `<div class="code-regel">${escapeHtml(blok)}</div>`;
+    }
+
+    const isInleiding = eersteAlinea;
+    eersteAlinea = false;
+    return alineasVan(blok, isInleiding);
+  }).join("");
+}
+
+function render() {
+  const el = document.getElementById("tekst");
+  const uit = document.getElementById("uitgegeven");
+  const opg = document.getElementById("opgehaald");
+  if (!state.data) { el.innerHTML = '<div class="laden">Guidance ophalen</div>'; return; }
+  const d = state.data[state.tab];
+  if (!d) { el.innerHTML = '<div class="fout">Geen data voor deze termijn.</div>'; return; }
+  if (d.error) { el.innerHTML = `<div class="fout">${d.error}</div>`; return; }
+  el.innerHTML = formateer(state.origineel ? d.original : d.translated, state.origineel);
+  uit.textContent = d.issuedAtNl || d.issuedAt || "onbekend";
+  opg.textContent = d.fetchedAt ? new Date(d.fetchedAt).toLocaleString("nl-NL") : "–";
+}
+
+fetch("https://data.weerlab.nl/dwd_guidance.json?t=" + Date.now())
+  .then(r => r.json())
+  .then(data => { state.data = data; render(); })
+  .catch(e => {
+    document.getElementById("tekst").innerHTML =
+      `<div class="fout">Kon DWD guidance niet laden: ${e.message}</div>`;
+  });
+</script>
+</body>
+</html>

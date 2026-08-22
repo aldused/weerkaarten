@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WBGT Uurlijks — Weerbewaking</title>
+<script src="wbgt_core.js?v=20260605-tr2604"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  const wbIsLocalPreview = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+  const wbStandalonePreview = new URLSearchParams(window.location.search).get('standalone') === '1';
+  if (window.self === window.top && !wbStandalonePreview) {
+    window.location.replace('index.html#weerbewaking-wbgt-uurlijks');
+  } else if (!wbIsLocalPreview && sessionStorage.getItem('wb_unlocked') !== '1') {
+    window.location.replace('weerbewaking.html');
+  }
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0f1a;--bg2:#101827;--panel:#161f2e;--panel2:#111b2a;
+  --border:#263a55;--text:#d8e8f4;--muted:#7f99b4;--accent:#2ec4e8;
+  --brand:#1a5490;--warn:#f0c040;--danger:#ff7070;
+}
+body{font-family:Inter,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:10px 14px}
+.wrap{width:100%;max-width:1360px;margin:0 auto}
+
+/* ── Header ── */
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+  padding:20px 28px;border:1px solid var(--border);border-radius:8px;
+  background:linear-gradient(180deg,#142033 0%,#101827 100%);margin-bottom:14px}
+.eyebrow{font-size:.82rem;color:var(--accent);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}
+h1{font-size:1.65rem;color:#fff;line-height:1.15}
+.sub{font-size:.98rem;color:var(--muted);line-height:1.45;margin-top:8px;max-width:720px}
+.back{height:42px;padding:0 18px;border-radius:7px;border:1px solid #324866;
+  background:#111b2a;color:var(--text);font:800 .95rem Inter,system-ui,sans-serif;
+  cursor:pointer;white-space:nowrap}
+.back:hover{border-color:var(--accent);color:#fff}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+  background:var(--panel2);border:1px solid var(--border);border-radius:8px;
+  padding:16px 20px;margin-bottom:14px}
+.toolbar label{font-size:.95rem;color:var(--muted);font-weight:700;letter-spacing:.03em}
+.toolbar select,.toolbar input[type=text]{
+  font:inherit;font-size:1.05rem;padding:8px 12px;
+  border:1px solid #30465f;border-radius:6px;background:#0d1624;color:#fff;outline:none}
+.toolbar select:focus,.toolbar input:focus{border-color:var(--accent)}
+.toolbar button{font:700 1rem Inter,system-ui,sans-serif;height:42px;padding:0 16px;
+  background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer}
+.toolbar button:hover{background:#2467aa}
+.toolbar button.sec{background:#1e3050;color:#cfe7f7;border:1px solid #324866}
+.toolbar button.sec:hover{background:#253e68}
+.status-txt{font-size:.92rem;color:var(--muted)}
+.spacer{flex:1}
+
+/* ── Evenement balk ── */
+.evenement-bar{display:flex;align-items:center;gap:12px;
+  background:#13200d;border:1px solid #2a5020;border-left:5px solid #4a9040;
+  border-radius:6px;padding:12px 20px;margin-bottom:14px}
+.evenement-bar label{font-size:1rem;font-weight:800;color:#7dd068;
+  text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.evenement-bar input{flex:1;font:700 1.15rem Inter,system-ui,sans-serif;color:#a8e89a;
+  background:#0d1a09;border:1px solid #2a5020;border-radius:4px;padding:8px 12px;outline:none}
+.evenement-bar input:focus{border-color:#4a9040;box-shadow:0 0 0 2px rgba(74,144,64,.2)}
+.evenement-bar input::placeholder{color:#3a6036;font-weight:500}
+
+/* ── Foutmelding ── */
+.fout{padding:10px 14px;background:#1e0a0a;border:1px solid #5c1a1a;border-radius:6px;
+  color:var(--danger);font-size:.82rem;margin-bottom:10px}
+
+/* ── Tabellen ── */
+.tabel-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:960px){.tabel-grid{grid-template-columns:1fr}}
+
+.tabel-kaart{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tabel-kop{background:#0f1e30;padding:14px 18px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border)}
+.tabel-kop .dag{font-size:1.12rem;font-weight:800;color:#fff}
+.tabel-kop .model-tag{font-size:.9rem;color:var(--muted);font-weight:600}
+
+table.wt{width:100%;border-collapse:collapse}
+table.wt th{
+  font-size:.86rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--muted);background:#101b2c;padding:10px 12px;
+  border-bottom:2px solid var(--border);text-align:center;white-space:nowrap}
+table.wt th:first-child{text-align:left;padding-left:18px}
+table.wt td{padding:12px 14px;border-bottom:1px solid #1a2d44;
+  font-size:1.12rem;text-align:center;vertical-align:middle}
+table.wt td:first-child{text-align:left;padding-left:18px;
+  font-weight:800;color:var(--accent)}
+table.wt tr:last-child td{border-bottom:0}
+table.wt tr:hover td{background:#0d1e33}
+.uur-dag{display:inline-block;margin-right:5px;font-size:.78rem;color:var(--muted);
+  font-weight:900;text-transform:uppercase}
+
+/* Bewerkbare cel */
+.bew{
+  display:inline-block;min-width:44px;
+  border:1px dashed #2a4060;border-radius:4px;padding:3px 7px;
+  cursor:text;outline:none;transition:background .1s,border-color .1s;
+}
+.bew:hover{background:#132035;border-color:#3a6090}
+.bew:focus{background:#0d1f38;border-color:var(--accent);
+  box-shadow:0 0 0 2px rgba(46,196,232,.15)}
+.bew.gewijzigd{background:#1e1800;border-color:var(--warn);color:var(--warn)}
+
+/* Wind cel */
+.wind-cel{display:flex;flex-direction:column;align-items:center;gap:1px}
+.wind-richting{font-size:.82rem;color:var(--muted);line-height:1}
+.wind-snelheid{display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap}
+.wind-unit{font-size:.95rem;color:var(--text)}
+
+/* WBGT badge */
+.badge{display:inline-block;border-radius:6px;padding:5px 10px;
+  font-weight:900;font-size:1.18rem;color:#fff;min-width:72px;text-align:center;
+  text-shadow:0 1px 2px rgba(0,0,0,.3)}
+.badge.bew{border-color:rgba(255,255,255,.35);cursor:text}
+.badge.bew.gewijzigd{box-shadow:0 0 0 2px rgba(240,192,64,.22)}
+
+/* Hittekracht */
+.hk-wrap{display:flex;align-items:center;gap:8px}
+.hk-bar-bg{flex:1;height:11px;border-radius:6px;background:#1a2d44;overflow:hidden}
+.hk-bar-fill{height:100%;border-radius:5px;transition:width .25s}
+.hk-num{font-size:1.08rem;font-weight:900;min-width:36px;text-align:right}
+
+/* Leeg / status */
+.leeg{padding:30px;text-align:center;color:var(--muted);font-size:1rem}
+
+/* ── Legenda & formule ── */
+.legenda{display:none;margin-top:12px;flex-wrap:wrap;align-items:center;gap:8px;font-size:.86rem;color:var(--muted)}
+.legenda strong{color:var(--text)}
+.l-dot{width:13px;height:13px;border-radius:3px;flex-shrink:0;display:inline-block;vertical-align:middle}
+.formule-toelichting{display:none;margin-top:10px;font-size:.9rem;color:var(--muted);line-height:1.55;
+  padding:12px 18px;background:var(--panel2);border:1px solid var(--border);border-radius:6px}
+.formule-toelichting strong{color:#a8cde8}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid #263a55;
+  border-top-color:var(--accent);border-radius:50%;animation:spin .55s linear infinite;
+  vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <div>
+      <div class="eyebrow">Weerbewaking</div>
+      <h1>WBGT Uurlijks</h1>
+      <div class="sub">Eenvoudige uurlijkse WBGT-tabel voor evenementen. Per uur zie je WBGT en hittekracht; klik een WBGT-waarde om die handmatig bij te stellen.</div>
+    </div>
+    <button class="back" type="button" onclick="gaTerug()">← Weerbewaking</button>
+  </div>
+
+  <div class="toolbar">
+    <label>Model:</label>
+    <select id="model-sel">
+      <option value="harmonie" selected>HARMONIE 2×2 km</option>
+      <option value="icond2">DWD ICON-D2</option>
+      <option value="mix_harmonie_icond2">Modelmix HARMONIE + DWD ICON-D2</option>
+      <option value="icond2ruc">ICON-D2 RUC (uurlijks)</option>
+    </select>
+    <label style="margin-left:10px">Startuur:</label>
+    <select id="startuur-sel" style="min-width:110px"></select>
+    <label style="margin-left:10px">Plaats:</label>
+    <input type="text" id="plaats-in" value="" placeholder="Plaatsnaam of lat,lon" style="width:180px">
+    <button id="zoek-btn">Zoek</button>
+    <select id="bewaarde-plaats-sel" title="Bewaarde plaats laden" style="min-width:145px">
+      <option value="">Bewaarde plaats…</option>
+    </select>
+    <button class="sec" id="bewaar-plaats-btn" type="button" title="Bewaar deze plaats en modelkeuze">Bewaar</button>
+    <span class="spacer"></span>
+    <span class="status-txt" id="data-status">–</span>
+    <button class="sec" id="ververs-btn" title="Opnieuw laden">↻</button>
+    <button class="sec" id="png-btn" title="Download tabel als PNG" onclick="exporteerPNG()">⬇ PNG</button>
+  </div>
+
+  <div id="fout-melding" class="fout" style="display:none"></div>
+
+  <div class="evenement-bar">
+    <label>Evenement:</label>
+    <input type="text" id="evenement-in" placeholder="bijv. Wielerklassieker Rotterdam · 10:00–16:00 uur">
+  </div>
+
+  <div class="tabel-grid">
+    <div class="tabel-kaart">
+      <div class="tabel-kop">
+        <span class="dag" id="dag-lbl-1">–</span>
+        <span class="model-tag" id="model-tag-1">–</span>
+      </div>
+      <div id="tabel-1-wrap"><div class="leeg">Voer een plaatsnaam in en klik Zoek.</div></div>
+    </div>
+    <div class="tabel-kaart">
+      <div class="tabel-kop">
+        <span class="dag" id="dag-lbl-2">–</span>
+        <span class="model-tag" id="model-tag-2">–</span>
+      </div>
+      <div id="tabel-2-wrap"><div class="leeg">–</div></div>
+    </div>
+  </div>
+
+  <div class="legenda">
+    <strong>WBGT risico:</strong>
+    <span><span class="l-dot" style="background:#4472C4"></span> &lt;19 Laag</span>
+    <span><span class="l-dot" style="background:#70AD47"></span> 19–23 Matig</span>
+    <span><span class="l-dot" style="background:#FFD700"></span> 23–28 Hoog</span>
+    <span><span class="l-dot" style="background:#FFA500"></span> 28–32 Erg hoog</span>
+    <span><span class="l-dot" style="background:#FF4500"></span> ≥32 Extreem</span>
+    <span style="margin-left:10px">Klik een WBGT-badge om handmatig bij te stellen; ESC herstelt de modelwaarde.</span>
+  </div>
+  <div class="formule-toelichting">
+    <strong>Met zon (≥ 50 W/m²):</strong> WBGT = 0,7 × T<sub>nw</sub> + 0,2 × T<sub>g</sub> + 0,1 × T<sub>a</sub> &nbsp;|&nbsp;
+    <strong>Zonder zon / schaduw:</strong> WBGT = 0,7 × T<sub>nw</sub> + 0,3 × T<sub>a</sub> &nbsp;|&nbsp;
+    <strong>Hittekracht</strong> = WBGT ÷ 2 − 6½ &nbsp;|&nbsp;
+    T<sub>nw</sub> via Liljegren (2008) warmtebalans &nbsp;|&nbsp;
+    Straling wordt geschat uit bewolking + zonshoek op datum/tijd/locatie en is handmatig aanpasbaar
+  </div>
+
+</div><!-- .wrap -->
+
+<script>
+/* ============================================================
+   WBGT UURLIJKS — Weerbewaking
+   Berekening via window.WBGT (wbgt_core.js)
+   Data: HARMONIE / ICON-D2 / ICON-D2 RUC via harmonie-data.weerlab.nl
+   ============================================================ */
+
+/* ── Constanten ── */
+const HARM_BASE = 'https://harmonie-data.weerlab.nl/';
+const MODELS = {
+  harmonie:  { meta: 'harmonie_canvas_meta.json',  label: 'HARMONIE 2×2 km' },
+  icond2:    { meta: 'icond2_canvas_meta.json',    label: 'DWD ICON-D2' },
+  mix_harmonie_icond2: {
+    label: 'Modelmix HARMONIE + DWD ICON-D2',
+    members: ['harmonie', 'icond2']
+  },
+  icond2ruc: { meta: 'icond2ruc_canvas_meta.json', label: 'ICON-D2 RUC' },
+};
+const NSTEPS        = 12;
+const SAMPLE_KM     = 10;
+const SAMPLE_N      = 6;
+const HK_MAX_BAR    = 10;
+const PLAATSEN_KEY  = 'wbgt_uurlijks_bewaarde_plaatsen_v1';
+const PLAATS_LAATST = 'wbgt_uurlijks_laatste_plaats_v1';
+
+/* ── State ── */
+let huidigModel  = 'harmonie';
+let metaCache    = {};
+let huidigeMeta  = null;
+let huidigePunt  = null;
+let modelRijen   = [];  // [{t, temp, rv, wind_u, wind_v, bewolking}]
+let ovs          = [];  // [{temp?, rv?, wind?}]  gebruiker-overschrijvingen per rij
+
+/* ── Navigatie ── */
+function gaTerug() {
+  if (window.self !== window.top) window.location.replace('weerbewaking.html');
+  else window.location.href = 'index.html#weerbewaking';
+}
+
+/* ── Helpers ── */
+const DAGNAMEN = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+const MAANDEN  = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+function fmtDag(dt) {
+  return `${DAGNAMEN[dt.getDay()]} ${dt.getDate()} ${MAANDEN[dt.getMonth()]}`;
+}
+function fmtUur(dt) {
+  return String(dt.getHours()).padStart(2,'0') + ':00';
+}
+function dagKey(dt) {
+  return `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+}
+function fmtDagBereik(rijData) {
+  if (!rijData.length) return '–';
+  const eerste = rijData[0].rij.t;
+  const laatste = rijData[rijData.length - 1].rij.t;
+  const eersteDag = fmtDag(eerste);
+  const laatsteDag = fmtDag(laatste);
+  return dagKey(eerste) === dagKey(laatste) ? eersteDag : `${eersteDag} → ${laatsteDag}`;
+}
+function fmtUurMetDag(dt, basisDt, html = false) {
+  const uur = fmtUur(dt);
+  if (!basisDt || dagKey(dt) === dagKey(basisDt)) return uur;
+  const dag = DAGNAMEN[dt.getDay()].slice(0, 2);
+  return html ? `<span class="uur-dag">${dag}</span>${uur}` : `${dag} ${uur}`;
+}
+function f1(v) { return v == null || !Number.isFinite(v) ? '–' : v.toFixed(1); }
+function f0(v) { return v == null || !Number.isFinite(v) ? '–' : Math.round(v).toString(); }
+
+function setStatus(html) {
+  document.getElementById('data-status').innerHTML = html;
+}
+function toonFout(txt) {
+  const el = document.getElementById('fout-melding');
+  el.style.display = txt ? '' : 'none';
+  el.textContent = txt;
+}
+
+/* ── Windrichting ── */
+const WINDPTS = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+function windRichting(u, v) {
+  if (u == null || v == null) return '–';
+  const dir = (Math.atan2(-u, -v) * 180 / Math.PI + 360) % 360;
+  return WINDPTS[Math.round(dir / 22.5) % 16];
+}
+function windBft(u, v) {
+  if (u == null || v == null) return null;
+  const spd = Math.sqrt(u*u + v*v);
+  if (spd < 0.3)  return 0;
+  if (spd < 1.6)  return 1;
+  if (spd < 3.4)  return 2;
+  if (spd < 5.5)  return 3;
+  if (spd < 8.0)  return 4;
+  if (spd < 10.8) return 5;
+  if (spd < 13.9) return 6;
+  if (spd < 17.2) return 7;
+  if (spd < 20.8) return 8;
+  if (spd < 24.5) return 9;
+  if (spd < 28.5) return 10;
+  if (spd < 32.7) return 11;
+  return 12;
+}
+function windMs(u, v) {
+  if (u == null || v == null) return null;
+  return Math.sqrt(u*u + v*v);
+}
+
+function modelCloudFraction(rij) {
+  if (!rij || rij.bewolking == null) return 0.5;
+  return Math.max(
+    (rij.bew_hoog || 0) * 0.2,
+    rij.bew_mid  || 0,
+    rij.bew_laag || 0
+  );
+}
+
+function stralingVoorRij(rij, ovsRij = {}) {
+  if (!huidigePunt) return {Sr: null, SrModel: null, cosZ: null, cloud: null};
+  const cloud = modelCloudFraction(rij);
+  const cosZ = WBGT.solarZenithCos(huidigePunt.lat, huidigePunt.lon, rij.t);
+  const SrModel = WBGT.estimateGhi(cosZ, cloud);
+  const Sr = ovsRij.sr != null ? ovsRij.sr : SrModel;
+  return {Sr, SrModel, cosZ, cloud};
+}
+
+/* ── WBGT berekening per rij ──────────────────────────────────────────
+ *
+ *  Formules (ISO 7243 / Liljegren):
+ *    Met zon (Sr >= 50 W/m²):  WBGT = 0.7*Tnw + 0.2*Tg + 0.1*Ta
+ *    Zonder zon / nacht volgt dezelfde formule met vrijwel Tg = Ta.
+ *
+ *  Tnw: natuurlijke natteboltemp via Liljegren/Kong-Huber warmtebalans
+ *  Tg:  boltemperatuur via Liljegren/Kong-Huber op 50,8mm bol
+ *  Wind: 10m-wind minimaal 0,62 m/s en stabiliteitsafhankelijk naar 2m
+ *  Sr:  zonnestraling in W/m², standaard geschat uit bewolking + zonshoek
+ *
+ *  Hittekracht volgt de KNMI-klassen: 0 onder 14°C WBGT, daarna per 2°C omhoog.
+ * ---------------------------------------------------------------------- */
+function berekenRij(rij, ovsRij) {
+  if (!huidigePunt) return null;
+
+  // Effectieve invoerwaarden (overschrijving of model)
+  const Ta = ovsRij.temp  != null ? ovsRij.temp  : rij.temp;
+  const RH = ovsRij.rv    != null ? ovsRij.rv    : rij.rv;
+  const ws = ovsRij.wind  != null ? ovsRij.wind  : windMs(rij.wind_u, rij.wind_v);
+
+  if (!Number.isFinite(Ta) || !Number.isFinite(RH)) return null;
+
+  const {Sr, SrModel, cosZ, cloud} = stralingVoorRij(rij, ovsRij);
+
+  const res = WBGT.wbgtComponents(Ta, RH, Sr, Number.isFinite(ws) ? ws : 1.0, cosZ, cloud);
+  if (!res) return null;
+
+  // Gebruiker-override WBGT → vervang berekende waarde
+  const wbgtEff = ovsRij.wbgt != null ? ovsRij.wbgt : res.WBGT;
+  const hk = WBGT.wbgtHittekracht(wbgtEff);
+
+  return {
+    Ta, RH, ws, Sr, SrModel, cosZ, cloud,
+    Tnw:        res.Tnw,
+    Tg:         res.Tg,
+    WBGT:       wbgtEff,
+    risico:     ovsRij.wbgt != null ? WBGT.wbgtRisico(wbgtEff) : res.risico,
+    hittekracht: hk,
+    metZon:     Sr >= 50,
+  };
+}
+
+/* ── Tabel renderen ── */
+function wbgtBadge(wbgt) {
+  if (!Number.isFinite(wbgt)) return '<span style="color:var(--muted)">–</span>';
+  return `<span class="badge" style="background:${WBGT.wbgtColor(wbgt)}">${f1(wbgt)}</span>`;
+}
+
+function hkBalk(hk) {
+  if (!Number.isFinite(hk)) return '–';
+  const pct    = Math.min(100, hk / HK_MAX_BAR * 100);
+  const kleur  = hk < 3 ? '#22c55e' : hk < 6 ? '#eab308' : hk < 9 ? '#f97316' : '#ef4444';
+  const numClr = hk < 3 ? '#4ade80' : hk < 6 ? '#fbbf24' : hk < 9 ? '#fb923c' : '#f87171';
+  return `<div class="hk-wrap">
+    <div class="hk-bar-bg"><div class="hk-bar-fill" style="width:${pct}%;background:${kleur}"></div></div>
+    <span class="hk-num" style="color:${numClr}">${Math.round(hk)}</span>
+  </div>`;
+}
+
+function maakTabel(rijData) {
+  if (!rijData.length) return '<div class="leeg">Geen data.</div>';
+  let h = `<table class="wt">
+  <thead><tr>
+    <th>Uur</th>
+    <th title="WBGT — Wet Bulb Globe Temperature">WBGT (°C)</th>
+    <th title="KNMI-klassen: 0 onder 14°C WBGT, daarna per 2°C omhoog">Hittekracht</th>
+  </tr></thead><tbody>`;
+
+  const basisTijd = rijData[0].rij.t;
+  for (const {k, rij, ovsRij, res} of rijData) {
+    const wbgt_toon = res && Number.isFinite(res.WBGT) ? f1(res.WBGT) : '–';
+    const risico = res ? (res.risico || '') : '';
+    const cWbgt = ovsRij.wbgt != null ? 'gewijzigd' : '';
+    h += `<tr>
+      <td>${fmtUurMetDag(rij.t, basisTijd, true)}</td>
+      <td><span class="badge bew ${cWbgt}" data-k="${k}" data-veld="wbgt"
+            contenteditable="true" tabindex="0"
+            title="${risico ? `${risico} · ` : ''}Klik om WBGT (°C) handmatig bij te stellen"
+            style="${res ? `background:${WBGT.wbgtColor(res.WBGT)};color:#fff;border-radius:6px` : ''}">${wbgt_toon}</span></td>
+      <td>${res ? hkBalk(res.hittekracht) : '–'}</td>
+    </tr>`;
+  }
+  h += '</tbody></table>';
+  return h;
+}
+
+function risicoTextKleur(wbgt) {
+  if (!Number.isFinite(wbgt)) return 'var(--muted)';
+  if (wbgt < 19) return '#90d070';
+  if (wbgt < 23) return '#e0d050';
+  if (wbgt < 28) return '#ffa040';
+  if (wbgt < 32) return '#ff6030';
+  return '#ff4040';
+}
+
+function tekenTabellen() {
+  if (!modelRijen.length) return;
+  const plaatsnaam = huidigePunt
+    ? (document.getElementById('plaats-in').value || '').split(',')[0].trim()
+    : '';
+  const modelLbl = MODELS[huidigModel].label;
+
+  for (let h = 0; h < 2; h++) {
+    const start = h * 6;
+    const rijData = [];
+    for (let k = start; k < Math.min(start + 6, modelRijen.length); k++) {
+      rijData.push({
+        k,
+        rij:    modelRijen[k],
+        ovsRij: ovs[k] || {},
+        res:    berekenRij(modelRijen[k], ovs[k] || {}),
+      });
+    }
+    if (!rijData.length) {
+      document.getElementById(`tabel-${h+1}-wrap`).innerHTML = '<div class="leeg">–</div>';
+      continue;
+    }
+    const dag = fmtDagBereik(rijData);
+    const eveEl = document.getElementById('evenement-in');
+    const eveTxt = eveEl ? eveEl.value.trim() : '';
+    const dagVolledig = eveTxt
+      ? `${plaatsnaam} · ${dag} · ${eveTxt}`
+      : `${plaatsnaam} · ${dag}`;
+    document.getElementById(`dag-lbl-${h+1}`).textContent = dagVolledig;
+    document.getElementById(`model-tag-${h+1}`).textContent = modelLbl;
+    document.getElementById(`tabel-${h+1}-wrap`).innerHTML = maakTabel(rijData);
+  }
+
+  // Bewerkbare cellen: events koppelen
+  document.querySelectorAll('span.bew').forEach(el => {
+    el.addEventListener('blur', onBewBlur);
+    el.addEventListener('keydown', onBewKey);
+    el.addEventListener('focus', onBewFocus);
+    el.addEventListener('click', onBewFocus);
+  });
+}
+
+/* ── Bewerkbare cel: events ── */
+function onBewFocus(e) {
+  // Selecteer alle tekst voor makkelijk typen
+  e.currentTarget.dataset.replaceOnType = '1';
+  requestAnimationFrame(() => {
+    const range = document.createRange();
+    range.selectNodeContents(e.currentTarget);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+}
+
+function volgendeBewCel(k, veld, terug = false) {
+  if (!modelRijen.length) return null;
+  const stap = terug ? -1 : 1;
+  const volgendeK = k + stap;
+  if (volgendeK >= 0 && volgendeK < modelRijen.length) {
+    return {k: volgendeK, veld};
+  }
+  return null;
+}
+
+function focusBewCelNaRender(k, veld) {
+  requestAnimationFrame(() => {
+    const selector = `span.bew[data-k="${k}"][data-veld="${veld}"]`;
+    const volgende = document.querySelector(selector);
+    if (volgende) volgende.focus();
+  });
+}
+
+function onBewKey(e) {
+  if (e.currentTarget.dataset.replaceOnType === '1'
+      && e.key.length === 1
+      && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.currentTarget.textContent = '';
+    delete e.currentTarget.dataset.replaceOnType;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    bewaarBewCel(e.currentTarget);
+    return;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    delete e.currentTarget.dataset.replaceOnType;
+    const k    = parseInt(e.currentTarget.dataset.k);
+    const veld = e.currentTarget.dataset.veld;
+    if (ovs[k]) delete ovs[k][veld];
+    tekenTabellen();
+    focusBewCelNaRender(k, veld);
+    return;
+  }
+  if (e.key === 'Tab') {
+    delete e.currentTarget.dataset.replaceOnType;
+    const k    = parseInt(e.currentTarget.dataset.k);
+    const veld = e.currentTarget.dataset.veld;
+    const volgende = volgendeBewCel(k, veld, e.shiftKey) || {k, veld};
+    e.preventDefault();
+    e.currentTarget.blur();
+    focusBewCelNaRender(volgende.k, volgende.veld);
+  }
+}
+
+function onBewBlur(e) {
+  bewaarBewCel(e.currentTarget);
+}
+
+function bewaarBewCel(cel) {
+  const k    = parseInt(cel.dataset.k);
+  const veld = cel.dataset.veld;
+  delete cel.dataset.replaceOnType;
+  // Strip eenheid-suffix ("m/s", "°C", "%", "W/m²") voor parse
+  const raw  = cel.textContent.trim().replace(/[^0-9.,\-]/g, '').replace(',', '.');
+  const val  = parseFloat(raw);
+
+  if (!ovs[k]) ovs[k] = {};
+
+  if (!Number.isFinite(val)) {
+    delete ovs[k][veld];
+  } else {
+    // Sanity-checks: voorkom absurde waarden
+    if (veld === 'temp' && (val < -50 || val > 60))  { delete ovs[k][veld]; }
+    else if (veld === 'rv'   && (val < 0   || val > 100)) { delete ovs[k][veld]; }
+    else if (veld === 'wind' && (val < 0   || val > 80))  { delete ovs[k][veld]; }
+    else if (veld === 'sr'   && (val < 0   || val > 1200)) { delete ovs[k][veld]; }
+    else if (veld === 'wbgt' && (val < -10  || val > 60))  { delete ovs[k][veld]; }
+    else ovs[k][veld] = val;
+  }
+  tekenTabellen();
+}
+
+/* ── Model-data laden ── */
+function basisModelKey(key = huidigModel) {
+  const model = MODELS[key];
+  return model && model.members ? model.members[0] : key;
+}
+async function laadMeta(key = huidigModel) {
+  const basisKey = basisModelKey(key);
+  if (metaCache[basisKey]) return metaCache[basisKey];
+  const r = await fetch(HARM_BASE + MODELS[basisKey].meta + '?_=' + Date.now());
+  if (!r.ok) throw new Error('meta HTTP ' + r.status);
+  const j = await r.json();
+  metaCache[basisKey] = j;
+  return j;
+}
+
+function runStatusTekst(modelKey = huidigModel) {
+  const model = MODELS[modelKey];
+  if (model && model.members) {
+    const runs = model.members.map(k => {
+      const kort = MODELS[k].label.replace('HARMONIE 2×2 km', 'HARMONIE').replace('DWD ', '');
+      return `${kort}: ${(metaCache[k] && metaCache[k].run) || '–'}`;
+    });
+    return `${model.label} · ${runs.join(' · ')}`;
+  }
+  return `${MODELS[modelKey].label} · run ${(metaCache[basisModelKey(modelKey)] || {}).run || '–'}`;
+}
+
+function latLonNaarGrids(meta, lat, lon) {
+  const g    = meta.grid;
+  const pts  = [{lat, lon}];
+  for (let i = 0; i < SAMPLE_N; i++) {
+    const br   = (i * 360 / SAMPLE_N) * Math.PI / 180;
+    const dLat = (SAMPLE_KM * Math.cos(br)) / 111.32;
+    const dLon = (SAMPLE_KM * Math.sin(br)) / (111.32 * Math.cos(lat * Math.PI / 180));
+    pts.push({lat: lat + dLat, lon: lon + dLon});
+  }
+  const gis = [];
+  const seen = new Set();
+  for (const p of pts) {
+    const iLat = Math.round((p.lat - g.lat_min) / (g.lat_max - g.lat_min) * (g.n_lat - 1));
+    const iLon = Math.round((p.lon - g.lon_min) / (g.lon_max - g.lon_min) * (g.n_lon - 1));
+    if (iLat < 0 || iLat >= g.n_lat || iLon < 0 || iLon >= g.n_lon) continue;
+    const gi = iLat * g.n_lon + iLon;
+    if (!seen.has(gi)) { seen.add(gi); gis.push(gi); }
+  }
+  return gis;
+}
+
+/* Range-fetch parameter voor meerdere tijdstappen in één aanvraag per component */
+async function haalParam(paramKey, gis, startIdx, nSteps, modelKey) {
+  const meta = await laadMeta(modelKey);
+  const info = meta.parameters[paramKey];
+  if (!info) return null;
+  const nPts  = meta.grid.n_lat * meta.grid.n_lon;
+  const nComp = info.components;
+  const url   = HARM_BASE + info.file;
+  const HDRB  = 16;
+  const minGi = Math.min(...gis);
+  const maxGi = Math.max(...gis);
+
+  const taken = [];
+  for (let s = startIdx; s < startIdx + nSteps; s++) {
+    for (let c = 0; c < nComp; c++) {
+      taken.push({s, c, base: HDRB + ((s * nComp + c) * nPts) * 4});
+    }
+  }
+
+  const out = Array.from({length: nSteps}, () => new Array(nComp).fill(null));
+  let nxt = 0;
+  async function worker() {
+    while (nxt < taken.length) {
+      const {s, c, base} = taken[nxt++];
+      try {
+        const resp = await fetch(url, {
+          headers: {Range: `bytes=${base + minGi*4}-${base + maxGi*4 + 3}`}
+        });
+        if (!resp.ok && resp.status !== 206) continue;
+        const dv = new DataView(await resp.arrayBuffer());
+        let som = 0, n = 0;
+        for (const gi of gis) {
+          const v = dv.getFloat32((gi - minGi) * 4, true);
+          if (Number.isFinite(v)) { som += v; n++; }
+        }
+        out[s - startIdx][c] = n ? som / n : null;
+      } catch {}
+    }
+  }
+  // 8 parallelle workers
+  await Promise.all(Array(Math.min(8, taken.length)).fill(0).map(worker));
+  return out;
+}
+
+function gemiddeldeReeksen(reeksen) {
+  const bruikbaar = reeksen.filter(Array.isArray);
+  if (!bruikbaar.length) return null;
+  const nSteps = Math.max(...bruikbaar.map(r => r.length));
+  const uit = [];
+  for (let s = 0; s < nSteps; s++) {
+    const nComp = Math.max(1, ...bruikbaar.map(r => Array.isArray(r[s]) ? r[s].length : 0));
+    uit[s] = [];
+    for (let c = 0; c < nComp; c++) {
+      let som = 0, n = 0;
+      for (const reeks of bruikbaar) {
+        const v = Array.isArray(reeks[s]) ? reeks[s][c] : null;
+        if (Number.isFinite(v)) { som += v; n++; }
+      }
+      uit[s][c] = n ? som / n : null;
+    }
+  }
+  return uit;
+}
+
+async function haalParamVoorActiefModel(paramKey, startIdx, nSteps, baseTimes) {
+  const model = MODELS[huidigModel];
+  if (!model.members) {
+    return haalParam(paramKey, huidigePunt.gis, startIdx, nSteps, huidigModel);
+  }
+  const perModel = await Promise.all(model.members.map(async memberKey => {
+    const memberMeta = await laadMeta(memberKey);
+    if (!memberMeta.parameters[paramKey]) return null;
+    const gis = latLonNaarGrids(memberMeta, huidigePunt.lat, huidigePunt.lon);
+    if (!gis.length) return null;
+
+    const indexByTime = new Map((memberMeta.tijden || []).map((t, i) => [new Date(t).getTime(), i]));
+    const indices = baseTimes.map(t => indexByTime.get(new Date(t).getTime()));
+    const geldig = indices.filter(i => Number.isInteger(i));
+    if (!geldig.length) return null;
+
+    const minIdx = Math.min(...geldig);
+    const maxIdx = Math.max(...geldig);
+    const raw = await haalParam(paramKey, gis, minIdx, maxIdx - minIdx + 1, memberKey);
+    return indices.map(i => Number.isInteger(i) ? raw[i - minIdx] : null);
+  }));
+  return gemiddeldeReeksen(perModel);
+}
+
+async function laadModelData(startIdx) {
+  const meta  = huidigeMeta;
+  const nSteps = Math.min(NSTEPS, meta.tijden.length - startIdx);
+  const baseTimes = meta.tijden.slice(startIdx, startIdx + nSteps);
+  setStatus('<span class="spin"></span>' + MODELS[huidigModel].label + ' laden…');
+
+  const paramKeys = ['temp', 'rv', 'wind', 'bewolking'];
+  const laadbareParams = MODELS[huidigModel].members
+    ? paramKeys
+    : paramKeys.filter(p => meta.parameters[p]);
+  const reeksen   = {};
+  let klaar = 0;
+
+  await Promise.all(laadbareParams.map(async p => {
+    reeksen[p] = await haalParamVoorActiefModel(p, startIdx, nSteps, baseTimes);
+    klaar++;
+    setStatus('<span class="spin"></span>' + MODELS[huidigModel].label
+      + ` laden… (${klaar}/${laadbareParams.length})`);
+  }));
+
+  // State resetten
+  modelRijen = [];
+  ovs = Array.from({length: NSTEPS}, () => ({}));
+
+  for (let k = 0; k < nSteps; k++) {
+    const t = new Date(meta.tijden[startIdx + k]);
+
+    const temp = reeksen.temp ? reeksen.temp[k][0] : null;
+    const rv   = reeksen.rv   ? reeksen.rv[k][0]   : null;
+    const wu   = reeksen.wind ? reeksen.wind[k][0]  : null;
+    const wv   = reeksen.wind ? reeksen.wind[k][1]  : null;
+
+    // Bewolking: 3 lagen (component 0=hoog/cirrus, 1=middel, 2=laag)
+    let bew_hoog = null, bew_mid = null, bew_laag = null, bewolking = null;
+    if (reeksen.bewolking) {
+      bew_hoog = reeksen.bewolking[k][0];
+      bew_mid  = reeksen.bewolking[k][1];
+      bew_laag = reeksen.bewolking[k][2];
+      // Effectieve bewolking voor zonschatting: cirrus telt 20% mee
+      bewolking = Math.max(
+        (bew_hoog || 0) * 0.2,
+        bew_mid  || 0,
+        bew_laag || 0
+      );
+    }
+
+    modelRijen.push({t, temp, rv, wind_u: wu, wind_v: wv,
+      bewolking, bew_hoog, bew_mid, bew_laag});
+  }
+
+  setStatus(runStatusTekst());
+  tekenTabellen();
+}
+
+/* ── Geocoding via Nominatim ── */
+async function geocodePlaats(q) {
+  // Directe coördinaten: "52.1, 5.18" of "(52.1, 5.18)"
+  const nums = q.trim().replace(/[()]/g, '').match(/[-+]?\d+(?:[.,]\d+)?/g);
+  if (nums && nums.length >= 2) {
+    const lat = parseFloat(nums[0].replace(',', '.'));
+    const lon = parseFloat(nums[1].replace(',', '.'));
+    if (Number.isFinite(lat) && Number.isFinite(lon)
+        && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      return {lat, lon, naam: `${lat.toFixed(3)}, ${lon.toFixed(3)}`};
+    }
+  }
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1'
+    + '&countrycodes=nl,be,de&q=' + encodeURIComponent(q);
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Geocode mislukt (HTTP ' + r.status + ')');
+  const j = await r.json();
+  if (!j.length) return null;
+  return {lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon), naam: j[0].display_name};
+}
+
+/* ── Bewaarde plaatsen ── */
+function plaatsLabel(item) {
+  return (item && (item.label || item.naam) || '').split(',')[0].trim()
+    || (item && Number.isFinite(item.lat) && Number.isFinite(item.lon)
+      ? `${item.lat.toFixed(3)}, ${item.lon.toFixed(3)}` : 'Plaats');
+}
+function plaatsId(item) {
+  const lat = Number.isFinite(item.lat) ? item.lat.toFixed(4) : 'x';
+  const lon = Number.isFinite(item.lon) ? item.lon.toFixed(4) : 'x';
+  return `${lat}_${lon}_${item.model || huidigModel}`;
+}
+function leesBewaardePlaatsen() {
+  try {
+    const lijst = JSON.parse(localStorage.getItem(PLAATSEN_KEY) || '[]');
+    return Array.isArray(lijst) ? lijst.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon)) : [];
+  } catch {
+    return [];
+  }
+}
+function schrijfBewaardePlaatsen(lijst) {
+  try { localStorage.setItem(PLAATSEN_KEY, JSON.stringify(lijst.slice(0, 30))); } catch {}
+}
+function onthoudLaatstePlaats(item) {
+  try { localStorage.setItem(PLAATS_LAATST, JSON.stringify(item)); } catch {}
+}
+function leesLaatstePlaats() {
+  try {
+    const item = JSON.parse(localStorage.getItem(PLAATS_LAATST) || 'null');
+    return item && Number.isFinite(item.lat) && Number.isFinite(item.lon) ? item : null;
+  } catch {
+    return null;
+  }
+}
+function vulBewaardePlaatsenSelect() {
+  const sel = document.getElementById('bewaarde-plaats-sel');
+  if (!sel) return;
+  const huidigeWaarde = sel.value;
+  const lijst = leesBewaardePlaatsen();
+  sel.innerHTML = '<option value="">Bewaarde plaats…</option>';
+  lijst.forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = `${plaatsLabel(item)} · ${MODELS[item.model || 'harmonie']?.label || 'model'}`;
+    sel.appendChild(opt);
+  });
+  if (huidigeWaarde && sel.querySelector(`option[value="${huidigeWaarde}"]`)) sel.value = huidigeWaarde;
+}
+function huidigePlaatsItem() {
+  if (!huidigePunt) return null;
+  const label = (document.getElementById('plaats-in').value || huidigePunt.naam || '').trim();
+  const item = {
+    label,
+    naam: huidigePunt.naam || label,
+    lat: huidigePunt.lat,
+    lon: huidigePunt.lon,
+    model: huidigModel,
+    ts: Date.now(),
+  };
+  item.id = plaatsId(item);
+  return item;
+}
+function bewaarHuidigePlaats() {
+  const item = huidigePlaatsItem();
+  if (!item) {
+    toonFout('Zoek eerst een plaats voordat je bewaart.');
+    return;
+  }
+  const lijst = leesBewaardePlaatsen().filter(p => p.id !== item.id);
+  lijst.unshift(item);
+  schrijfBewaardePlaatsen(lijst);
+  onthoudLaatstePlaats(item);
+  vulBewaardePlaatsenSelect();
+  const sel = document.getElementById('bewaarde-plaats-sel');
+  if (sel) sel.value = item.id;
+  toonFout('');
+  setStatus(`${plaatsLabel(item)} bewaard · ${MODELS[item.model].label}`);
+}
+async function laadPlaatsItem(item) {
+  if (!item) return;
+  huidigModel = MODELS[item.model] ? item.model : 'harmonie';
+  document.getElementById('model-sel').value = huidigModel;
+  document.getElementById('plaats-in').value = item.label || plaatsLabel(item);
+  const bewaarSel = document.getElementById('bewaarde-plaats-sel');
+  if (bewaarSel && item.id && bewaarSel.querySelector(`option[value="${item.id}"]`)) {
+    bewaarSel.value = item.id;
+  }
+  toonFout('');
+  setStatus('<span class="spin"></span>Bewaarde plaats laden…');
+  const meta = await laadMeta(huidigModel);
+  huidigeMeta = meta;
+  const gis = latLonNaarGrids(meta, item.lat, item.lon);
+  if (!gis.length) {
+    toonFout('Bewaarde plaats ligt buiten het modelgebied.');
+    setStatus('–');
+    return;
+  }
+  huidigePunt = {lat: item.lat, lon: item.lon, naam: item.naam || item.label, gis};
+  vulStartuurSelect(meta.tijden);
+  onthoudLaatstePlaats(item);
+  await laadModelData(parseInt(document.getElementById('startuur-sel').value || '0'));
+}
+
+/* ── Startuur-select vullen ── */
+function vulStartuurSelect(tijden) {
+  const sel  = document.getElementById('startuur-sel');
+  const now  = new Date();
+  let defIdx = 0;
+  for (let i = 0; i < tijden.length; i++) {
+    if (new Date(tijden[i]) >= now) { defIdx = i; break; }
+  }
+  const oud = sel.value;
+  sel.innerHTML = '';
+  tijden.forEach((t, i) => {
+    const dt  = new Date(t);
+    const lbl = `${DAGNAMEN[dt.getDay()].slice(0,2)} ${String(dt.getHours()).padStart(2,'0')}:00`;
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = lbl;
+    if (i === defIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  if (oud && sel.querySelector(`option[value="${oud}"]`)) sel.value = oud;
+}
+
+/* ── Hoofd-flow ── */
+async function zoekEnLaad() {
+  const q = (document.getElementById('plaats-in').value || '').trim();
+  if (!q) return;
+  toonFout('');
+  setStatus('<span class="spin"></span>Zoeken…');
+  try {
+    const [meta, geo] = await Promise.all([
+      laadMeta(huidigModel),
+      geocodePlaats(q),
+    ]);
+    if (!geo) { toonFout('Plaats niet gevonden.'); setStatus('–'); return; }
+    huidigeMeta  = meta;
+    const gis    = latLonNaarGrids(meta, geo.lat, geo.lon);
+    if (!gis.length) { toonFout('Punt buiten modelgebied.'); setStatus('–'); return; }
+    huidigePunt  = {lat: geo.lat, lon: geo.lon, naam: geo.naam, gis};
+    vulStartuurSelect(meta.tijden);
+    const startIdx = parseInt(document.getElementById('startuur-sel').value || '0');
+    await laadModelData(startIdx);
+    const item = huidigePlaatsItem();
+    if (item) onthoudLaatstePlaats(item);
+  } catch (e) {
+    toonFout('Fout: ' + e.message);
+    setStatus('–');
+  }
+}
+
+async function wisselModel(modelKey) {
+  huidigModel = modelKey;
+  huidigeMeta = null;
+  if (!huidigePunt) return;
+  toonFout('');
+  try {
+    const meta = await laadMeta(modelKey);
+    huidigeMeta     = meta;
+    huidigePunt.gis = latLonNaarGrids(meta, huidigePunt.lat, huidigePunt.lon);
+    vulStartuurSelect(meta.tijden);
+    const startIdx  = parseInt(document.getElementById('startuur-sel').value || '0');
+    await laadModelData(startIdx);
+    const item = huidigePlaatsItem();
+    if (item) onthoudLaatstePlaats(item);
+  } catch (e) {
+    toonFout('Model niet beschikbaar: ' + e.message);
+    setStatus('–');
+  }
+}
+
+/* ── Events ── */
+document.getElementById('zoek-btn').addEventListener('click', zoekEnLaad);
+document.getElementById('plaats-in').addEventListener('keydown', e => {
+  if (e.key === 'Enter') zoekEnLaad();
+});
+document.getElementById('bewaar-plaats-btn').addEventListener('click', bewaarHuidigePlaats);
+document.getElementById('bewaarde-plaats-sel').addEventListener('change', async e => {
+  const item = leesBewaardePlaatsen().find(p => p.id === e.target.value);
+  if (!item) return;
+  try {
+    await laadPlaatsItem(item);
+  } catch (err) {
+    toonFout('Bewaarde plaats laden mislukt: ' + err.message);
+    setStatus('–');
+  }
+});
+document.getElementById('model-sel').addEventListener('change', e => {
+  wisselModel(e.target.value);
+});
+document.getElementById('startuur-sel').addEventListener('change', () => {
+  if (!huidigePunt || !huidigeMeta) return;
+  const idx = parseInt(document.getElementById('startuur-sel').value || '0');
+  laadModelData(idx);
+});
+document.getElementById('ververs-btn').addEventListener('click', () => {
+  Object.keys(metaCache).forEach(k => delete metaCache[k]);
+  zoekEnLaad();
+});
+// Evenement wijziging → dag-labels bijwerken
+document.getElementById('evenement-in').addEventListener('input', () => {
+  if (modelRijen.length) tekenTabellen();
+});
+
+/* ── Autostart: meta laden ── */
+(async () => {
+  try {
+    vulBewaardePlaatsenSelect();
+    const laatst = leesLaatstePlaats();
+    if (laatst) {
+      await laadPlaatsItem(laatst);
+      return;
+    }
+    const meta = await laadMeta(huidigModel);
+    huidigeMeta = meta;
+    vulStartuurSelect(meta.tijden);
+    setStatus(MODELS[huidigModel].label + ' · voer een plaatsnaam in');
+  } catch (e) {
+    setStatus('Kan meta niet laden: ' + e.message);
+  }
+})();
+
+/* ── PNG Export ──────────────────────────────────────────────────────────
+ * Bouwt een schone wit-achtergrond render van beide WBGT-tabellen,
+ * inclusief koptekst (plaatsnaam, datum, model, evenement).
+ * html2canvas rendert dit naar PNG en triggert download.
+ * -------------------------------------------------------------------- */
+function exporteerPNG() {
+  if (!modelRijen.length) { alert('Geen data geladen — zoek eerst een locatie.'); return; }
+
+  const plaatsnaam = (document.getElementById('plaats-in').value || '').split(',')[0].trim();
+  const evenement  = (document.getElementById('evenement-in').value || '').trim();
+  const modelLbl   = MODELS[huidigModel].label;
+
+  // Helper: bouw één lichte tabel-HTML voor PNG-render
+  function maakLichteTabel(rijData) {
+    if (!rijData.length) return '';
+    const dag = fmtDagBereik(rijData);
+    const basisTijd = rijData[0].rij.t;
+    let h = `<div style="font:700 .82rem Inter,Arial,sans-serif;color:#1a5490;
+      padding:8px 10px 4px;border-bottom:2px solid #1a5490;
+      display:flex;justify-content:space-between;align-items:baseline">
+      <span>${plaatsnaam} · ${dag}</span>
+      <span style="font-size:.7rem;font-weight:600;color:#64748b">${modelLbl}</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font:400 .78rem Arial,sans-serif;color:#111">
+    <thead><tr style="background:#f0f5fb">
+      <th style="${TH}text-align:left;padding-left:10px">Uur</th>
+      <th style="${TH}">WBGT (°C)</th>
+      <th style="${TH}">Hittekracht</th>
+    </tr></thead><tbody>`;
+
+    const TDbasis = 'padding:5px 7px;border-bottom:1px solid #e2e8f0;text-align:center;vertical-align:middle;';
+
+    for (const {k, rij, ovsRij, res} of rijData) {
+      // WBGT badge
+      const wbgtHtml = res && Number.isFinite(res.WBGT)
+        ? `<span style="display:inline-block;border-radius:4px;padding:2px 7px;
+            font-weight:900;color:#fff;background:${WBGT.wbgtColor(res.WBGT)};
+            text-shadow:0 1px 1px rgba(0,0,0,.25)">${f1(res.WBGT)}</span>`
+        : '–';
+
+      // Hittekracht balk
+      let hkHtml = '–';
+      if (res && Number.isFinite(res.hittekracht)) {
+        const pct  = Math.min(100, res.hittekracht / HK_MAX_BAR * 100);
+        const kleur = res.hittekracht < 3 ? '#22c55e' : res.hittekracht < 6 ? '#eab308'
+          : res.hittekracht < 9 ? '#f97316' : '#ef4444';
+        hkHtml = `<div style="display:flex;align-items:center;gap:4px">
+          <div style="flex:1;height:8px;border-radius:4px;background:#e2e8f0;overflow:hidden">
+            <div style="height:100%;width:${pct}%;border-radius:4px;background:${kleur}"></div>
+          </div>
+          <span style="font-weight:900;font-size:.76rem;min-width:24px;text-align:right;color:${kleur}">${Math.round(res.hittekracht)}</span>
+        </div>`;
+      }
+
+      h += `<tr>
+        <td style="${TDbasis}text-align:left;padding-left:10px;font-weight:700;color:#1a5490">${fmtUurMetDag(rij.t, basisTijd)}</td>
+        <td style="${TDbasis}">${wbgtHtml}</td>
+        <td style="${TDbasis}min-width:110px">${hkHtml}</td>
+      </tr>`;
+    }
+    h += '</tbody></table>';
+    return h;
+  }
+
+  const TH = 'padding:6px 7px;font-size:.68rem;font-weight:800;text-transform:uppercase;'
+           + 'letter-spacing:.04em;color:#64748b;border-bottom:2px solid #d0dbe8;text-align:center;';
+
+  // Bouw de twee rijsets
+  const sets = [[], []];
+  for (let k = 0; k < modelRijen.length; k++) {
+    sets[k < 6 ? 0 : 1].push({
+      k, rij: modelRijen[k], ovsRij: ovs[k] || {},
+      res: berekenRij(modelRijen[k], ovs[k] || {}),
+    });
+  }
+
+  // Render-container: witte A4-breedte achtergrond
+  const wrap = document.createElement('div');
+  wrap.style.cssText = [
+    'position:fixed', 'top:-9999px', 'left:-9999px',
+    'width:760px', 'background:#fff', 'padding:20px 22px 18px',
+    'font-family:Inter,Arial,sans-serif',
+  ].join(';');
+
+  // Koptekst
+  const run = huidigeMeta ? (huidigeMeta.run || '') : '';
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding-bottom:10px;border-bottom:3px solid #1a5490;margin-bottom:14px">
+      <div>
+        <div style="font:900 1.15rem Inter,Arial,sans-serif;color:#1a5490;text-transform:uppercase;letter-spacing:.03em">
+          WBGT Uurlijks
+        </div>
+        ${evenement ? `<div style="font:700 .9rem Inter,Arial,sans-serif;color:#c05000;margin-top:3px">${evenement}</div>` : ''}
+      </div>
+      <div style="text-align:right;font-size:.72rem;color:#64748b;line-height:1.5">
+        <div><strong style="color:#1e293b">${plaatsnaam}</strong></div>
+        <div>${modelLbl}${run ? ' · run ' + run.slice(0,16) : ''}</div>
+        <div>${new Date().toLocaleString('nl-NL',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+    </div>
+    <div id="png-tbl-1" style="margin-bottom:14px;border:1px solid #d0dbe8;border-radius:6px;overflow:hidden"></div>
+    <div id="png-tbl-2" style="border:1px solid #d0dbe8;border-radius:6px;overflow:hidden"></div>
+    <div style="margin-top:10px;font-size:.64rem;color:#94a3b8;line-height:1.45;border-top:1px solid #e2e8f0;padding-top:6px">
+      Met zon (≥50 W/m²): WBGT = 0,7×T<sub>nw</sub> + 0,2×T<sub>g</sub> + 0,1×T<sub>a</sub> &nbsp;|&nbsp;
+      Zonder zon: WBGT = 0,7×T<sub>nw</sub> + 0,3×T<sub>a</sub> &nbsp;|&nbsp;
+      Hittekracht: KNMI-klassen per 2°C WBGT &nbsp;|&nbsp; T<sub>nw</sub> via Liljegren (2008) &nbsp;|&nbsp; weerlab.nl
+    </div>`;
+
+  wrap.querySelector('#png-tbl-1').innerHTML = maakLichteTabel(sets[0]);
+  if (sets[1].length) wrap.querySelector('#png-tbl-2').innerHTML = maakLichteTabel(sets[1]);
+  else wrap.querySelector('#png-tbl-2').remove();
+
+  document.body.appendChild(wrap);
+  void wrap.offsetHeight;
+
+  const btn = document.getElementById('png-btn');
+  const origTxt = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ …';
+
+  html2canvas(wrap, {scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false})
+    .then(canvas => {
+      const a = document.createElement('a');
+      const datum = new Date().toISOString().slice(0,10);
+      a.download = `wbgt_uurlijks_${plaatsnaam.toLowerCase().replace(/\s+/g,'_')}_${datum}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    })
+    .catch(err => alert('PNG-export mislukt: ' + err.message))
+    .finally(() => {
+      wrap.remove();
+      btn.disabled = false;
+      btn.textContent = origTxt;
+    });
+}
+</script>
+</body>
+</html>

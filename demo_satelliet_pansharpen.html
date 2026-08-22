@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo · Pan-sharpening Nederland HD (MTG vis06 500 m)</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --knmi-blue: #00205b;
+    --accent: #2ec4e8;
+    --bg: #f6f8fb;
+    --panel: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e3e8ef;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: var(--knmi-blue); margin-bottom: 4px; }
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; max-width: 960px; }
+  .wrap { max-width: 1500px; margin: 0 auto; }
+  .status {
+    display: inline-block; font-size: 12px; font-weight: 600; color: var(--knmi-blue);
+    background: #e8f4ff; border: 1px solid #bfd9f2; border-radius: 14px;
+    padding: 4px 12px; margin-bottom: 14px;
+  }
+  .status.fout { background: #fdeaea; border-color: #f2bfbf; color: #8a1f1f; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+  .kaart {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .kaart h2 {
+    font-size: 13px; font-weight: 700; color: var(--knmi-blue);
+    padding: 10px 12px 2px;
+  }
+  .kaart .uitleg { font-size: 11px; color: var(--muted); padding: 0 12px 8px; min-height: 30px; }
+  .kaart canvas { width: 100%; height: auto; display: block; background: #050b14; cursor: crosshair; }
+  .crops {
+    margin-top: 18px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px;
+  }
+  .crops h2 { font-size: 14px; font-weight: 700; color: var(--knmi-blue); margin-bottom: 2px; }
+  .crops .uitleg { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .croprow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 1100px) { .croprow { grid-template-columns: 1fr; } }
+  .croprow figure canvas { width: 100%; height: auto; display: block; border-radius: 8px; background: #050b14; }
+  .croprow figcaption { font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 5px; text-align: center; }
+  .knoppen { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .knop {
+    border: 1px solid #c5d3e3; background: #fff; color: #2a4a70; border-radius: 14px;
+    font-family: inherit; font-size: 12px; font-weight: 600; padding: 5px 14px; cursor: pointer;
+  }
+  .knop:hover { background: #e8f4ff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Demo · Pan-sharpening Nederland HD</h1>
+  <div class="sub">
+    Het kleurbeeld (GeoColour) komt van MTG op ~1 km resolutie. De vis06-HRFI-band heeft 500 m
+    resolutie. Door de fijne structuur uit die 500 m-band in het kleurbeeld te mengen wordt het
+    Nederland&nbsp;HD-beeld echt scherper — geen kunstmatige verscherping, maar extra satellietdetail.
+    Werkt alleen overdag (zichtbaar licht). Klik op een kaart om het detail-uitsnedepunt te verplaatsen.
+  </div>
+  <div class="status" id="status">Laden…</div>
+  <div class="knoppen">
+    <button class="knop" id="btn-herlaad">↻ Opnieuw laden</button>
+  </div>
+
+  <div class="grid">
+    <div class="kaart">
+      <h2>A · Huidig (productie)</h2>
+      <div class="uitleg">GeoColour 1 km + huidige kunstmatige verscherping (convolutiefilter + contrast).</div>
+      <canvas id="cv-a" width="1200" height="1334"></canvas>
+    </div>
+    <div class="kaart">
+      <h2>B · Pan-sharpened: luminantie</h2>
+      <div class="uitleg">Helderheid volledig vervangen door de 500 m vis06-band; kleur uit GeoColour.</div>
+      <canvas id="cv-b" width="1200" height="1334"></canvas>
+    </div>
+    <div class="kaart">
+      <h2>C · Pan-sharpened: detail-injectie</h2>
+      <div class="uitleg">Alleen de fijne 500 m-structuur toegevoegd (ratio-methode); helderheid en kleurbalans van GeoColour blijven behouden.</div>
+      <canvas id="cv-c" width="1200" height="1334"></canvas>
+    </div>
+  </div>
+
+  <div class="crops">
+    <h2>Detail-uitsnede (2× ingezoomd)</h2>
+    <div class="uitleg" id="crop-uitleg">Uitsnede rond het midden van Nederland.</div>
+    <div class="croprow">
+      <figure><canvas id="crop-a" width="400" height="400"></canvas><figcaption>A · Huidig</figcaption></figure>
+      <figure><canvas id="crop-b" width="400" height="400"></canvas><figcaption>B · Luminantie</figcaption></figure>
+      <figure><canvas id="crop-c" width="400" height="400"></canvas><figcaption>C · Detail-injectie</figcaption></figure>
+    </div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="sat-sharpen-hd" color-interpolation-filters="sRGB">
+    <feConvolveMatrix order="3" preserveAlpha="true" divisor="1"
+      kernelMatrix="0 -0.14 0 -0.14 1.56 -0.14 0 -0.14 0"/>
+  </filter>
+</svg>
+
+<script>
+const WMS_URL = 'https://om.weerlab.nl/eumetview';
+const BBOX_LONLAT = [2.65, 50.55, 7.65, 53.95];
+const W = 1200, H = 1334;
+const KLEUR_LAAG = 'mtg_fd:rgb_geocolour';
+const PAN_LAAG = 'mtg_fd:vis06_hrfi';
+const PUBLICATIE_DELAY_MIN = 30;
+// Zelfde nabewerking als productie Nederland HD (zonder convolutie bij B/C:
+// daar levert de pan-band het echte detail).
+const FILTER_HUIDIG = 'url(#sat-sharpen-hd) contrast(1.18) saturate(1.16) brightness(1.035)';
+const FILTER_PANSHARP = 'contrast(1.18) saturate(1.16) brightness(1.035)';
+
+const R_MERC = 6378137;
+function lonLatNaarWebMercator(lon, lat) {
+  const veiligeLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  return [
+    R_MERC * lon * Math.PI / 180,
+    R_MERC * Math.log(Math.tan(Math.PI / 4 + veiligeLat * Math.PI / 360))
+  ];
+}
+
+function bbox3857() {
+  const [minLon, minLat, maxLon, maxLat] = BBOX_LONLAT;
+  const [minX, minY] = lonLatNaarWebMercator(minLon, minLat);
+  const [maxX, maxY] = lonLatNaarWebMercator(maxLon, maxLat);
+  return [minX, minY, maxX, maxY].join(',');
+}
+
+function tijdstap(minutenTerug) {
+  const nu = new Date();
+  const basis = new Date(nu);
+  basis.setUTCMinutes(Math.floor((nu.getUTCMinutes() - PUBLICATIE_DELAY_MIN) / 10) * 10, 0, 0);
+  return new Date(basis.getTime() - minutenTerug * 60000);
+}
+
+function isoTijd(d) {
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function wmsUrl(laag, t) {
+  return WMS_URL +
+    '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0' +
+    '&LAYERS=' + encodeURIComponent(laag) +
+    '&STYLES=&FORMAT=image%2Fjpeg&TRANSPARENT=FALSE' +
+    '&CRS=EPSG%3A3857&BBOX=' + bbox3857() +
+    '&WIDTH=' + W + '&HEIGHT=' + H +
+    '&TIME=' + isoTijd(t);
+}
+
+function laadBeeld(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => img.naturalWidth > 0 ? resolve(img) : reject(new Error('leeg beeld'));
+    img.onerror = () => reject(new Error('laadfout'));
+    img.src = url;
+  });
+}
+
+function naarCanvas(img) {
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, W, H);
+  return cv;
+}
+
+function gemiddeldeHelderheid(cv) {
+  const ctx = cv.getContext('2d');
+  const d = ctx.getImageData(0, 0, W, H).data;
+  let som = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4 * 97) { som += d[i + 1]; n++; }
+  return som / n;
+}
+
+function maakLuminosityVariant(kleurCv, panCv) {
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(kleurCv, 0, 0);
+  ctx.globalCompositeOperation = 'luminosity';
+  ctx.drawImage(panCv, 0, 0);
+  return cv;
+}
+
+function maakDetailInjectieVariant(kleurCv, panCv) {
+  // Ratio-methode (Brovey-achtig): kleur × pan / blur(pan). De lage frequenties
+  // vallen tegen elkaar weg, alleen het 500 m-detail wordt geïnjecteerd.
+  const blurCv = document.createElement('canvas');
+  blurCv.width = W; blurCv.height = H;
+  const blurCtx = blurCv.getContext('2d', { willReadFrequently: true });
+  blurCtx.filter = 'blur(3px)';
+  blurCtx.drawImage(panCv, 0, 0);
+
+  const kleur = kleurCv.getContext('2d').getImageData(0, 0, W, H);
+  const pan = panCv.getContext('2d').getImageData(0, 0, W, H).data;
+  const blur = blurCtx.getImageData(0, 0, W, H).data;
+  const d = kleur.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const ratio = Math.max(0.6, Math.min(1.7, (pan[i + 1] + 4) / (blur[i + 1] + 4)));
+    d[i] = Math.min(255, d[i] * ratio);
+    d[i + 1] = Math.min(255, d[i + 1] * ratio);
+    d[i + 2] = Math.min(255, d[i + 2] * ratio);
+  }
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  cv.getContext('2d').putImageData(kleur, 0, 0);
+  return cv;
+}
+
+const bronnen = { a: null, b: null, c: null };
+let cropCentrum = { x: 0.52, y: 0.45 };
+
+function toonVariant(id, bronCv, filter) {
+  const doel = document.getElementById(id);
+  const ctx = doel.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(bronCv, 0, 0);
+  doel.style.filter = filter;
+}
+
+function tekenCrops() {
+  const grootte = 200; // bronpixels, getoond op 400 → 2× zoom
+  const cx = Math.round(cropCentrum.x * W);
+  const cy = Math.round(cropCentrum.y * H);
+  const x0 = Math.max(0, Math.min(W - grootte, cx - grootte / 2));
+  const y0 = Math.max(0, Math.min(H - grootte, cy - grootte / 2));
+  const paren = [
+    ['crop-a', bronnen.a, FILTER_HUIDIG],
+    ['crop-b', bronnen.b, FILTER_PANSHARP],
+    ['crop-c', bronnen.c, FILTER_PANSHARP]
+  ];
+  for (const [id, bron, filter] of paren) {
+    if (!bron) continue;
+    const doel = document.getElementById(id);
+    const ctx = doel.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 400, 400);
+    ctx.drawImage(bron, x0, y0, grootte, grootte, 0, 0, 400, 400);
+    doel.style.filter = filter;
+  }
+}
+
+async function laad() {
+  const status = document.getElementById('status');
+  status.classList.remove('fout');
+  status.textContent = 'Satellietbeelden laden…';
+  for (let poging = 0; poging < 6; poging++) {
+    const t = tijdstap(poging * 10);
+    try {
+      const [kleurImg, panImg] = await Promise.all([
+        laadBeeld(wmsUrl(KLEUR_LAAG, t)),
+        laadBeeld(wmsUrl(PAN_LAAG, t))
+      ]);
+      const kleurCv = naarCanvas(kleurImg);
+      const panCv = naarCanvas(panImg);
+
+      const panHelder = gemiddeldeHelderheid(panCv);
+      if (panHelder < 8) {
+        status.classList.add('fout');
+        status.textContent = 'Het is nu donker boven Nederland — vis06 (zichtbaar licht) is leeg. ' +
+          'Pan-sharpening werkt alleen overdag; probeer de demo bij daglicht.';
+      }
+
+      bronnen.a = kleurCv;
+      bronnen.b = maakLuminosityVariant(kleurCv, panCv);
+      bronnen.c = maakDetailInjectieVariant(kleurCv, panCv);
+      toonVariant('cv-a', bronnen.a, FILTER_HUIDIG);
+      toonVariant('cv-b', bronnen.b, FILTER_PANSHARP);
+      toonVariant('cv-c', bronnen.c, FILTER_PANSHARP);
+      tekenCrops();
+      if (panHelder >= 8) {
+        status.textContent = 'Beeld van ' + t.toLocaleString('nl-NL', {
+          timeZone: 'Europe/Amsterdam', day: '2-digit', month: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }) + ' NL · GeoColour 1 km + vis06 HRFI 500 m';
+      }
+      return;
+    } catch (e) {
+      status.textContent = 'Beeld ' + isoTijd(t) + ' niet beschikbaar, probeer ouder…';
+    }
+  }
+  status.classList.add('fout');
+  status.textContent = 'Geen recent satellietbeeld beschikbaar.';
+}
+
+for (const id of ['cv-a', 'cv-b', 'cv-c']) {
+  document.getElementById(id).addEventListener('click', e => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    cropCentrum = {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height
+    };
+    document.getElementById('crop-uitleg').textContent = 'Eigen uitsnede (aangeklikt punt).';
+    tekenCrops();
+  });
+}
+
+document.getElementById('btn-herlaad').addEventListener('click', laad);
+laad();
+</script>
+</body>
+</html>

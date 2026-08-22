@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weersverwachting Nederland – KNMI – Ed Aldus WM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f6f8fb;--bg2:#ffffff;--panel:#ffffff;--card:#ffffff;--border:#e3e8ef;--text:#0f172a;--text2:#64748b;--accent:#00205b;--warm:#dc2626;--koud:#2563eb;--knmi:#00205b;--zacht:#eef4ff;--waarschuwing:#f59e0b;
+  --sans:"DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono:"DM Mono", ui-monospace, monospace;
+}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-feature-settings:"ss01","cv11"}
+.header{background:var(--bg2);padding:12px 24px;border-bottom:1px solid var(--border)}
+.header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.header h1{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.01em}
+.header p{font-size:11px;color:var(--text2);margin-top:2px;font-family:var(--mono)}
+.header-rechts{display:flex;align-items:center;gap:12px}
+.btn{padding:6px 12px;border-radius:8px;background:var(--accent);border:none;color:white;font-size:11.5px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+.btn:hover{opacity:.92}
+.meta-tijd{font-size:11px;color:var(--text2);font-family:var(--mono)}
+.container{max-width:1100px;margin:0 auto;padding:20px 20px 60px}
+
+/* Sectie styling */
+.sectie{margin-bottom:28px}
+.sectie-titel{font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid var(--accent);display:inline-block}
+
+/* Kaartjes strip */
+.kaarten-strip{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
+.kaart-item{flex-shrink:0;text-align:center}
+.kaart-item img{border-radius:8px;border:1px solid var(--border);height:220px}
+.kaart-item .kaart-label{font-size:.72rem;color:var(--text2);margin-top:4px}
+
+/* Tekstverwachting per dagdeel */
+.tekst-blok{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+.tekst-kopregel{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}
+.tekst-titel{font-size:20px;font-weight:700;color:var(--text);line-height:1.25;letter-spacing:-.02em}
+.tekst-label{flex-shrink:0;border-radius:999px;background:var(--zacht);color:var(--accent);font-size:10.5px;font-weight:700;padding:5px 9px;text-transform:uppercase;letter-spacing:.04em}
+.waarschuwing-balk{display:flex;gap:10px;align-items:flex-start;background:#fff8e6;border:1px solid #f6cc68;border-left:4px solid var(--waarschuwing);border-radius:9px;padding:10px 12px;margin-bottom:14px;color:#713f12;font-size:12.5px;line-height:1.45}
+.waarschuwing-balk strong{display:block;color:#713f12;margin-bottom:1px}
+.waarschuwing-teken{font-size:17px;line-height:1.2}
+.algemeen-blok{font-size:13.5px;line-height:1.6;color:var(--text);margin-bottom:12px}
+.periode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.periode{border:1px solid var(--border);border-left:3px solid #4f7eb8;border-radius:9px;padding:11px 12px;background:var(--bg)}
+.periode-kop{font-size:11.5px;font-weight:700;color:var(--accent);margin-bottom:4px}
+.periode p{font-size:13px;color:var(--text);line-height:1.55}
+@media(max-width:680px){.tekst-kopregel{display:block}.tekst-label{display:inline-block;margin-top:9px}.periode-grid{grid-template-columns:1fr}}
+
+/* 7-daagse kaartjes */
+.dagen-uitleg{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;background:var(--zacht);border:1px solid #cddcf1;border-radius:11px;padding:12px 14px;margin-bottom:12px;color:#243b5a}
+.dagen-uitleg strong{display:block;font-size:12.5px;color:var(--accent);margin-bottom:2px}
+.dagen-uitleg p{font-size:11.5px;line-height:1.5}
+.dagen-uitleg .bron-pill{white-space:nowrap;background:var(--panel);border:1px solid #cddcf1;border-radius:999px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--accent)}
+.dagen-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px}
+@media(max-width:520px){.dagen-uitleg{display:block}.dagen-uitleg .bron-pill{display:inline-block;margin-top:8px}.dagen-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.dag-kaart{position:relative;background:var(--card);border:1px solid var(--border);border-radius:13px;padding:12px 10px;text-align:center;transition:transform .15s;box-shadow:0 1px 2px rgba(15,23,42,0.04)}
+.dag-kaart:hover{transform:translateY(-2px);border-color:#94a3b8}
+.dag-kaart.vandaag{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,32,91,0.15)}
+.dag-kaart.waarschuwing{border-top:4px solid #eab308;padding-top:9px}
+.dag-kaart.mogelijk{border-top-color:#f59e0b}
+.dag-naam{font-size:13px;font-weight:700;color:var(--text);text-transform:capitalize}
+.dag-datum{font-size:.68rem;color:var(--text2);margin-bottom:6px}
+.dag-icoon{width:58px;height:58px;margin:3px auto 1px}
+.dag-symbool{font-size:10.5px;font-weight:600;line-height:1.3;color:var(--text);min-height:28px;display:flex;align-items:flex-start;justify-content:center}
+.dag-waarschuwing{display:inline-flex;align-items:center;justify-content:center;min-height:22px;margin:5px auto 1px;border-radius:999px;background:#fef3c7;color:#854d0e;padding:3px 7px;font-size:9.5px;font-weight:700;line-height:1.2}
+.dag-waarschuwing.mogelijk{background:#fff7ed;color:#9a3412}
+.dag-temps{display:flex;justify-content:center;gap:13px;margin:8px 0 9px}
+.dag-temp{display:flex;flex-direction:column;align-items:center;gap:1px}
+.dag-temp small{font-size:9px;text-transform:uppercase;color:var(--text2);font-weight:700}
+.dag-max{font-size:1.05rem;font-weight:700;color:var(--warm)}
+.dag-min{font-size:.9rem;font-weight:600;color:var(--koud)}
+.dag-detail{font-size:10px;color:var(--text2);line-height:1.35;border-top:1px solid var(--border);padding-top:7px;text-align:left}
+.dag-detail span{display:flex;justify-content:space-between;gap:5px;padding:2px 0}
+.dag-detail b{color:var(--text);font-weight:600;text-align:right}
+
+/* Vooruitzichten */
+.vooruitzicht-blok{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px}
+.vooruitzicht-blok p{font-size:.88rem;line-height:1.6;color:var(--text)}
+.vooruitzicht-blok .vz-tijd{font-size:.7rem;color:var(--text2);margin-top:6px}
+.blok-tijd{font-size:.7rem;color:var(--text2);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+
+/* Loading */
+.laden{text-align:center;padding:40px;color:var(--text2)}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.copyright{text-align:center;font-size:.65rem;color:#445566;padding:12px}
+
+/* ── DARK MODE ── overschrijft :root tokens ── */
+[data-theme="dark"] {
+  --bg:#0b1220;--bg2:#111a2e;--panel:#111a2e;--card:#0e1629;
+  --border:rgba(255,255,255,0.08);--text:#f1f5f9;--text2:#94a3b8;
+  --accent:#2ec4e8;--knmi:#2ec4e8;
+}
+[data-theme="dark"] .header { background:#111a2e; }
+[data-theme="dark"] .sectie-titel { color:#f1f5f9; }
+[data-theme="dark"] .tekst-blok strong { color:#f1f5f9; }
+[data-theme="dark"] .dag-naam { color:#f1f5f9; }
+[data-theme="dark"] .copyright { color:#64748b; }
+[data-theme="dark"] .waarschuwing-balk{background:#3b2a10;border-color:#7c5a16;color:#fde68a}
+[data-theme="dark"] .waarschuwing-balk strong{color:#fef3c7}
+[data-theme="dark"] .dagen-uitleg{background:#14213a;border-color:#29446d;color:#cbd5e1}
+[data-theme="dark"] .dagen-uitleg .bron-pill{border-color:#29446d}
+</style>
+<script>
+  (function(){
+    function apply(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
+    var saved = "light"; try { saved = localStorage.getItem("weerlab_theme") || "light"; } catch {}
+    apply(saved);
+    window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
+  })();
+</script>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1>Weersverwachting Nederland</h1>
+      <p>Bron: KNMI &middot; KNMI-bericht <span id="meta-tijd">-</span></p>
+    </div>
+    <div class="header-rechts">
+      <span class="meta-tijd" id="opgehaald"></span>
+      <button class="btn" onclick="laadData()">&#8635; Vernieuwen</button>
+    </div>
+  </div>
+</div>
+
+<div class="container" id="inhoud">
+  <div class="laden" id="laden"><span class="spinner"></span> Verwachting laden...</div>
+</div>
+
+<div class="copyright">© Ed Aldus WM | weerlab.nl | Bron: KNMI (knmi.nl)</div>
+
+<script>
+const DATA_URL = /^(localhost|127\.0\.0\.1|::1|\[::1\])$/.test(location.hostname)
+  ? 'knmi_verwachting.json'
+  : 'https://data.weerlab.nl/knmi_verwachting.json';
+const AUTO_REFRESH_MS = 10 * 60 * 1000;
+
+async function laadData(stil = false){
+  const inhoud = document.getElementById('inhoud');
+  if(!stil || !inhoud.querySelector('.sectie')){
+    inhoud.innerHTML = '<div class="laden"><span class="spinner"></span> Verwachting laden...</div>';
+  }
+
+  try {
+    const r = await fetch(DATA_URL+'?t='+Date.now(), {cache:'no-store'});
+    if(!r.ok) throw new Error('JSON niet gevonden — draai eerst het Python script');
+    const d = await r.json();
+    toon(d);
+  } catch(e){
+    if(!stil) inhoud.innerHTML = `<div class="laden" style="color:#ef4444">${esc(e.message)}</div>`;
+  }
+}
+
+function toon(d){
+  const inhoud = document.getElementById('inhoud');
+  document.getElementById('meta-tijd').textContent = d.vandaag_morgen?.tijd || '';
+  document.getElementById('opgehaald').textContent = d.opgehaald ? 'Opgehaald ' + formatDataTijd(d.opgehaald) : '';
+
+  let html = '';
+
+  // ── Kaartjes ──────────────────────────────────────────────────────────
+  if(d.kaartjes?.length){
+    html += `<div class="sectie">
+      <div class="sectie-titel">Verwachtingskaarten</div>
+      <div class="kaarten-strip">
+        ${d.kaartjes.map(k => `
+          <div class="kaart-item">
+            <img src="${esc(k.url)}" alt="${esc(k.label)}" loading="lazy">
+            <div class="kaart-label">${esc(k.label)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Vandaag & morgen ──────────────────────────────────────────────────
+  if(d.vandaag_morgen){
+    const vm = d.vandaag_morgen;
+    const delen = verdeelVerwachting(vm.tekst || []);
+    html += `<div class="sectie">
+      <div class="sectie-titel">Vandaag &amp; morgen</div>
+      <div class="tekst-blok">
+        <div class="tekst-kopregel">
+          <div class="tekst-titel">${esc(vm.titel || '')}</div>
+          <div class="tekst-label">Per dagdeel en regio</div>
+        </div>
+        ${delen.waarschuwing ? `<div class="waarschuwing-balk"><span class="waarschuwing-teken" aria-hidden="true">&#9888;</span><div><strong>Waarschuwing</strong>${esc(delen.waarschuwing)}</div></div>` : ''}
+        ${delen.algemeen ? `<div class="algemeen-blok">${esc(delen.algemeen)}</div>` : ''}
+        <div class="periode-grid">
+          ${delen.blokken.map(b => `<div class="periode"><div class="periode-kop">${esc(b.kop)}</div><p>${esc(b.tekst)}</p></div>`).join('')}
+        </div>
+        ${vm.tijd ? `<div class="blok-tijd">KNMI-bericht: ${esc(vm.tijd)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // ── 7-daagse ──────────────────────────────────────────────────────────
+  if(d.dagen?.length){
+    const vandaag = new Date().toLocaleDateString('nl-NL',{weekday:'long'}).toLowerCase();
+    html += `<div class="sectie">
+      <div class="sectie-titel">7-daagse verwachting</div>
+      <div class="dagen-uitleg">
+        <div><strong>Waarom tekst en symbool soms anders lijken</strong><p>Het symbool vat het landelijke weer voor de hele dag samen. De tekst hierboven maakt onderscheid tussen dagdelen en regio's. Gebruik die tekst voor timing en plaatselijke verschillen.</p></div>
+        <span class="bron-pill">Beide van KNMI</span>
+      </div>
+      <div class="dagen-strip">
+        ${d.dagen.map(dag => {
+          const isVandaag = dag.dag.toLowerCase() === vandaag;
+          const symbool = dagSymboolInfo(dag);
+          const waarschuwing = dagWaarschuwingInfo(dag, symbool);
+          return `<div class="dag-kaart${isVandaag?' vandaag':''}${waarschuwing?' waarschuwing '+waarschuwing.status:''}">
+            <div class="dag-naam">${esc(dag.dag)}</div>
+            <div class="dag-datum">${esc(dag.datum)}</div>
+            ${dag.icoon_url ? `<img class="dag-icoon" src="${esc(dag.icoon_url)}" alt="${esc(symbool.beschrijving)}" title="${esc(symbool.beschrijving)}">` : ''}
+            <div class="dag-symbool">${esc(symbool.beschrijving || 'Dagbeeld niet beschikbaar')}</div>
+            ${waarschuwing ? `<div class="dag-waarschuwing ${waarschuwing.status}">${esc(waarschuwing.label)}</div>` : ''}
+            <div class="dag-temps">
+              <span class="dag-temp"><small>Max.</small><span class="dag-max">${esc(dag.tmax||'-')}</span></span>
+              <span class="dag-temp"><small>Min.</small><span class="dag-min">${esc(dag.tmin||'-')}</span></span>
+            </div>
+            <div class="dag-detail">
+              ${dag.neerslagkans ? `<span>Kans op neerslag <b>${esc(dag.neerslagkans)}</b></span>` : ''}
+              ${dag.neerslag ? `<span>Hoeveelheid <b>${esc(dag.neerslag)}</b></span>` : ''}
+              ${dag.wind ? `<span>Wind <b>${esc(formatWind(dag.wind))}</b></span>` : ''}
+              ${dag.zon ? `<span>Zonneschijn <b>${esc(dag.zon)}</b></span>` : ''}
+              ${dag.zonkracht ? `<span>Zonkracht <b>${esc(dag.zonkracht)}</b></span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Vooruitzichten ────────────────────────────────────────────────────
+  if(d.vooruitzichten?.tekst){
+    html += `<div class="sectie">
+      <div class="sectie-titel">Vooruitzichten</div>
+      <div class="vooruitzicht-blok">
+        <p>${esc(d.vooruitzichten.tekst)}</p>
+        <div class="vz-tijd">${esc(d.vooruitzichten.tijd||'')}</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Lange termijn ─────────────────────────────────────────────────────
+  if(d.lange_termijn?.tekst){
+    html += `<div class="sectie">
+      <div class="sectie-titel">Lange termijn</div>
+      <div class="vooruitzicht-blok">
+        <p>${esc(d.lange_termijn.tekst)}</p>
+        <div class="vz-tijd">${esc(d.lange_termijn.tijd||'')}</div>
+      </div>
+    </div>`;
+  }
+
+  inhoud.innerHTML = html;
+}
+
+function esc(waarde){
+  return String(waarde ?? '').replace(/[&<>"']/g, teken => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[teken]));
+}
+
+function verdeelVerwachting(teksten){
+  const volledig = teksten.filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  const markerBron = 'Komende nacht|Vanochtend|Vanmiddag|Vanavond|Vannacht|Morgenochtend|Morgenmiddag|Morgenavond';
+  const patroon = new RegExp(`\\b(${markerBron})\\b`, 'gi');
+  const treffers = [...volledig.matchAll(patroon)];
+  if(!treffers.length){
+    return {waarschuwing:'', algemeen:volledig, blokken:[]};
+  }
+
+  let intro = volledig.slice(0, treffers[0].index).trim();
+  let waarschuwing = '';
+  if(/^Waarschuwingen?\b/i.test(intro)){
+    waarschuwing = intro.replace(/^Waarschuwingen?\s*/i,'').trim();
+    intro = '';
+  }
+
+  const blokken = treffers.map((treffer, index) => {
+    const begin = treffer.index + treffer[0].length;
+    const einde = index + 1 < treffers.length ? treffers[index + 1].index : volledig.length;
+    return {
+      kop: treffer[0],
+      tekst: volledig.slice(begin, einde).replace(/\s*\(Bron:\s*KNMI\)\s*$/i,'').trim()
+    };
+  }).filter(b => b.tekst);
+  return {waarschuwing, algemeen:intro, blokken};
+}
+
+function dagSymboolInfo(dag){
+  const alt = String(dag.icoon_alt || '').trim();
+  const beschrijving = alt.replace(/\s*-\s*(?:Mogelijke\s+)?Waarschuwing\s*$/i,'').trim();
+  const waarschuwingStatus = /Mogelijke waarschuwing/i.test(alt) ? 'mogelijk' : /Waarschuwing/i.test(alt) ? 'actief' : '';
+  return {
+    beschrijving: beschrijving ? beschrijving.charAt(0).toUpperCase() + beschrijving.slice(1) : '',
+    waarschuwingStatus
+  };
+}
+
+function dagWaarschuwingInfo(dag, symbool){
+  const info = dag.waarschuwing || {};
+  const status = info.status || symbool.waarschuwingStatus;
+  if(!status) return null;
+  const fenomenen = Array.isArray(info.fenomenen) ? info.fenomenen.filter(Boolean) : [];
+  const label = info.code
+    ? `Code ${info.code}${fenomenen.length ? ' · ' + fenomenen.join(', ') : ''}`
+    : fenomenen.join(', ') || (status === 'mogelijk' ? 'Waarschuwing mogelijk' : 'Waarschuwing actief');
+  return {status, label};
+}
+
+function formatWind(wind){
+  const waarde = String(wind || '').trim();
+  return /\b\d+(?:-\d+)?$/.test(waarde) ? waarde + ' Bft' : waarde;
+}
+
+function formatDataTijd(waarde){
+  const datum = new Date(waarde);
+  if(Number.isNaN(datum.getTime())) return waarde;
+  return datum.toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).replace(',',' ·');
+}
+
+window.addEventListener('load', () => {
+  laadData();
+  setInterval(() => laadData(true), AUTO_REFRESH_MS);
+});
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) laadData(true);
+});
+window.addEventListener('message', event => {
+  if(event.origin !== location.origin) return;
+  const type = typeof event.data === 'string' ? event.data : event.data?.type;
+  if(type === 'weerlab-refresh') laadData(true);
+});
+</script>
+</body>
+</html>

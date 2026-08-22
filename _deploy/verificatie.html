@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weerlab — MosMix Verificatie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-family, 'DM Sans', sans-serif);
+    font-size: 14px;
+    background: var(--color-background, #f6f8fb);
+    color: var(--color-text, #0f172a);
+  }
+  .page { max-width: 980px; margin: 0 auto; padding: 20px 16px 56px; }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  header h1 { font-size: 20px; font-weight: 700; color: #00205b; }
+  .bijgewerkt { font-size: 12px; color: #64748b; }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  label.ctrl { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+  select {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 5px 28px 5px 10px;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+  select:focus { outline: 2px solid #2ec4e8; outline-offset: 1px; }
+
+  .chart-wrap {
+    background: #fff;
+    border: 1px solid #e3e8ef;
+    border-radius: 10px;
+    padding: 16px 16px 12px;
+    margin-bottom: 14px;
+  }
+  .chart-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #64748b;
+    margin-bottom: 10px;
+  }
+  canvas { display: block; width: 100%; touch-action: none; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; }
+  .legend-line { width: 24px; height: 3px; border-radius: 2px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+
+  .info-bar {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 12px;
+  }
+  .info-stat { display: flex; flex-direction: column; gap: 2px; }
+  .info-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; }
+  .info-val { font-size: 15px; font-weight: 700; color: #00205b; }
+
+  .tabel-wrap {
+    background: #fff;
+    border: 1px solid #e3e8ef;
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+  .tabel-wrap h3 {
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: #64748b; margin-bottom: 12px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: center; font-weight: 600; color: #64748b; padding: 4px 8px; border-bottom: 1px solid #e3e8ef; white-space: nowrap; }
+  th.left { text-align: left; }
+  td { text-align: center; padding: 4px 8px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+  td.datum { text-align: left; font-weight: 600; color: #0f172a; }
+  td.obs-tx { font-weight: 700; color: #cc0000; }
+  td.obs-tn { font-weight: 700; color: #0b3a8a; }
+  td.run { color: #334155; }
+  td.pos { color: #10b981; }
+  td.neg { color: #cc0000; }
+  td.na { color: #94a3b8; font-style: italic; }
+  tr:last-child td { border-bottom: none; }
+
+  .laden { text-align: center; padding: 40px; color: #64748b; font-size: 14px; }
+  .fout { text-align: center; padding: 20px; color: #cc0000; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>MosMix Verificatie — Temperatuur</h1>
+    <span class="bijgewerkt" id="bijgewerkt">Laden…</span>
+  </header>
+
+  <div class="controls">
+    <label class="ctrl" for="stationSelect">Station</label>
+    <select id="stationSelect"></select>
+  </div>
+
+  <div id="infoBar" class="info-bar"></div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Maximumtemperatuur (TX)</div>
+    <canvas id="canvasTX" height="210"></canvas>
+    <div class="legend" id="legendTX"></div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Minimumtemperatuur (TN)</div>
+    <canvas id="canvasTN" height="210"></canvas>
+    <div class="legend" id="legendTN"></div>
+  </div>
+
+  <div class="tabel-wrap">
+    <h3>Detailtabel — verwacht vs. gemeten</h3>
+    <div id="tabel"><div class="laden">Laden…</div></div>
+  </div>
+</div>
+
+<script>
+const DATA_URL = location.hostname === 'localhost'
+  ? '/verificatie_multirun.json'
+  : 'https://data.weerlab.nl/verificatie_multirun.json';
+
+const RUN_COLORS = {
+  1: { stroke: '#1e3a5f', dash: [],     label: 'T−1 dag' },
+  2: { stroke: '#2563eb', dash: [],     label: 'T−2 dagen' },
+  3: { stroke: '#60a5fa', dash: [],     label: 'T−3 dagen' },
+  4: { stroke: '#93c5fd', dash: [5,3],  label: 'T−4 dagen' },
+  5: { stroke: '#bfdbfe', dash: [4,3],  label: 'T−5 dagen' },
+};
+const OBS_TX = '#cc0000';
+const OBS_TN = '#0b3a8a';
+
+function runStyle(aanloop) {
+  return RUN_COLORS[Math.min(aanloop, 5)];
+}
+
+function fmtDatum(d) {
+  const mnd = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const [,m,dd] = d.split('-');
+  return `${parseInt(dd)} ${mnd[parseInt(m)-1]}`;
+}
+
+// ─── Charts ──────────────────────────────────────────────────────────────────
+function drawChart(canvasId, stationData, varKey, obsKey, obsColor) {
+  const canvas = document.getElementById(canvasId);
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 32;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = '210px';
+  canvas.width  = W * dpr;
+  canvas.height = 210 * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const ML = 44, MR = 16, MT = 16, MB = 32;
+  const cw = W - ML - MR;
+  const ch = 210 - MT - MB;
+
+  const dates = Object.keys(stationData).sort();
+  const n = dates.length;
+  if (!n) return;
+
+  let allVals = [];
+  dates.forEach(d => {
+    const e = stationData[d];
+    e.runs.forEach(r => { if (r[varKey] != null) allVals.push(r[varKey]); });
+    if (e[obsKey] != null) allVals.push(e[obsKey]);
+  });
+  if (!allVals.length) return;
+  const vMin = Math.floor(Math.min(...allVals) - 1.5);
+  const vMax = Math.ceil(Math.max(...allVals) + 1.5);
+
+  function xPos(i) { return ML + (i / Math.max(n - 1, 1)) * cw; }
+  function yPos(v) { return MT + ch - ((v - vMin) / (vMax - vMin)) * ch; }
+
+  // Grid
+  const step = (vMax - vMin) <= 20 ? 5 : 10;
+  ctx.strokeStyle = '#e3e8ef'; ctx.lineWidth = 1;
+  for (let v = Math.ceil(vMin / step) * step; v <= vMax; v += step) {
+    const y = yPos(v);
+    ctx.beginPath(); ctx.moveTo(ML, y); ctx.lineTo(ML + cw, y); ctx.stroke();
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px DM Sans, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(v + '°', ML - 5, y + 3.5);
+  }
+
+  // x-as labels
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px DM Sans, sans-serif';
+  ctx.textAlign = 'center';
+  const labelStep = Math.max(1, Math.ceil(n / 10));
+  dates.forEach((d, i) => {
+    if (i % labelStep !== 0 && i !== n - 1) return;
+    const x = xPos(i);
+    ctx.fillText(fmtDatum(d), x, MT + ch + 20);
+    ctx.strokeStyle = '#e3e8ef'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, MT + ch); ctx.lineTo(x, MT + ch + 4); ctx.stroke();
+  });
+
+  // Vandaag-scheidingslijn
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayIdx = dates.indexOf(todayStr);
+  if (todayIdx >= 0) {
+    ctx.strokeStyle = '#e3e8ef'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(xPos(todayIdx), MT); ctx.lineTo(xPos(todayIdx), MT + ch); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#cbd5e1'; ctx.font = '9px DM Sans, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('vandaag', xPos(todayIdx), MT - 4);
+  }
+
+  function hasGap(i) {
+    if (i === 0) return false;
+    return (new Date(dates[i]) - new Date(dates[i-1])) > 3 * 86400000;
+  }
+
+  // Groepeer runs per aanloop
+  const groepen = {};
+  dates.forEach((d, i) => {
+    stationData[d].runs.forEach(r => {
+      const al = Math.min(r.aanloop, 5);
+      if (!groepen[al]) groepen[al] = new Array(n).fill(null);
+      if (r[varKey] != null) groepen[al][i] = r[varKey];
+    });
+  });
+
+  // Teken runs (oud → nieuw, zodat T-1 bovenop)
+  [5, 4, 3, 2, 1].forEach(al => {
+    if (!groepen[al]) return;
+    const sty = runStyle(al);
+    ctx.strokeStyle = sty.stroke;
+    ctx.lineWidth = al <= 2 ? 2 : 1.5;
+    ctx.setLineDash(sty.dash);
+    ctx.beginPath();
+    let pen = false;
+    groepen[al].forEach((v, i) => {
+      if (v == null || hasGap(i)) { pen = false; return; }
+      if (!pen) { ctx.moveTo(xPos(i), yPos(v)); pen = true; }
+      else ctx.lineTo(xPos(i), yPos(v));
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Gemeten lijn
+  ctx.strokeStyle = obsColor; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  let penObs = false;
+  dates.forEach((d, i) => {
+    const v = stationData[d][obsKey];
+    if (v == null || hasGap(i)) { penObs = false; return; }
+    if (!penObs) { ctx.moveTo(xPos(i), yPos(v)); penObs = true; }
+    else ctx.lineTo(xPos(i), yPos(v));
+  });
+  ctx.stroke();
+
+  // Gemeten dots
+  dates.forEach((d, i) => {
+    const v = stationData[d][obsKey];
+    if (v == null) return;
+    ctx.beginPath(); ctx.arc(xPos(i), yPos(v), 4, 0, Math.PI * 2);
+    ctx.fillStyle = obsColor; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+  });
+}
+
+// ─── Legende ──────────────────────────────────────────────────────────────────
+function buildLegend(id, obsColor, obsLabel, aanloopSet) {
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  const obsItem = document.createElement('div');
+  obsItem.className = 'legend-item';
+  obsItem.innerHTML = `<div class="legend-dot" style="background:${obsColor};border-color:${obsColor}"></div><span>${obsLabel}</span>`;
+  el.appendChild(obsItem);
+  [...aanloopSet].sort((a,b) => a-b).forEach(al => {
+    const sty = runStyle(al);
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<div class="legend-line" style="background:${sty.stroke}"></div><span>Run ${sty.label}</span>`;
+    el.appendChild(item);
+  });
+}
+
+// ─── Statistieken ─────────────────────────────────────────────────────────────
+function buildInfoBar(stationData) {
+  function stat(obsKey, varKey, aanloop) {
+    let mae=0, bias=0, cnt=0;
+    Object.values(stationData).forEach(e => {
+      if (e[obsKey] == null) return;
+      const r = e.runs.find(r => r.aanloop === aanloop);
+      if (!r || r[varKey] == null) return;
+      const d = r[varKey] - e[obsKey];
+      mae += Math.abs(d); bias += d; cnt++;
+    });
+    return cnt ? { mae: (mae/cnt).toFixed(1), bias: (bias/cnt).toFixed(1), n: cnt } : null;
+  }
+  const sTX = stat('obs_tx','tx',1);
+  const sTN = stat('obs_tn','tn',1);
+  const bar = document.getElementById('infoBar');
+  const fmt = s => s ? s.mae + ' °C' : '—';
+  const fmtB = s => s ? (parseFloat(s.bias) >= 0 ? '+' : '') + s.bias + ' °C' : '—';
+  bar.innerHTML = `
+    <div class="info-stat"><span class="info-label">MAE TX (T−1)</span><span class="info-val">${fmt(sTX)}</span></div>
+    <div class="info-stat"><span class="info-label">Bias TX (T−1)</span><span class="info-val">${fmtB(sTX)}</span></div>
+    <div class="info-stat"><span class="info-label">MAE TN (T−1)</span><span class="info-val">${fmt(sTN)}</span></div>
+    <div class="info-stat"><span class="info-label">Bias TN (T−1)</span><span class="info-val">${fmtB(sTN)}</span></div>
+    <div class="info-stat"><span class="info-label">Obs (n)</span><span class="info-val">${sTX ? sTX.n : 0}</span></div>
+  `;
+}
+
+// ─── Detailtabel ──────────────────────────────────────────────────────────────
+function buildTabel(stationData) {
+  const container = document.getElementById('tabel');
+  const obsRows = Object.entries(stationData)
+    .filter(([,e]) => e.obs_tx != null || e.obs_tn != null)
+    .sort(([a],[b]) => a.localeCompare(b));
+
+  if (!obsRows.length) {
+    container.innerHTML = '<p style="color:#94a3b8;font-size:12px;padding:8px 0">Nog geen waarnemingen beschikbaar.</p>';
+    return;
+  }
+
+  const maxAl = Math.min(5, Math.max(...obsRows.flatMap(([,e]) => e.runs.map(r => r.aanloop))));
+  let html = '<table><thead><tr><th class="left">Datum</th>';
+  html += '<th style="color:#cc0000">TX gem.</th>';
+  for (let al=1;al<=maxAl;al++) html += `<th>TX T−${al}</th>`;
+  html += '<th style="color:#cc0000">Afw. TX</th>';
+  html += '<th style="color:#0b3a8a">TN gem.</th>';
+  for (let al=1;al<=maxAl;al++) html += `<th>TN T−${al}</th>`;
+  html += '<th style="color:#0b3a8a">Afw. TN</th>';
+  html += '</tr></thead><tbody>';
+
+  obsRows.forEach(([datum, e]) => {
+    html += '<tr>';
+    html += `<td class="datum">${fmtDatum(datum)}</td>`;
+    html += `<td class="obs-tx">${e.obs_tx != null ? e.obs_tx.toFixed(1) : '—'}</td>`;
+    for (let al=1;al<=maxAl;al++) {
+      const r = e.runs.find(r => r.aanloop === al);
+      html += `<td class="run">${r && r.tx != null ? r.tx.toFixed(1) : '—'}</td>`;
+    }
+    const r1TX = e.runs.find(r => r.aanloop === 1);
+    if (r1TX && r1TX.tx != null && e.obs_tx != null) {
+      const d = r1TX.tx - e.obs_tx;
+      html += `<td class="${Math.abs(d)<0.5?'run':d>0?'pos':'neg'}">${d>0?'+':''}${d.toFixed(1)}</td>`;
+    } else html += '<td class="na">—</td>';
+    html += `<td class="obs-tn">${e.obs_tn != null ? e.obs_tn.toFixed(1) : '—'}</td>`;
+    for (let al=1;al<=maxAl;al++) {
+      const r = e.runs.find(r => r.aanloop === al);
+      html += `<td class="run">${r && r.tn != null ? r.tn.toFixed(1) : '—'}</td>`;
+    }
+    const r1TN = e.runs.find(r => r.aanloop === 1);
+    if (r1TN && r1TN.tn != null && e.obs_tn != null) {
+      const d = r1TN.tn - e.obs_tn;
+      html += `<td class="${Math.abs(d)<0.5?'run':d>0?'pos':'neg'}">${d>0?'+':''}${d.toFixed(1)}</td>`;
+    } else html += '<td class="na">—</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+let DATA = null;
+
+function render() {
+  const station = document.getElementById('stationSelect').value;
+  const stData  = DATA.stations[station];
+  if (!stData) return;
+
+  // Aanloop-waarden in gebruik
+  const aanloopSet = new Set();
+  Object.values(stData).forEach(e => e.runs.forEach(r => aanloopSet.add(Math.min(r.aanloop, 5))));
+
+  drawChart('canvasTX', stData, 'tx', 'obs_tx', OBS_TX);
+  drawChart('canvasTN', stData, 'tn', 'obs_tn', OBS_TN);
+  buildLegend('legendTX', OBS_TX, 'Gemeten TX', aanloopSet);
+  buildLegend('legendTN', OBS_TN, 'Gemeten TN', aanloopSet);
+  buildInfoBar(stData);
+  buildTabel(stData);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const resp = await fetch(DATA_URL + '?t=' + Date.now());
+    if (!resp.ok) throw new Error(resp.status);
+    DATA = await resp.json();
+    document.getElementById('bijgewerkt').textContent = 'Bijgewerkt: ' + DATA.gegenereerd + ' · Bron: DWD MosMix + KNMI EDR';
+
+    const sel = document.getElementById('stationSelect');
+    Object.keys(DATA.stations).sort().forEach(naam => {
+      const opt = document.createElement('option');
+      opt.value = naam;
+      opt.textContent = naam;
+      if (naam === 'De Bilt') opt.selected = true;
+      sel.appendChild(opt);
+    });
+
+    sel.addEventListener('change', render);
+    window.addEventListener('resize', render);
+    render();
+  } catch(e) {
+    document.getElementById('tabel').innerHTML = `<div class="fout">Fout bij laden data: ${e.message}</div>`;
+    document.getElementById('bijgewerkt').textContent = 'Data niet beschikbaar';
+  }
+})();
+</script>
+</body>
+</html>

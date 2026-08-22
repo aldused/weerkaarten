@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wolkenverdeling — weerlab.nl</title>
+<style>
+  :root {
+    --bg:#0d1420; --panel:#172235; --panel2:#111b2b; --border:#2a3a55;
+    --accent:#88aaff; --gold:#ffcc66; --text:#e6ecf5; --muted:#91a2c2;
+    --night:#1a2a55; --day:#c8a820; --danger:#ff7373;
+    --kaart-breedte:1000px;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; min-height:100%; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,"Helvetica Neue",Arial,sans-serif; }
+  button, select, input { font:inherit; }
+  button:focus-visible, select:focus-visible, input:focus-visible, #kaart-img:focus-visible {
+    outline:2px solid var(--gold); outline-offset:2px;
+  }
+  header {
+    position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:10px 18px; background:rgba(23,34,53,.97); border-bottom:1px solid var(--border);
+    backdrop-filter:blur(8px);
+  }
+  header h1 { margin:0; font-size:17px; flex:1; }
+  .model-label { color:var(--muted); font-size:12px; font-weight:500; }
+  .run-info { color:var(--muted); font-size:12px; }
+  .info-btn {
+    width:28px; height:28px; border-radius:50%; border:1px solid var(--border);
+    color:var(--accent); background:rgba(136,170,255,.1); cursor:pointer; font-weight:800;
+  }
+  #uitleg { display:none; max-width:1460px; margin:12px auto 0; padding:0 16px; }
+  .uitleg-box {
+    padding:12px 16px; background:var(--panel); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:0 8px 8px 0;
+    font-size:13px; line-height:1.65;
+  }
+  .uitleg-box strong { color:var(--gold); }
+  .bronregel { margin-top:8px; color:var(--muted); font-size:12px; }
+
+  .kaart-layout {
+    width:min(100%, 1500px); margin:14px auto 0; padding:0 16px;
+    display:grid; grid-template-columns:minmax(0, var(--kaart-breedte)) 260px;
+    justify-content:center; align-items:start; gap:12px;
+  }
+  .kaart-wrap { width:100%; max-width:var(--kaart-breedte); }
+  .kaart-stage { position:relative; width:100%; border-radius:8px; overflow:hidden; background:var(--panel); }
+  #kaart-img { width:100%; min-height:320px; display:block; cursor:crosshair; user-select:none; }
+  .map-overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+  .loading-overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(13,20,32,.72); color:var(--muted); opacity:0; pointer-events:none;
+    transition:opacity .18s;
+  }
+  .loading-overlay.vis { opacity:1; }
+  #loc-marker {
+    position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; border:2px solid #fff;
+    border-radius:50%; background:#ff3b30; box-shadow:0 0 0 3px rgba(13,20,32,.72);
+    pointer-events:none; display:none;
+  }
+  .kaart-legenda {
+    background:#f8fafc; color:#1f2937; border-radius:8px; border:1px solid #cbd5e1;
+    padding:10px 11px; font-size:11px; line-height:1.25;
+  }
+  .kaart-legenda summary { cursor:pointer; font-size:13px; font-weight:800; color:#0f172a; }
+  .leg-group { margin-top:10px; }
+  .leg-title { margin-bottom:5px; font-size:10px; font-weight:900; color:#475569; text-transform:uppercase; letter-spacing:.06em; }
+  .leg-item { display:grid; grid-template-columns:42px 1fr; align-items:center; gap:7px; margin:4px 0; }
+  .leg-swatch { height:19px; border:1px solid #94a3b8; border-radius:3px; background:var(--c); }
+  .leg-swatch.dots { background-color:var(--c); background-image:radial-gradient(circle, var(--dot,#fff) 1.3px, transparent 1.7px); background-size:7px 7px; }
+  .leg-swatch.blobs { background-color:#54a4e4; background-image:radial-gradient(ellipse, #fff 0 42%, transparent 45%); background-size:19px 14px; }
+  .leg-note { margin-top:10px; color:#64748b; font-size:10px; line-height:1.45; }
+
+  .info-balk, .controls, .inspecteur {
+    width:min(100%, 1460px); margin-left:auto; margin-right:auto; padding-left:16px; padding-right:16px;
+  }
+  .info-balk { margin-top:10px; display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+  .info-prefix { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .info-chip {
+    padding:5px 11px; border-radius:18px; background:var(--panel); border:1px solid var(--border);
+    font-size:12px; white-space:nowrap;
+  }
+  .info-chip.situatie { color:var(--gold); font-weight:800; }
+  .info-chip.nacht { border-color:#4d64a0; color:#a9beff; }
+  .chip-label { color:var(--muted); font-size:10px; margin-right:4px; }
+
+  .inspecteur { margin-top:10px; }
+  .inspecteur[hidden] { display:none; }
+  .inspecteur-card {
+    background:linear-gradient(135deg,#182640,#111b2b); border:1px solid #3b5278;
+    border-radius:9px; padding:12px 14px;
+  }
+  .inspecteur-head { display:flex; gap:10px; align-items:flex-start; }
+  .inspecteur-head h2 { margin:0; flex:1; font-size:14px; color:var(--gold); }
+  .close-btn { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:19px; }
+  .inspecteur-grid { display:grid; grid-template-columns:repeat(8,minmax(90px,1fr)); gap:7px; margin-top:10px; }
+  .metric { padding:8px 9px; border-radius:7px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); }
+  .metric-label { display:block; color:var(--muted); font-size:10px; margin-bottom:3px; }
+  .metric-value { font-size:14px; font-weight:800; }
+  .inspecteur-status { margin-top:8px; color:var(--muted); font-size:11px; }
+
+  /* ─── Gezamenlijke, goed afleesbare tijdas ─────────────────── */
+  .time-control {
+    width:min(100%, 1460px); margin:13px auto 0; padding:10px 16px 9px;
+    background:linear-gradient(180deg,#1b3355 0%,#15253e 100%);
+    border:1px solid #46699b; border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.18);
+  }
+  .time-control-head {
+    display:grid; grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:baseline; gap:12px; margin-bottom:2px;
+  }
+  .time-control-title {
+    color:#b9d1ff; font-size:10px; font-weight:900; text-transform:uppercase;
+    letter-spacing:.08em; white-space:nowrap;
+  }
+  #time-current {
+    color:#fff; font-size:17px; font-weight:850; letter-spacing:-.015em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #time-meta {
+    color:#c8d9f7; font:700 10px ui-monospace,SFMono-Regular,Menlo,monospace;
+    white-space:nowrap;
+  }
+  .time-slider-shell { padding:0 2px; }
+  #uur-slider {
+    display:block; width:100%; height:30px; margin:0; cursor:pointer;
+    -webkit-appearance:none; appearance:none; background:transparent; outline:none;
+    touch-action:pan-y;
+  }
+  #uur-slider::-webkit-slider-runnable-track {
+    height:10px; border:1px solid #637995; border-radius:999px;
+    background:linear-gradient(to right,#9bc2ff 0 var(--range-progress,0%),#34445c var(--range-progress,0%) 100%);
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.55);
+  }
+  #uur-slider::-webkit-slider-thumb {
+    -webkit-appearance:none; width:26px; height:26px; margin-top:-9px;
+    border:4px solid #ecf4ff; border-radius:50%; background:#638dff;
+    box-shadow:0 0 0 3px rgba(155,194,255,.3),0 3px 8px rgba(0,0,0,.5); cursor:grab;
+  }
+  #uur-slider:active::-webkit-slider-thumb { cursor:grabbing; transform:scale(1.06); }
+  #uur-slider::-moz-range-track { height:10px; border:1px solid #637995; border-radius:999px; background:#34445c; }
+  #uur-slider::-moz-range-progress { height:10px; border-radius:999px; background:#9bc2ff; }
+  #uur-slider::-moz-range-thumb {
+    width:18px; height:18px; border:4px solid #ecf4ff; border-radius:50%;
+    background:#638dff; box-shadow:0 0 0 3px rgba(155,194,255,.3); cursor:grab;
+  }
+  #time-axis {
+    position:relative; height:32px; margin:-1px 13px 0;
+    border-top:1px solid rgba(185,209,255,.35); overflow:hidden;
+  }
+  .time-day-boundary {
+    position:absolute; top:0; bottom:0; width:1px; background:rgba(185,209,255,.48);
+    transform:translateX(-.5px);
+  }
+  .time-day-label {
+    position:absolute; top:7px; transform:translateX(-50%); color:#e5efff;
+    font:800 10px ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap;
+  }
+  .time-hour-tick {
+    position:absolute; top:0; width:1px; height:5px; background:rgba(203,213,225,.55);
+    transform:translateX(-.5px);
+  }
+  .time-hour-tick.major { height:7px; background:#dbeafe; }
+  .time-hour-tick span {
+    position:absolute; top:20px; left:3px; color:#b9c8dd;
+    font:8px ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .time-jump-section { margin-top:7px; }
+  .time-jump-head {
+    display:flex; justify-content:space-between; gap:10px; margin:0 2px 5px;
+    color:#b9c8dd; font:800 9px ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.06em; text-transform:uppercase;
+  }
+  .time-jump-head span:last-child { color:#9bc2ff; font-weight:700; letter-spacing:0; text-transform:none; }
+  #time-jump-strip {
+    display:flex; gap:5px; overflow-x:auto; padding:1px 2px 7px;
+    scrollbar-width:thin; scrollbar-color:#53667f transparent;
+  }
+  .time-jump {
+    flex:0 0 auto; min-width:61px; padding:4px 6px 5px; border:2px solid var(--border);
+    border-radius:6px; color:var(--muted); background:var(--panel); cursor:pointer;
+    font:700 9px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .time-jump:hover { border-color:var(--accent); color:var(--text); }
+  .time-jump:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .time-jump strong { display:block; margin-top:1px; color:var(--text); font-size:11px; }
+  .time-jump.nacht { background:#111c35; }
+  .time-jump.new-day { margin-left:8px; border-left-color:var(--gold); }
+  .time-jump.active { border-color:var(--accent); background:#1e3256; color:var(--accent); }
+  .time-jump.active strong { color:#fff; }
+  .sr-only {
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
+  #tijdbalk {
+    height:7px; display:flex; overflow:hidden; margin:4px 13px 0; border:1px solid #53667f;
+    border-radius:999px; background:var(--border);
+  }
+  .tijdbalk-seg { flex:1; min-width:1px; transition:filter .12s,transform .12s; }
+  .tijdbalk-seg.dag { background:var(--day); opacity:.72; }
+  .tijdbalk-seg.nacht { background:var(--night); opacity:.95; }
+  .tijdbalk-seg.active { filter:brightness(1.55); transform:scaleY(1.3); }
+  .time-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px; }
+
+  .controls { margin-top:13px; }
+  .ctrl-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:9px; }
+  .btn {
+    padding:7px 13px; border-radius:7px; border:1px solid var(--border); color:var(--text);
+    background:var(--panel); cursor:pointer;
+  }
+  .btn:hover { border-color:var(--accent); }
+  .btn.active { background:var(--accent); border-color:var(--accent); color:#07101d; font-weight:800; }
+  .btn.icon { min-width:42px; padding-left:9px; padding-right:9px; }
+  #btn-map-focus { border-color:var(--accent); color:#dfe8ff; white-space:nowrap; }
+  #btn-map-focus-exit {
+    display:none; position:fixed; z-index:1200; top:10px; right:12px;
+    min-height:36px; padding:7px 11px; border:1px solid rgba(136,170,255,.85);
+    border-radius:8px; background:rgba(13,20,32,.9); color:var(--text);
+    box-shadow:0 5px 18px rgba(0,0,0,.4); backdrop-filter:blur(8px);
+    cursor:pointer; font-weight:800; font-size:11px;
+  }
+  #btn-map-focus-exit:hover { background:#1e3256; border-color:#c5d5ff; }
+  #map-focus-meta {
+    display:none; position:fixed; z-index:1200; top:10px; left:12px;
+    max-width:calc(100vw - 210px); padding:7px 11px; border:1px solid rgba(136,170,255,.65);
+    border-radius:8px; background:rgba(13,20,32,.88); color:var(--text);
+    box-shadow:0 5px 18px rgba(0,0,0,.35); backdrop-filter:blur(8px);
+    font-size:11px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #map-focus-controls {
+    display:none; position:fixed; z-index:1200; left:50%; bottom:12px;
+    transform:translateX(-50%); align-items:center; gap:7px;
+    grid-template-columns:auto auto minmax(128px,170px) clamp(150px,28vw,420px) auto auto;
+    grid-template-areas:"prev play product slider time next";
+    padding:7px 9px; border:1px solid rgba(136,170,255,.75); border-radius:10px;
+    background:rgba(13,20,32,.9); box-shadow:0 5px 18px rgba(0,0,0,.4);
+    backdrop-filter:blur(8px);
+  }
+  #map-focus-controls button { min-width:42px; height:32px; padding:0 9px; }
+  #map-focus-prev { grid-area:prev; }
+  #map-focus-play { grid-area:play; }
+  #map-focus-product { grid-area:product; min-width:0; height:32px; padding:0 8px; border:1px solid var(--border); border-radius:7px; color:var(--text); background:var(--panel); font-size:11px; font-weight:700; }
+  #map-focus-slider { grid-area:slider; width:100%; height:30px; margin:0; cursor:pointer; accent-color:var(--accent); }
+  #map-focus-time { grid-area:time; min-width:120px; color:var(--text); text-align:center; font-size:10px; font-weight:800; }
+  #map-focus-next { grid-area:next; }
+  body.map-focus-mode { height:100vh; overflow:hidden; }
+  body.map-focus-mode header,
+  body.map-focus-mode #uitleg,
+  body.map-focus-mode .time-control,
+  body.map-focus-mode .info-balk,
+  body.map-focus-mode .inspecteur,
+  body.map-focus-mode .controls,
+  body.map-focus-mode .kaart-legenda { display:none; }
+  body.map-focus-mode main { width:100vw; height:100vh; }
+  body.map-focus-mode #btn-map-focus-exit { display:inline-flex; align-items:center; gap:6px; }
+  body.map-focus-mode #map-focus-meta { display:block; }
+  body.map-focus-mode #map-focus-controls { display:grid; }
+  body.map-focus-mode .kaart-layout {
+    position:relative; width:100vw; height:100vh; margin:0; padding:0;
+    display:block; overflow:hidden;
+  }
+  body.map-focus-mode .kaart-wrap {
+    position:absolute; left:50%; top:calc(50% - clamp(28px,6vh,72px)); max-width:none;
+    transform:translate(-50%,-50%);
+  }
+  body.map-focus-mode .kaart-stage,
+  body.map-focus-mode #kaart-img { width:100%; height:100%; min-height:0; }
+  .speed-label { color:var(--muted); font-size:12px; }
+  .speed-sel { padding:6px 8px; border-radius:6px; color:var(--text); background:var(--panel); border:1px solid var(--border); }
+  .zoom-row input { flex:1; max-width:320px; accent-color:var(--accent); }
+  #grootte-label { min-width:55px; text-align:right; color:var(--muted); font-size:11px; }
+  .fout { color:var(--danger); }
+
+  @media (max-width:1000px) {
+    .kaart-layout { grid-template-columns:minmax(0,1fr); }
+    .kaart-legenda { width:100%; }
+    .inspecteur-grid { grid-template-columns:repeat(4,minmax(90px,1fr)); }
+    .time-hour-tick:not(.major) { display:none; }
+  }
+  @media (max-width:600px) {
+    header { padding:9px 11px; }
+    header h1 { font-size:15px; }
+    .kaart-layout { padding:0 8px; }
+    .info-balk,.controls,.inspecteur { padding-left:9px; padding-right:9px; }
+    .time-control { margin-top:9px; padding:8px 9px 7px; border-radius:0; }
+    .time-control-head { grid-template-columns:auto 1fr; gap:5px 9px; }
+    #time-current { grid-column:1 / -1; grid-row:2; font-size:14px; }
+    #time-meta { grid-column:2; grid-row:1; text-align:right; }
+    #uur-slider { height:32px; }
+    #time-axis { margin-inline:13px; }
+    .time-hour-tick { display:none; }
+    .time-jump { min-width:56px; }
+    .inspecteur-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .secondary-control { display:none; }
+    .btn { padding:7px 10px; font-size:12px; }
+    #kaart-img { min-height:220px; }
+    #map-focus-controls {
+      width:min(360px,calc(100vw - 24px)); box-sizing:border-box;
+      grid-template-columns:auto auto minmax(0,1fr) auto;
+      grid-template-areas:"prev play time next" "product product slider slider";
+    }
+    #map-focus-product { width:100%; }
+    #map-focus-time { min-width:0; }
+  }
+</style>
+</head>
+<body>
+<button id="btn-map-focus-exit" type="button" aria-label="Sluit de beeldvullende kaartmodus" title="Terug naar de bediening (Escape)">
+  <span aria-hidden="true">✕</span><span>Sluit beeldvullend</span>
+</button>
+<div id="map-focus-meta" aria-live="polite">Wolkenverdeling</div>
+<div id="map-focus-controls" role="group" aria-label="Tijd bedienen in beeldvullende kaartmodus">
+  <button class="btn" id="map-focus-prev" type="button" aria-label="Vorig uur" title="Vorig uur (pijl links)">◀</button>
+  <button class="btn" id="map-focus-play" type="button" aria-label="Afspelen">▶</button>
+  <select id="map-focus-product" aria-label="Kies een andere bewolkingskaart" title="Kies een andere bewolkingskaart">
+    <option value="wolkenverdeling">Bewolking HARMONIE</option>
+    <option value="bewolking-icond2">Bewolking ICON-D2</option>
+  </select>
+  <input id="map-focus-slider" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Geldige tijd kiezen">
+  <span id="map-focus-time" aria-live="polite">laden…</span>
+  <button class="btn" id="map-focus-next" type="button" aria-label="Volgend uur" title="Volgend uur (pijl rechts)">▶</button>
+</div>
+<header>
+  <h1>☁️ Wolkenverdeling <span class="model-label">· KNMI HARMONIE · afgeleide classificatie</span></h1>
+  <button class="btn" id="btn-map-focus" type="button" aria-pressed="false" title="Verberg de bediening en toon alleen de wolkenkaart">⛶ Kaart beeldvullend</button>
+  <button class="info-btn" id="info-btn" type="button" aria-expanded="false" title="Uitleg">i</button>
+  <div class="run-info" id="run-label">laden…</div>
+</header>
+
+<section id="uitleg" aria-label="Uitleg wolkenkaart">
+  <div class="uitleg-box">
+    De kaart combineert <strong>hoge, middelbare en lage wolkenbedekking</strong> met wolkenbasis,
+    zicht, neerslag en een aanvullend convectief signaal. De wolkentypen zijn
+    <strong>indicatieve klassen</strong>: “veel” betekent veel bedekking, niet gemeten optische dikte.
+    Een lage wolkenbasis en echte mist hebben elk een eigen kleur.
+    <div class="bronregel">
+      Wolken, basis, zicht en neerslag: KNMI HARMONIE-AROME Cy43 P1. CAPE: aanvullend
+      Open-Meteo / DMI HARMONIE op een grover rooster. Klik op de kaart voor lokale modelwaarden.
+    </div>
+  </div>
+</section>
+
+<main>
+  <section class="time-control" aria-label="Tijdlijn wolkenverdeling">
+    <div class="time-control-head">
+      <span class="time-control-title">Geldige tijd</span>
+      <output id="time-current" for="uur-slider">Modeltijden laden…</output>
+      <span id="time-meta">0 tijdstippen</span>
+    </div>
+    <div class="time-slider-shell">
+      <input type="range" id="uur-slider" min="0" max="59" value="0" aria-label="Geldig uur" aria-describedby="time-help">
+    </div>
+    <div id="time-axis" aria-hidden="true"></div>
+    <div class="time-jump-section">
+      <div class="time-jump-head"><span>Spring direct naar een uur</span><span>Klik een tijd</span></div>
+      <div id="time-jump-strip" role="group" aria-label="Beschikbare geldige uren"></div>
+    </div>
+    <div id="tijdbalk" aria-hidden="true" title="Donkerblauw is nacht, goud is dag"></div>
+    <p id="time-help" class="sr-only">Versleep de regelaar om een ander geldig modeluur op de wolkenkaart te tonen.</p>
+    <div class="time-actions">
+      <button class="btn icon" id="btn-prev" type="button" aria-label="Vorig uur">◀</button>
+      <button class="btn" id="btn-play" type="button">▶ Play</button>
+      <button class="btn icon" id="btn-next" type="button" aria-label="Volgend uur">▶</button>
+      <span class="speed-label secondary-control">Snelheid:</span>
+      <select class="speed-sel secondary-control" id="speed-sel" aria-label="Animatiesnelheid">
+        <option value="900">Langzaam</option><option value="450" selected>Normaal</option>
+        <option value="230">Snel</option><option value="120">Heel snel</option>
+      </select>
+      <button class="btn secondary-control" id="btn-begin" type="button">⏮ Begin</button>
+      <button class="btn secondary-control" id="btn-einde" type="button">⏭ Einde</button>
+    </div>
+  </section>
+
+  <div class="kaart-layout" id="kaart-layout">
+    <div class="kaart-wrap">
+      <div class="kaart-stage" id="kaart-stage">
+        <img id="kaart-img" src="" alt="Wolkenverdeling" draggable="false" tabindex="0">
+        <svg id="temp-overlay" class="map-overlay" aria-hidden="true" style="display:none"></svg>
+        <svg id="wind-overlay" class="map-overlay" aria-hidden="true" style="display:none"></svg>
+        <div id="loc-marker" aria-hidden="true"></div>
+        <div class="loading-overlay" id="loading" aria-live="polite">Kaart laden…</div>
+      </div>
+    </div>
+
+    <aside class="kaart-legenda" aria-label="Legenda wolkenklassen">
+      <details open>
+        <summary>Legenda — indicatieve klassen</summary>
+        <div class="leg-group"><div class="leg-title">Helder</div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#54a4e4"></span><span>Helder</span></div>
+        </div>
+        <div class="leg-group"><div class="leg-title">Hoge bewolking</div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#c3eef9"></span><span>Beperkte bedekking</span></div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#8adff4"></span><span>Veel bedekking</span></div>
+        </div>
+        <div class="leg-group"><div class="leg-title">Middelbare bewolking</div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#f3f5f7"></span><span>Beperkte bedekking</span></div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#b6bac1"></span><span>Veel bedekking</span></div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#6d727b"></span><span>Vrijwel gesloten</span></div>
+        </div>
+        <div class="leg-group"><div class="leg-title">Lage basis en mist</div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#bcc9d6;--dot:#5f7fa8"></span><span>Basis &lt; 2000 ft</span></div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#e9f096"></span><span>Basis &lt; 1000 ft</span></div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#f0b400"></span><span>Basis &lt; 500 ft</span></div>
+          <div class="leg-item"><span class="leg-swatch" style="--c:#d97706"></span><span>Mist: zicht &lt; 600 m</span></div>
+        </div>
+        <div class="leg-group"><div class="leg-title">Cumulus-indicatie</div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#54a4e4"></span><span>Vlak</span></div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#54a4e4;background-size:4px 4px"></span><span>Groeiend</span></div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#9fb6c9"></span><span>Uitgespreid</span></div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#c3eef9"></span><span>Onder hoge bewolking</span></div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#b6bac1"></span><span>Onder middelbare bewolking</span></div>
+          <div class="leg-item"><span class="leg-swatch dots" style="--c:#e9f096;--dot:#8a9457"></span><span>Onder lage bewolking</span></div>
+          <div class="leg-item"><span class="leg-swatch blobs"></span><span>Bui- / Cb-indicatie</span></div>
+        </div>
+        <div class="leg-note">Bedekking en klassen zijn modelafleidingen, geen waarneming of kanspercentage.</div>
+      </details>
+    </aside>
+  </div>
+
+  <div class="info-balk" id="info-balk">
+    <span class="info-prefix">Kaartbeeld</span>
+    <div class="info-chip situatie" id="chip-situatie">—</div>
+    <div class="info-chip"><span class="chip-label">geldig</span><span id="val-tijd">—</span></div>
+    <div class="info-chip"><span class="chip-label">termijn</span>+<span id="val-uur">—</span>u</div>
+    <div class="info-chip"><span class="chip-label">gem. hoog</span><span id="val-hoog">—</span>%</div>
+    <div class="info-chip"><span class="chip-label">gem. midden</span><span id="val-mid">—</span>%</div>
+    <div class="info-chip"><span class="chip-label">gem. laag</span><span id="val-laag">—</span>%</div>
+    <div class="info-chip"><span class="chip-label">lage-basisgebied</span><span id="val-st">—</span>%</div>
+    <div class="info-chip"><span class="chip-label">Cb-indicatiegebied</span><span id="val-cb">—</span>%</div>
+    <div class="info-chip"><span class="chip-label">max. CAPE kaart</span><span id="val-cape">—</span> J/kg</div>
+  </div>
+
+  <section class="inspecteur" id="inspecteur" hidden aria-live="polite">
+    <div class="inspecteur-card">
+      <div class="inspecteur-head">
+        <h2 id="inspecteur-titel">Lokale modelwaarde</h2>
+        <button class="close-btn" id="inspecteur-sluit" type="button" aria-label="Lokale inspectie sluiten">×</button>
+      </div>
+      <div class="inspecteur-grid">
+        <div class="metric"><span class="metric-label">Klasse</span><span class="metric-value" id="loc-klasse">—</span></div>
+        <div class="metric"><span class="metric-label">Hoge bewolking</span><span class="metric-value" id="loc-hoog">—</span></div>
+        <div class="metric"><span class="metric-label">Middelbare bewolking</span><span class="metric-value" id="loc-mid">—</span></div>
+        <div class="metric"><span class="metric-label">Lage bewolking</span><span class="metric-value" id="loc-laag">—</span></div>
+        <div class="metric"><span class="metric-label">Wolkenbasis</span><span class="metric-value" id="loc-basis">—</span></div>
+        <div class="metric"><span class="metric-label">Zicht</span><span class="metric-value" id="loc-zicht">—</span></div>
+        <div class="metric"><span class="metric-label">Neerslag</span><span class="metric-value" id="loc-neerslag">—</span></div>
+        <div class="metric"><span class="metric-label">CAPE indicatief</span><span class="metric-value" id="loc-cape">—</span></div>
+      </div>
+      <div class="inspecteur-status" id="inspecteur-status">Klik op de kaart voor een locatie.</div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <div class="ctrl-row">
+      <button class="btn" id="btn-temp" type="button">🌡 Temp: Uit</button>
+      <button class="btn" id="btn-wind" type="button">💨 Wind: Uit</button>
+    </div>
+    <div class="ctrl-row zoom-row secondary-control">
+      <span class="speed-label">Kaartbreedte:</span>
+      <button class="btn icon" id="btn-zoom-min" type="button">−</button>
+      <input type="range" id="grootte-slider" min="600" max="1800" value="1000" step="20" aria-label="Kaartbreedte">
+      <button class="btn icon" id="btn-zoom-plus" type="button">+</button>
+      <span id="grootte-label">1000px</span>
+      <button class="btn" id="btn-zoom-reset" type="button">Reset</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+'use strict';
+const MODEL_PREFIX = 'topmeteo';
+const ROOT_BASE = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)
+  ? '' : 'https://data.weerlab.nl/beta-wolkenkaart/';
+const LOKAAL = ROOT_BASE === '';
+const REFRESH_MS = 120000;
+const ZOOM_MIN = 600, ZOOM_MAX = 1800, ZOOM_STEP = 120;
+const $ = id => document.getElementById(id);
+
+let uren = [], currentIdx = 0, currentMeta = null, assetBase = ROOT_BASE;
+let playing = false, timer = null, speed = 450, showTemp = false, showWind = false;
+let selectedLocation = null, inspectorTimer = null;
+let mapFocusActive = false;
+const imgCache = new Map(), detailCache = new Map();
+
+function toggleUitleg() {
+  const open = $('uitleg').style.display !== 'block';
+  $('uitleg').style.display = open ? 'block' : 'none';
+  $('info-btn').setAttribute('aria-expanded', String(open));
+}
+
+function runVersion() { return (currentMeta?.run_utc || 'onbekend').replace(/[^0-9]/g, ''); }
+function assetUrl(fname, extra='') {
+  const sep = fname.includes('?') ? '&' : '?';
+  return `${assetBase}${fname}${sep}v=${runVersion()}${extra}`;
+}
+function validKey(u) { return u?.valid_utc || u?.tijdstip || ''; }
+function validDate(u) {
+  if (u?.valid_utc) return new Date(u.valid_utc);
+  return new Date(`${u?.tijdstip || ''}:00`);
+}
+function formatValid(u, compact=false) {
+  const d = validDate(u);
+  if (Number.isNaN(d.getTime())) return u?.tijdstip || '—';
+  return new Intl.DateTimeFormat('nl-NL', compact
+    ? {weekday:'short',hour:'2-digit',timeZone:'Europe/Amsterdam'}
+    : {weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'}
+  ).format(d).replace(',', ' ·');
+}
+function formatLongValid(u) {
+  const d = validDate(u);
+  if (Number.isNaN(d.getTime())) return u?.tijdstip || '—';
+  return new Intl.DateTimeFormat('nl-NL',{
+    weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'
+  }).format(d).replace(',', ' ·') + ' uur';
+}
+function dayKey(u) {
+  const d = validDate(u);
+  return new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Europe/Amsterdam'}).format(d);
+}
+function localHour(u) {
+  return Number(new Intl.DateTimeFormat('en-GB',{hour:'2-digit',hourCycle:'h23',timeZone:'Europe/Amsterdam'}).format(validDate(u)));
+}
+function formatAxisDay(u) {
+  return new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short',timeZone:'Europe/Amsterdam'}).format(validDate(u));
+}
+function num(v, digits=0) { return Number.isFinite(Number(v)) ? Number(v).toFixed(digits) : '—'; }
+
+async function fetchMeta() {
+  const r = await fetch(`${ROOT_BASE}beta_${MODEL_PREFIX}_meta.json?t=${Date.now()}`, {cache:'no-store'});
+  if (!r.ok) throw new Error(`metadata ${r.status}`);
+  return r.json();
+}
+
+async function refreshMeta(force=false) {
+  try {
+    const meta = await fetchMeta();
+    if (!force && currentMeta?.run_utc === meta.run_utc) return;
+    const keep = validKey(uren[currentIdx]);
+    imgCache.clear(); detailCache.clear();
+    applyMeta(meta, keep);
+  } catch (err) {
+    if (!currentMeta) $('run-label').innerHTML = '<span class="fout">Geen data beschikbaar</span>';
+  }
+}
+
+function applyMeta(meta, keepValid='') {
+  currentMeta = meta;
+  uren = Array.isArray(meta.uren) ? meta.uren : [];
+  assetBase = LOKAAL ? '' : ROOT_BASE + (meta.asset_base || '');
+  window._meta_global = {map_axes:meta.map_axes, lon_bounds:meta.lon_bounds, lat_bounds:meta.lat_bounds};
+  const maxU = uren.at(-1)?.t || 0;
+  const km = meta.grid?.resolutie_km;
+  $('run-label').textContent = `run: ${meta.run} · ${km ? `kaartrooster ca. ${km} km · ` : ''}t/m +${maxU}u`;
+  $('uur-slider').max = Math.max(uren.length - 1, 0);
+  $('map-focus-slider').max = Math.max(uren.length - 1, 0);
+  $('map-focus-slider').disabled = !uren.length;
+  buildTijdbalk(); buildTimeAxis(); buildTimeJumpButtons();
+  let idx = keepValid ? uren.findIndex(u => validKey(u) === keepValid) : -1;
+  if (idx < 0) idx = 0;
+  goTo(idx); preloadRange(idx + 1, 5);
+}
+
+function loadImg(idx, retry=false) {
+  const u = uren[idx];
+  if (!u?.fname) return Promise.reject(new Error('Geen kaartbestand'));
+  const key = `${runVersion()}:${u.fname}:${retry ? Date.now() : ''}`;
+  if (imgCache.has(key)) return imgCache.get(key);
+  const p = new Promise((resolve,reject) => {
+    const img = new Image();
+    img.onload = () => img.naturalWidth ? resolve(img) : reject(new Error('Lege afbeelding'));
+    img.onerror = () => reject(new Error('Afbeelding niet beschikbaar'));
+    img.src = assetUrl(u.fname, retry ? `&retry=${Date.now()}` : '');
+  });
+  imgCache.set(key,p); return p;
+}
+async function showImage(idx) {
+  const requested = idx;
+  $('loading').classList.add('vis'); $('loading').textContent = 'Kaart laden…';
+  try {
+    let img;
+    try { img = await loadImg(idx); } catch { img = await loadImg(idx, true); }
+    if (currentIdx !== requested) return;
+    $('kaart-img').src = img.src;
+    $('kaart-img').alt = `Wolkenverdeling geldig ${formatValid(uren[idx])}`;
+    $('loading').classList.remove('vis');
+    renderOverlays(); renderLocationMarker();
+  } catch (err) {
+    if (currentIdx === requested) {
+      $('loading').textContent = 'Kaart tijdelijk niet beschikbaar — probeer opnieuw';
+      $('loading').classList.add('vis');
+    }
+  }
+}
+function preloadRange(idx,n) { for (let i=idx;i<Math.min(idx+n,uren.length);i++) loadImg(i).catch(()=>{}); }
+
+function goTo(idx) {
+  if (!uren.length) return;
+  currentIdx = Math.max(0,Math.min(uren.length-1,idx));
+  const u = uren[currentIdx];
+  $('uur-slider').value = currentIdx;
+  $('map-focus-slider').value = currentIdx;
+  updateTimeControl();
+  $('chip-situatie').textContent = u.situatie || '—';
+  $('chip-situatie').classList.toggle('nacht', !!u.nacht);
+  $('val-tijd').textContent = `${formatValid(u)} LT`;
+  $('val-uur').textContent = u.t;
+  $('val-hoog').textContent = num(u.hoog);
+  $('val-mid').textContent = num(u.mid);
+  $('val-laag').textContent = num(u.laag);
+  $('val-st').textContent = num(u.st);
+  $('val-cb').textContent = num(u.cb);
+  $('val-cape').textContent = num(u.cape);
+  $('map-focus-meta').textContent=`Wolkenverdeling · ${formatValid(u)} LT · run ${currentMeta?.run||'—'}`;
+  $('map-focus-time').textContent=`${formatValid(u)} LT`;
+  $('map-focus-slider').setAttribute('aria-valuetext',`Geldig ${formatLongValid(u)}`);
+  $('map-focus-slider').title=`Geldig ${formatLongValid(u)} · versleep voor een ander uur`;
+  showImage(currentIdx); preloadRange(currentIdx+1,6);
+  if (selectedLocation && !playing) scheduleInspector();
+}
+function step(delta) { goTo((currentIdx + delta + uren.length) % uren.length); }
+
+function togglePlay() {
+  playing = !playing;
+  $('btn-play').textContent = playing ? '⏸ Pauze' : '▶ Play';
+  $('btn-play').classList.toggle('active',playing);
+  $('map-focus-play').textContent=playing?'⏸':'▶';
+  $('map-focus-play').setAttribute('aria-label',playing?'Pauzeren':'Afspelen');
+  if (playing) tick(); else { clearTimeout(timer); timer=null; if (selectedLocation) scheduleInspector(); }
+}
+function tick() { if (!playing) return; step(1); timer=setTimeout(tick,speed); }
+
+function buildTijdbalk() {
+  $('tijdbalk').replaceChildren(...uren.map(u => {
+    const el=document.createElement('div'); el.className=`tijdbalk-seg ${u.nacht?'nacht':'dag'}`; el.title=formatValid(u); return el;
+  }));
+}
+function buildTimeAxis() {
+  const axis=$('time-axis'); axis.replaceChildren();
+  if (!uren.length) return;
+  const denom=Math.max(1,uren.length-1), groups=[];
+  uren.forEach((u,i)=>{
+    const key=dayKey(u), last=groups.at(-1);
+    if (!last || last.key!==key) groups.push({key,first:i,last:i,u}); else last.last=i;
+  });
+  groups.forEach((group,groupIdx)=>{
+    if (groupIdx) {
+      const boundary=document.createElement('span'); boundary.className='time-day-boundary';
+      boundary.style.left=`${(group.first/denom*100).toFixed(2)}%`; axis.append(boundary);
+    }
+    const label=document.createElement('span'); label.className='time-day-label';
+    label.style.left=`${(((group.first+group.last)/2)/denom*100).toFixed(2)}%`;
+    label.textContent=formatAxisDay(group.u); axis.append(label);
+  });
+  uren.forEach((u,i)=>{
+    const hour=localHour(u); if (hour%6) return;
+    const tick=document.createElement('span'), major=hour===12;
+    tick.className=`time-hour-tick${major?' major':''}`;
+    tick.style.left=`${(i/denom*100).toFixed(2)}%`;
+    if (hour===6 || hour===12 || hour===18) tick.innerHTML=`<span>${String(hour).padStart(2,'0')}u</span>`;
+    axis.append(tick);
+  });
+}
+function updateTimeControl() {
+  const slider=$('uur-slider'), u=uren[currentIdx];
+  if (!u) {
+    $('time-current').textContent='Modeltijden laden…'; $('time-meta').textContent='0 tijdstippen'; return;
+  }
+  const min=Number(slider.min)||0, max=Number(slider.max)||0;
+  const progress=max>min?(Number(slider.value)-min)/(max-min)*100:0;
+  const label=`Geldig ${formatLongValid(u)}`;
+  slider.style.setProperty('--range-progress',`${Math.max(0,Math.min(100,progress)).toFixed(1)}%`);
+  slider.setAttribute('aria-valuetext',label); slider.title=`${label} · versleep voor een ander modeluur`;
+  $('time-current').textContent=label;
+  const days=new Set(uren.map(dayKey)).size;
+  $('time-meta').textContent=`${currentIdx+1}/${uren.length} · ${days} ${days===1?'dag':'dagen'}`;
+  document.querySelectorAll('.tijdbalk-seg').forEach((el,i)=>el.classList.toggle('active',i===currentIdx));
+  document.querySelectorAll('.time-jump').forEach((el,i)=>{
+    const active=i===currentIdx;
+    el.classList.toggle('active',active);
+    el.setAttribute('aria-current',active?'true':'false');
+  });
+  const activeJump=document.querySelector('.time-jump.active'), strip=$('time-jump-strip');
+  if (activeJump && strip) strip.scrollLeft=Math.max(0,activeJump.offsetLeft-strip.clientWidth/2+activeJump.clientWidth/2);
+}
+function buildTimeJumpButtons() {
+  const frag=document.createDocumentFragment(); let previousDay='';
+  uren.forEach((u,i)=>{
+    const day=dayKey(u), d=validDate(u);
+    const b=document.createElement('button'); b.type='button'; b.className=`time-jump ${u.nacht?'nacht':''} ${previousDay&&day!==previousDay?'new-day':''}`;
+    b.setAttribute('aria-label',`Ga naar ${formatValid(u)}`); b.title=`Ga naar ${formatValid(u)}`;
+    const dayTxt=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',timeZone:'Europe/Amsterdam'}).format(d);
+    const hour=new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'}).format(d);
+    b.innerHTML=`<span>${dayTxt}</span><strong>${hour}</strong>`; b.addEventListener('click',()=>goTo(i)); frag.appendChild(b); previousDay=day;
+  });
+  $('time-jump-strip').replaceChildren(frag);
+}
+
+function latLonToPx(lat,lon,w,h) {
+  const mg=window._meta_global||{}, ax=mg.map_axes||[0,0,1,.945];
+  const lonB=mg.lon_bounds||[.5,11.3], latB=mg.lat_bounds||[49,56];
+  const fx=(lon-lonB[0])/(lonB[1]-lonB[0]), fy=(lat-latB[0])/(latB[1]-latB[0]);
+  return [(ax[0]+fx*ax[2])*w,(1-(ax[1]+fy*ax[3]))*h];
+}
+function prepareSvg(svg) {
+  const img=$('kaart-img'), w=img.clientWidth, h=img.clientHeight;
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`); svg.replaceChildren(); return [w,h];
+}
+function svgEl(name,attrs={}) { const el=document.createElementNS('http://www.w3.org/2000/svg',name); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); return el; }
+
+function renderTempOverlay() {
+  const svg=$('temp-overlay'), [w,h]=prepareSvg(svg), placed=[];
+  if (!showTemp || !uren[currentIdx]?.temps) return;
+  uren[currentIdx].temps.forEach(s=>{
+    const [x,y]=latLonToPx(s.la,s.lo,w,h), box={x:x-22,y:y-13,w:44,h:26};
+    if (x<8||x>w-8||y<8||y>h-8||placed.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y)) return;
+    placed.push(box); const t=Math.round(s.t), col=t>=30?'#ff5555':t>=25?'#ffaa33':t>=20?'#ffdd55':t<=5?'#bbddff':'#fff';
+    const g=svgEl('g'); const title=svgEl('title'); title.textContent=`${s.s}: ${t} °C`; g.append(title);
+    g.append(svgEl('rect',{x:x-18,y:y-9,width:36,height:18,rx:4,fill:'rgba(10,16,28,.82)',stroke:'#fff','stroke-width':1}));
+    const tx=svgEl('text',{x,y:y+4,'text-anchor':'middle','font-size':11,'font-weight':800,fill:col}); tx.textContent=`${t}°`; g.append(tx); svg.append(g);
+  });
+}
+function renderWindOverlay() {
+  const svg=$('wind-overlay'), [w,h]=prepareSvg(svg), placed=[];
+  if (!showWind || !uren[currentIdx]?.winds) return;
+  const defs=svgEl('defs'), marker=svgEl('marker',{id:'wind-arrow',markerWidth:8,markerHeight:6,refX:7,refY:3,orient:'auto'});
+  marker.append(svgEl('polygon',{points:'0 0,8 3,0 6',fill:'#003eaa'})); defs.append(marker); svg.append(defs);
+  uren[currentIdx].winds.forEach(s=>{
+    const [x,y]=latLonToPx(s.la,s.lo,w,h), box={x:x-28,y:y-28,w:56,h:56};
+    if (s.spd<.3||x<18||x>w-18||y<18||y>h-18||placed.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y)) return;
+    placed.push(box); const bft=s.spd<1.6?1:s.spd<3.4?2:s.spd<5.5?3:s.spd<8?4:s.spd<10.8?5:s.spd<13.9?6:s.spd<17.2?7:8;
+    const ux=s.u/s.spd, uy=s.v/s.spd, len=20+bft*2;
+    const line=svgEl('line',{x1:x+ux*15,y1:y-uy*15,x2:x+ux*(15+len),y2:y-uy*(15+len),stroke:'#003eaa','stroke-width':4,'stroke-linecap':'round','marker-end':'url(#wind-arrow)'});
+    line.style.filter='drop-shadow(0 0 2px white)'; svg.append(line);
+    svg.append(svgEl('rect',{x:x-13,y:y-9,width:26,height:18,rx:4,fill:'#fff',stroke:'#003eaa','stroke-width':2}));
+    const tx=svgEl('text',{x,y:y+4,'text-anchor':'middle','font-size':11,'font-weight':900,fill:'#003eaa'}); tx.textContent=bft; svg.append(tx);
+  });
+}
+function renderOverlays() { renderTempOverlay(); renderWindOverlay(); }
+
+function setOverlay(type,on) {
+  if (type==='temp') { showTemp=on; $('temp-overlay').style.display=on?'':'none'; $('btn-temp').textContent=`🌡 Temp: ${on?'Aan':'Uit'}`; $('btn-temp').classList.toggle('active',on); }
+  else { showWind=on; $('wind-overlay').style.display=on?'':'none'; $('btn-wind').textContent=`💨 Wind: ${on?'Aan':'Uit'}`; $('btn-wind').classList.toggle('active',on); }
+  renderOverlays();
+}
+
+function clickMap(evt) {
+  if (!currentMeta) return;
+  const rect=$('kaart-img').getBoundingClientRect(), ax=currentMeta.map_axes||[0,0,1,.945];
+  const x=(evt.clientX-rect.left)/rect.width, y=(evt.clientY-rect.top)/rect.height;
+  const fx=(x-ax[0])/ax[2], fy=((1-y)-ax[1])/ax[3];
+  if (fx<0||fx>1||fy<0||fy>1) return;
+  const lon=currentMeta.lon_bounds[0]+fx*(currentMeta.lon_bounds[1]-currentMeta.lon_bounds[0]);
+  const lat=currentMeta.lat_bounds[0]+fy*(currentMeta.lat_bounds[1]-currentMeta.lat_bounds[0]);
+  selectedLocation={lat,lon}; $('inspecteur').hidden=false; renderLocationMarker(); scheduleInspector();
+  $('inspecteur').scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function renderLocationMarker() {
+  const marker=$('loc-marker'); if (!selectedLocation) { marker.style.display='none'; return; }
+  const [x,y]=latLonToPx(selectedLocation.lat,selectedLocation.lon,$('kaart-img').clientWidth,$('kaart-img').clientHeight);
+  marker.style.left=`${x}px`; marker.style.top=`${y}px`; marker.style.display='block';
+}
+function closeInspector() { selectedLocation=null; $('inspecteur').hidden=true; $('loc-marker').style.display='none'; }
+function scheduleInspector() { clearTimeout(inspectorTimer); inspectorTimer=setTimeout(updateInspector,100); }
+
+async function gunzipIfNeeded(buffer) {
+  const bytes=new Uint8Array(buffer);
+  if (!(bytes[0]===0x1f&&bytes[1]===0x8b)) return buffer;
+  if (typeof DecompressionStream==='undefined') throw new Error('Browser ondersteunt gzip-detail niet');
+  const stream=new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).arrayBuffer();
+}
+async function loadDetail(idx) {
+  const key=`${runVersion()}:${idx}`; if (detailCache.has(key)) return detailCache.get(key);
+  const fname=uren[idx]?.detail_fname; if (!fname) throw new Error('Lokale detaildata volgt bij de volgende modelrun');
+  const promise=fetch(assetUrl(fname),{cache:'force-cache'}).then(r=>{if(!r.ok)throw new Error(`detail ${r.status}`);return r.arrayBuffer();})
+    .then(gunzipIfNeeded).then(parseDetail).catch(err=>{detailCache.delete(key);throw err;});
+  detailCache.set(key,promise);
+  if (detailCache.size>4) detailCache.delete(detailCache.keys().next().value);
+  return promise;
+}
+function parseDetail(buffer) {
+  const v=new DataView(buffer), magic=String.fromCharCode(...new Uint8Array(buffer,0,4));
+  if (magic!=='WVD1'||v.getUint8(8)!==1) throw new Error('Onbekend detailformaat');
+  const nLat=v.getUint16(4,true), nLon=v.getUint16(6,true), n=nLat*nLon;
+  if (v.getUint32(12,true)!==n || buffer.byteLength<16+11*n) throw new Error('Onvolledig detailbestand');
+  return {buffer,view:v,nLat,nLon,n,off:{hoog:16,mid:16+n,laag:16+2*n,klasse:16+3*n,basis:16+4*n,zicht:16+6*n,neer:16+8*n,cape:16+9*n}};
+}
+async function updateInspector() {
+  if (!selectedLocation||!currentMeta) return;
+  $('inspecteur-status').textContent='Lokale waarden laden…';
+  try {
+    const d=await loadDetail(currentIdx), g=currentMeta.detail?.grid||currentMeta.grid;
+    const i=Math.max(0,Math.min(d.nLat-1,Math.round((selectedLocation.lat-g.lat_min)/(g.lat_max-g.lat_min)*(d.nLat-1))));
+    const j=Math.max(0,Math.min(d.nLon-1,Math.round((selectedLocation.lon-g.lon_min)/(g.lon_max-g.lon_min)*(d.nLon-1))));
+    const p=i*d.nLon+j, lat=g.lat_min+i/(d.nLat-1)*(g.lat_max-g.lat_min), lon=g.lon_min+j/(d.nLon-1)*(g.lon_max-g.lon_min);
+    const u8=o=>d.view.getUint8(o+p), u16=o=>d.view.getUint16(o+2*p,true);
+    const cls=u8(d.off.klasse), basis=u16(d.off.basis), zicht=u16(d.off.zicht), cape=u16(d.off.cape), qn=u8(d.off.neer);
+    $('inspecteur-titel').textContent=`Lokale modelwaarde · ${lat.toFixed(3)}°N, ${lon.toFixed(3)}°O · ${formatValid(uren[currentIdx])} LT`;
+    $('loc-klasse').textContent=currentMeta.detail?.class_labels?.[String(cls)]||`klasse ${cls}`;
+    $('loc-hoog').textContent=`${Math.round(u8(d.off.hoog)/255*100)}%`;
+    $('loc-mid').textContent=`${Math.round(u8(d.off.mid)/255*100)}%`;
+    $('loc-laag').textContent=`${Math.round(u8(d.off.laag)/255*100)}%`;
+    $('loc-basis').textContent=basis===65535?'—':basis>=9000?'geen basis':`${basis} m · ${Math.round(basis*3.28084)} ft`;
+    $('loc-zicht').textContent=zicht===65535?'—':zicht<1000?`${zicht} m`:`${(zicht/1000).toFixed(1)} km`;
+    $('loc-neerslag').textContent=`${((qn/16)**2).toFixed(1)} mm/u`;
+    $('loc-cape').textContent=cape===65535?'niet beschikbaar':`${cape} J/kg`;
+    $('inspecteur-status').textContent=`Dichtstbijzijnde modelcel · kaartrooster ca. ${currentMeta.grid?.resolutie_km||'—'} km. CAPE is aanvullend en grover.`;
+  } catch (err) { $('inspecteur-status').textContent=err.message; }
+}
+
+function setZoom(px,save=true) {
+  px=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,Number(px)||1000));
+  document.documentElement.style.setProperty('--kaart-breedte',`${px}px`); $('grootte-slider').value=px; $('grootte-label').textContent=`${px}px`;
+  if(save)try{localStorage.setItem('wv_breedte_v2',px)}catch{}
+  requestAnimationFrame(()=>{renderOverlays();renderLocationMarker();});
+}
+
+function sizeFocusedMap() {
+  const wrap=$('kaart-layout').querySelector('.kaart-wrap'), img=$('kaart-img');
+  if (!mapFocusActive) {
+    wrap.style.width=''; wrap.style.height='';
+    requestAnimationFrame(()=>{renderOverlays();renderLocationMarker();});
+    return;
+  }
+  const naturalWidth=img.naturalWidth||1450, naturalHeight=img.naturalHeight||1000;
+  const scale=Math.max(window.innerWidth/naturalWidth,window.innerHeight/naturalHeight);
+  const width=naturalWidth*scale, height=naturalHeight*scale;
+  wrap.style.width=`${Math.round(width)}px`; wrap.style.height=`${Math.round(height)}px`;
+  requestAnimationFrame(()=>{renderOverlays();renderLocationMarker();});
+}
+
+function setMapFocusMode(active,notifyParent) {
+  mapFocusActive=Boolean(active);
+  document.body.classList.toggle('map-focus-mode',mapFocusActive);
+  $('btn-map-focus').setAttribute('aria-pressed',String(mapFocusActive));
+  sizeFocusedMap();
+  if (notifyParent&&window.parent!==window) {
+    window.parent.postMessage({type:'weerlab-weerkaarten-focus',active:mapFocusActive},window.location.origin);
+  }
+}
+
+function bindEvents() {
+  $('info-btn').addEventListener('click',toggleUitleg);
+  $('btn-prev').addEventListener('click',()=>step(-1)); $('btn-next').addEventListener('click',()=>step(1));
+  $('btn-play').addEventListener('click',togglePlay); $('btn-begin').addEventListener('click',()=>goTo(0)); $('btn-einde').addEventListener('click',()=>goTo(uren.length-1));
+  $('speed-sel').addEventListener('change',()=>{speed=Number($('speed-sel').value);if(playing){clearTimeout(timer);tick();}});
+  $('btn-temp').addEventListener('click',()=>setOverlay('temp',!showTemp)); $('btn-wind').addEventListener('click',()=>setOverlay('wind',!showWind));
+  $('uur-slider').addEventListener('input',e=>goTo(Number(e.target.value)));
+  $('kaart-img').addEventListener('click',clickMap); $('inspecteur-sluit').addEventListener('click',closeInspector);
+  $('grootte-slider').addEventListener('input',e=>setZoom(e.target.value));
+  $('btn-zoom-min').addEventListener('click',()=>setZoom(Number($('grootte-slider').value)-ZOOM_STEP));
+  $('btn-zoom-plus').addEventListener('click',()=>setZoom(Number($('grootte-slider').value)+ZOOM_STEP));
+  $('btn-zoom-reset').addEventListener('click',()=>setZoom(1000));
+  $('btn-map-focus').addEventListener('click',()=>setMapFocusMode(true,true));
+  $('btn-map-focus-exit').addEventListener('click',()=>{setMapFocusMode(false,true);$('btn-map-focus').focus({preventScroll:true});});
+  $('map-focus-prev').addEventListener('click',()=>step(-1));
+  $('map-focus-play').addEventListener('click',togglePlay);
+  $('map-focus-next').addEventListener('click',()=>step(1));
+  $('map-focus-product').addEventListener('change',e=>switchBewolkingskaart(e.target.value));
+  $('map-focus-slider').addEventListener('input',e=>{if(playing)togglePlay();goTo(Number(e.target.value));});
+  $('kaart-img').addEventListener('load',sizeFocusedMap);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&mapFocusActive){e.preventDefault();setMapFocusMode(false,true);$('btn-map-focus').focus({preventScroll:true});return;}
+    if(mapFocusActive&&e.key==='ArrowRight'){e.preventDefault();step(1);return;}
+    if(mapFocusActive&&e.key==='ArrowLeft'){e.preventDefault();step(-1);return;}
+    if (/^(INPUT|SELECT|BUTTON|TEXTAREA)$/.test(e.target.tagName)||e.target.isContentEditable) return;
+    if(e.key==='ArrowRight')step(1); if(e.key==='ArrowLeft')step(-1); if(e.key===' '){e.preventDefault();togglePlay();}
+  });
+  window.addEventListener('resize',()=>{sizeFocusedMap();renderOverlays();renderLocationMarker();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshMeta();});
+  window.addEventListener('message',e=>{
+    const t=typeof e.data==='string'?e.data:e.data?.type;
+    if(t==='weerlab-refresh')refreshMeta(true);
+    if(e.origin===window.location.origin&&t==='weerlab-weerkaarten-focus-exit')setMapFocusMode(false,false);
+  });
+}
+
+function switchBewolkingskaart(product) {
+  if (product === 'wolkenverdeling') return;
+  if (window.parent !== window) {
+    window.parent.postMessage({type:'weerlab-weerkaarten-product', product}, window.location.origin);
+  } else {
+    window.location.href = 'beta_wolkenkaart.html';
+  }
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  bindEvents(); let saved=1000; try{saved=Number(localStorage.getItem('wv_breedte_v2'))||1000}catch{} setZoom(saved,false);
+  if (matchMedia('(max-width:1000px)').matches) document.querySelector('.kaart-legenda details').open=false;
+  refreshMeta(true); setInterval(()=>refreshMeta(),REFRESH_MS);
+});
+</script>
+</body>
+</html>

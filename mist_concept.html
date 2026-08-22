@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mist-detectie — CONCEPT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f0f3f7;--panel:#ffffff;--header:#003366;--border:#d0d8e4;--text:#1a2b40;--text2:#5a6a80;--accent:#0066cc}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--header);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #2ec4e8;flex-wrap:wrap;gap:10px}
+.header h1{font-family:monospace;font-size:1.1rem;font-weight:700;color:white;letter-spacing:.02em}
+.header p{font-size:.72rem;color:#a8c4e8;margin-top:2px}
+.header-right{font-size:.7rem;color:#a8c4e8;text-align:right;line-height:1.4}
+.concept-banner{background:linear-gradient(90deg,#fff8e0,#ffeb99);color:#885500;padding:8px 20px;font-size:.85rem;font-weight:600;border-bottom:2px solid #d4a843;text-align:center}
+
+.status-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.huidig-status{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;font-weight:600;font-size:.95rem}
+.huidig-status .emoji{font-size:1.8em}
+.huidig-status .titel{line-height:1.2}
+.huidig-status .detail{font-size:.72rem;font-weight:400;opacity:.8;margin-top:2px}
+
+/* Mist-categorie kleuren */
+.mist-geen{background:#e8f5e9;color:#2a7a2a;border:1px solid #c8e6c9}
+.mist-vochtig{background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb}
+.mist-nevel{background:#fff8e0;color:#996600;border:1px solid #ffe082}
+.mist-mist{background:#e0e0e0;color:#424242;border:1px solid #9e9e9e}
+.mist-dicht{background:#bdbdbd;color:#212121;border:1px solid #616161}
+
+#grafieken{padding:12px 16px}
+.grafiek-blok{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.grafiek-titel{font-size:.95rem;font-weight:700;color:#003366;line-height:1.2;margin-bottom:2px}
+.grafiek-sub{font-size:.68rem;color:var(--text2);margin-bottom:6px}
+.legenda{display:flex;flex-wrap:wrap;gap:12px;font-size:.72rem;color:var(--text2);margin-bottom:6px}
+.legenda span{display:flex;align-items:center;gap:5px}
+.leg-lijn{display:inline-block;width:18px;height:3px;border-radius:2px}
+.leg-blok{display:inline-block;width:10px;height:10px;border-radius:2px}
+.leg-dash{display:inline-block;width:18px;height:3px;background:repeating-linear-gradient(90deg,currentColor 0 4px,transparent 4px 7px)}
+
+.canvas-wrap{position:relative;width:100%;height:230px}
+.canvas-wrap.hoog{height:280px}
+.canvas-wrap.laag{height:140px}
+
+/* Mist-tijdlijn (strook met gekleurde blokken) */
+.mist-tijdlijn{display:flex;width:100%;height:38px;border-radius:6px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px}
+.mist-tijdlijn .cel{flex:1;position:relative;min-width:0}
+.mist-tijdlijn .cel:hover{filter:brightness(0.9)}
+.mist-tijdlijn .cel .lbl{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#1a2b40;color:white;padding:4px 8px;border-radius:4px;font-size:.7rem;white-space:nowrap;display:none;z-index:10}
+.mist-tijdlijn .cel:hover .lbl{display:block}
+
+#status{text-align:center;padding:50px;color:var(--text2);font-size:.9rem}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.uitleg{background:#f0f6fc;border:1px solid #d0dceb;border-radius:8px;padding:12px 16px;margin:16px;font-size:.82rem;color:var(--text2);line-height:1.5}
+.uitleg strong{color:var(--text)}
+.uitleg ul{margin:6px 0 0 20px;padding:0}
+.uitleg li{margin-bottom:4px}
+.uitleg .tabelletje{display:grid;grid-template-columns:auto auto auto auto auto;gap:4px 12px;margin-top:8px;font-size:.75rem;background:white;padding:8px;border-radius:4px}
+.uitleg .tabelletje > div{padding:4px 6px}
+.uitleg .tabelletje > div:nth-child(-n+5){font-weight:700;color:var(--text);background:#e0e8f3;border-radius:3px}
+
+.locatie-btns{display:flex;gap:6px;flex-wrap:wrap}
+.locatie-btn{padding:5px 10px;border-radius:5px;border:1px solid var(--border);background:#f5f7fa;color:var(--text2);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
+.locatie-btn:hover{border-color:var(--accent);color:var(--text)}
+.locatie-btn.actief{background:var(--accent);border-color:var(--accent);color:white}
+
+#copyright{text-align:center;font-size:.7rem;color:#888;padding:10px 0 16px;font-family:monospace}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Mist-detectie — HARMONIE</h1>
+    <p>Afgeleide waarde uit zicht + vochtigheid + dauwpunt-spread · 48 uur vooruit · Bron: KNMI HARMONIE via Open-Meteo</p>
+  </div>
+  <div class="header-right">
+    Concept — Ed Aldus WM<br>
+    <span id="klok"></span>
+  </div>
+</div>
+
+<div class="concept-banner">
+  🧪 CONCEPT — visualisatie-voorstel, nog niet aan de sidebar gehaakt
+</div>
+
+<div class="status-bar">
+  <div id="huidig-status" class="huidig-status mist-geen">
+    <div class="emoji">⏳</div>
+    <div>
+      <div class="titel">Data ophalen…</div>
+      <div class="detail">Score 0/4</div>
+    </div>
+  </div>
+  <div>
+    <div style="font-size:.65rem;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Locatie</div>
+    <div class="locatie-btns">
+      <button class="locatie-btn actief" data-lat="52.10" data-lon="5.18" data-naam="De Bilt">De Bilt</button>
+      <button class="locatie-btn" data-lat="52.31" data-lon="4.76" data-naam="Schiphol">Schiphol</button>
+      <button class="locatie-btn" data-lat="51.96" data-lon="4.44" data-naam="Rotterdam">Rotterdam</button>
+      <button class="locatie-btn" data-lat="53.12" data-lon="6.59" data-naam="Eelde">Eelde</button>
+      <button class="locatie-btn" data-lat="50.91" data-lon="5.77" data-naam="Maastricht">Maastricht</button>
+      <button class="locatie-btn" data-lat="51.44" data-lon="3.60" data-naam="Vlissingen">Vlissingen</button>
+    </div>
+  </div>
+  <div style="flex:1"></div>
+  <div style="font-size:.72rem;color:var(--text2);max-width:280px">
+    <strong>Mist-score</strong> 0&ndash;4: gebaseerd op zicht, luchtvochtigheid en dauwpunt-spread. Hoe hoger de score, hoe waarschijnlijker mist.
+  </div>
+</div>
+
+<div id="grafieken">
+  <div id="status"><span class="spinner"></span>HARMONIE data laden…</div>
+
+  <!-- 1. Mist-tijdlijn (strook bovenaan) -->
+  <div class="grafiek-blok" id="blok-tijdlijn" style="display:none">
+    <div class="grafiek-titel">Mist-verwachting per uur</div>
+    <div class="grafiek-sub" id="sub-tijdlijn">Volgende 48 uur · kleurcode = waarschijnlijkheid mist</div>
+    <div class="legenda">
+      <span><span class="leg-blok" style="background:#c8e6c9"></span>Geen mist</span>
+      <span><span class="leg-blok" style="background:#bbdefb"></span>Vochtig</span>
+      <span><span class="leg-blok" style="background:#ffe082"></span>Nevel</span>
+      <span><span class="leg-blok" style="background:#9e9e9e"></span>Mist</span>
+      <span><span class="leg-blok" style="background:#616161"></span>Dichte mist</span>
+    </div>
+    <div id="mist-strip" class="mist-tijdlijn"></div>
+  </div>
+
+  <!-- 2. Zicht -->
+  <div class="grafiek-blok" id="blok-zicht" style="display:none">
+    <div class="grafiek-titel">Horizontaal zicht (m)</div>
+    <div class="grafiek-sub">HARMONIE voorspelling · &lt;1000 m = mist · 1&ndash;4 km = nevel · &gt;10 km = helder</div>
+    <div class="legenda">
+      <span><span class="leg-lijn" style="background:#2266aa"></span>Zicht</span>
+      <span><span class="leg-dash" style="color:#888"></span>1 km / 4 km grens</span>
+      <span><span class="leg-blok" style="background:rgba(150,160,170,0.25)"></span>nacht</span>
+    </div>
+    <div class="canvas-wrap"><canvas id="canvas-zicht"></canvas></div>
+  </div>
+
+  <!-- 3. Temp + dauwpunt -->
+  <div class="grafiek-blok" id="blok-temp" style="display:none">
+    <div class="grafiek-titel">Temperatuur &amp; dauwpunt</div>
+    <div class="grafiek-sub">Als de twee lijnen elkaar raken (spread &lt; 1°C) is de lucht verzadigd &mdash; condens/mist kan ontstaan</div>
+    <div class="legenda">
+      <span><span class="leg-lijn" style="background:#cc2222"></span>Temperatuur 2 m</span>
+      <span><span class="leg-lijn" style="background:#22aa66"></span>Dauwpunt 2 m</span>
+      <span><span class="leg-blok" style="background:rgba(204,34,34,0.10)"></span>Spread (verschil)</span>
+    </div>
+    <div class="canvas-wrap"><canvas id="canvas-temp"></canvas></div>
+  </div>
+
+  <!-- 4. RH + spread + wind -->
+  <div class="grafiek-blok" id="blok-extra" style="display:none">
+    <div class="grafiek-titel">Luchtvochtigheid, dauwpunt-spread &amp; wind</div>
+    <div class="grafiek-sub">Mist vormt bij RH &gt; 95%, spread &lt; 1°C én zwakke wind (&lt; 10 km/u)</div>
+    <div class="legenda">
+      <span><span class="leg-lijn" style="background:#1976d2"></span>RH (%)</span>
+      <span><span class="leg-lijn" style="background:#ff6d00"></span>Spread T&minus;Td (°C)</span>
+      <span><span class="leg-lijn" style="background:#7b1fa2"></span>Wind (km/u)</span>
+    </div>
+    <div class="canvas-wrap"><canvas id="canvas-extra"></canvas></div>
+  </div>
+</div>
+
+<div class="uitleg">
+  <strong>Hoe werkt de mist-score?</strong>
+  De score is een optelsom van 4 criteria die we uit HARMONIE halen. Per criterium 1 of 2 punten:
+
+  <div class="tabelletje">
+    <div>Criterium</div>
+    <div>0 pt</div>
+    <div>1 pt</div>
+    <div>2 pt</div>
+    <div>Waarom</div>
+
+    <div>Zicht</div>
+    <div>&gt; 4 km</div>
+    <div>1&ndash;4 km</div>
+    <div>&lt; 1 km</div>
+    <div>&lt; 1 km is de officiële mist-grens</div>
+
+    <div>RH 2 m</div>
+    <div>≤ 95%</div>
+    <div>&gt; 95%</div>
+    <div>&mdash;</div>
+    <div>bij RH &gt; 95% is condensatie mogelijk</div>
+
+    <div>T &minus; Td</div>
+    <div>≥ 1°C</div>
+    <div>&lt; 1°C</div>
+    <div>&mdash;</div>
+    <div>kleine spread = verzadigde lucht</div>
+  </div>
+
+  <strong style="display:block;margin-top:10px">Score → categorie:</strong>
+  <ul style="list-style:none;margin-left:0">
+    <li>🟢 <strong>0</strong> = helder, geen mist</li>
+    <li>🔵 <strong>1</strong> = vochtig (nog geen zicht-probleem)</li>
+    <li>🟡 <strong>2</strong> = nevel (zicht 1&ndash;4 km)</li>
+    <li>⚪ <strong>3</strong> = mist (zicht &lt; 1 km of sterk verzadigd)</li>
+    <li>⚫ <strong>4</strong> = dichte mist (alle criteria voldaan)</li>
+  </ul>
+
+  <div style="margin-top:10px;padding-top:10px;border-top:1px solid #d0dceb">
+    <strong>Niet meegenomen (bewust simpel gehouden):</strong> wind (mist breekt boven ~15 km/u), lage bewolking op 100&ndash;500 m (dat is laag overtrokken ipv mist), inversielaag-hoogte. Deze zouden het nauwkeuriger maken maar ook complexer. Kunnen later als "geavanceerde score" toegevoegd worden.
+  </div>
+</div>
+
+<div id="copyright">&copy; Ed Aldus WM &middot; Data: KNMI HARMONIE via Open-Meteo &middot; Concept-pagina</div>
+
+<script>
+const OM_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
+  ? 'https://om.weerlab.nl/om'
+  : null;
+
+let huidigLat = 52.10, huidigLon = 5.18, huidigNaam = 'De Bilt';
+
+// ── Mist-score berekening ────────────────────────────────────────────
+function berekenScore(vis, rh, spread) {
+  let score = 0;
+  if (vis != null) {
+    if (vis < 1000) score += 2;
+    else if (vis < 4000) score += 1;
+  }
+  if (rh != null && rh > 95) score += 1;
+  if (spread != null && spread < 1.0) score += 1;
+  return score;
+}
+function scoreCat(s) {
+  if (s === 0) return {klasse:'mist-geen', emoji:'✅', label:'Geen mist', kleur:'#c8e6c9'};
+  if (s === 1) return {klasse:'mist-vochtig', emoji:'💧', label:'Vochtig', kleur:'#bbdefb'};
+  if (s === 2) return {klasse:'mist-nevel', emoji:'🌫️', label:'Nevel', kleur:'#ffe082'};
+  if (s === 3) return {klasse:'mist-mist', emoji:'🌁', label:'Mist', kleur:'#9e9e9e'};
+  return {klasse:'mist-dicht', emoji:'🌫️', label:'Dichte mist', kleur:'#616161'};
+}
+
+// ── Nacht-arcering plugin ─────────────────────────────────────────────
+const nachtPlugin = {
+  id: 'nachtArcering',
+  beforeDatasetsDraw(chart, args, opts) {
+    const tijden = opts?.tijden;
+    if (!tijden) return;
+    const {ctx, chartArea, scales: {x, y}} = chart;
+    if (!x || !y) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,30,60,0.05)';
+    let inNacht = false, startX = 0;
+    for (let i = 0; i < tijden.length; i++) {
+      const h = new Date(tijden[i]).getHours();
+      const isNacht = h < 6 || h >= 18;
+      const px = x.getPixelForValue(i);
+      if (isNacht && !inNacht) { inNacht = true; startX = px; }
+      if (!isNacht && inNacht) {
+        ctx.fillRect(startX, y.top, px - startX, y.bottom - y.top);
+        inNacht = false;
+      }
+    }
+    if (inNacht) ctx.fillRect(startX, y.top, x.getPixelForValue(tijden.length - 1) - startX, y.bottom - y.top);
+    ctx.restore();
+  }
+};
+Chart.register(nachtPlugin);
+
+// ── Labels ────────────────────────────────────────────────────────────
+function maakLabels(tijden) {
+  const dagen = ['Zo','Ma','Di','Wo','Do','Vr','Za'];
+  const mnden = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  return tijden.map(t => {
+    const d = new Date(t);
+    const h = d.getHours();
+    if (h === 0) return ['', `${dagen[d.getDay()]} ${d.getDate()} ${mnden[d.getMonth()]}`];
+    if (h === 6 || h === 12 || h === 18) return h.toString().padStart(2, '0') + ':00';
+    return '';
+  });
+}
+
+const charts = {};
+function xTicks(extra={}) {
+  return {
+    autoSkip: false,
+    font: function(ctx) {
+      const raw = ctx.tick && ctx.tick.label;
+      const isDag = Array.isArray(raw);
+      return {size: isDag ? 10 : 8, weight: isDag ? 'bold' : 'normal'};
+    },
+    ...extra
+  };
+}
+
+// ── Data laden ────────────────────────────────────────────────────────
+async function laden() {
+  document.getElementById('status').style.display = '';
+  const vars = 'temperature_2m,dew_point_2m,relative_humidity_2m,visibility,cloud_cover_low,wind_speed_10m';
+  let url = `https://api.open-meteo.com/v1/forecast?latitude=${huidigLat}&longitude=${huidigLon}&hourly=${vars}&models=knmi_harmonie_arome_netherlands&wind_speed_unit=kmh&timezone=Europe%2FAmsterdam&forecast_hours=48`;
+  if (OM_BASE) url = url.replace('https://api.open-meteo.com/v1/forecast', `${OM_BASE}/forecast`);
+
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    const h = d.hourly;
+    const tijden = h.time;
+    const labels = maakLabels(tijden);
+    const T = h.temperature_2m;
+    const Td = h.dew_point_2m;
+    const rh = h.relative_humidity_2m;
+    const vis = h.visibility;
+    const cl = h.cloud_cover_low;
+    const wind = h.wind_speed_10m;
+
+    // Spread + score per uur
+    const spread = T.map((v, i) => (v != null && Td[i] != null) ? v - Td[i] : null);
+    const scores = tijden.map((_, i) => berekenScore(vis[i], rh[i], spread[i]));
+
+    // Huidige situatie
+    const nuScore = scores[0];
+    const cat = scoreCat(nuScore);
+    const statusEl = document.getElementById('huidig-status');
+    statusEl.className = 'huidig-status ' + cat.klasse;
+    statusEl.querySelector('.emoji').textContent = cat.emoji;
+    statusEl.querySelector('.titel').textContent = `${cat.label} — ${huidigNaam}`;
+    statusEl.querySelector('.detail').textContent =
+      `Score ${nuScore}/4 · Zicht ${vis[0]?Math.round(vis[0]/1000*10)/10+' km':'–'} · RH ${rh[0]}% · Spread ${spread[0]?.toFixed(1)}°C`;
+
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('blok-tijdlijn').style.display = '';
+    document.getElementById('blok-zicht').style.display = '';
+    document.getElementById('blok-temp').style.display = '';
+    document.getElementById('blok-extra').style.display = '';
+
+    // ── 1. TIJDLIJN-STRIP ───────────────────────────────────────────
+    const strip = document.getElementById('mist-strip');
+    strip.innerHTML = '';
+    scores.forEach((s, i) => {
+      const cat = scoreCat(s);
+      const cel = document.createElement('div');
+      cel.className = 'cel';
+      cel.style.background = cat.kleur;
+      const d = new Date(tijden[i]);
+      const tijdStr = `${['Zo','Ma','Di','Wo','Do','Vr','Za'][d.getDay()]} ${d.getDate()}/${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:00`;
+      cel.innerHTML = `<div class="lbl">${tijdStr} · ${cat.label} (${s}/4)<br>Zicht ${vis[i]?Math.round(vis[i]/1000*10)/10+' km':'–'} · RH ${rh[i]}% · Spread ${spread[i]?.toFixed(1)}°C</div>`;
+      strip.appendChild(cel);
+    });
+    document.getElementById('sub-tijdlijn').textContent =
+      `${huidigNaam} · volgende 48 uur · hover voor details per uur`;
+
+    // ── 2. ZICHT CHART ──────────────────────────────────────────────
+    if (charts.zicht) charts.zicht.destroy();
+    charts.zicht = new Chart(document.getElementById('canvas-zicht'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label:'Zicht', data: vis, borderColor:'#2266aa', backgroundColor:'rgba(34,102,170,0.15)', borderWidth:2.5, pointRadius:0, tension:0.3, fill:'origin'},
+          {label:'1 km', data: labels.map(()=>1000), borderColor:'rgba(100,100,100,0.45)', borderWidth:1, pointRadius:0, fill:false, borderDash:[4,3]},
+          {label:'4 km', data: labels.map(()=>4000), borderColor:'rgba(100,100,100,0.30)', borderWidth:1, pointRadius:0, fill:false, borderDash:[4,3]},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{
+            filter:item=>item.datasetIndex===0,
+            callbacks:{
+              title:(ctx)=>tijden[ctx[0].dataIndex].slice(5,16).replace('T',' '),
+              label:(ctx)=>{
+                const v = ctx.parsed.y;
+                const km = v>=1000 ? (v/1000).toFixed(1)+' km' : v+' m';
+                const cat = v<1000?'(mist)':v<4000?'(nevel)':'(helder)';
+                return ` Zicht: ${km} ${cat}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {ticks: xTicks(), grid:{color:'#eef1f5'}},
+          y: {ticks:{font:{size:10},callback:v=>v>=1000?(v/1000)+' km':v+' m'}, grid:{color:'#eef1f5'}, min:0, suggestedMax:15000}
+        }
+      }
+    });
+
+    // ── 3. TEMP + DAUWPUNT ──────────────────────────────────────────
+    if (charts.temp) charts.temp.destroy();
+    charts.temp = new Chart(document.getElementById('canvas-temp'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          // Spread als gevuld gebied tussen T en Td
+          {label:'T', data: T, borderColor:'#cc2222', backgroundColor:'rgba(204,34,34,0.10)', borderWidth:2.5, pointRadius:0, tension:0.3, fill:'+1'},
+          {label:'Td', data: Td, borderColor:'#22aa66', borderWidth:2.5, pointRadius:0, tension:0.3, fill:false},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{
+            callbacks:{
+              title:(ctx)=>tijden[ctx[0].dataIndex].slice(5,16).replace('T',' '),
+              label:(ctx)=>{
+                const lbl = ctx.datasetIndex===0 ? 'T' : 'Td';
+                return ` ${lbl}: ${ctx.parsed.y?.toFixed(1)}°C`;
+              },
+              afterBody:(ctx)=>{
+                const s = spread[ctx[0].dataIndex];
+                return s!=null ? ['', ` Spread: ${s.toFixed(1)}°C${s<1?' ⚠️ verzadigd':''}`] : [];
+              }
+            }
+          }
+        },
+        scales: {
+          x: {ticks: xTicks(), grid:{color:'#eef1f5'}},
+          y: {ticks:{font:{size:10},callback:v=>v+'°C'}, grid:{color:'#eef1f5'}}
+        }
+      }
+    });
+
+    // ── 4. RH + spread + wind ───────────────────────────────────────
+    if (charts.extra) charts.extra.destroy();
+    charts.extra = new Chart(document.getElementById('canvas-extra'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label:'RH', data: rh, borderColor:'#1976d2', borderWidth:2, pointRadius:0, tension:0.3, fill:false, yAxisID:'y'},
+          {label:'Spread', data: spread, borderColor:'#ff6d00', borderWidth:2, pointRadius:0, tension:0.3, fill:false, yAxisID:'y2'},
+          {label:'Wind', data: wind, borderColor:'#7b1fa2', borderWidth:1.5, borderDash:[4,3], pointRadius:0, tension:0.3, fill:false, yAxisID:'y2'},
+          // 95% referentielijn
+          {label:'95%', data: labels.map(()=>95), borderColor:'rgba(25,118,210,0.35)', borderWidth:1, pointRadius:0, fill:false, borderDash:[3,3], yAxisID:'y'},
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: {mode:'index', intersect:false},
+        plugins: {
+          legend:{display:false},
+          nachtArcering:{tijden},
+          tooltip:{
+            filter:item=>item.datasetIndex<3,
+            callbacks:{
+              title:(ctx)=>tijden[ctx[0].dataIndex].slice(5,16).replace('T',' '),
+              label:(ctx)=>{
+                const n = ['RH','Spread','Wind'][ctx.datasetIndex];
+                const u = ['%','°C','km/u'][ctx.datasetIndex];
+                return ` ${n}: ${ctx.parsed.y?.toFixed(1)} ${u}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {ticks: xTicks(), grid:{color:'#eef1f5'}},
+          y: {position:'left',ticks:{font:{size:10},callback:v=>v+'%',color:'#1976d2'}, grid:{color:'#eef1f5'}, min:60, max:100, title:{display:true,text:'RH %',color:'#1976d2',font:{size:10}}},
+          y2: {position:'right',ticks:{font:{size:10},color:'#ff6d00'}, grid:{display:false}, min:0, suggestedMax:10, title:{display:true,text:'Spread °C / Wind km/u',color:'#ff6d00',font:{size:10}}}
+        }
+      }
+    });
+
+  } catch(e) {
+    document.getElementById('status').innerHTML = '⚠️ Kan data niet laden: ' + e.message;
+  }
+}
+
+// ── Locatie-knoppen ───────────────────────────────────────────────────
+document.querySelectorAll('.locatie-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.locatie-btn').forEach(b => b.classList.remove('actief'));
+    btn.classList.add('actief');
+    huidigLat = parseFloat(btn.dataset.lat);
+    huidigLon = parseFloat(btn.dataset.lon);
+    huidigNaam = btn.dataset.naam;
+    laden();
+  });
+});
+
+function updateKlok(){
+  document.getElementById('klok').textContent = new Date().toLocaleTimeString('nl-NL');
+}
+updateKlok(); setInterval(updateKlok, 1000);
+laden();
+</script>
+</body>
+</html>

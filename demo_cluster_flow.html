@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEMO — Scenario-verloop ENS clusters</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: #f1f5f9; color: #1e293b;
+    padding: 28px 16px;
+  }
+  .kaart-box {
+    background: white; border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(0,0,0,.09);
+    max-width: 960px; margin: 0 auto;
+    padding: 20px 22px 16px;
+  }
+  .flow-titel { font-size: 1rem; font-weight: 700; color: #0f172a; }
+  .flow-sub   { font-size: .78rem; color: #64748b; margin: 3px 0 14px; }
+  .flow-sub b { color: #475569; }
+
+  #sankey-wrap { width: 100%; }
+  #sankey { display: block; margin: 0 auto; width: 100%; height: auto; max-width: 920px; }
+
+  .sk-link { transition: opacity .15s; cursor: pointer; }
+  .sk-link:hover { opacity: .85 !important; }
+  .sk-node-lbl   { font-size: 11.5px; font-weight: 700; fill: white; pointer-events: none; }
+  .sk-node-pct   { font-size: 10px; font-weight: 600; fill: rgba(255,255,255,.85); pointer-events: none; }
+  .sk-col-hdr    { font-size: 12px; font-weight: 700; fill: #334155; }
+  .sk-col-sub    { font-size: 10px; fill: #94a3b8; }
+
+  .flow-voetnoot {
+    font-size: .72rem; color: #94a3b8; margin-top: 10px;
+    display: flex; gap: 18px; flex-wrap: wrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="kaart-box">
+  <div class="flow-titel">🔀 Scenario-verloop — 51 ensembleleden</div>
+  <div class="flow-sub">
+    Elke band is een groep leden die van scenario wisselt (of blijft) tussen de intervallen.
+    <b>Dikte = aantal leden.</b> Beweeg over een band voor details.
+  </div>
+  <div id="sankey-wrap"><svg id="sankey"></svg></div>
+  <div class="flow-voetnoot">
+    <span>Kleur = scenario binnen dat interval (zelfde kleuren als kaartbadges)</span>
+    <span>DEMO · voorbeelddata run 2026-06-12 00 UTC</span>
+  </div>
+</div>
+
+<script>
+// ── Voorbeelddata (zelfde structuur als straks in meta.json) ───────────────
+// labels per interval: cluster-index per lid (51 leden, gesorteerd laag→hoog z500)
+const DEMO = {
+  intervallen: [
+    { naam:'int1', kop:'Dag 3–4',  sub:'72–96h',   n:[28,23] },
+    { naam:'int2', kop:'Dag 5–7',  sub:'120–168h', n:[20,8,9,14] },
+    { naam:'int3', kop:'Dag 8–10', sub:'192–240h', n:[16,12,13,10] },
+  ],
+  // stromen[i] = matrix [bron][doel] tussen interval i en i+1
+  stromen: [
+    [ [15,5,2,6],
+      [5,3,7,8] ],
+    [ [10,4,3,3],
+      [2,4,1,1],
+      [2,2,4,1],
+      [2,2,5,5] ],
+  ]
+};
+
+const KLEUREN = ['#1d4ed8','#16a34a','#dc2626','#7c3aed','#ea580c','#0891b2'];
+
+function tekenSankey(data) {
+  const svg = document.getElementById('sankey');
+  const NS  = 'http://www.w3.org/2000/svg';
+
+  const totaal   = data.intervallen[0].n.reduce((a,b)=>a+b,0);
+  const pxPerLid = 5.4;
+  const nodeGap  = 16;
+  const nodeW    = 30;
+  const topPad   = 46;
+  const W        = 900;
+  const colX     = [92, (W-nodeW)/2, W-92-nodeW];
+
+  // Hoogste kolom bepaalt hoogte
+  let maxColH = 0;
+  data.intervallen.forEach(iv => {
+    const h = totaal*pxPerLid + (iv.n.length-1)*nodeGap;
+    if (h > maxColH) maxColH = h;
+  });
+  const H = topPad + maxColH + 16;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  const defs = document.createElementNS(NS,'defs');
+  svg.appendChild(defs);
+
+  // Node-posities berekenen (verticaal gecentreerd per kolom)
+  const kolommen = data.intervallen.map((iv, ci) => {
+    const colH = totaal*pxPerLid + (iv.n.length-1)*nodeGap;
+    let y = topPad + (maxColH - colH)/2;
+    return iv.n.map((cnt, ni) => {
+      const h = cnt*pxPerLid;
+      const node = { x: colX[ci], y, h, cnt, kleur: KLEUREN[ni%KLEUREN.length], ni };
+      y += h + nodeGap;
+      return node;
+    });
+  });
+
+  // Stromen tekenen (eerst, zodat nodes erboven liggen)
+  data.stromen.forEach((matrix, si) => {
+    const bron = kolommen[si], doel = kolommen[si+1];
+    const bronOff = bron.map(n => n.y);
+    const doelOff = doel.map(n => n.y);
+
+    matrix.forEach((rij, b) => {
+      rij.forEach((cnt, d) => {
+        if (!cnt) return;
+        const h  = cnt*pxPerLid;
+        const sx = bron[b].x + nodeW, sy = bronOff[b];
+        const tx = doel[d].x,         ty = doelOff[d];
+        bronOff[b] += h; doelOff[d] += h;
+
+        const gid = `g${si}_${b}_${d}`;
+        const grad = document.createElementNS(NS,'linearGradient');
+        grad.setAttribute('id', gid);
+        grad.setAttribute('x1','0'); grad.setAttribute('x2','1');
+        grad.innerHTML =
+          `<stop offset="0" stop-color="${bron[b].kleur}"/>` +
+          `<stop offset="1" stop-color="${doel[d].kleur}"/>`;
+        defs.appendChild(grad);
+
+        const mx = (sx+tx)/2;
+        const p = document.createElementNS(NS,'path');
+        p.setAttribute('d',
+          `M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}` +
+          ` L${tx},${ty+h} C${mx},${ty+h} ${mx},${sy+h} ${sx},${sy+h} Z`);
+        p.setAttribute('fill', `url(#${gid})`);
+        p.setAttribute('opacity', '0.42');
+        p.setAttribute('class','sk-link');
+        const t = document.createElementNS(NS,'title');
+        t.textContent = `${cnt} leden: Scenario ${b+1} (${data.intervallen[si].kop}) → Scenario ${d+1} (${data.intervallen[si+1].kop})`;
+        p.appendChild(t);
+        svg.appendChild(p);
+      });
+    });
+  });
+
+  // Nodes + labels
+  kolommen.forEach((kol, ci) => {
+    // kolomkop
+    const hdr = document.createElementNS(NS,'text');
+    hdr.setAttribute('x', colX[ci]+nodeW/2); hdr.setAttribute('y', 18);
+    hdr.setAttribute('text-anchor','middle'); hdr.setAttribute('class','sk-col-hdr');
+    hdr.textContent = data.intervallen[ci].kop;
+    svg.appendChild(hdr);
+    const sub = document.createElementNS(NS,'text');
+    sub.setAttribute('x', colX[ci]+nodeW/2); sub.setAttribute('y', 32);
+    sub.setAttribute('text-anchor','middle'); sub.setAttribute('class','sk-col-sub');
+    sub.textContent = data.intervallen[ci].sub;
+    svg.appendChild(sub);
+
+    kol.forEach(n => {
+      const r = document.createElementNS(NS,'rect');
+      r.setAttribute('x', n.x); r.setAttribute('y', n.y);
+      r.setAttribute('width', nodeW); r.setAttribute('height', n.h);
+      r.setAttribute('rx', 4); r.setAttribute('fill', n.kleur);
+      const t = document.createElementNS(NS,'title');
+      t.textContent = `Scenario ${n.ni+1}: ${n.cnt} van ${totaal} leden (${Math.round(100*n.cnt/totaal)}%)`;
+      r.appendChild(t);
+      svg.appendChild(r);
+
+      // % naast node (links voor kolom 0, rechts voor laatste, anders boven)
+      const pct = Math.round(100*n.cnt/totaal);
+      const lbl = document.createElementNS(NS,'text');
+      lbl.setAttribute('y', n.y + n.h/2 + 4);
+      lbl.setAttribute('font-size','11'); lbl.setAttribute('font-weight','700');
+      lbl.setAttribute('fill', n.kleur);
+      if (ci === 0) {
+        lbl.setAttribute('x', n.x - 8); lbl.setAttribute('text-anchor','end');
+      } else {
+        lbl.setAttribute('x', n.x + nodeW + 8); lbl.setAttribute('text-anchor','start');
+      }
+      lbl.textContent = `Sc ${n.ni+1} · ${pct}%`;
+      svg.appendChild(lbl);
+    });
+  });
+}
+
+tekenSankey(DEMO);
+</script>
+</body>
+</html>

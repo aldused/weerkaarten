@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pluim-trend (demo) – Ed Aldus WM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#eef2f7; --panel:#ffffff; --header:#16243a; --border:#d4dbe6;
+  --ink:#16243a; --ink2:#5a6a80; --ink3:#8a98ac; --accent:#2ec4e8; --accent2:#035e7a;
+  --temp:#cc2222; --tempband:#e8736b; --tempband2:#f3b6b1; --hres:#cc0000;
+  --rain:#1565c0; --rainband:#7fb4e6; --rainband2:#cfe2f6; --night:#eef1f6;
+}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.header{background:var(--header);padding:13px 22px;border-bottom:3px solid var(--accent);display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px 16px}
+.header h1{font-size:1.02rem;font-weight:700;color:#fff;letter-spacing:-.01em}
+.header h1 .demo{font-size:.62rem;font-weight:600;background:var(--accent);color:#06222c;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle;letter-spacing:.04em}
+.header .meta{font-size:.72rem;color:#9fb0c4;font-family:'DM Mono',monospace;font-weight:500;letter-spacing:.03em}
+.header .meta b{color:#fff;font-weight:600}
+.controls{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 22px;display:flex;flex-wrap:wrap;gap:18px 26px;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.ctrl{display:flex;flex-direction:column;gap:6px}
+.ctrl > span{font-size:.66rem;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em}
+.chips{display:flex;gap:6px}
+.chip{padding:6px 15px;border-radius:18px;border:1px solid var(--border);background:#f4f7fa;color:var(--ink2);font-size:.82rem;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip.actief{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.74rem;color:var(--ink2);align-items:center}
+.legend .it{display:inline-flex;align-items:center;gap:6px}
+.legend .sw{width:22px;height:10px;border-radius:2px;display:inline-block}
+.legend .ln{width:22px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+.uitleg{padding:11px 22px;font-size:.8rem;color:var(--ink2);background:#f7f9fc;border-bottom:1px solid var(--border);line-height:1.45}
+.uitleg b{color:var(--ink)}
+.wrap{max-width:1060px;margin:0 auto;padding:18px 16px 60px}
+.runpanel{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,40,80,.06)}
+.runpanel.nieuwste{box-shadow:0 0 0 2px var(--accent),0 2px 10px rgba(46,196,232,.25)}
+.rp-head{display:flex;align-items:baseline;gap:12px;padding:10px 16px 4px;flex-wrap:wrap}
+.rp-head .titel{font-size:.95rem;font-weight:700;color:var(--ink)}
+.rp-head .sub{font-size:.72rem;color:var(--ink3);font-family:'DM Mono',monospace}
+.rp-head .badge{font-size:.62rem;font-weight:700;background:var(--accent);color:#06222c;padding:2px 8px;border-radius:10px;letter-spacing:.04em}
+.rp-head .leeftijd{margin-left:auto;font-size:.72rem;color:var(--ink3);font-family:'DM Mono',monospace}
+.rp-svg{display:block;width:100%;height:auto}
+svg text{font-family:'DM Sans',sans-serif}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Pluim-trend — temp &amp; neerslag<span class="demo">DEMO · voorbeelddata</span></h1>
+  <div class="meta">ECMWF IFS-ENS · 51 leden · <b>laatste 3 dagen, 00 &amp; 12 UTC</b></div>
+</div>
+
+<div class="controls">
+  <div class="ctrl">
+    <span>Station</span>
+    <div class="chips" id="stations"></div>
+  </div>
+  <div class="ctrl">
+    <span>Legenda</span>
+    <div class="legend">
+      <span class="it"><span class="ln" style="border-color:var(--tempband);border-top-width:1px"></span>51 leden</span>
+      <span class="it"><span class="ln" style="border-color:var(--temp)"></span>temp mediaan</span>
+      <span class="it"><span class="ln" style="border-color:var(--hres);border-top-style:dashed"></span>HRES</span>
+      <span class="it"><span class="sw" style="background:var(--rainband2)"></span>neerslag p10–p90</span>
+      <span class="it"><span class="sw" style="background:var(--rainband)"></span>p25–p75</span>
+      <span class="it"><span class="ln" style="border-color:var(--rain)"></span>neerslag mediaan</span>
+    </div>
+  </div>
+</div>
+
+<div class="uitleg">
+  <b>Lees de trend verticaal:</b> nieuwste run staat boven, oudste onder. De runs delen dezelfde kalender-as,
+  dus een verticale lijn op bv. <b>za 4 jul</b> toont hoe achtereenvolgende runs die dag inschatten —
+  schuift de mediaan omhoog/omlaag of wordt de spreiding kleiner, dan zie je de trend.
+</div>
+
+<div class="wrap" id="wrap"></div>
+
+<script>
+// ---------- config ----------
+const STATIONS = {
+  'De Bilt':    {tBase:19.4, diurnal:6.2, warmPeak:8.6, frontMm:11},
+  'Rotterdam':  {tBase:19.9, diurnal:5.4, warmPeak:8.0, frontMm:9},
+  'Maastricht': {tBase:20.3, diurnal:7.0, warmPeak:9.4, frontMm:14},
+};
+const DAGEN = ['zo','ma','di','wo','do','vr','za'];
+const MAAND = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const HOUR = 3600e3, DAY = 86400e3;
+
+// "nu" = nieuwste run: vandaag 12 UTC (demo: 2026-06-30)
+const NOW = new Date(Date.UTC(2026,5,30,12,0,0));
+// 6 runs: 3 dagen x 00/12, nieuwste eerst
+const RUNS = [];
+for (let d=0; d<3; d++) for (const h of [12,0]) {
+  RUNS.push(new Date(Date.UTC(2026,5,30-d,h,0,0)));
+}
+// gedeelde valide-as: vanaf vandaag 00 UTC t/m +9 dagen, stap 6u
+const AX_START = new Date(Date.UTC(2026,5,30,0,0,0));
+const AX_END   = new Date(AX_START.getTime() + 9*DAY);
+const STEP = 1*HOUR;          // uurlijkse sampling → vloeiende pluim
+const FCST_LEN = 15*DAY;      // run reikt 15 dagen
+const N_MEM = 51;             // ensemble-leden
+
+// deterministische pseudo-random (per run+station reproduceerbaar)
+function rng(seed){let s=(seed>>>0)||1;return ()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;}}
+function gauss(rnd){let u=0,v=0;while(u===0)u=rnd();while(v===0)v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function quantile(sorted,q){const i=(sorted.length-1)*q,lo=Math.floor(i),hi=Math.ceil(i);return sorted[lo]+(sorted[hi]-sorted[lo])*(i-lo);}
+
+// ---------- synthetische ensemble (51 leden, uurlijks) ----------
+// Per run: deterministisch forecast-signaal + per-lid random-walk die met lead-time uitwaaiert.
+function buildRun(station, runDate, runIndex){
+  const cfg = STATIONS[station];
+  const t0  = runDate.getTime();
+  // gedeeld forecast-signaal; trend: nieuwere run (lager runIndex) = warme periode sterker + front eerder
+  const warmCenter = AX_START.getTime() + (6.3 + runIndex*0.18)*DAY;
+  const warmAmp    = cfg.warmPeak - runIndex*0.55;
+  const warmWidth  = 1.9*DAY;
+  const frontCenter= AX_START.getTime() + (3.4 + runIndex*0.22)*DAY;
+  const frontWidth = 0.6*DAY;
+  const runBias    = (rng(runIndex*7919 + station.length*131)()-0.5)*0.8;
+
+  const times=[];
+  for (let t=AX_START.getTime(); t<=AX_END.getTime()+1; t+=STEP) times.push(t);
+  const n=times.length;
+  const tempMem=[], rainMem=[];
+  for (let m=0;m<N_MEM;m++){ tempMem.push(new Array(n).fill(null)); rainMem.push(new Array(n).fill(null)); }
+
+  for (let m=0;m<N_MEM;m++){
+    const r = rng((runIndex*131071) ^ (m*2654435761) ^ (station.length*97));
+    const ampF   = 0.78 + r()*0.44;       // diurnale amplitude-factor (bewolking), gem ~1
+    const wetF   = 0.40 + r()*1.50;        // neerslag-intensiteit per lid
+    const tShift = (r()-0.5)*0.5*DAY;      // synoptische timing-shift
+    const pPhase = r()*Math.PI*2;
+    let walk=0;
+    const tEnd=Math.min(AX_END.getTime(), t0+FCST_LEN);
+    for (let t=t0; t<=tEnd; t+=STEP){
+      walk += gauss(r)*0.16;               // uurlijkse random-walk → spreiding ~sqrt(lead)
+      if (t < AX_START.getTime()) continue;
+      const i=Math.round((t-AX_START.getTime())/STEP);
+      if (i<0 || i>=n) continue;
+      const lead=(t-t0)/DAY, hod=((t/HOUR)%24), tt=t-tShift;
+      const amp=cfg.diurnal*(1 + (ampF-1)*Math.min(1,lead/2.5));
+      const diurnal=-amp*Math.cos((hod-3)/24*2*Math.PI);  // min ~05u, max ~15u
+      const warm=warmAmp*Math.exp(-Math.pow((tt-warmCenter)/warmWidth,2));
+      const synop=Math.sin(tt/DAY*1.6 + pPhase)*Math.min(1,lead/2);
+      tempMem[m][i]=cfg.tBase + diurnal + warm + runBias + synop + walk;
+      const front=Math.exp(-Math.pow((tt-frontCenter)/frontWidth,2));
+      const shower=(lead>2 ? Math.max(0,gauss(r))*0.45 : Math.max(0,gauss(r))*0.12);
+      rainMem[m][i]=Math.max(0, cfg.frontMm*front*wetF*0.22 + shower*wetF);
+    }
+  }
+
+  // kwantielen + mediaan per stap (alleen waar alle leden bestaan)
+  const tQ={lo:[],p25:[],med:[],p75:[],hi:[],hres:[]};
+  const rQ={p10:[],p25:[],med:[],p75:[],p90:[]};
+  for (let i=0;i<n;i++){
+    const col=[]; for(let m=0;m<N_MEM;m++){const v=tempMem[m][i]; if(v!=null)col.push(v);}
+    if (col.length<N_MEM){ for(const k in tQ) tQ[k].push(null); }
+    else { col.sort((a,b)=>a-b);
+      tQ.lo.push(quantile(col,0)); tQ.p25.push(quantile(col,.25)); tQ.med.push(quantile(col,.5));
+      tQ.p75.push(quantile(col,.75)); tQ.hi.push(quantile(col,1));
+      tQ.hres.push(quantile(col,.5) + 0.4*Math.sin(times[i]/DAY*2.3+runIndex)); }
+    const rc=[]; for(let m=0;m<N_MEM;m++){const v=rainMem[m][i]; if(v!=null)rc.push(v);}
+    if (rc.length<N_MEM){ for(const k in rQ) rQ[k].push(null); }
+    else { rc.sort((a,b)=>a-b);
+      rQ.p10.push(quantile(rc,.10)); rQ.p25.push(quantile(rc,.25)); rQ.med.push(quantile(rc,.5));
+      rQ.p75.push(quantile(rc,.75)); rQ.p90.push(quantile(rc,.90)); }
+  }
+  return {times, tempMem, rainMem, tQ, rQ, t0};
+}
+
+// ---------- SVG render ----------
+const W=1020, M={l:42,r:30,t:8}, PLOT_W=W-M.l-M.r;
+const TH=150, RH=78, GAP=18, LBL=30;
+const H = M.t+TH+GAP+RH+LBL;
+const TY0=M.t, TY1=M.t+TH;
+const RY0=M.t+TH+GAP, RY1=M.t+TH+GAP+RH;
+
+const xToPx = t => M.l + ((t-AX_START.getTime())/(AX_END.getTime()-AX_START.getTime()))*PLOT_W;
+function yT(tmin,tmax){return v=> TY1 - ((v-tmin)/(tmax-tmin))*(TY1-TY0);}
+function yR(rmax){return v=> RY1 - (v/rmax)*(RY1-RY0);}
+
+// lijn uit parallel-arrays times[]/vals[] (slaat nulls over → start bij run-init)
+function pathArr(times, vals, yf){
+  let d='', st=false;
+  for(let i=0;i<times.length;i++){const v=vals[i]; if(v==null||isNaN(v)){st=false;continue;}
+    d+=(st?'L':'M')+xToPx(times[i]).toFixed(1)+','+yf(v).toFixed(1); st=true;}
+  return d;
+}
+// gevulde band tussen lo[] en hi[]
+function bandArr(times, lo, hi, yf){
+  const idx=[]; for(let i=0;i<times.length;i++) if(lo[i]!=null&&hi[i]!=null) idx.push(i);
+  if(!idx.length) return '';
+  let up='',dn='';
+  for(let k=0;k<idx.length;k++){const i=idx[k]; up+=(k?'L':'M')+xToPx(times[i]).toFixed(1)+','+yf(lo[i]).toFixed(1);}
+  for(let k=idx.length-1;k>=0;k--){const i=idx[k]; dn+='L'+xToPx(times[i]).toFixed(1)+','+yf(hi[i]).toFixed(1);}
+  return up+dn+'Z';
+}
+
+function runSvg(station, runDate, runIndex){
+  const D=buildRun(station,runDate,runIndex);
+  const {times, tempMem, tQ, rQ}=D;
+  // y-bereik temp gedeeld vast voor vergelijkbaarheid
+  const tmin=10, tmax=40;
+  let rmax=0; for(const v of rQ.p90) if(v!=null&&v>rmax) rmax=v; rmax=Math.max(3, rmax*1.1);
+  const yt=yT(tmin,tmax), yr=yR(rmax);
+  let s=`<svg viewBox="0 0 ${W} ${H}" class="rp-svg" xmlns="http://www.w3.org/2000/svg">`;
+
+  // achtergrond plots
+  s+=`<rect x="${M.l}" y="${TY0}" width="${PLOT_W}" height="${TY1-TY0}" fill="#fbfcfe"/>`;
+  s+=`<rect x="${M.l}" y="${RY0}" width="${PLOT_W}" height="${RY1-RY0}" fill="#fbfdff"/>`;
+
+  // nacht-arcering (00-06 UTC blokjes) over temp-plot
+  for(let t=AX_START.getTime();t<AX_END.getTime();t+=DAY){
+    const x0=xToPx(t), x1=xToPx(t+6*HOUR);
+    s+=`<rect x="${x0.toFixed(1)}" y="${TY0}" width="${(x1-x0).toFixed(1)}" height="${TY1-TY0}" fill="var(--night)"/>`;
+  }
+  // "voor run-tijd" grijs (analyse-zone links van init)
+  if(runDate.getTime()>AX_START.getTime()){
+    const xi=xToPx(runDate.getTime());
+    s+=`<rect x="${M.l}" y="${TY0}" width="${(xi-M.l).toFixed(1)}" height="${RY1-TY0}" fill="#f1f3f7" opacity="0.7"/>`;
+    s+=`<line x1="${xi.toFixed(1)}" y1="${TY0}" x2="${xi.toFixed(1)}" y2="${RY1}" stroke="#9aa7ba" stroke-width="1.3" stroke-dasharray="3 3"/>`;
+    s+=`<text x="${(xi+4).toFixed(1)}" y="${TY1-6}" font-size="11" fill="#9aa7ba">↦ run</text>`;
+  }
+
+  // daglijnen + datumlabels
+  for(let t=AX_START.getTime();t<=AX_END.getTime()+1;t+=DAY){
+    const px=xToPx(t);
+    s+=`<line x1="${px.toFixed(1)}" y1="${TY0}" x2="${px.toFixed(1)}" y2="${RY1}" stroke="#dde3ec" stroke-width="1"/>`;
+    const dt=new Date(t), lx=xToPx(t+DAY/2);
+    if(t<AX_END.getTime()){
+      s+=`<text x="${lx.toFixed(1)}" y="${RY1+16}" font-size="12.5" font-weight="600" text-anchor="middle" fill="#5a6a80">${DAGEN[dt.getUTCDay()]}</text>`;
+      s+=`<text x="${lx.toFixed(1)}" y="${RY1+27}" font-size="11" text-anchor="middle" fill="#8a98ac">${dt.getUTCDate()} ${MAAND[dt.getUTCMonth()]}</text>`;
+    }
+  }
+
+  // 6-uur subgrid (fijn) op temp-plot
+  for(let t=AX_START.getTime();t<AX_END.getTime();t+=6*HOUR){
+    if((t-AX_START.getTime())%DAY===0) continue;
+    const px=xToPx(t);
+    s+=`<line x1="${px.toFixed(1)}" y1="${TY0}" x2="${px.toFixed(1)}" y2="${TY1}" stroke="#eef1f6" stroke-width="0.6"/>`;
+  }
+  // temp gridlijnen + y-labels
+  for(let v=10;v<=40;v+=5){
+    const py=yt(v);
+    s+=`<line x1="${M.l}" y1="${py.toFixed(1)}" x2="${M.l+PLOT_W}" y2="${py.toFixed(1)}" stroke="#e7ebf2" stroke-width="0.8"/>`;
+    s+=`<text x="${M.l-6}" y="${(py+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#8a98ac">${v}°</text>`;
+  }
+  // temp: 51 leden (spaghetti) + mediaan + HRES
+  for(let m=0;m<tempMem.length;m++)
+    s+=`<path d="${pathArr(times,tempMem[m],yt)}" fill="none" stroke="var(--tempband)" stroke-width="0.7" stroke-opacity="0.38" stroke-linejoin="round"/>`;
+  s+=`<path d="${pathArr(times,tQ.med,yt)}" fill="none" stroke="var(--temp)" stroke-width="2.4" stroke-linejoin="round"/>`;
+  s+=`<path d="${pathArr(times,tQ.hres,yt)}" fill="none" stroke="var(--hres)" stroke-width="1.7" stroke-dasharray="5 3" stroke-linejoin="round"/>`;
+  s+=`<text x="${M.l+3}" y="${TY0+13}" font-size="11" font-weight="700" fill="var(--temp)">TEMP °C · 51 leden</text>`;
+
+  // neerslag y-labels
+  for(const v of [0, +(rmax/2).toFixed(1), +rmax.toFixed(1)]){
+    const py=yr(v);
+    s+=`<text x="${M.l-6}" y="${(py+4).toFixed(1)}" font-size="10.5" text-anchor="end" fill="#8a98ac">${v}</text>`;
+    s+=`<line x1="${M.l}" y1="${py.toFixed(1)}" x2="${M.l+PLOT_W}" y2="${py.toFixed(1)}" stroke="#e7ebf2" stroke-width="0.7"/>`;
+  }
+  // neerslag: geneste kwantiel-waaier (p10–90 / p25–75) + mediaan
+  s+=`<path d="${bandArr(times,rQ.p10,rQ.p90,yr)}" fill="var(--rainband2)" opacity="0.9"/>`;
+  s+=`<path d="${bandArr(times,rQ.p25,rQ.p75,yr)}" fill="var(--rainband)" opacity="0.75"/>`;
+  s+=`<path d="${pathArr(times,rQ.med,yr)}" fill="none" stroke="var(--rain)" stroke-width="2" stroke-linejoin="round"/>`;
+  s+=`<text x="${M.l+3}" y="${RY0+13}" font-size="11" font-weight="700" fill="var(--rain)">NEERSLAG mm/u</text>`;
+
+  // assenkaders
+  s+=`<rect x="${M.l}" y="${TY0}" width="${PLOT_W}" height="${TY1-TY0}" fill="none" stroke="#c3cdda" stroke-width="1"/>`;
+  s+=`<rect x="${M.l}" y="${RY0}" width="${PLOT_W}" height="${RY1-RY0}" fill="none" stroke="#c3cdda" stroke-width="1"/>`;
+  s+=`</svg>`;
+  return s;
+}
+
+// ---------- bouw ----------
+function runLabel(d){
+  const wd=DAGEN[d.getUTCDay()], dd=d.getUTCDate(), mm=MAAND[d.getUTCMonth()];
+  const hh=String(d.getUTCHours()).padStart(2,'0');
+  return {kort:`${wd} ${dd} ${mm} — ${hh} UTC`, run:`${hh}Z`};
+}
+function leeftijd(d){
+  const h=Math.round((NOW.getTime()-d.getTime())/HOUR);
+  if(h<=0) return 'nieuwste run';
+  return `${h} uur ouder`;
+}
+
+let huidigStation='De Bilt';
+function render(){
+  const wrap=document.getElementById('wrap');
+  wrap.innerHTML='';
+  RUNS.forEach((rd,i)=>{
+    const L=runLabel(rd);
+    const div=document.createElement('div');
+    div.className='runpanel'+(i===0?' nieuwste':'');
+    div.innerHTML=
+      `<div class="rp-head">
+         <span class="titel">${L.kort}</span>
+         ${i===0?'<span class="badge">NIEUWSTE</span>':''}
+         <span class="sub">${huidigStation}</span>
+         <span class="leeftijd">${leeftijd(rd)}</span>
+       </div>`+
+      runSvg(huidigStation, rd, i);
+    wrap.appendChild(div);
+  });
+}
+function buildChips(){
+  const c=document.getElementById('stations');
+  Object.keys(STATIONS).forEach(name=>{
+    const b=document.createElement('button');
+    b.className='chip'+(name===huidigStation?' actief':'');
+    b.textContent=name;
+    b.onclick=()=>{huidigStation=name;[...c.children].forEach(x=>x.classList.toggle('actief',x.textContent===name));render();};
+    c.appendChild(b);
+  });
+}
+buildChips();
+render();
+</script>
+</body>
+</html>

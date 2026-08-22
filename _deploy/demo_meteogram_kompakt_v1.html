@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meteogram Kompakt — Weerlab demo v1</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--wl-color-background);
+    color: var(--wl-color-text);
+    font: var(--wl-text-body-md);
+    font-family: var(--wl-font-sans);
+  }
+  .wrap {
+    max-width: var(--wl-content-max);
+    margin: 0 auto;
+    padding: var(--wl-space-lg);
+  }
+  header.page {
+    display: flex;
+    align-items: baseline;
+    gap: var(--wl-space-md);
+    flex-wrap: wrap;
+    margin-bottom: var(--wl-space-md);
+  }
+  header.page h1 {
+    margin: 0;
+    font: var(--wl-text-headline-lg);
+    color: var(--wl-color-primary);
+  }
+  header.page .sub {
+    color: var(--wl-color-text-muted);
+    font-size: 13px;
+  }
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: var(--wl-space-md);
+  }
+  .controls select, .controls input {
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: var(--wl-radius-md);
+    padding: 8px 12px;
+    font: var(--wl-text-body-sm);
+    color: var(--wl-color-text);
+  }
+
+  .meteogram {
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: var(--wl-radius-lg);
+    box-shadow: var(--wl-shadow-1);
+    overflow: hidden;
+  }
+  .mg-title {
+    background: var(--wl-color-primary);
+    color: #fff;
+    padding: 10px 16px;
+    font: var(--wl-text-headline-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .mg-title .src {
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.85;
+    font-family: var(--wl-font-mono);
+  }
+
+  .mg-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .mg-canvas {
+    /* SVG zit hier in; breedte wordt door SVG gezet */
+    display: block;
+  }
+
+  /* Tooltip */
+  .mg-tip {
+    position: absolute;
+    background: var(--wl-color-text);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font: var(--wl-text-data-sm);
+    pointer-events: none;
+    transform: translate(-50%, -110%);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 80ms;
+    z-index: 10;
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 16px;
+    font-size: 11px;
+    color: var(--wl-color-text-muted);
+    border-top: 1px solid var(--wl-color-border);
+    background: var(--wl-color-surface-muted);
+    flex-wrap: wrap;
+  }
+  .legend .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Meteogram Kompakt</h1>
+    <span class="sub">5-daagse · HARMONIE + ECMWF blend · runs 00/06/12/18</span>
+  </header>
+
+  <div class="controls">
+    <select id="station">
+      <option>Rotterdam</option>
+      <option>De Bilt</option>
+      <option>Schiphol</option>
+      <option>Groningen</option>
+      <option>Maastricht</option>
+      <option>Vlissingen</option>
+    </select>
+    <select id="run">
+      <option>Run 06 UTC · 27.04.2026</option>
+      <option>Run 00 UTC · 27.04.2026</option>
+      <option>Run 18 UTC · 26.04.2026</option>
+      <option>Run 12 UTC · 26.04.2026</option>
+    </select>
+  </div>
+
+  <div class="meteogram" id="mg">
+    <div class="mg-title">
+      <span>5-Dagen Verwachting voor Rotterdam — Kompakt (HARMONIE/ECMWF)</span>
+      <span class="src">demo · synthetische data</span>
+    </div>
+    <div class="mg-scroll">
+      <svg class="mg-canvas" id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:#cc0000"></span>Temperatuur</span>
+      <span><span class="dot" style="background:#1d4ed8"></span>Dauwpunt</span>
+      <span><span class="dot" style="background:#e07000"></span>Mittelwind</span>
+      <span><span class="dot" style="background:#7a3a00"></span>Windvlagen</span>
+      <span><span class="dot" style="background:#e6b800"></span>Zon</span>
+      <span><span class="dot" style="background:#475569"></span>Wolken</span>
+      <span><span class="dot" style="background:#1d4ed8"></span>Neerslag</span>
+      <span><span class="dot" style="background:#6d28d9"></span>Neerslagkans</span>
+    </div>
+  </div>
+</div>
+
+<div class="mg-tip" id="tip"></div>
+
+<script>
+/* ============================================================
+   METEOGRAM KOMPAKT — demo v1
+   Volledig SVG, geen libraries. Sample data hardcoded zodat we
+   eerst de stijl kunnen finetunen.
+   ============================================================ */
+
+// ---------- CONFIG ----------
+const HOURS = 120;                 // 5 dagen
+const HOUR_PX = 22;                // breedte per uur
+const PAD_LEFT = 56;               // y-as labels
+const PAD_RIGHT = 12;
+const ROW_HEAD = 48;               // datum + uur-headers
+const ROW_TEMP = 220;
+const ROW_WIND = 130;
+const ROW_ARROWS = 26;
+const ROW_SUN = 70;
+const ROW_CLOUD = 70;
+const ROW_PRECIP = 100;
+const ROW_FOOT = 36;               // uur-labels onder
+const GAP = 18;
+const PLOT_WIDTH = HOURS * HOUR_PX;
+const TOTAL_WIDTH = PAD_LEFT + PLOT_WIDTH + PAD_RIGHT;
+
+// kleuren via design tokens (fallback hex)
+const C = {
+  ink: '#0f172a', muted: '#64748b', soft: '#94a3b8',
+  line: '#e3e8ef', lineSoft: '#eef2f7',
+  night: '#f1f5f9',
+  temp: '#cc0000', dew: '#1d4ed8',
+  wind: '#e07000', gust: '#7a3a00',
+  sun: '#e6b800', sunSoft: '#fde68a',
+  cloud: '#475569',
+  rain: '#1d4ed8', snow: '#7dd3fc',
+  prob: '#6d28d9',
+};
+
+// startuur van plot — laatste run-uur op DD/MM
+const START = new Date('2026-04-27T06:00:00Z');
+
+// ---------- SAMPLE DATA ----------
+// Synthetische realistische data: dagcyclus T, paar buien, wind oploopt
+function genData() {
+  const out = [];
+  for (let i = 0; i < HOURS; i++) {
+    const t = new Date(START.getTime() + i * 3600 * 1000);
+    const h = t.getUTCHours() + t.getUTCMinutes()/60;
+    const dayPhase = Math.sin(((h - 6) / 24) * 2 * Math.PI);   // -1 = 06z, +1 = 18z
+    const dayIdx = Math.floor(i / 24);
+
+    // dagvariatie temp per dag
+    const tBase = [14, 16, 18, 19, 17][dayIdx] || 17;
+    const tAmp  = [3, 5, 6, 7, 6][dayIdx] || 5;
+    const T = tBase + tAmp * dayPhase + (Math.random()-0.5)*0.4;
+
+    // dauwpunt schommelt rond 6-10
+    const Td = 6 + 2*Math.sin((i/24)*Math.PI*2 - 1) + (Math.random()-0.5)*0.6;
+
+    // wind: oploopt overdag dag 2 en 3
+    const wBase = [18, 28, 38, 30, 22][dayIdx] || 25;
+    const windK = wBase + 8*dayPhase + (Math.random()-0.5)*4;
+    const gustK = windK * (1.4 + 0.15*Math.random());
+    const windDir = 200 + 40*Math.sin(i/30) + 20*Math.random();
+
+    // wolken
+    const cloudHigh = clamp(50 + 40*Math.sin(i/12) + (i<10?40:-10), 0, 100);
+    const cloudMid  = clamp(30 + 50*Math.sin(i/8 + 1) + (i<8?60:-20), 0, 100);
+    const cloudLow  = clamp(20 + 60*Math.sin(i/6 + 2) + (i<6?70:0), 0, 100);
+
+    // zon: laag bij veel lage wolken, 0 's nachts
+    const isDay = h > 5.5 && h < 20.5;
+    let sun = 0;
+    if (isDay) {
+      const cover = (cloudHigh*0.2 + cloudMid*0.4 + cloudLow*0.6)/100;
+      sun = Math.max(0, (1 - cover)) * Math.max(0, Math.sin(((h-5.5)/15)*Math.PI));
+      sun = clamp(sun*100, 0, 100);
+    }
+
+    // neerslag
+    let precip = 0, prob = 0;
+    if (i >= 3 && i <= 9) { precip = 0.2 + Math.random()*0.4; prob = 60 + Math.random()*30; }
+    else if (i >= 28 && i <= 33) { precip = 0.4 + Math.random()*1.2; prob = 70 + Math.random()*25; }
+    else if (i >= 70 && i <= 74) { precip = 0.1 + Math.random()*0.3; prob = 30 + Math.random()*20; }
+    else { prob = 5 + Math.random()*15; }
+
+    out.push({ t, T, Td, windK, gustK, windDir, cloudHigh, cloudMid, cloudLow, sun, precip, prob, isDay });
+  }
+  return out;
+}
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+const DATA = genData();
+
+// ---------- SVG SETUP ----------
+const svg = document.getElementById('svg');
+const totalH = ROW_HEAD + ROW_TEMP + GAP + ROW_WIND + ROW_ARROWS + GAP + ROW_SUN + GAP + ROW_CLOUD + GAP + ROW_PRECIP + ROW_FOOT;
+svg.setAttribute('width', TOTAL_WIDTH);
+svg.setAttribute('height', totalH);
+svg.setAttribute('viewBox', `0 0 ${TOTAL_WIDTH} ${totalH}`);
+
+// helpers
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs={}, parent=svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+function xAt(i) { return PAD_LEFT + i * HOUR_PX + HOUR_PX/2; }
+function xAtEdge(i) { return PAD_LEFT + i * HOUR_PX; }
+
+// ---------- BACKGROUND BANDS (dag/nacht) ----------
+function drawNightBands(yTop, yBot, group) {
+  for (let i = 0; i < HOURS; i++) {
+    const d = DATA[i];
+    if (!d.isDay) {
+      el('rect', {
+        x: xAtEdge(i), y: yTop,
+        width: HOUR_PX, height: yBot - yTop,
+        fill: C.night, opacity: 0.55
+      }, group);
+    }
+  }
+}
+
+// ---------- HEADER (datum + uur) ----------
+function drawHeader() {
+  const g = el('g', { class: 'header' });
+  // datumstrook bovenaan
+  let lastDay = -1;
+  for (let i = 0; i <= HOURS; i++) {
+    const t = new Date(START.getTime() + i * 3600 * 1000);
+    const day = t.getUTCDate();
+    if (day !== lastDay) {
+      // dagscheidings-lijn
+      if (i > 0) {
+        el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: 0, y2: ROW_HEAD,
+          stroke: C.line, 'stroke-width': 1 }, g);
+      }
+      lastDay = day;
+      // dagnaam
+      if (i < HOURS) {
+        const wd = ['Zo','Ma','Di','Wo','Do','Vr','Za'][t.getUTCDay()];
+        const mon = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][t.getUTCMonth()];
+        // centreer over de dag (of overige uren als laatste dag)
+        const remainingHours = Math.min(24, HOURS - i);
+        const cx = xAtEdge(i) + remainingHours * HOUR_PX / 2;
+        const txt = el('text', {
+          x: cx, y: 18, 'text-anchor': 'middle',
+          'font-family': 'var(--wl-font-sans)', 'font-size': 13, 'font-weight': 700,
+          fill: C.ink
+        }, g);
+        txt.textContent = `${wd} ${day}.${mon}`;
+      }
+    }
+  }
+  // uur-labels onder datumstrook
+  for (let i = 0; i < HOURS; i += 3) {
+    const t = new Date(START.getTime() + i * 3600 * 1000);
+    const hh = String(t.getUTCHours()).padStart(2, '0');
+    const txt = el('text', {
+      x: xAt(i), y: 40, 'text-anchor': 'middle',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 10,
+      fill: C.muted
+    }, g);
+    txt.textContent = hh;
+  }
+  // onderlijn
+  el('line', { x1: 0, x2: TOTAL_WIDTH, y1: ROW_HEAD-0.5, y2: ROW_HEAD-0.5,
+    stroke: C.line, 'stroke-width': 1 }, g);
+}
+
+// ---------- WEATHER ICONS (per uur, op vaste rij in temp panel) ----------
+function weatherIcon(d) {
+  // simpel: zonnig / wolken / regen / nacht
+  const totalCloud = (d.cloudHigh*0.3 + d.cloudMid*0.4 + d.cloudLow*0.5);
+  if (d.precip > 0.2) return d.isDay ? 'rain' : 'rain-night';
+  if (totalCloud > 70) return 'overcast';
+  if (totalCloud > 35) return d.isDay ? 'partly-day' : 'partly-night';
+  return d.isDay ? 'sun' : 'moon';
+}
+function drawIcon(g, x, y, size, type) {
+  const r = size/2;
+  if (type === 'sun') {
+    el('circle', { cx: x, cy: y, r: r*0.55, fill: '#f59e0b' }, g);
+    // stralen
+    for (let a = 0; a < 8; a++) {
+      const ang = a * Math.PI/4;
+      el('line', {
+        x1: x + Math.cos(ang)*r*0.7, y1: y + Math.sin(ang)*r*0.7,
+        x2: x + Math.cos(ang)*r*0.95, y2: y + Math.sin(ang)*r*0.95,
+        stroke: '#f59e0b', 'stroke-width': 1.6, 'stroke-linecap': 'round'
+      }, g);
+    }
+  } else if (type === 'moon') {
+    el('path', {
+      d: `M ${x+r*0.3} ${y-r*0.55} a ${r*0.65} ${r*0.65} 0 1 0 0 ${r*1.1} a ${r*0.5} ${r*0.5} 0 1 1 0 -${r*1.1} z`,
+      fill: '#fbbf24'
+    }, g);
+  } else if (type === 'partly-day' || type === 'partly-night') {
+    // zon/maan + wolk
+    if (type === 'partly-day') {
+      el('circle', { cx: x-r*0.3, cy: y-r*0.2, r: r*0.45, fill: '#f59e0b' }, g);
+    } else {
+      el('circle', { cx: x-r*0.3, cy: y-r*0.2, r: r*0.4, fill: '#fbbf24' }, g);
+    }
+    el('ellipse', { cx: x+r*0.15, cy: y+r*0.15, rx: r*0.65, ry: r*0.4, fill: '#cbd5e1' }, g);
+  } else if (type === 'overcast') {
+    el('ellipse', { cx: x-r*0.2, cy: y, rx: r*0.55, ry: r*0.4, fill: '#94a3b8' }, g);
+    el('ellipse', { cx: x+r*0.2, cy: y+r*0.05, rx: r*0.6, ry: r*0.4, fill: '#64748b' }, g);
+  } else if (type === 'rain' || type === 'rain-night') {
+    el('ellipse', { cx: x, cy: y-r*0.2, rx: r*0.7, ry: r*0.4, fill: '#64748b' }, g);
+    for (let i = -1; i <= 1; i++) {
+      el('line', {
+        x1: x + i*r*0.4, y1: y+r*0.2,
+        x2: x + i*r*0.4 - r*0.15, y2: y+r*0.65,
+        stroke: '#1d4ed8', 'stroke-width': 1.6, 'stroke-linecap': 'round'
+      }, g);
+    }
+  }
+}
+
+// ---------- TEMP PANEL ----------
+function drawTempPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  // titel
+  const title = el('text', { x: 4, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink }, g);
+  title.textContent = 'Temperatuur (●) en Dauwpunt (●)';
+
+  const yTop = 8, yBot = ROW_TEMP - 4;
+  const ICON_ROW_Y = yTop + 14;
+
+  // y schaal: vind min/max
+  let tMin = 0, tMax = 30;
+  const tVals = DATA.flatMap(d => [d.T, d.Td]);
+  tMin = Math.floor(Math.min(...tVals) / 5) * 5;
+  tMax = Math.ceil(Math.max(...tVals) / 5) * 5;
+  const yScale = v => yBot - (v - tMin) / (tMax - tMin) * (yBot - yTop - 28);
+  // -28 om ruimte te laten voor icoontjes bovenin
+
+  // night bands
+  drawNightBands(yTop, yBot, g);
+
+  // gridlines horizontaal per 5°
+  for (let v = tMin; v <= tMax; v += 5) {
+    const y = yScale(v);
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+      stroke: v === 0 ? C.muted : C.line, 'stroke-width': v === 0 ? 1 : 0.8 }, g);
+    const lab = el('text', { x: PAD_LEFT - 6, y: y + 3, 'text-anchor': 'end',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 10, fill: C.muted }, g);
+    lab.textContent = `${v}°`;
+  }
+  // gridlines verticaal per 3u
+  for (let i = 0; i <= HOURS; i += 3) {
+    el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: yTop, y2: yBot,
+      stroke: i % 24 === 0 ? C.muted : C.line, 'stroke-width': i % 24 === 0 ? 1 : 0.5 }, g);
+  }
+
+  // weather icons rij
+  for (let i = 0; i < HOURS; i++) {
+    drawIcon(g, xAt(i), ICON_ROW_Y, 20, weatherIcon(DATA[i]));
+  }
+
+  // dauwpunt lijn
+  let dPath = '';
+  DATA.forEach((d, i) => {
+    dPath += (i === 0 ? 'M' : 'L') + xAt(i) + ' ' + yScale(d.Td);
+  });
+  el('path', { d: dPath, fill: 'none', stroke: C.dew, 'stroke-width': 2,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
+
+  // temp lijn
+  let tPath = '';
+  DATA.forEach((d, i) => {
+    tPath += (i === 0 ? 'M' : 'L') + xAt(i) + ' ' + yScale(d.T);
+  });
+  el('path', { d: tPath, fill: 'none', stroke: C.temp, 'stroke-width': 2.2,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
+
+  // panel border
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.line }, g);
+}
+
+// ---------- WIND PANEL ----------
+function drawWindPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  const title = el('text', { x: 4, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink }, g);
+  title.textContent = 'Mittelwind en Windvlagen (km/h)';
+
+  const yTop = 8, yBot = ROW_WIND - 4;
+  const wMax = Math.ceil(Math.max(...DATA.map(d => d.gustK)) / 15) * 15;
+  const yScale = v => yBot - (v / wMax) * (yBot - yTop);
+
+  drawNightBands(yTop, yBot, g);
+
+  // gridlines per 15 km/h
+  for (let v = 0; v <= wMax; v += 15) {
+    const y = yScale(v);
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+      stroke: C.line, 'stroke-width': 0.8 }, g);
+    const lab = el('text', { x: PAD_LEFT - 6, y: y + 3, 'text-anchor': 'end',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 10, fill: C.muted }, g);
+    lab.textContent = `${v}`;
+  }
+  for (let i = 0; i <= HOURS; i += 3) {
+    el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: yTop, y2: yBot,
+      stroke: i % 24 === 0 ? C.muted : C.line, 'stroke-width': i % 24 === 0 ? 1 : 0.5 }, g);
+  }
+
+  // gust lijn (donker)
+  let gPath = '';
+  DATA.forEach((d, i) => {
+    gPath += (i === 0 ? 'M' : 'L') + xAt(i) + ' ' + yScale(d.gustK);
+  });
+  el('path', { d: gPath, fill: 'none', stroke: C.gust, 'stroke-width': 2 }, g);
+
+  // mean lijn
+  let mPath = '';
+  DATA.forEach((d, i) => {
+    mPath += (i === 0 ? 'M' : 'L') + xAt(i) + ' ' + yScale(d.windK);
+  });
+  el('path', { d: mPath, fill: 'none', stroke: C.wind, 'stroke-width': 2 }, g);
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.line }, g);
+}
+
+// ---------- WIND ARROWS ----------
+function drawWindArrows(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  const cy = ROW_ARROWS/2;
+  for (let i = 0; i < HOURS; i++) {
+    const d = DATA[i];
+    const cx = xAt(i);
+    // pijl wijst NAAR waar wind heen gaat. Meteorologisch: wind komt UIT richting d.windDir,
+    // dus pijl wijst naar (windDir + 180)
+    const dir = (d.windDir + 180) % 360;
+    const len = 7 + Math.min(8, d.windK / 10);
+    drawArrow(g, cx, cy, dir, len);
+  }
+}
+function drawArrow(g, cx, cy, dirDeg, len) {
+  const rad = (dirDeg - 90) * Math.PI / 180;
+  const dx = Math.cos(rad) * len;
+  const dy = Math.sin(rad) * len;
+  el('line', {
+    x1: cx - dx, y1: cy - dy, x2: cx + dx, y2: cy + dy,
+    stroke: '#0f172a', 'stroke-width': 1.2, 'stroke-linecap': 'round'
+  }, g);
+  // pijlpunt
+  const ah = 4;
+  const a1 = (dirDeg - 90 + 150) * Math.PI / 180;
+  const a2 = (dirDeg - 90 - 150) * Math.PI / 180;
+  el('line', {
+    x1: cx + dx, y1: cy + dy,
+    x2: cx + dx + Math.cos(a1)*ah, y2: cy + dy + Math.sin(a1)*ah,
+    stroke: '#0f172a', 'stroke-width': 1.2, 'stroke-linecap': 'round'
+  }, g);
+  el('line', {
+    x1: cx + dx, y1: cy + dy,
+    x2: cx + dx + Math.cos(a2)*ah, y2: cy + dy + Math.sin(a2)*ah,
+    stroke: '#0f172a', 'stroke-width': 1.2, 'stroke-linecap': 'round'
+  }, g);
+}
+
+// ---------- SUN PANEL ----------
+function drawSunPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  const title = el('text', { x: 4, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink }, g);
+  title.textContent = 'Zonneschijnduur (1h) / Dagsom in uren';
+
+  const yTop = 8, yBot = ROW_SUN - 4;
+  drawNightBands(yTop, yBot, g);
+
+  // 0% en 100% lijnen
+  el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: yBot, y2: yBot,
+    stroke: C.muted, 'stroke-width': 1 }, g);
+  el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: yTop, y2: yTop,
+    stroke: C.line }, g);
+  const lab100 = el('text', { x: PAD_LEFT - 6, y: yTop + 9, 'text-anchor': 'end',
+    'font-family': 'var(--wl-font-mono)', 'font-size': 10, fill: C.muted }, g);
+  lab100.textContent = '100%';
+  const lab0 = el('text', { x: PAD_LEFT - 6, y: yBot + 3, 'text-anchor': 'end',
+    'font-family': 'var(--wl-font-mono)', 'font-size': 10, fill: C.muted }, g);
+  lab0.textContent = '0%';
+
+  // bars per uur
+  DATA.forEach((d, i) => {
+    if (d.sun > 0) {
+      const h = (d.sun / 100) * (yBot - yTop);
+      el('rect', {
+        x: xAtEdge(i)+0.5, y: yBot - h,
+        width: HOUR_PX-1, height: h,
+        fill: C.sun
+      }, g);
+    }
+  });
+
+  // dagscheidings-lijnen + dagsom
+  for (let day = 0; day < 5; day++) {
+    const x1 = xAtEdge(day*24);
+    const x2 = xAtEdge(Math.min(HOURS, (day+1)*24));
+    if (day > 0) {
+      el('line', { x1, x2: x1, y1: yTop, y2: yBot,
+        stroke: C.muted, 'stroke-width': 0.8 }, g);
+    }
+    // dagsom
+    const dsum = DATA.slice(day*24, (day+1)*24).reduce((s,d)=>s + d.sun/100, 0);
+    const cx = (x1 + x2) / 2;
+    const txt = el('text', {
+      x: cx, y: yTop + 14, 'text-anchor': 'middle',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 11, 'font-weight': 700,
+      fill: C.ink
+    }, g);
+    txt.textContent = dsum.toFixed(1);
+  }
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.line }, g);
+}
+
+// ---------- CLOUD PANEL ----------
+function drawCloudPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  const title = el('text', { x: 4, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink }, g);
+  title.textContent = 'Wolkenbedekking';
+
+  const yTop = 8, yBot = ROW_CLOUD - 4;
+  const rowH = (yBot - yTop) / 3;
+
+  // achtergrond licht-blauw (hemel)
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: '#dbeafe' }, g);
+
+  // 3 rijen: hoog, midden, laag
+  const rows = [
+    { key: 'cloudHigh', label: 'hoog' },
+    { key: 'cloudMid',  label: 'midden' },
+    { key: 'cloudLow',  label: 'laag' },
+  ];
+  rows.forEach((row, ri) => {
+    const ry = yTop + ri * rowH;
+    DATA.forEach((d, i) => {
+      const v = d[row.key];
+      if (v > 5) {
+        const grey = Math.round(255 - (v/100) * 200);  // 255=wit, 55=donkergrijs
+        el('rect', {
+          x: xAtEdge(i), y: ry,
+          width: HOUR_PX, height: rowH,
+          fill: `rgb(${grey},${grey},${grey})`,
+          opacity: 0.85
+        }, g);
+      }
+    });
+    // label
+    const lab = el('text', {
+      x: PAD_LEFT - 6, y: ry + rowH/2 + 3, 'text-anchor': 'end',
+      'font-family': 'var(--wl-font-sans)', 'font-size': 10, fill: C.muted
+    }, g);
+    lab.textContent = row.label;
+  });
+
+  // kader + dagscheidingen
+  for (let i = 0; i <= HOURS; i += 24) {
+    el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: yTop, y2: yBot,
+      stroke: C.muted, 'stroke-width': 0.8 }, g);
+  }
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.line }, g);
+}
+
+// ---------- PRECIP PANEL ----------
+function drawPrecipPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  const title = el('text', { x: 4, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink }, g);
+  title.textContent = 'Neerslag per uur + Dagsom (mm) + Neerslagkans';
+
+  const yTop = 8, yBot = ROW_PRECIP - 4;
+  const pMax = Math.max(2, Math.ceil(Math.max(...DATA.map(d=>d.precip)) * 2) / 2);
+
+  drawNightBands(yTop, yBot, g);
+
+  // gridlines mm
+  for (let v = 0; v <= pMax; v += pMax/2) {
+    const y = yBot - (v / pMax) * (yBot - yTop);
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+      stroke: C.line, 'stroke-width': 0.8 }, g);
+    const lab = el('text', { x: PAD_LEFT - 6, y: y + 3, 'text-anchor': 'end',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 10, fill: C.muted }, g);
+    lab.textContent = `${v.toFixed(v<1?1:0)}`;
+  }
+  for (let i = 0; i <= HOURS; i += 3) {
+    el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: yTop, y2: yBot,
+      stroke: i % 24 === 0 ? C.muted : C.line, 'stroke-width': i % 24 === 0 ? 1 : 0.5 }, g);
+  }
+
+  // bars
+  DATA.forEach((d, i) => {
+    if (d.precip > 0) {
+      const h = (d.precip / pMax) * (yBot - yTop);
+      el('rect', {
+        x: xAtEdge(i)+1, y: yBot - h,
+        width: HOUR_PX-2, height: h,
+        fill: C.rain
+      }, g);
+    }
+  });
+
+  // kans-lijn (paars, schaal 0-100% over volledige hoogte)
+  let probPath = '';
+  DATA.forEach((d, i) => {
+    const y = yBot - (d.prob / 100) * (yBot - yTop);
+    probPath += (i === 0 ? 'M' : 'L') + xAt(i) + ' ' + y;
+  });
+  el('path', { d: probPath, fill: 'none', stroke: C.prob, 'stroke-width': 1.5,
+    'stroke-dasharray': '3 2', opacity: 0.9 }, g);
+
+  // dagsommen
+  for (let day = 0; day < 5; day++) {
+    const x1 = xAtEdge(day*24);
+    const x2 = xAtEdge(Math.min(HOURS, (day+1)*24));
+    const dsum = DATA.slice(day*24, (day+1)*24).reduce((s,d)=>s + d.precip, 0);
+    const cx = (x1 + x2) / 2;
+    const txt = el('text', {
+      x: cx, y: yTop + 14, 'text-anchor': 'middle',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 11, 'font-weight': 700,
+      fill: C.ink
+    }, g);
+    txt.textContent = dsum < 0.05 ? '0' : dsum.toFixed(1);
+  }
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.line }, g);
+}
+
+// ---------- FOOT ----------
+function drawFoot(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  // uur labels (zelfde als header)
+  for (let i = 0; i < HOURS; i += 3) {
+    const t = new Date(START.getTime() + i * 3600 * 1000);
+    const hh = String(t.getUTCHours()).padStart(2, '0');
+    const txt = el('text', {
+      x: xAt(i), y: 12, 'text-anchor': 'middle',
+      'font-family': 'var(--wl-font-mono)', 'font-size': 10,
+      fill: C.muted
+    }, g);
+    txt.textContent = hh;
+  }
+  // dagstrook
+  let lastDay = -1;
+  for (let i = 0; i <= HOURS; i++) {
+    const t = new Date(START.getTime() + i * 3600 * 1000);
+    const day = t.getUTCDate();
+    if (day !== lastDay) {
+      lastDay = day;
+      if (i < HOURS) {
+        const wd = ['Zo','Ma','Di','Wo','Do','Vr','Za'][t.getUTCDay()];
+        const mon = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][t.getUTCMonth()];
+        const remainingHours = Math.min(24, HOURS - i);
+        const cx = xAtEdge(i) + remainingHours * HOUR_PX / 2;
+        const txt = el('text', {
+          x: cx, y: 28, 'text-anchor': 'middle',
+          'font-family': 'var(--wl-font-sans)', 'font-size': 12, 'font-weight': 700,
+          fill: C.ink
+        }, g);
+        txt.textContent = `${wd} ${day}.${mon}`;
+      }
+    }
+  }
+}
+
+// ---------- RENDER ----------
+function render() {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  let y = 0;
+  drawHeader();
+  y = ROW_HEAD;
+  drawTempPanel(y);
+  y += ROW_TEMP + GAP;
+  drawWindPanel(y);
+  y += ROW_WIND;
+  drawWindArrows(y);
+  y += ROW_ARROWS + GAP;
+  drawSunPanel(y);
+  y += ROW_SUN + GAP;
+  drawCloudPanel(y);
+  y += ROW_CLOUD + GAP;
+  drawPrecipPanel(y);
+  y += ROW_PRECIP;
+  drawFoot(y);
+}
+render();
+</script>
+</body>
+</html>

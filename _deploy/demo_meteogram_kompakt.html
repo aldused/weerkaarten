@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meteogram Kompakt — Weerlab demo v3</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--wl-color-background);
+    color: var(--wl-color-text);
+    font: var(--wl-text-body-md);
+    font-family: var(--wl-font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1800px; margin: 0 auto; padding: var(--wl-space-lg); }
+
+  header.page {
+    display: flex; align-items: baseline; gap: var(--wl-space-md);
+    flex-wrap: wrap; margin-bottom: var(--wl-space-md);
+  }
+  header.page h1 { margin: 0; font: var(--wl-text-headline-lg); color: var(--wl-color-primary); }
+  header.page .sub { color: var(--wl-color-text-muted); font-size: 13px; }
+
+  .controls {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-bottom: var(--wl-space-md);
+  }
+  .search-box { position: relative; }
+  .search-box input {
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: var(--wl-radius-md);
+    padding: 9px 32px 9px 36px;
+    font: var(--wl-text-body-sm);
+    color: var(--wl-color-text);
+    min-width: 280px;
+    outline: none;
+  }
+  .search-box input:focus {
+    border-color: var(--wl-color-primary);
+    box-shadow: 0 0 0 3px rgba(0,32,91,0.1);
+  }
+  .search-box .icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--wl-color-text-muted); pointer-events: none;
+  }
+  .search-box .clear {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--wl-color-text-muted);
+    cursor: pointer; padding: 2px 6px; font-size: 16px; line-height: 1;
+    border-radius: 4px;
+  }
+  .search-box .clear:hover { background: var(--wl-color-background-soft); }
+  .suggest {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: var(--wl-radius-md);
+    box-shadow: var(--wl-shadow-3);
+    max-height: 320px; overflow-y: auto;
+    z-index: 50;
+    display: none;
+  }
+  .suggest.open { display: block; }
+  .suggest-item {
+    padding: 8px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--wl-color-border);
+    font-size: 13px;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  }
+  .suggest-item:last-child { border-bottom: none; }
+  .suggest-item:hover, .suggest-item.active { background: var(--wl-color-primary-soft); }
+  .suggest-item .name { font-weight: 600; color: var(--wl-color-text); }
+  .suggest-item .meta { color: var(--wl-color-text-muted); font-size: 11px; }
+  .suggest-empty { padding: 12px; color: var(--wl-color-text-muted); font-size: 12px; text-align: center; }
+
+  .btn {
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: var(--wl-radius-md);
+    padding: 9px 14px;
+    font: var(--wl-text-body-sm); font-weight: 600;
+    color: var(--wl-color-text);
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--wl-color-background-soft); border-color: var(--wl-color-border-strong); }
+  .btn.primary { background: var(--wl-color-primary); color: #fff; border-color: var(--wl-color-primary); }
+  .btn.primary:hover { background: var(--wl-color-primary-strong); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--wl-color-primary-soft);
+    color: var(--wl-color-primary);
+    border-radius: var(--wl-radius-full);
+    padding: 5px 12px; font-size: 11px; font-weight: 600;
+  }
+  .pill.live .blip {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--wl-color-success);
+    animation: blip 2s infinite;
+  }
+  @keyframes blip {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+    50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+  }
+
+  .meteogram {
+    background: var(--wl-color-surface);
+    border: 1px solid var(--wl-color-border);
+    border-radius: var(--wl-radius-lg);
+    box-shadow: var(--wl-shadow-2);
+    overflow: hidden;
+    position: relative;
+  }
+  .mg-title {
+    background: linear-gradient(180deg, var(--wl-color-primary) 0%, var(--wl-color-primary-strong) 100%);
+    color: #fff;
+    padding: 12px 18px;
+    font: var(--wl-text-headline-md);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .mg-title .meta { font-size: 11px; font-weight: 500; opacity: 0.9; font-family: var(--wl-font-mono); }
+  .mg-stage { position: relative; overflow-x: auto; overflow-y: hidden; min-height: 200px; }
+  .mg-canvas { display: block; }
+
+  .mg-loading {
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(2px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; z-index: 20;
+    color: var(--wl-color-primary); font-weight: 600;
+  }
+  .mg-loading .sp {
+    width: 32px; height: 32px;
+    border: 3px solid var(--wl-color-border);
+    border-top-color: var(--wl-color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .mg-error {
+    padding: 24px; color: var(--wl-color-danger); text-align: center;
+    background: rgba(204,0,0,0.05); border: 1px solid rgba(204,0,0,0.2);
+    border-radius: 8px; margin: 16px;
+  }
+
+  .mg-crosshair {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(15,23,42,0.4);
+    pointer-events: none; opacity: 0;
+    transition: opacity 100ms;
+    z-index: 5;
+  }
+  .mg-tip {
+    position: fixed;
+    background: rgba(15,23,42,0.96);
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12px; line-height: 1.5;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    opacity: 0; transition: opacity 100ms;
+    z-index: 100;
+    min-width: 240px;
+    backdrop-filter: blur(6px);
+  }
+  .mg-tip h4 {
+    margin: 0 0 6px 0; font-size: 12px; font-weight: 700;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    padding-bottom: 4px;
+  }
+  .mg-tip table { width: 100%; border-collapse: collapse; }
+  .mg-tip td { padding: 1px 0; font-family: var(--wl-font-mono); font-size: 11px; }
+  .mg-tip td:first-child { color: rgba(255,255,255,0.7); padding-right: 10px; }
+  .mg-tip td:last-child { text-align: right; font-weight: 600; }
+  .mg-tip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+  .legend {
+    display: flex; gap: 18px;
+    padding: 10px 18px;
+    font-size: 11px; color: var(--wl-color-text-muted);
+    border-top: 1px solid var(--wl-color-border);
+    background: var(--wl-color-surface-muted);
+    flex-wrap: wrap;
+  }
+  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 5px; }
+  .legend .dash { display: inline-block; width: 14px; height: 0; border-top: 2px dashed var(--wl-color-probability-purple); vertical-align: middle; margin-right: 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Meteogram Kompakt</h1>
+    <span class="sub">5-daagse · HARMONIE (0-48u) + ECMWF (48-120u) · live via Open-Meteo</span>
+  </header>
+
+  <div class="controls">
+    <div class="search-box">
+      <span class="icon">🔍</span>
+      <input id="search" type="text" placeholder="Zoek plaats… bv. Rotterdam, Brussel, Berlin" autocomplete="off">
+      <button class="clear" id="clear" title="Wissen">✕</button>
+      <div class="suggest" id="suggest"></div>
+    </div>
+    <button class="btn" id="btn-locate" title="Mijn locatie">📍 Mijn locatie</button>
+    <button class="btn primary" id="btn-png" title="Download als PNG">⬇ PNG</button>
+    <span class="pill live" id="run-info"><span class="blip"></span>Laden…</span>
+  </div>
+
+  <div class="meteogram" id="mg">
+    <div class="mg-title">
+      <span id="mg-title-text">Meteogram laden…</span>
+      <span class="meta" id="mg-title-meta">HARMONIE + ECMWF · Open-Meteo</span>
+    </div>
+    <div class="mg-stage" id="stage">
+      <svg class="mg-canvas" id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="mg-crosshair" id="cross"></div>
+      <div class="mg-loading" id="loading"><div class="sp"></div><div>Verwachting ophalen…</div></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:#cc0000"></span>Temperatuur</span>
+      <span><span class="dot" style="background:#1d4ed8"></span>Dauwpunt</span>
+      <span><span class="dot" style="background:#e07000"></span>Mittelwind</span>
+      <span><span class="dot" style="background:#7a3a00"></span>Windvlagen</span>
+      <span><span class="dot" style="background:#e6b800"></span>Zon</span>
+      <span><span class="dot" style="background:#475569"></span>Wolken hoog/midden/laag</span>
+      <span><span class="dot" style="background:#1d4ed8"></span>Neerslag (mm/h)</span>
+      <span><span class="dash"></span>Neerslagkans (%)</span>
+    </div>
+  </div>
+</div>
+
+<div class="mg-tip" id="tip"></div>
+
+<script>
+/* ============================================================
+   METEOGRAM KOMPAKT v3 — live data + search + PNG
+   ============================================================ */
+
+const HOURS = 120;
+const PAD_LEFT = 60;
+const PAD_RIGHT = 16;
+const ROW_HEAD   = 52;
+const ROW_TEMP   = 240;
+const ROW_WIND   = 130;
+const ROW_ARROWS = 30;
+const ROW_SUN    = 64;
+const ROW_CLOUD  = 78;
+const ROW_PRECIP = 110;
+const ROW_FOOT   = 38;
+const GAP        = 14;
+
+const C = {
+  ink: '#0f172a', muted: '#64748b', soft: '#94a3b8',
+  line: '#e3e8ef', lineSoft: '#f1f5f9', lineHard: '#cbd5e1',
+  night: '#eef2f7',
+  temp: '#cc0000', tempSoft: 'rgba(204,0,0,0.08)',
+  dew: '#1d4ed8',
+  wind: '#e07000', gust: '#7a3a00', gustFill: 'rgba(122,58,0,0.10)',
+  sun: '#e6b800', sunSoft: '#fef3c7',
+  cloud: '#475569',
+  rain: '#1d4ed8', snow: '#7dd3fc',
+  prob: '#6d28d9',
+};
+
+const FONT_SANS = 'DM Sans, ui-sans-serif, system-ui, sans-serif';
+const FONT_MONO = 'DM Mono, ui-monospace, monospace';
+
+// ---------- STATE ----------
+let DATA = [];
+let START = null;
+let LOCATION = { name: 'Rotterdam', lat: 51.9244, lon: 4.4777, country: 'NL' };
+let RUN_INFO = { harmonie: null, ecmwf: null };
+
+// ---------- DOM REFS ----------
+const stage = document.getElementById('stage');
+const svg = document.getElementById('svg');
+const cross = document.getElementById('cross');
+const tip = document.getElementById('tip');
+const loading = document.getElementById('loading');
+const NS = 'http://www.w3.org/2000/svg';
+
+let HOUR_PX, PLOT_WIDTH, TOTAL_WIDTH;
+function computeDims() {
+  const stageW = Math.max(800, stage.clientWidth);
+  const rawAvail = stageW - PAD_LEFT - PAD_RIGHT;
+  HOUR_PX = Math.max(12, rawAvail / HOURS);
+  PLOT_WIDTH = HOURS * HOUR_PX;
+  TOTAL_WIDTH = PAD_LEFT + PLOT_WIDTH + PAD_RIGHT;
+}
+
+function el(tag, attrs={}, parent=svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+function xAt(i) { return PAD_LEFT + i * HOUR_PX + HOUR_PX/2; }
+function xAtEdge(i) { return PAD_LEFT + i * HOUR_PX; }
+
+function smoothPath(points) {
+  if (points.length < 2) return '';
+  let d = `M${points[0][0]} ${points[0][1]}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i-1)];
+    const p1 = points[i];
+    const p2 = points[i+1];
+    const p3 = points[Math.min(points.length-1, i+2)];
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x} ${c1y} ${c2x} ${c2y} ${p2[0]} ${p2[1]}`;
+  }
+  return d;
+}
+
+// ============================================================
+// DATA FETCH — Open-Meteo HARMONIE + ECMWF blend
+// ============================================================
+const HOURLY_VARS = [
+  'temperature_2m','dew_point_2m',
+  'wind_speed_10m','wind_gusts_10m','wind_direction_10m',
+  'precipitation','precipitation_probability',
+  'cloud_cover_low','cloud_cover_mid','cloud_cover_high',
+  'sunshine_duration'
+].join(',');
+
+async function fetchModelData(lat, lon, model, forecastDays) {
+  const url = `https://api.open-meteo.com/v1/forecast?` +
+    `latitude=${lat}&longitude=${lon}` +
+    `&hourly=${HOURLY_VARS}` +
+    `&models=${model}` +
+    `&forecast_days=${forecastDays}` +
+    `&wind_speed_unit=kmh` +
+    `&timezone=UTC`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Open-Meteo ${model}: ${r.status}`);
+  const j = await r.json();
+  return j;
+}
+
+async function loadData() {
+  showLoading(true);
+  hideError();
+  try {
+    // parallel fetch
+    const [harmonieResp, ecmwfResp] = await Promise.allSettled([
+      fetchModelData(LOCATION.lat, LOCATION.lon, 'knmi_harmonie_arome_europe', 3),
+      fetchModelData(LOCATION.lat, LOCATION.lon, 'ecmwf_ifs025', 6),
+    ]);
+
+    if (ecmwfResp.status !== 'fulfilled') {
+      throw new Error('ECMWF data niet beschikbaar voor deze locatie.');
+    }
+    const ecmwf = ecmwfResp.value;
+    const harmonie = harmonieResp.status === 'fulfilled' ? harmonieResp.value : null;
+
+    DATA = blendData(harmonie, ecmwf);
+    if (DATA.length < 2) throw new Error('Geen bruikbare data ontvangen.');
+    START = DATA[0].t;
+
+    // run info
+    RUN_INFO.harmonie = harmonie ? new Date(harmonie.hourly.time[0] + 'Z') : null;
+    RUN_INFO.ecmwf = new Date(ecmwf.hourly.time[0] + 'Z');
+
+    updateTitle();
+    render();
+  } catch (e) {
+    showError(e.message || String(e));
+  } finally {
+    showLoading(false);
+  }
+}
+
+function blendData(harmonie, ecmwf) {
+  // ECMWF base, HARMONIE overrides voor uren waarvoor het beschikbaar is
+  // Beide hebben hourly.time arrays in UTC.
+  const out = [];
+  const eh = ecmwf.hourly;
+  if (!eh || !eh.time) return out;
+
+  // bouw een lookup voor harmonie op time-string
+  const hMap = new Map();
+  if (harmonie && harmonie.hourly && harmonie.hourly.time) {
+    const hh = harmonie.hourly;
+    for (let i = 0; i < hh.time.length; i++) {
+      hMap.set(hh.time[i], i);
+    }
+  }
+  const hh = harmonie ? harmonie.hourly : null;
+
+  // start: nu, afgerond naar boven naar het uur
+  const now = new Date();
+  const startMs = Math.ceil(now.getTime() / (3600*1000)) * 3600*1000;
+
+  for (let i = 0; i < eh.time.length; i++) {
+    const t = new Date(eh.time[i] + 'Z');
+    if (t.getTime() < startMs) continue;
+    if (out.length >= HOURS) break;
+
+    const hIdx = hMap.has(eh.time[i]) ? hMap.get(eh.time[i]) : -1;
+    const useH = hIdx >= 0 && hh;
+
+    const pick = (eVal, hVal) => (useH && hVal !== null && hVal !== undefined && !isNaN(hVal)) ? hVal : eVal;
+
+    const T  = pick(eh.temperature_2m[i],   useH ? hh.temperature_2m[hIdx]   : null);
+    const Td = pick(eh.dew_point_2m[i],     useH ? hh.dew_point_2m[hIdx]     : null);
+    const ws = pick(eh.wind_speed_10m[i],   useH ? hh.wind_speed_10m[hIdx]   : null);
+    const wg = pick(eh.wind_gusts_10m[i],   useH ? hh.wind_gusts_10m[hIdx]   : null);
+    const wd = pick(eh.wind_direction_10m[i], useH ? hh.wind_direction_10m[hIdx] : null);
+    const pr = pick(eh.precipitation[i],    useH ? hh.precipitation[hIdx]    : null);
+    const cl = pick(eh.cloud_cover_low[i],  useH ? hh.cloud_cover_low[hIdx]  : null);
+    const cm = pick(eh.cloud_cover_mid[i],  useH ? hh.cloud_cover_mid[hIdx]  : null);
+    const ch = pick(eh.cloud_cover_high[i], useH ? hh.cloud_cover_high[hIdx] : null);
+    const sd = pick(eh.sunshine_duration[i], useH ? hh.sunshine_duration[hIdx] : null);
+    // probability: alleen ECMWF
+    const pp = eh.precipitation_probability ? eh.precipitation_probability[i] : null;
+
+    const h = t.getUTCHours() + t.getUTCMinutes()/60;
+    const isDay = sd !== null && sd !== undefined ? sd > 0 : (h > 5.5 && h < 20.5);
+    const sunPct = sd !== null && sd !== undefined ? clamp(sd / 36, 0, 100) : 0;  // sd seconden / 3600 * 100
+
+    out.push({
+      t,
+      T: T ?? 0, Td: Td ?? 0,
+      windK: ws ?? 0, gustK: wg ?? (ws ?? 0) * 1.3,
+      windDir: wd ?? 270,
+      cloudHigh: ch ?? 0, cloudMid: cm ?? 0, cloudLow: cl ?? 0,
+      sun: sunPct,
+      precip: pr ?? 0,
+      prob: pp ?? 0,
+      isDay,
+      src: useH ? 'HARMONIE' : 'ECMWF'
+    });
+  }
+  return out;
+}
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+// ============================================================
+// GEOCODING
+// ============================================================
+let suggestTimer = null;
+const searchEl = document.getElementById('search');
+const suggestEl = document.getElementById('suggest');
+const clearEl = document.getElementById('clear');
+const NL_COUNTRY = { 'NL':'Nederland','BE':'België','DE':'Duitsland','FR':'Frankrijk','GB':'Verenigd Koninkrijk','LU':'Luxemburg' };
+
+searchEl.addEventListener('input', () => {
+  clearTimeout(suggestTimer);
+  const q = searchEl.value.trim();
+  if (q.length < 2) { suggestEl.classList.remove('open'); return; }
+  suggestTimer = setTimeout(() => doGeocode(q), 250);
+});
+searchEl.addEventListener('focus', () => {
+  if (searchEl.value.trim().length >= 2) doGeocode(searchEl.value.trim());
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-box')) suggestEl.classList.remove('open');
+});
+searchEl.addEventListener('keydown', (e) => {
+  const items = suggestEl.querySelectorAll('.suggest-item');
+  let active = suggestEl.querySelector('.active');
+  let idx = active ? Array.from(items).indexOf(active) : -1;
+  if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(items.length-1, idx+1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(0, idx-1); }
+  else if (e.key === 'Enter' && active) { e.preventDefault(); active.click(); return; }
+  else if (e.key === 'Escape') { suggestEl.classList.remove('open'); return; }
+  else return;
+  items.forEach(it => it.classList.remove('active'));
+  if (items[idx]) items[idx].classList.add('active');
+});
+clearEl.addEventListener('click', () => {
+  searchEl.value = '';
+  suggestEl.classList.remove('open');
+  searchEl.focus();
+});
+
+async function doGeocode(q) {
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=nl&format=json`;
+    const r = await fetch(url);
+    const j = await r.json();
+    renderSuggest(j.results || []);
+  } catch (e) {
+    suggestEl.innerHTML = `<div class="suggest-empty">Zoeken mislukt</div>`;
+    suggestEl.classList.add('open');
+  }
+}
+function renderSuggest(results) {
+  suggestEl.innerHTML = '';
+  if (results.length === 0) {
+    suggestEl.innerHTML = `<div class="suggest-empty">Geen resultaten</div>`;
+    suggestEl.classList.add('open');
+    return;
+  }
+  for (const r of results) {
+    const div = document.createElement('div');
+    div.className = 'suggest-item';
+    const country = NL_COUNTRY[r.country_code] || r.country || '';
+    const admin = r.admin1 ? r.admin1 : '';
+    const meta = [admin, country].filter(Boolean).join(' · ');
+    div.innerHTML = `
+      <span class="name">${escapeHtml(r.name)}</span>
+      <span class="meta">${escapeHtml(meta)}</span>
+    `;
+    div.addEventListener('click', () => {
+      LOCATION = { name: r.name, lat: r.latitude, lon: r.longitude, country: r.country_code, admin: r.admin1 };
+      searchEl.value = r.name;
+      suggestEl.classList.remove('open');
+      loadData();
+    });
+    suggestEl.appendChild(div);
+  }
+  suggestEl.classList.add('open');
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// "Mijn locatie"
+document.getElementById('btn-locate').addEventListener('click', () => {
+  if (!navigator.geolocation) { alert('Geolocatie niet beschikbaar'); return; }
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    // reverse geocode
+    try {
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=nl&format=json`);
+      const j = await r.json();
+      const top = (j.results && j.results[0]) || { name: 'Mijn locatie', latitude: lat, longitude: lon };
+      LOCATION = { name: top.name, lat, lon, country: top.country_code, admin: top.admin1 };
+      searchEl.value = top.name;
+    } catch {
+      LOCATION = { name: 'Mijn locatie', lat, lon };
+    }
+    loadData();
+  }, () => alert('Kon locatie niet ophalen'));
+});
+
+// ============================================================
+// RENDER (zelfde als v2, met data-driven grenzen)
+// ============================================================
+let tempScale, windScale, precipScale, probScale;
+let axisLabels = [];
+let hoverDots = null;
+
+function showLoading(on) { loading.style.display = on ? 'flex' : 'none'; }
+function showError(msg) {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const div = document.createElement('div');
+  div.className = 'mg-error';
+  div.textContent = '⚠ ' + msg;
+  stage.appendChild(div);
+  setTimeout(() => div.remove(), 6000);
+}
+function hideError() {
+  document.querySelectorAll('.mg-error').forEach(e => e.remove());
+}
+
+function updateTitle() {
+  const loc = LOCATION.name + (LOCATION.country ? ' (' + LOCATION.country + ')' : '');
+  document.getElementById('mg-title-text').textContent = `5-Dagen Verwachting voor ${loc} — Kompakt (HARMONIE/ECMWF)`;
+  const runs = [];
+  if (RUN_INFO.harmonie) runs.push(`HARMONIE start ${fmtUTC(RUN_INFO.harmonie)}`);
+  if (RUN_INFO.ecmwf) runs.push(`ECMWF start ${fmtUTC(RUN_INFO.ecmwf)}`);
+  document.getElementById('mg-title-meta').textContent = runs.join(' · ') || 'Open-Meteo';
+  document.getElementById('run-info').innerHTML = `<span class="blip"></span>${LOCATION.lat.toFixed(2)}°N, ${LOCATION.lon.toFixed(2)}°E · live`;
+}
+function fmtUTC(d) {
+  return `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')} ${String(d.getUTCHours()).padStart(2,'0')}z`;
+}
+
+function drawNightBands(g, yTop, yBot) {
+  for (let i = 0; i < DATA.length; i++) {
+    if (!DATA[i].isDay) {
+      el('rect', { x: xAtEdge(i), y: yTop, width: HOUR_PX, height: yBot - yTop,
+        fill: C.night, opacity: 0.7 }, g);
+    }
+  }
+}
+function drawGrid(g, yTop, yBot) {
+  for (let i = 0; i <= DATA.length; i++) {
+    const x = xAtEdge(i);
+    const t = i < DATA.length ? DATA[i].t : new Date(DATA[DATA.length-1].t.getTime() + 3600*1000);
+    const hour = t.getUTCHours();
+    let stroke = C.lineSoft, sw = 0.5;
+    if (hour === 0) { stroke = C.lineHard; sw = 1; }
+    else if (hour % 6 === 0) { stroke = C.line; sw = 0.7; }
+    else if (hour % 3 === 0) { stroke = C.line; sw = 0.5; }
+    el('line', { x1: x, x2: x, y1: yTop, y2: yBot,
+      stroke, 'stroke-width': sw, 'shape-rendering': 'crispEdges' }, g);
+  }
+}
+
+function drawHeader() {
+  const g = el('g', { class: 'header' });
+  const N = DATA.length;
+  // dag-strepen achtergrond
+  let dayStart = 0;
+  for (let i = 0; i <= N; i++) {
+    const t = i < N ? DATA[i].t : new Date(DATA[N-1].t.getTime() + 3600*1000);
+    if (i === N || (i > 0 && t.getUTCDate() !== DATA[i-1].t.getUTCDate())) {
+      const dayIdx = Math.floor((DATA[dayStart].t.getUTCDate())); // niet echt dayIdx but for alternation
+      if (dayStart > 0 && (dayStart / 24) % 2 < 1 ? false : true) {
+        // simpler: alternate per local day index from 0
+      }
+      dayStart = i;
+    }
+  }
+  // alternerende dagachtergrond
+  let bandIdx = 0;
+  let bandStart = 0;
+  for (let i = 1; i <= N; i++) {
+    const cur = i < N ? DATA[i].t.getUTCDate() : -1;
+    const prev = DATA[i-1].t.getUTCDate();
+    if (i === N || cur !== prev) {
+      if (bandIdx % 2 === 1) {
+        el('rect', { x: xAtEdge(bandStart), y: 0,
+          width: xAtEdge(i) - xAtEdge(bandStart), height: ROW_HEAD,
+          fill: C.lineSoft, opacity: 0.5 }, g);
+      }
+      bandIdx++;
+      bandStart = i;
+    }
+  }
+
+  // dag-grenzen + datum-label
+  let lastDay = -1;
+  for (let i = 0; i <= N; i++) {
+    const t = i < N ? DATA[i].t : new Date(DATA[N-1].t.getTime() + 3600*1000);
+    const day = t.getUTCDate();
+    if (day !== lastDay) {
+      if (i > 0) {
+        el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: 0, y2: ROW_HEAD,
+          stroke: C.lineHard, 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, g);
+      }
+      lastDay = day;
+      if (i < N) {
+        const wd = ['Zo','Ma','Di','Wo','Do','Vr','Za'][t.getUTCDay()];
+        const mon = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][t.getUTCMonth()];
+        // bepaal dag-eind (volgende dag-grens of plot-eind)
+        let dayEnd = N;
+        for (let j = i+1; j < N; j++) {
+          if (DATA[j].t.getUTCDate() !== day) { dayEnd = j; break; }
+        }
+        const cx = xAtEdge(i) + (xAtEdge(dayEnd) - xAtEdge(i)) / 2;
+        const txt = el('text', {
+          x: cx, y: 20, 'text-anchor': 'middle',
+          'font-family': FONT_SANS, 'font-size': 13, 'font-weight': 700, fill: C.ink
+        }, g);
+        txt.textContent = `${wd} ${day} ${mon}`;
+      }
+    }
+  }
+  // uur-labels
+  for (let i = 0; i < N; i++) {
+    const t = DATA[i].t;
+    const hh = t.getUTCHours();
+    if (hh % 3 !== 0) continue;
+    const isMidnight = hh === 0;
+    const txt = el('text', {
+      x: xAt(i), y: 42, 'text-anchor': 'middle',
+      'font-family': FONT_MONO, 'font-size': 10,
+      'font-weight': isMidnight ? 700 : 400,
+      fill: isMidnight ? C.ink : C.muted
+    }, g);
+    txt.textContent = String(hh).padStart(2,'0');
+  }
+  el('line', { x1: 0, x2: TOTAL_WIDTH, y1: ROW_HEAD-0.5, y2: ROW_HEAD-0.5,
+    stroke: C.lineHard, 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, g);
+}
+
+// ---------- ICONS (zelfde als v2) ----------
+function weatherIconType(d) {
+  const totalCloud = (d.cloudHigh*0.3 + d.cloudMid*0.4 + d.cloudLow*0.5);
+  if (d.precip > 0.4) return 'rain-heavy';
+  if (d.precip > 0.1) return 'rain-light';
+  if (totalCloud > 70) return 'overcast';
+  if (totalCloud > 35) return d.isDay ? 'partly-day' : 'partly-night';
+  if (totalCloud > 15) return d.isDay ? 'mostly-sunny-day' : 'mostly-clear-night';
+  return d.isDay ? 'sun' : 'moon';
+}
+function drawIcon(g, x, y, size, type) {
+  const r = size/2;
+  const sun = '#fbbf24', sunDeep = '#f59e0b';
+  const moon = '#fde68a';
+  const cloudA = '#cbd5e1', cloudB = '#94a3b8', cloudDark = '#64748b';
+  if (type === 'sun') {
+    el('circle', { cx: x, cy: y, r: r*0.55, fill: sun, stroke: sunDeep, 'stroke-width': 0.6 }, g);
+    for (let a = 0; a < 8; a++) {
+      const ang = a * Math.PI/4;
+      el('line', { x1: x + Math.cos(ang)*r*0.72, y1: y + Math.sin(ang)*r*0.72,
+        x2: x + Math.cos(ang)*r*0.98, y2: y + Math.sin(ang)*r*0.98,
+        stroke: sunDeep, 'stroke-width': 1.5, 'stroke-linecap': 'round' }, g);
+    }
+  } else if (type === 'moon') {
+    el('path', { d: `M ${x+r*0.25} ${y-r*0.6} a ${r*0.7} ${r*0.7} 0 1 0 0 ${r*1.2} a ${r*0.55} ${r*0.55} 0 1 1 0 -${r*1.2} z`,
+      fill: moon, stroke: '#f59e0b', 'stroke-width': 0.5 }, g);
+  } else if (type === 'mostly-sunny-day') {
+    el('circle', { cx: x-r*0.2, cy: y-r*0.15, r: r*0.5, fill: sun, stroke: sunDeep, 'stroke-width': 0.5 }, g);
+    for (let a = 0; a < 6; a++) {
+      const ang = a * Math.PI/3 - Math.PI*0.5;
+      el('line', { x1: x-r*0.2 + Math.cos(ang)*r*0.62, y1: y-r*0.15 + Math.sin(ang)*r*0.62,
+        x2: x-r*0.2 + Math.cos(ang)*r*0.85, y2: y-r*0.15 + Math.sin(ang)*r*0.85,
+        stroke: sunDeep, 'stroke-width': 1.2, 'stroke-linecap': 'round' }, g);
+    }
+    el('ellipse', { cx: x+r*0.25, cy: y+r*0.2, rx: r*0.5, ry: r*0.3, fill: cloudA }, g);
+  } else if (type === 'mostly-clear-night') {
+    el('path', { d: `M ${x+r*0.05} ${y-r*0.5} a ${r*0.55} ${r*0.55} 0 1 0 0 ${r*1.0} a ${r*0.42} ${r*0.42} 0 1 1 0 -${r*1.0} z`, fill: moon }, g);
+    el('ellipse', { cx: x+r*0.3, cy: y+r*0.25, rx: r*0.45, ry: r*0.27, fill: cloudA }, g);
+  } else if (type === 'partly-day') {
+    el('circle', { cx: x-r*0.35, cy: y-r*0.25, r: r*0.42, fill: sun, stroke: sunDeep, 'stroke-width': 0.5 }, g);
+    el('ellipse', { cx: x+r*0.1, cy: y+r*0.1, rx: r*0.65, ry: r*0.42, fill: cloudA }, g);
+    el('ellipse', { cx: x+r*0.3, cy: y+r*0.2, rx: r*0.45, ry: r*0.32, fill: cloudB }, g);
+  } else if (type === 'partly-night') {
+    el('path', { d: `M ${x-r*0.1} ${y-r*0.55} a ${r*0.5} ${r*0.5} 0 1 0 0 ${r*1.0} a ${r*0.4} ${r*0.4} 0 1 1 0 -${r*1.0} z`, fill: moon }, g);
+    el('ellipse', { cx: x+r*0.2, cy: y+r*0.15, rx: r*0.6, ry: r*0.38, fill: cloudA }, g);
+    el('ellipse', { cx: x+r*0.35, cy: y+r*0.25, rx: r*0.4, ry: r*0.28, fill: cloudB }, g);
+  } else if (type === 'overcast') {
+    el('ellipse', { cx: x-r*0.25, cy: y-r*0.05, rx: r*0.55, ry: r*0.36, fill: cloudA }, g);
+    el('ellipse', { cx: x+r*0.2, cy: y+r*0.08, rx: r*0.65, ry: r*0.42, fill: cloudB }, g);
+    el('ellipse', { cx: x+r*0.05, cy: y+r*0.22, rx: r*0.55, ry: r*0.3, fill: cloudDark }, g);
+  } else if (type === 'rain-light' || type === 'rain-heavy') {
+    el('ellipse', { cx: x-r*0.15, cy: y-r*0.25, rx: r*0.5, ry: r*0.32, fill: cloudA }, g);
+    el('ellipse', { cx: x+r*0.15, cy: y-r*0.1, rx: r*0.6, ry: r*0.36, fill: cloudB }, g);
+    const drops = type === 'rain-heavy' ? [-0.45, -0.15, 0.15, 0.45] : [-0.3, 0.0, 0.3];
+    for (const dx of drops) {
+      el('line', { x1: x + dx*r, y1: y+r*0.2, x2: x + dx*r - r*0.18, y2: y+r*0.7,
+        stroke: '#1d4ed8', 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
+    }
+  }
+}
+
+function drawTempPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  el('text', { x: PAD_LEFT, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink,
+    'font-family': FONT_SANS }, g).textContent = 'Temperatuur (°C) en Dauwpunt';
+
+  const yTop = 6, yBot = ROW_TEMP - 4;
+  const ICON_ROW_Y = yTop + 14;
+  const PLOT_TOP = yTop + 30;
+
+  const tVals = DATA.flatMap(d => [d.T, d.Td]);
+  const tMin = Math.floor(Math.min(...tVals) / 5) * 5 - 1;
+  const tMax = Math.ceil(Math.max(...tVals) / 5) * 5 + 1;
+  tempScale = v => yOff + (yBot - (v - tMin) / (tMax - tMin) * (yBot - PLOT_TOP));
+
+  drawNightBands(g, yTop, yBot);
+  drawGrid(g, yTop, yBot);
+
+  for (let v = tMin; v <= tMax; v += 5) {
+    const y = yBot - (v - tMin) / (tMax - tMin) * (yBot - PLOT_TOP);
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+      stroke: v === 0 ? C.muted : C.line, 'stroke-width': v === 0 ? 1 : 0.7,
+      'shape-rendering': 'crispEdges' }, g);
+  }
+  if ((tMax - tMin) <= 30) {
+    for (let v = tMin; v <= tMax; v += 1) {
+      if (v % 5 !== 0) {
+        const y = yBot - (v - tMin) / (tMax - tMin) * (yBot - PLOT_TOP);
+        el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+          stroke: C.lineSoft, 'stroke-width': 0.4 }, g);
+      }
+    }
+  }
+
+  const iconStride = HOUR_PX < 16 ? 2 : 1;
+  for (let i = 0; i < DATA.length; i += iconStride) {
+    drawIcon(g, xAt(i), ICON_ROW_Y, Math.min(20, HOUR_PX*1.4), weatherIconType(DATA[i]));
+  }
+
+  const dewPts = DATA.map((d, i) => [xAt(i), yBot - (d.Td - tMin) / (tMax - tMin) * (yBot - PLOT_TOP)]);
+  el('path', { d: smoothPath(dewPts), fill: 'none', stroke: C.dew, 'stroke-width': 1.8,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round', opacity: 0.9 }, g);
+
+  const tempPts = DATA.map((d, i) => [xAt(i), yBot - (d.T - tMin) / (tMax - tMin) * (yBot - PLOT_TOP)]);
+  const tempArea = smoothPath(tempPts) + ` L${tempPts[tempPts.length-1][0]} ${yBot} L${tempPts[0][0]} ${yBot} Z`;
+  el('path', { d: tempArea, fill: C.tempSoft, stroke: 'none' }, g);
+  el('path', { d: smoothPath(tempPts), fill: 'none', stroke: C.temp, 'stroke-width': 2.4,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.lineHard, 'shape-rendering': 'crispEdges' }, g);
+
+  axisLabels.push({ y: yOff, items: [] });
+  for (let v = tMin; v <= tMax; v += 5) {
+    const y = yBot - (v - tMin) / (tMax - tMin) * (yBot - PLOT_TOP);
+    axisLabels[axisLabels.length-1].items.push({ y: y + 3, text: `${v}°`, color: v === 0 ? C.ink : C.muted });
+  }
+}
+
+function drawWindPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  el('text', { x: PAD_LEFT, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink,
+    'font-family': FONT_SANS }, g).textContent = 'Mittelwind en Windvlagen (km/h)';
+
+  const yTop = 6, yBot = ROW_WIND - 4;
+  const wMax = Math.max(15, Math.ceil(Math.max(...DATA.map(d => d.gustK)) / 15) * 15);
+  windScale = v => yOff + (yBot - (v / wMax) * (yBot - yTop));
+
+  drawNightBands(g, yTop, yBot);
+  drawGrid(g, yTop, yBot);
+
+  for (let v = 0; v <= wMax; v += 15) {
+    const y = yBot - (v / wMax) * (yBot - yTop);
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+      stroke: C.line, 'stroke-width': 0.7, 'shape-rendering': 'crispEdges' }, g);
+  }
+  [29, 50, 75].forEach(thr => {
+    if (thr <= wMax) {
+      const y = yBot - (thr / wMax) * (yBot - yTop);
+      el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+        stroke: C.gust, 'stroke-width': 0.6, 'stroke-dasharray': '2 3', opacity: 0.5 }, g);
+    }
+  });
+
+  const gustPts = DATA.map((d, i) => [xAt(i), yBot - (d.gustK / wMax) * (yBot - yTop)]);
+  const meanPts = DATA.map((d, i) => [xAt(i), yBot - (d.windK / wMax) * (yBot - yTop)]);
+
+  const gustAreaPath = smoothPath(gustPts) +
+    ' L' + meanPts[meanPts.length-1][0] + ' ' + meanPts[meanPts.length-1][1] +
+    smoothPath([...meanPts].reverse()).substring(1) + ' Z';
+  el('path', { d: gustAreaPath, fill: C.gustFill, stroke: 'none' }, g);
+  el('path', { d: smoothPath(gustPts), fill: 'none', stroke: C.gust, 'stroke-width': 2 }, g);
+  el('path', { d: smoothPath(meanPts), fill: 'none', stroke: C.wind, 'stroke-width': 2 }, g);
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.lineHard, 'shape-rendering': 'crispEdges' }, g);
+
+  axisLabels.push({ y: yOff, items: [] });
+  for (let v = 0; v <= wMax; v += 15) {
+    const y = yBot - (v / wMax) * (yBot - yTop);
+    axisLabels[axisLabels.length-1].items.push({ y: y + 3, text: `${v}`, color: C.muted });
+  }
+}
+
+function drawWindArrows(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  const cy = ROW_ARROWS/2;
+  const stride = HOUR_PX < 14 ? 2 : 1;
+  for (let i = 0; i < DATA.length; i += stride) {
+    const d = DATA[i];
+    const cx = xAt(i);
+    const dir = (d.windDir + 180) % 360;
+    const len = Math.min(12, 6 + d.windK/8);
+    drawArrow(g, cx, cy, dir, len, d.windK);
+  }
+}
+function drawArrow(g, cx, cy, dirDeg, len, speed) {
+  const rad = (dirDeg - 90) * Math.PI / 180;
+  const dx = Math.cos(rad) * len;
+  const dy = Math.sin(rad) * len;
+  const stroke = speed > 50 ? C.gust : speed > 29 ? C.wind : C.ink;
+  el('line', { x1: cx - dx, y1: cy - dy, x2: cx + dx, y2: cy + dy,
+    stroke, 'stroke-width': 1.3, 'stroke-linecap': 'round' }, g);
+  const ah = 4.5;
+  const a1 = (dirDeg - 90 + 150) * Math.PI / 180;
+  const a2 = (dirDeg - 90 - 150) * Math.PI / 180;
+  el('line', { x1: cx + dx, y1: cy + dy,
+    x2: cx + dx + Math.cos(a1)*ah, y2: cy + dy + Math.sin(a1)*ah,
+    stroke, 'stroke-width': 1.3, 'stroke-linecap': 'round' }, g);
+  el('line', { x1: cx + dx, y1: cy + dy,
+    x2: cx + dx + Math.cos(a2)*ah, y2: cy + dy + Math.sin(a2)*ah,
+    stroke, 'stroke-width': 1.3, 'stroke-linecap': 'round' }, g);
+}
+
+function drawSunPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  el('text', { x: PAD_LEFT, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink,
+    'font-family': FONT_SANS }, g).textContent = 'Zonneschijnduur (% van mogelijk) — dagsom in uren';
+
+  const yTop = 6, yBot = ROW_SUN - 4;
+  drawNightBands(g, yTop, yBot);
+
+  // potentiële daglicht-arc
+  for (let i = 0; i < DATA.length; i++) {
+    const d = DATA[i];
+    if (d.isDay) {
+      const h = d.t.getUTCHours() + d.t.getUTCMinutes()/60;
+      const potential = Math.max(0, Math.sin(((h-5.5)/15)*Math.PI));
+      const ph = potential * (yBot - yTop);
+      el('rect', { x: xAtEdge(i)+0.5, y: yBot - ph,
+        width: HOUR_PX-1, height: ph, fill: C.sunSoft, opacity: 0.6 }, g);
+    }
+  }
+
+  drawGrid(g, yTop, yBot);
+
+  DATA.forEach((d, i) => {
+    if (d.sun > 0) {
+      const h = (d.sun / 100) * (yBot - yTop);
+      el('rect', { x: xAtEdge(i)+0.5, y: yBot - h,
+        width: HOUR_PX-1, height: h, fill: C.sun }, g);
+    }
+  });
+
+  // dagsommen per kalenderdag
+  const dayBuckets = bucketByDay();
+  for (const b of dayBuckets) {
+    const dsum = DATA.slice(b.start, b.end).reduce((s,d)=>s + d.sun/100, 0);
+    const cx = (xAtEdge(b.start) + xAtEdge(b.end)) / 2;
+    el('rect', { x: cx-18, y: yTop+1, width: 36, height: 16, rx: 8,
+      fill: '#fff', stroke: C.sun, 'stroke-width': 1 }, g);
+    el('text', { x: cx, y: yTop + 13, 'text-anchor': 'middle',
+      'font-family': FONT_MONO, 'font-size': 11, 'font-weight': 700, fill: C.ink }, g)
+      .textContent = dsum.toFixed(1) + 'h';
+  }
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.lineHard, 'shape-rendering': 'crispEdges' }, g);
+
+  axisLabels.push({ y: yOff, items: [
+    { y: yTop + 9, text: '100%', color: C.muted },
+    { y: yBot + 3, text: '0%', color: C.muted }
+  ]});
+}
+
+function drawCloudPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  el('text', { x: PAD_LEFT, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink,
+    'font-family': FONT_SANS }, g).textContent = 'Wolkenbedekking';
+
+  const yTop = 6, yBot = ROW_CLOUD - 4;
+  const rowH = (yBot - yTop) / 3;
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop, fill: '#e0f2fe' }, g);
+
+  const rows = [
+    { key: 'cloudHigh', label: 'hoog' },
+    { key: 'cloudMid',  label: 'midden' },
+    { key: 'cloudLow',  label: 'laag' },
+  ];
+  rows.forEach((row, ri) => {
+    const ry = yTop + ri * rowH;
+    DATA.forEach((d, i) => {
+      const v = d[row.key];
+      if (v > 3) {
+        const grey = Math.round(245 - (v/100) * 200);
+        const alpha = 0.4 + (v/100) * 0.55;
+        el('rect', { x: xAtEdge(i), y: ry,
+          width: HOUR_PX+0.5, height: rowH,
+          fill: `rgb(${grey},${grey},${grey})`, opacity: alpha }, g);
+      }
+    });
+  });
+
+  for (let r = 1; r < 3; r++) {
+    const y = yTop + r * rowH;
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH-PAD_RIGHT, y1: y, y2: y,
+      stroke: '#fff', 'stroke-width': 0.5, opacity: 0.6 }, g);
+  }
+
+  // dag-grenzen
+  for (let i = 0; i < DATA.length; i++) {
+    if (DATA[i].t.getUTCHours() === 0) {
+      el('line', { x1: xAtEdge(i), x2: xAtEdge(i), y1: yTop, y2: yBot,
+        stroke: C.lineHard, 'stroke-width': 0.8, 'shape-rendering': 'crispEdges' }, g);
+    }
+  }
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.lineHard, 'shape-rendering': 'crispEdges' }, g);
+
+  axisLabels.push({ y: yOff, items: rows.map((row, ri) => ({
+    y: yTop + ri * rowH + rowH/2 + 3, text: row.label, color: C.muted, fontSize: 10
+  })) });
+}
+
+function drawPrecipPanel(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  el('text', { x: PAD_LEFT, y: -4, 'font-size': 12, 'font-weight': 700, fill: C.ink,
+    'font-family': FONT_SANS }, g).textContent = 'Neerslag (mm/uur, dagsom) en Neerslagkans (%)';
+
+  const yTop = 6, yBot = ROW_PRECIP - 4;
+  const pMaxRaw = Math.max(...DATA.map(d => d.precip), 0);
+  const pMax = Math.max(2, Math.ceil(pMaxRaw * 2) / 2);
+  precipScale = v => yOff + (yBot - (v / pMax) * (yBot - yTop));
+  probScale = v => yOff + (yBot - (v / 100) * (yBot - yTop));
+
+  drawNightBands(g, yTop, yBot);
+  drawGrid(g, yTop, yBot);
+
+  for (let v = 0; v <= pMax; v += pMax/2) {
+    const y = yBot - (v / pMax) * (yBot - yTop);
+    el('line', { x1: PAD_LEFT, x2: TOTAL_WIDTH - PAD_RIGHT, y1: y, y2: y,
+      stroke: C.line, 'stroke-width': 0.7, 'shape-rendering': 'crispEdges' }, g);
+  }
+
+  DATA.forEach((d, i) => {
+    if (d.precip > 0) {
+      const h = (d.precip / pMax) * (yBot - yTop);
+      el('rect', { x: xAtEdge(i)+1, y: yBot - h,
+        width: HOUR_PX-2, height: h, fill: C.rain, rx: 1 }, g);
+    }
+  });
+
+  const probPts = DATA.map((d, i) => [xAt(i), yBot - (d.prob / 100) * (yBot - yTop)]);
+  el('path', { d: smoothPath(probPts), fill: 'none', stroke: C.prob, 'stroke-width': 1.6,
+    'stroke-dasharray': '4 2', opacity: 0.85 }, g);
+
+  // dagsommen
+  for (const b of bucketByDay()) {
+    const dsum = DATA.slice(b.start, b.end).reduce((s,d)=>s + d.precip, 0);
+    const cx = (xAtEdge(b.start) + xAtEdge(b.end)) / 2;
+    el('rect', { x: cx-22, y: yTop+1, width: 44, height: 16, rx: 8,
+      fill: '#fff', stroke: C.rain, 'stroke-width': 1 }, g);
+    el('text', { x: cx, y: yTop + 13, 'text-anchor': 'middle',
+      'font-family': FONT_MONO, 'font-size': 11, 'font-weight': 700, fill: C.ink }, g)
+      .textContent = (dsum < 0.05 ? '0' : dsum.toFixed(1)) + ' mm';
+  }
+
+  el('rect', { x: PAD_LEFT, y: yTop, width: PLOT_WIDTH, height: yBot - yTop,
+    fill: 'none', stroke: C.lineHard, 'shape-rendering': 'crispEdges' }, g);
+
+  axisLabels.push({ y: yOff, items: [] });
+  for (let v = 0; v <= pMax; v += pMax/2) {
+    const y = yBot - (v / pMax) * (yBot - yTop);
+    axisLabels[axisLabels.length-1].items.push({ y: y + 3,
+      text: v < 1 ? v.toFixed(1) : v.toFixed(0), color: C.muted });
+  }
+  axisLabels[axisLabels.length-1].rightItems = [
+    { y: yTop + 9, text: '100%', color: C.prob },
+    { y: yBot + 3, text: '0%', color: C.prob }
+  ];
+}
+
+function bucketByDay() {
+  const out = [];
+  let start = 0;
+  for (let i = 1; i <= DATA.length; i++) {
+    if (i === DATA.length || DATA[i].t.getUTCDate() !== DATA[i-1].t.getUTCDate()) {
+      out.push({ start, end: i });
+      start = i;
+    }
+  }
+  return out;
+}
+
+function drawFoot(yOff) {
+  const g = el('g', { transform: `translate(0, ${yOff})` });
+  for (let i = 0; i < DATA.length; i++) {
+    const t = DATA[i].t;
+    const hh = t.getUTCHours();
+    if (hh % 3 !== 0) continue;
+    const isMidnight = hh === 0;
+    el('text', { x: xAt(i), y: 12, 'text-anchor': 'middle',
+      'font-family': FONT_MONO, 'font-size': 10,
+      'font-weight': isMidnight ? 700 : 400,
+      fill: isMidnight ? C.ink : C.muted }, g)
+      .textContent = String(hh).padStart(2,'0');
+  }
+  let lastDay = -1;
+  for (let i = 0; i <= DATA.length; i++) {
+    const t = i < DATA.length ? DATA[i].t : null;
+    const day = t ? t.getUTCDate() : -2;
+    if (day !== lastDay) {
+      lastDay = day;
+      if (i < DATA.length) {
+        const wd = ['Zo','Ma','Di','Wo','Do','Vr','Za'][t.getUTCDay()];
+        const mon = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][t.getUTCMonth()];
+        let dayEnd = DATA.length;
+        for (let j = i+1; j < DATA.length; j++) {
+          if (DATA[j].t.getUTCDate() !== day) { dayEnd = j; break; }
+        }
+        const cx = xAtEdge(i) + (xAtEdge(dayEnd) - xAtEdge(i)) / 2;
+        el('text', { x: cx, y: 30, 'text-anchor': 'middle',
+          'font-family': FONT_SANS, 'font-size': 12, 'font-weight': 700, fill: C.ink }, g)
+          .textContent = `${wd} ${day} ${mon}`;
+      }
+    }
+  }
+}
+
+function drawAxisLabels() {
+  const g = el('g', { class: 'axis' });
+  for (const block of axisLabels) {
+    for (const item of block.items) {
+      el('text', { x: PAD_LEFT - 6, y: block.y + item.y, 'text-anchor': 'end',
+        'font-family': FONT_MONO, 'font-size': item.fontSize || 10,
+        fill: item.color || C.muted }, g).textContent = item.text;
+    }
+    if (block.rightItems) {
+      for (const item of block.rightItems) {
+        el('text', { x: TOTAL_WIDTH - PAD_RIGHT + 4, y: block.y + item.y, 'text-anchor': 'start',
+          'font-family': FONT_MONO, 'font-size': 10,
+          fill: item.color || C.muted }, g).textContent = item.text;
+      }
+    }
+  }
+}
+
+// ---------- HOVER ----------
+function setupHover() {
+  stage.onmousemove = (e) => {
+    const rect = stage.getBoundingClientRect();
+    const x = e.clientX - rect.left + stage.scrollLeft;
+    if (x < PAD_LEFT || x > PAD_LEFT + PLOT_WIDTH) { hideCrosshair(); return; }
+    const i = Math.floor((x - PAD_LEFT) / HOUR_PX);
+    if (i < 0 || i >= DATA.length) { hideCrosshair(); return; }
+    showCrosshair(i, e.clientX, e.clientY);
+  };
+  stage.onmouseleave = hideCrosshair;
+}
+function showCrosshair(i, mx, my) {
+  const px = xAt(i) - stage.scrollLeft;
+  cross.style.left = px + 'px';
+  cross.style.opacity = '1';
+
+  while (hoverDots.firstChild) hoverDots.removeChild(hoverDots.firstChild);
+  const d = DATA[i];
+  if (tempScale) {
+    el('circle', { cx: xAt(i), cy: tempScale(d.T), r: 4, fill: C.temp, stroke: '#fff', 'stroke-width': 1.5 }, hoverDots);
+    el('circle', { cx: xAt(i), cy: tempScale(d.Td), r: 3.5, fill: C.dew, stroke: '#fff', 'stroke-width': 1.5 }, hoverDots);
+  }
+  if (windScale) {
+    el('circle', { cx: xAt(i), cy: windScale(d.windK), r: 3.5, fill: C.wind, stroke: '#fff', 'stroke-width': 1.5 }, hoverDots);
+    el('circle', { cx: xAt(i), cy: windScale(d.gustK), r: 3.5, fill: C.gust, stroke: '#fff', 'stroke-width': 1.5 }, hoverDots);
+  }
+  if (probScale) {
+    el('circle', { cx: xAt(i), cy: probScale(d.prob), r: 3.5, fill: C.prob, stroke: '#fff', 'stroke-width': 1.5 }, hoverDots);
+  }
+
+  const t = d.t;
+  const wd = ['Zo','Ma','Di','Wo','Do','Vr','Za'][t.getUTCDay()];
+  const dd = t.getUTCDate();
+  const mon = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][t.getUTCMonth()];
+  const hh = String(t.getUTCHours()).padStart(2,'0');
+  tip.innerHTML = `
+    <h4>${wd} ${dd} ${mon} · ${hh}:00 UTC <span style="opacity:.5;font-size:10px;font-weight:500;">${d.src}</span></h4>
+    <table>
+      <tr><td><span class="dot" style="background:${C.temp}"></span>Temperatuur</td><td>${d.T.toFixed(1)} °C</td></tr>
+      <tr><td><span class="dot" style="background:${C.dew}"></span>Dauwpunt</td><td>${d.Td.toFixed(1)} °C</td></tr>
+      <tr><td><span class="dot" style="background:${C.wind}"></span>Wind</td><td>${d.windK.toFixed(0)} km/h ${windDirText(d.windDir)}</td></tr>
+      <tr><td><span class="dot" style="background:${C.gust}"></span>Vlagen</td><td>${d.gustK.toFixed(0)} km/h</td></tr>
+      <tr><td><span class="dot" style="background:${C.sun}"></span>Zon</td><td>${d.sun.toFixed(0)}%</td></tr>
+      <tr><td>Wolken H/M/L</td><td>${d.cloudHigh.toFixed(0)}/${d.cloudMid.toFixed(0)}/${d.cloudLow.toFixed(0)}%</td></tr>
+      <tr><td><span class="dot" style="background:${C.rain}"></span>Neerslag</td><td>${d.precip.toFixed(1)} mm/h</td></tr>
+      <tr><td><span class="dot" style="background:${C.prob}"></span>Kans</td><td>${d.prob.toFixed(0)}%</td></tr>
+    </table>`;
+  tip.style.opacity = '1';
+  const tipW = 260; const offset = 14;
+  let left = mx + offset;
+  if (left + tipW > window.innerWidth - 10) left = mx - tipW - offset;
+  tip.style.left = left + 'px';
+  tip.style.top = (my - 30) + 'px';
+}
+function hideCrosshair() {
+  cross.style.opacity = '0';
+  tip.style.opacity = '0';
+  if (hoverDots) while (hoverDots.firstChild) hoverDots.removeChild(hoverDots.firstChild);
+}
+function windDirText(deg) {
+  const dirs = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+  return dirs[Math.round(deg/22.5) % 16];
+}
+
+// ============================================================
+// PNG EXPORT
+// ============================================================
+document.getElementById('btn-png').addEventListener('click', exportPNG);
+
+async function exportPNG() {
+  if (DATA.length === 0) return;
+  const btn = document.getElementById('btn-png');
+  const oldText = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Genereren…';
+  try {
+    const xml = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = svgUrl; });
+
+    const w = parseFloat(svg.getAttribute('width'));
+    const h = parseFloat(svg.getAttribute('height'));
+    const titleH = 60;
+    const footerH = 26;
+    const totalH = h + titleH + footerH;
+    const scale = 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w * scale;
+    canvas.height = totalH * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, totalH);
+
+    // titel-balk
+    ctx.fillStyle = '#00205b';
+    ctx.fillRect(0, 0, w, titleH);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px ' + FONT_SANS;
+    const loc = LOCATION.name + (LOCATION.country ? ' (' + LOCATION.country + ')' : '');
+    ctx.fillText(`5-Dagen Verwachting voor ${loc} — Kompakt (HARMONIE/ECMWF)`, 16, 28);
+    ctx.font = '11px ' + FONT_MONO;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    const runs = [];
+    if (RUN_INFO.harmonie) runs.push(`HARMONIE start ${fmtUTC(RUN_INFO.harmonie)}`);
+    if (RUN_INFO.ecmwf) runs.push(`ECMWF start ${fmtUTC(RUN_INFO.ecmwf)}`);
+    ctx.fillText(runs.join('  ·  '), 16, 48);
+
+    // meteogram-svg op canvas
+    ctx.drawImage(img, 0, titleH);
+
+    // footer
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, titleH + h, w, footerH);
+    ctx.strokeStyle = '#e3e8ef';
+    ctx.beginPath(); ctx.moveTo(0, titleH+h+0.5); ctx.lineTo(w, titleH+h+0.5); ctx.stroke();
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px ' + FONT_SANS;
+    const stamp = new Date().toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' });
+    ctx.fillText(`weerlab.nl · gegenereerd ${stamp} · bron: Open-Meteo (HARMONIE + ECMWF)`, 16, titleH + h + 17);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${LOCATION.lat.toFixed(3)}°N, ${LOCATION.lon.toFixed(3)}°E`, w - 16, titleH + h + 17);
+
+    URL.revokeObjectURL(svgUrl);
+
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeLoc = LOCATION.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const dateStr = new Date().toISOString().slice(0,10);
+      a.href = url; a.download = `meteogram_${safeLoc}_${dateStr}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  } catch (e) {
+    alert('PNG export mislukt: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+// ============================================================
+// MAIN RENDER
+// ============================================================
+function render() {
+  computeDims();
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  axisLabels = [];
+
+  if (DATA.length < 2) return;
+
+  const totalH = ROW_HEAD + ROW_TEMP + GAP + ROW_WIND + ROW_ARROWS + GAP + ROW_SUN + GAP + ROW_CLOUD + GAP + ROW_PRECIP + ROW_FOOT;
+  svg.setAttribute('width', TOTAL_WIDTH);
+  svg.setAttribute('height', totalH);
+  svg.setAttribute('viewBox', `0 0 ${TOTAL_WIDTH} ${totalH}`);
+
+  let y = 0;
+  drawHeader();  y = ROW_HEAD;
+  drawTempPanel(y); y += ROW_TEMP + GAP;
+  drawWindPanel(y); y += ROW_WIND;
+  drawWindArrows(y); y += ROW_ARROWS + GAP;
+  drawSunPanel(y); y += ROW_SUN + GAP;
+  drawCloudPanel(y); y += ROW_CLOUD + GAP;
+  drawPrecipPanel(y); y += ROW_PRECIP;
+  drawFoot(y);
+
+  drawAxisLabels();
+  hoverDots = el('g', { class: 'hover-dots' });
+
+  cross.style.height = totalH + 'px';
+  setupHover();
+}
+
+window.addEventListener('resize', () => { hideCrosshair(); if (DATA.length) render(); });
+
+// Initial load: Rotterdam
+loadData();
+</script>
+</body>
+</html>

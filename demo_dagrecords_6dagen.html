@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dagrecords maximumtemperatuur — 6 dagen vooruit</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; }
+.header { background: #1e293b; color: #fff; padding: 12px 20px; border-bottom: 3px solid #2ec4e8; }
+.header h1 { font-size: 16px; font-weight: 700; }
+.header p { font-size: 11px; color: #94a3b8; margin-top: 2px; font-family: "DM Mono", monospace; }
+.legenda { background:#fff; border-bottom:1px solid #e3e8ef; padding:7px 20px; display:flex; align-items:center; gap:2px; flex-wrap:wrap; }
+.legenda .lab { font-size:11px; color:#64748b; font-weight:600; margin-right:8px; }
+.legenda .blk { width:26px; height:12px; display:inline-block; }
+.legenda .tick { font-size:9px; color:#475569; font-family:"DM Mono",monospace; width:26px; text-align:center; }
+.kaarten-wrap { padding: 16px; }
+.kaarten-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; max-width: var(--grid-breedte,1180px); margin: 0 auto; }
+@media (max-width: 1000px){ .kaarten-grid { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 640px){ .kaarten-grid { grid-template-columns: 1fr; max-width: 420px; } }
+.mini-kaart { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(15,23,42,0.14); }
+.mini-header { background: #1e293b; color: #fff; padding: 9px 12px; display: flex; justify-content: space-between; align-items: baseline; }
+.mini-dag-naam { font-size: 18px; font-weight: 700; text-transform: capitalize; }
+.mini-dag-datum { font-size: 13px; color: #cbd5e1; font-weight: 600; font-family: "DM Mono", monospace; }
+.mini-max { display:flex; align-items:baseline; justify-content:center; gap:8px; padding:6px 10px;
+  background: linear-gradient(90deg,#fff7ed,#ffedd5); border-bottom:1px solid #fed7aa; }
+.mini-max .mm-label { font-size:10px; color:#c2410c; text-transform:uppercase; letter-spacing:.5px; }
+.mini-max .mm-val { font-size:24px; font-weight:700; font-family:"DM Mono",monospace; color:#b91c1c; line-height:1; }
+.mini-max .mm-meta { font-size:11px; font-weight:600; color:#9a3412; }
+.mini-max .mm-lopend { font-size:9px; font-weight:700; color:#fff; background:#dc2626;
+  padding:2px 6px; border-radius:9999px; text-transform:uppercase; letter-spacing:.4px; }
+.badge-lopend { display:inline-block; font-size:10px; font-weight:700; color:#fff;
+  background:#dc2626; padding:2px 8px; border-radius:9999px; margin-left:6px; vertical-align:middle; }
+.kaart-box { position: relative; background:#dceaf5; }
+.kaart-box canvas, .kaart-box svg { display:block; width:100%; height:auto; }
+.kaart-box svg { position:absolute; top:0; left:0; }
+.nl-grens { fill:none; stroke:#ffffff; stroke-width:5; stroke-linejoin:round; opacity:.95; }
+.mini-footer { background: #0f172a; padding: 4px 10px; font-size: 9px; color: #64748b; font-family: "DM Mono", monospace; text-align: right; }
+.toolbar { background:#fff; padding:8px 20px; border-bottom:1px solid #e3e8ef; display:flex; align-items:center; gap:12px; }
+.toolbar label { font-size:11px; color:#64748b; font-weight:600; }
+.toolbar input[type=range] { width:200px; accent-color:#00205b; cursor:pointer; }
+.toolbar span { font-size:11px; color:#334155; font-family:"DM Mono",monospace; min-width:48px; }
+.status { text-align: center; color: #64748b; padding: 20px; font-size: 12px; }
+.footer { text-align: center; padding: 12px; font-size: 11px; color: #94a3b8; font-family: "DM Mono", monospace; }
+
+[data-theme="dark"] body { background:#0b1220; color:#f1f5f9; }
+[data-theme="dark"] .header { background:#111a2e; }
+[data-theme="dark"] .legenda { background:#111a2e; border-color:rgba(255,255,255,.08); }
+[data-theme="dark"] .mini-kaart { background:#111a2e; }
+[data-theme="dark"] .mini-header { background:#0e1629; }
+[data-theme="dark"] .mini-max { background: linear-gradient(90deg,#2a1810,#3a1d0f); border-color:#7c2d12; }
+[data-theme="dark"] .mini-max .mm-val { color:#fca5a5; }
+[data-theme="dark"] .mini-max .mm-meta { color:#fdba74; }
+[data-theme="dark"] .toolbar { background:#111a2e; border-color:rgba(255,255,255,.08); }
+[data-theme="dark"] .toolbar label { color:#94a3b8; }
+[data-theme="dark"] .toolbar span { color:#cbd5e1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Dagrecords maximumtemperatuur · komende 6 dagen</h1>
+  <p id="hdr-sub">Laden…</p>
+</div>
+<div class="legenda" id="legenda"></div>
+<div class="toolbar">
+  <label for="zoom-slider">Kaartgrootte</label>
+  <input type="range" id="zoom-slider" min="700" max="2600" value="1180" step="20"
+         oninput="stelGrootteIn(this.value)">
+  <span id="zoom-label">1180px</span>
+</div>
+
+<div class="kaarten-wrap">
+  <div class="kaarten-grid" id="kaarten-grid"></div>
+</div>
+<div class="status" id="status">Laden…</div>
+<div class="footer" id="footer">weerlab.nl · © Ed Aldus WM · KNMI dagrecords</div>
+
+<script src="nl_grens_coords.js"></script>
+<script>
+(function(){
+  function apply(t){ document.documentElement.setAttribute("data-theme", t==="dark"?"dark":"light"); }
+  var saved="light"; try { saved=localStorage.getItem("weerlab_theme")||"light"; } catch{}
+  apply(saved);
+  window.addEventListener("storage",function(e){ if(e.key==="weerlab_theme") apply(e.newValue); });
+})();
+
+// ── Geo-projectie (zelfde als alle weerlab NL-kaarten) ───────────────────────
+const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
+const SVG_W=800, SVG_H=1100;
+const GRID_H=210, GRID_W=Math.round(GRID_H*SVG_W/SVG_H);   // interpolatie-raster
+const DISP_W=420, DISP_H=Math.round(DISP_W*SVG_H/SVG_W);   // canvas-pixels per kaart
+const NS="http://www.w3.org/2000/svg";
+const NL_DAGEN=["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+const NL_MAAND=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+const NL_MAAND_K=["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+
+// IDW-instellingen (zoals mosmix-kaart: shepard kNN + lichte blur)
+const POWER=2.5, KNN=8, BLUR=1.6, ALPHA=0.92;
+
+// Label-offset [dlon,dlat] voor stations die te dicht op elkaar liggen: alleen het
+// LABEL schuift (met leiderlijntje), de stip + interpolatie blijven op de echte plek.
+// (Leeg: IJmuiden — dat geen temp meer meet — is uit de dataset, dus geen overlap.)
+const LABEL_OFFSET = {};
+
+// Kleurramp voor records (geel → oranje → rood → magenta), genormaliseerd op venster
+const RAMP=[
+  [0.00,"#2b83ba"],[0.12,"#80bfab"],[0.25,"#c7e8ad"],[0.38,"#edf7b3"],
+  [0.50,"#ffedaa"],[0.62,"#fec980"],[0.72,"#fb9a4f"],[0.82,"#ef6548"],
+  [0.90,"#d7301f"],[0.96,"#990000"],[1.00,"#67001f"]
+];
+let SCHAAL=[20,40];   // wordt per venster bepaald
+
+function rampKleur(val){
+  const [vmin,vmax]=SCHAAL;
+  let t=(val-vmin)/(vmax-vmin); t=Math.max(0,Math.min(1,t));
+  let prev=RAMP[0];
+  for(const stop of RAMP){
+    if(t<=stop[0]){
+      const span=stop[0]-prev[0]||1, f=(t-prev[0])/span;
+      const a=hex(prev[1]), b=hex(stop[1]);
+      return [Math.round(a[0]+f*(b[0]-a[0])),Math.round(a[1]+f*(b[1]-a[1])),Math.round(a[2]+f*(b[2]-a[2]))];
+    }
+    prev=stop;
+  }
+  return hex(RAMP[RAMP.length-1][1]);
+}
+function hex(h){ h=h.replace("#",""); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function lum(r,g,b){ return (0.299*r+0.587*g+0.114*b)/255; }
+
+// ── Land-mask uit NL_GRENS (rasteren op GRID-resolutie) ──────────────────────
+let LANDMASK=null;
+function maakLandMask(){
+  const c=document.createElement("canvas"); c.width=GRID_W; c.height=GRID_H;
+  const ctx=c.getContext("2d");
+  ctx.fillStyle="#000"; ctx.beginPath();
+  for(const poly of NL_GRENS){
+    if(!poly||poly.length<2) continue;
+    poly.forEach(([lon,lat],i)=>{
+      const x=(lon-LON_MIN)/(LON_MAX-LON_MIN)*GRID_W;
+      const y=(1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*GRID_H;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.closePath();
+  }
+  ctx.fill("evenodd");
+  const px=ctx.getImageData(0,0,GRID_W,GRID_H).data;
+  const data=new Uint8Array(GRID_W*GRID_H);
+  for(let i=0;i<GRID_W*GRID_H;i++) data[i]=px[i*4+3]>0?1:0;
+  LANDMASK={w:GRID_W,h:GRID_H,data};
+}
+
+// ── IDW-veld (gemodificeerde Shepard, kNN) ───────────────────────────────────
+function bouwVeld(punten){
+  const w=LANDMASK.w,h=LANDMASK.h, N=punten.length;
+  const sp=punten.map(p=>({
+    x:(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*w,
+    y:(1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*h, val:p.val }));
+  const veld=new Float32Array(w*h), mask=new Uint8Array(w*h);
+  const useK=Math.min(KNN,N);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const idx=y*w+x;
+    if(!LANDMASK.data[idx]) continue;
+    const dArr=new Float64Array(N);
+    for(let i=0;i<N;i++){ const dx=x-sp[i].x, dy=y-sp[i].y; dArr[i]=Math.sqrt(dx*dx+dy*dy); }
+    const idxs=new Int32Array(N); for(let i=0;i<N;i++) idxs[i]=i;
+    for(let k=0;k<useK;k++){ let mi=k; for(let j=k+1;j<N;j++) if(dArr[idxs[j]]<dArr[idxs[mi]]) mi=j;
+      const t=idxs[k]; idxs[k]=idxs[mi]; idxs[mi]=t; }
+    const R=dArr[idxs[useK-1]]+1e-6;
+    let sumW=0,sumWV=0;
+    for(let k=0;k<useK;k++){
+      const i=idxs[k], d=dArr[i];
+      if(d<0.7){ sumWV=sp[i].val; sumW=1; break; }
+      const num=(R-d)/(R*d), wi=Math.pow(num,POWER);
+      sumW+=wi; sumWV+=wi*sp[i].val;
+    }
+    veld[idx]=sumWV/sumW; mask[idx]=1;
+  }
+  return {w,h,veld,mask};
+}
+function blurVeld(f,sigma){
+  if(sigma<=0) return f;
+  const {w,h,veld,mask}=f, radius=Math.max(1,Math.ceil(sigma*3));
+  const kern=new Float32Array(radius*2+1); let ks=0;
+  for(let i=-radius;i<=radius;i++){ const v=Math.exp(-(i*i)/(2*sigma*sigma)); kern[i+radius]=v; ks+=v; }
+  for(let i=0;i<kern.length;i++) kern[i]/=ks;
+  const tmp=new Float32Array(w*h), out=new Float32Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(!mask[y*w+x]) continue;
+    let s=0,ws=0; for(let k=-radius;k<=radius;k++){ const xx=x+k; if(xx<0||xx>=w||!mask[y*w+xx]) continue;
+      s+=veld[y*w+xx]*kern[k+radius]; ws+=kern[k+radius]; } tmp[y*w+x]=ws>0?s/ws:veld[y*w+x]; }
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(!mask[y*w+x]) continue;
+    let s=0,ws=0; for(let k=-radius;k<=radius;k++){ const yy=y+k; if(yy<0||yy>=h||!mask[yy*w+x]) continue;
+      s+=tmp[yy*w+x]*kern[k+radius]; ws+=kern[k+radius]; } out[y*w+x]=ws>0?s/ws:tmp[y*w+x]; }
+  return {w,h,veld:out,mask};
+}
+
+// ── Veld → canvas ────────────────────────────────────────────────────────────
+function tekenVeld(canvas,f){
+  canvas.width=DISP_W; canvas.height=DISP_H;
+  const ctx=canvas.getContext("2d");
+  const tmp=document.createElement("canvas"); tmp.width=f.w; tmp.height=f.h;
+  const tctx=tmp.getContext("2d");
+  const img=tctx.createImageData(f.w,f.h), buf=img.data;
+  for(let i=0;i<f.w*f.h;i++){
+    if(!f.mask[i]){ buf[i*4+3]=0; continue; }
+    const [r,g,b]=rampKleur(f.veld[i]);
+    buf[i*4]=r; buf[i*4+1]=g; buf[i*4+2]=b; buf[i*4+3]=Math.round(ALPHA*255);
+  }
+  tctx.putImageData(img,0,0);
+  ctx.clearRect(0,0,DISP_W,DISP_H);
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+  ctx.drawImage(tmp,0,0,DISP_W,DISP_H);
+}
+
+function nlPad(){
+  let d="";
+  for(const poly of NL_GRENS){ if(!poly||poly.length<2) continue;
+    poly.forEach(([lon,lat],i)=>{ const x=(lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;
+      const y=(1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H; d+=(i===0?"M":"L")+x.toFixed(1)+" "+y.toFixed(1); }); d+="Z"; }
+  return d;
+}
+
+// ── 1 kaart bouwen ───────────────────────────────────────────────────────────
+function bouwKaart(stations, dagRec, datumKey, dt){
+  // punten verzamelen
+  const punten=[];
+  for(const [naam,rec] of Object.entries(dagRec)){
+    const co=stations[naam]; if(!co) continue;
+    punten.push({naam, lon:co[0], lat:co[1], val:rec.t, jaar:rec.d.slice(0,4), lopend:!!rec.l});
+  }
+  // hoogste
+  let mx=null; for(const p of punten) if(mx===null||p.val>mx.val) mx=p;
+
+  const dagNaam=NL_DAGEN[dt.getDay()];
+  const dagLabel=dagNaam.charAt(0).toUpperCase()+dagNaam.slice(1);
+  const datum=dt.getDate()+" "+NL_MAAND[dt.getMonth()];
+
+  const wrap=document.createElement("div"); wrap.className="mini-kaart";
+  wrap.innerHTML=
+    `<div class="mini-header"><span class="mini-dag-naam">${dagLabel}</span>`+
+    `<span class="mini-dag-datum">${datum}</span></div>`+
+    (mx?`<div class="mini-max"><span class="mm-label">hoogste ooit</span>`+
+        `<span class="mm-val">${mx.val.toFixed(1)}°</span>`+
+        `<span class="mm-meta">${mx.naam} · ${mx.jaar}</span>`+
+        (mx.lopend?`<span class="mm-lopend">dit seizoen</span>`:``)+`</div>`
+       :`<div class="mini-max"><span class="mm-label">geen data</span></div>`);
+
+  const box=document.createElement("div"); box.className="kaart-box";
+  const canvas=document.createElement("canvas");
+  const svg=document.createElementNS(NS,"svg");
+  svg.setAttribute("viewBox","0 0 "+SVG_W+" "+SVG_H);
+  svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+
+  if(punten.length>=3){
+    let f=bouwVeld(punten); f=blurVeld(f,BLUR);
+    tekenVeld(canvas,f);
+  } else { canvas.width=DISP_W; canvas.height=DISP_H; }
+
+  // NL-grens
+  const grens=document.createElementNS(NS,"path"); grens.setAttribute("d",nlPad());
+  grens.setAttribute("class","nl-grens"); svg.appendChild(grens);
+
+  // stationslabels: waarde groot + jaartal klein eronder
+  for(const p of punten){
+    const x=(p.lon-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W;
+    const y=(1-(p.lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H;
+    // label-positie (evt. verschoven om overlap te vermijden)
+    const off=LABEL_OFFSET[p.naam];
+    const lx = off ? (p.lon+off[0]-LON_MIN)/(LON_MAX-LON_MIN)*SVG_W : x;
+    const ly = off ? (1-(p.lat+off[1]-LAT_MIN)/(LAT_MAX-LAT_MIN))*SVG_H : y;
+    const isMax=(mx&&p.naam===mx.naam);
+    // Witte tekst + donkere rand = leesbaar op elke veldkleur (geel→dieprood).
+    // Lopend (record dit seizoen) = lichtrood jaartal i.p.v. donkerrood-op-rood.
+    const HALO="#0f172a";
+    // leiderlijntje stip → verschoven label
+    if(off) svg.appendChild(node("line",{x1:x,y1:y,x2:lx,y2:ly,stroke:"#0f172a99","stroke-width":1.5}));
+    // stip op de ECHTE plek
+    svg.appendChild(node("circle",{cx:x,cy:y,r:isMax?7:4,fill:isMax?"#ffd24a":"#ffffff",
+      stroke:isMax?"#7a1212":HALO,"stroke-width":isMax?3:1.5}));
+    // waarde
+    svg.appendChild(node("text",{x:lx,y:ly-9,"text-anchor":"middle","font-family":"DM Mono,monospace",
+      "font-weight":"700","font-size":isMax?28:22,fill:"#ffffff","paint-order":"stroke",
+      stroke:HALO,"stroke-width":isMax?6:5,"stroke-linejoin":"round"},
+      p.val.toFixed(1)+"°"));
+    // jaartal klein — lopend lichtrood, anders wit; zelfde donkere rand
+    svg.appendChild(node("text",{x:lx,y:ly+16,"text-anchor":"middle","font-family":"DM Mono,monospace",
+      "font-weight":"700","font-size":14,fill:p.lopend?"#fda4af":"#ffffff","paint-order":"stroke",
+      stroke:HALO,"stroke-width":4,"stroke-linejoin":"round"},
+      p.jaar));
+  }
+
+  box.appendChild(canvas); box.appendChild(svg); wrap.appendChild(box);
+  wrap.insertAdjacentHTML("beforeend",`<div class="mini-footer">weerlab.nl · KNMI dagrecords</div>`);
+  return wrap;
+}
+function node(tag,attrs,txt){ const e=document.createElementNS(NS,tag);
+  for(const [k,v] of Object.entries(attrs)) e.setAttribute(k,v); if(txt!=null) e.textContent=txt; return e; }
+
+function tekenLegenda(){
+  const el=document.getElementById("legenda"); el.innerHTML="";
+  el.appendChild(Object.assign(document.createElement("span"),{className:"lab",textContent:"Schaal (°C):"}));
+  const [vmin,vmax]=SCHAAL, n=9;
+  const blkRow=document.createElement("div"); blkRow.style.display="flex"; blkRow.style.flexDirection="column";
+  const blks=document.createElement("div"); blks.style.display="flex";
+  const ticks=document.createElement("div"); ticks.style.display="flex";
+  for(let i=0;i<n;i++){
+    const v=vmin+(vmax-vmin)*i/(n-1); const [r,g,b]=rampKleur(v);
+    blks.appendChild(node2("span","blk",`background:rgb(${r},${g},${b})`,""));
+    ticks.appendChild(node2("span","tick","",v.toFixed(0)));
+  }
+  blkRow.appendChild(blks); blkRow.appendChild(ticks); el.appendChild(blkRow);
+}
+function node2(tag,cls,style,txt){ const e=document.createElement(tag); e.className=cls; if(style)e.style.cssText=style; e.textContent=txt; return e; }
+
+// ── Kaartgrootte-schuif ──────────────────────────────────────────────────────
+function stelGrootteIn(breedte, opslaan=true){
+  document.documentElement.style.setProperty("--grid-breedte", breedte+"px");
+  document.getElementById("zoom-label").textContent = breedte+"px";
+  document.getElementById("zoom-slider").value = breedte;
+  if(opslaan) try{ localStorage.setItem("dagrecords_breedte", breedte); }catch{}
+}
+(function(){ let b=1180; try{ b=parseInt(localStorage.getItem("dagrecords_breedte"))||1180; }catch{} stelGrootteIn(b, false); })();
+
+// ── Laden ────────────────────────────────────────────────────────────────────
+// Productie: R2 (data is R2-only). Localhost blokkeert CORS → val terug op het
+// relatieve bestand (door launchd lokaal vers gehouden).
+function haalDagrecords(){
+  return fetch("https://data.weerlab.nl/dagrecords_nl.json?t="+Date.now())
+    .then(r=>{ if(!r.ok) throw 0; return r.json(); })
+    .catch(()=>fetch("dagrecords_nl.json?t="+Date.now()).then(r=>r.json()));
+}
+haalDagrecords().then(data=>{
+  maakLandMask();
+  const stations=data.stations, recs=data.dagrecords;
+  const grid=document.getElementById("kaarten-grid"); grid.innerHTML="";
+
+  // 6 kalenderdagen vanaf vandaag (of ?start=YYYY-MM-DD om te previewen)
+  const qStart=new URLSearchParams(location.search).get("start");
+  const vandaag = qStart ? new Date(qStart+"T12:00:00") : new Date();
+  vandaag.setHours(12,0,0,0);
+  const dagen=[];
+  for(let i=0;i<6;i++){
+    const dt=new Date(vandaag); dt.setDate(dt.getDate()+i);
+    const key=String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+    dagen.push({dt,key,rec:recs[key]||{}});
+  }
+  // gedeelde schaal over het venster (max contrast, dagen vergelijkbaar)
+  let lo=Infinity,hi=-Infinity;
+  for(const d of dagen) for(const v of Object.values(d.rec)){ if(v.t<lo)lo=v.t; if(v.t>hi)hi=v.t; }
+  if(isFinite(lo)){ SCHAAL=[Math.floor(lo-1),Math.ceil(hi+0.5)]; }
+  tekenLegenda();
+
+  for(const d of dagen) grid.appendChild(bouwKaart(stations,d.rec,d.key,d.dt));
+
+  document.getElementById("status").textContent="";
+  const gen=(data.gegenereerd||"").replace("T"," ").replace("+00:00"," UTC");
+  const lop=data.lopend||"";
+  document.getElementById("hdr-sub").innerHTML="Hoogste max-temp ooit per kalenderdag · "+Object.keys(stations).length+" KNMI-stations"+
+    (lop?` <span class="badge-lopend">incl. lopende metingen t/m ${lop}</span>`:"");
+  document.getElementById("footer").textContent="weerlab.nl · © Ed Aldus WM · KNMI dagrecords (incl. lopende EDR) · "+gen;
+}).catch(e=>{ document.getElementById("status").textContent="Kon data niet laden: "+e.message; });
+</script>
+</body>
+</html>

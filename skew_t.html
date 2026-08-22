@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atmosferische sounding — Skew-T Log-P — Weerlab.nl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --soft: #94a3b8;
+  --line: #e3e8ef;
+  --line-soft: #eef2f7;
+  --blue: #00205b;
+  --brand2: #0b3a8a;
+  --accent: #2ec4e8;
+  --accent-ink: #035e7a;
+  --temp: #e11515;      /* temperatuurlijn (rood) */
+  --dew: #1440c8;       /* dauwpuntlijn (blauw) */
+  --parcel: #101828;    /* pakketstijgcurve (zwart) */
+  --cape: rgba(216,30,44,.16);
+  --cin: rgba(37,99,235,.20);
+  --dry: #b9975b;       /* droogadiabaten */
+  --moist: #2f8f7a;     /* natadiabaten */
+  --mixr: #2fa84a;      /* mengverhoudinglijnen */
+  --virt-env: #8b5cf6;  /* virtuele omgevingstemperatuur */
+  --good: #0b7a52;
+  --warn: #a24e00;
+  --danger: #b91c1c;
+  --shadow: 0 8px 26px rgba(15, 23, 42, .08);
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.05), 0 2px 6px rgba(15,23,42,.04);
+}
+[data-theme="dark"] {
+  --bg: #0b1220;
+  --surface: #121a2b;
+  --surface-2: #0e1629;
+  --ink: #e5ecf6;
+  --muted: #8292ac;
+  --soft: #5b6a84;
+  --line: #1f2a40;
+  --line-soft: #18223a;
+  --accent: #38d1f0;
+  --temp: #ff5a5a;
+  --dew: #5b8cff;
+  --parcel: #e8eefb;
+  --cape: rgba(255,90,103,.16);
+  --cin: rgba(56,113,240,.22);
+  --dry: #a8895a;
+  --moist: #3fae95;
+  --mixr: #3bbb57;
+  --virt-env: #c4b5fd;
+  --good: #4ade9e;
+  --warn: #f6a04e;
+  --danger: #ff7a86;
+  --shadow: 0 10px 30px rgba(0,0,0,.45);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+}
+html { background: var(--bg); }
+body {
+  min-height: 100%;
+  background: linear-gradient(180deg, #eaf2fb 0, #eef4fb 240px, var(--bg) 640px);
+  color: var(--ink);
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+[data-theme="dark"] body { background: linear-gradient(180deg,#0d1626 0,#0b1220 420px,var(--bg) 760px); }
+.page { width: min(1280px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 48px; }
+
+/* topbar */
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 38px; height: 38px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--blue), var(--brand2) 55%, var(--accent));
+  box-shadow: 0 8px 22px rgba(0,32,91,.25); flex: 0 0 auto; position: relative; }
+.brand-mark::after { content: "⛰"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 19px; }
+.brand-title { font-size: 16px; font-weight: 800; color: var(--ink); line-height: 1.1; letter-spacing: -.01em;}
+.brand-sub { margin-top: 2px; color: var(--muted); font: 600 11px/1.35 "DM Mono", monospace; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pill { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(148,163,184,.35);
+  border-radius: 999px; background: rgba(255,255,255,.78); color: #334155; padding: 5px 11px; font:700 12px/1.2 "DM Sans",sans-serif; white-space: nowrap; }
+[data-theme="dark"] .pill { background: rgba(18,26,43,.7); color: var(--muted); border-color: var(--line); }
+.pill.demo { border-color: rgba(109,40,217,.3); background: rgba(237,233,254,.92); color: #5b21b6; }
+[data-theme="dark"] .pill.demo { background: rgba(76,29,149,.35); color:#c4b5fd; border-color:#6d28d9; }
+.theme-btn { cursor:pointer; }
+
+/* controls */
+.controls { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px; }
+.field { display:flex; flex-direction:column; gap:4px; }
+.field label { font: 700 9.5px/1 "DM Mono", monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--soft); }
+select, .seg, .toggles { font-family:"DM Sans", sans-serif; }
+select { appearance:none; -webkit-appearance:none; background:var(--surface); color:var(--ink);
+  border:1px solid var(--line); border-radius:9px; padding:8px 30px 8px 11px; font-size:13px; font-weight:600; cursor:pointer;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%2364748b' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat:no-repeat; background-position:right 10px center; box-shadow:var(--shadow-sm); }
+.seg { display:inline-flex; background:var(--surface-2); border:1px solid var(--line); border-radius:9px; padding:3px; gap:2px; box-shadow:var(--shadow-sm); }
+.seg button { border:0; background:transparent; color:var(--muted); font-size:12px; font-weight:700; padding:6px 12px; border-radius:7px; cursor:pointer; }
+.seg button.on { background:var(--blue); color:#fff; box-shadow:0 2px 6px rgba(0,32,91,.25); }
+[data-theme="dark"] .seg button.on { background:var(--accent); color:#04222d; }
+.toggles { display:flex; flex-wrap:wrap; gap:5px 6px; }
+.toggles label { display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--line);
+  border-radius:999px; padding:5px 11px 5px 9px; font-size:11.5px; font-weight:600; color:var(--muted); cursor:pointer; user-select:none; }
+.toggles label.on { color:var(--ink); border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.toggles input { display:none; }
+.toggles .sw { width:11px; height:11px; border-radius:4px; border:1.5px solid var(--soft); flex:0 0 auto; position:relative; }
+.toggles label.on .sw { background:var(--accent); border-color:var(--accent); }
+.toggles label.on .sw::after { content:"✓"; position:absolute; inset:-3px 0 0 0; text-align:center; font-size:9px; color:#04222d; font-weight:900; }
+
+/* layout */
+.grid { display:grid; grid-template-columns: minmax(0, 600px) minmax(320px, 1fr); gap:16px; align-items:start; }
+@media (max-width: 940px){ .grid { grid-template-columns: 1fr; } }
+.card { border:1px solid var(--line); border-radius:16px; background:var(--surface); box-shadow:var(--shadow); }
+.card.pad { padding:14px; }
+.card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line-soft); }
+.card-head h2 { font-size:13px; font-weight:800; letter-spacing:-.01em; }
+.kicker { font: 700 10px/1 "DM Mono", monospace; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); }
+
+/* skew-t canvas */
+.skewwrap { position:relative; width:100%; }
+#skewt { width:100%; height:auto; display:block; border-radius:0 0 16px 16px; }
+.valid-line { padding:9px 14px; font: 600 11.5px/1.4 "DM Mono", monospace; color:var(--muted); border-bottom:1px solid var(--line-soft); display:flex; gap:14px; flex-wrap:wrap; }
+.valid-line b { color:var(--ink); }
+
+/* right column */
+.stack { display:flex; flex-direction:column; gap:16px; }
+
+/* ═══ PRO (Infoplaza-stijl) layout ═══ */
+.pro { border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden; }
+.pro-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:9px 14px; background:var(--ink); color:#fff; font:700 12.5px/1.3 "DM Mono",monospace; }
+[data-theme="dark"] .pro-head { background:#060c18; }
+.pro-head .auth { color:var(--soft); font-weight:600; font-size:11px; }
+.pro-main { display:flex; gap:0; align-items:stretch; }
+.pro-skew { flex:1.35 1 0; min-width:0; border-right:1px solid var(--line); position:relative; }
+.pro-side { flex:1 1 0; min-width:300px; display:flex; flex-direction:column; }
+.pro-hodo { border-bottom:1px solid var(--line); position:relative; }
+.pro-hodo canvas { display:block; width:100%; height:auto; }
+.pro-motion { padding:7px 12px; font:600 11px/1.5 "DM Mono",monospace; color:var(--muted); border-bottom:1px solid var(--line);
+  display:grid; grid-template-columns:1fr 1fr; gap:1px 14px; }
+.pro-motion b { color:var(--ink); }
+.pro-sev { display:flex; gap:0; }
+.sev-prob { flex:1.1; padding:9px 12px; border-right:1px solid var(--line); }
+.sev-haz { flex:1; padding:9px 12px; }
+.sev-t { font:700 10px/1 "DM Mono",monospace; letter-spacing:.08em; text-transform:uppercase; color:var(--soft); margin-bottom:8px; text-align:center; }
+.sev-bars { display:flex; align-items:flex-end; justify-content:space-around; height:58px; gap:6px; }
+.sev-bar { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+.sev-bar .bar { width:100%; border-radius:3px 3px 0 0; min-height:2px; }
+.sev-bar .pct { font:800 12px/1 "DM Mono",monospace; margin-bottom:3px; }
+.sev-bar .cat { font:700 8.5px/1 "DM Mono",monospace; margin-top:4px; color:var(--muted); letter-spacing:.04em; }
+.sev-haz .hz { font:800 15px/1.35 "DM Sans"; color:var(--ink); }
+.sev-haz .hz.warn { color:var(--warn); } .sev-haz .hz.dang { color:var(--danger); } .sev-haz .hz.calm { color:var(--good); }
+
+/* dichte 4-paneel parameter-tabel */
+.pro-table { display:grid; grid-template-columns:repeat(4,1fr); gap:0; border-top:1px solid var(--line); }
+@media (max-width:1100px){ .pro-table { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:560px){ .pro-table { grid-template-columns:1fr; } }
+.pt-panel { border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+.pt-panel:last-child { border-right:0; }
+.pt-title { background:var(--ink); color:#fff; font:800 11.5px/1 "DM Sans"; text-align:center; padding:6px; }
+[data-theme="dark"] .pt-title { background:#0a1424; }
+.pt-sub { background:var(--bg-soft,var(--surface-2)); color:var(--muted); font:700 9.5px/1 "DM Mono",monospace;
+  text-transform:uppercase; letter-spacing:.06em; text-align:center; padding:4px 6px; border-bottom:1px solid var(--line-soft); }
+.pt-row { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:4px 10px; font-size:11.5px; }
+.pt-row:nth-child(odd){ background:var(--surface-2); }
+.pt-row .k { color:var(--muted); font-weight:600; }
+.pt-row .v { font:700 11.5px/1 "DM Mono",monospace; color:var(--ink); white-space:nowrap; }
+.pt-row3 { display:grid; grid-template-columns:1.2fr 1fr 1fr 1fr; gap:4px; padding:4px 10px; font-size:11px; }
+.pt-row3:nth-child(odd){ background:var(--surface-2); }
+.pt-row3 .k { color:var(--muted); font-weight:600; }
+.pt-row3 .v { font:700 11px/1 "DM Mono",monospace; color:var(--ink); text-align:right; }
+.pt-row3 .h { font:700 9px/1 "DM Mono",monospace; color:var(--soft); text-align:right; text-transform:uppercase; }
+.v.g{color:#0b7a52!important;} .v.y{color:#8a6d00!important;} .v.o{color:#a24e00!important;} .v.r{color:#a11!important;}
+[data-theme="dark"] .v.g{color:#4ade9e!important;} [data-theme="dark"] .v.y{color:#e6c650!important;}
+[data-theme="dark"] .v.o{color:#f6a04e!important;} [data-theme="dark"] .v.r{color:#ff7a86!important;}
+@media (max-width:940px){ .pro-main { flex-direction:column; } .pro-skew { border-right:0; border-bottom:1px solid var(--line); } .pro-side { min-width:0; } }
+
+/* index table */
+.idxwrap { padding:4px 0 8px; }
+table.idx { width:100%; border-collapse:collapse; font-size:12px; }
+table.idx th, table.idx td { padding:5px 10px; text-align:right; }
+table.idx td.lab, table.idx th.lab { text-align:left; color:var(--muted); font-weight:600; }
+table.idx tr.sec td { padding-top:11px; }
+table.idx .grouphd td { font: 700 9.5px/1 "DM Mono", monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--soft); padding:9px 10px 3px; border-bottom:1px solid var(--line-soft); }
+table.idx td.num { font:600 12px/1 "DM Mono", monospace; color:var(--ink); }
+table.idx tr:hover td { background:var(--surface-2); }
+.colh { font: 700 10px/1 "DM Mono", monospace; color:var(--soft); text-transform:uppercase; letter-spacing:.06em; }
+.chip { display:inline-block; padding:1px 7px; border-radius:999px; font:700 10.5px/1.4 "DM Mono",monospace; }
+.chip.g{background:rgba(16,185,129,.15);color:#0b7a52;} .chip.y{background:rgba(230,184,0,.18);color:#8a6d00;}
+.chip.o{background:rgba(224,112,0,.16);color:#a24e00;} .chip.r{background:rgba(204,0,0,.14);color:#a11;}
+[data-theme="dark"] .chip.g{color:#4ade9e;} [data-theme="dark"] .chip.y{color:#e6c650;}
+[data-theme="dark"] .chip.o{color:#f6a04e;} [data-theme="dark"] .chip.r{color:#ff7a86;}
+
+/* hodograph */
+#hodo { width:100%; height:auto; display:block; }
+.hodo-legend { display:flex; gap:12px; flex-wrap:wrap; padding:0 14px 12px; font-size:11px; color:var(--muted); }
+.hodo-legend i { display:inline-block; width:12px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+
+/* interpretation */
+.interp { font-size:13px; line-height:1.6; color:var(--ink); }
+.interp p { margin:0 0 9px; }
+.interp .verdict { display:inline-flex; align-items:center; gap:8px; font-weight:800; font-size:14px; margin-bottom:8px; }
+.interp .verdict .dot { width:10px; height:10px; border-radius:50%; }
+.interp ul { margin:2px 0 8px; padding-left:18px; }
+.interp li { margin:2px 0; }
+.interp b { color:var(--ink); }
+.foot { font-size:11px; color:var(--soft); line-height:1.55; margin-top:14px; }
+.legend-row { display:flex; flex-wrap:wrap; gap:12px; padding:10px 14px; border-top:1px solid var(--line-soft); font-size:11px; color:var(--muted); }
+.legend-row span { display:inline-flex; align-items:center; gap:6px; }
+.legend-row i { width:16px; height:0; border-top-width:3px; border-top-style:solid; display:inline-block; }
+.diagnostic-note { padding:8px 14px 10px; border-top:1px solid var(--line-soft); color:var(--soft);
+  font:500 10.5px/1.5 "DM Mono",monospace; }
+.btn { border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:8px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; box-shadow:var(--shadow-sm); }
+.btn:hover { border-color:var(--accent); }
+
+/* ── uitleg / educatie ── */
+.explainer { margin-top:16px; padding:0; overflow:hidden; }
+.exp-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:16px 18px; cursor:pointer; }
+.exp-head h2 { font-size:16px; font-weight:800; letter-spacing:-.01em; margin-top:2px; }
+.exp-body { padding:0 18px 20px; border-top:1px solid var(--line-soft); }
+.explainer.collapsed .exp-body { display:none; }
+.exp-body .lead { font-size:14px; line-height:1.65; color:var(--ink-2, var(--ink)); max-width:75ch; margin:16px 0 6px; }
+.exp-body .lead b { color:var(--ink); }
+.exp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:16px 0 6px; }
+@media (max-width:820px){ .exp-grid { grid-template-columns:1fr; } }
+.exp-block { background:var(--surface-2); border:1px solid var(--line-soft); border-radius:12px; padding:14px 15px; }
+.exp-block h3 { font-size:13px; font-weight:800; margin-bottom:8px; display:flex; align-items:center; gap:7px; }
+.exp-block h3 .n { width:20px; height:20px; border-radius:6px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:11px; flex:0 0 auto; }
+[data-theme="dark"] .exp-block h3 .n { background:var(--accent); color:#04222d; }
+.exp-block p { font-size:12.5px; line-height:1.6; color:var(--muted); margin-bottom:7px; }
+.exp-block p:last-child { margin-bottom:0; }
+.linekey { list-style:none; display:flex; flex-direction:column; gap:7px; }
+.linekey li { display:flex; align-items:flex-start; gap:9px; font-size:12.5px; line-height:1.45; }
+.linekey .sw { width:22px; height:0; border-top-width:3px; border-top-style:solid; margin-top:8px; flex:0 0 auto; border-radius:2px; }
+.linekey .bx { width:16px; height:12px; border-radius:3px; margin-top:2px; flex:0 0 auto; }
+.linekey b { color:var(--ink); }
+
+.exp-body h3.sec { font-size:14px; font-weight:800; margin:22px 0 4px; }
+.gl-group { margin-top:14px; }
+.gl-group > .gl-title { font:700 10px/1 "DM Mono",monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-ink); margin-bottom:9px; }
+[data-theme="dark"] .gl-group > .gl-title { color:var(--accent); }
+.gl-list { display:grid; grid-template-columns:repeat(2,1fr); gap:9px 18px; }
+@media (max-width:820px){ .gl-list { grid-template-columns:1fr; } }
+.gl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; align-items:baseline; }
+.gl .abbr { font:800 13px/1.3 "DM Mono",monospace; color:var(--ink); white-space:nowrap; }
+.gl .full { font-size:11px; color:var(--soft); grid-column:2; margin-top:-2px; }
+.gl .desc { grid-column:1 / -1; font-size:12.5px; line-height:1.55; color:var(--muted); margin-top:3px; }
+.gl .desc b { color:var(--ink); font-weight:700; }
+.gl .read { grid-column:1 / -1; font-size:11.5px; color:var(--accent-ink); margin-top:3px; }
+[data-theme="dark"] .gl .read { color:var(--accent); }
+
+.rules { margin-top:22px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+@media (max-width:820px){ .rules { grid-template-columns:1fr 1fr; } }
+.rule { border:1px solid var(--line-soft); border-radius:10px; padding:11px 12px; background:var(--surface); }
+.rule .rt { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+.rule .rd { font-size:12px; line-height:1.5; color:var(--muted); }
+.rule.g .rt{color:#0b7a52;} .rule.y .rt{color:#8a6d00;} .rule.o .rt{color:#a24e00;} .rule.r .rt{color:#a11;}
+[data-theme="dark"] .rule.g .rt{color:#4ade9e;} [data-theme="dark"] .rule.y .rt{color:#e6c650;}
+[data-theme="dark"] .rule.o .rt{color:#f6a04e;} [data-theme="dark"] .rule.r .rt{color:#ff7a86;}
+.exp-caret { transition:transform .2s; display:inline-block; }
+.explainer.collapsed .exp-caret { transform:rotate(-90deg); }
+
+/* ── plaats-zoek + snelkeuze ── */
+.searchrow { display:flex; gap:6px; }
+.searchrow input { flex:1; min-width:150px; background:var(--surface); color:var(--ink); border:1px solid var(--line);
+  border-radius:9px; padding:8px 11px; font-size:13px; font-weight:600; font-family:"DM Sans",sans-serif; box-shadow:var(--shadow-sm); }
+.searchrow input:focus { outline:none; border-color:var(--accent); }
+.scrub { display:flex; align-items:center; gap:10px; padding:10px 14px; border-top:1px solid var(--line-soft); }
+.scrub-btn { border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:8px; width:32px; height:30px; flex:0 0 auto; cursor:pointer; font-size:12px; }
+.scrub-btn:hover:not(:disabled) { border-color:var(--accent); }
+.scrub-btn:disabled { opacity:.4; cursor:default; }
+.scrub input[type=range] { flex:1; accent-color:var(--accent); height:4px; cursor:pointer; min-width:80px; }
+.scrub-lab { font:700 12px/1.2 "DM Mono",monospace; color:var(--ink); min-width:158px; text-align:right; white-space:nowrap; }
+@media (max-width:480px){ .scrub-lab { min-width:0; font-size:11px; } }
+.modelbadge { display:inline-flex; align-items:center; height:36px; padding:0 14px; border-radius:9px;
+  background:var(--surface-2); border:1px solid var(--line); color:var(--ink); font:700 12.5px/1 "DM Mono",monospace;
+  box-shadow:var(--shadow-sm); white-space:nowrap; }
+.chips { display:flex; flex-wrap:wrap; gap:5px; }
+.chip-btn { background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:5px 11px;
+  font-size:11.5px; font-weight:600; color:var(--muted); cursor:pointer; }
+.chip-btn:hover { border-color:var(--accent); color:var(--ink); }
+.chip-btn.on { background:var(--blue); color:#fff; border-color:var(--blue); }
+[data-theme="dark"] .chip-btn.on { background:var(--accent); color:#04222d; border-color:var(--accent); }
+.pill.live { border-color:rgba(16,185,129,.35); background:rgba(209,250,229,.7); color:#047857; }
+[data-theme="dark"] .pill.live { background:rgba(6,78,59,.4); color:#4ade9e; border-color:#10b981; }
+.pill.err { border-color:rgba(204,0,0,.35); background:rgba(254,226,226,.8); color:#b91c1c; }
+.loadmsg { position:absolute; inset:0; display:grid; place-items:center; background:color-mix(in srgb,var(--surface) 72%,transparent);
+  font:700 15px/1.4 "DM Sans"; color:var(--muted); z-index:3; border-radius:0 0 16px 16px; text-align:center; padding:20px; }
+.loadmsg.err { color:var(--danger); }
+@media (max-width:560px){
+  .page { width:min(100% - 16px,1280px); padding-top:10px; }
+  .controls { gap:8px; }
+  .controls .field[style*="min-width:220px"] { min-width:min(100%,220px)!important; }
+  .windbar-key { display:none!important; }
+  .legend-row { gap:8px 10px; padding:8px 10px; }
+  .pro-head { font-size:10.5px; padding:8px 10px; }
+  .pro-head .auth { display:none; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-title">Atmosferische sounding</div>
+        <div class="brand-sub">Skew-T Log-P &amp; hodograaf · weerlab.nl</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="pill live" id="statusPill" aria-live="polite">● laden…</span>
+      <button class="pill theme-btn" id="themeBtn" type="button">◐ Thema</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="field" style="min-width:220px">
+      <label for="placeInput">Plaats</label>
+      <form class="searchrow" id="placeForm">
+        <input id="placeInput" type="text" placeholder="Zoek plaats… (bijv. Utrecht)" autocomplete="off">
+        <button class="btn" id="placeBtn" type="submit" aria-label="Zoek plaats">🔍</button>
+      </form>
+    </div>
+    <div class="field">
+      <label>Model</label>
+      <div class="seg" id="modelSeg" role="group" aria-label="Weermodel">
+        <button type="button" data-m="harmonie" class="on" aria-pressed="true">HARMONIE&nbsp;90</button>
+        <button type="button" data-m="icond2" aria-pressed="false">ICON-D2</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="timeSel">Geldig</label>
+      <select id="timeSel"><option>—</option></select>
+    </div>
+    <div class="field">
+      <label>Pakket</label>
+      <div class="seg" id="parcelSeg" role="group" aria-label="Luchtpakket">
+        <button type="button" data-p="SB" class="on" aria-pressed="true">SB</button>
+        <button type="button" data-p="ML" aria-pressed="false">ML</button>
+        <button type="button" data-p="MU" aria-pressed="false">MU</button>
+      </div>
+    </div>
+    <div class="field" style="margin-left:auto">
+      <label>&nbsp;</label>
+      <button class="btn" id="pngBtn" type="button">⬇ PNG</button>
+    </div>
+  </div>
+
+  <div class="controls" style="margin-top:-4px">
+    <div class="field">
+      <label>Snelkeuze</label>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="field">
+      <label for="scenSel">Voorbeeld</label>
+      <select id="scenSel"><option value="">— live model —</option></select>
+    </div>
+    <div class="field" style="margin-left:auto">
+      <label>Lagen</label>
+      <div class="toggles" id="toggles">
+        <label data-k="dry" class="on" role="checkbox" tabindex="0" aria-checked="true"><span class="sw"></span>Droogadiabaten</label>
+        <label data-k="moist" class="on" role="checkbox" tabindex="0" aria-checked="true"><span class="sw"></span>Natadiabaten</label>
+        <label data-k="mixr" class="on" role="checkbox" tabindex="0" aria-checked="true"><span class="sw"></span>Mengverhouding</label>
+        <label data-k="parcel" class="on" role="checkbox" tabindex="0" aria-checked="true"><span class="sw"></span>Pakketcurve</label>
+        <label data-k="barbs" class="on" role="checkbox" tabindex="0" aria-checked="true"><span class="sw"></span>Windvanen</label>
+        <label data-k="virt" class="on" role="checkbox" tabindex="0" aria-checked="true"><span class="sw"></span>Virt. temp.</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="pro">
+    <div class="pro-head"><span id="proHead">—</span><span class="auth">weerlab.nl · Skew-T Log-P V2</span></div>
+    <div class="pro-main">
+      <div class="pro-skew">
+        <div class="skewwrap"><canvas id="skewt" role="img" aria-label="Skew-T Log-P met temperatuur, dauwpunt, pakketcurve en wind"></canvas><div class="loadmsg" id="loadmsg" role="status" aria-live="polite" style="display:none"></div></div>
+        <div class="legend-row">
+          <span><i style="border-color:var(--temp)"></i>Temp</span>
+          <span><i style="border-color:var(--dew)"></i>Dauwpunt</span>
+          <span><i style="border-color:var(--parcel);border-top-style:dashed"></i>Pakket</span>
+          <span id="virtLegend"><i style="border-color:var(--virt-env);border-top-style:dotted"></i>Tv omgeving</span>
+          <span><i style="border-color:var(--dry)"></i>Droogad.</span>
+          <span><i style="border-color:var(--moist);border-top-style:dashed"></i>Natad.</span>
+          <span><i style="border-color:var(--mixr);border-top-style:dotted"></i>Mengv.</span>
+          <span class="windbar-key"><i style="border-color:#3b82f6"></i>Wind kt</span>
+        </div>
+      </div>
+      <div class="pro-side">
+        <div class="pro-hodo"><canvas id="hodo" role="img" aria-label="Hodograaf met windprofiel en stormbeweging"></canvas></div>
+        <div class="pro-motion" id="motionBox"></div>
+        <div class="pro-sev">
+          <div class="sev-prob"><div class="sev-t" title="Gecombineerde, niet-gekalibreerde modeldiagnose">Zwaarweer-indicatie*</div><div class="sev-bars" id="sevBars"></div></div>
+          <div class="sev-haz"><div class="sev-t">Zwaar-weer-signaal</div><div class="hz" id="sevHaz">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="scrub" id="scrub">
+      <button class="scrub-btn" id="scrubPrev" title="Vorige">◀</button>
+      <input type="range" id="scrubRange" min="0" max="0" value="0" step="1" aria-label="Geldige tijdstap">
+      <button class="scrub-btn" id="scrubNext" title="Volgende">▶</button>
+      <span class="scrub-lab" id="scrubLab">—</span>
+    </div>
+    <div class="pro-table" id="idxTable"></div>
+    <div class="diagnostic-note">* Modeldiagnose uit één verticale kolom, geen kanspercentage of waarschuwing. Een losse hoge index geeft nooit zelfstandig een zwaarweersignaal: instabiliteit, ontremming en het relevante hagel-, wind- of rotatiesignaal moeten tegelijk aanwezig zijn. Controleer altijd timing, forcering, radar en officiële KNMI-waarschuwingen.</div>
+  </div>
+
+  <div class="card pad" style="margin-top:16px">
+    <div class="kicker" style="margin-bottom:8px">Interpretatie (meteoroloog)</div>
+    <div class="interp" id="interp"></div>
+  </div>
+
+  <!-- ══ UITLEG ══ -->
+  <div class="card explainer" id="explainer">
+    <div class="exp-head" id="expHead">
+      <div><span class="kicker">Uitleg — toegankelijk</span>
+        <h2>Zo lees je een atmosferische sounding</h2></div>
+      <button class="btn" id="expToggle"><span class="exp-caret">▾</span> Verbergen</button>
+    </div>
+    <div class="exp-body">
+      <p class="lead">Een <b>sounding</b> is een dwarsdoorsnede van de dampkring recht boven één plek — van de grond tot ~16 km hoog.
+        Ze laat in één beeld zien hoe <b>temperatuur</b>, <b>vocht</b> en <b>wind</b> met de hoogte veranderen. Meteorologen lezen eruit af
+        of er buien, onweer, mist, ijzel of storm kunnen ontstaan. De data komt van een <b>weermodel</b> (HARMONIE) of van een
+        echte <b>weerballon</b> (radiosonde) die twee keer per dag omhoog gaat.</p>
+
+      <div class="exp-grid">
+        <div class="exp-block">
+          <h3><span class="n">1</span>De grafiek</h3>
+          <p><b>Hoogte</b> loopt van onder (grond, ~1000&nbsp;hPa) naar boven (~100&nbsp;hPa). Links staat naast de druk ook de berekende hoogte in meters <b>boven de lokale grond (AGL)</b>.</p>
+          <p><b>Temperatuur</b> loopt van links (koud) naar rechts (warm). De schuine lijnen ("skew") maken koude bovenlucht beter zichtbaar — vandaar de naam <b>Skew-T</b>.</p>
+          <p>De grijze/bruine hulplijntjes zijn hoe lucht <i>zou</i> afkoelen als ze opstijgt. Waar de temperatuurlijn steiler of vlakker loopt dan die hulplijnen, zie je of de lucht stabiel of onstabiel is.</p>
+        </div>
+        <div class="exp-block">
+          <h3><span class="n">2</span>Wat de lijnen betekenen</h3>
+          <ul class="linekey">
+            <li><span class="sw" style="border-color:var(--temp)"></span><span><b>Temperatuur</b> — hoe warm de lucht op elke hoogte is.</span></li>
+            <li><span class="sw" style="border-color:var(--dew)"></span><span><b>Dauwpunt</b> — maat voor vocht. Ligt hij dicht bij de temperatuurlijn, dan is de lucht vochtig (wolken/mist); ver ervan = droog.</span></li>
+            <li><span class="sw" style="border-color:var(--parcel);border-top-style:dashed"></span><span><b>Pakketcurve</b> — het pad van een opstijgend "luchtpakket". Met virtuele temperatuur actief worden pakket en CAPE/CIN daarvoor gecorrigeerd; de paarse stippellijn is dan de virtuele omgevingstemperatuur.</span></li>
+            <li><span class="bx" style="background:var(--cape)"></span><span><b>Rood vlak = CAPE</b> — brandstof voor de bui. <b>Blauw vlak = CIN</b> — de rem die opstijgen tegenhoudt.</span></li>
+          </ul>
+        </div>
+        <div class="exp-block">
+          <h3><span class="n">3</span>De hodograaf</h3>
+          <p>Het ronde diagram toont de <b>wind op elke hoogte</b>. Elk punt is de wind op die hoogte; de gekleurde lijn verbindt ze van de grond (0&nbsp;km) omhoog.</p>
+          <p>Een <b>lange, gekromde</b> lijn = veel windverandering met de hoogte (schering). Dat organiseert buien tot flinke onweerscomplexen of zelfs draaiende <b>supercellen</b>.</p>
+          <p>De paarse stip (<b>Bunkers RM</b>) schat waarheen een zware bui zou trekken.</p>
+        </div>
+      </div>
+
+      <h3 class="sec">Begrippen &amp; afkortingen</h3>
+
+      <div class="gl-group">
+        <div class="gl-title">Instabiliteit — kan lucht opstijgen?</div>
+        <div class="gl-list">
+          <div class="gl"><span class="abbr">CAPE</span><span class="full">Convective Available Potential Energy</span>
+            <span class="desc"><b>Brandstof voor onweer.</b> Hoe hoger, hoe krachtiger lucht kan opstijgen. In J/kg.</span>
+            <span class="read">≈0 stabiel · 500–1000 stevige buien · 1000–2500 fors · &gt;2500 zwaar onweer</span></div>
+          <div class="gl"><span class="abbr">CIN</span><span class="full">Convective Inhibition</span>
+            <span class="desc"><b>De rem, of "het deksel".</b> Een warme laag hogerop die opstijgen tegenhoudt. Sterke CIN = buien komen laat of niet los.</span>
+            <span class="read">Dichter bij 0 = makkelijker buien · sterk negatief = deksel</span></div>
+          <div class="gl"><span class="abbr">LI</span><span class="full">Lifted Index</span>
+            <span class="desc">Temperatuurverschil tussen omgeving en een opstijgend pakket op ~5,5&nbsp;km. <b>Negatief = onstabiel.</b></span>
+            <span class="read">&gt;0 stabiel · −2 tot −6 onstabiel · &lt;−6 zeer onstabiel</span></div>
+          <div class="gl"><span class="abbr">LCL</span><span class="full">Lifting Condensation Level</span>
+            <span class="desc"><b>Hoogte van de wolkenbasis</b> — waar opstijgende lucht begint te condenseren.</span>
+            <span class="read">Laag = vochtig/mist · hoog = droge onderlucht</span></div>
+          <div class="gl"><span class="abbr">LFC</span><span class="full">Level of Free Convection</span>
+            <span class="desc">Hoogte waarboven een luchtpakket <b>vanzelf</b> verder opstijgt zonder duwtje.</span>
+            <span class="read">Lage LFC = buien ontstaan makkelijk</span></div>
+          <div class="gl"><span class="abbr">EL</span><span class="full">Equilibrium Level</span>
+            <span class="desc"><b>De top van de bui</b> — waar de opstijgende lucht stopt. Hier vormt zich het aambeeld.</span>
+            <span class="read">Hoge EL (&gt;10 km) = hoge, krachtige onweerstorens</span></div>
+          <div class="gl"><span class="abbr">SB · ML · MU</span><span class="full">Surface-Based · Mixed-Layer · Most-Unstable</span>
+            <span class="desc">Wélk luchtpakket je omhoog laat gaan: vanaf de <b>grond</b> (SB), een <b>gemiddelde</b> van de onderste laag (ML), of het <b>meest onstabiele</b> (MU).</span>
+            <span class="read">MU telt bij onweer boven een koele grondlaag</span></div>
+        </div>
+      </div>
+
+      <div class="gl-group">
+        <div class="gl-title">Thermodynamisch — vocht, warmte &amp; neerslag</div>
+        <div class="gl-list">
+          <div class="gl"><span class="abbr">K-index</span><span class="full">K-index</span>
+            <span class="desc">Onweerskans op basis van warmte en vocht in de onderste luchtlagen.</span>
+            <span class="read">&gt;30 = flinke kans op (natte) onweersbuien</span></div>
+          <div class="gl"><span class="abbr">Totals</span><span class="full">Total Totals</span>
+            <span class="desc">Klassieke onweersindex uit temperatuur en vocht op 850 en 500&nbsp;hPa.</span>
+            <span class="read">&gt;50 onweer waarschijnlijk · &gt;55 zwaar</span></div>
+          <div class="gl"><span class="abbr">PWAT</span><span class="full">Precipitable Water</span>
+            <span class="desc"><b>Al het water in de luchtkolom</b>, als je het zou laten uitregenen (in mm). Maat voor hoosbui-potentieel.</span>
+            <span class="read">&gt;30 mm = veel vocht; wateroverlast vereist ook zware of herhaalde buien</span></div>
+          <div class="gl"><span class="abbr">Vriesniveau</span><span class="full">Freezing level</span>
+            <span class="desc">Hoogte waar het <b>0&nbsp;°C</b> wordt. Bepaalt of neerslag als regen of sneeuw valt en of hagel smelt.</span>
+            <span class="read">Laag = hagel/graupel haalt de grond</span></div>
+          <div class="gl"><span class="abbr">Wet-bulb 0°</span><span class="full">Wet-bulb zero</span>
+            <span class="desc">Hoogte waar de <b>natteboltemperatuur</b> 0&nbsp;°C is — betere hagel- en sneeuwgrensindicator dan het gewone vriesniveau.</span>
+            <span class="read">Laag (&lt;2,5 km) gunstig voor hagel</span></div>
+          <div class="gl"><span class="abbr">DCAPE</span><span class="full">Downdraft CAPE</span>
+            <span class="desc">Energie voor <b>neerwaartse</b> lucht — de valwind onder een bui die zorgt voor zware <b>windstoten</b>.</span>
+            <span class="read">&gt;800 J/kg = stevige valwinden mogelijk</span></div>
+          <div class="gl"><span class="abbr">Conv. temp</span><span class="full">Convectieve temperatuur</span>
+            <span class="desc">De temperatuur die de <b>grond moet bereiken</b> voordat buien spontaan ontstaan door opwarming.</span>
+            <span class="read">Wordt de dagtop gehaald → buienvorming</span></div>
+        </div>
+      </div>
+
+      <div class="gl-group">
+        <div class="gl-title">Wind &amp; kinematiek — hoe zwaar en georganiseerd?</div>
+        <div class="gl-list">
+          <div class="gl"><span class="abbr">Schering</span><span class="full">Windschering (wind shear)</span>
+            <span class="desc">Verandering van windsnelheid en -richting met de hoogte (in knopen). <b>Veel schering organiseert buien</b> en houdt ze langer in stand.</span>
+            <span class="read">0–6 km &gt;35 kt = supercel-potentieel</span></div>
+          <div class="gl"><span class="abbr">SRH</span><span class="full">Storm-Relative Helicity</span>
+            <span class="desc"><b>Draaiing</b> in de onderste lucht (m²/s²). Voedt roterende buien en daarmee de kans op <b>windhozen/tornado's</b>.</span>
+            <span class="read">0–3 km &gt;150 = draaiende buien mogelijk</span></div>
+          <div class="gl"><span class="abbr">Hodograaf</span><span class="full">Hodograph</span>
+            <span class="desc">Het ronde winddiagram. De <b>vorm</b> (recht of gekromd) verraadt het type onweer: multicel of supercel.</span>
+            <span class="read">Sterk gekromd = draaiende supercellen</span></div>
+          <div class="gl"><span class="abbr">Bunkers RM</span><span class="full">Bunkers Right Mover</span>
+            <span class="desc">Geschatte <b>trekrichting en -snelheid</b> van een zware, rechtsdraaiende bui.</span>
+            <span class="read">Gebruikt om SRH te berekenen</span></div>
+        </div>
+      </div>
+
+      <div class="gl-group">
+        <div class="gl-title">Zwaar weer — hagel &amp; windstoot</div>
+        <div class="gl-list">
+          <div class="gl"><span class="abbr">SHIP</span><span class="full">Significant Hail Parameter</span>
+            <span class="desc"><b>Hagelkans</b> uit CAPE, vocht, steilheid van de temperatuurafname (700–500 hPa) en schering. Hoge SHIP + een <b>laag</b> wet-bulb-nulpunt (minder smelten onderweg) = grotere hagel.</span>
+            <span class="read">&gt;1 = kans op grote hagel (≥ 5 cm)</span></div>
+          <div class="gl"><span class="abbr">Hagel</span><span class="full">Geschatte hagelgrootte</span>
+            <span class="desc">Grove <b>cm-inschatting</b> van de steendiameter, afgeleid uit SHIP en de smelting onder het wet-bulb-nulpunt. Sterke opwaartse wind houdt grotere stenen zwevend; laag vriesniveau laat ze de grond halen.</span>
+            <span class="read">indicatief — echte hagel hangt ook van storm-type af</span></div>
+          <div class="gl"><span class="abbr">Valwind</span><span class="full">Windstoot uit neerwaartse stroom</span>
+            <span class="desc">Geschatte <b>zware windstoot</b> onder een bui, ≈ √(2·DCAPE): verdampende neerslag koelt lucht af die als valwind naar beneden stort en horizontaal uitwaaiert.</span>
+            <span class="read">&gt;55 kt = schade mogelijk (natte valwind/downburst)</span></div>
+        </div>
+      </div>
+
+      <div class="gl-group">
+        <div class="gl-title">Composiet — alles samengevat in één getal</div>
+        <div class="gl-list">
+          <div class="gl"><span class="abbr">SCP</span><span class="full">Supercell Composite Parameter</span>
+            <span class="desc">Combineert CAPE, schering en draaiing tot één <b>omgevingsparameter voor supercellen</b>; het getal is geen kanspercentage.</span>
+            <span class="read">&gt;1 mogelijk · &gt;10 gunstige omgeving</span></div>
+          <div class="gl"><span class="abbr">STP</span><span class="full">Significant Tornado Parameter</span>
+            <span class="desc">Omgevingsparameter voor een <b>significante tornado</b>, uit CAPE, wolkenbasis, schering en draaiing; geen lokale kansverwachting.</span>
+            <span class="read">&gt;1 = verhoogd tornado-risico</span></div>
+        </div>
+      </div>
+
+      <h3 class="sec">Vuistregels in één oogopslag</h3>
+      <div class="rules">
+        <div class="rule g"><div class="rt">Stabiel</div><div class="rd">CAPE ≈ 0, LI positief, dauwpunt ver van temperatuur. Hooguit stapelwolkjes.</div></div>
+        <div class="rule y"><div class="rt">Buien mogelijk</div><div class="rd">Wat CAPE, LI licht negatief, laag vriesniveau. Denk aan winterse (hagel)buien.</div></div>
+        <div class="rule o"><div class="rt">Onweer</div><div class="rd">CAPE &gt;1000, LI &lt;−4, vochtige onderlucht. Fikse onweersbuien, kans op wateroverlast.</div></div>
+        <div class="rule r"><div class="rt">Zwaar weer</div><div class="rd">Hoge CAPE én veel schering/SRH. Supercellen, grote hagel, valwind of windhoos.</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   THERMODYNAMICA  (SI tenzij vermeld; druk in hPa, temp intern in K of °C)
+   ═══════════════════════════════════════════════════════════════════════ */
+const Rd=287.04, Cp=1004.0, Lv=2.501e6, EPS=0.622, G=9.80665, KAPPA=Rd/Cp; // 0.2857
+const K0=273.15, KT=0.5144444; // knopen→m/s
+
+const esat=Tc=> 6.112*Math.exp(17.67*Tc/(Tc+243.5));          // hPa  (Bolton)
+const wsat=(Tc,P)=>{ const e=esat(Tc); return EPS*e/Math.max(P-e,1e-6); }; // kg/kg
+const wFromTd=(Tdc,P)=> wsat(Tdc,P);                           // vochtmengverh. kg/kg
+const tdFromW=(w,P)=>{ const e=w*P/(EPS+w); const l=Math.log(Math.max(e,1e-6)/6.112); return 243.5*l/(17.67-l); };
+const thetaK=(Tc,P)=> (Tc+K0)*Math.pow(1000/P,KAPPA);
+const dryTk=(T0k,P0,P)=> T0k*Math.pow(P/P0,KAPPA);            // droogadiabaat T(P)
+
+function lclLevel(P0,Tc,Tdc){                                  // Bolton 1980
+  const T=Tc+K0, Td=Tdc+K0;
+  const Tlcl = 56 + 1/(1/(Td-56) + Math.log(T/Td)/800);
+  const Plcl = P0*Math.pow(Tlcl/T, 1/KAPPA);
+  return {Plcl, Tlcl};
+}
+// dT/dln(P) langs pseudo-natadiabaat
+function moistDTDlnP(Tk,P){
+  const Tc=Tk-K0, ws=wsat(Tc,P);
+  const num = KAPPA*Tk*(1 + Lv*ws/(Rd*Tk));
+  const den = 1 + EPS*Lv*Lv*ws/(Cp*Rd*Tk*Tk);
+  return num/den;
+}
+function moistStep(Tk,P0,P1,n=6){                              // RK4 integratie over ln(P)
+  let T=Tk; const l0=Math.log(P0), dl=(Math.log(P1)-l0)/n;
+  for(let i=0;i<n;i++){
+    const p=l=>Math.exp(l0+dl*(i+l));
+    const k1=moistDTDlnP(T,p(0));
+    const k2=moistDTDlnP(T+0.5*dl*k1,p(0.5));
+    const k3=moistDTDlnP(T+0.5*dl*k2,p(0.5));
+    const k4=moistDTDlnP(T+dl*k3,p(1));
+    T+=dl*(k1+2*k2+2*k3+k4)/6;
+  }
+  return T;
+}
+const virtC=(Tc,w)=> (Tc+K0)*(1+0.608*w)-K0;                  // virtuele temp (°C), w kg/kg
+
+/* ── wind helpers ── */
+const uvFrom=(dir,spd)=>({u:-spd*Math.sin(dir*Math.PI/180), v:-spd*Math.cos(dir*Math.PI/180)}); // m/s als spd m/s
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VOORBEELDPROFIELEN  (fysisch consistent)  — p[hPa],t,td[°C],dir[°],spd[kt]
+   ═══════════════════════════════════════════════════════════════════════ */
+const SCEN = [
+ { id:"onweer", name:"Zomerse onweersbui — CAPE & vocht",
+   src:"HARMONIE (model)", stn:"De Bilt (260)", run:"vandaag 06 UTC", valid:"+9u · 15 UTC", elev:2,
+   note:"Warme, vochtige grenslaag onder een conditioneel-instabiele troposfeer; klassieke namiddag-onweersbui.",
+   data:[
+    [1013,28,19,200,8],[1000,26.5,18.5,205,10],[950,22.5,17,215,14],[900,19,15.5,220,18],
+    [850,16,13,225,22],[800,12,10,230,26],[700,4,2,235,30],[600,-4,-7,240,34],
+    [500,-13,-18,245,40],[400,-25,-32,250,48],[300,-42,-50,255,58],[250,-52,-60,255,62],
+    [200,-55,-66,250,60],[150,-58,-70,250,54],[100,-62,-75,250,48]]},
+
+ { id:"inversie", name:"Winterinversie & mist — stabiel",
+   src:"HARMONIE (model)", stn:"De Bilt (260)", run:"vandaag 00 UTC", valid:"+6u · 06 UTC", elev:2,
+   note:"Verzadigde, koude grenslaag onder een sterke temperatuurinversie; radiatiemist, geen convectie.",
+   data:[
+    [1024,2,2,120,4],[1020,3,2.5,130,5],[1000,6,0,140,8],[950,5,-3,150,12],
+    [900,3,-6,160,16],[850,1,-9,170,20],[700,-6,-18,190,26],[600,-13,-25,200,32],
+    [500,-22,-33,210,38],[400,-34,-45,220,44],[300,-50,-58,230,52],[250,-55,-63,230,54],
+    [200,-56,-66,225,50],[150,-58,-70,222,47],[100,-60,-75,220,44]]},
+
+ { id:"buiig", name:"Buiige koudeluchtadvectie — winterse buien",
+   src:"Radiosonde 06260", stn:"De Bilt (260)", run:"vandaag 12 UTC", valid:"waarneming", elev:2,
+   note:"Post-frontale, onstabiele koude lucht met laag vriesniveau; hagel-/graupelbuien en windstoten.",
+   data:[
+    [1008,9,6,280,18],[1000,8.5,6,285,20],[950,5,3,290,24],[900,2,0.5,295,28],
+    [850,-1,-3,300,30],[800,-4,-6,300,32],[700,-11,-14,305,34],[600,-20,-24,305,36],
+    [500,-30,-35,300,40],[400,-43,-49,300,46],[300,-54,-60,295,50],[250,-55,-62,290,48],
+    [200,-54,-64,285,44],[150,-56,-68,282,42],[100,-58,-72,280,38]]},
+
+ { id:"severe", name:"Zwaar onweer met windschering — supercel",
+   src:"HARMONIE (model)", stn:"Zuid-Limburg", run:"vandaag 06 UTC", valid:"+12u · 18 UTC", elev:80,
+   note:"Zeer hoge CAPE met sterk draaiende windschering; omgeving voor supercellen, grote hagel en windhozen.",
+   data:[
+    [1010,30,21,160,12],[1000,28.5,20.5,170,16],[950,24,19,185,22],[900,20,17.5,200,28],
+    [850,17,15,215,34],[800,13,12,225,40],[700,5,3,240,48],[600,-3,-9,250,56],
+    [500,-12,-20,255,64],[400,-24,-34,258,72],[300,-41,-50,260,82],[250,-51,-60,260,86],
+    [200,-56,-66,258,80],[150,-59,-70,256,74],[100,-62,-76,255,68]]},
+];
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OMGEVINGSPROFIEL — fijn grid + hoogte-integratie (hydrostatisch)
+   ═══════════════════════════════════════════════════════════════════════ */
+function buildEnv(raw){
+  const lv = raw.map(r=>({p:r[0],t:r[1],td:Math.min(r[1],r[2]),dir:r[3],spd:r[4]*KT}))
+                .sort((a,b)=>b.p-a.p);
+  const Psfc=lv[0].p, Ptop=lv[lv.length-1].p;
+  // interpolatie lineair in ln(P); wind via u,v — levert ALTIJD t,td,u,v,w,tv
+  function interp(P){
+    let a,b,f;
+    if(P>=Psfc){ a=b=lv[0]; f=0; }
+    else if(P<=Ptop){ a=b=lv[lv.length-1]; f=0; }
+    else { let i=0; while(lv[i+1].p>P) i++; a=lv[i]; b=lv[i+1];
+           f=(Math.log(P)-Math.log(a.p))/(Math.log(b.p)-Math.log(a.p)); }
+    const ua=uvFrom(a.dir,a.spd), ub=uvFrom(b.dir,b.spd);
+    const u=ua.u+f*(ub.u-ua.u), v=ua.v+f*(ub.v-ua.v);
+    const t=a.t+f*(b.t-a.t), td=a.td+f*(b.td-a.td), w=wFromTd(td,P);
+    return { p:P, t, td, u, v, spd:Math.hypot(u,v),
+             dir:(Math.atan2(-u,-v)*180/Math.PI+360)%360, w, tv:virtC(t,w) };
+  }
+  // fijn grid + hoogte
+  const N=360, grid=[];
+  for(let i=0;i<=N;i++){
+    const P=Math.exp(Math.log(Psfc)+(Math.log(Ptop)-Math.log(Psfc))*i/N);
+    const s=interp(P); s.w=wFromTd(s.td,P); s.tv=virtC(s.t,s.w);
+    grid.push(s);
+  }
+  grid[0].z=0;   // hoogtes in AGL: schering-/SRH-/LCL-lagen zijn grondrelatief (ook bij bergterrein via ICON-D2)
+  for(let i=1;i<grid.length;i++){
+    const tvm=((grid[i].tv+grid[i-1].tv)/2)+K0;
+    grid[i].z=grid[i-1].z + (Rd*tvm/G)*(Math.log(grid[i-1].p)-Math.log(grid[i].p));
+  }
+  // lookups
+  const envT =P=>interp(P).t, envTd=P=>interp(P).td;
+  const zAtP =P=>{ if(P>=grid[0].p)return grid[0].z; if(P<=grid[N].p)return grid[N].z;
+      let i=0; while(grid[i+1].p>P)i++; const f=(Math.log(P)-Math.log(grid[i].p))/(Math.log(grid[i+1].p)-Math.log(grid[i].p));
+      return grid[i].z+f*(grid[i+1].z-grid[i].z); };
+  const pAtZ =z=>{ if(z<=grid[0].z)return grid[0].p; let i=0; while(i<N&&grid[i+1].z<z)i++;
+      if(i>=N)return grid[N].p; const f=(z-grid[i].z)/(grid[i+1].z-grid[i].z); return Math.exp(Math.log(grid[i].p)+f*(Math.log(grid[i+1].p)-Math.log(grid[i].p))); };
+  const windAtZ=z=>{ const P=pAtZ(z); return interp(P); };
+  return {lv,grid,Psfc,Ptop,interp,envT,envTd,zAtP,pAtZ,windAtZ};
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PAKKETSTIJGING + CAPE/CIN/LCL/LFC/EL  (met virt.temp optie)
+   ═══════════════════════════════════════════════════════════════════════ */
+function parcelAscent(env, P0, T0, Td0, useVirt){
+  const {Plcl,Tlcl}=lclLevel(P0,T0,Td0);
+  const w0=wFromTd(Td0,P0);
+  // grid van P0 → 100 (fijn), forceer Plcl erin
+  const pts=[]; const N=300;
+  for(let i=0;i<=N;i++) pts.push(Math.exp(Math.log(P0)+(Math.log(100)-Math.log(P0))*i/N));
+  pts.push(Plcl); pts.sort((a,b)=>b-a);
+  const path=[]; let Tmoist=Tlcl, Pprev=Plcl;
+  for(const P of pts){
+    if(P>P0+0.001) continue;
+    let Tk, wpar;
+    if(P>=Plcl){ Tk=dryTk(T0+K0,P0,P); wpar=w0; }
+    else { Tmoist=moistStep(Tmoist,Pprev,P); Pprev=P; Tk=Tmoist; wpar=wsat(Tk-K0,P); }
+    const Tc=Tk-K0;
+    const e=env.interp(P);
+    const tvPar = useVirt? virtC(Tc,wpar) : Tc;
+    const tvEnv = useVirt? e.tv : e.t;
+    path.push({P, z:env.zAtP(P), Tpar:Tc, Tenv:e.t, tvPar, tvEnv,
+      plotPar:useVirt?tvPar:Tc, plotEnv:useVirt?tvEnv:e.t, buoy:(tvPar-tvEnv)});
+  }
+  // LFC = eerste positieve kruising boven LCL. EL = hoogste terugkeer naar
+  // negatief daarboven; zo wordt CAPE niet afgekapt door een dunne stabiele laag.
+  let lfcP=null, lfcZ=null, elP=null, elZ=null;
+  const crossing=(a,b)=>{ const f=Math.max(0,Math.min(1,-a.buoy/(b.buoy-a.buoy||1e-9)));
+    return {P:Math.exp(Math.log(a.P)+f*(Math.log(b.P)-Math.log(a.P))), z:a.z+f*(b.z-a.z)}; };
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1], b=path[i];
+    if(b.P>Plcl) continue;                    // alleen boven LCL zoeken
+    if(lfcP===null && b.buoy>0){ const c=a.buoy<=0?crossing(a,b):{P:b.P,z:b.z}; lfcP=c.P; lfcZ=c.z; }
+    if(lfcP!==null && a.buoy>0 && b.buoy<=0 && b.P<lfcP){ const c=crossing(a,b); elP=c.P; elZ=c.z; }
+  }
+  if(lfcP!==null && (elP===null||path[path.length-1].buoy>0)){
+    elP=path[path.length-1].P; elZ=path[path.length-1].z;
+  }
+  // CAPE tussen LFC en hoogste EL (alle positieve stukken); CIN onder LFC.
+  let cape=0, cin=0;
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1], b=path[i]; const dz=b.z-a.z; if(dz<=0) continue;
+    const bm=(a.buoy+b.buoy)/2;
+    const c=G*bm/((((a.tvEnv+b.tvEnv)/2)+K0))*dz;
+    const zm=(a.z+b.z)/2;
+    if(lfcZ!==null && zm>=lfcZ && (elZ===null||zm<=elZ)){ if(c>0) cape+=c; }
+    else if(lfcZ!==null && zm<lfcZ){ if(c<0) cin+=c; }
+  }
+  // LI @500
+  const p500=path.reduce((best,p)=>Math.abs(p.P-500)<Math.abs(best.P-500)?p:best,path[0]);
+  const li = p500.Tenv - p500.Tpar;
+  return {path,Plcl,Tlcl:Tlcl-K0, lclZ:env.zAtP(Plcl), lfcP,lfcZ,elP,elZ,
+          cape:Math.max(0,cape), cin:Math.min(0,cin), li, w0};
+}
+
+/* ── afgeleide indices ── */
+function indices(env, scen){
+  const g=env.grid, at=P=>env.interp(P);
+  const T=(P)=>env.envT(P), Td=(P)=>env.envTd(P);
+  const Psfc=env.Psfc;
+  // SB pakket
+  const sfc=g[0];
+  const sb=parcelAscent(env,Psfc,sfc.t,sfc.td,STATE.virt);
+  // ML pakket (onderste 100 hPa): gemiddelde POTENTIËLE temp + mengverh., teruggebracht naar Psfc
+  let thsum=0,wsum=0,cnt=0;
+  for(const s of g){ if(s.p<Psfc-100) break; thsum+=thetaK(s.t,s.p); wsum+=s.w; cnt++; }
+  const mlW=wsum/cnt;
+  const mlT = thsum/cnt*Math.pow(Psfc/1000,KAPPA)-K0;   // mean-theta → temp op launch-druk
+  const mlTd = tdFromW(mlW,Psfc);                        // dauwpunt op launch-druk (w0==mean-w)
+  const ml=parcelAscent(env,Psfc,mlT,mlTd,STATE.virt);
+  // MU pakket (hoogste theta-e in onderste 300 hPa)
+  let best=g[0], bestThe=-1;
+  for(const s of g){ if(s.p<Psfc-300) break;
+    const the=thetaK(s.t,s.p)*Math.exp(Lv*s.w/(Cp*(s.t+K0))); if(the>bestThe){bestThe=the;best=s;} }
+  const mu=parcelAscent(env,best.p,best.t,best.td,STATE.virt);
+  // klassieke indices
+  const K = (T(850)-T(500)) + Td(850) - (T(700)-Td(700));
+  const TT= (T(850)-T(500)) + (Td(850)-T(500));
+  // PWAT
+  let pw=0; for(let i=1;i<g.length;i++){ const wm=(g[i].w+g[i-1].w)/2; pw+=wm*(g[i-1].p-g[i].p)*100/G; } // kg/m2 ~ mm
+  // vriesniveau & wet-bulb zero
+  const frz = crossZ(g,'t'); const wbz = crossZ(g,'tw');
+  // wind shear & SRH (m/s → kt)
+  const w0=env.windAtZ(0), w1=env.windAtZ(1000), w3=env.windAtZ(3000), w6=env.windAtZ(6000);
+  const shr = (a,b)=>Math.hypot(b.u-a.u,b.v-a.v)/KT;
+  const sh01=shr(w0,w1), sh03=shr(w0,w3), sh06=shr(w0,w6);
+  // Bunkers RM + SRH
+  const bunk=bunkers(env); const srh01=srh(env,0,1000,bunk), srh03=srh(env,0,3000,bunk);
+  // composieten (indicatief) — SPC-stijl begrensde termen
+  const bwd=sh06*KT;                                                   // 0-6 km bulk shear, m/s
+  const scpShear = bwd<10?0: Math.min(bwd/20,1.0);
+  const scp = Math.max(0,mu.cape/1000)*(Math.max(0,srh03)/50)*scpShear;
+  const stpShear = bwd<12.5?0: bwd>30?1.5: bwd/20;
+  const stpLCL = sb.lclZ==null?0: sb.lclZ<1000?1: sb.lclZ>2000?0: (2000-sb.lclZ)/1000;
+  const stpCIN = sb.cin>-50?1: sb.cin<-200?0: (200+sb.cin)/150;       // sb.cin is negatief
+  const stp = Math.max(0,sb.cape/1500)*stpLCL*(Math.max(0,srh01)/150)*stpShear*stpCIN;
+  // DCAPE
+  const dc = dcape(env);
+  // ── Zwaar weer: hagel (SHIP) + valwind-windstoot (DCAPE) ──
+  const z5=env.zAtP(500), z7=env.zAtP(700);
+  const lr75=(T(700)-T(500))/Math.max((z5-z7)/1000,0.1);              // lapse-rate 700-500, °C/km
+  const mumr=(mu.w0||0)*1000;                                          // MU-mengverhouding, g/kg
+  const shrC=Math.min(27,Math.max(7,bwd));                            // 0-6 km schering, m/s (cap 7-27)
+  let ship=mu.cape*mumr*lr75*(-T(500))*shrC/42e6;                     // SPC Significant Hail Parameter
+  if(mu.cape<1300) ship*=mu.cape/1300;
+  if(lr75<5.8) ship*=lr75/5.8;
+  if(frz!=null && frz<2400) ship*=frz/2400;
+  ship=Math.max(0,ship);
+  const melt = wbz==null?1: wbz>4200?0.35: wbz>3400?0.65: wbz>2800?0.85:1;  // wet-bulb-0 smelting
+  const shipE=ship*melt;
+  const hailCm = mu.cape<60?0: shipE<0.3?1: shipE<0.6?2: shipE<1?3.5: shipE<2?5.5:7;  // indicatief cm
+  const gustKt = mu.cape<50?0: 0.66*Math.sqrt(2*Math.max(0,dc))/KT;   // valwind ≈ 0,66·√(2·DCAPE)
+  const gustKmh = gustKt*1.852;
+  // ── storm-motion-vectoren (mean / Bunkers L+R / Corfidi up+down MCS) ──
+  const meanW=(z0,z1)=>{ let su=0,sv=0,n=0; for(let z=z0;z<=z1;z+=250){const w=env.windAtZ(z); su+=w.u;sv+=w.v;n++;} return {u:su/n,v:sv/n}; };
+  const mean6=meanW(0,6000);
+  let llj={u:0,v:0,s:-1}; for(let z=0;z<=1500;z+=100){const w=env.windAtZ(z); const s=Math.hypot(w.u,w.v); if(s>llj.s) llj={u:w.u,v:w.v,s};}
+  const lo=env.windAtZ(500), hi=env.windAtZ(5500); let du=hi.u-lo.u,dv=hi.v-lo.v; const mg=Math.hypot(du,dv)||1, DV=7.5;
+  const RM={u:mean6.u+DV*(dv/mg), v:mean6.v-DV*(du/mg)}, LM={u:mean6.u-DV*(dv/mg), v:mean6.v+DV*(du/mg)};
+  const upMCS={u:mean6.u-llj.u, v:mean6.v-llj.v}, downMCS={u:2*mean6.u-llj.u, v:2*mean6.v-llj.v};
+  const dsp=w=>({u:w.u,v:w.v, dir:Math.round((Math.atan2(-w.u,-w.v)*180/Math.PI+360)%360), kt:Math.round(Math.hypot(w.u,w.v)/KT)});
+  const motion={mean:dsp(mean6), left:dsp(LM), right:dsp(RM), upMCS:dsp(upMCS), downMCS:dsp(downMCS)};
+  // ── extra indices ──
+  const bli=mu.li;                                                    // Best Lifted Index (meest onstabiel)
+  const ehi=sb.cape*Math.max(0,srh03)/160000;                         // Energy-Helicity Index 0-3
+  const capeshear=Math.sqrt(2*mu.cape)*bwd;                          // WMAXSHEAR (m²/s²)
+  // ── zwaarweersignalen: alleen gecombineerde diagnostiek, nooit een losse index ──
+  // DCAPE is pas relevant als diepe convectie werkelijk kan loskomen én er
+  // voldoende opwaartse energie/steilheid is. Dit voorkomt een vals
+  // windstootsignaal bij zwak-labiele profielen met alleen een droge middenlaag.
+  const deepConv = mu.cape>=500 && mu.cin>=-75 && mu.elZ!=null && mu.elZ>=7000;
+  const windSignal = deepConv && mu.cape>=750 && dc>=800 && gustKmh>=90 && (lr75>=6.5||sh06>=25);
+  const hailSignal = deepConv && mu.cape>=1000 && ship>=1 && (wbz==null||wbz<=3500);
+  const tornadoSignal = deepConv && (stp>=1 || (sb.cape>=1000&&srh03>=250&&sh06>=30&&sb.lclZ<=1500));
+  const haz=[];
+  if(windSignal) haz.push('ZWARE WINDSTOTEN MOGELIJK');
+  if(hailSignal) haz.push('GROTE HAGEL MOGELIJK');
+  if(tornadoSignal) haz.push('WINDHOOSSIGNAAL');
+  if(!haz.length) haz.push('GEEN ZWAAR-WEERSIGNAAL');
+  const extremeSignal=(windSignal&&gustKmh>=110)||(hailSignal&&ship>=2)||stp>=2;
+  const sevCat=haz[0]==='GEEN ZWAAR-WEERSIGNAAL'?0:extremeSignal||haz.length>=2?3:2;
+  // Tconv & CCL
+  const {ccl,tconv}=cclTconv(env,sfc.td,Psfc);
+  return {sb,ml,mu,K,TT,pw,frz,wbz,sh01,sh03,sh06,srh01,srh03,scp,stp,dcape:dc,ccl,tconv,bunk,
+          ship,hailCm,gustKt,gustKmh,lr75,bli,ehi,capeshear,motion,sevCat,deepConv,windSignal,hailSignal,tornadoSignal,
+          hazard:haz.slice(0,3).join(' · '),sfcT:sfc.t,
+          w0,w1,w3,w6, mlT,mlTd, muP:best.p};
+}
+function crossZ(g,kind){ // hoogte waar t of wet-bulb 0°C passeert (eerste van onder)
+  const v0=kind==='tw'?wetbulb(g[0].t,g[0].td,g[0].p):g[0].t;
+  if(v0<0) return g[0].z;   // oppervlak al onder nul (winter) → niveau = grond, geen "—"
+  for(let i=1;i<g.length;i++){
+    const va=kind==='tw'?wetbulb(g[i-1].t,g[i-1].td,g[i-1].p):g[i-1].t;
+    const vb=kind==='tw'?wetbulb(g[i].t,g[i].td,g[i].p):g[i].t;
+    if(va>=0&&vb<0){ const f=va/(va-vb); return g[i-1].z+f*(g[i].z-g[i-1].z); }
+  }
+  return null;
+}
+function wetbulb(Tc,Tdc,P){ // isobare (thermodynamische) natteboltemp — drukafhankelijk, psychrometrisch
+  if(Tdc>=Tc) return Tc;
+  const e=esat(Tdc), gamma=6.454e-4*P;          // psychrometerconstante × druk (hPa/°C)
+  const f=Tw=> esat(Tw) - gamma*(Tc-Tw) - e;    // f(Td)<=0, f(T)>=0, monotoon stijgend
+  let lo=Tdc, hi=Tc;
+  for(let i=0;i<45;i++){ const m=(lo+hi)/2; if(f(m)>0) hi=m; else lo=m; }
+  return (lo+hi)/2;
+}
+function bunkers(env){ // right mover, 7.5 m/s deviatie
+  // 0-6 km gemiddelde wind
+  let su=0,sv=0,n=0; for(let z=0;z<=6000;z+=250){ const w=env.windAtZ(z); su+=w.u; sv+=w.v; n++; }
+  const mu=su/n, mv=sv/n;
+  const lo=env.windAtZ(500), hi=env.windAtZ(5500);
+  let du=hi.u-lo.u, dv=hi.v-lo.v; const mag=Math.hypot(du,dv)||1;
+  const D=7.5; // m/s
+  return {u:mu + D*(dv/mag), v:mv - D*(du/mag)}; // rechts van shear
+}
+function srh(env,z0,z1,c){
+  let s=0, pu=env.windAtZ(z0).u-c.u, pv=env.windAtZ(z0).v-c.v;
+  for(let z=z0+100;z<=z1;z+=100){ const w=env.windAtZ(z); const u=w.u-c.u, v=w.v-c.v;
+    s += (u*pv - v*pu); pu=u; pv=v; }
+  return s; // m2/s2
+}
+function dcape(env){
+  const g=env.grid;  // p aflopend: g[0]=oppervlak
+  // bronniveau = laagste theta-e in de 850–500 hPa laag (droogste midtroposfeer)
+  let iSrc=-1, best=1e9;
+  for(let i=0;i<g.length;i++){ const s=g[i]; if(s.p>850) continue; if(s.p<500) break;
+    const the=thetaK(s.t,s.p)*Math.exp(Lv*s.w/(Cp*(s.t+K0)));
+    if(the<best){ best=the; iSrc=i; } }
+  if(iSrc<1) return 0;
+  const src=g[iSrc];
+  // pakket verzadigd op src (wet-bulb temp), daal natadiabaat omlaag naar oppervlak
+  let Tk=wetbulb(src.t,src.td,src.p)+K0, Pp=src.p, d=0;
+  let tvPar=virtC(Tk-K0,wsat(Tk-K0,src.p));
+  for(let i=iSrc-1;i>=0;i--){                    // van src omlaag naar oppervlak
+    const s=g[i], prev=g[i+1];
+    Tk=moistStep(Tk,Pp,s.p); Pp=s.p;
+    const tvParNew=virtC(Tk-K0,wsat(Tk-K0,s.p));
+    const dz=prev.z-s.z; if(dz<=0){ tvPar=tvParNew; continue; }
+    const bm=((prev.tv-tvPar)+(s.tv-tvParNew))/2;   // omgeving warmer dan dalend pakket
+    d += G*bm/(((prev.tv+s.tv)/2)+K0)*dz;
+    tvPar=tvParNew;
+  }
+  return Math.max(0,d);
+}
+function cclTconv(env,Tdsfc,Psfc){
+  const w0=wFromTd(Tdsfc,Psfc); const g=env.grid;
+  // CCL: waar omgevingstemp = temp langs constante mengverh w0
+  for(let i=1;i<g.length;i++){
+    const tw=tdFromW(w0,g[i].p);   // temp op mengverh-lijn (=verzadiging bij w0)
+    if(tw>=g[i].t){ const P=g[i].p; const tconv=dryTk(tdFromW(w0,P)+K0,P,Psfc)-K0; return {ccl:g[i].z,tconv}; }
+  }
+  return {ccl:null,tconv:null};
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SKEW-T RENDERING
+   ═══════════════════════════════════════════════════════════════════════ */
+const SK={ Pbot:1050, Ptop:100, Tmin:-42, Tmax:42, skew:0.95,
+           mL:66, mR:130, mT:14, mB:38 };
+let cv, ctx, W,H, plotW,plotH, xL,xR,yT,yB, xPerDeg;
+let compactSkew=false;
+function setupCanvas(canvas, cssW, cssH){
+  const dpr=Math.min(window.devicePixelRatio||1, 2);
+  canvas.style.width=cssW+"px"; canvas.style.height=cssH+"px";
+  canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+  const c=canvas.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0); return c;
+}
+const yP =P=>{ const f=(Math.log(P)-Math.log(SK.Pbot))/(Math.log(SK.Ptop)-Math.log(SK.Pbot)); return yB-f*plotH; };
+const xT =(T,P)=> xL + (T-SK.Tmin)*xPerDeg + (yB-yP(P))*SK.skew;
+
+function drawSkewT(env, parc){
+  const cssW=Math.max(280, Math.min(860, Math.round((cv.parentElement.clientWidth)||600)));
+  compactSkew=cssW<560;
+  const ratio=compactSkew?0.94:cssW<720?0.74:0.62;
+  const cssH=Math.round(cssW*ratio);
+  ctx=setupCanvas(cv,cssW,cssH); W=cssW; H=cssH;
+  const mL=compactSkew?48:SK.mL, mR=compactSkew?(STATE.barbs?62:14):SK.mR;
+  const mB=compactSkew?42:SK.mB;
+  plotW=W-mL-mR; plotH=H-SK.mT-mB;
+  xL=mL; xR=W-mR; yT=SK.mT; yB=H-mB; xPerDeg=plotW/(SK.Tmax-SK.Tmin);
+  const cs=getComputedStyle(document.body);
+  const col=n=>cs.getPropertyValue(n).trim();
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=col('--surface'); ctx.fillRect(0,0,W,H);
+
+  // clip plotgebied
+  ctx.save(); ctx.beginPath(); ctx.rect(xL,yT,plotW,plotH); ctx.clip();
+
+  const grid=col('--line'), gridSoft=col('--line-soft');
+  // ── isothermen (skew, elke 10°C) ──
+  ctx.lineWidth=1;
+  for(let T=-120;T<=50;T+=10){
+    ctx.beginPath(); ctx.strokeStyle= T===0? 'rgba(37,99,235,.5)': gridSoft;
+    ctx.moveTo(xT(T,SK.Pbot),yP(SK.Pbot)); ctx.lineTo(xT(T,SK.Ptop),yP(SK.Ptop)); ctx.stroke();
+  }
+  // ── droogadiabaten ──
+  if(STATE.dry){ ctx.strokeStyle=col('--dry'); ctx.globalAlpha=.55; ctx.lineWidth=1;
+    for(let th=-30;th<=200;th+=10){ ctx.beginPath(); let first=true;
+      for(let P=SK.Pbot;P>=SK.Ptop;P-=10){ const Tc=dryTk(th+K0,1000,P)-K0; const x=xT(Tc,P),y=yP(P);
+        if(x<xL-40||x>xR+80){ first=true; continue;} first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);} ctx.stroke(); }
+    ctx.globalAlpha=1; }
+  // ── natadiabaten ──
+  if(STATE.moist){ ctx.strokeStyle=col('--moist'); ctx.globalAlpha=.5; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+    for(let tw=-20;tw<=32;tw+=4){ ctx.beginPath(); let first=true, Tk=tw+K0, Pp=1000;
+      for(let P=1000;P>=SK.Ptop;P-=10){ Tk=moistStep(Tk,Pp,P,3); Pp=P; const x=xT(Tk-K0,P),y=yP(P);
+        if(x<xL-40){ first=true; continue;} first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);} ctx.stroke(); }
+    ctx.setLineDash([]); ctx.globalAlpha=1; }
+  // ── mengverhoudinglijnen ──
+  if(STATE.mixr){ ctx.strokeStyle=col('--mixr'); ctx.globalAlpha=.7; ctx.setLineDash([1,4]); ctx.lineWidth=1.1;
+    const ws=[0.4,1,2,4,7,10,16,24];
+    for(const w of ws){ ctx.beginPath();
+      for(let P=SK.Pbot;P>=600;P-=10){ const Tc=tdFromW(w/1000,P); const x=xT(Tc,P),y=yP(P);
+        P===SK.Pbot?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.stroke();
+      const Tc=tdFromW(w/1000,600), lx=xT(Tc,600);
+      if(lx<xR-8){ ctx.fillStyle=col('--mixr'); ctx.globalAlpha=.95;
+        ctx.font='700 9px "DM Mono", monospace'; ctx.textAlign='center';
+        ctx.fillText(w<1?w:''+w, lx, yP(600)-3); ctx.globalAlpha=.7; } }
+    ctx.setLineDash([]); ctx.globalAlpha=1; }
+
+  // ── CAPE / CIN vlakken (tussen getekende pakket- en temperatuurlijn) ──
+  if(STATE.parcel && parc){ fillArea(parc.path, parc.lfcP, parc.elP); }
+  // ── temperatuur & dauwpunt ──
+  const prof=env.lv;
+  ctx.lineWidth=3.2; ctx.lineJoin='round'; ctx.lineCap='round';
+  drawProfile(prof,'td',col('--dew'));
+  drawProfile(prof,'t', col('--temp'));
+  // Bij virtuele-temperatuurcorrectie correspondeert de gestippelde lijn met
+  // de omgeving die voor buoyancy/CAPE/CIN is gebruikt.
+  if(STATE.virt && parc){ drawPath(parc.path,'plotEnv',col('--virt-env'),1.2,[2,3]); }
+  // ── pakketcurve ──
+  if(STATE.parcel && parc){
+    ctx.strokeStyle=col('--parcel'); ctx.lineWidth=2.4; ctx.setLineDash([6,4]); ctx.beginPath();
+    let first=true;
+    for(const p of parc.path){ if(p.P>env.Psfc)continue; const x=xT(p.plotPar,p.P),y=yP(p.P);
+      first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);} ctx.stroke(); ctx.setLineDash([]);
+    // LCL/LFC/EL markers
+    mark(parc.Plcl, xT(parc.Tlcl,parc.Plcl), 'LCL', col('--dew'));
+    if(parc.lfcP) mark(parc.lfcP, null, 'LFC', col('--parcel'));
+    if(parc.elP && parc.elP<parc.Plcl) mark(parc.elP, null, 'EL', col('--temp'));
+  }
+  ctx.restore(); // einde clip
+
+  // ── isobaren + labels ──
+  ctx.strokeStyle=grid; ctx.fillStyle=col('--muted'); ctx.lineWidth=1;
+  ctx.font='600 10px "DM Mono", monospace'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(const P of [1000,900,850,700,600,500,400,300,250,200,150,100]){
+    const y=yP(P); ctx.globalAlpha=.5; ctx.beginPath(); ctx.moveTo(xL,y); ctx.lineTo(xR,y); ctx.stroke();
+    ctx.globalAlpha=1; ctx.fillStyle=col('--muted'); ctx.font='600 10px "DM Mono", monospace'; ctx.textAlign='right';
+    ctx.fillText(P, xL-(compactSkew?26:38), y);
+    // hoogte in meters links (t/m modeltop, niet extrapoleren)
+    const z=env.zAtP(P); if(z!=null && P>=env.grid[env.grid.length-1].p-1){ ctx.fillStyle=col('--soft');
+      ctx.font='500 8.5px "DM Mono",monospace'; ctx.fillText(Math.round(z)+'m', xL-4, y); }
+  }
+  // ── temperatuur-as onder ──
+  ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=col('--muted');
+  ctx.font='600 10px "DM Mono", monospace';
+  for(let T=SK.Tmin+2;T<=SK.Tmax;T+=10){ const x=xT(T,SK.Pbot); if(x<xL||x>xR)continue;
+    ctx.fillText(T, x, yB+5); }
+  ctx.textAlign='center'; ctx.fillText('hPa', xL-(compactSkew?26:29), yB+20);
+  ctx.textAlign='left'; ctx.fillText('°C', xR+4, yB+20);
+  // frame
+  ctx.strokeStyle=col('--line'); ctx.lineWidth=1.2; ctx.strokeRect(xL,yT,plotW,plotH);
+
+  // ── windsnelheid-balken + windvanen ──
+  if(STATE.barbs){ if(!compactSkew) drawWindBars(env,col); drawBarbs(env,col); }
+}
+function drawWindBars(env,col){
+  const x0=xR+8, barW=52;
+  let mxk=25; for(const s of env.lv) mxk=Math.max(mxk, s.spd/KT);
+  const scale=Math.min(150, Math.max(50, Math.ceil(mxk/25)*25));
+  const sx=v=> x0 + Math.min(v,scale)/scale*barW;
+  ctx.strokeStyle=col('--line-soft'); ctx.fillStyle=col('--soft'); ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.font='500 7.5px "DM Mono",monospace';
+  for(let v=25;v<=scale;v+=25){ ctx.globalAlpha=.45; ctx.beginPath(); ctx.moveTo(sx(v),yT); ctx.lineTo(sx(v),yB); ctx.stroke();
+    ctx.globalAlpha=1; ctx.fillText(v, sx(v), yT-4); }
+  ctx.strokeStyle=col('--line'); ctx.globalAlpha=.7; ctx.beginPath(); ctx.moveTo(x0,yT); ctx.lineTo(x0,yB); ctx.stroke(); ctx.globalAlpha=1;
+  ctx.fillStyle='#3b82f6'; ctx.textBaseline='middle';
+  let lastY=-99;
+  for(const s of env.lv){ if(s.p>env.Psfc||s.p<SK.Ptop) continue; const y=yP(s.p);
+    if(Math.abs(y-lastY)<2.6) continue;   // dunne balken, niet tegen elkaar bij dicht opeen niveaus
+    lastY=y; const w=sx(s.spd/KT)-x0;
+    if(w>0.5) ctx.fillRect(x0, y-0.55, w, 1.1); }
+}
+function drawProfile(prof,key,color){
+  ctx.strokeStyle=color; ctx.beginPath(); let first=true;
+  for(const s of prof){ const x=xT(s[key],s.p), y=yP(s.p); first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);}
+  ctx.stroke();
+}
+function drawPath(path,key,color,width=1.2,dash=[]){
+  ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=width; ctx.setLineDash(dash); ctx.beginPath(); let first=true;
+  for(const s of path){ const x=xT(s[key],s.P), y=yP(s.P); first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y); }
+  ctx.stroke(); ctx.restore();
+}
+function fillArea(path, lfcP, elP){
+  if(lfcP==null) return;
+  const cs=getComputedStyle(document.body);
+  const elEff = elP==null ? path[path.length-1].P : elP;
+  // CIN: grond → LFC, waar pakket kouder is dan omgeving
+  paintBand(path, p=> p.P>=lfcP && p.buoy<0, cs.getPropertyValue('--cin'));
+  // CAPE: strikt LFC → EL, waar pakket warmer is dan omgeving
+  paintBand(path, p=> p.P<=lfcP && p.P>=elEff && p.buoy>=0, cs.getPropertyValue('--cape'));
+}
+// vult de zone tussen pakket (Tpar) en omgeving (Tenv); interpoleert het exacte
+// snijpunt Tpar=Tenv aan begin/eind zodat de wig netjes op de lijnen sluit
+function paintBand(path, cond, fill){
+  ctx.fillStyle=fill.trim();
+  const pts=path.filter(p=>p.P<=SK.Pbot);
+  let seg=[];
+  const cross=(a,b)=>{ const da=a.buoy, db=b.buoy, f=da/(da-db);
+    return { P:Math.exp(Math.log(a.P)+f*(Math.log(b.P)-Math.log(a.P))),
+      plotPar:a.plotPar+f*(b.plotPar-a.plotPar), plotEnv:a.plotEnv+f*(b.plotEnv-a.plotEnv), buoy:0 }; };
+  const flush=()=>{ if(seg.length>=2){ ctx.beginPath();
+    ctx.moveTo(xT(seg[0].plotPar,seg[0].P),yP(seg[0].P));
+    for(let i=1;i<seg.length;i++) ctx.lineTo(xT(seg[i].plotPar,seg[i].P),yP(seg[i].P));
+    for(let i=seg.length-1;i>=0;i--) ctx.lineTo(xT(seg[i].plotEnv,seg[i].P),yP(seg[i].P));
+    ctx.closePath(); ctx.fill(); } seg=[]; };
+  const sign=p=> p.buoy;
+  for(let i=0;i<pts.length;i++){ const p=pts[i];
+    if(cond(p)){ if(!seg.length && i>0 && sign(pts[i-1])*sign(p)<0) seg.push(cross(pts[i-1],p)); seg.push(p); }
+    else { if(seg.length){ if(sign(pts[i-1])*sign(p)<0) seg.push(cross(pts[i-1],p)); flush(); } }
+  }
+  flush();
+}
+function mark(P,x,label,color){
+  const y=yP(P); ctx.save();
+  ctx.strokeStyle=color; ctx.setLineDash([2,2]); ctx.lineWidth=1; ctx.globalAlpha=.8;
+  ctx.beginPath(); ctx.moveTo(xL,y); ctx.lineTo(xL+34,y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.globalAlpha=1; ctx.fillStyle=color; ctx.font='800 9.5px "DM Mono",monospace';
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(label, xL+3, y-6); ctx.restore();
+}
+function drawBarbs(env,col){
+  const x=xR+(compactSkew?29:100); ctx.strokeStyle=col('--ink'); ctx.fillStyle=col('--ink');
+  const levels=compactSkew?[1000,925,850,700,500,300,200,100]:[1000,925,850,700,600,500,400,300,250,200,150,100];
+  for(const P of levels){ if(P>env.Psfc||P<SK.Ptop) continue; const w=env.interp(P);
+    barb(x, yP(P), w.dir, w.spd/KT, col('--ink'),compactSkew?22:30); }
+}
+function barb(cx,cy,dir,ktspd,color,L=30){
+  const ang=dir*Math.PI/180;                     // staaf wijst naar waar de wind vandaan komt
+  const dx=Math.sin(ang), dy=-Math.cos(ang);    // eenheidsvector langs staaf
+  const px=-dy, py=dx, bl=compactSkew?7:10;       // loodrecht (barb-zijde), barb-lengte
+  ctx.save(); ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=1.4; ctx.lineCap='round'; ctx.lineJoin='round';
+  let spd=Math.round(ktspd/5)*5;
+  if(spd<3){ ctx.beginPath(); ctx.arc(cx,cy,3.2,0,7); ctx.stroke(); ctx.restore(); return; }
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+dx*L,cy+dy*L); ctx.stroke();  // staaf
+  const nFlag=Math.floor(spd/50); spd-=nFlag*50;
+  const nFull=Math.floor(spd/10); spd-=nFull*10;
+  const nHalf=spd>=5?1:0;
+  const count=nFlag+nFull+nHalf;
+  let step=5; if(count*step>L-5) step=(L-5)/Math.max(count,1); // schaal zodat alles op de staaf past
+  let d=L;                                        // begin bij tip, loop naar station toe (nooit <0)
+  const pt=dd=>({x:cx+dx*dd, y:cy+dy*dd});
+  for(let i=0;i<nFlag;i++){ const a=pt(d), b=pt(d-step*0.9);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(a.x+px*bl,a.y+py*bl); ctx.lineTo(b.x,b.y); ctx.closePath(); ctx.fill(); d-=step*1.05; }
+  for(let i=0;i<nFull;i++){ const a=pt(d);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(a.x+px*bl+dx*step*0.5, a.y+py*bl+dy*step*0.5); ctx.stroke(); d-=step; }
+  if(nHalf){ if(nFlag===0&&nFull===0) d-=step*0.5; const a=pt(d);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(a.x+px*bl*0.5+dx*step*0.25, a.y+py*bl*0.5+dy*step*0.25); ctx.stroke(); }
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HODOGRAAF
+   ═══════════════════════════════════════════════════════════════════════ */
+function drawHodo(env, idx){
+  const c=document.getElementById('hodo'); const cssW=Math.max(240, Math.round(c.parentElement.clientWidth||320)), cssH=Math.round(cssW*0.86);
+  const g=setupCanvas(c,cssW,cssH);
+  const cs=getComputedStyle(document.body), col=n=>cs.getPropertyValue(n).trim();
+  g.clearRect(0,0,cssW,cssH); const cx=cssW*0.5, cy=cssH*0.52;
+  // schaal: bepaal max wind 0-8km
+  let mx=20; for(let z=0;z<=8000;z+=250){ const w=env.windAtZ(z); mx=Math.max(mx,Math.hypot(w.u,w.v)/KT); }
+  const R=Math.min(cssW,cssH)*0.44; const sc=R/(Math.ceil(mx/10)*10);
+  const X=(u)=>cx+u/KT*sc, Y=(v)=>cy-v/KT*sc;
+  // ringen
+  g.strokeStyle=col('--line'); g.fillStyle=col('--soft'); g.font='500 8.5px "DM Mono",monospace'; g.textAlign='center';
+  for(let r=10;r<=Math.ceil(mx/10)*10;r+=10){ g.globalAlpha=.6; g.beginPath(); g.arc(cx,cy,r*sc,0,7); g.stroke();
+    g.globalAlpha=1; g.fillText(r, cx+r*sc+9, cy+3); }
+  g.strokeStyle=col('--line-soft'); g.globalAlpha=.8;
+  g.beginPath(); g.moveTo(cx-R-10,cy); g.lineTo(cx+R+16,cy); g.moveTo(cx,cy-R-10); g.lineTo(cx,cy+R+10); g.stroke(); g.globalAlpha=1;
+  // hodograaf, gekleurd per laag
+  const segs=[[0,1000,'#e11d48'],[1000,3000,'#f59e0b'],[3000,6000,'#10b981'],[6000,8000,'#3b82f6']];
+  g.lineWidth=3; g.lineJoin='round';
+  for(const [z0,z1,c2] of segs){ g.strokeStyle=c2; g.beginPath(); let first=true;
+    for(let z=z0;z<=z1;z+=200){ const w=env.windAtZ(z); const x=X(w.u),y=Y(w.v); first?(g.moveTo(x,y),first=false):g.lineTo(x,y);} g.stroke(); }
+  // hoogtelabels
+  g.fillStyle=col('--ink'); g.font='700 8.5px "DM Mono",monospace';
+  for(const z of [0,1000,3000,6000]){ const w=env.windAtZ(z); const x=X(w.u),y=Y(w.v);
+    g.beginPath(); g.arc(x,y,2.6,0,7); g.fill(); g.fillText((z/1000)+'km',x+6,y-4); }
+  // storm-motion-vectoren
+  const mo=idx.motion; if(mo){
+    const pt=(w,color,lab,r=3.2)=>{ const x=X(w.u),y=Y(w.v);
+      g.fillStyle=color; g.beginPath(); g.arc(x,y,r,0,7); g.fill();
+      g.font='700 8px "DM Mono",monospace'; g.textAlign='left'; g.fillText(lab, x+5, y+3); };
+    pt(mo.mean,'#10b981','mean'); pt(mo.right,col('--ink'),'RM',3.6); pt(mo.left,col('--ink'),'LM',3.6);
+    pt(mo.upMCS,'#0d9488','up'); pt(mo.downMCS,'#3b82f6','down');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   UI / STATE
+   ═══════════════════════════════════════════════════════════════════════ */
+const STATE={ parcel:'SB', dry:true, moist:true, mixr:true, parcel_:true, barbs:true, virt:true,
+              model:'harmonie', lat:52.10, lon:5.18, place:'De Bilt', hourIdx:0 };
+let ENV, IDX, META=null, LIVE=null;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIVE DATA — Open-Meteo drukniveaus (AROME = HARMONIE-AROME core, ICON-D2, ECMWF)
+   ═══════════════════════════════════════════════════════════════════════ */
+const MODELS={
+  harmonie:{name:'HARMONIE', sub:'KNMI · 90 modelniveaus', kind:'harmonie'},
+  icond2:  {slug:'icon_d2', name:'ICON-D2', sub:'DWD · 2,2 km', days:2, kind:'om'},
+  arome:   {slug:'meteofrance_arome_france', name:'AROME', sub:'HARMONIE-AROME · Météo-France · 1,3 km', days:2, kind:'om'},
+  ecmwf:   {slug:'ecmwf_ifs025', name:'ECMWF IFS', sub:'ECMWF · 0,25°', days:4, kind:'om'},
+};
+const FORCE_LIVE_DATA=new URLSearchParams(location.search).has('liveData');
+const HARM_URL = !FORCE_LIVE_DATA&&(location.hostname==='localhost'||location.hostname==='127.0.0.1')
+  ? '/harmonie_soundings.json' : 'https://data.weerlab.nl/harmonie-sounding/soundings.json';
+const HARM_STATIONS=[['debilt',52.10,5.18],['groningen',53.13,6.58],['twente',52.27,6.90],
+  ['maastricht',50.91,5.77],['schiphol',52.32,4.79],['vlissingen',51.44,3.60]];
+let HARM=null, HARM_T=0, CURSTEPS=[], METAC=null;
+const AUTO_REFRESH_MS=60*60*1000;
+let LAST_AUTO_REFRESH=Date.now(), AUTO_REFRESHING=false;
+const haversine=(la1,lo1,la2,lo2)=>{ const R=6371,r=Math.PI/180;
+  const dla=(la2-la1)*r, dlo=(lo2-lo1)*r;
+  const a=Math.sin(dla/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dlo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a)); };
+const LEVELS=[1000,975,950,925,900,850,800,700,600,500,400,300,250,200,150,100];
+const PVARS=['temperature','relative_humidity','wind_speed','wind_direction'];
+const PRESETS=[['De Bilt',52.10,5.18],['Schiphol',52.31,4.76],['Rotterdam',51.95,4.44],
+  ['Groningen',53.22,6.58],['Twente',52.27,6.90],['Maastricht',50.91,5.77],
+  ['Vlissingen',51.44,3.60],['Den Helder',52.96,4.76]];
+
+const val=(a,i)=> (a && a[i]!=null) ? a[i] : null;
+function tdFrom(T,rh){ rh=Math.max(1,Math.min(100,rh==null?50:rh)); const e=rh/100*esat(T);
+  const l=Math.log(Math.max(e,1e-6)/6.112); return 243.5*l/(17.67-l); }
+
+async function fetchSounding(lat,lon,mkey){
+  const m=MODELS[mkey], vars=[];
+  for(const L of LEVELS) for(const v of PVARS) vars.push(v+'_'+L+'hPa');
+  vars.push('temperature_2m','relative_humidity_2m','wind_speed_10m','wind_direction_10m','surface_pressure','cape');
+  const url='https://api.open-meteo.com/v1/forecast?latitude='+lat.toFixed(3)+'&longitude='+lon.toFixed(3)+
+    '&models='+m.slug+'&hourly='+vars.join(',')+'&wind_speed_unit=kn&timezone=UTC&forecast_days='+m.days+'&cell_selection=nearest';
+  const r=await fetch(url); const j=await r.json();
+  if(j.error) throw new Error(j.reason||'API-fout'); if(!j.hourly||!j.hourly.time) throw new Error('geen data');
+  return {h:j.hourly, elev:j.elevation==null?0:j.elevation, glat:j.latitude, glon:j.longitude, model:m};
+}
+function rowsAt(D,i){
+  const h=D.h, rows=[]; const sp=val(h.surface_pressure,i), t2=val(h.temperature_2m,i);
+  if(sp!=null && t2!=null) rows.push([sp,t2,tdFrom(t2,val(h.relative_humidity_2m,i)),
+      val(h.wind_direction_10m,i)||0, val(h.wind_speed_10m,i)||0]);
+  for(const L of LEVELS){ if(sp!=null && L>=sp-2) continue; const t=val(h['temperature_'+L+'hPa'],i); if(t==null) continue;
+    rows.push([L,t,tdFrom(t,val(h['relative_humidity_'+L+'hPa'],i)),
+      val(h['wind_direction_'+L+'hPa'],i)||0, val(h['wind_speed_'+L+'hPa'],i)||0]); }
+  return rows;
+}
+async function geocode(q){
+  const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=1&language=nl&format=json');
+  const j=await r.json(); if(!j.results||!j.results.length) throw new Error('plaats niet gevonden');
+  const g=j.results[0];
+  return {lat:g.latitude, lon:g.longitude, name:g.name+(g.country_code&&g.country_code!=='NL'?' ('+g.country_code+')':'')};
+}
+const WD=['zo','ma','di','wo','do','vr','za'], MO=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+function fmtTime(iso){ const [d,t]=iso.split('T'); const p=d.split('-').map(Number);
+  const wd=WD[new Date(p[0],p[1]-1,p[2]).getDay()]; return wd+' '+p[2]+' '+MO[p[1]-1]+' · '+t.slice(0,2)+' UTC'; }
+const leadHours=iso=> Math.round((Date.parse(iso+':00Z')-Date.now())/3600000);
+
+function setPill(cls,txt){ const p=document.getElementById('statusPill'); p.className='pill '+cls; p.textContent=txt; }
+function showLoad(msg,err){ const l=document.getElementById('loadmsg'); l.textContent=msg; l.className='loadmsg'+(err?' err':''); l.style.display='grid'; }
+function hideLoad(){ document.getElementById('loadmsg').style.display='none'; }
+
+function applyRows(rows, meta){
+  META=meta; const raw=rows.map(r=>r.slice()); raw.elev=meta.elev||0;
+  ENV=buildEnv(raw); IDX=indices(ENV,meta); renderAll();
+}
+const stepRows=s=> s.rows || rowsAt(LIVE, s.i);   // HARMONIE: kant-en-klaar; OM: uit arrays
+
+function buildStepUI(){
+  const sel=document.getElementById('timeSel'); sel.innerHTML='';
+  CURSTEPS.forEach((s,pos)=> sel.add(new Option(fmtTime(s.iso)+(s.lead>=0?'  (+'+s.lead+'u)':'  ('+s.lead+'u)'), pos)));
+  const rng=document.getElementById('scrubRange'); rng.min=0; rng.max=Math.max(0,CURSTEPS.length-1);
+  // stap met valid-tijd dichtst bij nu (s.lead is bij HARMONIE model-lead, geen uren-vanaf-nu)
+  let best=-1,bd=1e9; CURSTEPS.forEach((s,pos)=>{ const dh=leadHours(s.iso); if(dh>=0 && dh<bd){bd=dh;best=pos;} });
+  STATE.hourIdx = best>=0? best : CURSTEPS.length-1;   // alles in het verleden → recentste stap
+}
+function gotoHour(pos){                           // pos = index in CURSTEPS
+  if(!CURSTEPS.length) return;
+  pos=Math.max(0,Math.min(CURSTEPS.length-1,pos)); STATE.hourIdx=pos;
+  document.getElementById('timeSel').value=pos; document.getElementById('scrubRange').value=pos;
+  document.getElementById('scrubPrev').disabled = pos<=0;
+  document.getElementById('scrubNext').disabled = pos>=CURSTEPS.length-1;
+  renderLive();
+}
+function scrubStep(d){ gotoHour(STATE.hourIdx+d); }
+
+function renderLive(){
+  document.getElementById('scrub').style.display='flex';
+  const s=CURSTEPS[STATE.hourIdx], M=METAC; if(!s||!M){ showLoad('Geen tijdstap.',true); return; }
+  const rows=stepRows(s);
+  if(rows.length<4){ showLoad('Onvoldoende niveaus voor dit model hier.',true); setPill('err','● geen profiel'); return; }
+  const lab=fmtTime(s.iso)+(s.lead>=0?' (+'+s.lead+'u)':' ('+s.lead+'u)');
+  document.getElementById('scrubLab').textContent=lab;
+  if(M.staleH) setPill('err','● VEROUDERDE RUN · '+M.staleH+'u oud');
+  else setPill('live','● LIVE · '+M.modelName);
+  // header toont de gekozen plaats; het kernstation komt als suffix als er gesnapt is
+  const core = (M.core && M.core!==STATE.place) ? M.core : null;
+  applyRows(rows, { src:M.modelName+' · '+M.modelSub, stn:STATE.place, core, coreKm:M.coreKm, live:true, elev:M.elev,
+    glat:M.glat, glon:M.glon, valid:lab+(M.runLabel?' · run '+M.runLabel:''), note:M.note });
+  hideLoad();
+}
+async function loadLive(){
+  showLoad('Laden…'); setPill('live','● laden…');
+  CURSTEPS=[];   // stale tijd-UI wissen tot nieuwe load slaagt
+  document.getElementById('scrubPrev').disabled=true; document.getElementById('scrubNext').disabled=true;
+  try{
+    if(MODELS[STATE.model].kind==='harmonie') await loadHarmonie(); else await loadOM();
+    buildStepUI(); gotoHour(STATE.hourIdx);
+  } catch(e){ showLoad('Geen data ('+e.message+').',true); setPill('err','● geen data'); }
+}
+async function loadOM(){
+  LIVE=await fetchSounding(STATE.lat,STATE.lon,STATE.model);
+  CURSTEPS = LIVE.h.time.map((iso,i)=>({iso,lead:leadHours(iso),i})).filter(s=>s.lead>=-2);
+  if(!CURSTEPS.length) CURSTEPS=[{iso:LIVE.h.time[0],lead:leadHours(LIVE.h.time[0]),i:0}];
+  METAC={ modelName:LIVE.model.name, modelSub:LIVE.model.sub, elev:LIVE.elev, glat:LIVE.glat, glon:LIVE.glon, runLabel:'',
+          note:'Live '+LIVE.model.name+'-profiel voor '+STATE.place+'. Modelgrid '+LIVE.glat.toFixed(2)+'°N '+LIVE.glon.toFixed(2)+'°O, hoogte '+Math.round(LIVE.elev)+' m.' };
+}
+function nearestHarmStation(lat,lon){ let best=HARM_STATIONS[0][0],bd=1e18;
+  for(const [slug,la,lo] of HARM_STATIONS){ const cl=Math.cos(la*Math.PI/180);
+    const d=(la-lat)**2+((lo-lon)*cl)**2; if(d<bd){bd=d;best=slug;} } return best; }
+async function loadHarmonie(){
+  if(!HARM || Date.now()-HARM_T > 600000){   // ververs bij nieuwe run (TTL 10 min)
+    const r=await fetch(HARM_URL,{cache:'no-store'}); if(!r.ok) throw new Error('R2 '+r.status);
+    HARM=await r.json(); HARM_T=Date.now();
+  }
+  const st=HARM.stations[nearestHarmStation(STATE.lat,STATE.lon)];
+  if(!st||!st.times||!st.times.length) throw new Error('station leeg');
+  const dkm = haversine(STATE.lat, STATE.lon, st.lat, st.lon);
+  CURSTEPS = st.times.map(t=>({iso:t.valid, lead:t.lead, rows:t.data}));
+  const rl = HARM.run ? (HARM.run.slice(6,8)+'-'+HARM.run.slice(4,6)+' '+HARM.run.slice(8,10)+'Z') : '';
+  // versheid: run ouder dan 18 u → waarschuwing in pill (pipeline draait 2×/dag)
+  const runMs = HARM.run? Date.UTC(+HARM.run.slice(0,4),+HARM.run.slice(4,6)-1,+HARM.run.slice(6,8),+HARM.run.slice(8,10)) : NaN;
+  const ageH = isNaN(runMs)? 999 : Math.round((Date.now()-runMs)/3600000);
+  const grid = st.gridlat!=null ? st.gridlat.toFixed(2)+'°N '+st.gridlon.toFixed(2)+'°O' : '';
+  const far = dkm>25 ? ' — dichtstbijzijnde kernstation (~'+Math.round(dkm)+' km)' : '';
+  METAC={ modelName:'HARMONIE', modelSub:'KNMI · 90 modelniveaus', elev:0, glat:st.gridlat, glon:st.gridlon, runLabel:rl,
+          core:st.name, coreKm:Math.round(dkm), staleH: ageH>18? ageH : 0,
+          note:'HARMONIE-AROME 90 modelniveaus — '+st.name+' (run '+rl+')'+far+'. Modelgrid '+grid+'. Fijne verticale resolutie t.o.v. Open-Meteo.' };
+}
+function loadSample(i){
+  const sc=SCEN[i]; setPill('demo','● VOORBEELD'); CURSTEPS=[]; METAC=null;
+  document.getElementById('timeSel').innerHTML='<option>voorbeeld</option>';
+  document.getElementById('scrub').style.display='none';   // geen tijdas bij voorbeeld
+  applyRows(sc.data.map(r=>r.slice()), {src:sc.src, stn:sc.stn, valid:sc.valid, run:sc.run, elev:sc.elev, live:false, note:sc.note});
+  hideLoad();
+}
+
+async function refreshLatestRun(){
+  if(AUTO_REFRESHING || document.getElementById('scenSel').value!=='') return;
+  AUTO_REFRESHING=true; LAST_AUTO_REFRESH=Date.now();
+  HARM=null; HARM_T=0; // forceer ook bij HARMONIE een echte controle van het R2-bestand
+  try { await loadLive(); }
+  finally { AUTO_REFRESHING=false; }
+}
+
+function severity(name,v){
+  // geef chip-klasse per index
+  const t=(x,a,b,c)=> x<a?'g':x<b?'y':x<c?'o':'r';
+  switch(name){
+    case 'cape': return v<300?'g':v<1000?'y':v<2500?'o':'r';
+    case 'li': return v>0?'g':v>-2?'y':v>-6?'o':'r';
+    case 'sh06': return v<25?'g':v<35?'y':v<45?'o':'r';
+    case 'srh': return v<100?'g':v<200?'y':v<300?'o':'r';
+    default: return '';
+  }
+}
+const f0=x=>x==null?'—':Math.round(x).toString();
+const f1=x=>x==null?'—':x.toFixed(1);
+
+function renderTable(){
+  const s=IDX.sb,m=IDX.ml,u=IDX.mu,mo=IDX.motion;
+  const r3=(k,a,b,c,cls)=>`<div class="pt-row3"><span class="k">${k}</span><span class="v ${cls||''}">${a}</span><span class="v">${b}</span><span class="v">${c}</span></div>`;
+  const r=(k,v,cls)=>`<div class="pt-row"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span></div>`;
+  const mv=w=>`${w.dir}°/${w.kt}kt`;
+  const gCls=IDX.gustKmh<50?'g':IDX.gustKmh<75?'y':IDX.gustKmh<95?'o':'r';
+  const hCls=IDX.hailCm<2?'g':IDX.hailCm<4?'y':IDX.hailCm<6?'o':'r';
+  document.getElementById('idxTable').innerHTML=`
+   <div class="pt-panel">
+     <div class="pt-title">Parcels</div>
+     <div class="pt-row3"><span class="k"></span><span class="h">Sfc</span><span class="h">ML</span><span class="h">MU</span></div>
+     ${r3('CAPE J/kg',f0(s.cape),f0(m.cape),f0(u.cape),severity('cape',u.cape))}
+     ${r3('CINH J/kg',f0(s.cin),f0(m.cin),f0(u.cin))}
+     ${r3('LI °C',f1(s.li),f1(m.li),f1(u.li),severity('li',s.li))}
+     ${r3('LCL m AGL',f0(s.lclZ),f0(m.lclZ),f0(u.lclZ))}
+     ${r3('LFC m AGL',f0(s.lfcZ),f0(m.lfcZ),f0(u.lfcZ))}
+     ${r3('EL m AGL',f0(s.elZ),f0(m.elZ),f0(u.elZ))}
+     ${r3('Start hPa',f0(ENV.Psfc),f0(ENV.Psfc),f0(IDX.muP))}
+   </div>
+   <div class="pt-panel">
+     <div class="pt-title">Kinematics</div>
+     <div class="pt-sub">Windschering [kt]</div>
+     ${r('0–1 km',f0(IDX.sh01))}${r('0–3 km',f0(IDX.sh03))}${r('0–6 km',f0(IDX.sh06),severity('sh06',IDX.sh06))}
+     <div class="pt-sub">SRH [m²s⁻²]</div>
+     ${r('0–1 km',f0(IDX.srh01),severity('srh',IDX.srh01))}${r('0–3 km',f0(IDX.srh03),severity('srh',IDX.srh03))}
+     <div class="pt-sub">Storm-motion</div>
+     ${r('Mean',mv(mo.mean))}${r('Rechtsdraaier',mv(mo.right))}${r('Linksdraaier',mv(mo.left))}
+   </div>
+   <div class="pt-panel">
+     <div class="pt-title">Thermodynamics</div>
+     ${r('Vriesniveau m AGL',f0(IDX.frz))}
+     ${r('Wet-bulb 0° m AGL',f0(IDX.wbz))}
+     ${r('CCL m AGL',f0(IDX.ccl))}
+     ${r('Opp. temp °C',f1(IDX.sfcT))}
+     ${r('Conv. temp °C',f1(IDX.tconv))}
+     ${r('LR 700–500 °C/km',f1(IDX.lr75))}
+     ${r('K-index',f0(IDX.K))}
+     ${r('Totals',f0(IDX.TT))}
+     ${r('PWAT mm',f1(IDX.pw))}
+   </div>
+   <div class="pt-panel">
+     <div class="pt-title">Severe Weather</div>
+     <div class="pt-sub">Storm-organisatie</div>
+     ${r('SCP',f1(IDX.scp))}${r('STP',f1(IDX.stp))}${r('CAPESHEAR',f0(IDX.capeshear))}${r('EHI 0–3',f1(IDX.ehi))}
+     <div class="pt-sub">Windstoot / hagel</div>
+     ${r('DCAPE J/kg',f0(IDX.dcape))}
+     ${r('SHIP',f1(IDX.ship))}
+     ${r('Valwindsignaal',IDX.windSignal?'verhoogd':'geen',IDX.windSignal?gCls:'g')}
+     ${r('Hagelindicatie',IDX.hailCm>0?(IDX.hailCm>=2?IDX.hailCm.toFixed(1)+' cm':'&lt; 2 cm'):'—',hCls)}
+   </div>`;
+}
+function renderSevere(){
+  const mo=IDX.motion, mv=w=>`${w.dir}°/${w.kt}kt`;
+  document.getElementById('motionBox').innerHTML=
+    `<span>mean: <b>${mv(mo.mean)}</b></span><span>right: <b>${mv(mo.right)}</b></span>`+
+    `<span>left: <b>${mv(mo.left)}</b></span><span>upMCS: <b>${mv(mo.upMCS)}</b></span>`+
+    `<span>downMCS: <b>${mv(mo.downMCS)}</b></span>`;
+  const cats=['GEEN','AANDACHT','VERHOOGD','HOOG'], cols=['#10b981','#eab308','#dc2626','#7c3aed'];
+  document.getElementById('sevBars').innerHTML=cats.map((c,i)=>
+    `<div class="sev-bar"><span class="pct" style="color:${cols[i]}">${i===IDX.sevCat?'●':'·'}</span><div class="bar" style="height:${i===IDX.sevCat?38:3}px;background:${cols[i]};opacity:${i===IDX.sevCat?1:.22}"></div><span class="cat">${c}</span></div>`).join('');
+  const hz=document.getElementById('sevHaz'); hz.textContent=IDX.hazard;
+  hz.className='hz '+(IDX.hazard.startsWith('GEEN')?'calm': /hagel|windhoos|windstoten/i.test(IDX.hazard)?'dang':'warn');
+}
+
+function renderInterp(){
+  const sc=META||{}, s=IDX.sb, m=IDX.ml, u=IDX.mu;
+  const dominant=[['SB',s],['ML',m],['MU',u]].reduce((a,b)=>b[1].cape>a[1].cape?b:a);
+  const parcelName=dominant[0], parcel=dominant[1], cape=parcel.cape;
+  let level,color,head;
+  if(cape<200 && parcel.li>0){ level='Stabiel'; color='#10b981'; head='Stabiele, niet-convectieve atmosfeer'; }
+  else if(cape<600){ level='Marginaal'; color='#e6b800'; head='Zwak labiele lucht — buien mogelijk'; }
+  else if(cape<1800){ level='Onstabiel'; color='#e07000'; head='Onstabiel — (onweers)buien waarschijnlijk'; }
+  else { level='Zeer onstabiel'; color='#cc0000'; head='Zeer onstabiel — zwaar onweer mogelijk'; }
+
+  const bullets=[];
+  bullets.push(`<b>${parcelName}-CAPE</b> ${f0(cape)} J/kg, <b>${parcelName}-CIN</b> ${f0(Math.abs(parcel.cin))} J/kg, <b>${parcelName}-LI</b> ${f1(parcel.li)} °C — ${cape<200?'nauwelijks oprijzend vermogen':cape<1800?'potentieel voor buien bij voldoende forcering':'krachtige opwaartse bewegingen mogelijk'}.`);
+  if(parcel.lclZ!=null) bullets.push(`<b>${parcelName}-LCL</b> ~${f0(parcel.lclZ)} m AGL → condensatieniveau ${parcel.lclZ<800?'laag (vochtige grenslaag)':parcel.lclZ>1800?'hoog en droog (meer verdamping onder buien)':'gematigd'}.`);
+  bullets.push(`<b>Schering 0–6 km</b> ${f0(IDX.sh06)} kt, <b>SRH 0–3 km</b> ${f0(IDX.srh03)} m²/s² — ${IDX.sh06>40?'sterk georganiseerde/roterende buien mogelijk':IDX.sh06>25?'multicel-organisatie':'zwak georganiseerd, pulserende buien'}.`);
+  bullets.push(`<b>Vriesniveau</b> ${f0(IDX.frz)} m AGL, <b>PWAT</b> ${f1(IDX.pw)} mm — ${IDX.frz<2200?'laag vriesniveau: minder smeltweg voor hagel/graupel':'hoog vriesniveau: meer smeltweg voor hagel; PWAT bepaalt mede het neerslagpotentieel'}.`);
+  if(cape>=60){
+    const hail = IDX.hailCm<2?'kleine graupel/hagel (&lt; 2 cm)': IDX.hailCm<4?('~'+IDX.hailCm.toFixed(0)+' cm'): ('groot, ~'+IDX.hailCm.toFixed(0)+' cm mogelijk');
+    const gustText=IDX.windSignal
+      ? `<b>gecombineerd valwindsignaal</b> aanwezig (DCAPE ${f0(IDX.dcape)} J/kg; theoretische schaal ~${f0(IDX.gustKt)} kt)`
+      : `<b>geen valwindsignaal</b>; DCAPE ${f0(IDX.dcape)} J/kg is losstaand onvoldoende zonder sterkere instabiliteit en gunstige temperatuurafname/schering`;
+    bullets.push(`<b>Hagel</b> ${hail} (SHIP ${f1(IDX.ship)}${IDX.wbz!=null?', wet-bulb-0 '+f0(IDX.wbz)+' m':''}); ${gustText}.`);
+  }
+
+  document.getElementById('interp').innerHTML=`
+    <div class="verdict"><span class="dot" style="background:${color}"></span>${head}</div>
+    ${sc.note?`<p style="color:var(--muted)">${sc.note}</p>`:''}
+    <ul>${bullets.map(b=>`<li>${b}</li>`).join('')}</ul>
+    <p style="color:var(--muted);font-size:11.5px"><b>Let op:</b> een sounding beschrijft de omgeving op één modelpunt. Fronten, convergentie, timing, bui-initiatie en modelonzekerheid kunnen de werkelijke ontwikkeling sterk veranderen.</p>`;
+}
+
+function renderValid(){
+  const m=META||{};
+  const grid = (m.glat!=null)? m.glon.toFixed(2)+'°E '+m.glat.toFixed(2)+'°N' : (m.stn||'');
+  const place = m.stn||STATE.place||'';
+  const core = m.core? ` · kernst. ${m.core}${m.coreKm?` (~${m.coreKm} km)`:''}` : '';
+  document.getElementById('proHead').textContent =
+    `${m.src||'—'}  |  ${grid}  |  ${place}${core}  |  Valid ${m.valid||'—'}`;
+}
+
+function currentParcel(){ return STATE.parcel==='ML'?IDX.ml: STATE.parcel==='MU'?IDX.mu: IDX.sb; }
+function renderAll(){
+  renderValid();
+  drawSkewT(ENV, STATE.parcel_?currentParcel():null);
+  drawHodo(ENV, IDX);
+  renderTable(); renderSevere(); renderInterp();
+  document.getElementById('virtLegend').style.display=STATE.virt?'inline-flex':'none';
+}
+
+function reindex(){ if(ENV){ IDX=indices(ENV,META); renderAll(); } }  // her-bereken (bv. virt-toggle)
+
+/* ── init controls ── */
+function initApp(){
+  cv=document.getElementById('skewt');
+
+  // voorbeelden-dropdown
+  const sel=document.getElementById('scenSel');
+  SCEN.forEach((s,i)=> sel.add(new Option('📚 '+s.name, 's'+i)));
+  sel.onchange=()=>{ if(sel.value==='') loadLive(); else loadSample(+sel.value.slice(1)); };
+
+  // snelkeuze-chips
+  const chips=document.getElementById('chips');
+  PRESETS.forEach(([nm,la,lo])=>{ const b=document.createElement('button'); b.className='chip-btn'; b.textContent=nm;
+    b.dataset.nm=nm; b.onclick=()=>{ STATE.lat=la; STATE.lon=lo; STATE.place=nm; document.getElementById('scenSel').value=''; markChip(nm); loadLive(); };
+    chips.appendChild(b); });
+  const markChip=nm=> document.querySelectorAll('#chips .chip-btn').forEach(c=>c.classList.toggle('on',c.dataset.nm===nm));
+  markChip('De Bilt');
+
+  // model-UI zetten zonder herladen (zodat de zoek-autoswitch niet dubbel laadt)
+  const setModelUI=m=>{ STATE.model=m;
+    document.querySelectorAll('#modelSeg button').forEach(x=>{ const on=x.dataset.m===m;
+      x.classList.toggle('on',on); x.setAttribute('aria-pressed',on?'true':'false'); }); };
+
+  // plaats zoeken — HARMONIE heeft maar 6 kernstations; een arbitraire plaats
+  // ver daarvandaan hoort bij ICON-D2 (punt-verwachting), anders krijg je steeds
+  // hetzelfde kernstation. Binnen 25 km blijft HARMONIE (fijne 90-laags).
+  document.getElementById('placeForm').onsubmit=async e=>{ e.preventDefault();
+    const q=document.getElementById('placeInput').value.trim(); if(!q) return;
+    showLoad('Plaats zoeken…'); setPill('live','● zoeken…');
+    try{ const g=await geocode(q); STATE.lat=g.lat; STATE.lon=g.lon; STATE.place=g.name;
+      const dk=Math.min(...HARM_STATIONS.map(([s,la,lo])=>haversine(g.lat,g.lon,la,lo)));
+      if(STATE.model==='harmonie' && dk>25) setModelUI('icond2');
+      document.getElementById('scenSel').value=''; markChip(''); loadLive(); }
+    catch(err){ showLoad('Plaats niet gevonden: “'+q+'”.',true); setPill('err','● niet gevonden'); } };
+
+  // model-schakelaar
+  document.querySelectorAll('#modelSeg button').forEach(b=> b.onclick=()=>{
+    setModelUI(b.dataset.m); document.getElementById('scenSel').value=''; loadLive(); });
+
+  // tijd — dropdown + scrubber onder de sounding
+  document.getElementById('timeSel').onchange=e=>{ if(CURSTEPS.length && e.target.value!=='') gotoHour(+e.target.value); };
+  document.getElementById('scrubRange').oninput=e=>{ if(CURSTEPS.length) gotoHour(+e.target.value); };
+  document.getElementById('scrubPrev').onclick=()=>scrubStep(-1);
+  document.getElementById('scrubNext').onclick=()=>scrubStep(1);
+
+  // pakket
+  document.querySelectorAll('#parcelSeg button').forEach(b=> b.onclick=()=>{
+    document.querySelectorAll('#parcelSeg button').forEach(x=>{ x.classList.remove('on'); x.setAttribute('aria-pressed','false'); });
+    b.classList.add('on'); b.setAttribute('aria-pressed','true'); STATE.parcel=b.dataset.p; renderAll(); });
+
+  // lagen
+  document.querySelectorAll('#toggles label').forEach(l=> l.onclick=()=>{
+    const k=l.dataset.k; l.classList.toggle('on'); const on=l.classList.contains('on');
+    l.setAttribute('aria-checked',on?'true':'false');
+    if(k==='dry')STATE.dry=on; else if(k==='moist')STATE.moist=on; else if(k==='mixr')STATE.mixr=on;
+    else if(k==='parcel'){STATE.parcel_=on;} else if(k==='barbs')STATE.barbs=on;
+    else if(k==='virt'){STATE.virt=on; reindex(); return;}
+    renderAll(); });
+  document.querySelectorAll('#toggles label').forEach(l=> l.onkeydown=e=>{
+    if(e.key==='Enter'||e.key===' '){ e.preventDefault(); l.click(); }
+  });
+
+  document.getElementById('themeBtn').onclick=()=>{
+    const d=document.documentElement.getAttribute('data-theme')==='dark';
+    document.documentElement.setAttribute('data-theme', d?'light':'dark'); renderAll(); };
+
+  const exp=document.getElementById('explainer');
+  document.getElementById('expHead').onclick=()=>{ exp.classList.toggle('collapsed');
+    const c=exp.classList.contains('collapsed');
+    document.getElementById('expToggle').innerHTML='<span class="exp-caret">▾</span> '+(c?'Tonen':'Verbergen'); };
+
+  document.getElementById('pngBtn').onclick=()=>{
+    const a=document.createElement('a'); a.download='skewt_'+(STATE.place||'sounding').replace(/\W+/g,'_')+'.png';
+    a.href=cv.toDataURL('image/png'); a.click(); };
+
+  let rt; const redraw=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ if(!ENV)return;
+      drawSkewT(ENV, STATE.parcel_?currentParcel():null); drawHodo(ENV, IDX); }, 90); };
+  if(window.ResizeObserver){ const ro=new ResizeObserver(redraw);
+    ro.observe(document.querySelector('.skewwrap')); ro.observe(document.getElementById('hodo').parentElement); }
+  window.addEventListener('resize', redraw);
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+
+  // Een open Skew-T haalt ieder uur de nieuwste beschikbare modelrun op.
+  setInterval(()=>{ if(!document.hidden) refreshLatestRun(); }, AUTO_REFRESH_MS);
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden && Date.now()-LAST_AUTO_REFRESH>=AUTO_REFRESH_MS) refreshLatestRun();
+  });
+  window.addEventListener('message',e=>{
+    if(e.origin===location.origin && e.data?.type==='weerlab-refresh') refreshLatestRun();
+  });
+
+  loadLive();   // start: De Bilt, HARMONIE
+}
+
+initApp();
+</script>
+</body>
+</html>

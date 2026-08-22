@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Europa Drukkaarten — ECMWF IFS</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: #0f172a;
+    color: #f8fafc;
+    padding: 11px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid #1e3a5f;
+  }
+  .header-titel { font-size: 1rem; font-weight: 700; }
+  .header-sub   { font-size: 0.75rem; color: #94a3b8; }
+  .run-info     { font-size: 0.72rem; color: #64748b; margin-left: auto; }
+
+  .wrap {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 18px 40px;
+  }
+
+  .zoom-bar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px; margin-top: 4px;
+  }
+  .zoom-bar label { font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; }
+  .zoom-bar input[type=range] {
+    flex: 1; max-width: 260px; accent-color: #3b82f6; cursor: pointer;
+  }
+  #zoom-pct { font-size: 12px; color: #3b82f6; min-width: 38px; font-weight: 600; }
+
+  .panel-blok { margin-bottom: 28px; }
+  .panel-titel {
+    font-size: 11px; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+  }
+  .panel-img {
+    width: 100%; border-radius: 8px; border: 1px solid #cbd5e1;
+    display: block; cursor: zoom-in; transition: width .1s;
+    background: #e2e8f0;
+  }
+
+  /* Lightbox */
+  #lightbox {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.88);
+    z-index: 500; align-items: center; justify-content: center; cursor: zoom-out;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a href="https://weerlab.nl/" target="_top"
+     style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+            border-radius:7px;border:1px solid rgba(255,255,255,0.22);
+            color:#94a3b8;font-size:12px;font-weight:600;text-decoration:none;
+            flex-shrink:0;white-space:nowrap;"
+     onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#94a3b8'">
+    ← Significant kaart
+  </a>
+  <div>
+    <div class="header-titel">Zeeniveaudruk + 500 hPa geopotentiaal — ECMWF IFS</div>
+    <div class="header-sub">Isobaren (blauw) · Geopotentiaal (rood stippel)</div>
+  </div>
+  <div class="run-info" id="run-info">laden…</div>
+</div>
+
+<div class="wrap">
+
+  <div class="zoom-bar">
+    <label>Zoom</label>
+    <input type="range" id="zoom-slider" min="40" max="200" value="100"
+           oninput="setZoom(this.value)">
+    <span id="zoom-pct">100%</span>
+  </div>
+
+  <div class="panel-blok">
+    <div class="panel-titel">Dag 1–9 · +24 t/m +216 uur</div>
+    <img class="panel-img" id="img1"
+         src="druk_panel_dag01-09.png?t=0"
+         alt="Panel dag 1-9"
+         onerror="this.style.opacity='.3'"
+         onclick="openLightbox(this.src)">
+  </div>
+
+  <div class="panel-blok">
+    <div class="panel-titel">Dag 10–15 · +240 t/m +360 uur</div>
+    <img class="panel-img" id="img2"
+         src="druk_panel_dag10-15.png?t=0"
+         alt="Panel dag 10-15"
+         onerror="this.style.opacity='.3'"
+         onclick="openLightbox(this.src)">
+  </div>
+
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+function setZoom(v) {
+  document.querySelectorAll('.panel-img').forEach(img => img.style.width = v + '%');
+  document.getElementById('zoom-pct').textContent = v + '%';
+}
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+// Run-label via last-modified
+fetch('druk_panel_dag01-09.png', { method: 'HEAD' })
+  .then(r => {
+    const lm = r.headers.get('last-modified');
+    if (lm) {
+      const d = new Date(lm);
+      document.getElementById('run-info').textContent =
+        'Bijgewerkt: ' + d.toLocaleString('nl-NL', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
+        }) + ' UTC';
+    } else {
+      document.getElementById('run-info').textContent = '';
+    }
+  }).catch(() => { document.getElementById('run-info').textContent = ''; });
+
+// Cache-bust bij laden
+const t = Date.now();
+document.getElementById('img1').src = 'druk_panel_dag01-09.png?t=' + t;
+document.getElementById('img2').src = 'druk_panel_dag10-15.png?t=' + t;
+</script>
+</body>
+</html>

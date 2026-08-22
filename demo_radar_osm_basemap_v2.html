@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>DEMO v2 — OSM straatkaart onder ECHTE KNMI-radar</title>
+<style>
+  :root {
+    --slate:#0f172a; --line:#e3e8ef; --bg:#f6f8fb; --accent:#2563eb;
+    --txt:#0f172a; --muted:#64748b; --radius:12px; --shadow:0 6px 24px rgba(15,23,42,.16);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--txt); }
+  .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .note { background:#eaf6ff; border:1px solid #9cc9ec; border-radius:10px;
+    padding:10px 13px; font-size:12.5px; color:#0b4a72; margin:0 0 14px; line-height:1.5; }
+  .note b { color:#073452; }
+  .stage { position:relative; border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); background:#aab9c9; }
+  canvas { display:block; width:100%; height:auto; touch-action:none; cursor:grab; }
+  canvas:active { cursor:grabbing; }
+  .ov-top, .ov-bot { position:absolute; left:10px; right:10px; display:flex; align-items:center; gap:10px;
+    background:rgba(15,23,42,.82); color:#fff; padding:8px 12px; border-radius:10px; backdrop-filter:blur(4px); font-size:13px; pointer-events:none; }
+  .ov-top { top:10px; } .ov-bot { bottom:10px; font-size:11px; opacity:.92; }
+  .ov-top .t { font-weight:700; } .ov-top .z { margin-left:auto; font-variant-numeric:tabular-nums; opacity:.85; }
+  .loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(170,185,201,.9); font-size:15px; font-weight:600; color:#0f172a; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0 0; }
+  .bar .lbl { font-size:12px; color:var(--muted); margin-right:2px; }
+  button.tg, button.zm { border:1px solid var(--line); background:#fff; color:var(--txt);
+    padding:7px 13px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; transition:.12s; display:inline-flex; align-items:center; gap:6px; }
+  button.tg:hover, button.zm:hover { border-color:var(--accent); }
+  button.tg.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .zoomctl { margin-left:auto; display:flex; gap:6px; }
+  button.zm { width:40px; justify-content:center; font-size:18px; padding:6px 0; }
+  .legend { display:flex; align-items:center; gap:0; margin:14px 0 0; font-size:11px; color:var(--muted); flex-wrap:wrap; }
+  .legend .cap { margin-right:8px; font-weight:600; color:var(--txt); }
+  .legend .sw { width:26px; height:12px; }
+  .legend .tick { width:26px; text-align:center; font-size:10px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.55; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DEMO v2 — OpenStreetMap straatkaart onder de <em>echte</em> KNMI-radar</h1>
+  <p class="sub">Live <code>radar_data.bin</code> (KNMI NL25, huidig frame) + exacte dBZ-kleurschaal uit radar.html, over CARTO/OSM straat-tiles.</p>
+
+  <div class="note">
+    <b>Echte data, niet synthetisch.</b> Zelfde kleurschaal en alpha als de productie-radar; alleen de ondergrond
+    is gewisseld (topo → OSM-straten). Sleep/zoom om een bui boven een wijk te leggen. Tegels = CARTO/OSM (demo);
+    productie: <b>MapTiler EU</b>.
+  </div>
+
+  <div class="stage">
+    <canvas id="map" width="1040" height="720"></canvas>
+    <div class="ov-top"><span class="t" id="ttl">Neerslagradar — KNMI</span><span class="z" id="zlabel"></span></div>
+    <div class="ov-bot" id="attrib">© OpenStreetMap-bijdragers · © CARTO · © KNMI · demo</div>
+    <div class="loading" id="loading">KNMI-radardata laden…</div>
+  </div>
+
+  <div class="bar">
+    <span class="lbl">Lagen:</span>
+    <button class="tg on" id="tg-street">🗺 Straatkaart</button>
+    <button class="tg on" id="tg-radar">🌧 Radar</button>
+    <button class="tg" id="tg-labels">🏷 Plaatsnamen bovenop</button>
+    <div class="zoomctl">
+      <button class="zm" id="zm-out" title="Uitzoomen">−</button>
+      <button class="zm" id="zm-in" title="Inzoomen">+</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"><span class="cap">Neerslag (mm/u)</span></div>
+  <p class="hint">Radar = huidig KNMI-frame op moment van laden. Pan/zoom werkt los van de echte radar.html — dit is enkel een ondergrond-vergelijking.</p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("map"), ctx=cv.getContext("2d");
+  var W=cv.width, H=cv.height;
+
+  // ── dBZ-kleurpipeline (1:1 uit radar.html) ────────────────────────────────
+  function pvToDbz(pv){ return 0.5*pv-32; }
+  function dbzToMmh(dbz){ if(dbz<=0)return 0; return Math.pow(Math.pow(10,dbz/10)/200,1/1.6); }
+  var DBZ_LEVELS=[7,13.4,18.2,23,27.8,31,34.2,37,39,41.5,43.8,47,50.2,55,60,65,70];
+  var DBZ_COLORS=[[178,218,248],[120,185,240],[70,148,228],[42,108,212],[28,80,196],[16,52,168],
+    [222,218,40],[248,182,30],[250,142,20],[244,100,12],[232,55,16],[208,26,26],[168,2,42],
+    [198,0,150],[240,80,240],[255,200,255],[255,255,255]];
+  var DBZ_ALPHA=[215,238,250,255,255,255,255,255,255,255,255,255,255,255,255,255,255]; // 'normaal'
+  function dbzColor(dbz){
+    if(dbz<DBZ_LEVELS[0])return null;
+    if(dbz>=DBZ_LEVELS[DBZ_LEVELS.length-1]){var c=DBZ_COLORS[DBZ_COLORS.length-1];return[c[0],c[1],c[2],DBZ_ALPHA[DBZ_ALPHA.length-1]];}
+    for(var i=DBZ_LEVELS.length-2;i>=0;i--){ if(dbz>=DBZ_LEVELS[i]){
+      var t=(dbz-DBZ_LEVELS[i])/(DBZ_LEVELS[i+1]-DBZ_LEVELS[i]),c0=DBZ_COLORS[i],c1=DBZ_COLORS[i+1],a0=DBZ_ALPHA[i],a1=DBZ_ALPHA[i+1];
+      return[Math.round(c0[0]+t*(c1[0]-c0[0])),Math.round(c0[1]+t*(c1[1]-c0[1])),Math.round(c0[2]+t*(c1[2]-c0[2])),Math.round(a0+t*(a1-a0))];
+    }}
+    return null;
+  }
+  // PV→RGBA LUT
+  var LUT=new Uint8ClampedArray(256*4), LUT_MIN_PV=255;
+  for(var pv=1;pv<=254;pv++){ var c=dbzColor(0.5*pv-32); if(!c)continue; var o=pv*4;
+    LUT[o]=c[0];LUT[o+1]=c[1];LUT[o+2]=c[2];LUT[o+3]=c[3]; if(pv<LUT_MIN_PV)LUT_MIN_PV=pv; }
+  // legenda (mm/u via dBZ-niveaus die ~ronde mm geven)
+  (function(){ var L=document.getElementById("legend");
+    var mmStops=[[18.2,"<1"],[23,"1"],[27.8,"2"],[34.2,"5"],[39,"10"],[43.8,"20"],[50.2,"50"],[55,"100"]];
+    mmStops.forEach(function(s){ var c=dbzColor(s[0]); var sw=document.createElement("span"); sw.className="sw";
+      sw.style.background="rgb("+c[0]+","+c[1]+","+c[2]+")"; L.appendChild(sw); });
+    var row=document.createElement("div"); row.className="legend"; row.style.marginTop="2px";
+    var cap=document.createElement("span"); cap.className="cap"; cap.style.visibility="hidden"; cap.textContent="Neerslag (mm/u)"; row.appendChild(cap);
+    mmStops.forEach(function(s){ var tk=document.createElement("span"); tk.className="tick"; tk.textContent=s[1]; row.appendChild(tk); });
+    L.parentNode.insertBefore(row,L.nextSibling);
+  })();
+
+  // ── View (PlateCarree) ────────────────────────────────────────────────────
+  var view={lon:5.2,lat:52.1,ppd:118};   // start: heel NL
+  function latPPD(){ return view.ppd/Math.cos(view.lat*Math.PI/180); }
+  function lonToX(lon){ return W/2+(lon-view.lon)*view.ppd; }
+  function latToY(lat){ return H/2-(lat-view.lat)*latPPD(); }
+  function xToLon(x){ return view.lon+(x-W/2)/view.ppd; }
+  function yToLat(y){ return view.lat-(y-H/2)/latPPD(); }
+
+  // ── Web-Mercator tiles ────────────────────────────────────────────────────
+  function lon2tx(lon,z){return(lon+180)/360*Math.pow(2,z);}
+  function lat2ty(lat,z){var r=lat*Math.PI/180;return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z);}
+  function tx2lon(x,z){return x/Math.pow(2,z)*360-180;}
+  function ty2lat(y,z){return Math.atan(Math.sinh(Math.PI*(1-2*y/Math.pow(2,z))))*180/Math.PI;}
+  function tileZoom(){ return Math.max(2,Math.min(19,Math.round(Math.log2(360*view.ppd/256)))); }
+  var tileCache={};
+  function styleName(s){return s==="L"?"voyager_only_labels":s==="N"?"voyager_nolabels":"voyager";}
+  function getTile(z,x,y,s,onload){ var key=s+z+"/"+x+"/"+y,t=tileCache[key];
+    if(t)return(t.complete&&t.naturalWidth)?t:null;
+    var img=new Image(); img.crossOrigin="anonymous"; img.onload=onload; img.onerror=function(){img._e=1;};
+    img.src="https://basemaps.cartocdn.com/rastertiles/"+styleName(s)+"/"+z+"/"+x+"/"+y+"@2x.png"; tileCache[key]=img; return null; }
+  function drawTiles(mode){ // mode: 'V' full, 'N' nolabels, 'L' labels-only
+    var z=tileZoom(),n=Math.pow(2,z);
+    var x0=Math.floor(lon2tx(xToLon(0),z)),x1=Math.floor(lon2tx(xToLon(W),z));
+    var y0=Math.floor(lat2ty(yToLat(0),z)),y1=Math.floor(lat2ty(yToLat(H),z));
+    for(var tx=x0;tx<=x1;tx++)for(var ty=y0;ty<=y1;ty++){ var xx=((tx%n)+n)%n;
+      var img=getTile(z,xx,ty,mode,scheduleRender); if(!img)continue;
+      var dx=lonToX(tx2lon(tx,z)),dy=latToY(ty2lat(ty,z));
+      ctx.drawImage(img,dx,dy,lonToX(tx2lon(tx+1,z))-dx+1,latToY(ty2lat(ty+1,z))-dy+1);
+    }
+  }
+
+  // ── Echte KNMI-radar ──────────────────────────────────────────────────────
+  var meta=null, data=null, nLat=0, nLon=0, nFrames=0, frame=0;
+  var gLonMin,gLonMax,gLatMin,gLatMax;
+  function samplePV(lon,lat){
+    var fx=(lon-gLonMin)/(gLonMax-gLonMin)*(nLon-1);
+    var fy=(gLatMax-lat)/(gLatMax-gLatMin)*(nLat-1);
+    if(fx<0||fy<0||fx>nLon-1||fy>nLat-1)return 0;
+    var x0=fx|0,y0=fy|0,x1=Math.min(x0+1,nLon-1),y1=Math.min(y0+1,nLat-1);
+    var tx=fx-x0,ty=fy-y0, base=frame*nLat*nLon;
+    function g(x,y){var v=data[base+y*nLon+x];return v===255?0:v;}
+    var a=g(x0,y0),b=g(x1,y0),c=g(x0,y1),d=g(x1,y1);
+    return a*(1-tx)*(1-ty)+b*tx*(1-ty)+c*(1-tx)*ty+d*tx*ty;
+  }
+  var roff=document.createElement("canvas"), rctx=roff.getContext("2d");
+  function drawRadar(){
+    if(!data)return;
+    roff.width=W; roff.height=H;
+    var img=rctx.createImageData(W,H), px=img.data;
+    for(var y=0;y<H;y++){ var lat=yToLat(y+0.5);
+      for(var x=0;x<W;x++){ var pv=samplePV(xToLon(x+0.5),lat);
+        if(pv<LUT_MIN_PV)continue; var lo=(Math.round(pv))*4; if(LUT[lo+3]===0)continue;
+        var p=(y*W+x)*4; px[p]=LUT[lo];px[p+1]=LUT[lo+1];px[p+2]=LUT[lo+2];px[p+3]=LUT[lo+3];
+      }
+    }
+    rctx.putImageData(img,0,0);
+    ctx.drawImage(roff,0,0);
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  var layers={street:true,radar:true,labelsOnTop:false}, pend=false;
+  function scheduleRender(){ if(pend)return; pend=true;
+    if(document.hidden)setTimeout(render,16); else requestAnimationFrame(render); }
+  function render(){ pend=false;
+    ctx.clearRect(0,0,W,H); ctx.fillStyle="#aab9c9"; ctx.fillRect(0,0,W,H);
+    if(layers.street) drawTiles(layers.labelsOnTop?"N":"V");
+    if(layers.radar)  drawRadar();
+    if(layers.street&&layers.labelsOnTop) drawTiles("L");
+    document.getElementById("zlabel").textContent="tile-z "+tileZoom()+" · "+Math.round(view.ppd)+" px/°";
+  }
+
+  // ── Interactie ────────────────────────────────────────────────────────────
+  function zoomAt(f,cx,cy){ var lon=xToLon(cx),lat=yToLat(cy);
+    view.ppd=Math.max(40,Math.min(120000,view.ppd*f));
+    view.lon=lon-(cx-W/2)/view.ppd; view.lat=lat+(cy-H/2)/latPPD(); scheduleRender(); }
+  cv.addEventListener("wheel",function(e){ e.preventDefault(); var r=cv.getBoundingClientRect();
+    zoomAt(Math.exp(-e.deltaY*0.0015),(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height); },{passive:false});
+  var drag=null;
+  cv.addEventListener("pointerdown",function(e){ drag={x:e.clientX,y:e.clientY,lon:view.lon,lat:view.lat}; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove",function(e){ if(!drag)return; var r=cv.getBoundingClientRect();
+    view.lon=drag.lon-(e.clientX-drag.x)*W/r.width/view.ppd; view.lat=drag.lat+(e.clientY-drag.y)*H/r.height/latPPD(); scheduleRender(); });
+  cv.addEventListener("pointerup",function(){drag=null;});
+  document.getElementById("zm-in").onclick=function(){zoomAt(1.6,W/2,H/2);};
+  document.getElementById("zm-out").onclick=function(){zoomAt(1/1.6,W/2,H/2);};
+  function tg(id,key){var b=document.getElementById(id);b.onclick=function(){layers[key]=!layers[key];b.classList.toggle("on",layers[key]);scheduleRender();};}
+  tg("tg-street","street"); tg("tg-radar","radar");
+  document.getElementById("tg-labels").onclick=function(){layers.labelsOnTop=!layers.labelsOnTop;this.classList.toggle("on",layers.labelsOnTop);scheduleRender();};
+
+  // ── Data laden ────────────────────────────────────────────────────────────
+  Promise.all([
+    fetch("radar_meta.json").then(function(r){return r.json();}),
+    fetch("radar_data.bin").then(function(r){return r.arrayBuffer();})
+  ]).then(function(res){
+    meta=res[0]; var buf=res[1], dv=new DataView(buf);
+    nLat=dv.getUint16(0,true); nLon=dv.getUint16(2,true); nFrames=dv.getUint16(4,true);
+    data=new Uint8Array(buf,16);
+    var g=meta.grid; gLonMin=g.lon_min; gLonMax=g.lon_max; gLatMin=g.lat_min; gLatMax=g.lat_max;
+    frame=(typeof meta.t_now_index==="number")?meta.t_now_index:Math.min(nFrames-1,35);
+    var tijd=(meta.tijden&&meta.tijden[frame])?(" — "+meta.tijden[frame]):"";
+    document.getElementById("ttl").textContent="Neerslagradar — KNMI"+(meta.bijgewerkt?(" ("+meta.bijgewerkt+")"):"");
+    document.getElementById("loading").style.display="none";
+    render();
+  }).catch(function(e){
+    document.getElementById("loading").textContent="Kon radardata niet laden: "+e;
+  });
+})();
+</script>
+</body>
+</html>
