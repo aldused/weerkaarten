@@ -221,14 +221,15 @@ VARS = {
 MERK_INK    = '#0f172a'
 MERK_ACCENT = '#2ec4e8'
 MERK_MUTED  = '#64748b'
-MERK_SUB    = 'Ed Aldus · weerdata & visualisaties'
+MERK_SUB_1  = 'Ed Aldus • weerdata &'
+MERK_SUB_2  = 'visualisaties'
 
 # Verticale opbouw in inches. De kaart houdt exact zijn oude hoogte; de
 # merkstrook komt eronder, zodat er geen data onder het logo verdwijnt.
 MAP_H_IN    = 5.40
 HEADER_IN   = 0.62
 BOTTOM_IN   = 0.08
-FOOTER_IN   = 0.24
+FOOTER_IN   = 0.58
 
 NL_DAGEN  = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
 
@@ -587,12 +588,30 @@ def proj_extent(extent):
 
 
 def teken_merkstrook(fig, bron_credit, fig_h):
-    """Compacte bronregel zoals in de aangeleverde X-kaarten."""
+    """Weerlab-merklock-up links en modelbron rechts."""
     lijn_y = FOOTER_IN / fig_h
     fig.add_artist(Line2D([0.012, 0.988], [lijn_y, lijn_y], transform=fig.transFigure,
                           color='#dfe5ec', linewidth=0.8, zorder=1))
-    fig.text(0.012, 0.105 / fig_h, 'Weerlab.nl · Ed Aldus', fontsize=7.5,
-             ha='left', va='center', color=MERK_INK, fontweight='bold')
+
+    # Schaalbare tekstlock-up van het echte logo. Daardoor blijft de merknaam
+    # ook na GIF- en MP4-compressie scherp en behoudt .nl zijn blauwe kleur.
+    merknaam = HPacker(children=[
+        TextArea('Weerlab.', textprops=dict(fontsize=13.5, fontweight='bold',
+                                            color=MERK_INK)),
+        TextArea('nl', textprops=dict(fontsize=13.5, fontweight='bold',
+                                      color=MERK_ACCENT)),
+    ], align='baseline', pad=0, sep=0)
+    sub_props = dict(fontsize=7.0, fontweight='bold', color=MERK_MUTED,
+                     fontfamily='DejaVu Sans Mono')
+    logo = VPacker(children=[
+        merknaam,
+        TextArea(MERK_SUB_1, textprops=sub_props),
+        TextArea(MERK_SUB_2, textprops=sub_props),
+    ], align='left', pad=0, sep=0.8)
+    fig.add_artist(AnchoredOffsetbox(
+        loc='lower left', child=logo, frameon=False, pad=0, borderpad=0,
+        bbox_to_anchor=(0.012, 0.035 / fig_h), bbox_transform=fig.transFigure))
+
     fig.text(0.988, 0.105 / fig_h, bron_credit, fontsize=7.5, ha='right',
              va='center', color=MERK_MUTED)
 
