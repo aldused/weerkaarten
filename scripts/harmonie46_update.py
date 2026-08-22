@@ -341,10 +341,10 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     }
     now = datetime.now(tz=LOCAL_TZ)
     meta = {
-        "model": "HARMONIE V46 TEST",
+        "model": "HARMONIE V46",
         "cycle": 46,
         "experimental": True,
-        "source": "KNMI Data Platform · experimentele Cy46 P1-testfeed",
+        "source": "KNMI Data Platform · HARMONIE Cy46 P1-feed",
         "run": run_label,
         "run_utc": run.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "bijgewerkt": now.strftime("%d-%m-%Y %H:%M"),

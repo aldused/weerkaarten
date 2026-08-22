@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Harmonie 43 — Ed Aldus WM</title>
+<title>HARMONIE V43 en V46 — Ed Aldus WM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -810,7 +810,7 @@ body.scroll-mode { overflow: hidden; }
     <div class="header-titel">Ed Aldus WM</div>
     <select id="model-select" style="padding:4px 10px;border-radius:6px;border:1px solid #4a7ab5;background:#003366;color:white;font-size:13px;font-weight:700;cursor:pointer;">
       <option value="harmonie">HARMONIE V43 (KNMI)</option>
-      <option value="harmonie46">HARMONIE V46 (KNMI · test)</option>
+      <option value="harmonie46">HARMONIE V46 (KNMI)</option>
       <option value="icond2">ICON-D2 (DWD)</option>
       <option value="ecmwf_om">ECMWF IFS (16 dagen, Open-Meteo)</option>
       <option value="icond2ruc">ICON-D2-RUC (DWD, uurlijks)</option>
@@ -952,7 +952,7 @@ body.scroll-mode { overflow: hidden; }
   // Model configuratie: meta-bestand per model
   var MODELS = {
     harmonie: { meta: "harmonie_canvas_meta.json", label: "HARMONIE V43 (KNMI, 2km)" },
-    harmonie46: { meta: "harmonie46_canvas_meta.json", label: "HARMONIE V46 TEST (KNMI, 2km)" },
+    harmonie46: { meta: "harmonie46_canvas_meta.json", label: "HARMONIE V46 (KNMI, 2km)" },
     icond2:   { meta: "icond2_canvas_meta.json",   label: "ICON-D2 (DWD, 2.2km)" },
     icond2ruc: { meta: "icond2ruc_canvas_meta.json", label: "ICON-D2-RUC (DWD, 2.2km, uurlijks)" },
     ecmwf_om: { meta: "ecmwf_om_canvas_meta.json", label: "ECMWF IFS via Open-Meteo (16 dagen)" },
@@ -2850,11 +2850,16 @@ body.scroll-mode { overflow: hidden; }
     }
     function classicModelText() {
       var raw = (meta.model || MODELS[actiefModel].label || "Model").toUpperCase();
-      var name = raw.indexOf("ICON-D2-RUC") >= 0 ? "ICON D2 RUC" :
-                 raw.indexOf("ICON-D2") >= 0 ? "ICON D2" :
-                 raw.indexOf("HARMONIE") >= 0 ? "HARMONIE" :
-                 raw.indexOf("ECMWF") >= 0 ? "ECMWF IFS" : raw;
-      var deg = (name === "HARMONIE" || name === "ICON D2" || name === "ICON D2 RUC") ? 0.02 :
+      var basis = raw.indexOf("ICON-D2-RUC") >= 0 ? "ICON D2 RUC" :
+                  raw.indexOf("ICON-D2") >= 0 ? "ICON D2" :
+                  raw.indexOf("HARMONIE") >= 0 ? "HARMONIE" :
+                  raw.indexOf("ECMWF") >= 0 ? "ECMWF IFS" : raw;
+      // De modelversie hoort op de kaart zelf, niet alleen in de keuzelijst:
+      // een screenshot of geexporteerde PNG reist daar los van, en dan is
+      // HARMONIE V43 niet van V46 te onderscheiden.
+      var versie = (raw.match(/V\d+/) || [""])[0];
+      var name = versie && basis.indexOf(versie) < 0 ? basis + " " + versie : basis;
+      var deg = (basis === "HARMONIE" || basis === "ICON D2" || basis === "ICON D2 RUC") ? 0.02 :
         (meta.grid && meta.grid.n_lon > 1 ? Math.abs((meta.grid.lon_max - meta.grid.lon_min) / (meta.grid.n_lon - 1)) : 0.02);
       return "Model: " + name + " (" + deg.toFixed(2) + "\u00b0)";
     }
@@ -4201,7 +4206,9 @@ body.scroll-mode { overflow: hidden; }
     var pname = sel ? sel.value : "kaart";
     var pLabel = sel ? sel.options[sel.selectedIndex].text : "Kaart";
     var modelSlug = vergelijkModus ? (idx === 0 ? "harmonie" : "icond2") : actiefModel;
-    var modelLabel = modelSlug === "harmonie" ? "HARMONIE" : modelSlug === "icond2" ? "ICON-D2" : modelSlug.toUpperCase();
+    var modelLabel = modelSlug === "harmonie" ? "HARMONIE V43" :
+                     modelSlug === "harmonie46" ? "HARMONIE V46" :
+                     modelSlug === "icond2" ? "ICON-D2" : modelSlug.toUpperCase();
     var uurVal = parseInt(slider.value);
 
     // Schaal banden + tekst mee met kaartbreedte (anders te klein op hi-res export)
