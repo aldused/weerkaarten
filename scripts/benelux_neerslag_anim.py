@@ -79,7 +79,7 @@ MODELS = {
     'harmonie': {
         'label':       'HARMONIE V46',
         'bron':        'KNMI HARMONIE V46 2,5 km',
-        'credit':      '© KNMI open data',
+        'credit':      '© KNMI · HARMONIE V46',
         # Nederland van Zuid-Limburg tot en met de Wadden. De strakke uitsnede
         # geeft op X veel meer bruikbare pixels per provincie dan Benelux-breed.
         'extent':      [2.2, 8.2, 50.5, 54.2],
@@ -143,7 +143,8 @@ def _fmt_bft(v):
 
 
 # soort bepaalt de kopregels: 'som' loopt op vanaf de run, 'moment' is een
-# momentopname per stap, 'interval' een maximum over de voorgaande stap.
+# 'instant' is de waarde op de geldigheidstijd; 'interval' een maximum over het
+# voorgaande tijdvak.
 VARS = {
     'neerslag': {
         'titel':      'neerslagsom',
@@ -200,7 +201,7 @@ VARS = {
         'titel':      'temperatuur',
         'eenheid':    '°C',
         'soort':      'moment',
-        'subtitel':   'temperatuur op 2 meter, momentopname per stap',
+        'subtitel':   'temperatuur op 2 meter',
         'menu':       'Temperatuur',
         'levels':     TEMP_LEVELS,
         'colors':     TEMP_COLORS,
@@ -268,7 +269,7 @@ def ecmwf_max_step(run_hour):
 
 
 def ecmwf_steps(run_hour, max_step=None):
-    """3-uursstappen t/m +144u, daarna 6-uurs t/m het maximum van deze run."""
+    """3-uursstappen tot maximaal +144u voor iedere dagelijkse run."""
     top = min(max_step or ecmwf_max_step(run_hour), ecmwf_max_step(run_hour))
     return list(range(3, top + 1, 3))
 
@@ -716,7 +717,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                 fontweight='bold',
                 path_effects=[pe.withStroke(linewidth=2.0, foreground=rand)])
 
-    # Vaste punten: grotere waarde plus een kleine plaatsnaam voor oriëntatie.
+    # Vaste punten: grotere waarden voor extra detail, zonder plaatsnamen zodat
+    # de kaart op sociale media rustig en direct leesbaar blijft.
     # Drempel geldt hier niet, zodat ook een nulwaarde zichtbaar blijft.
     for naam, la, lo in PUNTEN:
         if not (extent[0] + 0.1 < lo < extent[1] - 0.1 and
@@ -732,10 +734,6 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                 fontsize=12.0, fontweight='bold', color=inkt,
                 ha='center', va='center', clip_on=True,
                 path_effects=[pe.withStroke(linewidth=2.4, foreground=rand)])
-        ax.text(lo, la - 0.085, naam, transform=PROJ_PC, zorder=8,
-                fontsize=5.8, color='#263640', ha='center', va='top',
-                clip_on=True,
-                path_effects=[pe.withStroke(linewidth=1.4, foreground='white')])
 
     ax.spines['geo'].set_linewidth(1.1)
     ax.spines['geo'].set_edgecolor('#333333')
