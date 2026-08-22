@@ -108,7 +108,7 @@ bouw_model() {
 STATUS=0
 # HARMONIE is de goedkope, snel verversende reeks: die eerst, zodat een lange
 # ECMWF-bouw hem nooit een uur laat wachten.
-bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v4_run" || STATUS=1
+bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v5_run" || STATUS=1
 bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_ecmwf_144_x_v2_run"  || STATUS=1
 
 # Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw

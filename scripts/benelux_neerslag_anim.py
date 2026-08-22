@@ -142,9 +142,8 @@ def _fmt_bft(v):
     return f'{sum(1 for grens in BFT_GRENZEN if v >= grens)}'
 
 
-# soort bepaalt de kopregels: 'som' loopt op vanaf de run, 'moment' is een
-# 'instant' is de waarde op de geldigheidstijd; 'interval' een maximum over het
-# voorgaande tijdvak.
+# Soort bepaalt de kopregels: 'som' loopt op vanaf de run, 'moment' is de waarde
+# op de geldigheidstijd en 'interval' een maximum over het voorgaande tijdvak.
 VARS = {
     'neerslag': {
         'titel':      'neerslagsom',
@@ -737,8 +736,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                 path_effects=[pe.withStroke(linewidth=2.0, foreground=rand)])
 
     # Vaste punten: grotere waarden voor extra detail, zonder plaatsnamen zodat
-    # de kaart op sociale media rustig en direct leesbaar blijft.
-    # Drempel geldt hier niet, zodat ook een nulwaarde zichtbaar blijft.
+    # de kaart op sociale media rustig en direct leesbaar blijft. Dezelfde
+    # ondergrens geldt als voor het raster: bij neerslag dus geen 0 mm.
     for naam, la, lo in PUNTEN:
         if not (extent[0] + 0.1 < lo < extent[1] - 0.1 and
                 extent[2] + 0.1 < la < extent[3] - 0.1):
@@ -746,7 +745,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         i = int(np.argmin(np.abs(lats_f - la)))
         j = int(np.argmin(np.abs(lons_f - lo)))
         v = tp[i, j]
-        if not np.isfinite(v):
+        if (not np.isfinite(v) or
+                (var['label_min'] is not None and v < var['label_min'])):
             continue
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         ax.text(lo, la, var['label_fmt'](v), transform=PROJ_PC, zorder=8,
@@ -763,8 +763,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
 
     fig.text(0.014, van_boven(0.127), f'{model_label} ({fmt_run(run)})', fontsize=13.5,
              fontweight='bold', va='top')
-    # Een oplopende som leest anders dan een momentopname: "vanaf de run tot X"
-    # versus "geldig op X".
+    # Bij een oplopende som staat "vanaf de run tot X"; bij andere velden de
+    # geldigheidstijd.
     kop2 = f'{var["titel"]} ({var["eenheid"]}) — ' + (
         f'vanaf {fmt_valid(run)}' if var['soort'] == 'som' else var['subtitel'])
     fig.text(0.014, van_boven(0.477), kop2, fontsize=10.5, va='top', color='#444444')
