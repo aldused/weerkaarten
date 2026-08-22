@@ -113,7 +113,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
       </label>
       <span class="spacer"></span>
       <a id="dl-gif" href="#" target="_blank" rel="noopener">GIF openen</a>
-      <a id="dl-mp4" href="#" target="_blank" rel="noopener">mp4 openen</a>
+      <a id="dl-mp4" href="#" download onclick="downloadMp4(event)">MP4 downloaden</a>
     </div>
     <div class="fout" id="fout"></div>
   </section>
@@ -166,10 +166,10 @@ const MODELLEN = {
 // Bestandsnamen: neerslag houdt zijn oorspronkelijke prefix, de rest volgt
 // hetzelfde patroon. Zie prefix_van() in benelux_neerslag_anim.py.
 const VELDEN = {
-  neerslag:   { titel: 'Neerslagsom',  eind: 'Eindstand · totaal over de hele reeks' },
-  wind:       { titel: 'Windkracht',   eind: 'Laatste beeld van de reeks' },
-  windstoten: { titel: 'Windstoten',   eind: 'Laatste beeld van de reeks' },
-  temp:       { titel: 'Temperatuur',  eind: 'Laatste beeld van de reeks' },
+  neerslag:   { titel: 'Neerslagsom', bestand: 'neerslagsom', eind: 'Eindstand · totaal over de hele reeks' },
+  wind:       { titel: 'Windkracht', bestand: 'windkracht', eind: 'Laatste beeld van de reeks' },
+  windstoten: { titel: 'Windstoten', bestand: 'windstoten', eind: 'Laatste beeld van de reeks' },
+  temp:       { titel: 'Temperatuur', bestand: 'temperatuur', eind: 'Laatste beeld van de reeks' },
 };
 
 let model = localStorage.getItem('wb_neerslagsom_model') || 'ecmwf';
@@ -228,6 +228,46 @@ function stapOmschrijving(m){
   return VELDEN[veld].titel + ' · ' + kop + ' t/m +' + m.lead_max + ' uur';
 }
 
+function mp4Bestandsnaam(run){
+  const modelNaam = model === 'harmonie' ? 'HARMONIE_V46' : 'ECMWF_HRES';
+  const datum = run.getUTCFullYear() + '-' +
+    String(run.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(run.getUTCDate()).padStart(2, '0');
+  const tijd = String(run.getUTCHours()).padStart(2, '0') + 'UTC';
+  return modelNaam + '_' + datum + '_' + tijd + '_' + VELDEN[veld].bestand + '.mp4';
+}
+
+async function downloadMp4(event){
+  event.preventDefault();
+  const knop = event.currentTarget;
+  if (knop.dataset.bezig === '1' || !knop.href || knop.href.endsWith('#')) return;
+
+  const oorspronkelijkeTekst = knop.textContent;
+  knop.dataset.bezig = '1';
+  knop.setAttribute('aria-busy', 'true');
+  knop.textContent = 'MP4 ophalen…';
+  try {
+    const reactie = await fetch(knop.href, {cache: 'no-store'});
+    if (!reactie.ok) throw new Error('download ' + reactie.status);
+    const blobUrl = URL.createObjectURL(await reactie.blob());
+    const download = document.createElement('a');
+    download.href = blobUrl;
+    download.download = knop.download || 'weerkaart.mp4';
+    document.body.appendChild(download);
+    download.click();
+    download.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  } catch (e) {
+    const foutVak = document.getElementById('fout');
+    foutVak.style.display = 'block';
+    foutVak.textContent = 'De MP4 kon niet worden gedownload (' + e.message + '). Probeer het opnieuw.';
+  } finally {
+    delete knop.dataset.bezig;
+    knop.removeAttribute('aria-busy');
+    knop.textContent = oorspronkelijkeTekst;
+  }
+}
+
 async function laad(){
   const cfg = MODELLEN[model];
   const vcfg = VELDEN[veld];
@@ -277,14 +317,19 @@ async function laad(){
     const gif = R2 + '/' + (b.gif || prefix + '_laatste.gif') + q;
     const png = R2 + '/' + (b.totaal_png || prefix + '_totaal_laatste.png') + q;
     document.getElementById('film').src = mp4;
-    document.getElementById('dl-mp4').href = mp4;
+    const mp4Knop = document.getElementById('dl-mp4');
+    mp4Knop.href = mp4;
+    mp4Knop.download = mp4Bestandsnaam(run);
     document.getElementById('dl-gif').href = gif;
     document.getElementById('dl-png').href = png;
     document.getElementById('totaalkaart').src = png;
   } catch (e) {
     // Zonder meta terugvallen op de vaste "laatste"-namen
     document.getElementById('film').src = R2 + '/' + prefix + '_laatste.mp4' + cb;
-    document.getElementById('dl-mp4').href = R2 + '/' + prefix + '_laatste.mp4';
+    const mp4Knop = document.getElementById('dl-mp4');
+    mp4Knop.href = R2 + '/' + prefix + '_laatste.mp4';
+    mp4Knop.download = (model === 'harmonie' ? 'HARMONIE_V46' : 'ECMWF_HRES') +
+      '_laatste_' + VELDEN[veld].bestand + '.mp4';
     document.getElementById('dl-gif').href = R2 + '/' + prefix + '_laatste.gif';
     document.getElementById('dl-png').href = R2 + '/' + prefix + '_totaal_laatste.png';
     document.getElementById('totaalkaart').src = R2 + '/' + prefix + '_totaal_laatste.png' + cb;
