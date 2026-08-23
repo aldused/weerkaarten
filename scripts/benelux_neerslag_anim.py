@@ -3,7 +3,7 @@ Nederlandse weerkaarten (animatie) — ECMWF HRES en HARMONIE
 
 Sociale kaarten voor neerslagsom, windkracht, windstoten, temperatuur en zicht:
 kleurvlak + cijfers op een raster, verticale kleurschaal rechts en run/geldigheid
-in de kop. Per beschikbaar model een GIF, een mp4 en een losse eindkaart.
+in de kop. Per beschikbaar model een mp4 en een losse eindkaart.
 
 Modellen:
   ecmwf     ECMWF IFS HRES 9 km uit open data (veld `tp`).
@@ -18,7 +18,6 @@ Gebruik:
     python benelux_neerslag_anim.py                           # ECMWF, laatste run
     python benelux_neerslag_anim.py --model harmonie          # HARMONIE, laatste run
     python benelux_neerslag_anim.py --run 6 --max-step 72
-    python benelux_neerslag_anim.py --no-mp4                  # alleen GIF
 """
 
 import os
@@ -76,7 +75,7 @@ HARMONIE_MAX    = 60
 # graad breedte waard, dus met gelijke stappen komen de cijfers horizontaal
 # tegen elkaar aan te staan terwijl er verticaal ruimte overblijft. Zo staat het
 # raster vierkant in kilometers (~30 km) en past er ruim twee keer zoveel
-# detail op zonder botsingen, ook nog na verkleinen naar de 720 px van de GIF.
+# detail op zonder botsingen, ook nog op de 792 px van de mp4.
 LABEL_D_LAT  = 0.27
 LABEL_D_LON  = 0.44
 LABEL_FONT   = 7.2
@@ -662,7 +661,7 @@ def teken_merkstrook(fig, bron_credit, fig_h):
                           color='#dfe5ec', linewidth=0.8, zorder=1))
 
     # Schaalbare tekstlock-up van het echte logo. Daardoor blijft de merknaam
-    # ook na GIF- en MP4-compressie scherp en behoudt .nl zijn blauwe kleur.
+    # ook na MP4-compressie scherp en behoudt .nl zijn blauwe kleur.
     merknaam = HPacker(children=[
         TextArea('Weerlab.', textprops=dict(fontsize=13.5, fontweight='bold',
                                             color=MERK_INK)),
@@ -898,116 +897,6 @@ def _hex_rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def _gif_palet(imgs, var, kleuren=128):
-    """Eén palet voor alle beelden, met de schaalkleuren exact erin.
-
-    PIL leidde het palet af uit beeld 1. Dat beeld is +1u en vrijwel droog, dus
-    geel/oranje/rood/paars zaten er niet in en alle latere beelden kregen de
-    dichtstbijzijnde verkeerde kleur — 18 van de 24 schaalkleuren sneuvelden zo.
-
-    Hier komt het palet uit alle beelden samen; daarna wordt per schaalkleur de
-    dichtstbijzijnde paletplek op de exacte waarde gezet, zodat de kleurschaal
-    hoe dan ook klopt en niet meer per beeld verschuift.
-    """
-    from PIL import Image
-    stap = max(1, len(imgs) // 15)
-    monsters = [im.resize((im.width // 3, im.height // 3), Image.NEAREST)
-                for im in imgs[::stap]]
-    # Kop en merkstrook staan op elk beeld hetzelfde, beslaan weinig pixels en
-    # verdwijnen vrijwel helemaal in een 1-op-3 monster. Ze legden het daardoor
-    # af tegen wat de kaart nodig had: letterrandjes werden roze en mintgroen en
-    # het logo kreeg een andere tint zodra je de gif bekeek in plaats van de png.
-    # Die twee stroken gaan er nu onverkleind bij.
-    eerste = imgs[0]
-    monsters += [eerste.crop((0, 0, eerste.width, int(eerste.height * 0.09))),
-                 eerste.crop((0, int(eerste.height * 0.92), eerste.width, eerste.height))]
-
-    breedte = max(m.width for m in monsters)
-    master = Image.new('RGB', (breedte, sum(m.height for m in monsters)), 'white')
-    y = 0
-    for m in monsters:
-        master.paste(m, (0, y)); y += m.height
-
-    # De schaalkleuren plus een grijstrap voor de letters krijgen een eigen plek
-    # achteraan het palet, in plaats van dat ze over een bestaande plek heen
-    # worden geschreven. Elke overschreven plek was namelijk een kleur die
-    # ergens op de kaart of in het logo stond, en precies die raakten we kwijt.
-    vast = [_hex_rgb(c) for c in [var['under']] + list(var['colors']) + [var['over']]]
-    vast += [(w, w, w) for w in range(0, 256, 17)]
-    # Vaste kleuren van de kaart zelf: zee, kust, grenzen, de merkstrook en het
-    # logo. Weinig pixels, maar juist daar viel de verkleuring op.
-    vast += [_hex_rgb(c) for c in ('#eef2f5', '#dfe5ec', '#20303c', '#5d7382',
-                                   MERK_INK, MERK_ACCENT, MERK_MUTED)]
-    uniek = []
-    for kleur in vast:
-        if kleur not in uniek:
-            uniek.append(kleur)
-
-    vrij = kleuren - len(uniek)
-    palet = master.convert('P', palette=Image.ADAPTIVE, colors=vrij)
-    ruw = list(palet.getpalette() or [])
-    tabel = ruw[:vrij * 3] + [0] * max(0, vrij * 3 - len(ruw))
-    for kleur in uniek:
-        tabel += list(kleur)
-    palet.putpalette(tabel + [0] * (768 - len(tabel)))
-    return palet
-
-
-# X weigert zware gif's en toont brede beelden klein in de tijdlijn. De eerste
-# poging is daarom direct 720 px; minder paletkleuren besparen veel ruimte
-# zonder de vaste weerklassen aan te tasten. De grotere bronletters houden de
-# cijfers ook na deze verkleining goed leesbaar.
-GIF_POGINGEN = ((720, 96), (680, 80), (640, 72), (600, 64))
-GIF_MAX_MB = 8.0
-
-
-def build_gif(frames, outfile, var, frame_ms=420, hold_ms=2600,
-              pogingen=GIF_POGINGEN, max_mb=GIF_MAX_MB):
-    """Gif die onder de uploadgrens van X blijft.
-
-    Op 900 px met een vol palet kwam een natte run boven de 15 MB uit en
-    weigerde X het bestand. Een drukke run is duurder dan een rustige, dus het
-    blijft schatten: daarom wordt de grootte na het schrijven gecontroleerd en
-    valt hij zo nodig een maat terug.
-    """
-    from PIL import Image
-    for i, (width, kleuren) in enumerate(pogingen):
-        imgs = []
-        for f in frames:
-            im = Image.open(f).convert('RGB')
-            if im.width > width:
-                im = im.resize((width, round(im.height * width / im.width)),
-                               Image.LANCZOS)
-            imgs.append(im)
-        _schrijf_gif(imgs, outfile, var, frame_ms, hold_ms, kleuren)
-        mb = os.path.getsize(outfile) / 1e6
-        if mb <= max_mb or i == len(pogingen) - 1:
-            print(f'  {os.path.basename(outfile)}  ({mb:.1f} MB, '
-                  f'{width} px, {kleuren} kleuren)')
-            return
-        print(f'  {os.path.basename(outfile)}: {mb:.1f} MB bij {width} px / '
-              f'{kleuren} kleuren is te groot voor X — opnieuw een maat kleiner')
-
-
-def _schrijf_gif(imgs, outfile, var, frame_ms, hold_ms, kleuren):
-    from PIL import Image
-    palet = _gif_palet(imgs, var, kleuren)
-    # dither uit: de vlakken zijn effen, ruis erin zou de kleurklassen vervagen.
-    kwant = [im.quantize(palette=palet, dither=Image.NONE) for im in imgs]
-    durations = [frame_ms] * (len(kwant) - 1) + [hold_ms]
-    # optimize=False: PIL zou anders opnieuw kleuren samenvoegen en het net
-    # rechtgezette palet weer stukmaken.
-    # disposal=1 (niet 2): met 2 wist de decoder het doek na elk beeld naar de
-    # achtergrondkleur (wit) voordat het volgende beeld getekend is. Bij deze
-    # zware beelden duurt dat tekenen merkbaar lang, dus flitste er tussen de
-    # frames wit door - de 'witte randen'. Met 1 blijft het vorige beeld staan
-    # en wordt het nieuwe eroverheen getekend. Extra winst: bij disposal=1 mag
-    # PIL alleen het gewijzigde rechthoekje wegschrijven, wat het bestand fors
-    # kleiner maakt. Het palet blijft ongemoeid.
-    kwant[0].save(outfile, save_all=True, append_images=kwant[1:], loop=0,
-                  duration=durations, optimize=False, disposal=1)
-
-
 # 6 fps: 60 HARMONIE-stappen duren zo 10 seconden in plaats van 6. Bij 10 fps
 # schoot een bui in twee tellen het land over en was per beeld niets af te
 # lezen; de snelheidskiezer op de pagina gaat nog steeds tot 4x voor wie snel
@@ -1033,7 +922,7 @@ def build_mp4(frame_glob, outfile, fps=MP4_FPS):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def bouw_veld(args, cfg, var_naam, bron_dir=None):
-    """Eén model × één veld: frames, GIF, mp4, eindkaart en meta."""
+    """Eén model × één veld: frames, mp4, eindkaart en meta."""
     var = VARS[var_naam]
     prefix = prefix_van(args.model, var_naam)
 
@@ -1121,8 +1010,6 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
           f'({"km/u" if var["cb_klassen"] else var["eenheid"]})')
 
     suffix = '_DEMO' if args.demo else ''
-    if not args.no_gif:
-        build_gif(frames, os.path.join(OUTPUT_DIR, f'{prefix}_{run_tag}{suffix}.gif'), var)
     if not args.no_mp4:
         build_mp4(os.path.join(frame_dir, f'{var_naam}_{run_tag}_*.png'),
                   os.path.join(OUTPUT_DIR, f'{prefix}_{run_tag}{suffix}.mp4'))
@@ -1152,7 +1039,6 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
             'video_fps': MP4_FPS,
             'gemaakt': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
             'bestanden': {
-                'gif': f'{prefix}_{run_tag}.gif',
                 'mp4': f'{prefix}_{run_tag}.mp4',
                 'totaal_png': f'{prefix}_totaal_{run_tag}.png',
             },
@@ -1174,7 +1060,6 @@ def main():
                          f'HARMONIE max {HARMONIE_MAX})')
     ap.add_argument('--refresh', action='store_true', help='GRIB opnieuw downloaden')
     ap.add_argument('--no-mp4', action='store_true')
-    ap.add_argument('--no-gif', action='store_true')
     ap.add_argument('--latest-run', action='store_true',
                     help='print alleen het runlabel van de nieuwste volledige run')
     args = ap.parse_args()

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kaartenstudio Nederland: bouwt bij elke nieuwe run per veld een GIF + mp4 + eindkaart en
+# Kaartenstudio Nederland: bouwt bij elke nieuwe run per veld een mp4 + eindkaart en
 # zet die op R2. Velden: neerslagsom, windkracht, windstoten, temperatuur en
 # voor HARMONIE V46 ook rechtstreeks modelzicht.
 #
@@ -46,7 +46,7 @@ VELDEN=(neerslag wind windstoten temp)
 
 bouw_model() {
   local MODEL="$1" ACHTERVOEGSEL="$2" MARKER="$3"
-  local RUN GEDAAN VELD PREFIX GIF MP4 PNG META EXTRA=()
+  local RUN GEDAAN VELD PREFIX MP4 PNG META EXTRA=()
   local MODEL_VELDEN=("${VELDEN[@]}")
   if [ "$MODEL" = "harmonie" ]; then
     MODEL_VELDEN+=(zicht)
@@ -76,32 +76,29 @@ bouw_model() {
   local F
   for VELD in "${MODEL_VELDEN[@]}"; do
     PREFIX="benelux_${VELD}${ACHTERVOEGSEL}"
-    GIF="$OUT/${PREFIX}_${RUN}.gif"
     MP4="$OUT/${PREFIX}_${RUN}.mp4"
     PNG="$OUT/${PREFIX}_totaal_${RUN}.png"
     META="$OUT/${PREFIX}_meta.json"
-    if [ ! -s "$GIF" ]; then
-      echo "$(date '+%F %T') [$MODEL/$VELD] FOUT: $GIF ontbreekt na bouw" >&2
+    if [ ! -s "$MP4" ]; then
+      echo "$(date '+%F %T') [$MODEL/$VELD] FOUT: $MP4 ontbreekt na bouw" >&2
       return 1
     fi
-    for F in "$GIF" "$MP4" "$PNG"; do
+    for F in "$MP4" "$PNG"; do
       [ -s "$F" ] || continue
       "$RCLONE" copyto "$F" "$R2_DIR/$(basename "$F")" \
         --header-upload "Cache-Control: public, max-age=86400" --no-traverse
     done
     [ -s "$META" ] && "$RCLONE" copyto "$META" "$R2_DIR/$(basename "$META")" \
       --header-upload "Cache-Control: public, max-age=300" --no-traverse
-    "$RCLONE" copyto "$GIF" "$R2_DIR/${PREFIX}_laatste.gif" \
-      --header-upload "Cache-Control: public, max-age=300" --no-traverse
-    [ -s "$MP4" ] && "$RCLONE" copyto "$MP4" "$R2_DIR/${PREFIX}_laatste.mp4" \
+    "$RCLONE" copyto "$MP4" "$R2_DIR/${PREFIX}_laatste.mp4" \
       --header-upload "Cache-Control: public, max-age=300" --no-traverse
     "$RCLONE" copyto "$PNG" "$R2_DIR/${PREFIX}_totaal_laatste.png" \
       --header-upload "Cache-Control: public, max-age=300" --no-traverse
 
     # Oude runs opruimen: hou de laatste 4 per veld
-    ls -1t "$OUT/${PREFIX}"_2*.gif 2>/dev/null | tail -n +5 | while read -r F; do
-      OUD="$(basename "$F" .gif)"; OUD="${OUD##*_}"
-      rm -f "$OUT/${PREFIX}_${OUD}."{gif,mp4} "$OUT/${PREFIX}_totaal_${OUD}.png"
+    ls -1t "$OUT/${PREFIX}"_2*.mp4 2>/dev/null | tail -n +5 | while read -r F; do
+      OUD="$(basename "$F" .mp4)"; OUD="${OUD##*_}"
+      rm -f "$OUT/${PREFIX}_${OUD}.mp4" "$OUT/${PREFIX}_totaal_${OUD}.png"
     done
   done
 
