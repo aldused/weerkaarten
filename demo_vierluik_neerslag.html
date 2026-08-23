@@ -1061,8 +1061,11 @@ function laadTegelMeta(modelId) {
 
 // Tegels komen van R2; zonder crossOrigin vergiftigt een cache-hit zonder
 // CORS-header de canvas (zie de bekende R2-Vary-valkuil).
-function haalTegel(fname, stil) {
-  var url = TEGEL_URL + fname;
+// De bestandsnamen blijven per run gelijk en de tegels staan een uur in de
+// cache, dus de runsleutel moet in de URL — anders blijft een nieuwe run
+// onzichtbaar tot de cache verloopt.
+function haalTegel(tm, fname, stil) {
+  var url = TEGEL_URL + fname + '?v=' + encodeURIComponent(tm.gemaakt || tm.bijgewerkt || tm.run || 'v1');
   var img = tegelCache.get(url);
   if (img) {
     tegelCache.delete(url); tegelCache.set(url, img);   // LRU: opnieuw achteraan
@@ -1090,7 +1093,7 @@ function prefetchTegels(tm, md, stepIdx) {
     if (!d) continue;
     var tijd = md.meta.tijden[stepIdx + d];
     var u = tijd && tm.perTijd[tijd];
-    if (u) haalTegel(u.fname, true);
+    if (u) haalTegel(tm, u.fname, true);
   }
 }
 
@@ -1116,7 +1119,7 @@ function tekenWolkentegel(ctx, pIdx, mCfg, md, stepIdx, cw, ch,
   var uur = tm.perTijd[tijdstip];
   if (!uur) { leeg('Geen wolkenkaart voor dit uur'); return; }
 
-  var img = haalTegel(uur.fname);
+  var img = haalTegel(tm, uur.fname);
   if (img.mislukt) { leeg('Wolkentegel laden mislukt'); return; }
   if (!img.complete || !img.naturalWidth) {
     // Nog onderweg: liever het vorige uur laten staan dan de kaart leegmaken —
