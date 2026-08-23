@@ -1032,7 +1032,8 @@ var TEGEL_URL = DATA_URL + 'wolkentegels/';
 var tegelMeta = {};        // modelId → meta | null (niet beschikbaar) | undefined (nog niet gevraagd)
 var tegelMetaBezig = {};
 var tegelCache = new Map();  // url → Image
-var TEGEL_CACHE_MAX = 90;
+var TEGEL_CACHE_MAX = 160;
+var tegelLaatst = [null, null, null, null];   // per vak de laatst getekende tegel
 
 function laadTegelMeta(modelId) {
   if (tegelMetaBezig[modelId] || tegelMeta[modelId] !== undefined) return;
@@ -1082,9 +1083,10 @@ function haalTegel(fname, stil) {
 }
 
 // Buururen alvast ophalen zodat de tijdbalk en het afspelen niet haperen.
+// Ruim vooruit, want het afspelen loopt één kant op.
 function prefetchTegels(tm, md, stepIdx) {
   if (!tm || !md.meta.tijden) return;
-  for (var d = -1; d <= 2; d++) {
+  for (var d = -2; d <= 8; d++) {
     if (!d) continue;
     var tijd = md.meta.tijden[stepIdx + d];
     var u = tijd && tm.perTijd[tijd];
@@ -1116,7 +1118,15 @@ function tekenWolkentegel(ctx, pIdx, mCfg, md, stepIdx, cw, ch,
 
   var img = haalTegel(uur.fname);
   if (img.mislukt) { leeg('Wolkentegel laden mislukt'); return; }
-  if (!img.complete || !img.naturalWidth) { leeg('Wolkenkaart laden…'); return; }
+  if (!img.complete || !img.naturalWidth) {
+    // Nog onderweg: liever het vorige uur laten staan dan de kaart leegmaken —
+    // anders knippert het hele vierluik zwart tijdens het afspelen.
+    var vorig = tegelLaatst[pIdx];
+    if (!vorig || vorig.modelId !== mCfg.id) { leeg('Wolkenkaart laden…'); return; }
+    img = vorig.img;
+  } else {
+    tegelLaatst[pIdx] = { modelId: mCfg.id, img: img };
+  }
 
   statusEl.style.display = 'none';
   var T = tm.tegel;
@@ -1164,6 +1174,17 @@ var globalTimeIndex = 0;
 var activeGlobalTime = '';
 var panelStep = [0, 0, 0, 0]; // direct model-step index per panel
 var activeVar = 'neerslag';
+// De facetbalk geeft de gewenste kaartlaag mee als ?laag=… ; alleen een laag
+// die in de kiezer staat wordt overgenomen.
+(function () {
+  var wens = PAGE_PARAMS.get('laag');
+  if (!wens) return;
+  var sel = document.getElementById('var-select');
+  if (sel && Array.prototype.some.call(sel.options, function (o) { return o.value === wens; })) {
+    activeVar = wens;
+    sel.value = wens;
+  }
+})();
 var playTimer = null;
 
 function updatePanelTime(pIdx, referenceTime) {
@@ -3104,12 +3125,21 @@ document.addEventListener('keydown', function(e) {
 // VARIABLE SELECTOR
 // ═══════════════════════════════════════════════════════════════
 
+function meldKaartlaag() {
+  if (window.parent === window) return;
+  try {
+    window.parent.postMessage({ type: 'weerlab-kaart-state', veld: activeVar },
+                              window.location.origin);
+  } catch (e) {}
+}
+
 function kiesKaartlaag(waarde) {
   if (!waarde || waarde === activeVar) return;
   activeVar = waarde;
   document.getElementById('var-select').value = waarde;
   var focusKiezer = document.getElementById('map-focus-var');
   if (focusKiezer) focusKiezer.value = waarde;
+  meldKaartlaag();
   updateSelectedVariableInfo();
   requestRender(); // direct renderen met wat al geladen is
   Promise.allSettled(actieveModellen().map(function(m) {
