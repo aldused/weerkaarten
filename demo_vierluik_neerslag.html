@@ -1064,7 +1064,7 @@ function laadTegelMeta(modelId) {
 // De bestandsnamen blijven per run gelijk en de tegels staan een uur in de
 // cache, dus de runsleutel moet in de URL — anders blijft een nieuwe run
 // onzichtbaar tot de cache verloopt.
-function haalTegel(tm, fname, stil) {
+function haalTegel(tm, fname) {
   var url = TEGEL_URL + fname + '?v=' + encodeURIComponent(tm.gemaakt || tm.bijgewerkt || tm.run || 'v1');
   var img = tegelCache.get(url);
   if (img) {
@@ -1074,8 +1074,14 @@ function haalTegel(tm, fname, stil) {
   img = new Image();
   img.crossOrigin = 'anonymous';
   img.decoding = 'async';
-  img.onload = function() { if (!stil && activeVar === TEGEL_VAR) requestRender(); };
-  img.onerror = function() { img.mislukt = true; };
+  // Altijd hertekenen, ook als deze tegel vooruit werd opgehaald: het paneel
+  // kan intussen op precies dit uur staan wachten en zou anders op "laden…"
+  // blijven staan terwijl het beeld al binnen is.
+  img.onload = function() { if (activeVar === TEGEL_VAR) requestRender(); };
+  img.onerror = function() {
+    img.mislukt = true;
+    if (activeVar === TEGEL_VAR) requestRender();
+  };
   img.src = url;
   tegelCache.set(url, img);
   while (tegelCache.size > TEGEL_CACHE_MAX) {
@@ -1093,7 +1099,7 @@ function prefetchTegels(tm, md, stepIdx) {
     if (!d) continue;
     var tijd = md.meta.tijden[stepIdx + d];
     var u = tijd && tm.perTijd[tijd];
-    if (u) haalTegel(tm, u.fname, true);
+    if (u) haalTegel(tm, u.fname);
   }
 }
 
