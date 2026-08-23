@@ -961,7 +961,7 @@ GIF_POGINGEN = ((720, 96), (680, 80), (640, 72), (600, 64))
 GIF_MAX_MB = 8.0
 
 
-def build_gif(frames, outfile, var, frame_ms=320, hold_ms=2200,
+def build_gif(frames, outfile, var, frame_ms=420, hold_ms=2600,
               pogingen=GIF_POGINGEN, max_mb=GIF_MAX_MB):
     """Gif die onder de uploadgrens van X blijft.
 
@@ -1008,7 +1008,11 @@ def _schrijf_gif(imgs, outfile, var, frame_ms, hold_ms, kleuren):
                   duration=durations, optimize=False, disposal=1)
 
 
-MP4_FPS = 10
+# 6 fps: 60 HARMONIE-stappen duren zo 10 seconden in plaats van 6. Bij 10 fps
+# schoot een bui in twee tellen het land over en was per beeld niets af te
+# lezen; de snelheidskiezer op de pagina gaat nog steeds tot 4x voor wie snel
+# wil doorspoelen.
+MP4_FPS = 6
 MP4_BITRATE = '650k'
 
 
