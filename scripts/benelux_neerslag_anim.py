@@ -793,9 +793,11 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                 fontweight='bold',
                 path_effects=[pe.withStroke(linewidth=2.0, foreground=rand)])
 
-    # Vaste punten: grotere waarden voor extra detail, zonder plaatsnamen zodat
-    # de kaart op sociale media rustig en direct leesbaar blijft. Dezelfde
-    # ondergrens geldt als voor het raster: bij neerslag dus geen 0 mm.
+    # Vaste punten: extra waarden op plekken die het raster overslaat, zonder
+    # plaatsnamen zodat de kaart op sociale media rustig en direct leesbaar
+    # blijft. Zelfde lettergrootte als het raster — twee maten door elkaar oogde
+    # rommelig. Dezelfde ondergrens geldt als voor het raster: bij neerslag dus
+    # geen 0 mm.
     for naam, la, lo in PUNTEN:
         if not (extent[0] + 0.1 < lo < extent[1] - 0.1 and
                 extent[2] + 0.1 < la < extent[3] - 0.1):
@@ -809,9 +811,9 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
             continue
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         ax.text(lo, la, var['label_fmt'](v), transform=PROJ_PC, zorder=8,
-                fontsize=12.0, fontweight='bold', color=inkt,
+                fontsize=10.2, fontweight='bold', color=inkt,
                 ha='center', va='center', clip_on=True,
-                path_effects=[pe.withStroke(linewidth=2.4, foreground=rand)])
+                path_effects=[pe.withStroke(linewidth=2.0, foreground=rand)])
 
     ax.spines['geo'].set_linewidth(1.1)
     ax.spines['geo'].set_edgecolor('#333333')
