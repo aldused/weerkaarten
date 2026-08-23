@@ -103,6 +103,13 @@ TO 1200 python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_openmeteo_updat
 # ECMWF Open Data 00/12 runs: laag verwijderd. Vervangen door Open-Meteo (ecmwf_om).
 # Script ecmwf_opendata_long.py bewaard.
 
+echo "$(date): Wolkentegels voor het hoge-resolutie 4-luik genereren..." >> "$LOG"
+# Per model: alleen renderen als er een nieuwe run in de canvas-meta staat.
+TO 1800 python3 /Users/aldus/KNMI_Project/test_cumulus_kaart.py \
+  --tegels /Users/aldus/KNMI_Project/weerlab/wolkentegels >> "$LOG" 2>&1
+echo "$(date): Wolkentegels uploaden naar R2..." >> "$LOG"
+TO 900 bash /Users/aldus/KNMI_Project/weerlab/shell/upload_wolkentegels.sh >> "$LOG" 2>&1
+
 echo "$(date): === Klaar ===" >> "$LOG"
 
 # Log opschonen (max 5000 regels)

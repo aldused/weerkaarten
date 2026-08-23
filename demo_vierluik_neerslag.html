@@ -554,6 +554,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
       <option value="cape" data-label="CAPE">CAPE</option>
       <option value="bewolking" data-label="Bewolking">Bewolking</option>
       <option value="wolkenlagen" data-label="Wolkenlagen">Wolkenlagen</option>
+      <option value="wolkenkaart" data-label="Wolkenkaart (realistisch)">Wolkenkaart (realistisch)</option>
       <option value="straling" data-label="Zonnestraling">Zonnestraling</option>
       <option value="cumstraling" data-label="Dagsom straling">Dagsom straling</option>
     </select>
@@ -1022,6 +1023,126 @@ function loadOverlay() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// WOLKENTEGELS — realistische bewolking (zelfde renderer als #weerkaarten-
+// bewolking-icond2, maar als kale georefereerde tegel per model en per uur).
+// Het paneel tekent de tegel rechtstreeks; er komt geen veldlus aan te pas.
+// ═══════════════════════════════════════════════════════════════
+var TEGEL_VAR = 'wolkenkaart';
+var TEGEL_URL = DATA_URL + 'wolkentegels/';
+var tegelMeta = {};        // modelId → meta | null (niet beschikbaar) | undefined (nog niet gevraagd)
+var tegelMetaBezig = {};
+var tegelCache = new Map();  // url → Image
+var TEGEL_CACHE_MAX = 90;
+
+function laadTegelMeta(modelId) {
+  if (tegelMetaBezig[modelId] || tegelMeta[modelId] !== undefined) return;
+  tegelMetaBezig[modelId] = true;
+  var cfg = MODELS[modelIndexById(modelId)];
+  if (!cfg) { tegelMeta[modelId] = null; return; }
+  fetch(TEGEL_URL + modelId + '_tegel_meta.json?t=' + Date.now())
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(j) {
+      if (j && j.uren && j.tegel) {
+        j.perTijd = {};
+        j.uren.forEach(function(u) { j.perTijd[u.tijdstip] = u; });
+        tegelMeta[modelId] = j;
+      } else {
+        tegelMeta[modelId] = null;
+      }
+    })
+    .catch(function() { tegelMeta[modelId] = null; })
+    .then(function() {
+      tegelMetaBezig[modelId] = false;
+      updateVariableAvailability();
+      if (activeVar === TEGEL_VAR) requestRender();
+    });
+}
+
+// Tegels komen van R2; zonder crossOrigin vergiftigt een cache-hit zonder
+// CORS-header de canvas (zie de bekende R2-Vary-valkuil).
+function haalTegel(fname, stil) {
+  var url = TEGEL_URL + fname;
+  var img = tegelCache.get(url);
+  if (img) {
+    tegelCache.delete(url); tegelCache.set(url, img);   // LRU: opnieuw achteraan
+    return img;
+  }
+  img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.decoding = 'async';
+  img.onload = function() { if (!stil && activeVar === TEGEL_VAR) requestRender(); };
+  img.onerror = function() { img.mislukt = true; };
+  img.src = url;
+  tegelCache.set(url, img);
+  while (tegelCache.size > TEGEL_CACHE_MAX) {
+    var oudste = tegelCache.keys().next().value;
+    tegelCache.delete(oudste);
+  }
+  return img;
+}
+
+// Buururen alvast ophalen zodat de tijdbalk en het afspelen niet haperen.
+function prefetchTegels(tm, md, stepIdx) {
+  if (!tm || !md.meta.tijden) return;
+  for (var d = -1; d <= 2; d++) {
+    if (!d) continue;
+    var tijd = md.meta.tijden[stepIdx + d];
+    var u = tijd && tm.perTijd[tijd];
+    if (u) haalTegel(u.fname, true);
+  }
+}
+
+function tekenWolkentegel(ctx, pIdx, mCfg, md, stepIdx, cw, ch,
+                          vLonMin, vLonMax, vLatMin, vLatMax) {
+  var statusEl = document.getElementById('status-' + pIdx);
+  var tm = tegelMeta[mCfg.id];
+  if (tm === undefined) laadTegelMeta(mCfg.id);
+
+  function leeg(tekst) {
+    statusEl.style.display = 'block';
+    statusEl.textContent = tekst;
+    ctx.fillStyle = '#1a2535';
+    ctx.fillRect(0, 0, cw, ch);
+    var o = document.getElementById('overlay-' + pIdx);
+    if (o) o.getContext('2d').clearRect(0, 0, o.width, o.height);
+  }
+
+  if (tm === undefined) { leeg('Wolkenkaart laden…'); return; }
+  if (tm === null) { leeg('Wolkenkaart niet beschikbaar voor dit model'); return; }
+
+  var tijdstip = md.meta.tijden[stepIdx];
+  var uur = tm.perTijd[tijdstip];
+  if (!uur) { leeg('Geen wolkenkaart voor dit uur'); return; }
+
+  var img = haalTegel(uur.fname);
+  if (img.mislukt) { leeg('Wolkentegel laden mislukt'); return; }
+  if (!img.complete || !img.naturalWidth) { leeg('Wolkenkaart laden…'); return; }
+
+  statusEl.style.display = 'none';
+  var T = tm.tegel;
+  var tLonW = T.lon_max - T.lon_min, tLatH = T.lat_max - T.lat_min;
+  var sx = (vLonMin - T.lon_min) / tLonW * img.naturalWidth;
+  var sw = (vLonMax - vLonMin) / tLonW * img.naturalWidth;
+  var sy = (T.lat_max - vLatMax) / tLatH * img.naturalHeight;
+  var sh = (vLatMax - vLatMin) / tLatH * img.naturalHeight;
+
+  ctx.fillStyle = '#101b2c';        // buiten het modeldomein
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  // drawImage knipt bron én doel evenredig af als de uitsnede buiten de tegel
+  // valt, dus randgebieden houden vanzelf de achtergrondkleur.
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+
+  var resEl = document.getElementById('p' + pIdx + '-res');
+  if (resEl) resEl.textContent = T.km_px.toFixed(2) + ' km/px · wolkenrender';
+
+  labelVakken.length = 0;
+  renderOverlay(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax);
+  prefetchTegels(tm, md, stepIdx);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // VIEW STATE (geographic extent + pan/zoom)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1291,6 +1412,12 @@ function updateVariableAvailability() {
   Array.from(select.options).forEach(function(option) {
     var key = option.value === 'wolkenlagen' ? 'bewolking' : option.value;
     var count = actief.filter(function(m) {
+      // De wolkentegel staat los van de veldbestanden: die telt mee zodra de
+      // tegelmeta van dit model is opgehaald.
+      if (key === TEGEL_VAR) {
+        if (tegelMeta[m.id] === undefined) laadTegelMeta(m.id);
+        return !!tegelMeta[m.id];
+      }
       var md = modelData[m.id];
       if (!md || !md.meta || !md.meta.parameters) return false;
       if (key === 'cumul') return !!(md.meta.parameters.cumul || md.meta.parameters.neerslag);
@@ -1705,7 +1832,11 @@ function renderPanel(pIdx) {
   }
   var ctx = canvas.getContext('2d');
 
-  if (!md || !md.paramData || Object.keys(md.paramData).length === 0) {
+  // De wolkentegel komt niet uit de veldbestanden; die modus heeft alleen de
+  // meta (voor de tijdenlijst) nodig.
+  var tegelModus = activeVar === TEGEL_VAR;
+  var metaKlaar = md && md.meta && md.meta.tijden;
+  if (!metaKlaar || (!tegelModus && (!md.paramData || Object.keys(md.paramData).length === 0))) {
     statusEl.style.display = 'block';
     if (!(md && md.failed)) statusEl.textContent = 'Laden...';
     ctx.fillStyle = '#1e293b';
@@ -1728,9 +1859,6 @@ function renderPanel(pIdx) {
   var data = md.data;
   var g = md.meta.grid;
 
-  var imgData = ctx.createImageData(cw, ch);
-  var pix = imgData.data;
-
   // Viewport: gebruik gedeelde afmetingen (panel 0) zodat alle 6 panelen
   // exact dezelfde geografische uitsnede tonen.
   var vpCw = sharedVpCw || cw, vpCh = sharedVpCh || ch;
@@ -1744,6 +1872,15 @@ function renderPanel(pIdx) {
   var vLatMax = vCenterLat + vLatH / 2;
   var vLonMin = vCenterLon - vLonW / 2;
   var vLonMax = vCenterLon + vLonW / 2;
+
+  if (tegelModus) {
+    tekenWolkentegel(ctx, pIdx, mCfg, md, stepIdx, cw, ch,
+                     vLonMin, vLonMax, vLatMin, vLatMax);
+    return;
+  }
+
+  var imgData = ctx.createImageData(cw, ch);
+  var pix = imgData.data;
 
   var gLatH = g.lat_max - g.lat_min;
   var gLonW = g.lon_max - g.lon_min;
@@ -2583,6 +2720,14 @@ function buildLegendHTML(pIdx) {
       [0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1].forEach(function(v) { swatches += sw(interpColor(v, ref)); });
     });
     labels = lbl(['Hoog','Midden','Laag']);
+  } else if (activeVar === TEGEL_VAR) {
+    title = 'Wolkentypen · gerenderd beeld';
+    [['#fcfdff','Cirrus (hoog)'], ['#b9d4a8','Altocumulus (midden)'],
+     ['#ffffff','Cumulus'], ['#8891a0','Stratocumulus'], ['#5a626e','Stratus'],
+     ['#2e343f','Cumulonimbus'], ['#d4a84a','Mist']].forEach(function(rij) {
+      swatches += '<div class="leg-swatch" style="background:' + rij[0] + '"></div>';
+    });
+    labels = lbl(['Ci','Ac','Cu','Sc','St','Cb','mist']);
   } else if (activeVar === 'wolkenlagen') {
     title = 'Wolkenlagen · R=laag G=midden B=hoog';
     [[0,0,0],[230,40,40],[40,210,40],[50,90,235],[235,225,40],[45,225,225],[225,55,225],[245,245,245]]
@@ -2837,6 +2982,7 @@ var VAR_NAMES = {
   neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
   dauwpunt:'Dauwpunt', wind:'Wind', windstoten:'Windstoten', druk:'Luchtdruk',
   zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', wolkenlagen:'Wolkenlagen',
+  wolkenkaart:'Wolkenkaart (realistisch)',
   straling:'Zonnestraling', cumstraling:'Dagsom straling'
 };
 var mapTooltip = document.getElementById('map-tooltip');
