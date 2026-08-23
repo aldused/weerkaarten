@@ -69,6 +69,19 @@ ECMWF_RUN_HOURS = (0, 6, 12, 18)
 ECMWF_MAX       = 144              # alle vier dagelijkse runs, 3-uursstappen
 HARMONIE_MAX    = 60
 
+# Waardecijfers: rasterafstand in graden, lettergrootte en dikte van de
+# contourrand. Op een plek zodat de dichtheid in een keer te wijzigen is; de
+# vaste punten gebruiken dezelfde maat, twee lettergroottes oogde rommelig.
+# d_lon = d_lat / cos(52°): op deze breedte is een graad lengte maar 0,62
+# graad breedte waard, dus met gelijke stappen komen de cijfers horizontaal
+# tegen elkaar aan te staan terwijl er verticaal ruimte overblijft. Zo staat het
+# raster vierkant in kilometers (~30 km) en past er ruim twee keer zoveel
+# detail op zonder botsingen, ook nog na verkleinen naar de 720 px van de GIF.
+LABEL_D_LAT  = 0.27
+LABEL_D_LON  = 0.44
+LABEL_FONT   = 7.2
+LABEL_STROKE = 1.4
+
 MODELS = {
     'ecmwf': {
         'label':       'ECMWF HRES 9 km',
@@ -697,7 +710,12 @@ def _tekst_op(kleur):
 
 def _bij_vast_punt(lo, la):
     """Valt dit rasterpunt zo dicht bij een vast punt dat de cijfers botsen?"""
-    return any(abs(la - pla) < 0.16 and abs(lo - plo) < 0.22
+    # De zone schaalt mee met het raster, maar niet onder de breedte van de
+    # cijfers zelf: anders plakken bij een fijn raster het vaste punt en zijn
+    # buur aan elkaar ("22 23" als één blok).
+    d_la = max(LABEL_D_LAT * 0.32, 0.11)
+    d_lo = max(LABEL_D_LON * 0.38, 0.19)
+    return any(abs(la - pla) < d_la and abs(lo - plo) < d_lo
                for _, pla, plo in PUNTEN)
 
 
@@ -710,7 +728,7 @@ def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None):
     """
     # Voor X zijn iets minder maar duidelijk grotere cijfers beter leesbaar dan
     # een fijn raster dat na het verkleinen dichtloopt.
-    d_lat, d_lon = 0.50, 0.58
+    d_lat, d_lon = LABEL_D_LAT, LABEL_D_LON
     for la in np.arange(extent[2] + 0.12, extent[3] - 0.06, d_lat):
         for lo in np.arange(extent[0] + 0.15, extent[1] - 0.08, d_lon):
             i = int(np.argmin(np.abs(lats_f - la)))
@@ -788,10 +806,10 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                                 var.get('label_max')):
         txt = var['label_fmt'](v)
         inkt, rand = _tekst_op(_vlakkleur(var, v))
-        ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=10.2,
+        ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=LABEL_FONT,
                 color=inkt, ha='center', va='center', clip_on=True,
                 fontweight='bold',
-                path_effects=[pe.withStroke(linewidth=2.0, foreground=rand)])
+                path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
 
     # Vaste punten: extra waarden op plekken die het raster overslaat, zonder
     # plaatsnamen zodat de kaart op sociale media rustig en direct leesbaar
@@ -811,9 +829,9 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
             continue
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         ax.text(lo, la, var['label_fmt'](v), transform=PROJ_PC, zorder=8,
-                fontsize=10.2, fontweight='bold', color=inkt,
+                fontsize=LABEL_FONT, fontweight='bold', color=inkt,
                 ha='center', va='center', clip_on=True,
-                path_effects=[pe.withStroke(linewidth=2.0, foreground=rand)])
+                path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
 
     ax.spines['geo'].set_linewidth(1.1)
     ax.spines['geo'].set_edgecolor('#333333')
