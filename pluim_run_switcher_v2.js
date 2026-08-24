@@ -2,7 +2,7 @@
 // content-addressed pad zodat CDN-caches nooit een oudere versie kunnen geven.
 (function () {
   'use strict';
-  const src = 'pluim_run_switcher_032667819e3a.js';
+  const src = 'pluim_run_switcher_48ffbf926db6.js';
   const sourceScript = document.currentScript;
   const forwarded = ['data-required', 'data-editor-mode-aware']
     .map(name => [name, sourceScript?.getAttribute?.(name)])

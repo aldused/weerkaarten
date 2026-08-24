@@ -307,11 +307,11 @@ for (const page of [
   'janvisser.html',
   'weerbewaking_ridderkerk_rhoon_dekuip.html',
 ]) {
-  assert.match(fs.readFileSync(path.join(root, page), 'utf8'), /pluim_run_switcher_032667819e3a\.js/, `${page}: directe gezamenlijke 00\/06\/12\/18-runkeuze ontbreekt`);
+  assert.match(fs.readFileSync(path.join(root, page), 'utf8'), /pluim_run_switcher_48ffbf926db6\.js/, `${page}: directe gezamenlijke 00\/06\/12\/18-runkeuze ontbreekt`);
 }
 for (const page of ['weerbewaking_landelijke_kaart.html', 'weerbewaking_landelijke_meerdaagse.html', 'weerbewaking_landelijke_pluim.html', 'weerbewaking_knmi_metingen.html', 'weerbewaking_regio_kaart.html']) {
   const html = fs.readFileSync(path.join(root, page), 'utf8');
-  assert.match(html, /pluim_run_switcher_032667819e3a\.js/, `${page}: directe pluimrunkeuze is niet cache-gebroken`);
+  assert.match(html, /pluim_run_switcher_48ffbf926db6\.js/, `${page}: directe pluimrunkeuze is niet cache-gebroken`);
   assert.match(html, /data-editor-mode-aware="true"/, `${page}: runbalk kan niet per editorpagina worden verborgen`);
   const required = html.match(/data-required="([^"]+)"/)?.[1] || '';
   assert.match(required, /temperature_2m,precipitation,wind_speed_10m,cloud_cover,wind_gusts_10m/,
@@ -337,7 +337,7 @@ assert.match(knmiMeasurementsPage, /id="knmi-reload-button"/, 'KNMI-pagina mist 
 assert.match(knmiMeasurementsPage, /window\.location\.reload\(\)/, 'KNMI-herlaadknop vernieuwt het editorvenster niet');
 assert.match(knmiMeasurementsPage, /MutationObserver\(syncVisibility\)/, 'KNMI-herlaadknop wordt niet na het ontgrendelen zichtbaar');
 assert.match(fs.readFileSync(path.join(root, 'weerbewaking_regio_kaart.html'), 'utf8'), /WEERLAB_EDITOR_MODE = 'regio'/, 'regiopagina verbergt de pluimrunbalk niet');
-const switcher = fs.readFileSync(path.join(root, 'pluim_run_switcher_032667819e3a.js'), 'utf8');
+const switcher = fs.readFileSync(path.join(root, 'pluim_run_switcher_48ffbf926db6.js'), 'utf8');
 assert.match(switcher, /const CYCLES = \[0, 6, 12, 18\]/, 'runkeuze bevat niet alle vier IFS ENS-cycli');
 assert.match(switcher, /weerlab_unavailable_variables/, 'oudere runs markeren nieuwe variabelen niet expliciet');
 assert.match(switcher, /#weerlab-run-switcher~#root/, 'editorhoogte houdt geen rekening met de runkeuzebalk');

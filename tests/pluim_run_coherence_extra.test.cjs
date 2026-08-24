@@ -218,8 +218,8 @@ assert.throws(
   'interactieve pluim accepteert een initialisatie buiten 00/06/12/18 UTC',
 );
 
-assert.match(color, /pluim_run_switcher_032667819e3a\.js/);
-assert.match(interactive, /pluim_run_switcher_032667819e3a\.js/);
+assert.match(color, /pluim_run_switcher_48ffbf926db6\.js/);
+assert.match(interactive, /pluim_run_switcher_48ffbf926db6\.js/);
 assert.match(
   functionSource(interactive, 'fetchEnsembleCoherent'),
   /assertExactCommonEnsemble\(data,url,config,optionalBases\)/,

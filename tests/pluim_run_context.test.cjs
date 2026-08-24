@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const switcher = fs.readFileSync(path.join(root, 'pluim_run_switcher_032667819e3a.js'), 'utf8');
+const switcher = fs.readFileSync(path.join(root, 'pluim_run_switcher_48ffbf926db6.js'), 'utf8');
 const exporter = fs.readFileSync(path.join(root, 'weerbewaking_pluim_export.js'), 'utf8');
 
 function extractFunction(text, name) {

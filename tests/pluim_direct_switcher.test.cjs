@@ -5,11 +5,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
-const selectorName = 'pluim_run_switcher_032667819e3a.js';
+const selectorName = 'pluim_run_switcher_48ffbf926db6.js';
 const source = fs.readFileSync(path.join(root, selectorName), 'utf8');
 assert.equal(
   crypto.createHash('sha256').update(source).digest('hex').slice(0, 12),
-  '032667819e3a',
+  '48ffbf926db6',
   'de inhoud van de content-addressed runselector mag niet ongemerkt in-place wijzigen',
 );
 const run00 = '2026-08-10T00:00:00Z';

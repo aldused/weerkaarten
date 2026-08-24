@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'janvisser.html'), 'utf8');
-const switcher = fs.readFileSync(path.join(root, 'pluim_run_switcher_032667819e3a.js'), 'utf8');
+const switcher = fs.readFileSync(path.join(root, 'pluim_run_switcher_48ffbf926db6.js'), 'utf8');
 
 function extractFunction(text, name) {
   const start = text.indexOf(`function ${name}(`);

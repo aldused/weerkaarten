@@ -18,7 +18,7 @@ function functionSource(name) {
   throw new Error(`${name} is niet volledig`);
 }
 
-assert.match(source, /pluim_run_switcher_032667819e3a\.js/);
+assert.match(source, /pluim_run_switcher_48ffbf926db6\.js/);
 assert.match(
   source,
   /data-required="cloud_cover,wind_direction_10m"/,

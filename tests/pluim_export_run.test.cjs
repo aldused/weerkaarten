@@ -100,7 +100,7 @@ assert.match(rrdk, /runHour,\s*\n\s*params:/, 'RRDK geeft de gekozen cyclus niet
 assert.doesNotMatch(rrdk, /runHour:\s*12/, 'RRDK-kleurpluimdownload staat nog hard op 12 UTC');
 assert.match(rrdk, /Pluimen bij PDF · gekozen run/, 'RRDK maakt de dynamische runkeuze niet zichtbaar');
 
-const switcher = fs.readFileSync(path.resolve(__dirname, '..', 'pluim_run_switcher_032667819e3a.js'), 'utf8');
+const switcher = fs.readFileSync(path.resolve(__dirname, '..', 'pluim_run_switcher_48ffbf926db6.js'), 'utf8');
 assert.match(switcher, /async function withRunHour\(hour, task\)/, 'runselector mist een geïsoleerde exportkeuze');
 assert.match(switcher, /async function createRunContext\(hour\)/, 'runselector maakt geen onveranderlijke exportcontext');
 assert.doesNotMatch(switcher, /state\.selectedHour = selectedHour;[\s\S]*await task/, 'export muteert nog de zichtbare globale run');
