@@ -385,6 +385,7 @@
       minRange: 20,
       leftAxis: 76,
       rangePad: 2,
+      medianMarkerDays: 5,
       statusSuffix: 'lopende neerslagsom vanaf start',
       lineLabel: 'Mediaan lopende som',
       bandLabel: 'Marge P10-P90',
@@ -830,6 +831,70 @@
     return maxW;
   }
 
+  const MARKER_FONT = '800 21px Inter, Arial, sans-serif';
+
+  // Indexen op vaste dagafstand vanaf de start van de pluim. Het laatste punt
+  // wordt meegenomen zodat de eindsom altijd een label krijgt.
+  function markerIndexes(timeValues, everyDays) {
+    if (!(everyDays > 0) || timeValues.length < 2) return [];
+    const stepMs = everyDays * 24 * 3600 * 1000;
+    const start = timeValues[0];
+    const end = timeValues[timeValues.length - 1];
+    const out = [];
+    for (let target = start + stepMs; target <= end + stepMs / 2; target += stepMs) {
+      const want = Math.min(target, end);
+      let best = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < timeValues.length; i++) {
+        const dist = Math.abs(timeValues[i] - want);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+      }
+      if (best >= 0 && !out.includes(best)) out.push(best);
+    }
+    return out;
+  }
+
+  // Zet de bereikte mediaansom als chip op de mediaanlijn, zodat de lopende
+  // som per periode afleesbaar is zonder de y-as te volgen.
+  function drawMedianMarkers(ctx, o) {
+    const { cfg, st, timeValues, xF, yF, yMin, yMax, left, right, top } = o;
+    ctx.save();
+    ctx.font = MARKER_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    markerIndexes(timeValues, cfg.medianMarkerDays).forEach(i => {
+      const value = st[i] && st[i].p50;
+      if (!Number.isFinite(value)) return;
+      const px = xF(i);
+      const py = yF(clamp(value, yMin, yMax));
+
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fillStyle = cfg.medianHaloColor || 'rgba(0,0,0,0.55)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px, py, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = cfg.medianColor || '#ffffff';
+      ctx.fill();
+
+      const label = fmtValue(value, cfg);
+      const chipW = ctx.measureText(label).width + 18;
+      const chipH = 30;
+      const chipX = clamp(px - chipW / 2, left + 4, right - chipW - 4);
+      let chipY = py - 14 - chipH;
+      if (chipY < top + 4) chipY = py + 14;
+      roundRect(ctx, chipX, chipY, chipW, chipH, 8);
+      ctx.fillStyle = 'rgba(6,26,18,0.80)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.38)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(label, chipX + chipW / 2, chipY + chipH / 2 + 1);
+    });
+    ctx.restore();
+  }
+
   function drawChart(ctx, x, y, w, h, times, stats, cfg) {
     const nMax = Math.min(times.length, FORECAST_DAYS * 24);
     const ts = times.slice(0, nMax);
@@ -1119,6 +1184,13 @@
       ctx.fillStyle = 'rgba(255,255,255,0.86)';
       ctx.font = '800 22px Inter, Arial, sans-serif';
       ctx.fillText(`${d.getDate()} ${MAAND_NL[d.getMonth()]}`, xx, y + m.top + ih + 51);
+    }
+
+    if (cfg.medianMarkerDays > 0 && cfg.render !== 'bars' && cfg.render !== 'stacked') {
+      drawMedianMarkers(ctx, {
+        cfg, st, timeValues, xF, yF, yMin, yMax,
+        left: x + m.left, right: x + m.left + iw, top: y + m.top,
+      });
     }
   }
 

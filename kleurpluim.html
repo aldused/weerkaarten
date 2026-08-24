@@ -1350,6 +1350,7 @@ const PARAMS = {
     minRange: 20,
     rangePad: 2,
     rebaseCumulative: true,
+    medianMarkerDays: 5,
     statusSuffix: 'lopende neerslagsom vanaf start',
     lineLabel: 'Mediaan lopende som',
     bandLabel: 'Marge P10-P90',
@@ -1910,6 +1911,62 @@ function yAxisLabelWidth(yMin, yMax, cfg) {
   return maxW;
 }
 
+const MARKER_FONT = '800 11.5px Inter, sans-serif';
+
+// Indexen op vaste dagafstand vanaf de start van de pluim. Het laatste punt
+// wordt meegenomen zodat de eindsom altijd een label krijgt.
+function markerIndexes(timeValues, everyDays) {
+  if (!(everyDays > 0) || timeValues.length < 2) return [];
+  const stepMs = everyDays * 24 * 3600 * 1000;
+  const start = timeValues[0];
+  const end = timeValues[timeValues.length - 1];
+  const out = [];
+  for (let target = start + stepMs; target <= end + stepMs / 2; target += stepMs) {
+    const want = Math.min(target, end);
+    let best = -1, bestDist = Infinity;
+    for (let i = 0; i < timeValues.length; i++) {
+      const dist = Math.abs(timeValues[i] - want);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+    if (best >= 0 && !out.includes(best)) out.push(best);
+  }
+  return out;
+}
+
+// Zet de bereikte mediaansom als chip op de mediaanlijn, zodat de lopende som
+// per periode afleesbaar is zonder de y-as te volgen.
+function drawMedianMarkers(svg, o) {
+  const { cfg, st, timeValues, xF, yF, yMin, yMax, left, right, top } = o;
+  if (!axisMeasureCtx) axisMeasureCtx = document.createElement('canvas').getContext('2d');
+  markerIndexes(timeValues, cfg.medianMarkerDays).forEach(i => {
+    const value = st[i] && st[i].p50;
+    if (!Number.isFinite(value)) return;
+    const px = xF(i);
+    const py = yF(Math.min(Math.max(value, yMin), yMax));
+
+    mk(svg, 'circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 3.4, fill: cfg.medianHaloColor || 'rgba(0,0,0,0.55)' });
+    mk(svg, 'circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 1.8, fill: cfg.medianColor || '#ffffff' });
+
+    const label = fmtValue(value, cfg);
+    let textW = label.length * 6.4;
+    if (axisMeasureCtx) { axisMeasureCtx.font = MARKER_FONT; textW = axisMeasureCtx.measureText(label).width; }
+    const chipW = textW + 10;
+    const chipH = 16;
+    const chipX = Math.min(Math.max(px - chipW / 2, left + 3), right - chipW - 3);
+    let chipY = py - 8 - chipH;
+    if (chipY < top + 3) chipY = py + 8;
+    mk(svg, 'rect', {
+      x: chipX.toFixed(1), y: chipY.toFixed(1), width: chipW.toFixed(1), height: chipH, rx: 5,
+      fill: 'rgba(6,26,18,0.80)', stroke: 'rgba(255,255,255,0.38)', 'stroke-width': 0.8,
+    });
+    mk(svg, 'text', {
+      x: (chipX + chipW / 2).toFixed(1), y: (chipY + chipH / 2 + 4).toFixed(1),
+      'text-anchor': 'middle', 'font-size': 11.5, 'font-weight': 800,
+      'font-family': 'Inter, sans-serif', fill: 'white',
+    }, label);
+  });
+}
+
 function drawChart(svg, times, stats, cfg, opts = {}) {
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
@@ -2315,6 +2372,13 @@ function drawChart(svg, times, stats, cfg, opts = {}) {
         style: 'text-shadow:0 1px 3px rgba(0,0,0,0.4)',
       }, h === 0 ? '0h' : '12h');
     }
+  }
+
+  if (cfg.medianMarkerDays > 0 && cfg.render !== 'bars' && cfg.render !== 'stacked') {
+    drawMedianMarkers(svg, {
+      cfg, st, timeValues, xF, yF, yMin, yMax,
+      left: M.left, right: M.left + IW, top: M.top,
+    });
   }
 }
 
