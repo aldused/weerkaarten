@@ -1622,10 +1622,20 @@ const initialStationKey = queryKey(QUERY.get('station') || QUERY.get('st'));
 // herlaadt de pagina bij een echte cycluswissel, dus lat/lon/naam moeten in de
 // URL staan; anders viel de pluim daarna stil terug op Rotterdam.
 function stationUitQuery() {
-  const lat = Number(QUERY.get('lat'));
-  const lon = Number(QUERY.get('lon'));
+  // Number(null) en Number('') zijn allebei 0: zonder deze controle op de ruwe
+  // tekst wordt een URL zonder lat/lon stilzwijgend 0,0 op de Atlantische Oceaan.
+  const latRuw = QUERY.get('lat');
+  const lonRuw = QUERY.get('lon');
+  if (latRuw == null || lonRuw == null) return null;
+  if (String(latRuw).trim() === '' || String(lonRuw).trim() === '') return null;
+  const lat = Number(latRuw);
+  const lon = Number(lonRuw);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  // 0,0 is de Atlantische Oceaan en nooit een echte keuze. Een oudere versie
+  // schreef die nullen wel in de URL bij een ontbrekende lat/lon; zo'n bewaarde
+  // link mag de pluim niet blijven vergiftigen.
+  if (lat === 0 && lon === 0) return null;
   const naam = String(QUERY.get('plaats') || '').trim().slice(0, 60);
   return { lat, lon, naam: naam || `${lat.toFixed(3)}, ${lon.toFixed(3)}` };
 }
@@ -3544,9 +3554,20 @@ async function loadCurrent(force = false, edgeFresh = false) {
 function bewaarStatusInUrl() {
   try {
     const url = new URL(location.href);
-    url.searchParams.set('lat', Number(currentStation.lat).toFixed(4));
-    url.searchParams.set('lon', Number(currentStation.lon).toFixed(4));
-    url.searchParams.set('plaats', currentStation.naam || '');
+    const lat = Number(currentStation.lat);
+    const lon = Number(currentStation.lon);
+    // Alleen een echte plaats hoort in de URL. Number(null) en Number('') zijn
+    // 0: zonder deze controle belandt 0,0 in de link en komt de pluim na een
+    // herlaadbeurt op de oceaan uit.
+    if (Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0)) {
+      url.searchParams.set('lat', lat.toFixed(4));
+      url.searchParams.set('lon', lon.toFixed(4));
+      url.searchParams.set('plaats', currentStation.naam || '');
+    } else {
+      url.searchParams.delete('lat');
+      url.searchParams.delete('lon');
+      url.searchParams.delete('plaats');
+    }
     url.searchParams.delete('station');
     url.searchParams.delete('st');
     url.searchParams.set('param', currentParam);
@@ -3712,6 +3733,10 @@ document.addEventListener('click', e => {
 
 initRangeInputs();
 document.querySelectorAll('.param-btn').forEach(btn => btn.classList.toggle('actief', btn.dataset.param === currentParam));
+// Meteen de link opschonen: een bewaarde URL met 0,0 valt hierboven terug op de
+// standaardplaats, en die correctie hoort ook in de adresbalk te staan voordat
+// de runwisselaar de pagina bij een cycluswissel opnieuw laadt.
+bewaarStatusInUrl();
 function scheduleAutoRefresh() {
   if (autoRefreshTimer) clearTimeout(autoRefreshTimer);
   const delay = isFastUpdateWindow() ? FAST_UPDATE_INTERVAL_MS : NORMAL_UPDATE_INTERVAL_MS;
