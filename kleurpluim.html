@@ -1891,19 +1891,39 @@ function calcRange(stats, cfg) {
   return { yMin, yMax };
 }
 
+const Y_AXIS_FONT = '800 12.5px Inter, sans-serif';
+const Y_AXIS_GAP = 7;
+let axisMeasureCtx = null;
+
+// Breedste y-as-label bepaalt de linkermarge. Met een vaste marge valt
+// "40 km/u" of "14.0 mm" links buiten de viewBox en knipt de SVG het
+// eerste cijfer af.
+function yAxisLabelWidth(yMin, yMax, cfg) {
+  if (!(cfg.yStep > 0)) return 0;
+  if (!axisMeasureCtx) axisMeasureCtx = document.createElement('canvas').getContext('2d');
+  if (!axisMeasureCtx) return 0;
+  axisMeasureCtx.font = Y_AXIS_FONT;
+  let maxW = 0, steps = 0;
+  for (let v = Math.ceil(yMin / cfg.yStep) * cfg.yStep; v <= yMax && steps < 200; v += cfg.yStep, steps++) {
+    maxW = Math.max(maxW, axisMeasureCtx.measureText(fmtValue(v, cfg)).width);
+  }
+  return maxW;
+}
+
 function drawChart(svg, times, stats, cfg, opts = {}) {
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
   const W = 820, H = opts.height || 350;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const M = { top: 16, right: cfg.rightAxis ? 58 : 20, bottom: 68, left: cfg.leftAxis || 58 };
-  const IW = W - M.left - M.right;
-  const IH = H - M.top - M.bottom;
   const ranged = sliceForSelectedRange(times, stats);
   const ts = ranged.times;
   const st = ranged.stats;
   const nMax = ts.length;
   const { yMin, yMax } = calcRange(st, cfg);
+  const leftAxisMin = Math.ceil(yAxisLabelWidth(yMin, yMax, cfg) + Y_AXIS_GAP + 3);
+  const M = { top: 16, right: cfg.rightAxis ? 58 : 20, bottom: 68, left: Math.max(cfg.leftAxis || 58, leftAxisMin) };
+  const IW = W - M.left - M.right;
+  const IH = H - M.top - M.bottom;
   const yRange = yMax - yMin || 1;
   const timeValues = ts.map(t => new Date(t).getTime());
   const timeStart = timeValues[0];
@@ -2216,7 +2236,7 @@ function drawChart(svg, times, stats, cfg, opts = {}) {
     if (cfg.gridLineDash) gridAttrs['stroke-dasharray'] = cfg.gridLineDash;
     mk(svg, 'line', gridAttrs);
     mk(svg, 'text', {
-      x: M.left - 7, y: (yy + 4.5).toFixed(1),
+      x: M.left - Y_AXIS_GAP, y: (yy + 4.5).toFixed(1),
       'text-anchor': 'end', 'font-size': 12.5, 'font-weight': 800,
       'font-family': 'Inter, sans-serif', fill: 'white',
       style: 'text-shadow:0 1px 4px rgba(0,0,0,0.6)',

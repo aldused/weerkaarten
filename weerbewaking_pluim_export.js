@@ -811,14 +811,34 @@
     ctx.fill();
   }
 
+  const AXIS_FONT = '800 23px Inter, Arial, sans-serif';
+  const AXIS_LABEL_GAP = 7;
+
+  // Breedste y-as-label bepaalt de linkermarge. Met een vaste marge valt
+  // "40 km/u" of "14.0 mm" buiten het kaartvlak en knipt de afronding het
+  // eerste cijfer af.
+  function axisLabelWidth(ctx, yMin, yMax, cfg) {
+    if (!(cfg.yStep > 0)) return 0;
+    ctx.save();
+    ctx.font = AXIS_FONT;
+    let maxW = 0;
+    let steps = 0;
+    for (let v = Math.ceil(yMin / cfg.yStep) * cfg.yStep; v <= yMax && steps < 200; v += cfg.yStep, steps++) {
+      maxW = Math.max(maxW, ctx.measureText(fmtValue(v, cfg)).width);
+    }
+    ctx.restore();
+    return maxW;
+  }
+
   function drawChart(ctx, x, y, w, h, times, stats, cfg) {
-    const m = { top: 16, right: cfg.rightAxis ? 76 : 28, bottom: 72, left: cfg.leftAxis || 72 };
-    const iw = w - m.left - m.right;
-    const ih = h - m.top - m.bottom;
     const nMax = Math.min(times.length, FORECAST_DAYS * 24);
     const ts = times.slice(0, nMax);
     const st = stats.slice(0, nMax);
     const { yMin, yMax } = calcRange(st, cfg);
+    const leftAxisMin = axisLabelWidth(ctx, yMin, yMax, cfg) + AXIS_LABEL_GAP + 4;
+    const m = { top: 16, right: cfg.rightAxis ? 76 : 28, bottom: 72, left: Math.max(cfg.leftAxis || 72, Math.ceil(leftAxisMin)) };
+    const iw = w - m.left - m.right;
+    const ih = h - m.top - m.bottom;
     const yRange = yMax - yMin || 1;
     const timeValues = ts.map(value => new Date(value).getTime());
     const timeStart = timeValues[0];
@@ -1038,7 +1058,7 @@
     ctx.lineWidth = 1.2;
     ctx.strokeRect(x + m.left, y + m.top, iw, ih);
 
-    ctx.font = '800 23px Inter, Arial, sans-serif';
+    ctx.font = AXIS_FONT;
     ctx.textBaseline = 'middle';
     for (let v = Math.ceil(yMin / cfg.yStep) * cfg.yStep; v <= yMax; v += cfg.yStep) {
       const yy = yF(v);
@@ -1054,7 +1074,7 @@
 
       ctx.fillStyle = 'white';
       ctx.textAlign = 'right';
-      ctx.fillText(fmtValue(v, cfg), x + m.left - 7, yy);
+      ctx.fillText(fmtValue(v, cfg), x + m.left - AXIS_LABEL_GAP, yy);
     }
     if (cfg.rightAxis === 'bft') {
       const bftThresholds = [0, 1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103, 118];
