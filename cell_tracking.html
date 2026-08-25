@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#071526">
+<title>Onweercellen Nederland — Weerlab</title>
+<link rel="stylesheet" href="weerlab_design_tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--wl-color-background); color: var(--wl-color-text);
+    font-family: var(--wl-font-sans);
+  }
+  button, select { font: inherit; }
+
+  .topbar {
+    min-height: 62px; flex: 0 0 auto; display: flex; align-items: center;
+    gap: 18px; padding: 9px 16px; background: var(--wl-color-surface);
+    border-bottom: 1px solid var(--wl-color-border); box-shadow: var(--wl-shadow-1);
+    position: relative; z-index: 1001;
+  }
+  .brand { min-width: 242px; }
+  .brand-row { display: flex; align-items: center; gap: 9px; }
+  .storm-icon {
+    width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
+    color: #fff; background: linear-gradient(145deg, #0b3a8a, #1689c7);
+    box-shadow: 0 4px 12px rgba(11,58,138,.22); font-size: 19px;
+  }
+  h1 { margin: 0; font: var(--wl-text-headline-md); color: var(--wl-color-primary); }
+  .subtitle { margin-top: 2px; font-size: 11px; color: var(--wl-color-text-muted); }
+  .live {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px;
+    border-radius: 999px; background: rgba(16,185,129,.10); color: #087a57;
+    font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  }
+  .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #10b981; }
+  .live.stale { background: rgba(224,112,0,.11); color: #a14d00; }
+  .live.stale::before { background: #e07000; }
+  .live.error { background: rgba(204,0,0,.10); color: #a40000; }
+  .live.error::before { background: #cc0000; }
+
+  .lead-controls { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .control-label { color: var(--wl-color-text-muted); font-size: 11px; font-weight: 700; }
+  .segmented {
+    display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px;
+    background: var(--wl-color-background-soft);
+  }
+  .segmented button {
+    border: 0; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--wl-color-text-muted);
+    font-size: 12px; font-weight: 650;
+  }
+  .segmented button:hover { color: var(--wl-color-primary); }
+  .segmented button.active { color: #fff; background: var(--wl-color-primary); box-shadow: var(--wl-shadow-1); }
+  .spacer { flex: 1; }
+  .icon-button {
+    width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px;
+    border: 1px solid var(--wl-color-border-strong); background: var(--wl-color-surface);
+    color: var(--wl-color-primary); cursor: pointer; font-size: 17px;
+  }
+  .icon-button:hover { background: var(--wl-color-primary-soft); }
+  .icon-button.loading { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .workspace { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 310px; }
+  .map-wrap { position: relative; min-width: 0; background: #d8e4ee; }
+  #map { position: absolute; inset: 0; }
+  .leaflet-container { background: #d8e4ee; font-family: var(--wl-font-sans); }
+  .leaflet-control-zoom a { color: #00205b; }
+  .leaflet-control-attribution { font-size: 10px; }
+  .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 10px 30px rgba(7,21,38,.24); }
+  .leaflet-popup-content { margin: 13px 15px; min-width: 235px; }
+
+  .map-card {
+    position: absolute; z-index: 500; background: rgba(7,21,38,.88); color: #fff;
+    border: 1px solid rgba(255,255,255,.14); border-radius: 11px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.17); backdrop-filter: blur(8px);
+  }
+  .timestamp-card { top: 12px; left: 54px; padding: 8px 11px; pointer-events: none; }
+  .timestamp-card strong { display: block; font: 700 15px/1.2 var(--wl-font-mono); }
+  .timestamp-card span { display: block; margin-top: 3px; font-size: 10px; color: rgba(255,255,255,.7); }
+  .legend { left: 12px; bottom: 26px; padding: 10px 11px; }
+  .legend-title { margin-bottom: 7px; font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: rgba(255,255,255,.72); }
+  .legend-row { display: flex; align-items: center; gap: 7px; margin: 5px 0; font-size: 11px; }
+  .legend-swatch { width: 20px; height: 11px; border: 2px solid; border-radius: 3px; }
+  .empty-state {
+    position: absolute; z-index: 550; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: min(420px, calc(100% - 42px)); padding: 22px; text-align: center;
+    background: rgba(255,255,255,.94); border: 1px solid rgba(203,213,225,.95);
+    border-radius: 16px; box-shadow: 0 12px 32px rgba(15,23,42,.16); display: none;
+  }
+  .empty-state.show { display: block; }
+  .empty-icon { font-size: 28px; margin-bottom: 7px; }
+  .empty-state strong { display: block; color: #00205b; font-size: 15px; }
+  .empty-state span { display: block; margin-top: 6px; color: #64748b; font-size: 12px; line-height: 1.45; }
+
+  .sidebar {
+    min-height: 0; overflow-y: auto; padding: 14px; background: var(--wl-color-surface);
+    border-left: 1px solid var(--wl-color-border); display: flex; flex-direction: column; gap: 12px;
+  }
+  .card { border: 1px solid var(--wl-color-border); border-radius: 12px; overflow: hidden; background: var(--wl-color-surface); }
+  .card-head { padding: 11px 12px; border-bottom: 1px solid var(--wl-color-border); font: var(--wl-text-label-md); }
+  .card-body { padding: 12px; }
+  .headline-stat { display: flex; align-items: baseline; gap: 8px; }
+  .headline-stat strong { color: var(--wl-color-primary); font: 700 34px/1 var(--wl-font-mono); }
+  .headline-stat span { font-size: 12px; color: var(--wl-color-text-muted); }
+  .risk-list { margin-top: 11px; }
+  .risk-row { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--wl-color-border); }
+  .risk-dot { width: 10px; height: 10px; border-radius: 3px; }
+  .risk-name { font-size: 11px; color: var(--wl-color-text-muted); }
+  .risk-count { font: 700 13px var(--wl-font-mono); }
+  .lead-key { display: grid; gap: 9px; }
+  .lead-row { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 9px; font-size: 11px; color: var(--wl-color-text-muted); }
+  .lead-line { height: 13px; border: 2px solid #1769c2; border-radius: 3px; background: rgba(23,105,194,.35); }
+  .lead-line.l30 { background: rgba(23,105,194,.20); border-style: dashed; }
+  .lead-line.l60 { background: rgba(23,105,194,.10); border-style: dotted; }
+  .note { font-size: 11px; line-height: 1.5; color: var(--wl-color-text-muted); }
+  .note strong { color: var(--wl-color-text); }
+  .note a { color: var(--wl-color-secondary); font-weight: 700; }
+  .freshness { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--wl-color-border); color: var(--wl-color-text-soft); font-size: 10px; }
+
+  .popup-title { display: flex; align-items: center; gap: 8px; margin: 0 0 9px; font-size: 14px; color: #0f172a; }
+  .popup-code { display: inline-grid; place-items: center; min-width: 24px; height: 24px; border-radius: 7px; color: #fff; font: 800 12px var(--wl-font-mono); }
+  .popup-grid { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .popup-grid td { padding: 4px 0; border-top: 1px solid #edf1f6; vertical-align: top; }
+  .popup-grid td:first-child { color: #64748b; padding-right: 12px; }
+  .popup-grid td:last-child { color: #0f172a; text-align: right; font-weight: 700; }
+  .direction { display: inline-block; margin-right: 4px; }
+
+  @media (max-width: 860px) {
+    .topbar { gap: 9px; padding: 8px 10px; flex-wrap: wrap; }
+    .brand { min-width: 0; flex: 1; }
+    .subtitle { max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .live { order: 2; }
+    .lead-controls { order: 3; width: calc(100% - 46px); }
+    .control-label { display: none; }
+    .segmented { width: 100%; }
+    .segmented button { flex: 1; padding-inline: 7px; }
+    .spacer { display: none; }
+    .icon-button { order: 3; }
+    .workspace { display: block; position: relative; }
+    .map-wrap { position: absolute; inset: 0; }
+    .sidebar { display: none; }
+    .timestamp-card { left: 50px; top: 9px; }
+    .legend { bottom: 22px; }
+  }
+  @media (max-width: 440px) {
+    .storm-icon { width: 30px; height: 30px; }
+    h1 { font-size: 14px; }
+    .live { font-size: 9px; }
+    .timestamp-card strong { font-size: 13px; }
+    .legend-row { margin: 3px 0; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-row">
+      <div class="storm-icon" aria-hidden="true">ϟ</div>
+      <div>
+        <h1>Onweercellen Nederland</h1>
+        <div class="subtitle" id="subtitle">KNMI CellWarn · laden…</div>
+      </div>
+    </div>
+  </div>
+  <div class="live" id="live-status">actueel</div>
+  <div class="lead-controls" aria-label="Verwachtingstermijn">
+    <span class="control-label">Toon gebied over</span>
+    <div class="segmented" id="lead-buttons">
+      <button type="button" data-lead="15">15 min</button>
+      <button type="button" data-lead="30">30 min</button>
+      <button type="button" data-lead="60">60 min</button>
+      <button type="button" data-lead="all" class="active">Alles</button>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button class="icon-button" id="refresh" type="button" title="Ververs CellWarn-data" aria-label="Ververs CellWarn-data">↻</button>
+</header>
+
+<main class="workspace">
+  <section class="map-wrap" aria-label="Kaart met onweercellen en verwachte trekrichting">
+    <div id="map"></div>
+    <div class="map-card timestamp-card">
+      <strong id="map-time">--:-- uur</strong>
+      <span id="map-date">producttijd wordt geladen</span>
+    </div>
+    <div class="map-card legend" aria-label="Legenda hagelcategorie">
+      <div class="legend-title">Hagelcategorie CellWarn</div>
+      <div class="legend-row"><i class="legend-swatch" style="background:rgba(107,123,142,.45);border-color:#5b697a"></i>geen hagel verwacht</div>
+      <div class="legend-row"><i class="legend-swatch" style="background:rgba(77,183,226,.45);border-color:#1593c7"></i>1–2 cm</div>
+      <div class="legend-row"><i class="legend-swatch" style="background:rgba(23,105,194,.45);border-color:#0b4f9c"></i>2–4 cm</div>
+      <div class="legend-row"><i class="legend-swatch" style="background:rgba(106,27,154,.45);border-color:#54127d"></i>meer dan 4 cm</div>
+    </div>
+    <div class="empty-state" id="empty-state" role="status">
+      <div class="empty-icon" aria-hidden="true">✓</div>
+      <strong id="empty-title">Geen significante onweercellen</strong>
+      <span id="empty-text">KNMI CellWarn detecteert op dit moment geen cellen in het productgebied.</span>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <section class="card">
+      <div class="card-head">Actieve gebieden</div>
+      <div class="card-body">
+        <div class="headline-stat"><strong id="area-total">0</strong><span id="area-label">polygonen</span></div>
+        <div class="risk-list" id="risk-list"></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head">Zo lees je de kaart</div>
+      <div class="card-body lead-key">
+        <div class="lead-row"><span>+15 min</span><i class="lead-line"></i></div>
+        <div class="lead-row"><span>+30 min</span><i class="lead-line l30"></i></div>
+        <div class="lead-row"><span>+60 min</span><i class="lead-line l60"></i></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head">Over deze experimentele kaart</div>
+      <div class="card-body note">
+        <strong>CellWarn</strong> volgt significante buien met radar en berekent waar de cel in het komende uur kan komen. Klik een vlak voor snelheid, richting, reflectiviteit, hagelparameters en windstoten.
+        <br><br>
+        Dit is experimentele nowcastbegeleiding en <strong>geen officiële KNMI-waarschuwing</strong>. Raadpleeg daarvoor altijd de officiële waarschuwingen.
+        <div class="freshness" id="freshness">Bron: KNMI · iedere 5 minuten ververst</div>
+        <div style="margin-top:8px"><a href="https://dataplatform.knmi.nl/dataset/cell-tracking-2-0" target="_blank" rel="noopener">Dataset en technische uitleg ↗</a></div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  var LOCAL = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.protocol === "file:";
+  var DATA_URL = LOCAL ? "cell_tracking_latest.geojson" : "https://data.weerlab.nl/cell_tracking_latest.geojson";
+  var REFRESH_MS = 5 * 60 * 1000;
+  var selectedLead = "all";
+  var currentData = null;
+  var cellLayer = null;
+
+  var RISK = {
+    1: { label: "Geen hagel verwacht", short: "geen hagel", color: "#5b697a", fill: "#6b7b8e" },
+    2: { label: "Hagel 1–2 cm", short: "1–2 cm", color: "#1593c7", fill: "#4db7e2" },
+    3: { label: "Hagel 2–4 cm", short: "2–4 cm", color: "#0b4f9c", fill: "#1769c2" },
+    4: { label: "Hagel >4 cm", short: ">4 cm", color: "#54127d", fill: "#6a1b9a" }
+  };
+
+  var map = L.map("map", {
+    zoomControl: true,
+    minZoom: 6,
+    maxZoom: 12,
+    maxBounds: [[48.8, 1.0], [55.8, 10.8]],
+    maxBoundsViscosity: .65
+  }).setView([52.18, 5.35], 8);
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd", maxZoom: 20,
+    attribution: "&copy; OpenStreetMap &copy; CARTO"
+  }).addTo(map);
+
+  fetch("nl_provincies.geojson")
+    .then(function(response){ if (!response.ok) throw new Error(response.status); return response.json(); })
+    .then(function(geo){
+      L.geoJSON(geo, { interactive: false, style: { color: "#506176", weight: .75, opacity: .7, fillOpacity: 0 } }).addTo(map).bringToBack();
+    }).catch(function(){});
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>'"]/g, function(char){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char];
+    });
+  }
+
+  function number(value) {
+    var match = String(value == null ? "" : value).replace(",", ".").match(/-?\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : null;
+  }
+
+  function codeOf(feature) {
+    var props = feature.properties || {};
+    var code = Number(props.warning_code);
+    if (!code && props.warning_code_leadtime) code = Number(String(props.warning_code_leadtime).split("_")[0]);
+    return RISK[code] ? code : 1;
+  }
+
+  function leadOf(feature) {
+    var value = String((feature.properties || {}).warning_code_leadtime || "");
+    var match = value.match(/_(15|30|60)$/);
+    return match ? Number(match[1]) : 15;
+  }
+
+  function featuresForSelection() {
+    var features = currentData && Array.isArray(currentData.features) ? currentData.features : [];
+    return features.filter(function(feature){
+      var geometry = feature.geometry || {};
+      var hasCoordinates = Array.isArray(geometry.coordinates) && geometry.coordinates.length > 0;
+      return hasCoordinates && (selectedLead === "all" || leadOf(feature) === Number(selectedLead));
+    });
+  }
+
+  function styleFeature(feature) {
+    var lead = leadOf(feature);
+    var risk = RISK[codeOf(feature)];
+    return {
+      color: risk.color,
+      fillColor: risk.fill,
+      weight: lead === 15 ? 2.5 : 2,
+      opacity: lead === 15 ? .98 : lead === 30 ? .82 : .68,
+      fillOpacity: lead === 15 ? .43 : lead === 30 ? .25 : .13,
+      dashArray: lead === 15 ? null : lead === 30 ? "8 5" : "3 7",
+      lineCap: "round",
+      lineJoin: "round"
+    };
+  }
+
+  function prop(props, keys) {
+    for (var i = 0; i < keys.length; i++) {
+      if (props[keys[i]] !== undefined && props[keys[i]] !== null && props[keys[i]] !== "") return props[keys[i]];
+    }
+    return null;
+  }
+
+  function popupRow(label, value) {
+    if (value === null || value === undefined || value === "") return "";
+    return "<tr><td>" + escapeHtml(label) + "</td><td>" + escapeHtml(value) + "</td></tr>";
+  }
+
+  function popupHtml(feature) {
+    var props = feature.properties || {};
+    var code = codeOf(feature), risk = RISK[code], lead = leadOf(feature);
+    var degrees = number(prop(props, ["direction_degrees", "Direction"]));
+    var direction = prop(props, ["Direction"]);
+    var speed = prop(props, ["Speed"]);
+    if (!speed && number(props.speed_ms) !== null) speed = Math.round(Number(props.speed_ms) * 3.6) + " km/u";
+    var rows = "";
+    rows += popupRow("Verwachting", "+" + lead + " minuten");
+    rows += popupRow("Trekrichting", direction || (degrees !== null ? Math.round(degrees) + "°" : ""));
+    rows += popupRow("Snelheid", speed);
+    rows += popupRow("Oppervlakte", prop(props, ["Covered area", "covered_area"]));
+    rows += popupRow("Max. reflectiviteit", prop(props, ["Max. Reflectivity", "max_reflectivity"]));
+    rows += popupRow("Echo-top", prop(props, ["Echo Top Height", "echo_top_height"]));
+    rows += popupRow("MEHS", prop(props, ["Max. MEHS", "max_mehs"]));
+    rows += popupRow("POSH", prop(props, ["Max. POSH", "max_posh"]));
+    rows += popupRow("Max. windstoot", prop(props, ["Max. Gust", "max_gust"]));
+    rows += popupRow("VIL", prop(props, ["Max. VIL", "max_vil"]));
+    rows += popupRow("VII", prop(props, ["Max. VII", "max_vii"]));
+    return '<div class="popup-title"><span class="popup-code" style="background:' + risk.fill + '">' + code + '</span><strong>' + escapeHtml(risk.label) + '</strong></div>' +
+      '<table class="popup-grid">' + rows + '</table>';
+  }
+
+  function onEachFeature(feature, layer) {
+    layer.bindPopup(popupHtml(feature));
+    layer.on({
+      mouseover: function(){ layer.setStyle({ weight: 4, fillOpacity: Math.min(.58, styleFeature(feature).fillOpacity + .12) }); },
+      mouseout: function(){ layer.setStyle(styleFeature(feature)); }
+    });
+  }
+
+  function renderStats(features) {
+    var counts = {1:0, 2:0, 3:0, 4:0};
+    features.forEach(function(feature){ counts[codeOf(feature)] += 1; });
+    document.getElementById("area-total").textContent = features.length.toLocaleString("nl-NL");
+    document.getElementById("area-label").textContent = selectedLead === "all" ? "verwachtingsvlakken" : "gebieden op +" + selectedLead + " min";
+    document.getElementById("risk-list").innerHTML = [1,2,3,4].map(function(code){
+      return '<div class="risk-row"><i class="risk-dot" style="background:' + RISK[code].fill + '"></i><span class="risk-name">' + RISK[code].short + '</span><span class="risk-count">' + counts[code] + '</span></div>';
+    }).join("");
+  }
+
+  function render() {
+    if (cellLayer) map.removeLayer(cellLayer);
+    var features = featuresForSelection().slice().sort(function(a, b){
+      return leadOf(b) - leadOf(a) || codeOf(a) - codeOf(b);
+    });
+    cellLayer = L.geoJSON({type:"FeatureCollection", features:features}, {
+      style: styleFeature,
+      onEachFeature: onEachFeature
+    }).addTo(map);
+    renderStats(features);
+
+    var empty = document.getElementById("empty-state");
+    empty.classList.toggle("show", features.length === 0);
+    if (!features.length && currentData) {
+      document.getElementById("empty-title").textContent = selectedLead === "all" ? "Geen significante onweercellen" : "Geen gebied voor +" + selectedLead + " minuten";
+      document.getElementById("empty-text").textContent = selectedLead === "all"
+        ? "KNMI CellWarn detecteert op dit moment geen cellen in het productgebied."
+        : "In de actuele CellWarn-uitvoer staat geen polygon voor deze verwachtingstermijn.";
+    }
+  }
+
+  function productTime(data) {
+    var raw = data && data.dimensions && data.dimensions.time && data.dimensions.time.value;
+    var date = raw ? new Date(raw) : null;
+    return date && !isNaN(date) ? date : null;
+  }
+
+  function updateTime(data) {
+    var date = productTime(data);
+    var status = document.getElementById("live-status");
+    if (!date) {
+      document.getElementById("map-time").textContent = "tijd onbekend";
+      document.getElementById("map-date").textContent = "KNMI CellWarn";
+      return;
+    }
+    document.getElementById("map-time").textContent = date.toLocaleTimeString("nl-NL", {hour:"2-digit", minute:"2-digit", timeZone:"Europe/Amsterdam"}) + " uur";
+    document.getElementById("map-date").textContent = date.toLocaleDateString("nl-NL", {weekday:"long", day:"numeric", month:"long", timeZone:"Europe/Amsterdam"});
+    var ageMin = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+    document.getElementById("subtitle").textContent = "KNMI CellWarn · product " + (ageMin < 2 ? "zojuist" : ageMin + " min geleden");
+    document.getElementById("freshness").textContent = "Bron: KNMI · producttijd " + date.toLocaleString("nl-NL", {dateStyle:"short", timeStyle:"short", timeZone:"Europe/Amsterdam"}) + " · iedere 5 minuten ververst";
+    status.textContent = ageMin <= 15 ? "actueel" : "vertraagd";
+    status.className = "live" + (ageMin <= 15 ? "" : " stale");
+  }
+
+  function setError(message) {
+    var status = document.getElementById("live-status");
+    status.textContent = "datafout";
+    status.className = "live error";
+    document.getElementById("subtitle").textContent = message;
+    if (!currentData) {
+      document.getElementById("empty-title").textContent = "CellWarn-data niet bereikbaar";
+      document.getElementById("empty-text").textContent = "De kaart probeert over vijf minuten automatisch opnieuw te laden.";
+      document.getElementById("empty-state").classList.add("show");
+    }
+  }
+
+  function loadData() {
+    var button = document.getElementById("refresh");
+    button.classList.add("loading");
+    return fetch(DATA_URL + "?_=" + Date.now(), {cache:"no-store"})
+      .then(function(response){ if (!response.ok) throw new Error("HTTP " + response.status); return response.json(); })
+      .then(function(data){
+        if (data.type !== "FeatureCollection" || !Array.isArray(data.features)) throw new Error("ongeldig GeoJSON");
+        currentData = data;
+        updateTime(data);
+        render();
+      })
+      .catch(function(error){ setError("KNMI CellWarn · laden mislukt (" + error.message + ")"); })
+      .finally(function(){ button.classList.remove("loading"); });
+  }
+
+  document.getElementById("lead-buttons").addEventListener("click", function(event){
+    var button = event.target.closest("button[data-lead]");
+    if (!button) return;
+    selectedLead = button.dataset.lead;
+    document.querySelectorAll("#lead-buttons button").forEach(function(item){ item.classList.toggle("active", item === button); });
+    render();
+  });
+  document.getElementById("refresh").addEventListener("click", loadData);
+  window.addEventListener("resize", function(){ map.invalidateSize(); });
+
+  loadData();
+  setInterval(loadData, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

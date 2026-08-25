@@ -1214,11 +1214,11 @@ html[data-theme="dark"] body,
     <div class="nav-item" id="nav-nowcast" onclick="openPanel('nowcast')">
       <span>Nowcast 15-min</span>
     </div>
-    <div class="nav-item" id="nav-celltracking" onclick="openPanel('celltracking')">
-      <span>Onweercellen Nederland</span><span class="telbadge">CellWarn</span>
-    </div>
     <div class="nav-item" id="nav-bliksem" onclick="openPanel('bliksem')">
       <span>Bliksem Benelux</span>
+    </div>
+    <div class="nav-item" id="nav-celltracking" onclick="openPanel('celltracking')">
+      <span>Onweercellen Nederland</span><span class="telbadge">CellWarn</span>
     </div>
     <div class="nav-item" id="nav-satelliet" onclick="openPanel('satelliet')">
       <span>Satellietbeelden HD</span>
@@ -1579,8 +1579,8 @@ html[data-theme="dark"] body,
             <div class="home-cat-sub">Beeld</div>
             <button class="home-cat-link" type="button" onclick="openPanel('radar')">Neerslagradar</button>
             <button class="home-cat-link" type="button" onclick="openPanel('nowcast')">Nowcast 15-min</button>
-            <button class="home-cat-link" type="button" onclick="openPanel('celltracking')">Onweercellen Nederland<span class="n">CellWarn</span></button>
             <button class="home-cat-link" type="button" onclick="openPanel('bliksem')">Bliksem Benelux</button>
+            <button class="home-cat-link" type="button" onclick="openPanel('celltracking')">Onweercellen Nederland<span class="n">CellWarn</span></button>
             <button class="home-cat-link" type="button" onclick="openPanel('satelliet')">Satellietbeelden HD</button>
             <div class="home-cat-sub">Metingen</div>
             <button class="home-cat-link" type="button" onclick="openWaarn('nl')">Waarnemingen<span class="n">NL · EU</span></button>
@@ -2546,7 +2546,7 @@ const WEERBEWAKING_SUBPAGES = {
   "meteogram": "weerbewaking_meteogram.html",
   "weatherpro": "weerbewaking_weatherpro.html",
   "pluim": "weerbewaking_pluim.html?v=20260811-all-runs-v3",
-  "kleurpluim": "kleurpluim.html?v=20260824-nulplaats-fix",
+  "kleurpluim": "kleurpluim.html?v=20260824-terug-fix",
   "eventtabel": "weerbewaking_event_tabel.html",
 };
 
@@ -2675,8 +2675,18 @@ function openWeerbewakingSubpage(sub, hashBijwerken = true) {
   const iframe = document.querySelector("#panel-weerbewaking iframe");
   if (iframe) {
     iframe.removeAttribute("data-src");
-    const huidigeSrc = (iframe.getAttribute("src") || "").split("?")[0];
+    // De subpagina's navigeren zelf binnen de iframe (location.replace), zodat
+    // het src-attribuut op de vorige pagina blijft staan. Vergelijk daarom de
+    // werkelijke iframe-URL; anders denkt deze functie dat weerbewaking.html al
+    // open staat terwijl de kleurpluim zichtbaar is en gebeurt er niets.
     const basisSrc = src.split('?')[0];
+    const huidigeSrc = (() => {
+      try {
+        const naam = (iframe.contentWindow.location.pathname || "").split("/").pop();
+        if (naam) return naam;
+      } catch (e) {}
+      return (iframe.getAttribute("src") || "").split("?")[0];
+    })();
     const toonInterneView = () => {
       try {
         if (planner && typeof iframe.contentWindow.toonPlanner === 'function') iframe.contentWindow.toonPlanner(false, false);
