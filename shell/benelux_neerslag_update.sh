@@ -1,6 +1,6 @@
 #!/bin/bash
 # Kaartenstudio Nederland: bouwt bij elke nieuwe run per veld een mp4 + eindkaart en
-# zet die op R2. Velden: neerslagsom, windkracht, windstoten, temperatuur en
+# zet die op R2. Velden: neerslagsom, windkracht met richting, windstoten, temperatuur en
 # voor HARMONIE V46 ook gesimuleerde radar en rechtstreeks modelzicht.
 #
 #   ECMWF HRES  vier runs per dag (00/06/12/18 UTC), steeds 3-uursstappen
@@ -110,8 +110,8 @@ bouw_model() {
 STATUS=0
 # HARMONIE is de goedkope, snel verversende reeks: die eerst, zodat een lange
 # ECMWF-bouw hem nooit een uur laat wachten.
-bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v10_radar_ticks_run" || STATUS=1
-bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_ecmwf_144_x_v2_run"  || STATUS=1
+bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v11_windrichting_run" || STATUS=1
+bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_ecmwf_144_x_v3_windrichting_run"  || STATUS=1
 
 # Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw
 # te downloaden.

@@ -1,8 +1,8 @@
 """
 Nederlandse weerkaarten (animatie) — ECMWF HRES en HARMONIE
 
-Sociale kaarten voor neerslagsom, gesimuleerde radar, windkracht, windstoten,
-temperatuur en zicht:
+Sociale kaarten voor neerslagsom, gesimuleerde radar, windkracht met richting,
+windstoten, temperatuur en zicht:
 kleurvlak + cijfers op een raster, verticale kleurschaal rechts en run/geldigheid
 in de kop. Per beschikbaar model een mp4 en een losse eindkaart.
 
@@ -237,7 +237,7 @@ VARS = {
         'titel':      'windkracht',
         'eenheid':    'Bft',
         'soort':      'moment',
-        'subtitel':   'windkracht in Beaufort, op 10 meter',
+        'subtitel':   'richting waarvandaan, op 10 meter',
         'menu':       'Windkracht',
         'levels':     BFT_GRENZEN,
         'colors':     WIND_COLORS,
@@ -246,6 +246,10 @@ VARS = {
         'cb_klassen': BFT_KLASSEN,
         'label_min':  None,
         'label_fmt':  _fmt_bft,
+        # Richting komt onder het Beaufortcijfer. Iets ruimer dan het gewone
+        # waarderaster houdt die tweeregelige labels ook in de mp4 rustig.
+        'label_d_lat': 0.40,
+        'label_d_lon': 0.65,
         'ecmwf_params': ['10u', '10v'],
         'ecmwf_cache':  'wind',
         'harmonie':   ('harmonie46_data_wind.bin', 'canvas'),
@@ -367,6 +371,19 @@ def fmt_valid(dt, lokaal=False):
         return (f'{NL_DAGEN[dt.weekday()]} {dt.day:02d}.{dt.month:02d}. '
                 f'{dt.hour:02d}:{dt.minute:02d} LT')
     return f'{NL_DAGEN[dt.weekday()]} {dt.day:02d}.{dt.month:02d}. {dt.hour:02d}z'
+
+
+def windrichting(u, v):
+    """U/V (richting waarheen) naar Nederlandse richting waarvandaan.
+
+    Een oostwaartse U-component is dus westenwind. Acht hoofdsectoren zijn op
+    het sociale formaat duidelijker dan zestien smalle sectorlabels.
+    """
+    if not np.isfinite(u) or not np.isfinite(v) or np.hypot(u, v) < 0.2:
+        return '—'
+    graden = (np.degrees(np.arctan2(-u, -v)) + 360.0) % 360.0
+    sectoren = ('N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW')
+    return sectoren[int((graden + 22.5) // 45.0) % 8]
 
 
 def ecmwf_max_step(run_hour):
@@ -529,7 +546,11 @@ def ecmwf_fields(var_naam='neerslag', run_hour=None, max_step=None, refresh=Fals
         veld = _ecmwf_veld(per_lead[lead], var_naam)
         if veld is None:                      # stap mist het benodigde veld
             continue
-        out.append((lead, run, run + timedelta(hours=lead), lats, lons, veld))
+        vector = None
+        if var_naam == 'wind':
+            vector = (per_lead[lead]['u10'], per_lead[lead]['v10'])
+        out.append((lead, run, run + timedelta(hours=lead), lats, lons, veld,
+                    vector))
     if not out:
         raise SystemExit(f'geen enkele stap bruikbaar voor {var_naam}')
     return out
@@ -667,7 +688,9 @@ def harmonie_fields(var_naam='neerslag', max_step=None, bron_dir=None):
     if kubus.size != verwacht:
         raise SystemExit(f'{bestand}: {kubus.size} waarden, verwacht {verwacht}')
 
-    veld = _harmonie_veld(kubus.reshape(vorm), var_naam)
+    kubus = kubus.reshape(vorm)
+    veld = _harmonie_veld(kubus, var_naam)
+    vector = (kubus[:, 0], kubus[:, 1]) if var_naam == 'wind' else None
     if VARS[var_naam]['soort'] == 'som':
         zakt = np.where((veld[1:] < veld[:-1] - 1e-6).any(axis=(1, 2)))[0]
         if zakt.size:
@@ -681,7 +704,9 @@ def harmonie_fields(var_naam='neerslag', max_step=None, bron_dir=None):
     out = []
     for i in range(top):                             # bin-index 0 = +1u
         lead = i + 1
-        out.append((lead, run, run + timedelta(hours=lead), lats, lons, veld[i]))
+        stap_vector = None if vector is None else (vector[0][i], vector[1][i])
+        out.append((lead, run, run + timedelta(hours=lead), lats, lons, veld[i],
+                    stap_vector))
     return out
 
 
@@ -767,7 +792,8 @@ def _bij_vast_punt(lo, la):
                for _, pla, plo in PUNTEN)
 
 
-def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None):
+def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None,
+               d_lat=None, d_lon=None):
     """Waardecijfers op een regelmatig raster (in graden).
 
     drempel=None toont ook lage waarden; voor de neerslagsom staat er een
@@ -776,7 +802,8 @@ def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None):
     """
     # Voor X zijn iets minder maar duidelijk grotere cijfers beter leesbaar dan
     # een fijn raster dat na het verkleinen dichtloopt.
-    d_lat, d_lon = LABEL_D_LAT, LABEL_D_LON
+    d_lat = d_lat or LABEL_D_LAT
+    d_lon = d_lon or LABEL_D_LON
     for la in np.arange(extent[2] + 0.12, extent[3] - 0.06, d_lat):
         for lo in np.arange(extent[0] + 0.15, extent[1] - 0.08, d_lon):
             i = int(np.argmin(np.abs(lats_f - la)))
@@ -786,7 +813,7 @@ def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None):
                 continue
             if (np.isfinite(v) and (drempel is None or v >= drempel) and
                     (bovengrens is None or v <= bovengrens)):
-                yield lo, la, v
+                yield lo, la, v, i, j
 
 
 _PROJ_GRID = {}
@@ -812,11 +839,17 @@ def proj_grid(lons_f, lats_f):
 
 
 def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_label,
-               step_txt='', max_lead=None, eind=None):
+               step_txt='', max_lead=None, eind=None, vector_ruw=None):
     extent = cfg['extent']
     cmap, norm = build_cmap(var)
     lats_f, lons_f, tp = crop_and_upsample(lats, lons, veld_ruw, extent,
                                            cfg['interp_step'])
+    wind_u = wind_v = None
+    if vector_ruw is not None:
+        _, _, wind_u = crop_and_upsample(lats, lons, vector_ruw[0], extent,
+                                         cfg['interp_step'])
+        _, _, wind_v = crop_and_upsample(lats, lons, vector_ruw[1], extent,
+                                         cfg['interp_step'])
     px, py = proj_grid(lons_f, lats_f)
 
     x0, x1, y0, y1 = proj_extent(extent)
@@ -852,9 +885,12 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     # Waardecijfers. Radar blijft bewust cijferloos: zo blijven de kleine
     # buienstructuren ook na compressie scherp zichtbaar.
     if var.get('show_labels', True):
-        for lo, la, v in label_grid(lats_f, lons_f, tp, extent, var['label_min'],
-                                    var.get('label_max')):
+        for lo, la, v, i, j in label_grid(
+                lats_f, lons_f, tp, extent, var['label_min'], var.get('label_max'),
+                var.get('label_d_lat'), var.get('label_d_lon')):
             txt = var['label_fmt'](v)
+            if wind_u is not None:
+                txt = f'{txt}\nuit {windrichting(wind_u[i, j], wind_v[i, j])}'
             inkt, rand = _tekst_op(_vlakkleur(var, v))
             ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=LABEL_FONT,
                     color=inkt, ha='center', va='center', clip_on=True,
@@ -878,7 +914,10 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                 (var.get('label_max') is not None and v > var['label_max'])):
             continue
         inkt, rand = _tekst_op(_vlakkleur(var, v))
-        ax.text(lo, la, var['label_fmt'](v), transform=PROJ_PC, zorder=8,
+        txt = var['label_fmt'](v)
+        if wind_u is not None:
+            txt = f'{txt}\nuit {windrichting(wind_u[i, j], wind_v[i, j])}'
+        ax.text(lo, la, txt, transform=PROJ_PC, zorder=8,
                 fontsize=LABEL_FONT, fontweight='bold', color=inkt,
                 ha='center', va='center', clip_on=True,
                 path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
@@ -1013,12 +1052,14 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
     extent = cfg['extent']
     frames = []
     getekend = []
-    for lead, run_, valid, lats, lons, veld in data:
+    for item in data:
+        lead, run_, valid, lats, lons, veld = item[:6]
+        vector = item[6] if len(item) > 6 else None
         f = os.path.join(frame_dir, f'{var_naam}_{run_tag}_{lead:03d}.png')
         getekend.append(
             plot_frame(lead, run_, valid, lats, lons, veld, f, cfg, var, model_label,
                        step_txt=step_txt, max_lead=max_lead,
-                       eind=run + timedelta(hours=max_lead)))
+                       eind=run + timedelta(hours=max_lead), vector_ruw=vector))
         frames.append(f)
 
     # Controleer wat er getekend is, niet alleen wat er ingelezen werd. De bin
