@@ -237,7 +237,7 @@ VARS = {
         'titel':      'windkracht',
         'eenheid':    'Bft',
         'soort':      'moment',
-        'subtitel':   'richting waarvandaan, op 10 meter',
+        'subtitel':   'pijl wijst waarheen, op 10 meter',
         'menu':       'Windkracht',
         'levels':     BFT_GRENZEN,
         'colors':     WIND_COLORS,
@@ -373,17 +373,12 @@ def fmt_valid(dt, lokaal=False):
     return f'{NL_DAGEN[dt.weekday()]} {dt.day:02d}.{dt.month:02d}. {dt.hour:02d}z'
 
 
-def windrichting(u, v):
-    """U/V (richting waarheen) naar Nederlandse richting waarvandaan.
-
-    Een oostwaartse U-component is dus westenwind. Acht hoofdsectoren zijn op
-    het sociale formaat duidelijker dan zestien smalle sectorlabels.
-    """
+def windeenheidsvector(u, v):
+    """U/V-windcomponenten als eenheidsvector in de stroomrichting."""
     if not np.isfinite(u) or not np.isfinite(v) or np.hypot(u, v) < 0.2:
-        return '—'
-    graden = (np.degrees(np.arctan2(-u, -v)) + 360.0) % 360.0
-    sectoren = ('N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW')
-    return sectoren[int((graden + 22.5) // 45.0) % 8]
+        return None
+    snelheid = np.hypot(u, v)
+    return u / snelheid, v / snelheid
 
 
 def ecmwf_max_step(run_hour):
@@ -884,18 +879,23 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
 
     # Waardecijfers. Radar blijft bewust cijferloos: zo blijven de kleine
     # buienstructuren ook na compressie scherp zichtbaar.
+    wind_pijlen = []
     if var.get('show_labels', True):
         for lo, la, v, i, j in label_grid(
                 lats_f, lons_f, tp, extent, var['label_min'], var.get('label_max'),
                 var.get('label_d_lat'), var.get('label_d_lon')):
             txt = var['label_fmt'](v)
-            if wind_u is not None:
-                txt = f'{txt}\n{windrichting(wind_u[i, j], wind_v[i, j])}'
             inkt, rand = _tekst_op(_vlakkleur(var, v))
-            ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=LABEL_FONT,
+            effecten = [pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)]
+            cijfer_lat = la + 0.035 if wind_u is not None else la
+            ax.text(lo, cijfer_lat, txt, transform=PROJ_PC, zorder=6,
+                    fontsize=LABEL_FONT,
                     color=inkt, ha='center', va='center', clip_on=True,
-                    fontweight='bold',
-                    path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
+                    fontweight='bold', path_effects=effecten)
+            if wind_u is not None:
+                vector = windeenheidsvector(wind_u[i, j], wind_v[i, j])
+                if vector is not None:
+                    wind_pijlen.append((lo, la - 0.045, *vector, inkt, rand))
 
     # Vaste punten: extra waarden op plekken die het raster overslaat, zonder
     # plaatsnamen zodat de kaart op sociale media rustig en direct leesbaar
@@ -915,12 +915,31 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
             continue
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         txt = var['label_fmt'](v)
-        if wind_u is not None:
-            txt = f'{txt}\n{windrichting(wind_u[i, j], wind_v[i, j])}'
-        ax.text(lo, la, txt, transform=PROJ_PC, zorder=8,
+        effecten = [pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)]
+        cijfer_lat = la + 0.035 if wind_u is not None else la
+        ax.text(lo, cijfer_lat, txt, transform=PROJ_PC, zorder=8,
                 fontsize=LABEL_FONT, fontweight='bold', color=inkt,
                 ha='center', va='center', clip_on=True,
-                path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
+                path_effects=effecten)
+        if wind_u is not None:
+            vector = windeenheidsvector(wind_u[i, j], wind_v[i, j])
+            if vector is not None:
+                wind_pijlen.append((lo, la - 0.045, *vector, inkt, rand))
+
+    # Eén echte vectorlaag in plaats van kleine Unicode-pijltjes. De vectoren
+    # zijn genormaliseerd: het kleurvlak en cijfer tonen de snelheid, de pijl
+    # uitsluitend de richting. Een witte/zwarte rand houdt ze op elke
+    # windkrachtkleur scherp, ook na videocompressie.
+    if wind_pijlen:
+        ax.quiver(
+            np.asarray([p[0] for p in wind_pijlen]),
+            np.asarray([p[1] for p in wind_pijlen]),
+            np.asarray([p[2] for p in wind_pijlen]),
+            np.asarray([p[3] for p in wind_pijlen]),
+            transform=PROJ_PC, pivot='middle', scale_units='inches', scale=6.2,
+            width=0.0042, headwidth=3.8, headlength=5.0, headaxislength=4.5,
+            color=[p[4] for p in wind_pijlen], edgecolor=[p[5] for p in wind_pijlen],
+            linewidth=0.55, zorder=7)
 
     ax.spines['geo'].set_linewidth(1.1)
     ax.spines['geo'].set_edgecolor('#333333')
