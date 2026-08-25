@@ -20,6 +20,14 @@
 
 set -uo pipefail
 
+# launchd start een job met 256 file descriptors; rsync houdt er met
+# --link-dest veel tegelijk open en viel daar sinds 21 aug elke nacht op om
+# ("copy_file fromfd: openat: Too many open files", rsync-status 11). In een
+# terminal valt dat niet op: daar staat de soft limit al op ruim een miljoen,
+# dus handmatige runs slaagden wel. kern.maxfilesperproc is 245760, dus 4096
+# is ruim binnen de marge.
+ulimit -n 4096 2>/dev/null || true
+
 SRC="$HOME/KNMI_Project/weerlab"
 BACKUP_ROOT="$HOME/KNMI_Project/backups"
 BEWAAR=14
