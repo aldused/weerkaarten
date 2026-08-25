@@ -890,7 +890,7 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                 var.get('label_d_lat'), var.get('label_d_lon')):
             txt = var['label_fmt'](v)
             if wind_u is not None:
-                txt = f'{txt}\nuit {windrichting(wind_u[i, j], wind_v[i, j])}'
+                txt = f'{txt}\n{windrichting(wind_u[i, j], wind_v[i, j])}'
             inkt, rand = _tekst_op(_vlakkleur(var, v))
             ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=LABEL_FONT,
                     color=inkt, ha='center', va='center', clip_on=True,
@@ -916,7 +916,7 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         inkt, rand = _tekst_op(_vlakkleur(var, v))
         txt = var['label_fmt'](v)
         if wind_u is not None:
-            txt = f'{txt}\nuit {windrichting(wind_u[i, j], wind_v[i, j])}'
+            txt = f'{txt}\n{windrichting(wind_u[i, j], wind_v[i, j])}'
         ax.text(lo, la, txt, transform=PROJ_PC, zorder=8,
                 fontsize=LABEL_FONT, fontweight='bold', color=inkt,
                 ha='center', va='center', clip_on=True,
