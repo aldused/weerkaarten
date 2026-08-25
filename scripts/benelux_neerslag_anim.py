@@ -1,7 +1,8 @@
 """
 Nederlandse weerkaarten (animatie) — ECMWF HRES en HARMONIE
 
-Sociale kaarten voor neerslagsom, windkracht, windstoten, temperatuur en zicht:
+Sociale kaarten voor neerslagsom, gesimuleerde radar, windkracht, windstoten,
+temperatuur en zicht:
 kleurvlak + cijfers op een raster, verticale kleurschaal rechts en run/geldigheid
 in de kop. Per beschikbaar model een mp4 en een losse eindkaart.
 
@@ -151,6 +152,17 @@ ZICHT_COLORS = ['#5b006e', '#a50026', '#d73027', '#f46d43', '#fdae61',
 ZICHT_UNDER  = '#2d0038'
 ZICHT_OVER   = '#f7fbff'
 
+# Gesimuleerde radarreflectiviteit. Het rechtstreekse HARMONIE-rprate-veld
+# wordt met Z=300*R^1.4 naar dBZ omgerekend. De schaal sluit aan bij gangbare
+# radarproducten: zwakke echo's grijs/blauw, neerslag groen, zware buien
+# geel/rood en de sterkste kernen magenta/paars.
+RADAR_LEVELS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
+RADAR_COLORS = ['#eeeeee', '#cfd6d2', '#a9bbb3', '#72988a',
+                '#3d755f', '#15933f', '#16c544', '#28ef42',
+                '#c9f21a', '#fff000', '#ffad00', '#ff6500',
+                '#f00000', '#a90000', '#ff36bc', '#7f20a8']
+RADAR_OVER   = '#4b007a'
+
 
 def _fmt_mm(v):
     return f'{v:.0f}'
@@ -189,6 +201,29 @@ VARS = {
         'ecmwf_params': ['tp'],
         'ecmwf_cache':  'tp',                      # bestaande GRIB-cache hergebruiken
         'harmonie':   ('harmonie46_data_cumul.bin', 'native'),
+    },
+    'radar': {
+        'titel':      'gesimuleerde radar',
+        'eenheid':    'dBZ',
+        'soort':      'moment',
+        'subtitel':   'uit rechtstreekse modelneerslagintensiteit',
+        'menu':       'Gesimuleerde radar',
+        'levels':     RADAR_LEVELS,
+        'colors':     RADAR_COLORS,
+        'over':       RADAR_OVER,
+        'under':      '#ffffff',
+        'cb_klassen': None,
+        'label_min':  None,
+        'label_fmt':  _fmt_heel,
+        'show_labels': False,
+        'dpi':        150,
+        'video_width': 1080,
+        'video_bitrate': '1800k',
+        # Niet bij ECMWF aanbieden: dit product gebruikt het rechtstreekse
+        # HARMONIE-rprate-veld, niet een uursom of een geïnterpoleerde schatting.
+        'ecmwf_params': [],
+        'ecmwf_cache':  'radar',
+        'harmonie':   ('harmonie46_data_regenrate.bin', 'native'),
     },
     'wind': {
         'titel':      'windkracht',
@@ -578,6 +613,12 @@ def _harmonie_veld(kubus, var_naam):
     """
     if var_naam == 'neerslag':
         return (kubus / 12.0) ** 2                 # uint8-sqrt schaal 12 → mm
+    if var_naam == 'radar':
+        regen = (kubus / 16.0) ** 2                # uint8-sqrt schaal 16 → mm/u
+        # NEXRAD/KNMI-convectieve relatie. Onder 0,05 mm/u geen echo tekenen.
+        return np.where(regen >= 0.05,
+                        10.0 * np.log10(300.0 * np.maximum(regen, 1e-6) ** 1.4),
+                        -1.0)
     if var_naam in ('wind', 'windstoten'):
         return np.hypot(kubus[:, 0], kubus[:, 1]) * 3.6       # m/s → km/u
     if var_naam == 'temp':
@@ -800,22 +841,24 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         'cultural', 'admin_1_states_provinces_lines', '10m',
         edgecolor='#60717d', linewidth=0.38, facecolor='none'), zorder=4)
 
-    # waardecijfers
-    for lo, la, v in label_grid(lats_f, lons_f, tp, extent, var['label_min'],
-                                var.get('label_max')):
-        txt = var['label_fmt'](v)
-        inkt, rand = _tekst_op(_vlakkleur(var, v))
-        ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=LABEL_FONT,
-                color=inkt, ha='center', va='center', clip_on=True,
-                fontweight='bold',
-                path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
+    # Waardecijfers. Radar blijft bewust cijferloos: zo blijven de kleine
+    # buienstructuren ook na compressie scherp zichtbaar.
+    if var.get('show_labels', True):
+        for lo, la, v in label_grid(lats_f, lons_f, tp, extent, var['label_min'],
+                                    var.get('label_max')):
+            txt = var['label_fmt'](v)
+            inkt, rand = _tekst_op(_vlakkleur(var, v))
+            ax.text(lo, la, txt, transform=PROJ_PC, zorder=6, fontsize=LABEL_FONT,
+                    color=inkt, ha='center', va='center', clip_on=True,
+                    fontweight='bold',
+                    path_effects=[pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)])
 
     # Vaste punten: extra waarden op plekken die het raster overslaat, zonder
     # plaatsnamen zodat de kaart op sociale media rustig en direct leesbaar
     # blijft. Zelfde lettergrootte als het raster — twee maten door elkaar oogde
     # rommelig. Dezelfde ondergrens geldt als voor het raster: bij neerslag dus
     # geen 0 mm.
-    for naam, la, lo in PUNTEN:
+    for naam, la, lo in (PUNTEN if var.get('show_labels', True) else []):
         if not (extent[0] + 0.1 < lo < extent[1] - 0.1 and
                 extent[2] + 0.1 < la < extent[3] - 0.1):
             continue
@@ -883,7 +926,7 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     teken_merkstrook(fig, cfg['credit'], fig_h)
 
     fig.patch.set_facecolor('white')
-    fig.savefig(outfile, dpi=110, facecolor='white')
+    fig.savefig(outfile, dpi=var.get('dpi', 110), facecolor='white')
     plt.close(fig)
     # grof monster van het veld dat hier daadwerkelijk getekend is, zodat
     # bouw_veld achteraf kan controleren wat er op de kaart terechtkwam
@@ -905,15 +948,15 @@ MP4_FPS = 6
 MP4_BITRATE = '650k'
 
 
-def build_mp4(frame_glob, outfile, fps=MP4_FPS):
+def build_mp4(frame_glob, outfile, fps=MP4_FPS, width=792, bitrate=MP4_BITRATE):
     if not shutil.which('ffmpeg'):
         print('  ffmpeg niet gevonden — mp4 overgeslagen')
         return
     cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-framerate', str(fps),
            '-pattern_type', 'glob', '-i', frame_glob,
-           '-vf', 'scale=792:-2',
+           '-vf', f'scale={width}:-2',
            '-c:v', 'libx264', '-preset', 'medium', '-pix_fmt', 'yuv420p',
-           '-b:v', MP4_BITRATE, '-maxrate', '750k', '-bufsize', '1300k',
+           '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', bitrate,
            '-movflags', '+faststart', outfile]
     subprocess.run(cmd, check=True)
     print(f'  {os.path.basename(outfile)}  ({os.path.getsize(outfile)/1e6:.1f} MB)')
@@ -1012,7 +1055,9 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
     suffix = '_DEMO' if args.demo else ''
     if not args.no_mp4:
         build_mp4(os.path.join(frame_dir, f'{var_naam}_{run_tag}_*.png'),
-                  os.path.join(OUTPUT_DIR, f'{prefix}_{run_tag}{suffix}.mp4'))
+                  os.path.join(OUTPUT_DIR, f'{prefix}_{run_tag}{suffix}.mp4'),
+                  width=var.get('video_width', 792),
+                  bitrate=var.get('video_bitrate', MP4_BITRATE))
 
     # laatste stap ook als losse kaart: bij de som is dat het totaal, bij de
     # andere velden het verste beeld van de reeks

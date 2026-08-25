@@ -76,7 +76,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
     <div>
       <div class="eyebrow">Kaartenstudio</div>
       <h1>Kaartenstudio Nederland</h1>
-      <div class="sub">Scherpe animaties voor Nederland: neerslagsom, windkracht, windstoten, temperatuur en zicht. ECMWF HRES 9 km levert vier runs per dag met 3-uursstappen tot +144 uur; HARMONIE V46 2,5 km geeft elk uur een verse run met uurstappen tot +60 uur. Zicht komt rechtstreeks uit HARMONIE V46. De compacte uitsnede en het contrastrijke cijferraster zijn geoptimaliseerd voor MP4 op X.</div>
+      <div class="sub">Haarscherpe animaties voor Nederland: neerslagsom, gesimuleerde radar, windkracht, windstoten, temperatuur en zicht. ECMWF HRES 9 km levert vier runs per dag met 3-uursstappen tot +144 uur; HARMONIE V46 2,5 km geeft elk uur een verse run met uurstappen tot +60 uur. Radar en zicht komen rechtstreeks uit HARMONIE V46. De compacte uitsnede is geoptimaliseerd voor MP4 op X.</div>
     </div>
   </header>
 
@@ -90,6 +90,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
     </div>
     <div class="modelkeuze veldkeuze" id="veldkeuze">
       <button type="button" data-var="neerslag" onclick="kiesVeld('neerslag')">Neerslagsom<small>oplopende som (mm)</small></button>
+      <button type="button" data-var="radar" onclick="kiesVeld('radar')">Simulatie radar<small>HARMONIE V46 · dBZ</small></button>
       <button type="button" data-var="wind" onclick="kiesVeld('wind')">Windkracht<small>Beaufort op 10 m</small></button>
       <button type="button" data-var="windstoten" onclick="kiesVeld('windstoten')">Windstoten<small>hoogste stoot, km/u</small></button>
       <button type="button" data-var="temp" onclick="kiesVeld('temp')">Temperatuur<small>2 meter (°C)</small></button>
@@ -128,7 +129,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
       <a class="pill" id="dl-png" href="#" target="_blank" rel="noopener">PNG openen</a>
     </div>
     <div class="totaal">
-      <img id="totaalkaart" alt="Totale neerslagsom Nederland over de hele reeks">
+      <img id="totaalkaart" alt="Laatste kaartbeeld van de gekozen animatiereeks">
     </div>
   </section>
 
@@ -139,6 +140,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
         <li><strong>ECMWF HRES 9 km</strong>: vier runs per dag (00, 06, 12 en 18 UTC), steeds met 3-uursstappen tot +144 uur (48 beelden).</li>
         <li><strong>HARMONIE V46 2,5 km</strong>: elk uur een nieuwe run met uurstappen tot +60 uur (60 beelden). De data komen rechtstreeks van het KNMI; de kaart vermeldt daarom duidelijk “© KNMI · HARMONIE V46”. De modelnaam en resolutie staan ook in de kop van iedere MP4- en PNG-kaart.</li>
         <li><strong>Neerslagsom</strong> loopt op vanaf het runtijdstip: elk beeld is het totaal tot de geldigheidstijd in de kop, geen losse tijdvakjes. Cijfers in millimeter worden vanaf 1 mm getoond. De kleurschaal volgt de indeling van noodweer.be: fijne stappen onderin (blauw tot 5 mm, groen tot 10) en logaritmisch oplopend tot 300 mm, zodat zowel de 60-uurs HARMONIE-som als de 144-uurs ECMWF-som goed leesbaar blijft.</li>
+        <li><strong>Simulatie radar</strong> gebruikt de rechtstreekse HARMONIE V46-modelneerslagintensiteit en zet die met Z=300·R<sup>1,4</sup> om naar dBZ. Het is een modelbeeld, geen gemeten radar. De 1080-pixel MP4 heeft een hogere bitrate en geen cijferlaag, zodat kleine buienkernen en scherpe gradiënten zichtbaar blijven.</li>
         <li><strong>Windkracht</strong> en <strong>windstoten</strong> delen één schaal: elk kleurvlak is precies één windkracht, want de klassegrenzen zijn de Beaufort-drempels. Je ziet dus direct hoeveel klassen de stoot boven het gemiddelde uitkomt. Bij <strong>windkracht</strong> staan ook de cijfers in Beaufort, dus die benoemen het vlak waar ze in staan. Bij <strong>windstoten</strong> staan ze in km/u, want daar telt juist het verschil bínnen een klasse — 62 of 74 km/u is allebei windkracht 8.</li>
         <li><strong>Windstoten</strong> toont de hoogste stoot in het voorgaande tijdvak — bij ECMWF over 3 uur; bij HARMONIE over het voorgaande uur.</li>
         <li><strong>Temperatuur</strong> is de 2-meter-temperatuur op het geldigheidsmoment zelf, in stappen van 2,5 °C rond het bereik dat in Nederland voorkomt.</li>
@@ -169,6 +171,7 @@ const MODELLEN = {
 // hetzelfde patroon. Zie prefix_van() in benelux_neerslag_anim.py.
 const VELDEN = {
   neerslag:   { titel: 'Neerslagsom', bestand: 'neerslagsom', eind: 'Eindstand · totaal over de hele reeks' },
+  radar:      { titel: 'Gesimuleerde radar', bestand: 'simulatie_radar', eind: 'Laatste radarbeeld van de reeks' },
   wind:       { titel: 'Windkracht', bestand: 'windkracht', eind: 'Laatste beeld van de reeks' },
   windstoten: { titel: 'Windstoten', bestand: 'windstoten', eind: 'Laatste beeld van de reeks' },
   temp:       { titel: 'Temperatuur', bestand: 'temperatuur', eind: 'Laatste beeld van de reeks' },
@@ -179,7 +182,7 @@ let model = localStorage.getItem('wb_neerslagsom_model') || 'ecmwf';
 if (!MODELLEN[model]) model = 'ecmwf';
 let veld = localStorage.getItem('wb_neerslagsom_veld') || 'neerslag';
 if (!VELDEN[veld]) veld = 'neerslag';
-if (veld === 'zicht') model = 'harmonie';
+if (veld === 'zicht' || veld === 'radar') model = 'harmonie';
 let videoFps = 10;
 
 function prefixVan(){
@@ -210,7 +213,7 @@ function zetSnelheid(){
 
 function kiesModel(id){
   if (!MODELLEN[id]) return;
-  if (id === 'ecmwf' && veld === 'zicht') {
+  if (id === 'ecmwf' && (veld === 'zicht' || veld === 'radar')) {
     veld = 'neerslag';
     localStorage.setItem('wb_neerslagsom_veld', veld);
   }
@@ -223,7 +226,7 @@ function kiesVeld(id){
   if (!VELDEN[id]) return;
   veld = id;
   localStorage.setItem('wb_neerslagsom_veld', id);
-  if (id === 'zicht' && model !== 'harmonie') {
+  if ((id === 'zicht' || id === 'radar') && model !== 'harmonie') {
     model = 'harmonie';
     localStorage.setItem('wb_neerslagsom_model', model);
   }
@@ -232,9 +235,9 @@ function kiesVeld(id){
 
 function markeerKnoppen(){
   const ecmwfKnop = document.querySelector('#modelkeuze button[data-model="ecmwf"]');
-  ecmwfKnop.disabled = veld === 'zicht';
-  ecmwfKnop.title = veld === 'zicht'
-    ? 'ECMWF-open-data levert geen rechtstreeks zichtveld'
+  ecmwfKnop.disabled = veld === 'zicht' || veld === 'radar';
+  ecmwfKnop.title = veld === 'zicht' || veld === 'radar'
+    ? 'Dit rechtstreekse veld is alleen beschikbaar voor HARMONIE V46'
     : '';
   document.querySelectorAll('#modelkeuze button').forEach(b => {
     b.classList.toggle('aan', b.dataset.model === model);

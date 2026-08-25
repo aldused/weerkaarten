@@ -112,6 +112,7 @@ def empty_fields() -> dict[str, np.ndarray | None]:
     return {
         "temp": None,
         "cum": None,
+        "regenrate": None,
         "hoog": None,
         "mid": None,
         "laag": None,
@@ -164,6 +165,10 @@ def read_steps(files: list[Path]):
                         fields["rv"] = values
                     elif short == "tp":
                         fields["cum"] = values
+                    elif short == "rprate":
+                        # kg m-2 s-1 is voor vloeibaar water gelijk aan mm/s.
+                        # Bewaar als mm/u voor de gesimuleerde radar.
+                        fields["regenrate"] = np.maximum(values * 3600.0, 0)
                     elif short == "hcc":
                         fields["hoog"] = values / 100.0
                     elif short == "mcc":
@@ -204,7 +209,7 @@ def read_steps(files: list[Path]):
                 finally:
                     eccodes.codes_release(gid)
 
-        required = ("temp", "cum", "hoog", "mid", "laag", "uw", "vw", "ug", "vg", "zicht", "rv", "druk", "dauwpunt")
+        required = ("temp", "cum", "regenrate", "hoog", "mid", "laag", "uw", "vw", "ug", "vg", "zicht", "rv", "druk", "dauwpunt")
         missing = [key for key in required if fields[key] is None]
         if missing:
             raise RuntimeError(f"{path.name}: ontbrekende velden: {', '.join(missing)}")
@@ -287,6 +292,7 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
         return path
 
     write_u8sqrt("neerslag", hourly_precip, 16)
+    write_u8sqrt("regenrate", series["regenrate"][1:], 16)
     accum = []
     total = None
     for value in hourly_precip:
@@ -326,6 +332,7 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     base_grid = grid()
     params = {
         "neerslag": {"file": f"{PREFIX}_data_neerslag.bin", "components": 1, "label": "Uurlijkse neerslag (mm/u)", "dtype": "u8sqrt", "scale": 16, "grid": precip_grid},
+        "radar": {"file": f"{PREFIX}_data_regenrate.bin", "components": 1, "label": "Gesimuleerde radarreflectiviteit (dBZ)", "dtype": "u8sqrt", "scale": 16, "grid": precip_grid},
         "cumul": {"file": f"{PREFIX}_data_cumul.bin", "components": 1, "label": "Cumulatieve neerslag (mm)", "dtype": "u8sqrt", "scale": 12, "grid": precip_grid},
         "temp": {"file": f"{PREFIX}_data_temp.bin", "components": 1, "label": "Temperatuur 2m (°C)"},
         "bewolking": {"file": f"{PREFIX}_data_bewolking.bin", "components": 3, "label": "Bewolking (hoog/midden/laag)"},
