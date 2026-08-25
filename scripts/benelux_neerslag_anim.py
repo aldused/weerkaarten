@@ -156,12 +156,19 @@ ZICHT_OVER   = '#f7fbff'
 # wordt met Z=300*R^1.4 naar dBZ omgerekend. De schaal sluit aan bij gangbare
 # radarproducten: zwakke echo's grijs/blauw, neerslag groen, zware buien
 # geel/rood en de sterkste kernen magenta/paars.
-RADAR_LEVELS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
-RADAR_COLORS = ['#eeeeee', '#cfd6d2', '#a9bbb3', '#72988a',
-                '#3d755f', '#15933f', '#16c544', '#28ef42',
-                '#c9f21a', '#fff000', '#ffad00', '#ff6500',
-                '#f00000', '#a90000', '#ff36bc', '#7f20a8']
-RADAR_OVER   = '#4b007a'
+# De referentiekaart gebruikt een vloeiende schaal van 0–78 dBZ, met labels
+# per 6 dBZ. Rood begint daar al rond 48–50 dBZ; een eerdere Weerlab-versie
+# schoof rood onterecht door naar 60 dBZ en oogde daardoor te groen/geel.
+RADAR_LEVELS = list(range(0, 80, 2))
+RADAR_COLORS = ['#ffffff', '#d3d3d3', '#b5bfb9', '#98ab9f', '#7a9785',
+                '#5d826a', '#3f6e50', '#225a36', '#04461c', '#045d1c',
+                '#04751c', '#048c1c', '#04a41c', '#04bb1c', '#04d31c',
+                '#04ea1c', '#fcee04', '#fadf04', '#f7cf04', '#f5c004',
+                '#f3b004', '#f1a104', '#ee9104', '#ec8204', '#f42e04',
+                '#dd2503', '#c61c02', '#ae1202', '#970901', '#800000',
+                '#ff00ff', '#e61ae6', '#cc33cc', '#b34db3', '#996699',
+                '#808080', '#919191', '#a1a1a1', '#b2b2b2']
+RADAR_OVER   = '#d3d3d3'
 
 
 def _fmt_mm(v):
@@ -213,6 +220,7 @@ VARS = {
         'over':       RADAR_OVER,
         'under':      '#ffffff',
         'cb_klassen': None,
+        'cb_ticks':   list(range(0, 79, 6)),
         'label_min':  None,
         'label_fmt':  _fmt_heel,
         'show_labels': False,
@@ -915,8 +923,9 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
                    va='center', fontsize=9.5, color='#333333')
         eenheid_hoog = 0.34
     else:
-        cb.set_ticks(niveaus)
-        cb.set_ticklabels([f'{v:g}' for v in niveaus])
+        ticks = var.get('cb_ticks', niveaus)
+        cb.set_ticks(ticks)
+        cb.set_ticklabels([f'{v:g}' for v in ticks])
         eenheid_hoog = 0.18
     cb.ax.tick_params(labelsize=9.5, length=2)
     cb.outline.set_linewidth(0.7)
