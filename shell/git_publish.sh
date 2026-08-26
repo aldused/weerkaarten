@@ -39,16 +39,10 @@ if ! git diff --cached --quiet -- "$@"; then
   git commit -m "$MESSAGE" -- "$@"
 fi
 
-# 2. Alle overige tracked data-churn (toplijst.json, mosmix_*.json, sat_*.png,
-#    records_*.json, ...) mee-committen zodat de werkboom SCHOON is voor de
-#    rebase. Vroeger bleef die churn dirty en gebruikte `git pull --autostash`
-#    een stash; bij een pop-conflict bleef die staan en stapelde zich op (43+
-#    verweesde autostashes). Untracked bestanden (logs, *_uurNN.png, *.local.json)
-#    blijven met rust — die horen niet in git.
-git add -u
-if ! git diff --cached --quiet; then
-  git commit -m "data: werkboom-churn meegepubliceerd (auto)"
-fi
+# 2. Runtime-data hoort op R2, niet in Pages. Laat gewijzigde data daarom
+#    bewust ongestaged: de afzonderlijke updatejobs publiceren deze al via
+#    shell/r2_publish.sh. Zo triggert een dataverloop geen Pages-deploy meer.
+#    Alleen de expliciet opgegeven bronbestanden bovenaan worden gecommit.
 
 # 3. Niets nieuws en niets klaarstaan om te pushen -> klaar.
 if [ "$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)" = "0" ]; then

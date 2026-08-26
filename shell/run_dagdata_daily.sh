@@ -27,11 +27,10 @@ echo "Stap 3/4: Hittegolven bijwerken en publiceren"
 shell/r2_publish.sh hittegolven.json
 
 echo ""
-echo "Stap 4/4: dagdata naar git/Pages publiceren (extremenzoeker leest relatief)"
-# De extremenzoeker (extremen.html) en stationsanalyse laden dagdata_*.json via
-# relatieve URL's → Cloudflare Pages/git, NIET R2. Zonder deze publicatie loopt
-# de site achter tot iemand handmatig commit.
-shell/git_publish.sh "data: dagdata daily sync $(date '+%Y-%m-%d %H:%M')" dagdata_*.json
+echo "Stap 4/4: dagdata naar R2 publiceren"
+# De afnemers laden buiten localhost rechtstreeks vanaf data.weerlab.nl.
+# Dit ververst de data zonder Git-commit of Pages-deploy.
+shell/r2_publish.sh dagdata_*.json
 
 echo ""
 echo "Klaar — $(date '+%Y-%m-%d %H:%M')"

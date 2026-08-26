@@ -3,8 +3,7 @@
 # Hittekracht-app refresh — wrapper voor nl.edaldus.hittekracht-app.plist
 # Haalt per KNMI-station de app-identieke hittekrachtverwachting (vandaag+morgen)
 # uit de publieke KNMI-app backend (api.app.knmi.cloud/weather/detail) en schrijft
-# hittekracht_app.json. Wordt door demo_hittekracht_app.html relatief geladen →
-# publiceren via git/Pages (niet R2).
+# hittekracht_app.json. De app haalt dit buiten localhost vanaf R2 op.
 # Draait elke 30 min, 24/7. Publiceert alleen bij inhoudelijke wijziging
 # (station-hittekracht), niet bij elke gegenereerd-timestamp. 24/7 zodat de
 # dag-hittekracht bij middernacht meteen naar de nieuwe dag verspringt (app
@@ -59,5 +58,5 @@ if [ -n "$NEW" ] && [ "$NEW" = "$OLD" ]; then
 fi
 
 echo "$NEW" > "$STATE"
-shell/git_publish.sh "data: hittekracht-app refresh $(date '+%Y-%m-%d %H:%M')" "$OUT"
+shell/r2_publish.sh "$OUT"
 echo "Klaar $(date '+%H:%M')"

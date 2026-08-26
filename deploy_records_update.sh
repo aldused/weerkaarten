@@ -31,8 +31,8 @@ git add index.html
 # Backend script
 git add scripts/knmi_records.py
 
-# Alle records JSON bestanden
-git add records_*.json
+# Alle records JSON-bestanden gaan naar R2; ze horen niet meer in Pages/Git.
+shell/r2_publish.sh records_*.json
 
 # Dit deploy script zelf
 git add deploy_records_update.sh
