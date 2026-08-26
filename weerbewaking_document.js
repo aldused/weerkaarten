@@ -10,7 +10,12 @@
   }
   function goHome(){
     if(window.self !== window.top){
-      try{ window.parent.history.replaceState(null,'','#weerbewaking'); }catch(e){}
+      try{
+        if(typeof window.parent.openWeerbewakingSubpage === 'function'){
+          window.parent.openWeerbewakingSubpage('home');
+          return;
+        }
+      }catch(e){}
       window.location.replace('weerbewaking.html');
       return;
     }
