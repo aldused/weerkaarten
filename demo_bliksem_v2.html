@@ -582,7 +582,8 @@ var playing = false;
 
 var zoom = 1, viewX = 0, viewY = 0;
 
-var basemapCanvas = null;   // gebakken CARTO-ondergrond (BASEMAP_W×H)
+var basemapCanvas = null;   // gebakken Weerlab-topo-ondergrond (BASEMAP_W×H)
+var bliksemTopoImg = null;
 var densCanvas = null;      // gekleurde dichtheidskaart (BASEMAP_W×H)
 var densDirty = true;
 // benelux_grens_coords.js declareert NL_GRENS/BE_GRENS/LU_GRENS met `const`,
@@ -756,10 +757,37 @@ function isDark(){ return document.documentElement.getAttribute("data-theme")===
 function voyagerStyle(){ return isDark() ? "dark_nolabels" : "voyager_nolabels"; }
 var bakeBusy=false, bakeDone=false;
 function bakeBasemap(){
-  // Rustige radarondergrond: alleen de eigen grenzen en plaatsnamen die in
-  // draw() worden getekend. Externe tegels bevatten nautische objecten die
-  // niet relevant zijn voor bliksemwaarnemingen.
-  bakeBusy=false; bakeDone=false; basemapCanvas=null;
+  if(bakeBusy) return;
+  bakeBusy=true;
+  function klaar(img){
+    var tmp=document.createElement("canvas"); tmp.width=BASEMAP_W; tmp.height=BASEMAP_H;
+    var tc=tmp.getContext("2d");
+    if(!img){
+      tc.fillStyle=isDark()?"#0e1b2e":"#aac4da";
+      tc.fillRect(0,0,BASEMAP_W,BASEMAP_H);
+    } else {
+      // Dezelfde lokale hillshade-bron als de neerslagradar, zonder labels,
+      // nautische zones of externe tegelverzoeken.
+      tc.drawImage(img,0,312,img.width,1000,0,0,BASEMAP_W,BASEMAP_H);
+      var pixels=tc.getImageData(0,0,BASEMAP_W,BASEMAP_H), d=pixels.data;
+      for(var i=0;i<d.length;i+=4){
+        var r=d[i],g=d[i+1],b=d[i+2],shade=(r+g+b)/3/214;
+        if(shade<0.78) shade=0.78; else if(shade>1.1) shade=1.1;
+        var water=(b-r+8)/50; if(water<0)water=0; else if(water>1)water=1;
+        var lr=136*shade,lg=140*shade,lb=128*shade;
+        var ws=0.93+0.10*shade,wr=156*ws,wg=192*ws,wb=223*ws;
+        d[i]=lr+(wr-lr)*water; d[i+1]=lg+(wg-lg)*water; d[i+2]=lb+(wb-lb)*water;
+      }
+      tc.putImageData(pixels,0,0);
+    }
+    basemapCanvas=tmp; bakeDone=true; bakeBusy=false;
+    if(typeof draw==="function") draw();
+  }
+  if(bliksemTopoImg){ klaar(bliksemTopoImg); return; }
+  var img=new Image();
+  img.onload=function(){ bliksemTopoImg=img; klaar(img); };
+  img.onerror=function(){ klaar(null); };
+  img.src="radar_basemap_topo.png";
 }
 // scherpe tegels voor ingezoomd venster
 var liveTileCache={};
