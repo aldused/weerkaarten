@@ -750,40 +750,16 @@ function genDemo(){
 }
 
 // ════════════════════════════════════════════════════════════════
-//  Basiskaart — OpenStreetMap-tegels → PlateCarree-venster
+//  Basiskaart — rustige vectorondergrond zonder nautische details
 // ════════════════════════════════════════════════════════════════
 function isDark(){ return document.documentElement.getAttribute("data-theme")==="dark"; }
 function voyagerStyle(){ return isDark() ? "dark_nolabels" : "voyager_nolabels"; }
 var bakeBusy=false, bakeDone=false;
 function bakeBasemap(){
-  if(bakeBusy) return; bakeBusy=true;
-  var z=8, n=Math.pow(2,z);
-  function lon2tx(lo){return (lo+180)/360*n;}
-  function lat2ty(la){var r=la*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;}
-  function tx2lon(x){return x/n*360-180;}
-  function ty2lat(y){return Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;}
-  var txMin=Math.floor(lon2tx(PROJ_LON_MIN)), txMax=Math.floor(lon2tx(PROJ_LON_MAX));
-  var tyMin=Math.floor(lat2ty(PROJ_LAT_MAX)), tyMax=Math.floor(lat2ty(PROJ_LAT_MIN));
-  var tmp=document.createElement("canvas"); tmp.width=BASEMAP_W; tmp.height=BASEMAP_H;
-  var tc=tmp.getContext("2d");
-  tc.fillStyle=isDark()?"#0e1b2e":"#aac4da"; tc.fillRect(0,0,BASEMAP_W,BASEMAP_H);
-  tc.imageSmoothingEnabled=true; tc.imageSmoothingQuality="high";
-  var jobs=[]; for(var tx=txMin;tx<=txMax;tx++) for(var ty=tyMin;ty<=tyMax;ty++) jobs.push([tx,ty]);
-  var total=jobs.length, done=0, ok=0;
-  function fin(){
-    bakeBusy=false;
-    if(ok>=Math.ceil(total*0.6)){ basemapCanvas=tmp; bakeDone=true; draw(); if(typeof renderMinis==="function") renderMinis(); }
-  }
-  jobs.forEach(function(j){
-    var tx=j[0],ty=j[1],img=new Image(); img.crossOrigin="anonymous";
-    img.onload=function(){
-      var dx=lonToX(tx2lon(tx)), dy=latToY(ty2lat(ty));
-      var dw=lonToX(tx2lon(tx+1))-dx, dh=latToY(ty2lat(ty+1))-dy;
-      tc.drawImage(img,dx,dy,dw+1,dh+1); ok++; if(++done===total) fin();
-    };
-    img.onerror=function(){ if(++done===total) fin(); };
-    img.src="https://tile.openstreetmap.org/"+z+"/"+tx+"/"+ty+".png";
-  });
+  // Rustige radarondergrond: alleen de eigen grenzen en plaatsnamen die in
+  // draw() worden getekend. Externe tegels bevatten nautische objecten die
+  // niet relevant zijn voor bliksemwaarnemingen.
+  bakeBusy=false; bakeDone=false; basemapCanvas=null;
 }
 // scherpe tegels voor ingezoomd venster
 var liveTileCache={};
