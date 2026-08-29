@@ -144,7 +144,7 @@ body{--kop-scale:1}
 }
 </style>
 <link rel="stylesheet" href="weerbewaking_document_ui.css?v=20260823-v1">
-<script src="weerbewaking_document_ui.js?v=20260823-v1" defer></script>
+<script src="weerbewaking_document_ui.js?v=20260829-opgesteld-v1" defer></script>
 </head>
 <body class="wb-document-ui wb-document-feyenoord">
 
@@ -155,8 +155,8 @@ body{--kop-scale:1}
       <div class="toolbar-sub"><span id="data-status">–</span> <span id="save-status"></span></div>
     </div>
     <div class="toolbar-actions">
-      <button type="button" onclick="zetNu()" title="Zet documentdatum en opsteltijd op dit moment">Nu instellen</button>
-      <button type="button" class="button-success" onclick="herlaadTabel()" title="Haal de uurtabel opnieuw op; eigen tabelaanpassingen worden overschreven">Tabel bijwerken</button>
+      <button type="button" onclick="zetNu()" title="Zet alleen ‘Opgesteld op’ op dit moment; de tabel blijft onveranderd">Opgesteld: nu</button>
+      <button type="button" class="button-success" onclick="herlaadTabel()" title="Haal de uurtabel opnieuw op; eigen tabelaanpassingen worden overschreven">Tabel opnieuw instellen</button>
       <button type="button" onclick="exporteerPDF()">PDF maken</button>
       <button type="button" class="btn-instellingen" onclick="toggleInstellingen()" title="Toon of verberg de documentopties">Opties</button>
       <button type="button" class="button-back" onclick="gaTerug()">Overzicht</button>
@@ -187,6 +187,7 @@ body{--kop-scale:1}
     <div class="toolbar-group">
       <span class="group-label">Formulier</span>
       <label class="field"><span>Datum</span><input type="date" id="doc-datum"></label>
+      <input type="hidden" id="opgesteld-tijd">
     </div>
 
     <div class="toolbar-group">
@@ -680,7 +681,7 @@ async function renderTabel(){
 
 async function laadData(){
   const nu=new Date();
-  document.getElementById('hdr-datum').textContent=formatDatumVol(nu);
+  updateOpgesteldHeader();
   // Altijd eerst een lege tabel zodat de structuur zichtbaar is
   bouwLegeTabel();
   if(huidigModel==='weatherpro'){
@@ -781,13 +782,21 @@ document.getElementById('aantal-sel').addEventListener('change', ()=>{
   }
 });
 
-/* Eén klik: documentdatum = vandaag, 'Opgesteld op…' = nu */
+function lokaalDatetime(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function getOpgesteldDate(){
+  const v=document.getElementById('opgesteld-tijd')?.value;
+  const d=v ? new Date(v) : new Date();
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+function updateOpgesteldHeader(){
+  document.getElementById('hdr-datum').textContent=formatDatumVol(getOpgesteldDate());
+}
+/* Alleen ‘Opgesteld op…’ = nu; documentdatum en tabel blijven ongewijzigd. */
 function zetNu(){
-  const datumEl=document.getElementById('doc-datum');
-  const wasAndereDatum = datumEl.value !== vandaagISO();
-  datumEl.value=vandaagISO();
-  document.getElementById('hdr-datum').textContent=formatDatumVol(new Date());
-  if(wasAndereDatum) datumEl.dispatchEvent(new Event('change'));
+  document.getElementById('opgesteld-tijd').value=lokaalDatetime();
+  updateOpgesteldHeader();
   saveDraft();
 }
 /* Instellingen-paneel inklapbaar (standaard dicht) */
@@ -802,8 +811,7 @@ try{ if(localStorage.getItem(TOOLBAR_OPEN_KEY)==='1') document.querySelector('.t
 
 /* ── PDF ── */
 function exporteerPDF(){
-  // 'Opgesteld op…' verversen zodat de PDF niet de laadtijd van de pagina toont
-  document.getElementById('hdr-datum').textContent=formatDatumVol(new Date());
+  updateOpgesteldHeader();
   document.querySelectorAll('#doc select').forEach(sel => {
     [...sel.options].forEach(opt => opt.removeAttribute('selected'));
     const live = sel.options[sel.selectedIndex];
@@ -887,15 +895,17 @@ function saveDraft(){
   d.plaats=document.getElementById('plaats-in').value;
   d.waarsch=document.getElementById('waarsch-sel').value;
   d.waarschVoor=document.getElementById('waarsch-voor')?.innerHTML||'';
+  d.opgesteldTijd=document.getElementById('opgesteld-tijd')?.value || '';
   try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
 }
 function leegForm(){
   document.getElementById('plaats-in').value='Rotterdam';
+  document.getElementById('opgesteld-tijd').value='';
 }
 function restoreDraft(){
   try{
     const j=localStorage.getItem(saveKey());
-    if(!j){ leegForm(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
+    if(!j){ leegForm(); updateOpgesteldHeader(); document.getElementById('save-status').textContent='💾 Nieuw document ('+huidigeDatum()+')'; return; }
     const d=JSON.parse(j);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
@@ -908,6 +918,8 @@ function restoreDraft(){
     }
     const voor=document.getElementById('waarsch-voor');
     if(voor && d.waarschVoor!=null) voor.innerHTML=d.waarschVoor;
+    document.getElementById('opgesteld-tijd').value=d.opgesteldTijd || '';
+    updateOpgesteldHeader();
     if(d.__ts) toonSaveStatus(d.__ts,'Hersteld');
   }catch(e){}
 }
