@@ -1137,6 +1137,31 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
                 if val is not None:
                     data_out[dag_key][p][naam] = val
 
+    # ── Carry-over voor de lopende dag ────────────────────────────────────────
+    # MOSMIX levert alleen toekomstige uren. Vanaf de 09z-run is de nacht/ochtend
+    # van vandaag verleden tijd, dus vallen TN, TG en de andere ochtendvelden voor
+    # dag 1 volledig weg. Consumenten die een complete 7-daagse verwachten (o.a.
+    # de landelijke kaarteneditor) breken daarop met "geen complete verwachting".
+    # Daarom: gaten in dag 1 vullen met de waarden uit de vorige run. Verse data
+    # wordt nooit overschreven, alleen ontbrekende stations aangevuld.
+    CARRY_PARAMS = ["TN", "TG", "TTD", "gevoels", "TX_O", "FF_O", "FX_O", "DD_O", "wwM"]
+    if dagen and os.path.exists(output_file):
+        try:
+            with open(output_file) as f:
+                vorige_data = json.load(f).get("data", {})
+        except (ValueError, OSError):
+            vorige_data = {}
+        dag1 = dagen[0].isoformat()
+        oud = vorige_data.get(dag1, {})
+        aangevuld = 0
+        for p in CARRY_PARAMS:
+            for naam, val in (oud.get(p) or {}).items():
+                if val is not None and naam not in data_out[dag1][p]:
+                    data_out[dag1][p][naam] = val
+                    aangevuld += 1
+        if aangevuld:
+            print(f"  carry-over {dag1}: {aangevuld} waarden uit vorige run overgenomen")
+
     # Run-tijd formatteren (bijv. "2026-04-01T09:00:00Z")
     run_str = laatste_run.strftime("%Y-%m-%dT%H:%M:%SZ") if laatste_run else None
 
