@@ -119,6 +119,8 @@ WARM_RAW = """
 25 mei 1921: Warnsveld 30,9°C
 25 mei 1921: Gemert 30,8°C
 28 mei 1931: Winterswijk 31,4°C
+31 mei 1947: Oudenbosch 32,1°C
+31 mei 1947: Warnsveld 32,0°C
 
 == Juni 1 ==
 8 juni 1915: Oudenbosch 36,1°C
