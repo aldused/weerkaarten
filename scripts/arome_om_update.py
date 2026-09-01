@@ -346,26 +346,31 @@ def main() -> int:
                     f.write(np.nan_to_num(arr[s], nan=0).astype(np.float32).tobytes())
         print(f"  {name}: {path.stat().st_size/1024/1024:.1f} MB")
 
-    def write_bin_u8(name, series, scale):
+    # q = round(waarde**(1/power)*scale); exponent staat als 'power' in de meta.
+    # Zie harmonie_update.sh: de wortel met scale 16 liet tussen 0,03 en
+    # 0,06 mm/u maar één representeerbare waarde over en verspilde tegelijk de
+    # bovenste 60% van het bytebereik.
+    def write_bin_u8(name, series, scale, power=2):
+        inv = 1.0 / power
         path = WORK_DIR / name
         with path.open("wb") as f:
             f.write(struct.pack("<HHHH", n_lat, n_lon, n_steps, 1))
             f.write(bytes([1]) + b"\x00" * 7)
             for s in range(n_steps):
-                q = np.clip(np.round(np.sqrt(np.maximum(series[s], 0)) * scale), 0, 255).astype(np.uint8)
+                q = np.clip(np.round(np.maximum(series[s], 0) ** inv * scale), 0, 255).astype(np.uint8)
                 f.write(q.tobytes())
         print(f"  {name}: {path.stat().st_size/1024/1024:.1f} MB (u8)")
 
     # Neerslag + cumul (uint8-sqrt)
-    write_bin_u8(f"{PREFIX}_data_neerslag.bin", precip, 16)
+    write_bin_u8(f"{PREFIX}_data_neerslag.bin", precip, 50, 3)
     cumul = np.cumsum(precip, axis=0).astype(np.float32)
-    write_bin_u8(f"{PREFIX}_data_cumul.bin", cumul, 12)
+    write_bin_u8(f"{PREFIX}_data_cumul.bin", cumul, 32, 3)
 
     # Pseudo-radar: Marshall-Palmer Z=200*R^1.6 op uurneerslag
     pseudo_dbz = np.where(precip >= 0.05,
                           10 * np.log10(np.maximum(200 * np.maximum(precip, 0.001) ** 1.6, 1)),
                           0).astype(np.float32)
-    write_bin_u8(f"{PREFIX}_data_radar.bin", pseudo_dbz, 16)
+    write_bin_u8(f"{PREFIX}_data_radar.bin", pseudo_dbz, 3, 1)
 
     write_bin(f"{PREFIX}_data_temp.bin", (arrays["temperature_2m"],))
     write_bin(f"{PREFIX}_data_dauwpunt.bin", (arrays["dew_point_2m"],))
@@ -422,12 +427,12 @@ def main() -> int:
         "grid": grid_hr,
         "parameters": {
             "neerslag": {"file": f"{PREFIX}_data_neerslag.bin", "components": 1,
-                         "label": "Uurlijkse neerslag (mm/u)", "dtype": "u8sqrt", "scale": 16, "grid": grid_hr},
+                         "label": "Uurlijkse neerslag (mm/u)", "dtype": "u8sqrt", "scale": 50, "power": 3, "grid": grid_hr},
             "radar": {"file": f"{PREFIX}_data_radar.bin", "components": 1,
                       "label": "Radar afgeleid uit uursom (Marshall-Palmer dBZ)",
-                      "dtype": "u8sqrt", "scale": 16, "grid": grid_hr},
+                      "dtype": "u8sqrt", "scale": 3, "power": 1, "grid": grid_hr},
             "cumul": {"file": f"{PREFIX}_data_cumul.bin", "components": 1,
-                      "label": "Cumulatieve neerslag (mm)", "dtype": "u8sqrt", "scale": 12, "grid": grid_hr},
+                      "label": "Cumulatieve neerslag (mm)", "dtype": "u8sqrt", "scale": 32, "power": 3, "grid": grid_hr},
             "temp": {"file": f"{PREFIX}_data_temp.bin", "components": 1, "label": "Temperatuur 2m (°C)"},
             "dauwpunt": {"file": f"{PREFIX}_data_dauwpunt.bin", "components": 1, "label": "Dauwpuntstemperatuur 2m (°C)"},
             "rv": {"file": f"{PREFIX}_data_rv.bin", "components": 1, "label": "Relatieve vochtigheid 2m (%)"},

@@ -279,26 +279,39 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     ]
 
     precip_grid = grid(lat_full, lon_full)
-    def write_u8sqrt(name: str, values, scale: int):
+    # q = round(waarde**(1/power)*scale); exponent staat als 'power' in de meta.
+    # Zie harmonie_update.sh voor de reden dat de wortel met scale 16 onderaan
+    # te grof was en bovenaan het halve bytebereik onbenut liet.
+    def write_u8sqrt(name: str, values, scale: int, power: int = 2):
         path = ROOT / f"{PREFIX}_data_{name}.bin"
         with atomic(path) as handle:
             handle.write(struct.pack("<HHHH", len(lat_full), len(lon_full), len(values), 1))
             handle.write(bytes([1]) + b"\x00" * 7)
             for value in values:
                 subset = np.nan_to_num(value[np.ix_(lat_full, lon_full)], nan=0)
-                encoded = np.clip(np.rint(np.sqrt(np.maximum(subset, 0)) * scale), 0, 255).astype("u1")
+                encoded = np.clip(np.rint(np.maximum(subset, 0) ** (1.0 / power) * scale), 0, 255).astype("u1")
                 handle.write(encoded.tobytes())
         outputs.append(path)
         return path
 
-    write_u8sqrt("neerslag", hourly_precip, 16)
-    write_u8sqrt("regenrate", series["regenrate"][1:], 16)
+    write_u8sqrt("neerslag", hourly_precip, 50, 3)
+    # De meta biedt dit bestand aan als 'radar' in dBZ, maar rprate levert een
+    # regenintensiteit in mm/u. Die ging ongewijzigd de dBZ-kleurschaal in,
+    # waardoor 30 mm/u als 30 dBZ werd geverfd en alles onder 4 mm/u onder de
+    # laagste dBZ-klasse verdween: het radarpaneel van V46 bleef leeg. Nu
+    # dezelfde Marshall-Palmer-omrekening als bij V43 en AROME.
+    _regenrate = [np.nan_to_num(v, nan=0.0) for v in series["regenrate"][1:]]
+    _dbz = [np.where(r >= 0.05,
+                     10 * np.log10(np.maximum(200 * np.maximum(r, 0.001) ** 1.6, 1)),
+                     0.0)
+            for r in _regenrate]
+    write_u8sqrt("regenrate", _dbz, 3, 1)
     accum = []
     total = None
     for value in hourly_precip:
         total = value.copy() if total is None else total + value
         accum.append(total.copy())
-    write_u8sqrt("cumul", accum, 12)
+    write_u8sqrt("cumul", accum, 32, 3)
     write_float("temp", series["temp"][1:])
     write_float("bewolking", list(zip(series["hoog"][1:], series["mid"][1:], series["laag"][1:])), 3)
     write_float("wind", list(zip(series["uw"][1:], series["vw"][1:])), 2)
@@ -331,9 +344,9 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     ]
     base_grid = grid()
     params = {
-        "neerslag": {"file": f"{PREFIX}_data_neerslag.bin", "components": 1, "label": "Uurlijkse neerslag (mm/u)", "dtype": "u8sqrt", "scale": 16, "grid": precip_grid},
-        "radar": {"file": f"{PREFIX}_data_regenrate.bin", "components": 1, "label": "Gesimuleerde radarreflectiviteit (dBZ)", "dtype": "u8sqrt", "scale": 16, "grid": precip_grid},
-        "cumul": {"file": f"{PREFIX}_data_cumul.bin", "components": 1, "label": "Cumulatieve neerslag (mm)", "dtype": "u8sqrt", "scale": 12, "grid": precip_grid},
+        "neerslag": {"file": f"{PREFIX}_data_neerslag.bin", "components": 1, "label": "Uurlijkse neerslag (mm/u)", "dtype": "u8sqrt", "scale": 50, "power": 3, "grid": precip_grid},
+        "radar": {"file": f"{PREFIX}_data_regenrate.bin", "components": 1, "label": "Radar afgeleid uit rprate (Marshall-Palmer dBZ)", "dtype": "u8sqrt", "scale": 3, "power": 1, "grid": precip_grid},
+        "cumul": {"file": f"{PREFIX}_data_cumul.bin", "components": 1, "label": "Cumulatieve neerslag (mm)", "dtype": "u8sqrt", "scale": 32, "power": 3, "grid": precip_grid},
         "temp": {"file": f"{PREFIX}_data_temp.bin", "components": 1, "label": "Temperatuur 2m (°C)"},
         "bewolking": {"file": f"{PREFIX}_data_bewolking.bin", "components": 3, "label": "Bewolking (hoog/midden/laag)"},
         "wind": {"file": f"{PREFIX}_data_wind.bin", "components": 2, "label": "Wind 10m (m/s)"},

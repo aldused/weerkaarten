@@ -232,31 +232,36 @@ def write_bin(fn, data_list, nc=1):
 # q = round(sqrt(mm)*scale) → scale 16: max 254 mm/u; scale 12: max 451 mm.
 # Header-byte 8 = dtype 1 zodat de viewer weet dat het uint8-sqrt is.
 n_lat_hr = len(lat_idx_all); n_lon_hr = len(lon_idx_all)
-def write_bin_u8hr(fn, data_list, scale):
+# q = round(waarde**(1/power)*scale); de exponent staat als 'power' in de meta.
+# Zie harmonie_update.sh voor waarom de wortel met scale 16 te grof was
+# onderaan (één representeerbare waarde tussen 0,03 en 0,06 mm/u) en tegelijk
+# overbemeten bovenaan (hoogste byte in de praktijk 93 van de 255).
+def write_bin_u8hr(fn, data_list, scale, power=2):
+    inv = 1.0 / power
     with open(fn, "wb") as f:
         f.write(struct.pack("<HHHH", n_lat_hr, n_lon_hr, len(data_list), 1))
         f.write(bytes([1]) + b"\x00" * 7)
         for item in data_list:
             sub = np.nan_to_num(item[np.ix_(lat_idx_all, lon_idx_all)], nan=0)
-            q = np.clip(np.round(np.sqrt(np.maximum(sub, 0)) * scale), 0, 255).astype(np.uint8)
+            q = np.clip(np.round(np.maximum(sub, 0) ** inv * scale), 0, 255).astype(np.uint8)
             f.write(q.tobytes())
     print(f"   {fn}: {os.path.getsize(fn)/1024/1024:.1f} MB (full-res {n_lat_hr}x{n_lon_hr})")
 
 PREFIX = "icond2"
-write_bin_u8hr(f"{PREFIX}_data_neerslag.bin", hourly_precip[:n_steps], 16)
+write_bin_u8hr(f"{PREFIX}_data_neerslag.bin", hourly_precip[:n_steps], 50, 3)
 _cumul_acc = None
 _cumul_list = []
 for _p in hourly_precip[:n_steps]:
     _p2 = np.maximum(np.nan_to_num(_p, nan=0), 0)
     _cumul_acc = _p2.copy() if _cumul_acc is None else _cumul_acc + _p2
     _cumul_list.append(_cumul_acc)
-write_bin_u8hr(f"{PREFIX}_data_cumul.bin", _cumul_list, 12)
+write_bin_u8hr(f"{PREFIX}_data_cumul.bin", _cumul_list, 32, 3)
 # Gesimuleerde radar: DWD dbz_cmax = kolom-max reflectiviteit in dBZ (instantaan)
 _radar = all_data.get("radar", [])
 has_radar = len(_radar) > 1 and any(d is not None for d in _radar[1:])
 if has_radar:
     _radar_clip = [np.maximum(np.nan_to_num(d, nan=0), 0) for d in _radar[1:n_steps+1]]
-    write_bin_u8hr(f"{PREFIX}_data_radar.bin", _radar_clip, 16)
+    write_bin_u8hr(f"{PREFIX}_data_radar.bin", _radar_clip, 3, 1)
 write_bin(f"{PREFIX}_data_temp.bin", all_data["temp"][1:n_steps+1])
 write_bin(f"{PREFIX}_data_dauwpunt.bin", all_data["dauwpunt"][1:n_steps+1])
 write_bin(f"{PREFIX}_data_rv.bin", all_data["rv"][1:n_steps+1])
@@ -319,12 +324,12 @@ meta = {
     },
     "parameters": {
         "neerslag":   {"file": f"{PREFIX}_data_neerslag.bin",   "components": 1, "label": "Uurlijkse neerslag (mm/u)",
-                       "dtype": "u8sqrt", "scale": 16,
+                       "dtype": "u8sqrt", "scale": 50, "power": 3,
                        "grid": {"n_lat": n_lat_hr, "n_lon": n_lon_hr,
                                 "lat_min": float(lats[lat_idx_all[0]]), "lat_max": float(lats[lat_idx_all[-1]]),
                                 "lon_min": float(lons[lon_idx_all[0]]), "lon_max": float(lons[lon_idx_all[-1]])}},
         "cumul":      {"file": f"{PREFIX}_data_cumul.bin",     "components": 1, "label": "Cumulatieve neerslag (mm)",
-                       "dtype": "u8sqrt", "scale": 12,
+                       "dtype": "u8sqrt", "scale": 32, "power": 3,
                        "grid": {"n_lat": n_lat_hr, "n_lon": n_lon_hr,
                                 "lat_min": float(lats[lat_idx_all[0]]), "lat_max": float(lats[lat_idx_all[-1]]),
                                 "lon_min": float(lons[lon_idx_all[0]]), "lon_max": float(lons[lon_idx_all[-1]])}},
@@ -346,7 +351,7 @@ if has_radar:
     meta["parameters"]["radar"] = {
         "file": f"{PREFIX}_data_radar.bin", "components": 1,
         "label": "Gesimuleerde radar dbz_cmax (dBZ, instantaan)",
-        "dtype": "u8sqrt", "scale": 16,
+        "dtype": "u8sqrt", "scale": 3, "power": 1,
         "grid": {"n_lat": n_lat_hr, "n_lon": n_lon_hr,
                  "lat_min": float(lats[lat_idx_all[0]]), "lat_max": float(lats[lat_idx_all[-1]]),
                  "lon_min": float(lons[lon_idx_all[0]]), "lon_max": float(lons[lon_idx_all[-1]])}}

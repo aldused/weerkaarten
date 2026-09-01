@@ -196,9 +196,19 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
                 else:
                     for comp in item: f.write(crop(comp).astype(np.float32).tobytes())
 
-    # Neerslag op volledige modelresolutie (geen stride), uint8 sqrt-gecodeerd:
-    # q = round(sqrt(mm)*scale) → scale 16: max 254 mm/u; scale 12: max 451 mm.
-    # Header-byte 8 = dtype 1 zodat de viewer weet dat het uint8-sqrt is.
+    # Neerslag op volledige modelresolutie (geen stride), uint8-gecodeerd:
+    # q = round(waarde**(1/power)*scale), terug waarde = (q/scale)**power.
+    # Header-byte 8 = dtype 1 zodat de viewer weet dat het een uint8-veld is;
+    # de exponent staat als 'power' in de meta (ontbreekt hij, dan is het een
+    # oud bestand met de wortelcodering).
+    #
+    # Waarom niet meer de wortel met scale 16: die zette de klassegrens
+    # 0,1 mm/u tussen byte 5 (0,098) en byte 6 (0,141) en liet tussen 0,03 en
+    # 0,06 mm/u maar één representeerbare waarde over, terwijl de hoogste byte
+    # die deze modellen in de praktijk halen 93 is van de 255 — te grof
+    # onderaan, zwaar overbemeten bovenaan. De derdemachtswortel met scale 50
+    # geeft vier waarden in diezelfde laagste klasse en houdt het plafond op
+    # 132 mm/u. Radar staat in dBZ en is al logaritmisch: power 1 (lineair).
     n_lat_hr=len(lat_idx_all); n_lon_hr=len(lon_idx_all)
     native_grid={
       'n_lat':n_lat_hr,'n_lon':n_lon_hr,
@@ -243,29 +253,30 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     print(f'   native wolkenbron: {n_lat_hr}x{n_lon_hr} '
           f'({sum(os.path.getsize(x) for x in native_files.values())/1024/1024:.1f} MB)')
 
-    def write_bin_u8hr(fn, data_list, scale):
+    def write_bin_u8hr(fn, data_list, scale, power=2):
+        inv=1.0/power
         with atomisch(fn) as f:
             f.write(struct.pack('<HHHH',n_lat_hr,n_lon_hr,len(data_list),1))
             f.write(bytes([1])+b'\x00'*7)
             for item in data_list:
                 sub=np.nan_to_num(item[np.ix_(lat_idx_all,lon_idx_all)],nan=0)
-                q=np.clip(np.round(np.sqrt(np.maximum(sub,0))*scale),0,255).astype(np.uint8)
+                q=np.clip(np.round(np.maximum(sub,0)**inv*scale),0,255).astype(np.uint8)
                 f.write(q.tobytes())
         print(f'   {fn}: {os.path.getsize(fn)/1024/1024:.1f} MB (full-res {n_lat_hr}x{n_lon_hr})')
 
-    write_bin_u8hr('harmonie_data_neerslag.bin', hourly_precip, 16)
+    write_bin_u8hr('harmonie_data_neerslag.bin', hourly_precip, 50, 3)
     _cumul_acc = None
     _cumul_list = []
     for _p in hourly_precip:
         _cumul_acc = _p.copy() if _cumul_acc is None else _cumul_acc + _p
         _cumul_list.append(_cumul_acc)
-    write_bin_u8hr('harmonie_data_cumul.bin', _cumul_list, 12)
+    write_bin_u8hr('harmonie_data_cumul.bin', _cumul_list, 32, 3)
     # Pseudo-radar: Marshall-Palmer Z=200*R^1.6 op de uursom (KNMI open data
     # bevat geen gesimuleerde reflectiviteit; dit is de eerlijke benadering)
     _pseudo_dbz = [np.where(_p >= 0.05,
                             10*np.log10(np.maximum(200*np.maximum(_p,0.001)**1.6, 1)), 0)
                    for _p in hourly_precip]
-    write_bin_u8hr('harmonie_data_radar.bin', _pseudo_dbz, 16)
+    write_bin_u8hr('harmonie_data_radar.bin', _pseudo_dbz, 3, 1)
     write_bin('harmonie_data_temp.bin', all_data['temp'][1:])
     write_bin('harmonie_data_bewolking.bin', list(zip(all_data['hoog'][1:],all_data['mid'][1:],all_data['laag'][1:])), 3)
     write_bin('harmonie_data_wind.bin', list(zip(all_data['uw'][1:],all_data['vw'][1:])), 2)
@@ -326,17 +337,17 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         'lon_min':float(c_lons[0]),'lon_max':float(c_lons[-1])},
       'parameters':{
         'neerslag':{'file':'harmonie_data_neerslag.bin','components':1,'label':'Uurlijkse neerslag (mm/u)',
-          'dtype':'u8sqrt','scale':16,
+          'dtype':'u8sqrt','scale':50,'power':3,
           'grid':{'n_lat':n_lat_hr,'n_lon':n_lon_hr,
             'lat_min':float(lats[lat_idx_all[0]]),'lat_max':float(lats[lat_idx_all[-1]]),
             'lon_min':float(lons[lon_idx_all[0]]),'lon_max':float(lons[lon_idx_all[-1]])}},
         'cumul':{'file':'harmonie_data_cumul.bin','components':1,'label':'Cumulatieve neerslag (mm)',
-          'dtype':'u8sqrt','scale':12,
+          'dtype':'u8sqrt','scale':32,'power':3,
           'grid':{'n_lat':n_lat_hr,'n_lon':n_lon_hr,
             'lat_min':float(lats[lat_idx_all[0]]),'lat_max':float(lats[lat_idx_all[-1]]),
             'lon_min':float(lons[lon_idx_all[0]]),'lon_max':float(lons[lon_idx_all[-1]])}},
         'radar':{'file':'harmonie_data_radar.bin','components':1,'label':'Radar afgeleid uit uursom (Marshall-Palmer dBZ)',
-          'dtype':'u8sqrt','scale':16,
+          'dtype':'u8sqrt','scale':3,'power':1,
           'grid':{'n_lat':n_lat_hr,'n_lon':n_lon_hr,
             'lat_min':float(lats[lat_idx_all[0]]),'lat_max':float(lats[lat_idx_all[-1]]),
             'lon_min':float(lons[lon_idx_all[0]]),'lon_max':float(lons[lon_idx_all[-1]])}},
