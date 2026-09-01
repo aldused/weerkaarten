@@ -118,6 +118,8 @@ def build_point_source(
             "steps": n_steps,
             "dtype": dtype_name,
             "scale": info.get("scale"),
+            # Exponent van de uint8-codering; ontbreekt bij oude wortelbins.
+            "power": info.get("power", 2),
             "bytes_per_value": bytes_per_value,
             "grid": grid,
         }

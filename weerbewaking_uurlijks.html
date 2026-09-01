@@ -917,12 +917,13 @@ function dtypeVoorParameter(info,headerDtype=null){
 function bytesPerWaarde(dtype){
   return dtype==='u8sqrt' ? 1 : 4;
 }
-function decodeRasterWaarde(dv,offset,dtype,scale){
+// macht = exponent van de uint8-codering: waarde = (q/scale)^macht. Ontbreekt
+// 'power' in de meta, dan is het een oud bestand met de wortelcodering.
+function decodeRasterWaarde(dv,offset,dtype,scale,macht){
   if(offset<0 || offset+bytesPerWaarde(dtype)>dv.byteLength) return null;
   if(dtype==='u8sqrt'){
-    const q=dv.getUint8(offset);
-    const inv=1/(scale||16);
-    return (q*inv)*(q*inv);
+    const q=dv.getUint8(offset)/(scale||16);
+    return macht===3 ? q*q*q : macht===1 ? q : q*q;
   }
   return dv.getFloat32(offset,true);
 }
@@ -974,7 +975,7 @@ async function puntReeks(paramKey, gis, nSteps, limit=20, modelKey=huidigModel){
       const base=HEADER + ((s*nComp+c)*nPts)*bpp;
       let som=0, n=0;
       for(const gi of gridIndices){
-        const v=decodeRasterWaarde(dv,base+gi*bpp,dtype,info.scale);
+        const v=decodeRasterWaarde(dv,base+gi*bpp,dtype,info.scale,info.power||2);
         if(Number.isFinite(v)){ som+=v; n++; }
       }
       resultaten[s][c]=n ? som/n : null;

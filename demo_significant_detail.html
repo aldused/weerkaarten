@@ -2883,6 +2883,8 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
       nLat, nLon, nSteps, nComp, nPts, valuesPerStep,
       dtypeFlag,
       scale: info.scale || 16,
+      // Zie decodeStepSlice: 'power' ontbreekt in oudere meta's (= wortel).
+      power: info.power || 2,
       raw
     };
   }
@@ -2912,9 +2914,13 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     if (file.dtypeFlag === 1) {
       const out = new Float32Array(file.valuesPerStep);
       const inv = 1 / file.scale;
+      // Exponent van de uint8-codering: q = round(waarde^(1/power) * scale), dus
+      // terug waarde = (q/scale)^power. Staat 'power' niet in de meta, dan komt het
+      // bestand uit de tijd dat alles de wortelcodering had (power 2).
+      const macht = file.power;
       for (let i = 0; i < out.length; i++) {
         const q = file.raw[start + i] * inv;
-        out[i] = q * q;
+        out[i] = macht === 3 ? q * q * q : macht === 1 ? q : q * q;
       }
       return out;
     }
@@ -2948,7 +2954,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
       if (file.dtypeFlag === 1) {
         for (let i = 0; i < file.nPts; i++) {
           const q = file.raw[base + i] * inv;
-          sum[i] += q * q;
+          sum[i] += file.power === 3 ? q * q * q : file.power === 1 ? q : q * q;
         }
       } else {
         for (let i = 0; i < file.nPts; i++) {

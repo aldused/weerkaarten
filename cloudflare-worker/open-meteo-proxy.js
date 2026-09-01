@@ -255,11 +255,12 @@ function sampleGridIndices(grid, lat, lon, radiusKm, samples) {
   return [...unique].sort((a, b) => a - b);
 }
 
-function readPointValue(view, offset, dtype, scale) {
+// power = exponent van de uint8-codering: waarde = (q/scale)^power. Oudere
+// meta's noemen 'power' niet; die bins zijn wortelgecodeerd.
+function readPointValue(view, offset, dtype, scale, power) {
   if (dtype === 'u8sqrt') {
-    const encoded = view.getUint8(offset);
-    const inverse = 1 / (scale || 16);
-    return (encoded * inverse) ** 2;
+    const encoded = view.getUint8(offset) / (scale || 16);
+    return encoded ** (power || 2);
   }
   return view.getFloat32(offset, true);
 }
@@ -287,7 +288,7 @@ async function readPointParameter(bucket, info, lat, lon, start, hours, radiusKm
       for (const gridIndex of gridIndices) {
         const localPoint = (gridIndex - first) * pointBytes;
         const localValue = localPoint + (step * info.components + component) * bytesPerValue;
-        const value = readPointValue(view, localValue, info.dtype, info.scale);
+        const value = readPointValue(view, localValue, info.dtype, info.scale, info.power);
         if (Number.isFinite(value)) {
           sum += value;
           count++;

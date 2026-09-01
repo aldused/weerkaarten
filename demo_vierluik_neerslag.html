@@ -2513,10 +2513,17 @@ function loadParamBin(modelId, paramKey, meta) {
       var data, schaal = 1;
       if (dtype === 1) {
         var scale = info.scale || 16;
+        // Exponent van de uint8-codering: q = round(waarde^(1/power) * scale), dus
+        // terug waarde = (q/scale)^power. Staat 'power' niet in de meta, dan komt het
+        // bestand uit de tijd dat alles de wortelcodering had (power 2).
+        var macht = info.power || 2;
         var raw = new Uint8Array(buf, 16);
         data = new Float32Array(raw.length);
         var inv = 1 / scale;
-        for (var i = 0; i < raw.length; i++) { var q = raw[i] * inv; data[i] = q * q; }
+        for (var i = 0; i < raw.length; i++) {
+          var q = raw[i] * inv;
+          data[i] = macht === 3 ? q * q * q : macht === 1 ? q : q * q;
+        }
       } else if (dtype === 2) {
         // Bewolkingsfracties op volle modelresolutie. Bewust als Uint8Array
         // laten staan: uitpakken naar float32 zou 26 miljoen waarden viermaal

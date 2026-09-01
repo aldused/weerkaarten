@@ -1150,12 +1150,16 @@ body.scroll-mode { overflow: hidden; }
   // Bewaar ook mm/u levels voor de legenda
   var NEERSLAG_LEVELS_MM = [0.1, 0.2, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
 
-  // Neerslag mm/u kleurschaal (noodweer.be-achtig: licht cyaan -> groen/geel/rood/paars)
+  // Neerslag mm/u kleurschaal (noodweer.be-achtig: licht cyaan -> groen/geel/rood/paars).
+  // De blauwtinten onder 3 mm/u zijn opnieuw verdeeld: de drie lichtste klassen
+  // lagen binnen acht RGB-eenheden van elkaar en van het witte droog-vlak,
+  // terwijl juist die klassen een groot deel van het natte oppervlak vullen.
+  // Klassegrenzen ongewijzigd; gelijk aan demo_vierluik_neerslag.html.
   var NEERSLAG_MM_LEVELS = [0.03, 0.06, 0.1, 0.3, 0.5, 1, 2, 3, 5, 7, 10, 15, 25, 40, 50, 75, 100];
   var NEERSLAG_MM_COLORS = [
-    [240,249,254],[232,244,252],
-    [224,243,251],[176,217,242],[116,185,232],[58,143,212],[20,96,176],
-    [68,187,34],[170,221,0],[255,238,0],[255,170,0],[255,85,0],
+    [222,240,252],[196,226,247],
+    [162,208,240],[116,182,228],[70,150,212],[30,110,186],[12,72,146],
+    [48,168,42],[140,212,20],[248,232,0],[255,168,0],[255,84,0],
     [221,0,0],[153,0,0],[119,0,136],[204,68,204],[255,170,204]
   ];
 
@@ -1635,10 +1639,17 @@ body.scroll-mode { overflow: hidden; }
     var data;
     if (dtype === 1) {
       var scale = (info && info.scale) || 16;
+      // Exponent van de uint8-codering: q = round(waarde^(1/power) * scale), dus
+      // terug waarde = (q/scale)^power. Staat 'power' niet in de meta, dan komt het
+      // bestand uit de tijd dat alles de wortelcodering had (power 2).
+      var macht = (info && info.power) || 2;
       var raw = new Uint8Array(buf, 16);
       data = new Float32Array(raw.length);
       var inv = 1 / scale;
-      for (var i = 0; i < raw.length; i++) { var q = raw[i] * inv; data[i] = q * q; }
+      for (var i = 0; i < raw.length; i++) {
+        var q = raw[i] * inv;
+        data[i] = macht === 3 ? q * q * q : macht === 1 ? q : q * q;
+      }
     } else {
       data = new Float32Array(buf, 16); // skip 16-byte header
     }
