@@ -552,6 +552,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
       <option value="zicht" data-label="Zicht">Zicht</option>
       <option value="druk" data-label="Luchtdruk">Luchtdruk</option>
       <option value="cape" data-label="CAPE">CAPE</option>
+      <option value="bewolking_totaal" data-label="Bewolking totaal (octa)">Bewolking totaal (octa)</option>
       <option value="bewolking" data-label="Bewolking (rood, wit, blauw)">Bewolking (rood, wit, blauw)</option>
       <option value="wolkenlagen" data-label="Wolkenlagen (RGB)">Wolkenlagen (RGB)</option>
       <option value="wolkenkaart" data-label="Wolkenkaart (realistisch)">Wolkenkaart (realistisch)</option>
@@ -707,12 +708,18 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
 // KLEURSCHALEN
 // ═══════════════════════════════════════════════════════════════
 
-// Neerslag mm/u kleurschaal — identiek aan harmonie_canvas.html
+// Neerslag mm/u kleurschaal. De klassegrenzen zijn identiek aan
+// harmonie_canvas.html; de blauwtinten eronder zijn opnieuw verdeeld.
+// In de oude schaal lagen de drie lichtste klassen (0,03 / 0,06 / 0,1 mm/u) op
+// [240,249,254] · [232,244,252] · [224,243,251] — hooguit acht eenheden uit
+// elkaar en dus niet van elkaar én niet van het witte "droog" te onderscheiden,
+// terwijl juist die klassen ongeveer een kwart van het natte oppervlak vullen.
+// De zeven blauwtinten onder 3 mm/u lopen nu in gelijke, zichtbare stappen.
 var NEERSLAG_MM_LEVELS = [0.03, 0.06, 0.1, 0.3, 0.5, 1, 2, 3, 5, 7, 10, 15, 25, 40, 50, 75, 100];
 var NEERSLAG_MM_COLORS = [
-  [240,249,254],[232,244,252],
-  [224,243,251],[176,217,242],[116,185,232],[58,143,212],[20,96,176],
-  [68,187,34],[170,221,0],[255,238,0],[255,170,0],[255,85,0],
+  [222,240,252],[196,226,247],
+  [162,208,240],[116,182,228],[70,150,212],[30,110,186],[12,72,146],
+  [48,168,42],[140,212,20],[248,232,0],[255,168,0],[255,84,0],
   [221,0,0],[153,0,0],[119,0,136],[204,68,204],[255,170,204]
 ];
 
@@ -836,6 +843,34 @@ var CLOUD_LOW_REF  = [[0,[236,244,247]],[0.16,[255,210,200]],[0.52,[249,95,79]],
 function blendCol(a, b, f) {
   return [Math.round(a[0]*(1-f)+b[0]*f), Math.round(a[1]*(1-f)+b[1]*f), Math.round(a[2]*(1-f)+b[2]*f)];
 }
+// Totale bewolking in achtsten. De H/M/L-composiet hierboven verft drie lagen
+// over elkaar: bij een gesloten laag wolkendek loopt het hele kaartvlak vol met
+// dezelfde donkerrode tint en valt er niets meer af te lezen — 95 % en 100 %
+// zien er identiek uit, en wat er boven die laag hangt verdwijnt eronder.
+// Deze laag toont in plaats daarvan één grootheid met negen scherpe klassen
+// (0 t/m 8 achtsten), zodat de hoeveelheid zelf afleesbaar is.
+// Bewust grijs en niet blauw: blauw is op deze kaarten de kleur van neerslag,
+// en een blauw wolkendek naast een blauw buienveld leest verkeerd.
+// De donkerste klasse blijft bewust middengrijs: de kustlijn en de provincie-
+// grenzen liggen er in donkere lijnen overheen en die moeten ook bij 8/8
+// zichtbaar blijven.
+var OCTA_COLORS = [
+  [253,253,254],[236,239,243],[218,223,231],[199,206,217],[179,188,202],
+  [158,168,186],[137,148,169],[116,128,151],[96,108,133]
+];
+// Willekeurige overlap: de drie lagen zitten niet tegen elkaar aan, dus de kans
+// dat een punt onbewolkt is, is het product van de drie kansen per laag.
+function totaleBewolking(h, m, l) {
+  var a = h < 0 ? 0 : (h > 1 ? 1 : h);
+  var b = m < 0 ? 0 : (m > 1 ? 1 : m);
+  var c = l < 0 ? 0 : (l > 1 ? 1 : l);
+  return 1 - (1 - a) * (1 - b) * (1 - c);
+}
+function octaColor(totaal) {
+  var o = Math.round(totaal * 8);
+  return OCTA_COLORS[o < 0 ? 0 : (o > 8 ? 8 : o)];
+}
+
 function cloudCompositeColor(h, m, l) {
   var rgb = [236, 244, 247];                                 // basis: lichte lucht
   if (h > 0.03) rgb = blendCol(rgb, interpColor(h, CLOUD_HIGH_REF), Math.min(0.78, 0.18 + h * 0.72));
@@ -1443,7 +1478,8 @@ function updateVariableAvailability() {
   var totaal = actief.length || 1;
   var loaded = actief.filter(function(m) { return modelData[m.id] && modelData[m.id].meta; }).length;
   Array.from(select.options).forEach(function(option) {
-    var key = option.value === 'wolkenlagen' ? 'bewolking' : option.value;
+    var key = (option.value === 'wolkenlagen' || option.value === 'bewolking_totaal')
+            ? 'bewolking' : option.value;
     var count = actief.filter(function(m) {
       // De wolkentegel staat los van de veldbestanden: die telt mee zodra de
       // tegelmeta van dit model is opgehaald.
@@ -1680,11 +1716,23 @@ var DPR = Math.min(window.devicePixelRatio || 1, 3);
 // geeft daardoor zichtbare ruiten en trapjes. We verdichten het rooster één
 // keer per (model, parameter, tijdstap) met Catmull-Rom-interpolatie en
 // bewaren dat resultaat; pannen, zoomen en opnieuw tekenen kosten daarna
-// niets extra. Neerslag/radar blijven ongemoeid: die moeten scherp blijven.
+// niets extra.
+//
+// Neerslag en bewolking doen sinds kort mee, maar met een klem: de gewone
+// Catmull-Rom schiet bij een scherpe buirand door onder nul en boven de piek
+// uit, wat een valse motregen-halo om elke bui legt. KLEM_VARS begrenst het
+// resultaat tot de twee binnenste steunpunten — dat blijft glad maar kan nooit
+// buiten de brondata treden. Zonder verdichting krijgen die velden bij inzoomen
+// de hoekige facetten van bilineaire interpolatie in plaats van de vloeiende
+// randen die een radarbeeld hoort te hebben.
 var VERFIJN_VARS = {
   temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, wind:1, windstoten:1,
-  straling:1, cumstraling:1, bewolking:1, bewolking_hr:1, rv:1
+  straling:1, cumstraling:1, bewolking:1, bewolking_hr:1, rv:1,
+  neerslag:1, cumul:1, radar:1
 };
+// Velden waar over- en onderschieten fysisch onmogelijk is (neerslag ≥ 0,
+// bewolkingsfractie 0..1) en de interpolatie dus geklemd moet worden.
+var KLEM_VARS = { neerslag:1, cumul:1, radar:1, bewolking:1, bewolking_hr:1 };
 var verfijnCache = {};
 var verfijnVolgorde = [];
 var VERFIJN_CACHE_MAX = 10;
@@ -1709,6 +1757,7 @@ function verfijnFactor(pd) {
 
 function verfijndVeld(modelId, key, pd, stepIdx) {
   if (!VERFIJN_VARS[key] || !pd || stepIdx < 0 || stepIdx >= pd.nSteps) return null;
+  var klem = !!KLEM_VARS[key];
   var f = verfijnFactor(pd);
   if (f < 2) return null;
   var nLat = pd.nLat, nLon = pd.nLon, nComp = pd.nComp || 1;
@@ -1733,8 +1782,14 @@ function verfijndVeld(modelId, key, pd, stepIdx) {
         var x0 = ix - 1 < 0 ? 0 : ix - 1;
         var x2 = ix + 1 > nLon - 1 ? nLon - 1 : ix + 1;
         var x3 = ix + 2 > nLon - 1 ? nLon - 1 : ix + 2;
-        tussen[uitRij + ox] = tx === 0 ? pd.data[rij + ix]
-          : catmull(pd.data[rij + x0], pd.data[rij + ix], pd.data[rij + x2], pd.data[rij + x3], tx);
+        if (tx === 0) { tussen[uitRij + ox] = pd.data[rij + ix]; continue; }
+        var p1 = pd.data[rij + ix], p2 = pd.data[rij + x2];
+        var w = catmull(pd.data[rij + x0], p1, p2, pd.data[rij + x3], tx);
+        if (klem) {
+          var lo = p1 < p2 ? p1 : p2, hi = p1 < p2 ? p2 : p1;
+          if (w < lo) w = lo; else if (w > hi) w = hi;
+        }
+        tussen[uitRij + ox] = w;
       }
     }
     // 2. verticaal verdichten
@@ -1749,6 +1804,13 @@ function verfijndVeld(modelId, key, pd, stepIdx) {
       var uitOff = compOff + oy * outLon;
       if (ty === 0) {
         uit.set(tussen.subarray(r1, r1 + outLon), uitOff);
+      } else if (klem) {
+        for (var ox3 = 0; ox3 < outLon; ox3++) {
+          var q1 = tussen[r1 + ox3], q2 = tussen[r2 + ox3];
+          var wv = catmull(tussen[r0 + ox3], q1, q2, tussen[r3 + ox3], ty);
+          var qlo = q1 < q2 ? q1 : q2, qhi = q1 < q2 ? q2 : q1;
+          uit[uitOff + ox3] = wv < qlo ? qlo : (wv > qhi ? qhi : wv);
+        }
       } else {
         for (var ox2 = 0; ox2 < outLon; ox2++) {
           uit[uitOff + ox2] = catmull(tussen[r0 + ox2], tussen[r1 + ox2], tussen[r2 + ox2], tussen[r3 + ox2], ty);
@@ -2010,6 +2072,8 @@ function renderPanel(pIdx) {
       if (fx < -0.5 || fx > pdNLon - 0.5 || fy < -0.5 || fy > pdNLat - 0.5) {
         if (activeVar === 'bewolking') {
           pix[pi] = 236; pix[pi+1] = 244; pix[pi+2] = 247; pix[pi+3] = 255;  // lichte lucht
+        } else if (activeVar === 'bewolking_totaal') {
+          pix[pi] = 253; pix[pi+1] = 253; pix[pi+2] = 254; pix[pi+3] = 255;  // 0 octa
         } else if (activeVar === 'wolkenlagen') {
           pix[pi] = 0; pix[pi+1] = 0; pix[pi+2] = 0; pix[pi+3] = 255;        // zwart (additieve RGB)
         } else if (activeVar === 'wind' || activeVar === 'windstoten') {
@@ -2026,7 +2090,7 @@ function renderPanel(pIdx) {
       if (gx0 >= pdNLon) gx0 = pdNLon-1; if (gx1 >= pdNLon) gx1 = pdNLon-1;
       if (gy0 >= pdNLat) gy0 = pdNLat-1; if (gy1 >= pdNLat) gy1 = pdNLat-1;
 
-      if (activeVar === 'bewolking') {
+      if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
         // 3 componenten: hoog, midden, laag — bilineair, bewust zonder closure
         // in de pixellus (die kostte drie functie-objecten per beeldpunt).
         var i00 = gy0*pdNLon + gx0, i01 = gy0*pdNLon + gx1;
@@ -2039,7 +2103,9 @@ function renderPanel(pIdx) {
         var mm2 = (pd.data[bM+i00]*w00 + pd.data[bM+i01]*w01 + pd.data[bM+i10]*w10 + pd.data[bM+i11]*w11) * bSchaal;
         var bL = bB + 2*bN;
         var ll = (pd.data[bL+i00]*w00 + pd.data[bL+i01]*w01 + pd.data[bL+i10]*w10 + pd.data[bL+i11]*w11) * bSchaal;
-        c = cloudCompositeColor(hh, mm2, ll);
+        c = activeVar === 'bewolking_totaal'
+          ? octaColor(totaleBewolking(hh, mm2, ll))
+          : cloudCompositeColor(hh, mm2, ll);
       } else if (activeVar === 'wolkenlagen') {
         // Additieve RGB-composiet (Meteociel "couches nébu."): R=laag, G=midden, B=hoog, op zwart.
         // Data-componenten: 0=hoog, 1=midden, 2=laag (zelfde bin als bewolking).
@@ -2164,7 +2230,8 @@ function vakVrij(x0, y0, x1, y1) {
 }
 function claimVak(x0, y0, x1, y1) { labelVakken.push([x0, y0, x1, y1]); }
 
-var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, cumul:1, straling:1, cumstraling:1, neerslag:1};
+var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, cumul:1, straling:1, cumstraling:1, neerslag:1,
+                  bewolking:1, bewolking_totaal:1};
 function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, stepIdx) {
   if (!LABEL_VARS[activeVar]) return;
   if (!pd) return;
@@ -2189,7 +2256,8 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
   // labels breed zijn; botsingscontrole laat vervolgens alleen de labels staan
   // die passen. Dat geeft veel meer afleesbare punten dan een grof vast raster.
   var LABEL_AFSTAND = { wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
-                        straling: 50, cumstraling: 50, temp: 46, dauwpunt: 46, windstoten: 46 };
+                        straling: 50, cumstraling: 50, temp: 46, dauwpunt: 46, windstoten: 46,
+                        bewolking: 52, bewolking_totaal: 52 };
   // Dichtheid schaalt mee met de grootte van het vak. Factor 0,7 op de afstand
   // is ruwweg twee keer zoveel labels (1/0,7² ≈ 2). Kleine vakken — mobiel, of
   // vijf/zes kaarten naast elkaar — houden de ruimere afstand, anders wordt de
@@ -2323,6 +2391,20 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         var mv = b00*(1-fracx)*(1-fracy)+b01*fracx*(1-fracy)+b10*(1-fracx)*fracy+b11*fracx*fracy;
         var ms = Math.sqrt(mu*mu + mv*mv);
         val = Math.round(ms * 3.6);  // m/s → km/h
+      } else if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
+        // 3 componenten (hoog/midden/laag) → totale bedekking in procenten.
+        var bwVlak = pdNLat * pdNLon, bwSchaal = pd.schaal || 1;
+        var bwW00 = (1-fracx)*(1-fracy), bwW01 = fracx*(1-fracy);
+        var bwW10 = (1-fracx)*fracy,     bwW11 = fracx*fracy;
+        var bwI00 = gy0*pdNLon+gx0, bwI01 = gy0*pdNLon+gx1;
+        var bwI10 = gy1*pdNLon+gx0, bwI11 = gy1*pdNLon+gx1;
+        var bwLaag = [];
+        for (var bwC = 0; bwC < 3; bwC++) {
+          var bwB = pdStepOffMC + bwC * bwVlak;
+          bwLaag.push((pd.data[bwB+bwI00]*bwW00 + pd.data[bwB+bwI01]*bwW01 +
+                       pd.data[bwB+bwI10]*bwW10 + pd.data[bwB+bwI11]*bwW11) * bwSchaal);
+        }
+        val = Math.round(totaleBewolking(bwLaag[0], bwLaag[1], bwLaag[2]) * 100);
       } else {
         var v00=pd.data[pdStepOff+gy0*pdNLon+gx0], v01=pd.data[pdStepOff+gy0*pdNLon+gx1];
         var v10=pd.data[pdStepOff+gy1*pdNLon+gx0], v11=pd.data[pdStepOff+gy1*pdNLon+gx1];
@@ -2340,6 +2422,8 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       if (activeVar === 'cape' && val < 50) continue;
       var text = activeVar === 'neerslag'    ? (val < 10 ? val.toFixed(1) : String(Math.round(val)))
                : activeVar === 'windstoten'  ? String(val)
+               : activeVar === 'bewolking' || activeVar === 'bewolking_totaal'
+                                             ? Math.round(val / 12.5) + ''
                : activeVar === 'cumul'       ? Math.round(val) + ''
                : activeVar === 'straling'    ? Math.round(val) + ''
                : activeVar === 'cumstraling' ? Math.round(val) + ''
@@ -2453,8 +2537,10 @@ function loadParamBin(modelId, paramKey, meta) {
 var PARAM_KEYS = ['neerslag', 'temp', 'wind', 'windstoten', 'zicht', 'bewolking', 'straling'];
 
 var CUMUL_MM_LEVELS = [1, 5, 10, 20, 30, 50, 75, 100, 150, 200, 300];
+// Zelfde ingreep als bij de uurschaal: de lichtste klasse (1–5 mm) stak niet af
+// tegen het witte droog-vlak eromheen.
 var CUMUL_MM_COLORS = [
-  [224,243,251],[176,217,242],[116,185,232],[58,143,212],[20,96,176],
+  [196,226,247],[150,200,236],[100,170,222],[52,132,204],[20,96,176],
   [0,51,128],[51,0,128],[102,0,153],[153,0,153],[200,0,100],[220,50,50]
 ];
 
@@ -2476,7 +2562,8 @@ function computeCumulNeerslag(md) {
 // bewolking ook op volle modelresolutie ('bewolking_hr', uint8 0..1, even groot
 // als de float32-versie op halve resolutie); die krijgt voorrang.
 function veldSleutel(modelId, varNaam) {
-  var basis = varNaam === 'wolkenlagen' ? 'bewolking' : varNaam;
+  var basis = (varNaam === 'wolkenlagen' || varNaam === 'bewolking_totaal')
+            ? 'bewolking' : varNaam;
   if (basis === 'bewolking') {
     var md = modelData[modelId];
     if (md && md.meta && md.meta.parameters && md.meta.parameters['bewolking_hr']) return 'bewolking_hr';
@@ -2699,7 +2786,10 @@ function buildLegendHTML(pIdx) {
   if (activeVar === 'neerslag') {
     title = 'Neerslag mm/u · getal vanaf 0,2';
     NEERSLAG_MM_COLORS.forEach(function(c){ swatches += sw(c); });
-    labels = lbl(['0.03','0.06','0.1','0.3','0.5','1','2','3','5','7','10','15','25','40','50','75','100+']);
+    // Zeventien getallen van 8 px passen niet naast elkaar in de legendabalk; ze
+    // liepen in elkaar over tot één streep cijfers. Elk tweede niveau staat nog
+    // steeds precies boven een klassegrens en is wél leesbaar.
+    labels = lbl(['0.03','0.1','0.5','2','5','10','25','50','100+']);
   } else if (activeVar === 'radar') {
     // ICON-D2: echte dbz_cmax (instantaan kolom-max).
     // HARMONIE + AROME: afgeleid uit uursom (geen sim. reflectiviteit beschikbaar)
@@ -2746,8 +2836,12 @@ function buildLegendHTML(pIdx) {
       swatches += sw(interpColor(gStap / 4 + 0.125, WIND_REF));
     }
     labels = lbl(['0','1','6','12','20','29','39','50','62','75','89','103+']);
+  } else if (activeVar === 'bewolking_totaal') {
+    title = 'Bewolking totaal · achtsten';
+    OCTA_COLORS.forEach(function(c){ swatches += sw(c); });
+    labels = lbl(['0','1','2','3','4','5','6','7','8']);
   } else if (activeVar === 'bewolking') {
-    title = 'Bewolking H/M/L';
+    title = 'Bewolking H/M/L · getal = totaal %';
     // Drie laag-ramps naast elkaar: hoog (blauw) · midden (geel-oranje) · laag (rood)
     [CLOUD_HIGH_REF, CLOUD_MID_REF, CLOUD_LOW_REF].forEach(function(ref) {
       [0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1].forEach(function(v) { swatches += sw(interpColor(v, ref)); });
@@ -2988,14 +3082,12 @@ function hoverValue(pd, stepIdx, lat, lon) {
     var deg = (Math.atan2(-a, -b) * 180 / Math.PI + 360) % 360;
     return msNaarBft(ms) + ' Bft · ' + Math.round(kmh) + ' km/u · ' + Math.round(deg) + '°';
   }
-  if (activeVar === 'bewolking' || activeVar === 'wolkenlagen') {
+  if (activeVar === 'bewolking' || activeVar === 'wolkenlagen' || activeVar === 'bewolking_totaal') {
     var mid = sampleComponent(pd, stepIdx, lat, lon, 1) || 0;
     var low = sampleComponent(pd, stepIdx, lat, lon, 2) || 0;
     // Totaal via willekeurige overlap — zelfde formule als het getal op de kaart
-    var totaal = 1 - (1 - Math.max(0, Math.min(1, a))) *
-                     (1 - Math.max(0, Math.min(1, mid))) *
-                     (1 - Math.max(0, Math.min(1, low)));
-    return 'totaal ' + Math.round(totaal * 100) + '%' +
+    var totaal = totaleBewolking(a, mid, low);
+    return Math.round(totaal * 8) + '/8 · totaal ' + Math.round(totaal * 100) + '%' +
            ' · H ' + Math.round(a*100) + '% · M ' + Math.round(mid*100) + '% · L ' + Math.round(low*100) + '%';
   }
   if (activeVar === 'neerslag') return (a < 1 ? a.toFixed(2) : a.toFixed(1)) + ' mm/u';
@@ -3014,7 +3106,8 @@ function hoverValue(pd, stepIdx, lat, lon) {
 var VAR_NAMES = {
   neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
   dauwpunt:'Dauwpunt', wind:'Wind', windstoten:'Windstoten', druk:'Luchtdruk',
-  zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', wolkenlagen:'Wolkenlagen',
+  zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal',
+  wolkenlagen:'Wolkenlagen',
   wolkenkaart:'Wolkenkaart (realistisch)',
   straling:'Zonnestraling', cumstraling:'Dagsom straling'
 };
