@@ -439,6 +439,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
 .panel-model-select:hover { border-color: #7dd3fc; background: #0e5a86; }
 .panel-model-select:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 1px; }
 .panel-model-select option { background: #0f172a; color: #f1f5f9; }
+.panel-model-select optgroup { background: #0f172a; color: #7dd3fc; font-style: normal; font-weight: 600; }
 
 .canvas-wrap {
   flex: 1; position: relative; overflow: hidden; min-height: 0;
@@ -941,19 +942,26 @@ var DATA_URL = PAGE_PARAMS.get('localData') === '1'
 // MODEL CONFIGS
 // ═══════════════════════════════════════════════════════════════
 
-var MODELS = IS_GLOBAL4 ? [
-  { id: 'ecmwf_global', label: 'ECMWF IFS',  short: 'ECMWF', metaFile: 'ecmwf_om_canvas_meta.json',        color: '#22d3ee' },
-  { id: 'gfs_global',   label: 'GFS Global', short: 'GFS',   metaFile: 'gfs_global_om_canvas_meta.json',   color: '#f59e0b' },
-  { id: 'icon_global',  label: 'ICON Global',short: 'ICON',  metaFile: 'icon_global_om_canvas_meta.json',  color: '#a78bfa' },
-  { id: 'ukmo_global',  label: 'UKMO Global',short: 'UKMO',  metaFile: 'ukmo_global_om_canvas_meta.json',  color: '#f472b6' },
-] : [
-  { id: 'harmonie',  label: 'HARMONIE V43', short: 'V43', metaFile: 'harmonie_canvas_meta.json',  color: '#22d3ee' },
-  { id: 'harmonie46',label: 'HARMONIE V46', short: 'V46', metaFile: 'harmonie46_canvas_meta.json', color: '#38bdf8' },
-  { id: 'icond2',    label: 'ICON-D2',      short: 'ICON', metaFile: 'icond2_canvas_meta.json',    color: '#f59e0b' },
-  { id: 'arome_om',  label: 'AROME 1.5',    short: 'AROM', metaFile: 'arome_om_canvas_meta.json',  color: '#a78bfa' },
-  { id: 'ukmo_om',   label: 'UKMO 2km',     short: 'UKMO', metaFile: 'ukmo_om_canvas_meta.json',   color: '#f472b6' },
-  { id: 'dmi_om',    label: 'DMI Harmonie', short: 'DMI',  metaFile: 'dmi_om_canvas_meta.json',    color: '#60a5fa' },
-  { id: 'icond2ruc', label: 'ICON-D2-RUC',  short: 'RUC',  metaFile: 'icond2ruc_canvas_meta.json', color: '#34d399' },
+// Eén gedeelde modellenlijst voor beide ingangen: de hoge-resolutiemodellen én
+// de globale modellen staan in elk vak in dezelfde keuzelijst, gegroepeerd op
+// dracht. De globale velden beslaan sinds september 2026 hetzelfde kaartvlak
+// als de hoge-resolutiemodellen, dus panelen zijn onderling uitwisselbaar.
+var MODELS = [
+  { id: 'harmonie',  label: 'HARMONIE V43', short: 'V43', metaFile: 'harmonie_canvas_meta.json',  color: '#22d3ee', groep: 'hires' },
+  { id: 'harmonie46',label: 'HARMONIE V46', short: 'V46', metaFile: 'harmonie46_canvas_meta.json', color: '#38bdf8', groep: 'hires' },
+  { id: 'icond2',    label: 'ICON-D2',      short: 'ICON', metaFile: 'icond2_canvas_meta.json',    color: '#f59e0b', groep: 'hires' },
+  { id: 'icond2ruc', label: 'ICON-D2-RUC',  short: 'RUC',  metaFile: 'icond2ruc_canvas_meta.json', color: '#34d399', groep: 'hires' },
+  { id: 'arome_om',  label: 'AROME 1.5',    short: 'AROM', metaFile: 'arome_om_canvas_meta.json',  color: '#a78bfa', groep: 'hires' },
+  { id: 'ukmo_om',   label: 'UKMO 2km',     short: 'UKMO', metaFile: 'ukmo_om_canvas_meta.json',   color: '#f472b6', groep: 'hires' },
+  { id: 'dmi_om',    label: 'DMI Harmonie', short: 'DMI',  metaFile: 'dmi_om_canvas_meta.json',    color: '#60a5fa', groep: 'hires' },
+  { id: 'ecmwf_global', label: 'ECMWF IFS',   short: 'ECMWF', metaFile: 'ecmwf_om_canvas_meta.json',       color: '#e879f9', groep: 'globaal' },
+  { id: 'gfs_global',   label: 'GFS Global',  short: 'GFS',   metaFile: 'gfs_global_om_canvas_meta.json',  color: '#fbbf24', groep: 'globaal' },
+  { id: 'icon_global',  label: 'ICON Global', short: 'ICON-G',metaFile: 'icon_global_om_canvas_meta.json', color: '#c084fc', groep: 'globaal' },
+  { id: 'ukmo_global',  label: 'UKMO Global', short: 'UKMO-G',metaFile: 'ukmo_global_om_canvas_meta.json', color: '#fb7185', groep: 'globaal' },
+];
+var MODEL_GROEPEN = [
+  { key: 'hires',   label: 'Hoge resolutie (korte dracht)' },
+  { key: 'globaal', label: 'Globale modellen (7 dagen)' },
 ];
 
 if (IS_GLOBAL4) {
@@ -966,10 +974,12 @@ if (IS_GLOBAL4) {
 // De keuze staat in de URL (?modellen=harmonie,icond2,…) en wordt daarnaast
 // lokaal onthouden, zodat een eigen samenstelling een volgende keer terugkomt.
 var PANEL_COUNT = 4;
+// Rechtsonder (vak 4) staat standaard ECMWF IFS: het globale model naast de
+// drie hoge-resolutiemodellen, zodat de lange dracht meteen in beeld staat.
 var DEFAULT_PANEL_MODELS = IS_GLOBAL4
   ? ['ecmwf_global', 'gfs_global', 'icon_global', 'ukmo_global']
-  : ['harmonie', 'harmonie46', 'icond2', 'arome_om'];
-var PANEL_STORAGE_KEY = IS_GLOBAL4 ? 'weerlab-global4-modellen' : 'weerlab-hires4-modellen-v2';
+  : ['harmonie', 'harmonie46', 'icond2', 'ecmwf_global'];
+var PANEL_STORAGE_KEY = IS_GLOBAL4 ? 'weerlab-global4-modellen-v2' : 'weerlab-hires4-modellen-v3';
 
 function modelIndexById(id) {
   for (var mi = 0; mi < MODELS.length; mi++) if (MODELS[mi].id === id) return mi;
@@ -1591,9 +1601,14 @@ function bouwModelKiezers() {
   panels.forEach(function(p) {
     var sel = document.getElementById('p' + p.idx + '-select');
     if (!sel) return;
-    sel.innerHTML = MODELS.map(function(m) {
-      return '<option value="' + m.id + '"' + (m.id === MODELS[p.modelIdx].id ? ' selected' : '') + '>' +
-             m.label + '</option>';
+    // Gegroepeerd op dracht: de korte hoge-resolutieruns eerst, daarna de
+    // globale modellen die zeven dagen ver reiken.
+    sel.innerHTML = MODEL_GROEPEN.map(function(g) {
+      var opts = MODELS.filter(function(m) { return (m.groep || 'hires') === g.key; }).map(function(m) {
+        return '<option value="' + m.id + '"' + (m.id === MODELS[p.modelIdx].id ? ' selected' : '') + '>' +
+               m.label + '</option>';
+      }).join('');
+      return opts ? '<optgroup label="' + g.label + '">' + opts + '</optgroup>' : '';
     }).join('');
     sel.addEventListener('change', function() { kiesModel(p.idx, this.value); });
     updatePanelHeader(p.idx);
