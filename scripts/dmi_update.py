@@ -17,7 +17,9 @@ import os
 import struct
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone as _timezone
+
+UTC = _timezone.utc
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -211,6 +213,22 @@ def main() -> int:
     write_bin(WORK_DIR / f"{prefix}_data_straling.bin",        (np.maximum(arrays["shortwave_radiation"], 0).astype(np.float32),))
     write_bin(WORK_DIR / f"{prefix}_data_straling_direct.bin", (np.maximum(arrays["direct_radiation"], 0).astype(np.float32),))
 
+    # Zonneschijnduur volgens de WMO-regel (DNI boven 120 W/m²), afgeleid uit de
+    # directe straling — zelfde rekenregel als Open-Meteo zelf hanteert, zodat de
+    # modellen in het vierluik onderling vergelijkbaar blijven.
+    heeft_zon = False
+    try:
+        from zonuren import zonminuten_uit_direct
+        zon_tijden = [datetime.fromisoformat(t).replace(tzinfo=LOCAL_TZ).astimezone(UTC)
+                      for t in times]
+        zon_min = zonminuten_uit_direct(
+            np.maximum(np.nan_to_num(arrays["direct_radiation"], nan=0), 0),
+            zon_tijden, lats, lons)
+        write_bin(WORK_DIR / f"{prefix}_data_zon.bin", (zon_min,))
+        heeft_zon = True
+    except Exception as exc:
+        print(f"  [waarschuwing] zonneschijn overgeslagen: {exc}")
+
     now = datetime.now(tz=LOCAL_TZ)
     # Open-Meteo geeft de model-init niet terug. DMI Harmonie draait elke 3 u;
     # leid de nominale run af uit de 3-uurscyclus met 3 u marge zodat we nooit
@@ -245,6 +263,7 @@ def main() -> int:
             "zicht":           {"file": f"{prefix}_data_zicht.bin",           "components": 1, "label": "Zicht (m)"},
             "straling":        {"file": f"{prefix}_data_straling.bin",        "components": 1, "label": "Globale straling (W/m²)"},
             "straling_direct": {"file": f"{prefix}_data_straling_direct.bin", "components": 1, "label": "Directe kortgolvige straling (W/m²)"},
+            **({"zon": {"file": f"{prefix}_data_zon.bin", "components": 1, "label": "Zonneschijn (minuten per uur)"}} if heeft_zon else {}),
         },
         "overlay": "harmonie_overlay.png",
     }

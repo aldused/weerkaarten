@@ -28,7 +28,7 @@ import re
 import struct
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -391,6 +391,23 @@ def main() -> int:
 
     stral = np.maximum(np.nan_to_num(arrays["shortwave_radiation"], nan=0), 0).astype(np.float32)
     write_bin(f"{PREFIX}_data_straling.bin", (stral,))
+
+    # Zonneschijnduur volgens de WMO-regel (DNI boven 120 W/m²), afgeleid uit de
+    # directe straling. AROME levert geen kant-en-klare sunshine_duration via
+    # Open-Meteo; deze rekenregel is dezelfde die Open-Meteo zelf toepast, dus de
+    # modellen in het vierluik blijven onderling vergelijkbaar.
+    heeft_zon = False
+    try:
+        from zonuren import zonminuten_uit_direct
+        zon_tijden = [datetime.fromisoformat(tt).replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+                      for tt in times]
+        zon_min = zonminuten_uit_direct(
+            np.maximum(np.nan_to_num(arrays["direct_radiation"], nan=0), 0),
+            zon_tijden, lats, lons)
+        write_bin(f"{PREFIX}_data_zon.bin", (zon_min,))
+        heeft_zon = True
+    except Exception as exc:
+        print(f"  [waarschuwing] zonneschijn overgeslagen: {exc}")
     # Dagsom: reset om middernacht lokale tijd (Kachelmann-conventie)
     cs = np.zeros((n_steps, n_lat, n_lon), dtype=np.float32)
     acc = None
@@ -442,6 +459,7 @@ def main() -> int:
             "druk": {"file": f"{PREFIX}_data_druk.bin", "components": 1, "label": "Luchtdruk zeeniveau (hPa)"},
             "cape": {"file": f"{PREFIX}_data_cape.bin", "components": 1, "label": "CAPE (J/kg)"},
             "straling": {"file": f"{PREFIX}_data_straling.bin", "components": 1, "label": "Globale straling (W/m²)"},
+            **({"zon": {"file": f"{PREFIX}_data_zon.bin", "components": 1, "label": "Zonneschijn (minuten per uur)"}} if heeft_zon else {}),
             "cumstraling": {"file": f"{PREFIX}_data_cumstraling.bin", "components": 1,
                             "label": "Straling dagsom (Wh/m², reset middernacht)"},
         },
