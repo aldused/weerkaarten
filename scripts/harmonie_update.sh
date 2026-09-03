@@ -177,6 +177,10 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     hourly_stral=[(all_stral_cum[i]-all_stral_cum[i-1])/3600 for i in range(1,len(all_stral_cum))]
     hourly_stral=[np.maximum(s,0) for s in hourly_stral]
     has_direct=any(d is not None for d in all_stral_direct[1:])
+    # Diagnose: levert de KNMI-feed directe straling (GRIB1 param 116)? Zo ja,
+    # dan kan de zonneschijnduur op het volle 4 km-rooster i.p.v. het grove
+    # Open-Meteo-hulprooster van 13 km.
+    print(f'   directe straling in GRIB-feed: {has_direct}')
     direct_stral=[np.maximum(d,0) if d is not None else np.full((nj,ni),np.nan) for d in all_stral_direct[1:]]
 
     # 5. Crop en exporteer
