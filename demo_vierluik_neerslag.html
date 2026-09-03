@@ -1482,6 +1482,7 @@ function laagBeschikbaar(md, varNaam, modelId) {
   if (!md || !md.meta || !md.meta.parameters) return false;
   if (key === 'cumul') return !!(md.meta.parameters.cumul || md.meta.parameters.neerslag);
   if (key === 'cumzon') return !!md.meta.parameters.zon;
+  if (key === 'radar') return !!(md.meta.parameters.radar || md.meta.parameters.neerslag);
   return !!md.meta.parameters[key];
 }
 
@@ -2581,6 +2582,23 @@ function computeCumulNeerslag(md) {
   md.paramData['cumul'] = { data: cum, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid };
 }
 
+// Pseudo-radar voor modellen zonder reflectiviteitsveld: Marshall-Palmer
+// Z = 200·R^1,6 op de uursom, precies zoals de HARMONIE-pijplijn dat doet voor
+// zijn eigen radarlaag. Zo tonen ook ECMWF, GFS en de andere globale modellen
+// een radarbeeld — als afgeleide, en zo staat het ook in de legenda.
+function computeRadarUitNeerslag(md) {
+  var pd = md.paramData['neerslag'];
+  if (!pd) return;
+  var nS = pd.nSteps, nL = pd.nLat, nN = pd.nLon, sz = nL * nN;
+  var dbz = new Float32Array(nS * sz);
+  var schaal = pd.schaal || 1;
+  for (var i = 0; i < nS * sz; i++) {
+    var r = (pd.data[i] || 0) * schaal;
+    dbz[i] = r >= 0.05 ? 10 * Math.log10(Math.max(200 * Math.pow(Math.max(r, 0.001), 1.6), 1)) : 0;
+  }
+  md.paramData['radar'] = { data: dbz, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid, afgeleid: true };
+}
+
 // Zonuren vandaag: de minuten per uur opgeteld en omgerekend naar uren, met een
 // reset om middernacht lokale tijd. De modellen leveren alleen het uurveld, dus
 // deze som wordt hier gemaakt — net als de cumulatieve neerslag hierboven.
@@ -2633,6 +2651,12 @@ function loadParamIfNeeded(modelId, key) {
   key = veldSleutel(modelId, key);
   var md = modelData[modelId];
   if (!md || !md.meta || !md.meta.parameters) return Promise.resolve();
+  if (key === 'radar' && !md.meta.parameters['radar']) {
+    if (md.paramData['radar']) return Promise.resolve();
+    return loadParamIfNeeded(modelId, 'neerslag').then(function() {
+      if (!md.paramData['radar']) computeRadarUitNeerslag(md);
+    });
+  }
   if (key === 'cumzon') {
     if (md.paramData['cumzon']) return Promise.resolve();
     return loadParamIfNeeded(modelId, 'zon').then(function() {
@@ -2848,7 +2872,9 @@ function buildLegendHTML(pIdx) {
     // HARMONIE + AROME: afgeleid uit uursom (geen sim. reflectiviteit beschikbaar)
     var rmIdx = panels[pIdx] ? panels[pIdx].modelIdx : 0;
     var radarModel = rmIdx >= 0 ? MODELS[rmIdx].id : '';
-    title = radarModel === 'icond2' ? 'Radar dBZ (instantaan)' : 'Radar dBZ (afgeleid 1u)';
+    var rmMd = radarModel && modelData[radarModel];
+    var echt = rmMd && rmMd.meta && rmMd.meta.parameters && rmMd.meta.parameters.radar && radarModel === 'icond2';
+    title = echt ? 'Radar dBZ (instantaan)' : 'Radar dBZ (afgeleid uit uursom)';
     RADAR_DBZ_COLORS.forEach(function(c){ swatches += sw(c); });
     labels = lbl(['4','6','12','18','24','30','36','42','48','54','60','66','72+']);
   } else if (activeVar === 'temp') {

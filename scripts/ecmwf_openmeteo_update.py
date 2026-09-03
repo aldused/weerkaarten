@@ -48,6 +48,9 @@ HOURLY = [
     "cape",
     "shortwave_radiation",
     "direct_radiation",
+    # Zicht: alleen GFS en UKMO leveren het; ECMWF en ICON geven null en
+    # krijgen dan geen zicht-bestand (de viewer meldt de laag als afwezig).
+    "visibility",
 ]
 
 
@@ -222,6 +225,10 @@ def main() -> int:
     from zonuren import zonminuten_uit_direct
     zon_tijden = [datetime.fromisoformat(tt).replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
                   for tt in times]
+    heeft_zicht = bool(np.isfinite(arrays["visibility"]).any())
+    if heeft_zicht:
+        zicht = np.nan_to_num(arrays["visibility"], nan=50000.0).astype(np.float32)
+        write_bin(WORK_DIR / f"{prefix}_data_zicht.bin", (zicht,))
     zon_min = zonminuten_uit_direct(
         np.maximum(np.nan_to_num(arrays["direct_radiation"], nan=0), 0),
         zon_tijden, lats, lons, model=args.model)
@@ -256,6 +263,7 @@ def main() -> int:
             "straling": {"file": f"{prefix}_data_straling.bin", "components": 1, "label": "Globale straling (W/m²)"},
             "straling_direct": {"file": f"{prefix}_data_straling_direct.bin", "components": 1, "label": "Directe kortgolvige straling (W/m²)"},
             "zon": {"file": f"{prefix}_data_zon.bin", "components": 1, "label": "Zonneschijn (minuten per uur)"},
+            **({"zicht": {"file": f"{prefix}_data_zicht.bin", "components": 1, "label": "Zicht (m)"}} if heeft_zicht else {}),
         },
         "overlay": "harmonie_overlay.png",
     }
