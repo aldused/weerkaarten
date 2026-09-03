@@ -48,6 +48,8 @@ HOURLY = [
     "cape",
     "shortwave_radiation",
     "direct_radiation",
+    # Zonneschijnduur volgens de WMO-regel (DNI boven 120 W/m²), seconden per uur.
+    "sunshine_duration",
 ]
 
 
@@ -214,6 +216,10 @@ def main() -> int:
     write_bin(WORK_DIR / f"{prefix}_data_cape.bin", (arrays["cape"],))
     write_bin(WORK_DIR / f"{prefix}_data_straling.bin", (np.maximum(arrays["shortwave_radiation"], 0).astype(np.float32),))
     write_bin(WORK_DIR / f"{prefix}_data_straling_direct.bin", (np.maximum(arrays["direct_radiation"], 0).astype(np.float32),))
+    # Zonneschijn in minuten per uur: dat leest een gebruiker directer dan
+    # seconden, en 0-60 past precies op de kaartschaal.
+    zon_min = np.clip(arrays["sunshine_duration"] / 60.0, 0, 60).astype(np.float32)
+    write_bin(WORK_DIR / f"{prefix}_data_zon.bin", (zon_min,))
 
     now = datetime.now(tz=LOCAL_TZ)
     meta = {
@@ -243,6 +249,7 @@ def main() -> int:
             "cape": {"file": f"{prefix}_data_cape.bin", "components": 1, "label": "CAPE (J/kg)"},
             "straling": {"file": f"{prefix}_data_straling.bin", "components": 1, "label": "Globale straling (W/m²)"},
             "straling_direct": {"file": f"{prefix}_data_straling_direct.bin", "components": 1, "label": "Directe kortgolvige straling (W/m²)"},
+            "zon": {"file": f"{prefix}_data_zon.bin", "components": 1, "label": "Zonneschijn (minuten per uur)"},
         },
         "overlay": "harmonie_overlay.png",
     }

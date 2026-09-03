@@ -94,7 +94,9 @@ GRID_STEP = 0.15  # ~16–17 km — ruim voldoende voor 500/850 hPa
 # Max coördinaten per bulk-call via POST (413 boven ~300)
 BATCH_SIZE = 200
 
-HOURLY_VARS_STRAL = ["direct_radiation"]
+# Zonneschijnduur komt uit hetzelfde KNMI-Harmonie-model als de directe
+# straling, volgens de WMO-regel (DNI boven 120 W/m²), in seconden per uur.
+HOURLY_VARS_STRAL = ["direct_radiation", "sunshine_duration"]
 
 HOURLY_VARS_300 = [
     "geopotential_height_300hPa",
@@ -254,16 +256,18 @@ def fetch_cape(
 def fetch_direct_radiation(
     batches: list[list[tuple[int, int, float, float]]],
     times: list[str],
-) -> np.ndarray:
-    """Haal directe kortgolvige straling op via knmi_harmonie_arome_europe.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Haal directe straling + zonneschijnduur op via knmi_harmonie_arome_europe.
 
-    Retourneert (n_steps, n_lat, n_lon) array in W/m².
+    Retourneert (direct, zon): directe straling in W/m² en zonneschijnduur in
+    minuten per uur, beide (n_steps, n_lat, n_lon).
     """
     n_lat = max(lat_i for b in batches for (lat_i, _, _, _) in b) + 1
     n_lon = max(lon_i for b in batches for (_, lon_i, _, _) in b) + 1
     n_steps = len(times)
 
     direct = np.full((n_steps, n_lat, n_lon), np.nan, dtype=np.float32)
+    zon = np.full((n_steps, n_lat, n_lon), np.nan, dtype=np.float32)
     time_set = set(times)
 
     for bi, batch in enumerate(batches):
@@ -282,6 +286,7 @@ def fetch_direct_radiation(
             h = loc.get("hourly") or {}
             tlist = h.get("time") or []
             d_list = h.get("direct_radiation") or []
+            z_list = h.get("sunshine_duration") or []
             idx_map = {t: k for k, t in enumerate(tlist) if t in time_set}
             for step_i, tstr in enumerate(times):
                 k = idx_map.get(tstr)
@@ -290,9 +295,12 @@ def fetch_direct_radiation(
                 v = d_list[k] if k < len(d_list) else None
                 if v is not None:
                     direct[step_i, lat_i, lon_i] = max(0.0, float(v))
+                z = z_list[k] if k < len(z_list) else None
+                if z is not None:
+                    zon[step_i, lat_i, lon_i] = min(60.0, max(0.0, float(z) / 60.0))
         print(f"  direct_radiation batch {bi + 1}/{len(batches)}: {len(batch)} punten klaar")
 
-    return direct
+    return direct, zon
 
 
 def write_bin(path: str, arrs: tuple[np.ndarray, ...]) -> None:
@@ -363,7 +371,7 @@ def main() -> int:
     print("CAPE ophalen (DMI Harmonie)...")
     cape = fetch_cape(batches, tijden)
     print("Directe straling ophalen (KNMI Harmonie)...")
-    direct_rad = fetch_direct_radiation(batches, tijden)
+    direct_rad, zon_min = fetch_direct_radiation(batches, tijden)
     print(f"Ophalen klaar in {time.time() - t0:.1f}s")
 
     # Vul ontbrekende punten bij door nearest-neighbor
@@ -412,6 +420,7 @@ def main() -> int:
     write_bin("harmonie_data_hoogte850.bin", (gp850, t850, u850, v850))
     write_bin("harmonie_data_cape.bin", (cape,))
     write_bin("harmonie_data_straling_direct.bin", (direct_rad,))
+    write_bin("harmonie_data_zon.bin", (zon_min,))
 
     # Meta bijwerken
     meta_grid_300 = {
@@ -482,7 +491,23 @@ def main() -> int:
     meta["parameters"]["hoogte_500"] = meta_grid_500
     meta["parameters"]["hoogte_850"] = meta_grid_850
     meta["parameters"]["cape"] = meta_grid_cape
+    meta_grid_zon = {
+        "file": "harmonie_data_zon.bin",
+        "components": 1,
+        "label": "Zonneschijn (minuten per uur)",
+        "source": "open-meteo knmi_harmonie_arome_europe",
+        "grid": {
+            "n_lat": n_lat,
+            "n_lon": n_lon,
+            "lat_min": lat_min,
+            "lat_max": lat_max,
+            "lon_min": lon_min,
+            "lon_max": lon_max,
+        },
+    }
+
     meta["parameters"]["straling_direct"] = meta_grid_stral_direct
+    meta["parameters"]["zon"] = meta_grid_zon
 
     with meta_path.open("w") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
@@ -493,7 +518,8 @@ def main() -> int:
         f"hoogte500 {os.path.getsize('harmonie_data_hoogte500.bin') / 1024 / 1024:.1f} MB + "
         f"hoogte850 {os.path.getsize('harmonie_data_hoogte850.bin') / 1024 / 1024:.1f} MB + "
         f"cape {os.path.getsize('harmonie_data_cape.bin') / 1024:.0f} kB + "
-        f"straling_direct {os.path.getsize('harmonie_data_straling_direct.bin') / 1024:.0f} kB"
+        f"straling_direct {os.path.getsize('harmonie_data_straling_direct.bin') / 1024:.0f} kB + "
+        f"zon {os.path.getsize('harmonie_data_zon.bin') / 1024:.0f} kB"
     )
     return 0
 

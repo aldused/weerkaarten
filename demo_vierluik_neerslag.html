@@ -557,8 +557,8 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
       <option value="bewolking" data-label="Bewolking (rood, wit, blauw)">Bewolking (rood, wit, blauw)</option>
       <option value="wolkenlagen" data-label="Wolkenlagen (RGB)">Wolkenlagen (RGB)</option>
       <option value="wolkenkaart" data-label="Wolkenkaart (realistisch)">Wolkenkaart (realistisch)</option>
-      <option value="straling" data-label="Zonnestraling">Zonnestraling</option>
-      <option value="cumstraling" data-label="Dagsom straling">Dagsom straling</option>
+      <option value="zon" data-label="Zon (minuten per uur)">Zon (minuten per uur)</option>
+      <option value="cumzon" data-label="Zonuren (dagsom)">Zonuren (dagsom)</option>
     </select>
     <span id="var-availability" aria-live="polite">laden…</span>
   </div>
@@ -775,38 +775,29 @@ var ZICHT_M_COLORS = [
 ];
 
 
-// Straling laatste uur (Wh/m²) — Kachelmann-schaal:
-// magenta/paars (zeer weinig) → blauw → bleek → groen → geel → oranje → donkerrood
-var STRALING_REF = [
-  [0,   [ 22,  5,  30]],   // nacht - vrijwel zwart
-  [1,   [200,  0, 200]],   // magenta
-  [30,  [140,  0, 180]],   // paars
-  [90,  [ 70,  0, 150]],   // donkerpaars
-  [120, [ 35, 35, 165]],   // donkerblauw
-  [180, [ 45, 95, 220]],   // blauw
-  [240, [125,175,250]],    // lichtblauw
-  [300, [205,228,248]],    // bleekblauw
-  [360, [150,220,130]],    // lichtgroen
-  [420, [195,230, 60]],    // geelgroen
-  [480, [255,235,  0]],    // geel
-  [550, [255,200,  0]],    // donkergeel
-  [625, [255,150,  0]],    // oranje
-  [700, [255, 90,  0]],    // dieporanje
-  [775, [240, 30,  0]],    // rood
-  [850, [190,  0,  0]],    // donkerrood
-  [950, [140,  0, 10]],    // zeer donkerrood
-  [1100,[ 95,  0, 20]],    // bruinrood
+// Zonneschijn 0–60 minuten per uur: grijs (geen zon) → geel → oranje (vol uur).
+// De onderkant blijft bewust grijsblauw, zodat een uur zonder zon niet als een
+// flauw geel vlak leest.
+var ZON_REF = [
+  [0,  [ 96,110,130]],
+  [1,  [140,150,165]],
+  [10, [200,205,180]],
+  [20, [250,240,150]],
+  [30, [255,225,80]],
+  [40, [255,200,30]],
+  [50, [255,170,0]],
+  [60, [255,132,0]],
 ];
 
-// Dagsom straling: 0–9000 Wh/m² (reset om middernacht lokale tijd)
-var CUMSTRALING_REF = [
-  [0,    [220,230,255]],
-  [100,  [255,255,180]],
-  [500,  [255,240,80]],
-  [1500, [255,200,0]],
-  [3000, [255,140,0]],
-  [5000, [255,60,0]],
-  [9000, [180,0,0]],
+// Zonuren per dag: 0–14 uur (reset om middernacht lokale tijd)
+var CUMZON_REF = [
+  [0,   [220,230,255]],
+  [0.5, [255,255,190]],
+  [2,   [255,240,90]],
+  [4,   [255,215,0]],
+  [7,   [255,165,0]],
+  [10,  [255,100,0]],
+  [14,  [200,20,0]],
 ];
 
 // CAPE J/kg — grijs → blauw → groen → geel → oranje → rood → paars
@@ -1482,6 +1473,18 @@ function updateHeaderSummary() {
   document.getElementById('header-sub').textContent = delen.join(' · ');
 }
 
+// Levert dit model deze kaartlaag? Zelfde regels als de kiezer hanteert:
+// cumulatieve lagen leunen op hun uurveld, de wolkentegel staat los van de
+// veldbestanden.
+function laagBeschikbaar(md, varNaam, modelId) {
+  var key = (varNaam === 'wolkenlagen' || varNaam === 'bewolking_totaal') ? 'bewolking' : varNaam;
+  if (key === TEGEL_VAR) return !!tegelMeta[modelId];
+  if (!md || !md.meta || !md.meta.parameters) return false;
+  if (key === 'cumul') return !!(md.meta.parameters.cumul || md.meta.parameters.neerslag);
+  if (key === 'cumzon') return !!md.meta.parameters.zon;
+  return !!md.meta.parameters[key];
+}
+
 function updateVariableAvailability() {
   var select = document.getElementById('var-select');
   var actief = actieveModellen();
@@ -1493,14 +1496,8 @@ function updateVariableAvailability() {
     var count = actief.filter(function(m) {
       // De wolkentegel staat los van de veldbestanden: die telt mee zodra de
       // tegelmeta van dit model is opgehaald.
-      if (key === TEGEL_VAR) {
-        if (tegelMeta[m.id] === undefined) laadTegelMeta(m.id);
-        return !!tegelMeta[m.id];
-      }
-      var md = modelData[m.id];
-      if (!md || !md.meta || !md.meta.parameters) return false;
-      if (key === 'cumul') return !!(md.meta.parameters.cumul || md.meta.parameters.neerslag);
-      return !!md.meta.parameters[key];
+      if (key === TEGEL_VAR && tegelMeta[m.id] === undefined) laadTegelMeta(m.id);
+      return laagBeschikbaar(modelData[m.id], key, m.id);
     }).length;
     option.dataset.count = count;
     if (loaded === actief.length) {
@@ -1742,7 +1739,7 @@ var DPR = Math.min(window.devicePixelRatio || 1, 3);
 // randen die een radarbeeld hoort te hebben.
 var VERFIJN_VARS = {
   temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, wind:1, windstoten:1,
-  straling:1, cumstraling:1, bewolking:1, bewolking_hr:1, rv:1,
+  zon:1, cumzon:1, bewolking:1, bewolking_hr:1, rv:1,
   neerslag:1, cumul:1, radar:1
 };
 // Velden waar over- en onderschieten fysisch onmogelijk is (neerslag ≥ 0,
@@ -1857,8 +1854,8 @@ var ISO_STAP = {
   cape:        [100, 500],
   wind:        [1, 4],        // in Bft
   windstoten:  [10, 30],      // in km/u
-  straling:    [100, 300],
-  cumstraling: [500, 2000]
+  zon:         [10, 30],       // in minuten
+  cumzon:      [1, 3]          // in uren
 };
 var veldBuffer = null;
 
@@ -1948,7 +1945,11 @@ function renderPanel(pIdx) {
   var metaKlaar = md && md.meta && md.meta.tijden;
   if (!metaKlaar || (!tegelModus && (!md.paramData || Object.keys(md.paramData).length === 0))) {
     statusEl.style.display = 'block';
-    if (!(md && md.failed)) statusEl.textContent = 'Laden...';
+    // Staat de meta er al en kent dit model de laag niet, dan is wachten
+    // zinloos: dan blijft "Laden..." anders eeuwig staan (deeplink ?laag=…).
+    if (metaKlaar && !laagBeschikbaar(md, activeVar, mCfg.id)) {
+      statusEl.textContent = 'Variabele niet beschikbaar';
+    } else if (!(md && md.failed)) statusEl.textContent = 'Laden...';
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
@@ -2204,11 +2205,11 @@ function renderPanel(pIdx) {
           veldBuffer[py * cw + px] = Math.max(0, val);
         } else if (activeVar === 'zicht') {
           c = boundaryColor(Math.max(0, val), ZICHT_M_LEVELS, ZICHT_M_COLORS);
-        } else if (activeVar === 'straling') {
-          c = interpColor(Math.max(0, val), STRALING_REF);
+        } else if (activeVar === 'zon') {
+          c = interpColor(Math.max(0, val), ZON_REF);
           veldBuffer[py * cw + px] = Math.max(0, val);
-        } else if (activeVar === 'cumstraling') {
-          c = interpColor(Math.max(0, val), CUMSTRALING_REF);
+        } else if (activeVar === 'cumzon') {
+          c = interpColor(Math.max(0, val), CUMZON_REF);
           veldBuffer[py * cw + px] = Math.max(0, val);
         }
       }
@@ -2245,7 +2246,7 @@ function vakVrij(x0, y0, x1, y1) {
 }
 function claimVak(x0, y0, x1, y1) { labelVakken.push([x0, y0, x1, y1]); }
 
-var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, cumul:1, straling:1, cumstraling:1, neerslag:1,
+var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, cumul:1, zon:1, cumzon:1, neerslag:1,
                   bewolking:1, bewolking_totaal:1};
 function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, stepIdx) {
   if (!LABEL_VARS[activeVar]) return;
@@ -2271,7 +2272,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
   // labels breed zijn; botsingscontrole laat vervolgens alleen de labels staan
   // die passen. Dat geeft veel meer afleesbare punten dan een grof vast raster.
   var LABEL_AFSTAND = { wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
-                        straling: 50, cumstraling: 50, temp: 46, dauwpunt: 46, windstoten: 46,
+                        zon: 50, cumzon: 50, temp: 46, dauwpunt: 46, windstoten: 46,
                         bewolking: 52, bewolking_totaal: 52 };
   // Dichtheid schaalt mee met de grootte van het vak. Factor 0,7 op de afstand
   // is ruwweg twee keer zoveel labels (1/0,7² ≈ 2). Kleine vakken — mobiel, of
@@ -2432,16 +2433,16 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       // Geheel-getal-vars: sla lage/onbelangrijke waarden over
       if (activeVar === 'neerslag' && val < 0.2) continue;   // droog: geen getal
       if (activeVar === 'cumul' && val < 0.5) continue;
-      if (activeVar === 'straling' && val < 5) continue;
-      if (activeVar === 'cumstraling' && val < 10) continue;
+      if (activeVar === 'zon' && val < 3) continue;      // vrijwel zonloos uur
+      if (activeVar === 'cumzon' && val < 0.5) continue;
       if (activeVar === 'cape' && val < 50) continue;
       var text = activeVar === 'neerslag'    ? (val < 10 ? val.toFixed(1) : String(Math.round(val)))
                : activeVar === 'windstoten'  ? String(val)
                : activeVar === 'bewolking' || activeVar === 'bewolking_totaal'
                                              ? Math.round(val / 12.5) + ''
                : activeVar === 'cumul'       ? Math.round(val) + ''
-               : activeVar === 'straling'    ? Math.round(val) + ''
-               : activeVar === 'cumstraling' ? Math.round(val) + ''
+               : activeVar === 'zon'         ? Math.round(val) + ''
+               : activeVar === 'cumzon'      ? (val < 10 ? val.toFixed(1) : String(Math.round(val)))
                : activeVar === 'cape'        ? Math.round(val) + ''
                : activeVar === 'zicht'       ? (val < 1000 ? Math.round(val) + 'm'
                                                 : val < 10000 ? (val / 1000).toFixed(1)
@@ -2556,7 +2557,7 @@ function loadParamBin(modelId, paramKey, meta) {
     });
 }
 
-var PARAM_KEYS = ['neerslag', 'temp', 'wind', 'windstoten', 'zicht', 'bewolking', 'straling'];
+var PARAM_KEYS = ['neerslag', 'temp', 'wind', 'windstoten', 'zicht', 'bewolking', 'zon'];
 
 var CUMUL_MM_LEVELS = [1, 5, 10, 20, 30, 50, 75, 100, 150, 200, 300];
 // Zelfde ingreep als bij de uurschaal: de lichtste klasse (1–5 mm) stak niet af
@@ -2578,6 +2579,29 @@ function computeCumulNeerslag(md) {
     }
   }
   md.paramData['cumul'] = { data: cum, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid };
+}
+
+// Zonuren vandaag: de minuten per uur opgeteld en omgerekend naar uren, met een
+// reset om middernacht lokale tijd. De modellen leveren alleen het uurveld, dus
+// deze som wordt hier gemaakt — net als de cumulatieve neerslag hierboven.
+function computeCumZon(md) {
+  var pd = md.paramData['zon'];
+  if (!pd) return;
+  var nS = pd.nSteps, nL = pd.nLat, nN = pd.nLon, sz = nL * nN;
+  var tijden = (md.meta && md.meta.tijden) || [];
+  var cum = new Float32Array(nS * sz);
+  var vorigeDag = null;
+  for (var s = 0; s < nS; s++) {
+    var off = s * sz;
+    var dag = (tijden[s] || '').slice(0, 10);
+    var nieuweDag = (vorigeDag === null || dag !== vorigeDag);
+    vorigeDag = dag;
+    for (var i = 0; i < sz; i++) {
+      var minuten = Math.max(0, pd.data[off + i] || 0) * (pd.schaal || 1);
+      cum[off + i] = (nieuweDag ? 0 : cum[(s - 1) * sz + i]) + minuten / 60;
+    }
+  }
+  md.paramData['cumzon'] = { data: cum, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid };
 }
 
 // Welke parameter uit de meta hoort bij een kaartlaag. HARMONIE levert de
@@ -2609,6 +2633,12 @@ function loadParamIfNeeded(modelId, key) {
   key = veldSleutel(modelId, key);
   var md = modelData[modelId];
   if (!md || !md.meta || !md.meta.parameters) return Promise.resolve();
+  if (key === 'cumzon') {
+    if (md.paramData['cumzon']) return Promise.resolve();
+    return loadParamIfNeeded(modelId, 'zon').then(function() {
+      if (!md.paramData['cumzon']) computeCumZon(md);
+    });
+  }
   if (key === 'cumul') {
     if (md.paramData['cumul']) return Promise.resolve();
     // Prefereer pre-computed bin; val back op JS-berekening als bin ontbreekt
@@ -2684,6 +2714,7 @@ function loadModel(mCfg, pIdx, freshMeta) {
     .then(function() {
       // cumul bin al geladen via initKeys; JS-fallback alleen als bin ontbrak
       if (activeVar === 'cumul' && !modelData[mCfg.id].paramData['cumul']) computeCumulNeerslag(modelData[mCfg.id]);
+      if (activeVar === 'cumzon' && !modelData[mCfg.id].paramData['cumzon']) computeCumZon(modelData[mCfg.id]);
       // Nieuw geladen model meteen op de centrale tijd zetten. Tijdens de
       // eerste load is dat het tijdstip dat het dichtst bij "nu" ligt.
       var meta = modelData[mCfg.id].meta;
@@ -2882,15 +2913,15 @@ function buildLegendHTML(pIdx) {
     [[0,0,0],[230,40,40],[40,210,40],[50,90,235],[235,225,40],[45,225,225],[225,55,225],[245,245,245]]
       .forEach(function(c){ swatches += sw(c); });
     labels = lbl(['onbew.','laag','midden','hoog','l+m','m+h','l+h','alle']);
-  } else if (activeVar === 'straling') {
-    title = 'Straling laatste uur Wh/m²';
-    [1, 60, 120, 180, 240, 300, 360, 420, 480, 550, 625, 700, 775, 850, 950, 1100]
-      .forEach(function(v){ swatches += sw(interpColor(v, STRALING_REF)); });
-    labels = lbl(['1','180','300','420','550','700','850','1100']);
-  } else if (activeVar === 'cumstraling') {
-    title = 'Straling dagsom Wh/m²';
-    [0, 100, 500, 1500, 3000, 5000, 9000].forEach(function(v){ swatches += sw(interpColor(v, CUMSTRALING_REF)); });
-    labels = lbl(['0','100','500','1500','3000','5000','9000']);
+  } else if (activeVar === 'zon') {
+    title = 'Zon dit uur · minuten';
+    [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
+      .forEach(function(v){ swatches += sw(interpColor(v, ZON_REF)); });
+    labels = lbl(['0','10','20','30','40','50','60']);
+  } else if (activeVar === 'cumzon') {
+    title = 'Zonuren vandaag';
+    [0, 0.5, 2, 4, 6, 8, 10, 12, 14].forEach(function(v){ swatches += sw(interpColor(v, CUMZON_REF)); });
+    labels = lbl(['0','2','4','6','8','10','14']);
   }
 
   return '<span class="pleg-title">'+title+'</span>'
@@ -3120,8 +3151,8 @@ function hoverValue(pd, stepIdx, lat, lon) {
   if (activeVar === 'druk') return Math.round(a / 100) + ' hPa';
   if (activeVar === 'cape') return Math.round(a) + ' J/kg';
   if (activeVar === 'zicht') return a < 1000 ? Math.round(a) + ' m' : (a / 1000).toFixed(a < 10000 ? 1 : 0) + ' km';
-  if (activeVar === 'straling') return Math.round(a) + ' Wh/m²';
-  if (activeVar === 'cumstraling') return Math.round(a) + ' Wh/m²';
+  if (activeVar === 'zon') return Math.round(a) + ' min zon';
+  if (activeVar === 'cumzon') return a.toFixed(1) + ' uur zon';
   return a.toFixed(1);
 }
 
@@ -3131,7 +3162,7 @@ var VAR_NAMES = {
   zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal',
   wolkenlagen:'Wolkenlagen',
   wolkenkaart:'Wolkenkaart (realistisch)',
-  straling:'Zonnestraling', cumstraling:'Dagsom straling'
+  zon:'Zon (minuten per uur)', cumzon:'Zonuren (dagsom)'
 };
 var mapTooltip = document.getElementById('map-tooltip');
 

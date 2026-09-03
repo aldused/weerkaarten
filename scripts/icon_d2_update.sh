@@ -6,7 +6,7 @@ cd "/Users/aldus/KNMI_Project/weerlab"
 echo "$(date): ICON-D2 update gestart"
 
 /usr/local/bin/python3 << 'PYEOF'
-import os, json, struct, time, bz2, tempfile
+import os, sys, json, struct, time, bz2, tempfile
 import numpy as np
 import requests
 import eccodes
@@ -216,16 +216,19 @@ print(f"   Crop grid: {n_lat}x{n_lon} (stride {STRIDE}), {n_steps} uur")
 def crop(d):
     return np.nan_to_num(d[np.ix_(lat_idx, lon_idx)], nan=0).astype(np.float32)
 
-def write_bin(fn, data_list, nc=1):
+def write_bin(fn, data_list, nc=1, al_gecropt=False):
+    # al_gecropt=True voor velden die al op het uitvoerrooster staan; die
+    # nogmaals door crop() halen zou de index-selectie dubbel toepassen.
+    zet = (lambda d: np.asarray(d, dtype=np.float32)) if al_gecropt else crop
     with open(fn, "wb") as f:
         f.write(struct.pack("<HHHH", n_lat, n_lon, len(data_list), nc))
         f.write(b"\x00" * 8)
         for item in data_list:
             if nc == 1:
-                f.write(crop(item).tobytes())
+                f.write(zet(item).tobytes())
             else:
                 for comp in item:
-                    f.write(crop(comp).tobytes())
+                    f.write(zet(comp).tobytes())
     print(f"   {fn}: {os.path.getsize(fn)/1024/1024:.1f} MB")
 
 # Neerslag op volledige modelresolutie (geen stride), uint8 sqrt-gecodeerd:
@@ -284,6 +287,7 @@ def deavg_uur(series, n):
         out.append(np.maximum(a1 * h - a0 * (h - 1), 0))
     return out
 
+_heeft_zon = False
 _stral_dir = all_data.get("stral_dir", [])
 _stral_dif = all_data.get("stral_dif", [])
 if _stral_dir and _stral_dif and len(_stral_dir) > n_steps:
@@ -302,6 +306,24 @@ if _stral_dir and _stral_dif and len(_stral_dir) > n_steps:
         _prev_date = _d
         _cs_list.append(_cs_acc)
     write_bin(f"{PREFIX}_data_cumstraling.bin", _cs_list)
+
+    # Zonneschijnduur uit de directe straling, volgens de WMO-regel
+    # (DNI boven 120 W/m²). Zelfde rekenregel als Open-Meteo hanteert voor de
+    # modellen die hun zonneschijn kant-en-klaar leveren, zodat de modellen in
+    # het vierluik onderling vergelijkbaar blijven.
+    try:
+        sys.path.insert(0, "/Users/aldus/KNMI_Project/weerlab/scripts")
+        from zonuren import zonminuten_uit_direct
+        _zon_tijden = [run_dt + timedelta(hours=h) for h in range(1, len(_dir_h) + 1)]
+        _zon = zonminuten_uit_direct(np.stack([crop(d) for d in _dir_h]),
+                                     _zon_tijden, c_lats, c_lons)
+        write_bin(f"{PREFIX}_data_zon.bin", [_zon[i] for i in range(_zon.shape[0])],
+                  al_gecropt=True)
+        _heeft_zon = True
+    except Exception as _zon_exc:
+        # De zonneschijnlaag is aanvullend; de rest van de run mag er niet op
+        # stuklopen. Zonder bin blijft de laag simpelweg uit de meta.
+        print(f"   [waarschuwing] zonneschijn overgeslagen: {_zon_exc}")
 
 # 4. Metadata
 print("\n4. Metadata...")
@@ -347,6 +369,9 @@ meta = {
     },
     "overlay": "harmonie_overlay.png",
 }
+if _heeft_zon:
+    meta["parameters"]["zon"] = {"file": f"{PREFIX}_data_zon.bin", "components": 1,
+                                 "label": "Zonneschijn (minuten per uur)"}
 if has_radar:
     meta["parameters"]["radar"] = {
         "file": f"{PREFIX}_data_radar.bin", "components": 1,
