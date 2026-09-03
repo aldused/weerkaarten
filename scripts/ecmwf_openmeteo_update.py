@@ -224,7 +224,7 @@ def main() -> int:
                   for tt in times]
     zon_min = zonminuten_uit_direct(
         np.maximum(np.nan_to_num(arrays["direct_radiation"], nan=0), 0),
-        zon_tijden, lats, lons)
+        zon_tijden, lats, lons, model=args.model)
     write_bin(WORK_DIR / f"{prefix}_data_zon.bin", (zon_min,))
 
     now = datetime.now(tz=LOCAL_TZ)

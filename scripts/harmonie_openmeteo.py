@@ -414,7 +414,8 @@ def main() -> int:
     from zonuren import zonminuten_uit_direct
     zon_tijden = [datetime.fromisoformat(tt).replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
                   for tt in tijden]
-    zon_min = zonminuten_uit_direct(direct_rad, zon_tijden, lats, lons)
+    zon_min = zonminuten_uit_direct(direct_rad, zon_tijden, lats, lons,
+                                    model="knmi_harmonie_arome_netherlands")
     # Laat volledig ontbrekende stappen NaN. Nul betekent echte nul-CAPE;
     # ontbrekende DMI-uren mogen daar niet mee worden verward.
 

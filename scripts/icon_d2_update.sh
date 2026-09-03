@@ -316,7 +316,7 @@ if _stral_dir and _stral_dif and len(_stral_dir) > n_steps:
         from zonuren import zonminuten_uit_direct
         _zon_tijden = [run_dt + timedelta(hours=h) for h in range(1, len(_dir_h) + 1)]
         _zon = zonminuten_uit_direct(np.stack([crop(d) for d in _dir_h]),
-                                     _zon_tijden, c_lats, c_lons)
+                                     _zon_tijden, c_lats, c_lons, model="icon_d2")
         write_bin(f"{PREFIX}_data_zon.bin", [_zon[i] for i in range(_zon.shape[0])],
                   al_gecropt=True)
         _heeft_zon = True

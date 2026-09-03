@@ -403,7 +403,7 @@ def main() -> int:
                       for tt in times]
         zon_min = zonminuten_uit_direct(
             np.maximum(np.nan_to_num(arrays["direct_radiation"], nan=0), 0),
-            zon_tijden, lats, lons)
+            zon_tijden, lats, lons, model=cfg["model_hi"])
         write_bin(f"{PREFIX}_data_zon.bin", (zon_min,))
         heeft_zon = True
     except Exception as exc:

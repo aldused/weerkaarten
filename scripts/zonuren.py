@@ -1,52 +1,53 @@
 #!/usr/bin/env python3
-"""Zonneschijnduur (minuten per uur) uit de directe straling van een model.
+"""Zonneschijnduur (minuten per uur) uit de directe straling van een model,
+per model gekalibreerd op gemeten zonneschijn.
 
-Waarom niet de WMO-drempel rechtstreeks op het uurgemiddelde?
---------------------------------------------------------------
-De WMO rekent zonneschijn zodra de directe normale straling (DNI) boven
-120 W/m² komt. Die regel geldt voor een momentwaarde. Modellen leveren een
-uurgemiddelde, en dan wordt de regel binair: elk uur waarin de gemiddelde DNI
-boven 120 W/m² uitkomt, telt als een vol uur zon. Bij gebroken bewolking is dat
-structureel te veel — en hoe grover het model, hoe gladder de bewolking en hoe
-erger de overschatting. Getoetst tegen de gemeten zonneschijn (KNMI 10-minuten
-`ss`, 8 stations × 8 daglichturen op 3 sep 2026) gaf die aanpak, inclusief
-Open-Meteo's eigen `sunshine_duration`:
+Stap 1 — de fysische kern
+-------------------------
+De WMO telt zon zodra de directe normale straling (DNI) boven 120 W/m² komt.
+Die regel geldt voor een momentwaarde; op een uurgemiddelde wordt hij binair en
+overschat hij zwaar (ECMWF +18 min/uur, want elk zonnig uur telt dan als 60).
+Wat wél werkt: een uurgemiddelde van de directe straling ontstaat doordat de
+zon een deel van het uur onbelemmerd scheen. De heldere-hemel-index
 
-    ECMWF IFS  bias +18,0 min/uur, gemiddelde afwijking 20,4
-    GFS        bias +15,0                              21,0
-    ICON glob. bias +14,4                              19,0
-    UKMO glob. bias +13,9                              20,7
-    ICON-D2    bias  +4,7                              13,1
-    HARMONIE   bias  -1,4                              12,8
+    k = uurgemiddelde directe straling / heldere-hemel-waarde (Meinel)
 
-Wat hier wél gebeurt
---------------------
-Een uurgemiddelde van de directe straling ontstaat doordat de zon een deel van
-het uur onbelemmerd scheen en de rest van het uur niet — precies wat een
-zonneschijnmeter registreert. De zonnige fractie volgt dan uit
+is dan een eerste schatting van de zonfractie, en de zonneschijnduur is die
+fractie maal het aantal minuten waarin de zon hoog genoeg staat om de
+120 W/m²-grens te kunnen halen.
 
-    fractie = directe straling (uurgemiddeld) / heldere-hemel-waarde
+Stap 2 — kalibratie per model
+-----------------------------
+k = fractie klopt alleen bij aan/uit-bewolking. Dunne bewolking dempt de bundel
+zonder de zon te blokkeren (hi-res modellen dan 8-12 min/uur te laag), en hoe
+de "directe straling" tot stand komt verschilt per model: ECMWF open data heeft
+geen fdir, dus Open-Meteo leidt die af uit de globale straling; DWD ICON levert
+hem zelf. Daarom bepaalt scripts/zonuren_kalibratie.py per model de curve
+fractie = f(k) op gemeten KNMI-zonneschijn (10-minuten `ss`, 30 stations,
+14 dagen) en schrijft die naar zonuren_curves.json. Dag-gewijze
+cross-validatie, minuten per uur (bias / gemiddelde absolute fout):
 
-en de zonneschijnduur is die fractie maal het aantal minuten waarin de zon hoog
-genoeg staat om de 120 W/m²-grens te kunnen halen. De heldere-hemel-DNI komt uit
-het model van Meinel (1361 · 0,7^AM^0,678), per deelstap van 10 minuten
-geprojecteerd op het horizontale vlak.
+                      k = fractie        gekalibreerd
+    ECMWF IFS         -2,4 / 13,7        +0,5 / 13,4
+    GFS               +5,1 / 15,0        -1,4 / 15,5
+    ICON globaal      -6,4 / 14,3        -0,8 / 14,7
+    UKMO globaal      -3,3 / 16,2        -0,0 / 17,0
+    HARMONIE          -7,8 / 14,3        +0,1 / 13,7
+    ICON-D2           -8,0 / 12,8        -0,7 / 12,2
+    UKMO 2 km        -11,6 / 16,9        +0,1 / 15,2
 
-Zelfde toets, zelfde stations en uren, met deze methode:
+De resterende 12-15 min per uur is de bewolkingsverwachting zelf (roostercel
+tegenover puntsensor bij gebroken bewolking), geen methodefout; de dagsom komt
+uit op ±1,3 uur voor ECMWF, HARMONIE en ICON-D2.
 
-    ECMWF IFS  bias  +1,3 min/uur, gemiddelde afwijking  7,3
-    GFS        bias  +1,1                                8,5
-    ICON glob. bias  -2,9                                6,4
-    UKMO glob. bias  +1,1                                9,4
-    ICON-D2    bias  -5,6                                8,2
-    UKMO 2 km  bias  -1,9                                8,7
-    HARMONIE   bias  -8,2                                9,0
-
-Alle modellen gaan door deze ene functie, zodat de panelen in het vierluik
-onderling vergelijkbaar blijven.
+Ontbreekt een curve voor een model, dan geldt de gepoolde curve van zijn groep
+(hi-res of globaal). Ontbreekt het json-bestand, dan k = fractie.
 """
 
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import numpy as np
 
@@ -54,6 +55,23 @@ ZONCONSTANTE = 1361.0      # W/m², zonne-instraling boven de atmosfeer
 DNI_DREMPEL = 120.0        # W/m², WMO-grens voor "de zon schijnt"
 DEELSTAP_MIN = 10          # minuten per deelstap binnen het uur
 MIN_ZONHOOGTE = 0.01       # sin(h); daaronder telt de zon niet mee
+CURVES_PAD = Path(__file__).resolve().parent / "zonuren_curves.json"
+
+# Pijplijn-prefix of Open-Meteo-slug → sleutel in zonuren_curves.json.
+MODEL_ALIAS = {
+    "ecmwf_om": "ecmwf_ifs025",
+    "gfs_global_om": "gfs_seamless",
+    "icon_global_om": "icon_global",
+    "ukmo_global_om": "ukmo_global_deterministic_10km",
+    "harmonie": "knmi_harmonie_arome_netherlands",
+    "harmonie46": "knmi_harmonie_arome_netherlands",
+    "knmi_harmonie_arome_europe": "knmi_harmonie_arome_netherlands",
+    "icond2": "icon_d2",
+    "icond2ruc": "icon_d2",
+    "arome_om": "meteofrance_arome_france_hd",
+    "ukmo_om": "ukmo_uk_deterministic_2km",
+    "dmi_om": "dmi_harmonie_arome_europe",
+}
 
 
 def _sin_zonnehoogte(jaardag: float, uur_utc: np.ndarray,
@@ -75,7 +93,7 @@ def _sin_zonnehoogte(jaardag: float, uur_utc: np.ndarray,
 
 def _heldere_hemel(jaardag: float, start_uur: float,
                    lat2d: np.ndarray, lon2d: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Heldere-hemel-referentie voor één uurvak.
+    """Heldere-hemel-referentie voor één uurvak op een rooster.
 
     Levert (directe straling op het horizontale vlak, uurgemiddeld) en het
     aantal minuten waarin de zon hoog genoeg staat om de WMO-grens te halen.
@@ -94,8 +112,45 @@ def _heldere_hemel(jaardag: float, start_uur: float,
     return som / len(fracties), minuten
 
 
+def heldere_hemel_uur(eind_utc, lat: float, lon: float) -> tuple[float, float]:
+    """Puntversie voor de kalibratie: (heldere-hemel directe straling, zonminuten)
+    voor het uurvak dat eindigt op `eind_utc`. Zelfde rekenregel als het rooster."""
+    jaardag = float(eind_utc.timetuple().tm_yday)
+    start_uur = eind_utc.hour + eind_utc.minute / 60.0 - 1.0
+    helder, minuten = _heldere_hemel(jaardag, start_uur, np.array([[lat]]), np.array([[lon]]))
+    return float(helder[0, 0]), float(minuten[0, 0])
+
+
+_CURVES: dict | None = None
+
+
+def _laad_curves() -> dict:
+    global _CURVES
+    if _CURVES is None:
+        try:
+            _CURVES = json.loads(CURVES_PAD.read_text())
+        except Exception:
+            _CURVES = {}
+    return _CURVES
+
+
+def curve_voor(model: str | None) -> tuple[np.ndarray, np.ndarray] | None:
+    """Kalibratiecurve (x = k, y = zonfractie) voor dit model; None = ongekalibreerd."""
+    c = _laad_curves()
+    if not c:
+        return None
+    slug = MODEL_ALIAS.get(model or "", model or "")
+    kromme = c.get("curves", {}).get(slug)
+    if kromme is None:
+        groep = c.get("groep", {}).get(slug)
+        kromme = c.get("pool", {}).get(groep) or c.get("pool", {}).get("alle")
+    if not kromme or len(kromme.get("x", [])) < 2:
+        return None
+    return np.asarray(kromme["x"], dtype=np.float64), np.asarray(kromme["y"], dtype=np.float64)
+
+
 def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
-                          label_is_eind: bool = True) -> np.ndarray:
+                          label_is_eind: bool = True, model: str | None = None) -> np.ndarray:
     """Zonneschijnduur in minuten per uur (0–60).
 
     direct_wm2 : (n_steps, n_lat, n_lon) uurgemiddelde directe straling op het
@@ -104,6 +159,7 @@ def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
     lats, lons : 1D-roosterassen in graden.
     label_is_eind : True als het tijdstempel het einde van het uurvak aangeeft
                  (de Open-Meteo-conventie: "preceding hour mean").
+    model      : pijplijn-prefix of Open-Meteo-slug; kiest de kalibratiecurve.
 
     NaN blijft NaN: een gat in de brondata blijft een gat, geen "geen zon".
     """
@@ -111,6 +167,7 @@ def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
     lat2d = np.asarray(lats, dtype=np.float64).reshape(-1, 1)
     lon2d = np.asarray(lons, dtype=np.float64).reshape(1, -1)
     uit = np.full(direct.shape, np.nan, dtype=np.float32)
+    kromme = curve_voor(model)
 
     for s, stempel in enumerate(tijden_utc):
         jaardag = float(stempel.timetuple().tm_yday)
@@ -118,7 +175,11 @@ def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
         start_uur = uur - 1.0 if label_is_eind else uur
         helder, zonminuten = _heldere_hemel(jaardag, start_uur, lat2d, lon2d)
         bruikbaar = helder > 1.0                     # anders nacht of zon te laag
-        fractie = np.clip(direct[s] / np.where(bruikbaar, helder, 1.0), 0.0, 1.0)
+        k = np.clip(direct[s] / np.where(bruikbaar, helder, 1.0), 0.0, None)
+        if kromme is None:
+            fractie = np.clip(k, 0.0, 1.0)
+        else:
+            fractie = np.clip(np.interp(k, kromme[0], kromme[1]), 0.0, 1.0)
         minuten = np.where(bruikbaar, fractie * zonminuten, 0.0)
         uit[s] = np.where(np.isnan(direct[s]), np.nan, np.clip(minuten, 0, 60))
 
