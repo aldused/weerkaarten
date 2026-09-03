@@ -47,6 +47,7 @@ from lopend_patch import EDR_10, _edr_floats, _wigos  # noqa: E402
 from zonuren import heldere_hemel_uur              # noqa: E402
 
 UIT = SCRIPT_DIR / "zonuren_curves.json"
+DELTAS = (0, 10, 20, 30)          # geteste verschuivingen modeluur → meetvenster, minuten
 
 # AWS-stations met zonneschijnsensor (KNMI-nummer). 210/340/391 geven 404 in EDR.
 STATIONS = [235, 240, 249, 251, 257, 260, 267, 269, 270, 273, 275, 277, 278, 279,
@@ -82,21 +83,17 @@ def haal_gemeten(dagen: int) -> dict:
             if not cov:
                 continue
             ax = cov["domain"]["axes"]
-            per_uur: dict = {}
+            # Ruwe 10-minuutwaarden (label = einde van het 10-minuutvak), zodat
+            # een meetvenster op elke 10 minuten kan beginnen: nodig om de
+            # tijdverschuiving δ per model te bepalen.
+            reeks = {}
             for t, v in zip(ax["t"]["values"], _edr_floats(cov["ranges"]["ss"]["values"])):
-                if v is None:
-                    continue
-                dt = datetime.fromisoformat(t.replace("Z", "+00:00"))
-                # 10-minuutwaarde hoort bij het voorafgaande interval
-                k = (dt - timedelta(minutes=1)).replace(minute=0, second=0, microsecond=0)
-                per_uur.setdefault(k, []).append(v)
-            uit[str(nr)] = {
-                "lat": ax["y"]["values"][0], "lon": ax["x"]["values"][0],
-                "uren": {k.isoformat(): sum(v) for k, v in per_uur.items() if len(v) == 6},
-            }
+                if v is not None:
+                    reeks[datetime.fromisoformat(t.replace("Z", "+00:00"))] = v
+            uit[str(nr)] = {"lat": ax["y"]["values"][0], "lon": ax["x"]["values"][0], "reeks": reeks}
         except Exception as exc:
             print(f"  station {nr}: {exc}")
-    print(f"gemeten: {len(uit)} stations, {sum(len(s['uren']) for s in uit.values())} volledige uren")
+    print(f"gemeten: {len(uit)} stations, {sum(len(s['reeks']) for s in uit.values())} 10-minuutwaarden")
     return uit
 
 
@@ -122,19 +119,37 @@ def haal_model(slug: str, ss: dict, dagen: int) -> dict | None:
     return {st[i]: d[i]["hourly"] for i in range(len(d))}
 
 
-def paren(slug: str, per_st: dict, ss: dict, cache: dict) -> np.ndarray:
-    """Rijen (k, gemeten fractie, zonminuten, dag) voor één model."""
+def meetvenster(reeks: dict, eind) -> float | None:
+    """Gemeten zonminuten in het uurvenster dat op `eind` eindigt (zes 10-minuutvakken)."""
+    tot = 0.0
+    for k in range(6):
+        v = reeks.get(eind - timedelta(minutes=10 * k))
+        if v is None:
+            return None
+        tot += v
+    return tot
+
+
+def paren(slug: str, per_st: dict, ss: dict, cache: dict, delta_min: int) -> np.ndarray:
+    """Rijen (k, gemeten fractie, zonminuten, dag) voor één model.
+
+    Het modeluur met label T wordt gekoppeld aan het meetvenster dat eindigt op
+    T + δ; de heldere-hemel-referentie schuift mee. Welke δ het best past
+    verschilt per model (hoe Open-Meteo het uurgemiddelde labelt).
+    """
     R = []
     for stnr, h in per_st.items():
         lat, lon = ss[stnr]["lat"], ss[stnr]["lon"]
-        meet = ss[stnr]["uren"]
+        reeks = ss[stnr]["reeks"]
         for i, t in enumerate(h["time"]):
-            eind = datetime.fromisoformat(t).replace(tzinfo=timezone.utc)
-            g = meet.get((eind - timedelta(hours=1)).isoformat())
             dr = h["direct_radiation"][i]
-            if g is None or dr is None:
+            if dr is None:
                 continue
-            sleutel = (stnr, t)
+            eind = datetime.fromisoformat(t).replace(tzinfo=timezone.utc) + timedelta(minutes=delta_min)
+            g = meetvenster(reeks, eind)
+            if g is None:
+                continue
+            sleutel = (stnr, eind)
             if sleutel not in cache:
                 cache[sleutel] = heldere_hemel_uur(eind, lat, lon)
             helder, zonmin = cache[sleutel]
@@ -200,16 +215,25 @@ def main() -> int:
         per_st = haal_model(slug, ss, args.dagen)
         if not per_st:
             continue
-        R = paren(slug, per_st, ss, cache)
-        if len(R) < 500:
-            print(f"  {slug}: {len(R)} paren, te weinig — terugval op groepscurve")
+        # Tijdverschuiving: kies de δ met de kleinste rmse na kalibratie.
+        beste = None
+        for delta in DELTAS:
+            R = paren(slug, per_st, ss, cache, delta)
+            if len(R) < 500:
+                continue
+            r = toets(R)
+            if beste is None or r["kal_rmse"] < beste[1]["kal_rmse"]:
+                beste = (delta, r, R)
+        if beste is None:
+            print(f"  {slug}: te weinig paren — terugval op groepscurve")
             continue
+        delta, r, R = beste
         xs, ys = curve(R[:, 0], R[:, 1])
-        curves[slug] = {"x": xs, "y": ys}
-        rapport[slug] = toets(R)
+        curves[slug] = {"x": xs, "y": ys, "delta_min": delta}
+        r["delta_min"] = delta
+        rapport[slug] = r
         per_groep[groep].append(R)
-        r = rapport[slug]
-        print(f"  {slug:34s} n={r['n']:5d}  ongekalibreerd {r['raw_bias']:+5.1f}/{r['raw_abs']:4.1f}  "
+        print(f"  {slug:34s} n={r['n']:5d} δ={delta:2d}  ongekalibreerd {r['raw_bias']:+5.1f}/{r['raw_abs']:4.1f}  "
               f"gekalibreerd {r['kal_bias']:+5.1f}/{r['kal_abs']:4.1f}  rmse {r['kal_rmse']:4.1f}")
 
     pool = {}

@@ -134,8 +134,10 @@ def _laad_curves() -> dict:
     return _CURVES
 
 
-def curve_voor(model: str | None) -> tuple[np.ndarray, np.ndarray] | None:
-    """Kalibratiecurve (x = k, y = zonfractie) voor dit model; None = ongekalibreerd."""
+def curve_voor(model: str | None) -> tuple[np.ndarray, np.ndarray, float] | None:
+    """Kalibratiecurve (x = k, y = zonfractie, δ in minuten) voor dit model;
+    None = ongekalibreerd. δ is de verschuiving van het uurvenster waarop het
+    modeluur betrekking heeft (per model bepaald op gemeten zonneschijn)."""
     c = _laad_curves()
     if not c:
         return None
@@ -146,7 +148,8 @@ def curve_voor(model: str | None) -> tuple[np.ndarray, np.ndarray] | None:
         kromme = c.get("pool", {}).get(groep) or c.get("pool", {}).get("alle")
     if not kromme or len(kromme.get("x", [])) < 2:
         return None
-    return np.asarray(kromme["x"], dtype=np.float64), np.asarray(kromme["y"], dtype=np.float64)
+    return (np.asarray(kromme["x"], dtype=np.float64), np.asarray(kromme["y"], dtype=np.float64),
+            float(kromme.get("delta_min", 0)))
 
 
 def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
@@ -168,11 +171,12 @@ def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
     lon2d = np.asarray(lons, dtype=np.float64).reshape(1, -1)
     uit = np.full(direct.shape, np.nan, dtype=np.float32)
     kromme = curve_voor(model)
+    delta_uur = kromme[2] / 60.0 if kromme is not None else 0.0
 
     for s, stempel in enumerate(tijden_utc):
         jaardag = float(stempel.timetuple().tm_yday)
         uur = stempel.hour + stempel.minute / 60.0
-        start_uur = uur - 1.0 if label_is_eind else uur
+        start_uur = (uur - 1.0 if label_is_eind else uur) + delta_uur
         helder, zonminuten = _heldere_hemel(jaardag, start_uur, lat2d, lon2d)
         bruikbaar = helder > 1.0                     # anders nacht of zon te laag
         k = np.clip(direct[s] / np.where(bruikbaar, helder, 1.0), 0.0, None)
