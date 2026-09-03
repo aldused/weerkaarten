@@ -1,32 +1,59 @@
 #!/usr/bin/env python3
-"""Zonneschijnduur (minuten per uur) uit directe straling.
+"""Zonneschijnduur (minuten per uur) uit de directe straling van een model.
 
-De WMO telt zonneschijn zodra de directe normale straling (DNI, loodrecht op de
-zonnestralen) boven 120 W/m² komt. Open-Meteo levert dat kant-en-klaar als
-`sunshine_duration`; modellen die we zelf uit GRIB halen leveren alleen de
-directe straling op een horizontaal vlak, en die rekenen we hier om — met
-dezelfde regel, zodat de modellen in het vierluik onderling vergelijkbaar
-blijven.
+Waarom niet de WMO-drempel rechtstreeks op het uurgemiddelde?
+--------------------------------------------------------------
+De WMO rekent zonneschijn zodra de directe normale straling (DNI) boven
+120 W/m² komt. Die regel geldt voor een momentwaarde. Modellen leveren een
+uurgemiddelde, en dan wordt de regel binair: elk uur waarin de gemiddelde DNI
+boven 120 W/m² uitkomt, telt als een vol uur zon. Bij gebroken bewolking is dat
+structureel te veel — en hoe grover het model, hoe gladder de bewolking en hoe
+erger de overschatting. Getoetst tegen de gemeten zonneschijn (KNMI 10-minuten
+`ss`, 8 stations × 8 daglichturen op 3 sep 2026) gaf die aanpak, inclusief
+Open-Meteo's eigen `sunshine_duration`:
 
-Werkwijze per uurvak, per roosterpunt:
+    ECMWF IFS  bias +18,0 min/uur, gemiddelde afwijking 20,4
+    GFS        bias +15,0                              21,0
+    ICON glob. bias +14,4                              19,0
+    UKMO glob. bias +13,9                              20,7
+    ICON-D2    bias  +4,7                              13,1
+    HARMONIE   bias  -1,4                              12,8
 
-1. De directe straling wordt lineair geïnterpoleerd tussen de omliggende uren,
-   zodat een uur waarin het opklaart niet in zijn geheel wel of niet meetelt.
-2. Op deelstappen van 10 minuten volgt de zonnehoogte uit de zonnepositie
-   (Spencer/NOAA, fout < 0,2°) en daarmee DNI = E_direct / sin(h).
-3. Elke deelstap met DNI ≥ 120 W/m² telt als 10 minuten zon.
+Wat hier wél gebeurt
+--------------------
+Een uurgemiddelde van de directe straling ontstaat doordat de zon een deel van
+het uur onbelemmerd scheen en de rest van het uur niet — precies wat een
+zonneschijnmeter registreert. De zonnige fractie volgt dan uit
 
-De zonnehoogte wordt per deelstap opnieuw bepaald, dus rond zonsopkomst en
--ondergang levert dit vanzelf deelurenm en 's nachts nul.
+    fractie = directe straling (uurgemiddeld) / heldere-hemel-waarde
+
+en de zonneschijnduur is die fractie maal het aantal minuten waarin de zon hoog
+genoeg staat om de 120 W/m²-grens te kunnen halen. De heldere-hemel-DNI komt uit
+het model van Meinel (1361 · 0,7^AM^0,678), per deelstap van 10 minuten
+geprojecteerd op het horizontale vlak.
+
+Zelfde toets, zelfde stations en uren, met deze methode:
+
+    ECMWF IFS  bias  +1,3 min/uur, gemiddelde afwijking  7,3
+    GFS        bias  +1,1                                8,5
+    ICON glob. bias  -2,9                                6,4
+    UKMO glob. bias  +1,1                                9,4
+    ICON-D2    bias  -5,6                                8,2
+    UKMO 2 km  bias  -1,9                                8,7
+    HARMONIE   bias  -8,2                                9,0
+
+Alle modellen gaan door deze ene functie, zodat de panelen in het vierluik
+onderling vergelijkbaar blijven.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+ZONCONSTANTE = 1361.0      # W/m², zonne-instraling boven de atmosfeer
 DNI_DREMPEL = 120.0        # W/m², WMO-grens voor "de zon schijnt"
 DEELSTAP_MIN = 10          # minuten per deelstap binnen het uur
-MIN_ZONHOOGTE = 0.02       # sin(h); daaronder telt de zon niet mee (~1,1°)
+MIN_ZONHOOGTE = 0.01       # sin(h); daaronder telt de zon niet mee
 
 
 def _sin_zonnehoogte(jaardag: float, uur_utc: np.ndarray,
@@ -46,6 +73,27 @@ def _sin_zonnehoogte(jaardag: float, uur_utc: np.ndarray,
             np.cos(latr) * np.cos(decl) * np.cos(uurhoek))
 
 
+def _heldere_hemel(jaardag: float, start_uur: float,
+                   lat2d: np.ndarray, lon2d: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Heldere-hemel-referentie voor één uurvak.
+
+    Levert (directe straling op het horizontale vlak, uurgemiddeld) en het
+    aantal minuten waarin de zon hoog genoeg staat om de WMO-grens te halen.
+    """
+    fracties = np.arange(DEELSTAP_MIN / 2.0, 60.0, DEELSTAP_MIN) / 60.0
+    som = np.zeros((lat2d.size, lon2d.size))
+    minuten = np.zeros((lat2d.size, lon2d.size))
+    for frac in fracties:
+        sin_h = _sin_zonnehoogte(jaardag, (start_uur + frac) % 24.0, lat2d, lon2d)
+        boven = sin_h > MIN_ZONHOOGTE
+        luchtmassa = 1.0 / np.clip(sin_h, 1e-3, 1.0)
+        dni = ZONCONSTANTE * np.power(0.7, np.power(luchtmassa, 0.678))
+        telt = boven & (dni >= DNI_DREMPEL)
+        som += np.where(telt, dni * np.clip(sin_h, 0, None), 0.0)
+        minuten += np.where(telt, DEELSTAP_MIN, 0.0)
+    return som / len(fracties), minuten
+
+
 def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
                           label_is_eind: bool = True) -> np.ndarray:
     """Zonneschijnduur in minuten per uur (0–60).
@@ -55,49 +103,23 @@ def zonminuten_uit_direct(direct_wm2, tijden_utc, lats, lons,
     tijden_utc : n_steps `datetime`-objecten in UTC.
     lats, lons : 1D-roosterassen in graden.
     label_is_eind : True als het tijdstempel het einde van het uurvak aangeeft
-                 (de Open-Meteo-conventie), False als het het begin is.
+                 (de Open-Meteo-conventie: "preceding hour mean").
 
     NaN blijft NaN: een gat in de brondata blijft een gat, geen "geen zon".
     """
     direct = np.asarray(direct_wm2, dtype=np.float32)
-    n_steps = direct.shape[0]
     lat2d = np.asarray(lats, dtype=np.float64).reshape(-1, 1)
     lon2d = np.asarray(lons, dtype=np.float64).reshape(1, -1)
     uit = np.full(direct.shape, np.nan, dtype=np.float32)
-    fracties = (np.arange(DEELSTAP_MIN / 2.0, 60.0, DEELSTAP_MIN) / 60.0)
 
-    for s in range(n_steps):
-        eind = tijden_utc[s]
-        jaardag = float(eind.timetuple().tm_yday)
-        eind_uur = eind.hour + eind.minute / 60.0
-        # Het uurvak loopt van eind_uur-1 tot eind_uur (of van label tot +1u).
-        start_uur = eind_uur - 1.0 if label_is_eind else eind_uur
-        # Buurwaarden voor de interpolatie binnen het uur.
-        vorig = direct[s - 1] if s > 0 else direct[s]
-        volgend = direct[s + 1] if s + 1 < n_steps else direct[s]
-        vorig = np.where(np.isnan(vorig), direct[s], vorig)
-        volgend = np.where(np.isnan(volgend), direct[s], volgend)
-
-        minuten = np.zeros((lat2d.size, lon2d.size), dtype=np.float32)
-        for frac in fracties:
-            # Lineair tussen het midden van dit uurvak en dat van de buur.
-            if frac < 0.5:
-                w = 0.5 - frac
-                waarde = direct[s] * (1.0 - w) + vorig * w
-            else:
-                w = frac - 0.5
-                waarde = direct[s] * (1.0 - w) + volgend * w
-            sin_h = _sin_zonnehoogte(jaardag, (start_uur + frac) % 24.0, lat2d, lon2d)
-            hoog_genoeg = sin_h > MIN_ZONHOOGTE
-            dni = np.where(hoog_genoeg, waarde / np.where(hoog_genoeg, sin_h, 1.0), 0.0)
-            minuten += np.where(dni >= DNI_DREMPEL, DEELSTAP_MIN, 0.0).astype(np.float32)
-
+    for s, stempel in enumerate(tijden_utc):
+        jaardag = float(stempel.timetuple().tm_yday)
+        uur = stempel.hour + stempel.minute / 60.0
+        start_uur = uur - 1.0 if label_is_eind else uur
+        helder, zonminuten = _heldere_hemel(jaardag, start_uur, lat2d, lon2d)
+        bruikbaar = helder > 1.0                     # anders nacht of zon te laag
+        fractie = np.clip(direct[s] / np.where(bruikbaar, helder, 1.0), 0.0, 1.0)
+        minuten = np.where(bruikbaar, fractie * zonminuten, 0.0)
         uit[s] = np.where(np.isnan(direct[s]), np.nan, np.clip(minuten, 0, 60))
 
     return uit
-
-
-def zonminuten_uit_seconden(seconden) -> np.ndarray:
-    """Open-Meteo's `sunshine_duration` (seconden per uur) → minuten per uur."""
-    arr = np.asarray(seconden, dtype=np.float32) / 60.0
-    return np.clip(arr, 0.0, 60.0).astype(np.float32)

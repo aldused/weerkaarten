@@ -30,11 +30,14 @@ import os
 import struct
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import numpy as np
 import requests
+
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
 # open_meteo helper
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -94,9 +97,7 @@ GRID_STEP = 0.15  # ~16–17 km — ruim voldoende voor 500/850 hPa
 # Max coördinaten per bulk-call via POST (413 boven ~300)
 BATCH_SIZE = 200
 
-# Zonneschijnduur komt uit hetzelfde KNMI-Harmonie-model als de directe
-# straling, volgens de WMO-regel (DNI boven 120 W/m²), in seconden per uur.
-HOURLY_VARS_STRAL = ["direct_radiation", "sunshine_duration"]
+HOURLY_VARS_STRAL = ["direct_radiation"]
 
 HOURLY_VARS_300 = [
     "geopotential_height_300hPa",
@@ -257,17 +258,15 @@ def fetch_direct_radiation(
     batches: list[list[tuple[int, int, float, float]]],
     times: list[str],
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Haal directe straling + zonneschijnduur op via knmi_harmonie_arome_europe.
+    """Haal directe kortgolvige straling op via knmi_harmonie_arome_europe.
 
-    Retourneert (direct, zon): directe straling in W/m² en zonneschijnduur in
-    minuten per uur, beide (n_steps, n_lat, n_lon).
+    Retourneert (n_steps, n_lat, n_lon) array in W/m².
     """
     n_lat = max(lat_i for b in batches for (lat_i, _, _, _) in b) + 1
     n_lon = max(lon_i for b in batches for (_, lon_i, _, _) in b) + 1
     n_steps = len(times)
 
     direct = np.full((n_steps, n_lat, n_lon), np.nan, dtype=np.float32)
-    zon = np.full((n_steps, n_lat, n_lon), np.nan, dtype=np.float32)
     time_set = set(times)
 
     for bi, batch in enumerate(batches):
@@ -286,7 +285,6 @@ def fetch_direct_radiation(
             h = loc.get("hourly") or {}
             tlist = h.get("time") or []
             d_list = h.get("direct_radiation") or []
-            z_list = h.get("sunshine_duration") or []
             idx_map = {t: k for k, t in enumerate(tlist) if t in time_set}
             for step_i, tstr in enumerate(times):
                 k = idx_map.get(tstr)
@@ -295,12 +293,9 @@ def fetch_direct_radiation(
                 v = d_list[k] if k < len(d_list) else None
                 if v is not None:
                     direct[step_i, lat_i, lon_i] = max(0.0, float(v))
-                z = z_list[k] if k < len(z_list) else None
-                if z is not None:
-                    zon[step_i, lat_i, lon_i] = min(60.0, max(0.0, float(z) / 60.0))
         print(f"  direct_radiation batch {bi + 1}/{len(batches)}: {len(batch)} punten klaar")
 
-    return direct, zon
+    return direct
 
 
 def write_bin(path: str, arrs: tuple[np.ndarray, ...]) -> None:
@@ -371,7 +366,7 @@ def main() -> int:
     print("CAPE ophalen (DMI Harmonie)...")
     cape = fetch_cape(batches, tijden)
     print("Directe straling ophalen (KNMI Harmonie)...")
-    direct_rad, zon_min = fetch_direct_radiation(batches, tijden)
+    direct_rad = fetch_direct_radiation(batches, tijden)
     print(f"Ophalen klaar in {time.time() - t0:.1f}s")
 
     # Vul ontbrekende punten bij door nearest-neighbor
@@ -411,6 +406,15 @@ def main() -> int:
         direct_rad = fill_nan(direct_rad)
     except ImportError:
         print("[harmonie_openmeteo] scipy ontbreekt — NaN niet ingevuld")
+
+    # Zonneschijnduur uit de zonnige fractie van de directe straling (zie
+    # scripts/zonuren.py): Open-Meteo's eigen sunshine_duration legt de
+    # WMO-drempel op het uurgemiddelde en overschat daardoor structureel.
+    # Pas ná fill_nan, anders leest een ontbrekend punt als "geen zon".
+    from zonuren import zonminuten_uit_direct
+    zon_tijden = [datetime.fromisoformat(tt).replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+                  for tt in tijden]
+    zon_min = zonminuten_uit_direct(direct_rad, zon_tijden, lats, lons)
     # Laat volledig ontbrekende stappen NaN. Nul betekent echte nul-CAPE;
     # ontbrekende DMI-uren mogen daar niet mee worden verward.
 

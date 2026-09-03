@@ -18,7 +18,7 @@ import os
 import struct
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -48,8 +48,6 @@ HOURLY = [
     "cape",
     "shortwave_radiation",
     "direct_radiation",
-    # Zonneschijnduur volgens de WMO-regel (DNI boven 120 W/m²), seconden per uur.
-    "sunshine_duration",
 ]
 
 
@@ -216,9 +214,17 @@ def main() -> int:
     write_bin(WORK_DIR / f"{prefix}_data_cape.bin", (arrays["cape"],))
     write_bin(WORK_DIR / f"{prefix}_data_straling.bin", (np.maximum(arrays["shortwave_radiation"], 0).astype(np.float32),))
     write_bin(WORK_DIR / f"{prefix}_data_straling_direct.bin", (np.maximum(arrays["direct_radiation"], 0).astype(np.float32),))
-    # Zonneschijn in minuten per uur: dat leest een gebruiker directer dan
-    # seconden, en 0-60 past precies op de kaartschaal.
-    zon_min = np.clip(arrays["sunshine_duration"] / 60.0, 0, 60).astype(np.float32)
+    # Zonneschijn in minuten per uur. Bewust niet Open-Meteo's eigen
+    # sunshine_duration: die legt de WMO-drempel op het uurgemiddelde en telt
+    # dan vrijwel elk zonnig uur als 60 minuten (voor ECMWF +18 min/uur t.o.v.
+    # de gemeten zonneschijn). zonuren.py leidt de zonnige fractie af uit de
+    # directe straling; zie de toets in dat bestand.
+    from zonuren import zonminuten_uit_direct
+    zon_tijden = [datetime.fromisoformat(tt).replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+                  for tt in times]
+    zon_min = zonminuten_uit_direct(
+        np.maximum(np.nan_to_num(arrays["direct_radiation"], nan=0), 0),
+        zon_tijden, lats, lons)
     write_bin(WORK_DIR / f"{prefix}_data_zon.bin", (zon_min,))
 
     now = datetime.now(tz=LOCAL_TZ)
