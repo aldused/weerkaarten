@@ -48,7 +48,7 @@
   const productIcon = p => ({radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
   function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback;}catch{return fallback;}}
   let saved=readStorage('weerlab-menu-v9-favorites',['radar','significant','pluim-ens6']);
-  let favorites=Array.isArray(saved)?[...new Set(saved.filter(id=>byId.has(id)))]:['radar','significant','pluim-ens6'];
+  let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>id==='global4'?'hires4':id).filter(id=>byId.has(id)))]:['radar','significant','pluim-ens6'];
   let view=readStorage('weerlab-menu-v9-view','cards')==='list'?'list':'cards';
   let state={}, filterOpen=false, toastTimer, searchTimer, searchOrigin='#start';
   const main=$('#main'), search=$('#search'), dialog=$('#menu-dialog');

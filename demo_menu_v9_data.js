@@ -1,4 +1,4 @@
-/* Menuconcept v9. Catalogus uit v7; kaartfilters en routes gecontroleerd tegen index.html. */
+/* Menuconcept v9. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
   {
     "id": "radar",
@@ -238,7 +238,7 @@ const MENU_PRODUCTS = [
   {
     "id": "hires4",
     "name": "Vergelijk vier modellen",
-    "description": "Vier verwachtingen naast elkaar",
+    "description": "Regionale en wereldmodellen naast elkaar",
     "category": "verwachting",
     "type": "kaarten",
     "section": "",
@@ -259,36 +259,6 @@ const MENU_PRODUCTS = [
         "icond2ruc",
         "arome",
         "ecmwf",
-        "gfs"
-      ],
-      "gebied": [
-        "nl"
-      ],
-      "weergave": [
-        "4"
-      ]
-    },
-    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME ECMWF HRES GFS",
-    "restricted": false
-  },
-  {
-    "id": "global4",
-    "name": "Vergelijk wereldmodellen",
-    "description": "ECMWF, GFS en ICON naast elkaar",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "",
-    "icon": "vierluik",
-    "href": "index.html#weerkaarten-global4",
-    "thumbnail": "thumbs/global4.webp",
-    "facets": {
-      "veld": [
-        "neerslag",
-        "temp",
-        "wind"
-      ],
-      "model": [
-        "ecmwf",
         "gfs",
         "iconeu"
       ],
@@ -299,13 +269,13 @@ const MENU_PRODUCTS = [
         "4"
       ]
     },
-    "keywords": "Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
+    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
     "restricted": false
   },
   {
     "id": "sigvier",
-    "name": "Weeroverzicht in vier kaarten",
-    "description": "Het weerbeeld volgens vier modellen",
+    "name": "Significant weer · vierluik",
+    "description": "Vergelijk het complete weerbeeld van vier modellen",
     "category": "verwachting",
     "type": "kaarten",
     "section": "",
