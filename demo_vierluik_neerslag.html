@@ -120,7 +120,7 @@ body {
   transform: translateX(-50%); align-items: center; gap: 10px;
   width: min(1360px, calc(100vw - 24px)); box-sizing: border-box;
   grid-template-columns: auto auto auto minmax(180px, 1fr) auto auto;
-  grid-template-areas: "laag prev play slider time next" "laag prev play axis time next";
+  grid-template-areas: "laag prev play slider time next" "laag prev play axis time next" "extra extra extra extra extra extra";
   padding: 10px 14px; border: 1px solid rgba(125,211,252,.75); border-radius: 12px;
   background: rgba(2,8,23,.94); box-shadow: 0 6px 22px rgba(2,8,23,.55);
   backdrop-filter: blur(8px);
@@ -186,8 +186,20 @@ body.map-focus-mode .panel-time-badge {
 .sync-info strong { color:#7dd3fc; font-weight:700; }
 .time-options { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:5px; }
 .time-options label { color:#cbd5e1; font-size:11px; }
-#time-mode { background:#0c4a6e; color:#fff; border:1px solid #38bdf8; border-radius:6px; padding:4px 6px; font-size:11px; }
+#time-mode, #day-select, #focus-day-select, #focus-time-mode { background:#0c4a6e; color:#fff; border:1px solid #38bdf8; border-radius:6px; padding:4px 6px; font-size:11px; }
 #time-range-summary { color:#bfdbfe; font-size:11px; }
+#focus-extra { grid-area: extra; display:flex; gap:9px; align-items:center; flex-wrap:wrap; color:#bae6fd; font-size:11px; }
+#focus-extra select { max-width:160px; }
+.panel-model-run.is-old { color:#fbbf24; }
+.compare-crosshair { display:none; position:absolute; z-index:4; width:18px; height:18px; transform:translate(-50%,-50%); pointer-events:none; border:1px solid #fff; border-radius:50%; box-shadow:0 0 0 1px #0f172a; }
+.compare-crosshair::before, .compare-crosshair::after { content:''; position:absolute; background:#fff; box-shadow:0 0 1px 1px #0f172a; }
+.compare-crosshair::before { width:24px; height:1px; left:-4px; top:8px; }
+.compare-crosshair::after { height:24px; width:1px; top:-4px; left:8px; }
+#map-tooltip { max-width:min(430px,calc(100vw - 16px)); }
+#map-tooltip table { width:100%; border-collapse:collapse; margin:5px 0; }
+#map-tooltip th, #map-tooltip td { padding:4px 0; border-top:1px solid #334155; text-align:left; vertical-align:top; }
+#map-tooltip th { padding-right:14px; white-space:nowrap; font-weight:600; }
+#map-tooltip td { color:#e0f2fe; }
 button:disabled { opacity:.4; cursor:default; }
 input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   outline: 2px solid #7dd3fc; outline-offset: 2px;
@@ -196,7 +208,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   #map-focus-controls {
     width: min(360px, calc(100vw - 24px)); box-sizing: border-box;
     grid-template-columns: auto auto minmax(0, 1fr) auto;
-    grid-template-areas: "laag laag laag laag" "prev play time next" "slider slider slider slider" "axis axis axis axis";
+    grid-template-areas: "laag laag laag laag" "prev play time next" "slider slider slider slider" "axis axis axis axis" "extra extra extra extra";
   }
   #map-focus-time { min-width: 0; }
   #map-focus-var { max-width: none; width: 100%; margin: 0 0 4px; }
@@ -552,6 +564,11 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   <div id="map-focus-axis" aria-hidden="true"></div>
   <span id="map-focus-time" aria-live="polite">Modeltijden laden…</span>
   <button id="map-focus-next" type="button" aria-label="Volgend beschikbaar tijdstip" title="Volgend beschikbaar tijdstip (pijl rechts)">▶</button>
+  <div id="focus-extra">
+    <label for="focus-time-mode">Vergelijken</label>
+    <select id="focus-time-mode"><option value="common">Gelijke tijden</option><option value="all">Volledig bereik</option></select>
+    <label for="focus-day-select">Dag</label><select id="focus-day-select" disabled></select>
+  </div>
 </div>
 
 <!-- Header -->
@@ -619,7 +636,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   <button class="tool-btn" id="btn-reset" type="button">⌂ Nederland</button>
   <div class="sep"></div>
   <span class="tl-label toolbar-hint">Pan:</span>
-  <span class="toolbar-hint" style="font-size:10.5px;color:#f1f5f9;">Sleep op kaart · Scroll = zoom</span>
+  <span class="toolbar-hint" style="font-size:10.5px;color:#f1f5f9;">Beweeg = vergelijk · Sleep = verplaats · Scroll = zoom</span>
   <button class="tool-btn" id="btn-map-focus" type="button" aria-pressed="false"
     title="Verberg alle bediening en toon alleen de vier kaarten">
     <span aria-hidden="true">⛶</span> Kaarten beeldvullend
@@ -710,6 +727,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
       <option value="all">Volledig bereik</option>
     </select>
     <button id="btn-now" class="tool-btn" type="button" title="Ga naar het beschikbare tijdstip het dichtst bij nu">Nu</button>
+    <label for="day-select">Dag</label><select id="day-select" disabled></select>
     <span id="time-range-summary" role="status">Modeltijden laden…</span>
     <span class="sync-info" id="sync-info">Modeltijden laden…</span>
   </div>
@@ -1300,6 +1318,48 @@ function comparisonTimes(sets, mode) {
   }).sort(function(a, b) { return a - b; }).map(function(ms) { return new Date(ms).toISOString(); });
 }
 
+// Behoud bij een dagwissel het gekozen lokale uur, of het dichtstbijzijnde uur op die dag.
+function timeIndexForDay(times, day, reference) {
+  var ref = new Date(reference);
+  var minutes = ref.getHours() * 60 + ref.getMinutes();
+  var best = -1, distance = Infinity;
+  times.forEach(function(t, i) {
+    if (localDayKey(t) !== day) return;
+    var date = new Date(t);
+    var diff = Math.abs(date.getHours() * 60 + date.getMinutes() - minutes);
+    if (diff < distance) { best = i; distance = diff; }
+  });
+  return best;
+}
+
+function buildDayChoices() {
+  ['day-select', 'focus-day-select'].forEach(function(id) {
+    var select = document.getElementById(id);
+    select.replaceChildren();
+    var seen = new Set();
+    globalTimes.forEach(function(t) {
+      var day = localDayKey(t);
+      if (seen.has(day)) return;
+      seen.add(day);
+      var option = document.createElement('option');
+      option.value = day;
+      option.textContent = formatDayLabel(t);
+      select.appendChild(option);
+    });
+    select.disabled = !globalTimes.length;
+  });
+}
+
+function limitingModels() {
+  var last = globalTimes[globalTimes.length - 1];
+  if (!last) return '';
+  return actieveModellen().filter(function(m) {
+    var md = modelData[m.id];
+    var times = md && md.meta && md.meta.tijden || [];
+    return times.length && new Date(times[times.length - 1]).getTime() === new Date(last).getTime();
+  }).map(function(m) { return m.label; }).join(', ');
+}
+
 function updateSyncStatus() {
   var pending = actieveModellen().some(function(m) {
     var md = modelData[m.id];
@@ -1310,7 +1370,7 @@ function updateSyncStatus() {
     : '↔ ' + count + '/' + panels.length + ' op dit tijdstip';
   document.getElementById('time-range-summary').textContent = pending ? 'Modeltijden laden…'
     : !globalTimes.length ? 'Geen gezamenlijke tijden — kies andere modellen of Volledig bereik.'
-    : timeMode === 'common' ? 'Samen: ' + formatTime(globalTimes[0]) + ' – ' + formatTime(globalTimes[globalTimes.length - 1])
+    : timeMode === 'common' ? 'Samen: ' + formatTime(globalTimes[0]) + ' – ' + formatTime(globalTimes[globalTimes.length - 1]) + (limitingModels() ? ' · einde ' + limitingModels() : '')
     : 'Ontbrekende uren blijven leeg; elke getoonde kaart hoort bij de gekozen tijd.';
   return pending;
 }
@@ -1422,9 +1482,13 @@ function buildTimeAxis(axisId) {
     if (asBreedte / (totaalUren / stappen[si]) >= 38) { uurStap = stappen[si]; break; }
   }
 
+  var previousTickX = -Infinity;
   globalTimes.forEach(function(t, i) {
     var dt = new Date(t);
     if (dt.getMinutes() !== 0 || dt.getHours() % uurStap !== 0) return;
+    var tickX = i / denom * asBreedte;
+    if (tickX - previousTickX < 36) return;
+    previousTickX = tickX;
     var hour = dt.getHours();
     var tick = document.createElement('span');
     var major = hour === 0 || hour === 12;
@@ -1483,6 +1547,9 @@ function updateGlobalTimeControl() {
   var meta = document.getElementById('global-time-meta');
   var dayCount = new Set(globalTimes.map(localDayKey)).size;
   var pending = updateSyncStatus();
+  ['day-select', 'focus-day-select'].forEach(function(id) {
+    document.getElementById(id).value = activeGlobalTime ? localDayKey(activeGlobalTime) : '';
+  });
   ['btn-play', 'map-focus-play', 'btn-now'].forEach(function(id) {
     document.getElementById(id).disabled = !globalTimes.length;
   });
@@ -1544,9 +1611,11 @@ function runLabel(meta) {
     var days = ['zo','ma','di','wo','do','vr','za'];
     var runKort = days[run.getDay()] + ' ' + String(run.getHours()).padStart(2,'0') + 'u';
     var eindKort = einde ? days[einde.getDay()] + ' ' + String(einde.getHours()).padStart(2,'0') + 'u' : '';
-    return 'Run ' + runKort + (eindKort ? ' · tot ' + eindKort : '');
+    var age = Math.floor((Date.now() - run.getTime()) / 3600000);
+    return 'Run ' + runKort + (age >= 24 ? ' · ' + age + 'u oud' : '') + (eindKort ? ' · tot ' + eindKort : '');
   }
-  return '';
+  var times = meta && meta.tijden || [];
+  return times.length ? 'Tot ' + formatTime(times[times.length - 1]) : '';
 }
 
 function updateHeaderSummary() {
@@ -1641,6 +1710,7 @@ function updatePanelHeader(pIdx) {
   var meta = modelData[mCfg.id] && modelData[mCfg.id].meta;
   if (runEl) {
     runEl.textContent = meta ? runLabel(meta) : 'laden...';
+    runEl.classList.toggle('is-old', !!(meta && meta.run_utc && Date.now() - new Date(meta.run_utc).getTime() >= 86400000));
     runEl.title = !meta ? '' :
       (meta.run ? 'Modelrun: ' + meta.run : '') +
       (meta.tijden && meta.tijden.length
@@ -1704,6 +1774,7 @@ function getGlobalTimes() {
   if (!globalTimes.length && playTimer) togglePlay();
   buildTimeAxis();
   buildTimeJumpButtons();
+  buildDayChoices();
   updateGlobalTimeControl();
   buildTimeline();
 }
@@ -2938,6 +3009,7 @@ function requestRender() {
     sharedVpCh = ref ? ref.clientHeight : 0;
     panels.forEach(function(p) { renderPanel(p.idx); });
     updateLegend();
+    updateComparison();
   });
 }
 
@@ -3279,31 +3351,89 @@ var VAR_NAMES = {
 };
 var mapTooltip = document.getElementById('map-tooltip');
 
+var comparisonPoint = null;
+var comparisonMarkers = panels.map(function(panel) {
+  var marker = document.createElement('span');
+  marker.className = 'compare-crosshair';
+  marker.setAttribute('aria-hidden', 'true');
+  document.getElementById('cw' + panel.idx).appendChild(marker);
+  return marker;
+});
+
+function comparisonValue(panel, lat, lon) {
+  if (panel.modelIdx < 0) return 'Geen model';
+  var id = MODELS[panel.modelIdx].id;
+  var md = modelData[id];
+  if (!md || !md.meta) return md && md.failed ? 'Laden mislukt' : 'Laden…';
+  if (panelStep[panel.idx] < 0) return 'Geen kaart voor dit uur';
+  if (activeVar === TEGEL_VAR) return 'Beeldlaag, geen puntwaarde';
+  var key = veldSleutel(id, activeVar);
+  var pd = md.paramData && (md.paramData[key] || (key === 'bewolking_hr' && md.paramData.bewolking));
+  if (!pd) return md.paramLaden && md.paramLaden[key] ? 'Laden…' : 'Laag niet beschikbaar';
+  var value = hoverValue(pd, panelStep[panel.idx], lat, lon);
+  return value === null ? 'Geen gegevens op deze plek' : value;
+}
+
+function hideComparison() {
+  comparisonPoint = null;
+  mapTooltip.style.display = 'none';
+  comparisonMarkers.forEach(function(marker) { marker.style.display = 'none'; });
+}
+
+function updateComparison() {
+  if (!comparisonPoint) return;
+  if (panState) { hideComparison(); return; }
+  var point = comparisonPoint, ext = currentMapExtent();
+  var x = (point.lon - ext.lonMin) / (ext.lonMax - ext.lonMin);
+  var y = (ext.latMax - point.lat) / (ext.latMax - ext.latMin);
+  if (x < 0 || x > 1 || y < 0 || y > 1) { hideComparison(); return; }
+  comparisonMarkers.forEach(function(marker) {
+    marker.style.left = (x * 100) + '%'; marker.style.top = (y * 100) + '%';
+    marker.style.display = 'block';
+  });
+  var title = document.createElement('strong');
+  title.textContent = (VAR_NAMES[activeVar] || activeVar) + ' · dezelfde locatie';
+  var table = document.createElement('table');
+  table.setAttribute('aria-label', 'Modelwaarden op dezelfde locatie');
+  panels.forEach(function(panel) {
+    if (panel.modelIdx < 0) return;
+    var model = MODELS[panel.modelIdx];
+    var row = table.insertRow(), name = document.createElement('th');
+    name.scope = 'row'; name.textContent = model.label; name.style.color = model.color;
+    row.appendChild(name);
+    row.insertCell().textContent = comparisonValue(panel, point.lat, point.lon);
+  });
+  var detail = document.createElement('div');
+  detail.className = 'tt-sub';
+  detail.textContent = point.lat.toFixed(3) + '°N · ' + point.lon.toFixed(3) + '°E · ' + (activeGlobalTime ? formatTime(activeGlobalTime) : 'Geen gezamenlijke tijd');
+  mapTooltip.replaceChildren(title, table, detail);
+  mapTooltip.style.display = 'block';
+  var left = point.x + 16;
+  if (left + mapTooltip.offsetWidth > window.innerWidth - 8) left = point.x - mapTooltip.offsetWidth - 16;
+  mapTooltip.style.left = Math.max(8, left) + 'px';
+  mapTooltip.style.top = Math.max(8, Math.min(window.innerHeight - mapTooltip.offsetHeight - 8, point.y + 16)) + 'px';
+}
+
 panels.forEach(function(panel) {
   var wrap = document.getElementById('cw' + panel.idx);
-  wrap.addEventListener('mousemove', function(e) {
-    if (panel.modelIdx < 0 || panState) { mapTooltip.style.display='none'; return; }
-    var md = modelData[MODELS[panel.modelIdx].id];
-    var lookupKey = veldSleutel(MODELS[panel.modelIdx].id, activeVar);
-    var pd = md && md.paramData && md.paramData[lookupKey];
-    if (!pd || panelStep[panel.idx] < 0) { mapTooltip.style.display='none'; return; }
+  var pressPosition = null;
+  wrap.addEventListener('pointerdown', function(e) { pressPosition = [e.clientX, e.clientY]; });
+  function compareAt(e) {
+    if (panState) { hideComparison(); return; }
     var rect = wrap.getBoundingClientRect(), ext = currentMapExtent();
-    var lon = ext.lonMin + (e.clientX-rect.left)/rect.width*(ext.lonMax-ext.lonMin);
-    var lat = ext.latMax - (e.clientY-rect.top)/rect.height*(ext.latMax-ext.latMin);
-    var value = hoverValue(pd, panelStep[panel.idx], lat, lon);
-    if (value === null) { mapTooltip.style.display='none'; return; }
-    var modelName = (md.meta && md.meta.model) || document.getElementById('p'+panel.idx+'-name').textContent;
-    var geldig = md.meta && md.meta.tijden ? formatTime(md.meta.tijden[panelStep[panel.idx]]) : '';
-    mapTooltip.innerHTML = '<strong>'+modelName+'</strong><br>'+
-      (VAR_NAMES[activeVar] || activeVar)+': <span class="tt-value">'+value+'</span><br>'+
-      '<span class="tt-sub">'+lat.toFixed(3)+'°N · '+lon.toFixed(3)+'°E · '+gridResolutionText(pd)+'<br>Geldig: '+geldig+'</span>';
-    mapTooltip.style.display = 'block';
-    var left = Math.min(window.innerWidth-mapTooltip.offsetWidth-8, e.clientX+14);
-    var top = Math.min(window.innerHeight-mapTooltip.offsetHeight-8, e.clientY+14);
-    mapTooltip.style.left = Math.max(8,left)+'px';
-    mapTooltip.style.top = Math.max(8,top)+'px';
+    comparisonPoint = {
+      lon: ext.lonMin + (e.clientX - rect.left) / rect.width * (ext.lonMax - ext.lonMin),
+      lat: ext.latMax - (e.clientY - rect.top) / rect.height * (ext.latMax - ext.latMin),
+      x:e.clientX, y:e.clientY
+    };
+    updateComparison();
+  }
+  wrap.addEventListener('mousemove', compareAt);
+  wrap.addEventListener('click', function(e) {
+    if (pressPosition && Math.hypot(e.clientX - pressPosition[0], e.clientY - pressPosition[1]) < 5) compareAt(e);
   });
-  wrap.addEventListener('mouseleave', function() { mapTooltip.style.display='none'; });
+  wrap.addEventListener('mouseleave', hideComparison);
+  wrap.addEventListener('mousedown', hideComparison);
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -3371,11 +3501,21 @@ function syncAllToTime(refTime) {
   });
 }
 
-document.getElementById('time-mode').addEventListener('change', function() {
-  if (playTimer) togglePlay();
-  timeMode = this.value;
-  getGlobalTimes();
-  requestRender();
+['time-mode', 'focus-time-mode'].forEach(function(id) {
+  document.getElementById(id).addEventListener('change', function() {
+    if (playTimer) togglePlay();
+    timeMode = this.value;
+    document.getElementById('time-mode').value = timeMode;
+    document.getElementById('focus-time-mode').value = timeMode;
+    getGlobalTimes();
+    requestRender();
+  });
+});
+['day-select', 'focus-day-select'].forEach(function(id) {
+  document.getElementById(id).addEventListener('change', function() {
+    var idx = timeIndexForDay(globalTimes, this.value, activeGlobalTime);
+    if (idx >= 0) setGlobalTimeIndex(idx);
+  });
 });
 document.getElementById('btn-now').addEventListener('click', function() {
   setGlobalTimeIndex(nearestTimeIndex(globalTimes, Date.now()));

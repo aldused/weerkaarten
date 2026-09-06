@@ -15,7 +15,7 @@ const c = vm.createContext({Set, Date, Number, Math, Promise,
   panels: [0,1,2,3].map(idx=>({idx,modelIdx:idx})),
   MODELS: [0,1,2,3].map(id=>({id})), modelData:{}, panelStep:[-1,-1,-1,-1],
   actieveModellen(){return c.MODELS}, updatePanelTime(){},
-  buildTimeAxis(){}, buildTimeJumpButtons(){}, updateGlobalTimeControl(){}, buildTimeline(){}, requestRender(){},
+  buildDayChoices(){}, buildTimeAxis(){}, buildTimeJumpButtons(){}, updateGlobalTimeControl(){}, buildTimeline(){}, requestRender(){},
   togglePlay(){ c.playTimer = c.playTimer ? null : 1; },
 });
 ['nearestTimeIndex','exactTimeIndex','comparisonTimes','modelTimeSets','getGlobalTimes','syncAllToTime','setGlobalTimeIndex'].forEach(name=>vm.runInContext(fn(name),c));
@@ -87,4 +87,37 @@ test('A cloud tile in transit never displays the previous hour under the new tim
   vm.runInContext(fn('tekenWolkentegel'),c);
   c.tekenWolkentegel(ctx,0,{id:0},{meta:{tijden:[t(0)]}},0,100,100,0,1,0,1);
   assert.equal(fills,1);
+});
+['localDayKey','timeIndexForDay','limitingModels','sampleComponent','hoverValue','comparisonValue'].forEach(name=>vm.runInContext(fn(name),c));
+test('Day selection preserves the local hour and clamps within the selected day',()=>{
+  const ts=[new Date(2026,8,6,14),new Date(2026,8,7,8),new Date(2026,8,7,14),new Date(2026,8,8,2)].map(d=>d.toISOString());
+  assert.equal(c.timeIndexForDay(ts,'2026-09-07',ts[0]),2);
+  assert.equal(c.timeIndexForDay(ts,'2026-09-08',ts[0]),3);
+  assert.equal(c.timeIndexForDay(ts,'2026-09-09',ts[0]),-1);
+});
+test('The common end identifies the model with the shortest available forecast',()=>{
+  setup([[3,4,5,6],[3,4,5],[4,5,6],[0,1,2,3,4,5,6]]);
+  c.MODELS.forEach((m,i)=>m.label='Model '+i);
+  assert.equal(c.limitingModels(),'Model 1');
+});
+test('Point comparison samples each model at the same geographic location and step',()=>{
+  c.activeVar='neerslag'; c.veldSleutel=()=>c.activeVar;
+  c.MODELS.forEach((m,i)=>{
+    c.modelData[i]={meta:{},paramData:{neerslag:{
+      nLat:2,nLon:2,nSteps:2,nComp:1,
+      grid:{lat_min:50,lat_max:54,lon_min:3,lon_max:7},
+      data:[0,0,0,0,...Array(4).fill(i+1)]
+    }}};
+    c.panelStep[i]=1;
+  });
+  assert.deepEqual(c.panels.map(p=>c.comparisonValue(p,52,5)),['1.0 mm/u','2.0 mm/u','3.0 mm/u','4.0 mm/u']);
+  assert.equal(c.comparisonValue(c.panels[0],60,5),'Geen gegevens op deze plek');
+});
+test('The comparison never presents missing model hours or missing layers as zero',()=>{
+  c.panelStep[0]=-1;
+  assert.equal(c.comparisonValue(c.panels[0],52,5),'Geen kaart voor dit uur');
+  c.panelStep[0]=0; c.modelData[0].paramData={};
+  assert.equal(c.comparisonValue(c.panels[0],52,5),'Laag niet beschikbaar');
+  c.modelData[0]={failed:true};
+  assert.equal(c.comparisonValue(c.panels[0],52,5),'Laden mislukt');
 });
