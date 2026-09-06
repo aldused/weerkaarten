@@ -53,7 +53,7 @@ body {
   background: #1e293b;
   border-bottom: 1px solid #334155;
   padding: 5px 12px;
-  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
 }
 .tl-label {
   font-size: 10px; color: #64748b; font-weight: 700;
@@ -166,8 +166,16 @@ body.map-focus-mode .panel-time-badge {
   background: rgba(2, 8, 23, .92); border-color: rgba(125, 211, 252, .55);
   color: #f8fafc;
 }
-.sync-info { font-size: 10.5px; color: #475569; margin-left: auto; font-family: monospace; }
+.sync-info { font-size: 10.5px; color: #cbd5e1; margin-left: auto; font-family: monospace; }
+.sync-info { white-space:nowrap; }
+#toolbar > * { flex-shrink:0; }
+@media (max-width:1400px) { .toolbar-hint { display:none; } }
 .sync-info strong { color:#7dd3fc; font-weight:700; }
+.time-options { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:5px; }
+.time-options label { color:#cbd5e1; font-size:11px; }
+#time-mode { background:#0c4a6e; color:#fff; border:1px solid #38bdf8; border-radius:6px; padding:4px 6px; font-size:11px; }
+#time-range-summary { color:#bfdbfe; font-size:11px; }
+button:disabled { opacity:.4; cursor:default; }
 input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   outline: 2px solid #7dd3fc; outline-offset: 2px;
 }
@@ -525,12 +533,12 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
 </button>
 <div id="map-focus-controls" role="group" aria-label="Kaartlaag en tijd bedienen in beeldvullende kaartmodus">
   <select id="map-focus-var" aria-label="Kaartlaag voor alle vier de kaarten" title="Andere kaartlaag kiezen"></select>
-  <button id="map-focus-prev" type="button" aria-label="Eén uur terug" title="Eén uur terug (pijl links)">−1u</button>
+  <button id="map-focus-prev" type="button" aria-label="Vorig beschikbaar tijdstip" title="Vorig beschikbaar tijdstip (pijl links)">◀</button>
   <button id="map-focus-play" type="button" aria-label="Animatie starten">▶</button>
   <input id="map-focus-slider" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Geldige tijd kiezen">
   <div id="map-focus-axis" aria-hidden="true"></div>
   <span id="map-focus-time" aria-live="polite">Modeltijden laden…</span>
-  <button id="map-focus-next" type="button" aria-label="Eén uur vooruit" title="Eén uur vooruit (pijl rechts)">+1u</button>
+  <button id="map-focus-next" type="button" aria-label="Volgend beschikbaar tijdstip" title="Volgend beschikbaar tijdstip (pijl rechts)">▶</button>
 </div>
 
 <!-- Header -->
@@ -575,9 +583,9 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   </div>
   <div class="sep"></div>
   <div class="play-wrap">
-    <button id="btn-prev" type="button" aria-label="Eén uur terug" title="Eén uur terug">−1u</button>
+    <button id="btn-prev" type="button" aria-label="Vorig beschikbaar tijdstip" title="Vorig beschikbaar tijdstip">◀</button>
     <button id="btn-play" type="button" aria-label="Animatie starten" title="Animatie starten">▶</button>
-    <button id="btn-next" type="button" aria-label="Eén uur vooruit" title="Eén uur vooruit">+1u</button>
+    <button id="btn-next" type="button" aria-label="Volgend beschikbaar tijdstip" title="Volgend beschikbaar tijdstip">▶</button>
     <label class="tl-label" for="speed-select">Snelheid</label>
     <select id="speed-select" aria-label="Animatiesnelheid">
       <option value="400">Langzaam</option>
@@ -603,7 +611,6 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
     title="Verberg alle bediening en toon alleen de vier kaarten">
     <span aria-hidden="true">⛶</span> Kaarten beeldvullend
   </button>
-  <span class="sync-info" id="sync-info"><strong>↔ Eén tijdslider</strong> · alle vier de kaarten lopen gelijk</span>
 </div>
 
 
@@ -682,6 +689,16 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
     <span class="time-control-title">Gezamenlijke tijd</span>
     <output id="global-time-label" for="global-time-slider">Modeltijden laden…</output>
     <span id="global-time-meta">0 tijdstippen</span>
+  </div>
+  <div class="time-options">
+    <label for="time-mode">Vergelijken</label>
+    <select id="time-mode" aria-describedby="time-range-summary">
+      <option value="common">Gelijke tijden</option>
+      <option value="all">Volledig bereik</option>
+    </select>
+    <button id="btn-now" class="tool-btn" type="button" title="Ga naar het beschikbare tijdstip het dichtst bij nu">Nu</button>
+    <span id="time-range-summary" role="status">Modeltijden laden…</span>
+    <span class="sync-info" id="sync-info">Modeltijden laden…</span>
   </div>
   <div class="time-slider-shell">
     <input type="range" id="global-time-slider" min="0" max="0" value="0" step="1" disabled
@@ -1164,11 +1181,8 @@ function tekenWolkentegel(ctx, pIdx, mCfg, md, stepIdx, cw, ch,
   var img = haalTegel(tm, uur.fname);
   if (img.mislukt) { leeg('Wolkentegel laden mislukt'); return; }
   if (!img.complete || !img.naturalWidth) {
-    // Nog onderweg: liever het vorige uur laten staan dan de kaart leegmaken —
-    // anders knippert het hele vierluik zwart tijdens het afspelen.
-    var vorig = tegelLaatst[pIdx];
-    if (!vorig || vorig.modelId !== mCfg.id) { leeg('Wolkenkaart laden…'); return; }
-    img = vorig.img;
+    leeg('Wolkenkaart voor dit uur laden…');
+    return;
   } else {
     tegelLaatst[pIdx] = { modelId: mCfg.id, img: img };
   }
@@ -1217,10 +1231,11 @@ var view = {
 // ═══════════════════════════════════════════════════════════════
 // TIME STATE
 // ═══════════════════════════════════════════════════════════════
-var globalTimes = [];   // gezamenlijke, chronologische lijst van alle geldige tijden
+var globalTimes = [];   // standaard uitsluitend exact gedeelde geldige tijden
+var timeMode = 'common';
 var globalTimeIndex = 0;
 var activeGlobalTime = '';
-var panelStep = [0, 0, 0, 0]; // direct model-step index per panel
+var panelStep = [-1, -1, -1, -1]; // direct model-step index per panel
 var activeVar = 'neerslag';
 // De facetbalk geeft de gewenste kaartlaag mee als ?laag=… ; alleen een laag
 // die in de kiezer staat wordt overgenomen.
@@ -1241,14 +1256,50 @@ function updatePanelTime(pIdx, referenceTime) {
   var mCfg = MODELS[panel.modelIdx];
   var md = modelData[mCfg.id];
   var lbl = document.getElementById('ptlbl-' + pIdx);
-  if (!md || !md.meta || !md.meta.tijden) return;
-  if (lbl) {
-    var t = md.meta.tijden[panelStep[pIdx]] || '';
-    var differs = !!(t && referenceTime && new Date(t).getTime() !== new Date(referenceTime).getTime());
-    lbl.classList.toggle('is-offset', differs);
-    lbl.textContent = t ? (differs ? 'Dichtstbij: ' : 'Geldig ') + formatTime(t) : '—';
-    lbl.title = mCfg.label + ' · ' + (t ? (differs ? 'dichtstbijzijnde beschikbare tijd: ' : 'geldig ') + formatTime(t) : 'geen data');
-  }
+  if (!lbl) return;
+  var t = md && md.meta && md.meta.tijden ? md.meta.tijden[panelStep[pIdx]] : '';
+  lbl.classList.toggle('is-offset', !t);
+  lbl.textContent = t ? 'Geldig ' + formatTime(t)
+    : referenceTime ? 'Geen kaart · ' + formatTime(referenceTime) : 'Geen gezamenlijke tijd';
+  lbl.title = mCfg.label + ' · ' + lbl.textContent;
+}
+
+// Vergelijk tijdstippen, niet modelstappen: runs beginnen op verschillende uren.
+function exactTimeIndex(times, refTime) {
+  var ms = new Date(refTime).getTime();
+  return times.findIndex(function(t) { return new Date(t).getTime() === ms; });
+}
+
+function modelTimeSets() {
+  return actieveModellen().map(function(m) {
+    var md = modelData[m.id];
+    return new Set((md && md.meta && md.meta.tijden || []).map(function(t) {
+      return new Date(t).getTime();
+    }).filter(Number.isFinite));
+  });
+}
+
+function comparisonTimes(sets, mode) {
+  var all = new Set();
+  sets.forEach(function(times) { times.forEach(function(ms) { all.add(ms); }); });
+  return Array.from(all).filter(function(ms) {
+    return mode === 'all' || sets.every(function(times) { return times.has(ms); });
+  }).sort(function(a, b) { return a - b; }).map(function(ms) { return new Date(ms).toISOString(); });
+}
+
+function updateSyncStatus() {
+  var pending = actieveModellen().some(function(m) {
+    var md = modelData[m.id];
+    return !md || (!md.meta && !md.failed);
+  });
+  var count = panels.filter(function(p) { return panelStep[p.idx] >= 0; }).length;
+  document.getElementById('sync-info').textContent = pending ? 'Modeltijden laden…'
+    : '↔ ' + count + '/' + panels.length + ' op dit tijdstip';
+  document.getElementById('time-range-summary').textContent = pending ? 'Modeltijden laden…'
+    : !globalTimes.length ? 'Geen gezamenlijke tijden — kies andere modellen of Volledig bereik.'
+    : timeMode === 'common' ? 'Samen: ' + formatTime(globalTimes[0]) + ' – ' + formatTime(globalTimes[globalTimes.length - 1])
+    : 'Ontbrekende uren blijven leeg; elke getoonde kaart hoort bij de gekozen tijd.';
+  return pending;
 }
 
 function updateRangeProgress(slider) {
@@ -1409,6 +1460,16 @@ function updateGlobalTimeControl() {
   var label = document.getElementById('global-time-label');
   var meta = document.getElementById('global-time-meta');
   var dayCount = new Set(globalTimes.map(localDayKey)).size;
+  var pending = updateSyncStatus();
+  ['btn-play', 'map-focus-play', 'btn-now'].forEach(function(id) {
+    document.getElementById(id).disabled = !globalTimes.length;
+  });
+  ['btn-prev', 'map-focus-prev'].forEach(function(id) {
+    document.getElementById(id).disabled = !globalTimes.length || globalTimeIndex === 0;
+  });
+  ['btn-next', 'map-focus-next'].forEach(function(id) {
+    document.getElementById(id).disabled = !globalTimes.length || globalTimeIndex === globalTimes.length - 1;
+  });
   if (!globalTimes.length) {
     slider.disabled = true;
     focusSlider.disabled = true;
@@ -1416,8 +1477,10 @@ function updateGlobalTimeControl() {
     focusSlider.max = 0;
     slider.value = 0;
     focusSlider.value = 0;
-    label.textContent = 'Modeltijden laden…';
-    document.getElementById('map-focus-time').textContent = 'Modeltijden laden…';
+    label.textContent = pending ? 'Modeltijden laden…' : 'Geen gezamenlijke tijd';
+    document.getElementById('map-focus-time').textContent = label.textContent;
+    slider.removeAttribute('aria-valuetext');
+    focusSlider.removeAttribute('aria-valuetext');
     meta.textContent = '0 tijdstippen';
     updateRangeProgress(slider);
     return;
@@ -1467,7 +1530,8 @@ function runLabel(meta) {
 function updateHeaderSummary() {
   var delen = actieveModellen().map(function(m) {
     var md = modelData[m.id];
-    var uren = md && md.meta && md.meta.tijden ? md.meta.tijden.length + 'u' : '…';
+    var tijden = md && md.meta && md.meta.tijden;
+    var uren = tijden && tijden.length ? Math.round((new Date(tijden[tijden.length - 1]) - new Date(tijden[0])) / 3600000) + 'u' : '…';
     return m.label + ' ' + uren;
   });
   document.getElementById('header-sub').textContent = delen.join(' · ');
@@ -1580,13 +1644,9 @@ function kiesModel(pIdx, modelId) {
     if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Laden...'; }
   }
   var klaar = (md && md.meta) ? loadParamIfNeeded(mCfg.id, activeVar) : loadModel(mCfg, pIdx);
+  getGlobalTimes();
   requestRender();
   Promise.resolve(klaar).then(function() {
-    var geladen = modelData[mCfg.id];
-    if (geladen && geladen.meta && geladen.meta.tijden) {
-      panelStep[pIdx] = nearestTimeIndex(geladen.meta.tijden, activeGlobalTime || new Date());
-      updatePanelTime(pIdx, activeGlobalTime);
-    }
     getGlobalTimes();
     updateHeaderSummary();
     updateVariableAvailability();
@@ -1615,27 +1675,29 @@ function bouwModelKiezers() {
 
 function getGlobalTimes() {
   var keepTime = activeGlobalTime || new Date();
-  var allTimes = new Set();
-  actieveModellen().forEach(function(m) {
-    var md = modelData[m.id];
-    if (!md || !md.meta || !md.meta.tijden) return;
-    md.meta.tijden.forEach(function(t) { allTimes.add(t); });
-  });
-  globalTimes = Array.from(allTimes).sort(function(a, b) { return new Date(a).getTime() - new Date(b).getTime(); });
+  globalTimes = comparisonTimes(modelTimeSets(), timeMode);
   globalTimeIndex = nearestTimeIndex(globalTimes, keepTime);
   activeGlobalTime = globalTimes[globalTimeIndex] || '';
-  if (activeGlobalTime) syncAllToTime(activeGlobalTime);
+  syncAllToTime(activeGlobalTime);
+  if (!globalTimes.length && playTimer) togglePlay();
   buildTimeAxis();
   buildTimeJumpButtons();
   updateGlobalTimeControl();
   buildTimeline();
 }
 
+function timelineBounds() {
+  var times = comparisonTimes(modelTimeSets(), 'all');
+  return [new Date(times[0]).getTime(), new Date(times[times.length - 1]).getTime()];
+}
+
 function buildTimeline() {
   var strip = document.getElementById('tl-strip');
-  if (!strip || !globalTimes.length) return;
-  var tStart = new Date(globalTimes[0]).getTime();
-  var tEnd   = new Date(globalTimes[globalTimes.length - 1]).getTime();
+  if (!strip) return;
+  if (!globalTimes.length) { strip.innerHTML = ''; return; }
+  var bounds = timelineBounds();
+  var tStart = bounds[0];
+  var tEnd = bounds[1];
   var tRange = tEnd - tStart || 1;
   var pctVoor = function(ms) { return ((ms - tStart) / tRange * 100); };
 
@@ -1662,8 +1724,8 @@ function buildTimeline() {
     if (heeftData) {
       var t0 = new Date(md.meta.tijden[0]).getTime();
       var t1 = new Date(md.meta.tijden[md.meta.tijden.length - 1]).getTime();
-      barStyle += 'left:' + pctVoor(t0).toFixed(1) + '%;width:' + Math.max(0.5, pctVoor(t1) - pctVoor(t0)).toFixed(1) + '%;';
-      hrsText = md.meta.tijden.length + 'u';
+      barStyle += 'left:' + Math.max(0, Math.min(100, pctVoor(t0))).toFixed(1) + '%;width:' + Math.max(0, Math.min(100, pctVoor(t1)) - Math.max(0, pctVoor(t0))).toFixed(1) + '%;';
+      hrsText = Math.round((t1 - t0) / 3600000) + 'u';
       rowTitle = m.label + ': ' + formatTime(md.meta.tijden[0]) + ' t/m ' + formatTime(md.meta.tijden[md.meta.tijden.length - 1]);
     } else {
       barStyle += 'width:0;';
@@ -1684,8 +1746,10 @@ function buildTimeline() {
 // Verticale streep in de modelbalken op de gekozen tijd
 function updateTimelineCursor() {
   if (!globalTimes.length) return;
-  var denom = Math.max(1, globalTimes.length - 1);
-  var pct = (globalTimeIndex / denom * 100).toFixed(2) + '%';
+  var bounds = timelineBounds();
+  var start = bounds[0];
+  var range = bounds[1] - start || 1;
+  var pct = ((new Date(activeGlobalTime).getTime() - start) / range * 100).toFixed(2) + '%';
   document.querySelectorAll('#tl-strip .tl-cursor').forEach(function(el) { el.style.left = pct; });
 }
 
@@ -1694,7 +1758,10 @@ function tijdlijnSeek(clientX, barWrap) {
   if (!globalTimes.length) return;
   var rect = barWrap.getBoundingClientRect();
   var frac = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
-  setGlobalTimeIndex(Math.round(frac * (globalTimes.length - 1)));
+  var bounds = timelineBounds();
+  var start = bounds[0];
+  var end = bounds[1];
+  setGlobalTimeIndex(nearestTimeIndex(globalTimes, start + frac * (end - start)));
 }
 (function bindTijdlijnSeek() {
   var strip = document.getElementById('tl-strip');
@@ -1939,6 +2006,9 @@ function renderPanel(pIdx) {
     canvas.height = newH;
   }
   var ctx = canvas.getContext('2d');
+  // Wis ook labels en pijlen wanneer het nieuwe tijdstip of model geen kaart heeft.
+  var overlayCanvas = document.getElementById('overlay-' + pIdx);
+  if (overlayCanvas) overlayCanvas.getContext('2d').clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
   // De wolkentegel komt niet uit de veldbestanden; die modus heeft alleen de
   // meta (voor de tijdenlijst) nodig.
@@ -1959,7 +2029,7 @@ function renderPanel(pIdx) {
   var stepIdx = panelStep[pIdx];
   if (!md.meta.tijden || stepIdx < 0 || stepIdx >= md.meta.tijden.length) {
     statusEl.style.display = 'block';
-    statusEl.textContent = 'Geen data';
+    statusEl.textContent = activeGlobalTime ? 'Geen kaart voor dit tijdstip' : 'Geen gezamenlijke tijd';
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
@@ -2719,6 +2789,8 @@ function loadModel(mCfg, pIdx, freshMeta) {
   return (freshMeta ? Promise.resolve(freshMeta) : fetchModelMeta(mCfg))
     .then(function(meta) {
       modelData[mCfg.id] = { meta: meta, paramData: {} };
+      getGlobalTimes();
+      requestRender();
 
       // Kopregels bijwerken: model-run in lokale tijd waar bekend (GRIB-modellen
       // hebben run_utc), anders de update-tijd (Open-Meteo geeft geen run terug).
@@ -2739,15 +2811,6 @@ function loadModel(mCfg, pIdx, freshMeta) {
       // cumul bin al geladen via initKeys; JS-fallback alleen als bin ontbrak
       if (activeVar === 'cumul' && !modelData[mCfg.id].paramData['cumul']) computeCumulNeerslag(modelData[mCfg.id]);
       if (activeVar === 'cumzon' && !modelData[mCfg.id].paramData['cumzon']) computeCumZon(modelData[mCfg.id]);
-      // Nieuw geladen model meteen op de centrale tijd zetten. Tijdens de
-      // eerste load is dat het tijdstip dat het dichtst bij "nu" ligt.
-      var meta = modelData[mCfg.id].meta;
-      if (meta.tijden && meta.tijden.length) {
-        panelStep[pIdx] = nearestTimeIndex(meta.tijden, activeGlobalTime || new Date());
-      } else {
-        panelStep[pIdx] = 0;
-      }
-      updatePanelTime(pIdx, activeGlobalTime);
       getGlobalTimes();
       updateHeaderSummary();
       updateVariableAvailability();
@@ -2758,6 +2821,8 @@ function loadModel(mCfg, pIdx, freshMeta) {
       // nooit reeds geladen modeldata overschrijven
       if (!modelData[mCfg.id] || !modelData[mCfg.id].meta) {
         modelData[mCfg.id] = { failed: true };
+        getGlobalTimes();
+        requestRender();
       }
       var statusEl = document.getElementById('status-' + pIdx);
       if (statusEl) {
@@ -3199,7 +3264,7 @@ panels.forEach(function(panel) {
     var md = modelData[MODELS[panel.modelIdx].id];
     var lookupKey = veldSleutel(MODELS[panel.modelIdx].id, activeVar);
     var pd = md && md.paramData && md.paramData[lookupKey];
-    if (!pd) { mapTooltip.style.display='none'; return; }
+    if (!pd || panelStep[panel.idx] < 0) { mapTooltip.style.display='none'; return; }
     var rect = wrap.getBoundingClientRect(), ext = currentMapExtent();
     var lon = ext.lonMin + (e.clientX-rect.left)/rect.width*(ext.lonMax-ext.lonMin);
     var lat = ext.latMax - (e.clientY-rect.top)/rect.height*(ext.latMax-ext.latMin);
@@ -3228,9 +3293,10 @@ function stepAll(delta) {
   setGlobalTimeIndex(globalTimeIndex + delta);
 }
 
-function setGlobalTimeIndex(nextIndex) {
+function setGlobalTimeIndex(nextIndex, fromPlayback) {
+  if (!fromPlayback && playTimer) togglePlay();
   if (!globalTimes.length) return;
-  globalTimeIndex = Math.max(0, Math.min(globalTimes.length - 1, nextIndex));
+  globalTimeIndex = Math.max(0, Math.min(globalTimes.length - 1, Math.round(nextIndex) || 0));
   activeGlobalTime = globalTimes[globalTimeIndex];
   syncAllToTime(activeGlobalTime);
   updateGlobalTimeControl();
@@ -3251,7 +3317,7 @@ function togglePlay() {
     if (!globalTimes.length) return;
     var spd = parseInt(document.getElementById('speed-select').value);
     playTimer = setInterval(function() {
-      setGlobalTimeIndex(globalTimeIndex >= globalTimes.length - 1 ? 0 : globalTimeIndex + 1);
+      setGlobalTimeIndex(globalTimeIndex >= globalTimes.length - 1 ? 0 : globalTimeIndex + 1, true);
     }, spd);
     document.getElementById('btn-play').textContent = '⏸';
     document.getElementById('btn-play').setAttribute('aria-label', 'Animatie pauzeren');
@@ -3272,21 +3338,41 @@ document.getElementById('map-focus-slider').addEventListener('input', function()
   setGlobalTimeIndex(parseInt(this.value, 10));
 });
 
-// Eén referentietijd wordt voor ieder model naar het dichtstbijzijnde
-// beschikbare tijdstip vertaald. Korte modelruns blijven zo bruikbaar en
-// worden met een geel tijdlabel herkenbaar als de centrale tijd erbuiten valt.
+// Nooit een naburig of verlopen uur tonen onder de centrale tijd.
 function syncAllToTime(refTime) {
   panels.forEach(function(p) {
     if (p.modelIdx < 0) return;
     var md = modelData[MODELS[p.modelIdx].id];
-    if (!md || !md.meta || !md.meta.tijden) return;
-    panelStep[p.idx] = nearestTimeIndex(md.meta.tijden, refTime);
+    panelStep[p.idx] = md && md.meta && md.meta.tijden && refTime
+      ? exactTimeIndex(md.meta.tijden, refTime) : -1;
     updatePanelTime(p.idx, refTime);
   });
 }
 
+document.getElementById('time-mode').addEventListener('change', function() {
+  if (playTimer) togglePlay();
+  timeMode = this.value;
+  getGlobalTimes();
+  requestRender();
+});
+document.getElementById('btn-now').addEventListener('click', function() {
+  setGlobalTimeIndex(nearestTimeIndex(globalTimes, Date.now()));
+});
+document.getElementById('speed-select').addEventListener('change', function() {
+  if (playTimer) { togglePlay(); togglePlay(); }
+});
+
 document.getElementById('global-time-slider').addEventListener('input', function() {
   setGlobalTimeIndex(parseInt(this.value, 10));
+});
+
+// Pauzeer ook wanneer de gebruiker de slider vastpakt zonder van uur te wisselen.
+['global-time-slider', 'map-focus-slider'].forEach(function(id) {
+  var slider = document.getElementById(id);
+  slider.addEventListener('pointerdown', function() { if (playTimer) togglePlay(); });
+  slider.addEventListener('keydown', function(e) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key) && playTimer) togglePlay();
+  });
 });
 
 // Keyboard navigation
@@ -3297,11 +3383,9 @@ document.addEventListener('keydown', function(e) {
     document.getElementById('btn-map-focus').focus({ preventScroll:true });
     return;
   }
-  if (mapFocusActive && e.key === 'ArrowRight') { e.preventDefault(); stepAll(1); return; }
-  if (mapFocusActive && e.key === 'ArrowLeft') { e.preventDefault(); stepAll(-1); return; }
   if (e.target.closest('input, select, button')) return;
-  if (e.key === 'ArrowRight') stepAll(1);
-  else if (e.key === 'ArrowLeft') stepAll(-1);
+  if (e.key === 'ArrowRight') { e.preventDefault(); stepAll(1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); stepAll(-1); }
   else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
 });
 
