@@ -113,31 +113,41 @@ body {
   cursor: pointer; font: 800 11px/1.1 "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 #btn-map-focus-exit:hover { background: #0c4a6e; border-color: #7dd3fc; color: #fff; }
+/* Beeldvullende bediening: breder en groter dan de gewone balk, want hij is
+   het enige bedieningselement in beeld en wordt van afstand gelezen. */
 #map-focus-controls {
-  display: none; position: fixed; z-index: 1200; left: 50%; bottom: 12px;
-  transform: translateX(-50%); align-items: center; gap: 7px;
-  grid-template-columns: auto auto auto clamp(200px, 38vw, 580px) auto auto;
+  display: none; position: fixed; z-index: 1200; left: 50%; bottom: 14px;
+  transform: translateX(-50%); align-items: center; gap: 10px;
+  width: min(1360px, calc(100vw - 24px)); box-sizing: border-box;
+  grid-template-columns: auto auto auto minmax(180px, 1fr) auto auto;
   grid-template-areas: "laag prev play slider time next" "laag prev play axis time next";
-  padding: 7px 9px; border: 1px solid rgba(125,211,252,.7); border-radius: 10px;
-  background: rgba(2,8,23,.9); box-shadow: 0 5px 18px rgba(2,8,23,.45);
+  padding: 10px 14px; border: 1px solid rgba(125,211,252,.75); border-radius: 12px;
+  background: rgba(2,8,23,.94); box-shadow: 0 6px 22px rgba(2,8,23,.55);
   backdrop-filter: blur(8px);
 }
 #map-focus-controls button {
-  min-width: 42px; height: 32px; padding: 0 9px; border: 1px solid #475569;
-  border-radius: 7px; background: #17243a; color: #fff; cursor: pointer; font-weight: 800;
+  min-width: 48px; height: 40px; padding: 0 12px; border: 1px solid #475569;
+  border-radius: 8px; background: #17243a; color: #fff; cursor: pointer;
+  font: 800 15px "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 #map-focus-controls button:hover { border-color: #7dd3fc; background: #0c4a6e; }
 #map-focus-prev { grid-area: prev; }
 #map-focus-play { grid-area: play; }
-#map-focus-slider { grid-area: slider; width: 100%; height: 30px; margin: 0; cursor: pointer; accent-color: #38bdf8; }
-#map-focus-time { grid-area: time; min-width: 165px; color: #e0f2fe; text-align: center; font: 800 10px ui-monospace, monospace; }
+#map-focus-slider { grid-area: slider; width: 100%; height: 34px; margin: 0; cursor: pointer; accent-color: #38bdf8; }
+#map-focus-time {
+  grid-area: time; min-width: 190px; color: #e0f2fe; text-align: center; line-height: 1.15;
+  font: 800 11px "DM Sans", ui-sans-serif, system-ui, sans-serif; white-space: nowrap;
+}
+#map-focus-time .mft-uur { display: block; font-size: 22px; letter-spacing: .5px; color: #fff; }
+#map-focus-time .mft-dag { display: block; font-size: 12px; font-weight: 700; color: #bae6fd; margin-top: 2px; }
 #map-focus-next { grid-area: next; }
 #map-focus-var {
-  grid-area: laag; align-self: center; max-width: 190px;
-  border: 1px solid #38bdf8; border-radius: 7px;
+  grid-area: laag; align-self: center; max-width: clamp(150px, 24vw, 340px); min-width: 0;
+  border: 1px solid #38bdf8; border-radius: 8px;
   background: #0c4a6e; color: #fff; cursor: pointer;
-  font: 800 11.5px "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  padding: 6px 24px 6px 9px; margin-right: 3px;
+  font: 800 14px "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  padding: 9px 28px 9px 12px; margin-right: 4px;
+  text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
   appearance: none; -webkit-appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, #7dd3fc 50%),
                     linear-gradient(135deg, #7dd3fc 50%, transparent 50%);
@@ -147,11 +157,14 @@ body {
 #map-focus-var:hover { border-color: #7dd3fc; background: #0e5a86; }
 #map-focus-var option { background: #0f172a; color: #f1f5f9; }
 #map-focus-axis {
-  grid-area: axis; position: relative; height: 26px; margin: -4px 0 0;
-  border-top: 1px solid rgba(148,163,184,.3); overflow: hidden;
+  grid-area: axis; position: relative; height: 36px; margin: -4px 0 0;
+  border-top: 1px solid rgba(148,163,184,.35); overflow: hidden;
 }
-#map-focus-axis .time-day-label { top: 13px; font-size: 9px; }
-#map-focus-axis .time-hour-tick span { font-size: 8px; }
+#map-focus-axis .time-day-label { top: 18px; font-size: 12px; font-weight: 800; color: #f1f5f9; }
+#map-focus-axis .time-hour-tick span { font-size: 10px; top: 2px; color: #cbd5e1; }
+#map-focus-axis .time-hour-tick.major span { color: #fff; font-weight: 800; }
+#map-focus-axis .time-day-boundary { height: 100%; background: rgba(186,230,253,.45); }
+#map-focus-axis .time-now-marker { height: 100%; }
 body.map-focus-mode #header,
 body.map-focus-mode #toolbar,
 body.map-focus-mode #time-controller,
@@ -1329,6 +1342,15 @@ function formatLongTime(isoStr) {
     ' · ' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0') + ' uur';
 }
 
+// Beeldvullende bediening: het uur groot, de dag eronder — leesbaar van afstand.
+function formatFocusTime(isoStr) {
+  var dt = new Date(isoStr);
+  var days = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+  var months = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+  return '<span class="mft-uur">' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0') + '</span>' +
+         '<span class="mft-dag">' + days[dt.getDay()] + ' ' + dt.getDate() + ' ' + months[dt.getMonth()] + '</span>';
+}
+
 function localDayKey(isoStr) {
   var dt = new Date(isoStr);
   return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
@@ -1492,7 +1514,7 @@ function updateGlobalTimeControl() {
   slider.value = globalTimeIndex;
   focusSlider.value = globalTimeIndex;
   label.textContent = formatLongTime(activeGlobalTime);
-  document.getElementById('map-focus-time').textContent = formatLongTime(activeGlobalTime);
+  document.getElementById('map-focus-time').innerHTML = formatFocusTime(activeGlobalTime);
   meta.textContent = (globalTimeIndex + 1) + '/' + globalTimes.length + ' · ' + dayCount + (dayCount === 1 ? ' dag' : ' dagen');
   slider.setAttribute('aria-valuetext', formatLongTime(activeGlobalTime));
   focusSlider.setAttribute('aria-valuetext', formatLongTime(activeGlobalTime));
