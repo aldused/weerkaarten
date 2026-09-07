@@ -10,7 +10,7 @@ function fn(name) {
   assert(start >= 0, name);
   return script.slice(start, script.indexOf('\n}', start) + 2);
 }
-const c = vm.createContext({Set, Date, Number, Math, Promise,
+const c = vm.createContext({Set, Date, Number, Math, Promise, VierluikCore:require('../vierluik-core'),
   globalTimes: [], globalTimeIndex:0, activeGlobalTime:'', timeMode:'common', playTimer:null,
   panels: [0,1,2,3].map(idx=>({idx,modelIdx:idx})),
   MODELS: [0,1,2,3].map(id=>({id})), modelData:{}, panelStep:[-1,-1,-1,-1],
@@ -110,7 +110,7 @@ test('Point comparison samples each model at the same geographic location and st
     }}};
     c.panelStep[i]=1;
   });
-  assert.deepEqual(c.panels.map(p=>c.comparisonValue(p,52,5)),['1.0 mm/u','2.0 mm/u','3.0 mm/u','4.0 mm/u']);
+  assert.deepEqual(c.panels.map(p=>c.comparisonValue(p,52,5)),['1.0 mm (afgelopen uur)','2.0 mm (afgelopen uur)','3.0 mm (afgelopen uur)','4.0 mm (afgelopen uur)']);
   assert.equal(c.comparisonValue(c.panels[0],60,5),'Geen gegevens op deze plek');
 });
 test('The comparison never presents missing model hours or missing layers as zero',()=>{
@@ -120,4 +120,37 @@ test('The comparison never presents missing model hours or missing layers as zer
   assert.equal(c.comparisonValue(c.panels[0],52,5),'Laag niet beschikbaar');
   c.modelData[0]={failed:true};
   assert.equal(c.comparisonValue(c.panels[0],52,5),'Laden mislukt');
+});
+// Use the actual palette/Beaufort contracts alongside point-value formatting.
+vm.runInContext(script.slice(script.indexOf('var NEERSLAG_MM_LEVELS'),script.indexOf('var PAGE_PARAMS')),c);
+test('Point units correctly convert Pa, U/V m/s, visibility and scalar gusts',()=>{
+  const d={nLat:2,nLon:2,nSteps:1,nComp:1,grid:{lat_min:50,lat_max:54,lon_min:3,lon_max:7},data:Array(4).fill(101325)};
+  c.activeVar='druk';assert.equal(c.hoverValue(d,0,52,5),'1013.3 hPa');
+  c.activeVar='wind';d.nComp=2;d.data=[3,3,3,3,4,4,4,4];assert.equal(c.hoverValue(d,0,52,5),'3 Bft · 18 km/u · uit 217°');
+  d.data.fill(0);assert.match(c.hoverValue(d,0,52,5),/windstil$/);
+  d.data[4]=NaN;assert.equal(c.hoverValue(d,0,52,5),null);
+  c.activeVar='windstoten';d.nComp=1;d.data=Array(4).fill(10);assert.equal(c.hoverValue(d,0,52,5),'36 km/u');
+  c.activeVar='zicht';d.data.fill(500);assert.equal(c.hoverValue(d,0,52,5),'500 m');
+  c.activeVar='cape';d.data.fill(-10);assert.equal(c.hoverValue(d,0,52,5),'0 J/kg');
+});
+test('Hurricane force has its own colour and Beaufort 12 includes its threshold',()=>{
+  assert.equal(c.msNaarBft(32.69),11);assert.equal(c.msNaarBft(32.7),12);
+  assert.equal(c.WIND_COLORS.length,13);
+  assert.notDeepEqual(c.windKleur(30),c.windKleur(35));
+});
+test('Cloud point values match the displayed overlap estimate and preserve missing layers',()=>{
+  const d={nLat:2,nLon:2,nSteps:1,nComp:3,grid:{lat_min:50,lat_max:54,lon_min:3,lon_max:7},data:[...Array(8).fill(.5),...Array(4).fill(0)]};
+  c.activeVar='bewolking_totaal';assert.match(c.hoverValue(d,0,52,5),/^6\/8 · geschat totaal 75%/);
+  d.data[8]=NaN;assert.equal(c.hoverValue(d,0,52,5),null);
+});
+['markeerLaden','loadParamIfNeeded','computeRadarUitNeerslag'].forEach(name=>vm.runInContext(fn(name),c));
+test('Concurrent loads share the download and derived radar waits for the source',async()=>{
+  c.activeVar='neerslag';c.veldSleutel=(_id,key)=>key;c.modelData[0]={meta:{parameters:{neerslag:{file:'test.bin'}}},paramData:{}};
+  let complete,calls=0;c.loadParamBin=()=>{calls++;return new Promise(r=>complete=r)};
+  const a=c.loadParamIfNeeded(0,'neerslag'),b=c.loadParamIfNeeded(0,'radar');
+  assert.equal(calls,1);assert.equal(c.modelData[0].paramData.radar,undefined);
+  complete({nLat:2,nLon:2,nSteps:1,nComp:1,schaal:1,grid:{},data:[1,NaN,1,1]});
+  await Promise.all([a,b]);
+  assert.ok(c.modelData[0].paramData.radar.data[0]>20);
+  assert.ok(Number.isNaN(c.modelData[0].paramData.radar.data[1]));
 });

@@ -549,6 +549,17 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   font-size: 8px; color: #64748b; font-family: monospace;
   min-width: 160px;
 }
+
+/* The numeric axis sits directly under the colors it describes. */
+.panel-legend{display:block;padding:5px 12px 6px;min-width:0;}
+.pleg-title{display:block;color:#d5e1ed;font-size:11px;white-space:normal;letter-spacing:.015em;line-height:1.3;}
+.pleg-scale{width:100%;margin-top:5px;}
+.pleg-bar{display:flex;width:100%;height:10px;min-width:0;}
+.pleg-labels{display:block;position:relative;width:100%;min-width:0;height:17px;margin-top:3px;color:#cbd5e1;font-size:10px;}
+.pleg-labels>span{position:absolute;transform:translateX(-50%);white-space:nowrap;}
+.pleg-labels>span.first{transform:none;}.pleg-labels>span.last{transform:translateX(-100%);}
+.pleg-note{display:block;font-size:10px;color:#b9c9da;line-height:1.4;}
+.no-data-key{display:inline-block;width:8px;height:8px;background:rgb(200,210,220);margin-left:5px;}
 </style>
 </head>
 <body>
@@ -582,7 +593,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
     <label for="var-select">Kaartlaag</label>
     <select id="var-select" aria-label="Kaartlaag voor alle vier de kaarten">
       <option value="neerslag" data-label="Neerslag">Neerslag</option>
-      <option value="radar" data-label="Radar (dBZ)">Radar (dBZ)</option>
+      <option value="radar" data-label="Modelradar (dBZ)">Modelradar (dBZ)</option>
       <option value="cumul" data-label="Cumulatieve neerslag">Cumulatieve neerslag</option>
       <option value="temp" data-label="Temperatuur">Temperatuur</option>
       <option value="dauwpunt" data-label="Dauwpunt">Dauwpunt</option>
@@ -591,10 +602,10 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
       <option value="zicht" data-label="Zicht">Zicht</option>
       <option value="druk" data-label="Luchtdruk">Luchtdruk</option>
       <option value="cape" data-label="CAPE">CAPE</option>
-      <option value="bewolking_totaal" data-label="Bewolking totaal (octa)">Bewolking totaal (octa)</option>
-      <option value="bewolking" data-label="Bewolking (rood, wit, blauw)">Bewolking (rood, wit, blauw)</option>
+      <option value="bewolking_totaal" data-label="Bewolking totaal (schatting, achtsten)">Bewolking totaal (schatting, achtsten)</option>
+      <option value="bewolking" data-label="Bewolking (hoog/midden/laag)">Bewolking (hoog/midden/laag)</option>
       <option value="wolkenlagen" data-label="Wolkenlagen (RGB)">Wolkenlagen (RGB)</option>
-      <option value="wolkenkaart" data-label="Wolkenkaart (realistisch)">Wolkenkaart (realistisch)</option>
+      <option value="wolkenkaart" data-label="Wolkenkaart (modelbeeld)">Wolkenkaart (modelbeeld)</option>
       <option value="zon" data-label="Zon (minuten per uur)">Zon (minuten per uur)</option>
       <option value="cumzon" data-label="Zonuren (dagsom)">Zonuren (dagsom)</option>
     </select>
@@ -750,6 +761,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   <!-- gevuld door buildTimeline() -->
 </div>
 
+<script src="vierluik-core.js?v=20260907-elementen1"></script>
 <script>
 (function() {
 
@@ -810,7 +822,7 @@ var TEMP_REF = [
 var WIND_COLORS = [
   [238,238,232],[198,198,190],[142,142,136],[184,230,152],[92,210,48],
   [0,180,0],[185,235,0],[255,220,0],[255,135,0],[235,20,38],
-  [190,0,185],[230,92,230]
+  [190,0,185],[230,92,230],[250,180,245]
 ];
 
 // Zicht in meters — nadruk op mist en slecht zicht, met rustige klassen voor
@@ -1129,7 +1141,7 @@ function laadTegelMeta(modelId) {
     .then(function(j) {
       if (j && j.uren && j.tegel) {
         j.perTijd = {};
-        j.uren.forEach(function(u) { j.perTijd[u.tijdstip] = u; });
+        j.uren.forEach(function(u) { var ms=VierluikCore.timeMs(u.tijdstip); if(Number.isFinite(ms))j.perTijd[new Date(ms).toISOString()] = u; });
         tegelMeta[modelId] = j;
       } else {
         tegelMeta[modelId] = null;
@@ -1226,7 +1238,7 @@ function tekenWolkentegel(ctx, pIdx, mCfg, md, stepIdx, cw, ch,
   var sy = (T.lat_max - vLatMax) / tLatH * img.naturalHeight;
   var sh = (vLatMax - vLatMin) / tLatH * img.naturalHeight;
 
-  ctx.fillStyle = '#101b2c';        // buiten het modeldomein
+  ctx.fillStyle = 'rgb(200,210,220)'; // buiten het modeldomein: geen gegevens
   ctx.fillRect(0, 0, cw, ch);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -1297,15 +1309,15 @@ function updatePanelTime(pIdx, referenceTime) {
 
 // Vergelijk tijdstippen, niet modelstappen: runs beginnen op verschillende uren.
 function exactTimeIndex(times, refTime) {
-  var ms = new Date(refTime).getTime();
-  return times.findIndex(function(t) { return new Date(t).getTime() === ms; });
+  var ms = VierluikCore.timeMs(refTime);
+  return times.findIndex(function(t) { return VierluikCore.timeMs(t) === ms; });
 }
 
 function modelTimeSets() {
   return actieveModellen().map(function(m) {
     var md = modelData[m.id];
     return new Set((md && md.meta && md.meta.tijden || []).map(function(t) {
-      return new Date(t).getTime();
+      return VierluikCore.timeMs(t);
     }).filter(Number.isFinite));
   });
 }
@@ -1320,12 +1332,12 @@ function comparisonTimes(sets, mode) {
 
 // Behoud bij een dagwissel het gekozen lokale uur, of het dichtstbijzijnde uur op die dag.
 function timeIndexForDay(times, day, reference) {
-  var ref = new Date(reference);
+  var ref = VierluikCore.displayDate(reference);
   var minutes = ref.getHours() * 60 + ref.getMinutes();
   var best = -1, distance = Infinity;
   times.forEach(function(t, i) {
     if (localDayKey(t) !== day) return;
-    var date = new Date(t);
+    var date = VierluikCore.displayDate(t);
     var diff = Math.abs(date.getHours() * 60 + date.getMinutes() - minutes);
     if (diff < distance) { best = i; distance = diff; }
   });
@@ -1384,7 +1396,7 @@ function updateRangeProgress(slider) {
 }
 
 function formatTime(isoStr) {
-  var dt = new Date(isoStr);
+  var dt = VierluikCore.displayDate(isoStr);
   var days = ['zo','ma','di','wo','do','vr','za'];
   var months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   return days[dt.getDay()] + ' ' +
@@ -1395,7 +1407,7 @@ function formatTime(isoStr) {
 }
 
 function formatLongTime(isoStr) {
-  var dt = new Date(isoStr);
+  var dt = VierluikCore.displayDate(isoStr);
   var days = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
   return 'Geldig ' + days[dt.getDay()] + ' ' + dt.getDate() + ' ' + months[dt.getMonth()] +
@@ -1404,7 +1416,7 @@ function formatLongTime(isoStr) {
 
 // Beeldvullende bediening: het uur groot, de dag eronder — leesbaar van afstand.
 function formatFocusTime(isoStr) {
-  var dt = new Date(isoStr);
+  var dt = VierluikCore.displayDate(isoStr);
   var days = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
   var months = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
   return '<span class="mft-uur">' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0') + '</span>' +
@@ -1412,12 +1424,11 @@ function formatFocusTime(isoStr) {
 }
 
 function localDayKey(isoStr) {
-  var dt = new Date(isoStr);
-  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+  return VierluikCore.dayKey(isoStr);
 }
 
 function formatDayLabel(isoStr) {
-  var dt = new Date(isoStr);
+  var dt = VierluikCore.displayDate(isoStr);
   var days = ['zo','ma','di','wo','do','vr','za'];
   var months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   return days[dt.getDay()] + ' ' + dt.getDate() + ' ' + months[dt.getMonth()];
@@ -1425,11 +1436,11 @@ function formatDayLabel(isoStr) {
 
 function nearestTimeIndex(times, refTime) {
   if (!times.length) return 0;
-  var refMs = refTime instanceof Date ? refTime.getTime() : new Date(refTime).getTime();
+  var refMs = refTime instanceof Date ? refTime.getTime() : VierluikCore.timeMs(refTime);
   if (!Number.isFinite(refMs)) refMs = Date.now();
   var best = 0, bestDiff = Infinity;
   times.forEach(function(t, i) {
-    var diff = Math.abs(new Date(t).getTime() - refMs);
+    var diff = Math.abs(VierluikCore.timeMs(t) - refMs);
     if (diff < bestDiff) { bestDiff = diff; best = i; }
   });
   return best;
@@ -1484,7 +1495,7 @@ function buildTimeAxis(axisId) {
 
   var previousTickX = -Infinity;
   globalTimes.forEach(function(t, i) {
-    var dt = new Date(t);
+    var dt = VierluikCore.displayDate(t);
     if (dt.getMinutes() !== 0 || dt.getHours() % uurStap !== 0) return;
     var tickX = i / denom * asBreedte;
     if (tickX - previousTickX < 36) return;
@@ -1522,7 +1533,7 @@ function buildTimeJumpButtons() {
   var fragment = document.createDocumentFragment();
   var previousDay = '';
   globalTimes.forEach(function(t, i) {
-    var dt = new Date(t);
+    var dt = VierluikCore.displayDate(t);
     var days = ['zo','ma','di','wo','do','vr','za'];
     var months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
     var day = localDayKey(t);
@@ -1606,12 +1617,12 @@ function updateGlobalTimeControl() {
 // modellen), anders de laatste update (Open-Meteo geeft de model-run niet terug).
 function runLabel(meta) {
   if (meta && meta.run_utc) {
-    var run = new Date(meta.run_utc);
-    var einde = meta.tijden && meta.tijden.length ? new Date(meta.tijden[meta.tijden.length - 1]) : null;
+    var run = VierluikCore.displayDate(meta.run_utc);
+    var einde = meta.tijden && meta.tijden.length ? VierluikCore.displayDate(meta.tijden[meta.tijden.length - 1]) : null;
     var days = ['zo','ma','di','wo','do','vr','za'];
     var runKort = days[run.getDay()] + ' ' + String(run.getHours()).padStart(2,'0') + 'u';
     var eindKort = einde ? days[einde.getDay()] + ' ' + String(einde.getHours()).padStart(2,'0') + 'u' : '';
-    var age = Math.floor((Date.now() - run.getTime()) / 3600000);
+    var age = Math.floor((Date.now() - VierluikCore.timeMs(meta.run_utc)) / 3600000);
     return 'Run ' + runKort + (age >= 24 ? ' · ' + age + 'u oud' : '') + (eindKort ? ' · tot ' + eindKort : '');
   }
   var times = meta && meta.tijden || [];
@@ -1635,7 +1646,7 @@ function laagBeschikbaar(md, varNaam, modelId) {
   var key = (varNaam === 'wolkenlagen' || varNaam === 'bewolking_totaal') ? 'bewolking' : varNaam;
   if (key === TEGEL_VAR) return !!tegelMeta[modelId];
   if (!md || !md.meta || !md.meta.parameters) return false;
-  if (key === 'cumul') return !!(md.meta.parameters.cumul || md.meta.parameters.neerslag);
+  if (key === 'cumul') return !!md.meta.parameters.neerslag;
   if (key === 'cumzon') return !!md.meta.parameters.zon;
   if (key === 'radar') return !!(md.meta.parameters.radar || md.meta.parameters.neerslag);
   return !!md.meta.parameters[key];
@@ -1708,8 +1719,12 @@ function updatePanelHeader(pIdx) {
   if (sel && sel.value !== mCfg.id) sel.value = mCfg.id;
   if (dot) dot.style.background = mCfg.color;
   var meta = modelData[mCfg.id] && modelData[mCfg.id].meta;
+  if(activeVar===TEGEL_VAR){
+    var tm=tegelMeta[mCfg.id];
+    meta=tm?Object.assign({},tm,{tijden:tm.uren.map(function(u){return u.tijdstip;})}):null;
+  }
   if (runEl) {
-    runEl.textContent = meta ? runLabel(meta) : 'laden...';
+    runEl.textContent = meta ? runLabel(meta) : activeVar===TEGEL_VAR?'Wolkenrun niet beschikbaar':'laden...';
     runEl.classList.toggle('is-old', !!(meta && meta.run_utc && Date.now() - new Date(meta.run_utc).getTime() >= 86400000));
     runEl.title = !meta ? '' :
       (meta.run ? 'Modelrun: ' + meta.run : '') +
@@ -1801,7 +1816,7 @@ function buildTimeline() {
   globalTimes.forEach(function(t) {
     var key = localDayKey(t);
     if (vorigeDag && key !== vorigeDag) {
-      dagStrepen += '<span class="tl-dag" style="left:' + pctVoor(new Date(t).getTime()).toFixed(2) + '%"></span>';
+      dagStrepen += '<span class="tl-dag" style="left:' + pctVoor(VierluikCore.timeMs(t)).toFixed(2) + '%"></span>';
     }
     vorigeDag = key;
   });
@@ -1881,126 +1896,8 @@ function tijdlijnSeek(clientX, barWrap) {
 // Render op device-pixels (Retina): 2x scherpere velden, grenzen en labels
 var DPR = Math.min(window.devicePixelRatio || 1, 3);
 
-// ═══════════════════════════════════════════════════════════════
-// VERFIJNING: bicubische verdichting van het modelrooster
-// ═══════════════════════════════════════════════════════════════
-// De canvasbestanden voor temperatuur, wind, druk enzovoort staan op een
-// grover rooster dan de neerslagvelden. Rechtstreeks bilineair uitvergroten
-// geeft daardoor zichtbare ruiten en trapjes. We verdichten het rooster één
-// keer per (model, parameter, tijdstap) met Catmull-Rom-interpolatie en
-// bewaren dat resultaat; pannen, zoomen en opnieuw tekenen kosten daarna
-// niets extra.
-//
-// Neerslag en bewolking doen sinds kort mee, maar met een klem: de gewone
-// Catmull-Rom schiet bij een scherpe buirand door onder nul en boven de piek
-// uit, wat een valse motregen-halo om elke bui legt. KLEM_VARS begrenst het
-// resultaat tot de twee binnenste steunpunten — dat blijft glad maar kan nooit
-// buiten de brondata treden. Zonder verdichting krijgen die velden bij inzoomen
-// de hoekige facetten van bilineaire interpolatie in plaats van de vloeiende
-// randen die een radarbeeld hoort te hebben.
-var VERFIJN_VARS = {
-  temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, wind:1, windstoten:1,
-  zon:1, cumzon:1, bewolking:1, bewolking_hr:1, rv:1,
-  neerslag:1, cumul:1, radar:1
-};
-// Velden waar over- en onderschieten fysisch onmogelijk is (neerslag ≥ 0,
-// bewolkingsfractie 0..1) en de interpolatie dus geklemd moet worden.
-var KLEM_VARS = { neerslag:1, cumul:1, radar:1, bewolking:1, bewolking_hr:1 };
-var verfijnCache = {};
-var verfijnVolgorde = [];
-var VERFIJN_CACHE_MAX = 10;
-
-function catmull(p0, p1, p2, p3, t) {
-  var b = 0.5 * (p2 - p0);
-  var c = p0 - 2.5 * p1 + 2 * p2 - 0.5 * p3;
-  var d = 0.5 * (p3 - p0) + 1.5 * (p1 - p2);
-  return ((d * t + c) * t + b) * t + p1;
-}
-
-// Verdichtingsfactor: mik op cellen van ongeveer 1,2 km, maximaal 4×.
-function verfijnFactor(pd) {
-  if (!pd || !pd.grid || pd.nLat < 4 || pd.nLon < 4) return 1;
-  var g = pd.grid;
-  var midLat = (g.lat_min + g.lat_max) / 2 * Math.PI / 180;
-  var latKm = Math.abs(g.lat_max - g.lat_min) * 111.32 / (pd.nLat - 1);
-  var lonKm = Math.abs(g.lon_max - g.lon_min) * 111.32 * Math.cos(midLat) / (pd.nLon - 1);
-  var km = (latKm + lonKm) / 2;
-  return Math.max(1, Math.min(4, Math.round(km / 1.2)));
-}
-
-function verfijndVeld(modelId, key, pd, stepIdx) {
-  if (!VERFIJN_VARS[key] || !pd || stepIdx < 0 || stepIdx >= pd.nSteps) return null;
-  var klem = !!KLEM_VARS[key];
-  var f = verfijnFactor(pd);
-  if (f < 2) return null;
-  var nLat = pd.nLat, nLon = pd.nLon, nComp = pd.nComp || 1;
-  var outLat = (nLat - 1) * f + 1, outLon = (nLon - 1) * f + 1;
-  if (outLat * outLon * nComp > 4.2e6) return null;   // te zwaar: laat bilineair staan
-
-  var cacheKey = modelId + '|' + key + '|' + stepIdx + '|' + f;
-  if (verfijnCache[cacheKey]) return verfijnCache[cacheKey];
-
-  var vlak = nLat * nLon, outVlak = outLat * outLon;
-  var uit = new Float32Array(outVlak * nComp);
-  var tussen = new Float32Array(nLat * outLon);   // eerst rijen, dan kolommen
-
-  for (var comp = 0; comp < nComp; comp++) {
-    var base = stepIdx * vlak * nComp + comp * vlak;
-    // 1. horizontaal verdichten
-    for (var y = 0; y < nLat; y++) {
-      var rij = base + y * nLon, uitRij = y * outLon;
-      for (var ox = 0; ox < outLon; ox++) {
-        var fx = ox / f, ix = Math.floor(fx), tx = fx - ix;
-        if (ix >= nLon - 1) { ix = nLon - 1; tx = 0; }
-        var x0 = ix - 1 < 0 ? 0 : ix - 1;
-        var x2 = ix + 1 > nLon - 1 ? nLon - 1 : ix + 1;
-        var x3 = ix + 2 > nLon - 1 ? nLon - 1 : ix + 2;
-        if (tx === 0) { tussen[uitRij + ox] = pd.data[rij + ix]; continue; }
-        var p1 = pd.data[rij + ix], p2 = pd.data[rij + x2];
-        var w = catmull(pd.data[rij + x0], p1, p2, pd.data[rij + x3], tx);
-        if (klem) {
-          var lo = p1 < p2 ? p1 : p2, hi = p1 < p2 ? p2 : p1;
-          if (w < lo) w = lo; else if (w > hi) w = hi;
-        }
-        tussen[uitRij + ox] = w;
-      }
-    }
-    // 2. verticaal verdichten
-    var compOff = comp * outVlak;
-    for (var oy = 0; oy < outLat; oy++) {
-      var fy = oy / f, iy = Math.floor(fy), ty = fy - iy;
-      if (iy >= nLat - 1) { iy = nLat - 1; ty = 0; }
-      var y0 = iy - 1 < 0 ? 0 : iy - 1;
-      var y2 = iy + 1 > nLat - 1 ? nLat - 1 : iy + 1;
-      var y3 = iy + 2 > nLat - 1 ? nLat - 1 : iy + 2;
-      var r0 = y0 * outLon, r1 = iy * outLon, r2 = y2 * outLon, r3 = y3 * outLon;
-      var uitOff = compOff + oy * outLon;
-      if (ty === 0) {
-        uit.set(tussen.subarray(r1, r1 + outLon), uitOff);
-      } else if (klem) {
-        for (var ox3 = 0; ox3 < outLon; ox3++) {
-          var q1 = tussen[r1 + ox3], q2 = tussen[r2 + ox3];
-          var wv = catmull(tussen[r0 + ox3], q1, q2, tussen[r3 + ox3], ty);
-          var qlo = q1 < q2 ? q1 : q2, qhi = q1 < q2 ? q2 : q1;
-          uit[uitOff + ox3] = wv < qlo ? qlo : (wv > qhi ? qhi : wv);
-        }
-      } else {
-        for (var ox2 = 0; ox2 < outLon; ox2++) {
-          uit[uitOff + ox2] = catmull(tussen[r0 + ox2], tussen[r1 + ox2], tussen[r2 + ox2], tussen[r3 + ox2], ty);
-        }
-      }
-    }
-  }
-
-  var veld = {
-    data: uit, nLat: outLat, nLon: outLon, nSteps: 1, nComp: nComp,
-    schaal: pd.schaal || 1, grid: pd.grid, bronNLat: pd.nLat, bronNLon: pd.nLon
-  };
-  verfijnCache[cacheKey] = veld;
-  verfijnVolgorde.push(cacheKey);
-  while (verfijnVolgorde.length > VERFIJN_CACHE_MAX) delete verfijnCache[verfijnVolgorde.shift()];
-  return veld;
-}
+// Kaartkleuren, puntwaarden en labels gebruiken hetzelfde bronrooster.
+// Bilineaire interpolatie voegt geen extrema of schijnresolutie toe.
 
 // ═══════════════════════════════════════════════════════════════
 // ISOLIJNEN
@@ -2029,8 +1926,8 @@ function tekenIsolijnen(pix, cw, ch, buf, minor, major) {
       var v = buf[i];
       if (v !== v) continue;
       var q = Math.floor(v * invMinor), qn = q, gevonden = false;
-      if (x + 1 < cw) { qn = Math.floor(buf[i + 1] * invMinor); if (qn !== q) gevonden = true; }
-      if (!gevonden && y + 1 < ch) { qn = Math.floor(buf[i + cw] * invMinor); if (qn !== q) gevonden = true; }
+      if (x + 1 < cw) { qn = Math.floor(buf[i + 1] * invMinor); if (Number.isFinite(qn) && qn !== q) gevonden = true; }
+      if (!gevonden && y + 1 < ch) { qn = Math.floor(buf[i + cw] * invMinor); if (Number.isFinite(qn) && qn !== q) gevonden = true; }
       if (!gevonden) continue;
       var niveau = (q > qn ? q : qn) * minor;
       var isMajor = Math.abs(niveau * invMajor - Math.round(niveau * invMajor)) < 1e-6;
@@ -2090,6 +1987,8 @@ function renderPanel(pIdx) {
   var md = modelData[mCfg.id];
   var canvas = document.getElementById('canvas-' + pIdx);
   var statusEl = document.getElementById('status-' + pIdx);
+  var resolutionEl=document.getElementById('p'+pIdx+'-res');
+  if(resolutionEl)resolutionEl.textContent='';
 
   var wrap = document.getElementById('cw' + pIdx);
   var newW = Math.round(wrap.clientWidth * DPR), newH = Math.round(wrap.clientHeight * DPR);
@@ -2107,13 +2006,9 @@ function renderPanel(pIdx) {
   // meta (voor de tijdenlijst) nodig.
   var tegelModus = activeVar === TEGEL_VAR;
   var metaKlaar = md && md.meta && md.meta.tijden;
-  if (!metaKlaar || (!tegelModus && (!md.paramData || Object.keys(md.paramData).length === 0))) {
+  if (!metaKlaar) {
     statusEl.style.display = 'block';
-    // Staat de meta er al en kent dit model de laag niet, dan is wachten
-    // zinloos: dan blijft "Laden..." anders eeuwig staan (deeplink ?laag=…).
-    if (metaKlaar && !laagBeschikbaar(md, activeVar, mCfg.id)) {
-      statusEl.textContent = 'Variabele niet beschikbaar';
-    } else if (!(md && md.failed)) statusEl.textContent = 'Laden...';
+    if (!(md && md.failed)) statusEl.textContent = 'Laden...';
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
@@ -2134,7 +2029,7 @@ function renderPanel(pIdx) {
   var data = md.data;
   var g = md.meta.grid;
 
-  // Viewport: gebruik gedeelde afmetingen (panel 0) zodat alle 6 panelen
+  // Viewport: gebruik gedeelde afmetingen (panel 0) zodat alle vier panelen
   // exact dezelfde geografische uitsnede tonen.
   var vpCw = sharedVpCw || cw, vpCh = sharedVpCh || ch;
   var vCenterLat = (view.latMin + view.latMax) / 2;
@@ -2194,8 +2089,9 @@ function renderPanel(pIdx) {
     lookupKey = 'bewolking';
   }
   if (!curParamData) {
-    var bezig = md.paramLaden && md.paramLaden[lookupKey];
-    var mislukt = md.paramFout && md.paramFout[lookupKey];
+    var loadKey=activeVar==='cumul'?'neerslag':activeVar==='cumzon'?'zon':activeVar==='radar'&&!md.meta.parameters.radar?'neerslag':lookupKey;
+    var bezig = md.paramLaden && md.paramLaden[loadKey];
+    var mislukt = md.paramFout && md.paramFout[loadKey];
     statusEl.style.display = 'block';
     statusEl.textContent = bezig ? 'Laden...'
                          : mislukt ? 'Laden mislukt — nieuwe poging volgt'
@@ -2214,10 +2110,7 @@ function renderPanel(pIdx) {
   // Roosterregel toont altijd de échte modelresolutie, niet de verdichting
   if (resEl) resEl.textContent = gridResolutionText(pd);
 
-  // Verdicht rooster gebruiken waar dat kan; die bevat één tijdstap (index 0)
-  var fijn = verfijndVeld(mCfg.id, lookupKey, pd, stepIdx);
   var veldStap = stepIdx;
-  if (fijn) { pd = fijn; veldStap = 0; }
 
   var pdNLat = pd.nLat, pdNLon = pd.nLon, pdNComp = pd.nComp;
   var pdG = pd.grid || g;
@@ -2248,20 +2141,9 @@ function renderPanel(pIdx) {
       var pi = (py * cw + px) * 4;
       var c = null;
 
-      // Outside model domain?
-      if (fx < -0.5 || fx > pdNLon - 0.5 || fy < -0.5 || fy > pdNLat - 0.5) {
-        if (activeVar === 'bewolking') {
-          pix[pi] = 236; pix[pi+1] = 244; pix[pi+2] = 247; pix[pi+3] = 255;  // lichte lucht
-        } else if (activeVar === 'bewolking_totaal') {
-          pix[pi] = 253; pix[pi+1] = 253; pix[pi+2] = 254; pix[pi+3] = 255;  // 0 octa
-        } else if (activeVar === 'wolkenlagen') {
-          pix[pi] = 0; pix[pi+1] = 0; pix[pi+2] = 0; pix[pi+3] = 255;        // zwart (additieve RGB)
-        } else if (activeVar === 'wind' || activeVar === 'windstoten') {
-          pix[pi] = 18; pix[pi+1] = 28; pix[pi+2] = 44; pix[pi+3] = 255;     // donker (kleurvlak-vars)
-        } else {
-          pix[pi] = 255; pix[pi+1] = 255; pix[pi+2] = 255; pix[pi+3] = 255;  // wit
-        }
-        continue;
+      // Outside the source grid is unknown, not dry or cloud-free.
+      if (fx < 0 || fx > pdNLon - 1 || fy < 0 || fy > pdNLat - 1) {
+        pix[pi]=200;pix[pi+1]=210;pix[pi+2]=220;pix[pi+3]=255;continue;
       }
 
       // Clamp
@@ -2270,87 +2152,26 @@ function renderPanel(pIdx) {
       if (gx0 >= pdNLon) gx0 = pdNLon-1; if (gx1 >= pdNLon) gx1 = pdNLon-1;
       if (gy0 >= pdNLat) gy0 = pdNLat-1; if (gy1 >= pdNLat) gy1 = pdNLat-1;
 
+      var plane=pdNLat*pdNLon, base=pdStepOffMC, scale=pd.schaal||1;
+      var idx0=gy0*pdNLon+gx0,idx1=gy0*pdNLon+gx1,idx2=gy1*pdNLon+gx0,idx3=gy1*pdNLon+gx1;
+      var aa=VierluikCore.bilinear(pd.data[base+idx0],pd.data[base+idx1],pd.data[base+idx2],pd.data[base+idx3],fracx,fracy)*scale;
+      var bb=pdNComp>1?VierluikCore.bilinear(pd.data[base+plane+idx0],pd.data[base+plane+idx1],pd.data[base+plane+idx2],pd.data[base+plane+idx3],fracx,fracy)*scale:0;
+      var cc=pdNComp>2?VierluikCore.bilinear(pd.data[base+2*plane+idx0],pd.data[base+2*plane+idx1],pd.data[base+2*plane+idx2],pd.data[base+2*plane+idx3],fracx,fracy)*scale:0;
+      if(!Number.isFinite(aa)||!Number.isFinite(bb)||!Number.isFinite(cc)){
+        pix[pi]=200;pix[pi+1]=210;pix[pi+2]=220;pix[pi+3]=255;continue;
+      }
       if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
-        // 3 componenten: hoog, midden, laag — bilineair, bewust zonder closure
-        // in de pixellus (die kostte drie functie-objecten per beeldpunt).
-        var i00 = gy0*pdNLon + gx0, i01 = gy0*pdNLon + gx1;
-        var i10 = gy1*pdNLon + gx0, i11 = gy1*pdNLon + gx1;
-        var w00 = (1-fracx)*(1-fracy), w01 = fracx*(1-fracy);
-        var w10 = (1-fracx)*fracy,     w11 = fracx*fracy;
-        var bN = pdNLat * pdNLon, bB = pdStepOffMC, bSchaal = pd.schaal || 1;
-        var hh = (pd.data[bB+i00]*w00 + pd.data[bB+i01]*w01 + pd.data[bB+i10]*w10 + pd.data[bB+i11]*w11) * bSchaal;
-        var bM = bB + bN;
-        var mm2 = (pd.data[bM+i00]*w00 + pd.data[bM+i01]*w01 + pd.data[bM+i10]*w10 + pd.data[bM+i11]*w11) * bSchaal;
-        var bL = bB + 2*bN;
-        var ll = (pd.data[bL+i00]*w00 + pd.data[bL+i01]*w01 + pd.data[bL+i10]*w10 + pd.data[bL+i11]*w11) * bSchaal;
-        c = activeVar === 'bewolking_totaal'
-          ? octaColor(totaleBewolking(hh, mm2, ll))
-          : cloudCompositeColor(hh, mm2, ll);
-      } else if (activeVar === 'wolkenlagen') {
-        // Additieve RGB-composiet (Meteociel "couches nébu."): R=laag, G=midden, B=hoog, op zwart.
-        // Data-componenten: 0=hoog, 1=midden, 2=laag (zelfde bin als bewolking).
-        var j00 = gy0*pdNLon + gx0, j01 = gy0*pdNLon + gx1;
-        var j10 = gy1*pdNLon + gx0, j11 = gy1*pdNLon + gx1;
-        var q00 = (1-fracx)*(1-fracy), q01 = fracx*(1-fracy);
-        var q10 = (1-fracx)*fracy,     q11 = fracx*fracy;
-        var wlN = pdNLat * pdNLon, wlB = pdStepOffMC, wlSchaal = pd.schaal || 1;
-        var wlHigh = (pd.data[wlB+j00]*q00 + pd.data[wlB+j01]*q01 + pd.data[wlB+j10]*q10 + pd.data[wlB+j11]*q11) * wlSchaal;
-        var wlM = wlB + wlN, wlL = wlB + 2*wlN;
-        var wlMid = pdNComp > 1
-          ? (pd.data[wlM+j00]*q00 + pd.data[wlM+j01]*q01 + pd.data[wlM+j10]*q10 + pd.data[wlM+j11]*q11) * wlSchaal : 0;
-        var wlLow = pdNComp > 2
-          ? (pd.data[wlL+j00]*q00 + pd.data[wlL+j01]*q01 + pd.data[wlL+j10]*q10 + pd.data[wlL+j11]*q11) * wlSchaal : 0;
-        var wlG = 0.85;  // gamma: dunne bewolking al zichtbaar
-        c = [
-          Math.round(255 * Math.pow(Math.max(0, Math.min(1, wlLow)),  wlG)),
-          Math.round(255 * Math.pow(Math.max(0, Math.min(1, wlMid)),  wlG)),
-          Math.round(255 * Math.pow(Math.max(0, Math.min(1, wlHigh)), wlG))
-        ];
-      } else if (activeVar === 'wind') {
-        // 2 components: U, V — bilinear
-        var wBase0 = pdStepOffMC + 0 * pdNLat * pdNLon;
-        var wBase1 = pdStepOffMC + 1 * pdNLat * pdNLon;
-        var wu00=pd.data[wBase0+gy0*pdNLon+gx0]||0, wu01=pd.data[wBase0+gy0*pdNLon+gx1]||0;
-        var wu10=pd.data[wBase0+gy1*pdNLon+gx0]||0, wu11=pd.data[wBase0+gy1*pdNLon+gx1]||0;
-        var wv00=pd.data[wBase1+gy0*pdNLon+gx0]||0, wv01=pd.data[wBase1+gy0*pdNLon+gx1]||0;
-        var wv10=pd.data[wBase1+gy1*pdNLon+gx0]||0, wv11=pd.data[wBase1+gy1*pdNLon+gx1]||0;
-        var u  = wu00*(1-fracx)*(1-fracy)+wu01*fracx*(1-fracy)+wu10*(1-fracx)*fracy+wu11*fracx*fracy;
-        var v2 = wv00*(1-fracx)*(1-fracy)+wv01*fracx*(1-fracy)+wv10*(1-fracx)*fracy+wv11*fracx*fracy;
-        var spd = Math.sqrt(u*u + v2*v2);
-        c = windKleur(spd);
-        if (isoInstel) veldBuffer[py * cw + px] = bftFractie(spd);
-      } else if (activeVar === 'windstoten') {
-        // 2 componenten: U,V-vector (HARMONIE) of scalar+0 (ICON-D2)
-        // → magnitude sqrt(u²+v²) werkt correct voor beide
-        var gsB0 = pdStepOffMC + 0 * pdNLat * pdNLon;
-        var gsB1 = pdStepOffMC + 1 * pdNLat * pdNLon;
-        var gu00=pd.data[gsB0+gy0*pdNLon+gx0]||0, gu01=pd.data[gsB0+gy0*pdNLon+gx1]||0;
-        var gu10=pd.data[gsB0+gy1*pdNLon+gx0]||0, gu11=pd.data[gsB0+gy1*pdNLon+gx1]||0;
-        var gv00=pd.data[gsB1+gy0*pdNLon+gx0]||0, gv01=pd.data[gsB1+gy0*pdNLon+gx1]||0;
-        var gv10=pd.data[gsB1+gy1*pdNLon+gx0]||0, gv11=pd.data[gsB1+gy1*pdNLon+gx1]||0;
-        var gsU = gu00*(1-fracx)*(1-fracy)+gu01*fracx*(1-fracy)+gu10*(1-fracx)*fracy+gu11*fracx*fracy;
-        var gsV = gv00*(1-fracx)*(1-fracy)+gv01*fracx*(1-fracy)+gv10*(1-fracx)*fracy+gv11*fracx*fracy;
-        var gsVal = Math.sqrt(gsU*gsU + gsV*gsV);
-        c = windKleur(gsVal);
-        if (isoInstel) veldBuffer[py * cw + px] = gsVal * 3.6;   // km/u
+        if(pdNComp<3)continue;
+        c=activeVar==='bewolking_totaal'?octaColor(totaleBewolking(aa,bb,cc)):cloudCompositeColor(aa,bb,cc);
+      } else if(activeVar==='wolkenlagen'){
+        if(pdNComp<3)continue;
+        c=[cc,bb,aa].map(function(v){return Math.round(255*Math.pow(Math.max(0,Math.min(1,v)),0.85));});
+      } else if(activeVar==='wind'||activeVar==='windstoten'){
+        var speed=Math.hypot(aa,bb);
+        c=windKleur(speed);
+        if(isoInstel)veldBuffer[py*cw+px]=activeVar==='wind'?bftFractie(speed):speed*3.6;
       } else {
-        // Single-component bilinear
-        var sOff = pdStepOff;
-        var v00 = pd.data[sOff + gy0*pdNLon + gx0];
-        var v01 = pd.data[sOff + gy0*pdNLon + gx1];
-        var v10 = pd.data[sOff + gy1*pdNLon + gx0];
-        var v11 = pd.data[sOff + gy1*pdNLon + gx1];
-        if (![v00, v01, v10, v11].every(Number.isFinite)) {
-          pix[pi] = 200; pix[pi+1] = 210; pix[pi+2] = 220; pix[pi+3] = 255;
-          continue;
-        }
-        // Bilineair voor alle variabelen — max-pooling bewaart neerslag-pieken in data.
-        var val = v00*(1-fracx)*(1-fracy)+v01*fracx*(1-fracy)+v10*(1-fracx)*fracy+v11*fracx*fracy;
-
-        if (isNaN(val)) {
-          pix[pi] = 200; pix[pi+1] = 210; pix[pi+2] = 220; pix[pi+3] = 255;
-          continue;
-        }
+        var val=VierluikCore.scalarValue(activeVar,aa);
 
         if (activeVar === 'neerslag') {
           c = val >= NEERSLAG_MM_LEVELS[0] ? boundaryColor(val, NEERSLAG_MM_LEVELS, NEERSLAG_MM_COLORS) : null;
@@ -2482,13 +2303,8 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       // ── Wind: pijl in windrichting + Bft-getal ──────────────
       if (activeVar === 'wind') {
         if (pdNComp < 2) continue;
-        var wB0 = pdStepOffMC, wB1 = pdStepOffMC + pdNLat * pdNLon;
-        var u00=pd.data[wB0+gy0*pdNLon+gx0]||0, u01=pd.data[wB0+gy0*pdNLon+gx1]||0;
-        var u10=pd.data[wB0+gy1*pdNLon+gx0]||0, u11=pd.data[wB0+gy1*pdNLon+gx1]||0;
-        var v00=pd.data[wB1+gy0*pdNLon+gx0]||0, v01=pd.data[wB1+gy0*pdNLon+gx1]||0;
-        var v10=pd.data[wB1+gy1*pdNLon+gx0]||0, v11=pd.data[wB1+gy1*pdNLon+gx1]||0;
-        var u = u00*(1-fracx)*(1-fracy)+u01*fracx*(1-fracy)+u10*(1-fracx)*fracy+u11*fracx*fracy;
-        var v = v00*(1-fracx)*(1-fracy)+v01*fracx*(1-fracy)+v10*(1-fracx)*fracy+v11*fracx*fracy;
+        var u=sampleComponent(pd,stepIdx,lat,lon,0),v=sampleComponent(pd,stepIdx,lat,lon,1);
+        if(u===null||v===null)continue;
         var spd = Math.sqrt(u*u + v*v);
         var bft = msNaarBft(spd);
         // atan2(U, V): 0 = noord, π/2 = oost (canvas 0 = omhoog)
@@ -2517,7 +2333,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         ctx.lineTo(-ah * 0.5, -aLen * 0.5 + ah);    // pijlpunt links
         ctx.moveTo(0, -aLen * 0.5);
         ctx.lineTo( ah * 0.5, -aLen * 0.5 + ah);    // pijlpunt rechts
-        ctx.stroke();
+        if(spd>=0.3)ctx.stroke();
         ctx.restore();
         var bftY = py + aLen * 0.5 + fontSize * 0.8;
         ctx.font = 'bold ' + fontSize + 'px sans-serif';
@@ -2531,27 +2347,12 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         // Windstoten km/h onder Bft-getal
         var gsModelId = MODELS[panels[pIdx].modelIdx].id;
         var gsPd = modelData[gsModelId] && modelData[gsModelId].paramData['windstoten'];
-        if (gsPd) {
-          var gsNLat = gsPd.nLat, gsNLon = gsPd.nLon, gsNComp = gsPd.nComp;
-          var gsG = gsPd.grid || pdG;
-          var gsFy = (lat - gsG.lat_min) / (gsG.lat_max - gsG.lat_min) * (gsNLat - 1);
-          var gsFx = (lon - gsG.lon_min) / (gsG.lon_max - gsG.lon_min) * (gsNLon - 1);
-          if (gsFx >= 0 && gsFx <= gsNLon - 0.5 && gsFy >= 0 && gsFy <= gsNLat - 0.5) {
-            var gsX0=Math.floor(gsFx), gsX1=Math.min(gsX0+1,gsNLon-1);
-            var gsY0=Math.floor(gsFy), gsY1=Math.min(gsY0+1,gsNLat-1);
-            var gsFracX=gsFx-gsX0, gsFracY=gsFy-gsY0;
-            var gsOff = stepIdx * gsNLat * gsNLon * gsNComp;
-            var gsOff1 = gsOff + gsNLat * gsNLon;
-            var gs00=gsPd.data[gsOff+gsY0*gsNLon+gsX0]||0, gs01=gsPd.data[gsOff+gsY0*gsNLon+gsX1]||0;
-            var gs10=gsPd.data[gsOff+gsY1*gsNLon+gsX0]||0, gs11=gsPd.data[gsOff+gsY1*gsNLon+gsX1]||0;
-            var gw00=gsPd.data[gsOff1+gsY0*gsNLon+gsX0]||0, gw01=gsPd.data[gsOff1+gsY0*gsNLon+gsX1]||0;
-            var gw10=gsPd.data[gsOff1+gsY1*gsNLon+gsX0]||0, gw11=gsPd.data[gsOff1+gsY1*gsNLon+gsX1]||0;
-            var gsMsU = gs00*(1-gsFracX)*(1-gsFracY)+gs01*gsFracX*(1-gsFracY)+gs10*(1-gsFracX)*gsFracY+gs11*gsFracX*gsFracY;
-            var gsMsV = gw00*(1-gsFracX)*(1-gsFracY)+gw01*gsFracX*(1-gsFracY)+gw10*(1-gsFracX)*gsFracY+gw11*gsFracX*gsFracY;
-            var gsKmh = Math.round(Math.sqrt(gsMsU*gsMsU + gsMsV*gsMsV) * 3.6);
-            ctx.font = (fontSize - 2) + 'px sans-serif';
-            ctx.fillStyle = '#ffe066';
-            ctx.fillText(gsKmh + '', px, bftY + fontSize);
+        if(gsPd){
+          var gu=sampleComponent(gsPd,stepIdx,lat,lon,0);
+          var gv=gsPd.nComp===1?0:sampleComponent(gsPd,stepIdx,lat,lon,1);
+          if(gu!==null&&gv!==null){
+            ctx.font=(fontSize-2)+'px sans-serif';ctx.fillStyle='#ffe066';
+            ctx.fillText(String(Math.round(Math.hypot(gu,gv)*3.6)),px,bftY+fontSize);
           }
         }
         ctx.shadowBlur = 0;
@@ -2559,40 +2360,19 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       }
 
       // ── Windstoten: km/h getal ───────────────────────────────
-      var val;
-      if (activeVar === 'windstoten') {
-        // magnitude van U,V-vector (HARMONIE) of scalar+0 (ICON-D2)
-        var gB0 = pdStepOffMC, gB1 = pdStepOffMC + pdNLat * pdNLon;
-        var a00=pd.data[gB0+gy0*pdNLon+gx0]||0, a01=pd.data[gB0+gy0*pdNLon+gx1]||0;
-        var a10=pd.data[gB0+gy1*pdNLon+gx0]||0, a11=pd.data[gB0+gy1*pdNLon+gx1]||0;
-        var b00=pd.data[gB1+gy0*pdNLon+gx0]||0, b01=pd.data[gB1+gy0*pdNLon+gx1]||0;
-        var b10=pd.data[gB1+gy1*pdNLon+gx0]||0, b11=pd.data[gB1+gy1*pdNLon+gx1]||0;
-        var mu = a00*(1-fracx)*(1-fracy)+a01*fracx*(1-fracy)+a10*(1-fracx)*fracy+a11*fracx*fracy;
-        var mv = b00*(1-fracx)*(1-fracy)+b01*fracx*(1-fracy)+b10*(1-fracx)*fracy+b11*fracx*fracy;
-        var ms = Math.sqrt(mu*mu + mv*mv);
-        val = Math.round(ms * 3.6);  // m/s → km/h
-      } else if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
-        // 3 componenten (hoog/midden/laag) → totale bedekking in procenten.
-        var bwVlak = pdNLat * pdNLon, bwSchaal = pd.schaal || 1;
-        var bwW00 = (1-fracx)*(1-fracy), bwW01 = fracx*(1-fracy);
-        var bwW10 = (1-fracx)*fracy,     bwW11 = fracx*fracy;
-        var bwI00 = gy0*pdNLon+gx0, bwI01 = gy0*pdNLon+gx1;
-        var bwI10 = gy1*pdNLon+gx0, bwI11 = gy1*pdNLon+gx1;
-        var bwLaag = [];
-        for (var bwC = 0; bwC < 3; bwC++) {
-          var bwB = pdStepOffMC + bwC * bwVlak;
-          bwLaag.push((pd.data[bwB+bwI00]*bwW00 + pd.data[bwB+bwI01]*bwW01 +
-                       pd.data[bwB+bwI10]*bwW10 + pd.data[bwB+bwI11]*bwW11) * bwSchaal);
-        }
-        val = Math.round(totaleBewolking(bwLaag[0], bwLaag[1], bwLaag[2]) * 100);
-      } else {
-        var v00=pd.data[pdStepOff+gy0*pdNLon+gx0], v01=pd.data[pdStepOff+gy0*pdNLon+gx1];
-        var v10=pd.data[pdStepOff+gy1*pdNLon+gx0], v11=pd.data[pdStepOff+gy1*pdNLon+gx1];
-        if (isNaN(v00+v01+v10+v11)) continue;
-        val = v00*(1-fracx)*(1-fracy)+v01*fracx*(1-fracy)+v10*(1-fracx)*fracy+v11*fracx*fracy;
-        val = Math.round(val * 10) / 10;
+      var val=sampleComponent(pd,stepIdx,lat,lon,0);
+      if(val===null)continue;
+      if(activeVar==='windstoten'){
+        var gustV=pd.nComp===1?0:sampleComponent(pd,stepIdx,lat,lon,1);
+        if(gustV===null)continue;
+        val=Math.round(Math.hypot(val,gustV)*3.6);
+      }else if(activeVar==='bewolking'||activeVar==='bewolking_totaal'){
+        var cloudM=sampleComponent(pd,stepIdx,lat,lon,1),cloudL=sampleComponent(pd,stepIdx,lat,lon,2);
+        if(cloudM===null||cloudL===null)continue;
+        val=totaleBewolking(val,cloudM,cloudL)*100;
       }
-      if (isNaN(val)) continue;
+      if(!Number.isFinite(val))continue;
+      val=VierluikCore.scalarValue(activeVar,val);
 
       // Geheel-getal-vars: sla lage/onbelangrijke waarden over
       if (activeVar === 'neerslag' && val < 0.2) continue;   // droog: geen getal
@@ -2673,51 +2453,14 @@ function renderOverlay(pIdx, cw, ch, lonMin, lonMax, latMin, latMax) {
 // ═══════════════════════════════════════════════════════════════
 
 function loadParamBin(modelId, paramKey, meta) {
-  var info = meta.parameters[paramKey];
-  if (!info || info.derived) return Promise.resolve(null);
-
-  var ts = meta.bijgewerkt ? encodeURIComponent(meta.bijgewerkt) : 'v1';
-  return fetch(DATA_URL + info.file + '?v=' + ts)
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' voor ' + info.file);
-      return r.arrayBuffer();
-    })
-    .then(function(buf) {
-      if (buf.byteLength < 16) throw new Error('Onvolledig databestand: ' + info.file);
-      var dv = new DataView(buf);
-      var nLat  = dv.getUint16(0, true);
-      var nLon  = dv.getUint16(2, true);
-      var nStps = dv.getUint16(4, true);
-      var nComp = dv.getUint16(6, true);
-      var dtype = dv.getUint8(8);  // 0 = float32, 1 = uint8 sqrt, 2 = uint8 lineair 0..1
-      var data, schaal = 1;
-      if (dtype === 1) {
-        var scale = info.scale || 16;
-        // Exponent van de uint8-codering: q = round(waarde^(1/power) * scale), dus
-        // terug waarde = (q/scale)^power. Staat 'power' niet in de meta, dan komt het
-        // bestand uit de tijd dat alles de wortelcodering had (power 2).
-        var macht = info.power || 2;
-        var raw = new Uint8Array(buf, 16);
-        data = new Float32Array(raw.length);
-        var inv = 1 / scale;
-        for (var i = 0; i < raw.length; i++) {
-          var q = raw[i] * inv;
-          data[i] = macht === 3 ? q * q * q : macht === 1 ? q : q * q;
-        }
-      } else if (dtype === 2) {
-        // Bewolkingsfracties op volle modelresolutie. Bewust als Uint8Array
-        // laten staan: uitpakken naar float32 zou 26 miljoen waarden viermaal
-        // zo veel geheugen kosten. De schaal 1/255 wordt ná de interpolatie
-        // toegepast — lineair, dus wiskundig identiek.
-        data = new Uint8Array(buf, 16);
-        schaal = 1 / 255;
-      } else {
-        data = new Float32Array(buf, 16);
-      }
-      return {
-        nLat: nLat, nLon: nLon, nSteps: nStps, nComp: nComp,
-        data: data, schaal: schaal, grid: info.grid || meta.grid
-      };
+  var info=meta.parameters[paramKey];
+  if(!info || info.derived)return Promise.resolve(null);
+  return fetch(DATA_URL+info.file+'?v='+encodeURIComponent(meta.bijgewerkt||meta.run_utc||'v1'))
+    .then(function(r){if(!r.ok)throw Error('HTTP '+r.status+' voor '+info.file);return r.arrayBuffer();})
+    .then(function(buf){
+      var pd=VierluikCore.decode(buf,info,meta);
+      if((paramKey==='wind'&&pd.nComp!==2)||(/^bewolking/.test(paramKey)&&pd.nComp!==3))throw Error('Verkeerde componenten voor '+paramKey);
+      return paramKey==='windstoten'?VierluikCore.gustMagnitude(pd):pd;
     });
 }
 
@@ -2731,18 +2474,16 @@ var CUMUL_MM_COLORS = [
   [0,51,128],[51,0,128],[102,0,153],[153,0,153],[200,0,100],[220,50,50]
 ];
 
+function comparisonStart() {
+  var starts=actieveModellen().map(function(m){var d=modelData[m.id];return d&&d.meta?VierluikCore.timeMs(d.meta.tijden[0]):NaN;});
+  return starts.length && starts.every(Number.isFinite)?Math.max.apply(null,starts):NaN;
+}
 function computeCumulNeerslag(md) {
-  var pd = md.paramData['neerslag'];
-  if (!pd) return;
-  var nS = pd.nSteps, nL = pd.nLat, nN = pd.nLon, sz = nL * nN;
-  var cum = new Float32Array(nS * sz);
-  for (var s = 0; s < nS; s++) {
-    var off = s * sz;
-    for (var i = 0; i < sz; i++) {
-      cum[off + i] = (s > 0 ? cum[(s-1)*sz + i] : 0) + Math.max(0, pd.data[off + i] || 0);
-    }
-  }
-  md.paramData['cumul'] = { data: cum, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid };
+  var pd=md.paramData.neerslag,start=comparisonStart();
+  if(!pd)return;
+  if(!Number.isFinite(start))return;
+  if(md.paramData.cumul && md.paramData.cumul.startMs===start)return;
+  md.paramData.cumul=VierluikCore.cumulative(pd,md.meta.tijden,start,false);
 }
 
 // Pseudo-radar voor modellen zonder reflectiviteitsveld: Marshall-Palmer
@@ -2756,7 +2497,8 @@ function computeRadarUitNeerslag(md) {
   var dbz = new Float32Array(nS * sz);
   var schaal = pd.schaal || 1;
   for (var i = 0; i < nS * sz; i++) {
-    var r = (pd.data[i] || 0) * schaal;
+    var r = pd.data[i] * schaal;
+    if(!Number.isFinite(r)){dbz[i]=NaN;continue;}
     dbz[i] = r >= 0.05 ? 10 * Math.log10(Math.max(200 * Math.pow(Math.max(r, 0.001), 1.6), 1)) : 0;
   }
   md.paramData['radar'] = { data: dbz, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid, afgeleid: true };
@@ -2766,23 +2508,10 @@ function computeRadarUitNeerslag(md) {
 // reset om middernacht lokale tijd. De modellen leveren alleen het uurveld, dus
 // deze som wordt hier gemaakt — net als de cumulatieve neerslag hierboven.
 function computeCumZon(md) {
-  var pd = md.paramData['zon'];
-  if (!pd) return;
-  var nS = pd.nSteps, nL = pd.nLat, nN = pd.nLon, sz = nL * nN;
-  var tijden = (md.meta && md.meta.tijden) || [];
-  var cum = new Float32Array(nS * sz);
-  var vorigeDag = null;
-  for (var s = 0; s < nS; s++) {
-    var off = s * sz;
-    var dag = (tijden[s] || '').slice(0, 10);
-    var nieuweDag = (vorigeDag === null || dag !== vorigeDag);
-    vorigeDag = dag;
-    for (var i = 0; i < sz; i++) {
-      var minuten = Math.max(0, pd.data[off + i] || 0) * (pd.schaal || 1);
-      cum[off + i] = (nieuweDag ? 0 : cum[(s - 1) * sz + i]) + minuten / 60;
-    }
-  }
-  md.paramData['cumzon'] = { data: cum, nLat: nL, nLon: nN, nSteps: nS, nComp: 1, grid: pd.grid };
+  var pd=md.paramData.zon,start=comparisonStart();
+  if(!pd || !Number.isFinite(start))return;
+  if(md.paramData.cumzon && md.paramData.cumzon.startMs===start)return;
+  md.paramData.cumzon=VierluikCore.cumulative(pd,md.meta.tijden,start,true);
 }
 
 // Welke parameter uit de meta hoort bij een kaartlaag. HARMONIE levert de
@@ -2827,25 +2556,14 @@ function loadParamIfNeeded(modelId, key) {
     });
   }
   if (key === 'cumul') {
-    if (md.paramData['cumul']) return Promise.resolve();
-    // Prefereer pre-computed bin; val back op JS-berekening als bin ontbreekt
-    if (md.meta.parameters['cumul']) {
-      return loadParamBin(modelId, 'cumul', md.meta).then(function(pd) {
-        if (pd) md.paramData['cumul'] = pd;
-        else return loadParamIfNeeded(modelId, 'neerslag').then(function() {
-          if (!md.paramData['cumul']) computeCumulNeerslag(md);
-        });
-      });
-    }
-    return loadParamIfNeeded(modelId, 'neerslag').then(function() {
-      if (!md.paramData['cumul']) computeCumulNeerslag(md);
-    });
+    return loadParamIfNeeded(modelId,'neerslag').then(function(){computeCumulNeerslag(md);});
   }
   if (md.paramData[key]) return Promise.resolve();
   if (!md.meta.parameters[key] || md.meta.parameters[key].derived) return Promise.resolve();
-  if (md.paramLaden && md.paramLaden[key]) return Promise.resolve();
+  if (md.pending && md.pending[key]) return md.pending[key];
+  if (!md.pending) md.pending={};
   markeerLaden(md, key, true);
-  return loadParamBin(modelId, key, md.meta).then(function(pd) {
+  md.pending[key] = loadParamBin(modelId, key, md.meta).then(function(pd) {
     markeerLaden(md, key, false);
     if (pd) md.paramData[key] = pd;
     requestRender();
@@ -2862,12 +2580,13 @@ function loadParamIfNeeded(modelId, key) {
         requestRender();
       }).catch(function() {
         markeerLaden(md, 'bewolking', false);
-        md.paramFout['bewolking'] = true;
+        md.paramFout['bewolking'] = true; requestRender();
       });
     }
-    md.paramFout[key] = true;
+    md.paramFout[key] = true; requestRender();
     console.warn('Laag ' + key + ' van ' + modelId + ' laden mislukt:', err);
   });
+  return md.pending[key].finally(function(){delete md.pending[key];});
 }
 
 function fetchModelMeta(mCfg) {
@@ -2881,6 +2600,10 @@ function fetchModelMeta(mCfg) {
 function loadModel(mCfg, pIdx, freshMeta) {
   return (freshMeta ? Promise.resolve(freshMeta) : fetchModelMeta(mCfg))
     .then(function(meta) {
+      if(!Array.isArray(meta.tijden)||!meta.tijden.length)throw Error('Geen geldige tijden');
+      meta.tijden=meta.tijden.map(function(t){var ms=VierluikCore.timeMs(t);if(!Number.isFinite(ms))throw Error('Ongeldig tijdstip');return new Date(ms).toISOString();});
+      if(meta.tijden.some(function(t,i){return i>0 && t<=meta.tijden[i-1];}))throw Error('Niet-oplopende of dubbele tijden in de bron');
+      if(modelData[mCfg.id]){delete tegelMeta[mCfg.id];}
       modelData[mCfg.id] = { meta: meta, paramData: {} };
       getGlobalTimes();
       requestRender();
@@ -2901,7 +2624,7 @@ function loadModel(mCfg, pIdx, freshMeta) {
       return loadParamIfNeeded(mCfg.id, activeVar);
     })
     .then(function() {
-      // cumul bin al geladen via initKeys; JS-fallback alleen als bin ontbrak
+      // Afgeleide sommen zijn beschikbaar zodra hun bronveld is geladen.
       if (activeVar === 'cumul' && !modelData[mCfg.id].paramData['cumul']) computeCumulNeerslag(modelData[mCfg.id]);
       if (activeVar === 'cumzon' && !modelData[mCfg.id].paramData['cumzon']) computeCumZon(modelData[mCfg.id]);
       getGlobalTimes();
@@ -2935,7 +2658,7 @@ var refreshInProgress = false;
 function metaVersion(meta) {
   if (!meta) return '';
   var tijden = meta.tijden || [];
-  return [meta.bijgewerkt || '', meta.run_utc || '', meta.run || '', tijden[0] || '', tijden[tijden.length - 1] || ''].join('|');
+  return [meta.bijgewerkt || '', meta.run_utc || '', meta.run || '', tijden.length?VierluikCore.timeMs(tijden[0]):'', tijden.length?VierluikCore.timeMs(tijden[tijden.length - 1]):''].join('|');
 }
 
 function refreshModels() {
@@ -2943,11 +2666,11 @@ function refreshModels() {
   refreshInProgress = true;
   // Alleen de modellen die nu in het vierluik staan opnieuw controleren
   var actief = actieveModellen();
-  return Promise.all(actief.map(fetchModelMeta))
+  return Promise.all(actief.map(function(m){return fetchModelMeta(m).catch(function(){return null;});}))
     .then(function(metas) {
       var changed = metas.map(function(meta, i) {
         var current = modelData[actief[i].id];
-        return { meta: meta, model: actief[i], changed: !current || metaVersion(current.meta) !== metaVersion(meta) };
+        return { meta: meta, model: actief[i], changed: !!meta && (!current || metaVersion(current.meta) !== metaVersion(meta)) };
       }).filter(function(item) { return item.changed; });
       return Promise.all(changed.map(function(item) {
         return loadModel(item.model, panelVoorModel(item.model.id), item.meta);
@@ -3002,124 +2725,93 @@ function requestRender() {
   renderPending = true;
   requestAnimationFrame(function() {
     renderPending = false;
+    if(activeVar==='cumul')actieveModellen().forEach(function(m){var md=modelData[m.id];if(md&&md.paramData)computeCumulNeerslag(md);});
+    if(activeVar==='cumzon')actieveModellen().forEach(function(m){var md=modelData[m.id];if(md&&md.paramData)computeCumZon(md);});
+    updateAllPanelHeaders();
+    updateLegend();
     pasGridBreedteAan();
+    equalizeLegends();
     // Bereken aspect ratio eenmalig vanuit panel 0 — garandeert identieke uitsnede
     var ref = document.getElementById('cw0');
     sharedVpCw = ref ? ref.clientWidth : 0;
     sharedVpCh = ref ? ref.clientHeight : 0;
     panels.forEach(function(p) { renderPanel(p.idx); });
-    updateLegend();
     updateComparison();
   });
 }
 
 function buildLegendHTML(pIdx) {
-  var swatches = '', labels = '', title = '';
-
-  function sw(c) { return '<div class="leg-swatch" style="background:rgb('+c[0]+','+c[1]+','+c[2]+')"></div>'; }
-  function lbl(ls) { return ls.map(function(l){ return '<span>'+l+'</span>'; }).join(''); }
-
-  if (activeVar === 'neerslag') {
-    title = 'Neerslag mm/u · getal vanaf 0,2';
-    NEERSLAG_MM_COLORS.forEach(function(c){ swatches += sw(c); });
-    // Zeventien getallen van 8 px passen niet naast elkaar in de legendabalk; ze
-    // liepen in elkaar over tot één streep cijfers. Elk tweede niveau staat nog
-    // steeds precies boven een klassegrens en is wél leesbaar.
-    labels = lbl(['0.03','0.1','0.5','2','5','10','25','50','100+']);
-  } else if (activeVar === 'radar') {
-    // ICON-D2: echte dbz_cmax (instantaan kolom-max).
-    // HARMONIE + AROME: afgeleid uit uursom (geen sim. reflectiviteit beschikbaar)
-    var rmIdx = panels[pIdx] ? panels[pIdx].modelIdx : 0;
-    var radarModel = rmIdx >= 0 ? MODELS[rmIdx].id : '';
-    var rmMd = radarModel && modelData[radarModel];
-    var echt = rmMd && rmMd.meta && rmMd.meta.parameters && rmMd.meta.parameters.radar && radarModel === 'icond2';
-    title = echt ? 'Radar dBZ (instantaan)' : 'Radar dBZ (afgeleid uit uursom)';
-    RADAR_DBZ_COLORS.forEach(function(c){ swatches += sw(c); });
-    labels = lbl(['4','6','12','18','24','30','36','42','48','54','60','66','72+']);
-  } else if (activeVar === 'temp') {
-    title = 'Temperatuur °C · lijn = 1 °C';
-    [-20,-15,-10,-5,0,5,10,15,20,25,30,35].forEach(function(t){ swatches += sw(interpColor(t, TEMP_REF)); });
-    labels = lbl(['-20','-10','0','10','20','30']);
-  } else if (activeVar === 'dauwpunt') {
-    title = 'Dauwpunt °C · lijn = 1 °C';
-    [-15,-10,-5,0,4,8,12,15,18,21,24].forEach(function(t){ swatches += sw(interpColor(t, TEMP_REF)); });
-    labels = lbl(['-15','-5','0','8','15','21']);
-  } else if (activeVar === 'druk') {
-    title = 'Luchtdruk hPa · lijn = 1 hPa';
-    [975,985,995,1005,1010,1015,1020,1028,1036,1045].forEach(function(p){ swatches += sw(interpColor(p, DRUK_REF)); });
-    labels = lbl(['975','995','1010','1020','1036','1045']);
-  } else if (activeVar === 'cape') {
-    title = 'CAPE J/kg · lijn = 100';
-    [0,100,250,500,750,1000,1500,2000,3000,4000].forEach(function(v){ swatches += sw(interpColor(v, CAPE_REF)); });
-    labels = lbl(['0','250','500','1000','2000','4000']);
-  } else if (activeVar === 'zicht') {
-    title = 'Zicht · km (<1: m)';
-    ZICHT_M_COLORS.forEach(function(c){ swatches += sw(c); });
-    labels = lbl(['0','0.2','0.5','1','2','4','7','10','20','35','50+']);
-  } else if (activeVar === 'wind') {
-    title = 'Wind Bft · lijn per Bft';
-    // Vloeiende schaal: vier tinten per Bft-klasse in plaats van één vlak
-    for (var wStap = 0; wStap < WIND_COLORS.length * 4; wStap++) {
-      swatches += sw(interpColor(wStap / 4 + 0.125, WIND_REF));
-    }
-    labels = lbl(['0','1','2','3','4','5','6','7','8','9','10','11']);
-  } else if (activeVar === 'cumul') {
-    title = 'Cum. neerslag mm';
-    CUMUL_MM_COLORS.forEach(function(c){ swatches += sw(c); });
-    labels = lbl(['1','5','10','20','30','50','75','100','150','200','300']);
-  } else if (activeVar === 'windstoten') {
-    title = 'Windstoten km/u · lijn = 10 km/u';
-    // Vloeiende Bft-schaal; labels = ondergrens van elke klasse in km/u
-    for (var gStap = 0; gStap < WIND_COLORS.length * 4; gStap++) {
-      swatches += sw(interpColor(gStap / 4 + 0.125, WIND_REF));
-    }
-    labels = lbl(['0','1','6','12','20','29','39','50','62','75','89','103+']);
-  } else if (activeVar === 'bewolking_totaal') {
-    title = 'Bewolking totaal · achtsten';
-    OCTA_COLORS.forEach(function(c){ swatches += sw(c); });
-    labels = lbl(['0','1','2','3','4','5','6','7','8']);
-  } else if (activeVar === 'bewolking') {
-    title = 'Bewolking H/M/L · getal = totaal %';
-    // Drie laag-ramps naast elkaar: hoog (blauw) · midden (geel-oranje) · laag (rood)
-    [CLOUD_HIGH_REF, CLOUD_MID_REF, CLOUD_LOW_REF].forEach(function(ref) {
-      [0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1].forEach(function(v) { swatches += sw(interpColor(v, ref)); });
-    });
-    labels = lbl(['Hoog','Midden','Laag']);
-  } else if (activeVar === TEGEL_VAR) {
-    title = 'Wolkentypen · gerenderd beeld';
-    [['#fcfdff','Cirrus (hoog)'], ['#b9d4a8','Altocumulus (midden)'],
-     ['#ffffff','Cumulus'], ['#8891a0','Stratocumulus'], ['#5a626e','Stratus'],
-     ['#2e343f','Cumulonimbus'], ['#d4a84a','Mist']].forEach(function(rij) {
-      swatches += '<div class="leg-swatch" style="background:' + rij[0] + '"></div>';
-    });
-    labels = lbl(['Ci','Ac','Cu','Sc','St','Cb','mist']);
-  } else if (activeVar === 'wolkenlagen') {
-    title = 'Wolkenlagen · R=laag G=midden B=hoog';
-    [[0,0,0],[230,40,40],[40,210,40],[50,90,235],[235,225,40],[45,225,225],[225,55,225],[245,245,245]]
-      .forEach(function(c){ swatches += sw(c); });
-    labels = lbl(['onbew.','laag','midden','hoog','l+m','m+h','l+h','alle']);
-  } else if (activeVar === 'zon') {
-    title = 'Zon dit uur · minuten';
-    [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
-      .forEach(function(v){ swatches += sw(interpColor(v, ZON_REF)); });
-    labels = lbl(['0','10','20','30','40','50','60']);
-  } else if (activeVar === 'cumzon') {
-    title = 'Zonuren vandaag';
-    [0, 0.5, 2, 4, 6, 8, 10, 12, 14].forEach(function(v){ swatches += sw(interpColor(v, CUMZON_REF)); });
-    labels = lbl(['0','2','4','6','8','10','14']);
+  var model=MODELS[panels[pIdx].modelIdx],md=modelData[model.id],pd=md&&md.paramData&&md.paramData[veldSleutel(model.id,activeVar)];
+  if(!pd && md && md.paramData && veldSleutel(model.id,activeVar)==='bewolking_hr')pd=md.paramData.bewolking;
+  var title='', note='', bar='', labels='';
+  function rgb(c){return 'rgb('+c.join(',')+')';}
+  function esc(t){return String(t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function tick(value,pos){return '<span style="left:'+pos+'%"'+(pos===0?' class="first"':pos===100?' class="last"':'')+'>'+esc(value)+'</span>';}
+  function discrete(colors,values,stride,ranges){
+    bar=colors.map(function(c,i){return '<span class="leg-swatch" style="background:'+rgb(c)+'" title="'+esc(ranges?(values[i]+'–'+(values[i+1]??'∞')):values[i])+'"></span>';}).join('');
+    values.forEach(function(v,i){if(i%(stride||1)===0||i===values.length-1)labels+=tick(v+(ranges&&i===values.length-1?'+':''),(i+.5)/values.length*100);});
   }
-
-  return '<span class="pleg-title">'+title+'</span>'
-       + '<div class="pleg-bar">' + swatches + '</div>'
-       + '<div class="pleg-labels">' + labels + '</div>';
+  function continuous(ref,ticks){
+    var min=ref[0][0],range=ref[ref.length-1][0]-min;
+    var stops=ref.map(function(r){return rgb(r[1])+' '+((r[0]-min)/range*100)+'%';});
+    bar='<span style="width:100%;background:linear-gradient(to right,'+stops.join(',')+')"></span>';
+    ticks.forEach(function(t){labels+=tick(t,(t-min)/range*100);});
+  }
+  if(activeVar==='neerslag'){
+    title='Neerslag · mm in het voorgaande uur';discrete(NEERSLAG_MM_COLORS,NEERSLAG_MM_LEVELS.map(String),2,true);note='Klassen vanaf de aangegeven waarde. Wit: <0,03 mm; kaartgetallen vanaf 0,2 mm.';
+  }else if(activeVar==='radar'){
+    title='Modelradar · dBZ (klasse vanaf)';discrete(RADAR_DBZ_COLORS,RADAR_DBZ_LEVELS.map(String),2,true);
+    var info=md&&md.meta.parameters.radar;
+    note=info&&/dbz_cmax|instantaan/i.test(info.label||'')?'Gesimuleerde kolommaximumreflectiviteit; geen gemeten radar.':info&&/rprate/i.test(info.label||'')?'Afgeleid uit momentane regenintensiteit (Marshall–Palmer).':'Afgeleid uit de neerslag van het voorgaande uur (Marshall–Palmer).';
+  }else if(activeVar==='temp'||activeVar==='dauwpunt'){
+    title=(activeVar==='temp'?'Temperatuur':'Dauwpunt')+' op 2 m · °C';continuous(TEMP_REF,[-30,-20,-10,0,10,20,30,40]);note='Lijnen: 1 °C; zwaardere lijnen: 5 °C.';
+  }else if(activeVar==='druk'){
+    title='Luchtdruk op zeeniveau · hPa';continuous(DRUK_REF,[970,990,1010,1030,1050]);note='Lijnen: 1 hPa; zwaardere lijnen: 5 hPa.';
+  }else if(activeVar==='cape'){
+    title='CAPE · J/kg';continuous(CAPE_REF,[0,1000,2000,3000,4000]);note='Onstabiliteitsenergie, geen onweerskans. Lijnen: 100 J/kg.';
+  }else if(activeVar==='zicht'){
+    title='Horizontaal zicht · km (klasse vanaf)';discrete(ZICHT_M_COLORS,ZICHT_M_LEVELS.map(function(v){return v/1000;}),1,true);note='Onder 1 km tonen de kaartgetallen meters (m).';
+  }else if(activeVar==='wind'){
+    title='Wind op 10 m · Beaufort';continuous([[0,WIND_REF[0][1]]].concat(WIND_REF,[[13,WIND_REF[WIND_REF.length-1][1]]]),[0,2,4,6,8,10,12]);note='Pijl: stromingsrichting. Puntwaarde: richting waaruit de wind komt; windstil zonder richting.';
+  }else if(activeVar==='windstoten'){
+    title='Windstoten op 10 m · km/u';var ref=[];for(var g=0;g<=150;g++)ref.push([g,windKleur(g/3.6)]);continuous(ref,[0,30,60,90,120,150]);note='Lijnen: 10 km/u. Maximum over de bronperiode; geen gemiddelde wind.';
+  }else if(activeVar==='cumul'){
+    title='Neerslagsom · mm (klasse vanaf)';discrete(CUMUL_MM_COLORS,CUMUL_MM_LEVELS.map(String),1,true);
+    note=pd&&Number.isFinite(pd.startMs)?'Alle modellen vanaf '+formatTime(pd.startMs)+' t/m de gekozen tijd.':'Wachten op dezelfde starttijd voor alle modellen.';
+  }else if(activeVar==='bewolking_totaal'){
+    title='Geschatte totale bewolking · achtsten';discrete(OCTA_COLORS,[0,1,2,3,4,5,6,7,8]);note='Berekend uit hoog/midden/laag met willekeurige overlap; geen direct modeltotaal.';
+  }else if(activeVar==='bewolking'){
+    title='Wolkenlagen · kaartgetal in achtsten';discrete([cloudCompositeColor(1,0,0),cloudCompositeColor(0,1,0),cloudCompositeColor(0,0,1)],['hoog','midden','laag']);note='Kleuren mengen waar lagen overlappen. Puntwaarde geeft laagpercentages en geschat totaal.';
+  }else if(activeVar==='wolkenlagen'){
+    title='Wolkenlagen · RGB';discrete([[0,0,0],[255,0,0],[0,255,0],[0,0,255],[255,255,0],[0,255,255],[255,0,255],[255,255,255]],['helder','laag','midden','hoog','L+M','M+H','L+H','H+M+L']);note='Rood=laag, groen=midden, blauw=hoog; helderder betekent meer bewolking.';
+  }else if(activeVar===TEGEL_VAR){
+    title='Wolkenkaart · geïnterpreteerd modelbeeld';discrete([[252,253,255],[185,212,168],[255,255,255],[136,145,160],[90,98,110],[46,52,63],[212,168,74]],['Ci','Ac','Cu','Sc','St','Cb','mist']);note='Indicatieve wolkentypen met nagebootste textuur; geen satellietwaarneming. De kop toont de run van dit beeld.';
+    var tile=tegelMeta[model.id];
+    if(tile && tile.cape_bron && tile.cape_bron!==model.id)note+=' CAPE voor wolkentypen: '+(MODELS[modelIndexById(tile.cape_bron)]||{}).label+'.';
+  }else if(activeVar==='zon'){
+    title='Geschatte zonneschijn · min/uur';continuous(ZON_REF,[0,10,20,30,40,50,60]);note='Afgeleid uit modelstraling; geen gemeten zonneschijnduur.';
+  }else if(activeVar==='cumzon'){
+    title='Geschatte zonneschijnduur · uur';continuous(CUMZON_REF,[0,2,4,6,8,10,12,14]);
+    var time=md&&md.meta.tijden[panelStep[pIdx]],day=time&&VierluikCore.dayKey(VierluikCore.timeMs(time)-1),start=pd&&pd.dayStarts&&pd.dayStarts.find(function(d){return d.day===day;});
+    note=start?'Dagsom '+day+' vanaf '+formatTime(start.start)+'; dezelfde periode voor alle modellen.':pd&&Number.isFinite(pd.startMs)?'Vergelijking vanaf '+formatTime(pd.startMs)+'; daarna dagsommen in Nederlandse tijd.':'Wachten op dezelfde starttijd voor alle modellen.';
+  }
+  if(pd&&pd.source)note+=' Bronveld: '+(pd.source==='open-meteo dmi_harmonie_arome_europe'?'DMI HARMONIE via Open-Meteo (vervangend model)':pd.source==='open-meteo knmi_harmonie_arome_europe'?'KNMI HARMONIE via Open-Meteo':pd.source)+'.';
+  return '<span class="pleg-title">'+esc(title)+'</span><div class="pleg-scale"><div class="pleg-bar">'+bar+'</div><div class="pleg-labels">'+labels+'</div></div><span class="pleg-note">'+esc(note)+' <span class="no-data-key"></span> Grijsblauw: geen gegevens.</span>';
 }
 
 function updateLegend() {
   panels.forEach(function(p) {
     var el = document.getElementById('plegend-' + p.idx);
     if (!el) return;
-    el.innerHTML = p.modelIdx < 0 ? '' : buildLegendHTML(p.idx);
+    var html=p.modelIdx < 0 ? '' : buildLegendHTML(p.idx);
+    if(el.innerHTML!==html)el.innerHTML=html;
   });
+}
+function equalizeLegends() {
+  var legends=Array.from(document.querySelectorAll('.panel-legend'));
+  legends.forEach(function(el){el.style.minHeight='';});
+  var height=Math.ceil(Math.max.apply(null,legends.map(function(el){return el.getBoundingClientRect().height;})));
+  legends.forEach(function(el){el.style.minHeight=height+'px';});
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3295,45 +2987,36 @@ function currentMapExtent() {
 }
 
 function sampleComponent(pd, stepIdx, lat, lon, comp) {
-  if (!pd || !pd.grid || stepIdx < 0 || stepIdx >= pd.nSteps) return null;
-  var g = pd.grid, nLat = pd.nLat, nLon = pd.nLon, nComp = pd.nComp;
-  if (comp >= nComp) return 0;
-  var fy = (lat - g.lat_min) / (g.lat_max - g.lat_min) * (nLat - 1);
-  var fx = (lon - g.lon_min) / (g.lon_max - g.lon_min) * (nLon - 1);
-  if (fx < 0 || fx > nLon - 1 || fy < 0 || fy > nLat - 1) return null;
-  var x0=Math.floor(fx), x1=Math.min(x0+1,nLon-1), y0=Math.floor(fy), y1=Math.min(y0+1,nLat-1);
-  var dx=fx-x0, dy=fy-y0, plane=nLat*nLon;
-  var off=stepIdx*plane*nComp+comp*plane;
-  var a=pd.data[off+y0*nLon+x0], b=pd.data[off+y0*nLon+x1];
-  var c=pd.data[off+y1*nLon+x0], d=pd.data[off+y1*nLon+x1];
-  if (![a,b,c,d].every(Number.isFinite)) return null;
-  return (a*(1-dx)*(1-dy)+b*dx*(1-dy)+c*(1-dx)*dy+d*dx*dy) * (pd.schaal || 1);
+  return VierluikCore.sample(pd, stepIdx, lat, lon, comp);
 }
 
 function hoverValue(pd, stepIdx, lat, lon) {
   var a = sampleComponent(pd, stepIdx, lat, lon, 0);
   if (a === null) return null;
   if (activeVar === 'wind' || activeVar === 'windstoten') {
-    var b = sampleComponent(pd, stepIdx, lat, lon, 1) || 0;
+    var b = pd.nComp===1 && activeVar==='windstoten'?0:sampleComponent(pd, stepIdx, lat, lon, 1);
+    if(b===null)return null;
     var ms = Math.sqrt(a*a + b*b), kmh = ms * 3.6;
     if (activeVar === 'windstoten') return Math.round(kmh) + ' km/u';
     var deg = (Math.atan2(-a, -b) * 180 / Math.PI + 360) % 360;
-    return msNaarBft(ms) + ' Bft · ' + Math.round(kmh) + ' km/u · ' + Math.round(deg) + '°';
+    return msNaarBft(ms) + ' Bft · ' + Math.round(kmh) + ' km/u · ' + (ms<0.3?'windstil':'uit '+Math.round(deg)+'°');
   }
   if (activeVar === 'bewolking' || activeVar === 'wolkenlagen' || activeVar === 'bewolking_totaal') {
-    var mid = sampleComponent(pd, stepIdx, lat, lon, 1) || 0;
-    var low = sampleComponent(pd, stepIdx, lat, lon, 2) || 0;
+    var mid = sampleComponent(pd, stepIdx, lat, lon, 1);
+    var low = sampleComponent(pd, stepIdx, lat, lon, 2);
+    if(mid===null||low===null)return null;
     // Totaal via willekeurige overlap — zelfde formule als het getal op de kaart
     var totaal = totaleBewolking(a, mid, low);
-    return Math.round(totaal * 8) + '/8 · totaal ' + Math.round(totaal * 100) + '%' +
+    return Math.round(totaal * 8) + '/8 · geschat totaal ' + Math.round(totaal * 100) + '%' +
            ' · H ' + Math.round(a*100) + '% · M ' + Math.round(mid*100) + '% · L ' + Math.round(low*100) + '%';
   }
-  if (activeVar === 'neerslag') return (a < 1 ? a.toFixed(2) : a.toFixed(1)) + ' mm/u';
-  if (activeVar === 'radar') return a.toFixed(0) + ' dBZ';
+  a=VierluikCore.scalarValue(activeVar,a);
+  if (activeVar === 'neerslag') return (a < 1 ? a.toFixed(2) : a.toFixed(1)) + ' mm (afgelopen uur)';
+  if (activeVar === 'radar') return a<4?'<4 dBZ':a.toFixed(0)+' dBZ';
   if (activeVar === 'cumul') return a.toFixed(1) + ' mm';
-  if (activeVar === 'temp') return Math.round(a) + ' °C';
+  if (activeVar === 'temp') return a.toFixed(1) + ' °C';
   if (activeVar === 'dauwpunt') return a.toFixed(1) + ' °C';
-  if (activeVar === 'druk') return Math.round(a / 100) + ' hPa';
+  if (activeVar === 'druk') return (a / 100).toFixed(1) + ' hPa';
   if (activeVar === 'cape') return Math.round(a) + ' J/kg';
   if (activeVar === 'zicht') return a < 1000 ? Math.round(a) + ' m' : (a / 1000).toFixed(a < 10000 ? 1 : 0) + ' km';
   if (activeVar === 'zon') return Math.round(a) + ' min zon';
@@ -3344,9 +3027,9 @@ function hoverValue(pd, stepIdx, lat, lon) {
 var VAR_NAMES = {
   neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
   dauwpunt:'Dauwpunt', wind:'Wind', windstoten:'Windstoten', druk:'Luchtdruk',
-  zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal',
+  zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal (geschat)',
   wolkenlagen:'Wolkenlagen',
-  wolkenkaart:'Wolkenkaart (realistisch)',
+  wolkenkaart:'Wolkenkaart (modelbeeld)',
   zon:'Zon (minuten per uur)', cumzon:'Zonuren (dagsom)'
 };
 var mapTooltip = document.getElementById('map-tooltip');
