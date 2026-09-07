@@ -1,4 +1,19 @@
 (function(){
+  // Geen enkele afbeelding mag de PDF-export laten hangen. img.decode() en een
+  // trage fetch geven soms nooit antwoord — met name als de gebruiker tijdens
+  // het exporteren naar een ander tabblad gaat, want dan zet de browser het
+  // decoderen van losse afbeeldingen stil. Zonder deze grens bleef de hele
+  // export daarop wachten en leek het alsof de PDF eindeloos duurde.
+  const IMG_FETCH_TIMEOUT_MS = 4000;   // netwerk mag traag zijn
+  const IMG_DECODE_TIMEOUT_MS = 1500;  // decoderen van een logo duurt normaal enkele ms
+
+  function metTijdslimiet(belofte, ms, bijTimeout = null){
+    return Promise.race([
+      Promise.resolve(belofte).catch(()=>bijTimeout),
+      new Promise(resolve=>setTimeout(()=>resolve(bijTimeout), ms)),
+    ]);
+  }
+
   function blobNaarDataUrl(blob){
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -15,10 +30,15 @@
     if(/^data:/i.test(bron)) return bron;
     try{
       const url=new URL(bron,document.baseURI);
-      const response=await fetch(url.href,{
-        credentials:url.origin===location.origin?'same-origin':'omit',
-        mode:'cors',cache:'force-cache'
-      });
+      const ctrl=typeof AbortController==='function'?new AbortController():null;
+      const afbreken=setTimeout(()=>{ try{ ctrl && ctrl.abort(); }catch(_){ } }, IMG_FETCH_TIMEOUT_MS);
+      let response;
+      try{
+        response=await fetch(url.href,{
+          credentials:url.origin===location.origin?'same-origin':'omit',
+          mode:'cors',cache:'force-cache',signal:ctrl?ctrl.signal:undefined
+        });
+      } finally { clearTimeout(afbreken); }
       if(!response.ok) throw new Error('HTTP '+response.status);
       return await blobNaarDataUrl(await response.blob());
     }catch(fetchError){
@@ -37,7 +57,7 @@
   async function inlineImages(root){
     const afbeeldingen=[...root.querySelectorAll('img')];
     await Promise.all(afbeeldingen.map(async img=>{
-      const dataUrl=await safeImageDataUrl(img);
+      const dataUrl=await metTijdslimiet(safeImageDataUrl(img), IMG_FETCH_TIMEOUT_MS);
       if(!dataUrl){
         // Eén geblokkeerde externe afbeelding mag nooit de hele PDF blokkeren.
         img.remove();
@@ -46,7 +66,9 @@
       img.removeAttribute('srcset');
       img.removeAttribute('crossorigin');
       img.src=dataUrl;
-      if(typeof img.decode==='function') await img.decode().catch(()=>{});
+      // decode() is alleen een optimalisatie; html2canvas wacht zelf ook op de
+      // afbeelding. Blijft het decoderen hangen, dan gaat de export gewoon door.
+      if(typeof img.decode==='function') await metTijdslimiet(img.decode(), IMG_DECODE_TIMEOUT_MS);
     }));
   }
 

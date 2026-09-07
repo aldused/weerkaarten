@@ -1696,21 +1696,50 @@
     };
   }
 
+  // PNG-compressie op de hoofdthread kost ruim een seconde per pluim en legt
+  // de pagina zolang stil. pluim_png_encoder.js verplaatst dat naar workers.
+  function maakCanvas(width, height) {
+    if (window.WeerlabPngEncoder) return WeerlabPngEncoder.createCanvas(width, height);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    return canvas;
+  }
+
+  function comprimeerPng(canvas) {
+    if (window.WeerlabPngEncoder) return WeerlabPngEncoder.toBlob(canvas, 'image/png');
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('PNG maken mislukt'))), 'image/png', 0.95);
+    });
+  }
+
   async function renderBlob(drawFn, scale) {
-    const previewCanvas = document.createElement('canvas');
+    const previewCanvas = maakCanvas(1, 1);
     const previewCtx = previewCanvas.getContext('2d');
     drawFn(previewCtx, true);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = previewCanvas.width * scale;
-    canvas.height = previewCanvas.height * scale;
+    const canvas = maakCanvas(previewCanvas.width * scale, previewCanvas.height * scale);
     const ctx = canvas.getContext('2d');
     ctx.scale(scale, scale);
     drawFn(ctx, false);
 
-    const png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+    const png = await comprimeerPng(canvas);
     if (!png) throw new Error('PNG maken mislukt');
     return png;
+  }
+
+  // Tekent maximaal drie pluimen tegelijk door de pijplijn: terwijl de workers
+  // de vorige comprimeren, tekent de hoofdthread alvast de volgende.
+  async function renderInParallel(items, mapper, limit = 3) {
+    const uit = new Array(items.length);
+    let volgende = 0;
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (volgende < items.length) {
+        const i = volgende++;
+        uit[i] = await mapper(items[i], i);
+      }
+    }));
+    return uit;
   }
 
   async function genereerPluimPNG({lat, lon, naam, startDate, endDate, scale=2}) {
@@ -1738,12 +1767,16 @@
     const results = [];
     const folder = slug(folderName || naamOut || 'plaats');
 
-    for (const model of models) {
+    const gerenderd = await renderInParallel(models, async model => {
       const png = await renderBlob((ctx, resize) => drawSinglePage(ctx, naamOut, model, resize), scale);
       const fname = pluimFilename(folderName || naamOut, model.param);
-      results.push({ filename: fname, path: fname, blob: png, sizeBytes: png.size });
-      if (!zip) {
-        downloadBlob(png, fname);
+      return { filename: fname, path: fname, blob: png, sizeBytes: png.size };
+    });
+    results.push(...gerenderd);
+    if (!zip) {
+      for (const bestand of gerenderd) {
+        downloadBlob(bestand.blob, bestand.filename);
+        // Browsers laten opeenvolgende downloads pas toe met wat lucht ertussen.
         await new Promise(resolve => setTimeout(resolve, 120));
       }
     }

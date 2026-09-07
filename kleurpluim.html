@@ -274,6 +274,71 @@ h1 .stn { font-weight: 500; opacity: 0.82; }
   color: white;
 }
 .download-all-btn:hover { background: rgba(255,255,255,0.25); }
+.kies-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.10);
+}
+.kies-strip[hidden] { display: none !important; }
+.kies-kop {
+  font: 900 0.68rem/1 Inter, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.72);
+  flex: 0 0 100%;
+}
+.kies-strip label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 0.78rem/1 Inter, sans-serif;
+  color: rgba(255,255,255,0.9);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kies-strip input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #ffffff;
+  cursor: pointer;
+}
+.kies-strip label .klaar {
+  font: 800 0.66rem/1 Inter, sans-serif;
+  color: #9ff0b6;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.kies-strip label.gereed .klaar { opacity: 1; }
+.kies-strip label.bezig .klaar { opacity: 0.55; color: rgba(255,255,255,0.8); }
+.kies-mini {
+  border: 1px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.86);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: 800 0.7rem/1 Inter, sans-serif;
+  cursor: pointer;
+}
+.kies-mini:hover { background: rgba(255,255,255,0.22); color: white; }
+.kies-acties {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.kies-status {
+  flex: 0 0 100%;
+  font: 700 0.72rem/1.35 Inter, sans-serif;
+  color: rgba(255,255,255,0.7);
+  min-height: 1em;
+}
 .samenvatting {
   display: flex;
   flex-wrap: wrap;
@@ -439,6 +504,9 @@ h1 .stn { font-weight: 500; opacity: 0.82; }
   .param-btn { flex: 1 1 auto; }
   .download-actions { flex: 1 1 100%; margin-left: 0; }
   .download-actions .download-btn { width: 100%; }
+  .kies-strip label { flex: 1 1 45%; }
+  .kies-acties { margin-left: 0; flex: 1 1 100%; }
+  .kies-acties .download-btn { flex: 1 1 100%; }
   .thunder-card { grid-template-columns: 1fr; }
   .thunder-bolt { width: 100%; height: 34px; }
   .legenda { gap: 10px 14px; }
@@ -524,8 +592,19 @@ body.embedded .download-btn {
     <button class="param-btn" type="button" data-param="multi">8-pluim</button>
     <div class="download-actions" id="download-actions" hidden>
       <button class="download-btn" id="download-4pluim" type="button">Download PNG</button>
-      <button class="download-btn download-all-btn" id="download-all-pluimen" type="button">Download alle 8 als ZIP</button>
+      <button class="download-btn download-all-btn" id="download-all-pluimen" type="button" aria-expanded="false" aria-controls="kies-strip">Kies pluimen om te downloaden</button>
     </div>
+  </div>
+
+  <div class="kies-strip" id="kies-strip" hidden role="group" aria-label="Kies welke kleurpluimen worden gedownload">
+    <span class="kies-kop">Downloadselectie</span>
+    <span class="kies-acties" id="kies-acties">
+      <button class="kies-mini" id="kies-alles" type="button">Alles</button>
+      <button class="kies-mini" id="kies-geen" type="button">Geen</button>
+      <label title="Meerdere pluimen in één ZIP-bestand in plaats van losse PNG's"><input type="checkbox" id="kies-zip" checked> Als ZIP</label>
+      <button class="download-btn" id="download-keuze" type="button">Download selectie</button>
+    </span>
+    <span class="kies-status" id="kies-status" aria-live="polite"></span>
   </div>
 
   <div id="single-view" class="single-view">
@@ -547,6 +626,7 @@ body.embedded .download-btn {
 
 <script src="pluim_run_switcher_48ffbf926db6.js" data-required="temperature_2m,precipitation,wind_speed_10m,cloud_cover,wind_gusts_10m"></script>
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
+<script src="pluim_png_encoder.js?v=20260907-worker-encoder"></script>
 <script>
 const NS = 'http://www.w3.org/2000/svg';
 const DOW_NL = ['zo','ma','di','wo','do','vr','za'];
@@ -2697,26 +2777,22 @@ function renderMultiShell() {
 function setDownloadButtons({
   mainDisabled = false,
   mainLabel = 'Download PNG',
-  allDisabled = mainDisabled,
-  allLabel = 'Download alle 8 als ZIP',
+  keuzeDisabled = mainDisabled,
 } = {}) {
   const wrap = document.getElementById('download-actions');
   const btn = document.getElementById('download-4pluim');
-  const allBtn = document.getElementById('download-all-pluimen');
+  const keuzeBtn = document.getElementById('download-all-pluimen');
   wrap.hidden = false;
   btn.disabled = mainDisabled;
   btn.textContent = mainLabel;
-  allBtn.disabled = allDisabled;
-  allBtn.textContent = allLabel;
+  // De tweede knop klapt alleen de keuzestrip open; het opschrift blijft staan
+  // zodat de gebruiker de selectie ook tijdens het laden kan aanpassen.
+  keuzeBtn.disabled = false;
+  void keuzeDisabled;
 }
 
 function syncDownloadButton(disabled = false, label = 'Download PNG') {
-  setDownloadButtons({
-    mainDisabled: disabled,
-    mainLabel: label,
-    allDisabled: disabled,
-    allLabel: disabled ? 'Even wachten...' : 'Download alle 8 als ZIP',
-  });
+  setDownloadButtons({ mainDisabled: disabled, mainLabel: label });
 }
 
 function drawRoundRect(ctx, x, y, w, h, r) {
@@ -2965,6 +3041,25 @@ function drawLegendLine(ctx, legends, x, y, maxW) {
   return ly;
 }
 
+function makePngCanvas(width, height) {
+  if (window.WeerlabPngEncoder) return WeerlabPngEncoder.createCanvas(width, height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+// De PNG-compressie is verreweg de duurste stap van een download: op de
+// hoofdthread kost een pluim van 2800x1960 px ruim een seconde. De encoder
+// verplaatst dat naar een pool van workers, zodat meerdere pluimen tegelijk
+// worden gecomprimeerd terwijl de pagina bruikbaar blijft.
+function encodePng(canvas) {
+  if (window.WeerlabPngEncoder) return WeerlabPngEncoder.toBlob(canvas, 'image/png');
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('PNG maken mislukt'))), 'image/png', 0.95);
+  });
+}
+
 function downloadBlob(blob, filename) {
   if (!blob) throw new Error('PNG kon niet worden gemaakt');
   const url = URL.createObjectURL(blob);
@@ -3076,9 +3171,7 @@ async function renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCa
   const cardH = chartH + 206 + thunderH;
   const footerH = 70;
   const H = headerH + cardH + footerH;
-  const canvas = document.createElement('canvas');
-  canvas.width = W * scale;
-  canvas.height = H * scale;
+  const canvas = makePngCanvas(W * scale, H * scale);
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
 
@@ -3121,7 +3214,7 @@ async function renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCa
   ctx.font = '800 16px Inter, sans-serif';
   ctx.fillText('Ed Aldus WM · Data: ECMWF Open Data / Open-Meteo · IFS ENS · native modelstappen', margin, H - 36);
 
-  return new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+  return encodePng(canvas);
 }
 
 function buildDetachedSingleChart(param, cfg, times, stats) {
@@ -3160,9 +3253,7 @@ async function downloadMultiPng() {
     const cardH = chartH + 206;
     const footerH = 70;
     const H = headerH + (cardH * cards.length) + (cardGap * (cards.length - 1)) + footerH;
-    const canvas = document.createElement('canvas');
-    canvas.width = W * scale;
-    canvas.height = H * scale;
+    const canvas = makePngCanvas(W * scale, H * scale);
     const ctx = canvas.getContext('2d');
     ctx.scale(scale, scale);
 
@@ -3211,15 +3302,7 @@ async function downloadMultiPng() {
     ctx.font = '800 16px Inter, sans-serif';
     ctx.fillText('Ed Aldus WM · Data: ECMWF Open Data / Open-Meteo · IFS ENS · native modelstappen', margin, H - 36);
 
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
-    const url = blob ? URL.createObjectURL(blob) : canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = downloadName('multi');
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    if (blob) setTimeout(() => URL.revokeObjectURL(url), 2000);
+    downloadBlob(await encodePng(canvas), downloadName('multi'));
   } catch (e) {
     console.error(e);
     document.getElementById('laadstatus').textContent = 'PNG maken mislukt: ' + e.message;
@@ -3252,63 +3335,191 @@ async function downloadSinglePng() {
   }
 }
 
-async function downloadAllPngs() {
-  const status = document.getElementById('laadstatus');
-  setDownloadButtons({
-    mainDisabled: true,
-    mainLabel: 'Even wachten...',
-    allDisabled: true,
-    allLabel: 'ZIP maken...',
+// ── Downloadselectie ──────────────────────────────────────────────────────
+// De gebruiker vinkt aan welke kleurpluimen mee moeten. Zodra een vinkje wordt
+// gezet, wordt de ensembledata voor die pluim alvast op de achtergrond gehaald,
+// zodat er bij het indrukken van "Download selectie" alleen nog getekend en
+// gecomprimeerd hoeft te worden.
+const kiesStatus = new Map();   // param -> 'bezig' | 'gereed' | 'fout'
+let prefetchTimer = null;
+let prefetchLoopt = false;
+const RENDER_CONCURRENCY = 3;
+
+function kiesVakjes() {
+  return Array.from(document.querySelectorAll('#kies-strip input[data-dl-param]'));
+}
+
+function gekozenParams() {
+  return kiesVakjes().filter(el => el.checked).map(el => el.dataset.dlParam);
+}
+
+function bouwKiesStrip() {
+  const strip = document.getElementById('kies-strip');
+  const acties = document.getElementById('kies-acties');
+  if (!strip || strip.dataset.gebouwd === '1') return;
+  const labels = new Map(
+    Array.from(document.querySelectorAll('.param-btn[data-param]'))
+      .map(btn => [btn.dataset.param, (btn.textContent || '').trim()])
+  );
+  ALL_DOWNLOAD_PARAMS.forEach(param => {
+    const label = document.createElement('label');
+    label.dataset.dlLabel = param;
+    label.innerHTML = `<input type="checkbox" data-dl-param="${param}"> <span>${escHtml(labels.get(param) || DOWNLOAD_LABELS[param] || param)}</span> <span class="klaar">&#10003;</span>`;
+    strip.insertBefore(label, acties);
   });
+  strip.dataset.gebouwd = '1';
+  // Standaard staat de pluim aan die nu op het scherm staat.
+  const start = currentParam === 'multi' ? 'temp' : currentParam;
+  const eerste = strip.querySelector(`input[data-dl-param="${start}"]`);
+  if (eerste) eerste.checked = true;
+  kiesVakjes().forEach(el => el.addEventListener('change', () => {
+    werkKiesStatusBij();
+    schedulePrefetch();
+  }));
+}
+
+function werkKiesStatusBij(bericht) {
+  const gekozen = gekozenParams();
+  const statusEl = document.getElementById('kies-status');
+  const knop = document.getElementById('download-keuze');
+  kiesVakjes().forEach(el => {
+    const label = el.closest('label');
+    if (!label) return;
+    const staat = el.checked ? kiesStatus.get(el.dataset.dlParam) : null;
+    label.classList.toggle('gereed', staat === 'gereed');
+    label.classList.toggle('bezig', staat === 'bezig');
+  });
+  if (knop) {
+    knop.disabled = !gekozen.length;
+    knop.textContent = gekozen.length > 1
+      ? `Download ${gekozen.length} pluimen`
+      : gekozen.length === 1 ? 'Download 1 pluim' : 'Download selectie';
+  }
+  if (statusEl && bericht !== undefined) statusEl.textContent = bericht;
+  else if (statusEl && !gekozen.length) statusEl.textContent = 'Vink minstens één pluim aan.';
+  else if (statusEl) {
+    const gereed = gekozen.filter(param => kiesStatus.get(param) === 'gereed').length;
+    const fout = gekozen.filter(param => kiesStatus.get(param) === 'fout');
+    statusEl.textContent = fout.length
+      ? `${fout.length} pluim(en) niet beschikbaar in deze run; de rest wordt wel gedownload.`
+      : gereed === gekozen.length
+        ? `${gekozen.length} pluim(en) klaar om te downloaden.`
+        : `Data ophalen: ${gereed}/${gekozen.length} klaar...`;
+  }
+}
+
+function schedulePrefetch() {
+  clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(() => { prefetchGekozen().catch(() => {}); }, 250);
+}
+
+// Haalt de data voor de aangevinkte pluimen op in één geverifieerde run-batch.
+// Al gecachete pluimen komen direct terug, dus herhaald aanvinken is gratis.
+async function prefetchGekozen() {
+  if (prefetchLoopt) return;
+  const teDoen = gekozenParams().filter(param => kiesStatus.get(param) !== 'gereed');
+  if (!teDoen.length) { werkKiesStatusBij(); return; }
+  prefetchLoopt = true;
+  teDoen.forEach(param => kiesStatus.set(param, 'bezig'));
+  werkKiesStatusBij();
   try {
-    const entries = [];
-    const plaats = slugTekst(displayStationNaam());
-    status.textContent = '8 pluimen laden...';
+    await loadStableEnsBatch((runMeta, batchForce, batchFresh) => settleWithConcurrency(
+      teDoen,
+      3,
+      param => loadStatsForParam(param, runMeta, batchForce, batchFresh)
+        .then(result => { kiesStatus.set(param, 'gereed'); werkKiesStatusBij(); return result; })
+        .catch(err => { kiesStatus.set(param, 'fout'); werkKiesStatusBij(); throw err; }),
+    ));
+  } catch (e) {
+    teDoen.forEach(param => { if (kiesStatus.get(param) === 'bezig') kiesStatus.set(param, 'fout'); });
+  } finally {
+    prefetchLoopt = false;
+    werkKiesStatusBij();
+  }
+}
+
+function toggleKiesStrip(forceer) {
+  const strip = document.getElementById('kies-strip');
+  const knop = document.getElementById('download-all-pluimen');
+  bouwKiesStrip();
+  const open = forceer === undefined ? strip.hidden : forceer;
+  strip.hidden = !open;
+  knop.setAttribute('aria-expanded', String(open));
+  if (open) {
+    werkKiesStatusBij();
+    schedulePrefetch();
+    if (window.WeerlabPngEncoder) WeerlabPngEncoder.warmUp();
+  }
+}
+
+async function downloadSelectie() {
+  const params = gekozenParams();
+  if (!params.length) { werkKiesStatusBij('Vink minstens één pluim aan.'); return; }
+  const knop = document.getElementById('download-keuze');
+  const alsZip = !!document.getElementById('kies-zip')?.checked && params.length > 1;
+  const plaats = slugTekst(displayStationNaam());
+  knop.disabled = true;
+  setDownloadButtons({ mainDisabled: true, mainLabel: 'Even wachten...' });
+  werkKiesStatusBij('Data controleren...');
+  try {
     const [stable] = await Promise.all([
       loadStableEnsBatch(
         (runMeta, batchForce, batchFresh) => settleWithConcurrency(
-          ALL_DOWNLOAD_PARAMS,
-          4,
+          params,
+          3,
           param => loadStatsForParam(param, runMeta, batchForce, batchFresh),
         ),
       ),
-      showDailyTxRange ? fetchMosmixTx(currentStation.lat, currentStation.lon) : Promise.resolve(),
+      showDailyTxRange && params.includes('temp')
+        ? fetchMosmixTx(currentStation.lat, currentStation.lon)
+        : Promise.resolve(),
     ]);
     const results = stable.value;
-    let unavailable = 0;
-    for (let i = 0; i < ALL_DOWNLOAD_PARAMS.length; i++) {
-      const param = ALL_DOWNLOAD_PARAMS[i];
+    let klaar = 0;
+    const ontbreekt = [];
+    // Tekenen gebeurt op de hoofdthread, comprimeren in de workers. Door een
+    // paar pluimen tegelijk door de pijplijn te sturen loopt het comprimeren
+    // van de vorige door terwijl de volgende wordt getekend.
+    const gerenderd = await settleWithConcurrency(params, RENDER_CONCURRENCY, async (param, i) => {
       const settled = results[i];
-      if (!settled || settled.status !== 'fulfilled') {
-        unavailable++;
-        continue;
-      }
-      const result = settled.value;
-      const { cfg, times, stats } = result;
-      status.textContent = `${cfg.title} PNG maken...`;
-      setDownloadButtons({
-        mainDisabled: true,
-        mainLabel: 'Even wachten...',
-        allDisabled: true,
-        allLabel: `${entries.length + 1}/${ALL_DOWNLOAD_PARAMS.length} in ZIP...`,
-      });
+      if (!settled || settled.status !== 'fulfilled') throw settled?.reason || new Error('niet beschikbaar');
+      const { cfg, times, stats } = settled.value;
       const { svg, chips, legends, thunderCard } = buildDetachedSingleChart(param, cfg, times, stats);
-      const statusText = statusTextForResult(result);
-      const blob = await renderSinglePngBlob({ cfg, svg, chips, legends, status: statusText, thunderCard });
-      const filename = downloadName(param);
-      entries.push({ path: filename, blob });
+      const blob = await renderSinglePngBlob({
+        cfg, svg, chips, legends, thunderCard,
+        status: statusTextForResult(settled.value),
+      });
+      klaar++;
+      werkKiesStatusBij(`${klaar}/${params.length} pluimen gemaakt...`);
+      return { param, path: downloadName(param), blob };
+    });
+
+    const bestanden = [];
+    gerenderd.forEach((res, i) => {
+      if (res && res.status === 'fulfilled') bestanden.push(res.value);
+      else ontbreekt.push(DOWNLOAD_LABELS[params[i]] || params[i]);
+    });
+    if (!bestanden.length) throw new Error('Geen van de gekozen pluimen is in deze opgeslagen run beschikbaar.');
+
+    if (alsZip) {
+      downloadBlob(await makeZip(bestanden.map(b => ({ path: b.path, blob: b.blob }))), `${plaats}_pluimen.zip`);
+    } else {
+      for (const bestand of bestanden) {
+        downloadBlob(bestand.blob, bestand.path);
+        // Browsers laten meerdere downloads pas toe met wat lucht ertussen.
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
     }
-    if (!entries.length) throw new Error('Geen enkele kleurpluim is in deze opgeslagen run beschikbaar.');
-    const zipBlob = await makeZip(entries);
-    downloadBlob(zipBlob, `${plaats}_pluimen.zip`);
-    status.textContent = unavailable
-      ? `ZIP opgeslagen met ${entries.length} correcte PNG's · ${unavailable} onderdelen ontbreken in deze oudere run`
-      : `ZIP opgeslagen met ${entries.length} PNG's`;
+    werkKiesStatusBij(
+      `${bestanden.length} pluim(en) gedownload${alsZip ? ' als ZIP' : ''}` +
+      (ontbreekt.length ? ` · niet beschikbaar in deze run: ${ontbreekt.join(', ')}` : '')
+    );
   } catch (e) {
     console.error(e);
-    status.textContent = 'ZIP maken mislukt: ' + e.message;
+    werkKiesStatusBij('Download mislukt: ' + e.message);
   } finally {
-    syncDownloadButton(false);
+    setDownloadButtons({ mainDisabled: false, mainLabel: 'Download PNG' });
+    werkKiesStatusBij();
   }
 }
 
@@ -3400,12 +3611,7 @@ function renderMultiResults(seq, results) {
   document.getElementById('laadstatus').textContent = failed
     ? `${plumeRunShort} · ${results.length} van 8 kleurpluimen exact geladen · ${failed} ontbreken in deze opgeslagen run`
     : `${plumeRunShort} · ${plumeCoverageShort} · ${memberCount} ensemble-leden${spatialText} · selectie ${selectedRangeDays()} dagen · native modelstappen · 8-pluim onder elkaar`;
-  setDownloadButtons({
-    mainDisabled: false,
-    mainLabel: 'Download PNG',
-    allDisabled: false,
-    allLabel: failed ? `Download ${results.length} beschikbare als ZIP` : 'Download alle 8 als ZIP',
-  });
+  setDownloadButtons({ mainDisabled: false, mainLabel: 'Download PNG' });
 }
 
 let showDailyTxRange = false;
@@ -3599,6 +3805,8 @@ function setStation(lat, lon, naam) {
   sluitZoek();
   bewaarStatusInUrl();
   loadCurrent(isFastUpdateWindow());
+  kiesStatus.clear();
+  if (!document.getElementById('kies-strip').hidden) { werkKiesStatusBij(); schedulePrefetch(); }
 }
 
 function sluitZoek() {
@@ -3717,7 +3925,18 @@ document.getElementById('zoek-btn').addEventListener('click', () => {
 });
 document.getElementById('extra-input').addEventListener('input', syncStationLabel);
 document.getElementById('download-4pluim').addEventListener('click', downloadCurrentPng);
-document.getElementById('download-all-pluimen').addEventListener('click', downloadAllPngs);
+document.getElementById('download-all-pluimen').addEventListener('click', () => toggleKiesStrip());
+document.getElementById('download-keuze').addEventListener('click', downloadSelectie);
+document.getElementById('kies-alles').addEventListener('click', () => {
+  kiesVakjes().forEach(el => { el.checked = true; });
+  werkKiesStatusBij();
+  schedulePrefetch();
+});
+document.getElementById('kies-geen').addEventListener('click', () => {
+  kiesVakjes().forEach(el => { el.checked = false; });
+  werkKiesStatusBij();
+});
+document.getElementById('kies-zip').addEventListener('change', () => werkKiesStatusBij());
 bindDateCommit(['range-start', 'range-end'], () => {
   selectedRange();
   syncHighlightBounds();
