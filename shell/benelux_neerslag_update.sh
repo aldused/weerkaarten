@@ -1,13 +1,17 @@
 #!/bin/bash
 # Kaartenstudio Nederland: bouwt bij elke nieuwe run per veld een mp4 + eindkaart en
 # zet die op R2. Velden: neerslagsom, windkracht met richting, windstoten, temperatuur en
-# voor HARMONIE V46 ook gesimuleerde radar en rechtstreeks modelzicht.
+# voor HARMONIE ook gesimuleerde radar en rechtstreeks modelzicht.
 #
 #   ECMWF HRES  vier runs per dag (00/06/12/18 UTC), steeds 3-uursstappen
 #               t/m +144u (48 frames).
 #   HARMONIE V46 elk uur een nieuwe KNMI-run, 60 frames van +1u t/m +60u. Leest
 #               de bins die harmonie46_update.sh al wegschrijft, dus geen tweede
 #               download van de run-tar.
+#   HARMONIE V43 idem uit harmonie_update.sh. V46 is een testfeed die stil kan
+#               vallen (7 sep een halve dag), dus staat V43 er als eigen reeks
+#               naast: de pagina schakelt ertussen en houdt zo altijd een
+#               doorlopende 2,5 km-verwachting.
 #
 # Bedoeld voor launchd (elke 10 min checken, no-op als de run al gebouwd is).
 # HARMONIE gaat eerst: die is goedkoop en ververst het vaakst.
@@ -48,9 +52,7 @@ bouw_model() {
   local MODEL="$1" ACHTERVOEGSEL="$2" MARKER="$3"
   local RUN GEDAAN VELD PREFIX MP4 PNG META EXTRA=()
   local MODEL_VELDEN=("${VELDEN[@]}")
-  if [ "$MODEL" = "harmonie" ]; then
-    MODEL_VELDEN+=(radar zicht)
-  fi
+  case "$MODEL" in harmonie*) MODEL_VELDEN+=(radar zicht) ;; esac
 
   RUN="$("$PY" "$GENERATOR" --model "$MODEL" --latest-run 2>/dev/null | tail -1)"
   if ! [[ "$RUN" =~ ^[0-9]{10}$ ]]; then
@@ -108,10 +110,12 @@ bouw_model() {
 }
 
 STATUS=0
-# HARMONIE is de goedkope, snel verversende reeks: die eerst, zodat een lange
-# ECMWF-bouw hem nooit een uur laat wachten.
-bouw_model harmonie "_harmonie" "$ROOT/.benelux_neerslag_harmonie46_x_v11_windrichting_run" || STATUS=1
-bouw_model ecmwf    ""          "$ROOT/.benelux_neerslag_ecmwf_144_x_v3_windrichting_run"  || STATUS=1
+# HARMONIE is de goedkope, snel verversende reeks (~100 s per run): die eerst,
+# zodat een lange ECMWF-bouw hem nooit een uur laat wachten. V46 blijft de
+# standaard op de pagina, V43 loopt ernaast door als V46 stilvalt.
+bouw_model harmonie   "_harmonie"   "$ROOT/.benelux_neerslag_harmonie46_x_v12_metaschaal_run" || STATUS=1
+bouw_model harmonie43 "_harmonie43" "$ROOT/.benelux_neerslag_harmonie43_x_v1_run"             || STATUS=1
+bouw_model ecmwf      ""            "$ROOT/.benelux_neerslag_ecmwf_144_x_v3_windrichting_run" || STATUS=1
 
 # Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw
 # te downloaden.

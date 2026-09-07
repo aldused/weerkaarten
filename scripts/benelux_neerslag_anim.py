@@ -7,17 +7,26 @@ kleurvlak + cijfers op een raster, verticale kleurschaal rechts en run/geldighei
 in de kop. Per beschikbaar model een mp4 en een losse eindkaart.
 
 Modellen:
-  ecmwf     ECMWF IFS HRES 9 km uit open data (veld `tp`).
-            Alle vier runs (00/06/12/18 UTC) lopen t/m +144u in 3-uursstappen.
-  harmonie  KNMI HARMONIE V46 2,5 km, elk uur een nieuwe run, t/m +60u
-            in uurstappen. Leest de cumulatieve som die de bestaande
-            harmonie46_update.sh-pijplijn al wegschrijft, inclusief zicht,
-            dus geen tweede download van de 865 MB-run-tar.
+  ecmwf       ECMWF IFS HRES 9 km uit open data (veld `tp`).
+              Alle vier runs (00/06/12/18 UTC) lopen t/m +144u in 3-uursstappen.
+  harmonie    KNMI HARMONIE V46 2,5 km, elk uur een nieuwe run, t/m +60u
+              in uurstappen. Leest de cumulatieve som die de bestaande
+              harmonie46_update.sh-pijplijn al wegschrijft, inclusief zicht,
+              dus geen tweede download van de 865 MB-run-tar.
+  harmonie43  Idem uit de operationele V43-pijplijn (harmonie_update.sh).
+              V46 is een KNMI-testfeed die stil kan vallen — 7 sep lag hij een
+              halve dag stil — en dan is V43 de reeks die wel doorloopt.
+
+Beide HARMONIE-cycli schrijven dezelfde metadatasleutels weg, alleen met hun
+eigen bestandsprefix en schaalfactoren. Deze module leest bestandsnaam, rooster
+en codering daarom uit de meta in plaats van ze vast in te bakken; zie
+harmonie_param().
 
 Gebruik:
     python benelux_neerslag_anim.py --demo                    # synthetische data
     python benelux_neerslag_anim.py                           # ECMWF, laatste run
-    python benelux_neerslag_anim.py --model harmonie          # HARMONIE, laatste run
+    python benelux_neerslag_anim.py --model harmonie          # V46, laatste run
+    python benelux_neerslag_anim.py --model harmonie43        # V43, laatste run
     python benelux_neerslag_anim.py --run 6 --max-step 72
 """
 
@@ -100,13 +109,29 @@ MODELS = {
         'extent':      [2.2, 8.2, 50.5, 54.2],
         'interp_step': 0.02,        # native ~0,018° lat / 0,029° lon
         'tijdzone':    'local',
+        'harmonie_meta': 'harmonie46_canvas_meta.json',
+        'achtervoegsel': '_harmonie',
+    },
+    'harmonie43': {
+        'label':       'HARMONIE V43',
+        'bron':        'KNMI HARMONIE V43 2,5 km',
+        'credit':      '© KNMI · HARMONIE V43',
+        'extent':      [2.2, 8.2, 50.5, 54.2],
+        'interp_step': 0.02,
+        'tijdzone':    'local',
+        'harmonie_meta': 'harmonie_canvas_meta.json',
+        'achtervoegsel': '_harmonie43',
     },
 }
 
 
+def is_harmonie(model):
+    return 'harmonie_meta' in MODELS[model]
+
+
 def prefix_van(model, var):
-    """Bestandsprefix. neerslag houdt zijn oude namen (bestaande R2-links)."""
-    return f'benelux_{var}' + ('_harmonie' if model == 'harmonie' else '')
+    """Bestandsprefix. ECMWF houdt zijn oude namen (bestaande R2-links)."""
+    return f'benelux_{var}' + MODELS[model].get('achtervoegsel', '')
 
 # ── Kleurschalen per veld ────────────────────────────────────────────────────
 
@@ -191,6 +216,8 @@ def _fmt_zicht(v):
 
 # Soort bepaalt de kopregels: 'som' loopt op vanaf de run, 'moment' is de waarde
 # op de geldigheidstijd en 'interval' een maximum over het voorgaande tijdvak.
+# 'harmonie' is (metasleutel, rooster): de sleutel in parameters{} van de
+# canvas-meta, niet de bestandsnaam — die verschilt per cyclus (V43/V46).
 VARS = {
     'neerslag': {
         'titel':      'neerslagsom',
@@ -207,13 +234,15 @@ VARS = {
         'label_fmt':  _fmt_mm,
         'ecmwf_params': ['tp'],
         'ecmwf_cache':  'tp',                      # bestaande GRIB-cache hergebruiken
-        'harmonie':   ('harmonie46_data_cumul.bin', 'native'),
+        'harmonie':   ('cumul', 'native'),
     },
     'radar': {
         'titel':      'gesimuleerde radar',
         'eenheid':    'dBZ',
         'soort':      'moment',
-        'subtitel':   'uit rechtstreekse modelneerslagintensiteit',
+        # V46 rekent met rprate, V43 met de uursom; beide pijplijnen zetten dat
+        # zelf met Marshall-Palmer om, dus houd de ondertitel modelneutraal.
+        'subtitel':   'modelneerslag omgerekend naar dBZ',
         'menu':       'Gesimuleerde radar',
         'levels':     RADAR_LEVELS,
         'colors':     RADAR_COLORS,
@@ -231,7 +260,7 @@ VARS = {
         # HARMONIE-rprate-veld, niet een uursom of een geïnterpoleerde schatting.
         'ecmwf_params': [],
         'ecmwf_cache':  'radar',
-        'harmonie':   ('harmonie46_data_regenrate.bin', 'native'),
+        'harmonie':   ('radar', 'native'),
     },
     'wind': {
         'titel':      'windkracht',
@@ -252,7 +281,7 @@ VARS = {
         'label_d_lon': 0.65,
         'ecmwf_params': ['10u', '10v'],
         'ecmwf_cache':  'wind',
-        'harmonie':   ('harmonie46_data_wind.bin', 'canvas'),
+        'harmonie':   ('wind', 'canvas'),
     },
     'windstoten': {
         'titel':      'windstoten',
@@ -269,7 +298,7 @@ VARS = {
         'label_fmt':  _fmt_heel,
         'ecmwf_params': ['10fg', '10fg3'],
         'ecmwf_cache':  'windstoten',
-        'harmonie':   ('harmonie46_data_windstoten.bin', 'canvas'),
+        'harmonie':   ('windstoten', 'canvas'),
     },
     'temp': {
         'titel':      'temperatuur',
@@ -286,7 +315,7 @@ VARS = {
         'label_fmt':  _fmt_heel,
         'ecmwf_params': ['2t'],
         'ecmwf_cache':  'temp',
-        'harmonie':   ('harmonie46_data_temp.bin', 'canvas'),
+        'harmonie':   ('temp', 'canvas'),
     },
     'zicht': {
         'titel':      'zicht',
@@ -306,7 +335,7 @@ VARS = {
         # daarom bewust alleen beschikbaar voor HARMONIE V46.
         'ecmwf_params': [],
         'ecmwf_cache':  'zicht',
-        'harmonie':   ('harmonie46_data_zicht.bin', 'canvas'),
+        'harmonie':   ('zicht', 'canvas'),
     },
 }
 
@@ -553,42 +582,58 @@ def ecmwf_fields(var_naam='neerslag', run_hour=None, max_step=None, refresh=Fals
 
 # ── HARMONIE ─────────────────────────────────────────────────────────────────
 
-def harmonie_meta(grid='native', bron_dir=None):
-    """Run + rooster van de laatste complete HARMONIE-V46-verwerking.
+def harmonie_meta(model, bron_dir=None):
+    """Run + volledige metadata van de laatste complete HARMONIE-verwerking.
 
-    De V46-pijplijn schrijft de metadata atomair als laatste. Het volledige
-    neerslagrooster staat bij parameter ``cumul``; wind en temperatuur gebruiken
-    het compactere basisrooster.
+    Beide pijplijnen schrijven de metadata atomair als laatste, dus zodra dit
+    bestand de nieuwe run noemt staan de bins er ook.
     """
+    naam = MODELS[model]['harmonie_meta']
     bron_dir = bron_dir or HARMONIE_DIR
-    with open(os.path.join(bron_dir, 'harmonie46_canvas_meta.json')) as fh:
+    with open(os.path.join(bron_dir, naam)) as fh:
         meta = json.load(fh)
     run_utc = meta.get('run_utc')
     if not run_utc:
-        raise SystemExit('HARMONIE-V46-metadata bevat geen run_utc')
-    run = datetime.strptime(run_utc, '%Y-%m-%dT%H:%M:%SZ')
-    rooster = (meta.get('parameters', {}).get('cumul', {}).get('grid')
-               if grid == 'native' else meta.get('grid'))
+        raise SystemExit(f'{naam} bevat geen run_utc')
+    return datetime.strptime(run_utc, '%Y-%m-%dT%H:%M:%SZ'), meta
+
+
+def harmonie_param(meta, var_naam):
+    """Bestand, rooster en codering van één veld, uit de meta van de pijplijn.
+
+    V43 en V46 gebruiken dezelfde sleutels maar hun eigen bestandsprefix, en de
+    schaalfactoren van de uint8-codering zijn in de loop van de tijd veranderd.
+    Alles wat nodig is om de bin te lezen staat in de meta, dus haal het daar op
+    in plaats van het hier vast te leggen. Het volledige neerslagrooster hangt
+    aan de parameter zelf; wind en temperatuur gebruiken het compactere
+    basisrooster bovenin de meta.
+    """
+    sleutel, grid_soort = VARS[var_naam]['harmonie']
+    p = (meta.get('parameters') or {}).get(sleutel)
+    if not p or not p.get('file'):
+        raise SystemExit(f'HARMONIE-metadata kent parameter {sleutel} niet')
+    rooster = p.get('grid') if grid_soort == 'native' else meta.get('grid')
     if not rooster:
-        raise SystemExit(f'HARMONIE-V46-metadata bevat geen {grid}-rooster')
-    return run, rooster
+        raise SystemExit(f'HARMONIE-metadata bevat geen {grid_soort}-rooster '
+                         f'voor {sleutel}')
+    return p, rooster
 
 
-def harmonie_latest_run():
-    run, _ = harmonie_meta()
+def harmonie_latest_run(model):
+    run, _ = harmonie_meta(model)
     return f'{run:%Y%m%d%H}'
 
 
-def harmonie_snapshot(velden):
+def harmonie_snapshot(model, velden):
     """Kopieer meta's en bins naar een tijdelijke map, en controleer dat de run
     daar voor én na dezelfde is.
 
-    harmonie46_update.sh herschrijft deze bestanden elk uur, en een bouwronde
+    De HARMONIE-pijplijnen herschrijven deze bestanden elk uur, en een bouwronde
     duurt langer dan dat interval. Zonder momentopname leest een veld halverwege
     een half overschreven bin: dat gaf 18 aug een frame waarin de hele Benelux
     in één kleur vollooop terwijl het volgende frame weer normaal was.
     """
-    meta_naam = 'harmonie46_canvas_meta.json'
+    meta_naam = MODELS[model]['harmonie_meta']
 
     def runs():
         with open(os.path.join(HARMONIE_DIR, meta_naam)) as fh:
@@ -603,11 +648,12 @@ def harmonie_snapshot(velden):
 
     voor = runs()
     if not voor:
-        raise SystemExit('HARMONIE-V46-meta bevat geen run_utc — verwerking '
+        raise SystemExit(f'{meta_naam} bevat geen run_utc — verwerking '
                          'nog bezig, wacht op de volgende ronde')
 
-    namen = [meta_naam] + [VARS[v]['harmonie'][0] for v in velden]
-    tmp = tempfile.mkdtemp(prefix='harmonie46_snap_')
+    _, meta = harmonie_meta(model)
+    namen = [meta_naam] + [harmonie_param(meta, v)[0]['file'] for v in velden]
+    tmp = tempfile.mkdtemp(prefix=f'{model}_snap_')
     for naam in namen:
         shutil.copy2(os.path.join(HARMONIE_DIR, naam), os.path.join(tmp, naam))
 
@@ -630,19 +676,19 @@ def harmonie_snapshot(velden):
 
 
 def _harmonie_veld(kubus, var_naam):
-    """Rauwe bin-inhoud → het veld in de eenheid van de kaart.
+    """Gedecodeerde bin-inhoud → het veld in de eenheid van de kaart.
 
     kubus is (stap, component, lat, lon) voor float-bins, of (stap, lat, lon)
-    voor de uint8-gecodeerde neerslag.
+    voor de uint8-gecodeerde velden. De uint8-schaal is er al af (zie
+    harmonie_fields), dus hier alleen nog de eenheid.
     """
     if var_naam == 'neerslag':
-        return (kubus / 12.0) ** 2                 # uint8-sqrt schaal 12 → mm
+        return kubus                               # cumul staat al in mm
     if var_naam == 'radar':
-        regen = (kubus / 16.0) ** 2                # uint8-sqrt schaal 16 → mm/u
-        # NEXRAD/KNMI-convectieve relatie. Onder 0,05 mm/u geen echo tekenen.
-        return np.where(regen >= 0.05,
-                        10.0 * np.log10(300.0 * np.maximum(regen, 1e-6) ** 1.4),
-                        -1.0)
+        # Beide pijplijnen rekenen zelf al met Marshall-Palmer naar dBZ en
+        # zetten "geen echo" op 0. Onder de laagste klasse tekenen, niet nog
+        # eens omrekenen: dat maakte van 20 dBZ ruim 40.
+        return np.where(kubus > 0.0, kubus, -1.0)
     if var_naam in ('wind', 'windstoten'):
         return np.hypot(kubus[:, 0], kubus[:, 1]) * 3.6       # m/s → km/u
     if var_naam == 'temp':
@@ -652,15 +698,17 @@ def _harmonie_veld(kubus, var_naam):
     raise SystemExit(f'onbekend veld: {var_naam}')
 
 
-def harmonie_fields(var_naam='neerslag', max_step=None, bron_dir=None):
-    """Veld per uur uit de bins die weerlab/scripts/harmonie_update.sh wegschrijft.
+def harmonie_fields(model, var_naam='neerslag', max_step=None, bron_dir=None):
+    """Veld per uur uit de bins die de HARMONIE-pijplijn al heeft weggeschreven.
 
     Die pijplijn haalt de run-tar toch al binnen, dus hier alleen uitlezen — geen
     tweede download van de grote run-tar. dtype-byte 0 = float32,
-    1 = uint8-sqrt.
+    1 = uint8 met codering ``waarde = (byte / scale) ** power`` uit de meta.
     """
-    bestand, grid_soort = VARS[var_naam]['harmonie']
-    run, grid = harmonie_meta(grid_soort, bron_dir)
+    _, grid_soort = VARS[var_naam]['harmonie']
+    run, meta = harmonie_meta(model, bron_dir)
+    param, grid = harmonie_param(meta, var_naam)
+    bestand = param['file']
     path = os.path.join(bron_dir or HARMONIE_DIR, bestand)
     with open(path, 'rb') as fh:
         n_lat, n_lon, n_steps, n_comp = struct.unpack('<HHHH', fh.read(8))
@@ -684,6 +732,15 @@ def harmonie_fields(var_naam='neerslag', max_step=None, bron_dir=None):
         raise SystemExit(f'{bestand}: {kubus.size} waarden, verwacht {verwacht}')
 
     kubus = kubus.reshape(vorm)
+    if dtype_flag == 1:
+        # Schaal en exponent staan in de meta omdat ze per parameter én per
+        # cyclus verschillen; vastgezette waarden liepen uit de pas met de
+        # pijplijn en gaven een neerslagsom die ruim anderhalf keer te hoog was.
+        schaal, macht = param.get('scale'), param.get('power')
+        if not schaal or not macht:
+            raise SystemExit(f'{bestand}: meta mist scale/power voor de '
+                             'uint8-codering')
+        kubus = (kubus / float(schaal)) ** float(macht)
     veld = _harmonie_veld(kubus, var_naam)
     vector = (kubus[:, 0], kubus[:, 1]) if var_naam == 'wind' else None
     if VARS[var_naam]['soort'] == 'som':
@@ -1041,19 +1098,21 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
     for old in glob.glob(os.path.join(frame_dir, '*.png')):
         os.remove(old)
 
+    harmonie = is_harmonie(args.model)
+
     # Toon de nominale modelresolutie in elke kaartkop.
     model_label = cfg['label']
-    if args.model == 'harmonie':
+    if harmonie:
         model_label = f'{model_label} 2,5 km'
     if args.demo:
-        if args.model == 'harmonie':
+        if harmonie:
             steps = list(range(1, min(args.max_step or HARMONIE_MAX, HARMONIE_MAX) + 1))
         else:
             steps = ecmwf_steps(args.run if args.run is not None else 0, args.max_step)
         data = demo_fields(steps)
         model_label += ' (DEMO)'
-    elif args.model == 'harmonie':
-        data = harmonie_fields(var_naam, args.max_step, bron_dir)
+    elif harmonie:
+        data = harmonie_fields(args.model, var_naam, args.max_step, bron_dir)
     else:
         data = ecmwf_fields(var_naam, args.run, args.max_step, refresh=args.refresh)
 
@@ -1061,7 +1120,7 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
     run = data[0][1]
     run_tag = f'{run:%Y%m%d%H}'
     leads = [d[0] for d in data]
-    if args.model == 'harmonie':
+    if harmonie:
         step_txt = '+1u t/m'
     else:
         step_txt = '+3u t/m'
@@ -1143,7 +1202,7 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
             'soort': var['soort'],
             'run': f'{run:%Y-%m-%dT%H:00Z}',
             'run_tag': run_tag,
-            'stap_uren': 1 if args.model == 'harmonie' else 3,
+            'stap_uren': 1 if harmonie else 3,
             'stap_uren_lang': None,
             'stap_wissel_uur': None,
             'lead_min': leads[0],
@@ -1181,7 +1240,8 @@ def main():
     cfg = MODELS[args.model]
 
     if args.latest_run:
-        print(harmonie_latest_run() if args.model == 'harmonie' else latest_run(args.run))
+        print(harmonie_latest_run(args.model) if is_harmonie(args.model)
+              else latest_run(args.run))
         return
 
     velden = list(VARS) if args.var == 'alle' else [args.var]
@@ -1191,8 +1251,8 @@ def main():
     # Alle velden uit één momentopname, anders kan veld 4 uit een nieuwere run
     # komen dan veld 1 terwijl de meta één run noemt.
     bron_dir = None
-    if args.model == 'harmonie' and not args.demo:
-        bron_dir = harmonie_snapshot(velden)
+    if is_harmonie(args.model) and not args.demo:
+        bron_dir = harmonie_snapshot(args.model, velden)
     try:
         for var_naam in velden:
             bouw_veld(args, cfg, var_naam, bron_dir)
