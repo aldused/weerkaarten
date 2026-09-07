@@ -113,8 +113,8 @@ STATUS=0
 # HARMONIE is de goedkope, snel verversende reeks (~100 s per run): die eerst,
 # zodat een lange ECMWF-bouw hem nooit een uur laat wachten. V46 blijft de
 # standaard op de pagina, V43 loopt ernaast door als V46 stilvalt.
-bouw_model harmonie   "_harmonie"   "$ROOT/.benelux_neerslag_harmonie46_x_v12_metaschaal_run" || STATUS=1
-bouw_model harmonie43 "_harmonie43" "$ROOT/.benelux_neerslag_harmonie43_x_v1_run"             || STATUS=1
+bouw_model harmonie   "_harmonie"   "$ROOT/.benelux_neerslag_harmonie46_x_v13_radarkop_run" || STATUS=1
+bouw_model harmonie43 "_harmonie43" "$ROOT/.benelux_neerslag_harmonie43_x_v2_radarkop_run" || STATUS=1
 bouw_model ecmwf      ""            "$ROOT/.benelux_neerslag_ecmwf_144_x_v3_windrichting_run" || STATUS=1
 
 # Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw

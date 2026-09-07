@@ -240,9 +240,17 @@ VARS = {
         'titel':      'gesimuleerde radar',
         'eenheid':    'dBZ',
         'soort':      'moment',
-        # V46 rekent met rprate, V43 met de uursom; beide pijplijnen zetten dat
-        # zelf met Marshall-Palmer om, dus houd de ondertitel modelneutraal.
+        # V46 heeft rprate: een momentwaarde, net als een echte radarbeeld.
+        # V43 heeft in de open data alleen de uursom, en een uurgemiddelde vlakt
+        # buienkernen af — gemeten op één V46-run scheelt dat 5 tot 9 dBZ in de
+        # piek en een factor 67 in het aantal pixels boven 45 dBZ. Benoem dat in
+        # de kop, anders lijkt een V43-kaart een zwakke verwachting terwijl het
+        # de methode is.
         'subtitel':   'modelneerslag omgerekend naar dBZ',
+        'subtitel_model': {
+            'harmonie':   'uit rprate — momentwaarde',
+            'harmonie43': 'uit de uursom — kernen vlakker',
+        },
         'menu':       'Gesimuleerde radar',
         'levels':     RADAR_LEVELS,
         'colors':     RADAR_COLORS,
@@ -891,7 +899,7 @@ def proj_grid(lons_f, lats_f):
 
 
 def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_label,
-               step_txt='', max_lead=None, eind=None, vector_ruw=None):
+               step_txt='', max_lead=None, eind=None, vector_ruw=None, model_id=None):
     extent = cfg['extent']
     cmap, norm = build_cmap(var)
     lats_f, lons_f, tp = crop_and_upsample(lats, lons, veld_ruw, extent,
@@ -1010,8 +1018,9 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
              fontweight='bold', va='top')
     # Bij een oplopende som staat "vanaf de run tot X"; bij andere velden de
     # geldigheidstijd.
+    ondertitel = (var.get('subtitel_model') or {}).get(model_id) or var['subtitel']
     kop2 = f'{var["titel"]} ({var["eenheid"]}) — ' + (
-        f'vanaf {fmt_valid(run, lokaal)}' if var['soort'] == 'som' else var['subtitel'])
+        f'vanaf {fmt_valid(run, lokaal)}' if var['soort'] == 'som' else ondertitel)
     fig.text(0.014, van_boven(0.477), kop2, fontsize=10.5, va='top', color='#444444')
     geldig = (f'tot {fmt_valid(valid, lokaal)}' if var['soort'] == 'som'
               else fmt_valid(valid, lokaal))
@@ -1137,7 +1146,8 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
         getekend.append(
             plot_frame(lead, run_, valid, lats, lons, veld, f, cfg, var, model_label,
                        step_txt=step_txt, max_lead=max_lead,
-                       eind=run + timedelta(hours=max_lead), vector_ruw=vector))
+                       eind=run + timedelta(hours=max_lead), vector_ruw=vector,
+                       model_id=args.model))
         frames.append(f)
 
     # Controleer wat er getekend is, niet alleen wat er ingelezen werd. De bin
