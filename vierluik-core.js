@@ -53,11 +53,15 @@
     if((w0&& !Number.isFinite(a))||(w1&& !Number.isFinite(b))||(w2&& !Number.isFinite(c))||(w3&& !Number.isFinite(d)))return NaN;
     return (w0?a*w0:0)+(w1?b*w1:0)+(w2?c*w2:0)+(w3?d*w3:0);
   }
-  function sample(pd, step, lat, lon, component=0) {
+  function sample(pd, step, lat, lon, component=0, method='bilinear') {
     if(!pd||!pd.grid||step<0||step>=pd.nSteps||component<0||component>=pd.nComp)return null;
     const g=pd.grid,nx=pd.nLon,ny=pd.nLat;
     let x=(lon-g.lon_min)/(g.lon_max-g.lon_min)*(nx-1),y=(lat-g.lat_min)/(g.lat_max-g.lat_min)*(ny-1);
     if(!Number.isFinite(x)||!Number.isFinite(y)||x<0||x>nx-1||y<0||y>ny-1)return null;
+    if(method==='nearest') {
+      const value=pd.data[(step*pd.nComp+component)*nx*ny+Math.round(y)*nx+Math.round(x)];
+      return Number.isFinite(value)?value*(pd.schaal??1):null;
+    }
     const x0=Math.floor(x),y0=Math.floor(y),x1=Math.min(x0+1,nx-1),y1=Math.min(y0+1,ny-1),dx=x-x0,dy=y-y0;
     const off=(step*pd.nComp+component)*nx*ny;
     const positions=[y0*nx+x0,y0*nx+x1,y1*nx+x0,y1*nx+x1],weights=[(1-dx)*(1-dy),dx*(1-dy),(1-dx)*dy,dx*dy];

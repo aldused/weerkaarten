@@ -88,7 +88,7 @@ test('A cloud tile in transit never displays the previous hour under the new tim
   c.tekenWolkentegel(ctx,0,{id:0},{meta:{tijden:[t(0)]}},0,100,100,0,1,0,1);
   assert.equal(fills,1);
 });
-['localDayKey','timeIndexForDay','limitingModels','sampleComponent','hoverValue','comparisonValue'].forEach(name=>vm.runInContext(fn(name),c));
+['localDayKey','timeIndexForDay','limitingModels','neerslagBronrooster','radarBronOmschrijving','sampleComponent','hoverValue','comparisonValue'].forEach(name=>vm.runInContext(fn(name),c));
 test('Day selection preserves the local hour and clamps within the selected day',()=>{
   const ts=[new Date(2026,8,6,14),new Date(2026,8,7,8),new Date(2026,8,7,14),new Date(2026,8,8,2)].map(d=>d.toISOString());
   assert.equal(c.timeIndexForDay(ts,'2026-09-07',ts[0]),2);

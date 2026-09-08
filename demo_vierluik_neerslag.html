@@ -761,7 +761,7 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   <!-- gevuld door buildTimeline() -->
 </div>
 
-<script src="vierluik-core.js?v=20260907-elementen1"></script>
+<script src="vierluik-core.js?v=20260908-neerslagdetail1"></script>
 <script>
 (function() {
 
@@ -784,7 +784,8 @@ var NEERSLAG_MM_COLORS = [
   [221,0,0],[153,0,0],[119,0,136],[204,68,204],[255,170,204]
 ];
 
-// Radar dBZ — KNMI/Infoplaza-stijl klassen per 6 dBZ
+// Radar dBZ: splits de bestaande kleurbanden in stappen van 3 dBZ,
+// zodat verschillen binnen een buienkern niet in één brede kleur verdwijnen.
 var RADAR_DBZ_LEVELS = [4, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72];
 var RADAR_DBZ_COLORS = [
   [242,242,242],  //  4-6   bijna wit
@@ -801,6 +802,21 @@ var RADAR_DBZ_COLORS = [
   [180,0,180],    // 66-72  paars
   [255,140,220],  // 72+    roze
 ];
+(function() {
+  var levels=[],colors=[];
+  RADAR_DBZ_LEVELS.forEach(function(level,i) {
+    levels.push(level);colors.push(RADAR_DBZ_COLORS[i]);
+    if(i<RADAR_DBZ_LEVELS.length-1 && RADAR_DBZ_LEVELS[i+1]-level===6) {
+      levels.push(level+3);
+      colors.push(RADAR_DBZ_COLORS[i].map(function(c,k){return Math.round((c+RADAR_DBZ_COLORS[i+1][k])/2);}));
+    }
+  });
+  RADAR_DBZ_LEVELS=levels;RADAR_DBZ_COLORS=colors;
+})();
+
+function neerslagBronrooster() {
+  return activeVar==='neerslag'||activeVar==='radar'||activeVar==='cumul';
+}
 
 // Temperatuurschaal met bewust grote kleursprongen in het bereik waarin het
 // Nederlandse weer zich meestal afspeelt (0–30 °C). De oude schaal liep daar
@@ -2113,6 +2129,7 @@ function renderPanel(pIdx) {
   var veldStap = stepIdx;
 
   var pdNLat = pd.nLat, pdNLon = pd.nLon, pdNComp = pd.nComp;
+  var gebruikBronrooster = neerslagBronrooster();
   var pdG = pd.grid || g;
   var pdLatH = pdG.lat_max - pdG.lat_min;
   var pdLonW = pdG.lon_max - pdG.lon_min;
@@ -2154,7 +2171,11 @@ function renderPanel(pIdx) {
 
       var plane=pdNLat*pdNLon, base=pdStepOffMC, scale=pd.schaal||1;
       var idx0=gy0*pdNLon+gx0,idx1=gy0*pdNLon+gx1,idx2=gy1*pdNLon+gx0,idx3=gy1*pdNLon+gx1;
-      var aa=VierluikCore.bilinear(pd.data[base+idx0],pd.data[base+idx1],pd.data[base+idx2],pd.data[base+idx3],fracx,fracy)*scale;
+      // Neerslagpieken niet middelen met de drie omliggende roosterpunten.
+      // Dit gebruikt het aangeleverde modelrooster, ook voor grovere modellen.
+      var aa=(gebruikBronrooster
+        ? pd.data[base+Math.round(fy)*pdNLon+Math.round(fx)]
+        : VierluikCore.bilinear(pd.data[base+idx0],pd.data[base+idx1],pd.data[base+idx2],pd.data[base+idx3],fracx,fracy))*scale;
       var bb=pdNComp>1?VierluikCore.bilinear(pd.data[base+plane+idx0],pd.data[base+plane+idx1],pd.data[base+plane+idx2],pd.data[base+plane+idx3],fracx,fracy)*scale:0;
       var cc=pdNComp>2?VierluikCore.bilinear(pd.data[base+2*plane+idx0],pd.data[base+2*plane+idx1],pd.data[base+2*plane+idx2],pd.data[base+2*plane+idx3],fracx,fracy)*scale:0;
       if(!Number.isFinite(aa)||!Number.isFinite(bb)||!Number.isFinite(cc)){
@@ -2740,6 +2761,18 @@ function requestRender() {
   });
 }
 
+function radarBronOmschrijving(info,pd) {
+  var source=info||{},label=source.label||'';
+  if(/instantaneous_rain/.test(source.source_method||'') || /rprate|momentane regen|GRIB1 181.*TRI=0/i.test(label+' '+(source.source_parameter||''))) {
+    return 'Radarbenadering uit momentane regenintensiteit; geen gemeten radar.';
+  }
+  if(/dbz_cmax|kolommaximum/i.test(label+' '+(source.source_parameter||''))) {
+    return 'Gesimuleerde kolommaximumreflectiviteit; geen gemeten radar.';
+  }
+  if(pd&&pd.afgeleid) return 'Radarbenadering uit de uursom; bewegende buienkernen worden hierdoor vlakker.';
+  return 'Modelveld in dBZ; geen gemeten radar. De bron specificeert de radarmethode niet.';
+}
+
 function buildLegendHTML(pIdx) {
   var model=MODELS[panels[pIdx].modelIdx],md=modelData[model.id],pd=md&&md.paramData&&md.paramData[veldSleutel(model.id,activeVar)];
   if(!pd && md && md.paramData && veldSleutel(model.id,activeVar)==='bewolking_hr')pd=md.paramData.bewolking;
@@ -2758,11 +2791,15 @@ function buildLegendHTML(pIdx) {
     ticks.forEach(function(t){labels+=tick(t,(t-min)/range*100);});
   }
   if(activeVar==='neerslag'){
-    title='Neerslag · mm in het voorgaande uur';discrete(NEERSLAG_MM_COLORS,NEERSLAG_MM_LEVELS.map(String),2,true);note='Klassen vanaf de aangegeven waarde. Wit: <0,03 mm; kaartgetallen vanaf 0,2 mm.';
+    title='Neerslag · mm in het voorgaande uur';discrete(NEERSLAG_MM_COLORS,NEERSLAG_MM_LEVELS.map(String),2,true);note='Bronrooster zonder ruimtelijke middeling. Wit: <0,03 mm; kaartgetallen vanaf 0,2 mm.';
   }else if(activeVar==='radar'){
-    title='Modelradar · dBZ (klasse vanaf)';discrete(RADAR_DBZ_COLORS,RADAR_DBZ_LEVELS.map(String),2,true);
+    title='Modelradar · dBZ (klasse vanaf)';discrete(RADAR_DBZ_COLORS,RADAR_DBZ_LEVELS.map(String),4,true);
+    labels='';
+    RADAR_DBZ_LEVELS.forEach(function(value,i){
+      if(value%12===6 || value===72)labels+=tick(value===72?'72+':value,(i+.5)/RADAR_DBZ_LEVELS.length*100);
+    });
     var info=md&&md.meta.parameters.radar;
-    note=info&&/dbz_cmax|instantaan/i.test(info.label||'')?'Gesimuleerde kolommaximumreflectiviteit; geen gemeten radar.':info&&/rprate/i.test(info.label||'')?'Afgeleid uit momentane regenintensiteit (Marshall–Palmer).':'Afgeleid uit de neerslag van het voorgaande uur (Marshall–Palmer).';
+    note=radarBronOmschrijving(info,pd)+' Bronrooster zonder ruimtelijke middeling.';
   }else if(activeVar==='temp'||activeVar==='dauwpunt'){
     title=(activeVar==='temp'?'Temperatuur':'Dauwpunt')+' op 2 m · °C';continuous(TEMP_REF,[-30,-20,-10,0,10,20,30,40]);note='Lijnen: 1 °C; zwaardere lijnen: 5 °C.';
   }else if(activeVar==='druk'){
@@ -2777,7 +2814,7 @@ function buildLegendHTML(pIdx) {
     title='Windstoten op 10 m · km/u';var ref=[];for(var g=0;g<=150;g++)ref.push([g,windKleur(g/3.6)]);continuous(ref,[0,30,60,90,120,150]);note='Lijnen: 10 km/u. Maximum over de bronperiode; geen gemiddelde wind.';
   }else if(activeVar==='cumul'){
     title='Neerslagsom · mm (klasse vanaf)';discrete(CUMUL_MM_COLORS,CUMUL_MM_LEVELS.map(String),1,true);
-    note=pd&&Number.isFinite(pd.startMs)?'Alle modellen vanaf '+formatTime(pd.startMs)+' t/m de gekozen tijd.':'Wachten op dezelfde starttijd voor alle modellen.';
+    note=pd&&Number.isFinite(pd.startMs)?'Alle modellen vanaf '+formatTime(pd.startMs)+' t/m de gekozen tijd. Zonder ruimtelijke middeling.':'Wachten op dezelfde starttijd voor alle modellen.';
   }else if(activeVar==='bewolking_totaal'){
     title='Geschatte totale bewolking · achtsten';discrete(OCTA_COLORS,[0,1,2,3,4,5,6,7,8]);note='Berekend uit hoog/midden/laag met willekeurige overlap; geen direct modeltotaal.';
   }else if(activeVar==='bewolking'){
@@ -2987,7 +3024,7 @@ function currentMapExtent() {
 }
 
 function sampleComponent(pd, stepIdx, lat, lon, comp) {
-  return VierluikCore.sample(pd, stepIdx, lat, lon, comp);
+  return VierluikCore.sample(pd, stepIdx, lat, lon, comp, neerslagBronrooster()?'nearest':'bilinear');
 }
 
 function hoverValue(pd, stepIdx, lat, lon) {

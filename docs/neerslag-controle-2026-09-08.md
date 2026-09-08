@@ -44,6 +44,29 @@ ongeveer 2 km. De getallen hieronder zijn maxima binnen het kaartvenster
 
 ## Grenzen van de vergelijking
 
+### Vierluik: dezelfde bronverbetering
+
+- De vernieuwde V43- en V46-radarbestanden worden al rechtstreeks door het
+  vierluik geladen. De legenda herkent nu `source_method` en `source_parameter`
+  en onderscheidt momentane regen, kolommaximumreflectiviteit en de fallback
+  uit uursommen. V43/V46 werden door de oude labelherkenning onterecht als
+  uursomradar beschreven.
+- Neerslag, radar en neerslagsom gebruiken nu de dichtstbijzijnde aangeleverde
+  modelcel, zonder bilineair middelen met buurcellen. Dit geldt ook voor
+  kaartgetallen en puntvergelijkingen. Andere velden houden hun interpolatie.
+  Er worden geen fijnere meteorologische structuren verzonnen; grovere
+  modelroosters blijven herkenbaar grof.
+- Radar heeft tussen 6 en 72 dBZ kleurstappen van 3 in plaats van 6 dBZ.
+  De gedeelde tijdas en het gezamenlijke startmoment van sommen blijven gelijk.
+- Controle: 32 numerieke regressietests geslaagd. Browsertest met echte
+  V43/V46/ICON-D2/ECMWF-bestanden op geldigheid 8 september 17 UTC controleerde
+  1.312 kaartpixels en evenveel puntwaarden over de drie neerslaglagen:
+  alle gecontroleerde waarden/kleuren komen overeen met de gekozen broncel.
+  De vier panelen gebruiken steeds exact dezelfde geldigheid; geen browserfouten.
+- Er is geen MP4-export toegevoegd aan het vierluik.
+
+### Vergelijking met andere bureaus
+
 Een regen-gebaseerde radarproxy is geen volledige simulatie van radarreflectiviteit
 uit de verticale verdeling van regen, sneeuw en hagel. Hij is ook geen gemeten
 radar. De referentie van Infoplaza vermeldt gesimuleerde reflectiviteit; een
