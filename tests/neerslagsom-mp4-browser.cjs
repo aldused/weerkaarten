@@ -70,6 +70,61 @@ const server=http.createServer((req,res)=>{
     await page.getByRole('button',{name:'Sluiten',exact:true}).click();
     assert.equal(await page.locator('#root').evaluate(el=>el.inert),false);
     console.log('Cancellation and controls restored.');
+    // Inject asynchronous configure failures and mid-stream closure, then use
+    // real browser encoders for the successful retry and inspect the real MP4.
+    await page.evaluate(()=>{
+      const Native=window.VideoEncoder;
+      window.encoderAudit={mode:'',attempts:[],probed:[],unprobed:false};
+      window.VideoEncoder=class extends Native {
+        constructor(callbacks){super(callbacks);this.callbacks=callbacks;this.frameCount=0;}
+        static async isConfigSupported(config){
+          const result=await Native.isConfigSupported(config);
+          if(result.supported)encoderAudit.probed.push(JSON.stringify(result.config));
+          return result;
+        }
+        configure(config){
+          encoderAudit.unprobed ||= !encoderAudit.probed.includes(JSON.stringify(config));
+          encoderAudit.attempts.push(config);this.attempt=encoderAudit.attempts.length;
+          super.configure(config);
+          if((encoderAudit.mode==='configure'&&this.attempt===1)||
+             (encoderAudit.mode==='resize'&&config.width>1088)||encoderAudit.mode==='all') {
+            queueMicrotask(()=>{if(this.state!=='closed')this.close();this.callbacks.error(new DOMException('Test: encoder initialization failed','EncodingError'));});
+          }
+        }
+        encode(frame,options){
+          if(encoderAudit.mode==='midstream'&&this.attempt===1&&this.frameCount===2){
+            this.close();this.callbacks.error(new DOMException('Test: encoder failed midstream','EncodingError'));
+            throw new DOMException("Cannot call 'encode' on a closed codec.",'InvalidStateError');
+          }
+          this.frameCount++;super.encode(frame,options);
+        }
+      };
+    });
+    for(const mode of ['configure','midstream','resize','all']){
+      await page.evaluate(mode=>{encoderAudit.mode=mode;encoderAudit.attempts=[];encoderAudit.probed=[];},mode);
+      await page.getByRole('button',{name:'MP4 van tijdvak',exact:true}).click();
+      await page.selectOption('#film-start','0');await page.selectOption('#film-eind','3');
+      const downloadPromise=mode==='all'?null:page.waitForEvent('download',{timeout:60000});
+      await page.click('#film-maak');
+      await page.waitForFunction(()=>/Klaar:|lukte niet/.test(document.getElementById('film-status').textContent),null,{timeout:60000});
+      const status=await page.locator('#film-status').textContent(),audit=await page.evaluate(()=>encoderAudit);
+      assert.equal(audit.unprobed,false);assert(audit.attempts.length>=2);
+      assert(audit.attempts.every(c=>c.hardwareAcceleration!=='prefer-hardware'));
+      if(mode==='all'){
+        assert.match(status,/lukte niet.*encoder initialization failed/);
+        assert.equal(await page.locator('#film-maak').isDisabled(),false);
+      }else{
+        assert.match(status,/^Klaar:/);
+        const download=await downloadPromise,file=out+'/neerslagsom-fallback-'+mode+'.mp4';await download.saveAs(file);
+        const stream=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',file],{encoding:'utf8'})).streams[0];
+        assert.equal(stream.codec_name,'h264');assert.equal(+stream.nb_frames,9);
+        const hashes=execFileSync('ffmpeg',['-v','error','-i',file,'-f','framemd5','-'],{encoding:'utf8'}).split('\n').filter(line=>line&&!line.startsWith('#')).map(line=>line.split(',').at(-1).trim());
+        assert.equal(new Set(hashes.slice(0,4)).size,4);
+        if(mode==='resize')assert(stream.width<=1088);
+      }
+      console.log('ENCODER FALLBACK',mode,audit.attempts.map(c=>[c.codec,c.width,c.hardwareAcceleration]),status);
+      await page.getByRole('button',{name:'Sluiten',exact:true}).click();
+    }
     assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());

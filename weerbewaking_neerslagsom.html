@@ -456,25 +456,56 @@ async function encodeerTijdvakMp4(start, eind, fps, status){
     throw new Error('Deze browser ondersteunt geen H.264-MP4-export');
   }
   const video = document.getElementById('film');
-  const bronBreedte = video.videoWidth;
-  const bronHoogte = video.videoHeight;
-  const breedte = afrondenOp16(bronBreedte);
-  const hoogte = afrondenOp16(bronHoogte);
+  // Controleer exact dezelfde configuratie als configure() krijgt. De oude
+  // proef liet hardwareAcceleration weg, maar dwong daarna prefer-hardware af.
+  // Een positief proefresultaat kon zo alsnog een gesloten encoder opleveren.
+  const pogingen = [
+    {codec:'avc1.64002a', hardwareAcceleration:'no-preference', maxWidth:1440},
+    {codec:'avc1.42002a', hardwareAcceleration:'prefer-software', maxWidth:1440},
+    {codec:'avc1.420028', hardwareAcceleration:'no-preference', maxWidth:1080},
+    {codec:'avc1.420028', hardwareAcceleration:'prefer-software', maxWidth:1080},
+  ];
+  let laatsteFout;
+  for (let i = 0; i < pogingen.length; i++) {
+    if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
+    const poging = pogingen[i];
+    const factor = Math.min(1, poging.maxWidth / video.videoWidth);
+    const drawWidth = Math.round(video.videoWidth * factor);
+    const drawHeight = Math.round(video.videoHeight * factor);
+    const config = {
+      codec: poging.codec, width: afrondenOp16(drawWidth), height: afrondenOp16(drawHeight),
+      bitrate: poging.maxWidth >= 1440 ? 12000000 : 8000000, framerate: fps,
+      bitrateMode:'variable', latencyMode:'realtime',
+      hardwareAcceleration: poging.hardwareAcceleration, avc:{format:'avc'},
+    };
+    let steun;
+    try { steun = await VideoEncoder.isConfigSupported(config); }
+    catch (error) { laatsteFout = error; continue; }
+    if (!steun.supported) continue;
+    if (i) status.textContent = 'Export opnieuw voorbereiden met een andere encoderinstelling…';
+    try {
+      // Elke poging begint met een nieuwe encoder én een lege MP4: ook een
+      // encoder die halverwege uitvalt laat geen dubbele/oude beelden achter.
+      return await encodeerTijdvakPoging(start, eind, fps, status, steun.config, drawWidth, drawHeight);
+    } catch (error) {
+      if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
+      if (!error.codecFailure) throw error;
+      laatsteFout = error;
+    }
+  }
+  throw new Error('H.264-export kon niet worden gestart met de beschikbare encoderinstellingen' +
+    (laatsteFout ? ': ' + laatsteFout.message : ''));
+}
+
+async function encodeerTijdvakPoging(start, eind, fps, status, config, drawWidth, drawHeight){
+  const video = document.getElementById('film');
+  const breedte = config.width;
+  const hoogte = config.height;
   const canvas = document.createElement('canvas');
   canvas.width = breedte;
   canvas.height = hoogte;
   const teken = canvas.getContext('2d', {alpha: false});
   if (!teken) throw new Error('videocanvas niet beschikbaar');
-
-  const codecs = ['avc1.640028', 'avc1.4D0028', 'avc1.42002A', 'avc1.640033'];
-  let codec = null;
-  for (const kandidaat of codecs) {
-    try {
-      const steun = await VideoEncoder.isConfigSupported({codec: kandidaat, width: breedte, height: hoogte, bitrate: 12000000, framerate: fps});
-      if (steun && steun.supported) { codec = kandidaat; break; }
-    } catch (_) {}
-  }
-  if (!codec) throw new Error('H.264-codering wordt niet ondersteund voor dit formaat');
 
   const muxer = new Mp4Muxer.Muxer({
     target: new Mp4Muxer.ArrayBufferTarget(),
@@ -486,40 +517,49 @@ async function encodeerTijdvakMp4(start, eind, fps, status){
     output: (chunk, meta) => { try { muxer.addVideoChunk(chunk, meta); } catch (error) { encoderFout = error; } },
     error: error => { encoderFout = error; },
   });
-  encoder.configure({
-    codec, width: breedte, height: hoogte, bitrate: 12000000, framerate: fps,
-    bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration: 'prefer-hardware',
-    avc: {format: 'avc'},
-  });
-
   const totaal = eind - start + 1;
-  const duur = Math.round(1000000 / fps);
   let uitvoerIndex = 0;
+  const codecFout = error => {
+    const fout = new Error((encoderFout || error)?.message || 'De video-encoder is gestopt');
+    fout.codecFailure = true;
+    return fout;
+  };
+  function controleerEncoder(){
+    if (encoderFout || encoder.state !== 'configured') throw codecFout(encoderFout);
+  }
+  async function schrijfFrame(){
+    controleerEncoder();
+    const timestamp = Math.round(uitvoerIndex * 1000000 / fps);
+    const frame = new VideoFrame(canvas, {timestamp, duration: Math.round((uitvoerIndex + 1) * 1000000 / fps) - timestamp});
+    let timeout;
+    try {
+      encoder.encode(frame, {keyFrame: true});
+      await Promise.race([
+        encoder.flush(),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('De video-encoder reageert niet')), 15000); }),
+      ]);
+      controleerEncoder();
+      uitvoerIndex++;
+    } catch (error) { throw codecFout(error); }
+    finally { clearTimeout(timeout); frame.close(); }
+  }
   try {
+    try { encoder.configure(config); } catch (error) { throw codecFout(error); }
     for (let bronIndex = start; bronIndex <= eind; bronIndex++) {
       if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
       await springNaarFilmFrame(video, bronIndex, videoFps);
       if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
       teken.fillStyle = '#ffffff';
       teken.fillRect(0, 0, breedte, hoogte);
-      teken.drawImage(video, 0, 0, bronBreedte, bronHoogte);
-      const frame = new VideoFrame(canvas, {timestamp: uitvoerIndex * duur, duration: duur});
-      encoder.encode(frame, {keyFrame: true});
-      frame.close();
-      uitvoerIndex++;
-      // Beperk de wachtrij: bewaar bij lange tijdvakken niet alle ruwe beelden in het geheugen.
-      await encoder.flush();
-      if (encoderFout) throw encoderFout;
+      teken.drawImage(video, 0, 0, drawWidth, drawHeight);
+      await schrijfFrame();
       status.textContent = 'MP4 coderen: beeld ' + (bronIndex - start + 1) + ' van ' + totaal + '…';
     }
     for (let hold = 0; hold < Math.max(3, Math.round(fps * 0.8)); hold++) {
-      const frame = new VideoFrame(canvas, {timestamp: uitvoerIndex * duur, duration: duur});
-      encoder.encode(frame, {keyFrame: true});
-      frame.close();
-      uitvoerIndex++;
+      if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
+      await schrijfFrame();
     }
-    await encoder.flush();
-    if (encoderFout) throw encoderFout;
+    controleerEncoder();
     if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
     muxer.finalize();
     return new Blob([muxer.target.buffer], {type: 'video/mp4'});
