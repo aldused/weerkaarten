@@ -9,6 +9,8 @@
 <script defer src="./kaarten_editor_pin.js?v=20260818-pin1965-v1"
   data-pin-hash="d7c7673ba8ca7b0f04b1af4df026cbea7fed5b8acf59b27d33ef988c60eff054"
   data-session-key="neerslagsom_pin_ok_1965"></script>
+<!-- Lokale H.264-MP4 export voor een gekozen tijdvak. -->
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/build/mp4-muxer.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -53,6 +55,16 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
 .uitleg li{margin-bottom:5px}
 .uitleg code{background:#0d1624;border:1px solid #26364d;border-radius:4px;padding:1px 5px;font-size:.78rem}
 .fout{padding:14px 16px;color:var(--danger);font-size:.82rem;font-weight:800;display:none}
+.film-overlay{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:18px;background:rgba(3,8,16,.76)}
+.film-venster{width:min(500px,100%);border:1px solid #355270;border-radius:9px;background:#101b2b;box-shadow:0 20px 60px rgba(0,0,0,.55);overflow:hidden}
+.film-kop{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:18px 18px 12px;border-bottom:1px solid var(--border)}
+.film-kop strong{display:block;color:#fff;font-size:1rem}.film-kop span{display:block;color:var(--muted);font-size:.76rem;line-height:1.4;margin-top:4px}
+.film-sluit{border:0;background:transparent;color:#9eb7cc;font-size:1.45rem;line-height:1;cursor:pointer}
+.film-form{display:grid;grid-template-columns:70px 1fr;gap:10px 12px;align-items:center;padding:16px 18px;color:#b8cce0;font-size:.8rem;font-weight:800}
+.film-form select{min-width:0;height:34px;border:1px solid #38546e;border-radius:5px;background:#0b1421;color:#fff;padding:0 8px;font:700 .78rem Inter,system-ui,sans-serif}
+.film-status{min-height:22px;padding:0 18px 14px;color:#a9c4da;font-size:.8rem;line-height:1.4}.film-status.fout{display:block;color:var(--danger);padding:0 18px 14px}
+.film-acties{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--border)}
+.film-acties button{height:34px;border-radius:6px;border:1px solid #324866;background:#111b2a;color:var(--text);padding:0 12px;font:800 .78rem Inter,system-ui,sans-serif;cursor:pointer}.film-acties button.primair{background:var(--brand);border-color:transparent;color:#fff}.film-acties button:disabled{opacity:.5;cursor:wait}
 @media(max-width:640px){
   body{padding:14px}
   .header{flex-direction:column;align-items:stretch}
@@ -103,7 +115,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
       <button type="button" data-model="harmonie43" onclick="kiesModel('harmonie43')">HARMONIE V43<small>2 km · tot +60 uur</small></button>
     </div>
     <div class="speler">
-      <video id="film" controls loop autoplay muted playsinline preload="auto"></video>
+      <video id="film" controls loop autoplay muted playsinline preload="auto" crossorigin="anonymous"></video>
     </div>
     <div class="acties">
       <button class="primair" type="button" onclick="stapFrame(-1)">◀ stap terug</button>
@@ -116,6 +128,7 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
           <option value="4">4×</option>
         </select>
       </label>
+      <button type="button" onclick="openFilmMaker()">MP4 van tijdvak</button>
       <span class="spacer"></span>
       <a id="dl-mp4" href="#" download onclick="downloadMp4(event)">MP4 downloaden</a>
     </div>
@@ -149,11 +162,29 @@ h1{font-size:1.35rem;color:white;line-height:1.15}
         <li><strong>Temperatuur</strong> is de 2-meter-temperatuur op het geldigheidsmoment zelf, in stappen van 2,5 °C rond het bereik dat in Nederland voorkomt.</li>
         <li><strong>Zicht</strong> toont het horizontale modelzicht aan het oppervlak in kilometer. Paars, rood en oranje markeren mist en zeer slecht zicht; geel beperkt zicht en groen/lichtblauw goed zicht. Alleen waarden tot en met 10 km krijgen een cijfer. Het is een rechtstreeks KNMI-veld uit HARMONIE (V46 en V43); ECMWF-open-data levert geen betrouwbaar rechtstreeks zichtveld en is daarom bij deze kaart uitgeschakeld.</li>
         <li><strong>Detail</strong>: HARMONIE-neerslag en radar worden op het oorspronkelijke KNMI-rooster getekend, zonder extra ruimtelijke middeling. De bijbehorende MP4 is 1440 pixels breed met kwaliteitsgestuurde compressie; de overige MP4-kaarten zijn 792 pixels breed. Het cijferraster staat vierkant in kilometers (ongeveer 30 km) en zonder plaatsnamen, en de cijfers hebben een stevige contrastrand, zodat de kaart in de tijdlijn leesbaar blijft. Door H.264-compressie blijft het bestand klein genoeg om direct te posten.</li>
+        <li><strong>MP4 van tijdvak</strong>: kies onder de kaart het eerste en laatste kaartbeeld en de afspeelsnelheid. De export bevat alleen dat tijdvak, wordt als H.264-MP4 op dit apparaat gemaakt en start direct als download.</li>
         <li>De pijplijn bouwt automatisch bij elke nieuwe run; blijft een run langer staan dan de verversing van dat model, dan kleurt de run-badge geel.</li>
       </ul>
     </div>
   </section>
 </main>
+</div>
+
+<div class="film-overlay" id="film-overlay" role="dialog" aria-modal="true" aria-labelledby="film-kop">
+  <div class="film-venster">
+    <div class="film-kop">
+      <div><strong id="film-kop">Maak MP4 van tijdvak</strong><span>De gekozen kaartbeelden worden op dit apparaat als H.264-MP4 gemaakt.</span></div>
+      <button class="film-sluit" type="button" onclick="sluitFilmMaker()" aria-label="Sluiten">×</button>
+    </div>
+    <div class="film-form">
+      <label for="film-start">Vanaf</label><select id="film-start"></select>
+      <label for="film-eind">Tot</label><select id="film-eind"></select>
+      <label for="film-fps">Snelheid</label>
+      <select id="film-fps"><option value="4">4 beelden/sec</option><option value="6" selected>6 beelden/sec</option><option value="8">8 beelden/sec</option><option value="12">12 beelden/sec</option></select>
+    </div>
+    <div class="film-status" id="film-status" aria-live="polite"></div>
+    <div class="film-acties"><button type="button" onclick="sluitFilmMaker()">Annuleren</button><button class="primair" id="film-maak" type="button" onclick="maakTijdvakMp4()">Maak MP4</button></div>
+  </div>
 </div>
 
 <script>
@@ -205,6 +236,9 @@ let veld = localStorage.getItem('wb_neerslagsom_veld') || 'neerslag';
 if (!VELDEN[veld]) veld = 'neerslag';
 if (ALLEEN_HIRES(veld) && !MODELLEN[model].hires) model = hiresVoorkeur();
 let videoFps = 10;
+let actieveReeks = null;
+let actieveRun = null;
+let filmBezig = false;
 
 function prefixVan(){
   return 'benelux_' + veld + MODELLEN[model].achtervoegsel;
@@ -286,6 +320,239 @@ function mp4Bestandsnaam(run){
   return modelNaam + '_' + datum + '_' + tijd + '_' + VELDEN[veld].bestand + '.mp4';
 }
 
+function begrensGetal(waarde, onder, boven){
+  return Math.min(Math.max(waarde, onder), boven);
+}
+
+function leadVoorFilmIndex(index){
+  const leads = actieveReeks && Array.isArray(actieveReeks.leads) ? actieveReeks.leads : [];
+  if (Number.isFinite(Number(leads[index]))) return Number(leads[index]);
+  const begin = Number(actieveReeks && actieveReeks.lead_min) || 1;
+  const stap = Number(actieveReeks && actieveReeks.stap_uren) || 1;
+  return begin + index * stap;
+}
+
+function tijdVoorFilmIndex(index){
+  return new Date(actieveRun.getTime() + leadVoorFilmIndex(index) * 3600e3);
+}
+
+function filmTijdLabel(index){
+  return fmt(tijdVoorFilmIndex(index)) + ' (+' + leadVoorFilmIndex(index) + ' uur)';
+}
+
+function tijdvakBestandsnaam(start, eind){
+  const lokaal = MODELLEN[model].lokaal;
+  const format = datum => {
+    const jaar = lokaal ? datum.getFullYear() : datum.getUTCFullYear();
+    const maand = String((lokaal ? datum.getMonth() : datum.getUTCMonth()) + 1).padStart(2, '0');
+    const dag = String(lokaal ? datum.getDate() : datum.getUTCDate()).padStart(2, '0');
+    const uur = String(lokaal ? datum.getHours() : datum.getUTCHours()).padStart(2, '0');
+    return jaar + '-' + maand + '-' + dag + '_' + uur + (lokaal ? 'LT' : 'UTC');
+  };
+  return MODELLEN[model].bestand + '_' + format(tijdVoorFilmIndex(start)) +
+    '_tot_' + format(tijdVoorFilmIndex(eind)) + '_' + VELDEN[veld].bestand + '.mp4';
+}
+
+function vulFilmTijdvakken(){
+  const begin = document.getElementById('film-start');
+  const eind = document.getElementById('film-eind');
+  const video = document.getElementById('film');
+  const frames = Number(actieveReeks && actieveReeks.frames) || 0;
+  begin.replaceChildren();
+  eind.replaceChildren();
+  for (let index = 0; index < frames; index++) {
+    for (const select of [begin, eind]) {
+      const optie = document.createElement('option');
+      optie.value = String(index);
+      optie.textContent = filmTijdLabel(index);
+      select.appendChild(optie);
+    }
+  }
+  const huidig = begrensGetal(Math.round((video.currentTime || 0) * videoFps), 0, Math.max(0, frames - 1));
+  let opgeslagen = {};
+  try { opgeslagen = JSON.parse(localStorage.getItem('weerlab_tijdvak_mp4_v1') || '{}') || {}; } catch (_) {}
+  const start = begrensGetal(Number.isInteger(opgeslagen.start) ? opgeslagen.start : huidig, 0, Math.max(0, frames - 1));
+  const stop = begrensGetal(Number.isInteger(opgeslagen.eind) ? opgeslagen.eind : Math.min(frames - 1, start + 23), start, Math.max(0, frames - 1));
+  begin.value = String(start);
+  eind.value = String(stop);
+  document.getElementById('film-fps').value = String([4, 6, 8, 12].includes(Number(opgeslagen.fps)) ? opgeslagen.fps : 6);
+}
+
+function bewaarFilmTijdvak(){
+  const begin = Number(document.getElementById('film-start').value);
+  const eind = Number(document.getElementById('film-eind').value);
+  if (eind < begin) document.getElementById('film-eind').value = String(begin);
+  try {
+    localStorage.setItem('weerlab_tijdvak_mp4_v1', JSON.stringify({
+      start: Number(document.getElementById('film-start').value),
+      eind: Number(document.getElementById('film-eind').value),
+      fps: Number(document.getElementById('film-fps').value),
+    }));
+  } catch (_) {}
+}
+
+function openFilmMaker(){
+  const video = document.getElementById('film');
+  const fout = document.getElementById('fout');
+  if (!actieveReeks || !actieveRun || !video.videoWidth || !video.duration) {
+    fout.style.display = 'block';
+    fout.textContent = 'De animatie is nog niet volledig geladen. Wacht even en probeer het opnieuw.';
+    return;
+  }
+  video.pause();
+  vulFilmTijdvakken();
+  const status = document.getElementById('film-status');
+  status.classList.remove('fout');
+  status.textContent = 'Kies het eerste en laatste kaartbeeld van de MP4.';
+  document.getElementById('film-overlay').style.display = 'flex';
+}
+
+function sluitFilmMaker(){
+  if (filmBezig) return;
+  document.getElementById('film-overlay').style.display = 'none';
+}
+
+function wachtOpFrame(video){
+  return new Promise(resolve => {
+    if (video.requestVideoFrameCallback) {
+      video.requestVideoFrameCallback(() => resolve());
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }
+  });
+}
+
+function springNaarFilmFrame(video, index, fps){
+  const moment = Math.min(index / fps, Math.max(0, video.duration - 0.02));
+  if (Math.abs(video.currentTime - moment) < 0.002) return wachtOpFrame(video);
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      opruimen();
+      reject(new Error('kaartbeeld laden duurde te lang'));
+    }, 12000);
+    const klaar = () => { opruimen(); wachtOpFrame(video).then(resolve); };
+    const opruimen = () => { clearTimeout(timeout); video.removeEventListener('seeked', klaar); };
+    video.addEventListener('seeked', klaar, {once: true});
+    video.currentTime = moment;
+  });
+}
+
+function afrondenOp16(waarde){ return Math.ceil(waarde / 16) * 16; }
+
+async function encodeerTijdvakMp4(start, eind, fps, status){
+  if (!window.VideoEncoder || !window.Mp4Muxer) {
+    throw new Error('Deze browser ondersteunt geen H.264-MP4-export');
+  }
+  const video = document.getElementById('film');
+  const bronBreedte = video.videoWidth;
+  const bronHoogte = video.videoHeight;
+  const breedte = afrondenOp16(bronBreedte);
+  const hoogte = afrondenOp16(bronHoogte);
+  const canvas = document.createElement('canvas');
+  canvas.width = breedte;
+  canvas.height = hoogte;
+  const teken = canvas.getContext('2d', {alpha: false});
+  if (!teken) throw new Error('videocanvas niet beschikbaar');
+
+  const codecs = ['avc1.640028', 'avc1.4D0028', 'avc1.42002A', 'avc1.640033'];
+  let codec = null;
+  for (const kandidaat of codecs) {
+    try {
+      const steun = await VideoEncoder.isConfigSupported({codec: kandidaat, width: breedte, height: hoogte, bitrate: 12000000, framerate: fps});
+      if (steun && steun.supported) { codec = kandidaat; break; }
+    } catch (_) {}
+  }
+  if (!codec) throw new Error('H.264-codering wordt niet ondersteund voor dit formaat');
+
+  const muxer = new Mp4Muxer.Muxer({
+    target: new Mp4Muxer.ArrayBufferTarget(),
+    video: {codec: 'avc', width: breedte, height: hoogte, frameRate: fps},
+    fastStart: 'in-memory',
+  });
+  let encoderFout = null;
+  const encoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: error => { encoderFout = error; },
+  });
+  encoder.configure({
+    codec, width: breedte, height: hoogte, bitrate: 12000000, framerate: fps,
+    bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration: 'prefer-hardware',
+    avc: {format: 'avc'},
+  });
+
+  const totaal = eind - start + 1;
+  const duur = Math.round(1000000 / fps);
+  let uitvoerIndex = 0;
+  try {
+    for (let bronIndex = start; bronIndex <= eind; bronIndex++) {
+      await springNaarFilmFrame(video, bronIndex, videoFps);
+      teken.fillStyle = '#ffffff';
+      teken.fillRect(0, 0, breedte, hoogte);
+      teken.drawImage(video, 0, 0, bronBreedte, bronHoogte);
+      const frame = new VideoFrame(canvas, {timestamp: uitvoerIndex * duur, duration: duur});
+      encoder.encode(frame, {keyFrame: true});
+      frame.close();
+      uitvoerIndex++;
+      status.textContent = 'MP4 coderen: beeld ' + (bronIndex - start + 1) + ' van ' + totaal + '…';
+    }
+    for (let hold = 0; hold < Math.max(3, Math.round(fps * 0.8)); hold++) {
+      const frame = new VideoFrame(canvas, {timestamp: uitvoerIndex * duur, duration: duur});
+      encoder.encode(frame, {keyFrame: true});
+      frame.close();
+      uitvoerIndex++;
+    }
+    await encoder.flush();
+    if (encoderFout) throw encoderFout;
+    muxer.finalize();
+    return new Blob([muxer.target.buffer], {type: 'video/mp4'});
+  } finally {
+    encoder.close();
+  }
+}
+
+function downloadTijdvak(blob, naam){
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = naam;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+async function maakTijdvakMp4(){
+  if (filmBezig) return;
+  const start = Number(document.getElementById('film-start').value);
+  const eind = Number(document.getElementById('film-eind').value);
+  const fps = Number(document.getElementById('film-fps').value);
+  const status = document.getElementById('film-status');
+  const knop = document.getElementById('film-maak');
+  if (!Number.isInteger(start) || !Number.isInteger(eind) || eind < start) {
+    status.classList.add('fout');
+    status.textContent = 'Kies een geldig tijdvak.';
+    return;
+  }
+  bewaarFilmTijdvak();
+  filmBezig = true;
+  knop.disabled = true;
+  status.classList.remove('fout');
+  status.textContent = 'Voorbereiden…';
+  try {
+    const blob = await encodeerTijdvakMp4(start, eind, fps, status);
+    const naam = tijdvakBestandsnaam(start, eind);
+    downloadTijdvak(blob, naam);
+    status.textContent = 'Klaar: ' + naam + ' (' + (blob.size / 1024 / 1024).toFixed(1) + ' MB).';
+  } catch (error) {
+    console.error(error);
+    status.classList.add('fout');
+    status.textContent = 'MP4 maken lukte niet: ' + (error && error.message ? error.message : error) + '.';
+  } finally {
+    filmBezig = false;
+    knop.disabled = false;
+  }
+}
+
 async function downloadMp4(event){
   event.preventDefault();
   const knop = event.currentTarget;
@@ -336,6 +603,8 @@ async function laad(){
     videoFps = Number(m.video_fps) || 10;
 
     const run = new Date(m.run);
+    actieveReeks = m;
+    actieveRun = run;
     const eind = new Date(run.getTime() + m.lead_max * 3600e3);
     document.getElementById('anim-titel').textContent = stapOmschrijving(m);
     document.getElementById('reeks').textContent =
@@ -376,6 +645,8 @@ async function laad(){
     document.getElementById('dl-png').href = png;
     document.getElementById('totaalkaart').src = png;
   } catch (e) {
+    actieveReeks = null;
+    actieveRun = null;
     // Zonder meta terugvallen op de vaste "laatste"-namen
     document.getElementById('film').src = R2 + '/' + prefix + '_laatste.mp4' + cb;
     const mp4Knop = document.getElementById('dl-mp4');
@@ -391,6 +662,13 @@ async function laad(){
                     '); de animatie hieronder is de laatst gepubliceerde run.';
   }
 }
+
+document.getElementById('film-start').addEventListener('change', bewaarFilmTijdvak);
+document.getElementById('film-eind').addEventListener('change', bewaarFilmTijdvak);
+document.getElementById('film-fps').addEventListener('change', bewaarFilmTijdvak);
+document.getElementById('film-overlay').addEventListener('click', event => {
+  if (event.target === event.currentTarget) sluitFilmMaker();
+});
 
 laad();
 </script>
