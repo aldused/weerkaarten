@@ -48,7 +48,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
-from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.colors import ListedColormap, BoundaryNorm, LinearSegmentedColormap, to_hex
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import TextArea, HPacker, VPacker, AnchoredOffsetbox
 from scipy.interpolate import RegularGridInterpolator
@@ -178,23 +178,27 @@ ZICHT_UNDER  = '#2d0038'
 ZICHT_OVER   = '#f7fbff'
 
 # Radarbenadering. De momentane HARMONIE-regenintensiteit
-# wordt met Z=200*R^1.6 naar dBZ omgerekend. De schaal sluit aan bij gangbare
-# radarproducten: zwakke echo's grijs, neerslag licht- tot donkerblauw, zware buien
-# geel/rood en de sterkste kernen magenta/paars.
-# De referentiekaart gebruikt een vloeiende schaal van 0–78 dBZ, met labels
-# per 6 dBZ. Rood begint daar al rond 48–50 dBZ; een eerdere Weerlab-versie
-# schoof rood onterecht door naar 60 dBZ en oogde daardoor te groen/geel.
-RADAR_LEVELS = list(range(0, 80, 2))
-RADAR_COLORS = ['#ffffff', '#d3d3d3', '#b5bfb9', '#e3f4ff', '#c7e9fc',
-                '#abe0fa', '#8ed6f7', '#72cbf3', '#56bdec', '#3aace3',
-                '#2299d7', '#1285c7', '#0871b5', '#005da1', '#004b8b',
-                '#003b75', '#002d61', '#fadf04', '#f7cf04', '#f5c004',
-                '#f3b004', '#f1a104', '#ee9104', '#ec8204', '#f42e04',
-                '#dd2503', '#c61c02', '#ae1202', '#970901', '#800000',
-                '#ff00ff', '#e61ae6', '#cc33cc', '#b34db3', '#996699',
-                '#808080', '#919191', '#a1a1a1', '#b2b2b2']
+# wordt met Z=200*R^1.6 naar dBZ omgerekend. Lichte/matige echo's krijgen
+# rustige, lichte blauwtinten; de overgang naar geel verloopt geleidelijk.
+# Alleen de kleuren worden geïnterpoleerd (per 0.5 dBZ): het bronrooster en
+# de intensiteiten blijven ongewijzigd. Dit voorkomt donkere contourbanden
+# zonder kleine kernen ruimtelijk glad te strijken. Legenda gebruikt dezelfde
+# schaal. Sterke echo's blijven vanaf circa 48 dBZ rood en vanaf 60 magenta.
+RADAR_LEVELS = np.arange(0, 78.5, 0.5).tolist()
+_RADAR_ANCHORS = [
+    (0, '#ffffff'), (6, '#f3f9fd'), (12, '#e0eff8'),
+    (18, '#c7e1f1'), (24, '#a8cde6'), (30, '#85b3d8'),
+    (32, '#73a6d0'), (34, '#92bbcf'), (36, '#dbe4c4'),
+    (38, '#f7e6a1'), (40, '#f4ce73'), (44, '#ef9e42'),
+    (48, '#e95029'), (54, '#bd231a'), (58, '#800000'),
+    (60, '#ff00ff'), (66, '#b34db3'), (70, '#808080'),
+    (78, '#d3d3d3'),
+]
+_RADAR_CMAP = LinearSegmentedColormap.from_list(
+    'radar_zacht', [(v / 78, c) for v, c in _RADAR_ANCHORS], N=2048)
+RADAR_COLORS = [to_hex(_RADAR_CMAP((v + 0.25) / 78))
+                for v in RADAR_LEVELS[:-1]]
 RADAR_OVER   = '#d3d3d3'
-# 6–34 dBZ: veertien blauwtinten; vanaf 34 dBZ blijven geel/oranje/rood staan.
 
 
 def _fmt_mm(v):
@@ -1070,6 +1074,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         cb.set_ticklabels([f'{v:g}' for v in ticks])
         eenheid_hoog = 0.18
     cb.ax.tick_params(labelsize=9.5, length=2)
+    if var.get('native_render'):
+        cb.ax.minorticks_off()
     cb.outline.set_linewidth(0.7)
     fig.text(cb_x, cb_y0 + cb_h + eenheid_hoog / fig_h, var['eenheid'], fontsize=11,
              va='bottom', ha='left', color='#444444')
