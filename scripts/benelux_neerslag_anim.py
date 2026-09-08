@@ -247,7 +247,7 @@ VARS = {
         'titel':      'radarbenadering',
         'eenheid':    'dBZ',
         'soort':      'moment',
-        'subtitel':   'momentane regenintensiteit',
+        'subtitel':   '',
         'menu':       'Gesimuleerde radar',
         'levels':     RADAR_LEVELS,
         'colors':     RADAR_COLORS,
@@ -1054,8 +1054,11 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
         start_t = lokale_tijd(valid - timedelta(hours=1)) if lokaal else valid - timedelta(hours=1)
         end_t = lokale_tijd(valid) if lokaal else valid
         ondertitel = f'voorgaande uur: {start_t:%H:%M}–{end_t:%H:%M} ' + ('LT' if lokaal else 'UTC')
-    kop2 = f'{var["titel"]} ({var["eenheid"]}) — ' + (
-        f'vanaf {fmt_valid(run, lokaal)}' if var['soort'] == 'som' else ondertitel)
+    toelichting = (f'vanaf {fmt_valid(run, lokaal)}' if var['soort'] == 'som'
+                   else ondertitel)
+    kop2 = f'{var["titel"]} ({var["eenheid"]})'
+    if toelichting:
+        kop2 += ' — ' + toelichting
     fig.text(0.014, van_boven(0.477), kop2, fontsize=10.5, va='top', color='#444444')
     geldig = (f'tot {fmt_valid(valid, lokaal)}' if var['soort'] == 'som'
               else fmt_valid(valid, lokaal))
