@@ -179,21 +179,22 @@ ZICHT_OVER   = '#f7fbff'
 
 # Radarbenadering. De momentane HARMONIE-regenintensiteit
 # wordt met Z=200*R^1.6 naar dBZ omgerekend. De schaal sluit aan bij gangbare
-# radarproducten: zwakke echo's grijs/blauw, neerslag groen, zware buien
+# radarproducten: zwakke echo's grijs, neerslag licht- tot donkerblauw, zware buien
 # geel/rood en de sterkste kernen magenta/paars.
 # De referentiekaart gebruikt een vloeiende schaal van 0–78 dBZ, met labels
 # per 6 dBZ. Rood begint daar al rond 48–50 dBZ; een eerdere Weerlab-versie
 # schoof rood onterecht door naar 60 dBZ en oogde daardoor te groen/geel.
 RADAR_LEVELS = list(range(0, 80, 2))
-RADAR_COLORS = ['#ffffff', '#d3d3d3', '#b5bfb9', '#98ab9f', '#7a9785',
-                '#5d826a', '#3f6e50', '#225a36', '#04461c', '#045d1c',
-                '#04751c', '#048c1c', '#04a41c', '#04bb1c', '#04d31c',
-                '#04ea1c', '#fcee04', '#fadf04', '#f7cf04', '#f5c004',
+RADAR_COLORS = ['#ffffff', '#d3d3d3', '#b5bfb9', '#e3f4ff', '#c7e9fc',
+                '#abe0fa', '#8ed6f7', '#72cbf3', '#56bdec', '#3aace3',
+                '#2299d7', '#1285c7', '#0871b5', '#005da1', '#004b8b',
+                '#003b75', '#002d61', '#fadf04', '#f7cf04', '#f5c004',
                 '#f3b004', '#f1a104', '#ee9104', '#ec8204', '#f42e04',
                 '#dd2503', '#c61c02', '#ae1202', '#970901', '#800000',
                 '#ff00ff', '#e61ae6', '#cc33cc', '#b34db3', '#996699',
                 '#808080', '#919191', '#a1a1a1', '#b2b2b2']
 RADAR_OVER   = '#d3d3d3'
+# 6–34 dBZ: veertien blauwtinten; vanaf 34 dBZ blijven geel/oranje/rood staan.
 
 
 def _fmt_mm(v):

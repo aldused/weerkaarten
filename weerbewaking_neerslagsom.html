@@ -239,6 +239,7 @@ let videoFps = 10;
 let actieveReeks = null;
 let actieveRun = null;
 let filmBezig = false;
+let filmAnnuleren = false;
 
 function prefixVan(){
   return 'benelux_' + veld + MODELLEN[model].achtervoegsel;
@@ -394,7 +395,7 @@ function bewaarFilmTijdvak(){
 function openFilmMaker(){
   const video = document.getElementById('film');
   const fout = document.getElementById('fout');
-  if (!actieveReeks || !actieveRun || !video.videoWidth || !video.duration) {
+  if (!actieveReeks || !actieveRun || !video.videoWidth || !Number.isFinite(video.duration) || video.readyState < 2) {
     fout.style.display = 'block';
     fout.textContent = 'De animatie is nog niet volledig geladen. Wacht even en probeer het opnieuw.';
     return;
@@ -405,35 +406,46 @@ function openFilmMaker(){
   status.classList.remove('fout');
   status.textContent = 'Kies het eerste en laatste kaartbeeld van de MP4.';
   document.getElementById('film-overlay').style.display = 'flex';
+  document.getElementById('root').inert = true;
 }
 
 function sluitFilmMaker(){
-  if (filmBezig) return;
+  if (filmBezig) {
+    filmAnnuleren = true;
+    document.getElementById('film-status').textContent = 'Export stoppen…';
+    return;
+  }
   document.getElementById('film-overlay').style.display = 'none';
-}
-
-function wachtOpFrame(video){
-  return new Promise(resolve => {
-    if (video.requestVideoFrameCallback) {
-      video.requestVideoFrameCallback(() => resolve());
-    } else {
-      requestAnimationFrame(() => requestAnimationFrame(resolve));
-    }
-  });
+  document.getElementById('root').inert = false;
 }
 
 function springNaarFilmFrame(video, index, fps){
-  const moment = Math.min(index / fps, Math.max(0, video.duration - 0.02));
-  if (Math.abs(video.currentTime - moment) < 0.002) return wachtOpFrame(video);
+  // Seek midden in het bronframe om afronding op een framegrens te vermijden.
+  // Bij 'seeked' is het beeld gedecodeerd en direct bruikbaar voor drawImage.
+  // requestVideoFrameCallback wacht op een NIEUWE presentatie en kan bij een
+  // gepauzeerde video (of na seeked) oneindig wachten.
+  const moment = Math.min((index + 0.5) / fps, Math.max(0, video.duration - 0.001));
+  if (!video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - moment) < 0.0001) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       opruimen();
       reject(new Error('kaartbeeld laden duurde te lang'));
     }, 12000);
-    const klaar = () => { opruimen(); wachtOpFrame(video).then(resolve); };
-    const opruimen = () => { clearTimeout(timeout); video.removeEventListener('seeked', klaar); };
+    const klaar = () => {
+      if (video.seeking || video.readyState < 2) return;
+      opruimen(); resolve();
+    };
+    const mislukt = () => { opruimen(); reject(new Error('het bronfilmpje kon niet worden gelezen')); };
+    const opruimen = () => {
+      clearTimeout(timeout);
+      video.removeEventListener('seeked', klaar);
+      video.removeEventListener('loadeddata', klaar);
+      video.removeEventListener('error', mislukt);
+    };
     video.addEventListener('seeked', klaar, {once: true});
-    video.currentTime = moment;
+    video.addEventListener('loadeddata', klaar);
+    video.addEventListener('error', mislukt, {once: true});
+    try { video.currentTime = moment; } catch (error) { opruimen(); reject(error); }
   });
 }
 
@@ -471,7 +483,7 @@ async function encodeerTijdvakMp4(start, eind, fps, status){
   });
   let encoderFout = null;
   const encoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    output: (chunk, meta) => { try { muxer.addVideoChunk(chunk, meta); } catch (error) { encoderFout = error; } },
     error: error => { encoderFout = error; },
   });
   encoder.configure({
@@ -485,7 +497,9 @@ async function encodeerTijdvakMp4(start, eind, fps, status){
   let uitvoerIndex = 0;
   try {
     for (let bronIndex = start; bronIndex <= eind; bronIndex++) {
+      if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
       await springNaarFilmFrame(video, bronIndex, videoFps);
+      if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
       teken.fillStyle = '#ffffff';
       teken.fillRect(0, 0, breedte, hoogte);
       teken.drawImage(video, 0, 0, bronBreedte, bronHoogte);
@@ -493,6 +507,9 @@ async function encodeerTijdvakMp4(start, eind, fps, status){
       encoder.encode(frame, {keyFrame: true});
       frame.close();
       uitvoerIndex++;
+      // Beperk de wachtrij: bewaar bij lange tijdvakken niet alle ruwe beelden in het geheugen.
+      await encoder.flush();
+      if (encoderFout) throw encoderFout;
       status.textContent = 'MP4 coderen: beeld ' + (bronIndex - start + 1) + ' van ' + totaal + '…';
     }
     for (let hold = 0; hold < Math.max(3, Math.round(fps * 0.8)); hold++) {
@@ -503,10 +520,11 @@ async function encodeerTijdvakMp4(start, eind, fps, status){
     }
     await encoder.flush();
     if (encoderFout) throw encoderFout;
+    if (filmAnnuleren) throw new DOMException('Export geannuleerd', 'AbortError');
     muxer.finalize();
     return new Blob([muxer.target.buffer], {type: 'video/mp4'});
   } finally {
-    encoder.close();
+    if (encoder.state !== 'closed') encoder.close();
   }
 }
 
@@ -528,14 +546,19 @@ async function maakTijdvakMp4(){
   const fps = Number(document.getElementById('film-fps').value);
   const status = document.getElementById('film-status');
   const knop = document.getElementById('film-maak');
-  if (!Number.isInteger(start) || !Number.isInteger(eind) || eind < start) {
+  const video = document.getElementById('film');
+  const oorspronkelijkeTijd = video.currentTime;
+  if (!actieveReeks || !Number.isInteger(start) || !Number.isInteger(eind) || start < 0 || eind >= actieveReeks.frames || eind < start || ![4,6,8,12].includes(fps)) {
     status.classList.add('fout');
     status.textContent = 'Kies een geldig tijdvak.';
     return;
   }
   bewaarFilmTijdvak();
   filmBezig = true;
+  filmAnnuleren = false;
   knop.disabled = true;
+  const keuzes = ['film-start', 'film-eind', 'film-fps'].map(id => document.getElementById(id));
+  keuzes.forEach(el => { el.disabled = true; });
   status.classList.remove('fout');
   status.textContent = 'Voorbereiden…';
   try {
@@ -544,12 +567,13 @@ async function maakTijdvakMp4(){
     downloadTijdvak(blob, naam);
     status.textContent = 'Klaar: ' + naam + ' (' + (blob.size / 1024 / 1024).toFixed(1) + ' MB).';
   } catch (error) {
-    console.error(error);
-    status.classList.add('fout');
-    status.textContent = 'MP4 maken lukte niet: ' + (error && error.message ? error.message : error) + '.';
+    status.classList.toggle('fout', error.name !== 'AbortError');
+    status.textContent = error.name === 'AbortError' ? 'Export geannuleerd.' : 'MP4 maken lukte niet: ' + (error && error.message ? error.message : error) + '.';
   } finally {
     filmBezig = false;
     knop.disabled = false;
+    keuzes.forEach(el => { el.disabled = false; });
+    video.currentTime = oorspronkelijkeTijd;
   }
 }
 
