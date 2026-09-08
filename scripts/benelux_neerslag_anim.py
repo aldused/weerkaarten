@@ -395,6 +395,9 @@ VARS['uursom'] = {
     'cb_ticks': [0.03, 0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 25, 50, 100],
     'render_cells': True, 'label_fixed_points': False, 'label_white': True,
     'label_fmt': lambda v: f'{v:.1f}',
+    # Facebook hercodeert lage framerates agressief. Houd de kaartduur gelijk,
+    # maar herhaal ieder uurbeeld vijfmaal in een vaste 30-fps videostroom.
+    'social_fps': 30, 'video_crf': 13,
     'label_d_lat': 0.18, 'label_d_lon': 0.29,
 }
 
@@ -1122,14 +1125,21 @@ MP4_FPS = 6
 MP4_BITRATE = '650k'
 
 
-def build_mp4(frame_glob, outfile, fps=MP4_FPS, width=792, bitrate=MP4_BITRATE, crf=None):
+def build_mp4(frame_glob, outfile, fps=MP4_FPS, width=792, bitrate=MP4_BITRATE,
+              crf=None, output_fps=None):
     if not shutil.which('ffmpeg'):
         print('  ffmpeg niet gevonden — mp4 overgeslagen')
         return
+    filters = f'scale={width}:-2:flags=lanczos,setsar=1'
+    if output_fps:
+        filters += f',fps={output_fps}'
     cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-framerate', str(fps),
            '-pattern_type', 'glob', '-i', frame_glob,
-           '-vf', f'scale={width}:-2:flags=lanczos',
+           '-vf', filters,
            '-c:v', 'libx264', '-preset', 'medium', '-pix_fmt', 'yuv420p',
+           *(['-profile:v', 'high', '-g', str(output_fps * 2),
+              '-keyint_min', str(output_fps * 2), '-sc_threshold', '0']
+             if output_fps else []),
            *(['-crf', str(crf)] if crf is not None else
              ['-b:v', bitrate, '-maxrate', bitrate, '-bufsize', bitrate]),
            '-movflags', '+faststart', outfile]
@@ -1246,7 +1256,7 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
                   os.path.join(OUTPUT_DIR, f'{prefix}_{run_tag}{suffix}.mp4'),
                   width=var.get('video_width', 792),
                   bitrate=var.get('video_bitrate', MP4_BITRATE),
-                  crf=var.get('video_crf'))
+                  crf=var.get('video_crf'), output_fps=var.get('social_fps'))
 
     # laatste stap ook als losse kaart: bij de som is dat het totaal, bij de
     # andere velden het verste beeld van de reeks
@@ -1271,6 +1281,7 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
             'leads': leads,
             'frames': len(data),
             'video_fps': MP4_FPS,
+            'encoded_fps': var.get('social_fps', MP4_FPS),
             'video_width': var.get('video_width', 792),
             'omschrijving': var.get('subtitel'),
             'roosterweergave': 'native' if harmonie and var.get('native_render') else 'linear',
