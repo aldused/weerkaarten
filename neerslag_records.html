@@ -118,8 +118,16 @@ tr:hover td { background: #fafbfd; }
     window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
   })();
 </script>
+<link rel="stylesheet" href="klimaat.css?v=20260908-3">
+<link rel="stylesheet" href="terugkijken.css?v=20260908-1">
+<script src="klimaat.js?v=20260908-3"></script>
 </head>
-<body>
+<body class="climate-page climate-neerslag_records archive-page">
+<section class="climate-heading" aria-labelledby="climate-title">
+<a class="climate-back" href="index.html#menu/terugkijken?type=terug">← Maand &amp; archief</a>
+<div class="climate-heading-row"><div><h1 id="climate-title">KNMI-neerslagarchief</h1><p>Zoek natte en droge records, bekijk een station of vergelijk meetreeksen.</p></div><span class="climate-label">KNMI · Weerarchief</span></div>
+<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Het handmatige meetnet bevat actieve én opgeheven stations. Etmaalneerslag loopt van 08:00 UTC op de vorige dag tot 08:00 UTC op de genoemde datum. Gevalideerde reeksen lopen achter op vandaag; de dekking verschilt per station. <a href="https://www.knmi.nl/nederland-nu/klimatologie/monv/reeksen" target="_blank" rel="noopener">KNMI-brongegevens ↗</a></p></details>
+</section>
 
 <div class="header">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -134,7 +142,7 @@ tr:hover td { background: #fafbfd; }
 
   <div class="info-balk">
     📡 Data van <strong id="n-stations">...</strong> KNMI neerslagstations. Metingen van 08:00 UTC vorige dag t/m 08:00 UTC vermelde datum.
-    Sneeuwdek (SX) in cm op moment van meting. &nbsp;·&nbsp; <span class="bijgewerkt" id="bijgewerkt"></span>
+    Sneeuwdek (SX) in cm op moment van meting. Ranglijsten van decaden, maanden, seizoenen en jaren bevatten alleen complete kalenderperioden. &nbsp;·&nbsp; <span class="bijgewerkt" id="bijgewerkt"></span>
   </div>
 
   <div class="tabs">
@@ -459,9 +467,9 @@ tr:hover td { background: #fafbfd; }
   <div class="sectie" id="sectie-station">
     <div class="filter-balk">
       <label>Station:</label>
-      <select id="sel-station" onchange="laadStation()" style="min-width:200px;"></select>
+      <select aria-label="Neerslagstation" id="sel-station" onchange="laadStation()" style="min-width:200px;"></select>
       <label>Maand:</label>
-      <select id="sel-station-maand" onchange="laadStation()">
+      <select aria-label="Filter maand bij station" id="sel-station-maand" onchange="laadStation()">
         <option value="">Alle maanden</option>
         <option value="1">Januari</option><option value="2">Februari</option>
         <option value="3">Maart</option><option value="4">April</option>
@@ -537,7 +545,7 @@ tr:hover td { background: #fafbfd; }
   <div class="sectie" id="sectie-grafiek">
     <div class="filter-balk">
       <label>Station:</label>
-      <select id="sel-grafiek-station" onchange="laadGrafiek()" style="min-width:220px;"></select>
+      <select aria-label="Station voor grafiek" id="sel-grafiek-station" onchange="laadGrafiek()" style="min-width:220px;"></select>
       <label>Vanaf jaar:</label>
       <select id="sel-grafiek-periode" onchange="laadGrafiek()">
         <option value="0">Alle jaren</option>
@@ -888,6 +896,10 @@ function laadStation() {
   const nr = document.getElementById("sel-station").value;
   if (!nr || !data.stations[nr]) return;
   const rec = data.stations[nr];
+  let coverage=document.getElementById('station-coverage');
+  if(!coverage){coverage=document.createElement('p');coverage.id='station-coverage';coverage.className='climate-status';document.getElementById('station-kaarten').before(coverage);}
+  const formatDate=value=>value?`${value.slice(6,8)}-${value.slice(4,6)}-${value.slice(0,4)}`:'onbekend';
+  coverage.textContent=`Meetreeks ${data.stationsnamen[nr]}: ${formatDate(rec.metingen_van)} t/m ${formatDate(rec.metingen_tm)}. Ranglijsten gebruiken complete kalenderperioden.`;
   const maandFilter = document.getElementById("sel-station-maand")?.value || "";
   document.getElementById("station-kaarten").style.display = "grid";
 
@@ -990,6 +1002,10 @@ function laadGrafiek() {
   const vanafJaar = parseInt(document.getElementById("sel-grafiek-periode").value) || 0;
   if (!nr || !data || !data.stations[nr]) return;
   const rec = data.stations[nr];
+  let coverage=document.getElementById('station-coverage');
+  if(!coverage){coverage=document.createElement('p');coverage.id='station-coverage';coverage.className='climate-status';document.getElementById('station-kaarten').before(coverage);}
+  const formatDate=value=>value?`${value.slice(6,8)}-${value.slice(4,6)}-${value.slice(0,4)}`:'onbekend';
+  coverage.textContent=`Meetreeks ${data.stationsnamen[nr]}: ${formatDate(rec.metingen_van)} t/m ${formatDate(rec.metingen_tm)}. Ranglijsten gebruiken complete kalenderperioden.`;
   const naam = data.stationsnamen[nr] || nr;
   const reeks = (rec.jaar_reeks || []).filter(r => r.jaar >= vanafJaar);
   if (!reeks.length) return;
@@ -1078,10 +1094,12 @@ function vulGrafiekDropdowns() {
 // Laad data — twee bestanden: natste + droogste
 const t = Date.now();
 Promise.all([
-  fetch("neerslag_records.json?t=" + t).then(r => r.json()),
-  fetch("neerslag_droog.json?t=" + t).then(r => r.json())
+  fetch("neerslag_records.json?t=" + t,{cache:"no-store"}).then(r => {if(!r.ok)throw new Error("Bron niet beschikbaar");return r.json();}),
+  fetch("neerslag_droog.json?t=" + t,{cache:"no-store"}).then(r => {if(!r.ok)throw new Error("Bron niet beschikbaar");return r.json();})
 ]).then(([natste, droogste]) => {
   data = natste;
+  if(!data.stations||!data.landelijk||!droogste.stations||!droogste.landelijk)throw new Error('Onvolledige brongegevens');
+  weerlabClimateStatus({through:data.metingen_tm,generated:data.bijgewerkt,maxAgeDays:35,note:data.stations_achter_bron?.length?`${data.stations_achter_bron.length} stations lopen nog achter op de bron; dekking verschilt per station`:'Gevalideerd neerslagarchief · dekking verschilt per station'});
   // Droogste landelijk samenvoegen
   Object.assign(data.landelijk, droogste.landelijk);
   // Droogste per station samenvoegen
@@ -1098,7 +1116,8 @@ Promise.all([
   const urlModus = new URLSearchParams(location.search).get('modus');
   if (urlModus === 'droogste') wisselModus('droogste');
 }).catch(e => {
-  document.querySelector(".info-balk").textContent = "Fout bij laden: " + e.message;
+  document.querySelector(".info-balk").textContent = "De neerslaggegevens zijn nu niet beschikbaar. Laad de pagina opnieuw om het nogmaals te proberen.";
+  weerlabClimateStatus({fixed:"Het neerslagarchief kon niet worden geladen"});
 });
 </script>
 </body>

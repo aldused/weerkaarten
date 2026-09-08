@@ -269,8 +269,15 @@ body {
   .top10-grid { grid-template-columns: 1fr; }
 }
 </style>
+<link rel="stylesheet" href="klimaat.css?v=20260908-2">
+<script src="klimaat.js?v=20260908-2"></script>
 </head>
-<body>
+<body class="climate-page climate-stationsanalyse">
+<section class="climate-heading" aria-labelledby="climate-title">
+  <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
+  <div class="climate-heading-row"><div><h1 id="climate-title">Eerste & laatste</h1><p>Vind de eerste en laatste dag waarop een grens wordt bereikt, zoals vorst of 30 °C.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens per station. Controleer de gekozen drempel, het tijdvak en de beschikbare meetperiode. Een lopend jaar is onvolledig. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
+</section>
 
 <div class="header">
   <div>
@@ -506,13 +513,13 @@ const PRESETS = {
     {label:'droog (<0.1 mm)',val:0.1,richting:'onder'}
   ],
   wind: [
-    {label:'5 Bft (60)',val:60},
-    {label:'6 Bft (75)',val:75},
-    {label:'7 Bft (90)',val:90},
-    {label:'8 Bft (105)',val:105},
-    {label:'9 Bft (120)',val:120},
-    {label:'10 Bft (140)',val:140},
-    {label:'11 Bft (160, storm)',val:160}
+    {label:'60 km/u',val:60},
+    {label:'75 km/u',val:75},
+    {label:'90 km/u',val:90},
+    {label:'105 km/u',val:105},
+    {label:'120 km/u',val:120},
+    {label:'140 km/u',val:140},
+    {label:'160 km/u',val:160}
   ],
   zon: [
     {label:'geen zon (<0.1 uur)',val:0.1,richting:'onder'},
@@ -529,7 +536,7 @@ const KOLOM_INFO = {
   temp:     {kolom:'TX', factor:10, eenheid:'°C', naam:'Max. temperatuur'},
   temp_min: {kolom:'TN', factor:10, eenheid:'°C', naam:'Min. temperatuur'},
   neerslag: {kolom:'RH', factor:10, eenheid:'mm', naam:'Neerslag'},
-  wind:     {kolom:'FXX',factor:10, eenheid:'m/s (0.1)',naam:'Windstoot'},
+  wind:     {kolom:'FXX',factor:10/3.6, eenheid:'km/u',naam:'Windstoot'},
   zon:      {kolom:'SQ', factor:10, eenheid:'uur', naam:'Zonneschijn'}
 };
 
@@ -671,7 +678,7 @@ function updatePresets() {
   const info = KOLOM_INFO[type];
   document.getElementById('eenheid-label').textContent = info.eenheid;
 
-  // Wind: drempel is in 0.1 m/s, maar we tonen m/s
+  // Wind: invoer en uitvoer in km/u; KNMI-bronwaarden in 0,1 m/s.
   // Neerslag: -1 = <0.05mm → we behandelen dat
   // Zon: SQ in 0.1 uur
 
@@ -702,22 +709,34 @@ function updatePresets() {
 }
 
 // ── Data laden (JSON via R2) ──
-const IS_LOCAL = location.hostname === 'localhost' || location.protocol === 'file:';
-const R2_BASE = IS_LOCAL ? '' : 'https://pub-b85951afb4be461a9ac47caf4c8d7e83.r2.dev/';
+const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.protocol === 'file:';
+const R2_BASE = IS_LOCAL ? '' : 'https://data.weerlab.nl/';
 
 async function laadCSV(stn) {
-  if (csvCache[stn]) return csvCache[stn];
+  if (csvCache[stn]) {
+    kolomIndex = csvCache[stn].columns;
+    toonMeetperiode(csvCache[stn].rows, stn);
+    return csvCache[stn].rows;
+  }
 
-  const url = R2_BASE + `dagdata_${stn}.json`;
+  const url = R2_BASE + `dagdata_${stn}.json?t=${Date.now()}`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Data niet gevonden: ${url}`);
   const json = await resp.json();
 
   // Kolom-index opbouwen uit JSON header
+  kolomIndex = {};
   json.kolommen.forEach((c, i) => { kolomIndex[c] = i; });
 
-  csvCache[stn] = json.data;
+  csvCache[stn] = {rows:json.data,columns:{...kolomIndex}};
+  toonMeetperiode(json.data, stn);
   return json.data;
+}
+
+function toonMeetperiode(rows, stn) {
+  const all = document.getElementById('sel-station').value === 'all';
+  if(all)window.weerlabClimateStatus({fixed:'Meerdere stations · meetperiode verschilt per station'});
+  else window.weerlabClimateStatus({through:rows.at(-1)?.[kolomIndex.YYYYMMDD], historical:Number(stn)<200});
 }
 
 function getVal(rij, kolom) {
@@ -770,11 +789,12 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
     });
 
     let eersteDag = null, laatsteDag = null, aantal = 0, langsteReeks = 0, huidigeReeks = 0;
-    let extremeVal = null, extremeDatum = null;
+    let extremeVal = null, extremeDatum = null, geldigeDagen = 0, vorigeDatum = null;
 
     rijen.forEach(rij => {
       const raw = getVal(rij, kolom);
-      if (raw === null) return;
+      if (raw === null) { huidigeReeks = 0; return; }
+      geldigeDagen++;
 
       const isSpoor = (kolom === 'RH' && raw === -1);
       const waarde = isSpoor ? 0 : raw;
@@ -785,6 +805,9 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
       const dd = parseInt(datum.substring(6, 8));
       const sDag = seizoensDag(jaar, mm, dd, sInfo);
       const datumStr = dd + ' ' + MND[mm - 1];
+      const epoch = Date.UTC(jaar, mm - 1, dd);
+      if(vorigeDatum !== null && epoch - vorigeDatum !== 86400000) huidigeReeks = 0;
+      vorigeDatum = epoch;
 
       alleWaarden.push({waarde, jaar, mm, dd, isSpoor});
 
@@ -811,7 +834,7 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
       }
     });
 
-    if (rijen.length < minDagen && sJaar < huidigJaar) return;
+    if (!geldigeDagen || (geldigeDagen < minDagen && sJaar < huidigJaar)) return;
 
     resultaten.push({
       sJaar,
@@ -819,7 +842,7 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
       eersteDag, laatsteDag, aantal, langsteReeks,
       extremeVal: extremeVal !== null ? extremeVal / factor : null,
       extremeDatum,
-      aantalDagen: rijen.length
+      aantalDagen: geldigeDagen
     });
   });
 
@@ -843,7 +866,7 @@ function startAnalyse() {
   document.getElementById('resultaten').style.display = 'none';
 
   const info = KOLOM_INFO[type];
-  const drempelRaw = drempel * info.factor;
+  const drempelRaw = Math.round(drempel * info.factor * 1e8) / 1e8;
 
   if (stn === 'all') {
     startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info);
@@ -884,6 +907,7 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
   const perStation = {};
   geladen.forEach(({id, data}) => {
     if (!data) return;
+    kolomIndex = csvCache[id].columns;
     perStation[id] = analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw);
   });
 
@@ -965,7 +989,7 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
 // Format een waarde met de juiste eenheid (handelt spoor voor neerslag af)
 function fmtWaarde(w, info, isSpoor) {
   if (isSpoor) return 'spoor';
-  return (w / info.factor).toFixed(1) + info.eenheid;
+  return (w / info.factor).toFixed(1) + ' ' + info.eenheid;
 }
 
 // Render een top-10 tabel. Toont station-kolom als lijst-items stationNaam hebben.
@@ -1009,6 +1033,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   const seizoenTxt = sInfo.kort;
   const perTxt = isHeelJaar ? 'per jaar' : `per ${seizoenTxt}`;
   const inTxt = isHeelJaar ? 'in jaar' : `in ${seizoenTxt}`;
+  if(!resultaten.length){for(const id of ['val-aantal','val-reeks'])document.getElementById(id).textContent='–';for(const id of ['sub-aantal','sub-reeks'])document.getElementById(id).textContent='Geen voldoende complete meetperioden';}
 
   // ── Overzicht ──
   const metEerste = resultaten.filter(r => r.eersteDag);
@@ -1066,7 +1091,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
 
   // ── Grafiek 1: Eerste & laatste dag per jaar/seizoen ──
   document.getElementById('chart1-title').textContent =
-    `Eerste en laatste dag ${richtTekst} ${drempel}${info.eenheid} ${perTxt} — ${stationNaam} (${sInfo.label})`;
+    `Eerste en laatste dag ${richtTekst} ${drempel} ${info.eenheid} ${perTxt} — ${stationNaam} (${sInfo.label})`;
 
   const ctx1 = document.getElementById('chart1').getContext('2d');
   if (chart1Instance) chart1Instance.destroy();
@@ -1197,7 +1222,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
 
   // ── Grafiek 2: Aantal dagen per jaar/seizoen ──
   document.getElementById('chart2-title').textContent =
-    `Aantal dagen ${richtTekst} ${drempel}${info.eenheid} ${perTxt} — ${stationNaam} (${sInfo.label})`;
+    `Aantal dagen ${richtTekst} ${drempel} ${info.eenheid} ${perTxt} — ${stationNaam} (${sInfo.label})`;
 
   const ctx2 = document.getElementById('chart2').getContext('2d');
   if (chart2Instance) chart2Instance.destroy();
@@ -1210,7 +1235,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
     data: {
       labels: jaarLabels,
       datasets: [{
-        label: `Dagen ${richtTekst} ${drempel}${info.eenheid}`,
+        label: `Dagen ${richtTekst} ${drempel} ${info.eenheid}`,
         data: aantalData,
         backgroundColor: aantalData.map(v => v >= gemAantal ? '#0077cc88' : '#66aadd66'),
         borderColor: aantalData.map(v => v >= gemAantal ? '#0066cc' : '#88bbdd'),
@@ -1274,7 +1299,7 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
 
   // ── Detail-tabel ──
   document.getElementById('tabel-title').textContent =
-    `Detail ${perTxt} — ${stationNaam} — ${richtTekst} ${drempel}${info.eenheid} (${sInfo.label})`;
+    `Detail ${perTxt} — ${stationNaam} — ${richtTekst} ${drempel} ${info.eenheid} (${sInfo.label})`;
 
   // Bewaar state zodat sorteren later kan zonder opnieuw te analyseren
   detailState.resultaten = resultaten;
@@ -1382,8 +1407,8 @@ function renderDetailTabel() {
       : '-';
     const extremeTd = r.extremeVal !== null
       ? (isAlle && r.extremeStation
-          ? `${r.extremeVal.toFixed(1)}${info.eenheid} <span style="${stnStyle}">(${r.extremeDatum} — ${r.extremeStation})</span>`
-          : `${r.extremeVal.toFixed(1)}${info.eenheid} (${r.extremeDatum})`)
+          ? `${r.extremeVal.toFixed(1)} ${info.eenheid} <span style="${stnStyle}">(${r.extremeDatum} — ${r.extremeStation})</span>`
+          : `${r.extremeVal.toFixed(1)} ${info.eenheid} (${r.extremeDatum})`)
       : '-';
 
     const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : '-';

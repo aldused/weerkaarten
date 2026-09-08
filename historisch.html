@@ -60,8 +60,17 @@
     .info-panel { flex: 1 1 auto; }
   }
 </style>
+<link rel="stylesheet" href="klimaat.css?v=20260908-3">
+<link rel="stylesheet" href="terugkijken.css?v=20260908-1">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('weerlab_theme')==='dark'?'dark':'light';}catch(e){}</script>
+<script src="klimaat.js?v=20260908-3"></script>
 </head>
-<body>
+<body class="climate-page climate-historisch archive-page">
+<section class="climate-heading" aria-labelledby="climate-title">
+<a class="climate-back" href="index.html#menu/terugkijken?type=terug">← Maand &amp; archief</a>
+<div class="climate-heading-row"><div><h1 id="climate-title">Historische dagkaarten</h1><p>Kies een datum en weerelement en bekijk de gemeten waarden op de kaart en per station.</p></div><span class="climate-label">KNMI · Weerarchief</span></div>
+<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens, rechtstreeks opgevraagd voor de gekozen datum. Beschikbaarheid verschilt per station en weerelement. Windstoten staan in km/u; gemiddelde wind in m/s. Recente dagen kunnen nog onvolledig zijn. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI-brongegevens ↗</a></p></details>
+</section>
 <div class="header">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
     <div>
@@ -108,7 +117,7 @@
     <div class="param-cat">
       <span class="cat-label">💨 Wind</span>
       <button class="param-btn" id="btn-FG" onclick="wisselParam('FG')">FG Gem.</button>
-      <button class="param-btn" id="btn-FXX" onclick="wisselParam('FXX')">FXX Stoot</button>
+      <button class="param-btn" id="btn-FXX" onclick="wisselParam('FXX')">Windstoot (km/u)</button>
     </div>
     <div class="param-cat">
       <span class="cat-label">🌧️ Neerslag</span>
@@ -221,10 +230,10 @@ const PARAM_COL = {
   DR:  {div:10, eenheid:"u",   label:"Neerslagduur"},
   PG:  {div:10, eenheid:"hPa", label:"Luchtdruk"},
   FG:  {div:10, eenheid:"m/s", label:"Gem. wind"},
-  FXX: {div:10, eenheid:"m/s", label:"Max windstoot"},
+  FXX: {div:10/3.6, eenheid:"km/u", label:"Max windstoot"},
   NG:  {div:1,  eenheid:"oktas",label:"Bewolking"},
   UG:  {div:1,  eenheid:"%",   label:"Luchtvochtigheid"},
-  VVN: {div:1,  eenheid:"m",   label:"Min zicht"},
+  VVN: {div:1,  eenheid:"",   label:"Min zicht"},
 };
 
 const NL_MAANDEN = ["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
@@ -256,6 +265,7 @@ function getKleur(param, waarde) {
     return "#08306b";
   }
   if (param === "FG" || param === "FXX") {
+    if(param === "FXX") waarde /= 3.6;
     if (waarde < 3)   return "#ffffcc";
     if (waarde < 6)   return "#a1dab4";
     if (waarde < 9)   return "#41b6c4";
@@ -319,6 +329,15 @@ function getKleur(param, waarde) {
   return "#aaaaaa";
 }
 
+function displayObservation(value,param){
+  if(param!=='VVN')return String(value).replace('.',',');
+  if(value===0)return '<100 m';
+  if(value<50)return `${value*100}–${(value+1)*100} m`;
+  if(value===50)return '5–6 km';
+  if(value>=56&&value<80)return `${value-50}–${value-49} km`;
+  if(value>=80&&value<89)return `${30+(value-80)*5}–${35+(value-80)*5} km`;
+  return value===89?'>70 km':'–';
+}
 function tekstKleur(kleur) {
   // Simpele luma check
   const r = parseInt(kleur.slice(1,3),16), g = parseInt(kleur.slice(3,5),16), b = parseInt(kleur.slice(5,7),16);
@@ -332,13 +351,13 @@ function maakLegenda(param) {
     TG: [{k:"#084594",t:"< -10°C"},{k:"#2166ac",t:"-10–-5°C"},{k:"#4393c3",t:"-5–0°C"},{k:"#92c5de",t:"0–5°C"},{k:"#d1e5f0",t:"5–10°C"},{k:"#fddbc7",t:"10–15°C"},{k:"#f4a582",t:"15–20°C"},{k:"#d6604d",t:"20–25°C"},{k:"#b2182b",t:"25–30°C"}],
     RH: [{k:"#f7fbff",t:"0 mm"},{k:"#c6dbef",t:"< 2 mm"},{k:"#6baed6",t:"2–5 mm"},{k:"#2171b5",t:"5–10 mm"},{k:"#084594",t:"10–20 mm"},{k:"#08306b",t:"> 20 mm"}],
     FG: [{k:"#ffffcc",t:"< 3 m/s"},{k:"#a1dab4",t:"3–6 m/s"},{k:"#41b6c4",t:"6–9 m/s"},{k:"#2c7fb8",t:"9–12 m/s"},{k:"#253494",t:"12–15 m/s"},{k:"#081d58",t:"> 15 m/s"}],
-    FXX:[{k:"#ffffcc",t:"< 3 m/s"},{k:"#a1dab4",t:"3–6 m/s"},{k:"#41b6c4",t:"6–9 m/s"},{k:"#2c7fb8",t:"9–12 m/s"},{k:"#253494",t:"12–15 m/s"},{k:"#081d58",t:"> 15 m/s"}],
+    FXX:[{k:"#ffffcc",t:"< 10,8 km/u"},{k:"#a1dab4",t:"10,8–21,6 km/u"},{k:"#41b6c4",t:"21,6–32,4 km/u"},{k:"#2c7fb8",t:"32,4–43,2 km/u"},{k:"#253494",t:"43,2–54 km/u"},{k:"#081d58",t:"≥ 54 km/u"}],
     SQ: [{k:"#f7f7f7",t:"0 u"},{k:"#fee391",t:"< 2 u"},{k:"#fec44f",t:"2–4 u"},{k:"#fe9929",t:"4–6 u"},{k:"#d95f0e",t:"6–8 u"},{k:"#993404",t:"> 8 u"}],
     PG: [{k:"#084594",t:"< 990 hPa"},{k:"#4393c3",t:"990–1000"},{k:"#d1e5f0",t:"1000–1010"},{k:"#fddbc7",t:"1010–1020"},{k:"#d6604d",t:"1020–1030"},{k:"#b2182b",t:"> 1030 hPa"}],
   };
   const items = legendas[param] || [];
   return `<div class="legenda">
-    <div class="legenda-titel">${PARAM_COL[param].label} (${PARAM_COL[param].eenheid})</div>
+    <div class="legenda-titel">${PARAM_COL[param].label}${PARAM_COL[param].eenheid ? " ("+PARAM_COL[param].eenheid+")" : ""}</div>
     <div class="legenda-items">${items.map(i=>`<div class="legenda-item"><div class="legenda-kleur" style="background:${i.k};border:1px solid #ccc;"></div><span>${i.t}</span></div>`).join("")}
     <div class="legenda-item"><div class="legenda-kleur" style="background:#ccc;border:1px solid #aaa;"></div><span>Geen data</span></div>
     </div></div>`;
@@ -349,7 +368,7 @@ function tekenKaart() {
   laag.innerHTML = "";
   const info = document.getElementById("info-tbody");
   info.innerHTML = "";
-  document.getElementById("th-param").textContent = `${PARAM_COL[huidigParam].label} (${PARAM_COL[huidigParam].eenheid})`;
+  document.getElementById("th-param").textContent = `${PARAM_COL[huidigParam].label}${PARAM_COL[huidigParam].eenheid ? " ("+PARAM_COL[huidigParam].eenheid+")" : ""}`;
 
   const rijen = [];
   for (const st of STATIONS) {
@@ -358,7 +377,7 @@ function tekenKaart() {
     const kleur = getKleur(huidigParam, waarde);
     const tk = tekstKleur(kleur);
     if (waarde === null) continue;
-    const tekst = String(waarde);
+    const tekst = displayObservation(waarde,huidigParam);
 
     // Cirkel + label
     const g = document.createElementNS("http://www.w3.org/2000/svg","g");
@@ -386,7 +405,7 @@ function tekenKaart() {
   rijen.sort((a,b) => (b.waarde??-9999) - (a.waarde??-9999));
   rijen.forEach(r => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.naam}</td><td><strong>${r.waarde !== null ? r.waarde : "–"}</strong> ${r.waarde !== null ? PARAM_COL[huidigParam].eenheid : ""}</td>`;
+    tr.innerHTML = `<td>${r.naam}</td><td><strong>${r.waarde !== null ? displayObservation(r.waarde,huidigParam).replaceAll("<","&lt;") : "–"}</strong> ${r.waarde !== null ? PARAM_COL[huidigParam].eenheid : ""}</td>`;
     info.appendChild(tr);
   });
 
@@ -397,7 +416,7 @@ function wisselParam(param) {
   huidigParam = param;
   document.querySelectorAll(".param-btn").forEach(b => b.classList.remove("actief"));
   document.getElementById("btn-" + param).classList.add("actief");
-  if (Object.keys(huidigData).length > 0) laadDag();
+  laadDag();
 }
 
 function getDatumStr() {
@@ -415,7 +434,24 @@ function getDatumLabel() {
   return `${NL_DAGEN_LANG[d.getDay()]} ${dag} ${NL_MAANDEN[maand]} ${jaar}`;
 }
 
+let dayRequest=0;
+function validArchiveDate(key){
+  if(!/^\d{8}$/.test(key))return false;
+  const y=+key.slice(0,4),m=+key.slice(4,6),d=+key.slice(6,8),date=new Date(y,m-1,d);
+  const today=new Date();today.setHours(0,0,0,0);
+  return y>=1901 && date.getFullYear()===y && date.getMonth()===m-1 && date.getDate()===d && date<today;
+}
+function observationValue(raw,param){
+  if(raw==null || raw==='' || !Number.isFinite(Number(raw)))return null;
+  raw=Number(raw);
+  // KNMI trace codes represent less than 0.05 mm/hour, not negative totals.
+  if(raw===-1 && ['RH','SQ'].includes(param))return 0;
+  if(param==='NG' && raw===9)return null; // sky obscured, not nine oktas
+  return Math.round(raw / PARAM_COL[param].div * 10) / 10;
+}
 async function laadDag() {
+  const request=++dayRequest;
+  const requestedParam=huidigParam;
   const datumStr = getDatumStr();
   const datumLabel = getDatumLabel();
   const status = document.getElementById("status");
@@ -425,7 +461,11 @@ async function laadDag() {
   document.getElementById("kaart-wrapper").style.display = "none";
 
   huidigData = {};
-
+  weerlabClimateStatus({fixed:'Daggegevens laden…'});
+  if(!validArchiveDate(datumStr)){
+    status.className='status fout';status.textContent='Kies een geldige datum vanaf 1901, vóór vandaag.';
+    weerlabClimateStatus({fixed:'Geen geldige archiefdatum geselecteerd'});return;
+  }
   try {
     const apiUrl = `https://www.daggegevens.knmi.nl/klimatologie/daggegevens`;
     const postData = `start=${datumStr}&end=${datumStr}&stns=ALL&vars=TX:TN:TG:RH:DR:FG:FXX:SQ:SP:PG:NG:UG:VVN&fmt=json`;
@@ -440,32 +480,35 @@ async function laadDag() {
         headers: {"Content-Type": "application/x-www-form-urlencoded"},
         body: postData
       });
+      if(!res.ok)throw new Error("KNMI niet beschikbaar");
       json = await res.json();
     } catch(e) {
       // CORS fallback: proxy 1
       try {
         const res2 = await fetch(proxyUrl);
+        if(!res2.ok)throw new Error("Bron niet beschikbaar");
         json = await res2.json();
       } catch(e2) {
         // Proxy 2 als backup
         const res3 = await fetch(proxyUrl2);
+        if(!res3.ok)throw new Error("Bron niet beschikbaar");
         json = await res3.json();
       }
     }
 
-    if (!json || json.length === 0) {
+    if(request!==dayRequest)return;
+    weerlabClimateStatus({fixed:`Gekozen dag: ${datumLabel}`,note:"KNMI-daggegevens · windstoten in km/u"});
+    if (!Array.isArray(json) || json.length === 0) {
       status.className = "status fout";
       status.textContent = `Geen data gevonden voor ${datumLabel}.`;
       return;
     }
 
-    const info = PARAM_COL[huidigParam];
+    const info = PARAM_COL[requestedParam];
     for (const rij of json) {
       const stn = rij.station_code;
-      const raw = rij[huidigParam];
-      if (raw !== null && raw !== undefined) {
-        huidigData[stn] = Math.round(raw / info.div * 10) / 10;
-      }
+      const value = observationValue(rij[requestedParam],requestedParam);
+      if (value !== null) huidigData[stn] = value;
     }
 
     if (Object.keys(huidigData).length === 0) {
@@ -481,8 +524,10 @@ async function laadDag() {
     tekenKaart();
 
   } catch(e) {
+    if(request!==dayRequest)return;
+    weerlabClimateStatus({fixed:"De daggegevens konden niet worden geladen"});
     status.className = "status fout";
-    status.textContent = `Fout bij ophalen: ${e.message}`;
+    status.textContent = "De KNMI-daggegevens zijn nu niet bereikbaar. Probeer de datum opnieuw te laden.";
   }
 }
 
@@ -528,7 +573,7 @@ function navigeer(richting) {
   laadDag();
 }
 
-// Initialiseer met vandaag min 1 jaar
+// Twee dagen terug: recente gevalideerde daggegevens kunnen vertraagd verschijnen.
 const gisteren = new Date();
 gisteren.setDate(gisteren.getDate() - 2);
 document.getElementById("inp-dag").value = gisteren.getDate();

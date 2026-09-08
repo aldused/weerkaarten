@@ -4,10 +4,12 @@ knmi_neerslag_records.py
 Records voor KNMI neerslagstations via ZIP bestanden.
 ZIP URL: cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/monv_reeksen/neerslaggeg_NAAM_NR.zip
 Output: neerslag_records.json
-Verwerkt max 10 stations per run (caching).
+Vernieuwt begrensd per run; behoudt alle overige reeksen en vermeldt de meetdekking.
 """
 
-import os, json, time, re, requests, zipfile, io
+import os, json, time, re, requests, zipfile, io, argparse
+from calendar import monthrange, isleap
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 
@@ -102,6 +104,7 @@ def haal_stations_van_pagina():
 
     print("Stationslijst ophalen van KNMI pagina...")
     r = requests.get(PAGINA_URL, timeout=60)
+    r.raise_for_status()
     html = r.text
     pattern = r'neerslaggeg_([A-Z0-9\-]+)_(\d+)\.zip'
     matches = re.findall(pattern, html)
@@ -117,13 +120,19 @@ def haal_stations_van_pagina():
             "zip_nr": nr.zfill(3)
         }
 
+    if not stations:
+        raise ValueError("KNMI-stationslijst is leeg; bestaande bestanden blijven behouden")
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S):
+        match = re.search(r"neerslaggeg_[A-Z0-9\-]+_(\d+)\.zip.*?(\d{8}) t/m (\d{8})", row, re.S)
+        if match and str(int(match[1])) in stations:
+            stations[str(int(match[1]))]["bron_tm"] = match[3]
     print(f"  {len(stations)} stations gevonden")
     with open(STATIONS_CACHE, "w") as f:
         json.dump(stations, f, ensure_ascii=False)
     return stations
 
 
-def haal_station_data(stn_info):
+def haal_station_data(stn_info, force=False):
     nr     = stn_info["nr"]
     naam   = stn_info["zip_naam"]
     zip_nr = stn_info["zip_nr"]
@@ -131,7 +140,7 @@ def haal_station_data(stn_info):
 
     if os.path.exists(cache_file):
         mtime = os.path.getmtime(cache_file)
-        if (time.time() - mtime) < 86400 * 30:
+        if not force and (time.time() - mtime) < 86400 * 30:
             with open(cache_file) as f:
                 return json.load(f)
 
@@ -172,8 +181,10 @@ def parse_neerslag_txt(tekst, cache_file):
                 data.append({"d": datum, "rd": rd, "sx": sx})
         except:
             continue
-    with open(cache_file, "w") as f:
-        json.dump(data, f)
+    if data:
+        with open(cache_file + ".tmp", "w") as f:
+            json.dump(data, f)
+        os.replace(cache_file + ".tmp", cache_file)
     return data
 
 
@@ -259,9 +270,9 @@ def seizoen_maanden(sz_key):
     return                    [(jr, 9),  (jr, 10),    (jr, 11)]  # herfst
 
 
-def seizoen_compleet(sz_key, mnd_count, min_per_maand=25):
-    """Een seizoen is compleet als alle 3 maanden minstens min_per_maand dagen hebben."""
-    return all(mnd_count.get(m, 0) >= min_per_maand for m in seizoen_maanden(sz_key))
+def seizoen_compleet(sz_key, mnd_count):
+    """Alle kalenderdagen zijn vereist voor vergelijkbare seizoenssommen."""
+    return all(mnd_count.get(m, 0) == monthrange(*m)[1] for m in seizoen_maanden(sz_key))
 
 
 def bereken_records(data, nr=None):
@@ -309,6 +320,7 @@ def bereken_records(data, nr=None):
          "label": f"{NL_MND[k[1]]} decade {k[2]}, {k[0]}",
          "jaar": k[0], "mnd": k[1], "dec": k[2]}
         for k,v in dec_data.items()
+        if dec_count[k] == (10 if k[2] < 3 else monthrange(k[0],k[1])[1]-20)
     ], key=lambda x: -x["waarde"])
 
     mnd_alle = sorted([
@@ -316,6 +328,7 @@ def bereken_records(data, nr=None):
          "label": f"{NL_MND_LANG[k[1]]} {k[0]}",
          "jaar": k[0], "mnd": k[1]}
         for k,v in mnd_data.items()
+        if mnd_count[k] == monthrange(*k)[1]
     ], key=lambda x: -x["waarde"])
 
     seizoen_alle = sorted([
@@ -329,6 +342,7 @@ def bereken_records(data, nr=None):
     jaar_alle = sorted([
         {"waarde": round(v,1), "jaar": k}
         for k,v in jaar_data.items()
+        if jaar_count[k] == 365 + isleap(k)
     ], key=lambda x: -x["waarde"])
 
     sneeuw_alle = sorted([
@@ -340,6 +354,7 @@ def bereken_records(data, nr=None):
     jaar_reeks = sorted([
         {"jaar": k, "mm": round(v, 1)}
         for k, v in jaar_data.items()
+        if jaar_count[k] == 365 + isleap(k)
     ], key=lambda x: x["jaar"])
 
     # Droogste (ascending, met kwaliteitsfilters: minimumaantal meetdagen + min jaar 1900)
@@ -352,7 +367,7 @@ def bereken_records(data, nr=None):
          "label": f"{NL_MND[k[1]]} decade {k[2]}, {k[0]}",
          "jaar": k[0], "mnd": k[1], "dec": k[2]}
         for k,v in dec_data.items()
-        if dec_count[k] >= 7 and k[0] >= 1880 and heeft_regen
+        if dec_count[k] == (10 if k[2] < 3 else monthrange(k[0],k[1])[1]-20) and k[0] >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droog_mnd_alle = sorted([
@@ -360,7 +375,7 @@ def bereken_records(data, nr=None):
          "label": f"{NL_MND_LANG[k[1]]} {k[0]}",
          "jaar": k[0], "mnd": k[1]}
         for k,v in mnd_data.items()
-        if mnd_count[k] >= 20 and k[0] >= 1880 and heeft_regen
+        if mnd_count[k] == monthrange(*k)[1] and k[0] >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droog_seizoen_alle = sorted([
@@ -374,7 +389,7 @@ def bereken_records(data, nr=None):
     droog_jaar_alle = sorted([
         {"waarde": round(v,1), "jaar": k}
         for k,v in jaar_data.items()
-        if jaar_count[k] >= 300 and k >= 1880 and heeft_regen
+        if jaar_count[k] == 365 + isleap(k) and k >= 1880 and heeft_regen
     ], key=lambda x: x["waarde"])
 
     droge_perioden = [p for p in bereken_droge_perioden(data) if int(p["van"][:4]) >= 1880]
@@ -405,6 +420,8 @@ def bereken_records(data, nr=None):
     maand_per_mnd_droog = top_per_maand(droog_mnd_alle,  n=10, asc=True)
 
     return {
+        "metingen_van": min(dag_data, default=None),
+        "metingen_tm": max(dag_data, default=None),
         "dag": dag_alle[:TOP_N], "decade": dec_alle[:TOP_N],
         "maand": mnd_alle[:TOP_N], "seizoen": seizoen_alle[:TOP_N],
         "jaar": jaar_alle[:TOP_N], "sneeuw": sneeuw_alle[:TOP_N],
@@ -490,40 +507,53 @@ def main():
     t0 = time.time()
     print(f"=== KNMI Neerslag Records === {datetime.now():%Y-%m-%d %H:%M}")
 
-    stations = haal_stations_van_pagina()
-
-    if os.path.exists(OUTPUT_JSON):
-        with open(OUTPUT_JSON) as f:
-            output = json.load(f)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--local-cache', action='store_true', help='Herbereken zonder netwerkverzoeken')
+    parser.add_argument('--max-per-run', type=int, default=MAX_PER_RUN)
+    args = parser.parse_args()
+    if args.local_cache:
+        with open(STATIONS_CACHE) as f: stations = json.load(f)
     else:
-        output = {"stations": {}, "landelijk": {}, "bijgewerkt": ""}
+        stations = haal_stations_van_pagina()
+    if not stations: raise ValueError('Geen stations; uitvoer niet gewijzigd')
 
-    alle_records = {}  # Forceer herberekening van alle stations
-
-    verwerkt = 0
-    for nr_str, info in sorted(stations.items(), key=lambda x: int(x[0])):
-        cache_file = os.path.join(CACHE_DIR, f"nrs_{info['nr']}.json")
-        if os.path.exists(cache_file):
-            mtime = os.path.getmtime(cache_file)
-            if (time.time() - mtime) < 86400 * 30:
-                # Cache is geldig — laad alsnog in alle_records als nog niet aanwezig
-                if nr_str not in alle_records:
-                    with open(cache_file) as cf:
-                        cached = json.load(cf)
-                    if cached:
-                        alle_records[nr_str] = bereken_records(filter_blacklist(info["nr"], cached), info["nr"])
-                continue
-
-        print(f"  [{verwerkt+1}/{MAX_PER_RUN}] Stn {info['nr']}: {info['naam']}...")
-        data = haal_station_data(info)
-        if data:
-            alle_records[nr_str] = bereken_records(filter_blacklist(info["nr"], data), info["nr"])
-            verwerkt += 1
+    checks_path = os.path.join(CACHE_DIR, 'broncontrole.json')
+    checks = {}
+    if os.path.exists(checks_path):
+        with open(checks_path) as f: checks = json.load(f)
+    pending = []
+    for nr, info in stations.items():
+        path = os.path.join(CACHE_DIR, f"nrs_{info['nr']}.json")
+        cached = []
+        if os.path.exists(path):
+            with open(path) as f: cached = json.load(f)
+        latest = max((r['d'] for r in cached), default='')
+        # Closed stations do not need repeated full downloads. Active stations
+        # are compared with the observation endpoint advertised by KNMI.
+        if info.get('bron_tm'):
+            needs_update = latest < info['bron_tm'] and checks.get(nr, '') < info['bron_tm']
         else:
-            open(cache_file, "w").write("[]")
-
-        if verwerkt >= MAX_PER_RUN:
-            break
+            needs_update = not os.path.exists(path) or time.time()-os.path.getmtime(path)>86400*30
+        if needs_update: pending.append(info)
+    updates = [] if args.local_cache else pending[:max(0,args.max_per_run)]
+    print(f"{len(pending)} reeksen achter op bron; {len(updates)} verversen", flush=True)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda info: bool(haal_station_data(info, force=True)), updates))
+    verwerkt = sum(results)
+    for info, success in zip(updates,results):
+        if success: checks[str(info['nr'])] = info.get('bron_tm','')
+    if updates:
+        with open(checks_path,'w') as f: json.dump(checks,f)
+    pending_ids = {str(info['nr']) for info in pending}
+    refreshed_ids = {str(info['nr']) for info,success in zip(updates,results) if success}
+    alle_records = {}
+    for nr, info in sorted(stations.items(), key=lambda x: int(x[0])):
+        path = os.path.join(CACHE_DIR, f"nrs_{info['nr']}.json")
+        if not os.path.exists(path): continue
+        with open(path) as f: cached = json.load(f)
+        if cached:
+            alle_records[nr] = bereken_records(filter_blacklist(info['nr'], cached), info['nr'])
+    if not alle_records: raise ValueError('Geen metingen; uitvoer niet gewijzigd')
 
     print(f"Landelijke records berekenen over {len(alle_records)} stations...")
     landelijk = bereken_landelijk(alle_records, stations)
@@ -549,12 +579,18 @@ def main():
     landelijk_droog  = {k: v for k, v in landelijk.items() if k in DROOG_KEYS}
 
     bijgewerkt = datetime.now().isoformat()
+    coverage = {nr:rec.get('metingen_tm') for nr,rec in alle_records.items()}
+    source_behind = sorted((pending_ids - refreshed_ids) & set(alle_records), key=int)
+    metadata = {'metingen_tm':max(filter(None,coverage.values()), default=None),
+                'stations_achter_bron':source_behind,
+                'volledige_perioden':True}
 
     output = {
         "stations": stations_natste,
         "landelijk": landelijk_natste,
         "stationsnamen": stationsnamen,
         "bijgewerkt": bijgewerkt,
+        **metadata,
         "n_stations": len(alle_records),
         "n_totaal": len(stations)
     }
@@ -565,6 +601,7 @@ def main():
         "stations": stations_droog,
         "landelijk": landelijk_droog,
         "bijgewerkt": bijgewerkt,
+        **metadata,
     }
     with open("neerslag_droog.json", "w") as f:
         json.dump(droog_output, f, ensure_ascii=False)

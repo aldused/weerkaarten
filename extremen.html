@@ -518,12 +518,19 @@ tbody tr.target { background: #ecfdf5; }
   .pin-form { grid-template-columns: 1fr; }
 }
 </style>
+<link rel="stylesheet" href="klimaat.css?v=20260908-2">
+<script src="klimaat.js?v=20260908-2"></script>
 </head>
-<body>
+<body class="climate-page climate-extremen">
+<section class="climate-heading" aria-labelledby="climate-title">
+  <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
+  <div class="climate-heading-row"><div><h1 id="climate-title">Zoek weerextremen</h1><p>Zoek bijzondere metingen op station, weerelement en tijdvak.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens. Recente metingen zijn voorlopig. Niet ieder station heeft voor elk weerelement een volledige meetreeks. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
+</section>
 <div class="pin-gate" id="pinGate">
   <div class="pin-box">
     <div class="pin-title">Extremenzoeker</div>
-    <div class="pin-sub">Deze demo staat tijdelijk achter een pincode.</div>
+    <div class="pin-sub">Deze analyse is beveiligd met een pincode.</div>
     <form class="pin-form" id="pinForm">
       <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Pincode" aria-label="Pincode">
       <button type="submit">Open</button>
@@ -770,7 +777,7 @@ const METRICS = [
   {id:"rhSum", label:"Meeste neerslag", short:"Neerslagsom", field:"RH", reducer:"sum", direction:"high", unit:"mm", color:"rain"},
   {id:"rhMin", label:"Droogste periode", short:"Neerslagsom laag", field:"RH", reducer:"sum", direction:"low", unit:"mm", color:"rain"},
   {id:"rhMax", label:"Hoogste dagsom neerslag", short:"Dagregen", field:"RH", reducer:"max", direction:"high", unit:"mm", color:"rain"},
-  {id:"fxxMax", label:"Hoogste windstoot", short:"Windstoot", field:"FXX", reducer:"max", direction:"high", unit:"m/s", color:"wind"},
+  {id:"fxxMax", label:"Hoogste windstoot", short:"Windstoot", field:"FXX", reducer:"max", direction:"high", unit:"km/u", color:"wind"},
   {id:"sqSum", label:"Meeste zonuren", short:"Zonuren", field:"SQ", reducer:"sum", direction:"high", unit:"uur", color:"sun"},
   {id:"sqMin", label:"Minste zonuren", short:"Zonuren laag", field:"SQ", reducer:"sum", direction:"low", unit:"uur", color:"sun"}
 ];
@@ -883,8 +890,8 @@ function threshold(expected) {
 }
 function valueText(v, metric) {
   if (v == null || Number.isNaN(v)) return "-";
-  const digits = metric.reducer === "sum" || metric.reducer === "avg" || metric.field !== "FXX" ? 1 : 1;
-  return Number(v).toFixed(digits).replace(".", ",");
+  const display = metric.field === "FXX" ? Number(v) * 3.6 : Number(v);
+  return display.toFixed(1).replace(".", ",");
 }
 function valueWithUnit(v, metric) { return `${valueText(v, metric)} ${metric.unit.replace("&deg;","°")}`; }
 function metricById(id) { return METRICS.find(m => m.id === id) || METRICS[0]; }
@@ -1187,7 +1194,7 @@ function sortedTodayRows(rows, spec) {
 
 function todayValueWithUnit(value, metric) {
   if (metric.id === "fxxMax") {
-    return `${valueText(value, metric)} m/s (${Math.round(value * 3.6)} km/u)`;
+    return valueWithUnit(value, metric);
   }
   return valueWithUnit(value, metric);
 }
@@ -1222,7 +1229,7 @@ function renderTodayCard() {
     document.getElementById("todayNote").textContent =
       `${isAll ? "Beste station in Nederland" : "Waarde voor dit station"} ${timeText}.`;
     if (metric.id === "fxxMax") {
-      document.getElementById("todayUnit").textContent = `m/s (${Math.round(selected[0] * 3.6)} km/u)`;
+      document.getElementById("todayUnit").textContent = "km/u";
     }
   }
 
@@ -1726,6 +1733,10 @@ function compareLabel() {
 }
 
 function render() {
+  if(latestDate) {
+    const d=latestDate;
+    window.weerlabClimateStatus({through:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`, historical:Number(currentStation?.nr)<200, note:currentAllStations.length?'meetperiode verschilt per station':null});
+  }
   if (currentStation?.allStations) {
     renderAllStationsMode();
     return;

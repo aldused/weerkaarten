@@ -132,6 +132,7 @@ def parse_etmgeg(tekst):
             "TG": getal("TG"),
             "RH": getal("RH"),
             "SQ": getal("SQ"),
+            "FG": getal("FG"),
             "FX": getal("FXX"),  # etmgeg gebruikt FXX voor max. windstoot
         }
     return resultaat
@@ -216,6 +217,12 @@ def haal_station_data(stn_nr):
         elif csv_type == "epen":
             return parse_epen_csv(pad, info.get("csv_code", ""))
         return {}
+    if "--local-cache" in sys.argv:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"knmi_dagdata_{stn_nr}.csv")
+        if not os.path.exists(path):
+            return {}
+        with open(path, encoding="utf-8-sig") as handle:
+            return parse_etmgeg(handle.read())
     url = f"https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/daggegevens/etmgeg_{stn_nr}.zip"
     try:
         r = requests.get(url, timeout=120)
@@ -269,6 +276,7 @@ def verwerk_stations(station_nrs):
                         "TG":  d["TG"],
                         "RH":  d["RH"],
                         "SQ":  d["SQ"],
+                        "FG":  d.get("FG"),
                         "FX":  d["FX"],
                     })
             if rijen:
@@ -292,7 +300,24 @@ def main():
         nrs = list(STATIONS.keys())
         print(f"Ophalen voor {len(nrs)} stations …")
 
+    previous = {}
+    if os.path.exists(uitvoer_pad):
+        with open(uitvoer_pad, encoding="utf-8") as handle:
+            previous = json.load(handle)
     data = verwerk_stations(nrs)
+    # Preserve archives for sources that are temporarily unavailable.
+    retained = []
+    for nr in nrs:
+        key = str(nr)
+        if key not in data["data"] and key in previous.get("data", {}):
+            data["data"][key] = previous["data"][key]
+            data["stations"][key] = previous["stations"][key]
+            retained.append(key)
+    data["behouden_stations"] = retained
+    if retained:
+        print("Bestaand archief behouden voor: " + ", ".join(retained))
+    if not data["data"]:
+        raise RuntimeError("Geen stations beschikbaar; bestaande uitvoer blijft behouden")
 
     uitvoer_pad_js = uitvoer_pad.replace(".json", ".js")
     json_str = json.dumps(data, ensure_ascii=False, separators=(",", ":"))

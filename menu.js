@@ -136,11 +136,15 @@
     const cat=categories[state.page];
     const base=state.page==='favorieten'?favorites.map(id=>byId.get(id)):products.filter(isInType);
     const result=base.filter(p=>matchesFilters(p));
-    let html=heading(cat.title,cat.description,cat.name);
+    const climate=state.page==='terugkijken' && state.type==='klimaat';
+    const archive=state.page==='terugkijken' && state.type==='terug';
+    let html=heading(climate?'Records & klimaat':archive?'Maand & archief':cat.title,climate?'Van uitzonderlijk weer tot het langjarig gemiddelde. Kies wat je wilt onderzoeken.':archive?'Bekijk de maandbalans, volg het seizoen en zoek het weer van een eerdere dag terug.':cat.description,cat.name);
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
+    if(climate)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Het weer in context</strong><p>Records en metingen worden aangevuld zodra brondata beschikbaar zijn. Klimaatnormalen hebben de vaste referentieperiode <b>1991–2020</b>. De gegevensdatum staat bij het onderdeel.</p></div></aside>`;
+    if(archive)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Van dagkaart tot seizoensbalans</strong><p>Kies een landelijk overzicht of bekijk één station in detail. Bij elk onderdeel staan de meetperiode en de bron; recente dagen kunnen nog worden aangevuld.</p></div></aside>`;
     html+=controls(result.length,{filters:!!filterSets[state.type]})+filterPanel(base);
     if(!result.length)return html+empty(state.page==='favorieten'?'Maak Weerlab een beetje van jou':'Geen onderdelen bij deze combinatie',state.page==='favorieten'?'Tik op het sterretje bij een onderdeel. Je favorieten worden in deze browser bewaard.':'Verwijder een filter om meer weerinformatie te zien.',state.page==='favorieten'?'<a class="button button-primary" href="#start">Ontdek Weerlab</a>':'<button class="button button-primary" data-reset-filters>Alle filters wissen</button>');
-    if(state.page==='nu' && state.type==='nu' || state.page==='professioneel' && state.type==='vak'){
+    if(climate || archive || state.page==='nu' && state.type==='nu' || state.page==='professioneel' && state.type==='vak'){
       const secs=[...new Set(result.map(p=>p.section))];
       html+=secs.map(sec=>`<section class="catalogue-section"><h2>${escape(sec==='Beeld'?'Radar & satelliet':sec)}</h2>${productCollection(result.filter(p=>p.section===sec))}</section>`).join('');
     }else html+=productCollection(result);
@@ -282,7 +286,7 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html#'+route;
+      frame.src='product-host.html?v=20260908-terug-1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';

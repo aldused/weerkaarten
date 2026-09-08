@@ -153,8 +153,16 @@ tfoot td.sq { color: #e67e00; }
   })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="klimaat.css?v=20260908-3">
+<link rel="stylesheet" href="terugkijken.css?v=20260908-1">
+<script src="klimaat.js?v=20260908-3"></script>
 </head>
-<body>
+<body class="climate-page climate-maandoverzicht archive-page">
+<section class="climate-heading" aria-labelledby="climate-title">
+<a class="climate-back" href="index.html#menu/terugkijken?type=terug">← Maand &amp; archief</a>
+<div class="climate-heading-row"><div><h1 id="climate-title">Maandstanden per station</h1><p>Bekijk dagelijkse metingen, maandgemiddelden en totalen voor het gekozen station.</p></div><span class="climate-label">KNMI · Weerarchief</span></div>
+<details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens met recente aanvullingen. Normaalwaarden gelden voor de volledige kalendermaand (1991–2020). Ranglijsten vergelijken dezelfde kalenderdagen; ontbrekende waarden tellen niet als nul. <a href="https://www.knmi.nl/nederland-nu/klimatologie/daggegevens" target="_blank" rel="noopener">KNMI-brongegevens ↗</a></p></details>
+</section>
 <div class="header">
   <div>
     <div class="header-titel">Ed Aldus WM &#8212; Maandoverzicht</div>
@@ -162,9 +170,9 @@ tfoot td.sq { color: #e67e00; }
   </div>
 </div>
 <div class="nav">
-  <select id="ss" onchange="wisselStation()"></select>
-  <span class="pijl" onclick="nav(-1)">&#9664;</span>
-  <select id="sm" onchange="sel()">
+  <select aria-label="Station" id="ss" onchange="wisselStation()"></select>
+  <button class="pijl" aria-label="Vorige maand" onclick="nav(-1)">&#9664;</button>
+  <select aria-label="Maand" id="sm" onchange="sel()">
     <option value="1">Januari</option><option value="2">Februari</option>
     <option value="3">Maart</option><option value="4">April</option>
     <option value="5">Mei</option><option value="6">Juni</option>
@@ -172,24 +180,24 @@ tfoot td.sq { color: #e67e00; }
     <option value="9">September</option><option value="10">Oktober</option>
     <option value="11">November</option><option value="12">December</option>
   </select>
-  <select id="sj" onchange="sel()"></select>
-  <span class="pijl" onclick="nav(1)">&#9654;</span>
-</div>
-<div class="rgl-wrap" id="rgl-wrap" style="display:none">
-  <div class="rgl-titel">Top noteringen — stand van zaken deze maand</div>
-  <div class="rgl-grid" id="rgl"></div>
+  <select aria-label="Jaar" id="sj" onchange="sel()"></select>
+  <button class="pijl" aria-label="Volgende maand" onclick="nav(1)">&#9654;</button>
 </div>
 <div class="stats" id="st"></div>
+<details class="rgl-wrap archive-ranks" id="rgl-wrap" style="display:none">
+  <summary>Historische ranglijsten · dezelfde dagen van de maand</summary>
+  <div class="rgl-grid" id="rgl"></div>
+</details>
 <div class="tbl-wrap">
   <div class="status" id="msg">Laden...</div>
   <table id="tbl" style="display:none">
     <thead><tr>
       <th>Dag</th>
-      <th style="color:#ffaaaa">TX max</th>
-      <th style="color:#aaccff">TN min</th>
-      <th>TG gem</th>
-      <th style="color:#88ddaa">Neerslag</th>
-      <th style="color:#ffcc66">Zon</th>
+      <th style="color:#ffaaaa">TX max (°C)</th>
+      <th style="color:#aaccff">TN min (°C)</th>
+      <th>TG gem (°C)</th>
+      <th style="color:#88ddaa">Neerslag (mm)</th>
+      <th style="color:#ffcc66">Zon (uur)</th>
     </tr></thead>
     <tbody id="tb"></tbody>
     <tfoot id="tf"></tfoot>
@@ -348,7 +356,13 @@ function corrigeerMetToplijst(data, stationNaam) {
   return uit;
 }
 
+var stationRequest = 0;
 function laadData() {
+  var request = ++stationRequest, requestedStation = hSt;
+  weerlabClimateStatus({fixed:"Stationgegevens laden…"});
+  document.getElementById("st").innerHTML="";
+  document.getElementById("rgl-wrap").style.display="none";
+  document.getElementById("grafiek-wrap").style.display="none";
   document.getElementById('msg').style.display = '';
   document.getElementById('msg').textContent = 'Laden...';
   document.getElementById('tbl').style.display = 'none';
@@ -361,13 +375,14 @@ function laadData() {
       .catch(function() { return {}; })
   ])
     .then(function(res) {
+      if(request!==stationRequest)return;
       var j = res[0];
       TOPLIJST = res[1] || {};
-      D = corrigeerMetToplijst(j.data || {}, hSt.naam);
+      D = corrigeerMetToplijst(j.data || {}, requestedStation.naam);
       document.getElementById('bw').textContent = hSt.naam + ' (0' + hSt.nr + ') · ' + (j.bijgewerkt || '');
       toon();
     })
-    .catch(function(e) { document.getElementById('msg').textContent = 'Fout: ' + e.message; });
+    .catch(function(e) { if(request!==stationRequest)return;document.getElementById('msg').textContent = 'De stationgegevens zijn niet beschikbaar. Kies opnieuw een station om te proberen.';weerlabClimateStatus({fixed:'Stationgegevens konden niet worden geladen'}); });
 }
 
 function bouwIdx() {
@@ -389,11 +404,13 @@ function bouwIdx() {
 }
 
 function rang(val, veld, hoger, ix) {
+  var expected = new Date(J,M,0).getDate(), currentDays=Object.keys(D).filter(k=>k.startsWith(J+'-'+String(M).padStart(2,'0')+'-') && D[k][veld]!=null).length;
+  if(currentDays!==expected)return '';
   if (val == null) return '';
   var v = [], ks = Object.keys(ix);
   for (var i = 0; i < ks.length; i++) {
     var a = ix[ks[i]][veld] || [];
-    if (a.length < 25) continue;
+    if (a.length !== new Date(+ks[i],M,0).getDate()) continue;
     var s = 0; for (var j = 0; j < a.length; j++) s += a[j];
     v.push(['tx','tn','tg'].indexOf(veld) >= 0 ? s/a.length : s);
   }
@@ -436,16 +453,16 @@ function rglJaarwaarde(jaar, veld, agg, eindDag) {
     var o = D[k];
     if (o && o[veld] != null) arr.push(o[veld]);
   }
-  if (arr.length < Math.ceil(eindDag * 0.75)) return null;  // ≥75% data nodig
+  if (arr.length !== eindDag) return null; // Vergelijk uitsluitend dezelfde complete kalenderdagen.
   return rglAgg(arr, agg);
 }
 
 function rglRangUitleg(rang, totaal, hi, lo) {
-  if (rang === 1)              return '<b>' + hi + ' ooit</b> sinds 1901';
-  if (rang <= 3)               return '3-' + hi + ' sinds 1901';
+  if (rang === 1)              return '<b>' + hi + ' ooit</b> in de beschikbare reeks';
+  if (rang <= 3)               return '3-' + hi + ' in de beschikbare reeks';
   if (rang <= 10)              return 'top-10 ' + hi;
-  if (rang === totaal)         return '<b>' + lo + ' ooit</b> sinds 1901';
-  if (rang >= totaal - 2)      return '3-' + lo + ' sinds 1901';
+  if (rang === totaal)         return '<b>' + lo + ' ooit</b> in de beschikbare reeks';
+  if (rang >= totaal - 2)      return '3-' + lo + ' in de beschikbare reeks';
   if (rang >= totaal - 9)      return 'top-10 ' + lo;
   var p = (totaal - rang) / Math.max(totaal - 1, 1);
   if (p >= 0.75)               return 'bovengemiddeld ' + hi.replace(/ste$/, '');
@@ -522,7 +539,7 @@ function rglToggle(btn) {
 
 function toon() {
   sync();
-  var vd = new Date().toISOString().slice(0,10);
+  var vd = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   var nm = (ALLE_NM[hSt.nr] || {})[M] || {};
   var ad = new Date(J, M, 0).getDate();
   var ms = String(M).padStart(2,'0');
@@ -554,7 +571,7 @@ function toon() {
   ].map(function(s) {
     return '<div class="stat ' + s.c + '"><div class="stat-lbl">' + s.l + '</div>' +
       '<div class="stat-val">' + (s.v!=null ? s.v.toFixed(1)+s.e : '&#8211;') + '</div>' +
-      (s.nm!=null ? '<div class="stat-norm">Normaal: ' + s.nm + s.e + ds(s.v,s.nm) + '</div>' : '') +
+      (s.nm!=null ? '<div class="stat-norm">Maandnorm: ' + s.nm + s.e + ((['rr','sq'].includes(s.c) && (s.c==='rr'?rr:sq).length<ad)?'':ds(s.v,s.nm)) + '</div>' : '') +
       '</div>';
   }).join('');
 
@@ -593,6 +610,10 @@ function toon() {
     if (D[k] && D[k].tg != null) eindDag = d;
   }
   bouwRanglijst(eindDag);
+  var selectedKeys=rows.filter(r=>r.o && ['tx','tn','tg','rr','sq'].some(field=>r.o[field]!=null)).map(r=>r.k);
+  var through=selectedKeys[selectedKeys.length-1];
+  var historical=J!==new Date().getFullYear()||M!==new Date().getMonth()+1;
+  weerlabClimateStatus(through?{through,historical,note:`${selectedKeys.length} van ${ad} dagen · normaalwaarden gelden voor de hele maand`}:{fixed:'Geen metingen beschikbaar voor deze maand'});
 
   tekenGrafiek();
 }
@@ -637,19 +658,19 @@ function tekenGrafiek() {
     label: 'TX max (°C)', data: tx, type: 'line',
     borderColor: '#c0392b', backgroundColor: 'rgba(192,57,43,0.08)',
     borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
-    tension: 0.3, yAxisID: 'yTemp', spanGaps: true,
+    tension: 0.3, yAxisID: 'yTemp', spanGaps: false,
   });
   if (grafiekLijnen.tn) datasets.push({
     label: 'TN min (°C)', data: tn, type: 'line',
     borderColor: '#2471a3', backgroundColor: 'rgba(36,113,163,0.08)',
     borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
-    tension: 0.3, yAxisID: 'yTemp', spanGaps: true,
+    tension: 0.3, yAxisID: 'yTemp', spanGaps: false,
   });
   if (grafiekLijnen.tg) datasets.push({
     label: 'TG gem (°C)', data: tg, type: 'line',
     borderColor: '#888', backgroundColor: 'rgba(100,100,100,0.05)',
     borderWidth: 1.5, pointRadius: 2, borderDash: [4,3],
-    tension: 0.3, yAxisID: 'yTemp', spanGaps: true,
+    tension: 0.3, yAxisID: 'yTemp', spanGaps: false,
   });
   if (grafiekLijnen.rr) datasets.push({
     label: 'Neerslag (mm)', data: rr, type: 'bar',
@@ -666,12 +687,12 @@ function tekenGrafiek() {
   if (grafiekLijnen.tx && nm.tx != null) datasets.push({
     label: 'Normaal TX', data: Array(ad).fill(nm.tx), type: 'line',
     borderColor: 'rgba(192,57,43,0.35)', borderWidth: 1, borderDash: [5,4],
-    pointRadius: 0, yAxisID: 'yTemp', spanGaps: true,
+    pointRadius: 0, yAxisID: 'yTemp', spanGaps: false,
   });
   if (grafiekLijnen.tn && nm.tn != null) datasets.push({
     label: 'Normaal TN', data: Array(ad).fill(nm.tn), type: 'line',
     borderColor: 'rgba(36,113,163,0.35)', borderWidth: 1, borderDash: [5,4],
-    pointRadius: 0, yAxisID: 'yTemp', spanGaps: true,
+    pointRadius: 0, yAxisID: 'yTemp', spanGaps: false,
   });
 
   var heeftTemp = grafiekLijnen.tx || grafiekLijnen.tn || grafiekLijnen.tg;
