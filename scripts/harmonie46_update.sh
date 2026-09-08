@@ -18,10 +18,11 @@ if [ "$status" -ne 0 ]; then
   exit "$status"
 fi
 
-files=(harmonie_overlay.png harmonie46_canvas_meta.json)
+files=(harmonie_overlay.png)
 for file in harmonie46_data_*.bin; do
   [ -f "$file" ] && files+=("$file")
 done
+files+=(harmonie46_canvas_meta.json)
 
 R2_GZIP=1 bash shell/r2_publish_harmonie.sh "${files[@]}" || exit 1
 bash shell/r2_publish_point_source.sh harmonie46 harmonie46_canvas_meta.json || exit 1

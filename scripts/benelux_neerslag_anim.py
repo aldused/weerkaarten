@@ -9,7 +9,7 @@ in de kop. Per beschikbaar model een mp4 en een losse eindkaart.
 Modellen:
   ecmwf       ECMWF IFS HRES 9 km uit open data (veld `tp`).
               Alle vier runs (00/06/12/18 UTC) lopen t/m +144u in 3-uursstappen.
-  harmonie    KNMI HARMONIE V46 2,5 km, elk uur een nieuwe run, t/m +60u
+  harmonie    KNMI HARMONIE V46 2 km, elk uur een nieuwe run, t/m +60u
               in uurstappen. Leest de cumulatieve som die de bestaande
               harmonie46_update.sh-pijplijn al wegschrijft, inclusief zicht,
               dus geen tweede download van de 865 MB-run-tar.
@@ -102,7 +102,7 @@ MODELS = {
     },
     'harmonie': {
         'label':       'HARMONIE V46',
-        'bron':        'KNMI HARMONIE V46 2,5 km',
+        'bron':        'KNMI HARMONIE V46 2 km',
         'credit':      '© KNMI · HARMONIE V46',
         # Nederland van Zuid-Limburg tot en met de Wadden. De strakke uitsnede
         # geeft op X veel meer bruikbare pixels per provincie dan Benelux-breed.
@@ -114,7 +114,7 @@ MODELS = {
     },
     'harmonie43': {
         'label':       'HARMONIE V43',
-        'bron':        'KNMI HARMONIE V43 2,5 km',
+        'bron':        'KNMI HARMONIE V43 2 km',
         'credit':      '© KNMI · HARMONIE V43',
         'extent':      [2.2, 8.2, 50.5, 54.2],
         'interp_step': 0.02,
@@ -177,8 +177,8 @@ ZICHT_COLORS = ['#5b006e', '#a50026', '#d73027', '#f46d43', '#fdae61',
 ZICHT_UNDER  = '#2d0038'
 ZICHT_OVER   = '#f7fbff'
 
-# Gesimuleerde radarreflectiviteit. Het rechtstreekse HARMONIE-rprate-veld
-# wordt met Z=300*R^1.4 naar dBZ omgerekend. De schaal sluit aan bij gangbare
+# Radarbenadering. De momentane HARMONIE-regenintensiteit
+# wordt met Z=200*R^1.6 naar dBZ omgerekend. De schaal sluit aan bij gangbare
 # radarproducten: zwakke echo's grijs/blauw, neerslag groen, zware buien
 # geel/rood en de sterkste kernen magenta/paars.
 # De referentiekaart gebruikt een vloeiende schaal van 0–78 dBZ, met labels
@@ -235,22 +235,14 @@ VARS = {
         'ecmwf_params': ['tp'],
         'ecmwf_cache':  'tp',                      # bestaande GRIB-cache hergebruiken
         'harmonie':   ('cumul', 'native'),
+        'native_render': True,
+        'dpi': 180, 'video_width': 1440, 'video_crf': 18,
     },
     'radar': {
-        'titel':      'gesimuleerde radar',
+        'titel':      'radarbenadering',
         'eenheid':    'dBZ',
         'soort':      'moment',
-        # V46 heeft rprate: een momentwaarde, net als een echte radarbeeld.
-        # V43 heeft in de open data alleen de uursom, en een uurgemiddelde vlakt
-        # buienkernen af — gemeten op één V46-run scheelt dat 5 tot 9 dBZ in de
-        # piek en een factor 67 in het aantal pixels boven 45 dBZ. Benoem dat in
-        # de kop, anders lijkt een V43-kaart een zwakke verwachting terwijl het
-        # de methode is.
-        'subtitel':   'modelneerslag omgerekend naar dBZ',
-        'subtitel_model': {
-            'harmonie':   'uit rprate — momentwaarde',
-            'harmonie43': 'uit de uursom — kernen vlakker',
-        },
+        'subtitel':   'momentane regenintensiteit',
         'menu':       'Gesimuleerde radar',
         'levels':     RADAR_LEVELS,
         'colors':     RADAR_COLORS,
@@ -262,8 +254,9 @@ VARS = {
         'label_fmt':  _fmt_heel,
         'show_labels': False,
         'dpi':        150,
-        'video_width': 1080,
-        'video_bitrate': '1800k',
+        'video_width': 1440,
+        'video_crf': 18,
+        'native_render': True,
         # Niet bij ECMWF aanbieden: dit product gebruikt het rechtstreekse
         # HARMONIE-rprate-veld, niet een uursom of een geïnterpoleerde schatting.
         'ecmwf_params': [],
@@ -381,6 +374,22 @@ PUNTEN = [
 ]
 
 
+VARS['uursom'] = {
+    **VARS['neerslag'],
+    'titel': 'neerslag per uur', 'menu': 'Neerslag per uur',
+    'soort': 'interval', 'subtitel': 'som over het voorgaande uur',
+    'hourly_interval': True, 'harmonie': ('neerslag', 'native'),
+    'ecmwf_params': [], 'label_min': 0.5,
+    'levels': [0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 75, 100],
+    'colors': ['#e1f7ff', '#bceeff', '#8bdafa', '#42bdf0', '#009bdc',
+               '#00b528', '#52e619', '#9afa00', '#e3f600', '#fff000',
+               '#ffd000', '#ffa100', '#ff6900', '#f52b00', '#c80026',
+               '#aa559f', '#dfacd8'],
+    'cb_ticks': [0.1, 0.5, 1, 2, 3, 5, 10, 20, 50, 100],
+    'label_d_lat': 0.18, 'label_d_lon': 0.29,
+}
+
+
 def build_cmap(var):
     cmap = ListedColormap(var['colors'])
     cmap.set_over(var['over'])
@@ -442,6 +451,9 @@ def crop_and_upsample(lats, lons, field, extent, interp_step):
     field_c = field[np.ix_(lat_mask, lon_mask)]
     if lats_c[0] > lats_c[-1]:                       # aflopend → oplopend
         lats_c, field_c = lats_c[::-1], field_c[::-1, :]
+
+    if interp_step is None:
+        return lats_c, lons_c, field_c
 
     interp = RegularGridInterpolator((lats_c, lons_c), field_c,
                                     method='linear', bounds_error=False, fill_value=np.nan)
@@ -690,7 +702,7 @@ def _harmonie_veld(kubus, var_naam):
     voor de uint8-gecodeerde velden. De uint8-schaal is er al af (zie
     harmonie_fields), dus hier alleen nog de eenheid.
     """
-    if var_naam == 'neerslag':
+    if var_naam in ('neerslag', 'uursom'):
         return kubus                               # cumul staat al in mm
     if var_naam == 'radar':
         # Beide pijplijnen rekenen zelf al met Marshall-Palmer naar dBZ en
@@ -903,7 +915,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     extent = cfg['extent']
     cmap, norm = build_cmap(var)
     lats_f, lons_f, tp = crop_and_upsample(lats, lons, veld_ruw, extent,
-                                           cfg['interp_step'])
+                                           None if var.get('native_render') and
+                                           is_harmonie(model_id) else cfg['interp_step'])
     wind_u = wind_v = None
     if vector_ruw is not None:
         _, _, wind_u = crop_and_upsample(lats, lons, vector_ruw[0], extent,
@@ -1019,6 +1032,10 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     # Bij een oplopende som staat "vanaf de run tot X"; bij andere velden de
     # geldigheidstijd.
     ondertitel = (var.get('subtitel_model') or {}).get(model_id) or var['subtitel']
+    if var.get('hourly_interval'):
+        start_t = lokale_tijd(valid - timedelta(hours=1)) if lokaal else valid - timedelta(hours=1)
+        end_t = lokale_tijd(valid) if lokaal else valid
+        ondertitel = f'voorgaande uur: {start_t:%H:%M}–{end_t:%H:%M} ' + ('LT' if lokaal else 'UTC')
     kop2 = f'{var["titel"]} ({var["eenheid"]}) — ' + (
         f'vanaf {fmt_valid(run, lokaal)}' if var['soort'] == 'som' else ondertitel)
     fig.text(0.014, van_boven(0.477), kop2, fontsize=10.5, va='top', color='#444444')
@@ -1081,15 +1098,16 @@ MP4_FPS = 6
 MP4_BITRATE = '650k'
 
 
-def build_mp4(frame_glob, outfile, fps=MP4_FPS, width=792, bitrate=MP4_BITRATE):
+def build_mp4(frame_glob, outfile, fps=MP4_FPS, width=792, bitrate=MP4_BITRATE, crf=None):
     if not shutil.which('ffmpeg'):
         print('  ffmpeg niet gevonden — mp4 overgeslagen')
         return
     cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-framerate', str(fps),
            '-pattern_type', 'glob', '-i', frame_glob,
-           '-vf', f'scale={width}:-2',
+           '-vf', f'scale={width}:-2:flags=lanczos',
            '-c:v', 'libx264', '-preset', 'medium', '-pix_fmt', 'yuv420p',
-           '-b:v', bitrate, '-maxrate', bitrate, '-bufsize', bitrate,
+           *(['-crf', str(crf)] if crf is not None else
+             ['-b:v', bitrate, '-maxrate', bitrate, '-bufsize', bitrate]),
            '-movflags', '+faststart', outfile]
     subprocess.run(cmd, check=True)
     print(f'  {os.path.basename(outfile)}  ({os.path.getsize(outfile)/1e6:.1f} MB)')
@@ -1099,7 +1117,15 @@ def build_mp4(frame_glob, outfile, fps=MP4_FPS, width=792, bitrate=MP4_BITRATE):
 
 def bouw_veld(args, cfg, var_naam, bron_dir=None):
     """Eén model × één veld: frames, mp4, eindkaart en meta."""
-    var = VARS[var_naam]
+    var = dict(VARS[var_naam])
+    if args.model == 'ecmwf':
+        for option in ('dpi', 'video_width', 'video_crf'):
+            var.pop(option, None)
+    if var_naam == 'radar' and args.model == 'harmonie43' and not args.demo:
+        _, source_meta = harmonie_meta(args.model, bron_dir)
+        source = source_meta['parameters']['radar']
+        if source.get('source_method') != 'instantaneous_rain_marshall_palmer_v1':
+            var['subtitel'] = 'uit uursom · uurgemiddelde radarbenadering'
     prefix = prefix_van(args.model, var_naam)
 
     frame_dir = os.path.join(FRAME_ROOT, args.model, var_naam)
@@ -1112,7 +1138,7 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
     # Toon de nominale modelresolutie in elke kaartkop.
     model_label = cfg['label']
     if harmonie:
-        model_label = f'{model_label} 2,5 km'
+        model_label = f'{model_label} 2 km'
     if args.demo:
         if harmonie:
             steps = list(range(1, min(args.max_step or HARMONIE_MAX, HARMONIE_MAX) + 1))
@@ -1195,7 +1221,8 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
         build_mp4(os.path.join(frame_dir, f'{var_naam}_{run_tag}_*.png'),
                   os.path.join(OUTPUT_DIR, f'{prefix}_{run_tag}{suffix}.mp4'),
                   width=var.get('video_width', 792),
-                  bitrate=var.get('video_bitrate', MP4_BITRATE))
+                  bitrate=var.get('video_bitrate', MP4_BITRATE),
+                  crf=var.get('video_crf'))
 
     # laatste stap ook als losse kaart: bij de som is dat het totaal, bij de
     # andere velden het verste beeld van de reeks
@@ -1220,6 +1247,9 @@ def bouw_veld(args, cfg, var_naam, bron_dir=None):
             'leads': leads,
             'frames': len(data),
             'video_fps': MP4_FPS,
+            'video_width': var.get('video_width', 792),
+            'omschrijving': var.get('subtitel'),
+            'roosterweergave': 'native' if harmonie and var.get('native_render') else 'linear',
             'gemaakt': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
             'bestanden': {
                 'mp4': f'{prefix}_{run_tag}.mp4',

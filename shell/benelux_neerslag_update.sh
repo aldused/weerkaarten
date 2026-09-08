@@ -52,7 +52,7 @@ bouw_model() {
   local MODEL="$1" ACHTERVOEGSEL="$2" MARKER="$3"
   local RUN GEDAAN VELD PREFIX MP4 PNG META EXTRA=()
   local MODEL_VELDEN=("${VELDEN[@]}")
-  case "$MODEL" in harmonie*) MODEL_VELDEN+=(radar zicht) ;; esac
+  case "$MODEL" in harmonie*) MODEL_VELDEN+=(radar zicht uursom) ;; esac
 
   RUN="$("$PY" "$GENERATOR" --model "$MODEL" --latest-run 2>/dev/null | tail -1)"
   if ! [[ "$RUN" =~ ^[0-9]{10}$ ]]; then
@@ -113,8 +113,8 @@ STATUS=0
 # HARMONIE is de goedkope, snel verversende reeks (~100 s per run): die eerst,
 # zodat een lange ECMWF-bouw hem nooit een uur laat wachten. V46 blijft de
 # standaard op de pagina, V43 loopt ernaast door als V46 stilvalt.
-bouw_model harmonie   "_harmonie"   "$ROOT/.benelux_neerslag_harmonie46_x_v13_radarkop_run" || STATUS=1
-bouw_model harmonie43 "_harmonie43" "$ROOT/.benelux_neerslag_harmonie43_x_v2_radarkop_run" || STATUS=1
+bouw_model harmonie   "_harmonie"   "$ROOT/.benelux_neerslag_harmonie46_x_v14_native_run" || STATUS=1
+bouw_model harmonie43 "_harmonie43" "$ROOT/.benelux_neerslag_harmonie43_x_v3_instant_run" || STATUS=1
 bouw_model ecmwf      ""            "$ROOT/.benelux_neerslag_ecmwf_144_x_v3_windrichting_run" || STATUS=1
 
 # Twee dagen GRIB-cache bewaren blijft genoeg voor een herbouw zonder opnieuw

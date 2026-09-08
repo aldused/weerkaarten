@@ -10,6 +10,8 @@ echo "$(date): Harmonie update gestart"
 import os, json, struct, time, tempfile, tarfile
 import numpy as np
 import eccodes
+from scripts.harmonie_precip import (grib1_precip_kind, rain_rate_mm_h,
+    rain_rate_to_dbz, hourly_from_accumulation, RADAR_METHOD)
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -59,7 +61,8 @@ except:
 if os.path.exists('harmonie_canvas_meta.json'):
     with open('harmonie_canvas_meta.json') as mf:
         old_meta = json.load(mf)
-    if old_meta.get('run_utc') == run_utc_check:
+    if (old_meta.get('run_utc') == run_utc_check and
+            old_meta.get('parameters',{}).get('radar',{}).get('source_method') == RADAR_METHOD):
         print(f'   Run {run_utc_check} al verwerkt, skip.')
         raise SystemExit(0)
 
@@ -87,6 +90,10 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     grib_files = sorted([os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith('_GB')])
     print(f'   {len(grib_files)} bestanden')
 
+    leads = [int(os.path.basename(f).split('_')[-2]) for f in grib_files]
+    if leads != list(range(0, 6100, 100)):
+        raise ValueError('HARMONIE: verwacht alle uurstappen +0 tot +60')
+
     # Parse run
     parts = filename.replace('.tar','').split('_')
     run_str_raw = parts[-1] if parts else ''
@@ -100,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     TEMP_LEVELS = [2, 50, 100, 200, 300]
     WIND_LEVELS = [10, 50, 100, 200, 300]
 
-    all_data = {k: [] for k in ['temp','cum','hoog','mid','laag','uw','vw','ug','vg','zicht','rv','druk','dauwpunt','wolkenbasis']}
+    all_data = {k: [] for k in ['temp','cum','regenrate','hoog','mid','laag','uw','vw','ug','vg','zicht','rv','druk','dauwpunt','wolkenbasis']}
     all_stral_cum = []
     all_stral_direct = []
     all_temp_prof = {l: [] for l in TEMP_LEVELS}
@@ -108,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     lats = lons = None; nj = ni = 0
 
     for gf in grib_files:
-        temp=cum=hoog=mid=laag=uw=vw=ug=vg=zicht=druk=rv=dp=stral=stral_direct=basis=None
+        temp=cum=regenrate=hoog=mid=laag=uw=vw=ug=vg=zicht=druk=rv=dp=stral=stral_direct=basis=None
         druk_n=0
         temps_p={}; u_w_p={}; v_w_p={}
         with open(gf,'rb') as fh:
@@ -123,7 +130,8 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
                 elif ind==11 and lvl in TEMP_LEVELS: temps_p[lvl]=vals-273.15
                 elif ind==17 and lvl==2: dp=vals-273.15
                 elif ind==52 and lvl==2: rv=vals*100
-                elif ind==61: cum=vals
+                elif grib1_precip_kind(ind, eccodes.codes_get_long(msgid,'indicatorOfTypeOfLevel'), lvl, eccodes.codes_get_long(msgid,'timeRangeIndicator')) == 'cum': cum=vals
+                elif grib1_precip_kind(ind, eccodes.codes_get_long(msgid,'indicatorOfTypeOfLevel'), lvl, eccodes.codes_get_long(msgid,'timeRangeIndicator')) == 'regenrate': regenrate=rain_rate_mm_h(vals)
                 elif ind==75: hoog=vals
                 elif ind==74: mid=vals
                 elif ind==73: laag=vals
@@ -150,6 +158,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
                 eccodes.codes_release(msgid)
         z=np.zeros((nj,ni))
         all_data['temp'].append(temp); all_data['cum'].append(cum)
+        all_data['regenrate'].append(regenrate)
         all_data['hoog'].append(hoog); all_data['mid'].append(mid); all_data['laag'].append(laag)
         all_data['uw'].append(uw); all_data['vw'].append(vw)
         all_data['ug'].append(ug); all_data['vg'].append(vg)
@@ -173,7 +182,9 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         for l in TEMP_LEVELS: all_temp_prof[l]=[d[::-1,:] for d in all_temp_prof[l]]
         for l in WIND_LEVELS: all_wspd_prof[l]=[d[::-1,:] for d in all_wspd_prof[l]]
 
-    hourly_precip=[np.maximum(all_data['cum'][i]-all_data['cum'][i-1],0) for i in range(1,len(all_data['cum']))]
+    hourly_precip=hourly_from_accumulation(all_data['cum'])
+    if any(r is None for r in all_data['regenrate'][1:]):
+        raise ValueError('Momentane regenintensiteit ontbreekt; radar niet publiceren')
     hourly_stral=[(all_stral_cum[i]-all_stral_cum[i-1])/3600 for i in range(1,len(all_stral_cum))]
     hourly_stral=[np.maximum(s,0) for s in hourly_stral]
     has_direct=any(d is not None for d in all_stral_direct[1:])
@@ -275,12 +286,9 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
         _cumul_acc = _p.copy() if _cumul_acc is None else _cumul_acc + _p
         _cumul_list.append(_cumul_acc)
     write_bin_u8hr('harmonie_data_cumul.bin', _cumul_list, 32, 3)
-    # Pseudo-radar: Marshall-Palmer Z=200*R^1.6 op de uursom (KNMI open data
-    # bevat geen gesimuleerde reflectiviteit; dit is de eerlijke benadering)
-    _pseudo_dbz = [np.where(_p >= 0.05,
-                            10*np.log10(np.maximum(200*np.maximum(_p,0.001)**1.6, 1)), 0)
-                   for _p in hourly_precip]
-    write_bin_u8hr('harmonie_data_radar.bin', _pseudo_dbz, 3, 1)
+    # GRIB1 181 / 105 / 0 / TRI 0: momentane regenflux, niet de uursom.
+    _dbz = [rain_rate_to_dbz(r) for r in all_data['regenrate'][1:]]
+    write_bin_u8hr('harmonie_data_radar.bin', _dbz, 3, 1)
     write_bin('harmonie_data_temp.bin', all_data['temp'][1:])
     write_bin('harmonie_data_bewolking.bin', list(zip(all_data['hoog'][1:],all_data['mid'][1:],all_data['laag'][1:])), 3)
     write_bin('harmonie_data_wind.bin', list(zip(all_data['uw'][1:],all_data['vw'][1:])), 2)
@@ -350,7 +358,9 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
           'grid':{'n_lat':n_lat_hr,'n_lon':n_lon_hr,
             'lat_min':float(lats[lat_idx_all[0]]),'lat_max':float(lats[lat_idx_all[-1]]),
             'lon_min':float(lons[lon_idx_all[0]]),'lon_max':float(lons[lon_idx_all[-1]])}},
-        'radar':{'file':'harmonie_data_radar.bin','components':1,'label':'Radar afgeleid uit uursom (Marshall-Palmer dBZ)',
+        'radar':{'file':'harmonie_data_radar.bin','components':1,'label':'Radarproxy uit momentane regenintensiteit (dBZ)',
+          'source_method':RADAR_METHOD,'source_parameter':'GRIB1 181/105/0 TRI=0',
+          'source_units':'kg m-2 s-1','zr_a':200,'zr_b':1.6,
           'dtype':'u8sqrt','scale':3,'power':1,
           'grid':{'n_lat':n_lat_hr,'n_lon':n_lon_hr,
             'lat_min':float(lats[lat_idx_all[0]]),'lat_max':float(lats[lat_idx_all[-1]]),

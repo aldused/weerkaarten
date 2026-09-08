@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 import eccodes
 import numpy as np
 import requests
+from harmonie_precip import rain_rate_mm_h, rain_rate_to_dbz, hourly_from_accumulation, RADAR_METHOD
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -103,6 +104,8 @@ def grib_files(directory: Path) -> list[Path]:
         for path in directory.rglob("*")
         if path.is_file() and path.name.endswith(("_GB", ".grib", ".grib2"))
     )
+    if [int(p.name.split("_")[-2]) for p in found] != list(range(0, 6100, 100)):
+        raise RuntimeError("Cy46: verwacht alle uurstappen +0 tot +60")
     if len(found) < 2:
         raise RuntimeError(f"Onvoldoende Cy46-tijdstappen: {len(found)}")
     return found
@@ -168,7 +171,7 @@ def read_steps(files: list[Path]):
                     elif short == "rprate":
                         # kg m-2 s-1 is voor vloeibaar water gelijk aan mm/s.
                         # Bewaar als mm/u voor de gesimuleerde radar.
-                        fields["regenrate"] = np.maximum(values * 3600.0, 0)
+                        fields["regenrate"] = rain_rate_mm_h(values)
                     elif short == "hcc":
                         fields["hoog"] = values / 100.0
                     elif short == "mcc":
@@ -269,10 +272,7 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
         outputs.append(path)
         return path
 
-    hourly_precip = [
-        np.maximum(series["cum"][idx] - series["cum"][idx - 1], 0)
-        for idx in range(1, len(series["cum"]))
-    ]
+    hourly_precip = hourly_from_accumulation(series["cum"])
     hourly_radiation = [
         np.maximum((series["straling"][idx] - series["straling"][idx - 1]) / 3600.0, 0)
         for idx in range(1, len(series["straling"]))
@@ -300,11 +300,9 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     # waardoor 30 mm/u als 30 dBZ werd geverfd en alles onder 4 mm/u onder de
     # laagste dBZ-klasse verdween: het radarpaneel van V46 bleef leeg. Nu
     # dezelfde Marshall-Palmer-omrekening als bij V43 en AROME.
-    _regenrate = [np.nan_to_num(v, nan=0.0) for v in series["regenrate"][1:]]
-    _dbz = [np.where(r >= 0.05,
-                     10 * np.log10(np.maximum(200 * np.maximum(r, 0.001) ** 1.6, 1)),
-                     0.0)
-            for r in _regenrate]
+    if any(r is None for r in series["regenrate"][1:]):
+        raise ValueError('Momentane regenintensiteit ontbreekt; radar niet publiceren')
+    _dbz = [rain_rate_to_dbz(r) for r in series["regenrate"][1:]]
     write_u8sqrt("regenrate", _dbz, 3, 1)
     accum = []
     total = None
@@ -345,7 +343,7 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     base_grid = grid()
     params = {
         "neerslag": {"file": f"{PREFIX}_data_neerslag.bin", "components": 1, "label": "Uurlijkse neerslag (mm/u)", "dtype": "u8sqrt", "scale": 50, "power": 3, "grid": precip_grid},
-        "radar": {"file": f"{PREFIX}_data_regenrate.bin", "components": 1, "label": "Radar afgeleid uit rprate (Marshall-Palmer dBZ)", "dtype": "u8sqrt", "scale": 3, "power": 1, "grid": precip_grid},
+        "radar": {"file": f"{PREFIX}_data_regenrate.bin", "components": 1, "label": "Radarproxy uit momentane regenintensiteit (dBZ)", "source_method": RADAR_METHOD, "source_parameter": "rprate", "source_units": "kg m-2 s-1", "zr_a": 200, "zr_b": 1.6, "dtype": "u8sqrt", "scale": 3, "power": 1, "grid": precip_grid},
         "cumul": {"file": f"{PREFIX}_data_cumul.bin", "components": 1, "label": "Cumulatieve neerslag (mm)", "dtype": "u8sqrt", "scale": 32, "power": 3, "grid": precip_grid},
         "temp": {"file": f"{PREFIX}_data_temp.bin", "components": 1, "label": "Temperatuur 2m (°C)"},
         "bewolking": {"file": f"{PREFIX}_data_bewolking.bin", "components": 3, "label": "Bewolking (hoog/midden/laag)"},
@@ -390,7 +388,8 @@ def main() -> int:
     run = run_datetime(filename)
     if META_FILE.exists() and not args.force:
         old = json.loads(META_FILE.read_text(encoding="utf-8"))
-        if old.get("run_utc") == run.strftime("%Y-%m-%dT%H:%M:%SZ"):
+        if (old.get("run_utc") == run.strftime("%Y-%m-%dT%H:%M:%SZ") and
+                old.get("parameters", {}).get("radar", {}).get("source_method") == RADAR_METHOD):
             print(f"HARMONIE 46 {old['run_utc']} is al verwerkt")
             return 10
 
