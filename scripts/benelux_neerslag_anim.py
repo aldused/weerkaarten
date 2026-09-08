@@ -384,13 +384,17 @@ VARS['uursom'] = {
     'titel': 'neerslag per uur', 'menu': 'Neerslag per uur',
     'soort': 'interval', 'subtitel': 'som over het voorgaande uur',
     'hourly_interval': True, 'harmonie': ('neerslag', 'native'),
-    'ecmwf_params': [], 'label_min': 0.5,
-    'levels': [0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 75, 100],
-    'colors': ['#e1f7ff', '#bceeff', '#8bdafa', '#42bdf0', '#009bdc',
-               '#00b528', '#52e619', '#9afa00', '#e3f600', '#fff000',
-               '#ffd000', '#ffa100', '#ff6900', '#f52b00', '#c80026',
-               '#aa559f', '#dfacd8'],
-    'cb_ticks': [0.1, 0.5, 1, 2, 3, 5, 10, 20, 50, 100],
+    # Dezelfde mm-klassen als het vierluik: blauw <3, groen vanaf 3,
+    # geel vanaf 7 en oranje vanaf 10 mm in het voorgaande uur.
+    'ecmwf_params': [], 'label_min': 0.2,
+    'levels': [0.03, 0.06, 0.1, 0.3, 0.5, 1, 2, 3, 5, 7, 10, 15, 25, 40, 50, 75, 100],
+    'colors': ['#def0fc', '#c4e2f7', '#a2d0f0', '#74b6e4', '#4696d4',
+               '#1e6eba', '#0c4892', '#30a82a', '#8cd414', '#f8e800',
+               '#ffa800', '#ff5400', '#dd0000', '#990000', '#770088', '#cc44cc'],
+    'over': '#ffaacc',
+    'cb_ticks': [0.03, 0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 25, 50, 100],
+    'render_cells': True, 'label_fixed_points': False, 'label_white': True,
+    'label_fmt': lambda v: f'{v:.1f}',
     'label_d_lat': 0.18, 'label_d_lon': 0.29,
 }
 
@@ -870,7 +874,7 @@ def _bij_vast_punt(lo, la):
 
 
 def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None,
-               d_lat=None, d_lon=None):
+               d_lat=None, d_lon=None, fixed_points=True, snap_to_grid=False):
     """Waardecijfers op een regelmatig raster (in graden).
 
     drempel=None toont ook lage waarden; voor de neerslagsom staat er een
@@ -886,11 +890,11 @@ def label_grid(lats_f, lons_f, field, extent, drempel=None, bovengrens=None,
             i = int(np.argmin(np.abs(lats_f - la)))
             j = int(np.argmin(np.abs(lons_f - lo)))
             v = field[i, j]
-            if _bij_vast_punt(lo, la):
+            if fixed_points and _bij_vast_punt(lo, la):
                 continue
             if (np.isfinite(v) and (drempel is None or v >= drempel) and
                     (bovengrens is None or v <= bovengrens)):
-                yield lo, la, v, i, j
+                yield (lons_f[j] if snap_to_grid else lo), (lats_f[i] if snap_to_grid else la), v, i, j
 
 
 _PROJ_GRID = {}
@@ -943,8 +947,13 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
 
     uiteinden = 'both' if var['under'] != '#ffffff' else 'max'
     # let op: px/py staan al in projectiecoordinaten, dus geen transform= hier
-    cf = ax.contourf(px, py, tp, levels=var['levels'], cmap=cmap, norm=norm,
-                     extend=uiteinden, zorder=1)
+    if var.get('render_cells'):
+        # Elke modelcel krijgt exact zijn eigen klasse; geen contourinterpolatie.
+        cf = ax.pcolormesh(px, py, tp, cmap=cmap, norm=norm, shading='nearest',
+                          antialiased=False, edgecolors='none', zorder=1)
+    else:
+        cf = ax.contourf(px, py, tp, levels=var['levels'], cmap=cmap, norm=norm,
+                         extend=uiteinden, zorder=1)
 
     ax.add_feature(cfeature.OCEAN.with_scale('10m'), facecolor='#eef2f5', zorder=0)
     ax.add_feature(cfeature.LAND.with_scale('10m'), facecolor='#ffffff', zorder=0)
@@ -966,9 +975,12 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     if var.get('show_labels', True):
         for lo, la, v, i, j in label_grid(
                 lats_f, lons_f, tp, extent, var['label_min'], var.get('label_max'),
-                var.get('label_d_lat'), var.get('label_d_lon')):
+                var.get('label_d_lat'), var.get('label_d_lon'),
+                fixed_points=var.get('label_fixed_points', True),
+                snap_to_grid=var.get('render_cells', False)):
             txt = var['label_fmt'](v)
-            inkt, rand = _tekst_op(_vlakkleur(var, v))
+            inkt, rand = (('#ffffff', '#17354de6') if var.get('label_white')
+                          else _tekst_op(_vlakkleur(var, v)))
             effecten = [pe.withStroke(linewidth=LABEL_STROKE, foreground=rand)]
             cijfer_lat = la + 0.035 if wind_u is not None else la
             ax.text(lo, cijfer_lat, txt, transform=PROJ_PC, zorder=6,
@@ -985,7 +997,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     # blijft. Zelfde lettergrootte als het raster — twee maten door elkaar oogde
     # rommelig. Dezelfde ondergrens geldt als voor het raster: bij neerslag dus
     # geen 0 mm.
-    for naam, la, lo in (PUNTEN if var.get('show_labels', True) else []):
+    for naam, la, lo in (PUNTEN if var.get('show_labels', True) and
+                         var.get('label_fixed_points', True) else []):
         if not (extent[0] + 0.1 < lo < extent[1] - 0.1 and
                 extent[2] + 0.1 < la < extent[3] - 0.1):
             continue
@@ -1058,7 +1071,8 @@ def plot_frame(lead, run, valid, lats, lons, veld_ruw, outfile, cfg, var, model_
     cb_h = (MAP_H_IN - 0.95) / fig_h
     cax = fig.add_axes([cb_x, cb_y0, 0.016, cb_h])
     niveaus = var['levels']
-    cb = fig.colorbar(cf, cax=cax, orientation='vertical', extend=uiteinden)
+    cb = fig.colorbar(cf, cax=cax, orientation='vertical', extend=uiteinden,
+                      boundaries=niveaus)
     if var['cb_klassen']:
         # Kleurvlak = één windkracht, dus het klassenummer hoort midden in het
         # vlak te staan, niet op de grens ertussen.
