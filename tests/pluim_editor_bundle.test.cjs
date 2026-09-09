@@ -96,7 +96,7 @@ assert.match(national, /y:P-54,width:210,height:54/, 'landelijke editor: tempera
 assert.match(national, /!\["plume","knmi"\]\.includes\(Vg\)&&tn\.length>0/, 'landelijke editor: recente symbolen blijven zichtbaar bij pluim of KNMI-metingen');
 assert.match(national, /!\["plume","knmi"\]\.includes\(Vg\)&&r\.jsxs\("div",\{style:\{display:"flex",alignItems:"center",gap:5,margin:"5px 0 6px"/, 'landelijke editor: symboolfilters blijven zichtbaar bij pluim of KNMI-metingen');
 assert.match(national, /\["plume","knmi"\]\.includes\(Vg\)\?null:K==="alles"\?Ol\.map/, 'landelijke editor: symbolencatalogus blijft zichtbaar bij pluim of KNMI-metingen');
-assert.match(national, /!\["plume","knmi"\]\.includes\(Vg\)&&r\.jsxs\("div",\{style:\{background:"#1a2436",borderBottom:[\s\S]{0,500}children:"TOEVOEGEN"/, 'landelijke editor: algemene toevoegbalk blijft zichtbaar bij pluim of KNMI-metingen');
+assert.match(national, /!\["plume","knmi"\]\.includes\(Vg\)&&r\.jsxs\("div",\{(?:"data-studio-section":"tools",)?style:\{background:"#1a2436",borderBottom:[\s\S]{0,500}children:"TOEVOEGEN"/, 'landelijke editor: algemene toevoegbalk blijft zichtbaar bij pluim of KNMI-metingen');
 assert.doesNotMatch(national, /(?:!\["plume","knmi"\]\.includes\(Vg\)&&){2}/, 'landelijke editor: zichtbaarheidsguard is dubbel gepatcht');
 assert.doesNotMatch(national, /(?:\["plume","knmi"\]\.includes\(Vg\)\?null:){2}/, 'landelijke editor: catalogusguard is dubbel gepatcht');
 assert.match(national, /children:"TOEVOEGEN"/, 'landelijke editor: onderste werkbalk heeft geen duidelijke functieaanduiding');
@@ -136,7 +136,7 @@ assert.match(regional, /data-weerlab-hidden-mode-nav/, 'regionale editor: dubbel
 assert.doesNotMatch(regional, /gridTemplateColumns:"repeat\(5,minmax\(0,1fr\)\)"/, 'regionale editor: vijfvoudige interne navigatie wordt nog opgebouwd');
 
 const helperStart = national.indexOf('async function weerlabPlumeJson');
-const helperEnd = national.indexOf('let lt=1;function Ah()', helperStart);
+const helperEnd = national.indexOf('let lt=1;', helperStart);
 assert.ok(helperStart >= 0 && helperEnd > helperStart, 'landelijke editor: pluimhelpers zijn niet isoleerbaar');
 const plumeHelpers = new Function(
   `${national.slice(helperStart, helperEnd)};return {document:weerlabPlumeDocument,panelKeys:weerlabPlumePanelKeys}`,
