@@ -46,6 +46,8 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
 [data-theme="dark"] .mini-kaart { background:#111a2e; }
 [data-theme="dark"] .mini-header { background:#0e1629; }
 </style>
+<link rel="stylesheet" href="mosmix-maps.css?v=20260909-1">
+<script src="mosmix-core.js?v=20260909-1"></script>
 </head>
 <body>
 
@@ -54,6 +56,7 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
   <p id="hdr-sub">Laden&hellip;</p>
 </div>
 <div class="toolbar">
+  <p>Gemiddelde wind (Bft) en gemiddelde richting per volledig uurvak. Nacht = volgende kalenderdatum; grijs = geen complete gegevens.</p>
   <div class="dagdeel-btns">
     <button class="btn-dd actief" data-dd="ochtend">Ochtend 06&ndash;12</button>
     <button class="btn-dd" data-dd="middag">Middag 12&ndash;18</button>
@@ -158,50 +161,10 @@ function bouwBasemap(svg, provincies){
 
 // Uurlijks index
 let uurlijksIdx=null;
-function bouwUurlijksIdx(uurlijks){
-  uurlijksIdx={};
-  for(const [naam,s] of Object.entries(uurlijks.data||{})){
-    const m=new Map();
-    const tijden=s.tijden||[], ff=s.FF||[], dd=s.DD||[];
-    for(let i=0;i<tijden.length;i++) m.set(tijden[i],{ff:ff[i]??null, dd:dd[i]??null});
-    uurlijksIdx[naam]=m;
-  }
-}
-
-// Circulair gemiddelde wind via uurlijks over [startUur, eindUur]
-function uurlijksGemWind(naam, datum, startUur, eindUur){
-  const m=uurlijksIdx?.[naam]; if(!m) return {ff:null,dir:null};
-  let sumSin=0,sumCos=0,sumFF=0,n=0;
-  for(let h=startUur;h<=eindUur;h++){
-    const key=datum+"T"+String(h).padStart(2,"0")+":00";
-    const v=m.get(key);
-    if(v && v.ff!=null && v.dd!=null){
-      const rad=v.dd*Math.PI/180;
-      sumSin+=Math.sin(rad); sumCos+=Math.cos(rad);
-      sumFF+=v.ff; n++;
-    }
-  }
-  if(!n) return {ff:null,dir:null};
-  return {ff:sumFF/n, dir:(Math.atan2(sumSin/n,sumCos/n)*180/Math.PI+360)%360};
-}
-
-// Wind {ff km/h, dir graden} per dagdeel
-function dagdeelWind(naam, dag, dagdeel, mosmix){
-  const dd=mosmix.data[dag]||{};
-  if(dagdeel==="ochtend") return {ff:dd.FF_O?.[naam]??null, dir:dd.DD_O?.[naam]??null};
-  if(dagdeel==="middag")  return {ff:dd.FF_M?.[naam]??null, dir:dd.DD_M?.[naam]??null};
-  if(dagdeel==="avond")   return uurlijksGemWind(naam, dag, 18, 23);
-  if(dagdeel==="nacht"){
-    const idx=mosmix.dagen.indexOf(dag);
-    const volgendeDag=idx>=0&&idx+1<mosmix.dagen.length?mosmix.dagen[idx+1]:null;
-    if(volgendeDag){
-      const dd2=mosmix.data[volgendeDag]||{};
-      const ff=dd2.FF_N?.[naam]??null, dir=dd2.DD_N?.[naam]??null;
-      if(ff!=null) return {ff,dir};
-    }
-    return uurlijksGemWind(naam, volgendeDag||dag, 0, 5);
-  }
-  return {ff:null,dir:null};
+function bouwUurlijksIdx(uurlijks){uurlijksIdx=MosmixCore.hourlyIndex(uurlijks);}
+function dagdeelWind(naam, dag, dagdeel){
+  const start={ochtend:6,middag:12,avond:18,nacht:0}[dagdeel];
+  return MosmixCore.meanWind(uurlijksIdx,naam,dagdeel==='nacht'?MosmixCore.nextDay(dag):dag,start,start+5);
 }
 
 const DD_LABEL={ochtend:"06\u201312", middag:"12\u201318", avond:"18\u201300", nacht:"00\u201306"};
@@ -250,9 +213,10 @@ function bouwGrid(){
   const grid=document.getElementById("kaarten-grid");
   grid.innerHTML="";
   mosmixGlobal.dagen.slice(0,9).forEach(dag=>{
-    const d=new Date(dag+"T12:00:00");
+    const kaartDag=huidigDagdeel==='nacht'?MosmixCore.nextDay(dag):dag;
+    const d=new Date(kaartDag+"T12:00:00");
     const dagNaam=NL_DAGEN[d.getDay()];
-    const dagDatum=dag.slice(5).replace("-","/");
+    const dagDatum=kaartDag.slice(5).replace("-","/");
     const wrap=document.createElement("div");
     wrap.className="mini-kaart";
     wrap.innerHTML="<div class=\"mini-header\"><span class=\"mini-dag-naam\">"+dagNaam+"</span><span class=\"mini-dag-datum\">"+dagDatum+" \u00b7 "+DD_LABEL[huidigDagdeel]+"</span></div>";
@@ -285,10 +249,11 @@ document.querySelectorAll(".btn-dd").forEach(btn=>{
 });
 
 Promise.all([
-  fetch("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()).then(r=>r.json()),
-  fetch("https://data.weerlab.nl/mosmix_uurlijks_nl.json?t="+Date.now()).then(r=>r.json()),
+  MosmixCore.loadDaily("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()),
+  MosmixCore.fetchJSON("https://data.weerlab.nl/mosmix_uurlijks_nl.json?t="+Date.now()),
   fetch("nl_provincies.geojson").then(r=>r.json())
 ]).then(([mosmix, uurlijks, provincies])=>{
+  MosmixCore.assertSameRun(mosmix, uurlijks);
   mosmixGlobal=mosmix;
   provinciesGlobal=provincies;
   bouwUurlijksIdx(uurlijks);

@@ -1,6 +1,16 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
   {
+    "id": "mosmix-neerslagkans",
+    "name": "MOS/MIX · neerslagkansen",
+    "description": "Nederland · uurkansen op neerslag per drempel",
+    "category": "verwachting", "type": "kaarten", "alsoTypes": ["pluim"],
+    "section": "Nederland · MOS/MIX", "icon": "neerslag",
+    "href": "index.html#mosmix-neerslagkans", "thumbnail": null,
+    "facets": {"veld":["neerslag"],"model":["mosmix"],"gebied":["nl"],"bron":["mosmix"],"grootheid":["neerslag"],"vorm":["kaart"]},
+    "keywords": "MOSMIX MOS/MIX Nederland regen kans kansen kaarten uurkans", "restricted": false
+  },
+  {
     "id": "radar",
     "name": "Neerslagradar",
     "description": "Buien live, 5-min",
@@ -237,7 +247,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "hires4",
-    "name": "Vergelijk vier modellen",
+    "name": "Vergelijk modellen & elementen",
     "description": "Regionale en wereldmodellen naast elkaar",
     "category": "verwachting",
     "type": "kaarten",
@@ -697,12 +707,12 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "mosmix-minikaarten",
-    "name": "9-daagse weerkaarten",
-    "description": "Een weerkaart voor elke dag",
+    "name": "MOS/MIX · 9-daagse kaarten",
+    "description": "Nederland · temperatuur en wind, ook per dagdeel",
     "category": "verwachting",
-    "type": "pluim",
-    "section": "MOS/MIX",
-    "icon": "tabel",
+    "type": "kaarten",
+    "section": "Nederland · MOS/MIX",
+    "icon": "map",
     "href": "index.html#mosmix-minikaarten",
     "thumbnail": "thumbs/mosmix-minikaarten.webp",
     "facets": {
@@ -711,28 +721,39 @@ const MENU_PRODUCTS = [
       ],
       "grootheid": [
         "temp",
-        "neerslag",
-        "wind",
-        "zon"
+        "wind"
       ],
       "plaats": [
         "alle"
       ],
       "vorm": [
         "kaart"
+      ],
+      "veld": [
+        "temp",
+        "wind"
+      ],
+      "model": [
+        "mosmix"
+      ],
+      "gebied": [
+        "nl"
       ]
     },
-    "keywords": "9-daagse kaarten Kaartje per dag MOS/MIX Temperatuur Neerslag Wind Zon Heel Nederland Kaart",
-    "restricted": false
+    "keywords": "MOSMIX MOS/MIX Nederland kaarten Nederland · temperatuur en wind, ook per dagdeel",
+    "restricted": false,
+    "alsoTypes": [
+      "pluim"
+    ]
   },
   {
     "id": "mosmix-parameter",
-    "name": "Verwachting per weerelement",
-    "description": "Alle stations in één tabel",
+    "name": "MOS/MIX · kaarten per element",
+    "description": "Nederland · temperatuur, neerslag, wind, wolken en zon",
     "category": "verwachting",
-    "type": "pluim",
-    "section": "MOS/MIX",
-    "icon": "tabel",
+    "type": "kaarten",
+    "section": "Nederland · MOS/MIX",
+    "icon": "map",
     "href": "index.html#mosmix-parameter",
     "thumbnail": "thumbs/mosmix-parameter.webp",
     "facets": {
@@ -749,11 +770,28 @@ const MENU_PRODUCTS = [
         "alle"
       ],
       "vorm": [
-        "tabel"
+        "kaart"
+      ],
+      "veld": [
+        "temp",
+        "wind",
+        "neerslag",
+        "bewolking",
+        "onweer",
+        "zon"
+      ],
+      "model": [
+        "mosmix"
+      ],
+      "gebied": [
+        "nl"
       ]
     },
-    "keywords": "Per parameter Alle stations, één veld MOS/MIX Temperatuur Neerslag Wind Zon Heel Nederland Tabel",
-    "restricted": false
+    "keywords": "MOSMIX MOS/MIX Nederland kaarten Nederland · temperatuur, neerslag, wind, wolken en zon",
+    "restricted": false,
+    "alsoTypes": [
+      "pluim"
+    ]
   },
   {
     "id": "mosmix-trend",
@@ -1292,6 +1330,7 @@ const MENU_PRODUCTS = [
 ];
 const MENU_LABELS = {
   "veld": {
+    "zon": "Zon",
     "significant": "Significant",
     "temp": "Temperatuur",
     "neerslag": "Neerslag",
@@ -1305,6 +1344,7 @@ const MENU_LABELS = {
     "overzicht": "Overzicht"
   },
   "model": {
+    "mosmix": "DWD MOS/MIX",
     "harmonie": "HARMONIE 43",
     "harmonie46": "HARMONIE 46",
     "icond2": "ICON-D2",

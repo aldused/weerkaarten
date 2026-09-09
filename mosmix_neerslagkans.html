@@ -45,6 +45,8 @@
 
   .status { text-align: center; color: #64748b; padding: 8px; font-size: 12px; }
 </style>
+<link rel="stylesheet" href="mosmix-maps.css?v=20260909-1">
+<script src="mosmix-core.js?v=20260909-1"></script>
 </head>
 <body>
 
@@ -91,7 +93,7 @@
     <span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span>
   </div>
   <div class="legenda-notes">
-    Kansen komen uit DWD-MOSMIX velden <code>R101/R110/R130/R150</code> — kans dat er in een 12‑uurs venster méér dan het genoemde aantal mm valt. <b>Dag</b> = 06–18u lokaal; <b>nacht</b> = 18–06u lokaal.
+    DWD-velden <code>R101/R110/R130/R150</code> geven de kans op méér dan de gekozen hoeveelheid in <b>één uur</b>. Het dagoverzicht toont de hoogste uurkans met eindtijd op die datum, geen 12- of 24-uurskans. De andere keuzes tonen één uur: 17–18u op de gekozen datum of 05–06u op de volgende datum (Nederlandse tijd).
   </div>
 </div>
 
@@ -105,19 +107,19 @@ const latToY = lat => (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * SVG_H;
 const NL_DAGEN = ["zo","ma","di","wo","do","vr","za"];
 
 const DREMPELS = [
-  { key:"R101", drempel:0.1, naam:"≥ 0,1 mm (meetbaar)",
+  { key:"R101", drempel:0.1, naam:"> 0,1 mm (meetbaar)",
     schaal:[[0,"#f7fbff"],[10,"#deebf7"],[25,"#c6dbef"],[40,"#9ecae1"],[55,"#6baed6"],[70,"#4292c6"],[85,"#2171b5"],[100,"#08306b"]] },
-  { key:"R110", drempel:1,   naam:"≥ 1 mm",
+  { key:"R110", drempel:1,   naam:"> 1 mm",
     schaal:[[0,"#f7fcf0"],[10,"#e0f3db"],[25,"#ccebc5"],[40,"#a8ddb5"],[55,"#7bccc4"],[70,"#4eb3d3"],[85,"#2b8cbe"],[100,"#084081"]] },
-  { key:"R130", drempel:3,   naam:"≥ 3 mm",
+  { key:"R130", drempel:3,   naam:"> 3 mm",
     schaal:[[0,"#fff7ec"],[10,"#fee8c8"],[25,"#fdd49e"],[40,"#fdbb84"],[55,"#fc8d59"],[70,"#ef6548"],[85,"#d7301f"],[100,"#7f0000"]] },
-  { key:"R150", drempel:5,   naam:"≥ 5 mm (stevige bui)",
+  { key:"R150", drempel:5,   naam:"> 5 mm",
     schaal:[[0,"#fcfbfd"],[10,"#efedf5"],[25,"#dadaeb"],[40,"#bcbddc"],[55,"#9e9ac8"],[70,"#807dba"],[85,"#6a51a3"],[100,"#3f007d"]] },
 ];
 const VENSTERS = [
-  { key:"T", naam:"Totaal (24u)" },
-  { key:"D", naam:"Dag 06–18u" },
-  { key:"N", naam:"Nacht 18–06u" },
+  { key:"T", naam:"Hoogste uurkans" },
+  { key:"D", naam:"Uur 17–18u" },
+  { key:"N", naam:"Volgende datum 05–06u" },
 ];
 
 let mosmixData=null, provincies=null;
@@ -257,7 +259,8 @@ function maakDagBtns(){
   const dagen = mosmixData?.dagen || [];
   dagen.forEach((dag, i) => {
     const d = new Date(dag+"T12:00:00");
-    const lbl = i===0 ? "Vandaag" : i===1 ? "Morgen" : NL_DAGEN[d.getDay()] + " " + d.getDate() + "/" + (d.getMonth()+1);
+    const vandaag=MosmixCore.dayKey();
+    const lbl = dag===vandaag ? "Vandaag" : dag===MosmixCore.nextDay(vandaag) ? "Morgen" : NL_DAGEN[d.getDay()] + " " + d.getDate() + "/" + (d.getMonth()+1);
     const btn = document.createElement("button");
     btn.className = "btn" + (i === keuzeDag ? " actief":"");
     btn.textContent = lbl;
@@ -295,7 +298,7 @@ function update(){
   const dagData = dagKey ? mosmixData.data?.[dagKey]?.[param] : null;
   const waarden = Object.entries(mosmixData.stations)
     .map(([n,[lon,lat]]) => ({ naam: n, lon, lat, val: dagData?.[n] }))
-    .filter(w => w.val != null && Number.isFinite(Number(w.val)))
+    .filter(w => w.val != null && MosmixCore.finite(w.val) && w.val >= 0 && w.val <= 100)
     .map(w => ({ ...w, val: Math.round(Number(w.val)) }));
   if(waarden.length){
     tekenHeatmap(waarden);
@@ -309,18 +312,18 @@ function update(){
   const d = new Date(dagKey+"T12:00:00");
   const full = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][d.getDay()];
   document.getElementById("kaart-titel").textContent =
-    `Kans op neerslag ${keuzeDrempel.naam.replace(" (meetbaar)","").replace(" (stevige bui)","")}`;
+    `Kans op neerslag ${keuzeDrempel.naam.replace(" (meetbaar)","").replace("","")}`;
   document.getElementById("kaart-sub").textContent =
     `${full} ${d.getDate()}/${d.getMonth()+1} — ${keuzeVenster.naam.toLowerCase()}`;
   document.getElementById("kaart-drempel").textContent = `DWD MOSMIX ${param}`;
   document.getElementById("status").textContent =
-    waarden.length ? `${waarden.length} stations · live uit mosmix_nl.json` : `Geen waarden beschikbaar voor ${param}`;
+    waarden.length ? `${waarden.length} stations · ruimtelijke schatting tussen stations` : `Geen waarden beschikbaar voor ${param}`;
 
   maakDrempelBtns(); maakVensterBtns(); maakDagBtns();
 }
 
 Promise.all([
-  fetch("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()).then(r=>r.json()),
+  MosmixCore.loadDaily("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()),
   fetch("nl_provincies.geojson").then(r=>r.json())
 ]).then(([data, prov])=>{
   mosmixData = data; provincies = prov;
@@ -329,6 +332,9 @@ Promise.all([
     `Bijgewerkt ${data.bijgewerkt || "onbekend"} · run ${data.run || "onbekend"}`;
   maakDrempelBtns(); maakVensterBtns(); maakDagBtns();
   update();
+}).catch(e=>{
+  document.getElementById('status').textContent='Kaartgegevens niet beschikbaar. '+e.message;
+  document.getElementById('hdr-update').textContent='Laden mislukt — vernieuw de pagina om het opnieuw te proberen.';
 });
 </script>
 </body>

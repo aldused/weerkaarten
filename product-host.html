@@ -1663,6 +1663,7 @@ html,body,.pagina-wrap {height:100%;min-height:0;margin:0!important;padding:0!im
         <button class="mosmix-subtab actief" data-src="mosmix_composiet.html">📊 Overzicht</button>
         <button class="mosmix-subtab" id="btn-minikaarten">🗓 9-daagse kaarten ▾</button>
         <button class="mosmix-subtab" data-src="mosmix_kaart.html?v=20260426-neerslagkans">🗺 Per parameter</button>
+        <button class="mosmix-subtab" data-src="mosmix_neerslagkans.html?v=20260909-kaarten1">Neerslagkansen</button>
         <button class="mosmix-subtab" data-src="grafiek_trend.html?v=20260430-windstrip-tabel">📈 Trend per station</button>
         <button class="mosmix-subtab" data-src="verificatie.html">✅ Verificatie</button>
         <button class="mosmix-subtab" data-src="mosmix_composiet_eu.html">🇪🇺 Multi Europe</button>
@@ -1933,7 +1934,7 @@ html,body,.pagina-wrap {height:100%;min-height:0;margin:0!important;padding:0!im
 
     <!-- ── WAT IS NIEUW ── -->
     <div class="panel" id="panel-nieuws">
-      <iframe data-src="nieuws.html?v=20260909-vier-elementen1" style="width:100%;height:90vh;border:none;" loading="lazy"></iframe>
+      <iframe data-src="nieuws.html?v=20260909-kaartenaudit1" style="width:100%;height:90vh;border:none;" loading="lazy"></iframe>
     </div>
 
   </div><!-- /content-scroll -->
@@ -2170,36 +2171,11 @@ function setTheme(t){
   });
 }
 document.addEventListener("DOMContentLoaded", function(){
-  // MOSMIX-subtab switcher
-  function mosmixFrameHoogte(){
-    const subZichtbaar = document.getElementById("minikaart-subrow").classList.contains("zichtbaar");
-    document.getElementById("mosmix-frame").style.height = subZichtbaar ? "calc(90vh - 80px)" : "calc(90vh - 42px)";
-  }
-  document.querySelectorAll(".mosmix-subtab").forEach(function(b){
-    b.addEventListener("click", function(){
-      if(b.id === "btn-minikaarten"){
-        // Activeer parent + toon sub-rij
-        document.querySelectorAll(".mosmix-subtab").forEach(x => x.classList.remove("actief"));
-        b.classList.add("actief");
-        document.getElementById("minikaart-subrow").classList.add("zichtbaar");
-        // Laad actieve sub-knop
-        const actSub = document.querySelector(".mosmix-subbtn.actief");
-        if(actSub) document.getElementById("mosmix-frame").src = actSub.dataset.src;
-      } else {
-        // Normaal tab: verberg sub-rij
-        document.querySelectorAll(".mosmix-subtab").forEach(x => x.classList.remove("actief"));
-        b.classList.add("actief");
-        document.getElementById("minikaart-subrow").classList.remove("zichtbaar");
-        document.getElementById("mosmix-frame").src = b.dataset.src;
-      }
-      mosmixFrameHoogte();
-    });
-  });
-  document.querySelectorAll(".mosmix-subbtn").forEach(function(b){
-    b.addEventListener("click", function(){
-      document.querySelectorAll(".mosmix-subbtn").forEach(x => x.classList.remove("actief"));
-      b.classList.add("actief");
-      document.getElementById("mosmix-frame").src = b.dataset.src;
+  // Scope to this panel: Toplijst reuses the visual tab class.
+  document.querySelectorAll('#panel-mosmix .mosmix-subtab, #panel-mosmix .mosmix-subbtn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const key=b.id==='btn-minikaarten'?'minikaarten':Object.keys(MOSMIX_SUBS).find(k=>b.dataset.src?.includes(MOSMIX_SUBS[k].frag));
+      if(key)openMosmix(key);
     });
   });
 
@@ -2646,7 +2622,13 @@ function openDagrec(key, hashBijwerken = true) {
 const MOSMIX_SUBS = {
   overzicht:   { frag:"mosmix_composiet.html", label:"Overzicht" },
   minikaarten: { knop:"btn-minikaarten",       label:"9-daagse kaarten" },
+  minimum:     { frag:"mosmix_9dag_tn.html", mini:true, label:"9 dagen · minimumtemperatuur" },
+  wind:        { frag:"mosmix_9dag_wind.html", mini:true, label:"9 dagen · gemiddelde wind" },
+  dagdelen:    { frag:"mosmix_9dag_dagdeel.html", mini:true, label:"9 dagen · temperatuur per dagdeel" },
+  dagdelenwind:{ frag:"mosmix_9dag_dagdeel_wind.html", mini:true, label:"9 dagen · wind per dagdeel" },
+  maximum:     { frag:"mosmix_9dag.html", mini:true, label:"9 dagen · maximumtemperatuur" },
   parameter:   { frag:"mosmix_kaart",          label:"Per parameter" },
+  neerslagkans:{ frag:"mosmix_neerslagkans",   label:"Neerslagkansen Nederland" },
   trend:       { frag:"grafiek_trend",         label:"Trend per station" },
   verificatie: { frag:"verificatie",           label:"Verificatie" },
   eu:          { frag:"mosmix_composiet_eu",   label:"Multi Europe" }
@@ -2655,8 +2637,17 @@ function openMosmix(key, hashBijwerken = true) {
   if (!MOSMIX_SUBS[key]) key = "overzicht";
   const config = MOSMIX_SUBS[key];
   openPanel("mosmix", false, false);
-  if (config.knop) document.getElementById(config.knop)?.click();
-  else klikMosmixTab(config.frag);
+  const mini=key==='minikaarten'||config.mini;
+  const panel=document.getElementById('panel-mosmix');
+  const button=mini?panel.querySelector('.mosmix-subbtn[data-src*="'+(config.frag||'mosmix_9dag.html')+'"]'):[...panel.querySelectorAll('.mosmix-subtab')].find(b=>b.dataset.src?.includes(config.frag));
+  panel.querySelectorAll('.mosmix-subtab').forEach(b=>{const active=mini?b.id==='btn-minikaarten':b===button;b.classList.toggle('actief',active);b.setAttribute('aria-pressed',String(active));});
+  panel.querySelectorAll('.mosmix-subbtn').forEach(b=>{b.classList.toggle('actief',b===button);b.setAttribute('aria-pressed',String(b===button));});
+  document.getElementById('minikaart-subrow').classList.toggle('zichtbaar',!!mini);
+  const frame=document.getElementById('mosmix-frame');
+  if(button){const url=new URL(button.dataset.src,location.href);url.searchParams.set('v','20260909-kaarten1');if(frame.src!==url.href)frame.src=url.href;}
+  frame.title='MOS/MIX · '+config.label;
+  frame.style.height=mini?'calc(90vh - 80px)':'calc(90vh - 42px)';
+  document.getElementById('topbar-titel').textContent='MOS/MIX · '+config.label;
   openTak("mosmix", "nav-mosmix-" + key);
   zetKruimel("mosmix", config.label);
   if (hashBijwerken) history.replaceState(null, "", key === "overzicht" ? "#mosmix" : "#mosmix-" + key);

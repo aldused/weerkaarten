@@ -40,6 +40,8 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
 [data-theme="dark"] .mini-kaart { background:#111a2e; }
 [data-theme="dark"] .mini-header { background:#0e1629; }
 </style>
+<link rel="stylesheet" href="mosmix-maps.css?v=20260909-1">
+<script src="mosmix-core.js?v=20260909-1"></script>
 </head>
 <body>
 
@@ -166,11 +168,10 @@ function bouwStations(svg, dagData){
   for(const [naam,coords] of Object.entries(STATIONS)){
     const off=OFFSET[naam]||[0,0];
     const cx=lonToX(coords[0]+off[0]), cy=latToY(coords[1]+off[1]);
-    // Dagtijd wind 06–18: gemiddelde van ochtend (FF_O) en middag (FF_M)
-    const ffO=dagData.FF_O?.[naam]??null, ffM=dagData.FF_M?.[naam]??null;
-    const ff=(ffO!=null&&ffM!=null)?(ffO+ffM)/2:ffO??ffM??null;
-    // Windrichting: middag (DD_M) als meest representatief voor overdag
-    const dd=dagData.DD_M?.[naam]??dagData.DD_O?.[naam]??null;
+    // Daily source is the mean of available 06–18 hourly speeds (km/h).
+    const ff=dagData.FF?.[naam]??null;
+    // Source DD is the direction at the highest hourly speed in that window.
+    const dd=dagData.DD?.[naam]??null;
     const bft=kmhToBft(ff);
     const kleur=bftKleur(bft);
     const r=36;
@@ -256,7 +257,7 @@ function stelGrootteIn(breedte, opslaan=true){
 }
 
 Promise.all([
-  fetch("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()).then(r=>r.json()),
+  MosmixCore.loadDaily("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()),
   fetch("nl_provincies.geojson").then(r=>r.json())
 ]).then(([mosmix, provincies])=>{
   document.getElementById("status").textContent="";

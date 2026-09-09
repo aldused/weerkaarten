@@ -42,7 +42,7 @@
   };
   const typeNames={nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals'};
   const filterSets={
-    kaarten:[['veld','Weerelement'],['model','Weermodel'],['gebied','Gebied']],
+    kaarten:[['veld','Weerelement'],['model','Model / bron'],['gebied','Gebied']],
     pluim:[['bron','Type verwachting'],['grootheid','Weerelement'],['vorm','Weergave']],
   };
   const productIcon = p => ({radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
@@ -93,7 +93,8 @@
   function productCard(p,{featured=false}={}){
     const quickNames={radar:['Radar & buien','Waar regent het nu?'],modelkaarten:['Weerkaarten','De komende uren en dagen'],'pluim-viewer':['Weerpluim','De verwachting voor jouw plaats'],actueel:['Waarnemingen','Het gemeten weer in Nederland']};
     const [name,description]=featured?quickNames[p.id]:[p.name,p.description];
-    return `<article class="product-card ${p.thumbnail?'':'no-image'}" data-product="${p.id}">${!p.thumbnail?`<span class="product-icon">${icon(productIcon(p))}</span>`:''}<a class="card-link" href="${escape(p.href)}">${p.thumbnail?`<div class="card-image"><img src="${escape(p.thumbnail)}" alt="" loading="${featured?'eager':'lazy'}" decoding="async"></div>`:''}<div class="card-copy"><h3 class="card-title">${escape(name)}${icon('arrow')}</h3><p>${escape(description)}</p>${p.restricted?`<span class="product-meta">${icon('lock')}Afgeschermde tool</span>`:''}</div></a>${pin(p)}</article>`;
+    const mapPlaceholder=p.type==='kaarten'&&!p.thumbnail;
+    return `<article class="product-card ${p.thumbnail||mapPlaceholder?'':'no-image'}" data-product="${p.id}">${!p.thumbnail&&!mapPlaceholder?`<span class="product-icon">${icon(productIcon(p))}</span>`:''}<a class="card-link" href="${escape(p.href)}">${p.thumbnail?`<div class="card-image"><img src="${escape(p.thumbnail)}" alt="" loading="${featured?'eager':'lazy'}" decoding="async"></div>`:mapPlaceholder?`<div class="card-image map-placeholder" aria-hidden="true">${icon(productIcon(p))}<span>${p.facets.model?.includes('mosmix')?'DWD MOS/MIX':'Weerkaarten Europa'}</span></div>`:''}<div class="card-copy"><h3 class="card-title">${escape(name)}${icon('arrow')}</h3><p>${escape(description)}</p>${p.restricted?`<span class="product-meta">${icon('lock')}Afgeschermde tool</span>`:''}</div></a>${pin(p)}</article>`;
   }
   function productRow(p,context=false){return `<article class="product-row" data-product="${p.id}"><a class="row-link" href="${escape(p.href)}"><span class="row-icon">${icon(productIcon(p))}</span><span class="row-copy"><strong>${escape(p.name)}</strong><p>${escape(p.description)}</p>${context?`<span class="product-meta">${escape(typeNames[p.type])}</span>`:''}${p.restricted?`<span class="product-meta">${icon('lock')}Afgeschermde tool</span>`:''}</span>${icon('arrow','arrow')}</a>${pin(p)}</article>`;}
   function productCollection(list,mode=view,context=false){return `<div class="${mode==='cards'?'catalogue-grid':'product-list'}">${list.map(p=>mode==='cards'?productCard(p):productRow(p,context)).join('')}</div>`;}
@@ -113,7 +114,7 @@
   function isInType(p){
     if(p.category!==state.page)return false;
     const sections={beeld:'Beeld',metingen:'Metingen',water:'Water & kust',analyse:'Analyse',tv:'TV / uitzending',studio:'Studio (afgeschermd)'};
-    return sections[state.type]?p.section===sections[state.type]:p.type===state.type;
+    return sections[state.type]?p.section===sections[state.type]:p.type===state.type || p.alsoTypes?.includes(state.type);
   }
   function matchesFilters(p,filters=state.filters){return Object.entries(filters).every(([key,value])=>p.facets[key]?.includes(value));}
   function controls(count,{filters=false}={}){
@@ -138,19 +139,26 @@
     const result=base.filter(p=>matchesFilters(p));
     const climate=state.page==='terugkijken' && state.type==='klimaat';
     const archive=state.page==='terugkijken' && state.type==='terug';
+    const maps=state.page==='verwachting' && state.type==='kaarten';
+    if(maps){const order={'mosmix-minikaarten':0,'mosmix-parameter':1,'mosmix-neerslagkans':2};result.sort((a,b)=>(order[a.id]??3)-(order[b.id]??3));}
     let html=heading(climate?'Records & klimaat':archive?'Maand & archief':cat.title,climate?'Van uitzonderlijk weer tot het langjarig gemiddelde. Kies wat je wilt onderzoeken.':archive?'Bekijk de maandbalans, volg het seizoen en zoek het weer van een eerdere dag terug.':cat.description,cat.name);
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
     if(climate)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Het weer in context</strong><p>Records en metingen worden aangevuld zodra brondata beschikbaar zijn. Klimaatnormalen hebben de vaste referentieperiode <b>1991–2020</b>. De gegevensdatum staat bij het onderdeel.</p></div></aside>`;
     if(archive)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Van dagkaart tot seizoensbalans</strong><p>Kies een landelijk overzicht of bekijk één station in detail. Bij elk onderdeel staan de meetperiode en de bron; recente dagen kunnen nog worden aangevuld.</p></div></aside>`;
+    if(maps)html+=`<nav class="maps-shortcuts" aria-label="Snel naar weerkaarten"><a href="index.html#mosmix-minikaarten">${icon('map')}<span><strong>MOS/MIX Nederland</strong><small>9 dagen in één overzicht</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-modelkaarten">${icon('cloud')}<span><strong>Modelkaarten</strong><small>Uur voor uur vooruit</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-vierluik">${icon('grid')}<span><strong>Vergelijken</strong><small>Vier modellen of elementen</small></span>${icon('arrow')}</a></nav>`;
     html+=controls(result.length,{filters:!!filterSets[state.type]})+filterPanel(base);
     if(!result.length)return html+empty(state.page==='favorieten'?'Maak Weerlab een beetje van jou':'Geen onderdelen bij deze combinatie',state.page==='favorieten'?'Tik op het sterretje bij een onderdeel. Je favorieten worden in deze browser bewaard.':'Verwijder een filter om meer weerinformatie te zien.',state.page==='favorieten'?'<a class="button button-primary" href="#start">Ontdek Weerlab</a>':'<button class="button button-primary" data-reset-filters>Alle filters wissen</button>');
-    if(climate || archive || state.page==='nu' && state.type==='nu' || state.page==='professioneel' && state.type==='vak'){
+    if(maps){
+      const groups=[['Nederland · MOS/MIX','Statistisch nabewerkte stationsverwachtingen. De kaartkleuren tussen stations zijn een ruimtelijke schatting.',p=>p.facets.model?.includes('mosmix')],['Nederland · modelkaarten','Gedetailleerde verwachtingen per uur. Vergelijk modellen én weerelementen.',p=>!p.facets.model?.includes('mosmix') && p.facets.gebied?.includes('nl')],['Europa · overzicht & scenario’s','Bekijk de grote lijn: luchtdruk, fronten, uitzonderlijk weer en onzekerheid.',p=>!p.facets.model?.includes('mosmix') && !p.facets.gebied?.includes('nl')]];
+      html+=groups.map(([title,description,match])=>{const items=result.filter(match);return items.length?`<section class="catalogue-section maps-section"><h2>${title}</h2><p class="maps-section-intro">${description}</p>${productCollection(items)}</section>`:'';}).join('');
+      html+='<p class="maps-footnote">Controleer in de kaart altijd de modelrun en geldige tijd. Voorbeeldafbeeldingen in dit overzicht zijn geen actuele weerkaarten.</p>';
+    }else if(climate || archive || state.page==='nu' && state.type==='nu' || state.page==='professioneel' && state.type==='vak'){
       const secs=[...new Set(result.map(p=>p.section))];
       html+=secs.map(sec=>`<section class="catalogue-section"><h2>${escape(sec==='Beeld'?'Radar & satelliet':sec)}</h2>${productCollection(result.filter(p=>p.section===sec))}</section>`).join('');
     }else html+=productCollection(result);
     return html;
   }
-  const normalize=value=>value.toLocaleLowerCase('nl').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const normalize=value=>value.toLocaleLowerCase('nl').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/mos[\s/-]*mix/g,'mosmix').replace(/[^a-z0-9]+/g,' ').trim();
   const searchIndex=new Map(products.map(p=>[p.id,normalize(p.name+' '+p.description+' '+p.keywords+' '+typeNames[p.type]+' '+categories[p.category].name+' '+({radar:'regen buien neerslag',nowcast:'regen buien neerslag verwachting',satelliet:'wolken',bliksem:'onweer ontladingen',actueel:'actueel temperatuur stations vandaag',normalen:'klimaat normaal',droogte:'droogte neerslagtekort'}[p.id]||''))]));
   function findResults(q){
     const synonyms={regen:'neerslag',wolken:'bewolking',temperaturen:'temperatuur'};
@@ -286,7 +294,7 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html?v=20260909-vier-elementen1#'+route;
+      frame.src='product-host.html?v=20260909-kaartenaudit1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';

@@ -43,6 +43,8 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
 [data-theme="dark"] .mini-kaart { background:#111a2e; }
 [data-theme="dark"] .mini-header { background:#0e1629; }
 </style>
+<link rel="stylesheet" href="mosmix-maps.css?v=20260909-1">
+<script src="mosmix-core.js?v=20260909-1"></script>
 </head>
 <body>
 
@@ -51,6 +53,7 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
   <p id="hdr-sub">Laden…</p>
 </div>
 <div class="toolbar">
+  <p>Ochtend/middag: afgeleide maxima, afgestemd op het dagmaximum. Avond/nacht: laagste uurtemperatuur. Nacht = volgende kalenderdatum; grijs = geen compleet uurvak.</p>
   <div class="dagdeel-btns">
     <button class="btn-dd actief" data-dd="ochtend">Ochtend 06–12</button>
     <button class="btn-dd" data-dd="middag">Middag 12–18</button>
@@ -156,48 +159,13 @@ function bouwBasemap(svg, provincies){
 
 // Uurlijks: bouw index {stationNaam: Map<"YYYY-MM-DDTHH:mm" -> {ttt, ff, dd}>}
 let uurlijksIdx = null;
-function bouwUurlijksIdx(uurlijks){
-  uurlijksIdx = {};
-  for(const [naam, s] of Object.entries(uurlijks.data||{})){
-    const m = new Map();
-    const tijden=s.tijden||[], ttt=s.TTT||[], ff=s.FF||[], dd=s.DD||[];
-    for(let i=0;i<tijden.length;i++){
-      m.set(tijden[i],{ttt:ttt[i]??null, ff:ff[i]??null, dd:dd[i]??null});
-    }
-    uurlijksIdx[naam]=m;
-  }
-}
-
-// Min TTT voor station in uurvak [startUur, eindUur] van datum "YYYY-MM-DD"
-function uurlijksMinTemp(naam, datum, startUur, eindUur){
-  const m=uurlijksIdx?.[naam]; if(!m) return null;
-  let minT=null;
-  for(let h=startUur;h<=eindUur;h++){
-    const key=datum+"T"+String(h).padStart(2,"0")+":00";
-    const v=m.get(key);
-    if(v && v.ttt!=null && (minT===null||v.ttt<minT)) minT=v.ttt;
-  }
-  return minT;
-}
-
-// Temperatuur voor station op dag afhankelijk van huidig dagdeel
+function bouwUurlijksIdx(uurlijks){uurlijksIdx=MosmixCore.hourlyIndex(uurlijks);}
 function dagdeelTemp(naam, dag, dagdeel, mosmix){
-  const dd=mosmix.data[dag]||{};
-  if(dagdeel==="ochtend") return dd.TX_O?.[naam]??null;
-  if(dagdeel==="middag")  return dd.TX_M?.[naam]??null;
-  if(dagdeel==="avond")   return uurlijksMinTemp(naam, dag, 18, 23);
-  if(dagdeel==="nacht"){
-    // TN van volgende dag in daily json = min temp voor nacht vóór die dag
-    const idx=mosmix.dagen.indexOf(dag);
-    const volgendeDag=idx>=0&&idx+1<mosmix.dagen.length?mosmix.dagen[idx+1]:null;
-    if(volgendeDag){
-      const tn=mosmix.data[volgendeDag]?.TN?.[naam]??null;
-      if(tn!=null) return tn;
-    }
-    // Fallback: uurlijks min 00-05 van volgende dag
-    return volgendeDag?uurlijksMinTemp(naam, volgendeDag, 0, 5):null;
-  }
-  return null;
+  const data=mosmix.data[dag]||{};
+  if(dagdeel==='ochtend')return data.TX_O?.[naam]??null;
+  if(dagdeel==='middag')return data.TX_M?.[naam]??null;
+  if(dagdeel==='avond')return MosmixCore.minTemp(uurlijksIdx,naam,dag,18,23);
+  return MosmixCore.minTemp(uurlijksIdx,naam,MosmixCore.nextDay(dag),0,5);
 }
 
 // Label per dagdeel in mini-header (rechts naast datum)
@@ -235,9 +203,10 @@ function bouwGrid(){
   const grid=document.getElementById("kaarten-grid");
   grid.innerHTML="";
   mosmixGlobal.dagen.slice(0,9).forEach(dag=>{
-    const d=new Date(dag+"T12:00:00");
+    const kaartDag=huidigDagdeel==='nacht'?MosmixCore.nextDay(dag):dag;
+    const d=new Date(kaartDag+"T12:00:00");
     const dagNaam=NL_DAGEN[d.getDay()];
-    const dagDatum=dag.slice(5).replace("-","/");
+    const dagDatum=kaartDag.slice(5).replace("-","/");
     const wrap=document.createElement("div");
     wrap.className="mini-kaart";
     wrap.innerHTML=`<div class="mini-header"><span class="mini-dag-naam">${dagNaam}</span><span class="mini-dag-datum">${dagDatum} · ${DD_LABEL[huidigDagdeel]}</span></div>`;
@@ -271,10 +240,11 @@ document.querySelectorAll(".btn-dd").forEach(btn=>{
 });
 
 Promise.all([
-  fetch("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()).then(r=>r.json()),
-  fetch("https://data.weerlab.nl/mosmix_uurlijks_nl.json?t="+Date.now()).then(r=>r.json()),
+  MosmixCore.loadDaily("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()),
+  MosmixCore.fetchJSON("https://data.weerlab.nl/mosmix_uurlijks_nl.json?t="+Date.now()),
   fetch("nl_provincies.geojson").then(r=>r.json())
 ]).then(([mosmix, uurlijks, provincies])=>{
+  MosmixCore.assertSameRun(mosmix, uurlijks);
   mosmixGlobal=mosmix;
   provinciesGlobal=provincies;
   bouwUurlijksIdx(uurlijks);
