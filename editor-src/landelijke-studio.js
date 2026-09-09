@@ -72,11 +72,12 @@ export function createLandelijkeStudio(React) {
 
   return function LandelijkeStudio(props) {
     const { children, enabled, selected, tool, pendingLabel, count, dayLabel, actions, night, brightness, nightBrightness, ratio, source, loading, error } = props;
-    const [tab, setTab] = React.useState('data');
+    const regional = props.regional === true;
+    const [tab, setTab] = React.useState(regional ? 'add' : 'data');
     const [zoom, setZoom] = React.useState(false);
     const panelRef = React.useRef(null);
     React.useEffect(() => { if (selected) setTab('edit'); }, [selected?.id]);
-    React.useEffect(() => { if (!selected && tab === 'edit') setTab('data'); }, [selected, tab]);
+    React.useEffect(() => { if (!selected && tab === 'edit') setTab(regional ? 'add' : 'data'); }, [selected, tab, regional]);
     React.useEffect(() => { if (panelRef.current) panelRef.current.scrollTop = 0; }, [tab, selected?.id]);
     if (!enabled) return h('div', { style: props.style }, children);
 
@@ -126,8 +127,9 @@ export function createLandelijkeStudio(React) {
       }),
     });
     const selectTab = id => { setTab(id); actions.select(); if (id === 'data') actions.data(); };
-    const tabs = selected ? [...STUDIO_TABS, { id: 'edit', label: 'Bewerken', icon: 'edit' }] : STUDIO_TABS;
-    const status = pendingLabel ? `Klik op de kaart om ${pendingLabel} te plaatsen.` : tool !== 'select' ? 'Klik op de kaart om te plaatsen. Druk op Esc als je klaar bent.' : selected ? `${selected.label || selected.value || 'Element'} geselecteerd · sleep om te verplaatsen` : 'Klik op een plaats om te bewerken. Sleep om te verplaatsen.';
+    const baseTabs = regional ? [{id: 'add', label: 'Kaart maken', icon: 'plus'}, STUDIO_TABS[2]] : STUDIO_TABS;
+    const tabs = selected ? [...baseTabs, { id: 'edit', label: 'Bewerken', icon: 'edit' }] : baseTabs;
+    const status = pendingLabel ? `Klik op de kaart om ${pendingLabel} te plaatsen.` : tool !== 'select' ? 'Klik op de kaart om te plaatsen. Druk op Esc als je klaar bent.' : selected ? `${selected.label || selected.value || 'Element'} geselecteerd · sleep om te verplaatsen` : regional ? 'Kies een onderdeel links en plaats het op de kaart. Sleep om te verplaatsen.' : 'Klik op een plaats om te bewerken. Sleep om te verplaatsen.';
     const detail = (title, content) => h('details', { className: 'studio-details' }, h('summary', null, title), h('div', { className: 'studio-details-body' }, content));
     const text = node => typeof node === 'string' ? node : React.isValidElement(node) ? items(node).map(text).join(' ') : '';
     const forecastPanel = node => React.cloneElement(node, {}, ...items(node).filter(n => !text(n).startsWith('Plaatst de ')).map(n => {
@@ -140,7 +142,7 @@ export function createLandelijkeStudio(React) {
     return h('div', { className: `landelijke-studio${zoom ? ' studio-zoom' : ''}` },
       root.filter(n => n.type === 'input'),
       h('header', { className: 'studio-header' },
-        h('div', { className: 'studio-brand' }, h('span', { className: 'studio-brand-mark' }, h(Icon, { name: 'map' })), h('div', null, h('span', { className: 'studio-eyebrow' }, 'WEERLAB / KAARTENSTUDIO'), h('h1', null, 'Landelijke weerkaart'))),
+        h('div', { className: 'studio-brand' }, h('span', { className: 'studio-brand-mark' }, h(Icon, { name: 'map' })), h('div', null, h('span', { className: 'studio-eyebrow' }, 'WEERLAB / KAARTENSTUDIO'), h('h1', null, regional ? 'Regionale weerkaart' : 'Landelijke weerkaart'))),
         h('div', { className: 'studio-header-actions' },
           h(Button, { icon: 'folder', onClick: actions.open, title: 'Een opgeslagen kaartindeling openen' }, 'Openen'),
           h(Button, { icon: 'save', onClick: actions.save, title: 'Kaartindeling opslaan om later verder te werken' }, 'Opslaan'),
@@ -162,15 +164,16 @@ export function createLandelijkeStudio(React) {
             h(Card, { title: 'Vul je weerkaart', description: 'Kies de bron, dag en periode. Zet daarna de verwachting op de kaart.' }, skin(summary), dataPanels.map(forecastPanel)),
             !dataHead && h('p', { className: 'studio-description' }, 'De weergegevens worden klaargezet…')),
           tab === 'add' && h(React.Fragment, null,
-            h(Card, { title: 'Zet iets op de kaart', description: 'Kies een onderdeel en klik op de gewenste plek.' }, h('div', { className: 'studio-tool-grid' }, items(tools).filter(n => n.type === 'button').slice(0, 8).map(skin))),
-            h(Card, { title: 'Weersymbolen' }, h('div', {className:'studio-common-symbols'}, WEATHER_ICON_BASICS.map(([type,label]) => h('button', {type:'button',key:type,'aria-label':WEATHER_ICON_LABELS[type],title:WEATHER_ICON_LABELS[type],'aria-pressed':tool===type,onClick:()=>actions.chooseSymbol(type)},h('svg',{viewBox:'0 0 96 96','aria-hidden':true},h(WeatherIcon,{type,s:96})),h('span',null,label)))), h(Button, { onClick: actions.symbols, 'aria-expanded': props.symbolsOpen, className: 'studio-full' }, props.symbolsOpen ? 'Meer symbolen sluiten' : 'Meer symbolen en varianten'), h('div', { className: 'studio-symbols' }, symbolRows.map(skin))),
-            other.map(skin), custom && h(Card, { title: 'Eigen plaats' }, skin(custom))),
+            h(Card, { title: regional ? 'Maak je regiokaart' : 'Zet iets op de kaart', description: 'Kies een onderdeel en klik op de gewenste plek.' }, h('div', { className: 'studio-tool-grid' }, items(tools).filter(n => n.type === 'button').slice(0, 8).map(skin))),
+            regional && other.map(skin),
+            h(Card, { title: 'Weersymbolen' }, h('div', {className:'studio-common-symbols'}, WEATHER_ICON_BASICS.map(([type,label]) => h('button', {type:'button',key:type,'aria-label':WEATHER_ICON_LABELS[type],title:WEATHER_ICON_LABELS[type],'aria-pressed':tool===type,onClick:()=>actions.chooseSymbol(type)},h('svg',{viewBox:'0 0 96 96','aria-hidden':true},h(WeatherIcon,{type,s:96})),h('span',null,label)))), h(Button, { onClick: actions.symbols, 'aria-expanded': props.symbolsOpen, className: 'studio-full' }, props.symbolsOpen ? 'Meer symbolen sluiten' : 'Meer symbolen en varianten'), (!regional || props.symbolsOpen) && h('div', { className: 'studio-symbols' }, symbolRows.map(skin))),
+            !regional && other.map(skin), regional && detail('Meer mogelijkheden', items(tools).filter(n => n.type === 'button').slice(8).map(skin)), custom && h(Card, { title: 'Eigen plaats' }, skin(custom))),
           tab === 'style' && h(React.Fragment, null,
-            h(Card, { title: 'Maak de kaart af', description: 'Pas de koptekst, achtergrond en naamsvermelding aan.' }, skin(heading)),
+            heading && h(Card, { title: 'Maak de kaart af', description: 'Pas de koptekst, achtergrond en naamsvermelding aan.' }, skin(heading)),
             h(Card, { title: 'Achtergrond' }, h('div', { className: 'studio-segment' }, h(Button, { onClick: () => actions.appearance(false), 'aria-pressed': !night, icon: 'sun' }, 'Dag'), h(Button, { onClick: () => actions.appearance(true), 'aria-pressed': night, icon: 'moon' }, 'Nacht')),
               h('label', { className: 'studio-range' }, h('span', null, 'Helderheid', h('output', null, `${night ? nightBrightness : brightness}%`)), h('input', { type: 'range', min: 30, max: 150, value: night ? nightBrightness : brightness, onChange: e => actions.brightness(+e.target.value), 'aria-label': 'Helderheid achtergrond' })),
               h(Button, { icon: 'folder', onClick: actions.background, className: 'studio-full' }, 'Eigen achtergrond kiezen')),
-            h(Card, { title: 'Wind op de kaart' }, h('div', { className: 'studio-wind-grid' }, items(tools).filter(n => n.type === 'button').slice(8).map(skin))),
+            !regional && h(Card, { title: 'Wind op de kaart' }, h('div', { className: 'studio-wind-grid' }, items(tools).filter(n => n.type === 'button').slice(8).map(skin))),
             h(Card, { title: 'Naamsvermelding' }, skin(copyright))),
           tab === 'edit' && selected && h(React.Fragment, null,
             h('div', { className: 'studio-selection-heading' }, h('div', null, h('span', { className: 'studio-eyebrow' }, 'GESELECTEERD'), h('h2', null, selected.label || 'Onderdeel bewerken')), h(Button, { onClick: actions.deselect }, 'Klaar')),
@@ -187,7 +190,7 @@ export function createLandelijkeStudio(React) {
             h(Button, { onClick: () => setZoom(v => !v), 'aria-pressed': zoom, title: 'Wissel tussen passend en groot kaartvoorbeeld' }, zoom ? 'Passend' : 'Vergroten'))),
         h('div', { className: 'studio-map-stage' }, cleanMap),
         h('div', { className: `studio-canvas-hint${tool !== 'select' || pendingLabel ? ' is-placing' : ''}`, role: 'status' }, h(Icon, { name: tool !== 'select' ? 'plus' : 'pointer' }), status),
-        h('div', { className: 'studio-data-status', role: 'status' }, h('span', null, error ? 'Weergegevens niet beschikbaar · zie Weergegevens' : loading ? `${source} laden…` : dayLabel || 'Kies een dag bij Weergegevens'), h('span', null, 'PNG · originele resolutie'))),
+        h('div', { className: 'studio-data-status', role: 'status' }, h('span', null, error ? 'Weergegevens niet beschikbaar · zie Weergegevens' : loading ? `${source} laden…` : dayLabel || (regional ? 'Rijnmond · regionale weerkaart' : 'Kies een dag bij Weergegevens')), h('span', null, 'PNG · originele resolutie'))),
       work.filter(n => n !== map && n !== inspector));
   };
 }
