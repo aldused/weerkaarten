@@ -254,6 +254,8 @@ python3 - "$SHELL_DIR" "$CACHE" "$WEERLAB" <<'PYEOF'
 import json, os, re, sys
 from datetime import datetime, timedelta
 shell_dir, cache, weerlab = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, shell_dir)
+from guidance_editorial import reference_bundle
 man = json.load(open(os.path.join(cache, "manifest.json")))
 prompt = open(os.path.join(shell_dir, "guidance_prompt.md")).read()
 
@@ -282,8 +284,8 @@ if verse_ecmwf:
                "Bouw het beeld volledig opnieuw op vanaf de kaarten.")
 else:
     ctx.append(f"Dit is een TUSSENUPDATE (dagdeel: {dagdeel}). De ECMWF HRES-run is dezelfde als in "
-               f"de vorige guidance ({man['ecmwf_run_label']}); wél vers zijn de KNMI-weerkaarten "
-               "(HARMONIE-analyse), de Bracknell-fronten en de KNMI/DWD-guidance. Leg het accent op "
+               f"de vorige guidance ({man['ecmwf_run_label']}). Controleer per bron de uitgifte en geldigheid; "
+               "opnieuw opgehaald betekent niet automatisch vernieuwd. Leg het accent op "
                "de korte termijn: verwerk de nieuwste analyse en frontligging in de dagen van vandaag "
                "en morgen. De meerdaagse lijn hoeft niet te wijzigen tenzij de verse kaarten daar "
                "aanleiding toe geven.")
@@ -338,44 +340,26 @@ feiten_pad = os.path.join(cache, "drukcentra_feiten.txt")
 if os.path.isfile(feiten_pad):
     lines += ["", open(feiten_pad).read().rstrip()]
 
-# kaarten+dagen+feiten apart bewaren: de verificatie-pass gebruikt dezelfde sectie
+# Kaartsectie bewaren voor diagnose; beide passes gebruiken verderop het volledige bronpakket.
 open(os.path.join(cache, "kaarten_sectie.txt"), "w").write("\n".join(lines) + "\n")
 
-# KNMI-guidance (kort + meerdaags) als referentietekst, alleen als vers genoeg
-try:
-    kg = json.load(open(os.path.join(weerlab, "guidance.json")))
-    opgehaald = datetime.fromisoformat(kg["bijgewerkt"])
-    if datetime.now() - opgehaald < timedelta(hours=36):
-        lines += ["", "# KNMI-GUIDANCE (referentie, zie werkwijze stap 3)",
-                  f"Opgehaald: {kg['bijgewerkt'][:16]}"]
-        for key, kop in (("kort", "Guidance modelbeoordeling (tot +48 uur)"),
-                         ("lang", "Guidance meerdaagse")):
-            g = kg.get(key) or {}
-            tekst = (g.get("tekst") or "").strip()
-            if tekst:
-                lines += ["", f"## {kop}", g.get("geldig") or "", tekst[:5000]]
-    else:
-        print(f"KNMI-guidance ouder dan 36 uur ({kg['bijgewerkt'][:16]}) — niet meegenomen")
-except Exception as e:
-    print(f"KNMI-guidance niet beschikbaar als referentie: {e}")
-
-# DWD-guidance (synoptische beoordeling DWD-meteoroloog, Duitstalig origineel)
-try:
-    dg = json.load(open(os.path.join(weerlab, "dwd_guidance.json")))
-    opgehaald = datetime.fromisoformat(dg["bijgewerkt"])
-    if datetime.now() - opgehaald < timedelta(hours=36):
-        lines += ["", "# DWD-GUIDANCE (referentie, zie werkwijze stap 3; Duitstalig, focus Duitsland)",
-                  f"Opgehaald: {dg['bijgewerkt'][:16]}"]
-        for key, kop in (("kurzfrist", "Synoptische Übersicht Kurzfrist"),
-                         ("mittelfrist", "Synoptische Übersicht Mittelfrist")):
-            g = dg.get(key) or {}
-            tekst = (g.get("original") or "").strip()
-            if tekst:
-                lines += ["", f"## {kop}", f"Uitgifte: {g.get('issuedAt') or '?'}", tekst[:5000]]
-    else:
-        print(f"DWD-guidance ouder dan 36 uur ({dg['bijgewerkt'][:16]}) — niet meegenomen")
-except Exception as e:
-    print(f"DWD-guidance niet beschikbaar als referentie: {e}")
+# Volledige referentieteksten, inclusief modelvergelijkingen aan het einde.
+# De eindcontrole krijgt exact hetzelfde bronpakket als de auteur.
+references, register = reference_bundle(weerlab)
+base_sources = [("ecmwf_hres", "ECMWF HRES-kaarten"),
+                ("ecmwf_dagfeiten", "ECMWF-modelpunten Nederland")]
+if kc and kc.get("charts"):
+    base_sources.append(("knmi_kaarten", "KNMI-frontkaarten"))
+if any(re.match(r"guidance_brack_\d+\.png$", f) for f in os.listdir(cache)):
+    base_sources.append(("ukmo", "UKMO/Bracknell-frontkaarten"))
+if os.path.isfile(feiten_pad) and "# ENS DE BILT" in open(feiten_pad).read():
+    base_sources.append(("ecmwf_ens", "ECMWF ENS De Bilt"))
+if os.path.isfile(cluster_pad) and any(f.startswith("guidance_cluster_") and f.endswith(".png") for f in os.listdir(cache)):
+    base_sources.append(("ecmwf_clusters", "ECMWF ENS-clusters"))
+register += [{"id": ident, "naam": name, "status": "beschikbaar"} for ident, name in base_sources]
+lines += [references, "# BRONREGISTER", json.dumps(register, ensure_ascii=False, indent=1)]
+open(os.path.join(cache, "bronnen_sectie.txt"), "w").write("\n".join(lines) + "\n")
+json.dump(register, open(os.path.join(cache, "bronregister.json"), "w"), ensure_ascii=False, indent=1)
 
 open(os.path.join(cache, "prompt_full.txt"), "w").write(prompt + "\n".join(lines) + "\n")
 print("Prompt samengesteld")
@@ -437,7 +421,7 @@ for key in ("intro", "days", "aandachtspunten"):
         sys.exit(f"FOUT: veld '{key}' ontbreekt in concept")
 
 verify = open(os.path.join(shell_dir, "guidance_verify_prompt.md")).read()
-kaarten = open(os.path.join(cache, "kaarten_sectie.txt")).read()
+kaarten = open(os.path.join(cache, "bronnen_sectie.txt")).read()
 prompt = (verify + "\n" + kaarten + "\n# CONCEPT\n\n"
           + json.dumps(concept, ensure_ascii=False, indent=1) + "\n")
 open(os.path.join(cache, "verify_prompt_full.txt"), "w").write(prompt)
@@ -451,9 +435,11 @@ if ! run_text_model "$CACHE/verify_prompt_full.txt" "$CACHE/raw_verified.txt" "v
 fi
 
 # ----------------------------------------------- 5. Valideren + JSON assembleren
-python3 - "$CACHE" <<'PYEOF'
+python3 - "$CACHE" "$SHELL_DIR" <<'PYEOF'
 import json, os, sys
 from datetime import datetime, timezone
+sys.path.insert(0, sys.argv[2])
+from guidance_editorial import validate_assessment
 
 cache = sys.argv[1]
 raw = open(os.path.join(cache, "raw_verified.txt")).read()
@@ -488,6 +474,12 @@ for i, (md, d) in enumerate(zip(man["days"], gd["days"])):
     if d.get("date") != md["date"]:
         sys.exit(f"FOUT: datum van dag {i + 1} klopt niet")
 
+register = json.load(open(os.path.join(cache, "bronregister.json")))
+try:
+    validate_assessment(gd, {b["id"] for b in register if b["status"] == "beschikbaar"})
+except ValueError as exc:
+    sys.exit(f"FOUT: {exc} — oude guidance blijft staan")
+
 # Harde eindredactie: te lange of automatisch klinkende tekst wordt niet gepubliceerd.
 def woorden(s):
     return len(str(s).split())
@@ -510,12 +502,13 @@ for naam, tekst, maximum in limieten:
 if not 1 <= zinnen(gd["intro"]) <= 3:
     sys.exit("FOUT: intro moet uit maximaal drie zinnen bestaan")
 for i, d in enumerate(gd["days"], 1):
-    if zinnen(d["synoptiek"]) != 2:
-        sys.exit(f"FOUT: synoptiek dag {i} moet uit exact twee zinnen bestaan")
-    if not 1 <= zinnen(d["weertype"]) <= 2:
-        sys.exit(f"FOUT: weertype dag {i} moet uit maximaal twee zinnen bestaan")
+    if not 2 <= zinnen(d["synoptiek"]) <= 3:
+        sys.exit(f"FOUT: synoptiek dag {i} moet uit twee of drie zinnen bestaan")
+    if not 1 <= zinnen(d["weertype"]) <= 3:
+        sys.exit(f"FOUT: weertype dag {i} moet uit maximaal drie zinnen bestaan")
 alle_tekst = " ".join([gd["intro"], gd["vooruitzichten"], gd["aandachtspunten"]]
-                       + [d[k] for d in gd["days"] for k in ("synoptiek", "weertype")]).lower()
+                       + [d.get(k, "") for d in gd["days"] for k in ("synoptiek", "weertype", "onzekerheid")]
+                       + [c[k] for c in gd["modelbeoordeling"] for k in ("vergelijking", "betekenis")]).lower()
 verboden = ("alle bronnen", "alle modellen", "eensluidend", "staat vast",
             "trogje", "zonverlies", "voorspelling")
 gevonden = [term for term in verboden if term in alle_tekst]
@@ -552,7 +545,10 @@ out = {
     "ecmwf_run_utc": man["ecmwf_run_utc"],
     "ecmwf_run_label": man["ecmwf_run_label"],
     "intro": gd["intro"],
-    "days": [dict(md, synoptiek=cd["synoptiek"], weertype=cd["weertype"])
+    "schema_version": 2,
+    "modelbeoordeling": gd["modelbeoordeling"],
+    "bronregister": register,
+    "days": [dict(md, synoptiek=cd["synoptiek"], weertype=cd["weertype"], onzekerheid=cd.get("onzekerheid", ""))
              for md, cd in zip(man["days"], gd["days"])],
     "vooruitzichten": gd["vooruitzichten"],
     "aandachtspunten": gd["aandachtspunten"],

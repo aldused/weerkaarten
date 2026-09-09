@@ -900,7 +900,7 @@ const MENU_PRODUCTS = [
   {
     "id": "modellenbespreking",
     "name": "Modellenbespreking",
-    "description": "4×/dag, Weerlab",
+    "description": "Weerbeeld, modelverschillen en bronkaarten per dag.",
     "category": "verwachting",
     "type": "tekst",
     "section": "",

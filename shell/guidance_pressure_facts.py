@@ -247,6 +247,8 @@ def _haal_nl_model(model, endpoint):
                 if None not in (ws, wr):
                     doel["wind_s"].append(ws)
                     doel["wind_r"].append(wr)
+            # Buienwindstoten en CAPE kunnen ook in de avond of nacht pieken.
+            for i in indices:
                 stoot = hourly["wind_gusts_10m"][i]
                 cape = hourly["cape"][i]
                 if stoot is not None:
@@ -309,13 +311,15 @@ def nl_weersfeiten(metrics):
                 f"hoogste dagsom {m['neerslag_max']:.1f} mm bij {m['natste_punt']}.")
         if m["bewolking_mediaan"] is not None:
             regels.append(
-                f"- Bewolking overdag: landelijke mediaan circa "
+                f"- Bewolking 08–19 uur lokale tijd: mediaan over de modelpunten circa "
                 f"{m['bewolking_mediaan']:.0f}% (samengesteld uit lage, middelbare en hoge bewolking).")
         if m["windsnelheid"] is not None:
             regels.append(
                 f"- Wind overdag: overwegend {_windrichting(m['windrichting'])}, gemiddeld "
                 f"{m['windsnelheid']:.0f} km/u over de modelpunten; "
-                f"hoogste berekende windstoot {m['windstoot']:.0f} km/u.")
+                f"hoogste berekende windstoot over het etmaal {m['windstoot']:.0f} km/u."
+                if m["windstoot"] is not None else
+                f"- Wind overdag: gemiddeld {m['windsnelheid']:.0f} km/u; windstoten ontbreken.")
         if m["cape"] is not None:
             regels.append(f"- CAPE boven de modelpunten: maximaal {m['cape']:.0f} J/kg.")
         regels.append("")
@@ -364,8 +368,8 @@ def ens_debilt():
         p10, p90 = tmaxen[n // 10], tmaxen[9 * n // 10]
         d = datetime.fromisoformat(dag).date()
         label = f"{DAGEN[d.weekday()][:2]} {d.day}/{d.month}"
-        regels.append(f"- {label}: maxtemp mediaan {med:.0f} gr ({p10:.0f}-{p90:.0f}), "
-                      f"{round(100 * natte / n)}% van de leden nat (>=0,5 mm)")
+        regels.append(f"- {dag} ({label}): maxtemp mediaan {med:.0f} °C (P10–P90: {p10:.0f}-{p90:.0f} °C), "
+                      f"{natte}/{n} bruikbare leden nat ({round(100 * natte / n)}%; >=0,5 mm per UTC-etmaal in De Bilt)")
     return regels
 
 
@@ -404,8 +408,11 @@ def main():
     regels += ["# ECMWF-DAGFEITEN NEDERLAND — machinaal berekend",
                "",
                "Negen representatieve modelpunten (kust, noord, midden, oost en zuid).",
-               "Deze ECMWF-waarden zijn LEIDEND voor temperatuur, neerslag, bewolking, wind en",
-               "CAPE in het weertype per dag. Rond verstandig af en voeg geen nauwkeuriger",
+               "Dit is ECMWF-puntuitvoer via Open-Meteo, niet een landelijke gebiedsdekking.",
+               "De API levert de recentste uitvoer; de exacte run is hier niet vastgesteld en",
+               "hoeft niet gelijk te zijn aan de HRES-kaarten. Deze waarden onderbouwen",
+               "ECMWF-cijfers; afwijkende KNMI/HARMONIE-cijfers mogen als modelverschil worden",
+               "benoemd. Rond verstandig af en voeg geen nauwkeuriger",
                "getallen toe dan hier staan. Gebruik de kaarten voor het ruimtelijke patroon",
                "en KNMI/DWD voor verschijnselen.", ""]
     regels += weer
@@ -419,7 +426,8 @@ def main():
         regels += ["# ENS DE BILT — 51 leden, machinaal berekend (15 dagen)",
                    "",
                    "Gebruik dit voor de vooruitzichten-alinea: temperatuurniveau, spreiding",
-                   "(= onzekerheid) en het aandeel natte leden per dag.", ""]
+                   "(P10–P90) en het aandeel natte leden per UTC-etmaal op dit ene punt.",
+                   "Dit aandeel is geen landelijke regenkans of verwachte regenduur.", ""]
         regels += ens
         regels.append("")
 
