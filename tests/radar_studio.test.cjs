@@ -55,6 +55,7 @@ vm.runInContext(engine.slice(0,start)+`
   };
 })();`,context);
 const r=context.radar;r.fixture(times);
+assert.equal(r.state().layers.steden,false,'Place labels are off by default so precipitation stays clear');
 r.window('+1u');assert.equal(r.state().frameIdx,48);assert.equal(r.state().frameF,48);assert.equal(r.range().s,36);assert.equal(r.range().e,48);
 r.window('nu');assert.equal(r.state().frameIdx,36);assert.equal(r.range().s,0);assert.equal(r.range().e,60,'Now must not lock the timeline to a single frame');
 r.step(1);assert.equal(r.state().frameIdx,37);
