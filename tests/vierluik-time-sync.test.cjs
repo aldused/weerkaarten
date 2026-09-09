@@ -12,7 +12,7 @@ function fn(name) {
 }
 const c = vm.createContext({Set, Date, Number, Math, Promise, VierluikCore:require('../vierluik-core'),
   globalTimes: [], globalTimeIndex:0, activeGlobalTime:'', timeMode:'common', playTimer:null,
-  panels: [0,1,2,3].map(idx=>({idx,modelIdx:idx})),
+  panels: [0,1,2,3].map(idx=>({idx,modelIdx:idx,varName:'neerslag'})),
   MODELS: [0,1,2,3].map(id=>({id})), modelData:{}, panelStep:[-1,-1,-1,-1],
   actieveModellen(){return c.MODELS}, updatePanelTime(){},
   buildDayChoices(){}, buildTimeAxis(){}, buildTimeJumpButtons(){}, updateGlobalTimeControl(){}, buildTimeline(){}, requestRender(){},
@@ -74,7 +74,7 @@ test('A missing forecast clears both the old map and its labels',()=>{
   c.DPR=1; c.TEGEL_VAR='wolkenkaart'; c.activeVar='neerslag';
   c.modelData[0]={meta:{tijden:[t(0)]},paramData:{neerslag:{}}};
   c.activeGlobalTime=t(3); c.panelStep[0]=-1;
-  vm.runInContext(fn('renderPanel'),c); c.renderPanel(0);
+  vm.runInContext(fn('renderPanelActive'),c); c.renderPanelActive(0);
   assert.equal(fills,1); assert.equal(clears,1);
   assert.equal(status.textContent,'Geen kaart voor dit tijdstip');
 });
@@ -88,7 +88,7 @@ test('A cloud tile in transit never displays the previous hour under the new tim
   c.tekenWolkentegel(ctx,0,{id:0},{meta:{tijden:[t(0)]}},0,100,100,0,1,0,1);
   assert.equal(fills,1);
 });
-['localDayKey','timeIndexForDay','limitingModels','neerslagBronrooster','radarBronOmschrijving','sampleComponent','hoverValue','comparisonValue'].forEach(name=>vm.runInContext(fn(name),c));
+['localDayKey','timeIndexForDay','limitingModels','neerslagBronrooster','radarBronOmschrijving','sampleComponent','hoverValue','panelVar','metPanelVar','comparisonValueActive','comparisonValue'].forEach(name=>vm.runInContext(fn(name),c));
 test('Day selection preserves the local hour and clamps within the selected day',()=>{
   const ts=[new Date(2026,8,6,14),new Date(2026,8,7,8),new Date(2026,8,7,14),new Date(2026,8,8,2)].map(d=>d.toISOString());
   assert.equal(c.timeIndexForDay(ts,'2026-09-07',ts[0]),2);

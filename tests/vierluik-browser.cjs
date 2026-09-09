@@ -27,6 +27,25 @@ const base=process.env.WEERLAB_TEST_URL || 'http://127.0.0.1:8787';
   const row=await page.evaluate(()=>({field:audit.active,status:Array.from(document.querySelectorAll('.panel-status')).map(e=>e.style.display==='none'?'OK':e.textContent),values:audit.panels.map(p=>{const d=audit.data[audit.models[p.modelIdx].id]?.paramData[audit.veldSleutel(audit.models[p.modelIdx].id,audit.active)];return d?audit.hoverValue(d,audit.steps[p.idx],52.1,5.1):null}),legendHeights:Array.from(document.querySelectorAll('.panel-legend')).map(e=>Math.round(e.getBoundingClientRect().height)),canvasHeights:Array.from(document.querySelectorAll('.canvas-wrap')).map(e=>Math.round(e.getBoundingClientRect().height))}));rows.push(row);assert.ok(Math.max(...row.canvasHeights)-Math.min(...row.canvasHeights)<=1,field+' unequal map heights');console.log('LAYER',JSON.stringify(row));
   if(['temp','wind','bewolking_totaal','wolkenlagen','cumul'].includes(field))await page.screenshot({path:output+'/vierluik-'+field+'.png'});
  }
+ // Eén model moet vier verschillende elementen tegelijk kunnen tonen.
+ for(let i=0;i<4;i++)await page.selectOption('#p'+i+'-select','harmonie');
+ const panelFields=['neerslag','temp','wind','bewolking_totaal'];
+ for(let i=0;i<4;i++)await page.selectOption('#p'+i+'-element',panelFields[i]);
+ await page.waitForFunction(expected=>audit.panels.every((p,i)=>p.varName===expected.fields[i])&&
+   [...document.querySelectorAll('.panel-status')].every(e=>e.style.display==='none')&&
+   [...document.querySelectorAll('.pleg-title')].every((e,i)=>e.textContent.toUpperCase().startsWith(expected.titles[i])),
+   {fields:panelFields,titles:['NEERSLAG','TEMPERATUUR','WIND','GESCHATTE TOTALE BEWOLKING']},{timeout:30000});
+ const independent=await page.evaluate(()=>({
+  models:audit.panels.map(p=>audit.models[p.modelIdx].id),
+  fields:audit.panels.map(p=>p.varName),
+  legends:[...document.querySelectorAll('.pleg-title')].map(e=>e.textContent)
+ }));
+ assert.deepEqual(independent.models,['harmonie','harmonie','harmonie','harmonie']);
+ assert.deepEqual(independent.fields,panelFields);
+ assert.match(independent.legends[0],/Neerslag/);assert.match(independent.legends[1],/Temperatuur/);
+ assert.match(independent.legends[2],/Wind/);assert.match(independent.legends[3],/bewolking/i);
+ console.log('INDEPENDENT',JSON.stringify(independent));
+ await page.screenshot({path:output+'/vierluik-een-model-vier-elementen.png'});
  await page.selectOption('#var-select','temp');
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);
  await page.screenshot({path:output+'/vierluik-mobile.png'});

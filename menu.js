@@ -286,7 +286,7 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html?v=20260909-bespreking-3#'+route;
+      frame.src='product-host.html?v=20260909-vier-elementen1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
