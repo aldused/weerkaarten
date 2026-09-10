@@ -404,6 +404,7 @@ select, input[type=date], input[type=text] {
     window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
   })();
 </script>
+<link rel="stylesheet" href="pluim-presentatie.css?v=20260910">
 </head>
 <body>
 
@@ -473,7 +474,7 @@ select, input[type=date], input[type=text] {
     <div class="seg periode-btns">
       <button class="periode-btn actief" data-preset="7">7 d</button>
       <button class="periode-btn" data-preset="10">10 d</button>
-      <button class="periode-btn" data-preset="16">16 d</button>
+      <button class="periode-btn" data-preset="16">15 d</button>
       <button class="periode-btn" data-preset="custom">Datum…</button>
     </div>
 
@@ -503,7 +504,7 @@ select, input[type=date], input[type=text] {
     <button class="btn-primary" id="btn-laden" onclick="laadData()" style="display:none">&#9654; Ophalen</button>
     <button class="btn-sec green" id="btn-vergelijk" onclick="openVergelijking()">&#8862; 4 Stations</button>
     <a class="btn-sec" href="weerbewaking_pluim.html?lock=1&amp;station=De%20Bilt&amp;v=20260811-all-runs-v3" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px">&#128202; 6-luik De Bilt (A4)</a>
-    <button class="btn-sec" id="btn-auto" onclick="toggleAutoRefresh()">&#10227; Auto-refresh uit</button>
+    <button class="btn-sec" id="btn-auto" onclick="toggleAutoRefresh()">Nieuwe ECMWF-runs automatisch</button>
     <button class="btn-sec" id="btn-reset" onclick="resetAlles()" style="display:none;color:#c03030;border-color:#e8b0b0">&#8634; Reset</button>
     <div class="action-spacer"></div>
     <div id="png-opties" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
@@ -526,6 +527,7 @@ select, input[type=date], input[type=text] {
     <div class="grafiek-titel" id="titel-temp"></div>
     <div id="tldr-temp" class="tldr-chips" style="display:none"></div>
     <div class="legenda legenda-row" id="leg-row-temp" style="margin-bottom:6px">
+      <button class="tgl-pill" id="tgl-mosmix" onclick="window._toonMosmix=!window._toonMosmix;this.classList.toggle('on',window._toonMosmix);laadData()" title="Afzonderlijke MOS/MIX dagminima en maxima toevoegen">MOS/MIX erbij</button>
       <span id="leg-temp" style="display:contents"></span>
       <span class="tgl-pill tgl-banden on" id="tgl-banden" onclick="toggleBanden()" title="Toon/verberg p10–p90 en IQR-banden"><span class="dot"></span>Banden (p10–p90 + IQR)</span>
       <span class="tgl-pill tgl-hres on" id="tgl-hres" onclick="toggleHres()" title="Toon/verberg HRES deterministisch"><span class="dot"></span>HRES</span>
@@ -702,10 +704,10 @@ const nachtPlugin = {
     const yScale = chart.scales.y || chart.scales.y1;
     if (!xScale || !yScale) return;
     ctx.save();
-    ctx.fillStyle = 'rgba(35,55,90,0.08)';
+    ctx.fillStyle = '#f1f2f3';
     let inNacht = false, startX = 0;
     for (let i = 0; i < ts.length; i++) {
-      const h = new Date(ts[i]).getHours();
+      const h = new Date(ts[i]).getUTCHours();
       const isNacht = h < 6 || h >= 18;
       const px = xScale.getPixelForValue(i);
       if (isNacht && !inNacht) { inNacht = true; startX = px; }
@@ -781,6 +783,10 @@ const tijdEvenredigeAsPlugin = {
   },
 };
 Chart.register(tijdEvenredigeAsPlugin);
+Chart.register({id:'pluimLeesbareDagen',beforeUpdate(chart){
+ const ts=chartTimestamps[chart.canvas.id];
+ if(ts&&chart.data.labels?.some(Array.isArray))chart.data.labels=maakLabels(ts);
+}});
 
 // ── Nacht-overlay voor bewolking-charts ──
 // Gebruikt echte zonsop/-onder; tekent een extra donkere laag over nachtbanden
@@ -1083,6 +1089,7 @@ let mosmixCache = null;
 
 // ── MOSMIX TX/TN ophalen ──
 async function haalMosmix() {
+  if(!window._toonMosmix)return null;
   if (mosmixCache) return mosmixCache;
   try {
     const r = await fetch('https://data.weerlab.nl/mosmix_nl.json?t=' + Date.now());
@@ -1113,7 +1120,7 @@ function mosmixBolletjes(mosmix, station, ts) {
     let txIdx = -1, tnIdx = -1, rrDagIdx = -1, rrNachtIdx = -1;
     for (let i = 0; i < ts.length; i++) {
       if (ts[i].startsWith(dag)) {
-        const h = new Date(ts[i]).getHours();
+        const h = new Date(ts[i]).getUTCHours();
         if (h >= 15 && h <= 17 && txIdx === -1) txIdx = i;  // TX om 16:00
         if (h >= 4 && h <= 6 && tnIdx === -1) tnIdx = i;    // TN om 05:00
         if (h >= 11 && h <= 13 && rrDagIdx === -1) rrDagIdx = i;  // RR dag om 12:00
@@ -1193,10 +1200,8 @@ function runInfoTekst(){
   };
   const end=new Date(Number(m.data_end_time)*1000);
   const dekkingUur=Math.max(0,Math.round((end-init)/3600000));
-  const volgendeRun=new Date(init.getTime()+6*3600000);
-  const verwerking=Math.max(0,avail-init);
-  const volgendeBinnen=new Date(volgendeRun.getTime()+verwerking);
-  return `ENS-run: ${fmtRun(init)} · één-run-dekking ${dekkingUur} uur t/m ${fmtRun(end)} · binnen ${fmtT(avail)} · volgende bronrun rond ${fmtT(volgendeBinnen)}`;
+
+  return `ENS-run: ${fmtRun(init)} · één-run-dekking ${dekkingUur} uur t/m ${fmtRun(end)} · binnen ${fmtT(avail)} · controle op nieuwe runs elke minuut`;
 }
 async function updateRunInfo(){
   const el=document.getElementById('run-info');
@@ -1355,12 +1360,16 @@ document.addEventListener('click',e=>{
 
 // ── Helpers ──
 function maakLabels(times){
+  const firstDay=Math.floor(Date.parse(times[0])/86400000);
+  const days=Math.max(1,(Date.parse(times.at(-1))-Date.parse(times[0]))/86400000);
+  const stride=Math.max(1,Math.ceil(days/(window.innerWidth<480?4:window.innerWidth<900?8:16)));
   return times.map(t=>{
     const d=new Date(t);
     const utc=typeof t==='string'&&/Z$/.test(t);
     const h=utc?d.getUTCHours():d.getHours();
     // Dag-label als 2-regelige array: lege eerste regel duwt de dagnaam
     // naar beneden, onder de 06/12/18 tijdslabels, zodat ze niet overlappen
+    if(h===0&&((Math.floor(d.getTime()/86400000)-firstDay)%stride!==0))return '';
     if(h===0)return ['', `${NL_DAGEN[utc?d.getUTCDay():d.getDay()]} ${utc?d.getUTCDate():d.getDate()} ${NL_MND[utc?d.getUTCMonth():d.getMonth()]}`];
     if(h===6)return '06:00';
     if(h===12)return '12:00';
@@ -1384,7 +1393,7 @@ function maakLabelsCompact(times){
   });
 }
 // Compacte x-as config voor grid-cellen
-const xAsCompact={grid:{color:GRID},ticks:{color:TICK,maxRotation:0,autoSkip:false,
+const xAsCompact={grid:{drawOnChartArea:false,drawTicks:false},ticks:{color:TICK,maxRotation:0,autoSkip:false,
   font:function(ctx){
     const raw = ctx.tick && ctx.tick.label;
     const isDag = Array.isArray(raw);
@@ -1516,7 +1525,11 @@ function useCanonicalVariables(url){
       const canonical=hourly.split(',').map(key=>key
         .replace(/^windspeed_10m/,'wind_speed_10m')
         .replace(/^windgusts_10m/,'wind_gusts_10m')
-        .replace(/^cloudcover(?=_|$)/,'cloud_cover'));
+        .replace(/^cloudcover(?=_|$)/,'cloud_cover')
+        .replace(/^winddirection_10m/,'wind_direction_10m')
+        .replace(/^dewpoint_2m/,'dew_point_2m')
+        .replace(/^relativehumidity_2m/,'relative_humidity_2m')
+        .replace(/^weathercode(?=_|$)/,'weather_code'));
       u.searchParams.set('hourly',canonical.join(','));
     }
     if(u.searchParams.has('windspeed_unit')){
@@ -1535,7 +1548,11 @@ function addLegacyWindAliases(data){
       const legacy=key
         .replace(/^wind_speed_10m/,'windspeed_10m')
         .replace(/^wind_gusts_10m/,'windgusts_10m')
-        .replace(/^cloud_cover(?=_|$)/,'cloudcover');
+        .replace(/^cloud_cover(?=_|$)/,'cloudcover')
+        .replace(/^wind_direction_10m/,'winddirection_10m')
+        .replace(/^dew_point_2m/,'dewpoint_2m')
+        .replace(/^relative_humidity_2m/,'relativehumidity_2m')
+        .replace(/^weather_code(?=_|$)/,'weathercode');
       if(legacy!==key && !(legacy in section)) section[legacy]=section[key];
     }
   }
@@ -1628,7 +1645,11 @@ function canonicalEnsembleBase(base){
   return String(base||'')
     .replace(/^windspeed_10m/,'wind_speed_10m')
     .replace(/^windgusts_10m/,'wind_gusts_10m')
-    .replace(/^cloudcover(?=_|$)/,'cloud_cover');
+    .replace(/^cloudcover(?=_|$)/,'cloud_cover')
+        .replace(/^winddirection_10m/,'wind_direction_10m')
+        .replace(/^dewpoint_2m/,'dew_point_2m')
+        .replace(/^relativehumidity_2m/,'relative_humidity_2m')
+        .replace(/^weathercode(?=_|$)/,'weather_code');
 }
 
 function requestedEnsembleBases(url){
@@ -1732,7 +1753,7 @@ function trimHourlyToRunvenster(data,meta,requireFullEnd=false){
   const verified=verifiedModelRunMeta(meta);
   const startMs=verified.last_run_initialisation_time*1000;
   const endMs=verified.data_end_time*1000;
-  const selected=valueTimes
+  let selected=valueTimes
     .map((time,index)=>({index,stamp:new Date(time).getTime()}))
     .filter(item=>Number.isFinite(item.stamp)&&item.stamp>=startMs&&item.stamp<=endMs)
     .map(item=>item.index);
@@ -1744,6 +1765,14 @@ function trimHourlyToRunvenster(data,meta,requireFullEnd=false){
     : lastValueMs;
   if(firstMs!==startMs||(requireFullEnd&&boundaryMs!==endMs)){
     throw new Error('modelrespons dekt niet exact het geverifieerde runvenster');
+  }
+  // AIFS geeft de exclusieve eindgrens ook als lege rij terug. Verwijder
+  // uitsluitend die bewezen grens, nooit ontbrekende waarden binnen de run.
+  const lastIndex=selected[selected.length-1];
+  const stepMs=Number(meta.temporal_resolution_seconds)*1000;
+  if(lastValueMs===endMs&&entries.every(([,values])=>values[lastIndex]===null)
+    &&stepMs>0&&new Date(valueTimes[selected[selected.length-2]]).getTime()===endMs-stepMs){
+    selected=selected.slice(0,-1);
   }
   hourly.time=selected.map(index=>valueTimes[index]);
   entries.forEach(([key,values])=>{ hourly[key]=selected.map(index=>values[index]); });
@@ -1818,14 +1847,14 @@ async function fetchExactDeterministic(ensemble,ensembleUrl,hourlyOverride,model
   const meta=ensemble?.__weerlabRunMeta;
   if(!meta) return null;
   const embedded=ensemble?.weerlab_hres;
-  const aliases={cloudcover:'cloud_cover',windspeed_10m:'wind_speed_10m',windgusts_10m:'wind_gusts_10m'};
+  const aliases={cloudcover:'cloud_cover',windspeed_10m:'wind_speed_10m',windgusts_10m:'wind_gusts_10m',winddirection_10m:'wind_direction_10m',dewpoint_2m:'dew_point_2m',relativehumidity_2m:'relative_humidity_2m'};
   const requested=String(hourlyOverride||'').split(',').map(value=>value.trim()).filter(Boolean);
   if(embedded&&Date.parse(embedded.run||'')===Number(meta.last_run_initialisation_time)*1000
       &&embedded.aligned_to_ensemble===true&&Array.isArray(embedded.time)
       &&requested.length&&requested.every(field=>Array.isArray(embedded[aliases[field]||field]))){
     const hourly={time:embedded.time.slice()};
     requested.forEach(field=>{hourly[field]=embedded[aliases[field]||field].slice();});
-    return {weerlab_run:embedded.run,hourly};
+    return PM.markUtcTimes({weerlab_run:embedded.run,hourly});
   }
   const url=singleRunUrlForEnsemble(ensembleUrl,meta,hourlyOverride,modelOverride);
   if(!url) return null;
@@ -1917,33 +1946,17 @@ async function fetchExactHresRuns(lat,lon,hourly,dagen,uurOffsets=[0],runContext
 }
 
 function filterT(times,van,tot){
-  if(!times||!times.length) return [];
-  const utc=times.some(value=>typeof value==='string'&&/Z$/.test(value));
-  const pad=value=>String(value).padStart(2,'0');
-  const dayKey=d=>utc
-    ? `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`
-    : `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  let pairs=times.map((ts,i)=>({i,d:new Date(ts)}));
-  if(van&&tot){
-    pairs=pairs.filter(p=>dayKey(p.d)>=van&&dayKey(p.d)<=tot);
+  if(!times?.length)return [];
+  // Archiefresponses leveren de volledige run. Het gekozen aantal dagen moet
+  // daarom óók hier gelden, onafhankelijk van forecast_days in de API-URL.
+  let start=-Infinity,end=Infinity;
+  if(van&&tot){start=Date.parse(van+'T00:00:00Z');end=Date.parse(tot+'T00:00:00Z')+86400000;}
+  else{
+    const first=Date.parse(times[0]);
+    const days=Math.min(15,Math.max(1,parseInt(actievePreset)||15));
+    start=Math.floor(first/86400000)*86400000;end=start+days*86400000;
   }
-  // Snijd de laatste kalenderdag alleen weg als die echt onvolledig is. Bepaal
-  // de actuele stap uit het einde van de reeks: ECMWF gaat daar van 3 naar 6 u.
-  if(pairs.length){
-    const lastKey=dayKey(pairs[pairs.length-1].d);
-    const laatsteDag=pairs.filter(p=>dayKey(p.d)===lastKey);
-    const verschillen=[];
-    for(let i=1;i<pairs.length;i++){
-      const dh=(pairs[i].d-pairs[i-1].d)/3600000;
-      if(dh>0&&dh<=12) verschillen.push(dh);
-    }
-    const recent=verschillen.slice(-12).sort((a,b)=>a-b);
-    const stapUur=recent.length?recent[Math.floor(recent.length/2)]:1;
-    const verwacht=Math.max(1,Math.round(24/stapUur));
-    const minimum=Math.max(2,Math.floor(verwacht*0.75));
-    if(laatsteDag.length<minimum) pairs=pairs.filter(p=>dayKey(p.d)!==lastKey);
-  }
-  return pairs.map(p=>p.i);
+  return times.map((t,i)=>({i,t:Date.parse(t)})).filter(p=>Number.isFinite(p.t)&&p.t>=start&&p.t<=end).map(p=>p.i);
 }
 
 function datumRange(){
@@ -1997,12 +2010,12 @@ const cfgBase={
   plugins:{legend:{display:false}},
   layout:{padding:{left:2,right:6,top:6,bottom:2}},
   scales:{
-    x:{grid:{color:GRID,lineWidth:0.5},ticks:{color:TICK,maxRotation:0,autoSkip:false,
+    x:{grid:{drawOnChartArea:false,drawTicks:false},ticks:{color:TICK,maxRotation:0,autoSkip:false,
       font:function(ctx){
         const raw = ctx.tick && ctx.tick.label;
         const isDag = Array.isArray(raw);
         const w = window.innerWidth;
-        return {size: isDag ? (w<480?9:10.5) : (w<480?7:8.5), weight: isDag ? '700' : '400'};
+        return {size: isDag ? (w<480?10:13) : 10, weight: isDag ? '600' : '400'};
       },
       color:function(ctx){
         const raw = ctx.tick && ctx.tick.label;
@@ -2010,7 +2023,7 @@ const cfgBase={
         const w = window.innerWidth;
         if(w < 480) return 'transparent';          // telefoon: alleen dagkoppen
         if(w < 768) return raw==='12:00' ? '#9aa5b5' : 'transparent'; // tablet: alleen 12u
-        return '#9aa5b5';                           // desktop: alles
+        return 'transparent'; // dagen vormen de hoofdindeling; uren staan bij aanwijzen
       }
     },border:{color:'#d8dde6'}},
   }
@@ -2019,8 +2032,8 @@ const cfgBase={
 function yAs(pos,unit,kleur,extra={}){
   const isTemp = unit === '°C';
   return{position:pos,grid:{color:pos==='left'?GRID:'transparent', lineWidth: 0.5},
-    ticks:{color:kleur||TICK,font:{size: isTemp ? 9.5 : 10},callback:v=>v+(unit||''),
-      ...(isTemp ? {stepSize:2.5} : {})},
+    ticks:{color:kleur||TICK,font:{size:12},callback:v=>v+(unit||''),
+      ...(isTemp ? {stepSize:5} : {})},
     border:{color:'#d8dde6'},...extra};
 }
 
@@ -2054,7 +2067,7 @@ function _toggleFlag(flag, pillCls, mark, defaultOn){
 }
 // Defaults — eerste indruk: alles aan zodat het hele ensemble meteen zichtbaar is
 window._toonSpaghetti = window._toonSpaghetti ?? true;
-window._toonBanden    = window._toonBanden    ?? true;
+window._toonBanden    = window._toonBanden    ?? false;
 window._toonHres      = window._toonHres      ?? true;
 
 // tl;dr-chips boven de temperatuurgrafiek — sleutelgetallen uit het ensemble
@@ -2319,9 +2332,9 @@ const ov16=new Date(+nu2+16*86400000).toISOString().slice(0,10);
 });
 
 // ── Ophalen ──
-let _laadBusy=false;
+let _laadBusy=false, _laadPending=false;
 async function laadData(){
-  if(_laadBusy) return;
+  if(_laadBusy){_laadPending=true;return;}
   _laadBusy=true;
   const btn=document.getElementById('btn-laden');
   btn.disabled=true;btn.textContent='Ophalen…';
@@ -2368,12 +2381,13 @@ async function laadData(){
   } finally {
     _laadBusy=false;
     btn.disabled=false;btn.textContent='▶ Ophalen';
+    if(_laadPending){_laadPending=false;setTimeout(laadData,0);}
   }
 }
 
 // ── Temp + Neerslag ──
 async function laadTemp(lat,lon,naam,dagen,van,tot){
-  document.getElementById('header-sub').textContent='ECMWF IFS ENS · 1 controle + 50 verstoorde leden · native modelstappen · UTC';
+  document.getElementById('header-sub').textContent='ECMWF IFS ENS · 1 controle + 50 verstoorde leden · UTC · oper en controle kunnen samenvallen';
   const ensUrl=`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&models=ecmwf_ifs025&temporal_resolution=native&timezone=GMT&forecast_days=${dagen}`;
   const ens=await fetchEnsembleCoherent(ensUrl);
   const hres=await fetchExactDeterministic(ens,ensUrl,'temperature_2m');
@@ -2395,9 +2409,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
   const hTs=hIdx.map(i=>hres.hourly.time[i]);
   const hTemp=hIdx.map(i=>hres.hourly.temperature_2m[i]);
   // HRES gemapped op ensemble-timestamps voor crosshair
-  const hTempMap = {};
-  hTs.forEach((t,i) => { hTempMap[t] = hTemp[i]; });
-  const hTempMapped = ts.map(t => hTempMap[t] ?? null);
+  const hTempMapped = alignSeriesToTimes(ts,hTs,hTemp);
   const lab=getLab(ts);
 
   // MOSMIX TX/TN bolletjes
@@ -2418,7 +2430,7 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
 
   // Temp chart
   document.getElementById('blok-temp').style.display='';
-  document.getElementById('titel-temp').textContent=`ECMWF – ${naam}  Temperatuur`;
+  document.getElementById('titel-temp').textContent=`ECMWF – ${naam} · Temperatuur (°C)`;
   document.getElementById('leg-temp').innerHTML=legHtml([
     ['rgba(22,120,30,0.35)','50 verstoorde leden','lijn'],
     ['rgba(51,170,51,0.10)','p10–p90','blok'],
@@ -2427,7 +2439,6 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
     ['#2233bb','Controle','lijn'],
     ['#1a1a1a','Gemiddelde','dash'],
     ['#cc00cc','Mediaan (P50)','dash'],
-    ['rgba(200,50,50,0.5)','10° / 20°C','dash'],
     ...(mosBol ? [['#ff4444','MOSMIX TX' + mosLabel,'punt'],['#4488ff','MOSMIX TN' + mosLabel,'punt']] : []),
   ]);
   chartTimestamps['canvas-temp']=ts;
@@ -2444,10 +2455,6 @@ async function laadTemp(lat,lon,naam,dagen,van,tot){
       {type:'line',data:hTempMapped,borderColor:'#cc0000',borderWidth:2,pointRadius:0,fill:false,tension:0,order:2,borderCapStyle:'butt',borderJoinStyle:'miter',_isHres:true,hidden:!window._toonHres},
       ...(tCtrl?[{type:'line',data:tCtrl,borderColor:'#2233bb',borderWidth:2,pointRadius:0,fill:false,tension:0,order:2,borderCapStyle:'butt',borderJoinStyle:'miter'}]:[]),
       {type:'line',data:tMean,borderColor:'#1a1a1a',borderWidth:2,borderDash:[2,4],pointRadius:0,fill:false,tension:0,order:2,borderCapStyle:'butt',borderJoinStyle:'miter'},
-      {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.35)',borderWidth:0.7,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(25),borderColor:'rgba(200,0,0,0.60)',borderWidth:1.0,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(30),borderColor:'rgba(200,0,0,0.70)',borderWidth:1.1,borderDash:[5,4],pointRadius:0,fill:false,order:3},
       ...(mosBol ? [
         {type:'line',data:mosTxData,borderColor:'transparent',backgroundColor:'#ff4444',pointRadius:ctx=>mosTxData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
         {type:'line',data:mosTnData,borderColor:'transparent',backgroundColor:'#4488ff',pointRadius:ctx=>mosTnData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
@@ -2540,11 +2547,12 @@ function alignSeriesToTimes(targetTimes, sourceTimes, values){
 
 // ── Dagtemperatuur kansen (gestapeld staafdiagram per dag, KNMI-stijl) ──
 async function laadDagKansen(lat,lon,naam,dagen,van,tot){
-  document.getElementById('header-sub').textContent='51 ensembleleden · ECMWF-stappen 3 u (later 6 u) · Bron: Open-Meteo';
+  document.getElementById('header-sub').textContent='51 ensembleleden · oorspronkelijke ECMWF-tijdstappen · Bron: Open-Meteo';
   const ens=await fetchEnsembleCoherent(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`);
   if(!ens?.hourly?.time) throw new Error('Geen ensemble data ontvangen');
   const times=ens.hourly.time;
-  const idx=filterT(times,van,tot),ts=idx.map(i=>times[i]);
+  const dagBereik=gekozenUtcDagbereik(times,van,tot,dagen);
+  const idx=filterT(times,van,tot).filter(i=>times[i].slice(0,10)<=dagBereik.tot),ts=idx.map(i=>times[i]);
   const tK=PM.ensembleMemberKeys(ens.hourly,'temperature_2m');
   const tA=tK.map(k=>idx.map(i=>ens.hourly[k][i]));
   const n=tA.length;
@@ -2619,7 +2627,7 @@ async function laadDagKansen(lat,lon,naam,dagen,van,tot){
 
 // ── Dagneerslag kansen (gestapeld staafdiagram per dag, KNMI-stijl) ──
 async function laadDagNeerslag(lat,lon,naam,dagen,van,tot){
-  document.getElementById('header-sub').textContent='51 ensembleleden · ECMWF-stappen 3 u (later 6 u) · Bron: Open-Meteo';
+  document.getElementById('header-sub').textContent='51 ensembleleden · oorspronkelijke ECMWF-tijdstappen · Bron: Open-Meteo';
   const bronDagen=dagenMetSluitpunt(dagen);
   const ens=await fetchEnsembleCoherent(`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=precipitation&models=ecmwf_ifs025&temporal_resolution=native&timezone=GMT&forecast_days=${bronDagen}`);
   if(!ens?.hourly?.time) throw new Error('Geen ensemble data ontvangen');
@@ -2765,7 +2773,7 @@ async function laadBewolking(lat,lon,naam,dagen,van,tot){
 
 // ── Wind ──
 async function laadWind(lat,lon,naam,dagen,van,tot){
-  document.getElementById('header-sub').textContent='ECMWF IFS ENS · 1 controle + 50 verstoorde leden · native modelstappen · UTC';
+  document.getElementById('header-sub').textContent='ECMWF IFS ENS · 1 controle + 50 verstoorde leden · UTC · oper en controle kunnen samenvallen';
   const ensUrl=`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=wind_speed_10m,wind_gusts_10m&models=ecmwf_ifs025&wind_speed_unit=kmh&temporal_resolution=native&timezone=GMT&forecast_days=${dagen}`;
   const ens=await fetchEnsembleCoherent(ensUrl);
   const hres=await fetchExactDeterministic(ens,ensUrl,'wind_speed_10m,wind_gusts_10m');
@@ -2817,7 +2825,6 @@ async function laadWind(lat,lon,naam,dagen,van,tot){
       ...(ffCtrl?[{type:'line',label:'Controle wind',data:ffCtrl,borderColor:'#2233bb',borderWidth:2,pointRadius:0,fill:false,tension:0,order:2,borderCapStyle:'butt',borderJoinStyle:'miter',_windTooltip:'wind'}]:[]),
       {type:'line',label:'HRES wind',data:hFFMapped,borderColor:'#cc0000',borderWidth:2,borderDash:[7,4],pointRadius:0,fill:false,tension:0,order:3,borderCapStyle:'butt',borderJoinStyle:'miter',_isHres:true,hidden:!window._toonHres,_windTooltip:'wind'},
       {type:'line',label:'HRES stoten',data:hFXMapped,borderColor:'rgba(220,80,40,0.85)',borderWidth:1.8,borderDash:[7,4],pointRadius:0,fill:false,tension:0,order:4,borderCapStyle:'butt',borderJoinStyle:'miter',_isHres:true,hidden:!window._toonHres,_windTooltip:'gust'},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(240,180,60,0.65)',borderWidth:1,borderDash:[6,4],pointRadius:0,fill:false,order:11},
       ...BFT.filter(b=>b.v<yMax).map(b=>({type:'line',data:Array(ts.length).fill(b.v),borderColor:'rgba(150,100,50,0.4)',borderWidth:0.7,borderDash:[3,4],pointRadius:0,fill:false,order:11})),
     ]},
     options:{...cfgBase,
@@ -3349,7 +3356,6 @@ async function laadAifs(lat,lon,naam,dagen,van,tot){
   document.getElementById('leg-aifs').innerHTML=legHtml([
     ['rgba(20,130,20,0.5)','Ensembleleden','lijn'],['rgba(51,187,51,0.25)','IQR p25–p75','blok'],
     ['#ee3333','Mediaan','lijn'],['#2299ff','AIFS deterministisch','lijn'],
-    ['rgba(200,50,50,0.5)','10° / 20°C','dash'],
     ...(mosBol ? [['#ff4444','MOS/MIX TX'+mosLabel,'punt'],['#4488ff','MOS/MIX TN'+mosLabel,'punt']] : []),
   ]);
   chartTimestamps['canvas-aifs']=ts;
@@ -3360,10 +3366,6 @@ async function laadAifs(lat,lon,naam,dagen,van,tot){
       {type:'line',data:tP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0,order:9},
       {type:'line',data:tMed,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0,order:1},
       {type:'line',data:hTemp,borderColor:'#2299ff',borderWidth:2,pointRadius:0,fill:false,tension:0,order:2},
-      {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.35)',borderWidth:0.7,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(25),borderColor:'rgba(200,0,0,0.60)',borderWidth:1.0,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(30),borderColor:'rgba(200,0,0,0.70)',borderWidth:1.1,borderDash:[5,4],pointRadius:0,fill:false,order:3},
       ...(mosBol ? [
         {type:'line',data:mosTxData,borderColor:'transparent',backgroundColor:'#ff4444',pointRadius:ctx=>mosTxData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
         {type:'line',data:mosTnData,borderColor:'transparent',backgroundColor:'#4488ff',pointRadius:ctx=>mosTnData[ctx.dataIndex]!=null?7:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:2,fill:false,order:0,spanGaps:false,showLine:false},
@@ -3451,7 +3453,6 @@ async function laadIcon(lat,lon,naam,dagen,van,tot){
   document.getElementById('leg-icon').innerHTML=legHtml([
     ['rgba(20,130,20,0.5)','Ensembleleden','lijn'],['rgba(51,187,51,0.25)','IQR p25–p75','blok'],
     ['#ee3333','Mediaan','lijn'],
-    ['rgba(200,50,50,0.5)','10° / 20°C','dash'],
   ]);
   chartTimestamps['canvas-icon']=ts;
   actieveCharts.icon=new Chart(document.getElementById('canvas-icon'),{
@@ -3460,10 +3461,6 @@ async function laadIcon(lat,lon,naam,dagen,van,tot){
       {type:'line',data:tP25,borderColor:'transparent',backgroundColor:'rgba(51,187,51,0.12)',fill:'+1',pointRadius:0,tension:0,order:9},
       {type:'line',data:tP75,borderColor:'transparent',fill:false,pointRadius:0,tension:0,order:9},
       {type:'line',data:tMed,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0,order:1},
-      {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.35)',borderWidth:0.7,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(25),borderColor:'rgba(200,0,0,0.60)',borderWidth:1.0,borderDash:[5,4],pointRadius:0,fill:false,order:3},
-      {type:'line',data:Array(ts.length).fill(30),borderColor:'rgba(200,0,0,0.70)',borderWidth:1.1,borderDash:[5,4],pointRadius:0,fill:false,order:3},
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{
@@ -3536,7 +3533,7 @@ async function laadIcon(lat,lon,naam,dagen,van,tot){
 
 // ── Dauwpunt / Vochtigheid ──
 async function laadDauwpunt(lat,lon,naam,dagen,van,tot){
-  document.getElementById('header-sub').textContent='51 ensembleleden · ECMWF-stappen 3 u (later 6 u) · Bron: Open-Meteo';
+  document.getElementById('header-sub').textContent='51 ensembleleden · oorspronkelijke ECMWF-tijdstappen · Bron: Open-Meteo';
   const ensUrl=`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&hourly=dewpoint_2m,relativehumidity_2m&models=ecmwf_ifs025&timezone=Europe%2FAmsterdam&forecast_days=${dagen}`;
   const ens=await fetchEnsembleCoherent(ensUrl);
   const hres=await fetchExactDeterministic(ens,ensUrl,'temperature_2m,relative_humidity_2m,dewpoint_2m');
@@ -4156,7 +4153,7 @@ function openVergelijking(){
       <div class="seg">
         <button class="actief vbtn" onclick="setVergPeriode('7',this)">7 d</button>
         <button class="vbtn" onclick="setVergPeriode('10',this)">10 d</button>
-        <button class="vbtn" onclick="setVergPeriode('16',this)">16 d</button>
+        <button class="vbtn" onclick="setVergPeriode('16',this)">15 d</button>
         <button class="vbtn" onclick="setVergPeriode('custom',this)">Datum…</button>
       </div>
       <div id="wrap-verg-custom" class="vp-custom">
@@ -4549,10 +4546,6 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot,runContex
         {type:'line',data:tMed,borderColor:medK,borderWidth:2,borderDash:[8,5],pointRadius:0,fill:false,tension:0,order:1},
         ...(tCtrlV?[{type:'line',data:tCtrlV,borderColor:'#2233bb',borderWidth:1.8,pointRadius:0,fill:false,tension:0,order:2}]:[]),
         {type:'line',data:tMeanV,borderColor:'#1a1a1a',borderWidth:1.6,borderDash:[2,4],pointRadius:0,fill:false,tension:0,order:2},
-        {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.4)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false,order:3},
-        {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.3)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false,order:3},
-        {type:'line',data:Array(ts.length).fill(25),borderColor:'rgba(200,0,0,0.60)',borderWidth:1.0,borderDash:[4,4],pointRadius:0,fill:false,order:3},
-        {type:'line',data:Array(ts.length).fill(30),borderColor:'rgba(200,0,0,0.70)',borderWidth:1.1,borderDash:[4,4],pointRadius:0,fill:false,order:3},
         ...(mosBol ? [
           {type:'line',data:mosTxData,borderColor:'transparent',backgroundColor:'#ff4444',pointRadius:ctx=>mosTxData[ctx.dataIndex]!=null?5:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:1.5,fill:false,order:0,spanGaps:false,showLine:false},
           {type:'line',data:mosTnData,borderColor:'transparent',backgroundColor:'#4488ff',pointRadius:ctx=>mosTnData[ctx.dataIndex]!=null?5:0,pointStyle:'circle',pointBorderColor:'white',pointBorderWidth:1.5,fill:false,order:0,spanGaps:false,showLine:false},
@@ -4646,7 +4639,6 @@ async function laadVergPluim(idx,lat,lon,naam,type,dagen,model,van,tot,runContex
       {type:'line',data:p25,borderColor:'transparent',backgroundColor:ensK,fill:'+1',pointRadius:0,tension:0,order:9},
       {type:'line',data:p75,borderColor:'transparent',fill:false,pointRadius:0,tension:0,order:9},
       {type:'line',data:ffMed,borderColor:medK,borderWidth:2,pointRadius:0,fill:false,tension:0,order:1},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(240,180,60,0.65)',borderWidth:1,borderDash:[6,4],pointRadius:0,fill:false,order:11},
     ];
     const _windVals=ffA.flat().filter(Number.isFinite);
     const _yMaxW=_windVals.length?Math.max(20,Math.ceil(Math.max(..._windVals)*1.1/5)*5):60;
@@ -5203,7 +5195,6 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
   document.getElementById('leg-hres').innerHTML=legHtml([
     ['#ee3333',`Huidige run (${runNaam})`,'lijn'],
     ...(pTemp?[['rgba(238,120,120,0.7)',`Vorige run (${prevNaam})`,'lijn']]:[]),
-    ['rgba(200,50,50,0.5)','10° / 20°C','dash'],
   ]);
   if(actieveCharts.hres)actieveCharts.hres.destroy();
   chartTimestamps['canvas-hres']=ts;
@@ -5211,10 +5202,6 @@ async function laadHres(lat,lon,naam,dagen,van,tot){
     data:{labels:lab,datasets:[
       {type:'line',data:hTemp,borderColor:'#ee3333',borderWidth:2.5,pointRadius:0,fill:false,tension:0,order:1},
       ...(pTemp&&pTemp.some(v=>v!==null)?[{type:'line',data:pTemp,borderColor:'rgba(238,120,120,0.7)',borderWidth:1.5,borderDash:[3,2],pointRadius:0,fill:false,tension:0,order:2,spanGaps:true}]:[]),
-      {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.45)',borderWidth:0.8,borderDash:[5,4],pointRadius:0,fill:false,order:4},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.35)',borderWidth:0.7,borderDash:[5,4],pointRadius:0,fill:false,order:4},
-      {type:'line',data:Array(ts.length).fill(25),borderColor:'rgba(200,0,0,0.60)',borderWidth:1.0,borderDash:[5,4],pointRadius:0,fill:false,order:4},
-      {type:'line',data:Array(ts.length).fill(30),borderColor:'rgba(200,0,0,0.70)',borderWidth:1.1,borderDash:[5,4],pointRadius:0,fill:false,order:4},
     ]},
     options:{...cfgBase,
       plugins:{legend:{display:false},tooltip:{...ttCfg,
@@ -5534,10 +5521,6 @@ async function laadVergHres(idx,lat,lon,naam,type,dagen,van,tot,runContext=null)
     datasets=[
       {type:'line',data:fidx.map(i=>hres.hourly.temperature_2m[i]),borderColor:'#cc0000',borderWidth:2,pointRadius:0,fill:false,tension:0},
       ...(pTemp&&pTemp.some(v=>v!==null)?[{type:'line',data:pTemp,borderColor:'rgba(238,120,120,0.6)',borderWidth:1.2,borderDash:[3,2],pointRadius:0,fill:false,tension:0,spanGaps:true}]:[]),
-      {type:'line',data:Array(ts.length).fill(10),borderColor:'rgba(200,50,50,0.4)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false},
-      {type:'line',data:Array(ts.length).fill(20),borderColor:'rgba(200,50,50,0.3)',borderWidth:0.7,borderDash:[4,4],pointRadius:0,fill:false},
-      {type:'line',data:Array(ts.length).fill(25),borderColor:'rgba(200,0,0,0.60)',borderWidth:1.0,borderDash:[4,4],pointRadius:0,fill:false},
-      {type:'line',data:Array(ts.length).fill(30),borderColor:'rgba(200,0,0,0.70)',borderWidth:1.1,borderDash:[4,4],pointRadius:0,fill:false},
     ];
     scales={x:{...cfgBase.scales.x,ticks:{...cfgBase.scales.x.ticks,maxTicksLimit:8}},y:yAs('left','°C')};
     tooltipCb={filter:item=>item.datasetIndex<=(pTemp?1:0),callbacks:{label:ctx=>{
@@ -6110,10 +6093,10 @@ function toggleAutoRefresh(){
   if(autoRefreshInterval){
     clearInterval(autoRefreshInterval);
     autoRefreshInterval=null;
-    btn.style.background='#1e3a5a';btn.style.color='#aaa';btn.textContent='⟳ Auto-refresh uit';
+    btn.style.background='#1e3a5a';btn.style.color='#aaa';btn.textContent='Nieuwe ECMWF-runs automatisch';
   }else{
     autoRefreshInterval=setInterval(()=>{if(!document.getElementById('btn-laden').disabled)laadData();},300000); // 5 min
-    btn.style.background='#0d9488';btn.style.color='white';btn.textContent='⟳ Auto-refresh 5 min';
+    btn.style.background='#0d9488';btn.style.color='white';btn.textContent='Ook overige modellen elke 5 min';
   }
 }
 

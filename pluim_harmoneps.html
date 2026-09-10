@@ -63,6 +63,7 @@ main{padding:14px 16px;max-width:1200px;margin:0 auto}
 .err{padding:12px;color:#b91c1c;background:#fee2e2;border-radius:8px;margin:8px 0;font-size:.85rem}
 .foot{max-width:1200px;margin:0 auto;padding:4px 18px 20px;color:var(--text2);font-size:.72rem;line-height:1.5}
 </style>
+<link rel="stylesheet" href="pluim-presentatie.css?v=20260910">
 </head>
 <body>
 <div class="header" id="topHeader">
@@ -72,7 +73,7 @@ main{padding:14px 16px;max-width:1200px;margin:0 auto}
     <span class="sep">·</span>
     <span>6 members</span>
     <span class="sep">·</span>
-    <span>2.5 km native</span>
+    <span>circa 2 km · 6 leden per startuur</span>
     <span class="sep">·</span>
     <span>60 uur lead</span>
     <span class="sep">·</span>
@@ -109,7 +110,7 @@ if (window.parent !== window || /[?&]embedded=1/.test(location.search)) {
   <div class="param-card" data-var="tcc_pct"><span class="ico">☁️</span>Bewolking</div>
   <div class="param-card" data-var="rh_pct"><span class="ico">💧</span>RV 2 m</div>
   <div class="param-card" data-var="msl_hpa"><span class="ico">🎯</span>Druk MSL</div>
-  <div class="param-card" data-var="pwat_mm"><span class="ico">💦</span>Precip. water</div>
+  <div class="param-card" data-var="cloud_base_m"><span class="ico">☁️</span>Wolkenbasis</div>
   <div class="param-card" data-var="vis_km"><span class="ico">🌫️</span>Zicht</div>
 </div>
 <div class="search-suggest" id="suggest"></div>
@@ -120,11 +121,11 @@ if (window.parent !== window || /[?&]embedded=1/.test(location.search)) {
     <div id="tldr-harmonie" class="tldr-chips" style="display:none"></div>
     <div class="legenda-row" id="legenda-harmonie">
       <span><span class="sw" style="background:rgba(40,160,40,0.18)"></span>p25–p75 (banden van de 6 members)</span>
-      <span><span class="ln" style="border-color:#cc2222"></span>Mediaan</span>
-      <span><span class="ln" style="border-color:#111;border-width:2.4px"></span>Oper (control)</span>
-      <span class="tgl-pill on" id="hh-tgl-banden" onclick="toggleHHBanden()" title="Toon/verberg p25–p75 band"><span class="dot"></span>Banden (p25–p75)</span>
-      <span class="tgl-pill on" id="hh-tgl-oper" onclick="toggleHHOper()" title="Toon/verberg de operationele control run"><span class="dot"></span>Oper (control)</span>
-      <span class="tgl-pill on" id="hh-tgl-spaghetti" onclick="toggleHHSpaghetti()" title="Toon/verberg alle 6 members"><span class="dot"></span>🍝 Alle 6 members</span>
+      <span><span class="ln" style="border-color:#b024a5;border-top-style:dashed"></span>Mediaan (P50)</span>
+      <span><span class="ln" style="border-color:#2453b3;border-width:2.4px"></span>Controle</span>
+      <span class="tgl-pill" id="hh-tgl-banden" onclick="toggleHHBanden()" title="Toon/verberg p25–p75 band"><span class="dot"></span>Banden (p25–p75)</span>
+      <span class="tgl-pill on" id="hh-tgl-oper" onclick="toggleHHOper()" title="Toon/verberg de controleberekening"><span class="dot"></span>Controle</span>
+      <span class="tgl-pill on" id="hh-tgl-spaghetti" onclick="toggleHHSpaghetti()" title="Toon/verberg de vijf verstoorde leden"><span class="dot"></span>5 verstoorde leden</span>
     </div>
     <div class="chart-wrap"><canvas id="plume"></canvas></div>
   </div>
@@ -137,11 +138,12 @@ if (window.parent !== window || /[?&]embedded=1/.test(location.search)) {
   </div>
 </main>
 <footer class="foot">
-  Data: KNMI Data Platform — HARMONIE-AROME Cy43 P2a EPS. Nearest-station aan je gekozen locatie (6 members, uurlijks, 0-60 uur lead).
-  Hoofdlijn (of blauwe neerslagstaaf) = ensemblemediaan (P50). Dunnere lijnen = individuele members.
+  Data: KNMI Data Platform — HARMONIE-AROME Cy43 P2a EPS. Deze pluim bevat de controle en vijf verstoorde leden van één startuur; geen samengesteld ensemble van 30 leden. Nearest-station aan je gekozen locatie (6 members, uurlijks, 0-60 uur lead).
+  Paarse streeplijn (of blauwe neerslagstaaf) = ensemblemediaan (P50). Blauwe lijn = controle. Neerslag = totaal waterequivalent over het voorafgaande uur. Dunnere lijnen = individuele members.
   Zoek via OpenStreetMap Nominatim — plaatsnamen worden automatisch gekoppeld aan dichtstbijzijnd beschikbaar station.
 </footer>
 
+<script src="harmoneps-data.js?v=20260910"></script>
 <script>
 const VAR_LABELS = {
   t2m_c: "Temperatuur 2 m (°C)",
@@ -153,7 +155,7 @@ const VAR_LABELS = {
   tcc_pct: "Totale bewolking (%)",
   rh_pct: "Relatieve vochtigheid 2 m (%)",
   msl_hpa: "Luchtdruk MSL (hPa)",
-  pwat_mm: "Precipitable water (kg/m²)",
+  cloud_base_m: "Wolkenbasis (m)",
   vis_km: "Zicht (km)",
 };
 
@@ -258,26 +260,44 @@ let huidigVar = 't2m_c';
 
 let STATION_DATA = null, HUIDIG_META = null, chart = null;
 
-async function laadStation(station, meta){
-  if(!station) return;
-  const r = await fetch(`pluim_harmoneps/${station.id}.json?v=${Date.now()}`);
-  if(!r.ok){
-    document.getElementById('meta').innerHTML = `<div class="err">Geen data beschikbaar voor ${station.naam}.</div>`;
-    return;
-  }
-  STATION_DATA = await r.json();
-  HUIDIG_META = meta;
-  document.getElementById('runLbl').innerHTML = `Run <strong>${STATION_DATA.run}</strong> · ${STATION_DATA.n_members} members`;
-  const km = HUIDIG_META ? HUIDIG_META.km.toFixed(1) : '0';
-  const qnaam = HUIDIG_META ? HUIDIG_META.queryNaam : STATION_DATA.station.naam;
-  document.getElementById('meta').innerHTML =
-    `📍 <strong>${qnaam}</strong> → dichtstbijzijnd station <strong>${STATION_DATA.station.naam}</strong> (${km} km). ` +
-    `Grid-cel ${STATION_DATA.grid_lat}°N ${STATION_DATA.grid_lon}°E.`;
-  render();
+let stationRequest=0, selectedStation=null, refreshBusy=false;
+function showFreshness(){
+  const el=document.getElementById('runLbl');
+  if(!STATION_DATA)return;
+  const d=new Date(STATION_DATA.run_initialisation);
+  const age=(Date.now()-d)/36e5;
+  el.textContent=`Run ${d.toLocaleDateString('nl-NL',{timeZone:'UTC',day:'numeric',month:'short'})} ${String(d.getUTCHours()).padStart(2,'0')} UTC · 1 controle + 5 leden · controle elke minuut${age>6?' · oudere bronrun':''}`;
+  el.style.color=age>6?'#ffce80':'';
 }
+async function laadStation(station, meta, quiet=false){
+  if(!station)return;
+  const request=++stationRequest;
+  selectedStation=station;
+  try{
+    const candidate=await HarmonepsData.load(station.id);
+    if(request!==stationRequest)return;
+    if(quiet&&candidate.run===STATION_DATA?.run){showFreshness();return;}
+    STATION_DATA=candidate; HUIDIG_META=meta;
+    showFreshness();
+    const el=document.getElementById('meta');
+    const km=meta?meta.km.toFixed(1):'0';
+    el.textContent=`${meta?.queryNaam||candidate.station.naam} · rooster bij ${candidate.station.naam} (${km} km) · ${candidate.grid_lat}° N, ${candidate.grid_lon}° E. Tijden: UTC.`;
+    render();
+  }catch(e){
+    if(request!==stationRequest)return;
+    document.getElementById('meta').textContent=`${e.message}. ${quiet&&STATION_DATA?'De laatst geladen run blijft zichtbaar.':'Probeer opnieuw.'}`;
+    if(!quiet){if(chart)chart.destroy();chart=null;STATION_DATA=null;document.getElementById('chartTitle').textContent='Geen geverifieerde pluim beschikbaar';}
+  }
+}
+async function refreshStation(){
+ if(document.hidden||refreshBusy||!selectedStation)return;
+ refreshBusy=true;try{await laadStation(selectedStation,HUIDIG_META,true);}finally{refreshBusy=false;}
+}
+setInterval(refreshStation,60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshStation();});
 
 // Pluim-staten (defaults)
-window.HH_TOON_BANDEN    = window.HH_TOON_BANDEN    ?? true;
+window.HH_TOON_BANDEN    = window.HH_TOON_BANDEN    ?? false;
 window.HH_TOON_OPER      = window.HH_TOON_OPER      ?? true;
 window.HH_TOON_SPAGHETTI = window.HH_TOON_SPAGHETTI ?? true;
 function toggleHHBanden(){    window.HH_TOON_BANDEN    = !window.HH_TOON_BANDEN;    syncHHToggle(); }
@@ -430,7 +450,7 @@ function renderHHCloud(times, labels, members){
       {type:'line', label:'Mediaan', data:ccMed, borderColor:'#ffffff', borderWidth:1.6, pointRadius:0, fill:false, tension:0, order:1},
     ]},
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true, maintainAspectRatio:false, animation:false,
       plugins:{ legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:10}}},
         tooltip:{ mode:'index', intersect:false,
           callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'-'}%` } } },
@@ -484,7 +504,7 @@ function renderHHWindDir(times, labels, members){
   chart = new Chart(ctx, {
     data:{ labels, datasets },
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true, maintainAspectRatio:false, animation:false,
       plugins:{ legend:{display:true, position:'bottom', labels:{boxWidth:10, font:{size:10}}},
         tooltip:{ mode:'index', intersect:false,
           callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(0):'0'}%` } } },
@@ -503,12 +523,12 @@ function render(){
   document.getElementById('chartTitle').textContent = label;
   const times = STATION_DATA.times.map(t => new Date(t));
   const labels = times.map(d => {
-    const day = ['zo','ma','di','wo','do','vr','za'][d.getDay()];
-    const hh = String(d.getHours()).padStart(2,'0');
-    return `${day} ${hh}u`;
+    const day = ['zo','ma','di','wo','do','vr','za'][d.getUTCDay()];
+    const hh = String(d.getUTCHours()).padStart(2,'0');
+    return `${day} ${d.getUTCDate()}-${String(d.getUTCMonth()+1).padStart(2,'0')} ${hh} UTC`;
   });
   const members = (STATION_DATA.vars[v] || []).map(series => series.map(value =>
-    v === 'pwat_mm' && (!Number.isFinite(value) || value < 0 || value > 200) ? null : value
+    v === 'cloud_base_m' && (!Number.isFinite(value) || value < 0 || value > 25000) ? null : value
   ));
   if(!members.length){
     if(chart) chart.destroy();
@@ -520,9 +540,9 @@ function render(){
   if (v === 'tcc_pct')      { legendaRow.style.display='none'; renderHHCloud(times, labels, members); buildDagTabel(times, members, v); return; }
   if (v === 'wind_dir_deg') { legendaRow.style.display='none'; renderHHWindDir(times, labels, members); buildDagTabel(times, members, v); return; }
   legendaRow.style.display='';
-  const COLORS = ['#cc2222','#228822','#0066cc','#cc9900','#8844cc','#44aacc'];
+  const COLORS = ['#2453b3','#288038','#288038','#288038','#288038','#288038'];
   const datasets = members.map((series, mi) => ({
-    label: mi===0 ? 'Oper' : `Member ${mi}`,
+    label: mi===0 ? 'Controle' : `Lid ${STATION_DATA.member_ids[mi]}`,
     data: series,
     borderColor: COLORS[mi % COLORS.length] + (mi===0 ? 'cc' : '88'),
     borderWidth: mi===0 ? 2 : 0.8, pointRadius: 0, fill: false, tension:0,
@@ -533,7 +553,7 @@ function render(){
   }));
   // Mediaan & p25/p75 over alle 6 members per tijdstap
   const mean = times.map((_,i) => {
-    const vals = members.map(m => m[i]).filter(x => x != null);
+    const vals = members.map(m => m[i]).filter(Number.isFinite);
     return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
   });
   const median = times.map((_,i) => _pct(members.map(m=>m[i]), 50));
@@ -543,7 +563,7 @@ function render(){
   datasets.push(
     {label:'p25', data:p25, borderColor:'transparent', backgroundColor:'rgba(40,160,40,0.18)', fill:'+1', pointRadius:0, tension:0, order:9, _isBand:true, hidden:!window.HH_TOON_BANDEN},
     {label:'p75', data:p75, borderColor:'transparent', fill:false, pointRadius:0, tension:0, order:9, _isBand:true, hidden:!window.HH_TOON_BANDEN},
-    {label:'Mediaan', data:median, borderColor:'#cc2222', borderWidth:2, pointRadius:0, fill:false, tension:0, order:1, borderCapStyle:'butt', borderJoinStyle:'miter'},
+    {label:'Mediaan', data:median, borderColor:'#b024a5', borderWidth:2, borderDash:[7,4], pointRadius:0, fill:false, tension:0, order:1, borderCapStyle:'butt', borderJoinStyle:'miter'},
   );
   const ctx = document.getElementById('plume');
   const existing = Chart.getChart(ctx);
@@ -559,19 +579,19 @@ function render(){
     data: { labels: labels, datasets: isPrecip
       ? [
           // Range max per uur als achtergrond (lichtgrijs)
-          { type:'bar', label:'Maximum (alle members)', data: members[0].map((_,i)=>Math.max(...members.map(m=>m[i]||0))), backgroundColor:'rgba(150,180,210,0.35)', borderWidth:0, order:3 },
+          { type:'bar', label:'Maximum (alle members)', data: members[0].map((_,i)=>Math.max(...members.map(m=>m[i]).filter(Number.isFinite))), backgroundColor:'rgba(150,180,210,0.35)', borderWidth:0, order:3 },
           { type:'bar', label:'Mediaan (P50)', data: median, backgroundColor:'#0066cc', borderWidth:0, order:2 },
           // Per-member dunne lijntjes erover
-          ...members.map((s,mi) => ({ type:'line', label: mi===0?'Oper':`Member ${mi}`, data:s,
+          ...members.map((s,mi) => ({ type:'line', label: mi===0?'Controle':`Lid ${STATION_DATA.member_ids[mi]}`, data:s,
               borderColor: COLORS[mi%COLORS.length]+'aa', borderWidth:1, pointRadius:0, fill:false, order:1, tension:0,
               borderCapStyle:'butt', borderJoinStyle:'miter' }))
         ]
       : datasets },
     options: {
-      responsive:true, maintainAspectRatio:false,
+      responsive:true, maintainAspectRatio:false, animation:false,
       scales: (function(){
         const sc = {
-          x: { ticks:{ maxRotation:0, autoSkip:true, autoSkipPadding:14 }, grid:{display:false} },
+          x: { ticks:{ maxRotation:0, autoSkip:false, font:{size:11}, callback:(_,i)=>{const d=times[i];if(!d)return '';const h=d.getUTCHours();return h===0?[''+['zo','ma','di','wo','do','vr','za'][d.getUTCDay()],d.getUTCDate()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')]:h%6===0?String(h).padStart(2,'0'):'';} }, grid:{color:c=>times[c.index]?.getUTCHours()===0?'#bdc6cd':'#f2f3f4'} },
           y: { title:{ display:true, text: label } },
         };
         // Beaufort is alleen gedefinieerd voor gemiddelde wind op 10 meter.
@@ -592,7 +612,7 @@ function render(){
         }
         return sc;
       })(),
-      plugins: { legend: { display: !isPrecip, position:'bottom', labels:{boxWidth:10, font:{size:10}} }, tooltip:{
+      plugins: { legend: { display: !isPrecip, position:'bottom', labels:{boxWidth:24, font:{size:12},filter:item=>!['p25','p75'].includes(item.text)} }, tooltip:{
         mode:'index', intersect:false,
         callbacks:{ label: ctx => {
           const value = ctx.parsed.y;
@@ -627,7 +647,7 @@ const KANSEN = {
   rh_pct: [{lbl:'≥95%', test:v=>v>=95}, {lbl:'≤40%', test:v=>v<=40}],
   vis_km: [{lbl:'<5 km', test:v=>v<5}, {lbl:'<1 km', test:v=>v<1}, {lbl:'<0.2 km', test:v=>v<0.2}],
   msl_hpa: [{lbl:'<1000 hPa', test:v=>v<1000}, {lbl:'>1025', test:v=>v>1025}],
-  pwat_mm: [{lbl:'>20 kg/m²', test:v=>v>20}, {lbl:'>30', test:v=>v>30}],
+  cloud_base_m: [{lbl:'<300 m', test:v=>v<300}, {lbl:'<1000 m', test:v=>v<1000}],
   wind_dir_deg: [],
 };
 
@@ -662,13 +682,13 @@ function buildDagTabel(times, members, vName){
   const isCum = isPrecip;
   const unit = ({t2m_c:'°C', gust_kmh:'km/u', wind_kmh:'km/u', wind50_kmh:'km/u',
                  wind_dir_deg:'°', precip_mm_per_h:'mm', tcc_pct:'%', rh_pct:'%',
-                 msl_hpa:'hPa', pwat_mm:'kg/m²', vis_km:'km'})[vName] || '';
+                 msl_hpa:'hPa', cloud_base_m:'m', vis_km:'km'})[vName] || '';
   const fmt = (x, showBft=true) => {
     if(x==null) return '—';
     const value = (Math.abs(x) >= 100 ? Math.round(x) : x.toFixed(1)) + ' ' + unit;
     return showBft && vName === 'wind_kmh' ? `${value} (${kmhToBft(x)} Bft)` : value;
   };
-  const fmtPct = p => p==null ? '—' : (p===0?'—':Math.round(p)+'%');
+  const fmtPct = p => p==null ? '—' : Math.round(p)+'%';
 
   // Header met evt. extra kans-kolommen
   const kansen = KANSEN[vName] || [];

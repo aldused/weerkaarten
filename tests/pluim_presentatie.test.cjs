@@ -1,0 +1,36 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const html=fs.readFileSync(require('node:path').join(__dirname,'../pluim_interactief.html'),'utf8');
+const source=html.slice(html.indexOf('function filterT('),html.indexOf('\nfunction datumRange()'));
+const times=Array.from({length:361},(_,i)=>new Date(Date.UTC(2026,8,10)+i*36e5).toISOString());
+const context={actievePreset:'7'};vm.createContext(context);vm.runInContext(source,context);
+assert.equal(context.filterT(times,null,null).length,169,'7 dagen moet een 15-daags archief echt begrenzen');
+context.actievePreset='10';assert.equal(context.filterT(times,null,null).length,241);
+context.actievePreset='16';assert.equal(context.filterT(times,null,null).length,361);
+assert.equal(context.filterT(times,'2026-09-12','2026-09-13').length,49);
+const short=times.slice(6,151);context.actievePreset='7';assert.equal(context.filterT(short,null,null).length,short.length,'korte slotdag mag niet verdwijnen');
+console.log('PASS: 7/10/15 dagen, datumselectie en volledige korte slotdag');
+const fn=html.slice(html.indexOf('async function fetchExactDeterministic('),html.indexOf('\nfunction runParamMetUurOffset'));
+const embeddedContext={PM:require('../pluim_math.js'),Date,Array,String};vm.createContext(embeddedContext);vm.runInContext(fn,embeddedContext);
+(async()=>{
+ const run='2026-09-10T00:00:00Z';const e={__weerlabRunMeta:{last_run_initialisation_time:Date.parse(run)/1000},weerlab_hres:{run,aligned_to_ensemble:true,time:['2026-09-10T00:00','2026-09-10T03:00'],temperature_2m:[11,10]}};
+ const h=await embeddedContext.fetchExactDeterministic(e,'unused','temperature_2m');
+ assert.deepEqual(Array.from(h.hourly.time),['2026-09-10T00:00Z','2026-09-10T03:00Z']);
+ console.log('PASS: ingesloten operationele lijn krijgt dezelfde UTC-as als ENS');
+})().catch(e=>{console.error(e);process.exitCode=1});
+const aliasSource=html.slice(html.indexOf('function useCanonicalVariables('),html.indexOf('async function fetchT('));
+const aliasContext={URL};vm.createContext(aliasContext);vm.runInContext(aliasSource,aliasContext);
+assert(new URL(aliasContext.useCanonicalVariables('https://example.test/?hourly=dewpoint_2m,relativehumidity_2m,winddirection_10m,weathercode')).searchParams.get('hourly')==='dew_point_2m,relative_humidity_2m,wind_direction_10m,weather_code');
+const response=aliasContext.addLegacyWindAliases({hourly:{dew_point_2m_member01:[10],relative_humidity_2m:[90],wind_direction_10m:[270]}});
+assert.equal(response.hourly.dewpoint_2m_member01[0],10);assert.equal(response.hourly.relativehumidity_2m[0],90);assert.equal(response.hourly.winddirection_10m[0],270);
+console.log('PASS: huidige bronveldnamen blijven in alle oudere deelpluimen bruikbaar');
+
+const trimSource=html.slice(html.indexOf('function trimHourlyToRunvenster('),html.indexOf('function attachRunMeta('));
+const trimContext={verifiedModelRunMeta:m=>m,Date,Number,Object,Array,Set,Error};vm.createContext(trimContext);vm.runInContext(trimSource,trimContext);
+const meta={last_run_initialisation_time:Date.parse(times[0])/1000,data_end_time:Date.parse(times[12])/1000,temporal_resolution_seconds:21600};
+const boundary={hourly:{time:[times[0],times[6],times[12]],temperature_2m:[12,13,null],temperature_2m_member01:[11,14,null]}};
+trimContext.trimHourlyToRunvenster(boundary,meta,true);assert.equal(boundary.hourly.time.length,2);
+const inside={hourly:{time:[times[0],times[6],times[12]],temperature_2m:[12,null,14]}};
+trimContext.trimHourlyToRunvenster(inside,meta,true);assert.equal(inside.hourly.time.length,3);assert.equal(inside.hourly.temperature_2m[1],null);
+const partial={hourly:{time:[times[0],times[6],times[12]],temperature_2m:[12,13,null],temperature_2m_member01:[12,13,14]}};
+trimContext.trimHourlyToRunvenster(partial,meta,true);assert.equal(partial.hourly.time.length,3);
+console.log('PASS: alleen volledig lege exclusieve AIFS-eindgrens wordt verwijderd');

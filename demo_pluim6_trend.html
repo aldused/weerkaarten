@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pluim-trend (demo) – Ed Aldus WM</title>
+<title>Pluim-trend – Ed Aldus WM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -45,11 +45,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .rp-svg{display:block;width:100%;height:auto}
 svg text{font-family:'DM Sans',sans-serif}
 </style>
+<link rel="stylesheet" href="pluim-presentatie.css?v=20260910">
 </head>
 <body>
 <div class="header">
   <h1>Pluim-trend — temp &amp; neerslag<span class="demo" id="bron">LIVE</span></h1>
-  <div class="meta">ECMWF IFS-ENS (51 leden) + aparte HRES · <b>laatste 8 runs, 00/06/12/18 UTC</b> · <span id="status">laden…</span></div>
+  <div class="meta">ECMWF IFS-ENS (51 leden) · <b>laatste 8 runs, 00/06/12/18 UTC</b> · <span id="status">laden…</span></div>
 </div>
 
 <div class="controls">
@@ -71,7 +72,7 @@ svg text{font-family:'DM Sans',sans-serif}
 
 <div class="uitleg">
   <b>Lees de trend verticaal:</b> nieuwste run staat boven, oudste onder. De runs delen dezelfde kalender-as,
-  dus een verticale lijn op bv. <b>za 4 jul</b> toont hoe achtereenvolgende runs die dag inschatten —
+  dus een verticale lijn op een bepaalde dag toont hoe achtereenvolgende runs die dag inschatten —
   schuift de mediaan omhoog/omlaag of wordt de spreiding kleiner, dan zie je de trend.
 </div>
 
@@ -92,7 +93,7 @@ const MAAND = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov'
 const HOUR = 3600e3, DAY = 86400e3;
 // weerbewaking-pluim palet
 const C_GREEN="#2d8a2d", C_BLUE="#1111bb", C_RED="#cc0000", C_BLACK="#1a1a1a", C_MAGENTA="#dd00dd";
-const C_NACHT="#ededed", C_GRID="#cccccc", C_GRID6="#dddddd", C_DAG="#222222", C_AXIS="#555";
+const C_NACHT="#f1f2f3", C_GRID="#dfe3e6", C_GRID6="#eef0f2", C_DAG="#9aa5af", C_AXIS="#555";
 
 // databron: R2 (live) of lokaal bestand (?localData=1 i.v.m. CORS op localhost)
 const LOCAL = new URLSearchParams(location.search).has('localData');
@@ -100,7 +101,7 @@ const DATA_BASE = LOCAL ? '' : 'https://data.weerlab.nl/';
 const ARCHIVE_MANIFEST_URL = `${DATA_BASE}pluim_archive_meta.json`;
 const MANIFEST_POLL_MS = 60 * 1000;
 
-let AX0=0, AX1=0, TMIN=0, TMAX=40;  // gedeelde as-grenzen, per render gezet
+let AX0=0, AX1=0, TMIN=0, TMAX=40, PMAX=5;  // gedeelde as-grenzen, per render gezet
 let huidigStation='debilt';
 const _cache={};                     // revision:slug -> gefetchte data
 let archiveManifest=null;
@@ -229,7 +230,7 @@ function runSvg(rd){
   const tmin=TMIN, tmax=TMAX;
   let pmax=0; for(const m of pCum) for(const v of m) if(v>pmax) pmax=v;
   for(const v of pHres) if(v>pmax) pmax=v;
-  pmax=Math.max(5, Math.ceil(pmax/5)*5);
+  pmax=PMAX; // dezelfde neerslagas voor alle runs: verschillen blijven vergelijkbaar
   const yt=yT(tmin,tmax), yr=yR(pmax);
   let s=`<svg viewBox="0 0 ${W} ${H}" class="rp-svg" xmlns="http://www.w3.org/2000/svg">`;
 
@@ -309,6 +310,17 @@ function runSvg(rd){
   return s;
 }
 
+function validateRuns(data){
+  for(const run of data.runs||[]){
+    const n=run.n,ts=run.times_ms;
+    if(!Number.isInteger(n)||n<2||!Array.isArray(ts)||ts.length!==n||ts.some((t,i)=>!Number.isFinite(t)||(i&&t<=ts[i-1]))||ts[0]!==Date.parse(run.run))throw new Error('Ongeldige tijdas in pluimarchief');
+    for(const [base,legacy] of [['temperature_2m','temp_members'],['precipitation','precip_members']]){
+      const members=membersOf(run,base,legacy);
+      if(members.length!==51||members.some(m=>m.length!==n||m.some(v=>!Number.isFinite(v))))throw new Error('Onvolledige 51-ledenrun');
+    }
+  }
+}
+
 // ---------- bouw ----------
 function runLabel(ms){
   const d=new Date(ms);
@@ -323,15 +335,20 @@ function setStatus(txt, ok=true){
   const el=document.getElementById('status'); if(el){ el.textContent=txt; el.style.color = ok?'':'#ffb3a7'; }
 }
 
+let renderRequest=0;
 async function render(){
+  const request=++renderRequest;
   const wrap=document.getElementById('wrap');
   wrap.innerHTML='<div style="padding:48px;text-align:center;color:var(--ink3)">Pluimen laden…</div>';
   let data,manifest;
   try {
     manifest=await ensureArchiveManifest();
     data=await loadStation(huidigStation,manifest);
+    if(request!==renderRequest)return;
+    validateRuns(data);
   }
   catch(e){
+    if(request!==renderRequest)return;
     wrap.innerHTML=`<div style="padding:48px;text-align:center;color:#c0392b">Kon pluim-data niet laden (${e.message}).<br>
       <span style="font-size:.82rem;color:var(--ink3)">Bron: ${LOCAL?'lokaal bestand':'data.weerlab.nl'} · iedere minuut gecontroleerd op een complete 00/06/12/18Z-run.</span></div>`;
     setStatus('geen data', false); return;
@@ -352,6 +369,7 @@ async function render(){
   const newestMs=Date.parse(newest.run);
   setStatus(`${runs.length}/8 runs · nieuwste ${runLabel(newestMs)}`);
   const converted=runs.map(convertRun);
+  PMAX=Math.max(5,Math.ceil(Math.max(0,...converted.flatMap(r=>r.pCum.flat().concat(r.pHres)).filter(Number.isFinite))/5)*5);
   const allTemps=converted.flatMap(run=>run.tMembers.flat().concat(run.tHres)).filter(Number.isFinite);
   if(allTemps.length){
     TMIN=Math.floor((Math.min(...allTemps)-1)/5)*5;
