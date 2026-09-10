@@ -178,6 +178,8 @@
     renderNav();
     const showingProduct=!!state.productRoute;
     document.body.classList.toggle('product-open',showingProduct);
+    document.body.classList.remove('map-focus-open');
+    document.body.classList.toggle('vierluik-open', showingProduct && /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(state.productRoute));
     main.hidden=showingProduct;
     $('#product-workspace').hidden=!showingProduct;
     if(showingProduct){renderProduct();prefixMenuLinks();return;}
@@ -267,6 +269,7 @@
     if(dialog.open)return;
     const editing=event.target.matches('input,textarea,select,[contenteditable="true"]');
     if(event.key==='/'&&!editing&&!event.ctrlKey&&!event.metaKey || (event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){
+      if(!search.getClientRects().length)return;
       event.preventDefault();search.focus();search.select();
     }
   });
@@ -284,6 +287,7 @@
 
   function renderProduct(){
     const route=state.productRoute;
+    document.body.classList.toggle('vierluik-open', /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(route));
     const title=state.product?.name || 'Weerlab';
     $('#product-title').textContent=title;
     $('#product-permalink').href='index.html#'+route;
@@ -294,7 +298,7 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html?v=20260909-kaartenaudit1#'+route;
+      frame.src='product-host.html?v=20260910-vierluik-compact#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
@@ -303,7 +307,8 @@
     const frame=$('#product-frame');
     if(event.source!==frame.contentWindow || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
     const data=event.data;
-    if(data?.type==='weerlab-focus-search'){search.focus();search.select();return;}
+    if(data?.type==='weerlab-weerkaarten-focus'){document.body.classList.toggle('map-focus-open', Boolean(data.active));return;}
+    if(data?.type==='weerlab-focus-search'){if(search.getClientRects().length){search.focus();search.select();}return;}
     if(data?.type!=='weerlab-product-route'||typeof data.hash!=='string'||!/^#[a-z0-9_-]+$/i.test(data.hash))return;
     if(data.hash==='#home'){navigate('#menu/start');return;}
     if(data.hash!==location.hash){

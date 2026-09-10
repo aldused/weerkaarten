@@ -7,6 +7,7 @@
     pending = true;
     queueMicrotask(() => {
       pending = false;
+      document.body.classList.toggle('compact-vierluik', /^#weerkaarten-(vierluik|hires4|hires6|global4)$/.test(location.hash));
       parent.postMessage({type:'weerlab-product-route',hash:location.hash,title:document.getElementById('topbar-titel')?.textContent || 'Weerlab'}, location.protocol === 'file:' ? '*' : location.origin);
     });
   }
@@ -38,6 +39,14 @@
     doc.addEventListener('load', event=>{if(event.target.tagName==='IFRAME'){try{wireLinks(event.target.contentDocument);}catch{}}},true);
     doc.querySelectorAll('iframe').forEach(frame=>{try{wireLinks(frame.contentDocument);}catch{}});
   }
+  // De kaart is twee iframes diep: geef beeldvullend door aan de buitenste pagina.
+  window.addEventListener('message', event => {
+    if(event.origin!==location.origin || event.source!==document.getElementById('wk-frame')?.contentWindow)return;
+    if(event.data?.type==='weerlab-weerkaarten-focus')parent.postMessage(event.data,location.origin);
+  });
+  const style=document.createElement('style');
+  style.textContent='body.compact-vierluik .content-scroll{padding:0!important;overflow:hidden}body.compact-vierluik #wk-facetten{display:none}body.compact-vierluik #wk-frame{display:block;height:100dvh!important}';
+  document.head.appendChild(style);
   wireLinks(document);
   report();
 })();
