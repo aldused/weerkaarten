@@ -143,8 +143,9 @@ body {
 #map-focus-axis { grid-area:axis; position:relative; height:28px; overflow:hidden; border-top:1px solid #475569; }
 #map-focus-axis .time-day-label { top:15px; font-size:10px; }
 #map-focus-axis .time-hour-tick span { top:2px; font-size:9px; }
+#focus-actions { grid-area:exit; display:flex; align-items:center; gap:4px; min-width:0; }
 #map-focus-controls #btn-map-focus-exit {
-  grid-area:exit; position:static; min-height:32px; box-shadow:none; backdrop-filter:none;
+  flex:1; min-width:0; position:static; min-height:32px; box-shadow:none; backdrop-filter:none;
 }
 body.map-focus-mode #header,
 body.map-focus-mode #toolbar,
@@ -561,9 +562,12 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
 <body>
 
 <div id="map-focus-controls" role="group" aria-label="Kaartlaag en tijd bedienen in beeldvullende kaartmodus">
+<div id="focus-actions">
+  <button id="focus-reset-models" type="button" aria-label="Reset modellen naar HARMONIE 43, HARMONIE 46, ICON-D2 en ECMWF" title="Reset modellen: HARMONIE 43 · HARMONIE 46 · ICON-D2 · ECMWF">↺</button>
 <button id="btn-map-focus-exit" type="button" aria-label="Sluit de beeldvullende kaartmodus" title="Terug naar de bediening (Escape)">
   <span aria-hidden="true">✕</span><span>Sluit beeldvullend</span>
 </button>
+</div>
   <select id="map-focus-var" aria-label="Kaartlaag voor alle vier de kaarten" title="Andere kaartlaag kiezen"></select>
   <button id="map-focus-prev" type="button" aria-label="Vorig beschikbaar tijdstip" title="Vorig beschikbaar tijdstip (pijl links)">◀</button>
   <button id="map-focus-play" type="button" aria-label="Animatie starten">▶</button>
@@ -737,6 +741,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
       <option value="common">Gelijke tijden</option>
       <option value="all">Volledig bereik</option>
     </select>
+    <button id="btn-reset-models" class="tool-btn" type="button" title="Reset modellen: HARMONIE 43 · HARMONIE 46 · ICON-D2 · ECMWF">↺ Modellen</button>
     <button id="btn-now" class="tool-btn" type="button" title="Ga naar het beschikbare tijdstip het dichtst bij nu">Nu</button>
     <label for="day-select">Dag</label><select id="day-select" disabled></select>
     <span id="time-range-summary" role="status">Modeltijden laden…</span>
@@ -1839,7 +1844,7 @@ function kiesModel(pIdx, modelId) {
   var klaar = (md && md.meta) ? loadParamIfNeeded(mCfg.id, panelVar(pIdx)) : loadModel(mCfg, pIdx);
   getGlobalTimes();
   requestRender();
-  Promise.resolve(klaar).then(function() {
+  return Promise.resolve(klaar).then(function() {
     getGlobalTimes();
     updateHeaderSummary();
     updateVariableAvailability();
@@ -1848,6 +1853,24 @@ function kiesModel(pIdx, modelId) {
     requestRender();
   });
 }
+
+// Herstel de vaste vier modellen zonder de gekozen elementen of kaartuitsnede te wijzigen.
+function resetModelKeuze() {
+  if (playTimer) togglePlay();
+  var tijd = activeGlobalTime;
+  var modellen = ['harmonie', 'harmonie46', 'icond2', 'ecmwf_global'];
+  var knoppen = ['focus-reset-models', 'btn-reset-models'].map(function(id) { return document.getElementById(id); });
+  knoppen.forEach(function(knop) { knop.disabled = true; });
+  return Promise.all(modellen.map(function(id, i) { return kiesModel(i, id); })).then(function() {
+    // Een niet meer beschikbaar uur wordt het dichtstbijzijnde gezamenlijke uur.
+    if (tijd && globalTimes.length && modellen.every(function(id, i) { return MODELS[panels[i].modelIdx].id === id; })) {
+      setGlobalTimeIndex(nearestTimeIndex(globalTimes, tijd));
+    }
+  }).finally(function() { knoppen.forEach(function(knop) { knop.disabled = false; }); });
+}
+['focus-reset-models', 'btn-reset-models'].forEach(function(id) {
+  document.getElementById(id).addEventListener('click', resetModelKeuze);
+});
 
 function bouwModelKiezers() {
   panels.forEach(function(p) {

@@ -298,7 +298,7 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html?v=20260910-vierluik-compact#'+route;
+      frame.src='product-host.html?v=20260910-vierluik-reset#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
