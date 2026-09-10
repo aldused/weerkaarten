@@ -1450,6 +1450,7 @@
     if (resize) {
       ctx.canvas.width = PAGE_W;
       ctx.canvas.height = pageH;
+      return pageH; // Alleen meten; tekenen gebeurt eenmaal op de uiteindelijke resolutie.
     }
     ctx.fillStyle = '#8a8070';
     ctx.fillRect(0, 0, PAGE_W, pageH);
@@ -1515,6 +1516,7 @@
     if (resize) {
       ctx.canvas.width = PAGE_W;
       ctx.canvas.height = pageH;
+      return pageH; // Alleen meten; tekenen gebeurt eenmaal op de uiteindelijke resolutie.
     }
     ctx.fillStyle = '#8a8070';
     ctx.fillRect(0, 0, PAGE_W, pageH);

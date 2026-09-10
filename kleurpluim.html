@@ -2791,6 +2791,7 @@ function setDownloadButtons({
   // zodat de gebruiker de selectie ook tijdens het laden kan aanpassen.
   keuzeBtn.disabled = false;
   void keuzeDisabled;
+  schedulePngPreparation();
 }
 
 function syncDownloadButton(disabled = false, label = 'Download PNG') {
@@ -3162,7 +3163,48 @@ async function makeZip(entries) {
   return new Blob(chunks, { type: 'application/zip' });
 }
 
-async function renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCard }) {
+// Cache op de volledige beeldinhoud: wisselen van run, plaats, periode of
+// opschrift kan daardoor nooit een verouderde PNG opleveren.
+const pngResults=new Map();
+const PNG_CACHE_LIMIT=32*1024*1024;
+let pngCacheBytes=0;
+let pngPrepareTimer;
+let pngPreparing=false;
+function cachedPng(key, render){
+  const existing=pngResults.get(key);
+  if(existing){ pngResults.delete(key);pngResults.set(key,existing);return existing.promise; }
+  const item={bytes:0,promise:null};
+  item.promise=Promise.resolve().then(render).then(blob=>{
+    item.bytes=blob.size;pngCacheBytes+=blob.size;
+    for(const [oldKey,old] of pngResults){
+      if(pngCacheBytes<=PNG_CACHE_LIMIT && pngResults.size<=10) break;
+      if(old===item || !old.bytes) continue;
+      pngResults.delete(oldKey);pngCacheBytes-=old.bytes;
+    }
+    if(blob.size>PNG_CACHE_LIMIT){pngResults.delete(key);pngCacheBytes-=blob.size;}
+    return blob;
+  }).catch(error=>{pngResults.delete(key);throw error;});
+  pngResults.set(key,item);
+  return item.promise;
+}
+function schedulePngPreparation(){
+  clearTimeout(pngPrepareTimer);
+  pngPrepareTimer=setTimeout(async()=>{
+    const button=document.getElementById('download-4pluim');
+    if(pngPreparing || document.hidden || !button || button.disabled || button.closest('[hidden]')) return;
+    pngPreparing=true;
+    try{ await (currentParam==='multi'?makeMultiPng():makeSinglePng()); }
+    catch(e){ /* De downloadknop kan een mislukte voorbereiding opnieuw proberen. */ }
+    finally{pngPreparing=false;}
+  },600);
+}
+
+function renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCard, station=displayStationNaam() }) {
+  const snapshot=svg.cloneNode(true);
+  const key=JSON.stringify(['single',cfg.title,station,snapshot.outerHTML,chips,legends,status,thunderCard]);
+  return cachedPng(key,()=>drawSinglePngBlob({cfg,svg:snapshot,chips,legends,status,thunderCard,station}));
+}
+async function drawSinglePngBlob({ cfg, svg, chips, legends, status, thunderCard, station }) {
   const scale = 2;
   const W = 1400;
   const margin = 64;
@@ -3183,7 +3225,7 @@ async function renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCa
   ctx.fillStyle = '#b0a488';
   ctx.fill();
 
-  drawPngHeader(ctx, cfg.title, displayStationNaam(), margin, 92, W - margin * 2);
+  drawPngHeader(ctx, cfg.title, station, margin, 92, W - margin * 2);
   ctx.fillStyle = 'rgba(255,255,255,0.36)';
   ctx.fillRect(margin, 118, W - margin * 2, 2);
 
@@ -3227,7 +3269,7 @@ function buildDetachedSingleChart(param, cfg, times, stats) {
     height: 350,
     summaryEl,
     legendEl,
-    clipId: `downloadClip-${param}-${Date.now()}`,
+    clipId: `downloadClip-${param}`,
   });
   return {
     svg,
@@ -3237,14 +3279,17 @@ function buildDetachedSingleChart(param, cfg, times, stats) {
   };
 }
 
-async function downloadMultiPng() {
-  if (currentParam !== 'multi') return;
-  const btn = document.getElementById('download-4pluim');
-  const cards = MULTI_PARAMS.map(param => document.querySelector(`[data-card="${param}"]`));
-  if (cards.some(card => !card) || document.getElementById('multi-view').hidden) return;
-
-  syncDownloadButton(true, 'PNG maken...');
-  try {
+function makeMultiPng() {
+  const cards=MULTI_PARAMS.map(param=>document.querySelector(`[data-card="${param}"]`));
+  if(cards.some(card=>!card) || document.getElementById('multi-view').hidden) return Promise.reject(new Error('Pluimen zijn nog niet geladen'));
+  const snapshots=cards.map(card=>card.cloneNode(true));
+  const station=displayStationNaam();
+  const key=JSON.stringify(['multi',station,...snapshots.map(card=>card.innerHTML)]);
+  return cachedPng(key,()=>drawMultiPng(snapshots,station));
+}
+async function drawMultiPng(cards,station){
+    // Alle SVG's tegelijk decoderen; lees daarna alleen de vaste momentopname.
+    const images=await Promise.all(cards.map(card=>svgToImage(card.querySelector('svg'))));
     const scale = 2;
     const W = 1400;
     const margin = 64;
@@ -3265,7 +3310,7 @@ async function downloadMultiPng() {
     ctx.fillStyle = '#b0a488';
     ctx.fill();
 
-    drawPngHeader(ctx, '8-pluim', displayStationNaam(), margin, 92, W - margin * 2);
+    drawPngHeader(ctx, '8-pluim', station, margin, 92, W - margin * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.36)';
     ctx.fillRect(margin, 118, W - margin * 2, 2);
 
@@ -3293,7 +3338,7 @@ async function downloadMultiPng() {
       const chips = Array.from(card.querySelectorAll('.chip')).map(chip => chip.textContent || '');
       const chipBottom = drawChipRow(ctx, chips, margin, y + 54, W - margin * 2);
       const chartY = Math.max(y + 96, chipBottom + 14);
-      const img = await svgToImage(card.querySelector('svg'));
+      const img = images[i];
       drawRoundedChartImage(ctx, img, margin, chartY, chartW, chartH);
 
       const legends = Array.from(card.querySelectorAll('.leg-item')).map(el => el.textContent.replace(/\s+/g, ' ').trim());
@@ -3304,37 +3349,35 @@ async function downloadMultiPng() {
     ctx.font = '800 16px Inter, sans-serif';
     ctx.fillText('Ed Aldus WM · Data: ECMWF Open Data / Open-Meteo · IFS ENS · native modelstappen', margin, H - 36);
 
-    downloadBlob(await encodePng(canvas), downloadName('multi'));
-  } catch (e) {
-    console.error(e);
-    document.getElementById('laadstatus').textContent = 'PNG maken mislukt: ' + e.message;
-  } finally {
-    syncDownloadButton(false);
-  }
+    return encodePng(canvas);
+}
+async function downloadMultiPng(){
+  if(currentParam!=='multi') return;
+  const filename=downloadName('multi');
+  syncDownloadButton(true,'PNG maken...');
+  try{ downloadBlob(await makeMultiPng(),filename); }
+  catch(e){ console.error(e);document.getElementById('laadstatus').textContent='PNG maken mislukt: '+e.message; }
+  finally{syncDownloadButton(false);}
 }
 
-async function downloadSinglePng() {
-  if (currentParam === 'multi') return;
-  const cfg = PARAMS[currentParam];
-  const svg = document.getElementById('chart');
-  if (!cfg || !svg || document.getElementById('single-view').hidden) return;
-
-  syncDownloadButton(true, 'PNG maken...');
-  try {
-    const status = document.getElementById('laadstatus').textContent || '';
-    const chips = Array.from(document.querySelectorAll('#samenvatting .chip')).map(chip => chip.textContent || '');
-    const legends = Array.from(document.querySelectorAll('#legenda .leg-item')).map(el => el.textContent.replace(/\s+/g, ' ').trim());
-    const thunderCard = cfg.dailyThunderLabels && lastSingleChartData?.param === currentParam
-      ? makeThunderCardData(sliceForSelectedRange(lastSingleChartData.times, lastSingleChartData.stats).stats, cfg)
-      : null;
-    const blob = await renderSinglePngBlob({ cfg, svg, chips, legends, status, thunderCard });
-    downloadBlob(blob, downloadName(currentParam));
-  } catch (e) {
-    console.error(e);
-    document.getElementById('laadstatus').textContent = 'PNG maken mislukt: ' + e.message;
-  } finally {
-    syncDownloadButton(false);
-  }
+function makeSinglePng(){
+  const cfg=PARAMS[currentParam];
+  const svg=document.getElementById('chart');
+  if(!cfg || !svg || document.getElementById('single-view').hidden) return Promise.reject(new Error('Pluim is nog niet geladen'));
+  const status=document.getElementById('laadstatus').textContent || '';
+  const chips=Array.from(document.querySelectorAll('#samenvatting .chip')).map(chip=>chip.textContent || '');
+  const legends=Array.from(document.querySelectorAll('#legenda .leg-item')).map(el=>el.textContent.replace(/\s+/g,' ').trim());
+  const thunderCard=cfg.dailyThunderLabels && lastSingleChartData?.param===currentParam
+    ? makeThunderCardData(sliceForSelectedRange(lastSingleChartData.times,lastSingleChartData.stats).stats,cfg) : null;
+  return renderSinglePngBlob({cfg,svg,chips,legends,status,thunderCard});
+}
+async function downloadSinglePng(){
+  if(currentParam==='multi') return;
+  const filename=downloadName(currentParam);
+  syncDownloadButton(true,'PNG maken...');
+  try{downloadBlob(await makeSinglePng(),filename);}
+  catch(e){console.error(e);document.getElementById('laadstatus').textContent='PNG maken mislukt: '+e.message;}
+  finally{syncDownloadButton(false);}
 }
 
 // ── Downloadselectie ──────────────────────────────────────────────────────
@@ -3935,6 +3978,7 @@ document.getElementById('zoek-btn').addEventListener('click', () => {
 });
 document.getElementById('extra-input').addEventListener('input', syncStationLabel);
 document.getElementById('download-4pluim').addEventListener('click', downloadCurrentPng);
+document.getElementById('extra-input')?.addEventListener('input',schedulePngPreparation);
 document.getElementById('download-all-pluimen').addEventListener('click', () => toggleKiesStrip());
 document.getElementById('download-keuze').addEventListener('click', downloadSelectie);
 document.getElementById('kies-alles').addEventListener('click', () => {

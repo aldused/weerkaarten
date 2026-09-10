@@ -7,11 +7,14 @@
   const IMG_FETCH_TIMEOUT_MS = 4000;   // netwerk mag traag zijn
   const IMG_DECODE_TIMEOUT_MS = 1500;  // decoderen van een logo duurt normaal enkele ms
 
+  const imageCache=new Map();
+  let activeExport=null;
+
   function metTijdslimiet(belofte, ms, bijTimeout = null){
-    return Promise.race([
-      Promise.resolve(belofte).catch(()=>bijTimeout),
-      new Promise(resolve=>setTimeout(()=>resolve(bijTimeout), ms)),
-    ]);
+    return new Promise(resolve=>{
+      const timer=setTimeout(()=>resolve(bijTimeout),ms);
+      Promise.resolve(belofte).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);resolve(bijTimeout);});
+    });
   }
 
   function blobNaarDataUrl(blob){
@@ -23,35 +26,46 @@
     });
   }
 
+  function loadedImageData(img){
+    if(!img?.complete || !img.naturalWidth || !img.naturalHeight) return null;
+    try{
+      const canvas=document.createElement('canvas');
+      canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+      canvas.getContext('2d').drawImage(img,0,0);
+      return canvas.toDataURL('image/png');
+    }catch(e){ return null; }
+  }
+
   async function safeImageDataUrl(img){
     if(!img) return null;
     const bron=img.currentSrc || img.getAttribute('src') || '';
     if(!bron) return null;
     if(/^data:/i.test(bron)) return bron;
-    try{
-      const url=new URL(bron,document.baseURI);
+    const url=new URL(bron,document.baseURI);
+    if(imageCache.has(url.href)) return imageCache.get(url.href);
+    const promise=(async()=>{
+      // Een geladen logo is al beschikbaar: geen extra netwerkronde of decode.
+      const loaded=loadedImageData(img) || loadedImageData([...document.images].find(other=>
+        (other.currentSrc || other.src)===url.href && other.complete && other.naturalWidth));
+      if(loaded) return loaded;
       const ctrl=typeof AbortController==='function'?new AbortController():null;
-      const afbreken=setTimeout(()=>{ try{ ctrl && ctrl.abort(); }catch(_){ } }, IMG_FETCH_TIMEOUT_MS);
-      let response;
+      const timer=setTimeout(()=>ctrl?.abort(),IMG_FETCH_TIMEOUT_MS);
       try{
-        response=await fetch(url.href,{
+        const response=await fetch(url.href,{
           credentials:url.origin===location.origin?'same-origin':'omit',
-          mode:'cors',cache:'force-cache',signal:ctrl?ctrl.signal:undefined
+          mode:'cors',cache:'force-cache',signal:ctrl?.signal
         });
-      } finally { clearTimeout(afbreken); }
-      if(!response.ok) throw new Error('HTTP '+response.status);
-      return await blobNaarDataUrl(await response.blob());
-    }catch(fetchError){
-      try{
-        if(!img.complete || !img.naturalWidth || !img.naturalHeight) return null;
-        const canvas=document.createElement('canvas');
-        canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
-        canvas.getContext('2d').drawImage(img,0,0);
-        return canvas.toDataURL('image/png');
-      }catch(canvasError){
-        return null;
-      }
-    }
+        if(!response.ok) return null;
+        return await blobNaarDataUrl(await response.blob());
+      }catch(e){ return null; }
+      finally{ clearTimeout(timer); }
+    })();
+    const bounded=metTijdslimiet(promise,IMG_FETCH_TIMEOUT_MS);
+    imageCache.set(url.href,bounded);
+    if(imageCache.size>32) imageCache.delete(imageCache.keys().next().value);
+    const result=await bounded;
+    if(!result) imageCache.delete(url.href); // later opnieuw proberen na een netwerkfout
+    return result;
   }
 
   async function inlineImages(root){
@@ -100,28 +114,98 @@
       if(live) live.setAttribute('selected','');
     });
   }
-  async function html2pdfSave(element, options){
-    if(typeof html2pdf !== 'function') return Promise.reject(new Error('html2pdf is niet geladen'));
-    await prepareForCanvas(element);
-    const worker=html2pdf().set(options).from(element).save();
-    if(worker && typeof worker.then === 'function') return Promise.resolve(worker);
-    return new Promise(resolve=>setTimeout(resolve,2000));
+  function canvasOptions(options={}){
+    const onclone=options.onclone;
+    return {
+      logging:false,imageTimeout:IMG_FETCH_TIMEOUT_MS,...options,
+      scrollX:0,scrollY:0,
+      onclone:async function(cloneDoc,element){
+        cloneDoc.documentElement.style.scrollBehavior='auto';
+        cloneDoc.documentElement.scrollTop=0;
+        cloneDoc.documentElement.scrollLeft=0;
+        if(cloneDoc.body){ cloneDoc.body.scrollTop=0; cloneDoc.body.scrollLeft=0; }
+        cloneDoc.defaultView?.scrollTo(0,0);
+        if(onclone) await onclone(cloneDoc,element);
+      }
+    };
   }
-  async function canvasPdf(element, filename, options={}){
-    if(typeof html2canvas !== 'function' || !window.jspdf?.jsPDF){
-      throw new Error('PDF-bibliotheek is niet geladen');
+
+  // Ook de bovenliggende schil kan gescrold zijn. Herstel alle posities na
+  // afloop, zodat de gebruiker verder kan schrijven waar hij gebleven was.
+  function resetScroll(){
+    const restore=[];
+    const seen=new Set();
+    function elementScroll(el){
+      if(!el || seen.has(el)) return;
+      seen.add(el);
+      const x=el.scrollLeft,y=el.scrollTop,behavior=el.style.scrollBehavior;
+      if(!x && !y) return;
+      el.style.scrollBehavior='auto'; el.scrollLeft=0; el.scrollTop=0;
+      restore.push(()=>{el.scrollLeft=x;el.scrollTop=y;el.style.scrollBehavior=behavior;});
     }
-    await prepareForCanvas(element);
-    const canvas=await html2canvas(element,{
-      scale:options.scale || 1.8,useCORS:true,backgroundColor:'#ffffff',logging:false,
-      scrollX:0,scrollY:0,windowWidth:element.scrollWidth,windowHeight:element.scrollHeight
+    let view=window;
+    while(view){
+      try{
+        const x=view.scrollX,y=view.scrollY,root=view.document.documentElement;
+        const behavior=root.style.scrollBehavior;
+        root.style.scrollBehavior='auto'; view.scrollTo(0,0);
+        const savedView=view;
+        restore.push(()=>{savedView.scrollTo(x,y);root.style.scrollBehavior=behavior;});
+        let frame=view.frameElement;
+        if(!frame) break;
+        for(let parent=frame.parentElement;parent;parent=parent.parentElement) elementScroll(parent);
+        view=view.parent;
+      }catch(e){break;}
+    }
+    return ()=>{for(const reset of restore.reverse()) reset();};
+  }
+
+  function runExport(action){
+    if(activeExport) return activeExport;
+    const buttons=[...document.querySelectorAll('button[onclick*="exporteerPDF"],button[onclick*="downloadPdf"]')]
+      .map(el=>({el,text:el.textContent,disabled:el.disabled}));
+    buttons.forEach(({el})=>{el.disabled=true;el.textContent='PDF maken…';el.setAttribute('aria-busy','true');});
+    activeExport=(async()=>{
+      const restore=resetScroll();
+      try{ return await action(); }
+      finally{
+        restore();
+        buttons.forEach(({el,text,disabled})=>{el.disabled=disabled;el.textContent=text;el.removeAttribute('aria-busy');});
+        activeExport=null;
+      }
+    })();
+    return activeExport;
+  }
+
+  function html2pdfSave(element, options={}){
+    return runExport(async()=>{
+      if(typeof html2pdf !== 'function') throw new Error('html2pdf is niet geladen');
+      await prepareForCanvas(element);
+      // html2pdf centreert zijn tijdelijke pagina in het huidige venster.
+      // Een andere render-viewport verschuift die pagina en snijdt de linkerkant af.
+      const opt={...options,html2canvas:canvasOptions(options.html2canvas)};
+      delete opt.html2canvas.windowWidth;
+      delete opt.html2canvas.windowHeight;
+      await html2pdf().set(opt).from(element).save();
     });
-    const width=options.widthMm || 210;
-    const imageHeight=canvas.height/canvas.width*width;
-    const pageHeight=Math.max(options.minHeightMm || 297,Math.ceil(imageHeight)+2);
-    const pdf=new jspdf.jsPDF({unit:'mm',format:[width,pageHeight],orientation:'portrait'});
-    pdf.addImage(canvas,'JPEG',0,0,width,imageHeight,undefined,'FAST');
-    pdf.save(filename);
+  }
+  function canvasPdf(element, filename, options={}){
+    return runExport(async()=>{
+      if(typeof html2canvas !== 'function' || !window.jspdf?.jsPDF){
+        throw new Error('PDF-bibliotheek is niet geladen');
+      }
+      await prepareForCanvas(element);
+      const canvas=await html2canvas(element,canvasOptions({
+        scale:options.scale || 1.8,useCORS:true,backgroundColor:'#ffffff',
+        windowWidth:element.scrollWidth,windowHeight:element.scrollHeight
+      }));
+      const width=options.widthMm || 210;
+      const imageHeight=canvas.height/canvas.width*width;
+      const pageHeight=Math.max(options.minHeightMm || 297,Math.ceil(imageHeight)+2);
+      const pdf=new jspdf.jsPDF({unit:'mm',format:[width,pageHeight],orientation:'portrait'});
+      pdf.addImage(canvas,'JPEG',0,0,width,imageHeight,undefined,'FAST');
+      pdf.save(filename);
+    });
   }
   window.WBExport={ syncSelectValues, safeImageDataUrl, prepareForCanvas, html2pdfSave, canvasPdf };
 })();
