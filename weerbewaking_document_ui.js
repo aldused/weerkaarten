@@ -13,7 +13,7 @@
       else if(/exporteerPDF\s*\(|downloadPdf\s*\(/.test(actie)) zetTekst(el,'PDF maken');
       else if(/toggleInstellingen\s*\(/.test(actie)) zetTekst(el,'Opties');
       else if(/wisDraft\s*\(/.test(actie)) zetTekst(el,'Wissen');
-      else if(/gaTerug\s*\(|weerbewaking\.html/.test(actie)) zetTekst(el,'Overzicht');
+      else if(/gaTerug\s*\(|weerbewaking\.html/.test(actie)) zetTekst(el,'← Terug naar overzicht');
     });
   }
 

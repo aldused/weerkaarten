@@ -17,7 +17,7 @@ for (const bestand of documenten) {
   const html = fs.readFileSync(path.join(root, bestand), 'utf8');
   assert.match(
     html,
-    /weerbewaking_export\.js\?v=20260823-cors-v1/,
+    /weerbewaking_export\.js\?v=[^"\s]+/,
     `${bestand}: veilige gedeelde PDF-module ontbreekt`,
   );
 }

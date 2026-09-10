@@ -204,7 +204,10 @@ body{--kop-scale:1}
 }
 </style>
 <link rel="stylesheet" href="weerbewaking_document_ui.css?v=20260823-v1">
-<script src="weerbewaking_document_ui.js?v=20260829-opgesteld-v1" defer></script>
+<script src="weerbewaking_document_ui.js?v=20260910-v1" defer></script>
+<link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
+<script src="weerbewaking_recent.js?v=20260910-v1"></script>
+<script src="weerbewaking_return.js?v=20260910-v2" defer></script>
 </head>
 <body class="wb-document-ui wb-document-vijfdaags">
 
@@ -617,7 +620,8 @@ function popPerDagKnmi(knmiJ, dagDatums){
 
 /* Tabel-persistentie (vooruitzichten-tabel + headers + datum-status) */
 const TABEL_KEY_PREFIX='wb_rijnmond_tabel_';
-function tabelSaveKey(){ return TABEL_KEY_PREFIX + vandaagISO() + '_' + (document.getElementById('station-sel')?.value||''); }
+function oudeTabelSaveKey(){ return TABEL_KEY_PREFIX + huidigeDatum() + '_' + (document.getElementById('station-sel')?.value||''); }
+function tabelSaveKey(){ return oudeTabelSaveKey() + '_' + docSlug(docNaam()); }
 function saveTabel(){
   const tbody=document.getElementById('vooruit-body');
   const dagen=document.getElementById('vooruit-dagen');
@@ -632,7 +636,7 @@ function saveTabel(){
 }
 function restoreTabel(){
   try{
-    const j=localStorage.getItem(tabelSaveKey());
+    const j=localStorage.getItem(tabelSaveKey()) || localStorage.getItem(oudeTabelSaveKey());
     if(!j) return false;
     const d=JSON.parse(j);
     if(!d.headers || !d.body) return false;
@@ -900,7 +904,8 @@ function saveDraft(){
   d.toonKomende=!!document.getElementById('toon-komende')?.checked;
   d.toonDaarna=!!document.getElementById('toon-daarna')?.checked;
   d.docNaam=docNaam();
-  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); registreerDocNaam(d.docNaam); syncEventDocumentKoppeling(); toonSaveStatus(d.__ts); schrijfGedeeldeDraft(d); }catch(e){}
+  d.station=document.getElementById('station-sel')?.value || '';
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); if(window.WBRecent) WBRecent.capture(saveKey(),d); registreerDocNaam(d.docNaam); syncEventDocumentKoppeling(); toonSaveStatus(d.__ts); schrijfGedeeldeDraft(d); }catch(e){ if(window.WBRecent) WBRecent.storageError(); }
 }
 function updateTekstSecties(){
   const koppels=[
@@ -959,6 +964,8 @@ function restoreDraft(){
     }
     const d=JSON.parse(j);
     if(d.docNaam && document.getElementById('doc-naam')) document.getElementById('doc-naam').value=d.docNaam;
+    const station=document.getElementById('station-sel');
+    if(station && [...station.options].some(o=>o.value===d.station)) station.value=d.station;
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
       if(el.matches('input, textarea, select')){

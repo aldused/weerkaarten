@@ -122,7 +122,10 @@ body{--kop-scale:1}
 .pagina h2.kop{font-size:calc(1rem * var(--kop-scale))}
 </style>
 <link rel="stylesheet" href="weerbewaking_document_ui.css?v=20260823-v1">
-<script src="weerbewaking_document_ui.js?v=20260829-opgesteld-v1" defer></script>
+<script src="weerbewaking_document_ui.js?v=20260910-v1" defer></script>
+<link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
+<script src="weerbewaking_recent.js?v=20260910-v1"></script>
+<script src="weerbewaking_return.js?v=20260910-v2" defer></script>
 </head>
 <body class="wb-document-ui wb-document-rijnmond-kort">
 
@@ -498,7 +501,7 @@ function bouwDraftObject(){
 function saveDraft(){
   const d=bouwDraftObject();
   laatstGeschrevenTs=d.__ts;
-  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); toonSaveStatus(d.__ts); }catch(e){}
+  try{ localStorage.setItem(saveKey(), JSON.stringify(d)); if(window.WBRecent) WBRecent.capture(saveKey(),d); toonSaveStatus(d.__ts); }catch(e){ if(window.WBRecent) WBRecent.storageError(); }
   // Schrijf ook naar gedeelde KV (best-effort, blokkeert UI niet)
   if(gedeeldeSyncBeschikbaar()) WBSync.putJson(saveKey(), d).catch(()=>{});
 }
@@ -556,7 +559,7 @@ async function haalGedeeldeDraft(initieel=false){
     if(d.__ts > (laatstGeschrevenTs||0) + 500){
       // Andere kant heeft nieuwere versie → toepassen
       pasDraftToe(d, initieel?'Hersteld (gedeeld)':'Bijgewerkt door andere kant');
-      try{ localStorage.setItem(saveKey(), JSON.stringify(d)); }catch(e){}
+      try{ localStorage.setItem(saveKey(), JSON.stringify(d)); if(window.WBRecent) WBRecent.capture(saveKey(),d); }catch(e){ if(window.WBRecent) WBRecent.storageError(); }
     }
   }catch(e){ /* offline of KV niet beschikbaar — geen probleem, lokaal blijft werken */ }
 }
@@ -611,7 +614,7 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden') saveDraftNow();
 });
 
-document.getElementById('doc-datum').value=vandaagISO();
+document.getElementById('doc-datum').value=WBRecent.startDate(vandaagISO());
 document.getElementById('doc-datum').addEventListener('change', ()=>{
   updateOpgesteldKop();
   updateDagnamen();
@@ -754,7 +757,7 @@ function popPerDagKnmi(knmiJ, dagDatums){
 
 /* Tabel-persistentie (localStorage, per dag) */
 const TABEL_KEY_PREFIX='wb_rr_tabel_';
-function tabelSaveKey(){ return TABEL_KEY_PREFIX+vandaagISO(); }
+function tabelSaveKey(){ return TABEL_KEY_PREFIX+huidigeDatumKey(); }
 function saveTabel(){
   const tbody=document.getElementById('vijfdaagse-body');
   const dagen=document.getElementById('vijfdaagse-dagen');

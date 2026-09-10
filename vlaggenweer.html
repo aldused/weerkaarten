@@ -52,7 +52,10 @@ input.val,select.dir-select{width:100%;font:inherit;font-weight:800;border:1px s
 @media(max-width:760px){.header{align-items:flex-start;flex-direction:column}.actions{justify-content:flex-start}.wrap{padding:10px}.doc-head{padding:24px;gap:14px}.brand{display:none}.doc-title{font-size:30px}table{width:100%;margin:0 0 18px}.bft-legend{width:100%;margin:0 0 14px;grid-template-columns:1fr}.intro{margin:18px 0}.sheet{padding-bottom:10px}}
 </style>
 <link rel="stylesheet" href="weerbewaking_document_ui.css?v=20260823-v1">
-<script src="weerbewaking_document_ui.js?v=20260823-v1" defer></script>
+<script src="weerbewaking_document_ui.js?v=20260910-v1" defer></script>
+<link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
+<script src="weerbewaking_recent.js?v=20260910-v1"></script>
+<script src="weerbewaking_return.js?v=20260910-v2" defer></script>
 </head>
 <body class="wb-document-ui wb-document-vlaggenweer">
 <script>
@@ -261,7 +264,7 @@ async function downloadPdf(){
 const SAVE_PREFIX='vlag_draft_';
 function vandaagISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function exportStamp(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');}
-function saveKey(){return SAVE_PREFIX+vandaagISO();}
+function saveKey(){return SAVE_PREFIX+WBRecent.startDate(vandaagISO());}
 function snapshotCells(){
   const rows=[];
   document.querySelectorAll('#vlag-table tbody tr').forEach(tr=>{
@@ -320,21 +323,14 @@ function saveDraft(){
   d.cells=snapshotCells();
   if(cellsHebbenRasterRommel(d.cells)) return;
   d.firstRowDateISO = firstRowDate ? isoDate(firstRowDate) : null;
-  try{localStorage.setItem(saveKey(),JSON.stringify(d));toonSaveStatus(d.__ts,'Opgeslagen');}catch(e){}
+  try{localStorage.setItem(saveKey(),JSON.stringify(d)); if(window.WBRecent) WBRecent.capture(saveKey(),d);toonSaveStatus(d.__ts,'Opgeslagen');}catch(e){ if(window.WBRecent) WBRecent.storageError(); }
 }
 function restoreDraft(){
   try{
     const j=localStorage.getItem(saveKey());
     if(!j) return false;
     const d=JSON.parse(j);
-    if(cellsHebbenRasterRommel(d.cells)){
-      localStorage.removeItem(saveKey());
-      return false;
-    }
-    if(!cellenGebruikenWeatherPro(d.cells)){
-      localStorage.removeItem(saveKey());
-      return false;
-    }
+    const tabelGeldig=!cellsHebbenRasterRommel(d.cells) && cellenGebruikenWeatherPro(d.cells);
     document.querySelectorAll('[data-save]').forEach(el=>{
       const k=el.getAttribute('data-save');
       if(d[k]==null) return;
@@ -342,15 +338,16 @@ function restoreDraft(){
       else el.innerHTML=d[k];
     });
     if(d.firstRowDateISO) firstRowDate = new Date(d.firstRowDateISO+'T12:00:00');
-    if(Array.isArray(d.cells)&&d.cells.length){renderFromDraft(d.cells);}
+    if(tabelGeldig){renderFromDraft(d.cells);}
     toonSaveStatus(d.__ts,'Hersteld uit opslag');
-    return true;
+    // Ook zonder bruikbare tabel blijven geschreven teksten bewaard.
+    return tabelGeldig;
   }catch(e){return false;}
 }
 function toonSaveStatus(ts,prefix){
   const el=document.getElementById('save-status'); if(!el) return;
   const t=new Date(ts);
-  el.textContent=`💾 ${prefix} · ${vandaagISO()} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+  el.textContent=`💾 ${prefix} · ${WBRecent.startDate(vandaagISO())} · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
 }
 function wisDraft(){
   if(!confirm('Opgeslagen aanpassingen van '+vandaagISO()+' wissen?')) return;
@@ -378,7 +375,7 @@ async function refetchData(){
 
 (async function init(){
   if(restoreDraft()){
-    const now=new Date();
+    const now=new Date(WBRecent.startDate(vandaagISO())+'T12:00:00');
     document.getElementById('doc-date').textContent=`${fmtDate(now)[0].toUpperCase()+fmtDate(now).slice(1)} ${now.getFullYear()} | ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} uur`;
     document.getElementById('copyright').innerHTML=`Bron: WeatherPro (MeteoGroup/DTN) · © Ed Aldus Weer en Media · geen aansprakelijkheid voor (gedeeltelijk) niet uitkomen van de verwachtingen.`;
     document.getElementById('status').textContent='WeatherPro-waarden hersteld uit opslag. Klik "Data bijwerken" voor verse data.';

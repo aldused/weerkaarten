@@ -16,7 +16,7 @@ const documenten = [
 for (const [bestand, variant] of documenten) {
   const html = fs.readFileSync(path.join(root, bestand), 'utf8');
   assert.match(html, /weerbewaking_document_ui\.css\?v=20260823-v1/, `${bestand}: gedeelde stijl ontbreekt`);
-  const uiVersie = bestand === 'vlaggenweer.html' ? '20260823-v1' : '20260829-opgesteld-v1';
+  const uiVersie = '20260910-v1';
   assert.match(html, new RegExp(`weerbewaking_document_ui\\.js\\?v=${uiVersie}`), `${bestand}: gedeelde UI-logica ontbreekt`);
   assert.match(html, new RegExp(`<body class="[^"]*wb-document-ui[^"]*${variant}`), `${bestand}: documentvariant ontbreekt`);
 }
