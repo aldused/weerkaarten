@@ -572,8 +572,8 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "pluim-ens6",
-    "name": "Weerpluimen · 6 plaatsen",
-    "description": "Zes Nederlandse plaatsen naast elkaar",
+    "name": "Weerpluim · 6 elementen",
+    "description": "Temperatuur, wind en neerslag voor één plaats",
     "category": "verwachting",
     "type": "pluim",
     "section": "Pluimen",
@@ -605,8 +605,8 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "pluim-ens6plus",
-    "name": "Weerpluimen met regensom",
-    "description": "Zes plaatsen, inclusief opgetelde neerslag",
+    "name": "Weerpluim · extra elementen",
+    "description": "Bewolking, windrichting en extra modelvelden",
     "category": "verwachting",
     "type": "pluim",
     "section": "Pluimen",
@@ -639,7 +639,7 @@ const MENU_PRODUCTS = [
   {
     "id": "pluim-trend",
     "name": "Hoe verandert de verwachting?",
-    "description": "Vergelijk de laatste zes modelberekeningen",
+    "description": "Vergelijk de laatste acht modelberekeningen",
     "category": "verwachting",
     "type": "pluim",
     "section": "Pluimen",

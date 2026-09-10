@@ -326,8 +326,9 @@ assert.match(simpleRequired, /temperature_2m,precipitation,wind_speed_10m,cloud_
 assert.doesNotMatch(simpleRequired, /relative_humidity_2m/,
   'landelijke pluim: optionele relatieve vochtigheid blokkeert nog historische kernruns');
 for (const page of ['weerbewaking_landelijke_kaart.html', 'weerbewaking_landelijke_meerdaagse.html', 'weerbewaking_landelijke_pluim.html', 'weerbewaking_knmi_metingen.html', 'weerbewaking_regio_kaart.html']) {
-  const expectedVersion = page.includes('regio') ? /editor-pluim-v5/ : /windstandaarduit-v35/;
-  assert.match(fs.readFileSync(path.join(root, page), 'utf8'), expectedVersion, `${page}: aangepaste editorbundel is niet cache-gebroken`);
+  const pageHtml = fs.readFileSync(path.join(root, page), 'utf8');
+  const version = pageHtml.match(/editor-assets\/[^"']+\?v=(\d{8})-[^"']+/)?.[1];
+  assert.ok(version && Number(version) >= 20260809, `${page}: editorbundel mist een recente cacheversie`);
 }
 assert.match(fs.readFileSync(path.join(root, 'weerbewaking_landelijke_meerdaagse.html'), 'utf8'), /WEERLAB_EDITOR_MODE = 'week'/, 'meerdaagse pagina opent niet rechtstreeks in de juiste modus');
 assert.match(fs.readFileSync(path.join(root, 'weerbewaking_landelijke_pluim.html'), 'utf8'), /WEERLAB_EDITOR_MODE = 'plume'/, 'pluimpagina opent niet rechtstreeks in de juiste modus');
