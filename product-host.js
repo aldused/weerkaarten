@@ -27,6 +27,9 @@
         parent.postMessage({type:'weerlab-focus-search'},location.protocol==='file:'?'*':location.origin);
       }
     },true);
+    doc.addEventListener('keydown', event => {
+      if(event.key==='Escape' && !event.defaultPrevented)parent.postMessage({type:'weerlab-product-focus-exit'},location.origin);
+    });
     doc.addEventListener('click', event => {
       const a=event.target.closest?.('a[href]');
       if(!a || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button!==0)return;
@@ -44,8 +47,23 @@
     if(event.origin!==location.origin || event.source!==document.getElementById('wk-frame')?.contentWindow)return;
     if(event.data?.type==='weerlab-weerkaarten-focus')parent.postMessage(event.data,location.origin);
   });
+  window.addEventListener('message', event => {
+    if(event.origin===location.origin && event.source===parent && event.data?.type==='weerlab-weerkaarten-focus-exit')sluitWeerkaartenFocusMode();
+  });
   const style=document.createElement('style');
-  style.textContent='body.compact-vierluik .content-scroll{padding:0!important;overflow:hidden}body.compact-vierluik #wk-facetten{display:none}body.compact-vierluik #wk-frame{display:block;height:100dvh!important}';
+  style.textContent=`
+    .content-scroll{padding:0!important;min-height:0;}
+    .content-scroll:has(>.panel.actief>iframe){overflow:hidden;}
+    .content-scroll>.panel.actief:has(>iframe){display:flex;height:100%;min-height:0;flex-direction:column;}
+    .content-scroll>.panel>iframe{flex:1 1 0;height:0!important;min-height:0;width:100%;}
+    .content-scroll>.panel>:not(iframe){flex-shrink:0;}
+    .content-scroll>.panel.actief:not(:has(>iframe)){padding:8px;}
+    #panel-guidance.actief{display:flex;height:100%;min-height:0;flex-direction:column;}
+    #panel-guidance #guidance-knmi,#panel-guidance #guidance-dwd{flex:1;min-height:0;overflow:auto;}
+    #guidance-dwd iframe{display:block;height:100%!important;min-height:0;}
+    .wl-subtabs{margin:0;padding:4px 6px;}
+    body.compact-vierluik #wk-facetten{display:none;}
+  `;
   document.head.appendChild(style);
   wireLinks(document);
   report();

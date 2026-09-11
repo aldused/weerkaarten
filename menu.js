@@ -179,6 +179,7 @@
     const showingProduct=!!state.productRoute;
     document.body.classList.toggle('product-open',showingProduct);
     document.body.classList.remove('map-focus-open');
+    setProductExpanded(false);
     document.body.classList.toggle('vierluik-open', showingProduct && /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(state.productRoute));
     main.hidden=showingProduct;
     $('#product-workspace').hidden=!showingProduct;
@@ -213,7 +214,53 @@
     }
     say(byId.get(id).name+(removing?' verwijderd uit favorieten':' toegevoegd aan favorieten')+(stored?'':'. Alleen voor deze sessie bewaard.'),true);
   }
-  function closeDialog(){dialog.close();document.body.style.overflow='';$('#open-menu').setAttribute('aria-expanded','false');}
+  function closeDialog(){clearTimeout(searchTimer);dialog.close();document.body.style.overflow='';$('#open-menu')?.setAttribute('aria-expanded','false');}
+  const mobileMenu = matchMedia('(max-width:760px)');
+  const searchBox = $('.search-box');
+  function placeSearch(){
+    if(!mobileMenu.matches && dialog.open)closeDialog();
+    (mobileMenu.matches?$('#dialog-search'):$('#sidebar-search')).appendChild(searchBox);
+  }
+  function showMenu(focusSearch=false){
+    if(!dialog.open)dialog.showModal();
+    document.body.style.overflow='hidden';
+    $('#open-menu')?.setAttribute('aria-expanded','true');
+    renderMenuSearch();
+    (focusSearch?search:$('#close-menu')).focus();
+  }
+  function focusSearch(){
+    setProductExpanded(false);
+    if(document.body.classList.contains('map-focus-open')){
+      document.body.classList.remove('map-focus-open');
+      $('#product-frame').contentWindow?.postMessage({type:'weerlab-weerkaarten-focus-exit'},location.origin);
+    }
+    if(mobileMenu.matches)showMenu(true);
+    search.focus();search.select();
+  }
+  function renderMenuSearch(){
+    const q=search.value.trim(), results=$('#dialog-search-results');
+    results.hidden=!q;$('#dialog-nav').hidden=!!q;
+    if(!q){results.replaceChildren();return;}
+    const matches=findResults(q);
+    results.innerHTML=matches.slice(0,8).map(p=>`<a href="${escape(p.href)}">${escape(p.name)}<small>${escape(p.description)}</small></a>`).join('') || '<p>Geen resultaten. Probeer een andere zoekterm.</p>';
+    if(matches.length>8)results.innerHTML+=`<a href="#menu/zoeken?q=${encodeURIComponent(q)}">Alle ${matches.length} resultaten bekijken</a>`;
+  }
+  function setProductExpanded(active){
+    document.body.classList.toggle('product-expanded',active);
+    const button=$('#product-expand');
+    button.setAttribute('aria-pressed',String(active));
+    button.setAttribute('aria-label',active?'Sluit beeldvullend':'Toon deze pagina beeldvullend');
+    button.title=active?'Sluit beeldvullend (Escape)':'Beeldvullend';
+    button.querySelector('.expand-label').textContent=active?'Sluiten':'Beeldvullend';
+    button.firstElementChild.textContent=active?'✕':'⛶';
+  }
+  mobileMenu.addEventListener('change',placeSearch);
+  placeSearch();
+  new ResizeObserver(()=>{
+    const height=$('#mobile-nav').getBoundingClientRect().height;
+    // Bewaar de gemeten hoogte terwijl beeldvullend de navigatie tijdelijk verbergt.
+    if(height)document.documentElement.style.setProperty('--mobile-nav-height',height+'px');
+  }).observe($('#mobile-nav'));
   document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
   document.addEventListener('click',event=>{
     const pinButton=event.target.closest('[data-pin]');if(pinButton){toggleFavorite(pinButton.dataset.pin);return;}
@@ -221,9 +268,10 @@
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
     const removeFilter=event.target.closest('[data-remove-filter]');
     if(event.target.closest('[data-reset-filters]')||removeFilter){const next={...state.filters};if(removeFilter)delete next[removeFilter.dataset.removeFilter];else Object.keys(next).forEach(key=>delete next[key]);navigate(routeUrl(state.page,state.type,next),{keepScroll:true});$('#toggle-filters')?.focus();say('Filters bijgewerkt');return;}
-    if(event.target.closest('#open-menu')){dialog.showModal();document.body.style.overflow='hidden';$('#open-menu').setAttribute('aria-expanded','true');return;}
+    if(event.target.closest('#product-expand')){setProductExpanded(!document.body.classList.contains('product-expanded'));return;}
+    if(event.target.closest('#open-menu')){showMenu();return;}
     if(event.target.closest('#close-menu')){closeDialog();return;}
-    if(event.target.closest('[data-clear-query]') || event.target.closest('#clear-search')){search.value='';navigate(searchOrigin,{replace:true});search.focus();return;}
+    if(event.target.closest('[data-clear-query]') || event.target.closest('#clear-search')){clearTimeout(searchTimer);search.value='';if(dialog.open){renderMenuSearch();$('#clear-search').hidden=true;}else navigate(searchOrigin,{replace:true});search.focus();return;}
     const productLink=event.target.closest('a[href]');
     if(productLink && !event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey && event.button===0){
       const url=new URL(productLink.href,location.href);
@@ -248,6 +296,7 @@
   search.addEventListener('input',()=>{
     clearTimeout(searchTimer);const q=search.value.slice(0,180);$('#clear-search').hidden=!q;$('.search-key').hidden=!!q;
     searchTimer=setTimeout(()=>{
+      if(dialog.open){renderMenuSearch();return;}
       if(state.page!=='zoeken')searchOrigin=location.hash||'#start';
       if(!q.trim()){navigate(searchOrigin,{replace:state.page==='zoeken',keepScroll:true});return;}
       navigate('#menu/zoeken?q='+encodeURIComponent(q),{replace:state.page==='zoeken',keepScroll:true});
@@ -259,6 +308,7 @@
       event.preventDefault();clearTimeout(searchTimer);
       if(search.value.trim()){
         if(state.page!=='zoeken')searchOrigin=location.hash||'#start';
+        if(dialog.open)closeDialog();
         navigate('#menu/zoeken?q='+encodeURIComponent(search.value.slice(0,180)),{replace:state.page==='zoeken',keepScroll:true});
         main.querySelector('.row-link')?.focus();
       }
@@ -267,16 +317,16 @@
   });
   document.addEventListener('keydown',event=>{
     if(dialog.open)return;
+    if(event.key==='Escape' && document.body.classList.contains('product-expanded')){setProductExpanded(false);$('#product-expand').focus();return;}
     const editing=event.target.matches('input,textarea,select,[contenteditable="true"]');
     if(event.key==='/'&&!editing&&!event.ctrlKey&&!event.metaKey || (event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){
-      if(!search.getClientRects().length)return;
-      event.preventDefault();search.focus();search.select();
+      event.preventDefault();focusSearch();
     }
   });
   dialog.addEventListener('cancel',event=>{event.preventDefault();closeDialog();});
   dialog.addEventListener('keydown',event=>{
     if(event.key!=='Tab')return;
-    const focusable=[...dialog.querySelectorAll('a[href],button:not(:disabled)')].filter(el=>el.getClientRects().length);
+    const focusable=[...dialog.querySelectorAll('a[href],button:not(:disabled),input:not(:disabled)')].filter(el=>el.getClientRects().length);
     const first=focusable[0],last=focusable[focusable.length-1];
     if(event.shiftKey && document.activeElement===first){event.preventDefault();last?.focus();}
     else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first?.focus();}
@@ -298,7 +348,7 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html?v=20260910-vierluik-reset#'+route;
+      frame.src='product-host.html?v=20260911-schermruimte1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
@@ -308,7 +358,8 @@
     if(event.source!==frame.contentWindow || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
     const data=event.data;
     if(data?.type==='weerlab-weerkaarten-focus'){document.body.classList.toggle('map-focus-open', Boolean(data.active));return;}
-    if(data?.type==='weerlab-focus-search'){if(search.getClientRects().length){search.focus();search.select();}return;}
+    if(data?.type==='weerlab-focus-search'){focusSearch();return;}
+    if(data?.type==='weerlab-product-focus-exit'){setProductExpanded(false);return;}
     if(data?.type!=='weerlab-product-route'||typeof data.hash!=='string'||!/^#[a-z0-9_-]+$/i.test(data.hash))return;
     if(data.hash==='#home'){navigate('#menu/start');return;}
     if(data.hash!==location.hash){
