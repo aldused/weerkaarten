@@ -461,13 +461,13 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   })();
 </script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="radar-ui.css?v=20260909-radar1">
-<script src="radar-ui.js?v=20260909-radar1"></script>
+<link rel="stylesheet" href="radar-ui.css?v=20260911-map2">
+<script src="radar-ui.js?v=20260911-map2"></script>
 </head>
 <body class="radar-studio">
 <header class="radar-header"><div class="radar-brand"><span class="radar-logo" data-radar-icon="radar"></span><div><span class="radar-eyebrow">WEERLAB / ACTUEEL</span><h1>Neerslagradar</h1><p id="hdr-sub">Gemeten neerslag en de verwachting voor de komende 2 uur</p></div></div><div class="radar-freshness"><span id="hdr-update" role="status">Radar laden…</span></div></header>
 <div class="radar-workspace">
-<aside aria-label="Radarmenu" class="radar-side">
+<aside aria-label="Radarmenu" class="radar-side" id="radar-side">
 <div aria-label="Radarinstellingen" class="radar-tabs" role="tablist">
 <button aria-controls="panel-locatie" aria-selected="true" data-radar-tab="locatie" id="tab-locatie" role="tab" type="button"><span data-radar-icon="pin"></span>Locatie</button>
 <button aria-controls="panel-lagen" aria-selected="false" data-radar-tab="lagen" id="tab-lagen" role="tab" tabindex="-1" type="button"><span data-radar-icon="layers"></span>Kaartlagen</button>
@@ -504,9 +504,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 <div class="radar-side-footer">KNMI radar · elke 5 minuten bijgewerkt</div>
 </aside>
 <main aria-label="Radarkaart en tijdlijn" class="radar-main">
-<div class="radar-map-heading"><span><span class="radar-dot"></span>Nederland en omgeving</span><span>Klik op de kaart voor lokale neerslag</span></div>
+<div class="radar-map-heading"><span><span class="radar-dot"></span>Nederland en omgeving</span><button id="map-focus" type="button" aria-expanded="true" aria-controls="radar-side">Meer kaartruimte</button></div>
 <div data-slot="map"><div class="canvas-container" id="canvas-container">
-<canvas id="radar-canvas"></canvas>
+<canvas id="radar-canvas" role="img" aria-label="Neerslagkaart: zoek een plaats voor lokale neerslag of bedien de kaart met de zoomknoppen"></canvas>
+<div class="map-tools"><button id="map-home" data-needs-radar="" type="button">Nederland</button><button id="map-places" data-needs-radar="" type="button" aria-pressed="false">Plaatsnamen</button></div>
+<div id="map-coverage" class="map-coverage" hidden="">Gearceerd: buiten radardekking</div>
 <div class="kaart-brand kaart-brand-top" hidden="">
 <div class="kaart-brand-title">Neerslagradar — Nederland</div>
 <div class="kaart-brand-sub" id="kaart-brand-tijd">laden…</div>
@@ -521,7 +523,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 <button data-needs-radar="" id="ovl-zoom-in" title="Inzoomen (dubbelklik op kaart)" type="button">+</button>
 <div class="zoom-info-overlay" id="ovl-zoom-info">1.0×</div>
 <button data-needs-radar="" id="ovl-zoom-out" title="Uitzoomen (Shift+klik op kaart)" type="button">−</button>
-<button aria-label="Hele kaart tonen" class="reset" data-needs-radar="" id="ovl-zoom-reset" title="Hele kaart tonen" type="button"><span data-radar-icon="expand"></span></button>
+<button aria-label="Nederland tonen" class="reset" data-needs-radar="" id="ovl-zoom-reset" title="Nederland tonen" type="button"><span data-radar-icon="expand"></span></button>
 </div>
 
 </div></div>
@@ -623,6 +625,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
                 ((PROJ_LON_MAX - PROJ_LON_MIN) * KM_LON);
   var BASEMAP_W = 1800;
   var BASEMAP_H = Math.round(BASEMAP_W * ASPECT);
+  // World coordinates stay fixed; the viewport follows the available screen.
+  var VIEW_W = BASEMAP_W, VIEW_H = BASEMAP_H;
   function lonToX(lon){ return (lon - PROJ_LON_MIN) / (PROJ_LON_MAX - PROJ_LON_MIN) * BASEMAP_W; }
   function latToY(lat){ return (PROJ_LAT_MAX - lat) / (PROJ_LAT_MAX - PROJ_LAT_MIN) * BASEMAP_H; }
   var PROVINCIE_ORDER = [
@@ -895,11 +899,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   var blendBuf = null;
   var radCanvas = null, radCtx = null, radImg = null;
 
-  // Realistische basemap (topo-reliëf herkleurd) + gedetailleerd NL-landvlak
-  var topoImg = null;
+  // Detailed coastline supplied locally; no tile service is needed.
   var nlLand = null;
-  var basemapCache = null;
-  var TOPO_SY = 312, TOPO_SH = 1000;  // content-rect in radar_basemap_topo.png
   // Animatie-window (frame-bereik). Default: alles
   var animStart = 0, animEnd = -1;  // -1 = einde van array
   var animWindow = "nu";
@@ -1205,13 +1206,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       euLandGeo ? Promise.resolve(euLandGeo) : fetch("europa_land.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
       lakesGeo ? Promise.resolve(lakesGeo) : fetch("nl_meren.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
       PLAATSEN_BIG ? Promise.resolve({ plaatsen: PLAATSEN_BIG }) : fetch("plaatsen_lookup.json").then(function(r){return r.json();}).catch(function(){return null;}),
-      nlLand ? Promise.resolve(nlLand) : fetch("nl_land_detail.geojson").then(function(r){return r.json();}).catch(function(){return null;}),
-      topoImg ? Promise.resolve(topoImg) : new Promise(function(resolve) {
-        var img = new Image();
-        img.onload = function(){ resolve(img); };
-        img.onerror = function(){ resolve(null); };
-        img.src = "radar_basemap_topo.png";
-      })
+      nlLand ? Promise.resolve(nlLand) : fetch("nl_land_detail.geojson").then(function(r){return r.json();}).catch(function(){return null;})
+
     ];
     return Promise.all(taken).then(function(results) {
       beGeo = results[0];
@@ -1220,11 +1216,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       lakesGeo = results[3];
       var plData = results[4];
       nlLand = results[5];
-      topoImg = results[6];
-      bouwBasemapCache();
+
+
       // Geen externe kaarttegels: die voegen nautische zones, grenzen en labels
       // toe die voor een neerslagradar alleen maar afleiden.
-      observeerThema();     // bij light↔dark de ondergrond opnieuw bakken
+      observeerThema();     // de vectorkleuren volgen het gekozen thema
       if (plData && plData.plaatsen && !PLAATSEN_BIG) {
         PLAATSEN_BIG = plData.plaatsen.filter(function(p) {
           return p.lat >= PROJ_LAT_MIN && p.lat <= PROJ_LAT_MAX
@@ -1345,214 +1341,43 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function setupCanvas() {
     canvas = document.getElementById("radar-canvas");
-    var dpr = window.devicePixelRatio || 1;
-    dprGlobal = dpr;
-    canvas.width  = Math.round(BASEMAP_W * dpr);
-    canvas.height = Math.round(BASEMAP_H * dpr);
-    canvas.style.width  = "100%";
-    canvas.style.height = "100%";
     ctx = canvas.getContext("2d");
-    canvas.style.filter = SENS_FILTERS[sensitivity] || '';
-    updateKaartOverlayLayout();
-  }
-
-  // ── Realistische basemap-cache ──────────────────────────────────────────
-  // Hillshade-topo per pixel herkleurd: land groen (NL fris, buitenland
-  // gedempt), water professioneel blauw. Binnen NL beslist het gedetailleerde
-  // vectorland (CBS) over land/water; daarbuiten de topo-raster zelf.
-  // CARTO Voyager straat-tiles als ondergrond (noodweer.be-/Buienradar-stijl).
-  // Async geladen; tot de tegels er zijn — of als de CDN faalt — valt de kaart
-  // automatisch terug op de zelf-bevattende topo-reliëfkaart hieronder.
-  var basemapTileCanvas = null;   // klaar-gecomponeerde CARTO-ondergrond (of null)
-  var voyagerBezig = false;
-
-  function bouwBasemapCache() {
-    if (basemapTileCanvas) { basemapCache = basemapTileCanvas; return; }
-    bouwBasemapCacheTopo();
-  }
-
-  function bouwBasemapCacheTopo() {
-    if (!topoImg || !nlGeo) { basemapCache = null; return; }
-    var W = BASEMAP_W, H = BASEMAP_H;
-    basemapCache = document.createElement("canvas");
-    basemapCache.width = W; basemapCache.height = H;
-    var c = basemapCache.getContext("2d");
-    c.drawImage(topoImg, 0, TOPO_SY, topoImg.width, TOPO_SH, 0, 0, W, H);
-    var img = c.getImageData(0, 0, W, H);
-    var d = img.data;
-
-    function maakMask(geo) {
-      var mc = document.createElement("canvas");
-      mc.width = W; mc.height = H;
-      var m = mc.getContext("2d");
-      _drawGeoFeatures(m, geo, "#ffffff", null, 0);
-      return m.getImageData(0, 0, W, H).data;
+    resizeMap(true);
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(function() { resizeMap(false); }).observe(document.getElementById("canvas-container"));
     }
-    var maskLand = nlLand ? maakMask(nlLand) : null;
-    var maskNLW  = maakMask(nlGeo);
-
-    var i, r, g, b, lum, wet, shade, nl, lr, lg, lb, w;
-    for (i = 0; i < d.length; i += 4) {
-      r = d[i]; g = d[i + 1]; b = d[i + 2];
-      lum = (r + g + b) / 3;
-      // Blauwdominantie → water (vlak land ≈ −13, water ≈ +58; zachte AA-rand)
-      wet = (b - r + 8) / 50;
-      if (wet < 0) wet = 0; else if (wet > 1) wet = 1;
-      if (maskLand) {
-        var mlw = maskNLW[i + 3] / 255;
-        if (mlw > 0) {
-          var vecWet = 1 - maskLand[i + 3] / 255;
-          w = wet + (vecWet - wet) * mlw;
-          // Plassen die niet in het vectorland zijn uitgesneden maar wel in
-          // de topo als water staan (Loosdrecht, Vinkeveen…): water wint.
-          if (wet > w) w = wet;
-        } else w = wet;
-        nl = maskLand[i + 3] / 255;
-      } else {
-        w = wet;
-        nl = maskNLW[i + 3] / 255;
-      }
-      // Reliëf: luminantie t.o.v. vlak land (≈214) moduleert de groentint
-      shade = lum / 214;
-      if (shade < 0.78) shade = 0.78; else if (shade > 1.1) shade = 1.1;
-      // Gedempt grijsgroen (was fris groen 167,203,136 / water 156,192,223):
-      // neerslagkleuren moeten boven land leesbaar blijven, zie
-      // demo_radar_zichtbaarheid.html variant A+B.
-      lr = (128 + 8 * (1 - nl)) * shade;    // NL 128,143,118 → buitenland 136,140,128
-      lg = (143 - 3 * (1 - nl)) * shade;
-      lb = (118 + 10 * (1 - nl)) * shade;
-      var ws = 0.93 + 0.10 * shade;
-      var wr = 126 * ws, wg = 155 * ws, wb = 186 * ws;
-      d[i]     = lr + (wr - lr) * w;
-      d[i + 1] = lg + (wg - lg) * w;
-      d[i + 2] = lb + (wb - lb) * w;
-      d[i + 3] = 255;
-    }
-    c.putImageData(img, 0, 0);
   }
 
-  // ── OpenStreetMap-tegels laden en in PlateCarree-ondergrond componeren ───
-  // Web-Mercator tegels → het vaste PlateCarree-venster (lonToX/latToY) van de
-  // radar. Eénmalige, niet-blokkerende load: de topo-kaart staat al; zodra de
-  // tegels binnen zijn wisselt de ondergrond naar de schone straatkaart.
-  function isDarkTheme(){ return document.documentElement.getAttribute("data-theme") === "dark"; }
-  function voyagerStyle(){ return isDarkTheme() ? "dark_nolabels" : "voyager_nolabels"; }
+  function resizeMap(initial) {
+    if (!canvas || !radCanvas) return;
+    var rect = document.getElementById("canvas-container").getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr);
+    if (!initial && canvas.width === width && canvas.height === height) return;
+    var cx = viewX + VIEW_W / zoomLevel / 2;
+    var cy = viewY + VIEW_H / zoomLevel / 2;
+    VIEW_W = VIEW_H * width / height;
+    canvas.width = width; canvas.height = height;
+    dprGlobal = height / VIEW_H;
+    // Render precipitation at display resolution, without inventing grid detail.
+    upW = Math.min(1600, width); upH = Math.round(upW * height / width);
+    radCanvas.width = upW; radCanvas.height = upH;
+    radImg = radCtx.createImageData(upW, upH);
+    radViewKey = ""; laatstGetekendF = -1;
+    if (initial) { resetZoom(); return; }
+    viewX = cx - VIEW_W / zoomLevel / 2;
+    viewY = cy - VIEW_H / zoomLevel / 2;
+    clampView(); renderFrame();
+  }
 
-  // Thema kan tijdens de sessie wisselen (cross-tab via localStorage
-  // weerlab_theme → data-theme). Dan ondergrond opnieuw bakken in de juiste
-  // CARTO-stijl en de live-tegelcache legen. Oude ondergrond blijft staan tot
-  // de nieuwe bake klaar is (geen flits).
+  function isDarkTheme() { return document.documentElement.getAttribute("data-theme") === "dark"; }
   var themaObsActief = false;
   function observeerThema() {
     if (themaObsActief) return;
     themaObsActief = true;
-    var laatste = document.documentElement.getAttribute("data-theme");
-    new MutationObserver(function() {
-      var nu = document.documentElement.getAttribute("data-theme");
-      if (nu === laatste) return;
-      laatste = nu;
-      liveTileCache = {};
-      voyagerBezig = false;
-      laadVoyagerTiles();
-    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-  }
-
-  function laadVoyagerTiles() {
-    // De rustige eigen topo-ondergrond blijft de standaard. Geen externe
-    // tegellaag laden: zo blijven scheepvaartroutes en nautische objecten weg.
-    return;
-    if (voyagerBezig) return;
-    voyagerBezig = true;
-    var z = 8, n = Math.pow(2, z);
-    function lon2tx(lon){ return (lon + 180) / 360 * n; }
-    function lat2ty(lat){ var r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n; }
-    function tx2lon(x){ return x / n * 360 - 180; }
-    function ty2lat(y){ return Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI; }
-    var txMin = Math.floor(lon2tx(PROJ_LON_MIN)), txMax = Math.floor(lon2tx(PROJ_LON_MAX));
-    var tyMin = Math.floor(lat2ty(PROJ_LAT_MAX)), tyMax = Math.floor(lat2ty(PROJ_LAT_MIN));
-    var jobs = [];
-    for (var tx = txMin; tx <= txMax; tx++)
-      for (var ty = tyMin; ty <= tyMax; ty++) jobs.push([tx, ty]);
-
-    var tmp = document.createElement("canvas");
-    tmp.width = BASEMAP_W; tmp.height = BASEMAP_H;
-    var tc = tmp.getContext("2d");
-    tc.fillStyle = isDarkTheme() ? "#0e1b2e" : "#aac4da"; tc.fillRect(0, 0, BASEMAP_W, BASEMAP_H); // zee onder eventuele gaten
-    tc.imageSmoothingEnabled = true; tc.imageSmoothingQuality = "high";
-
-    var totaal = jobs.length, klaar = 0, gelukt = 0;
-    function af() {
-      voyagerBezig = false;
-      // Minstens 60% van de tegels nodig voor een nette kaart; anders topo houden.
-      if (gelukt >= Math.ceil(totaal * 0.6)) {
-        basemapTileCanvas = tmp;
-        basemapCache = tmp;
-        liveTileCache = {};   // inzoom-tegels horen bij de nieuwe stijl
-        if (typeof renderFrame === "function" && radarData && nlGeo) renderFrame();
-      }
-    }
-    jobs.forEach(function(j) {
-      var tx = j[0], ty = j[1], img = new Image();
-      img.crossOrigin = "anonymous";   // OSM stuurt ACAO:* → canvas blijft exporteerbaar (PNG opslaan)
-      img.onload = function() {
-        var dx = lonToX(tx2lon(tx)),     dy = latToY(ty2lat(ty));
-        var dw = lonToX(tx2lon(tx + 1)) - dx, dh = latToY(ty2lat(ty + 1)) - dy;
-        tc.drawImage(img, dx, dy, dw + 1, dh + 1);   // +1px tegen naden
-        gelukt++; if (++klaar === totaal) af();
-      };
-      img.onerror = function() { if (++klaar === totaal) af(); };
-      img.src = "https://tile.openstreetmap.org/" + z + "/" + tx + "/" + ty + ".png";
-    });
-  }
-
-  // ── Scherpere CARTO-tegels voor het ZICHTBARE venster bij inzoomen ───────
-  // De z8-bake (basemapTileCanvas) dekt alles direct; zodra je inzoomt leggen
-  // we hogere-zoom tegels van dezelfde Voyager-stijl eroverheen → kustlijn en
-  // straten blijven scherp en uitgelijnd, ook bij provincie-zoom. Async; elke
-  // binnenkomende tegel triggert (buiten play) een herteken.
-  var liveTileCache = {};
-  function liveTile(z, tx, ty) {
-    var key = z + "/" + tx + "/" + ty, t = liveTileCache[key];
-    if (t) return (t.complete && t.naturalWidth) ? t : null;
-    var img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload  = function() { if (!playing) renderFrame(); };
-    img.onerror = function() { img._err = 1; };
-    img.src = "https://tile.openstreetmap.org/" + z + "/" + tx + "/" + ty + ".png";
-    liveTileCache[key] = img;
-    return null;
-  }
-  function tekenLiveTiles(c) {
-    if (!basemapTileCanvas) return;   // alleen op de CARTO-ondergrond (topo niet)
-    // @2x-tegels leveren de retina-scherpte, dus kies het tegel-zoomniveau op
-    // CSS-resolutie (zónder dpr) — anders schiet z te hoog en exploderen de
-    // tegelaantallen (dpr2 → z12 → >100 tegels per venster).
-    var pxPerDeg = (BASEMAP_W / (PROJ_LON_MAX - PROJ_LON_MIN)) * zoomLevel;
-    var z = Math.round(Math.log2(pxPerDeg * 360 / 256));
-    if (z <= 8) return;               // uitgezoomd: de z8-bake volstaat
-    z = Math.min(z, 15);
-    var n = Math.pow(2, z);
-    function lon2tx(lon){ return (lon + 180) / 360 * n; }
-    function lat2ty(lat){ var r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n; }
-    function tx2lon(x){ return x / n * 360 - 180; }
-    function ty2lat(y){ return Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI; }
-    var loW = PROJ_LON_MIN + (viewX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
-    var loE = PROJ_LON_MIN + ((viewX + BASEMAP_W / zoomLevel) / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
-    var laN = PROJ_LAT_MAX - (viewY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
-    var laS = PROJ_LAT_MAX - ((viewY + BASEMAP_H / zoomLevel) / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
-    var txMin = Math.floor(lon2tx(loW)), txMax = Math.floor(lon2tx(loE));
-    var tyMin = Math.floor(lat2ty(laN)), tyMax = Math.floor(lat2ty(laS));
-    if ((txMax - txMin + 1) * (tyMax - tyMin + 1) > 120) return;   // veiligheidslimiet
-    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high";
-    for (var tx = txMin; tx <= txMax; tx++) {
-      for (var ty = tyMin; ty <= tyMax; ty++) {
-        var img = liveTile(z, tx, ty);
-        if (!img) continue;
-        var dx = lonToX(tx2lon(tx)), dy = latToY(ty2lat(ty));
-        var dw = lonToX(tx2lon(tx + 1)) - dx, dh = latToY(ty2lat(ty + 1)) - dy;
-        c.drawImage(img, dx, dy, dw + 0.6, dh + 0.6);   // +0.6px tegen naden
-      }
-    }
+    new MutationObserver(function() { renderFrame(); }).observe(document.documentElement,
+      { attributes: true, attributeFilter: ["data-theme"] });
   }
 
   // ── Geo path drawing helpers ────────────────────────────────────────────
@@ -1775,8 +1600,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var relX = (clientX - bm.left)  / bm.width;
     var relY = (clientY - bm.top)   / bm.height;
     return {
-      x: viewX + relX * (BASEMAP_W / zoomLevel),
-      y: viewY + relY * (BASEMAP_H / zoomLevel)
+      x: viewX + relX * (VIEW_W / zoomLevel),
+      y: viewY + relY * (VIEW_H / zoomLevel)
     };
   }
 
@@ -1859,14 +1684,14 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     if (!upRijMax || upRijMax.length !== nLat)   upRijMax = new Uint8Array(nLat);
     if (!upXI || upXI.length !== upW * 4) { upXI = new Int32Array(upW * 4); upXW = new Float32Array(upW * 4); }
     if (!upYI || upYI.length !== upH * 4) { upYI = new Int32Array(upH * 4); upYW = new Float32Array(upH * 4); }
-    var spanX = BASEMAP_W / zoomLevel, spanY = BASEMAP_H / zoomLevel;
-    function vul(idxArr, wArr, nOut, nSrc, view, span, basemapDim) {
+    var spanX = VIEW_W / zoomLevel, spanY = VIEW_H / zoomLevel;
+    function vul(idxArr, wArr, nOut, nSrc, view, span, origin, gridSpan) {
       var lo = nSrc, hi = 0;
       for (var o = 0; o < nOut; o++) {
         var coord = view + (o + 0.5) * span / nOut;     // basemap-coord van deze outputpixel
         // Celcentra-conventie: native cel i dekt basemap-fractie [i/nSrc, (i+1)/nSrc],
         // met de gesamplede waarde op het celcentrum (i+0.5) — zie haal_radar.py.
-        var s = coord / basemapDim * nSrc - 0.5;        // fractionele native index
+        var s = (coord - origin) / gridSpan * nSrc - 0.5;        // fractionele native index
         var i1 = Math.floor(s);
         var t = s - i1;
         var t2 = t * t, t3 = t2 * t;
@@ -1879,15 +1704,15 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
           var ix = i1 - 1 + k;
           if (ix < 0) ix = 0; else if (ix > nSrc - 1) ix = nSrc - 1;
           idxArr[o * 4 + k] = ix;
-          wArr[o * 4 + k] = (k === 0 ? ws0 : k === 1 ? ws1 : k === 2 ? ws2 : ws3);
+          wArr[o * 4 + k] = coord < origin || coord > origin + gridSpan ? 0 : (k === 0 ? ws0 : k === 1 ? ws1 : k === 2 ? ws2 : ws3);
           if (ix < lo) lo = ix;
           if (ix > hi) hi = ix;
         }
       }
       return [lo, hi];
     }
-    vul(upXI, upXW, upW, nLon, viewX, spanX, BASEMAP_W);
-    var ry = vul(upYI, upYW, upH, nLat, viewY, spanY, BASEMAP_H);
+    vul(upXI, upXW, upW, nLon, viewX, spanX, lonToX(meta.grid.lon_min), lonToX(meta.grid.lon_max) - lonToX(meta.grid.lon_min));
+    var ry = vul(upYI, upYW, upH, nLat, viewY, spanY, latToY(meta.grid.lat_max), latToY(meta.grid.lat_min) - latToY(meta.grid.lat_max));
     radVisR0 = ry[0]; radVisR1 = ry[1];
   }
 
@@ -1930,6 +1755,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     }
     var minPv = LUT_MIN_PV;
     // 2. Horizontale Catmull-Rom pass (zichtbare native rijen → upW breed)
+    upTmpH.fill(0);
     for (y = r0n; y <= r1n; y++) {
       if (upRijMax[y] < minPv) continue;
       var src = y * nLon, dst = y * upW;
@@ -1974,7 +1800,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     if (Math.round(frameF) !== frameIdx) frameF = frameIdx;
     updateKaartOverlayLayout();
     if (radarMode !== "instant") bouwCumGrid();
-    var W = BASEMAP_W, H = BASEMAP_H;
+    var W = VIEW_W, H = VIEW_H;
     var _t0 = performance.now();
 
     // World→canvas transform met dpr + zoom + pan (alles in BASEMAP-coords)
@@ -1983,36 +1809,26 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     // Clip op het zichtbare gebied (full basemap)
     ctx.beginPath();
-    ctx.rect(0, 0, W, H);
+    ctx.rect(viewX, viewY, W / zoomLevel, H / zoomLevel);
     ctx.save();
     ctx.clip();
 
-    // 1. Ondergrond: realistische topo-basemap (cache), vector-fallback,
-    //    of beta MTG-satellietlaag.
-    var linePx = function(px) { return Math.max(0.08, px / Math.max(1, zoomLevel)); };
-    var satBgActief = tekenSatellietAchtergrond(ctx, W, H);
-    if (!satBgActief) {
-      ctx.save();
-      ctx.filter = "saturate(0.45) brightness(1.05)";
-      if (basemapCache) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(basemapCache, 0, 0, W, H);
-        tekenLiveTiles(ctx);   // scherpere tegels voor het zichtbare venster bij inzoomen
-      } else {
-        ctx.fillStyle = "#b9d0e4";
-        ctx.fillRect(0, 0, W, H);
-        if (euLandGeo && zoomLevel < 1.8) {
-          _drawGeoFeatures(ctx, euLandGeo, "#b8c7a2", null, 0);
-        }
-        _drawGeoFeatures(ctx, nlGeo, "#a7cb88", null, 0);
-        _drawGeoFeatures(ctx, beGeo, "#b0c598", null, 0);
-        if (lakesGeo) _drawGeoFeatures(ctx, lakesGeo, "#a6c6e2", null, 0);
-      }
-    }
-
-    // Restore the map filter before drawing any meteorological data.
-    if (!satBgActief) ctx.restore();
+    var display = bitmapDisplayRect();
+    var screenScale = VIEW_W / Math.max(1, display ? display.width : VIEW_W);
+    var linePx = function(px) { return px * screenScale / zoomLevel; };
+    var dark = isDarkTheme();
+    var sea = dark ? "#223e50" : "#c8dde5";
+    var land = dark ? "#384946" : "#f1f0e8";
+    var border = dark ? "rgba(201,221,218,.42)" : "rgba(60,85,92,.4)";
+    ctx.fillStyle = sea;
+    ctx.fillRect(viewX, viewY, W / zoomLevel, H / zoomLevel);
+    _drawGeoFeatures(ctx, euLandGeo, land, null, 0);
+    _drawGeoFeatures(ctx, beGeo, land, null, 0);
+    // The detailed land mask preserves islands, estuaries and inland water.
+    _drawGeoFeatures(ctx, nlGeo, sea, null, 0);
+    _drawGeoFeatures(ctx, nlLand || nlGeo, land, null, 0);
+    _drawGeoFeatures(ctx, lakesGeo, sea, null, 0);
+    tekenSatellietAchtergrond(ctx, BASEMAP_W, BASEMAP_H);
 
     // 4. Radar-raster — instant: temporele blend + bilineair 2× in dataruimte
     //    + PV→kleur-LUT (zuivere kleuren, scherpe kernen); som-modi: native.
@@ -2045,18 +1861,38 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       // (Catmull-Rom). Teken het exact over dat venster → scherp op elke zoom.
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(radCanvas, viewX, viewY, BASEMAP_W / zoomLevel, BASEMAP_H / zoomLevel);
+      ctx.drawImage(radCanvas, viewX, viewY, VIEW_W / zoomLevel, VIEW_H / zoomLevel);
+    }
+
+    // Explicitly mark uncovered geography so an empty map cannot suggest dry weather.
+    var gx0 = lonToX(meta.grid.lon_min), gx1 = lonToX(meta.grid.lon_max);
+    var gy0 = latToY(meta.grid.lat_max), gy1 = latToY(meta.grid.lat_min);
+    var uncovered = viewX < gx0 || viewY < gy0 || viewX + W / zoomLevel > gx1 || viewY + H / zoomLevel > gy1;
+    document.getElementById("map-coverage").hidden = !uncovered;
+    if (uncovered) {
+      ctx.save(); ctx.beginPath();
+      ctx.rect(viewX, viewY, W / zoomLevel, H / zoomLevel);
+      ctx.rect(gx0, gy0, gx1 - gx0, gy1 - gy0); ctx.clip("evenodd");
+      ctx.fillStyle = dark ? "rgba(12,24,36,.2)" : "rgba(255,255,255,.25)";
+      ctx.fillRect(viewX, viewY, W / zoomLevel, H / zoomLevel);
+      ctx.strokeStyle = dark ? "rgba(197,221,229,.13)" : "rgba(49,79,92,.12)"; ctx.lineWidth = linePx(1);
+      var step = linePx(14), span = H / zoomLevel;
+      ctx.beginPath();
+      for (var hx = viewX - span; hx < viewX + W / zoomLevel; hx += step) {
+        ctx.moveTo(hx, viewY + span); ctx.lineTo(hx + span, viewY);
+      }
+      ctx.stroke(); ctx.restore();
     }
 
     // 6. Rivieren in waterblauw (uit te zetten via layer-toggle)
     if (layers.rivieren && riverGeo) {
-      _drawGeoLines(ctx, riverGeo, "rgba(125,168,208,0.85)", linePx(1.1));
+      _drawGeoLines(ctx, riverGeo, sea, linePx(1.1));
     }
 
     // 7. Grenzen — geen halo's: provincielijnen alleen op land (geclipt),
     //    kustlijn = rand van het gedetailleerde landvlak.
     if (layers.provincies) {
-      _drawGeoFeatures(ctx, beGeo, null, "rgba(55,70,85,0.22)", linePx(0.65));
+      _drawGeoFeatures(ctx, beGeo, null, border, linePx(0.65));
       var actieveFeature = actieveProvincie ? vindProvincieFeature(actieveProvincie) : null;
       if (nlLand) {
         // Provincielijnen (en de actieve provincie-markering) alleen op land,
@@ -2065,22 +1901,20 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         ctx.save();
         _geoPath(ctx, nlLand);
         ctx.clip();
-        _drawGeoFeatures(ctx, nlGeo, null, "rgba(55,70,85,0.32)", linePx(0.75));
+        _drawGeoFeatures(ctx, nlGeo, null, border, linePx(0.75));
         if (actieveFeature) _drawGeoFeatures(ctx, { features: [actieveFeature] }, null, "rgba(40,55,70,0.55)", linePx(1.1));
         ctx.restore();
       } else {
-        _drawGeoFeatures(ctx, nlGeo, null, "rgba(55,70,85,0.30)", linePx(0.7));
+        _drawGeoFeatures(ctx, nlGeo, null, border, linePx(0.7));
         if (actieveFeature) _drawGeoFeatures(ctx, { features: [actieveFeature] }, null, "rgba(40,55,70,0.55)", linePx(1.1));
       }
     }
-    // Kustlijn-outline alleen op de topo-ondergrond. Op CARTO tekent de
-    // straatkaart de kust al scherp — een eigen vectorlijn zou er (zeker
-    // ingezoomd) náást lopen, dus die laten we daar weg.
-    if (!basemapTileCanvas) {
+    // Coastline stays vector-sharp at every zoom level.
+    {
       if (nlLand) {
-        _drawGeoFeatures(ctx, nlLand, null, "rgba(40,55,70,0.45)", linePx(0.95));
+        _drawGeoFeatures(ctx, nlLand, null, border, linePx(0.95));
       } else {
-        _drawBuitengrens(ctx, nlGeo, "rgba(40,55,70,0.45)", linePx(0.95));
+        _drawBuitengrens(ctx, nlGeo, border, linePx(0.95));
       }
     }
 
@@ -2101,21 +1935,22 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       else if (zoomLevel >= 2.2) popMin = 70000;
       else                       popMin = 140000;
       var visLonMin = PROJ_LON_MIN + (viewX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
-      var visLonMax = PROJ_LON_MIN + ((viewX + BASEMAP_W / zoomLevel) / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
+      var visLonMax = PROJ_LON_MIN + ((viewX + VIEW_W / zoomLevel) / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
       var visLatMax = PROJ_LAT_MAX - (viewY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
-      var visLatMin = PROJ_LAT_MAX - ((viewY + BASEMAP_H / zoomLevel) / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
+      var visLatMin = PROJ_LAT_MAX - ((viewY + VIEW_H / zoomLevel) / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
       var visPad = 0.18 / Math.max(1, zoomLevel);
       labelLijst = [];
       var seenLabels = {};
       function addLabel(lat, lon, naam, pop, land, boost) {
-        var key = String(naam || "").toLowerCase() + "|" + (land || "");
+        var key = String(naam || "").toLowerCase();
         if (seenLabels[key]) return;
         seenLabels[key] = true;
         labelLijst.push([lat, lon, naam, pop || 0, land || "", boost || 0]);
       }
       for (var fi = 0; fi < STEDEN_LABEL.length; fi++) {
         var fs = STEDEN_LABEL[fi];
-        addLabel(fs[0], fs[1], fs[2], 260000, "NL", 900000);
+        var known = PLAATSEN_BIG.find(function(p) { return p.naam === fs[2]; });
+        addLabel(fs[0], fs[1], fs[2], known ? known.pop : 140000, known ? known.land : "", 900000);
       }
       for (var pi = 0; pi < PLAATSEN_BIG.length; pi++) {
         var pp = PLAATSEN_BIG[pi];
@@ -2147,7 +1982,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         return 0;
       }
       var displayRect = bitmapDisplayRect();
-      var labelScale = RadarUI.mapLabelScale(displayRect && displayRect.width, BASEMAP_W);
+      var labelScale = screenScale;
       var basisFont = 11.5;
       if      (zoomLevel >= 12) basisFont = 13.5;
       else if (zoomLevel >= 8)  basisFont = 13;
@@ -2160,7 +1995,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       labelLijst = labelLijst.slice().sort(function(a, b) {
         return ((b[3] || 0) + (b[5] || 0)) - ((a[3] || 0) + (a[5] || 0));
       });
-      var geplaatst = [];  // bounding boxes [x0,y0,x1,y1]
+      var geplaatst = [
+        [0, 0, 220 * labelScale, 57 * labelScale],
+        [W - 62 * labelScale, 0, W, 174 * labelScale],
+        [0, H - 50 * labelScale, 135 * labelScale, H]
+      ];  // Keep labels clear of map controls and the scale bar.
       var maxLabels;
       if      (zoomLevel >= 18) maxLabels = 260;
       else if (zoomLevel >= 12) maxLabels = 230;
@@ -2186,6 +2025,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       for (var k = 0; k < labelLijst.length; k++) {
         if (placedCount >= maxLabels) break;
         var st = labelLijst[k];
+        if (puntSel && puntSel.plaats === st[2]) continue;
         var wx = lonToX(st[1]), wy = latToY(st[0]);
         var sxs = (wx - viewX) * zoomLevel;
         var sys = (wy - viewY) * zoomLevel;
@@ -2225,21 +2065,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         geplaatst.push(chosen.box);
         placedCount++;
 
-        var textColor = (t === 2) ? "#0f172a" : (t === 1) ? "#1f2937" : "#334155";
+        var textColor = dark ? "#eff7fa" : "#223c49";
         var markerFill = "#3a5d71";
-
-        ctx.save();
-        ctx.shadowColor = "rgba(15,23,42,0.14)";
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetY = 1;
-        roundRectPath(ctx, chosen.x, chosen.y, labelW, labelH, 4);
-        ctx.fillStyle = t === 2 ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.68)";
-        ctx.fill();
-        ctx.shadowColor = "transparent";
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = "rgba(30,41,59,0.12)";
-        ctx.stroke();
-        ctx.restore();
 
         ctx.beginPath();
         ctx.arc(sxs, sys, dotR, 0, Math.PI * 2);
@@ -2250,8 +2077,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         ctx.stroke();
 
         ctx.textAlign = chosen.align;
-        ctx.lineWidth = 2.6;
-        ctx.strokeStyle = "rgba(255,255,255,0.88)";
+        ctx.lineWidth = 3 * labelScale;
+        ctx.strokeStyle = dark ? "#203541" : "rgba(255,255,255,0.95)";
         ctx.strokeText(st[2], chosen.tx, chosen.ty);
         ctx.fillStyle = textColor;
         ctx.fillText(st[2], chosen.tx, chosen.ty);
@@ -2405,6 +2232,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var mxs = (mwx - viewX) * zoomLevel;
       var mys = (mwy - viewY) * zoomLevel;
       if (mxs > -100 && mxs < W + 100 && mys > -100 && mys < H + 100) {
+        ctx.save(); ctx.translate(mxs, mys); ctx.scale(screenScale, screenScale);
+        mxs = 0; mys = 0;
         // Pin schaalt iets met zoom maar blijft groot
         var pinR = (zoomLevel >= 8) ? 11 : 9;
         // Buitenring (witte halo)
@@ -2428,7 +2257,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         ctx.fill();
         // Naam-label boven pin (groter font, robuust leesbaar)
         if (puntSel.plaats) {
-          var lblFont = (zoomLevel >= 12) ? 26 : (zoomLevel >= 8) ? 22 : (zoomLevel >= 5) ? 19 : 17;
+          var lblFont = 13;
           ctx.font = "800 " + lblFont + "px DM Sans, Arial, sans-serif";
           ctx.textBaseline = "middle";
           ctx.textAlign = "center";
@@ -2478,6 +2307,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
           ctx.fill();
           ctx.textAlign = "left";
         }
+        ctx.restore();
       }
     }
 
@@ -2492,45 +2322,21 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var kaartBrandTijd = document.getElementById("kaart-brand-tijd");
     if (kaartBrandTijd) kaartBrandTijd.textContent = tijdTekst || "";
 
-    // Schaal-balk linksonder \u2014 toont km gebaseerd op huidige zoom
-    (function tekenSchaalbalk() {
-      // 1 grid-pixel \u2248 KM_LON km bij midlat * (PROJ_LON_MAX-PROJ_LON_MIN)/BASEMAP_W
-      var degPerPx = (PROJ_LON_MAX - PROJ_LON_MIN) / BASEMAP_W;
-      var kmPerPx = degPerPx * KM_LON;
-      // Effectief op scherm: 1 source-px = zoomLevel screen-px
-      var kmPerScreenPx = kmPerPx / zoomLevel;
-      // Kies "mooie" lengte (1, 2, 5, 10, 20, 50, 100, 200, 500 km)
-      var doelPx = 120;  // streef ~120px breed
-      var doelKm = kmPerScreenPx * doelPx;
-      var keuzes = [1, 2, 5, 10, 20, 50, 100, 200, 500];
-      var schaalKm = keuzes[0];
-      for (var sk = 0; sk < keuzes.length; sk++) {
-        if (keuzes[sk] >= doelKm) { schaalKm = keuzes[sk]; break; }
-        schaalKm = keuzes[sk];
-      }
-      var schaalPx = schaalKm / kmPerScreenPx;
-      var sbX = 14, sbY = H - 56;
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillRect(sbX - 4, sbY - 18, schaalPx + 8, 22);
-      ctx.strokeStyle = "rgba(0,32,91,0.4)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(sbX - 4, sbY - 18, schaalPx + 8, 22);
-      // Balk
-      ctx.fillStyle = "#0f172a";
-      ctx.fillRect(sbX, sbY - 4, schaalPx, 4);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(sbX + 1, sbY - 3, schaalPx - 2, 2);
-      // Eindstreepjes
-      ctx.fillStyle = "#0f172a";
-      ctx.fillRect(sbX, sbY - 8, 2, 8);
-      ctx.fillRect(sbX + schaalPx - 2, sbY - 8, 2, 8);
-      // Label
-      ctx.font = "700 11px DM Sans, Arial, sans-serif";
-      ctx.fillStyle = "#0f172a";
-      ctx.textBaseline = "middle";
-      ctx.textAlign = "left";
-      ctx.fillText(schaalKm + " km", sbX + schaalPx + 6, sbY - 8);
-    })();
+    // Scale remains legible on every viewport and reflects the centre latitude.
+    ctx.save();
+    ctx.scale(screenScale, screenScale);
+    var cssW = W / screenScale, cssH = H / screenScale;
+    var midLat = PROJ_LAT_MAX - (viewY + H / zoomLevel / 2) / BASEMAP_H * (PROJ_LAT_MAX - PROJ_LAT_MIN);
+    var kmPerPixel = 111.32 * Math.cos(midLat * Math.PI / 180) * (PROJ_LON_MAX - PROJ_LON_MIN) / BASEMAP_W * screenScale / zoomLevel;
+    var scale = RadarUI.distanceScale(kmPerPixel, Math.min(100, cssW / 4));
+    ctx.fillStyle = dark ? "#132538ee" : "#ffffffee";
+    ctx.fillRect(12, cssH - 43, scale.pixels + 20, 31);
+    ctx.fillStyle = dark ? "#e0eef3" : "#284653";
+    ctx.font = "600 11px DM Sans, sans-serif"; ctx.textBaseline = "top"; ctx.textAlign = "left";
+    ctx.fillText(scale.km + " km", 21, cssH - 40);
+    ctx.fillRect(21, cssH - 23, scale.pixels, 2);
+    ctx.fillRect(21, cssH - 27, 2, 6); ctx.fillRect(19 + scale.pixels, cssH - 27, 2, 6);
+    ctx.restore();
 
     // Update UI labels
     var isFcst = isFutureFrame(frameIdx) || (frameTypes && frameTypes[frameIdx] === "forecast");
@@ -3157,7 +2963,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
     var serie = reeksVoorPunt(lat, lon);
     if (!serie) {
-      document.getElementById("punt-samenvatting").innerHTML = '<span class="droog">Geen radar-data buiten Nederland.</span>';
+      document.getElementById("punt-samenvatting").innerHTML = '<span class="droog">Buiten radardekking: geen neerslaggegevens beschikbaar.</span>';
       var cv = document.getElementById("punt-spark");
       cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
       document.getElementById("punt-tabel-body").innerHTML = "";
@@ -3223,8 +3029,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       // Defer 230ms zodat dblclick voorrang krijgt
       clearTimeout(clickTimer);
       clickTimer = setTimeout(function() {
-        var srcPxX = viewX + fxy.fx * (BASEMAP_W / zoomLevel);
-        var srcPxY = viewY + fxy.fy * (BASEMAP_H / zoomLevel);
+        var srcPxX = viewX + fxy.fx * (VIEW_W / zoomLevel);
+        var srcPxY = viewY + fxy.fy * (VIEW_H / zoomLevel);
         var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
         var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
         toonPunt(lat, lon);
@@ -3286,8 +3092,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       // Pan + zoom naar plaats
       zoomLevel = Math.max(zoomLevel, 7.0);
       var srcX = lonToX(p.lon), srcY = latToY(p.lat);
-      viewX = srcX - (BASEMAP_W / zoomLevel) / 2;
-      viewY = srcY - (BASEMAP_H / zoomLevel) / 2;
+      viewX = srcX - (VIEW_W / zoomLevel) / 2;
+      viewY = srcY - (VIEW_H / zoomLevel) / 2;
       clampView();
       toonPunt(p.lat, p.lon, p.naam);
       if (voegToe && isFavoriet(p.lat, p.lon) < 0) {
@@ -3377,8 +3183,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         if (lat >= PROJ_LAT_MIN && lat <= PROJ_LAT_MAX && lon >= PROJ_LON_MIN && lon <= PROJ_LON_MAX) {
           zoomLevel = 6.0;
           var srcX = lonToX(lon), srcY = latToY(lat);
-          viewX = srcX - (BASEMAP_W / zoomLevel) / 2;
-          viewY = srcY - (BASEMAP_H / zoomLevel) / 2;
+          viewX = srcX - (VIEW_W / zoomLevel) / 2;
+          viewY = srcY - (VIEW_H / zoomLevel) / 2;
           clampView();
           toonPunt(lat, lon, "Mijn locatie");
         } else {
@@ -3621,7 +3427,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     if (!canvas) return null;
     var rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
-    var cAspect = BASEMAP_W / BASEMAP_H;
+    var cAspect = VIEW_W / VIEW_H;
     var rAspect = rect.width / rect.height;
     var dispW, dispH, offX, offY;
     if (rAspect > cAspect) {
@@ -3691,10 +3497,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var maxY = Math.min(BASEMAP_H, Math.max(y0, y1));
     var bw = Math.max(1, maxX - minX);
     var bh = Math.max(1, maxY - minY);
-    var zoom = Math.min(BASEMAP_W / (bw * margeFactor), BASEMAP_H / (bh * margeFactor));
-    zoomLevel = Math.max(minZoom || ZOOM_MIN, Math.min(ZOOM_MAX, zoom));
-    viewX = (minX + maxX) / 2 - (BASEMAP_W / zoomLevel) / 2;
-    viewY = (minY + maxY) / 2 - (BASEMAP_H / zoomLevel) / 2;
+    var zoom = Math.min(VIEW_W / (bw * margeFactor), VIEW_H / (bh * margeFactor));
+    zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom));
+    viewX = (minX + maxX) / 2 - (VIEW_W / zoomLevel) / 2;
+    viewY = (minY + maxY) / 2 - (VIEW_H / zoomLevel) / 2;
     clampView();
     renderFrame();
     return true;
@@ -3754,12 +3560,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
   }
 
   function clampView() {
-    var visW = BASEMAP_W / zoomLevel;
-    var visH = BASEMAP_H / zoomLevel;
-    if (viewX < 0) viewX = 0;
-    if (viewY < 0) viewY = 0;
-    if (viewX + visW > BASEMAP_W) viewX = BASEMAP_W - visW;
-    if (viewY + visH > BASEMAP_H) viewY = BASEMAP_H - visH;
+    var visW = VIEW_W / zoomLevel;
+    var visH = VIEW_H / zoomLevel;
+    viewX = visW >= BASEMAP_W ? (BASEMAP_W - visW) / 2 : Math.max(0, Math.min(BASEMAP_W - visW, viewX));
+    viewY = visH >= BASEMAP_H ? (BASEMAP_H - visH) / 2 : Math.max(0, Math.min(BASEMAP_H - visH, viewY));
   }
 
   function setZoomAt(newZoom, clientX, clientY) {
@@ -3770,22 +3574,20 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var fxy = clientNaarBitmapFractie(clientX, clientY);
       if (fxy) { fracX = fxy.fx; fracY = fxy.fy; }
     }
-    var srcX = viewX + fracX * (BASEMAP_W / zoomLevel);
-    var srcY = viewY + fracY * (BASEMAP_H / zoomLevel);
+    var srcX = viewX + fracX * (VIEW_W / zoomLevel);
+    var srcY = viewY + fracY * (VIEW_H / zoomLevel);
     zoomLevel = newZoom;
-    if (zoomLevel <= ZOOM_MIN + 0.001) {
-      viewX = 0; viewY = 0;
-    } else {
-      viewX = srcX - fracX * (BASEMAP_W / zoomLevel);
-      viewY = srcY - fracY * (BASEMAP_H / zoomLevel);
-      clampView();
-    }
+    viewX = srcX - fracX * (VIEW_W / zoomLevel);
+    viewY = srcY - fracY * (VIEW_H / zoomLevel);
+    clampView();
     renderFrame();
   }
 
   function resetZoom() {
-    zoomLevel = 1.0;
-    viewX = 0; viewY = 0;
+    zoomLevel = Math.max(ZOOM_MIN, Math.min(VIEW_W / (lonToX(7.35) - lonToX(3.15)), VIEW_H / (latToY(50.55) - latToY(53.8))));
+    viewX = lonToX(5.25) - VIEW_W / zoomLevel / 2;
+    viewY = latToY(52.175) - VIEW_H / zoomLevel / 2;
+    clampView();
     actieveProvincie = "";
     markeerRegioKnop("");
     var sel = document.getElementById("provincie-select");
@@ -3852,7 +3654,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     // Helper: omreken display-pixel naar bron-pixel delta (rekening houdend met letterbox)
     function displayToSourceScale() {
       var bm = bitmapDisplayRect();
-      return (BASEMAP_W / zoomLevel) / Math.max(1, bm ? bm.width : BASEMAP_W);
+      return (VIEW_W / zoomLevel) / Math.max(1, bm ? bm.width : BASEMAP_W);
     }
 
     // Slepen om te pannen — track muisdown locatie ook bij zoom 1 voor klik vs sleep
@@ -3870,7 +3672,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         if (mc) {
           var mwx = lonToX(puntSel.lon), mwy = latToY(puntSel.lat);
           var dx = mc.x - mwx, dy = mc.y - mwy;
-          var hitR = 22 / zoomLevel;
+          var hitR = 22 * VIEW_W / bitmapDisplayRect().width / zoomLevel;
           if (Math.sqrt(dx*dx + dy*dy) < hitR) {
             markerDragging = true;
             dragMoved = false;
@@ -3916,7 +3718,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
         if (hmc) {
           var hmwx = lonToX(puntSel.lon), hmwy = latToY(puntSel.lat);
           var hdx = hmc.x - hmwx, hdy = hmc.y - hmwy;
-          container.style.cursor = Math.sqrt(hdx*hdx + hdy*hdy) < 22/zoomLevel ? "grab" : "";
+          container.style.cursor = Math.sqrt(hdx*hdx + hdy*hdy) < 22 * VIEW_W / bitmapDisplayRect().width / zoomLevel ? "grab" : "";
         }
       }
       if (!isDragging) return;
@@ -4065,8 +3867,8 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var fx = fxy.fx, fy = fxy.fy;
 
       // Reken om naar bron-pixel coord (rekening houdend met zoom+pan)
-      var srcPxX = viewX + fx * (BASEMAP_W  / zoomLevel);
-      var srcPxY = viewY + fy * (BASEMAP_H / zoomLevel);
+      var srcPxX = viewX + fx * (VIEW_W / zoomLevel);
+      var srcPxY = viewY + fy * (VIEW_H / zoomLevel);
       // lat/lon via basemap-extent (kan ruimer zijn dan data-extent)
       var lon = PROJ_LON_MIN + (srcPxX / BASEMAP_W) * (PROJ_LON_MAX - PROJ_LON_MIN);
       var lat = PROJ_LAT_MAX - (srcPxY / BASEMAP_H) * (PROJ_LAT_MAX - PROJ_LAT_MIN);
@@ -4241,6 +4043,11 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 
   function init() {
     RadarUI.init();
+    document.getElementById("map-focus").addEventListener("click", function() {
+      var focused = document.body.classList.toggle("map-focused");
+      this.setAttribute("aria-expanded", String(!focused));
+      this.textContent = focused ? "Toon zijpaneel" : "Meer kaartruimte";
+    });
     bouwLegenda();
     window.addEventListener("resize", function() {
       syncCompactTimeline();
@@ -4309,6 +4116,10 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       setupProvincieZoom();
       setupRegioZoom();
       setupZoomPan();
+      document.getElementById("map-home").addEventListener("click", resetZoom);
+      document.getElementById("map-places").addEventListener("click", function() {
+        document.querySelector('[data-layer="steden"]').click();
+      });
       setupPuntPaneel();
       setupLayerToggles();
       setupLagenInfo();

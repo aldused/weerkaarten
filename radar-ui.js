@@ -25,8 +25,15 @@
   function mapLabelScale(displayWidth, nativeWidth) {
     return Math.max(1, nativeWidth / Math.max(200, displayWidth || nativeWidth));
   }
+  function distanceScale(kmPerPixel, targetPixels) {
+    var target = kmPerPixel * targetPixels;
+    var power = Math.pow(10, Math.floor(Math.log10(target)));
+    var km = [1, 2, 5, 10].map(function(n) { return n * power; }).filter(function(n) { return n <= target; }).pop() || power;
+    return { km: Number(km.toPrecision(3)), pixels: km / kmPerPixel };
+  }
   function init() {
     var d=global.document;
+    if (global.self !== global.top && d.body) d.body.classList.add('is-embedded');
     d.querySelectorAll('[data-radar-icon]').forEach(function(el) {
       var p=paths[el.getAttribute('data-radar-icon')];
       if(p) el.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+p+'"/></svg>';
@@ -77,7 +84,8 @@
       }
     }
     d.querySelectorAll('.layer-btn').forEach(function(el){el.setAttribute('aria-pressed',String(!!state.layers[el.getAttribute('data-layer')]));});
+    d.getElementById('map-places').setAttribute('aria-pressed', String(!!state.layers.steden));
     d.querySelectorAll('[data-window]').forEach(function(el){el.setAttribute('aria-pressed',String(el.classList.contains('actief')));});
   }
-  global.RadarUI={init:init,ready:ready,sync:sync,isWindowAvailable:isWindowAvailable,mapLabelScale:mapLabelScale};
+  global.RadarUI={init:init,ready:ready,sync:sync,isWindowAvailable:isWindowAvailable,mapLabelScale:mapLabelScale,distanceScale:distanceScale};
 })(window);

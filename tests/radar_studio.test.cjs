@@ -51,7 +51,27 @@ vm.runInContext(engine.slice(0,start)+`
     state:function(){return {frameIdx:frameIdx,frameF:frameF,playing:playing,mode:radarMode,layers:layers};},
     step:stapBinnenBereik,mm:pvToMmh,
     sum:function(mode){radarMode=mode;animWindow='nu';frameIdx=tNowIndex;bouwCumGrid();return cumGrid;},
-    coords:function(){return STEDEN_LABEL;},setupSearch:setupZoek
+    coords:function(){return STEDEN_LABEL;},setupSearch:setupZoek,
+    geometry:function(width,height,lon,lat){
+      VIEW_H=BASEMAP_H;VIEW_W=BASEMAP_H*width/height;
+      canvas={getBoundingClientRect:function(){return {left:10,top:20,width:width,height:height};}};
+      resetZoom();
+      var sx=10+(lonToX(lon)-viewX)*zoomLevel/VIEW_W*width;
+      var sy=20+(latToY(lat)-viewY)*zoomLevel/VIEW_H*height;
+      var point=screenToBasemap(sx,sy);
+      return {lon:PROJ_LON_MIN+point.x/BASEMAP_W*(PROJ_LON_MAX-PROJ_LON_MIN),
+        lat:PROJ_LAT_MAX-point.y/BASEMAP_H*(PROJ_LAT_MAX-PROJ_LAT_MIN),
+        sx:sx,sy:sy,display:bitmapDisplayRect()};
+    },
+    gridSamples:function(){
+      meta.grid={lon_min:2,lon_max:8,lat_min:50,lat_max:54};
+      nLat=nLon=8;upW=9;upH=5;VIEW_W=BASEMAP_W;VIEW_H=BASEMAP_H;
+      zoomLevel=1;viewX=viewY=0;bouwViewTabellen();
+      return Array.from({length:upW},function(_,x){
+        var sum=0,value=0;for(var k=0;k<4;k++){var w=upXW[x*4+k];sum+=w;value+=w*upXI[x*4+k];}
+        return {sum:sum,value:value};
+      });
+    }
   };
 })();`,context);
 const r=context.radar;r.fixture(times);
@@ -74,4 +94,21 @@ r.setupSearch();
 byId['plaats-zoek'].value='Onbekendeplaats123';byId['btn-plaats-toevoegen'].fire('click');assert.match(byId['zoek-status'].textContent,/niet gevonden/);
 byId['plaats-zoek'].value='Arnhem';byId['plaats-zoek'].fire('change');assert.equal(byId['plaats-zoek'].value,'Arnhem','Blur does not swallow the search before button activation');
 byId['btn-plaats-toevoegen'].fire('click');assert.equal(context.chosenPlace.naam,'Arnhem');assert.equal(byId['zoek-status'].textContent,'');assert.equal(storage.has('radarFavs'),false,'Searching does not silently save a favorite');
+for(const [width,height] of [[938,364],[1246,364],[368,496],[298,430]]){
+ for(const [lon,lat] of [[4.48,51.92],[6.57,53.22],[5.69,50.85]]){
+  const p=r.geometry(width,height,lon,lat);
+  assert.ok(Math.abs(p.lon-lon)<1e-10&&Math.abs(p.lat-lat)<1e-10,'Click and map use the same projection');
+  assert.equal(p.display.width,width);assert.equal(p.display.height,height,'No letterbox');
+  assert.ok(p.sx>=10&&p.sx<=width+10&&p.sy>=20&&p.sy<=height+20,'Netherlands fits in the reset view');
+ }
+}
+const samples=r.gridSamples();
+assert.equal(samples[0].sum,0);assert.equal(samples[8].sum,0,'Outside radar coverage cannot repeat edge pixels');
+assert.ok(Math.abs(samples[4].sum-1)<1e-6);
+assert.ok(Math.abs(samples[4].value-((5.5-2)/6*8-.5))<1e-6,'Radar is projected using its actual grid extent');
+for(const kmPerPixel of [.01,.1,.7,2]){
+ const scale=ui.distanceScale(kmPerPixel,100);
+ assert.ok(scale.pixels>0&&scale.pixels<=100.000001);assert.ok(Math.abs(scale.pixels*kmPerPixel-scale.km)<1e-8);
+}
 console.log('Radar: unique controls, keyboard tabs, loading states, available times, readable map labels, forecast distinction, time navigation/playback, layers, coordinates and rainfall sums passed.');
+console.log('Map: desktop/mobile extent, coordinate roundtrip, radar grid alignment, no edge repetition and distance scale passed.');
