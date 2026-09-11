@@ -14,6 +14,17 @@ DWD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DWD)
 
 
+class SourceCompletenessTests(unittest.TestCase):
+    def test_model_comparison_after_10000_characters_survives(self):
+        from unittest.mock import patch, Mock
+        body = 'ausgegeben am Freitag, den 11.09.2026 um 10.30 UTC\n' + 'A' * 10500 + '\nModellvergleich am Ende.'
+        response = Mock(text='<pre>' + body + '</pre>')
+        with patch.object(DWD.requests, 'get', return_value=response):
+            text, issue = DWD.scrape_dwd('https://example.test/dwd')
+        self.assertEqual(text, body)
+        self.assertIn('Modellvergleich am Ende.', text)
+        response.raise_for_status.assert_called_once()
+
 class FakeResponse:
     def __init__(self, vertaald):
         self.vertaald = vertaald

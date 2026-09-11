@@ -1,6 +1,7 @@
 /* Datum- en bronlogica, gedeeld door de weergave en regressiecontroles. */
 (function(root){
   'use strict';
+  const elementNames={bewolking:'Bewolking',neerslag:'Neerslag',wind:'Wind',temperatuur:'Temperatuur',zicht:'Zicht & mist'};
   const dayPattern=/^\d{4}-\d{2}-\d{2}$/;
   function isoDay(value){
     const s=String(value||'').slice(0,10);
@@ -42,6 +43,16 @@
         if(!item||['onderwerp','periode','vergelijking','betekenis'].some(k=>typeof item[k]!=='string'||!item[k].trim())||!Array.isArray(item.bron_ids)||!item.bron_ids.length||item.bron_ids.some(id=>!ids.has(id)))throw new Error('Onvolledige modelbeoordeling');
       }
     }
+    if(feed.schema_version>=3 || feed.korte_termijn!==undefined){
+      const short=feed.korte_termijn;
+      if(!short||Date.parse(short.geldig_tot)-Date.parse(short.geldig_van)!==48*3600000)throw new Error('Ongeldig kortetermijntijdvak');
+      if(!Array.isArray(short.elementen)||short.elementen.length!==5)throw new Error('Onvolledige korte termijn');
+      const ids=new Set((feed.bronregister||[]).filter(b=>b.status==='beschikbaar').map(b=>b.id));
+      for(const [i,item] of short.elementen.entries()){
+        if(!item||item.element!==Object.keys(elementNames)[i]||typeof item.tekst!=='string'||!item.tekst.trim()||!Array.isArray(item.bron_ids)||!item.bron_ids.length||item.bron_ids.some(id=>!ids.has(id)))throw new Error('Ongeldig weerelement of bron');
+      }
+      if(typeof feed.bronnotities!=='string')throw new Error('Ongeldige bronnotities');
+    }
     if(feed.days.some(d=>d.onzekerheid!==undefined&&typeof d.onzekerheid!=='string'))throw new Error('Ongeldige dagbeoordeling');
     return feed;
   }
@@ -51,6 +62,6 @@
     return base+encodeURIComponent(file)+'?v='+encodeURIComponent(version);
   }
   function sentences(value){return String(value||'').trim().split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý])/u).filter(Boolean);}
-  const api={isoDay,today,numeric,chartDate,validate,ageHours,fileUrl,sentences};
+  const api={elementNames,isoDay,today,numeric,chartDate,validate,ageHours,fileUrl,sentences};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.WeerlabDiscussion=api;
 })(typeof window==='undefined'?globalThis:window);

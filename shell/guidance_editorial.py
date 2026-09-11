@@ -23,7 +23,7 @@ def issued_at(text, source):
     return None
 
 
-def reference_bundle(weerlab, now=None):
+def reference_bundle(weerlab, now=None, dwd_path=None):
     now = now or datetime.now(timezone.utc)
     lines, register = ['\n# BRONTEKSTEN — dezelfde bronnen voor auteur en eindcontrole'], []
     for filename, source, sections in (
@@ -31,7 +31,8 @@ def reference_bundle(weerlab, now=None):
         ('dwd_guidance.json', 'dwd', [('kurzfrist', 'DWD Kurzfrist'), ('mittelfrist', 'DWD Mittelfrist')]),
     ):
         try:
-            data = json.loads((Path(weerlab) / filename).read_text())
+            source_path = Path(dwd_path) if source == 'dwd' and dwd_path else Path(weerlab) / filename
+            data = json.loads(source_path.read_text())
         except (OSError, ValueError):
             data = {}
         if not isinstance(data, dict):
@@ -88,8 +89,43 @@ def validate_assessment(guidance, available_ids):
             raise ValueError('ongeldige onzekerheid per dag')
         texts += [day.get('synoptiek', ''), day.get('weertype', ''), uncertainty]
     texts += [card[k] for card in cards for k in ('vergelijking', 'betekenis')]
+    texts += [e.get('tekst', '') for e in guidance.get('korte_termijn', {}).get('elementen', [])]
     for text in texts:
         # Controle per zin, zodat windschering in kn in een andere zin kan blijven.
         for sentence in re.split(r'(?<=[.!?])\s+', text):
             if re.search(r'windstot|windstoot', sentence, re.I) and re.search(r'\d\s*(?:m/s|kn(?:open)?|kt(?:s)?)\b', sentence, re.I):
                 raise ValueError('windstoten moeten in km/u worden vermeld')
+
+
+ELEMENTS = ('bewolking', 'neerslag', 'wind', 'temperatuur', 'zicht')
+
+
+def validate_short_term(guidance, available_ids, context):
+    """Controleer het geldige tijdvak en de dekking van de Nederlandse guidance."""
+    short = guidance.get('korte_termijn')
+    if not isinstance(short, dict):
+        raise ValueError('korte_termijn ontbreekt')
+    for key in ('geldig_van', 'geldig_tot'):
+        if short.get(key) != context.get(key) or not context.get(key):
+            raise ValueError('korte_termijn: geldigheid wijkt af van het bronpakket')
+    start = datetime.fromisoformat(short['geldig_van'])
+    end = datetime.fromisoformat(short['geldig_tot'])
+    if start.tzinfo is None or end.tzinfo is None or end - start != timedelta(hours=48):
+        raise ValueError('korte_termijn moet precies 48 uur met tijdzone beslaan')
+    elements = short.get('elementen')
+    if not isinstance(elements, list) or len(elements) != len(ELEMENTS):
+        raise ValueError('korte_termijn vereist vijf weerelementen')
+    if any(not isinstance(e, dict) for e in elements) or [e.get('element') for e in elements] != list(ELEMENTS):
+        raise ValueError('korte_termijn: onjuiste of dubbele weerelementen')
+    for item in elements:
+        value, ids = item.get('tekst'), item.get('bron_ids')
+        if not isinstance(value, str) or not value.strip() or len(value.split()) > 65:
+            raise ValueError('korte_termijn: elementtekst ontbreekt of is te lang')
+        if not isinstance(ids, list) or not ids or any(not isinstance(i, str) or i not in available_ids for i in ids):
+            raise ValueError('korte_termijn verwijst naar een ontbrekende of verouderde bron')
+    timed_texts = [e['tekst'] for e in elements] + [guidance.get('aandachtspunten', '')]
+    if any(re.search(r"\b(?:vandaag|vanmiddag|vanavond|vannacht|morgen(?:ochtend|middag|avond|nacht)?|komende nacht)\b", t, re.I) for t in timed_texts):
+        raise ValueError('gebruik vaste kalenderdagen in korte termijn en aandachtspunten')
+    notes = guidance.get('bronnotities')
+    if not isinstance(notes, str) or len(notes.split()) > 90:
+        raise ValueError('bronnotities ontbreekt of is te lang')

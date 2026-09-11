@@ -34,3 +34,23 @@ assert.throws(()=>core.validate({...v2,modelbeoordeling:[{...assessment,bron_ids
 assert.throws(()=>core.validate({...v2,modelbeoordeling:[{...assessment,betekenis:''}]}));
 assert.throws(()=>core.validate({...v2,days:[{...feed.days[0],onzekerheid:{}}]}));
 console.log('OK: nieuwe modelbeoordeling, bronverwijzingen, bronstatus en compatibiliteit met bestaande edities.');
+
+// Een nieuwe editie mag ontbrekende of niet onderbouwde weerelementen niet verbergen.
+{
+  const baseline=structuredClone(feed);
+  baseline.schema_version=3;
+  baseline.bronregister=[{id:'knmi_kort',naam:'KNMI korte termijn',status:'beschikbaar'}];
+  delete baseline.modelbeoordeling;
+  baseline.bronnotities='De puntuitvoer heeft geen vastgestelde run.';
+  baseline.korte_termijn={geldig_van:'2026-09-11T15:00:00Z',geldig_tot:'2026-09-13T15:00:00Z',elementen:Object.keys(core.elementNames).map(element=>({element,tekst:'Een onderbouwde bespreking.',bron_ids:['knmi_kort']}))};
+  assert.equal(core.validate(baseline),baseline);
+  for(const mutate of [
+    f=>delete f.korte_termijn,
+    f=>f.korte_termijn.elementen.pop(),
+    f=>f.korte_termijn.elementen[0].bron_ids=['ontbreekt'],
+    f=>f.bronregister[0].status='buiten actualiteitsgrens',
+    f=>f.korte_termijn.geldig_tot='2026-09-12T15:00:00Z',
+    f=>f.korte_termijn.elementen[4].element='wind'
+  ]){const bad=structuredClone(baseline);mutate(bad);assert.throws(()=>core.validate(bad));}
+  console.log('OK: 48-uursgeldigheid, volledige weerelementen, unieke elementen en actuele brondekking.');
+}

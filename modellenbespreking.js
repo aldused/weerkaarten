@@ -14,6 +14,7 @@
   }
   function updateStatus(){
     if(!edition)return;
+    if(edition.korte_termijn)$('short-term-status').hidden=Date.parse(edition.korte_termijn.geldig_tot)>Date.now();
     const age=core.ageHours(edition.generated_utc),runAge=core.ageHours(edition.ecmwf_run_utc);
     const stale=age>14||!edition.days.some(d=>d.date>=core.today());
     if(edition.redactioneel_voorbeeld){$('status').dataset.state='warning';$('status').textContent='Redactioneel voorbeeld op basis van de editie van '+timestamp(edition.generated_utc)+'. Dit is geen nieuwe actuele verwachting.'+(edition.voorbeeld_kaartmelding?' '+edition.voorbeeld_kaartmelding:'');return;}
@@ -77,6 +78,15 @@
     button.append(img,text('span',item.caption));button.addEventListener('click',()=>openChart(item));return button;
   }
   function appendCharts(container,items,feed){let count=0;for(const {chart,kind} of items){const thumb=thumbnail(chart,kind,feed);if(thumb){container.append(thumb);count++;}}return count;}
+  function sourceDetails(ids,feed){
+    const details=text('details','','text-sources');details.append(text('summary','Onderbouwing'));
+    const list=text('ul');
+    for(const id of ids){
+      const source=(feed.bronregister||[]).find(s=>s.id===id);
+      if(source)list.append(text('li',source.naam+(source.issued_utc?' · '+timestamp(source.issued_utc):'')));
+    }
+    details.append(list);return details;
+  }
   function render(feed){
     edition=feed;lastError='';
     $('issued').textContent=timestamp(feed.generated_utc);
@@ -87,16 +97,30 @@
     $('attention').replaceChildren();
     const attention=core.sentences(feed.aandachtspunten);
     (attention.length?attention:['In deze editie zijn geen afzonderlijke aandachtspunten aangeleverd.']).forEach(sentence=>$('attention').append(text('li',sentence)));
+    $('short-term-elements').replaceChildren();
+    const short=feed.korte_termijn;
+    $('short-term-panel').hidden=$('short-term-link').hidden=!short;
+    if(short){
+      $('short-term-period').textContent=timestamp(short.geldig_van)+' – '+timestamp(short.geldig_tot)+' · Nederlandse tijd';
+      for(const item of short.elementen){
+        const card=text('article','','panel element-card');
+        card.append(text('h3',core.elementNames[item.element]),text('p',item.tekst));
+        card.append(sourceDetails(item.bron_ids,feed));
+        $('short-term-elements').append(card);
+      }
+    }
+    $('source-notes').hidden=!feed.bronnotities;
+    $('source-notes').textContent=feed.bronnotities||'';
     const sources=new Map((feed.bronregister||[]).map(source=>[source.id,source]));
     $('assessments').replaceChildren();
     (feed.modelbeoordeling||[]).forEach(item=>{
       const card=text('article','','panel assessment-card');
       card.append(text('p',item.periode,'eyebrow'),text('h3',item.onderwerp),text('p',item.vergelijking));
       const impact=text('div','','assessment-impact');impact.append(text('h4','Betekenis voor Nederland'),text('p',item.betekenis));card.append(impact);
-      card.append(text('p',item.bron_ids.map(id=>{const source=sources.get(id);return source?(source.naam+(source.issued_utc?' · '+timestamp(source.issued_utc):'')):id;}).join(' / '),'assessment-sources'));
+      card.append(sourceDetails(item.bron_ids,feed));
       $('assessments').append(card);
     });
-    $('assessment-panel').hidden=!$('assessments').children.length;
+    $('assessment-panel').hidden=$('assessment-link').hidden=!$('assessments').children.length;
     $('attention-title').textContent=$('assessment-panel').hidden?'Modelverschillen & aandachtspunten':'Waarop letten';
     $('source-register').replaceChildren();
     if(sources.size){

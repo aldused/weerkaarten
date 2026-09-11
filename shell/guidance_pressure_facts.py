@@ -223,7 +223,7 @@ def _haal_nl_model(model, endpoint):
             if not overdag:
                 continue
             doel = per_dag.setdefault(dag, {"punten": [], "wolken": [], "wind_r": [],
-                                            "wind_s": [], "stoten": [], "cape": []})
+                                            "wind_s": [], "stoten": [], "cape": [], "stoot_details": [], "nachten": []})
             temps = [hourly["temperature_2m"][i] for i in indices]
             neerslag = [hourly["precipitation"][i] for i in indices]
             if any(v is None for v in temps + neerslag):
@@ -233,6 +233,18 @@ def _haal_nl_model(model, endpoint):
                 "tmax": max(temps),
                 "neerslag": sum(max(0, v) for v in neerslag),
             })
+            # De komende nacht loopt van 18 tot 09 uur Nederlandse tijd,
+            # dus nadrukkelijk over de kalendergrens heen.
+            volgende = (datetime.fromisoformat(dag) + timedelta(days=1)).date().isoformat()
+            nacht_indices = [i for i, t in enumerate(tijden)
+                             if t[:10] == dag and int(t[11:13]) >= 18
+                             or t[:10] == volgende and int(t[11:13]) < 9]
+            nacht_start = datetime.fromisoformat(dag + 'T18:00:00').replace(tzinfo=ZoneInfo('Europe/Amsterdam'))
+            nacht_eind = datetime.fromisoformat(volgende + 'T09:00:00').replace(tzinfo=ZoneInfo('Europe/Amsterdam'))
+            verwacht = int((nacht_eind.astimezone(timezone.utc) - nacht_start.astimezone(timezone.utc)).total_seconds() / 3600)
+            nacht_temps = [hourly['temperature_2m'][i] for i in nacht_indices]
+            if len(nacht_temps) == verwacht and all(v is not None for v in nacht_temps):
+                doel['nachten'].append({'naam': naam, 'minimum': min(nacht_temps)})
             for i in overdag:
                 laag = hourly["cloud_cover_low"][i]
                 mid = hourly["cloud_cover_mid"][i]
@@ -253,6 +265,7 @@ def _haal_nl_model(model, endpoint):
                 cape = hourly["cape"][i]
                 if stoot is not None:
                     doel["stoten"].append(stoot)
+                    doel["stoot_details"].append({"naam": naam, "tijd": tijden[i], "waarde": stoot})
                 if cape is not None:
                     doel["cape"].append(cape)
     return per_dag
@@ -287,6 +300,10 @@ def _dagmetrics(per_dag):
             "windsnelheid": statistics.mean(f["wind_s"]) if f["wind_s"] else None,
             "windstoot": max(f["stoten"]) if f["stoten"] else None,
             "cape": max(f["cape"]) if f["cape"] else None,
+            "windstoot_piek": max(f.get('stoot_details', []), key=lambda v: v['waarde'], default=None),
+            "nacht": ({"laagste": min(f['nachten'], key=lambda v: v['minimum']),
+                       "hoogste": max(f['nachten'], key=lambda v: v['minimum'])}
+                      if len(f.get('nachten', [])) == len(NL_PUNTEN) else None),
         }
     return metrics
 
@@ -320,6 +337,15 @@ def nl_weersfeiten(metrics):
                 f"hoogste berekende windstoot over het etmaal {m['windstoot']:.0f} km/u."
                 if m["windstoot"] is not None else
                 f"- Wind overdag: gemiddeld {m['windsnelheid']:.0f} km/u; windstoten ontbreken.")
+        if m.get('windstoot_piek'):
+            piek = m['windstoot_piek']
+            regels.append(f"- Plaats/tijd van die windstootpiek: {piek['naam']}, {piek['tijd']} Nederlandse tijd; één modelpunt, geen gebiedsdekkende verwachting.")
+        if m.get('nacht'):
+            laag, hoog = m['nacht']['laagste'], m['nacht']['hoogste']
+            volgende = (d + timedelta(days=1)).isoformat()
+            regels.append(f"- Komende nacht ({dag} 18 uur tot {volgende} 09 uur Nederlandse tijd): minimum {laag['minimum']:.0f}–{hoog['minimum']:.0f} °C over de negen modelpunten; laagst {laag['naam']}, hoogst {hoog['naam']}.")
+        else:
+            regels.append('- Voor de komende nacht zijn geen complete minima over alle negen punten beschikbaar.')
         if m["cape"] is not None:
             regels.append(f"- CAPE boven de modelpunten: maximaal {m['cape']:.0f} J/kg.")
         regels.append("")
@@ -385,9 +411,10 @@ def main():
     regels = ["# DRUKCENTRA — machinaal berekend uit het ECMWF-drukveld",
               "",
               "Onderstaande kernposities zijn rechtstreeks uit het model berekend en zijn",
-              "LEIDEND voor elke positie-aanduiding van hoge- en lagedrukgebieden in de",
-              "tekst. Schat posities dus niet zelf van de kaarten af; gebruik de kaarten",
-              "voor fronten, bewolking, neerslag en structuur.", ""]
+              "afkomstig van een grof rooster (2,5 graden), uit de recentste Open-Meteo-uitvoer.",
+              "De exacte modelrun is onbekend en hoeft niet gelijk te zijn aan de kaarten.",
+              "Gebruik deze posities als oriëntatie; zij overrulen geen actuele, geldige",
+              "kaart. Benoem bij onverklaarde verschillen alleen de onderbouwde grootschalige ligging.", ""]
     for dag, veld in sorted(velden.items()):
         label = f"{DAGEN[dag.weekday()]} {dag.day} {MAANDEN[dag.month - 1]} 12 UTC"
         regels.append(f"## {label}")
@@ -432,6 +459,9 @@ def main():
         regels.append("")
 
     import os
+    json.dump({'retrieved_utc': datetime.now(timezone.utc).isoformat(),
+               'model': 'ecmwf_ifs025', 'run_utc': None, 'timezone': 'Europe/Amsterdam',
+               'dagen': ecmwf_metrics}, open(os.path.join(cache, 'nederland_feiten.json'), 'w'), ensure_ascii=False, indent=2)
     pad = os.path.join(cache, "drukcentra_feiten.txt")
     open(pad, "w").write("\n".join(regels))
     print(f"ECMWF-feitenblok: {sum(1 for r in regels if r.startswith('- '))} regels "

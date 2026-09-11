@@ -10,6 +10,7 @@ of fout vertalen. Bij een storing valt het script terug op het lokale
 Helsinki-NLP-model, zodat de DWD-update niet afhankelijk is van één dienst.
 """
 
+import argparse
 import html as html_lib
 import json
 import os
@@ -528,6 +529,7 @@ def scrape_dwd(url):
     r = requests.get(url, timeout=30, headers={
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
     })
+    r.raise_for_status()
     r.encoding = "utf-8"
     html = r.text
 
@@ -548,10 +550,18 @@ def scrape_dwd(url):
     if uitgave_match:
         uitgave = uitgave_match.group(1).strip()
 
-    return tekst[:10000], uitgave
+    if len(tekst) > 64000:
+        raise ValueError("Onverwacht lange DWD-brontekst")
+    return tekst, uitgave
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source-only', action='store_true', help='Alleen de volledige Duitse brontekst, voor de modellenbespreking')
+    parser.add_argument('--output', default=OUTPUT)
+    args = parser.parse_args()
+    if args.source_only and os.path.abspath(args.output) == os.path.abspath(OUTPUT):
+        parser.error('--source-only vereist een apart --output-bestand; de vertaalde feed blijft behouden')
     print(f"=== DWD Guidance === {datetime.now():%Y-%m-%d %H:%M}")
     output = {}
 
@@ -561,8 +571,10 @@ def main():
             origineel, uitgave = scrape_dwd(url)
             print(f"  Origineel: {len(origineel)} tekens")
 
-            print(f"  Vertalen via {TRANSLATION_BACKEND} (met lokale reserve)...")
-            vertaald = vertaal_tekst(origineel)
+            vertaald = ""
+            if not args.source_only:
+                print(f"  Vertalen via {TRANSLATION_BACKEND} (met lokale reserve)...")
+                vertaald = vertaal_tekst(origineel)
             print(f"  Vertaald: {len(vertaald)} tekens")
 
             output[naam] = {
@@ -587,9 +599,9 @@ def main():
         "fallback": "Helsinki-NLP/opus-mt-de-nl",
         "glossaryVersion": 2,
     }
-    with open(OUTPUT, "w") as f:
+    with open(args.output, "w") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
-    print(f"Opgeslagen: {OUTPUT}")
+    print(f"Opgeslagen: {args.output}")
 
 
 if __name__ == "__main__":

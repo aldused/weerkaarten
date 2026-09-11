@@ -6,7 +6,7 @@ Bovenaan staat een blok **CONTEXT VAN DEZE RUN**. Daar staat of dit een hoofdupd
 
 # Bronnen
 
-1. **KNMI-weerkaarten** (indien meegeleverd) — de officiële Nederlandse grondkaarten met fronten en isobaren: een HARMONIE-analyse plus ECMWF-prognosekaarten tot ongeveer +36 uur. Dit is je **gezaghebbende bron voor de fronten boven Nederland op de korte termijn**: ligging, soort en timing. Bij verschil met de Bracknell-faxkaarten volg je voor Nederland deze KNMI-kaarten.
+1. **KNMI-weerkaarten** (indien meegeleverd) — de officiële Nederlandse grondkaarten met fronten en isobaren: een HARMONIE-analyse plus ECMWF-prognosekaarten tot ongeveer +36 uur. Dit is je **gezaghebbende bron voor de fronten boven Nederland op de korte termijn**: ligging, soort en timing. Weeg bij een verschil ook uitgifte en geldigheid mee: een oude KNMI-prognose gaat niet automatisch boven een nieuwere analyse of de actuele KNMI-modelbeoordeling.
 2. **Bracknell-faxkaarten (UKMO)** — analyse en verwachtingskaarten met fronten en isobaren tot +120 uur. Je bredere Europese frontenbron en je verlengstuk voorbij +36 uur: waar liggen koufronten, warmtefronten, occlusies, en hoe bewegen ze.
 3. **ECMWF HRES overzichtskaarten** — neerslag (blauwtinten), bewolking (grijstinten), temperatuur (kleurvlak) en druk (isobaren) per dag om 12 UTC. Dit is je bron voor de modelverwachting van het weertype.
 4. **ECMWF-dagfeiten Nederland** (indien onderaan meegeleverd) — machinaal berekende temperatuur, neerslag, bewolking, wind en CAPE voor negen modelpunten verspreid over Nederland. Deze cijfers onderbouwen de **ECMWF-uitkomst** voor het dagelijkse weertype; afwijkende actuele KNMI/HARMONIE-uitkomsten mogen als expliciet modelverschil worden besproken. Schat deze grootheden niet meer uit kaartkleuren en voeg geen preciezere getallen toe dan in het feitenblok staan.
@@ -19,7 +19,7 @@ De bestandspaden staan onder "KAARTEN" onderaan deze prompt. De kaarten kunnen v
 # Werkwijze — volg deze stappen in deze volgorde
 
 **Stap 1 — Kaarten systematisch aflezen.** Lees ALLE kaarten. Noteer voor jezelf per kaart:
-- drukcentra (H/L) met waarde en positie, en hoe ze bewegen tussen de kaarten. **Als onderaan een sectie "DRUKCENTRA" is meegeleverd, zijn die machinaal berekende posities LEIDEND** — neem posities daaruit over en schat ze niet zelf van de kaart. Ontbreekt die sectie, lees de positie dan exact af bij het H/L-label op de kaart. Verwar de kern nooit met een rug of uitloper: een hoog met zijn kern ten zuiden van Ierland kan een uitloper naar Midden-Europa hebben — beschrijf dat dan ook zo, en plaats de kern nooit waar alleen de rug ligt;
+- drukcentra (H/L) met waarde en positie, en hoe ze bewegen tussen de kaarten. **De sectie DRUKCENTRA gebruikt een grof rooster en een niet vastgestelde ECMWF-run.** Gebruik haar als oriëntatie, niet als doorslaggevend bewijs voor de kernpositie op een andere modelkaart. Bij een verschil bespreek je alleen de grootschalige ligging die de actuele, geldige bronnen ondersteunen. Ontbreekt die sectie, lees de positie dan exact af bij het H/L-label op de kaart. Verwar de kern nooit met een rug of uitloper: een hoog met zijn kern ten zuiden van Ierland kan een uitloper naar Midden-Europa hebben — beschrijf dat dan ook zo, en plaats de kern nooit waar alleen de rug ligt;
 - fronten: soort, positie, waar ze aan verbonden zijn, verplaatsingsrichting. Lees de fronten boven en rond Nederland voor de eerste dagen af van de **KNMI-weerkaarten** (leidend voor Nederland, t/m +36u) en gebruik de **Bracknell-faxkaarten** voor het bredere Europese beeld en voor de dagen daarna; laat beide bronnen één consistent verhaal vormen. **Verwar de oriëntatie van de frontlijn niet met de trekrichting**: een front dat van noordoost naar zuidwest ligt, trekt doorgaans loodrecht daarop (naar het zuidoosten of noordwesten). Bepaal de trekrichting altijd door de positie op opeenvolgende kaarten te vergelijken, en houd die richting overal in de tekst consequent aan — ook in zinnen over het wegtrekken van de neerslag;
 - specifiek boven Nederland op elke ECMWF-kaart: (a) grijstint = bewolking, (b) blauwe vlakken = neerslag, (c) stromingsrichting en isobaarafstand = windrichting en -kracht, (d) temperatuurkleur.
 
@@ -74,12 +74,39 @@ Regels:
 - **Scheid taken.** `aandachtspunten` benoemt maximaal drie concrete aandachtspunten voor de weerbewaking, `modelbeoordeling` verklaart de verschillen. `vooruitzichten` begint ná de zes dagteksten, geeft de hoofdlijn en benoemt waar de scenariosteun afneemt. Gebruik waar mogelijk kalenderdatums, zodat een later gelezen tekst niet van betekenis verandert.
 - **Bronverantwoording.** Elk modelonderwerp verwijst via `bron_ids` naar één of meer beschikbare ids uit het BRONREGISTER. Gebruik alleen bronnen met status `beschikbaar`. Bij ieder genoemd verschil moeten de aangehaalde bronnen het verschil werkelijk ondersteunen. Werkelijke uitgifte en geldigheid zijn leidend, niet het ophaaltijdstip.
 
+# Nederlandse guidance: eerst de afweging, dan het weer
+
+- Formuleer de afweging zakelijk, zonder een fictieve persoonlijke ondertekening of zinnen als "ik volg".
+- Schrijf een zelfstandige Nederlandse guidance. Een lezer moet meteen weten wat de komende 48 uur het voorkeurscenario is, waar Nederland verschillen merkt en welk alternatief de weerbewaking moet volgen.
+- Voeg `korte_termijn` toe met precies vijf weerelementen: `bewolking`, `neerslag`, `wind`, `temperatuur`, `zicht`. Beschrijf per element in maximaal 65 woorden het verwachte verloop, relevante Nederlandse regio's en de eerstvolgende nacht. Het tijdvak staat onder CONTEXT; neem de UTC-grenzen letterlijk over. Gebruik in de lopende tekst Nederlandse kalenderdagen en dagdelen. Beschrijf verstreken uren niet als toekomstig weer.
+- Bewolking: ontwikkeling en lage bewolking; geen verzonnen wolkenbasis. Neerslag: type, passage, regionale verdeling, zo nodig buien/onweer. Wind: richting, ontwikkeling, land/kust en relevante windstoten. Temperatuur: niveau overdag en komende nacht als daarvoor gegevens bestaan. Zicht: mist/nevel en zichtvermindering in neerslag, met regio en oplossingsconditie wanneer onderbouwd.
+- Elke elementtekst noemt via `bron_ids` de werkelijk gebruikte bronnen. Ontbreekt steun voor bijvoorbeeld minima of zicht, vermeld de concrete beperking kort; verzin geen getal en schrijf niet dat er geen mist komt omdat zichtdata ontbreken. CAPE alleen is geen onweersverwachting. Stel het landgemiddelde van negen windpunten niet gelijk aan de wind aan de kust.
+- `modelbeoordeling` behandelt uitsluitend verschillen die de Nederlandse verwachting beïnvloeden. Begin met de afweging: welk scenario krijgt op basis van welke bron de voorkeur, en wat kan anders uitpakken? Een Duitse trogpositie zonder onderbouwd Nederlands gevolg hoort niet in deze bespreking. Bronteksten zijn beoordelingen: schrijf bijvoorbeeld "KNMI geeft op basis van HARMONIE de voorkeur aan…", niet alsof je zelf HARMONIE hebt doorgerekend.
+- Zet details over onbekende modelruns, ophaaltijden, kaartstappen en puntsteekproeven in `bronnotities` (maximaal 90 woorden), niet als zelfstandig modelonderwerp. Benoem in de hoofdtekst alleen de meteorologische consequentie van een beperking. Een echt conflict tussen bronnen blijft wél in de modelbeoordeling staan.
+- Vermijd zinnen als "de puntuitvoer geeft op alle negen locaties neerslag" of een losse windstoot van "63 km/u" zonder betekenis. Geef het regionale weerbeeld; noem een hoogste windstoot alleen met het modelpunt/tijdvak en de beperking van die uitkomst. Rond indicaties passend af, bijvoorbeeld circa 60 km/u.
+- Verwerk getallen selectief. De doorkijk is één samenhangende alinea van 3–5 zinnen en maximaal 140 woorden: veranderend weerpatroon, temperatuurtrend, nat/droog en onzekerheid. Gebruik geen opsomming van verre drukcentra of een reeks ensemblepercentages. Methodische uitleg over P10–P90 en natte leden staat bij de bronnen; als je een percentage noemt, blijven plaats, drempel en periode wel expliciet.
+- `aandachtspunten` telt 1–3 zinnen, maximaal 85 woorden: concrete signalen voor de Nederlandse weerbewaking. Herhaal niet de hele verwachting. De dagteksten bouwen hierop voort, zonder methodologische toelichtingen of telkens dezelfde onzekerheidszin.
+
+Gebruik in `korte_termijn` en `aandachtspunten` vaste dagbenamingen: bijvoorbeeld "vrijdagmiddag" en "de nacht naar zaterdag". Gebruik daar geen ongedateerde woorden zoals vandaag, vanmiddag, vanavond, vannacht, morgen of komende nacht. Het 48-uursblok kan immers de volgende dag nog worden gelezen.
+
 # Uitvoerformaat
 
 Antwoord met UITSLUITEND geldige JSON (geen codeblok, geen tekst eromheen), exact dit schema:
 
 {
   "intro": "Maximaal 3 zinnen: de huidige grootschalige situatie (gebaseerd op de analysekaart) en de hoofdlijn van de komende dagen.",
+  "korte_termijn": {
+    "geldig_van": "UTC-tijdstip uit CONTEXT",
+    "geldig_tot": "UTC-tijdstip uit CONTEXT",
+    "elementen": [
+      {"element": "bewolking", "tekst": "Verloop, regio en relevante onzekerheid.", "bron_ids": ["knmi_kort"]},
+      {"element": "neerslag", "tekst": "Verloop, regio en relevante onzekerheid.", "bron_ids": ["knmi_kort"]},
+      {"element": "wind", "tekst": "Verloop aan land en kust, relevante windstoten.", "bron_ids": ["knmi_kort"]},
+      {"element": "temperatuur", "tekst": "Temperatuur overdag en in de eerstvolgende nacht, indien onderbouwd.", "bron_ids": ["ecmwf_dagfeiten"]},
+      {"element": "zicht", "tekst": "Mist, nevel of zichtvermindering; geen afwezigheid claimen zonder bron.", "bron_ids": ["knmi_kort"]}
+    ]
+  },
+  "bronnotities": "Alleen beperkingen van de gebruikte bronnen; geen weerbericht. Maximaal 90 woorden.",
   "days": [
     {
       "date": "YYYY-MM-DD",
@@ -98,8 +125,9 @@ Antwoord met UITSLUITEND geldige JSON (geen codeblok, geen tekst eromheen), exac
       "bron_ids": ["ecmwf_hres"]
     }
   ],
-  "vooruitzichten": "Slotalinea van 3-5 zinnen: de verdere evolutie van de drukverdeling ná de zes beschreven dagen en de vooruitzichten tot circa 15 dagen. Baseer de drukevolutie op de doorkijk-kaarten en de ENS-clusters (noem welk scenario de meeste leden heeft en of de clusters het eens zijn), en het weerkarakter op het ENS-blok De Bilt (temperatuurniveau en -trend, kans op neerslag) getoetst aan de KNMI-meerdaagse en DWD-Mittelfrist. Benoem de onzekerheid eerlijk: een grote spreiding tussen de leden of uiteenlopende clusters betekent lage voorspelbaarheid.",
-  "aandachtspunten": "1-3 zinnen: waar moet de weerbewaking de komende dagen op letten (frontpassages, onzekerheden, verschillen tussen UKMO-fronten en ECMWF, of een blijvend verschil met de KNMI-guidance). Bij ontbrekende bronnen benoem je de beperking; verzin geen risico."
+  "vooruitzichten": "Samenhangende doorkijk ná de zes dagteksten: 3–5 zinnen, maximaal 140 woorden; weerpatroon, temperatuurtrend en onzekerheid, gedragen door doorkijkkaarten en ensemble/guidance.",
+  "aandachtspunten": "1–3 concrete signalen om te volgen in Nederland, maximaal 85 woorden."
+
 }
 
 Het days-array bevat exact 6 items: vandaag en de vijf dagen daarna. De datums krijg je onder "KAARTEN".

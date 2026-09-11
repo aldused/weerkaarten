@@ -17,8 +17,9 @@
 #
 # Bij elke fout: exit zonder upload, zodat de vorige, op echte modelruns
 # gebaseerde guidance blijft staan. Er is nadrukkelijk geen generieke noodtekst.
-# Gebruik: guidance_update.sh [--dry-run|--force]
+# Gebruik: guidance_update.sh [--dry-run|--preview|--force]
 #   --dry-run : alles t/m promptbouw, geen claude/upload
+#   --preview : volledige generatie in aparte map, zonder enige upload
 #   --force   : sla de slot-skip over (voor handmatig hergenereren)
 # Elk van de 4 momenten heeft een retry ~30 min later; de slot-skip zorgt dat
 # de retry alleen doorloopt als de hoofdrun van dat dagdeel nog niet slaagde.
@@ -36,9 +37,16 @@ CLAUDE_MODEL="opus"
 CODEX_BIN="/Applications/ChatGPT.app/Contents/Resources/codex"
 BRACK_LEADS=(0 24 48 72 96 120)
 DRY_RUN=0
+PREVIEW=0
 FORCE=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 [ "${1:-}" = "--force" ] && FORCE=1
+[ "${1:-}" = "--preview" ] && PREVIEW=1
+if [ "$PREVIEW" = "1" ] || [ "$DRY_RUN" = "1" ]; then
+  mkdir -p "$CACHE"
+  CACHE=$(mktemp -d "$CACHE/preview.XXXXXX")
+  echo "PREVIEW_MAP=$CACHE"
+fi
 
 mkdir -p "$CACHE"
 cd "$CACHE"
@@ -48,7 +56,7 @@ echo "[$(date '+%F %T')] guidance_update start"
 # levert precies één update. Draaide de hoofdrun van dit dagdeel al met succes,
 # dan slaat de retry over; faalde die, dan loopt de retry gewoon door. Zo
 # vernieuwen ook de tussenruns (waarin ECMWF niet verandert) netjes 4x/dag.
-if [ "$DRY_RUN" != "1" ] && [ "$FORCE" != "1" ]; then
+if [ "$DRY_RUN" != "1" ] && [ "$PREVIEW" != "1" ] && [ "$FORCE" != "1" ]; then
   if python3 - "$CACHE" <<'PYEOF'
 import json, os, sys
 from datetime import datetime
@@ -79,15 +87,16 @@ fi
 # -> weerkaarten_run.sh) en ververst guidance.json ook; hier extra zodat de
 # prompt altijd een verse referentie heeft.
 if /usr/local/bin/python3 "$WEERLAB/scripts/haal_guidance.py"; then
-  "$SHELL_DIR/r2_publish.sh" "$WEERLAB/guidance.json" || echo "WAARSCHUWING: upload KNMI-guidance mislukt"
+  if [ "$PREVIEW" = "0" ] && [ "$DRY_RUN" = "0" ]; then
+    "$SHELL_DIR/r2_publish.sh" "$WEERLAB/guidance.json" || echo "WAARSCHUWING: upload KNMI-guidance mislukt"
+  fi
 else
   echo "WAARSCHUWING: haal_guidance.py mislukt — oude KNMI-tekst als referentie"
 fi
-# DWD-guidance (Kurzfrist/Mittelfrist, incl. lokale vertaling — duurt ~2 min)
-if /usr/local/bin/python3 "$WEERLAB/scripts/haal_dwd_guidance.py"; then
-  "$SHELL_DIR/r2_publish.sh" "$WEERLAB/dwd_guidance.json" || echo "WAARSCHUWING: upload DWD-guidance mislukt"
-else
-  echo "WAARSCHUWING: haal_dwd_guidance.py mislukt — oude DWD-tekst als referentie"
+# Voor de Nederlandse afweging is de volledige Duitse bron nodig.
+# De aparte DWD-pagina houdt haar eigen vertaalde feed via upload_guidance.sh.
+if ! /usr/local/bin/python3 "$WEERLAB/scripts/haal_dwd_guidance.py" --source-only --output "$CACHE/dwd_guidance.json"; then
+  echo "WAARSCHUWING: DWD-brontekst niet opgehaald; bronregister vermeldt de beperking"
 fi
 
 # ---------------------------------------------------------------- 1. Bracknell
@@ -252,7 +261,7 @@ fi
 # ------------------------------------------------------- 3. Prompt samenstellen
 python3 - "$SHELL_DIR" "$CACHE" "$WEERLAB" <<'PYEOF'
 import json, os, re, sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 shell_dir, cache, weerlab = sys.argv[1], sys.argv[2], sys.argv[3]
 sys.path.insert(0, shell_dir)
 from guidance_editorial import reference_bundle
@@ -278,7 +287,13 @@ except Exception:
     vorige_run = None
 verse_ecmwf = man["ecmwf_run_utc"] != vorige_run
 
-ctx = ["# CONTEXT VAN DEZE RUN", ""]
+peiltijd = datetime.now(timezone.utc).replace(microsecond=0)
+context = {"geldig_van": peiltijd.isoformat(), "geldig_tot": (peiltijd + timedelta(hours=48)).isoformat()}
+json.dump(context, open(os.path.join(cache, "guidance_context.json"), "w"))
+ctx = ["# CONTEXT VAN DEZE RUN", "",
+       "Peiltijd bronpakket en begin korte termijn (UTC): " + context["geldig_van"],
+       "Einde korte termijn (UTC): " + context["geldig_tot"],
+       "Neem deze grenzen letterlijk over in korte_termijn.geldig_van en geldig_tot."]
 if verse_ecmwf:
     ctx.append(f"Dit is een HOOFDUPDATE op een verse ECMWF HRES-run ({man['ecmwf_run_label']}). "
                "Bouw het beeld volledig opnieuw op vanaf de kaarten.")
@@ -298,7 +313,7 @@ lines = ["", *ctx, "", "# KAARTEN"]
 if kc and kc.get("charts"):
     lines += ["", "## KNMI-weerkaarten (grondkaarten met fronten; HARMONIE-analyse + ECMWF-prognose)",
               "Gezaghebbende Nederlandse frontenanalyse voor de korte termijn (analyse t/m +36 uur). "
-              "Bij verschil met Bracknell is deze voor Nederland leidend voor frontligging en -timing."]
+              "Weeg bij verschillen uitgifte en geldigheid mee; actuele KNMI-beoordelingen kunnen oudere prognosekaarten bijstellen."]
     for c in kc["charts"]:
         lines.append(f"- {os.path.join(cache, c['file'])} — {c['valid_label']}")
 
@@ -345,7 +360,7 @@ open(os.path.join(cache, "kaarten_sectie.txt"), "w").write("\n".join(lines) + "\
 
 # Volledige referentieteksten, inclusief modelvergelijkingen aan het einde.
 # De eindcontrole krijgt exact hetzelfde bronpakket als de auteur.
-references, register = reference_bundle(weerlab)
+references, register = reference_bundle(weerlab, dwd_path=os.path.join(cache, "dwd_guidance.json"))
 base_sources = [("ecmwf_hres", "ECMWF HRES-kaarten"),
                 ("ecmwf_dagfeiten", "ECMWF-modelpunten Nederland")]
 if kc and kc.get("charts"):
@@ -439,7 +454,7 @@ python3 - "$CACHE" "$SHELL_DIR" <<'PYEOF'
 import json, os, sys
 from datetime import datetime, timezone
 sys.path.insert(0, sys.argv[2])
-from guidance_editorial import validate_assessment
+from guidance_editorial import validate_assessment, validate_short_term
 
 cache = sys.argv[1]
 raw = open(os.path.join(cache, "raw_verified.txt")).read()
@@ -476,6 +491,8 @@ for i, (md, d) in enumerate(zip(man["days"], gd["days"])):
 
 register = json.load(open(os.path.join(cache, "bronregister.json")))
 try:
+    context = json.load(open(os.path.join(cache, "guidance_context.json")))
+    validate_short_term(gd, {b["id"] for b in register if b["status"] == "beschikbaar"}, context)
     validate_assessment(gd, {b["id"] for b in register if b["status"] == "beschikbaar"})
 except ValueError as exc:
     sys.exit(f"FOUT: {exc} — oude guidance blijft staan")
@@ -490,8 +507,8 @@ def zinnen(s):
 
 limieten = [
     ("intro", gd["intro"], 100),
-    ("vooruitzichten", gd["vooruitzichten"], 180),
-    ("aandachtspunten", gd["aandachtspunten"], 120),
+    ("vooruitzichten", gd["vooruitzichten"], 140),
+    ("aandachtspunten", gd["aandachtspunten"], 85),
 ]
 for i, d in enumerate(gd["days"], 1):
     limieten += [(f"synoptiek dag {i}", d["synoptiek"], 110),
@@ -501,6 +518,10 @@ for naam, tekst, maximum in limieten:
         sys.exit(f"FOUT: {naam} is te lang ({woorden(tekst)} woorden; maximaal {maximum})")
 if not 1 <= zinnen(gd["intro"]) <= 3:
     sys.exit("FOUT: intro moet uit maximaal drie zinnen bestaan")
+if not 3 <= zinnen(gd["vooruitzichten"]) <= 5:
+    sys.exit("FOUT: vooruitzichten moet uit drie tot vijf zinnen bestaan")
+if not 1 <= zinnen(gd["aandachtspunten"]) <= 3:
+    sys.exit("FOUT: aandachtspunten moet uit één tot drie zinnen bestaan")
 for i, d in enumerate(gd["days"], 1):
     if not 2 <= zinnen(d["synoptiek"]) <= 3:
         sys.exit(f"FOUT: synoptiek dag {i} moet uit twee of drie zinnen bestaan")
@@ -545,7 +566,10 @@ out = {
     "ecmwf_run_utc": man["ecmwf_run_utc"],
     "ecmwf_run_label": man["ecmwf_run_label"],
     "intro": gd["intro"],
-    "schema_version": 2,
+    "schema_version": 3,
+    "input_cutoff_utc": context["geldig_van"],
+    "korte_termijn": gd["korte_termijn"],
+    "bronnotities": gd["bronnotities"],
     "modelbeoordeling": gd["modelbeoordeling"],
     "bronregister": register,
     "days": [dict(md, synoptiek=cd["synoptiek"], weertype=cd["weertype"], onzekerheid=cd.get("onzekerheid", ""))
@@ -565,11 +589,18 @@ os.replace(tmp, os.path.join(cache, "ecmwf_guidance.json"))
 print("ecmwf_guidance.json geschreven")
 PYEOF
 
+if [ "$PREVIEW" = "1" ]; then
+  echo "PREVIEW_KLAAR=$CACHE/ecmwf_guidance.json — gecontroleerde editie, nog niet gepubliceerd"
+  exit 0
+fi
+
 # ------------------------------------------------------------------- 6. Upload
-uploads=("$CACHE/ecmwf_guidance.json")
+uploads=()
 for f in "$CACHE"/guidance_knmi_*.gif "$CACHE"/guidance_brack_*.png "$CACHE"/guidance_ecmwf_d*.png "$CACHE"/guidance_cluster_*.png; do
   [ -f "$f" ] && uploads+=("$f")
 done
 "$SHELL_DIR/r2_publish.sh" "${uploads[@]}"
+# De nieuwe tekst verschijnt pas nadat alle bijbehorende kaarten zijn geüpload.
+"$SHELL_DIR/r2_publish.sh" "$CACHE/ecmwf_guidance.json"
 
 echo "[$(date '+%F %T')] guidance_update klaar"
