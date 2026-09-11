@@ -30,9 +30,12 @@
   const icon = (name, cls='') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[name] || paths.map}</svg>`;
   const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const $ = selector => document.querySelector(selector);
+  const site = window.WEERLAB_MENU_SITE || {};
+  const selfPage = site.selfPage || 'index.html';
+  const storagePrefix = site.storagePrefix || 'weerlab-menu-v9';
   const products = MENU_PRODUCTS;
   const byId = new Map(products.map(p => [p.id, p]));
-  const categories = {
+  const categories = site.categories || {
     start:{name:'Overzicht',icon:'home'},
     nu:{name:'Nu',icon:'sun',title:'Het weer van dit moment',description:'Bekijk buien, satellietbeelden en de laatste metingen.',types:[['nu','Alles'],['beeld','Radar & satelliet'],['metingen','Metingen'],['water','Water & kust']]},
     verwachting:{name:'Verwachting',icon:'cloud',title:'Wat gaat het weer doen?',description:'Van de komende bui tot de verwachting voor volgende week.',types:[['kaarten','Weerkaarten'],['pluim','Pluimen & kansen'],['tekst','Weerbericht']]},
@@ -40,28 +43,31 @@
     favorieten:{name:'Favorieten',icon:'star',title:'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
     professioneel:{name:'Voor professionals',icon:'tools',title:'Voor professionals',description:'Verdieping, analyse en gereedschap voor de weerstudio.',types:[['vak','Alles'],['analyse','Analyse'],['tv','TV & uitzending'],['studio','Studio']]},
   };
-  const typeNames={nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals'};
-  const filterSets={
+  const typeNames=site.typeNames || {nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals'};
+  const filterSets=site.filterSets || {
     kaarten:[['veld','Weerelement'],['model','Model / bron'],['gebied','Gebied']],
     pluim:[['bron','Type verwachting'],['grootheid','Weerelement'],['vorm','Weergave']],
   };
   const productIcon = p => ({radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
   function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback;}catch{return fallback;}}
-  const previous=readStorage('sb_favorieten',[]);
+  const previous=site.storagePrefix?[]:readStorage('sb_favorieten',[]);
+  const defaultFavorites=site.defaultFavorites || ['radar','significant','pluim-ens6'];
   const migrated=Array.isArray(previous)?previous.map(id=>products.find(p=>p.href==='index.html#'+id)?.id).filter(Boolean):[];
-  let saved=readStorage('weerlab-menu-v9-favorites',migrated.length?migrated:['radar','significant','pluim-ens6']);
-  let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>id==='global4'?'hires4':id).filter(id=>byId.has(id)))]:['radar','significant','pluim-ens6'];
-  let view=readStorage('weerlab-menu-v9-view','cards')==='list'?'list':'cards';
+  let saved=readStorage(storagePrefix+'-favorites',migrated.length?migrated:defaultFavorites);
+  let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>id==='global4'?'hires4':id).filter(id=>byId.has(id)))]:defaultFavorites;
+  let view=readStorage(storagePrefix+'-view','cards')==='list'?'list':'cards';
   let state={}, filterOpen=false, toastTimer, searchTimer, searchOrigin='#start';
   const main=$('#main'), search=$('#search'), dialog=$('#menu-dialog');
   function save(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}
   function say(message,toast=false){$('#announcement').textContent=message;if(toast){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.add('visible');toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2500);}}
   function routeUrl(page,type,filters={}){const q=new URLSearchParams();if(type)q.set('type',type);Object.entries(filters).forEach(([key,value])=>{if(value)q.set(key,value);});return '#menu/'+page+(q.size?'?'+q:'');}
   function readRoute(){
-    const raw=location.hash.slice(1);
-    const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken'].includes(raw.split('?')[0]);
+    const incoming=location.hash.slice(1);
+    const raw=site.routeAliases?.[incoming] ?? incoming;
+    const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
       const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw);
+      if(site.directProducts && !product)return {page:'start',type:'',filters:{},q:''};
       return {page:product?.category || 'start',type:product?.type || '',filters:{},q:'',productRoute:raw,product};
     }
     const [path,query='']=raw.replace(/^menu\//,'').replace(/^home$/,'start').split('?');
@@ -84,15 +90,16 @@
   }
   function navLink(id){const cat=categories[id];return `<a class="nav-link" href="#${id}" data-route="${id}" ${state.page===id?'aria-current="page"':''}>${icon(cat.icon)}<span>${cat.name}</span>${id==='favorieten'?`<span class="nav-count">${favorites.length}</span>`:''}</a>`;}
   function renderNav(){
-    $('#desktop-nav').innerHTML=navLink('start')+'<div class="nav-label">Ontdek het weer</div>'+['nu','verwachting','terugkijken'].map(navLink).join('')+'<div class="nav-divider"></div>'+navLink('favorieten');
-    $('.sidebar-bottom [data-route]').setAttribute('aria-current',state.page==='professioneel'?'page':'false');
-    $('#mobile-nav').innerHTML=['start','nu','verwachting','terugkijken'].map(id=>`<a href="#${id}" ${state.page===id?'aria-current="page"':''}>${icon(categories[id].icon)}<span>${categories[id].name}</span></a>`).join('')+`<button id="open-menu" aria-haspopup="dialog" aria-controls="menu-dialog" aria-expanded="${dialog.open}">${icon('menu')}<span>Menu</span></button>`;
-    $('#dialog-nav').innerHTML=['start','nu','verwachting','terugkijken','favorieten','professioneel'].map(navLink).join('')+`<a href="index.html#waarschuwingen" class="nav-link">${icon('warning')}Waarschuwingen</a><a href="index.html#nieuws" class="nav-link">Wat is nieuw</a><a href="index_be.html" class="nav-link">Weer in België</a><a href="/cdn-cgi/access/logout" class="nav-link">Uitloggen</a>`;
+    $('#desktop-nav').innerHTML=navLink('start')+'<div class="nav-label">Ontdek het weer</div>'+(site.navItems || ['nu','verwachting','terugkijken']).map(navLink).join('')+'<div class="nav-divider"></div>'+navLink('favorieten');
+    $('.sidebar-bottom [data-route]')?.setAttribute('aria-current',state.page==='professioneel'?'page':'false');
+    $('#mobile-nav').innerHTML=['start',...(site.navItems || ['nu','verwachting','terugkijken'])].map(id=>`<a href="#${id}" ${state.page===id?'aria-current="page"':''}>${icon(categories[id].icon)}<span>${categories[id].name}</span></a>`).join('')+`<button id="open-menu" aria-haspopup="dialog" aria-controls="menu-dialog" aria-expanded="${dialog.open}">${icon('menu')}<span>Menu</span></button>`;
+    const extraLinks=site.extraLinks || [{href:'index.html#waarschuwingen',name:'Waarschuwingen',icon:'warning'},{href:'index.html#nieuws',name:'Wat is nieuw'},{href:'index_be.html',name:'Weer in België'},{href:'/cdn-cgi/access/logout',name:'Uitloggen'}];
+    $('#dialog-nav').innerHTML=['start',...(site.navItems || ['nu','verwachting','terugkijken']),'favorieten',...(categories.professioneel?['professioneel']:[])].map(navLink).join('')+extraLinks.map(link=>`<a href="${escape(link.href)}" class="nav-link">${link.icon?icon(link.icon):''}${escape(link.name)}</a>`).join('');
   }
   function pin(p){const pinned=favorites.includes(p.id);return `<button class="pin-button" data-pin="${p.id}" aria-pressed="${pinned}" aria-label="${escape(p.name)} ${pinned?'verwijderen uit':'toevoegen aan'} favorieten" title="${pinned?'Verwijderen uit':'Toevoegen aan'} favorieten">${icon('star')}</button>`;}
   function productCard(p,{featured=false}={}){
     const quickNames={radar:['Radar & buien','Waar regent het nu?'],modelkaarten:['Weerkaarten','De komende uren en dagen'],'pluim-viewer':['Weerpluim','De verwachting voor jouw plaats'],actueel:['Waarnemingen','Het gemeten weer in Nederland']};
-    const [name,description]=featured?quickNames[p.id]:[p.name,p.description];
+    const [name,description]=featured?(quickNames[p.id] || [p.name,p.description]):[p.name,p.description];
     const mapPlaceholder=p.type==='kaarten'&&!p.thumbnail;
     return `<article class="product-card ${p.thumbnail||mapPlaceholder?'':'no-image'}" data-product="${p.id}">${!p.thumbnail&&!mapPlaceholder?`<span class="product-icon">${icon(productIcon(p))}</span>`:''}<a class="card-link" href="${escape(p.href)}">${p.thumbnail?`<div class="card-image"><img src="${escape(p.thumbnail)}" alt="" loading="${featured?'eager':'lazy'}" decoding="async"></div>`:mapPlaceholder?`<div class="card-image map-placeholder" aria-hidden="true">${icon(productIcon(p))}<span>${p.facets.model?.includes('mosmix')?'DWD MOS/MIX':'Weerkaarten Europa'}</span></div>`:''}<div class="card-copy"><h3 class="card-title">${escape(name)}${icon('arrow')}</h3><p>${escape(description)}</p>${p.restricted?`<span class="product-meta">${icon('lock')}Afgeschermde tool</span>`:''}</div></a>${pin(p)}</article>`;
   }
@@ -101,18 +108,19 @@
   function heading(title,description,eyebrow){return `<div class="page-heading"><div>${eyebrow?`<div class="eyebrow">${escape(eyebrow)}</div>`:''}<h1 tabindex="-1">${escape(title)}</h1><p>${escape(description)}</p></div></div>`;}
   function favoriteChips(){return favorites.slice(0,4).map(id=>{const p=byId.get(id);return `<a class="favorite-chip" href="${escape(p.href)}">${escape(p.name)}${icon('chevron')}</a>`;}).join('');}
   function home(){
-    const browse=[
+    const browse=site.browse || [
       {id:'nu',description:'Wat gebeurt er op dit moment?',links:[['radar','Radar & buien'],['satelliet','Satellietbeelden'],['actueel','Waarnemingen']]},
       {id:'verwachting',description:'Wat kun je de komende dagen verwachten?',links:[['#verwachting?type=kaarten','Weerkaarten'],['#verwachting?type=pluim','Pluimen & kansen'],['#verwachting?type=tekst','Weerbericht']]},
       {id:'terugkijken',description:'Hoe was het weer, en wat is normaal?',links:[['#terugkijken?type=terug','Maand & seizoen'],['archief','Archief metingen'],['#terugkijken?type=klimaat','Records & klimaat']]},
     ];
-    return heading('Jouw weeroverzicht','Snel naar de kaarten, verwachtingen en metingen die je zoekt.','Welkom bij Weerlab')+
-      `<section aria-labelledby="quick-title"><div class="section-heading"><h2 id="quick-title">Snel naar</h2><p>Direct naar je weerinformatie</p></div><div class="quick-grid">${['radar','modelkaarten','pluim-viewer','actueel'].map(id=>productCard(byId.get(id),{featured:true})).join('')}</div></section>
+    return heading(site.homeTitle || 'Jouw weeroverzicht',site.homeDescription || 'Snel naar de kaarten, verwachtingen en metingen die je zoekt.',site.welcome || 'Welkom bij Weerlab')+
+      `<section aria-labelledby="quick-title"><div class="section-heading"><h2 id="quick-title">Snel naar</h2><p>Direct naar je weerinformatie</p></div><div class="quick-grid">${(site.quickProducts || ['radar','modelkaarten','pluim-viewer','actueel']).map(id=>productCard(byId.get(id),{featured:true})).join('')}</div></section>
       <section class="home-favorites" aria-label="Jouw favorieten"><span class="favorites-label">${icon('star')}Jouw favorieten</span><div class="favorite-chips">${favorites.length?favoriteChips():'<span class="favorites-label">Bewaar een onderdeel met het sterretje.</span>'}</div><a class="quiet-link" href="#favorieten">${favorites.length>4?'Alle '+favorites.length:'Bekijken'}${icon('arrow')}</a></section>
       <section aria-labelledby="browse-title"><div class="section-heading"><h2 id="browse-title">Ontdek Weerlab</h2><p>Alles op een logische plek</p></div><div class="category-grid">${browse.map(c=>`<div class="category-block" data-category="${c.id}"><div class="category-title">${icon(categories[c.id].icon)}<h2>${categories[c.id].name}</h2></div><p>${c.description}</p><div class="category-links">${c.links.map(([id,label])=>`<a href="${escape(id.startsWith('#')?id:byId.get(id).href)}">${label}${icon('chevron')}</a>`).join('')}</div><a class="quiet-link" href="#${c.id}">Alles bekijken${icon('arrow')}</a></div>`).join('')}</div></section>`;
   }
   function isInType(p){
     if(p.category!==state.page)return false;
+    if(!state.type)return true;
     const sections={beeld:'Beeld',metingen:'Metingen',water:'Water & kust',analyse:'Analyse',tv:'TV / uitzending',studio:'Studio (afgeschermd)'};
     return sections[state.type]?p.section===sections[state.type]:p.type===state.type || p.alsoTypes?.includes(state.type);
   }
@@ -139,7 +147,7 @@
     const result=base.filter(p=>matchesFilters(p));
     const climate=state.page==='terugkijken' && state.type==='klimaat';
     const archive=state.page==='terugkijken' && state.type==='terug';
-    const maps=state.page==='verwachting' && state.type==='kaarten';
+    const maps=!site.directProducts && state.page==='verwachting' && state.type==='kaarten';
     if(maps){const order={'mosmix-minikaarten':0,'mosmix-parameter':1,'mosmix-neerslagkans':2};result.sort((a,b)=>(order[a.id]??3)-(order[b.id]??3));}
     let html=heading(climate?'Records & klimaat':archive?'Maand & archief':cat.title,climate?'Van uitzonderlijk weer tot het langjarig gemiddelde. Kies wat je wilt onderzoeken.':archive?'Bekijk de maandbalans, volg het seizoen en zoek het weer van een eerdere dag terug.':cat.description,cat.name);
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
@@ -167,9 +175,9 @@
   }
   function searchPage(){
     const q=state.q.trim();
-    if(!q)return heading('Zoek in heel Weerlab','Zoek op een onderwerp, een weerelement of een model.','Zoeken')+`<div class="search-suggestions">${['Radar','Neerslag','ECMWF','Pluim','Weerrecords'].map(q=>`<a href="#zoeken?q=${encodeURIComponent(q)}">${q}</a>`).join('')}</div>`;
+    if(!q)return heading(site.searchTitle || 'Zoek in heel Weerlab','Zoek op een onderwerp, een weerelement of een model.','Zoeken')+`<div class="search-suggestions">${(site.searchSuggestions || ['Radar','Neerslag','ECMWF','Pluim','Weerrecords']).map(q=>`<a href="#zoeken?q=${encodeURIComponent(q)}">${q}</a>`).join('')}</div>`;
     const results=findResults(q);
-    return heading(`Resultaten voor ‘${q}’`,`${results.length} ${results.length===1?'onderdeel':'onderdelen'} gevonden in heel Weerlab.`,'Zoeken')+(results.length?productCollection(results,'list',true):empty('Geen resultaat gevonden','Probeer een kortere zoekterm, zoals regen, pluim of ECMWF.','<button class="button button-primary" data-clear-query>Opnieuw zoeken</button><a class="button" href="#start">Naar start</a>'));
+    return heading(`Resultaten voor ‘${q}’`,`${results.length} ${results.length===1?'onderdeel':'onderdelen'} gevonden in ${site.searchScope || 'heel Weerlab'}.`,'Zoeken')+(results.length?productCollection(results,'list',true):empty('Geen resultaat gevonden','Probeer een kortere zoekterm, zoals regen, pluim of ECMWF.','<button class="button button-primary" data-clear-query>Opnieuw zoeken</button><a class="button" href="#start">Naar start</a>'));
   }
   function prefixMenuLinks(){
     document.querySelectorAll('a[href^="#"]').forEach(a=>{if(a.id==='product-permalink'||a.hash==='#main'||a.hash.startsWith('#menu/'))return;a.setAttribute('href','#menu/'+a.hash.slice(1));});
@@ -200,7 +208,7 @@
   }
   function toggleFavorite(id){
     const removing=favorites.includes(id);favorites=removing?favorites.filter(x=>x!==id):favorites.concat(id);
-    const stored=save('weerlab-menu-v9-favorites',favorites);
+    const stored=save(storagePrefix+'-favorites',favorites);
     const focused=document.activeElement;
     const previousIndex=[...main.querySelectorAll('[data-pin]')].indexOf(focused);
     renderNav();
@@ -264,7 +272,7 @@
   document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
   document.addEventListener('click',event=>{
     const pinButton=event.target.closest('[data-pin]');if(pinButton){toggleFavorite(pinButton.dataset.pin);return;}
-    const viewButton=event.target.closest('[data-view]');if(viewButton){view=viewButton.dataset.view;save('weerlab-menu-v9-view',view);render();main.querySelector(`[data-view="${view}"]`).focus();say(view==='list'?'Lijstweergave':'Kaartweergave');return;}
+    const viewButton=event.target.closest('[data-view]');if(viewButton){view=viewButton.dataset.view;save(storagePrefix+'-view',view);render();main.querySelector(`[data-view="${view}"]`).focus();say(view==='list'?'Lijstweergave':'Kaartweergave');return;}
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
     const removeFilter=event.target.closest('[data-remove-filter]');
     if(event.target.closest('[data-reset-filters]')||removeFilter){const next={...state.filters};if(removeFilter)delete next[removeFilter.dataset.removeFilter];else Object.keys(next).forEach(key=>delete next[key]);navigate(routeUrl(state.page,state.type,next),{keepScroll:true});$('#toggle-filters')?.focus();say('Filters bijgewerkt');return;}
@@ -275,7 +283,7 @@
     const productLink=event.target.closest('a[href]');
     if(productLink && !event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey && event.button===0){
       const url=new URL(productLink.href,location.href);
-      if(url.origin===location.origin && /\/(?:index(?:\.html)?)?$/.test(url.pathname) && url.hash && !url.hash.startsWith('#menu/')){
+      if(url.origin===location.origin && (site.selfPage?url.pathname===new URL(selfPage,location.href).pathname:/\/(?:index(?:\.html)?)?$/.test(url.pathname)) && url.hash && !url.hash.startsWith('#menu/')){
         event.preventDefault();if(dialog.open)closeDialog();navigate(url.hash,{focus:true});return;
       }
     }
@@ -340,7 +348,7 @@
     document.body.classList.toggle('vierluik-open', /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(route));
     const title=state.product?.name || 'Weerlab';
     $('#product-title').textContent=title;
-    $('#product-permalink').href='index.html#'+route;
+    $('#product-permalink').href=selfPage+'#'+route;
     const category=categories[state.page]||categories.start;
     $('#product-back').href='#menu/'+state.page+(state.type?'?type='+state.type:'');
     $('#product-back').textContent='← '+category.name;
@@ -348,11 +356,23 @@
     frame.hidden=false;
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
-      frame.src='product-host.html?v=20260911-schermruimte1#'+route;
+      frame.title=title;
+      frame.src=state.product?.src || 'product-host.html?v=20260911-schermruimte1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
   }
+  // Standalone Belgische producten delen de zoek- en Escape-sneltoetsen met het menu.
+  if(site.directProducts)$('#product-frame').addEventListener('load',()=>{
+    let doc;try{doc=$('#product-frame').contentDocument;}catch{return;}
+    doc?.addEventListener('keydown',event=>{
+      if(event.key==='Escape'){setProductExpanded(false);return;}
+      const editing=event.target.matches('input,textarea,select,[contenteditable="true"]');
+      if(event.key==='/'&&!editing&&!event.ctrlKey&&!event.metaKey || (event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){
+        event.preventDefault();focusSearch();
+      }
+    });
+  });
   window.addEventListener('message',event=>{
     const frame=$('#product-frame');
     if(event.source!==frame.contentWindow || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
@@ -366,7 +386,7 @@
       history.pushState(null,'',data.hash);
       frame.dataset.route=data.hash.slice(1);
       state=readRoute();renderNav();renderProduct();prefixMenuLinks();
-      $('#product-permalink').href='index.html'+data.hash;
+      $('#product-permalink').href=selfPage+data.hash;
     }
     if(typeof data.title==='string'){$('#product-title').textContent=data.title;frame.title=data.title;document.title=data.title+' · Weerlab';}
   });
