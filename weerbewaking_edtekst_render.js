@@ -33,8 +33,8 @@
     wrap(s.summary).forEach((line,i)=>text(line,48,399+i*37,4,c.cyan));
     box(48,602,984,10,c.blue);
     const xs=[488,615,742,869,996];
-    s.days.forEach((d,i)=>{if(!editable)text(d.day,xs[i],648,5,c.cyan,'center');if(d.date)text(d.date.slice(8)+'/'+d.date.slice(5,7),xs[i],698,2.2,c.muted,'center');});
-    const rows=[['zonuren    uur','sun',727,c.green],['regenkans    %','rain',798,c.green],['minimum     °C','min',891,c.white],['maximum     °C','max',968,c.yellow],['windrichting','dir',1062,c.green],['wind       Bft','force',1133,c.green]];
+    s.days.forEach((d,i)=>{if(!editable)text(d.day,xs[i],648,5,c.cyan,'center');});
+    const rows=[['zonuren','sun',727,c.green],['regenkans    %','rain',798,c.green],['minimum     °C','min',891,c.white],['maximum     °C','max',968,c.yellow],['windrichting','dir',1062,c.green],['wind       Bft','force',1133,c.green]];
     for(const [label,key,y,col] of rows){text(label,48,y,4,c.cyan);if(!editable)s.days.forEach((d,i)=>text(d[key]??'-',xs[i],y,4,col,'center'));}
     box(48,1231,244,10,c.blue);box(788,1231,244,10,c.blue);text('Ed Aldus',540,1219,6,c.yellow,'center');
     text('Het weer, elke dag.',540,1284,3,c.cyan,'center');
