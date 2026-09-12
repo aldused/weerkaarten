@@ -109,5 +109,7 @@ is dit een praktische toegangspoort en geen servermatige beveiliging.
 
 Na een nieuwe, gevalideerde editie publiceert de Codex-taak uitsluitend
 `data/kranten_demo.json` en `data/kranten_status.json` via
-`shell/git_publish.sh`. Bij een ongewijzigde bron wordt niets gepubliceerd.
-De bestaande homepage en navigatie blijven ongewijzigd.
+`bash shell/kranten_publish.sh "Krantconcepten <krantdatum> bijgewerkt"`.
+Deze helper maakt een schone tijdelijke checkout, zodat gelijktijdige weerjobs
+geen krantpublicatie blokkeren of onbedoeld meekomen. Bij een ongewijzigde bron
+wordt niets gepubliceerd. De bestaande homepage en navigatie blijven ongewijzigd.
