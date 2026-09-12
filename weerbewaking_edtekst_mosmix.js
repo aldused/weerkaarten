@@ -17,7 +17,7 @@
     for(const date of feed.dagen){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<today)continue;const d=feed.data[date];if(!d)continue;
       const value=k=>d[k]?.[station],rounded=(k,lo,hi)=>finite(value(k))&&value(k)>=lo&&value(k)<=hi?Math.round(value(k)):null;
       const sq=value('SQ'),dd=value('DD');
-      mapped[date]={date,day:weekdays[new Date(date+'T12:00:00Z').getUTCDay()],sun:finite(sq)&&sq>=0&&sq<=24?Math.round(sq*10)/10:null,rain:rounded('R101',0,100),min:rounded('TN',-40,50),max:rounded('TX',-40,50),force:beaufort(value('FF')),dir:finite(dd)&&dd>=0&&dd<=360?directions[Math.round(dd/22.5)%16]:null};
+      mapped[date]={date,day:weekdays[new Date(date+'T12:00:00Z').getUTCDay()],sun:finite(sq)&&sq>=0&&sq<=24?Math.ceil(sq):null,rain:rounded('R101',0,100),min:rounded('TN',-40,50),max:rounded('TX',-40,50),force:beaufort(value('FF')),dir:finite(dd)&&dd>=0&&dd<=360?directions[Math.round(dd/22.5)%16]:null};
       if(mapped[date].min!==null&&mapped[date].max!==null&&mapped[date].min>mapped[date].max){mapped[date].min=null;mapped[date].max=null;}
     }
     return {station,stationId:'06344',run:run.toISOString(),retrievedAt:now.toISOString(),days:mapped};

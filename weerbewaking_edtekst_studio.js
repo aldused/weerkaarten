@@ -1,9 +1,9 @@
 const $=id=>document.getElementById(id),clone=o=>JSON.parse(JSON.stringify(o));
 let state=clone(EDtekst.sample),valid=true,fontReady=false,importing=false,tableChanged=0;
-const storageKey='edtekst-studio-v2';
+const storageKey='edtekst-studio-v3';
 try{const saved=localStorage.getItem(storageKey);if(saved){EDtekst.validate(JSON.parse(saved));state=JSON.parse(saved);if(state.region.trim().toUpperCase()==='REGIO ROTTERDAM')state.region='Rijnmondgebied';}}catch{}
 const needsInitialImport=state.demo&&!state.source&&JSON.stringify(state.days)===JSON.stringify(EDtekst.sample.days)&&state.summary===EDtekst.sample.summary;
-const rows=[['day','Weekdag',648,62,MOSMIX.weekdays],['sun','Zonuren',727,54,0,24,0.1],['rain','Hoogste uurkans regen (%)',798,54,0,100],['min','Minimum (°C)',891,54,-40,50],['max','Maximum (°C)',968,54,-40,50],['dir','Windrichting',1062,54,[...MOSMIX.directions,'VAR']],['force','Windkracht (Bft)',1133,54,0,12]];
+const rows=[['day','Weekdag',648,62,MOSMIX.weekdays],['sun','Zonuren',727,54,0,24],['rain','Hoogste uurkans regen (%)',798,54,0,100],['min','Minimum (°C)',891,54,-40,50],['max','Maximum (°C)',968,54,-40,50],['dir','Windrichting',1062,54,[...MOSMIX.directions,'VAR']],['force','Windkracht (Bft)',1133,54,0,12]];
 function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
 function sourceStatus(){
   if(!state.source){$('source-status').textContent='Nog geen MOSMIX ingeladen.';return;}
