@@ -1,0 +1,54 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const path=require('node:path');
+const html=fs.readFileSync(path.join(__dirname,'../skew_t.html'),'utf8');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/initApp\(\);\s*$/,'');
+const nodes=new Map();
+const document={getElementById(id){
+  if(!nodes.has(id))nodes.set(id,{style:{},textContent:'',innerHTML:'',disabled:false,
+    getContext:()=>({clearRect(){}})});
+  return nodes.get(id);
+}};
+const c=vm.createContext({document,console,URLSearchParams,location:{search:'',hostname:'localhost'}});
+vm.runInContext(script+`;
+  this.pending=[];
+  this.shown=[];
+  loadHarmonie=selection=>new Promise((resolve,reject)=>pending.push({selection,resolve,reject}));
+  buildStepUI=()=>{};
+  gotoHour=()=>shown.push(METAC.modelName);
+  renderAll=()=>{};
+  this.api={loadLive,loadSample,STATE,get:()=>({steps:CURSTEPS,meta:METAC,env:ENV})};
+`,c);
+async function check(){
+  const first=c.api.loadLive();
+  c.api.STATE.place='Twente';
+  const second=c.api.loadLive();
+  c.pending[1].resolve({live:null,steps:[{}],meta:{modelName:'nieuw'}});
+  await second;
+  c.pending[0].resolve({live:null,steps:[{}],meta:{modelName:'oud'}});
+  await first;
+  assert.deepEqual([...c.shown],['nieuw'],'Late response must not replace newer selection');
+  assert.equal(c.pending[0].selection.place,'De Bilt','Request takes immutable location snapshot');
+  assert.equal(c.pending[1].selection.place,'Twente');
+  const third=c.api.loadLive();
+  assert.equal(c.api.get().meta,null);
+  assert.equal(c.api.get().env,null);
+  assert.equal(document.getElementById('pngBtn').disabled,true);
+  c.api.loadSample(0);
+  c.pending[2].resolve({live:null,steps:[{}],meta:{modelName:'late-live'}});
+  await third;
+  assert.equal(c.api.get().meta,null,'Example invalidates in-flight live requests');
+  assert.equal(c.shown.length,1);
+  const fourth=c.api.loadLive();
+  c.pending[3].reject(Error('network failure'));
+  await fourth;
+  assert.equal(c.api.get().env,null);
+  assert.equal(c.api.get().steps.length,0);
+  assert.match(document.getElementById('loadmsg').textContent,/network failure/);
+  assert.equal(document.getElementById('timeSel').disabled,true);
+  assert.equal(document.getElementById('scrubRange').disabled,true);
+  assert.equal(document.getElementById('pngBtn').disabled,true);
+  console.log('Late responses, location snapshots, example switching and error clearing passed.');
+}
+check().catch(e=>{console.error(e);process.exitCode=1;});
