@@ -1,9 +1,9 @@
 const $=id=>document.getElementById(id),clone=o=>JSON.parse(JSON.stringify(o));
 let state=clone(EDtekst.sample),valid=true,fontReady=false,importing=false,tableChanged=0;
-const storageKey='edtekst-studio-v1';
+const storageKey='edtekst-studio-v2';
 try{const saved=localStorage.getItem(storageKey);if(saved){EDtekst.validate(JSON.parse(saved));state=JSON.parse(saved);if(state.region.trim().toUpperCase()==='REGIO ROTTERDAM')state.region='Rijnmondgebied';}}catch{}
 const needsInitialImport=state.demo&&!state.source&&JSON.stringify(state.days)===JSON.stringify(EDtekst.sample.days)&&state.summary===EDtekst.sample.summary;
-const rows=[['day','Weekdag',648,62,MOSMIX.weekdays],['sun','Zon (%)',727,54,0,100],['rain','Hoogste uurkans regen (%)',798,54,0,100],['min','Minimum (°C)',891,54,-40,50],['max','Maximum (°C)',968,54,-40,50],['dir','Windrichting',1062,54,[...MOSMIX.directions,'VAR']],['force','Windkracht (Bft)',1133,54,0,12]];
+const rows=[['day','Weekdag',648,62,MOSMIX.weekdays],['sun','Zonuren',727,54,0,24,0.1],['rain','Hoogste uurkans regen (%)',798,54,0,100],['min','Minimum (°C)',891,54,-40,50],['max','Maximum (°C)',968,54,-40,50],['dir','Windrichting',1062,54,[...MOSMIX.directions,'VAR']],['force','Windkracht (Bft)',1133,54,0,12]];
 function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
 function sourceStatus(){
   if(!state.source){$('source-status').textContent='Nog geen MOSMIX ingeladen.';return;}
@@ -20,14 +20,14 @@ function changeCell(index,key,raw){
   tableChanged++;render();
 }
 function renderTable(){
-  $('table-edit').replaceChildren(...rows.map(([key,label,y,height,range,max])=>{
+  $('table-edit').replaceChildren(...rows.map(([key,label,y,height,range,max,step=1])=>{
     const row=document.createElement('div');row.className=`edit-row ${key}-row`;row.setAttribute('role','row');row.style.top=((y-(key==='day'?12:9))/1350*100)+'%';row.style.height=height/1350*100+'%';
     state.days.forEach((day,i)=>{
       const cell=document.createElement('div');cell.className='edit-cell';cell.setAttribute('role',key==='day'?'columnheader':'cell');
       const isSelect=Array.isArray(range),input=document.createElement(isSelect?'select':'input');
       input.className='table-input';input.dataset.day=i;input.dataset.key=key;input.setAttribute('aria-label',`${label}, ${day.date||day.day}, dag ${i+1}`);
       if(isSelect){if(key!=='day'){const empty=document.createElement('option');empty.value='';empty.textContent='-';input.append(empty);}for(const option of range){const el=document.createElement('option');el.value=option;el.textContent=option;input.append(el);}}
-      else{input.type='number';input.inputMode='numeric';input.min=range;input.max=max;input.step='1';input.placeholder='-';}
+      else{input.type='number';input.inputMode='decimal';input.min=range;input.max=max;input.step=String(step);input.placeholder='-';}
       input.value=day[key]??'';
       input.addEventListener('input',()=>{input.setAttribute('aria-invalid',String(!input.validity.valid));changeCell(i,key,input.value);});
       input.addEventListener('focus',()=>{if(!isSelect)input.select();});
@@ -40,7 +40,7 @@ function render(){
   $('count').textContent=`${state.summary.length}/200 tekens · ${EDtekst.wrap(state.summary).length}/5 regels`;
   try{
     EDtekst.validate(state);EDtekst.draw($('screen').getContext('2d'),state,{editable:true});valid=true;
-    $('accessibleForecast').textContent=state.heading+'. '+state.summary+' '+state.days.map(d=>`${d.date||d.day}: zon ${d.sun??'onbekend'}%, regenkans ${d.rain??'onbekend'}%, minimum ${d.min??'onbekend'}, maximum ${d.max??'onbekend'}, wind ${d.dir??'onbekend'} ${d.force??'onbekend'} Bft.`).join(' ');
+    $('accessibleForecast').textContent=state.heading+'. '+state.summary+' '+state.days.map(d=>`${d.date||d.day}: ${d.sun??'onbekend'} zonuren, regenkans ${d.rain??'onbekend'}%, minimum ${d.min??'onbekend'}, maximum ${d.max??'onbekend'}, wind ${d.dir??'onbekend'} ${d.force??'onbekend'} Bft.`).join(' ');
     try{localStorage.setItem(storageKey,JSON.stringify(state));message('Concept bewaard op dit apparaat.');}catch{message('Download je afbeelding voordat je afsluit; bewaren is niet beschikbaar.');}
   }catch(e){valid=false;message(e.message,true);}
   $('download').disabled=!valid||!fontReady||importing;sourceStatus();
@@ -75,4 +75,4 @@ $('download').addEventListener('click',()=>{
 $('reset').onclick=()=>{tableChanged++;state=clone(EDtekst.sample);populate();};populate();
 document.fonts.load('40px "EDtekst Mono"').then(fonts=>{if(!fonts.length)throw Error('Font ontbreekt');fontReady=true;render();}).catch(()=>message('Het lettertype kon niet laden. Vernieuw de pagina voordat je downloadt.',true));
 if(needsInitialImport)importMOSMIX();
-if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'update_edtekst_forecast',title:'Werk de EDtekst-verwachting bij',description:'Werk het volledige weerbericht en de bewerkbare tabel bij. Bewaart het concept op dit apparaat; downloadt of publiceert niets.',inputSchema:{type:'object',properties:{forecast:{type:'object',description:'Volledig bericht: date, time, region, heading, summary, demo, crt en vijf days (day, sun, rain, min, max, dir, force).'}},required:['forecast'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input){if(!input||typeof input.forecast!=='object')throw Error('Een volledig weerbericht is vereist.');EDtekst.validate(input.forecast);state=clone(input.forecast);tableChanged++;if(state.source)state.source.edited=true;populate();return {updated:true,date:state.date,days:state.days.length};}})).catch(()=>{});}catch{}}
+if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'update_edtekst_forecast',title:'Werk de EDtekst-verwachting bij',description:'Werk het volledige weerbericht en de bewerkbare tabel bij. Bewaart het concept op dit apparaat; downloadt of publiceert niets.',inputSchema:{type:'object',properties:{forecast:{type:'object',description:'Volledig bericht: date, time, region, heading, summary, demo, crt en vijf days (day, sun in uren, rain, min, max, dir, force).'}},required:['forecast'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input){if(!input||typeof input.forecast!=='object')throw Error('Een volledig weerbericht is vereist.');EDtekst.validate(input.forecast);state=clone(input.forecast);tableChanged++;if(state.source)state.source.edited=true;populate();return {updated:true,date:state.date,days:state.days.length};}})).catch(()=>{});}catch{}}
