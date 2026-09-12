@@ -1327,6 +1327,21 @@ const MENU_PRODUCTS = [
     "facets": {},
     "keywords": "Weerbewaking Afgeschermd dossier ",
     "restricted": true
+  },
+  {
+    "id": "krantenredactie",
+    "name": "Krantenredactie (demo)",
+    "description": "Weerberichten per krant schrijven en controleren",
+    "category": "professioneel",
+    "type": "vak",
+    "section": "Studio (afgeschermd)",
+    "icon": "tekst",
+    "href": "index.html#krantenredactie",
+    "src": "demo_kranten.html?v=20260912-menu1",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "Kranten krant redactie weerbericht Volkskrant Trouw Parool AD concepten teksten tekenlimiet",
+    "restricted": true
   }
 ];
 const MENU_LABELS = {
