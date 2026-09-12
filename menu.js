@@ -357,7 +357,7 @@
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
       frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260912-waarnemingen3#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20260912-kaartgrootte1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
