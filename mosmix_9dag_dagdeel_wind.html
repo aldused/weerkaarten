@@ -47,9 +47,11 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
 [data-theme="dark"] .mini-header { background:#0e1629; }
 </style>
 <link rel="stylesheet" href="mosmix-maps.css?v=20260909-1">
-<script src="mosmix-core.js?v=20260909-1"></script>
+<script src="mosmix-core.js?v=20260912-mini1"></script>
+<link rel="stylesheet" href="mosmix-mini.css?v=20260912-5">
+<script src="mosmix-mini.js?v=20260912-5"></script>
 </head>
-<body>
+<body class="mosmix-mini-page">
 
 <div class="header">
   <h1>9-daagse wind per dagdeel</h1>
@@ -73,10 +75,6 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
     <div class="legenda-item"><div class="legenda-cirkel" style="background:#ef5350"></div>8+</div>
     <div class="legenda-item" style="margin-left:6px;color:#64748b">&middot; pijl m&eacute;t de wind &middot; getal = Bft</div>
   </div>
-  <label for="zoom-slider">Kaartgrootte</label>
-  <input type="range" id="zoom-slider" min="500" max="2000" value="1100" step="20"
-         oninput="stelGrootteIn(this.value)">
-  <span class="zoom-val" id="zoom-label">1100px</span>
 </div>
 
 <div class="kaarten-wrap">
@@ -228,15 +226,10 @@ function bouwGrid(){
     wrap.appendChild(svg);
     wrap.insertAdjacentHTML("beforeend","<div class=\"mini-footer\">\u00a9 Ed Aldus \u00b7 DWD MOSMIX \u00b7 weerlab.nl</div>");
     grid.appendChild(wrap);
+    MosmixMini.enhance(wrap, {day:kaartDag, period:DD_LABEL[huidigDagdeel], values:Object.fromEntries(Object.keys(STATIONS).map(name=>[name,kmhToBft(dagdeelWind(name,dag,huidigDagdeel).ff)])), unit:"Bft"});
   });
 }
 
-function stelGrootteIn(breedte, opslaan=true){
-  document.documentElement.style.setProperty("--grid-breedte",breedte+"px");
-  document.getElementById("zoom-label").textContent=breedte+"px";
-  document.getElementById("zoom-slider").value=breedte;
-  if(opslaan) try{ localStorage.setItem("mosmix_kaarten_breedte",breedte); }catch{}
-}
 
 document.querySelectorAll(".btn-dd").forEach(btn=>{
   btn.addEventListener("click",()=>{
@@ -248,9 +241,12 @@ document.querySelectorAll(".btn-dd").forEach(btn=>{
   });
 });
 
+const MINI_DATA_BASE = location.hostname === "localhost" || location.hostname === "127.0.0.1" || new URLSearchParams(location.search).has("localData") ? "" : "https://data.weerlab.nl/";
+MosmixMini.legend(BFT_KLEUREN.map((color,value)=>[value,color]), "Bft");
+
 Promise.all([
-  MosmixCore.loadDaily("https://data.weerlab.nl/mosmix_nl.json?t="+Date.now()),
-  MosmixCore.fetchJSON("https://data.weerlab.nl/mosmix_uurlijks_nl.json?t="+Date.now()),
+  MosmixCore.loadDaily(MINI_DATA_BASE+"mosmix_nl.json?t="+Date.now(), {probabilities:false}),
+  MosmixCore.fetchJSON(MINI_DATA_BASE+"mosmix_uurlijks_nl.json?t="+Date.now()),
   fetch("nl_provincies.geojson").then(r=>r.json())
 ]).then(([mosmix, uurlijks, provincies])=>{
   MosmixCore.assertSameRun(mosmix, uurlijks);
@@ -260,17 +256,7 @@ Promise.all([
 
   document.getElementById("status").textContent="";
   const upd=mosmix.bijgewerkt.replace("T"," ");
-  const runRaw=mosmix.run||"";
-  let runStr="";
-  if(runRaw){
-    const r=new Date(runRaw);
-    const dd=String(r.getUTCDate()).padStart(2,"0");
-    const mm=String(r.getUTCMonth()+1).padStart(2,"0");
-    const yyyy=r.getUTCFullYear();
-    const hh=String(r.getUTCHours()).padStart(2,"0");
-    runStr=" \u00b7 Run: "+dd+"-"+mm+"-"+yyyy+" "+hh+" UTC";
-  }
-  document.getElementById("hdr-sub").textContent="Bijgewerkt: "+upd+runStr+" \u00b7 Bron: DWD MOSMIX";
+  MosmixMini.metadata(mosmix);
   document.getElementById("footer").textContent="weerlab.nl \u00b7 \u00a9 Ed Aldus WM \u00b7 DWD MOSMIX \u00b7 "+upd;
 
   try{
@@ -285,9 +271,6 @@ Promise.all([
 
   bouwGrid();
 
-  let breedte=1100;
-  try{ breedte=parseInt(localStorage.getItem("mosmix_kaarten_breedte"))||1100; }catch{}
-  stelGrootteIn(breedte, false);
 }).catch(e=>{
   document.getElementById("status").textContent="Kon data niet laden: "+e.message;
 });

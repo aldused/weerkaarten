@@ -25,14 +25,14 @@
     }
     return issues;
   }
-  function showQuality(data){
+  function showQuality(data, options={}){
     if(typeof document==='undefined')return;
     let box=document.getElementById('mosmix-quality');
     if(!box){box=document.createElement('aside');box.id='mosmix-quality';box.setAttribute('aria-label','Bron en betrouwbaarheid');document.querySelector('.header')?.after(box);}
     box.replaceChildren();
     const warning=runWarning(data);
     if(warning){const p=document.createElement('p');p.className='mosmix-warning';p.setAttribute('role','status');p.textContent=warning;box.append(p);}
-    const issues=probabilityIssues(data);
+    const issues=options.probabilities===false?[]:probabilityIssues(data);
     if(issues.length){const p=document.createElement('p');p.className='mosmix-warning';p.textContent='Broncontrole: '+issues.length+' combinaties van station en tijdvak bevatten tegenstrijdige neerslagkansen (een hogere drempel heeft een grotere kans). DWD-bronwaarden zijn ongewijzigd; vergelijk deze drempels met voorzichtigheid.';box.append(p);}
     const p=document.createElement('p');
     const run=Date.parse(data.run);
@@ -43,7 +43,7 @@
     for(const [route,label] of [['minikaarten','9 dagen'],['parameter','Per element'],['neerslagkans','Neerslagkansen']]){const a=document.createElement('a');a.href='index.html#mosmix-'+route;a.target='_top';a.textContent=label;nav.append(a);}box.append(nav);
   }
   async function fetchJSON(url){const response=await fetch(url,{signal:AbortSignal.timeout(20000)});if(!response.ok)throw Error('De gegevensbron is tijdelijk niet beschikbaar (HTTP '+response.status+').');return response.json();}
-  async function loadDaily(url){const data=validateDaily(await fetchJSON(url));showQuality(data);return data;}
+  async function loadDaily(url, options={}){const data=validateDaily(await fetchJSON(url));showQuality(data, options);return data;}
   function assertSameRun(daily,hourly){
     if(!hourly?.data || !daily.run || !hourly.run || Date.parse(daily.run)!==Date.parse(hourly.run))throw Error('Dag- en uurgegevens horen nog niet bij dezelfde modelrun. Probeer het over enkele minuten opnieuw.');
   }

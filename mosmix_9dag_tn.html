@@ -43,19 +43,17 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
 [data-theme="dark"] .mini-kaart { background:#111a2e; }
 </style>
 <link rel="stylesheet" href="mosmix-maps.css?v=20260909-1">
-<script src="mosmix-core.js?v=20260909-1"></script>
+<script src="mosmix-core.js?v=20260912-mini1"></script>
+<link rel="stylesheet" href="mosmix-mini.css?v=20260912-5">
+<script src="mosmix-mini.js?v=20260912-5"></script>
 </head>
-<body>
+<body class="mosmix-mini-page">
 
 <div class="header">
   <h1>9-daagse minimumtemperatuur</h1>
   <p id="hdr-sub">Laden…</p>
 </div>
 <div class="toolbar">
-  <label for="zoom-slider">Kaartgrootte</label>
-  <input type="range" id="zoom-slider" min="500" max="2000" value="1100" step="20"
-         oninput="stelGrootteIn(this.value)">
-  <span id="zoom-label">1100px</span>
 </div>
 
 <div class="kaarten-wrap">
@@ -193,7 +191,7 @@ function maakLandMask(){
 function shepardVeld(paramData, stations){
   const w=landMask.w, h=landMask.h, punten=[];
   Object.entries(paramData).forEach(([naam,val])=>{
-    if(!stations[naam]||val==null) return;
+    if(!stations[naam]||!Number.isFinite(val)) return;
     const [lon,lat]=stations[naam];
     punten.push({x:lonToX(lon)/SVG_W*w, y:latToY(lat)/SVG_H*h, val});
   });
@@ -419,41 +417,32 @@ function bouwPaneel(grid, dagKey, mosmix){
     tekenContouren(overlay,veldObj);
     if(paramData){
       Object.entries(paramData)
-        .filter(([naam])=>stations[naam])
+        .filter(([naam,val])=>stations[naam] && Number.isFinite(val))
         .map(([naam,val])=>({naam,val,lon:stations[naam][0],lat:stations[naam][1]}))
         .sort((a,b)=>b.val-a.val)
         .forEach(item=>tekenStation(overlay,item));
     }
+    MosmixMini.enhance(wrap, {day:dagKey, values:Object.fromEntries(Object.keys(stations).map(name=>[name,paramData?.[name]??null])), unit:"°C"});
   };
 }
 
-function stelGrootteIn(breedte, opslaan=true){
-  document.documentElement.style.setProperty("--grid-breedte",breedte+"px");
-  document.getElementById("zoom-label").textContent=breedte+"px";
-  document.getElementById("zoom-slider").value=breedte;
-  if(opslaan) try{ localStorage.setItem("mosmix_9dag_tn_breedte",breedte); }catch{}
-}
 
 // R2 blokkeert CORS vanaf localhost → lokale kopie bij testen (?localData=1 of localhost)
 const LOKAAL = location.hostname==="localhost" || location.hostname==="127.0.0.1"
   || new URLSearchParams(location.search).has("localData");
 const DATA_URL = LOKAAL ? "mosmix_nl.json" : "https://data.weerlab.nl/mosmix_nl.json";
 
+MosmixMini.legend(TX_KLEUREN.filter((_,i)=>i%2===0 || i===TX_KLEUREN.length-1).map(([color,value])=>[value,color]), "°C");
+
 Promise.all([
-  MosmixCore.loadDaily(DATA_URL+"?t="+Date.now()),
+  MosmixCore.loadDaily(DATA_URL+"?t="+Date.now(), {probabilities:false}),
   fetch("nl_provincies.geojson").then(r=>r.json())
 ]).then(([mosmix, prov])=>{
   provincies=prov;
   maakLandMask();
   document.getElementById("status").textContent="";
   const upd=(mosmix.bijgewerkt||"").replace("T"," ");
-  let runStr="";
-  if(mosmix.run){
-    const r=new Date(mosmix.run);
-    const hh=String(r.getUTCHours()).padStart(2,"0");
-    runStr=" · run: "+hh+" UTC";
-  }
-  document.getElementById("hdr-sub").textContent="DWD MOSMIX"+runStr+" · Bijgewerkt: "+upd;
+  MosmixMini.metadata(mosmix);
   document.getElementById("footer").textContent="weerlab.nl · © Ed Aldus WM · DWD MOSMIX · "+upd;
 
   const grid=document.getElementById("kaarten-grid");
@@ -461,9 +450,6 @@ Promise.all([
   // 1) Skeletten (headers + basemaps) meteen zichtbaar
   const vullers=mosmix.dagen.slice(0,9).map(dagKey=>bouwPaneel(grid,dagKey,mosmix));
 
-  let opgeslagen=1100;
-  try{ opgeslagen=parseInt(localStorage.getItem("mosmix_9dag_tn_breedte"))||1100; }catch{}
-  stelGrootteIn(opgeslagen,false);
 
   // 2) Zware heatmap/contour/labels progressief per frame → UI blijft responsief
   const statusEl=document.getElementById("status");
