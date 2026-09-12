@@ -69,15 +69,16 @@ const MENU_PRODUCTS = [
   {
     "id": "satelliet",
     "name": "Satellietbeelden",
-    "description": "Wolken vanuit de ruimte · Meteosat",
+    "description": "Beste dag- en nachtbeeld · wolken, radar en timelapse",
     "category": "nu",
     "type": "nu",
     "section": "Beeld",
     "icon": "sat",
     "href": "index.html#satelliet",
+    "src": "satelliet.html?v=20260912-1",
     "thumbnail": null,
     "facets": {},
-    "keywords": "Satelliet HD MTG, AI-upscale ",
+    "keywords": "Satelliet Meteosat MTG wolken dag nacht mist GeoColour True Colour infrarood bronbeeld radar timelapse regio",
     "restricted": false
   },
   {
