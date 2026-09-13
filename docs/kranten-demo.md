@@ -16,10 +16,11 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 - De vijf versies gaan allemaal over heel Nederland; Parool wordt dus niet
   uitsluitend een Amsterdams weerbericht.
 - Volkskrant kort: maximaal 30 woorden, weer en temperatuur voor krant-vandaag
-  én krant-morgen. Volkskrant lang: rond 185. Trouw: rond 150. Parool en AD: rond
-  100. Richtmarge voor 'rond': 10% (afgeronde grenzen naar binnen).
-- Titel: 1–4 woorden. Dit valt binnen de tabel met 1–5 woorden én de strengere
-  voorbeeldprompt. Titel en auteursnaam tellen niet mee met het bericht.
+  én krant-morgen. Volkskrant lang: rond 185 woorden. Trouw: rond 1.000
+  karakters inclusief spaties. Parool en AD: rond 100 woorden. Richtmarge voor
+  'rond': 10%; voor Trouw bewaakt de teller daarom 900–1.100 karakters.
+- Titel: 1–5 woorden voor Volkskrant kort, Trouw, Parool en AD. Volkskrant lang
+  heeft geen titel. Titel en auteursnaam tellen niet mee met de tekstlengte.
 - Behoud onzekerheden en regionale verschillen. Voeg geen temperaturen,
   windgegevens, tijdstippen, oorzaken of weerwaarschuwingen toe die de bron niet
   onderbouwt. Geen opvulling om het gewenste aantal woorden te halen.
@@ -31,9 +32,10 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
   dragen dan duidelijk 'DEMO — GEEN ZONDAGSKRANT'. Maandag wordt pas op zondag
   gemaakt met een actuele zondagbron; verschuif de zaterdagbron niet naar maandag.
 - De gebruikersdeadline is **vóór 13.00 uur**, boven de 14.00 uur in het document.
-  Broncontrole en eventuele herziening dagelijks om 07, 08, 09, 10, 11 en 12 uur
-  Nederlandse tijd. Een controle zonder gewijzigde bron hoeft geen nieuwe tekst
-  op te leveren. De broncontroletijd en concepttijd blijven gescheiden.
+  Broncontrole en eventuele herziening vinden zeven dagen per week ieder halfuur
+  plaats van 07.00 tot en met 12.00 uur Nederlandse tijd. Een controle zonder
+  gewijzigde bron hoeft geen nieuwe tekst op te leveren. De broncontroletijd en
+  concepttijd blijven gescheiden.
 - Auteursnaam standaard Ed Aldus; dit is ook de auteur van de eerste bron.
 - Aanleveradressen en HQ zijn context. Geen mails versturen, HQ-berichten
   inplannen of publicaties naar kranten uitvoeren. Radio valt buiten deze taak.

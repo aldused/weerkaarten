@@ -22,10 +22,18 @@ class KrantenTest(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 9, 12, 7, tzinfo=k.TZ)
         self.source = k.parse_source(source_html(), self.now)
+        articles = {}
+        for key, (unit, low, _high) in k.LENGTH_RULES.items():
+            if unit == 'characters':
+                prefix = 'Vandaag morgen '
+                body = prefix + ('a' * (low - len(prefix) - 1)) + '.'
+            else:
+                body = 'Vandaag morgen ' + 'weer ' * (low - 3 if low > 3 else 1) + 'zon.'
+            articles[key] = {'title': '' if key == 'vk_lang' else 'Regen en zon', 'body': body}
         self.candidate = {
             'sourceId': self.source['id'], 'sourceDate':'2026-09-12', 'publicationDate':'2026-09-13',
             'demoOnly':True, 'author':'Ed Aldus', 'usedParagraphs':[1,2],
-            'articles': {key:{'title':'Regen en zon', 'body':'Vandaag morgen ' + 'weer '*(lo-3 if lo>3 else 1) + 'zon.'} for key,(lo,hi) in k.LIMITS.items()}
+            'articles': articles
         }
 
     def test_extracts_real_article_and_boundary(self):
@@ -61,11 +69,23 @@ class KrantenTest(unittest.TestCase):
         self.assertTrue(k.validate(self.candidate,self.source,self.now))
 
     def test_length_title_author_and_punctuation(self):
-        for field,value in [('title','Een veel te lange titel'),('body','Vandaag morgen '+ 'regen '*30+'.'),('body','Vandaag morgen regen , zon.')]:
+        for field,value in [('title','Een veel te lange titel vandaag'),('body','Vandaag morgen '+ 'regen '*30+'.'),('body','Vandaag morgen regen , zon.')]:
             with self.subTest(field=field,value=value):
                 candidate=copy.deepcopy(self.candidate);candidate['articles']['vk_kort'][field]=value
                 self.assertTrue(k.validate(candidate,self.source,self.now))
         self.candidate['author']=''
+        self.assertTrue(k.validate(self.candidate,self.source,self.now))
+
+    def test_trouw_counts_characters_including_spaces(self):
+        candidate=copy.deepcopy(self.candidate)
+        candidate['articles']['trouw']['body']='Vandaag ' + 'a' * 890 + '.'
+        errors=k.validate(candidate,self.source,self.now)
+        self.assertTrue(any('karakters inclusief spaties' in error for error in errors))
+
+    def test_title_rules_follow_newspaper_table(self):
+        self.candidate['articles']['ad']['title']='Veel zon maar soms buien'
+        self.assertEqual(k.validate(self.candidate,self.source,self.now),[])
+        self.candidate['articles']['vk_lang']['title']='Geen titel toegestaan'
         self.assertTrue(k.validate(self.candidate,self.source,self.now))
 
     def test_wrong_publication_date_rejected(self):

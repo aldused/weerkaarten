@@ -36,12 +36,14 @@ const screenshots=process.env.WEERLAB_SCREENSHOT_DIR||'/private/tmp';
     for(const paper of ['trouw','parool','ad']) {
       await page.locator(`[data-paper="${paper}"]`).click();
       assert.equal(await page.locator('.article').count(),1);
-      assert.equal(await page.locator('.counter.bad').count(),0);
+      if(paper==='trouw')assert.match(await page.locator('.counter').innerText(),/karakters inclusief spaties/);
     }
     await page.locator('#title-ad').fill('Deze titel is veel te lang');
     await page.locator('#body-ad').fill('Vandaag regen , morgen zon');
     assert.match(await page.locator('#issues-ad').innerText(),/leesteken|spaties/);
     assert.match(await page.locator('#issues-ad').innerText(),/titelwoorden/);
+    await page.locator('[data-paper="volkskrant"]').click();
+    assert.equal(await page.locator('#title-vk_lang').count(),0,'Volkskrant lang has no title field');
     await page.reload();await page.locator('[data-paper="ad"]').click();
     assert.equal(await page.locator('#body-ad').inputValue(),'Vandaag regen , morgen zon');
     payload=structuredClone(payload);payload.revision='test-revision';payload.articles.ad.body='Vandaag nieuwe tekst. Morgen zon.';

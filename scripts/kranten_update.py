@@ -21,7 +21,20 @@ DATA = ROOT / 'data'
 TZ = ZoneInfo('Europe/Amsterdam')
 URL = 'https://www.buienradar.nl/nederland/weerbericht/weerbericht'
 MONTHS = 'januari februari maart april mei juni juli augustus september oktober november december'.split()
-LIMITS = {'vk_kort': (1, 30), 'vk_lang': (167, 203), 'trouw': (135, 165), 'parool': (90, 110), 'ad': (90, 110)}
+LENGTH_RULES = {
+    'vk_kort': ('words', 1, 30),
+    'vk_lang': ('words', 167, 203),
+    'trouw': ('characters', 900, 1100),
+    'parool': ('words', 90, 110),
+    'ad': ('words', 90, 110),
+}
+TITLE_LIMITS = {
+    'vk_kort': (1, 5),
+    'vk_lang': (0, 0),
+    'trouw': (1, 5),
+    'parool': (1, 5),
+    'ad': (1, 5),
+}
 
 
 def atomic_json(path, value):
@@ -106,6 +119,10 @@ def words(value):
     return len(value.split())
 
 
+def measured_length(value, unit):
+    return len(value) if unit == 'characters' else words(value)
+
+
 def validate(candidate, source, now):
     errors = []
     if candidate.get('sourceId') != source['id']:
@@ -123,18 +140,21 @@ def validate(candidate, source, now):
     if not used or not set(used).issubset(source['eligibleParagraphs']):
         errors.append('Bronverwijzing bevat vandaag/nacht of ontbreekt.')
     articles = candidate.get('articles', {})
-    if not isinstance(articles, dict) or set(articles) != set(LIMITS):
+    if not isinstance(articles, dict) or set(articles) != set(LENGTH_RULES):
         return errors + ['Precies vijf krantversies vereist.']
-    for key, (low, high) in LIMITS.items():
+    for key, (unit, low, high) in LENGTH_RULES.items():
         item = articles[key]
         if not isinstance(item, dict) or not all(isinstance(item.get(x), str) for x in ('title', 'body')):
             errors.append(key + ': ongeldige titel of tekst.')
             continue
         title, body = item['title'].strip(), item['body'].strip()
-        if not 1 <= words(title) <= 4:
-            errors.append(key + ': titel moet 1–4 woorden bevatten.')
-        if not low <= words(body) <= high:
-            errors.append(f'{key}: {words(body)} woorden, verwacht {low}–{high}.')
+        title_low, title_high = TITLE_LIMITS[key]
+        if not title_low <= words(title) <= title_high:
+            errors.append(key + (': geen titel gebruiken.' if title_high == 0 else ': titel moet 1–5 woorden bevatten.'))
+        length = measured_length(body, unit)
+        if not low <= length <= high:
+            label = 'karakters inclusief spaties' if unit == 'characters' else 'woorden'
+            errors.append(f'{key}: {length} {label}, verwacht {low}–{high}.')
         if not re.match(r'^Vandaag\b', body):
             errors.append(key + ': begin bij vandaag vanuit de krantdatum.')
         if key == 'vk_kort' and not re.search(r'\bmorgen\b', body, re.I):
@@ -192,7 +212,7 @@ def main():
                     atomic_json(archive, previous)
                 atomic_json(current, candidate)
                 atomic_json(DATA / 'kranten_status.json', {'checkedAt': now.isoformat(), 'ok': True, 'sourceId': source['id'], 'message': 'Concepten bijgewerkt.'})
-            print('OK: krantdatum, vijf versies, bronverwijzing, woordenaantallen, titels en basisleestekens gecontroleerd.')
+            print('OK: krantdatum, vijf versies, bronverwijzing, tekstlengtes, titels en basisleestekens gecontroleerd.')
     except Exception as error:
         if args.command in {'fetch', 'publish'}:
             atomic_json(DATA / 'kranten_status.json', {'checkedAt': now.isoformat(), 'ok': False, 'message': str(error)})
