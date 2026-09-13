@@ -24,6 +24,21 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 - Behoud onzekerheden en regionale verschillen. Voeg geen temperaturen,
   windgegevens, tijdstippen, oorzaken of weerwaarschuwingen toe die de bron niet
   onderbouwt. Geen opvulling om het gewenste aantal woorden te halen.
+- Benut de beschikbare ruimte voor een prettig leesbaar bericht. Richt op ongeveer
+  185–195 woorden voor Volkskrant lang, 1.000 karakters voor Trouw en 100–110
+  woorden voor Parool en AD; de bestaande bovengrenzen blijven gelden. Laat bij
+  voldoende inhoud niet onnodig veel ruimte liggen. Een korte praktische zin mag,
+  bijvoorbeeld een paraplu meenemen bij verwachte regen. Houd het advies passend
+  bij de genoemde regio, dag en onzekerheid; voeg daarmee geen nieuwe weerfeiten toe.
+  Gebruik zo'n praktische of licht speelse zin af en toe, niet standaard in iedere
+  editie of elke versie. Het is geen verplicht onderdeel. Natuurlijk taalgebruik
+  en relevante informatie gaan vóór het opvullen van de beschikbare ruimte.
+- Verwerk relevante kalendergebeurtenissen subtiel als die het bericht herkenbaar
+  maken. Controleer datum en weekdag bij een officiële bron. Prinsjesdag 2026 is
+  dinsdag 15 september (https://www.rijksoverheid.nl/themas/overheid-en-democratie/prinsjesdag).
+  In de maandagkrant is dat 'morgen, op Prinsjesdag'; in de dinsdagkrant 'vandaag,
+  op Prinsjesdag'. Leid uit landelijke verwachtingen geen specifiek weer voor de
+  stoet in Den Haag af. Varieer formuleringen en vermijd geforceerde grapjes.
 - Schrijf vloeiend Nederlands in volledige zinnen. Controleer hoofdletters,
   interpunctie, alinea's, dubbele woorden en spaties. De automatische controle
   detecteert alleen basale fouten en vervangt deze redactionele controle niet.
