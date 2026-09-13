@@ -94,7 +94,6 @@
     if (count<spec.min||count>spec.max) list.push(key==='vk_kort'?'Tekst moet 1–30 woorden bevatten.':'Richtlengte: '+number(spec.min)+'–'+number(spec.max)+' '+unit(spec,count)+'.');
     if (spec.title && (words(item.title)<1||words(item.title)>5)) list.push('Gebruik 1–5 titelwoorden.');
     if (!data.author.trim()) list.push('Vul de auteursnaam in.');
-    if (!/^Vandaag\b/u.test(item.body.trim())) list.push('Begin bij ‘Vandaag’ vanuit de krantdatum.');
     if (key==='vk_kort'&&!/\bmorgen\b/iu.test(item.body)) list.push('Neem ook morgen op.');
     if (/\bovermorgen\b/iu.test(item.body)) list.push('Controleer de dag: gebruik een weekdag of de dagen erna.');
     if (!/[.!?]$/u.test(item.body.trim())) list.push('Sluit de tekst af met een leesteken.');

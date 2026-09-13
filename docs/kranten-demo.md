@@ -27,6 +27,14 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 - Schrijf vloeiend Nederlands in volledige zinnen. Controleer hoofdletters,
   interpunctie, alinea's, dubbele woorden en spaties. De automatische controle
   detecteert alleen basale fouten en vervangt deze redactionele controle niet.
+- Volg de toon van de aangeleverde voorbeelden: helder krantennederlands dat
+  prettig leest en tegelijk zakelijk blijft. Schrijf concreet en actief, varieer
+  korte en langere zinnen en bouw chronologisch op van het krantweer van vandaag
+  naar morgen en de dagen erna. Vermijd vakjargon, ambtelijke formuleringen,
+  herhaling, een droge opsomming en sensationele taal.
+- Een bericht hoeft niet met het woord 'Vandaag' te beginnen. Kies een natuurlijke,
+  informatieve opening, bijvoorbeeld met het belangrijkste weerbeeld. Zorg wel
+  dat de tijdlijn voor de krantlezer ondubbelzinnig blijft.
 - Er is geen zondagskrant. Op zaterdag mag de dagelijkse cyclus een voorbeeld
   voor zondag maken, maar uitsluitend met `demoOnly: true`. De pagina en exports
   dragen dan duidelijk 'DEMO — GEEN ZONDAGSKRANT'. Maandag wordt pas op zondag

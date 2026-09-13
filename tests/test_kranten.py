@@ -88,6 +88,11 @@ class KrantenTest(unittest.TestCase):
         self.candidate['articles']['vk_lang']['title']='Geen titel toegestaan'
         self.assertTrue(k.validate(self.candidate,self.source,self.now))
 
+    def test_natural_opening_does_not_have_to_start_with_today(self):
+        body=self.candidate['articles']['ad']['body']
+        self.candidate['articles']['ad']['body']=body.replace('Vandaag morgen','Zon en wolken',1)
+        self.assertEqual(k.validate(self.candidate,self.source,self.now),[])
+
     def test_wrong_publication_date_rejected(self):
         self.candidate['publicationDate']='2026-09-14'
         self.assertTrue(k.validate(self.candidate,self.source,self.now))

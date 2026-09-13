@@ -155,8 +155,6 @@ def validate(candidate, source, now):
         if not low <= length <= high:
             label = 'karakters inclusief spaties' if unit == 'characters' else 'woorden'
             errors.append(f'{key}: {length} {label}, verwacht {low}–{high}.')
-        if not re.match(r'^Vandaag\b', body):
-            errors.append(key + ': begin bij vandaag vanuit de krantdatum.')
         if key == 'vk_kort' and not re.search(r'\bmorgen\b', body, re.I):
             errors.append(key + ': weer voor de volgende krantdag ontbreekt.')
         if not re.search(r'[.!?]$', body) or re.search(r'[,;:!?]{2,}|\S[ \t]+[,.;:!?]|[.!?][A-Za-zÀ-ÿ]', body):
