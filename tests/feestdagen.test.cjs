@@ -1,7 +1,11 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'), html=fs.readFileSync(path.join(root,'feestdagen_weer.html'),'utf8');
 for(const [,attrs,body] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) if(!/\bsrc=/.test(attrs))new vm.Script(body);
-const DATA=JSON.parse(fs.readFileSync(path.join(root,'feestdagen_data.json'),'utf8'));
+// Synthetic conflicting station records remain stable when the live archive grows.
+const DATA={stations:{260:{naam:'De Bilt'},235:{naam:'De Kooy'}},data:{
+ 260:{Prinsjesdag:[{jaar:2020,datum:'2020-09-15',TX:351,TN:80,RH:15,SQ:100,FG:60,FX:100}]},
+ 235:{Prinsjesdag:[{jaar:2020,datum:'2020-09-15',TX:121,TN:-12,RH:434,SQ:118,FG:150,FX:280}]}
+}};
 const dom={
  'periode-select':{value:'all'},'jaar-enkel':{value:'2026'},'jaar-van':{value:'2025'},'jaar-tot':{value:'1901'},
  'stat-grid':{innerHTML:'',children:[],appendChild(x){this.children.push(x)}},

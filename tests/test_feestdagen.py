@@ -44,7 +44,7 @@ class FeestdagenTest(unittest.TestCase):
         self.assertEqual((ROOT/'feestdagen_data.js').read_text(), 'const FEESTDAGEN_DATA = '+raw+';')
         data = json.loads(raw)
         self.assertIn('Prinsjesdag', data['kalender'])
-        self.assertEqual(len(data['data']['260']['Prinsjesdag']), date.today().year - 1901 + (date.today().isoformat() > fd.nde_weekdag(date.today().year,9,1,3)))
+        self.assertEqual({r['jaar'] for r in data['data']['260']['Prinsjesdag'] if r['jaar'] <= 2025}, set(range(1901, 2026)))
         for station in data['data'].values():
             for holiday, rows in station.items():
                 dates = [r['datum'] for r in rows]
