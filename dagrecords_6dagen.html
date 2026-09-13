@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="nl" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -63,11 +63,13 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
 </style>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
 <script src="klimaat.js?v=20260908-2"></script>
+<link rel="stylesheet" href="records-ui.css?v=20260913-1">
+<script defer src="records-ui.js?v=20260913-1"></script>
 </head>
 <body class="climate-page climate-dagrecords_6dagen">
 <section class="climate-heading" aria-labelledby="climate-title">
   <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
-  <div class="climate-heading-row"><div><h1 id="climate-title">Dagrecords</h1><p>De hoogste gemeten temperatuur voor de komende zes kalenderdagen.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
+  <div class="climate-heading-row"><div><h1 id="climate-title">Dagrecords</h1><p>Historische maximumtemperaturen per kalenderdag. Kies een datum en bekijk de kaarten of de ranglijst.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
   <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>Dit zijn historische records, geen weersverwachtingen. Kaartkleuren gebruiken voor alle zes dagen dezelfde schaal. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
 </section>
 
@@ -76,7 +78,12 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
   <p id="hdr-sub">Laden…</p>
 </div>
 <div class="legenda" id="legenda"></div>
-<div class="toolbar">
+<div class="toolbar record-day-controls">
+  <label for="record-start">Vanaf kalenderdag <input type="date" id="record-start"></label>
+  <div class="record-step"><button id="record-prev" type="button">← Vorige dag</button><button id="record-today" type="button">Vandaag</button><button id="record-next" type="button">Volgende dag →</button></div>
+  <label for="record-view">Weergave <select id="record-view"><option value="maps">Kaarten · 6 dagen</option><option value="table">Ranglijst · gekozen dag</option></select></label>
+</div>
+<div class="toolbar" id="record-map-size">
   <label for="zoom-slider">Kaartgrootte</label>
   <input type="range" id="zoom-slider" min="700" max="2600" value="1180" step="20"
          oninput="stelGrootteIn(this.value)">
@@ -86,17 +93,16 @@ body { font-family: "DM Sans", sans-serif; background: #f0f4f8; color: #0f172a; 
 <div class="kaarten-wrap">
   <div class="kaarten-grid" id="kaarten-grid"></div>
 </div>
+<section class="record-day-table" id="record-day-ranking" hidden>
+<h2 id="record-day-title">Dagrecords per station</h2>
+<div class="table-wrap"><table id="record-day-table"><thead><tr><th>#</th><th>Station</th><th>Maximumtemperatuur (°C)</th><th>Datum record</th></tr></thead><tbody id="record-day-rows"></tbody></table></div>
+</section>
 <div class="status" id="status">Laden…</div>
 <div class="footer" id="footer">weerlab.nl · © Ed Aldus WM · KNMI dagrecords</div>
 
 <script src="nl_grens_coords.js"></script>
 <script>
-(function(){
-  function apply(t){ document.documentElement.setAttribute("data-theme", t==="dark"?"dark":"light"); }
-  var saved="light"; try { saved=localStorage.getItem("weerlab_theme")||"light"; } catch{}
-  apply(saved);
-  window.addEventListener("storage",function(e){ if(e.key==="weerlab_theme") apply(e.newValue); });
-})();
+// Record tables use a light reading surface, independently of the site navigation.
 
 // ── Geo-projectie (zelfde als alle weerlab NL-kaarten) ───────────────────────
 const LON_MIN=3.3, LON_MAX=7.4, LAT_MIN=50.45, LAT_MAX=53.8;
@@ -418,14 +424,15 @@ function haalDagrecords(){
     .then(r=>{ if(!r.ok) throw 0; return r.json(); })
     .catch(()=>fetch(fallback+"?t="+Date.now()).then(r=>r.json()));
 }
-haalDagrecords().then(data=>{
+let recordDayData=null;
+function renderDagrecords(data){
   window.weerlabClimateStatus({through:data.lopend, generated:data.gegenereerd, note:"historische records, geen verwachting"});
   maakLandMask();
   const stations=data.stations, recs=data.dagrecords;
   const grid=document.getElementById("kaarten-grid"); grid.innerHTML="";
 
   // 6 kalenderdagen vanaf vandaag (of ?start=YYYY-MM-DD om te previewen)
-  const qStart=new URLSearchParams(location.search).get("start");
+  const qStart=document.getElementById("record-start").value;
   const vandaag = qStart ? new Date(qStart+"T12:00:00") : new Date();
   vandaag.setHours(12,0,0,0);
   const dagen=[];
@@ -440,7 +447,22 @@ haalDagrecords().then(data=>{
   if(isFinite(lo)){ SCHAAL=[Math.floor(lo-1),Math.ceil(hi+0.5)]; }
   tekenLegenda();
 
-  for(const d of dagen) grid.appendChild(bouwKaart(stations,d.rec,d.key,d.dt));
+  if(document.getElementById("record-view").value==='maps') {
+    for(const d of dagen) grid.appendChild(bouwKaart(stations,d.rec,d.key,d.dt));
+  }
+  const chosen=dagen[0];
+  document.getElementById('record-day-title').textContent='Hoogste maximumtemperatuur · '+chosen.dt.getDate()+' '+NL_MAAND[chosen.dt.getMonth()];
+  const rows=document.getElementById('record-day-rows');rows.replaceChildren();
+  let vorigeDagTemp=null, vorigeDagRang=0;
+  Object.entries(chosen.rec).sort((a,b)=>b[1].t-a[1].t||a[0].localeCompare(b[0],'nl')).forEach(([name,rec],i)=>{
+    const rang=i>0&&Number(rec.t)===vorigeDagTemp?vorigeDagRang:i+1;
+    vorigeDagTemp=Number(rec.t);vorigeDagRang=rang;
+    const row=document.createElement('tr');
+    for(const text of [rang,name,Number(rec.t).toFixed(1).replace('.',','),rec.d.split('-').reverse().join('-')]){
+      const cell=document.createElement('td');cell.textContent=text;row.append(cell);
+    }
+    rows.append(row);
+  });
 
   document.getElementById("status").textContent="";
   const gen=(data.gegenereerd||"").replace("T"," ").replace("+00:00"," UTC");
@@ -451,7 +473,28 @@ haalDagrecords().then(data=>{
     (histAantal?` · incl. ${histAantal} historische/opgeheven locaties`:"")+
     (lop?` <span class="badge-lopend">incl. lopende metingen t/m ${lop}</span>`:"");
   document.getElementById("footer").textContent="weerlab.nl · © Ed Aldus WM · KNMI dagrecords (incl. lopende EDR) · "+gen;
-}).catch(e=>{ document.getElementById("status").textContent="Kon data niet laden: "+e.message; });
+}
+function recordDateValue(date){return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');}
+const startInput=document.getElementById('record-start');
+const startQuery=new URLSearchParams(location.search).get('start');
+startInput.value=startQuery&&/^\d{4}-\d{2}-\d{2}$/.test(startQuery)&&Number.isFinite(Date.parse(startQuery))?startQuery:recordDateValue(new Date());
+function updateRecordDays(){
+  if(!startInput.value||!startInput.validity.valid)return;
+  const table=document.getElementById('record-view').value==='table';
+  document.getElementById('record-day-ranking').hidden=!table;
+  document.querySelector('.kaarten-wrap').hidden=table;
+  document.getElementById('legenda').hidden=table;
+  document.getElementById('record-map-size').hidden=table;
+  const url=new URL(location.href);url.searchParams.set('start',startInput.value);history.replaceState(null,'',url);
+  if(recordDayData)renderDagrecords(recordDayData);
+}
+startInput.addEventListener('change',updateRecordDays);
+document.getElementById('record-view').addEventListener('change',updateRecordDays);
+for(const [id,delta] of [['record-prev',-1],['record-next',1]])document.getElementById(id).addEventListener('click',()=>{
+  const date=new Date(startInput.value+'T12:00:00');date.setDate(date.getDate()+delta);startInput.value=recordDateValue(date);updateRecordDays();
+});
+document.getElementById('record-today').addEventListener('click',()=>{startInput.value=recordDateValue(new Date());updateRecordDays();});
+haalDagrecords().then(data=>{recordDayData=data;updateRecordDays();}).catch(e=>{document.getElementById('status').textContent='Kon data niet laden. Vernieuw de pagina om opnieuw te proberen.';});
 </script>
 </body>
 </html>

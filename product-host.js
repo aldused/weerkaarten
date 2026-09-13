@@ -37,7 +37,12 @@
       if(url.origin!==location.origin || !/\/(?:index(?:\.html)?)?$/.test(url.pathname))return;
       event.preventDefault();
       parent.postMessage({type:'weerlab-product-route',hash:url.hash||'#home',title:'Weerlab'},location.protocol==='file:'?'*':location.origin);
-      if(url.hash && !url.hash.startsWith('#menu/')) openHashRoute(url.hash);
+      if(url.hash && !url.hash.startsWith('#menu/')) {
+        // Keep the host route in sync before its title observer reports it.
+        // Otherwise a record-page link opens correctly, then restores the old URL.
+        history.replaceState(null,'',url.hash);
+        openHashRoute(url.hash);
+      }
     },true);
     doc.addEventListener('load', event=>{if(event.target.tagName==='IFRAME'){try{wireLinks(event.target.contentDocument);}catch{}}},true);
     doc.querySelectorAll('iframe').forEach(frame=>{try{wireLinks(frame.contentDocument);}catch{}});

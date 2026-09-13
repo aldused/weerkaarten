@@ -38,6 +38,7 @@ WARM_RAW = """
 8 februari 1990: Epen 15,4°C
 
 == Februari 2 ==
+18 februari 1950: Maastricht Caberg 19,6°C
 18 februari 1950: Buchten 19,2°C
 17 februari 1961: Ermelo 19,1°C
 14 februari 1961: Maastricht Caberg 18,8°C

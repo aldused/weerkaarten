@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="nl" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -137,21 +137,17 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
 [data-theme="dark"] .rk{color:#64748b}
 </style>
 <script>
-  (function(){
-    function apply(t){ document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light"); }
-    var saved = "light"; try { saved = localStorage.getItem("weerlab_theme") || "light"; } catch {}
-    apply(saved);
-    window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
-  })();
+  // Record tables use a light reading surface, independently of the site navigation.
 </script>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
 <script src="klimaat.js?v=20260908-2"></script>
+<link rel="stylesheet" href="records-ui.css?v=20260913-1">
+<script defer src="records-ui.js?v=20260913-1"></script>
 </head>
 <body class="climate-page climate-p13_records">
 <section class="climate-heading" aria-labelledby="climate-title">
-  <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
-  <div class="climate-heading-row"><div><h1 id="climate-title">Landelijke neerslag · P13</h1><p>Vergelijk natte en droge dagen, maanden, seizoenen en jaren.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
-  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>P13 is het gemiddelde van dertien neerslagstations, met minimaal tien beschikbare stations. Een meetdag loopt van 08:00 UTC op de vorige dag tot 08:00 UTC op de vermelde datum. Brongegevens kunnen later beschikbaar komen. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
+<a class="climate-back" href="index.html#menu/terugkijken">← Terugkijken</a>
+<div class="climate-heading-row"><div><h1 id="climate-title">Landelijke neerslag · P13</h1><p>Zoek de natste en droogste perioden in het gemiddelde van 13 neerslagstations.</p></div></div>
 </section>
 <header>
   <div>
@@ -165,10 +161,10 @@ footer{text-align:center;padding:20px;color:#94a3b8;font-size:11px;font-family:"
 <div class="container">
   <div id="loading">Gegevens laden...</div>
   <div id="content" style="display:none">
-    <details class="info"><summary>Meetnet &amp; meetperiode</summary>
+    <div class="info">
       <strong>P13 neerslaggemiddelde</strong> &mdash; Dagelijks gemiddelde van 13 representatieve KNMI-neerslagstations. Meting: 08:00 UTC vorige dag t/m 08:00 UTC vermelde datum. Minimum <strong>10</strong> stations vereist.
       <div class="sl" id="sl"></div>
-    </details>
+    </div>
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="records">Records</button>
       <button class="tab-btn" data-tab="vrij">Vrije periode</button>
@@ -275,12 +271,12 @@ fetch("p13_records.json?t=" + Date.now(), {cache:"no-store"})
   });
 
 function render(D) {
-  window.weerlabClimateStatus({through:D.meta.periode_eind, generated:D.meta.gegenereerd, maxAgeDays:7, note:"P13-brongegevens verschijnen met vertraging"});
   document.getElementById("loading").style.display = "none";
   document.getElementById("content").style.display = "block";
   var rec = D.records;
   var jaarData = D.jaaroverzicht;
   document.getElementById("hmeta").textContent = "Periode: " + D.meta.periode_start + " – " + D.meta.periode_eind + " · " + D.meta.gegenereerd;
+  window.weerlabClimateStatus({through:D.meta.periode_eind,generated:D.meta.gegenereerd,maxAgeDays:7,note:"P13-brongegevens verschijnen met vertraging"});
   var sl = document.getElementById("sl");
   Object.entries(D.meta.stations).sort(function(a, b) { return a[1].localeCompare(b[1]); }).forEach(function(e) {
     var s = document.createElement("span"); s.className = "sb"; s.textContent = e[1] + " (" + e[0] + ")"; sl.appendChild(s);
@@ -289,12 +285,15 @@ function render(D) {
     var card = document.createElement("div"); card.className = "rc";
     var hdr = document.createElement("div"); hdr.className = "rh " + type; hdr.textContent = title; card.appendChild(hdr);
     var tbl = document.createElement("table"); tbl.className = "rt";
+    const head = tbl.createTHead().insertRow();
+    for (const label of ['#','Periode','Neerslag (mm)']) { const th=document.createElement('th');th.textContent=label;head.appendChild(th); }
+    const body = tbl.createTBody();
     rows.forEach(function(r, i) {
       var tr = document.createElement("tr");
       var td1 = document.createElement("td"); td1.className = "rk"; td1.textContent = i + 1;
       var td2 = document.createElement("td"); td2.className = "lb"; td2.textContent = r.label;
       var td3 = document.createElement("td"); td3.className = "vl" + (type === "droog" ? " d" : ""); td3.textContent = r.waarde + " mm";
-      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tbl.appendChild(tr);
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); body.appendChild(tr);
     });
     card.appendChild(tbl); return card;
   }

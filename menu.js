@@ -66,7 +66,9 @@
     const raw=site.routeAliases?.[incoming] ?? incoming;
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
-      const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw);
+      const recordParent={'dagrecords-jaar':'dagrecords',dagrecordsjaar:'dagrecords',droog668:'neerslag668'};
+      const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw)
+        || products.find(p=>p.id===recordParent[raw]);
       if(site.directProducts && !product)return {page:'start',type:'',filters:{},q:''};
       return {page:product?.category || 'start',type:product?.type || '',filters:{},q:'',productRoute:raw,product};
     }
@@ -357,7 +359,7 @@
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
       frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260912-mini5#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20260913-records-1#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
