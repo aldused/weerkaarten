@@ -17,7 +17,9 @@ def replace(old, new):
         raise ValueError(f'Expected one integration anchor: {old[:100]}')
     s = s.replace(old, new, 1)
 
-imports = 'import {createWeatherIcon,WEATHER_ICON_LABELS} from "../editor-src/weather-icons.js?v=20260909-icons1";\nimport {createLandelijkeStudio} from "../editor-src/landelijke-studio.js?v=20260909-regio1";\n'
+s = s.replace('weather-icons.js?v=20260909-icons1', 'weather-icons.js?v=20260913-rain1')
+s = s.replace('landelijke-studio.js?v=20260909-regio1', 'landelijke-studio.js?v=20260913-rain1')
+imports = 'import {createWeatherIcon,WEATHER_ICON_LABELS} from "../editor-src/weather-icons.js?v=20260913-rain1";\nimport {createLandelijkeStudio} from "../editor-src/landelijke-studio.js?v=20260913-rain1";\n'
 if imports not in s:
     s = imports + s
 replace('Lt=({type:e,s:A=250})=>', 'LegacyLt=({type:e,s:A=250})=>')

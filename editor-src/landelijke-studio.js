@@ -1,6 +1,6 @@
 // Presentation layer for the existing editor. All weather, drawing, history and
 // export callbacks stay owned by the original React application.
-import {createWeatherIcon, WEATHER_ICON_LABELS, WEATHER_ICON_BASICS} from './weather-icons.js?v=20260909-icons1';
+import {createWeatherIcon, WEATHER_ICON_LABELS, WEATHER_ICON_BASICS} from './weather-icons.js?v=20260913-rain1';
 export const STUDIO_TABS = [
   { id: 'data', label: 'Weergegevens', icon: 'cloud' },
   { id: 'add', label: 'Toevoegen', icon: 'plus' },

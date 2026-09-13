@@ -89,8 +89,12 @@ export function createWeatherIcon(React, LegacyIcon) {
     function flake(x,y,size=6) {
       return h('g',{transform:`translate(${x} ${y})`,stroke:'#bce9fc',strokeWidth:1.7,fill:'none'},[0,60,120].map(a=>h('g',{key:a,transform:`rotate(${a})`},line(-size,0,size,0),path(`M${-size+2}-2 ${-size+3.5} 0 ${-size+2} 2M${size-2}-2 ${size-3.5} 0 ${size-2} 2`))));
     }
-    function drop(x,y,scale=1) {
-      return path('M3-6-2 5',{transform:`translate(${x} ${y}) scale(${scale})`,fill:'none',stroke:'#51b9e5',strokeWidth:3.4});
+    function drop(x,y,scale=1,drizzle=false) {
+      const d=drizzle?'M.6-1.4-.6 1.4':'M3-6-2 5';
+      // A narrow white edge separates the blue from both land and water, also in PNG exports.
+      return h('g',{transform:`translate(${x} ${y}) scale(${scale})`,fill:'none'},
+        path(d,{stroke:'#fff',strokeOpacity:drizzle?.65:.8,strokeWidth:drizzle?1.35:4.1}),
+        path(d,{stroke:drizzle?'#8bdffc':'#51b9e5',strokeWidth:drizzle?.95:3.4}));
     }
     if(spec.sun) nodes.push(spec.clear?sun(48,46,20):sun(spec.cirrus?43:31,spec.cirrus?48:30,spec.cirrus?18:15));
     if(spec.moon) {
@@ -119,7 +123,7 @@ export function createWeatherIcon(React, LegacyIcon) {
     if(spec.snow) nodes.push(h('g',null,Array.from({length:spec.snow},(_,i)=>h('g',{key:i},flake(48+(i-(spec.snow-1)/2)*16,77,spec.snow>3?5:6)))));
     if(spec.hail) nodes.push(h('g',null,Array.from({length:spec.hail},(_,i)=>circle(48+(i-(spec.hail-1)/2)*(spec.standalone?20:17),spec.standalone?49:77,spec.standalone?7:4.5,{key:i,fill:'#e9faff',stroke:'#6dc9ed',strokeWidth:2}))));
     if(spec.mixed) nodes.push(drop(37,77),flake(61,77,7));
-    if(spec.drizzle) nodes.push(h('g',null,[31,47,63].flatMap(x=>[circle(x,73,2,{key:x,fill:'#8bdffc',stroke:'#dbf7ff',strokeWidth:.6}),circle(x-3,82,2,{key:x+100,fill:'#8bdffc',stroke:'#dbf7ff',strokeWidth:.6})])));
+    if(spec.drizzle) nodes.push(h('g',null,[32,43,54,65].flatMap(x=>[h('g',{key:x},drop(x,73,1,true)),h('g',{key:x+100},drop(x-3,81,1,true))])));
     if(spec.thunder) nodes.push(path('M48 51h13L50 68h10L38 91l7-21H35Z',{fill:'#fac644',stroke:'#b7872f',strokeWidth:.65,transform:spec.standalone?(spec.small?'translate(17 1) scale(.65)':'translate(-5 -38) scale(1.15)'):'translate(0 -2)'}));
     if(spec.fog) {
       const y=spec.cloud?72:48-(spec.fog-1)*6;
