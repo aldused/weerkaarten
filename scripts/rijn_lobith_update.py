@@ -6,13 +6,14 @@ uit de nieuwe RWS WaterWebservices (DDAPI 2.0).
 Schrijft rijn_lobith.json voor demo_rijn_lobith.html:
   - nu:      laatste geldige 10-min meting (afvoer m3/s)
   - reeks:   dagwaarden (etmaalgemiddelde) laatste ~60 dagen
-  - drempels + historie: gecureerde referenties (zie ONDER)
+  - drempels: OLA reference; no fixed alarm or unsupported historical records
 
 Bron: https://ddapi20-waterwebservices.rijkswaterstaat.nl
 Grootheid Q (Debiet), Compartiment OW, locatie lobith.bovenrijn.tolkamer.
 De klassieke waterwebservices.rijkswaterstaat.nl is per eind april 2026 gestopt.
 """
-import os, json, datetime
+import os, json, datetime, math, tempfile
+from zoneinfo import ZoneInfo
 from collections import defaultdict
 import urllib.request
 
@@ -25,14 +26,22 @@ SENTINEL = 100000          # RWS mist-waarde (999999999) eruit filteren
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(SCRIPT_DIR, "rijn_lobith.json")
 
-# Gecureerde referentiedrempels + historische laagterecords (m3/s).
-# Bron: Rijkswaterstaat Waterinfo / waterberichtgeving.rws.nl.
-DREMPELS = {"gemiddeld": 2200, "ola": 1020, "alarm": 800, "record": 620}
-HISTORIE = [
-    {"jaar": 1947, "q": 620, "note": "record - laagste ooit"},
-    {"jaar": 2018, "q": 732, "note": "okt - laagste sinds 1901 (toen)"},
-    {"jaar": 2022, "q": 650, "note": "aug - naderde record"},
-]
+# OLA is a navigation reference, not a stand-alone alarm threshold.
+# https://open.rijkswaterstaat.nl/%40253564/olr-2022-bepaling-overeengekomen-lage/
+DREMPELS = {"ola": 1020}
+NL = ZoneInfo("Europe/Amsterdam")
+
+
+def meettijd(value):
+    try:
+        result = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return result.astimezone(datetime.timezone.utc) if result.tzinfo else None
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def geldige_waarde(value, afvoer=False):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and abs(value) < SENTINEL and (not afvoer or value >= 0)
 
 
 def _post(url: str, body: dict, timeout: int = 120) -> dict:
@@ -64,11 +73,11 @@ def haal_afvoer() -> list:
         for m in reeks.get("MetingenLijst", []):
             tijd = m.get("Tijdstip")
             w = (m.get("Meetwaarde") or {}).get("Waarde_Numeriek")
-            if tijd is None or w is None:
+            if meettijd(tijd) is None or not geldige_waarde(w, afvoer=True):
                 continue
             if abs(w) >= SENTINEL:
                 continue
-            out.append((tijd, float(w)))
+            out.append((meettijd(tijd).isoformat(), float(w)))
     # dedupe op tijdstip, sorteer
     uniek = {t: w for t, w in out}
     return sorted(uniek.items())
@@ -94,21 +103,33 @@ def haal_waterstand() -> tuple | None:
         for m in reeks.get("MetingenLijst", []):
             w = (m.get("Meetwaarde") or {}).get("Waarde_Numeriek")
             t = m.get("Tijdstip")
-            if t is None or w is None or abs(w) >= SENTINEL:
+            if meettijd(t) is None or not geldige_waarde(w):
                 continue
+            t = meettijd(t).isoformat()
             if laatste is None or t > laatste[0]:
                 laatste = (t, float(w))
     return laatste
 
 
 def dagwaarden(metingen: list) -> list:
-    """Etmaalgemiddelde per kalenderdag (lokale datum uit ISO-tijdstip)."""
-    per_dag = defaultdict(list)
+    """Mean of available observations per Dutch day, with explicit coverage."""
+    per_dag = defaultdict(dict)
     for tijd, w in metingen:
-        datum = tijd[:10]  # YYYY-MM-DD (lokale tijd in RWS-respons)
-        per_dag[datum].append(w)
-    rijen = [{"d": d, "q": round(sum(v) / len(v))} for d, v in sorted(per_dag.items())]
-    return rijen
+        instant = meettijd(tijd)
+        if instant is None or not geldige_waarde(w, afvoer=True):
+            continue
+        datum = instant.astimezone(NL).date()
+        per_dag[datum][instant] = w
+    rows = []
+    for datum, readings in sorted(per_dag.items()):
+        start = datetime.datetime.combine(datum, datetime.time(), NL).astimezone(datetime.timezone.utc)
+        end = datetime.datetime.combine(datum + datetime.timedelta(days=1), datetime.time(), NL).astimezone(datetime.timezone.utc)
+        expected = int((end - start).total_seconds() / 600)
+        slots = {int((t - start).total_seconds() // 600) for t in readings}
+        rows.append({"d": datum.isoformat(), "q": round(sum(readings.values()) / len(readings)),
+                     "aantal": len(readings), "verwacht": expected,
+                     "volledig": len(slots) == expected})
+    return rows
 
 
 def main():
@@ -134,10 +155,12 @@ def main():
         "nu": nu,
         "reeks": reeks,
         "drempels": DREMPELS,
-        "historie": HISTORIE,
     }
-    with open(OUT, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=2)
+    # Readers must never observe a partly written JSON document.
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=SCRIPT_DIR, suffix=".json.tmp", delete=False) as f:
+        json.dump(out, f, ensure_ascii=False, indent=2, allow_nan=False)
+        temp_path = f.name
+    os.replace(temp_path, OUT)
 
     print(f"Geschreven: {OUT}")
     print(f"  nu: {out['nu']['afvoer']} m3/s @ {laatste_tijd}")

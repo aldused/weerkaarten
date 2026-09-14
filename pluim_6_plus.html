@@ -961,6 +961,12 @@ function cutoffLengthForDataEnd(times, dataEndMs) {
   }
   return count;
 }
+async function optionalWithin(promise, ms = 15000) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise(resolve => { timer=setTimeout(()=>resolve(null),ms); })]);
+  } finally { clearTimeout(timer); }
+}
 async function fetchCycleMatchedData(lat, lon, force = false, edgeFresh = false) {
   const runControl = window.WeerlabPlumeRuns;
   await runControl?.ensureLocation?.(lat, lon);
@@ -982,19 +988,19 @@ async function fetchCycleMatchedData(lat, lon, force = false, edgeFresh = false)
     const retryFresh = true;
     const [coreEns, optionalEns, hres] = await Promise.all([
       fetchEnsemble(lat, lon, runMeta, retryFresh, true, SIX_PLUS_CORE_VARIABLES),
-      fetchEnsemble(
+      optionalWithin(fetchEnsemble(
         lat, lon, runMeta, retryFresh, true, SIX_PLUS_OPTIONAL_VARIABLES,
       ).catch(error => {
         console.warn('Optionele ENS-velden niet beschikbaar:', error.message);
         return null;
-      }),
-      fetchHres(lat, lon, runMeta, force || attempt > 0, edgeFresh).catch(error => {
+      })),
+      optionalWithin(fetchHres(lat, lon, runMeta, force || attempt > 0, edgeFresh).catch(error => {
         // Single Runs loopt niet voor elke cyclus gelijk op met ENS. De exacte
         // HRES-overlay is aanvullend: bij ontbreken blijft dezelfde ENS-run
         // zichtbaar, zonder een HRES-reeks uit een andere initialisatie.
         console.warn('Exacte HRES-overlay niet beschikbaar:', error.message);
         return null;
-      }),
+      })),
     ]);
     const metaAfter = verifiedRunMeta(await fetchRunMeta());
     const sameInitialisation = Number(metaAfter?.last_run_initialisation_time) === Number(runMeta.last_run_initialisation_time);

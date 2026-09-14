@@ -1,6 +1,7 @@
 import os, requests, zipfile, io, xml.etree.ElementTree as ET, re, json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from mosmix_trend_rain import rain_by_day
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -111,6 +112,7 @@ for code, naam in stations_temp:
     tn_raw  = parse_values(root, 'TN')
     ttt_raw = parse_values(root, 'TTT')
     rr_raw  = parse_values(root, 'RR1c')
+    rain_days = rain_by_day(times, rr_raw, LOCAL_TZ)
 
     daily = {}
     for i, dt_utc in enumerate(times):
@@ -132,7 +134,7 @@ for code, naam in stations_temp:
         tn = min(tn_v) if tn_v else (min(ttt_v) if ttt_v else None)
         if tx is not None:
             td[d] = {"tx": round(tx,1), "tn": round(tn,1) if tn is not None else None}
-        rd[d] = round(sum(daily[d]["rr"]), 1) if daily[d]["rr"] else 0.0
+        rd[d] = rain_days.get(d)
 
     temp_data[naam] = td
     rr_data[naam]   = rd
@@ -212,7 +214,7 @@ ax2.set_title("Neerslag (dagsom)", fontsize=9, color="#333333", loc="left", pad=
 n = len(stations_temp); breedte = 0.10
 offsets = np.linspace(-(n-1)*breedte/2, (n-1)*breedte/2, n)
 for idx, (naam, rd) in enumerate(rr_data.items()):
-    ax2.bar(x + offsets[idx], [rd.get(d, 0.0) for d in alle_dagen], width=breedte, color=KLEUREN.get(naam,"#333"), alpha=0.8, zorder=5, label=naam)
+    ax2.bar(x + offsets[idx], [rd.get(d) if rd.get(d) is not None else np.nan for d in alle_dagen], width=breedte, color=KLEUREN.get(naam,"#333"), alpha=0.8, zorder=5, label=naam)
 ax2.set_xticks(x); ax2.set_xticklabels(dag_labels, fontsize=8); ax2.set_ylim(bottom=0)
 ax2.legend(fontsize=6.5, loc="upper right", framealpha=0.9, edgecolor="#cccccc", ncol=2, borderpad=0.5, labelspacing=0.3)
 
@@ -239,7 +241,7 @@ json_data = {"gegenereerd": now_str2, "dagen": [d.isoformat() for d in alle_dage
 for naam, dag_data in temp_data.items():
     json_data["temp"][naam] = {"kleur": KLEUREN.get(naam,"#333"), "tx": [dag_data[d]["tx"] if d in dag_data else None for d in alle_dagen], "tn": [dag_data[d]["tn"] if d in dag_data and dag_data[d]["tn"] is not None else None for d in alle_dagen]}
 for naam, rd in rr_data.items():
-    json_data["rr"][naam] = {"kleur": KLEUREN.get(naam,"#333"), "rr": [rd.get(d,0.0) for d in alle_dagen]}
+    json_data["rr"][naam] = {"kleur": KLEUREN.get(naam,"#333"), "rr": [rd.get(d) for d in alle_dagen]}
 for naam, wd in wind_data.items():
     json_data["wind"][naam] = {"kleur": KLEUREN.get(naam,"#333"), "bft": [wd.get(d,None) for d in alle_dagen]}
 

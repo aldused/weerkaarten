@@ -387,7 +387,7 @@
 </div>
 
 <script>
-const JSON_URL = "grafiek_trend.json?t=" + Date.now();
+const JSON_URL = (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "" : "https://data.weerlab.nl/") + "grafiek_trend.json?t=" + Date.now();
 
 function gradenNaarKompas(deg) {
   const punten = ["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW","W","WNW","NW","NNW"];
@@ -460,11 +460,14 @@ const windRichtingPlugin = {
 // State / helpers ──────────────────────────────────────
 function eqSets(a, b) { if (a.size !== b.size) return false; for (const x of a) if (!b.has(x)) return false; return true; }
 
-fetch(JSON_URL)
+fetch(JSON_URL, {cache:"no-store",signal:AbortSignal.timeout(15000)})
   .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
   .then(data => {
-    document.getElementById("run-lbl").textContent = "run: " + data.gegenereerd;
+    document.getElementById("run-lbl").textContent = "Bijgewerkt: " + data.gegenereerd;
 
+    if(!Array.isArray(data.stations)||!Array.isArray(data.dagen)||!data.dagen.length)throw Error('De verwachting bevat geen bruikbare dagen.');
+    const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    if(data.dagen[data.dagen.length-1]<today)throw Error('Deze verwachting is verouderd (laatste dag '+data.dagen[data.dagen.length-1]+').');
     const STATIONS = data.stations; // array van {naam, kleur, hoofd, regio}
     const labels = data.dag_labels;
 
@@ -474,6 +477,7 @@ fetch(JSON_URL)
     // Bouw HTML ────────────────────────────────────────
     const content = document.getElementById("content");
     content.innerHTML = "";
+    const note=document.createElement('p');note.className='legenda-hint';note.textContent='Neerslag is de som over de beschikbare verwachtingstijden. Vandaag is dus geen volledige etmaalsom. Een streepje betekent ontbrekende gegevens; 0,0 mm betekent droog.';content.appendChild(note);
 
     // Toolbar
     const toolbar = document.createElement("div"); toolbar.className = "toolbar";
@@ -800,7 +804,7 @@ fetch(JSON_URL)
     }
 
     const tempK = maakKaart(`<span>Temperatuur <span class="grafiek-sub">— TX (max) &nbsp; - - TN (min)</span></span>`, 340);
-    const rrK   = maakKaart(`<span>Neerslag <span class="grafiek-sub">(dagsom mm)</span></span>`, 240);
+    const rrK   = maakKaart(`<span>Neerslag <span class="grafiek-sub">(som beschikbare uren · mm)</span></span>`, 240);
     const windK = maakKaart(`<span>Wind <span class="grafiek-sub">(max Bft per dag)</span></span>`, 280);
 
     // Windrichting strip (onder wind grafiek)
@@ -926,7 +930,7 @@ fetch(JSON_URL)
           dag: dlbl,
           tx: td.tx?.[i] ?? null,
           tn: td.tn?.[i] ?? null,
-          rr: rd?.[i] ?? 0,
+          rr: rd?.[i] ?? null,
           bft: wd.bft?.[i] ?? null,
           dd: wd.wdir?.[i] ?? null,
         });
@@ -945,7 +949,7 @@ fetch(JSON_URL)
           <td>${r.dag}</td>
           <td class="tx">${r.tx === null ? "—" : r.tx.toFixed(1) + "°"}</td>
           <td class="tn">${r.tn === null ? "—" : r.tn.toFixed(1) + "°"}</td>
-          <td class="${rrCls}">${r.rr ? r.rr.toFixed(1) + " mm" : "—"}</td>
+          <td class="${rrCls}">${r.rr !== null ? r.rr.toFixed(1) + " mm" : "—"}</td>
           <td>${r.bft === null ? "—" : "Bft " + r.bft}</td>
           <td class="dd">${r.dd === null ? "—" : gradenNaarKompas(r.dd) + " " + Math.round(r.dd) + "°"}</td>
         </tr>`;
@@ -1003,7 +1007,7 @@ fetch(JSON_URL)
       ctx.fillText(`${tabelStation} — 10 dagen MOSMIX`, 30, 24);
       ctx.font = "500 11px DM Mono, monospace";
       ctx.fillStyle = "#64748b";
-      ctx.fillText(`run: ${data.gegenereerd || ""}  ·  © Ed Aldus`, 30, 44);
+      ctx.fillText(`Bijgewerkt: ${data.gegenereerd || ""}  ·  © Ed Aldus`, 30, 44);
       // kolomkoppen
       let y0 = headerH + 8;
       ctx.font = "700 10.5px DM Sans, system-ui, sans-serif";
@@ -1031,7 +1035,7 @@ fetch(JSON_URL)
           { v: r.dag, kleur: "#0f172a", font: "600 12.5px DM Sans, system-ui, sans-serif", align: "left" },
           { v: r.tx === null ? "—" : r.tx.toFixed(1) + "°", kleur: "#cc0000" },
           { v: r.tn === null ? "—" : r.tn.toFixed(1) + "°", kleur: "#1d4ed8" },
-          { v: r.rr ? r.rr.toFixed(1) + " mm" : "—", kleur: r.rr >= 5 ? "#1e40af" : r.rr >= 1 ? "#2563eb" : "#0f172a" },
+          { v: r.rr !== null ? r.rr.toFixed(1) + " mm" : "—", kleur: r.rr >= 5 ? "#1e40af" : r.rr >= 1 ? "#2563eb" : "#0f172a" },
           { v: r.bft === null ? "—" : "Bft " + r.bft, kleur: "#0f172a" },
           { v: r.dd === null ? "—" : gradenNaarKompas(r.dd) + " " + Math.round(r.dd) + "°", kleur: "#64748b", font: "600 12.5px DM Sans, system-ui, sans-serif" },
         ];
@@ -1093,7 +1097,7 @@ fetch(JSON_URL)
         const dlbl = (labels[i] || "").replace("\n", " ");
         const tx = td.tx?.[i];
         const tn = td.tn?.[i];
-        const rr = rd?.[i] ?? 0;
+        const rr = rd?.[i] ?? null;
         const bf = wd.bft?.[i];
         const dd = wd.wdir?.[i];
         const rrCls = rr >= 5 ? "rr heel-nat" : rr >= 1 ? "rr nat" : "rr";
@@ -1101,7 +1105,7 @@ fetch(JSON_URL)
           <td>${dlbl}</td>
           <td class="tx">${tx === null || tx === undefined ? "—" : tx.toFixed(1) + "°"}</td>
           <td class="tn">${tn === null || tn === undefined ? "—" : tn.toFixed(1) + "°"}</td>
-          <td class="${rrCls}">${rr ? rr.toFixed(1) + " mm" : "—"}</td>
+          <td class="${rrCls}">${rr !== null ? rr.toFixed(1) + " mm" : "—"}</td>
           <td>${bf === null || bf === undefined ? "—" : "Bft " + bf}</td>
           <td class="dd">${dd === null || dd === undefined ? "—" : gradenNaarKompas(dd) + " " + Math.round(dd) + "°"}</td>
         </tr>`;
@@ -1117,8 +1121,10 @@ fetch(JSON_URL)
     synchroniseerTabelKiezer();
   })
   .catch(err => {
-    document.getElementById("content").innerHTML =
-      `<div class="fout">Kon grafiek_trend.json niet laden.<br><small>${err.message}</small></div>`;
+    document.getElementById('run-lbl').textContent='Verwachting niet beschikbaar';
+    const notice=document.createElement('div');notice.className='fout';notice.setAttribute('role','alert');notice.textContent='De verwachting kan niet worden getoond. '+err.message;
+    const retry=document.createElement('button');retry.className='download-btn';retry.textContent='Opnieuw proberen';retry.addEventListener('click',()=>location.reload());
+    document.getElementById('content').replaceChildren(notice,retry);
   });
 </script>
 </body>

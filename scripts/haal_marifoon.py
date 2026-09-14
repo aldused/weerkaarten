@@ -306,4 +306,5 @@ def _maak_periodes(time_slot):
 
 
 if __name__ == "__main__":
-    haal_marifoon()
+    if not haal_marifoon():
+        raise SystemExit("Geen nieuw kustbericht ontvangen; bestaande publicatie blijft behouden.")

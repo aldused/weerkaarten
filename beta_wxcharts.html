@@ -230,6 +230,8 @@ let fsOpen=false, fsScale=1, fsX=0, fsY=0, fsDrag=false, fsSx=0, fsSy=0;
 let metaSignature='';
 let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToken=0;
 const META_REFRESH_MS=5*60*1000;
+const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
+function runAgeWarning(run,now=Date.now()){const age=now-Date.parse(run?.run_utc);return !Number.isFinite(age)?'Modeltijd onbekend':age>48*3600000?'Verouderde modelrun · controleer geldigheid':'';}
 const preloaded={};                       // "model|cyc|run|var" -> {frame: Image}
 const $=id=>document.getElementById(id);
 const NL_DAG=['zo','ma','di','wo','do','vr','za'];
@@ -311,6 +313,7 @@ function setModel(mk){
 
 function setRun(cc){
   curCyc=cc;
+  $('update-info').textContent=runAgeWarning(R());
   document.querySelectorAll('#runbar .pill').forEach(b=>b.classList.toggle('actief',b.dataset.c===cc));
   const md=META.models.find(m=>m.key===curModel);
   $('run-info').textContent=md.label+' · Run: '+R().run_label+' · t/m +'+R().maxlead+'u';
@@ -446,7 +449,7 @@ function signatureOf(m){
 }
 async function refreshMeta(initial=false){
   try{
-    const response=await fetch('wxbeta_meta.json?_='+Date.now(),{cache:'no-store'});
+    const response=await fetch(META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.ok) throw new Error('HTTP '+response.status);
     const m=await response.json(), nextSignature=signatureOf(m), changed=!!META&&nextSignature!==metaSignature;
     if(!META){
@@ -471,7 +474,7 @@ async function refreshMeta(initial=false){
       setRun(nextCyc);
     }
     const now=new Date();
-    $('update-info').textContent=(changed?'nieuwe run geladen · ':'gecontroleerd · ')+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    $('update-info').textContent=(runAgeWarning(R()) ? runAgeWarning(R())+' · ' : changed?'nieuwe run geladen · ':'bron gecontroleerd · ')+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
     $('update-info').classList.toggle('fresh',changed);
     if(changed) setTimeout(()=>$('update-info').classList.remove('fresh'),5000);
   }catch(e){

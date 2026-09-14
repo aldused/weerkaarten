@@ -127,16 +127,16 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "hittekracht",
-    "name": "Gevoelstemperatuur & hitte",
-    "description": "De gemeten hittebelasting",
-    "category": "nu",
-    "type": "nu",
-    "section": "Metingen",
+    "name": "Hittekracht · KNMI-app",
+    "description": "Verwachte hittebelasting vandaag, morgen en overmorgen",
+    "category": "verwachting",
+    "type": "kaarten",
+    "section": "Nederland · modelkaarten",
     "icon": "temp",
     "href": "index.html#hittekracht",
     "thumbnail": null,
-    "facets": {},
-    "keywords": "Hittekracht Gemeten + KNMI-app ",
+    "facets": {"veld":["temp"],"model":["knmi-app"],"gebied":["nl"]},
+    "keywords": "Hittekracht KNMI app hitte verwachte hittebelasting vandaag morgen overmorgen ",
     "restricted": false
   },
   {
@@ -156,7 +156,7 @@ const MENU_PRODUCTS = [
   {
     "id": "zeetemp",
     "name": "Zeewatertemperatuur",
-    "description": "Noordzee + kustbericht",
+    "description": "Zeewatertemperatuur Europa en golven aan de Hollandse kust",
     "category": "nu",
     "type": "nu",
     "section": "Water & kust",
@@ -164,7 +164,7 @@ const MENU_PRODUCTS = [
     "href": "index.html#zeetemp",
     "thumbnail": "thumbs/zeetemp.webp",
     "facets": {},
-    "keywords": "Zeewatertemperatuur Noordzee + kustbericht ",
+    "keywords": "Zeewatertemperatuur Europa Noordzee golven Hollandse kust ",
     "restricted": false
   },
   {
@@ -509,7 +509,7 @@ const MENU_PRODUCTS = [
       ]
     },
     "keywords": "Wolkenkaart ICON-D2, realistisch Bewolking ICON-D2 Nederland 1 kaart ICON-D2",
-    "restricted": false
+    "restricted": true
   },
   {
     "id": "convectietemp",
@@ -799,7 +799,7 @@ const MENU_PRODUCTS = [
   {
     "id": "mosmix-trend",
     "name": "Trend per plaats",
-    "description": "Vergelijk opeenvolgende verwachtingen",
+    "description": "Temperatuur, neerslag en wind per plaats voor de komende tien dagen",
     "category": "verwachting",
     "type": "pluim",
     "section": "MOS/MIX",
@@ -824,10 +824,10 @@ const MENU_PRODUCTS = [
         "overig"
       ],
       "vorm": [
-        "trend"
+        "vergelijk"
       ]
     },
-    "keywords": "Trend per station Run-op-run MOS/MIX Temperatuur Neerslag De Bilt Groningen Twente Maastricht Den Helder / Schiphol Vlissingen Andere plaats Runs onder elkaar",
+    "keywords": "Trend per station MOS/MIX Temperatuur Neerslag Wind Tien dagen Plaatsen vergelijken",
     "restricted": false
   },
   {
@@ -1362,6 +1362,7 @@ const MENU_LABELS = {
     "overzicht": "Overzicht"
   },
   "model": {
+    "knmi-app": "KNMI-app",
     "mosmix": "DWD MOS/MIX",
     "harmonie": "HARMONIE 43",
     "harmonie46": "HARMONIE 46",
@@ -1386,6 +1387,7 @@ const MENU_LABELS = {
     "1": "Eén plaats",
     "6": "Zes plaatsen",
     "trend": "Runs onder elkaar",
+    "vergelijk": "Plaatsen vergelijken",
     "kaart": "Kaart",
     "tabel": "Tabel"
   },

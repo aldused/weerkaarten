@@ -15,6 +15,7 @@ import re
 import json
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+from mosmix_trend_rain import rain_by_day
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -132,6 +133,7 @@ for code, naam, _kleur, _hoofd, _regio in STATIONS:
     rr_raw  = parse_values(root, 'RR1c')
     ff_raw  = parse_values(root, 'FF')
     dd_raw  = parse_values(root, 'DD')
+    rain_days = rain_by_day(times, rr_raw, LOCAL_TZ)
 
     daily = {}
     for i, dt_utc in enumerate(times):
@@ -155,7 +157,7 @@ for code, naam, _kleur, _hoofd, _regio in STATIONS:
         tx_v = daily[d]["tx"]; tn_v = daily[d]["tn"]; ttt_v = daily[d]["ttt"]
         tx = max(tx_v) if tx_v else (max(ttt_v) if ttt_v else None)
         tn = min(tn_v) if tn_v else (min(ttt_v) if ttt_v else None)
-        rr = round(sum(daily[d]["rr"]), 1) if daily[d]["rr"] else 0.0
+        rr = rain_days.get(d)
         # max wind + bijbehorende richting
         bft = None; wdir = None
         if daily[d]["ff_dd"]:
@@ -207,7 +209,7 @@ for _code, naam, kleur, _hoofd, _regio in STATIONS:
     }
     json_data["rr"][naam] = {
         "kleur": kleur,
-        "rr": [v if v is not None else 0.0 for v in waarden(naam, "rr")],
+        "rr": waarden(naam, "rr"),
     }
     json_data["wind"][naam] = {
         "kleur": kleur,
@@ -282,7 +284,7 @@ n = len(HOOFD); breedte = 0.11
 offsets = np.linspace(-(n-1)*breedte/2, (n-1)*breedte/2, n)
 for idx, (naam, kleur) in enumerate(HOOFD):
     sd = per_station.get(naam, {})
-    rr_list = [sd.get(d, {}).get("rr") or 0.0 for d in alle_dagen_iso]
+    rr_list = [v if v is not None else np.nan for v in waarden(naam, "rr")]
     ax2.bar(x + offsets[idx], rr_list, width=breedte, color=kleur, alpha=0.85, zorder=5, label=naam)
 ax2.set_xticks(x); ax2.set_xticklabels(dag_labels, fontsize=8)
 ax2.set_ylim(bottom=0)

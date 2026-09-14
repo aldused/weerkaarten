@@ -188,7 +188,7 @@ td.verschil { font-weight: 700; }
 
 <header>
   <h1>Verificatie MOSMIX</h1>
-  <p id="subtitel">Laden...</p>
+  <p id="subtitel" role="status">Verificatie wordt opgehaald…</p>
 </header>
 
 <div class="wrap">
@@ -196,8 +196,8 @@ td.verschil { font-weight: 700; }
   <div class="samen" id="samenvatting"></div>
   <div class="tabel-wrap" id="tabel-container">
     <div class="geen-data" id="geen-data">
-      <b>Nog geen verificatie beschikbaar</b>
-      <p>Het script moet eerst een dag draaien om de berekeningen te archiveren.</p>
+      <b>Gegevens ophalen…</b>
+      <p>De vergelijking tussen verwachting en metingen wordt geladen.</p>
     </div>
   </div>
   <div class="info" id="info"></div>
@@ -307,19 +307,23 @@ function toonDag(index) {
 
 async function laad() {
   let data;
+  document.getElementById("subtitel").textContent = "Verificatie wordt opgehaald…";
   try {
     const dataUrl = location.hostname === "localhost" || location.hostname === "127.0.0.1"
       ? "verificatie.json"
       : "https://data.weerlab.nl/verificatie.json";
-    const r = await fetch(dataUrl + "?" + Date.now());
+    const r = await fetch(dataUrl + "?" + Date.now(), {cache:"no-store", signal:AbortSignal.timeout(15000)});
     if (!r.ok) throw new Error("Niet gevonden");
     data = await r.json();
   } catch {
+    document.getElementById("subtitel").textContent = "Ophalen mislukt";
+    document.getElementById("geen-data").innerHTML = '<b>Verificatie kon niet worden opgehaald</b><p>Probeer het opnieuw zodra de verbinding beschikbaar is.</p><button type="button" id="opnieuw">Opnieuw proberen</button>';
+    document.getElementById("opnieuw").addEventListener("click", laad);
     return;
   }
 
   // Nieuw formaat: data.dagen is array
-  if (data.dagen && data.dagen.length > 0) {
+  if (Array.isArray(data.dagen) && data.dagen.length > 0) {
     alleDagen = data.dagen;
     alleDagen._bijgewerkt = data.bijgewerkt;
   } else if (data.datum) {
@@ -327,6 +331,8 @@ async function laad() {
     alleDagen = [data];
     alleDagen._bijgewerkt = data.bijgewerkt;
   } else {
+    document.getElementById("subtitel").textContent = "Nog geen verificatie beschikbaar";
+    document.getElementById("geen-data").innerHTML = '<b>Nog geen vergelijking beschikbaar</b><p>Voor deze periode zijn nog geen verwachtingen met metingen vergeleken.</p>';
     return;
   }
 
