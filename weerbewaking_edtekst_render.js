@@ -34,9 +34,9 @@
     box(48,602,984,10,c.blue);
     const xs=[488,615,742,869,996];
     s.days.forEach((d,i)=>{if(!editable)text(d.day,xs[i],648,5,c.cyan,'center');});
-    const rows=[['zonuren','sun',727,c.green],['regenkans    %','rain',798,c.green],['minimum     °C','min',891,c.white],['maximum     °C','max',968,c.yellow],['windrichting','dir',1062,c.green],['wind       Bft','force',1133,c.green]];
+    const rows=[['zonuren','sun',727,c.green],['regenkans    %','rain',798,c.green],['minimum     °C','min',891,c.green],['maximum     °C','max',968,c.green],['windrichting','dir',1062,c.green],['wind       Bft','force',1133,c.green]];
     for(const [label,key,y,col] of rows){text(label,48,y,4,c.cyan);if(!editable)s.days.forEach((d,i)=>text(d[key]??'-',xs[i],y,4,col,'center'));}
-    box(48,1231,244,10,c.blue);box(788,1231,244,10,c.blue);text('Ed Aldus',540,1219,6,c.yellow,'center');
+    box(48,1231,244,10,c.blue);box(788,1231,244,10,c.blue);text('Ed Aldus',540,1219,5,c.yellow,'center');
     text('Het weer, elke dag.',540,1284,3,c.cyan,'center');
     if(s.demo)text('DEMO / VOORBEELDGEGEVENS',540,1322,2,c.muted,'center');
     if(s.crt){ctx.fillStyle='rgba(0,0,0,0.17)';for(let y=0;y<1350;y+=6)ctx.fillRect(0,y,1080,1);}
