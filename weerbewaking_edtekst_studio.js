@@ -49,11 +49,15 @@ function populate(){for(const k of ['date','time','region','heading','summary'])
 for(const k of ['date','time','region','heading','summary'])$(k).addEventListener('input',()=>{state[k]=$(k).value;render();});
 for(const k of ['demo','crt'])$(k).addEventListener('change',()=>{state[k]=$(k).checked;render();});
 $('editor').addEventListener('submit',e=>e.preventDefault());
-$('forecast-start').value=MOSMIX.addDays(MOSMIX.localDate(),1);
+const today=MOSMIX.localDate(),tomorrow=MOSMIX.addDays(today,1),savedStart=state.days?.[0]?.date;
+$('forecast-start').min=today;$('forecast-start').value=savedStart&&savedStart>=today?savedStart:today;
+function updateStartShortcuts(){const start=$('forecast-start').value;$('start-today').setAttribute('aria-pressed',String(start===today));$('start-tomorrow').setAttribute('aria-pressed',String(start===tomorrow));}
+function disableStartShortcuts(disabled){$('start-today').disabled=disabled;$('start-tomorrow').disabled=disabled;}
+updateStartShortcuts();$('forecast-start').addEventListener('change',updateStartShortcuts);
 async function importMOSMIX(){
   if(importing)return;const start=$('forecast-start').value;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||start<MOSMIX.localDate()){message('Kies vandaag of een komende datum.',true);return;}
-  importing=true;const revision=tableChanged;$('import-mosmix').disabled=true;$('import-mosmix').textContent='MOSMIX ophalen…';$('download').disabled=true;
+  importing=true;const revision=tableChanged;$('import-mosmix').disabled=true;disableStartShortcuts(true);$('import-mosmix').textContent='MOSMIX ophalen…';$('download').disabled=true;
   try{
     const response=await fetch('https://data.weerlab.nl/mosmix_nl.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(20000)});const feed=await response.json();if(!response.ok)throw Error(feed.error||'MOSMIX ophalen is niet gelukt.');const data=MOSMIX.mapFeed(feed);
     if(revision!==tableChanged)throw Error('Je hebt tijdens het laden cijfers aangepast. Klik opnieuw op MOSMIX inladen om die te vervangen.');
@@ -64,9 +68,11 @@ async function importMOSMIX(){
     next.source={type:'MOSMIX',station:'06344',run:data.run,retrievedAt:data.retrievedAt,edited:false};EDtekst.validate(next);state=next;populate();
     message('MOSMIX ingeladen. Klik in de tabel om cijfers aan te passen. Controleer ook je weerschets.');
   }catch(e){message(e.message||'MOSMIX ophalen is niet gelukt; je bestaande waarden zijn behouden.',true);}
-  finally{importing=false;$('import-mosmix').disabled=false;$('import-mosmix').textContent='↓  MOSMIX inladen';$('download').disabled=!valid||!fontReady;}
+  finally{importing=false;$('import-mosmix').disabled=false;disableStartShortcuts(false);$('import-mosmix').textContent='↓  MOSMIX inladen';$('download').disabled=!valid||!fontReady;}
 }
 $('import-mosmix').addEventListener('click',importMOSMIX);
+$('start-today').addEventListener('click',()=>{$('forecast-start').value=today;updateStartShortcuts();importMOSMIX();});
+$('start-tomorrow').addEventListener('click',()=>{$('forecast-start').value=tomorrow;updateStartShortcuts();importMOSMIX();});
 $('download').addEventListener('click',()=>{
   if(!valid||!fontReady||importing)return;
   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;EDtekst.draw(canvas.getContext('2d'),state);
