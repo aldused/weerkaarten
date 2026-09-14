@@ -108,7 +108,7 @@
   </div>
 </div>
 
-<script src="pluim_run_switcher_48ffbf926db6.js" data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"></script>
+<script src="pluim_run_switcher_986ffccbe63e.js" data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"></script>
 <script src="pluim_math.js?v=20260808-expertpluim"></script>
 <script>
 const STATIONS = [
@@ -846,15 +846,32 @@ function runMetaTeksten(meta) {
   };
 }
 
-async function loadAndRender(force = false, edgeFresh = false) {
+let plumeLoadQueue = Promise.resolve();
+let plumeHasLoaded = false;
+function loadAndRender(force = false, edgeFresh = false) {
+  // Serialiseer laden: een tragere vorige aanvraag mag geen nieuwere run overschrijven.
+  plumeLoadQueue = plumeLoadQueue.catch(() => {}).then(() => renderCurrentPlume(force, edgeFresh));
+  return plumeLoadQueue;
+}
+
+async function renderCurrentPlume(force = false, edgeFresh = false) {
   const loader = document.getElementById('loader');
   const host = document.getElementById('pageHost');
   loader.classList.remove('verborgen');
   const label = force ? 'Nieuwe ensembledata controleren' : 'Ensemble laden';
   loader.innerHTML = `<div class="spinner"></div><div style="font-size:13px;font-weight:600;color:#2a4a70">${label} voor ${currentStation.name}…</div>`;
   host.innerHTML = '';
+  currentModel = null;
+  pageSvgString = '';
+  document.getElementById('hdrRun').textContent = 'Actuele ECMWF-run controleren…';
+  document.getElementById('hdrDatum').textContent = '';
+  document.getElementById('runinfo').textContent = '';
 
   try {
+    const runs = window.WeerlabPlumeRuns;
+    if (plumeHasLoaded || force || edgeFresh) await runs.refreshSelection();
+    else await runs.state.archiveReady;
+    plumeHasLoaded = true;
     const [batch, mosmix] = await Promise.all([
       fetchCoherentPlumeBatch(currentStation.lat, currentStation.lon, force || edgeFresh),
       fetchMosmix(),
@@ -1096,7 +1113,7 @@ function scheduleAutoRefresh() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && isFastUpdateWindow()) loadAndRender(true);
+  if (!document.hidden) loadAndRender(true);
 });
 
 // De URL bevat de exacte geverifieerde runuren en is daardoor veilig
