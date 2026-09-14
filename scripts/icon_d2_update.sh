@@ -214,7 +214,7 @@ n_steps = min(MAX_HOURS, len(hourly_precip))
 print(f"   Crop grid: {n_lat}x{n_lon} (stride {STRIDE}), {n_steps} uur")
 
 def crop(d):
-    return np.nan_to_num(d[np.ix_(lat_idx, lon_idx)], nan=0).astype(np.float32)
+    return np.asarray(d[np.ix_(lat_idx, lon_idx)], dtype=np.float32)  # behoud ontbrekende roosterpunten
 
 def write_bin(fn, data_list, nc=1, al_gecropt=False):
     # al_gecropt=True voor velden die al op het uitvoerrooster staan; die

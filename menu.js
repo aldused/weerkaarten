@@ -359,7 +359,7 @@
     if(frame.dataset.route!==route){
       frame.dataset.route=route;
       frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260914-records-1#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20260914-modelkaarten-1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
