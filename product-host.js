@@ -32,17 +32,13 @@
     });
     doc.addEventListener('click', event => {
       const a=event.target.closest?.('a[href]');
-      if(!a || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button!==0)return;
+      if(!a || a.hasAttribute('download') || a.target && a.target !== '_self' || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button!==0)return;
       const url=new URL(a.href,doc.baseURI);
       if(url.origin!==location.origin || !/\/(?:index(?:\.html)?)?$/.test(url.pathname))return;
       event.preventDefault();
-      parent.postMessage({type:'weerlab-product-route',hash:url.hash||'#home',title:'Weerlab'},location.protocol==='file:'?'*':location.origin);
-      if(url.hash && !url.hash.startsWith('#menu/')) {
-        // Keep the host route in sync before its title observer reports it.
-        // Otherwise a record-page link opens correctly, then restores the old URL.
-        history.replaceState(null,'',url.hash);
-        openHashRoute(url.hash);
-      }
+      // Navigation requests include menu routes and their filters. The shell
+      // owns the transition; old title observers must not restore this route.
+      parent.postMessage({type:'weerlab-navigate',hash:url.hash||'#menu/start'},location.protocol==='file:'?'*':location.origin);
     },true);
     doc.addEventListener('load', event=>{if(event.target.tagName==='IFRAME'){try{wireLinks(event.target.contentDocument);}catch{}}},true);
     doc.querySelectorAll('iframe').forEach(frame=>{try{wireLinks(frame.contentDocument);}catch{}});

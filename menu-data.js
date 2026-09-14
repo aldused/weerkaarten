@@ -1,5 +1,7 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
+  {id:'waarschuwingen',name:'KNMI-waarschuwingen',description:'Actuele waarschuwingen per provincie, met geldigheid en toelichting.',category:'nu',type:'nu',section:'Waarschuwingen',icon:'warning',href:'index.html#waarschuwingen',thumbnail:null,facets:{},keywords:'code geel oranje rood gevaarlijk weer waarschuwing onweer windstoten hitte gladheid KNMI',restricted:false},
+  {id:'nieuws',name:'Wat is nieuw',description:'Nieuwe onderdelen en verbeteringen van Weerlab.',category:'start',type:'nieuws',section:'Over Weerlab',icon:'tekst',href:'index.html#nieuws',thumbnail:null,facets:{},keywords:'nieuw nieuws updates wijzigingen verbeteringen',restricted:false},
   {
     "id": "mosmix-neerslagkans",
     "name": "MOS/MIX · neerslagkansen",
@@ -248,7 +250,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "hires4",
-    "name": "Vergelijk modellen & elementen",
+    "name": "Vergelijk modellen & elementen · 4-luik",
     "description": "Regionale en wereldmodellen naast elkaar",
     "category": "verwachting",
     "type": "kaarten",

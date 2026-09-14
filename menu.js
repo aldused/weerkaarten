@@ -43,12 +43,12 @@
     favorieten:{name:'Favorieten',icon:'star',title:'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
     professioneel:{name:'Voor professionals',icon:'tools',title:'Voor professionals',description:'Verdieping, analyse en gereedschap voor de weerstudio.',types:[['vak','Alles'],['analyse','Analyse'],['tv','TV & uitzending'],['studio','Studio']]},
   };
-  const typeNames=site.typeNames || {nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals'};
+  const typeNames=site.typeNames || {nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals',nieuws:'Nieuws'};
   const filterSets=site.filterSets || {
     kaarten:[['veld','Weerelement'],['model','Model / bron'],['gebied','Gebied']],
     pluim:[['bron','Type verwachting'],['grootheid','Weerelement'],['vorm','Weergave']],
   };
-  const productIcon = p => ({radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
+  const productIcon = p => ({warning:'warning',radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
   function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback;}catch{return fallback;}}
   const previous=site.storagePrefix?[]:readStorage('sb_favorieten',[]);
   const defaultFavorites=site.defaultFavorites || ['radar','significant','pluim-ens6'];
@@ -194,8 +194,12 @@
     main.hidden=showingProduct;
     $('#product-workspace').hidden=!showingProduct;
     if(showingProduct){renderProduct();prefixMenuLinks();return;}
-    $('#product-frame').removeAttribute('src');
-    $('#product-frame').dataset.route='';
+    const oldFrame=$('#product-frame');
+    if(oldFrame.hasAttribute('src') || oldFrame.dataset.route){
+      const blank=oldFrame.cloneNode(false);
+      blank.removeAttribute('src');blank.dataset.route='';blank.hidden=true;
+      oldFrame.replaceWith(blank);
+    }
     main.innerHTML=state.page==='start'?home():state.page==='zoeken'?searchPage():catalogue();
     if(search.value!==state.q)search.value=state.q;
     $('#clear-search').hidden=!search.value;
@@ -282,6 +286,10 @@
     if(event.target.closest('#open-menu')){showMenu();return;}
     if(event.target.closest('#close-menu')){closeDialog();return;}
     if(event.target.closest('[data-clear-query]') || event.target.closest('#clear-search')){clearTimeout(searchTimer);search.value='';if(dialog.open){renderMenuSearch();$('#clear-search').hidden=true;}else navigate(searchOrigin,{replace:true});search.focus();return;}
+    const skipLink=event.target.closest('a[href="#main"]');
+    if(skipLink && event.button===0 && !event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){
+      event.preventDefault();(state.productRoute?$('#product-title'):main).focus();return;
+    }
     const productLink=event.target.closest('a[href]');
     if(productLink && !event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey && event.button===0){
       const url=new URL(productLink.href,location.href);
@@ -354,19 +362,23 @@
     const category=categories[state.page]||categories.start;
     $('#product-back').href='#menu/'+state.page+(state.type?'?type='+state.type:'');
     $('#product-back').textContent='← '+category.name;
-    const frame=$('#product-frame');
-    frame.hidden=false;
-    if(frame.dataset.route!==route){
-      frame.dataset.route=route;
-      frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260914-modelkaarten-1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+    const previousFrame=$('#product-frame');
+    if(previousFrame.dataset.route!==route){
+      // A new browsing context has no previous about:blank/product entry.
+      // Only the shell adds browser-history entries; Back must restore a page,
+      // never unload an iframe while leaving its product heading visible.
+      const frame=previousFrame.cloneNode(false);
+      frame.hidden=false;frame.dataset.route=route;frame.title=title;
+      frame.src=state.product?.src || 'product-host.html?v=20260914-navigation-1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      if(state.product?.src)frame.addEventListener('load',()=>wireDirectProduct(frame));
+      previousFrame.replaceWith(frame);
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
     document.title=title+' · Weerlab';
   }
   // Standalone Belgische producten delen de zoek- en Escape-sneltoetsen met het menu.
-  if(site.directProducts)$('#product-frame').addEventListener('load',()=>{
-    let doc;try{doc=$('#product-frame').contentDocument;}catch{return;}
+  function wireDirectProduct(frame){
+    let doc;try{doc=frame.contentDocument;}catch{return;}
     doc?.addEventListener('keydown',event=>{
       if(event.key==='Escape'){setProductExpanded(false);return;}
       const editing=event.target.matches('input,textarea,select,[contenteditable="true"]');
@@ -374,11 +386,15 @@
         event.preventDefault();focusSearch();
       }
     });
-  });
+  }
   window.addEventListener('message',event=>{
     const frame=$('#product-frame');
     if(event.source!==frame.contentWindow || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
+    if(!state.productRoute || $('#product-workspace').hidden)return;
     const data=event.data;
+    if(data?.type==='weerlab-navigate' && typeof data.hash==='string' && /^#(?:[a-z0-9_-]+|menu\/[a-z0-9_-]+(?:\?[^#]*)?)$/i.test(data.hash)){
+      navigate(data.hash,{focus:true});return;
+    }
     if(data?.type==='weerlab-weerkaarten-focus'){document.body.classList.toggle('map-focus-open', Boolean(data.active));return;}
     if(data?.type==='weerlab-focus-search'){focusSearch();return;}
     if(data?.type==='weerlab-product-focus-exit'){setProductExpanded(false);return;}
