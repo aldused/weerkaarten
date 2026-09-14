@@ -26,7 +26,7 @@ assert.equal(wind.fmtWindstoot(140),'50');assert.equal(wind.fmtWindstoot(null),'
 assert.equal(wind.fmtFG(50),'3');assert.equal(wind.fmtFG(null),'–');
 assert.equal(wind.paramWaarde({factor:.1,kmh:true},100),36);
 assert.equal(wind.paramWaarde({factor:.1,bft:true},50),3);
-assert.equal(wind.fmtRH(-1),'0.0');assert.equal(wind.fmtRH(null),'–');assert.equal(wind.fmtSQ(0),'0.0');
+assert.equal(wind.fmtRH(-1),'0,0');assert.equal(wind.fmtRH(null),'–');assert.equal(wind.fmtSQ(0),'0,0');
 assert(html.includes('fmtWindstoot(r.FX)')&&html.includes('fmtWindstoot(rij.FX)'),'Tables must show gusts in km/h');
 assert(!html.includes('Wind <small>Bft</small>'));
 // Gust formatting in the extremes finder uses the same km/h conversion.

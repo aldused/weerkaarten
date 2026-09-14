@@ -509,9 +509,9 @@
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
-<script src="klimaat.js?v=20260908-2"></script>
-<link rel="stylesheet" href="records-ui.css?v=20260913-1">
-<script defer src="records-ui.js?v=20260913-1"></script>
+<script src="klimaat.js?v=20260914-1"></script>
+<link rel="stylesheet" href="records-ui.css?v=20260914-1">
+<script defer src="records-ui.js?v=20260914-1"></script>
 </head>
 <body class="climate-page climate-dagrecords_jaar">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -3479,6 +3479,7 @@ let l5JaarSort = { kolom: "jaar", asc: false };
 
 async function wisselModus(modus) {
   const isL5 = modus === "l5";
+  document.getElementById("breadcrumb-balk").hidden = isL5;
   document.getElementById("l5-sectie").style.display = isL5 ? "block" : "none";
 
   // Verberg/toon stations UI
@@ -3498,6 +3499,10 @@ async function wisselModus(modus) {
   if (isL5) {
     if (!l5Data) await l5LaadData();
     l5Toon();
+  } else {
+    document.getElementById("gegenereerd-lbl").textContent = "Bijgewerkt: " + (data?.lopend_bijgewerkt || data?.gegenereerd || "onbekend");
+    const stn = document.getElementById("sel-station").value;
+    window.weerlabClimateStatus(GROEPEN[stn] ? {fixed:"Meerdere stations · meetperiode verschilt per station"} : {through:data?.tm,generated:data?.gegenereerd,historical:!!HIST_STATIONS[stn] || Number(stn)<200});
   }
 }
 
@@ -3505,7 +3510,8 @@ async function l5LaadData() {
   document.getElementById("l5-laden").style.display = "block";
   document.getElementById("l5-tabel").style.display = "none";
   try {
-    const r = await fetch("l5_records.json?t=" + Date.now());
+    const r = await fetch(window.weerlabClimateDataUrl("l5_records.json"), {cache:"no-store"});
+    if (!r.ok) throw new Error("Landelijke gegevens tijdelijk niet beschikbaar");
     l5Data = await r.json();
     // Metadata tonen
     const meta = l5Data.meta;
@@ -3578,6 +3584,8 @@ function l5SluitJaar() {
 
 function l5Toon() {
   if (!l5Data) return;
+  document.getElementById("gegenereerd-lbl").textContent = "L5 bijgewerkt: " + l5Data.meta.gegenereerd;
+  window.weerlabClimateStatus({through:l5Data.meta["periode_"+l5Param+"_eind"],generated:l5Data.meta.gegenereerd,note:"Landelijk L5-gemiddelde · gevalideerde daggegevens"});
   if (l5JaarModus) { l5VulJaar(); return; }
 
   const rec = l5Data.records[l5Param];
@@ -4884,7 +4892,7 @@ function kdRenderSeizoen(c) {
     <div style="margin-top:20px;font-size:0.75em;color:var(--tekst2);padding:12px 16px;background:var(--kaart);border-radius:10px;border:1px solid var(--rand);">
       <strong style="color:var(--tekst);">L5 Gemiddelde</strong> — Dagelijks gemiddelde van de 5 officiële KNMI-hoofdstations:
       <strong style="color:var(--accent);">De Bilt · Den Helder · Eelde · Vlissingen · Maastricht</strong>.
-      Minimaal 3 stations vereist per dag. TX/TN/TG in &deg;C, RH in mm, SQ in uur.
+      Minimaal 3 stations vereist per dag. Ranglijsten van decades, maanden, seizoenen en jaren bevatten uitsluitend complete perioden. TX/TN/TG in &deg;C, RH in mm, SQ in uur.
       <span id="l5-meta-periode" style="margin-left:8px;color:var(--tekst2);"></span>
     </div>
   </div>

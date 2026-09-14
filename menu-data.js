@@ -1102,7 +1102,7 @@ const MENU_PRODUCTS = [
     "thumbnail": null,
     "facets": {},
     "keywords": "Extremenzoeker Vrije query ",
-    "restricted": true
+    "restricted": false
   },
   {
     "id": "eerstelaatste",

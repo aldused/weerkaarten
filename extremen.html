@@ -436,73 +436,6 @@ tbody tr.target { background: #ecfdf5; }
 .coverage.ok { background: #ecfdf5; color: #047857; }
 .coverage.bad { background: #fff7ed; color: #c2410c; }
 .hidden { display: none !important; }
-.pin-gate {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(246, 248, 251, 0.96);
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
-.pin-box {
-  width: min(420px, 100%);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.14);
-  padding: 22px;
-}
-.pin-title {
-  color: var(--text);
-  font-size: 18px;
-  font-weight: 800;
-}
-.pin-sub {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-  margin-top: 6px;
-}
-.pin-form {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  margin-top: 16px;
-}
-.pin-form input {
-  min-height: 38px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  outline: none;
-  padding: 8px 10px;
-}
-.pin-form input:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(0, 32, 91, 0.08); }
-.pin-form button {
-  min-height: 38px;
-  background: var(--brand);
-  border: none;
-  border-radius: 8px;
-  color: #ffffff;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 8px 14px;
-}
-.pin-error {
-  color: #b91c1c;
-  font-size: 12px;
-  font-weight: 700;
-  min-height: 18px;
-  margin-top: 8px;
-}
 @media (max-width: 860px) {
   .hero-grid, .grid, .today-grid { grid-template-columns: 1fr; }
   .quick-stats { grid-template-columns: 1fr; }
@@ -515,13 +448,12 @@ tbody tr.target { background: #ecfdf5; }
   select, input[type="date"], #station, #metric { width: 100%; min-width: 0; }
   .segmented { width: 100%; }
   .segmented button { flex: 1; }
-  .pin-form { grid-template-columns: 1fr; }
 }
 </style>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
-<script src="klimaat.js?v=20260908-2"></script>
-<link rel="stylesheet" href="records-ui.css?v=20260913-1">
-<script defer src="records-ui.js?v=20260913-1"></script>
+<script src="klimaat.js?v=20260914-1"></script>
+<link rel="stylesheet" href="records-ui.css?v=20260914-1">
+<script defer src="records-ui.js?v=20260914-1"></script>
 </head>
 <body class="climate-page climate-extremen">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -529,17 +461,6 @@ tbody tr.target { background: #ecfdf5; }
   <div class="climate-heading-row"><div><h1 id="climate-title">Zoek weerextremen</h1><p>Zoek bijzondere metingen op station, weerelement en tijdvak.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
   <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens. Recente metingen zijn voorlopig. Niet ieder station heeft voor elk weerelement een volledige meetreeks. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
 </section>
-<div class="pin-gate" id="pinGate">
-  <div class="pin-box">
-    <div class="pin-title">Extremenzoeker</div>
-    <div class="pin-sub">Deze analyse is beveiligd met een pincode.</div>
-    <form class="pin-form" id="pinForm">
-      <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Pincode" aria-label="Pincode">
-      <button type="submit">Open</button>
-    </form>
-    <div class="pin-error" id="pinError"></div>
-  </div>
-</div>
 <div class="header">
   <div>
     <div class="title">Extremenzoeker</div>
@@ -796,8 +717,6 @@ const state = {
   season: null
 };
 
-const PIN_CODE = "19976";
-const PIN_SESSION_KEY = "weerlab_extremen_pin_ok";
 
 let currentStation = null;
 let currentRows = [];
@@ -821,36 +740,11 @@ const els = {
   dashboard: document.getElementById("dashboard")
 };
 
-function unlockPage() {
-  document.getElementById("pinGate").classList.add("hidden");
+function startPage() {
   if (!els.station.options.length) initControls();
   loadHistoricalPlaceOptions();
   loadTodayData();
   loadStation();
-}
-
-function initPinGate() {
-  const form = document.getElementById("pinForm");
-  const input = document.getElementById("pinInput");
-  const error = document.getElementById("pinError");
-  let ok = false;
-  try { ok = sessionStorage.getItem(PIN_SESSION_KEY) === "1"; } catch {}
-  if (ok) {
-    unlockPage();
-    return;
-  }
-  input.focus();
-  form.addEventListener("submit", event => {
-    event.preventDefault();
-    if (input.value.trim() === PIN_CODE) {
-      try { sessionStorage.setItem(PIN_SESSION_KEY, "1"); } catch {}
-      error.textContent = "";
-      unlockPage();
-    } else {
-      error.textContent = "Onjuiste pincode.";
-      input.select();
-    }
-  });
 }
 
 function pad(n) { return String(n).padStart(2, "0"); }
@@ -2195,7 +2089,7 @@ function showStatus(text) {
   els.dashboard.classList.add("hidden");
 }
 
-initPinGate();
+startPage();
 </script>
 </body>
 </html>

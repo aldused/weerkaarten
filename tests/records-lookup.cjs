@@ -2,10 +2,10 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
-for(const name of ['records_debilt','dagrecords_jaar','dagrecords_6dagen','extremen','neerslag_records','p13_records']){
+for(const name of ['records_debilt','dagrecords_jaar','dagrecords_6dagen','extremen','neerslag_records','p13_records','hittegolven','stationsanalyse','feestdagen_weer','normalen','normalen_vergelijk','beta_landelijk_maand','maandoverzicht','zomerstatistieken','droogtemonitor','historisch']){
  const html=read(name+'.html');
  for(const [,attrs,body]of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(!/\bsrc=|application\/ld\+json/.test(attrs))new vm.Script(body,{filename:name+'.html'});
- assert(html.includes('records-ui.css?v=20260913-1')&&html.includes('records-ui.js?v=20260913-1'));
+ assert(html.includes('records-ui.css?v=20260914-1')&&html.includes('records-ui.js?v=20260914-1'));
 }
 const helper=read('records-ui.js');new vm.Script(helper);
 const sorter=helper.slice(helper.indexOf('  function sortValue('),helper.indexOf('  const enhanced='));
@@ -38,4 +38,6 @@ const dayContext=vm.createContext({
 vm.runInContext(dayHtml.slice(dayHtml.indexOf('  let vorigeDagTemp='),dayHtml.indexOf('  document.getElementById("status").textContent="";')),dayContext);
 assert.deepEqual(rendered.map(row=>row[0]),[1,1,3]);
 assert.deepEqual(rendered.map(row=>row[1]),['A','B','C']);
-console.log('Records lookup: 6 pages parse; historical extremes, aggregate/daily choice, numeric/date sorting and tied ranks passed.');
+console.log('Records lookup: 16 pages parse; historical extremes, aggregate/daily choice, numeric/date sorting and tied ranks passed.');
+
+assert(!read("extremen.html").includes("initPinGate"));

@@ -16,10 +16,10 @@ const P13_DATA = {
       "961": "Roermond"
     },
     "periode_start": "1900-01-01",
-    "periode_eind": "2026-07-31",
+    "periode_eind": "2026-08-10",
     "min_stations": 10,
     "top_n": 25,
-    "gegenereerd": "2026-08-26 05:20"
+    "gegenereerd": "2026-09-14 04:03"
   },
   "records": {
     "natste_dag": [
@@ -354,10 +354,6 @@ const P13_DATA = {
         "waarde": 5.5
       },
       {
-        "label": "april 1952",
-        "waarde": 6.0
-      },
-      {
         "label": "april 1976",
         "waarde": 6.1
       },
@@ -410,11 +406,11 @@ const P13_DATA = {
         "waarde": 9.6
       },
       {
-        "label": "januari 1996",
+        "label": "november 2011",
         "waarde": 9.8
       },
       {
-        "label": "november 2011",
+        "label": "januari 1996",
         "waarde": 9.8
       },
       {
@@ -428,6 +424,10 @@ const P13_DATA = {
       {
         "label": "april 1988",
         "waarde": 10.2
+      },
+      {
+        "label": "juli 2018",
+        "waarde": 11.1
       }
     ],
     "natste_winter": [
@@ -766,10 +766,6 @@ const P13_DATA = {
         "waarde": 84.4
       },
       {
-        "label": "Lente 1952",
-        "waarde": 84.8
-      },
-      {
         "label": "Lente 2020",
         "waarde": 87.1
       },
@@ -836,6 +832,10 @@ const P13_DATA = {
       {
         "label": "Lente 2004",
         "waarde": 112.7
+      },
+      {
+        "label": "Lente 1933",
+        "waarde": 114.0
       }
     ],
     "natste_zomer": [
@@ -1390,10 +1390,6 @@ const P13_DATA = {
         "waarde": 608.0
       },
       {
-        "label": "1955",
-        "waarde": 613.7
-      },
-      {
         "label": "1943",
         "waarde": 619.9
       },
@@ -1448,6 +1444,10 @@ const P13_DATA = {
       {
         "label": "1949",
         "waarde": 666.7
+      },
+      {
+        "label": "1991",
+        "waarde": 667.0
       }
     ],
     "langste_droge_periode": [
@@ -1925,21 +1925,30 @@ const P13_DATA = {
       "jaarsom": 812.4,
       "max_dag": 37.1,
       "max_dag_datum": "04 Jul",
-      "neerslagdagen": 172
+      "neerslagdagen": 172,
+      "onvolledig": true,
+      "dagen": 349,
+      "tm_datum": "31 Dec"
     },
     {
       "jaar": 1954,
       "jaarsom": 765.7,
       "max_dag": 27.2,
       "max_dag_datum": "26 Jul",
-      "neerslagdagen": 157
+      "neerslagdagen": 157,
+      "onvolledig": true,
+      "dagen": 306,
+      "tm_datum": "31 Dec"
     },
     {
       "jaar": 1955,
       "jaarsom": 613.7,
       "max_dag": 24.1,
       "max_dag_datum": "15 Sep",
-      "neerslagdagen": 126
+      "neerslagdagen": 126,
+      "onvolledig": true,
+      "dagen": 334,
+      "tm_datum": "31 Dec"
     },
     {
       "jaar": 1956,
@@ -2433,13 +2442,13 @@ const P13_DATA = {
     },
     {
       "jaar": 2026,
-      "jaarsom": 346.4,
+      "jaarsom": 348.2,
       "max_dag": 11.6,
       "max_dag_datum": "20 Jun",
       "neerslagdagen": 81,
       "onvolledig": true,
-      "dagen": 212,
-      "tm_datum": "31 Jul"
+      "dagen": 222,
+      "tm_datum": "10 Aug"
     }
   ],
   "maandoverzicht": {
@@ -202416,6 +202425,57 @@ const P13_DATA = {
           {
             "dag": 31,
             "mm": 3.4
+          }
+        ]
+      },
+      {
+        "maand": 8,
+        "naam": "aug",
+        "som": 1.8,
+        "max_dag": 0.5,
+        "max_dag_datum": "07",
+        "neerslagdagen": 0,
+        "dagen": 10,
+        "dagwaarden": [
+          {
+            "dag": 1,
+            "mm": 0.3
+          },
+          {
+            "dag": 2,
+            "mm": 0.0
+          },
+          {
+            "dag": 3,
+            "mm": 0.0
+          },
+          {
+            "dag": 4,
+            "mm": 0.4
+          },
+          {
+            "dag": 5,
+            "mm": 0.5
+          },
+          {
+            "dag": 6,
+            "mm": 0.0
+          },
+          {
+            "dag": 7,
+            "mm": 0.5
+          },
+          {
+            "dag": 8,
+            "mm": 0.0
+          },
+          {
+            "dag": 9,
+            "mm": 0.0
+          },
+          {
+            "dag": 10,
+            "mm": 0.1
           }
         ]
       }

@@ -6,7 +6,9 @@
   const links = [
     ['records_debilt.html','Weerrecords'],['dagrecords_6dagen.html','Dagrecords · kaarten'],
     ['dagrecords_jaar.html','Dagrecords · per jaar'],['extremen.html','Zoek extremen'],
-    ['neerslag_records.html','Neerslagrecords'],['p13_records.html','Landelijk · P13']
+    ['neerslag_records.html','Neerslagrecords'],['p13_records.html','Landelijk · P13'],
+    ['hittegolven.html','Hittegolven'],['stationsanalyse.html','Eerste & laatste'],
+    ['feestdagen_weer.html','Feestdagen'],['normalen.html','Klimaatnormalen']
   ];
   function element(tag, attrs = {}, text) {
     const node = document.createElement(tag);
@@ -24,6 +26,7 @@
     const fill = () => list.replaceChildren(...Array.from(select.options).filter(o=>o.value && !o.disabled).map(o=>element('option',{value:o.textContent.trim()})));
     fill();
     new MutationObserver(fill).observe(select,{childList:true,subtree:true});
+    let choosing=false;
     function chooseStation() {
       const term = input.value.trim().toLocaleLowerCase('nl');
       if (!term) { feedback.textContent=''; return; }
@@ -33,7 +36,8 @@
       const match = exact || (matches.length===1 ? matches[0] : null);
       if (match) {
         select.value=match.value; input.value=match.textContent.trim(); feedback.textContent='';
-        select.dispatchEvent(new Event('change',{bubbles:true}));
+        choosing=true;
+        try { select.dispatchEvent(new Event('change',{bubbles:true})); } finally { choosing=false; }
       } else feedback.textContent=matches.length ? 'Kies een station uit de suggesties.' : 'Geen station gevonden. Probeer een andere naam.';
     }
     input.addEventListener('change',chooseStation);
@@ -43,9 +47,9 @@
       if(Array.from(select.options).some(o=>o.textContent.trim().toLocaleLowerCase('nl')===term))chooseStation();
       if(!term)feedback.textContent='';
     });
-    select.addEventListener('change',()=>{input.value='';feedback.textContent='';});
+    select.addEventListener('change',()=>{if(!choosing)input.value='';feedback.textContent='';});
     field.append(input,list,feedback);
-    const group=select.closest('.filter-groep,.control');
+    const group=select.closest('.filter-groep,.control,.ctrl-group,.station-select-wrap,label');
     if(group) group.before(field); else select.before(field);
   }
   function mainControls() {
@@ -238,11 +242,16 @@
   document.addEventListener('DOMContentLoaded',()=>{
     document.body.classList.add('record-page');
     const nav=element('nav',{class:'record-nav','aria-label':'Recordspagina’s'});
-    const routes=['records','dagrecords','dagrecords-jaar','extremen','neerslag668','p13'];
-    for(const [index,[file,label]]of links.entries()){
-      const a=element('a',{href:window===window.top?file:'index.html#'+routes[index]},label);
-      if(file===page)a.setAttribute('aria-current','page');nav.append(a);
+    const routes=['records','dagrecords','dagrecords-jaar','extremen','neerslag668','p13','hittegolven','eerstelaatste','feestdagen','normalen'];
+    const archives=[['beta_landelijk_maand.html','Maandbeeld','maandbeeld'],['maandoverzicht.html','Maandstanden','maandoverzicht'],['zomerstatistieken.html','Zomerstatistieken','zomerstatistieken'],['droogtemonitor.html','Droogtemonitor','droogte'],['neerslag_records.html','Neerslagrecords','neerslag668'],['historisch.html','Historische dagkaarten','archief']];
+    const archivePage=archives.some(([file])=>file===page);
+    const entries=archivePage ? archives : links.map(([file,label],i)=>[file,label,routes[i]]);
+    nav.setAttribute('aria-label','Weerrecords en historie');
+    for(const [file,label,route] of entries){
+      const a=element('a',{href:window===window.top?file:'index.html#'+route},label);
+      if(file===page || (page==='normalen_vergelijk.html' && file==='normalen.html'))a.setAttribute('aria-current','page');nav.append(a);
     }
+    nav.append(element('a',{class:'record-nav-all',href:'index.html#menu/terugkijken'},'Alle onderdelen →'));
     const heading=document.querySelector('.climate-heading');heading.after(nav);
     document.querySelectorAll('.rtab,.ptab,.param-tab').forEach(el=>{
       el.setAttribute('role','button');el.tabIndex=0;
@@ -253,8 +262,11 @@
     if(page==='dagrecords_jaar.html')yearControls();
     if(page==='extremen.html')extremeControls();
     if(page==='neerslag_records.html')rainControls();
-    for(const id of ['sel-station','station','sel-grafiek-station','sel-verg-station']){const select=$(id);if(select)stationSearch(select);}
-    const scan=()=>document.querySelectorAll('table').forEach(enhanceTable);
+    const rankingPages=['records_debilt.html','dagrecords_jaar.html','dagrecords_6dagen.html','extremen.html','neerslag_records.html','p13_records.html'];
+    const scan=()=>{
+      for(const id of ['sel-station','station','stationSelect','station-select','sel-grafiek-station','sel-verg-station','ss']){const select=$(id);if(select?.tagName==='SELECT')stationSearch(select);}
+      if(rankingPages.includes(page))document.querySelectorAll('table').forEach(enhanceTable);
+    };
     scan();let queued=false;
     new MutationObserver(()=>{if(!queued){queued=true;requestAnimationFrame(()=>{queued=false;scan();});}}).observe(document.body,{childList:true,subtree:true});
   });

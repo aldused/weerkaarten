@@ -17,11 +17,13 @@ Output: l5_records.json
 """
 
 import os
+import subprocess
 import json
 import zipfile
 import urllib.request
 import numpy as np
 import pandas as pd
+from climate_periods import complete_days
 from datetime import datetime, date, timedelta
 
 # ── Configuratie ──────────────────────────────────────────────────────────────
@@ -78,8 +80,7 @@ def download_station(nr: int) -> pd.DataFrame:
 
     cache_geldig = False
     if os.path.exists(cache_path):
-        leeftijd = (datetime.now() - datetime.fromtimestamp(os.path.getmtime(cache_path))).days
-        cache_geldig = leeftijd < 3
+        cache_geldig = datetime.fromtimestamp(os.path.getmtime(cache_path)).date() == date.today()
 
     if not cache_geldig:
         url = BASE_URL.format(nr=nr)
@@ -240,11 +241,12 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
         records["laagste_dag"] = top_n(s, TOP_N, ascending=True)
 
     # Decade (gemiddelde per decade voor temp, som voor neerslag/zon)
-    labels = dag.index.to_series().apply(lambda d: f"{decade_label(d.month, d.day)} {d.year}")
+    dec_days = complete_days(dag, "decade")
+    labels = dec_days.index.to_series().apply(lambda d: f"{decade_label(d.month, d.day)} {d.year}")
     if is_som:
-        deca = dag.groupby(labels).sum().round(1)
+        deca = dec_days.groupby(labels).sum().round(1)
     else:
-        deca = dag.groupby(labels).mean().round(1)
+        deca = dec_days.groupby(labels).mean().round(1)
     records["hoogste_decade"] = top_n(deca, TOP_N, ascending=False)
     if is_temp or is_zon:
         records["laagste_decade"] = top_n(deca, TOP_N, ascending=True)
@@ -252,10 +254,10 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
     # Per kalendermaand + decade (voor "maand → decade"-filter in UI)
     # Structuur: hoogste_decade_per[mnd]["all"|"1"|"2"|"3"] = top-25 lijst
     df_dec = pd.DataFrame({
-        "val":  dag.values,
-        "jaar": dag.index.year,
-        "mnd":  dag.index.month,
-        "dec":  [1 if d <= 10 else (2 if d <= 20 else 3) for d in dag.index.day],
+        "val":  dec_days.values,
+        "jaar": dec_days.index.year,
+        "mnd":  dec_days.index.month,
+        "dec":  [1 if d <= 10 else (2 if d <= 20 else 3) for d in dec_days.index.day],
     })
     agg = "sum" if is_som else "mean"
     grp = (df_dec.groupby(["mnd", "dec", "jaar"])["val"].agg(agg).round(1)
@@ -283,11 +285,12 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
     if is_temp or is_zon:
         records["laagste_decade_per"] = per_mnd_dec_laag
 
-    # Maand
+    # Only complete months can be compared as monthly means or totals.
+    month_days = complete_days(dag, "month")
     if is_som:
-        maand = dag.groupby(dag.index.to_period("M")).sum().round(1)
+        maand = month_days.groupby(month_days.index.to_period("M")).sum().round(1)
     else:
-        maand = dag.groupby(dag.index.to_period("M")).mean().round(1)
+        maand = month_days.groupby(month_days.index.to_period("M")).mean().round(1)
     maand_periods = list(maand.index)
     maand.index = [f"{MAANDEN_NL[p.month]} {p.year}" for p in maand_periods]
     records["hoogste_maand"] = top_n(maand, TOP_N, ascending=False)
@@ -305,12 +308,13 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
     records["laagste_maand_per"] = per_mnd_laag
 
     # Seizoen
-    sei_labels = dag.index.to_series().apply(seizoen_jaar)
+    season_days = complete_days(dag, "season")
+    sei_labels = season_days.index.to_series().apply(seizoen_jaar)
     if is_som:
-        sei = dag.groupby(sei_labels).sum().round(1)
+        sei = season_days.groupby(sei_labels).sum().round(1)
     else:
-        sei = dag.groupby(sei_labels).mean().round(1)
-    sei_counts = dag.groupby(sei_labels).count()
+        sei = season_days.groupby(sei_labels).mean().round(1)
+    sei_counts = season_days.groupby(sei_labels).count()
     sei = sei[sei_counts >= 70]
 
     for naam in SEIZOENEN:
@@ -318,12 +322,13 @@ def bereken_records(dag: pd.Series, param: str) -> dict:
         records[f"hoogste_{naam.lower()}"] = top_n(subset, TOP_N, ascending=False)
         records[f"laagste_{naam.lower()}"] = top_n(subset, TOP_N, ascending=True)
 
-    # Jaar
+    # Complete years, including leap day.
+    year_days = complete_days(dag, "year")
     if is_som:
-        jaar = dag.groupby(dag.index.year).sum().round(1)
+        jaar = year_days.groupby(year_days.index.year).sum().round(1)
     else:
-        jaar = dag.groupby(dag.index.year).mean().round(1)
-    jaar_counts = dag.groupby(dag.index.year).count()
+        jaar = year_days.groupby(year_days.index.year).mean().round(1)
+    jaar_counts = year_days.groupby(year_days.index.year).count()
     jaar = jaar[jaar_counts >= 300]
     jaar.index = jaar.index.astype(str)
     records["hoogste_jaar"] = top_n(jaar, TOP_N, ascending=False)
@@ -344,7 +349,7 @@ def jaar_statistieken(param_series: dict) -> list:
         row = {"jaar": int(jaar)}
         for param, s in param_series.items():
             grp = s[s.index.year == jaar]
-            if grp.count() < 300:
+            if len(complete_days(grp, "year")) != (366 if pd.Timestamp(int(jaar), 1, 1).is_leap_year else 365):
                 continue
             if param == "RH":
                 row["rh_som"] = round(float(grp.sum()), 1)
@@ -354,10 +359,10 @@ def jaar_statistieken(param_series: dict) -> list:
                 row["warme_dagen"] = int((grp >= 20.0).sum())
                 row["zomerse_dagen"] = int((grp >= 25.0).sum())
                 row["tropische_dagen"] = int((grp >= 30.0).sum())
+                row["ijs_dagen"] = int((grp < 0.0).sum())
             elif param == "TN":
                 row["tn_gem"] = round(float(grp.mean()), 1)
                 row["vorst_dagen"] = int((grp < 0.0).sum())
-                row["ijs_dagen"] = int((grp < -10.0).sum())
             elif param == "TG":
                 row["tg_gem"] = round(float(grp.mean()), 1)
             elif param == "SQ":
@@ -434,3 +439,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # The pages read these feeds from R2; every scheduled export must publish.
+    subprocess.run(["bash", os.path.join(SCRIPT_DIR, "shell", "r2_publish.sh"), OUTPUT_JSON], check=True)

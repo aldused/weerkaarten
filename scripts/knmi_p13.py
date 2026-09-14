@@ -21,10 +21,12 @@ Output: p13_records.json
 """
 
 import os
+import subprocess
 import json
 import urllib.request
 import urllib.parse
 import pandas as pd
+from climate_periods import complete_days
 from datetime import datetime
 
 # ── Configuratie ──────────────────────────────────────────────────────────────
@@ -188,10 +190,12 @@ def dag_records(dag: pd.DataFrame) -> dict:
     return {"natste_dag": top_n(s)}
 
 def decade_records(dag: pd.DataFrame) -> dict:
+    dag = dag.loc[complete_days(dag["rh_mm"], "decade").index]
     labels = dag.index.to_series().apply(lambda d: f"{decade_label(d.month, d.day)} {d.year}")
     return {"natste_decade": top_n(dag["rh_mm"].groupby(labels).sum())}
 
 def maand_records(dag: pd.DataFrame) -> dict:
+    dag = dag.loc[complete_days(dag["rh_mm"], "month").index]
     maand = dag["rh_mm"].groupby(dag.index.to_period("M")).sum()
     maand.index = [f"{MAANDEN_NL[p.month]} {p.year}" for p in maand.index]
     return {
@@ -200,6 +204,7 @@ def maand_records(dag: pd.DataFrame) -> dict:
     }
 
 def seizoen_records(dag: pd.DataFrame) -> dict:
+    dag = dag.loc[complete_days(dag["rh_mm"], "season").index]
     labels     = dag.index.to_series().apply(seizoen_jaar)
     sei_som    = dag["rh_mm"].groupby(labels).sum()
     sei_counts = dag["rh_mm"].groupby(labels).count()
@@ -212,6 +217,7 @@ def seizoen_records(dag: pd.DataFrame) -> dict:
     return result
 
 def jaar_records(dag: pd.DataFrame) -> dict:
+    dag = dag.loc[complete_days(dag["rh_mm"], "year").index]
     som    = dag["rh_mm"].groupby(dag.index.year).sum()
     counts = dag["rh_mm"].groupby(dag.index.year).count()
     som    = som[counts >= 300]
@@ -269,7 +275,7 @@ def jaar_statistieken(dag: pd.DataFrame) -> list:
             "max_dag_datum": grp["rh_mm"].idxmax().strftime("%d %b"),
             "neerslagdagen": int((grp["rh_mm"] >= 1.0).sum()),
         }
-        if n_dagen < 300:
+        if n_dagen < (366 if pd.Timestamp(int(jaar), 1, 1).is_leap_year else 365):
             entry["onvolledig"] = True
             entry["dagen"] = int(n_dagen)
             entry["tm_datum"] = grp.index[-1].strftime("%d %b")
@@ -371,3 +377,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # The pages read these feeds from R2; every scheduled export must publish.
+    subprocess.run(["bash", os.path.join(SCRIPT_DIR, "shell", "r2_publish.sh"), OUTPUT_JSON], check=True)

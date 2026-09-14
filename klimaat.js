@@ -2,6 +2,12 @@
 (() => {
   'use strict';
   let latest = null;
+  // Changing climate exports are published independently of the static site.
+  window.weerlabClimateDataUrl = file => {
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) || location.protocol === 'file:';
+    return (local ? '' : 'https://data.weerlab.nl/') + file + '?t=' + Date.now();
+  };
+
   function dateOnly(value) {
     const m = String(value || '').match(/^(\d{4})-?(\d{2})-?(\d{2})/);
     return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
