@@ -346,7 +346,7 @@ const MENU_PRODUCTS = [
         "1"
       ]
     },
-    "keywords": "Modelkaarten Europa tot +384 u Overzicht Temperatuur Neerslag Wind Hoogtevelden Onweer / CAPE ECMWF HRES GFS ICON-EU Europa 1 kaart ECMWF HRES GFS ICON-EU",
+    "keywords": "Modelkaarten Europa tot +384 u Overzicht Temperatuur Neerslag Wind Straalstroom Jetstream 300 hPa Saharastof CAMS aerosol AOD stof Sahara Hoogtevelden Onweer / CAPE ECMWF HRES GFS ICON-EU Europa 1 kaart ECMWF HRES GFS ICON-EU",
     "restricted": false
   },
   {

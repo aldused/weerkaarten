@@ -133,6 +133,7 @@
   .daglabels { display:flex; justify-content:space-between; margin-top:4px;
                color:var(--muted); font-size:10px; }
   .daglabels span { flex:1; text-align:center; }
+#dust-info a{color:var(--accent)} #dust-info summary{cursor:pointer;font-weight:600}
 </style>
 </head>
 <body>
@@ -140,7 +141,7 @@
 <header>
   <h1>🌍 Modelkaarten Europa</h1>
   <span class="new-badge">NIEUW</span>
-  <span class="muted">ECMWF · GFS · ICON-EU</span>
+  <span class="muted">ECMWF · GFS · ICON-EU · CAMS</span>
   <span class="run-info" id="run-info">laden…</span>
   <span class="update-info" id="update-info">live controle…</span>
 </header>
@@ -151,6 +152,19 @@
 <div class="bar" id="runbar"></div>
 <div class="barlabel">Variabele</div>
 <div class="bar" id="varbar"></div>
+<p id="jetstream-info" class="muted" style="margin:8px 16px" hidden>Wind op 300 hPa (ongeveer 9 km hoogte). Kleur: snelheid in knopen; stroomlijnen: windrichting. 1 knoop = 1,852 km/u. ECMWF · Atlantische Oceaan en Europa.</p>
+
+<section id="dust-info" hidden style="margin:10px 16px;max-width:1050px;line-height:1.55">
+  <p><strong>Saharastof · stof in de hele luchtkolom</strong><br>Kleuren tonen de optische dikte door mineraalstof bij 550 nm (AOD, zonder eenheid). Hogere waarden betekenen meer uitdoving van licht door stof. De legenda begint bij 0,10; een wit gebied betekent dus niet automatisch nul stof.</p>
+  <details><summary>Hoe wordt dit berekend? En wat zegt het over stof op de grond?</summary>
+    <p>CAMS berekent hoeveel stof opwaait uit droge bodems, hoe wind en turbulentie het vervoeren en hoeveel door bezinking en neerslag uit de lucht verdwijnt. Satellietwaarnemingen verbeteren de begintoestand. Voor de kaart wordt het effect van de deeltjes op licht over alle luchtlagen opgeteld.</p>
+    <p>Dit is specifiek mineraalstof: rook, zeezout en andere aerosolen zijn niet inbegrepen. De stoflaag is niet op herkomst gelabeld; in deze regio gaat het vaak om Saharastof, maar ook andere woestijnen kunnen bijdragen.</p>
+    <p><strong>Drie verschillende maten:</strong> AOD beschrijft lichtuitdoving in de hele kolom. Stofconcentratie aan de grond wordt gemeten in µg/m³. Depositie is het stof dat neerslaat, in bijvoorbeeld mg/m². Een hoge AOD voorspelt niet rechtstreeks hoeveel stof op auto's terechtkomt; daarvoor is een depositieproduct nodig.</p>
+    <p><strong>Andere modellen:</strong> AEMET/BSC vergelijkt meerdere stofmodellen, waaronder MONARCH; DWD maakt eigen berekeningen met ICON-ART. Open-Meteo ontsluit CAMS-data en is dus geen onafhankelijk stofmodel. Hun variabele <code>dust</code> is stof bij de grond; <code>aerosol_optical_depth</code> omvat alle aerosolen.</p>
+    <p><a href="https://www.ecmwf.int/en/forecasts/datasets/cams-global-atmospheric-composition-forecasts" target="_blank" rel="noopener">CAMS-methode</a> · <a href="https://dust.aemet.es/products/daily-dust-products" target="_blank" rel="noopener">AEMET/BSC-modelvergelijking</a> · <a href="https://gmd.copernicus.org/articles/8/1659/2015/" target="_blank" rel="noopener">ICON-ART</a> · <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener">Open-Meteo: variabelen</a></p>
+  </details>
+  <p class="muted">Originele kaarten en legenda: Copernicus Atmosphere Monitoring Service / ECMWF. Alleen daadwerkelijk aangeboden runs; drie-uursstappen tot +120 uur.</p>
+</section>
 
 <div class="stage">
   <div class="leftcol">
@@ -201,7 +215,7 @@
   <aside class="runpanel">
     <h3>Beschikbare runs</h3>
     <div id="runlist"></div>
-    <div class="foot"><span style="color:var(--gold)">●</span> nu getoonde run<br>HRES → +240 u · ENS → +360 u · GFS → +240 u · ICON-EU → +120 u</div>
+    <div class="foot"><span style="color:var(--gold)">●</span> nu getoonde run<br>HRES → +240 u · ENS → +360 u · GFS → +240 u · ICON-EU → +120 u · CAMS → +120 u</div>
   </aside>
 </div>
 
@@ -295,6 +309,8 @@ function renderRunPanel(){
 }
 
 function syncVarButtons(){
+  $('jetstream-info').hidden=varKey!=='jetstream';
+  $('dust-info').hidden=curModel!=='cams';
   document.querySelectorAll('#varbar .pill').forEach(b=>{
     b.style.display=R().files[b.dataset.k]?'':'none';
     b.classList.toggle('actief',b.dataset.k===varKey);
@@ -342,6 +358,7 @@ function show(i){
     prepareDownload();
   };
   img.onerror=()=>{ $('loading').textContent='frame ontbreekt'; };
+  img.alt=META.vars.find(v=>v.key===varKey).label+' · '+fr.valid_label+' · run '+R().run_label;
   img.src=srcOf(varKey,idx);
   $('c-valid').textContent=fr.valid_label;
   $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
@@ -433,7 +450,7 @@ function fsZoom(f,cx,cy){ const ns=Math.min(7,Math.max(1,fsScale*f)); const k=ns
 
 function buildStaticBars(m){
   $('modelbar').innerHTML=''; $('varbar').innerHTML='';
-  const EMO={t2m:'🌡️',t2m_grid:'🔢',t850:'🌡️',z500:'🌐',wind:'💨',precip24:'🌧️',cape:'⚡',overview:'🗺️'};
+  const EMO={t2m:'🌡️',t2m_grid:'🔢',t850:'🌡️',z500:'🌐',wind:'💨',jetstream:'🌬️',precip24:'🌧️',cape:'⚡',overview:'🗺️',dust_europe:'🏜️',dust_sahara:'🏜️',dust_atlantic:'🏜️'};
   const mb=$('modelbar');
   m.models.forEach(md=>{ const b=document.createElement('button'); b.className='pill'; b.dataset.m=md.key;
     b.textContent=md.label; b.onclick=()=>{ if(playing)play(); setModel(md.key); }; mb.appendChild(b); });
