@@ -318,7 +318,7 @@ const MENU_PRODUCTS = [
   {
     "id": "hres10",
     "name": "Weerkaarten Europa",
-    "description": "De verwachting voor heel Europa",
+    "description": "ECMWF, GFS en ICON-EU, met straalstroom en eigen CAMS-kaarten voor Saharastof",
     "category": "verwachting",
     "type": "kaarten",
     "section": "",

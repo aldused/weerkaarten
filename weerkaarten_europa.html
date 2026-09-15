@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+
+<html lang="nl">
+<head>
+<meta charset="utf-8"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><link href="weerlab_design_tokens.css" rel="stylesheet"/><meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Weerkaarten Europa · Weerlab</title>
+<style>
+  :root {
+    --bg:#0d1420; --panel:#172235; --panel2:#1e2c44; --border:#2a3a55;
+    --accent:#88aaff; --accent2:#2ec4e8; --gold:#ffcc66; --text:#e6ecf5;
+    --muted:#8899bb; --danger:#e04040;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text);
+         font-family:-apple-system,"Helvetica Neue",Arial,sans-serif; }
+
+  header { background:var(--panel); border-bottom:1px solid var(--border);
+           padding:12px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:17px; font-weight:800; }
+  .new-badge { background:#2563a8; color:#fff; font-size:9px; font-weight:800;
+               padding:2px 6px; border-radius:3px; letter-spacing:1px; }
+  .run-info { color:var(--muted); font-size:12px; margin-left:auto; }
+  .update-info { color:#77d9a3; font-size:11px; white-space:nowrap; }
+  .update-info.fresh { color:var(--gold); }
+
+  .barlabel { padding:11px 20px 0; color:var(--muted); font-size:10px;
+              text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
+  .bar { display:flex; gap:7px; flex-wrap:wrap; padding:5px 20px 0; }
+  .pill { background:var(--panel); border:1px solid var(--border); color:var(--text);
+          padding:7px 13px; border-radius:8px; cursor:pointer; font-size:13px;
+          transition:border-color .15s, background .15s; white-space:nowrap; }
+  .pill:hover { border-color:var(--accent); }
+  .pill.actief { background:var(--accent); color:#0d1420; border-color:var(--accent); font-weight:700; }
+  #runbar .pill.actief { background:var(--gold); border-color:var(--gold); }
+  #modelbar .pill.actief { background:var(--accent2); border-color:var(--accent2); color:#0d1420; }
+  .pill .dim { opacity:.6; font-size:11px; }
+
+  .stage { display:flex; gap:14px; width:100%; max-width:1800px; margin:8px auto 0; padding:0 12px;
+           align-items:flex-start; }
+  .leftcol { flex:1; min-width:0; width:100%; }
+  .viewer-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 2px;
+                  min-height:38px; }
+  .size-control { display:flex; align-items:center; gap:8px; padding:6px 10px;
+                  background:var(--panel); border:1px solid var(--border); border-radius:8px;
+                  color:var(--muted); font-size:12px; font-weight:700; }
+  #mapsize { width:190px; accent-color:var(--accent2); cursor:pointer; }
+  #mapsize-value { min-width:38px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .tool-meta { color:var(--muted); font-size:11px; margin-left:auto; }
+  .kaart-scroll { width:100%; max-width:100%; min-width:0; overflow-x:auto; overflow-y:hidden; padding-bottom:3px;
+                  scrollbar-color:var(--border) transparent; }
+  .fsbtn { position:absolute; top:9%; left:50%; transform:translateX(-50%); z-index:5;
+           background:rgba(13,20,32,.62); border:1px solid var(--border); color:#fff;
+           border-radius:7px; padding:6px 11px; font-size:12px; cursor:pointer; }
+  .fsbtn:hover { border-color:var(--accent); }
+  /* Fullscreen zoom-overlay */
+  #fs { position:fixed; inset:0; background:rgba(8,12,20,.97); z-index:1000; display:none;
+        flex-direction:column; }
+  #fs.open { display:flex; }
+  .fs-top { display:flex; align-items:center; gap:10px; padding:12px 18px; }
+  .fs-cap { font-size:14px; color:var(--text); }
+  .fs-cap b { color:var(--gold); }
+  .fs-top .sp { margin-left:auto; }
+  .fs-btn { background:var(--panel); border:1px solid var(--border); color:var(--text);
+            border-radius:7px; padding:7px 12px; cursor:pointer; font-size:14px; }
+  .fs-btn:hover { border-color:var(--accent); }
+  .fs-stage { flex:1; overflow:hidden; position:relative; cursor:grab; }
+  .fs-stage.drag { cursor:grabbing; }
+  #fsimg { position:absolute; left:50%; top:50%; width:96vw; height:auto; max-width:none;
+           transform-origin:center center; user-select:none; -webkit-user-drag:none;
+           border-radius:6px; }
+  .fs-hint { text-align:center; color:var(--muted); font-size:11px; padding:7px; }
+  .kaart-wrap { position:relative; width:var(--kaart-grootte, 100%); min-width:520px;
+                margin:0 auto; padding:8px 0 0; transition:width .12s ease; }
+  .runpanel { width:208px; flex-shrink:0; background:var(--panel); border:1px solid var(--border);
+              border-radius:10px; padding:12px 14px; margin-top:8px; }
+  .runpanel h3 { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+                 color:var(--muted); margin-bottom:8px; font-weight:700; }
+  .runrow { display:flex; justify-content:space-between; align-items:baseline; padding:7px 0;
+            border-bottom:1px solid var(--border); font-size:13px; }
+  .runrow:last-child { border-bottom:none; }
+  .runrow .cyc { font-weight:700; }
+  .runrow .t { font-variant-numeric:tabular-nums; }
+  .runrow .loc { color:var(--muted); font-size:10px; margin-left:6px; }
+  .runrow.loaded { color:var(--gold); }
+  .runrow.loaded .cyc::before { content:'● '; font-size:9px; vertical-align:middle; }
+  .runrow .soon { color:var(--accent2); font-size:10px; margin-left:7px; font-weight:700; }
+  .runpanel .foot { margin-top:10px; color:var(--muted); font-size:10px; line-height:1.5; }
+  @media (max-width:1780px){
+    .stage { flex-direction:column; }
+    .runpanel { width:100%; }
+    #runlist { display:flex; flex-wrap:wrap; gap:0 22px; }
+    .runrow { min-width:220px; gap:18px; }
+  }
+  @media (max-width:680px){
+    header { padding:10px 12px; }
+    .bar, .barlabel { padding-left:12px; padding-right:12px; }
+    .stage { padding:0 8px; }
+    .size-control { width:100%; }
+    #mapsize { flex:1; min-width:90px; }
+    .tool-meta { width:100%; margin-left:0; }
+  }
+  #kaart { width:100%; border-radius:8px; display:block; background:var(--panel);
+           min-height:320px; border:1px solid var(--border); }
+  .loading { position:absolute; inset:8px 16px 0; display:flex; align-items:center;
+             justify-content:center; background:rgba(13,20,32,.6); border-radius:8px;
+             color:var(--muted); font-size:14px; opacity:0; pointer-events:none;
+             transition:opacity .2s; }
+  .loading.vis { opacity:1; }
+  .credit { position:absolute; right:24px; bottom:11px; font-size:11px; color:#eef3fb;
+            background:rgba(13,20,32,.55); padding:2px 8px; border-radius:5px;
+            pointer-events:none; letter-spacing:.02em; }
+
+  .chips { margin:10px 0 0; display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+  .chip { background:var(--panel); border:1px solid var(--border); border-radius:20px;
+          padding:5px 13px; font-size:13px; white-space:nowrap; }
+  .chip b { color:var(--gold); }
+  .chip .lbl { color:var(--muted); font-size:11px; margin-right:5px; }
+
+  .controls { margin:14px 0 24px; }
+  .ctrl-row { display:flex; align-items:center; gap:11px; flex-wrap:wrap; margin-bottom:10px; }
+  .btn { background:var(--panel); border:1px solid var(--border); color:var(--text);
+         padding:8px 16px; border-radius:8px; cursor:pointer; font-size:14px;
+         transition:border-color .15s; }
+  .btn:hover { border-color:var(--accent); }
+  .btn:disabled { opacity:.58; cursor:wait; }
+  .btn.active { background:var(--accent); color:#0d1420; border-color:var(--accent); }
+  .btn.play { min-width:104px; font-weight:700; }
+  select.sel { background:var(--panel); color:var(--text); border:1px solid var(--border);
+               border-radius:6px; padding:7px 10px; font-size:13px; cursor:pointer; }
+  .muted { color:var(--muted); font-size:13px; }
+
+  #slider { width:100%; height:6px; cursor:pointer; accent-color:var(--accent); }
+  .daglabels { display:flex; justify-content:space-between; margin-top:4px;
+               color:var(--muted); font-size:10px; }
+  .daglabels span { flex:1; text-align:center; }
+#dust-info a{color:var(--accent)} #dust-info summary{cursor:pointer;font-weight:600}
+</style>
+<style>
+/* Dezelfde lichte bediening als Modelkaarten Nederland. */
+:root {--bg:var(--wl-color-background);--panel:#fff;--panel2:#f8fafc;--border:#dbe4ef;--accent:#00205b;--accent2:#035e7a;--gold:#00205b;--text:#0f172a;--muted:#64748b}
+body {font-family:var(--wl-font-sans);}
+header {padding:11px 20px;background:#fff;gap:12px;border-bottom:1px solid #e3e8ef;}
+header h1 {font-size:16px;letter-spacing:-.01em;}
+.all-maps {font-size:12px;color:#035e7a;text-decoration:none;padding-right:10px;}
+.embedded .all-maps {display:none}
+.update-info {color:#047857}
+.stage {max-width:1800px;padding:0;margin:0 auto;gap:0;display:flex;flex-direction:row;align-items:flex-start;}
+.leftcol {padding:10px 16px;}
+#control-sidebar {flex:0 0 312px;width:312px;padding:10px;display:flex;flex-direction:column;gap:10px;background:#f8fbff;border-left:1px solid #dbe4ef;position:sticky;top:0;max-height:100vh;overflow-y:auto;}
+.control-section,.runpanel {background:#fff;border:1px solid #dbe4ef;border-radius:8px;padding:12px;box-shadow:0 1px 2px rgba(15,23,42,.04);width:100%;margin:0;}
+.control-section h2 {font-size:12px;font-weight:700;margin:0 0 12px;}
+.control-section label[for],.field-label {display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:700;margin:10px 0 5px;}
+#modelbar,#varbar {width:100%;padding:9px 28px 9px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;font:600 13px var(--wl-font-sans);cursor:pointer;}
+#varbar {background:#00205b;color:#fff;border-color:#00205b;border-bottom:2px solid #2ec4e8;}
+#varbar option {background:#fff;color:#0f172a;}
+#runbar {padding:0;gap:6px;}
+#runbar .pill {font-size:12px;padding:6px 10px;}
+#runbar .pill.actief,.btn.active {background:#00205b;color:#fff;border-color:#00205b;}
+button,select {font-family:inherit;}
+button:focus-visible,select:focus-visible,a:focus-visible,input:focus-visible {outline:2px solid #2ec4e8;outline-offset:2px;}
+.chips {margin:0;display:block;}
+.chip {display:block;border:0;border-radius:0;padding:4px 0;white-space:normal;font-size:12px;}
+.chip .lbl {display:inline-block;min-width:54px;}
+.controls {margin:12px 0 0;}
+.ctrl-row {gap:6px;}
+.ctrl-row .btn {font-size:11px;padding:7px 8px;min-width:0;}
+.btn.play {flex:1 0 100%;background:#00205b;color:#fff;}
+#slider {margin:8px 0;}
+.daglabels {display:none;}
+#runlist {display:block;}
+.runrow {min-width:0;font-size:11px;gap:8px;}
+.runrow .t {text-align:right;}
+.viewer-tools {margin:0 0 8px;}
+.size-control {padding:6px 8px;}
+#mapsize {width:120px;}
+.tool-meta {width:100%;margin:0;font-size:10px;}
+.btn {padding:7px 11px;font-size:12px;}
+.kaart-wrap {min-width:0;padding:0;}
+#kaart {min-height:0;}
+.fsbtn {top:12px;left:auto;right:12px;transform:none;}
+#fs {--text:#e6ecf5;--muted:#b9c6d9;--panel:#172235;--border:#445570;--gold:#ffcc66;--accent:#88aaff;}
+.map-explanation {max-width:1100px;font-size:12px;line-height:1.6;}
+#dust-info {margin:12px 0!important;}
+#dust-info p {margin:8px 0;}
+#jetstream-info {margin:12px 0!important;}
+@media(max-width:900px){
+ .stage {flex-direction:column;}
+ #control-sidebar {position:static;order:-1;max-height:none;width:100%;flex:auto;border-left:0;border-bottom:1px solid #dbe4ef;display:grid;grid-template-columns:1fr 1fr;align-items:start;}
+ #control-sidebar .runpanel {grid-column:1/-1;}
+ #runlist {display:flex;gap:12px;flex-wrap:wrap;}
+ .leftcol {width:100%;padding:10px;}
+}
+@media(max-width:560px){
+ header {padding:10px;}.run-info {margin-left:0;width:100%;font-size:10px;}
+ #control-sidebar {grid-template-columns:1fr;}.size-control {width:auto;}#mapsize {width:95px;}
+}
+</style></head>
+<body>
+<header><a class="all-maps" href="index.html#menu/verwachting?type=kaarten" target="_top">← Alle weerkaarten</a>
+<h1>Weerkaarten Europa</h1>
+
+
+<span class="run-info" id="run-info">laden…</span>
+<span class="update-info" id="update-info">live controle…</span>
+</header>
+
+
+
+
+
+
+
+
+<div class="stage">
+<div class="leftcol">
+<div class="viewer-tools">
+<label class="size-control" for="mapsize">
+        Kaartgrootte
+        <input id="mapsize" max="160" min="70" step="5" type="range" value="100"/>
+<output for="mapsize" id="mapsize-value">100%</output>
+</label>
+<button class="btn" id="size-reset" type="button">Passend</button>
+<button class="btn" disabled="" id="download" title="Download de originele PNG met titel, geldigheid en legenda" type="button">⬇ Download PNG</button>
+<span class="tool-meta" id="map-resolution">originele kaart laden…</span>
+</div>
+<div class="kaart-scroll" id="kaart-scroll">
+<div class="kaart-wrap" id="kaart-wrap">
+<img alt="weerkaart" decoding="async" id="kaart"/>
+<button class="fsbtn" id="fsbtn" title="Vergroten + inzoomen">⤢ Vergroten</button>
+<div class="loading" id="loading">laden…</div>
+</div>
+</div>
+
+
+<div class="map-explanation"><p class="muted" hidden="" id="jetstream-info" style="margin:8px 16px">Wind op 300 hPa (ongeveer 9 km hoogte). Kleur: snelheid in knopen; stroomlijnen: windrichting. 1 knoop = 1,852 km/u. ECMWF · Atlantische Oceaan en Europa.</p><section hidden="" id="dust-info" style="margin:10px 16px;max-width:1050px;line-height:1.55">
+<p><strong>Saharastof · stof in de hele luchtkolom</strong><br/>Kleuren tonen de optische dikte door mineraalstof bij 550 nm (AOD, zonder eenheid). Hogere waarden betekenen meer uitdoving van licht door stof. <span id="dust-range-info">De legenda begint bij 0,10; een wit gebied betekent dus niet automatisch nul stof.</span></p>
+<details><summary>Hoe wordt dit berekend? En wat zegt het over stof op de grond?</summary>
+<p>CAMS berekent hoeveel stof opwaait uit droge bodems, hoe wind en turbulentie het vervoeren en hoeveel door bezinking en neerslag uit de lucht verdwijnt. Satellietwaarnemingen verbeteren de begintoestand. Voor de kaart wordt het effect van de deeltjes op licht over alle luchtlagen opgeteld.</p>
+<p>Dit is specifiek mineraalstof: rook, zeezout en andere aerosolen zijn niet inbegrepen. De stoflaag is niet op herkomst gelabeld; in deze regio gaat het vaak om Saharastof, maar ook andere woestijnen kunnen bijdragen.</p>
+<p><strong>Drie verschillende maten:</strong> AOD beschrijft lichtuitdoving in de hele kolom. Stofconcentratie aan de grond wordt gemeten in µg/m³. Depositie is het stof dat neerslaat, in bijvoorbeeld mg/m². Een hoge AOD voorspelt niet rechtstreeks hoeveel stof op auto's terechtkomt; daarvoor is een depositieproduct nodig.</p>
+<p><strong>Andere modellen:</strong> AEMET/BSC vergelijkt meerdere stofmodellen, waaronder MONARCH; DWD maakt eigen berekeningen met ICON-ART. Open-Meteo ontsluit CAMS-data en is dus geen onafhankelijk stofmodel. Hun variabele <code>dust</code> is stof bij de grond; <code>aerosol_optical_depth</code> omvat alle aerosolen.</p>
+<p><a href="https://www.ecmwf.int/en/forecasts/datasets/cams-global-atmospheric-composition-forecasts" rel="noopener" target="_blank">CAMS-methode</a> · <a href="https://dust.aemet.es/products/daily-dust-products" rel="noopener" target="_blank">AEMET/BSC-modelvergelijking</a> · <a href="https://gmd.copernicus.org/articles/8/1659/2015/" rel="noopener" target="_blank">ICON-ART</a> · <a href="https://open-meteo.com/en/docs/air-quality-api" rel="noopener" target="_blank">Open-Meteo: variabelen</a></p>
+</details>
+<p class="muted" id="dust-source-info">Originele kaarten en legenda: Copernicus Atmosphere Monitoring Service / ECMWF. Alleen daadwerkelijk aangeboden runs; drie-uursstappen tot +120 uur.</p>
+</section></div></div>
+
+<aside aria-label="Bediening weerkaarten" id="control-sidebar"><section class="control-section"><h2>Kaartkeuze</h2><label for="modelbar">Weermodel</label><select aria-label="Weermodel" id="modelbar"></select><label for="varbar">Kaartlaag</label><select aria-label="Kaartlaag" id="varbar"></select><span class="field-label">Modelrun</span><div class="bar" id="runbar"></div></section><section class="control-section"><h2>Geldigheidstijd · UTC</h2><div class="chips">
+<span class="chip"><span class="lbl">Geldig</span><b id="c-valid">–</b></span>
+<span class="chip"><span class="lbl">Vooruit</span><span id="c-lead">–</span></span>
+<span class="chip"><span class="lbl">Variabele</span><span id="c-var">–</span></span>
+</div><div class="controls">
+<div class="ctrl-row">
+<button class="btn play" id="play">▶ Afspelen</button>
+<button class="btn" id="prev">◀ Vorige</button>
+<button class="btn" id="next">Volgende ▶</button>
+<span class="muted">Snelheid</span>
+<select aria-label="Animatiesnelheid" class="sel" id="speed">
+<option value="700">Langzaam</option>
+<option selected="" value="450">Normaal</option>
+<option value="250">Snel</option>
+</select>
+<label class="muted" style="margin-left:auto;cursor:pointer">
+<input checked="" id="loopchk" type="checkbox"/> herhalen
+        </label>
+</div>
+<input aria-label="Geldigheidstijd" id="slider" max="0" min="0" step="1" type="range" value="0"/>
+<div class="daglabels" id="daglabels"></div>
+</div></section><aside class="runpanel">
+<h3>Beschikbare runs</h3>
+<div id="runlist"></div>
+<div class="foot"><span style="color:var(--gold)">●</span> nu getoonde run<br/>HRES → +240 u · ENS → +360 u · GFS → +240 u · ICON-EU → +120 u · CAMS → +120 u</div>
+</aside></aside></div>
+<div id="fs">
+<div class="fs-top">
+<span class="fs-cap" id="fs-cap">–</span>
+<span class="sp"></span>
+<button class="fs-btn" id="fs-prev">◀ Vorige</button>
+<button class="fs-btn" id="fs-next">Volgende ▶</button>
+<button class="fs-btn" id="fs-reset">Reset zoom</button>
+<button class="fs-btn" id="fs-close">✕ Sluiten</button>
+</div>
+<div class="fs-stage" id="fs-stage"><img alt="" id="fsimg"/></div>
+<div class="fs-hint">scroll / pinch = zoom · sleep = verschuiven · ←/→ = ander tijdstip · klik of Esc = sluiten</div>
+</div>
+<script>if(window.parent!==window)document.body.classList.add('embedded');
+
+let META=null, curModel=null, curCyc=null, varKey=null, idx=0, playing=false, timer=null;
+const PAGE_PARAMS=new URLSearchParams(location.search);   // ?model= / ?var= vanuit de facetbalk
+// Meldt model- en veldkeuze aan de weerkaartenpagina, zodat de facetbalk klopt.
+function meldStandAanOuder(){
+  const url=new URL(location.href);url.searchParams.set('model',curModel);url.searchParams.set('var',varKey);history.replaceState(null,'',url);
+  if(window.parent===window) return;
+  try{ window.parent.postMessage({type:'weerlab-kaart-state', model:curModel, var:varKey}, location.origin); }catch(e){}
+}
+let fsOpen=false, fsScale=1, fsX=0, fsY=0, fsDrag=false, fsSx=0, fsSy=0;
+let metaSignature='';
+let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToken=0;
+const META_REFRESH_MS=5*60*1000;
+const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
+function runAgeWarning(run,now=Date.now()){const age=now-Date.parse(run?.run_utc);return !Number.isFinite(age)?'Modeltijd onbekend':age>48*3600000?'Verouderde modelrun · controleer geldigheid':'';}
+const preloaded={};                       // "model|cyc|run|var" -> {frame: Image}
+const $=id=>document.getElementById(id);
+const NL_DAG=['zo','ma','di','wo','do','vr','za'];
+function shortValid(iso){ const d=new Date(iso), u=d.getUTCHours();
+  return `${NL_DAG[d.getUTCDay()]} ${d.getUTCDate()} ${String(u).padStart(2,'0')}u`; }
+
+const D=()=>META.data[curModel];
+const R=()=>D().runs[curCyc];
+const srcOf=(k,i)=>META.base+R().files[k][i]+'?run='+encodeURIComponent(R().run_utc);
+function firstAllowedIndex(){
+  if(varKey!=='precip24') return 0;
+  const i=R().frames.findIndex(f=>f.lead>=24);
+  return i<0?0:i;
+}
+
+function orderCycles(d){
+  return d.cycles.slice().sort((a,b)=>{
+    if(a==='ens') return 1; if(b==='ens') return -1;
+    return d.runs[b].run_utc.localeCompare(d.runs[a].run_utc);
+  });
+}
+const cycLabel=cc=> cc==='ens' ? 'ENS' : cc+'Z';
+
+function preloadAround(center){
+  if(!R().files[varKey]) return;
+  const k=curModel+'|'+curCyc+'|'+R().run_utc+'|'+varKey;
+  if(!preloaded[k]) preloaded[k]={};
+  [-1,1,2,3].forEach(off=>{
+    const i=center+off;
+    if(i<0||i>=R().frames.length||preloaded[k][i]) return;
+    const im=new Image(); im.src=srcOf(varKey,i); preloaded[k][i]=im;
+  });
+}
+
+function buildRunBar(){
+  const rb=$('runbar'); rb.innerHTML='';
+  orderCycles(D()).forEach(cc=>{
+    const b=document.createElement('button'); b.className='pill'; b.dataset.c=cc;
+    b.innerHTML=cycLabel(cc)+' <span class="dim">+'+D().runs[cc].maxlead+'u</span>';
+    b.onclick=()=>{ if(playing)play(); setRun(cc); };
+    rb.appendChild(b);
+  });
+}
+
+function buildDaglabels(){
+  const fr=R().frames, start=firstAllowedIndex(), n=fr.length-start, box=$('daglabels'); box.innerHTML='';
+  const every=Math.max(1,Math.round(n/6));
+  for(let i=start;i<fr.length;i++){ const s=document.createElement('span');
+    s.textContent=((i-start)%every===0)?shortValid(fr[i].valid_utc):''; box.appendChild(s); }
+}
+
+function renderRunPanel(){
+  const box=$('runlist'); box.innerHTML='';
+  orderCycles(D()).forEach(cc=>{
+    const r=D().runs[cc]; const row=document.createElement('div');
+    row.className='runrow'+(cc===curCyc?' loaded':'');
+    row.innerHTML=`<span class="cyc">${cycLabel(cc)}</span>`+
+      `<span class="t">${r.run_label}<span class="loc">+${r.maxlead}u</span></span>`;
+    box.appendChild(row);
+  });
+}
+
+function syncVarButtons(){
+  $('jetstream-info').hidden=varKey!=='jetstream';
+  $('dust-info').hidden=curModel!=='cams';
+  if(curModel==='cams'){
+    const own=!!R().renderer?.startsWith('weerlab-cams-aod-');
+    $('dust-range-info').textContent=own
+      ? 'De laagste kleurklasse loopt van 0 tot 0,025. De kleuren geven geen gezondheidsklassen aan.'
+      : 'De legenda begint bij 0,10; een wit gebied betekent dus niet automatisch nul stof.';
+    $('dust-source-info').textContent=own
+      ? 'Eigen kaarten en legenda: Weerlab / Ed Aldus. Getekend uit ruwe Copernicus CAMS / ECMWF-modeldata. Drie-uursstappen tot +120 uur.'
+      : 'Originele kaarten en legenda: Copernicus Atmosphere Monitoring Service / ECMWF. Drie-uursstappen tot +120 uur.';
+  }
+
+  $('varbar').replaceChildren(...META.vars.filter(v=>R().files[v.key]).map(v=>new Option(v.label,v.key)));
+  $('varbar').value=varKey;
+  const v=META.vars.find(v=>v.key===varKey);
+  $('c-var').textContent=v.label+(v.unit?` (${v.unit})`:'');
+}
+
+function setModel(mk){
+  curModel=mk;
+  $('modelbar').value=mk;
+  buildRunBar();
+  setRun(orderCycles(D())[0]);    // nieuwste run van dit model
+  meldStandAanOuder();
+}
+
+function setRun(cc){
+  curCyc=cc;
+  $('update-info').textContent=runAgeWarning(R());
+  document.querySelectorAll('#runbar .pill').forEach(b=>b.classList.toggle('actief',b.dataset.c===cc));
+  const md=META.models.find(m=>m.key===curModel);
+  $('run-info').textContent=md.label+' · Run: '+R().run_label+' · t/m +'+R().maxlead+'u';
+  if(!R().files[varKey]){ const av=META.vars.find(v=>R().files[v.key]); if(av) varKey=av.key; }
+  $('slider').min=firstAllowedIndex();
+  $('slider').max=R().frames.length-1;
+  if(idx>R().frames.length-1) idx=R().frames.length-1;
+  buildDaglabels(); syncVarButtons(); renderRunPanel(); show(idx);
+}
+
+function setVar(key){ varKey=key; buildDaglabels(); syncVarButtons(); show(idx); meldStandAanOuder(); }
+
+function show(i){
+  const first=firstAllowedIndex();
+  idx=Math.max(first,Math.min(R().frames.length-1,i));
+  $('slider').min=first;
+  $('slider').value=idx;
+  const fr=R().frames[idx];
+  downloadToken++; $('download').disabled=true; $('download').textContent='PNG voorbereiden…';
+  $('loading').textContent='laden…';
+  $('loading').classList.add('vis');
+  const img=$('kaart');
+  img.onload=()=>{
+    $('loading').classList.remove('vis');
+    $('map-resolution').textContent=`origineel ${img.naturalWidth} × ${img.naturalHeight} px · titel en legenda inbegrepen`;
+    prepareDownload();
+  };
+  img.onerror=()=>{ $('loading').textContent='frame ontbreekt'; };
+  img.alt=META.vars.find(v=>v.key===varKey).label+' · '+fr.valid_label+' · run '+R().run_label;
+  img.src=srcOf(varKey,idx);
+  $('c-valid').textContent=fr.valid_label;
+  $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
+  preloadAround(idx);
+  if(fsOpen) fsUpdate();
+}
+
+function step(d){ const L=R().frames.length, first=firstAllowedIndex(); let n=idx+d;
+  if(n>=L) n=$('loopchk').checked?first:L-1; if(n<first) n=first; show(n); }
+function play(){
+  playing=!playing; $('play').classList.toggle('active',playing);
+  $('play').textContent=playing?'⏸ Pauze':'▶ Afspelen'; clearInterval(timer);
+  if(playing) timer=setInterval(()=>{
+    if(idx>=R().frames.length-1 && !$('loopchk').checked){ play(); return; } step(1);
+  }, +$('speed').value);
+}
+
+// ── Kaartgrootte + originele PNG-download ──
+function setMapSize(value, remember=true){
+  const v=Math.max(70,Math.min(160,Number(value)||100));
+  document.documentElement.style.setProperty('--kaart-grootte',v+'%');
+  $('mapsize').value=v; $('mapsize-value').textContent=v+'%';
+  if(remember){ try{ localStorage.setItem('wxbeta_map_size',String(v)); }catch(e){} }
+}
+function safePart(s){ return String(s||'kaart').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function downloadName(){
+  const fr=R().frames[idx], valid=fr.valid_utc.replace(/[-:]/g,'').replace('T','_').slice(0,13);
+  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}.png`;
+}
+async function prepareDownload(){
+  const token=++downloadToken, source=srcOf(varKey,idx), name=downloadName(), b=$('download');
+  b.disabled=true; b.textContent='PNG voorbereiden…';
+  try{
+    // Eigen download-query voorkomt dat een eerdere <img>-request zonder CORS
+    // uit de browsercache wordt hergebruikt voor deze blob-download.
+    const r=await fetch(source+'&download=1',{mode:'cors',cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const blob=await r.blob(), url=URL.createObjectURL(blob);
+    if(token!==downloadToken){ URL.revokeObjectURL(url); return; }
+    if(downloadObjectUrl) URL.revokeObjectURL(downloadObjectUrl);
+    downloadObjectUrl=url; downloadSource=source; downloadObjectName=name;
+    b.textContent='⬇ Download PNG'; b.disabled=false;
+  }catch(e){
+    if(token!==downloadToken) return;
+    if(downloadObjectUrl) URL.revokeObjectURL(downloadObjectUrl);
+    downloadObjectUrl=''; downloadSource=source; downloadObjectName=name;
+    b.textContent='↗ Open PNG'; b.disabled=false;
+  }
+}
+function downloadPng(){
+  const b=$('download'), a=document.createElement('a');
+  if(downloadObjectUrl&&downloadSource===srcOf(varKey,idx)){
+    a.href=downloadObjectUrl; a.download=downloadObjectName;
+    document.body.appendChild(a); a.click(); a.remove();
+    b.textContent='✓ PNG gedownload';
+  }else{
+    a.href=srcOf(varKey,idx); a.target='_blank'; a.rel='noopener'; a.click();
+    b.textContent='PNG geopend';
+  }
+  setTimeout(()=>{ b.textContent=downloadObjectUrl?'⬇ Download PNG':'↗ Open PNG'; },1800);
+}
+
+// ── Fullscreen + zoom ──
+function fsApply(){ $('fsimg').style.transform=`translate(calc(-50% + ${fsX}px), calc(-50% + ${fsY}px)) scale(${fsScale})`; }
+function fsUpdate(){ const fr=R().frames[idx], v=META.vars.find(v=>v.key===varKey);
+  $('fsimg').src=srcOf(varKey,idx);
+  $('fs-cap').innerHTML=`${v.label} · <b>${fr.valid_label}</b> · +${fr.lead} u`; }
+function openFs(){ fsOpen=true; fsScale=1; fsX=0; fsY=0; fsApply(); fsUpdate(); $('fs').classList.add('open'); }
+function closeFs(){ fsOpen=false; $('fs').classList.remove('open'); }
+function fsZoom(f,cx,cy){ const ns=Math.min(7,Math.max(1,fsScale*f)); const k=ns/fsScale;
+  fsX=cx-(cx-fsX)*k; fsY=cy-(cy-fsY)*k; fsScale=ns; if(fsScale<=1.001){fsScale=1;fsX=0;fsY=0;} fsApply(); }
+(function(){
+  const stage=$('fs-stage');
+  $('fsbtn').addEventListener('click', openFs);
+  $('fs-close').addEventListener('click', closeFs);
+  $('fs-reset').addEventListener('click', ()=>{ fsScale=1; fsX=0; fsY=0; fsApply(); });
+  $('fs-prev').addEventListener('click', ()=>{ if(playing)play(); step(-1); });
+  $('fs-next').addEventListener('click', ()=>{ if(playing)play(); step(1); });
+  stage.addEventListener('wheel', e=>{ e.preventDefault(); const r=stage.getBoundingClientRect();
+    fsZoom(e.deltaY<0?1.15:1/1.15, e.clientX-r.left-r.width/2, e.clientY-r.top-r.height/2); }, {passive:false});
+  let dx=0,dy=0,moved=false;
+  stage.addEventListener('mousedown', e=>{ fsDrag=true; moved=false; dx=e.clientX; dy=e.clientY;
+    fsSx=e.clientX-fsX; fsSy=e.clientY-fsY; stage.classList.add('drag'); });
+  window.addEventListener('mousemove', e=>{ if(!fsDrag) return;
+    if(Math.hypot(e.clientX-dx,e.clientY-dy)>4) moved=true;
+    fsX=e.clientX-fsSx; fsY=e.clientY-fsSy; fsApply(); });
+  window.addEventListener('mouseup', ()=>{ if(fsDrag&&!moved) closeFs(); fsDrag=false; stage.classList.remove('drag'); });
+})();
+
+function buildStaticBars(m){
+  $('modelbar').replaceChildren(...m.models.map(md=>new Option(md.label,md.key)));
+  $('modelbar').onchange=()=>{if(playing)play();setModel($('modelbar').value);};
+  $('varbar').onchange=()=>{if(playing)play();setVar($('varbar').value);};
+}
+function signatureOf(m){
+  return JSON.stringify(m.models.map(md=>[md.key,(m.data[md.key].cycles||[]).map(cc=>{
+    const r=m.data[md.key].runs[cc];
+    return [cc,r.run_utc,r.maxlead,Object.values(r.files||{}).map(x=>x.length)];
+  })]));
+}
+async function refreshMeta(initial=false){
+  try{
+    const response=await fetch(META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!response.ok) throw new Error('HTTP '+response.status);
+    const m=await response.json(), nextSignature=signatureOf(m), changed=!!META&&nextSignature!==metaSignature;
+    if(!META){
+      META=m; metaSignature=nextSignature; buildStaticBars(m);
+      const wensVar=PAGE_PARAMS.get('var'), wensModel=PAGE_PARAMS.get('model');
+      varKey=m.vars.some(v=>v.key===wensVar)?wensVar:m.vars[0].key;
+      setModel(m.data[wensModel]?wensModel:m.models[0].key);
+    }else if(changed){
+      const oldModel=curModel, oldVar=varKey, oldCyc=curCyc;
+      const oldLatest=orderCycles(D())[0], wasLatest=oldCyc===oldLatest;
+      const oldValid=R().frames[idx]&&R().frames[idx].valid_utc;
+      META=m; metaSignature=nextSignature; buildStaticBars(m);
+      curModel=m.data[oldModel]?oldModel:m.models[0].key;
+      varKey=m.vars.some(v=>v.key===oldVar)?oldVar:m.vars[0].key;
+      $('modelbar').value=curModel;
+      buildRunBar();
+      const newest=orderCycles(D())[0], nextCyc=wasLatest||!D().runs[oldCyc]?newest:oldCyc;
+      if(oldValid){
+        idx=D().runs[nextCyc].frames.reduce((best,fr,i,a)=>
+          Math.abs(new Date(fr.valid_utc)-new Date(oldValid))<Math.abs(new Date(a[best].valid_utc)-new Date(oldValid))?i:best,0);
+      }
+      setRun(nextCyc);
+    }
+    const now=new Date();
+    $('update-info').textContent=(runAgeWarning(R()) ? runAgeWarning(R())+' · ' : changed?'nieuwe run geladen · ':'bron gecontroleerd · ')+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    $('update-info').classList.toggle('fresh',changed);
+    if(changed) setTimeout(()=>$('update-info').classList.remove('fresh'),5000);
+  }catch(e){
+    $('update-info').textContent='live controle mislukt';
+    if(initial) $('run-info').textContent='meta laden mislukt';
+  }
+}
+refreshMeta(true);
+setInterval(()=>refreshMeta(false),META_REFRESH_MS);
+
+$('slider').addEventListener('input',e=>show(+e.target.value));
+$('mapsize').addEventListener('input',e=>setMapSize(e.target.value));
+$('size-reset').addEventListener('click',()=>setMapSize(100));
+$('download').addEventListener('click',downloadPng);
+$('play').addEventListener('click',play);
+$('prev').addEventListener('click',()=>{ if(playing)play(); step(-1); });
+$('next').addEventListener('click',()=>{ if(playing)play(); step(1); });
+$('speed').addEventListener('change',()=>{ if(playing){ play(); play(); } });
+document.addEventListener('keydown',e=>{
+  if(!fsOpen && /^(INPUT|SELECT|BUTTON)$/.test(e.target.tagName)) return;
+  if(e.key==='Escape' && fsOpen){ closeFs(); return; }
+  if(e.key==='ArrowRight'){ if(playing)play(); step(1); }
+  if(e.key==='ArrowLeft'){ if(playing)play(); step(-1); }
+  if(e.key===' '){ e.preventDefault(); play(); }
+});
+try{ setMapSize(localStorage.getItem('wxbeta_map_size')||100,false); }catch(e){ setMapSize(100,false); }
+</script>
+</body>
+</html>

@@ -369,7 +369,7 @@
       // never unload an iframe while leaving its product heading visible.
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260914-navigation-1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20260915-europa-menu-1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
       if(state.product?.src)frame.addEventListener('load',()=>wireDirectProduct(frame));
       previousFrame.replaceWith(frame);
     }
