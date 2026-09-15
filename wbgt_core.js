@@ -4,8 +4,8 @@
  *   WBGT = 0,7*Tnw + 0,2*Tg + 0,1*Ta
  *
  * Tnw: natuurlijke natteboltemperatuur via Liljegren (2008) warmte/massabalans
- *       op natte kokersilinder (d=7mm), opgelost met Newton-Raphson.
- *       Initiaal geschat via Stull (2011); Tnw >= Tw bij lage windsnelheid.
+ *       op natte kokersilinder (d=7mm), opgelost met intervalhalvering.
+ *       Stull Tw is uitsluitend een apart weergegeven benadering.
  * Tg:  boltemperatuur via Liljegren/Kong-Huber warmtebalans op 50,8mm bol.
  *
  * De bestaande pagina-API blijft: wbgtOutdoor() ontvangt wind op 10 m in m/s.
@@ -238,12 +238,13 @@
         }
         px = x; pf = fx;
       }
-      if (!found) return fallback;
+      if (!found) return NaN;
     }
     for (var i = 0; i < 80; i++) {
       var mid = 0.5 * (lo + hi);
       var fm = fn(mid);
-      if (!finite(fm) || Math.abs(hi - lo) < 0.001) return mid;
+      if (!finite(fm)) return NaN;
+      if (Math.abs(hi - lo) < 0.00001) return mid;
       if (flo * fm <= 0) {
         hi = mid; fhi = fm;
       } else {
@@ -353,6 +354,7 @@
     var useSolar = outdoor !== false ? s : 0;
     var Tnw = naturalWetBulbLiljegren(Ta, RH, v, useSolar, ps, fd, cz);
     var Tg = outdoor !== false ? calcGlobeTemp(Ta, useSolar, v, ps, RH, cz, fd) : Ta;
+    if (!finite(Tnw) || !finite(Tg)) return null;
     var WBGT = 0.7 * Tnw + 0.2 * Tg + 0.1 * Ta;
     return {
       Ta: Ta,
@@ -422,7 +424,46 @@
     return wbgtOutdoor(Ta, RH, solar, u10, cosZ, cloud, pressure, fdir);
   }
 
+  // Strict entry point for manual calculator. Explicit solar elevation prevents
+  // accidentally using night-time wind correction with positive solar radiation.
+  function calculateManual(input) {
+    var a = input || {};
+    var measured = a.method === "measured";
+    var shade = a.exposure === "shade";
+    if (!finite(a.Ta) || a.Ta < -40 || a.Ta > 60) return null;
+    var c;
+    if (measured) {
+      if (!finite(a.Tnw) || !finite(a.Tg) || a.Tnw < -40 || a.Tnw > 80 || a.Tg < -40 || a.Tg > 120) return null;
+      c = {Ta:a.Ta, Tnw:a.Tnw, Tg:a.Tg, Tw:null, u1m:null, u2m:null, u10:null, S:null};
+    } else {
+      if (!finite(a.RH) || a.RH < 1 || a.RH > 100 ||
+          !finite(a.wind) || a.wind < 0 || a.wind > 75 ||
+          !finite(a.pressure) || a.pressure < 500 || a.pressure > 1100 ||
+          !finite(a.S) || a.S < 0 || a.S > 1400 ||
+          !finite(a.elevation) || a.elevation < -90 || a.elevation > 90 ||
+          !finite(a.fdir) || a.fdir < 0 || a.fdir > 0.9) return null;
+      if (a.S > 0 && a.elevation <= 0 && !shade) return null;
+      var cz = Math.max(0, Math.sin(a.elevation * Math.PI / 180));
+      var solar = shade ? 0 : a.S;
+      // Wind stability follows the surrounding meteorological radiation, even
+      // when the sensor itself is in shade. Local 2 m wind bypasses this estimate.
+      var v = a.windHeight === 2 ? Math.max(0.13, a.wind) : wind10mTo2m(a.wind, cz, a.S);
+      c = componentsAt2mWind(a.Ta, a.RH, v, solar, true, a.pressure, a.fdir, cz,
+        a.windHeight === 2 ? null : a.wind);
+      if (!c) return null;
+      c.u10Raw = a.windHeight === 2 ? null : a.wind;
+    }
+    c.WBGT = shade ? 0.7*c.Tnw + 0.3*c.Tg : 0.7*c.Tnw + 0.2*c.Tg + 0.1*c.Ta;
+    c.weights = shade ? [0.7,0.3,0] : [0.7,0.2,0.1];
+    c.mode = shade ? "zonder zonbelasting" : "buiten";
+    c.method = measured ? "measured" : "model";
+    c.risico = wbgtRisico(c.WBGT);
+    c.hittekracht = wbgtHittekracht(c.WBGT);
+    return c;
+  }
+
   root.WBGT = {
+    calculateManual: calculateManual,
     buckEs: buckEs,
     vaporPressure: vaporPressure,
     rhFromTd: rhFromTd,

@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WBGT rekentool — Weerbewaking</title>
-<script src="wbgt_core.js?v=20260605-tr2604"></script>
+<script src="wbgt_core.js?v=20260915-validated"></script>
 <script>
   if (sessionStorage.getItem('wb_unlocked') !== '1') {
     window.location.replace('weerbewaking.html');
@@ -104,14 +104,15 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46
 </style>
 <link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
 <script src="weerbewaking_return.js?v=20260910-v2" defer></script>
+<link rel="stylesheet" href="wbgt_calculator.css?v=20260915">
 </head>
 <body>
 <main class="wrap">
   <header class="header">
     <div>
-      <div class="eyebrow">Weerbewaking</div>
-      <h1>WBGT rekentool</h1>
-      <div class="sub">Controleer handmatig de WBGT met temperatuur, relatieve vochtigheid, wind en zonnestraling.</div>
+      <div class="eyebrow">Weerlab / Weerbewaking / WBGT</div>
+      <h1>Grip op hitte.</h1>
+      <div class="sub">Bereken de WBGT, bekijk wat eraan bijdraagt en vergelijk met de richtlijn voor hittebelasting.</div>
     </div>
     <button class="back" type="button" onclick="gaTerug()">Terug naar weerbewaking</button>
   </header>
@@ -119,23 +120,25 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46
   <section class="tool">
     <div class="card">
       <div class="card-h">
-        <strong>Invoer</strong>
-        <span>Wind is standaard op 10 meter; de tool corrigeert volgens TR-26-04 naar 2 meter.</span>
+        <strong><span class="step">01</span> De omstandigheden</strong>
+        <span>Pas de waarden aan. De berekening werkt direct mee.</span>
       </div>
       <div class="inputs">
-        <label class="wide">Plaats
+        <label class="wide">Berekeningswijze<select id="wbgt-method"><option value="model">Schatting uit weergegevens</option><option value="measured">Gemeten Ta, Tnw en Tg</option></select></label>
+        <label class="wide">Omgeving<select id="wbgt-exposure"><option value="outdoor">Buiten, met zonbelasting</option><option value="shade">Zonder zonbelasting</option></select></label>
+        <label class="wide">Plaats (label voor export)
           <input id="wbgt-place" type="text" value="De Bilt" placeholder="Vul plaatsnaam in">
         </label>
-        <label class="wide">Geldig voor
+        <label class="wide">Geldig voor (label voor export)
           <input id="wbgt-valid" type="text" value="" placeholder="maandag 25 mei 2026">
         </label>
         <label>Luchttemperatuur Ta (°C)
           <input id="wbgt-ta" type="text" inputmode="decimal" value="30">
         </label>
-        <label>Relatieve vochtigheid (%)
+        <label data-model>Relatieve vochtigheid (%)
           <input id="wbgt-rh" type="text" inputmode="decimal" value="60">
         </label>
-        <label>Wind 10 meter
+        <label data-model>Windsnelheid
           <div class="unit-row">
             <input id="wbgt-wind" type="text" inputmode="decimal" value="2">
             <select id="wbgt-wind-unit" aria-label="Wind-eenheid">
@@ -144,30 +147,33 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46
             </select>
           </div>
         </label>
-        <label>Zonnestraling (W/m²)
+        <label data-model>Globale straling (W/m²)
           <input id="wbgt-sr" type="text" inputmode="decimal" value="700">
         </label>
+        <label data-model>Hoogte windmeting<select id="wbgt-wind-height"><option value="10">10 meter → schatting 2 m</option><option value="2">2 meter, lokaal gemeten</option></select></label>
+        <label data-model>Zonshoogte (°)<input id="wbgt-elevation" type="text" inputmode="decimal" value="45"><small>Boven horizon; voorbeeldwaarde 45°.</small></label>
+        <label data-model>Luchtdruk op locatie (hPa)<input id="wbgt-pressure" type="text" inputmode="decimal" value="1013,25"></label>
+        <label data-model>Fractie directe straling<input id="wbgt-fdir" type="text" inputmode="decimal" value="0,8"><small>0–0,9; 0,8 is de KNMI-aanname voor waarnemingen.</small></label>
+        <label data-measured hidden>Natuurlijke nattebol Tnw (°C)<input id="wbgt-measured-tnw" type="text" inputmode="decimal" value="25"></label>
+        <label data-measured hidden>Globetemperatuur Tg (°C)<input id="wbgt-measured-tg" type="text" inputmode="decimal" value="40"></label>
         <label>UV-index
           <input id="wbgt-uv" type="text" inputmode="decimal" value="6">
         </label>
       </div>
       <div class="actions">
         <button type="button" data-preset="sun">Voorbeeld zon</button>
-        <button type="button" data-preset="shadow" class="sec">Schaduwtest</button>
+        <button type="button" data-preset="shadow" class="sec">Zonder zonbelasting</button>
         <button type="button" data-preset="hot" class="sec">Zware hitte</button>
         <button type="button" id="download-png">Download PNG</button>
         <label class="png-toggle"><input id="png-hittekracht" type="checkbox" checked> Hittekracht in PNG</label>
       </div>
-      <div class="note">De WBGT wordt berekend met natuurlijke natteboltemperatuur, zwarteboltemperatuur, luchttemperatuur en de KNMI-windcorrectie. De UV-index staat los van WBGT en is handmatig aanpasbaar.</div>
-      <div class="defs">
-        <div class="def"><strong>Tnw / Tw</strong><span>Natuurlijke natteboltemperatuur: temperatuur inclusief het koelende effect van verdamping.</span></div>
-        <div class="def"><strong>Tg bol</strong><span>Globetemperatuur van een zwarte bol: zon, warmtestraling en wind samen.</span></div>
-      </div>
-    </div>
+      <div class="note" id="wbgt-assumptions"></div>
+      <div class="note validation" id="wbgt-validation" role="alert" hidden></div>
+        </div>
 
-    <aside class="card result">
-      <div class="result-label">WBGT</div>
-      <div class="result-value" id="wbgt-result">-</div>
+    <aside class="card result" aria-label="Berekeningsresultaat">
+      <div class="result-label" id="wbgt-result-label">Berekende WBGT · modelschatting</div>
+      <div class="result-value" id="wbgt-result" aria-live="polite">-</div>
       <div class="result-meta"><span class="risk" id="wbgt-risk">-</span></div>
       <div class="hittekracht-panel" aria-label="Hittekrachtmeter">
         <svg viewBox="0 0 240 188" role="img" aria-labelledby="hittekracht-title">
@@ -184,25 +190,37 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46
         <div class="hittekracht-title">hittekracht</div>
       </div>
       <div class="tiles">
-        <div class="tile"><div class="k">Tnw (nat bol)</div><div class="v" id="wbgt-tnw">-</div></div>
-        <div class="tile"><div class="k">Tw (psychrom.)</div><div class="v" id="wbgt-tw">-</div></div>
+        <div class="tile"><div class="k">Tnw · natuurlijk</div><div class="v" id="wbgt-tnw">-</div></div>
+        <div class="tile"><div class="k">Tw · Stull (indicatief)</div><div class="v" id="wbgt-tw">-</div></div>
         <div class="tile"><div class="k">Tg bol</div><div class="v" id="wbgt-tg">-</div></div>
         <div class="tile"><div class="k">Wind 2 m</div><div class="v" id="wbgt-u1m">-</div></div>
         <div class="tile"><div class="k">Hittekracht</div><div class="v" id="wbgt-hittekracht">-</div></div>
         <div class="tile"><div class="k">UV-index</div><div class="v" id="wbgt-uv-output">-</div></div>
       </div>
+      <div class="formula"><div class="k">Weging van de temperaturen</div><div class="contribution-bar"><span></span><span></span><span></span></div><div id="wbgt-contributions" class="v">—</div></div>
       <div class="formula">
         <div class="k">Formule (<span id="wbgt-modus">-</span>)</div>
-        <div class="v" id="wbgt-formula">-</div>
+        <div class="v" id="wbgt-formula">-</div><p id="wbgt-equation" class="equation"></p><p class="equation">Klassen worden vóór afronding bepaald. WBGT is geen gevoelstemperatuur.</p>
       </div>
     </aside>
   </section>
 
-  <section class="grades" id="wbgt-gradaties">
+  <section class="grades guidelines" aria-labelledby="limits-title">
+    <div class="grades-h"><div><h2 id="limits-title"><span class="step">02</span> Wat betekent de uitkomst?</h2><p>WBGT-limieten uit de aangeleverde GGD/RIVM-richtlijn (juni 2023), voor een 8-urige werkdag.</p></div><span class="source-tag">GGD / RIVM</span></div>
+    <div class="inputs context-inputs">
+      <label>Inspanning<select id="wbgt-activity"><option value="0">Rust · 115 W</option><option value="1">Laag · 180 W</option><option value="2" selected>Middelmatig · 300 W</option><option value="3">Hoog · 415 W</option><option value="4">Zeer hoog · 520 W</option></select></label>
+      <label>Gewend aan warmte<select id="wbgt-acclimated"><option value="no">Niet geacclimatiseerd</option><option value="yes">Wel geacclimatiseerd</option></select></label>
+      <label>Kledingcorrectie (CAV)<select id="wbgt-cav"><option value="0">Goed ventilerende kleding · +0 °C</option><option value="3">Extra laag katoen · +3 °C</option><option value="4">Niet-ademend schort, lange mouwen · +4 °C</option><option value="10">Niet-ademende overall, zonder onderlaag · +10 °C</option></select></label>
+    </div>
+    <div class="assessment" id="wbgt-assessment" aria-live="polite"></div>
+    <div class="table-scroll"><table class="grade-table limits-table"><thead><tr><th>Inspanning</th><th>Vermogen</th><th>Geacclimatiseerd</th><th>Niet geacclimatiseerd</th></tr></thead><tbody id="wbgt-limits"></tbody></table></div>
+    <div class="note">Deze limieten gelden voor gezonde volwassenen van 18–65 jaar. Een waarde onder de limiet is geen garantie dat een activiteit veilig is. Gezondheid, kleding, inspanningsduur en lokale omstandigheden tellen mee. De kledingvoorbeelden zijn laboratoriumwaarden; beoordeel of ze bij de werkelijke kleding passen. Voor sport gelden eigen protocollen.</div>
+  </section>
+  <details class="grades" id="wbgt-gradaties"><summary>Algemene WBGT-kleurindeling <span>Bekijk schaal en export</span></summary>
     <div class="grades-h">
       <div>
         <h2>WBGT gradaties</h2>
-        <p>Risico-indeling voor sport en buitenactiviteit op basis van de berekende WBGT.</p>
+        <p>Indicatieve Weerlab-kleurindeling; geen vervanging voor de inspanningsafhankelijke richtlijnlimieten hierboven.</p>
       </div>
       <button type="button" id="download-table-png">Download tabel PNG</button>
     </div>
@@ -216,28 +234,28 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(46
       </thead>
       <tbody id="grade-body"></tbody>
     </table>
-  </section>
+  </details>
 
   <section class="pdf-resource">
     <div>
-      <h2>Artikel sport en hitte</h2>
-      <p>Proloop-artikel als achtergrondinformatie bij WBGT, hittebelasting en sporten in warme omstandigheden.</p>
+      <h2>De berekening, stap voor stap</h2>
+      <p>De schatting lost de warmte- en verdampingsbalans van natte koker en zwarte bol op (Liljegren / Kong–Huber). Ta, luchtvochtigheid, lokale wind, straling, zonshoogte en luchtdruk bepalen de uitkomst. Tw volgens Stull is alleen ter vergelijking en wordt niet in de WBGT gebruikt.</p><p>Modelaannamen: bol 50,8 mm, koker 7 mm, grondalbedo 0,45, grondtemperatuur gelijk aan Ta en geschatte atmosferische warmtestraling. Ook in de modus zonder zon blijven deze buitenlucht-aannamen gelden; bij gebouwen of warme oppervlakken zijn echte sensormetingen geschikter.</p><p>De invoer van plaats en geldigheid is uitsluitend voor het exportlabel. Vul de werkelijke zonshoogte apart in. Wind op 10 m wordt na begrenzing op 0,62 m/s naar 2 m omgerekend; lokale 2m-wind heeft een modelminimum van 0,13 m/s. Afronding op 0,1 °C is geen nauwkeurigheidsclaim.</p><p><a href="https://www.rivm.nl/sites/default/files/2023-06/Achtergrond_WBGT_PSH_Richtlijn_Hitte_Gezondheid.pdf" target="_blank" rel="noopener">GGD/RIVM-richtlijn (2023) ↗</a> · <a href="https://www.knmi.nl/kennis-en-datacentrum/publicatie/van-wet-bulb-globe-temperature-wbgt-naar-hittekracht" target="_blank" rel="noopener">KNMI TR-26-04 (2026) ↗</a> · <a href="https://www.osha.gov/otm/section-2-health-hazards/chapter-3" target="_blank" rel="noopener">Formules met en zonder zon (OSHA) ↗</a> · <a href="proloop-artikel-sport-en-hitte.pdf">Artikel sport en hitte</a></p>
     </div>
-    <a class="pdf-link" href="proloop-artikel-sport-en-hitte.pdf" download>Download PDF</a>
+    <a class="pdf-link" href="https://www.rivm.nl/sites/default/files/2023-06/Achtergrond_WBGT_PSH_Richtlijn_Hitte_Gezondheid.pdf" target="_blank" rel="noopener">Lees richtlijn ↗</a>
   </section>
 </main>
 
 <script>
 const GRADATIES=[
-  {range:'< 19°C',risk:'Laag',cls:'grade-low',color:'#42b857',advies:'Normale activiteit mogelijk. Zorg voor voldoende vochtinname en blijf alert op kwetsbare personen.'},
+  {range:'< 19°C',risk:'Laag',cls:'grade-low',color:'#42b857',advies:'Relatief lage WBGT. Beoordeel ook inspanning, kleding en individuele kwetsbaarheid.'},
   {range:'19–23°C',risk:'Matig',cls:'grade-moderate',color:'#f3f48c',advies:'Let op risicogroepen. Neem extra drinkpauzes bij sport of langdurige buitenactiviteit.'},
   {range:'23–28°C',risk:'Hoog',cls:'grade-high',color:'#ff9f40',advies:'Beperk zware inspanning. Plan regelmatige pauzes, schaduw en extra hydratatie in.'},
   {range:'28–32°C',risk:'Erg hoog',cls:'grade-very-high',color:'#ff3b30',advies:'Intensieve activiteit wordt afgeraden. Kort programma in of verplaats inspanning naar een koeler moment.'},
-  {range:'> 32°C',risk:'Extreem',cls:'grade-extreme',color:'#050505',advies:'Gevaarlijk voor iedereen. Buitenactiviteiten staken of uitstellen; activeer het hitte- of noodplan.'}
+  {range:'≥ 32°C',risk:'Extreem',cls:'grade-extreme',color:'#050505',advies:'Zeer hoge WBGT. Volg het hitteprotocol en beoordeel of activiteiten moeten stoppen.'}
 ];
 function parseGetal(id){
   const raw=(document.getElementById(id)?.value || '').trim().replace(',','.');
-  const v=parseFloat(raw);
+  const v=/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw) ? Number(raw) : NaN;
   return Number.isFinite(v) ? v : null;
 }
 function fmt(v,d=1,unit=''){
@@ -331,7 +349,7 @@ function verwerkWindUnitWijziging(){
   const waarde=parseGetal('wbgt-wind');
   if(waarde!=null && nieuweUnit!==laatsteWindUnit){
     const omgerekend=laatsteWindUnit==='ms' && nieuweUnit==='kmh' ? waarde*3.6 : waarde/3.6;
-    input.value=fmt(omgerekend,1,'');
+    input.value=String(Number(omgerekend.toFixed(8))).replace('.',',');
   }
   laatsteWindUnit=nieuweUnit;
   updateWbgt();
@@ -352,60 +370,65 @@ function huidigeBerekening(){
   const uv=parseGetal('wbgt-uv');
   const plaats=getPlaats();
   const geldigVoor=getGeldigVoor();
-  if(!window.WBGT || [Ta,RH,windRaw,wind10,Sr].some(v=>v==null)) return null;
-  const c=window.WBGT.wbgtComponents(Ta,RH,Sr,wind10,null,null);
+  if(!window.WBGT) return null;
+  const c=window.WBGT.calculateManual({Ta,RH,S:Sr,wind:wind10,
+    method:document.getElementById('wbgt-method').value,
+    exposure:document.getElementById('wbgt-exposure').value,
+    windHeight:Number(document.getElementById('wbgt-wind-height').value),
+    elevation:parseGetal('wbgt-elevation'),pressure:parseGetal('wbgt-pressure'),fdir:parseGetal('wbgt-fdir'),
+    Tnw:parseGetal('wbgt-measured-tnw'),Tg:parseGetal('wbgt-measured-tg')});
   const hittekracht=c ? berekenHittekrachtKnmi(c.WBGT) : null;
   return c ? {Ta,RH,windRaw,windUnit,wind10,Sr,uv,plaats,geldigVoor,hittekracht,c} : null;
 }
-function formatWind1m(c,unit){
-  const kmh=c.u1m*3.6;
-  const bft=naarBft(c.u10*3.6);
-  if(unit === 'kmh') return `${fmt(kmh,1,' km/u')} (BFT ${bft})`;
-  return `${fmt(c.u1m,1,' m/s')} (BFT ${bft})`;
-}
-function stullWaarschuwing(Ta, RH){
-  if(Ta==null || RH==null) return '';
-  if(Ta < 5)  return '⚠ Ta < 5°C: Stull Tw minder nauwkeurig';
-  if(RH < 5)  return '⚠ RV < 5%: Stull Tw minder nauwkeurig';
-  return '';
+const LIMITS=[['Rust',115,33,32],['Laag',180,30,29],['Middelmatig',300,28,26],['Hoog',415,26,23],['Zeer hoog',520,25,20]];
+function updateAssessment(c){
+  const activity=Number(document.getElementById('wbgt-activity').value);
+  const col=document.getElementById('wbgt-acclimated').value==='yes'?2:3;
+  const cav=Number(document.getElementById('wbgt-cav').value);
+  document.getElementById('wbgt-limits').innerHTML=LIMITS.map((r,i)=>`<tr class="${i===activity?'selected':''}"><th scope="row">${r[0]}</th><td>${r[1]} W</td><td class="${col===2?'active-column':''}">${r[2]} °C</td><td class="${col===3?'active-column':''}">${r[3]} °C</td></tr>`).join('');
+  const el=document.getElementById('wbgt-assessment');
+  if(!c){el.textContent='Vul geldige omstandigheden in om met de richtlijn te vergelijken.';el.dataset.state='empty';return;}
+  const effective=c.WBGT+cav,limit=LIMITS[activity][col],delta=effective-limit;
+  el.dataset.state=delta>=0?'above':'below';
+  el.textContent=`WBGT + kleding: ${fmt(effective,1,' °C')} · richtlijnlimiet ${limit} °C. `+(delta>0?`${fmt(delta,1,' °C')} boven de limiet. Pas werk of omstandigheden aan.`:delta===0?'Op de limiet. Beoordeel passende maatregelen.':`${fmt(-delta,1,' °C')} onder de limiet voor de gekozen inspanning en acclimatisatie.`);
 }
 function updateWbgt(){
+  const measured=document.getElementById('wbgt-method').value==='measured';
+  const shade=document.getElementById('wbgt-exposure').value==='shade';
+  document.querySelectorAll('[data-model]').forEach(el=>el.hidden=measured);
+  document.querySelectorAll('[data-measured]').forEach(el=>el.hidden=!measured);
   const calc=huidigeBerekening();
-  const result=document.getElementById('wbgt-result');
-  const risk=document.getElementById('wbgt-risk');
+  const result=document.getElementById('wbgt-result'),risk=document.getElementById('wbgt-risk');
+  const error=document.getElementById('wbgt-validation');
+  error.hidden=!!calc;
+  document.getElementById('download-png').disabled=!calc;
+  document.getElementById('wbgt-result-label').textContent=measured?'WBGT · uit sensormetingen':'WBGT · modelschatting';
+  document.getElementById('wbgt-assumptions').textContent=measured?'Gebruik natuurlijke nattebol- en globetemperaturen van een WBGT-meter. Een gewone psychrometrische natteboltemperatuur is hiervoor niet geschikt.':'Voorbeeldwaarden: controleer vooral zonshoogte, stralingsfractie en windhoogte. De uitkomst is een schatting voor de ingevoerde omstandigheden.'+(shade?' Zonder zonbelasting wordt de kortgolvige straling op de sensor op nul gezet; de windcorrectie gebruikt de omgevingsstraling.':'');
+  updateAssessment(calc?.c);
   if(!calc){
-    result.innerHTML='<span class="error">-</span>';
-    risk.textContent='Controleer invoer';
-    renderHittekrachtMeter(null);
-    return;
+    result.textContent='—';risk.textContent='Controleer invoer';risk.style.background='#fee2e2';risk.style.color='#991b1b';
+    ['tnw','tw','tg','u1m','hittekracht','uv-output','formula','equation','contributions','modus'].forEach(id=>document.getElementById('wbgt-'+id).textContent='—');
+    error.textContent=measured?'Vul volledige getallen in: Ta −40–60 °C, Tnw −40–80 °C en Tg −40–120 °C.':'Controleer: Ta −40–60 °C, RV 1–100%, wind 0–75 m/s, straling 0–1400 W/m², druk 500–1100 hPa, zonshoogte −90–90° en directe fractie 0–0,9. Bij zonbelasting en straling boven nul moet de zon boven de horizon staan.';
+    renderHittekrachtMeter(null);return;
   }
-  const {Ta,RH,c,windUnit,hittekracht}=calc;
+  const {c,windUnit,hittekracht}=calc;
   const kleur=window.WBGT.wbgtColor(c.WBGT);
-  result.textContent=fmt(c.WBGT,1,' °C');
-  risk.textContent=c.risico || '-';
-  risk.style.background=kleur;
-  risk.style.color=tekstkleur(kleur);
+  result.textContent=fmt(c.WBGT,1,' °C');risk.textContent='Kleurklasse: '+c.risico;risk.style.background=kleur;risk.style.color=tekstkleur(kleur);
   document.getElementById('wbgt-tnw').textContent=fmt(c.Tnw,1,' °C');
   document.getElementById('wbgt-tw').textContent=fmt(c.Tw,1,' °C');
   document.getElementById('wbgt-tg').textContent=fmt(c.Tg,1,' °C');
-  document.getElementById('wbgt-u1m').textContent=formatWind1m(c,windUnit);
-  document.getElementById('wbgt-hittekracht').textContent=fmt(hittekracht,0,'');
+  document.getElementById('wbgt-u1m').textContent=c.u2m==null?'—':fmt(c.u2m*(windUnit==='kmh'?3.6:1),2,windUnit==='kmh'?' km/u':' m/s');
+  document.getElementById('wbgt-hittekracht').textContent=fmt(hittekracht,0);
   renderHittekrachtMeter(hittekracht);
-  document.getElementById('wbgt-uv-output').textContent=fmtUv(calc.uv);
-  const hasSun=c.S>=50;
-  document.getElementById('wbgt-modus').textContent=hasSun ? 'buiten, zon' : 'schaduw / nacht';
-  document.getElementById('wbgt-formula').textContent=hasSun ? '0,7 × Tnw + 0,2 × Tg + 0,1 × Ta' : '0,7 × Tnw + 0,3 × Ta';
-  const warn=stullWaarschuwing(Ta,RH);
-  let warnEl=document.getElementById('wbgt-stull-warn');
-  if(!warnEl){
-    warnEl=document.createElement('div');
-    warnEl.id='wbgt-stull-warn';
-    warnEl.style.cssText='padding:8px 16px;font-size:.74rem;color:#f0c040;background:#1a1400;border-top:1px solid #3a2e00';
-    document.querySelector('.card').appendChild(warnEl);
-  }
-  warnEl.textContent=warn;
-  warnEl.style.display=warn?'block':'none';
+  document.getElementById('wbgt-uv-output').textContent=calc.uv>=0&&calc.uv<=25?fmtUv(calc.uv):'—';
+  document.getElementById('wbgt-modus').textContent=c.mode;
+  document.getElementById('wbgt-formula').textContent=shade?'0,7 × Tnw + 0,3 × Tg':'0,7 × Tnw + 0,2 × Tg + 0,1 × Ta';
+  const parts=[c.Tnw*c.weights[0],c.Tg*c.weights[1],c.Ta*c.weights[2]];
+  document.getElementById('wbgt-equation').textContent=parts.filter((_,i)=>c.weights[i]>0).map(x=>fmt(x,2)).join(' + ')+' = '+fmt(c.WBGT,2,' °C');
+  document.getElementById('wbgt-contributions').textContent=`${shade?'70 / 30':'70 / 20 / 10'}% · Tnw / Tg${shade?'':' / Ta'}`;
+  document.querySelectorAll('.contribution-bar span').forEach((el,i)=>el.style.width=(c.weights[i]*100)+'%');
 }
+
 function rondRect(ctx,x,y,w,h,r){
   ctx.beginPath();
   ctx.moveTo(x+r,y);
@@ -641,7 +664,7 @@ function tekenWbgtLegenda(ctx,x,y,w){
 function tekenGradatieTabel(ctx,x,y,w){
   ctx.fillStyle='#12385f';
   ctx.font='900 34px Inter, Arial, sans-serif';
-  ctx.fillText('WBGT gradaties',x,y);
+  ctx.fillText('WBGT kleurklassen · indicatief',x,y);
   const top=y+32;
   const col=[150,170,w-320];
   ctx.fillStyle='#ffffff';
@@ -650,7 +673,7 @@ function tekenGradatieTabel(ctx,x,y,w){
   ctx.fillStyle='#526f8d';
   ctx.font='900 20px Inter, Arial, sans-serif';
   ctx.fillText('WBGT index',x+20,top+42);
-  ctx.fillText('Risico',x+col[0]+30,top+42);
+  ctx.fillText('Kleurklasse',x+col[0]+30,top+42);
   ctx.fillText('Te nemen maatregelen',x+col[0]+col[1]+30,top+42);
   GRADATIES.forEach((g,i)=>{
     const rowY=top+70+i*74;
@@ -716,7 +739,7 @@ function downloadPng(){
   pasFont(ctx,wbgtTekst,290,74,50,'900');
   ctx.fillStyle='#3f2500';
   ctx.fillText(wbgtTekst,zonX,bodyY+312);
-  tekenUvBadge(ctx,90,bodyY+338,264,76,uv);
+  tekenUvBadge(ctx,90,bodyY+338,264,76,uv>=0&&uv<=25?uv:null);
   if(toonHittekracht){
     tekenHittekrachtMeter(ctx,846,bodyY+338,264,hittekracht);
   }
@@ -736,6 +759,11 @@ function downloadPng(){
   ctx.textAlign='center';
   ctx.textBaseline='middle';
   ctx.fillText(risicoTekst,canvas.width/2,bodyY+390+23);  /* 23 = helft van hoogte 46 */
+  ctx.fillStyle='#12385f';ctx.textAlign='center';ctx.font='600 23px Inter, Arial, sans-serif';
+  ctx.fillText((c.method==='measured'?'Uit sensormetingen':'Modelschatting')+' · '+c.mode,600,bodyY+500);
+  ctx.fillText(`Ta ${fmt(c.Ta,1,' °C')}  /  Tnw ${fmt(c.Tnw,1,' °C')}  /  Tg ${fmt(c.Tg,1,' °C')}`,600,bodyY+540);
+  ctx.font='500 20px Inter, Arial, sans-serif';
+  ctx.fillText('Kleurklasse is indicatief; beoordeel ook inspanning, kleding en hittefitheid.',600,bodyY+580);
   tekenWbgtLegenda(ctx,90,bodyY+675,1020);
   tekenKaartFooter(ctx,canvas.width,canvas.height-footerH,footerH,`© Ed Aldus | ${kortTekst(plaats,30)} | ${now}`);
 
@@ -787,6 +815,12 @@ function zetPreset(type){
   laatsteWindUnit=waarden.unit;
   document.getElementById('wbgt-sr').value=waarden.sr;
   document.getElementById('wbgt-uv').value=waarden.uv;
+  document.getElementById('wbgt-method').value='model';
+  document.getElementById('wbgt-exposure').value=type==='shadow'?'shade':'outdoor';
+  document.getElementById('wbgt-elevation').value='45';
+  document.getElementById('wbgt-pressure').value='1013,25';
+  document.getElementById('wbgt-fdir').value='0,8';
+  document.getElementById('wbgt-wind-height').value='10';
   updateWbgt();
 }
 function gaTerug(){
@@ -804,7 +838,7 @@ function gaTerug(){
 }
 laatsteWindUnit=document.getElementById('wbgt-wind-unit')?.value || 'ms';
 initialiseerGeldigVoor();
-['wbgt-ta','wbgt-rh','wbgt-wind','wbgt-sr','wbgt-uv'].forEach(id=>{
+['wbgt-ta','wbgt-rh','wbgt-wind','wbgt-sr','wbgt-uv','wbgt-elevation','wbgt-pressure','wbgt-fdir','wbgt-method','wbgt-exposure','wbgt-wind-height','wbgt-measured-tnw','wbgt-measured-tg','wbgt-activity','wbgt-acclimated','wbgt-cav'].forEach(id=>{
   document.getElementById(id).addEventListener('input', updateWbgt);
   document.getElementById(id).addEventListener('change', updateWbgt);
 });
