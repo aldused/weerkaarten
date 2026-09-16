@@ -4,6 +4,13 @@
   const sample={date:'2026-09-12',time:'15:45',region:'Rijnmondgebied',heading:'Tot en met donderdag',summary:'Zondag regenachtig. Maandag en dinsdag droog met geregeld zon en ook wat hogere temperaturen. Vanaf woensdag wisselvalliger en koeler.',demo:true,crt:false,days:[{day:'zo',sun:4,rain:80,min:14,max:20,dir:'W',force:3},{day:'ma',sun:6,rain:10,min:12,max:23,dir:'ZW',force:2},{day:'di',sun:8,rain:20,min:15,max:23,dir:'ZW',force:3},{day:'wo',sun:7,rain:80,min:12,max:18,dir:'NW',force:3},{day:'do',sun:4,rain:80,min:12,max:18,dir:'ZW',force:3}]};
   function normalize(t){return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[–—]/g,'-').replace(/[‘’]/g,"'");}
   function wrap(t,width=40){const out=[];for(const para of normalize(t).split('\n')){let line='';for(let word of para.split(/\s+/).filter(Boolean)){if(line && line.length+word.length+1>width){out.push(line);line='';}while(word.length>width){out.push(word.slice(0,width));word=word.slice(width);}line+=(line?' ':'')+word;}out.push(line);}return out;}
+  const forcePattern='(?:[0-9]|1[0-2])(?:-(?:[0-9]|1[0-2]))?';
+  function validForce(value){
+    if(value===null)return true;
+    if(typeof value==='number')return Number.isInteger(value)&&value>=0&&value<=12;
+    if(typeof value!=='string'||!new RegExp('^'+forcePattern+'$').test(value))return false;
+    const [low,high]=value.split('-').map(Number);return high===undefined||low<=high;
+  }
   function validate(s){
     if(!s || !/^\d{4}-\d{2}-\d{2}$/.test(s.date)|| !/^\d{2}:\d{2}$/.test(s.time)||Number(s.time.slice(0,2))>23||Number(s.time.slice(3))>59)throw Error('Vul een geldige datum en tijd in.');
     const parsedDate=new Date(s.date+'T12:00:00Z');if(!Number.isFinite(+parsedDate)||parsedDate.toISOString().slice(0,10)!==s.date)throw Error('Vul een geldige datum in.');
@@ -11,7 +18,7 @@
     if(s.region.length>26||s.heading.length>40||s.summary.length>200||wrap(s.summary).length>5)throw Error('De weerschets past op maximaal 5 regels van 40 tekens. Maak de tekst iets korter.');
     if([s.region,s.heading,s.summary].some(t=>[...normalize(t)].some(c=>!/[a-z0-9 .,:\/°%!?'()+&\n-]/i.test(c))))throw Error('Gebruik letters, cijfers en gewone leestekens; geen emoji.');
     if(!Array.isArray(s.days)||s.days.length!==5)throw Error('Vul vijf dagen in.');
-    for(const d of s.days){if(!['ma','di','wo','do','vr','za','zo'].includes(d.day))throw Error('Kies een geldige weekdag.');if(d.sun!==null&&(!Number.isInteger(d.sun)||d.sun<0||d.sun>24))throw Error('Controleer de zonuren: 0–24 hele uren.');for(const [k,lo,hi] of [['rain',0,100],['min',-40,50],['max',-40,50],['force',0,12]])if(d[k]!==null&&(!Number.isInteger(d[k])||d[k]<lo||d[k]>hi))throw Error('Controleer de waarden: regenkans 0–100%, temperatuur -40–50 °C, wind 0–12 Bft.');if(d.min!==null&&d.max!==null&&d.min>d.max)throw Error('De minimumtemperatuur mag niet hoger zijn dan de maximumtemperatuur.');if(d.dir!==null&&!['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW','VAR'].includes(d.dir))throw Error('Kies een geldige windrichting.');}
+    for(const d of s.days){if(!['ma','di','wo','do','vr','za','zo'].includes(d.day))throw Error('Kies een geldige weekdag.');if(d.sun!==null&&(!Number.isInteger(d.sun)||d.sun<0||d.sun>24))throw Error('Controleer de zonuren: 0–24 hele uren.');for(const [k,lo,hi] of [['rain',0,100],['min',-40,50],['max',-40,50]])if(d[k]!==null&&(!Number.isInteger(d[k])||d[k]<lo||d[k]>hi))throw Error('Controleer de waarden: regenkans 0–100%, temperatuur -40–50 °C, wind 0–12 Bft.');if(!validForce(d.force))throw Error('Vul windkracht in als 0–12 Bft of een oplopend bereik, bijvoorbeeld 4-6.');if(d.min!==null&&d.max!==null&&d.min>d.max)throw Error('De minimumtemperatuur mag niet hoger zijn dan de maximumtemperatuur.');if(d.dir!==null&&!['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW','VAR'].includes(d.dir))throw Error('Kies een geldige windrichting.');}
     return s;
   }
   function draw(ctx,s,{editable=false}={}){
@@ -34,12 +41,12 @@
     box(48,602,984,10,c.blue);
     const xs=[488,615,742,869,996];
     s.days.forEach((d,i)=>{if(!editable)text(d.day,xs[i],648,5,c.cyan,'center');});
-    const rows=[['zonuren','sun',727,c.green],['regenkans    %','rain',798,c.green],['minimum     °C','min',891,c.green],['maximum     °C','max',968,c.green],['windrichting','dir',1062,c.green],['wind       Bft','force',1133,c.green]];
-    for(const [label,key,y,col] of rows){text(label,48,y,4,c.cyan);if(!editable)s.days.forEach((d,i)=>text(d[key]??'-',xs[i],y,4,col,'center'));}
+    const rows=[['maximum     °C','max',727,c.green],['minimum     °C','min',798,c.green],['neerslagkans %','rain',891,c.green],['zonuren','sun',968,c.green],['windrichting','dir',1062,c.green],['wind       Bft','force',1133,c.green]];
+    for(const [label,key,y,col] of rows){text(label,48,y,4,c.cyan);if(!editable)s.days.forEach((d,i)=>text(d[key]??'-',xs[i],y,key==='force'&&String(d[key]).length>4?3.4:4,col,'center'));}
     box(48,1231,244,10,c.blue);box(788,1231,244,10,c.blue);text('Ed Aldus',540,1219,5,c.yellow,'center');
     text('Het weer, elke dag.',540,1284,3,c.cyan,'center');
     if(s.demo)text('DEMO / VOORBEELDGEGEVENS',540,1322,2,c.muted,'center');
     if(s.crt){ctx.fillStyle='rgba(0,0,0,0.17)';for(let y=0;y<1350;y+=6)ctx.fillRect(0,y,1080,1);}
   }
-  const api={sample,draw,wrap,validate,colors};if(typeof module!=='undefined')module.exports=api;else root.EDtekst=api;
+  const api={sample,draw,wrap,validate,validForce,forcePattern,colors};if(typeof module!=='undefined')module.exports=api;else root.EDtekst=api;
 })(globalThis);

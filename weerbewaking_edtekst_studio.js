@@ -3,7 +3,7 @@ let state=clone(EDtekst.sample),valid=true,fontReady=false,importing=false,table
 const storageKey='edtekst-studio-v3';
 try{const saved=localStorage.getItem(storageKey);if(saved){EDtekst.validate(JSON.parse(saved));state=JSON.parse(saved);if(state.region.trim().toUpperCase()==='REGIO ROTTERDAM')state.region='Rijnmondgebied';}}catch{}
 const needsInitialImport=state.demo&&!state.source&&JSON.stringify(state.days)===JSON.stringify(EDtekst.sample.days)&&state.summary===EDtekst.sample.summary;
-const rows=[['day','Weekdag',648,62,MOSMIX.weekdays],['sun','Zonuren',727,54,0,24],['rain','Hoogste uurkans regen (%)',798,54,0,100],['min','Minimum (°C)',891,54,-40,50],['max','Maximum (°C)',968,54,-40,50],['dir','Windrichting',1062,54,[...MOSMIX.directions,'VAR']],['force','Windkracht (Bft)',1133,54,0,12]];
+const rows=[['day','Weekdag',648,62,MOSMIX.weekdays],['max','Maximum (°C)',727,54,-40,50],['min','Minimum (°C)',798,54,-40,50],['rain','Neerslagkans: hoogste uurkans (%)',891,54,0,100],['sun','Zonuren',968,54,0,24],['dir','Windrichting',1062,54,[...MOSMIX.directions,'VAR']],['force','Windkracht (Bft)',1133,54,0,12]];
 function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
 function sourceStatus(){
   if(!state.source){$('source-status').textContent='Nog geen MOSMIX ingeladen.';return;}
@@ -14,7 +14,7 @@ function sourceStatus(){
 }
 function changeCell(index,key,raw){
   const row=rows.find(r=>r[0]===key),isSelect=Array.isArray(row[4]);
-  state.days[index][key]=raw===''?null:isSelect?raw:Number(raw);
+  state.days[index][key]=raw===''?null:isSelect||key==='force'?raw:Number(raw);
   if(key==='day')delete state.days[index].date;
   if(state.source)state.source.edited=true;
   tableChanged++;render();
@@ -27,9 +27,11 @@ function renderTable(){
       const isSelect=Array.isArray(range),input=document.createElement(isSelect?'select':'input');
       input.className='table-input';input.dataset.day=i;input.dataset.key=key;input.setAttribute('aria-label',`${label}, ${day.date||day.day}, dag ${i+1}`);
       if(isSelect){if(key!=='day'){const empty=document.createElement('option');empty.value='';empty.textContent='-';input.append(empty);}for(const option of range){const el=document.createElement('option');el.value=option;el.textContent=option;input.append(el);}}
+      else if(key==='force'){input.type='text';input.inputMode='text';input.maxLength=5;input.pattern=EDtekst.forcePattern;input.title='Windkracht in Bft, bijvoorbeeld 4 of 4-6';input.placeholder='-';}
       else{input.type='number';input.inputMode='decimal';input.min=range;input.max=max;input.step=String(step);input.placeholder='-';}
       input.value=day[key]??'';
-      input.addEventListener('input',()=>{input.setAttribute('aria-invalid',String(!input.validity.valid));changeCell(i,key,input.value);});
+      const updateForce=()=>{if(key==='force'){input.setCustomValidity(EDtekst.validForce(input.value===''?null:input.value)?'':'Gebruik 0–12 of een oplopend bereik, bijvoorbeeld 4-6.');input.style.fontSize=input.value.length>4?'3.1481cqw':'';}};updateForce();
+      input.addEventListener('input',()=>{updateForce();input.setAttribute('aria-invalid',String(!input.validity.valid));changeCell(i,key,input.value);});
       input.addEventListener('focus',()=>{if(!isSelect)input.select();});
       input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}});
       cell.append(input);row.append(cell);
@@ -40,7 +42,7 @@ function render(){
   $('count').textContent=`${state.summary.length}/200 tekens · ${EDtekst.wrap(state.summary).length}/5 regels`;
   try{
     EDtekst.validate(state);EDtekst.draw($('screen').getContext('2d'),state,{editable:true});valid=true;
-    $('accessibleForecast').textContent=state.heading+'. '+state.summary+' '+state.days.map(d=>`${d.date||d.day}: ${d.sun??'onbekend'} zonuren, regenkans ${d.rain??'onbekend'}%, minimum ${d.min??'onbekend'}, maximum ${d.max??'onbekend'}, wind ${d.dir??'onbekend'} ${d.force??'onbekend'} Bft.`).join(' ');
+    $('accessibleForecast').textContent=state.heading+'. '+state.summary+' '+state.days.map(d=>`${d.date||d.day}: maximum ${d.max??'onbekend'}, minimum ${d.min??'onbekend'}, neerslagkans ${d.rain??'onbekend'}%, ${d.sun??'onbekend'} zonuren, wind ${d.dir??'onbekend'} ${d.force??'onbekend'} Bft.`).join(' ');
     try{localStorage.setItem(storageKey,JSON.stringify(state));message('Concept bewaard op dit apparaat.');}catch{message('Download je afbeelding voordat je afsluit; bewaren is niet beschikbaar.');}
   }catch(e){valid=false;message(e.message,true);}
   $('download').disabled=!valid||!fontReady||importing;sourceStatus();
