@@ -47,6 +47,11 @@ function render(){
   }catch(e){valid=false;message(e.message,true);}
   $('download').disabled=!valid||!fontReady||importing;sourceStatus();
 }
+function syncClock(){
+  const now=new Date(),date=MOSMIX.localDate(now),time=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(now);
+  const changed=state.date!==date||state.time!==time;state.date=date;state.time=time;$('date').value=date;$('time').value=time;
+  if(changed)render();
+}
 function populate(){for(const k of ['date','time','region','heading','summary'])$(k).value=state[k];for(const k of ['demo','crt'])$(k).checked=state[k];renderTable();render();}
 for(const k of ['date','time','region','heading','summary'])$(k).addEventListener('input',()=>{state[k]=$(k).value;render();});
 for(const k of ['demo','crt'])$(k).addEventListener('change',()=>{state[k]=$(k).checked;render();});
@@ -76,11 +81,13 @@ $('import-mosmix').addEventListener('click',importMOSMIX);
 $('start-today').addEventListener('click',()=>{$('forecast-start').value=today;updateStartShortcuts();importMOSMIX();});
 $('start-tomorrow').addEventListener('click',()=>{$('forecast-start').value=tomorrow;updateStartShortcuts();importMOSMIX();});
 $('download').addEventListener('click',()=>{
+  syncClock();
   if(!valid||!fontReady||importing)return;
   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;EDtekst.draw(canvas.getContext('2d'),state);
   const fileDate=state.date;canvas.toBlob(blob=>{if(!blob){message('Downloaden is niet gelukt. Probeer het opnieuw.',true);return;}const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='edtekst-'+fileDate+'.png';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);message('Afbeelding klaar — je download is gestart.');},'image/png');
 });
-$('reset').onclick=()=>{tableChanged++;state=clone(EDtekst.sample);populate();};populate();
+$('reset').onclick=()=>{tableChanged++;state=clone(EDtekst.sample);populate();syncClock();};populate();syncClock();
+setInterval(syncClock,1000);window.addEventListener('focus',syncClock);document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncClock();});
 document.fonts.load('40px "EDtekst Mono"').then(fonts=>{if(!fonts.length)throw Error('Font ontbreekt');fontReady=true;render();}).catch(()=>message('Het lettertype kon niet laden. Vernieuw de pagina voordat je downloadt.',true));
 if(needsInitialImport)importMOSMIX();
-if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'update_edtekst_forecast',title:'Werk de EDtekst-verwachting bij',description:'Werk het volledige weerbericht en de bewerkbare tabel bij. Bewaart het concept op dit apparaat; downloadt of publiceert niets.',inputSchema:{type:'object',properties:{forecast:{type:'object',description:'Volledig bericht: date, time, region, heading, summary, demo, crt en vijf days (day, sun in uren, rain, min, max, dir, force).'}},required:['forecast'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input){if(!input||typeof input.forecast!=='object')throw Error('Een volledig weerbericht is vereist.');EDtekst.validate(input.forecast);state=clone(input.forecast);tableChanged++;if(state.source)state.source.edited=true;populate();return {updated:true,date:state.date,days:state.days.length};}})).catch(()=>{});}catch{}}
+if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'update_edtekst_forecast',title:'Werk de EDtekst-verwachting bij',description:'Werk het volledige weerbericht en de bewerkbare tabel bij. Bewaart het concept op dit apparaat; downloadt of publiceert niets.',inputSchema:{type:'object',properties:{forecast:{type:'object',description:'Volledig bericht: date, time, region, heading, summary, demo, crt en vijf days (day, sun in uren, rain, min, max, dir, force).'}},required:['forecast'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input){if(!input||typeof input.forecast!=='object')throw Error('Een volledig weerbericht is vereist.');EDtekst.validate(input.forecast);state=clone(input.forecast);syncClock();tableChanged++;if(state.source)state.source.edited=true;populate();return {updated:true,date:state.date,days:state.days.length};}})).catch(()=>{});}catch{}}
