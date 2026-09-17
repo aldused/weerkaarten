@@ -32,8 +32,8 @@
       ctx.fillText(normalize(t),x,y+size*7.5);
     }
     box(0,0,1080,1350,c.bg);
-    text('P704',48,34,3,c.yellow);text('EDtekst',186,34,3,c.white);text(s.date.split('-').reverse().join('-')+' '+s.time,1032,34,3,c.cyan,'right');
-    box(48,86,984,110,c.blue);text('ED',73,107,10,c.yellow);text('tekst',212,107,10,c.white);text('704',1008,122,6,c.yellow,'right');
+    text('P704',48,34,3,c.yellow);text('EDweer',186,34,3,c.white);text(s.date.split('-').reverse().join('-')+' '+s.time,1032,34,3,c.cyan,'right');
+    box(48,86,984,110,c.blue);text('ED',73,107,10,c.yellow);text('weer',212,107,10,c.white);text('704',1008,122,6,c.yellow,'right');
     box(48,210,984,47,c.green);text('WEER',68,220,4,c.bg);text('meerdaagse',1012,220,4,c.bg,'right');
     text(s.region,48,285,3,c.white);text('1/1',1032,285,3,c.muted,'right');
     text(s.heading,48,342,4,c.green);
