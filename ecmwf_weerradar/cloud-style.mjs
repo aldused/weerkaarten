@@ -23,20 +23,24 @@ function visibility(scale,pixel){
 }
 export function cloudStyle(cover,low,high,lon,lat,detail,kmPerPixel=0){
   const c=clamp(cover/100),l=clamp(low/100),h=clamp(high/100);
-  if(!detail)return [Math.round(213+25*h+8*(1-l)),clamp((c-.12)/.88)*.92];
-  // Fixed geographical coordinates keep the same plumes across tile boundaries.
-  // Rotating successive scales prevents a preferred direction. This texture
-  // changes appearance only; native total cloud cover remains the opacity base.
-  const x=lon*70,y=lat*111;
-  const broad=visibility(10.8,kmPerPixel),medium=visibility(4.9,kmPerPixel),fine=visibility(2.1,kmPerPixel);
-  const structure=.55*broad*noise(x/10.8,y/10.8)
-    +.33*medium*noise((.8*x+.6*y)/4.9+59,(-.6*x+.8*y)/4.9-31)
-    +.12*fine*noise((.6*x-.8*y)/2.1-73,(.8*x+.6*y)/2.1+17);
-  const base=clamp((c-.12)/.88);
-  // Bounded modulation avoids fake holes in overcast areas or invented cloud
-  // outside the forecast. It cannot reverse the effect of increasing cover.
-  const coverage=clamp(base+.8*base*(1-base)*structure);
+  // A continuous transfer curve lets thin cloud fade into the map while a
+  // closed deck reads as one soft grey-white mass on both land and dark sea.
+  const fraction=clamp((c-.08)/.92),base=fraction*fraction*(3-2*fraction);
   const smoothShade=213+25*h+8*(1-l);
-  const shade=clamp(smoothShade+broad*13+36*structure,193,251);
+  // Detail belongs at cloud margins, not across every overcast pixel. The
+  // smooth fade also avoids a visible boundary where this fast path starts.
+  const edgeFraction=clamp((.94-c)/.24);
+  const edgeFade=edgeFraction*edgeFraction*(3-2*edgeFraction);
+  if(!detail||base===0||edgeFade===0)return [Math.round(smoothShade),base*.92];
+  // Only broad, low-contrast variation: tiny invented billows made the old
+  // display look granular. These world-fixed scales stay continuous across
+  // tiles, and the real ECMWF cloud field still determines every cloud mass.
+  const x=lon*70,y=lat*111;
+  const broad=visibility(32,kmPerPixel),soft=visibility(14,kmPerPixel);
+  const structure=.82*broad*noise(x/32,y/32)
+    +.18*soft*noise((.8*x+.6*y)/14+59,(-.6*x+.8*y)/14-31);
+  const edge=base*(1-base)*edgeFade;
+  const coverage=clamp(base+.08*edge*structure);
+  const shade=clamp(smoothShade+16*edge*structure,193,251);
   return [Math.round(shade),coverage*.92];
 }

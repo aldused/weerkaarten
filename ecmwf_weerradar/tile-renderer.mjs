@@ -1,4 +1,5 @@
 import { scales, EUROPE } from './core.mjs';
+import { createGaussianTileSampler } from './gaussian-sampler.mjs';
 import { cloudStyle } from './cloud-style.mjs';
 function colorsFor(scale){
   // Lookup table keeps tile painting independent of the number of palette stops.
@@ -15,18 +16,20 @@ const palettes=Object.fromEntries(Object.entries(scales).map(([k,v])=>[k,colorsF
 
 export function renderTile(field,coords){
   const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z;
-  const longitudes=Array.from({length:256},(_,x)=>(coords.x+(x+.5)/256)/world*360-180);
+  const sampler=createGaussianTileSampler(field.grid,field.data.values,coords);
+  const longitudes=sampler?.longitudes||Array.from({length:256},(_,x)=>(coords.x+(x+.5)/256)/world*360-180);
   for(let y=0;y<256;y++){
-    const lat=Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/256)/world)))*180/Math.PI;
+    const lat=sampler?.latitudes[y]??Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/256)/world)))*180/Math.PI;
     const kmPerPixel=40075*Math.cos(lat*Math.PI/180)/(256*world);
     if(lat<EUROPE[1]||lat>EUROPE[3])continue;
+    const row=sampler?.row(y);
     for(let x=0;x<256;x++){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
-      const value=field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
+      const value=row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
       const c=Math.min(palette.n-1,Math.max(0,Math.round((value-palette.min)/(palette.max-palette.min)*(palette.n-1))))*4,p=(y*256+x)*4;
       pixels[p]=palette.rgba[c];pixels[p+1]=palette.rgba[c+1];pixels[p+2]=palette.rgba[c+2];pixels[p+3]=palette.rgba[c+3];
-      if(field.variable==='cloud_cover'&&value>15){
+      if(field.variable==='cloud_cover'){
         const [shade,alpha]=cloudStyle(value,value,0,lon,lat,field.texture,kmPerPixel);
         pixels[p]=shade;pixels[p+1]=Math.min(255,shade+2);pixels[p+2]=Math.min(255,shade+3);pixels[p+3]=alpha*255;
       }

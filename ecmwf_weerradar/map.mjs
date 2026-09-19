@@ -1,48 +1,108 @@
 import L from 'leaflet';
 import { renderTile } from './tile-renderer.mjs';
+import { SharedRenderQueue, abortError } from './render-queue.mjs';
 
 // Canvas tiles keep the full ECMWF grid available on browsers without WebGL2.
 let weatherLoader;
 export const setWeatherLoader=loader=>{weatherLoader=loader;};
-const tileCache=new globalThis.Map(),workerFields=new globalThis.Map(),jobs=new globalThis.Map();
-let worker,jobCounter=0;
+const workerFields=new globalThis.Map();
+let worker,workerJob,jobCounter=0;
 try{
   const workerURL=new URL('./assets/weather-worker.js',document.baseURI);workerURL.search=new URL(import.meta.url).search;
   worker=new Worker(workerURL,{type:'module'});
   worker.onmessage=({data})=>{
-    const job=jobs.get(data.id);if(!job)return;jobs.delete(data.id);
+    if(!workerJob||workerJob.id!==data.id)return;
+    const job=workerJob;workerJob=null;
     if(data.error)job.reject(new Error(data.error));else job.resolve(data.pixels);
   };
   worker.onerror=()=>{
     worker?.terminate();worker=null;workerFields.clear();
-    for(const job of jobs.values()){try{job.resolve(renderTile(job.field,job.coords));}catch(error){job.reject(error);}}
-    jobs.clear();
+    const job=workerJob;workerJob=null;
+    if(job)renderOnMain(job.field,job.coords,job.signal).then(job.resolve,job.reject);
   };
 }catch{}
-function paint(field,coords){
-  const key=field.key+'|'+field.texture+'|'+coords.z+'/'+coords.x+'/'+coords.y;
-  if(tileCache.has(key)){const result=tileCache.get(key);tileCache.delete(key);tileCache.set(key,result);return result;}
-  const task=new Promise((resolve,reject)=>{
-    if(!worker){requestAnimationFrame(()=>{try{resolve(renderTile(field,coords));}catch(error){reject(error);}});return;}
-    if(!workerFields.has(field.key)){
+function renderOnMain(field,coords,signal){
+  return new Promise((resolve,reject)=>{
+    if(signal.aborted){reject(abortError(signal));return;}
+    const cancel=()=>{cancelAnimationFrame(frame);reject(abortError(signal));};
+    const frame=requestAnimationFrame(()=>{
+      signal.removeEventListener('abort',cancel);
+      if(signal.aborted){reject(abortError(signal));return;}
+      try{resolve(renderTile(field,coords));}catch(error){reject(error);}
+    });
+    signal.addEventListener('abort',cancel,{once:true});
+  });
+}
+function renderPixels({field,coords},signal){
+  if(signal.aborted)return Promise.reject(abortError(signal));
+  if(!worker)return renderOnMain(field,coords,signal);
+  return new Promise((resolve,reject)=>{
+    // Upload and eviction happen at dispatch, so fields needed by queued jobs
+    // cannot be dropped before their render message reaches the worker.
+    if(workerFields.has(field.key)){
+      const bytes=workerFields.get(field.key);workerFields.delete(field.key);workerFields.set(field.key,bytes);
+    }else{
       worker.postMessage({type:'field',key:field.key,gridData:field.gridData,ranges:field.ranges,variable:field.variable,values:field.data.values,cloudLow:field.cloudLow,cloudHigh:field.cloudHigh});
       workerFields.set(field.key,field.data.values.byteLength+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0));
       let bytes=[...workerFields.values()].reduce((a,b)=>a+b,0);
-      while(workerFields.size>12||(bytes>96*1024*1024&&workerFields.size>3)){const old=workerFields.keys().next().value;bytes-=workerFields.get(old);workerFields.delete(old);worker.postMessage({type:'drop',key:old});}
+      while(workerFields.size>12||(bytes>96*1024*1024&&workerFields.size>3)){
+        const old=workerFields.keys().next().value;bytes-=workerFields.get(old);workerFields.delete(old);worker.postMessage({type:'drop',key:old});
+      }
     }
-    const id=++jobCounter;jobs.set(id,{resolve,reject,field,coords});
-    worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture});
-  }).catch(error=>{tileCache.delete(key);throw error;});
-  tileCache.set(key,task);while(tileCache.size>128)tileCache.delete(tileCache.keys().next().value);
-  return task;
+    const id=++jobCounter;workerJob={id,resolve,reject,field,coords,signal};
+    try{worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture});}
+    catch(error){workerJob=null;reject(error);}
+    // A worker's synchronous render cannot be interrupted. Keep this slot busy
+    // until its reply, even when its subscribers cancel, so only one tile is
+    // ever posted. The queue will discard that abandoned result.
+  });
+}
+const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:128});
+function paint(field,coords,signal){
+  const key=field.key+'|'+field.texture+'|'+coords.z+'/'+coords.x+'/'+coords.y;
+  return paintQueue.request(key,{field,coords},signal);
 }
 const WeatherTiles=L.GridLayer.extend({
-  initialize(url,options){L.GridLayer.prototype.initialize.call(this,options);this.url=url;},
+  initialize(url,options){
+    L.GridLayer.prototype.initialize.call(this,options);this.url=url;this.requests=new Set();
+    this.on('tileunload',({tile})=>{
+      tile.weatherRequest?.abort();
+      if(this.unloadCheckPending)return;this.unloadCheckPending=true;
+      queueMicrotask(()=>{
+        this.unloadCheckPending=false;
+        if(this._map&&this._loading&&this._noTilesToLoad()){this._loading=false;this.fire('load');}
+      });
+    });
+  },
+  onRemove(map){
+    for(const controller of this.requests)controller.abort();this.requests.clear();
+    L.GridLayer.prototype.onRemove.call(this,map);
+  },
+  _update(center){
+    L.GridLayer.prototype._update.call(this,center);
+    if(this.prunePending)return;this.prunePending=true;
+    // Leaflet normally waits for a new tile to finish before pruning after a
+    // pan. Prune now, before obsolete queued tiles consume the render slot.
+    // Defer one microtask so _setView has installed its animation/noPrune flag.
+    queueMicrotask(()=>{
+      this.prunePending=false;
+      if(this._map&&!this._noPrune&&!this._map._animatingZoom)this._pruneTiles();
+    });
+  },
   createTile(coords,done){
     const tile=document.createElement('canvas');tile.width=tile.height=256;
-    weatherLoader(this.url).then(field=>paint(field,coords)).then(pixels=>{
+    const controller=new AbortController(),{signal}=controller;tile.weatherRequest=controller;this.requests.add(controller);
+    Promise.resolve().then(()=>{
+      if(signal.aborted)throw abortError(signal);
+      return weatherLoader(this.url,signal);
+    }).then(field=>paint(field,coords,signal)).then(pixels=>{
+      if(signal.aborted)throw abortError(signal);
       tile.getContext('2d').putImageData(new ImageData(pixels,256,256),0,0);done(null,tile);
-    }).catch(error=>done(error,tile));
+    }).catch(error=>{
+      // Never call Leaflet's done for detached tiles: a new tile can already
+      // have reused its coordinates. The unload handler settles loading state.
+      if(!signal.aborted&&error?.name!=='AbortError')done(error,tile);
+    }).finally(()=>{this.requests.delete(controller);delete tile.weatherRequest;});
     return tile;
   },
 });
@@ -57,7 +117,7 @@ export class Map {
     this.native.createPane('borders');this.native.getPane('borders').style.zIndex=450;this.native.getPane('borders').style.pointerEvents='none';
     const satellite=options.style.sources.satellite;
     L.tileLayer(satellite.tiles[0],{maxZoom:18,maxNativeZoom:17,attribution:satellite.attribution,noWrap:true}).addTo(this.native);
-    this.countriesURL=options.style.sources.countries.data;
+    this.countriesURL=options.style.sources.countries.data;this.bordersVisible=true;
     for(const ev of ['move','resize','moveend'])this.native.on(ev,()=>this.fire(ev,{}));
     this.native.on('click',e=>this.fire('click',{lngLat:{lng:e.latlng.lng,lat:e.latlng.lat},point:e.containerPoint}));
     this.touchZoomRotate={disableRotation(){}};
@@ -70,10 +130,12 @@ export class Map {
       L.geoJSON(data,{pane:'land',interactive:false,style:{stroke:false,fillColor:'#719342',fillOpacity:.44}}).addTo(this.native);
     }).catch(()=>{});
     fetch('./assets/regions.geojson').then(r=>r.json()).then(data=>{
-      this.regions=L.geoJSON(data,{pane:'borders',interactive:false,style:{color:'#2e4d58',weight:.6,opacity:.65,fill:false}}).addTo(this.native);
+      this.regions=L.geoJSON(data,{pane:'borders',interactive:false,style:{color:'#2e4d58',weight:.6,opacity:.65,fill:false}});
+      if(this.bordersVisible)this.regions.addTo(this.native);
     }).catch(()=>{});
     fetch(this.countriesURL).then(r=>r.json()).then(data=>{
-      this.border=L.geoJSON(data,{pane:'borders',interactive:false,style:{color:'#1b3034',weight:1,opacity:.75,fill:false}}).addTo(this.native);
+      this.border=L.geoJSON(data,{pane:'borders',interactive:false,style:{color:'#1b3034',weight:1,opacity:.75,fill:false}});
+      if(this.bordersVisible)this.border.addTo(this.native);
     }).catch(()=>{});
   }
   on(ev,fn){if(!this.events.has(ev))this.events.set(ev,new Set());this.events.get(ev).add(fn);return this;}
@@ -103,7 +165,10 @@ export class Map {
   isSourceLoaded(id){const layer=this.layers.get(id);return layer&&!layer.isLoading();}
   removeLayer(id){const layer=this.layers.get(id);if(layer)this.native.removeLayer(layer);this.layers.delete(id);}
   setPaintProperty(id,property,value){if(property==='raster-opacity')this.layers.get(id)?.setOpacity(value);}
-  setLayoutProperty(id,property,value){if(id==='borders')for(const layer of [this.border,this.regions])if(layer){if(value==='none')layer.remove();else layer.addTo(this.native);}}
+  setLayoutProperty(id,property,value){
+    if(id!=='borders')return;this.bordersVisible=value!=='none';
+    for(const layer of [this.border,this.regions])if(layer){if(this.bordersVisible)layer.addTo(this.native);else layer.remove();}
+  }
 }
 export class AttributionControl {
   constructor(options){this.options=options;}

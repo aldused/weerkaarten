@@ -2,7 +2,8 @@ import * as mapEngine from './map.mjs';
 import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, domainOptions, GridFactory, getRanges } from '@openmeteo/weather-map-layer';
 import { LruBlockCache, initWasm } from '@openmeteo/file-reader';
 import { FastBrowserBlockCache } from './fast-block-cache.mjs';
-import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, runPath, hasFullHorizon, forecastFrames, nearestIndex, hourlyRate, localDateKey, fmt, scales, inEurope } from './core.mjs';
+import { createSharedTask, consumeTask } from './shared-task.mjs';
+import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, runPath, hasFullHorizon, forecastFrames, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope } from './core.mjs';
 
 const $ = id => document.getElementById(id);
 $('app').dataset.moduleReadyMs=Math.round(performance.now());
@@ -29,29 +30,20 @@ function icon(el, name) {
 }
 document.querySelectorAll('[data-icon]').forEach(el => icon(el, el.dataset.icon));
 
-let meta, frames = [], current = null, wanted = 0, revision = 0, rendering = false;
+let meta, frames = [], current = null, wanted = 0, revision = 0, rendering = false, refreshing = false;
+let requestedContext = null, startupRevision = 0;
+let retryLoad = () => start();
 let mode = 'weather', playing = false, playTimer, sourceCounter = 0, cities = [], selectedPoint = null;
 let pendingSources = new Map(), cityDrawQueued = false, frameErrors = new Set();
 const intervalByURL = new Map();
 const options = {
   ...defaultOmProtocolSettings,
-  fileReaderConfig: { useSAB: false, retries: 2, cache: typeof caches==='undefined'?new LruBlockCache(65536,768):new FastBrowserBlockCache({cacheName:'weerlab-ecmwf-om-v1',blockSize:65536,memCacheTtlMs:15000,maxBytes:192*1024*1024,maxConcurrentFetches:8}) },
+  fileReaderConfig: { ...defaultOmProtocolSettings.fileReaderConfig, useSAB: false, retries: 2, cache: typeof caches==='undefined'?new LruBlockCache(65536,768):new FastBrowserBlockCache({cacheName:'weerlab-ecmwf-om-v1',blockSize:65536,memCacheTtlMs:15000,maxBytes:192*1024*1024,maxConcurrentFetches:8}) },
   maxStatesWithData: 14,
   clippingOptions: { bounds: EUROPE },
   colorScales: { ...defaultOmProtocolSettings.colorScales, ...scales },
   postReadCallback(reader, data, state) {
-    const variable = state.dataOptions.variable;
-    if (!data.values) return;
-    if (variable === 'precipitation' || variable === 'snowfall_water_equivalent') {
-      const hours = intervalByURL.get(state.omFileUrl);
-      if (!hours) throw new Error('Neerslaginterval ontbreekt');
-      for (let i = 0; i < data.values.length; i++) data.values[i] = hourlyRate(data.values[i], hours);
-      if (data.scaleFactor) data.scaleFactor *= hours;
-    } else if (variable === 'wind_u_component_10m') {
-      // The library derives speed and meteorological direction from native u/v.
-      for (let i = 0; i < data.values.length; i++) data.values[i] *= 3.6;
-      if (data.scaleFactor) data.scaleFactor /= 3.6;
-    }
+    normalizeFieldData(data,state.dataOptions.variable,intervalByURL.get(state.omFileUrl));
   },
 };
 const domain = domainOptions.find(d => d.value === 'ecmwf_ifs');
@@ -61,34 +53,39 @@ let fieldReads=0;
 function trimFieldCache(){
   let bytes=[...fieldCache.values()].reduce((sum,e)=>sum+(e.bytes||0),0);
   while(fieldCache.size>16||(bytes>128*1024*1024&&fieldCache.size>4)){
-    const key=fieldCache.keys().next().value;bytes-=fieldCache.get(key).bytes||0;fieldCache.delete(key);
+    const key=[...fieldCache].find(([,e])=>e.task.settled||e.task.controller.signal.aborted)?.[0];
+    if(!key)break;bytes-=fieldCache.get(key).bytes||0;fieldCache.delete(key);
   }
 }
-function readField(file,variable){
+function readField(file,variable,signal){
+  signal?.throwIfAborted();
   const b=map.getBounds(),south=Math.max(EUROPE[1],b.getSouth()),north=Math.min(EUROPE[3],b.getNorth());
   // Reuse a decoded latitude band when moving east/west or zooming into it.
   for(const [cachedKey,entry] of fieldCache){
-    if(entry.file===file&&entry.variable===variable&&entry.south<=south&&entry.north>=north){
-      fieldCache.delete(cachedKey);fieldCache.set(cachedKey,entry);return entry.promise;
+    if(!entry.task.controller.signal.aborted&&entry.file===file&&entry.variable===variable&&entry.south<=south&&entry.north>=north){
+      fieldCache.delete(cachedKey);fieldCache.set(cachedKey,entry);return consumeTask(entry.task,signal);
     }
   }
   const margin=Math.max(.2,(north-south)*.35);
   const bounds=[EUROPE[0],Math.max(EUROPE[1],south-margin),EUROPE[2],Math.min(EUROPE[3],north+margin)];
   const ranges=getRanges(domain.grid,bounds),key=file+'|'+variable+'|'+JSON.stringify(ranges);
   $('app').dataset.fieldReads=++fieldReads;
-  const promise=wasmReady.then(()=>protocol.omFileReader.readVariable(file,variable,ranges)).then(data=>{
+  const task=createSharedTask(async readSignal=>{
+    await wasmReady;readSignal.throwIfAborted();
+    const data=await protocol.omFileReader.readVariable(file,variable,ranges,readSignal);
     options.postReadCallback(protocol.omFileReader,data,{dataOptions:{variable},omFileUrl:file});
     const field={data,grid:GridFactory.create(domain.grid,ranges),variable,key,ranges,gridData:domain.grid};
     const entry=fieldCache.get(key);
     if(entry)entry.bytes=data.values.byteLength+(data.directions?.byteLength||0)+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
     trimFieldCache();
     return field;
-  }).catch(error=>{fieldCache.delete(key);throw error;});
-  fieldCache.set(key,{file,variable,south:bounds[1],north:bounds[3],promise});
+  });
+  task.promise.catch(()=>{if(fieldCache.get(key)?.task===task)fieldCache.delete(key);});
+  fieldCache.set(key,{file,variable,south:bounds[1],north:bounds[3],task});
   trimFieldCache();
-  return promise;
+  return consumeTask(task,signal);
 }
-mapEngine.setWeatherLoader(url=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable).then(field=>({...field,texture:$('texture').checked}));});
+mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked}));});
 const params = new URLSearchParams(location.search);
 const coords = (params.get('center') || '5.94,51.96').split(',').map(Number);
 const initialCenter = inEurope(coords[0], coords[1]) ? coords : [5.94, 51.96];
@@ -128,18 +125,19 @@ map.on('moveend', () => {
   u.searchParams.set('center',`${c.lng.toFixed(4)},${c.lat.toFixed(4)}`);u.searchParams.set('zoom',map.getZoom().toFixed(2));
   history.replaceState(null,'',u);
 });
-let viewportRevision=0;
+let viewportRevision=0,viewportController;
 async function updateViewportSamples(){
-  const rev=++viewportRevision,frame=current,started=performance.now();
+  viewportController?.abort();viewportController=new AbortController();
+  const rev=++viewportRevision,frame=current,started=performance.now(),signal=viewportController.signal;
   try{
     // Leaflet extends the existing tile layers by itself; rebuilding all layers
     // here caused avoidable downloads, duplicated rendering and flashing on pan.
     const vars=[...new Set([...variablesForMode(),'temperature_2m'])];
-    const fields=await Promise.all(vars.map(v=>readField(frame.url,v)));
+    const fields=await Promise.all(vars.map(v=>readField(frame.url,v,signal)));
     if(rev!==viewportRevision||current!==frame)return;
     vars.forEach((v,i)=>{current.samples[v]=fields[i];});queueCityDraw();updatePoint();
     $('app').dataset.panDataMs=Math.round(performance.now()-started);
-  }catch(error){if(rev===viewportRevision)status(error.message,true);}
+  }catch(error){if(rev===viewportRevision&&error.name!=='AbortError')status(error.message,true);}
 }
   map.on('click',e => {
   if(!inEurope(e.lngLat.lng,e.lngLat.lat))return;
@@ -181,51 +179,57 @@ async function discoverRun(now) {
 }
 
 async function start() {
-  stopPlayback();status('Complete ECMWF-run voor tien dagen ophalen…');
+  const startup=++startupRevision;
+  retryLoad=()=>start();
+  refreshing=true;stopPlayback();clearTimeout(sliderTimer);revision++;renderController?.abort();prefetchController?.abort();status('Complete ECMWF-run voor tien dagen ophalen…');
   try {
     const now=Date.now();
-    meta=await discoverRun(now);$('app').dataset.metadataReadyMs=Math.round(performance.now());
-    frames=forecastFrames(meta,now);
-    try{localStorage.setItem('weerlab-ecmwf-run',JSON.stringify({savedAt:runCacheTime,meta}));}catch{}
-    frames.forEach(f=>intervalByURL.set(f.url,f.hours));
+    const candidateMeta=await discoverRun(now);
+    if(startup!==startupRevision)return;
+    const timeline=forecastFrames(candidateMeta,now);
+    $('app').dataset.metadataReadyMs=Math.round(performance.now());
+    try{localStorage.setItem('weerlab-ecmwf-run',JSON.stringify({savedAt:runCacheTime,meta:candidateMeta}));}catch{}
+    timeline.forEach(f=>intervalByURL.set(f.url,f.hours));
     await mapReady;
+    if(startup!==startupRevision)return;
     const b=map.getBounds();updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
-    buildTimeline();
-    $('app').dataset.model='ecmwf_ifs';$('app').dataset.run=meta.reference_time;
-    $('app').dataset.forecastStart=frames[0].iso;$('app').dataset.forecastEnd=frames.at(-1).iso;
-    $('run-label').textContent=`ECMWF IFS HRES · 9 km · run ${fmt(meta.reference_time,{day:'numeric',month:'short'})} ${new Date(meta.reference_time).getUTCHours().toString().padStart(2,'0')} UTC`;
-    const age=(now-Date.parse(meta.reference_time))/HOUR;
-    $('run-label').title=`Bron bijgewerkt: ${fmt(meta.last_modified_time,{dateStyle:'medium',timeStyle:'short'})}${age>24?' · Let op: modelrun ouder dan 24 uur':''}`;
-    if(age>24) $('run-label').textContent+=' · oudere run';
-    ['play','previous','next','time-slider'].forEach(id=>$(id).disabled=false);
-    requestFrame(0,true);
-  } catch(error) {status(`${error.message}. Probeer opnieuw.`,true);}
+    // A refresh preserves the chosen forecast time where the new run permits
+    // it. The previous run and its controls stay together until a full frame
+    // from this candidate has loaded successfully.
+    const selectedTime=requestedContext?.timeline[wanted]?.time??current?.time;
+    const index=selectedTime===undefined?0:nearestIndex(timeline,selectedTime);
+    refreshing=false;requestFrame(index,true,{meta:candidateMeta,timeline});
+  } catch(error) {
+    if(startup!==startupRevision)return;
+    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};}
+    refreshing=false;status(`${error.message}. ${current?'De vorige modelrun blijft zichtbaar. ':''}Probeer opnieuw.`,true);
+  }
 }
 
-function buildTimeline(){
-  const unique=[...new Set(frames.map(f=>localDateKey(f.time)))];
+function buildTimeline(timeline){
+  const unique=[...new Set(timeline.map(f=>localDateKey(f.time)))];
   const container=$('days');container.replaceChildren();
   unique.forEach((key,i)=>{
-    const dayFrames=frames.filter(f=>localDateKey(f.time)===key);
+    const dayFrames=timeline.filter(f=>localDateKey(f.time)===key);
     const target=dayFrames.reduce((best,f)=>Math.abs(Number(fmt(f.time,{hour:'numeric',hourCycle:'h23'}))-12)<Math.abs(Number(fmt(best.time,{hour:'numeric',hourCycle:'h23'}))-12)?f:best);
     const button=document.createElement('button');button.type='button';button.dataset.day=key;button.dataset.short=fmt(target.time,{weekday:'short'}).replace('.','');
     const name=i===0?'vandaag':i===1?'morgen':fmt(target.time,{weekday:'short'}).replace('.','');
-    button.textContent=name;const small=document.createElement('small');small.textContent=fmt(target.time,{day:'numeric'});button.append(small);
+    button.textContent=name;const small=document.createElement('small');small.textContent=fmt(target.time,{day:'numeric',month:'short'});button.append(small);
     button.title=fmt(target.time,{dateStyle:'full'});button.setAttribute('aria-pressed','false');
     button.setAttribute('aria-label',button.title);
-    button.addEventListener('click',()=>{stopPlayback();requestFrame(frames.indexOf(i===0?dayFrames[0]:target));});container.append(button);
+    button.addEventListener('click',()=>{stopPlayback();requestFrame(timeline.indexOf(i===0?dayFrames[0]:target));});container.append(button);
   });
-  const end=(frames.at(-1).time-frames[0].time)/HOUR;
+  const end=(timeline.at(-1).time-timeline[0].time)/HOUR;
   $('time-slider').max=end;$('range-end').textContent=`+${FORECAST_DAYS} dagen`;
   $('time-ticks').replaceChildren();
   for(let i=0;i<=FORECAST_DAYS;i++){const tick=document.createElement('span');tick.textContent=i?`+${i}d`:'nu';$('time-ticks').append(tick);}
 }
-function variablesForMode(){
+function variablesForMode(modelMeta=meta){
   if(mode==='temperature') return ['temperature_2m'];
   if(mode==='wind') return ['wind_u_component_10m'];
-  return [...(mode==='weather'&&$('clouds').checked?['cloud_cover']:[]),'precipitation',...($('snow').checked&&meta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
+  return [...(mode==='weather'&&$('clouds').checked?['cloud_cover']:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
 }
-function weatherURL(frame,variable){return `om://${frame.url}?variable=${variable}&interpolation=linear&color_blend=true`;}
+function weatherURL(frame,variable){return `om://${frame.url}?variable=${variable}&interpolation=monotone&color_blend=true`;}
 function addLayer(frame,variable,prefix){
   const id=`${prefix}-${variable}`;
   map.addSource(id,{type:'raster',url:weatherURL(frame,variable),tileSize:256,maxzoom:10});
@@ -233,23 +237,26 @@ function addLayer(frame,variable,prefix){
   return id;
 }
 function removeLayers(ids){for(const id of ids){pendingSources.delete(id);frameErrors.delete(id);if(map.getLayer(id)) map.removeLayer(id);if(map.getSource(id)) map.removeSource(id);}}
-function awaitSources(ids){
+function awaitSources(ids,signal){
   return new Promise((resolve,reject)=>{
-    const cleanup=()=>{clearTimeout(timer);map.off('sourcedata',check);ids.forEach(id=>pendingSources.delete(id));};
+    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);map.off('sourcedata',check);ids.forEach(id=>pendingSources.delete(id));};
     const check=()=>{
       if(ids.some(id=>frameErrors.has(id))){cleanup();reject(new Error('Een ECMWF-weerlaag kon niet worden geladen'));return;}
       if(ids.every(id=>map.getSource(id)&&map.isSourceLoaded(id))){cleanup();resolve();}
     };
+    const abort=()=>{cleanup();reject(signal.reason);};
     const timer=setTimeout(()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));},45000);
-    ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);check();
+    signal?.addEventListener('abort',abort,{once:true});
+    ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);if(signal?.aborted)abort();else check();
   });
 }
-async function readTemperature(frame){
-  return readField(frame.url,'temperature_2m');
+async function readTemperature(frame,signal){
+  return readField(frame.url,'temperature_2m',signal);
 }
-async function renderFrame(index,rev){
+async function renderFrame(index,rev,signal,context){
   const started=performance.now();
-  const frame=frames[index], layerMode=mode, vars=variablesForMode();
+  const frame=context.timeline[index], modelMeta=context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
+  retryLoad=()=>requestFrame(index,true,context);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view can reveal finished layers immediately. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.
@@ -269,12 +276,14 @@ async function renderFrame(index,rev){
   status(`Laden: ${fmt(frame.time,{weekday:'short',hour:'2-digit',minute:'2-digit'})}…`);
   $('app').dataset.frameStatus='loading';
   try {
-    const [,temperature,...fields]=await Promise.all([awaitSources(ids),readTemperature(frame),...vars.map(v=>readField(frame.url,v))]);
+    const [,temperature,...fields]=await Promise.all([awaitSources(ids,signal),readTemperature(frame,signal),...vars.map(v=>readField(frame.url,v,signal))]);
     if(rev!==revision){removeLayers(ids);return false;}
     const samples={temperature_2m:temperature};
     vars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
-    current={...frame,index,ids,mode:layerMode,samples};
+    meta=modelMeta;frames=context.timeline;
+    current={...frame,index,ids,mode:layerMode,samples,modelMeta,timeline:context.timeline};
+    if(old?.timeline!==current.timeline)buildTimeline(current.timeline);
     ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));
     if(old) removeLayers(old.ids);
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
@@ -285,7 +294,8 @@ async function renderFrame(index,rev){
     return true;
   } catch(error){
     removeLayers(ids);
-    if(rev!==revision)return false;
+    if(rev!==revision||error.name==='AbortError')return false;
+    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};}
     stopPlayback();$('app').dataset.frameStatus='error';
     status(`${error.message}. ${current?'De vorige tijdstap blijft zichtbaar.':''}`,true);
     return false;
@@ -297,35 +307,47 @@ function loadMapDetails(){
   map.loadDetails();
   fetch('./assets/cities.json').then(r=>{if(!r.ok)throw new Error('Plaatsnamen laden mislukt');return r.json();}).then(places=>{cities=places;queueCityDraw();}).catch(()=>{detailsStarted=false;});
 }
-async function requestFrame(index,force=false){
-  if(!frames.length)return;
-  wanted=Math.min(frames.length-1,Math.max(0,index));revision++;
-  if(rendering)return;
-  if(!force&&current?.index===wanted&&current.mode===mode){syncUI();return;}
+let renderController,prefetchController;
+async function requestFrame(index,force=false,context={meta,timeline:frames}){
+  if(!context.timeline.length)return;
+  requestedContext=context;
+  wanted=Math.min(context.timeline.length-1,Math.max(0,index));revision++;
+  renderController?.abort();prefetchController?.abort();
+  if(rendering||refreshing)return;
+  if(!force&&current?.url===context.timeline[wanted].url&&current.mode===mode){syncUI();$('status').hidden=true;$('app').dataset.frameStatus='ready';return;}
   rendering=true;
   let success=false;
   try {
     let targetRevision;
-    do {targetRevision=revision;success=await renderFrame(wanted,targetRevision);}while(targetRevision!==revision);
+    do {targetRevision=revision;renderController=new AbortController();success=await renderFrame(wanted,targetRevision,renderController.signal,requestedContext);}while(targetRevision!==revision&&!refreshing);
   } finally {rendering=false;}
-  if(success){
+  if(success&&!refreshing){
     // Warm the next frame without keeping old decoded rasters indefinitely.
     const next=frames[(wanted+1)%frames.length];
-    Promise.allSettled([...variablesForMode(),'temperature_2m'].map(v=>readField(next.url,v)));
+    prefetchController=new AbortController();
+    const signal=prefetchController.signal;
+    Promise.allSettled([...new Set([...variablesForMode(),'temperature_2m'])].map(v=>readField(next.url,v,signal)));
     if(playing)scheduleNext();
   }
 }
 function syncUI(){
   if(!current)return;
+  const metadata=current.modelMeta,timeline=current.timeline;
+  $('app').dataset.model='ecmwf_ifs';$('app').dataset.run=metadata.reference_time;
+  $('app').dataset.forecastStart=timeline[0].iso;$('app').dataset.forecastEnd=timeline.at(-1).iso;
+  const age=(Date.now()-Date.parse(metadata.reference_time))/HOUR;
+  $('run-label').textContent=`ECMWF IFS HRES · 9 km · run ${fmt(metadata.reference_time,{day:'numeric',month:'short'})} ${new Date(metadata.reference_time).getUTCHours().toString().padStart(2,'0')} UTC${age>24?' · oudere run':''}`;
+  $('run-label').title=`Bron bijgewerkt: ${fmt(metadata.last_modified_time,{dateStyle:'medium',timeStyle:'short'})}`;
   const f=current;$('valid-clock').textContent=fmt(f.time,{hour:'2-digit',minute:'2-digit'});
   $('valid-day').textContent=fmt(f.time,{weekday:'short',day:'numeric',month:'short'});
-  $('slider-time').textContent=fmt(f.time,{weekday:'long',hour:'2-digit',minute:'2-digit'});
-  $('time-slider').value=(f.time-frames[0].time)/HOUR;
+  $('slider-time').textContent=fmt(f.time,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  $('time-slider').value=(f.time-timeline[0].time)/HOUR;
   $('time-slider').setAttribute('aria-valuetext',fmt(f.time,{dateStyle:'full',timeStyle:'short'}));
-  $('time-slider').style.background=`linear-gradient(to right,#ffdf00 ${$('time-slider').value/$('time-slider').max*100}%,#679db7 0)`;
-  document.querySelectorAll('#days button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.day===localDateKey(f.time))));
+  $('time-slider').style.setProperty('--progress',`${$('time-slider').value/$('time-slider').max*100}%`);
+  document.querySelectorAll('#days button').forEach(b=>{const active=b.dataset.day===localDateKey(f.time),changed=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',String(active));if(active&&changed)b.scrollIntoView({block:'nearest',inline:'nearest'});});
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===f.mode)));
-  $('previous').disabled=f.index===0;$('next').disabled=f.index===frames.length-1;
+  $('play').disabled=false;$('time-slider').disabled=false;
+  $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
   $('interval-label').textContent=`ECMWF IFS · 9 km · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
   $('load-label').textContent=`Verwachting · +${f.lead} uur`;
   const legend=$('legend');let title,unit,numbers,gradient;
@@ -345,7 +367,7 @@ $('play').addEventListener('click',()=>{
 $('previous').addEventListener('click',()=>{stopPlayback();requestFrame(wanted-1);});
 $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);});
 let sliderTimer;
-$('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('slider-time').textContent=fmt(frames[target].time,{weekday:'long',hour:'2-digit',minute:'2-digit'});sliderTimer=setTimeout(()=>requestFrame(target),130);});
+$('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${fmt(frames[target].time,{dateStyle:'full',timeStyle:'short'})}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();mode=b.dataset.mode;requestFrame(wanted,true);}));
 ['clouds','snow','texture'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
 $('city-labels').addEventListener('change',queueCityDraw);
@@ -360,10 +382,10 @@ $('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidd
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
 $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
 $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('info').close();}});
-$('retry').addEventListener('click',()=>frames.length?requestFrame(wanted,true):start());
+$('retry').addEventListener('click',()=>retryLoad());
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
-  if(e.target.closest('input,select,button,dialog')||$('info').open)return;
+  if(e.target.closest('input,select,button,dialog,#map')||$('info').open)return;
   if(e.code==='Space'){e.preventDefault();$('play').click();}
   if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();stopPlayback();requestFrame(wanted+(e.key==='ArrowRight'?1:-1));}
 });
@@ -371,7 +393,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlaybac
 
 function sample(sampleData,lat,lon){
   if(!sampleData?.data?.values)return NaN;
-  return sampleData.grid.getInterpolatedValue(sampleData.data.values,lat,lon,'linear');
+  return sampleData.grid.getInterpolatedValue(sampleData.data.values,lat,lon,'monotone');
 }
 let drawnCities=[];
 function queueCityDraw(){if(!cityDrawQueued){cityDrawQueued=true;requestAnimationFrame(()=>{cityDrawQueued=false;drawCities();});}}
@@ -383,12 +405,12 @@ function drawCities(){
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);drawnCities=[];
   if(!$('city-labels').checked||!current)return;
-  const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12;
+  const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12,controls=document.querySelector('.bottom-area').getBoundingClientRect();
   for(const city of cities){
     if(city.minZoom>zoom)continue;
     const p=map.project([city.lon,city.lat]);
     if(p.x<25||p.x>width-25||p.y<20||p.y>height-25)continue;
-    if(p.y>height-160&&Math.abs(p.x-width/2)<Math.min(width/2,500))continue;
+    if(p.x>controls.left-12&&p.x<controls.right+12&&p.y>controls.top-20)continue;
     const name=city.name, w=Math.max(50,name.length*font*.53), rect=[p.x-w/2-9,p.y-30,p.x+w/2+9,p.y+18];
     if(boxes.some(b=>rect[0]<b[2]&&rect[2]>b[0]&&rect[1]<b[3]&&rect[3]>b[1]))continue;
     boxes.push(rect);
@@ -399,7 +421,7 @@ function drawCities(){
     const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):temp;
     if(Number.isFinite(displayedValue)){const t=String(Math.round(displayedValue));ctx.font=`600 ${font}px Arial`;ctx.strokeText(t,p.x+7,p.y-12);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,p.y-12);}
     if(Number.isFinite(cloud)&&cloud<35&&!(rain>.1))skyIcon(ctx,p.x-13,p.y-16,city);
-    else if(Number.isFinite(cloud)&&cloud<65){sun(ctx,p.x-15,p.y-17,3.7);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
+    else if(Number.isFinite(cloud)&&cloud<65){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
       const wind=current.samples.wind_u_component_10m;
       if(wind?.data.directions){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-17);ctx.rotate(a+Math.PI);ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(0,-7);ctx.lineTo(-3,-3);ctx.moveTo(0,-7);ctx.lineTo(3,-3);ctx.stroke();ctx.restore();}

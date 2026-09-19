@@ -13,20 +13,36 @@ export function fileURL(meta, valid) {
   return `${DATA_ROOT}/${runPath(meta.reference_time)}/${new Date(valid).toISOString().slice(0, 16).replace(':', '')}.om`;
 }
 export function hasFullHorizon(meta, now) {
-  return meta?.completed === true && REQUIRED.every(v => meta.variables?.includes(v)) &&
-    Array.isArray(meta.valid_times) && Date.parse(meta.valid_times.at(-1)) >= now + FORECAST_DAYS * 24 * HOUR;
+  try { forecastFrames(meta, now); return true; } catch { return false; }
+}
+// The spatial IFS files contain a sum over their native backwards interval,
+// not a running total. A missing file must never turn a 1h sum into a 2h mean.
+export function nativeIntervalHours(lead) {
+  if (!Number.isInteger(lead) || lead <= 0) throw new Error('Ongeldige ECMWF-voorspeltijd');
+  const hours = lead <= 90 ? 1 : lead <= 144 ? 3 : 6;
+  if (lead % hours) throw new Error('Ongeldige ECMWF-tijdstap');
+  return hours;
 }
 export function forecastFrames(meta, now = Date.now()) {
+  if (meta?.completed !== true || !REQUIRED.every(v => meta.variables?.includes(v))) throw new Error('Onvolledige ECMWF-modelrun');
+  const run = Date.parse(meta.reference_time);
+  if (!Number.isFinite(run) || run % HOUR || !Number.isFinite(now)) throw new Error('Ongeldige modelrun of huidige tijd');
+  if (!Array.isArray(meta.valid_times) || meta.valid_times.length < 2) throw new Error('ECMWF-tijdreeks ontbreekt');
   const times = meta.valid_times.map(Date.parse);
   if (times.some((t, i) => !Number.isFinite(t) || (i && t <= times[i - 1]))) throw new Error('Ongeldige tijdreeks');
-  const start = times.findIndex(t => t >= Math.ceil(now / HOUR) * HOUR);
-  if (start < 1) throw new Error('Geen volledige neerslagintervallen beschikbaar');
+  if (times[0] !== run) throw new Error('ECMWF-tijdreeks begint niet bij de modelrun');
+  for (let i = 1; i < times.length; i++) {
+    const hours = nativeIntervalHours((times[i] - run) / HOUR);
+    if (times[i] - times[i - 1] !== hours * HOUR) throw new Error('ECMWF-tijdstap ontbreekt; neerslaginterval kan niet worden bepaald');
+  }
+  const start = times.findIndex((t, i) => i > 0 && t >= Math.ceil(now / HOUR) * HOUR);
+  if (start < 0) throw new Error('Geen volledige neerslagintervallen beschikbaar');
   const last = times.findIndex(t => t >= times[start] + FORECAST_DAYS * 24 * HOUR);
   if (last < 0) throw new Error('Deze run bevat geen volledige tien dagen');
   return times.slice(start, last + 1).map((time, i) => ({
     time, iso: meta.valid_times[start + i],
-    hours: (time - times[start + i - 1]) / HOUR,
-    lead: (time - Date.parse(meta.reference_time)) / HOUR,
+    hours: nativeIntervalHours((time - run) / HOUR),
+    lead: (time - run) / HOUR,
     url: fileURL(meta, time),
   }));
 }
@@ -34,13 +50,42 @@ export function nearestIndex(frames, time) {
   return frames.reduce((best, f, i) => Math.abs(f.time - time) < Math.abs(frames[best].time - time) ? i : best, 0);
 }
 export function hourlyRate(amount, hours) {
-  return Number.isFinite(amount) && hours > 0 ? Math.max(0, amount) / hours : NaN;
+  return Number.isFinite(amount) && Number.isFinite(hours) && hours > 0 ? Math.max(0, amount) / hours : NaN;
 }
-export function localDateKey(time) {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam' }).format(new Date(time));
+const normalizedFields = new WeakMap();
+// OM FloatArray decoding already applies compression scale/offset. Keep native
+// °C and cloud percent untouched; only convert backward sums and derived wind.
+export function normalizeFieldData(data, variable, hours) {
+  if (!data?.values) return data;
+  const accumulation = variable === 'precipitation' || variable === 'snowfall_water_equivalent';
+  const identity = `${variable}|${accumulation ? hours : ''}`;
+  const previous = normalizedFields.get(data);
+  if (previous === identity) return data;
+  if (previous) throw new Error('ECMWF-veld heeft al een andere eenheid of tijdstap');
+  if (accumulation) {
+    if (![1, 3, 6].includes(hours)) throw new Error('Ongeldig neerslaginterval');
+    for (let i = 0; i < data.values.length; i++) data.values[i] = hourlyRate(data.values[i], hours);
+    if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor *= hours;
+  } else if (variable === 'wind_u_component_10m') {
+    // weather-map-layer derives speed + meteorological direction from raw u/v.
+    for (let i = 0; i < data.values.length; i++) data.values[i] = Number.isFinite(data.values[i]) ? data.values[i] * 3.6 : NaN;
+    if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor /= 3.6;
+  }
+  normalizedFields.set(data, identity);
+  return data;
 }
+const dateKeyFormat=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam'});
+const dateFormats=new Map();
+export function localDateKey(time) { return dateKeyFormat.format(new Date(time)); }
 export function fmt(time, options) {
-  return new Intl.DateTimeFormat('nl-NL', { timeZone: 'Europe/Amsterdam', ...options }).format(new Date(time));
+  const key=JSON.stringify(options);
+  let format=dateFormats.get(key);
+  if(!format){
+    format=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',...options});
+    if(dateFormats.size>=32)dateFormats.delete(dateFormats.keys().next().value);
+    dateFormats.set(key,format);
+  }
+  return format.format(new Date(time));
 }
 export function inEurope(lon, lat) {
   return Number.isFinite(lon) && Number.isFinite(lat) && lon >= EUROPE[0] && lon <= EUROPE[2] && lat >= EUROPE[1] && lat <= EUROPE[3];
