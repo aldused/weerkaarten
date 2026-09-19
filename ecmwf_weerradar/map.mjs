@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import { renderTile } from './tile-renderer.mjs';
 import { SharedRenderQueue, abortError } from './render-queue.mjs';
+import {visibleWeatherTiles} from './field-window.mjs';
 
 // Canvas tiles keep the full ECMWF grid available on browsers without WebGL2.
 let weatherLoader;
@@ -57,7 +58,7 @@ function renderPixels({field,coords},signal){
     // ever posted. The queue will discard that abandoned result.
   });
 }
-const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:128});
+const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256});
 function paint(field,coords,signal){
   const key=field.key+'|'+field.texture+'|'+coords.z+'/'+coords.x+'/'+coords.y;
   return paintQueue.request(key,{field,coords},signal);
@@ -118,25 +119,27 @@ export class Map {
     const satellite=options.style.sources.satellite;
     L.tileLayer(satellite.tiles[0],{maxZoom:18,maxNativeZoom:17,attribution:satellite.attribution,noWrap:true}).addTo(this.native);
     this.countriesURL=options.style.sources.countries.data;this.bordersVisible=true;
-    for(const ev of ['move','resize','moveend'])this.native.on(ev,()=>this.fire(ev,{}));
+    for(const ev of ['movestart','move','resize','moveend'])this.native.on(ev,()=>this.fire(ev,{}));
     this.native.on('click',e=>this.fire('click',{lngLat:{lng:e.latlng.lng,lat:e.latlng.lat},point:e.containerPoint}));
     this.touchZoomRotate={disableRotation(){}};
     // Native initialization is synchronous; defer compatibility load event.
     queueMicrotask(()=>{this.loaded=true;this.fire('load',{});});
   }
   loadDetails(){
-    if(this.detailsLoaded)return;this.detailsLoaded=true;
+    if(this.detailsLoaded)return this.detailsPromise;this.detailsLoaded=true;
+    this.detailsPromise=Promise.allSettled([
     fetch('./assets/land.geojson').then(r=>r.json()).then(data=>{
       L.geoJSON(data,{pane:'land',interactive:false,style:{stroke:false,fillColor:'#719342',fillOpacity:.44}}).addTo(this.native);
-    }).catch(()=>{});
+    }).catch(()=>{}),
     fetch('./assets/regions.geojson').then(r=>r.json()).then(data=>{
       this.regions=L.geoJSON(data,{pane:'borders',interactive:false,style:{color:'#2e4d58',weight:.6,opacity:.65,fill:false}});
       if(this.bordersVisible)this.regions.addTo(this.native);
-    }).catch(()=>{});
+    }).catch(()=>{}),
     fetch(this.countriesURL).then(r=>r.json()).then(data=>{
       this.border=L.geoJSON(data,{pane:'borders',interactive:false,style:{color:'#1b3034',weight:1,opacity:.75,fill:false}});
       if(this.bordersVisible)this.border.addTo(this.native);
-    }).catch(()=>{});
+    }).catch(()=>{})]);
+    return this.detailsPromise;
   }
   on(ev,fn){if(!this.events.has(ev))this.events.set(ev,new Set());this.events.get(ev).add(fn);return this;}
   off(ev,fn){this.events.get(ev)?.delete(fn);return this;}
@@ -147,6 +150,12 @@ export class Map {
   getCenter(){return this.native.getCenter();}
   getZoom(){return this.native.getZoom()-1;}
   getCanvas(){return this.el;}
+  async prepareFields(fields,signal){
+    const b=this.getBounds(),tiles=visibleWeatherTiles([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],this.getZoom());
+    // Bound bitmap memory to at most three visible composite frames,64MiB.
+    paintQueue.maxEntries=Math.min(256,Math.max(32,tiles.length*fields.length*3));
+    await Promise.all(fields.flatMap(field=>tiles.map(coords=>paint(field,coords,signal))));
+  }
   project(point){return this.native.latLngToContainerPoint(ll(point));}
   zoomIn(){this.native.zoomIn();} zoomOut(){this.native.zoomOut();}
   flyTo(o){this.native.flyTo(ll(o.center),o.zoom+1,{duration:(o.duration||500)/1000});}

@@ -8,7 +8,10 @@ import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, do
 import { LruBlockCache, initWasm } from '@openmeteo/file-reader';
 import { FastBrowserBlockCache } from './fast-block-cache.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
-import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope } from './core.mjs';
+import {fieldWindow} from './field-window.mjs';
+import {prioritizeSelectedFile} from './data-transport.mjs';
+import {AdjacentFrames} from './adjacent-frames.mjs';
+import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath } from './core.mjs';
 
 const $ = id => document.getElementById(id);
 $('app').dataset.moduleReadyMs=Math.round(performance.now());
@@ -48,6 +51,8 @@ let requestedContext = null, startupRevision = 0;
 let retryLoad = () => start();
 let mode = 'weather', playing = false, playTimer, sourceCounter = 0, cities = [], selectedPoint = null;
 let pendingSources = new Map(), cityDrawQueued = false, frameErrors = new Set();
+const adjacentFrames=new AdjacentFrames();
+let nextFrameReady=false;
 const intervalByURL = new Map();
 const options = {
   ...defaultOmProtocolSettings,
@@ -72,15 +77,15 @@ function trimFieldCache(){
 }
 function readField(file,variable,signal){
   signal?.throwIfAborted();
-  const b=map.getBounds(),south=Math.max(EUROPE[1],b.getSouth()),north=Math.min(EUROPE[3],b.getNorth());
+  const b=map.getBounds(),window=fieldWindow([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],map.getZoom());
+  const [,south,,north]=window.bounds;
   // Reuse a decoded latitude band when moving east/west or zooming into it.
   for(const [cachedKey,entry] of fieldCache){
     if(!entry.task.controller.signal.aborted&&entry.file===file&&entry.variable===variable&&entry.south<=south&&entry.north>=north){
       fieldCache.delete(cachedKey);fieldCache.set(cachedKey,entry);return consumeTask(entry.task,signal);
     }
   }
-  const margin=Math.max(.2,(north-south)*.35);
-  const bounds=[EUROPE[0],Math.max(EUROPE[1],south-margin),EUROPE[2],Math.min(EUROPE[3],north+margin)];
+  const bounds=window.readBounds;
   const ranges=getRanges(domain.grid,bounds),key=file+'|'+variable+'|'+JSON.stringify(ranges);
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
@@ -94,7 +99,7 @@ function readField(file,variable,signal){
     return field;
   });
   task.promise.catch(()=>{if(fieldCache.get(key)?.task===task)fieldCache.delete(key);});
-  fieldCache.set(key,{file,variable,south:bounds[1],north:bounds[3],task});
+  fieldCache.set(key,{file,variable,south,north,task});
   trimFieldCache();
   return consumeTask(task,signal);
 }
@@ -130,6 +135,7 @@ map.on('error', e => {
   else if(current?.ids.includes(e.sourceId))status('Kaartdeel kon niet worden opgehaald. Probeer opnieuw.',true);
 });
 map.on('move', queueCityDraw);
+map.on('movestart',cancelPreparation);
 map.on('resize', queueCityDraw);
 map.on('moveend', () => {
   const b=map.getBounds(); updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
@@ -145,11 +151,12 @@ async function updateViewportSamples(){
   try{
     // Leaflet extends the existing tile layers by itself; rebuilding all layers
     // here caused avoidable downloads, duplicated rendering and flashing on pan.
-    const vars=[...new Set([...variablesForMode(),'temperature_2m'])];
+    const vars=[...new Set([...variablesForMode(),...($('city-labels').checked?['temperature_2m']:[])])];
     const fields=await Promise.all(vars.map(v=>readField(frame.url,v,signal)));
     if(rev!==viewportRevision||current!==frame)return;
     vars.forEach((v,i)=>{current.samples[v]=fields[i];});queueCityDraw();updatePoint();
     $('app').dataset.panDataMs=Math.round(performance.now()-started);
+    prepareAdjacentFrames();
   }catch(error){if(rev===viewportRevision&&error.name!=='AbortError')status(error.message,true);}
 }
   map.on('click',e => {
@@ -179,7 +186,7 @@ async function discoverRuns(now,prefetchedLatest) {
 async function start(prefetchedLatest) {
   const startup=++startupRevision;
   retryLoad=()=>start();
-  refreshing=true;stopPlayback();clearTimeout(sliderTimer);revision++;renderController?.abort();status('Nieuwste ECMWF-verwachting ophalen…');
+  refreshing=true;stopPlayback();cancelPreparation();clearTimeout(sliderTimer);revision++;renderController?.abort();status('Nieuwste ECMWF-verwachting ophalen…');
   try {
     const now=Date.now();
     const candidateMetas=await discoverRuns(now,prefetchedLatest);
@@ -294,13 +301,11 @@ function awaitSources(ids,signal){
     ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);if(signal?.aborted)abort();else check();
   });
 }
-async function readTemperature(frame,signal){
-  return readField(frame.url,'temperature_2m',signal);
-}
 async function renderFrame(index,rev,signal,context){
   const started=performance.now();
   const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
   retryLoad=()=>requestFrame(index,true,context);
+  prioritizeSelectedFile(frame.url);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view can reveal finished layers immediately. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.
@@ -319,14 +324,23 @@ async function renderFrame(index,rev,signal,context){
   status(`Laden: ${forecastLabel(frame.time).text}…`);
   $('app').dataset.frameStatus='loading';
   try {
-    const [,temperature,...fields]=await Promise.all([awaitSources(ids,signal),readTemperature(frame,signal),...vars.map(v=>readField(frame.url,v,signal))]);
+    const sampleVars=[...new Set([...vars,...($('city-labels').checked?['temperature_2m']:[])])];
+    const [,...fields]=await Promise.all([awaitSources(ids,signal),...sampleVars.map(v=>readField(frame.url,v,signal))]);
     if(rev!==revision){removeLayers(ids);return false;}
-    const samples={temperature_2m:temperature};
-    vars.forEach((v,i)=>{samples[v]=fields[i];});
+    const samples={};
+    sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
     meta=modelMeta;frames=context.timeline;
     current={...frame,index,ids,mode:layerMode,samples,modelMeta,timeline:context.timeline};
-    if(old?.timeline!==current.timeline)buildTimeline(current.timeline);
+    if(old?.timeline!==current.timeline){
+      buildTimeline(current.timeline);
+      // Only after the replacement frame is usable may obsolete runs leave
+      // persistent storage. Keep both the latest and its long-range fallback.
+      const activeRuns=[...new Set(current.timeline.map(f=>runPath(f.modelMeta.reference_time)))];
+      void options.fileReaderConfig.cache.retainRuns?.(activeRuns).catch(()=>{});
+      const files=new Set(current.timeline.map(f=>f.url));
+      for(const [key,entry] of fieldCache)if(entry.task.settled&&!files.has(entry.file))fieldCache.delete(key);
+    }
     ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));
     if(old) removeLayers(old.ids);
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
@@ -340,15 +354,16 @@ async function renderFrame(index,rev,signal,context){
     if(rev!==revision||error.name==='AbortError')return false;
     if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};syncUI();}
     stopPlayback();$('app').dataset.frameStatus='error';
-    status(`${error.message}. ${current?'De vorige tijdstap blijft zichtbaar.':''}`,true);
+    status(`De weergegevens konden niet worden geladen. ${current?'De vorige tijdstap blijft zichtbaar.':'Probeer opnieuw.'}`,true);
     return false;
   }finally{if(reveal)map.off('sourcedata',reveal);}
 }
-let detailsStarted=false;
+let detailsStarted=false,detailsReady=Promise.resolve();
 function loadMapDetails(){
   if(detailsStarted)return;detailsStarted=true;
-  map.loadDetails();
-  fetch('./assets/cities.json').then(r=>{if(!r.ok)throw new Error('Plaatsnamen laden mislukt');return r.json();}).then(places=>{cities=places;queueCityDraw();}).catch(()=>{detailsStarted=false;});
+  const mapDetails=map.loadDetails();
+  const cityDetails=fetch('./assets/cities.json').then(r=>{if(!r.ok)throw new Error('Plaatsnamen laden mislukt');return r.json();}).then(places=>{cities=places;queueCityDraw();}).catch(()=>{detailsStarted=false;});
+  detailsReady=Promise.allSettled([mapDetails,cityDetails]);
 }
 let renderController;
 async function requestFrame(index,force=false,context={meta,timeline:frames}){
@@ -356,11 +371,12 @@ async function requestFrame(index,force=false,context={meta,timeline:frames}){
   const target=Math.min(context.timeline.length-1,Math.max(0,index));
   if(!force&&rendering&&wanted===target&&requestedContext?.timeline===context.timeline)return;
   requestedContext=context;
+  cancelPreparation();
   wanted=target;revision++;
   renderController?.abort();
   syncTimeChoices({...context.timeline[wanted],index:wanted},true);
   if(rendering||refreshing)return;
-  if(!force&&current?.url===context.timeline[wanted].url&&current.mode===mode){syncUI();$('status').hidden=true;$('app').dataset.frameStatus='ready';return;}
+  if(!force&&current?.url===context.timeline[wanted].url&&current.mode===mode){syncUI();$('status').hidden=true;$('app').dataset.frameStatus='ready';prepareAdjacentFrames();return;}
   rendering=true;
   let success=false;
   try {
@@ -368,7 +384,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames}){
     do {targetRevision=revision;renderController=new AbortController();success=await renderFrame(wanted,targetRevision,renderController.signal,requestedContext);}while(targetRevision!==revision&&!refreshing);
   } finally {rendering=false;}
   if(success&&!refreshing){
-    if(playing)scheduleNext();
+    prepareAdjacentFrames();
   }
 }
 function updateTimeHeading(frame,metadata){
@@ -400,7 +416,7 @@ function syncUI(){
   if(timelineDayKey!==localDateKey(Date.now()))buildTimeline(timeline);
   syncTimeChoices(f);
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===f.mode)));
-  $('play').disabled=false;$('time-slider').disabled=false;$('now').disabled=false;
+  $('play').disabled=!playing&&!nextFrameReady;$('time-slider').disabled=false;$('now').disabled=false;
   $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
   $('interval-label').textContent=`ECMWF IFS · 9 km · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
   const legend=$('legend');let title,unit,numbers,gradient;
@@ -421,7 +437,32 @@ function syncUI(){
     snowLegend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=snow.labels[i]);
   }
 }
-function stopPlayback(){playing=false;clearTimeout(playTimer);icon($('play'),'play');$('play').setAttribute('aria-label','Animatie afspelen');}
+function cancelPreparation(){
+  adjacentFrames.cancel();clearTimeout(playTimer);nextFrameReady=false;
+  $('play').disabled=!playing;$('app').dataset.nextFrameReady='false';
+  $('play').title=playing?'Animatie pauzeren':'Volgende beeld wordt voorbereid…';
+}
+function prepareAdjacentFrames(){
+  if(!current||rendering||refreshing||document.hidden)return;
+  cancelPreparation();const frame=current,texture=$('texture').checked;
+  adjacentFrames.start(frame.index,frame.timeline.length,async(index,signal)=>{
+    // Let the selected view and its map labels finish first on slow links.
+    await detailsReady;signal.throwIfAborted();
+    const next=frame.timeline[index],vars=variablesForMode(next.modelMeta);
+    const sampleVars=[...new Set([...vars,...($('city-labels').checked?['temperature_2m']:[])])];
+    const fields=await Promise.all(sampleVars.map(v=>readField(next.url,v,signal)));
+    signal.throwIfAborted();
+    await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture})),signal);
+  },{ready:()=>{
+    if(current!==frame)return;
+    nextFrameReady=true;$('app').dataset.nextFrameReady='true';$('play').disabled=false;$('play').title='Afspelen / pauzeren';
+    if(playing)scheduleNext();
+  },error:()=>{
+    if(current!==frame)return;
+    stopPlayback();$('play').title='Volgende beeld nog niet beschikbaar; kies Volgende tijdstap om opnieuw te laden';
+  }});
+}
+function stopPlayback(){playing=false;clearTimeout(playTimer);icon($('play'),'play');$('play').setAttribute('aria-label','Animatie afspelen');$('play').disabled=!nextFrameReady;}
 function scheduleNext(){clearTimeout(playTimer);playTimer=setTimeout(()=>{if(playing)requestFrame((wanted+1)%frames.length);},Number($('speed').value));}
 $('play').addEventListener('click',()=>{
   if(playing){stopPlayback();return;}playing=true;icon($('play'),'pause');$('play').setAttribute('aria-label','Animatie pauzeren');if(!rendering)requestFrame((wanted+1)%frames.length);
@@ -433,10 +474,10 @@ let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
 ['clouds','snow','texture','fog'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
-$('city-labels').addEventListener('change',queueCityDraw);
+$('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
-$('speed').addEventListener('change',()=>{if(playing&&!rendering)scheduleNext();});
+$('speed').addEventListener('change',()=>{if(playing&&!rendering&&nextFrameReady)scheduleNext();});
 $('zoom-in').addEventListener('click',()=>map.zoomIn());$('zoom-out').addEventListener('click',()=>map.zoomOut());
 $('europe').addEventListener('click',()=>map.fitBounds([[-24,34],[42,70]],{padding:{top:105,bottom:185,left:45,right:75},duration:600}));
 $('home').addEventListener('click',()=>map.flyTo({center:[5.3,51.6],zoom:7,duration:650}));
@@ -454,7 +495,7 @@ document.addEventListener('keydown',e=>{
   }
   if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();$('play').click();}
 });
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlayback();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopPlayback();cancelPreparation();}else prepareAdjacentFrames();});
 
 function sample(sampleData,lat,lon){
   if(!sampleData?.data?.values)return NaN;

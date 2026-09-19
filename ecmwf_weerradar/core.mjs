@@ -1,5 +1,6 @@
+import {EDGE_ORIGIN} from './data-transport.mjs';
 import {intervalRate} from './precipitation.mjs';
-export const DATA_ROOT = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
+export const DATA_ROOT = `${EDGE_ORIGIN}/data_spatial/ecmwf_ifs`;
 export const EUROPE = [-26, 29, 46, 73];
 export const HOUR = 3600000;
 export const FORECAST_DAYS = 10;

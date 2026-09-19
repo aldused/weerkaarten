@@ -55,7 +55,7 @@ test('horizon requires 240h from the first actual frame, not just from wall cloc
   assert.throws(()=>forecastFrames({...meta,valid_times:meta.valid_times.slice(1)},run),/modelrun/);
 });
 test('URL and nearest-frame lookup use UTC without local-date drift',()=>{
-  assert.equal(fileURL(meta,'2026-09-25T18:00Z'),'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs/2026/09/18/1200Z/2026-09-25T1800.om');
+  assert.equal(fileURL(meta,'2026-09-25T18:00Z'),'https://weerlab-ecmwf-cache.dawn-term-a69f.workers.dev/data_spatial/ecmwf_ifs/2026/09/18/1200Z/2026-09-25T1800.om');
   const frames=forecastFrames(meta,run+HOUR);
   assert.equal(frames[nearestIndex(frames,run+149*HOUR)].lead,150);
   assert.equal(localDateKey('2026-09-19T23:00Z'),'2026-09-20');
