@@ -4,33 +4,56 @@ import {writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {getProtocolInstance,defaultOmProtocolSettings,domainOptions,GridFactory,getRanges} from '@openmeteo/weather-map-layer';
 import {initWasm,OmHttpBackendPool,OmDataType,LruBlockCache} from '@openmeteo/file-reader';
-import {HOUR,DATA_ROOT,forecastFrames,hasFullHorizon,runPath,normalizeFieldData,fmt,localDateKey} from '../core.mjs';
+import {HOUR,fileURL,normalizeFieldData,fmt,localDateKey} from '../core.mjs';
+import {discoverForecastRuns,combinedForecastFrames} from '../forecast-runs.mjs';
 
-const sourceDocs='https://github.com/open-meteo/open-meteo/blob/main/Sources/App/Ecmwf/EcmwfVariable.swift';
+const sourceDocs='https://github.com/open-meteo/open-meteo/blob/main/Sources/App/EcmwfEcpds/EcmwfEcpdsVariable.swift';
 const now=Date.now();
 async function json(url){const r=await fetch(url);assert.ok(r.ok,`${r.status}: ${url}`);return r.json();}
-const latest=await json(`${DATA_ROOT}/latest.json`);
-let meta=hasFullHorizon(latest,now)?latest:null;
-for(let back=6;!meta&&back<=36;back+=6){
-  const run=Date.parse(latest.reference_time)-back*HOUR;
-  if(new Date(run).getUTCHours()%12)continue;
-  try{const candidate=await json(`${DATA_ROOT}/${runPath(run)}/meta.json`);if(hasFullHorizon(candidate,now))meta=candidate;}catch{}
-}
-assert.ok(meta,'No complete ten-day run');
-const frames=forecastFrames(meta,now);
+const metas=await discoverForecastRuns(json,now);
+const frames=combinedForecastFrames(metas,now);
+assert.ok(frames.at(-1).time-frames[0].time>=240*HOUR,'A full ten-day timeline is required');
 const domain=domainOptions.find(x=>x.value==='ecmwf_ifs');
 await initWasm();
 const cache=new LruBlockCache(65536,1024),pool=new OmHttpBackendPool();
 const reader=getProtocolInstance({...defaultOmProtocolSettings,fileReaderConfig:{useSAB:false,cache}}).omFileReader;
 const bounds=[0,48,15,54],ranges=getRanges(domain.grid,bounds),grid=GridFactory.create(domain.grid,ranges);
-const points=[{name:'Arnhem',lat:51.96,lon:5.94},{name:'Paris',lat:48.8566,lon:2.3522},{name:'Berlin',lat:52.52,lon:13.405}];
+const points=[
+  {name:'Arnhem',lat:51.96,lon:5.94},{name:'Paris',lat:48.8566,lon:2.3522},{name:'Berlin',lat:52.52,lon:13.405},
+  {name:'Brussels',lat:50.85,lon:4.35},{name:'Frankfurt',lat:50.1,lon:8.7},
+  {name:'Hamburg',lat:53.55,lon:10},{name:'Groningen',lat:53.2,lon:6.6},
+];
 const midnight=frames.find((f,i)=>i&&localDateKey(f.time)!==localDateKey(frames[i-1].time));
-const selected=[...new Map([frames[0],midnight,frames.find(f=>f.hours===3),frames.at(-1)].filter(Boolean).map(f=>[f.time,f])).values()];
+const sourceChangeIndex=frames.findIndex(frame=>frame.sourceChanged);
+const screenshotTime=Date.parse('2026-09-20T13:00:00Z');
+const requested=[
+  ['first',frames[0]],
+  ['local-midnight',midnight],
+  ['screenshot-20-september-15-cest',frames.find(frame=>frame.time===screenshotTime)],
+  ['first-three-hour-interval',frames.find(frame=>frame.hours===3)],
+  ['last-newest-run-frame',sourceChangeIndex>0?frames[sourceChangeIndex-1]:null],
+  ['first-older-run-frame',sourceChangeIndex>0?frames[sourceChangeIndex]:null],
+  ['last-six-hour-interval',frames.findLast(frame=>frame.hours===6)],
+];
+const selectedByTime=new Map();
+for(const [reason,frame] of requested){
+  if(!frame)continue;
+  const selection=selectedByTime.get(frame.time)??{frame,reasons:[]};
+  selection.reasons.push(reason);selectedByTime.set(frame.time,selection);
+}
+const selected=[...selectedByTime.values()].sort((a,b)=>a.frame.time-b.frame.time);
+if(sourceChangeIndex>0){
+  const before=frames[sourceChangeIndex-1],after=frames[sourceChangeIndex];
+  assert.notEqual(before.reference_time,after.reference_time,'Source boundary must name different runs');
+  assert.equal(before.time,after.time-after.hours*HOUR,'Source boundary cannot overlap or skip a precipitation period');
+}
 const rawVariables=['temperature_2m','cloud_cover','precipitation','snowfall_water_equivalent','wind_u_component_10m','wind_v_component_10m'];
 const results=[];
 const sample=values=>Object.fromEntries(points.map(p=>[p.name,grid.getInterpolatedValue(values,p.lat,p.lon,'monotone')]));
 const close=(a,b,tolerance,message)=>assert.ok(Number.isNaN(a)&&Number.isNaN(b)||Math.abs(a-b)<=tolerance,`${message}: ${a} vs ${b}`);
-for(const frame of selected){
+for(const {frame,reasons} of selected){
+  assert.equal(frame.url,fileURL(frame.modelMeta,frame.time),'All frame fields must use their declared model run');
+  assert.equal(frame.lead,(frame.time-Date.parse(frame.reference_time))/HOUR,'Forecast lead must use the selected frame run');
   const raw=await pool.withReader(frame.url,cache,async root=>{
     const fields={};
     for(const variable of rawVariables){
@@ -65,11 +88,11 @@ for(const frame of selected){
     for(const p of points)close(displayedPoints[p.name],expectedPoints[p.name],wind?2e-5:1e-6,`${variable} ${p.name}`);
     fields[variable]={rawMin:min,rawMax:max,count:valid,scaleFactor:input.scaleFactor,addOffset:input.addOffset,maxValueError,rawAtPoints:sample(input.values),displayedAtPoints:displayedPoints,...(wind?{maxDirectionErrorDegrees:maxDirectionError,directionAtPoints:Object.fromEntries(points.map(p=>[p.name,grid.getLinearInterpolatedDirection(displayed.directions,p.lat,p.lon)]))}:{})};
   }
-  results.push({valid:frame.iso,localTime:fmt(frame.time,{dateStyle:'short',timeStyle:'short'}),intervalHours:frame.hours,leadHours:frame.lead,source:frame.url,fields});
-  console.log('Raw OM verified:',frame.iso,`${frame.hours}h`,fields.cloud_cover.displayedAtPoints.Arnhem+'% cloud',fields.precipitation.displayedAtPoints.Arnhem+'mm/h',fields.wind_u_component_10m.displayedAtPoints.Arnhem+'km/h');
+  results.push({reasons,reference_time:frame.reference_time,olderRun:frame.olderRun,sourceChanged:frame.sourceChanged,valid:frame.iso,localTime:fmt(frame.time,{dateStyle:'short',timeStyle:'short'}),periodStart:new Date(frame.time-frame.hours*HOUR).toISOString(),intervalHours:frame.hours,leadHours:frame.lead,source:frame.url,fields});
+  console.log('Raw OM verified:',frame.iso,`run ${frame.reference_time}`,`${frame.hours}h`,JSON.stringify(fields.precipitation.displayedAtPoints),reasons.join(', '));
 }
-const report={checkedAt:new Date().toISOString(),sourceDocs,run:meta.reference_time,grid:domain.grid,interpolation:'monotone',bounds,points,frames:frames.length,horizonHours:(frames.at(-1).time-frames[0].time)/HOUR,results};
+const report={checkedAt:new Date().toISOString(),forecastFrom:new Date(now).toISOString(),sourceDocs,runs:[...new Set(frames.map(frame=>frame.reference_time))],discoveredRuns:metas.map(meta=>({reference_time:meta.reference_time,completed:meta.completed,lastValidTime:meta.valid_times?.at(-1)})),grid:domain.grid,interpolation:'monotone',bounds,points,frames:frames.length,horizonHours:(frames.at(-1).time-frames[0].time)/HOUR,results};
 await writeFile(new URL('./live-validation.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
-console.log('Native ECMWF validation passed, including 1h/3h/6h sums, midnight and raw u/v');
+console.log('Native ECMWF validation passed, including 1h/3h/6h sums, midnight, per-frame runs, source boundary and raw u/v');
 // The upstream module creates a persistent worker pool in Node.
 process.exit(0);

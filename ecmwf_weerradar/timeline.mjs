@@ -9,6 +9,29 @@ export function forecastLabel(time) {
   const zone=repeated?' '+fmt(time,{timeZoneName:'shortOffset'}).split(' ').at(-1):'';
   return {date,clock,displayClock:clock+zone,text:`${date} · ${clock}${zone}`,full:fmt(time,{dateStyle:'full',timeStyle:'short'})+zone};
 }
+
+// A day tab changes the local calendar day, not the selected hour. Work with
+// existing frames only: the target day can have fewer hours, coarser steps,
+// or a missing/repeated hour at a daylight-saving transition.
+export function chooseDayEntry(day, selectedTime) {
+  if (!day?.entries?.length) return undefined;
+  if (!Number.isFinite(selectedTime)) return day.target || day.entries[0];
+  const sameInstant=day.entries.find(entry=>entry.time===selectedTime);
+  if (sameInstant) return sameInstant;
+  const clockMinutes=clock=>{
+    const [hour,minute]=clock.split(':').map(Number);
+    return hour*60+minute;
+  };
+  const selectedMinutes=clockMinutes(fmt(selectedTime,{hour:'2-digit',minute:'2-digit'}));
+  return day.entries.reduce((best,entry)=>{
+    const distance=Math.abs(clockMinutes(entry.clock)-selectedMinutes);
+    const bestDistance=Math.abs(clockMinutes(best.clock)-selectedMinutes);
+    // Equally near available hours use the earlier frame. On an autumn day
+    // this also selects the first repeated hour unless that exact day/frame
+    // was already selected (handled above).
+    return distance<bestDistance || (distance===bestDistance && entry.time<best.time)?entry:best;
+  });
+}
 export function groupForecastDays(frames, now=Date.now()) {
   const today=localDateKey(now),groups=new Map();
   frames.forEach((frame,index)=>{

@@ -45,12 +45,28 @@ test('UTC duration survives local midnight and both DST transitions',()=>{
 test('rain and snow have an exact visibility threshold; no quantization halo or NaN color',()=>{
  for(const variable of ['precipitation','snowfall_water_equivalent']){
   for(const value of [-1,0,.01,.04762,.049,.049999,NaN,Infinity])assert.equal(precipitationColor(variable,value)[3],0);
-  assert.ok(precipitationColor(variable,.05)[3]>0);
+  assert.equal(precipitationColor(variable,.05)[3],0);
  }
  assert.deepEqual(precipitationColor('precipitation',1),[0,114,239,255]);
  assert.deepEqual(precipitationColor('precipitation',4),[238,218,28,255]);
  assert.deepEqual(precipitationColor('precipitation',30),[203,50,185,255]);
  assert.deepEqual(precipitationColor('precipitation',100),[203,50,185,255]);
+});
+test('quantized light rain and snow fade continuously, without a solid half-cell contour',()=>{
+ for(const variable of ['precipitation','snowfall_water_equivalent']){
+  let previous=0;
+  for(let i=0;i<=200;i++){
+   const value=.04+i*.001,alpha=precipitationColor(variable,value)[3];
+   assert.ok(alpha>=previous,'opacity cannot reverse for light precipitation');
+   assert.ok(alpha-previous<=3,`abrupt contour at ${value}: ${previous} to ${alpha}`);
+   previous=alpha;
+  }
+  assert.ok(precipitationColor(variable,.1)[3]<80,'0.1 mm/h must not become an almost opaque slab');
+  // Actual renderer, with a small continuous field through the visibility
+  // boundary: the former color map jumped 191/204 alpha units in one pixel.
+  const pixels=renderTile({variable,data:{values:[]},grid:{getInterpolatedValue:(_v,_lat,lon)=>.05+(lon-5.625)*.002}},{z:6,x:33,y:21});
+  for(let x=1;x<256;x++)assert.ok(Math.abs(pixels[x*4+3]-pixels[(x-1)*4+3])<=1);
+ }
 });
 test('each legend tick has exactly the same value and RGBA as an actual map pixel',()=>{
  const coords={z:6,x:33,y:21};

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {groupForecastDays,forecastLabel} from '../timeline.mjs';
+import {groupForecastDays,forecastLabel,chooseDayEntry} from '../timeline.mjs';
 import {forecastFrames,HOUR,REQUIRED,localDateKey} from '../core.mjs';
 function hours(start,count){return Array.from({length:count},(_,index)=>{const time=Date.parse(start)+index*HOUR;return {time,iso:new Date(time).toISOString()};});}
 test('every day/hour button references exactly one original UTC frame, including native 3/6h steps',()=>{
@@ -35,4 +35,51 @@ test('today/morrow are local calendar dates and relabel correctly across midnigh
 test('first forecast after local midnight is named Morgen when today has no future model frame',()=>{
  const days=groupForecastDays(hours('2026-09-19T22:00Z',72),Date.parse('2026-09-19T21:59Z'));
  assert.equal(days[0].label,'Morgen');assert.equal(days[1].label,'Overmorgen');assert.equal(days[2].hoursVisible,false);
+});
+test('switching day preserves the selected Amsterdam hour instead of resetting to noon',()=>{
+ const days=groupForecastDays(hours('2026-09-19T13:00Z',57),Date.parse('2026-09-19T13:00Z'));
+ const selected=days[0].entries[0];
+ assert.equal(selected.clock,'15:00');
+ for(const day of days.slice(1)){
+  const entry=chooseDayEntry(day,selected.time);
+  assert.equal(entry.clock,'15:00');assert.equal(localDateKey(entry.time),day.key);
+  assert.equal(day.entries.includes(entry),true);
+  assert.equal(day.target.clock,'12:00'); // Keep the existing default API intact.
+ }
+});
+test('day selection falls back to the nearest actual frame on limited and coarse days',()=>{
+ const days=groupForecastDays(hours('2026-09-19T14:00Z',40),Date.parse('2026-09-19T13:00Z'));
+ assert.equal(chooseDayEntry(days[0],Date.parse('2026-09-20T07:00Z')).clock,'16:00');
+ const coarse=groupForecastDays(hours('2026-09-21T00:00Z',24).filter((_,i)=>i%6===0),Date.parse('2026-09-19T13:00Z'))[0];
+ assert.deepEqual(coarse.entries.map(entry=>entry.clock),['02:00','08:00','14:00','20:00']);
+ assert.equal(chooseDayEntry(coarse,Date.parse('2026-09-19T13:00Z')).clock,'14:00');
+ assert.equal(chooseDayEntry(coarse,Date.parse('2026-09-19T21:00Z')).clock,'20:00');
+ assert.equal(chooseDayEntry(coarse,Date.parse('2026-09-19T09:00Z')).clock,'08:00'); // 11:00 is equally near 08:00 and 14:00.
+ const threeHourly=groupForecastDays(hours('2026-09-21T00:00Z',24).filter((_,i)=>i%3===0),Date.parse('2026-09-19T13:00Z'))[0];
+ assert.equal(chooseDayEntry(threeHourly,Date.parse('2026-09-19T13:00Z')).clock,'14:00');
+ assert.equal(chooseDayEntry(threeHourly,Date.parse('2026-09-19T14:00Z')).clock,'17:00');
+ assert.equal(chooseDayEntry(coarse,undefined),coarse.target);
+ assert.equal(chooseDayEntry({entries:[]},Date.parse('2026-09-19T13:00Z')),undefined);
+});
+test('day selection keeps wall clock time across both DST changes without adding 24 hours',()=>{
+ for(const [start,count,selectedISO,targetDate,expectedISO] of [
+  ['2026-03-27T23:00Z',47,'2026-03-28T14:00Z','2026-03-29','2026-03-29T13:00:00.000Z'],
+  ['2026-10-23T22:00Z',49,'2026-10-24T13:00Z','2026-10-25','2026-10-25T14:00:00.000Z'],
+ ]){
+  const day=groupForecastDays(hours(start,count),Date.parse(start)).find(entry=>entry.key===targetDate);
+  const target=chooseDayEntry(day,Date.parse(selectedISO));
+  assert.equal(target.clock,'15:00');assert.equal(target.iso,expectedISO);
+ }
+});
+test('selecting the same autumn day preserves the exact second 02:00 frame',()=>{
+ const day=groupForecastDays(hours('2026-10-24T22:00Z',25),Date.parse('2026-10-24T22:00Z'))[0];
+ const twice=day.entries.filter(entry=>entry.clock==='02:00');
+ for(const entry of twice)assert.equal(chooseDayEntry(day,entry.time),entry);
+ assert.equal(chooseDayEntry(day,Date.parse('2026-10-24T00:00Z')),twice[0]);
+});
+test('missing spring hour selects an existing nearest frame without inventing or crossing dates',()=>{
+ const day=groupForecastDays(hours('2026-03-28T23:00Z',23),Date.parse('2026-03-28T23:00Z'))[0];
+ const entry=chooseDayEntry(day,Date.parse('2026-03-28T01:00Z'));
+ assert.equal(entry.clock,'01:00');assert.equal(entry.iso,'2026-03-29T00:00:00.000Z');
+ assert.equal(localDateKey(entry.time),day.key);
 });

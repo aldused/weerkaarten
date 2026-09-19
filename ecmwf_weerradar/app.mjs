@@ -1,12 +1,13 @@
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
-import { forecastLabel, groupForecastDays } from './timeline.mjs';
+import { forecastLabel, groupForecastDays, chooseDayEntry } from './timeline.mjs';
+import {combinedForecastFrames,discoverForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
 import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, domainOptions, GridFactory, getRanges } from '@openmeteo/weather-map-layer';
 import { LruBlockCache, initWasm } from '@openmeteo/file-reader';
 import { FastBrowserBlockCache } from './fast-block-cache.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
-import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, runPath, hasFullHorizon, forecastFrames, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope } from './core.mjs';
+import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope } from './core.mjs';
 
 const $ = id => document.getElementById(id);
 $('app').dataset.moduleReadyMs=Math.round(performance.now());
@@ -160,41 +161,26 @@ async function json(url, signal) {
   return response.json();
 }
 let runCacheTime=0;
-async function discoverRun(now) {
+async function discoverRuns(now,prefetchedLatest) {
   try{
-    const saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-run'));
-    if(saved&&now-saved.savedAt<5*60*1000&&hasFullHorizon(saved.meta,now)){forecastFrames(saved.meta,now);runCacheTime=saved.savedAt;return saved.meta;}
+    const saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-runs-v2'));
+    if(!prefetchedLatest&&saved&&now>=saved.savedAt&&now-saved.savedAt<5*60*1000){combinedForecastFrames(saved.metas,now);runCacheTime=saved.savedAt;return saved.metas;}
   }catch{}
   runCacheTime=now;
-  const latest=await json(`${DATA_ROOT}/latest.json`);
-  // Side runs only cover 144h. Never fill the last day with a different run/model.
-  if(hasFullHorizon(latest,now)) {
-    try { forecastFrames(latest,now);return latest; } catch {}
-  }
-  const ref=Date.parse(latest.reference_time);
-  if(!Number.isFinite(ref)) throw new Error('ECMWF-modeltijd ontbreekt');
-  for(let back=6;back<=36;back+=6){
-    const run=ref-back*HOUR;
-    if(new Date(run).getUTCHours()%12) continue;
-    try {
-      const candidate=await json(`${DATA_ROOT}/${runPath(run)}/meta.json`);
-      if(hasFullHorizon(candidate,now)){forecastFrames(candidate,now);return candidate;}
-    } catch {}
-  }
-  throw new Error('Geen complete ECMWF-run voor tien dagen beschikbaar');
+  return discoverForecastRuns(url=>prefetchedLatest&&url===`${DATA_ROOT}/latest.json`?prefetchedLatest:json(url),now);
 }
 
-async function start() {
+async function start(prefetchedLatest) {
   const startup=++startupRevision;
   retryLoad=()=>start();
-  refreshing=true;stopPlayback();clearTimeout(sliderTimer);revision++;renderController?.abort();status('Complete ECMWF-run voor tien dagen ophalen…');
+  refreshing=true;stopPlayback();clearTimeout(sliderTimer);revision++;renderController?.abort();status('Nieuwste ECMWF-verwachting ophalen…');
   try {
     const now=Date.now();
-    const candidateMeta=await discoverRun(now);
+    const candidateMetas=await discoverRuns(now,prefetchedLatest);
     if(startup!==startupRevision)return;
-    const timeline=forecastFrames(candidateMeta,now);
+    const timeline=combinedForecastFrames(candidateMetas,now);
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
-    try{localStorage.setItem('weerlab-ecmwf-run',JSON.stringify({savedAt:runCacheTime,meta:candidateMeta}));}catch{}
+    try{localStorage.setItem('weerlab-ecmwf-runs-v2',JSON.stringify({savedAt:runCacheTime,metas:candidateMetas}));}catch{}
     timeline.forEach(f=>intervalByURL.set(f.url,f.hours));
     await mapReady;
     if(startup!==startupRevision)return;
@@ -202,9 +188,11 @@ async function start() {
     // A refresh preserves the chosen forecast time where the new run permits
     // it. The previous run and its controls stay together until a full frame
     // from this candidate has loaded successfully.
-    const selectedTime=requestedContext?.timeline[wanted]?.time??current?.time;
+    const linkedTime=params.get('time');
+    const requestedTime=linkedTime&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/.test(linkedTime)?Date.parse(linkedTime):NaN;
+    const selectedTime=requestedContext?.timeline[wanted]?.time??current?.time??(Number.isFinite(requestedTime)?requestedTime:undefined);
     const index=selectedTime===undefined?0:nearestIndex(timeline,selectedTime);
-    refreshing=false;requestFrame(index,true,{meta:candidateMeta,timeline});
+    refreshing=false;requestFrame(index,true,{meta:timeline[index].modelMeta,timeline});
   } catch(error) {
     if(startup!==startupRevision)return;
     if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};}
@@ -220,7 +208,7 @@ function buildTimeline(timeline){
     const button=document.createElement('button');button.type='button';button.dataset.day=day.key;
     button.textContent=day.label;const small=document.createElement('small');small.textContent=day.date;button.append(small);
     button.title=day.full;button.setAttribute('aria-label',day.full);button.setAttribute('aria-pressed','false');
-    button.addEventListener('click',()=>{stopPlayback();requestFrame(day.target.index);});container.append(button);
+    button.addEventListener('click',()=>{stopPlayback();requestFrame(chooseDayEntry(day,requestedContext?.timeline[wanted]?.time??current?.time)?.index??day.target.index);});container.append(button);
   }
   $('time-slider').max=(timeline.at(-1).time-timeline[0].time)/HOUR;$('range-end').textContent=`+${FORECAST_DAYS} dagen`;
   $('time-ticks').replaceChildren();
@@ -298,7 +286,7 @@ async function readTemperature(frame,signal){
 }
 async function renderFrame(index,rev,signal,context){
   const started=performance.now();
-  const frame=context.timeline[index], modelMeta=context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
+  const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
   retryLoad=()=>requestFrame(index,true,context);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view can reveal finished layers immediately. Later time changes
@@ -375,13 +363,19 @@ function syncUI(){
   if(!current)return;
   const metadata=current.modelMeta,timeline=current.timeline;
   $('app').dataset.model='ecmwf_ifs';$('app').dataset.run=metadata.reference_time;
+  $('app').dataset.olderRun=String(!!current.olderRun);
   $('app').dataset.forecastStart=timeline[0].iso;$('app').dataset.forecastEnd=timeline.at(-1).iso;
   const age=(Date.now()-Date.parse(metadata.reference_time))/HOUR;
   $('run-label').textContent=`ECMWF IFS HRES · 9 km · run ${fmt(metadata.reference_time,{day:'numeric',month:'short'})} ${new Date(metadata.reference_time).getUTCHours().toString().padStart(2,'0')} UTC${age>24?' · oudere run':''}`;
-  $('run-label').title=`Bron bijgewerkt: ${fmt(metadata.last_modified_time,{dateStyle:'medium',timeStyle:'short'})}`;
+  const runClock=new Date(metadata.reference_time).getUTCHours().toString().padStart(2,'0')+' UTC';
+  $('run-badge').textContent=(current.olderRun?'Eerder: ':'Run ')+runClock;
+  $('run-badge').classList.toggle('earlier-run',!!current.olderRun);
+  $('run-badge').title=`${fmt(metadata.reference_time,{day:'numeric',month:'short'})} ${runClock}${current.olderRun?' · Aanvulling: de nieuwste run reikt niet tot deze datum.':''}`;
+  $('run-label').title=`Bron bijgewerkt: ${fmt(metadata.last_modified_time,{dateStyle:'medium',timeStyle:'short'})}${current.olderRun?' · Voor deze termijn wordt de laatste volledige run gebruikt.':''}`;
   const f=current,label=forecastLabel(f.time);$('valid-clock').textContent=label.displayClock;
   $('valid-day').textContent=label.date;
   $('slider-time').textContent=label.text;
+  const pageURL=new URL(location.href);pageURL.searchParams.set('time',new Date(f.time).toISOString());history.replaceState(null,'',pageURL);
   $('time-slider').value=(f.time-timeline[0].time)/HOUR;
   $('time-slider').setAttribute('aria-valuetext',label.text);
   $('time-slider').style.setProperty('--progress',`${$('time-slider').value/$('time-slider').max*100}%`);
@@ -495,7 +489,7 @@ function updatePoint(fetchMissing=true){
   const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
   const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
   const dateOptions={day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZoneName:'short'};
-  $('point-note').textContent=`Tijdvak: ${fmt(period.start,dateOptions)} – ${fmt(period.end,dateOptions)}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}Rooster circa 9 km.`;
+  $('point-note').textContent=`Tijdvak: ${fmt(period.start,dateOptions)} – ${fmt(period.end,dateOptions)}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}Run ${fmt(period.run,{day:'numeric',month:'short'})} ${new Date(period.run).getUTCHours().toString().padStart(2,'0')} UTC. Rooster circa 9 km.`;
   Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);
@@ -525,8 +519,19 @@ $('search-form').addEventListener('submit',async e=>{
   }catch(error){if(error.name!=='AbortError'&&!local.length)$('search-results').textContent='Zoeken is tijdelijk niet beschikbaar. Probeer een andere plaats.';}
 });
 
-// Metadata is refreshed when the user returns after a long pause. Current frames
-// are kept fixed during an animation, so a run can never change halfway through.
-let checkedAt=Date.now();
-window.addEventListener('focus',()=>{if(Date.now()-checkedAt>30*60*1000){checkedAt=Date.now();start();}});
+// A tiny metadata check picks up all four runs, only when visible and idle.
+// Unchanged metadata never reloads fields. Never switch runs during playback.
+let checkedAt=Date.now(),checkingRun=false;
+async function checkForNewRun(){
+  if(!current||document.hidden||playing||rendering||refreshing||checkingRun||Date.now()-checkedAt<10*60*1000)return;
+  checkedAt=Date.now();checkingRun=true;
+  try {
+    const latest=await json(`${DATA_ROOT}/latest.json`);
+    if(!playing&&!rendering&&!refreshing&&!document.hidden&&isNewerForecastRun(latest,current.timeline,Date.now()))await start(latest);
+  } catch { /* Keep the current forecast when the metadata check fails. */ }
+  finally {checkingRun=false;}
+}
+window.addEventListener('focus',checkForNewRun);
+document.addEventListener('visibilitychange',checkForNewRun);
+setInterval(checkForNewRun,60*1000);
 start();

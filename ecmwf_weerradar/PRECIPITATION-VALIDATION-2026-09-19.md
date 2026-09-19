@@ -1,5 +1,7 @@
 # Neerslagcontrole — 19 september 2026
 
+> Vervolg: de hoeveelheidcontrole hieronder blijft geldig. De runkeuze en abrupte kleurdekking zijn daarna aangepast naar aanleiding van nieuwe screenshots; zie [vervolgcontrole](RAIN-EDGES-AND-RUNS-2026-09-19.md). De passages over één volledige run beschrijven de eerdere versie.
+
 ## Uitkomst
 
 De numerieke neerslagverwerking van de nieuwe 9km-kaart bevat in de onderzochte gevallen **geen meter/millimeterfout, geen dubbele cumulatie en geen verwisseling van cumulatieve neerslag en tijdvaksommen**. Geldige positieve bronwaarden zijn ongewijzigd gebleven. De grote verschillen met de andere Weerlab-kaart zijn geen vergelijking van identieke velden:
