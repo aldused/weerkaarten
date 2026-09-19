@@ -1,3 +1,4 @@
+import {writeFogColor} from './fog-style.mjs';
 import {isPrecipitation,writePrecipitationColor,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import { scales, EUROPE } from './core.mjs';
 import { createGaussianTileSampler } from './gaussian-sampler.mjs';
@@ -28,6 +29,7 @@ export function renderTile(field,coords){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
       const value=row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
+      if(field.variable==='visibility'){writeFogColor(value,pixels,(y*256+x)*4,coords.x*256+x,coords.y*256+y);continue;}
       if(precipitation){if(value<PRECIPITATION_THRESHOLD)continue;writePrecipitationColor(field.variable,value,pixels,(y*256+x)*4);continue;}
       const c=Math.min(palette.n-1,Math.max(0,Math.round((value-palette.min)/(palette.max-palette.min)*(palette.n-1))))*4,p=(y*256+x)*4;
       pixels[p]=palette.rgba[c];pixels[p+1]=palette.rgba[c+1];pixels[p+2]=palette.rgba[c+2];pixels[p+3]=palette.rgba[c+3];

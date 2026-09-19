@@ -1,3 +1,4 @@
+import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
 import { forecastLabel, groupForecastDays, chooseDayEntry } from './timeline.mjs';
@@ -33,6 +34,11 @@ function icon(el, name) {
   el.innerHTML = `<svg viewBox="0 0 24 24" fill="${name === 'play' ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="${name === 'pause' ? 4 : 1.9}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]}"/></svg>`;
 }
 document.querySelectorAll('[data-icon]').forEach(el => icon(el, el.dataset.icon));
+for(const band of [...FOG_BANDS].reverse()){
+  const item=document.createElement('span'),swatch=document.createElement('i');
+  swatch.style.setProperty('--fog-color',band.color);swatch.className=band.hatch?'fog-swatch fog-hatched':'fog-swatch';
+  item.append(swatch,document.createTextNode(band.label.replace('Zicht ','')));$('fog-bands').append(item);
+}
 const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
@@ -258,7 +264,7 @@ new ResizeObserver(entries=>{document.documentElement.style.setProperty('--dock-
 function variablesForMode(modelMeta=meta){
   if(mode==='temperature') return ['temperature_2m'];
   if(mode==='wind') return ['wind_u_component_10m'];
-  return [...(mode==='weather'&&$('clouds').checked?['cloud_cover']:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
+  return [...(mode==='weather'&&$('clouds').checked?['cloud_cover',...($('fog').checked&&modelMeta.variables.includes('visibility')?['visibility']:[])]:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
 }
 function weatherURL(frame,variable){return `om://${frame.url}?variable=${variable}&interpolation=monotone&color_blend=true`;}
 function addLayer(frame,variable,prefix){
@@ -394,6 +400,8 @@ function syncUI(){
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;
   legend.querySelector('.legend-colors').style.background=gradient;
   legend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=numbers[i]);
+  $('fog-legend').hidden=!f.ids.some(id=>id.endsWith('-visibility'));
+  $('fog-unavailable').hidden=!(f.mode==='weather'&&$('clouds').checked&&$('fog').checked&&!f.modelMeta.variables.includes('visibility'));
   const snowLegend=$('snow-legend');
   snowLegend.hidden=!f.ids.some(id=>id.endsWith('snowfall_water_equivalent'));
   if(!snowLegend.hidden){
@@ -412,7 +420,7 @@ $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);})
 let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
-['clouds','snow','texture'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
+['clouds','snow','texture','fog'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
 $('city-labels').addEventListener('change',queueCityDraw);
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
@@ -463,7 +471,12 @@ function drawCities(){
     ctx.fillStyle='#f5f8e9';ctx.fillRect(p.x-1.3,p.y-4,2.6,2.6);
     const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):temp;
     if(Number.isFinite(displayedValue)){const t=String(Math.round(displayedValue));ctx.font=`600 ${font}px Arial`;ctx.strokeText(t,p.x+7,p.y-12);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,p.y-12);}
-    if(Number.isFinite(cloud)&&cloud<35&&!(rain>.1))skyIcon(ctx,p.x-13,p.y-16,city);
+    const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
+    if(fog){
+      ctx.fillStyle=fog.color;ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
+      for(let line=0;line<3;line++){ctx.beginPath();ctx.moveTo(p.x-20+(line%2)*2,p.y-21+line*5);ctx.lineTo(p.x-6,p.y-21+line*5);ctx.stroke();}
+    }
+    else if(Number.isFinite(cloud)&&cloud<35&&!(rain>.1))skyIcon(ctx,p.x-13,p.y-16,city);
     else if(Number.isFinite(cloud)&&cloud<65){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
       const wind=current.samples.wind_u_component_10m;
@@ -482,9 +495,16 @@ function updatePoint(fetchMissing=true){
   const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=forecastLabel(current.time).text;
   const values=$('point-values');values.replaceChildren();
   const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','km/u',0]];
+  if(current.modelMeta.variables.includes('visibility'))entries.push(['visibility','Berekend zicht','m',1]);
   for(const [variable,label,unit,digits] of entries){
     const value=sample(current.samples[variable],p.lat,p.lng),el=document.createElement('div'),strong=document.createElement('strong'),small=document.createElement('small');
-    strong.textContent=Number.isFinite(value)?`${variable==='precipitation'&&value>0&&value<PRECIPITATION_THRESHOLD?'<'+PRECIPITATION_THRESHOLD.toLocaleString('nl-NL'):value.toLocaleString('nl-NL',{maximumFractionDigits:digits})} ${unit}`:'—';small.textContent=label;el.append(strong,small);values.append(el);
+    strong.textContent=Number.isFinite(value)?`${variable==='precipitation'&&value>0&&value<PRECIPITATION_THRESHOLD?'<'+PRECIPITATION_THRESHOLD.toLocaleString('nl-NL'):value.toLocaleString('nl-NL',{maximumFractionDigits:digits})} ${unit}`:'—';small.textContent=label;
+    if(variable==='visibility'){
+      const band=fogBand(value);strong.textContent=visibilityText(value);el.classList.add('visibility-value');
+      if(band){el.classList.add('fog-value');el.style.setProperty('--fog-color',band.color);el.classList.toggle('fog-hatched',band.hatch);small.textContent=`≋ Mist · ${band.label} · berekend`; }
+      el.title=`${p.name} · ${fmt(current.time,{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'})} · berekend zicht: ${visibilityText(value)}${band?' · '+band.label:''}`;
+    }
+    el.append(strong,small);values.append(el);
   }
   const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
   const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
