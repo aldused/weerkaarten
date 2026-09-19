@@ -1,13 +1,27 @@
-import { HOUR, localDateKey, fmt } from './core.mjs';
+import { HOUR, localDateKey, fmt, nearestIndex } from './core.mjs';
 
 // All controls refer to the original frame index/UTC instant. Calendar days
 // are Amsterdam days; never add 24 elapsed hours to obtain a local day.
-export function forecastLabel(time) {
-  const date=fmt(time,{weekday:'short',day:'numeric',month:'short'});
+export function forecastLabel(time,runTime) {
+  time=new Date(time).getTime();
+  const capital=s=>s.charAt(0).toUpperCase()+s.slice(1);
+  const date=capital(fmt(time,{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
+  const mobileDate=capital(fmt(time,{weekday:'short',day:'numeric',month:'long',year:'numeric'}));
   const clock=fmt(time,{hour:'2-digit',minute:'2-digit'});
   const repeated=[time-HOUR,time+HOUR].some(t=>localDateKey(t)===localDateKey(time)&&fmt(t,{hour:'2-digit',minute:'2-digit'})===clock);
-  const zone=repeated?' '+fmt(time,{timeZoneName:'shortOffset'}).split(' ').at(-1):'';
-  return {date,clock,displayClock:clock+zone,text:`${date} · ${clock}${zone}`,full:fmt(time,{dateStyle:'full',timeStyle:'short'})+zone};
+  const offset=fmt(time,{timeZoneName:'shortOffset'}).split(' ').at(-1).replace('GMT','UTC');
+  const zone=`Nederlandse ${offset==='UTC+2'?'zomertijd':'wintertijd'} (${offset})`;
+  const text=`${date} • ${clock} uur${repeated?' ('+offset+')':''}`;
+  const run=runTime===undefined?NaN:new Date(runTime).getTime();
+  const runDate=Number.isFinite(run)?fmt(run,{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}):null;
+  const runClock=Number.isFinite(run)?fmt(run,{hour:'2-digit',minute:'2-digit',timeZone:'UTC'}):null;
+  const lead=Number.isFinite(run)?(time-run)/HOUR:null;
+  return {date,mobileDate,clock,displayClock:clock+(repeated?' '+offset:''),text,full:`${text} • ${zone}`,zone,offset,runDate,runClock,lead,
+    runLabel:runDate?`ECMWF-run ${runDate} • ${runClock} UTC`:null,leadLabel:lead===null?null:`verwachting +${lead} uur`};
+}
+
+export function nowFrameIndex(frames,now=Date.now()) {
+  return frames.length?nearestIndex(frames,now):-1;
 }
 
 // A day tab changes the local calendar day, not the selected hour. Work with

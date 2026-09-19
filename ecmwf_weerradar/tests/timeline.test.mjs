@@ -83,3 +83,26 @@ test('missing spring hour selects an existing nearest frame without inventing or
  assert.equal(entry.clock,'01:00');assert.equal(entry.iso,'2026-03-29T00:00:00.000Z');
  assert.equal(localDateKey(entry.time),day.key);
 });
+
+test('the selected heading spells out the date, year, zone and real elapsed run lead',()=>{
+ const summer=forecastLabel('2026-09-19T13:00:00Z','2026-09-19T00:00:00Z');
+ assert.equal(summer.text,'Zaterdag 19 september 2026 • 15:00 uur');
+ assert.equal(summer.zone,'Nederlandse zomertijd (UTC+2)');
+ assert.equal(summer.runClock,'00:00');assert.equal(summer.lead,13);
+ assert.equal(summer.runLabel,'ECMWF-run 19 september 2026 • 00:00 UTC');
+ const winter=forecastLabel('2026-12-31T23:00:00Z','2026-12-31T18:00:00Z');
+ assert.equal(winter.date,'Vrijdag 1 januari 2027');assert.equal(winter.clock,'00:00');
+ assert.equal(winter.zone,'Nederlandse wintertijd (UTC+1)');assert.equal(winter.lead,5);
+ assert.equal(winter.runDate,'31 december 2026');
+ const a=forecastLabel('2026-10-25T00:00Z','2026-10-24T18:00Z'),b=forecastLabel('2026-10-25T01:00Z','2026-10-24T18:00Z');
+ assert.equal(a.clock,b.clock);assert.notEqual(a.full,b.full);assert.equal(a.lead,6);assert.equal(b.lead,7);
+ const spring=forecastLabel('2026-03-29T01:00Z','2026-03-28T18:00Z');assert.equal(spring.clock,'03:00');assert.equal(spring.lead,7);
+});
+
+test('Nu selects an available frame and clamps correctly at both forecast ends',async()=>{
+ const {nowFrameIndex}=await import('../timeline.mjs');const frames=hours('2026-09-19T13:00Z',4);
+ assert.equal(nowFrameIndex([],frames[0].time),-1);
+ assert.equal(nowFrameIndex(frames,frames[0].time-HOUR),0);
+ assert.equal(nowFrameIndex(frames,frames[0].time+1.8*HOUR),2);
+ assert.equal(nowFrameIndex(frames,frames.at(-1).time+10*HOUR),3);
+});

@@ -1,7 +1,7 @@
 import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
-import { forecastLabel, groupForecastDays, chooseDayEntry } from './timeline.mjs';
+import { forecastLabel, groupForecastDays, chooseDayEntry, nowFrameIndex } from './timeline.mjs';
 import {combinedForecastFrames,discoverForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
 import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, domainOptions, GridFactory, getRanges } from '@openmeteo/weather-map-layer';
@@ -260,7 +260,14 @@ const shortViewport=matchMedia('(max-height: 650px)');
 setMenuCollapsed(shortViewport.matches);
 shortViewport.addEventListener('change',event=>{if(event.matches)setMenuCollapsed(true);});
 // Only an actual menu size change updates layout; map motion never measures it.
-new ResizeObserver(entries=>{document.documentElement.style.setProperty('--dock-height',`${Math.ceil(entries[0].contentRect.height)}px`);queueCityDraw();}).observe(document.querySelector('.bottom-area'));
+let dockWidth=0;
+new ResizeObserver(entries=>{
+  const {width,height}=entries[0].contentRect;
+  document.documentElement.style.setProperty('--dock-height',`${Math.ceil(height)}px`);queueCityDraw();
+  if(Math.abs(width-dockWidth)>1){dockWidth=width;requestAnimationFrame(()=>{
+    for(const id of ['days','hours'])$(id).querySelector('[aria-pressed=true]')?.scrollIntoView({block:'nearest',inline:'center'});
+  });}
+}).observe(document.querySelector('.bottom-area'));
 function variablesForMode(modelMeta=meta){
   if(mode==='temperature') return ['temperature_2m'];
   if(mode==='wind') return ['wind_u_component_10m'];
@@ -299,8 +306,7 @@ async function renderFrame(index,rev,signal,context){
   // remain atomic, so there is never a mixture of different forecast hours.
   let reveal;
   if(!current){
-    $('valid-clock').textContent=forecastLabel(frame.time).displayClock;
-    $('valid-day').textContent=fmt(frame.time,{weekday:'short',day:'numeric',month:'short'});
+    updateTimeHeading(frame,modelMeta);
     reveal=()=>{
       if(rev!==revision)return;
       for(const id of ids)if(map.isSourceLoaded(id)&&!frameErrors.has(id)){
@@ -365,22 +371,28 @@ async function requestFrame(index,force=false,context={meta,timeline:frames}){
     if(playing)scheduleNext();
   }
 }
+function updateTimeHeading(frame,metadata){
+  const label=forecastLabel(frame.time,metadata.reference_time);
+  $('selected-date').textContent=label.date;
+  $('selected-date-mobile').textContent=label.mobileDate;
+  $('selected-clock').textContent=`${label.clock} uur`;
+  $('slider-time').setAttribute('aria-label',label.full);
+  $('slider-time').dataset.utc=new Date(frame.time).toISOString();
+  $('run-badge').textContent=label.runLabel+(frame.olderRun?' · Aanvullende eerdere run':'');
+  $('run-badge').classList.toggle('earlier-run',!!frame.olderRun);
+  $('run-badge').title=`Bron bijgewerkt: ${forecastLabel(metadata.last_modified_time).full}`;
+  $('forecast-lead').textContent=label.leadLabel;
+  $('selected-zone').textContent=label.zone;
+  document.title=`${label.text} · Weerkaart Europa · Weerlab`;
+  return label;
+}
 function syncUI(){
   if(!current)return;
   const metadata=current.modelMeta,timeline=current.timeline;
   $('app').dataset.model='ecmwf_ifs';$('app').dataset.run=metadata.reference_time;
   $('app').dataset.olderRun=String(!!current.olderRun);
   $('app').dataset.forecastStart=timeline[0].iso;$('app').dataset.forecastEnd=timeline.at(-1).iso;
-  const age=(Date.now()-Date.parse(metadata.reference_time))/HOUR;
-  $('run-label').textContent=`ECMWF IFS HRES · 9 km · run ${fmt(metadata.reference_time,{day:'numeric',month:'short'})} ${new Date(metadata.reference_time).getUTCHours().toString().padStart(2,'0')} UTC${age>24?' · oudere run':''}`;
-  const runClock=new Date(metadata.reference_time).getUTCHours().toString().padStart(2,'0')+' UTC';
-  $('run-badge').textContent=(current.olderRun?'Eerder: ':'Run ')+runClock;
-  $('run-badge').classList.toggle('earlier-run',!!current.olderRun);
-  $('run-badge').title=`${fmt(metadata.reference_time,{day:'numeric',month:'short'})} ${runClock}${current.olderRun?' · Aanvulling: de nieuwste run reikt niet tot deze datum.':''}`;
-  $('run-label').title=`Bron bijgewerkt: ${fmt(metadata.last_modified_time,{dateStyle:'medium',timeStyle:'short'})}${current.olderRun?' · Voor deze termijn wordt de laatste volledige run gebruikt.':''}`;
-  const f=current,label=forecastLabel(f.time);$('valid-clock').textContent=label.displayClock;
-  $('valid-day').textContent=label.date;
-  $('slider-time').textContent=label.text;
+  const f=current,label=updateTimeHeading(f,metadata);
   const pageURL=new URL(location.href);pageURL.searchParams.set('time',new Date(f.time).toISOString());history.replaceState(null,'',pageURL);
   $('time-slider').value=(f.time-timeline[0].time)/HOUR;
   $('time-slider').setAttribute('aria-valuetext',label.text);
@@ -388,10 +400,9 @@ function syncUI(){
   if(timelineDayKey!==localDateKey(Date.now()))buildTimeline(timeline);
   syncTimeChoices(f);
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===f.mode)));
-  $('play').disabled=false;$('time-slider').disabled=false;
+  $('play').disabled=false;$('time-slider').disabled=false;$('now').disabled=false;
   $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
   $('interval-label').textContent=`ECMWF IFS · 9 km · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
-  $('load-label').textContent=`Verwachting · +${f.lead} uur`;
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
   else if(f.mode==='wind'){title='Wind';unit='km/u';numbers=['0','20','40','60','100+'];gradient='linear-gradient(to right,#66c2d0,#53ca89,#e9cc48,#ee9131,#bc3379)';}
@@ -415,6 +426,7 @@ function scheduleNext(){clearTimeout(playTimer);playTimer=setTimeout(()=>{if(pla
 $('play').addEventListener('click',()=>{
   if(playing){stopPlayback();return;}playing=true;icon($('play'),'pause');$('play').setAttribute('aria-label','Animatie pauzeren');if(!rendering)requestFrame((wanted+1)%frames.length);
 });
+$('now').addEventListener('click',()=>{stopPlayback();const index=nowFrameIndex(frames);if(index>=0)requestFrame(index);});
 $('previous').addEventListener('click',()=>{stopPlayback();requestFrame(wanted-1);});
 $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);});
 let sliderTimer;
@@ -436,9 +448,11 @@ $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info'
 $('retry').addEventListener('click',()=>retryLoad());
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
-  if(e.target.closest('input,select,button,dialog,#map')||$('info').open)return;
-  if(e.code==='Space'){e.preventDefault();$('play').click();}
-  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();stopPlayback();requestFrame(wanted+(e.key==='ArrowRight'?1:-1));}
+  if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]')||$('info').open)return;
+  if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)&&(!e.target.closest('button')||e.target.closest('.timeline'))){
+    e.preventDefault();stopPlayback();requestFrame(e.key==='Home'?0:e.key==='End'?frames.length-1:wanted+(e.key==='ArrowRight'?1:-1));
+  }
+  if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();$('play').click();}
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlayback();});
 
@@ -492,7 +506,7 @@ function closePoint(){selectedPoint=null;$('point').hidden=true;pointMarker?.rem
 $('point-close').addEventListener('click',closePoint);
 function updatePoint(fetchMissing=true){
   if(!selectedPoint||!current)return;
-  const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=forecastLabel(current.time).text;
+  const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=forecastLabel(current.time).full;
   const values=$('point-values');values.replaceChildren();
   const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','km/u',0]];
   if(current.modelMeta.variables.includes('visibility'))entries.push(['visibility','Berekend zicht','m',1]);
@@ -502,14 +516,13 @@ function updatePoint(fetchMissing=true){
     if(variable==='visibility'){
       const band=fogBand(value);strong.textContent=visibilityText(value);el.classList.add('visibility-value');
       if(band){el.classList.add('fog-value');el.style.setProperty('--fog-color',band.color);el.classList.toggle('fog-hatched',band.hatch);small.textContent=`≋ Mist · ${band.label} · berekend`; }
-      el.title=`${p.name} · ${fmt(current.time,{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'})} · berekend zicht: ${visibilityText(value)}${band?' · '+band.label:''}`;
+      el.title=`${p.name} · ${forecastLabel(current.time).full} · berekend zicht: ${visibilityText(value)}${band?' · '+band.label:''}`;
     }
     el.append(strong,small);values.append(el);
   }
   const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
   const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
-  const dateOptions={day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZoneName:'short'};
-  $('point-note').textContent=`Tijdvak: ${fmt(period.start,dateOptions)} – ${fmt(period.end,dateOptions)}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}Run ${fmt(period.run,{day:'numeric',month:'short'})} ${new Date(period.run).getUTCHours().toString().padStart(2,'0')} UTC. Rooster circa 9 km.`;
+  $('point-note').textContent=`Tijdvak: ${forecastLabel(period.start).text} – ${forecastLabel(period.end).full}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}${forecastLabel(current.time,period.run).runLabel}. Rooster circa 9 km.`;
   Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);
