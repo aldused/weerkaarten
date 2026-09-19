@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#126d92">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23126d92'/%3E%3Ctext x='5' y='25' font-size='26' fill='%23ffdf00'%3Ew%3C/text%3E%3C/svg%3E">
+  <meta name="description" content="Inzoombare ECMWF-weerradar voor Europa. Bewolking, neerslag, sneeuw, temperatuur en wind op het oorspronkelijke 9 km-rooster, tien dagen vooruit.">
+  <title>Weerradar Europa · 10 dagen · Weerlab</title>
+  <link rel="stylesheet" href="./assets/map.css"><link rel="stylesheet" href="./style.css?v=538776d86a40">
+</head>
+<body>
+  <main id="app" aria-label="ECMWF weerradar Europa">
+    <div id="map" role="region" aria-label="Inzoombare weerkaart van Europa"></div>
+    <canvas id="places" aria-hidden="true"></canvas>
+    <div class="top-left">
+      <div class="time-badge"><strong id="valid-clock">--:--</strong><span id="valid-day">Laden…</span></div>
+      <button id="search-toggle" class="square search-toggle" aria-label="Zoek een plaats" title="Zoek een plaats" data-icon="search"></button>
+      <form id="search-form" role="search" hidden>
+        <label class="sr-only" for="search">Plaats in Europa</label><input id="search" type="search" placeholder="Zoek een plaats in Europa" autocomplete="off">
+        <button type="submit" aria-label="Zoeken" data-icon="search"></button>
+        <div id="search-results" aria-live="polite"></div>
+      </form>
+    </div>
+    <a class="brand" href="./index.html" aria-label="Weerlab weerradar"><b>weer<span>lab</span></b><small>ECMWF · EUROPA · 10 DAGEN</small></a>
+    <div class="tools" aria-label="Kaartbediening">
+      <div class="layer-toolbar" role="group" aria-label="Kaartlagen">
+        <button class="square" data-mode="weather" data-icon="weather" aria-label="Weer: bewolking en neerslag" title="Weer: bewolking en neerslag" aria-pressed="true"></button>
+        <button class="square" data-mode="rain" data-icon="rain" aria-label="Neerslag" title="Neerslag" aria-pressed="false"></button>
+        <button class="square" data-mode="temperature" data-icon="temperature" aria-label="Temperatuur" title="Temperatuur" aria-pressed="false"></button>
+        <button class="square" data-mode="wind" data-icon="wind" aria-label="Wind" title="Wind" aria-pressed="false"></button>
+        <button id="settings-toggle" class="square" data-icon="layers" aria-label="Laaginstellingen" title="Laaginstellingen" aria-expanded="false"></button>
+      </div>
+      <div class="zoom-toolbar">
+        <button id="zoom-in" class="square" data-icon="plus" aria-label="Inzoomen" title="Inzoomen"></button>
+        <button id="zoom-out" class="square" data-icon="minus" aria-label="Uitzoomen" title="Uitzoomen"></button>
+        <button id="europe" class="square" data-icon="europe" aria-label="Heel Europa" title="Heel Europa"></button>
+        <button id="home" class="square" data-icon="home" aria-label="Benelux" title="Benelux"></button>
+        <button id="fullscreen" class="square" data-icon="expand" aria-label="Volledig scherm" title="Volledig scherm"></button>
+      </div>
+    </div>
+    <aside id="settings" class="panel settings" hidden aria-label="Laaginstellingen">
+      <div class="panel-heading"><h2>Kaartlagen</h2><button class="close" data-close="settings" aria-label="Laaginstellingen sluiten" data-icon="close"></button></div>
+      <label><input type="checkbox" id="clouds" checked> Bewolking</label>
+      <label><input type="checkbox" id="texture" checked> Fijne wolkentextuur (illustratief)</label>
+      <label><input type="checkbox" id="snow" checked> Sneeuw (smeltwater)</label>
+      <label><input type="checkbox" id="city-labels" checked> Plaatsen en temperaturen</label>
+      <label><input type="checkbox" id="borders" checked> Landsgrenzen</label>
+      <label class="opacity-label">Zichtbaarheid <input type="range" id="opacity" min="20" max="100" value="100" aria-label="Zichtbaarheid weerlagen"></label>
+      <label>Afspeelsnelheid <select id="speed" aria-label="Afspeelsnelheid"><option value="1600">Rustig</option><option value="800" selected>Normaal</option><option value="350">Snel</option></select></label>
+      <p>Modelresolutie circa 9 km. Alle tijden zijn Nederlandse tijd.</p>
+    </aside>
+    <div id="status" class="status" role="status"><span class="spinner"></span><span id="status-text">ECMWF-run ophalen…</span><button id="retry" hidden>Opnieuw</button></div>
+    <section id="point" class="panel point" hidden aria-label="Weer op geselecteerde plaats">
+      <div class="panel-heading"><div><small>ECMWF-VERWACHTING</small><h2 id="point-title">Geselecteerde plaats</h2></div><button id="point-close" class="close" aria-label="Plaatsdetails sluiten" data-icon="close"></button></div>
+      <p id="point-time"></p><div id="point-values" class="point-values"></div><p id="point-note"></p>
+    </section>
+    <div class="bottom-area">
+      <div class="forecast-caption"><span class="model-dot"></span><strong id="layer-title">Weerradar</strong><span id="interval-label">ECMWF IFS · 9 km</span></div>
+      <div class="legend" id="legend" aria-label="Legenda"><span>Neerslag <small>mm/u</small></span><div class="legend-colors"></div><div class="legend-numbers"><span>0,05</span><span>0,3</span><span>1</span><span>4</span><span>16+</span></div></div>
+      <section class="timeline" aria-label="Verwachting tot tien dagen vooruit">
+        <div id="days" class="days" role="group" aria-label="Kies een dag"></div>
+        <div class="scrub-row">
+          <button id="previous" class="square" aria-label="Vorige tijdstap" title="Vorige tijdstap" data-icon="left" disabled></button>
+          <button id="play" class="square play" aria-label="Animatie afspelen" title="Afspelen / pauzeren" data-icon="play" disabled></button>
+          <button id="next" class="square" aria-label="Volgende tijdstap" title="Volgende tijdstap" data-icon="right" disabled></button>
+          <div class="slider-wrap"><div class="slider-caption"><span id="range-start">Vandaag</span><output id="slider-time">Verwachting laden</output><span id="range-end">+10 dagen</span></div><input id="time-slider" type="range" min="0" max="240" step="0.01" value="0" aria-label="Tijdstip van de verwachting" disabled><div id="time-ticks" class="time-ticks" aria-hidden="true"></div></div>
+          <button id="info-toggle" class="square" data-icon="info" aria-label="Over deze kaart" title="Bron en uitleg"></button>
+        </div>
+      </section>
+      <div class="run-line"><span id="run-label">ECMWF IFS HRES · oorspronkelijke 9 km-data</span><span id="load-label">Modelverwachting</span></div>
+    </div>
+    <dialog id="info">
+      <div class="panel-heading"><h2>Weerradar · 10 dagen</h2><button id="info-close" class="close" aria-label="Uitleg sluiten" data-icon="close"></button></div>
+      <p>De oorspronkelijke <strong>ECMWF IFS HRES-verwachting op het O1280-rooster (circa 9 km)</strong>, voor Europa en tien dagen vooruit. De kaart kiest automatisch een complete modelrun die de hele periode dekt.</p>
+      <p>Wit en grijs tonen voorspelde bewolking. Blauw, geel en rood tonen neerslag. Roze is sneeuwval, uitgedrukt in millimeters smeltwater. De bewolking is een modelveld, geen satellietfoto; neerslag is een verwachting, geen gemeten radar.</p>
+      <p>De fijne wolkentextuur illustreert de bewolkingsgraad. Afzonderlijke wolkjes onder 9 km zijn geen extra voorspelde details. Zet de textuur uit bij Kaartlagen om het oorspronkelijke, glad weergegeven modelveld te bekijken. Neerslag, temperaturen en wind gebruiken uitsluitend de modelwaarden.</p>
+      <p>ECMWF levert uurstappen tot +90 uur, drie-uursstappen tot +144 uur en daarna zes-uursstappen. De tijdlijn gebruikt die echte tijdstappen. Neerslag wordt gedeeld door de lengte van het voorafgaande interval en toont dus de <strong>gemiddelde intensiteit in mm/u</strong>. Verder inzoomen voegt geen modelresolutie toe.</p>
+      <p>Kaartopzet naar het WetterOnline-voorbeeld, met eigen vormgeving en eigen databron. De eigen radar-, satelliet- en bliksemproducten van WetterOnline maken geen deel uit van deze kaart.</p>
+      <p class="sources">Data: <a href="https://open-meteo.com/en/docs/ecmwf-api" target="_blank" rel="noopener">ECMWF via Open-Meteo</a> · <a href="https://github.com/open-meteo/open-data" target="_blank" rel="noopener">AWS Open Data</a> · CC BY 4.0.<br>Kaart: Esri World Imagery, Natural Earth. Plaatsen: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0). Software: Leaflet en Open-Meteo (GPL-2.0).</p>
+      <p class="key-help">Sneltoetsen: ← / → tijdstap · spatie afspelen · Esc sluiten.</p>
+    </dialog>
+    <noscript>Schakel JavaScript in om de ECMWF-weerradar te gebruiken.</noscript>
+  </main>
+  <script type="module" src="./assets/app.js?v=538776d86a40"></script>
+</body>
+</html>

@@ -16,6 +16,17 @@ for f in *.html *.json *.js *.css *.svg *.ico *.png *.txt *.webp *.ttf; do
   fi
 done
 
+# Zelfstandige ECMWF-kaart: assets, broncode en licenties blijven samen.
+# Afhankelijkheden en lokale caches horen niet in de gepubliceerde website.
+if [ -d ecmwf_weerradar ]; then
+  while IFS= read -r -d '' f; do
+    mkdir -p "$STAGE/$(dirname "$f")"
+    cp "$f" "$STAGE/$f"
+  done < <(find ecmwf_weerradar \
+    -type d \( -name node_modules -o -name .git -o -name __pycache__ \) -prune -o \
+    -type f ! -name .DS_Store ! -name '*.pyc' -print0)
+fi
+
 # Pas vervangen wanneer de volledige staging-build geslaagd is. Hiermee
 # verdwijnen ook oude bestanden die niet meer in de bronroot bestaan.
 rm -rf "$OUTPUT"

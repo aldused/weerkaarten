@@ -1,0 +1,11 @@
+import { build } from 'esbuild';
+import { mkdir, copyFile, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+await mkdir('assets', { recursive: true });
+await build({ entryPoints: ['app.mjs'], bundle: true, minify: true, format: 'esm', platform: 'browser', target: ['es2022'], outfile: 'assets/app.js', legalComments: 'linked' });
+await build({ entryPoints: ['weather-worker.mjs'], bundle: true, minify: true, format: 'esm', platform: 'browser', target: ['es2022'], outfile: 'assets/weather-worker.js', legalComments: 'linked' });
+await writeFile('assets/map.css',(await readFile('node_modules/leaflet/dist/leaflet.css','utf8')).replace(/\r\n/g,'\n').replace(/[ \t]+$/gm,''));
+await copyFile('node_modules/@openmeteo/file-format-wasm/dist/om_reader_wasm.web.wasm', 'assets/om_reader_wasm.web.wasm');
+const version=createHash('sha256').update(await readFile('assets/app.js')).update(await readFile('assets/weather-worker.js')).update(await readFile('style.css')).digest('hex').slice(0,12);
+await writeFile('index.html',(await readFile('index.html','utf8')).replace(/\.\/assets\/app\.js(?:\?v=[^"]*)?/g,`./assets/app.js?v=${version}`).replace(/\.\/style\.css(?:\?v=[^"]*)?/g,`./style.css?v=${version}`));
+console.log('ECMWF-weerradar gebouwd.');
