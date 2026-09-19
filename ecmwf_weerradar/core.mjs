@@ -1,3 +1,4 @@
+import {intervalRate} from './precipitation.mjs';
 export const DATA_ROOT = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
 export const EUROPE = [-26, 29, 46, 73];
 export const HOUR = 3600000;
@@ -50,7 +51,7 @@ export function nearestIndex(frames, time) {
   return frames.reduce((best, f, i) => Math.abs(f.time - time) < Math.abs(frames[best].time - time) ? i : best, 0);
 }
 export function hourlyRate(amount, hours) {
-  return Number.isFinite(amount) && Number.isFinite(hours) && hours > 0 ? Math.max(0, amount) / hours : NaN;
+  return [1,3,6].includes(hours) ? intervalRate(amount,hours) : NaN;
 }
 const normalizedFields = new WeakMap();
 // OM FloatArray decoding already applies compression scale/offset. Keep native
@@ -64,7 +65,7 @@ export function normalizeFieldData(data, variable, hours) {
   if (previous) throw new Error('ECMWF-veld heeft al een andere eenheid of tijdstap');
   if (accumulation) {
     if (![1, 3, 6].includes(hours)) throw new Error('Ongeldig neerslaginterval');
-    for (let i = 0; i < data.values.length; i++) data.values[i] = hourlyRate(data.values[i], hours);
+    for (let i = 0; i < data.values.length; i++) data.values[i] = intervalRate(data.values[i], hours);
     if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor *= hours;
   } else if (variable === 'wind_u_component_10m') {
     // weather-map-layer derives speed + meteorological direction from raw u/v.

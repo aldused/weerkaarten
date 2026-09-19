@@ -28,7 +28,7 @@ test('1/3/6h backward sums have the same rain rate and conserve totals',()=>{
   assert.ok(Number.isNaN(hourlyRate(3,0)));
   assert.ok(Number.isNaN(hourlyRate(Infinity,3)));
   assert.ok(Number.isNaN(hourlyRate(3,Infinity)));
-  assert.equal(hourlyRate(-.001,1),0);
+  assert.ok(Number.isNaN(hourlyRate(-.001,1)));
 });
 test('reject missing native steps instead of changing precipitation accumulation hours',()=>{
   for(const missingLead of [16,91,93,147,150]){

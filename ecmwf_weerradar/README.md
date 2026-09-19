@@ -44,6 +44,8 @@ Bij de eerste opening worden afgeronde weerlagen direct zichtbaar; het laadberic
 
 ## Controle
 
+De neerslagcontrole staat in [PRECIPITATION-VALIDATION-2026-09-19.md](PRECIPITATION-VALIDATION-2026-09-19.md): originele ECMWF-GRIB, twee modelruns, de eigen Weerlab-API-bestanden, rungebonden Open-Meteo-punten en kaartpixels. Regen- en sneeuwlegenda gebruiken dezelfde grenswaarden als de renderer; de grens 0,05 mm/u wordt vóór kleurafronding toegepast. Puntinformatie vermeldt de exacte periode, tijdzone en totale millimeters.
+
 De laatste menu-, tijdkeuze- en snelheidscontrole staat in [MENU-VALIDATION-2026-09-19.md](MENU-VALIDATION-2026-09-19.md). `timeline.mjs` groepeert uitsluitend de originele UTC-tijdstappen in Nederlandse kalenderdagen; dubbele uren bij wintertijd krijgen een expliciete UTC-offset.
 
 `npm test` controleert de volledige horizon, ontbrekende stappen, zomer-/wintertijd, eenheidsconversies, cache- en annuleringsgedrag, wolkenweergave en exacte roosterinterpolatie. `node tests/validate-live.mjs` leest de echte OM-bron op de eerste stap, een lokale middernacht, een drie-uursstap en de laatste zes-uursstap. Het vergelijkt de ruwe velden en u/v-componenten met dezelfde conversie en interpolatie als de kaart. Het resultaat staat in `tests/live-validation.json`.

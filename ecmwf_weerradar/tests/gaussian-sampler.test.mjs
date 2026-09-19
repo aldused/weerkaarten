@@ -74,3 +74,12 @@ test('geometry cache shares variables and times but respects data ranges and bou
   clearGaussianSamplerCache();
   assert.equal(gaussianSamplerCacheStats().bytes,0);
 });
+
+test('precipitation interpolation does not create negative rain, overshoot maxima or paint a wholly dry field',()=>{
+ const field=makeField(native,[-180,44,180,60]),coords={z:6,x:31,y:21};
+ for(const max of [0,.1,8]){
+  for(let i=0;i<field.values.length;i++)field.values[i]=(i%19<4)?max:0;
+  const sampler=createGaussianTileSampler(field.grid,field.values,coords,128);
+  for(let y=0;y<128;y++)for(const value of sampler.row(y))assert.ok(value>=0&&value<=max+1e-6,`${value} outside 0..${max}`);
+ }
+});

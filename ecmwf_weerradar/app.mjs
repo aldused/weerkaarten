@@ -1,3 +1,5 @@
+import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
+import {precipitationPeriod} from './precipitation.mjs';
 import { forecastLabel, groupForecastDays } from './timeline.mjs';
 import * as mapEngine from './map.mjs';
 import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, domainOptions, GridFactory, getRanges } from '@openmeteo/weather-map-layer';
@@ -393,11 +395,18 @@ function syncUI(){
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
   else if(f.mode==='wind'){title='Wind';unit='km/u';numbers=['0','20','40','60','100+'];gradient='linear-gradient(to right,#66c2d0,#53ca89,#e9cc48,#ee9131,#bc3379)';}
-  else{title='Neerslag';unit='mm/u';numbers=['0,05','0,3','1','4','16+'];gradient='';}
+  else{const rainLegend=precipitationLegend();title='Totale neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;
   legend.querySelector('.legend-colors').style.background=gradient;
   legend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=numbers[i]);
+  const snowLegend=$('snow-legend');
+  snowLegend.hidden=!f.ids.some(id=>id.endsWith('snowfall_water_equivalent'));
+  if(!snowLegend.hidden){
+    const snow=precipitationLegend('snowfall_water_equivalent');
+    snowLegend.querySelector('.legend-colors').style.background=snow.gradient;
+    snowLegend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=snow.labels[i]);
+  }
 }
 function stopPlayback(){playing=false;clearTimeout(playTimer);icon($('play'),'play');$('play').setAttribute('aria-label','Animatie afspelen');}
 function scheduleNext(){clearTimeout(playTimer);playTimer=setTimeout(()=>{if(playing)requestFrame((wanted+1)%frames.length);},Number($('speed').value));}
@@ -481,9 +490,13 @@ function updatePoint(fetchMissing=true){
   const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','km/u',0]];
   for(const [variable,label,unit,digits] of entries){
     const value=sample(current.samples[variable],p.lat,p.lng),el=document.createElement('div'),strong=document.createElement('strong'),small=document.createElement('small');
-    strong.textContent=Number.isFinite(value)?`${value.toLocaleString('nl-NL',{maximumFractionDigits:digits})} ${unit}`:'—';small.textContent=label;el.append(strong,small);values.append(el);
+    strong.textContent=Number.isFinite(value)?`${variable==='precipitation'&&value>0&&value<PRECIPITATION_THRESHOLD?'<'+PRECIPITATION_THRESHOLD.toLocaleString('nl-NL'):value.toLocaleString('nl-NL',{maximumFractionDigits:digits})} ${unit}`:'—';small.textContent=label;el.append(strong,small);values.append(el);
   }
-  $('point-note').textContent=`Rooster circa 9 km. Neerslag gemiddeld over ${fmt(current.time-current.hours*HOUR,{hour:'2-digit',minute:'2-digit'})}–${fmt(current.time,{hour:'2-digit',minute:'2-digit'})}.`;
+  const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
+  const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
+  const dateOptions={day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZoneName:'short'};
+  $('point-note').textContent=`Tijdvak: ${fmt(period.start,dateOptions)} – ${fmt(period.end,dateOptions)}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}Rooster circa 9 km.`;
+  Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);
     if(missing.length)Promise.allSettled(missing.map(async v=>{const field=await readField(frame.url,v);if(current===frame)frame.samples[v]=field;})).then(()=>{if(current===frame&&selectedPoint===p)updatePoint(false);});
