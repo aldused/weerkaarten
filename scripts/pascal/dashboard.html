@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PASCAL — kansen extreem weer per provincie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --fg:#0f172a; --muted:#64748b; --line:#e3e8ef; --bg:#f6f8fb;
+  --panel:#fff; --accent:#00205b; --accent-strong:#0b3a8a;
+  --chip:#f6f8fb; --chip-hover:#eef2f7;
+  --sans:"DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono:"DM Mono", ui-monospace, monospace;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; padding:0; }
+body { font-family:var(--sans);
+       background:var(--bg); color:var(--fg); font-size:13px; line-height:1.4;
+       font-feature-settings:"ss01","cv11"; }
+.topbar { background:#fff; border-bottom:1px solid var(--line);
+          padding:10px 18px; display:flex; align-items:center; gap:14px; }
+.topbar .brand { font-size:15px; font-weight:700; letter-spacing:-0.01em; }
+.topbar .meta { color:var(--muted); font-size:12px; }
+.topbar .spacer { flex:1; }
+.topbar .mockup-badge { background:#fef3c7; color:#92400e; font-size:11px;
+                       padding:3px 8px; border-radius:4px; font-weight:600; }
+
+.dash { display:grid; grid-template-columns: 230px 1fr 320px;
+        gap:14px; padding:14px; max-width:1600px; margin:0 auto;
+        align-items:stretch; }
+nav.criteria, section.mapwrap, aside.details { height:100%; }
+section.mapwrap { display:flex; flex-direction:column; }
+section.mapwrap #mapHost { flex:1; display:flex; align-items:center; justify-content:center; }
+@media (max-width:1200px){ .dash{ grid-template-columns:200px 1fr; }
+  aside.details{grid-column:1/-1;} }
+@media (max-width:800px){ .dash{ grid-template-columns:1fr; }
+  nav.criteria{display:flex;flex-wrap:wrap;}}
+
+/* Criteria chip stack */
+nav.criteria { background:var(--panel); border:1px solid var(--line);
+              border-radius:10px; padding:6px; display:flex; flex-direction:column; gap:2px; }
+nav.criteria h3 { margin:4px 8px 6px; font-size:11px; font-weight:600;
+                  text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); }
+.crit-chip { display:flex; align-items:center; gap:8px; padding:8px 10px;
+             border-radius:7px; cursor:pointer; background:var(--chip); border:1px solid transparent;
+             transition:background .1s, border-color .1s; width:100%; color:inherit;
+             font:inherit; text-align:left; appearance:none; }
+.crit-chip:hover { background:var(--chip-hover); }
+.crit-chip.active { background:#eff6ff; border-color:var(--accent); }
+.crit-chip .ic { width:24px; height:24px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.crit-chip .ic svg { width:22px; height:22px; }
+.crit-chip .lbl { flex:1; font-size:12px; font-weight:500; }
+.crit-chip .pk { font-size:11px; font-weight:700; color:var(--muted);
+                 font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
+.crit-chip.active .pk { color:var(--accent-strong); }
+
+/* Map panel */
+section.mapwrap { background:var(--panel); border:1px solid var(--line);
+                 border-radius:10px; padding:14px 18px; }
+.maphead { display:flex; align-items:baseline; gap:14px; margin-bottom:6px; }
+.maphead .title { font-size:17px; font-weight:700; letter-spacing:-0.01em; }
+.maphead .subtitle { color:var(--muted); font-size:12px; }
+.maphead .dayBig { margin-left:auto; font-size:20px; font-weight:700;
+                   font-variant-numeric:tabular-nums; color:var(--accent-strong); }
+.maphead .dayBig small { font-size:11px; font-weight:500; color:var(--muted); margin-left:4px; }
+
+#mapSvg { width:100%; max-width:100%; max-height:640px; display:block; margin:0 auto; }
+#mapSvg path.prov { stroke:#4b5563; stroke-width:0.5; cursor:pointer;
+                    transition:stroke-width .1s, filter .1s; }
+#mapSvg path.prov:hover { stroke:#000; stroke-width:1.2; }
+#mapSvg path.prov.selected { stroke:#000; stroke-width:1.8; filter:drop-shadow(0 0 4px rgba(0,0,0,0.35)); }
+#mapSvg text.lbl { font-size:9px; fill:#1f2937; text-anchor:middle; pointer-events:none;
+                   paint-order:stroke; stroke:#fff; stroke-width:2.6; stroke-linejoin:round; }
+#mapSvg text.pct { font-size:10px; font-weight:700; fill:#111; }
+
+/* Day scrubber */
+.scrub { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+.scrub-row { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.scrub-btn { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:#f3f4f6;
+             border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#374151; }
+.scrub-btn:hover { background:#e5e7eb; }
+.scrub-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.scrub-ticks { display:flex; height:24px; }
+.scrub-tick { flex:1; height:24px; border-radius:3px; margin:0 1px;
+              cursor:pointer; transition:transform .1s; position:relative; }
+.scrub-tick:hover { transform:scaleY(1.12); }
+.scrub-tick.active { outline:2px solid var(--accent-strong); outline-offset:0; }
+.scrub-labels { display:flex; font-size:10px; color:var(--muted);
+                 font-variant-numeric:tabular-nums; }
+.scrub-labels span { min-width:0; flex:1; text-align:center; margin:0 1px; }
+
+.legend { display:flex; align-items:center; gap:2px; margin-top:8px;
+          font-size:10.5px; color:var(--muted); }
+.legend span.item { display:flex; align-items:center; gap:3px; margin-right:8px; }
+.legend .sw { width:14px; height:14px; border-radius:2px; border:1px solid rgba(0,0,0,0.08); }
+
+/* Details sidebar */
+aside.details { background:var(--panel); border:1px solid var(--line);
+               border-radius:10px; padding:14px 16px; }
+aside.details h2 { margin:0 0 4px 0; font-size:15px; font-weight:700; }
+aside.details .subname { color:var(--muted); font-size:12px; margin-bottom:10px; }
+aside.details .nosel { color:var(--muted); font-size:12px; font-style:italic; }
+.spark-table { width:100%; border-collapse:collapse; font-size:12px; }
+.spark-table td { padding:4px 2px; vertical-align:middle; }
+.spark-table td.ic { width:22px; }
+.spark-table td.ic svg { width:18px; height:18px; }
+.spark-table td.lb { padding-left:4px; font-size:11.5px; }
+.spark-table td.sp { width:96px; padding:0 4px; }
+.spark-table td.pk { width:32px; text-align:right; font-weight:700;
+                     font-variant-numeric:tabular-nums; }
+.spark-table tr:hover { background:#f9fafb; }
+.spark-table tr.hl { background:#ecfdf5; }
+.spark svg { display:block; }
+
+.summary-badges { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+.badge { font-size:10.5px; padding:3px 7px; border-radius:999px;
+         background:#f3f4f6; color:#374151; font-weight:600; }
+.badge.hot { background:#fef2f2; color:#b91c1c; }
+
+footer.foot { max-width:1600px; margin:0 auto; padding:4px 20px 18px;
+              color:var(--muted); font-size:11px; }
+
+/* ── Heatmap-sectie (naast kaart) ─────────────────────── */
+.heatmap-wrap { max-width:1600px; margin:0 auto; padding:8px 20px 28px; }
+.heatmap-wrap > h2 { font-size:15px; font-weight:700; color:var(--fg); margin:0 0 4px; letter-spacing:-0.01em; }
+.heatmap-wrap > .hm-intro { font-size:12px; color:var(--muted); margin-bottom:12px; }
+.crit-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; align-items:center; }
+.crit-group { display:flex; gap:3px; align-items:center; }
+.crit-group-lbl {
+  font-size:10px; font-weight:700; letter-spacing:0.08em;
+  color:var(--muted); text-transform:uppercase; padding:0 6px 0 8px;
+}
+.crit-tab {
+  padding:6px 12px; border-radius:999px;
+  background:var(--panel); border:1px solid var(--line);
+  font-size:12px; color:var(--fg); cursor:pointer;
+  font-family:inherit; font-weight:600;
+  transition:background 0.12s, border-color 0.12s;
+}
+.crit-tab:hover { background:var(--chip-hover); border-color:#94a3b8; }
+.crit-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.heatmap {
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:12px; padding:18px 20px;
+  box-shadow:0 1px 2px rgba(15,23,42,0.04); overflow-x:auto;
+}
+.heatmap-head { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+.heatmap-head h3 { margin:0; font-size:14px; font-weight:700; color:var(--fg); letter-spacing:-0.01em; }
+.heatmap-head .sub { font-size:12px; color:var(--muted); margin-top:3px; }
+.legend-mini { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+.legend-bar {
+  width:160px; height:10px; border-radius:999px;
+  background:linear-gradient(90deg, #f1f5f9 0%, #e0f2fe 20%, #bae6fd 40%, #fbbf24 60%, #f97316 80%, #dc2626 100%);
+}
+.hm-grid { display:grid; grid-template-columns:150px repeat(var(--hm-days,14), 1fr); gap:3px; min-width:900px; }
+.hm-dayhead {
+  font-size:10px; text-align:center; color:var(--muted);
+  padding:4px 2px; line-height:1.2; font-variant-numeric:tabular-nums;
+}
+.hm-dayhead b { color:var(--fg); font-weight:700; display:block; font-size:13px; }
+.hm-dayhead.today b { color:var(--accent); }
+.hm-prov {
+  padding:6px 10px; font-size:12.5px; font-weight:600; color:var(--fg);
+  display:flex; align-items:center; gap:6px; border-radius:6px; background:#f6f8fb;
+}
+.hm-prov .abbr { font-size:9.5px; color:var(--muted); font-weight:700; letter-spacing:0.05em; }
+.hm-cell {
+  height:28px; border-radius:5px; display:grid; place-items:center;
+  font-size:11px; font-weight:700; color:var(--fg);
+  font-variant-numeric:tabular-nums; cursor:pointer; transition:transform 0.1s;
+}
+.hm-cell:hover { transform:scale(1.08); box-shadow:0 2px 6px rgba(15,23,42,0.15); z-index:2; }
+.hm-cell.today { outline:2px solid var(--accent); }
+.hm-cell.active { outline:2px solid #0f172a; }
+.stale-banner { display:none; margin:10px 14px 0; padding:10px 14px; border-radius:8px;
+                border:1px solid #dc2626; background:#fef2f2; color:#991b1b;
+                font-weight:700; text-align:center; }
+.stale-banner.show { display:block; }
+
+/* Production overview: one phenomenon, threshold, model and area selection. */
+.topbar{justify-content:space-between;align-items:flex-start;padding:18px 24px;gap:20px}
+.topbar .brand{font-size:22px}.experiment{font-size:11px;color:#536479;font-weight:500;margin-left:8px}
+.method{max-width:660px;font-size:13px}.method summary{cursor:pointer;color:#125c9b;font-weight:600;text-align:right}.method p{line-height:1.65}
+.controls{display:flex;align-items:center;gap:20px;flex-wrap:wrap;max-width:1600px;margin:auto;padding:18px 14px 8px}
+.controls label{display:flex;gap:8px;align-items:center;font-weight:600}.controls select{font:inherit;padding:9px 12px;border:1px solid #cbd5e1;border-radius:7px;background:white;color:var(--fg);max-width:100%}
+#viewNote{color:var(--muted);font-size:12px}.meaning{max-width:1572px;margin:6px auto 0;padding:10px 14px;background:#eaf2f8;border-radius:6px;color:#254662}
+.dash{grid-template-columns:210px minmax(0,1fr) 380px;align-items:start}
+nav.criteria,section.mapwrap,aside.details{height:auto;min-width:0}
+nav.criteria{padding:12px;gap:5px}.group-button{font:inherit;text-align:left;padding:11px 10px;border:0;border-radius:6px;background:transparent;color:var(--fg);cursor:pointer}.group-button.active{background:#e6f0f8;color:#0b5184;font-weight:700}.group-button:hover{background:#f0f5f9}
+nav.criteria .threshold-title{margin-top:18px}.nav-help,.detail-note{font-size:12px;color:var(--muted);line-height:1.55}
+.crit-chip .lbl{font-size:12px}.crit-chip{padding:10px 8px}.crit-chip .pk{font-size:12px}
+#mapSvg{max-height:480px}#mapSvg .pct{font-size:9px}.legend{flex-wrap:wrap;gap:5px}.maphead{flex-wrap:wrap}.maphead .title{font-size:19px}.maphead .dayBig{font-size:19px;white-space:nowrap}
+.selected-chance{font-size:44px;font-weight:700;color:#125c9b;line-height:1.2;margin:14px 0 6px}.selected-chance span{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:4px}
+aside.details h3{font-size:13px;margin:20px 0 8px}.models{width:100%;border-collapse:collapse;font-size:12px}.models th{text-align:left;color:var(--muted);font-size:11px}.models td,.models th{padding:10px 4px;border-bottom:1px solid var(--line);vertical-align:top}.models td:nth-child(n+2){white-space:nowrap;text-align:right}.models small{display:block;font-size:10px;color:var(--muted);font-weight:400;line-height:1.7;margin-top:4px}
+.heatmap-wrap{margin-top:8px}.heatmap{overflow:auto}.hm-grid{min-width:850px}.hm-cell{font-variant-numeric:tabular-nums}.legend-bar{background:linear-gradient(to right,#f7fbff,#9ecae1,#4292c6,#08519c,#08306b)}
+[hidden]{display:none!important}button:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #3694c9;outline-offset:2px}
+@media(max-width:1250px){.dash{grid-template-columns:180px minmax(0,1fr)}aside.details{grid-column:1/-1}.models td:first-child{width:65%}}
+@media(max-width:700px){.topbar{padding:14px;flex-direction:column}.method summary{text-align:left}.controls{gap:10px}.controls label{width:100%;display:block}.controls select{display:block;width:100%;margin-top:5px}.dash{grid-template-columns:minmax(0,1fr);padding:10px}.meaning{margin:6px 10px}.experiment{display:block;margin-left:0}.models small{font-size:11px}nav.criteria{display:block}.group-button{display:inline-block;padding:8px}.crit-chip{display:inline-flex;width:auto;margin:3px;gap:10px}.nav-help{display:none}#mapSvg{max-height:420px}.mapwrap{padding:14px!important}.scrub-row{flex-wrap:wrap}.scrub-col{flex-basis:100%}.scrub-labels{font-size:7px}.models td,.models th{padding:8px 3px}.heatmap-wrap{padding:0 10px 20px}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div><div class="brand">PASCAL <span class="experiment">Weerlab · experimenteel</span></div>
+  <div class="meta">Kans dat een criterium ergens in een gebied wordt gehaald</div></div>
+  <details class="method"><summary>Berekening &amp; bronnen</summary>
+    <p>Per model: tel de ensembleleden waarin het criterium ergens in het gekozen gebied en tijdvenster optreedt; deel door het aantal leden. Nederland wordt per lid uit alle gebieden samen berekend.</p>
+    <p><b>Modelgemiddelde:</b> elk beschikbaar model telt even zwaar. <b>Naar ledenaantal:</b> modellen tellen mee naar hun ensemblegrootte. Beide mengingen zijn experimenteel en niet statistisch gekalibreerd. Meer leden betekent niet automatisch een beter model.</p>
+    <p>HARMONIE is hier het HarmonEPS-ensemble. ICON-D2 en ECMWF tellen elk eenmaal mee, ook wanneer er meerdere aanleverroutes zijn. Resolutie, bemonstering en modelrun kunnen verschillen. Met acht representatieve punten kan de Open-Meteo-route lokale gebeurtenissen missen.</p>
+    <p><b>Zicht:</b> alleen native modelzicht van HarmonEPS en ICON-D2 telt mee. De aparte IFS-MOS-mistindicatie is een handmatig begrensde classificatie van regressiekansen. Deze is geen gekalibreerde zichtkans; de 50m-indicatie is bovendien afgeleid van een 100m-regressie.</p>
+    <p><b>Convectie:</b> CAPE en regen in hetzelfde 6-uursvenster op hetzelfde modelpunt vormen een proxy. Dit percentage is geen kans op bliksem, hagel of zwaar onweer.</p>
+    <p>Lokale kalenderdagen (Europe/Amsterdam), beoordeeld op de modeltijden. Rollende regenvensters duren precies 24 uur en eindigen op de geselecteerde dag. IFS heeft stappen van 3 of 6 uur; intervalmaxima kunnen een daggrens overlappen. Alleen geldige vensters tellen mee. Een onvolledige dag, gebied of ensemble krijgt het label gedeeltelijke dekking; de kans geldt uitsluitend voor het beschikbare deel. Minimaal twee volledige leden zijn vereist. Ontbrekende waarden tellen nooit als nul.</p>
+    <p>Per lid geldt een treffer zodra minimaal één geldig rasterpunt op minimaal één beoordeelde tijdstap de drempel haalt. Eerst wordt deze OF-bewerking uitgevoerd, daarna wordt gedeeld door het aantal geldige leden. Leden met gaten worden uitgesloten; alle overblijvende leden gebruiken dezelfde beschikbare punten en tijden. Een 0% bij gedeeltelijke dekking geldt alleen voor dat beschikbare deel.</p><p>Prestatiegewichten zijn niet beschikbaar: daarvoor ontbreken onafhankelijke verificatiescores. Ledenweging is geen prestatieweging. Getoonde dekking is geen statistische betrouwbaarheid.</p>
+    <p><b>100% ergens is niet 100% overal.</b> Gebiedsbedekking uit TR-395 wordt nog niet berekend. De kaartkleuren geven percentages weer en zijn geen KNMI-waarschuwingscodes.</p>
+    <div id="sourceList"></div>
+    <p>Methodische basis: <a href="https://cdn.knmi.nl/system/data_center_publications/files/000/071/558/original/TR395.pdf" target="_blank" rel="noopener">Kees Kok, KNMI TR-395 (2022)</a>, hoofdstuk 3 en 5. De modelmix en proxycriteria zijn eigen Weerlab-keuzes.</p>
+  </details>
+</header>
+<div class="stale-banner" id="staleBanner" role="alert"></div>
+<div class="controls">
+  <label>Weergave <select id="modelView">
+    <option value="mix">Modelgemiddelde · gelijke gewichten</option>
+    <option value="ifs">ECMWF IFS-ENS</option>
+    <option value="harm">HARMONIE / HarmonEPS</option>
+    <option value="icon">ICON-D2-EPS</option>
+    <option value="pooled">Modelmix · naar ledenaantal</option>
+    <option value="fog">Mistindicatie IFS-MOS · apart signaal</option>
+  </select></label>
+  <label>Gebied <select id="areaSelect"></select></label>
+  <span id="viewNote"></span>
+</div>
+<div class="meaning" id="meaning"></div>
+
+<div class="dash">
+  <nav class="criteria" id="criteriaNav">
+    <h3>Criterium</h3>
+    <!-- chips injected -->
+  </nav>
+
+  <section class="mapwrap">
+    <div class="maphead">
+      <div>
+        <div class="title" id="mapTitle">—</div>
+        <div class="subtitle" id="mapSubtitle">—</div>
+      </div>
+      <div class="dayBig" id="mapDayBig">—<small id="mapDayWeek"></small></div>
+    </div>
+    <div id="mapHost"></div>
+    <div class="legend" id="legend"></div>
+
+    <div class="scrub">
+      <div class="scrub-row">
+        <button class="scrub-btn" id="btnPrev" title="Vorige dag">‹</button>
+        <button class="scrub-btn" id="btnPlay" title="Play/pause">▶</button>
+        <button class="scrub-btn" id="btnNext" title="Volgende dag">›</button>
+        <div class="scrub-col">
+          <div class="scrub-ticks" id="scrubTicks"></div>
+          <div class="scrub-labels" id="scrubLabels"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="details" id="details">
+    <h2 id="detName">Kies provincie</h2>
+    <div class="subname" id="detSub">Klik op een provincie in de kaart om de tijdserie per criterium te zien.</div>
+    <div id="detBody"></div>
+  </aside>
+</div>
+
+<div class="heatmap-wrap">
+  <h2>Overzicht per gebied × dag</h2>
+  <div class="hm-intro">Klik op een cel om het criterium en de dag te selecteren in de kaart hierboven.</div>
+
+  <div class="heatmap">
+    <div class="heatmap-head">
+      <div>
+        <h3 id="hmTitel">—</h3>
+        <div class="sub" id="hmSub"></div>
+      </div>
+      <div class="legend-mini"><span>0%</span><span class="legend-bar"></span><span>100%</span></div>
+    </div>
+    <div class="hm-grid" id="hmGrid"></div>
+  </div>
+</div>
+
+<footer class="foot">
+  Experimentele gebieds- en dagvensterkans volgens het p<sub>A</sub>-principe uit KNMI TR-395. Bronmix en ledenaantal verschillen per gebied, criterium en dag; dit is geen officieel waarschuwingssysteem.
+</footer>
+
+<script>
+const VIEWS = __VIEWS__;
+const DETAILS = __DETAILS__;
+let DATA = VIEWS.mix;
+const CRITERIA = __CRIT__;
+const DAYS = __DAYS__;
+const PROVS = __PROVS__;
+const GEO = __GEO__;
+const ABBR = __ABBR__;
+const META = __META__;
+const DOW_NL = ['zo','ma','di','wo','do','vr','za'];
+function parseDay(s){ const [y,m,d]=s.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function amsterdamToday(){
+  const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Europe/Amsterdam', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
+  const v = Object.fromEntries(parts.map(p => [p.type,p.value]));
+  return `${v.year}-${v.month}-${v.day}`;
+}
+function fmtPct(v){ return v == null || !Number.isFinite(v) ? 'n/b' : (v > 0 && v < 0.5 ? '<1%' : `${Math.round(v)}%`); }
+function escapeText(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function expectedModels(cid){return cid.startsWith('vis')?['harm','icon']:['ifs',...(cid==='thunder'||cid==='svr'?[]:['harm']),'icon'];}
+function missingReason(model,area,cid,day){
+  if(cid.startsWith('vis')&&model==='ifs')return 'parameter ontbreekt: IFS levert hier geen direct zicht';
+  if((cid==='thunder'||cid==='svr')&&model==='harm')return 'parameter ontbreekt: HarmonEPS 209 is bliksemindicator, geen CAPE';
+  if(model==='fog'&&!cid.startsWith('vis'))return 'mistindicator niet geschikt voor dit criterium';
+  const routes=model==='harm'?[['harm',null]]:model==='icon'?(cid.startsWith('vis')?[['dwd',null]]:[['om','icon_d2']]):model==='fog'?[['om','ecmwf_ifs025']]:[['grib',null],['om','ecmwf_ifs025']];
+  return routes.map(([route,m])=>{
+    const src=META.availability?.[route];
+    if(!src)return 'modelrun nog niet beschikbaar';
+    if(src.reason)return src.reason;
+    const i=src.days.indexOf(DAYS[day]);
+    if(i<0)return 'datum buiten verwachtingstermijn';
+    const diag=m?src.diagnostics_per_model?.[m]:src.diagnostics;
+    return diag?.[area]?.[cid]?.[i]?.reason||'parameter ontbreekt voor dit model';
+  }).filter((v,i,a)=>a.indexOf(v)===i).join('; ');
+}
+function cellInfo(area,cid,day,view=STATE.view){
+  const rows=DETAILS[area][cid][day];
+  const expected=(view==='mix'||view==='pooled')?expectedModels(cid):[view];
+  const used=expected.filter(k=>rows[k]&&Number.isFinite(rows[k].p));
+  const missing=expected.filter(k=>!used.includes(k));
+  const partial=used.length>0&&(missing.length>0||used.some(k=>rows[k].status==='partial'));
+  const status=used.length===0?'n/b':partial?'gedeeltelijke dekking':'volledige bemonsterde dekking';
+  const reasons=missing.map(k=>META.model_labels[k]+': '+missingReason(k,area,cid,day));
+  const note=used.filter(k=>rows[k].status==='partial').map(k=>META.model_labels[k]+': '+rows[k].reason);
+  const available=expectedModels(cid).filter(k=>rows[k]&&Number.isFinite(rows[k].p)).length;
+  const absent=expectedModels(cid).filter(k=>!rows[k]);
+  return {used,missing,absent,available,partial,status,text:`${status} · ${used.length}/${expected.length} modellen meegenomen. ${[...note,...reasons].join(' · ')}`};
+}
+function coverageTitle(area,cid,day){return escapeText(cellInfo(area,cid,day).text);}
+function showFreshness(){
+  const el = document.getElementById('staleBanner');
+  const ageH = (Date.now() - Date.parse(META.data_time || META.generated_at)) / 3600000;
+  if (!Number.isFinite(ageH) || ageH > META.max_age_hours){
+    el.textContent = `LET OP: PASCAL-data is verouderd (${Number.isFinite(ageH)?Math.floor(ageH)+' uur':'onbekende leeftijd'}). Niet operationeel gebruiken.`;
+    el.classList.add('show');
+  }
+}
+
+// Kleurenschaal — YlOrRd sequential
+function color(p){
+  if (p == null) return "#e5e7eb";
+  // interpolate 0..100 -> light yellow to deep red
+  const stops = [[0,[247,251,255]],[15,[222,235,247]],[30,[158,202,225]],[50,[66,146,198]],[70,[33,113,181]],[85,[8,81,156]],[100,[8,48,107]]];
+  for (let i=1;i<stops.length;i++){
+    if (p<=stops[i][0]){
+      const t = (p-stops[i-1][0])/(stops[i][0]-stops[i-1][0]);
+      const a=stops[i-1][1], b=stops[i][1];
+      return `rgb(${(a[0]+(b[0]-a[0])*t)|0},${(a[1]+(b[1]-a[1])*t)|0},${(a[2]+(b[2]-a[2])*t)|0})`;
+    }
+  }
+  return "#8c2d04";
+}
+
+// ---- Kaartprojectie (Mercator-benadering, aspect-correct)
+function project(lon, lat){
+  const lat0 = 52.2;
+  return [(lon - 3.0) * Math.cos(lat0*Math.PI/180), -(lat - 50.6)];
+}
+function computeBounds(){
+  let xs=[], ys=[];
+  const walk = c => {
+    if (typeof c[0]==='number'){ const [x,y]=project(c[0],c[1]); xs.push(x); ys.push(y); }
+    else c.forEach(walk);
+  };
+  GEO.features.forEach(f => walk(f.geometry.coordinates));
+  return {minx:Math.min(...xs), maxx:Math.max(...xs), miny:Math.min(...ys), maxy:Math.max(...ys)};
+}
+const BOUNDS = computeBounds();
+const SCALE = 100;
+function px(lon,lat){ const [x,y]=project(lon,lat); return [(x-BOUNDS.minx)*SCALE, (y-BOUNDS.miny)*SCALE]; }
+
+function pathD(feature){
+  const polys = feature.geometry.type==='Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+  let d='';
+  polys.forEach(poly => poly.forEach(ring => {
+    ring.forEach((pt,i) => { const [x,y]=px(pt[0],pt[1]); d += (i===0?'M':'L') + x.toFixed(2) + ',' + y.toFixed(2) + ' '; });
+    d += 'Z ';
+  }));
+  return d;
+}
+function ringCentroid(ring){
+  let A=0,Cx=0,Cy=0;
+  for (let i=0;i<ring.length-1;i++){
+    const [x0,y0]=project(ring[i][0],ring[i][1]);
+    const [x1,y1]=project(ring[i+1][0],ring[i+1][1]);
+    const f = x0*y1 - x1*y0;
+    A += f; Cx += (x0+x1)*f; Cy += (y0+y1)*f;
+  }
+  A *= 0.5;
+  if (A===0) return {cx:0,cy:0,area:0};
+  return {cx:Cx/(6*A), cy:Cy/(6*A), area:Math.abs(A)};
+}
+function fCentroid(feature){
+  const polys = feature.geometry.type==='Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+  let totA=0,sx=0,sy=0;
+  polys.forEach(poly=>{ const c=ringCentroid(poly[0]); totA+=c.area; sx+=c.cx*c.area; sy+=c.cy*c.area; });
+  if (totA===0) return [0,0];
+  let cx=(sx/totA-BOUNDS.minx)*SCALE, cy=(sy/totA-BOUNDS.miny)*SCALE;
+  if (feature.properties.statnaam === "Waddeneilanden") cy -= 2;
+  return [cx, cy];
+}
+const MAPW = (BOUNDS.maxx-BOUNDS.minx)*SCALE;
+const MAPH = (BOUNDS.maxy-BOUNDS.miny)*SCALE;
+
+// ---- State: start op vandaag in Amsterdam en herstel de laatste selectie.
+const todayNl = amsterdamToday();
+const defaultDayIdx = Math.max(0, DAYS.indexOf(todayNl));
+let STATE = { view: "mix", critId: CRITERIA[0].id, dayIdx: defaultDayIdx, selProv: "Nederland", playing: false, timer: null };
+try {
+  const saved = JSON.parse(sessionStorage.getItem('pascal-state') || '{}');
+  if (VIEWS[saved.view]) STATE.view = saved.view;
+  if (CRITERIA.some(c => c.id === saved.critId)) STATE.critId = saved.critId;
+  if (DAYS.includes(saved.day)) STATE.dayIdx = DAYS.indexOf(saved.day);
+  if (saved.selProv && DATA[saved.selProv]) STATE.selProv = saved.selProv;
+} catch (_) {}
+
+DATA = VIEWS[STATE.view];
+// ---- Build UI
+function buildChips(){
+  const nav = document.getElementById('criteriaNav');
+  const selected = CRITERIA.find(c => c.id === STATE.critId);
+  const groups = [...new Set(CRITERIA.map(c=>c.group))];
+  nav.innerHTML = '<h3>1 · Verschijnsel</h3>' + groups.map(group=>
+    `<button class="group-button ${selected.group===group?'active':''}" data-group="${group}" aria-pressed="${selected.group===group}">${group}${group==='Convectie'?' · proxy':''}</button>`).join('') +
+    '<h3 class="threshold-title">2 · Drempel</h3>' + CRITERIA.filter(c=>c.group===selected.group).map(c=>
+    `<button type="button" class="crit-chip ${c.id===STATE.critId?'active':''}" data-id="${c.id}" aria-pressed="${c.id===STATE.critId}"><span class="lbl">${c.label}</span><span class="pk">${fmtPct(DATA[STATE.selProv][c.id][STATE.dayIdx])}</span></button>`).join('') +
+    '<p class="nav-help">Percentages voor het gekozen gebied en de geselecteerde dag.</p>';
+  nav.querySelectorAll('[data-group]').forEach(b=>b.onclick=()=>{
+    STATE.critId = CRITERIA.find(c=>c.group===b.dataset.group).id;
+    if(STATE.view==='fog' && b.dataset.group!=='Zicht') STATE.view='mix';
+    render();
+  });
+  nav.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{STATE.critId=b.dataset.id;render();});
+}
+
+function buildMap(){
+  const paths = GEO.features.map(f => {
+    const name = f.properties.statnaam;
+    const v = DATA[name][STATE.critId][STATE.dayIdx];
+    const cls = 'prov' + (name===STATE.selProv?' selected':'');
+    return `<path class="${cls}" data-name="${name}" d="${pathD(f)}" fill="${color(v)}">
+            <title>${name}: ${fmtPct(v)} · ${coverageTitle(name,STATE.critId,STATE.dayIdx)}</title></path>`;
+  }).join('');
+  const labels = GEO.features.map(f => {
+    const [cx,cy] = fCentroid(f);
+    const n = f.properties.statnaam;
+    const v = DATA[n][STATE.critId][STATE.dayIdx];
+    return `<text class="lbl" x="${cx}" y="${cy-1}">${ABBR[n]||n}</text>
+            <text class="lbl pct" x="${cx}" y="${cy+8}">${fmtPct(v)}${cellInfo(n,STATE.critId,STATE.dayIdx).partial?'*':''}</text>`;
+  }).join('');
+  document.getElementById('mapHost').innerHTML =
+    `<svg id="mapSvg" viewBox="0 0 ${MAPW.toFixed(1)} ${MAPH.toFixed(1)}" preserveAspectRatio="xMidYMid meet">
+       ${paths}${labels}
+     </svg>`;
+  document.querySelectorAll('#mapSvg path.prov').forEach(el => {
+    el.addEventListener('click', () => { STATE.selProv = el.dataset.name; render(); });
+  });
+}
+
+function buildScrubber(){
+  const ticks = document.getElementById('scrubTicks');
+  const labels = document.getElementById('scrubLabels');
+  ticks.innerHTML=''; labels.innerHTML='';
+  DAYS.forEach((d,i)=>{
+    const v = DATA[STATE.selProv][STATE.critId][i];
+    const t = document.createElement('div');
+    t.className = 'scrub-tick' + (i===STATE.dayIdx?' active':'');
+    t.style.background = color(v);
+    t.title = `${STATE.selProv} · ${d}: ${fmtPct(v)} · ${cellInfo(STATE.selProv,STATE.critId,i).text}`;
+    t.tabIndex=0;t.setAttribute('role','button');t.setAttribute('aria-label',t.title);
+    t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();STATE.dayIdx=i;render();}};
+    t.addEventListener('click', ()=>{ STATE.dayIdx=i; render(); });
+    ticks.appendChild(t);
+    const [y,m,da] = d.split('-');
+    const dow = DOW_NL[parseDay(d).getUTCDay()];
+    const lbl = document.createElement('span');
+    lbl.innerHTML = `${dow}<br>${da}/${m}`;
+    labels.appendChild(lbl);
+  });
+}
+
+function buildLegend(){
+  const el = document.getElementById('legend');
+  el.innerHTML = 'Percentage: ' + [0,5,15,30,50,70,85].map(p =>
+    `<span class="item"><span class="sw" style="background:${color(p+0.1)}"></span>${p===0?'0':p+'%'}</span>`
+  ).join('') + '<span class="item"><span class="sw" style="background:'+color(100)+'"></span>100%</span><span class="item"><span class="sw" style="background:#e5e7eb"></span>n/b</span><span>* gedeeltelijke dekking (uitleg bij aanwijzen)</span>';
+}
+
+function sparkSvg(values, hlIdx){
+  const W=270, H=64, pad=5;
+  const x=i=>pad+(W-2*pad)*i/Math.max(1,values.length-1);
+  const y=v=>H-pad-(H-2*pad)*v/100;
+  let line='', connected=false;
+  values.forEach((v,i)=>{if(v==null){connected=false;return;} line+=(connected?' L':' M')+x(i)+','+y(v);connected=true;});
+  const points=values.map((v,i)=>v==null?'':`<circle cx="${x(i)}" cy="${y(v)}" r="${i===hlIdx?4:2}" fill="#125c9b"><title>${DAYS[i]}: ${fmtPct(v)}</title></circle>`).join('');
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Dagkansen, vaste schaal 0 tot 100 procent"><path d="${line}" fill="none" stroke="#125c9b" stroke-width="2"/>${points}</svg>`;
+}
+
+function buildDetails(){
+  const name=STATE.selProv, cid=STATE.critId, day=STATE.dayIdx;
+  const crit=CRITERIA.find(c=>c.id===cid), rows=DETAILS[name][cid][day];
+  const eligible=Object.entries(rows).filter(([k])=>k!=='fog');
+  const total=eligible.reduce((n,[k,r])=>n+r.members,0);
+  const mixView=STATE.view==='mix'||STATE.view==='pooled';
+  document.getElementById('detName').textContent=name;
+  document.getElementById('detSub').textContent=crit.label+' · '+DAYS[day];
+  const current=DATA[name][cid][day];
+  const coverage=cellInfo(name,cid,day);
+  const table=['ifs','harm','icon',...(cid.startsWith('vis')?['fog']:[])].map(k=>{
+    const r=rows[k];
+    const weight=!r||k==='fog' ? '—' : mixView ? (STATE.view==='mix'?100/eligible.length:100*r.members/total).toFixed(0)+'%' : STATE.view===k?'100%':'—';
+    return `<tr title="${escapeText(r?r.reason||'':missingReason(k,name,cid,day))}"><td><b>${META.model_labels[k]}</b><small>${r?`${r.sampling} · ${r.members}/${r.expected_members??r.members} leden${r.points!=null?` · ${r.points}/${r.expected_points} punten`:""}`:escapeText(missingReason(k,name,cid,day))}${r?`<br>${r.time_count?`${formatTime(r.time_start)}–${formatTime(r.time_end)} · ${r.time_count} stappen<br>`:''}${r.run?'Run '+formatRun(r.run):'Run onbekend'}${r.run_complete===false?' (onvolledig)':r.run_complete===true?' (compleet)':''} · opgehaald ${formatTime(r.fetched_at)}`:''}</small></td><td>${fmtPct(r?.p)}${r?.status==='partial'?'*':''}</td><td>${weight}</td></tr>`;
+  }).join('');
+  document.getElementById('detBody').innerHTML=`<div class="selected-chance">${fmtPct(current)}${coverage.partial?'*':''}<span>${STATE.view==='fog'?'mistindicatie':crit.proxy?'aandeel leden met proxycondities':'gebiedskans'}</span></div>
+    <p class="detail-note">${escapeText(coverage.text)}</p>
+    <p class="detail-note"><b>${STATE.view==='fog'?(rows.fog?'1':'0'):coverage.available} modellen beschikbaar · ${coverage.used.length} meegenomen</b>. ${coverage.absent.length?'Ontbreekt: '+coverage.absent.map(k=>META.model_labels[k]).join(', '):'Alle geschikte modellen aanwezig'}. ${coverage.partial?'Kans voor het beschikbare deel; geen volledige dag-/gebiedskans.':''} Dekking zegt niets over voorspelvaardigheid.</p><h3>Modelvergelijking</h3><table class="models"><thead><tr><th>Bron</th><th>%</th><th>Gewicht</th></tr></thead><tbody>${table}</tbody></table>
+    <p class="detail-note">${cid.startsWith('vis')?'IFS-MOS is een apart mistsignaal en telt niet mee in de zichtmix.':'Een ontbrekend model telt niet als 0%. Gewichten worden verdeeld over de beschikbare modellen.'}</p>
+    <h3>Verloop per dag</h3>${sparkSvg(DATA[name][cid],day)}<p class="detail-note">0–100% · ${DAYS[0]} → ${DAYS.at(-1)}. Gaten betekenen n/b; per dag kan de bronmix veranderen.</p>`;
+}
+
+function formatRun(value){ return formatTime(`${value.slice(0,4)}-${value.slice(4,6)}-${value.slice(6,8)}T${value.slice(8,10)}:00:00Z`); }
+function formatTime(value){
+  return new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(value));
+}
+
+function updateHead(){
+  const c = CRITERIA.find(x=>x.id===STATE.critId);
+  document.getElementById('mapTitle').textContent = c.label;
+  document.getElementById('mapSubtitle').innerHTML =
+    `${c.window}`;
+  const d = DAYS[STATE.dayIdx];
+  const dow = DOW_NL[parseDay(d).getUTCDay()];
+  const offset = Math.round((parseDay(d) - parseDay(todayNl)) / 86400000);
+  const offsetLabel = offset === 0 ? 'vandaag' : (offset > 0 ? `+${offset}d` : `${offset}d`);
+  document.getElementById('mapDayBig').innerHTML =
+    `${d.slice(8)} ${['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][parseInt(d.slice(5,7),10)]}<small>${dow} · ${offsetLabel}</small>`;
+}
+
+function refreshChipValues(){
+  document.querySelectorAll('.crit-chip').forEach(chip=>{
+    const c = chip.dataset.id;
+    const v = DATA[STATE.selProv][c][STATE.dayIdx];
+    chip.querySelector('.pk').textContent = fmtPct(v)+(cellInfo(STATE.selProv,c,STATE.dayIdx).partial?'*':'');
+    chip.title=cellInfo(STATE.selProv,c,STATE.dayIdx).text;
+    chip.classList.toggle('active', c===STATE.critId);
+  });
+}
+
+function render(){
+  DATA=VIEWS[STATE.view];
+  document.getElementById('modelView').value=STATE.view;
+  document.getElementById('areaSelect').value=STATE.selProv;
+  document.getElementById('viewNote').textContent = STATE.view==='mix'?'Elk beschikbaar model telt even zwaar':STATE.view==='pooled'?'Grotere ensembles krijgen meer gewicht':STATE.view==='fog'?'Afzonderlijke indicatie, geen zichtkans':'Eén ensemblemodel';
+  const criterion=CRITERIA.find(c=>c.id===STATE.critId);
+  document.getElementById('meaning').textContent = STATE.view==='fog'?'Mistindicatie uit een regressiemodel met handgekozen grenzen. Dit percentage is geen kans op de zichtdrempel.':criterion.proxy?'Convectieproxy: CAPE en regen in een 6-uursvenster. Dit is geen berekende kans op bliksem of zwaar onweer.':'Ergens in het gebied, op de beschikbare modeltijden. * betekent gedeeltelijke dekking; wijs een vak aan voor uitleg. Een hoge kans zegt niet welk deel van het gebied wordt getroffen.';
+  updateHead();
+  buildChips();
+  buildMap();
+  buildScrubber();
+  refreshChipValues();
+  buildDetails();
+  try { sessionStorage.setItem('pascal-state', JSON.stringify({view:STATE.view, critId:STATE.critId, day:DAYS[STATE.dayIdx], selProv:STATE.selProv})); } catch (_) {}
+}
+
+function setupPlayback(){
+  document.getElementById('btnPrev').onclick = ()=>{ STATE.dayIdx=(STATE.dayIdx-1+DAYS.length)%DAYS.length; render(); };
+  document.getElementById('btnNext').onclick = ()=>{ STATE.dayIdx=(STATE.dayIdx+1)%DAYS.length; render(); };
+  document.getElementById('btnPlay').onclick = ()=>{
+    STATE.playing = !STATE.playing;
+    document.getElementById('btnPlay').textContent = STATE.playing?'⏸':'▶';
+    if (STATE.playing){
+      STATE.timer = setInterval(()=>{ STATE.dayIdx=(STATE.dayIdx+1)%DAYS.length; render(); }, 900);
+    } else {
+      clearInterval(STATE.timer);
+    }
+  };
+}
+
+document.getElementById('areaSelect').innerHTML=['Nederland',...PROVS].map(a=>`<option>${a}</option>`).join('');
+document.getElementById('areaSelect').onchange=e=>{STATE.selProv=e.target.value;render();};
+document.getElementById('modelView').onchange=e=>{STATE.view=e.target.value;if(STATE.view==='fog'&&!STATE.critId.startsWith('vis'))STATE.critId='vis200';render();};
+document.getElementById('sourceList').innerHTML='<b>Beschikbare bronnen bij opbouw</b>'+META.sources.map(s=>`<p>${s.label}: ${s.run?'run '+formatRun(s.run):'run onbekend'}, opgehaald ${formatTime(s.fetched_at)}.</p>`).join('');
+buildChips();
+buildLegend();
+setupPlayback();
+showFreshness();
+render();
+
+// ─── Heatmap onderaan — gebruikt dezelfde DATA/DAYS/CRITERIA/ABBR ───
+function hmColor(p){ return color(p); }
+function hmInk(p){ return (p != null && p >= 50) ? "#fff" : "#0f172a"; }
+function renderHM(){
+  const crit = CRITERIA.find(c => c.id === STATE.critId);
+  document.getElementById('hmTitel').textContent = crit ? crit.label : STATE.critId;
+  document.getElementById('hmSub').innerHTML =
+    crit ? crit.window + ' · ' + document.getElementById('modelView').selectedOptions[0].text : '';
+  const today = amsterdamToday();
+  const provs = Object.keys(DATA).filter(n => n !== "Nederland");
+  let cells = [`<div class="hm-prov" style="background:transparent;padding:6px 0;font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Gebied</div>`];
+  DAYS.forEach((d,i) => {
+    const dt = parseDay(d);
+    const dagNaam = DOW_NL[dt.getUTCDay()];
+    const nr = d.slice(8);
+    const mnd = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][parseInt(d.slice(5,7),10)-1];
+    const cls = (d === today) ? "today" : (i === STATE.dayIdx ? "active" : "");
+    cells.push(`<div class="hm-dayhead ${cls}" data-day="${i}" style="cursor:pointer">${dagNaam}<b>${nr}</b><small>${mnd}</small></div>`);
+  });
+  provs.forEach(name => {
+    const vals = (DATA[name] && DATA[name][STATE.critId]) || [];
+    cells.push(`<div class="hm-prov"><span class="abbr">${ABBR[name]||''}</span>${name}</div>`);
+    vals.forEach((p, i) => {
+      const tclass = DAYS[i] === today ? "today" : (i === STATE.dayIdx ? "active" : "");
+      cells.push(`<div class="hm-cell ${tclass}" data-day="${i}" data-prov="${name}" style="background:${hmColor(p)};color:${hmInk(p)};" title="${name} · ${DAYS[i]}: ${fmtPct(p)} · ${coverageTitle(name,STATE.critId,i)}">${fmtPct(p)}${cellInfo(name,STATE.critId,i).partial?'*':''}</div>`);
+    });
+  });
+  if (DATA["Nederland"] && DATA["Nederland"][STATE.critId]) {
+    cells.push(`<div class="hm-prov" style="background:#eff6ff;border:1px solid #dbeafe;"><span class="abbr">NL</span>Nederland</div>`);
+    DATA["Nederland"][STATE.critId].forEach((p, i) => {
+      const tclass = DAYS[i] === today ? "today" : (i === STATE.dayIdx ? "active" : "");
+      cells.push(`<div class="hm-cell ${tclass}" data-day="${i}" data-prov="Nederland" style="background:${hmColor(p)};color:${hmInk(p)};border:1px solid var(--accent);" title="Nederland · ${DAYS[i]}: ${fmtPct(p)} · ${coverageTitle('Nederland',STATE.critId,i)}">${fmtPct(p)}${cellInfo('Nederland',STATE.critId,i).partial?'*':''}</div>`);
+    });
+  }
+  const hmGridEl = document.getElementById('hmGrid');
+  // Kolomtal volgt het werkelijke aantal dagen (kan < 14 zijn na trimmen van
+  // trailing dagen zonder databron), anders schuift elke rij een cel op → trap.
+  hmGridEl.style.setProperty('--hm-days', DAYS.length);
+  hmGridEl.innerHTML = cells.join('');
+  // klik op cel of header = ga naar die dag (en optioneel provincie)
+  document.querySelectorAll('#hmGrid [data-day]').forEach(el => {
+    el.tabIndex=0;el.setAttribute('role','button');
+    el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click();}};
+    el.addEventListener('click', () => {
+      STATE.dayIdx = parseInt(el.dataset.day,10);
+      if (el.dataset.prov) STATE.selProv = el.dataset.prov;
+      render(); renderHM();
+    });
+  });
+}
+renderHM();
+// patch: als de kaart render() draait, ook heatmap actief criterium updaten
+const _origRender = render;
+render = function(){ _origRender(); renderHM(); };
+
+// De hoofdrouter vraagt bij openen om verversing. Beperk dit tot eenmaal per
+// minuut om een reloadlus te voorkomen; de selectie staat in sessionStorage.
+window.addEventListener('message', event => {
+  if (event.origin !== window.location.origin || event.data?.type !== 'weerlab-refresh') return;
+  const key = 'pascal-last-router-refresh';
+  const last = Number(sessionStorage.getItem(key) || 0);
+  if (Date.now() - last < 60000) return;
+  sessionStorage.setItem(key, String(Date.now()));
+  location.reload();
+});
+</script>
+</body></html>
