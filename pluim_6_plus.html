@@ -46,13 +46,42 @@
   .runinfo{font-size:11px;color:var(--ink-3);font-weight:600;margin-left:auto}
 
   .page-wrap{padding:14px 20px;background:var(--bg)}
-  .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:hidden;position:relative;min-height:360px}
+  .method{
+    margin:10px 20px 0;background:#fff;border:1px solid var(--line);border-radius:10px;
+    padding:10px 14px;color:#324a68;font-size:12px;line-height:1.5;
+  }
+  .method summary{cursor:pointer;color:var(--brand-2);font-weight:800}
+  .method p{margin-top:8px}
+  .method code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#edf3f9;padding:1px 4px;border-radius:4px}
+  .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:auto;position:relative;min-height:360px}
+  #pageHost{min-width:0}
   .page-card svg{display:block;width:100%;height:auto}
+  .stack-bar{cursor:crosshair;outline:none}
+  .stack-bar:focus .stack-focus,.stack-bar:hover .stack-focus{stroke:#0077b6;stroke-width:4;fill-opacity:.08}
+  .chart-tooltip{
+    position:fixed;z-index:1000;max-width:min(330px,calc(100vw - 20px));pointer-events:none;
+    background:#082d52;color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:9px;
+    box-shadow:0 10px 28px rgba(0,32,91,.28);padding:10px 12px;font-size:12px;line-height:1.45;
+    opacity:0;transform:translateY(4px);transition:opacity .1s ease,transform .1s ease;
+  }
+  .chart-tooltip.zichtbaar{opacity:1;transform:none}
+  .chart-tooltip strong{display:block;font-size:13px;margin-bottom:3px}
+  .chart-tooltip .tip-row{display:flex;justify-content:space-between;gap:16px}
+  .chart-tooltip .tip-row span:last-child{font-variant-numeric:tabular-nums;font-weight:700}
+  .mobile-scroll-hint{display:none}
   .loader{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(247,250,255,0.92);z-index:20}
   .loader.verborgen{display:none}
   .spinner{width:38px;height:38px;border:4px solid #dce9f7;border-top-color:#0067cc;border-radius:50%;animation:draaien 0.8s linear infinite}
   @keyframes draaien{to{transform:rotate(360deg)}}
   .err{color:#cc2222;font-size:13px;font-weight:600;text-align:center;padding:0 20px}
+  @media (max-width:800px){
+    .header-bg,.page-wrap{padding-left:8px;padding-right:8px}
+    .toolbar,.method{margin-left:8px;margin-right:8px}
+    .toolbar{gap:8px}.runinfo{width:100%;margin-left:0}
+    .page-card svg{width:2400px;max-width:none}
+    .page-card{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+    .mobile-scroll-hint{display:block;margin:10px 12px -4px;color:#526984;font-size:11px;font-weight:700;text-align:center}
+  }
 </style>
 <link rel="stylesheet" href="pluim-presentatie.css?v=20260910">
 </head>
@@ -62,7 +91,7 @@
   <div class="header">
     <div>
       <div class="header-titel">📊 Ensemble 6 pluim+</div>
-      <div class="header-sub">Bewolking (fan + categorieën) · Windrichting · Onweer · 850/500 hPa waar beschikbaar · native 3/6-uurs modelstappen</div>
+      <div class="header-sub">Schaduwgevende en totale bewolkingskansen · Windrichting · Onweer · 850/500 hPa waar beschikbaar · native modelstappen</div>
     </div>
     <div class="header-rechts">
       <div class="datum" id="hdrDatum">—</div>
@@ -71,6 +100,12 @@
     </div>
   </div>
 </div>
+
+<details class="method">
+  <summary>Berekening bewolkingskansen en gebruikte lagen</summary>
+  <p><strong>Totale bewolking</strong> gebruikt per ECMWF IFS-ENS 0,25°-lid rechtstreeks <code>cloud_cover</code> (totale atmosferische bedekkingsgraad). <strong>Schaduwgevende bewolking</strong> gebruikt <code>cloud_cover_low</code> en <code>cloud_cover_mid</code>. Voor IFS worden die API-lagen bepaald uit relatieve vochtigheid op respectievelijk 1000/925/850 hPa (laag en mist, tot circa 3 km) en 700/500 hPa (midden, circa 3–8 km). <code>cloud_cover_high</code> en de onderliggende 300/250/200 hPa-lagen worden bewust niet meegenomen. Omdat ECMWF/Open-Meteo geen rechtstreekse schaduwparameter aanbiedt, worden laag en midden per lid overlap-gecorrigeerd gecombineerd als <code>100 × [1 − (1−laag/100) × (1−midden/100)]</code>. Dit is een random-overlapbenadering: lagen worden niet simpel opgeteld en ook niet met alleen het maximum samengevat.</p>
+  <p>De klassen zijn centraal vastgelegd als 0–&lt;20, 20–&lt;40, 40–&lt;60, 60–&lt;80 en 80–100%. Exact 20% valt dus in “Licht bewolkt”. Alleen geldige leden tellen mee; een ontbrekende waarde wordt nooit 0%. Als laag of midden ontbreekt, is schaduwgevende bewolking voor dat lid en tijdstip niet beschikbaar.</p>
+</details>
 
 <div class="toolbar">
   <span class="lbl" id="lblStation">Station</span>
@@ -81,11 +116,12 @@
   <span id="plaatsFout" style="font-size:11px;color:#cc2222;font-weight:600"></span>
   <span class="lbl">Update</span>
   <button class="btn" id="btnRefresh">🔄 Vernieuw</button>
-  <button class="btn btn-primair" id="btnPng">📥 Download PNG (A4 landscape)</button>
+  <button class="btn btn-primair" id="btnPng">📥 Download PNG</button>
   <span class="runinfo" id="runinfo"></span>
 </div>
 
 <div class="page-wrap">
+  <div class="mobile-scroll-hint">↔ Veeg horizontaal voor de volledige tijdlijn en Y-as</div>
   <div class="page-card" id="pageCard">
     <div class="loader" id="loader">
       <div class="spinner"></div>
@@ -94,9 +130,11 @@
     <div id="pageHost"></div>
   </div>
 </div>
+<div class="chart-tooltip" id="chartTooltip" role="status" aria-live="polite"></div>
 
-<script src="pluim_run_switcher_48ffbf926db6.js" data-required="cloud_cover,wind_direction_10m"></script>
+<script src="pluim_run_switcher_48ffbf926db6.js" data-required="cloud_cover,cloud_cover_low,cloud_cover_mid,wind_direction_10m"></script>
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
+<script src="pluim_cloud_probability.js?v=20260919-cloud-probability"></script>
 <script>
 const STATIONS = [
   { name:"Rotterdam",        lat:51.9244, lon:4.4777 },
@@ -125,6 +163,7 @@ const C_GREEN="#2e8b3e", C_BLACK="#1a1a1a", C_RED="#cc0000", C_DARKRED="#8b1414"
 const C_NACHT="#f1f2f3", C_GRID="#dfe3e6", C_AXIS="#333";
 
 let pageSvgString = "";
+let activeModel = null;
 
 const OM_PROXY_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
   ? 'https://om.weerlab.nl/om'
@@ -286,7 +325,7 @@ function nlDate(d, langDay=true) {
 }
 function nlShortDM(d) { return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 
-const SIX_PLUS_CORE_VARIABLES = 'cloudcover,winddirection_10m';
+const SIX_PLUS_CORE_VARIABLES = 'cloud_cover,cloud_cover_low,cloud_cover_mid,wind_direction_10m';
 const SIX_PLUS_OPTIONAL_VARIABLES = 'cape,temperature_850hPa,temperature_500hPa';
 
 async function fetchEnsemble(lat, lon, runMeta, force = false, edgeFresh = false, variables = SIX_PLUS_CORE_VARIABLES) {
@@ -343,7 +382,7 @@ function mergeOptionalEnsembleFields(core, optional, variables, runMeta) {
 async function fetchHres(lat, lon, runMeta, force = false, edgeFresh = false) {
   const runInitialization = runInitializationFromMeta(runMeta);
   const url = `https://single-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
-    + `&hourly=cloudcover,winddirection_10m,cape,temperature_850hPa,temperature_500hPa`
+    + `&hourly=wind_direction_10m,cape,temperature_850hPa,temperature_500hPa`
     + `&models=ecmwf_ifs&run=${encodeURIComponent(runInitialization)}`
     + `&forecast_days=15&temporal_resolution=native&timezone=GMT`;
   try {
@@ -373,6 +412,22 @@ function boundedMembersOf(hourly, key, startIndex, cutoffLength) {
   return membersOf(hourly, key)
     .map(series => fillNaN(series.slice(startIndex, startIndex + cutoffLength)));
 }
+function pairedLayerMembers(hourly, lowKey, midKey, startIndex, cutoffLength) {
+  const low = [];
+  const mid = [];
+  const memberKeys = [
+    '',
+    ...Array.from({ length: 50 }, (_, index) => `_member${String(index + 1).padStart(2, '0')}`),
+  ];
+  for (const suffix of memberKeys) {
+    const lowValues = hourly?.[lowKey + suffix];
+    const midValues = hourly?.[midKey + suffix];
+    if (!Array.isArray(lowValues) || !Array.isArray(midValues)) continue;
+    low.push(fillNaN(lowValues.slice(startIndex, startIndex + cutoffLength)));
+    mid.push(fillNaN(midValues.slice(startIndex, startIndex + cutoffLength)));
+  }
+  return { low, mid };
+}
 function trimTrailingMissing(matrix) {
   if (!matrix.length) return matrix;
   const length = Math.max(0, ...matrix.map(series => Array.isArray(series) ? series.length : 0));
@@ -391,6 +446,14 @@ function requireMemberMatrix(matrix, label, expectedCount = 51) {
     : [];
   if (!Array.isArray(matrix) || matrix.length !== expectedCount || usable.length !== expectedCount) {
     throw new Error(`Geen geldige ${label}ensembledata beschikbaar: ${usable.length} van ${expectedCount} leden in deze modelrun.`);
+  }
+  return matrix;
+}
+function availableMemberMatrix(hourly, key, startIndex, cutoffLength, label) {
+  const matrix = boundedMembersOf(hourly, key, startIndex, cutoffLength)
+    .filter(series => Array.isArray(series));
+  if (!matrix.length || !matrix.some(series => series.some(Number.isFinite))) {
+    throw new Error(`Geen geldige ${label}ensembledata beschikbaar.`);
   }
   return matrix;
 }
@@ -433,15 +496,12 @@ function exactEnsembleMembers(hourly, key, expectedCount = 51) {
   }
   return matrix.map(series => series.slice());
 }
-function exactCommonEnsemble(hourly, keys) {
-  const matrices = {};
-  for (const key of keys) matrices[key] = exactEnsembleMembers(hourly, key);
-  return matrices;
-}
 function addLegacyFieldAliases(hourly) {
   if (!hourly || typeof hourly !== 'object') return hourly;
   const aliases = [
     ['cloud_cover', 'cloudcover'],
+    ['cloud_cover_low', 'cloudcover_low'],
+    ['cloud_cover_mid', 'cloudcover_mid'],
     ['wind_direction_10m', 'winddirection_10m'],
   ];
   for (const [canonical, legacy] of aliases) {
@@ -524,25 +584,6 @@ function circQuantile(arrs, q) {
   return out;
 }
 
-const CLOUD_CATS = [
-  {label:'Onbewolkt',     lo:0,  hi:12,  color:'#f5e642'},
-  {label:'Licht bewolkt', lo:12, hi:37,  color:'#dcd28c'},
-  {label:'Half bewolkt',  lo:37, hi:62,  color:'#a09464'},
-  {label:'Zwaar bewolkt', lo:62, hi:87,  color:'#828296'},
-  {label:'Geheel bewolkt',lo:87, hi:101, color:'#373746'},
-];
-function cloudStackSeries(members) {
-  const N = members[0].length;
-  return CLOUD_CATS.map(c => {
-    const vals = new Array(N);
-    for (let t=0; t<N; t++) {
-      const col = members.map(m => m[t]).filter(v => v!=null && !isNaN(v));
-      vals[t] = col.length ? col.filter(v => v>=c.lo && v<c.hi).length/col.length*100 : 0;
-    }
-    return { label:c.label, color:c.color, values:vals };
-  });
-}
-
 const WINDDIR_SECTORS = ['N','NO','O','ZO','Z','ZW','W','NW'];
 const WINDDIR_COLORS = {
   N:'#2c8a3a', NO:'#5ec3eb', O:'#3b46c8', ZO:'#d18ad6',
@@ -550,16 +591,27 @@ const WINDDIR_COLORS = {
 };
 function windDirStackSeries(members) {
   const N = members[0].length;
-  return WINDDIR_SECTORS.map((s, si) => {
-    const vals = new Array(N);
-    for (let t=0; t<N; t++) {
-      const col = members.map(m => m[t]).filter(v => v!=null && !isNaN(v));
-      if (!col.length) { vals[t] = 0; continue; }
-      const cnt = col.filter(d => Math.floor(((d+22.5)%360)/45) === si).length;
-      vals[t] = cnt/col.length*100;
+  const values = WINDDIR_SECTORS.map(() => new Array(N).fill(null));
+  const validCounts = new Array(N).fill(0);
+  for (let t=0; t<N; t++) {
+    const counts = WINDDIR_SECTORS.map(() => 0);
+    for (const member of members) {
+      const direction = Number(member[t]);
+      if (!Number.isFinite(direction)) continue;
+      counts[Math.floor((((direction % 360) + 360 + 22.5) % 360) / 45)]++;
+      validCounts[t]++;
     }
-    return { label:s, color:WINDDIR_COLORS[s], values:vals };
-  });
+    const percentages = WeerlabCloudProbability.percentagesFromCounts(counts, validCounts[t], 1);
+    percentages.forEach((percentage, index) => { values[index][t] = percentage; });
+  }
+  return {
+    series: WINDDIR_SECTORS.map((sector, index) => ({
+      label: sector,
+      color: WINDDIR_COLORS[sector],
+      values: values[index],
+    })),
+    validCounts,
+  };
 }
 
 function weatherCategory(code) {
@@ -625,25 +677,29 @@ function rangeOf(arrs, extra=[]) {
   return Number.isFinite(mn) && Number.isFinite(mx) ? [mn, mx] : [0, 1];
 }
 
-const PAGE_W=2970, PAGE_H=2100;
+const PAGE_W=2970, PAGE_H=2400;
 const PAGE_MARGIN_X=30, PAGE_HEADER_H=110, PAGE_FOOTER_H=40;
 const PANEL_GAP=16;
-const COLS=2, ROWS=3;
-const PANEL_W = (PAGE_W - 2*PAGE_MARGIN_X - (COLS-1)*PANEL_GAP) / COLS;
+const COLS=2;
+const FULL_PANEL_W = PAGE_W - 2*PAGE_MARGIN_X;
+const PANEL_W = (FULL_PANEL_W - (COLS-1)*PANEL_GAP) / COLS;
 const GRID_H = PAGE_H - PAGE_HEADER_H - PAGE_FOOTER_H - 2*PAGE_MARGIN_X;
-const PANEL_H = (GRID_H - (ROWS-1)*PANEL_GAP) / ROWS;
+const CLOUD_PANEL_H = 600;
+const PANEL_H = (GRID_H - 2*CLOUD_PANEL_H - 3*PANEL_GAP) / 2;
 const PM = { l: 80, r: 80, t: 92, b: 165 };
-const PLOT_W = PANEL_W - PM.l - PM.r;
-const PLOT_H = PANEL_H - PM.t - PM.b;
+const escapeSvgAttribute = value => String(value)
+  .replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75, p90, hres2, p502, yMin2, yMax2, fanColor, xMode, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, valueFmt}) {
+function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble, ctrl, hres, p10, p25, p50, p75, p90, hres2, p502, yMin2, yMax2, fanColor, xMode, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, valueFmt, stacked, unavailable, panelIndex}) {
+  const plotW = panelW - PM.l - PM.r;
+  const plotH = panelH - PM.t - PM.b;
   const timeMs = times.map(time => time.getTime());
-  const first = times[0];
-  const last = times[times.length - 1];
-  const domainStart = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate());
-  const domainEnd = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate() + 1);
+  const firstStep = timeMs.length > 1 ? timeMs[1] - timeMs[0] : 6 * HOUR_MS;
+  const lastStep = timeMs.length > 1 ? timeMs.at(-1) - timeMs.at(-2) : firstStep;
+  const domainStart = timeMs[0] - firstStep / 2;
+  const domainEnd = timeMs.at(-1) + lastStep / 2;
   const domainRange = Math.max(1, domainEnd - domainStart);
-  const timeToPx = value => ox + PM.l + ((value - domainStart) / domainRange) * PLOT_W;
+  const timeToPx = value => ox + PM.l + ((value - domainStart) / domainRange) * plotW;
   const indexToTime = index => {
     const lo = Math.max(0, Math.min(timeMs.length - 1, Math.floor(index)));
     const hi = Math.max(0, Math.min(timeMs.length - 1, Math.ceil(index)));
@@ -658,50 +714,60 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75,
   // Gebruik werkelijke timestamps: een native 6-uursstap moet tweemaal zoveel
   // horizontale ruimte krijgen als een 3-uursstap.
   const xToPx = index => timeToPx(indexToTime(index));
-  const yToPx = y => oy + PM.t + (1 - (y-yMin)/(yMax-yMin))*PLOT_H;
-  const yToPx2 = y => oy + PM.t + (1 - (y-yMin2)/(yMax2-yMin2))*PLOT_H;
+  const yToPx = y => oy + PM.t + (1 - (y-yMin)/(yMax-yMin))*plotH;
+  const yToPx2 = y => oy + PM.t + (1 - (y-yMin2)/(yMax2-yMin2))*plotH;
+  const timeLabelIndexes = [];
+  let lastTimeLabelMs = -Infinity;
+  timeMs.forEach((timestamp, index) => {
+    if (index === 0 || timestamp - lastTimeLabelMs >= 5.5 * HOUR_MS) {
+      timeLabelIndexes.push(index);
+      lastTimeLabelMs = timestamp;
+    }
+  });
   let s = '';
 
-  s += `<rect x="${ox}" y="${oy}" width="${PANEL_W}" height="${PANEL_H}" fill="#ffffff"/>`;
+  s += `<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" fill="#ffffff"/>`;
 
   const nightBlocks = computeNightBlocks(times, xMode);
   for (const [a,b] of nightBlocks) {
     const x0 = Math.max(ox+PM.l, xToPx(a));
-    const x1 = Math.min(ox+PM.l+PLOT_W, xToPx(b));
-    if (x1>x0) s += `<rect x="${x0.toFixed(1)}" y="${oy+PM.t}" width="${(x1-x0).toFixed(1)}" height="${PLOT_H}" fill="${C_NACHT}"/>`;
+    const x1 = Math.min(ox+PM.l+plotW, xToPx(b));
+    if (x1>x0) s += `<rect x="${x0.toFixed(1)}" y="${oy+PM.t}" width="${(x1-x0).toFixed(1)}" height="${plotH}" fill="${C_NACHT}"/>`;
   }
 
-  // Dunne grijze lijnen op elke echte 6-uursgrens (Weerplaza-stijl)
-  for (let tick=domainStart + 6*HOUR_MS; tick<domainEnd; tick+=6*HOUR_MS) {
-    if (new Date(tick).getUTCHours() === 0) continue;
-    const px = timeToPx(tick);
-    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+PLOT_H}" stroke="#dddddd" stroke-width="0.6"/>`;
+  // Dunne grijze lijnen op 6-uursmomenten in Nederlandse lokale tijd.
+  for (const index of timeLabelIndexes) {
+    const local = WeerlabCloudProbability.localTimeParts(times[index]);
+    if (!local) continue;
+    const px = timeToPx(timeMs[index]);
+    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="#dddddd" stroke-width="0.6"/>`;
   }
-  // Donkere lijnen op dagovergangen
-  for (let d=0; d<=nDays; d++) {
-    const tick = domainStart + d * DAY_MS;
-    if (tick > domainEnd) break;
-    const px = timeToPx(tick);
-    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+PLOT_H}" stroke="#222222" stroke-width="1.4"/>`;
+  // Donkere lijnen op Nederlandse kalenderdag-overgangen, ook rond DST.
+  for (let index=1; index<times.length; index++) {
+    const previous = WeerlabCloudProbability.localTimeParts(times[index-1]);
+    const current = WeerlabCloudProbability.localTimeParts(times[index]);
+    if (!previous || !current || previous.dateKey === current.dateKey) continue;
+    const px = timeToPx((timeMs[index-1] + timeMs[index]) / 2);
+    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="#222222" stroke-width="1.4"/>`;
   }
 
   const fmt = valueFmt || (v => Math.round(v));
   const yticks = niceTicks(yMin, yMax, 6);
   for (const yt of yticks) {
     const py = yToPx(yt);
-    s += `<line x1="${ox+PM.l}" y1="${py.toFixed(1)}" x2="${ox+PM.l+PLOT_W}" y2="${py.toFixed(1)}" stroke="${C_GRID}" stroke-width="0.7"/>`;
+    s += `<line x1="${ox+PM.l}" y1="${py.toFixed(1)}" x2="${ox+PM.l+plotW}" y2="${py.toFixed(1)}" stroke="${C_GRID}" stroke-width="0.7"/>`;
     s += `<text x="${ox+PM.l-8}" y="${(py+5).toFixed(1)}" font-size="20" text-anchor="end" fill="${C_AXIS}">${fmt(yt)}</text>`;
   }
   if (yMin2 !== undefined) {
     const yticks2 = niceTicks(yMin2, yMax2, 6);
     for (const yt of yticks2) {
       const py = yToPx2(yt);
-      s += `<text x="${ox+PM.l+PLOT_W+8}" y="${(py+5).toFixed(1)}" font-size="20" text-anchor="start" fill="#003366">${Math.round(yt)}</text>`;
+      s += `<text x="${ox+PM.l+plotW+8}" y="${(py+5).toFixed(1)}" font-size="20" text-anchor="start" fill="#003366">${Math.round(yt)}</text>`;
     }
   } else {
     for (const yt of yticks) {
       const py = yToPx(yt);
-      s += `<text x="${ox+PM.l+PLOT_W+8}" y="${(py+5).toFixed(1)}" font-size="20" text-anchor="start" fill="${C_AXIS}">${fmt(yt)}</text>`;
+      s += `<text x="${ox+PM.l+plotW+8}" y="${(py+5).toFixed(1)}" font-size="20" text-anchor="start" fill="${C_AXIS}">${fmt(yt)}</text>`;
     }
   }
 
@@ -737,8 +803,13 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75,
   const hasFiniteHres = Array.isArray(hres) && hres.some(Number.isFinite);
   const hasFiniteHres2 = Array.isArray(hres2) && hres2.some(Number.isFinite);
 
-  if (arguments[0].stacked) {
-    const series = arguments[0].stacked;
+  const stackSeries = Array.isArray(stacked) ? stacked : stacked?.series;
+  if (unavailable) {
+    s += `<rect x="${ox+PM.l}" y="${oy+PM.t}" width="${plotW}" height="${plotH}" fill="#f7f9fc"/>`;
+    s += `<text x="${ox+PM.l+plotW/2}" y="${oy+PM.t+plotH/2-8}" font-size="26" font-weight="700" text-anchor="middle" fill="#5a7090">Niet beschikbaar</text>`;
+    s += `<text x="${ox+PM.l+plotW/2}" y="${oy+PM.t+plotH/2+25}" font-size="17" text-anchor="middle" fill="#5a7090">${unavailable}</text>`;
+  } else if (stackSeries?.length) {
+    const series = stackSeries;
     const N = series[0].values.length;
     for (let i=0; i<N; i++) {
       let acc = 0;
@@ -753,9 +824,22 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75,
         const v = sv.values[i];
         if (v == null || isNaN(v) || v <= 0) continue;
         const y1 = yToPx(acc), y2 = yToPx(acc + v);
-        s += `<rect x="${px.toFixed(1)}" y="${y2.toFixed(1)}" width="${bw.toFixed(2)}" height="${(y1-y2).toFixed(1)}" fill="${sv.color}"/>`;
+        s += `<rect x="${px.toFixed(1)}" y="${y2.toFixed(1)}" width="${bw.toFixed(2)}" height="${(y1-y2).toFixed(1)}" fill="${sv.color}" stroke="#ffffff" stroke-width="1" shape-rendering="crispEdges"/>`;
         acc += v;
       }
+      if (!Number.isFinite(stacked?.validCounts?.[i]) || stacked.validCounts[i] <= 0) {
+        s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${(px+bw).toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="#9aa9b8" stroke-width="2"/>`;
+      }
+      const barAria = [
+        title,
+        WeerlabCloudProbability.formatLocalDateTime(times[i]),
+        `${stacked?.validCounts?.[i] || 0} geldige ensembleleden`,
+        ...series.map(item => `${item.label} ${Number.isFinite(item.values[i]) ? item.values[i].toFixed(1) + ' procent' : 'niet beschikbaar'}`),
+      ].join(', ');
+      s += `<g class="stack-bar" tabindex="0" role="img" aria-label="${escapeSvgAttribute(barAria)}" data-panel-index="${panelIndex}" data-time-index="${i}">`;
+      s += `<rect class="stack-focus" x="${px.toFixed(1)}" y="${oy+PM.t}" width="${bw.toFixed(2)}" height="${plotH}" fill="transparent" stroke="transparent"/>`;
+      s += `</g>`;
+      s += `<rect x="${px.toFixed(1)}" y="${oy+PM.t}" width="${bw.toFixed(2)}" height="${plotH}" fill="none" stroke="#6f7782" stroke-width="0.8" shape-rendering="crispEdges" pointer-events="none"/>`;
     }
   } else {
     if (p10 && p90) s += `<path d="${bandPath(p10,p90)}" fill="${fc}" fill-opacity="0.18" stroke="none"/>`;
@@ -767,25 +851,34 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75,
     if (hasFiniteHres2) s += `<path d="${pathOf(hres2, yToPx2)}" fill="none" stroke="#0066cc" stroke-width="2.2" stroke-dasharray="10 6" stroke-linecap="butt" stroke-linejoin="miter"/>`;
   }
 
-  s += `<rect x="${ox+PM.l}" y="${oy+PM.t}" width="${PLOT_W}" height="${PLOT_H}" fill="none" stroke="${C_AXIS}" stroke-width="1.2"/>`;
+  s += `<rect x="${ox+PM.l}" y="${oy+PM.t}" width="${plotW}" height="${plotH}" fill="none" stroke="${C_AXIS}" stroke-width="1.2"/>`;
 
-  for (let d=0; d<nDays; d++) {
-    const tick = domainStart + d*DAY_MS + 12*HOUR_MS;
-    if (tick > domainEnd) break;
-    const labelX = timeToPx(tick);
-    const dt = new Date(domainStart + d*DAY_MS);
-    const ly = oy+PM.t+PLOT_H+22;
-    s += `<text x="${labelX.toFixed(1)}" y="${ly}" font-size="20" text-anchor="middle" fill="${C_AXIS}">${DAGEN_KORT[dt.getDay()]}</text>`;
-    s += `<text x="${labelX.toFixed(1)}" y="${ly+22}" font-size="20" text-anchor="middle" fill="${C_AXIS}">${nlShortDM(dt)}</text>`;
+  const dayGroups = [];
+  times.forEach((time, index) => {
+    const local = WeerlabCloudProbability.localTimeParts(time);
+    if (!local) return;
+    const lastGroup = dayGroups.at(-1);
+    if (!lastGroup || lastGroup.key !== local.dateKey) dayGroups.push({ key:local.dateKey, local, first:index, last:index });
+    else lastGroup.last = index;
+    if (timeLabelIndexes.includes(index)) {
+      s += `<text x="${xToPx(index).toFixed(1)}" y="${oy+PM.t+plotH+18}" font-size="13" text-anchor="middle" fill="#667085">${String(local.hour).padStart(2,'0')}u</text>`;
+    }
+  });
+  for (const group of dayGroups) {
+    const labelX = (xToPx(group.first) + xToPx(group.last)) / 2;
+    const ly = oy+PM.t+plotH+43;
+    s += `<text x="${labelX.toFixed(1)}" y="${ly}" font-size="19" font-weight="700" text-anchor="middle" fill="${C_AXIS}">${group.local.weekday}</text>`;
+    s += `<text x="${labelX.toFixed(1)}" y="${ly+22}" font-size="18" text-anchor="middle" fill="${C_AXIS}">${String(group.local.day).padStart(2,'0')}-${String(group.local.month).padStart(2,'0')}</text>`;
   }
 
-  const cx = ox + PANEL_W/2;
+  const cx = ox + panelW/2;
   s += `<text x="${cx}" y="${oy+30}" font-size="30" font-weight="700" text-anchor="middle" fill="#1a1a1a">${title}</text>`;
-  s += `<text x="${cx}" y="${oy+58}" font-size="20" text-anchor="middle" fill="#444">${station}, ${datumTxt} (ENS-pluim ${runLabel})</text>`;
+  s += `<text x="${cx}" y="${oy+55}" font-size="20" font-weight="700" text-anchor="middle" fill="#344054">${station}</text>`;
+  s += `<text x="${cx}" y="${oy+78}" font-size="17" text-anchor="middle" fill="#667085">${datumTxt} · modelrun ${runLabel}</text>`;
 
-  const legY = oy + PANEL_H - 75;
-  const legItems = arguments[0].stacked
-    ? arguments[0].stacked.map(sv => ({color:sv.color, swatch:'block', txt:sv.label}))
+  const legY = oy + panelH - 75;
+  const legItems = stackSeries
+    ? stackSeries.map(sv => ({color:sv.color, swatch:'block', txt:sv.label}))
     : p502
       ? [
           {color:fc, swatch:'band', txt:"P10–P90 / P25–P75"},
@@ -800,7 +893,7 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75,
           {color:fc, swatch:'line', txt:"Mediaan (P50)"},
           ...(hasFiniteHres ? [{color:C_RED, swatch:'line', txt:"HRES 9 km"}] : []),
         ];
-  const totalW = PANEL_W - 80, itemW = totalW / legItems.length;
+  const totalW = panelW - 80, itemW = totalW / legItems.length;
   legItems.forEach((it,i) => {
     const cxL = ox + 40 + i*itemW + 12;
     if (it.swatch === 'band') {
@@ -818,19 +911,20 @@ function buildPanelSvg({ox, oy, title, ensemble, ctrl, hres, p10, p25, p50, p75,
     s += `<text x="${txtX}" y="${legY+6}" font-size="${it.swatch==='block'?16:19}" fill="#222">${it.txt}</text>`;
   });
 
-  const footY = oy + PANEL_H - 18;
+  const footY = oy + panelH - 18;
   s += `<text x="${ox+20}" y="${footY}" font-size="15" font-style="italic" fill="#666">${footLeft}</text>`;
-  s += `<text x="${ox+PANEL_W-20}" y="${footY}" font-size="15" font-style="italic" text-anchor="end" fill="#666">${footRight}</text>`;
-  s += `<rect x="${ox}" y="${oy}" width="${PANEL_W}" height="${PANEL_H}" fill="none" stroke="#aaaaaa" stroke-width="1"/>`;
+  s += `<text x="${ox+panelW-20}" y="${footY}" font-size="15" font-style="italic" text-anchor="end" fill="#666">${footRight}</text>`;
+  s += `<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" fill="none" stroke="#aaaaaa" stroke-width="1"/>`;
   return s;
 }
 
 function computeNightBlocks(times, xMode) {
   const blocks = [];
   for (let i=0; i<times.length; i++) {
-    if (times[i].getUTCHours() === 18) {
+    const local = WeerlabCloudProbability.localTimeParts(times[i]);
+    if (local?.hour === 18) {
       let j = i+1;
-      while (j < times.length && times[j].getUTCHours() !== 6) j++;
+      while (j < times.length && WeerlabCloudProbability.localTimeParts(times[j])?.hour !== 6) j++;
       const a = i;
       const b = Math.min(j, times.length);
       blocks.push([a, b]);
@@ -847,14 +941,101 @@ function buildPageSvg(model) {
   s += `<text x="${PAGE_W/2}" y="92" font-size="22" text-anchor="middle" fill="#555">ECMWF IFS-ENS · ${model.nMembers} berekeningen · ${model.panelStatus} · ${model.hresStatus} · ${model.datumTxt} (run ${model.runLabel})${model.coverageLabel ? ` · ${model.coverageLabel}` : ''}</text>`;
 
   for (let i=0; i<model.panels.length; i++) {
-    const r = Math.floor(i/COLS), c = i%COLS;
-    const ox = PAGE_MARGIN_X + c*(PANEL_W+PANEL_GAP);
-    const oy = PAGE_HEADER_H + PAGE_MARGIN_X + r*(PANEL_H+PANEL_GAP);
-    s += buildPanelSvg({ ox, oy, station: model.station, datumTxt: model.datumTxt, runLabel: model.runLabel, footLeft: model.footLeft, footRight: model.footRight, nDays: model.nDays, times: model.times, ...model.panels[i] });
+    const gridTop = PAGE_HEADER_H + PAGE_MARGIN_X;
+    let ox, oy, panelW, panelH;
+    if (i < 2) {
+      ox = PAGE_MARGIN_X;
+      oy = gridTop + i * (CLOUD_PANEL_H + PANEL_GAP);
+      panelW = FULL_PANEL_W;
+      panelH = CLOUD_PANEL_H;
+    } else {
+      const otherIndex = i - 2;
+      const row = Math.floor(otherIndex / COLS);
+      const column = otherIndex % COLS;
+      ox = PAGE_MARGIN_X + column * (PANEL_W + PANEL_GAP);
+      oy = gridTop + 2 * (CLOUD_PANEL_H + PANEL_GAP) + row * (PANEL_H + PANEL_GAP);
+      panelW = PANEL_W;
+      panelH = PANEL_H;
+    }
+    s += buildPanelSvg({ ox, oy, panelW, panelH, station: model.station, datumTxt: model.datumTxt, runLabel: model.runLabel, footLeft: model.footLeft, footRight: model.footRight, nDays: model.nDays, times: model.times, ...model.panels[i], panelIndex:i });
   }
-  s += `<text x="${PAGE_W/2}" y="${PAGE_H-15}" font-size="16" text-anchor="middle" fill="#777" font-style="italic">© Weerlab.nl · ECMWF IFS-ENS${model.hasHres ? ' + exacte IFS HRES 9 km (Single Runs)' : ''} via Open-Meteo · native modelstappen · A4 landscape</text>`;
+  s += `<text x="${PAGE_W/2}" y="${PAGE_H-15}" font-size="16" text-anchor="middle" fill="#777" font-style="italic">© Weerlab.nl · ECMWF IFS-ENS${model.hasHres ? ' + exacte IFS HRES 9 km (Single Runs)' : ''} via Open-Meteo · native modelstappen</text>`;
   s += `</svg>`;
   return s;
+}
+
+function tooltipRows(panel, timeIndex) {
+  const series = Array.isArray(panel?.stacked) ? panel.stacked : panel?.stacked?.series;
+  if (!series) return [];
+  return series.map(item => ({
+    label: item.label,
+    value: Number.isFinite(item.values?.[timeIndex]) ? item.values[timeIndex] : null,
+  }));
+}
+
+function showChartTooltip(element, clientX, clientY) {
+  const tooltip = document.getElementById('chartTooltip');
+  const panelIndex = Number(element.dataset.panelIndex);
+  const timeIndex = Number(element.dataset.timeIndex);
+  const panel = activeModel?.panels?.[panelIndex];
+  const time = activeModel?.times?.[timeIndex];
+  if (!panel || !time) return;
+  const validCount = panel.stacked?.validCounts?.[timeIndex] || 0;
+  const rows = tooltipRows(panel, timeIndex);
+  tooltip.replaceChildren();
+  const heading = document.createElement('strong');
+  heading.textContent = panel.title;
+  tooltip.appendChild(heading);
+  const moment = document.createElement('div');
+  moment.textContent = WeerlabCloudProbability.formatLocalDateTime(time);
+  tooltip.appendChild(moment);
+  const members = document.createElement('div');
+  members.style.margin = '3px 0 5px';
+  members.textContent = `${validCount} geldige ensembleleden`;
+  tooltip.appendChild(members);
+  for (const row of rows) {
+    const line = document.createElement('div');
+    line.className = 'tip-row';
+    const label = document.createElement('span');
+    label.textContent = row.label;
+    const value = document.createElement('span');
+    value.textContent = Number.isFinite(row.value)
+      ? `${row.value.toLocaleString('nl-NL', { minimumFractionDigits:1, maximumFractionDigits:1 })}%`
+      : 'niet beschikbaar';
+    line.append(label, value);
+    tooltip.appendChild(line);
+  }
+  const aria = [panel.title, WeerlabCloudProbability.formatLocalDateTime(time), `${validCount} geldige ensembleleden`]
+    .concat(rows.map(row => `${row.label} ${Number.isFinite(row.value) ? row.value.toFixed(1) + ' procent' : 'niet beschikbaar'}`))
+    .join(', ');
+  element.setAttribute('aria-label', aria);
+  tooltip.classList.add('zichtbaar');
+  const bounds = tooltip.getBoundingClientRect();
+  const left = Math.max(10, Math.min(window.innerWidth - bounds.width - 10, clientX + 14));
+  const topCandidate = clientY - bounds.height - 14;
+  const top = topCandidate >= 10 ? topCandidate : Math.min(window.innerHeight - bounds.height - 10, clientY + 14);
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${Math.max(10, top)}px`;
+}
+
+function hideChartTooltip() {
+  document.getElementById('chartTooltip').classList.remove('zichtbaar');
+}
+
+function bindChartTooltips(model) {
+  activeModel = model;
+  document.querySelectorAll('#pageHost .stack-bar').forEach(element => {
+    const positionFromElement = () => {
+      const rect = element.getBoundingClientRect();
+      showChartTooltip(element, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    };
+    element.addEventListener('pointerenter', event => showChartTooltip(element, event.clientX, event.clientY));
+    element.addEventListener('pointermove', event => showChartTooltip(element, event.clientX, event.clientY));
+    element.addEventListener('pointerleave', hideChartTooltip);
+    element.addEventListener('pointerdown', event => showChartTooltip(element, event.clientX, event.clientY));
+    element.addEventListener('focus', positionFromElement);
+    element.addEventListener('blur', hideChartTooltip);
+  });
 }
 
 // Gebruik bronmetadata voor de werkelijk geladen modelrun. ECMWF publiceert
@@ -1069,6 +1250,14 @@ async function loadAndRender(force = false, edgeFresh = false) {
     }
     pageSvgString = buildPageSvg(model);
     host.innerHTML = pageSvgString;
+    bindChartTooltips(model);
+    const pageCard = document.getElementById('pageCard');
+    if (window.matchMedia('(max-width:800px)').matches && pageCard.dataset.mobilePositioned !== '1') {
+      requestAnimationFrame(() => {
+        pageCard.scrollLeft = Math.max(0, (pageCard.scrollWidth - pageCard.clientWidth) / 2);
+        pageCard.dataset.mobilePositioned = '1';
+      });
+    }
 
     document.getElementById('hdrDatum').textContent = model.datumTxt.charAt(0).toUpperCase() + model.datumTxt.slice(1);
     document.getElementById('hdrRun').textContent = `ENS-pluim ${model.runLabel} · ${model.nMembers} leden · ${model.panelStatus}${rm ? ` · ${rm.detail}` : ''}`;
@@ -1102,22 +1291,27 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   }
   const times = candidateTimes.slice(0, cutoffLength);
 
-  const requiredVariables = ['cloudcover', 'winddirection_10m'];
+  const requiredVariables = ['cloud_cover', 'wind_direction_10m'];
   const optionalVariables = ['cape', 'temperature_850hPa', 'temperature_500hPa'];
   const unavailable = new Set(ens?.weerlab_unavailable_variables || []);
   const unavailableAliases = {
-    cloudcover: 'cloud_cover',
-    winddirection_10m: 'wind_direction_10m',
+    cloud_cover: 'cloudcover',
+    wind_direction_10m: 'winddirection_10m',
   };
   const missing = requiredVariables.filter(key => unavailable.has(key) || unavailable.has(unavailableAliases[key]));
   if (missing.length) {
     throw new Error(`De gekozen run mist ${missing.join(', ')}; er wordt niets uit een andere run gemengd.`);
   }
-  // Deze controle gaat vóór iedere statistiek: de vier kernpanelen moeten
-  // dezelfde controle + member01…member50 hebben, zonder één ontbrekend punt.
-  exactCommonEnsemble(hourly, requiredVariables);
+  // Windrichting blijft een compleet kernveld. Voor bewolking tellen we juist
+  // per tijdstip alle geldige leden, zodat ontbrekende leden nooit als 0 gelden.
+  exactEnsembleMembers(hourly, 'winddirection_10m');
 
-  const cloudMembers = requireMemberMatrix(trimTrailingMissing(boundedMembersOf(hourly, 'cloudcover', startIndex, cutoffLength)), 'bewolkings');
+  const cloudMembers = availableMemberMatrix(
+    hourly, 'cloud_cover', startIndex, cutoffLength, 'totale-bewolkings',
+  );
+  const shadowLayers = pairedLayerMembers(
+    hourly, 'cloud_cover_low', 'cloud_cover_mid', startIndex, cutoffLength,
+  );
   const wdirMembers  = requireMemberMatrix(trimTrailingMissing(boundedMembersOf(hourly, 'winddirection_10m', startIndex, cutoffLength)), 'windrichtings');
   const capeMembers = optionalMemberMatrix(
     hourly, optionalVariables[0], startIndex, cutoffLength, unavailable,
@@ -1151,6 +1345,11 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
     return Number.isFinite(value) ? value : null;
   }));
   const cloudUse = trimMatrix(cloudMembers);
+  const shadowLowUse = shadowLayers.low.length ? trimMatrix(shadowLayers.low) : null;
+  const shadowMidUse = shadowLayers.mid.length ? trimMatrix(shadowLayers.mid) : null;
+  const shadowUse = shadowLowUse && shadowMidUse
+    ? WeerlabCloudProbability.combineShadowMembers(shadowLowUse, shadowMidUse)
+    : null;
   const wdirUse = trimMatrix(wdirMembers);
   const capeUse = capeMembers ? trimMatrix(capeMembers) : null;
   const t850Use = t850Members ? trimMatrix(t850Members) : null;
@@ -1188,12 +1387,10 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
       return useTimes.map(() => null);
     }
   };
-  const cloudHres = optionalAlignHres(hr.cloudcover, 'bewolking');
   const capeHres  = optionalAlignHres(hr.cape, 'CAPE');
   const t850Hres  = optionalAlignHres(hr.temperature_850hPa, 'temperatuur 850 hPa');
   const t500Hres  = optionalAlignHres(hr.temperature_500hPa, 'temperatuur 500 hPa');
 
-  const cloudEns = cloudUse;
   const capeEns  = capeUse;
   const t850Ens  = t850Use;
   const t500Ens  = t500Use;
@@ -1201,22 +1398,28 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   const pct = (arrs, p) => percentile(arrs, p);
   const pcts = arrs => ({ p10:pct(arrs,0.1), p25:pct(arrs,0.25), p50:pct(arrs,0.5), p75:pct(arrs,0.75), p90:pct(arrs,0.9) });
 
-  const cloudP = pcts(cloudEns);
   const capeP  = capeEns ? pcts(capeEns) : null;
   const t850P  = t850Ens ? pcts(t850Ens) : null;
   const t500P  = t500Ens ? pcts(t500Ens) : null;
 
   const runDate = useTimes[0];
   const runLabel = 'niet geverifieerd';
-  const datumTxt = `${DAGEN_LANG[runDate.getUTCDay()]} ${runDate.getUTCDate()} ${MAANDEN_LANG[runDate.getUTCMonth()]} ${runDate.getUTCFullYear()}`;
+  const datumTxt = new Intl.DateTimeFormat('nl-NL', {
+    timeZone:'Europe/Amsterdam', weekday:'long', day:'numeric', month:'long', year:'numeric',
+  }).format(runDate);
   const todayStr = `${String(runDate.getUTCDate()).padStart(2,'0')}-${String(runDate.getUTCMonth()+1).padStart(2,'0')}-${runDate.getUTCFullYear()}`;
 
-  const cloudStack = cloudStackSeries(cloudUse);
+  const cloudStack = WeerlabCloudProbability.probabilityStack(cloudUse);
+  const shadowStack = shadowUse && shadowUse.some(member => member.some(Number.isFinite))
+    ? WeerlabCloudProbability.probabilityStack(shadowUse)
+    : null;
   const wdirStack  = windDirStackSeries(wdirUse);
 
   const panels = [
-    { title:"Bewolking (%) — fanplot", ...cloudP, hres:cloudHres, fanColor:'#5a7ba8', xMode:'model', yMin:0, yMax:100, valueFmt:v=>Math.round(v) },
-    { title:"Bewolking — kans per categorie", stacked:cloudStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>Math.round(v) },
+    shadowStack
+      ? { title:"Schaduwgevende bewolking (%)", stacked:shadowStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` }
+      : { title:"Schaduwgevende bewolking (%)", unavailable:'Lage en middelbare ENS-bewolking ontbreken voor deze run.', xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
+    { title:"Totale bewolking (%)", stacked:cloudStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
     { title:"Windrichting — kans per sector", stacked:wdirStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>Math.round(v) },
   ];
   if (capeP) {
@@ -1232,18 +1435,20 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   }
   const hasHres = panels.some(panel => Array.isArray(panel.hres) && panel.hres.some(Number.isFinite));
   const missingPanels = [
+    ...(!shadowStack ? ['schaduwgevende bewolking'] : []),
     ...(!capeP ? ['CAPE/onweer'] : []),
     ...(!t850P ? ['850 hPa'] : []),
     ...(!t500P ? ['500 hPa'] : []),
   ];
-  const panelStatus = panels.length === 6
+  const availablePanelCount = panels.filter(panel => !panel.unavailable).length;
+  const panelStatus = availablePanelCount === 6
     ? '6 van 6 panelen'
-    : `${panels.length} van 6 panelen · ${missingPanels.join(', ')} tijdelijk niet beschikbaar voor deze run`;
+    : `${availablePanelCount} van 6 panelen · ${missingPanels.join(', ')} tijdelijk niet beschikbaar voor deze run`;
   const hresStatus = hasHres ? 'exacte HRES-overlay waar beschikbaar' : 'exacte HRES-overlay niet beschikbaar';
 
   return {
     station: currentStation.name,
-    nMembers: cloudEns.length,
+    nMembers: cloudUse.length,
     datumTxt, runLabel,
     footLeft: `Weerlab.nl ${todayStr}, gegenereerd op basis van ECMWF/Open-Meteo`,
     footRight: `Bron: ECMWF IFS-ENS`,
@@ -1270,7 +1475,7 @@ function exportPng() {
     canvas.toBlob(b => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(b);
-      a.download = `pluim_${currentStation.name.toLowerCase().replace(/\s+/g,'_')}_a4.png`;
+      a.download = `pluim_${currentStation.name.toLowerCase().replace(/\s+/g,'_')}.png`;
       a.click();
       URL.revokeObjectURL(url);
       btn.disabled = false; btn.textContent = old;
