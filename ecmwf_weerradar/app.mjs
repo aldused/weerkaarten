@@ -395,7 +395,7 @@ function syncUI(){
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
   else if(f.mode==='wind'){title='Wind';unit='km/u';numbers=['0','20','40','60','100+'];gradient='linear-gradient(to right,#66c2d0,#53ca89,#e9cc48,#ee9131,#bc3379)';}
-  else{const rainLegend=precipitationLegend();title='Totale neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
+  else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;
   legend.querySelector('.legend-colors').style.background=gradient;
