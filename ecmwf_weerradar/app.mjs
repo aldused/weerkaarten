@@ -251,7 +251,7 @@ function syncTimeChoices(frame,pending=false){
     b.classList.toggle('is-pending',pending&&active);b.setAttribute('aria-busy',String(pending&&active));
     const changed=b.getAttribute('aria-pressed')!=='true';
     b.setAttribute('aria-pressed',String(!pending&&active||pending&&Number(b.dataset.index)===current?.index));
-    if(active&&!pending&&changed)b.scrollIntoView({block:'nearest',inline:'nearest'});
+    if(active&&!pending&&changed)b.scrollIntoView({block:'nearest',inline:'center'});
   }
 }
 function setMenuCollapsed(collapsed){
