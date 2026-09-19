@@ -43,14 +43,17 @@ const config=vm.createContext({});vm.runInContext(stationConfig+';this.windInfo=
 assert.equal(config.windInfo.eenheid,'km/u');
 assert(Math.abs(90*config.windInfo.factor-250)<1e-8,'90 km/h must match 250 tenths m/s');
 const analysis=stationHTML.slice(stationHTML.indexOf('function analyseerStation('),stationHTML.indexOf('// ── Analyse uitvoeren'));
-const analysisCtx=vm.createContext({Date:TestDate,kolomIndex:{YYYYMMDD:0,FXX:1},MND:['jan'],inSeizoen:()=>true,seizoensJaar:y=>y,seizoensJaarLabel:y=>y,seizoensDag:(y,m,d)=>d,getVal:(row)=>row[1]});
+const StationRecords=require('../stationsanalyse-records.js');
+const analysisCtx=vm.createContext({StationRecords,Date:TestDate,kolomIndex:{YYYYMMDD:0,FXX:1},MND:['jan'],inSeizoen:()=>true,seizoensJaar:y=>y,seizoensJaarLabel:y=>y,seizoensDag:(y,m,d)=>d,getVal:(row)=>row[1] ?? null});
 vm.runInContext(analysis,analysisCtx);
-const period={maanden:[1],lengte:31};
+const period={maanden:[1],lengte:31,startM:1};
 const series=analysisCtx.analyseerStation([['20260101',250],['20260102',null],['20260103',250],['20260105',250]],period,2026,2026,config.windInfo,'boven',250);
-assert.equal(series.resultaten[0].aantal,3);assert.equal(series.resultaten[0].langsteReeks,1,'Missing dates and measurements break consecutive runs');
+assert.equal(series.resultaten[0].aantalDagen,3);assert.equal(series.resultaten[0].langsteReeks,null,'Incomplete periods retain dates but do not publish complete-period statistics');
+const complete=analysisCtx.analyseerStation(Array.from({length:31},(_,i)=>['202601'+String(i+1).padStart(2,'0'),[0,2,4].includes(i)?250:0]),period,2026,2026,config.windInfo,'boven',250);
+assert.equal(complete.resultaten[0].aantal,3);assert.equal(complete.resultaten[0].langsteReeks,1,'Non-qualifying days break consecutive runs');
 assert.equal(analysisCtx.analyseerStation([['20260101',null]],period,2026,2026,config.windInfo,'boven',250).resultaten.length,0,'Missing gust measurements cannot become a zero-event year');
 let requests=0;
-const cacheContext=vm.createContext({location:{hostname:'127.0.0.1',protocol:'http:'},csvCache:{},kolomIndex:{},document:{getElementById:()=>({value:'260'})},window:{weerlabClimateStatus(){}},fetch:async url=>{requests++;return{ok:true,json:async()=>url.includes('_260.')?{kolommen:['YYYYMMDD','TX'],data:[['20260907',200]]}:{kolommen:['TX','YYYYMMDD'],data:[[300,'20260907']]}}}});
+const cacheContext=vm.createContext({StationRecords,STATIONS:{},location:{hostname:'127.0.0.1',protocol:'http:'},csvCache:{},kolomIndex:{},document:{getElementById:()=>({value:'260'})},window:{weerlabClimateStatus(){}},fetch:async url=>{requests++;return{ok:true,json:async()=>url.includes('_260.')?{kolommen:['YYYYMMDD','TX'],data:[['20260907',200]]}:{kolommen:['TX','YYYYMMDD'],data:[[300,'20260907']]}}}});
 vm.runInContext(loader,cacheContext);
 (async()=>{
  await cacheContext.laadCSV('260');await cacheContext.laadCSV('380');

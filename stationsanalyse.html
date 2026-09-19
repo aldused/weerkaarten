@@ -270,15 +270,23 @@ body {
 }
 </style>
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
+<script src="stationsanalyse-records.js?v=20260919-1"></script>
 <script src="klimaat.js?v=20260914-1"></script>
 <link rel="stylesheet" href="records-ui.css?v=20260914-1">
 <script defer src="records-ui.js?v=20260914-1"></script>
+<style>
+/* Keep full years readable and wide multi-station cells inside their scroller. */
+.climate-stationsanalyse .ctrl-input.jaar { width: 88px; }
+.climate-stationsanalyse .top10-grid > *,
+.climate-stationsanalyse .summary-cards > * { min-width: 0; }
+.climate-stationsanalyse .detail-scroll { max-width: 100%; overflow: auto; }
+</style>
 </head>
 <body class="climate-page climate-stationsanalyse">
 <section class="climate-heading" aria-labelledby="climate-title">
   <a class="climate-back" href="index.html#menu/terugkijken?type=klimaat">← Records &amp; klimaat</a>
   <div class="climate-heading-row"><div><h1 id="climate-title">Eerste & laatste</h1><p>Vind de eerste en laatste dag waarop een grens wordt bereikt, zoals vorst of 30 °C.</p></div><span class="climate-label">KNMI · Klimaatarchief</span></div>
-  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens per station. Controleer de gekozen drempel, het tijdvak en de beschikbare meetperiode. Een lopend jaar is onvolledig. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
+  <details class="climate-source"><summary>Bron &amp; uitleg</summary><p>KNMI-daggegevens per station, aangevuld met het historische TX/TN-recordarchief. Historische recordnoteringen vormen geen volledige dagreeks. Eerste en laatste datums zijn de uiterste beschikbare waarnemingen; ontbrekende dagen kunnen eerdere of latere gebeurtenissen bevatten. Aantallen, gemiddelden en reekslengten worden alleen voor volledige perioden berekend. Alle stations op een grensdatum blijven zichtbaar. Controleer de gekozen drempel, het tijdvak en de beschikbare meetperiode. Een lopend jaar is onvolledig. <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/klimaatnormalen-1991-2020" target="_blank" rel="noopener">Over weer en klimaat bij het KNMI ↗</a></p></details>
 </section>
 
 <div class="header">
@@ -363,6 +371,7 @@ body {
 </div>
 
 <div class="content">
+  <p id="bron-status" role="status" style="margin-bottom:12px"></p>
   <div id="status"><span class="spinner"></span> Kies een station en klik op Analyseer...</div>
   <div id="resultaten" style="display:none">
     <div class="summary-cards" id="summary-cards">
@@ -442,6 +451,8 @@ body {
 const STATIONS = {
   210:{naam:'Valkenburg',lat:52.167,lon:4.417},
   215:{naam:'Voorschoten',lat:52.125,lon:4.432},
+  229:{naam:'Texelhors'},
+  324:{naam:'Stavenisse'},
   225:{naam:'IJmuiden',lat:52.463,lon:4.555},
   235:{naam:'De Kooy',lat:52.924,lon:4.785},
   240:{naam:'Schiphol',lat:52.309,lon:4.769},
@@ -600,7 +611,7 @@ function seizoensJaar(jaar, mm, info) {
 // Positie van een datum binnen het seizoen (1-based)
 function seizoensDag(jaar, mm, dd, info) {
   if (info.maanden.length === 12) {
-    return datumNaarDagNr(jaar, mm, dd);
+    return datumNaarDagNr(2024, mm, dd);
   }
   if (info.spansYear) {
     // winter: dec 1..31 → 1..31; jan 1..31 → 32..62; feb 1..29 → 63..91
@@ -635,7 +646,11 @@ function seizoensJaarLabel(sJaar, info) {
 }
 
 // ── Init ──
-function init() {
+async function init() {
+  try { await laadHistorischeRecords(); }
+  catch (error) {
+    document.getElementById('bron-status').textContent = 'Historische records konden niet worden geladen; resultaten zijn onvolledig. ' + error.message;
+  }
   // Vul station-dropdown: "Alle stations" bovenaan, dan op naam gesorteerd
   const sel = document.getElementById('sel-station');
   const optAll = document.createElement('option');
@@ -646,7 +661,7 @@ function init() {
   sorted.forEach(([stn, info]) => {
     const opt = document.createElement('option');
     opt.value = stn;
-    opt.textContent = `${info.naam} (${stn})`;
+    opt.textContent = info.historisch ? `${info.naam} (historische records)` : `${info.naam} (${stn})`;
     if (stn === '260') opt.selected = true;
     sel.appendChild(opt);
   });
@@ -713,6 +728,23 @@ function updatePresets() {
 // ── Data laden (JSON via R2) ──
 const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.protocol === 'file:';
 const R2_BASE = IS_LOCAL ? '' : 'https://data.weerlab.nl/';
+const historischeRecords = {};
+async function laadHistorischeRecords() {
+  const response = await fetch(R2_BASE + 'records_nl_extreme.json?v=20260919-1');
+  if (!response.ok) throw new Error('Historisch recordarchief niet beschikbaar');
+  const records = StationRecords.historicalRecords(await response.json());
+  for (const r of records) {
+    const naam = r.station;
+    let id = Object.keys(STATIONS).find(id => STATIONS[id].naam === naam);
+    if (!id) {
+      id = 'hist:' + encodeURIComponent(naam);
+      STATIONS[id] = {naam, historisch:true};
+    }
+    (historischeRecords[id] ||= []).push(r);
+  }
+  document.getElementById('bron-status').textContent = 'Daggegevens en historische recordnoteringen geladen. Onvolledige perioden zijn gemarkeerd; eerste en laatste datums blijven zichtbaar.';
+}
+
 
 async function laadCSV(stn) {
   if (csvCache[stn]) {
@@ -721,6 +753,13 @@ async function laadCSV(stn) {
     return csvCache[stn].rows;
   }
 
+  if (STATIONS[stn]?.historisch) {
+    kolomIndex = {YYYYMMDD:0, TX:1, TN:2};
+    const rows = StationRecords.mergeRows([], kolomIndex, historischeRecords[stn] || []);
+    csvCache[stn] = {rows, columns:{...kolomIndex}};
+    toonMeetperiode(rows, stn);
+    return rows;
+  }
   const url = R2_BASE + `dagdata_${stn}.json?t=${Date.now()}`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Data niet gevonden: ${url}`);
@@ -730,37 +769,40 @@ async function laadCSV(stn) {
   kolomIndex = {};
   json.kolommen.forEach((c, i) => { kolomIndex[c] = i; });
 
-  csvCache[stn] = {rows:json.data,columns:{...kolomIndex}};
-  toonMeetperiode(json.data, stn);
-  return json.data;
+  const rows = StationRecords.mergeRows(json.data, kolomIndex, historischeRecords[stn] || []);
+  csvCache[stn] = {rows,columns:{...kolomIndex}};
+  toonMeetperiode(rows, stn);
+  return rows;
 }
 
 function toonMeetperiode(rows, stn) {
   const all = document.getElementById('sel-station').value === 'all';
   if(all)window.weerlabClimateStatus({fixed:'Meerdere stations · meetperiode verschilt per station'});
+  else if (STATIONS[stn]?.historisch) window.weerlabClimateStatus({fixed:'Historische recordnoteringen · geen volledige dagreeks'});
   else window.weerlabClimateStatus({through:rows.at(-1)?.[kolomIndex.YYYYMMDD], historical:Number(stn)<200});
 }
 
-function getVal(rij, kolom) {
-  const idx = kolomIndex[kolom];
+function getVal(rij, kolom, columns = kolomIndex) {
+  const idx = columns[kolom];
   if (idx === undefined) return null;
   const v = rij[idx];
   if (v === null || v === undefined) return null;
-  if (typeof v === 'number') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   const s = String(v).trim();
   if (s === '') return null;
-  return parseInt(s, 10);
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
 // ── Analyseer één station → {resultaten, alleWaarden} ──
-function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw) {
+function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw, columns = kolomIndex) {
   const kolom = info.kolom;
   const factor = info.factor;
 
   // Groepeer rijen per seizoensjaar (winter: dec hoort bij volgend jaar)
   const jarenMap = {};
-  data.forEach(rij => {
-    const datum = rij[kolomIndex['YYYYMMDD']];
+  StationRecords.mergeRows(data, columns, []).forEach(rij => {
+    const datum = rij[columns['YYYYMMDD']];
     const jaar = parseInt(datum.substring(0, 4));
     const mm = parseInt(datum.substring(4, 6));
     if (!inSeizoen(mm, sInfo)) return;
@@ -770,18 +812,13 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
     jarenMap[sJaar].push(rij);
   });
 
-  const minDagen = sInfo.maanden.length === 12 ? 300
-                 : sInfo.maanden.length >= 3 ? 60
-                 : Math.floor(sInfo.lengte * 0.7);
-
   const resultaten = [];
   const alleWaarden = [];
   const jaren = Object.keys(jarenMap).map(Number).sort((a,b) => a - b);
-  const huidigJaar = new Date().getFullYear();
 
   jaren.forEach(sJaar => {
     const rijen = jarenMap[sJaar].slice().sort((a, b) => {
-      const da = a[kolomIndex['YYYYMMDD']], db = b[kolomIndex['YYYYMMDD']];
+      const da = a[columns['YYYYMMDD']], db = b[columns['YYYYMMDD']];
       const ja = parseInt(da.substring(0,4)), jb = parseInt(db.substring(0,4));
       const ma = parseInt(da.substring(4,6)), mb = parseInt(db.substring(4,6));
       const dda = parseInt(da.substring(6,8)), ddb = parseInt(db.substring(6,8));
@@ -794,14 +831,14 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
     let extremeVal = null, extremeDatum = null, geldigeDagen = 0, vorigeDatum = null;
 
     rijen.forEach(rij => {
-      const raw = getVal(rij, kolom);
+      const raw = getVal(rij, kolom, columns);
       if (raw === null) { huidigeReeks = 0; return; }
       geldigeDagen++;
 
       const isSpoor = (kolom === 'RH' && raw === -1);
       const waarde = isSpoor ? 0 : raw;
       const voldoet = richting === 'boven' ? waarde >= drempelRaw : waarde < drempelRaw;
-      const datum = rij[kolomIndex['YYYYMMDD']];
+      const datum = rij[columns['YYYYMMDD']];
       const jaar = parseInt(datum.substring(0, 4));
       const mm = parseInt(datum.substring(4, 6));
       const dd = parseInt(datum.substring(6, 8));
@@ -836,12 +873,15 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
       }
     });
 
-    if (!geldigeDagen || (geldigeDagen < minDagen && sJaar < huidigJaar)) return;
+    if (!geldigeDagen) return;
+    const volledig = geldigeDagen === StationRecords.periodDays(sJaar, sInfo);
 
     resultaten.push({
       sJaar,
       jaarLabel: seizoensJaarLabel(sJaar, sInfo),
-      eersteDag, laatsteDag, aantal, langsteReeks,
+      eersteDag, laatsteDag,
+      eersteDagen: eersteDag ? [eersteDag] : [], laatsteDagen: laatsteDag ? [laatsteDag] : [],
+      volledig, aantal: volledig ? aantal : null, langsteReeks: volledig ? langsteReeks : null,
       extremeVal: extremeVal !== null ? extremeVal / factor : null,
       extremeDatum,
       aantalDagen: geldigeDagen
@@ -852,7 +892,9 @@ function analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempel
 }
 
 // ── Analyse uitvoeren ──
-function startAnalyse() {
+let analyseVersie = 0;
+async function startAnalyse() {
+  const versie = ++analyseVersie;
   const stn = document.getElementById('sel-station').value;
   const type = document.getElementById('sel-analyse').value;
   const richting = document.getElementById('sel-richting').value;
@@ -871,23 +913,25 @@ function startAnalyse() {
   const drempelRaw = Math.round(drempel * info.factor * 1e8) / 1e8;
 
   if (stn === 'all') {
-    startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info);
+    return startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info, versie);
     return;
   }
 
   document.getElementById('status').innerHTML = '<span class="spinner"></span> Data laden...';
-  laadCSV(stn).then(data => {
-    const {resultaten, alleWaarden} = analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw);
-    const top10Hoog = [...alleWaarden].sort((a, b) => b.waarde - a.waarde).slice(0, 10);
-    const top10Laag = [...alleWaarden].sort((a, b) => a.waarde - b.waarde).slice(0, 10);
+  return laadCSV(stn).then(data => {
+    if (versie !== analyseVersie) return;
+    const {resultaten, alleWaarden} = analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw, csvCache[stn].columns);
+    const top10Hoog = StationRecords.top(alleWaarden, true);
+    const top10Laag = StationRecords.top(alleWaarden, false);
     toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Hoog, top10Laag);
   }).catch(err => {
+    if (versie !== analyseVersie) return;
     document.getElementById('status').innerHTML = `Fout: ${err.message}`;
   });
 }
 
 // ── Analyse: alle stations tegelijk (Nederlandrecords) ──
-async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info) {
+async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, totJaar, sInfo, info, versie = analyseVersie) {
   const status = document.getElementById('status');
   const ids = Object.keys(STATIONS);
   status.innerHTML = `<span class="spinner"></span> Laden 0/${ids.length} stations...`;
@@ -901,10 +945,12 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
     return {id, data};
   });
   const geladen = await Promise.all(taken);
+  if (versie !== analyseVersie) return;
 
   status.innerHTML = `<span class="spinner"></span> Analyseren van ${geladen.filter(s => s.data).length} stations...`;
   await new Promise(r => setTimeout(r, 30)); // yield voor UI-update
 
+  if (versie !== analyseVersie) return;
   // Analyseer elk station
   const perStation = {};
   geladen.forEach(({id, data}) => {
@@ -913,22 +959,10 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
     perStation[id] = analyseerStation(data, sInfo, vanJaar, totJaar, info, richting, drempelRaw);
   });
 
-  // Top 10 globaal: voor elke unieke datum behoud alleen de hoogste/laagste waarde
-  const perDatumHoog = new Map();
-  const perDatumLaag = new Map();
-  Object.entries(perStation).forEach(([id, res]) => {
-    const naam = STATIONS[id].naam;
-    res.alleWaarden.forEach(w => {
-      const key = `${w.jaar}-${w.mm}-${w.dd}`;
-      const withStn = {...w, stationId: id, stationNaam: naam};
-      const curH = perDatumHoog.get(key);
-      if (!curH || w.waarde > curH.waarde) perDatumHoog.set(key, withStn);
-      const curL = perDatumLaag.get(key);
-      if (!curL || w.waarde < curL.waarde) perDatumLaag.set(key, withStn);
-    });
-  });
-  const top10Hoog = [...perDatumHoog.values()].sort((a, b) => b.waarde - a.waarde).slice(0, 10);
-  const top10Laag = [...perDatumLaag.values()].sort((a, b) => a.waarde - b.waarde).slice(0, 10);
+  const alleWaarden = Object.entries(perStation).flatMap(([id,res]) =>
+    res.alleWaarden.map(w => ({...w,stationId:id,stationNaam:STATIONS[id].naam})));
+  const top10Hoog = StationRecords.top(alleWaarden, true);
+  const top10Laag = StationRecords.top(alleWaarden, false);
 
   // Aggregate per seizoensjaar: earliest first, latest last, gem. aantal, max aantal, extremen
   const jaarNaar = {};
@@ -943,23 +977,15 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
   const resultatenAgg = [];
   Object.keys(jaarNaar).map(Number).sort((a, b) => a - b).forEach(sJaar => {
     const alle = jaarNaar[sJaar];
-    const metEerste = alle.filter(x => x.eersteDag);
-    const metLaatste = alle.filter(x => x.laatsteDag);
-
-    let eersteDag = null;
-    if (metEerste.length > 0) {
-      const winnaar = metEerste.reduce((a, b) => a.eersteDag.sDag < b.eersteDag.sDag ? a : b);
-      eersteDag = {...winnaar.eersteDag, stationNaam: winnaar.stationNaam};
-    }
-    let laatsteDag = null;
-    if (metLaatste.length > 0) {
-      const winnaar = metLaatste.reduce((a, b) => a.laatsteDag.sDag > b.laatsteDag.sDag ? a : b);
-      laatsteDag = {...winnaar.laatsteDag, stationNaam: winnaar.stationNaam};
-    }
-
-    const gemAantal = alle.reduce((s, r) => s + r.aantal, 0) / alle.length;
-    const maxStn = alle.reduce((a, b) => a.aantal > b.aantal ? a : b);
-    const reeksStn = alle.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
+    const eersteDagen = StationRecords.boundary(alle.flatMap(r => r.eersteDagen.map(d =>
+      ({...d, stationId:r.stationId, stationNaam:r.stationNaam}))), 'first');
+    const laatsteDagen = StationRecords.boundary(alle.flatMap(r => r.laatsteDagen.map(d =>
+      ({...d, stationId:r.stationId, stationNaam:r.stationNaam}))), 'last');
+    const eersteDag = eersteDagen[0] || null, laatsteDag = laatsteDagen[0] || null;
+    const compleet = alle.filter(r => r.volledig);
+    const gemAantal = compleet.length ? compleet.reduce((s,r)=>s+r.aantal,0)/compleet.length : null;
+    const maxStn = compleet.reduce((a,b)=>!a || b.aantal>a.aantal ? b:a, null);
+    const reeksStn = compleet.reduce((a,b)=>!a || b.langsteReeks>a.langsteReeks ? b:a, null);
 
     const metExt = alle.filter(x => x.extremeVal !== null);
     let extreem = null;
@@ -972,12 +998,13 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
     resultatenAgg.push({
       sJaar,
       jaarLabel: seizoensJaarLabel(sJaar, sInfo),
-      eersteDag, laatsteDag,
-      aantal: Math.round(gemAantal * 10) / 10,
-      maxAantal: maxStn.aantal,
-      maxAantalStation: maxStn.stationNaam,
-      langsteReeks: reeksStn.langsteReeks,
-      langsteReeksStation: reeksStn.stationNaam,
+      eersteDag, laatsteDag, eersteDagen, laatsteDagen,
+      volledig: compleet.length === alle.length,
+      aantal: gemAantal === null ? null : Math.round(gemAantal * 10) / 10,
+      maxAantal: maxStn?.aantal ?? null,
+      maxAantalStation: maxStn?.stationNaam,
+      langsteReeks: reeksStn?.langsteReeks ?? null,
+      langsteReeksStation: reeksStn?.stationNaam,
       extremeVal: extreem ? extreem.extremeVal : null,
       extremeDatum: extreem ? extreem.extremeDatum : null,
       extremeStation: extreem ? extreem.stationNaam : null,
@@ -985,13 +1012,15 @@ async function startAnalyseAlle(type, richting, drempel, drempelRaw, vanJaar, to
     });
   });
 
+  const mislukt = geladen.filter(s=>!s.data).map(s=>STATIONS[s.id].naam);
+  if (mislukt.length) document.getElementById('bron-status').textContent = 'Onvolledige resultaten: laden mislukt voor ' + mislukt.join(', ');
   toonResultaten(resultatenAgg, type, drempel, richting, 'all', sInfo, top10Hoog, top10Laag);
 }
 
 // Format een waarde met de juiste eenheid (handelt spoor voor neerslag af)
 function fmtWaarde(w, info, isSpoor) {
   if (isSpoor) return 'spoor';
-  return (w / info.factor).toFixed(1) + ' ' + info.eenheid;
+  return (w / info.factor).toFixed(1).replace('.', ',') + ' ' + info.eenheid;
 }
 
 // Render een top-10 tabel. Toont station-kolom als lijst-items stationNaam hebben.
@@ -1009,11 +1038,12 @@ function renderTop10(bodyId, lijst, info) {
   }
   lijst.forEach((e, i) => {
     const tr = document.createElement('tr');
-    if (i === 0) tr.className = 'record-1';
+    const rank = lijst.findIndex(other => other.waarde === e.waarde) + 1;
+    if (rank === 1) tr.className = 'record-1';
     const datum = `${e.dd} ${MND[e.mm - 1]} ${e.jaar}`;
     const stationCel = metStation ? `<td style="text-align:left">${e.stationNaam}</td>` : '';
     tr.innerHTML = `
-      <td class="rang">${i + 1}</td>
+      <td class="rang">${rank}</td>
       ${stationCel}
       <td>${datum}</td>
       <td class="waarde-cel">${fmtWaarde(e.waarde, info, e.isSpoor)}</td>
@@ -1038,45 +1068,30 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   if(!resultaten.length){for(const id of ['val-aantal','val-reeks'])document.getElementById(id).textContent='–';for(const id of ['sub-aantal','sub-reeks'])document.getElementById(id).textContent='Geen voldoende complete meetperioden';}
 
   // ── Overzicht ──
-  const metEerste = resultaten.filter(r => r.eersteDag);
-  const metLaatste = resultaten.filter(r => r.laatsteDag);
 
-  // Vroegste eerste dag
-  if (metEerste.length > 0) {
-    const vroegste = metEerste.reduce((a, b) => a.eersteDag.sDag < b.eersteDag.sDag ? a : b);
-    const wTxt = fmtWaarde(vroegste.eersteDag.waarde, info, vroegste.eersteDag.isSpoor);
-    document.getElementById('val-eerste').textContent = `${vroegste.eersteDag.datum} (${wTxt})`;
-    const stnSuf = vroegste.eersteDag.stationNaam ? ` — ${vroegste.eersteDag.stationNaam}` : '';
-    document.getElementById('sub-eerste').textContent = `in ${vroegste.jaarLabel}${stnSuf}`;
-    document.getElementById('card-eerste').querySelector('.label').textContent =
-      `Vroegste eerste dag ${inTxt}`;
-  } else {
-    document.getElementById('val-eerste').textContent = '-';
-    document.getElementById('sub-eerste').textContent = 'geen data';
+  for (const [side, key, mode] of [['eerste','eersteDagen','first'],['laatste','laatsteDagen','last']]) {
+    const records = StationRecords.boundary(resultaten.flatMap(r => (r[key] || []).map(d =>
+      ({...d, jaarLabel:r.jaarLabel}))), mode);
+    document.getElementById('val-' + side).textContent = records.length ? records[0].datum : '-';
+    document.getElementById('sub-' + side).textContent = records.length ? records.map(d =>
+      `${d.jaarLabel}: ${fmtWaarde(d.waarde, info, d.isSpoor)}${d.stationNaam ? ' — ' + d.stationNaam : ''}`).join('; ') : 'geen data';
+    document.getElementById('card-' + side).querySelector('.label').textContent =
+      `${side === 'eerste' ? 'Vroegste eerste' : 'Laatste'} waargenomen dag ${inTxt}`;
   }
-
-  // Laatste dag (record)
-  if (metLaatste.length > 0) {
-    const laatst = metLaatste.reduce((a, b) => a.laatsteDag.sDag > b.laatsteDag.sDag ? a : b);
-    const wTxt = fmtWaarde(laatst.laatsteDag.waarde, info, laatst.laatsteDag.isSpoor);
-    document.getElementById('val-laatste').textContent = `${laatst.laatsteDag.datum} (${wTxt})`;
-    const stnSuf = laatst.laatsteDag.stationNaam ? ` — ${laatst.laatsteDag.stationNaam}` : '';
-    document.getElementById('sub-laatste').textContent = `in ${laatst.jaarLabel}${stnSuf}`;
-    document.getElementById('card-laatste').querySelector('.label').textContent =
-      `Laatste dag ${inTxt} (record)`;
-  } else {
-    document.getElementById('val-laatste').textContent = '-';
-    document.getElementById('sub-laatste').textContent = 'geen data';
+  const statistiek = resultaten.filter(r => r.aantal !== null);
+  if (!statistiek.length) {
+    for (const id of ['val-aantal','val-reeks']) document.getElementById(id).textContent = '–';
+    for (const id of ['sub-aantal','sub-reeks']) document.getElementById(id).textContent = 'Geen volledige meetperioden';
   }
 
   // Gemiddeld aantal dagen
-  if (resultaten.length > 0) {
-    const gem = resultaten.reduce((s, r) => s + r.aantal, 0) / resultaten.length;
+  if (statistiek.length > 0) {
+    const gem = statistiek.reduce((s, r) => s + r.aantal, 0) / statistiek.length;
     document.getElementById('val-aantal').textContent = gem.toFixed(1);
-    document.getElementById('sub-aantal').textContent = `over ${resultaten.length} ${isHeelJaar ? 'jaar' : seizoenTxt + 's'}`;
+    document.getElementById('sub-aantal').textContent = `over ${statistiek.length} volledige ${isHeelJaar ? 'jaar' : seizoenTxt + 's'}`;
 
     // Meeste dagen (bij alle stations: jaar met hoogste landelijk gemiddelde)
-    const meeste = resultaten.reduce((a, b) => a.aantal > b.aantal ? a : b);
+    const meeste = statistiek.reduce((a, b) => a.aantal > b.aantal ? a : b);
     const aantalLabel = isAlle
       ? `Gem. dagen ${perTxt} (per station) — max ${meeste.aantal.toFixed(1)} in ${meeste.jaarLabel}`
       : `Gem. dagen ${perTxt} (max ${meeste.aantal} in ${meeste.jaarLabel})`;
@@ -1084,8 +1099,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   }
 
   // Langste reeks
-  if (resultaten.length > 0) {
-    const langst = resultaten.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
+  if (statistiek.length > 0) {
+    const langst = statistiek.reduce((a, b) => a.langsteReeks > b.langsteReeks ? a : b);
     document.getElementById('val-reeks').textContent = langst.langsteReeks + ' dagen';
     const stnSuf = isAlle && langst.langsteReeksStation ? ` — ${langst.langsteReeksStation}` : '';
     document.getElementById('sub-reeks').textContent = `in ${langst.jaarLabel}${stnSuf}`;
@@ -1118,8 +1133,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
     return {slope, intercept, van: punten[0].x, tot: punten[punten.length-1].x};
   }
 
-  const trendEerste = trendlijn(jaren, eersteData);
-  const trendLaatste = trendlijn(jaren, laatsteData);
+  const trendEerste = trendlijn(jaren, eersteData.map((v,i)=>resultaten[i].volledig ? v : null));
+  const trendLaatste = trendlijn(jaren, laatsteData.map((v,i)=>resultaten[i].volledig ? v : null));
 
   const datasets1 = [
     {
@@ -1230,7 +1245,8 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   if (chart2Instance) chart2Instance.destroy();
 
   const aantalData = resultaten.map(r => r.aantal);
-  const gemAantal = aantalData.length > 0 ? aantalData.reduce((s, v) => s + v, 0) / aantalData.length : 0;
+  const geldigeAantallen = aantalData.filter(v => v !== null);
+  const gemAantal = geldigeAantallen.length > 0 ? geldigeAantallen.reduce((s, v) => s + v, 0) / geldigeAantallen.length : 0;
 
   chart2Instance = new Chart(ctx2, {
     type: 'bar',
@@ -1293,9 +1309,9 @@ function toonResultaten(resultaten, type, drempel, richting, stn, sInfo, top10Ho
   // ── Top 10 hoogste + laagste ──
   const seizoenSuf = isHeelJaar ? '' : ` in ${seizoenTxt}`;
   document.getElementById('top10-hoog-title').textContent =
-    `Top 10 hoogste ${info.naam.toLowerCase()}${seizoenSuf} — ${stationNaam}`;
+    `Top 10 hoogste (inclusief gedeelde plaatsen) ${info.naam.toLowerCase()}${seizoenSuf} — ${stationNaam}`;
   document.getElementById('top10-laag-title').textContent =
-    `Top 10 laagste ${info.naam.toLowerCase()}${seizoenSuf} — ${stationNaam}`;
+    `Top 10 laagste (inclusief gedeelde plaatsen) ${info.naam.toLowerCase()}${seizoenSuf} — ${stationNaam}`;
   renderTop10('top10-hoog-body', top10Hoog || [], info);
   renderTop10('top10-laag-body', top10Laag || [], info);
 
@@ -1333,7 +1349,7 @@ const SORT_KEYS = {
   jaar:    r => r.sJaar,
   eerste:  r => r.eersteDag ? r.eersteDag.sDag : null,
   laatste: r => r.laatsteDag ? r.laatsteDag.sDag : null,
-  venster: r => (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : null,
+  venster: r => StationRecords.windowDays(r.eersteDag, r.laatsteDag),
   aantal:  r => r.aantal,
   reeks:   r => r.langsteReeks,
   extreem: r => r.extremeVal
@@ -1395,34 +1411,26 @@ function renderDetailTabel() {
   const stnStyle = 'font-size:0.85em;color:#5a7090;font-weight:400';
   gesorteerd.forEach(r => {
     const tr = document.createElement('tr');
-    const eersteW = r.eersteDag ? fmtWaarde(r.eersteDag.waarde, info, r.eersteDag.isSpoor) : '';
-    const laatsteW = r.laatsteDag ? fmtWaarde(r.laatsteDag.waarde, info, r.laatsteDag.isSpoor) : '';
-    const eersteTd = r.eersteDag
-      ? (isAlle && r.eersteDag.stationNaam
-          ? `${r.eersteDag.datum} <span style="${stnStyle}">${eersteW} (${r.eersteDag.stationNaam})</span>`
-          : `${r.eersteDag.datum} <span style="${stnStyle}">${eersteW}</span>`)
-      : '-';
-    const laatsteTd = r.laatsteDag
-      ? (isAlle && r.laatsteDag.stationNaam
-          ? `${r.laatsteDag.datum} <span style="${stnStyle}">${laatsteW} (${r.laatsteDag.stationNaam})</span>`
-          : `${r.laatsteDag.datum} <span style="${stnStyle}">${laatsteW}</span>`)
-      : '-';
+    const boundaryCell = records => records.length ? records.map(d =>
+      `${d.datum} <span style="${stnStyle}">${fmtWaarde(d.waarde, info, d.isSpoor)}${d.stationNaam ? ' (' + d.stationNaam + ')' : ''}</span>`).join('<br>') : '-';
+    const eersteTd = boundaryCell(r.eersteDagen || []);
+    const laatsteTd = boundaryCell(r.laatsteDagen || []);
     const extremeTd = r.extremeVal !== null
       ? (isAlle && r.extremeStation
           ? `${r.extremeVal.toFixed(1)} ${info.eenheid} <span style="${stnStyle}">(${r.extremeDatum} — ${r.extremeStation})</span>`
           : `${r.extremeVal.toFixed(1)} ${info.eenheid} (${r.extremeDatum})`)
       : '-';
 
-    const venster = (r.eersteDag && r.laatsteDag) ? (r.laatsteDag.sDag - r.eersteDag.sDag + 1) : '-';
-    const aantalTxt = isAlle
+    const venster = StationRecords.windowDays(r.eersteDag, r.laatsteDag) ?? '-';
+    const aantalTxt = r.aantal === null ? '–' : isAlle
       ? `${r.aantal} <span style="${stnStyle}">(max ${r.maxAantal} — ${r.maxAantalStation})</span>`
       : r.aantal;
-    const reeksTxt = isAlle
+    const reeksTxt = r.langsteReeks === null ? '–' : isAlle
       ? `${r.langsteReeks} <span style="${stnStyle}">(${r.langsteReeksStation})</span>`
       : r.langsteReeks;
 
     tr.innerHTML = `
-      <td style="font-weight:700">${r.jaarLabel}</td>
+      <td style="font-weight:700">${r.jaarLabel}${r.volledig ? '' : '<br><small>onvolledige meetperiode</small>'}</td>
       <td>${eersteTd}</td>
       <td>${laatsteTd}</td>
       <td style="color:#6a5a00;font-weight:600">${venster !== '-' ? venster + ' d' : '-'}</td>

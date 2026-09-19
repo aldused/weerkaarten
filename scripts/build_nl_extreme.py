@@ -896,6 +896,12 @@ def build() -> dict:
         "tm": "2020-12-31",
         "gegenereerd": nu,
         "bron": "Gecureerde historische warmte- en koude-records Nederlandse stations (incl. opgeheven stations)",
+        # Complete source observations: never build period selections from top-N lists.
+        "waarnemingen": [
+            {"datum": iso, "station": stn, "parameter": parameter, "waarde": temp}
+            for parameter, parsed in (("TX", warm), ("TN", cold))
+            for _, _, iso, temp, stn in parsed
+        ],
         "dag": dag_map,
         "decade": decade_map,
         "maand": maand_map,
