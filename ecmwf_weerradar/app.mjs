@@ -1,3 +1,4 @@
+import { forecastLabel, groupForecastDays } from './timeline.mjs';
 import * as mapEngine from './map.mjs';
 import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, domainOptions, GridFactory, getRanges } from '@openmeteo/weather-map-layer';
 import { LruBlockCache, initWasm } from '@openmeteo/file-reader';
@@ -22,13 +23,16 @@ const paths = {
   europe:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM2 12h20M12 2c6 6 6 14 0 20-6-6-6-14 0-20Z',
   home:'m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7',
   expand:'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5', close:'m6 6 12 12M6 18 18 6',
-  left:'m15 4-8 8 8 8', right:'m9 4 8 8-8 8', play:'m7 3 14 9-14 9Z', pause:'M8 4v16M16 4v16',
+  down:'m5 9 7 7 7-7', up:'m5 15 7-7 7 7', left:'m15 4-8 8 8 8', right:'m9 4 8 8-8 8', play:'m7 3 14 9-14 9Z', pause:'M8 4v16M16 4v16',
   info:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 10v7M12 6v1',
 };
 function icon(el, name) {
   el.innerHTML = `<svg viewBox="0 0 24 24" fill="${name === 'play' ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="${name === 'pause' ? 4 : 1.9}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]}"/></svg>`;
 }
 document.querySelectorAll('[data-icon]').forEach(el => icon(el, el.dataset.icon));
+const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind'};
+document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
+const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
 
 let meta, frames = [], current = null, wanted = 0, revision = 0, rendering = false, refreshing = false;
 let requestedContext = null, startupRevision = 0;
@@ -181,7 +185,7 @@ async function discoverRun(now) {
 async function start() {
   const startup=++startupRevision;
   retryLoad=()=>start();
-  refreshing=true;stopPlayback();clearTimeout(sliderTimer);revision++;renderController?.abort();prefetchController?.abort();status('Complete ECMWF-run voor tien dagen ophalen…');
+  refreshing=true;stopPlayback();clearTimeout(sliderTimer);revision++;renderController?.abort();status('Complete ECMWF-run voor tien dagen ophalen…');
   try {
     const now=Date.now();
     const candidateMeta=await discoverRun(now);
@@ -206,24 +210,61 @@ async function start() {
   }
 }
 
+let dayGroups=[],timelineDayKey='',hoursDayKey='';
 function buildTimeline(timeline){
-  const unique=[...new Set(timeline.map(f=>localDateKey(f.time)))];
+  dayGroups=groupForecastDays(timeline);timelineDayKey=localDateKey(Date.now());hoursDayKey='';
   const container=$('days');container.replaceChildren();
-  unique.forEach((key,i)=>{
-    const dayFrames=timeline.filter(f=>localDateKey(f.time)===key);
-    const target=dayFrames.reduce((best,f)=>Math.abs(Number(fmt(f.time,{hour:'numeric',hourCycle:'h23'}))-12)<Math.abs(Number(fmt(best.time,{hour:'numeric',hourCycle:'h23'}))-12)?f:best);
-    const button=document.createElement('button');button.type='button';button.dataset.day=key;button.dataset.short=fmt(target.time,{weekday:'short'}).replace('.','');
-    const name=i===0?'vandaag':i===1?'morgen':fmt(target.time,{weekday:'short'}).replace('.','');
-    button.textContent=name;const small=document.createElement('small');small.textContent=fmt(target.time,{day:'numeric',month:'short'});button.append(small);
-    button.title=fmt(target.time,{dateStyle:'full'});button.setAttribute('aria-pressed','false');
-    button.setAttribute('aria-label',button.title);
-    button.addEventListener('click',()=>{stopPlayback();requestFrame(timeline.indexOf(i===0?dayFrames[0]:target));});container.append(button);
-  });
-  const end=(timeline.at(-1).time-timeline[0].time)/HOUR;
-  $('time-slider').max=end;$('range-end').textContent=`+${FORECAST_DAYS} dagen`;
+  for(const day of dayGroups){
+    const button=document.createElement('button');button.type='button';button.dataset.day=day.key;
+    button.textContent=day.label;const small=document.createElement('small');small.textContent=day.date;button.append(small);
+    button.title=day.full;button.setAttribute('aria-label',day.full);button.setAttribute('aria-pressed','false');
+    button.addEventListener('click',()=>{stopPlayback();requestFrame(day.target.index);});container.append(button);
+  }
+  $('time-slider').max=(timeline.at(-1).time-timeline[0].time)/HOUR;$('range-end').textContent=`+${FORECAST_DAYS} dagen`;
   $('time-ticks').replaceChildren();
   for(let i=0;i<=FORECAST_DAYS;i++){const tick=document.createElement('span');tick.textContent=i?`+${i}d`:'nu';$('time-ticks').append(tick);}
 }
+function showHours(day){
+  $('hours-section').hidden=!day?.hoursVisible;
+  if(!day?.hoursVisible){hoursDayKey='';return;}
+  if(hoursDayKey===day.key)return;
+  hoursDayKey=day.key;$('hours').replaceChildren();
+  $('hours-day').textContent=`${day.label} · ${day.date}`;
+  $('hours').setAttribute('aria-label',`Tijdstip op ${day.full}`);
+  for(const entry of day.entries){
+    const button=document.createElement('button');button.type='button';button.textContent=entry.label;button.dataset.index=entry.index;button.dataset.utc=entry.iso;
+    button.setAttribute('aria-label',forecastLabel(entry.time).full);
+    button.setAttribute('aria-pressed','false');button.addEventListener('click',()=>{stopPlayback();requestFrame(entry.index);});$('hours').append(button);
+  }
+}
+function syncTimeChoices(frame,pending=false){
+  if(!dayGroups.length)return;
+  const key=localDateKey(frame.time),day=dayGroups.find(d=>d.key===key);
+  showHours(day);
+  for(const b of $('days').children){
+    const active=b.dataset.day===key;
+    b.classList.toggle('is-pending',pending&&active);b.setAttribute('aria-busy',String(pending&&active));
+    if(!pending){const changed=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',String(active));if(active&&changed)b.scrollIntoView({block:'nearest',inline:'nearest'});}
+  }
+  for(const b of $('hours').children){
+    const active=Number(b.dataset.index)===frame.index;
+    b.classList.toggle('is-pending',pending&&active);b.setAttribute('aria-busy',String(pending&&active));
+    const changed=b.getAttribute('aria-pressed')!=='true';
+    b.setAttribute('aria-pressed',String(!pending&&active||pending&&Number(b.dataset.index)===current?.index));
+    if(active&&!pending&&changed)b.scrollIntoView({block:'nearest',inline:'nearest'});
+  }
+}
+function setMenuCollapsed(collapsed){
+  document.querySelector('.bottom-area').classList.toggle('is-collapsed',collapsed);
+  $('menu-details').hidden=collapsed;$('menu-toggle').setAttribute('aria-expanded',String(!collapsed));
+  const label=collapsed?'Menu uitklappen':'Menu inklappen';$('menu-toggle').setAttribute('aria-label',label);$('menu-toggle').title=label;icon($('menu-toggle'),collapsed?'up':'down');queueCityDraw();
+}
+$('menu-toggle').addEventListener('click',()=>setMenuCollapsed($('menu-toggle').getAttribute('aria-expanded')==='true'));
+const shortViewport=matchMedia('(max-height: 650px)');
+setMenuCollapsed(shortViewport.matches);
+shortViewport.addEventListener('change',event=>{if(event.matches)setMenuCollapsed(true);});
+// Only an actual menu size change updates layout; map motion never measures it.
+new ResizeObserver(entries=>{document.documentElement.style.setProperty('--dock-height',`${Math.ceil(entries[0].contentRect.height)}px`);queueCityDraw();}).observe(document.querySelector('.bottom-area'));
 function variablesForMode(modelMeta=meta){
   if(mode==='temperature') return ['temperature_2m'];
   if(mode==='wind') return ['wind_u_component_10m'];
@@ -262,7 +303,7 @@ async function renderFrame(index,rev,signal,context){
   // remain atomic, so there is never a mixture of different forecast hours.
   let reveal;
   if(!current){
-    $('valid-clock').textContent=fmt(frame.time,{hour:'2-digit',minute:'2-digit'});
+    $('valid-clock').textContent=forecastLabel(frame.time).displayClock;
     $('valid-day').textContent=fmt(frame.time,{weekday:'short',day:'numeric',month:'short'});
     reveal=()=>{
       if(rev!==revision)return;
@@ -273,7 +314,7 @@ async function renderFrame(index,rev,signal,context){
     };
     map.on('sourcedata',reveal);
   }
-  status(`Laden: ${fmt(frame.time,{weekday:'short',hour:'2-digit',minute:'2-digit'})}…`);
+  status(`Laden: ${forecastLabel(frame.time).text}…`);
   $('app').dataset.frameStatus='loading';
   try {
     const [,temperature,...fields]=await Promise.all([awaitSources(ids,signal),readTemperature(frame,signal),...vars.map(v=>readField(frame.url,v,signal))]);
@@ -295,7 +336,7 @@ async function renderFrame(index,rev,signal,context){
   } catch(error){
     removeLayers(ids);
     if(rev!==revision||error.name==='AbortError')return false;
-    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};}
+    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};syncUI();}
     stopPlayback();$('app').dataset.frameStatus='error';
     status(`${error.message}. ${current?'De vorige tijdstap blijft zichtbaar.':''}`,true);
     return false;
@@ -307,12 +348,15 @@ function loadMapDetails(){
   map.loadDetails();
   fetch('./assets/cities.json').then(r=>{if(!r.ok)throw new Error('Plaatsnamen laden mislukt');return r.json();}).then(places=>{cities=places;queueCityDraw();}).catch(()=>{detailsStarted=false;});
 }
-let renderController,prefetchController;
+let renderController;
 async function requestFrame(index,force=false,context={meta,timeline:frames}){
   if(!context.timeline.length)return;
+  const target=Math.min(context.timeline.length-1,Math.max(0,index));
+  if(!force&&rendering&&wanted===target&&requestedContext?.timeline===context.timeline)return;
   requestedContext=context;
-  wanted=Math.min(context.timeline.length-1,Math.max(0,index));revision++;
-  renderController?.abort();prefetchController?.abort();
+  wanted=target;revision++;
+  renderController?.abort();
+  syncTimeChoices({...context.timeline[wanted],index:wanted},true);
   if(rendering||refreshing)return;
   if(!force&&current?.url===context.timeline[wanted].url&&current.mode===mode){syncUI();$('status').hidden=true;$('app').dataset.frameStatus='ready';return;}
   rendering=true;
@@ -322,11 +366,6 @@ async function requestFrame(index,force=false,context={meta,timeline:frames}){
     do {targetRevision=revision;renderController=new AbortController();success=await renderFrame(wanted,targetRevision,renderController.signal,requestedContext);}while(targetRevision!==revision&&!refreshing);
   } finally {rendering=false;}
   if(success&&!refreshing){
-    // Warm the next frame without keeping old decoded rasters indefinitely.
-    const next=frames[(wanted+1)%frames.length];
-    prefetchController=new AbortController();
-    const signal=prefetchController.signal;
-    Promise.allSettled([...new Set([...variablesForMode(),'temperature_2m'])].map(v=>readField(next.url,v,signal)));
     if(playing)scheduleNext();
   }
 }
@@ -338,13 +377,14 @@ function syncUI(){
   const age=(Date.now()-Date.parse(metadata.reference_time))/HOUR;
   $('run-label').textContent=`ECMWF IFS HRES · 9 km · run ${fmt(metadata.reference_time,{day:'numeric',month:'short'})} ${new Date(metadata.reference_time).getUTCHours().toString().padStart(2,'0')} UTC${age>24?' · oudere run':''}`;
   $('run-label').title=`Bron bijgewerkt: ${fmt(metadata.last_modified_time,{dateStyle:'medium',timeStyle:'short'})}`;
-  const f=current;$('valid-clock').textContent=fmt(f.time,{hour:'2-digit',minute:'2-digit'});
-  $('valid-day').textContent=fmt(f.time,{weekday:'short',day:'numeric',month:'short'});
-  $('slider-time').textContent=fmt(f.time,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const f=current,label=forecastLabel(f.time);$('valid-clock').textContent=label.displayClock;
+  $('valid-day').textContent=label.date;
+  $('slider-time').textContent=label.text;
   $('time-slider').value=(f.time-timeline[0].time)/HOUR;
-  $('time-slider').setAttribute('aria-valuetext',fmt(f.time,{dateStyle:'full',timeStyle:'short'}));
+  $('time-slider').setAttribute('aria-valuetext',label.text);
   $('time-slider').style.setProperty('--progress',`${$('time-slider').value/$('time-slider').max*100}%`);
-  document.querySelectorAll('#days button').forEach(b=>{const active=b.dataset.day===localDateKey(f.time),changed=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',String(active));if(active&&changed)b.scrollIntoView({block:'nearest',inline:'nearest'});});
+  if(timelineDayKey!==localDateKey(Date.now()))buildTimeline(timeline);
+  syncTimeChoices(f);
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===f.mode)));
   $('play').disabled=false;$('time-slider').disabled=false;
   $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
@@ -367,8 +407,8 @@ $('play').addEventListener('click',()=>{
 $('previous').addEventListener('click',()=>{stopPlayback();requestFrame(wanted-1);});
 $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);});
 let sliderTimer;
-$('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${fmt(frames[target].time,{dateStyle:'full',timeStyle:'short'})}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
-document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();mode=b.dataset.mode;requestFrame(wanted,true);}));
+$('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
 ['clouds','snow','texture'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
 $('city-labels').addEventListener('change',queueCityDraw);
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
@@ -378,7 +418,7 @@ $('zoom-in').addEventListener('click',()=>map.zoomIn());$('zoom-out').addEventLi
 $('europe').addEventListener('click',()=>map.fitBounds([[-24,34],[42,70]],{padding:{top:105,bottom:185,left:45,right:75},duration:600}));
 $('home').addEventListener('click',()=>map.flyTo({center:[5.3,51.6],zoom:7,duration:650}));
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('app').requestFullscreen();}catch{status('Volledig scherm is niet beschikbaar in deze browser.',true);}});
-$('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
+$('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
 $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
 $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('info').close();}});
@@ -431,12 +471,12 @@ function drawCities(){
 }
 
 let pointMarker;
-function showPoint(point){selectedPoint=point;if(pointMarker)pointMarker.remove();pointMarker=new mapEngine.Marker({color:'#ffdf00',scale:.7}).setLngLat([point.lng,point.lat]).addTo(map);$('point').hidden=false;$('search-form').hidden=true;updatePoint();}
+function showPoint(point){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');if(innerHeight<650)setMenuCollapsed(true);selectedPoint=point;if(pointMarker)pointMarker.remove();pointMarker=new mapEngine.Marker({color:'#2ec4e8',scale:.7}).setLngLat([point.lng,point.lat]).addTo(map);$('point').hidden=false;$('search-form').hidden=true;updatePoint();}
 function closePoint(){selectedPoint=null;$('point').hidden=true;pointMarker?.remove();pointMarker=null;}
 $('point-close').addEventListener('click',closePoint);
 function updatePoint(fetchMissing=true){
   if(!selectedPoint||!current)return;
-  const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=fmt(current.time,{dateStyle:'full',timeStyle:'short'});
+  const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=forecastLabel(current.time).text;
   const values=$('point-values');values.replaceChildren();
   const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','km/u',0]];
   for(const [variable,label,unit,digits] of entries){
