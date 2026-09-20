@@ -55,7 +55,7 @@
   .method code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#edf3f9;padding:1px 4px;border-radius:4px}
   .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:auto;position:relative;min-height:360px}
   #pageHost{min-width:0}
-  .page-card svg{display:block;width:100%;height:auto}
+  .page-card svg{display:block;width:100%;min-width:1800px;height:auto}
   .stack-bar{cursor:crosshair;outline:none}
   .stack-bar:focus .stack-focus,.stack-bar:hover .stack-focus{stroke:#0077b6;stroke-width:4;fill-opacity:.08}
   .chart-tooltip{
@@ -118,6 +118,7 @@
   <summary>Berekening bewolkingskansen en gebruikte lagen</summary>
   <p><strong>Totale bewolking</strong> gebruikt per ECMWF IFS-ENS-lid rechtstreeks <code>cloud_cover</code> (totale atmosferische bedekkingsgraad). <strong>Schaduwgevende bewolking</strong> gebruikt <code>cloud_cover_low</code> en <code>cloud_cover_mid</code>. Voor IFS worden die API-lagen bepaald uit relatieve vochtigheid op respectievelijk 1000/925/850 hPa (laag en mist, tot circa 3 km) en 700/500 hPa (midden, circa 3–8 km). <code>cloud_cover_high</code> en de onderliggende 300/250/200 hPa-lagen worden bewust niet meegenomen. Omdat ECMWF/Open-Meteo geen rechtstreekse schaduwparameter aanbiedt, worden laag en midden per lid overlap-gecorrigeerd gecombineerd als <code>100 × [1 − (1−laag/100) × (1−midden/100)]</code>. Dit is een random-overlapbenadering: lagen worden niet simpel opgeteld en ook niet met alleen het maximum samengevat. In oudere archieven ontbreken deze lagen soms; het betreffende diagram toont dan “Niet beschikbaar”. De daadwerkelijk geladen modelvariant staat bij de bronvermelding.</p>
   <p>De klassen zijn centraal vastgelegd als 0–&lt;20, 20–&lt;40, 40–&lt;60, 60–&lt;80 en 80–100%. Exact 20% valt dus in “Licht bewolkt”. Alleen geldige leden tellen mee; een ontbrekende waarde wordt nooit 0%. Als laag of midden ontbreekt, is schaduwgevende bewolking voor dat lid en tijdstip niet beschikbaar.</p>
+  <p>Vroege runs bevatten niet altijd wolkenlagen. Zodra de reguliere bron dezelfde modelrun levert, kan het archief die lagen aanvullen. Alleen exact overeenkomende brontijdstippen worden gebruikt, zonder interpolatie. Het schaduwdiagram kan daardoor minder tijdstappen hebben dan totale bewolking; de tooltip vermeldt het werkelijke tijdstip en aantal geldige leden. Ontbrekende historische lagen worden niet uit een nieuwere run aangevuld.</p>
 </details>
 
 <div class="toolbar">
@@ -582,6 +583,22 @@ const PM = { l: 80, r: 80, t: 92, b: 165 };
 const escapeSvgAttribute = value => String(value)
   .replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
+function axisTimeLabelIndexes(times, plotW) {
+  const timestamps=times.map(time=>time.getTime());
+  if(!timestamps.length)return [];
+  const span=Math.max(HOUR_MS,timestamps.at(-1)-timestamps[0]);
+  const minimumGap=76; // SVG units; >=46 screen pixels at the minimum width.
+  const requiredHours=minimumGap/Math.max(1,plotW)*span/HOUR_MS;
+  const interval=([6,12,24,48,72,96].find(hours=>hours>=requiredHours)
+    || Math.ceil(requiredHours/24)*24)*HOUR_MS;
+  const indexes=[];
+  let last=-Infinity;
+  timestamps.forEach((timestamp,index)=>{
+    if(timestamp-last>=interval){indexes.push(index);last=timestamp;}
+  });
+  return indexes;
+}
+
 function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble, ctrl, hres, p10, p25, p50, p75, p90, hres2, p502, yMin2, yMax2, fanColor, xMode, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, valueFmt, stacked, unavailable, panelIndex}) {
   const plotW = panelW - PM.l - PM.r;
   const plotH = panelH - PM.t - PM.b;
@@ -608,14 +625,7 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
   const xToPx = index => timeToPx(indexToTime(index));
   const yToPx = y => oy + PM.t + (1 - (y-yMin)/(yMax-yMin))*plotH;
   const yToPx2 = y => oy + PM.t + (1 - (y-yMin2)/(yMax2-yMin2))*plotH;
-  const timeLabelIndexes = [];
-  let lastTimeLabelMs = -Infinity;
-  timeMs.forEach((timestamp, index) => {
-    if (index === 0 || timestamp - lastTimeLabelMs >= 5.5 * HOUR_MS) {
-      timeLabelIndexes.push(index);
-      lastTimeLabelMs = timestamp;
-    }
-  });
+  const timeLabelIndexes = axisTimeLabelIndexes(times, plotW);
   let s = '';
 
   s += `<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" fill="#ffffff"/>`;
@@ -753,14 +763,17 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
     if (!lastGroup || lastGroup.key !== local.dateKey) dayGroups.push({ key:local.dateKey, local, first:index, last:index });
     else lastGroup.last = index;
     if (timeLabelIndexes.includes(index)) {
-      s += `<text x="${xToPx(index).toFixed(1)}" y="${oy+PM.t+plotH+18}" font-size="13" text-anchor="middle" fill="#667085">${String(local.hour).padStart(2,'0')}u</text>`;
+      s += `<text class="axis-time-label" data-panel-index="${panelIndex}" x="${xToPx(index).toFixed(1)}" y="${oy+PM.t+plotH+28}" font-size="24" font-weight="600" text-anchor="middle" fill="#344054">${String(local.hour).padStart(2,'0')}u</text>`;
     }
   });
+  let lastDayLabelX = -Infinity;
   for (const group of dayGroups) {
     const labelX = (xToPx(group.first) + xToPx(group.last)) / 2;
-    const ly = oy+PM.t+plotH+43;
-    s += `<text x="${labelX.toFixed(1)}" y="${ly}" font-size="19" font-weight="700" text-anchor="middle" fill="${C_AXIS}">${group.local.weekday}</text>`;
-    s += `<text x="${labelX.toFixed(1)}" y="${ly+22}" font-size="18" text-anchor="middle" fill="${C_AXIS}">${String(group.local.day).padStart(2,'0')}-${String(group.local.month).padStart(2,'0')}</text>`;
+    if(labelX-lastDayLabelX<76)continue;
+    lastDayLabelX=labelX;
+    const ly = oy+PM.t+plotH+57;
+    s += `<text class="axis-day-label" data-panel-index="${panelIndex}" x="${labelX.toFixed(1)}" y="${ly}" font-size="23" font-weight="700" text-anchor="middle" fill="${C_AXIS}">${group.local.weekday}</text>`;
+    s += `<text class="axis-date-label" data-panel-index="${panelIndex}" x="${labelX.toFixed(1)}" y="${ly+26}" font-size="23" text-anchor="middle" fill="${C_AXIS}">${String(group.local.day).padStart(2,'0')}-${String(group.local.month).padStart(2,'0')}</text>`;
   }
 
   const cx = ox + panelW/2;
@@ -768,8 +781,8 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
   s += `<text x="${cx}" y="${oy+55}" font-size="20" font-weight="700" text-anchor="middle" fill="#344054">${station}</text>`;
   s += `<text x="${cx}" y="${oy+78}" font-size="17" text-anchor="middle" fill="#667085">${datumTxt} · modelrun ${runLabel}</text>`;
 
-  const legY = oy + panelH - 75;
-  const legItems = stackSeries
+  const legY = oy + panelH - 51;
+  const legItems = unavailable ? [] : stackSeries
     ? stackSeries.map(sv => ({color:sv.color, swatch:'block', txt:sv.label}))
     : p502
       ? [
@@ -870,7 +883,7 @@ function showChartTooltip(element, clientX, clientY) {
   const panelIndex = Number(element.dataset.panelIndex);
   const timeIndex = Number(element.dataset.timeIndex);
   const panel = activeModel?.panels?.[panelIndex];
-  const time = activeModel?.times?.[timeIndex];
+  const time = (panel?.times || activeModel?.times)?.[timeIndex];
   if (!panel || !time) return;
   const validCount = panel.stacked?.validCounts?.[timeIndex] || 0;
   const rows = tooltipRows(panel, timeIndex);
@@ -1052,6 +1065,10 @@ async function loadAndRender(force = false) {
       model.sourceModel=data.model;
       model.footRight=`Bron: ECMWF IFS-ENS · ${model.runLabel}`;
       model.footLeft=`Weerlab.nl · ${data.source?.provider || 'ECMWF'} · ${data.model}`;
+      const layerSource=data.source?.enrichment;
+      if(model.panels[0].stacked && layerSource?.fields_added?.some(field=>['cloud_cover_low','cloud_cover_mid'].includes(field))) {
+        model.panels[0].footLeft=`Weerlab.nl · ECMWF via ${layerSource.provider} · ${layerSource.model} · exacte brontijdstappen`;
+      }
       cached={data,model,svg:buildPageSvg(model)};renderedModels.set(cacheKey,cached);
       if(renderedModels.size>24)renderedModels.delete(renderedModels.keys().next().value);
     }
@@ -1222,11 +1239,20 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   const shadowStack = shadowUse && shadowUse.some(member => member.some(Number.isFinite))
     ? WeerlabCloudProbability.probabilityStack(shadowUse)
     : null;
+  // Early runs have finer native times than the later cloud-layer source.
+  // Render only actual paired observations, never invented/interpolated bars.
+  const shadowIndexes = shadowStack ? shadowStack.validCounts.flatMap((count,index)=>count>0?[index]:[]) : [];
+  const shadowTimes = shadowIndexes.map(index=>useTimes[index]);
+  const shadowNativeStack = shadowStack && {
+    series:shadowStack.series.map(series=>({...series,values:shadowIndexes.map(index=>series.values[index])})),
+    validCounts:shadowIndexes.map(index=>shadowStack.validCounts[index]),
+    percentagesByTime:shadowIndexes.map(index=>shadowStack.percentagesByTime[index]),
+  };
   const wdirStack  = windDirStackSeries(wdirUse);
 
   const panels = [
     shadowStack
-      ? { title:"Schaduwgevende bewolking (%)", stacked:shadowStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` }
+      ? { title:"Schaduwgevende bewolking (%)", stacked:shadowNativeStack, times:shadowTimes, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` }
       : { title:"Schaduwgevende bewolking (%)", unavailable:'Lage en middelbare ENS-bewolking ontbreken voor deze run.', xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
     { title:"Totale bewolking (%)", stacked:cloudStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
     { title:"Windrichting — kans per sector", stacked:wdirStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>Math.round(v) },
