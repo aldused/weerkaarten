@@ -1,6 +1,7 @@
 import {beaufort,windLegend} from './wind-style.mjs';
 import {MODELS,modelFor,harmonieFrames,preserveModelTime} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
+import {installMovableMenu} from './movable-menu.mjs';
 import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
@@ -274,6 +275,7 @@ function setMenuCollapsed(collapsed){
 $('menu-toggle').addEventListener('click',()=>setMenuCollapsed($('menu-toggle').getAttribute('aria-expanded')==='true'));
 const shortViewport=matchMedia('(max-height: 650px)');
 setMenuCollapsed(shortViewport.matches);
+installMovableMenu(document.querySelector('.bottom-area'),$('menu-drag'),$('menu-reset'),queueCityDraw);
 shortViewport.addEventListener('change',event=>{if(event.matches)setMenuCollapsed(true);});
 // Only an actual menu size change updates layout; map motion never measures it.
 let dockWidth=0;
@@ -518,6 +520,7 @@ $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-clo
 $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('info').close();}});
 $('retry').addEventListener('click',()=>retryLoad());
 document.addEventListener('keydown',e=>{
+  if(e.defaultPrevented)return;
   if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
   if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]')||$('info').open)return;
   if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)&&(!e.target.closest('button')||e.target.closest('.timeline'))){
@@ -546,7 +549,7 @@ function drawCities(){
     if(city.minZoom>zoom)continue;
     const p=map.project([city.lon,city.lat]);
     if(p.x<25||p.x>width-25||p.y<20||p.y>height-25)continue;
-    if(p.x>controls.left-12&&p.x<controls.right+12&&p.y>controls.top-20)continue;
+    if(p.x>controls.left-12&&p.x<controls.right+12&&p.y>controls.top-42&&p.y<controls.bottom+24)continue;
     const name=city.name, w=Math.max(50,name.length*font*.53), rect=[p.x-w/2-9,p.y-30,p.x+w/2+9,p.y+18];
     if(boxes.some(b=>rect[0]<b[2]&&rect[2]>b[0]&&rect[1]<b[3]&&rect[3]>b[1]))continue;
     boxes.push(rect);

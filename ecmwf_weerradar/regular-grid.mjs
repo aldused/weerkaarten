@@ -12,7 +12,9 @@ export function createRegularGrid(g){
   for(let i=0;i<4;i++){if(!ws[i])continue;const v=values[ids[i]];if(!Number.isFinite(v))return NaN;if(direction){a+=Math.sin(v*Math.PI/180)*ws[i];b+=Math.cos(v*Math.PI/180)*ws[i];}else a+=v*ws[i];}
   return direction?(Math.atan2(a,b)*180/Math.PI+360)%360:a;
  }
- return {kind:'regular',...g,getInterpolatedValue:interpolate,getLinearInterpolatedValue:interpolate,getLinearInterpolatedDirection:(v,lat,lon)=>interpolate(v,lat,lon,true)};
+ // The common grid API passes a fourth interpolation-method argument. Keep
+ // scalar sampling separate: a truthy 'monotone' must never mean direction.
+ return {kind:'regular',...g,getInterpolatedValue:(v,lat,lon)=>interpolate(v,lat,lon),getLinearInterpolatedValue:(v,lat,lon)=>interpolate(v,lat,lon),getLinearInterpolatedDirection:(v,lat,lon)=>interpolate(v,lat,lon,true)};
 }
 const MAGIC=0x31524c57;
 export function encodeRegularPacket(meta,values,directions){
