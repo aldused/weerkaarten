@@ -1,7 +1,8 @@
+import {frameScheduler} from './frame-scheduler.mjs';
 // Cache hits can complete hundreds of tiles in the same microtask. Keep their
 // canvas/Leaflet commits inside a short animation-frame budget as well.
 export class CanvasCommits {
-  constructor({schedule=fn=>requestAnimationFrame(fn),cancel=id=>cancelAnimationFrame(id),now=()=>performance.now(),budgetMs=6}={}){
+  constructor({schedule=fn=>frameScheduler.schedule(fn),cancel=handle=>frameScheduler.cancel(handle),now=()=>performance.now(),budgetMs=6}={}){
     Object.assign(this,{schedule,cancel,now,budgetMs});this.queue=[];this.frame=null;
   }
   commit(draw,signal){

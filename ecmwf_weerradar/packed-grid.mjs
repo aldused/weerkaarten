@@ -54,6 +54,26 @@ export function createPackedGrid(metadata){
   const grid=Object.create(native);
   grid.cacheKey=JSON.stringify([metadata.ranges,metadata.bounds]);
   grid.sampleIndex=(y,x)=>{const r=rows.get(y);if(!r)return -1;const i=mod(x-r.x,r.n);return i<r.len?r.offset+i:-1;};
+  // Outside the transported crop the library also yields NaN, but only after a
+  // full virtual lookup per pixel. Its bilinear helper can still fill a stencil
+  // with exactly one missing corner, so only two or more missing corners are
+  // answered here directly; the remaining edge pixels keep the library result.
+  const dy=180/(2*native.latitudeLines+.5),lines=native.latitudeLines;
+  grid.missingStencil=(values,lat,lon)=>{
+    if(!Number.isFinite(lat)||!Number.isFinite(lon))return true;
+    const lower=mod(Math.floor(lines-1-(lat-dy/2)/dy),2*lines);
+    let missing=0;
+    for(let y=lower;y<=lower+1;y++){
+      const r=rows.get(y);
+      if(!r){missing+=2;break;}
+      const center=mod(Math.floor(lon/(360/r.n)),r.n);
+      const first=grid.sampleIndex(y,center),second=grid.sampleIndex(y,(center+1)%r.n);
+      if(first<0||!Number.isFinite(values[first]))missing++;
+      if(second<0||!Number.isFinite(values[second]))missing++;
+      if(missing>=2)break;
+    }
+    return missing>=2;
+  };
   const proxies=new WeakMap();
   const source=values=>{
     let proxy=proxies.get(values);if(proxy)return proxy;

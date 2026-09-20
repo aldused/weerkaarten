@@ -11,9 +11,28 @@ export function isNewerForecastRun(latest, timeline, now=Date.now()) {
   } catch { return false; }
 }
 
+/** ECMWF publishes ten days only from the 00 and 12 UTC runs; 06 and 18 UTC
+ * reach six days. When the newest run is a short one, its predecessor is
+ * always needed, so ask for that metadata at the same time instead of after
+ * the first answer. A wrong guess only costs one small unused request. */
+const PUBLICATION_LAG = 5.5 * HOUR;
+export function speculativeFallbackRun(now) {
+  if (!Number.isFinite(now)) return null;
+  const newest = Math.floor((now - PUBLICATION_LAG) / (6 * HOUR)) * 6 * HOUR;
+  const hour = new Date(newest).getUTCHours();
+  return hour === 6 || hour === 18 ? newest - 6 * HOUR : null;
+}
+
 /** Find the newest usable short run and a full run for its remaining horizon. */
 export async function discoverForecastRuns(loadJSON, now = Date.now()) {
   if (typeof loadJSON !== 'function' || !Number.isFinite(now)) throw new Error('Ongeldige ECMWF-bron of huidige tijd');
+  const expected = speculativeFallbackRun(now);
+  let speculative = null;
+  if (expected !== null) {
+    // Start this before latest.json, so both answers travel at the same time.
+    try { speculative = {run: expected, meta: Promise.resolve(loadJSON(`${DATA_ROOT}/${runPath(expected)}/meta.json`)).catch(() => null)}; }
+    catch { speculative = null; }
+  }
   const latest = await loadJSON(`${DATA_ROOT}/latest.json`);
   const reference = Date.parse(latest?.reference_time);
   if (!Number.isFinite(reference) || reference % (6 * HOUR)) throw new Error('ECMWF-modeltijd ontbreekt of is ongeldig');
@@ -27,7 +46,7 @@ export async function discoverForecastRuns(loadJSON, now = Date.now()) {
   for (let back = 6; back <= 36; back += 6) {
     const run = reference - back * HOUR;
     try {
-      const candidate = await loadJSON(`${DATA_ROOT}/${runPath(run)}/meta.json`);
+      const candidate = speculative?.run === run ? await speculative.meta : await loadJSON(`${DATA_ROOT}/${runPath(run)}/meta.json`);
       // A cache or server response from a different run cannot satisfy this URL.
       if (Date.parse(candidate?.reference_time) !== run) continue;
       metas.push(candidate);

@@ -2,6 +2,7 @@ import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
 import {MODELS,modelFor,harmonieFrames,preserveModelTime} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
 import {installMovableMenu} from './movable-menu.mjs';
+import {visibleTimeout} from './frame-scheduler.mjs';
 import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
@@ -46,6 +47,7 @@ document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.c
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
 
 let meta, frames = [], current = null, wanted = 0, revision = 0, rendering = false, refreshing = false;
+let checkedAt = Date.now();
 let requestedContext = null, startupRevision = 0;
 let retryLoad = () => start();
 let mode = 'weather', playing = false, playTimer, sourceCounter = 0, cities = [], selectedPoint = null;
@@ -97,9 +99,12 @@ let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
 $('model-select').value=selectedModel;
 $('model-select').addEventListener('change',()=>{selectedModel=$('model-select').value;start(undefined,selectedModel,true);});
 // Optional local diagnostics: no reporting endpoint and no visitor tracking.
-if(params.get('profile')==='1')setInterval(()=>{
-  $('app').dataset.cacheStats=JSON.stringify({...map.performanceStats(),fieldEntries:fieldCache.size,fieldBytes:[...fieldCache.values()].reduce((n,e)=>n+(e.bytes||0),0)});
-},1000);
+if(params.get('profile')==='1'){
+  setInterval(()=>{
+    $('app').dataset.cacheStats=JSON.stringify({...map.performanceStats(),fieldEntries:fieldCache.size,fieldBytes:[...fieldCache.values()].reduce((n,e)=>n+(e.bytes||0),0)});
+  },1000);
+  globalThis.weerlabProfile={stats:()=>map.performanceStats(),samples:()=>mapEngine.renderStats.samples,fields:()=>[...fieldCache.values()].map(e=>({variable:e.variable,bounds:[e.west,e.south,e.east,e.north]}))};
+}
 const coords = (params.get('center') || '5.94,51.96').split(',').map(Number);
 const initialCenter = inEurope(coords[0], coords[1]) ? coords : [5.94, 51.96];
 const initialZoom = Math.min(10, Math.max(1, Number(params.get('zoom')) || 6.3));
@@ -170,11 +175,22 @@ async function json(url, signal) {
   return response.json();
 }
 let runCacheTime=0;
+// ECMWF publishes four runs a day. Stored metadata of the run that is still
+// on screen may open the map without any metadata request; the existing run
+// check then verifies it and replaces the whole frame when a newer run exists.
+const RUN_CACHE_MS=6*60*60*1000,RUN_CHECK_MS=5*60*1000;
 async function discoverRuns(now,prefetchedLatest) {
-  try{
-    const saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-runs-v2'));
-    if(!prefetchedLatest&&saved&&now>=saved.savedAt&&now-saved.savedAt<5*60*1000){combinedForecastFrames(saved.metas,now);runCacheTime=saved.savedAt;return saved.metas;}
-  }catch{}
+  let saved;
+  try{saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-runs-v2'));}catch{}
+  if(saved&&now>=saved.savedAt&&now-saved.savedAt<RUN_CACHE_MS&&!(prefetchedLatest&&now-saved.savedAt<RUN_CHECK_MS)){
+    try{
+      combinedForecastFrames(saved.metas,now);runCacheTime=saved.savedAt;
+      // Verify right after the first map instead of before it. A newer run
+      // then replaces the whole frame through the existing run check.
+      if(now-saved.savedAt>=RUN_CHECK_MS){checkedAt=0;setTimeout(()=>checkForNewRun(),1200);}
+      return saved.metas;
+    }catch{ /* A stored run that no longer reaches ten days is discarded. */ }
+  }
   runCacheTime=now;
   return discoverForecastRuns(url=>prefetchedLatest&&url===`${DATA_ROOT}/latest.json`?prefetchedLatest:json(url),now);
 }
@@ -296,6 +312,8 @@ new ResizeObserver(entries=>{
     for(const id of ['days','hours'])$(id).querySelector('[aria-pressed=true]')?.scrollIntoView({block:'nearest',inline:'center'});
   });}
 }).observe(document.querySelector('.bottom-area'));
+// Refinements of the same frame: they must not delay the first usable map.
+const OPTIONAL_LAYERS=['visibility','snowfall_water_equivalent'];
 function variablesForMode(modelMeta=meta){
   if(mode==='temperature') return ['temperature_2m'];
   if(mode==='wind') return ['wind_u_component_10m'];
@@ -315,13 +333,15 @@ function addLayer(frame,variable,prefix){
 function removeLayers(ids){for(const id of ids){pendingSources.delete(id);frameErrors.delete(id);if(map.getLayer(id)) map.removeLayer(id);if(map.getSource(id)) map.removeSource(id);}}
 function awaitSources(ids,signal){
   return new Promise((resolve,reject)=>{
-    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);map.off('sourcedata',check);ids.forEach(id=>pendingSources.delete(id));};
+    const cleanup=()=>{stopTimer();signal?.removeEventListener('abort',abort);map.off('sourcedata',check);ids.forEach(id=>pendingSources.delete(id));};
     const check=()=>{
       if(ids.some(id=>frameErrors.has(id))){cleanup();reject(new Error('Een ECMWF-weerlaag kon niet worden geladen'));return;}
       if(ids.every(id=>map.getSource(id)&&map.isSourceLoaded(id))){cleanup();resolve();}
     };
     const abort=()=>{cleanup();reject(signal.reason);};
-    const timer=setTimeout(()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));},45000);
+    // Only visible seconds count: a background tab renders very slowly and
+    // must show its finished map on return, not a load error.
+    const stopTimer=visibleTimeout(45000,()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));});
     signal?.addEventListener('abort',abort,{once:true});
     ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);if(signal?.aborted)abort();else check();
   });
@@ -339,11 +359,13 @@ async function renderFrame(index,rev,signal,context){
   if(!current){
     updateTimeHeading(frame,modelMeta);
     reveal=()=>{
-      if(rev!==revision)return;
-      for(const id of ids)if(map.isSourceLoaded(id)&&!frameErrors.has(id)){
+      if(rev!==revision){map.off('sourcedata',reveal);return;}
+      for(const id of ids)if(map.getSource(id)&&map.isSourceLoaded(id)&&!frameErrors.has(id)){
         map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100);
-        if(!id.endsWith('visibility')&&!id.endsWith('snowfall_water_equivalent')&&!$('app').dataset.firstVisibleWeatherMs){$('app').dataset.firstVisibleWeatherMs=Math.round(performance.now());$('app').dataset.firstVisibleLayer=id;}
+        if(!OPTIONAL_LAYERS.some(v=>id.endsWith(v))&&!$('app').dataset.firstVisibleWeatherMs){$('app').dataset.firstVisibleWeatherMs=Math.round(performance.now());$('app').dataset.firstVisibleLayer=id;}
       }
+      // Keep listening while the optional layers of this same frame finish.
+      if(ids.every(id=>!map.getSource(id)||map.isSourceLoaded(id)))map.off('sourcedata',reveal);
     };
     map.on('sourcedata',reveal);
   }
@@ -351,7 +373,11 @@ async function renderFrame(index,rev,signal,context){
   $('app').dataset.frameStatus='loading';
   try {
     const sampleVars=sampleVariables(vars,modelMeta);
-    let [,...fields]=await Promise.all([awaitSources(ids,signal),...sampleVars.map(v=>readField(frame.url,v,signal))]);
+    // The first map must not wait for mist and snow: both are refinements of
+    // the same frame and cost roughly half of all tiles. A later time change
+    // still switches every layer together, so no two hours are ever mixed.
+    const requiredIds=!current&&ids.length>1?ids.filter((id,i)=>!OPTIONAL_LAYERS.includes(vars[i])):ids;
+    let [,...fields]=await Promise.all([awaitSources(requiredIds.length?requiredIds:ids,signal),...sampleVars.map(v=>readField(frame.url,v,signal))]);
     // A pan during loading may change the crop while the time stays the same.
     // Commit city/point values only once they cover the current tile window.
     for(;;){
@@ -393,7 +419,7 @@ async function renderFrame(index,rev,signal,context){
     stopPlayback();$('app').dataset.frameStatus='error';
     status(`De weergegevens konden niet worden geladen. ${current?'De vorige tijdstap blijft zichtbaar.':'Probeer opnieuw.'}`,true);
     return false;
-  }finally{if(reveal)map.off('sourcedata',reveal);}
+  }finally{if(reveal&&(rev!==revision||ids.every(id=>!map.getSource(id)||map.isSourceLoaded(id))))map.off('sourcedata',reveal);}
 }
 let detailsStarted=false,detailsReady=Promise.resolve();
 function loadMapDetails(){
@@ -652,7 +678,7 @@ $('search-form').addEventListener('submit',async e=>{
 
 // A tiny metadata check picks up all four runs, only when visible and idle.
 // Unchanged metadata never reloads fields. Never switch runs during playback.
-let checkedAt=Date.now(),checkingRun=false;
+let checkingRun=false;
 async function checkForNewRun(){
   if(!current||document.hidden||playing||rendering||refreshing||checkingRun||Date.now()-checkedAt<10*60*1000)return;
   checkedAt=Date.now();checkingRun=true;const polledModel=selectedModel,polledFrame=current;

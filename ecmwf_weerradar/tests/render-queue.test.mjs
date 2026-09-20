@@ -53,3 +53,27 @@ test('already aborted and same-turn abandoned tiles are skipped before dispatch'
   const b=new AbortController();const pending=queue.request('b',{},b.signal);const rejected=assert.rejects(pending,{name:'AbortError'});b.abort();await rejected;await next();
   assert.equal(calls,0);assert.equal(queue.pending.size,0);assert.equal(queue.queue.length,0);
 });
+
+test('a worker pool renders several tiles at once and queues the rest',async()=>{
+  const active=[],finish=[];
+  const queue=new SharedRenderQueue((payload)=>new Promise(resolve=>{active.push(payload);finish.push(()=>resolve(payload));}),{concurrency:3});
+  const jobs=['a','b','c','d'].map(key=>queue.request(key,key));
+  await next();
+  assert.deepEqual(active,['a','b','c'],'drie tegels tegelijk, de vierde wacht');
+  finish.shift()();await next();
+  assert.deepEqual(active,['a','b','c','d']);
+  finish.forEach(fn=>fn());
+  assert.deepEqual(await Promise.all(jobs),['a','b','c','d']);
+});
+
+test('a shrinking pool lowers the number of parallel tiles without a new queue',async()=>{
+  let workers=2;const active=[],finish=[];
+  const queue=new SharedRenderQueue(payload=>new Promise(resolve=>{active.push(payload);finish.push(()=>resolve(payload));}),{concurrency:()=>workers});
+  const first=['a','b','c'].map(key=>queue.request(key,key));
+  await next();assert.deepEqual(active,['a','b']);
+  workers=1;finish.shift()();await next();
+  assert.deepEqual(active,['a','b'],'met nog één werker komt er niets bij zolang die bezet is');
+  finish.shift()();await next();
+  assert.deepEqual(active,['a','b','c']);
+  finish.forEach(fn=>fn());await Promise.all(first);
+});

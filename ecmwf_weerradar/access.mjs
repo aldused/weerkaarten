@@ -30,18 +30,24 @@ export function installAccessGate(doc,storage,loadApp){
   return remembered?unlock():Promise.resolve();
 }
 
-function startMap(){
-  // Preserve the parallel metadata lookup, but only after unlocking the page.
+// The model metadata is one small public file and the slowest first step.
+// Fetching it while the code is still being typed removes that wait entirely;
+// nothing personal is sent and no map data is requested before unlocking.
+function prefetchModelRun(){
   try{
     const saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-runs-v2'));
-    if(!['harmonie','harmonie46'].includes(new URLSearchParams(location.search).get('model'))&&(!saved||Date.now()<saved.savedAt||Date.now()-saved.savedAt>=300000)){
-      window.weerlabLatest=fetch('https://weerlab-ecmwf-fields.dawn-term-a69f.workers.dev/data_spatial/ecmwf_ifs/latest.json',{cache:'no-cache',signal:AbortSignal.timeout(16000)}).then(r=>{if(!r.ok)throw new Error('ECMWF-modelinformatie niet bereikbaar');return r.json();});
-      window.weerlabLatest.catch(()=>{});
-    }
+    if(['harmonie','harmonie46'].includes(new URLSearchParams(location.search).get('model')))return;
+    if(saved&&Date.now()>=saved.savedAt&&Date.now()-saved.savedAt<300000)return;
+    window.weerlabLatest=fetch('https://weerlab-ecmwf-fields.dawn-term-a69f.workers.dev/data_spatial/ecmwf_ifs/latest.json',{cache:'no-cache',signal:AbortSignal.timeout(16000)}).then(r=>{if(!r.ok)throw new Error('ECMWF-modelinformatie niet bereikbaar');return r.json();});
+    window.weerlabLatest.catch(()=>{});
   }catch{}
+}
+function startMap(){
+  prefetchModelRun();
   return import(document.getElementById('app-loader').dataset.appSrc);
 }
 if(globalThis.document){
   let storage;try{storage=sessionStorage;}catch{}
+  prefetchModelRun();
   installAccessGate(document,storage,startMap);
 }

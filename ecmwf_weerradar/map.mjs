@@ -4,31 +4,50 @@ import { renderTile } from './tile-renderer.mjs';
 import { SharedRenderQueue, abortError } from './render-queue.mjs';
 import {visibleWeatherTiles} from './field-window.mjs';
 import {CanvasCommits} from './canvas-commits.mjs';
+import {frameScheduler} from './frame-scheduler.mjs';
 
 // Canvas tiles keep the full ECMWF grid available on browsers without WebGL2.
 let weatherLoader;
 export const setWeatherLoader=loader=>{weatherLoader=loader;};
-const workerFields=new globalThis.Map();
-let worker,workerJob,jobCounter=0;
-try{
-  const workerURL=new URL('./assets/weather-worker.js',document.baseURI);workerURL.search=new URL(import.meta.url).search;
-  worker=new Worker(workerURL,{type:'module'});
+// Tile rasterisation used a single worker: one busy core while the machine
+// had several idle ones. A small pool renders independent tiles in parallel;
+// every worker keeps its own bounded field cache, together the same budget.
+const POOL_SIZE=Math.max(1,Math.min(4,(globalThis.navigator?.hardwareConcurrency||4)-1));
+const FIELD_BYTES=Math.round(32*1024*1024/POOL_SIZE),FIELD_ENTRIES=Math.max(8,Math.ceil(48/POOL_SIZE));
+// Local diagnostics only; no reporting endpoint and no visitor tracking.
+// Per-tile samples are kept only when the page is opened with ?profile=1.
+const PROFILING=(()=>{try{return new URLSearchParams(location.search).get('profile')==='1';}catch{return false;}})();
+export const renderStats={tiles:0,workerMs:0,commitWaitMs:0,commits:0,mainThreadTiles:0,samples:[]};
+let jobCounter=0;
+function createWorkerSlot(){
+  let worker;
+  try{
+    const workerURL=new URL('./assets/weather-worker.js',document.baseURI);workerURL.search=new URL(import.meta.url).search;
+    worker=new Worker(workerURL,{type:'module'});
+  }catch{return null;}
+  const slot={worker,fields:new globalThis.Map(),bytes:0,job:null};
   worker.onmessage=({data})=>{
-    if(!workerJob||workerJob.id!==data.id)return;
-    const job=workerJob;workerJob=null;
+    const job=slot.job;
+    if(!job||job.id!==data.id)return;
+    slot.job=null;
+    renderStats.tiles++;const roundTrip=performance.now()-job.started;renderStats.workerMs+=roundTrip;
+    if(PROFILING&&renderStats.samples.length<600)renderStats.samples.push({v:job.field.variable,x:job.coords.x,y:job.coords.y,z:job.coords.z,ms:Math.round(roundTrip),render:Math.round(data.renderMs||0)});
     if(data.error)job.reject(new Error(data.error));else job.resolve(data.pixels);
   };
   worker.onerror=()=>{
-    worker?.terminate();worker=null;workerFields.clear();
-    const job=workerJob;workerJob=null;
+    slot.worker?.terminate();slot.worker=null;slot.fields.clear();slot.bytes=0;
+    const job=slot.job;slot.job=null;
     if(job)renderOnMain(job.field,job.coords,job.signal).then(job.resolve,job.reject);
   };
-}catch{}
+  return slot;
+}
+const pool=Array.from({length:POOL_SIZE},createWorkerSlot).filter(Boolean);
+const liveWorkers=()=>pool.reduce((n,slot)=>n+(slot.worker?1:0),0);
 function renderOnMain(field,coords,signal){
   return new Promise((resolve,reject)=>{
     if(signal.aborted){reject(abortError(signal));return;}
-    const cancel=()=>{cancelAnimationFrame(frame);reject(abortError(signal));};
-    const frame=requestAnimationFrame(()=>{
+    const cancel=()=>{frameScheduler.cancel(frame);reject(abortError(signal));};
+    const frame=frameScheduler.schedule(()=>{
       signal.removeEventListener('abort',cancel);
       if(signal.aborted){reject(abortError(signal));return;}
       try{resolve(renderTile(field,coords));}catch(error){reject(error);}
@@ -38,29 +57,31 @@ function renderOnMain(field,coords,signal){
 }
 function renderPixels({field,coords},signal){
   if(signal.aborted)return Promise.reject(abortError(signal));
-  if(!worker)return renderOnMain(field,coords,signal);
+  const slot=pool.find(s=>s.worker&&!s.job);
+  if(!slot){renderStats.mainThreadTiles++;return renderOnMain(field,coords,signal);}
   return new Promise((resolve,reject)=>{
-    // Upload and eviction happen at dispatch, so fields needed by queued jobs
-    // cannot be dropped before their render message reaches the worker.
-    if(workerFields.has(field.key)){
-      const bytes=workerFields.get(field.key);workerFields.delete(field.key);workerFields.set(field.key,bytes);
+    // Upload and eviction happen at dispatch, so a field needed by this tile
+    // cannot be dropped before its render message reaches the worker.
+    if(slot.fields.has(field.key)){
+      const bytes=slot.fields.get(field.key);slot.fields.delete(field.key);slot.fields.set(field.key,bytes);
     }else{
-      worker.postMessage({type:'field',key:field.key,gridData:field.gridData,ranges:field.ranges,packed:field.packed,variable:field.variable,values:field.data.values,cloudLow:field.cloudLow,cloudHigh:field.cloudHigh});
-      workerFields.set(field.key,field.data.values.byteLength+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0));
-      let bytes=[...workerFields.values()].reduce((a,b)=>a+b,0);
-      while(workerFields.size>48||(bytes>32*1024*1024&&workerFields.size>3)){
-        const old=workerFields.keys().next().value;bytes-=workerFields.get(old);workerFields.delete(old);worker.postMessage({type:'drop',key:old});
+      slot.worker.postMessage({type:'field',key:field.key,gridData:field.gridData,ranges:field.ranges,packed:field.packed,variable:field.variable,values:field.data.values,cloudLow:field.cloudLow,cloudHigh:field.cloudHigh});
+      const bytes=field.data.values.byteLength+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
+      slot.fields.set(field.key,bytes);slot.bytes+=bytes;
+      while(slot.fields.size>FIELD_ENTRIES||(slot.bytes>FIELD_BYTES&&slot.fields.size>2)){
+        const old=slot.fields.keys().next().value;
+        slot.bytes-=slot.fields.get(old);slot.fields.delete(old);slot.worker.postMessage({type:'drop',key:old});
       }
     }
-    const id=++jobCounter;workerJob={id,resolve,reject,field,coords,signal};
-    try{worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture});}
-    catch(error){workerJob=null;reject(error);}
-    // A worker's synchronous render cannot be interrupted. Keep this slot busy
-    // until its reply, even when its subscribers cancel, so only one tile is
-    // ever posted. The queue will discard that abandoned result.
+    const id=++jobCounter;slot.job={id,resolve,reject,field,coords,signal,started:performance.now()};
+    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture});}
+    catch(error){slot.job=null;reject(error);}
+    // A worker's synchronous render cannot be interrupted. Keep its slot busy
+    // until the reply arrives, even when subscribers cancel, so no message
+    // pile can form. The queue discards that abandoned result.
   });
 }
-const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256});
+const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256,concurrency:()=>Math.max(1,liveWorkers())});
 const canvasCommits=new CanvasCommits();
 function paint(field,coords,signal){
   const key=field.key+'|'+field.texture+'|'+coords.z+'/'+coords.x+'/'+coords.y;
@@ -99,10 +120,11 @@ const WeatherTiles=L.GridLayer.extend({
     Promise.resolve().then(()=>{
       if(signal.aborted)throw abortError(signal);
       return weatherLoader(this.url,signal);
-    }).then(field=>paint(field,coords,signal)).then(pixels=>canvasCommits.commit(()=>{
+    }).then(field=>paint(field,coords,signal)).then(pixels=>{const queued=performance.now();return canvasCommits.commit(()=>{
+      renderStats.commits++;renderStats.commitWaitMs+=performance.now()-queued;
       if(signal.aborted)throw abortError(signal);
       tile.getContext('2d').putImageData(new ImageData(pixels,256,256),0,0);done(null,tile);
-    },signal)).catch(error=>{
+    },signal);}).catch(error=>{
       // Never call Leaflet's done for detached tiles: a new tile can already
       // have reused its coordinates. The unload handler settles loading state.
       if(!signal.aborted&&error?.name!=='AbortError')done(error,tile);
@@ -145,15 +167,19 @@ export class Map {
   getCanvas(){return this.el;}
   performanceStats(){return {
     pixelCacheEntries:paintQueue.cache.size,pixelCacheBytes:[...paintQueue.cache.values()].reduce((n,v)=>n+v.byteLength,0),
-    workerFields:workerFields.size,workerFieldBytes:[...workerFields.values()].reduce((a,b)=>a+b,0),
+    workerFields:pool.reduce((n,slot)=>n+slot.fields.size,0),workerFieldBytes:pool.reduce((n,slot)=>n+slot.bytes,0),workers:liveWorkers(),
     pendingTiles:paintQueue.pending.size,weatherLayers:this.layers.size,
+    renderedTiles:renderStats.tiles,workerMs:Math.round(renderStats.workerMs),
+    commits:renderStats.commits,commitWaitMs:Math.round(renderStats.commitWaitMs),mainThreadTiles:renderStats.mainThreadTiles,
     detailTiles:this.details.layers.size,detailCacheTiles:this.details.cache.size,
   };}
   setFrameBudget(fieldCount){
     const b=this.getBounds(),tiles=visibleWeatherTiles([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],this.getZoom());
-    // Three visible frames: standard laptops need ~128 MiB; wide monitors may
-    // need more. The absolute ceiling remains 256 MiB, never a full-day cache.
-    paintQueue.maxEntries=Math.min(1024,Math.max(32,tiles.length*fieldCount*3+8));
+    // Four frames: the selected one, both prepared neighbours and the frame
+    // being prepared after a step. With three, the parallel renderers filled
+    // the cache and dropped the previous frame that the user steps back to.
+    // The absolute ceiling remains 1024 tiles, never a full-day cache.
+    paintQueue.maxEntries=Math.min(1024,Math.max(32,tiles.length*fieldCount*4+8));
   }
   async prepareFields(fields,signal){
     const b=this.getBounds(),tiles=visibleWeatherTiles([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],this.getZoom());

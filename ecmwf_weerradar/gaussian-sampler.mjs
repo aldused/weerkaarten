@@ -75,6 +75,9 @@ function geometryFor(grid,coords,size){
 export function createGaussianTileSampler(grid,values,coords,size=256){
   if(!Number.isInteger(grid.latitudeLines)||typeof grid.nxOf!=='function'||typeof grid.integral!=='function')return null;
   const geometry=geometryFor(grid,coords,size),horizontal=new Map(),output=new Float64Array(size);
+  // A transported crop knows where it holds no data. Asking it first keeps the
+  // identical result and skips the costly virtual lookup for empty pixels.
+  const linear=(lat,lon)=>grid.missingStencil&&grid.missingStencil(values,lat,lon)?NaN:grid.getLinearInterpolatedValue(values,lat,lon);
   function horizontalValues(stencil){
     let result=horizontal.get(stencil);if(result)return result;
     result=new Float64Array(size);
@@ -90,13 +93,13 @@ export function createGaussianTileSampler(grid,values,coords,size=256){
     row(y){
       const stencils=geometry.rows[y],lat=geometry.latitudes[y];
       if(!stencils){
-        for(let x=0;x<size;x++)output[x]=grid.getLinearInterpolatedValue(values,lat,geometry.longitudes[x]);
+        for(let x=0;x<size;x++)output[x]=linear(lat,geometry.longitudes[x]);
         return output;
       }
       const a=horizontalValues(stencils[0]),b=horizontalValues(stencils[1]),c=horizontalValues(stencils[2]),d=horizontalValues(stencils[3]);
       for(let x=0;x<size;x++){
         output[x]=!Number.isFinite(a[x])||!Number.isFinite(b[x])||!Number.isFinite(c[x])||!Number.isFinite(d[x])
-          ?grid.getLinearInterpolatedValue(values,lat,geometry.longitudes[x])
+          ?linear(lat,geometry.longitudes[x])
           :round(monotone(geometry.weights,y*4,a[x],b[x],c[x],d[x]));
       }
       return output;

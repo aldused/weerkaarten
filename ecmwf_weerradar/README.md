@@ -80,6 +80,24 @@ De nieuwe bestandslezer combineert bestandslengte en OM-catalogus in één begre
 
 Zie [PERFORMANCE-2026-09-20.md](PERFORMANCE-2026-09-20.md). `node tests/audit-bootstrap-live.mjs` vergelijkt de volledige gedecodeerde velden met rechtstreekse S3-lezingen bij twee modelruns en 1/3/6-uursstappen; de SHA256-resultaten staan in `tests/bootstrap-live-audit.json`.
 
+### Parallel tekenen en achtergrondtabbladen (20 september 2026)
+
+De tegels worden nu door een kleine pool van tekenwerkers berekend in plaats van één voor
+één, en de eerste kaart wacht alleen op bewolking en neerslag; mist en sneeuw van hetzelfde
+tijdstip volgen zodra ze klaar zijn. Beeldpunten buiten de opgehaalde uitsnede worden direct
+overgeslagen in plaats van via de dure terugval van de bibliotheek; de getoonde waarden
+blijven exact gelijk. De opgeslagen runinformatie opent een tweede bezoek zonder
+metadata-aanvraag en de terugvalrun wordt naast `latest.json` opgehaald in plaats van erna.
+
+Een kaart in een achtergrondtabblad gaf voorheen na 45 seconden een foutmelding, ook als
+alle data al binnen was: de tegels werden uitsluitend in een animatieframe op het canvas
+gezet, en dat frame komt daar nooit. Tegels worden nu ook zonder animatieframe geplaatst en
+de laadlimiet telt alleen zichtbare seconden.
+
+Zie [TEGELS-EN-ACHTERGROND-20260920.md](TEGELS-EN-ACHTERGROND-20260920.md) voor de metingen
+voor en na, de pixelvergelijking en de beperkingen. `node tests/perf-browser.mjs` herhaalt
+die laadmeting in een echte Chrome-pagina.
+
 ### HARMONIE en Beaufort (20 september 2026)
 
 De kaart biedt ECMWF, HARMONIE 43 en HARMONIE 46 via de modelkeuze. HARMONIE gebruikt de bestaande regionale KNMI-export van circa 60 uur; de tijdlijn en het bereik volgen het gekozen model. Alle windweergaven gebruiken Beaufort. Zie [HARMONIE-EN-BEAUFORT-20260920.md](HARMONIE-EN-BEAUFORT-20260920.md) voor bronnen, automatische publicatie, conversies en broncontroles.

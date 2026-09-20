@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {combinedForecastFrames, discoverForecastRuns, isNewerForecastRun} from '../forecast-runs.mjs';
+import {combinedForecastFrames, discoverForecastRuns, isNewerForecastRun, speculativeFallbackRun} from '../forecast-runs.mjs';
 import {availableForecastFrames, DATA_ROOT, forecastFrames, fileURL, HOUR, REQUIRED, localDateKey, fmt, runPath} from '../core.mjs';
 
 const base = Date.parse('2026-09-19T00:00:00Z');
@@ -61,22 +61,28 @@ test('discovery keeps the preceding 06 UTC forecast when the latest 12 UTC run i
   const incomplete = {...metadata(base + 12 * HOUR), completed: false};
   const source = loader(incomplete, [short, full]);
   const metas = await discoverForecastRuns(source.loadJSON, now);
-  assert.deepEqual(source.calls, [
-    `${DATA_ROOT}/latest.json`,
-    `${DATA_ROOT}/2026/09/19/0600Z/meta.json`,
+  // The 00 UTC metadata is the predicted fallback and is asked for in parallel.
+  assert.equal(source.calls[0], `${DATA_ROOT}/2026/09/19/0000Z/meta.json`);
+  assert.deepEqual([...source.calls].sort(), [
     `${DATA_ROOT}/2026/09/19/0000Z/meta.json`,
+    `${DATA_ROOT}/2026/09/19/0600Z/meta.json`,
+    `${DATA_ROOT}/latest.json`,
   ]);
   const frames = combinedForecastFrames(metas, now);
   assert.equal(frames[0].modelMeta, short);
   assert.equal(frames.at(-1).modelMeta, full);
 });
 
-test('discovery returns a latest complete full run after exactly one request', async () => {
+test('a latest complete full run needs no second answer, only the parallel prediction', async () => {
   const latest = metadata(base + 12 * HOUR);
   const source = loader(latest);
   const metas = await discoverForecastRuns(source.loadJSON, now);
   assert.deepEqual(metas, [latest]);
-  assert.deepEqual(source.calls, [`${DATA_ROOT}/latest.json`]);
+  // One unused prediction is the whole price; no sequential second round trip.
+  assert.deepEqual([...source.calls].sort(), [
+    `${DATA_ROOT}/2026/09/19/0000Z/meta.json`,
+    `${DATA_ROOT}/latest.json`,
+  ]);
 });
 
 test('discovery does not select an incomplete intervening six-hour run', async () => {
@@ -96,9 +102,9 @@ test('discovery skips unavailable and incomplete fallback runs and checks 18 UTC
   // be skipped in favour of the preceding 12 UTC forecast for the first days.
   const source = loader(incomplete, [previousShort, previousFull]);
   const metas = await discoverForecastRuns(source.loadJSON, now);
-  assert.deepEqual(source.calls, [
+  assert.equal(source.calls[0], `${DATA_ROOT}/2026/09/19/0000Z/meta.json`);
+  assert.deepEqual(source.calls.slice(1), [
     `${DATA_ROOT}/latest.json`,
-    `${DATA_ROOT}/2026/09/19/0000Z/meta.json`,
     `${DATA_ROOT}/2026/09/18/1800Z/meta.json`,
     `${DATA_ROOT}/2026/09/18/1200Z/meta.json`,
   ]);
@@ -111,7 +117,9 @@ test('discovery validates time metadata, rejects wrong-run responses and bounds 
   for (const reference_time of ['invalid', '2026-09-19T06:30:00Z', '2026-09-19T07:00:00Z']) {
     const source = loader({...short, reference_time});
     await assert.rejects(discoverForecastRuns(source.loadJSON, now), /modeltijd/);
-    assert.equal(source.calls.length, 1);
+    // Unusable metadata stops discovery; only the one prediction was in flight.
+    assert.equal(source.calls.length, 2);
+    assert.equal(source.calls.filter(url => url.endsWith('meta.json')).length, 1);
   }
   const calls = [];
   await assert.rejects(discoverForecastRuns(async url => {
@@ -251,4 +259,37 @@ test('UTC offsets and both Amsterdam DST boundaries leave model URLs and native 
     assert.equal(second.time - first.time, HOUR);
     assert.notEqual(fmt(first.time, {hour: '2-digit', timeZoneName: 'shortOffset'}), fmt(second.time, {hour: '2-digit', timeZoneName: 'shortOffset'}));
   }
+});
+
+test('de voorspelde terugvalrun is de 00/12 UTC-run vóór een korte 06/18 UTC-run',()=>{
+  const at=iso=>speculativeFallbackRun(Date.parse(iso));
+  assert.equal(new Date(at('2026-09-20T13:00:00Z')).toISOString(),'2026-09-20T00:00:00.000Z');
+  assert.equal(new Date(at('2026-09-21T01:00:00Z')).toISOString(),'2026-09-20T12:00:00.000Z');
+  assert.equal(at('2026-09-20T18:00:00Z'),null,'na een 12 UTC-run is geen terugval nodig');
+  assert.equal(at(NaN),null);
+});
+
+test('de terugvalmetadata wordt naast latest.json opgehaald, niet erna',async()=>{
+  const now=Date.parse('2026-09-20T13:00:00Z');
+  const order=[],resolvers=new Map();
+  const loadJSON=url=>{order.push(url);return new Promise((resolve,reject)=>resolvers.set(url,{resolve,reject}));};
+  const promise=discoverForecastRuns(loadJSON,now);
+  await new Promise(r=>setImmediate(r));
+  assert.equal(order.length,2,'beide verzoeken staan open voordat latest.json antwoordt');
+  assert.ok(order.some(url=>url.endsWith('/latest.json')));
+  assert.ok(order.some(url=>url.endsWith('/2026/09/20/0000Z/meta.json')));
+  const run=(reference,hours)=>{
+    const leads=[0];
+    for(let lead=1;lead<=Math.min(90,hours);lead++)leads.push(lead);
+    for(let lead=93;lead<=Math.min(144,hours);lead+=3)leads.push(lead);
+    for(let lead=150;lead<=hours;lead+=6)leads.push(lead);
+    return {completed:true,reference_time:reference,
+      variables:['cloud_cover','precipitation','temperature_2m','wind_u_component_10m','wind_v_component_10m'],
+      valid_times:leads.map(lead=>new Date(Date.parse(reference)+lead*3600000).toISOString().slice(0,16)+'Z')};
+  };
+  resolvers.get(`${DATA_ROOT}/latest.json`).resolve(run('2026-09-20T06:00:00Z',144));
+  resolvers.get(`${DATA_ROOT}/2026/09/20/0000Z/meta.json`).resolve(run('2026-09-20T00:00:00Z',360));
+  const metas=await promise;
+  assert.deepEqual(metas.map(m=>m.reference_time),['2026-09-20T06:00:00Z','2026-09-20T00:00:00Z']);
+  assert.equal(order.length,2,'er is geen tweede verzoek voor dezelfde terugvalrun gedaan');
 });
