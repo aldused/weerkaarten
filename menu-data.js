@@ -1164,6 +1164,21 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "weerkaart-europa",
+    "name": "Weerkaart Europa",
+    "description": "ECMWF tot 10 dagen · HARMONIE 43 en 46 · interactieve weerkaart",
+    "category": "professioneel",
+    "type": "vak",
+    "section": "Analyse",
+    "icon": "map",
+    "href": "index.html#weerkaart-europa",
+    "src": "ecmwf_weerradar/",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "Weerkaart Europa ECMWF HARMONIE 43 46 bewolking neerslag temperatuur wind Bft windstoten mist weerradar",
+    "restricted": true
+  },
+  {
     "id": "skewt",
     "name": "Skew-T sounding",
     "description": "HARMONIE 90 · ICON-D2",
