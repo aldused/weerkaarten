@@ -1,3 +1,4 @@
+import {windScale} from './wind-style.mjs';
 import {EDGE_ORIGIN} from './data-transport.mjs';
 import {intervalRate} from './precipitation.mjs';
 export const DATA_ROOT = `${EDGE_ORIGIN}/data_spatial/ecmwf_ifs`;
@@ -117,7 +118,5 @@ export const scales = {
   temperature_2m: { type: 'breakpoint', unit: '°C',
     breakpoints: [-30,-20,-10,0,5,10,15,20,25,30,35,40],
     colors: [[156,76,185,.8],[90,72,178,.8],[54,109,208,.8],[79,197,218,.8],[92,208,173,.8],[136,208,105,.8],[207,217,104,.8],[251,211,88,.8],[246,163,70,.8],[232,105,59,.8],[213,65,60,.8],[155,45,87,.8]] },
-  wind_u_component_10m: { type: 'breakpoint', unit: 'km/u',
-    breakpoints: [0,10,20,30,40,60,80,100,130],
-    colors: [[102,194,208,.25],[70,192,188,.45],[83,202,137,.55],[164,205,91,.65],[233,204,72,.75],[238,145,49,.85],[230,83,58,.9],[188,51,121,.95],[120,39,153,1]] },
+  wind_u_component_10m: windScale,
 };

@@ -1,3 +1,6 @@
+import {beaufort,windLegend} from './wind-style.mjs';
+import {MODELS,modelFor,harmonieFrames,preserveModelTime} from './forecast-models.mjs';
+import {createRegularGrid} from './regular-grid.mjs';
 import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
@@ -5,7 +8,7 @@ import { forecastLabel, groupForecastDays, chooseDayEntry, nowFrameIndex } from 
 import {combinedForecastFrames,discoverForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
 import {updateCurrentBounds, domainOptions, getRanges} from '@openmeteo/weather-map-layer';
-import {FieldPackets,FIELD_ORIGIN} from './field-packets.mjs';
+import {FieldPackets,FIELD_ORIGIN,HARMONIE_ORIGIN} from './field-packets.mjs';
 import {createPackedGrid} from './packed-grid.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
@@ -75,8 +78,8 @@ function readField(file,variable,signal){
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
     const data=await fieldPackets.read(file,variable,window.bounds,readSignal);
-    normalizeFieldData(data,variable,intervalByURL.get(file));
-    const field={data,grid:createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
+    if(data.metadata.kind!=='regular')normalizeFieldData(data,variable,intervalByURL.get(file));
+    const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     const entry=fieldCache.get(key);
     if(entry)entry.bytes=data.values.byteLength+(data.directions?.byteLength||0)+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
     trimFieldCache();
@@ -89,6 +92,9 @@ function readField(file,variable,signal){
 }
 mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked}));});
 const params = new URLSearchParams(location.search);
+let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
+$('model-select').value=selectedModel;
+$('model-select').addEventListener('change',()=>{selectedModel=$('model-select').value;start(undefined,selectedModel);});
 // Optional local diagnostics: no reporting endpoint and no visitor tracking.
 if(params.get('profile')==='1')setInterval(()=>{
   $('app').dataset.cacheStats=JSON.stringify({...map.performanceStats(),fieldEntries:fieldCache.size,fieldBytes:[...fieldCache.values()].reduce((n,e)=>n+(e.bytes||0),0)});
@@ -112,7 +118,7 @@ const map = new mapEngine.Map({
   ]},
 });
 map.touchZoomRotate.disableRotation();
-map.addControl(new mapEngine.AttributionControl({compact:true,customAttribution:'<a href="https://open-meteo.com/" target="_blank" rel="noopener">ECMWF / Open-Meteo</a> · Natural Earth'}),'bottom-right');
+map.addControl(new mapEngine.AttributionControl({compact:true,customAttribution:'<span id="model-attribution"><a href="https://open-meteo.com/" target="_blank" rel="noopener">ECMWF / Open-Meteo</a></span> · Natural Earth'}),'bottom-right');
 map.addControl(new mapEngine.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
 const mapReady = new Promise(resolve => map.once('load',resolve));
 map.on('error', e => {
@@ -172,17 +178,26 @@ async function discoverRuns(now,prefetchedLatest) {
   return discoverForecastRuns(url=>prefetchedLatest&&url===`${DATA_ROOT}/latest.json`?prefetchedLatest:json(url),now);
 }
 
-async function start(prefetchedLatest) {
+let modelDiscoveryController;
+async function start(prefetchedLatest,modelId=selectedModel) {
+  modelDiscoveryController?.abort();modelDiscoveryController=new AbortController();
+  const signal=modelDiscoveryController.signal;
+  if(!current){$('interval-label').textContent=MODELS[modelId].detail;$('model-coverage').textContent=MODELS[modelId].region;}
+  $('model-select').setAttribute('aria-busy','true');
   const startup=++startupRevision;
-  retryLoad=()=>start();
-  refreshing=true;stopPlayback();cancelPreparation();clearTimeout(sliderTimer);revision++;renderController?.abort();status('Nieuwste ECMWF-verwachting ophalen…');
+  retryLoad=()=>start(undefined,modelId);
+  refreshing=true;stopPlayback();cancelPreparation();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
   try {
     const now=Date.now();
-    const candidateMetas=await discoverRuns(now,prefetchedLatest);
+    let timeline;
+    if(modelId==='ecmwf_ifs'){
+      const candidateMetas=await discoverRuns(now,prefetchedLatest);
+      if(startup!==startupRevision)return;
+      timeline=combinedForecastFrames(candidateMetas,now);
+      try{localStorage.setItem('weerlab-ecmwf-runs-v2',JSON.stringify({savedAt:runCacheTime,metas:candidateMetas}));}catch{}
+    }else timeline=harmonieFrames(await json(`${HARMONIE_ORIGIN}/harmonie/${modelId}/latest.json`,signal),modelId,now);
     if(startup!==startupRevision)return;
-    const timeline=combinedForecastFrames(candidateMetas,now);
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
-    try{localStorage.setItem('weerlab-ecmwf-runs-v2',JSON.stringify({savedAt:runCacheTime,metas:candidateMetas}));}catch{}
     timeline.forEach(f=>intervalByURL.set(f.url,f.hours));
     await mapReady;
     if(startup!==startupRevision)return;
@@ -192,14 +207,17 @@ async function start(prefetchedLatest) {
     // from this candidate has loaded successfully.
     const linkedTime=params.get('time');
     const requestedTime=linkedTime&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/.test(linkedTime)?Date.parse(linkedTime):NaN;
-    const selectedTime=requestedContext?.timeline[wanted]?.time??current?.time??(Number.isFinite(requestedTime)?requestedTime:undefined);
+    let selectedTime=requestedContext?.timeline[wanted]?.time??current?.time??(Number.isFinite(requestedTime)?requestedTime:undefined);
+    const selection=preserveModelTime(timeline,selectedTime);selectedTime=selection.time;
+    $('model-notice').textContent=selection.outside?'De gekozen datum valt buiten deze modelrun. Het eerst beschikbare tijdstip wordt getoond.':'';
     const index=selectedTime===undefined?0:nearestIndex(timeline,selectedTime);
     refreshing=false;requestFrame(index,true,{meta:timeline[index].modelMeta,timeline});
   } catch(error) {
     if(startup!==startupRevision)return;
     if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};}
-    refreshing=false;status(`${error.message}. ${current?'De vorige modelrun blijft zichtbaar. ':''}Probeer opnieuw.`,true);
-  }
+    if(current){selectedModel=modelFor(current.modelMeta);$('model-select').value=selectedModel;}
+    refreshing=false;status(`${error.message}. ${current?'Het vorige model blijft zichtbaar. ':''}Probeer opnieuw.`,true);
+  }finally{if(startup===startupRevision)$('model-select').setAttribute('aria-busy','false');}
 }
 
 let dayGroups=[],timelineDayKey='',hoursDayKey='';
@@ -212,9 +230,11 @@ function buildTimeline(timeline){
     button.title=day.full;button.setAttribute('aria-label',day.full);button.setAttribute('aria-pressed','false');
     button.addEventListener('click',()=>{stopPlayback();requestFrame(chooseDayEntry(day,requestedContext?.timeline[wanted]?.time??current?.time)?.index??day.target.index);});container.append(button);
   }
-  $('time-slider').max=(timeline.at(-1).time-timeline[0].time)/HOUR;$('range-end').textContent=`+${FORECAST_DAYS} dagen`;
+  $('time-slider').max=(timeline.at(-1).time-timeline[0].time)/HOUR;const span=Number($('time-slider').max);$('range-end').textContent=span>=240?'+10 dagen':`+${span} uur`;
+  document.querySelector('.timeline').setAttribute('aria-label',`Verwachting tot ${forecastLabel(timeline.at(-1).time).text}`);
   $('time-ticks').replaceChildren();
-  for(let i=0;i<=FORECAST_DAYS;i++){const tick=document.createElement('span');tick.textContent=i?`+${i}d`:'nu';$('time-ticks').append(tick);}
+  const divisions=span>=240?10:Math.min(5,Math.ceil(span/12));
+  for(let i=0;i<=divisions;i++){const tick=document.createElement('span'),hours=Math.round(span*i/divisions);tick.textContent=i?(span>=240?`+${hours/24}d`:`+${hours}u`):'nu';$('time-ticks').append(tick);}
 }
 function showHours(day){
   $('hours-section').hidden=!day?.hoursVisible;
@@ -292,7 +312,7 @@ function awaitSources(ids,signal){
 }
 async function renderFrame(index,rev,signal,context){
   const started=performance.now();
-  viewportController?.abort();viewportRevision++;
+  viewportController?.abort();viewportRevision++;pointController?.abort();
   const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
   map.setFrameBudget(vars.length);
   retryLoad=()=>requestFrame(index,true,context);
@@ -306,7 +326,7 @@ async function renderFrame(index,rev,signal,context){
       if(rev!==revision)return;
       for(const id of ids)if(map.isSourceLoaded(id)&&!frameErrors.has(id)){
         map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100);
-        if(!id.endsWith('snowfall_water_equivalent')&&!$('app').dataset.firstVisibleWeatherMs){$('app').dataset.firstVisibleWeatherMs=Math.round(performance.now());$('app').dataset.firstVisibleLayer=id;}
+        if(!id.endsWith('visibility')&&!id.endsWith('snowfall_water_equivalent')&&!$('app').dataset.firstVisibleWeatherMs){$('app').dataset.firstVisibleWeatherMs=Math.round(performance.now());$('app').dataset.firstVisibleLayer=id;}
       }
     };
     map.on('sourcedata',reveal);
@@ -334,10 +354,11 @@ async function renderFrame(index,rev,signal,context){
       buildTimeline(current.timeline);
       // Only after the replacement frame is usable may obsolete runs leave
       // persistent storage. Keep both the latest and its long-range fallback.
-      const activeRuns=[...new Set(current.timeline.map(f=>runPath(f.modelMeta.reference_time)))];
+
       // Packet cache keys contain the complete immutable run/file path.
-      const files=new Set(current.timeline.map(f=>f.url));
-      for(const [key,entry] of fieldCache)if(entry.task.settled&&!files.has(entry.file))fieldCache.delete(key);
+      // Retain recently viewed other models within the same bounded LRU.
+      // Every entry already owns its immutable model/run/field/area identity.
+      trimFieldCache();
     }
     ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));
     if(old) removeLayers(old.ids);
@@ -388,7 +409,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames}){
   }
 }
 function updateTimeHeading(frame,metadata){
-  const label=forecastLabel(frame.time,metadata.reference_time);
+  const label=forecastLabel(frame.time,metadata.reference_time,MODELS[modelFor(metadata)].label);
   $('selected-date').textContent=label.date;
   $('selected-date-mobile').textContent=label.mobileDate;
   $('selected-clock').textContent=`${label.clock} uur`;
@@ -405,11 +426,12 @@ function updateTimeHeading(frame,metadata){
 function syncUI(){
   if(!current)return;
   const metadata=current.modelMeta,timeline=current.timeline;
-  $('app').dataset.model='ecmwf_ifs';$('app').dataset.run=metadata.reference_time;
+  const modelId=modelFor(metadata);selectedModel=modelId;$('model-select').value=modelId;
+  $('app').dataset.model=modelId;$('app').dataset.run=metadata.reference_time;
   $('app').dataset.olderRun=String(!!current.olderRun);
   $('app').dataset.forecastStart=timeline[0].iso;$('app').dataset.forecastEnd=timeline.at(-1).iso;
   const f=current,label=updateTimeHeading(f,metadata);
-  const pageURL=new URL(location.href);pageURL.searchParams.set('time',new Date(f.time).toISOString());history.replaceState(null,'',pageURL);
+  const pageURL=new URL(location.href);pageURL.searchParams.set('time',new Date(f.time).toISOString());pageURL.searchParams.set('model',modelId);history.replaceState(null,'',pageURL);
   $('time-slider').value=(f.time-timeline[0].time)/HOUR;
   $('time-slider').setAttribute('aria-valuetext',label.text);
   $('time-slider').style.setProperty('--progress',`${$('time-slider').value/$('time-slider').max*100}%`);
@@ -418,10 +440,16 @@ function syncUI(){
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===f.mode)));
   $('play').disabled=!playing&&!nextFrameReady;$('time-slider').disabled=false;$('now').disabled=false;
   $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
-  $('interval-label').textContent=`ECMWF IFS · 9 km · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
+  $('interval-label').textContent=`${MODELS[modelId].detail} · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
+  $('model-attribution').textContent=modelId==='ecmwf_ifs'?'ECMWF / Open-Meteo':'KNMI / Weerlab';
+  $('model-coverage').textContent=MODELS[modelId].region;
+  $('model-resolution').textContent=modelId==='ecmwf_ifs'?'Modelrooster circa 9 km.':'Regionale Weerlab-rasters van circa 2–4 km, afhankelijk van het veld.';
+  $('point-model').textContent=MODELS[modelId].label+'-VERWACHTING';
+  $('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=modelId==='ecmwf_ifs';
+  $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
-  else if(f.mode==='wind'){title='Wind';unit='km/u';numbers=['0','20','40','60','100+'];gradient='linear-gradient(to right,#66c2d0,#53ca89,#e9cc48,#ee9131,#bc3379)';}
+  else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;
@@ -527,7 +555,7 @@ function drawCities(){
     ctx.strokeText(name,p.x,p.y+12);ctx.fillText(name,p.x,p.y+12);
     ctx.fillStyle='#f5f8e9';ctx.fillRect(p.x-1.3,p.y-4,2.6,2.6);
     const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):temp;
-    if(Number.isFinite(displayedValue)){const t=String(Math.round(displayedValue));ctx.font=`600 ${font}px Arial`;ctx.strokeText(t,p.x+7,p.y-12);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,p.y-12);}
+    if(Number.isFinite(displayedValue)){const t=String(current.mode==='wind'?beaufort(displayedValue):Math.round(displayedValue));ctx.font=`600 ${font}px Arial`;ctx.strokeText(t,p.x+7,p.y-12);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,p.y-12);}
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
     if(fog){
       ctx.fillStyle=fog.color;ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
@@ -537,13 +565,13 @@ function drawCities(){
     else if(Number.isFinite(cloud)&&cloud<65){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
       const wind=current.samples.wind_u_component_10m;
-      if(wind?.data.directions){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-17);ctx.rotate(a+Math.PI);ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(0,-7);ctx.lineTo(-3,-3);ctx.moveTo(0,-7);ctx.lineTo(3,-3);ctx.stroke();ctx.restore();}
+      if(wind?.data.directions&&Number.isFinite(displayedValue)){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-17);ctx.rotate(a+Math.PI);ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(0,-7);ctx.lineTo(-3,-3);ctx.moveTo(0,-7);ctx.lineTo(3,-3);ctx.stroke();ctx.restore();}
     }
     drawnCities.push({...city,x:p.x,y:p.y});
   }
 }
 
-let pointMarker;
+let pointMarker,pointController;
 function showPoint(point){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');if(innerHeight<650)setMenuCollapsed(true);selectedPoint=point;if(pointMarker)pointMarker.remove();pointMarker=new mapEngine.Marker({color:'#2ec4e8',scale:.7}).setLngLat([point.lng,point.lat]).addTo(map);$('point').hidden=false;$('search-form').hidden=true;updatePoint();}
 function closePoint(){selectedPoint=null;$('point').hidden=true;pointMarker?.remove();pointMarker=null;}
 $('point-close').addEventListener('click',closePoint);
@@ -551,10 +579,10 @@ function updatePoint(fetchMissing=true){
   if(!selectedPoint||!current)return;
   const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=forecastLabel(current.time).full;
   const values=$('point-values');values.replaceChildren();
-  const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','km/u',0]];
+  const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','Bft',0]];
   if(current.modelMeta.variables.includes('visibility'))entries.push(['visibility','Berekend zicht','m',1]);
   for(const [variable,label,unit,digits] of entries){
-    const value=sample(current.samples[variable],p.lat,p.lng),el=document.createElement('div'),strong=document.createElement('strong'),small=document.createElement('small');
+    const rawValue=sample(current.samples[variable],p.lat,p.lng),value=variable==='wind_u_component_10m'?beaufort(rawValue):rawValue,el=document.createElement('div'),strong=document.createElement('strong'),small=document.createElement('small');
     strong.textContent=Number.isFinite(value)?`${variable==='precipitation'&&value>0&&value<PRECIPITATION_THRESHOLD?'<'+PRECIPITATION_THRESHOLD.toLocaleString('nl-NL'):value.toLocaleString('nl-NL',{maximumFractionDigits:digits})} ${unit}`:'—';small.textContent=label;
     if(variable==='visibility'){
       const band=fogBand(value);strong.textContent=visibilityText(value);el.classList.add('visibility-value');
@@ -565,11 +593,11 @@ function updatePoint(fetchMissing=true){
   }
   const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
   const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
-  $('point-note').textContent=`Tijdvak: ${forecastLabel(period.start).text} – ${forecastLabel(period.end).full}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}${forecastLabel(current.time,period.run).runLabel}. Rooster circa 9 km.`;
+  $('point-note').textContent=`Tijdvak: ${forecastLabel(period.start).text} – ${forecastLabel(period.end).full}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}${forecastLabel(current.time,period.run,MODELS[modelFor(current.modelMeta)].label).runLabel}. ${modelFor(current.modelMeta)==='ecmwf_ifs'?'Rooster circa 9 km.':'Regionale rasters circa 2–4 km. Bewolking: maximum van de hoge, middelbare en lage laag.'}`;
   Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);
-    if(missing.length)Promise.allSettled(missing.map(async v=>{const field=await readField(frame.url,v);if(current===frame)frame.samples[v]=field;})).then(()=>{if(current===frame&&selectedPoint===p)updatePoint(false);});
+    if(missing.length){pointController?.abort();pointController=new AbortController();const pointSignal=pointController.signal;Promise.allSettled(missing.map(async v=>{const field=await readField(frame.url,v,pointSignal);if(current===frame)frame.samples[v]=field;})).then(()=>{if(current===frame&&selectedPoint===p)updatePoint(false);});}
   }
 }
 
@@ -600,10 +628,15 @@ $('search-form').addEventListener('submit',async e=>{
 let checkedAt=Date.now(),checkingRun=false;
 async function checkForNewRun(){
   if(!current||document.hidden||playing||rendering||refreshing||checkingRun||Date.now()-checkedAt<10*60*1000)return;
-  checkedAt=Date.now();checkingRun=true;
+  checkedAt=Date.now();checkingRun=true;const polledModel=selectedModel,polledFrame=current;
   try {
+    if(selectedModel!=='ecmwf_ifs'){
+      const latest=await json(`${HARMONIE_ORIGIN}/harmonie/${selectedModel}/latest.json`);
+      if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||(latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version)))await start(undefined,polledModel);
+      return;
+    }
     const latest=await json(`${DATA_ROOT}/latest.json`);
-    if(!playing&&!rendering&&!refreshing&&!document.hidden&&isNewerForecastRun(latest,current.timeline,Date.now()))await start(latest);
+    if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&!document.hidden&&isNewerForecastRun(latest,current.timeline,Date.now()))await start(latest);
   } catch { /* Keep the current forecast when the metadata check fails. */ }
   finally {checkingRun=false;}
 }

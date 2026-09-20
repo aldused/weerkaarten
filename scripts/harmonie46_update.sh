@@ -26,4 +26,5 @@ files+=(harmonie46_canvas_meta.json)
 
 R2_GZIP=1 bash shell/r2_publish_harmonie.sh "${files[@]}" || exit 1
 bash shell/r2_publish_point_source.sh harmonie46 harmonie46_canvas_meta.json || exit 1
+bash ecmwf_weerradar/harmonie-publish/publish.sh harmonie46 || exit 1
 echo "$(date): HARMONIE 46 update gepubliceerd"

@@ -7,7 +7,7 @@
     // Start the one required metadata lookup while the application downloads.
     try {
       const saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-runs-v2'));
-      if(!saved||Date.now()<saved.savedAt||Date.now()-saved.savedAt>=300000){
+      if(!['harmonie','harmonie46'].includes(new URLSearchParams(location.search).get('model'))&&(!saved||Date.now()<saved.savedAt||Date.now()-saved.savedAt>=300000)){
         window.weerlabLatest=fetch('https://weerlab-ecmwf-fields.dawn-term-a69f.workers.dev/data_spatial/ecmwf_ifs/latest.json',{cache:'no-cache',signal:AbortSignal.timeout(16000)}).then(r=>{if(!r.ok)throw new Error('ECMWF-modelinformatie niet bereikbaar');return r.json();});
         window.weerlabLatest.catch(()=>{});
       }
@@ -16,12 +16,12 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#00205b">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%2300205b'/%3E%3Ctext x='5' y='25' font-size='26' fill='%232ec4e8'%3Ew%3C/text%3E%3C/svg%3E">
-  <meta name="description" content="Inzoombare ECMWF-weerradar voor Europa. Bewolking, neerslag, sneeuw, temperatuur en wind op het oorspronkelijke 9 km-rooster, tien dagen vooruit.">
+  <meta name="description" content="Inzoombare weerkaart met ECMWF, HARMONIE 43 en HARMONIE 46. Bewolking, neerslag, temperatuur en wind in Beaufort.">
   <title>Weerradar Europa · 10 dagen · Weerlab</title>
-  <link rel="stylesheet" href="./assets/map.css"><link rel="stylesheet" href="./style.css?v=d8731570565a">
+  <link rel="stylesheet" href="./assets/map.css"><link rel="stylesheet" href="./style.css?v=6a8660632ed8">
 </head>
 <body>
-  <main id="app" aria-label="ECMWF weerradar Europa">
+  <main id="app" aria-label="Weerkaart met modelkeuze">
     <div id="map" role="region" aria-label="Inzoombare weerkaart van Europa"></div>
     <canvas id="places" aria-hidden="true"></canvas>
     <div class="top-left">
@@ -61,19 +61,20 @@
       <label>Afspeelsnelheid <select id="speed" aria-label="Afspeelsnelheid"><option value="1600">Rustig</option><option value="800" selected>Normaal</option><option value="350">Snel</option></select></label>
       <p id="fog-unavailable" hidden>Zicht ontbreekt in deze modelrun. Mist is daarom niet weergegeven.</p>
       <p>Mistkleuren tonen berekend zicht, geen officiële waarschuwingen.</p>
-      <p>Modelresolutie circa 9 km. Alle tijden zijn Nederlandse tijd.</p>
+      <p><span id="model-resolution">Modelrooster circa 9 km.</span> Alle tijden zijn Nederlandse tijd.</p>
     </aside>
     <div id="status" class="status" role="status"><span class="spinner"></span><span id="status-text">ECMWF-run ophalen…</span><button id="retry" hidden>Opnieuw</button></div>
     <section id="point" class="panel point" hidden aria-label="Weer op geselecteerde plaats">
-      <div class="panel-heading"><div><small>ECMWF-VERWACHTING</small><h2 id="point-title">Geselecteerde plaats</h2></div><button id="point-close" class="close" aria-label="Plaatsdetails sluiten" data-icon="close"></button></div>
+      <div class="panel-heading"><div><small id="point-model">ECMWF-VERWACHTING</small><h2 id="point-title">Geselecteerde plaats</h2></div><button id="point-close" class="close" aria-label="Plaatsdetails sluiten" data-icon="close"></button></div>
       <p id="point-time"></p><div id="point-values" class="point-values"></div><p id="point-note"></p>
     </section>
     <div class="bottom-area">
       <section class="timeline" aria-label="Verwachting tot tien dagen vooruit">
         <div class="dock-heading">
-          <div class="selection"><div class="forecast-caption"><span class="model-dot"></span><strong id="layer-title">Weerkaart</strong><span id="interval-label">10 dagen · ECMWF</span></div><output id="slider-time" aria-live="polite"><span class="selected-date" id="selected-date">Verwachting laden…</span><span class="selected-date-mobile" id="selected-date-mobile" aria-hidden="true"></span><span class="selected-clock" id="selected-clock"></span></output><div id="model-time" class="model-time"><span id="run-badge"></span><span id="forecast-lead"></span><span id="selected-zone"></span></div></div>
+          <div class="selection"><div class="forecast-caption"><label class="model-picker"><span class="sr-only">Weermodel</span><select id="model-select" aria-label="Weermodel"><option value="ecmwf_ifs">ECMWF</option><option value="harmonie">HARMONIE 43</option><option value="harmonie46">HARMONIE 46</option></select></label><strong id="layer-title">Weerkaart</strong><span id="interval-label">10 dagen · ECMWF</span></div><output id="slider-time" aria-live="polite"><span class="selected-date" id="selected-date">Verwachting laden…</span><span class="selected-date-mobile" id="selected-date-mobile" aria-hidden="true"></span><span class="selected-clock" id="selected-clock"></span></output><div id="model-time" class="model-time"><span id="run-badge"></span><span id="forecast-lead"></span><span id="selected-zone"></span></div></div>
           <div class="heading-actions"><button id="info-toggle" class="square" data-icon="info" aria-label="Over deze kaart" title="Bron en uitleg"></button><button id="menu-toggle" class="square" aria-label="Menu inklappen" aria-expanded="true" aria-controls="menu-details" title="Menu inklappen" data-icon="down"></button></div>
         </div>
+        <p class="model-coverage" id="model-coverage">Europa · 10 dagen</p><p class="model-notice" id="model-notice" role="status"></p>
         <div id="menu-details">
           <div id="days" class="days" role="group" aria-label="Kies een dag"></div>
           <div id="hours-section" class="hours-section" hidden><div class="hours-heading"><span id="hours-day">Tijd kiezen</span><small>Nederlandse tijd</small></div><div id="hours" class="hours" role="group" aria-label="Kies een tijdstip"></div></div>
@@ -87,18 +88,18 @@
       </section>
     </div>
     <dialog id="info">
-      <div class="panel-heading"><h2>Weerradar · 10 dagen</h2><button id="info-close" class="close" aria-label="Uitleg sluiten" data-icon="close"></button></div>
-      <p>De oorspronkelijke <strong>ECMWF IFS HRES-verwachting op het O1280-rooster (circa 9 km)</strong>, voor Europa en tien dagen vooruit. De kaart gebruikt de nieuwste beschikbare run. Reikt deze niet tot tien dagen, dan komen uitsluitend de resterende tijdstappen uit de laatste volledige run. Elke kaart gebruikt voor alle lagen dezelfde modelrun. ECMWF heeft runs van 00, 06, 12 en 18 UTC; deze verschijnen na verwerking bij Open-Meteo. Een zichtbare, niet-afspelende kaart controleert elke tien minuten op een nieuw voltooide run.</p>
+      <div class="panel-heading"><h2>Weerkaart · modelverwachtingen</h2><button id="info-close" class="close" aria-label="Uitleg sluiten" data-icon="close"></button></div>
+      <div id="ecmwf-info"><p>De oorspronkelijke <strong>ECMWF IFS HRES-verwachting op het O1280-rooster (circa 9 km)</strong>, voor Europa en tien dagen vooruit. De kaart gebruikt de nieuwste beschikbare run. Reikt deze niet tot tien dagen, dan komen uitsluitend de resterende tijdstappen uit de laatste volledige run. Elke kaart gebruikt voor alle lagen dezelfde modelrun. ECMWF heeft runs van 00, 06, 12 en 18 UTC; deze verschijnen na verwerking bij Open-Meteo. Een zichtbare, niet-afspelende kaart controleert elke tien minuten op een nieuw voltooide run.</p>
       <p>Wit en grijs tonen voorspelde bewolking. Blauw, geel en rood tonen neerslag. Roze is sneeuwval, uitgedrukt in millimeters smeltwater per uur. Totale neerslag omvat regen én sneeuw; de roze laag markeert het sneeuwaandeel en wordt niet bij het totaal opgeteld. De bewolking is een modelveld, geen satellietfoto; neerslag is een verwachting, geen gemeten radar.</p>
       <p>De subtiele wolkenstructuur illustreert gedeeltelijke bewolking; gesloten wolkendekken blijven rustig en egaal. Afzonderlijke wolkjes onder 9 km zijn geen extra voorspelde details. Zet de textuur uit bij Kaartlagen om het oorspronkelijke, glad weergegeven modelveld te bekijken. Neerslag, temperaturen en wind gebruiken uitsluitend de modelwaarden.</p>
       <p>De run staat onder de gekozen datum en tijd. <strong>“Aanvullende eerdere run”</strong> betekent dat deze termijn buiten de nieuwste run valt. De ECMWF-kaart via de punten-API op Weerlab gebruikt 0,25°-data met naar uren verdeelde neerslagsommen. Vergelijk hetzelfde model, dezelfde run en hetzelfde tijdvak. Bij het wisselen van dag blijft het gekozen uur behouden, of het dichtstbijzijnde beschikbare tijdstip.</p>
       <p>ECMWF levert uurstappen tot +90 uur, drie-uursstappen tot +144 uur en daarna zes-uursstappen. De tijdlijn gebruikt die echte tijdstappen. De parameter is ECMWF totale neerslag (tp). Open-Meteo trekt opeenvolgende cumulatieve waarden binnen dezelfde run af en zet meters om naar millimeters. Deze tijdvaksom wordt gedeeld door de lengte van het voorafgaande interval en toont dus de <strong>gemiddelde intensiteit in mm/u</strong>. De geselecteerde tijd is het einde van dat tijdvak, geen momentopname. Vanaf 0,05 mm/u verschijnt neerslag geleidelijk in kleur; zeer lichte neerslag blijft doorschijnend. Klik op de kaart voor de intensiteit én de tijdvaksom. Verder inzoomen voegt geen modelresolutie toe.</p>
       <p>Een Europese weerkaart in de eigen Weerlab-vormgeving, met ECMWF als databron. De eigen radar-, satelliet- en bliksemproducten van WetterOnline maken geen deel uit van deze kaart.</p>
-      <p class="sources">Data: <a href="https://open-meteo.com/en/docs/ecmwf-api" target="_blank" rel="noopener">ECMWF via Open-Meteo</a> · <a href="https://github.com/open-meteo/open-data" target="_blank" rel="noopener">AWS Open Data</a> · CC BY 4.0.<br>Kaart: Esri World Imagery, Natural Earth. Plaatsen: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0). Software: Leaflet en Open-Meteo (GPL-2.0).</p>
+      </div><div id="harmonie-info" hidden><p>HARMONIE 43 en het experimentele HARMONIE 46 gebruiken de bestaande KNMI-modeldata van Weerlab voor Nederland en omgeving. De runs bevatten ongeveer 60 uur; de tijdlijn toont alleen werkelijk beschikbare tijden. Buiten het regionale gebied staan geen weerwaarden.</p><p>De regionale rasters hebben afhankelijk van het veld een afstand van circa 2–4 km. Neerslag is de bestaande som over het voorafgaande uur, in mm/u, zonder versterking. Bewolking toont de hoogste bedekking van de hoge, middelbare en lage wolkenlaag. Een afzonderlijk sneeuwveld is in deze bron niet beschikbaar. Mist gebruikt het oorspronkelijke berekende zicht.</p></div><p>Wind staat bij alle modellen in Beaufort (Bft), volgens de <a href="https://www.knmi.nl/kennis-en-datacentrum/uitleg/windschaal-van-beaufort" target="_blank" rel="noopener">KNMI-Beaufortschaal</a>. De klasse wordt na interpolatie uit de modelwindsnelheid bepaald; dit is geen windstoot.</p><p class="sources">KNMI HARMONIE via de bestaande Weerlab-bron. Data: <a href="https://open-meteo.com/en/docs/ecmwf-api" target="_blank" rel="noopener">ECMWF via Open-Meteo</a> · <a href="https://github.com/open-meteo/open-data" target="_blank" rel="noopener">AWS Open Data</a> · CC BY 4.0.<br>Kaart: Esri World Imagery, Natural Earth. Plaatsen: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0). Software: Leaflet en Open-Meteo (GPL-2.0).</p>
       <p class="key-help">Sneltoetsen in het menu: ← / → tijdstap · Home / End eerste / laatste tijdstip · spatie afspelen · Esc sluiten. Nu kiest het beschikbare tijdstip dat het dichtst bij de huidige tijd ligt.</p>
     </dialog>
-    <noscript>Schakel JavaScript in om de ECMWF-weerradar te gebruiken.</noscript>
+    <noscript>Schakel JavaScript in om de weerkaart te gebruiken.</noscript>
   </main>
-  <script type="module" src="./assets/app.js?v=d8731570565a"></script>
+  <script type="module" src="./assets/app.js?v=6a8660632ed8"></script>
 </body>
 </html>

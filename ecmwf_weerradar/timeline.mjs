@@ -2,7 +2,7 @@ import { HOUR, localDateKey, fmt, nearestIndex } from './core.mjs';
 
 // All controls refer to the original frame index/UTC instant. Calendar days
 // are Amsterdam days; never add 24 elapsed hours to obtain a local day.
-export function forecastLabel(time,runTime) {
+export function forecastLabel(time,runTime,model='ECMWF') {
   time=new Date(time).getTime();
   const capital=s=>s.charAt(0).toUpperCase()+s.slice(1);
   const date=capital(fmt(time,{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
@@ -17,7 +17,7 @@ export function forecastLabel(time,runTime) {
   const runClock=Number.isFinite(run)?fmt(run,{hour:'2-digit',minute:'2-digit',timeZone:'UTC'}):null;
   const lead=Number.isFinite(run)?(time-run)/HOUR:null;
   return {date,mobileDate,clock,displayClock:clock+(repeated?' '+offset:''),text,full:`${text} • ${zone}`,zone,offset,runDate,runClock,lead,
-    runLabel:runDate?`ECMWF-run ${runDate} • ${runClock} UTC`:null,leadLabel:lead===null?null:`verwachting +${lead} uur`};
+    runLabel:runDate?`${model}-run ${runDate} • ${runClock} UTC`:null,leadLabel:lead===null?null:`verwachting +${lead} uur`};
 }
 
 export function nowFrameIndex(frames,now=Date.now()) {

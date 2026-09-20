@@ -79,3 +79,7 @@ Zie `PERFORMANCE-2026-09-19.md` voor metingen, de gekozen aanpak en resterende b
 De nieuwe bestandslezer combineert bestandslengte en OM-catalogus in één begrensd suffixverzoek. Dezelfde gevalideerde cacheblokken en officiële OM-decoder blijven in gebruik. Bij een miss streamt de edge-cache de originele bytes direct door en bewaart alleen een volledig gecontroleerde kopie. Ook de geselecteerde kaart vult voortaan de gedeelde cache. De voorste blokwachtrij laat meer aanvragen samenvoegen; de werkelijke HTTP-concurrency blijft zes.
 
 Zie [PERFORMANCE-2026-09-20.md](PERFORMANCE-2026-09-20.md). `node tests/audit-bootstrap-live.mjs` vergelijkt de volledige gedecodeerde velden met rechtstreekse S3-lezingen bij twee modelruns en 1/3/6-uursstappen; de SHA256-resultaten staan in `tests/bootstrap-live-audit.json`.
+
+### HARMONIE en Beaufort (20 september 2026)
+
+De kaart biedt ECMWF, HARMONIE 43 en HARMONIE 46 via de modelkeuze. HARMONIE gebruikt de bestaande regionale KNMI-export van circa 60 uur; de tijdlijn en het bereik volgen het gekozen model. Alle windweergaven gebruiken Beaufort. Zie [HARMONIE-EN-BEAUFORT-20260920.md](HARMONIE-EN-BEAUFORT-20260920.md) voor bronnen, automatische publicatie, conversies en broncontroles.

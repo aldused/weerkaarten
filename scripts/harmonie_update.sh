@@ -468,4 +468,7 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     print(f'Upload klaar!')
 " 2>&1
 
+status=$?
+if [ "$status" -ne 0 ]; then exit "$status"; fi
+bash ecmwf_weerradar/harmonie-publish/publish.sh harmonie || exit 1
 echo "$(date): Harmonie update klaar"
