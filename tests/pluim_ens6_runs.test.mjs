@@ -105,3 +105,29 @@ test('backend returns only requested run and validates its source; unknown locat
   url.searchParams.set('latitude','40');url.searchParams.set('longitude','-74');
   const missing=await handleEns6(url,new Request(url),{},fetcher);assert.equal(missing.status,404);
 });
+test('new live run before archive publication is offered only after all 51 core members pass',async()=>{
+  const id='2026-09-20T06:00:00Z',start=Date.parse(id)/1000;
+  const meta={last_run_initialisation_time:start,last_run_modification_time:start+24000,last_run_availability_time:start+24000,data_end_time:start+10800,temporal_resolution_seconds:10800};
+  let partial=false,rollover=false,noArchive=false;
+  const fetcher=async url=>{
+    const u=String(url);
+    if(u.includes('pluim_archive'))return noArchive?Response.json({}, {status:503}):Response.json(manifest);
+    if(u.includes('/static/meta.json'))return Response.json({...meta,last_run_modification_time:meta.last_run_modification_time+(rollover?Math.random():0)});
+    if(u.includes('/v1/ensemble')) {
+      const hourly={time:[id,id.replace('06:00','09:00')]};
+      for(const field of PARAMETERS)for(let i=0;i<51;i++)hourly[field+(i?`_member${String(i).padStart(2,'0')}`:'')]=[20,40];
+      if(partial)hourly.wind_direction_10m_member50=[null,40];
+      return Response.json({hourly});
+    }
+    return Response.json({}, {status:404});
+  };
+  const url=new URL('https://om.weerlab.nl/ens6-runs?latitude=52.101&longitude=5.178');
+  const list=async()=> (await (await handleEns6(url,new Request(url),{},fetcher)).json()).runs;
+  assert.equal((await list())[0].run,id);
+  partial=true;assert(!(await list()).some(r=>r.run===id));partial=false;
+  rollover=true;assert(!(await list()).some(r=>r.run===id));rollover=false;
+  noArchive=true;assert.equal((await list())[0].run,id);
+  url.pathname='/ens6-run';url.searchParams.set('run',id);
+  const response=await handleEns6(url,new Request(url),{},fetcher);
+  assert.equal(response.status,200);assert.equal((await response.json()).run,id);
+});
