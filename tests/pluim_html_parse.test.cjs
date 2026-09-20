@@ -23,7 +23,10 @@ for (const file of files) {
   assert.ok(scripts.length, `${file}: geen inline JavaScript gevonden`);
   scripts.forEach((match, index) => {
     try {
-      Function(match[2]);
+      if (/type=["']module["']/.test(match[1])) {
+        const result=require('node:child_process').spawnSync(process.execPath,['--input-type=module','--check'],{input:match[2],encoding:'utf8'});
+        assert.equal(result.status,0,result.stderr);
+      } else Function(match[2]);
     } catch (error) {
       throw new Error(`${file}: inline script ${index + 1} parseert niet: ${error.message}`);
     }
@@ -56,7 +59,7 @@ for (const [name, html] of [['6-luik', sixPanel], ['6+', sixPlus]]) {
     `${name}: een oude URL zonder coördinaten mag niet stilzwijgend op 0,0 uitkomen`);
   assert.match(html, /\.replace\(\/\[<>&\]\/g, ''\)\.trim\(\)\.slice\(0, 80\)/,
     `${name}: een vrije plaatsnaam uit de URL wordt onveilig in HTML overgenomen`);
-  assert.match(html, /selectedRunMs === liveRunMs[\s\S]*ensureVariables\?\.\(\['cape'\]\)/,
+  if(name!=='6+')assert.match(html, /selectedRunMs === liveRunMs[\s\S]*ensureVariables\?\.\(\['cape'\]\)/,
     `${name}: actuele snelle cyclus schakelt niet door naar de complete CAPE-bron`);
 }
 

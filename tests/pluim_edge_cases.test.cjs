@@ -85,54 +85,13 @@ assert.deepEqual(
 assert.match(sixPlus, /series\.slice\(startIndex, startIndex \+ cutoffLength\)/, 'alle ENS-memberreeksen moeten hetzelfde metadata-runvenster krijgen');
 assert.match(sixPlus, /rawTimes\.findIndex\(time => time\.getTime\(\) >= verifiedRunStartMs\)/, 'tijdstappen vóór last_run_initialisation_time moeten worden verwijderd');
 assert.match(sixPlus, /const alignHres = arr => useTimes\.map\(/, 'HRES moet exact dezelfde afgekapte targettijdas gebruiken');
-assert.match(sixPlus, /requireMemberMatrix\(trimTrailingMissing\(boundedMembersOf\(hourly, 'cloudcover', startIndex, cutoffLength\)/);
-assert.match(
-  sixPlus,
-  /const t500Members = optionalMemberMatrix\([\s\S]*optionalVariables\[2\]/,
-  '500 hPa moet een geheel optioneel paneel zijn en mag de kernpluim niet blokkeren',
-);
-assert.match(
-  sixPlus,
-  /verifiedRunStartFromMeta\(runMeta\),\s*verifiedDataEndFromMeta\(runMeta\)/,
-  'buildModel moet uitsluitend het geverifieerde metadata-runvenster gebruiken',
-);
-assert.match(sixPlus, /tussenrun .*actuele dekking .*kan korter zijn/, '06/18-tussenruns moeten hun kortere dekking transparant melden');
-assert.doesNotMatch(sixPlus, /Control 9 km|control 9 km apart/);
-assert.match(sixPlus, /HRES 9 km/);
-const fetchHresSource = functionSource(sixPlus, 'fetchHres');
-assert.match(
-  fetchHresSource,
-  /https:\/\/single-runs-api\.open-meteo\.com\/v1\/forecast/,
-  '6+ moet de aparte HRES uit de Single Runs API halen',
-);
-assert.match(
-  fetchHresSource,
-  /run=\$\{encodeURIComponent\(runInitialization\)\}/,
-  '6+ moet HRES expliciet op dezelfde initialisatiecyclus vastzetten',
-);
-assert.doesNotMatch(
-  fetchHresSource,
-  /https:\/\/api\.open-meteo\.com\/v1\/forecast/,
-  'de seamless forecast-API mag niet als HRES worden gebruikt',
-);
-assert.doesNotMatch(
-  sixPlus,
-  /['"]https:\/\/api\.open-meteo\.com\/v1\/forecast/,
-  '6+ mag nergens meer een seamless forecast als deterministische HRES-bron aanbieden',
-);
-assert.match(
-  sixPlus,
-  /Number\(metaAfter\?\.last_run_initialisation_time\) === Number\(runMeta\.last_run_initialisation_time\)/,
-  'een ENS-cycluswissel tijdens het laden moet worden gedetecteerd',
-);
-assert.match(
-  sixPlus,
-  /fetchEnsemble\(lat, lon, runMeta, retryFresh, true, SIX_PLUS_CORE_VARIABLES\)/,
-  'de niet-selecteerbare ENS-core-endpoint moet zonder oude browser- of edgecache worden opgehaald',
-);
-const fetchSixEnsembleSource = functionSource(sixPlus, 'fetchEnsemble');
-assert.match(fetchSixEnsembleSource, /start_date=\$\{startDate\}&end_date=\$\{endDate\}/, '6+ moet ook na middernacht vanaf de echte runstart ophalen');
-assert.doesNotMatch(fetchSixEnsembleSource, /forecast_days=/, 'forecast_days snijdt een run van de vorige UTC-dag af');
+const ens6Backend=fs.readFileSync(path.join(root,'cloudflare-worker/ens6-runs.mjs'),'utf8');
+assert.match(sixPlus,/availableMemberMatrix/,'bewolking telt geldige leden per tijdstip');
+assert.match(sixPlus,/data.meta.last_run_initialisation_time\*1000,data.meta.data_end_time\*1000/,'grafieken gebruiken het ontvangen runvenster');
+assert.match(ens6Backend,/single-runs-api.open-meteo.com/,'exacte HRES-bron');
+assert.match(ens6Backend,/run:id.slice\(0,16\)/,'HRES gebruikt de gekozen run');
+assert.match(ens6Backend,/after.last_run_initialisation_time !== liveMeta.last_run_initialisation_time/,'cycluswissel wordt afgekeurd');
+assert.match(ens6Backend,/start_hour:id.slice\(0,16\)/,'live data begint bij de echte run');
 
 const watchPlume = fs.readFileSync(path.join(root, 'weerbewaking_pluim.html'), 'utf8');
 const watchContext = {

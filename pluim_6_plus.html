@@ -69,6 +69,12 @@
   .chart-tooltip .tip-row{display:flex;justify-content:space-between;gap:16px}
   .chart-tooltip .tip-row span:last-child{font-variant-numeric:tabular-nums;font-weight:700}
   .mobile-scroll-hint{display:none}
+  .run-selector{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;background:#082d52;color:#fff}
+  .run-selector label{font-weight:700}.run-selector select{max-width:100%;padding:10px 14px;background:#fff}
+  .run-selector [role=status]{font-size:12px;flex:1;min-width:200px}
+  .page-card.updating #pageHost{opacity:.45;pointer-events:none}
+  .page-card.updating .loader{position:sticky;inset:auto;top:0;min-height:70px;flex-direction:row;background:#edf5ff;border-bottom:1px solid #c5d3e3;padding:12px}
+  .page-card.updating .spinner{width:22px;height:22px}
   .loader{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(247,250,255,0.92);z-index:20}
   .loader.verborgen{display:none}
   .spinner{width:38px;height:38px;border:4px solid #dce9f7;border-top-color:#0067cc;border-radius:50%;animation:draaien 0.8s linear infinite}
@@ -87,6 +93,13 @@
 </head>
 <body>
 
+<div class="run-selector">
+  <label for="ensRunSelect">ENS6plus-modelrun</label>
+  <select id="ensRunSelect" aria-label="Modelrun met datum en UTC-tijd"><option>Runs laden…</option></select>
+  <button class="btn" id="latestRun" type="button">Nieuwste beschikbare run</button>
+  <span id="ensRunStatus" role="status" aria-live="polite">Beschikbare modelruns controleren…</span>
+</div>
+
 <div class="header-bg">
   <div class="header">
     <div>
@@ -103,7 +116,7 @@
 
 <details class="method">
   <summary>Berekening bewolkingskansen en gebruikte lagen</summary>
-  <p><strong>Totale bewolking</strong> gebruikt per ECMWF IFS-ENS 0,25°-lid rechtstreeks <code>cloud_cover</code> (totale atmosferische bedekkingsgraad). <strong>Schaduwgevende bewolking</strong> gebruikt <code>cloud_cover_low</code> en <code>cloud_cover_mid</code>. Voor IFS worden die API-lagen bepaald uit relatieve vochtigheid op respectievelijk 1000/925/850 hPa (laag en mist, tot circa 3 km) en 700/500 hPa (midden, circa 3–8 km). <code>cloud_cover_high</code> en de onderliggende 300/250/200 hPa-lagen worden bewust niet meegenomen. Omdat ECMWF/Open-Meteo geen rechtstreekse schaduwparameter aanbiedt, worden laag en midden per lid overlap-gecorrigeerd gecombineerd als <code>100 × [1 − (1−laag/100) × (1−midden/100)]</code>. Dit is een random-overlapbenadering: lagen worden niet simpel opgeteld en ook niet met alleen het maximum samengevat.</p>
+  <p><strong>Totale bewolking</strong> gebruikt per ECMWF IFS-ENS-lid rechtstreeks <code>cloud_cover</code> (totale atmosferische bedekkingsgraad). <strong>Schaduwgevende bewolking</strong> gebruikt <code>cloud_cover_low</code> en <code>cloud_cover_mid</code>. Voor IFS worden die API-lagen bepaald uit relatieve vochtigheid op respectievelijk 1000/925/850 hPa (laag en mist, tot circa 3 km) en 700/500 hPa (midden, circa 3–8 km). <code>cloud_cover_high</code> en de onderliggende 300/250/200 hPa-lagen worden bewust niet meegenomen. Omdat ECMWF/Open-Meteo geen rechtstreekse schaduwparameter aanbiedt, worden laag en midden per lid overlap-gecorrigeerd gecombineerd als <code>100 × [1 − (1−laag/100) × (1−midden/100)]</code>. Dit is een random-overlapbenadering: lagen worden niet simpel opgeteld en ook niet met alleen het maximum samengevat. In oudere archieven ontbreken deze lagen soms; het betreffende diagram toont dan “Niet beschikbaar”. De daadwerkelijk geladen modelvariant staat bij de bronvermelding.</p>
   <p>De klassen zijn centraal vastgelegd als 0–&lt;20, 20–&lt;40, 40–&lt;60, 60–&lt;80 en 80–100%. Exact 20% valt dus in “Licht bewolkt”. Alleen geldige leden tellen mee; een ontbrekende waarde wordt nooit 0%. Als laag of midden ontbreekt, is schaduwgevende bewolking voor dat lid en tijdstip niet beschikbaar.</p>
 </details>
 
@@ -132,10 +145,10 @@
 </div>
 <div class="chart-tooltip" id="chartTooltip" role="status" aria-live="polite"></div>
 
-<script src="pluim_run_switcher_48ffbf926db6.js" data-required="cloud_cover,cloud_cover_low,cloud_cover_mid,wind_direction_10m"></script>
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
 <script src="pluim_cloud_probability.js?v=20260919-cloud-probability"></script>
-<script>
+<script type="module">
+import {RunController, runId, runToken, runLabel} from './pluim_ens6_runs.mjs?v=20260920-exact1';
 const STATIONS = [
   { name:"Rotterdam",        lat:51.9244, lon:4.4777 },
   { name:"De Bilt",          lat:52.1010, lon:5.1800 },
@@ -165,12 +178,6 @@ const C_NACHT="#f1f2f3", C_GRID="#dfe3e6", C_AXIS="#333";
 let pageSvgString = "";
 let activeModel = null;
 
-const OM_PROXY_BASE = (location.protocol === 'https:' && /(^|\.)weerlab\.nl$/.test(location.hostname))
-  ? 'https://om.weerlab.nl/om'
-  : null;
-const _fetchCache = {};
-const _fetchInflight = {};
-const CACHE_TTL = 8 * 60 * 1000;
 const FAST_UPDATE_WINDOWS = [
   { start: 5 * 60 + 30, end: 12 * 60 },
   { start: 17 * 60 + 30, end: 23 * 60 + 59 },
@@ -179,62 +186,16 @@ const FAST_UPDATE_INTERVAL_MS = 2 * 60 * 1000;
 const NORMAL_UPDATE_INTERVAL_MS = 15 * 60 * 1000;
 let autoRefreshTimer = null;
 
-function rewriteOM(url) {
-  if (!OM_PROXY_BASE) return url;
-  const map = [
-    ['https://ensemble-api.open-meteo.com/v1/ensemble', `${OM_PROXY_BASE}/ensemble`],
-  ];
-  for (const [from, to] of map) {
-    if (url.startsWith(from)) return to + url.slice(from.length);
-  }
-  return url;
-}
-
-function addFreshParam(url) {
-  if (!OM_PROXY_BASE) return url;
-  const u = new URL(url, location.href);
-  u.searchParams.set('_weerlab_fresh', '1');
-  return u.toString();
-}
 
 function isFastUpdateWindow(d = new Date()) {
   const m = d.getHours() * 60 + d.getMinutes();
   return FAST_UPDATE_WINDOWS.some(w => m >= w.start && m <= w.end);
 }
 
-async function fetchJson(url, ms = 30000, retries = 3, force = false, edgeFresh = false) {
-  const cacheKey = rewriteOM(url);
-  const requestUrl = edgeFresh ? addFreshParam(cacheKey) : cacheKey;
-  const cached = _fetchCache[cacheKey];
-  if (!force && cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
-  if (!force && _fetchInflight[cacheKey]) return _fetchInflight[cacheKey];
-
-  _fetchInflight[cacheKey] = (async () => {
-    for (let poging = 0; poging < retries; poging++) {
-      const ctrl = new AbortController();
-      const id = setTimeout(() => ctrl.abort(), ms);
-      try {
-        const r = await fetch(requestUrl, { signal: ctrl.signal, cache: force ? 'no-store' : 'default' });
-        clearTimeout(id);
-        if (r.status === 429 && poging < retries - 1) {
-          await new Promise(res => setTimeout(res, 2000 * (poging + 1)));
-          continue;
-        }
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = await r.json();
-        _fetchCache[cacheKey] = { data, ts: Date.now() };
-        return data;
-      } catch (e) {
-        clearTimeout(id);
-        if (poging === retries - 1) throw new Error(e.name === 'AbortError' ? 'time-out' : e.message);
-        await new Promise(res => setTimeout(res, 1200 * (poging + 1)));
-      }
-    }
-  })().finally(() => { delete _fetchInflight[cacheKey]; });
-  return _fetchInflight[cacheKey];
-}
 
 const urlParams = new URLSearchParams(window.location.search);
+const runControl = new RunController({requested:urlParams.get('run')});
+window.WeerlabEns6 = runControl;
 const lockMode = urlParams.get('lock') === '1';
 const wantedStationName = (urlParams.get('station') || urlParams.get('st') || '')
   .replace(/[<>&]/g, '').trim().slice(0, 80);
@@ -276,7 +237,7 @@ stSel.addEventListener('change', () => {
   u.searchParams.set('lat', String(currentStation.lat));
   u.searchParams.set('lon', String(currentStation.lon));
   history.replaceState(null, '', u);
-  loadAndRender(isFastUpdateWindow());
+  loadAndRender();
 });
 document.getElementById('btnRefresh').addEventListener('click', () => loadAndRender(true, true));
 document.getElementById('btnPng').addEventListener('click', exportPng);
@@ -312,7 +273,7 @@ async function zoekPlaats() {
     u.searchParams.set('lat', String(currentStation.lat));
     u.searchParams.set('lon', String(currentStation.lon));
     history.replaceState(null, '', u);
-    loadAndRender(isFastUpdateWindow());
+    loadAndRender();
   } catch(e) {
     err.textContent = 'Zoekfout: '+e.message;
   }
@@ -325,76 +286,6 @@ function nlDate(d, langDay=true) {
 }
 function nlShortDM(d) { return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 
-const SIX_PLUS_CORE_VARIABLES = 'cloud_cover,cloud_cover_low,cloud_cover_mid,wind_direction_10m';
-const SIX_PLUS_OPTIONAL_VARIABLES = 'cape,temperature_850hPa,temperature_500hPa';
-
-async function fetchEnsemble(lat, lon, runMeta, force = false, edgeFresh = false, variables = SIX_PLUS_CORE_VARIABLES) {
-  const { startHour, endHour } = runHourBoundsFromMeta(runMeta);
-  // De vroegere daggrens start_date=${startDate}&end_date=${endDate} voorkwam
-  // afkappen na middernacht, maar start_hour/end_hour borgt nu ook het cyclusuur.
-  const url = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}`
-    + `&hourly=${encodeURIComponent(variables)}`
-    + `&models=ecmwf_ifs025&start_hour=${encodeURIComponent(startHour)}&end_hour=${encodeURIComponent(endHour)}`
-    + `&temporal_resolution=native&timezone=GMT`;
-  try {
-    const data = WeerlabPlumeMath.markUtcTimes(await fetchJson(url, 30000, 3, force, edgeFresh));
-    return trimHourlyToRunWindow(data, runMeta, 'Ensemble');
-  } catch (e) {
-    throw new Error("Ensemble " + e.message);
-  }
-}
-function mergeOptionalEnsembleFields(core, optional, variables, runMeta) {
-  const merged = {
-    ...core,
-    hourly: { ...(core?.hourly || {}) },
-    hourly_units: { ...(core?.hourly_units || {}) },
-  };
-  const requested = String(variables || '').split(',').map(value => value.trim()).filter(Boolean);
-  const unavailable = new Set(merged.weerlab_unavailable_variables || []);
-  const expectedRunMs = verifiedRunStartFromMeta(runMeta);
-  const optionalRunMs = optional?.weerlab_run ? Date.parse(optional.weerlab_run) : expectedRunMs;
-  const coreTimes = merged.hourly.time || [];
-  const optionalTimes = optional?.hourly?.time || [];
-  const sameRun = Number.isFinite(optionalRunMs) && optionalRunMs === expectedRunMs;
-  const sameTimes = coreTimes.length === optionalTimes.length &&
-    coreTimes.every((time, index) => Date.parse(time) === Date.parse(optionalTimes[index]));
-  if (!optional || !sameRun || !sameTimes) {
-    requested.forEach(variable => unavailable.add(variable));
-    merged.weerlab_unavailable_variables = [...unavailable];
-    return merged;
-  }
-  const optionalUnavailable = new Set(optional.weerlab_unavailable_variables || []);
-  for (const variable of requested) {
-    if (optionalUnavailable.has(variable)) {
-      unavailable.add(variable);
-      continue;
-    }
-    for (const [key, values] of Object.entries(optional.hourly || {})) {
-      if (key === variable || key.startsWith(`${variable}_member`)) merged.hourly[key] = values;
-    }
-    for (const [key, unit] of Object.entries(optional.hourly_units || {})) {
-      if (key === variable || key.startsWith(`${variable}_member`)) merged.hourly_units[key] = unit;
-    }
-  }
-  merged.weerlab_unavailable_variables = [...unavailable];
-  return merged;
-}
-async function fetchHres(lat, lon, runMeta, force = false, edgeFresh = false) {
-  const runInitialization = runInitializationFromMeta(runMeta);
-  const url = `https://single-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
-    + `&hourly=wind_direction_10m,cape,temperature_850hPa,temperature_500hPa`
-    + `&models=ecmwf_ifs&run=${encodeURIComponent(runInitialization)}`
-    + `&forecast_days=15&temporal_resolution=native&timezone=GMT`;
-  try {
-    const data = WeerlabPlumeMath.markUtcTimes(await fetchJson(url, 30000, 3, force, edgeFresh));
-    if (data?.weerlab_run && Date.parse(data.weerlab_run) !== verifiedRunStartFromMeta(runMeta)) {
-      throw new Error('antwoord hoort bij een andere ECMWF-run');
-    }
-    return trimHourlyToRunWindow(data, runMeta, 'HRES', false);
-  } catch (e) {
-    throw new Error("HRES " + e.message);
-  }
-}
 
 // Ontbrekende waarden blijven null (pathOf slaat ze over) — 0-vullen gaf
 // een valse "klif" naar 0 aan het einde van reeksen die korter zijn.
@@ -1038,100 +929,6 @@ function bindChartTooltips(model) {
   });
 }
 
-// Gebruik bronmetadata voor de werkelijk geladen modelrun. ECMWF publiceert
-// ook 06/18 UTC-updates; leid de run daarom nooit af uit de lokale klok.
-async function fetchRunMeta() {
-  try {
-    const r = await fetch('https://ensemble-api.open-meteo.com/data/ecmwf_ifs025_ensemble/static/meta.json', { cache: 'no-store' });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch (e) { return null; }
-}
-function verifiedRunMeta(meta) {
-  const initialisation = Number(meta?.last_run_initialisation_time);
-  const dataEnd = Number(meta?.data_end_time);
-  const modification = Number(meta?.last_run_modification_time || 0);
-  if (!Number.isFinite(initialisation) || initialisation <= 0 ||
-      !Number.isFinite(dataEnd) || dataEnd <= initialisation) {
-    throw new Error('Geen geldig ECMWF ENS-runvenster ontvangen.');
-  }
-  const runDate = new Date(initialisation * 1000);
-  if (![0, 6, 12, 18].includes(runDate.getUTCHours()) ||
-      runDate.getUTCMinutes() !== 0 || runDate.getUTCSeconds() !== 0) {
-    throw new Error(`ECMWF ENS-metadata bevat een ongeldige cyclus (${runDate.toISOString()}).`);
-  }
-  return {
-    ...meta,
-    last_run_initialisation_time: initialisation,
-    data_end_time: dataEnd,
-    last_run_modification_time: modification,
-  };
-}
-function verifiedRunStartFromMeta(meta) {
-  return verifiedRunMeta(meta).last_run_initialisation_time * 1000;
-}
-function runInitializationFromMeta(meta) {
-  return new Date(verifiedRunStartFromMeta(meta)).toISOString().slice(0, 16);
-}
-function verifiedDataEndFromMeta(meta) {
-  return verifiedRunMeta(meta).data_end_time * 1000;
-}
-function runMetaSentinel(meta) {
-  const verified = verifiedRunMeta(meta);
-  return `${verified.last_run_initialisation_time}:${verified.data_end_time}:${verified.last_run_modification_time}`;
-}
-function sameRunMeta(before, after) {
-  return runMetaSentinel(before) === runMetaSentinel(after);
-}
-function runHourBoundsFromMeta(meta) {
-  const verified = verifiedRunMeta(meta);
-  return {
-    startHour: new Date(verified.last_run_initialisation_time * 1000).toISOString().slice(0, 16),
-    endHour: new Date(verified.data_end_time * 1000).toISOString().slice(0, 16),
-  };
-}
-function trimHourlyToRunWindow(data, meta, sourceLabel, requireFullEnd = true) {
-  const verified = verifiedRunMeta(meta);
-  const hourly = data?.hourly;
-  const rawTimes = Array.isArray(hourly?.time) ? hourly.time : [];
-  if (!rawTimes.length) throw new Error(`${sourceLabel} bevat geen tijdas`);
-  const seriesEntries = Object.entries(hourly)
-    .filter(([key, values]) => key !== 'time' && Array.isArray(values));
-  const lengths = new Set(seriesEntries.map(([, values]) => values.length));
-  if (!seriesEntries.length || lengths.size !== 1) {
-    throw new Error(`${sourceLabel} heeft variabelen met verschillende lengtes`);
-  }
-  const valueCount = seriesEntries[0][1].length;
-  if (rawTimes.length < valueCount || rawTimes.length > valueCount + 1) {
-    throw new Error(`${sourceLabel} heeft een afwijkende tijdas`);
-  }
-  const valueTimes = rawTimes.slice(0, valueCount);
-  const parsedTimes = valueTimes.map(value => new Date(value).getTime());
-  if (parsedTimes.some(value => !Number.isFinite(value)) ||
-      parsedTimes.some((value, index) => index > 0 && value <= parsedTimes[index - 1])) {
-    throw new Error(`${sourceLabel} heeft geen strikt oplopende UTC-tijdas`);
-  }
-  const startMs = verified.last_run_initialisation_time * 1000;
-  const endMs = verified.data_end_time * 1000;
-  const indexes = parsedTimes
-    .map((time, index) => ({ time, index }))
-    .filter(item => item.time >= startMs && item.time <= endMs)
-    .map(item => item.index);
-  if (indexes.length < 2) throw new Error(`${sourceLabel} bevat te weinig stappen in de gekozen run`);
-  const firstMs = parsedTimes[indexes[0]];
-  const lastValueMs = parsedTimes[indexes[indexes.length - 1]];
-  const boundaryMs = rawTimes.length === valueCount + 1
-    ? new Date(rawTimes[valueCount]).getTime()
-    : lastValueMs;
-  if (firstMs !== startMs || (requireFullEnd && boundaryMs !== endMs)) {
-    throw new Error(`${sourceLabel} dekt niet exact de gekozen ECMWF-run`);
-  }
-  const boundedHourly = { time: indexes.map(index => valueTimes[index]) };
-  for (const [key, values] of seriesEntries) {
-    boundedHourly[key] = indexes.map(index => values[index]);
-  }
-  return WeerlabPlumeMath.markUtcTimes({ ...data, hourly: boundedHourly });
-}
 function cutoffLengthForDataEnd(times, dataEndMs) {
   if (!Array.isArray(times) || !Number.isFinite(dataEndMs)) return 0;
   let count = 0;
@@ -1142,65 +939,13 @@ function cutoffLengthForDataEnd(times, dataEndMs) {
   }
   return count;
 }
-async function optionalWithin(promise, ms = 15000) {
-  let timer;
-  try {
-    return await Promise.race([promise, new Promise(resolve => { timer=setTimeout(()=>resolve(null),ms); })]);
-  } finally { clearTimeout(timer); }
-}
-async function fetchCycleMatchedData(lat, lon, force = false, edgeFresh = false) {
-  const runControl = window.WeerlabPlumeRuns;
-  await runControl?.ensureLocation?.(lat, lon);
-  const selectedRunMs = Date.parse(runControl?.selectedRunIso?.() || '');
-  const liveRunMs = Number(runControl?.state?.liveMeta?.last_run_initialisation_time) * 1000;
-  if (Number.isFinite(selectedRunMs) && selectedRunMs === liveRunMs) {
-    // CAPE ontbreekt in de snelle 00/06-voorlevering. Schakel voor dezelfde
-    // actuele cyclus door naar de complete bron; historische cycli blijven exact.
-    await runControl?.ensureVariables?.(['cape']);
-  }
-  // De gewone forecast-API kan al op een nieuwere 06/18-run staan. Selecteer
-  // HRES daarom expliciet via Single Runs en controleer na het ophalen dat de
-  // ENS-metadata niet tussentijds van cyclus is gewisseld.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const runMeta = verifiedRunMeta(await fetchRunMeta());
-    // De ensemble-endpoint heeft zelf geen run-selector. Om een eerder in de
-    // browser/edge gecachte cyclus uit te sluiten, wordt hij na de metadata
-    // altijd vers en zonder edge-cache opgehaald.
-    const retryFresh = true;
-    const [coreEns, optionalEns, hres] = await Promise.all([
-      fetchEnsemble(lat, lon, runMeta, retryFresh, true, SIX_PLUS_CORE_VARIABLES),
-      optionalWithin(fetchEnsemble(
-        lat, lon, runMeta, retryFresh, true, SIX_PLUS_OPTIONAL_VARIABLES,
-      ).catch(error => {
-        console.warn('Optionele ENS-velden niet beschikbaar:', error.message);
-        return null;
-      })),
-      optionalWithin(fetchHres(lat, lon, runMeta, force || attempt > 0, edgeFresh).catch(error => {
-        // Single Runs loopt niet voor elke cyclus gelijk op met ENS. De exacte
-        // HRES-overlay is aanvullend: bij ontbreken blijft dezelfde ENS-run
-        // zichtbaar, zonder een HRES-reeks uit een andere initialisatie.
-        console.warn('Exacte HRES-overlay niet beschikbaar:', error.message);
-        return null;
-      })),
-    ]);
-    const metaAfter = verifiedRunMeta(await fetchRunMeta());
-    const sameInitialisation = Number(metaAfter?.last_run_initialisation_time) === Number(runMeta.last_run_initialisation_time);
-    if (sameInitialisation && sameRunMeta(runMeta, metaAfter)) {
-      const ens = mergeOptionalEnsembleFields(
-        coreEns, optionalEns, SIX_PLUS_OPTIONAL_VARIABLES, runMeta,
-      );
-      return { ens, hres, runMeta };
-    }
-  }
-  throw new Error('ECMWF ENS-run wisselde tijdens het laden; probeer opnieuw.');
-}
 function runMetaTeksten(meta) {
   if (!meta?.last_run_initialisation_time) return null;
   const init = new Date(meta.last_run_initialisation_time * 1000);
   const availS = meta.last_run_availability_time || meta.last_run_initialisation_time;
   const fmtT = d => d.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' });
   const RUN_STAP = 6 * 3600 * 1000;
-  const fmtRun = d => `${DAGEN_KORT[d.getUTCDay()]} ${d.getUTCDate()} ${MAANDEN[d.getUTCMonth()]} ${String(d.getUTCHours()).padStart(2,'0')} UTC`;
+  const fmtRun = d => runLabel(d.toISOString());
   const volgendeModelRun = new Date(init.getTime() + RUN_STAP);
   const horizonUren = meta.data_end_time
     ? Math.round((meta.data_end_time - meta.last_run_initialisation_time) / 3600)
@@ -1222,49 +967,112 @@ function runMetaTeksten(meta) {
   };
 }
 
-async function loadAndRender(force = false, edgeFresh = false) {
-  const loader = document.getElementById('loader');
-  const host = document.getElementById('pageHost');
-  loader.classList.remove('verborgen');
-  const label = force ? 'Nieuwe ensembledata controleren' : 'Ensemble laden';
-  loader.innerHTML = `<div class="spinner"></div><div style="font-size:13px;font-weight:600;color:#2a4a70">${label} voor ${currentStation.name}…</div>`;
-  host.innerHTML = '';
-
+function syncRunOptions() {
+  const select=document.getElementById('ensRunSelect');
+  select.replaceChildren();
+  const wanted=runControl.selectedRun;
+  for (const item of runControl.runs) {
+    const option=new Option(runLabel(item.run),item.run);
+    option.selected=item.run===wanted; select.add(option);
+  }
+  if (wanted && !runControl.runs.some(r=>r.run===wanted)) {
+    const missing=new Option(runLabel(wanted)+' · niet beschikbaar',wanted);
+    missing.selected=true; missing.disabled=true;select.add(missing);
+  }
+  if (!select.options.length) select.add(new Option('Geen beschikbare runs',''));
+  document.getElementById('latestRun').disabled=!runControl.runs.length;
+}
+function syncRunUrl(mode='replace') {
+  if (!runControl.selectedRun) return;
+  const url=new URL(location.href);
+  url.searchParams.set('run',runToken(runControl.selectedRun));
+  url.searchParams.set('station',currentStation.name);
+  url.searchParams.set('lat',String(currentStation.lat));
+  url.searchParams.set('lon',String(currentStation.lon));
+  if (url.href!==location.href) history[mode==='push' && parent===window?'pushState':'replaceState'](null,'',url);
+  if (parent!==window) parent.postMessage({type:'weerlab-ens6-route',query:url.searchParams.toString(),mode},location.protocol==='file:'?'*':location.origin);
+}
+async function selectRun(value,mode='push') {
   try {
-    const { ens, hres, runMeta } = await fetchCycleMatchedData(
-      currentStation.lat,
-      currentStation.lon,
-      force,
-      edgeFresh,
-    );
-    const model = buildModel(
-      ens,
-      hres,
-      verifiedRunStartFromMeta(runMeta),
-      verifiedDataEndFromMeta(runMeta),
-    );
-    const rm = runMetaTeksten(runMeta);
-    if (rm) {
-      model.runLabel = rm.runLabel;
-      model.coverageLabel = rm.coverageLabel;
+    runControl.choose(value);
+    syncRunOptions();syncRunUrl(mode);
+    await loadAndRender();
+  } catch (error) { document.getElementById('ensRunStatus').textContent=error.message; }
+}
+document.getElementById('ensRunSelect').addEventListener('change',event=>selectRun(event.target.value));
+document.getElementById('latestRun').addEventListener('click',()=>{if(runControl.runs[0])selectRun(runControl.runs[0].run);});
+window.addEventListener('popstate',()=>{
+  const params=new URLSearchParams(location.search);
+  const station=STATIONS.find(s=>s.name===params.get('station'));
+  if(station){currentStation=station;stSel.value=STATIONS.indexOf(station);}
+  selectRun(params.get('run'),'replace');
+});
+window.addEventListener('message',event=>{
+  if(event.source!==parent || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
+  if(event.data?.type!=='weerlab-ens6-select')return;
+  const params=new URLSearchParams(event.data.query);
+  const station=STATIONS.find(s=>s.name===params.get('station'));
+  if(station){currentStation=station;stSel.value=STATIONS.indexOf(station);}
+  selectRun(params.get('run'),'replace');
+});
+let renderSerial=0;
+const renderedModels=new Map();
+async function loadAndRender(force = false) {
+  const ticket=++renderSerial;
+  const loader=document.getElementById('loader'), host=document.getElementById('pageHost');
+  const card=document.getElementById('pageCard'), status=document.getElementById('ensRunStatus');
+  const station={...currentStation};
+  const selected=runControl.selectedRun;
+  const loading=id=>`Modelrun ${id ? runLabel(id) : 'controleren'} wordt geladen…`;
+  const showLoading=id=>{
+    status.textContent=loading(id);
+    loader.replaceChildren();
+    const spinner=document.createElement('div');spinner.className='spinner';
+    const text=document.createElement('span');text.textContent=loading(id)+(activeModel?' Vorige grafiek blijft zichtbaar totdat deze run klaarstaat.':'');
+    loader.append(spinner,text);
+  };
+  card.classList.toggle('updating',!!activeModel);card.setAttribute('aria-busy','true');
+  loader.classList.remove('verborgen');hideChartTooltip();
+  document.getElementById('btnPng').disabled=true;
+  showLoading(selected);
+  try {
+    const result=await runControl.load(station,{refresh:force,onSelection:id=>{
+      if(ticket!==renderSerial)return;
+      syncRunOptions();syncRunUrl();showLoading(id);
+    }});
+    if(ticket!==renderSerial || !runControl.isCurrent(result))return;
+    const {data,cacheKey}=result;
+    let cached=renderedModels.get(cacheKey);
+    if(!cached || cached.data!==data) {
+      const model=buildModel(data.ens,data.hres,data.meta.last_run_initialisation_time*1000,data.meta.data_end_time*1000);
+      const rm=runMetaTeksten(data.meta);
+      model.runId=data.run;model.runLabel=runLabel(data.run);model.coverageLabel=rm.coverageLabel;
+      model.datumTxt=new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(data.run));
+      model.sourceModel=data.model;
+      model.footRight=`Bron: ECMWF IFS-ENS · ${model.runLabel}`;
+      model.footLeft=`Weerlab.nl · ${data.source?.provider || 'ECMWF'} · ${data.model}`;
+      cached={data,model,svg:buildPageSvg(model)};renderedModels.set(cacheKey,cached);
+      if(renderedModels.size>24)renderedModels.delete(renderedModels.keys().next().value);
     }
-    pageSvgString = buildPageSvg(model);
-    host.innerHTML = pageSvgString;
+    // No await within this commit: all panels, metadata and export update together.
+    const {model}=cached;
+    pageSvgString=cached.svg;host.innerHTML=pageSvgString;host.dataset.runId=data.run;
     bindChartTooltips(model);
-    const pageCard = document.getElementById('pageCard');
-    if (window.matchMedia('(max-width:800px)').matches && pageCard.dataset.mobilePositioned !== '1') {
-      requestAnimationFrame(() => {
-        pageCard.scrollLeft = Math.max(0, (pageCard.scrollWidth - pageCard.clientWidth) / 2);
-        pageCard.dataset.mobilePositioned = '1';
-      });
-    }
-
-    document.getElementById('hdrDatum').textContent = model.datumTxt.charAt(0).toUpperCase() + model.datumTxt.slice(1);
-    document.getElementById('hdrRun').textContent = `ENS-pluim ${model.runLabel} · ${model.nMembers} leden · ${model.panelStatus}${rm ? ` · ${rm.detail}` : ''}`;
-    document.getElementById('runinfo').textContent = `ENS-pluim: ${model.runLabel} · ${model.panelStatus} · ${model.hresStatus}${rm ? ` · ${rm.detail}` : ''} · ${currentStation.name} (${currentStation.lat.toFixed(3)}, ${currentStation.lon.toFixed(3)})`;
-    loader.classList.add('verborgen');
-  } catch (e) {
-    loader.innerHTML = `<div class="err">⚠ ${e.message}</div><button class="btn btn-primair" onclick="loadAndRender(isFastUpdateWindow())">Opnieuw</button>`;
+    document.getElementById('hdrDatum').textContent=model.datumTxt;
+    document.getElementById('hdrRun').textContent=`ENS6plus – run ${model.runLabel} · ${model.nMembers} leden · ${model.panelStatus}`;
+    document.getElementById('runinfo').textContent=`ENS6plus – run ${model.runLabel} · ${station.name} · ${model.coverageLabel} · ${data.model}`;
+    status.textContent=`Actief: ${model.runLabel} · ${station.name}`;
+    status.dataset.runId=data.run;
+    syncRunOptions();loader.classList.add('verborgen');card.classList.remove('updating');
+    card.setAttribute('aria-busy','false');document.getElementById('btnPng').disabled=false;
+  } catch(error) {
+    if(ticket!==renderSerial || error.name==='AbortError')return;
+    status.textContent=error.message;syncRunOptions();
+    loader.replaceChildren();
+    const message=document.createElement('span');message.className='err';
+    message.textContent=error.message+(activeModel?` Vorige grafiek: ${activeModel.runLabel} (${activeModel.station}); niet de gekozen run.`:'');
+    const retry=document.createElement('button');retry.className='btn';retry.textContent='Opnieuw proberen';retry.addEventListener('click',()=>loadAndRender(true));
+    loader.append(message,retry);card.setAttribute('aria-busy','false');
   }
 }
 
@@ -1424,14 +1232,20 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   ];
   if (capeP) {
     panels.push({ title:"Onweer — CAPE (J/kg)", ...capeP, hres:capeHres, fanColor:'#cc6600', xMode:'model', yMin:0, yMax:5000 });
+  } else {
+    panels.push({title:'Onweer — CAPE (J/kg)',unavailable:'CAPE ontbreekt voor deze modelrun.',yMin:0,yMax:5000});
   }
   if (t850P) {
     const [t850Mn, t850Mx] = pad(...rangeOf([t850P.p10, t850P.p90], t850Hres), 0.08);
     panels.push({ title:"Temperatuur 850 hPa (°C)", ...t850P, hres:t850Hres, fanColor:'#cc0033', xMode:'model', yMin:Math.floor(t850Mn/2)*2, yMax:Math.ceil(t850Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" });
+  } else {
+    panels.push({title:'Temperatuur 850 hPa (°C)',unavailable:'850 hPa ontbreekt voor deze modelrun.',yMin:-10,yMax:20});
   }
   if (t500P) {
     const [t500Mn, t500Mx] = pad(...rangeOf([t500P.p10, t500P.p90], t500Hres), 0.08);
     panels.push({ title:"Temperatuur 500 hPa (°C)", ...t500P, hres:t500Hres, fanColor:'#5566cc', xMode:'model', yMin:Math.floor(t500Mn/2)*2, yMax:Math.ceil(t500Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" });
+  } else {
+    panels.push({title:'Temperatuur 500 hPa (°C)',unavailable:'500 hPa ontbreekt voor deze modelrun.',yMin:-40,yMax:0});
   }
   const hasHres = panels.some(panel => Array.isArray(panel.hres) && panel.hres.some(Number.isFinite));
   const missingPanels = [
@@ -1501,7 +1315,7 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && isFastUpdateWindow()) loadAndRender(true);
 });
 
-loadAndRender(isFastUpdateWindow());
+loadAndRender();
 scheduleAutoRefresh();
 </script>
 </body>

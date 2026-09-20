@@ -608,6 +608,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "pluim-ens6plus",
+    "src": "pluim_6_plus.html?station=De%20Bilt&v=20260920-exact1",
     "name": "Weerpluim · extra elementen",
     "description": "Bewolking, windrichting en extra modelvelden",
     "category": "verwachting",

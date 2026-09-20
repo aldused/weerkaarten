@@ -67,7 +67,7 @@
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
       const recordParent={'dagrecords-jaar':'dagrecords',dagrecordsjaar:'dagrecords',droog668:'neerslag668'};
-      const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw)
+      const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw.split('?')[0])
         || products.find(p=>p.id===recordParent[raw]);
       if(site.directProducts && !product)return {page:'start',type:'',filters:{},q:''};
       return {page:product?.category || 'start',type:product?.type || '',filters:{},q:'',productRoute:raw,product};
@@ -363,6 +363,10 @@
     $('#product-back').href='#menu/'+state.page+(state.type?'?type='+state.type:'');
     $('#product-back').textContent='← '+category.name;
     const previousFrame=$('#product-frame');
+    if(state.product?.id==='pluim-ens6plus' && previousFrame.dataset.route?.split('?')[0]==='pluim-ens6plus' && previousFrame.dataset.route!==route){
+      previousFrame.dataset.route=route;
+      previousFrame.contentWindow?.postMessage({type:'weerlab-ens6-select',query:route.split('?')[1] || ''},location.origin);
+    }
     if(previousFrame.dataset.route!==route){
       // A new browsing context has no previous about:blank/product entry.
       // Only the shell adds browser-history entries; Back must restore a page,
@@ -370,6 +374,11 @@
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
       frame.src=state.product?.src || 'product-host.html?v=20260915-europa-menu-1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      if(state.product?.id==='pluim-ens6plus'){
+        const url=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1] || '');
+        for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
+        frame.src=url.href;
+      }
       if(state.product?.src)frame.addEventListener('load',()=>wireDirectProduct(frame));
       previousFrame.replaceWith(frame);
     }
@@ -392,6 +401,15 @@
     if(event.source!==frame.contentWindow || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
     if(!state.productRoute || $('#product-workspace').hidden)return;
     const data=event.data;
+    if(data?.type==='weerlab-ens6-route' && state.product?.id==='pluim-ens6plus' && typeof data.query==='string'){
+      const input=new URLSearchParams(data.query),params=new URLSearchParams();
+      for(const key of ['run','station','lat','lon'])if(input.has(key))params.set(key,input.get(key));
+      const hash='#pluim-ens6plus?'+params;
+      if(location.hash!==hash)history[data.mode==='push'?'pushState':'replaceState'](null,'',hash);
+      frame.dataset.route=hash.slice(1);state=readRoute();
+      $('#product-permalink').href=selfPage+hash;
+      return;
+    }
     if(data?.type==='weerlab-navigate' && typeof data.hash==='string' && /^#(?:[a-z0-9_-]+|menu\/[a-z0-9_-]+(?:\?[^#]*)?)$/i.test(data.hash)){
       navigate(data.hash,{focus:true});return;
     }

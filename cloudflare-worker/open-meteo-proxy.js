@@ -21,6 +21,8 @@
  * of via Cloudflare dashboard > Worker > Settings > Variables > Add secret.
  */
 
+import {handleEns6} from './ens6-runs.mjs';
+
 const ENDPOINTS = {
   'forecast':    { host: 'customer-api.open-meteo.com',               path: '/v1/forecast'    },
   'ensemble':    { host: 'customer-ensemble-api.open-meteo.com',      path: '/v1/ensemble'    },
@@ -52,6 +54,10 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    if (url.pathname === '/ens6-runs' || url.pathname === '/ens6-run') {
+      return handleEns6(url, request, env);
+    }
 
     // Sync-endpoints voor gedeelde drafts (Stefan ↔ jij)
     //   GET om.weerlab.nl/draft/<key>   → laatste opgeslagen JSON of {}

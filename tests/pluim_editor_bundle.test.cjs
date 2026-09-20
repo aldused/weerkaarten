@@ -307,7 +307,7 @@ for (const page of [
   'janvisser.html',
   'weerbewaking_ridderkerk_rhoon_dekuip.html',
 ]) {
-  assert.match(fs.readFileSync(path.join(root, page), 'utf8'), /pluim_run_switcher_48ffbf926db6\.js/, `${page}: directe gezamenlijke 00\/06\/12\/18-runkeuze ontbreekt`);
+  assert.match(fs.readFileSync(path.join(root, page), 'utf8'), page==='pluim_6_plus.html' ? /pluim_ens6_runs\.mjs/ : /pluim_run_switcher_48ffbf926db6\.js/, `${page}: directe gezamenlijke 00\/06\/12\/18-runkeuze ontbreekt`);
 }
 for (const page of ['weerbewaking_landelijke_kaart.html', 'weerbewaking_landelijke_meerdaagse.html', 'weerbewaking_landelijke_pluim.html', 'weerbewaking_knmi_metingen.html', 'weerbewaking_regio_kaart.html']) {
   const html = fs.readFileSync(path.join(root, page), 'utf8');
