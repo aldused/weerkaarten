@@ -110,11 +110,12 @@ CORE_BASES = (
 DIRECT_CORE_BASES = CORE_BASES + (
     "wind_gusts_10m", "cape", "wind_direction_10m",
 )
+CLOUD_LAYER_BASES = ("cloud_cover_low", "cloud_cover_mid")
 ARCHIVE_BASES = CORE_BASES + (
     "wind_gusts_10m", "cape", "wind_direction_10m", "temperature_850hPa",
     "temperature_500hPa", "geopotential_height_500hPa", "dew_point_2m",
     "relative_humidity_2m", "snowfall", "lifted_index", "weather_code",
-)
+) + CLOUD_LAYER_BASES
 # Open-Meteo exposeert momenteel wel 51 lifted-index-reeksen, maar vult ze voor
 # IFS ENS volledig met null. Zo'n sleutel is geen capability en mag ook niet
 # iedere minuut een nieuwe verrijkingspoging uitlokken. CAPE blijft wel direct
@@ -218,6 +219,22 @@ def is_complete_matrix(matrix: object, n: int) -> bool:
     )
 
 
+def is_cloud_layer_matrix(matrix: object, n: int) -> bool:
+    """Cloud capability may have gaps; null never means clear sky.
+
+    Preserve all 51 member positions and exact target times. In particular,
+    three-hourly layers on an hourly early-run axis have null intermediate
+    times. Do not interpolate, clamp invalid values or shift member indices.
+    """
+    return (
+        n >= 2 and isinstance(matrix, list) and len(matrix) == MEMBER_COUNT
+        and all(isinstance(row, list) and len(row) == n for row in matrix)
+        and all(value is None or (is_finite_number(value) and 0 <= value <= 100)
+                for row in matrix for value in row)
+        and any(is_finite_number(value) for row in matrix for value in row)
+    )
+
+
 def minimum_horizon_hours(cycle: datetime) -> int:
     return MIN_HORIZON_H if cycle.hour in (0, 12) else min(MIN_HORIZON_H, SHORT_HORIZON_H)
 
@@ -266,6 +283,11 @@ def validate_hourly(hourly: dict, cycle: datetime) -> tuple[list[str], dict[str,
     # zonder een verder geldige run af te keuren.
     keys_by_base: dict[str, list[str]] = {}
     for base, keys in candidate_keys.items():
+        if base in CLOUD_LAYER_BASES:
+            expected = [base] + [f"{base}_member{i:02d}" for i in range(1, MEMBER_COUNT)]
+            if keys == expected and is_cloud_layer_matrix([hourly[key] for key in keys], value_count):
+                keys_by_base[base] = keys
+            continue
         valid = (
             len(keys) == MEMBER_COUNT
             and all(
@@ -509,7 +531,10 @@ def rounded_members(hourly: dict, keys_by_base: dict[str, list[str]]) -> dict[st
     """Convert validated Open-Meteo series to the compact archive precision."""
     members: dict[str, list[list[float]]] = {}
     for base, keys in keys_by_base.items():
-        if base in ("precipitation", "snowfall"):
+        if base in CLOUD_LAYER_BASES:
+            members[base] = [[None if value is None else round(value, 1)
+                              for value in hourly[key]] for key in keys]
+        elif base in ("precipitation", "snowfall"):
             members[base] = [
                 [round(max(0, value), 3) for value in hourly[key]]
                 for key in keys
@@ -569,13 +594,14 @@ def run_time_axis(run: dict) -> list[int] | None:
 
 
 def complete_run_fields(run: dict) -> list[str]:
-    """Capabilities backed by a complete finite 51 x N matrix in this run."""
+    """Validated capabilities; optional cloud layers retain explicit gaps."""
     times = run_time_axis(run)
     if times is None:
         return []
     return [
         base for base in ARCHIVE_BASES
-        if is_complete_matrix(matrix_for_run(run, base), len(times))
+        if (is_cloud_layer_matrix if base in CLOUD_LAYER_BASES else is_complete_matrix)(
+            matrix_for_run(run, base), len(times))
     ]
 
 
@@ -697,11 +723,15 @@ def enrich_run_ensemble(
     if len(source_index) != len(source_times_ms):
         raise RuntimeError("OM-verrijking bevat dubbele tijdstappen")
     missing_times = [value for value in target_times if value not in source_index]
-    if missing_times:
+    # Early O1280 runs include hourly times absent from the later IFS025
+    # native axis. Only cloud layers may be added sparsely in that case;
+    # specialist/core fields retain their existing strict alignment contract.
+    sparse_early = existing_source.get("access") == "ecmwf_prescheduled_point_api"
+    if missing_times and not sparse_early:
         raise RuntimeError(
             f"OM-verrijking mist {len(missing_times)} bestaande archieftijdstappen"
         )
-    indices = [source_index[value] for value in target_times]
+    indices = [source_index.get(value) for value in target_times]
     source_members = rounded_members(hourly_ens, keys_by_base)
 
     enriched = copy.deepcopy(run)
@@ -712,6 +742,22 @@ def enrich_run_ensemble(
 
     added: list[str] = []
     for base in ENRICHMENT_BASES:
+        if base in CLOUD_LAYER_BASES:
+            source_matrix = source_members.get(base)
+            if not is_cloud_layer_matrix(source_matrix, len(source_times_ms)):
+                continue
+            aligned = [[row[index] if index is not None else None for index in indices]
+                       for row in source_matrix]
+            existing = matrix_for_run(enriched, base)
+            if is_cloud_layer_matrix(existing, len(target_times)):
+                aligned = [[old if old is not None else new for old, new in zip(old_row, new_row)]
+                           for old_row, new_row in zip(existing, aligned)]
+            if is_cloud_layer_matrix(aligned, len(target_times)) and aligned != existing:
+                members[base] = aligned
+                added.append(base)
+            continue
+        if missing_times:
+            continue
         # Never overwrite a complete direct or previously enriched matrix.
         if is_complete_matrix(matrix_for_run(enriched, base), len(target_times)):
             continue
@@ -760,6 +806,7 @@ def enrich_run_ensemble(
             "endpoint": "om.weerlab.nl/om/ensemble",
             "run_initialisation": run_iso,
             "aligned_to_existing_times": True,
+            "cloud_layer_alignment": "exact_native_timestamps_only; missing values remain null",
             "fields_added": merged_fields,
             "fetched": iso_z(datetime.now(timezone.utc)),
             "grid_latitude": grid_meta.get("latitude"),
@@ -1174,6 +1221,7 @@ def main(argv: list[str]) -> int:
                 continue
             if run_obj.get("data_sha256") == existing_run.get("data_sha256"):
                 print(f"  {name}: OM heeft nog geen nieuwe volledige specialistmatrices")
+                ensemble_batch_completed += 1
                 continue
             runs = [r for r in runs if r.get("run") != run_iso]
             runs.insert(0, run_obj)
@@ -1261,8 +1309,10 @@ def main(argv: list[str]) -> int:
             print(f"Batch afgekeurd: metadata-hercontrole faalde ({exc})", file=sys.stderr)
             return 1
         else:
-            if meta_after.get("last_run_initialisation_time") != source_meta.get("last_run_initialisation_time"):
-                print("Batch afgekeurd: bronrun wisselde tijdens de download", file=sys.stderr)
+            if any(meta_after.get(key) != source_meta.get(key) for key in (
+                "last_run_initialisation_time", "last_run_modification_time", "data_end_time"
+            )):
+                print("Batch afgekeurd: bronrun of broninhoud wisselde tijdens de download", file=sys.stderr)
                 return 1
 
     for path, out, name, ntemp, run_obj, added_fields in candidates:

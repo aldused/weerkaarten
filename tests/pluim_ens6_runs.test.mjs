@@ -12,6 +12,17 @@ export function archive() {
 export function dataset(id,location={lat:52.101,lon:5.178}) {
   return {...archivedDataset(archive(),manifest.runs.find(r=>r.run===id)),location:{latitude:location.lat,longitude:location.lon},revision:'r1'};
 }
+test('archived cloud layers retain sparse timestamps and member positions without zero fill',()=>{
+  const doc=archive(),entry=manifest.runs[0];
+  for(const field of ['cloud_cover_low','cloud_cover_mid'])for(const row of doc.runs[0].members[field])row[1]=null;
+  doc.runs[0].members.cloud_cover_low[17][2]=null;
+  const data=archivedDataset(doc,entry);
+  assert.equal(data.ens.hourly.cloud_cover_low[1],null);
+  assert.equal(data.ens.hourly.cloud_cover_low_member17[2],null);
+  assert.equal(data.ens.hourly.cloud_cover_low_member18[2],0);
+  assert.equal(data.ens.hourly.time.length,9);
+  assert.equal(data.run,ids[0]);
+});
 function mock({delay=()=>0,badRun=false}={}) {
   const requests=[],aborted=[];
   const fetcher=async(url,{signal})=>{

@@ -13,6 +13,9 @@ const server=http.createServer((req,res)=>{
  const ids=['2026-09-20T00:00:00Z','2026-09-19T18:00:00Z','2026-09-19T12:00:00Z','2026-09-19T06:00:00Z','2026-09-19T00:00:00Z'];
  const entries=ids.map((run,i)=>({run,fields:i===3?['cloud_cover','wind_direction_10m']:PARAMETERS,revision:'1'}));
  const doc={lat:52.101,lon:5.178,runs:ids.map((run,i)=>({run,source:{run_initialisation:run,model:'ecmwf_ifs025'},times_ms:Array.from({length:9},(_,j)=>Date.parse(run)+j*10800000),members:Object.fromEntries(PARAMETERS.map(f=>[f,Array.from({length:51},()=>Array.from({length:9},(_,j)=>f.includes('temperature')?i-j:i*20))]))}))};
+ const longHours=[...Array.from({length:73},(_,i)=>i),...Array.from({length:24},(_,i)=>75+i*3),...Array.from({length:36},(_,i)=>150+i*6)];
+ doc.runs[0].times_ms=longHours.map(hour=>Date.parse(ids[0])+hour*3600000);
+ for(const rows of Object.values(doc.runs[0].members))for(let i=0;i<rows.length;i++)rows[i]=longHours.map((_,j)=>j%100);
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${server.address().port}`;
  const browser=await chromium.launch({headless:true,channel:'chrome'});
@@ -39,12 +42,38 @@ const server=http.createServer((req,res)=>{
    assert.equal(labels.filter(t=>t.includes('modelrun '+runLabel(id))).length,6);
   };
   await page.goto(base+'/pluim_6_plus.html?station=De%20Bilt');await active(page,ids[0]);
+  const checkAxis=async()=>{
+   const geometry=await page.locator('#pageHost svg').evaluate(svg=>{
+    const scale=svg.getBoundingClientRect().width/svg.viewBox.baseVal.width;
+    return ['axis-time-label','axis-date-label'].flatMap(cls=>Array.from({length:6},(_,panel)=>{
+     const nodes=[...svg.querySelectorAll(`.${cls}[data-panel-index="${panel}"]`)];
+     const boxes=nodes.map(node=>node.getBoundingClientRect());
+     return {cls,panel,count:nodes.length,minFont:Math.min(...nodes.map(node=>Number(node.getAttribute('font-size'))*scale)),
+      gaps:boxes.slice(1).map((box,i)=>box.left-boxes[i].right)};
+    }));
+   });
+   for(const row of geometry){assert(row.count>0);assert(row.minFont>=13);assert(row.gaps.every(gap=>gap>=6),JSON.stringify(row));}
+  };
+  await checkAxis();
+  await page.locator('.axis-time-label[data-panel-index="2"]').first().scrollIntoViewIfNeeded();
+  await page.screenshot({path:'/tmp/ens6-axis-desktop.png'});
+  await page.setViewportSize({width:390,height:844});await checkAxis();
+  await page.screenshot({path:'/tmp/ens6-axis-mobile.png'});
+  await page.setViewportSize({width:1440,height:1000});
   assert.equal(await page.locator('#ensRunSelect option').count(),5);
+  // Cloud layers can have a coarser native axis than an early hourly run.
+  const sparseRun=doc.runs[2];
+  for(const field of ['cloud_cover_low','cloud_cover_mid'])for(const row of sparseRun.members[field])row[1]=null;
   for(const id of ids.slice(1)) {await page.selectOption('#ensRunSelect',id);await active(page,id);}
   const count=requests.filter(u=>u.pathname==='/ens6-run').length;
   await page.selectOption('#ensRunSelect',ids[0]);await active(page,ids[0]);
   assert.equal(requests.filter(u=>u.pathname==='/ens6-run').length,count,'cached latest does not redownload');
   await page.selectOption('#ensRunSelect',ids[2]);await active(page,ids[2]);await page.reload();await active(page,ids[2]);
+  assert.equal(await page.locator('.stack-bar[data-panel-index="0"]').count(),8);
+  const nativeBar=page.locator('.stack-bar[data-panel-index="0"][data-time-index="1"]');
+  await nativeBar.focus();
+  assert.match(await page.locator('#chartTooltip').innerText(),/20:00/,'tooltip matches +6h (18 UTC), not missing +3h');
+  assert.match(await page.locator('#chartTooltip').innerText(),/51 geldige ensembleleden/);
   await page.selectOption('#ensRunSelect',ids[1]);await active(page,ids[1]);await page.goBack();await active(page,ids[2]);await page.goForward();await active(page,ids[1]);
   await page.selectOption('#stSel','0');await active(page,ids[1]);assert.match(await page.locator('#runinfo').innerText(),/Rotterdam/);
   delay=250;
