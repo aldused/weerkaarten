@@ -234,7 +234,7 @@ function buildTimeline(timeline){
   document.querySelector('.timeline').setAttribute('aria-label',`Verwachting tot ${forecastLabel(timeline.at(-1).time).text}`);
   $('time-ticks').replaceChildren();
   const divisions=span>=240?10:Math.min(5,Math.ceil(span/12));
-  for(let i=0;i<=divisions;i++){const tick=document.createElement('span'),hours=Math.round(span*i/divisions);tick.textContent=i?(span>=240?`+${hours/24}d`:`+${hours}u`):'nu';$('time-ticks').append(tick);}
+  for(let i=0;i<=divisions;i++){const tick=document.createElement('span'),hours=Math.round(span*i/divisions);tick.textContent=i?(span>=240?`+${Math.round(hours/24)}d`:`+${hours}u`):'nu';$('time-ticks').append(tick);}
 }
 function showHours(day){
   $('hours-section').hidden=!day?.hoursVisible;
@@ -452,7 +452,7 @@ function syncUI(){
   else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
-  legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;
+  legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;legend.setAttribute('aria-label',`Legenda ${title.toLowerCase()} in ${unit}`);
   legend.querySelector('.legend-colors').style.background=gradient;
   legend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=numbers[i]);
   $('fog-legend').hidden=!f.ids.some(id=>id.endsWith('-visibility'));
