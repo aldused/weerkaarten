@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-PARAMETERS={'precipitation':'neerslag','temperature_2m':'temp','cloud_cover':'bewolking','wind_u_component_10m':'wind','visibility':'zicht'}
+PARAMETERS={'precipitation':'neerslag','temperature_2m':'temp','cloud_cover':'bewolking','wind_u_component_10m':'wind','visibility':'zicht','wind_gusts_10m':'windstoten'}
 def build(model, meta_path, output):
     meta_path=Path(meta_path); raw=meta_path.read_bytes(); meta=json.loads(raw)
     run=datetime.fromisoformat(meta['run_utc'].replace('Z','+00:00'))
@@ -29,10 +29,11 @@ def build(model, meta_path, output):
         ny,nx,steps,components=struct.unpack_from('<4H',data);dtype=data[8];size=1 if dtype in (1,2) else 4
         grid=info.get('grid',meta['grid'])
         if dtype not in (0,1,2) or (ny,nx,steps,components)!=(grid['n_lat'],grid['n_lon'],len(times),info['components']) or len(data)!=16+ny*nx*steps*components*size:raise ValueError('Bestand wijkt af van metadata: '+str(path))
+        if variable in ('wind_u_component_10m','wind_gusts_10m') and (components!=2 or dtype!=0):raise ValueError('Wind vereist twee oorspronkelijke m/s-componenten')
         length=ny*nx*components*size
         fields[variable]={'grid':grid,'offset':offset,'length':length,'dtype':dtype,'bytes':size,'components':components,'scale':info.get('scale',16),'power':info.get('power',2),'source_parameter':key}
         sources.append((path,stamp,stream,data,length));offset+=length
-    if len(fields)!=5:raise ValueError('Een vereist weerveld ontbreekt')
+    if any(v not in fields for v in PARAMETERS if v!='wind_gusts_10m'):raise ValueError('Een vereist weerveld ontbreekt')
     contract={'schema':1,'model':model,'reference_time':run.isoformat().replace('+00:00','Z'),'valid_times':times,'fields':fields,'frame_bytes':offset,'cloud_method':'maximum of high/middle/low cloud fraction','source':'KNMI via Weerlab'}
     digest=hashlib.sha256(json.dumps(contract,sort_keys=True).encode())
     output=Path(output);output.mkdir(parents=True,exist_ok=True)

@@ -18,6 +18,13 @@ test('source service cold and cached responses decode identically with one gzip 
  assert.ok([...f.entries.values()].every(r=>!r.headers.has('Content-Encoding')),'cache stores plain packets');
  await read(url('cloud_cover'));await read(url('precipitation',path.replace('0000Z','0600Z')));assert.equal(f.reads.length,3,'run and variable never share a cache entry');
 });
+test('gust service reads the original gust field without applying a wind or precipitation derivation',async()=>{
+ const f=fixture(),response=await f.handler(new Request(url('wind_gusts_10m')),{},f.ctx);
+ assert.equal(response.status,200);assert.equal(f.reads.length,1);assert.equal(f.reads[0].variable,'wind_gusts_10m');
+ const bytes=gunzipSync(Buffer.from(await response.arrayBuffer()));
+ const packet=decodePacket(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),{source:path,variable:'wind_gusts_10m',bounds});
+ assert.ok(packet.values.every(v=>v===80));await Promise.all(f.pending);
+});
 test('public service rejects arbitrary sources, fields, non-Europe bounds and invalid model times',async()=>{
  const f=fixture();
  for(const u of [url('arbitrary'),url().replace('bounds=5%2C51%2C6%2C52','bounds=1%2C-90%2C6%2C90'),url().replace('/2026/09/20/','/2026/09/21/'),url().replace('T0900.om','T9900.om'),url()+'&bounds=5,51,6,52',url().replace('/data_spatial/','/secrets/'),url().replace('v=3','v=999')])assert.ok((await f.handler(new Request(u),{},f.ctx)).status>=400,u);

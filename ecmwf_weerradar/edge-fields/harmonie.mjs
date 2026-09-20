@@ -54,7 +54,7 @@ export async function harmonie(request,env,ctx){
   const values=new Float32Array(count),directions=variable==='wind_u_component_10m'?new Float32Array(count):null;
   for(let i=0;i<count;i++){
    if(variable==='cloud_cover')values[i]=100*Math.max(components[0][i],components[1][i],components[2][i]);
-   else if(directions){const u=components[0][i],v=components[1][i];values[i]=Math.hypot(u,v)*3.6;directions[i]=(Math.atan2(-u,-v)*180/Math.PI+360)%360;}
+   else if(directions||variable==='wind_gusts_10m'){const u=components[0][i],v=components[1][i];values[i]=Math.hypot(u,v)*3.6;if(directions)directions[i]=(Math.atan2(-u,-v)*180/Math.PI+360)%360;}
    else values[i]=components[0][i];
   }
   const grid={n_lon:nx,n_lat:ny,lon_min:g.lon_min+x0*dx,lon_max:g.lon_min+x1*dx,lat_min:g.lat_min+y0*dy,lat_max:g.lat_min+y1*dy};

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {harmonieFrames,preserveModelTime} from '../forecast-models.mjs';
 import {forecastLabel} from '../timeline.mjs';
 import {createRegularGrid,createRegularTileSampler,encodeRegularPacket,decodeRegularPacket} from '../regular-grid.mjs';
-import {beaufort,BEAUFORT_MS,windLegend} from '../wind-style.mjs';
+import {beaufort,BEAUFORT_MS,windLegend,windDirectionText} from '../wind-style.mjs';
 import {harmonie} from '../edge-fields/harmonie.mjs';
 import {renderTile} from '../tile-renderer.mjs';
 const grid={n_lat:3,n_lon:4,lat_min:50,lat_max:54,lon_min:2,lon_max:8};
@@ -13,6 +13,13 @@ function meta(run='2026-09-20T06:00:00Z',model='harmonie'){return {schema:1,mode
 test('all Beaufort boundaries, missing data and negative speeds',()=>{
  assert.equal(beaufort(0),0);assert.ok(Number.isNaN(beaufort(NaN)));assert.ok(Number.isNaN(beaufort(-1)));
  for(let i=1;i<13;i++){assert.equal(beaufort(BEAUFORT_MS[i]*3.6),i);assert.equal(beaufort(BEAUFORT_MS[i]*3.6-1e-6),i-1);}assert.equal(beaufort(200),12);assert.deepEqual(windLegend.labels,['0','3','6','9','12']);
+});
+test('Dutch wind directions wrap at north and retain their meteorological angle',()=>{
+ for(const [degrees,label] of [[0,'N · 0°'],[90,'O · 90°'],[225,'ZW · 225°'],[360,'N · 0°'],[-45,'NW · 315°'],[NaN,'—']])assert.equal(windDirectionText(degrees),label);
+});
+test('HARMONIE exposes gusts only when that immutable source contains them',()=>{
+ const old=meta();assert.ok(!harmonieFrames(old,'harmonie',Date.parse(old.reference_time))[0].modelMeta.variables.includes('wind_gusts_10m'));
+ const next=meta();next.fields={...next.fields,wind_gusts_10m:{grid}};assert.ok(harmonieFrames(next,'harmonie',Date.parse(next.reference_time))[0].modelMeta.variables.includes('wind_gusts_10m'));
 });
 test('HARMONIE frames preserve original hour, model and run in every key',()=>{
  for(const id of ['harmonie','harmonie46']){const frames=harmonieFrames(meta(undefined,id),id,Date.parse('2026-09-20T09:23Z'));assert.equal(frames[0].iso,'2026-09-20T10:00:00.000Z');assert.equal(frames[0].lead,4);assert.equal(frames.at(-1).lead,60);assert.ok(frames[0].url.includes('/'+id+'/'));assert.equal(frames[0].hours,1);}
@@ -49,5 +56,17 @@ test('R2 service reads one immutable selected step, decodes rainfall once and ne
  const bucket={get:async(key,opt)=>{reads.push({key,opt});return key.endsWith('meta.json')?{json:async()=>fixture}:key.endsWith('000.bin')?{arrayBuffer:async()=>raw.buffer}:null;}};
  const cache=new Map(),saved=globalThis.caches;globalThis.caches={default:{match:async k=>cache.get(k.url)?.clone(),put:async(k,v)=>cache.set(k.url,v)}};
  try{const pending=[];const r=await harmonie(new Request('https://test'+source+'?'+new URLSearchParams({v:'1',variable:'precipitation',bounds:bounds.join(',')})),{HARMONIE_MAPS:bucket},{waitUntil:p=>pending.push(p)});assert.equal(r.status,200);const packet=await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();const d=decodeRegularPacket(packet,{source,variable:'precipitation',bounds});assert.ok(d.values.every(v=>v===1));assert.equal(reads.length,2);assert.ok(reads.every(r=>r.key.includes(fixture.version)));await Promise.all(pending);
+ }finally{globalThis.caches=saved;}
+});
+test('regional gusts decode both original m/s components and convert once to km/h',async()=>{
+ const raw=new Float32Array(24);raw.fill(-5,0,12);raw.fill(12,12);
+ const info={grid,offset:0,length:raw.byteLength,components:2,bytes:4,dtype:0};
+ const fixture={model:'harmonie',version:'2026092006-0123456789abcdef',fields:{wind_gusts_10m:info},valid_times:['2026-09-20T07:00Z']};
+ const reads=[],sourceStore={get:async(key,opt)=>{if(key.endsWith('meta.json'))return {json:async()=>fixture};reads.push(opt.range);return {arrayBuffer:async()=>raw.buffer.slice(opt.range.offset,opt.range.offset+opt.range.length)};}};
+ const saved=globalThis.caches;globalThis.caches={default:{match:async()=>null,put:async()=>{}}};
+ try{
+  const response=await harmonie(new Request('https://test'+source+'?'+new URLSearchParams({v:'1',variable:'wind_gusts_10m',bounds:bounds.join(',')})),{HARMONIE_MAPS:sourceStore},{waitUntil:()=>{}});
+  assert.equal(response.status,200);const packet=await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  const result=decodeRegularPacket(packet,{source,variable:'wind_gusts_10m',bounds});assert.ok(result.values.every(v=>v===Math.fround(46.8)));assert.equal(reads.length,2);assert.equal(result.directions,undefined);
  }finally{globalThis.caches=saved;}
 });

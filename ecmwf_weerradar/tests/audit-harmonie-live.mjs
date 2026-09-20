@@ -15,7 +15,7 @@ for(const [model,folder] of [['harmonie','export43'],['harmonie46','export46']])
    for(let y=0;y<p.n_lat;y++)for(let x=0;x<p.n_lon;x++){
     let expected=val(x+x0,y+y0);
     if(variable==='cloud_cover')expected=Math.fround(100*Math.max(expected,val(x+x0,y+y0,1),val(x+x0,y+y0,2)));
-    if(variable==='wind_u_component_10m')expected=Math.fround(Math.hypot(expected,val(x+x0,y+y0,1))*3.6);
+    if(variable==='wind_u_component_10m'||variable==='wind_gusts_10m')expected=Math.fround(Math.hypot(expected,val(x+x0,y+y0,1))*3.6);
     const actual=packet.values[y*p.n_lon+x];if(Number.isNaN(expected)&&Number.isNaN(actual))continue;
     maxError=Math.max(maxError,Math.abs(expected-actual));assert.equal(actual,expected,`${model} ${step} ${variable} ${x},${y}`);
    }
@@ -24,5 +24,5 @@ for(const [model,folder] of [['harmonie','export43'],['harmonie46','export46']])
   }
  }
 }
-await writeFile(new URL('harmonie-live-audit.json',import.meta.url),JSON.stringify({at:new Date().toISOString(),result:'30 fields identical to existing Weerlab source after documented presentation conversion',records},null,2)+'\n');
+await writeFile(new URL('harmonie-live-audit.json',import.meta.url),JSON.stringify({at:new Date().toISOString(),result:`${records.length} fields identical to existing Weerlab source after documented presentation conversion`,records},null,2)+'\n');
 console.log('Gecontroleerd:',records.length,'velden; alle waarden exact gelijk.');

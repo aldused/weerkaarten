@@ -2,7 +2,7 @@ import {domainOptions,getRanges} from '@openmeteo/weather-map-layer';
 import {packField,encodePacket} from '../packed-grid.mjs';
 const ROOT='https://openmeteo.s3.us-west-2.amazonaws.com';
 const PATH=/^\/data_spatial\/ecmwf_ifs\/(\d{4}\/\d{2}\/\d{2})\/(00|06|12|18)00Z\/(\d{4}-\d{2}-\d{2})T(\d{2})00\.om$/;
-const variables=new Set(['cloud_cover','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m']);
+const variables=new Set(['cloud_cover','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m','wind_gusts_10m']);
 const grid=domainOptions.find(d=>d.value==='ecmwf_ifs').grid;
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Server-Timing, X-Weerlab-Cache, X-Source-Points, X-Packed-Points','Timing-Allow-Origin':'*'};
 const fail=(message,status)=>new Response(message,{status,headers:{...CORS,'Cache-Control':'no-store'}});

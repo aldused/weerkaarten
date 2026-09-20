@@ -12,6 +12,7 @@ export function harmonieFrames(raw,modelId,now=Date.now()){
  if(!Number.isFinite(run)||!times?.length||times.some((t,i)=>t!==run+(i+1)*HOUR))throw Error('Ongeldige HARMONIE-tijdreeks');
  const variables=['cloud_cover','precipitation','temperature_2m','wind_u_component_10m','visibility'];
  if(!variables.every(v=>raw.fields?.[v]))throw Error('Onvolledige HARMONIE-modelrun');
+ if(raw.fields.wind_gusts_10m)variables.push('wind_gusts_10m');
  const meta={modelId,reference_time:raw.reference_time,last_modified_time:raw.last_modified_time,variables,version:raw.version,source:raw};
  const frames=times.map((time,step)=>({time,iso:new Date(time).toISOString(),hours:1,lead:step+1,url:`${HARMONIE_ORIGIN}/harmonie/${modelId}/${raw.version}/${String(step).padStart(3,'0')}.bin`,modelMeta:meta})).filter(f=>f.time>=Math.ceil(now/HOUR)*HOUR);
  if(!frames.length)throw Error('Deze HARMONIE-run bevat geen toekomstige tijdstappen');

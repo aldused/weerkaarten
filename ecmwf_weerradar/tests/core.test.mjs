@@ -109,3 +109,12 @@ test('rain, snow and derived wind convert once with matching quantization and un
   normalizeFieldData(wind,'wind_u_component_10m');
   assert.equal(wind.values[1],18);
 });
+test('native ECMWF gusts convert m/s to km/h once and are never divided by forecast interval',()=>{
+  for(const hours of [1,3,6]){
+    const gusts={values:Float32Array.from([0,5,12.5,NaN]),scaleFactor:10};
+    normalizeFieldData(gusts,'wind_gusts_10m',hours);
+    assert.deepEqual([...gusts.values],[0,18,45,NaN]);
+    normalizeFieldData(gusts,'wind_gusts_10m',hours);
+    assert.deepEqual([...gusts.values],[0,18,45,NaN]);
+  }
+});
