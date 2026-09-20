@@ -16,18 +16,24 @@ export function createHandler({fetcher=(...args)=>fetch(...args),getCache=()=>ca
   const inflight=new Map();
   return async function handle(request,env,ctx){
     const started=performance.now(),url=new URL(request.url);
-    if(!PATH.test(url.pathname)||[...url.searchParams.keys()].some(key=>!['range','cached'].includes(key))||url.searchParams.getAll('range').length>1||url.searchParams.getAll('cached').length>1||(url.searchParams.has('cached')&&url.searchParams.get('cached')!=='1'))return failure('Niet gevonden',404);
+    if(!PATH.test(url.pathname)||[...url.searchParams.keys()].some(key=>!['range','cached','tail'].includes(key))||url.searchParams.getAll('tail').length>1||url.searchParams.getAll('range').length>1||url.searchParams.getAll('cached').length>1||(url.searchParams.has('cached')&&url.searchParams.get('cached')!=='1'))return failure('Niet gevonden',404);
     if(request.method==='OPTIONS')return new Response(null,{status:204,headers:CORS});
     if(!['GET','HEAD'].includes(request.method))return failure('Alleen GET en HEAD',405);
     const binary=url.pathname.endsWith('.om'),head=request.method==='HEAD';
     let range;
     if(binary&&!head){
+      const tail=url.searchParams.get('tail');
+      if(tail!==null){
+        if(tail!=='262144'||url.searchParams.has('range')||request.headers.get('Range')!=='bytes=-262144')return failure('Ongeldige indexaanvraag',400);
+        range={tail:262144,text:'bytes=-262144'};
+      }else{
       const m=/^bytes=(\d+)-(\d+)$/.exec(request.headers.get('Range')||'');
       if(!m)return failure('Een enkel bytebereik is vereist',400);
       const start=Number(m[1]),end=Number(m[2]);
       if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end<start||end-start+1>512*1024)return failure('Ongeldig of te groot bytebereik',416);
       range={start,end,text:`bytes=${start}-${end}`};
       if(url.search&&url.searchParams.get('range')!==`${start}-${end}`)return failure('Afwijkend bytebereik',400);
+      }
     }
     if(url.search&&(!binary||head))return failure('Ongeldige query',400);
     // Cache API cannot store206. Store each exact range as a separate200 body
@@ -36,11 +42,9 @@ export function createHandler({fetcher=(...args)=>fetch(...args),getCache=()=>ca
     keyURL.search='';keyURL.searchParams.set('part',binary?(head?'head':range.text):'json');
     const key=new Request(keyURL),cache=getCache();
     const present=await cache.match(key);
-    // Foreground range misses and cold HEADs go straight to the public source;
-    // background neighbour reads populate the cache. Avoid an additional
-    // transatlantic proxy connection just to learn the file length. The first
-    // footer range below stores a validated HEAD for subsequent visitors.
-    if(binary&&(head||url.searchParams.get('cached')==='1')&&!present)return new Response(null,{status:307,headers:{...CORS,Location:UPSTREAM+url.pathname,'Cache-Control':'no-store'}});
+    // Legacy cold HEADs redirect. New clients use one suffix GET instead.
+    // Both selected and background fields populate the shared byte cache.
+    if(binary&&head&&!present)return new Response(null,{status:307,headers:{...CORS,Location:UPSTREAM+url.pathname,'Cache-Control':'no-store'}});
     async function load(){
       const originStart=performance.now();
       const response=await fetcher(UPSTREAM+url.pathname,{
@@ -58,15 +62,36 @@ export function createHandler({fetcher=(...args)=>fetch(...args),getCache=()=>ca
         headers.set('X-File-Length',String(length));body=new Uint8Array();
       }else if(binary){
         const match=/^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('Content-Range')||'');
-        if(response.status!==206||!match||Number(match[1])!==range.start||Number(match[2])!==range.end||Number(match[3])<=range.end)return failure('Ongeldig ECMWF-deelantwoord',502);
-        body=new Uint8Array(await response.arrayBuffer());
-        if(body.byteLength!==range.end-range.start+1)return failure('Onvolledig ECMWF-deelantwoord',502);
+        if(response.status!==206||!match)return failure('Ongeldig ECMWF-deelantwoord',502);
+        const [start,end,total]=match.slice(1).map(Number);
+        if(![start,end,total].every(Number.isSafeInteger)||total<=end||start<0||end<start||
+          (range.tail?(end!==total-1||start!==Math.max(0,total-range.tail)):(start!==range.start||end!==range.end)))return failure('Ongeldig ECMWF-deelantwoord',502);
+        const length=end-start+1;
         headers.set('X-Source-Range',response.headers.get('Content-Range'));
-        if(range.end===Number(match[3])-1){
-          const headKey=new URL(keyURL);headKey.searchParams.set('part','head');
-          const headHeaders=new Headers(headers);headHeaders.set('X-File-Length',match[3]);headHeaders.set('Content-Length','0');headHeaders.set('Cache-Control','public, max-age=86400');
-          try{await cache.put(new Request(headKey),new Response(new Uint8Array(),{headers:headHeaders}));}catch{}
+        headers.set('Cache-Control','public, max-age=86400');headers.set('Content-Length',String(length));
+        // Deliver source bytes immediately. Cache only the completely validated
+        // clone, outside the visitor's critical path; never cache a short body.
+        const storeBytes=async bytes=>{
+          if(bytes.byteLength!==length)throw new Error('Onvolledig ECMWF-deelantwoord');
+          await cache.put(key,new Response(bytes,{headers}));
+          if(end===total-1){
+            const headKey=new URL(keyURL);headKey.searchParams.set('part','head');
+            const headHeaders=new Headers(headers);headHeaders.set('X-File-Length',String(total));headHeaders.set('Content-Length','0');
+            await cache.put(new Request(headKey),new Response(new Uint8Array(),{headers:headHeaders}));
+          }
+        };
+        if(ctx?.waitUntil){
+          const source=response.clone();
+          const done=source.arrayBuffer().then(buffer=>storeBytes(new Uint8Array(buffer))).catch(()=>{});
+          ctx.waitUntil(done);
+          // Retain the in-flight entry until cache persistence has finished.
+          const streamed=new Response(response.body,{headers});
+          return {response:streamed,done};
         }
+        body=new Uint8Array(await response.arrayBuffer());
+        if(body.byteLength!==length)return failure('Onvolledig ECMWF-deelantwoord',502);
+        await storeBytes(body);
+        return {response:new Response(body,{headers}),done:Promise.resolve()};
       }else{
         body=new Uint8Array(await response.arrayBuffer());
         if(body.byteLength>2*1024*1024)return failure('Ongeldige ECMWF-metadata',502);
@@ -80,14 +105,19 @@ export function createHandler({fetcher=(...args)=>fetch(...args),getCache=()=>ca
       const bodyReady=performance.now();
       try{await cache.put(key,stored.clone());}catch{/* Cache failure must not hide valid source bytes. */}
       stored.headers.set('X-Origin-Timing',`headers;dur=${Math.round(originHeaders-originStart)}, body;dur=${Math.round(bodyReady-originHeaders)}, store;dur=${Math.round(performance.now()-bodyReady)}`);
-      return stored;
+      return {response:stored,done:Promise.resolve()};
     }
     let stored=present,hit=!!present;
     if(!stored){
       let task=inflight.get(key.url);
-      if(!task){task=load().catch(error=>{console.error('ECMWF cache source:',error.name,error.message);return failure('ECMWF-bron tijdelijk niet bereikbaar',502);}).finally(()=>{if(inflight.get(key.url)===task)inflight.delete(key.url);});inflight.set(key.url,task);}
+      if(!task){
+        task=load().catch(error=>{console.error('ECMWF cache source:',error.name,error.message);return failure('ECMWF-bron tijdelijk niet bereikbaar',502);});
+        inflight.set(key.url,task);
+        const cleanup=task.then(async result=>{await result.done;}).finally(()=>{if(inflight.get(key.url)===task)inflight.delete(key.url);});
+        ctx?.waitUntil(cleanup);
+      }
       else hit=true;
-      stored=(await task).clone();
+      const result=await task;stored=(result.response??result).clone();
     }
     if(!stored.ok)return stored;
     const headers=new Headers(stored.headers);

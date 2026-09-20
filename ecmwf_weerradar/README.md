@@ -73,3 +73,9 @@ Pas nadat de gekozen kaart en kaartdetails geladen zijn, worden uitsluitend het 
 De bronfetch gebruikt `cache: 'no-store'`: een tweede Cloudflare-broncache kan grote bestanden geheel verwerken voordat een gevraagde eindrange beschikbaar wordt. Elke range heeft ook een eigen netwerk-URL; dit voorkomt serialisatie van gelijktijdige aanvragen op dezelfde URL. Browser-HTTP-caching staat voor deze antwoorden uit, omdat de gecontroleerde CacheStorage-blokken die taak al uitvoeren. `X-Weerlab-Cache` en `Server-Timing` maken koude/warmte-metingen controleerbaar. Statische kaartbestanden hebben een dag browsercache; app/CSS/worker dragen een buildversie. HTML moet revalideren.
 
 Zie `PERFORMANCE-2026-09-19.md` voor metingen, de gekozen aanpak en resterende beperkingen.
+
+### Vervolg laadcontrole (20 september 2026)
+
+De nieuwe bestandslezer combineert bestandslengte en OM-catalogus in één begrensd suffixverzoek. Dezelfde gevalideerde cacheblokken en officiële OM-decoder blijven in gebruik. Bij een miss streamt de edge-cache de originele bytes direct door en bewaart alleen een volledig gecontroleerde kopie. Ook de geselecteerde kaart vult voortaan de gedeelde cache. De voorste blokwachtrij laat meer aanvragen samenvoegen; de werkelijke HTTP-concurrency blijft zes.
+
+Zie [PERFORMANCE-2026-09-20.md](PERFORMANCE-2026-09-20.md). `node tests/audit-bootstrap-live.mjs` vergelijkt de volledige gedecodeerde velden met rechtstreekse S3-lezingen bij twee modelruns en 1/3/6-uursstappen; de SHA256-resultaten staan in `tests/bootstrap-live-audit.json`.

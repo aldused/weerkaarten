@@ -67,9 +67,3 @@ test('edge range URLs are distinct without changing source file identity or othe
  assert.equal(rangeRequestURL(url,0,64),url+'?range=0-63');
  assert.equal(rangeRequestURL('https://openmeteo.s3.amazonaws.com/run.om',0,64),'https://openmeteo.s3.amazonaws.com/run.om');
 });
-test('foreground range requests prefer existing edge bytes and retain their run/file path',async()=>{
- const {EDGE_ORIGIN,rangeRequestURL,prioritizeSelectedFile}=await import('../data-transport.mjs');
- const url=EDGE_ORIGIN+'/data_spatial/ecmwf_ifs/selected.om';
- prioritizeSelectedFile(url);assert.equal(rangeRequestURL(url,64,128),url+'?range=64-127&cached=1');
- assert.equal(rangeRequestURL(EDGE_ORIGIN+'/data_spatial/ecmwf_ifs/next.om',64,128),EDGE_ORIGIN+'/data_spatial/ecmwf_ifs/next.om?range=64-127');
-});

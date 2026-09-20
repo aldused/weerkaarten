@@ -62,6 +62,17 @@ export class FastBrowserBlockCache extends BrowserBlockCache {
     return super.get(key,fetchFn,fileSize,signal);
   }
 
+  async seedTail(url,bytes,fileSize){
+    const blockSize=this.blockSize(),tasks=[];
+    if(!Number.isSafeInteger(fileSize)||fileSize<=0||!bytes.length||bytes.length>fileSize||(bytes.length!==fileSize&&bytes.length%blockSize))throw new Error('Ongeldige ECMWF-cacheblokken');
+    for(let index=0,remaining=bytes.length;remaining>0;index++){
+      const length=Math.min(blockSize,remaining),start=remaining-length;
+      const data=bytes.slice(start,remaining);remaining=start;
+      tasks.push(super.get(`${url}/block/${index}`,async()=>data,fileSize));
+    }
+    await Promise.all(tasks);
+  }
+
   evictIfNeeded() {
     if (this.#clearing) return Promise.resolve();
     // Each caller follows a successful cache.put. A block can be shorter than

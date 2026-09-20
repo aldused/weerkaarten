@@ -9,8 +9,8 @@ import { LruBlockCache, initWasm } from '@openmeteo/file-reader';
 import { FastBrowserBlockCache } from './fast-block-cache.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
-import {prioritizeSelectedFile} from './data-transport.mjs';
 import {AdjacentFrames} from './adjacent-frames.mjs';
+import {BootstrapFiles} from './file-bootstrap.mjs';
 import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath } from './core.mjs';
 
 const $ = id => document.getElementById(id);
@@ -56,7 +56,7 @@ let nextFrameReady=false;
 const intervalByURL = new Map();
 const options = {
   ...defaultOmProtocolSettings,
-  fileReaderConfig: { ...defaultOmProtocolSettings.fileReaderConfig, useSAB: false, retries: 2, cache: typeof caches==='undefined'?new LruBlockCache(65536,768):new FastBrowserBlockCache({cacheName:'weerlab-ecmwf-om-v1',blockSize:65536,memCacheTtlMs:15000,maxBytes:192*1024*1024,maxConcurrentFetches:8}) },
+  fileReaderConfig: { ...defaultOmProtocolSettings.fileReaderConfig, useSAB: false, retries: 2, cache: typeof caches==='undefined'?new LruBlockCache(65536,768):new FastBrowserBlockCache({cacheName:'weerlab-ecmwf-om-v1',blockSize:65536,memCacheTtlMs:15000,maxBytes:192*1024*1024,maxConcurrentFetches:64}) },
   maxStatesWithData: 14,
   clippingOptions: { bounds: EUROPE },
   colorScales: { ...defaultOmProtocolSettings.colorScales, ...scales },
@@ -66,6 +66,7 @@ const options = {
 };
 const domain = domainOptions.find(d => d.value === 'ecmwf_ifs');
 const protocol = getProtocolInstance(options);
+const bootstrapFiles=options.fileReaderConfig.cache.seedTail?new BootstrapFiles(options.fileReaderConfig.cache):null;
 const fieldCache=new Map();
 let fieldReads=0;
 function trimFieldCache(){
@@ -90,7 +91,8 @@ function readField(file,variable,signal){
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
     await wasmReady;readSignal.throwIfAborted();
-    const data=await protocol.omFileReader.readVariable(file,variable,ranges,readSignal);
+    const reader=bootstrapFiles&&!variable.startsWith('wind_')?bootstrapFiles:protocol.omFileReader;
+    const data=await reader.readVariable(file,variable,ranges,readSignal);
     options.postReadCallback(protocol.omFileReader,data,{dataOptions:{variable},omFileUrl:file});
     const field={data,grid:GridFactory.create(domain.grid,ranges),variable,key,ranges,gridData:domain.grid};
     const entry=fieldCache.get(key);
@@ -305,7 +307,6 @@ async function renderFrame(index,rev,signal,context){
   const started=performance.now();
   const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
   retryLoad=()=>requestFrame(index,true,context);
-  prioritizeSelectedFile(frame.url);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view can reveal finished layers immediately. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.

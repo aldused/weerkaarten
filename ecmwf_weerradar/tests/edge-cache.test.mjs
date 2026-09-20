@@ -47,11 +47,39 @@ test('range-specific URLs are validated and share the same canonical edge cache'
  assert.equal((await handle(request(path+'?range=1-16',range()))).status,400);
  assert.ok((await handle(request(path+'?range=0-15',{method:'HEAD'}))).status>=400);
 });
-test('foreground misses redirect with no duplicate origin fetch; prepared ranges serve the same bytes',async()=>{
+test('foreground misses populate the shared cache without a redirect or duplicate origin fetch',async()=>{
  let calls=0;const store=cache(),handle=createHandler({getCache:()=>store,fetcher:async()=>{calls++;return new Response(bytes.slice(0,16),{status:206,headers:{'Content-Range':'bytes 0-15/32'}});}});
  const foreground=request(path+'?range=0-15&cached=1',range());
- const miss=await handle(foreground);assert.equal(miss.status,307);assert.equal(calls,0);assert.equal(miss.headers.get('Location'),'https://openmeteo.s3.amazonaws.com'+path);
+ const miss=await handle(foreground);assert.equal(miss.status,206);assert.equal(calls,1);assert.equal(miss.headers.get('Location'),null);
  await handle(request(path+'?range=0-15',range()));assert.equal(calls,1);
  const hit=await handle(foreground);assert.equal(hit.status,206);assert.equal(hit.headers.get('X-Weerlab-Cache'),'HIT');assert.deepEqual(new Uint8Array(await hit.arrayBuffer()),bytes.slice(0,16));assert.equal(calls,1);
  assert.equal((await handle(request(path+'?range=0-15&cached=other',range()))).status,404);
+});
+
+test('source headers reach the client before its body completes; persistence stays deduplicated',async()=>{
+ let controller,calls=0;const pending=[],store=cache();
+ const handle=createHandler({getCache:()=>store,fetcher:async()=>{calls++;return new Response(new ReadableStream({start(c){controller=c;}}),{status:206,headers:{'Content-Range':'bytes 0-15/32'}});}});
+ const ctx={waitUntil:p=>pending.push(p)};
+ const first=await handle(request(path,range()),{},ctx);
+ assert.equal(first.status,206);assert.equal(store.entries.size,0);
+ const second=await handle(request(path,range()),{},ctx);assert.equal(calls,1);
+ controller.enqueue(bytes.slice(0,16));controller.close();
+ assert.deepEqual(new Uint8Array(await first.arrayBuffer()),bytes.slice(0,16));
+ assert.deepEqual(new Uint8Array(await second.arrayBuffer()),bytes.slice(0,16));
+ await Promise.all(pending);
+ assert.equal((await handle(request(path,range()))).headers.get('X-Weerlab-Cache'),'HIT');assert.equal(calls,1);
+});
+test('a truncated streamed source is never persisted',async()=>{
+ const pending=[],store=cache();
+ const handle=createHandler({getCache:()=>store,fetcher:async()=>new Response(bytes.slice(0,3),{status:206,headers:{'Content-Range':'bytes 0-15/32'}})});
+ const r=await handle(request(path,range()),{},{waitUntil:p=>pending.push(p)});
+ assert.equal((await r.arrayBuffer()).byteLength,3);await Promise.all(pending);assert.equal(store.entries.size,0);
+});
+test('one bounded suffix request provides exact original bytes and caches the file length',async()=>{
+ const store=cache();let calls=0;
+ const handle=createHandler({getCache:()=>store,fetcher:async(url,{headers})=>{calls++;assert.equal(headers.Range,'bytes=-262144');return new Response(bytes,{status:206,headers:{'Content-Range':'bytes 0-31/32'}});}});
+ const req=request(path+'?tail=262144',{headers:{Range:'bytes=-262144'}});
+ for(const state of ['MISS','HIT']){const r=await handle(req);assert.equal(r.status,206);assert.equal(r.headers.get('X-Weerlab-Cache'),state);assert.deepEqual(new Uint8Array(await r.arrayBuffer()),bytes);}
+ assert.equal(calls,1);assert.equal((await handle(request(path,{method:'HEAD'}))).headers.get('Content-Length'),'32');
+ for(const suffix of ['?tail=524288','?tail=262144&range=0-31','?tail=262144&tail=262144'])assert.ok((await handle(request(path+suffix,{headers:{Range:'bytes=-262144'}}))).status>=400);
 });
