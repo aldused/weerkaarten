@@ -17,6 +17,8 @@ De pagina vereiste cloud_cover_low en cloud_cover_mid voor de gedeelde uurselect
 
 ## URL, interactie en cache
 
+De browser gebruikt de gegenereerde klassieke bundel `pluim_ens6_runs.browser.js`, zodat ook openen via `file://` werkt. De bronmodules blijven rechtstreeks testbaar en worden met `scripts/build_ens6_runs.cjs` gebundeld, zonder extra runtimebibliotheek.
+
 De standalone URL gebruikt `?run=20260919T12`; het hoofdmenu bewaart dezelfde keuze als `#pluim-ens6plus?run=20260919T12&station=…&lat=…&lon=…`. De iframe gebruikt replaceState; alleen het menu voegt navigatiestappen toe. Terug/vooruit stuurt de selectie naar het bestaande iframe, zodat de datacache behouden blijft. Ongeldige/vervallen runs geven een fout en worden niet vervangen. Automatische controles vernieuwen de gekozen initialisatie, niet de keuze zelf.
 
 De browsercache bevat maximaal 24 datasets en 24 berekende modellen. De sleutel omvat coördinaten, model, volledige initialisatie, gesorteerde parameters, starttijd, de volledige native verwachtingstijdreeks en de bronrevision. Een andere run of locatie deelt nooit dezelfde sleutel. Vernieuwen vervangt alleen de betreffende dataset; terugschakelen hergebruikt data en percentages. De catalogus wordt per locatie maximaal een minuut hergebruikt. De bronrevision zorgt dat verrijkte/gewijzigde tijdreeksen niet dezelfde datasetsleutel krijgen.

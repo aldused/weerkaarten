@@ -61,6 +61,7 @@ const server=http.createServer((req,res)=>{
   assert.equal(await page.locator('#pageHost svg').count(),0);
   wrongRun=true;await page.goto(base+'/pluim_6_plus.html?run=20260919T12');await page.waitForFunction(()=>document.querySelector('#ensRunStatus').textContent.includes('ontvangen gegevens'));
   assert.equal(await page.locator('#pageHost svg').count(),0);wrongRun=false;
+  await page.goto(require('node:url').pathToFileURL(path.join(root,'pluim_6_plus.html')).href+'?run=20260919T12');await active(page,ids[2]);
   await page.goto(base+'/index.html#pluim-ens6plus?run=20260919T12&station=De%20Bilt');
   await page.waitForSelector('#product-frame');let frame=page.frames().find(f=>f.url().includes('/pluim_6_plus.html'));if(!frame){await page.waitForTimeout(100);frame=page.frames().find(f=>f.url().includes('/pluim_6_plus.html'));}
   await active(frame,ids[2]);assert.match(await page.locator('#product-title').innerText(),/extra elementen/);
