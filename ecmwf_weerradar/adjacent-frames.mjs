@@ -8,8 +8,8 @@ export function adjacentFrameIndices(index,length){
 export class AdjacentFrames {
   constructor({delayMs=350}={}){this.delayMs=delayMs;this.timer=null;this.job=null;}
   cancel(){clearTimeout(this.timer);this.timer=null;this.job?.controller.abort();this.job=null;}
-  start(index,length,prepare,{ready=()=>{},error=()=>{}}={}){
-    this.cancel();const indices=adjacentFrameIndices(index,length);
+  start(index,length,prepare,{ready=()=>{},error=()=>{},previous=true,delayMs=this.delayMs}={}){
+    this.cancel();const indices=adjacentFrameIndices(index,length).slice(0,previous?2:1);
     if(!indices.length)return;
     const job={controller:new AbortController()};this.job=job;
     this.timer=setTimeout(async()=>{
@@ -25,6 +25,6 @@ export class AdjacentFrames {
           return;
         }
       }
-    },this.delayMs);
+    },delayMs);
   }
 }

@@ -21,3 +21,9 @@ test('failed prefetch does not enable playback or prefetch the previous frame',a
  queue.start(3,10,async i=>{calls.push(i);throw Error('offline');},{ready:()=>assert.fail('not ready'),error:e=>errors.push(e.message)});
  await tick();assert.deepEqual(calls,[4]);assert.deepEqual(errors,['offline']);queue.cancel();
 });
+test('a constrained connection fetches only the next frame after the configured idle delay',async()=>{
+ const queue=new AdjacentFrames({delayMs:0}),calls=[];
+ queue.start(4,10,async i=>calls.push(i),{previous:false,delayMs:20});
+ await tick();assert.deepEqual(calls,[]);
+ await new Promise(resolve=>setTimeout(resolve,30));assert.deepEqual(calls,[5]);queue.cancel();
+});

@@ -32,10 +32,10 @@ function makeGeometry(grid,coords,size){
     const indices=new Int32Array(size*4),weights=new Float64Array(size*4);
     for(let x=0;x<size;x++){
       const position=longitudes[x]/step,center=modulo(Math.floor(position),count),i=x*4;
-      indices[i]=start+modulo(center-1,count);
-      indices[i+1]=start+center;
-      indices[i+2]=start+(center+1)%count;
-      indices[i+3]=start+(center+2)%count;
+      indices[i]=grid.sampleIndex?grid.sampleIndex(y,modulo(center-1,count)):start+modulo(center-1,count);
+      indices[i+1]=grid.sampleIndex?grid.sampleIndex(y,center):start+center;
+      indices[i+2]=grid.sampleIndex?grid.sampleIndex(y,(center+1)%count):start+(center+1)%count;
+      indices[i+3]=grid.sampleIndex?grid.sampleIndex(y,(center+2)%count):start+(center+2)%count;
       basis(modulo(position,1),weights,i);
     }
     row={indices,weights};gaussianRows.set(y,row);
@@ -53,7 +53,7 @@ function makeGeometry(grid,coords,size){
   return {longitudes,latitudes,weights,rows,bytes};
 }
 function geometryFor(grid,coords,size){
-  const key=`${grid.latitudeLines}/${grid.nx}/${grid.ny}/${grid.nxStart}/${coords.z}/${coords.x}/${coords.y}/${size}`;
+  const key=`${grid.cacheKey||''}/${grid.latitudeLines}/${grid.nx}/${grid.ny}/${grid.nxStart}/${coords.z}/${coords.x}/${coords.y}/${size}`;
   let geometry=geometryCache.get(key);
   if(geometry){geometryCache.delete(key);geometryCache.set(key,geometry);return geometry;}
   geometry=makeGeometry(grid,coords,size);

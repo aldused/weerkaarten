@@ -4,21 +4,16 @@ import {precipitationPeriod} from './precipitation.mjs';
 import { forecastLabel, groupForecastDays, chooseDayEntry, nowFrameIndex } from './timeline.mjs';
 import {combinedForecastFrames,discoverForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
-import { defaultOmProtocolSettings, updateCurrentBounds, getProtocolInstance, domainOptions, GridFactory, getRanges } from '@openmeteo/weather-map-layer';
-import { LruBlockCache, initWasm } from '@openmeteo/file-reader';
-import { FastBrowserBlockCache } from './fast-block-cache.mjs';
+import {updateCurrentBounds, domainOptions, getRanges} from '@openmeteo/weather-map-layer';
+import {FieldPackets,FIELD_ORIGIN} from './field-packets.mjs';
+import {createPackedGrid} from './packed-grid.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
 import {AdjacentFrames} from './adjacent-frames.mjs';
-import {BootstrapFiles} from './file-bootstrap.mjs';
 import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath } from './core.mjs';
 
 const $ = id => document.getElementById(id);
 $('app').dataset.moduleReadyMs=Math.round(performance.now());
-// Upstream only caches the finished module. Share the IN-FLIGHT initialization
-// too, otherwise six parallel variables can initialize six WASM instances.
-const wasmReady=initWasm();
-wasmReady.then(()=>{$('app').dataset.decoderReadyMs=Math.round(performance.now());}).catch(()=>{});
 const paths = {
   search:'M21 21l-6-6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0',
   weather:'M4 6V3M1 9h3M6 5 4 3M10 4V1M14 5l2-2M5 11a5 5 0 0 1 8-5M5 20a5 5 0 1 1 1-10 6 6 0 0 1 12 1 4.5 4.5 0 0 1 0 9Z',
@@ -54,24 +49,13 @@ let pendingSources = new Map(), cityDrawQueued = false, frameErrors = new Set();
 const adjacentFrames=new AdjacentFrames();
 let nextFrameReady=false;
 const intervalByURL = new Map();
-const options = {
-  ...defaultOmProtocolSettings,
-  fileReaderConfig: { ...defaultOmProtocolSettings.fileReaderConfig, useSAB: false, retries: 2, cache: typeof caches==='undefined'?new LruBlockCache(65536,768):new FastBrowserBlockCache({cacheName:'weerlab-ecmwf-om-v1',blockSize:65536,memCacheTtlMs:15000,maxBytes:192*1024*1024,maxConcurrentFetches:64}) },
-  maxStatesWithData: 14,
-  clippingOptions: { bounds: EUROPE },
-  colorScales: { ...defaultOmProtocolSettings.colorScales, ...scales },
-  postReadCallback(reader, data, state) {
-    normalizeFieldData(data,state.dataOptions.variable,intervalByURL.get(state.omFileUrl));
-  },
-};
-const domain = domainOptions.find(d => d.value === 'ecmwf_ifs');
-const protocol = getProtocolInstance(options);
-const bootstrapFiles=options.fileReaderConfig.cache.seedTail?new BootstrapFiles(options.fileReaderConfig.cache):null;
+const domain=domainOptions.find(d=>d.value==='ecmwf_ifs');
+const fieldPackets=new FieldPackets();
 const fieldCache=new Map();
 let fieldReads=0;
 function trimFieldCache(){
   let bytes=[...fieldCache.values()].reduce((sum,e)=>sum+(e.bytes||0),0);
-  while(fieldCache.size>16||(bytes>128*1024*1024&&fieldCache.size>4)){
+  while(fieldCache.size>64||(bytes>128*1024*1024&&fieldCache.size>4)){
     const key=[...fieldCache].find(([,e])=>e.task.settled||e.task.controller.signal.aborted)?.[0];
     if(!key)break;bytes-=fieldCache.get(key).bytes||0;fieldCache.delete(key);
   }
@@ -79,34 +63,36 @@ function trimFieldCache(){
 function readField(file,variable,signal){
   signal?.throwIfAborted();
   const b=map.getBounds(),window=fieldWindow([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],map.getZoom());
-  const [,south,,north]=window.bounds;
-  // Reuse a decoded latitude band when moving east/west or zooming into it.
+  const [west,south,east,north]=window.bounds;
+  // Reuse an exact native crop only when it covers this complete tile window.
   for(const [cachedKey,entry] of fieldCache){
-    if(!entry.task.controller.signal.aborted&&entry.file===file&&entry.variable===variable&&entry.south<=south&&entry.north>=north){
+    if(!entry.task.controller.signal.aborted&&entry.file===file&&entry.variable===variable&&entry.south<=south&&entry.north>=north&&entry.west<=west&&entry.east>=east){
       fieldCache.delete(cachedKey);fieldCache.set(cachedKey,entry);return consumeTask(entry.task,signal);
     }
   }
   const bounds=window.readBounds;
-  const ranges=getRanges(domain.grid,bounds),key=file+'|'+variable+'|'+JSON.stringify(ranges);
+  const ranges=getRanges(domain.grid,bounds),key=file+'|'+variable+'|'+JSON.stringify(window.bounds);
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
-    await wasmReady;readSignal.throwIfAborted();
-    const reader=bootstrapFiles&&!variable.startsWith('wind_')?bootstrapFiles:protocol.omFileReader;
-    const data=await reader.readVariable(file,variable,ranges,readSignal);
-    options.postReadCallback(protocol.omFileReader,data,{dataOptions:{variable},omFileUrl:file});
-    const field={data,grid:GridFactory.create(domain.grid,ranges),variable,key,ranges,gridData:domain.grid};
+    const data=await fieldPackets.read(file,variable,window.bounds,readSignal);
+    normalizeFieldData(data,variable,intervalByURL.get(file));
+    const field={data,grid:createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     const entry=fieldCache.get(key);
     if(entry)entry.bytes=data.values.byteLength+(data.directions?.byteLength||0)+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
     trimFieldCache();
     return field;
   });
   task.promise.catch(()=>{if(fieldCache.get(key)?.task===task)fieldCache.delete(key);});
-  fieldCache.set(key,{file,variable,south,north,task});
+  fieldCache.set(key,{file,variable,west,south,east,north,task});
   trimFieldCache();
   return consumeTask(task,signal);
 }
 mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked}));});
 const params = new URLSearchParams(location.search);
+// Optional local diagnostics: no reporting endpoint and no visitor tracking.
+if(params.get('profile')==='1')setInterval(()=>{
+  $('app').dataset.cacheStats=JSON.stringify({...map.performanceStats(),fieldEntries:fieldCache.size,fieldBytes:[...fieldCache.values()].reduce((n,e)=>n+(e.bytes||0),0)});
+},1000);
 const coords = (params.get('center') || '5.94,51.96').split(',').map(Number);
 const initialCenter = inEurope(coords[0], coords[1]) ? coords : [5.94, 51.96];
 const initialZoom = Math.min(10, Math.max(1, Number(params.get('zoom')) || 6.3));
@@ -159,7 +145,7 @@ async function updateViewportSamples(){
     vars.forEach((v,i)=>{current.samples[v]=fields[i];});queueCityDraw();updatePoint();
     $('app').dataset.panDataMs=Math.round(performance.now()-started);
     prepareAdjacentFrames();
-  }catch(error){if(rev===viewportRevision&&error.name!=='AbortError')status(error.message,true);}
+  }catch(error){if(rev===viewportRevision&&current===frame&&error.name!=='AbortError')status(error.message,true);}
 }
   map.on('click',e => {
   if(!inEurope(e.lngLat.lng,e.lngLat.lat))return;
@@ -171,7 +157,8 @@ function status(text, error=false) {
   $('status-text').textContent=text;$('status').classList.toggle('error',error);$('status').hidden=false;$('retry').hidden=!error;
 }
 async function json(url, signal) {
-  const response=await fetch(url,{signal:signal || AbortSignal.timeout(16000),cache:'no-cache'});
+  const transport=url.startsWith(DATA_ROOT)&&url.endsWith('.json')?FIELD_ORIGIN+new URL(url).pathname:url;
+  const response=await fetch(transport,{signal:signal || AbortSignal.timeout(16000),cache:'no-cache'});
   if(!response.ok) throw new Error(`Bron niet bereikbaar (${response.status})`);
   return response.json();
 }
@@ -305,7 +292,9 @@ function awaitSources(ids,signal){
 }
 async function renderFrame(index,rev,signal,context){
   const started=performance.now();
+  viewportController?.abort();viewportRevision++;
   const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
+  map.setFrameBudget(vars.length);
   retryLoad=()=>requestFrame(index,true,context);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view can reveal finished layers immediately. Later time changes
@@ -326,7 +315,15 @@ async function renderFrame(index,rev,signal,context){
   $('app').dataset.frameStatus='loading';
   try {
     const sampleVars=[...new Set([...vars,...($('city-labels').checked?['temperature_2m']:[])])];
-    const [,...fields]=await Promise.all([awaitSources(ids,signal),...sampleVars.map(v=>readField(frame.url,v,signal))]);
+    let [,...fields]=await Promise.all([awaitSources(ids,signal),...sampleVars.map(v=>readField(frame.url,v,signal))]);
+    // A pan during loading may change the crop while the time stays the same.
+    // Commit city/point values only once they cover the current tile window.
+    for(;;){
+      signal.throwIfAborted();
+      const b=map.getBounds(),needed=fieldWindow([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],map.getZoom()).bounds;
+      if(fields.every(f=>{const a=f.packed.bounds;return a[0]<=needed[0]&&a[1]<=needed[1]&&a[2]>=needed[2]&&a[3]>=needed[3];}))break;
+      fields=await Promise.all(sampleVars.map(v=>readField(frame.url,v,signal)));
+    }
     if(rev!==revision){removeLayers(ids);return false;}
     const samples={};
     sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
@@ -338,7 +335,7 @@ async function renderFrame(index,rev,signal,context){
       // Only after the replacement frame is usable may obsolete runs leave
       // persistent storage. Keep both the latest and its long-range fallback.
       const activeRuns=[...new Set(current.timeline.map(f=>runPath(f.modelMeta.reference_time)))];
-      void options.fileReaderConfig.cache.retainRuns?.(activeRuns).catch(()=>{});
+      // Packet cache keys contain the complete immutable run/file path.
       const files=new Set(current.timeline.map(f=>f.url));
       for(const [key,entry] of fieldCache)if(entry.task.settled&&!files.has(entry.file))fieldCache.delete(key);
     }
@@ -346,6 +343,7 @@ async function renderFrame(index,rev,signal,context){
     if(old) removeLayers(old.ids);
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
     $('app').dataset.frameStatus='ready';$('app').dataset.validTime=frame.iso;$('app').dataset.intervalHours=frame.hours;
+    delete $('app').dataset.lastLoadError;
     $('app').dataset.frameLoadMs=Math.round(performance.now()-started);
     if(!$('app').dataset.firstWeatherMs)$('app').dataset.firstWeatherMs=Math.round(performance.now());
     loadMapDetails();
@@ -353,6 +351,7 @@ async function renderFrame(index,rev,signal,context){
   } catch(error){
     removeLayers(ids);
     if(rev!==revision||error.name==='AbortError')return false;
+    $('app').dataset.lastLoadError=error.message;
     if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};syncUI();}
     stopPlayback();$('app').dataset.frameStatus='error';
     status(`De weergegevens konden niet worden geladen. ${current?'De vorige tijdstap blijft zichtbaar.':'Probeer opnieuw.'}`,true);
@@ -446,6 +445,8 @@ function cancelPreparation(){
 function prepareAdjacentFrames(){
   if(!current||rendering||refreshing||document.hidden)return;
   cancelPreparation();const frame=current,texture=$('texture').checked;
+  const connection=navigator.connection;
+  const limited=connection?.saveData||['slow-2g','2g','3g'].includes(connection?.effectiveType)||matchMedia('(max-width:700px), (pointer:coarse)').matches;
   adjacentFrames.start(frame.index,frame.timeline.length,async(index,signal)=>{
     // Let the selected view and its map labels finish first on slow links.
     await detailsReady;signal.throwIfAborted();
@@ -454,7 +455,7 @@ function prepareAdjacentFrames(){
     const fields=await Promise.all(sampleVars.map(v=>readField(next.url,v,signal)));
     signal.throwIfAborted();
     await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture})),signal);
-  },{ready:()=>{
+  },{previous:!limited,delayMs:limited?1200:350,ready:()=>{
     if(current!==frame)return;
     nextFrameReady=true;$('app').dataset.nextFrameReady='true';$('play').disabled=false;$('play').title='Afspelen / pauzeren';
     if(playing)scheduleNext();
@@ -609,4 +610,4 @@ async function checkForNewRun(){
 window.addEventListener('focus',checkForNewRun);
 document.addEventListener('visibilitychange',checkForNewRun);
 setInterval(checkForNewRun,60*1000);
-start();
+start(window.weerlabLatest);
