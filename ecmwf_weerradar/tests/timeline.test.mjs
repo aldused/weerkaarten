@@ -10,7 +10,12 @@ test('every day/hour button references exactly one original UTC frame, including
  assert.equal(entries.length,frames.length);assert.equal(new Set(entries.map(e=>e.index)).size,frames.length);
  for(const day of days)for(const e of day.entries){assert.equal(e.time,frames[e.index].time);assert.equal(e.iso,frames[e.index].iso);assert.equal(localDateKey(e.time),day.key);}
  assert.deepEqual(days.slice(0,3).map(d=>d.label),['Vandaag','Morgen','Overmorgen']);
- assert.deepEqual(days.filter(d=>d.hoursVisible).map(d=>d.distance),[0,1,2]);
+ assert.equal(days.every(d=>d.hoursVisible),true);
+ for(const step of [3,6]){
+  const day=days.find(d=>d.distance>2&&d.entries.length>1&&d.entries.every((e,i)=>!i||e.time-d.entries[i-1].time===step*HOUR));
+  assert.ok(day,`native ${step}h day has visible time buttons`);
+  assert.equal(day.hoursVisible,true);
+ }
  assert.equal(days[0].entries[0].clock,'13:00');assert.equal(days[1].entries.length,24);
  assert.equal(days.at(-1).entries.at(-1).index,frames.length-1);
 });
@@ -30,11 +35,11 @@ test('today/morrow are local calendar dates and relabel correctly across midnigh
  const before=groupForecastDays(frames,Date.parse('2026-09-19T21:59Z'));
  assert.equal(before[0].label,'Vandaag');assert.equal(before[1].label,'Morgen');assert.equal(before[1].entries[0].clock,'00:00');
  const after=groupForecastDays(frames,Date.parse('2026-09-19T22:01Z'));
- assert.equal(after[0].hoursVisible,false);assert.equal(after[1].label,'Vandaag');assert.equal(after[2].label,'Morgen');
+ assert.equal(after[0].hoursVisible,true);assert.equal(after[1].label,'Vandaag');assert.equal(after[2].label,'Morgen');
 });
 test('first forecast after local midnight is named Morgen when today has no future model frame',()=>{
  const days=groupForecastDays(hours('2026-09-19T22:00Z',72),Date.parse('2026-09-19T21:59Z'));
- assert.equal(days[0].label,'Morgen');assert.equal(days[1].label,'Overmorgen');assert.equal(days[2].hoursVisible,false);
+ assert.equal(days[0].label,'Morgen');assert.equal(days[1].label,'Overmorgen');assert.equal(days[2].hoursVisible,true);
 });
 test('switching day preserves the selected Amsterdam hour instead of resetting to noon',()=>{
  const days=groupForecastDays(hours('2026-09-19T13:00Z',57),Date.parse('2026-09-19T13:00Z'));

@@ -53,7 +53,7 @@ export function groupForecastDays(frames, now=Date.now()) {
     let day=groups.get(key);
     if(!day){
       const distance=Math.round((Date.parse(key)-Date.parse(today))/(24*HOUR));
-      day={key,distance,label:['Vandaag','Morgen','Overmorgen'][distance]||fmt(frame.time,{weekday:'short'}),date:fmt(frame.time,{day:'numeric',month:'short'}),full:fmt(frame.time,{dateStyle:'full'}),hoursVisible:distance>=0&&distance<3,entries:[]};
+      day={key,distance,label:['Vandaag','Morgen','Overmorgen'][distance]||fmt(frame.time,{weekday:'short'}),date:fmt(frame.time,{day:'numeric',month:'short'}),full:fmt(frame.time,{dateStyle:'full'}),hoursVisible:true,entries:[]};
       groups.set(key,day);
     }
     day.entries.push({index,time:frame.time,iso:frame.iso,clock:forecastLabel(frame.time).clock});
