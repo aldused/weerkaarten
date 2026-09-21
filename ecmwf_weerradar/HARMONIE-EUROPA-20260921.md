@@ -4,7 +4,7 @@
 
 De modelkeuze bevat ECMWF, KNMI HARMONIE Europa (circa 5,5 km), DMI HARMONIE Europa (circa 2 km), HARMONIE 43 Benelux en HARMONIE 46 Benelux. De Europese varianten gebruiken afzonderlijke oorspronkelijke Open-Meteo-kaartvelden. Het zijn regionale Europese modellen voor Midden- en Noord-Europa, geen dekking van heel Europa. Bronnen: https://open-meteo.com/en/docs/knmi-api en https://open-meteo.com/en/docs/dmi-api.
 
-Benelux wisselt direct naar 2,3–7,35° O / 49,4–53,65° N. Een tijdstap of nieuwe run behoudt vervolgens de handmatig gekozen uitsnede. Gedeelde links met expliciete coördinaten behouden die bij openen. De Benelux-knop gebruikt dezelfde begrenzing. De Europese opties openen een Europees overzicht.
+Benelux wisselt direct naar 2,3–7,35° O / 49,4–53,65° N. Een tijdstap of nieuwe run behoudt vervolgens de handmatig gekozen uitsnede. Gedeelde links met expliciete coördinaten behouden die bij openen. De Benelux-knop gebruikt dezelfde begrenzing. De Europese opties openen een Europees overzicht. Automatisch inpassen gebruikt kwart-zoomstappen, zodat afronden op een laptop de uitsnede niet onnodig vergroot (1280×720: 5,50 in plaats van 5,00; tijdwisselen behoudt 5,50).
 
 ## Juistheid
 
@@ -41,4 +41,6 @@ Geen algemene garantie voor een koude bron of mobiele verbinding: een ongezien E
 
 ## Bestanden
 
-`forecast-models.mjs`, `projected-grid.mjs`, `edge-fields/handler.mjs`, `field-packets.mjs`, `app.mjs`, `weather-worker.mjs`, `access.mjs`, `index.html`, `style.css`, gegenereerde `assets/app.js` en `assets/weather-worker.js`; tests en bovenstaande broncontrole. De productomschrijving in de hoofdsite (`menu-data.js`, versie in `index.html`) noemt nu KNMI/DMI Europa en Benelux. Toegangscode en plaats onder Professioneel blijven behouden.
+`map.mjs`, `forecast-models.mjs`, `projected-grid.mjs`, `edge-fields/handler.mjs`, `field-packets.mjs`, `app.mjs`, `weather-worker.mjs`, `access.mjs`, `index.html`, `style.css`, gegenereerde `assets/app.js` en `assets/weather-worker.js`; tests en bovenstaande broncontrole. De productomschrijving in de hoofdsite (`menu-data.js`, versie in `index.html`) noemt nu KNMI/DMI Europa en Benelux. Toegangscode en plaats onder Professioneel blijven behouden.
+
+Livecontrole na publicatie: juiste bundle, vijf modelkeuzes, KNMI eerste weerlaag 919 ms / hoofdbeeld 1281 ms, DMI modelwisseling hoofdbeeld 1543 ms, Benelux 546 ms; geen consolefouten. Dit zijn losse praktijkmetingen, geen netwerksnelheidsgarantie.

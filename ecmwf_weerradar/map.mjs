@@ -195,7 +195,13 @@ export class Map {
     if(Math.abs(zoom-this.native.getZoom())>1)this.native.setView(ll(o.center),zoom,{animate:false});
     else this.native.flyTo(ll(o.center),zoom,{duration:(o.duration||500)/1000});
   }
-  fitBounds(bounds,o){const p=o.padding;this.native.fitBounds(bounds.map(ll),{paddingTopLeft:[p.left,p.top],paddingBottomRight:[p.right,p.bottom],animate:false});}
+  fitBounds(bounds,o){
+    const p=o.padding,previousSnap=this.native.options.zoomSnap;
+    // Integer snapping can nearly double the region shown on a smaller screen.
+    // Allow the named regional fit to use quarter zooms; manual zoom is unchanged.
+    try{if(o.zoomSnap!==undefined)this.native.options.zoomSnap=o.zoomSnap;this.native.fitBounds(bounds.map(ll),{paddingTopLeft:[p.left,p.top],paddingBottomRight:[p.right,p.bottom],animate:false});}
+    finally{this.native.options.zoomSnap=previousSnap;}
+  }
   addSource(id,source){this.sources.set(id,source);}
   getSource(id){return this.sources.get(id);}
   removeSource(id){this.sources.delete(id);}

@@ -223,7 +223,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
     // Benelux is intentionally tighter than the full regional export. Explicit
     // model changes use its named region; later hours preserve the user's view.
     if(focusRegion||(!current&&modelId!=='ecmwf_ifs'&&!params.has('center'))){
-      map.fitBounds(modelView(modelId),{padding:{top:innerWidth<=700?150:80,bottom:innerWidth<=700?155:120,left:12,right:innerWidth<=700?12:65},duration:0});
+      map.fitBounds(modelView(modelId),{zoomSnap:.25,padding:{top:innerWidth<=700?150:80,bottom:innerWidth<=700?155:120,left:12,right:innerWidth<=700?12:65},duration:0});
     }
     const b=map.getBounds();updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
     // A refresh preserves the chosen forecast time where the new run permits
@@ -551,7 +551,7 @@ $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintP
 $('speed').addEventListener('change',()=>{if(playing&&!rendering&&nextFrameReady)scheduleNext();});
 $('zoom-in').addEventListener('click',()=>map.zoomIn());$('zoom-out').addEventListener('click',()=>map.zoomOut());
 $('europe').addEventListener('click',()=>map.fitBounds([[-24,34],[42,70]],{padding:{top:105,bottom:185,left:45,right:75},duration:600}));
-$('home').addEventListener('click',()=>map.fitBounds(modelView('harmonie'),{padding:{top:100,bottom:140,left:12,right:60},duration:400}));
+$('home').addEventListener('click',()=>map.fitBounds(modelView('harmonie'),{zoomSnap:.25,padding:{top:100,bottom:140,left:12,right:60},duration:400}));
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('app').requestFullscreen();}catch{status('Volledig scherm is niet beschikbaar in deze browser.',true);}});
 $('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
