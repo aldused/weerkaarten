@@ -6,21 +6,24 @@ export const MODELS={
  dmi_harmonie_arome_europe:{label:'DMI HARMONIE Europa',detail:'DMI HARMONIE · 2 km',region:'Midden- en Noord-Europa · circa 60 uur',attribution:'DMI / Open-Meteo',resolution:'Oorspronkelijk Europees modelrooster circa 2 km.',step:3},
  harmonie:{label:'HARMONIE 43 Benelux',detail:'HARMONIE 43 · regionaal',region:'Benelux · circa 60 uur',attribution:'KNMI / Weerlab',resolution:'Regionale Weerlab-rasters van circa 2–4 km, afhankelijk van het veld.'},
  harmonie46:{label:'HARMONIE 46 Benelux',detail:'HARMONIE 46 · experimenteel',region:'Benelux · circa 60 uur',attribution:'KNMI / Weerlab',resolution:'Regionale Weerlab-rasters van circa 2–4 km, afhankelijk van het veld.'},
+ icond2:{label:'ICON-D2 Benelux',detail:'ICON-D2 · regulier',region:'Benelux en omgeving · 48 uur',attribution:'DWD / Weerlab',resolution:'Bestaande Weerlab-export: neerslag circa 2,2 km, overige velden circa 4,4 km.'},
 };
 export function modelFor(meta){return meta?.modelId||'ecmwf_ifs';}
-export function harmonieFrames(raw,modelId,now=Date.now()){
- if(!isBenelux(modelId)||raw.schema!==1||raw.model!==modelId||!/^\d{10}-[a-f0-9]{16}$/.test(raw.version))throw Error('Ongeldige HARMONIE-modelrun');
+export function regionalFrames(raw,modelId,now=Date.now()){
+ if(!isRegional(modelId)||raw?.schema!==1||raw.model!==modelId||!/^\d{10}-[a-f0-9]{16}$/.test(raw.version))throw Error('Ongeldige regionale modelrun');
  const run=Date.parse(raw.reference_time),times=raw.valid_times?.map(Date.parse);
- if(!Number.isFinite(run)||!times?.length||times.some((t,i)=>t!==run+(i+1)*HOUR))throw Error('Ongeldige HARMONIE-tijdreeks');
+ if(!Number.isFinite(run)||!Number.isFinite(now)||!times?.length||times.some((t,i)=>t!==run+(i+1)*HOUR))throw Error('Ongeldige regionale tijdreeks');
+ if(modelId==='icond2'&&(run%(3*HOUR)||times.length>48))throw Error('Ongeldige ICON-D2-run of horizon');
  const variables=['cloud_cover','precipitation','temperature_2m','wind_u_component_10m','visibility'];
- if(!variables.every(v=>raw.fields?.[v]))throw Error('Onvolledige HARMONIE-modelrun');
+ if(!variables.every(v=>raw.fields?.[v]))throw Error('Onvolledige regionale modelrun');
  if(raw.fields.wind_gusts_10m)variables.push('wind_gusts_10m');
  if(raw.fields.cloud_base)variables.push('cloud_base');
  const meta={modelId,reference_time:raw.reference_time,last_modified_time:raw.last_modified_time,variables,version:raw.version,source:raw};
  const frames=times.map((time,step)=>({time,iso:new Date(time).toISOString(),hours:1,lead:step+1,url:`${HARMONIE_ORIGIN}/harmonie/${modelId}/${raw.version}/${String(step).padStart(3,'0')}.bin`,modelMeta:meta})).filter(f=>f.time>=Math.ceil(now/HOUR)*HOUR);
- if(!frames.length)throw Error('Deze HARMONIE-run bevat geen toekomstige tijdstappen');
+ if(!frames.length)throw Error('Deze modelrun bevat geen toekomstige tijdstappen');
  return frames;
 }
+export const harmonieFrames=regionalFrames;
 export function preserveModelTime(timeline,time){
  // A date beyond the regional horizon cannot meaningfully compare models.
  // Start at now, with an explicit message, instead of silently showing the end.
@@ -29,11 +32,12 @@ export function preserveModelTime(timeline,time){
 }
 
 export const isBenelux=model=>model==='harmonie'||model==='harmonie46';
+export const isRegional=model=>isBenelux(model)||model==='icond2';
 export const isEuropeanHarmonie=model=>model==='knmi_harmonie_arome_europe'||model==='dmi_harmonie_arome_europe';
 export const BENELUX_VIEW=[[2.3,49.4],[7.35,53.65]];
 export const EUROPE_VIEW=[[-17,40],[29,65]];
-export function modelView(model){return isBenelux(model)?BENELUX_VIEW:EUROPE_VIEW;}
-export const latestModelURL=model=>isBenelux(model)?`${HARMONIE_ORIGIN}/harmonie/${model}/latest.json`:`${FIELD_ORIGIN}/data_spatial/${model}/latest.json`;
+export function modelView(model){return isRegional(model)?BENELUX_VIEW:EUROPE_VIEW;}
+export const latestModelURL=model=>isRegional(model)?`${HARMONIE_ORIGIN}/harmonie/${model}/latest.json`:`${FIELD_ORIGIN}/data_spatial/${model}/latest.json`;
 export function europeanHarmonieFrames(raw,modelId,now=Date.now()){
  if(!isEuropeanHarmonie(modelId)||raw?.completed!==true)throw Error('Onvolledige Europese HARMONIE-run');
  const required=['cloud_cover','precipitation','temperature_2m','wind_speed_10m','wind_direction_10m'];

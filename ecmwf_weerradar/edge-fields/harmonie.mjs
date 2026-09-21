@@ -38,15 +38,15 @@ export async function harmonie(request,env,ctx){
  const url=new URL(request.url),start=performance.now(),source=env.HARMONIE_MAPS||publicSource(request.signal);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(request.method!=='GET')return error('Niet gevonden',404);
- const latest=url.pathname.match(/^\/harmonie\/(harmonie|harmonie46)\/latest\.json$/);
+ const latest=url.pathname.match(/^\/harmonie\/(harmonie|harmonie46|icond2)\/latest\.json$/);
  if(latest){
   const obj=await source.get(`map-source/${latest[1]}/latest.json`);
-  if(!obj)return error('HARMONIE-modelrun nog niet beschikbaar',503);
+  if(!obj)return error('Regionale modelrun nog niet beschikbaar',503);
   return new Response(obj.body,{headers:{...cors,'Content-Type':'application/json','Cache-Control':'public, max-age=30'}});
  }
- const m=url.pathname.match(/^\/harmonie\/(harmonie|harmonie46)\/(\d{10}-[a-f0-9]{16})\/(\d{3})\.bin$/);
+ const m=url.pathname.match(/^\/harmonie\/(harmonie|harmonie46|icond2)\/(\d{10}-[a-f0-9]{16})\/(\d{3})\.bin$/);
  const bounds=(url.searchParams.get('bounds')||'').split(',').map(Number),variable=url.searchParams.get('variable');
- if(!m||url.searchParams.get('v')!=='1'||[...url.searchParams].length!==3||bounds.length!==4||!bounds.every(Number.isFinite)||bounds[0]<-26||bounds[2]>46||bounds[1]<29||bounds[3]>73||bounds[0]>=bounds[2]||bounds[1]>=bounds[3])return error('Ongeldige HARMONIE-selectie',400);
+ if(!m||url.searchParams.get('v')!=='1'||[...url.searchParams].length!==3||bounds.length!==4||!bounds.every(Number.isFinite)||bounds[0]<-26||bounds[2]>46||bounds[1]<29||bounds[3]>73||bounds[0]>=bounds[2]||bounds[1]>=bounds[3])return error('Ongeldige regionale kaartselectie',400);
  const cache=caches.default,key=new Request(url),hit=await cache.match(key);if(hit)return deliver(hit,true,start);
  try{
   const prefix=`map-source/${m[1]}/${m[2]}`,object=await source.get(prefix+'/meta.json');
@@ -76,5 +76,5 @@ export async function harmonie(request,env,ctx){
   const packet=encodeRegularPacket({schema:1,kind:'regular',source:url.pathname,variable,bounds,grid,directions:!!directions,...(layers?{cloudLayers:true}:{}),...(base?{hasCloudBase:true,cloudBaseSampling:'nearest',cloudBaseSourceGrid:baseInfo.grid}:{})},values,directions,layers);
   const response=new Response(packet,{headers:{...cors,'Content-Type':'application/octet-stream','Cache-Control':'public, max-age=86400, immutable'}});
   ctx.waitUntil(cache.put(key,response.clone()));return deliver(response,false,start);
- }catch(e){if(request.signal.aborted)return error('Selectie vervallen',499);console.error('HARMONIE field:',e.message);return error('HARMONIE tijdelijk niet bereikbaar',502);}
+ }catch(e){if(request.signal.aborted)return error('Selectie vervallen',499);console.error('Regional field:',e.message);return error('Regionale modelgegevens tijdelijk niet bereikbaar',502);}
 }

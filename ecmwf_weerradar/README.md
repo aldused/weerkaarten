@@ -4,6 +4,12 @@ Een zelfstandige, inzoombare kaart voor Weerlab. Open `index.html` via HTTP(S), 
 
 ## Lokaal starten
 
+**ICON-D2:** de reguliere DWD-run staat als **ICON-D2 Benelux** in de modelkeuze, met maximaal 48 uur verwachting. Zie [ICON-D2-20260921.md](ICON-D2-20260921.md) voor bron, controle en publicatievolgorde.
+
+**Contrastverfijning:** wittere/ijlere hoge bewolking (12%), doorschijnend lichtgrijs midden (45%) en compacter grijs laag (85%). De grotere neutrale legenda is direct aanklikbaar per wolkenlaag. Zie [CLOUD-CONTRAST-2026-09-21.md](CLOUD-CONTRAST-2026-09-21.md) voor werking, overlap en controles.
+
+**ECMWF-verversing:** een bevestigde nieuwe run heeft voorrang op de opgeslagen opstartmetadata. Daardoor wordt niet steeds dezelfde oude run opnieuw getoond. Regressietests controleren verse/verouderde caches, ongewijzigde runs en verlopen metadata; de volledige suite bevat 186 geslaagde tests.
+
 **Bewolkingsupdate 21 september 2026:** de nieuwe `cloud_layers`-transportvelden vereisen ook de gewijzigde Workers in `edge-fields/`; beide zijn vóór deze frontendpublicatie uitgerold. Dezelfde laagstijlen gelden voor ECMWF en alle HARMONIE-keuzes. Controleer de volledige keten lokaal zonder deployment met `npm run build` en `node tests/preview-clouds.mjs`; open vervolgens http://127.0.0.1:8794/index.html. Deze controleserver leest de echte openbare modeldata en wijzigt alleen de endpointadressen in lokale responses. Zie [CLOUDS-2026-09-21.md](CLOUDS-2026-09-21.md).
 
 ```sh

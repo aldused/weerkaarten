@@ -1,9 +1,9 @@
 // Sub-grid shapes are illustrative. Model fractions control covered area;
 // height controls colour and the opacity of an occupied cloud fragment.
 export const CLOUD_STYLES=Object.freeze({
-  high:{label:'Hoge bewolking',rgb:[250,252,255],opacity:[.10,.25],sample:.18},
-  mid:{label:'Middelbare bewolking',rgb:[211,217,224],opacity:[.30,.50],sample:.40},
-  low:{label:'Lage bewolking',rgb:[126,135,145],opacity:[.60,.95],sample:.82},
+  high:{label:'Hoge bewolking',rgb:[255,255,255],opacity:[.10,.25],sample:.12},
+  mid:{label:'Middelbare bewolking',rgb:[196,202,210],opacity:[.30,.50],sample:.45},
+  low:{label:'Lage bewolking',rgb:[105,112,120],opacity:[.60,.95],sample:.85},
 });
 // Display threshold, not an official aviation/warning category. Only an
 // actual model cloud-base field may select this style; never cloud fraction.
@@ -59,8 +59,11 @@ export function cloudLayerStyle(type,cover,lon,lat,detail=true,kmPerPixel=0){
 export function cloudStyle(low,mid,high,lon,lat,detail=true,kmPerPixel=0,visible=7,cloudBase=NaN){
   if(![low,mid,high].every(Number.isFinite))return [0,0,0,0];
   let r=0,g=0,b=0,a=0;
-  // Higher translucent layers remain visible above the low grey deck.
-  for(const [type,cover,bit] of [['low',low,1],['mid',mid,2],['high',high,4]]){
+  // Visual priority, not an optical simulation: the compact low deck must
+  // retain its grey tone instead of being bleached by two lighter overlays.
+  // Higher layers remain visible through openings; legend switches expose
+  // each original field when a closed low deck obscures their contribution.
+  for(const [type,cover,bit] of [['high',high,4],['mid',mid,2],['low',low,1]]){
     if(!(visible&bit)||cover<=0)continue;
     const [cr,cg,cb,alpha]=type==='low'&&isVeryLowCloud(cloudBase)
       ?[...VERY_LOW_CLOUD.rgb,clamp(cover/100)*VERY_LOW_CLOUD.opacity]
@@ -74,5 +77,6 @@ export function cloudStyle(low,mid,high,lon,lat,detail=true,kmPerPixel=0,visible
 export function cloudIconType(low,mid,high){
   if(![low,mid,high].every(Number.isFinite))return null;
   const opacity=cloudStyle(low,mid,high,0,0,false)[3];
-  return opacity<.15?'clear':opacity<.60?'filtered':'overcast';
+  // A full 12% high veil still filters sunshine: it is not a clear sky.
+  return opacity<.08?'clear':opacity<.60?'filtered':'overcast';
 }

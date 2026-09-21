@@ -425,4 +425,9 @@ for point_file in point_files:
 print(f"\nKlaar! ICON-D2 run {run_str}, {n_steps} uur")
 PYEOF
 
+# Publish an immutable map snapshot only after the source update succeeded.
+icon_update_status=$?
+if [ "$icon_update_status" -ne 0 ]; then exit "$icon_update_status"; fi
+bash ecmwf_weerradar/harmonie-publish/publish.sh icond2 || exit 1
+
 echo "$(date): ICON-D2 update klaar"

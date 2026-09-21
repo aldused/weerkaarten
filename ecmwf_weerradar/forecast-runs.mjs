@@ -1,5 +1,19 @@
 import {availableForecastFrames, DATA_ROOT, FORECAST_DAYS, HOUR, runPath} from './core.mjs';
 
+const RUN_CACHE_MS=6*HOUR,RUN_CHECK_MS=5*60*1000;
+export async function discoverCachedForecastRuns(loadJSON, now, saved, prefetchedLatest) {
+  // A confirmed refresh must never select the stale startup cache again.
+  // Otherwise its deferred check keeps finding the same newer run forever.
+  if(!prefetchedLatest&&saved&&now>=saved.savedAt&&now-saved.savedAt<RUN_CACHE_MS){
+    try{
+      combinedForecastFrames(saved.metas,now);
+      return {metas:saved.metas,savedAt:saved.savedAt,needsCheck:now-saved.savedAt>=RUN_CHECK_MS};
+    }catch{ /* Invalid/expired horizons are discovered afresh. */ }
+  }
+  const metas=await discoverForecastRuns(url=>prefetchedLatest&&url===`${DATA_ROOT}/latest.json`?prefetchedLatest:loadJSON(url),now);
+  return {metas,savedAt:now,needsCheck:false};
+}
+
 // Metadata-only polling must not rebuild the map for an unchanged, unfinished
 // or stale run. The newest timeline source can differ from the selected tail.
 export function isNewerForecastRun(latest, timeline, now=Date.now()) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Split existing Weerlab HARMONIE bytes into immutable, hourly map objects.
+"""Split existing regional Weerlab bytes into immutable, hourly map objects.
 No GRIB conversion, rounding or recalculation of precipitation is performed.
 """
 import argparse, hashlib, json, mmap, os, shutil, struct, tempfile
@@ -11,7 +11,8 @@ PARAMETERS={'precipitation':'neerslag','temperature_2m':'temp','cloud_cover':'be
 def build(model, meta_path, output):
     meta_path=Path(meta_path); raw=meta_path.read_bytes(); meta=json.loads(raw)
     run=datetime.fromisoformat(meta['run_utc'].replace('Z','+00:00'))
-    if model not in ('harmonie','harmonie46') or run.utcoffset()!=timedelta(0): raise ValueError('Ongeldig model of UTC-run')
+    if model not in ('harmonie','harmonie46','icond2') or run.utcoffset()!=timedelta(0): raise ValueError('Ongeldig model of UTC-run')
+    if model=='icond2' and (meta.get('model')!='ICON-D2' or run.hour%3 or run.minute or run.second or run.microsecond or not 1<=meta['uren']<=48): raise ValueError('Verwacht reguliere ICON-D2-bron, geen RUC')
     times=[]
     for i,wall in enumerate(meta['tijden']):
         instant=run+timedelta(hours=i+1)
@@ -34,7 +35,7 @@ def build(model, meta_path, output):
         fields[variable]={'grid':grid,'offset':offset,'length':length,'dtype':dtype,'bytes':size,'components':components,'scale':info.get('scale',16),'power':info.get('power',2),'source_parameter':key}
         sources.append((path,stamp,stream,data,length));offset+=length
     if any(v not in fields for v in PARAMETERS if v not in ('wind_gusts_10m','cloud_base')):raise ValueError('Een vereist weerveld ontbreekt')
-    contract={'schema':1,'model':model,'reference_time':run.isoformat().replace('+00:00','Z'),'valid_times':times,'fields':fields,'frame_bytes':offset,'cloud_method':'maximum of high/middle/low cloud fraction','source':'KNMI via Weerlab'}
+    contract={'schema':1,'model':model,'reference_time':run.isoformat().replace('+00:00','Z'),'valid_times':times,'fields':fields,'frame_bytes':offset,'cloud_method':'maximum of high/middle/low cloud fraction','source':('DWD' if model=='icond2' else 'KNMI')+' via Weerlab'}
     digest=hashlib.sha256(json.dumps(contract,sort_keys=True).encode())
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     temp=Path(tempfile.mkdtemp(prefix='building-',dir=output))

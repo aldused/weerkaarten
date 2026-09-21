@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="${WEERLAB_PROJECT_ROOT:-/Users/aldus/KNMI_Project/weerlab}"
 MODEL="${1:?model ontbreekt}"
-case "$MODEL" in harmonie) META=harmonie_canvas_meta.json;; harmonie46) META=harmonie46_canvas_meta.json;; *) exit 2;; esac
+case "$MODEL" in harmonie) META=harmonie_canvas_meta.json;; harmonie46) META=harmonie46_canvas_meta.json;; icond2) META=icond2_canvas_meta.json;; *) exit 2;; esac
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT="$(mktemp -d /tmp/weerlab-map-source.XXXXXX)"
 trap 'rm -rf "$OUTPUT"' EXIT

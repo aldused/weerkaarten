@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {combinedForecastFrames, discoverForecastRuns, isNewerForecastRun, speculativeFallbackRun} from '../forecast-runs.mjs';
+import {combinedForecastFrames, discoverForecastRuns, discoverCachedForecastRuns, isNewerForecastRun, speculativeFallbackRun} from '../forecast-runs.mjs';
 import {availableForecastFrames, DATA_ROOT, forecastFrames, fileURL, HOUR, REQUIRED, localDateKey, fmt, runPath} from '../core.mjs';
 
 const base = Date.parse('2026-09-19T00:00:00Z');
@@ -20,6 +20,36 @@ function metadata(run, last = 360) {
 const full = metadata(base);
 const short = metadata(base + 6 * HOUR, 144);
 const now = base + 13.75 * HOUR;
+
+test('a confirmed newer ECMWF run bypasses both fresh and stale startup caches without a refresh loop',async()=>{
+  const latest=metadata(base+12*HOUR);
+  for(const age of [60_000,20*60_000]){
+    const saved={savedAt:now-age,metas:[short,full]};
+    const result=await discoverCachedForecastRuns(()=>assert.fail('prefetched full run needs no duplicate request'),now,saved,latest);
+    assert.deepEqual(result.metas,[latest]);
+    assert.equal(result.savedAt,now);
+    assert.equal(result.needsCheck,false);
+    const timeline=combinedForecastFrames(result.metas,now);
+    assert.equal(isNewerForecastRun(latest,timeline,now),false,'next poll must not rebuild the same frame');
+  }
+});
+test('startup cache is reused without field reloads and retains its real age',async()=>{
+  for(const age of [60_000,20*60_000]){
+    const saved={savedAt:now-age,metas:[short,full]};
+    const result=await discoverCachedForecastRuns(()=>assert.fail('usable startup cache needs no request'),now,saved);
+    assert.equal(result.metas,saved.metas);
+    assert.equal(result.savedAt,saved.savedAt);
+    assert.equal(result.needsCheck,age>=5*60_000);
+  }
+});
+test('invalid, expired or future-dated startup caches are replaced',async()=>{
+  const latest=metadata(base+12*HOUR);
+  for(const saved of [null,{savedAt:now-6*HOUR,metas:[full]},{savedAt:now+1,metas:[full]},{savedAt:now,metas:[]}]){
+    let reads=0;
+    const result=await discoverCachedForecastRuns(async url=>{if(url.endsWith('/latest.json')){reads++;return latest;}return full;},now,saved);
+    assert.deepEqual(result.metas,[latest]);assert.equal(result.needsCheck,false);assert.equal(reads,1);
+  }
+});
 
 test('metadata polling accepts all four completed run hours, without rebuilding unchanged or unfinished forecasts',()=>{
  for(const hour of [0,6,12,18]){

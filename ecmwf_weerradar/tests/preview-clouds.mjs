@@ -19,13 +19,13 @@ const remote={ecmwf:'https://weerlab-ecmwf-fields.dawn-term-a69f.workers.dev',ha
 // Optional immutable local exports for review of newly exposed cloud base.
 // This never writes/publishes a remote run or reads mutable frame files.
 const localModels={};
-for(const [model,path] of Object.entries({harmonie:process.env.CLOUD_REVIEW_HARMONIE,harmonie46:process.env.CLOUD_REVIEW_HARMONIE46}))if(path){
+for(const [model,path] of Object.entries({harmonie:process.env.CLOUD_REVIEW_HARMONIE,harmonie46:process.env.CLOUD_REVIEW_HARMONIE46,icond2:process.env.CLOUD_REVIEW_ICOND2}))if(path){
  const meta=JSON.parse(await readFile(resolve(path,'meta.json'),'utf8'));
  if(meta.model!==model)throw Error('Wrong local model');
  localModels[model]={meta,path:resolve(path)};
 }
 const localSource={async get(key,options){
- const match=/^map-source\/(harmonie|harmonie46)\/(latest\.json|\d{10}-[a-f0-9]{16}\/(meta\.json|\d{3}\.bin))$/.exec(key);
+ const match=/^map-source\/(harmonie|harmonie46|icond2)\/(latest\.json|\d{10}-[a-f0-9]{16}\/(meta\.json|\d{3}\.bin))$/.exec(key);
  const local=match&&localModels[match[1]];if(!local)return null;
  if(match[2]==='latest.json')return {body:JSON.stringify(local.meta)};
  if(!match[2].startsWith(local.meta.version+'/'))return null;

@@ -2,7 +2,7 @@ import {createProjectedGrid} from './projected-grid.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
 import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
 import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
-import {MODELS,modelFor,harmonieFrames,preserveModelTime,isBenelux,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
+import {MODELS,modelFor,regionalFrames,preserveModelTime,isBenelux,isRegional,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
 import {installMovableMenu} from './movable-menu.mjs';
 import {visibleTimeout} from './frame-scheduler.mjs';
@@ -10,7 +10,7 @@ import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
 import { forecastLabel, groupForecastDays, chooseDayEntry, nowFrameIndex } from './timeline.mjs';
-import {combinedForecastFrames,discoverForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
+import {combinedForecastFrames,discoverCachedForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
 import {updateCurrentBounds, domainOptions, getRanges} from '@openmeteo/weather-map-layer';
 import {FieldPackets,FIELD_ORIGIN} from './field-packets.mjs';
@@ -48,8 +48,18 @@ for(const band of [...FOG_BANDS].reverse()){
 for(const [type,style] of Object.entries(CLOUD_STYLES)){
   const swatch=document.querySelector(`[data-cloud-swatch="${type}"]`);
   swatch.style.setProperty('--cloud-color',`rgba(${style.rgb.join(',')},${style.sample})`);
+  swatch.parentElement.addEventListener('click',()=>{
+    const input=$(`cloud-${type}`);input.checked=!input.checked;
+    input.dispatchEvent(new Event('change'));
+  });
 }
 const cloudVisibility=()=>($('cloud-low').checked?1:0)|($('cloud-mid').checked?2:0)|($('cloud-high').checked?4:0);
+function syncCloudButtons(){
+  for(const type of ['high','mid','low']){
+    const item=document.querySelector(`[data-cloud-swatch="${type}"]`).parentElement,visible=$(`cloud-${type}`).checked;
+    item.classList.toggle('cloud-off',!visible);item.setAttribute('aria-pressed',String(visible));
+  }
+}
 const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
@@ -188,21 +198,13 @@ let runCacheTime=0;
 // ECMWF publishes four runs a day. Stored metadata of the run that is still
 // on screen may open the map without any metadata request; the existing run
 // check then verifies it and replaces the whole frame when a newer run exists.
-const RUN_CACHE_MS=6*60*60*1000,RUN_CHECK_MS=5*60*1000;
 async function discoverRuns(now,prefetchedLatest) {
   let saved;
   try{saved=JSON.parse(localStorage.getItem('weerlab-ecmwf-runs-v2'));}catch{}
-  if(saved&&now>=saved.savedAt&&now-saved.savedAt<RUN_CACHE_MS&&!(prefetchedLatest&&now-saved.savedAt<RUN_CHECK_MS)){
-    try{
-      combinedForecastFrames(saved.metas,now);runCacheTime=saved.savedAt;
-      // Verify right after the first map instead of before it. A newer run
-      // then replaces the whole frame through the existing run check.
-      if(now-saved.savedAt>=RUN_CHECK_MS){checkedAt=0;setTimeout(()=>checkForNewRun(),1200);}
-      return saved.metas;
-    }catch{ /* A stored run that no longer reaches ten days is discarded. */ }
-  }
-  runCacheTime=now;
-  return discoverForecastRuns(url=>prefetchedLatest&&url===`${DATA_ROOT}/latest.json`?prefetchedLatest:json(url),now);
+  const result=await discoverCachedForecastRuns(json,now,saved,prefetchedLatest);
+  runCacheTime=result.savedAt;
+  if(result.needsCheck){checkedAt=0;setTimeout(()=>checkForNewRun(),1200);}
+  return result.metas;
 }
 
 let modelDiscoveryController;
@@ -223,7 +225,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
       timeline=combinedForecastFrames(candidateMetas,now);
       try{localStorage.setItem('weerlab-ecmwf-runs-v2',JSON.stringify({savedAt:runCacheTime,metas:candidateMetas}));}catch{}
     }else if(isEuropeanHarmonie(modelId))timeline=await discoverEuropeanHarmonie(url=>json(url,signal),modelId,now);
-    else timeline=harmonieFrames(await json(latestModelURL(modelId),signal),modelId,now);
+    else timeline=regionalFrames(await json(latestModelURL(modelId),signal),modelId,now);
     if(startup!==startupRevision)return;
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
     timeline.forEach(f=>intervalByURL.set(f.url,f.hours));
@@ -494,6 +496,7 @@ function syncUI(){
   $('model-resolution').textContent=MODELS[modelId].resolution;
   $('point-model').textContent=MODELS[modelId].label+'-VERWACHTING';
   $('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
+  $('icon-d2-info').hidden=modelId!=='icond2';
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
@@ -507,7 +510,7 @@ function syncUI(){
   legend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=numbers[i]);
   $('fog-legend').hidden=!f.ids.some(id=>id.endsWith('-visibility'));
   $('cloud-legend').hidden=!f.ids.some(id=>id.endsWith('-cloud_cover'));
-  for(const type of ['high','mid','low'])document.querySelector(`[data-cloud-swatch="${type}"]`).parentElement.classList.toggle('cloud-off',!$(`cloud-${type}`).checked);
+  syncCloudButtons();
   const hasBase=!!f.samples.cloud_cover?.cloudBase;
   $('cloud-legend-fog').classList.toggle('cloud-off',!f.ids.some(id=>id.endsWith('-visibility'))&&!(hasBase&&$('cloud-low').checked));
   $('very-low-key').hidden=$('cloud-legend').hidden;
@@ -559,7 +562,7 @@ $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);})
 let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
-['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
+['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
@@ -715,7 +718,7 @@ async function checkForNewRun(){
   try {
     if(selectedModel!=='ecmwf_ifs'){
       const latest=await json(latestModelURL(selectedModel));
-      if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||(isBenelux(selectedModel)&&latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version)))await start(undefined,polledModel);
+      if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||(isRegional(selectedModel)&&latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version)))await start(undefined,polledModel);
       return;
     }
     const latest=await json(`${DATA_ROOT}/latest.json`);
