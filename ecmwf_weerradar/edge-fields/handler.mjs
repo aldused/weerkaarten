@@ -9,28 +9,50 @@ const META=new RegExp('^/data_spatial/'+MODELS+'/(latest\\.json|\\d{4}/\\d{2}/\\
 const validRunHour=(model,hour)=>hour>=0&&hour<24&&(model==='ecmwf_ifs'?hour%6===0:model==='dmi_harmonie_arome_europe'?hour%3===0:true);
 const variables=new Set(['cloud_cover','cloud_layers','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m','wind_gusts_10m']);
 const grid=domainOptions.find(d=>d.value==='ecmwf_ifs').grid;
+// How long a stale run description may still be served while it refreshes.
+const METADATA_STALE=600;
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Server-Timing, X-Weerlab-Cache, X-Source-Points, X-Packed-Points','Timing-Allow-Origin':'*'};
 const fail=(message,status)=>new Response(message,{status,headers:{...CORS,'Cache-Control':'no-store'}});
 export function createFieldHandler({readField,fetcher=(...args)=>fetch(...args),getCache=()=>caches.default,now=()=>Date.now()}={}){
+// One background refresh at a time per file, per isolate.
+const refreshing=new Set();
 return async function handle(request,env,ctx){
   const started=performance.now(),url=new URL(request.url),match=PATH.exec(url.pathname);
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...CORS,'Access-Control-Allow-Methods':'GET, OPTIONS'}});
   // Model discovery shares the source-local connection. Only tiny original
   // metadata are forwarded; incomplete runs retain the short refresh interval.
   if(request.method==='GET'&&!url.search&&META.test(url.pathname)){
-    const key=new Request(url),cached=await getCache().match(key);
-    if(cached)return deliver(cached,true,`cache;dur=${performance.now()-started}`);
-    try{
-      const upstream=await fetcher(ROOT+url.pathname,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(16000)]),redirect:'manual'});
-      if(!upstream.ok)return fail('Modelinformatie tijdelijk niet beschikbaar',upstream.status===404?404:502);
+    const key=new Request(url);
+    const load=async signal=>{
+      const upstream=await fetcher(ROOT+url.pathname,{signal,redirect:'manual'});
+      if(!upstream.ok){const error=new Error('Modelinformatie tijdelijk niet beschikbaar');error.status=upstream.status===404?404:502;throw error;}
       const bytes=await upstream.arrayBuffer();
       if(bytes.byteLength>2*1024*1024)throw new Error('Ongeldige modelinformatie');
       const metadata=JSON.parse(new TextDecoder().decode(bytes));
       const ttl=url.pathname.endsWith('/latest.json')||metadata.completed!==true?30:3600;
-      const stored=new Response(bytes,{headers:{...CORS,'Content-Type':'application/json','Cache-Control':`public, max-age=${ttl}`}});
-      ctx.waitUntil(getCache().put(key,stored.clone()));
-      return deliver(stored,false,`read;dur=${performance.now()-started}`);
-    }catch{return fail('Modelinformatie tijdelijk niet bereikbaar',502);}
+      // The shared copy outlives its refresh interval, so the next visitor is
+      // answered at once while a fresh copy is fetched behind that answer.
+      const stored=new Response(bytes,{headers:{...CORS,'Content-Type':'application/json',
+        'Cache-Control':`public, max-age=${Math.max(ttl,METADATA_STALE)}`,'X-Ttl':String(ttl),'X-Fetched-At':String(now())}});
+      await getCache().put(key,stored.clone());
+      return stored;
+    };
+    const cached=await getCache().match(key);
+    if(cached){
+      // Run metadata of a few minutes old still describes the same run, while
+      // waiting for the source in us-west-2 costs every visitor a full round
+      // trip before the first weather field can be requested. The map checks
+      // for a newer run by itself, every ten minutes and on return.
+      const age=(now()-Number(cached.headers.get('X-Fetched-At')||0))/1000;
+      if(age>=(Number(cached.headers.get('X-Ttl'))||30)&&!refreshing.has(url.pathname)){
+        refreshing.add(url.pathname);
+        ctx.waitUntil(load(AbortSignal.timeout(16000)).catch(()=>{}).finally(()=>refreshing.delete(url.pathname)));
+      }
+      return deliver(cached,true,`cache;dur=${performance.now()-started}`);
+    }
+    try{
+      return deliver(await load(AbortSignal.any([request.signal,AbortSignal.timeout(16000)])),false,`read;dur=${performance.now()-started}`);
+    }catch(error){return fail('Modelinformatie tijdelijk niet bereikbaar',error?.status===404?404:502);}
   }
   if(request.method!=='GET'||!match)return fail('Niet gevonden',404);
   const model=match[1],projected=EUROPEAN_HARMONIE.includes(model),version=projected?'1':'3';
@@ -69,6 +91,9 @@ return async function handle(request,env,ctx){
 
 async function deliver(stored,hit,timing){
  const headers=new Headers(stored.headers);headers.set('X-Weerlab-Cache',hit?'HIT':'MISS');headers.set('Server-Timing',timing);
+ // The longer lifetime is only for the shared cache; a client keeps the
+ // original refresh interval of this metadata.
+ const ttl=headers.get('X-Ttl');if(ttl)headers.set('Cache-Control',`public, max-age=${ttl}`);
  headers.delete('Content-Length');headers.set('Content-Encoding','gzip');
  return new Response(stored.body.pipeThrough(new CompressionStream('gzip')),{headers,encodeBody:'manual'});
 }

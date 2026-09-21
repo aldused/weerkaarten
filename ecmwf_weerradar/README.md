@@ -88,6 +88,16 @@ De nieuwe bestandslezer combineert bestandslengte en OM-catalogus in één begre
 
 Zie [PERFORMANCE-2026-09-20.md](PERFORMANCE-2026-09-20.md). `node tests/audit-bootstrap-live.mjs` vergelijkt de volledige gedecodeerde velden met rechtstreekse S3-lezingen bij twee modelruns en 1/3/6-uursstappen; de SHA256-resultaten staan in `tests/bootstrap-live-audit.json`.
 
+### Snelheid van de wolkenlagen (21 september 2026)
+
+Sinds de afzonderlijke hoge, middelbare en lage bewolking kostte een wolkentegel
+43 ms tegenover 2 ms voor neerslag. Het mengen van de drie lagen gebeurt nu zonder
+tijdelijke arrays per beeldpunt, de structuurschaal wordt per beeldrij bepaald en
+het totale wolkenveld wordt voor een wolkentegel niet meer apart geïnterpoleerd.
+De kaart is daardoor volledig bruikbaar na circa 0,8 in plaats van 1,1 seconde en
+een niet voorbereide tijdstap kost 32 in plaats van 372 ms, met exact dezelfde
+beeldpunten. Zie [WOLKENLAGEN-SNELHEID-20260921.md](WOLKENLAGEN-SNELHEID-20260921.md).
+
 ### Parallel tekenen en achtergrondtabbladen (20 september 2026)
 
 De tegels worden nu door een kleine pool van tekenwerkers berekend in plaats van één voor

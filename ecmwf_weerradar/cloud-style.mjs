@@ -36,41 +36,74 @@ for(let i=0;i<4096;i++)cdf[Math.round(clamp((noise(i*.754877666,i*.569840296)+1)
 for(let i=0,sum=0;i<cdf.length;i++){sum+=cdf[i];cdf[i]=sum/4096;}
 const rank=n=>{const x=clamp((n+1)/2)*255,i=Math.min(254,Math.floor(x));return cdf[i]+(cdf[i+1]-cdf[i])*(x-i);};
 const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
-export function cloudLayerStyle(type,cover,lon,lat,detail=true,kmPerPixel=0){
+// Scale of the illustrative structure per layer, in kilometres.
+const LAYER_SCALE={high:8,mid:21,low:16};
+/** How much of a layer covers this point, as opacity. Identical formula to
+ * the array-returning cloudLayerStyle; a tile renderer calls this millions of
+ * times, so it allocates nothing and may reuse a precomputed `resolved`. */
+export function cloudLayerOpacity(type,cover,lon,lat,detail=true,kmPerPixel=0,resolved){
   const style=CLOUD_STYLES[type],c=clamp(cover/100);
-  if(!Number.isFinite(c)||c===0)return [...style.rgb,0];
-  if(!detail)return [...style.rgb,c*style.sample];
+  if(!Number.isFinite(c)||c===0)return 0;
+  if(!detail)return c*style.sample;
+  if(resolved===undefined)resolved=visibility(LAYER_SCALE[type],kmPerPixel);
+  // Zoomed far out the structure is invisible; then the result is exactly the
+  // averaged area and the noise need not be evaluated at all.
+  if(resolved===0)return c*style.sample;
   const x=lon*70,y=lat*111;
   // Thin elongated fibres above, broad patches in the middle, compact low
   // cells below. Their coordinates do not depend on cloud amount or time.
   const n=type==='high'?noise((x+.45*y)/52,(y-.25*x)/8):type==='mid'?noise(x/26+67,y/21-19):noise(x/16-41,y/16+23);
-  const amount=rank(n),resolved=detail?visibility(type==='high'?8:type==='mid'?21:16,kmPerPixel):0;
+  const amount=rank(n);
   // Feather illustrative edges: a forecast fraction is not a sharp outline
   // of an observed cloud. The normal map uses area averaging (detail=false).
   const mask=c===1?1:smooth((c-amount+.10)/.20);
   // At coarse zoom / with texture disabled, fractional area is averaged;
   // the intrinsic cloud opacity remains the same for every cover value.
   const area=c*(1-resolved)+mask*resolved;
-  const [min,max]=style.opacity;
+  const min=style.opacity[0],max=style.opacity[1];
   const structure=.5+.5*n;
   const opacity=style.sample*(1-resolved)+(min+(max-min)*structure)*resolved;
-  return [...style.rgb,area*opacity];
+  return area*opacity;
+}
+/** Per-row structure visibility for the three layers; only kmPerPixel varies. */
+export function cloudResolved(detail,kmPerPixel,out=new Float64Array(3)){
+  out[0]=detail?visibility(LAYER_SCALE.high,kmPerPixel):0;
+  out[1]=detail?visibility(LAYER_SCALE.mid,kmPerPixel):0;
+  out[2]=detail?visibility(LAYER_SCALE.low,kmPerPixel):0;
+  return out;
+}
+export function cloudLayerStyle(type,cover,lon,lat,detail=true,kmPerPixel=0){
+  return [...CLOUD_STYLES[type].rgb,cloudLayerOpacity(type,cover,lon,lat,detail,kmPerPixel)];
+}
+// Visual priority, not an optical simulation: the compact low deck must
+// retain its grey tone instead of being bleached by two lighter overlays.
+// Higher layers remain visible through openings; legend switches expose
+// each original field when a closed low deck obscures their contribution.
+const LAYERS=Object.freeze([Object.freeze({type:'high',bit:4}),Object.freeze({type:'mid',bit:2}),Object.freeze({type:'low',bit:1})]);
+const scratch=new Float64Array(3);
+/** Blends the three layers into `rgb` and returns the resulting opacity.
+ * Allocates nothing: a single tile calls this 65 536 times. `resolved` is the
+ * optional per-row result of cloudResolved(). */
+export function blendCloudLayers(low,mid,high,lon,lat,detail,kmPerPixel,visible,cloudBase,rgb,resolved){
+  if(!Number.isFinite(low)||!Number.isFinite(mid)||!Number.isFinite(high))return 0;
+  let r=0,g=0,b=0,a=0;
+  for(let i=0;i<3;i++){
+    const {type,bit}=LAYERS[i],cover=bit===4?high:bit===2?mid:low;
+    if(!(visible&bit)||cover<=0)continue;
+    const veryLow=bit===1&&isVeryLowCloud(cloudBase);
+    const colour=veryLow?VERY_LOW_CLOUD.rgb:CLOUD_STYLES[type].rgb;
+    const alpha=veryLow?clamp(cover/100)*VERY_LOW_CLOUD.opacity
+      :cloudLayerOpacity(type,cover,lon,lat,detail,kmPerPixel,resolved?resolved[i]:undefined);
+    if(!alpha)continue;
+    r=colour[0]*alpha+r*(1-alpha);g=colour[1]*alpha+g*(1-alpha);b=colour[2]*alpha+b*(1-alpha);a=alpha+a*(1-alpha);
+  }
+  if(!a)return 0;
+  rgb[0]=r/a;rgb[1]=g/a;rgb[2]=b/a;
+  return a;
 }
 export function cloudStyle(low,mid,high,lon,lat,detail=true,kmPerPixel=0,visible=7,cloudBase=NaN){
-  if(![low,mid,high].every(Number.isFinite))return [0,0,0,0];
-  let r=0,g=0,b=0,a=0;
-  // Visual priority, not an optical simulation: the compact low deck must
-  // retain its grey tone instead of being bleached by two lighter overlays.
-  // Higher layers remain visible through openings; legend switches expose
-  // each original field when a closed low deck obscures their contribution.
-  for(const [type,cover,bit] of [['high',high,4],['mid',mid,2],['low',low,1]]){
-    if(!(visible&bit)||cover<=0)continue;
-    const [cr,cg,cb,alpha]=type==='low'&&isVeryLowCloud(cloudBase)
-      ?[...VERY_LOW_CLOUD.rgb,clamp(cover/100)*VERY_LOW_CLOUD.opacity]
-      :cloudLayerStyle(type,cover,lon,lat,detail,kmPerPixel);
-    r=cr*alpha+r*(1-alpha);g=cg*alpha+g*(1-alpha);b=cb*alpha+b*(1-alpha);a=alpha+a*(1-alpha);
-  }
-  return a?[Math.round(r/a),Math.round(g/a),Math.round(b/a),a]:[0,0,0,0];
+  const a=blendCloudLayers(low,mid,high,lon,lat,detail,kmPerPixel,visible,cloudBase,scratch);
+  return a?[Math.round(scratch[0]),Math.round(scratch[1]),Math.round(scratch[2]),a]:[0,0,0,0];
 }
 // Presentation-only icon classification: a full high veil must not use the
 // same solid-cloud icon as a full low deck. Never expose this as model cover.

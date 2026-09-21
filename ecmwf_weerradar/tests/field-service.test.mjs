@@ -71,3 +71,33 @@ test('an obsolete server request stops source work and cannot publish a cache en
  const r=await handler(new Request(url(),{signal:controller.signal}),{},f.ctx);
  assert.equal(began,true);assert.equal(r.status,499);assert.equal(f.pending.length,0);assert.equal(f.entries.size,0);
 });
+
+test('verlopen runinformatie wordt meteen geleverd en op de achtergrond ververst',async()=>{
+ const entries=new Map();
+ const cache={match:async key=>entries.get(typeof key==='string'?key:key.url)?.clone(),put:async(key,value)=>entries.set(typeof key==='string'?key:key.url,value.clone())};
+ let clock=Date.parse('2026-09-21T12:00:00Z'),calls=0,run='2026-09-21T00:00Z';
+ const pending=[],ctx={waitUntil:p=>pending.push(p)};
+ const handler=createFieldHandler({getCache:()=>cache,now:()=>clock,
+  fetcher:async()=>{calls++;return Response.json({completed:true,reference_time:run,valid_times:[run]});}});
+ const ask=async()=>{
+  const r=await handler(new Request('https://test/data_spatial/ecmwf_ifs/latest.json'),{},ctx);
+  return {hit:r.headers.get('X-Weerlab-Cache'),ttl:r.headers.get('Cache-Control'),
+   body:JSON.parse(gunzipSync(Buffer.from(await r.arrayBuffer())))};
+ };
+ const cold=await ask();
+ assert.equal(cold.hit,'MISS');assert.equal(cold.ttl,'public, max-age=30');assert.equal(calls,1);
+ const warm=await ask();
+ assert.equal(warm.hit,'HIT');assert.equal(calls,1,'binnen het interval wordt de bron niet opnieuw gelezen');
+ // Voorbij het verversingsinterval: het antwoord komt nog uit de cache, de
+ // nieuwe kopie wordt erachteraan opgehaald.
+ clock+=45000;run='2026-09-21T06:00Z';
+ const stale=await ask();
+ assert.equal(stale.hit,'HIT');
+ assert.equal(stale.body.reference_time,'2026-09-21T00:00Z','de bezoeker wacht niet op de bron');
+ assert.equal(pending.length,1,'precies één verversing op de achtergrond');
+ await Promise.all(pending);
+ assert.equal(calls,2);
+ const refreshed=await ask();
+ assert.equal(refreshed.hit,'HIT');assert.equal(refreshed.body.reference_time,'2026-09-21T06:00Z');
+ assert.equal(calls,2,'de verse kopie wordt niet nog eens opgehaald');
+});

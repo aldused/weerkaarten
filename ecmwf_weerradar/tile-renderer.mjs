@@ -4,7 +4,7 @@ import {writeFogColor} from './fog-style.mjs';
 import {isPrecipitation,writePrecipitationColor,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import { scales, EUROPE } from './core.mjs';
 import { createGaussianTileSampler } from './gaussian-sampler.mjs';
-import { cloudStyle } from './cloud-style.mjs';
+import { blendCloudLayers, cloudResolved } from './cloud-style.mjs';
 function colorsFor(scale){
   // Lookup table keeps tile painting independent of the number of palette stops.
   const n=4096,min=scale.breakpoints[0],max=scale.breakpoints.at(-1),rgba=new Uint8ClampedArray(n*4);
@@ -25,24 +25,38 @@ export function renderTile(field,coords){
   if(cloud&&![field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>a?.length===field.data.values.length))throw Error('Afzonderlijke wolkenlagen ontbreken');
   const cloudValues=cloud?[field.cloudLow,field.cloudMid,field.cloudHigh]:[];
   const cloudSamplers=cloudValues.map(values=>createGaussianTileSampler(field.grid,values,coords)||createRegularTileSampler(field.grid,values,coords));
+  // Per tile, not per pixel: three colour channels and the structure scale.
+  const cloudRGB=cloud?new Float64Array(3):null,resolved=cloud?new Float64Array(3):null;
+  const cloudVisible=field.cloudVisible??7,texture=field.texture;
   const longitudes=sampler?.longitudes||Array.from({length:256},(_,x)=>(coords.x+(x+.5)/256)/world*360-180);
   for(let y=0;y<256;y++){
     const lat=sampler?.latitudes[y]??Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/256)/world)))*180/Math.PI;
     const kmPerPixel=40075*Math.cos(lat*Math.PI/180)/(256*world);
     if(lat<EUROPE[1]||lat>EUROPE[3])continue;
-    const row=sampler?.row(y);
+    // A cloud tile draws only from its three layers; interpolating the total
+    // field as well would cost a quarter of the tile for a presence check the
+    // layers already give.
+    const row=cloud?null:sampler?.row(y);
     const cloudRows=cloudSamplers.map(s=>s?.row(y));
+    const lowRow=cloudRows[0],midRow=cloudRows[1],highRow=cloudRows[2];
+    if(cloud)cloudResolved(texture,kmPerPixel,resolved);
     for(let x=0;x<256;x++){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
-      const value=row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
+      const value=cloud?0:row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
       if(cloud){
-        const layers=cloudValues.map((values,i)=>cloudRows[i]?cloudRows[i][x]:field.grid.getInterpolatedValue(values,lat,lon,'monotone'));
+        const low=lowRow?lowRow[x]:field.grid.getInterpolatedValue(cloudValues[0],lat,lon,'monotone');
+        const mid=midRow?midRow[x]:field.grid.getInterpolatedValue(cloudValues[1],lat,lon,'monotone');
+        const high=highRow?highRow[x]:field.grid.getInterpolatedValue(cloudValues[2],lat,lon,'monotone');
+        // Cloudless points are the common case and need no structure at all.
+        if(low<=0&&mid<=0&&high<=0)continue;
         // Nearest model base avoids inventing a low ceiling between a cloud
         // and the source's 9999 m cloud-free sentinel.
         const base=field.cloudBase?field.grid.getNearestNeighborValue(field.cloudBase,lat,lon):NaN;
-        const [r,g,b,a]=cloudStyle(...layers,lon,lat,field.texture,kmPerPixel,field.cloudVisible??7,base),p=(y*256+x)*4;
-        pixels[p]=r;pixels[p+1]=g;pixels[p+2]=b;pixels[p+3]=a*255;continue;
+        const a=blendCloudLayers(low,mid,high,lon,lat,texture,kmPerPixel,cloudVisible,base,cloudRGB,resolved);
+        if(!a)continue;
+        const p=(y*256+x)*4;
+        pixels[p]=Math.round(cloudRGB[0]);pixels[p+1]=Math.round(cloudRGB[1]);pixels[p+2]=Math.round(cloudRGB[2]);pixels[p+3]=a*255;continue;
       }
       if(field.variable==='visibility'){writeFogColor(value,pixels,(y*256+x)*4,coords.x*256+x,coords.y*256+y);continue;}
       if(precipitation){if(value<PRECIPITATION_THRESHOLD)continue;writePrecipitationColor(field.variable,value,pixels,(y*256+x)*4);continue;}

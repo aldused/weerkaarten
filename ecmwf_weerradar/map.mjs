@@ -13,7 +13,7 @@ export const setWeatherLoader=loader=>{weatherLoader=loader;};
 // Tile rasterisation used a single worker: one busy core while the machine
 // had several idle ones. A small pool renders independent tiles in parallel;
 // every worker keeps its own bounded field cache, together the same budget.
-const POOL_SIZE=Math.max(1,Math.min(4,(globalThis.navigator?.hardwareConcurrency||4)-1));
+const POOL_SIZE=Math.max(1,Math.min(6,(globalThis.navigator?.hardwareConcurrency||4)-1));
 const FIELD_BYTES=Math.round(32*1024*1024/POOL_SIZE),FIELD_ENTRIES=Math.max(8,Math.ceil(48/POOL_SIZE));
 // Local diagnostics only; no reporting endpoint and no visitor tracking.
 // Per-tile samples are kept only when the page is opened with ?profile=1.
