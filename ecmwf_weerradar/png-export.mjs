@@ -29,7 +29,14 @@ export function wrapText(text,maxWidth,measure){
   if(line)lines.push(line);return lines;
 }
 // Compose native planes in paint order; omit controls and reject missing tiles.
-export function captureMap(mapElement,places){
+export function cropMapCanvas(canvas,rect){
+  if(!rect)return canvas;
+  if(rect.width<1||rect.height<1||rect.x<0||rect.y<0||rect.x+rect.width>canvas.width||rect.y+rect.height>canvas.height)throw Error('Het geselecteerde gebied valt buiten de kaart. Selecteer opnieuw.');
+  const cropped=document.createElement('canvas');cropped.width=rect.width;cropped.height=rect.height;
+  cropped.getContext('2d').drawImage(canvas,rect.x,rect.y,rect.width,rect.height,0,0,rect.width,rect.height);
+  return cropped;
+}
+export function captureMap(mapElement,places,rectSelection=null){
   const rect=mapElement.getBoundingClientRect(),canvas=document.createElement('canvas');
   canvas.width=Math.round(rect.width);canvas.height=Math.round(rect.height);
   const ctx=canvas.getContext('2d');ctx.fillStyle='#365f77';ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -46,7 +53,7 @@ export function captureMap(mapElement,places){
   ctx.globalAlpha=1;
   if(places.width&&places.height)ctx.drawImage(places,0,0,canvas.width,canvas.height);
   ctx.getImageData(0,0,1,1); // Fail explicitly if a source blocks CORS export.
-  return canvas;
+  return cropMapCanvas(canvas,rectSelection);
 }
 export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends}){
   const width=Math.max(640,Math.min(1920,mapImage.width)),pad=28,inner=width-pad*2;

@@ -2,6 +2,7 @@ import {createProjectedGrid} from './projected-grid.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
 import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
 import {captureMap,composePNG,exportLegends,pngFilename} from './png-export.mjs';
+import {installAreaSelection} from './area-selection.mjs';
 import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
 import {MODELS,modelFor,regionalFrames,preserveModelTime,isBenelux,isRegional,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
@@ -575,7 +576,14 @@ $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenEle
 let pngURL=null;
 $('png-close').addEventListener('click',()=>$('png-dialog').close());
 $('png-dialog').addEventListener('close',()=>{if(pngURL)URL.revokeObjectURL(pngURL);pngURL=null;$('png-preview').removeAttribute('src');prepareAdjacentFrames();});
-$('export-png').addEventListener('click',async()=>{
+$('export-png').addEventListener('click',()=>exportPNG());
+const areaSelection=installAreaSelection({app:$('app'),overlay:$('area-overlay'),box:$('area-box'),hint:$('area-hint'),save:$('area-save'),cancel:$('area-cancel'),onSave:rect=>exportPNG(rect),onClose:()=>{$('select-area').focus();prepareAdjacentFrames();}});
+$('select-area').addEventListener('click',()=>{
+  if(!current||rendering||refreshing){status('Wacht tot de kaart geladen is om een gebied te selecteren.');return;}
+  stopPlayback();cancelPreparation();areaSelection.open();
+});
+map.on('movestart',()=>{if(!$('area-overlay').hidden)areaSelection.close();});
+async function exportPNG(crop=null){
   stopPlayback();cancelPreparation();
   $('png-preview').hidden=true;$('png-save').hidden=true;$('png-status').textContent='De kaart wordt samengesteld…';$('png-dialog').showModal();$('export-png').disabled=true;
   try{
@@ -587,7 +595,7 @@ $('export-png').addEventListener('click',async()=>{
     if(frame.ids.some(id=>!map.isSourceLoaded(id)||frameErrors.has(id)))throw Error('De kaarttegels worden nog geladen. Probeer het zo opnieuw.');
     drawCities();
     const modelId=modelFor(frame.modelMeta),label=forecastLabel(frame.time,frame.modelMeta.reference_time,MODELS[modelId].label);
-    const canvas=composePNG(captureMap($('map'),$('places')),{
+    const canvas=composePNG(captureMap($('map'),$('places'),crop),{
       title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}`,
       time:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
       legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
@@ -596,10 +604,10 @@ $('export-png').addEventListener('click',async()=>{
     if(!$('png-dialog').open)return;
     if(pngURL)URL.revokeObjectURL(pngURL);pngURL=URL.createObjectURL(blob);
     $('png-preview').src=pngURL;$('png-preview').hidden=false;$('png-save').href=pngURL;$('png-save').download=pngFilename(modelId,frame.iso,frame.mode);$('png-save').hidden=false;
-    $('png-status').textContent=`${canvas.width} × ${canvas.height} pixels · huidige uitsnede · Ed Aldus · Weerlab`;
+    $('png-status').textContent=`${canvas.width} × ${canvas.height} pixels · ${crop?'geselecteerd gebied':'huidige uitsnede'} · Ed Aldus · Weerlab`;
   }catch(error){$('png-status').textContent=error.name==='SecurityError'?'De achtergrondbron blokkeert PNG-export. Vernieuw de pagina en probeer opnieuw.':error.message;}
   finally{$('export-png').disabled=false;}
-});
+}
 $('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
 $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
@@ -607,6 +615,7 @@ $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info'
 $('retry').addEventListener('click',()=>retryLoad());
 document.addEventListener('keydown',e=>{
   if(e.defaultPrevented)return;
+  if(!$('area-overlay').hidden)return;
   if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
   if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]')||document.querySelector('dialog[open]'))return;
   if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)&&(!e.target.closest('button')||e.target.closest('.timeline'))){
@@ -742,7 +751,7 @@ $('search-form').addEventListener('submit',async e=>{
 // Unchanged metadata never reloads fields. Never switch runs during playback.
 let checkingRun=false;
 async function checkForNewRun(){
-  if(!current||document.hidden||playing||rendering||refreshing||checkingRun||Date.now()-checkedAt<10*60*1000)return;
+  if(!current||!$('area-overlay').hidden||document.hidden||playing||rendering||refreshing||checkingRun||Date.now()-checkedAt<10*60*1000)return;
   checkedAt=Date.now();checkingRun=true;const polledModel=selectedModel,polledFrame=current;
   try {
     if(selectedModel!=='ecmwf_ifs'){
