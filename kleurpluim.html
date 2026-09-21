@@ -137,13 +137,22 @@ h1 .stn { font-weight: 500; opacity: 0.82; }
   top: calc(100% + 5px);
   left: 0;
   right: 0;
-  overflow: hidden;
+  max-height: min(340px, 55vh);
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: 8px;
   background: #6f6554;
   border: 1px solid rgba(255,255,255,0.22);
   box-shadow: 0 12px 28px rgba(0,0,0,0.24);
 }
 .zoek-item {
+  display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
   padding: 9px 12px;
   color: rgba(255,255,255,0.9);
   font-size: 0.82rem;
@@ -152,8 +161,11 @@ h1 .stn { font-weight: 500; opacity: 0.82; }
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 .zoek-item:last-child { border-bottom: none; }
-.zoek-item:hover { background: rgba(255,255,255,0.12); }
+.zoek-item:hover,
+.zoek-item.actief,
+.zoek-item:focus-visible { background: rgba(255,255,255,0.16); outline: none; }
 .zoek-item span { color: rgba(255,255,255,0.58); font-size: 0.75rem; }
+.zoek-melding { cursor: default; }
 .datum-controls {
   display: flex;
   align-items: stretch;
@@ -557,10 +569,10 @@ body.embedded .download-btn {
   <div class="balk">
     <div class="zoek-wrap">
       <div class="zoek-rij">
-        <input id="zoek-input" type="text" value="Rotterdam" placeholder="Zoek plaats..." autocomplete="off">
+        <input id="zoek-input" type="text" value="Rotterdam" placeholder="Zoek plaats..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="zoek-resultaten" aria-expanded="false">
         <button class="zoek-btn" id="zoek-btn" type="button">Zoek</button>
       </div>
-      <div id="zoek-resultaten"></div>
+      <div id="zoek-resultaten" role="listbox" aria-label="Kies een plaats"></div>
       <div class="extra-rij">
         <input id="extra-input" type="text" placeholder="Extra tekst achter plaats..." autocomplete="off" aria-label="Extra tekst achter plaats">
       </div>
@@ -1771,6 +1783,8 @@ const DOWNLOAD_LABELS = {
 let zoekTimer = null;
 let zoekSeq = 0;
 let zoekCtrl = null;
+let zoekTreffers = [];
+let zoekActiefIndex = -1;
 let loadSeq = 0;
 let lastSingleChartData = null;
 if (EMBEDDED) document.body.classList.add('embedded');
@@ -3914,13 +3928,74 @@ function setStation(lat, lon, naam) {
 }
 
 function sluitZoek() {
+  const input = document.getElementById('zoek-input');
   document.getElementById('zoek-resultaten').style.display = 'none';
+  input.setAttribute('aria-expanded', 'false');
+  input.removeAttribute('aria-activedescendant');
+  zoekTreffers = [];
+  zoekActiefIndex = -1;
 }
 
 function toonZoekMelding(tekst) {
   const res = document.getElementById('zoek-resultaten');
-  res.innerHTML = `<div class="zoek-item">${escHtml(tekst)}</div>`;
+  zoekTreffers = [];
+  zoekActiefIndex = -1;
+  res.innerHTML = `<div class="zoek-item zoek-melding" role="status">${escHtml(tekst)}</div>`;
   res.style.display = 'block';
+  document.getElementById('zoek-input').setAttribute('aria-expanded', 'true');
+}
+
+function normaliseerZoektekst(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('nl-NL').trim();
+}
+
+function sorteerZoekTreffers(q, treffers) {
+  const gezocht = normaliseerZoektekst(q);
+  return [...treffers].sort((a, b) => {
+    const score = item => {
+      const lokaal = ['NL', 'BE'].includes(String(item.landcode || '').toUpperCase()) ? 0 : 10;
+      const naam = normaliseerZoektekst(item.naam);
+      const overeenkomst = naam === gezocht ? 0 : naam.startsWith(gezocht) ? 1 : 2;
+      return lokaal + overeenkomst;
+    };
+    return score(a) - score(b) || String(a.naam).localeCompare(String(b.naam), 'nl');
+  });
+}
+
+function markeerZoekTreffer(index) {
+  const opties = [...document.querySelectorAll('#zoek-resultaten [role="option"]')];
+  if (!opties.length) return;
+  zoekActiefIndex = (index + opties.length) % opties.length;
+  opties.forEach((optie, i) => {
+    const actief = i === zoekActiefIndex;
+    optie.classList.toggle('actief', actief);
+    optie.setAttribute('aria-selected', String(actief));
+  });
+  const actief = opties[zoekActiefIndex];
+  document.getElementById('zoek-input').setAttribute('aria-activedescendant', actief.id);
+  actief.scrollIntoView({ block: 'nearest' });
+}
+
+function toonZoekTreffers(treffers) {
+  const res = document.getElementById('zoek-resultaten');
+  const input = document.getElementById('zoek-input');
+  zoekTreffers = treffers;
+  zoekActiefIndex = -1;
+  res.innerHTML = '';
+  treffers.forEach((d, index) => {
+    const knop = document.createElement('button');
+    knop.type = 'button';
+    knop.id = `zoek-optie-${index}`;
+    knop.className = 'zoek-item';
+    knop.setAttribute('role', 'option');
+    knop.setAttribute('aria-selected', 'false');
+    knop.innerHTML = `<strong>${escHtml(d.naam)}</strong> <span>${escHtml(d.extra)}</span>`;
+    knop.addEventListener('click', () => setStation(d.lat, d.lon, d.naam));
+    knop.addEventListener('mousemove', () => markeerZoekTreffer(index));
+    res.appendChild(knop);
+  });
+  res.style.display = 'block';
+  input.setAttribute('aria-expanded', 'true');
 }
 
 // De Open-Meteo-geocoder is voor autocomplete gebouwd en kent de Nederlandse
@@ -3929,7 +4004,7 @@ function toonZoekMelding(tekst) {
 // buurtschappen en straten die de geocoder niet kent.
 async function haalZoekTreffers(q, signal) {
   const omUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}` +
-    `&count=8&language=nl&format=json`;
+    `&count=10&language=nl&format=json`;
   try {
     const r = await fetch(omUrl, { signal });
     if (r.ok) {
@@ -3939,29 +4014,31 @@ async function haalZoekTreffers(q, signal) {
         lon: Number(d.longitude),
         naam: String(d.name || '').trim(),
         extra: [d.admin1, d.country].filter(Boolean).join(', '),
+        landcode: String(d.country_code || '').toUpperCase(),
       })).filter(t => t.naam && Number.isFinite(t.lat) && Number.isFinite(t.lon));
-      if (treffers.length) return treffers;
+      if (treffers.length) return sorteerZoekTreffers(q, treffers);
     }
   } catch (e) {
     if (e.name === 'AbortError') throw e;
   }
   const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}` +
-    `&format=json&limit=6&accept-language=nl`;
+    `&format=json&limit=8&accept-language=nl&addressdetails=1`;
   const r = await fetch(nomUrl, { headers: { 'Accept-Language': 'nl' }, signal });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const data = await r.json();
-  return (data || []).map(d => ({
+  const treffers = (data || []).map(d => ({
     lat: Number(d.lat),
     lon: Number(d.lon),
     naam: String(d.display_name || '').split(',')[0].trim(),
     extra: String(d.display_name || '').split(',').slice(1, 3).join(',').trim(),
+    landcode: String(d.address?.country_code || '').toUpperCase(),
   })).filter(t => t.naam && Number.isFinite(t.lat) && Number.isFinite(t.lon));
+  return sorteerZoekTreffers(q, treffers);
 }
 
-async function zoekPlaats(neemEerste = false) {
+async function zoekPlaats() {
   const q = document.getElementById('zoek-input').value.trim();
-  const res = document.getElementById('zoek-resultaten');
-  if (q.length < 2) return;
+  if (q.length < 2) { sluitZoek(); return; }
   const seq = ++zoekSeq;
   if (zoekCtrl) zoekCtrl.abort();
   const ctrl = new AbortController();
@@ -3977,20 +4054,7 @@ async function zoekPlaats(neemEerste = false) {
       toonZoekMelding('Niets gevonden');
       return;
     }
-    if (neemEerste) {
-      const d = treffers[0];
-      setStation(d.lat, d.lon, d.naam);
-      return;
-    }
-    res.innerHTML = '';
-    treffers.forEach(d => {
-      const div = document.createElement('div');
-      div.className = 'zoek-item';
-      div.innerHTML = `<strong>${escHtml(d.naam)}</strong> <span>${escHtml(d.extra)}</span>`;
-      div.addEventListener('click', () => setStation(d.lat, d.lon, d.naam));
-      res.appendChild(div);
-    });
-    res.style.display = 'block';
+    toonZoekTreffers(treffers);
   } catch (e) {
     // Een afgebroken of achterhaald verzoek laat de melding van het nieuwere
     // verzoek staan; alleen een echte fout op het actuele verzoek meldt zich.
@@ -4008,14 +4072,28 @@ document.querySelectorAll('.param-btn').forEach(btn => {
 
 document.getElementById('zoek-input').addEventListener('input', () => {
   clearTimeout(zoekTimer);
-  zoekTimer = setTimeout(() => zoekPlaats(false), 350);
+  zoekTreffers = [];
+  zoekActiefIndex = -1;
+  zoekTimer = setTimeout(zoekPlaats, 350);
 });
 
 document.getElementById('zoek-input').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (zoekTreffers.length) {
+      e.preventDefault();
+      markeerZoekTreffer(zoekActiefIndex + (e.key === 'ArrowDown' ? 1 : -1));
+    }
+    return;
+  }
   if (e.key === 'Enter') {
     e.preventDefault();
     clearTimeout(zoekTimer);
-    zoekPlaats(true);
+    if (zoekActiefIndex >= 0 && zoekTreffers[zoekActiefIndex]) {
+      const d = zoekTreffers[zoekActiefIndex];
+      setStation(d.lat, d.lon, d.naam);
+    } else {
+      zoekPlaats();
+    }
   }
   if (e.key === 'Escape') {
     clearTimeout(zoekTimer);
@@ -4025,7 +4103,7 @@ document.getElementById('zoek-input').addEventListener('keydown', e => {
 
 document.getElementById('zoek-btn').addEventListener('click', () => {
   clearTimeout(zoekTimer);
-  zoekPlaats(true);
+  zoekPlaats();
 });
 document.getElementById('extra-input').addEventListener('input', syncStationLabel);
 document.getElementById('download-4pluim').addEventListener('click', downloadCurrentPng);
