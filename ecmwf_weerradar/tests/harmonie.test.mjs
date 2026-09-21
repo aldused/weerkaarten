@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {HARMONIE_ORIGIN} from '../field-packets.mjs';
 import {harmonieFrames,preserveModelTime} from '../forecast-models.mjs';
 import {forecastLabel} from '../timeline.mjs';
 import {createRegularGrid,createRegularTileSampler,encodeRegularPacket,decodeRegularPacket} from '../regular-grid.mjs';
@@ -22,7 +23,7 @@ test('HARMONIE exposes gusts only when that immutable source contains them',()=>
  const next=meta();next.fields={...next.fields,wind_gusts_10m:{grid}};assert.ok(harmonieFrames(next,'harmonie',Date.parse(next.reference_time))[0].modelMeta.variables.includes('wind_gusts_10m'));
 });
 test('HARMONIE frames preserve original hour, model and run in every key',()=>{
- for(const id of ['harmonie','harmonie46']){const frames=harmonieFrames(meta(undefined,id),id,Date.parse('2026-09-20T09:23Z'));assert.equal(frames[0].iso,'2026-09-20T10:00:00.000Z');assert.equal(frames[0].lead,4);assert.equal(frames.at(-1).lead,60);assert.ok(frames[0].url.includes('/'+id+'/'));assert.equal(frames[0].hours,1);}
+ for(const id of ['harmonie','harmonie46']){const frames=harmonieFrames(meta(undefined,id),id,Date.parse('2026-09-20T09:23Z'));assert.equal(frames[0].iso,'2026-09-20T10:00:00.000Z');assert.equal(frames[0].lead,4);assert.equal(frames.at(-1).lead,60);assert.ok(frames[0].url.startsWith(HARMONIE_ORIGIN+'/harmonie/'+id+'/')); assert.equal(frames[0].hours,1);}
 });
 test('wrong model, truncated sequence and stale regional run are rejected',()=>{
  assert.throws(()=>harmonieFrames(meta(),'harmonie46'));

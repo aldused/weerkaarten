@@ -1,5 +1,6 @@
+import {createProjectedGrid} from './projected-grid.mjs';
 import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
-import {MODELS,modelFor,harmonieFrames,preserveModelTime} from './forecast-models.mjs';
+import {MODELS,modelFor,harmonieFrames,preserveModelTime,isBenelux,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
 import {installMovableMenu} from './movable-menu.mjs';
 import {visibleTimeout} from './frame-scheduler.mjs';
@@ -10,7 +11,7 @@ import { forecastLabel, groupForecastDays, chooseDayEntry, nowFrameIndex } from 
 import {combinedForecastFrames,discoverForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
 import {updateCurrentBounds, domainOptions, getRanges} from '@openmeteo/weather-map-layer';
-import {FieldPackets,FIELD_ORIGIN,HARMONIE_ORIGIN} from './field-packets.mjs';
+import {FieldPackets,FIELD_ORIGIN} from './field-packets.mjs';
 import {createPackedGrid} from './packed-grid.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
@@ -82,7 +83,7 @@ function readField(file,variable,signal){
   const task=createSharedTask(async readSignal=>{
     const data=await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(data.metadata.kind!=='regular')normalizeFieldData(data,variable,intervalByURL.get(file));
-    const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
+    const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     const entry=fieldCache.get(key);
     if(entry)entry.bytes=data.values.byteLength+(data.directions?.byteLength||0)+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
     trimFieldCache();
@@ -212,21 +213,17 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
       if(startup!==startupRevision)return;
       timeline=combinedForecastFrames(candidateMetas,now);
       try{localStorage.setItem('weerlab-ecmwf-runs-v2',JSON.stringify({savedAt:runCacheTime,metas:candidateMetas}));}catch{}
-    }else timeline=harmonieFrames(await json(`${HARMONIE_ORIGIN}/harmonie/${modelId}/latest.json`,signal),modelId,now);
+    }else if(isEuropeanHarmonie(modelId))timeline=await discoverEuropeanHarmonie(url=>json(url,signal),modelId,now);
+    else timeline=harmonieFrames(await json(latestModelURL(modelId),signal),modelId,now);
     if(startup!==startupRevision)return;
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
     timeline.forEach(f=>intervalByURL.set(f.url,f.hours));
     await mapReady;
     if(startup!==startupRevision)return;
-    // Fit the actual regional source before fetching its first weather frame.
-    // Run refreshes/time changes preserve a manual view; explicit shared map
-    // coordinates are also retained on opening a HARMONIE link.
-    const regionalGrid=timeline[0].modelMeta?.source?.fields.precipitation?.grid;
-    if(modelId!=='ecmwf_ifs'&&regionalGrid&&(focusRegion||(!current&&!params.has('center')))){
-      const {lon_min:west,lat_min:south,lon_max:east,lat_max:north}=regionalGrid;
-      if([west,south,east,north].every(Number.isFinite)&&west<east&&south<north){
-        map.fitBounds([[west,south],[east,north]],{padding:{top:innerWidth<=700?146:90,bottom:32,left:16,right:innerWidth<=700?16:60},duration:0});
-      }
+    // Benelux is intentionally tighter than the full regional export. Explicit
+    // model changes use its named region; later hours preserve the user's view.
+    if(focusRegion||(!current&&modelId!=='ecmwf_ifs'&&!params.has('center'))){
+      map.fitBounds(modelView(modelId),{padding:{top:innerWidth<=700?150:80,bottom:innerWidth<=700?155:120,left:12,right:innerWidth<=700?12:65},duration:0});
     }
     const b=map.getBounds();updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
     // A refresh preserves the chosen forecast time where the new run permits
@@ -483,11 +480,11 @@ function syncUI(){
   $('play').disabled=!playing&&!nextFrameReady;$('time-slider').disabled=false;$('now').disabled=false;
   $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
   $('interval-label').textContent=`${MODELS[modelId].detail} · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
-  $('model-attribution').textContent=modelId==='ecmwf_ifs'?'ECMWF / Open-Meteo':'KNMI / Weerlab';
+  $('model-attribution').textContent=MODELS[modelId].attribution;
   $('model-coverage').textContent=MODELS[modelId].region;
-  $('model-resolution').textContent=modelId==='ecmwf_ifs'?'Modelrooster circa 9 km.':'Regionale Weerlab-rasters van circa 2–4 km, afhankelijk van het veld.';
+  $('model-resolution').textContent=MODELS[modelId].resolution;
   $('point-model').textContent=MODELS[modelId].label+'-VERWACHTING';
-  $('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=modelId==='ecmwf_ifs';
+  $('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
@@ -554,7 +551,7 @@ $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintP
 $('speed').addEventListener('change',()=>{if(playing&&!rendering&&nextFrameReady)scheduleNext();});
 $('zoom-in').addEventListener('click',()=>map.zoomIn());$('zoom-out').addEventListener('click',()=>map.zoomOut());
 $('europe').addEventListener('click',()=>map.fitBounds([[-24,34],[42,70]],{padding:{top:105,bottom:185,left:45,right:75},duration:600}));
-$('home').addEventListener('click',()=>map.flyTo({center:[5.3,51.6],zoom:7,duration:650}));
+$('home').addEventListener('click',()=>map.fitBounds(modelView('harmonie'),{padding:{top:100,bottom:140,left:12,right:60},duration:400}));
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('app').requestFullscreen();}catch{status('Volledig scherm is niet beschikbaar in deze browser.',true);}});
 $('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
@@ -646,7 +643,7 @@ function updatePoint(fetchMissing=true){
   }
   const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
   const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
-  $('point-note').textContent=`Tijdvak: ${forecastLabel(period.start).text} – ${forecastLabel(period.end).full}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}${forecastLabel(current.time,period.run,MODELS[modelFor(current.modelMeta)].label).runLabel}. ${modelFor(current.modelMeta)==='ecmwf_ifs'?'Rooster circa 9 km.':'Regionale rasters circa 2–4 km. Bewolking: maximum van de hoge, middelbare en lage laag.'}`;
+  $('point-note').textContent=`Tijdvak: ${forecastLabel(period.start).text} – ${forecastLabel(period.end).full}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}${forecastLabel(current.time,period.run,MODELS[modelFor(current.modelMeta)].label).runLabel}. ${MODELS[modelFor(current.modelMeta)].resolution}`;
   Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);
@@ -684,8 +681,8 @@ async function checkForNewRun(){
   checkedAt=Date.now();checkingRun=true;const polledModel=selectedModel,polledFrame=current;
   try {
     if(selectedModel!=='ecmwf_ifs'){
-      const latest=await json(`${HARMONIE_ORIGIN}/harmonie/${selectedModel}/latest.json`);
-      if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||(latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version)))await start(undefined,polledModel);
+      const latest=await json(latestModelURL(selectedModel));
+      if(selectedModel===polledModel&&current===polledFrame&&!playing&&!rendering&&!refreshing&&(Date.parse(latest.reference_time)>Date.parse(current.modelMeta.reference_time)||(isBenelux(selectedModel)&&latest.reference_time===current.modelMeta.reference_time&&latest.version!==current.modelMeta.version)))await start(undefined,polledModel);
       return;
     }
     const latest=await json(`${DATA_ROOT}/latest.json`);
