@@ -2,7 +2,9 @@
 
 De knop **PNG** naast Lagen maakt een PNG-voorbeeld van de huidige kaartuitsnede. De gebruiker slaat het beeld op via **Download PNG**. Dit werkt via dezelfde kaartweergave voor alle modellen en voor weer, neerslag, temperatuur en wind.
 
-Met **Gebied** kan de gebruiker met de muis een rechthoek trekken. Menu's verdwijnen tijdelijk; **Maak PNG** exporteert uitsluitend de geselecteerde kaartpixels met dezelfde header/footer. Opnieuw slepen vervangt het kader; **Annuleren** of Escape herstelt de kaart. Kaders kleiner dan 40 × 40 pixels worden niet geaccepteerd. Verplaatsen of formaatwijziging van de kaart annuleert de selectie; automatische modelverversing wacht tot de selectie is afgerond.
+Met **Gebied** kan de gebruiker met de muis een exact vierkant (1:1) trekken. De breedte en hoogte blijven gelijk, ook bij omgekeerd slepen of aan de kaartrand. Menu's verdwijnen tijdelijk; **Maak PNG** exporteert uitsluitend de geselecteerde kaartpixels met dezelfde header/footer. De kaartuitsnede is vierkant; de header en footer komen erbuiten. Opnieuw slepen vervangt het kader; **Annuleren** of Escape herstelt de kaart. Kaders kleiner dan 40 × 40 pixels worden niet geaccepteerd. Verplaatsen of formaatwijziging van de kaart annuleert de selectie; automatische modelverversing wacht tot de selectie is afgerond.
+
+De vaste vierkante selectie vervangt het vrije rechthoekige kader. Totale suite: 195 geslaagde tests, inclusief vier sleeprichtingen, horizontale/verticale bewegingen en exact gelijke pixelafmetingen aan alle kaartranden.
 
 Gebiedselectie gecontroleerd met een echte muissleep van 560 × 480 pixels: PNG toont exact die kaartuitsnede zonder selectierand of donkere overlay. Aanvullende tests dekken vier sleeprichtingen, kaartgrenzen, afronding en exacte canvas-broncoördinaten. Totale suite: 194 geslaagde tests.
 
