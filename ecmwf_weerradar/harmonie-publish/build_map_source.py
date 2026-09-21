@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-PARAMETERS={'precipitation':'neerslag','temperature_2m':'temp','cloud_cover':'bewolking','wind_u_component_10m':'wind','visibility':'zicht','wind_gusts_10m':'windstoten'}
+PARAMETERS={'precipitation':'neerslag','temperature_2m':'temp','cloud_cover':'bewolking','wind_u_component_10m':'wind','visibility':'zicht','wind_gusts_10m':'windstoten','cloud_base':'wolkenbasis'}
 def build(model, meta_path, output):
     meta_path=Path(meta_path); raw=meta_path.read_bytes(); meta=json.loads(raw)
     run=datetime.fromisoformat(meta['run_utc'].replace('Z','+00:00'))
@@ -33,7 +33,7 @@ def build(model, meta_path, output):
         length=ny*nx*components*size
         fields[variable]={'grid':grid,'offset':offset,'length':length,'dtype':dtype,'bytes':size,'components':components,'scale':info.get('scale',16),'power':info.get('power',2),'source_parameter':key}
         sources.append((path,stamp,stream,data,length));offset+=length
-    if any(v not in fields for v in PARAMETERS if v!='wind_gusts_10m'):raise ValueError('Een vereist weerveld ontbreekt')
+    if any(v not in fields for v in PARAMETERS if v not in ('wind_gusts_10m','cloud_base')):raise ValueError('Een vereist weerveld ontbreekt')
     contract={'schema':1,'model':model,'reference_time':run.isoformat().replace('+00:00','Z'),'valid_times':times,'fields':fields,'frame_bytes':offset,'cloud_method':'maximum of high/middle/low cloud fraction','source':'KNMI via Weerlab'}
     digest=hashlib.sha256(json.dumps(contract,sort_keys=True).encode())
     output=Path(output);output.mkdir(parents=True,exist_ok=True)

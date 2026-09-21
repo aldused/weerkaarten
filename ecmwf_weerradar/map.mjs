@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import {cloudBytes} from './cloud-fields.mjs';
 import {MapDetails} from './map-details.mjs';
 import { renderTile } from './tile-renderer.mjs';
 import { SharedRenderQueue, abortError } from './render-queue.mjs';
@@ -65,8 +66,8 @@ function renderPixels({field,coords},signal){
     if(slot.fields.has(field.key)){
       const bytes=slot.fields.get(field.key);slot.fields.delete(field.key);slot.fields.set(field.key,bytes);
     }else{
-      slot.worker.postMessage({type:'field',key:field.key,gridData:field.gridData,ranges:field.ranges,packed:field.packed,variable:field.variable,values:field.data.values,cloudLow:field.cloudLow,cloudHigh:field.cloudHigh});
-      const bytes=field.data.values.byteLength+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
+      slot.worker.postMessage({type:'field',key:field.key,gridData:field.gridData,ranges:field.ranges,packed:field.packed,variable:field.variable,values:field.data.values,cloudLow:field.cloudLow,cloudMid:field.cloudMid,cloudHigh:field.cloudHigh,cloudBase:field.cloudBase});
+      const bytes=field.data.values.byteLength+cloudBytes(field);
       slot.fields.set(field.key,bytes);slot.bytes+=bytes;
       while(slot.fields.size>FIELD_ENTRIES||(slot.bytes>FIELD_BYTES&&slot.fields.size>2)){
         const old=slot.fields.keys().next().value;
@@ -74,7 +75,7 @@ function renderPixels({field,coords},signal){
       }
     }
     const id=++jobCounter;slot.job={id,resolve,reject,field,coords,signal,started:performance.now()};
-    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture});}
+    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture,cloudVisible:field.cloudVisible});}
     catch(error){slot.job=null;reject(error);}
     // A worker's synchronous render cannot be interrupted. Keep its slot busy
     // until the reply arrives, even when subscribers cancel, so no message
@@ -84,7 +85,7 @@ function renderPixels({field,coords},signal){
 const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256,concurrency:()=>Math.max(1,liveWorkers())});
 const canvasCommits=new CanvasCommits();
 function paint(field,coords,signal){
-  const key=field.key+'|'+field.texture+'|'+coords.z+'/'+coords.x+'/'+coords.y;
+  const key=field.key+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;
   return paintQueue.request(key,{field,coords},signal);
 }
 const WeatherTiles=L.GridLayer.extend({

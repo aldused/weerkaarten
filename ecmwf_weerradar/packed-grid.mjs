@@ -1,4 +1,5 @@
 import {GridFactory} from '@openmeteo/weather-map-layer';
+import {CLOUD_KEYS,cloudArrays,hasCloudLayers,decodeCloudArrays} from './cloud-fields.mjs';
 
 // Preserve original O1280 values and the complete interpolation stencil. Only
 // unused longitudes are omitted; this is not a resampled or quantized raster.
@@ -16,19 +17,23 @@ export function packField(data,gridData,ranges,bounds,identity={}){
     rows.push({y,n,start,x,len,offset:count});count+=len;
   }
   const values=new Float32Array(count),directions=data.directions?new Float32Array(count):undefined;
+  const layers=hasCloudLayers(data)?Object.fromEntries(CLOUD_KEYS.map(key=>[key,new Float32Array(count)])):{};
   for(const row of rows)for(let x=0;x<row.len;x++){
     const from=row.start+mod(row.x+x,row.n),to=row.offset+x;
     values[to]=data.values[from];if(directions)directions[to]=data.directions[from];
+    for(const key of Object.keys(layers))layers[key][to]=data[key][from];
   }
-  return {metadata:{version:1,...identity,gridData,ranges,bounds,rows,count,scaleFactor:data.scaleFactor,hasDirections:!!directions},values,directions};
+  return {metadata:{version:1,...identity,gridData,ranges,bounds,rows,count,scaleFactor:data.scaleFactor,hasDirections:!!directions,...(hasCloudLayers(data)?{cloudLayers:true}:{})},values,directions,...layers};
 }
 export function encodePacket(packet){
   const header=new TextEncoder().encode(JSON.stringify(packet.metadata));
   const offset=8+Math.ceil(header.length/4)*4;
-  const bytes=new Uint8Array(offset+packet.values.byteLength+(packet.directions?.byteLength||0));
+  const extra=packet.metadata.cloudLayers?cloudArrays(packet):[];
+  const bytes=new Uint8Array(offset+packet.values.byteLength+(packet.directions?.byteLength||0)+extra.reduce((n,a)=>n+a.byteLength,0));
   new DataView(bytes.buffer).setUint32(0,0x574c5031);new DataView(bytes.buffer).setUint32(4,header.length);
   bytes.set(header,8);bytes.set(new Uint8Array(packet.values.buffer,packet.values.byteOffset,packet.values.byteLength),offset);
   if(packet.directions)bytes.set(new Uint8Array(packet.directions.buffer,packet.directions.byteOffset,packet.directions.byteLength),offset+packet.values.byteLength);
+  extra.forEach((a,i)=>new Float32Array(bytes.buffer,offset+packet.values.byteLength*(1+Number(!!packet.directions)+i),a.length).set(a));
   return bytes;
 }
 export function decodePacket(buffer,expected){
@@ -36,7 +41,7 @@ export function decodePacket(buffer,expected){
   const length=view.getUint32(4),offset=8+Math.ceil(length/4)*4;
   if(length>100000||offset>buffer.byteLength)throw new Error('Ongeldige kaartindex');
   const m=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,8,length)));
-  if(m.version!==1||!Number.isSafeInteger(m.count)||m.count<1||m.count>2000000||buffer.byteLength!==offset+m.count*4*(m.hasDirections?2:1))throw new Error('Onvolledige kaartgegevens');
+  if(m.version!==1||!Number.isSafeInteger(m.count)||m.count<1||m.count>2000000||buffer.byteLength!==offset+m.count*4*(1+Number(!!m.hasDirections)+(m.cloudLayers?3:0))||(m.variable==='cloud_layers'&&!m.cloudLayers))throw new Error('Onvolledige kaartgegevens');
   for(const key of ['source','variable'])if(expected?.[key]!==undefined&&expected[key]!==m[key])throw new Error('Kaartgegevens horen bij een andere selectie');
   if(expected?.bounds&&JSON.stringify(expected.bounds)!==JSON.stringify(m.bounds))throw new Error('Afwijkend kaartgebied');
   if(m.gridData?.type!=='gaussian'||m.gridData.gaussianGridLatitudeLines!==1280||m.gridData.nx!==6599680||m.gridData.ny!==1||!Number.isFinite(m.scaleFactor)||m.scaleFactor<=0||!Array.isArray(m.ranges)||m.ranges.length!==2||m.ranges[0].start!==0||m.ranges[0].end!==1||!Number.isSafeInteger(m.ranges[1].start)||!Number.isSafeInteger(m.ranges[1].end)||m.ranges[1].start<0||m.ranges[1].end>6599680||m.ranges[1].end<=m.ranges[1].start)throw new Error('Ongeldig ECMWF-raster');
@@ -47,7 +52,7 @@ export function decodePacket(buffer,expected){
     count+=row.len;previous=row.y;
   }
   if(count!==m.count)throw new Error('Onvolledig ECMWF-raster');
-  return {metadata:m,values:new Float32Array(buffer,offset,m.count),directions:m.hasDirections?new Float32Array(buffer,offset+m.count*4,m.count):undefined,scaleFactor:m.scaleFactor};
+  return {metadata:m,values:new Float32Array(buffer,offset,m.count),directions:m.hasDirections?new Float32Array(buffer,offset+m.count*4,m.count):undefined,scaleFactor:m.scaleFactor,...decodeCloudArrays(buffer,offset+m.count*4*(m.hasDirections?2:1),m.count,m.cloudLayers)};
 }
 export function createPackedGrid(metadata){
   const native=GridFactory.create(metadata.gridData,metadata.ranges),rows=new Map(metadata.rows.map(r=>[r.y,r]));

@@ -1,4 +1,6 @@
 import {createProjectedGrid} from './projected-grid.mjs';
+import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
+import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
 import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
 import {MODELS,modelFor,harmonieFrames,preserveModelTime,isBenelux,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
@@ -43,6 +45,11 @@ for(const band of [...FOG_BANDS].reverse()){
   swatch.style.setProperty('--fog-color',band.color);swatch.className=band.hatch?'fog-swatch fog-hatched':'fog-swatch';
   item.append(swatch,document.createTextNode(band.label.replace('Zicht ','')));$('fog-bands').append(item);
 }
+for(const [type,style] of Object.entries(CLOUD_STYLES)){
+  const swatch=document.querySelector(`[data-cloud-swatch="${type}"]`);
+  swatch.style.setProperty('--cloud-color',`rgba(${style.rgb.join(',')},${style.sample})`);
+}
+const cloudVisibility=()=>($('cloud-low').checked?1:0)|($('cloud-mid').checked?2:0)|($('cloud-high').checked?4:0);
 const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
@@ -84,8 +91,10 @@ function readField(file,variable,signal){
     const data=await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(data.metadata.kind!=='regular')normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
+    for(const key of CLOUD_KEYS)if(data[key])field[key]=data[key];
+    if(data.cloudBase)field.cloudBase=data.cloudBase;
     const entry=fieldCache.get(key);
-    if(entry)entry.bytes=data.values.byteLength+(data.directions?.byteLength||0)+(field.cloudLow?.byteLength||0)+(field.cloudHigh?.byteLength||0);
+    if(entry)entry.bytes=data.values.byteLength+(data.directions?.byteLength||0)+cloudBytes(field);
     trimFieldCache();
     return field;
   });
@@ -94,7 +103,7 @@ function readField(file,variable,signal){
   trimFieldCache();
   return consumeTask(task,signal);
 }
-mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked}));});
+mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked,cloudVisible:Number(u.searchParams.get('clouds')??7)}));});
 const params = new URLSearchParams(location.search);
 let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
 $('model-select').value=selectedModel;
@@ -320,7 +329,7 @@ function sampleVariables(layerVariables,modelMeta){
   const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):['temperature_2m']):[];
   return [...new Set([...layerVariables,...labels])];
 }
-function weatherURL(frame,variable){return `om://${frame.url}?variable=${variable}&interpolation=monotone&color_blend=true`;}
+function weatherURL(frame,variable){return `om://${frame.url}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
 function addLayer(frame,variable,prefix){
   const id=`${prefix}-${variable}`;
   map.addSource(id,{type:'raster',url:weatherURL(frame,variable),tileSize:256,maxzoom:10});
@@ -497,6 +506,12 @@ function syncUI(){
   legend.querySelector('.legend-colors').style.background=gradient;
   legend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=numbers[i]);
   $('fog-legend').hidden=!f.ids.some(id=>id.endsWith('-visibility'));
+  $('cloud-legend').hidden=!f.ids.some(id=>id.endsWith('-cloud_cover'));
+  for(const type of ['high','mid','low'])document.querySelector(`[data-cloud-swatch="${type}"]`).parentElement.classList.toggle('cloud-off',!$(`cloud-${type}`).checked);
+  const hasBase=!!f.samples.cloud_cover?.cloudBase;
+  $('cloud-legend-fog').classList.toggle('cloud-off',!f.ids.some(id=>id.endsWith('-visibility'))&&!(hasBase&&$('cloud-low').checked));
+  $('very-low-key').hidden=$('cloud-legend').hidden;
+  $('very-low-key').textContent=hasBase?'Mistkleur: ook zeer lage bewolking · wolkenbasis <150 m.':'Zeer lage bewolking: geen afzonderlijke wolkenbasis in deze bron.';
   $('fog-unavailable').hidden=!(f.mode==='weather'&&$('clouds').checked&&$('fog').checked&&!f.modelMeta.variables.includes('visibility'));
   const snowLegend=$('snow-legend');
   snowLegend.hidden=!f.ids.some(id=>id.endsWith('snowfall_water_equivalent'));
@@ -513,7 +528,7 @@ function cancelPreparation(){
 }
 function prepareAdjacentFrames(){
   if(!current||rendering||refreshing||document.hidden)return;
-  cancelPreparation();const frame=current,texture=$('texture').checked;
+  cancelPreparation();const frame=current,texture=$('texture').checked,cloudVisible=cloudVisibility();
   const connection=navigator.connection;
   const limited=connection?.saveData||['slow-2g','2g','3g'].includes(connection?.effectiveType)||matchMedia('(max-width:700px), (pointer:coarse)').matches;
   adjacentFrames.start(frame.index,frame.timeline.length,async(index,signal)=>{
@@ -523,7 +538,7 @@ function prepareAdjacentFrames(){
     const sampleVars=sampleVariables(vars,next.modelMeta);
     const fields=await Promise.all(sampleVars.map(v=>readField(next.url,v,signal)));
     signal.throwIfAborted();
-    await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture})),signal);
+    await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture,cloudVisible})),signal);
   },{previous:!limited,delayMs:limited?1200:350,ready:()=>{
     if(current!==frame)return;
     nextFrameReady=true;$('app').dataset.nextFrameReady='true';$('play').disabled=false;$('play').title='Afspelen / pauzeren';
@@ -544,7 +559,7 @@ $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);})
 let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
-['clouds','snow','texture','fog'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
+['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>requestFrame(wanted,true)));
 $('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
@@ -592,7 +607,9 @@ function drawCities(){
     const name=city.name, w=Math.max(windMode?76:58,name.length*font*.53), rect=[p.x-w/2-9,p.y-(windMode?44:33),p.x+w/2+9,p.y+18];
     if(boxes.some(b=>rect[0]<b[2]&&rect[2]>b[0]&&rect[1]<b[3]&&rect[3]>b[1]))continue;
     boxes.push(rect);
-    const temp=sample(current.samples.temperature_2m,city.lat,city.lon),cloud=sample(current.samples.cloud_cover,city.lat,city.lon),rain=sample(current.samples.precipitation,city.lat,city.lon);
+    const temp=sample(current.samples.temperature_2m,city.lat,city.lon),rain=sample(current.samples.precipitation,city.lat,city.lon);
+    const cloudField=current.samples.cloud_cover;
+    const cloud=cloudIconType(...CLOUD_KEYS.map(key=>cloudField?.[key]?cloudField.grid.getInterpolatedValue(cloudField[key],city.lat,city.lon,'monotone'):NaN));
     ctx.font=`500 ${font}px Arial`;ctx.textAlign='center';ctx.lineJoin='round';ctx.lineWidth=2.7;ctx.strokeStyle='rgba(28,42,42,.7)';ctx.fillStyle='#f4f6f7';
     ctx.strokeText(name,p.x,p.y+12);ctx.fillText(name,p.x,p.y+12);
     if(!windMode){ctx.fillStyle='#f5f8e9';ctx.fillRect(p.x-1.3,p.y-4,2.6,2.6);}
@@ -603,8 +620,8 @@ function drawCities(){
       ctx.fillStyle=fog.color;ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
       for(let line=0;line<3;line++){ctx.beginPath();ctx.moveTo(p.x-20+(line%2)*2,p.y-21+line*5);ctx.lineTo(p.x-6,p.y-21+line*5);ctx.stroke();}
     }
-    else if(Number.isFinite(cloud)&&cloud<35&&!(rain>.1))skyIcon(ctx,p.x-13,p.y-16,city);
-    else if(Number.isFinite(cloud)&&cloud<65){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
+    else if(cloud==='clear'&&!(rain>.1))skyIcon(ctx,p.x-13,p.y-16,city);
+    else if(cloud==='filtered'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
       const wind=current.samples.wind_u_component_10m;
       if(wind?.data.directions&&Number.isFinite(displayedValue)){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-27);ctx.rotate(a+Math.PI);ctx.beginPath();ctx.moveTo(0,9);ctx.lineTo(0,-9);ctx.lineTo(-4,-4);ctx.moveTo(0,-9);ctx.lineTo(4,-4);ctx.strokeStyle='#243846';ctx.lineWidth=4;ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();ctx.restore();}
@@ -635,6 +652,22 @@ function updatePoint(fetchMissing=true){
       el.title=`${p.name} · ${forecastLabel(current.time).full} · berekend zicht: ${visibilityText(value)}${band?' · '+band.label:''}`;
     }
     el.append(strong,small);values.append(el);
+    if(variable==='cloud_cover'){
+      const cloud=current.samples.cloud_cover;
+      for(const [key,type] of [['cloudHigh','high'],['cloudMid','mid'],['cloudLow','low']]){
+        const value=cloud?.[key]?cloud.grid.getInterpolatedValue(cloud[key],p.lat,p.lng,'monotone'):NaN;
+        const item=document.createElement('div'),amount=document.createElement('strong'),label=document.createElement('small');
+        item.className='cloud-point-value';amount.textContent=Number.isFinite(value)?`${Math.round(value)} %`:'—';label.textContent=CLOUD_STYLES[type].label;item.append(amount,label);values.append(item);
+      }
+      if(cloud?.cloudBase){
+        const base=cloud.grid.getNearestNeighborValue(cloud.cloudBase,p.lat,p.lng);
+        const item=document.createElement('div'),amount=document.createElement('strong'),label=document.createElement('small');
+        item.className='cloud-point-value';amount.textContent=!Number.isFinite(base)||base<0?'—':base===9999?'Wolkenvrij':`${Math.round(base)} m`;
+        label.textContent=isVeryLowCloud(base)?'Wolkenbasis · zeer laag':'Wolkenbasis';
+        item.title='Oorspronkelijke modelhoogte van het dichtstbijzijnde bronpunt; <150 m is de weergavegrens voor zeer lage bewolking.';
+        item.append(amount,label);values.append(item);
+      }
+    }
     if(variable==='wind_u_component_10m'){
       const wind=current.samples[variable],direction=wind?.data.directions?wind.grid.getLinearInterpolatedDirection(wind.data.directions,p.lat,p.lng):NaN;
       const item=document.createElement('div'),heading=document.createElement('strong'),label=document.createElement('small');

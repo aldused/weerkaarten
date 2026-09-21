@@ -4,6 +4,8 @@ Een zelfstandige, inzoombare kaart voor Weerlab. Open `index.html` via HTTP(S), 
 
 ## Lokaal starten
 
+**Bewolkingsupdate 21 september 2026:** de nieuwe `cloud_layers`-transportvelden vereisen ook de gewijzigde Workers in `edge-fields/`; beide zijn vóór deze frontendpublicatie uitgerold. Dezelfde laagstijlen gelden voor ECMWF en alle HARMONIE-keuzes. Controleer de volledige keten lokaal zonder deployment met `npm run build` en `node tests/preview-clouds.mjs`; open vervolgens http://127.0.0.1:8794/index.html. Deze controleserver leest de echte openbare modeldata en wijzigt alleen de endpointadressen in lokale responses. Zie [CLOUDS-2026-09-21.md](CLOUDS-2026-09-21.md).
+
 ```sh
 npm ci
 npm run build
@@ -21,7 +23,7 @@ Open http://127.0.0.1:8788/. De kant-en-klare bestanden in `assets/` zijn al geb
 - `precipitation` en `snowfall_water_equivalent` zijn reeds gedeaccumuleerde **intervalsommen** in millimeter. De kaart deelt door het voorafgaande 1/3/6-uursinterval. De legenda toont mm/uur; sneeuw in mm/uur smeltwater.
 - Temperatuur is in de gedecodeerde bron al °C en bewolking al 0–100%; deze krijgen geen extra schaalconversie. Wind wordt uit de oorspronkelijke u/v-componenten in m/s afgeleid en eenmaal naar km/uur omgerekend. Plaatswaarden komen uit dezelfde run en tijdstap als de kaart.
 - Kaart, plaatswaarden en puntwaarden gebruiken dezelfde monotone kubische interpolatie. Hergebruik van roostergeometrie en berekeningen binnen een tegel versnelt het tekenen; tests vergelijken iedere onderzochte pixel exact met de oorspronkelijke bibliotheek. Er worden geen roosterpunten overgeslagen. Windrichting gebruikt de circulaire richtingsinterpolatie van de bibliotheek.
-- De totale bewolkingsgraad is oorspronkelijke modeldata. Dichte bewolking vormt een glad grijswit wolkendek. Optioneel verschijnt aan wolkenranden brede, zwakke structuur; de eerdere kleine, korrelige vlokken zijn verwijderd. Deze structuur is **illustratief**, geen satellietbeeld of voorspelling van individuele wolkjes. Zet deze uit bij Kaartlagen voor een glad weergegeven modelveld. Voor de illustratieve kleuring worden geen afzonderlijke lage/hoge wolkenvelden gedownload.
+- De totale bewolkingsgraad en de hoge, middelbare en lage bedekking worden samen uit dezelfde modelrun opgehaald (`cloud_layers`). De kaartkleur komt uit de afzonderlijke lagen. Hoge bewolking is bijna wit en 10–25% ondoorzichtig; middelbare bewolking lichtgrijs en 30–50%; lage wolken grijs en 60–85%, met compacte structuurkernen tot 95%. Het percentage bepaalt de bedekte ruimte, niet de intrinsieke opacity of kleur. De structuur is illustratief, geen extra modeldetail of gemeten optische dikte. Bij grof uitzoomen en zonder textuur wordt de subpixelbedekking vlakgemiddeld weergegeven. De drie lagen zijn apart schakelbaar; puntwaarden behouden de oorspronkelijke percentages.
 - Alleen het Europees domein (-26…46° O, 29…73° N) wordt als weerkaart weergegeven. Netwerkverzoeken lezen intern complete breedtebanden uit het gereduceerde Gaussische rooster.
 
 Bronnen: [ECMWF-modeldocumentatie bij Open-Meteo](https://open-meteo.com/en/docs/ecmwf-api), [Open-Meteo AWS Open Data](https://github.com/open-meteo/open-data), [OM-kaartbibliotheek](https://github.com/open-meteo/weather-map-layer).

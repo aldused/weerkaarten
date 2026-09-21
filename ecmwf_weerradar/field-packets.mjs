@@ -8,6 +8,9 @@ export class FieldPackets{
     Object.assign(this,{fetcher,storage,maxBytes,maxEntries});this.writes=0;this.maintenance=null;
   }
   async read(file,variable,bounds,signal){
+    // A separate transport identity keeps old total-only cloud packets out
+    // of both caches while leaving all non-cloud protocols unchanged.
+    if(variable==='cloud_cover')variable='cloud_layers';
     const path=new URL(file).pathname,isHarmonie=/^\/harmonie\/(harmonie|harmonie46)\/\d{10}-[a-f0-9]{16}\/\d{3}\.bin$/.test(path);
     const source=isHarmonie?path:path.match(/\/data_spatial\/(?:ecmwf_ifs|knmi_harmonie_arome_europe|dmi_harmonie_arome_europe)\/.*$/)?.[0],projected=/^\/data_spatial\/(knmi|dmi)_harmonie_arome_europe\//.test(path),decode=isHarmonie?decodeRegularPacket:projected?decodeProjectedPacket:decodePacket;
     if(!source)throw new Error('Ongeldige ECMWF-bron');

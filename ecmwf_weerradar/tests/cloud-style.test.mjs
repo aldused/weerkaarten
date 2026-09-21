@@ -1,74 +1,80 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cloudStyle} from '../cloud-style.mjs';
+import {cloudStyle,cloudLayerStyle,cloudIconType,CLOUD_STYLES} from '../cloud-style.mjs';
+import {renderTile} from '../tile-renderer.mjs';
+import {createRegularGrid} from '../regular-grid.mjs';
 
-test('cloud illustration preserves clear sky, overcast and increasing model cover',()=>{
-  for(let y=0;y<12;y++)for(let x=0;x<12;x++){
-    const lon=4+x*.023,lat=51+y*.016;
-    let previous=-1;
-    for(let cover=0;cover<=100;cover+=5){
-      const [shade,alpha]=cloudStyle(cover,cover,0,lon,lat,true,.6);
-      assert.ok(shade>=193&&shade<=251);
-      assert.ok(alpha>=previous&&alpha<=.92);
-      previous=alpha;
-      if(cover===0)assert.equal(alpha,0);
-      if(cover===100)assert.equal(alpha,.92);
+test('100% high cloud remains a white veil; height sets distinct opacity bands',()=>{
+  for(const type of ['high','mid','low'])for(let i=0;i<1000;i++){
+    const rgba=cloudLayerStyle(type,100,2+i*.023,49+i*.017,true,.2),s=CLOUD_STYLES[type];
+    assert.deepEqual(rgba.slice(0,3),s.rgb);
+    assert.ok(rgba[3]>=s.opacity[0]&&rgba[3]<=s.opacity[1]);
+    assert.equal(cloudLayerStyle(type,0,2,50,true,.2)[3],0);
+  }
+  for(const detail of [false,true])for(const km of [.1,1,3,20]){
+    assert.ok(cloudStyle(0,0,100,5,52,detail,km)[3]<=.25);
+    assert.ok(cloudStyle(0,100,0,5,52,detail,km)[3]<=.50);
+    assert.ok(cloudStyle(100,0,0,5,52,detail,km)[3]>.60);
+  }
+});
+test('model amount changes occupied area, not colour or opacity inside a cloud',()=>{
+  for(const type of ['high','mid','low']){
+    let area=0,identical=0;
+    for(let i=0;i<10000;i++){
+      const lon=-5+(i%100)*.14,lat=45+Math.floor(i/100)*.12;
+      const part=cloudLayerStyle(type,30,lon,lat,true,.1),more=cloudLayerStyle(type,70,lon,lat,true,.1);
+      const full=cloudLayerStyle(type,100,lon,lat,true,.1);
+      // Integrate feathered edges by their fractional area instead of counting
+      // every nearly transparent edge pixel as a completely covered pixel.
+      area+=part[3]/full[3];
+      if(Math.abs(part[3]-full[3])<1e-10)identical++;
+      assert.ok(more[3]>=part[3]);assert.deepEqual(part.slice(0,3),more.slice(0,3));
     }
+    assert.ok(area>2600&&area<3400,type+': '+area+'/10000 covered');
+    assert.ok(identical>1600,type+': cloud fragments must keep their density');
   }
 });
-
-test('subpixel cloud structure fades out and smooth mode stays independent of coordinates',()=>{
-  const far=[],close=[];
-  for(let i=0;i<200;i++){
-    const lon=4+i*.013,lat=51+i*.007;
-    const smooth=cloudStyle(65,65,0,lon,lat,false);
-    assert.deepEqual(cloudStyle(65,65,0,lon,lat,true,40),smooth);
-    assert.deepEqual(smooth,cloudStyle(65,65,0,0,0,false));
-    close.push(cloudStyle(65,65,0,lon,lat,true,.6)[1]);
-    far.push(cloudStyle(65,65,0,lon,lat,true,20)[1]);
+test('overlapping layers retain contributions and each can be inspected separately',()=>{
+  const p=[5,52,false,1],combined=cloudStyle(100,100,100,...p);
+  for(const mask of [1,2,4]){
+    const single=cloudStyle(100,100,100,...p,mask);
+    assert.notDeepEqual(single,combined);assert.ok(single[3]<combined[3]);
   }
-  const variance=a=>{const mean=a.reduce((s,v)=>s+v,0)/a.length;return a.reduce((s,v)=>s+(v-mean)**2,0)/a.length;};
-  assert.ok(variance(far)<variance(close)*.05);
+  assert.deepEqual(cloudStyle(100,100,100,...p,0),[0,0,0,0]);
+  assert.deepEqual(cloudStyle(100,100,100,...p,4),cloudStyle(0,0,100,...p));
+  assert.deepEqual(cloudStyle(0,0,0,...p),[0,0,0,0]);
+  assert.deepEqual(cloudStyle(NaN,0,100,...p),[0,0,0,0]);
 });
-
-test('cloud texture has no strong horizontal or vertical alignment',()=>{
-  let horizontal=0,vertical=0;
-  for(let y=0;y<100;y++)for(let x=0;x<100;x++){
-    const lon=3+x*.03,lat=50+y*.03*70/111;
-    const opacity=cloudStyle(65,65,0,lon,lat,true,.4)[1];
-    horizontal+=(cloudStyle(65,65,0,lon+.006,lat,true,.4)[1]-opacity)**2;
-    vertical+=(cloudStyle(65,65,0,lon,lat+.006*70/111,true,.4)[1]-opacity)**2;
+test('coarse pixels and texture-off use area averaging with fixed per-height density',()=>{
+  for(const type of ['high','mid','low']){
+    const full=cloudLayerStyle(type,100,5,52,false),half=cloudLayerStyle(type,50,5,52,false);
+    assert.equal(half[3],full[3]/2);
+    assert.deepEqual(cloudLayerStyle(type,50,0,0,false),half);
+    assert.deepEqual(cloudLayerStyle(type,50,5,52,true,80),half);
   }
-  assert.ok(horizontal/vertical>.75&&horizontal/vertical<1.33,`${horizontal/vertical}`);
 });
-
-test('closed decks are smooth and partial cloud has restrained broad shading',()=>{
-  const shades=[],alphas=[];
-  let smallStepEnergy=0,broadStepEnergy=0;
-  for(let y=0;y<80;y++)for(let x=0;x<80;x++){
-    const lon=2+x*.04,lat=49+y*.04*70/111;
-    for(const cover of [94,97,100]){
-      assert.deepEqual(cloudStyle(cover,cover,0,lon,lat,true,.4),cloudStyle(cover,cover,0,0,0,false));
-    }
-    const [shade,alpha]=cloudStyle(60,60,0,lon,lat,true,.4);
-    shades.push(shade);alphas.push(alpha);
-    smallStepEnergy+=(cloudStyle(60,60,0,lon+1/70,lat,true,.4)[1]-alpha)**2;
-    broadStepEnergy+=(cloudStyle(60,60,0,lon+8/70,lat,true,.4)[1]-alpha)**2;
-  }
-  assert.ok(Math.max(...shades)-Math.min(...shades)<=8,'partial cloud must not look speckled');
-  assert.ok(Math.max(...alphas)-Math.min(...alphas)<.04,'texture must not punch fake holes');
-  assert.ok(smallStepEnergy<broadStepEnergy*.05,'variation must be broad rather than granular');
+test('illustrative low-cloud structure includes dense 85–95% cores without changing the input fraction',()=>{
+ let dense=0;
+ for(let i=0;i<1000;i++){
+  const a=cloudLayerStyle('low',100,2+i*.023,49+i*.017,true,.2)[3];
+  if(a>=.85){dense++;assert.ok(a<=.95);}
+ }
+ assert.ok(dense>50);
 });
-
-test('cloud transition is continuous and visible on bright and dark backgrounds',()=>{
-  for(let cover=7;cover<=100;cover+=.1){
-    const previous=cloudStyle(cover-.1,cover-.1,0,4.2,51.4,true,.5)[1];
-    const next=cloudStyle(cover,cover,0,4.2,51.4,true,.5)[1];
-    assert.ok(next>=previous&&next-previous<.002,'no opacity cutoff at thin or closed cloud');
-  }
-  const [shade,alpha]=cloudStyle(100,100,0,4.2,51.4,true,.5);
-  for(const background of [40,250]){
-    const composite=shade*alpha+background*(1-alpha);
-    assert.ok(Math.abs(composite-background)>25,'closed cloud should remain legible');
-  }
+test('city icons keep sun/moon visible through a full high veil, unlike a low deck',()=>{
+  assert.equal(cloudIconType(0,0,0),'clear');
+  assert.equal(cloudIconType(0,0,100),'filtered');
+  assert.equal(cloudIconType(0,100,0),'filtered');
+  assert.equal(cloudIconType(100,0,0),'overcast');
+  assert.equal(cloudIconType(100,100,100),'overcast');
+  assert.equal(cloudIconType(NaN,0,100),null);
+});
+test('actual tile renderer uses all three model fields and preserves source values',()=>{
+  const grid=createRegularGrid({n_lat:2,n_lon:2,lon_min:0,lon_max:12,lat_min:48,lat_max:57}),coords={z:6,x:32,y:21};
+  const values=new Float32Array(4).fill(100),zero=new Float32Array(4),field={variable:'cloud_cover',data:{values},grid,texture:false};
+  const high=renderTile({...field,cloudLow:zero,cloudMid:zero,cloudHigh:values},coords);
+  const low=renderTile({...field,cloudLow:values,cloudMid:zero,cloudHigh:zero},coords);
+  let valid=0;for(let p=0;p<high.length;p+=4)if(high[p+3]){valid++;assert.ok(high[p+3]<=64);assert.ok(high[p]>240);assert.ok(low[p+3]>=153);assert.ok(low[p]<150);}
+  assert.ok(valid>10000);assert.ok(values.every(v=>v===100));assert.ok(zero.every(v=>v===0));
+  assert.throws(()=>renderTile(field,coords),/wolkenlagen ontbreken/);
 });

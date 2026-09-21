@@ -9,12 +9,12 @@ test('mistkleur volgt uitsluitend het zicht, met exacte grenzen in meters',()=>{
   for(const [value,id] of [[0,'dense'],[49.999,'dense'],[50,'thick'],[199.999,'thick'],[200,'fog'],[499.999,'fog']])assert.equal(fogBand(value)?.id,id);
   assert.equal(visibilityText(49.999),'<50 m');assert.equal(visibilityText(199.999),'<200 m');assert.equal(visibilityText(499.999),'<500 m');assert.equal(visibilityText(50),'50 m');assert.equal(visibilityText(null),'Zicht niet beschikbaar');
 });
-test('kaart gebruikt dezelfde kleuren als legenda en tooltip; alleen dichte mist heeft arcering',()=>{
+test('kaart gebruikt dezelfde egale grijsgele kleuren als legenda en tooltip, zonder arcering',()=>{
   for(const [value,band] of [[20,FOG_BANDS[0]],[100,FOG_BANDS[1]],[300,FOG_BANDS[2]]]){
     const out=new Uint8ClampedArray(8);writeFogColor(value,out,0,3,3);writeFogColor(value,out,4,0,0);
     assert.deepEqual([...out.slice(0,3)],band.rgb);
     assert.equal(out[3],218);
-    assert.equal(out[7]===235,band.hatch);
+    assert.equal(band.hatch,false);assert.deepEqual(out.slice(0,4),out.slice(4,8));
   }
   const left=new Uint8ClampedArray(4),right=new Uint8ClampedArray(4);
   writeFogColor(20,left,0,256,12);writeFogColor(20,right,0,0,12+256);assert.deepEqual(left,right);

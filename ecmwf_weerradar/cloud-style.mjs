@@ -1,6 +1,14 @@
-// Sub-grid texture is illustrative, not additional forecast information.
-// Native total cloud fraction determines coverage/opacity. No additional
-// model fields need to be downloaded just to shade an illustrative texture.
+// Sub-grid shapes are illustrative. Model fractions control covered area;
+// height controls colour and the opacity of an occupied cloud fragment.
+export const CLOUD_STYLES=Object.freeze({
+  high:{label:'Hoge bewolking',rgb:[250,252,255],opacity:[.10,.25],sample:.18},
+  mid:{label:'Middelbare bewolking',rgb:[211,217,224],opacity:[.30,.50],sample:.40},
+  low:{label:'Lage bewolking',rgb:[126,135,145],opacity:[.60,.95],sample:.82},
+});
+// Display threshold, not an official aviation/warning category. Only an
+// actual model cloud-base field may select this style; never cloud fraction.
+export const VERY_LOW_CLOUD=Object.freeze({maxBase:150,rgb:[222,220,202],opacity:.85});
+export const isVeryLowCloud=metres=>Number.isFinite(metres)&&metres>=0&&metres<VERY_LOW_CLOUD.maxBase;
 const clamp=(v,lo=0,hi=1)=>Math.min(hi,Math.max(lo,v));
 function hash(x,y){let h=Math.imul(x,374761393)+Math.imul(y,668265263);h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;}
 const F=(Math.sqrt(3)-1)/2,G=(3-Math.sqrt(3))/6;
@@ -21,26 +29,50 @@ function visibility(scale,pixel){
   // them into scratches when the map is zoomed out.
   const f=clamp((scale/Math.max(pixel,.01)-1)/3);return f*f*(3-2*f);
 }
-export function cloudStyle(cover,low,high,lon,lat,detail,kmPerPixel=0){
-  const c=clamp(cover/100),l=clamp(low/100),h=clamp(high/100);
-  // A continuous transfer curve lets thin cloud fade into the map while a
-  // closed deck reads as one soft grey-white mass on both land and dark sea.
-  const fraction=clamp((c-.08)/.92),base=fraction*fraction*(3-2*fraction);
-  const smoothShade=213+25*h+8*(1-l);
-  // Detail belongs at cloud margins, not across every overcast pixel. The
-  // smooth fade also avoids a visible boundary where this fast path starts.
-  const edgeFraction=clamp((.94-c)/.24);
-  const edgeFade=edgeFraction*edgeFraction*(3-2*edgeFraction);
-  if(!detail||base===0||edgeFade===0)return [Math.round(smoothShade),base*.92];
-  // Only broad, low-contrast variation: tiny invented billows made the old
-  // display look granular. These world-fixed scales stay continuous across
-  // tiles, and the real ECMWF cloud field still determines every cloud mass.
+// A global empirical CDF turns simplex noise into a uniform coverage rank.
+// No per-tile normalization: patterns stay continuous across tile boundaries.
+const cdf=new Float32Array(256);
+for(let i=0;i<4096;i++)cdf[Math.round(clamp((noise(i*.754877666,i*.569840296)+1)/2)*255)]++;
+for(let i=0,sum=0;i<cdf.length;i++){sum+=cdf[i];cdf[i]=sum/4096;}
+const rank=n=>{const x=clamp((n+1)/2)*255,i=Math.min(254,Math.floor(x));return cdf[i]+(cdf[i+1]-cdf[i])*(x-i);};
+const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
+export function cloudLayerStyle(type,cover,lon,lat,detail=true,kmPerPixel=0){
+  const style=CLOUD_STYLES[type],c=clamp(cover/100);
+  if(!Number.isFinite(c)||c===0)return [...style.rgb,0];
+  if(!detail)return [...style.rgb,c*style.sample];
   const x=lon*70,y=lat*111;
-  const broad=visibility(32,kmPerPixel),soft=visibility(14,kmPerPixel);
-  const structure=.82*broad*noise(x/32,y/32)
-    +.18*soft*noise((.8*x+.6*y)/14+59,(-.6*x+.8*y)/14-31);
-  const edge=base*(1-base)*edgeFade;
-  const coverage=clamp(base+.08*edge*structure);
-  const shade=clamp(smoothShade+16*edge*structure,193,251);
-  return [Math.round(shade),coverage*.92];
+  // Thin elongated fibres above, broad patches in the middle, compact low
+  // cells below. Their coordinates do not depend on cloud amount or time.
+  const n=type==='high'?noise((x+.45*y)/52,(y-.25*x)/8):type==='mid'?noise(x/26+67,y/21-19):noise(x/16-41,y/16+23);
+  const amount=rank(n),resolved=detail?visibility(type==='high'?8:type==='mid'?21:16,kmPerPixel):0;
+  // Feather illustrative edges: a forecast fraction is not a sharp outline
+  // of an observed cloud. The normal map uses area averaging (detail=false).
+  const mask=c===1?1:smooth((c-amount+.10)/.20);
+  // At coarse zoom / with texture disabled, fractional area is averaged;
+  // the intrinsic cloud opacity remains the same for every cover value.
+  const area=c*(1-resolved)+mask*resolved;
+  const [min,max]=style.opacity;
+  const structure=.5+.5*n;
+  const opacity=style.sample*(1-resolved)+(min+(max-min)*structure)*resolved;
+  return [...style.rgb,area*opacity];
+}
+export function cloudStyle(low,mid,high,lon,lat,detail=true,kmPerPixel=0,visible=7,cloudBase=NaN){
+  if(![low,mid,high].every(Number.isFinite))return [0,0,0,0];
+  let r=0,g=0,b=0,a=0;
+  // Higher translucent layers remain visible above the low grey deck.
+  for(const [type,cover,bit] of [['low',low,1],['mid',mid,2],['high',high,4]]){
+    if(!(visible&bit)||cover<=0)continue;
+    const [cr,cg,cb,alpha]=type==='low'&&isVeryLowCloud(cloudBase)
+      ?[...VERY_LOW_CLOUD.rgb,clamp(cover/100)*VERY_LOW_CLOUD.opacity]
+      :cloudLayerStyle(type,cover,lon,lat,detail,kmPerPixel);
+    r=cr*alpha+r*(1-alpha);g=cg*alpha+g*(1-alpha);b=cb*alpha+b*(1-alpha);a=alpha+a*(1-alpha);
+  }
+  return a?[Math.round(r/a),Math.round(g/a),Math.round(b/a),a]:[0,0,0,0];
+}
+// Presentation-only icon classification: a full high veil must not use the
+// same solid-cloud icon as a full low deck. Never expose this as model cover.
+export function cloudIconType(low,mid,high){
+  if(![low,mid,high].every(Number.isFinite))return null;
+  const opacity=cloudStyle(low,mid,high,0,0,false)[3];
+  return opacity<.15?'clear':opacity<.60?'filtered':'overcast';
 }

@@ -3,6 +3,7 @@ import {decodePacket,createPackedGrid} from '../packed-grid.mjs';
 import {renderTile} from '../tile-renderer.mjs';
 import {FIELD_ORIGIN} from '../field-packets.mjs';
 import {fieldWindow,visibleWeatherTiles} from '../field-window.mjs';
+import {CLOUD_KEYS} from '../cloud-fields.mjs';
 
 const run=process.argv[2]||'2026/09/20/0600Z';
 const valid=process.argv[3]||'2026-09-20T1400';
@@ -20,12 +21,13 @@ const median=a=>[...a].sort((p,q)=>p-q)[Math.floor(a.length/2)];
 const time=(field,list)=>{const t=[];for(const coords of list){const s=performance.now();renderTile(field,coords);t.push(performance.now()-s);}return t;};
 console.log(`tiles binnen ${tiles.length}, rand ${ring.length}, bounds ${bounds.map(v=>v.toFixed(2))}`);
 for(const variable of ['cloud_cover','precipitation','temperature_2m','visibility']){
-  const url=`${FIELD_ORIGIN}${source}?`+new URLSearchParams({v:'3',variable,bounds:bounds.join(',')});
+  const transportVariable=variable==='cloud_cover'?'cloud_layers':variable;
+  const url=`${process.env.FIELD_ORIGIN||FIELD_ORIGIN}${source}?`+new URLSearchParams({v:'3',variable:transportVariable,bounds:bounds.join(',')});
   const response=await fetch(url);
   if(!response.ok){console.log(variable,'HTTP',response.status);continue;}
   const buffer=await response.arrayBuffer();
-  const data=decodePacket(buffer,{source,variable,bounds});
-  const field={data,grid:createPackedGrid(data.metadata),packed:data.metadata,variable,key:variable,texture:true};
+  const data=decodePacket(buffer,{source,variable:transportVariable,bounds});
+  const field={data,grid:createPackedGrid(data.metadata),packed:data.metadata,variable,key:variable,texture:false,...Object.fromEntries(CLOUD_KEYS.map(key=>[key,data[key]]))};
   time(field,tiles.slice(0,4));                       // warm-up
   const inside=time(field,tiles),outside=time(field,ring);
   const sum=a=>a.reduce((p,q)=>p+q,0);

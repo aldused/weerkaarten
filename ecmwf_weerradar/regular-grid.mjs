@@ -1,5 +1,6 @@
 // Existing HARMONIE longitude/latitude rasters. Outside their domain is missing,
 // never zero precipitation or a repeated edge pixel.
+import {cloudArrays,decodeCloudArrays} from './cloud-fields.mjs';
 export function createRegularGrid(g){
  const nx=g.n_lon,ny=g.n_lat,dx=(g.lon_max-g.lon_min)/(nx-1),dy=(g.lat_max-g.lat_min)/(ny-1);
  if(!Number.isInteger(nx)||!Number.isInteger(ny)||nx<2||ny<2||!(dx>0)||!(dy>0))throw Error('Ongeldig HARMONIE-rooster');
@@ -14,15 +15,26 @@ export function createRegularGrid(g){
  }
  // The common grid API passes a fourth interpolation-method argument. Keep
  // scalar sampling separate: a truthy 'monotone' must never mean direction.
- return {kind:'regular',...g,getInterpolatedValue:(v,lat,lon)=>interpolate(v,lat,lon),getLinearInterpolatedValue:(v,lat,lon)=>interpolate(v,lat,lon),getLinearInterpolatedDirection:(v,lat,lon)=>interpolate(v,lat,lon,true)};
+ return {kind:'regular',...g,getInterpolatedValue:(v,lat,lon)=>interpolate(v,lat,lon),getLinearInterpolatedValue:(v,lat,lon)=>interpolate(v,lat,lon),getLinearInterpolatedDirection:(v,lat,lon)=>interpolate(v,lat,lon,true),getNearestNeighborValue:(v,lat,lon)=>{
+  const x=(lon-g.lon_min)/dx,y=(lat-g.lat_min)/dy;
+  // Exact half-grid ties always choose the north/east point, independent of
+  // crop origin and tiny floating-point errors in coordinate reconstruction.
+  const eps=1e-9;
+  if(!Number.isFinite(x+y)||x<-eps||x>nx-1+eps||y<-eps||y>ny-1+eps)return NaN;
+  const nearest=(p,n)=>Math.min(n-1,Math.max(0,Math.floor(p+.5+eps)));
+  return v[nearest(y,ny)*nx+nearest(x,nx)];
+ }};
 }
 const MAGIC=0x31524c57;
-export function encodeRegularPacket(meta,values,directions){
+export function encodeRegularPacket(meta,values,directions,layers){
  const json=new TextEncoder().encode(JSON.stringify(meta)),offset=12+Math.ceil(json.length/4)*4;
- const buffer=new ArrayBuffer(offset+values.byteLength+(directions?.byteLength||0)),view=new DataView(buffer);
+ const extra=meta.cloudLayers?cloudArrays(layers):[];
+ if(meta.hasCloudBase){if(!meta.cloudLayers||layers.cloudBase?.length!==values.length)throw Error('Ongeldige wolkenbasis');extra.push(layers.cloudBase);}
+ const buffer=new ArrayBuffer(offset+values.byteLength+(directions?.byteLength||0)+extra.reduce((n,a)=>n+a.byteLength,0)),view=new DataView(buffer);
  view.setUint32(0,MAGIC,true);view.setUint32(4,json.length,true);view.setUint32(8,values.length,true);
  new Uint8Array(buffer,12,json.length).set(json);new Float32Array(buffer,offset,values.length).set(values);
  if(directions)new Float32Array(buffer,offset+values.byteLength,directions.length).set(directions);
+ extra.forEach((a,i)=>new Float32Array(buffer,offset+values.byteLength*(1+Number(!!directions)+i),a.length).set(a));
  return buffer;
 }
 export function decodeRegularPacket(buffer,expected){
@@ -32,8 +44,8 @@ export function decodeRegularPacket(buffer,expected){
  const metadata=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,12,length)));
  if(metadata.schema!==1||metadata.kind!=='regular'||metadata.source!==expected.source||metadata.variable!==expected.variable||JSON.stringify(metadata.bounds)!==JSON.stringify(expected.bounds))throw Error('HARMONIE-selectie wijkt af');
  const grid=createRegularGrid(metadata.grid);
- if(count!==grid.n_lon*grid.n_lat||buffer.byteLength!==offset+count*4*(metadata.directions?2:1))throw Error('Afgekort HARMONIE-rooster');
- return {metadata,values:new Float32Array(buffer,offset,count),...(metadata.directions?{directions:new Float32Array(buffer,offset+count*4,count)}:{})};
+ if(count!==grid.n_lon*grid.n_lat||buffer.byteLength!==offset+count*4*(1+Number(!!metadata.directions)+(metadata.cloudLayers?3:0)+Number(!!metadata.hasCloudBase))||(metadata.variable==='cloud_layers'&&!metadata.cloudLayers)||(metadata.hasCloudBase&&!metadata.cloudLayers))throw Error('Afgekort HARMONIE-rooster');
+ return {metadata,values:new Float32Array(buffer,offset,count),...(metadata.directions?{directions:new Float32Array(buffer,offset+count*4,count)}:{}),...decodeCloudArrays(buffer,offset+count*4*(metadata.directions?2:1),count,metadata.cloudLayers),...(metadata.hasCloudBase?{cloudBase:new Float32Array(buffer,offset+count*4*(4+Number(!!metadata.directions)),count)}:{})};
 }
 export function createRegularTileSampler(grid,values,coords,size=256){
  if(grid.kind!=='regular')return null;

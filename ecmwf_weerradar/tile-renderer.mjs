@@ -21,25 +21,34 @@ const palettes=Object.fromEntries(Object.entries(scales).map(([k,v])=>[k,colorsF
 export function renderTile(field,coords){
   const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable);
   const sampler=createGaussianTileSampler(field.grid,field.data.values,coords)||createRegularTileSampler(field.grid,field.data.values,coords);
+  const cloud=field.variable==='cloud_cover';
+  if(cloud&&![field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>a?.length===field.data.values.length))throw Error('Afzonderlijke wolkenlagen ontbreken');
+  const cloudValues=cloud?[field.cloudLow,field.cloudMid,field.cloudHigh]:[];
+  const cloudSamplers=cloudValues.map(values=>createGaussianTileSampler(field.grid,values,coords)||createRegularTileSampler(field.grid,values,coords));
   const longitudes=sampler?.longitudes||Array.from({length:256},(_,x)=>(coords.x+(x+.5)/256)/world*360-180);
   for(let y=0;y<256;y++){
     const lat=sampler?.latitudes[y]??Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/256)/world)))*180/Math.PI;
     const kmPerPixel=40075*Math.cos(lat*Math.PI/180)/(256*world);
     if(lat<EUROPE[1]||lat>EUROPE[3])continue;
     const row=sampler?.row(y);
+    const cloudRows=cloudSamplers.map(s=>s?.row(y));
     for(let x=0;x<256;x++){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
       const value=row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
+      if(cloud){
+        const layers=cloudValues.map((values,i)=>cloudRows[i]?cloudRows[i][x]:field.grid.getInterpolatedValue(values,lat,lon,'monotone'));
+        // Nearest model base avoids inventing a low ceiling between a cloud
+        // and the source's 9999 m cloud-free sentinel.
+        const base=field.cloudBase?field.grid.getNearestNeighborValue(field.cloudBase,lat,lon):NaN;
+        const [r,g,b,a]=cloudStyle(...layers,lon,lat,field.texture,kmPerPixel,field.cloudVisible??7,base),p=(y*256+x)*4;
+        pixels[p]=r;pixels[p+1]=g;pixels[p+2]=b;pixels[p+3]=a*255;continue;
+      }
       if(field.variable==='visibility'){writeFogColor(value,pixels,(y*256+x)*4,coords.x*256+x,coords.y*256+y);continue;}
       if(precipitation){if(value<PRECIPITATION_THRESHOLD)continue;writePrecipitationColor(field.variable,value,pixels,(y*256+x)*4);continue;}
       const displayValue=field.variable==='wind_u_component_10m'?beaufort(value):value;
       const c=Math.min(palette.n-1,Math.max(0,Math.round((displayValue-palette.min)/(palette.max-palette.min)*(palette.n-1))))*4,p=(y*256+x)*4;
       pixels[p]=palette.rgba[c];pixels[p+1]=palette.rgba[c+1];pixels[p+2]=palette.rgba[c+2];pixels[p+3]=palette.rgba[c+3];
-      if(field.variable==='cloud_cover'){
-        const [shade,alpha]=cloudStyle(value,value,0,lon,lat,field.texture,kmPerPixel);
-        pixels[p]=shade;pixels[p+1]=Math.min(255,shade+2);pixels[p+2]=Math.min(255,shade+3);pixels[p+3]=alpha*255;
-      }
     }
   }
   return pixels;

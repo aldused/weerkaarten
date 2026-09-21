@@ -9,7 +9,7 @@ self.onmessage=({data:m})=>{
   if(m.type==='drop'){fields.delete(m.key);return;}
   try{
     const field=fields.get(m.key);if(!field)throw new Error('Tekenveld niet meer beschikbaar');
-    const started=performance.now(),pixels=renderTile({...field,texture:m.texture},m.coords);
+    const started=performance.now(),pixels=renderTile({...field,texture:m.texture,cloudVisible:m.cloudVisible},m.coords);
     self.postMessage({id:m.id,pixels,renderMs:performance.now()-started},[pixels.buffer]);
   }catch(error){self.postMessage({id:m.id,error:error.message});}
 };

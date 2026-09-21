@@ -1,12 +1,13 @@
 import {domainOptions,getRanges} from '@openmeteo/weather-map-layer';
 import {EUROPEAN_HARMONIE,projectedRanges,projectedPacket,encodeProjectedPacket} from '../projected-grid.mjs';
 import {packField,encodePacket} from '../packed-grid.mjs';
+import {CLOUD_FIELDS} from '../cloud-fields.mjs';
 const ROOT='https://openmeteo.s3.us-west-2.amazonaws.com';
 const MODELS='(ecmwf_ifs|knmi_harmonie_arome_europe|dmi_harmonie_arome_europe)';
 const PATH=new RegExp('^/data_spatial/'+MODELS+'/(\\d{4}/\\d{2}/\\d{2})/(\\d{2})00Z/(\\d{4}-\\d{2}-\\d{2})T(\\d{2})00\\.om$');
 const META=new RegExp('^/data_spatial/'+MODELS+'/(latest\\.json|\\d{4}/\\d{2}/\\d{2}/\\d{2}00Z/meta\\.json)$');
 const validRunHour=(model,hour)=>hour>=0&&hour<24&&(model==='ecmwf_ifs'?hour%6===0:model==='dmi_harmonie_arome_europe'?hour%3===0:true);
-const variables=new Set(['cloud_cover','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m','wind_gusts_10m']);
+const variables=new Set(['cloud_cover','cloud_layers','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m','wind_gusts_10m']);
 const grid=domainOptions.find(d=>d.value==='ecmwf_ifs').grid;
 const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Server-Timing, X-Weerlab-Cache, X-Source-Points, X-Packed-Points','Timing-Allow-Origin':'*'};
 const fail=(message,status)=>new Response(message,{status,headers:{...CORS,'Cache-Control':'no-store'}});
@@ -45,7 +46,15 @@ return async function handle(request,env,ctx){
     request.signal.throwIfAborted();
     const source=ROOT+url.pathname;let loaded;
     if(projected&&ranges.some(r=>r.end<=r.start)){ranges.splice(0,2,{start:0,end:1},{start:0,end:1});loaded={values:new Float32Array([NaN]),scaleFactor:1};}
-    else loaded=await readField(source,projected&&variable==='wind_u_component_10m'?'wind_speed_10m':variable,ranges,request.signal);
+    else if(variable==='cloud_layers'){
+      // Same immutable file, crop and run for all four fields; never infer
+      // cloud height or optical density from the total cloud fraction.
+      const names={values:'cloud_cover',...CLOUD_FIELDS};
+      const parts=await Promise.all(Object.entries(names).map(async([key,name])=>[key,await readField(source,name,ranges,request.signal)]));
+      loaded={...parts[0][1]};
+      for(const [key,data] of parts){if(data.values.length!==loaded.values.length)throw Error('Wolkenlagen hebben verschillende roosters');loaded[key]=data.values;}
+    }else loaded=await readField(source,projected&&variable==='wind_u_component_10m'?'wind_speed_10m':variable,ranges,request.signal);
+    if(variable==='cloud_layers'&&!loaded.cloudLow)for(const key of Object.keys(CLOUD_FIELDS))loaded[key]=new Float32Array(loaded.values.length).fill(NaN);
     request.signal.throwIfAborted();
     const readEnd=performance.now(),packet=projected?projectedPacket(loaded,model,ranges,bounds,{source:url.pathname,variable}):packField(loaded,grid,ranges,bounds,{source:url.pathname,variable});
     const bytes=projected?encodeProjectedPacket(packet):encodePacket(packet),packEnd=performance.now();

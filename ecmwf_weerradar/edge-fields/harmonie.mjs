@@ -1,4 +1,4 @@
-import {encodeRegularPacket} from '../regular-grid.mjs';
+import {createRegularGrid,encodeRegularPacket} from '../regular-grid.mjs';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Server-Timing, X-Weerlab-Cache','Timing-Allow-Origin':'*'};
 const manifests=new Map();
 function publicSource(signal){return {async get(key,options){
@@ -15,6 +15,25 @@ function publicSource(signal){return {async get(key,options){
 }};}
 const error=(text,status)=>new Response(text,{status,headers:{...cors,'Cache-Control':'no-store'}});
 async function deliver(response,hit,start){const headers=new Headers(response.headers);headers.set('Content-Encoding','gzip');headers.set('Server-Timing',`field;dur=${performance.now()-start}`);headers.set('X-Weerlab-Cache',hit?'HIT':'MISS');return new Response(response.body.pipeThrough(new CompressionStream('gzip')),{headers,encodeBody:'manual'});}
+async function readCrop(source,prefix,step,info,bounds,signal){
+ const g=info.grid,dx=(g.lon_max-g.lon_min)/(g.n_lon-1),dy=(g.lat_max-g.lat_min)/(g.n_lat-1);
+ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+ const x0=clamp(Math.floor((bounds[0]-g.lon_min)/dx)-2,0,g.n_lon-2),x1=clamp(Math.ceil((bounds[2]-g.lon_min)/dx)+2,x0+1,g.n_lon-1);
+ const y0=clamp(Math.floor((bounds[1]-g.lat_min)/dy)-2,0,g.n_lat-2),y1=clamp(Math.ceil((bounds[3]-g.lat_min)/dy)+2,y0+1,g.n_lat-1);
+ const nx=x1-x0+1,ny=y1-y0+1,count=nx*ny;
+ const components=await Promise.all(Array.from({length:info.components},async(_,c)=>{
+  signal.throwIfAborted();
+  const offset=info.offset+(c*g.n_lat+y0)*g.n_lon*info.bytes,length=ny*g.n_lon*info.bytes;
+  const part=await source.get(prefix+'/'+step+'.bin',{range:{offset,length}});
+  if(!part)throw Error('Modelbestand ontbreekt');const bytes=await part.arrayBuffer();signal.throwIfAborted();
+  if(bytes.byteLength!==length)throw Error('Onvolledig modelveld');const view=new DataView(bytes),out=new Float32Array(count);
+  for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){
+   const i=(y*g.n_lon+x+x0)*info.bytes,q=info.dtype===0?view.getFloat32(i,true):view.getUint8(i);
+   out[y*nx+x]=info.dtype===1?(q/info.scale)**info.power:info.dtype===2?q/255:q;
+  }return out;
+ }));
+ return {components,count,grid:{n_lon:nx,n_lat:ny,lon_min:g.lon_min+x0*dx,lon_max:g.lon_min+x1*dx,lat_min:g.lat_min+y0*dy,lat_max:g.lat_min+y1*dy}};
+}
 export async function harmonie(request,env,ctx){
  const url=new URL(request.url),start=performance.now(),source=env.HARMONIE_MAPS||publicSource(request.signal);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
@@ -32,33 +51,29 @@ export async function harmonie(request,env,ctx){
  try{
   const prefix=`map-source/${m[1]}/${m[2]}`,object=await source.get(prefix+'/meta.json');
   if(!object)return error('Deze modelrun is verlopen. Ververs de kaart.',410);
-  const meta=await object.json(),info=meta.fields[variable],step=Number(m[3]);
+  const meta=await object.json(),info=meta.fields[variable==='cloud_layers'?'cloud_cover':variable],step=Number(m[3]);
   if(meta.model!==m[1]||meta.version!==m[2]||!info||step>=meta.valid_times.length)return error('Veld of tijdstip ontbreekt',400);
-  const g=info.grid,dx=(g.lon_max-g.lon_min)/(g.n_lon-1),dy=(g.lat_max-g.lat_min)/(g.n_lat-1);
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  // Two cells of interpolation support, including the exact model boundary.
-  const x0=clamp(Math.floor((bounds[0]-g.lon_min)/dx)-2,0,g.n_lon-2),x1=clamp(Math.ceil((bounds[2]-g.lon_min)/dx)+2,x0+1,g.n_lon-1);
-  const y0=clamp(Math.floor((bounds[1]-g.lat_min)/dy)-2,0,g.n_lat-2),y1=clamp(Math.ceil((bounds[3]-g.lat_min)/dy)+2,y0+1,g.n_lat-1);
-  const nx=x1-x0+1,ny=y1-y0+1,count=nx*ny,components=[];
-  await Promise.all(Array.from({length:info.components},async(_,c)=>{
-   request.signal.throwIfAborted();
-   const offset=info.offset+(c*g.n_lat+y0)*g.n_lon*info.bytes,length=ny*g.n_lon*info.bytes;
-   const part=await source.get(prefix+'/'+m[3]+'.bin',{range:{offset,length}});
-   if(!part)throw Error('Modelbestand ontbreekt');const bytes=await part.arrayBuffer();request.signal.throwIfAborted();
-   if(bytes.byteLength!==length)throw Error('Onvolledig modelveld');const view=new DataView(bytes),out=new Float32Array(count);
-   for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){
-    const i=(y*g.n_lon+x+x0)*info.bytes,q=info.dtype===0?view.getFloat32(i,true):view.getUint8(i);
-    out[y*nx+x]=info.dtype===1?(q/info.scale)**info.power:info.dtype===2?q/255:q;
-   }components[c]=out;
-  }));
+  if(variable==='cloud_layers'&&info.components!==3)throw Error('Afzonderlijke wolkenlagen ontbreken');
+  const baseInfo=variable==='cloud_layers'?meta.fields.cloud_base:null;
+  if(baseInfo&&(baseInfo.components!==1||baseInfo.dtype!==0))throw Error('Ongeldig wolkenbasisveld');
+  // Cloud base may have a different native resolution. Read it from exactly
+  // the same immutable frame, retaining its own grid during extraction.
+  const [{components,count,grid},base]=await Promise.all([
+   readCrop(source,prefix,m[3],info,bounds,request.signal),
+   baseInfo?readCrop(source,prefix,m[3],baseInfo,bounds,request.signal):null,
+  ]);
   const values=new Float32Array(count),directions=variable==='wind_u_component_10m'?new Float32Array(count):null;
   for(let i=0;i<count;i++){
-   if(variable==='cloud_cover')values[i]=100*Math.max(components[0][i],components[1][i],components[2][i]);
+   if(variable==='cloud_cover'||variable==='cloud_layers')values[i]=100*Math.max(components[0][i],components[1][i],components[2][i]);
    else if(directions||variable==='wind_gusts_10m'){const u=components[0][i],v=components[1][i];values[i]=Math.hypot(u,v)*3.6;if(directions)directions[i]=(Math.atan2(-u,-v)*180/Math.PI+360)%360;}
    else values[i]=components[0][i];
   }
-  const grid={n_lon:nx,n_lat:ny,lon_min:g.lon_min+x0*dx,lon_max:g.lon_min+x1*dx,lat_min:g.lat_min+y0*dy,lat_max:g.lat_min+y1*dy};
-  const packet=encodeRegularPacket({schema:1,kind:'regular',source:url.pathname,variable,bounds,grid,directions:!!directions},values,directions);
+  const layers=variable==='cloud_layers'?{cloudHigh:components[0].map(v=>v*100),cloudMid:components[1].map(v=>v*100),cloudLow:components[2].map(v=>v*100)}:undefined;
+  if(base){
+   const baseGrid=createRegularGrid(base.grid),dx=(grid.lon_max-grid.lon_min)/(grid.n_lon-1),dy=(grid.lat_max-grid.lat_min)/(grid.n_lat-1);
+   layers.cloudBase=Float32Array.from({length:count},(_,i)=>baseGrid.getNearestNeighborValue(base.components[0],grid.lat_min+Math.floor(i/grid.n_lon)*dy,grid.lon_min+(i%grid.n_lon)*dx));
+  }
+  const packet=encodeRegularPacket({schema:1,kind:'regular',source:url.pathname,variable,bounds,grid,directions:!!directions,...(layers?{cloudLayers:true}:{}),...(base?{hasCloudBase:true,cloudBaseSampling:'nearest',cloudBaseSourceGrid:baseInfo.grid}:{})},values,directions,layers);
   const response=new Response(packet,{headers:{...cors,'Content-Type':'application/octet-stream','Cache-Control':'public, max-age=86400, immutable'}});
   ctx.waitUntil(cache.put(key,response.clone()));return deliver(response,false,start);
  }catch(e){if(request.signal.aborted)return error('Selectie vervallen',499);console.error('HARMONIE field:',e.message);return error('HARMONIE tijdelijk niet bereikbaar',502);}
