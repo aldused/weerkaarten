@@ -1352,14 +1352,14 @@ const MENU_PRODUCTS = [
     "description": "Weerberichten per krant schrijven en controleren",
     "category": "professioneel",
     "type": "vak",
-    "section": "Studio (afgeschermd)",
+    "section": "Studio",
     "icon": "tekst",
     "href": "index.html#krantenredactie",
-    "src": "demo_kranten.html?v=20260912-menu1",
+    "src": "demo_kranten.html?v=20260921-open1",
     "thumbnail": null,
     "facets": {},
     "keywords": "Kranten krant redactie weerbericht Volkskrant Trouw Parool AD concepten teksten tekenlimiet",
-    "restricted": true
+    "restricted": false
   }
 ];
 const MENU_LABELS = {

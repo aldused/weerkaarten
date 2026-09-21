@@ -2,8 +2,6 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
-  const ACCESS_HASH = 'cbdecc97d4791e60d96f893432c10727d4a01a258ae96b013eecf59826a93789';
-  const ACCESS_KEY = 'weerlab.kranten.toegang.v1';
   const PAPER = {
     volkskrant: {name:'de Volkskrant', ids:['vk_kort','vk_lang'], delivery:'Beide teksten samen · vk-eindredactie@dpgmedia.nl'},
     trouw: {name:'Trouw', ids:['trouw'], delivery:'eindredactie@trouw.nl en foto@trouw.nl'},
@@ -27,30 +25,6 @@
   const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let data, base, pending, paper='volkskrant', dirty=false, busy=false, storageOK=true, checkStatus;
   let toastTimer;
-  async function sha256(value) {
-    const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
-    return [...new Uint8Array(bytes)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
-  }
-  function unlock() {
-    try { sessionStorage.setItem(ACCESS_KEY,'1'); } catch {}
-    document.body.classList.remove('locked');
-    $('login-gate').hidden=true;
-    load();
-  }
-  function lock() {
-    try { sessionStorage.removeItem(ACCESS_KEY); } catch {}
-    document.body.classList.add('locked');
-    $('login-gate').hidden=false;
-    $('login-password').value='';
-    $('login-error').textContent='';
-    $('login-password').focus();
-  }
-  function initAccess() {
-    let unlocked=false;
-    try { unlocked=sessionStorage.getItem(ACCESS_KEY)==='1'; } catch {}
-    if(unlocked){unlock();return;}
-    $('login-password').focus();
-  }
   function toast(message) { $('toast').textContent=message; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').textContent='',4500); }
   function storageKey() { return 'weerlab.kranten.demo.v1.'+data.publicationDate; }
   function readStored(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
@@ -224,16 +198,5 @@
   });
   window.addEventListener('resize',()=>{if(data)PAPER[paper].ids.forEach(updateArticle);});
   window.addEventListener('beforeprint',()=>{if(data){notice();PAPER[paper].ids.forEach(updateArticle);}});
-  $('login-form').addEventListener('submit',async event=>{
-    event.preventDefault();
-    const input=$('login-password'), button=event.submitter;
-    if(button)button.disabled=true;
-    try {
-      if(await sha256(input.value)===ACCESS_HASH){unlock();return;}
-      $('login-error').textContent='Onjuist wachtwoord.';
-      input.select();
-    } finally {if(button)button.disabled=false;}
-  });
-  $('logout').addEventListener('click',lock);
-  initAccess();setInterval(()=>{if(!document.body.classList.contains('locked'))load();},60000);
+  load();setInterval(load,60000);
 })();

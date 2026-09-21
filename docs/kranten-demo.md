@@ -127,10 +127,8 @@ Start een lokale server in de weerlab-map met `python3 -m http.server 8787
 --bind 127.0.0.1` en open `http://127.0.0.1:8787/demo_kranten.html`.
 De browsercontrole staat in `tests/kranten-browser.cjs` en gebruikt Playwright.
 
-De demo staat online als `https://weerlab.nl/demo_kranten.html` en vraagt om de
-afzonderlijke krantcode. De code wordt in de browser gecontroleerd met een hash;
-de gegevens worden pas na ontgrendeling geladen. Omdat dit een statische site is,
-is dit een praktische toegangspoort en geen servermatige beveiliging.
+De demo staat online als `https://weerlab.nl/demo_kranten.html` en opent direct
+zonder afzonderlijke krantcode. De concepten worden bij het openen geladen.
 
 Na een nieuwe, gevalideerde editie publiceert de Codex-taak uitsluitend
 `data/kranten_demo.json` en `data/kranten_status.json` via
