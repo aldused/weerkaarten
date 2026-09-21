@@ -179,7 +179,9 @@ ZICHT_OVER   = '#f7fbff'
 
 # Radarbenadering. De momentane HARMONIE-regenintensiteit
 # wordt met Z=200*R^1.6 naar dBZ omgerekend. Lichte/matige echo's krijgen
-# rustige, lichte blauwtinten; de overgang naar geel verloopt geleidelijk.
+# rustige, lichte blauwtinten. Bij 36 dBZ springt blauw direct naar geel (twee
+# ankers op dezelfde plek): een geleidelijke overgang mengt blauw en geel tot
+# groengrijs. Zelfde grens als de modelradar in het vierluik.
 # Alleen de kleuren worden geïnterpoleerd (per 0.5 dBZ): het bronrooster en
 # de intensiteiten blijven ongewijzigd. Dit voorkomt donkere contourbanden
 # zonder kleine kernen ruimtelijk glad te strijken. Legenda gebruikt dezelfde
@@ -188,8 +190,8 @@ RADAR_LEVELS = np.arange(0, 78.5, 0.5).tolist()
 _RADAR_ANCHORS = [
     (0, '#ffffff'), (6, '#f3f9fd'), (12, '#e0eff8'),
     (18, '#c7e1f1'), (24, '#a8cde6'), (30, '#85b3d8'),
-    (32, '#73a6d0'), (34, '#92bbcf'), (36, '#dbe4c4'),
-    (38, '#f7e6a1'), (40, '#f4ce73'), (44, '#ef9e42'),
+    (32, '#73a6d0'), (36, '#5f98c8'), (36, '#f7e6a1'),
+    (40, '#f4ce73'), (44, '#ef9e42'),
     (48, '#e95029'), (54, '#bd231a'), (58, '#800000'),
     (60, '#ff00ff'), (66, '#b34db3'), (70, '#808080'),
     (78, '#d3d3d3'),
