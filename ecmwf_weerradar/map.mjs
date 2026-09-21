@@ -143,7 +143,7 @@ export class Map {
     this.native.createPane('land');this.native.getPane('land').style.zIndex=250;this.native.getPane('land').style.pointerEvents='none';
     this.native.createPane('borders');this.native.getPane('borders').style.zIndex=450;this.native.getPane('borders').style.pointerEvents='none';
     const satellite=options.style.sources.satellite;
-    L.tileLayer(satellite.tiles[0],{maxZoom:18,maxNativeZoom:17,attribution:satellite.attribution,noWrap:true}).addTo(this.native);
+    L.tileLayer(satellite.tiles[0],{maxZoom:18,maxNativeZoom:17,attribution:satellite.attribution,noWrap:true,crossOrigin:'anonymous'}).addTo(this.native);
     this.details=new MapDetails(this.native,L);this.bordersVisible=true;
     this.native.on('moveend',()=>{if(this.detailsLoaded)this.detailsPromise=this.details.update();});
     for(const ev of ['movestart','move','resize','moveend'])this.native.on(ev,()=>this.fire(ev,{}));

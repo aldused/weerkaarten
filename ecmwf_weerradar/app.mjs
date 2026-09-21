@@ -1,6 +1,7 @@
 import {createProjectedGrid} from './projected-grid.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
 import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
+import {captureMap,composePNG,exportLegends,pngFilename} from './png-export.mjs';
 import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
 import {MODELS,modelFor,regionalFrames,preserveModelTime,isBenelux,isRegional,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
@@ -571,6 +572,34 @@ $('zoom-in').addEventListener('click',()=>map.zoomIn());$('zoom-out').addEventLi
 $('europe').addEventListener('click',()=>map.fitBounds([[-24,34],[42,70]],{padding:{top:105,bottom:185,left:45,right:75},duration:600}));
 $('home').addEventListener('click',()=>map.fitBounds(modelView('harmonie'),{zoomSnap:.25,padding:{top:100,bottom:140,left:12,right:60},duration:400}));
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('app').requestFullscreen();}catch{status('Volledig scherm is niet beschikbaar in deze browser.',true);}});
+let pngURL=null;
+$('png-close').addEventListener('click',()=>$('png-dialog').close());
+$('png-dialog').addEventListener('close',()=>{if(pngURL)URL.revokeObjectURL(pngURL);pngURL=null;$('png-preview').removeAttribute('src');prepareAdjacentFrames();});
+$('export-png').addEventListener('click',async()=>{
+  stopPlayback();cancelPreparation();
+  $('png-preview').hidden=true;$('png-save').hidden=true;$('png-status').textContent='De kaart wordt samengesteld…';$('png-dialog').showModal();$('export-png').disabled=true;
+  try{
+    if(!current||rendering||refreshing||$('app').dataset.frameStatus!=='ready')throw Error('Wacht tot de gekozen kaart geladen is en klik daarna opnieuw op PNG.');
+    const frame=current,rev=revision,center=map.getCenter(),view=[center.lng,center.lat,map.getZoom()].join();
+    await document.fonts.ready;
+    const nextCenter=map.getCenter();
+    if(current!==frame||revision!==rev||[nextCenter.lng,nextCenter.lat,map.getZoom()].join()!==view)throw Error('De kaart is gewijzigd. Klik opnieuw op PNG voor de nieuwe uitsnede.');
+    if(frame.ids.some(id=>!map.isSourceLoaded(id)||frameErrors.has(id)))throw Error('De kaarttegels worden nog geladen. Probeer het zo opnieuw.');
+    drawCities();
+    const modelId=modelFor(frame.modelMeta),label=forecastLabel(frame.time,frame.modelMeta.reference_time,MODELS[modelId].label);
+    const canvas=composePNG(captureMap($('map'),$('places')),{
+      title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}`,
+      time:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
+      legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
+    });
+    const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG maken is niet gelukt.')),'image/png'));
+    if(!$('png-dialog').open)return;
+    if(pngURL)URL.revokeObjectURL(pngURL);pngURL=URL.createObjectURL(blob);
+    $('png-preview').src=pngURL;$('png-preview').hidden=false;$('png-save').href=pngURL;$('png-save').download=pngFilename(modelId,frame.iso,frame.mode);$('png-save').hidden=false;
+    $('png-status').textContent=`${canvas.width} × ${canvas.height} pixels · huidige uitsnede · Ed Aldus · Weerlab`;
+  }catch(error){$('png-status').textContent=error.name==='SecurityError'?'De achtergrondbron blokkeert PNG-export. Vernieuw de pagina en probeer opnieuw.':error.message;}
+  finally{$('export-png').disabled=false;}
+});
 $('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
 $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
@@ -579,7 +608,7 @@ $('retry').addEventListener('click',()=>retryLoad());
 document.addEventListener('keydown',e=>{
   if(e.defaultPrevented)return;
   if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
-  if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]')||$('info').open)return;
+  if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]')||document.querySelector('dialog[open]'))return;
   if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)&&(!e.target.closest('button')||e.target.closest('.timeline'))){
     e.preventDefault();stopPlayback();requestFrame(e.key==='Home'?0:e.key==='End'?frames.length-1:wanted+(e.key==='ArrowRight'?1:-1));
   }
