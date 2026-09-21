@@ -1,7 +1,8 @@
 /**
  * weerbewaking_pluim_export.js
  *
- * Genereert rustige losse kleurpluim-PNG's voor de Weerbewaking RRDK PDF-export:
+ * Genereert losse PNG's in dezelfde stijl en met dezelfde duiding als de
+ * actuele kleurpluim voor de Weerbewaking RRDK PDF-export:
  * temperatuur, neerslagkans, neerslag in mm, cumulatieve neerslag, wind,
  * windstoten,
  * zon/bewolking en onweer.
@@ -157,7 +158,13 @@
 
   function fmtDag(t) {
     const d = new Date(t);
-    return `${DOW_NL[d.getDay()]} ${d.getDate()} ${MAAND_NL[d.getMonth()]}`;
+    return `${DOW_NL[d.getUTCDay()]} ${d.getUTCDate()} ${MAAND_NL[d.getUTCMonth()]}`;
+  }
+
+  function fmtNeerslagVak(t) {
+    const end = new Date(t);
+    const start = new Date(end.getTime() - 6 * 3600000);
+    return `${fmtDag(start.toISOString())} ${String(start.getUTCHours()).padStart(2, '0')}–${String(end.getUTCHours() || 24).padStart(2, '0')} UTC`;
   }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -258,14 +265,15 @@
         return stats;
       },
       summary(stats) {
-        const vals = (stats.dailyMax || stats).filter(s => Number.isFinite(s.p50));
+        const daily = !!stats.dailyMax?.length;
+        const vals = (daily ? stats.dailyMax : stats).filter(s => Number.isFinite(s.p50));
         const warm = vals.reduce((a,b) => b.p50 > a.p50 ? b : a, vals[0]);
         const cool = vals.reduce((a,b) => b.p50 < a.p50 ? b : a, vals[0]);
         const spread = vals.reduce((a,b) => (b.p90-b.p10) > (a.p90-a.p10) ? b : a, vals[0]);
         return [
-          `Hoogste maximumtemperatuur: ${fmtValue(warm.p50, this)} · ${fmtDag(warm.t)}`,
-          `Laagste maximumtemperatuur: ${fmtValue(cool.p50, this)} · ${fmtDag(cool.t)}`,
-          `Meeste onzekerheid maximum: ±${Math.round((spread.p90-spread.p10)/2)}\u00b0`,
+          `${daily ? 'Hoogste modelmaximum' : 'Hoogste mediaan'}: ${fmtValue(warm.p50, this)} · ${fmtDag(warm.t)}`,
+          `${daily ? 'Laagste modelmaximum' : 'Laagste mediaan'}: ${fmtValue(cool.p50, this)} · ${fmtDag(cool.t)}`,
+          `Breedste P10–P90: ${Math.round(spread.p10)}–${Math.round(spread.p90)}\u00b0`,
         ];
       },
     },
@@ -314,7 +322,7 @@
         const heavy = vals.reduce((a,b) => b.extra.heavy > a.extra.heavy ? b : a, vals[0]);
         const wet = vals.reduce((a,b) => b.extra.p90mm > a.extra.p90mm ? b : a, vals[0]);
         return [
-          `Hoogste neerslagkans: ${Math.round(peak.p50)}% · ${fmtDag(peak.t)}`,
+          `Hoogste neerslagkans: ${Math.round(peak.p50)}% · ${fmtNeerslagVak(peak.t)}`,
           `Kans ≥1 mm/6u: ${Math.round(heavy.extra.heavy)}%`,
           `Natste 6-uurs signaal: ${wet.extra.p90mm.toFixed(1)} mm`,
         ];
@@ -356,7 +364,9 @@
             t,
             pMin: vals.length ? Math.min(...vals) : 0,
             p10: percentiel(vals, 10) || 0,
+            p25: percentiel(vals, 25),
             p50: percentiel(vals, 50) || 0,
+            p75: percentiel(vals, 75),
             p90: percentiel(vals, 90) || 0,
             pMax: vals.length ? Math.max(...vals) : 0,
             extra: { chance: vals.length ? vals.filter(v => v >= 0.1).length / vals.length * 100 : 0 },
@@ -369,7 +379,7 @@
         const med = vals.reduce((a,b) => b.p50 > a.p50 ? b : a, vals[0]);
         const spread = vals.reduce((a,b) => (b.p90 - b.p10) > (a.p90 - a.p10) ? b : a, vals[0]);
         return [
-          `Natste 6-uurs signaal: ${wet.p90.toFixed(1)} mm · ${fmtDag(wet.t)}`,
+          `Natste 6-uurs signaal: ${wet.p90.toFixed(1)} mm · ${fmtNeerslagVak(wet.t)}`,
           `Breedste 80%-marge: ${spread.p10.toFixed(1)}-${spread.p90.toFixed(1)} mm`,
           `Mediaan max 6u: ${med.p50.toFixed(1)} mm`,
         ];
@@ -409,7 +419,7 @@
         return [
           `Mediaan totaalsom: ${last.p50.toFixed(1)} mm`,
           `P10-P90 einde: ${last.p10.toFixed(1)}-${last.p90.toFixed(1)} mm`,
-          `Meeste onzekerheid: ±${((spread.p90-spread.p10)/2).toFixed(1)} mm · ${fmtDag(spread.t)}`,
+          `Breedste P10–P90: ${spread.p10.toFixed(1)}–${spread.p90.toFixed(1)} mm · ${fmtDag(spread.t)}`,
         ];
       },
     },
@@ -424,9 +434,9 @@
       rangePad: 5,
       leftAxis: 96,
       rightAxis: 'bft',
-      statusSuffix: 'windsnelheid in km/u + Beaufort',
-      lineLabel: 'Ensemble mediaan',
-      bandLabel: 'Onzekerheidsband (P10-P90)',
+      statusSuffix: 'windkracht in km/u + Beaufort · mediaan + spreiding',
+      lineLabel: 'Mediaan windkracht',
+      bandLabel: 'Waarschijnlijke band P10-P90 (80% van de leden)',
       bandEdgeColor: 'rgba(17,35,47,0.72)',
       bandEdgeWidth: 1.1,
       medianHaloColor: 'rgba(10,25,35,0.78)',
@@ -441,8 +451,8 @@
         const gusty = vals.reduce((a,b) => b.p90 > a.p90 ? b : a, vals[0]);
         return [
           `Meeste wind: ${fmtValue(peak.p50, this)} (${kmhToBft(peak.p50)} Bft) · ${fmtDag(peak.t)}`,
-          `Bovenkant ensemble: ${fmtValue(gusty.p90, this)} (${kmhToBft(gusty.p90)} Bft)`,
-          `Meeste onzekerheid: ±${Math.round((spread.p90-spread.p10)/2)} km/u`,
+          `Bovenkant ensemble: ${fmtValue(gusty.p90, this)} (${kmhToBft(gusty.p90)} Bft) · ${fmtDag(gusty.t)}`,
+          `Breedste band: ${Math.round(spread.p10)}-${Math.round(spread.p90)} km/u · ${fmtDag(spread.t)}`,
         ];
       },
     },
@@ -474,7 +484,7 @@
         return [
           `Hoogste mediane windstoot: ${fmtValue(peak.p50, this)} · ${fmtDag(peak.t)}`,
           `Bovenkant ensemble: ${fmtValue(high.p90, this)} · ${fmtDag(high.t)}`,
-          `Meeste onzekerheid: ±${Math.round((spread.p90-spread.p10)/2)} km/u`,
+          `Breedste P10–P90: ${Math.round(spread.p10)}–${Math.round(spread.p90)} km/u`,
         ];
       },
     },
@@ -521,9 +531,9 @@
         const cloud = vals.reduce((a,b) => b.extra.cloudP50 > a.extra.cloudP50 ? b : a, vals[0]);
         const spread = vals.reduce((a,b) => (b.extra.cloudP90-b.extra.cloudP10) > (a.extra.cloudP90-a.extra.cloudP10) ? b : a, vals[0]);
         return [
-          `Zonnigste moment: ${Math.round(sun.extra.sunP50)}% zon · ${fmtDag(sun.t)}`,
+          `Minste bewolking: ${Math.round(sun.extra.cloudP50)}% bewolkt · ${fmtDag(sun.t)}`,
           `Meeste bewolking: ${Math.round(cloud.extra.cloudP50)}% bewolkt · ${fmtDag(cloud.t)}`,
-          `Meeste spreiding bewolking: ±${Math.round((spread.extra.cloudP90-spread.extra.cloudP10)/2)}%`,
+          `Breedste P10–P90: ${Math.round(spread.extra.cloudP10)}–${Math.round(spread.extra.cloudP90)}% bewolkt`,
         ];
       },
     },
@@ -596,6 +606,45 @@
     },
   };
 
+  // Houd de ingebedde RRDK-export gelijk aan de actuele kleurenpluim. De
+  // kleur hoort in de onzekerheidsband; de lichte achtergrond en donkere
+  // mediaan maken de grafiek ook in een rapport of op papier goed leesbaar.
+  for (const key of ['temp', 'rainmm', 'raincum', 'wind', 'gust']) {
+    Object.assign(PARAMS[key], {
+      colourBand: true,
+      smoothScale: true,
+      backgroundOpacity: 0.08,
+      bandEdgeColor: '#466173',
+      bandEdgeWidth: 0.65,
+      innerBandFill: 'rgba(18,49,70,0.22)',
+      medianColor: '#122f46',
+      medianHaloColor: '#ffffff',
+      medianHaloWidth: 4.4,
+      medianWidth: 2.4,
+      gridLineColor: 'rgba(31,55,77,0.12)',
+      gridLineWidth: 0.6,
+      gridLineDash: [],
+      bandLabel: 'Middelste 80% van de leden (P10-P90)',
+    });
+  }
+  PARAMS.rain.lineLabel = 'Kans op ≥0,1 mm per 6 uur';
+  PARAMS.rain.statusSuffix = 'aandeel leden met ≥0,1 mm en ≥1 mm per 6 uur';
+  PARAMS.rain.medianColor = '#123d70';
+  PARAMS.rain.medianHaloColor = '#ffffff';
+  PARAMS.rain.bandFill = 'rgba(42,119,184,0.25)';
+  Object.assign(PARAMS.rain, {
+    smoothScale: true,
+    backgroundOpacity: 0.08,
+    bandEdgeColor: '#3e7fba',
+    bandEdgeWidth: 1,
+    gridLineColor: 'rgba(31,55,77,0.12)',
+  });
+  PARAMS.thunder.percentLine.color = '#122f46';
+  delete PARAMS.thunder.yMax;
+  PARAMS.thunder.minRange = 1000;
+  PARAMS.thunder.yStep = 250;
+  PARAMS.thunder.rangePad = 100;
+
   const MULTI_PARAMS = ['temp', 'rain', 'rainmm', 'raincum', 'wind', 'gust', 'cloud', 'thunder'];
   const FILE_LABELS = {
     temp: 'temperatuur',
@@ -648,7 +697,7 @@
     let cx = x;
     let cy = y;
     const h = 30;
-    ctx.font = '800 23px Inter, Arial, sans-serif';
+    ctx.font = '800 17px Inter, Arial, sans-serif';
     chips.forEach(chip => {
       const w = Math.min(maxW, Math.ceil(ctx.measureText(chip).width + 28));
       if (cx > x && cx + w > x + maxW) {
@@ -662,7 +711,7 @@
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.fillText(chip, cx + 14, cy + 22);
+      ctx.fillText(chip, cx + 14, cy + 21);
       cx += w + 8;
     });
     return cy + h;
@@ -677,7 +726,14 @@
   function makeDefaultStats(times, members) {
     return times.map((t, i) => {
       const vals = members.map(m => m[i]).filter(Number.isFinite);
-      return { t, p10: percentiel(vals, 10), p50: percentiel(vals, 50), p90: percentiel(vals, 90) };
+      return {
+        t,
+        p10: percentiel(vals, 10),
+        p25: percentiel(vals, 25),
+        p50: percentiel(vals, 50),
+        p75: percentiel(vals, 75),
+        p90: percentiel(vals, 90),
+      };
     });
   }
 
@@ -686,7 +742,7 @@
     const byDay = new Map();
     times.forEach((t, i) => {
       const d = new Date(t);
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       if (!byDay.has(key)) {
         const entry = { t, idxs: [] };
         byDay.set(key, entry);
@@ -695,6 +751,9 @@
       byDay.get(key).idxs.push(i);
     });
     return days.map(day => {
+      const first = Date.parse(times[day.idxs[0]]);
+      const midnight = Date.parse(`${times[day.idxs[0]].slice(0, 10)}T00:00:00Z`);
+      if (first !== midnight || Date.parse(times.at(-1)) < midnight + 24 * 3600000) return null;
       const maxima = members.map(member => {
         const vals = day.idxs.map(i => member[i]).filter(Number.isFinite);
         return vals.length ? Math.max(...vals) : null;
@@ -705,7 +764,7 @@
         p50: percentiel(maxima, 50),
         p90: percentiel(maxima, 90),
       };
-    }).filter(s => Number.isFinite(s.p50));
+    }).filter(s => s && Number.isFinite(s.p50));
   }
 
   function aggregateMembersByHours(times, members, hours = 6) {
@@ -915,16 +974,20 @@
     const yF = v => y + m.top + (1 - (v - yMin) / yRange) * ih;
     const yPercentF = v => y + m.top + (1 - clamp(v, 0, 100) / 100) * ih;
 
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y, w, h);
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + m.left, y + m.top, iw, ih);
     ctx.clip();
 
+    let scaleGradient = null;
     if (cfg.smoothScale) {
       const gradient = ctx.createLinearGradient(0, y + m.top, 0, y + m.top + ih);
       scaleStops(cfg.scale, yMin, yMax).forEach(stop => {
         gradient.addColorStop(stop.offset, stop.color);
       });
+      scaleGradient = gradient;
       ctx.fillStyle = gradient;
       ctx.globalAlpha = cfg.backgroundOpacity ?? 0.82;
       ctx.fillRect(x + m.left, y + m.top, iw, ih);
@@ -944,7 +1007,7 @@
     ctx.strokeStyle = cfg.dayLineColor || 'rgba(0,0,0,0.12)';
     ctx.lineWidth = 1;
     for (let i = 1; i < ts.length; i++) {
-      if (new Date(ts[i]).getHours() === 0) {
+      if (new Date(ts[i]).getUTCHours() === 0) {
         const xx = xF(i);
         ctx.beginPath();
         ctx.moveTo(xx, y + m.top);
@@ -983,7 +1046,7 @@
       ctx.strokeStyle = 'rgba(255,255,255,0.46)';
       ctx.lineWidth = 1;
       for (let i = 1; i < ts.length; i++) {
-        if (new Date(ts[i]).getHours() === 0) {
+        if (new Date(ts[i]).getUTCHours() === 0) {
           const xx = xF(i);
           ctx.beginPath();
           ctx.moveTo(xx, y + m.top);
@@ -1074,7 +1137,9 @@
       const smoothPasses = cfg.curveSmoothPasses || 0;
       const topPts = smoothPointsY(bandPts.map(p => p.top), smoothPasses);
       const botPts = smoothPointsY(bandPts.map(p => p.bot), smoothPasses);
-      ctx.fillStyle = cfg.bandFill || 'rgba(0,0,0,0.27)';
+      ctx.fillStyle = cfg.colourBand && scaleGradient
+        ? scaleGradient
+        : (cfg.bandFill || 'rgba(0,0,0,0.27)');
       if (smoothPasses) drawSmoothBand(ctx, topPts, botPts);
       else drawBand(ctx, topPts, botPts);
       if (cfg.bandEdgeColor) {
@@ -1089,6 +1154,18 @@
           drawLine(ctx, topPts);
           drawLine(ctx, botPts);
         }
+      }
+      const innerBandPts = st.map((s, i) => (
+        Number.isFinite(s.p75) && Number.isFinite(s.p25)
+          ? { top: [xF(i), yF(s.p75)], bot: [xF(i), yF(s.p25)] }
+          : null
+      )).filter(Boolean);
+      if (innerBandPts.length > 1) {
+        const innerTop = smoothPointsY(innerBandPts.map(p => p.top), smoothPasses);
+        const innerBot = smoothPointsY(innerBandPts.map(p => p.bot), smoothPasses);
+        ctx.fillStyle = cfg.innerBandFill || cfg.bandFill || 'rgba(0,0,0,0.27)';
+        if (smoothPasses) drawSmoothBand(ctx, innerTop, innerBot);
+        else drawBand(ctx, innerTop, innerBot);
       }
       (cfg.referenceLines || []).forEach(line => {
         if (!Number.isFinite(line.value) || line.value < yMin || line.value > yMax) return;
@@ -1137,7 +1214,7 @@
       ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = 'white';
+      ctx.fillStyle = '#254158';
       ctx.textAlign = 'right';
       ctx.fillText(fmtValue(v, cfg), x + m.left - AXIS_LABEL_GAP, yy);
     }
@@ -1146,13 +1223,14 @@
       ctx.textAlign = 'left';
       bftThresholds.forEach((value, bft) => {
         if (value < yMin || value > yMax) return;
+        ctx.fillStyle = '#254158';
         ctx.fillText(`${bft} Bft`, x + m.left + iw + 7, yF(value));
       });
     }
     if (cfg.rightAxis === 'percent') {
       ctx.textAlign = 'left';
       for (let p = 0; p <= 100; p += 20) {
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = '#254158';
         ctx.fillText(`${p}%`, x + m.left + iw + 7, yPercentF(p));
       }
     }
@@ -1162,28 +1240,28 @@
     ctx.textBaseline = 'alphabetic';
     for (let i = 0; i < ts.length; i++) {
       const t = new Date(ts[i]);
-      const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`;
+      const key = `${t.getUTCFullYear()}-${t.getUTCMonth()}-${t.getUTCDate()}`;
       if (daySet.has(key)) continue;
       daySet.add(key);
       let bestIdx = i, bestDist = Infinity;
       for (let j = i; j < Math.min(i + 24, ts.length); j++) {
-        const dist = Math.abs(new Date(ts[j]).getHours() - 12);
+        const dist = Math.abs(new Date(ts[j]).getUTCHours() - 12);
         if (dist < bestDist) { bestDist = dist; bestIdx = j; }
       }
       const xx = xF(bestIdx);
       const d = new Date(ts[bestIdx]);
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.strokeStyle = 'rgba(37,65,88,0.40)';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(xx, y + m.top + ih);
       ctx.lineTo(xx, y + m.top + ih + 6);
       ctx.stroke();
-      ctx.fillStyle = 'white';
+      ctx.fillStyle = '#254158';
       ctx.font = '900 25px Inter, Arial, sans-serif';
-      ctx.fillText(DOW_NL[d.getDay()], xx, y + m.top + ih + 27);
-      ctx.fillStyle = 'rgba(255,255,255,0.86)';
+      ctx.fillText(DOW_NL[d.getUTCDay()], xx, y + m.top + ih + 27);
+      ctx.fillStyle = '#52697c';
       ctx.font = '800 22px Inter, Arial, sans-serif';
-      ctx.fillText(`${d.getDate()} ${MAAND_NL[d.getMonth()]}`, xx, y + m.top + ih + 51);
+      ctx.fillText(`${d.getUTCDate()} ${MAAND_NL[d.getUTCMonth()]}`, xx, y + m.top + ih + 51);
     }
 
     if (cfg.medianMarkerDays > 0 && cfg.render !== 'bars' && cfg.render !== 'stacked') {
@@ -1203,7 +1281,7 @@
       ? [{ label: cfg.barLabel || 'Staafjes' }, ...(cfg.legendItems || []), ...(cfg.percentLine ? [{ type: 'line', color: cfg.percentLine.color || 'white', label: cfg.percentLine.label }] : [])]
       : [
         { type: 'line', color: cfg.medianColor || 'white', haloColor: cfg.medianHaloColor, label: cfg.lineLabel },
-        { type: 'band', color: cfg.bandFill || 'rgba(0,0,0,0.28)', stroke: cfg.bandEdgeColor || 'rgba(0,0,0,0.15)', label: cfg.bandLabel },
+        { type: 'band', colourBand: cfg.colourBand, color: cfg.bandFill || 'rgba(0,0,0,0.28)', stroke: cfg.bandEdgeColor || 'rgba(0,0,0,0.15)', label: cfg.bandLabel },
       ];
     let lx = x;
     let ly = y;
@@ -1232,7 +1310,14 @@
         ctx.lineTo(lx + 24, ly - 6);
         ctx.stroke();
       } else if (item.type === 'band') {
-        ctx.fillStyle = item.color || 'rgba(0,0,0,0.28)';
+        if (item.colourBand) {
+          const gradient = ctx.createLinearGradient(lx, ly - 12, lx + 18, ly);
+          gradient.addColorStop(0, '#90b76b');
+          gradient.addColorStop(1, '#e4ad63');
+          ctx.fillStyle = gradient;
+        } else {
+          ctx.fillStyle = item.color || 'rgba(0,0,0,0.28)';
+        }
         roundRect(ctx, lx, ly - 12, 18, 12, 3);
         ctx.fill();
         ctx.strokeStyle = item.stroke || 'rgba(255,255,255,0.42)';
@@ -1452,10 +1537,10 @@
       ctx.canvas.height = pageH;
       return pageH; // Alleen meten; tekenen gebeurt eenmaal op de uiteindelijke resolutie.
     }
-    ctx.fillStyle = '#8a8070';
+    ctx.fillStyle = '#edf2f6';
     ctx.fillRect(0, 0, PAGE_W, pageH);
     roundRect(ctx, 28, 28, PAGE_W - 56, pageH - 56, 14);
-    ctx.fillStyle = '#b0a488';
+    ctx.fillStyle = '#173a52';
     ctx.fill();
 
     ctx.fillStyle = 'white';
@@ -1518,10 +1603,10 @@
       ctx.canvas.height = pageH;
       return pageH; // Alleen meten; tekenen gebeurt eenmaal op de uiteindelijke resolutie.
     }
-    ctx.fillStyle = '#8a8070';
+    ctx.fillStyle = '#edf2f6';
     ctx.fillRect(0, 0, PAGE_W, pageH);
     roundRect(ctx, 28, 28, PAGE_W - 56, pageH - 56, 14);
-    ctx.fillStyle = '#b0a488';
+    ctx.fillStyle = '#173a52';
     ctx.fill();
 
     ctx.fillStyle = 'white';
