@@ -116,18 +116,19 @@ body {
 /* De bediening heeft eigen ruimte onder de kaarten, ook op lage schermen. */
 #map-focus-controls {
   display:none; order:2; flex:none; width:100%; min-width:0;
-  align-items:center; gap:0 6px; padding:4px 8px;
+  align-items:center; gap:4px 6px; padding:4px 8px;
   padding-bottom:max(4px, env(safe-area-inset-bottom));
   grid-template-columns:minmax(160px, 230px) auto auto minmax(120px, 1fr) auto auto auto;
-  grid-template-areas:"laag prev play slider time next exit" "extra prev play axis time next exit";
+  grid-template-areas:"laag prev play slider time next exit" "extra steps steps steps steps steps steps";
   border-top:1px solid #334155; background:#0b1424;
 }
-#map-focus-controls button {
+#map-focus-controls > button, #focus-actions > button {
   min-width:32px; height:32px; padding:0 8px; border:1px solid #475569;
   border-radius:5px; background:#17243a; color:#fff; cursor:pointer;
   font:700 12px "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
-#map-focus-controls button:hover { border-color:#7dd3fc; background:#0c4a6e; }
+#map-focus-controls > button:hover, #focus-actions > button:hover { border-color:#7dd3fc; background:#0c4a6e; }
+#focus-steps { grid-area:steps; }
 #map-focus-prev { grid-area:prev; }
 #map-focus-play { grid-area:play; }
 #map-focus-next { grid-area:next; }
@@ -140,9 +141,6 @@ body {
   border:1px solid #38bdf8; border-radius:5px; background:#0c4a6e; color:#fff;
   font:700 12px "DM Sans", ui-sans-serif, system-ui, sans-serif; text-overflow:ellipsis;
 }
-#map-focus-axis { grid-area:axis; position:relative; height:28px; overflow:hidden; border-top:1px solid #475569; }
-#map-focus-axis .time-day-label { top:15px; font-size:10px; }
-#map-focus-axis .time-hour-tick span { top:2px; font-size:9px; }
 #focus-actions { grid-area:exit; display:flex; align-items:center; gap:4px; min-width:0; }
 #map-focus-controls #btn-map-focus-exit {
   flex:1; min-width:0; position:static; min-height:32px; box-shadow:none; backdrop-filter:none;
@@ -162,7 +160,7 @@ body.map-focus-mode .panel-time-badge { font-size:11px; padding:3px 6px; bottom:
 .sync-info strong { color:#7dd3fc; font-weight:700; }
 .time-options { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:5px; }
 .time-options label { color:#cbd5e1; font-size:11px; }
-#time-mode, #day-select, #focus-day-select, #focus-time-mode { background:#0c4a6e; color:#fff; border:1px solid #38bdf8; border-radius:6px; padding:4px 6px; font-size:11px; }
+#time-mode, #focus-time-mode { background:#0c4a6e; color:#fff; border:1px solid #38bdf8; border-radius:6px; padding:4px 6px; font-size:11px; }
 #time-range-summary { color:#bfdbfe; font-size:11px; }
 #focus-extra { grid-area:extra; display:flex; gap:4px; align-items:center; min-width:0; }
 #focus-extra label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
@@ -184,8 +182,8 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
 @media (max-width: 900px) {
   #map-focus-controls {
     grid-template-columns:minmax(0, 1fr) auto auto minmax(100px, 1fr) auto auto;
-    grid-template-areas:"laag prev play time next exit" "extra slider slider slider slider slider" "extra axis axis axis axis axis";
-    gap:0 4px; padding-inline:5px;
+    grid-template-areas:"laag prev play time next exit" "extra slider slider slider slider slider" "steps steps steps steps steps steps";
+    gap:4px; padding-inline:5px;
   }
   #focus-extra { flex-direction:column; gap:3px; }
   #focus-extra select { width:100%; flex:none; }
@@ -194,9 +192,21 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   #btn-map-focus-exit span[aria-hidden] { display:none; }
 }
 @media (max-width: 450px) {
-  #map-focus-controls { grid-template-columns:minmax(0, 1fr) auto auto minmax(0, 1fr) auto; grid-template-areas:"laag prev play time next" "extra slider slider slider slider" "exit axis axis axis axis"; }
+  #map-focus-controls { grid-template-columns:minmax(0, 1fr) auto auto minmax(0, 1fr) auto; grid-template-areas:"laag prev play time next" "slider slider slider slider slider" "steps steps steps steps steps" "extra extra exit exit exit"; }
   #map-focus-time .mft-dag { white-space:normal; font-size:10px; }
   #map-focus-controls #btn-map-focus-exit { height:26px; min-height:26px; }
+}
+/* Liggende telefoon of laag venster: bediening in twee regels, zodat de
+   kaarten zo veel mogelijk hoogte houden. De dag staat dan al op de gekozen
+   dagknop eronder. */
+@media (max-height: 500px) and (min-width: 640px) {
+  #map-focus-controls {
+    grid-template-columns:minmax(120px, 200px) auto auto minmax(100px, 1fr) auto auto auto;
+    grid-template-areas:"laag prev play slider time next exit" "extra steps steps steps steps steps steps";
+  }
+  #map-focus-time .mft-dag { display:none; }
+  #focus-steps { grid-template-columns:fit-content(45%) minmax(0, 1fr); gap:8px; }
+  #focus-steps .ts-uren { border-left:1px solid #334155; padding-left:9px; }
 }
 
 /* ─── Gezamenlijke tijdslider ─────────────────────────────────── */
@@ -283,36 +293,56 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   content: 'nu'; position: absolute; top: 0; left: 3px;
   color: #fca5a5; font: 800 8px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.time-jump-section { margin-top: 7px; }
-.time-jump-head {
-  display: flex; justify-content: space-between; gap: 10px; margin: 0 2px 5px;
-  color: #94a3b8; font: 800 9px ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .06em; text-transform: uppercase;
+/* ─── Tijdstappen: dag- en uurknoppen zoals op Weerkaart Europa ───
+   Dagen en uren naast elkaar, elk afzonderlijk horizontaal scrollbaar.
+   Zelfde maten als daar: 36 px hoog met muis of trackpad, 44 px op
+   aanraakschermen. De gekozen dag en het gekozen uur zijn gevuld. */
+.tijdstappen {
+  display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr);
+  gap: 8px; min-width: 0;
 }
-.time-jump-head span:last-child { color: #7dd3fc; font-weight: 700; letter-spacing: 0; text-transform: none; }
-#time-jump-strip {
-  display: flex; gap: 5px; overflow-x: auto; padding: 1px 2px 7px;
+#time-steps { margin-top: 4px; }
+.ts-dagen, .ts-uren {
+  position: relative; display: flex; gap: 4px; min-width: 0;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  padding: 1px 2px 3px;
   scrollbar-width: thin; scrollbar-color: #475569 transparent;
 }
-.time-jump {
-  flex: 0 0 auto; min-width: 61px; padding: 4px 6px 5px;
-  border: 2px solid #334155; border-radius: 6px; color: #94a3b8; background: #0b1930;
-  font: 700 9px/1.15 ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer;
+.ts-uren { border-left: 1px solid #334155; padding-left: 9px; }
+.ts-dagen button, .ts-uren button {
+  position: relative; flex: 0 0 auto; min-height: 36px;
+  border: 1px solid #334155; border-radius: 8px;
+  background: #17243a; color: #f1f5f9; cursor: pointer; white-space: nowrap;
+  font: 650 12px/16px "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
-.time-jump:hover { border-color: #7dd3fc; color: #e0f2fe; }
-.time-jump:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
-.time-jump strong { display: block; margin-top: 1px; color: #f8fafc; font-size: 11px; }
-.time-jump.new-day { margin-left: 8px; border-left-color: #fbbf24; }
-.time-jump.active { border-color: #38bdf8; background: #0c4a6e; color: #bae6fd; }
-.time-jump.active strong { color: #fff; }
+.ts-dagen button {
+  min-width: 70px; padding: 5px 9px;
+  display: flex; align-items: baseline; justify-content: center; gap: 4px;
+}
+.ts-dagen button:nth-child(-n+3) { min-width: 82px; }
+.ts-dagen small { font-size: 11px; line-height: 15px; font-weight: 500; color: #94a3b8; }
+.ts-uren button { min-width: 50px; padding: 5px 7px; font-weight: 600; }
+.ts-dagen button:hover, .ts-uren button:hover { border-color: #7dd3fc; background: #0c4a6e; color: #fff; }
+.ts-dagen button:hover small { color: #bae6fd; }
+.ts-dagen button[aria-pressed="true"], .ts-uren button[aria-pressed="true"] {
+  border-color: #38bdf8; background: #38bdf8; color: #082f49;
+}
+.ts-dagen button[aria-pressed="true"] small { color: #0c4a6e; }
+/* Rode stip op het uur dat het dichtst bij nu ligt, net als de nu-streep. */
+.ts-uren button.is-nu::after {
+  content: ''; position: absolute; top: 3px; right: 3px;
+  width: 5px; height: 5px; border-radius: 50%; background: #f87171;
+}
+@media (pointer: coarse) {
+  .ts-dagen button, .ts-uren button { min-height: 44px; }
+}
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* Houd op brede schermen zo veel mogelijk hoogte vrij voor de vier kaarten.
-   De hoofdslider en datum-as blijven zichtbaar; de losse uurknoppen zijn daar
-   dubbelop en blijven op smallere/touch-schermen wel beschikbaar. */
+/* Houd op brede schermen zo veel mogelijk hoogte vrij voor de vier kaarten. */
 @media (min-width: 701px) {
   #time-controller { padding: 4px 14px 2px; }
   .time-control-head { gap: 9px; margin-bottom: 0; }
@@ -330,7 +360,6 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   #time-axis { height: 27px; margin-top: -1px; }
   .time-day-label { top: 14px; }
   .time-hour-tick span { top: 3px; }
-  .time-jump-section { display: none; }
 }
 
 #map-tooltip {
@@ -389,7 +418,8 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   #time-axis { margin-inline: 13px; height: 28px; }
   .time-hour-tick:not(.major) { display: none; }
   .time-hour-tick span { font-size: 8px; }
-  .time-jump { min-width: 56px; }
+  .tijdstappen { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .ts-uren { border-left: 0; padding-left: 2px; }
   .time-day-label { font-size: 9px; }
   .sync-info { width: 100%; }
 }
@@ -572,13 +602,15 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
   <button id="map-focus-prev" type="button" aria-label="Vorig beschikbaar tijdstip" title="Vorig beschikbaar tijdstip (pijl links)">◀</button>
   <button id="map-focus-play" type="button" aria-label="Animatie starten">▶</button>
   <input id="map-focus-slider" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Geldige tijd kiezen">
-  <div id="map-focus-axis" aria-hidden="true"></div>
   <span id="map-focus-time" aria-live="polite">Modeltijden laden…</span>
   <button id="map-focus-next" type="button" aria-label="Volgend beschikbaar tijdstip" title="Volgend beschikbaar tijdstip (pijl rechts)">▶</button>
   <div id="focus-extra">
     <label for="focus-time-mode">Vergelijken</label>
     <select id="focus-time-mode"><option value="common">Gelijke tijden</option><option value="all">Volledig bereik</option></select>
-    <label for="focus-day-select">Dag</label><select id="focus-day-select" disabled></select>
+  </div>
+  <div class="tijdstappen" id="focus-steps">
+    <div class="ts-dagen" role="group" aria-label="Kies een dag"></div>
+    <div class="ts-uren" role="group" aria-label="Kies een tijdstip"></div>
   </div>
 </div>
 
@@ -743,7 +775,6 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
     </select>
     <button id="btn-reset-models" class="tool-btn" type="button" title="Reset modellen: HARMONIE 43 · HARMONIE 46 · ICON-D2 · ECMWF">↺ Modellen</button>
     <button id="btn-now" class="tool-btn" type="button" title="Ga naar het beschikbare tijdstip het dichtst bij nu">Nu</button>
-    <label for="day-select">Dag</label><select id="day-select" disabled></select>
     <span id="time-range-summary" role="status">Modeltijden laden…</span>
     <span class="sync-info" id="sync-info">Modeltijden laden…</span>
   </div>
@@ -752,9 +783,9 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
       aria-label="Geldige tijd voor alle vier de kaarten" aria-describedby="global-time-help">
   </div>
   <div id="time-axis" aria-hidden="true"></div>
-  <div class="time-jump-section">
-    <div class="time-jump-head"><span>Spring direct naar een uur</span><span>Klik een tijd</span></div>
-    <div id="time-jump-strip" role="group" aria-label="Beschikbare geldige uren"></div>
+  <div class="tijdstappen" id="time-steps">
+    <div class="ts-dagen" role="group" aria-label="Kies een dag"></div>
+    <div class="ts-uren" role="group" aria-label="Kies een tijdstip"></div>
   </div>
   <p id="global-time-help" class="sr-only">Versleep deze regelaar om alle vier de modelkaarten tegelijk naar dezelfde geldige tijd te zetten.</p>
 </section>
@@ -1413,22 +1444,118 @@ function timeIndexForDay(times, day, reference) {
   return best;
 }
 
+// Tijdstappen zoals op Weerkaart Europa: een knop per dag en de beschikbare
+// uren van de gekozen dag. Beide stroken staan in de gewone én in de
+// beeldvullende bediening en worden samen bijgewerkt.
+var hourChoicesDay = null;
+
 function buildDayChoices() {
-  ['day-select', 'focus-day-select'].forEach(function(id) {
-    var select = document.getElementById(id);
-    select.replaceChildren();
-    var seen = new Set();
-    globalTimes.forEach(function(t) {
-      var day = localDayKey(t);
-      if (seen.has(day)) return;
-      seen.add(day);
-      var option = document.createElement('option');
-      option.value = day;
-      option.textContent = formatDayLabel(t);
-      select.appendChild(option);
-    });
-    select.disabled = !globalTimes.length;
+  var days = ['zo','ma','di','wo','do','vr','za'];
+  var longDays = ['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag'];
+  var months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  var longMonths = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+  var today = localDayKey(new Date().toISOString());
+  var dayStarts = [];
+  globalTimes.forEach(function(t) {
+    var key = localDayKey(t);
+    if (!dayStarts.length || dayStarts[dayStarts.length - 1].key !== key) dayStarts.push({ key:key, time:t });
   });
+  document.querySelectorAll('.tijdstappen .ts-dagen').forEach(function(strip) {
+    var fragment = document.createDocumentFragment();
+    dayStarts.forEach(function(day) {
+      var dt = VierluikCore.displayDate(day.time);
+      var distance = Math.round((Date.parse(day.key) - Date.parse(today)) / 86400000);
+      var full = longDays[dt.getDay()] + ' ' + dt.getDate() + ' ' + longMonths[dt.getMonth()] + ' ' + dt.getFullYear();
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.day = day.key;
+      button.textContent = ['Vandaag', 'Morgen', 'Overmorgen'][distance] || days[dt.getDay()];
+      var date = document.createElement('small');
+      date.textContent = dt.getDate() + ' ' + months[dt.getMonth()];
+      button.appendChild(date);
+      button.title = full;
+      button.setAttribute('aria-label', full);
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', function() {
+        var idx = timeIndexForDay(globalTimes, day.key, activeGlobalTime);
+        if (idx >= 0) setGlobalTimeIndex(idx);
+      });
+      fragment.appendChild(button);
+    });
+    strip.replaceChildren(fragment);
+  });
+  hourChoicesDay = null;  // de uren opnieuw opbouwen bij de volgende update
+}
+
+function buildHourChoices(day) {
+  var hours = [];
+  globalTimes.forEach(function(t, i) {
+    if (localDayKey(t) !== day) return;
+    var dt = VierluikCore.displayDate(t);
+    hours.push({ time:t, index:i, clock:String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0'),
+      offset:Math.round((Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate(), dt.getHours(), dt.getMinutes()) - VierluikCore.timeMs(t)) / 3600000) });
+  });
+  var clockCount = {};
+  hours.forEach(function(h) { clockCount[h.clock] = (clockCount[h.clock] || 0) + 1; });
+  document.querySelectorAll('.tijdstappen .ts-uren').forEach(function(strip) {
+    var fragment = document.createDocumentFragment();
+    hours.forEach(function(h) {
+      // Het dubbele uur bij de overgang naar wintertijd zijn twee verschillende verwachtingen.
+      var offset = clockCount[h.clock] > 1 ? ' +' + h.offset : '';
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.index = h.index;
+      button.textContent = h.clock + offset;
+      button.title = formatLongTime(h.time) + (offset ? ' (UTC' + offset.trim() + ')' : '');
+      button.setAttribute('aria-label', button.title);
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', function() { setGlobalTimeIndex(h.index); });
+      fragment.appendChild(button);
+    });
+    strip.replaceChildren(fragment);
+    strip.setAttribute('aria-label', hours.length ? 'Kies een tijdstip op ' + formatDayLabel(hours[0].time) : 'Kies een tijdstip');
+  });
+}
+
+// Het uur dat het dichtst bij nu ligt, zolang nu binnen de tijdreeks valt.
+function nowTimeIndex() {
+  if (!globalTimes.length) return -1;
+  var now = Date.now();
+  var t0 = VierluikCore.timeMs(globalTimes[0]);
+  var t1 = VierluikCore.timeMs(globalTimes[globalTimes.length - 1]);
+  return now > t0 && now < t1 ? nearestTimeIndex(globalTimes, now) : -1;
+}
+
+function updateTimeSteps() {
+  var day = activeGlobalTime ? localDayKey(activeGlobalTime) : '';
+  if (day !== hourChoicesDay) {
+    hourChoicesDay = day;
+    buildHourChoices(day);
+  }
+  var nowIndex = nowTimeIndex();
+  document.querySelectorAll('.ts-dagen, .ts-uren').forEach(function(strip) {
+    var isHours = strip.classList.contains('ts-uren');
+    var newlyActive = false;
+    Array.from(strip.children).forEach(function(button) {
+      var active = isHours ? Number(button.dataset.index) === globalTimeIndex : button.dataset.day === day;
+      if (active && button.getAttribute('aria-pressed') !== 'true') newlyActive = true;
+      button.setAttribute('aria-pressed', String(active));
+      if (isHours) button.classList.toggle('is-nu', Number(button.dataset.index) === nowIndex);
+    });
+    if (newlyActive) centreTimeStep(strip);
+  });
+}
+
+// Schuift de gekozen dag of het gekozen uur naar het midden van zijn strook.
+// Bewust geen scrollIntoView: dat verschuift in Weerlab ook de ouderpagina.
+function centreTimeStep(strip) {
+  var active = strip.querySelector('button[aria-pressed="true"]');
+  if (!active || !strip.clientWidth) return;
+  strip.scrollLeft = Math.max(0, active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2);
+}
+
+function centreAllTimeSteps() {
+  document.querySelectorAll('.ts-dagen, .ts-uren').forEach(centreTimeStep);
 }
 
 function limitingModels() {
@@ -1515,15 +1642,9 @@ function nearestTimeIndex(times, refTime) {
   return best;
 }
 
-// Bouwt de datum/tijd-as. Wordt voor twee plekken gebruikt: de as onder de
-// gezamenlijke slider en de compacte as in de beeldvullende bediening.
-function buildTimeAxis(axisId) {
-  if (axisId === undefined) {
-    buildTimeAxis('time-axis');
-    buildTimeAxis('map-focus-axis');
-    return;
-  }
-  var axis = document.getElementById(axisId);
+// Bouwt de datum/tijd-as onder de gezamenlijke slider van de gewone bediening.
+function buildTimeAxis() {
+  var axis = document.getElementById('time-axis');
   if (!axis) return;
   axis.innerHTML = '';
   if (!globalTimes.length) return;
@@ -1596,30 +1717,6 @@ function buildTimeAxis(axisId) {
   }
 }
 
-function buildTimeJumpButtons() {
-  var strip = document.getElementById('time-jump-strip');
-  if (!strip) return;
-  var fragment = document.createDocumentFragment();
-  var previousDay = '';
-  globalTimes.forEach(function(t, i) {
-    var dt = VierluikCore.displayDate(t);
-    var days = ['zo','ma','di','wo','do','vr','za'];
-    var months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-    var day = localDayKey(t);
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'time-jump' + (previousDay && day !== previousDay ? ' new-day' : '');
-    button.setAttribute('aria-label', 'Ga naar ' + formatLongTime(t));
-    button.title = 'Ga naar ' + formatLongTime(t);
-    button.innerHTML = '<span>' + days[dt.getDay()] + ' ' + dt.getDate() + ' ' + months[dt.getMonth()] + '</span>' +
-      '<strong>' + String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0') + '</strong>';
-    button.addEventListener('click', function() { setGlobalTimeIndex(i); });
-    fragment.appendChild(button);
-    previousDay = day;
-  });
-  strip.replaceChildren(fragment);
-}
-
 function updateGlobalTimeControl() {
   var slider = document.getElementById('global-time-slider');
   var focusSlider = document.getElementById('map-focus-slider');
@@ -1627,9 +1724,7 @@ function updateGlobalTimeControl() {
   var meta = document.getElementById('global-time-meta');
   var dayCount = new Set(globalTimes.map(localDayKey)).size;
   var pending = updateSyncStatus();
-  ['day-select', 'focus-day-select'].forEach(function(id) {
-    document.getElementById(id).value = activeGlobalTime ? localDayKey(activeGlobalTime) : '';
-  });
+  updateTimeSteps();
   ['btn-play', 'map-focus-play', 'btn-now'].forEach(function(id) {
     document.getElementById(id).disabled = !globalTimes.length;
   });
@@ -1669,17 +1764,6 @@ function updateGlobalTimeControl() {
   slider.title = formatLongTime(activeGlobalTime) + ' · regelt alle vier de kaarten';
   focusSlider.title = formatLongTime(activeGlobalTime) + ' · versleep voor een ander uur';
   updateRangeProgress(slider);
-  var jumpButtons = document.querySelectorAll('#time-jump-strip .time-jump');
-  jumpButtons.forEach(function(button, i) {
-    var active = i === globalTimeIndex;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-current', active ? 'true' : 'false');
-  });
-  var activeButton = document.querySelector('#time-jump-strip .time-jump.active');
-  var jumpStrip = document.getElementById('time-jump-strip');
-  if (activeButton && jumpStrip) {
-    jumpStrip.scrollLeft = Math.max(0, activeButton.offsetLeft - jumpStrip.clientWidth / 2 + activeButton.clientWidth / 2);
-  }
 }
 
 // Header-label per model: echte run in lokale tijd waar bekend (run_utc, GRIB-
@@ -1912,7 +1996,6 @@ function getGlobalTimes() {
   syncAllToTime(activeGlobalTime);
   if (!globalTimes.length && playTimer) togglePlay();
   buildTimeAxis();
-  buildTimeJumpButtons();
   buildDayChoices();
   updateGlobalTimeControl();
   buildTimeline();
@@ -3029,9 +3112,9 @@ function setMapFocusMode(active, notifyParent) {
   if (notifyParent && window.parent !== window) {
     window.parent.postMessage({ type:'weerlab-weerkaarten-focus', active:mapFocusActive }, window.location.origin);
   }
-  // Beide tijdassen opnieuw opbouwen: de uurstap hangt af van de breedte, en
-  // die verandert zodra de bediening van/naar beeldvullend springt.
-  window.setTimeout(function() { buildTimeAxis(); requestRender(); }, 40);
+  // De tijdas opnieuw opbouwen (de uurstap hangt af van de breedte) en de
+  // gekozen dag en het gekozen uur in de nu zichtbare bediening centreren.
+  window.setTimeout(function() { buildTimeAxis(); centreAllTimeSteps(); requestRender(); }, 40);
 }
 
 document.getElementById('btn-map-focus').addEventListener('click', function() {
@@ -3358,12 +3441,6 @@ function syncAllToTime(refTime) {
     requestRender();
   });
 });
-['day-select', 'focus-day-select'].forEach(function(id) {
-  document.getElementById(id).addEventListener('change', function() {
-    var idx = timeIndexForDay(globalTimes, this.value, activeGlobalTime);
-    if (idx >= 0) setGlobalTimeIndex(idx);
-  });
-});
 document.getElementById('btn-now').addEventListener('click', function() {
   setGlobalTimeIndex(nearestTimeIndex(globalTimes, Date.now()));
 });
@@ -3392,10 +3469,12 @@ document.addEventListener('keydown', function(e) {
     document.getElementById('btn-map-focus').focus({ preventScroll:true });
     return;
   }
-  if (e.target.closest('input, select, button')) return;
+  // Pijltjes werken ook als een dag- of uurknop focus heeft.
+  var onTimeStep = Boolean(e.target.closest('.tijdstappen'));
+  if (e.target.closest('input, select, button') && !onTimeStep) return;
   if (e.key === 'ArrowRight') { e.preventDefault(); stepAll(1); }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); stepAll(-1); }
-  else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key === ' ' && !onTimeStep) { e.preventDefault(); togglePlay(); }
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -3470,6 +3549,7 @@ document.getElementById('map-focus-var').addEventListener('change', function() {
 var resizeTimer = null;
 function naHerschaling() {
   buildTimeAxis();          // uurstap hangt af van de breedte van de tijdas
+  centreAllTimeSteps();
   updateTimelineCursor();
   requestRender();
 }
