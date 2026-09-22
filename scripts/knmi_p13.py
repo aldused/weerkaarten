@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """
 knmi_p13.py — Landelijk neerslaggemiddelde P13
-Berekent records op basis van 13 KNMI neerslagstations (terug tot 1900).
+Berekent records op basis van de 13 KNMI-neerslagstations van de P13-reeks
+(vanaf 1 januari 1906, zoals het KNMI).
 
-Neerslagstation-nummers (ANDERS dan synop-nummers!):
-  De Bilt        550   Ter Apel          144
-  De Kooy        025   West-Terschelling 011
-  Eelde          161   Westdorpe         770
-  Heerde         328   Winterswijk       666
-  Hoofddorp      438
-  Hoorn          222
-  Kerkwerve      737
-  Oudenbosch     828
-  Roermond       961
+P13 bestaat uit 13 handmatige neerslagstations (MONV-nummers, ANDERS dan de
+synop-nummers van de automatische weerstations):
+  De Bilt            550
+  De Kooy            025   (t/m 1971: Den Helder 009)
+  Groningen          139
+  Heerde             328
+  Hoofddorp          438
+  Hoorn              222
+  Kerkwerve          737
+  Oudenbosch         828
+  Roermond           961
+  Ter Apel           144
+  West-Terschelling  011
+  Westdorpe          770   (t/m 1995: Axel 745)
+  Winterswijk        666
+
+Definitie: knmi.nl/kennis-en-datacentrum/achtergrond/
+veelgestelde-vragen-over-landelijk-gemiddelden
+Daggemiddelde = gemiddelde over de 13 slots, met per slot het station dat op
+die datum geldt (zelfde als berekenP13/P13_SLOTS in beta_neerslagstations.html).
 
 Data: daggegevens.knmi.nl/klimatologie/monv/reeksen
 Kolom RD: 24-uur neerslagsom in tiende mm, 08:00 UTC vorigedag – 08:00 UTC huidig.
@@ -31,6 +42,24 @@ from datetime import datetime
 
 # ── Configuratie ──────────────────────────────────────────────────────────────
 
+# De 13 P13-slots: per slot de MONV-stations met hun geldigheid (van/tot incl.).
+P13_SLOTS = [
+    ("De Bilt",           [("550", None, None)]),
+    ("De Kooy",           [("009", None, "1971-12-31"), ("025", "1972-01-01", None)]),
+    ("Groningen",         [("139", None, None)]),
+    ("Heerde",            [("328", None, None)]),
+    ("Hoofddorp",         [("438", None, None)]),
+    ("Hoorn",             [("222", None, None)]),
+    ("Kerkwerve",         [("737", None, None)]),
+    ("Oudenbosch",        [("828", None, None)]),
+    ("Roermond",          [("961", None, None)]),
+    ("Ter Apel",          [("144", None, None)]),
+    ("West-Terschelling", [("011", None, None)]),
+    ("Westdorpe",         [("745", None, "1995-12-31"), ("770", "1996-01-01", None)]),
+    ("Winterswijk",       [("666", None, None)]),
+]
+
+# Huidige P13-stations (meta.stations, stationslijst op de pagina)
 P13_STATIONS = {
     "011": "West-Terschelling",
     "025": "De Kooy",
@@ -46,9 +75,10 @@ P13_STATIONS = {
     "828": "Oudenbosch",
     "961": "Roermond",
 }
+STATION_NAMEN = {**P13_STATIONS, "009": "Den Helder", "745": "Axel"}
 
 BASE_URL     = "https://daggegevens.knmi.nl/klimatologie/monv/reeksen"
-START_DATE   = "19000101"
+START_DATE   = "19060101"   # begin officiële P13-reeks
 SCRIPT_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR    = os.path.join(SCRIPT_DIR, "p13_cache")
 OUTPUT_JSON  = os.path.join(SCRIPT_DIR, "p13_records.json")
@@ -83,7 +113,7 @@ def download_station(nr: str) -> pd.DataFrame:
             "stns": nr, "start": START_DATE, "end": vandaag, "fmt": "csv",
         })
         url = f"{BASE_URL}?{params}"
-        print(f"  Downloaden: stn {nr} ({P13_STATIONS[nr]})")
+        print(f"  Downloaden: stn {nr} ({STATION_NAMEN[nr]})")
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=60) as resp:
@@ -92,9 +122,14 @@ def download_station(nr: str) -> pd.DataFrame:
                 f.write(tekst)
         except Exception as e:
             print(f"  FOUT bij downloaden station {nr}: {e}")
-            return pd.DataFrame()
+            if not os.path.exists(cache_path):
+                return pd.DataFrame()
+            # Oude cache is beter dan een P13 met een station te weinig.
+            print(f"  Verouderde cache gebruikt voor stn {nr}")
+            with open(cache_path, "r", encoding="utf-8") as f:
+                tekst = f.read()
     else:
-        print(f"  Cache: stn {nr} ({P13_STATIONS[nr]})")
+        print(f"  Cache: stn {nr} ({STATION_NAMEN[nr]})")
         with open(cache_path, "r", encoding="utf-8") as f:
             tekst = f.read()
 
@@ -132,21 +167,24 @@ def parse_neerslag_csv(tekst: str, nr: str) -> pd.DataFrame:
 
 
 def laad_alle_stations() -> pd.DataFrame:
+    """Eén kolom per P13-slot, met per datum het station dat dan meetelt."""
     print("P13 stations laden...")
+    codes  = sorted({code for _, reeks in P13_SLOTS for code, _, _ in reeks})
     frames = {}
-    for nr in sorted(P13_STATIONS.keys()):
+    for nr in codes:
         df = download_station(nr)
-        if not df.empty:
-            frames[nr] = df["rh_mm"].rename(nr)
+        if df.empty:
+            # Zonder dit station zou P13 stilletjes over 12 stations middelen.
+            raise RuntimeError(
+                f"Station {nr} ({STATION_NAMEN[nr]}) niet geladen; P13 niet berekend.\n"
+                "Controleer of https://daggegevens.knmi.nl bereikbaar is."
+            )
+        frames[nr] = df["rh_mm"]
 
-    if not frames:
-        raise RuntimeError(
-            "Geen enkel station geladen!\n"
-            "Controleer of https://daggegevens.knmi.nl bereikbaar is."
-        )
-
-    combined = pd.DataFrame(frames).sort_index()
-    print(f"  Geladen: {len(frames)}/13 stations, "
+    slots = {naam: pd.concat([frames[code].loc[van:tot] for code, van, tot in reeks])
+             for naam, reeks in P13_SLOTS}
+    combined = pd.DataFrame(slots).sort_index().loc[pd.Timestamp(START_DATE):]
+    print(f"  Geladen: {len(codes)} stations in 13 slots, "
           f"{combined.index[0].year}–{combined.index[-1].year}, "
           f"{len(combined)} dagen")
     return combined
@@ -156,7 +194,8 @@ def laad_alle_stations() -> pd.DataFrame:
 
 def bereken_daggemiddelde(combined: pd.DataFrame) -> pd.DataFrame:
     count     = combined.notna().sum(axis=1)
-    gemiddeld = combined.mean(axis=1)
+    # Afronden haalt float-ruis weg (0,99999… i.p.v. 1,0) bij de drempels ≥1,0 en <0,1 mm
+    gemiddeld = combined.mean(axis=1).round(6)
     return pd.DataFrame({"rh_mm": gemiddeld, "n_stations": count})[count >= MIN_STATIONS]
 
 
@@ -338,6 +377,11 @@ def main():
     output = {
         "meta": {
             "stations":      P13_STATIONS,
+            "stationswissels": [
+                {"slot": naam, "stn": code, "naam": STATION_NAMEN[code], "van": van, "tot": tot}
+                for naam, reeks in P13_SLOTS if len(reeks) > 1
+                for code, van, tot in reeks
+            ],
             "periode_start": dag.index[0].strftime("%Y-%m-%d"),
             "periode_eind":  dag.index[-1].strftime("%Y-%m-%d"),
             "min_stations":  MIN_STATIONS,
