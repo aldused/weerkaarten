@@ -1,3 +1,4 @@
+import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
 import {createProjectedGrid} from './projected-grid.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
 import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
@@ -639,6 +640,7 @@ function drawCities(){
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);drawnCities=[];
   if(!$('city-labels').checked||!current)return;
+  const symbolAudit=params.get('profile')==='1'?[]:null;
   const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12,valueFont=font+2,windMode=current.mode==='wind',controls=document.querySelector('.bottom-area').getBoundingClientRect();
   for(const city of cities){
     if(city.minZoom>zoom)continue;
@@ -657,12 +659,16 @@ function drawCities(){
     const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):temp;
     if(Number.isFinite(displayedValue)){const t=String(windMode?beaufort(displayedValue):Math.round(displayedValue)),y=p.y-(windMode?23:12);ctx.font=`700 ${valueFont}px Arial`;ctx.strokeText(t,p.x+7,y);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,y);}
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
-    if(fog){
+    const snowfall=sample(current.samples.snowfall_water_equivalent,city.lat,city.lon);
+    const symbol=weatherSymbol({precipitation:rain,snowfall,cloud,fog});
+    if(symbolAudit)symbolAudit.push({name,lat:city.lat,lon:city.lon,precipitation:rain,snowfall,cloud,symbol});
+    if(['rain','snow','mixed'].includes(symbol))drawPrecipitationSymbol(ctx,p.x-13,p.y-17,symbol);
+    else if(symbol==='fog'){
       ctx.fillStyle=fog.color;ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
       for(let line=0;line<3;line++){ctx.beginPath();ctx.moveTo(p.x-20+(line%2)*2,p.y-21+line*5);ctx.lineTo(p.x-6,p.y-21+line*5);ctx.stroke();}
     }
-    else if(cloud==='clear'&&!(rain>.1))skyIcon(ctx,p.x-13,p.y-16,city);
-    else if(cloud==='filtered'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
+    else if(symbol==='clear')skyIcon(ctx,p.x-13,p.y-16,city);
+    else if(symbol==='filtered'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
       const wind=current.samples.wind_u_component_10m;
       if(wind?.data.directions&&Number.isFinite(displayedValue)){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-27);ctx.rotate(a+Math.PI);ctx.beginPath();ctx.moveTo(0,9);ctx.lineTo(0,-9);ctx.lineTo(-4,-4);ctx.moveTo(0,-9);ctx.lineTo(4,-4);ctx.strokeStyle='#243846';ctx.lineWidth=4;ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();ctx.restore();}
@@ -671,6 +677,7 @@ function drawCities(){
     }
     drawnCities.push({...city,x:p.x,y:p.y});
   }
+  if(symbolAudit)canvas.dataset.weatherSymbols=JSON.stringify({model:modelFor(current.modelMeta),run:current.modelMeta.reference_time,time:current.iso,places:symbolAudit});
 }
 
 let pointMarker,pointController;
