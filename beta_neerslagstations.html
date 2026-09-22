@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://data.weerlab.nl" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
   --primary:#00205b; --primary-strong:#003366; --primary-soft:#eff6ff;
@@ -99,6 +99,10 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .zoek input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
 .chk input{accent-color:var(--primary);width:15px;height:15px;margin:0}
+.acties{display:flex;gap:6px;margin-left:auto}
+.knop-prim{background:var(--primary-strong);border-color:var(--primary-strong);color:#fff}
+.knop-prim:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+.knop[aria-busy="true"]{opacity:.6;cursor:progress}
 
 .info-rij{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;margin:10px 2px 8px;font-size:12.5px;color:var(--muted)}
 .info-rij b{color:var(--text);font-weight:600}
@@ -219,6 +223,8 @@ td .geen{color:var(--muted);font-style:italic}
   .seg{width:100%}
   .seg button{flex:1;padding:6px 4px;font-size:12px}
   .zoek{max-width:none;flex-basis:100%;order:5}
+  .acties{margin-left:0;flex-basis:100%;order:6}
+  .acties .knop{flex:1}
   .kaart-paneel{padding:6px}
   .kaart>svg{max-width:none}
   .kaart-hint{display:none}
@@ -265,6 +271,10 @@ td .geen{color:var(--muted);font-style:italic}
     </div>
     <label class="chk"><input type="checkbox" id="waardenChk"> Waarden op kaart</label>
     <label class="chk"><input type="checkbox" id="ontbrChk" checked> Stations zonder melding</label>
+    <div class="acties">
+      <button class="knop knop-prim" type="button" id="pngBtn" title="Kaart als PNG met Weerlab-kop en -voet">⬇ PNG downloaden</button>
+      <button class="knop" type="button" id="kopieerBtn" title="Kaart als afbeelding naar het klembord" hidden>Kopiëren</button>
+    </div>
   </div>
 
   <div class="info-rij" id="infoRij"></div>
@@ -878,6 +888,187 @@ function render(){
   zetSchaal();
 }
 $('tabelPaneel').addEventListener('toggle',()=>{if($('tabelPaneel').open)tekenTabel();});
+
+/* ── PNG-export (Weerlab slate-kop en -voet, zie header_footer_resultaat.html) ── */
+const EXP={breed:1600,kop:124,voet:64,pad:36,
+  zee:'#dfe8f1',land:'#ffffff',buur:'#eceff3',grens:'#b8c3d1',kust:'#8b9bb0',
+  ramp:['#f1f5f9','#dbeafe','#bfdbfe','#93c5fd','#60a5fa','#3b82f6','#2563eb','#1d4ed8','#1e40af','#172554'],
+  droogRand:'#64748b',onvRand:'#334155',geen:'#94a3b8',medaille:['#cc2200','#a08018','#94a3b8']};
+function rrPad(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+function hoofdletter(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+function exportTitels(idx){
+  const a=D.dagen[idx[0]],b=D.dagen[idx[idx.length-1]];
+  const lang=new Intl.DateTimeFormat('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'UTC'});
+  const dm=new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'});
+  let rechts,sub;
+  if(periode==='dag'){rechts=hoofdletter(lang.format(dagDatum(b)));sub='Neerslag 24 uur (mm)';}
+  else if(periode==='week'){rechts=`7 dagen t/m ${dm.format(dagDatum(b))}`;sub='Neerslagsom 7 dagen (mm)';}
+  else if(periode==='maand'){const m=hoofdletter(fMaand.format(dagDatum(a)));const vol=idx.length===dagenInMaand(a);rechts=vol?m:`${m} · 1 t/m ${+b.slice(6,8)}`;sub='Maandsom neerslag (mm)';}
+  else{const y=a.slice(0,4);rechts=b===`${y}1231`?`Jaar ${y}`:`${y} · 1 jan t/m ${fKort.format(dagDatum(b))}`;sub='Jaarsom neerslag (mm)';}
+  return {rechts,sub:`${sub} · ${tijdvakTekst(idx)}`};
+}
+function tekenExportKop(c,EW,idx){
+  const K=EXP.kop,P=EXP.pad;
+  c.fillStyle='#1e293b';c.fillRect(0,0,EW,K);
+  c.fillStyle='#2ec4e8';c.fillRect(0,K-6,EW,6);
+  const st=statusVan(idx),stTxt=st==='M'?'deels gevalideerd':STATUS_TXT[st];
+  const n=resultaten.filter(r=>!r.geen).length;
+  c.textBaseline='alphabetic';c.textAlign='left';
+  c.fillStyle='#ffffff';c.font="800 46px 'DM Sans', Arial, sans-serif";c.fillText('Ed Aldus WM',P,58);
+  const linksW=c.measureText('Ed Aldus WM').width;
+  c.fillStyle='#94a3b8';c.font="500 22px 'DM Mono', 'Courier New', monospace";
+  c.fillText(`KNMI-neerslagstations  ·  ${stTxt}  ·  ${n} stations`,P,94);
+  const {rechts,sub}=exportTitels(idx);
+  c.textAlign='right';
+  let fs=46;c.font=`800 ${fs}px 'DM Sans', Arial, sans-serif`;
+  while(c.measureText(rechts).width>EW-3*P-linksW-40&&fs>26){fs-=2;c.font=`800 ${fs}px 'DM Sans', Arial, sans-serif`;}
+  c.fillStyle='#ffffff';c.fillText(rechts,EW-P,58);
+  c.fillStyle='#cbd5e1';c.font="500 22px 'DM Sans', Arial, sans-serif";c.fillText(sub,EW-P,94);
+  c.textAlign='left';
+}
+function tekenExportVoet(c,EW,y){
+  const F=EXP.voet,P=EXP.pad,midY=y+F/2+7;
+  c.fillStyle='#0f172a';c.fillRect(0,y,EW,F);
+  c.textAlign='left';c.fillStyle='#f1f5f9';c.font="700 22px 'DM Sans', Arial, sans-serif";c.fillText('weerlab.nl',P,midY);
+  const mw=c.measureText('weerlab.nl').width;
+  c.fillStyle='#94a3b8';c.font="500 19px 'DM Sans', Arial, sans-serif";c.fillText('·  Ed Aldus — weerdata & visualisaties',P+mw+6,midY);
+  const tijd=D.archief?'MONV gevalideerd':(D.laatste_bestand_tijd?new Date(D.laatste_bestand_tijd).toLocaleString('nl-NL',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:TZ}):fKortJ.format(dagDatum(D.laatste_dag)));
+  const bron=`KNMI  ·  ${tijd}`;
+  c.font="500 18px 'DM Mono', 'Courier New', monospace";
+  const bw=c.measureText(bron).width,ph=30,px=EW-P-bw-22,py=y+F/2-ph/2;
+  c.fillStyle='rgba(46,196,232,0.14)';rrPad(c,px,py,bw+22,ph,ph/2);c.fill();
+  c.fillStyle='#7dd3fc';c.textAlign='right';c.fillText(bron,EW-P-11,midY);c.textAlign='left';
+}
+function tekenExportKaart(c,EW,y0){
+  const sc=EW/W,MH=Math.round(H*sc);
+  c.save();c.translate(0,y0);
+  c.fillStyle=EXP.zee;c.fillRect(0,0,EW,MH);
+  c.save();c.scale(sc,sc);
+  if(GEO){
+    c.lineJoin='round';
+    for(const b of GEO.buren){const p=new Path2D(b.d);c.fillStyle=EXP.buur;c.fill(p);c.strokeStyle=EXP.grens;c.lineWidth=0.8;c.stroke(p);}
+    for(const pr of GEO.provincies){const p=new Path2D(pr.d);c.fillStyle=EXP.land;c.fill(p);c.strokeStyle=EXP.grens;c.lineWidth=0.9;c.stroke(p);}
+    c.strokeStyle=EXP.kust;c.lineWidth=1.1;c.stroke(new Path2D(GEO.nl));
+  }
+  // stations: zelfde volgorde en klassen als op het scherm
+  const grenzen=klassenVoor(),f=1.12;
+  const lijst=resultaten.filter(r=>r.s.lat!=null&&(st.ontbr||!r.geen)).sort((a,b)=>(a.geen?-1:a.som)-(b.geen?-1:b.som));
+  for(const r of lijst){
+    const [x,y]=xy(r.s.lat,r.s.lon);
+    c.beginPath();
+    if(r.geen){
+      c.arc(x,y,3.4*f,0,6.2832);c.setLineDash([2.2,1.8]);c.strokeStyle=EXP.geen;c.lineWidth=1.4;c.stroke();c.setLineDash([]);
+      continue;
+    }
+    const k=klasse(r.som/10,grenzen),rad=straal(k)*f;
+    c.arc(x,y,rad,0,6.2832);c.fillStyle=EXP.ramp[k];c.fill();
+    if(!r.compleet){c.setLineDash([2.2,1.6]);c.strokeStyle=EXP.onvRand;c.lineWidth=1.4;}
+    else if(k===0&&grenzen[0]===0){c.strokeStyle=EXP.droogRand;c.lineWidth=1.3;}
+    else{c.strokeStyle='#ffffff';c.lineWidth=1.6;}
+    c.stroke();c.setLineDash([]);
+    r._ex=x;r._ey=y;r._er=rad;
+  }
+  if(st.waarden){
+    const fs=20/sc,bezet=[];
+    c.font=`600 ${fs}px 'DM Sans', Arial, sans-serif`;c.textBaseline='middle';c.lineJoin='round';
+    for(const r of lijst.filter(r=>!r.geen).sort((a,b)=>b.som-a.som)){
+      const t=(r.compleet?'':'≥')+(periode==='dag'?mm(r.som):nf0.format(r.som/10));
+      const w=c.measureText(t).width+fs*0.2,h=fs;
+      const bx=r._ex+r._er+fs*0.15,by=r._ey-h/2;
+      if(bx+w>W) continue;
+      if(bezet.some(b=>bx<b[0]+b[2]&&bx+w>b[0]&&by<b[1]+b[3]&&by+h>b[1])) continue;
+      bezet.push([bx,by,w,h]);
+      c.strokeStyle='#ffffff';c.lineWidth=fs*0.25;c.strokeText(t,bx,r._ey+fs*0.04);
+      c.fillStyle='#0f172a';c.fillText(t,bx,r._ey+fs*0.04);
+    }
+    c.textBaseline='alphabetic';
+  }
+  c.restore();
+  // ── top 3 (linksboven) ──
+  const top=natsteStations().slice(0,3);
+  if(top.length){
+    const bx=24,by=24,bw=390,rh=62,bh=58+top.length*rh;
+    c.fillStyle='rgba(255,255,255,0.94)';rrPad(c,bx,by,bw,bh,10);c.fill();c.strokeStyle='#cbd5e1';c.lineWidth=1.5;c.stroke();
+    c.fillStyle='#1e293b';c.font="700 24px 'DM Sans', Arial, sans-serif";c.textAlign='center';c.fillText('Top 3 natst',bx+bw/2,by+38);
+    top.forEach((r,i)=>{
+      const ry=by+58+i*rh,col=EXP.medaille[i];
+      c.beginPath();c.arc(bx+34,ry+26,17,0,6.2832);c.fillStyle=col;c.fill();
+      c.fillStyle='#fff';c.font="700 18px 'DM Sans', Arial, sans-serif";c.fillText(String(i+1),bx+34,ry+32);
+      c.textAlign='left';
+      let naam=r.s.n;c.font="700 22px 'DM Sans', Arial, sans-serif";
+      while(c.measureText(naam).width>bw-80&&naam.length>4) naam=naam.slice(0,-2)+'…';
+      c.fillStyle='#1e293b';c.fillText(naam,bx+62,ry+20);
+      c.fillStyle=col;c.font="600 20px 'DM Sans', Arial, sans-serif";
+      const mist=r.totaal-r.gemeld;
+      c.fillText(`${r.compleet?'':'≥ '}${mm(r.som)} mm${r.compleet?'':` (${mist} dag${mist===1?'':'en'} ontbreekt)`}`.replace('ontbreekt)',mist===1?'ontbreekt)':'ontbreken)'),bx+62,ry+46);
+      c.textAlign='center';
+    });
+    c.textAlign='left';
+  }
+  // ── legenda (linksonder) ──
+  const lab=klasLabels(grenzen),n=grenzen.length,sw=56;
+  const lw=Math.max(24+n*sw,470),notities=[];
+  if(periode!=='dag'&&resultaten.some(r=>!r.compleet&&!r.geen)) notities.push('stippelrand = onvolledig (≥)');
+  if(st.ontbr&&resultaten.some(r=>r.geen)) notities.push('stippelring = geen melding (≠ 0 mm)');
+  const xDagen=periodeIdx().filter(i=>D.dagstatus[i]==='X');
+  if(xDagen.length) notities.push(`geen KNMI-data: ${xDagen.slice(0,3).map(i=>fKort.format(dagDatum(D.dagen[i]))).join(', ')}${xDagen.length>3?' …':''}`);
+  const zp=resultaten.filter(r=>r.s.lat==null).length;
+  if(zp) notities.push(`${zp} stations zonder bekende positie niet getoond`);
+  const lh=112+notities.length*26,lx=24,ly=MH-24-lh;
+  c.fillStyle='rgba(255,255,255,0.94)';rrPad(c,lx,ly,lw,lh,10);c.fill();c.strokeStyle='#cbd5e1';c.lineWidth=1.5;c.stroke();
+  c.fillStyle='#1e293b';c.font="700 20px 'DM Sans', Arial, sans-serif";c.textAlign='left';c.fillText('Neerslag (mm)',lx+18,ly+32);
+  for(let i=0;i<n;i++){
+    const cx=lx+18+sw/2+i*sw,cy=ly+62,rad=Math.min(20,straal(i)*1.9);
+    c.beginPath();c.arc(cx,cy,rad,0,6.2832);c.fillStyle=EXP.ramp[i];c.fill();
+    if(i===0&&grenzen[0]===0){c.strokeStyle=EXP.droogRand;c.lineWidth=1.5;c.stroke();}
+    c.fillStyle='#475569';c.font="500 16px 'DM Mono', 'Courier New', monospace";c.textAlign='center';c.fillText(lab[i],cx,ly+100);
+  }
+  c.textAlign='left';c.fillStyle='#475569';c.font="500 17px 'DM Sans', Arial, sans-serif";
+  notities.forEach((tn,i)=>c.fillText(tn,lx+18,ly+130+i*26));
+  // ── schaalbalk + copyright (rechtsonder) ──
+  const km50=50/111.2*PROJ[3]*sc,sx=EW-24-km50,sy=MH-58;
+  c.strokeStyle='#334155';c.lineWidth=3;c.beginPath();c.moveTo(sx,sy-10);c.lineTo(sx,sy);c.lineTo(sx+km50,sy);c.lineTo(sx+km50,sy-10);c.stroke();
+  c.fillStyle='#334155';c.font="500 17px 'DM Mono', 'Courier New', monospace";c.textAlign='center';c.fillText('50 km',sx+km50/2,sy-16);
+  c.textAlign='right';c.fillStyle='#64748b';c.font="italic 500 17px 'DM Sans', Arial, sans-serif";c.fillText('© Ed Aldus / KNMI',EW-24,MH-22);
+  c.textAlign='left';
+  c.restore();
+  return MH;
+}
+async function maakKaartPng(){
+  try{await Promise.all(["800 46px 'DM Sans'","700 22px 'DM Sans'","500 22px 'DM Sans'","italic 500 17px 'DM Sans'","500 22px 'DM Mono'"].map(f=>document.fonts.load(f)));}catch(e){}
+  const idx=periodeIdx(),EW=EXP.breed,MH=Math.round(H*EW/W);
+  const cv=document.createElement('canvas');cv.width=EW;cv.height=EXP.kop+MH+EXP.voet;
+  const c=cv.getContext('2d');
+  tekenExportKop(c,EW,idx);
+  tekenExportKaart(c,EW,EXP.kop);
+  tekenExportVoet(c,EW,EXP.kop+MH);
+  const a=D.dagen[idx[0]],b=D.dagen[idx[idx.length-1]];
+  const naam=periode==='dag'?`24u_${b}`:periode==='week'?`7d_${a}-${b}`:periode==='maand'?`maand_${a.slice(0,6)}`:`jaar_${a.slice(0,4)}${b.slice(4)==='1231'?'':'_tm'+b}`;
+  const blob=await new Promise(res=>cv.toBlob(res,'image/png'));
+  return {blob,bestand:`knmi_neerslagstations_${naam}.png`};
+}
+function knopBezig(btn,aan,tekst){btn.setAttribute('aria-busy',aan?'true':'false');btn.disabled=aan;if(tekst)btn.textContent=tekst;}
+$('pngBtn').addEventListener('click',async()=>{
+  const btn=$('pngBtn'),oud=btn.textContent;knopBezig(btn,true,'Bezig…');
+  try{
+    const {blob,bestand}=await maakKaartPng();
+    const u=URL.createObjectURL(blob),l=document.createElement('a');l.href=u;l.download=bestand;document.body.appendChild(l);l.click();l.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),3000);
+  }catch(err){console.error(err);alert('PNG maken mislukt: '+err.message);}
+  knopBezig(btn,false,oud);
+});
+if(window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write){
+  $('kopieerBtn').hidden=false;
+  $('kopieerBtn').addEventListener('click',async()=>{
+    const btn=$('kopieerBtn');knopBezig(btn,true,'Bezig…');
+    try{
+      // Safari wil de ClipboardItem direct in de klik-handler, met een promise als inhoud.
+      await navigator.clipboard.write([new ClipboardItem({'image/png':maakKaartPng().then(x=>x.blob)})]);
+      knopBezig(btn,false,'Gekopieerd ✓');
+    }catch(err){console.error(err);knopBezig(btn,false,'Kopiëren mislukt');}
+    setTimeout(()=>{btn.textContent='Kopiëren';},2200);
+  });
+}
 
 /* ── status/update ────────────────────────────────────────────────── */
 function tekenStatus(){
