@@ -579,33 +579,42 @@ function tekenKpis(idx){
     return;
   }
   const gem=compl.reduce((a,r)=>a+r.som,0)/compl.length;
-  const max=compl.reduce((a,r)=>r.som>a.som?r:a,compl[0]);
+  const max=natsteStations()[0]||compl[0];
   const min=compl.reduce((a,r)=>r.som<a.som?r:a,compl[0]);
   const droog=compl.filter(r=>r.som===0).length;
   const pns=compl.filter(r=>r.pn!=null).map(r=>r.pn).sort((a,b)=>a-b);
   const med=pns.length?pns[Math.floor(pns.length/2)]:null;
   k.push(`<div class="kpi"><div class="l">Gemiddeld</div><div class="v">${mm(gem)} <small>mm</small></div><div class="n">${med!=null?`mediaan ${med}% van normaal`:`over ${compl.length} stations`}</div></div>`);
-  k.push(`<div class="kpi"><div class="l">Natst</div><div class="v">${mm(max.som)} <small>mm</small></div><div class="n" title="${esc(max.s.n)}">${esc(max.s.n)}</div></div>`);
+  k.push(`<div class="kpi"><div class="l">Natst</div><div class="v">${max.compleet?'':'≥ '}${mm(max.som)} <small>mm</small></div><div class="n" title="${esc(max.s.n)}">${esc(max.s.n)}</div></div>`);
   k.push(`<div class="kpi"><div class="l">Droogst</div><div class="v">${mm(min.som)} <small>mm</small></div><div class="n">${droog>1?`${droog} stations droog`:esc(min.s.n)}</div></div>`);
   k.push(`<div class="kpi"><div class="l">Stations</div><div class="v">${compl.length} <small>/ ${resultaten.length}</small></div><div class="n">met volledige meting</div></div>`);
   $('kpis').innerHTML=k.join('');
 }
 function topRij(r,rang){
-  return `<li><button type="button" data-c="${r.s.c}"><span class="rk">${rang}</span><span class="nm">${esc(r.s.n)}<small>${esc(r.s.p||'')}</small></span><span class="mmv">${mm(r.som)}</span></button></li>`;
+  const n=r.totaal-r.gemeld;
+  const prov=r.s.p&&!r.s.n.includes(r.s.p)?r.s.p:'';
+  const mist=r.compleet?'':(n===1?'1 dag ontbreekt':`${n} dagen ontbreken`);
+  const sub=esc([prov,mist].filter(Boolean).join(' · '));
+  return `<li><button type="button" data-c="${r.s.c}"><span class="rk">${rang}</span><span class="nm">${esc(r.s.n)}<small>${sub}</small></span><span class="mmv">${r.compleet?'':'≥ '}${mm(r.som)}</span></button></li>`;
+}
+// Natst: ook onvolledige reeksen — een ontbrekende dag kan de som alleen verhogen,
+// dus de ondergrens (≥) mag meedoen. Droogst: alleen volledige reeksen.
+function natsteStations(){
+  return resultaten.filter(r=>!r.geen).sort((a,b)=>b.som-a.som||(b.compleet-a.compleet)||a.s.n.localeCompare(b.s.n,'nl'));
 }
 function tekenTop(idx){
   const compl=resultaten.filter(r=>r.compleet);
-  const nat=compl.slice().sort((a,b)=>b.som-a.som||a.s.n.localeCompare(b.s.n,'nl')).slice(0,10);
+  const nat=natsteStations().slice(0,10);
   const droog=compl.slice().sort((a,b)=>a.som-b.som||a.s.n.localeCompare(b.s.n,'nl')).slice(0,10);
   $('topSub').textContent=idx.length?`${periodeNaam(idx).replace(/^24-uurssom /,'')} · mm`:'';
-  $('topNat').innerHTML=nat.length?nat.map((r,i)=>topRij(r,i+1)).join(''):'<li class="leeg">Geen volledige metingen</li>';
+  $('topNat').innerHTML=nat.length?nat.map((r,i)=>topRij(r,i+1)).join(''):'<li class="leeg">Geen metingen</li>';
   $('topDroog').innerHTML=droog.length?droog.map((r,i)=>topRij(r,i+1)).join(''):'<li class="leeg">—</li>';
   const n0=compl.filter(r=>r.som===0).length;
   const onv=resultaten.filter(r=>!r.compleet&&!r.geen).length;
   const noot=[];
-  noot.push(`Gerangschikt: ${compl.length} stations met een volledige meting.`);
+  if(onv) noot.push(`Natst: ook stations met ontbrekende dagen; ≥ betekent minimaal zoveel. Droogst: alleen de ${compl.length} stations met een volledige meting.`);
+  else noot.push(`Gerangschikt: ${compl.length} stations met een volledige meting.`);
   if(n0>10) noot.push(`${n0} stations bleven helemaal droog (0,0 mm); de droogste tien staan alfabetisch.`);
-  if(onv) noot.push(`${onv} stations met ontbrekende dagen tellen niet mee.`);
   $('topNoot').textContent=noot.join(' ');
 }
 

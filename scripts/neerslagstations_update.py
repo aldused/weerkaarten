@@ -375,23 +375,31 @@ def provincie_zoeker():
 
 # ─── top 10 ─────────────────────────────────────────────────────────────────
 def top10(stations, idx, dagstatus):
-    """Top 10 natst/droogst over dag-indexen idx; alleen stations met een
-    waarde op elke dag waarvoor KNMI data publiceerde."""
+    """Top 10 over dag-indexen idx (dagen zonder KNMI-bestand tellen niet).
+    Natst: ook onvolledige reeksen, als ondergrens ("ontbreekt" = aantal
+    missende dagen) — een ontbrekende dag kan de som alleen verhogen.
+    Droogst: alleen stations met een waarde op elke gepubliceerde dag."""
     gepubliceerd = [i for i in idx if dagstatus[i] != "X"]
     if not gepubliceerd:
         return None
-    rij = []
+    alle, volledig = [], []
     for s in stations:
         vals = [s["rd"][i] for i in gepubliceerd]
-        if any(v is None for v in vals):
+        gemeld = [v for v in vals if v is not None]
+        if not gemeld:
             continue
-        rij.append((sum(vals), s["c"], s["n"], s.get("p")))
-    rij.sort(key=lambda t: (-t[0], t[2]))
-    nat = [{"c": c, "n": n, "p": p, "mm": round(v / 10, 1)} for v, c, n, p in rij[:10]]
-    rij.sort(key=lambda t: (t[0], t[2]))
-    droog = [{"c": c, "n": n, "p": p, "mm": round(v / 10, 1)} for v, c, n, p in rij[:10]]
-    return {"natst": nat, "droogst": droog, "stations": len(rij),
-            "droog_0": sum(1 for v, *_ in rij if v == 0)}
+        ontbreekt = len(vals) - len(gemeld)
+        rij = (sum(gemeld), ontbreekt, s["c"], s["n"], s.get("p"))
+        alle.append(rij)
+        if not ontbreekt:
+            volledig.append(rij)
+    alle.sort(key=lambda t: (-t[0], t[1] > 0, t[3]))
+    nat = [{"c": c, "n": n, "p": p, "mm": round(v / 10, 1), **({"ontbreekt": o} if o else {})}
+           for v, o, c, n, p in alle[:10]]
+    volledig.sort(key=lambda t: (t[0], t[3]))
+    droog = [{"c": c, "n": n, "p": p, "mm": round(v / 10, 1)} for v, o, c, n, p in volledig[:10]]
+    return {"natst": nat, "droogst": droog, "stations": len(volledig),
+            "droog_0": sum(1 for v, *_ in volledig if v == 0)}
 
 
 # ─── hoofdprogramma ─────────────────────────────────────────────────────────
