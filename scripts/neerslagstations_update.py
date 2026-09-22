@@ -2,7 +2,7 @@
 """
 neerslagstations_update.py — KNMI-neerslagstations (vrijwilligersnet, 08-08 UT)
 
-Bouwt neerslagstations.json voor neerslagstations.html: per station de
+Bouwt neerslagstations.json voor beta_neerslagstations.html: per station de
 24-uurssom (08.00 UT vorige dag → 08.00 UT datumdag) over de vorige en de
 lopende maand, plus stationsgegevens, maandnormalen en een top 10.
 

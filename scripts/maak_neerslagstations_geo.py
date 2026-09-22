@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 maak_neerslagstations_geo.py — voorgeprojecteerde kaartgeometrie voor
-neerslagstations.html (eenmalig/bij kaartwijziging draaien).
+beta_neerslagstations.html (eenmalig/bij kaartwijziging draaien).
 
 Projectie: equirectangulair met cos(52,15°)-correctie (juiste aspectverhouding
 voor NL), viewBox 0 0 W 1000. Dezelfde constanten staan in de pagina (PROJ).
@@ -17,7 +17,7 @@ from shapely.geometry import box, shape, mapping
 from shapely.ops import unary_union
 
 REPO = Path(__file__).resolve().parent.parent
-HTML = REPO / "neerslagstations.html"
+HTML = REPO / "beta_neerslagstations.html"
 
 LON0, LON1, LAT0, LAT1 = 3.25, 7.30, 50.70, 53.62
 COSL = math.cos(math.radians(52.15))
@@ -72,7 +72,7 @@ def main():
     html = HTML.read_text()
     nieuw, n = re.subn(r"/\*GEO-START\*/.*?/\*GEO-END\*/", lambda m: js, html, flags=re.S)
     if n != 1:
-        sys.exit("GEO-blok niet gevonden in neerslagstations.html")
+        sys.exit("GEO-blok niet gevonden in beta_neerslagstations.html")
     HTML.write_text(nieuw)
     print(f"GEO: {len(js)/1024:.1f} KB, W={W}, buren={[b['n'] for b in buren]}")
 
