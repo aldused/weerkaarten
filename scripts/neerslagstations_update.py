@@ -312,6 +312,57 @@ def haal_voorlopig(start, eind, na=None):
     return per_dag
 
 
+# ─── MONV-verzoeken (gedeeld met neerslagstations_archief.py) ──────────────
+MONV_RIJ = re.compile(r"^\s*\d+,(\d{8}),")
+
+
+def monv_deel(van, tot):
+    """Eén MONV-verzoek. De server geeft boven ~100k rijen een HTML-foutpagina,
+    dus aanroepers vragen hooguit een half jaar per keer. Streng gecontroleerd:
+    CSV-kop aanwezig, geen HTML, eerste datum = van en (voor perioden ouder dan
+    ~5 maanden, dus al gevalideerd) laatste datum = tot."""
+    for poging in range(5):
+        try:
+            r = requests.post(MONV_URL, data={
+                "start": van.strftime("%Y%m%d"), "end": tot.strftime("%Y%m%d"),
+                "vars": "RD:SX", "stns": "ALL", "fmt": "csv"}, timeout=300)
+            r.raise_for_status()
+            tekst = r.text
+            if "<html" in tekst[:500].lower() or "# STN,YYYYMMDD" not in tekst:
+                raise RuntimeError("geen MONV-CSV (HTML/foutpagina)")
+            datums = [m.group(1) for m in map(MONV_RIJ.match, tekst.splitlines()) if m]
+            if not datums:
+                raise RuntimeError("MONV-CSV zonder datarijen")
+            recent = tot > date.today() - timedelta(days=150)
+            if min(datums) != van.strftime("%Y%m%d") or (
+                    not recent and max(datums) != tot.strftime("%Y%m%d")):
+                raise RuntimeError(f"MONV-periode onvolledig: {min(datums)}–{max(datums)}")
+            time.sleep(2)   # KNMI-server ontzien
+            return tekst
+        except Exception as exc:
+            if poging == 4:
+                raise
+            wacht = 15 * (poging + 1)
+            log(f"  MONV {van}–{tot}: {exc}; opnieuw over {wacht} s")
+            time.sleep(wacht)
+
+
+def monv_periode(van, tot):
+    """MONV-CSV over [van, tot] in delen van hooguit 182 dagen, aan elkaar geplakt.
+    Een deel na het gevalideerde einde (geen datarijen) stopt de reeks zonder fout."""
+    delen, d = [], van
+    while d <= tot:
+        e = min(tot, d + timedelta(days=181))
+        try:
+            delen.append(monv_deel(d, e))
+        except RuntimeError as exc:
+            if delen and "zonder datarijen" in str(exc) and e > date.today() - timedelta(days=150):
+                break               # voorbij het gevalideerde einde
+            raise
+        d = e + timedelta(days=1)
+    return "\n".join(delen)
+
+
 # ─── gevalideerde reeks (MONV) ──────────────────────────────────────────────
 def haal_gevalideerd(start, eind):
     """MONV-daggegevens; resultaat wordt in de cache opgeteld zodat een lege
@@ -333,12 +384,9 @@ def haal_gevalideerd(start, eind):
     else:
         van, volledig = start, True
     try:
-        r = requests.post(MONV_URL, data={
-            "start": van.strftime("%Y%m%d"), "end": eind.strftime("%Y%m%d"),
-            "vars": "RD:SX", "stns": "ALL", "fmt": "csv"}, timeout=180)
-        r.raise_for_status()
+        tekst = monv_periode(van, eind)
         nieuw = 0
-        for regel in r.text.splitlines():
+        for regel in tekst.splitlines():
             if regel.startswith("#"):
                 m = re.match(r"#\s+(\d+)\s{2,}(.+?)\s*$", regel)
                 if m:
@@ -365,6 +413,23 @@ def haal_gevalideerd(start, eind):
         cache["vanaf"] = s_start
     schrijf_atomair(pad, json.dumps(cache).encode())
     return waarden, {int(k): v for k, v in namen.items()}
+
+
+# ─── blacklist (één bron: knmi_neerslag_records.py) ────────────────────────
+def lees_blacklist():
+    """BLACKLIST {stn: [(JJJJMM, JJJJMM), ...]} via AST uit knmi_neerslag_records.py."""
+    import ast
+    tree = ast.parse((REPO / "scripts" / "knmi_neerslag_records.py").read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "BLACKLIST"
+                                                for t in node.targets):
+            return {int(k): v for k, v in ast.literal_eval(node.value).items()}
+    raise RuntimeError("BLACKLIST niet gevonden in knmi_neerslag_records.py")
+
+
+def uitgesloten(bl, code, dag):
+    ym = int(dag[:6])
+    return any(a <= ym <= b for a, b in bl.get(code, []))
 
 
 # ─── provincie ──────────────────────────────────────────────────────────────
@@ -430,8 +495,10 @@ def main():
     nu = datetime.now(timezone.utc)
     vandaag = nu.date()
     eerste_deze = vandaag.replace(day=1)
-    # Heel het lopende jaar, en in januari ook nog december.
-    start = min(date(vandaag.year, 1, 1), (eerste_deze - timedelta(days=1)).replace(day=1))
+    # Heel het lopende jaar, en in januari ook nog december; plus 6 voorloopdagen
+    # zodat een 7-daagse som op de eerste dag compleet is.
+    eerste_dag = min(date(vandaag.year, 1, 1), (eerste_deze - timedelta(days=1)).replace(day=1))
+    start = eerste_dag - timedelta(days=6)
     log(f"Neerslagstations — venster {start} t/m {vandaag}")
 
     gevalideerd, monv_namen = haal_gevalideerd(start, vandaag)
@@ -472,13 +539,21 @@ def main():
 
     zoek_prov = provincie_zoeker()
     normalen = laad_normalen(codes)
+    bl = lees_blacklist()
 
     stations = []
     for code in sorted(codes):
-        rd, sx = [], {}
+        rd, sx, ux = [], {}, []
         naam_ruw, lat, lon, precisie = None, None, None, None
         for i, dag in enumerate(dagen):
             waarde = None
+            if uitgesloten(bl, code, dag):          # onbetrouwbare periode → null
+                if ux and ux[-1][1] == i - 1:
+                    ux[-1][1] = i
+                else:
+                    ux.append([i, i])
+                rd.append(None)
+                continue
             if dagstatus[i] == "G":
                 g = gevalideerd.get(f"{code}|{dag}")
                 if g is not None:
@@ -511,10 +586,10 @@ def main():
         elif lat is not None:
             precisie = "1km"
         if lat is None:
-            log(f"  Waarschuwing: station {code} zonder coördinaten overgeslagen")
-            continue
+            log(f"  Let op: station {code} zonder officiële positie (alleen tabel/top 10)")
         naam = monv_namen.get(code) or meta.get("naam") or mooie_naam(naam_ruw or str(code))
-        st = {"c": code, "n": naam, "lat": round(lat, 5), "lon": round(lon, 5),
+        st = {"c": code, "n": naam, "lat": round(lat, 5) if lat is not None else None,
+              "lon": round(lon, 5) if lon is not None else None,
               "p": zoek_prov(lat, lon), "rd": rd}
         if precisie != "exact":
             st["pr"] = precisie
@@ -522,6 +597,8 @@ def main():
             st["nm"] = normalen[code]
         if sx:
             st["sx"] = {str(k): v for k, v in sx.items()}
+        if ux:
+            st["ux"] = ux
         stations.append(st)
 
     # Top 10 voor de laatste dag en de lopende maand (de pagina rekent zelf
@@ -538,6 +615,7 @@ def main():
             "stations": "KNMI Data Platform · climate_normals_1991_2020_precipitation_normals_by_station v1",
         },
         "gevalideerd_tot": gevalideerd_tot,
+        "eerste_dag": eerste_dag.strftime("%Y%m%d"),
         "laatste_dag": dagen[laatste_i],
         "laatste_bestand": voorlopig.get(dagen[laatste_i], {}).get("bestand"),
         "laatste_bestand_tijd": bestandtijd[laatste_i],

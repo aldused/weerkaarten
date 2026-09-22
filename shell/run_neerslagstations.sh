@@ -24,4 +24,11 @@ echo "════════════════════════�
 echo "Publiceren naar R2 (data.weerlab.nl/neerslagstations.json)…"
 R2_CACHE_CONTROL="public, max-age=120" shell/r2_publish.sh neerslagstations.json
 
+# 07:00-run: archief van vorig jaar bijwerken zolang het nog niet volledig
+# gevalideerd is (MONV loopt ~1 maand achter). Mislukken stopt de dagrun niet.
+if [ "$(date +%H)" = "07" ]; then
+  /usr/local/bin/python3 -u scripts/neerslagstations_archief.py --bij --publiceer \
+    || echo "Let op: archief vorig jaar niet bijgewerkt (volgende 07:00-run opnieuw)"
+fi
+
 echo "Klaar — $(date '+%Y-%m-%d %H:%M')"

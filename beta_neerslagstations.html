@@ -246,6 +246,7 @@ td .geen{color:var(--muted);font-style:italic}
   </header>
 
   <div class="toolbar" role="toolbar" aria-label="Kaartinstellingen">
+    <select id="jaarSel" class="keuze" aria-label="Kies jaar"></select>
     <div class="seg" id="periodeSeg" role="group" aria-label="Periode">
       <button type="button" data-p="dag" aria-pressed="true">24 uur</button>
       <button type="button" data-p="week" aria-pressed="false">7 dagen</button>
@@ -317,8 +318,8 @@ td .geen{color:var(--muted);font-style:italic}
 
   <section class="uitleg" aria-label="Uitleg">
     <div><b>Wat wordt gemeten?</b><p>Op ruim 300 plaatsen tapt een vrijwillige waarnemer elke ochtend om 08.00 UT (10.00 uur zomertijd, 09.00 uur wintertijd) de KNMI-regenmeter af. Een meting op datum D is de neerslag van D−1 08.00 UT tot D 08.00 UT. Een maandsom volgt de KNMI-afspraak: datum 1 t/m de laatste dag.</p></div>
-    <div><b>Voorlopig en gevalideerd</b><p>Het KNMI zet de voorlopige dagmetingen rond 18.40 UT als open data online. Meldingen die later binnenkomen staan daar niet in; daarom zijn er per dag minder stations dan op de KNMI-kaart. Na ongeveer een maand volgt de gevalideerde, complete reeks (MONV); die vervangt dan automatisch de voorlopige waarden.</p></div>
-    <div><b>Ontbrekend is niet droog</b><p>Een station zonder melding krijgt een grijze stippelring en telt niet als 0 mm. Bij een meerdaagse som met ontbrekende dagen staat een ≥-teken en een stippelrand: de som is dan minimaal zo groot. Alleen stations met een volledige reeks komen in de top 10.</p></div>
+    <div><b>Voorlopig en gevalideerd</b><p>Het KNMI zet de voorlopige dagmetingen rond 18.40 UT als open data online. Meldingen die later binnenkomen staan daar niet in; daarom zijn er per dag minder stations dan op de KNMI-kaart. Na ongeveer een maand volgt de gevalideerde, complete reeks (MONV); die vervangt dan automatisch de voorlopige waarden. Vanaf 1900 t/m vorig jaar is alles gevalideerd; elke waarde is vergeleken met een tweede, apart opgehaalde kopie van dezelfde KNMI-reeks.</p></div>
+    <div><b>Ontbrekend is niet droog</b><p>Een station zonder melding krijgt een grijze stippelring en telt niet als 0 mm. Bij een meerdaagse som met ontbrekende dagen staat een ≥-teken en een stippelrand: de som is dan minimaal zo groot. Natst: ook onvolledige reeksen (minimaal); droogst: alleen volledige. Perioden waarin de KNMI-brondata aantoonbaar fout zijn, tellen als ontbrekend. Oude stations zonder bekende KNMI-positie staan niet op de kaart, wel in top 10 en tabel; posities zijn de laatst bekende.</p></div>
   </section>
   <p class="foot" id="foot">Bron: KNMI.</p>
 </div>
@@ -332,6 +333,9 @@ const SVGNS='http://www.w3.org/2000/svg';
 const PARAMS=new URLSearchParams(location.search);
 const LOKAAL=location.protocol==='file:'||['localhost','127.0.0.1',''].includes(location.hostname)||PARAMS.has('localData');
 const DATA_URL=LOKAAL?'neerslagstations.json':'https://data.weerlab.nl/neerslagstations.json';
+const ARCH_URL=y=>LOKAAL?`neerslagstations_archief/neerslagstations_${y}.json`:`https://data.weerlab.nl/neerslagstations_${y}.json`;
+const JAREN_URL=LOKAAL?'neerslagstations_archief/neerslagstations_jaren.json':'https://data.weerlab.nl/neerslagstations_jaren.json';
+const EERSTE_JAAR=1900;
 const TZ='Europe/Amsterdam';
 
 /* ── formattering ─────────────────────────────────────────────────── */
@@ -342,6 +346,7 @@ const mm=t=>nf1.format(t/10);                       // tienden → "8,4"
 const fDag=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'});
 const fDagJ=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
 const fKort=new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'short',timeZone:'UTC'});
+const fKortJ=new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
 const fMaand=new Intl.DateTimeFormat('nl-NL',{month:'long',year:'numeric',timeZone:'UTC'});
 const fTijdNL=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:TZ});
 const fUurNL=new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:TZ});
@@ -388,7 +393,8 @@ function xy(lat,lon){return [(lon-PROJ[0])*PROJ[2]*PROJ[3],(PROJ[1]-lat)*PROJ[3]
 
 /* ── staat ────────────────────────────────────────────────────────── */
 let D=null, laatsteIdx=0, eindIdx=0, periode='dag', maandSel='', vorigeGevraagd=false;
-let DIM=[],MON=[];
+let DIM=[],MON=[],eersteIdx=0,HUIDIG=null,JAREN=null;
+const JAAR_CACHE=new Map();
 let resultaten=[], zichtbaar=[], sortK='mm', sortDesc=true;
 let vastCode=null, hoverCode=null;
 const st={waarden:false,ontbr:true};
@@ -450,6 +456,7 @@ function bereken(){
     let som=0,gemeld=0;const ontbr=[];
     for(const i of pub){const v=s.rd[i];if(v==null)ontbr.push(i);else{som+=v;gemeld++;}}
     const r={s,som,gemeld,totaal:pub.length,ontbr,compleet:pub.length>0&&gemeld===pub.length,geen:gemeld===0};
+    if(s.ux) r.ux=s.ux.some(([a,b])=>a<=i1&&b>=i0);
     if(periode!=='dag'&&s.nm&&pub.length&&!r.geen){
       let norm=0,ok=true;
       for(const i of pub){const v=s.nm[MON[i]];if(v==null){ok=false;break;}norm+=v/DIM[i];}
@@ -470,7 +477,7 @@ function tekenStations(){
   const f=Math.min(1.6,Math.max(1,0.62/sc));            // markers niet kleiner dan ~desktop
   const fs=Math.min(28,Math.max(11,10.5/sc));          // labels ~10,5 px op scherm
   const grenzen=klassenVoor();
-  const lijst=resultaten.filter(r=>st.ontbr||!r.geen);
+  const lijst=resultaten.filter(r=>r.s.lat!=null&&(st.ontbr||!r.geen));
   lijst.sort((a,b)=>(a.geen?-1:a.som)-(b.geen?-1:b.som));
   zichtbaar=lijst;
   posities=[];
@@ -529,7 +536,8 @@ function tijdvakTekst(idx){
   if(!idx.length) return '';
   const a=D.dagen[idx[0]],b=D.dagen[idx[idx.length-1]];
   const van=vorigeDag(a),tot=dagDatum(b);
-  return `${fKort.format(van)} 08:00 → ${fKort.format(tot)} 08:00 UT`;
+  const f=(van.getUTCFullYear()!==tot.getUTCFullYear()||D.archief)?fKortJ:fKort;
+  return `${f.format(van)} 08:00 → ${f.format(tot)} 08:00 UT`;
 }
 function nlTijden(s){ // lokale tijd van 08:00 UT op datum s
   return fUurNL.format(ut08(s));
@@ -538,7 +546,7 @@ function periodeNaam(idx){
   if(!idx.length) return '';
   const a=D.dagen[idx[0]],b=D.dagen[idx[idx.length-1]];
   if(periode==='dag') return `24-uurssom ${fDagJ.format(dagDatum(b))}`;
-  if(periode==='week') return `7-daagse som ${fKort.format(dagDatum(a))} t/m ${fKort.format(dagDatum(b))}`;
+  if(periode==='week'){const f=a.slice(0,4)!==b.slice(0,4)?fKortJ:fKort;return `7-daagse som ${f.format(dagDatum(a))} t/m ${f.format(dagDatum(b))}`;}
   if(periode==='jaar'){const y=a.slice(0,4);return b===`${y}1231`?`Jaarsom ${y}`:`Som ${y}, 1 jan t/m ${fKort.format(dagDatum(b))}`;}
   const m=fMaand.format(dagDatum(a));
   const volledig=idx.length===dagenInMaand(a);
@@ -561,9 +569,11 @@ function tekenInfo(idx,pub){
   const stTxt=status==='M'?'deels gevalideerd':STATUS_TXT[status];
   let h=`<span><b>${esc(periodeNaam(idx))}</b></span>`;
   h+=`<span class="mono">${tijdvakTekst(idx)}</span>`;
-  h+=`<span>(${nlTijden(D.dagen[idx[0]])}–${nlTijden(D.dagen[idx[idx.length-1]])} Nederlandse tijd)</span>`;
+  if(!D.archief) h+=`<span>(${nlTijden(D.dagen[idx[0]])}–${nlTijden(D.dagen[idx[idx.length-1]])} Nederlandse tijd)</span>`;
   h+=`<span class="chip ${status}">${stTxt}</span>`;
   h+=periode==='dag'?`<span>${gemeld} van ${actief} stations gemeld</span>`:`<span>${compl} stations volledig, ${gemeld-compl} onvolledig, ${actief-gemeld} zonder melding</span>`;
+  const zonderPos=resultaten.filter(r=>r.s.lat==null).length;
+  if(zonderPos) h+=`<span>${zonderPos} zonder bekende positie (niet op de kaart, wel in top 10 en tabel)</span>`;
   $('infoRij').innerHTML=h;
 
   const m=[];
@@ -577,7 +587,7 @@ function tekenInfo(idx,pub){
   const nu=new Date();
   const vandaagLabel=nu.toISOString().slice(0,10).replace(/-/g,'');
   const laatste=D.dagen[laatsteIdx];
-  if(idx.includes(laatsteIdx)&&laatste<vandaagLabel){
+  if(!D.archief&&idx.includes(laatsteIdx)&&laatste<vandaagLabel){
     const volgende=dagDatum(laatste);volgende.setUTCDate(volgende.getUTCDate()+1);
     const lab=volgende.toISOString().slice(0,10).replace(/-/g,'');
     const verwacht=new Date(Date.UTC(volgende.getUTCFullYear(),volgende.getUTCMonth(),volgende.getUTCDate(),18,40));
@@ -612,7 +622,7 @@ function tekenKpis(idx){
 }
 function topRij(r,rang){
   const n=r.totaal-r.gemeld;
-  const prov=r.s.p&&!r.s.n.includes(r.s.p)?r.s.p:'';
+  const prov=r.s.lat==null?'geen positie bekend':(r.s.p&&!r.s.n.includes(r.s.p)?r.s.p:'');
   const mist=r.compleet?'':(n===1?'1 dag ontbreekt':`${n} dagen ontbreken`);
   const sub=esc([prov,mist].filter(Boolean).join(' · '));
   return `<li><button type="button" data-c="${r.s.c}"><span class="rk">${rang}</span><span class="nm">${esc(r.s.n)}<small>${sub}</small></span><span class="mmv">${r.compleet?'':'≥ '}${mm(r.som)}</span></button></li>`;
@@ -656,7 +666,7 @@ function tekenTabel(){
   $('tabelBody').innerHTML=rijen.map(r=>{
     const v=r.geen?'<span class="geen">geen melding</span>':(r.compleet?'':'≥ ')+mm(r.som);
     const stt=r.geen?'geen melding':r.compleet?'volledig':`onvolledig`;
-    return `<tr data-c="${r.s.c}"><td>${esc(r.s.n)}</td><td class="num code">${r.s.c}</td><td>${esc(r.s.p||'')}</td><td class="num">${v}</td><td class="num">${r.gemeld}/${r.totaal}</td><td class="num">${r.pn!=null?(r.compleet?'':'≥ ')+r.pn+'%':'—'}</td><td>${stt}</td></tr>`;
+    return `<tr data-c="${r.s.c}"><td>${esc(r.s.n)}</td><td class="num code">${r.s.c}</td><td>${r.s.lat==null?'<span class="geen">geen positie</span>':esc(r.s.p||'')}</td><td class="num">${v}</td><td class="num">${r.gemeld}/${r.totaal}</td><td class="num">${r.pn!=null?(r.compleet?'':'≥ ')+r.pn+'%':'—'}</td><td>${stt}</td></tr>`;
   }).join('');
   $('tabelSub').textContent=`(${resultaten.length})`;
 }
@@ -698,7 +708,8 @@ function tipHtml(r){
   const s=r.s;
   const pos=`${nf3.format(s.lat)}° N, ${nf3.format(s.lon)}° O${s.pr?' (±1 km)':''}`;
   let h=`<div class="tk"><b>${esc(s.n)}</b><span class="code">stn ${s.c}</span></div>`;
-  h+=`<div class="loc">${esc(s.p||'')}${s.p?' · ':''}${pos}</div>`;
+  if(s.lat==null) h+=`<div class="loc">Positie niet bekend bij het KNMI · niet op de kaart</div>`;
+  else h+=`<div class="loc">${esc(s.p||'')}${s.p?' · ':''}${pos}${D.archief?'<br>Laatst bekende positie; het station kan toen elders hebben gestaan':''}</div>`;
   const status=statusVan(idx);
   if(r.geen){
     const reden=idx.every(i=>D.dagstatus[i]==='X')?'geen KNMI-data voor deze dag':'geen melding ontvangen';
@@ -706,7 +717,7 @@ function tipHtml(r){
   }else{
     h+=`<div class="val"><span class="mm">${r.compleet?'':'≥ '}${mm(r.som)}</span><span class="eh">mm</span><span class="chip ${status}">${status==='M'?'deels gevalideerd':STATUS_TXT[status]}</span></div>`;
   }
-  h+=`<div class="tv">${esc(periodeNaam(idx))}<br><span class="mono">${tijdvakTekst(idx)}</span> · ${nlTijden(D.dagen[idx[0]])}–${nlTijden(D.dagen[idx[idx.length-1]])} NL-tijd</div>`;
+  h+=`<div class="tv">${esc(periodeNaam(idx))}<br><span class="mono">${tijdvakTekst(idx)}</span>${D.archief?'':` · ${nlTijden(D.dagen[idx[0]])}–${nlTijden(D.dagen[idx[idx.length-1]])} NL-tijd`}</div>`;
   const extra=[];
   if(idx.length>1){
     extra.push(balkjes(r,idx));
@@ -717,6 +728,7 @@ function tipHtml(r){
     }
     extra.push(t);
   }
+  if(r.ux) extra.push(`<span class="m">Een deel van deze periode is uitgesloten: de KNMI-brondata zijn daar onbetrouwbaar (Weerlab-controle). Die dagen tellen als ontbrekend.</span>`);
   if(r.pn!=null) extra.push(`${r.compleet?'':'≥ '}<b>${r.pn}%</b> van normaal <span class="m">(normaal voor deze dagen ${nf0.format(r.norm)} mm, 1991-2020)</span>`);
   if(r.sx){const mx=r.sx.reduce((a,b)=>b[1]>a[1]&&b[1]<997?b:a,[0,0]);if(mx[1]>0)extra.push(`Sneeuwdek: ${mx[1]} cm (${fKort.format(dagDatum(D.dagen[mx[0]]))}, 08 UT)`);else extra.push('Sneeuwdek gemeld (minder dan 1 cm of onderbroken)');}
   if(extra.length) h+=`<div class="extra">${extra.join('<br>').replace('</svg><br>','</svg>')}</div>`;
@@ -734,6 +746,7 @@ function plaatsTip(r){
   const tip=$('tip'),kaart=$('kaart'),svg=$('svg');
   if(tip.hidden) return;
   if(tip.classList.contains('vast')&&matchMedia('(max-width:760px)').matches){tip.style.left='';tip.style.top='';return;}
+  if(r.x==null||r.s.lat==null){tip.style.left='8px';tip.style.top='8px';return;}
   const kb=kaart.getBoundingClientRect(),ctm=svg.getScreenCTM();
   if(!ctm) return;
   const sp=svg.createSVGPoint();sp.x=r.x;sp.y=r.y;const q=sp.matrixTransform(ctm);
@@ -781,7 +794,12 @@ let rsTimer=0;
 window.addEventListener('resize',()=>{clearTimeout(rsTimer);rsTimer=setTimeout(()=>{if(D&&Math.abs(schermSchaal()-laatsteSchaal)/laatsteSchaal>0.08)tekenStations();},150);zetSchaal();const r=posities.find(p=>p.s.c===(vastCode??hoverCode));if(r)plaatsTip(r);});
 
 function kiesStation(code,scroll){
-  const r=posities.find(p=>p.s.c===code)||(()=>{st.ontbr=true;$('ontbrChk').checked=true;tekenStations();return posities.find(p=>p.s.c===code);})();
+  let r=posities.find(p=>p.s.c===code);
+  if(!r){
+    const rr=resultaten.find(p=>p.s.c===code);
+    if(rr&&rr.s.lat!=null&&!st.ontbr){st.ontbr=true;$('ontbrChk').checked=true;tekenStations();r=posities.find(p=>p.s.c===code);}
+    else r=rr;
+  }
   if(!r) return;
   vastCode=code;hoverCode=null;tekenFocus();markeerTop();
   if(scroll){const k=$('kaart').getBoundingClientRect();if(k.top<0||k.top>innerHeight*0.5)$('kaart').scrollIntoView({behavior:'smooth',block:'start'});}
@@ -793,7 +811,7 @@ function topHover(e){
   const code=b?+b.dataset.c:null;
   if(code===hoverCode) return;
   hoverCode=code;tekenFocus();
-  if(vastCode==null){const r=code!=null&&posities.find(p=>p.s.c===code);if(r)toonTip(r,false);else $('tip').hidden=true;}
+  if(vastCode==null){const r=code!=null&&(posities.find(p=>p.s.c===code)||resultaten.find(p=>p.s.c===code));if(r)toonTip(r,false);else $('tip').hidden=true;}
 }
 ['topNat','topDroog'].forEach(id=>{const el=$(id);el.addEventListener('click',topKlik);el.addEventListener('pointerover',topHover);el.addEventListener('pointerleave',()=>{hoverCode=null;tekenFocus();if(vastCode==null)$('tip').hidden=true;});});
 
@@ -815,14 +833,24 @@ function zetPeriode(p){
   render();
 }
 document.querySelectorAll('#periodeSeg button').forEach(b=>b.addEventListener('click',()=>zetPeriode(b.dataset.p)));
-$('terugBtn').addEventListener('click',()=>{if(eindIdx>0){eindIdx--;render();}});
+$('terugBtn').addEventListener('click',()=>{
+  if(eindIdx>eersteIdx){eindIdx--;render();return;}
+  const d=vorigeDag(D.dagen[eersteIdx]);const y=d.getUTCFullYear();
+  if(y>=EERSTE_JAAR) naarJaar(y,{dag:d.toISOString().slice(0,10).replace(/-/g,'')});
+});
 $('maandSel').addEventListener('change',e=>{maandSel=e.target.value;render();});
 $('dagInput').addEventListener('click',e=>{try{e.target.showPicker();}catch(_){}});
 $('dagInput').addEventListener('change',e=>{
-  const v=e.target.value.replace(/-/g,'');const i=D.dagen.indexOf(v);
-  if(i>=0&&i<=laatsteIdx){eindIdx=i;render();}else render();
+  const v=e.target.value.replace(/-/g,'');if(v.length!==8){render();return;}
+  const i=D.dagen.indexOf(v);
+  if(i>=eersteIdx&&i<=laatsteIdx){eindIdx=i;render();return;}
+  naarJaar(+v.slice(0,4),{dag:v});
 });
-$('verderBtn').addEventListener('click',()=>{if(eindIdx<laatsteIdx){eindIdx++;render();}});
+$('verderBtn').addEventListener('click',()=>{
+  if(eindIdx<laatsteIdx){eindIdx++;render();return;}
+  if(D.archief){const y=D.jaar+1;naarJaar(y,{dag:`${y}0101`});}
+});
+$('jaarSel').addEventListener('change',e=>naarJaar(+e.target.value,{behoud:true}));
 $('waardenChk').addEventListener('change',e=>{st.waarden=e.target.checked;bewaar();tekenStations();});
 $('ontbrChk').addEventListener('change',e=>{st.ontbr=e.target.checked;bewaar();tekenStations();});
 
@@ -835,16 +863,17 @@ function render(){
   if(dagModus){
     const d=D.dagen[eindIdx];
     const iso=x=>`${x.slice(0,4)}-${x.slice(4,6)}-${x.slice(6,8)}`;
-    $('dagInput').min=iso(D.dagen[0]);$('dagInput').max=iso(D.dagen[laatsteIdx]);$('dagInput').value=iso(d);
+    $('dagInput').min=`${EERSTE_JAAR}-01-01`;$('dagInput').max=iso(HUIDIG.dagen[HUIDIG.laatsteIdx]);$('dagInput').value=iso(d);
     $('dagLbl').textContent=(periode==='week'?'t/m ':'')+fDag.format(dagDatum(d));
     $('dagLbl').title=D.dagstatus[eindIdx]==='X'?'Geen KNMI-data voor deze dag':'';
-    $('terugBtn').disabled=eindIdx<=0;$('verderBtn').disabled=eindIdx>=laatsteIdx;
+    $('terugBtn').disabled=eindIdx<=eersteIdx&&D.dagen[eersteIdx]<=`${EERSTE_JAAR}0101`;
+    $('verderBtn').disabled=eindIdx>=laatsteIdx&&!D.archief;
   }
   const {idx,pub}=bereken();
   tekenLegenda();tekenStations();tekenInfo(idx,pub);tekenKpis(idx);tekenTop(idx);
   if($('tabelPaneel').open) tekenTabel(); else $('tabelSub').textContent=`(${resultaten.length})`;
   const actief=vastCode??null;
-  if(actief!=null){const r=posities.find(p=>p.s.c===actief);if(r)toonTip(r,true);else sluitTip();}
+  if(actief!=null){const r=posities.find(p=>p.s.c===actief)||resultaten.find(p=>p.s.c===actief);if(r)toonTip(r,true);else sluitTip();}
   else $('tip').hidden=true;
   zetSchaal();
 }
@@ -853,6 +882,15 @@ $('tabelPaneel').addEventListener('toggle',()=>{if($('tabelPaneel').open)tekenTa
 /* ── status/update ────────────────────────────────────────────────── */
 function tekenStatus(){
   const b=$('statusBadge');
+  if(D.archief){
+    const c=D.controle||{};
+    b.className='badge ok';b.innerHTML=`<i></i>Archief ${D.jaar} · gevalideerd`;b.title='Gevalideerde KNMI-MONV-reeks';
+    const uit=(D.uitgesloten_stations||[]).map(s=>esc(s.n)).join(', ');
+    $('foot').innerHTML=`Archief ${D.jaar}: gevalideerde KNMI-reeks (MONV)${D.volledig_gevalideerd?'':` t/m ${D.gevalideerd_tot?fKort.format(dagDatum(D.gevalideerd_tot)):'—'}`}. Controle tegen de aparte Weerlab-kopie van de KNMI-stationsbestanden: ${nf0.format(c.gelijk||0)} waarden gelijk, ${nf0.format(c.verschil||0)} verschillend. `+
+      `Onbetrouwbare perioden (Weerlab-controle) tellen als ontbrekend${uit?`; geheel uitgesloten: ${uit}`:''}. Posities: laatst bekende officiële KNMI-positie; ${D.zonder_positie||0} stations zonder bekende positie staan alleen in top 10 en tabel.<br>`+
+      `Bron: KNMI Daggegevens, <a href="https://www.knmi.nl/nederland-nu/klimatologie/monv/reeksen" target="_blank" rel="noopener">MONV-reeksen</a>; stationslijst en normalen 1991-2020 van het KNMI Data Platform. % van normaal is t.o.v. 1991-2020.`;
+    return;
+  }
   const knmi=D.laatste_bestand_tijd?new Date(D.laatste_bestand_tijd):null;
   const gen=new Date(D.gegenereerd);
   const leeftijdU=(Date.now()-dagDatum(D.laatste_dag).getTime())/36e5;
@@ -881,24 +919,83 @@ async function start(){
     return;
   }
   $('laden').hidden=true;
-  D.stations.forEach(s=>{if(s.sx){const o={};for(const k in s.sx)o[+k]=s.sx[k];s.sx=o;}});
-  laatsteIdx=D.dagen.length-1;
-  while(laatsteIdx>0&&D.dagstatus[laatsteIdx]==='X')laatsteIdx--;
-  eindIdx=laatsteIdx;
-  const pd=PARAMS.get('dag');if(pd){const i=D.dagen.indexOf(pd.replace(/-/g,''));if(i>=0&&i<=laatsteIdx)eindIdx=i;}
+  HUIDIG=bereid(D);
+  vulJaren();
+  fetch(JAREN_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>{if(j){JAREN=j.jaren||null;vulJaren();}}).catch(()=>{});
+  const pj=+PARAMS.get('jaar'),pd=(PARAMS.get('dag')||'').replace(/-/g,'');
+  const doel={dag:pd||null,maand:PARAMS.get('maand'),vorige:vorigeGevraagd};
+  const jaar=pd?+pd.slice(0,4):pj;
+  if(jaar&&jaar!==huidigJaar()) await naarJaar(jaar,doel,true);
+  else activeer(HUIDIG,doel);
+  const ps=+PARAMS.get('station');if(ps)kiesStation(ps,false);
+}
+function huidigJaar(){return +HUIDIG.dagen[HUIDIG.laatsteIdx].slice(0,4);}
+function bereid(data){
+  data.stations.forEach(s=>{
+    if(s.sx&&!s._sx){const o={};for(const k in s.sx)o[+k]=s.sx[k];s.sx=o;s._sx=true;}
+    let a=-1,z=-1;s.rd.forEach((v,i)=>{if(v!=null){if(a<0)a=i;z=i;}});s.eerste=a;s.laatste=z;
+  });
+  let li=data.dagen.length-1;while(li>0&&data.dagstatus[li]==='X')li--;
+  data.laatsteIdx=li;
+  const ei=data.eerste_dag?data.dagen.indexOf(data.eerste_dag):0;
+  data.eersteIdx=ei>=0?ei:0;
+  if(!data.archief&&data.eerste_dag==null) data.eersteIdx=0;
+  return data;
+}
+function vulJaren(){
+  const hj=huidigJaar(),sel=$('jaarSel'),huidig=D?(D.archief?D.jaar:hj):hj;
+  let h='';
+  for(let y=hj;y>=EERSTE_JAAR;y--){
+    const info=JAREN&&JAREN[y];
+    if(y!==hj&&y!==huidig&&JAREN&&!info) continue;
+    h+=`<option value="${y}">${y}${y===hj?' (lopend)':''}</option>`;
+  }
+  sel.innerHTML=h;sel.value=String(huidig);
+}
+async function naarJaar(y,doel,stil){
+  if(y===huidigJaar()){activeer(HUIDIG,doel);return;}
+  if(y<EERSTE_JAAR||y>huidigJaar()) return;
+  let data=JAAR_CACHE.get(y);
+  if(!data){
+    const l=$('laden');l.textContent=`Jaar ${y} laden…`;l.hidden=false;
+    try{
+      const r=await fetch(ARCH_URL(y));
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      data=bereid(await r.json());JAAR_CACHE.set(y,data);
+    }catch(err){
+      l.textContent=`Jaar ${y} kon niet worden geladen (${err.message}).`;
+      setTimeout(()=>{l.hidden=true;},4000);
+      $('jaarSel').value=String(D.archief?D.jaar:huidigJaar());
+      return;
+    }
+    l.hidden=true;
+  }
+  activeer(data,doel);
+}
+function activeer(data,doel={}){
+  const vorigeD=D,vorigeEind=vorigeD&&vorigeD.dagen?vorigeD.dagen[eindIdx]:null,vorigeMaand=maandSel;
+  D=data;laatsteIdx=D.laatsteIdx;eersteIdx=D.eersteIdx;
   DIM=D.dagen.map(dagenInMaand);MON=D.dagen.map(d=>+d.slice(4,6)-1);
-  D.stations.forEach(s=>{let a=-1,z=-1;s.rd.forEach((v,i)=>{if(v!=null){if(a<0)a=i;z=i;}});s.eerste=a;s.laatste=z;});
-  // Maandkeuze: alle maanden in het venster (KNMI-maand = datums 1 t/m laatste dag).
-  const maanden=[...new Set(D.dagen.slice(0,laatsteIdx+1).map(d=>d.slice(0,6)))];
+  // Maandkeuze: maanden in het bestand (KNMI-maand = datums 1 t/m laatste dag).
+  const maanden=[...new Set(D.dagen.slice(eersteIdx,laatsteIdx+1).map(d=>d.slice(0,6)))];
   const lopend=D.dagen[laatsteIdx].slice(0,6);
-  $('maandSel').innerHTML=maanden.slice().reverse().map(m=>`<option value="${m}">${fMaand.format(dagDatum(m+'01'))}${m===lopend?' (loopt)':''}</option>`).join('');
-  maandSel=lopend;
-  if(vorigeGevraagd&&maanden.length>1) maandSel=maanden[maanden.length-2];
-  const pm=PARAMS.get('maand');if(pm&&maanden.includes(pm))maandSel=pm;
+  $('maandSel').innerHTML=maanden.slice().reverse().map(m=>`<option value="${m}">${fMaand.format(dagDatum(m+'01'))}${!D.archief&&m===lopend?' (loopt)':''}</option>`).join('');
+  // Doeldatum: expliciet, anders dezelfde kalenderdag/maand in het nieuwe jaar.
+  const jaarVan=D.dagen[laatsteIdx].slice(0,4);
+  let dag=doel.dag;
+  if(!dag&&doel.behoud&&vorigeEind) dag=jaarVan+vorigeEind.slice(4);
+  let i=dag?D.dagen.indexOf(dag):-1;
+  if(i<0&&dag&&dag.slice(4)==='0229') i=D.dagen.indexOf(jaarVan+'0228');
+  eindIdx=i>=eersteIdx&&i<=laatsteIdx?i:laatsteIdx;
+  let m=doel.maand&&maanden.includes(doel.maand)?doel.maand:null;
+  if(!m&&doel.behoud&&vorigeMaand){const k=jaarVan+vorigeMaand.slice(4);if(maanden.includes(k))m=k;}
+  if(!m&&dag&&maanden.includes(dag.slice(0,6)))m=dag.slice(0,6);
+  if(!m&&doel.vorige&&maanden.length>1)m=maanden[maanden.length-2];
+  maandSel=m||lopend;
   $('zoekLijst').innerHTML=D.stations.slice().sort((a,b)=>a.n.localeCompare(b.n,'nl')).map(s=>`<option value="${esc(s.n)} (${s.c})">`).join('');
+  vulJaren();
   tekenStatus();
   render();
-  const ps=+PARAMS.get('station');if(ps)kiesStation(ps,false);
 }
 start();
 })();
