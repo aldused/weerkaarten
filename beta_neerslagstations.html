@@ -176,6 +176,22 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .p13 .balk i{display:block;height:100%;background:var(--r6)}
 .p13 .knopje{border:0;background:none;padding:0;color:var(--accent-strong);font:600 11.5px var(--font);cursor:pointer;text-decoration:underline}
 .kaart svg .p13ring{fill:none;stroke:var(--text);stroke-width:1.8}
+#p13Tabel th,#p13Tabel td{padding:5px 6px}
+#p13Tabel tr.x td[colspan]{text-align:center}
+#p13Tabel thead th{white-space:normal;min-width:58px}
+#p13Tabel thead th{cursor:default;text-align:right;vertical-align:bottom;line-height:1.2}
+#p13Tabel thead th small{display:block;font:500 10px var(--mono);color:#cbd5e1}
+#p13Tabel th:first-child,#p13Tabel td:first-child{position:sticky;left:0;text-align:left;z-index:1}
+#p13Tabel td:first-child{background:var(--surface);font-weight:600}
+#p13Tabel thead th:first-child{z-index:3}
+#p13Tabel td{text-align:right;font-variant-numeric:tabular-nums}
+#p13Tabel td.mis{color:var(--soft)}
+#p13Tabel .p13k{border-left:2px solid var(--border-strong);font-weight:700}
+#p13Tabel td.nk{color:var(--muted);font:500 11px var(--mono)}
+#p13Tabel tr.x td{color:var(--soft);font-style:italic}
+#p13Tabel tfoot td{border-top:2px solid var(--border-strong);font-weight:700;background:var(--surface-muted)}
+#p13Tabel tfoot td:first-child{background:var(--surface-muted)}
+#p13Tabel tbody tr:hover{cursor:default}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);min-width:0}
 .kpi .l{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .kpi .v{font:700 22px/1.15 var(--font);margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -342,6 +358,12 @@ td .geen{color:var(--muted);font-style:italic}
     </div>
   </details>
 
+  <details class="paneel tabel-paneel" id="p13Paneel">
+    <summary><span>P13-tabel · landelijk gemiddelde per station <span class="top-sub" id="p13Sub"></span></span></summary>
+    <div class="tabel-acties"><button class="knop" type="button" id="p13CsvBtn">CSV downloaden</button><span id="p13Uitleg">— = geen melding (telt niet als 0) · ≥ = maand met ontbrekende dagen · n = aantal P13-stations met een meting · ≈ = niet alle 13 stations · * = maand met dagen zonder KNMI-data</span></div>
+    <div class="table-wrap"><table id="p13Tabel"></table></div>
+  </details>
+
   <section class="uitleg" aria-label="Uitleg">
     <div><b>Wat wordt gemeten?</b><p>Op ruim 300 plaatsen tapt een vrijwillige waarnemer elke ochtend om 08.00 UT (10.00 uur zomertijd, 09.00 uur wintertijd) de KNMI-regenmeter af. Een meting op datum D is de neerslag van D−1 08.00 UT tot D 08.00 UT. Een maandsom volgt de KNMI-afspraak: datum 1 t/m de laatste dag.</p></div>
     <div><b>Voorlopig en gevalideerd</b><p>Het KNMI zet de voorlopige dagmetingen rond 18.40 UT als open data online. Meldingen die later binnenkomen staan daar niet in; daarom zijn er per dag minder stations dan op de KNMI-kaart. Na ongeveer een maand volgt de gevalideerde, complete reeks (MONV); die vervangt dan automatisch de voorlopige waarden. Vanaf 1900 t/m vorig jaar is alles gevalideerd; elke waarde is vergeleken met een tweede, apart opgehaalde kopie van dezelfde KNMI-reeks.</p></div>
@@ -446,7 +468,8 @@ function tekenP13(idx){
     `<div class="v">${r.compleet?'':'≈ '}${toon} <small>mm</small></div>`+
     (periode!=='dag'?`<div class="n">Normaal 1991-2020 voor deze ${r.gebruikt} dagen: ${nf1.format(r.norm)} mm</div>`:'')+
     `<div class="balk" title="${Math.round(r.gemN/13*100)}% van de P13-stationsdagen gemeld"><i style="width:${Math.min(100,r.gemN/13*100*r.gebruikt/r.totaal).toFixed(1)}%"></i></div>`+
-    `<div class="n">${sub} · <button type="button" class="knopje" id="p13Toon">${st.p13?'verberg stations':'toon stations'}</button></div>`;
+    `<div class="n">${sub} · <button type="button" class="knopje" id="p13Toon">${st.p13?'verberg stations':'toon stations'}</button> · <button type="button" class="knopje" id="p13TabelKnop">tabel</button></div>`;
+  $('p13TabelKnop').addEventListener('click',()=>{const pn=$('p13Paneel');pn.open=true;tekenP13Tabel();pn.scrollIntoView({behavior:'smooth',block:'start'});});
   $('p13Toon').addEventListener('click',()=>{st.p13=!st.p13;$('p13Chk').checked=st.p13;bewaar();tekenStations();tekenP13(periodeIdx());});
 }
 function klassenVoor(){return KL;}
@@ -545,6 +568,70 @@ function bereken(){
   });
   return {idx,pub};
 }
+
+/* ── P13-tabel: per dag (of per maand bij Jaar) × 13 stations ── */
+let p13Csv=null;
+function p13Groepen(idx){
+  if(periode!=='jaar') return idx.map(i=>({lbl:fDag.format(dagDatum(D.dagen[i])),sleutel:D.dagen[i],idx:[i]}));
+  const g=new Map();
+  for(const i of idx){const m=D.dagen[i].slice(0,6);if(!g.has(m))g.set(m,{lbl:hoofdletter(fMaand.format(dagDatum(m+'01'))),sleutel:m,idx:[]});g.get(m).idx.push(i);}
+  return [...g.values()];
+}
+function tekenP13Tabel(){
+  const tab=$('p13Tabel'),idx=periodeIdx();
+  if(!idx.length||D.dagen[idx[0]]<P13_START){tab.innerHTML=`<tbody><tr><td>De P13-reeks van het KNMI begint op 1 januari 1906.</td></tr></tbody>`;$('p13Sub').textContent='';p13Csv=null;return;}
+  const f1=v=>nf1.format(v/10);
+  // Kolomkoppen: slotnaam + gebruikte stationsnummer(s) in deze periode
+  const kop=P13_SLOTS.map(sl=>{
+    const codes=[...new Set(idx.map(i=>p13Code(sl,D.dagen[i])))];
+    const VOORGANGER={9:'Den Helder',745:'Axel'};
+    const naam=codes.map(c=>VOORGANGER[c]||sl.n).filter((v,i,a)=>a.indexOf(v)===i).join('/');
+    return {naam,codes};
+  });
+  const groepen=p13Groepen(idx);
+  const csv=[['periode',...kop.map(k=>`${k.naam} (${k.codes.join('/')})`),'P13','n_stations_gem'].join(';')];
+  let h='<thead><tr><th scope="col">'+(periode==='jaar'?'Maand':'Datum')+'</th>'+
+    kop.map(k=>`<th scope="col">${esc(k.naam)}<small>stn ${k.codes.join('→')}</small></th>`).join('')+
+    '<th scope="col" class="p13k">P13</th><th scope="col">n</th></tr></thead><tbody>';
+  const totaal=P13_SLOTS.map(()=>({som:0,mist:0,norm:0,heeftNorm:true}));
+  for(const g of groepen){
+    const pub=g.idx.filter(i=>D.dagstatus[i]!=='X');
+    if(!pub.length){h+=`<tr class="x"><td>${esc(g.lbl)}</td><td colspan="${P13_SLOTS.length+2}">geen KNMI-data</td></tr>`;csv.push([g.sleutel,...P13_SLOTS.map(()=>''),'',''].join(';'));continue;}
+    const cellen=[],rij=[g.sleutel];
+    P13_SLOTS.forEach((sl,k)=>{
+      let som=0,mist=0,n=0;
+      for(const i of pub){const s=D.byCode.get(p13Code(sl,D.dagen[i]));const v=s?s.rd[i]:null;if(v==null)mist++;else{som+=v;n++;}
+        const nm=s&&s.nm?s.nm[MON[i]]:null;if(nm==null)totaal[k].heeftNorm=false;else totaal[k].norm+=nm/DIM[i];}
+      totaal[k].som+=som;totaal[k].mist+=mist;
+      if(!n){cellen.push(`<td class="mis" title="geen melding">—</td>`);rij.push('');}
+      else if(mist){cellen.push(`<td title="${mist} dag${mist===1?'':'en'} zonder melding">≥ ${f1(som)}</td>`);rij.push('>='+(som/10).toFixed(1));}
+      else{cellen.push(`<td>${f1(som)}</td>`);rij.push((som/10).toFixed(1));}
+    });
+    const p=berekenP13(g.idx);
+    const p13t=!p||!p.gebruikt?'—':`${p.compleet?'':'≈ '}${nf1.format(p.mm)}`;
+    const nt=p&&p.gebruikt?nf1.format(p.gemN).replace(',0',''):'0';
+    h+=`<tr><td>${esc(g.lbl)}${pub.length<g.idx.length?' *':''}</td>${cellen.join('')}<td class="p13k">${p13t}</td><td class="nk">${nt}</td></tr>`;
+    rij.push(p&&p.gebruikt?(p.compleet?'':'~')+p.mm.toFixed(1):'',p&&p.gebruikt?p.gemN.toFixed(1):'0');csv.push(rij.join(';'));
+  }
+  h+='</tbody>';
+  const tot=berekenP13(idx);
+  if(groepen.length>1&&tot&&!tot.nvt){
+    h+='<tfoot><tr><td>Totaal</td>'+totaal.map(x=>`<td${x.mist?` title="${x.mist} dagen zonder melding"`:''}>${x.som||!x.mist?(x.mist?'≥ ':'')+f1(x.som):'—'}</td>`).join('')+
+      `<td class="p13k">${tot.gebruikt?(tot.compleet?'':'≈ ')+nf1.format(tot.mm):'—'}</td><td class="nk">${tot.gebruikt?nf1.format(tot.gemN).replace(',0',''):''}</td></tr>`;
+    h+='<tr><td>% van normaal</td>'+totaal.map(x=>`<td>${x.heeftNorm&&x.norm>0&&x.som?(x.mist?'≥ ':'')+Math.round(x.som/10/x.norm*100)+'%':'—'}</td>`).join('')+
+      `<td class="p13k">${tot.pn!=null?(tot.compleet?'':'≈ ')+tot.pn+'%':'—'}</td><td></td></tr></tfoot>`;
+    csv.push(['totaal',...totaal.map(x=>x.som||!x.mist?(x.mist?'>=':'')+(x.som/10).toFixed(1):''),tot.gebruikt?(tot.compleet?'':'~')+tot.mm.toFixed(1):'',tot.gebruikt?tot.gemN.toFixed(1):''].join(';'));
+  }
+  tab.innerHTML=h;
+  $('p13Sub').textContent=`(${periodeNaam(idx)})`;
+  p13Csv={tekst:csv.join('\n'),naam:`p13_${periode}_${D.dagen[idx[0]]}_${D.dagen[idx[idx.length-1]]}.csv`};
+}
+$('p13Paneel').addEventListener('toggle',()=>{if($('p13Paneel').open)tekenP13Tabel();});
+$('p13CsvBtn').addEventListener('click',()=>{
+  if(!p13Csv) tekenP13Tabel(); if(!p13Csv) return;
+  const blob=new Blob(['\ufeff'+'# P13: 13 handmatige KNMI-neerslagstations (MONV), mm; >= = onvolledig; ~ = P13 niet uit alle 13 stations\n'+p13Csv.tekst],{type:'text/csv;charset=utf-8'});
+  const u=URL.createObjectURL(blob),l=document.createElement('a');l.href=u;l.download=p13Csv.naam;document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
+});
 
 /* ── tekenen stations ─────────────────────────────────────────────── */
 let posities=[],laatsteSchaal=0;
@@ -957,6 +1044,7 @@ function render(){
   }
   const {idx,pub}=bereken();
   tekenLegenda();tekenStations();tekenInfo(idx,pub);tekenP13(idx);tekenKpis(idx);tekenTop(idx);
+  if($('p13Paneel').open) tekenP13Tabel();
   if($('tabelPaneel').open) tekenTabel(); else $('tabelSub').textContent=`(${resultaten.length})`;
   const actief=vastCode??null;
   if(actief!=null){const r=posities.find(p=>p.s.c===actief)||resultaten.find(p=>p.s.c===actief);if(r)toonTip(r,true);else sluitTip();}
@@ -1217,6 +1305,7 @@ async function start(){
   if(jaar&&jaar!==huidigJaar()) await naarJaar(jaar,doel,true);
   else activeer(HUIDIG,doel);
   const ps=+PARAMS.get('station');if(ps)kiesStation(ps,false);
+  if(PARAMS.has('p13tabel')){$('p13Paneel').open=true;tekenP13Tabel();setTimeout(()=>$('p13Paneel').scrollIntoView({block:'start'}),50);}
 }
 function huidigJaar(){return +HUIDIG.dagen[HUIDIG.laatsteIdx].slice(0,4);}
 function bereid(data){
