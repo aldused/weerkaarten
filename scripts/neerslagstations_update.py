@@ -264,8 +264,9 @@ def parse_regensom(tekst):
     return uit
 
 
-def haal_voorlopig(start, eind):
-    """Dagbestanden in [start, eind] → {JJJJMMDD: {'bestand','aangemaakt','rijen'}}."""
+def haal_voorlopig(start, eind, na=None):
+    """Dagbestanden in [start, eind] → {JJJJMMDD: {'bestand','aangemaakt','rijen'}}.
+    Met na=JJJJMMDD (gevalideerd t/m) worden eerdere dagen overgeslagen."""
     map_ = CACHE / "regensom"
     map_.mkdir(parents=True, exist_ok=True)
     index_pad = CACHE / "regensom_index.json"
@@ -282,7 +283,7 @@ def haal_voorlopig(start, eind):
         if not m:
             continue
         dag = datetime.strptime(m.group(1), "%Y%m%d").date()
-        if not (start <= dag <= eind):
+        if not (start <= dag <= eind) or (na and m.group(1) <= na):
             continue
         doel = map_ / fn
         bekend = index.get(fn, {})
@@ -300,7 +301,7 @@ def haal_voorlopig(start, eind):
     for doel in sorted(map_.glob("regensom_*.txt")):
         m = re.match(r"regensom_(\d{8})\d{2}\.txt$", doel.name)
         dag = datetime.strptime(m.group(1), "%Y%m%d").date()
-        if not (start <= dag <= eind):
+        if not (start <= dag <= eind) or (na and m.group(1) <= na):
             continue
         rijen = parse_regensom(doel.read_text(encoding="latin-1"))
         # Een bestand hoort bij één datum; vreemde datums negeren.
@@ -314,15 +315,27 @@ def haal_voorlopig(start, eind):
 # ─── gevalideerde reeks (MONV) ──────────────────────────────────────────────
 def haal_gevalideerd(start, eind):
     """MONV-daggegevens; resultaat wordt in de cache opgeteld zodat een lege
-    of mislukte respons (komt 's nachts voor) nooit data wegneemt."""
+    of mislukte respons (komt 's nachts voor) nooit data wegneemt.
+    Incrementeel: normaal alleen de laatste ~60 dagen vóór het gevalideerde
+    einde opvragen; wekelijks (of als de cache het venster niet dekt) alles."""
     pad = CACHE / "gevalideerd.json"
     cache = lees_json(pad, {}) or {}
     waarden = cache.get("waarden", {})     # "code|JJJJMMDD" -> [rd, sx]
     namen = cache.get("namen", {})
+    s_start = start.strftime("%Y%m%d")
+    tot = max((k.split("|")[1] for k, v in waarden.items() if v[0] is not None), default=None)
+    volledig_op = cache.get("volledig_op", "")
+    dekt = cache.get("vanaf", "99999999") <= s_start and tot is not None
+    vers = volledig_op >= (date.today() - timedelta(days=7)).isoformat()
+    if dekt and vers:
+        van = max(start, datetime.strptime(tot, "%Y%m%d").date() - timedelta(days=60))
+        volledig = False
+    else:
+        van, volledig = start, True
     try:
         r = requests.post(MONV_URL, data={
-            "start": start.strftime("%Y%m%d"), "end": eind.strftime("%Y%m%d"),
-            "vars": "RD:SX", "stns": "ALL", "fmt": "csv"}, timeout=120)
+            "start": van.strftime("%Y%m%d"), "end": eind.strftime("%Y%m%d"),
+            "vars": "RD:SX", "stns": "ALL", "fmt": "csv"}, timeout=180)
         r.raise_for_status()
         nieuw = 0
         for regel in r.text.splitlines():
@@ -338,13 +351,19 @@ def haal_gevalideerd(start, eind):
             sx = int(delen[3]) if len(delen) > 3 and delen[3] not in ("",) else None
             waarden[f"{int(delen[0])}|{delen[1]}"] = [rd, sx]
             nieuw += 1
-        log(f"  MONV gevalideerd: {nieuw} rijen ontvangen")
+        log(f"  MONV gevalideerd: {nieuw} rijen ontvangen (vanaf {van}, "
+            f"{'volledig' if volledig else 'incrementeel'})")
+        if volledig and nieuw:
+            cache["volledig_op"] = date.today().isoformat()
+            cache["vanaf"] = s_start
     except Exception as exc:
         log(f"  Waarschuwing: MONV niet bereikbaar ({exc}); cache gebruikt")
     # Oude cache-regels buiten het venster opruimen.
-    grens = start.strftime("%Y%m%d")
-    waarden = {k: v for k, v in waarden.items() if k.split("|")[1] >= grens}
-    schrijf_atomair(pad, json.dumps({"waarden": waarden, "namen": namen}).encode())
+    waarden = {k: v for k, v in waarden.items() if k.split("|")[1] >= s_start}
+    cache.update({"waarden": waarden, "namen": namen})
+    if cache.get("vanaf", "") < s_start:
+        cache["vanaf"] = s_start
+    schrijf_atomair(pad, json.dumps(cache).encode())
     return waarden, {int(k): v for k, v in namen.items()}
 
 
@@ -411,11 +430,13 @@ def main():
     nu = datetime.now(timezone.utc)
     vandaag = nu.date()
     eerste_deze = vandaag.replace(day=1)
-    start = (eerste_deze - timedelta(days=1)).replace(day=1)   # 1e vorige maand
+    # Heel het lopende jaar, en in januari ook nog december.
+    start = min(date(vandaag.year, 1, 1), (eerste_deze - timedelta(days=1)).replace(day=1))
     log(f"Neerslagstations — venster {start} t/m {vandaag}")
 
-    voorlopig = haal_voorlopig(start, vandaag)
     gevalideerd, monv_namen = haal_gevalideerd(start, vandaag)
+    gev_tot = max((k.split("|")[1] for k, v in gevalideerd.items() if v[0] is not None), default=None)
+    voorlopig = haal_voorlopig(start, vandaag, na=gev_tot)
     if not voorlopig and not gevalideerd:
         log("FOUT: geen enkele KNMI-bron leverde data; niets geschreven")
         return 1
@@ -527,6 +548,10 @@ def main():
             "dag": {"dag": dagen[laatste_i], **(top10(stations, [laatste_i], dagstatus) or {})},
             "maand": {"maand": maand, "t_m": dagen[laatste_i],
                       **(top10(stations, maand_idx, dagstatus) or {})},
+            "jaar": {"jaar": dagen[laatste_i][:4], "t_m": dagen[laatste_i],
+                     **(top10(stations, [i for i, dag in enumerate(dagen)
+                                         if dag[:4] == dagen[laatste_i][:4] and i <= laatste_i],
+                              dagstatus) or {})},
         },
         "stations": stations,
     }

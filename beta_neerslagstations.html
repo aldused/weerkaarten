@@ -87,7 +87,13 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .stepper{display:inline-flex;align-items:center;gap:4px}
 .stepper button{width:32px;height:32px;border:1px solid var(--border);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--text);font-size:16px;line-height:1}
 .stepper button:disabled{opacity:.35;cursor:default}
-.stepper span{font:600 13px var(--font);min-width:118px;text-align:center;white-space:nowrap}
+.stepper .datum{position:relative;display:inline-block;min-width:118px;text-align:center}
+.stepper #dagLbl{font:600 13px var(--font);white-space:nowrap;padding:6px 8px;border-radius:8px;display:inline-block}
+.stepper .datum:hover #dagLbl{background:var(--bg-soft)}
+.stepper #dagLbl::after{content:" ▾";font-size:10px;color:var(--muted)}
+.stepper #dagInput{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;font-size:16px}
+.stepper #dagInput::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;opacity:0}
+.keuze{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 28px 6px 10px;font:600 13px var(--font);min-height:32px;cursor:pointer}
 .zoek{position:relative;flex:1 1 170px;max-width:260px}
 .zoek input{width:100%;border:1px solid var(--border);background:var(--surface-muted);color:var(--text);border-radius:8px;padding:6px 10px;font:14px var(--font);min-height:32px}
 .zoek input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
@@ -169,7 +175,7 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .top li button:hover,.top li button.actief{background:var(--primary-soft)}
 .top li .rk{font:500 11px var(--mono);color:var(--soft);text-align:right}
 .top li .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.top li .nm small{display:block;font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.top li .nm small{display:block;font-size:10.5px;color:var(--muted);white-space:normal;line-height:1.3}
 .top li .mmv{font:600 13px var(--font);font-variant-numeric:tabular-nums;white-space:nowrap}
 .top .noot{font-size:11.5px;color:var(--muted);margin:6px 4px 0}
 .top .leeg{font-size:12px;color:var(--muted);padding:6px 4px}
@@ -220,7 +226,7 @@ td .geen{color:var(--muted);font-style:italic}
 }
 @media (max-width:420px){
   .top-grid{grid-template-columns:1fr}
-  .stepper span{min-width:104px;font-size:12.5px}
+  .stepper .datum{min-width:104px}
 }
 @media (hover:none){ .kaart-hint{display:none} }
 </style>
@@ -243,12 +249,13 @@ td .geen{color:var(--muted);font-style:italic}
     <div class="seg" id="periodeSeg" role="group" aria-label="Periode">
       <button type="button" data-p="dag" aria-pressed="true">24 uur</button>
       <button type="button" data-p="week" aria-pressed="false">7 dagen</button>
-      <button type="button" data-p="maand" aria-pressed="false">Deze maand</button>
-      <button type="button" data-p="vorige" aria-pressed="false">Vorige maand</button>
+      <button type="button" data-p="maand" aria-pressed="false">Maand</button>
+      <button type="button" data-p="jaar" aria-pressed="false">Jaar</button>
     </div>
+    <select id="maandSel" class="keuze" aria-label="Kies maand" hidden></select>
     <div class="stepper" id="stepper">
       <button type="button" id="terugBtn" aria-label="Vorige dag">‹</button>
-      <span id="dagLbl">—</span>
+      <span class="datum"><span id="dagLbl">—</span><input type="date" id="dagInput" aria-label="Kies datum"></span>
       <button type="button" id="verderBtn" aria-label="Volgende dag">›</button>
     </div>
     <div class="zoek">
@@ -350,7 +357,16 @@ const KLASSEN={
   week: [0,0.1,2,5,10,20,30,50,75,100],
   maand:[null,10,25,50,75,100,125,150,200,250]
 };
-function klassenVoor(p){return p==='dag'?KLASSEN.dag:p==='week'?KLASSEN.week:KLASSEN.maand;}
+// Jaarsom: gelijke stappen die meeschalen met het verstreken deel van het jaar
+// (heel jaar: <400, 400, 500 … 1200 mm).
+function jaarKlassen(n){
+  const f=Math.max(n,1)/365;
+  const stap=[10,20,25,50,100].filter(s=>s<=100*f*1.1).pop()||10;
+  const basis=Math.max(stap,Math.round(400*f/stap)*stap);
+  return [null,...Array.from({length:9},(_,i)=>basis+i*stap)];
+}
+let KL=KLASSEN.dag;
+function klassenVoor(){return KL;}
 function klasse(v,grenzen){ // v in mm
   if(grenzen[0]===0){ if(v===0) return 0; for(let i=grenzen.length-1;i>=1;i--) if(v>=grenzen[i]) return i; return 1; }
   for(let i=grenzen.length-1;i>=1;i--) if(v>=grenzen[i]) return i; return 0;
@@ -371,13 +387,14 @@ let W=850,H=1000,PROJ=[3.25,53.62,Math.cos(52.15*Math.PI/180),1000/2.92];
 function xy(lat,lon){return [(lon-PROJ[0])*PROJ[2]*PROJ[3],(PROJ[1]-lat)*PROJ[3]];}
 
 /* ── staat ────────────────────────────────────────────────────────── */
-let D=null, laatsteIdx=0, eindIdx=0, periode='dag';
+let D=null, laatsteIdx=0, eindIdx=0, periode='dag', maandSel='', vorigeGevraagd=false;
+let DIM=[],MON=[];
 let resultaten=[], zichtbaar=[], sortK='mm', sortDesc=true;
 let vastCode=null, hoverCode=null;
 const st={waarden:false,ontbr:true};
-try{const s=JSON.parse(localStorage.getItem('wl_neerslagstations')||'{}');if(typeof s.waarden==='boolean')st.waarden=s.waarden;if(typeof s.ontbr==='boolean')st.ontbr=s.ontbr;if(['dag','week','maand','vorige'].includes(s.periode))periode=s.periode;}catch(e){}
+try{const s=JSON.parse(localStorage.getItem('wl_neerslagstations')||'{}');if(typeof s.waarden==='boolean')st.waarden=s.waarden;if(typeof s.ontbr==='boolean')st.ontbr=s.ontbr;if(['dag','week','maand','jaar'].includes(s.periode))periode=s.periode;}catch(e){}
 function bewaar(){try{localStorage.setItem('wl_neerslagstations',JSON.stringify({...st,periode}));}catch(e){}}
-if(['dag','week','maand','vorige'].includes(PARAMS.get('periode')))periode=PARAMS.get('periode');
+{const pp=PARAMS.get('periode');if(['dag','week','maand','jaar'].includes(pp))periode=pp;else if(pp==='vorige'){periode='maand';vorigeGevraagd=true;}}
 
 /* ── thema ────────────────────────────────────────────────────────── */
 $('themaBtn').addEventListener('click',()=>{
@@ -412,10 +429,9 @@ function periodeIdx(){
   const dagen=D.dagen;
   if(periode==='dag') return [eindIdx];
   if(periode==='week'){const a=[];for(let i=Math.max(0,eindIdx-6);i<=eindIdx;i++)a.push(i);return a;}
-  const lm=dagen[laatsteIdx].slice(0,6);
-  let m=lm;
-  if(periode==='vorige'){const y=+lm.slice(0,4),mo=+lm.slice(4,6);m=mo===1?`${y-1}12`:`${y}${String(mo-1).padStart(2,'0')}`;}
-  const a=[];dagen.forEach((d,i)=>{if(d.slice(0,6)===m&&i<=laatsteIdx)a.push(i);});
+  const a=[];
+  if(periode==='jaar'){const y=dagen[laatsteIdx].slice(0,4);dagen.forEach((d,i)=>{if(d.slice(0,4)===y&&i<=laatsteIdx)a.push(i);});return a;}
+  dagen.forEach((d,i)=>{if(d.slice(0,6)===maandSel&&i<=laatsteIdx)a.push(i);});
   return a;
 }
 function dagenInMaand(s){const y=+s.slice(0,4),m=+s.slice(4,6);return new Date(Date.UTC(y,m,0)).getUTCDate();}
@@ -425,16 +441,19 @@ function bereken(){
   const idx=periodeIdx();
   const status=D.dagstatus;
   const pub=idx.filter(i=>status[i]!=='X');
-  const maandPeriode=periode==='maand'||periode==='vorige';
-  const dim=idx.length?dagenInMaand(D.dagen[idx[0]]):30;
-  const mIdx=idx.length?+D.dagen[idx[0]].slice(4,6)-1:0;
-  resultaten=D.stations.map(s=>{
+  KL=periode==='jaar'?jaarKlassen(idx.length):KLASSEN[periode]||KLASSEN.maand;
+  const i0=idx[0],i1=idx[idx.length-1];
+  // Stations die al lang niets melden (gestopt) of pas later begonnen zijn,
+  // horen niet als "geen melding" in deze periode. 75 dagen dekt de MONV-achterstand.
+  const actief=D.stations.filter(s=>s.laatste>=i0-75&&s.eerste<=i1);
+  resultaten=actief.map(s=>{
     let som=0,gemeld=0;const ontbr=[];
     for(const i of pub){const v=s.rd[i];if(v==null)ontbr.push(i);else{som+=v;gemeld++;}}
     const r={s,som,gemeld,totaal:pub.length,ontbr,compleet:pub.length>0&&gemeld===pub.length,geen:gemeld===0};
-    if(maandPeriode&&s.nm&&s.nm[mIdx]!=null&&pub.length&&!r.geen){
-      const norm=s.nm[mIdx]*pub.length/dim;
-      r.norm=norm; r.pn=norm>0?Math.round(som/10/norm*100):null;
+    if(periode!=='dag'&&s.nm&&pub.length&&!r.geen){
+      let norm=0,ok=true;
+      for(const i of pub){const v=s.nm[MON[i]];if(v==null){ok=false;break;}norm+=v/DIM[i];}
+      if(ok&&norm>0){r.norm=norm;r.pn=Math.round(som/10/norm*100);}
     }
     if(s.sx){for(const i of idx){if(s.sx[i]!=null){r.sx=r.sx||[];r.sx.push([i,s.sx[i]]);}}}
     return r;
@@ -450,7 +469,7 @@ function tekenStations(){
   const sc=schermSchaal();laatsteSchaal=sc;
   const f=Math.min(1.6,Math.max(1,0.62/sc));            // markers niet kleiner dan ~desktop
   const fs=Math.min(28,Math.max(11,10.5/sc));          // labels ~10,5 px op scherm
-  const grenzen=klassenVoor(periode);
+  const grenzen=klassenVoor();
   const lijst=resultaten.filter(r=>st.ontbr||!r.geen);
   lijst.sort((a,b)=>(a.geen?-1:a.som)-(b.geen?-1:b.som));
   zichtbaar=lijst;
@@ -496,7 +515,7 @@ function tekenFocus(){
 
 /* ── legenda ──────────────────────────────────────────────────────── */
 function tekenLegenda(){
-  const g=klassenVoor(periode),lab=klasLabels(g);
+  const g=klassenVoor(),lab=klasLabels(g);
   let h=`<span class="leg-titel">mm</span><div class="leg-klassen">`;
   g.forEach((_,i)=>{const r=straal(i);h+=`<div class="leg-k"><svg width="26" height="24" viewBox="0 0 26 24" aria-hidden="true"><circle cx="13" cy="12" r="${(r*0.95).toFixed(1)}" fill="var(--r${i})" stroke="var(--droog-rand)" stroke-width="${i===0&&g[0]===0?1.2:0}"/></svg><span>${lab[i]}</span></div>`;});
   h+=`</div>`;
@@ -520,6 +539,7 @@ function periodeNaam(idx){
   const a=D.dagen[idx[0]],b=D.dagen[idx[idx.length-1]];
   if(periode==='dag') return `24-uurssom ${fDagJ.format(dagDatum(b))}`;
   if(periode==='week') return `7-daagse som ${fKort.format(dagDatum(a))} t/m ${fKort.format(dagDatum(b))}`;
+  if(periode==='jaar'){const y=a.slice(0,4);return b===`${y}1231`?`Jaarsom ${y}`:`Som ${y}, 1 jan t/m ${fKort.format(dagDatum(b))}`;}
   const m=fMaand.format(dagDatum(a));
   const volledig=idx.length===dagenInMaand(a);
   return volledig?`Maandsom ${m}`:`Som ${m}, 1 t/m ${+b.slice(6,8)}`;
@@ -657,14 +677,19 @@ $('csvBtn').addEventListener('click',()=>{
 /* ── tooltip ──────────────────────────────────────────────────────── */
 function balkjes(r,idx){
   if(idx.length<2) return '';
-  const vals=idx.map(i=>({i,v:r.s.rd[i],x:D.dagstatus[i]==='X'}));
+  let vals=idx.map(i=>({i,v:r.s.rd[i],x:D.dagstatus[i]==='X'}));
+  if(idx.length>45){ // jaar: per maand
+    const groep=new Map();
+    for(const o of vals){const m=D.dagen[o.i].slice(0,6);if(!groep.has(m))groep.set(m,{v:null,mist:0});const g=groep.get(m);if(o.v==null){if(!o.x)g.mist++;}else g.v=(g.v||0)+o.v;}
+    vals=[...groep.values()];
+  }
   const mx=Math.max(1,...vals.map(o=>o.v||0));
   const w=100/vals.length;
   let s=`<svg class="bars" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true">`;
   vals.forEach((o,j)=>{
     const x=j*w+w*0.12,bw=w*0.76;
     if(o.v==null){s+=`<rect x="${x.toFixed(2)}" y="31" width="${bw.toFixed(2)}" height="2" fill="var(--geen)" opacity=".7"/>`;}
-    else{const h=Math.max(o.v>0?1.5:0.6,o.v/mx*30);s+=`<rect x="${x.toFixed(2)}" y="${(33-h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" fill="var(--r6)" rx=".6"/>`;}
+    else{const h=Math.max(o.v>0?1.5:0.6,o.v/mx*30);s+=`<rect x="${x.toFixed(2)}" y="${(33-h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" fill="var(--r6)" rx=".6"${o.mist?' opacity=".5"':''}/>`;}
   });
   return s+`</svg>`;
 }
@@ -685,9 +710,11 @@ function tipHtml(r){
   const extra=[];
   if(idx.length>1){
     extra.push(balkjes(r,idx));
-    let t=`<span class="m">${r.gemeld} van ${r.totaal} dagen met meting</span>`;
-    const ontbr=r.ontbr.map(i=>+D.dagen[i].slice(6,8));
-    if(ontbr.length&&!r.geen) t+=`<br><span class="m">Ontbreekt: ${ontbr.length>8?ontbr.slice(0,8).join(', ')+' …':ontbr.join(', ')} ${fMaand.format(dagDatum(D.dagen[r.ontbr[0]])).split(' ')[0]}</span>`;
+    let t=`<span class="m">${idx.length>45?'Per maand · ':''}${r.gemeld} van ${r.totaal} dagen met meting</span>`;
+    if(r.ontbr.length&&!r.geen){
+      const lijst=r.ontbr.slice(0,6).map(i=>fKort.format(dagDatum(D.dagen[i]))).join(', ');
+      t+=`<br><span class="m">Ontbreekt: ${lijst}${r.ontbr.length>6?` en ${r.ontbr.length-6} andere dagen`:''}</span>`;
+    }
     extra.push(t);
   }
   if(r.pn!=null) extra.push(`${r.compleet?'':'≥ '}<b>${r.pn}%</b> van normaal <span class="m">(normaal voor deze dagen ${nf0.format(r.norm)} mm, 1991-2020)</span>`);
@@ -789,6 +816,12 @@ function zetPeriode(p){
 }
 document.querySelectorAll('#periodeSeg button').forEach(b=>b.addEventListener('click',()=>zetPeriode(b.dataset.p)));
 $('terugBtn').addEventListener('click',()=>{if(eindIdx>0){eindIdx--;render();}});
+$('maandSel').addEventListener('change',e=>{maandSel=e.target.value;render();});
+$('dagInput').addEventListener('click',e=>{try{e.target.showPicker();}catch(_){}});
+$('dagInput').addEventListener('change',e=>{
+  const v=e.target.value.replace(/-/g,'');const i=D.dagen.indexOf(v);
+  if(i>=0&&i<=laatsteIdx){eindIdx=i;render();}else render();
+});
 $('verderBtn').addEventListener('click',()=>{if(eindIdx<laatsteIdx){eindIdx++;render();}});
 $('waardenChk').addEventListener('change',e=>{st.waarden=e.target.checked;bewaar();tekenStations();});
 $('ontbrChk').addEventListener('change',e=>{st.ontbr=e.target.checked;bewaar();tekenStations();});
@@ -797,8 +830,12 @@ function render(){
   const stepper=$('stepper');
   const dagModus=periode==='dag'||periode==='week';
   stepper.hidden=!dagModus;
+  $('maandSel').hidden=periode!=='maand';
+  if(periode==='maand') $('maandSel').value=maandSel;
   if(dagModus){
     const d=D.dagen[eindIdx];
+    const iso=x=>`${x.slice(0,4)}-${x.slice(4,6)}-${x.slice(6,8)}`;
+    $('dagInput').min=iso(D.dagen[0]);$('dagInput').max=iso(D.dagen[laatsteIdx]);$('dagInput').value=iso(d);
     $('dagLbl').textContent=(periode==='week'?'t/m ':'')+fDag.format(dagDatum(d));
     $('dagLbl').title=D.dagstatus[eindIdx]==='X'?'Geen KNMI-data voor deze dag':'';
     $('terugBtn').disabled=eindIdx<=0;$('verderBtn').disabled=eindIdx>=laatsteIdx;
@@ -849,13 +886,15 @@ async function start(){
   while(laatsteIdx>0&&D.dagstatus[laatsteIdx]==='X')laatsteIdx--;
   eindIdx=laatsteIdx;
   const pd=PARAMS.get('dag');if(pd){const i=D.dagen.indexOf(pd.replace(/-/g,''));if(i>=0&&i<=laatsteIdx)eindIdx=i;}
-  // Maandknoppen dragen de echte maandnaam (KNMI-maand = datums 1 t/m laatste dag).
-  const lm=D.dagen[laatsteIdx];
-  const mNaam=s=>{const n=new Intl.DateTimeFormat('nl-NL',{month:'long',timeZone:'UTC'}).format(dagDatum(s));return n.charAt(0).toUpperCase()+n.slice(1);};
-  const vm=(()=>{const d=dagDatum(lm.slice(0,6)+'01');d.setUTCDate(0);return d.toISOString().slice(0,10).replace(/-/g,'');})();
-  document.querySelector('#periodeSeg [data-p="maand"]').textContent=mNaam(lm);
-  document.querySelector('#periodeSeg [data-p="vorige"]').textContent=mNaam(vm);
-  document.querySelector('#periodeSeg [data-p="vorige"]').disabled=!D.dagen.some(d=>d.slice(0,6)===vm.slice(0,6));
+  DIM=D.dagen.map(dagenInMaand);MON=D.dagen.map(d=>+d.slice(4,6)-1);
+  D.stations.forEach(s=>{let a=-1,z=-1;s.rd.forEach((v,i)=>{if(v!=null){if(a<0)a=i;z=i;}});s.eerste=a;s.laatste=z;});
+  // Maandkeuze: alle maanden in het venster (KNMI-maand = datums 1 t/m laatste dag).
+  const maanden=[...new Set(D.dagen.slice(0,laatsteIdx+1).map(d=>d.slice(0,6)))];
+  const lopend=D.dagen[laatsteIdx].slice(0,6);
+  $('maandSel').innerHTML=maanden.slice().reverse().map(m=>`<option value="${m}">${fMaand.format(dagDatum(m+'01'))}${m===lopend?' (loopt)':''}</option>`).join('');
+  maandSel=lopend;
+  if(vorigeGevraagd&&maanden.length>1) maandSel=maanden[maanden.length-2];
+  const pm=PARAMS.get('maand');if(pm&&maanden.includes(pm))maandSel=pm;
   $('zoekLijst').innerHTML=D.stations.slice().sort((a,b)=>a.n.localeCompare(b.n,'nl')).map(s=>`<option value="${esc(s.n)} (${s.c})">`).join('');
   tekenStatus();
   render();
