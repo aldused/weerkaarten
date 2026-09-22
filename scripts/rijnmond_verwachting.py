@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Automatische regioverwachting Rijnmond / Zuid-Holland Zuid.
 
-    python3 scripts/rijnmond_verwachting.py              # alleen bij nieuwe modelruns
-    python3 scripts/rijnmond_verwachting.py --force      # altijd opnieuw
+    python3 scripts/rijnmond_verwachting.py --slot        # vaste uitgifte (8x per dag)
+    python3 scripts/rijnmond_verwachting.py               # alleen bij nieuwe modelruns
+    python3 scripts/rijnmond_verwachting.py --force       # altijd opnieuw
     python3 scripts/rijnmond_verwachting.py --redactie claude   # plus taalredactie
 
 Keten: rijnmond_bronnen (welke modellen en runs staan er nu op Weerlab?) →
@@ -30,6 +31,10 @@ import rijnmond_bronnen as B  # noqa: E402
 import rijnmond_tekst as T  # noqa: E402
 
 UIT = B.WEERLAB / "rijnmond_verwachting.json"
+# Acht vaste uitgiften per dag (lokale tijd). De tijden liggen net ná de momenten
+# waarop Weerlab zijn modelvelden ververst: de nieuwe ECMWF-run staat rond 09:40
+# en 21:40 binnen, HARMONIE ieder uur rond :35 en ICON-D2 driemaal per dag.
+SLOTS = (1, 4, 7, 10, 13, 16, 19, 22)
 HISTORIE = B.CACHE / "historie.json"
 MAANDEN = B.MAANDEN
 
@@ -48,6 +53,15 @@ def vingerafdruk(feiten: dict) -> str:
     runs = sorted(f"{r['id']}:{r['run_utc']}:{r['status']}" for r in feiten["modelruns"])
     runs += feiten.get("ens_info", {}).get("runs", [])[:1] + [str(feiten.get("mosmix_run"))]
     return hashlib.sha1("|".join(runs).encode()).hexdigest()[:16]
+
+
+def slot_start(nu: datetime) -> datetime:
+    """Begin van het uitgiftemoment waar `nu` in valt."""
+    vandaag = nu.replace(minute=0, second=0, microsecond=0)
+    for uur in reversed(SLOTS):
+        if nu.hour >= uur:
+            return vandaag.replace(hour=uur)
+    return (vandaag - timedelta(days=1)).replace(hour=SLOTS[-1])
 
 
 def uitgifte_label(nu: datetime) -> str:
@@ -146,6 +160,8 @@ def slanke_feiten(feiten: dict) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--slot", action="store_true",
+                    help="vaste uitgifte: sla over als dit moment al een uitgifte heeft")
     ap.add_argument("--redactie", choices=["uit", "claude"], default="uit")
     ap.add_argument("--uit", default=str(UIT))
     args = ap.parse_args()
@@ -158,7 +174,17 @@ def main() -> int:
         return 1
     vinger = vingerafdruk(feiten)
     uitpad = Path(args.uit)
-    if not args.force and uitpad.exists():
+    if args.slot and uitpad.exists():
+        # Slot-wacht: de hoofdrun geeft uit, de inhaalpoging 20 minuten later
+        # doet dat alleen als de hoofdrun niet slaagde.
+        try:
+            vorige = json.loads(uitpad.read_text(encoding="utf-8"))
+            if datetime.fromisoformat(vorige["uitgegeven"]) >= slot_start(nu):
+                print(f"Uitgifte van {slot_start(nu):%H:%M} staat er al ({vorige['uitgegeven']}) — overgeslagen")
+                return 0
+        except Exception:
+            pass
+    if not args.force and not args.slot and uitpad.exists():
         try:
             vorige = json.loads(uitpad.read_text(encoding="utf-8"))
             leeftijd = nu - datetime.fromisoformat(vorige["uitgegeven"])
