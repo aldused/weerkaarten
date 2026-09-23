@@ -266,7 +266,22 @@ class Schrijver:
         return []
 
     def ochtendmist(self, p: dict) -> list[str]:
-        """Mist in de vroege ochtend hoort ook in een dagtekst thuis."""
+        """Mist in de vroege ochtend hoort ook in een dagtekst thuis.
+
+        Voor dagen zonder eigen nachttekst is de mistkans van de nacht ervoor
+        apart berekend; anders kijken we naar het tijdvak 06-12 uur."""
+        M = p.get("mist_ochtend") or {}
+        if M.get("klasse") in ("waarschijnlijk", "zeker"):
+            return [self.kies("De ochtend begint op veel plaatsen met mist.",
+                              "Vroeg in de ochtend is het op veel plaatsen mistig.")]
+        if M.get("klasse") == "mogelijk":
+            return [self.kies("In de vroege ochtend kan er mist hangen.",
+                              "De ochtend kan met mist beginnen.")]
+        if M.get("klasse") == "klein" and (M.get("ws_nacht") or 9) <= 2.0:
+            return [self.kies("Vroeg in de ochtend kan het plaatselijk nevelig zijn.",
+                              "Hier en daar kan de ochtend nevelig beginnen.")]
+        if M:
+            return []
         ochtend = self.vak(p["datum"], "06-12")
         frac = (ochtend or {}).get("mist_frac")
         if frac is None or frac < 0.2:
@@ -701,7 +716,7 @@ class Schrijver:
             if n is not None and obs.get("t") is not None:
                 lucht = "zwaar bewolkt" if n >= 7 else "half bewolkt" if n >= 4 else "vrij zonnig"
                 alinea1.append(f"Op dit moment is het in Rotterdam {lucht} en {afr(obs['t'])} graden.")
-        if not middag:
+        if not middag and (p["key"] == "vandaag" or p.get("mist_ochtend")):
             alinea1 += self.ochtendmist(p)
         alinea1 += self.samen(self.lucht_dag(p, middag), self.neerslag(p), p["neerslag"]["kans"])
         if not middag:
@@ -806,6 +821,15 @@ class Schrijver:
                     zinnen.append(f"Het blijft meestal droog. Alleen {self.opsomming(wisselend)} is er een kleine kans op een bui.")
                 else:
                     zinnen.append("Het blijft meestal droog.")
+        # Mist in de ochtend
+        mistig = [(namen[i], (d.get("mist_ochtend") or {}).get("klasse")) for i, d in enumerate(dagen)]
+        zeker = [n for n, k in mistig if k in ("waarschijnlijk", "zeker")]
+        mogelijk = [n for n, k in mistig if k == "mogelijk"]
+        if zeker:
+            zinnen.append(f"{cap(self.opsomming([n + 'ochtend' for n in zeker]))} begint het op veel plaatsen mistig.")
+        elif mogelijk:
+            zinnen.append(f"{cap(self.opsomming([n + 'ochtend' for n in mogelijk]))} kan er mist hangen.")
+
         # Temperatuur
         geldig = [t for t in tx if t is not None]
         if geldig:
@@ -823,12 +847,21 @@ class Schrijver:
                 niveau = " Dat is iets kouder dan normaal."
             else:
                 niveau = " Dat is normaal voor de tijd van het jaar."
-            if afwijking >= 6:
+            warmste = namen[max(range(len(geldig)), key=lambda i: geldig[i])]
+            # Springt één dag er ver bovenuit, noem die dan apart — tenzij de
+            # temperatuurzin die dag zelf al noemt.
+            per_dag = [(namen[i], geldig[i] - norm[i]) for i in range(len(geldig))
+                       if i < len(norm) and norm[i] is not None]
+            uitschieter = max(per_dag, key=lambda x: x[1]) if per_dag else None
+            if uitschieter and uitschieter[1] >= 6:
+                al_genoemd = uitschieter[0] == warmste and hi - lo >= 4
+                niveau = (" Dat is uitzonderlijk zacht voor de tijd van het jaar." if al_genoemd
+                          else f" Vooral {uitschieter[0]} is het uitzonderlijk zacht voor de tijd van het jaar.")
+            elif afwijking >= 6:
                 niveau = " Dat is uitzonderlijk zacht voor de tijd van het jaar."
             if hi - lo >= 4:
                 # Duidelijk verschil tussen de dagen: benoem het verloop.
                 eerste, laatste = afr(geldig[0]), afr(geldig[-1])
-                warmste = namen[max(range(len(geldig)), key=lambda i: geldig[i])]
                 if laatste - eerste >= 3:
                     zin = f"De temperatuur loopt op van een graad of {eerste} naar {laatste} graden, met {warmste} als warmste dag."
                 elif eerste - laatste >= 3:
@@ -866,8 +899,11 @@ class Schrijver:
             zinnen.append(f"Voor {naam} rekenen de modellen nu wat {'warmer' if dt > 0 else 'koeler'} dan gisteren.")
         if breed or weinig_modellen:
             wie = (weinig_modellen or breed)[-1]
-            zinnen.append(self.kies(f"Vooral voor {wie} is het nog onzeker.",
-                                    f"Hoe het weer vanaf {wie} uitpakt, is nog niet duidelijk."))
+            if any(wie in z for z in zinnen[-2:]):
+                zinnen.append("Dat laatste is nog wel onzeker.")
+            else:
+                zinnen.append(self.kies(f"Vooral voor {wie} is het nog onzeker.",
+                                        f"Hoe het weer vanaf {wie} uitpakt, is nog niet duidelijk."))
         return " ".join(zinnen)
 
     @staticmethod
@@ -946,6 +982,10 @@ class Schrijver:
         for i, p in enumerate(per):
             volgende = per[i + 1] if i + 1 < len(per) else None
             if p["key"] == "nacht2" and not self.nacht2_relevant(p):
+                # Geen eigen nachttekst, maar mist mag daardoor niet wegvallen.
+                volgende_dag = self.perioden.get("overmorgen")
+                if volgende_dag is not None and not volgende_dag.get("mist_ochtend"):
+                    volgende_dag["mist_ochtend"] = p.get("mist")
                 continue
             if p["soort"] == "dag":
                 alineas = self.sectie_dag(p, volgende)

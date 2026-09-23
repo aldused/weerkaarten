@@ -147,6 +147,7 @@ def vooruitzicht_tabel(feiten: dict) -> list[dict]:
             "wind": f"{T.AFK.get(w.get('richting') or '', '')} {w.get('bft')}" if w.get("bft") is not None else "–",
             "zon_uren": T.afr((d.get("lucht") or {}).get("zon_uren")) if (d.get("lucht") or {}).get("zon_uren") is not None else None,
             "n_modellen": d["n_modellen"], "ens_spreiding": d.get("tmax_ens"),
+            "mist": {k: (d.get("mist_ochtend") or {}).get(k) for k in ("klasse", "kans")} if d.get("mist_ochtend") else None,
             "per_model": d.get("per_model"),
         })
     return rijen

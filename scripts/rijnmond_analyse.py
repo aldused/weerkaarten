@@ -509,7 +509,9 @@ def mosmix_venster(mos: dict | None, start: datetime, eind: datetime, soort: str
         dag = mos.get("dag", {}).get(eind.date().isoformat())
         mist = [v.get("wwM") for v in (dag or {}).values() if v.get("wwM") is not None]
         if mist:
-            uit["mist_kans"] = float(np.mean(mist)) / 100
+            # Mist is plaatselijk: de hoogste stationskans telt, niet het gemiddelde
+            # (aan zee mist het zelden, landinwaarts des te vaker).
+            uit["mist_kans"] = float(np.max(mist)) / 100
     return uit or None
 
 
@@ -739,12 +741,19 @@ def mist_consensus(stats, w, ens, mos) -> dict:
         scores.append(sc)
         gw.append(w[k])
     kans_mod = wgem(scores, gw) or 0.0
-    bijdragen = [(kans_mod, 0.6)]
+    # Het modelzicht is voor mist een zwakke voorspeller; MOSMIX is per station
+    # statistisch gekalibreerd en weegt daarom zwaarder mee dan bij andere
+    # grootheden. Bovendien geldt een ondergrens: als één bron een duidelijk
+    # signaal geeft, mag het gemiddelde dat niet helemaal wegpoetsen — mist is
+    # een risico, geen gemiddelde.
+    bijdragen = [(kans_mod, 0.45)]
     if mos and mos.get("mist_kans") is not None:
-        bijdragen.append((mos["mist_kans"], 0.25))
+        bijdragen.append((mos["mist_kans"], 0.35))
     if ens and ens.get("mist_kans") is not None:
-        bijdragen.append((ens["mist_kans"], 0.15))
-    kans = sum(k * g for k, g in bijdragen) / sum(g for _, g in bijdragen)
+        bijdragen.append((ens["mist_kans"], 0.20))
+    gemiddeld = sum(k * g for k, g in bijdragen) / sum(g for _, g in bijdragen)
+    sterkste = max(k for k, _ in bijdragen)
+    kans = max(gemiddeld, 0.7 * sterkste)
     vis_gewicht = sum(w[k] for k, s in stats.items() if s.get("vis_heeft")) or 1
     uit = {
         "kans": round(kans * 100),
@@ -979,8 +988,8 @@ def analyseer(nu: datetime | None = None) -> dict:
         uit["modellen"].sort(key=lambda r: (r["groep"] != "hires", -r["gewicht"]))
         feiten["perioden"].append(uit)
 
-    # Tijdvakken van 6 uur voor vandaag t/m overmorgen
-    for dag_i in range(3):
+    # Tijdvakken van 6 uur voor vandaag t/m de vierde dag
+    for dag_i in range(4):
         d = nu.date() + timedelta(days=dag_i)
         for h0, h1, label in TIJDVAKKEN:
             s0 = datetime(d.year, d.month, d.day) + timedelta(hours=h0)
@@ -1009,6 +1018,27 @@ def analyseer(nu: datetime | None = None) -> dict:
             vak["bft"] = bft(vak["ws"])
             vak["richting"] = sector(rd["graden"]) if rd else None
             feiten["tijdvakken"].append(vak)
+
+    # Mist in de ochtend van de vierde dag: die nacht heeft geen eigen sectie.
+    def nacht_mist(datum: date, looptijd: float) -> dict | None:
+        dag0 = datetime(datum.year, datum.month, datum.day)
+        stats, deel = {}, []
+        for m in modellen:
+            st = model_venster(m, dag0 - 6 * H, dag0 + 7 * H, "nacht")
+            if st:
+                stats[m.prefix] = st
+                deel.append(m)
+        if not stats:
+            return None
+        w = gewichten(deel, looptijd, toets)
+        return mist_consensus(stats, w, ens_venster(ens, dag0 - 6 * H, dag0 + 7 * H, "nacht"),
+                              mosmix_venster(mos, dag0 - 6 * H, dag0 + 7 * H, "nacht"))
+
+    for p in feiten["perioden"]:
+        if p["key"] == "dag3":
+            m_ochtend = nacht_mist(date.fromisoformat(p["datum"]), p["looptijd_uur"])
+            if m_ochtend:
+                p["mist_ochtend"] = m_ochtend
 
     # Vooruitzicht: de dagen ná de vierde dag (etmaal 00-24, max 06-18,
     # min in de nacht ervoor)
@@ -1081,6 +1111,7 @@ def analyseer(nu: datetime | None = None) -> dict:
         }
         item["lucht"]["klasse"] = lucht_klasse(item["lucht"]["laag"], item["lucht"]["midden"],
                                                item["lucht"]["hoog"], None, "dag")
+        item["mist_ochtend"] = nacht_mist(d, looptijd)
         # Drukpatroon uit het ECMWF-veld (of het eerste mondiale model met druk)
         for m in sorted(deel, key=lambda x: (x.prefix != "ecmwf_om", x.groep != "globaal")):
             j = np.nonzero(_tarr(m) == np.datetime64(dag0 + 13 * H, "m"))[0]
