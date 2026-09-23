@@ -138,10 +138,15 @@ class Schrijver:
         self.perioden = {p["key"]: p for p in feiten["perioden"]}
         self.vakken = feiten.get("tijdvakken", [])
         self.guidance = feiten.get("guidance") or {}
+        self.gebruikt: set[str] = set()   # geen formulering twee keer in één bericht
 
     # ── Hulp ────────────────────────────────────────────────────────────────
     def kies(self, *opties: str) -> str:
-        return self.rng.choice([o for o in opties if o])
+        opties = [o for o in opties if o]
+        vers = [o for o in opties if o not in self.gebruikt]
+        keuze = self.rng.choice(vers or opties)
+        self.gebruikt.add(keuze)
+        return keuze
 
     def vak(self, datum: date | str, label: str) -> dict | None:
         d = datum if isinstance(datum, str) else datum.isoformat()
@@ -676,7 +681,7 @@ class Schrijver:
         if p["zekerheid"] == "laag":
             return self.kies("Over deze dag verschillen de modellen nog flink.",
                              "De berekeningen lopen voor deze dag nog uiteen, dus dit beeld kan nog veranderen.")
-        if p["key"] == "overmorgen" and p["zekerheid"] == "redelijk":
+        if p["key"] in ("overmorgen", "dag3") and p["zekerheid"] == "redelijk":
             return "Zo ver vooruit kan het beeld nog veranderen."
         return None
 
@@ -873,10 +878,15 @@ class Schrijver:
                 alineas = self.sectie_dag(p, volgende)
             else:
                 alineas = self.sectie_nacht(p, volgende)
-            titel = p["titel"]
+            titel, subtitel = p["titel"], None
             if p["key"] in ("morgen", "overmorgen"):
                 titel = f"{p['titel']} ({p['dag_label']})"
-            secties.append({"key": p["key"], "titel": titel, "alineas": [a for a in alineas if a]})
+            elif p["key"] == "dag3":
+                subtitel = p["dag_label"]
+            sectie = {"key": p["key"], "titel": titel, "alineas": [a for a in alineas if a]}
+            if subtitel:
+                sectie["subtitel"] = subtitel
+            secties.append(sectie)
         d = self.daarna()
         if d:
             eerste = self.f["daarna"][0]["dag_label"]

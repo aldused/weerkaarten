@@ -164,6 +164,10 @@ def maak_perioden(nu: datetime) -> list[dict]:
                 "start": dt(d1, 18), "eind": dt(d2, 7), "datum": d2})
     per.append({"key": "overmorgen", "titel": "Overmorgen", "soort": "dag", "start": dt(d2, 6),
                 "eind": dt(d2, 18), "datum": d2, "deel": "hele dag"})
+    # Vierde dag met een eigen tekst; die heet bij zijn dagnaam (bijv. "Zaterdag").
+    d3 = d0 + timedelta(days=3)
+    per.append({"key": "dag3", "titel": B.DAGEN[d3.weekday()].capitalize(), "soort": "dag",
+                "start": dt(d3, 6), "eind": dt(d3, 18), "datum": d3, "deel": "hele dag"})
     for p in per:
         p["dag_label"] = B.dag_lang(p["datum"])
     return per
@@ -1002,8 +1006,9 @@ def analyseer(nu: datetime | None = None) -> dict:
             vak["richting"] = sector(rd["graden"]) if rd else None
             feiten["tijdvakken"].append(vak)
 
-    # Vooruitzicht: dag 3 t/m 6 (etmaal 00-24, max 06-20, min in de nacht ervoor)
-    for dag_i in range(3, 7):
+    # Vooruitzicht: de dagen ná de vierde dag (etmaal 00-24, max 06-18,
+    # min in de nacht ervoor)
+    for dag_i in range(4, 7):
         d = nu.date() + timedelta(days=dag_i)
         dag0 = datetime(d.year, d.month, d.day)
         stats_d, stats_n, stats_e, deel = {}, {}, {}, []
