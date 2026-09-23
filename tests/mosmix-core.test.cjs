@@ -42,6 +42,13 @@ test('lege en ongeordende brondata geven een bruikbare fout',()=>{
   assert.throws(()=>m.validateDaily({dagen:['2026-09-10','2026-09-09'],stations:{Test:[5,52]},data:{'2026-09-10':{},'2026-09-09':{}}}),/datums/);
 });
 test('tegenstrijdige DWD-kansen worden gemeld, niet herschreven',()=>{
-  const values=[43,11,1,11],data={dagen:['2026-09-09'],stations:{Rotterdam:[4.4,51.9]},data:{'2026-09-09':Object.fromEntries(['R101','R110','R130','R150'].map((p,i)=>[p,{Rotterdam:values[i]}]))}};
-  const before=JSON.stringify(data);assert.equal(m.probabilityIssues(data).length,1);assert.equal(JSON.stringify(data),before);
+  const values=[43,41,1,11],data={dagen:['2026-09-09'],stations:{Rotterdam:[4.4,51.9]},data:{'2026-09-09':Object.fromEntries(['Rh00_N','Rh02_N','Rh10_N','Rh50_N'].map((p,i)=>[p,{Rotterdam:values[i]}]))}};
+  const before=JSON.stringify(data);assert.deepEqual(m.probabilityIssues(data).map(i=>i.suffix),['_N']);assert.equal(JSON.stringify(data),before);
+  data.data['2026-09-09'].Rh50_N.Rotterdam=0;assert.equal(m.probabilityIssues(data).length,0);
+});
+test('kansvensters: vaste UTC-tijden in Nederlandse kloktijd',()=>{
+  assert.equal(m.popKey('00'),'Rd00');assert.equal(m.popKey('10','_D'),'Rh10_D');
+  assert.equal(m.popWindow('2026-09-22','_D'),'08–20 u');assert.equal(m.popWindow('2026-09-22','_N'),'20–08 u');
+  assert.equal(m.popWindow('2026-09-22'),'08–08 u');assert.equal(m.popWindow('2026-12-01','_D'),'07–19 u');
+  assert.equal(m.popWindow('2026-10-24','_N'),'20–07 u');
 });

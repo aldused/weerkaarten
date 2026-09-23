@@ -1,5 +1,6 @@
 /* Weerlab daily MOSMIX: TX/TN °C, FF km/h, DD degrees, SQ sunshine
- * hours (may be estimated), R101 highest hourly probability (%).
+ * hours (may be estimated), R101 = DWD Rd00: chance of measurable
+ * precipitation (> 0 mm) over 24 hours, 06-06 UTC (%).
  * Feed dates are Europe/Amsterdam calendar dates. */
 (function(root){
   const station='Rotterdam Airport';

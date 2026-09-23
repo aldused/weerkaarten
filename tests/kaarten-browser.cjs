@@ -34,8 +34,12 @@ const base=process.env.WEERLAB_TEST_URL||'http://127.0.0.1:8787',root=path.resol
   assert((await host.locator('#mosmix-frame').getAttribute('src')).includes('dagdeel_wind'));
   await page.goto(base+'/mosmix_kaart.html?param=R101');await page.locator('#legenda').filter({hasText:'100%'}).waitFor();
   assert(!(await page.locator('#legenda').innerText()).includes('°'));
-  assert((await page.locator('#kaart-subtitel').innerText()).includes('Hoogste uurkans'));
-  assert(!(await page.locator('option[value="R101"]').innerText()).includes('24u'));
+  // Oude deeplink R101 komt uit op de 24-uurskans Rd00; de ondertitel noemt het venster in NL-tijd.
+  assert.match(await page.locator('#kaart-subtitel').innerText(),/etmaal .*· \d\d–\d\d u/);
+  assert.equal(await page.locator('select:has(option[value="Rd00"])').inputValue(),'Rd00');
+  assert.equal(await page.locator('option[value="R130"]').count(),0);
+  await page.selectOption('select:has(option[value="Rh00_N"])','Rh00_N');
+  assert.match(await page.locator('#kaart-subtitel').innerText(),/nacht/);
   assert((await page.locator('option[value="wwZ"]').innerText()).includes('Motregen'));
   await page.selectOption('select:has(option[value="FF"])','FF');
   assert((await page.locator('#kaart-subtitel').innerText()).includes('Gemiddelde'));

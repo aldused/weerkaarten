@@ -17,10 +17,21 @@
     if(now-run>18*3600000)return 'Let op: deze modelrun is ouder dan 18 uur. Er is mogelijk nog geen nieuwere verwachting beschikbaar.';
     return '';
   }
+  // DWD-neerslagkansen per drempel (> 0 / 0,2 / 1 / 5 mm): Rd** = 24 uur,
+  // Rh**_D / Rh**_N = 12 uur overdag / de nacht erna.
+  const POP_THRESHOLDS=['00','02','10','50'];
+  function popKey(threshold,suffix=''){return suffix?'Rh'+threshold+suffix:'Rd'+threshold;}
+  // De vensters liggen vast in UTC (dag 06–18, nacht 18–06, etmaal 06–06);
+  // geeft de Nederlandse kloktijden, bv. "08–20 u" in de zomer en "07–19 u" in de winter.
+  function popWindow(day,suffix=''){
+    const t0=Date.parse(day+'T00:00:00Z'),[start,end]=suffix==='_D'?[6,18]:suffix==='_N'?[18,30]:[6,30];
+    const hour=h=>new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hourCycle:'h23'}).format(t0+h*3600000);
+    return hour(start)+'–'+hour(end)+' u';
+  }
   function probabilityIssues(data){
     const issues=[];
     for(const day of data.dagen||[])for(const name of Object.keys(data.stations||{}))for(const suffix of ['','_D','_N']){
-      const values=['R101','R110','R130','R150'].map(p=>data.data?.[day]?.[p+suffix]?.[name]);
+      const values=POP_THRESHOLDS.map(t=>data.data?.[day]?.[popKey(t,suffix)]?.[name]);
       if(values.every(finite)&&values.some((v,i)=>i>0&&v>values[i-1]))issues.push({day,name,suffix,values});
     }
     return issues;
@@ -80,6 +91,6 @@
     return {ff,dir};
   }
   function legendLabel(param,value){return typeof value==='number'?value+(param.bft?' km/h':param.eenheid||''):value;}
-  const api={finite,dayKey,nextDay,validateDaily,runWarning,probabilityIssues,fetchJSON,loadDaily,assertSameRun,hourlyIndex,minTemp,meanWind,legendLabel};
+  const api={finite,dayKey,nextDay,validateDaily,runWarning,POP_THRESHOLDS,popKey,popWindow,probabilityIssues,fetchJSON,loadDaily,assertSameRun,hourlyIndex,minTemp,meanWind,legendLabel};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MosmixCore=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
