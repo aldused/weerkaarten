@@ -37,6 +37,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Expose-Headers': 'X-Cache-Status, X-Open-Meteo-Cache-Ttl, X-Weerlab-OM-Locations, X-Weerlab-OM-Upstream',
   'Access-Control-Max-Age':       '86400',
 };
 
@@ -118,6 +119,7 @@ export default {
     const cacheKey = new Request(upstream.toString().replace(env.OPEN_METEO_KEY, 'x'), request);
     const cache = caches.default;
     let response = fresh ? null : await cache.match(cacheKey);
+    const usage = summarizeOpenMeteoUsage(url, endpoint);
 
     if (!response) {
       const headers = { 'User-Agent': 'weerlab.nl-om-proxy/1.0' };
@@ -132,6 +134,8 @@ export default {
       response.headers.set('Cache-Control', fresh ? 'no-store' : `public, max-age=${cacheTtl}`);
       response.headers.set('X-Cache-Status', fresh ? 'BYPASS' : 'MISS');
       response.headers.set('X-Open-Meteo-Cache-Ttl', String(fresh ? 0 : cacheTtl));
+      response.headers.set('X-Weerlab-OM-Locations', String(usage.locations));
+      response.headers.set('X-Weerlab-OM-Upstream', '1');
       for (const [k, v] of Object.entries(CORS_HEADERS)) {
         response.headers.set(k, v);
       }
@@ -142,15 +146,52 @@ export default {
       if (!fresh && upstreamResp.ok) {
         ctx.waitUntil(cache.put(cacheKey, response.clone()));
       }
+      logOpenMeteoUsage(usage, fresh ? 'BYPASS' : 'MISS', upstreamResp.status, true);
     } else {
       response = new Response(response.body, response);
       response.headers.set('X-Cache-Status', 'HIT');
       response.headers.set('X-Open-Meteo-Cache-Ttl', String(cacheTtl));
+      response.headers.set('X-Weerlab-OM-Locations', String(usage.locations));
+      response.headers.set('X-Weerlab-OM-Upstream', '0');
+      logOpenMeteoUsage(usage, 'HIT', response.status, false);
     }
 
     return response;
   },
 };
+
+function csvCount(value) {
+  return value ? value.split(',').filter(Boolean).length : 0;
+}
+
+function summarizeOpenMeteoUsage(url, endpoint) {
+  const latitudeCount = csvCount(url.searchParams.get('latitude'));
+  const longitudeCount = csvCount(url.searchParams.get('longitude'));
+  const variableKeys = ['hourly', 'daily', 'current', 'minutely_15'];
+  const variables = variableKeys.reduce(
+    (sum, key) => sum + csvCount(url.searchParams.get(key)),
+    0,
+  );
+  return {
+    endpoint,
+    locations: Math.max(1, latitudeCount, longitudeCount),
+    variables,
+    models: Math.max(1, csvCount(url.searchParams.get('models'))),
+    forecastDays: Number(url.searchParams.get('forecast_days') || 0) || null,
+    pastDays: Number(url.searchParams.get('past_days') || 0) || null,
+  };
+}
+
+function logOpenMeteoUsage(usage, cacheStatus, upstreamStatus, upstreamFetch) {
+  // Geen API-key, IP-adres of coördinaten loggen: alleen geaggregeerde omvang.
+  console.log(JSON.stringify({
+    event: 'open_meteo_usage',
+    ...usage,
+    cacheStatus,
+    upstreamStatus,
+    upstreamFetch,
+  }));
+}
 
 async function proxyEumetview(url, request, ctx) {
   const upstream = new URL('https://view.eumetsat.int/geoserver/wms');
