@@ -260,8 +260,8 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     def crop(value, indices_lat=lat_idx, indices_lon=lon_idx):
         return np.nan_to_num(value[np.ix_(indices_lat, indices_lon)], nan=0).astype("<f4")
 
-    def write_float(name: str, values, components: int = 1, indices_lat=lat_idx, indices_lon=lon_idx):
-        path = ROOT / f"{PREFIX}_data_{name}.bin"
+    def write_float(name: str, values, components: int = 1, indices_lat=lat_idx, indices_lon=lon_idx, kind: str = "data"):
+        path = ROOT / f"{PREFIX}_{kind}_{name}.bin"
         with atomic(path) as handle:
             handle.write(struct.pack("<HHHH", len(indices_lat), len(indices_lon), len(values), components))
             handle.write(b"\x00" * 8)
@@ -320,6 +320,18 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
     write_float("dauwpunt", series["dauwpunt"][1:])
     write_float("wolkenbasis", series["wolkenbasis"][1:])
     write_float("straling", hourly_radiation)
+    # Volle modelresolutie (~2,5 km) voor de Weerkaart Europa-kaartbron. Naam
+    # {PREFIX}_native_* valt buiten de harmonie46_data_*-upload naar R2.
+    native = {
+        "temp_hr": ("temp", series["temp"][1:], 1),
+        "bewolking_hr": ("bewolking", list(zip(series["hoog"][1:], series["mid"][1:], series["laag"][1:])), 3),
+        "wind_hr": ("wind", list(zip(series["uw"][1:], series["vw"][1:])), 2),
+        "windstoten_hr": ("windstoten", list(zip(series["ug"][1:], series["vg"][1:])), 2),
+        "zicht_hr": ("zicht", series["zicht"][1:], 1),
+        "wolkenbasis_hr": ("wolkenbasis", series["wolkenbasis"][1:], 1),
+    }
+    for name, values, components in native.values():
+        outputs.remove(write_float(name, values, components, lat_full, lon_full, kind="native"))
 
     profile_lat, profile_lon = lat_full[::3], lon_full[::3]
     profile_path = ROOT / f"{PREFIX}_data_profiel.bin"
@@ -357,6 +369,9 @@ def export(run: datetime, lats, lons, series, temp_profile, wind_profile) -> lis
         "straling": {"file": f"{PREFIX}_data_straling.bin", "components": 1, "label": "Globale straling (W/m²)"},
         "profiel": {"file": f"{PREFIX}_data_profiel.bin", "components": 10, "label": "Temperatuur/windprofiel 2-300 m", "grid": grid(profile_lat, profile_lon), "levels": {"temperature_m": list(TEMP_LEVELS), "wind_speed_m": list(WIND_LEVELS)}},
     }
+    for key, (name, _, components) in native.items():
+        params[key] = {"file": f"{PREFIX}_native_{name}.bin", "components": components,
+                       "label": params[key[:-3]]["label"] + " · volle modelresolutie", "grid": precip_grid}
     now = datetime.now(tz=LOCAL_TZ)
     meta = {
         "model": "HARMONIE V46",

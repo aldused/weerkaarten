@@ -23,7 +23,9 @@ def build(model, meta_path, output):
     if len(times)!=meta['uren'] or not times: raise ValueError('Onvolledige tijdreeks')
     fields={}; sources=[]; offset=0
     for variable,key in PARAMETERS.items():
-        if variable=='cloud_cover' and 'bewolking_hr' in meta['parameters']:key='bewolking_hr'
+        # Full model resolution when the exporter provides it (<key>_hr);
+        # the ~4 km canvas fields are only a fallback for older runs.
+        if key+'_hr' in meta['parameters']:key=key+'_hr'
         info=meta['parameters'].get(key)
         if not info:continue
         path=meta_path.parent/info['file']; stamp=path.stat(); stream=path.open('rb'); data=mmap.mmap(stream.fileno(),0,access=mmap.ACCESS_READ)

@@ -58,7 +58,7 @@ try:
 except:
     run_utc_check = ''
 
-if os.path.exists('harmonie_canvas_meta.json'):
+if os.path.exists('harmonie_canvas_meta.json') and not os.environ.get('HARMONIE_FORCE'):
     with open('harmonie_canvas_meta.json') as mf:
         old_meta = json.load(mf)
     if (old_meta.get('run_utc') == run_utc_check and
@@ -296,6 +296,23 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     write_bin('harmonie_data_zicht.bin', all_data['zicht'][1:])
     if all(b is not None for b in all_data['wolkenbasis'][1:]):
         write_bin('harmonie_data_wolkenbasis.bin', all_data['wolkenbasis'][1:])
+    # Volle modelresolutie (~2,5 km) voor de Weerkaart Europa-kaartbron
+    # (ecmwf_weerradar/harmonie-publish). Aparte namen buiten de
+    # harmonie_data_*-upload: overige viewers houden het ~4 km-rooster.
+    def write_native_f32(fn, data_list, nc=1):
+        with atomisch(fn) as f:
+            f.write(struct.pack('<HHHH',n_lat_hr,n_lon_hr,len(data_list),nc))
+            f.write(b'\x00'*8)
+            for item in data_list:
+                for comp in ((item,) if nc==1 else item):
+                    f.write(np.nan_to_num(crop_native(comp),nan=0).astype('<f4').tobytes())
+    hr_files={'temp_hr':('harmonie_native_temp.bin',all_data['temp'][1:],1),
+      'wind_hr':('harmonie_native_wind.bin',list(zip(all_data['uw'][1:],all_data['vw'][1:])),2),
+      'windstoten_hr':('harmonie_native_windstoten.bin',list(zip(all_data['ug'][1:],all_data['vg'][1:])),2),
+      'zicht_hr':('harmonie_native_zicht.bin',all_data['zicht'][1:],1)}
+    if all(b is not None for b in all_data['wolkenbasis'][1:]):
+        hr_files['wolkenbasis_hr']=('harmonie_native_wolkenbasis.bin',all_data['wolkenbasis'][1:],1)
+    for _k,(_fn,_data,_nc) in hr_files.items(): write_native_f32(_fn,_data,_nc)
     write_bin('harmonie_data_rv.bin', all_data['rv'][1:])
     write_bin('harmonie_data_druk.bin', all_data['druk'][1:])
     write_bin('harmonie_data_dauwpunt.bin', all_data['dauwpunt'][1:])
@@ -395,6 +412,8 @@ with tempfile.TemporaryDirectory(prefix='harmonie_') as tmpdir:
     meta['parameters']['bewolking_hr']={'file':native_files['bewolking'],'components':3,
       'label':'Bewolking hoog/midden/laag op volle modelresolutie','dtype':'u8lin',
       'grid':dict(native_grid)}
+    for _k,(_fn,_data,_nc) in hr_files.items():
+        meta['parameters'][_k]={'file':_fn,'components':_nc,'label':meta['parameters'][_k[:-3]]['label']+' · volle modelresolutie','grid':dict(native_grid)}
     with atomisch('harmonie_canvas_meta.json','w') as f:
         json.dump(meta,f,indent=2,ensure_ascii=False)
 

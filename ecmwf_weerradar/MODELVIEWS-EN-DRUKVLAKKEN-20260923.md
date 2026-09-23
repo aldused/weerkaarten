@@ -28,8 +28,8 @@ De zoom wordt per scherm berekend uit het *vrije* kaartvlak (kaart minus merk/we
 
 Legenda's worden nu uit dezelfde breekpunten als de renderer gegenereerd (2 m: −10…30, 850 hPa: −20…20, 500 hPa: −45…−5 °C).
 
-## Bekende beperking (niet opgelost)
+## HARMONIE 43/46 op volle resolutie
 
-HARMONIE 43/46 temperatuur, wind, zicht en bewolking staan in de Weerlab-export op ~4 km (STRIDE 2 van het 2,5 km-model); alleen neerslag/hoge-resolutie-bewolking is ~2 km. Echte native resolutie vraagt een aanpassing van de upstream HARMONIE-canvas-pijplijn (zie “Significant detail fase 2”), niet van deze kaart.
+OPGELOST 23-09 16:26: exporters schrijven nu `harmonie_native_*.bin` / `harmonie46_native_*.bin` (float32, volle 390×372-rooster); `build_map_source.py` kiest `<veld>_hr`. Controle De Bilt HARMONIE 46 +6u: kaart 19,333 °C = native bron exact; oud 4 km-veld 19,434 °C. Overige Weerlab-pagina’s gebruiken ongewijzigd het 4 km-rooster.
 
 Uitgerold: veldworker `weerlab-ecmwf-fields` (versie a822ef20) met `ecmwf_ifs025`/`dwd_icon_d2`-drukvlakken en KNMI-drukvlakken.
