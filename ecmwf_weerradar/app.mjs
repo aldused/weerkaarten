@@ -5,7 +5,7 @@ import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
 import {captureMap,composePNG,exportLegends,pngFilename} from './png-export.mjs';
 import {installAreaSelection} from './area-selection.mjs';
 import {beaufort,windLegend,windDirectionText} from './wind-style.mjs';
-import {MODELS,modelFor,regionalFrames,preserveModelTime,isBenelux,isRegional,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
+import {MODELS,MODEL_CONFIG,UPPER_AIR_LEVELS,upperAirFile,viewZoom,modelFor,regionalFrames,preserveModelTime,isBenelux,isRegional,isEuropeanHarmonie,modelView,latestModelURL,discoverEuropeanHarmonie} from './forecast-models.mjs';
 import {createRegularGrid} from './regular-grid.mjs';
 import {installMovableMenu} from './movable-menu.mjs';
 import {visibleTimeout} from './frame-scheduler.mjs';
@@ -21,7 +21,7 @@ import {createPackedGrid} from './packed-grid.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
 import {AdjacentFrames} from './adjacent-frames.mjs';
-import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath } from './core.mjs';
+import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath, temperatureLegend } from './core.mjs';
 
 const $ = id => document.getElementById(id);
 $('app').dataset.moduleReadyMs=Math.round(performance.now());
@@ -119,6 +119,12 @@ function readField(file,variable,signal){
 mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked,cloudVisible:Number(u.searchParams.get('clouds')??7)}));});
 const params = new URLSearchParams(location.search);
 let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
+// Temperature level: 2 m, 850 hPa or 500 hPa. Pressure levels come from the
+// model's own upper-air source (MODEL_CONFIG.upperAir), never from another model.
+let tempLevel=Object.hasOwn(UPPER_AIR_LEVELS,params.get('level'))?params.get('level'):'2m';
+function tempVariable(modelId){const v=UPPER_AIR_LEVELS[tempLevel];return v!=='temperature_2m'&&!MODEL_CONFIG[modelId]?.upperAir?'temperature_2m':v;}
+// File that holds `variable` for this frame: same model, run and valid time.
+function fieldFile(frame,variable){return variable.endsWith('hPa')?upperAirFile(frame,modelFor(frame.modelMeta),variable):frame.url;}
 $('model-select').value=selectedModel;
 $('model-select').addEventListener('change',()=>{selectedModel=$('model-select').value;start(undefined,selectedModel,true);});
 // Optional local diagnostics: no reporting endpoint and no visitor tracking.
@@ -126,7 +132,7 @@ if(params.get('profile')==='1'){
   setInterval(()=>{
     $('app').dataset.cacheStats=JSON.stringify({...map.performanceStats(),fieldEntries:fieldCache.size,fieldBytes:[...fieldCache.values()].reduce((n,e)=>n+(e.bytes||0),0)});
   },1000);
-  globalThis.weerlabProfile={stats:()=>map.performanceStats(),samples:()=>mapEngine.renderStats.samples,fields:()=>[...fieldCache.values()].map(e=>({variable:e.variable,bounds:[e.west,e.south,e.east,e.north]}))};
+  globalThis.weerlabProfile={project:(lon,lat)=>{const p=map.project([lon,lat]);return {x:p.x,y:p.y};},padding:()=>viewPadding(),zoom:()=>map.getZoom(),stats:()=>map.performanceStats(),samples:()=>mapEngine.renderStats.samples,fields:()=>[...fieldCache.values()].map(e=>({variable:e.variable,bounds:[e.west,e.south,e.east,e.north]}))};
 }
 const coords = (params.get('center') || '5.94,51.96').split(',').map(Number);
 const initialCenter = inEurope(coords[0], coords[1]) ? coords : [5.94, 51.96];
@@ -163,10 +169,53 @@ map.on('resize', queueCityDraw);
 map.on('moveend', () => {
   const b=map.getBounds(); updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
   if (current&&!refreshing) updateViewportSamples();
+  // An automatic model view belongs to the screen, not to the link: sharing
+  // or reloading on another device must compute its own view again.
   const c=map.getCenter(), u=new URL(location.href);
-  u.searchParams.set('center',`${c.lng.toFixed(4)},${c.lat.toFixed(4)}`);u.searchParams.set('zoom',map.getZoom().toFixed(2));
+  if(autoView){u.searchParams.delete('center');u.searchParams.delete('zoom');}
+  else{u.searchParams.set('center',`${c.lng.toFixed(4)},${c.lat.toFixed(4)}`);u.searchParams.set('zoom',map.getZoom().toFixed(2));}
   history.replaceState(null,'',u);
 });
+// ---- Responsive default view -------------------------------------------
+// Every model has its own view (MODEL_CONFIG.view). It is recomputed from the
+// free map area, i.e. the map minus the brand/toolbars at the top and the
+// time dock at the bottom, whenever that area changes: window resize,
+// rotation, fullscreen, the dock opening/closing or moving. It stays
+// automatic until the visitor pans or zooms; the home button restores it.
+let autoView=!params.has('center');
+function viewPadding(){
+  const area=$('map').getBoundingClientRect(),h=area.height,w=area.width;
+  let top=12,bottom=12;
+  // Horizontal top bars only; the narrow zoom column at the right edge is
+  // part of the side margin, not a band across the map.
+  for(const el of document.querySelectorAll('.brand,.top-left,.layer-toolbar')){
+    const r=el.getBoundingClientRect();
+    if(r.width&&r.height&&r.height<h*.3&&r.bottom<area.top+h*.5)top=Math.max(top,r.bottom-area.top+8);
+  }
+  const dock=document.querySelector('.bottom-area').getBoundingClientRect();
+  if(dock.height&&getComputedStyle(document.querySelector('.bottom-area')).display!=='none'&&dock.top>area.top+h*.3)bottom=Math.max(bottom,area.bottom-dock.top+8);
+  // On a very low screen (landscape phone) never let overlays leave less than
+  // 45% of the height for the Netherlands; they are translucent/collapsible.
+  const free=h-top-bottom,minFree=h*.45;
+  if(free<minFree){const k=Math.max(0,(h-minFree))/(top+bottom);top*=k;bottom*=k;}
+  const side=w<=700?10:24;
+  return {top:Math.round(top),bottom:Math.round(bottom),left:side,right:side};
+}
+function fitModelView(modelId=selectedModel){
+  const view=modelView(modelId);
+  const padding=viewPadding();let measured;
+  map.fitView(view,padding,zoomFor=>{measured=[zoomFor(view.core),zoomFor(view.context)];return viewZoom(view,zoomFor);});
+  autoView=true;Object.assign($('app').dataset,{autoView:'true',viewZoom:map.getZoom().toFixed(2),viewPadding:[padding.top,padding.right,padding.bottom,padding.left].join(' '),viewFit:measured.map(z=>z.toFixed(2)).join(' ')});
+}
+function manualView(){if(autoView){autoView=false;$('app').dataset.autoView='false';}}
+for(const type of ['pointerdown','wheel','touchstart'])$('map').addEventListener(type,manualView,{passive:true});
+$('map').addEventListener('keydown',e=>{if(/^(Arrow|\+|-|=)/.test(e.key))manualView();});
+let refitTimer;
+function scheduleRefit(){clearTimeout(refitTimer);refitTimer=setTimeout(()=>{if(autoView)fitModelView();else map.native.invalidateSize({pan:false});},120);}
+addEventListener('resize',scheduleRefit);addEventListener('orientationchange',scheduleRefit);
+document.addEventListener('fullscreenchange',scheduleRefit);
+new ResizeObserver(scheduleRefit).observe($('map'));
+if(autoView)fitModelView();
 let viewportRevision=0,viewportController;
 async function updateViewportSamples(){
   viewportController?.abort();viewportController=new AbortController();
@@ -174,8 +223,8 @@ async function updateViewportSamples(){
   try{
     // Leaflet extends the existing tile layers by itself; rebuilding all layers
     // here caused avoidable downloads, duplicated rendering and flashing on pan.
-    const vars=sampleVariables(variablesForMode(),frame.modelMeta);
-    const fields=await Promise.all(vars.map(v=>readField(frame.url,v,signal)));
+    const vars=sampleVariables(variablesForMode(frame.modelMeta,frame),frame.modelMeta);
+    const fields=await Promise.all(vars.map(v=>readField(fieldFile(frame,v),v,signal)));
     if(rev!==viewportRevision||current!==frame)return;
     vars.forEach((v,i)=>{current.samples[v]=fields[i];});queueCityDraw();updatePoint();
     $('app').dataset.panDataMs=Math.round(performance.now()-started);
@@ -236,9 +285,9 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
     if(startup!==startupRevision)return;
     // Benelux is intentionally tighter than the full regional export. Explicit
     // model changes use its named region; later hours preserve the user's view.
-    if(focusRegion||(!current&&modelId!=='ecmwf_ifs'&&!params.has('center'))){
-      map.fitBounds(modelView(modelId),{zoomSnap:.25,padding:{top:innerWidth<=700?150:80,bottom:innerWidth<=700?155:120,left:12,right:innerWidth<=700?12:65},duration:0});
-    }
+    // Explicit model change: that model's own default view. First load:
+    // unless a link carries its own centre. Later runs keep the user's view.
+    if(focusRegion||(!current&&autoView))fitModelView(modelId);
     const b=map.getBounds();updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
     // A refresh preserves the chosen forecast time where the new run permits
     // it. The previous run and its controls stay together until a full frame
@@ -310,31 +359,35 @@ function setMenuCollapsed(collapsed){
   const label=collapsed?'Menu uitklappen':'Menu inklappen';$('menu-toggle').setAttribute('aria-label',label);$('menu-toggle').title=label;icon($('menu-toggle'),collapsed?'up':'down');queueCityDraw();
 }
 $('menu-toggle').addEventListener('click',()=>setMenuCollapsed($('menu-toggle').getAttribute('aria-expanded')==='true'));
-const shortViewport=matchMedia('(max-height: 650px)');
+// Low screens and phones start with the compact dock: the expanded menu would
+// otherwise cover most of the map (and the Netherlands) on a phone.
+const shortViewport=matchMedia('(max-height: 650px), (max-width: 700px)');
 setMenuCollapsed(shortViewport.matches);
 installMovableMenu(document.querySelector('.bottom-area'),$('menu-drag'),$('menu-reset'),queueCityDraw);
 shortViewport.addEventListener('change',event=>{if(event.matches)setMenuCollapsed(true);});
 // Only an actual menu size change updates layout; map motion never measures it.
-let dockWidth=0;
+let dockWidth=0,dockHeightSeen=0;
 new ResizeObserver(entries=>{
   const {width,height}=entries[0].contentRect;
   document.documentElement.style.setProperty('--dock-height',`${Math.ceil(height)}px`);queueCityDraw();
+  // The dock covers the bottom of the map: its height is part of the view.
+  if(Math.abs(height-dockHeightSeen)>4){dockHeightSeen=height;scheduleRefit();}
   if(Math.abs(width-dockWidth)>1){dockWidth=width;requestAnimationFrame(()=>{
     for(const id of ['days','hours'])$(id).querySelector('[aria-pressed=true]')?.scrollIntoView({block:'nearest',inline:'center'});
   });}
 }).observe(document.querySelector('.bottom-area'));
 // Refinements of the same frame: they must not delay the first usable map.
 const OPTIONAL_LAYERS=['visibility','snowfall_water_equivalent'];
-function variablesForMode(modelMeta=meta){
-  if(mode==='temperature') return ['temperature_2m'];
+function variablesForMode(modelMeta=meta,frame){
+  if(mode==='temperature'){const v=tempVariable(modelFor(modelMeta));return !frame||fieldFile(frame,v)?[v]:[];}
   if(mode==='wind') return ['wind_u_component_10m'];
   return [...(mode==='weather'&&$('clouds').checked?['cloud_cover',...($('fog').checked&&modelMeta.variables.includes('visibility')?['visibility']:[])]:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
 }
 function sampleVariables(layerVariables,modelMeta){
-  const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):['temperature_2m']):[];
+  const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):mode==='temperature'?[]:['temperature_2m']):[];
   return [...new Set([...layerVariables,...labels])];
 }
-function weatherURL(frame,variable){return `om://${frame.url}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
+function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
 function addLayer(frame,variable,prefix){
   const id=`${prefix}-${variable}`;
   map.addSource(id,{type:'raster',url:weatherURL(frame,variable),tileSize:256,maxzoom:10});
@@ -360,7 +413,7 @@ function awaitSources(ids,signal){
 async function renderFrame(index,rev,signal,context){
   const started=performance.now();
   viewportController?.abort();viewportRevision++;pointController?.abort();
-  const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta);
+  const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta,frame);
   map.setFrameBudget(vars.length);
   retryLoad=()=>requestFrame(index,true,context);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
@@ -388,21 +441,21 @@ async function renderFrame(index,rev,signal,context){
     // the same frame and cost roughly half of all tiles. A later time change
     // still switches every layer together, so no two hours are ever mixed.
     const requiredIds=!current&&ids.length>1?ids.filter((id,i)=>!OPTIONAL_LAYERS.includes(vars[i])):ids;
-    let [,...fields]=await Promise.all([awaitSources(requiredIds.length?requiredIds:ids,signal),...sampleVars.map(v=>readField(frame.url,v,signal))]);
+    let [,...fields]=await Promise.all([awaitSources(requiredIds.length?requiredIds:ids,signal),...sampleVars.map(v=>readField(fieldFile(frame,v),v,signal))]);
     // A pan during loading may change the crop while the time stays the same.
     // Commit city/point values only once they cover the current tile window.
     for(;;){
       signal.throwIfAborted();
       const b=map.getBounds(),needed=fieldWindow([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],map.getZoom()).bounds;
       if(fields.every(f=>{const a=f.packed.bounds;return a[0]<=needed[0]&&a[1]<=needed[1]&&a[2]>=needed[2]&&a[3]>=needed[3];}))break;
-      fields=await Promise.all(sampleVars.map(v=>readField(frame.url,v,signal)));
+      fields=await Promise.all(sampleVars.map(v=>readField(fieldFile(frame,v),v,signal)));
     }
     if(rev!==revision){removeLayers(ids);return false;}
     const samples={};
     sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
     meta=modelMeta;frames=context.timeline;
-    current={...frame,index,ids,mode:layerMode,samples,modelMeta,timeline:context.timeline};
+    current={...frame,index,ids,mode:layerMode,level:tempLevel,samples,modelMeta,timeline:context.timeline};
     if(old?.timeline!==current.timeline){
       buildTimeline(current.timeline);
       // Only after the replacement frame is usable may obsolete runs leave
@@ -450,7 +503,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames}){
   renderController?.abort();
   syncTimeChoices({...context.timeline[wanted],index:wanted},true);
   if(rendering||refreshing)return;
-  if(!force&&current?.url===context.timeline[wanted].url&&current.mode===mode){syncUI();$('status').hidden=true;$('app').dataset.frameStatus='ready';prepareAdjacentFrames();return;}
+  if(!force&&current?.url===context.timeline[wanted].url&&current.mode===mode&&current.level===tempLevel){syncUI();$('status').hidden=true;$('app').dataset.frameStatus='ready';prepareAdjacentFrames();return;}
   rendering=true;
   let success=false;
   try {
@@ -502,11 +555,12 @@ function syncUI(){
   $('icon-d2-info').hidden=modelId!=='icond2';
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   const legend=$('legend');let title,unit,numbers,gradient;
-  if(f.mode==='temperature'){title='Temperatuur';unit='°C';numbers=['−10','0','10','20','30+'];gradient='linear-gradient(to right,#366dd0,#4fc5da,#88d069,#fbd358,#e8693b)';}
+  if(f.mode==='temperature'){const v=tempVariable(modelId),l=temperatureLegend(v);title=v==='temperature_2m'?'Temperatuur':`Temperatuur ${v.slice(12,15)} hPa`;unit='°C';numbers=l.labels;gradient=l.gradient;}
   else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   $('wind-key').hidden=f.mode!=='wind';
+  syncTempLevels(f,modelId);
   $('wind-key').textContent='Windkracht in Bft · pijl: richting waarin de wind waait'+(metadata.variables.includes('wind_gusts_10m')?' · stoten in km/u':' · windstoten niet beschikbaar');
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;legend.setAttribute('aria-label',`Legenda ${title.toLowerCase()} in ${unit}`);
   legend.querySelector('.legend-colors').style.background=gradient;
@@ -540,9 +594,9 @@ function prepareAdjacentFrames(){
   adjacentFrames.start(frame.index,frame.timeline.length,async(index,signal)=>{
     // Let the selected view and its map labels finish first on slow links.
     await detailsReady;signal.throwIfAborted();
-    const next=frame.timeline[index],vars=variablesForMode(next.modelMeta);
+    const next=frame.timeline[index],vars=variablesForMode(next.modelMeta,next);
     const sampleVars=sampleVariables(vars,next.modelMeta);
-    const fields=await Promise.all(sampleVars.map(v=>readField(next.url,v,signal)));
+    const fields=await Promise.all(sampleVars.map(v=>readField(fieldFile(next,v),v,signal)));
     signal.throwIfAborted();
     await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture,cloudVisible})),signal);
   },{previous:!limited,delayMs:limited?1200:350,ready:()=>{
@@ -565,14 +619,31 @@ $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);})
 let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
+function syncTempLevels(frame,modelId){
+  const upper=MODEL_CONFIG[modelId]?.upperAir,chosen=tempVariable(modelId);
+  $('temp-levels').hidden=frame.mode!=='temperature';
+  for(const b of $('temp-levels').querySelectorAll('button')){
+    const level=b.dataset.level;b.disabled=level!=='2m'&&!upper;
+    b.setAttribute('aria-pressed',String(UPPER_AIR_LEVELS[level]===chosen));
+  }
+  let note='';
+  if(!upper)note=`${MODELS[modelId].label} levert in deze bron geen drukvlakken; 850/500 hPa niet beschikbaar.`;
+  else if(chosen!=='temperature_2m')note=fieldFile(frame,chosen)?`${upper.label} · ${upper.resolution}.`:`Dit tijdstip heeft geen ${chosen.slice(12,15)} hPa-veld: ${upper.label} ${upper.stepNote}.`;
+  $('temp-level-note').textContent=note;
+  const u=new URL(location.href);if(frame.mode==='temperature'&&tempLevel!=='2m')u.searchParams.set('level',tempLevel);else u.searchParams.delete('level');history.replaceState(null,'',u);
+}
+$('temp-levels').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-level]');if(!b||b.disabled||tempLevel===b.dataset.level)return;
+  stopPlayback();tempLevel=b.dataset.level;requestFrame(wanted,true);
+});
 ['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
 $('speed').addEventListener('change',()=>{if(playing&&!rendering&&nextFrameReady)scheduleNext();});
-$('zoom-in').addEventListener('click',()=>map.zoomIn());$('zoom-out').addEventListener('click',()=>map.zoomOut());
-$('europe').addEventListener('click',()=>map.fitBounds([[-24,34],[42,70]],{padding:{top:105,bottom:185,left:45,right:75},duration:600}));
-$('home').addEventListener('click',()=>map.fitBounds(modelView('harmonie'),{zoomSnap:.25,padding:{top:100,bottom:140,left:12,right:60},duration:400}));
+$('zoom-in').addEventListener('click',()=>{manualView();map.zoomIn();});$('zoom-out').addEventListener('click',()=>{manualView();map.zoomOut();});
+$('europe').addEventListener('click',()=>{manualView();map.fitBounds([[-24,34],[42,70]],{padding:viewPadding(),duration:600});});
+$('home').addEventListener('click',()=>fitModelView());
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('app').requestFullscreen();}catch{status('Volledig scherm is niet beschikbaar in deze browser.',true);}});
 let pngURL=null;
 $('png-close').addEventListener('click',()=>$('png-dialog').close());
@@ -599,7 +670,7 @@ async function exportPNG(crop=null){
     const canvas=composePNG(captureMap($('map'),$('places'),crop),{
       title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}`,
       time:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
-      legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
+      legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta,frame),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
     });
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG maken is niet gelukt.')),'image/png'));
     if(!$('png-dialog').open)return;
@@ -656,7 +727,8 @@ function drawCities(){
     ctx.font=`500 ${font}px Arial`;ctx.textAlign='center';ctx.lineJoin='round';ctx.lineWidth=2.7;ctx.strokeStyle='rgba(28,42,42,.7)';ctx.fillStyle='#f4f6f7';
     ctx.strokeText(name,p.x,p.y+12);ctx.fillText(name,p.x,p.y+12);
     if(!windMode){ctx.fillStyle='#f5f8e9';ctx.fillRect(p.x-1.3,p.y-4,2.6,2.6);}
-    const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):temp;
+    const levelVar=current.mode==='temperature'?current.ids.map(id=>id.split('-').slice(1).join('-')).find(v=>v.startsWith('temperature_')):null;
+    const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):levelVar?sample(current.samples[levelVar],city.lat,city.lon):current.mode==='temperature'?NaN:temp;
     if(Number.isFinite(displayedValue)){const t=String(windMode?beaufort(displayedValue):Math.round(displayedValue)),y=p.y-(windMode?23:12);ctx.font=`700 ${valueFont}px Arial`;ctx.strokeText(t,p.x+7,y);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,y);}
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
     const snowfall=sample(current.samples.snowfall_water_equivalent,city.lat,city.lon);
@@ -691,6 +763,8 @@ function updatePoint(fetchMissing=true){
   const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','Bft',0]];
   if(current.modelMeta.variables.includes('wind_gusts_10m'))entries.push(['wind_gusts_10m','Windstoten','km/u',0]);
   if(current.modelMeta.variables.includes('visibility'))entries.push(['visibility','Berekend zicht','m',1]);
+  // Pressure-level temperature only for the chosen level, from the same run.
+  if(current.mode==='temperature'){const v=tempVariable(modelFor(current.modelMeta));if(v!=='temperature_2m'&&fieldFile(current,v))entries.splice(1,0,[v,`Temperatuur ${v.slice(12,15)} hPa`,'°C',1]);}
   for(const [variable,label,unit,digits] of entries){
     const rawValue=sample(current.samples[variable],p.lat,p.lng),value=variable==='wind_u_component_10m'?beaufort(rawValue):rawValue,el=document.createElement('div'),strong=document.createElement('strong'),small=document.createElement('small');
     strong.textContent=Number.isFinite(value)?`${variable==='precipitation'&&value>0&&value<PRECIPITATION_THRESHOLD?'<'+PRECIPITATION_THRESHOLD.toLocaleString('nl-NL'):value.toLocaleString('nl-NL',{maximumFractionDigits:digits})} ${unit}`:'—';small.textContent=label;
@@ -728,7 +802,7 @@ function updatePoint(fetchMissing=true){
   Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);
-    if(missing.length){pointController?.abort();pointController=new AbortController();const pointSignal=pointController.signal;Promise.allSettled(missing.map(async v=>{const field=await readField(frame.url,v,pointSignal);if(current===frame)frame.samples[v]=field;})).then(()=>{if(current===frame&&selectedPoint===p)updatePoint(false);});}
+    if(missing.length){pointController?.abort();pointController=new AbortController();const pointSignal=pointController.signal;Promise.allSettled(missing.map(async v=>{const file=fieldFile(frame,v);if(!file)return;const field=await readField(file,v,pointSignal);if(current===frame)frame.samples[v]=field;})).then(()=>{if(current===frame&&selectedPoint===p)updatePoint(false);});}
   }
 }
 
@@ -737,14 +811,14 @@ let searchController;
 const normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function searchButtons(results){
   $('search-results').replaceChildren();
-  for(const result of results){const b=document.createElement('button');b.type='button';b.textContent=result.name;const small=document.createElement('small');small.textContent=result.detail||'Europa';b.append(small);b.addEventListener('click',()=>{showPoint({lng:result.lon,lat:result.lat,name:result.name});map.flyTo({center:[result.lon,result.lat],zoom:8,duration:700});});$('search-results').append(b);}
+  for(const result of results){const b=document.createElement('button');b.type='button';b.textContent=result.name;const small=document.createElement('small');small.textContent=result.detail||'Europa';b.append(small);b.addEventListener('click',()=>{showPoint({lng:result.lon,lat:result.lat,name:result.name});manualView();map.flyTo({center:[result.lon,result.lat],zoom:8,duration:700});});$('search-results').append(b);}
 }
 $('search').addEventListener('input',()=>{searchController?.abort();const q=normalize($('search').value.trim());searchButtons(q.length<2?[]:cities.filter(c=>normalize(c.name).includes(q)).slice(0,7));});
 $('search-form').addEventListener('submit',async e=>{
   e.preventDefault();const q=$('search').value.trim();if(q.length<2)return;
   searchController?.abort();searchController=new AbortController();const controller=searchController;
   const ll=q.match(/^(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)$/);
-  if(ll){const lat=Number(ll[1]),lon=Number(ll[2]);if(inEurope(lon,lat)){showPoint({lat,lng:lon,name:`${lat}° N, ${lon}° E`});map.flyTo({center:[lon,lat],zoom:8});return;}}
+  if(ll){const lat=Number(ll[1]),lon=Number(ll[2]);if(inEurope(lon,lat)){showPoint({lat,lng:lon,name:`${lat}° N, ${lon}° E`});manualView();map.flyTo({center:[lon,lat],zoom:8});return;}}
   const local=cities.filter(c=>normalize(c.name).includes(normalize(q))).slice(0,7);searchButtons(local);
   try{
     const data=await json(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({name:q,count:'10',language:'nl',format:'json'})}`,controller.signal);

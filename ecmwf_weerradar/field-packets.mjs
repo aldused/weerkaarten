@@ -12,9 +12,12 @@ export class FieldPackets{
     // of both caches while leaving all non-cloud protocols unchanged.
     if(variable==='cloud_cover')variable='cloud_layers';
     const path=new URL(file).pathname,isHarmonie=/^\/harmonie\/(harmonie|harmonie46|icond2)\/\d{10}-[a-f0-9]{16}\/\d{3}\.bin$/.test(path);
-    const source=isHarmonie?path:path.match(/\/data_spatial\/(?:ecmwf_ifs|knmi_harmonie_arome_europe|dmi_harmonie_arome_europe)\/.*$/)?.[0],projected=/^\/data_spatial\/(knmi|dmi)_harmonie_arome_europe\//.test(path),decode=isHarmonie?decodeRegularPacket:projected?decodeProjectedPacket:decodePacket;
+    // Regular lat/lon OM domains (pressure-level temperature only) share the
+    // Weerlab regular packet format with the regional exports.
+    const regularOM=/^\/data_spatial\/(ecmwf_ifs025|dwd_icon_d2)\//.test(path);
+    const source=isHarmonie?path:path.match(/\/data_spatial\/(?:ecmwf_ifs|ecmwf_ifs025|dwd_icon_d2|knmi_harmonie_arome_europe|dmi_harmonie_arome_europe)\/.*$/)?.[0],projected=/^\/data_spatial\/(knmi|dmi)_harmonie_arome_europe\//.test(path),decode=isHarmonie||regularOM?decodeRegularPacket:projected?decodeProjectedPacket:decodePacket;
     if(!source)throw new Error('Ongeldige ECMWF-bron');
-    const url=(isHarmonie?HARMONIE_ORIGIN:FIELD_ORIGIN)+source+'?'+new URLSearchParams({v:isHarmonie||projected?'1':'3',variable,bounds:bounds.join(',')});
+    const url=(isHarmonie?HARMONIE_ORIGIN:FIELD_ORIGIN)+source+'?'+new URLSearchParams({v:isHarmonie||projected||regularOM?'1':'3',variable,bounds:bounds.join(',')});
     const expected={source,variable,bounds};let cache,present;
     try{cache=await this.storage?.open('weerlab-ecmwf-packed-v3');}catch{/* Storage is optional in restricted/private browsers. */}
     signal?.throwIfAborted();

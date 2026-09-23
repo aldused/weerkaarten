@@ -203,6 +203,24 @@ export class Map {
     try{if(o.zoomSnap!==undefined)this.native.options.zoomSnap=o.zoomSnap;this.native.fitBounds(bounds.map(ll),{paddingTopLeft:[p.left,p.top],paddingBottomRight:[p.right,p.bottom],animate:false});}
     finally{this.native.options.zoomSnap=previousSnap;}
   }
+  // Model view for the current screen. `choose(zoomFor)` picks the zoom (see
+  // forecast-models viewZoom); zoomFor measures bounds against the map area
+  // left free by the overlays (padding), at fractional zoom. The core bounds
+  // are centred in that free area.
+  fitView(view,p,choose){
+    const m=this.native,tl=L.point(p.left,p.top),br=L.point(p.right,p.bottom),previousSnap=m.options.zoomSnap;
+    m.invalidateSize({pan:false});
+    // Quarter zooms (chosen by viewZoom) must not be rounded by Leaflet's
+    // integer zoomSnap: rounding up pushes the Netherlands out of view on a
+    // landscape phone, rounding down nearly halves it on a laptop.
+    try{
+      m.options.zoomSnap=0;
+      const zoom=choose(bounds=>m.getBoundsZoom(L.latLngBounds(bounds.map(ll)),false,tl.add(br))-1)+1;
+      m.setMinZoom(Math.min(view.minZoom+1,zoom));m.setMaxZoom(view.maxZoom+1);
+      const focus=m.project(ll(view.centre),zoom);
+      m.setView(m.unproject(focus.add(br.subtract(tl).divideBy(2)),zoom),zoom,{animate:false});
+    }finally{m.options.zoomSnap=previousSnap;}
+  }
   addSource(id,source){this.sources.set(id,source);}
   getSource(id){return this.sources.get(id);}
   removeSource(id){this.sources.delete(id);}

@@ -31,7 +31,7 @@ test('HARMONIE incomplete latest falls back by provider cadence and never uses E
  assert.equal(calls.length,2);assert(calls[1].includes('/2026/09/21/0000Z/'));assert.equal(frames[0].modelMeta.reference_time,run);
 });
 test('Benelux fits countries rather than the entire regional data export',()=>{
- assert.deepEqual(modelView('harmonie'),BENELUX_VIEW);assert.deepEqual(modelView('harmonie46'),BENELUX_VIEW);assert(BENELUX_VIEW[1][0]-BENELUX_VIEW[0][0]<5.1);assert(BENELUX_VIEW[1][1]-BENELUX_VIEW[0][1]<4.3);assert(MODELS.harmonie.label.endsWith('Benelux'));assert.notDeepEqual(modelView(models[0]),BENELUX_VIEW);
+ assert.deepEqual(modelView('harmonie').context,BENELUX_VIEW);assert.deepEqual(modelView('harmonie46').context,BENELUX_VIEW);assert(BENELUX_VIEW[1][0]-BENELUX_VIEW[0][0]<5.6);assert(BENELUX_VIEW[1][1]-BENELUX_VIEW[0][1]<4.3);assert(MODELS.harmonie.label.endsWith('Benelux'));assert.notDeepEqual(modelView(models[0]).context,BENELUX_VIEW);
 });
 test('projected field service and browser transport isolate both providers, runs and parameters',async()=>{
  const entries=new Map(),cache={match:async r=>entries.get(r.url||r)?.clone(),put:async(r,v)=>entries.set(r.url||r,v.clone())},reads=[],pending=[],ctx={waitUntil:p=>pending.push(p)};

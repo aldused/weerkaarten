@@ -27,7 +27,7 @@ test('regular ICON-D2 has its own identity, 48 original hourly steps and Benelux
  assert.ok(frames.every(f=>f.hours===1&&f.modelMeta.modelId==='icond2'&&f.url.startsWith(HARMONIE_ORIGIN+'/harmonie/icond2/'+version+'/')));
  assert.equal(frames[0].url.split('/').at(-1),'002.bin');
  assert.equal(isRegional('icond2'),true);assert.equal(isBenelux('icond2'),false);assert.equal(isRegional('icond2ruc'),false);
- assert.deepEqual(modelView('icond2'),BENELUX_VIEW);assert.match(latestModelURL('icond2'),/\/harmonie\/icond2\/latest.json$/);
+ assert.deepEqual(modelView('icond2').context,BENELUX_VIEW);assert.match(latestModelURL('icond2'),/\/harmonie\/icond2\/latest.json$/);
  assert.match(MODELS.icond2.attribution,/DWD/);assert.match(MODELS.icond2.resolution,/4,4/);
  assert.ok(!frames[0].modelMeta.variables.includes('cloud_base'));assert.ok(!frames[0].modelMeta.variables.includes('snowfall_water_equivalent'));
  assert.equal(preserveModelTime(frames,Date.parse('2026-09-25')).outside,true);

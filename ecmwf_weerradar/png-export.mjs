@@ -2,13 +2,17 @@ import {CLOUD_STYLES} from './cloud-style.mjs';
 import {precipitationLegend} from './precipitation-colors.mjs';
 import {windScale,windLegend} from './wind-style.mjs';
 import {FOG_BANDS} from './fog-style.mjs';
+import {temperatureLegend} from './core.mjs';
 
 export function pngFilename(model,iso,mode){
   return `weerlab-ed-aldus-${model}-${iso.replace(/[:.]/g,'-')}-${mode}.png`;
 }
 export function exportLegends({mode,variables,cloudVisible,hasBase}){
   const rows=[];
-  if(mode==='temperature')rows.push({label:'Temperatuur · °C',labels:['−10','0','10','20','30+'],stops:['#366dd0','#4fc5da','#88d069','#fbd358','#e8693b'].map((color,i)=>[i/4,color])});
+  if(mode==='temperature'){
+    const variable=variables.find(v=>v.startsWith('temperature_'))||'temperature_2m',legend=temperatureLegend(variable);
+    rows.push({label:`Temperatuur ${variable==='temperature_2m'?'2 m':variable.slice(12,15)+' hPa'} · °C`,labels:legend.labels,stops:legend.stops});
+  }
   else if(mode==='wind')rows.push({label:'Windkracht · Bft (pijlen: richting waarin de wind waait)',labels:windLegend.labels,stops:windScale.colors.map((c,i)=>[windScale.breakpoints[i]/12,`rgb(${c.slice(0,3)})`])});
   else for(const variable of ['precipitation','snowfall_water_equivalent'])if(variables.includes(variable)){
     const legend=precipitationLegend(variable);

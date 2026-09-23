@@ -118,5 +118,23 @@ export const scales = {
   temperature_2m: { type: 'breakpoint', unit: '°C',
     breakpoints: [-30,-20,-10,0,5,10,15,20,25,30,35,40],
     colors: [[156,76,185,.8],[90,72,178,.8],[54,109,208,.8],[79,197,218,.8],[92,208,173,.8],[136,208,105,.8],[207,217,104,.8],[251,211,88,.8],[246,163,70,.8],[232,105,59,.8],[213,65,60,.8],[155,45,87,.8]] },
+  // Upper-air palettes follow the usual synoptic ranges: 850 hPa −30…+25 °C
+  // (0 °C isotherm = snow line guide), 500 hPa −50…−5 °C.
+  temperature_850hPa: { type: 'breakpoint', unit: '°C',
+    breakpoints: [-30,-25,-20,-15,-10,-5,0,5,10,15,20,25],
+    colors: [[156,76,185,.8],[110,70,180,.8],[70,90,196,.8],[54,125,214,.8],[79,178,222,.8],[100,212,200,.8],[235,240,245,.8],[136,208,105,.8],[222,215,90,.8],[246,170,70,.8],[232,105,59,.8],[190,50,70,.8]] },
+  temperature_500hPa: { type: 'breakpoint', unit: '°C',
+    breakpoints: [-50,-45,-40,-35,-30,-25,-20,-15,-10,-5],
+    colors: [[156,76,185,.8],[110,70,180,.8],[70,90,196,.8],[54,125,214,.8],[79,178,222,.8],[100,212,200,.8],[136,208,105,.8],[222,215,90,.8],[246,163,70,.8],[222,85,60,.8]] },
   wind_u_component_10m: windScale,
 };
+
+// Legend for a temperature palette, generated from the same breakpoints the
+// renderer uses, so legend and map colours can never drift apart.
+export const TEMPERATURE_LEGEND_RANGE={temperature_2m:[-10,30],temperature_850hPa:[-20,20],temperature_500hPa:[-45,-5]};
+export function temperatureLegend(variable){
+  const [lo,hi]=TEMPERATURE_LEGEND_RANGE[variable],s=scales[variable],pct=v=>(v-lo)/(hi-lo);
+  const stops=s.breakpoints.map((b,i)=>[b,s.colors[i]]).filter(([b])=>b>=lo&&b<=hi).map(([b,c])=>[pct(b),`rgb(${c.slice(0,3).join(',')})`]);
+  const labels=[0,1,2,3,4].map(i=>{const v=lo+(hi-lo)*i/4;return (v<0?'−'+Math.abs(v):String(v))+(i===4?'+':'');});
+  return {labels,stops,gradient:`linear-gradient(to right,${stops.map(([p,c])=>`${c} ${(p*100).toFixed(1)}%`).join(',')})`};
+}

@@ -39,7 +39,7 @@ createServer(async(req,res)=>{
     const u=new URL(req.url,origin);
     if(u.pathname.startsWith('/data_spatial/')||u.pathname.startsWith('/harmonie/')){
       const regional=u.pathname.startsWith('/harmonie/'),ctx={waitUntil:p=>p.catch(e=>console.error(e.message))};
-      const local=regional&&localModels[u.pathname.split('/')[2]],native=!!local||u.searchParams.get('variable')==='cloud_layers';
+      const local=regional&&localModels[u.pathname.split('/')[2]],native=!!local||u.searchParams.get('variable')==='cloud_layers'||/hPa$/.test(u.searchParams.get('variable')||'');
       const response=native
         ?await (regional?harmonie:handler)(new Request(u),local?{HARMONIE_MAPS:localSource}:{},ctx)
         :await fetch(remote[regional?'harmonie':'ecmwf']+u.pathname+u.search);
