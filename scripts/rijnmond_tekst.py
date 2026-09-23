@@ -882,7 +882,8 @@ class Schrijver:
             if p["key"] in ("morgen", "overmorgen"):
                 titel = f"{p['titel']} ({p['dag_label']})"
             elif p["key"] == "dag3":
-                subtitel = p["dag_label"]
+                # De kop is al de dagnaam; de ondertitel geeft alleen de datum.
+                subtitel = p["dag_label"].split(" ", 1)[1] if " " in p["dag_label"] else p["dag_label"]
             sectie = {"key": p["key"], "titel": titel, "alineas": [a for a in alineas if a]}
             if subtitel:
                 sectie["subtitel"] = subtitel
