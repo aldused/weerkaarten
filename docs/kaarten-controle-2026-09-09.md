@@ -43,6 +43,18 @@ De catalogus `#menu/verwachting?type=kaarten`, alle 15 kaartingangen, zeven MOS/
 5. Voorspellingskwaliteit vraagt verificatie tegen waarnemingen over langere tijd (bias, MAE, Brier-score en betrouwbaarheid), niet alleen plausibele getallen. Geen claim dat alle data inhoudelijk foutloos is.
 6. Geen nieuwe productiedeploy uitgevoerd in deze controle; overige lokale werkzaamheden en automatische data-updates blijven onaangeroerd.
 
+## Nagekomen — 23 september 2026
+
+Punt 1 van de resterende bronwerkzaamheden is uitgevoerd. `scripts/mosmix_json.py`
+gebruikt niet langer de 1-uurskansen: `*_D` en `*_N` komen uit de 12-uurs velden
+`Rh00/Rh02/Rh10/Rh50`, de dagwaarde uit de 24-uurs velden `Rd00/Rd02/Rd10/Rd50`.
+DWD levert die alleen op 06 en 18 UTC, dus de vensters zijn dag 06–18 UTC, nacht
+18–06 UTC en etmaal 06–06 UTC — in Nederlandse tijd 08–20, 20–08 en 08–08 uur
+('s winters 07–19, 19–07 en 07–07 uur). `R101/R110/R150` (met `_D`/`_N`) blijven
+als alias naar dezelfde waarden bestaan; `R130` verviel, want > 3 mm bestaat niet
+als 12- of 24-uurskans. De schermteksten "hoogste uurkans / 17–18u / 05–06u" zijn
+daarmee vervallen; kaarten tonen nu het venster in Nederlandse kloktijd.
+
 ## Primaire bronnen
 
 - [DWD elementdefinities](https://opendata.dwd.de/weather/lib/MetElementDefinition.xml): R101/R110/R130/R150 1 uur; wwZ motregen; Rh-velden 12 uur.
