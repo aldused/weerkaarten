@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grondtemperatuur 10 cm · WGT-MOS demo</title>
+<meta name="description" content="Weerlab Grondtemperatuur Model (WGT-MOS, experimenteel): luchttemperatuur op 10 cm boven kort gras, nachtminimum en kans op grondvorst uit een gewogen modelmix met fysische afkoeling, bodem, bodemvocht en MOS-correctie.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#00205b; --primary-strong:#003366; --primary-soft:#eff6ff;
+  --accent:#2ec4e8; --accent-strong:#035e7a;
+  --bg:#f6f8fb; --bg-soft:#eef2f7; --surface:#ffffff; --surface-muted:#f8fafc;
+  --border:#e3e8ef; --border-strong:#cbd5e1;
+  --text:#0f172a; --muted:#64748b; --soft:#94a3b8;
+  --success:#10b981; --success-ink:#047857; --success-soft:rgba(16,185,129,.12);
+  --voorlopig-ink:#9a5b00; --voorlopig-soft:rgba(224,112,0,.12);
+  --danger:#cc0000; --danger-soft:rgba(204,0,0,.10);
+  --kans:#6d28d9;
+  --sea:#dfeaf5; --land:#ffffff; --buur:#eceff3; --grens:#b8c3d1; --kust:#8b9bb0;
+  --iso0:#0b2a6b; --iso2:#1d4ed8; --iso5:#6d28d9;
+  --font:"DM Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"DM Mono",ui-monospace,monospace;
+  --shadow:0 2px 4px rgba(15,23,42,.05),0 4px 12px rgba(15,23,42,.06);
+  --shadow-3:0 8px 24px rgba(15,23,42,.14);
+}
+:root[data-theme="dark"]{
+  --primary-soft:#12203d; --accent:#38d1f0; --accent-strong:#7dd3fc;
+  --bg:#0b1220; --bg-soft:#0f1728; --surface:#121a2b; --surface-muted:#0e1629;
+  --border:#1f2a40; --border-strong:#334155; --text:#e5ecf6; --muted:#8292ac; --soft:#5b6a84;
+  --success-ink:#34d399; --success-soft:rgba(52,211,153,.14);
+  --voorlopig-ink:#fbbf24; --voorlopig-soft:rgba(251,191,36,.12); --danger-soft:rgba(248,113,113,.14);
+  --kans:#a78bfa;
+  --sea:#0d1a2e; --land:#1a2438; --buur:#141d2e; --grens:#2c3a54; --kust:#3d4f6e;
+  --iso0:#e0ecff; --iso2:#93c5fd; --iso5:#c4b5fd;
+  --shadow:0 2px 4px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35); --shadow-3:0 10px 30px rgba(0,0,0,.5);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --primary-soft:#12203d; --accent:#38d1f0; --accent-strong:#7dd3fc;
+    --bg:#0b1220; --bg-soft:#0f1728; --surface:#121a2b; --surface-muted:#0e1629;
+    --border:#1f2a40; --border-strong:#334155; --text:#e5ecf6; --muted:#8292ac; --soft:#5b6a84;
+    --success-ink:#34d399; --success-soft:rgba(52,211,153,.14);
+    --voorlopig-ink:#fbbf24; --voorlopig-soft:rgba(251,191,36,.12); --danger-soft:rgba(248,113,113,.14);
+    --kans:#a78bfa;
+    --sea:#0d1a2e; --land:#1a2438; --buur:#141d2e; --grens:#2c3a54; --kust:#3d4f6e;
+    --iso0:#e0ecff; --iso2:#93c5fd; --iso5:#c4b5fd;
+    --shadow:0 2px 4px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35); --shadow-3:0 10px 30px rgba(0,0,0,.5);
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+a{color:var(--accent-strong)}
+button{font-family:inherit}
+.wrap{max-width:1400px;margin:0 auto;padding:16px 20px 48px}
+.terug{display:inline-block;font-size:12.5px;font-weight:600;text-decoration:none;margin-bottom:8px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
+.sub{margin:0;color:var(--muted);font-size:13px;max-width:760px}
+.hdr-acties{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:9999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--primary-soft);color:var(--text)}
+.badge i{width:7px;height:7px;border-radius:50%;background:var(--soft);display:inline-block}
+.badge.ok i{background:var(--success)}
+.badge.oud{background:var(--voorlopig-soft);color:var(--voorlopig-ink)}
+.badge.oud i{background:var(--voorlopig-ink)}
+.badge.exp{background:var(--voorlopig-soft);color:var(--voorlopig-ink)}
+.knop{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font:600 12px var(--font);color:var(--muted);cursor:pointer;min-height:32px}
+.knop:hover{color:var(--text);border-color:var(--border-strong)}
+.knop-prim{background:var(--primary-strong);border-color:var(--primary-strong);color:#fff}
+.knop-prim:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+.knop:focus-visible,.seg button:focus-visible,.tk button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;box-shadow:var(--shadow)}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--bg-soft);border-radius:8px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--muted);font:600 12.5px var(--font);padding:6px 11px;border-radius:6px;cursor:pointer;min-height:32px;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--primary);color:#fff}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+.chk input{accent-color:var(--primary);width:15px;height:15px;margin:0}
+
+/* tijdbediening: grote dag- en uurknoppen (Weerkaart Europa-stijl) */
+.tijd{margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px}
+.tk{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.tk button{border:1px solid var(--border);background:var(--surface-muted);color:var(--text);border-radius:8px;cursor:pointer;font:600 13px var(--font);font-variant-numeric:tabular-nums}
+.tk.dagen button{height:44px;min-width:92px;padding:0 12px}
+.tk.uren button{height:36px;min-width:40px;padding:0 6px}
+.tk button[aria-pressed="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
+.tk button.nacht{background:var(--bg-soft)}
+.tk button.nacht[aria-pressed="true"]{background:var(--primary);color:#fff}
+.tk button:disabled{opacity:.35;cursor:default}
+.tk .play{min-width:44px;font-size:15px}
+.tk .lbl{font:600 12px var(--font);color:var(--muted);margin-right:4px;min-width:44px}
+.tijd-info{font-size:12.5px;color:var(--muted)}
+.tijd-info b{color:var(--text)}
+
+.info-rij{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;margin:10px 2px 8px;font-size:12.5px;color:var(--muted)}
+.info-rij b{color:var(--text);font-weight:600}
+.melding{border:1px solid var(--border);border-left:3px solid var(--voorlopig-ink);background:var(--surface);border-radius:0 8px 8px 0;padding:8px 12px;font-size:12.5px;margin:0 0 10px;color:var(--text)}
+.melding.fout{border-left-color:var(--danger)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+.paneel{background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow)}
+.kaart-paneel{padding:10px}
+.kaart-kop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding:2px 4px 8px}
+.kaart-kop h2{font:700 16px/1.25 var(--font);margin:0}
+.kaart-kop span{font-size:12px;color:var(--muted)}
+.kaart{position:relative;touch-action:manipulation}
+.kaart>svg{display:block;width:100%;height:auto;max-width:calc(86vh * 0.851);aspect-ratio:851/1000;margin:0 auto;border-radius:6px;background:var(--sea);user-select:none;-webkit-user-select:none}
+.kaart svg .buur{fill:var(--buur);stroke:var(--grens);stroke-width:.8}
+.kaart svg .nlvlak{fill:var(--land)}
+.kaart svg .prov{fill:none;stroke:rgba(15,23,42,.28);stroke-width:.8;stroke-linejoin:round}
+:root[data-theme="dark"] .kaart svg .prov{stroke:rgba(226,232,240,.30)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .kaart svg .prov{stroke:rgba(226,232,240,.30)}}
+.kaart svg .kust{fill:none;stroke:var(--kust);stroke-width:1.1;stroke-linejoin:round}
+.kaart svg .iso{fill:none;stroke-linejoin:round;stroke-linecap:round;pointer-events:none}
+.kaart svg .iso0{stroke:var(--iso0);stroke-width:2.2}
+.kaart svg .iso2{stroke:var(--iso2);stroke-width:1.8;stroke-dasharray:7 4}
+.kaart svg .iso5{stroke:var(--iso5);stroke-width:1.8;stroke-dasharray:2 3}
+.kaart svg .st{stroke:var(--surface);stroke-width:1.5}
+.kaart svg .stl{font:600 11px var(--font);fill:var(--text);paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.kaart svg .wl{font:700 12.5px var(--font);fill:var(--text);paint-order:stroke;stroke:var(--surface);stroke-width:3.5px;stroke-linejoin:round;pointer-events:none;font-variant-numeric:tabular-nums}
+.kaart svg .wp{fill:var(--text);pointer-events:none}
+.kaart svg .ls-ring{fill:none;stroke:var(--danger);stroke-width:2.6;pointer-events:none}
+.kaart svg .ls-box{fill:var(--surface);stroke:var(--danger);stroke-width:1.6;pointer-events:none}
+.kaart svg .ls-txt{font:700 14px var(--font);fill:var(--text);pointer-events:none;font-variant-numeric:tabular-nums}
+.kaart svg .ls-sub{font:500 11px var(--font);fill:var(--muted);pointer-events:none}
+.kaart svg .hov{fill:none;stroke:var(--text);stroke-width:1.6;pointer-events:none}
+.kaart svg .sel{fill:none;stroke:var(--accent);stroke-width:2.6;pointer-events:none}
+.kaart-hint{position:absolute;left:10px;bottom:10px;font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:3px 8px;border-radius:6px;pointer-events:none;opacity:.92}
+.resol{position:absolute;right:10px;bottom:10px;font:500 10.5px var(--mono);color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 6px;border-radius:6px;pointer-events:none;opacity:.92}
+
+.tip{position:absolute;z-index:10;width:max-content;max-width:min(310px,calc(100% - 16px));background:var(--surface);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--shadow-3);padding:10px 12px;font-size:12.5px;pointer-events:none}
+.tip.vast{pointer-events:auto}
+.tip .tk2{display:flex;gap:10px;align-items:baseline;justify-content:space-between}
+.tip .tk2 b{font-size:14px;font-weight:700}
+.tip .loc{color:var(--muted);font-size:11.5px;margin-top:1px}
+.tip .val{display:flex;align-items:baseline;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
+.tip .val .gr{font:700 24px/1 var(--font);font-variant-numeric:tabular-nums}
+.tip .val .int{font:500 11.5px var(--mono);color:var(--muted)}
+.tip dl{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;margin:4px 0 0}
+.tip dt{color:var(--muted)}
+.tip dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+.tip .mod{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font:500 11px var(--mono);color:var(--muted);display:grid;grid-template-columns:1fr auto auto;gap:0 10px}
+.tip .mod span:nth-child(3n+2){text-align:right;color:var(--text)}
+.tip .mod span:nth-child(3n){text-align:right}
+.tip .mod .som{color:var(--text);font-weight:600;border-top:1px dashed var(--border);padding-top:2px;margin-top:2px}
+.tip .sluit{position:absolute;top:4px;right:4px;width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;border-radius:6px}
+.tip .sluit:hover{background:var(--bg-soft);color:var(--text)}
+.bh{display:inline-block;border-radius:9999px;padding:0 8px;font-size:11px;font-weight:700}
+.bh.hoog{background:var(--success-soft);color:var(--success-ink)}
+.bh.middel{background:var(--voorlopig-soft);color:var(--voorlopig-ink)}
+.bh.laag{background:var(--danger-soft);color:var(--danger)}
+
+.legenda{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:10px 4px 2px;font-size:11.5px;color:var(--muted)}
+.leg-titel{font-weight:600;color:var(--text);font-size:12px}
+.leg-balk{display:flex;flex-direction:column;gap:2px;min-width:260px;flex:1 1 300px;max-width:520px}
+.leg-balk canvas{width:100%;height:12px;border-radius:3px;border:1px solid var(--border)}
+.leg-ticks{position:relative;height:14px;font:500 10.5px var(--mono)}
+.leg-ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.leg-cat{display:flex;flex-wrap:wrap;gap:4px 12px}
+.leg-cat span{display:inline-flex;align-items:center;gap:5px}
+.leg-cat i{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid var(--border)}
+.leg-iso{display:inline-flex;gap:10px;align-items:center}
+.leg-iso svg{display:block}
+
+.zij{display:flex;flex-direction:column;gap:12px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);min-width:0}
+.kpi .l{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font:700 22px/1.15 var(--font);margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi .v small{font-size:12px;font-weight:600;color:var(--muted)}
+.kpi .n{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.blok{padding:12px}
+.blok h2{font:700 15px/1.25 var(--font);margin:0 0 2px}
+.blok .s{font-size:11.5px;color:var(--muted);margin:0 0 8px}
+.grafiek svg{display:block;width:100%;height:auto}
+.grafiek .as{font:500 10px var(--mono);fill:var(--muted)}
+.grafiek .rl{stroke:var(--border);stroke-width:1}
+.grafiek .nul{stroke:var(--iso0);stroke-width:1.2;stroke-dasharray:4 3}
+.grafiek .band{fill:var(--accent);opacity:.18}
+.grafiek .l10{fill:none;stroke:var(--primary-strong);stroke-width:2.2}
+:root[data-theme="dark"] .grafiek .l10{stroke:var(--accent)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .grafiek .l10{stroke:var(--accent)}}
+.grafiek .l2{fill:none;stroke:#e07000;stroke-width:1.6;stroke-dasharray:5 3}
+.grafiek .lm{fill:none;stroke:var(--soft);stroke-width:.9;opacity:.8}
+.grafiek .nachtvlak{fill:var(--bg-soft)}
+.grafiek .nu{stroke:var(--accent-strong);stroke-width:1.4}
+.grafiek-leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted);margin-top:4px}
+.grafiek-leg i{display:inline-block;width:16px;height:0;border-top:2px solid;vertical-align:middle;margin-right:4px}
+.runs{list-style:none;margin:0;padding:0;font-size:12px}
+.runs li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;padding:4px 2px;border-bottom:1px solid var(--border);align-items:baseline}
+.runs li:last-child{border-bottom:0}
+.runs .t{font:500 11px var(--mono);color:var(--muted);white-space:nowrap}
+.chip{display:inline-block;border-radius:9999px;padding:1px 8px;font-size:11px;font-weight:600;white-space:nowrap}
+.chip.G{background:var(--success-soft);color:var(--success-ink)}
+.chip.V{background:var(--voorlopig-soft);color:var(--voorlopig-ink)}
+.chip.X{background:var(--danger-soft);color:var(--danger)}
+.foot{color:var(--muted);font-size:11.5px;margin-top:12px}
+.drie{margin-top:16px;padding:12px}
+.drie-kop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.drie-kop h2{font:700 16px/1.25 var(--font);margin:0}
+.drie-kop span{font-size:12px;color:var(--muted)}
+.drie-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px}
+.mini{border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface-muted);cursor:pointer}
+.mini:hover{border-color:var(--border-strong)}
+.mini h3{font:700 13px var(--font);margin:0}
+.mini .m-sub{font-size:11.5px;color:var(--muted);margin:1px 0 6px}
+.mini .m-sub.let{color:var(--voorlopig-ink)}
+.mini svg{display:block;width:100%;height:auto;aspect-ratio:851/1000;background:var(--sea);border-radius:6px}
+.mini svg .buur{fill:var(--buur);stroke:var(--grens);stroke-width:.8}
+.mini svg .nlvlak{fill:var(--land)}
+.mini svg .prov{fill:none;stroke:rgba(15,23,42,.25);stroke-width:1}
+.mini svg .kust{fill:none;stroke:var(--kust);stroke-width:1.4}
+.mini svg .iso0{fill:none;stroke:var(--iso0);stroke-width:3}
+.mini .m-kpi{display:flex;justify-content:space-between;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)}
+.mini .m-kpi b{color:var(--text);font-variant-numeric:tabular-nums}
+.plaatsen{margin-top:12px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.plaatsen table{border-collapse:collapse;width:100%;font-size:12.5px}
+.plaatsen th{background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap}
+.plaatsen th:first-child{text-align:left}
+.plaatsen td{padding:5px 9px;border-bottom:1px solid var(--border);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.plaatsen td:first-child{text-align:left;font-weight:600}
+.plaatsen td .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.plaatsen td small{color:var(--muted);font-weight:500;margin-left:4px}
+@media (max-width:760px){.drie-grid{grid-template-columns:1fr}}
+
+dialog{border:1px solid var(--border-strong);border-radius:12px;padding:0;max-width:760px;width:calc(100% - 24px);background:var(--surface);color:var(--text);box-shadow:var(--shadow-3)}
+dialog::backdrop{background:rgba(15,23,42,.45)}
+.dlg-kop{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--primary-strong);color:#fff;border-radius:12px 12px 0 0}
+.dlg-kop h2{font:700 16px var(--font);margin:0}
+.dlg-kop button{background:transparent;border:0;color:#fff;font-size:20px;cursor:pointer;width:32px;height:32px;border-radius:6px}
+.dlg-body{padding:14px 18px 18px;max-height:75vh;overflow:auto;font-size:13.5px}
+.dlg-body h3{font:700 13px var(--font);margin:14px 0 4px}
+.dlg-body p,.dlg-body li{margin:0 0 6px}
+.dlg-body ul{padding-left:18px;margin:0 0 6px}
+.dlg-body .klein{font-size:12px;color:var(--muted)}
+.stappen{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}
+.stappen div{background:var(--surface-muted);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px}
+.stappen b{display:block;font-size:12.5px}
+
+@media (max-width:1100px){
+  .grid{grid-template-columns:1fr}
+  .zij{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+}
+@media (max-width:760px){
+  .wrap{padding:12px 12px 40px}
+  h1{font-size:19px}
+  .zij{display:flex}
+  .toolbar{padding:8px;gap:8px}
+  .seg{width:100%}
+  .seg button{flex:1 1 auto;padding:6px 6px;font-size:12px}
+  .kaart-paneel{padding:6px}
+  .kaart>svg{max-width:none}
+  .kaart-hint{display:none}
+  .tk.dagen button{min-width:0;flex:1}
+  .tk.uren{overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px}
+  .tip.vast{position:fixed;left:8px!important;right:8px;top:auto!important;bottom:calc(8px + env(safe-area-inset-bottom));max-width:none;width:auto}
+}
+@media (hover:none){ .kaart-hint{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="terug" id="terugLink" href="beta.html#grondtemp">← Weerlab bèta</a>
+  <header>
+    <div>
+      <h1>Grondtemperatuur 10 cm <span class="badge exp" style="vertical-align:middle">WGT-MOS · experimenteel</span></h1>
+      <p class="sub">Luchttemperatuur op 10 cm boven kort gras: verwachting per uur, minimum komende nacht en kans op grondvorst. Berekend uit een gewogen mix van weermodellen, een fysische afkoelingsterm, bodemsoort, bodemvocht en statistische correctie op KNMI-metingen.</p>
+    </div>
+    <div class="hdr-acties">
+      <span class="badge" id="statusBadge" role="status"><i></i>Gegevens laden…</span>
+      <button class="knop knop-prim" type="button" id="uitlegBtn">Hoe wordt deze verwachting berekend?</button>
+      <a class="knop" href="demo_wgt_verificatie.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">Verificatie</a>
+      <button class="knop" id="themaBtn" type="button" aria-label="Wissel licht/donker thema">◐ Thema</button>
+    </div>
+  </header>
+
+  <div class="toolbar" role="toolbar" aria-label="Kaartlaag">
+    <div class="seg" id="laagSeg" role="group" aria-label="Kaartlaag">
+      <button type="button" data-l="t10" aria-pressed="true">T 10 cm</button>
+      <button type="button" data-l="nmin" aria-pressed="false">Nachtminimum</button>
+      <button type="button" data-l="kans" aria-pressed="false">Kans grondvorst</button>
+      <button type="button" data-l="t2" aria-pressed="false">T 2 m</button>
+      <button type="button" data-l="diff" aria-pressed="false">T10 − T2</button>
+      <button type="button" data-l="sigma" aria-pressed="false">Onzekerheid</button>
+      <button type="button" data-l="bodem" aria-pressed="false">Bodemsoort</button>
+      <button type="button" data-l="vocht" aria-pressed="false">Bodemvocht</button>
+    </div>
+    <div class="seg" id="drempelSeg" role="group" aria-label="Vorstdrempel" hidden>
+      <button type="button" data-d="0" aria-pressed="true">&lt; 0 °C</button>
+      <button type="button" data-d="-2" aria-pressed="false">&lt; −2 °C</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="isoChk" checked> Lijnen 0 / −2 / −5 °C</label>
+    <label class="chk"><input type="checkbox" id="laagChk" checked> Laagste waarde</label>
+    <label class="chk"><input type="checkbox" id="waardenChk" checked> Waarden op kaart</label>
+    <label class="chk"><input type="checkbox" id="stChk"> Metingen 10 cm (nu)</label>
+  </div>
+
+  <div class="tijd" id="tijdPaneel">
+    <div class="tk dagen" id="dagen" role="group" aria-label="Dag"></div>
+    <div class="tk uren" id="uren" role="group" aria-label="Uur"></div>
+    <div class="tijd-info" id="tijdInfo"></div>
+  </div>
+
+  <div class="info-rij" id="infoRij"></div>
+  <div class="melding" id="melding" hidden></div>
+
+  <div class="grid">
+    <section class="paneel kaart-paneel" aria-label="Kaart">
+      <div class="kaart-kop"><h2 id="kaartTitel">Temperatuur op 10 cm</h2><span id="kaartSub"></span></div>
+      <div class="kaart" id="kaart">
+        <svg id="svg" role="img" aria-label="Kaart van Nederland met grondtemperatuur">
+          <defs><clipPath id="nlClip"><path id="nlClipPad"></path></clipPath></defs>
+          <g id="gBuren"></g><path id="nlVlak" class="nlvlak"></path>
+          <image id="veld" clip-path="url(#nlClip)" preserveAspectRatio="none"></image>
+          <g id="gIso" clip-path="url(#nlClip)"></g>
+          <g id="gProv"></g><path id="nlKust" class="kust"></path>
+          <g id="gWaarden"></g><g id="gSt"></g><g id="gLaagst"></g><g id="gFocus"></g>
+        </svg>
+        <div class="kaart-hint">Beweeg over de kaart · klik om vast te zetten</div>
+        <div class="resol" title="Uitvoerresolutie: bewust niet fijner dan de weermodellen verantwoorden">rooster ≈ 5 km</div>
+        <div class="tip" id="tip" role="tooltip" hidden></div>
+      </div>
+      <div class="legenda" id="legenda"></div>
+    </section>
+
+    <aside class="zij">
+      <div class="kpis" id="kpis"></div>
+      <section class="paneel blok grafiek" aria-labelledby="grafTitel">
+        <h2 id="grafTitel">Verloop</h2>
+        <p class="s" id="grafSub">Klik op de kaart om een plaats te kiezen.</p>
+        <svg id="graf" viewBox="0 0 360 190" role="img" aria-label="Verloop T10 en T2"></svg>
+        <div class="grafiek-leg">
+          <span><i style="border-color:var(--primary-strong)"></i>T 10 cm (WGT-MOS)</span>
+          <span><i style="border-color:#e07000;border-top-style:dashed"></i>T 2 m</span>
+          <span><i style="border-color:var(--soft)"></i>afzonderlijke modellen</span>
+          <span><i style="border-color:var(--accent);border-top-width:8px;opacity:.35"></i>80 %-interval</span>
+        </div>
+      </section>
+      <section class="paneel blok" aria-labelledby="runTitel">
+        <h2 id="runTitel">Gebruikte modelruns</h2>
+        <p class="s">Een run die te oud is of ontbreekt telt niet mee; de gewichten worden dan over de rest verdeeld.</p>
+        <ul class="runs" id="runs"></ul>
+      </section>
+    </aside>
+  </div>
+  <section class="paneel drie" aria-labelledby="drieTitel">
+    <div class="drie-kop"><h2 id="drieTitel">Minima op 10 cm — komende 3 nachten</h2><span>18.00 → 09.00 uur lokale tijd · klik op een kaartje voor de grote kaart</span></div>
+    <div class="drie-grid" id="drieGrid"></div>
+    <div class="plaatsen"><table id="plaatsTabel"></table></div>
+    <p class="foot" id="drieNoot" style="margin-top:6px"></p>
+  </section>
+  <p class="foot" id="foot">Bronnen: KNMI (waarnemingen, HARMONIE-AROME), DWD (ICON), ECMWF (IFS, AIFS), NOAA (GFS), UK Met Office, DMI via Open-Meteo · BRO Bodemkaart (TNO/PDOK) · Copernicus DEM · plaatsnamen GeoNames (CC BY 4.0). Experimenteel product — niet gebruiken voor beslissingen met grote gevolgen.</p>
+</div>
+
+<dialog id="uitleg" aria-labelledby="uitlegTitel">
+  <div class="dlg-kop"><h2 id="uitlegTitel">Hoe wordt deze verwachting berekend?</h2><button type="button" id="uitlegSluit" aria-label="Sluiten">×</button></div>
+  <div class="dlg-body">
+    <p>Dit is het <b>Weerlab Grondtemperatuur Model</b> (intern: WGT-MOS). Het rekent de temperatuur uit van de lucht <b>10 cm boven kort gras</b> — de plek waar ’s nachts rijp en grondvorst ontstaan. Dat is iets anders dan de gewone temperatuur op 2 meter, de temperatuur ín de bodem, of de temperatuur van het oppervlak zelf.</p>
+    <div class="stappen">
+      <div><b>1. Weermodellen</b>Negen modellen (HARMONIE, ICON, ECMWF, GFS, UKMO …) leveren temperatuur, dauwpunt, wind, bewolking en zon per uur.</div>
+      <div><b>2. Uitstraling</b>Per model rekenen we hoeveel warmte de grond ’s nachts naar de ruimte verliest.</div>
+      <div><b>3. Bodem</b>Bodemsoort en hoe nat de grond is bepalen hoeveel warmte van onderen wordt aangevoerd.</div>
+      <div><b>4. Weging</b>Modellen die de laatste weken beter waren in dit soort weer, tellen zwaarder mee.</div>
+      <div><b>5. Correctie</b>Een statistische correctie leert van eerdere fouten tegenover KNMI-metingen.</div>
+      <div><b>6. Metingen nu</b>Wijkt de meting van dit moment af, dan wordt de verwachting voor de eerste uren bijgestuurd.</div>
+    </div>
+    <h3>In één alinea</h3>
+    <p>Het Weerlab Grondtemperatuur Model rekent de temperatuur van de lucht op 10 cm boven kort gras uit, op een rooster van ongeveer 5 bij 5 km. Het vertrekpunt zijn de uurverwachtingen van negen weermodellen (HARMONIE NL/EU, DMI-HARMONIE, ICON-D2/-EU, ECMWF IFS en AIFS, GFS, UKMO): temperatuur en dauwpunt op 2 m, wind, lage, middelbare en hoge bewolking en zonnestraling. Voor elk model berekenen we eerst natuurkundig hoeveel kouder (of in de zon warmer) het op 10 cm is dan op 2 m. Dat hangt af van hoeveel warmte het gras 's nachts naar de hemel uitstraalt, wat bewolking terugkaatst en wind wegmengt, en of dauw of rijp de afkoeling remt. De ondergrond telt ook mee: de bodemsoort komt uit de BRO Bodemkaart, en hoe nat de grond is volgt uit de neerslag en verdamping van de afgelopen 60 dagen. Natte klei levert 's nachts veel warmte, droog zand en veen weinig. Daarnaast wordt het bij zee, IJsselmeer en in de stad minder koud en in beekdalen juist kouder. De constanten in die berekening zijn geschat uit vijf jaar KNMI-metingen van de minimumtemperatuur op 10 cm op 34 stations. Daarna halen we van elk model de fout af die het de afgelopen weken systematisch maakte, en mengen we de modellen. Een model telt zwaarder als het recent in hetzelfde soort weer (heldere, bewolkte of winderige nacht) en op dezelfde termijn vooruit het best presteerde. Een statistische correctie (MOS), getraind op twee jaar oude verwachtingen tegenover KNMI-metingen, corrigeert de overgebleven fouten, zoals de neiging van alle modellen om heldere, windstille nachten te warm te maken. Voor de eerste uren sturen we bij met de actuele KNMI-meting op 10 cm; die bijsturing dooft binnen enkele uren uit. Tot slot bepalen we de onzekerheid uit de onderlinge spreiding van de modellen, uit hoe gevoelig de uitkomst is voor kleine verschillen in wind en bewolking, en uit hoe groot de fouten in het verleden waren. Daaruit volgen de kans op grondvorst en de bandbreedte die op de kaart staan.</p>
+    <h3>Waarom kan het aan de grond zoveel kouder zijn?</h3>
+    <p>Op een heldere, windstille nacht straalt het gras warmte uit naar de heldere hemel. De lucht vlak erboven koelt dan sterk af, terwijl het op 2 meter veel minder daalt. Het verschil kan 3 tot 6 graden zijn. Bewolking werkt als een deken; wind mengt de koude laag weg. Droge lucht maakt de uitstraling sterker, vochtige lucht remt de daling zodra er dauw of rijp ontstaat.</p>
+    <h3>Wat doet de bodem?</h3>
+    <p>Droge zandgrond en veen geleiden warmte slecht: de bovenkant koelt snel af. Natte klei houdt veel warmte vast en levert ’s nachts meer warmte naar boven. Hoe nat de grond is, berekenen we uit de neerslag en verdamping van de afgelopen 60 dagen (plus het bodemvocht van ICON). Na een droge periode wordt het boven zand dus eerder koud dan na veel regen. Onder sneeuw is de isolatie het grootst.</p>
+    <h3>Lokale ligging</h3>
+    <p>In steden blijft het warmer; aan zee en langs het IJsselmeer remt het water de afkoeling. In beekdalen en laagtes kan koude lucht blijven hangen.</p>
+    <h3>Hoe betrouwbaar?</h3>
+    <p>Naast de verwachte waarde tonen we een bandbreedte (80 % van de gevallen valt erbinnen) en de kans op grondvorst. Die marge is groter als de modellen verschillen, bij weinig wind en wisselende bewolking (dan maakt een klein verschil veel uit), en verder vooruit in de tijd.</p>
+    <h3>Nauwkeurigheid op de kaart</h3>
+    <p>We rekenen op een rooster van ongeveer 5 bij 5 km. De bodemkaart is veel fijner, maar de weermodellen niet: een scherpere kaart zou nauwkeurigheid suggereren die er niet is. Binnen één vakje kan het in een laagte of een tuin dus kouder of warmer zijn.</p>
+    <h3>Voor de kenner</h3>
+    <ul class="klein">
+      <li>Fysica: ΔT = −L*·f<sub>nacht</sub>·f<sub>lokaal</sub> / (k₀ + k<sub>u</sub>·u<sup>p</sup> + k<sub>s</sub>·μ/1000) + dagopwarming; L* netto langgolvig (Brutsaert + wolkenlagen), μ = √(k·C) van de bodem (Johansen) bij de actuele vochtindex; dauw/rijpdemping onder Td. Constanten gefit op 34 KNMI-stations (T10N, 2021–aug 2024).</li>
+      <li>Weging: per leadtime (0-12 / 24-36 / 48-60 u) × weersituatie (straling, helder+wind, bewolkt, wisselend) × dag/nacht; w ∝ 1/MSE met halfwaardetijd 30 dagen + zelfde seizoen vorig jaar, gekrompen naar de gemiddelde prestatie (voorkomt dat één afwijkende week alles verschuift), plafond 35 %.</li>
+      <li>MOS: residu T10N − gewogen mix, ridge én gradient boosting; gekozen op kalendermaand-geblokte kruisvalidatie.</li>
+      <li>Bijsturing: afwijking KNMI 10-minutenmeting (tgn) vs. verwachting, ruimtelijk gespreid (35 km), uitdovend met e-folding 3 uur.</li>
+      <li>Niet gefit (aannames, zo gemarkeerd): stadseffect, IJsselmeer-effect, extra koude in beekdalen/laagtes, dagopwarming overdag (alleen ochtend-/middagminima geverifieerd).</li>
+    </ul>
+    <p class="klein">Naam en product zijn voorlopig. Of het model beter is dan de losse modellen blijkt uitsluitend uit de <a href="demo_wgt_verificatie.html">onafhankelijke verificatie</a>.</p>
+  </div>
+</dialog>
+
+<script>/*GEO-START*/const GEO={"w":851,"h":1000,"proj":[3.25,53.62,0.6135963605161202,342.46575342465815],"buren":[{"n":"Germany","d":"M647.1,1087.2L638.9,1077.4L619.4,1072.5L613.5,1063.5L610.9,1054.3L611.1,1050.9L622.7,1036.1L608.8,1024.7L601.4,1010.4L577.7,992.3L574.3,984.2L585.2,930.8L577.8,917.8L567.7,910.5L554.4,906.1L548.0,898.0L545.5,888.1L545.7,884.9L549.1,878.0L564.4,879.1L603.2,843.9L601.0,841.4L593.2,838.2L591.1,829.8L591.4,819.6L610.6,773.7L616.0,755.4L617.1,743.1L616.1,731.6L605.8,711.7L594.8,694.2L594.2,681.3L587.3,675.0L565.0,638.4L564.8,620.8L578.7,607.8L595.8,601.0L601.7,595.3L612.3,591.6L641.1,602.0L652.8,610.4L666.6,599.3L686.4,600.7L732.6,581.6L739.0,573.0L743.7,563.6L726.2,544.8L725.2,534.6L728.0,525.2L734.2,517.3L745.2,512.8L756.4,504.6L781.5,481.3L789.8,462.0L792.4,440.8L792.8,426.0L786.7,414.3L780.6,406.9L771.6,408.1L752.5,407.4L734.1,399.6L723.6,386.3L720.8,372.3L725.3,364.4L726.2,358.9L723.6,350.6L725.1,341.0L734.4,333.7L789.8,333.7L792.6,329.6L796.3,298.3L810.3,249.3L823.5,221.9L825.4,211.9L825.2,148.2L826.8,117.2L818.5,103.7L798.1,87.3L796.7,84.0L801.2,47.5L808.2,20.0L830.0,-15.2L847.1,-24.9L914.1,-30.1L914.1,1102.7L647.6,1102.7Z"},{"n":"France","d":"M-48.7,973.3L-29.4,968.8L-12.6,986.1L-0.9,1010.8L2.4,1036.1L6.9,1054.8L14.6,1061.9L47.8,1064.6L73.5,1072.4L81.3,1080.8L85.5,1102.7L-63.0,1102.7L-63.0,982.5Z"},{"n":"Belgium","d":"M202.9,763.0L205.4,760.8L222.1,769.4L235.8,771.2L239.4,769.0L236.0,751.7L236.8,747.7L249.2,736.0L263.0,730.6L264.9,731.4L270.7,740.2L281.9,748.7L290.2,748.7L316.8,725.0L323.7,730.3L329.6,739.2L332.2,752.9L336.1,755.0L355.0,753.6L364.9,741.2L374.6,732.5L382.3,739.8L385.5,756.5L390.7,775.7L413.7,797.8L433.2,804.2L457.6,799.7L468.5,795.6L476.0,799.6L482.9,812.1L496.6,825.4L526.5,835.3L536.2,841.1L543.9,852.8L542.0,869.3L527.6,902.9L526.3,909.9L527.8,915.3L524.6,922.9L505.9,945.5L504.9,950.1L515.0,970.8L525.2,975.5L535.4,977.2L577.1,978.7L580.8,985.7L604.3,1003.6L611.9,1018.2L628.6,1031.7L629.8,1034.0L629.2,1038.4L616.4,1054.3L617.5,1058.4L621.7,1064.9L640.9,1069.7L651.0,1081.7L652.0,1084.4L652.7,1102.7L80.2,1102.7L77.0,1085.8L71.6,1080.1L47.4,1072.8L13.6,1070.0L3.5,1061.1L-2.5,1038.4L-5.5,1014.5L-16.0,992.2L-30.6,977.1L-47.1,981.1L-63.0,991.4L-63.0,803.3L-6.0,772.9L21.2,763.8L23.3,766.2L29.6,795.5L33.8,803.8L39.2,809.1L46.2,810.1L55.3,803.1L69.7,795.2L91.4,798.9L107.2,806.2L113.1,813.8L122.6,820.4L136.8,822.0L165.1,808.8L192.4,788.7L199.9,775.6Z"}],"provincies":[{"n":"Groningen","d":"M807.6,267.8L806.3,263.7L809.9,258.9L826.3,232.2L832.8,208.6L829.8,184.6L830.7,173.6L826.5,170.5L825.6,164.7L828.1,156.8L833.8,144.5L833.6,138.7L831.3,131.5L820.8,129.1L816.2,126.7L809.9,126.0L804.4,120.9L805.7,110.3L793.7,108.9L781.3,103.1L774.1,98.3L766.4,90.4L764.5,76.7L761.5,72.6L763.2,61.6L759.6,58.2L748.9,53.8L745.6,56.5L734.6,52.7L724.1,54.1L711.1,57.9L703.7,62.3L692.8,65.4L690.9,64.7L665.1,67.8L655.2,69.9L649.3,72.6L642.2,77.7L640.5,75.3L632.7,70.5L629.1,70.2L619.7,72.6L618.0,71.6L616.7,74.3L623.7,87.7L626.6,86.6L630.4,92.8L638.2,95.5L636.5,108.6L631.2,113.4L631.7,119.5L627.9,122.6L626.6,127.7L623.7,129.5L626.2,137.7L619.9,145.5L615.1,155.1L614.6,165.8L621.2,172.9L632.9,173.3L639.0,178.1L650.2,182.5L658.4,161.0L663.6,151.4L671.0,147.9L672.0,145.2L680.0,142.5L689.2,145.5L693.0,150.3L696.4,158.2L700.0,156.2L701.4,162.3L707.9,167.1L711.3,176.0L723.9,170.9L732.7,171.6L774.8,214.7L791.4,238.0L796.4,243.8L791.2,255.8L796.4,255.8L803.1,265.4ZM684.0,23.6L680.2,22.6L674.7,27.7L680.0,31.8L684.2,28.1Z"},{"n":"Fryslân","d":"M401.4,111.0L394.4,109.6L395.7,115.1ZM388.8,109.2L381.2,106.8L375.3,108.9L359.5,119.5L353.7,125.0L337.1,136.3L335.2,141.1L340.2,142.5L342.5,138.7L350.7,138.4L363.3,127.1L361.9,121.6L374.7,116.1L381.0,111.6ZM618.0,71.6L615.1,70.2L607.1,74.0L597.8,72.6L581.2,74.3L563.8,79.5L554.3,78.4L548.5,80.8L531.4,90.4L526.6,91.4L491.1,109.6L485.8,114.7L478.5,124.3L469.2,129.8L462.1,137.0L456.0,150.0L452.6,170.5L447.4,175.3L447.2,179.8L441.1,185.6L429.3,189.4L402.6,212.3L430.1,189.4L440.0,187.0L446.5,181.2L449.5,186.0L450.3,190.8L446.7,193.5L453.5,205.5L451.2,211.3L454.5,224.7L452.0,233.2L453.3,243.2L445.7,246.9L442.8,252.1L444.6,255.5L451.4,261.3L457.3,264.4L463.1,262.0L472.8,265.1L482.3,269.5L486.9,269.2L490.7,264.0L497.6,263.4L503.3,260.3L506.0,265.8L511.7,265.1L517.6,267.8L520.1,265.8L525.1,267.1L532.5,275.0L533.7,279.5L540.0,275.0L545.1,279.1L551.8,280.5L556.4,278.1L561.9,272.6L563.2,268.8L572.0,266.4L575.6,273.3L577.2,275.0L583.1,272.9L584.4,275.7L590.5,271.9L589.0,268.2L594.9,267.5L621.4,249.7L626.6,242.1L631.9,237.0L641.5,238.0L647.8,244.5L660.5,235.3L667.8,221.9L654.2,200.7L655.2,189.4L642.0,184.6L644.1,180.1L639.0,178.1L632.9,173.3L621.2,172.9L614.6,165.8L615.1,155.1L619.9,145.5L626.2,137.7L623.7,129.5L626.6,127.7L627.9,122.6L631.7,119.5L631.2,113.4L636.5,108.6L638.2,95.5L631.2,93.2L624.3,95.2L623.7,91.1L619.3,91.4L611.9,86.0L610.4,78.1L611.9,72.6ZM481.8,62.0L471.8,60.3L410.0,77.1L406.8,79.5L402.4,85.6L399.5,92.5L407.9,93.2L414.2,87.7L421.7,84.6L429.3,85.6L442.8,79.5L448.4,74.7L464.2,73.6L467.8,69.5L481.4,64.0ZM529.8,54.8L513.8,54.1L508.1,51.0L504.7,51.4L497.2,57.2L497.2,61.6L502.9,66.1L510.6,66.8L515.5,65.1L521.1,60.6L536.9,62.3L555.0,57.9L563.4,52.1ZM657.5,38.7L659.4,35.3L650.4,35.6L638.6,38.0L609.4,42.1L602.9,46.9L602.0,53.8L611.7,50.7L619.3,50.7L630.8,48.6L635.5,44.9L647.2,40.8L648.9,39.0Z"},{"n":"Drenthe","d":"M796.4,243.8L791.4,238.0L774.8,214.7L732.7,171.6L723.9,170.9L711.3,176.0L707.9,167.1L701.4,162.3L700.0,156.2L696.4,158.2L693.0,150.3L689.2,145.5L680.0,142.5L672.0,145.2L671.0,147.9L663.6,151.4L658.4,161.0L650.2,182.5L644.1,180.1L642.0,184.6L655.2,189.4L654.2,200.7L667.8,221.9L660.5,235.3L647.8,244.5L641.5,238.0L631.9,237.0L626.6,242.1L621.4,249.7L603.1,262.3L606.7,267.5L620.3,282.9L610.7,293.5L605.6,294.9L603.1,297.9L609.6,314.0L612.1,321.9L616.3,323.6L620.3,320.2L623.9,320.5L627.7,322.6L628.9,322.3L630.8,325.3L633.8,326.0L640.5,326.7L645.7,325.3L646.4,328.8L654.4,334.6L658.6,345.2L669.1,340.4L673.1,344.5L676.6,340.8L686.9,344.5L685.9,333.6L694.1,326.7L707.1,324.0L726.6,332.9L726.0,334.6L725.2,334.9L726.4,335.6L726.0,338.0L727.1,339.7L733.8,333.9L741.1,331.5L750.6,332.9L766.4,331.8L771.0,335.6L775.2,336.3L782.8,333.6L796.8,338.0L799.6,334.2L803.1,277.4L807.6,267.8L803.1,265.4L796.4,255.8L791.2,255.8Z"},{"n":"Overijssel","d":"M623.9,320.5L620.3,320.2L616.3,323.6L612.1,321.9L609.6,314.0L603.1,297.9L605.6,294.9L610.7,293.5L620.3,282.9L606.7,267.5L603.1,262.3L594.9,267.5L589.0,268.2L590.5,271.9L584.4,275.7L583.1,272.9L577.2,275.0L575.6,273.3L572.0,266.4L563.2,268.8L561.9,272.6L556.4,278.1L551.8,280.5L545.1,279.1L540.0,275.0L534.8,278.4L539.8,284.9L546.4,286.0L552.7,290.1L561.5,297.6L565.9,309.9L570.5,317.1L564.0,323.3L571.8,327.1L581.9,334.6L574.9,341.4L569.9,341.1L563.4,344.5L556.0,343.2L544.9,345.5L541.9,353.8L548.0,367.8L549.1,376.4L554.1,377.7L559.0,384.6L562.3,392.5L564.6,391.8L567.6,389.0L570.5,391.8L579.6,382.2L583.8,380.1L589.2,383.6L592.8,389.7L599.3,395.2L599.9,403.1L602.9,406.5L602.0,413.0L602.2,416.1L605.4,417.8L603.9,424.3L595.1,427.4L596.2,433.6L594.3,434.2L593.8,436.3L594.1,438.7L593.4,440.8L595.9,451.4L599.1,451.7L601.4,459.6L605.2,465.4L603.9,467.8L608.1,470.5L609.4,469.9L610.2,471.2L607.7,474.7L609.0,476.7L611.9,478.1L612.1,480.1L613.2,477.4L613.0,475.7L623.5,477.4L649.1,477.1L648.9,474.0L658.1,470.5L665.3,471.9L668.0,478.4L678.5,492.1L682.1,494.2L686.7,492.8L694.5,494.2L701.9,492.5L706.5,499.0L713.4,495.2L719.3,500.0L718.9,501.4L719.3,501.7L719.5,505.8L717.2,510.3L728.3,514.4L750.8,514.4L757.5,513.7L761.3,509.2L763.2,501.4L770.4,493.8L777.7,492.8L785.7,477.1L792.0,477.7L800.8,474.3L801.9,472.3L796.8,467.1L793.9,459.6L793.5,454.8L798.1,445.2L799.8,439.0L803.1,434.2L803.1,427.1L800.4,418.2L795.4,416.4L790.3,407.9L786.7,395.5L783.4,395.2L779.8,402.7L775.8,405.8L759.0,400.3L757.3,397.3L740.7,397.3L736.1,395.9L724.5,388.4L726.0,376.4L721.0,365.4L728.3,366.8L730.6,362.0L735.9,363.4L739.0,361.6L729.0,353.1L730.6,344.2L726.0,338.0L726.4,335.6L725.2,334.9L726.0,334.6L726.6,332.9L707.1,324.0L694.1,326.7L685.9,333.6L686.9,344.5L676.6,340.8L673.1,344.5L669.1,340.4L658.6,345.2L654.4,334.6L646.4,328.8L645.7,325.3L640.5,326.7L633.8,326.0L630.8,325.3L628.9,322.3L627.7,322.6Z"},{"n":"Flevoland","d":"M544.9,345.5L556.0,343.2L553.9,342.5ZM533.7,279.5L532.5,275.0L525.1,267.1L520.1,265.8L517.6,267.8L506.4,271.2L492.8,293.5L492.3,327.7L497.2,331.8L504.7,343.5L499.7,347.6L485.2,352.1L473.0,364.4L463.6,366.4L461.9,371.6L457.7,370.5L460.2,364.4L466.3,359.6L463.6,351.4L451.8,332.5L442.1,322.6L431.2,317.8L428.0,318.2L431.8,318.5L443.4,324.0L451.6,332.5L463.3,351.4L465.9,358.9L459.8,364.7L457.5,370.5L457.3,373.3L459.1,379.8L450.7,386.6L447.2,388.0L422.0,405.8L401.8,417.8L394.8,423.6L396.7,443.2L406.4,440.1L414.2,440.4L427.6,446.2L448.6,464.4L453.9,468.2L478.9,460.6L483.9,444.9L483.9,440.4L480.8,434.9L486.3,428.8L490.0,430.5L495.9,429.5L499.1,424.7L506.6,418.5L519.0,412.3L524.7,412.7L535.2,404.5L539.4,398.3L545.9,386.0L547.8,377.4L548.0,367.8L538.6,357.2L526.6,355.5L505.4,350.3L502.2,346.6L507.1,344.9L542.6,344.9L570.3,336.0L574.3,329.5L571.8,327.1L564.0,323.3L570.5,317.1L565.9,309.9L561.5,297.6L552.7,290.1L546.4,286.0L539.8,284.9L534.8,278.4Z"},{"n":"Gelderland","d":"M564.6,391.8L562.3,392.5L559.0,384.6L554.1,377.7L549.7,377.1L544.5,394.9L539.4,398.3L540.5,402.1L538.2,405.5L523.2,418.5L514.8,424.3L510.2,425.0L505.0,429.8L500.3,429.5L496.8,432.5L496.1,436.3L488.8,442.8L485.2,448.3L481.4,459.2L478.5,464.4L474.1,464.0L452.6,470.2L450.3,479.1L453.9,479.8L460.0,485.6L460.2,496.2L466.5,497.9L470.5,504.1L475.3,508.9L472.4,510.3L470.3,515.1L469.4,518.5L469.9,522.6L464.2,527.4L469.4,530.8L477.6,528.1L480.6,524.3L479.5,519.9L484.2,520.5L486.0,528.1L485.0,538.0L487.7,538.4L491.1,544.2L491.1,551.0L496.8,558.2L499.3,563.7L499.1,571.2L495.1,574.3L485.6,570.2L481.2,566.1L475.1,563.7L469.9,560.3L467.1,560.6L460.6,559.6L455.6,562.7L448.2,565.4L440.9,565.8L437.7,569.5L424.5,566.8L419.6,562.7L416.1,563.0L411.0,568.8L405.6,566.1L398.8,579.1L392.3,589.7L391.7,592.8L386.0,594.5L384.8,597.3L379.3,598.3L381.2,602.4L367.3,604.5L367.7,608.2L374.3,609.2L373.2,616.8L367.7,616.1L371.1,620.5L377.8,624.0L381.8,629.8L387.9,627.4L396.7,632.5L396.7,640.1L394.4,644.5L402.0,642.8L412.3,642.8L419.2,645.9L427.2,643.8L429.9,644.9L442.1,638.7L445.3,626.7L452.2,616.1L460.0,619.9L467.3,618.2L469.9,613.4L473.4,613.4L476.6,616.8L481.4,617.8L485.0,613.7L491.5,613.0L497.6,616.4L501.2,616.4L505.8,624.0L513.6,627.4L515.3,630.8L521.6,632.9L524.3,637.3L531.6,639.7L546.8,637.3L549.3,637.7L550.1,631.5L555.4,630.8L560.0,639.4L568.0,641.1L576.0,634.9L573.5,624.0L566.3,615.1L570.1,610.6L575.1,612.7L585.4,608.6L589.4,605.5L591.1,601.0L600.4,606.8L606.5,607.2L613.0,609.2L613.0,602.1L608.3,599.3L606.7,593.8L601.0,590.8L610.9,587.3L618.0,591.8L616.5,594.9L623.1,600.0L632.9,600.0L636.7,597.9L641.1,601.0L642.2,606.5L650.4,605.8L654.2,611.3L663.4,613.7L663.6,604.8L659.4,602.1L660.0,598.3L668.0,601.0L672.6,601.0L675.6,604.5L682.9,602.1L683.2,600.0L694.7,595.2L701.0,591.1L711.9,587.7L719.7,583.6L723.5,583.9L729.6,590.4L736.3,584.6L739.7,583.6L744.7,577.1L745.8,568.8L752.1,567.1L751.7,556.8L748.3,555.5L736.1,545.2L727.9,541.1L722.4,541.1L724.1,530.8L732.3,529.1L735.7,525.7L737.8,514.0L728.3,514.4L717.2,510.3L719.5,505.8L719.3,501.7L718.9,501.4L719.3,500.0L713.4,495.2L706.5,499.0L701.9,492.5L694.5,494.2L686.7,492.8L682.1,494.2L678.5,492.1L668.0,478.4L665.3,471.9L658.1,470.5L648.9,474.0L649.1,477.1L623.5,477.4L613.0,475.7L613.2,477.4L612.1,480.1L611.9,478.1L609.0,476.7L607.7,474.7L610.2,471.2L609.4,469.9L608.1,470.5L603.9,467.8L605.2,465.4L601.4,459.6L599.1,451.7L595.9,451.4L593.4,440.8L594.1,438.7L593.8,436.3L594.3,434.2L596.2,433.6L595.1,427.4L603.9,424.3L605.4,417.8L602.2,416.1L602.0,413.0L602.9,406.5L599.9,403.1L599.3,395.2L592.8,389.7L589.2,383.6L583.8,380.1L579.6,382.2L570.5,391.8L567.6,389.0Z"},{"n":"Utrecht","d":"M376.4,476.4L379.5,474.3L373.4,464.4L376.8,458.2L370.5,450.7L367.1,455.8L364.4,455.5L358.7,459.2L352.2,458.9L352.8,463.0L349.0,468.2L340.2,468.5L337.9,469.9L336.6,471.9L331.8,475.7L326.8,476.7L325.5,479.8L328.7,485.6L335.0,493.2L337.3,493.5L345.0,499.3L341.3,501.4L341.5,507.2L337.3,507.9L332.6,505.1L328.4,506.8L324.0,513.0L331.0,518.2L331.2,529.1L340.0,533.2L331.8,537.7L326.3,550.0L335.6,548.6L337.7,552.7L329.5,554.8L338.3,565.8L342.1,576.0L349.7,574.7L352.8,571.9L354.9,579.1L358.5,583.6L366.7,588.4L367.5,594.5L372.8,595.5L373.4,603.1L381.2,602.4L379.3,598.3L384.8,597.3L386.0,594.5L391.7,592.8L392.3,589.7L398.8,579.1L405.6,566.1L411.0,568.8L416.1,563.0L419.6,562.7L424.5,566.8L437.7,569.5L440.9,565.8L448.2,565.4L455.6,562.7L460.6,559.6L467.1,560.6L469.9,560.3L475.1,563.7L481.2,566.1L485.6,570.2L495.1,574.3L499.1,571.2L499.3,563.7L496.8,558.2L491.1,551.0L491.1,544.2L487.7,538.4L485.0,538.0L486.0,528.1L484.2,520.5L479.5,519.9L480.6,524.3L477.6,528.1L469.4,530.8L464.2,527.4L469.9,522.6L469.4,518.5L470.3,515.1L472.4,510.3L475.3,508.9L470.5,504.1L466.5,497.9L460.2,496.2L460.0,485.6L453.9,479.8L450.3,479.1L452.6,470.2L442.8,462.3L435.2,461.6L432.0,459.6L423.6,458.2L415.0,477.7L413.1,484.2L408.3,493.8L393.8,492.8L377.4,497.9L374.7,491.8L375.7,488.0L372.4,485.6L375.1,484.6L376.8,478.1Z"},{"n":"Noord-Holland","d":"M300.9,226.0L303.2,219.2L297.8,218.2L296.9,222.9ZM428.0,318.2L430.6,314.0L428.3,309.9L427.2,301.4L422.0,296.9L408.3,296.2L405.6,301.0L398.4,300.7L393.8,295.9L392.5,291.1L389.6,289.7L391.7,265.1L378.0,238.4L375.9,236.0L402.6,212.3L379.1,232.5L361.0,236.3L354.1,245.5L348.6,248.6L341.5,250.7L327.6,242.8L323.8,234.2L326.1,228.4L321.3,227.7L317.9,224.3L311.2,225.0L308.3,230.5L307.0,249.0L300.5,277.4L292.7,297.6L291.5,305.1L291.7,312.3L289.4,327.1L286.8,350.7L282.2,379.1L278.4,390.8L284.7,394.9L274.0,396.9L275.7,402.1L274.2,409.9L261.4,442.5L276.1,449.0L277.2,446.6L286.2,447.3L281.2,458.9L277.0,462.7L274.6,479.8L284.3,481.2L290.6,480.8L298.4,475.7L305.5,474.7L309.7,475.3L309.5,480.8L312.1,483.9L314.8,481.2L321.3,476.7L324.7,477.1L331.8,475.7L336.6,471.9L337.9,469.9L340.2,468.5L349.0,468.2L352.8,463.0L352.2,458.9L358.7,459.2L364.4,455.5L367.1,455.8L370.5,450.7L376.8,458.2L373.4,464.4L379.5,474.3L376.4,476.4L376.8,478.1L375.1,484.6L372.4,485.6L375.7,488.0L374.7,491.8L377.4,497.9L393.8,492.8L408.3,493.8L413.1,484.2L415.0,477.7L423.6,458.2L432.0,459.6L430.1,454.5L433.7,451.0L428.9,453.1L419.9,447.9L409.1,449.0L404.3,450.7L398.8,446.9L396.7,443.2L383.9,438.4L375.5,440.4L375.1,436.6L369.8,433.9L362.3,427.4L370.7,422.9L378.7,413.4L381.8,413.4L383.5,407.9L387.1,405.1L387.5,403.8L387.7,401.4L395.7,397.3L389.4,394.9L387.3,400.0L387.3,404.1L386.0,405.1L378.0,404.5L377.8,399.0L382.0,393.2L380.1,388.4L385.8,382.2L381.6,375.7L379.3,368.2L374.3,360.6L371.9,350.7L371.7,339.0L377.4,334.9L382.0,337.3L386.4,334.6L394.6,342.5L401.1,341.4L404.5,338.0L409.6,337.0L417.3,329.8L419.4,319.9ZM342.3,158.6L338.5,149.7L334.3,149.7L325.3,164.0L316.9,176.0L309.7,189.0L306.6,204.8L307.6,213.4L312.5,216.1L322.6,211.6L329.7,202.4L335.6,200.7L341.1,193.5L341.1,190.1L346.1,185.3L346.7,169.5L348.4,166.1L345.3,160.3Z"},{"n":"Zuid-Holland","d":"M223.0,641.4L213.1,639.0L212.7,641.4L223.0,647.9L228.4,648.3L231.8,644.9ZM148.4,630.8L143.7,626.7L137.6,633.2ZM305.5,474.7L298.4,475.7L290.6,480.8L284.3,481.2L274.6,479.8L277.0,462.7L281.2,458.9L286.2,447.3L277.2,446.6L276.1,449.0L261.4,442.5L251.5,463.4L236.2,490.8L227.4,503.4L221.3,510.6L212.4,519.5L204.9,529.5L197.9,537.0L186.4,551.4L177.1,559.9L167.5,556.8L166.4,559.6L158.4,558.6L154.2,559.9L150.2,566.1L149.8,570.5L154.2,582.9L157.4,583.9L166.0,580.8L168.7,582.9L163.7,593.8L171.9,606.5L165.2,615.1L157.6,606.5L146.7,609.6L138.5,614.0L134.9,614.4L128.2,618.5L127.1,622.3L129.2,629.5L128.2,633.2L123.8,637.7L124.4,638.4L127.1,637.7L130.1,629.8L135.7,628.4L136.0,625.3L144.2,624.0L146.9,622.3L155.3,622.6L161.8,630.5L161.2,638.4L162.2,642.8L170.0,653.4L172.3,654.8L180.9,654.8L190.2,658.6L190.2,663.4L190.6,663.7L197.3,663.4L203.8,666.4L206.4,670.9L216.6,672.9L228.8,669.5L232.6,667.5L234.9,662.7L242.5,657.9L241.2,653.8L242.9,650.0L249.9,652.1L255.7,652.4L269.0,657.2L281.2,653.4L287.7,649.7L291.5,651.7L299.4,649.3L312.5,638.4L316.3,629.5L320.2,625.7L325.1,623.3L335.4,623.6L344.4,616.8L350.7,614.0L373.2,616.8L374.3,609.2L367.7,608.2L367.3,604.5L373.4,603.1L372.8,595.5L367.5,594.5L366.7,588.4L358.5,583.6L354.9,579.1L352.8,571.9L349.7,574.7L342.1,576.0L338.3,565.8L329.5,554.8L337.7,552.7L335.6,548.6L326.3,550.0L331.8,537.7L340.0,533.2L331.2,529.1L331.0,518.2L324.0,513.0L328.4,506.8L332.6,505.1L337.3,507.9L341.5,507.2L341.3,501.4L345.0,499.3L337.3,493.5L335.0,493.2L328.7,485.6L325.5,479.8L324.7,477.1L321.3,476.7L311.6,483.9L309.5,480.8L309.7,475.3ZM169.8,610.3L173.2,608.6L177.4,613.4L185.1,616.4L190.4,615.4L195.8,621.6L202.2,623.3L205.9,627.4L209.9,634.9L230.9,642.8L242.5,649.7L238.3,656.8L226.7,656.5L220.4,651.7L212.9,647.9L208.7,642.1L197.1,631.5L184.1,627.1L177.1,621.9L166.8,616.8Z"},{"n":"Zeeland","d":"M56.5,757.9L39.9,764.4L38.0,763.0L27.1,768.2L25.2,769.9L26.1,777.7L28.4,782.9L22.7,789.4L26.7,793.8L25.2,797.3L33.0,809.2L42.0,814.4L58.4,813.0L55.7,799.0L65.8,795.9L68.5,798.6L71.7,793.2L82.2,798.6L85.7,797.9L93.3,802.7L106.3,805.1L114.5,809.6L113.3,813.0L113.7,824.0L120.0,825.7L128.2,825.0L134.3,820.9L133.6,828.8L149.0,823.3L154.7,817.1L158.9,814.4L165.4,813.0L169.8,814.0L192.5,796.9L207.0,778.1L200.9,769.2L194.0,769.5L186.8,773.6L181.3,773.6L168.7,771.9L161.4,759.9L152.1,757.9L150.0,760.6L150.9,765.1L148.1,771.6L140.2,773.6L129.7,782.2L117.0,781.5L113.3,777.4L99.4,777.4L91.8,770.2L82.2,768.5L70.4,764.4L62.6,758.6ZM124.4,638.4L123.8,637.7L118.3,643.5L108.0,642.8L96.7,646.9L92.2,650.7L90.1,655.1L92.2,665.1L99.2,670.2L97.5,677.4L94.1,678.4L91.0,683.9L90.6,691.8L80.7,695.5L73.3,693.8L63.5,695.2L39.5,711.6L38.5,716.4L44.1,722.6L51.7,728.1L58.2,738.7L68.3,746.9L82.0,745.2L85.7,740.8L92.9,745.2L99.0,751.4L101.9,756.5L106.1,755.1L113.5,760.3L118.1,765.1L127.8,763.4L131.5,761.3L136.8,762.0L142.1,748.6L141.0,744.9L152.3,739.0L154.9,741.8L164.5,749.3L168.1,750.0L170.6,755.5L180.1,759.2L190.6,762.0L199.0,757.9L206.4,762.0L208.7,768.8L215.8,768.5L213.9,765.8L213.1,754.8L215.6,751.7L203.6,724.3L207.2,711.3L205.5,704.1L197.9,693.8L197.9,688.7L202.6,682.2L207.4,680.1L199.8,678.4L193.1,673.3L190.2,663.4L180.5,665.1L176.9,668.8L166.8,662.7L160.8,662.0L159.1,656.5L153.8,651.4L151.9,646.2L139.5,646.9L134.1,642.5L126.1,644.5L121.0,644.2ZM117.0,658.6L120.8,663.0L127.6,665.1L131.8,668.8L134.7,677.1L134.5,680.5L139.5,681.8L130.1,693.2L122.9,689.7L115.4,690.1L110.1,692.8L104.0,692.8L97.7,694.5L90.8,691.4L91.8,684.2L97.5,679.8L99.8,668.2L105.9,666.1ZM178.0,668.8L180.5,666.4L189.1,665.1L191.2,667.8L189.5,672.9L182.8,673.3L178.8,677.1L178.4,680.5L184.1,687.3L190.0,687.3L189.3,690.8L180.3,690.8L178.8,688.4L173.4,687.3L162.6,692.8L155.5,694.2L154.2,698.3L158.7,700.0L167.9,707.9L173.8,717.5L192.1,718.2L194.6,720.9L194.8,725.3L202.6,728.8L204.3,738.4L204.5,746.9L195.6,745.2L189.8,749.0L185.5,749.7L177.1,744.5L169.4,732.2L166.6,725.0L157.6,718.8L148.6,715.4L145.0,717.5L142.3,711.0L129.9,712.3L130.9,707.2L136.0,705.5L134.9,701.4L130.1,693.2L139.5,681.8L145.0,680.1L150.9,687.0L159.1,686.0L168.1,681.2L172.5,680.8L178.0,675.3ZM96.0,720.2L91.0,715.8L88.3,708.9L82.8,705.5L79.4,700.3L82.2,695.9L85.1,702.4L92.0,706.8L99.8,717.1Z"},{"n":"Noord-Brabant","d":"M549.3,637.7L546.8,637.3L531.6,639.7L524.3,637.3L521.6,632.9L515.3,630.8L513.6,627.4L505.8,624.0L501.2,616.4L497.6,616.4L491.5,613.0L485.0,613.7L481.4,617.8L476.6,616.8L473.4,613.4L469.9,613.4L467.3,618.2L460.0,619.9L452.2,616.1L445.3,626.7L442.1,638.7L429.9,644.9L427.2,643.8L419.2,645.9L412.3,642.8L402.0,642.8L394.4,644.5L396.7,640.1L396.7,632.5L387.9,627.4L381.8,629.8L377.8,624.0L371.1,620.5L367.7,616.1L350.7,614.0L344.4,616.8L335.4,623.6L325.1,623.3L320.2,625.7L316.3,629.5L312.5,638.4L299.4,649.3L291.2,651.7L284.1,658.6L268.3,662.7L260.6,663.4L247.1,658.6L242.5,657.9L240.4,659.6L239.1,668.2L231.1,675.3L224.2,676.0L207.4,680.1L202.6,682.2L197.9,688.7L197.9,693.8L205.5,704.1L207.2,711.3L203.6,724.3L215.6,751.7L213.1,754.8L213.9,765.8L215.8,768.5L228.0,767.8L229.3,774.7L238.5,776.0L246.3,772.3L248.4,768.8L240.0,757.5L238.3,753.1L240.6,751.0L241.0,745.9L238.5,743.5L250.5,736.6L259.9,733.9L270.7,732.2L272.8,735.3L269.0,743.2L270.0,752.4L278.4,749.0L290.0,751.4L298.4,751.4L297.8,745.2L303.2,742.5L308.3,736.6L310.8,731.5L315.8,726.0L328.9,727.7L330.1,731.8L334.1,733.2L333.3,739.4L330.5,743.5L331.8,752.4L323.0,749.0L318.8,749.7L319.6,755.1L323.4,757.2L334.1,755.1L343.8,754.5L352.8,761.6L360.0,752.7L368.6,744.9L370.0,735.6L372.4,732.2L377.4,736.0L384.3,736.0L389.8,749.7L382.7,762.7L392.3,773.6L395.5,778.4L395.9,789.0L402.0,791.1L409.8,786.6L418.6,792.8L415.2,805.5L417.7,807.9L423.0,805.8L429.9,807.9L438.3,807.2L440.4,802.7L455.4,807.5L460.6,800.7L465.5,799.7L469.7,794.5L476.2,796.2L485.0,807.5L484.4,813.7L486.7,821.6L497.8,818.8L499.3,803.4L508.9,789.4L551.4,776.4L563.4,765.4L551.0,743.2L548.7,728.8L547.0,724.7L543.8,703.4L555.0,705.5L558.3,708.2L564.2,707.5L578.9,702.1L585.0,707.2L586.3,697.9L583.3,693.2L582.1,684.2L577.0,679.1L572.0,676.0L570.1,672.3L570.5,665.8L568.4,654.5L564.0,652.1L556.9,650.7L553.7,647.9L552.7,640.4Z"},{"n":"Limburg","d":"M568.0,641.1L560.0,639.4L555.4,630.8L550.1,631.5L549.3,637.7L552.7,640.4L553.7,647.9L556.9,650.7L564.0,652.1L568.4,654.5L570.5,665.8L570.1,672.3L572.0,676.0L577.0,679.1L582.1,684.2L583.3,693.2L586.3,697.9L585.0,707.2L578.9,702.1L564.2,707.5L558.3,708.2L555.0,705.5L543.8,703.4L547.0,724.7L548.7,728.8L551.0,743.2L563.4,765.4L551.4,776.4L508.9,789.4L499.3,803.4L497.8,818.8L486.7,821.6L503.5,828.8L506.0,833.9L516.5,834.9L523.2,833.2L528.9,834.2L531.2,845.5L540.9,839.7L543.4,844.5L547.6,847.6L544.3,852.4L537.9,856.8L543.0,863.0L540.9,865.8L534.8,866.4L536.7,870.9L534.4,877.1L530.0,876.7L527.0,885.6L530.8,889.7L528.7,897.9L519.0,910.3L526.6,911.6L520.3,924.3L520.1,927.7L514.4,928.1L511.3,935.3L503.1,941.4L502.0,950.0L505.6,957.5L513.6,961.6L514.2,974.3L511.3,979.1L513.8,981.2L519.0,977.7L523.0,980.5L524.7,976.0L531.0,971.6L537.3,980.8L545.3,977.7L549.1,978.1L553.9,976.0L554.8,980.8L561.3,982.5L563.4,980.5L571.4,979.1L572.4,981.2L582.3,981.5L583.8,974.7L572.6,966.4L574.7,962.3L578.7,965.4L583.1,961.0L581.2,954.1L581.9,950.0L594.1,944.9L596.4,941.1L593.6,933.9L595.1,924.0L581.7,919.5L581.4,903.1L570.7,904.1L568.4,901.4L556.2,905.8L558.1,896.6L552.4,891.1L552.2,884.2L554.1,879.5L559.6,874.3L564.8,885.3L571.1,881.8L571.6,876.4L580.0,866.1L585.4,864.0L593.8,856.5L597.2,851.0L604.4,847.6L612.1,846.2L614.6,843.2L607.1,838.0L615.9,833.6L612.5,830.8L603.5,835.3L601.6,837.3L595.1,838.4L593.2,834.6L592.2,821.6L595.9,820.9L593.2,814.0L595.9,812.3L604.1,803.1L608.3,795.2L613.4,783.2L617.8,781.2L625.4,774.0L622.8,763.7L621.0,760.3L624.9,734.6L622.6,729.1L622.4,721.6L619.9,716.8L615.1,712.7L610.9,703.1L605.4,698.3L603.3,694.2L597.0,689.7L602.5,672.3L596.4,671.2L585.6,666.8L583.3,654.5L587.3,651.7L576.6,644.5L568.4,644.5Z"}],"nl":"M91.8,770.2L99.4,777.4L113.3,777.4L117.0,781.5L129.7,782.2L140.2,773.6L148.1,771.6L150.9,765.1L150.0,760.6L152.1,757.9L161.4,759.9L168.7,771.9L181.3,773.6L186.8,773.6L194.0,769.5L200.9,769.2L207.0,778.1L192.5,796.9L169.8,814.0L165.4,813.0L158.9,814.4L154.7,817.1L149.0,823.3L133.6,828.8L134.3,820.9L128.2,825.0L120.0,825.7L113.7,824.0L113.3,813.0L114.5,809.6L106.3,805.1L93.3,802.7L85.7,797.9L82.2,798.6L71.7,793.2L68.5,798.6L65.8,795.9L55.7,799.0L58.4,813.0L42.0,814.4L33.0,809.2L25.2,797.3L26.7,793.8L22.7,789.4L28.4,782.9L26.1,777.7L25.2,769.9L27.1,768.2L38.0,763.0L39.9,764.4L56.5,757.9L62.6,758.6L70.4,764.4L82.2,768.5ZM484.4,813.7L485.0,807.5L476.2,796.2L469.7,794.5L465.5,799.7L460.6,800.7L455.4,807.5L440.4,802.7L438.3,807.2L429.9,807.9L423.0,805.8L417.7,807.9L415.2,805.5L418.6,792.8L409.8,786.6L402.0,791.1L395.9,789.0L395.5,778.4L392.3,773.6L382.7,762.7L389.8,749.7L384.3,736.0L377.4,736.0L372.4,732.2L370.0,735.6L368.6,744.9L360.0,752.7L352.8,761.6L343.8,754.5L334.1,755.1L323.4,757.2L319.6,755.1L318.8,749.7L323.0,749.0L331.8,752.4L330.5,743.5L333.3,739.4L334.1,733.2L330.1,731.8L328.9,727.7L315.8,726.0L310.8,731.5L308.3,736.6L303.2,742.5L297.8,745.2L298.4,751.4L290.0,751.4L278.4,749.0L270.0,752.4L269.0,743.2L272.8,735.3L270.7,732.2L259.9,733.9L250.5,736.6L238.5,743.5L241.0,745.9L240.6,751.0L238.3,753.1L240.0,757.5L248.4,768.8L246.3,772.3L238.5,776.0L229.3,774.7L228.0,767.8L208.7,768.8L206.4,762.0L199.0,757.9L190.6,762.0L180.1,759.2L170.6,755.5L168.1,750.0L164.5,749.3L154.9,741.8L152.3,739.0L141.0,744.9L142.1,748.6L136.8,762.0L131.5,761.3L127.8,763.4L118.1,765.1L113.5,760.3L106.1,755.1L101.9,756.5L99.0,751.4L92.9,745.2L85.7,740.8L82.0,745.2L68.3,746.9L58.2,738.7L51.7,728.1L44.1,722.6L38.5,716.4L39.5,711.6L63.5,695.2L73.3,693.8L80.7,695.5L90.6,691.8L91.0,683.9L94.1,678.4L97.5,677.4L99.2,670.2L92.2,665.1L90.1,655.1L92.2,650.7L96.7,646.9L108.0,642.8L118.3,643.5L128.2,633.2L129.2,629.5L127.1,622.3L128.2,618.5L134.9,614.4L138.5,614.0L146.7,609.6L157.6,606.5L165.2,615.1L171.9,606.5L163.7,593.8L168.7,582.9L166.0,580.8L157.4,583.9L154.2,582.9L149.8,570.5L150.2,566.1L154.2,559.9L158.4,558.6L166.4,559.6L167.5,556.8L177.1,559.9L186.4,551.4L197.9,537.0L204.9,529.5L212.4,519.5L221.3,510.6L227.4,503.4L236.2,490.8L251.5,463.4L261.4,442.5L274.2,409.9L275.7,402.1L274.0,396.9L284.7,394.9L278.4,390.8L282.2,379.1L286.8,350.7L289.4,327.1L291.7,312.3L291.5,305.1L292.7,297.6L300.5,277.4L307.0,249.0L308.3,230.5L311.2,225.0L317.9,224.3L321.3,227.7L326.1,228.4L323.8,234.2L327.6,242.8L341.5,250.7L348.6,248.6L354.1,245.5L361.0,236.3L379.1,232.5L429.3,189.4L441.1,185.6L447.2,179.8L447.4,175.3L452.6,170.5L456.0,150.0L462.1,137.0L469.2,129.8L478.5,124.3L485.8,114.7L491.1,109.6L526.6,91.4L531.4,90.4L548.5,80.8L554.3,78.4L563.8,79.5L581.2,74.3L597.8,72.6L607.1,74.0L615.1,70.2L618.0,71.6L619.7,72.6L629.1,70.2L632.7,70.5L640.5,75.3L642.2,77.7L649.3,72.6L655.2,69.9L665.1,67.8L690.9,64.7L692.8,65.4L703.7,62.3L711.1,57.9L724.1,54.1L734.6,52.7L745.6,56.5L748.9,53.8L759.6,58.2L763.2,61.6L761.5,72.6L764.5,76.7L766.4,90.4L774.1,98.3L781.3,103.1L793.7,108.9L805.7,110.3L804.4,120.9L809.9,126.0L816.2,126.7L820.8,129.1L831.3,131.5L833.6,138.7L833.8,144.5L828.1,156.8L825.6,164.7L826.5,170.5L830.7,173.6L829.8,184.6L832.8,208.6L826.3,232.2L809.9,258.9L806.3,263.7L807.6,267.8L803.1,277.4L799.6,334.2L796.8,338.0L782.8,333.6L775.2,336.3L771.0,335.6L766.4,331.8L750.6,332.9L741.1,331.5L733.8,333.9L727.1,339.7L730.6,344.2L729.0,353.1L739.0,361.6L735.9,363.4L730.6,362.0L728.3,366.8L721.0,365.4L726.0,376.4L724.5,388.4L736.1,395.9L740.7,397.3L757.3,397.3L759.0,400.3L775.8,405.8L779.8,402.7L783.4,395.2L786.7,395.5L790.3,407.9L795.4,416.4L800.4,418.2L803.1,427.1L803.1,434.2L799.8,439.0L798.1,445.2L793.5,454.8L793.9,459.6L796.8,467.1L801.9,472.3L800.8,474.3L792.0,477.7L785.7,477.1L777.7,492.8L770.4,493.8L763.2,501.4L761.3,509.2L757.5,513.7L750.8,514.4L737.8,514.0L735.7,525.7L732.3,529.1L724.1,530.8L722.4,541.1L727.9,541.1L736.1,545.2L748.3,555.5L751.7,556.8L752.1,567.1L745.8,568.8L744.7,577.1L739.7,583.6L736.3,584.6L729.6,590.4L723.5,583.9L719.7,583.6L711.9,587.7L701.0,591.1L694.7,595.2L683.2,600.0L682.9,602.1L675.6,604.5L672.6,601.0L668.0,601.0L660.0,598.3L659.4,602.1L663.6,604.8L663.4,613.7L654.2,611.3L650.4,605.8L642.2,606.5L641.1,601.0L636.7,597.9L632.9,600.0L623.1,600.0L616.5,594.9L618.0,591.8L610.9,587.3L601.0,590.8L606.7,593.8L608.3,599.3L613.0,602.1L613.0,609.2L606.5,607.2L600.4,606.8L591.1,601.0L589.4,605.5L585.4,608.6L575.1,612.7L570.1,610.6L566.3,615.1L573.5,624.0L576.0,634.9L568.0,641.1L568.4,644.5L576.6,644.5L587.3,651.7L583.3,654.5L585.6,666.8L596.4,671.2L602.5,672.3L597.0,689.7L603.3,694.2L605.4,698.3L610.9,703.1L615.1,712.7L619.9,716.8L622.4,721.6L622.6,729.1L624.9,734.6L621.0,760.3L622.8,763.7L625.4,774.0L617.8,781.2L613.4,783.2L608.3,795.2L604.1,803.1L595.9,812.3L593.2,814.0L595.9,820.9L592.2,821.6L593.2,834.6L595.1,838.4L601.6,837.3L603.5,835.3L612.5,830.8L615.9,833.6L607.1,838.0L614.6,843.2L612.1,846.2L604.4,847.6L597.2,851.0L593.8,856.5L585.4,864.0L580.0,866.1L571.6,876.4L571.1,881.8L564.8,885.3L559.6,874.3L554.1,879.5L552.2,884.2L552.4,891.1L558.1,896.6L556.2,905.8L568.4,901.4L570.7,904.1L581.4,903.1L581.7,919.5L595.1,924.0L593.6,933.9L596.4,941.1L594.1,944.9L581.9,950.0L581.2,954.1L583.1,961.0L578.7,965.4L574.7,962.3L572.6,966.4L583.8,974.7L582.3,981.5L572.4,981.2L571.4,979.1L563.4,980.5L561.3,982.5L554.8,980.8L553.9,976.0L549.1,978.1L545.3,977.7L537.3,980.8L531.0,971.6L524.7,976.0L523.0,980.5L519.0,977.7L513.8,981.2L511.3,979.1L514.2,974.3L513.6,961.6L505.6,957.5L502.0,950.0L503.1,941.4L511.3,935.3L514.4,928.1L520.1,927.7L520.3,924.3L526.6,911.6L519.0,910.3L528.7,897.9L530.8,889.7L527.0,885.6L530.0,876.7L534.4,877.1L536.7,870.9L534.8,866.4L540.9,865.8L543.0,863.0L537.9,856.8L544.3,852.4L547.6,847.6L543.4,844.5L540.9,839.7L531.2,845.5L528.9,834.2L523.2,833.2L516.5,834.9L506.0,833.9L503.5,828.8L486.7,821.6ZM611.9,72.6L610.4,78.1L611.9,86.0L619.3,91.4L623.7,91.1L624.3,95.2L631.2,93.2L638.2,95.5L630.4,92.8L626.6,86.6L623.7,87.7L616.7,74.3L618.0,71.6ZM375.9,236.0L378.0,238.4L391.7,265.1L389.6,289.7L392.5,291.1L393.8,295.9L398.4,300.7L405.6,301.0L408.3,296.2L422.0,296.9L427.2,301.4L428.3,309.9L430.6,314.0L428.0,318.2L431.2,317.8L442.1,322.6L443.6,324.0L451.8,332.5L463.6,351.4L466.3,359.6L460.2,364.4L457.7,370.5L461.9,371.6L463.6,366.4L473.0,364.4L485.2,352.1L499.7,347.6L504.7,343.5L497.2,331.8L492.3,327.7L492.8,293.5L506.4,271.2L517.6,267.8L511.7,265.1L506.0,265.8L503.3,260.3L497.6,263.4L490.7,264.0L486.9,269.2L482.3,269.5L472.8,265.1L463.1,262.0L457.3,264.4L451.4,261.3L444.6,255.5L442.8,252.1L445.7,246.9L453.3,243.2L452.0,233.2L454.5,224.7L451.2,211.3L453.5,205.5L446.7,193.5L450.3,190.8L449.5,186.0L446.5,181.2L440.0,187.0L430.1,189.4ZM419.4,319.9L417.3,329.8L409.6,337.0L404.5,338.0L401.1,341.4L394.6,342.5L386.4,334.6L382.0,337.3L377.4,334.9L371.7,339.0L371.9,350.7L374.3,360.6L379.3,368.2L381.6,375.7L385.8,382.2L380.1,388.4L382.0,393.2L377.8,399.0L378.0,404.5L386.0,405.1L387.3,404.1L387.3,400.0L389.4,394.9L395.7,397.3L387.7,401.4L387.5,403.8L387.1,405.1L383.5,407.9L381.8,413.4L378.7,413.4L370.7,422.9L362.3,427.4L369.8,433.9L375.1,436.6L375.5,440.4L383.9,438.4L396.7,443.2L394.8,423.6L401.8,417.8L422.0,405.8L447.2,388.0L450.7,386.6L459.1,379.8L457.3,373.3L457.5,370.5L459.8,364.7L465.9,358.9L463.3,351.4L451.6,332.5L443.4,324.0L431.8,318.5ZM398.8,446.9L404.3,450.7L409.1,449.0L419.9,447.9L428.9,453.1L433.7,451.0L427.6,446.2L414.2,440.4L406.4,440.1L396.9,443.5ZM430.1,454.5L432.0,459.6L435.2,461.6L442.8,462.3L452.6,470.2L474.1,464.0L478.5,464.4L481.4,459.2L485.2,448.3L488.8,442.8L496.1,436.3L496.8,432.5L500.3,429.5L505.0,429.8L510.2,425.0L514.8,424.3L523.2,418.5L538.2,405.5L540.5,402.1L539.4,398.3L535.2,404.5L524.7,412.7L519.0,412.3L506.6,418.5L499.1,424.7L495.9,429.5L490.0,430.5L486.3,428.8L480.8,434.9L483.9,440.4L483.9,444.9L478.9,460.6L453.9,468.2L448.6,464.4L433.7,451.0ZM544.5,394.9L549.7,377.1L549.1,376.4L547.8,368.5L547.8,377.4L545.9,386.0L539.4,398.3ZM361.4,615.1L367.7,616.1L373.2,616.8ZM326.8,476.7L324.7,477.1L325.5,479.8ZM234.9,662.7L232.6,667.5L228.8,669.5L216.6,672.9L206.4,670.9L203.8,666.4L197.3,663.4L190.6,663.7L193.1,673.3L199.8,678.4L207.4,680.1L224.2,676.0L231.1,675.3L239.1,668.2L240.4,659.6ZM268.3,662.7L284.1,658.6L291.2,651.7L287.7,649.7L281.2,653.4L269.0,657.2L255.7,652.4L249.9,652.1L242.9,650.0L241.2,653.8L242.5,657.9L247.1,658.6L260.6,663.4ZM134.1,642.5L139.5,646.9L151.9,646.2L153.8,651.4L159.1,656.5L160.8,662.0L166.8,662.7L176.9,668.8L180.5,665.1L190.2,663.4L190.2,658.6L180.9,654.8L172.3,654.8L170.0,653.4L162.2,642.8L161.2,638.4L161.8,630.5L155.3,622.6L146.9,622.3L144.2,624.0L136.0,625.3L135.7,628.4L130.1,629.8L127.1,637.7L124.4,638.4L121.0,644.2L126.1,644.5ZM120.8,663.0L117.0,658.6L105.9,666.1L99.8,668.2L97.5,679.8L91.8,684.2L90.8,691.4L97.7,694.5L104.0,692.8L110.1,692.8L115.4,690.1L122.9,689.7L130.1,693.2L134.9,701.4L136.0,705.5L130.9,707.2L129.9,712.3L142.3,711.0L145.0,717.5L148.6,715.4L157.6,718.8L166.6,725.0L169.4,732.2L177.1,744.5L185.5,749.7L189.8,749.0L195.6,745.2L204.5,746.9L204.3,738.4L202.6,728.8L194.8,725.3L194.6,720.9L192.1,718.2L173.8,717.5L167.9,707.9L158.7,700.0L154.2,698.3L155.5,694.2L162.6,692.8L173.4,687.3L178.8,688.4L180.3,690.8L189.3,690.8L190.0,687.3L184.1,687.3L178.4,680.5L178.8,677.1L182.8,673.3L189.5,672.9L191.2,667.8L189.1,665.1L180.5,666.4L178.0,668.8L178.0,675.3L172.5,680.8L168.1,681.2L159.1,686.0L150.9,687.0L145.0,680.1L139.5,681.8L134.5,680.5L134.7,677.1L131.8,668.8L127.6,665.1ZM79.4,700.3L82.8,705.5L88.3,708.9L91.0,715.8L96.0,720.2L99.8,717.1L92.0,706.8L85.1,702.4L82.2,695.9ZM208.7,642.1L212.9,647.9L220.4,651.7L226.7,656.5L238.3,656.8L242.5,649.7L230.9,642.8L209.9,634.9L205.9,627.4L202.2,623.3L195.8,621.6L190.4,615.4L185.1,616.4L177.4,613.4L173.2,608.6L169.8,610.3L166.8,616.8L177.1,621.9L184.1,627.1L197.1,631.5ZM553.9,342.5L563.4,344.5L569.9,341.1L574.9,341.4L581.9,334.6L574.3,329.5L570.3,336.0L542.6,344.9L507.1,344.9L502.2,346.6L505.4,350.3L526.6,355.5L538.6,357.2L548.0,367.8L541.9,353.8L544.9,345.5ZM212.7,641.4L213.1,639.0L223.0,641.4L231.8,644.9L228.4,648.3L223.0,647.9ZM143.7,626.7L148.4,630.8L137.6,633.2ZM296.9,222.9L297.8,218.2L303.2,219.2L300.9,226.0ZM346.1,185.3L341.1,190.1L341.1,193.5L335.6,200.7L329.7,202.4L322.6,211.6L312.5,216.1L307.6,213.4L306.6,204.8L309.7,189.0L316.9,176.0L325.3,164.0L334.3,149.7L338.5,149.7L342.3,158.6L345.3,160.3L348.4,166.1L346.7,169.5ZM350.7,138.4L342.5,138.7L340.2,142.5L335.2,141.1L337.1,136.3L353.7,125.0L359.5,119.5L375.3,108.9L381.2,106.8L388.8,109.2L381.0,111.6L374.7,116.1L361.9,121.6L363.3,127.1ZM394.4,109.6L401.4,111.0L395.7,115.1ZM442.8,79.5L429.3,85.6L421.7,84.6L414.2,87.7L407.9,93.2L399.5,92.5L402.4,85.6L406.8,79.5L410.0,77.1L471.8,60.3L481.8,62.0L481.4,64.0L467.8,69.5L464.2,73.6L448.4,74.7ZM536.9,62.3L521.1,60.6L515.5,65.1L510.6,66.8L502.9,66.1L497.2,61.6L497.2,57.2L504.7,51.4L508.1,51.0L513.8,54.1L529.8,54.8L563.4,52.1L555.0,57.9ZM619.3,50.7L611.7,50.7L602.0,53.8L602.9,46.9L609.4,42.1L638.6,38.0L650.4,35.6L659.4,35.3L657.5,38.7L648.9,39.0L647.2,40.8L635.5,44.9L630.8,48.6ZM684.0,23.6L684.2,28.1L680.0,31.8L674.7,27.7L680.2,22.6Z"};/*GEO-END*/</script>
+<script>
+"use strict";
+const LOKAAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || location.protocol === "file:";
+const DATA_BASE = LOKAAL ? "wgt/" : "https://data.weerlab.nl/";
+const DATA_URL = DATA_BASE + "wgt_latest.json";
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 1) => (v == null || !isFinite(v)) ? "–" : v.toFixed(d).replace(".", ",").replace("-", "−");
+const TZ = "Europe/Amsterdam";
+const dagFmt = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, weekday: "short", day: "numeric", month: "short"});
+const dagKort = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, weekday: "short", day: "numeric"});
+const uurFmt = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, hour: "2-digit", minute: "2-digit"});
+const uurNr = new Intl.DateTimeFormat("nl-NL", {timeZone: TZ, hour: "2-digit", hourCycle: "h23"});
+const dagKey = new Intl.DateTimeFormat("sv-SE", {timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"});
+
+// ---------- thema (zelfde sleutel als de rest van Weerlab) ----------
+(function () {
+  try { const t = localStorage.getItem("weerlab_theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch (e) {}
+  $("themaBtn").onclick = () => {
+    const nu = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const nieuw = nu === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nieuw;
+    try { localStorage.setItem("weerlab_theme", nieuw); } catch (e) {}
+    teken();
+  };
+})();
+
+// ---------- kaartgeometrie (identiek aan beta_neerslagstations) ----------
+const [PLON0, PLAT1, COSL, K] = GEO.proj;
+const xy = (lon, lat) => [(lon - PLON0) * COSL * K, (PLAT1 - lat) * K];
+const lonlat = (x, y) => [x / (COSL * K) + PLON0, PLAT1 - y / K];
+const svg = $("svg");
+svg.setAttribute("viewBox", `0 0 ${GEO.w} ${GEO.h}`);
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+GEO.buren.forEach(b => el("path", {d: b.d, class: "buur"}, $("gBuren")));
+$("nlVlak").setAttribute("d", GEO.nl); $("nlClipPad").setAttribute("d", GEO.nl); $("nlKust").setAttribute("d", GEO.nl);
+GEO.provincies.forEach(p => el("path", {d: p.d, class: "prov"}, $("gProv")));
+
+// ---------- kleurschalen ----------
+const TEMP = [[-12,"#084594"],[-9,"#1565c0"],[-6,"#1e88e5"],[-3,"#42a5f5"],[-1,"#90caf9"],[0,"#b2dfdb"],[3,"#2e8b57"],[6,"#66bb6a"],[9,"#cddc39"],[12,"#ffeb3b"],[15,"#fbc02d"],[18,"#f57f17"],[21,"#ef6c00"],[25,"#d84315"],[30,"#8e1b0e"]];
+const DIFF = [[-6,"#08306b"],[-4,"#2171b5"],[-2,"#6baed6"],[-0.5,"#deebf7"],[0,"#f7f7f7"],[0.5,"#fde0d2"],[2,"#f4a582"],[4,"#d6604d"],[6,"#8e1b0e"]];
+const KANS = [[0,"#f8fafc"],[5,"#ede9fe"],[15,"#ddd6fe"],[30,"#c4b5fd"],[50,"#8b5cf6"],[70,"#6d28d9"],[90,"#4c1d95"],[100,"#2e1065"]];
+const SIGMA = [[0.3,"#ecfdf5"],[0.8,"#a7f3d0"],[1.2,"#fde68a"],[1.8,"#fb923c"],[2.5,"#dc2626"],[3.5,"#7f1d1d"]];
+const VOCHT = [[0,"#8c510a"],[20,"#d8b365"],[40,"#f6e8c3"],[65,"#c7eae5"],[85,"#5ab4ac"],[100,"#01665e"]];
+const BODEM_KL = {zand:["Zand","#f2d16b"], zavel:["Zavel","#b8d99a"], klei:["Klei","#3f9b8a"], veen:["Veen","#7b5ea7"], loss:["Löss","#d9894a"], bebouwd:["Bebouwd / ongekarteerd","#9aa3ad"], water:["Water","#9cc9e6"]};
+const REGIME = {A:"heldere, (vrijwel) windstille stralingsnacht", B:"helder met matige wind", C:"bewolkt", X:"wisselende bewolking", E:"bewolking neemt toe", D:"bewolking trekt weg", F:"vochtig / mistgevoelig", G:"neerslag of front", I:"sneeuwdek"};
+function hex2rgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function maakLut(stops, lo, hi, n = 512) {
+  const s = stops.map(([v, c]) => [v, hex2rgb(c)]); const lut = new Uint8ClampedArray(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = lo + (hi - lo) * i / (n - 1); let j = 0;
+    while (j < s.length - 2 && v > s[j + 1][0]) j++;
+    const [v0, c0] = s[j], [v1, c1] = s[j + 1]; const f = Math.min(1, Math.max(0, (v - v0) / (v1 - v0)));
+    for (let k = 0; k < 3; k++) lut[i * 3 + k] = c0[k] + (c1[k] - c0[k]) * f;
+  }
+  return {lut, lo, hi, n, stops};
+}
+const LUT = {temp: maakLut(TEMP, -12, 30), diff: maakLut(DIFF, -6, 6), kans: maakLut(KANS, 0, 100), sigma: maakLut(SIGMA, 0.3, 3.5), vocht: maakLut(VOCHT, 0, 100)};
+
+// ---------- data ----------
+let D = null, C = 0, NY = 0, NX = 0, NT = 0, cellVan = null, naast = null, ll = null;
+const staat = {laag: "t10", ti: 0, ni: 0, drempel: 0, vast: null, hov: null};
+function dec(b64, T) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new T(u.buffer); }
+const i2 = b => dec(b, Int16Array), u1 = b => dec(b, Uint8Array);
+const v16 = x => x === -32768 ? NaN : x / 10;
+
+async function laad() {
+  try {
+    const r = await fetch(DATA_URL + "?t=" + Date.now(), {cache: "no-cache"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    const g = j.rooster; NY = g.ny; NX = g.nx; C = g.iy.length; NT = j.tijden.length;
+    cellVan = new Int32Array(NY * NX).fill(-1);
+    ll = new Float64Array(C * 2);
+    for (let c = 0; c < C; c++) { cellVan[g.iy[c] * NX + g.ix[c]] = c; ll[2 * c] = g.lat0 + g.iy[c] * g.dlat; ll[2 * c + 1] = g.lon0 + g.ix[c] * g.dlon; }
+    // dichtstbijzijnde geldige cel voor randcellen (alleen weergave; clip op NL-contour)
+    naast = new Int32Array(NY * NX);
+    for (let y = 0; y < NY; y++) for (let x = 0; x < NX; x++) {
+      let best = -1, bd = 1e9;
+      if (cellVan[y * NX + x] >= 0) { naast[y * NX + x] = cellVan[y * NX + x]; continue; }
+      for (let r = 1; r < 6 && best < 0; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const yy = y + dy, xx = x + dx; if (yy < 0 || xx < 0 || yy >= NY || xx >= NX) continue;
+        const c = cellVan[yy * NX + xx]; if (c >= 0) { const d = dy * dy + dx * dx; if (d < bd) { bd = d; best = c; } }
+      }
+      naast[y * NX + x] = best;
+    }
+    const V = j.velden;
+    D = {j, tijden: j.tijden.map(t => new Date(t)),
+      t10: i2(V.t10), t2: i2(V.t2), sigma: i2(V.sigma), p0: u1(V.p0), pm2: u1(V.pm2), u: i2(V.u), c: u1(V.c), reg: u1(V.reg),
+      mix: i2(V.mix), mos: i2(V.mos),
+      pm: Object.fromEntries(Object.entries(j.per_model).map(([k, v]) => [k, i2(v)])),
+      gw: Object.fromEntries(Object.entries(j.gewicht).map(([k, v]) => [k, u1(v)])),
+      nachten: j.nachten.map(n => ({...n, t10min: i2(n.t10min), sigma: i2(n.sigma), p0: u1(n.p0), pm2: u1(n.pm2), uur: u1(n.uur), t2min: i2(n.t2min), reg: u1(n.reg), cmin: u1(n.cmin), umin: i2(n.umin)})),
+      bodem: u1(j.statisch.bodem), klassen: j.statisch.klassen,
+      frac: Object.fromEntries(Object.entries(j.statisch.frac).map(([k, v]) => [k, u1(v)])),
+      vocht: u1(j.statisch.vocht), p24: i2(j.statisch.p24), p7: i2(j.statisch.p7), p30: i2(j.statisch.p30),
+      hoogte: i2(j.statisch.hoogte), zee: i2(j.statisch.zee), plaats: j.statisch.plaats};
+    // start op het eerstvolgende hele uur ≥ nu
+    const nu = Date.now(); staat.ti = Math.max(0, D.tijden.findIndex(t => t.getTime() >= nu - 30 * 60e3));
+    bouwTijd(); statusEnMeldingen(); kpis(); runsLijst(); teken(); drieNachten();
+  } catch (e) {
+    $("statusBadge").className = "badge oud"; $("statusBadge").innerHTML = "<i></i>Geen gegevens";
+    toonMelding("De WGT-verwachting kon niet worden geladen (" + e.message + "). Er wordt bewust géén oude of geschatte kaart getoond.", true);
+  }
+}
+function toonMelding(t, fout) { const m = $("melding"); m.textContent = t; m.className = "melding" + (fout ? " fout" : ""); m.hidden = false; }
+
+// ---------- tijdbediening ----------
+let speel = null;
+function bouwTijd() {
+  const dagen = $("dagen"); dagen.innerHTML = "";
+  const perDag = new Map();
+  D.tijden.forEach((t, i) => { const k = dagKey.format(t); if (!perDag.has(k)) perDag.set(k, []); perDag.get(k).push(i); });
+  staat.perDag = perDag;
+  const nachtLaag = staat.laag === "nmin" || staat.laag === "kans";
+  const statisch = staat.laag === "bodem" || staat.laag === "vocht";
+  $("tijdPaneel").hidden = statisch;
+  if (nachtLaag) {
+    D.nachten.forEach((n, i) => {
+      const s = new Date(n.start), e = new Date(n.eind);
+      const b = el2("button", {type: "button", "aria-pressed": String(i === staat.ni)}, dagen);
+      b.className = "nacht"; b.style.minWidth = "180px";
+      b.textContent = `Nacht ${dagKort.format(s)} → ${dagKort.format(e)}`;
+      b.onclick = () => { staat.ni = i; bouwTijd(); teken(); kpis(); };
+    });
+    $("uren").hidden = true;
+  } else {
+    for (const [k, idx] of perDag) {
+      const b = el2("button", {type: "button", "aria-pressed": String(idx.includes(staat.ti))}, dagen);
+      b.textContent = dagFmt.format(D.tijden[idx[0]]);
+      b.onclick = () => { const h = +uurNr.format(D.tijden[staat.ti]); const k2 = idx.find(i => +uurNr.format(D.tijden[i]) === h); staat.ti = k2 ?? idx[0]; bouwTijd(); teken(); };
+    }
+    const uren = $("uren"); uren.hidden = false; uren.innerHTML = "";
+    const p = el2("button", {type: "button", class: "play", "aria-label": "Afspelen"}, uren); p.textContent = speel ? "❚❚" : "▶";
+    p.onclick = () => { if (speel) { clearInterval(speel); speel = null; } else speel = setInterval(() => { staat.ti = (staat.ti + 1) % NT; bouwTijd(); teken(); }, 700); bouwTijd(); };
+    const huidigeDag = [...perDag.values()].find(a => a.includes(staat.ti)) || [];
+    huidigeDag.forEach(i => {
+      const b = el2("button", {type: "button", "aria-pressed": String(i === staat.ti), title: uurFmt.format(D.tijden[i])}, uren);
+      let mn = 1e9; if (staat.laag === "t10" || staat.laag === "t2") { const A = staat.laag === "t10" ? D.t10 : D.t2; for (let c = 0; c < C; c++) { const v = A[i * C + c]; if (v !== -32768 && v < mn) mn = v; } }
+      b.innerHTML = mn < 1e9 ? `${uurNr.format(D.tijden[i])}<small style="display:block;font:500 10px var(--mono);opacity:.8">${fmt(mn / 10, 1)}°</small>` : uurNr.format(D.tijden[i]);
+      if (mn < 1e9) { b.style.height = "44px"; b.title = `laagste ${fmt(mn / 10)} °C om ${uurFmt.format(D.tijden[i])}`; }
+      const h = +uurNr.format(D.tijden[i]); if (h >= 19 || h <= 7) b.classList.add("nacht");
+      b.onclick = () => { staat.ti = i; bouwTijd(); teken(); };
+    });
+  }
+  tijdInfo();
+}
+function el2(tag, attrs, parent) { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
+function tijdInfo() {
+  const a = new Date(D.j.analyse_utc);
+  if (staat.laag === "nmin" || staat.laag === "kans") {
+    const n = D.nachten[staat.ni];
+    $("tijdInfo").innerHTML = n ? `Minimum over <b>${dagFmt.format(new Date(n.start))} 18.00 → ${dagFmt.format(new Date(n.eind))} 09.00</b> (lokale tijd) · zoals een minimumthermometer het meet: ± 0,7 °C lager dan de laagste uurwaarde` : "";
+  } else {
+    const t = D.tijden[staat.ti]; const lead = Math.round((t - a) / 36e5);
+    $("tijdInfo").innerHTML = `<b>${dagFmt.format(t)} ${uurFmt.format(t)}</b> uur (lokale tijd) · +${lead} u na analyse ${uurFmt.format(a)}`;
+  }
+  const c = laagsteCel();
+  if (c >= 0 && staat.laag !== "diff") $("tijdInfo").innerHTML += ` · ${staat.laag === "kans" ? "hoogste kans" : "laagste"}: <b>${labelTekst(staat.laag, waarde(c)).replace("°", " °C")}</b> bij ${D.plaats[c]}`;
+}
+
+// ---------- waarde per cel voor de actieve laag ----------
+function waarde(c) {
+  const L = staat.laag, o = staat.ti * C + c, n = D.nachten[staat.ni];
+  switch (L) {
+    case "t10": return v16(D.t10[o]);
+    case "t2": return v16(D.t2[o]);
+    case "diff": return v16(D.t10[o]) - v16(D.t2[o]);
+    case "sigma": return v16(D.sigma[o]);
+    case "nmin": return n ? v16(n.t10min[c]) : NaN;
+    case "kans": return n ? (staat.drempel === 0 ? n.p0[c] : n.pm2[c]) : NaN;
+    case "vocht": return D.vocht[c];
+    case "bodem": return D.bodem[c];
+  }
+}
+const lutVan = L => ({t10: LUT.temp, t2: LUT.temp, nmin: LUT.temp, diff: LUT.diff, kans: LUT.kans, sigma: LUT.sigma, vocht: LUT.vocht})[L];
+
+// ---------- veld tekenen: bilineair opgeschaald, pixel-uitgelijnd op het rooster ----------
+const UP = 6;
+const doek = document.createElement("canvas");
+function teken() {
+  if (!D) return;
+  const L = staat.laag, g = D.j.rooster;
+  const vals = new Float32Array(NY * NX);
+  for (let i = 0; i < NY * NX; i++) vals[i] = naast[i] >= 0 ? waarde(naast[i]) : NaN;
+  const Wc = NX * UP, Hc = NY * UP; doek.width = Wc; doek.height = Hc;
+  const ctx = doek.getContext("2d"); const img = ctx.createImageData(Wc, Hc);
+  if (L === "bodem") {
+    const kl = D.klassen;
+    for (let py = 0; py < Hc; py++) for (let px = 0; px < Wc; px++) {
+      const iy = NY - 1 - Math.floor(py / UP), ix = Math.floor(px / UP); const c = naast[iy * NX + ix];
+      const o = (py * Wc + px) * 4; if (c < 0) continue;
+      const [r, gg, b] = hex2rgb(BODEM_KL[kl[D.bodem[c]]][1]); img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = b; img.data[o + 3] = 235;
+    }
+  } else {
+    const lu = lutVan(L);
+    for (let py = 0; py < Hc; py++) {
+      const fy = NY - 1 - ((py + 0.5) / UP - 0.5); const y0 = Math.max(0, Math.min(NY - 2, Math.floor(fy))); const ty = Math.min(1, Math.max(0, fy - y0));
+      for (let px = 0; px < Wc; px++) {
+        const fx = (px + 0.5) / UP - 0.5; const x0 = Math.max(0, Math.min(NX - 2, Math.floor(fx))); const tx = Math.min(1, Math.max(0, fx - x0));
+        const a = vals[y0 * NX + x0], b = vals[y0 * NX + x0 + 1], c2 = vals[(y0 + 1) * NX + x0], d = vals[(y0 + 1) * NX + x0 + 1];
+        let v;
+        if (isFinite(a) && isFinite(b) && isFinite(c2) && isFinite(d)) v = (a * (1 - tx) + b * tx) * (1 - ty) + (c2 * (1 - tx) + d * tx) * ty;
+        else { const arr = [a, b, c2, d].filter(isFinite); if (!arr.length) continue; v = arr.reduce((s, x) => s + x, 0) / arr.length; }
+        const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1))));
+        const o = (py * Wc + px) * 4; img.data[o] = lu.lut[k * 3]; img.data[o + 1] = lu.lut[k * 3 + 1]; img.data[o + 2] = lu.lut[k * 3 + 2]; img.data[o + 3] = 235;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const [x0, y0] = xy(g.lon0 - g.dlon / 2, g.lat0 + (NY - 0.5) * g.dlat), [x1, y1] = xy(g.lon0 + (NX - 0.5) * g.dlon, g.lat0 - g.dlat / 2);
+  const im = $("veld"); im.setAttribute("href", doek.toDataURL()); im.setAttribute("x", x0); im.setAttribute("y", y0);
+  im.setAttribute("width", x1 - x0); im.setAttribute("height", y1 - y0);
+  im.style.imageRendering = L === "bodem" ? "pixelated" : "auto";
+  isolijnen(vals); waardenOpKaart(); laagste(); stations(); legenda(); titels(); tijdInfo(); if (staat.vast != null) grafiek(staat.vast); else if (staat.hov != null) grafiek(staat.hov);
+}
+
+// ---------- rasterbeeld voor willekeurige celwaarden (ook voor de minikaartjes) ----------
+function rasterUrl(fn, lu) {
+  const vals = new Float32Array(NY * NX);
+  for (let i = 0; i < NY * NX; i++) vals[i] = naast[i] >= 0 ? fn(naast[i]) : NaN;
+  const c2 = document.createElement("canvas"); const Wc = NX * 4, Hc = NY * 4; c2.width = Wc; c2.height = Hc;
+  const cx = c2.getContext("2d"); const im = cx.createImageData(Wc, Hc);
+  for (let py = 0; py < Hc; py++) { const fy = NY - 1 - ((py + .5) / 4 - .5); const y0 = Math.max(0, Math.min(NY - 2, Math.floor(fy))), ty = Math.min(1, Math.max(0, fy - y0));
+    for (let px = 0; px < Wc; px++) { const fx = (px + .5) / 4 - .5; const x0 = Math.max(0, Math.min(NX - 2, Math.floor(fx))), tx = Math.min(1, Math.max(0, fx - x0));
+      const a = vals[y0 * NX + x0], b = vals[y0 * NX + x0 + 1], c = vals[(y0 + 1) * NX + x0], d = vals[(y0 + 1) * NX + x0 + 1];
+      const arr = [a, b, c, d]; if (!arr.every(isFinite)) { const f = arr.filter(isFinite); if (!f.length) continue; }
+      const v = arr.every(isFinite) ? (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty : arr.filter(isFinite).reduce((s, x) => s + x, 0) / arr.filter(isFinite).length;
+      const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); const o = (py * Wc + px) * 4;
+      im.data[o] = lu.lut[k * 3]; im.data[o + 1] = lu.lut[k * 3 + 1]; im.data[o + 2] = lu.lut[k * 3 + 2]; im.data[o + 3] = 235; } }
+  cx.putImageData(im, 0, 0); return {url: c2.toDataURL(), vals};
+}
+function isoPad(vals, lv) {
+  const g = D.j.rooster; const P = (iy, ix) => xy(g.lon0 + ix * g.dlon, g.lat0 + iy * g.dlat); let d = "";
+  for (let y = 0; y < NY - 1; y++) for (let x = 0; x < NX - 1; x++) {
+    const v = [vals[y * NX + x], vals[y * NX + x + 1], vals[(y + 1) * NX + x + 1], vals[(y + 1) * NX + x]]; if (!v.every(isFinite)) continue;
+    const hk = [[y, x], [y, x + 1], [y + 1, x + 1], [y + 1, x]]; const pts = [];
+    for (let e = 0; e < 4; e++) { const a = v[e], b = v[(e + 1) % 4]; if ((a < lv) === (b < lv)) continue; const f = (lv - a) / (b - a);
+      const [ya, xa] = hk[e], [yb, xb] = hk[(e + 1) % 4]; pts.push(P(ya + (yb - ya) * f, xa + (xb - xa) * f)); }
+    for (let k = 0; k + 1 < pts.length; k += 2) d += `M${pts[k][0].toFixed(1)},${pts[k][1].toFixed(1)}L${pts[k + 1][0].toFixed(1)},${pts[k + 1][1].toFixed(1)}`;
+  }
+  return d;
+}
+const PLAATSEN = [["Groningen", 53.22, 6.57], ["Leeuwarden", 53.20, 5.79], ["Den Helder", 52.93, 4.78], ["Zwolle", 52.51, 6.09], ["Enschede", 52.22, 6.89],
+  ["Amsterdam", 52.37, 4.90], ["De Bilt", 52.10, 5.18], ["Arnhem", 51.98, 5.91], ["Rotterdam", 51.92, 4.48], ["Vlissingen", 51.44, 3.60],
+  ["Eindhoven", 51.44, 5.48], ["Venlo", 51.37, 6.17], ["Maastricht", 50.85, 5.69]];
+function celBij(la, lo) { let b = 0, bd = 1e9; for (let c = 0; c < C; c++) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
+function drieNachten() {
+  const grid = $("drieGrid"); grid.innerHTML = ""; const g = D.j.rooster;
+  const [x0, y0] = xy(g.lon0 - g.dlon / 2, g.lat0 + (NY - 0.5) * g.dlat), [x1, y1] = xy(g.lon0 + (NX - 0.5) * g.dlon, g.lat0 - g.dlat / 2);
+  D.nachten.forEach((n, i) => {
+    const kaart = document.createElement("div"); kaart.className = "mini"; kaart.tabIndex = 0; kaart.setAttribute("role", "button");
+    const s = new Date(n.start), e = new Date(n.eind);
+    let mi = 0, p50 = 0; for (let c = 0; c < C; c++) { if (n.t10min[c] < n.t10min[mi]) mi = c; if (n.p0[c] >= 50) p50++; }
+    const let_ = n.buiten_training ? ` · <b>voorbij 60 u: HARMONIE/ICON-D2 ontbreken, niet geverifieerd</b>` : "";
+    kaart.innerHTML = `<h3>Nacht ${dagKort.format(s)} → ${dagKort.format(e)}</h3><div class="m-sub${n.buiten_training ? " let" : ""}">+${Math.max(0, Math.round((s - new Date(D.j.analyse_utc)) / 36e5))}…${n.lead_max_u} u · ${n.n_modellen} modellen${let_}</div>`;
+    const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", `0 0 ${GEO.w} ${GEO.h}`); kaart.appendChild(sv);
+    const cid = "clipMini" + i; const defs = el("defs", {}, sv); el("path", {d: GEO.nl}, el("clipPath", {id: cid}, defs));
+    GEO.buren.forEach(b => el("path", {d: b.d, class: "buur"}, sv)); el("path", {d: GEO.nl, class: "nlvlak"}, sv);
+    const r = rasterUrl(c => v16(n.t10min[c]), LUT.temp);
+    el("image", {href: r.url, x: x0, y: y0, width: x1 - x0, height: y1 - y0, preserveAspectRatio: "none", "clip-path": `url(#${cid})`}, sv);
+    const iso = isoPad(r.vals, 0); if (iso) el("path", {d: iso, class: "iso0", "clip-path": `url(#${cid})`}, sv);
+    GEO.provincies.forEach(p => el("path", {d: p.d, class: "prov"}, sv)); el("path", {d: GEO.nl, class: "kust"}, sv);
+    const k = document.createElement("div"); k.className = "m-kpi";
+    k.innerHTML = `<span>laagste <b>${fmt(v16(n.t10min[mi]))} °C</b> ${D.plaats[mi]}</span><span>vorstkans ≥ 50 %: <b>${Math.round(100 * p50 / C)} %</b></span>`;
+    kaart.appendChild(k);
+    const kies = () => { staat.laag = "nmin"; staat.ni = i; [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.l === "nmin"))); bouwTijd(); teken(); kpis(); $("kaart").scrollIntoView({behavior: "smooth", block: "start"}); };
+    kaart.onclick = kies; kaart.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); kies(); } };
+    grid.appendChild(kaart);
+  });
+  // tabel per plaats
+  const lu = LUT.temp; const kl = v => { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; };
+  let t = `<thead><tr><th>Plaats</th>${D.nachten.map(n => `<th>${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))}</th>`).join("")}</tr></thead><tbody>`;
+  PLAATSEN.forEach(([nm, la, lo]) => { const c = celBij(la, lo);
+    t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16(n.t10min[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${n.p0[c]}%</small></td>`; }).join("")}</tr>`; });
+  $("plaatsTabel").innerHTML = t + "</tbody>";
+  $("drieNoot").textContent = "Per plaats: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel; in laagtes en open veld buiten de stad kan het kouder zijn.";
+}
+
+// ---------- isolijnen 0 / −2 / −5 (marching squares op het rooster) ----------
+function isolijnen(vals) {
+  const gI = $("gIso"); gI.innerHTML = "";
+  if (!$("isoChk").checked || !["t10", "nmin"].includes(staat.laag)) return;
+  const g = D.j.rooster;
+  const P = (iy, ix) => xy(g.lon0 + ix * g.dlon, g.lat0 + iy * g.dlat);
+  [[0, "iso0"], [-2, "iso2"], [-5, "iso5"]].forEach(([lv, cls]) => {
+    let d = "";
+    for (let y = 0; y < NY - 1; y++) for (let x = 0; x < NX - 1; x++) {
+      const v = [vals[y * NX + x], vals[y * NX + x + 1], vals[(y + 1) * NX + x + 1], vals[(y + 1) * NX + x]];
+      if (!v.every(isFinite)) continue;
+      const hoek = [[y, x], [y, x + 1], [y + 1, x + 1], [y + 1, x]];
+      const pts = [];
+      for (let e = 0; e < 4; e++) {
+        const a = v[e], b = v[(e + 1) % 4]; if ((a < lv) === (b < lv)) continue;
+        const f = (lv - a) / (b - a); const [ya, xa] = hoek[e], [yb, xb] = hoek[(e + 1) % 4];
+        pts.push(P(ya + (yb - ya) * f, xa + (xb - xa) * f));
+      }
+      for (let k = 0; k + 1 < pts.length; k += 2) d += `M${pts[k][0].toFixed(1)},${pts[k][1].toFixed(1)}L${pts[k + 1][0].toFixed(1)},${pts[k + 1][1].toFixed(1)}`;
+    }
+    if (d) el("path", {d, class: "iso " + cls}, gI);
+  });
+}
+
+// ---------- waarden op vaste plaatsen + laagste waarde ----------
+const KAARTPLAATSEN = [["Delfzijl",53.33,6.92],["Groningen",53.22,6.57],["Leeuwarden",53.20,5.79],["Den Helder",52.93,4.78],["Drachten",53.11,6.10],
+  ["Assen",52.99,6.56],["Emmen",52.78,6.90],["Heerenveen",52.96,5.92],["Alkmaar",52.63,4.75],["Lelystad",52.52,5.47],["Zwolle",52.51,6.09],
+  ["Hoogeveen",52.72,6.48],["Almelo",52.36,6.66],["Enschede",52.22,6.89],["Amsterdam",52.37,4.90],["Haarlem",52.38,4.64],["Apeldoorn",52.21,5.97],
+  ["Amersfoort",52.16,5.39],["Den Haag",52.07,4.30],["Utrecht",52.09,5.12],["Arnhem",51.98,5.91],["Winterswijk",51.97,6.72],["Rotterdam",51.92,4.48],
+  ["Gorinchem",51.83,4.97],["Nijmegen",51.84,5.86],["Middelburg",51.50,3.61],["Goes",51.50,3.89],["Breda",51.59,4.78],["Tilburg",51.56,5.09],
+  ["Den Bosch",51.69,5.30],["Eindhoven",51.44,5.48],["Venlo",51.37,6.17],["Terneuzen",51.33,3.83],["Weert",51.25,5.71],["Roermond",51.19,5.99],["Maastricht",50.85,5.69]];
+let plaatsCel = null;
+const numLaag = () => !["bodem"].includes(staat.laag);
+const eenheid = L => ({kans: "%", vocht: "", sigma: "°"})[L] ?? "°";
+function labelTekst(L, v) { return L === "kans" || L === "vocht" ? Math.round(v) + (L === "kans" ? "%" : "") : fmt(v, 1) + "°"; }
+function waardenOpKaart() {
+  const g = $("gWaarden"); g.innerHTML = "";
+  if (!$("waardenChk").checked || !numLaag()) return;
+  if (!plaatsCel) plaatsCel = KAARTPLAATSEN.map(([n, la, lo]) => [n, la, lo, celBij(la, lo)]);
+  plaatsCel.forEach(([n, la, lo, c]) => {
+    const v = waarde(c); if (!isFinite(v)) return; const [x, y] = xy(lo, la);
+    el("circle", {cx: x, cy: y, r: 2.4, class: "wp"}, g);
+    const t = el("text", {x: x + 5, y: y + 4.5, class: "wl"}, g); t.textContent = labelTekst(staat.laag, v);
+  });
+}
+function laagsteCel() {
+  const L = staat.laag; if (!["t10", "t2", "nmin", "diff", "kans"].includes(L)) return -1;
+  let best = -1, bv = L === "kans" ? -1 : 1e9;
+  for (let c = 0; c < C; c++) { const v = waarde(c); if (!isFinite(v)) continue; if (L === "kans" ? v > bv : v < bv) { bv = v; best = c; } }
+  return best;
+}
+function laagste() {
+  const g = $("gLaagst"); g.innerHTML = ""; const c = laagsteCel(); if (c < 0 || !$("laagChk").checked) return;
+  const L = staat.laag, v = waarde(c); const [x, y] = xy(ll[2 * c + 1], ll[2 * c]);
+  el("circle", {cx: x, cy: y, r: 9, class: "ls-ring"}, g);
+  const kop = (L === "kans" ? "Hoogste kans " : L === "diff" ? "Grootste verschil " : "Laagste ") + labelTekst(L, v).replace("°", " °C");
+  const onder = D.plaats[c]; const bw = Math.max(kop.length * 7.4, onder.length * 6.2) + 16, bh = 38;
+  let bx = x + 14, by = y - bh / 2; if (bx + bw > GEO.w - 6) bx = x - 14 - bw; by = Math.max(6, Math.min(GEO.h - bh - 6, by));
+  el("rect", {x: bx, y: by, width: bw, height: bh, rx: 6, class: "ls-box"}, g);
+  el("text", {x: bx + 8, y: by + 16, class: "ls-txt"}, g).textContent = kop;
+  el("text", {x: bx + 8, y: by + 31, class: "ls-sub"}, g).textContent = onder;
+}
+
+// ---------- stationsmetingen ----------
+function stations() {
+  const gS = $("gSt"); gS.innerHTML = "";
+  if (!$("stChk").checked) return;
+  const lu = LUT.temp;
+  (D.j.waarnemingen || []).forEach(s => {
+    const [x, y] = xy(s.lon, s.lat);
+    const k = Math.max(0, Math.min(lu.n - 1, Math.round((s.tgn - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1))));
+    el("circle", {cx: x, cy: y, r: 6, class: "st", fill: `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`}, gS);
+    const t = el("text", {x: x + 8, y: y + 4, class: "stl"}, gS); t.textContent = fmt(s.tgn);
+  });
+}
+
+// ---------- legenda ----------
+function legenda() {
+  const Lg = $("legenda"); Lg.innerHTML = ""; const L = staat.laag;
+  if (L === "bodem") {
+    Lg.innerHTML = `<span class="leg-titel">Dominante bodemsoort bovengrond (BRO Bodemkaart, per 5 km-cel)</span><span class="leg-cat">${Object.values(BODEM_KL).filter(([n]) => n !== "Water").map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("")}</span>`;
+    return;
+  }
+  const lu = lutVan(L);
+  const titel = {t10: "Temperatuur 10 cm (°C)", t2: "Temperatuur 2 m (°C)", nmin: "Nachtminimum 10 cm (°C)", diff: "T10 − T2 (°C)", kans: `Kans op T10 < ${staat.drempel === 0 ? "0" : "−2"} °C (%)`, sigma: "Onzekerheid σ (°C)", vocht: "Bodemvochtindex (0 = zeer droog, 100 = zeer nat)"}[L];
+  const wrap = document.createElement("div"); wrap.className = "leg-balk";
+  const lab = document.createElement("span"); lab.className = "leg-titel"; lab.textContent = titel; wrap.appendChild(lab);
+  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 1; const cx = cv.getContext("2d"); const im = cx.createImageData(256, 1);
+  let lo = lu.lo, hi = lu.hi; if (L === "t10" || L === "t2" || L === "nmin") { lo = -10; hi = 25; }
+  for (let i = 0; i < 256; i++) { const v = lo + (hi - lo) * i / 255; const k = Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)); im.data.set([lu.lut[k * 3], lu.lut[k * 3 + 1], lu.lut[k * 3 + 2], 255], i * 4); }
+  cx.putImageData(im, 0, 0); wrap.appendChild(cv);
+  const ticks = document.createElement("div"); ticks.className = "leg-ticks";
+  const tv = {t10: [-10, -5, -2, 0, 5, 10, 15, 20, 25], t2: [-10, -5, 0, 5, 10, 15, 20, 25], nmin: [-10, -5, -2, 0, 5, 10, 15, 20, 25], diff: [-6, -4, -2, 0, 2, 4, 6], kans: [0, 10, 30, 50, 70, 90], sigma: [0.5, 1, 1.5, 2, 2.5, 3], vocht: [0, 20, 40, 65, 85, 100]}[L];
+  tv.forEach(v => { const s = document.createElement("span"); s.style.left = (100 * (v - lo) / (hi - lo)) + "%"; s.textContent = fmt(v, L === "sigma" && v % 1 ? 1 : 0); ticks.appendChild(s); });
+  wrap.appendChild(ticks); Lg.appendChild(wrap);
+  if (L === "vocht") { const s = document.createElement("span"); s.textContent = "zeer droog < 20 · droog < 40 · normaal < 65 · vochtig < 85 · zeer nat"; Lg.appendChild(s); }
+  if ($("isoChk").checked && (L === "t10" || L === "nmin")) {
+    const s = document.createElement("span"); s.className = "leg-iso";
+    s.innerHTML = `<svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" style="stroke:var(--iso0);stroke-width:2.2"/></svg>0 °C <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" style="stroke:var(--iso2);stroke-width:1.8;stroke-dasharray:7 4"/></svg>−2 °C <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" style="stroke:var(--iso5);stroke-width:1.8;stroke-dasharray:2 3"/></svg>−5 °C`;
+    Lg.appendChild(s);
+  }
+}
+function titels() {
+  const L = staat.laag;
+  const nn = D.nachten[staat.ni];
+  const nachtNaam = !nn ? "" : (staat.ni === 0 && new Date(nn.start) - Date.now() < 18 * 36e5 ? "komende nacht" : "nacht") +
+    ` (${dagKort.format(new Date(nn.start))} → ${dagKort.format(new Date(nn.eind))})`;
+  $("kaartTitel").textContent = {t10: "Temperatuur op 10 cm boven gras", nmin: "Minimumtemperatuur op 10 cm, " + nachtNaam, kans: "Kans op grondvorst, " + nachtNaam, t2: "Temperatuur op 2 m (modelmix, bijgestuurd)", diff: "Verschil T10 cm − T2 m", sigma: "Onzekerheid van de 10 cm-verwachting", bodem: "Bodemsoort (bovengrond)", vocht: "Bodemvochtindex"}[L];
+  $("kaartSub").textContent = {sigma: "1 σ; 80 %-interval ≈ ± 1,28 σ", kans: staat.drempel === 0 ? "T10 < 0 °C ergens in de nacht" : "T10 < −2 °C ergens in de nacht", bodem: "BRO Bodemkaart V2025-1", vocht: D.j.bodemvocht_bron}[L] || "WGT-MOS";
+  $("drempelSeg").hidden = L !== "kans";
+}
+
+// ---------- tooltip ----------
+const bhKlasse = s => s < 1.0 ? ["hoog", "hoog"] : s < 1.7 ? ["middel", "middel"] : ["laag", "laag"];
+const vochtKl = m => m < 20 ? "zeer droog" : m < 40 ? "droog" : m < 65 ? "normaal" : m < 85 ? "vochtig" : "zeer nat";
+function bodemTekst(c) {
+  const parts = Object.entries(D.frac).map(([k, a]) => [k, a[c]]).filter(([, v]) => v >= 10).sort((a, b) => b[1] - a[1]);
+  return parts.map(([k, v]) => `${BODEM_KL[k][0].split(" ")[0].toLowerCase()} ${v}%`).join(", ") || "onbekend";
+}
+function tipHtml(c) {
+  const L = staat.laag, nacht = L === "nmin" || L === "kans";
+  const plaats = D.plaats[c]; const vocht = D.vocht[c];
+  let h = `<button class="sluit" aria-label="Sluiten" hidden>×</button><div class="tk2"><b>${plaats}</b></div>`;
+  if (nacht) {
+    const n = D.nachten[staat.ni]; const tm = v16(n.t10min[c]), s = v16(n.sigma[c]); const tu = D.tijden[n.uur[c]];
+    const [bk, bl] = bhKlasse(s);
+    h += `<div class="loc">Nacht ${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))} · laagste rond ${uurFmt.format(tu)} uur</div>
+      <div class="val"><span class="gr">${fmt(tm)}°C</span><span class="int">80 %: ${fmt(tm - 1.28 * s)} tot ${fmt(tm + 1.28 * s)}</span></div>
+      <dl><dt>Minimum 10 cm</dt><dd>${fmt(tm)} °C</dd><dt>Minimum 2 m</dt><dd>${fmt(v16(n.t2min[c]))} °C</dd>
+      <dt>Verschil</dt><dd>${fmt(tm - v16(n.t2min[c]))} °C</dd>
+      <dt>Kans grondvorst (&lt; 0)</dt><dd>${n.p0[c]}%</dd><dt>Kans &lt; −2 °C</dt><dd>${n.pm2[c]}%</dd>
+      <dt>Wind / bewolking</dt><dd>${fmt(v16(n.umin[c]))} m/s · ${n.cmin[c]}%</dd>
+      <dt>Situatie</dt><dd>${REGIME[D.j.regime_code[n.reg[c]]] || "–"}</dd>
+      <dt>Bodem</dt><dd>${bodemTekst(c)}</dd><dt>Bodemvocht</dt><dd>${vochtKl(vocht)} (${vocht})</dd>
+      <dt>Betrouwbaarheid</dt><dd><span class="bh ${bk}">${bl}</span></dd></dl>`;
+    h += modelBlok(c, n.uur[c], true);
+    return h;
+  }
+  const ti = staat.ti, o = ti * C + c; const t10 = v16(D.t10[o]), t2 = v16(D.t2[o]), s = v16(D.sigma[o]);
+  const [bk, bl] = bhKlasse(s);
+  if (L === "bodem" || L === "vocht") {
+    return h + `<dl><dt>Bodem</dt><dd>${bodemTekst(c)}</dd><dt>Bodemvocht</dt><dd>${vochtKl(vocht)} (${vocht})</dd>
+      <dt>Neerslag 24 u / 7 d / 30 d</dt><dd>${fmt(v16(D.p24[c]))} / ${fmt(v16(D.p7[c]), 0)} / ${fmt(v16(D.p30[c]), 0)} mm</dd>
+      <dt>Hoogte</dt><dd>${fmt(v16(D.hoogte[c]))} m</dd><dt>Afstand tot zee</dt><dd>${fmt(v16(D.zee[c]), 0)} km</dd></dl>`;
+  }
+  h += `<div class="loc">${dagFmt.format(D.tijden[ti])} · ${uurFmt.format(D.tijden[ti])} uur</div>
+    <div class="val"><span class="gr">${fmt(t10)}°C</span><span class="int">80 %: ${fmt(t10 - 1.28 * s)} tot ${fmt(t10 + 1.28 * s)}</span></div>
+    <dl><dt>Temperatuur 10 cm</dt><dd>${fmt(t10)} °C</dd><dt>Temperatuur 2 m</dt><dd>${fmt(t2)} °C</dd>
+    <dt>Verschil</dt><dd>${fmt(t10 - t2)} °C</dd><dt>Kans op grondvorst</dt><dd>${D.p0[o]}%</dd>
+    ${(() => { const n = D.nachten.find(n => ti >= n.i0 && ti <= n.i1); return n ? `<dt title="Laagste waarde in de nacht, zoals een minimumthermometer die registreert (lager dan een uurwaarde)">Nachtminimum</dt><dd>${fmt(v16(n.t10min[c]))} °C · ${uurFmt.format(D.tijden[n.uur[c]])}</dd>` : ""; })()}
+    <dt>Bodem</dt><dd>${bodemTekst(c)}</dd><dt>Bodemvocht</dt><dd>${vochtKl(vocht)} (${vocht})</dd>
+    <dt>Wind</dt><dd>${fmt(v16(D.u[o]))} m/s</dd><dt>Bewolking (effectief)</dt><dd>${D.c[o]}%</dd>
+    <dt>Situatie</dt><dd>${REGIME[D.j.regime_code[D.reg[o]]] || "–"}</dd>
+    <dt>Betrouwbaarheid</dt><dd><span class="bh ${bk}">${bl}</span></dd></dl>`;
+  return h + modelBlok(c, ti, false);
+}
+function modelBlok(c, ti, nacht) {
+  const o = ti * C + c; const rij = [];
+  for (const [m, a] of Object.entries(D.pm)) { const v = v16(a[o]); if (isFinite(v)) rij.push([D.j.modellen[m], v, D.gw[m][o]]); }
+  rij.sort((a, b) => b[2] - a[2]);
+  const mix = v16(D.mix[o]), mos = v16(D.mos[o]), eind = v16(D.t10[o]); const bij = eind - mix - mos;
+  let h = `<div class="mod"><span style="grid-column:1/-1;font-family:var(--font)">Per model (na biascorrectie) · gewicht</span>${rij.slice(0, 6).map(([n, v, w]) => `<span>${n}</span><span>${fmt(v)}</span><span>${w}%</span>`).join("")}`;
+  h += `<span class="som">Modelmix (gewogen)</span><span class="som">${fmt(mix)}</span><span class="som"></span>`;
+  h += `<span>MOS-correctie</span><span>${mos >= 0 ? "+" : ""}${fmt(mos)}</span><span></span>`;
+  if (Math.abs(bij) >= 0.05) h += `<span>Bijsturing metingen</span><span>${bij >= 0 ? "+" : ""}${fmt(bij)}</span><span></span>`;
+  if (nacht) {
+    const dl = D.j.delta_min;
+    h += `<span title="Een continu gemeten minimum (KNMI T10N) ligt lager dan de uurwaarde">Continu minimum (δ)</span><span>${fmt(dl)}</span><span></span>`;
+    h += `<span class="som">WGT-MOS minimum</span><span class="som">${fmt(eind + dl)}</span><span class="som"></span></div>`;
+  } else h += `<span class="som">WGT-MOS</span><span class="som">${fmt(eind)}</span><span class="som"></span></div>`;
+  return h;
+}
+function celOp(evt) {
+  const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse()); const [lon, lat] = lonlat(p.x, p.y); const g = D.j.rooster;
+  const iy = Math.round((lat - g.lat0) / g.dlat), ix = Math.round((lon - g.lon0) / g.dlon);
+  if (iy < 0 || ix < 0 || iy >= NY || ix >= NX) return -1; return cellVan[iy * NX + ix];
+}
+function plaatsTip(c, evt) {
+  const tip = $("tip"); tip.innerHTML = tipHtml(c); tip.hidden = false;
+  const kaart = $("kaart").getBoundingClientRect(); let x = evt.clientX - kaart.left + 14, y = evt.clientY - kaart.top + 14;
+  const w = tip.offsetWidth, hh = tip.offsetHeight;
+  if (x + w > kaart.width - 4) x = evt.clientX - kaart.left - w - 14; if (y + hh > kaart.height - 4) y = Math.max(4, kaart.height - hh - 4);
+  tip.style.left = Math.max(4, x) + "px"; tip.style.top = y + "px";
+  focus(c);
+}
+function focus(c) {
+  const f = $("gFocus"); f.innerHTML = ""; const g = D.j.rooster;
+  const box = (cc, cls) => { const la = ll[2 * cc], lo = ll[2 * cc + 1]; const [x0, y0] = xy(lo - g.dlon / 2, la + g.dlat / 2), [x1, y1] = xy(lo + g.dlon / 2, la - g.dlat / 2); el("rect", {x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: cls, rx: 2}, f); };
+  if (staat.vast != null) box(staat.vast, "sel"); if (c != null && c !== staat.vast) box(c, "hov");
+}
+svg.addEventListener("mousemove", e => { if (!D || staat.vast != null) return; const c = celOp(e); if (c < 0) { $("tip").hidden = true; $("gFocus").innerHTML = ""; staat.hov = null; return; } staat.hov = c; plaatsTip(c, e); });
+svg.addEventListener("mouseleave", () => { if (staat.vast == null) { $("tip").hidden = true; $("gFocus").innerHTML = ""; } });
+svg.addEventListener("click", e => {
+  if (!D) return; const c = celOp(e);
+  if (c < 0 || c === staat.vast) { staat.vast = null; $("tip").hidden = true; $("tip").classList.remove("vast"); focus(null); return; }
+  staat.vast = c; plaatsTip(c, e); const t = $("tip"); t.classList.add("vast"); const b = t.querySelector(".sluit"); b.hidden = false;
+  b.onclick = ev => { ev.stopPropagation(); staat.vast = null; t.hidden = true; t.classList.remove("vast"); focus(null); };
+  grafiek(c);
+});
+
+// ---------- grafiek voor gekozen cel ----------
+function grafiek(c) {
+  const G = $("graf"); G.innerHTML = ""; const Wg = 360, Hg = 190, ml = 30, mr = 8, mt = 8, mb = 22;
+  $("grafTitel").textContent = "Verloop " + D.plaats[c]; $("grafSub").textContent = "T 10 cm met 80 %-interval, T 2 m en de losse modellen (fysica per model, na biascorrectie; zonder MOS).";
+  const s10 = [], s2 = [], sg = [], mods = Object.keys(D.pm);
+  let lo = 99, hi = -99;
+  for (let t = 0; t < NT; t++) { const o = t * C + c; const a = v16(D.t10[o]), b = v16(D.t2[o]), s = v16(D.sigma[o]); s10.push(a); s2.push(b); sg.push(s);
+    if (isFinite(a)) { lo = Math.min(lo, a - 1.28 * s); hi = Math.max(hi, a + 1.28 * s, b); } }
+  mods.forEach(m => { for (let t = 0; t < NT; t++) { const v = v16(D.pm[m][t * C + c]); if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } } });
+  lo = Math.floor(Math.min(lo, 0) - 0.5); hi = Math.ceil(hi + 0.5);
+  const X = t => ml + (Wg - ml - mr) * t / (NT - 1), Y = v => mt + (Hg - mt - mb) * (hi - v) / (hi - lo);
+  // nacht-achtergrond (19-07 lokaal)
+  for (let t = 0; t < NT; t++) { const h = +uurNr.format(D.tijden[t]); if (h >= 19 || h < 7) el("rect", {x: X(t) - (Wg - ml - mr) / (NT - 1) / 2, y: mt, width: (Wg - ml - mr) / (NT - 1), height: Hg - mt - mb, class: "nachtvlak"}, G); }
+  const stap = hi - lo > 16 ? 5 : hi - lo > 8 ? 2 : 1;
+  for (let v = Math.ceil(lo / stap) * stap; v <= hi; v += stap) { el("line", {x1: ml, x2: Wg - mr, y1: Y(v), y2: Y(v), class: v === 0 ? "nul" : "rl"}, G); const tx = el("text", {x: ml - 4, y: Y(v) + 3, "text-anchor": "end", class: "as"}, G); tx.textContent = v; }
+  for (let t = 0; t < NT; t++) { const h = +uurNr.format(D.tijden[t]); if (h === 0) { const tx = el("text", {x: X(t), y: Hg - 6, "text-anchor": "middle", class: "as"}, G); tx.textContent = dagKort.format(D.tijden[t]); } }
+  const pad = (s, f = v => v) => { let d = ""; let pen = false; s.forEach((v, t) => { if (!isFinite(v)) { pen = false; return; } d += (pen ? "L" : "M") + X(t).toFixed(1) + "," + Y(f(v)).toFixed(1); pen = true; }); return d; };
+  let band = "", terug = "";
+  s10.forEach((v, t) => { if (isFinite(v)) { band += (band ? "L" : "M") + X(t).toFixed(1) + "," + Y(v + 1.28 * sg[t]).toFixed(1); terug = "L" + X(t).toFixed(1) + "," + Y(v - 1.28 * sg[t]).toFixed(1) + terug; } });
+  if (band) el("path", {d: band + terug + "Z", class: "band"}, G);
+  mods.forEach(m => { const s = []; for (let t = 0; t < NT; t++) s.push(v16(D.pm[m][t * C + c])); el("path", {d: pad(s), class: "lm"}, G); });
+  el("path", {d: pad(s2), class: "l2"}, G); el("path", {d: pad(s10), class: "l10"}, G);
+  if (!(staat.laag === "nmin" || staat.laag === "kans")) el("line", {x1: X(staat.ti), x2: X(staat.ti), y1: mt, y2: Hg - mb, class: "nu"}, G);
+}
+
+// ---------- samenvatting ----------
+function statusEnMeldingen() {
+  const j = D.j; const a = new Date(j.analyse_utc); const leeftijd = (Date.now() - new Date(j.gemaakt_utc)) / 36e5;
+  const gebruikt = j.runs.filter(r => r.status === "gebruikt").length;
+  const b = $("statusBadge"); b.className = "badge " + (leeftijd < 4 ? "ok" : "oud");
+  b.innerHTML = `<i></i>Run ${dagKort.format(a)} ${uurFmt.format(a)} · ${gebruikt}/${j.runs.length} modellen`;
+  const ontbr = j.runs.filter(r => r.status !== "gebruikt");
+  const txt = [];
+  if (leeftijd >= 4) txt.push(`Deze verwachting is ${Math.round(leeftijd)} uur oud — er is sindsdien geen nieuwe WGT-run gemaakt.`);
+  if (ontbr.length) txt.push("Niet meegenomen: " + ontbr.map(r => `${r.label} (${r.reden || r.status})`).join("; ") + ".");
+  if (!(j.waarnemingen || []).length) txt.push("Geen actuele KNMI-metingen beschikbaar: de eerste uren zijn niet bijgestuurd.");
+  if (txt.length) toonMelding(txt.join(" "), leeftijd >= 4);
+  const obs = j.waarnemingen || []; const gb = obs.length ? obs.reduce((s, o) => s + o.b10, 0) / obs.length : 0;
+  $("infoRij").innerHTML = `<span>Analyse <b>${dagFmt.format(a)} ${uurFmt.format(a)}</b></span><span>Bijgestuurd met <b>${obs.length}</b> KNMI-stations (gem. ${gb >= 0 ? "+" : ""}${fmt(gb)} °C)</span><span>Bodemvocht: ${j.bodemvocht_bron}</span>`;
+}
+function kpis() {
+  const n = D.nachten[staat.ni] || D.nachten[0]; const k = $("kpis"); if (!n) { k.innerHTML = ""; return; }
+  let mi = 0; for (let c = 1; c < C; c++) if (n.t10min[c] < n.t10min[mi]) mi = c;
+  let p50 = 0, pmax = 0; for (let c = 0; c < C; c++) { if (n.p0[c] >= 50) p50++; pmax = Math.max(pmax, n.p0[c]); }
+  let som = 0; for (let c = 0; c < C; c++) som += n.t10min[c]; const gem = som / C / 10;
+  let som2 = 0; for (let c = 0; c < C; c++) som2 += n.t10min[c] - n.t2min[c]; const vers = som2 / C / 10;
+  const kaartje = (l, v, nn) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${nn}</div></div>`;
+  k.innerHTML = kaartje("Laagste 10 cm", `${fmt(v16(n.t10min[mi]))}<small> °C</small>`, `${D.plaats[mi]} · nacht ${dagKort.format(new Date(n.start))}`)
+    + kaartje("Gemiddeld NL", `${fmt(gem)}<small> °C</small>`, `${fmt(vers)} °C t.o.v. 2 m`)
+    + kaartje("Grondvorstkans ≥ 50 %", `${Math.round(100 * p50 / C)}<small> % van NL</small>`, `hoogste kans ${pmax} %`)
+    + kaartje("Modellen", `${D.j.runs.filter(r => r.status === "gebruikt").length}<small>/${D.j.runs.length}</small>`, "actuele runs in de mix");
+}
+function runsLijst() {
+  const ul = $("runs"); ul.innerHTML = "";
+  D.j.runs.forEach(r => {
+    const li = el2("li", {}, ul); const st = r.status === "gebruikt" ? ["G", "gebruikt"] : r.status === "verouderd" ? ["V", "verouderd"] : ["X", "ontbreekt"];
+    const init = r.init ? new Date(r.init) : null;
+    li.innerHTML = `<span>${r.label}</span><span class="t">${init ? dagKort.format(init) + " " + uurFmt.format(init) : "–"}${r.leeftijd_u != null ? " · " + fmt(r.leeftijd_u, 0) + " u" : ""}</span><span class="chip ${st[0]}" title="${r.reden || ""}">${st[1]}</span>`;
+  });
+}
+
+// ---------- bediening ----------
+$("laagSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; staat.laag = b.dataset.l;
+  [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x === b))); if (D) { bouwTijd(); teken(); } });
+$("drempelSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; staat.drempel = +b.dataset.d;
+  [...$("drempelSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x === b))); teken(); });
+$("isoChk").onchange = teken; $("stChk").onchange = teken; $("waardenChk").onchange = teken; $("laagChk").onchange = teken;
+$("uitlegBtn").onclick = () => $("uitleg").showModal(); $("uitlegSluit").onclick = () => $("uitleg").close();
+document.addEventListener("keydown", e => {
+  if (!D || e.target.closest("input,dialog")) return;
+  if (e.key === "ArrowRight") { staat.ti = Math.min(NT - 1, staat.ti + 1); bouwTijd(); teken(); }
+  if (e.key === "ArrowLeft") { staat.ti = Math.max(0, staat.ti - 1); bouwTijd(); teken(); }
+});
+if (window.self !== window.top) $("terugLink").hidden = true;
+laad();
+</script>
+</body>
+</html>
