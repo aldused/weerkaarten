@@ -720,8 +720,11 @@ class Schrijver:
                 else:
                     zinnen.append(f"{cap(namen[eerste_nat])} neemt de kans op regen flink toe.")
             else:
-                wisselend = [namen[i] for i, k in enumerate(kansen) if k is not None and 25 <= k < 50]
-                if wisselend:
+                twijfel = [namen[i] for i, k in enumerate(kansen) if k is not None and 40 <= k < 50]
+                wisselend = [namen[i] for i, k in enumerate(kansen) if k is not None and 25 <= k < 40]
+                if twijfel:
+                    zinnen.append(f"Het blijft meestal droog, maar {self.opsomming(twijfel)} kan er goed een bui vallen.")
+                elif wisselend:
                     zinnen.append(f"Het blijft meestal droog. Alleen {self.opsomming(wisselend)} is er een kleine kans op een bui.")
                 else:
                     zinnen.append("Het blijft meestal droog.")
@@ -742,8 +745,21 @@ class Schrijver:
                 niveau = " Dat is iets kouder dan normaal."
             else:
                 niveau = " Dat is normaal voor de tijd van het jaar."
-            zin = (f"Het wordt elke middag een graad of {lo}." if lo == hi
-                   else f"’s Middags wordt het {lo} tot {hi} graden.")
+            if afwijking >= 6:
+                niveau = " Dat is uitzonderlijk zacht voor de tijd van het jaar."
+            if hi - lo >= 4:
+                # Duidelijk verschil tussen de dagen: benoem het verloop.
+                eerste, laatste = afr(geldig[0]), afr(geldig[-1])
+                warmste = namen[max(range(len(geldig)), key=lambda i: geldig[i])]
+                if laatste - eerste >= 3:
+                    zin = f"De temperatuur loopt op van een graad of {eerste} naar {laatste} graden, met {warmste} als warmste dag."
+                elif eerste - laatste >= 3:
+                    zin = f"De temperatuur zakt van een graad of {eerste} naar {laatste} graden."
+                else:
+                    zin = f"’s Middags wordt het {lo} tot {hi} graden. Het warmst is het {warmste}."
+            else:
+                zin = (f"Het wordt elke middag een graad of {lo}." if lo == hi
+                       else f"’s Middags wordt het {lo} tot {hi} graden.")
             zinnen.append(zin + niveau)
         # Zon: noem de zonnigste dag als die er duidelijk uitspringt
         zon = [(d.get("lucht") or {}).get("zon_uren") for d in dagen]
@@ -869,11 +885,16 @@ class Schrijver:
                             "subtitel": f"{eerste} t/m {laatste}", "alineas": [d]})
         # Overzicht: vandaag / vannacht / morgen; na 17 uur (geen "vandaag" meer)
         # schuift het op naar vannacht / morgen / overmorgen.
-        nacht = self.perioden.get("vanavond")
+        # Tussen middernacht en 5 uur loopt de huidige nacht nog; de avondperiode
+        # is dan de nacht dáárna en heet daarom "Komende nacht".
+        nacht_titel = "Komende nacht" if self.perioden.get("vannacht") else "Vannacht"
         if self.perioden.get("vandaag"):
-            reeks = [("vandaag", "Vandaag"), ("vanavond", "Vannacht"), ("morgen", "Morgen")]
+            reeks = [("vandaag", "Vandaag"), ("vanavond", nacht_titel), ("morgen", "Morgen")]
         else:
-            reeks = [("vanavond", "Vannacht"), ("morgen", "Morgen"), ("overmorgen", "Overmorgen")]
+            reeks = [("vanavond", nacht_titel), ("morgen", "Morgen"), ("overmorgen", "Overmorgen")]
+        if self.perioden.get("vannacht"):
+            # Vroeg in de ochtend: rest van de nacht, de dag die komt en morgen.
+            reeks = [("vannacht", "Vannacht"), ("vandaag", "Vandaag"), ("morgen", "Morgen")]
         for key, titel in reeks:
             if self.perioden.get(key):
                 kaarten.append(self.kaart(self.perioden[key], titel))
