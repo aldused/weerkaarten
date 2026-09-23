@@ -242,6 +242,55 @@ class Schrijver:
         zinnen.append(self.kies(*teksten.get(k, ("Het is wisselend bewolkt.",))))
         return zinnen
 
+    def zon_zin(self, p: dict) -> list[str]:
+        """Hoeveel uur schijnt de zon? Alleen als dat iets toevoegt."""
+        uren = p["lucht"].get("zon_uren")
+        if uren is None:
+            return []
+        n = afr(uren)
+        k = p["lucht"]["klasse"]
+        if k in ("grijs", "zwaar") and n >= 4:
+            return []          # zou het grijze beeld tegenspreken
+        if k in ("zonnig", "sluier") and n >= 3:
+            # De zonzin is al gevallen; geef alleen het aantal uren erbij.
+            return [self.kies(f"Dat levert een uur of {n} zon op.", f"Bij elkaar is dat zo'n {n} uur zon.")]
+        if n >= 7:
+            return [self.kies(f"De zon schijnt een uur of {n}.", f"In totaal is de zon zo'n {n} uur te zien.")]
+        if n >= 3:
+            return [self.kies(f"Bij elkaar schijnt de zon een uur of {n}.",
+                              f"De zon is in totaal zo'n {n} uur te zien.")]
+        if n >= 1 and k not in ("zonnig", "sluier"):
+            return [f"De zon is maar een uur of {n} te zien."]
+        if n < 1 and k in ("grijs", "zwaar", "middelhoog", "wisselend"):
+            return [self.kies("De zon laat zich nauwelijks zien.", "Van de zon zien we bijna niets.")]
+        return []
+
+    def ochtendmist(self, p: dict) -> list[str]:
+        """Mist in de vroege ochtend hoort ook in een dagtekst thuis."""
+        ochtend = self.vak(p["datum"], "06-12")
+        frac = (ochtend or {}).get("mist_frac")
+        if frac is None or frac < 0.2:
+            return []
+        if frac >= 0.45:
+            return [self.kies("Vroeg in de ochtend is het op veel plaatsen mistig.",
+                              "De ochtend begint op veel plaatsen met mist.")]
+        return [self.kies("Vroeg in de ochtend kan er nog wat mist hangen.",
+                          "In de vroege ochtend hangt er plaatselijk mist.")]
+
+    def windverloop(self, p: dict) -> list[str]:
+        """Trekt de wind aan of gaat hij juist liggen?"""
+        ochtend, middag, avond = (self.vak(p["datum"], v) for v in ("06-12", "12-18", "18-24"))
+        if not (ochtend and middag):
+            return []
+        bo, bm, ba = ochtend.get("bft"), middag.get("bft"), (avond or {}).get("bft")
+        if bo is None or bm is None:
+            return []
+        if bm >= bo + 1 and bm >= 3:
+            return [self.kies("In de middag trekt de wind wat aan.", "’s Middags waait het wat harder dan ’s ochtends.")]
+        if ba is not None and bo - ba >= 1 and bo >= 3:
+            return [self.kies("Tegen de avond gaat de wind liggen.", "In de avond zakt de wind weer wat weg.")]
+        return []
+
     # ── Weerbeeld 's nachts ─────────────────────────────────────────────────
     def lucht_nacht(self, p: dict, na_neerslag: bool = False) -> list[str]:
         k = p["lucht"]["klasse"]
@@ -287,7 +336,6 @@ class Schrijver:
         t_begin = uur_van(N.get("timing", {}).get("begin_mediaan"))
         t_eind = uur_van(N.get("timing", {}).get("eind_mediaan"))
         start, eind = uur_van(p["start"]), uur_van(p["eind"])
-        duur_periode = (eind - start).total_seconds() / 3600
         wanneer = ""
         if t_begin and (t_begin - start).total_seconds() / 3600 >= 1.5:
             wanneer = dagdeel_woord(t_begin, nacht)
@@ -296,6 +344,13 @@ class Schrijver:
         regio = self.neerslag_regio(N)
         bui = {"buien": "een bui", "regen": "wat regen", "motregen": "een beetje motregen"}[soort]
 
+        def zin(kern_met_tijd: str, kern_zonder_tijd: str) -> str:
+            """Zet de zin in de juiste volgorde en hangt het gebied er achteraan."""
+            basis = cap(f"{wanneer} {kern_met_tijd}") if wanneer else cap(kern_zonder_tijd)
+            if regio and basis.endswith("."):
+                basis = f"{basis[:-1]}, {regio}."
+            return basis
+
         if kans < 10:
             if nacht:
                 zinnen.append(self.kies("Het blijft droog.", "Het blijft overal droog."))
@@ -303,58 +358,53 @@ class Schrijver:
                 zinnen.append(self.kies("Het blijft droog.", "Het blijft de hele dag droog.", "Regen valt er niet."))
             return zinnen
         if kans < 25:
+            deel = f" {wanneer}" if wanneer else ""
             if N.get("uitschieters"):
-                wn = f" {wanneer}" if wanneer else ""
                 zinnen.append(self.kies(
-                    f"Bijna alle modellen houden het droog. Eén model laat{wn} {bui} vallen, dus helemaal zeker is dat droge weer niet.",
-                    f"Vrijwel overal blijft het droog. Eén model laat{wn} {bui} vallen, maar die kans is klein."))
+                    f"Bijna alle modellen houden het droog. Eén model laat{deel} {bui} vallen, dus helemaal zeker is dat droge weer niet.",
+                    f"Vrijwel overal blijft het droog. Eén model laat{deel} {bui} vallen, maar die kans is klein."))
             else:
-                deel = f" {wanneer}" if wanneer else ""
                 zinnen.append(self.kies(
-                    f"Het blijft bijna overal droog. Heel misschien valt er{deel}{regio} {bui}.",
-                    f"De meeste plaatsen blijven droog. Een enkele keer valt er{deel}{regio} {bui}."))
+                    f"Het blijft bijna overal droog. Heel misschien valt er{deel} {bui}.",
+                    f"De meeste plaatsen blijven droog. Een enkele keer valt er{deel} {bui}."))
             return zinnen
         if soort == "motregen":
-            if kans < 55:
-                zinnen.append(f"Uit de wolken kan{(' ' + wanneer) if wanneer else ''} af en toe een beetje motregen vallen{regio}.")
-            else:
-                zinnen.append(f"Uit de wolken valt{(' ' + wanneer) if wanneer else ''} af en toe een beetje motregen{regio}.")
+            deel = f" {wanneer}" if wanneer else ""
+            werkwoord = "kan" if kans < 55 else "valt"
+            staart = " vallen" if kans < 55 else ""
+            zinnen.append(zin(f"{werkwoord} er uit de wolken af en toe een beetje motregen{staart}.",
+                              f"Uit de wolken {werkwoord} af en toe een beetje motregen{staart}."))
             return zinnen
-        def zin(met_tijd: str, zonder_tijd: str) -> str:
-            """met_tijd: bijzin na de tijdsbepaling ("trekken er buien over");
-            zonder_tijd: volledige zin als er geen tijdsbepaling is."""
-            return cap(f"{wanneer} {met_tijd}") if wanneer else cap(zonder_tijd)
-
         if kans < 45:
             if soort == "buien":
                 zinnen.append(self.kies(
-                    zin(f"kan er{regio} hier en daar een bui vallen, maar lang niet overal.",
-                        f"Hier en daar kan{regio} een bui vallen, maar lang niet overal."),
-                    zin(f"valt er{regio} misschien een bui.", f"Er valt{regio} misschien een bui.")))
+                    zin("kan er hier en daar een bui vallen, maar lang niet overal.",
+                        "Hier en daar kan een bui vallen, maar lang niet overal."),
+                    zin("valt er misschien een bui.", "Er valt misschien een bui.")))
             else:
                 zinnen.append(self.kies(
-                    zin(f"valt er{regio} misschien wat regen. Op veel plaatsen blijft het droog.",
-                        f"Er valt{regio} misschien wat regen. Op veel plaatsen blijft het droog."),
-                    zin(f"kan er{regio} wat regen vallen.", f"Er kan{regio} wat regen vallen.")))
+                    zin("valt er misschien wat regen. Op veel plaatsen blijft het droog.",
+                        "Er valt misschien wat regen. Op veel plaatsen blijft het droog."),
+                    zin("kan er wat regen vallen.", "Er kan wat regen vallen.")))
         elif kans < 65:
             if soort == "buien":
                 zinnen.append(self.kies(
-                    zin(f"trekken er{regio} een paar buien over.", f"Er trekken{regio} een paar buien over."),
-                    zin(f"is de kans op een bui{regio} vrij groot.", f"De kans op een bui is{regio} vrij groot.")))
+                    zin("trekken er een paar buien over.", "Er trekken een paar buien over."),
+                    zin("is de kans op een bui vrij groot.", "De kans op een bui is vrij groot.")))
             else:
                 zinnen.append(self.kies(
-                    zin(f"valt er{regio} regen, al wordt het waarschijnlijk niet overal nat.",
-                        f"Er valt{regio} af en toe regen. Waarschijnlijk wordt het niet overal nat."),
-                    zin(f"valt er{regio} af en toe regen.", f"Er valt{regio} af en toe regen.")))
+                    zin("valt er regen, al wordt het waarschijnlijk niet overal nat.",
+                        "Er valt af en toe regen. Waarschijnlijk wordt het niet overal nat."),
+                    zin("valt er af en toe regen.", "Er valt af en toe regen.")))
         else:
             if soort == "buien":
                 zinnen.append(self.kies(
-                    zin(f"trekken er{regio} buien over.", f"Er trekken{regio} buien over."),
-                    zin(f"krijgen we{regio} buien.", f"We krijgen{regio} te maken met buien.")))
+                    zin("trekken er buien over.", "Er trekken buien over."),
+                    zin("krijgen we buien.", "We krijgen te maken met buien.")))
             else:
                 zinnen.append(self.kies(
-                    zin(f"gaat het{regio} regenen.", f"Het gaat{regio} regenen."),
-                    zin(f"trekt er{regio} een regenzone over.", f"Er trekt{regio} een regenzone over.")))
+                    zin("gaat het regenen.", "Het gaat regenen."),
+                    zin("trekt er een regenzone over.", "Er trekt een regenzone over.")))
         # Hoeveelheid
         als_nat = N.get("als_nat") or {}
         if soort == "buien":
@@ -371,16 +421,15 @@ class Schrijver:
             zinnen.append(self.kies("Veel stelt het niet voor.", "Het gaat om kleine hoeveelheden."))
         # Onweer en hagel
         if N.get("onweer") == "redelijk":
-            zinnen.append("Bij de buien kan het ook onweren" + (", met kans op hagel." if N.get("hagel") else "."))
+            zinnen.append("Bij de buien kan het ook onweren" + (". Er kan hagel bij zitten." if N.get("hagel") else "."))
         elif N.get("onweer") == "klein" and soort == "buien":
-            zinnen.append(self.kies("Een onweersbui is niet helemaal uitgesloten.",
-                                    "Een enkele bui kan gepaard gaan met onweer."))
+            zinnen.append(self.kies("Een onweersbui is niet uitgesloten.", "Bij een bui kan het ook onweren."))
         if t_eind and t_begin and (t_eind - t_begin).total_seconds() / 3600 <= 4 and kans >= 45 \
                 and (eind - t_eind).total_seconds() / 3600 >= 3:
             self.droog_na = True
             zinnen.append(cap(f"{dagdeel_woord(t_eind + timedelta(hours=1), nacht)} wordt het weer droog."))
         if N.get("timing", {}).get("begin_spreiding_uur", 0) >= 6:
-            zinnen.append("Hoe laat de neerslag precies komt, is nog onzeker.")
+            zinnen.append("Hoe laat de regen precies komt, is nog niet zeker.")
         return zinnen
 
     def neerslag_regio(self, N: dict) -> str:
@@ -388,9 +437,9 @@ class Schrijver:
         noord, zuid = r.get("noord") or 0, r.get("zuid") or 0
         kust, land = r.get("kust") or 0, r.get("land") or 0
         if max(noord, zuid) >= 0.2 and abs(noord - zuid) >= 0.15:
-            return " vooral ten noorden van de Maas" if noord > zuid else " vooral ten zuiden van de Maas"
+            return "vooral ten noorden van de Maas" if noord > zuid else "vooral ten zuiden van de Maas"
         if max(kust, land) >= 0.2 and abs(kust - land) >= 0.2:
-            return " vooral aan de kust" if kust > land else " vooral verder van zee"
+            return "vooral aan de kust" if kust > land else "vooral verder van zee"
         return ""
 
     # ── Temperatuur ─────────────────────────────────────────────────────────
@@ -436,6 +485,22 @@ class Schrijver:
                 z.append("Dat is zacht voor de tijd van het jaar.")
             elif afwijking <= -3:
                 z.append("Dat is fris voor de tijd van het jaar.")
+        ochtend = self.vak(p["datum"], "06-12")
+        avond = self.vak(p["datum"], "18-24")
+        if not middag_modus and ochtend and ochtend.get("t_min") is not None:
+            start = afr(ochtend["t_min"])
+            if T["waarde"] - ochtend["t_min"] >= 5:
+                z.append(self.kies(f"De ochtend begint met een graad of {start}.",
+                                   f"Vroeg op de dag is het nog een graad of {start}."))
+        ochtend_gemeld = bool(z) and "begint met een graad" in z[-1] or "Vroeg op de dag" in (z[-1] if z else "")
+        avond_anders = not (ochtend and ochtend.get("t_min") is not None
+                            and avond and avond.get("t_min") is not None
+                            and abs(avond["t_min"] - ochtend["t_min"]) < 2 and ochtend_gemeld)
+        if avond and avond.get("t_min") is not None and T["waarde"] - avond["t_min"] >= 3 and avond_anders:
+            z.append(self.kies(f"In de avond zakt de temperatuur naar een graad of {afr(avond['t_min'])}.",
+                               f"Tegen de nacht koelt het af naar een graad of {afr(avond['t_min'])}."))
+        if (T.get("dauwpunt") or 0) >= 18:
+            z.append(self.kies("Het voelt vochtig en benauwd.", "Door de vochtige lucht voelt het benauwd."))
         kust = T.get("kust")
         if kust is not None and T["waarde"] - kust >= 1.5:
             mate = "duidelijk" if T["waarde"] - kust >= 3 else "wat"
@@ -532,6 +597,10 @@ class Schrijver:
             else:
                 z.append(self.kies(f"Aan zee staat wat meer wind, {bft_tekst(bk)}.",
                                    f"Aan zee waait het wat harder, {bft_tekst(bk)}."))
+        if nacht and (p.get("mist") or {}).get("ws_nacht") is not None and 2 <= (W.get("bft") or 0) <= 4 \
+                and p["mist"]["ws_nacht"] <= 1.5 and not W.get("draaiing"):
+            z.append(self.kies("In de loop van de nacht gaat de wind liggen.",
+                               "Later in de nacht valt de wind bijna helemaal weg."))
         sl, sk = W.get("stoten_land_kmh"), W.get("stoten_kust_kmh")
         if (sl or 0) >= 50 or (sk or 0) >= 60:
             zwaar = "zware " if max(sl or 0, sk or 0) >= 90 else ""
@@ -632,12 +701,16 @@ class Schrijver:
             if n is not None and obs.get("t") is not None:
                 lucht = "zwaar bewolkt" if n >= 7 else "half bewolkt" if n >= 4 else "vrij zonnig"
                 alinea1.append(f"Op dit moment is het in Rotterdam {lucht} en {afr(obs['t'])} graden.")
+        if not middag:
+            alinea1 += self.ochtendmist(p)
         alinea1 += self.samen(self.lucht_dag(p, middag), self.neerslag(p), p["neerslag"]["kans"])
+        if not middag:
+            alinea1 += self.zon_zin(p)
         # Avondvooruitblik als de volgende nacht duidelijk natter is
         if not middag and volgende and volgende["neerslag"]["kans"] >= 40 and p["neerslag"]["kans"] < 35:
             alinea1.append("In de avond neemt de kans op een bui toe." if volgende["neerslag"].get("soort") == "buien"
                            else "In de avond neemt de kans op regen toe.")
-        alinea2 = self.temp_dag(p, middag) + self.wind(p)
+        alinea2 = self.temp_dag(p, middag) + self.wind(p) + (self.windverloop(p) if not middag else [])
         onzeker = self.onzekerheid(p)
         if onzeker:
             alinea2.append(onzeker)

@@ -292,6 +292,8 @@ def model_venster(m: B.Model, start: datetime, eind: datetime, soort: str) -> di
         uit["tmin_stad"] = float(np.nanmedian(tmin[STAD]))
         uit["tmin_platteland"] = float(np.nanmedian(tmin[PLATTELAND]))
         uit["tmin_koudst"] = float(np.nanmin(tmin[PLATTELAND]))
+    if "td" in d and len(ii):
+        uit["td_p75"] = float(np.nanpercentile(d["td"][LAND][:, ii], 75))
     uit["t_begin"] = float(np.nanmedian(d["t"][LAND, ii[0]])) if len(ii) else None
     uit["t_eind"] = float(np.nanmedian(d["t"][LAND, ii[-1]])) if len(ii) else None
 
@@ -860,6 +862,8 @@ def analyseer(nu: datetime | None = None) -> dict:
                 if gemeten:
                     temp["gemeten_max_tot_nu"] = rond(max(gemeten))
             temp["afwijkers"] = afwijkers(stats, w, "tmax_land", 2.5, labels)
+            vd = verdeling(stats, w, "td_p75")
+            temp["dauwpunt"] = rond(vd["mediaan"]) if vd else None
         else:
             extra = []
             if mos_land.get("tmin") is not None:
