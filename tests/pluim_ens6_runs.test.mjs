@@ -142,3 +142,15 @@ test('new live run before archive publication is offered only after all 51 core 
   const response=await handleEns6(url,new Request(url),{},fetcher);
   assert.equal(response.status,200);assert.equal((await response.json()).run,id);
 });
+test('sparse_fields publish early-run pressure levels only via their own capability; snowfall is requested',()=>{
+  assert(PARAMETERS.includes('snowfall'));
+  assert(!PARAMETERS.includes('cape'));
+  const doc=archive();
+  for(const row of doc.runs[0].members.temperature_850hPa)row[1]=null;
+  const base={...manifest.runs[0],fields:manifest.runs[0].fields.filter(f=>f!=='temperature_850hPa')};
+  assert(archivedDataset(doc,base).ens.weerlab_unavailable_variables.includes('temperature_850hPa'));
+  const data=archivedDataset(doc,{...base,sparse_fields:['temperature_850hPa']});
+  assert.equal(data.ens.hourly.temperature_850hPa[1],null);
+  assert(Number.isFinite(data.ens.hourly.temperature_850hPa[2]));
+  assert(!data.ens.weerlab_unavailable_variables.includes('temperature_850hPa'));
+});

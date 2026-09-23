@@ -112,6 +112,38 @@ class CloudArchiveTest(unittest.TestCase):
             self.assertNotIn("cloud_cover_mid", changed["runs"][0]["fields"])
             self.assertNotEqual(changed["revision"], manifest["revision"])
 
+    def test_early_run_gets_sparse_pressure_levels_as_separate_capability(self):
+        hourly = self.hourly()
+        for field in trend.SPARSE_EARLY_BASES:
+            for member in range(51):
+                hourly[field + (f"_member{member:02d}" if member else "")] = [5, 6, 7, 8, 9]
+        merged, added = self.merge(hourly=hourly)
+        self.assertTrue(set(trend.SPARSE_EARLY_BASES).issubset(added))
+        self.assertEqual(merged["members"]["temperature_850hPa"][0],
+                         [5, None, None, 6, None, None, 7, None, None, 8, None, None, 9])
+        self.assertNotIn("temperature_850hPa", trend.complete_run_fields(merged))
+        self.assertEqual(set(trend.sparse_run_fields(merged)), set(trend.SPARSE_EARLY_BASES))
+        self.assertEqual(self.merge(merged, hourly=hourly)[0]["data_sha256"], merged["data_sha256"])
+        # Een ontbrekend lid in de bron maakt het hele veld ongeschikt.
+        partial = copy.deepcopy(hourly)
+        partial["temperature_500hPa_member17"][2] = None
+        self.assertNotIn("temperature_500hPa", self.merge(hourly=partial)[1])
+        stations = [("Een", "een", 52, 5), ("Twee", "twee", 53, 6)]
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, slug, lat, lon in stations:
+                Path(tmp, f"pluim_trend_{slug}.json").write_text(json.dumps({"schema": 3, "slug": slug, "runs": [merged]}))
+            entry = trend.build_capability_payload(Path(tmp), stations)["runs"][0]
+            self.assertTrue(set(trend.SPARSE_EARLY_BASES).isdisjoint(entry["fields"]))
+            self.assertEqual(entry["sparse_fields"], list(trend.SPARSE_EARLY_BASES))
+
+    def test_sparse_matrix_rejects_partial_time_columns(self):
+        full = [[1.0, None, 2.0] for _ in range(51)]
+        self.assertTrue(trend.is_sparse_column_matrix(full, 3))
+        broken = copy.deepcopy(full)
+        broken[4][1] = 3.0
+        self.assertFalse(trend.is_sparse_column_matrix(broken, 3))
+        self.assertFalse(trend.is_sparse_column_matrix([[1.0, None, None] for _ in range(51)], 3))
+
     def test_no_change_at_one_station_does_not_block_other_cloud_updates(self):
         self.check_batch(None)
 

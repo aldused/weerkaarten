@@ -30,7 +30,8 @@ var WeerlabEns6Runs = (() => {
   // pluim_ens6_data.mjs
   var MODEL = "ecmwf_ifs025";
   var CORE = ["cloud_cover", "wind_direction_10m"];
-  var PARAMETERS = [...CORE, "cloud_cover_low", "cloud_cover_mid", "cape", "temperature_850hPa", "temperature_500hPa"];
+  var PARAMETERS = [...CORE, "cloud_cover_low", "cloud_cover_mid", "snowfall", "temperature_850hPa", "temperature_500hPa"];
+  var ALLOWED_PARAMETERS = [...PARAMETERS, "cape"];
   function runId(value) {
     const raw = String(value || "");
     const match = /^(\d{4})(\d{2})(\d{2})T(00|06|12|18)$/.exec(raw);

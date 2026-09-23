@@ -104,7 +104,7 @@
   <div class="header">
     <div>
       <div class="header-titel">📊 Ensemble 6 pluim+</div>
-      <div class="header-sub">Schaduwgevende en totale bewolkingskansen · Windrichting · Onweer · 850/500 hPa waar beschikbaar · native modelstappen</div>
+      <div class="header-sub">Schaduwgevende en totale bewolkingskansen · Windrichting · Sneeuw · 850/500 hPa waar beschikbaar · native modelstappen</div>
     </div>
     <div class="header-rechts">
       <div class="datum" id="hdrDatum">—</div>
@@ -148,7 +148,7 @@
 
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
 <script src="pluim_cloud_probability.js?v=20260919-cloud-probability"></script>
-<script src="pluim_ens6_runs.browser.js?v=20260920-exact1"></script>
+<script src="pluim_ens6_runs.browser.js?v=20260923-sneeuw"></script>
 <script>
 const {RunController, runId, runToken, runLabel} = WeerlabEns6Runs;
 const STATIONS = [
@@ -360,7 +360,9 @@ function optionalMemberMatrix(hourly, key, startIndex, cutoffLength, unavailable
     // controle + member01…member50 voor de hele gekozen run aanwezig zijn.
     // Een gedeeltelijk drukvlakveld wordt dus nooit tot null-statistiek of met
     // waarden uit een andere cyclus aangevuld.
-    exactEnsembleMembers(hourly, key);
+    // Vroege 00/06 UTC-runs mogen tijdstippen zonder bronwaarde hebben (alle
+    // leden null), maar nooit een tijdstip met slechts een deel van de leden.
+    exactEnsembleMembers(hourly, key, 51, true);
     return requireMemberMatrix(
       trimTrailingMissing(boundedMembersOf(hourly, key, startIndex, cutoffLength)),
       `${key}-`,
@@ -370,7 +372,7 @@ function optionalMemberMatrix(hourly, key, startIndex, cutoffLength, unavailable
     return null;
   }
 }
-function exactEnsembleMembers(hourly, key, expectedCount = 51) {
+function exactEnsembleMembers(hourly, key, expectedCount = 51, emptyColumnsAllowed = false) {
   const expectedKeys = [key];
   for (let member = 1; member < expectedCount; member++) {
     expectedKeys.push(`${key}_member${String(member).padStart(2, '0')}`);
@@ -382,8 +384,18 @@ function exactEnsembleMembers(hourly, key, expectedCount = 51) {
   }
   const expectedLength = Array.isArray(hourly?.time) ? hourly.time.length : 0;
   const matrix = expectedKeys.map(memberKey => hourly[memberKey]);
-  const incomplete = matrix.some(series => !Array.isArray(series) || series.length !== expectedLength ||
-    series.some(value => !Number.isFinite(value)));
+  const malformed = matrix.some(series => !Array.isArray(series) || series.length !== expectedLength);
+  let incomplete = malformed || matrix.some(series => series.some(value => !Number.isFinite(value)));
+  if (emptyColumnsAllowed && !malformed) {
+    let filled = 0;
+    incomplete = false;
+    for (let index = 0; index < expectedLength && !incomplete; index++) {
+      const finite = matrix.filter(series => Number.isFinite(series[index])).length;
+      if (finite === expectedCount) filled++;
+      else if (finite > 0 || matrix.some(series => series[index] != null)) incomplete = true;
+    }
+    incomplete = incomplete || filled < 2;
+  }
   if (!expectedLength || incomplete) {
     throw new Error(`${key}: de gekozen run is nog niet op ieder tijdstip volledig geladen voor alle ${expectedCount} leden`);
   }
@@ -1118,7 +1130,7 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   const times = candidateTimes.slice(0, cutoffLength);
 
   const requiredVariables = ['cloud_cover', 'wind_direction_10m'];
-  const optionalVariables = ['cape', 'temperature_850hPa', 'temperature_500hPa'];
+  const optionalVariables = ['snowfall', 'temperature_850hPa', 'temperature_500hPa'];
   const unavailable = new Set(ens?.weerlab_unavailable_variables || []);
   const unavailableAliases = {
     cloud_cover: 'cloudcover',
@@ -1139,7 +1151,7 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
     hourly, 'cloud_cover_low', 'cloud_cover_mid', startIndex, cutoffLength,
   );
   const wdirMembers  = requireMemberMatrix(trimTrailingMissing(boundedMembersOf(hourly, 'winddirection_10m', startIndex, cutoffLength)), 'windrichtings');
-  const capeMembers = optionalMemberMatrix(
+  const snowMembers = optionalMemberMatrix(
     hourly, optionalVariables[0], startIndex, cutoffLength, unavailable,
   );
   const t850Members = optionalMemberMatrix(
@@ -1177,7 +1189,13 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
     ? WeerlabCloudProbability.combineShadowMembers(shadowLowUse, shadowMidUse)
     : null;
   const wdirUse = trimMatrix(wdirMembers);
-  const capeUse = capeMembers ? trimMatrix(capeMembers) : null;
+  // Sneeuw als cumulatieve som per lid: Open-Meteo levert native
+  // intervalsommen (cm), dus de som is onafhankelijk van 1/3/6-uursstappen.
+  const cumulative = series => {
+    let total = 0;
+    return series.map(value => (Number.isFinite(value) ? (total += value) : null));
+  };
+  const snowUse = snowMembers ? trimMatrix(snowMembers).map(cumulative) : null;
   const t850Use = t850Members ? trimMatrix(t850Members) : null;
   const t500Use = t500Members ? trimMatrix(t500Members) : null;
 
@@ -1213,18 +1231,25 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
       return useTimes.map(() => null);
     }
   };
-  const capeHres  = optionalAlignHres(hr.cape, 'CAPE');
+  // HRES-sneeuw eerst op de eigen (fijnere) tijdas cumuleren, dan pas op de
+  // ENS-tijdstippen uitlijnen; een gat maakt de rest van de reeks ongeldig.
+  const hresSnowCumulative = Array.isArray(hr.snowfall)
+    ? (() => { let total = 0, broken = false; return hr.snowfall.map((value, index) => {
+        if (broken || (!Number.isFinite(value) && index > 0)) { broken = true; return null; }
+        total += Number.isFinite(value) ? value : 0; return total; }); })()
+    : null;
+  const snowHres  = optionalAlignHres(hresSnowCumulative, 'sneeuw');
   const t850Hres  = optionalAlignHres(hr.temperature_850hPa, 'temperatuur 850 hPa');
   const t500Hres  = optionalAlignHres(hr.temperature_500hPa, 'temperatuur 500 hPa');
 
-  const capeEns  = capeUse;
+  const snowEns  = snowUse;
   const t850Ens  = t850Use;
   const t500Ens  = t500Use;
 
   const pct = (arrs, p) => percentile(arrs, p);
   const pcts = arrs => ({ p10:pct(arrs,0.1), p25:pct(arrs,0.25), p50:pct(arrs,0.5), p75:pct(arrs,0.75), p90:pct(arrs,0.9) });
 
-  const capeP  = capeEns ? pcts(capeEns) : null;
+  const snowP  = snowEns ? pcts(snowEns) : null;
   const t850P  = t850Ens ? pcts(t850Ens) : null;
   const t500P  = t500Ens ? pcts(t500Ens) : null;
 
@@ -1257,27 +1282,39 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
     { title:"Totale bewolking (%)", stacked:cloudStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
     { title:"Windrichting — kans per sector", stacked:wdirStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>Math.round(v) },
   ];
-  if (capeP) {
-    panels.push({ title:"Onweer — CAPE (J/kg)", ...capeP, hres:capeHres, fanColor:'#cc6600', xMode:'model', yMin:0, yMax:5000 });
+  // Vroege 00/06 UTC-runs hebben een uurlijkse tijdas; 850/500 hPa komen
+  // daar alleen op de 3-uurlijkse brontijdstippen voor. Teken zo'n paneel
+  // uitsluitend op tijdstippen waarop het ensemble werkelijk waarden heeft,
+  // zonder interpolatie (zelfde principe als schaduwgevende bewolking).
+  const nativeFanPanel = panel => {
+    const indexes = useTimes.flatMap((_, index) => Number.isFinite(panel.p50?.[index]) ? [index] : []);
+    if (indexes.length === useTimes.length) return panel;
+    const pick = series => Array.isArray(series) ? indexes.map(index => series[index]) : series;
+    return { ...panel, times: indexes.map(index => useTimes[index]),
+      p10:pick(panel.p10), p25:pick(panel.p25), p50:pick(panel.p50), p75:pick(panel.p75), p90:pick(panel.p90), hres:pick(panel.hres) };
+  };
+  if (snowP) {
+    const snowMax = Math.max(1, ...snowP.p90.filter(Number.isFinite), ...snowHres.filter(Number.isFinite));
+    panels.push({ title:"Sneeuw — cumulatief (cm)", ...snowP, hres:snowHres, fanColor:'#4a90c8', xMode:'model', yMin:0, yMax:Math.ceil(snowMax * 1.1), valueFmt:v=>v < 10 ? v.toFixed(1) : v.toFixed(0) });
   } else {
-    panels.push({title:'Onweer — CAPE (J/kg)',unavailable:'CAPE ontbreekt voor deze modelrun.',yMin:0,yMax:5000});
+    panels.push({title:'Sneeuw — cumulatief (cm)',unavailable:'Sneeuwval ontbreekt voor deze modelrun.',yMin:0,yMax:1});
   }
   if (t850P) {
     const [t850Mn, t850Mx] = pad(...rangeOf([t850P.p10, t850P.p90], t850Hres), 0.08);
-    panels.push({ title:"Temperatuur 850 hPa (°C)", ...t850P, hres:t850Hres, fanColor:'#cc0033', xMode:'model', yMin:Math.floor(t850Mn/2)*2, yMax:Math.ceil(t850Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" });
+    panels.push(nativeFanPanel({ title:"Temperatuur 850 hPa (°C)", ...t850P, hres:t850Hres, fanColor:'#cc0033', xMode:'model', yMin:Math.floor(t850Mn/2)*2, yMax:Math.ceil(t850Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
   } else {
     panels.push({title:'Temperatuur 850 hPa (°C)',unavailable:'850 hPa ontbreekt voor deze modelrun.',yMin:-10,yMax:20});
   }
   if (t500P) {
     const [t500Mn, t500Mx] = pad(...rangeOf([t500P.p10, t500P.p90], t500Hres), 0.08);
-    panels.push({ title:"Temperatuur 500 hPa (°C)", ...t500P, hres:t500Hres, fanColor:'#5566cc', xMode:'model', yMin:Math.floor(t500Mn/2)*2, yMax:Math.ceil(t500Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" });
+    panels.push(nativeFanPanel({ title:"Temperatuur 500 hPa (°C)", ...t500P, hres:t500Hres, fanColor:'#5566cc', xMode:'model', yMin:Math.floor(t500Mn/2)*2, yMax:Math.ceil(t500Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
   } else {
     panels.push({title:'Temperatuur 500 hPa (°C)',unavailable:'500 hPa ontbreekt voor deze modelrun.',yMin:-40,yMax:0});
   }
   const hasHres = panels.some(panel => Array.isArray(panel.hres) && panel.hres.some(Number.isFinite));
   const missingPanels = [
     ...(!shadowStack ? ['schaduwgevende bewolking'] : []),
-    ...(!capeP ? ['CAPE/onweer'] : []),
+    ...(!snowP ? ['sneeuw'] : []),
     ...(!t850P ? ['850 hPa'] : []),
     ...(!t500P ? ['500 hPa'] : []),
   ];

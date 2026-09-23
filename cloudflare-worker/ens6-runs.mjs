@@ -1,4 +1,4 @@
-import {MODEL, CORE, PARAMETERS, runId, publishedRuns, nearestStation, archivedDataset, assertDataset} from '../pluim_ens6_data.mjs';
+import {MODEL, CORE, PARAMETERS, ALLOWED_PARAMETERS, runId, publishedRuns, nearestStation, archivedDataset, assertDataset} from '../pluim_ens6_data.mjs';
 const ROOT = 'https://data.weerlab.nl';
 const META = 'https://ensemble-api.open-meteo.com/data/ecmwf_ifs025_ensemble/static/meta.json';
 const headers = {'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*', 'Cache-Control':'no-store'};
@@ -53,11 +53,11 @@ export async function handleEns6(url, request, env, fetcher=fetch) {
     const entry = entries.find(e=>e.run === id) || (liveReady && id===liveId ? {run:id,fields:PARAMETERS,live:true,revision:liveRevision} : null);
     if (!entry) return response({error:'Deze modelrun is niet (meer) beschikbaar. Kies bewust een andere run.'},404);
     const fields = (url.searchParams.get('hourly') || PARAMETERS.join(',')).split(',');
-    if (!fields.length || fields.some(f=>!PARAMETERS.includes(f))) return response({error:'Onbekende ENS6plus-parameter.'},400);
+    if (!fields.length || fields.some(f=>!ALLOWED_PARAMETERS.includes(f))) return response({error:'Onbekende ENS6plus-parameter.'},400);
     const hresRequest=(async()=>{
       try {
         const endpoint=new URL('https://single-runs-api.open-meteo.com/v1/forecast');
-        endpoint.search=new URLSearchParams({latitude:String(lat),longitude:String(lon),models:'ecmwf_ifs',run:id.slice(0,16),hourly:'cape,temperature_850hPa,temperature_500hPa',forecast_days:'15',temporal_resolution:'native',timezone:'GMT'});
+        endpoint.search=new URLSearchParams({latitude:String(lat),longitude:String(lon),models:'ecmwf_ifs',run:id.slice(0,16),hourly:'snowfall,cape,temperature_850hPa,temperature_500hPa',forecast_days:'15',temporal_resolution:'native',timezone:'GMT'});
         const res=await fetcher(endpoint.toString(),{signal:AbortSignal.any([signal,AbortSignal.timeout(8000)]),cf:{cacheTtl:300,cacheEverything:true}});
         if(!res.ok)return null;
         const data=await res.json(),hourly=data.hourly;
@@ -66,7 +66,7 @@ export async function handleEns6(url, request, env, fetcher=fetch) {
         const start=times.findIndex(t=>Date.parse(t)===Date.parse(id));
         if(start<0)return null;
         const result={time:times.slice(start)};
-        for(const field of ['cape','temperature_850hPa','temperature_500hPa'])if(hourly[field]?.length===times.length)result[field]=hourly[field].slice(start);
+        for(const field of ['snowfall','cape','temperature_850hPa','temperature_500hPa'])if(hourly[field]?.length===times.length)result[field]=hourly[field].slice(start);
         return {weerlab_run:id,hourly:result};
       } catch { return null; }
     })();

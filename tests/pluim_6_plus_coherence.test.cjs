@@ -24,7 +24,7 @@ const early=context.buildModel(structuredClone(core),null,start,Date.parse(times
 assert.equal(early.panels.length,6);
 assert.equal(early.panels.filter(p=>p.unavailable).length,4);
 assert.match(early.panelStatus,/2 van 6/);
-const full=ensemble(['cloud_cover','cloud_cover_low','cloud_cover_mid','wind_direction_10m','cape','temperature_850hPa','temperature_500hPa']);
+const full=ensemble(['cloud_cover','cloud_cover_low','cloud_cover_mid','wind_direction_10m','snowfall','temperature_850hPa','temperature_500hPa']);
 assert.equal(context.buildModel(structuredClone(full),null,start,Date.parse(times.at(-1))).panelStatus,'6 van 6 panelen');
 const cloudGaps=structuredClone(full);
 for(const [key,row] of Object.entries(cloudGaps.hourly))if(key.startsWith('cloud_cover_low')||key.startsWith('cloud_cover_mid'))row[1]=null;
@@ -40,6 +40,15 @@ const sparseModel=context.buildModel(sparse,null,start,Date.parse(times.at(-1)))
 assert.equal(sparseModel.panels[1].stacked.validCounts[2],50);
 const partial=structuredClone(full);partial.hourly.temperature_850hPa_member17[2]=null;
 assert(context.buildModel(partial,null,start,Date.parse(times.at(-1))).panels[4].unavailable);
+const sparse850=structuredClone(full);
+for(const [key,row] of Object.entries(sparse850.hourly))if(key.startsWith('temperature_850hPa'))row[1]=null;
+const t850Panel=context.buildModel(sparse850,null,start,Date.parse(times.at(-1))).panels[4];
+assert(!t850Panel.unavailable,'850 hPa op exacte brontijdstippen blijft beschikbaar');
+assert.deepEqual(Array.from(t850Panel.times,t=>t.toISOString()),[times[0],times[2],times[3]]);
+assert(t850Panel.p50.every(Number.isFinite));
+const snowPanel=context.buildModel(structuredClone(full),null,start,Date.parse(times.at(-1))).panels[3];
+assert.match(snowPanel.title,/Sneeuw/);
+assert.deepEqual(Array.from(snowPanel.p50),[20,60,120,200],'sneeuw is cumulatief per lid');
 assert.throws(()=>context.buildModel({...core,weerlab_run:'2026-09-19T00:00:00Z'},null,start,Date.parse(times.at(-1))),/andere ECMWF-run/);
 assert.throws(()=>context.buildModel(structuredClone(core),{weerlab_run:'2026-09-19T00:00:00Z',hourly:{}},start,Date.parse(times.at(-1))),/andere ECMWF-initialisatie/);
 assert.throws(()=>context.buildModel(structuredClone(core),null,start+3600000,Date.parse(times.at(-1))));

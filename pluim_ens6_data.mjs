@@ -1,7 +1,9 @@
 // Shared, pure contracts for the ENS6plus endpoint and browser.
 export const MODEL = 'ecmwf_ifs025';
 export const CORE = ['cloud_cover', 'wind_direction_10m'];
-export const PARAMETERS = [...CORE, 'cloud_cover_low', 'cloud_cover_mid', 'cape', 'temperature_850hPa', 'temperature_500hPa'];
+export const PARAMETERS = [...CORE, 'cloud_cover_low', 'cloud_cover_mid', 'snowfall', 'temperature_850hPa', 'temperature_500hPa'];
+// CAPE blijft opvraagbaar voor nog gecachte oudere pagina's.
+export const ALLOWED_PARAMETERS = [...PARAMETERS, 'cape'];
 export function runId(value) {
   const raw = String(value || '');
   const match = /^(\d{4})(\d{2})(\d{2})T(00|06|12|18)$/.exec(raw);
@@ -49,7 +51,10 @@ export function archivedDataset(document, entry, parameters=PARAMETERS) {
   const hourly = {time:times.map(t=>new Date(t).toISOString())};
   const missing = [];
   for (const field of parameters) {
-    const matrix = entry.fields.includes(field) ? matrixFor(run, field) : null;
+    // sparse_fields: vroege 00/06 UTC-runs hebben sommige drukvlakvelden alleen
+    // op de exacte 3-uurlijkse brontijdstippen; overige tijdstippen blijven null.
+    const published = entry.fields.includes(field) || entry.sparse_fields?.includes(field);
+    const matrix = published ? matrixFor(run, field) : null;
     if (!matrix) { missing.push(field); continue; }
     matrix.forEach((row,i)=>{hourly[field+(i ? `_member${String(i).padStart(2,'0')}` : '')] = row;});
   }

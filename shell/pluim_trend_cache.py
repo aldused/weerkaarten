@@ -122,6 +122,13 @@ ARCHIVE_BASES = CORE_BASES + (
 # beschikbaar; LI kan later weer aan deze set worden toegevoegd zodra de bron
 # aantoonbaar eindige waarden levert.
 ENRICHMENT_BASES = tuple(base for base in ARCHIVE_BASES if base != "lifted_index")
+# Vroege 00/06 UTC-runs (O1280, uurlijkse tijdas) missen deze drukvlakvelden.
+# Open-Meteo IFS025 levert ze op 3-uurlijkse stappen. Ze mogen alleen op die
+# exacte brontijdstippen worden aangevuld: per tijdstip alle 51 leden of geen.
+# Zo'n matrix is geen volledige capability ("fields") maar een aparte
+# "sparse_fields"-capability, zodat consumenten die complete matrices eisen
+# hem nooit per ongeluk gebruiken.
+SPARSE_EARLY_BASES = ("temperature_850hPa", "temperature_500hPa")
 
 META_URL = "https://ensemble-api.open-meteo.com/data/ecmwf_ifs025_ensemble/static/meta.json"
 
@@ -233,6 +240,22 @@ def is_cloud_layer_matrix(matrix: object, n: int) -> bool:
                 for row in matrix for value in row)
         and any(is_finite_number(value) for row in matrix for value in row)
     )
+
+
+def is_sparse_column_matrix(matrix: object, n: int) -> bool:
+    """51 x n matrix whose every time column is either fully finite or fully null."""
+    if not (n >= 2 and isinstance(matrix, list) and len(matrix) == MEMBER_COUNT
+            and all(isinstance(row, list) and len(row) == n for row in matrix)):
+        return False
+    filled = 0
+    for index in range(n):
+        column = [row[index] for row in matrix]
+        if all(value is None for value in column):
+            continue
+        if not all(is_finite_number(value) for value in column):
+            return False
+        filled += 1
+    return filled >= 2
 
 
 def minimum_horizon_hours(cycle: datetime) -> int:
@@ -605,6 +628,18 @@ def complete_run_fields(run: dict) -> list[str]:
     ]
 
 
+def sparse_run_fields(run: dict) -> list[str]:
+    """Early-run fields present only on exact native source times."""
+    times = run_time_axis(run)
+    if times is None:
+        return []
+    return [
+        base for base in SPARSE_EARLY_BASES
+        if not is_complete_matrix(matrix_for_run(run, base), len(times))
+        and is_sparse_column_matrix(matrix_for_run(run, base), len(times))
+    ]
+
+
 def is_all_null_matrix(matrix: object, n: int) -> bool:
     return (
         n >= 2
@@ -757,6 +792,20 @@ def enrich_run_ensemble(
                 added.append(base)
             continue
         if missing_times:
+            if base not in SPARSE_EARLY_BASES:
+                continue
+            if is_complete_matrix(matrix_for_run(enriched, base), len(target_times)):
+                continue
+            source_matrix = source_members.get(base)
+            if not is_complete_matrix(source_matrix, len(source_times_ms)):
+                continue
+            aligned = [[row[index] if index is not None else None for index in indices]
+                       for row in source_matrix]
+            if not is_sparse_column_matrix(aligned, len(target_times)):
+                continue
+            if aligned != matrix_for_run(enriched, base):
+                members[base] = aligned
+                added.append(base)
             continue
         # Never overwrite a complete direct or previously enriched matrix.
         if is_complete_matrix(matrix_for_run(enriched, base), len(target_times)):
@@ -954,6 +1003,15 @@ def build_capability_payload(
                 base for base in ARCHIVE_BASES
                 if all(base in station_fields for station_fields in field_sets)
             ]
+            sparse_sets = [
+                station_fields | set(sparse_run_fields(run))
+                for station_fields, run in zip(field_sets, station_runs)
+            ]
+            sparse_fields = [
+                base for base in SPARSE_EARLY_BASES
+                if base not in fields
+                and all(base in station_fields for station_fields in sparse_sets)
+            ]
             complete = (
                 same_times
                 and set(CORE_BASES).issubset(fields)
@@ -963,14 +1021,17 @@ def build_capability_payload(
                 slug: runs_by_station[slug][run_iso]["data_sha256"]
                 for slug in sorted(runs_by_station)
             }
-            runs_out.append({
+            entry = {
                 "run": run_iso,
                 "fields": fields,
                 "complete": complete,
                 "station_count": len(station_runs),
                 "member_count": MEMBER_COUNT,
                 "data_sha256": canonical_sha256(digests),
-            })
+            }
+            if sparse_fields:
+                entry["sparse_fields"] = sparse_fields
+            runs_out.append(entry)
 
     semantic = {
         "schema": 1,
