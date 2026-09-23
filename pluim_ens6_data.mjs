@@ -4,6 +4,13 @@ export const CORE = ['cloud_cover', 'wind_direction_10m'];
 export const PARAMETERS = [...CORE, 'cloud_cover_low', 'cloud_cover_mid', 'snowfall', 'temperature_850hPa', 'temperature_500hPa'];
 // CAPE blijft opvraagbaar voor nog gecachte oudere pagina's.
 export const ALLOWED_PARAMETERS = [...PARAMETERS, 'cape'];
+// Panelen buiten de twee kernvelden; schaduw vraagt laag + midden samen.
+export const PANEL_GROUPS = [['cloud_cover_low','cloud_cover_mid'], ['snowfall'], ['temperature_850hPa'], ['temperature_500hPa']];
+export const PANEL_TOTAL = 2 + PANEL_GROUPS.length;
+export function panelCount(entry) {
+  const has = field => entry?.fields?.includes(field) || entry?.sparse_fields?.includes(field);
+  return 2 + PANEL_GROUPS.filter(group => group.every(has)).length;
+}
 export function runId(value) {
   const raw = String(value || '');
   const match = /^(\d{4})(\d{2})(\d{2})T(00|06|12|18)$/.exec(raw);

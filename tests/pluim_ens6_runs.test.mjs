@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {RunController} from '../pluim_ens6_runs.mjs';
-import {runId,runLabel,runToken,PARAMETERS,archivedDataset,publishedRuns,assertDataset} from '../pluim_ens6_data.mjs';
+import {runId,runLabel,runToken,PARAMETERS,PANEL_TOTAL,panelCount,archivedDataset,publishedRuns,assertDataset} from '../pluim_ens6_data.mjs';
 import {handleEns6} from '../cloudflare-worker/ens6-runs.mjs';
 
 export const ids=['2026-09-20T00:00:00Z','2026-09-19T18:00:00Z','2026-09-19T12:00:00Z','2026-09-19T06:00:00Z','2026-09-19T00:00:00Z'];
@@ -153,4 +153,14 @@ test('sparse_fields publish early-run pressure levels only via their own capabil
   assert.equal(data.ens.hourly.temperature_850hPa[1],null);
   assert(Number.isFinite(data.ens.hourly.temperature_850hPa[2]));
   assert(!data.ens.weerlab_unavailable_variables.includes('temperature_850hPa'));
+});
+test('without an explicit choice the newest run with all six panels is selected; incomplete newer runs stay selectable',async()=>{
+  const runs=[{run:'2026-09-23T00:00:00Z',fields:['cloud_cover','wind_direction_10m','snowfall'],revision:'r1'},...manifest.runs.slice(1)];
+  const fetcher=async url=>new URL(url).pathname==='/ens6-runs'?Response.json({runs,revision:'r1'}):Response.json(dataset(ids[1]));
+  const control=new RunController({fetcher});
+  const result=await control.load(location);
+  assert.equal(result.data.run,ids[1]);
+  assert.equal(control.runs[0].run,'2026-09-23T00:00:00Z');
+  assert.equal(panelCount(control.runs[0]),3);
+  assert.equal(panelCount({fields:['cloud_cover','wind_direction_10m','snowfall','cloud_cover_low','cloud_cover_mid'],sparse_fields:['temperature_850hPa','temperature_500hPa']}),PANEL_TOTAL);
 });

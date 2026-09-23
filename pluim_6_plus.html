@@ -47,15 +47,15 @@
 
   .page-wrap{padding:14px 20px;background:var(--bg)}
   .method{
-    margin:10px 20px 0;background:#fff;border:1px solid var(--line);border-radius:10px;
+    margin:0 20px 20px;background:#fff;border:1px solid var(--line);border-radius:10px;
     padding:10px 14px;color:#324a68;font-size:12px;line-height:1.5;
   }
   .method summary{cursor:pointer;color:var(--brand-2);font-weight:800}
   .method p{margin-top:8px}
   .method code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#edf3f9;padding:1px 4px;border-radius:4px}
-  .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:auto;position:relative;min-height:360px}
+  .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:hidden;position:relative;min-height:360px}
   #pageHost{min-width:0}
-  .page-card svg{display:block;width:100%;min-width:1800px;height:auto}
+  .page-card svg{display:block;width:100%;height:auto}
   .stack-bar{cursor:crosshair;outline:none}
   .stack-bar:focus .stack-focus,.stack-bar:hover .stack-focus{stroke:#0077b6;stroke-width:4;fill-opacity:.08}
   .chart-tooltip{
@@ -68,10 +68,14 @@
   .chart-tooltip strong{display:block;font-size:13px;margin-bottom:3px}
   .chart-tooltip .tip-row{display:flex;justify-content:space-between;gap:16px}
   .chart-tooltip .tip-row span:last-child{font-variant-numeric:tabular-nums;font-weight:700}
-  .mobile-scroll-hint{display:none}
-  .run-selector{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;background:#082d52;color:#fff}
-  .run-selector label{font-weight:700}.run-selector select{max-width:100%;padding:10px 14px;background:#fff}
-  .run-selector [role=status]{font-size:12px;flex:1;min-width:200px}
+  /* Runbalk in dezelfde stijl als #weerlab-run-switcher van de normale pluim. */
+  .run-selector{position:sticky;top:0;z-index:9998;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:9px 12px;background:#071a33;color:#e2e8f0;border-bottom:1px solid #284766;box-shadow:0 7px 18px rgba(2,12,27,.32);font:700 12px/1.25 Inter,Arial,sans-serif}
+  .run-selector label{color:#9fb8d4;text-transform:uppercase;letter-spacing:.07em;font-size:10px}
+  .run-selector select,.run-selector button.btn{border:1px solid #456482;border-radius:999px;background:#122b47;color:#e5eef8;padding:7px 12px;font:800 12px/1 Inter,Arial,sans-serif;max-width:100%}
+  .run-selector button.btn:hover:not(:disabled){background:#1d4266;border-color:#6ca6d8}
+  .run-selector button.btn:disabled{opacity:.42;cursor:not-allowed}
+  .run-selector [role=status]{color:#cbd5e1;font-weight:650;margin-left:4px}
+  .run-selector [role=status] button{margin-left:6px;border:1px solid #67e8f9;border-radius:999px;background:#0ea5e9;color:#042033;padding:5px 10px;font:800 11px/1 Inter,Arial,sans-serif;cursor:pointer}
   .page-card.updating #pageHost{opacity:.45;pointer-events:none}
   .page-card.updating .loader{position:sticky;inset:auto;top:0;min-height:70px;flex-direction:row;background:#edf5ff;border-bottom:1px solid #c5d3e3;padding:12px}
   .page-card.updating .spinner{width:22px;height:22px}
@@ -80,23 +84,19 @@
   .spinner{width:38px;height:38px;border:4px solid #dce9f7;border-top-color:#0067cc;border-radius:50%;animation:draaien 0.8s linear infinite}
   @keyframes draaien{to{transform:rotate(360deg)}}
   .err{color:#cc2222;font-size:13px;font-weight:600;text-align:center;padding:0 20px}
-  @media (max-width:800px){
-    .header-bg,.page-wrap{padding-left:8px;padding-right:8px}
-    .toolbar,.method{margin-left:8px;margin-right:8px}
-    .toolbar{gap:8px}.runinfo{width:100%;margin-left:0}
-    .page-card svg{width:2400px;max-width:none}
-    .page-card{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
-    .mobile-scroll-hint{display:block;margin:10px 12px -4px;color:#526984;font-size:11px;font-weight:700;text-align:center}
-  }
+  @media (max-width:640px){.method{margin:0 8px 8px}.runinfo{width:100%;margin-left:0}}
 </style>
 <link rel="stylesheet" href="pluim-presentatie.css?v=20260910">
+<link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
+<script src="weerbewaking_return.js?v=20260910-v2" defer></script>
+<script src="pluim_ens6_nav.js?v=20260923-v1" defer></script>
 </head>
 <body>
 
 <div class="run-selector">
-  <label for="ensRunSelect">ENS6plus-modelrun</label>
+  <label for="ensRunSelect">ECMWF-run</label>
   <select id="ensRunSelect" aria-label="Modelrun met datum en UTC-tijd"><option>Runs laden…</option></select>
-  <button class="btn" id="latestRun" type="button">Nieuwste beschikbare run</button>
+  <button class="btn" id="latestRun" type="button">Nieuwste complete run</button>
   <span id="ensRunStatus" role="status" aria-live="polite">Beschikbare modelruns controleren…</span>
 </div>
 
@@ -109,17 +109,9 @@
     <div class="header-rechts">
       <div class="datum" id="hdrDatum">—</div>
       <div class="omschr" id="hdrRun">Versie laden…</div>
-      <div style="margin-top:6px"><a href="index.html">← Terug</a></div>
     </div>
   </div>
 </div>
-
-<details class="method">
-  <summary>Berekening bewolkingskansen en gebruikte lagen</summary>
-  <p><strong>Totale bewolking</strong> gebruikt per ECMWF IFS-ENS-lid rechtstreeks <code>cloud_cover</code> (totale atmosferische bedekkingsgraad). <strong>Schaduwgevende bewolking</strong> gebruikt <code>cloud_cover_low</code> en <code>cloud_cover_mid</code>. Voor IFS worden die API-lagen bepaald uit relatieve vochtigheid op respectievelijk 1000/925/850 hPa (laag en mist, tot circa 3 km) en 700/500 hPa (midden, circa 3–8 km). <code>cloud_cover_high</code> en de onderliggende 300/250/200 hPa-lagen worden bewust niet meegenomen. Omdat ECMWF/Open-Meteo geen rechtstreekse schaduwparameter aanbiedt, worden laag en midden per lid overlap-gecorrigeerd gecombineerd als <code>100 × [1 − (1−laag/100) × (1−midden/100)]</code>. Dit is een random-overlapbenadering: lagen worden niet simpel opgeteld en ook niet met alleen het maximum samengevat. In oudere archieven ontbreken deze lagen soms; het betreffende diagram toont dan “Niet beschikbaar”. De daadwerkelijk geladen modelvariant staat bij de bronvermelding.</p>
-  <p>De klassen zijn centraal vastgelegd als 0–&lt;20, 20–&lt;40, 40–&lt;60, 60–&lt;80 en 80–100%. Exact 20% valt dus in “Licht bewolkt”. Alleen geldige leden tellen mee; een ontbrekende waarde wordt nooit 0%. Als laag of midden ontbreekt, is schaduwgevende bewolking voor dat lid en tijdstip niet beschikbaar.</p>
-  <p>Vroege runs bevatten niet altijd wolkenlagen. Zodra de reguliere bron dezelfde modelrun levert, kan het archief die lagen aanvullen. Alleen exact overeenkomende brontijdstippen worden gebruikt, zonder interpolatie. Het schaduwdiagram kan daardoor minder tijdstappen hebben dan totale bewolking; de tooltip vermeldt het werkelijke tijdstip en aantal geldige leden. Ontbrekende historische lagen worden niet uit een nieuwere run aangevuld.</p>
-</details>
 
 <div class="toolbar">
   <span class="lbl" id="lblStation">Station</span>
@@ -130,12 +122,11 @@
   <span id="plaatsFout" style="font-size:11px;color:#cc2222;font-weight:600"></span>
   <span class="lbl">Update</span>
   <button class="btn" id="btnRefresh">🔄 Vernieuw</button>
-  <button class="btn btn-primair" id="btnPng">📥 Download PNG</button>
+  <button class="btn btn-primair" id="btnPng">📥 Download PNG (A4 landscape)</button>
   <span class="runinfo" id="runinfo"></span>
 </div>
 
 <div class="page-wrap">
-  <div class="mobile-scroll-hint">↔ Veeg horizontaal voor de volledige tijdlijn en Y-as</div>
   <div class="page-card" id="pageCard">
     <div class="loader" id="loader">
       <div class="spinner"></div>
@@ -144,13 +135,20 @@
     <div id="pageHost"></div>
   </div>
 </div>
+<details class="method">
+  <summary>Berekening bewolkingskansen en gebruikte lagen</summary>
+  <p><strong>Totale bewolking</strong> gebruikt per ECMWF IFS-ENS-lid rechtstreeks <code>cloud_cover</code> (totale atmosferische bedekkingsgraad). <strong>Schaduwgevende bewolking</strong> gebruikt <code>cloud_cover_low</code> en <code>cloud_cover_mid</code>. Voor IFS worden die API-lagen bepaald uit relatieve vochtigheid op respectievelijk 1000/925/850 hPa (laag en mist, tot circa 3 km) en 700/500 hPa (midden, circa 3–8 km). <code>cloud_cover_high</code> en de onderliggende 300/250/200 hPa-lagen worden bewust niet meegenomen. Omdat ECMWF/Open-Meteo geen rechtstreekse schaduwparameter aanbiedt, worden laag en midden per lid overlap-gecorrigeerd gecombineerd als <code>100 × [1 − (1−laag/100) × (1−midden/100)]</code>. Dit is een random-overlapbenadering: lagen worden niet simpel opgeteld en ook niet met alleen het maximum samengevat. In oudere archieven ontbreken deze lagen soms; het betreffende diagram toont dan “Niet beschikbaar”. De daadwerkelijk geladen modelvariant staat bij de bronvermelding.</p>
+  <p>De klassen zijn centraal vastgelegd als 0–&lt;20, 20–&lt;40, 40–&lt;60, 60–&lt;80 en 80–100%. Exact 20% valt dus in “Licht bewolkt”. Alleen geldige leden tellen mee; een ontbrekende waarde wordt nooit 0%. Als laag of midden ontbreekt, is schaduwgevende bewolking voor dat lid en tijdstip niet beschikbaar.</p>
+  <p>Vroege runs bevatten niet altijd wolkenlagen. Zodra de reguliere bron dezelfde modelrun levert, kan het archief die lagen aanvullen. Alleen exact overeenkomende brontijdstippen worden gebruikt, zonder interpolatie. Het schaduwdiagram kan daardoor minder tijdstappen hebben dan totale bewolking; de tooltip vermeldt het werkelijke tijdstip en aantal geldige leden. Ontbrekende historische lagen worden niet uit een nieuwere run aangevuld.</p>
+</details>
 <div class="chart-tooltip" id="chartTooltip" role="status" aria-live="polite"></div>
 
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
 <script src="pluim_cloud_probability.js?v=20260919-cloud-probability"></script>
-<script src="pluim_ens6_runs.browser.js?v=20260923-sneeuw"></script>
+<script src="pluim_ens6_runs.browser.js?v=20260923-pluimnav"></script>
 <script>
-const {RunController, runId, runToken, runLabel} = WeerlabEns6Runs;
+const {RunController, runId, runToken, runLabel, panelCount, PANEL_TOTAL} = WeerlabEns6Runs;
+const completeRun = () => runControl.runs.find(r => panelCount(r) === PANEL_TOTAL);
 const STATIONS = [
   { name:"Rotterdam",        lat:51.9244, lon:4.4777 },
   { name:"De Bilt",          lat:52.1010, lon:5.1800 },
@@ -582,15 +580,13 @@ function rangeOf(arrs, extra=[]) {
   return Number.isFinite(mn) && Number.isFinite(mx) ? [mn, mx] : [0, 1];
 }
 
-const PAGE_W=2970, PAGE_H=3300;
+const PAGE_W=2970, PAGE_H=2100;
 const PAGE_MARGIN_X=30, PAGE_HEADER_H=110, PAGE_FOOTER_H=40;
 const PANEL_GAP=16;
-const COLS=2;
-const FULL_PANEL_W = PAGE_W - 2*PAGE_MARGIN_X;
-const PANEL_W = (FULL_PANEL_W - (COLS-1)*PANEL_GAP) / COLS;
+const COLS=2, ROWS=3;
+const PANEL_W = (PAGE_W - 2*PAGE_MARGIN_X - (COLS-1)*PANEL_GAP) / COLS;
 const GRID_H = PAGE_H - PAGE_HEADER_H - PAGE_FOOTER_H - 2*PAGE_MARGIN_X;
-const CLOUD_PANEL_H = 1050;
-const PANEL_H = (GRID_H - 2*CLOUD_PANEL_H - 3*PANEL_GAP) / 2;
+const PANEL_H = (GRID_H - (ROWS-1)*PANEL_GAP) / ROWS;
 const PM = { l: 80, r: 80, t: 92, b: 165 };
 const escapeSvgAttribute = value => String(value)
   .replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -858,22 +854,10 @@ function buildPageSvg(model) {
   s += `<text x="${PAGE_W/2}" y="92" font-size="22" text-anchor="middle" fill="#555">ECMWF IFS-ENS · ${model.nMembers} berekeningen · ${model.panelStatus} · ${model.hresStatus} · ${model.datumTxt} (run ${model.runLabel})${model.coverageLabel ? ` · ${model.coverageLabel}` : ''}</text>`;
 
   for (let i=0; i<model.panels.length; i++) {
-    const gridTop = PAGE_HEADER_H + PAGE_MARGIN_X;
-    let ox, oy, panelW, panelH;
-    if (i < 2) {
-      ox = PAGE_MARGIN_X;
-      oy = gridTop + i * (CLOUD_PANEL_H + PANEL_GAP);
-      panelW = FULL_PANEL_W;
-      panelH = CLOUD_PANEL_H;
-    } else {
-      const otherIndex = i - 2;
-      const row = Math.floor(otherIndex / COLS);
-      const column = otherIndex % COLS;
-      ox = PAGE_MARGIN_X + column * (PANEL_W + PANEL_GAP);
-      oy = gridTop + 2 * (CLOUD_PANEL_H + PANEL_GAP) + row * (PANEL_H + PANEL_GAP);
-      panelW = PANEL_W;
-      panelH = PANEL_H;
-    }
+    const r = Math.floor(i/COLS), c = i%COLS;
+    const ox = PAGE_MARGIN_X + c*(PANEL_W+PANEL_GAP);
+    const oy = PAGE_HEADER_H + PAGE_MARGIN_X + r*(PANEL_H+PANEL_GAP);
+    const panelW = PANEL_W, panelH = PANEL_H;
     s += buildPanelSvg({ ox, oy, panelW, panelH, station: model.station, datumTxt: model.datumTxt, runLabel: model.runLabel, footLeft: model.footLeft, footRight: model.footRight, nDays: model.nDays, times: model.times, ...model.panels[i], panelIndex:i });
   }
   s += `<text x="${PAGE_W/2}" y="${PAGE_H-15}" font-size="16" text-anchor="middle" fill="#777" font-style="italic">© Weerlab.nl · ECMWF IFS-ENS${model.hasHres ? ' + exacte IFS HRES 9 km (Single Runs)' : ''} via Open-Meteo · native modelstappen</text>`;
@@ -998,7 +982,8 @@ function syncRunOptions() {
   select.replaceChildren();
   const wanted=runControl.selectedRun;
   for (const item of runControl.runs) {
-    const option=new Option(runLabel(item.run),item.run);
+    const n=panelCount(item);
+    const option=new Option(runLabel(item.run)+(n<PANEL_TOTAL?` · ${n} van ${PANEL_TOTAL} panelen`:''),item.run);
     option.selected=item.run===wanted; select.add(option);
   }
   if (wanted && !runControl.runs.some(r=>r.run===wanted)) {
@@ -1026,7 +1011,7 @@ async function selectRun(value,mode='push') {
   } catch (error) { document.getElementById('ensRunStatus').textContent=error.message; }
 }
 document.getElementById('ensRunSelect').addEventListener('change',event=>selectRun(event.target.value));
-document.getElementById('latestRun').addEventListener('click',()=>{if(runControl.runs[0])selectRun(runControl.runs[0].run);});
+document.getElementById('latestRun').addEventListener('click',()=>{const run=completeRun()||runControl.runs[0];if(run)selectRun(run.run);});
 window.addEventListener('popstate',()=>{
   const params=new URLSearchParams(location.search);
   const station=STATIONS.find(s=>s.name===params.get('station'));
@@ -1092,6 +1077,17 @@ async function loadAndRender(force = false) {
     document.getElementById('hdrRun').textContent=`ENS6plus – run ${model.runLabel} · ${model.nMembers} leden · ${model.panelStatus}`;
     document.getElementById('runinfo').textContent=`ENS6plus – run ${model.runLabel} · ${station.name} · ${model.coverageLabel} · ${data.model}`;
     status.textContent=`Actief: ${model.runLabel} · ${station.name}`;
+    // Nieuwe vroege runs hebben 850/500 hPa en wolkenlagen soms nog niet:
+    // wijs dan de nieuwste run aan waarin alle panelen wél staan.
+    const shown=model.panels.filter(panel=>!panel.unavailable).length;
+    const complete=completeRun();
+    if(shown<model.panels.length && complete && complete.run!==data.run){
+      status.textContent+=` · ${shown} van ${model.panels.length} panelen beschikbaar`;
+      const knop=document.createElement('button');knop.type='button';
+      knop.textContent=`Alle panelen: ${runLabel(complete.run)}`;
+      knop.addEventListener('click',()=>selectRun(complete.run));
+      status.appendChild(knop);
+    }
     status.dataset.runId=data.run;
     syncRunOptions();loader.classList.add('verborgen');card.classList.remove('updating');
     card.setAttribute('aria-busy','false');document.getElementById('btnPng').disabled=false;
@@ -1278,7 +1274,7 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
   const panels = [
     shadowStack
       ? { title:"Schaduwgevende bewolking (%)", stacked:shadowNativeStack, times:shadowTimes, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` }
-      : { title:"Schaduwgevende bewolking (%)", unavailable:'Lage en middelbare ENS-bewolking ontbreken voor deze run.', xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
+      : { title:"Schaduwgevende bewolking (%)", unavailable:'Lage en middelbare ENS-bewolking ontbreken voor deze run. Kies in de runbalk een run met alle panelen.', xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
     { title:"Totale bewolking (%)", stacked:cloudStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>`${Math.round(v)}%` },
     { title:"Windrichting — kans per sector", stacked:wdirStack, xMode:'model', yMin:0, yMax:100, valueFmt:v=>Math.round(v) },
   ];
@@ -1297,19 +1293,19 @@ function buildModel(ens, hres, verifiedRunStartMs, verifiedDataEndMs) {
     const snowMax = Math.max(1, ...snowP.p90.filter(Number.isFinite), ...snowHres.filter(Number.isFinite));
     panels.push({ title:"Sneeuw — cumulatief (cm)", ...snowP, hres:snowHres, fanColor:'#4a90c8', xMode:'model', yMin:0, yMax:Math.ceil(snowMax * 1.1), valueFmt:v=>v < 10 ? v.toFixed(1) : v.toFixed(0) });
   } else {
-    panels.push({title:'Sneeuw — cumulatief (cm)',unavailable:'Sneeuwval ontbreekt voor deze modelrun.',yMin:0,yMax:1});
+    panels.push({title:'Sneeuw — cumulatief (cm)',unavailable:'Sneeuwval ontbreekt voor deze run. Kies in de runbalk een run met alle panelen.',yMin:0,yMax:1});
   }
   if (t850P) {
     const [t850Mn, t850Mx] = pad(...rangeOf([t850P.p10, t850P.p90], t850Hres), 0.08);
     panels.push(nativeFanPanel({ title:"Temperatuur 850 hPa (°C)", ...t850P, hres:t850Hres, fanColor:'#cc0033', xMode:'model', yMin:Math.floor(t850Mn/2)*2, yMax:Math.ceil(t850Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
   } else {
-    panels.push({title:'Temperatuur 850 hPa (°C)',unavailable:'850 hPa ontbreekt voor deze modelrun.',yMin:-10,yMax:20});
+    panels.push({title:'Temperatuur 850 hPa (°C)',unavailable:'850 hPa ontbreekt voor deze run. Kies in de runbalk een run met alle panelen.',yMin:-10,yMax:20});
   }
   if (t500P) {
     const [t500Mn, t500Mx] = pad(...rangeOf([t500P.p10, t500P.p90], t500Hres), 0.08);
     panels.push(nativeFanPanel({ title:"Temperatuur 500 hPa (°C)", ...t500P, hres:t500Hres, fanColor:'#5566cc', xMode:'model', yMin:Math.floor(t500Mn/2)*2, yMax:Math.ceil(t500Mx/2)*2, valueFmt:v=>v.toFixed(0)+"°" }));
   } else {
-    panels.push({title:'Temperatuur 500 hPa (°C)',unavailable:'500 hPa ontbreekt voor deze modelrun.',yMin:-40,yMax:0});
+    panels.push({title:'Temperatuur 500 hPa (°C)',unavailable:'500 hPa ontbreekt voor deze run. Kies in de runbalk een run met alle panelen.',yMin:-40,yMax:0});
   }
   const hasHres = panels.some(panel => Array.isArray(panel.hres) && panel.hres.some(Number.isFinite));
   const missingPanels = [

@@ -1,5 +1,5 @@
-import {MODEL, PARAMETERS, runId, runToken, runLabel, assertDataset} from './pluim_ens6_data.mjs';
-export {runId, runToken, runLabel};
+import {MODEL, PARAMETERS, PANEL_TOTAL, panelCount, runId, runToken, runLabel, assertDataset} from './pluim_ens6_data.mjs';
+export {runId, runToken, runLabel, panelCount, PANEL_TOTAL};
 
 export class RunController {
   constructor({fetcher=globalThis.fetch.bind(globalThis), base='https://om.weerlab.nl', requested=null}={}) {
@@ -44,7 +44,9 @@ export class RunController {
           this.selectedRun=this.runs.find(r=>new Date(r.run).getUTCHours()===Number(this.requested))?.run;
           if (!this.selectedRun) throw new Error(`De gekozen ${this.requested} UTC-run is niet beschikbaar.`);
         } else if (this.requested) this.selectedRun=runId(this.requested);
-        else this.selectedRun=this.runs[0]?.run;
+        // Zonder expliciete keuze: nieuwste run waarin alle panelen bestaan.
+        // Een nieuwere, nog onvolledige run blijft in de lijst kiesbaar.
+        else this.selectedRun=(this.runs.find(r=>panelCount(r)===PANEL_TOTAL) || this.runs[0])?.run;
       }
       const id=this.selectedRun;
       if (!id) throw new Error('Geen bruikbare ENS6plus-runs beschikbaar voor deze locatie.');

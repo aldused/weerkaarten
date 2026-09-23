@@ -44,7 +44,7 @@ export async function handleEns6(url, request, env, fetcher=fetch) {
       } catch {return false;}
     }
     if (url.pathname === '/ens6-runs') {
-      const runs = (station ? entries : []).map(e=>({run:e.run, fields:e.fields, revision:e.data_sha256 || manifest?.revision}));
+      const runs = (station ? entries : []).map(e=>({run:e.run, fields:e.fields, ...(e.sparse_fields?.length ? {sparse_fields:e.sparse_fields} : {}), revision:e.data_sha256 || manifest?.revision}));
       if(!runs.some(e=>e.run===liveId) && await liveProbe())runs.push({run:liveId,fields:PARAMETERS,revision:liveRevision});
       runs.sort((a,b)=>Date.parse(b.run)-Date.parse(a.run));
       return response({runs, station:station?.slug || null, model:MODEL, revision:manifest?.revision || liveRevision});

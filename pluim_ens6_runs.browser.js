@@ -21,7 +21,9 @@ var WeerlabEns6Runs = (() => {
   // pluim_ens6_runs.mjs
   var pluim_ens6_runs_exports = {};
   __export(pluim_ens6_runs_exports, {
+    PANEL_TOTAL: () => PANEL_TOTAL,
     RunController: () => RunController,
+    panelCount: () => panelCount,
     runId: () => runId,
     runLabel: () => runLabel,
     runToken: () => runToken
@@ -32,6 +34,12 @@ var WeerlabEns6Runs = (() => {
   var CORE = ["cloud_cover", "wind_direction_10m"];
   var PARAMETERS = [...CORE, "cloud_cover_low", "cloud_cover_mid", "snowfall", "temperature_850hPa", "temperature_500hPa"];
   var ALLOWED_PARAMETERS = [...PARAMETERS, "cape"];
+  var PANEL_GROUPS = [["cloud_cover_low", "cloud_cover_mid"], ["snowfall"], ["temperature_850hPa"], ["temperature_500hPa"]];
+  var PANEL_TOTAL = 2 + PANEL_GROUPS.length;
+  function panelCount(entry) {
+    const has = (field) => entry?.fields?.includes(field) || entry?.sparse_fields?.includes(field);
+    return 2 + PANEL_GROUPS.filter((group) => group.every(has)).length;
+  }
   function runId(value) {
     const raw = String(value || "");
     const match = /^(\d{4})(\d{2})(\d{2})T(00|06|12|18)$/.exec(raw);
@@ -116,7 +124,7 @@ var WeerlabEns6Runs = (() => {
             this.selectedRun = this.runs.find((r) => new Date(r.run).getUTCHours() === Number(this.requested))?.run;
             if (!this.selectedRun) throw new Error(`De gekozen ${this.requested} UTC-run is niet beschikbaar.`);
           } else if (this.requested) this.selectedRun = runId(this.requested);
-          else this.selectedRun = this.runs[0]?.run;
+          else this.selectedRun = (this.runs.find((r) => panelCount(r) === PANEL_TOTAL) || this.runs[0])?.run;
         }
         const id = this.selectedRun;
         if (!id) throw new Error("Geen bruikbare ENS6plus-runs beschikbaar voor deze locatie.");

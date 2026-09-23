@@ -608,7 +608,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "pluim-ens6plus",
-    "src": "pluim_6_plus.html?station=De%20Bilt&v=20260923-sneeuw",
+    "src": "pluim_6_plus.html?lock=1&station=De%20Bilt&v=20260923-pluimnav",
     "name": "Weerpluim · extra elementen",
     "description": "Bewolking, windrichting en extra modelvelden",
     "category": "verwachting",

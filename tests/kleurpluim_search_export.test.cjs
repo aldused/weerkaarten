@@ -60,9 +60,9 @@ assert.match(exportModule, /p75:\s*percentiel\(vals, 75\)/,
 assert.match(exportModule, /ctx\.fillStyle = '#edf2f6'/,
   'de Ridderkerk-export mist de lichte actuele kleurpluimachtergrond');
 
-assert.match(shell, /menu\.js\?v=20260921-kleurpluim-v2/,
+assert.match(shell, /menu\.js\?v=20260923-pluimnav/,
   'de hoofdpagina haalt het vernieuwde routemenu niet op');
-assert.match(menu, /product-host\.html\?v=20260921-kleurpluim-v2/,
+assert.match(menu, /product-host\.html\?v=20260923-pluimnav/,
   'het routemenu haalt de vernieuwde producthost niet op');
 assert.match(host, /kleurpluim\.html\?v=20260921-plaatszoeker-v1/,
   'de kleurenpluimroute gebruikt nog de oude cacheversie');
