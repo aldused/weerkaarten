@@ -139,7 +139,8 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .tip .loc{color:var(--muted);font-size:11.5px;margin-top:1px}
 .tip .val{display:flex;align-items:baseline;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
 .tip .val .gr{font:700 24px/1 var(--font);font-variant-numeric:tabular-nums}
-.tip .val .int{font:500 11.5px var(--mono);color:var(--muted)}
+.tip .val .eh{font:600 12px var(--font);color:var(--muted);align-self:flex-end;padding-bottom:2px}
+.tip .val .int{font:500 11.5px var(--mono);color:var(--muted);flex-basis:100%}
 .tip dl{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;margin:4px 0 0}
 .tip dt{color:var(--muted)}
 .tip dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
@@ -437,7 +438,8 @@ const DIFF = [[-6,"#08306b"],[-4,"#2171b5"],[-2,"#6baed6"],[-0.5,"#deebf7"],[0,"
 const KANS = [[0,"#f8fafc"],[5,"#ede9fe"],[15,"#ddd6fe"],[30,"#c4b5fd"],[50,"#8b5cf6"],[70,"#6d28d9"],[90,"#4c1d95"],[100,"#2e1065"]];
 const SIGMA = [[0.3,"#ecfdf5"],[0.8,"#a7f3d0"],[1.2,"#fde68a"],[1.8,"#fb923c"],[2.5,"#dc2626"],[3.5,"#7f1d1d"]];
 const VOCHT = [[0,"#8c510a"],[20,"#d8b365"],[40,"#f6e8c3"],[65,"#c7eae5"],[85,"#5ab4ac"],[100,"#01665e"]];
-const BODEM_KL = {zand:["Zand","#f2d16b"], zavel:["Zavel","#b8d99a"], klei:["Klei","#3f9b8a"], veen:["Veen","#7b5ea7"], loss:["Löss","#d9894a"], bebouwd:["Bebouwd / ongekarteerd","#9aa3ad"], water:["Water","#9cc9e6"]};
+const BODEM_KL = {zand:["Zand","#f2d16b"], zavel:["Zavel (kleiig zand)","#b8d99a"], klei:["Klei","#3f9b8a"], veen:["Veen","#7b5ea7"], loss:["Löss (leemgrond)","#d9894a"], bebouwd:["Bebouwd / ongekarteerd","#9aa3ad"], water:["Water","#9cc9e6"]};
+const BODEM_KORT = {zand: "zand", zavel: "zavel (kleiig zand)", klei: "klei", veen: "veen", loss: "löss (leemgrond)", bebouwd: "bebouwd/onbekend"};
 const REGIME = {A:"heldere, (vrijwel) windstille stralingsnacht", B:"helder met matige wind", C:"bewolkt", X:"wisselende bewolking", E:"bewolking neemt toe", D:"bewolking trekt weg", F:"vochtig / mistgevoelig", G:"neerslag of front", I:"sneeuwdek"};
 function hex2rgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
 function maakLut(stops, lo, hi, n = 512) {
@@ -789,7 +791,7 @@ const bhKlasse = s => s < 1.0 ? ["hoog", "hoog"] : s < 1.7 ? ["middel", "middel"
 const vochtKl = m => m < 20 ? "zeer droog" : m < 40 ? "droog" : m < 65 ? "normaal" : m < 85 ? "vochtig" : "zeer nat";
 function bodemTekst(c) {
   const parts = Object.entries(D.frac).map(([k, a]) => [k, a[c]]).filter(([, v]) => v >= 10).sort((a, b) => b[1] - a[1]);
-  return parts.map(([k, v]) => `${BODEM_KL[k][0].split(" ")[0].toLowerCase()} ${v}%`).join(", ") || "onbekend";
+  return parts.map(([k, v]) => `${BODEM_KORT[k] || k} ${v}%`).join(", ") || "onbekend";
 }
 function tipHtml(c) {
   const L = staat.laag, nacht = L === "nmin" || L === "kans";
@@ -799,9 +801,9 @@ function tipHtml(c) {
     const n = D.nachten[staat.ni]; const tm = v16(n.t10min[c]), s = v16(n.sigma[c]); const tu = D.tijden[n.uur[c]];
     const [bk, bl] = bhKlasse(s);
     h += `<div class="loc">Nacht ${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))} · laagste rond ${uurFmt.format(tu)} uur</div>
-      <div class="val"><span class="gr">${fmt(tm)}°C</span><span class="int">80 %: ${fmt(tm - 1.28 * s)} tot ${fmt(tm + 1.28 * s)}</span></div>
-      <dl><dt>Minimum 10 cm</dt><dd>${fmt(tm)} °C</dd><dt>Minimum 2 m</dt><dd>${fmt(v16(n.t2min[c]))} °C</dd>
-      <dt>Verschil</dt><dd>${fmt(tm - v16(n.t2min[c]))} °C</dd>
+      <div class="val"><span class="gr">${fmt(tm)}°C</span><span class="eh">op 10 cm</span><span class="int">80 %: ${fmt(tm - 1.28 * s)} tot ${fmt(tm + 1.28 * s)}</span></div>
+      <dl><dt>Minimum op 10 cm</dt><dd>${fmt(tm)} °C</dd><dt>Op dat moment, op 2 m</dt><dd>${fmt(v16(n.t2min[c]))} °C</dd>
+      <dt>Verschil op dat moment</dt><dd>${fmt(tm - v16(n.t2min[c]))} °C</dd>
       <dt>Kans grondvorst (&lt; 0)</dt><dd>${n.p0[c]}%</dd><dt>Kans &lt; −2 °C</dt><dd>${n.pm2[c]}%</dd>
       <dt>Wind / bewolking</dt><dd>${fmt(v16(n.umin[c]))} m/s · ${n.cmin[c]}%</dd>
       <dt>Situatie</dt><dd>${REGIME[D.j.regime_code[n.reg[c]]] || "–"}</dd>
@@ -818,9 +820,9 @@ function tipHtml(c) {
       <dt>Hoogte</dt><dd>${fmt(v16(D.hoogte[c]))} m</dd><dt>Afstand tot zee</dt><dd>${fmt(v16(D.zee[c]), 0)} km</dd></dl>`;
   }
   h += `<div class="loc">${dagFmt.format(D.tijden[ti])} · ${uurFmt.format(D.tijden[ti])} uur</div>
-    <div class="val"><span class="gr">${fmt(t10)}°C</span><span class="int">80 %: ${fmt(t10 - 1.28 * s)} tot ${fmt(t10 + 1.28 * s)}</span></div>
-    <dl><dt>Temperatuur 10 cm</dt><dd>${fmt(t10)} °C</dd><dt>Temperatuur 2 m</dt><dd>${fmt(t2)} °C</dd>
-    <dt>Verschil</dt><dd>${fmt(t10 - t2)} °C</dd><dt>Kans op grondvorst</dt><dd>${D.p0[o]}%</dd>
+    <div class="val"><span class="gr">${fmt(t10)}°C</span><span class="eh">op 10 cm</span><span class="int">80 %: ${fmt(t10 - 1.28 * s)} tot ${fmt(t10 + 1.28 * s)}</span></div>
+    <dl><dt>Temperatuur op 10 cm</dt><dd>${fmt(t10)} °C</dd><dt>Temperatuur op 2 m</dt><dd>${fmt(t2)} °C</dd>
+    <dt>Verschil op dat moment</dt><dd>${fmt(t10 - t2)} °C</dd><dt>Kans op grondvorst</dt><dd>${D.p0[o]}%</dd>
     ${(() => { const n = D.nachten.find(n => ti >= n.i0 && ti <= n.i1); return n ? `<dt title="Laagste waarde in de nacht, zoals een minimumthermometer die registreert (lager dan een uurwaarde)">Nachtminimum</dt><dd>${fmt(v16(n.t10min[c]))} °C · ${uurFmt.format(D.tijden[n.uur[c]])}</dd>` : ""; })()}
     <dt>Bodem</dt><dd>${bodemTekst(c)}</dd><dt>Bodemvocht</dt><dd>${vochtKl(vocht)} (${vocht})</dd>
     <dt>Wind</dt><dd>${fmt(v16(D.u[o]))} m/s</dd><dt>Bewolking (effectief)</dt><dd>${D.c[o]}%</dd>
