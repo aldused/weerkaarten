@@ -189,7 +189,10 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .stations-kop h2{font:700 16px/1.25 var(--font);margin:0}
 .st-tabel{margin-top:10px;overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:6px}
 .st-tabel table{border-collapse:collapse;width:100%;font-size:12.5px}
-.st-tabel th{position:sticky;top:0;z-index:1;background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap}
+.st-tabel th{position:sticky;top:0;z-index:1;background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap;cursor:pointer;user-select:none}
+.st-tabel th:hover{background:var(--primary)}
+.st-tabel th[aria-sort="ascending"]::after{content:" ▲";font-size:9px}
+.st-tabel th[aria-sort="descending"]::after{content:" ▼";font-size:9px}
 .st-tabel th:first-child{text-align:left}
 .st-tabel td{padding:5px 9px;border-bottom:1px solid var(--border);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .st-tabel td:first-child{text-align:left;font-weight:600}
@@ -641,14 +644,34 @@ function runsLijst() {
     li.innerHTML = `<span>${r.label}</span><span class="t">${init ? dagKort.format(init) + " " + uurFmt.format(init) : "–"}${r.leeftijd_u != null ? " · " + fmt(r.leeftijd_u, 0) + " u" : ""}</span><span class="chip ${st[0]}" title="${r.reden || ""}">${st[1]}</span>`;
   });
 }
+// -1 = kolom "KNMI-station" (op naam), 0.. = dagkolom (op temperatuur). dir: 1 = oplopend (A-Z / koud→warm).
+let stSort = {kol: -1, dir: 1};
+let stRijen = null;   // [naam, lat, lon, cel] — eenmalig opgebouwd, alleen opnieuw sorteren bij een klik
 function stationsTabel() {
-  const plaatsen = plaatsenLijst();
+  if (!stRijen) stRijen = plaatsenLijst().map(([nm, la, lo]) => [nm, la, lo, celBij(la, lo)]);
   const lu = LUT.temp; const kl = v => { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; };
-  let t = `<thead><tr><th>KNMI-station</th>${D.dagen.map(dg => `<th>${dg === D.dagen[0] ? "vandaag" : dagKort.format(new Date(dg.label + "T12:00:00Z"))}</th>`).join("")}</tr></thead><tbody>`;
-  plaatsen.forEach(([nm, la, lo]) => { const c = celBij(la, lo);
-    t += `<tr><td>${nm}</td>${D.dagen.map(dg => { const v = v16(dg.txmax[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small style="color:var(--muted);margin-left:4px">${dg.p25[c]}%</small></td>`; }).join("")}</tr>`; });
+  const { kol, dir } = stSort;
+  const waarde = r => kol < 0 ? r[0] : v16(D.dagen[kol].txmax[r[3]]);
+  const rijen = [...stRijen].sort((a, b) => {
+    const va = waarde(a), vb = waarde(b);
+    if (kol < 0) return dir * String(va).localeCompare(String(vb), "nl");
+    if (!isFinite(va)) return 1; if (!isFinite(vb)) return -1;
+    return dir * (va - vb);
+  });
+  const kopTekst = i => i === 0 ? "vandaag" : dagKort.format(new Date(D.dagen[i].label + "T12:00:00Z"));
+  const ariaVoor = i => i !== kol ? "none" : (dir === 1 ? "ascending" : "descending");
+  let t = `<thead><tr><th data-k="-1" aria-sort="${kol === -1 ? (dir === 1 ? "ascending" : "descending") : "none"}">KNMI-station</th>` +
+    D.dagen.map((dg, i) => `<th data-k="${i}" aria-sort="${ariaVoor(i)}">${kopTekst(i)}</th>`).join("") + `</tr></thead><tbody>`;
+  rijen.forEach(([nm, , , c]) => {
+    t += `<tr><td>${nm}</td>${D.dagen.map(dg => { const v = v16(dg.txmax[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small style="color:var(--muted);margin-left:4px">${dg.p25[c]}%</small></td>`; }).join("")}</tr>`;
+  });
   $("stTabel").innerHTML = t + "</tbody>";
-  $("stationsSub").textContent = `Alle ${plaatsen.length} KNMI-stations · dagmaximum en (klein) kans op ≥ 25 °C`;
+  $("stationsSub").textContent = `Alle ${stRijen.length} KNMI-stations · dagmaximum en (klein) kans op ≥ 25 °C · klik op een kolomkop om te sorteren`;
+  $("stTabel").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    const k = +th.dataset.k;
+    stSort = { kol: k, dir: stSort.kol === k ? -stSort.dir : (k === -1 ? 1 : -1) };
+    stationsTabel();
+  }));
 }
 
 $("laagSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; staat.laag = b.dataset.l;

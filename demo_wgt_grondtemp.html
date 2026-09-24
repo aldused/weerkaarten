@@ -220,7 +220,10 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .mini .m-kpi b{color:var(--text);font-variant-numeric:tabular-nums}
 .plaatsen{margin-top:12px;overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:6px}
 .plaatsen table{border-collapse:collapse;width:100%;font-size:12.5px}
-.plaatsen th{position:sticky;top:0;z-index:1;background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap}
+.plaatsen th{position:sticky;top:0;z-index:1;background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap;cursor:pointer;user-select:none}
+.plaatsen th:hover{background:var(--primary)}
+.plaatsen th[aria-sort="ascending"]::after{content:" ▲";font-size:9px}
+.plaatsen th[aria-sort="descending"]::after{content:" ▼";font-size:9px}
 .plaatsen th:first-child{text-align:left}
 .plaatsen td{padding:5px 9px;border-bottom:1px solid var(--border);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .plaatsen td:first-child{text-align:left;font-weight:600}
@@ -647,6 +650,9 @@ function plaatsenLijst() {
   return st && st.length ? st.map(s => [s.naam, s.lat, s.lon]) : PLAATSEN_TERUGVAL;
 }
 function celBij(la, lo) { let b = 0, bd = 1e9; for (let c = 0; c < C; c++) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
+// -1 = kolom "KNMI-station" (op naam), 0.. = nachtkolom (op temperatuur, koudste eerst bij dir 1).
+let plaatsSort = {kol: -1, dir: 1};
+let plaatsRijen = null;
 function drieNachten() {
   const grid = $("drieGrid"); grid.innerHTML = ""; const g = D.j.rooster;
   const [x0, y0] = xy(g.lon0 - g.dlon / 2, g.lat0 + (NY - 0.5) * g.dlat), [x1, y1] = xy(g.lon0 + (NX - 0.5) * g.dlon, g.lat0 - g.dlat / 2);
@@ -670,14 +676,33 @@ function drieNachten() {
     kaart.onclick = kies; kaart.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); kies(); } };
     grid.appendChild(kaart);
   });
-  // tabel per KNMI-station (alle stations met een 10 cm-minimumthermometer)
+  plaatsTabel();
+}
+
+function plaatsTabel() {
   const lu = LUT.temp; const kl = v => { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; };
-  const plaatsen = plaatsenLijst();
-  let t = `<thead><tr><th>KNMI-station</th>${D.nachten.map(n => `<th>${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))}</th>`).join("")}</tr></thead><tbody>`;
-  plaatsen.forEach(([nm, la, lo]) => { const c = celBij(la, lo);
-    t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16(n.t10min[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${n.p0[c]}%</small></td>`; }).join("")}</tr>`; });
+  if (!plaatsRijen) plaatsRijen = plaatsenLijst().map(([nm, la, lo]) => [nm, la, lo, celBij(la, lo)]);
+  const { kol, dir } = plaatsSort;
+  const waarde = r => kol < 0 ? r[0] : v16(D.nachten[kol].t10min[r[3]]);
+  const rijen = [...plaatsRijen].sort((a, b) => {
+    const va = waarde(a), vb = waarde(b);
+    if (kol < 0) return dir * String(va).localeCompare(String(vb), "nl");
+    if (!isFinite(va)) return 1; if (!isFinite(vb)) return -1;
+    return dir * (va - vb);
+  });
+  const ariaVoor = i => i !== kol ? "none" : (dir === 1 ? "ascending" : "descending");
+  let t = `<thead><tr><th data-k="-1" aria-sort="${kol === -1 ? (dir === 1 ? "ascending" : "descending") : "none"}">KNMI-station</th>` +
+    D.nachten.map((n, i) => `<th data-k="${i}" aria-sort="${ariaVoor(i)}">${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))}</th>`).join("") + `</tr></thead><tbody>`;
+  rijen.forEach(([nm, , , c]) => {
+    t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16(n.t10min[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${n.p0[c]}%</small></td>`; }).join("")}</tr>`;
+  });
   $("plaatsTabel").innerHTML = t + "</tbody>";
-  $("drieNoot").textContent = `Alle ${plaatsen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn.`;
+  $("drieNoot").textContent = `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
+  $("plaatsTabel").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    const k = +th.dataset.k;
+    plaatsSort = { kol: k, dir: plaatsSort.kol === k ? -plaatsSort.dir : 1 };
+    plaatsTabel();
+  }));
 }
 
 // ---------- isolijnen 0 / −2 / −5 (marching squares op het rooster) ----------
