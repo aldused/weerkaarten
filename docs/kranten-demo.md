@@ -72,35 +72,34 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
   dragen dan duidelijk 'DEMO — GEEN ZONDAGSKRANT'. Maandag wordt pas op zondag
   gemaakt met een actuele zondagbron; verschuif de zaterdagbron niet naar maandag.
 - De gebruikersdeadline is **vóór 13.00 uur**, boven de 14.00 uur in het document.
-  Broncontrole en eventuele herziening vinden zeven dagen per week ieder halfuur
-  plaats van 07.00 tot en met 12.00 uur Nederlandse tijd. Een controle zonder
+  Broncontrole en eventuele herziening vinden zeven dagen per week elk heel uur
+  plaats om 07.00, 08.00, 09.00, 10.00, 11.00 en 12.00 uur Nederlandse tijd.
+  Een controle zonder
   gewijzigde bron hoeft geen nieuwe tekst op te leveren. De broncontroletijd en
   concepttijd blijven gescheiden.
 - Auteursnaam standaard Ed Aldus; dit is ook de auteur van de eerste bron.
 - Aanleveradressen en HQ zijn context. Geen mails versturen, HQ-berichten
   inplannen of publicaties naar kranten uitvoeren. Radio valt buiten deze taak.
 
-## Dagelijkse update (automatisch, sinds 23 september 2026)
+## Dagelijkse update (automatisch)
 
-`scripts/kranten_auto.py` draait via launchd `nl.edaldus.kranten`
-(`shell/kranten_auto.sh`, plist in `shell/`) om 08, 09, 10, 11 en 12 uur. Log:
-`../logs/kranten_auto.log`.
+De Codex-heartbeat `krantenconcepten-bijwerken` is actief en draait zeven dagen
+per week om 07.00, 08.00, 09.00, 10.00, 11.00 en 12.00 uur Nederlandse tijd.
+Elke run leest dit document en gebruikt de werkstappen hieronder: actuele bron
+ophalen, alleen bij gewijzigde bruikbare verwachting of nieuwe krantdatum vijf
+concepten schrijven, valideren en via de bestaande publicatiehelper online zetten.
+De broncontrolestatus wordt ieder uur gepubliceerd, zodat de online klok de
+werkelijke controle toont. Een ongewijzigde bron levert geen nieuwe editie op.
 
-1. `kranten_update.py fetch` zonder taalmodel.
-2. Hash over krantdatum + bruikbare passages (morgen en verder). Is die al
-   verwerkt, dan stopt de run; een gewijzigde inleiding of tijdstempel telt niet.
-3. Anders één kale `claude -p --model sonnet` (geen tools, geen hooks/CLAUDE.md,
-   eigen systeemprompt met de afspraken hierboven, ~2k tokens in). Bij een
-   validatiefout één herkansing met alleen de foutmelding.
-4. validate → publish → `shell/kranten_publish.sh`. Maximaal 3 edities per dag.
-5. Staat er vanaf 10 uur nog geen editie voor morgen, dan volgt een
-   macOS-melding. State: `../artifacts/kranten-demo/auto_state.json`.
+De eerdere launchd-taak `nl.edaldus.kranten` is uitgeschakeld. Deze taak haalde
+de bron nog wel op, maar kon sinds 24 september geen teksten meer genereren:
+het gebruikte Claude API-tegoed was uitgeput. De vervallen automatisering draaide
+bovendien pas vanaf 08.00 uur. Schakel haar niet naast de Codex-heartbeat in;
+dan kunnen twee redactierondes tegelijk dezelfde bestanden bijwerken.
 
-Authenticatie: langlopend token uit `claude setup-token` in
-`~/.config/weerlab/claude_oauth_token` (chmod 600). Model wisselen:
-`KRANTEN_MODEL=opus`. De vroegere Codex-heartbeat
-(`~/.codex/automations/krantenconcepten-bijwerken`) staat op PAUSED: die
-verbruikte ~760k tokens per run en liep 22 sep op de Codex-limiet vast.
+Bij een bron- of publicatiefout blijven bestaande concepten behouden en wordt
+een melding met de concrete fout gegeven. De laatste geplande run is 12.00 uur;
+de aanleverdeadline blijft vóór 13.00 uur.
 
 ## Handmatig een editie maken
 

@@ -123,6 +123,15 @@ def measured_length(value, unit):
     return len(value) if unit == 'characters' else words(value)
 
 
+def edition_matches_source(source, edition):
+    """Ignore source metadata changes when the usable forecast is unchanged."""
+    if not edition or source['publicationDate'] != edition.get('publicationDate'):
+        return False
+    published = edition.get('source', {}).get('paragraphs')
+    usable = [source['paragraphs'][i] for i in source['eligibleParagraphs']]
+    return published == usable
+
+
 def validate(candidate, source, now):
     errors = []
     if candidate.get('sourceId') != source['id']:
@@ -181,7 +190,15 @@ def main():
                     raw = response.read().decode('utf-8')
             source = parse_source(raw, now)
             atomic_json(DATA / 'kranten_bron.json', source)
-            atomic_json(DATA / 'kranten_status.json', {'checkedAt': now.isoformat(), 'ok': True, 'sourceId': source['id'], 'message': 'Bron opgehaald.'})
+            edition_path = DATA / 'kranten_demo.json'
+            edition = json.loads(edition_path.read_text()) if edition_path.exists() else None
+            matched = edition_matches_source(source, edition)
+            # The page compares sourceId with the edition. Keep that comparison
+            # stable when only the source title or timestamp changed.
+            visible_id = edition['sourceId'] if matched else source['id']
+            atomic_json(DATA / 'kranten_status.json', {
+                'checkedAt': now.isoformat(), 'ok': True, 'sourceId': visible_id,
+                'checkedSourceId': source['id'], 'message': 'Bron opgehaald.'})
             print(json.dumps(source, ensure_ascii=False, indent=2))
         else:
             if not args.candidate:

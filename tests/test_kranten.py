@@ -41,6 +41,20 @@ class KrantenTest(unittest.TestCase):
         self.assertEqual(len(self.source['paragraphs']),3)
         self.assertNotIn('biografie', json.dumps(self.source))
 
+    def test_same_usable_forecast_needs_no_new_edition(self):
+        usable = [self.source['paragraphs'][i] for i in self.source['eligibleParagraphs']]
+        edition = {'publicationDate': self.source['publicationDate'],
+                   'source': {'paragraphs': usable}}
+        changed_metadata = copy.deepcopy(self.source)
+        changed_metadata['publishedAt'] = '2026-09-12T08:30:00+02:00'
+        self.assertTrue(k.edition_matches_source(changed_metadata, edition))
+        changed_forecast = copy.deepcopy(self.source)
+        changed_forecast['paragraphs'][1] = 'Morgen is het 18 graden.'
+        self.assertFalse(k.edition_matches_source(changed_forecast, edition))
+        changed_date = copy.deepcopy(self.source)
+        changed_date['publicationDate'] = '2026-09-14'
+        self.assertFalse(k.edition_matches_source(changed_date, edition))
+
     def test_valid_candidate(self):
         self.assertEqual(k.validate(self.candidate,self.source,self.now),[])
 
