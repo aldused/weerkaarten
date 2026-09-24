@@ -218,9 +218,9 @@ h1{font:700 22px/1.2 var(--font);margin:0 0 4px}
 .mini svg .iso0{fill:none;stroke:var(--iso0);stroke-width:3}
 .mini .m-kpi{display:flex;justify-content:space-between;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)}
 .mini .m-kpi b{color:var(--text);font-variant-numeric:tabular-nums}
-.plaatsen{margin-top:12px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.plaatsen{margin-top:12px;overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:6px}
 .plaatsen table{border-collapse:collapse;width:100%;font-size:12.5px}
-.plaatsen th{background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap}
+.plaatsen th{position:sticky;top:0;z-index:1;background:var(--primary-strong);color:#fff;font-weight:600;padding:6px 9px;text-align:right;white-space:nowrap}
 .plaatsen th:first-child{text-align:left}
 .plaatsen td{padding:5px 9px;border-bottom:1px solid var(--border);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .plaatsen td:first-child{text-align:left;font-weight:600}
@@ -638,9 +638,14 @@ function isoPad(vals, lv) {
   }
   return d;
 }
-const PLAATSEN = [["Groningen", 53.22, 6.57], ["Leeuwarden", 53.20, 5.79], ["Den Helder", 52.93, 4.78], ["Zwolle", 52.51, 6.09], ["Enschede", 52.22, 6.89],
+// Vaste terugval (alleen als het bestand ooit geen stationslijst meelevert): 13 grote plaatsen.
+const PLAATSEN_TERUGVAL = [["Groningen", 53.22, 6.57], ["Leeuwarden", 53.20, 5.79], ["Den Helder", 52.93, 4.78], ["Zwolle", 52.51, 6.09], ["Enschede", 52.22, 6.89],
   ["Amsterdam", 52.37, 4.90], ["De Bilt", 52.10, 5.18], ["Arnhem", 51.98, 5.91], ["Rotterdam", 51.92, 4.48], ["Vlissingen", 51.44, 3.60],
   ["Eindhoven", 51.44, 5.48], ["Venlo", 51.37, 6.17], ["Maastricht", 50.85, 5.69]];
+function plaatsenLijst() {
+  const st = D.j.stations;
+  return st && st.length ? st.map(s => [s.naam, s.lat, s.lon]) : PLAATSEN_TERUGVAL;
+}
 function celBij(la, lo) { let b = 0, bd = 1e9; for (let c = 0; c < C; c++) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
 function drieNachten() {
   const grid = $("drieGrid"); grid.innerHTML = ""; const g = D.j.rooster;
@@ -665,13 +670,14 @@ function drieNachten() {
     kaart.onclick = kies; kaart.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); kies(); } };
     grid.appendChild(kaart);
   });
-  // tabel per plaats
+  // tabel per KNMI-station (alle stations met een 10 cm-minimumthermometer)
   const lu = LUT.temp; const kl = v => { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; };
-  let t = `<thead><tr><th>Plaats</th>${D.nachten.map(n => `<th>${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))}</th>`).join("")}</tr></thead><tbody>`;
-  PLAATSEN.forEach(([nm, la, lo]) => { const c = celBij(la, lo);
+  const plaatsen = plaatsenLijst();
+  let t = `<thead><tr><th>KNMI-station</th>${D.nachten.map(n => `<th>${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))}</th>`).join("")}</tr></thead><tbody>`;
+  plaatsen.forEach(([nm, la, lo]) => { const c = celBij(la, lo);
     t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16(n.t10min[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${n.p0[c]}%</small></td>`; }).join("")}</tr>`; });
   $("plaatsTabel").innerHTML = t + "</tbody>";
-  $("drieNoot").textContent = "Per plaats: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel; in laagtes en open veld buiten de stad kan het kouder zijn.";
+  $("drieNoot").textContent = `Alle ${plaatsen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn.`;
 }
 
 // ---------- isolijnen 0 / −2 / −5 (marching squares op het rooster) ----------
