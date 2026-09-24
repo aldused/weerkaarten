@@ -553,7 +553,7 @@
 <link rel="stylesheet" href="klimaat.css?v=20260908-2">
 <script src="klimaat.js?v=20260914-1"></script>
 <link rel="stylesheet" href="records-ui.css?v=20260914-1">
-<script defer src="records-ui.js?v=20260914-1"></script>
+<script defer src="records-ui.js?v=20260924-1"></script>
 </head>
 <body class="climate-page climate-records_debilt">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -2348,7 +2348,7 @@ function wisselPeriode(p) {
   const isMR = p === "maandranking";
   document.getElementById("sectie-maandranking").style.display = isMR ? "block" : "none";
   document.getElementById("tabel-wrapper-outer").style.display = isMR ? "none" : "block";
-  document.querySelector(".richting-tabs").style.display = isMR ? "none" : "flex";
+  document.querySelector(".richting-tabs").style.display = (isMR || isKlimaatdagRecord()) ? "none" : "flex";
   document.getElementById("param-tabs").style.display = isMR ? "none" : "flex";
   document.getElementById("filter-periode-tabs-wrapper").style.display = isMR ? "none" : "flex";
   document.getElementById("sectie-jaar-overzicht").style.display = "none";
@@ -2366,7 +2366,8 @@ function wisselPeriode(p) {
 
   // Zorg dat param-tabs en richting zichtbaar zijn
   document.getElementById("param-tabs").style.display = "flex";
-  document.querySelector(".richting-tabs").style.display = "flex";
+  document.querySelector(".richting-tabs").style.display = isKlimaatdagRecord() ? "none" : "flex";
+  document.getElementById("record-calculation-group").style.display = isKlimaatdagRecord() ? "none" : "flex";
   toon();
 }
 
@@ -2385,6 +2386,21 @@ function wisselParam(p) {
   const isJaar = p === "jaar_overzicht";
   const isKlimaat = isKlimaatdagRecord(p);
 
+  // Vanuit de standaard dagweergave blijft de vertrouwde jaarranglijst het
+  // startpunt. Een bewust gekozen maand, decade, seizoen of periode blijft staan.
+  if (isKlimaat && huidigePeriode === "dag") {
+    huidigePeriode = "alltime";
+    const mobielePeriode = document.getElementById("sel-periode-mobile");
+    if (mobielePeriode) mobielePeriode.value = "alltime";
+    document.querySelectorAll(".ptab").forEach(b => {
+      const match = b.getAttribute("onclick");
+      b.classList.toggle("actief", match && match.includes("'alltime'"));
+    });
+    ["jaar","seizoen","maand","decade","dag","periode"].forEach(f => {
+      document.getElementById("filter-" + f).style.display = "none";
+    });
+  }
+
   // Verberg/toon de param-tabs rij zelf
   document.getElementById("param-tabs").style.display = isJaar ? "none" : "flex";
   // Jaaroverzicht knop markeren
@@ -2392,11 +2408,12 @@ function wisselParam(p) {
   if (jaarBtn) jaarBtn.style.opacity = isJaar ? "0.6" : "1";
 
   // Verberg/toon periode-filters
-  document.getElementById("filter-periode-tabs-wrapper").style.display = (isJaar || isKlimaat) ? "none" : "flex";
+  document.getElementById("filter-periode-tabs-wrapper").style.display = isJaar ? "none" : "flex";
 
   document.getElementById("sectie-jaar-overzicht").style.display = isJaar ? "block" : "none";
   document.getElementById("sectie-maandranking").style.display = "none";
   document.querySelector(".richting-tabs").style.display = (isJaar || isKlimaat) ? "none" : "flex";
+  document.getElementById("record-calculation-group").style.display = isKlimaat ? "none" : "flex";
   document.getElementById("tabel-wrapper-outer").style.display = isJaar ? "none" : "block";
 
   if (isJaar) {
@@ -2758,9 +2775,10 @@ function wisselHoofdtab(tab) {
 
   // Filter/param balk
   document.getElementById("filters-wrapper") && (document.getElementById("filters-wrapper").style.display = "flex");
-  document.getElementById("filter-periode-tabs-wrapper").style.display = (isRec && !isKlimaatRecord) ? "flex" : "none";
+  document.getElementById("filter-periode-tabs-wrapper").style.display = isRec ? "flex" : "none";
   document.getElementById("param-tabs").style.display        = isRec ? "flex" : "none";
   document.querySelector(".richting-tabs").style.display     = (isRec && !isKlimaatRecord) ? "flex" : "none";
+  document.getElementById("record-calculation-group").style.display = (isRec && !isKlimaatRecord) ? "flex" : "none";
   document.getElementById("tabel-wrapper-outer").style.display = isRec ? "block" : "none";
 
   // Records header verbergen bij andere tabs
@@ -3842,7 +3860,7 @@ function updateBreadcrumb() {
 
   if (huidigeHoofdtab === "records") {
     const klimaatCfg = KLIMAATDAG_RECORDS[huidigeParam];
-    document.getElementById("bc-periode").textContent = klimaatCfg ? "Jaarranglijst" : (PERIODE_LABELS[huidigePeriode] || "");
+    document.getElementById("bc-periode").textContent = PERIODE_LABELS[huidigePeriode] || "";
     document.getElementById("bc-param").textContent = klimaatCfg
       ? `📅 ${klimaatCfg.kort}`
       : (huidigeRichting === "hoog" ? "▲ " : "▼ ") + (PARAM_SHORT[huidigeParam] || "");
@@ -3898,6 +3916,61 @@ function zetReguliereRecordsKoppen(isMulti) {
   `;
 }
 
+function klimaatdagPeriodeSelectie(jaar, maand, dag) {
+  const p = huidigePeriode;
+  const y = Number(jaar), m = Number(maand), d = Number(dag);
+  if (p === "decade") {
+    const gekozenMaand = Number(document.getElementById("sel-dec-maand").value);
+    const gekozenDecade = Number(document.getElementById("sel-dec-dec").value);
+    const binnenDecade = gekozenDecade === 1 ? d <= 10 : gekozenDecade === 2 ? d >= 11 && d <= 20 : d >= 21;
+    return m === gekozenMaand && binnenDecade ? {sleutel:String(y), label:String(y), sorteerJaar:y} : null;
+  }
+  if (p === "maand") {
+    return m === Number(document.getElementById("sel-maand").value)
+      ? {sleutel:String(y), label:String(y), sorteerJaar:y} : null;
+  }
+  if (p === "dag") {
+    return m === Number(document.getElementById("sel-dag-maand").value) && d === Number(document.getElementById("sel-dag-dag").value)
+      ? {sleutel:String(y), label:String(y), sorteerJaar:y} : null;
+  }
+  if (p === "seizoen") {
+    const gekozen = document.getElementById("sel-seizoen").value;
+    const index = ktSeizoenVan(m);
+    if (["winter","lente","zomer","herfst"][index] !== gekozen) return null;
+    const seizoenJaar = ktSeizoenJaar(y, m);
+    return {sleutel:String(seizoenJaar), label:ktSeizoenLabel(index, seizoenJaar), sorteerJaar:seizoenJaar};
+  }
+  if (p === "jaar") {
+    const gekozenJaar = Number(document.getElementById("sel-jaar").value);
+    return y === gekozenJaar ? {sleutel:String(y), label:String(y), sorteerJaar:y} : null;
+  }
+  if (p === "periode") {
+    const van = document.getElementById("sel-van").value;
+    const tm = document.getElementById("sel-tm").value;
+    const iso = `${String(y).padStart(4,"0")}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    return van && tm && van <= iso && iso <= tm
+      ? {sleutel:`${van}/${tm}`, label:`${fmtDatum(van)} – ${fmtDatum(tm)}`, sorteerJaar:Number(van.slice(0,4))}
+      : null;
+  }
+  return {sleutel:String(y), label:String(y), sorteerJaar:y};
+}
+
+function klimaatdagPeriodeOmschrijving() {
+  const p = huidigePeriode;
+  if (p === "alltime") return "per kalenderjaar";
+  if (p === "jaar") return `in ${document.getElementById("sel-jaar").value}`;
+  if (p === "maand") return `in ${NL_MAANDEN_LANG[Number(document.getElementById("sel-maand").value)]}`;
+  if (p === "dag") return `op ${periodeLabel().toLowerCase()}`;
+  if (p === "seizoen") return `per ${document.getElementById("sel-seizoen").value}`;
+  if (p === "periode") return `van ${periodeLabel()}`;
+  if (p === "decade") {
+    const maand = Number(document.getElementById("sel-dec-maand").value);
+    const decade = Number(document.getElementById("sel-dec-dec").value);
+    return `in de ${decade}e decade van ${NL_MAANDEN_LANG[maand]}`;
+  }
+  return "per kalenderjaar";
+}
+
 function klimaatdagRecordRijen(cfg) {
   const isMulti = Array.isArray(multiData) && multiData.length > 1;
   const bronnen = isMulti
@@ -3907,28 +3980,32 @@ function klimaatdagRecordRijen(cfg) {
   const rijen = [];
 
   for (const ds of bronnen) {
+    const groepen = new Map();
     for (const [jaarTekst, maanden] of Object.entries(ds.maanddetail)) {
-      let aantal = 0;
-      let piek = null;
-      let heeftWaarde = false;
-      for (const maand of Object.values(maanden)) {
+      for (const [maandTekst, maand] of Object.entries(maanden)) {
         for (const dag of (maand.dagen || [])) {
+          const selectie = klimaatdagPeriodeSelectie(jaarTekst, maandTekst, dag.dag);
+          if (!selectie) continue;
           const waarde = dag[cfg.key];
           if (waarde === null || waarde === undefined || !Number.isFinite(Number(waarde))) continue;
-          heeftWaarde = true;
-          if (Number(waarde) >= cfg.drempel) aantal++;
-          if (piek === null || Number(waarde) > piek) piek = Number(waarde);
+          const groep = groepen.get(selectie.sleutel) || {...selectie, aantal:0, piek:null, heeftWaarde:false};
+          groep.heeftWaarde = true;
+          if (Number(waarde) >= cfg.drempel) groep.aantal++;
+          if (groep.piek === null || Number(waarde) > groep.piek) groep.piek = Number(waarde);
+          groepen.set(selectie.sleutel, groep);
         }
       }
-      if (!heeftWaarde || aantal === 0) continue;
-      const jaar = Number(jaarTekst);
+    }
+    for (const groep of groepen.values()) {
+      if (!groep.heeftWaarde || groep.aantal === 0) continue;
       rijen.push({
-        jaar,
+        jaar:groep.sorteerJaar,
+        periode:groep.label,
         station: ds.station,
         stationNr: ds.station_nr,
-        aantal,
-        piek,
-        lopend: jaar === huidigJaar,
+        aantal:groep.aantal,
+        piek:groep.piek,
+        lopend: groep.sorteerJaar === huidigJaar,
       });
     }
   }
@@ -3950,18 +4027,20 @@ function toonKlimaatdagRecords() {
     : data?.station;
   const periodeVan = bronnen.map(ds => ds.van).filter(Boolean).sort()[0] || data?.van;
   const periodeTm = bronnen.map(ds => ds.tm).filter(Boolean).sort().at(-1) || data?.tm;
+  const periodeOmschrijving = klimaatdagPeriodeOmschrijving();
+  const periodeKolom = huidigePeriode === "seizoen" ? "Seizoen" : (huidigePeriode === "periode" ? "Periode" : "Jaar");
 
   document.getElementById("records-titel").textContent =
-    `Meeste ${cfg.label} per kalenderjaar – ${stnNaam}`;
+    `Meeste ${cfg.label} ${periodeOmschrijving} – ${stnNaam}`;
   document.getElementById("records-sub").textContent = isMulti
-    ? `Jaartotalen van één afzonderlijk station · ${bronnen.length} volledige dagreeksen · lopende stand ververst elke 2 minuten`
+    ? `Telling per afzonderlijk station · ${bronnen.length} volledige dagreeksen · lopende stand ververst elke 2 minuten`
     : `${data?.station_nr} · ${fmtDatum(periodeVan)} t/m ${fmtDatum(periodeTm)} · lopende stand ververst elke 2 minuten`;
   document.getElementById("records-periode").textContent =
     `TX ≥ ${cfg.drempel}°C · inclusief de lopende KNMI-dag (UTC/GMT)`;
 
   document.querySelector("#records-tabel thead tr").innerHTML = `
     <th>#</th>
-    <th>Jaar</th>
+    <th>${periodeKolom}</th>
     ${isMulti ? '<th id="th-station">Station</th>' : ""}
     <th style="text-align:right;">Aantal dagen</th>
     <th style="text-align:right;">Achter record</th>
@@ -3997,7 +4076,7 @@ function toonKlimaatdagRecords() {
     if (rij.lopend) tr.style.background = "rgba(13,148,136,0.10)";
     tr.innerHTML = `
       <td class="rank rank-${rank <= 3 ? rank : ""}">${rank <= 3 ? ["🥇","🥈","🥉"][rank - 1] : rank}</td>
-      <td class="datum-cel">${rij.jaar}${lopendBadge}</td>
+      <td class="datum-cel">${rij.periode}${lopendBadge}</td>
       ${isMulti ? `<td style="font-weight:600;">${wdEsc(rij.station)}<span style="color:var(--tekst2);font-size:0.78em;font-weight:400;"> · ${wdEsc(rij.stationNr)}</span></td>` : ""}
       <td style="text-align:right;"><span class="waarde hoog" style="color:${cfg.kleur};">${rij.aantal}</span></td>
       <td style="text-align:right;color:${verschil === 0 ? cfg.kleur : "var(--tekst2)"};font-family:'DM Mono',monospace;">${verschil === 0 ? "record" : `−${verschil}`}</td>

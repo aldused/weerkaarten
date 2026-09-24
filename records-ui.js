@@ -109,11 +109,12 @@
       $('record-calculation-group').hidden=!regular||!supports;
       const aggregate=supports&&calculation.value==='period';
       if(regular&&period==='jaar')$('filter-jaar').style.display=aggregate?'none':'flex';
-      help.textContent=climate?'Aantal dagen boven de gekozen temperatuurgrens per kalenderjaar.':aggregate
+      const climatePeriod={dag:'de gekozen kalenderdag',decade:'de gekozen decade',maand:'de gekozen maand',seizoen:'het gekozen seizoen',jaar:'het gekozen jaar',alltime:'elk kalenderjaar',periode:'de gekozen periode'};
+      help.textContent=climate?`Aantal dagen boven de gekozen temperatuurgrens binnen ${climatePeriod[period]||'de gekozen periode'}.`:aggregate
         ? (['rh','sq'].includes(param)?'Som over de gekozen periode, vergeleken tussen jaren.':'Gemiddelde over de gekozen periode, vergeleken tussen jaren.')
         : 'Afzonderlijke dagmetingen binnen de gekozen periode. Zoek een station of filter de ranglijst.';
       actions.hidden=!regular;
-      step.hidden=climate||!['jaar','maand','seizoen','dag','decade'].includes(period)||(period==='jaar'&&aggregate);
+      step.hidden=!['jaar','maand','seizoen','dag','decade'].includes(period)||(period==='jaar'&&aggregate);
       direction.querySelectorAll('.rtab').forEach(tab=>{tab.setAttribute('aria-pressed',String(tab.classList.contains('actief')));tab.setAttribute('aria-disabled',String(tab.style.pointerEvents==='none'));});
     };
     document.addEventListener('change',sync);document.addEventListener('click',sync);document.addEventListener('weerlab-records-rendered',sync);sync();
