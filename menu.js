@@ -259,15 +259,41 @@
     results.innerHTML=matches.slice(0,8).map(p=>`<a href="${escape(p.href)}">${escape(p.name)}<small>${escape(p.description)}</small></a>`).join('') || '<p>Geen resultaten. Probeer een andere zoekterm.</p>';
     if(matches.length>8)results.innerHTML+=`<a href="#menu/zoeken?q=${encodeURIComponent(q)}">Alle ${matches.length} resultaten bekijken</a>`;
   }
+  // Beeldvullend: echte browser-fullscreen op de productruimte, zodat kopbalk,
+  // menu en browserbalken verdwijnen. Waar de Fullscreen API ontbreekt (iPhone)
+  // of wordt geweigerd, geeft dezelfde klasse een schermvullende CSS-weergave.
+  const fsOrigin=location.protocol==='file:'?'*':location.origin;
+  let fsViaApi=false;
+  function notifyProductFullscreen(){
+    $('#product-frame').contentWindow?.postMessage({type:'weerlab-fullscreen-state',active:document.body.classList.contains('product-expanded')},fsOrigin);
+  }
   function setProductExpanded(active){
+    const was=document.body.classList.contains('product-expanded');
     document.body.classList.toggle('product-expanded',active);
+    if(!active)document.body.classList.remove('product-fs-own-ui');
     const button=$('#product-expand');
     button.setAttribute('aria-pressed',String(active));
     button.setAttribute('aria-label',active?'Sluit beeldvullend':'Toon deze pagina beeldvullend');
     button.title=active?'Sluit beeldvullend (Escape)':'Beeldvullend';
     button.querySelector('.expand-label').textContent=active?'Sluiten':'Beeldvullend';
     button.firstElementChild.textContent=active?'✕':'⛶';
+    const ws=$('#product-workspace');
+    if(active&&!document.fullscreenElement){
+      const request=ws.requestFullscreen||ws.webkitRequestFullscreen;
+      if(request&&document.fullscreenEnabled!==false){
+        try{Promise.resolve(request.call(ws,{navigationUI:'hide'})).catch(()=>{});}catch{}
+      }
+    }else if(!active&&document.fullscreenElement){
+      fsViaApi=false;
+      document.exitFullscreen().catch(()=>{});
+    }
+    if(active!==was)notifyProductFullscreen();
   }
+  document.addEventListener('fullscreenchange',()=>{
+    if(document.fullscreenElement===$('#product-workspace')){fsViaApi=true;return;}
+    // Esc of de browser sloot fullscreen: herstel de gewone paginaweergave.
+    if(!document.fullscreenElement&&fsViaApi){fsViaApi=false;setProductExpanded(false);}
+  });
   mobileMenu.addEventListener('change',placeSearch);
   placeSearch();
   new ResizeObserver(()=>{
@@ -282,6 +308,7 @@
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
     const removeFilter=event.target.closest('[data-remove-filter]');
     if(event.target.closest('[data-reset-filters]')||removeFilter){const next={...state.filters};if(removeFilter)delete next[removeFilter.dataset.removeFilter];else Object.keys(next).forEach(key=>delete next[key]);navigate(routeUrl(state.page,state.type,next),{keepScroll:true});$('#toggle-filters')?.focus();say('Filters bijgewerkt');return;}
+    if(event.target.closest('#product-fs-exit')){setProductExpanded(false);$('#product-expand').focus({preventScroll:true});return;}
     if(event.target.closest('#product-expand')){setProductExpanded(!document.body.classList.contains('product-expanded'));return;}
     if(event.target.closest('#open-menu')){showMenu();return;}
     if(event.target.closest('#close-menu')){closeDialog();return;}
@@ -373,7 +400,7 @@
       // never unload an iframe while leaving its product heading visible.
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260923-pluimnav'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20260924-fullscreen1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
       if(state.product?.id==='pluim-ens6plus'){
         const url=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1] || '');
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
@@ -413,6 +440,9 @@
     if(data?.type==='weerlab-navigate' && typeof data.hash==='string' && /^#(?:[a-z0-9_-]+|menu\/[a-z0-9_-]+(?:\?[^#]*)?)$/i.test(data.hash)){
       navigate(data.hash,{focus:true});return;
     }
+    if(data?.type==='weerlab-fullscreen-toggle'){setProductExpanded(!document.body.classList.contains('product-expanded'));return;}
+    if(data?.type==='weerlab-fullscreen-query'){notifyProductFullscreen();return;}
+    if(data?.type==='weerlab-fullscreen-ui'){document.body.classList.toggle('product-fs-own-ui',Boolean(data.own)&&document.body.classList.contains('product-expanded'));return;}
     if(data?.type==='weerlab-weerkaarten-focus'){document.body.classList.toggle('map-focus-open', Boolean(data.active));return;}
     if(data?.type==='weerlab-focus-search'){focusSearch();return;}
     if(data?.type==='weerlab-product-focus-exit'){setProductExpanded(false);return;}

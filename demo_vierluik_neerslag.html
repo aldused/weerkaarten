@@ -103,7 +103,11 @@ body {
 }
 .tool-btn:hover { border-color: #64748b; color: #f8fafc; }
 .tool-btn.actief { background: #0c4a6e; border-color: #0ea5e9; color: #e0f2fe; }
-#btn-map-focus { margin-left: auto; border-color: #0ea5e9; color: #e0f2fe; }
+#btn-toolbar-fullscreen { margin-left: auto; border-color: #0ea5e9; color: #e0f2fe; }
+#btn-toolbar-fullscreen.actief { background: #0c4a6e; }
+#btn-fullscreen { white-space: nowrap; }
+#btn-fullscreen.actief { background: #0c4a6e !important; border-color: #38bdf8 !important; }
+#btn-map-focus { margin-left: 0; border-color: #0ea5e9; color: #e0f2fe; }
 #btn-map-focus:hover { background: #0c4a6e; border-color: #38bdf8; }
 #btn-map-focus-exit {
   display: none; position: fixed; z-index: 1200; top: 10px; right: 12px;
@@ -588,11 +592,13 @@ body.map-focus-mode .pleg-bar { height:7px; }
 body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
 .no-data-key{display:inline-block;width:8px;height:8px;background:rgb(200,210,220);margin-left:5px;}
 </style>
+<script src="weerkaart_fullscreen.js?v=20260924-fs1"></script>
 </head>
 <body>
 
 <div id="map-focus-controls" role="group" aria-label="Kaartlaag en tijd bedienen in beeldvullende kaartmodus">
 <div id="focus-actions">
+  <button id="btn-fullscreen" class="fs-btn" type="button" data-wl-fullscreen aria-pressed="false"><span class="wl-fs-icon" aria-hidden="true">⛶</span> <span class="wl-fs-label">Beeldvullend</span></button>
   <button id="focus-reset-models" type="button" aria-label="Reset modellen naar HARMONIE 43, HARMONIE 46, ICON-D2 en ECMWF" title="Reset modellen: HARMONIE 43 · HARMONIE 46 · ICON-D2 · ECMWF">↺</button>
 <button id="btn-map-focus-exit" type="button" aria-label="Sluit de beeldvullende kaartmodus" title="Terug naar de bediening (Escape)">
   <span aria-hidden="true">✕</span><span>Sluit beeldvullend</span>
@@ -680,6 +686,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
   <div class="sep"></div>
   <span class="tl-label toolbar-hint">Pan:</span>
   <span class="toolbar-hint" style="font-size:10.5px;color:#f1f5f9;">Beweeg = vergelijk · Sleep = verplaats · Scroll = zoom</span>
+  <button class="tool-btn" id="btn-toolbar-fullscreen" type="button" data-wl-fullscreen aria-pressed="false"><span class="wl-fs-icon" aria-hidden="true">⛶</span> <span class="wl-fs-label">Beeldvullend</span></button>
   <button class="tool-btn" id="btn-map-focus" type="button" aria-pressed="false"
     title="Verberg alle bediening en toon alleen de vier kaarten">
     <span aria-hidden="true">⛶</span> Kaarten beeldvullend
@@ -2242,9 +2249,9 @@ function renderPanelActive(pIdx) {
   var vCenterLat = (view.latMin + view.latMax) / 2;
   var vCenterLon = (view.lonMin + view.lonMax) / 2;
   var cosLat0 = Math.cos(vCenterLat * Math.PI / 180);
-  var baseLatH = BASE_EXTENT.latMax - BASE_EXTENT.latMin;
-  var vLatH = baseLatH / zoomLevel;
+  var vLatH = viewLatH(vpCw, vpCh, vCenterLat) / zoomLevel;
   var vLonW = vLatH * (vpCw / vpCh) / cosLat0;
+  vCenterLon = houdInDomein(vCenterLon, vLonW);
   var vLatMin = vCenterLat - vLatH / 2;
   var vLatMax = vCenterLat + vLatH / 2;
   var vLonMin = vCenterLon - vLonW / 2;
@@ -2914,6 +2921,24 @@ function refreshModels() {
 // ═══════════════════════════════════════════════════════════════
 
 var renderPending = false;
+// Beeldverhouding: de uitsnede heeft vaste hoogte (Nederland), de breedte volgt
+// het venster. Op brede schermen (beeldvullend 16:9, 4K) zou die breedte buiten
+// het modeldomein (lengte 0,5–11,3°) vallen en lege randen tonen. Daarom is de
+// standaarduitsnede (zoom 1) hooguit zo breed als dat domein; verder inzoomen
+// gaat daarna gewoon door.
+var DOMEIN_LON_MIN = 0.5, DOMEIN_LON_MAX = 11.3;
+function viewLatH(vpCw, vpCh, centerLat) {
+  var latH = BASE_EXTENT.latMax - BASE_EXTENT.latMin;
+  var maxLatH = (DOMEIN_LON_MAX - DOMEIN_LON_MIN) * Math.cos(centerLat * Math.PI / 180) * (vpCh / vpCw);
+  return Math.min(latH, maxLatH);
+}
+// Alleen als de uitsnede in het domein past, houd hem er binnen (geen verschuiving buiten de data).
+function houdInDomein(centerLon, lonW) {
+  var dom = DOMEIN_LON_MAX - DOMEIN_LON_MIN;
+  if (lonW >= dom - 0.001) return (DOMEIN_LON_MIN + DOMEIN_LON_MAX) / 2;
+  if (lonW < dom * 0.8) return centerLon; // stevig ingezoomd: vrij verschuiven
+  return Math.max(DOMEIN_LON_MIN + lonW / 2, Math.min(DOMEIN_LON_MAX - lonW / 2, centerLon));
+}
 var sharedVpCw = 0, sharedVpCh = 0; // gedeelde viewport-afmetingen voor alle 4 panels
 
 // Alle beschikbare breedte gebruiken; zoom blijft voor de vier kaarten gelijk.
@@ -3217,8 +3242,9 @@ function currentMapExtent() {
   var vpCw = sharedVpCw || 1, vpCh = sharedVpCh || 1;
   var centerLat = (view.latMin + view.latMax) / 2;
   var centerLon = (view.lonMin + view.lonMax) / 2;
-  var latH = (BASE_EXTENT.latMax - BASE_EXTENT.latMin) / zoomLevel;
+  var latH = viewLatH(vpCw, vpCh, centerLat) / zoomLevel;
   var lonW = latH * (vpCw / vpCh) / Math.cos(centerLat * Math.PI / 180);
+  centerLon = houdInDomein(centerLon, lonW);
   return {
     latMin:centerLat-latH/2, latMax:centerLat+latH/2,
     lonMin:centerLon-lonW/2, lonMax:centerLon+lonW/2
@@ -3463,6 +3489,12 @@ document.getElementById('global-time-slider').addEventListener('input', function
 
 // Keyboard navigation
 document.addEventListener('keydown', function(e) {
+  // Terugval-fullscreen (geen Fullscreen API): Esc sluit eerst beeldvullend.
+  if (e.key === 'Escape' && window.WeerlabFullscreen && window.WeerlabFullscreen.isActive()) {
+    e.preventDefault();
+    window.WeerlabFullscreen.toggle();
+    return;
+  }
   if (e.key === 'Escape' && mapFocusActive) {
     e.preventDefault();
     setMapFocusMode(false, true);

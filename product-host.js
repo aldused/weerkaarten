@@ -1,6 +1,29 @@
 /* Existing product logic, presented inside the shared Weerlab shell. */
 (() => {
-  if (parent === window) return;
+  // Beeldvullend: kaartpagina's in de iframes vragen de buitenste pagina om
+  // echte fullscreen en krijgen de toestand terug. Deze pagina relayt alleen.
+  const fsOrigin = location.protocol === 'file:' ? '*' : location.origin;
+  const eigenFrame = source => [...document.querySelectorAll('iframe')].some(f => f.contentWindow === source);
+  const naarFrames = data => document.querySelectorAll('iframe').forEach(f => { try { f.contentWindow.postMessage(data, fsOrigin); } catch {} });
+  window.addEventListener('message', event => {
+    const data = event.data;
+    if (!data || typeof data.type !== 'string' || !data.type.startsWith('weerlab-fullscreen-')) return;
+    if (event.origin !== location.origin && fsOrigin !== '*') return;
+    if (event.source === parent && parent !== window) {
+      if (data.type === 'weerlab-fullscreen-state') naarFrames(data);
+    } else if (eigenFrame(event.source)) {
+      if (parent !== window) { parent.postMessage(data, fsOrigin); return; }
+      // Zonder shell: deze pagina is zelf de buitenste.
+      if (data.type === 'weerlab-fullscreen-toggle') {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
+      }
+    }
+  });
+  if (parent === window) {
+    document.addEventListener('fullscreenchange', () => naarFrames({ type: 'weerlab-fullscreen-state', active: Boolean(document.fullscreenElement) }));
+    return;
+  }
   let pending = false;
   function report() {
     if (pending) return;
