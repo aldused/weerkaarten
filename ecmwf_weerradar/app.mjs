@@ -572,6 +572,7 @@ function syncUI(){
   $('cloud-legend-fog').classList.toggle('cloud-off',!f.ids.some(id=>id.endsWith('-visibility'))&&!(hasBase&&$('cloud-low').checked));
   $('very-low-key').hidden=$('cloud-legend').hidden;
   $('very-low-key').textContent=hasBase?'Mistkleur: ook zeer lage bewolking · wolkenbasis <150 m.':'Zeer lage bewolking: geen afzonderlijke wolkenbasis in deze bron.';
+  $('very-low-key').title=$('very-low-key').textContent;
   $('fog-unavailable').hidden=!(f.mode==='weather'&&$('clouds').checked&&$('fog').checked&&!f.modelMeta.variables.includes('visibility'));
   const snowLegend=$('snow-legend');
   snowLegend.hidden=!f.ids.some(id=>id.endsWith('snowfall_water_equivalent'));
