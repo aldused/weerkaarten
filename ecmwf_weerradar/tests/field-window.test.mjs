@@ -28,3 +28,10 @@ test('a small pan inside the same weather tiles reuses the exact window and zoom
  assert.deepEqual(bounds,[-26,29,46,73]);
  assert.ok(readBounds[1]<29&&readBounds[3]>73,'real points beyond the Europe clipping boundary remain available');
 });
+
+test('one native tile buffer covers a small pan across a tile edge and stays inside Europe',()=>{
+ const view=[.3,48.9,11.6,55.8],buffer=fieldWindow(view,6,1280,1).bounds;
+ const moved=fieldWindow(view.map((v,i)=>v+(i%2===0?1:0)),6).bounds;
+ assert.ok(buffer[0]<=moved[0]&&buffer[1]<=moved[1]&&buffer[2]>=moved[2]&&buffer[3]>=moved[3]);
+ assert.deepEqual(fieldWindow([-40,20,70,80],2,1280,1).bounds,[-26,29,46,73]);
+});

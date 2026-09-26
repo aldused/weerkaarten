@@ -82,7 +82,7 @@ function renderPixels({field,coords},signal){
     // pile can form. The queue discards that abandoned result.
   });
 }
-const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256,concurrency:()=>Math.max(1,liveWorkers())});
+const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256,concurrency:()=>Math.max(1,liveWorkers()),priority:({field})=>['visibility','snowfall_water_equivalent'].includes(field.variable)?1:0});
 const canvasCommits=new CanvasCommits();
 function paint(field,coords,signal){
   const key=field.key+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;

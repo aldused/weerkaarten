@@ -1,3 +1,4 @@
+import {transparentField} from './transparent-field.mjs';
 import {beaufort} from './wind-style.mjs';
 import {createRegularTileSampler} from './regular-grid.mjs';
 import {writeFogColor} from './fog-style.mjs';
@@ -20,6 +21,7 @@ const palettes=Object.fromEntries(Object.entries(scales).map(([k,v])=>[k,colorsF
 
 export function renderTile(field,coords){
   const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable);
+  if(transparentField(field))return pixels;
   const sampler=createGaussianTileSampler(field.grid,field.data.values,coords)||createRegularTileSampler(field.grid,field.data.values,coords);
   const cloud=field.variable==='cloud_cover';
   if(cloud&&![field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>a?.length===field.data.values.length))throw Error('Afzonderlijke wolkenlagen ontbreken');

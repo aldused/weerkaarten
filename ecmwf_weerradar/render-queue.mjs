@@ -5,8 +5,8 @@
  * a function so a shrinking worker pool lowers it without a new queue.
  */
 export class SharedRenderQueue {
-  constructor(render,{maxEntries=128,concurrency=1}={}){
-    this.render=render;this.maxEntries=maxEntries;this.concurrency=concurrency;this.cache=new Map();
+  constructor(render,{maxEntries=128,concurrency=1,priority=()=>0}={}){
+    this.priority=priority;this.render=render;this.maxEntries=maxEntries;this.concurrency=concurrency;this.cache=new Map();
     this.pending=new Map();this.queue=[];this.active=0;this.running=new Set();this.scheduled=false;
   }
   get slots(){
@@ -45,7 +45,11 @@ export class SharedRenderQueue {
   }
   drain(){
     while(this.active<this.slots&&this.queue.length){
-      const job=this.queue.shift();
+      // Stable priority: primary weather before optional refinements; FIFO
+      // within a priority, without interrupting a running synchronous tile.
+      let next=0;
+      for(let i=1;i<this.queue.length;i++)if(this.priority(this.queue[i].payload)<this.priority(this.queue[next].payload))next=i;
+      const [job]=this.queue.splice(next,1);
       this.active++;this.running.add(job);
       this.run(job);
     }

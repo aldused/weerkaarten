@@ -1,3 +1,5 @@
+import {firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
+import {MovingOverlay} from './moving-overlay.mjs';
 import {hasIsobars,drawIsobars} from './isobars.mjs';
 import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
 import {createProjectedGrid} from './projected-grid.mjs';
@@ -90,11 +92,14 @@ function trimFieldCache(){
 }
 function readField(file,variable,signal){
   signal?.throwIfAborted();
-  const b=map.getBounds(),window=fieldWindow([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],map.getZoom());
+  const b=map.getBounds(),view=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],needed=fieldWindow(view,map.getZoom()).bounds;
+  // One surrounding tile is downloaded on a miss; a cache hit only needs to
+  // cover the visible window. Small pans then keep the same native fields.
+  const window=fieldWindow(view,map.getZoom(),1280,1);
   const [west,south,east,north]=window.bounds;
   // Reuse an exact native crop only when it covers this complete tile window.
   for(const [cachedKey,entry] of fieldCache){
-    if(!entry.task.controller.signal.aborted&&entry.file===file&&entry.variable===variable&&entry.south<=south&&entry.north>=north&&entry.west<=west&&entry.east>=east){
+    if(!entry.task.controller.signal.aborted&&entry.file===file&&entry.variable===variable&&entry.south<=needed[1]&&entry.north>=needed[3]&&entry.west<=needed[0]&&entry.east>=needed[2]){
       fieldCache.delete(cachedKey);fieldCache.set(cachedKey,entry);return consumeTask(entry.task,signal);
     }
   }
@@ -164,7 +169,10 @@ map.on('error', e => {
   }
   else if(current?.ids.includes(e.sourceId))status('Kaartdeel kon niet worden opgehaald. Probeer opnieuw.',true);
 });
-map.on('move', queueCityDraw);
+const movingOverlay=new MovingOverlay(map,$('places'),queueCityDraw);
+map.on('movestart',()=>movingOverlay.start());
+map.on('move',()=>movingOverlay.move());
+map.on('moveend',()=>movingOverlay.finish());
 map.on('movestart',cancelPreparation);
 map.on('resize', queueCityDraw);
 map.on('moveend', () => {
@@ -437,7 +445,9 @@ async function renderFrame(index,rev,signal,context){
   status(`Laden: ${forecastLabel(frame.time).text}…`);
   $('app').dataset.frameStatus='loading';
   try {
-    const sampleVars=sampleVariables(vars,modelMeta);
+    const allSampleVars=sampleVariables(vars,modelMeta);
+    const sampleVars=firstFrameSamples(allSampleVars,vars,!!current);
+    const deferredVars=allSampleVars.filter(v=>!sampleVars.includes(v));
     // The first map must not wait for mist and snow: both are refinements of
     // the same frame and cost roughly half of all tiles. A later time change
     // still switches every layer together, so no two hours are ever mixed.
@@ -457,6 +467,14 @@ async function renderFrame(index,rev,signal,context){
     const old=current;
     meta=modelMeta;frames=context.timeline;
     current={...frame,index,ids,mode:layerMode,level:tempLevel,samples,modelMeta,timeline:context.timeline};
+    const committed=current;
+    // City temperatures and optional first-frame fields must not hold up the
+    // primary weather. They may only attach to this exact committed frame.
+    if(deferredVars.length)void loadRefinements(deferredVars,{
+      read:variable=>readField(fieldFile(frame,variable),variable,signal),
+      isCurrent:()=>current===committed&&rev===revision,
+      apply:(variable,field)=>{committed.samples[variable]=field;queueCityDraw();updatePoint();},
+    });
     if(old?.timeline!==current.timeline){
       buildTimeline(current.timeline);
       // Only after the replacement frame is usable may obsolete runs leave
@@ -664,7 +682,7 @@ async function exportPNG(crop=null){
   stopPlayback();cancelPreparation();
   $('png-preview').hidden=true;$('png-save').hidden=true;$('png-status').textContent='De kaart wordt samengesteld…';$('png-dialog').showModal();$('export-png').disabled=true;
   try{
-    if(!current||rendering||refreshing||$('app').dataset.frameStatus!=='ready')throw Error('Wacht tot de gekozen kaart geladen is en klik daarna opnieuw op PNG.');
+    if(!current||rendering||refreshing||movingOverlay.moving||$('app').dataset.frameStatus!=='ready')throw Error('Wacht tot de gekozen kaart geladen is en klik daarna opnieuw op PNG.');
     const frame=current,rev=revision,center=map.getCenter(),view=[center.lng,center.lat,map.getZoom()].join();
     await document.fonts.ready;
     const nextCenter=map.getCenter();
@@ -712,6 +730,14 @@ function sun(ctx,x,y,size){ctx.strokeStyle='#ffee38';ctx.fillStyle='#ffee38';ctx
 function daylight(lat,lon,time){const d=new Date(time),day=(time-Date.UTC(d.getUTCFullYear(),0,0))/86400000,decl=23.44*Math.PI/180*Math.sin(2*Math.PI*(284+day)/365.25),h=(d.getUTCHours()+d.getUTCMinutes()/60+lon/15-12)*Math.PI/12,phi=lat*Math.PI/180;return Math.sin(phi)*Math.sin(decl)+Math.cos(phi)*Math.cos(decl)*Math.cos(h)>0;}
 function skyIcon(ctx,x,y,city){if(daylight(city.lat,city.lon,current.time)){sun(ctx,x,y,4.3);return;}ctx.fillStyle='#ffee38';ctx.beginPath();ctx.arc(x,y,6,-Math.PI/2,Math.PI/2);ctx.quadraticCurveTo(x+3,y,x,y-6);ctx.fill();}
 function drawCities(){
+  if(movingOverlay.moving)return;
+  const started=performance.now();
+  paintCities();
+  if(params.get('profile')==='1'){
+    const d=$('places').dataset;d.drawCount=String(Number(d.drawCount||0)+1);d.drawMs=String(Math.round(performance.now()-started));
+  }
+}
+function paintCities(){
   const canvas=$('places'),ctx=canvas.getContext('2d'),width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight,dpr=Math.min(2,devicePixelRatio||1);
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);drawnCities=[];

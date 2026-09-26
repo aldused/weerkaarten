@@ -16,12 +16,12 @@ export function visibleWeatherTiles(bounds,mapZoom){
  * missing pixels after a small pan. Padding is only the native cubic stencil,
  * not an arbitrary percentage of the viewport. No source points are skipped.
  */
-export function fieldWindow(bounds,mapZoom,latitudeLines=1280){
+export function fieldWindow(bounds,mapZoom,latitudeLines=1280,tileBuffer=0){
   const z=Math.min(10,Math.max(2,Math.round(mapZoom+1))),world=2**z;
-  const west=Math.max(EUROPE[0],Math.floor((bounds[0]+180)/360*world)/world*360-180);
-  const east=Math.min(EUROPE[2],Math.ceil((bounds[2]+180)/360*world)/world*360-180);
-  const south=Math.max(EUROPE[1],latitude(Math.ceil(mercator(bounds[1])*world)/world));
-  const north=Math.min(EUROPE[3],latitude(Math.floor(mercator(bounds[3])*world)/world));
+  const west=Math.max(EUROPE[0],(Math.floor((bounds[0]+180)/360*world)-tileBuffer)/world*360-180);
+  const east=Math.min(EUROPE[2],(Math.ceil((bounds[2]+180)/360*world)+tileBuffer)/world*360-180);
+  const south=Math.max(EUROPE[1],latitude((Math.ceil(mercator(bounds[1])*world)+tileBuffer)/world));
+  const north=Math.min(EUROPE[3],latitude((Math.floor(mercator(bounds[3])*world)-tileBuffer)/world));
   const padding=3*180/(2*latitudeLines+.5);
   return {bounds:[west,south,east,north],readBounds:[west-padding,south-padding,east+padding,north+padding]};
 }

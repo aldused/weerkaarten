@@ -77,3 +77,13 @@ test('a shrinking pool lowers the number of parallel tiles without a new queue',
   assert.deepEqual(active,['a','b','c']);
   finish.forEach(fn=>fn());await Promise.all(first);
 });
+
+test('primary tiles overtake queued refinements without changing running work or equal-priority FIFO',async()=>{
+ const first=deferred(),calls=[];
+ const queue=new SharedRenderQueue(async p=>{calls.push(p.id);return p.id==='active'?first.promise:p.id;},{priority:p=>p.optional?1:0});
+ const active=queue.request('active',{id:'active',optional:true});await next();
+ const fog=queue.request('fog',{id:'fog',optional:true});
+ const rain=queue.request('rain',{id:'rain'}),cloud=queue.request('cloud',{id:'cloud'});
+ first.resolve('active');await Promise.all([active,fog,rain,cloud]);
+ assert.deepEqual(calls,['active','rain','cloud','fog']);
+});
