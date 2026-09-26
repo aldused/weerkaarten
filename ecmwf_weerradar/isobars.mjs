@@ -47,13 +47,14 @@ export function contours(values,nx,ny,{west=0,south=0,dx=1,dy=1,interval=ISOBAR_
   return result;
 }
 const cache=new WeakMap();
-export function fieldContours(field){
-  if(cache.has(field))return cache.get(field);
+export function fieldContours(field,interval=ISOBAR_INTERVAL){
+  let entries=cache.get(field);if(!entries){entries=new Map();cache.set(field,entries);}
+  if(entries.has(interval))return entries.get(interval);
   const [west,south,east,north]=field.packed.bounds,step=.25;
   const nx=Math.ceil((east-west)/step)+1,ny=Math.ceil((north-south)/step)+1,dx=(east-west)/(nx-1),dy=(north-south)/(ny-1);
   const values=new Float32Array(nx*ny);
   for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)values[y*nx+x]=field.grid.getInterpolatedValue(field.data.values,south+y*dy,west+x*dx,'monotone');
-  const lines=contours(values,nx,ny,{west,south,dx,dy});cache.set(field,lines);return lines;
+  const lines=contours(values,nx,ny,{west,south,dx,dy,interval});entries.set(interval,lines);return lines;
 }
 export function drawIsobars(ctx,field,project,width,height){
   const lines=fieldContours(field),labels=[];ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
@@ -72,4 +73,24 @@ export function drawIsobars(ctx,field,project,width,height){
   ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
   for(const p of labels){ctx.fillStyle='rgba(255,255,255,.88)';ctx.fillRect(p.x-18,p.y-8,36,16);ctx.fillStyle='#192b3b';ctx.fillText(String(p.level),p.x,p.y);}
   ctx.restore();return {lines:lines.length,labels:labels.length};
+}
+
+// Isotherms share the geographic contour mesh and require no extra downloads.
+export function drawIsotherms(ctx,field,project,width,height){
+ const lines=fieldContours(field,1),labels=[];ctx.save();
+ ctx.lineJoin='round';ctx.lineCap='round';
+ for(const {level,points} of lines){
+  const screen=points.map(project);ctx.beginPath();
+  screen.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+  ctx.strokeStyle=level===0?'rgba(20,30,35,.8)':'rgba(20,30,35,.45)';ctx.lineWidth=level===0?1.3:.65;ctx.stroke();
+  let distance=0;
+  for(let i=1;i<screen.length;i++){
+   const p=screen[i],prev=screen[i-1];distance+=Math.hypot(p.x-prev.x,p.y-prev.y);
+   if(distance<180||p.x<35||p.x>width-35||p.y<35||p.y>height-35||labels.some(q=>Math.hypot(p.x-q.x,p.y-q.y)<75))continue;
+   labels.push({...p,level});distance=0;
+  }
+ }
+ ctx.font='11px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=2.5;
+ for(const p of labels){const text=p.level+'°';ctx.strokeStyle='rgba(255,255,255,.55)';ctx.strokeText(text,p.x,p.y);ctx.fillStyle='#172c32';ctx.fillText(text,p.x,p.y);}
+ ctx.restore();return {lines:lines.length,labels:labels.length};
 }

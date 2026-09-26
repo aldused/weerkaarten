@@ -2,7 +2,7 @@ import {temperatureTimeline} from './temperature-timeline.mjs';
 import {discoverGFS,gfsFieldFile} from './gfs-runs.mjs';
 import {firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
 import {MovingOverlay} from './moving-overlay.mjs';
-import {hasIsobars,drawIsobars} from './isobars.mjs';
+import {hasIsobars,drawIsobars,drawIsotherms} from './isobars.mjs';
 import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
 import {createProjectedGrid} from './projected-grid.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
@@ -753,6 +753,10 @@ function paintCities(){
   const canvas=$('places'),ctx=canvas.getContext('2d'),width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight,dpr=Math.min(2,devicePixelRatio||1);
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);drawnCities=[];
+  if(current?.mode==='temperature'){
+    const variable=UPPER_AIR_LEVELS[current.level]||'temperature_2m',field=current.samples[variable];
+    if(field)canvas.dataset.isotherms=JSON.stringify(drawIsotherms(ctx,field,p=>map.project(p),width,height));
+  }else delete canvas.dataset.isotherms;
   if(current&&$('isobars').checked&&hasIsobars(current.modelMeta)&&current.samples.pressure_msl){
     const audit=drawIsobars(ctx,current.samples.pressure_msl,p=>map.project(p),width,height);
     canvas.dataset.isobars=JSON.stringify({...audit,time:current.iso,run:current.modelMeta.reference_time});
