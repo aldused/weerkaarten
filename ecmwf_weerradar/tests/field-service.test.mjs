@@ -101,3 +101,14 @@ test('verlopen runinformatie wordt meteen geleverd en op de achtergrond ververst
  assert.equal(refreshed.hit,'HIT');assert.equal(refreshed.body.reference_time,'2026-09-21T06:00Z');
  assert.equal(calls,2,'de verse kopie wordt niet nog eens opgehaald');
 });
+
+test('sea-level pressure uses the exact ECMWF file and rejects other model sources',async()=>{
+ const f=fixture(),r=await f.handler(new Request(url('pressure_msl')),{},f.ctx);
+ assert.equal(r.status,200);assert.equal(f.reads[0].variable,'pressure_msl');assert.ok(f.reads[0].source.endsWith(path));
+ const bytes=gunzipSync(Buffer.from(await r.arrayBuffer()));
+ const packet=decodePacket(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),{source:path,variable:'pressure_msl',bounds});
+ assert.ok(packet.values.every(v=>v===80),'source values remain unchanged');
+ const invalid=url('pressure_msl',path.replace('ecmwf_ifs','dmi_harmonie_arome_europe')).replace('v=3','v=1');
+ assert.equal((await f.handler(new Request(invalid),{},f.ctx)).status,400);
+ await Promise.all(f.pending);
+});

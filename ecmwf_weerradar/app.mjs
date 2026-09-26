@@ -1,3 +1,4 @@
+import {hasIsobars,drawIsobars} from './isobars.mjs';
 import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
 import {createProjectedGrid} from './projected-grid.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
@@ -385,7 +386,7 @@ function variablesForMode(modelMeta=meta,frame){
 }
 function sampleVariables(layerVariables,modelMeta){
   const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):mode==='temperature'?[]:['temperature_2m']):[];
-  return [...new Set([...layerVariables,...labels])];
+  return [...new Set([...layerVariables,...labels,...($('isobars').checked&&hasIsobars(modelMeta)?['pressure_msl']:[])])];
 }
 function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
 function addLayer(frame,variable,prefix){
@@ -554,6 +555,8 @@ function syncUI(){
   $('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
   $('icon-d2-info').hidden=modelId!=='icond2';
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
+  $('isobars').disabled=!hasIsobars(metadata);
+  $('isobars-note').textContent=hasIsobars(metadata)?'Luchtdruk op zeeniveau · lijnen om de 4 hPa.':'Isobaren zijn beschikbaar bij ECMWF.';
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){const v=tempVariable(modelId),l=temperatureLegend(v);title=v==='temperature_2m'?'Temperatuur':`Temperatuur ${v.slice(12,15)} hPa`;unit='°C';numbers=l.labels;gradient=l.gradient;}
   else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}
@@ -638,6 +641,7 @@ $('temp-levels').addEventListener('click',e=>{
   stopPlayback();tempLevel=b.dataset.level;requestFrame(wanted,true);
 });
 ['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
+$('isobars').addEventListener('change',()=>{stopPlayback();queueCityDraw();requestFrame(wanted,true);});
 $('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
@@ -669,7 +673,7 @@ async function exportPNG(crop=null){
     drawCities();
     const modelId=modelFor(frame.modelMeta),label=forecastLabel(frame.time,frame.modelMeta.reference_time,MODELS[modelId].label);
     const canvas=composePNG(captureMap($('map'),$('places'),crop),{
-      title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}`,
+      title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}${$('isobars').checked&&hasIsobars(frame.modelMeta)?' · Isobaren (4 hPa)':''}`,
       time:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
       legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta,frame),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
     });
@@ -711,6 +715,10 @@ function drawCities(){
   const canvas=$('places'),ctx=canvas.getContext('2d'),width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight,dpr=Math.min(2,devicePixelRatio||1);
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);drawnCities=[];
+  if(current&&$('isobars').checked&&hasIsobars(current.modelMeta)&&current.samples.pressure_msl){
+    const audit=drawIsobars(ctx,current.samples.pressure_msl,p=>map.project(p),width,height);
+    canvas.dataset.isobars=JSON.stringify({...audit,time:current.iso,run:current.modelMeta.reference_time});
+  }else delete canvas.dataset.isobars;
   if(!$('city-labels').checked||!current)return;
   const symbolAudit=params.get('profile')==='1'?[]:null;
   const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12,valueFont=font+2,windMode=current.mode==='wind',controls=document.querySelector('.bottom-area').getBoundingClientRect();

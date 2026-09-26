@@ -75,6 +75,10 @@ export function normalizeFieldData(data, variable, hours) {
     if (![1, 3, 6].includes(hours)) throw new Error('Ongeldig neerslaginterval');
     for (let i = 0; i < data.values.length; i++) data.values[i] = intervalRate(data.values[i], hours);
     if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor *= hours;
+  } else if (variable === 'pressure_msl') {
+    // Native ECMWF OM sea-level pressure is Pa; display contours in hPa.
+    for (let i = 0; i < data.values.length; i++) data.values[i] /= 100;
+    if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor *= 100;
   } else if (variable === 'wind_u_component_10m' || variable === 'wind_gusts_10m') {
     // Both native gust speed and derived wind speed are m/s; convert once.
     for (let i = 0; i < data.values.length; i++) data.values[i] = Number.isFinite(data.values[i]) ? data.values[i] * 3.6 : NaN;

@@ -39,7 +39,7 @@ createServer(async(req,res)=>{
     const u=new URL(req.url,origin);
     if(u.pathname.startsWith('/data_spatial/')||u.pathname.startsWith('/harmonie/')){
       const regional=u.pathname.startsWith('/harmonie/'),ctx={waitUntil:p=>p.catch(e=>console.error(e.message))};
-      const local=regional&&localModels[u.pathname.split('/')[2]],native=!!local||u.searchParams.get('variable')==='cloud_layers'||/hPa$/.test(u.searchParams.get('variable')||'');
+      const local=regional&&localModels[u.pathname.split('/')[2]],native=!!local||(u.searchParams.get('variable')==='pressure_msl'||(!process.env.ISOBAR_PREVIEW&&u.searchParams.get('variable')==='cloud_layers'))||/hPa$/.test(u.searchParams.get('variable')||'');
       const response=native
         ?await (regional?harmonie:handler)(new Request(u),local?{HARMONIE_MAPS:localSource}:{},ctx)
         :await fetch(remote[regional?'harmonie':'ecmwf']+u.pathname+u.search);
@@ -54,6 +54,8 @@ createServer(async(req,res)=>{
     if((await stat(path)).isDirectory())path=resolve(path,'index.html');
     let bytes=await readFile(path);
     if(['.js','.mjs'].includes(extname(path)))bytes=Buffer.from(bytes.toString().replaceAll(remote.ecmwf,origin).replaceAll(remote.harmonie,origin));
+    // Test fixture only on this loopback review server; production access stays unchanged.
+    if(process.env.ISOBAR_PREVIEW&&path===resolve(root,'access.mjs'))bytes=Buffer.from(bytes.toString().replace('installAccessGate(document,storage,startMap);',"installAccessGate(document,{getItem:()=> '1'},startMap);"));
     res.writeHead(200,{'Content-Type':types[extname(path)]||'application/octet-stream','Cache-Control':'no-store'});res.end(bytes);
   }catch(error){console.error(error.message);res.writeHead(500,{'Content-Type':'text/plain'});res.end(error.message);}
 }).listen(port,'127.0.0.1',()=>console.log('Cloud review: '+origin));

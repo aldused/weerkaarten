@@ -15,7 +15,7 @@ const META=new RegExp('^/data_spatial/'+MODELS+'/(latest\\.json|\\d{4}/\\d{2}/\\
 const validRunHour=(model,hour)=>hour>=0&&hour<24&&(model==='ecmwf_ifs'||model==='ecmwf_ifs025'?hour%6===0:model==='dmi_harmonie_arome_europe'||model==='dwd_icon_d2'?hour%3===0:true);
 const variables=new Set(['cloud_cover','cloud_layers','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m','wind_gusts_10m']);
 // Pressure levels exist in the KNMI Europe files, never in DMI's.
-const allowed=(model,variable)=>REGULAR[model]?UPPER_AIR.has(variable):model==='knmi_harmonie_arome_europe'?variables.has(variable)||UPPER_AIR.has(variable):variables.has(variable);
+const allowed=(model,variable)=>variable==='pressure_msl'?model==='ecmwf_ifs':REGULAR[model]?UPPER_AIR.has(variable):model==='knmi_harmonie_arome_europe'?variables.has(variable)||UPPER_AIR.has(variable):variables.has(variable);
 // Crop a regular OM grid to the requested bounds plus two native rows/columns
 // for interpolation. Values stay the untouched source floats.
 function regularRanges(model,bounds){
