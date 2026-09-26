@@ -1,3 +1,4 @@
+import {temperatureTimeline} from './temperature-timeline.mjs';
 import {discoverGFS,gfsFieldFile} from './gfs-runs.mjs';
 import {firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
 import {MovingOverlay} from './moving-overlay.mjs';
@@ -312,7 +313,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
     refreshing=false;requestFrame(index,true,{meta:timeline[index].modelMeta,timeline});
   } catch(error) {
     if(startup!==startupRevision)return;
-    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};}
+    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline,fullTimeline:current.fullTimeline};}
     if(current){selectedModel=modelFor(current.modelMeta);$('model-select').value=selectedModel;}
     refreshing=false;status(`${error.message}. ${current?'Het vorige model blijft zichtbaar. ':''}Probeer opnieuw.`,true);
   }finally{if(startup===startupRevision)$('model-select').setAttribute('aria-busy','false');}
@@ -468,7 +469,7 @@ async function renderFrame(index,rev,signal,context){
     sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
     meta=modelMeta;frames=context.timeline;
-    current={...frame,index,ids,mode:layerMode,level:tempLevel,samples,modelMeta,timeline:context.timeline};
+    current={...frame,index,ids,mode:layerMode,level:tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
     const committed=current;
     // City temperatures and optional first-frame fields must not hold up the
     // primary weather. They may only attach to this exact committed frame.
@@ -500,7 +501,7 @@ async function renderFrame(index,rev,signal,context){
     removeLayers(ids);
     if(rev!==revision||error.name==='AbortError')return false;
     $('app').dataset.lastLoadError=error.message;
-    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline};syncUI();}
+    if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline,fullTimeline:current.fullTimeline};syncUI();}
     stopPlayback();$('app').dataset.frameStatus='error';
     status(`De weergegevens konden niet worden geladen. ${current?'De vorige tijdstap blijft zichtbaar.':'Probeer opnieuw.'}`,true);
     return false;
@@ -514,8 +515,17 @@ function loadMapDetails(){
   detailsReady=Promise.allSettled([mapDetails,cityDetails]);
 }
 let renderController;
-async function requestFrame(index,force=false,context={meta,timeline:frames}){
+async function requestFrame(index,force=false,context={meta,timeline:frames,fullTimeline:current?.fullTimeline}){
   if(!context.timeline.length)return;
+  const fullTimeline=context.fullTimeline||context.timeline;
+  const variable=mode==='temperature'?tempVariable(modelFor(context.meta)):null;
+  const available=temperatureTimeline(fullTimeline,variable);
+  if(!available.length){status('Voor dit temperatuurniveau zijn geen tijdstippen beschikbaar.',true);return;}
+  if(available!==context.timeline){
+    const time=context.timeline[Math.min(context.timeline.length-1,Math.max(0,index))].time;
+    index=nearestIndex(available,time);
+  }
+  context={...context,timeline:available,fullTimeline};
   const target=Math.min(context.timeline.length-1,Math.max(0,index));
   if(!force&&rendering&&wanted===target&&requestedContext?.timeline===context.timeline)return;
   requestedContext=context;
