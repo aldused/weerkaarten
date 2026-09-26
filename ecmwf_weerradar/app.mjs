@@ -645,20 +645,20 @@ $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(slide
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
 function syncTempLevels(frame,modelId){
   const upper=MODEL_CONFIG[modelId]?.upperAir,chosen=tempVariable(modelId);
-  $('temp-levels').hidden=frame.mode!=='temperature';
+  $('temp-levels').hidden=frame.mode!=='temperature'&&!['ecmwf_ifs','ncep_gfs013'].includes(modelId);
   for(const b of $('temp-levels').querySelectorAll('button')){
     const level=b.dataset.level;b.disabled=level!=='2m'&&!upper;
-    b.setAttribute('aria-pressed',String(UPPER_AIR_LEVELS[level]===chosen));
+    b.setAttribute('aria-pressed',String(frame.mode==='temperature'&&UPPER_AIR_LEVELS[level]===chosen));
   }
   let note='';
   if(!upper)note=`${MODELS[modelId].label} levert in deze bron geen drukvlakken; 850/500 hPa niet beschikbaar.`;
   else if(chosen!=='temperature_2m')note=fieldFile(frame,chosen)?`${upper.label} · ${upper.resolution}.`:`Dit tijdstip heeft geen ${chosen.slice(12,15)} hPa-veld: ${upper.label} ${upper.stepNote}.`;
-  $('temp-level-note').textContent=note;
+  $('temp-level-note').textContent=frame.mode==='temperature'?note:'';
   const u=new URL(location.href);if(frame.mode==='temperature'&&tempLevel!=='2m')u.searchParams.set('level',tempLevel);else u.searchParams.delete('level');history.replaceState(null,'',u);
 }
 $('temp-levels').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-level]');if(!b||b.disabled||tempLevel===b.dataset.level)return;
-  stopPlayback();tempLevel=b.dataset.level;requestFrame(wanted,true);
+  const b=e.target.closest('button[data-level]');if(!b||b.disabled||(mode==='temperature'&&tempLevel===b.dataset.level))return;
+  stopPlayback();mode='temperature';tempLevel=b.dataset.level;requestFrame(wanted,true);
 });
 ['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('isobars').addEventListener('change',()=>{stopPlayback();queueCityDraw();requestFrame(wanted,true);});
