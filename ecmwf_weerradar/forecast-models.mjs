@@ -16,6 +16,12 @@ const NL_CENTRE=[5.3,52.15];
 const REGIONAL_VIEW={centre:NL_CENTRE,core:NL_CORE,context:[[2.55,50.3],[8.05,54.0]],maxOut:.25,minZoom:4,maxZoom:11};
 const EUROPE_VIEW_DEFAULT={centre:NL_CENTRE,core:[[2.1,49.85],[8.5,54.45]],context:[[-1.7,48.3],[12.3,56]],maxOut:.5,minZoom:3,maxZoom:11};
 export const MODEL_CONFIG={
+ ncep_gfs013:{label:'GFS',detail:'GFS · 13 km',region:'Europa · 10 dagen',attribution:'NOAA / Open-Meteo',
+  type:'europe',projection:'Regelmatig lat/lon-rooster',nativeResolutionKm:13,extent:[-26,29,46,73],
+  timestep:'1 uur t/m +120, daarna 3 uur',runs:[0,6,12,18],horizonHours:384,
+  interpolation:'bilineair op het oorspronkelijke rooster',units:{temperature_2m:'°C',precipitation:'mm per interval → mm/u',pressure_msl:'hPa'},view:EUROPE_VIEW_DEFAULT,
+  upperAir:{model:'ncep_gfs025',label:'GFS 0,25°',resolution:'drukvlakken circa 28 km',available:lead=>lead<=120||lead%3===0,stepNote:'elk uur t/m +120, daarna elke 3 uur'},
+  resolution:'GFS circa 13 km; luchtdruk, zicht, windstoten en drukvlakken op 0,25°.'},
  ecmwf_ifs:{label:'ECMWF',detail:'ECMWF IFS · 9 km',region:'Europa · 10 dagen',attribution:'ECMWF / Open-Meteo',
   type:'europe',projection:'Gereduceerd Gaussisch rooster O1280',nativeResolutionKm:9,extent:[-26,29,46,73],
   timestep:'1 uur t/m +90, 3 uur t/m +144, daarna 6 uur',runs:[0,6,12,18],horizonHours:360,

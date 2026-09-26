@@ -1,7 +1,7 @@
 // Sea-level pressure has been normalized from native Pa to hPa. Contours use a fixed geographic
 // mesh, so moving or zooming the map never changes their meteorological shape.
 export const ISOBAR_INTERVAL=4;
-export const hasIsobars=meta=>(meta?.modelId||'ecmwf_ifs')==='ecmwf_ifs'&&meta?.variables?.includes('pressure_msl');
+export const hasIsobars=meta=>['ecmwf_ifs','ncep_gfs013'].includes(meta?.modelId||'ecmwf_ifs')&&meta?.variables?.includes('pressure_msl');
 export function contours(values,nx,ny,{west=0,south=0,dx=1,dy=1,interval=ISOBAR_INTERVAL}={}){
   if(!(interval>0))throw Error('Invalid contour interval');
   const levels=new Map();

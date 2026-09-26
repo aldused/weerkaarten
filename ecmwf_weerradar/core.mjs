@@ -75,7 +75,7 @@ export function normalizeFieldData(data, variable, hours) {
     if (![1, 3, 6].includes(hours)) throw new Error('Ongeldig neerslaginterval');
     for (let i = 0; i < data.values.length; i++) data.values[i] = intervalRate(data.values[i], hours);
     if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor *= hours;
-  } else if (variable === 'pressure_msl') {
+  } else if (variable === 'pressure_msl' && !data.metadata?.source?.includes('/ncep_gfs025/')) {
     // Native ECMWF OM sea-level pressure is Pa; display contours in hPa.
     for (let i = 0; i < data.values.length; i++) data.values[i] /= 100;
     if (Number.isFinite(data.scaleFactor) && data.scaleFactor > 0) data.scaleFactor *= 100;

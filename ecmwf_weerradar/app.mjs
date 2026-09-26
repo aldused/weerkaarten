@@ -1,3 +1,4 @@
+import {discoverGFS,gfsFieldFile} from './gfs-runs.mjs';
 import {firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
 import {MovingOverlay} from './moving-overlay.mjs';
 import {hasIsobars,drawIsobars} from './isobars.mjs';
@@ -108,7 +109,7 @@ function readField(file,variable,signal){
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
     const data=await fieldPackets.read(file,variable,window.bounds,readSignal);
-    if(data.metadata.kind!=='regular')normalizeFieldData(data,variable,intervalByURL.get(file));
+    if(data.metadata.kind!=='regular'||file.includes('/ncep_gfs'))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     for(const key of CLOUD_KEYS)if(data[key])field[key]=data[key];
     if(data.cloudBase)field.cloudBase=data.cloudBase;
@@ -130,7 +131,7 @@ let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
 let tempLevel=Object.hasOwn(UPPER_AIR_LEVELS,params.get('level'))?params.get('level'):'2m';
 function tempVariable(modelId){const v=UPPER_AIR_LEVELS[tempLevel];return v!=='temperature_2m'&&!MODEL_CONFIG[modelId]?.upperAir?'temperature_2m':v;}
 // File that holds `variable` for this frame: same model, run and valid time.
-function fieldFile(frame,variable){return variable.endsWith('hPa')?upperAirFile(frame,modelFor(frame.modelMeta),variable):frame.url;}
+function fieldFile(frame,variable){if(modelFor(frame.modelMeta)==='ncep_gfs013')return gfsFieldFile(frame,variable);return variable.endsWith('hPa')?upperAirFile(frame,modelFor(frame.modelMeta),variable):frame.url;}
 $('model-select').value=selectedModel;
 $('model-select').addEventListener('change',()=>{selectedModel=$('model-select').value;start(undefined,selectedModel,true);});
 // Optional local diagnostics: no reporting endpoint and no visitor tracking.
@@ -285,7 +286,8 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
       if(startup!==startupRevision)return;
       timeline=combinedForecastFrames(candidateMetas,now);
       try{localStorage.setItem('weerlab-ecmwf-runs-v2',JSON.stringify({savedAt:runCacheTime,metas:candidateMetas}));}catch{}
-    }else if(isEuropeanHarmonie(modelId))timeline=await discoverEuropeanHarmonie(url=>json(url,signal),modelId,now);
+    }else if(modelId==='ncep_gfs013')timeline=await discoverGFS(url=>json(url,signal),now);
+    else if(isEuropeanHarmonie(modelId))timeline=await discoverEuropeanHarmonie(url=>json(url,signal),modelId,now);
     else timeline=regionalFrames(await json(latestModelURL(modelId),signal),modelId,now);
     if(startup!==startupRevision)return;
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
@@ -570,11 +572,11 @@ function syncUI(){
   $('model-coverage').textContent=MODELS[modelId].region;
   $('model-resolution').textContent=MODELS[modelId].resolution;
   $('point-model').textContent=MODELS[modelId].label+'-VERWACHTING';
-  $('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
+  $('gfs-info').hidden=modelId!=='ncep_gfs013';$('ecmwf-info').hidden=modelId!=='ecmwf_ifs';$('harmonie-info').hidden=!isBenelux(modelId);$('harmonie-europe-info').hidden=!isEuropeanHarmonie(modelId);
   $('icon-d2-info').hidden=modelId!=='icond2';
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   $('isobars').disabled=!hasIsobars(metadata);
-  $('isobars-note').textContent=hasIsobars(metadata)?'Luchtdruk op zeeniveau · lijnen om de 4 hPa.':'Isobaren zijn beschikbaar bij ECMWF.';
+  $('isobars-note').textContent=hasIsobars(metadata)?'Luchtdruk op zeeniveau · lijnen om de 4 hPa.':'Isobaren zijn beschikbaar bij ECMWF en GFS.';
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){const v=tempVariable(modelId),l=temperatureLegend(v);title=v==='temperature_2m'?'Temperatuur':`Temperatuur ${v.slice(12,15)} hPa`;unit='°C';numbers=l.labels;gradient=l.gradient;}
   else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}

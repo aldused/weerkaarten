@@ -4,18 +4,18 @@ import {packField,encodePacket} from '../packed-grid.mjs';
 import {encodeRegularPacket} from '../regular-grid.mjs';
 import {CLOUD_FIELDS} from '../cloud-fields.mjs';
 const ROOT='https://openmeteo.s3.us-west-2.amazonaws.com';
-const MODELS='(ecmwf_ifs|ecmwf_ifs025|dwd_icon_d2|knmi_harmonie_arome_europe|dmi_harmonie_arome_europe)';
+const MODELS='(ecmwf_ifs|ecmwf_ifs025|ncep_gfs013|ncep_gfs025|dwd_icon_d2|knmi_harmonie_arome_europe|dmi_harmonie_arome_europe)';
 // Regular latitude/longitude OM domains. Used only for pressure-level
 // temperature: the 9 km ECMWF files have no pressure levels (ECMWF open data
 // publishes those at 0.25°) and the Weerlab ICON-D2 export has no upper air.
-const REGULAR={ecmwf_ifs025:{horizon:360},dwd_icon_d2:{horizon:48}};
+const REGULAR={ncep_gfs013:{horizon:384},ncep_gfs025:{horizon:384},ecmwf_ifs025:{horizon:360},dwd_icon_d2:{horizon:48}};
 const UPPER_AIR=new Set(['temperature_850hPa','temperature_500hPa']);
 const PATH=new RegExp('^/data_spatial/'+MODELS+'/(\\d{4}/\\d{2}/\\d{2})/(\\d{2})00Z/(\\d{4}-\\d{2}-\\d{2})T(\\d{2})00\\.om$');
 const META=new RegExp('^/data_spatial/'+MODELS+'/(latest\\.json|\\d{4}/\\d{2}/\\d{2}/\\d{2}00Z/meta\\.json)$');
-const validRunHour=(model,hour)=>hour>=0&&hour<24&&(model==='ecmwf_ifs'||model==='ecmwf_ifs025'?hour%6===0:model==='dmi_harmonie_arome_europe'||model==='dwd_icon_d2'?hour%3===0:true);
+const validRunHour=(model,hour)=>hour>=0&&hour<24&&(model.startsWith('ncep_gfs')||model==='ecmwf_ifs'||model==='ecmwf_ifs025'?hour%6===0:model==='dmi_harmonie_arome_europe'||model==='dwd_icon_d2'?hour%3===0:true);
 const variables=new Set(['cloud_cover','cloud_layers','precipitation','temperature_2m','visibility','snowfall_water_equivalent','wind_u_component_10m','wind_gusts_10m']);
 // Pressure levels exist in the KNMI Europe files, never in DMI's.
-const allowed=(model,variable)=>variable==='pressure_msl'?model==='ecmwf_ifs':REGULAR[model]?UPPER_AIR.has(variable):model==='knmi_harmonie_arome_europe'?variables.has(variable)||UPPER_AIR.has(variable):variables.has(variable);
+const allowed=(model,variable)=>model==='ncep_gfs013'?['cloud_cover','cloud_layers','precipitation','snowfall_water_equivalent','temperature_2m','wind_u_component_10m'].includes(variable):model==='ncep_gfs025'?['pressure_msl','visibility','wind_gusts_10m',...UPPER_AIR].includes(variable):variable==='pressure_msl'?model==='ecmwf_ifs':REGULAR[model]?UPPER_AIR.has(variable):model==='knmi_harmonie_arome_europe'?variables.has(variable)||UPPER_AIR.has(variable):variables.has(variable);
 // Crop a regular OM grid to the requested bounds plus two native rows/columns
 // for interpolation. Values stay the untouched source floats.
 function regularRanges(model,bounds){
@@ -81,10 +81,15 @@ return async function handle(request,env,ctx){
   if(cached)return deliver(cached,true,`cache;dur=${performance.now()-started}`);
   if(regular)try{
     const {ranges,grid:crop}=regularRanges(model,bounds);
-    const loaded=await readField(ROOT+url.pathname,variable,ranges,request.signal);
+    let loaded;
+    if(variable==='cloud_layers'){
+      const parts=await Promise.all(Object.entries({values:'cloud_cover',...CLOUD_FIELDS}).map(async([key,name])=>[key,await readField(ROOT+url.pathname,name,ranges,request.signal)]));
+      loaded={...parts[0][1]};
+      for(const [key,data] of parts){if(data.values.length!==loaded.values.length)throw Error('Ongelijke wolkenroosters');loaded[key]=Float32Array.from(data.values);}
+    }else loaded=await readField(ROOT+url.pathname,variable,ranges,request.signal);
     if(loaded.values.length!==crop.n_lon*crop.n_lat)throw Error('Onverwachte roostergrootte');
     request.signal.throwIfAborted();
-    const packet=encodeRegularPacket({schema:1,kind:'regular',source:url.pathname,variable,bounds,grid:crop,directions:false},Float32Array.from(loaded.values),null);
+    const packet=encodeRegularPacket({schema:1,kind:'regular',source:url.pathname,variable,bounds,grid:crop,directions:!!loaded.directions,cloudLayers:variable==='cloud_layers'},Float32Array.from(loaded.values),loaded.directions?Float32Array.from(loaded.directions):null,loaded);
     const stored=new Response(packet,{headers:{...CORS,'Content-Type':'application/octet-stream','Cache-Control':'public, max-age=86400, immutable','X-Source-Points':String(loaded.values.length)}});
     ctx.waitUntil(getCache().put(key,stored.clone()));
     return deliver(stored,false,`read;dur=${performance.now()-started}`);
