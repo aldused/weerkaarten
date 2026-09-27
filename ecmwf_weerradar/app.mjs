@@ -457,14 +457,14 @@ async function renderFrame(index,rev,signal,context){
   map.setFrameBudget(vars.length);
   retryLoad=()=>requestFrame(index,true,context);
   const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
-  // The first view can reveal finished layers immediately. Later time changes
+  // The first view reveals each layer as soon as its first tile is painted. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.
   let reveal;
   if(!current){
     updateTimeHeading(frame,modelMeta);
-    reveal=()=>{
+    reveal=event=>{
       if(rev!==revision){map.off('sourcedata',reveal);return;}
-      for(const id of ids)if(map.getSource(id)&&map.isSourceLoaded(id)&&!frameErrors.has(id)){
+      for(const id of ids)if(map.getSource(id)&&(map.isSourceLoaded(id)||(event?.firstTile&&event.sourceId===id))&&!frameErrors.has(id)){
         map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100);
         if(!OPTIONAL_LAYERS.some(v=>id.endsWith(v))&&!$('app').dataset.firstVisibleWeatherMs){$('app').dataset.firstVisibleWeatherMs=Math.round(performance.now());$('app').dataset.firstVisibleLayer=id;}
       }

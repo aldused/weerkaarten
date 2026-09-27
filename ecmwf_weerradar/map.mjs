@@ -229,6 +229,7 @@ export class Map {
     const source=this.sources.get(def.source);
     const layer=new WeatherTiles(source.url,{pane:'weather',tileSize:256,minZoom:2,maxZoom:12,maxNativeZoom:10,noWrap:true,keepBuffer:1,updateWhenIdle:true,updateWhenZooming:false,opacity:def.paint['raster-opacity'],bounds:[[29,-26],[73,46]]});
     layer.on('load',()=>this.fire('sourcedata',{sourceId:def.id}));
+    layer.once('tileload',()=>this.fire('sourcedata',{sourceId:def.id,firstTile:true}));
     layer.on('tileerror',e=>this.fire('error',{sourceId:def.id,error:e.error}));
     this.layers.set(def.id,layer);layer.addTo(this.native);
   }

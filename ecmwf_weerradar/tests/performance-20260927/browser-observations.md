@@ -25,3 +25,12 @@ After the duplicate-draw fix, local Chrome reload and 100 × 30 pixel drag:
 - Field reads stayed at 10: no new source downloads for this pan.
 - Final overlay draw 63 ms, viewport sample completion 348 ms. Different
   crop/zoom from the earlier observation, so these durations are not an A/B speedup.
+
+Progressive first-view reveal:
+- Previously a layer became visible only at its final tile's load event.
+- Map adapter now emits a one-time firstTile event. Only the initial frame
+  uses that event to reveal a layer; replacements still commit after loading.
+- Chrome local preview: first weather visible at 5119 ms; full frame at
+  8691 ms. All four final layers had opacity 1 and 72/72 loaded tiles.
+- This proves partial availability precedes full readiness by 3572 ms in
+  this run; it is not a controlled comparison of network download speed.
