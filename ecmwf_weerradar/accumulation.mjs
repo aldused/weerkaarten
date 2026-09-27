@@ -41,17 +41,25 @@ export class AccumulationFields{
   if(this.cache.has(key))return this.cache.get(key);
   let result,done=0;
   for(let i=plan.steps.length-1;i>=0;i--){const prefix=this.cache.get(base+'|'+plan.steps[i].time);if(prefix){result={...prefix,values:Float32Array.from(prefix.values)};done=i+1;break;}}
-  for(let batch=done;batch<plan.steps.length;batch+=3){
+  // Keep a bounded window in flight; one slow request must not stall a whole batch.
+  // Consume in forecast order to preserve exactly the same floating-point totals.
+  const pending=new Map(),concurrency=6;
+  const enqueue=i=>{
+   const step=plan.steps[i];
+   // Attach rejection handling immediately, including requests later abandoned on abort.
+   pending.set(i,Promise.resolve().then(()=>{signal?.throwIfAborted();return this.read(step.url,plan.variable,bounds,signal);})
+    .then(data=>({data}),error=>({error})));
+  };
+  for(let i=done;i<Math.min(done+concurrency,plan.steps.length);i++)enqueue(i);
+  for(let i=done;i<plan.steps.length;i++){
    signal?.throwIfAborted();
-   const steps=plan.steps.slice(batch,batch+3);
-   const packets=await Promise.all(steps.map(step=>this.read(step.url,plan.variable,bounds,signal)));
-   signal?.throwIfAborted();
-   for(let j=0;j<steps.length;j++){
-    const step=steps[j],data=packets[j];
-    if(!result)result={metadata:data.metadata,values:new Float32Array(data.values.length)};
-    if(gridIdentity(result.metadata)!==gridIdentity(data.metadata))throw Error('Cumulatieve bronroosters verschillen');
-    addInterval(result.values,data,plan.variable,step.hours);onProgress(batch+j+1,plan.steps.length);
-   }
+   const packet=await pending.get(i);pending.delete(i);
+   signal?.throwIfAborted();if(packet.error)throw packet.error;
+   if(i+concurrency<plan.steps.length)enqueue(i+concurrency);
+   const step=plan.steps[i],data=packet.data;
+   if(!result)result={metadata:data.metadata,values:new Float32Array(data.values.length)};
+   if(gridIdentity(result.metadata)!==gridIdentity(data.metadata))throw Error('Cumulatieve bronroosters verschillen');
+   addInterval(result.values,data,plan.variable,step.hours);onProgress(i+1,plan.steps.length);
   }
   const output={...result,metadata:{...result.metadata,variable},start:plan.start,end:plan.end,run:plan.run};
   this.cache.set(key,output);while(this.cache.size>this.maxEntries)this.cache.delete(this.cache.keys().next().value);

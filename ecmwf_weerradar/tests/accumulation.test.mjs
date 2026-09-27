@@ -22,3 +22,17 @@ test('different native crops are rejected rather than added by array index',asyn
  let n=0;const sums=new AccumulationFields(async()=>({metadata:{kind:'regular',source:'/harmonie/harmonie/a',grid:{lon_min:n++,n_lon:2,n_lat:2}},values:Float32Array.of(1,1,1,1)}));
  const p=accumulationPlan(frame(),run,'precipitation_total');await assert.rejects(sums.get(p,'precipitation_total',[1,2,3,4]),/roosters/);assert.equal(sums.cache.size,0);
 });
+test('rolling downloads stay bounded and start the next interval before a slow neighbour finishes',async()=>{
+ const waiting=new Map(),started=[];
+ const sums=new AccumulationFields(url=>new Promise(resolve=>{started.push(url);waiting.set(url,resolve);}));
+ const p=accumulationPlan(frame(),run,'precipitation_total');
+ const packet=()=>({metadata:{kind:'regular',source:'/harmonie/harmonie/a',grid:{n_lon:1,n_lat:1}},values:Float32Array.of(1)});
+ const flush=()=>new Promise(resolve=>setImmediate(resolve));
+ const result=sums.get(p,'precipitation_total',[1,2,3,4]);await flush();
+ assert.equal(started.length,6);
+ waiting.get(p.steps[0].url)(packet());await flush();
+ assert.equal(started.length,7); // step 2 is still waiting, but step 7 already downloads
+ for(let i=1;i<7;i++)waiting.get(p.steps[i].url)(packet());await flush();
+ assert.equal(started.length,8);waiting.get(p.steps[7].url)(packet());
+ assert.deepEqual([...(await result).values],[8]);
+});
