@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {significantCode,significantVariables,buildSignificantField,SIGNIFICANT_WEATHER} from '../significant-weather.mjs';
+import {significantCode,buildSignificantFieldAsync,significantVariables,buildSignificantField,SIGNIFICANT_WEATHER} from '../significant-weather.mjs';
 import {createRegularGrid} from '../regular-grid.mjs';
 import {renderTile} from '../tile-renderer.mjs';
 import {exportLegends} from '../png-export.mjs';
@@ -27,4 +27,14 @@ test('high cloud gets its own key without hiding rain or lower cloud',()=>{
  assert.equal(significantCode(sky),8);
  assert.equal(significantCode({...sky,precipitation:1}),5);
  assert.equal(significantCode({...sky,low:80,cloud:'overcast'}),3);
+});
+
+test('cooperative classification preserves all pixels and yields for input',async()=>{
+ const constant=value=>({data:{values:[value]},grid:{getInterpolatedValue:a=>a[0]}});
+ const fields={precipitation:constant(1),cloud_cover:{...constant(100),cloudLow:[100],cloudMid:[0],cloudHigh:[0]}};
+ let yields=0;
+ const actual=await buildSignificantFieldAsync(fields,[3,50,7,54],9,undefined,{budgetMs:0,yieldTask:async()=>{yields++;}});
+ assert.deepEqual(actual,buildSignificantField(fields,[3,50,7,54],9));assert.ok(yields>1);
+ const controller=new AbortController();
+ await assert.rejects(buildSignificantFieldAsync(fields,[3,50,7,54],9,controller.signal,{budgetMs:0,yieldTask:async()=>controller.abort()}),{name:'AbortError'});
 });

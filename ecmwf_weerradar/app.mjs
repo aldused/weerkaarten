@@ -1,4 +1,4 @@
-import {buildSignificantField,significantVariables,significantType,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
+import {buildSignificantFieldAsync,significantVariables,significantType,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {MAP_REGIONS} from './map-regions.mjs';
 import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
 import {totalLegend} from './accumulation-colors.mjs';
@@ -121,7 +121,7 @@ function readField(file,variable,signal){
     const data=variable==='significant_weather'?await (async()=>{
       const frame=significantRequests.get(file),variables=significantVariables(frame.modelMeta);
       const parts=await Promise.all(variables.map(async v=>[v,await readField(fieldFile(frame,v),v,readSignal)]));
-      readSignal.throwIfAborted();return buildSignificantField(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm);
+      readSignal.throwIfAborted();return buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);
     })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
