@@ -120,8 +120,8 @@
 <div class="wrap" id="content" style="display:none;">
   <h1>Jan Visser — ECMWF Pluimen</h1>
   <div class="sub">
-    Temperatuur: ECMWF IFS ENS (51 leden) ensemble-gemiddelde 6-uursmaxima/-minima · stippellijn = vorige ENS-run.
-    Neerslag: ECMWF IFS ENS ensemble-gemiddelde 12-uurs-sommen · donkergroen = nieuwste run, lichtgroen = gisteren.
+    Temperatuur: ECMWF IFS ENS (51 leden) ensemble-gemiddelde 6-uursmaxima/-minima · stippellijn = vorige beschikbare 00/12 UTC ENS-run.
+    Neerslag: ECMWF IFS ENS ensemble-gemiddelde 12-uurs-sommen · donkergroen = nieuwste run, lichtgroen = vorige beschikbare 00/12 UTC ENS-run.
     Update <code id="updated">…</code> · volgende auto-ververs <code id="nextReload">…</code>.
   </div>
 
@@ -145,9 +145,9 @@
       <button class="dl-btn" id="dl-t" data-svg="chart-t" data-fn="temp_minmax">⬇ PNG</button>
       <svg viewBox="0 0 1180 420" preserveAspectRatio="xMidYMid meet" id="chart-t"></svg>
       <div class="legend-box">
-        <div class="item"><span class="sw previous" style="border-color:#1155cc"></span>TMin vorige ENS-run (stippellijn)</div>
+        <div class="item"><span class="sw previous" style="border-color:#1155cc"></span>TMin vorige 00/12 UTC ENS-run (stippellijn)</div>
         <div class="item"><span class="sw" style="border-color:#1155cc"></span>TMin nieuwste ENS-run</div>
-        <div class="item"><span class="sw previous" style="border-color:#d62020"></span>TMax vorige ENS-run (stippellijn)</div>
+        <div class="item"><span class="sw previous" style="border-color:#d62020"></span>TMax vorige 00/12 UTC ENS-run (stippellijn)</div>
         <div class="item"><span class="sw" style="border-color:#d62020"></span>TMax nieuwste ENS-run</div>
       </div>
     </div>
@@ -181,7 +181,7 @@
   </div>
 </div>
 
-<script src="pluim_run_switcher_48ffbf926db6.js" data-required="temperature_2m,precipitation,cloud_cover"></script>
+<script src="pluim_run_switcher_7547452ecdc3.js" data-required="temperature_2m,precipitation,cloud_cover"></script>
 <script>
 /* ──────────────────────────────────────────────────────────────
    Stations
@@ -215,11 +215,15 @@ const FONT_LEGEND = 16;
    ────────────────────────────────────────────────────────────── */
 const CACHE_KEY = 'jvens_v3';   /* v3 = 6h temp + 12h ENS-mean neerslag */
 
+let memoryCache;
 function loadCache() {
-  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
-  catch { return {}; }
+  if (memoryCache) return memoryCache;
+  try { memoryCache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') || {}; }
+  catch { memoryCache = {}; }
+  return memoryCache;
 }
 function saveCache(c) {
+  memoryCache = c;
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch {}
 }
 /**
@@ -256,7 +260,7 @@ function findPrevRun(stationName, currentRunStart) {
   const cache = loadCache();
   const st = cache[stationName] || {};
   const currentISO = currentRunStart.toISOString();
-  const earlier = Object.keys(st).filter(k => k < currentISO).sort();
+  const earlier = Object.keys(st).filter(k => k < currentISO && [0, 12].includes(new Date(k).getUTCHours())).sort();
   if (!earlier.length) return null;
   const key   = earlier[earlier.length - 1];
   const keyDate = new Date(key);
@@ -291,12 +295,12 @@ async function fetchWithRetry(url, tries = 3) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return await r.json();
     } catch (e) {
       lastErr = e;
-      await new Promise(res => setTimeout(res, 400 * (i + 1)));
+      if (i + 1 < tries) await new Promise(res => setTimeout(res, 400 * (i + 1)));
     }
   }
   throw lastErr;
@@ -396,11 +400,11 @@ function alignHresRun(raw, targetTimes, expectedRun, label) {
 async function fetchHresPrecipTempPrev(st, ensPromise) {
   const runs = window.WeerlabPlumeRuns;
   if (runs?.state?.ready) await runs.state.ready;
+  const ensData = await ensPromise;
   const selectedIso = runs?.selectedRunIso ? runs.selectedRunIso() : null;
   if (!selectedIso) throw new Error('Exacte ECMWF-run voor HRES ontbreekt');
   const selected = new Date(selectedIso);
   const previous = new Date(selected.getTime() - 24 * 3600000);
-  const ensData = await ensPromise;
   const targetTimes = ensembleTargetTimes(ensData);
   if (!targetTimes.length) throw new Error('ECMWF-ensemble heeft geen geldige tijdas');
 
@@ -1085,11 +1089,11 @@ function downloadSvgAsPng(svgEl, filename) {
   const vb = svgEl.viewBox.baseVal;
   const w = vb.width, hh = vb.height;
   // Supersample-factor (rasterize-resolutie); output blijft op 2× (retina-scherp).
-  const superScale = 4;
+  const superScale = 2;
   const outScale   = 2;
 
   const clone = svgEl.cloneNode(true);
-  clone.setAttribute('xmlns',       'http://www.w3.org/2000/svg');
+  clone.removeAttribute('xmlns');
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   clone.setAttribute('width',  w * superScale);
   clone.setAttribute('height', hh * superScale);
@@ -1109,35 +1113,22 @@ function downloadSvgAsPng(svgEl, filename) {
 
   const img = new Image();
   img.onload = () => {
-    // Hoge-res canvas (4×, voor antialiasing)
-    const hi = document.createElement('canvas');
-    hi.width  = Math.round(w  * superScale);
-    hi.height = Math.round(hh * superScale);
-    const hiCtx = hi.getContext('2d');
-    hiCtx.imageSmoothingEnabled = true;
-    hiCtx.imageSmoothingQuality = 'high';
-    hiCtx.fillStyle = '#ffffff';
-    hiCtx.fillRect(0, 0, hi.width, hi.height);
-    hiCtx.drawImage(img, 0, 0, hi.width, hi.height);
-
-    // Output op 2×-resolutie (downsample → soft antialiasing, niet onnodig groot)
+    // Direct rasteriseren op de uiteindelijke retina-resolutie.
     const out = document.createElement('canvas');
-    out.width  = Math.round(w  * outScale);
+    out.width = Math.round(w * outScale);
     out.height = Math.round(hh * outScale);
     const outCtx = out.getContext('2d');
-    outCtx.imageSmoothingEnabled = true;
-    outCtx.imageSmoothingQuality = 'high';
     outCtx.fillStyle = '#ffffff';
     outCtx.fillRect(0, 0, out.width, out.height);
-    outCtx.drawImage(hi, 0, 0, out.width, out.height);
+    outCtx.drawImage(img, 0, 0, out.width, out.height);
 
     out.toBlob(b => {
-      if (!b) { alert('PNG-encode mislukt'); return; }
+      if (!b) { URL.revokeObjectURL(url); alert('PNG-encode mislukt; probeer opnieuw.'); return; }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(b);
       a.download = filename + '.png';
       document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       URL.revokeObjectURL(url);
     }, 'image/png');
   };
@@ -1587,6 +1578,13 @@ async function ensureStationData(i) {
         throw new Error('De ECMWF-bron wisselde tijdens het laden; vernieuw voor één exacte run');
       }
     }
+    // Het reeds geladen archief bevat ook de exacte vorige hoofdrun.
+    // De oude dagelijkse samenvatting bevat niet altijd de 12 UTC-run.
+    const previous = await window.WeerlabPlumeRuns?.previousMainEnsemble?.(st.lat, st.lon, expectedRun);
+    if (previous) {
+      const stats = compute6hEnsMinMax(previous);
+      writeRunToCache(st.name, stats.runStart, stats.series, compute12hEnsPrecipMean(previous));
+    }
     const d = { ensData, hresData };
     stationData.set(i, d);
     return d;
@@ -1630,6 +1628,7 @@ async function renderStation(i) {
   document.getElementById('coords').textContent =
     `· ${st.lat.toFixed(2)}°N ${st.lon.toFixed(2)}°E`;
 
+  clearAllPanels(`${st.name} wordt geladen…`);
   let d = stationData.get(i);
   if (!d) {
     loadstate.textContent = `⏳ ${st.name} wordt opgehaald…`;
@@ -1639,9 +1638,10 @@ async function renderStation(i) {
       if (requestId !== renderRequestId || Number(stationSelect.value) !== i) return;
       loadstate.textContent = `· ${stationData.size}/${STATIONS.length} stations geladen`;
     } catch (e) {
+      if (requestId !== renderRequestId || Number(stationSelect.value) !== i) return [];
       clearAllPanels(`Geen pluim getoond: ${e.message}`);
-      loadstate.textContent = `❌ ${st.name}: ${e.message}`;
-      return;
+      loadstate.textContent = `❌ ${st.name}: ${e.message} · kies de plaats opnieuw om te proberen`;
+      return [{ error: e }];
     }
   }
 
@@ -1662,7 +1662,7 @@ async function renderStation(i) {
     drawTempChart('chart-t', st.name, ensStats, prevRun, d.hresData.hourly);
     const binsCurr = compute12hEnsPrecipMean(d.ensData);
     const binsPrev = (prevRun && prevRun.precipBins) ? prevRun.precipBins : [];
-    drawPrecipChart('chart-p', st.name, binsCurr, binsPrev, runStart, 'EC-Ens · ENS-mean 12u-sommen');
+    drawPrecipChart('chart-p', st.name, binsCurr, binsPrev, runStart, 'EC-Ens · ENS-mean 12u-sommen' + (prevRun ? ' · vs ' + runLabelNL(prevRun.runDate) : ' · eerdere 00/12 UTC-run ontbreekt'));
     const hresBinsCurr = compute12hPrecip(d.hresData.hourly, 'precipitation');
     const hresBinsPrev = compute12hPrecip(d.hresData.hourly, 'precipitation_previous_day1');
     drawPrecipChart('chart-p-op', st.name, hresBinsCurr, hresBinsPrev, runStart, 'EC-OP · HRES 12u-sommen');
@@ -1686,85 +1686,8 @@ async function renderStation(i) {
   return [];
 }
 
-/* Server-side run-cache (door dagelijkse cron geüpload naar R2).
-   Bevat per station ENS-mean 6h temp + 12h precip voor laatste runs.
-   Wordt in localStorage gemerged zodat findPrevRun ook werkt bij eerste bezoek. */
-async function loadServerCache() {
-  try {
-    const r = await fetch('https://data.weerlab.nl/jvens.json?t=' + Date.now(),
-      { cache: 'no-cache' });
-    if (!r.ok) return 0;
-    const doc = await r.json();
-    if (!doc || !doc.stations) return 0;
-    const localCache = loadCache();
-    let merged = 0;
-    for (const [name, runs] of Object.entries(doc.stations)) {
-      const st = localCache[name] || {};
-      for (const [runISO, entry] of Object.entries(runs)) {
-        if (!st[runISO]) {
-          st[runISO] = entry;
-          merged++;
-        }
-      }
-      // beperk tot CACHE_KEEP recentste
-      const keys = Object.keys(st).sort();
-      while (keys.length > CACHE_KEEP) {
-        delete st[keys.shift()];
-      }
-      localCache[name] = st;
-    }
-    saveCache(localCache);
-    return merged;
-  } catch (e) {
-    console.warn('Server-cache laden faalde:', e);
-    return 0;
-  }
-}
-
-(async () => {
-  const loadstate = document.getElementById('loadstate');
-  // Cache en De Bilt tegelijk laden. Voorheen blokkeerde de eerste render
-  // totdat alle zeven stations sequentieel waren opgehaald.
-  let defaultIdx = 0;
-  const [cacheResult, firstResult] = await Promise.allSettled([
-    loadServerCache(),
-    ensureStationData(defaultIdx),
-  ]);
-  if (cacheResult.status === 'fulfilled' && cacheResult.value > 0) {
-    console.log(`Server-cache: ${cacheResult.value} runs gemerged.`);
-  }
-
-  if (firstResult.status === 'rejected') {
-    console.warn('De Bilt fetch failed', firstResult.reason);
-    for (let i = 1; i < STATIONS.length; i++) {
-      try {
-        await ensureStationData(i);
-        defaultIdx = i;
-        break;
-      } catch (e) {
-        console.warn('Station fetch failed', STATIONS[i].name, e);
-      }
-    }
-  }
-
-  if (!stationData.has(defaultIdx)) {
-    loadstate.textContent = '❌ Geen stationsdata beschikbaar';
-    return;
-  }
-
-  cacheStationRun(defaultIdx, stationData.get(defaultIdx));
-  stationSelect.value = String(defaultIdx);
-  stationSelect.onchange = () => renderStation(Number(stationSelect.value));
-  const initialPanelErrors = await renderStation(defaultIdx);
-
-  document.getElementById('updated').textContent =
-    new Date().toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' });
-  if (!initialPanelErrors.length) {
-    loadstate.textContent = `· ${STATIONS[defaultIdx].name} · alle 6 grafieken geladen · overige stations op achtergrond`;
-  }
-
-  // Download-knoppen
-  document.querySelectorAll('.dl-btn').forEach(btn => {
+// Download-knoppen zijn ook na een tijdelijke laadfout beschikbaar.
+document.querySelectorAll('.dl-btn').forEach(btn => {
     btn.onclick = () => {
       const svgId = btn.dataset.svg;
       const fn    = btn.dataset.fn || btn.id.replace(/^dl-/, '');
@@ -1773,21 +1696,11 @@ async function loadServerCache() {
     };
   });
 
-  // Overige stations pas na de eerste zichtbare pluim en bewust sequentieel
-  // voorladen om de Open-Meteo rate-limit te ontzien.
-  (async function preloadRemainingStations() {
-    for (let i = 0; i < STATIONS.length; i++) {
-      if (i === defaultIdx || stationData.has(i)) continue;
-      try {
-        const d = await ensureStationData(i);
-        cacheStationRun(i, d);
-      } catch (e) {
-        console.warn('Station preload failed', STATIONS[i].name, e);
-      }
-      loadstate.textContent = `· ${stationData.size}/${STATIONS.length} stations geladen`;
-    }
-  })();
-
+(async () => {
+  stationSelect.onchange = () => renderStation(Number(stationSelect.value));
+  await renderStation(0);
+  document.getElementById('updated').textContent =
+    new Date().toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' });
 })();
 
 /* ──────────────────────────────────────────────────────────────
