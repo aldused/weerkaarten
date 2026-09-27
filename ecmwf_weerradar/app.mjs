@@ -1,3 +1,4 @@
+import {MAP_REGIONS} from './map-regions.mjs';
 import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
 import {totalLegend} from './accumulation-colors.mjs';
 import {temperatureTimeline} from './temperature-timeline.mjs';
@@ -223,12 +224,13 @@ function viewPadding(){
   return {top:Math.round(top),bottom:Math.round(bottom),left:side,right:side};
 }
 function fitModelView(modelId=selectedModel){
+  $('region-select').value='';
   const view=modelView(modelId);
   const padding=viewPadding();let measured;
   map.fitView(view,padding,zoomFor=>{measured=[zoomFor(view.core),zoomFor(view.context)];return viewZoom(view,zoomFor);});
   autoView=true;Object.assign($('app').dataset,{autoView:'true',viewZoom:map.getZoom().toFixed(2),viewPadding:[padding.top,padding.right,padding.bottom,padding.left].join(' '),viewFit:measured.map(z=>z.toFixed(2)).join(' ')});
 }
-function manualView(){if(autoView){autoView=false;$('app').dataset.autoView='false';}}
+function manualView(){ $('region-select').value='';if(autoView){autoView=false;$('app').dataset.autoView='false';}}
 for(const type of ['pointerdown','wheel','touchstart'])$('map').addEventListener(type,manualView,{passive:true});
 $('map').addEventListener('keydown',e=>{if(/^(Arrow|\+|-|=)/.test(e.key))manualView();});
 let refitTimer;
@@ -696,7 +698,13 @@ $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visi
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
 $('speed').addEventListener('change',()=>{if(playing&&!rendering&&nextFrameReady)scheduleNext();});
 $('zoom-in').addEventListener('click',()=>{manualView();map.zoomIn();});$('zoom-out').addEventListener('click',()=>{manualView();map.zoomOut();});
-$('europe').addEventListener('click',()=>{manualView();map.fitBounds([[-24,34],[42,70]],{padding:viewPadding(),duration:600});});
+for(const [id,label] of MAP_REGIONS){const option=document.createElement('option');option.value=id;option.textContent=label;$('region-select').append(option);}
+function selectRegion(id){
+ const region=MAP_REGIONS.find(r=>r[0]===id);if(!region)return;
+ manualView();map.fitBounds(region[2],{padding:viewPadding(),duration:600});$('region-select').value=id;
+}
+$('region-select').addEventListener('change',()=>selectRegion($('region-select').value));
+$('europe').addEventListener('click',()=>selectRegion('europe'));
 $('home').addEventListener('click',()=>fitModelView());
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('app').requestFullscreen();}catch{status('Volledig scherm is niet beschikbaar in deze browser.',true);}});
 let pngURL=null;
