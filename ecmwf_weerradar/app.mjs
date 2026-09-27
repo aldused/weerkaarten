@@ -72,6 +72,7 @@ function syncCloudButtons(){
     item.classList.toggle('cloud-off',!visible);item.setAttribute('aria-pressed',String(visible));
   }
 }
+if(matchMedia('(max-width:700px)').matches)$('map-legend-panel').open=false;
 const modeNames={weather:'Weer',significant:'Significant weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind',rain_total:'Cumulatieve neerslag',snow_total:'Cumulatieve sneeuw'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
 for(const item of SIGNIFICANT_WEATHER){const label=document.createElement('span'),swatch=document.createElement('i');swatch.style.background=`rgb(${item.color.slice(0,3)})`;label.append(swatch,item.label);$('significant-key').append(label);}
@@ -831,7 +832,7 @@ function paintCities(){
     }
     else if(symbol==='overcast'){ctx.fillStyle='#e4e8ec';ctx.strokeStyle='#30485b';ctx.lineWidth=1.2;ctx.beginPath();ctx.ellipse(p.x-13,p.y-16,9,5,0,0,Math.PI*2);ctx.fill();ctx.stroke();}
     else if(symbol==='clear')skyIcon(ctx,p.x-13,p.y-16,city);
-    else if(symbol==='filtered'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
+    else if(symbol==='filtered'||symbol==='cirrus'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
       const wind=current.samples.wind_u_component_10m;
       if(wind?.data.directions&&Number.isFinite(displayedValue)){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-27);ctx.rotate(a+Math.PI);ctx.beginPath();ctx.moveTo(0,9);ctx.lineTo(0,-9);ctx.lineTo(-4,-4);ctx.moveTo(0,-9);ctx.lineTo(4,-4);ctx.strokeStyle='#243846';ctx.lineWidth=4;ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();ctx.restore();}
