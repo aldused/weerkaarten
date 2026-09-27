@@ -17,7 +17,7 @@ import {visibleTimeout} from './frame-scheduler.mjs';
 import {FOG_BANDS,fogBand,visibilityText} from './fog-style.mjs';
 import {precipitationLegend,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {precipitationPeriod} from './precipitation.mjs';
-import { forecastLabel, groupForecastDays, chooseDayEntry, nowFrameIndex } from './timeline.mjs';
+import { forecastLabel, frameSpacingHours, groupForecastDays, chooseDayEntry, nowFrameIndex } from './timeline.mjs';
 import {combinedForecastFrames,discoverCachedForecastRuns,isNewerForecastRun} from './forecast-runs.mjs';
 import * as mapEngine from './map.mjs';
 import {updateCurrentBounds, domainOptions, getRanges} from '@openmeteo/weather-map-layer';
@@ -549,7 +549,7 @@ function updateTimeHeading(frame,metadata){
   const label=forecastLabel(frame.time,metadata.reference_time,MODELS[modelFor(metadata)].label);
   $('selected-date').textContent=label.date;
   $('selected-date-mobile').textContent=label.mobileDate;
-  $('selected-clock').textContent=`${label.clock} uur`;
+  $('selected-clock').textContent=`${label.displayClock} uur`;
   $('slider-time').setAttribute('aria-label',label.full);
   $('slider-time').dataset.utc=new Date(frame.time).toISOString();
   $('run-badge').textContent=label.runLabel+(frame.olderRun?' · Aanvullende eerdere run':'');
@@ -577,7 +577,8 @@ function syncUI(){
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===f.mode)));
   $('play').disabled=!playing&&!nextFrameReady;$('time-slider').disabled=false;$('now').disabled=false;
   $('previous').disabled=f.index===0;$('next').disabled=f.index===timeline.length-1;
-  $('interval-label').textContent=`${MODELS[modelId].detail} · ${f.hours}u ${(f.mode==='weather'||f.mode==='rain')?'neerslaggem.':'tijdstap'}`;
+  const precipitationMode=f.mode==='weather'||f.mode==='rain',spacing=frameSpacingHours(timeline,f.index);
+  $('interval-label').textContent=`${MODELS[modelId].detail} · ${precipitationMode?`${f.hours}u neerslaggem.`:spacing?`${spacing}u tijdstap`:'geldig tijdstip'}`;
   $('model-attribution').textContent=MODELS[modelId].attribution;
   $('model-coverage').textContent=MODELS[modelId].region;
   $('model-resolution').textContent=MODELS[modelId].resolution;

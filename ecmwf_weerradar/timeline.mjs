@@ -69,3 +69,9 @@ export function groupForecastDays(frames, now=Date.now()) {
   }
   return [...groups.values()];
 }
+
+// Display spacing is distinct from the source precipitation accumulation.
+export function frameSpacingHours(timeline,index){
+ const a=timeline[index],b=timeline[index+1]||timeline[index-1];
+ return a&&b?Math.abs(b.time-a.time)/HOUR:null;
+}

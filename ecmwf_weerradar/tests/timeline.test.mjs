@@ -111,3 +111,16 @@ test('Nu selects an available frame and clamps correctly at both forecast ends',
  assert.equal(nowFrameIndex(frames,frames[0].time+1.8*HOUR),2);
  assert.equal(nowFrameIndex(frames,frames.at(-1).time+10*HOUR),3);
 });
+
+test('display spacing follows selected pressure-level times, not rainfall accumulation',async()=>{
+ const {frameSpacingHours}=await import('../timeline.mjs');
+ const timeline=[3,6,12].map(h=>({time:h*3600000,hours:1}));
+ assert.equal(frameSpacingHours(timeline,0),3);assert.equal(frameSpacingHours(timeline,1),6);assert.equal(frameSpacingHours(timeline,2),6);assert.equal(frameSpacingHours([timeline[0]],0),null);
+});
+test('Dutch clock remains correct through midnight, summer and winter transitions for every model',()=>{
+ for(const model of ['ECMWF','GFS','HARMONIE','ICON-D2']){
+  for(const [utc,clock,offset] of [['2026-09-27T12:00Z','14:00','UTC+2'],['2026-09-27T23:00Z','01:00','UTC+2'],['2026-03-29T00:00Z','01:00','UTC+1'],['2026-03-29T01:00Z','03:00','UTC+2'],['2026-10-25T00:00Z','02:00','UTC+2'],['2026-10-25T01:00Z','02:00','UTC+1']]){
+   const label=forecastLabel(utc,'2026-03-28T00:00Z',model);assert.equal(label.clock,clock);assert.equal(label.offset,offset);assert.match(label.runLabel,/00:00 UTC$/);
+  }
+ }
+});
