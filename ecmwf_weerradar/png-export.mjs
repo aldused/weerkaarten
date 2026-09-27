@@ -1,3 +1,4 @@
+import {totalLegend} from './accumulation-colors.mjs';
 import {CLOUD_STYLES} from './cloud-style.mjs';
 import {precipitationLegend} from './precipitation-colors.mjs';
 import {windScale,windLegend} from './wind-style.mjs';
@@ -9,7 +10,8 @@ export function pngFilename(model,iso,mode){
 }
 export function exportLegends({mode,variables,cloudVisible,hasBase}){
   const rows=[];
-  if(mode==='temperature'){
+  if(mode==='rain_total'||mode==='snow_total'){const snow=mode==='snow_total',legend=totalLegend(snow);rows.push({label:snow?'Cumulatieve sneeuw · mm smeltwater':'Cumulatieve neerslag · mm',labels:legend.labels,stops:legend.stops});}
+  else if(mode==='temperature'){
     const variable=variables.find(v=>v.startsWith('temperature_'))||'temperature_2m',legend=temperatureLegend(variable);
     rows.push({label:`Temperatuur ${variable==='temperature_2m'?'2 m':variable.slice(12,15)+' hPa'} · °C`,labels:legend.labels,stops:legend.stops});
   }

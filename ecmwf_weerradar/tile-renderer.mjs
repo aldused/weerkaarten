@@ -1,3 +1,4 @@
+import {totalColor} from './accumulation-colors.mjs';
 import {transparentField} from './transparent-field.mjs';
 import {beaufort} from './wind-style.mjs';
 import {createRegularTileSampler} from './regular-grid.mjs';
@@ -61,6 +62,7 @@ export function renderTile(field,coords){
         pixels[p]=Math.round(cloudRGB[0]);pixels[p+1]=Math.round(cloudRGB[1]);pixels[p+2]=Math.round(cloudRGB[2]);pixels[p+3]=a*255;continue;
       }
       if(field.variable==='visibility'){writeFogColor(value,pixels,(y*256+x)*4,coords.x*256+x,coords.y*256+y);continue;}
+      if(field.variable==='precipitation_total'||field.variable==='snowfall_total'){totalColor(field.variable,value,pixels,(y*256+x)*4);continue;}
       if(precipitation){if(value<PRECIPITATION_THRESHOLD)continue;writePrecipitationColor(field.variable,value,pixels,(y*256+x)*4);continue;}
       const displayValue=field.variable==='wind_u_component_10m'?beaufort(value):value;
       const c=Math.min(palette.n-1,Math.max(0,Math.round((displayValue-palette.min)/(palette.max-palette.min)*(palette.n-1))))*4,p=(y*256+x)*4;

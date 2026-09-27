@@ -1,3 +1,5 @@
+import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
+import {totalLegend} from './accumulation-colors.mjs';
 import {temperatureTimeline} from './temperature-timeline.mjs';
 import {discoverGFS,gfsFieldFile} from './gfs-runs.mjs';
 import {firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
@@ -68,7 +70,7 @@ function syncCloudButtons(){
     item.classList.toggle('cloud-off',!visible);item.setAttribute('aria-pressed',String(visible));
   }
 }
-const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind'};
+const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind',rain_total:'Cumulatieve neerslag',snow_total:'Cumulatieve sneeuw'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
 
@@ -92,6 +94,8 @@ function trimFieldCache(){
     if(!key)break;bytes-=fieldCache.get(key).bytes||0;fieldCache.delete(key);
   }
 }
+const accumulationRequests=new Map();
+const accumulationFields=new AccumulationFields((...args)=>fieldPackets.read(...args));
 function readField(file,variable,signal){
   signal?.throwIfAborted();
   const b=map.getBounds(),view=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],needed=fieldWindow(view,map.getZoom()).bounds;
@@ -109,8 +113,9 @@ function readField(file,variable,signal){
   const ranges=getRanges(domain.grid,bounds),key=file+'|'+variable+'|'+JSON.stringify(window.bounds);
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
-    const data=await fieldPackets.read(file,variable,window.bounds,readSignal);
-    if(data.metadata.kind!=='regular'||file.includes('/ncep_gfs'))normalizeFieldData(data,variable,intervalByURL.get(file));
+    const request=accumulationRequests.get(file);
+    const data=isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
+    if(!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     for(const key of CLOUD_KEYS)if(data[key])field[key]=data[key];
     if(data.cloudBase)field.cloudBase=data.cloudBase;
@@ -132,7 +137,12 @@ let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
 let tempLevel=Object.hasOwn(UPPER_AIR_LEVELS,params.get('level'))?params.get('level'):'2m';
 function tempVariable(modelId){const v=UPPER_AIR_LEVELS[tempLevel];return v!=='temperature_2m'&&!MODEL_CONFIG[modelId]?.upperAir?'temperature_2m':v;}
 // File that holds `variable` for this frame: same model, run and valid time.
-function fieldFile(frame,variable){if(modelFor(frame.modelMeta)==='ncep_gfs013')return gfsFieldFile(frame,variable);return variable.endsWith('hPa')?upperAirFile(frame,modelFor(frame.modelMeta),variable):frame.url;}
+function fieldFile(frame,variable){
+ if(isAccumulation(variable)){
+  const anchor=frame.accumulationAnchor??frame.time-frame.hours*HOUR,file=frame.url+'/sum/'+anchor+'/'+variable;
+  accumulationRequests.set(file,{frame,anchor});return file;
+ }
+if(modelFor(frame.modelMeta)==='ncep_gfs013')return gfsFieldFile(frame,variable);return variable.endsWith('hPa')?upperAirFile(frame,modelFor(frame.modelMeta),variable):frame.url;}
 $('model-select').value=selectedModel;
 $('model-select').addEventListener('change',()=>{selectedModel=$('model-select').value;start(undefined,selectedModel,true);});
 // Optional local diagnostics: no reporting endpoint and no visitor tracking.
@@ -292,7 +302,8 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
     else timeline=regionalFrames(await json(latestModelURL(modelId),signal),modelId,now);
     if(startup!==startupRevision)return;
     $('app').dataset.metadataReadyMs=Math.round(performance.now());
-    timeline.forEach(f=>intervalByURL.set(f.url,f.hours));
+    timeline.forEach(f=>{intervalByURL.set(f.url,f.hours);f.accumulationAnchor=timeline[0].time-timeline[0].hours*HOUR;});
+    if(mode==='snow_total'&&!timeline[0].modelMeta.variables.includes('snowfall_water_equivalent'))mode='rain_total';
     await mapReady;
     if(startup!==startupRevision)return;
     // Benelux is intentionally tighter than the full regional export. Explicit
@@ -391,12 +402,14 @@ new ResizeObserver(entries=>{
 // Refinements of the same frame: they must not delay the first usable map.
 const OPTIONAL_LAYERS=['visibility','snowfall_water_equivalent'];
 function variablesForMode(modelMeta=meta,frame){
+  if(mode==='rain_total')return ['precipitation_total'];
+  if(mode==='snow_total')return ['snowfall_total'];
   if(mode==='temperature'){const v=tempVariable(modelFor(modelMeta));return !frame||fieldFile(frame,v)?[v]:[];}
   if(mode==='wind') return ['wind_u_component_10m'];
   return [...(mode==='weather'&&$('clouds').checked?['cloud_cover',...($('fog').checked&&modelMeta.variables.includes('visibility')?['visibility']:[])]:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
 }
 function sampleVariables(layerVariables,modelMeta){
-  const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):mode==='temperature'?[]:['temperature_2m']):[];
+  const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):(mode==='temperature'||mode.endsWith('_total'))?[]:['temperature_2m']):[];
   return [...new Set([...layerVariables,...labels,...($('isobars').checked&&hasIsobars(modelMeta)?['pressure_msl']:[])])];
 }
 function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
@@ -417,7 +430,7 @@ function awaitSources(ids,signal){
     const abort=()=>{cleanup();reject(signal.reason);};
     // Only visible seconds count: a background tab renders very slowly and
     // must show its finished map on return, not a load error.
-    const stopTimer=visibleTimeout(45000,()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));});
+    const stopTimer=visibleTimeout(mode.endsWith('_total')?240000:45000,()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));});
     signal?.addEventListener('abort',abort,{once:true});
     ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);if(signal?.aborted)abort();else check();
   });
@@ -469,7 +482,7 @@ async function renderFrame(index,rev,signal,context){
     sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
     meta=modelMeta;frames=context.timeline;
-    current={...frame,index,ids,mode:layerMode,level:tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
+    current={...frame,index,ids,mode:layerMode,level:layerMode==='temperature'&&!MODEL_CONFIG[modelFor(modelMeta)]?.upperAir?'2m':tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
     const committed=current;
     // City temperatures and optional first-frame fields must not hold up the
     // primary weather. They may only attach to this exact committed frame.
@@ -590,11 +603,20 @@ function syncUI(){
   $('isobars-note').textContent=hasIsobars(metadata)?'Luchtdruk op zeeniveau · lijnen om de 4 hPa.':'Isobaren zijn beschikbaar bij ECMWF en GFS.';
   const legend=$('legend');let title,unit,numbers,gradient;
   if(f.mode==='temperature'){const v=tempVariable(modelId),l=temperatureLegend(v);title=v==='temperature_2m'?'Temperatuur':`Temperatuur ${v.slice(12,15)} hPa`;unit='°C';numbers=l.labels;gradient=l.gradient;}
+  else if(f.mode.endsWith('_total')){const l=totalLegend(f.mode==='snow_total');title=modeNames[f.mode];unit=f.mode==='snow_total'?'mm smeltwater':'mm';numbers=l.labels;gradient=l.gradient;}
   else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   $('wind-key').hidden=f.mode!=='wind';
   syncTempLevels(f,modelId);
+  $('temperature-select').classList.toggle('selected',f.mode==='temperature');$('precipitation-select').classList.toggle('selected',['rain','rain_total','snow_total'].includes(f.mode));
+  $('precipitation-select').value=f.mode==='snow_total'?'snow_total':f.mode==='rain_total'?'rain_total':f.mode==='rain'?'rain':'';
+  const snowOption=$('precipitation-select').querySelector('[value="snow_total"]');snowOption.disabled=!metadata.variables.includes('snowfall_water_equivalent');snowOption.textContent=snowOption.disabled?'Sneeuw totaal · niet beschikbaar':'Sneeuw totaal';
+  const total=f.samples[f.mode==='snow_total'?'snowfall_total':'precipitation_total']?.data;
+  $('accumulation-note').hidden=!f.mode.endsWith('_total');
+  $('accumulation-note').textContent=total?`Totaal van ${forecastLabel(total.start).text} tot ${forecastLabel(total.end).full}.${f.mode==='snow_total'?' Sneeuw uitgedrukt als smeltwater, geen sneeuwdekhoogte.':''}`:'';
+  if(total)$('interval-label').textContent=`${MODELS[modelId].detail} · totaal ${(total.end-total.start)/HOUR} uur`;
+
   $('wind-key').textContent='Windkracht in Bft · pijl: richting waarin de wind waait'+(metadata.variables.includes('wind_gusts_10m')?' · stoten in km/u':' · windstoten niet beschikbaar');
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;legend.setAttribute('aria-label',`Legenda ${title.toLowerCase()} in ${unit}`);
   legend.querySelector('.legend-colors').style.background=gradient;
@@ -623,6 +645,7 @@ function cancelPreparation(){
 }
 function prepareAdjacentFrames(){
   if(!current||rendering||refreshing||document.hidden)return;
+  if(current.mode.endsWith('_total')){nextFrameReady=true;$('play').disabled=false;if(playing)scheduleNext();return;}
   cancelPreparation();const frame=current,texture=$('texture').checked,cloudVisible=cloudVisibility();
   const connection=navigator.connection;
   const limited=connection?.saveData||['slow-2g','2g','3g'].includes(connection?.effectiveType)||matchMedia('(max-width:700px), (pointer:coarse)').matches;
@@ -655,21 +678,16 @@ let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
 function syncTempLevels(frame,modelId){
-  const upper=MODEL_CONFIG[modelId]?.upperAir,chosen=tempVariable(modelId);
-  $('temp-levels').hidden=frame.mode!=='temperature'&&!['ecmwf_ifs','ncep_gfs013'].includes(modelId);
-  for(const b of $('temp-levels').querySelectorAll('button')){
-    const level=b.dataset.level;b.disabled=level!=='2m'&&!upper;
-    b.setAttribute('aria-pressed',String(frame.mode==='temperature'&&UPPER_AIR_LEVELS[level]===chosen));
-  }
-  let note='';
-  if(!upper)note=`${MODELS[modelId].label} levert in deze bron geen drukvlakken; 850/500 hPa niet beschikbaar.`;
-  else if(chosen!=='temperature_2m')note=fieldFile(frame,chosen)?`${upper.label} · ${upper.resolution}.`:`Dit tijdstip heeft geen ${chosen.slice(12,15)} hPa-veld: ${upper.label} ${upper.stepNote}.`;
-  $('temp-level-note').textContent=frame.mode==='temperature'?note:'';
-  const u=new URL(location.href);if(frame.mode==='temperature'&&tempLevel!=='2m')u.searchParams.set('level',tempLevel);else u.searchParams.delete('level');history.replaceState(null,'',u);
+ const upper=MODEL_CONFIG[modelId]?.upperAir,select=$('temperature-select');
+ for(const option of select.options)option.disabled=!!option.value&&option.value!=='2m'&&!upper;
+ select.value=frame.mode==='temperature'?(upper?tempLevel:'2m'):'';
+ const u=new URL(location.href);if(frame.mode==='temperature'&&tempLevel!=='2m')u.searchParams.set('level',tempLevel);else u.searchParams.delete('level');history.replaceState(null,'',u);
 }
-$('temp-levels').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-level]');if(!b||b.disabled||(mode==='temperature'&&tempLevel===b.dataset.level))return;
-  stopPlayback();mode='temperature';tempLevel=b.dataset.level;requestFrame(wanted,true);
+$('temperature-select').addEventListener('change',()=>{
+ const value=$('temperature-select').value;if(!value)return;stopPlayback();mode='temperature';tempLevel=value;requestFrame(wanted,true);
+});
+$('precipitation-select').addEventListener('change',()=>{
+ const value=$('precipitation-select').value;if(!value)return;stopPlayback();mode=value;requestFrame(wanted,true);
 });
 ['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('isobars').addEventListener('change',()=>{stopPlayback();queueCityDraw();requestFrame(wanted,true);});
@@ -705,7 +723,7 @@ async function exportPNG(crop=null){
     const modelId=modelFor(frame.modelMeta),label=forecastLabel(frame.time,frame.modelMeta.reference_time,MODELS[modelId].label);
     const canvas=composePNG(captureMap($('map'),$('places'),crop),{
       title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}${$('isobars').checked&&hasIsobars(frame.modelMeta)?' · Isobaren (4 hPa)':''}`,
-      time:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
+      time:frame.mode.endsWith('_total')?$('accumulation-note').textContent:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
       legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta,frame),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
     });
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG maken is niet gelukt.')),'image/png'));
@@ -780,11 +798,12 @@ function paintCities(){
     ctx.strokeText(name,p.x,p.y+12);ctx.fillText(name,p.x,p.y+12);
     if(!windMode){ctx.fillStyle='#f5f8e9';ctx.fillRect(p.x-1.3,p.y-4,2.6,2.6);}
     const levelVar=current.mode==='temperature'?current.ids.map(id=>id.split('-').slice(1).join('-')).find(v=>v.startsWith('temperature_')):null;
-    const displayedValue=current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):levelVar?sample(current.samples[levelVar],city.lat,city.lon):current.mode==='temperature'?NaN:temp;
+    const totalVariable=current.mode==='rain_total'?'precipitation_total':current.mode==='snow_total'?'snowfall_total':null;
+    const displayedValue=totalVariable?sample(current.samples[totalVariable],city.lat,city.lon):current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):levelVar?sample(current.samples[levelVar],city.lat,city.lon):current.mode==='temperature'?NaN:temp;
     if(Number.isFinite(displayedValue)){const t=String(windMode?beaufort(displayedValue):Math.round(displayedValue)),y=p.y-(windMode?23:12);ctx.font=`700 ${valueFont}px Arial`;ctx.strokeText(t,p.x+7,y);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,y);}
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
     const snowfall=sample(current.samples.snowfall_water_equivalent,city.lat,city.lon);
-    const symbol=weatherSymbol({precipitation:rain,snowfall,cloud,fog});
+    const symbol=totalVariable?null:weatherSymbol({precipitation:rain,snowfall,cloud,fog});
     if(symbolAudit)symbolAudit.push({name,lat:city.lat,lon:city.lon,precipitation:rain,snowfall,cloud,symbol});
     if(['rain','snow','mixed'].includes(symbol))drawPrecipitationSymbol(ctx,p.x-13,p.y-17,symbol);
     else if(symbol==='fog'){
@@ -813,6 +832,7 @@ function updatePoint(fetchMissing=true){
   const p=selectedPoint;$('point-title').textContent=p.name;$('point-time').textContent=forecastLabel(current.time).full;
   const values=$('point-values');values.replaceChildren();
   const entries=[['temperature_2m','Temperatuur','°C',1],['precipitation',`Neerslag · ${current.hours}u-gemiddelde`,'mm/u',2],['cloud_cover','Bewolking','%',0],['wind_u_component_10m','Wind','Bft',0]];
+  if(current.mode.endsWith('_total'))entries.unshift([current.mode==='snow_total'?'snowfall_total':'precipitation_total',modeNames[current.mode],current.mode==='snow_total'?'mm smeltwater':'mm',2]);
   if(current.modelMeta.variables.includes('wind_gusts_10m'))entries.push(['wind_gusts_10m','Windstoten','km/u',0]);
   if(current.modelMeta.variables.includes('visibility'))entries.push(['visibility','Berekend zicht','m',1]);
   // Pressure-level temperature only for the chosen level, from the same run.
@@ -851,6 +871,7 @@ function updatePoint(fetchMissing=true){
   const period=precipitationPeriod(current.modelMeta.reference_time,new Date(current.time).toISOString(),current.hours);
   const rain=sample(current.samples.precipitation,p.lat,p.lng),total=rain*period.hours;
   $('point-note').textContent=`Tijdvak: ${forecastLabel(period.start).text} – ${forecastLabel(period.end).full}. ${Number.isFinite(total)?`Totaal ${total>0&&total<.01?'<0,01':total.toLocaleString('nl-NL',{maximumFractionDigits:2})} mm (regen + sneeuw). `:''}${forecastLabel(current.time,period.run,MODELS[modelFor(current.modelMeta)].label).runLabel}. ${MODELS[modelFor(current.modelMeta)].resolution}`;
+  if(current.mode.endsWith('_total'))$('point-note').textContent=$('accumulation-note').textContent+' '+MODELS[modelFor(current.modelMeta)].resolution;
   Object.assign($('point').dataset,{precipitationRate:String(rain),precipitationAmount:String(total),periodStart:period.start,periodEnd:period.end,run:period.run});
   if(fetchMissing){
     const frame=current,missing=entries.map(e=>e[0]).filter(v=>!frame.samples[v]);

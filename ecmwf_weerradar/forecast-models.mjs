@@ -86,6 +86,7 @@ export function regionalFrames(raw,modelId,now=Date.now()){
  if(!variables.every(v=>raw.fields?.[v]))throw Error('Onvolledige regionale modelrun');
  if(raw.fields.wind_gusts_10m)variables.push('wind_gusts_10m');
  if(raw.fields.cloud_base)variables.push('cloud_base');
+ if(raw.fields.snowfall_water_equivalent)variables.push('snowfall_water_equivalent');
  const meta={modelId,reference_time:raw.reference_time,last_modified_time:raw.last_modified_time,variables,version:raw.version,source:raw};
  const frames=times.map((time,step)=>({time,iso:new Date(time).toISOString(),hours:1,lead:step+1,url:`${HARMONIE_ORIGIN}/harmonie/${modelId}/${raw.version}/${String(step).padStart(3,'0')}.bin`,modelMeta:meta})).filter(f=>f.time>=Math.ceil(now/HOUR)*HOUR);
  if(!frames.length)throw Error('Deze modelrun bevat geen toekomstige tijdstappen');

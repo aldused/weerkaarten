@@ -1,3 +1,4 @@
+import {totalScale,snowTotalScale} from './accumulation-colors.mjs';
 import {windScale} from './wind-style.mjs';
 import {EDGE_ORIGIN} from './data-transport.mjs';
 import {intervalRate} from './precipitation.mjs';
@@ -107,6 +108,7 @@ export function inEurope(lon, lat) {
 // ECMWF's spatial OM precipitation is a backwards SUM in mm, not a rate.
 // This palette is used only after dividing by the native 1/3/6 hour interval.
 export const scales = {
+  precipitation_total:totalScale,snowfall_total:snowTotalScale,
   cloud_cover: { type: 'breakpoint', unit: '%',
     breakpoints: [0, 15, 30, 50, 70, 85, 100],
     colors: [[230,235,238,0],[226,233,235,0],[220,227,230,.15],[213,222,226,.36],[218,225,228,.64],[231,235,236,.84],[245,247,247,.95]] },
