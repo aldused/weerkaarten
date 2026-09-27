@@ -51,3 +51,11 @@ Whole-field transparency fast path:
 - In-app test browser, 1280 x 720: first-visible weather 849 ms, full frame
   1540 ms, 4 layers each 24/24 tiles loaded at opacity 1. No main-thread
   tile rendering. Different viewport/browser, not an A/B loading comparison.
+
+Visible in-app browser follow-up (726.7 x 1226.7 CSS pixels):
+- ECMWF view displayed all weather layers and city symbols visually.
+- HARMONIE 43 model switch: ready, frameLoadMs 987.
+- GFS model switch: ready, frameLoadMs 2438, no console errors.
+- Automated pointer and keyboard actions did not yield usable continuous
+  gesture RAF samples (0 callbacks); no FPS conclusion is drawn.
+- Asked the user to assess actual mouse smoothness on their screen.
