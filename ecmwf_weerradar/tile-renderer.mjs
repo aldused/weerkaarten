@@ -1,3 +1,4 @@
+import {SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {totalColor} from './accumulation-colors.mjs';
 import {transparentField} from './transparent-field.mjs';
 import {beaufort} from './wind-style.mjs';
@@ -45,8 +46,9 @@ export function renderTile(field,coords){
     if(cloud)cloudResolved(texture,kmPerPixel,resolved);
     for(let x=0;x<256;x++){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
-      const value=cloud?0:row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
+      const value=field.variable==='significant_weather'?field.grid.getNearestNeighborValue(field.data.values,lat,lon):cloud?0:row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
+      if(field.variable==='significant_weather'){const color=SIGNIFICANT_WEATHER.find(s=>s.code===value)?.color;if(color)pixels.set(color,(y*256+x)*4);continue;}
       if(cloud){
         const low=lowRow?lowRow[x]:field.grid.getInterpolatedValue(cloudValues[0],lat,lon,'monotone');
         const mid=midRow?midRow[x]:field.grid.getInterpolatedValue(cloudValues[1],lat,lon,'monotone');

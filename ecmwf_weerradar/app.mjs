@@ -1,3 +1,4 @@
+import {buildSignificantField,significantVariables,significantType,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {MAP_REGIONS} from './map-regions.mjs';
 import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
 import {totalLegend} from './accumulation-colors.mjs';
@@ -71,8 +72,9 @@ function syncCloudButtons(){
     item.classList.toggle('cloud-off',!visible);item.setAttribute('aria-pressed',String(visible));
   }
 }
-const modeNames={weather:'Weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind',rain_total:'Cumulatieve neerslag',snow_total:'Cumulatieve sneeuw'};
+const modeNames={weather:'Weer',significant:'Significant weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind',rain_total:'Cumulatieve neerslag',snow_total:'Cumulatieve sneeuw'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
+for(const item of SIGNIFICANT_WEATHER){const label=document.createElement('span'),swatch=document.createElement('i');swatch.style.background=`rgb(${item.color.slice(0,3)})`;label.append(swatch,item.label);$('significant-key').append(label);}
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
 
 let meta, frames = [], current = null, wanted = 0, revision = 0, rendering = false, refreshing = false;
@@ -95,7 +97,7 @@ function trimFieldCache(){
     if(!key)break;bytes-=fieldCache.get(key).bytes||0;fieldCache.delete(key);
   }
 }
-const accumulationRequests=new Map();
+const accumulationRequests=new Map(),significantRequests=new Map();
 const accumulationFields=new AccumulationFields((...args)=>fieldPackets.read(...args));
 function readField(file,variable,signal){
   signal?.throwIfAborted();
@@ -115,7 +117,11 @@ function readField(file,variable,signal){
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
     const request=accumulationRequests.get(file);
-    const data=isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
+    const data=variable==='significant_weather'?await (async()=>{
+      const frame=significantRequests.get(file),variables=significantVariables(frame.modelMeta);
+      const parts=await Promise.all(variables.map(async v=>[v,await readField(fieldFile(frame,v),v,readSignal)]));
+      readSignal.throwIfAborted();return buildSignificantField(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm);
+    })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     for(const key of CLOUD_KEYS)if(data[key])field[key]=data[key];
@@ -139,6 +145,7 @@ let tempLevel=Object.hasOwn(UPPER_AIR_LEVELS,params.get('level'))?params.get('le
 function tempVariable(modelId){const v=UPPER_AIR_LEVELS[tempLevel];return v!=='temperature_2m'&&!MODEL_CONFIG[modelId]?.upperAir?'temperature_2m':v;}
 // File that holds `variable` for this frame: same model, run and valid time.
 function fieldFile(frame,variable){
+ if(variable==='significant_weather'){const file=frame.url+'/significant';significantRequests.set(file,frame);return file;}
  if(isAccumulation(variable)){
   const anchor=frame.accumulationAnchor??frame.time-frame.hours*HOUR,file=frame.url+'/sum/'+anchor+'/'+variable;
   accumulationRequests.set(file,{frame,anchor});return file;
@@ -404,6 +411,7 @@ new ResizeObserver(entries=>{
 // Refinements of the same frame: they must not delay the first usable map.
 const OPTIONAL_LAYERS=['visibility','snowfall_water_equivalent'];
 function variablesForMode(modelMeta=meta,frame){
+  if(mode==='significant')return ['significant_weather'];
   if(mode==='rain_total')return ['precipitation_total'];
   if(mode==='snow_total')return ['snowfall_total'];
   if(mode==='temperature'){const v=tempVariable(modelFor(modelMeta));return !frame||fieldFile(frame,v)?[v]:[];}
@@ -603,12 +611,14 @@ function syncUI(){
   $('snow').disabled=!metadata.variables.includes('snowfall_water_equivalent');
   $('isobars').disabled=!hasIsobars(metadata);
   $('isobars-note').textContent=hasIsobars(metadata)?'Luchtdruk op zeeniveau · lijnen om de 4 hPa.':'Isobaren zijn beschikbaar bij ECMWF en GFS.';
-  const legend=$('legend');let title,unit,numbers,gradient;
+  const legend=$('legend');legend.querySelector('.legend-colors').hidden=f.mode==='significant';legend.querySelector('.legend-numbers').hidden=f.mode==='significant';let title,unit,numbers,gradient;
   if(f.mode==='temperature'){const v=tempVariable(modelId),l=temperatureLegend(v);title=v==='temperature_2m'?'Temperatuur':`Temperatuur ${v.slice(12,15)} hPa`;unit='°C';numbers=l.labels;gradient=l.gradient;}
+  else if(f.mode==='significant'){title='Significant weer';unit='weertype';numbers=['Helder','Wolken','Mist','Regen','Sneeuw'];gradient='linear-gradient(to right,'+SIGNIFICANT_WEATHER.map(s=>`rgb(${s.color.slice(0,3)})`).join(',')+')';}
   else if(f.mode.endsWith('_total')){const l=totalLegend(f.mode==='snow_total');title=modeNames[f.mode];unit=f.mode==='snow_total'?'mm smeltwater':'mm';numbers=l.labels;gradient=l.gradient;}
   else if(f.mode==='wind'){title='Wind';unit='Bft';numbers=windLegend.labels;gradient=windLegend.gradient;}
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
+  $('significant-key').hidden=f.mode!=='significant';
   $('wind-key').hidden=f.mode!=='wind';
   syncTempLevels(f,modelId);
   $('temperature-select').classList.toggle('selected',f.mode==='temperature');$('precipitation-select').classList.toggle('selected',['rain','rain_total','snow_total'].includes(f.mode));
@@ -811,13 +821,15 @@ function paintCities(){
     if(Number.isFinite(displayedValue)){const t=String(windMode?beaufort(displayedValue):Math.round(displayedValue)),y=p.y-(windMode?23:12);ctx.font=`700 ${valueFont}px Arial`;ctx.strokeText(t,p.x+7,y);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,y);}
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
     const snowfall=sample(current.samples.snowfall_water_equivalent,city.lat,city.lon);
-    const symbol=totalVariable?null:weatherSymbol({precipitation:rain,snowfall,cloud,fog});
+    const significantField=current.samples.significant_weather;
+    const symbol=totalVariable?null:current.mode==='significant'?significantType(significantField?.grid.getNearestNeighborValue(significantField.data.values,city.lat,city.lon)):weatherSymbol({precipitation:rain,snowfall,cloud,fog});
     if(symbolAudit)symbolAudit.push({name,lat:city.lat,lon:city.lon,precipitation:rain,snowfall,cloud,symbol});
     if(['rain','snow','mixed'].includes(symbol))drawPrecipitationSymbol(ctx,p.x-13,p.y-17,symbol);
     else if(symbol==='fog'){
-      ctx.fillStyle=fog.color;ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
+      ctx.fillStyle=fog?.color||'#dad096';ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
       for(let line=0;line<3;line++){ctx.beginPath();ctx.moveTo(p.x-20+(line%2)*2,p.y-21+line*5);ctx.lineTo(p.x-6,p.y-21+line*5);ctx.stroke();}
     }
+    else if(symbol==='overcast'){ctx.fillStyle='#e4e8ec';ctx.strokeStyle='#30485b';ctx.lineWidth=1.2;ctx.beginPath();ctx.ellipse(p.x-13,p.y-16,9,5,0,0,Math.PI*2);ctx.fill();ctx.stroke();}
     else if(symbol==='clear')skyIcon(ctx,p.x-13,p.y-16,city);
     else if(symbol==='filtered'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
     if(current.mode==='wind'){
