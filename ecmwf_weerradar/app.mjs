@@ -701,7 +701,7 @@ $('zoom-in').addEventListener('click',()=>{manualView();map.zoomIn();});$('zoom-
 for(const [id,label] of MAP_REGIONS){const option=document.createElement('option');option.value=id;option.textContent=label;$('region-select').append(option);}
 function selectRegion(id){
  const region=MAP_REGIONS.find(r=>r[0]===id);if(!region)return;
- manualView();map.fitBounds(region[2],{padding:viewPadding(),duration:600});$('region-select').value=id;
+ manualView();map.fitBounds(region[2],{padding:viewPadding(),zoomSnap:.1,duration:600});$('region-select').value=id;
 }
 $('region-select').addEventListener('change',()=>selectRegion($('region-select').value));
 $('europe').addEventListener('click',()=>selectRegion('europe'));
