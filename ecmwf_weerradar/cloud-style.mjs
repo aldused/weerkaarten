@@ -109,7 +109,12 @@ export function cloudStyle(low,mid,high,lon,lat,detail=true,kmPerPixel=0,visible
 // same solid-cloud icon as a full low deck. Never expose this as model cover.
 export function cloudIconType(low,mid,high){
   if(![low,mid,high].every(Number.isFinite))return null;
-  const opacity=cloudStyle(low,mid,high,0,0,false)[3];
+  // The icon only needs composited opacity; skip RGB blending and arrays.
+  const highAlpha=cloudLayerOpacity('high',high,0,0,false);
+  const midAlpha=cloudLayerOpacity('mid',mid,0,0,false);
+  const lowAlpha=cloudLayerOpacity('low',low,0,0,false);
+  const above=midAlpha+highAlpha*(1-midAlpha);
+  const opacity=lowAlpha+above*(1-lowAlpha);
   // A full 12% high veil still filters sunshine: it is not a clear sky.
   return opacity<.08?'clear':opacity<.60?'filtered':'overcast';
 }

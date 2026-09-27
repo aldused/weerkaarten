@@ -38,3 +38,9 @@ test('cooperative classification preserves all pixels and yields for input',asyn
  const controller=new AbortController();
  await assert.rejects(buildSignificantFieldAsync(fields,[3,50,7,54],9,controller.signal,{budgetMs:0,yieldTask:async()=>controller.abort()}),{name:'AbortError'});
 });
+
+test('categorical rendering skips unused interpolation',()=>{
+ const grid={getNearestNeighborValue:()=>5,getInterpolatedValue:()=>{throw Error('Unused numeric interpolation');}};
+ const pixels=renderTile({variable:'significant_weather',data:{values:new Float32Array([5])},grid},{z:6,x:33,y:21});
+ assert.ok(pixels.some(v=>v!==0));
+});

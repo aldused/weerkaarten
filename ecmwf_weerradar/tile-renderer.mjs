@@ -19,12 +19,13 @@ function colorsFor(scale){
   }
   return {rgba,min,max,n};
 }
+const significantColors=Object.fromEntries(SIGNIFICANT_WEATHER.map(s=>[s.code,s.color]));
 const palettes=Object.fromEntries(Object.entries(scales).map(([k,v])=>[k,colorsFor(v)]));
 
 export function renderTile(field,coords){
-  const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable);
+  const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable),significant=field.variable==='significant_weather';
   if(transparentField(field))return pixels;
-  const sampler=createGaussianTileSampler(field.grid,field.data.values,coords)||createRegularTileSampler(field.grid,field.data.values,coords);
+  const sampler=significant?null:createGaussianTileSampler(field.grid,field.data.values,coords)||createRegularTileSampler(field.grid,field.data.values,coords);
   const cloud=field.variable==='cloud_cover';
   if(cloud&&![field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>a?.length===field.data.values.length))throw Error('Afzonderlijke wolkenlagen ontbreken');
   const cloudValues=cloud?[field.cloudLow,field.cloudMid,field.cloudHigh]:[];
@@ -46,9 +47,9 @@ export function renderTile(field,coords){
     if(cloud)cloudResolved(texture,kmPerPixel,resolved);
     for(let x=0;x<256;x++){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
-      const value=field.variable==='significant_weather'?field.grid.getNearestNeighborValue(field.data.values,lat,lon):cloud?0:row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
+      const value=significant?field.grid.getNearestNeighborValue(field.data.values,lat,lon):cloud?0:row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
-      if(field.variable==='significant_weather'){const color=SIGNIFICANT_WEATHER.find(s=>s.code===value)?.color;if(color)pixels.set(color,(y*256+x)*4);continue;}
+      if(significant){const color=significantColors[value];if(color)pixels.set(color,(y*256+x)*4);continue;}
       if(cloud){
         const low=lowRow?lowRow[x]:field.grid.getInterpolatedValue(cloudValues[0],lat,lon,'monotone');
         const mid=midRow?midRow[x]:field.grid.getInterpolatedValue(cloudValues[1],lat,lon,'monotone');
