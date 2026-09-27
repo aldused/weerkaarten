@@ -421,7 +421,7 @@ function variablesForMode(modelMeta=meta,frame){
 }
 function sampleVariables(layerVariables,modelMeta){
   const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):(mode==='temperature'||mode.endsWith('_total'))?[]:['temperature_2m']):[];
-  return [...new Set([...layerVariables,...labels,...($('isobars').checked&&hasIsobars(modelMeta)?['pressure_msl']:[])])];
+  return [...new Set([...layerVariables,...labels,...(mode==='significant'&&$('city-labels').checked?['wind_u_component_10m']:[]),...($('isobars').checked&&hasIsobars(modelMeta)?['pressure_msl']:[])])];
 }
 function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
 function addLayer(frame,variable,prefix){
@@ -620,7 +620,7 @@ function syncUI(){
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   $('significant-key').hidden=f.mode!=='significant';
-  $('wind-key').hidden=f.mode!=='wind';
+  $('wind-key').hidden=!['wind','significant'].includes(f.mode);
   syncTempLevels(f,modelId);
   $('temperature-select').classList.toggle('selected',f.mode==='temperature');$('precipitation-select').classList.toggle('selected',['rain','rain_total','snow_total'].includes(f.mode));
   $('precipitation-select').value=f.mode==='snow_total'?'snow_total':f.mode==='rain_total'?'rain_total':f.mode==='rain'?'rain':'';
@@ -630,7 +630,7 @@ function syncUI(){
   $('accumulation-note').textContent=total?`Totaal van ${forecastLabel(total.start).text} tot ${forecastLabel(total.end).full}.${f.mode==='snow_total'?' Sneeuw uitgedrukt als smeltwater, geen sneeuwdekhoogte.':''}`:'';
   if(total)$('interval-label').textContent=`${MODELS[modelId].detail} · totaal ${(total.end-total.start)/HOUR} uur`;
 
-  $('wind-key').textContent='Windkracht in Bft · pijl: richting waarin de wind waait'+(metadata.variables.includes('wind_gusts_10m')?' · stoten in km/u':' · windstoten niet beschikbaar');
+  $('wind-key').textContent='Windkracht in Bft · pijl: richting waarin de wind waait'+(f.mode==='significant'?'':metadata.variables.includes('wind_gusts_10m')?' · stoten in km/u':' · windstoten niet beschikbaar');
   legend.querySelector('span').firstChild.textContent=title+' ';legend.querySelector('small').textContent=unit;legend.setAttribute('aria-label',`Legenda ${title.toLowerCase()} in ${unit}`);
   legend.querySelector('.legend-colors').style.background=gradient;
   legend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=numbers[i]);
@@ -801,13 +801,13 @@ function paintCities(){
   }else delete canvas.dataset.isobars;
   if(!$('city-labels').checked||!current)return;
   const symbolAudit=params.get('profile')==='1'?[]:null;
-  const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12,valueFont=font+2,windMode=current.mode==='wind',controls=document.querySelector('.bottom-area').getBoundingClientRect();
+  const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12,valueFont=font+2,windMode=current.mode==='wind',significantWind=current.mode==='significant',controls=document.querySelector('.bottom-area').getBoundingClientRect();
   for(const city of cities){
     if(city.minZoom>zoom)continue;
     const p=map.project([city.lon,city.lat]);
     if(p.x<25||p.x>width-25||p.y<20||p.y>height-25)continue;
     if(p.x>controls.left-12&&p.x<controls.right+12&&p.y>controls.top-42&&p.y<controls.bottom+24)continue;
-    const name=city.name, w=Math.max(windMode?76:58,name.length*font*.53), rect=[p.x-w/2-9,p.y-(windMode?44:33),p.x+w/2+9,p.y+18];
+    const name=city.name, w=Math.max(windMode||significantWind?76:58,name.length*font*.53), rect=[p.x-w/2-9,p.y-(significantWind?60:windMode?44:33),p.x+w/2+9,p.y+18];
     if(boxes.some(b=>rect[0]<b[2]&&rect[2]>b[0]&&rect[1]<b[3]&&rect[3]>b[1]))continue;
     boxes.push(rect);
     const temp=sample(current.samples.temperature_2m,city.lat,city.lon),rain=sample(current.samples.precipitation,city.lat,city.lon);
@@ -833,11 +833,13 @@ function paintCities(){
     else if(symbol==='overcast'){ctx.fillStyle='#e4e8ec';ctx.strokeStyle='#30485b';ctx.lineWidth=1.2;ctx.beginPath();ctx.ellipse(p.x-13,p.y-16,9,5,0,0,Math.PI*2);ctx.fill();ctx.stroke();}
     else if(symbol==='clear')skyIcon(ctx,p.x-13,p.y-16,city);
     else if(symbol==='filtered'||symbol==='cirrus'){skyIcon(ctx,p.x-15,p.y-17,city);ctx.fillStyle='#ebeded';ctx.beginPath();ctx.ellipse(p.x-11,p.y-14,6,3,0,0,Math.PI*2);ctx.fill();}
-    if(current.mode==='wind'){
+    if(windMode||significantWind){
       const wind=current.samples.wind_u_component_10m;
-      if(wind?.data.directions&&Number.isFinite(displayedValue)){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-16,p.y-27);ctx.rotate(a+Math.PI);ctx.beginPath();ctx.moveTo(0,9);ctx.lineTo(0,-9);ctx.lineTo(-4,-4);ctx.moveTo(0,-9);ctx.lineTo(4,-4);ctx.strokeStyle='#243846';ctx.lineWidth=4;ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();ctx.restore();}
+      const windSpeed=sample(wind,city.lat,city.lon);
+      if(significantWind&&Number.isFinite(windSpeed)&&windSpeed>=0){const text=`${beaufort(windSpeed)} Bft`;ctx.font=`600 ${font}px Arial`;ctx.strokeStyle='rgba(28,42,42,.8)';ctx.lineWidth=2.7;ctx.strokeText(text,p.x+8,p.y-38);ctx.fillStyle='#fff';ctx.fillText(text,p.x+8,p.y-38);}
+      if(wind?.data.directions&&Number.isFinite(windSpeed)&&windSpeed>0){const a=wind.grid.getLinearInterpolatedDirection(wind.data.directions,city.lat,city.lon)*Math.PI/180;ctx.save();ctx.translate(p.x-(significantWind?24:16),p.y-(significantWind?42:27));ctx.rotate(a+Math.PI);ctx.beginPath();ctx.moveTo(0,9);ctx.lineTo(0,-9);ctx.lineTo(-4,-4);ctx.moveTo(0,-9);ctx.lineTo(4,-4);ctx.strokeStyle='#243846';ctx.lineWidth=4;ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();ctx.restore();}
       const gust=sample(current.samples.wind_gusts_10m,city.lat,city.lon);
-      if(Number.isFinite(gust)&&gust>=0){const text=`stoten ${Math.round(gust)}`;ctx.font=`600 ${font}px Arial`;ctx.strokeText(text,p.x,p.y-4);ctx.fillStyle='#fff';ctx.fillText(text,p.x,p.y-4);}
+      if(windMode&&Number.isFinite(gust)&&gust>=0){const text=`stoten ${Math.round(gust)}`;ctx.font=`600 ${font}px Arial`;ctx.strokeText(text,p.x,p.y-4);ctx.fillStyle='#fff';ctx.fillText(text,p.x,p.y-4);}
     }
     drawnCities.push({...city,x:p.x,y:p.y});
   }

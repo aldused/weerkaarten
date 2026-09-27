@@ -19,7 +19,7 @@ test('weather fields produce a categorical regular grid and matching PNG legend'
  const constant=value=>({data:{values:[value]},grid:{getInterpolatedValue:a=>a[0]}});
  const fields={precipitation:constant(1),snowfall_water_equivalent:constant(1),cloud_cover:{...constant(100),cloudLow:[100],cloudMid:[0],cloudHigh:[0]}};
  const result=buildSignificantField(fields,[3,50,7,54],9);assert.ok(result.values.every(v=>v===7));assert.equal(result.values.length,result.metadata.grid.n_lon*result.metadata.grid.n_lat);
- assert.equal(exportLegends({mode:'significant',variables:['significant_weather']}).length,8);
+ assert.equal(exportLegends({mode:'significant',variables:['significant_weather']}).length,9);
 });
 
 test('high cloud gets its own key without hiding rain or lower cloud',()=>{
