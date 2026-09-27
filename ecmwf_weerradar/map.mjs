@@ -1,3 +1,4 @@
+import {transparentField} from './transparent-field.mjs';
 import L from 'leaflet';
 import {cloudBytes} from './cloud-fields.mjs';
 import {MapDetails} from './map-details.mjs';
@@ -84,7 +85,12 @@ function renderPixels({field,coords},signal){
 }
 const paintQueue=new SharedRenderQueue(renderPixels,{maxEntries:256,concurrency:()=>Math.max(1,liveWorkers()),priority:({field})=>['visibility','snowfall_water_equivalent'].includes(field.variable)?1:0});
 const canvasCommits=new CanvasCommits();
+const transparentPixels=new Uint8ClampedArray(256*256*4);
 function paint(field,coords,signal){
+  if(signal.aborted)return Promise.reject(abortError(signal));
+  // Whole-field extrema are cached by immutable array identity. An invisible
+  // layer needs neither a worker upload nor a job for each visible tile.
+  if(transparentField(field))return Promise.resolve(transparentPixels);
   const key=field.key+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;
   return paintQueue.request(key,{field,coords},signal);
 }

@@ -42,3 +42,12 @@ Gesture diagnostics (profile=1 only):
   or automation pacing; it does not establish foreground smoothness.
 - Foreground confirmation requested before interpreting gesture frame rates.
 - Repeat first-visible weather was 1840 ms (warm caches; not a cold-load comparison).
+
+Whole-field transparency fast path:
+- An attempted generic point-value cache regressed a repeated regular-grid
+  sample benchmark (5 ms direct vs 20 ms cached); the change was removed.
+- Fully transparent fields now bypass worker upload and per-tile worker jobs,
+  using the existing conservative extrema predicate and a shared zero buffer.
+- In-app test browser, 1280 x 720: first-visible weather 849 ms, full frame
+  1540 ms, 4 layers each 24/24 tiles loaded at opacity 1. No main-thread
+  tile rendering. Different viewport/browser, not an A/B loading comparison.
