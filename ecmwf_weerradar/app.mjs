@@ -1,3 +1,4 @@
+import {installGestureProfile} from './gesture-profile.mjs';
 import {buildSignificantFieldAsync,significantVariables,significantType,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {MAP_REGIONS} from './map-regions.mjs';
 import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
@@ -190,6 +191,7 @@ map.on('error', e => {
   }
   else if(current?.ids.includes(e.sourceId))status('Kaartdeel kon niet worden opgehaald. Probeer opnieuw.',true);
 });
+if(params.get('profile')==='1')installGestureProfile(map,$('app'));
 const movingOverlay=new MovingOverlay(map,$('places'),queueCityDraw);
 map.on('movestart',()=>movingOverlay.start());
 map.on('move',()=>movingOverlay.move());

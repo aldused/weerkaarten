@@ -34,3 +34,11 @@ Progressive first-view reveal:
   8691 ms. All four final layers had opacity 1 and 72/72 loaded tiles.
 - This proves partial availability precedes full readiness by 3572 ms in
   this run; it is not a controlled comparison of network download speed.
+
+Gesture diagnostics (profile=1 only):
+- Added local RAF interval recording between map movestart and moveend.
+- Automated drag: 6366 ms, 8 frame callbacks, p95/max 1017 ms. Page reported
+  visibilityState=visible. This is consistent with occluded-window throttling
+  or automation pacing; it does not establish foreground smoothness.
+- Foreground confirmation requested before interpreting gesture frame rates.
+- Repeat first-visible weather was 1840 ms (warm caches; not a cold-load comparison).
