@@ -25,6 +25,16 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'janvisser.html'), 'ut
       window.WeerlabPlumeRuns={state:{selectedRun:{run}},ensureLocation:async()=>{},archiveMeta:()=>meta,selectedRunIso:()=>run};
       window.fetch=async url=>new Response(JSON.stringify(String(url).includes('jvens')?{stations:{}}:data));
     });
+    await page.addInitScript(() => {
+      const time = Array.from({length:129}, (_,i)=>new Date(Date.parse('2026-09-26T00:00Z')+i*3*3600000).toISOString().slice(0,16));
+      const hourly={time};
+      for(let m=0;m<51;m++) {
+        const suffix=m?'_member'+String(m).padStart(2,'0'):'';
+        hourly['temperature_2m'+suffix]=time.map(()=>15);
+        hourly['precipitation'+suffix]=time.map(()=>0.3);
+      }
+      window.WeerlabPlumeRuns.previousMainEnsemble=async()=>({hourly});
+    });
     await page.goto('http://jv.test/janvisser?run=12');
     await page.waitForFunction(()=>document.querySelector('#loadstate').textContent.includes('alle 6'));
     await page.evaluate(()=>{document.querySelector('#gate').remove();document.querySelector('#content').style.display='block';});
@@ -37,6 +47,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'janvisser.html'), 'ut
       assert.equal(png.readUInt32BE(16),2360);
       assert.equal(png.readUInt32BE(20),840);
     }
+    assert.match(await page.locator('#chart-p').textContent(), /vs .*00Z/);
     const comparisons = await page.evaluate(() => {
       const entry={temp:[{t:'2026-09-28T00:00:00Z',mx:20,mn:10}],precip:[{t:'2026-09-28T00:00:00Z',v:1}]};
       saveCache({'De Bilt':Object.fromEntries(['2026-09-25T12:00:00.000Z','2026-09-25T18:00:00.000Z','2026-09-26T00:00:00.000Z','2026-09-26T06:00:00.000Z','2026-09-26T12:00:00.000Z'].map(t=>[t,entry]))});
