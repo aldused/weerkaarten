@@ -257,7 +257,11 @@ async function updateViewportSamples(){
     const vars=sampleVariables(variablesForMode(frame.modelMeta,frame),frame.modelMeta);
     const fields=await Promise.all(vars.map(v=>readField(fieldFile(frame,v),v,signal)));
     if(rev!==viewportRevision||current!==frame)return;
-    vars.forEach((v,i)=>{current.samples[v]=fields[i];});queueCityDraw();updatePoint();
+    // moveend already repainted the overlay at its new screen position.
+    // Only repaint again when a crop or previously missing field changed.
+    const changed=vars.some((v,i)=>current.samples[v]!==fields[i]);
+    vars.forEach((v,i)=>{current.samples[v]=fields[i];});
+    if(changed){queueCityDraw();updatePoint();}
     $('app').dataset.panDataMs=Math.round(performance.now()-started);
     prepareAdjacentFrames();
   }catch(error){if(rev===viewportRevision&&current===frame&&error.name!=='AbortError')status(error.message,true);}
