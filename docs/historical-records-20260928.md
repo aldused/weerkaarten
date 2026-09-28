@@ -8,8 +8,8 @@ de Winterswijk-waarnemingen stonden al correct in beide bronbestanden.
 
 ## Herstel
 
-`record-stations.json` is het gedeelde register van alle 82 meetplaatsen in het
-beschikbare recordarchief: 47 stationreeksen plus 35 aanvullende historische
+`record-stations.json` is het gedeelde register van alle 83 meetplaatsen in het
+beschikbare recordarchief: 47 stationreeksen plus 36 aanvullende historische
 plaatsen. Dit is een inventaris van de beschikbare bronnen, geen claim dat elke
 vroegere KNMI-meetlocatie een volledig gedigitaliseerde reeks heeft.
 
@@ -45,7 +45,7 @@ extremen. Dezelfde paginaberekeningen worden getest voor beide HTML-pagina’s.
 
 CI en Cloudflare-build gebruiken `--fixture`: een gecomprimeerde, uit de echte
 bronnen afgeleide snapshot met dagwinnaars en alle gelijke waarden. De volledige
-live JSON-bestanden staan uitsluitend op R2, niet in Git. De snapshot voorkomt
+live JSON-bestanden staan uitsluitend op R2, niet in Git. De historische aanvulbron is volledig opgenomen, inclusief maand- en andere categorieën (zoals neerslagstation Eersel). De snapshot voorkomt
 netwerkafhankelijkheid van regressietests; hij vervangt de live publicatiecontrole
 niet. Wijzig de baseline alleen na inhoudelijke broncontrole, niet om een fout
 te omzeilen.
