@@ -807,7 +807,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
 </div>
 
 <script src="vierluik-core.js?v=20260928-windrichting1"></script>
-<script src="vierluik-significant.js?v=20260928-windpijlen1"></script>
+<script src="vierluik-significant.js?v=20260928-significant-snel1"></script>
 <script>
 (function() {
 
@@ -2269,8 +2269,6 @@ function renderPanelActive(pIdx) {
     return;
   }
 
-  var imgData = ctx.createImageData(cw, ch);
-  var pix = imgData.data;
 
   var gLatH = g.lat_max - g.lat_min;
   var gLonW = g.lon_max - g.lon_min;
@@ -2330,6 +2328,17 @@ function renderPanelActive(pIdx) {
   // Roosterregel toont altijd de échte modelresolutie, niet de verdichting
   if (resEl) resEl.textContent = gridResolutionText(pd);
 
+  var rasterKey=activeVar==='significant'?[stepIdx,cw,ch,vLonMin,vLonMax,vLatMin,vLatMax].join('|'):null;
+  var rasterCache=rasterKey&&(pd.rasterCache||(pd.rasterCache=new Map()));
+  if(rasterCache&&rasterCache.has(rasterKey)){
+    ctx.putImageData(rasterCache.get(rasterKey),0,0);
+    labelVakken.length=0;
+    renderOverlay(pIdx,cw,ch,vLonMin,vLonMax,vLatMin,vLatMax);
+    renderLabels(pIdx,cw,ch,vLonMin,vLonMax,vLatMin,vLatMax,pd,stepIdx);
+    return;
+  }
+  var imgData=ctx.createImageData(cw,ch),pix=imgData.data;
+
   var veldStap = stepIdx;
 
   var pdNLat = pd.nLat, pdNLon = pd.nLon, pdNComp = pd.nComp;
@@ -2386,8 +2395,8 @@ function renderPanelActive(pIdx) {
         pix[pi]=200;pix[pi+1]=210;pix[pi+2]=220;pix[pi+3]=255;continue;
       }
       if (activeVar === 'significant') {
-        var weather=VierluikSignificant.sample(pd,stepIdx,lat,lon);
-        c=weather.kind==='regen'?boundaryColor(Math.max(.1,VierluikCore.sample(pd.fields.neerslag,stepIdx,lat,lon,0,'nearest')),NEERSLAG_MM_LEVELS,NEERSLAG_MM_COLORS):weather.color;
+        var weather=VierluikSignificant.sample(pd,stepIdx,lat,lon,false);
+        c=weather.kind==='regen'?boundaryColor(Math.max(.1,weather.rain),NEERSLAG_MM_LEVELS,NEERSLAG_MM_COLORS):weather.color;
       } else if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
         if(pdNComp<3)continue;
         c=activeVar==='bewolking_totaal'?octaColor(totaleBewolking(aa,bb,cc)):cloudCompositeColor(aa,bb,cc);
@@ -2441,6 +2450,11 @@ function renderPanelActive(pIdx) {
 
   if (isoInstel) tekenIsolijnen(pix, cw, ch, veldBuffer, isoInstel[0], isoInstel[1]);
 
+  if(rasterCache){
+    rasterCache.set(rasterKey,imgData);
+    // Hooguit twee beelden per model; oude uren/uitsneden nemen geen extra geheugen in.
+    while(rasterCache.size>2)rasterCache.delete(rasterCache.keys().next().value);
+  }
   ctx.putImageData(imgData, 0, 0);
   labelVakken.length = 0;   // botsingscontrole per paneel opnieuw opbouwen
   renderOverlay(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax);
@@ -2785,18 +2799,28 @@ function loadParamIfNeeded(modelId, key) {
   var md = modelData[modelId];
   if (!md || !md.meta || !md.meta.parameters) return Promise.resolve();
   if (key === 'significant') {
-    if (md.paramData.significant) return Promise.resolve();
     if (md.significantPending) return md.significantPending;
+    if (md.paramData.significant) return Promise.resolve();
     markeerLaden(md, key, true);
-    md.significantPending = Promise.all(VierluikSignificant.required.concat(VierluikSignificant.optional).map(function(k){return loadParamIfNeeded(modelId,k);})).then(function(){
+    md.significantLoading=true;
+    function publishSignificant() {
+      if(modelData[modelId]!==md)return false;
       var fields=Object.assign({},md.paramData);
+      delete fields.significant;
       fields.bewolking=fields.bewolking_hr||fields.bewolking;
+      if (!VierluikSignificant.required.every(function(k){return !!fields[k];})) return false;
+      // Nieuwe composiet: de rastercache hoort alleen bij deze bronvelden.
+      md.paramData.significant=Object.assign({},fields.neerslag,{fields:fields});
       markeerLaden(md,key,false);
-      if (VierluikSignificant.required.every(function(k){return !!fields[k];})) {
-        md.paramData.significant=Object.assign({},fields.neerslag,{fields:fields});
-      } else { md.paramFout.significant=true; }
       requestRender();
-    }).finally(function(){delete md.significantPending;});
+      return true;
+    }
+    // Eerst de basiskaart; aanvullende bestanden concurreren niet met deze downloads.
+    md.significantPending=Promise.all(VierluikSignificant.required.map(function(k){return loadParamIfNeeded(modelId,k);})).then(function(){
+      if(modelData[modelId]!==md)return;
+      if(!publishSignificant()){markeerLaden(md,key,false);md.paramFout.significant=true;return;}
+      return Promise.all(VierluikSignificant.optional.map(function(k){return loadParamIfNeeded(modelId,k);})).then(publishSignificant);
+    }).finally(function(){md.significantLoading=false;delete md.significantPending;requestRender();});
     return md.significantPending;
   }
   if (key === 'radar' && !md.meta.parameters['radar']) {
@@ -3041,12 +3065,13 @@ function buildLegendHTMLActive(pIdx) {
     note='Bewolking met uurneerslag; regen gebruikt de neerslagkleuren. Natte sneeuw, sneeuw en ijzel zijn afgeleid; onweer uit neerslag en CAPE, geen onweerskans. Mist: zicht <500 m.';
     if(pd&&pd.fields){
       var f=pd.fields,missing=[];
-      note+=f.wind?' Pijlen: wind op 10 m, wijzen waarheen de wind waait.':' Windpijlen niet beschikbaar.';
+      note+=f.wind?' Pijlen: wind op 10 m, wijzen waarheen de wind waait.':md.significantLoading?' Windpijlen laden…':' Windpijlen niet beschikbaar.';
       if(!f.temp||!f.dauwpunt)missing.push('neerslagtype');
       if(!f.profiel)missing.push('ijzel');
       if(!f.cape)missing.push('onweer');
       if(!f.zicht)missing.push('mist');
-      if(missing.length)note+=' Geen indicatie voor: '+missing.join(', ')+'.';
+      if(md.significantLoading)note+=' Aanvullende weerdata wordt geladen; de kaart wordt automatisch aangevuld.';
+      else if(missing.length)note+=' Geen indicatie voor: '+missing.join(', ')+'.';
       var capeInfo=md.meta.parameters.cape;
       if(f.cape&&capeInfo&&capeInfo.source)note+=' CAPE-bron: '+capeInfo.source+'.';
     }

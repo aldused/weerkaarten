@@ -28,3 +28,15 @@ test('Composite samples independent grids and exact forecast steps',()=>{
  pd.fields.neerslag.grid.lat_max=51;
  assert.equal(sig.sample(pd,0,52,5).kind,'unknown');
 });
+test('Selective sampling preserves complete weather classifications and colours',()=>{
+ const cases=[{rain:0},{rain:.05,visibility:100},{rain:.1},{rain:3,cape:700},{rain:7,cape:1600},{rain:1,temp:-2,dew:-2},{rain:1,temp:-2,dew:-2,warm:2},{rain:2,temp:1.5,dew:1.5},{rain:1,temp:NaN},{rain:NaN}];
+ for(const input of cases){
+  const v={...base,high:.3,mid:.5,low:.6,...input};
+  const field=(values,nComp=1)=>({data:Float64Array.from(values.flatMap(x=>Array(4).fill(x))),nLat:2,nLon:2,nSteps:1,nComp,schaal:1,grid:{lat_min:50,lat_max:54,lon_min:3,lon_max:7}});
+  const pd={fields:{bewolking:field([v.high,v.mid,v.low],3),neerslag:field([v.rain]),temp:field([v.temp]),dauwpunt:field([v.dew]),cape:field([v.cape]),zicht:field([v.visibility]),profiel:field([0,0,v.warm??-3,-3,-3],5)}};
+  const expected=sig.classify({...v,warmLayer:(v.warm??-3)>.5});
+  const actual=sig.sample(pd,0,52,5);
+  for(const key of ['kind','color','label'])assert.deepEqual(actual[key],expected[key]);
+  assert.deepEqual(sig.sample(pd,0,52,5,false).color,expected.color);
+ }
+});
