@@ -1,3 +1,4 @@
+import {createGaussianAreaSampler} from './gaussian-sampler.mjs';
 import {weatherSymbol} from './weather-symbols.mjs';
 import {cloudIconType} from './cloud-style.mjs';
 import {fogBand} from './fog-style.mjs';
@@ -21,9 +22,20 @@ function* significantRows(fields,bounds,resolutionKm=9){
  // This improves drawing detail, not the underlying forecast resolution.
  const step=Math.max(.006,resolutionKm/333),nx=Math.max(2,Math.min(1200,Math.ceil((east-west)*Math.cos((south+north)/2*Math.PI/180)/step)+1)),ny=Math.max(2,Math.min(1200,Math.ceil((north-south)/step)+1));
  const grid={n_lon:nx,n_lat:ny,lon_min:west,lon_max:east,lat_min:south,lat_max:north},values=new Float32Array(nx*ny);
- const sample=(v,lat,lon,array)=>{const f=fields[v];return f?f.grid.getInterpolatedValue(array||f.data.values,lat,lon,'monotone'):NaN;};
+ const longitudes=Float64Array.from({length:nx},(_,x)=>west+x*(east-west)/(nx-1)),latitudes=Float64Array.from({length:ny},(_,y)=>south+y*(north-south)/(ny-1));
+ const samplers=new Map();
+ for(const [name,field] of Object.entries(fields)){
+  for(const key of ['values',...(name==='cloud_cover'?['cloudLow','cloudMid','cloudHigh']:[])]){
+   const array=key==='values'?field.data.values:field[key];
+   if(array){const sampler=createGaussianAreaSampler(field.grid,array,longitudes,latitudes);if(sampler)samplers.set(array,sampler);}
+  }
+ }
+ const sampledRows=new Map();let column=0;
+ const sample=(v,lat,lon,array)=>{const f=fields[v];if(!f)return NaN;const values=array||f.data.values;return sampledRows.has(values)?sampledRows.get(values)[column]:f.grid.getInterpolatedValue(values,lat,lon,'monotone');};
  for(let y=0;y<ny;y++){
+ for(const [array,sampler] of samplers)sampledRows.set(array,sampler.row(y));
  for(let x=0;x<nx;x++){
+  column=x;
   const lat=south+y*(north-south)/(ny-1),lon=west+x*(east-west)/(nx-1),cloud=fields.cloud_cover;
   const layers=['cloudLow','cloudMid','cloudHigh'].map(k=>cloud?.[k]?sample('cloud_cover',lat,lon,cloud[k]):NaN);
   values[y*nx+x]=significantCode({precipitation:sample('precipitation',lat,lon),snowfall:sample('snowfall_water_equivalent',lat,lon),cloud:cloudIconType(...layers),low:layers[0],mid:layers[1],high:layers[2],fog:fogBand(sample('visibility',lat,lon))});

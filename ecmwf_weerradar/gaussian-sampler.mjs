@@ -20,12 +20,12 @@ function monotone(weights,offset,p0,p1,p2,p3){
   const left=a*b<=0?0:2*a*b/(a+b),right=b*c<=0?0:2*b*c/(b+c);
   return weights[offset]*p1+weights[offset+1]*left+weights[offset+2]*p2+weights[offset+3]*right;
 }
-function makeGeometry(grid,coords,size){
+function makeGeometry(grid,coords,size,axes){
   const world=2**coords.z,lines=grid.latitudeLines,spacing=180/(2*lines+.5);
-  const longitudes=new Float64Array(size),latitudes=new Float64Array(size);
-  const weights=new Float64Array(size*4),rows=new Array(size),gaussianRows=new Map();
+  const longitudes=new Float64Array(size),latitudes=new Float64Array(axes?.latitudes.length??size);
+  const weights=new Float64Array(latitudes.length*4),rows=new Array(latitudes.length),gaussianRows=new Map();
   let bytes=longitudes.byteLength+latitudes.byteLength+weights.byteLength+size*64;
-  for(let x=0;x<size;x++)longitudes[x]=(coords.x+(x+.5)/size)/world*360-180;
+  for(let x=0;x<size;x++)longitudes[x]=axes?axes.longitudes[x]:(coords.x+(x+.5)/size)/world*360-180;
   function longitudeStencil(y){
     let row=gaussianRows.get(y);if(row)return row;
     const count=grid.nxOf(y),step=360/count,start=grid.integral(y);
@@ -42,8 +42,8 @@ function makeGeometry(grid,coords,size){
     bytes+=indices.byteLength+weights.byteLength+64;
     return row;
   }
-  for(let y=0;y<size;y++){
-    const lat=Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/size)/world)))*180/Math.PI;
+  for(let y=0;y<latitudes.length;y++){
+    const lat=axes?axes.latitudes[y]:Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/size)/world)))*180/Math.PI;
     latitudes[y]=lat;
     const position=lines-1-(lat-spacing/2)/spacing,lower=Math.floor(position);
     if(lower<1||lower>=2*lines-2){rows[y]=null;continue;}
@@ -74,7 +74,14 @@ function geometryFor(grid,coords,size){
  */
 export function createGaussianTileSampler(grid,values,coords,size=256){
   if(!Number.isInteger(grid.latitudeLines)||typeof grid.nxOf!=='function'||typeof grid.integral!=='function')return null;
-  const geometry=geometryFor(grid,coords,size),horizontal=new Map(),output=new Float64Array(size);
+  return samplerForGeometry(grid,values,geometryFor(grid,coords,size),size);
+}
+export function createGaussianAreaSampler(grid,values,longitudes,latitudes){
+ if(!Number.isInteger(grid.latitudeLines)||typeof grid.nxOf!=='function'||typeof grid.integral!=='function')return null;
+ return samplerForGeometry(grid,values,makeGeometry(grid,{z:0},longitudes.length,{longitudes,latitudes}),longitudes.length);
+}
+function samplerForGeometry(grid,values,geometry,size){
+  const horizontal=new Map(),output=new Float64Array(size);
   // A transported crop knows where it holds no data. Asking it first keeps the
   // identical result and skips the costly virtual lookup for empty pixels.
   const linear=(lat,lon)=>grid.missingStencil&&grid.missingStencil(values,lat,lon)?NaN:grid.getLinearInterpolatedValue(values,lat,lon);

@@ -100,6 +100,30 @@ function trimFieldCache(){
   }
 }
 const accumulationRequests=new Map(),significantRequests=new Map();
+// Keep only the two views of the current hour; discard on viewport/settings changes.
+const retainedViews=new Map();
+let modePreparation,modePreparationTimer;
+function clearRetainedViews(){for(const view of retainedViews.values())removeLayers(view.ids);retainedViews.clear();}
+function cancelModePreparation(){clearTimeout(modePreparationTimer);modePreparation?.abort();modePreparation=null;}
+function viewKey(frame,viewMode){
+ const b=map.getBounds();
+ return JSON.stringify([frame.url,viewMode,tempLevel,cloudVisibility(),$('texture').checked,$('clouds').checked,$('fog').checked,$('snow').checked,map.getZoom(),b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
+}
+function prepareOtherMode(){
+ cancelModePreparation();
+ if(current?.mode!=='weather'||document.hidden||playing||navigator.connection?.saveData||['slow-2g','2g'].includes(navigator.connection?.effectiveType))return;
+ const frame=current;modePreparation=new AbortController();const signal=modePreparation.signal;
+ modePreparationTimer=setTimeout(async()=>{
+  try{
+   await detailsReady;signal.throwIfAborted();
+   const variables=['significant_weather',...($('city-labels').checked?['temperature_2m','wind_u_component_10m']:[])];
+   const fields=await Promise.all(variables.map(v=>readField(fieldFile(frame,v),v,signal)));
+   signal.throwIfAborted();
+   await map.prepareFields(fields.filter(f=>f.variable==='significant_weather').map(f=>({...f,texture:$('texture').checked,cloudVisible:cloudVisibility()})),signal);
+  }catch(error){if(error.name!=='AbortError'&&params.get('profile')==='1')console.debug('Significant prefetch',error);}
+ },200);
+}
+
 const accumulationFields=new AccumulationFields((...args)=>fieldPackets.read(...args));
 function readField(file,variable,signal){
   signal?.throwIfAborted();
@@ -122,7 +146,7 @@ function readField(file,variable,signal){
     const data=variable==='significant_weather'?await (async()=>{
       const frame=significantRequests.get(file),variables=significantVariables(frame.modelMeta);
       const parts=await Promise.all(variables.map(async v=>[v,await readField(fieldFile(frame,v),v,readSignal)]));
-      readSignal.throwIfAborted();return buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);
+      readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);$('app').dataset.significantComputeMs=Math.round(performance.now()-started);return result;
     })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
@@ -196,8 +220,8 @@ const movingOverlay=new MovingOverlay(map,$('places'),queueCityDraw);
 map.on('movestart',()=>movingOverlay.start());
 map.on('move',()=>movingOverlay.move());
 map.on('moveend',()=>movingOverlay.finish());
-map.on('movestart',cancelPreparation);
-map.on('resize', queueCityDraw);
+map.on('movestart',()=>{cancelPreparation();cancelModePreparation();clearRetainedViews();});
+map.on('resize',()=>{queueCityDraw();clearRetainedViews();cancelModePreparation();});
 map.on('moveend', () => {
   const b=map.getBounds(); updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
   if (current&&!refreshing) updateViewportSamples();
@@ -304,7 +328,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
   $('model-select').setAttribute('aria-busy','true');
   const startup=++startupRevision;
   retryLoad=()=>start(undefined,modelId,focusRegion);
-  refreshing=true;stopPlayback();cancelPreparation();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
+  refreshing=true;stopPlayback();cancelPreparation();cancelModePreparation();clearRetainedViews();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
   try {
     const now=Date.now();
     let timeline;
@@ -458,7 +482,9 @@ async function renderFrame(index,rev,signal,context){
   const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta,frame);
   map.setFrameBudget(vars.length);
   retryLoad=()=>requestFrame(index,true,context);
-  const ids=vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
+  const key=viewKey(frame,layerMode),retained=retainedViews.get(key);
+  retainedViews.delete(key);
+  const ids=retained?.ids??vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view reveals each layer as soon as its first tile is painted. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.
   let reveal;
@@ -499,7 +525,7 @@ async function renderFrame(index,rev,signal,context){
     sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
     meta=modelMeta;frames=context.timeline;
-    current={...frame,index,ids,mode:layerMode,level:layerMode==='temperature'&&!MODEL_CONFIG[modelFor(modelMeta)]?.upperAir?'2m':tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
+    current={...frame,index,ids,viewKey:key,mode:layerMode,level:layerMode==='temperature'&&!MODEL_CONFIG[modelFor(modelMeta)]?.upperAir?'2m':tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
     const committed=current;
     // City temperatures and optional first-frame fields must not hold up the
     // primary weather. They may only attach to this exact committed frame.
@@ -519,7 +545,13 @@ async function renderFrame(index,rev,signal,context){
       trimFieldCache();
     }
     ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));
-    if(old) removeLayers(old.ids);
+    if(old){
+      if(old.url===frame.url&&['weather','significant'].includes(old.mode)&&old.viewKey===viewKey(old,old.mode)&&old.ids.every(id=>map.isSourceLoaded(id)&&!frameErrors.has(id))){
+        const previous=retainedViews.get(old.viewKey);if(previous)removeLayers(previous.ids);
+        old.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',0));retainedViews.set(old.viewKey,old);
+      }else{removeLayers(old.ids);clearRetainedViews();}
+    }
+    while(retainedViews.size>2){const [k,v]=retainedViews.entries().next().value;removeLayers(v.ids);retainedViews.delete(k);}
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
     $('app').dataset.frameStatus='ready';$('app').dataset.validTime=frame.iso;$('app').dataset.intervalHours=frame.hours;
     delete $('app').dataset.lastLoadError;
@@ -560,6 +592,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames,full
   if(!force&&rendering&&wanted===target&&requestedContext?.timeline===context.timeline)return;
   requestedContext=context;
   cancelPreparation();
+  if(current?.url!==context.timeline[target].url){cancelModePreparation();clearRetainedViews();}
   wanted=target;revision++;
   renderController?.abort();
   syncTimeChoices({...context.timeline[wanted],index:wanted},true);
@@ -572,7 +605,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames,full
     do {targetRevision=revision;renderController=new AbortController();success=await renderFrame(wanted,targetRevision,renderController.signal,requestedContext);}while(targetRevision!==revision&&!refreshing);
   } finally {rendering=false;}
   if(success&&!refreshing){
-    prepareAdjacentFrames();
+    prepareAdjacentFrames();prepareOtherMode();
   }
 }
 function updateTimeHeading(frame,metadata){
@@ -695,7 +728,7 @@ $('previous').addEventListener('click',()=>{stopPlayback();requestFrame(wanted-1
 $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);});
 let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
-document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;requestFrame(wanted,true);}));
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.mode===mode)));requestFrame(wanted,true);}));
 function syncTempLevels(frame,modelId){
  const upper=MODEL_CONFIG[modelId]?.upperAir,select=$('temperature-select');
  for(const option of select.options)option.disabled=!!option.value&&option.value!=='2m'&&!upper;
@@ -774,7 +807,7 @@ document.addEventListener('keydown',e=>{
   }
   if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();$('play').click();}
 });
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stopPlayback();cancelPreparation();}else prepareAdjacentFrames();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopPlayback();cancelPreparation();cancelModePreparation();}else prepareAdjacentFrames();});
 
 function sample(sampleData,lat,lon){
   if(!sampleData?.data?.values)return NaN;
