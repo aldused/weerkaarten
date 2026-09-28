@@ -554,6 +554,7 @@
 <script src="klimaat.js?v=20260914-1"></script>
 <link rel="stylesheet" href="records-ui.css?v=20260914-1">
 <script defer src="records-ui.js?v=20260924-1"></script>
+<script src="record-stations.js?v=20260928-2"></script>
 </head>
 <body class="climate-page climate-records_debilt">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -1586,43 +1587,7 @@ function sorteerFX(kolom) {
 }
 
 // Historische plaatsen (gecureerd, sparse) — virtuele stations gefilterd uit nl_extreme
-const HIST_STATIONS = {
-  "hist_s_heerenberg": "'s-Heerenberg",
-  "hist_akkrum": "Akkrum",
-  "hist_almen": "Almen",
-  "hist_assen": "Assen",
-  "hist_avereest": "Avereest",
-  "hist_breda": "Breda",
-  "hist_buchten": "Buchten",
-  "hist_castricum": "Castricum",
-  "hist_dedemsvaart": "Dedemsvaart",
-  "hist_echt": "Echt",
-  "hist_emmeloord": "Emmeloord",
-  "hist_emmen": "Emmen",
-  "hist_ermelo": "Ermelo",
-  "hist_gemert": "Gemert",
-  "hist_goes": "Goes",
-  "hist_haamstede": "Haamstede",
-  "hist_joure": "Joure",
-  "hist_kapellebrug": "Kapellebrug",
-  "hist_kortgene": "Kortgene",
-  "hist_maastricht_caberg": "Maastricht Caberg",
-  "hist_oudenbosch": "Oudenbosch",
-  "hist_rotterdam": "Rotterdam",
-  "hist_rottum": "Rottum",
-  "hist_sittard": "Sittard",
-  "hist_slijk_ewijk": "Slijk-Ewijk",
-  "hist_st_jansteen": "St. Jansteen",
-  "hist_ten_post": "Ten Post",
-  "hist_ternaard": "Ternaard",
-  "hist_uithuizermeeden": "Uithuizermeeden",
-  "hist_urk": "Urk",
-  "hist_venlo": "Venlo",
-  "hist_wageningen": "Wageningen",
-  "hist_warnsveld": "Warnsveld",
-  "hist_wijster": "Wijster",
-  "hist_witteveen": "Witteveen",
-};
+const HIST_STATIONS = {};
 const HIST_IDS = Object.keys(HIST_STATIONS);
 
 function vulHistorischeStations() {
@@ -1646,7 +1611,7 @@ function vulHistorischeStations() {
 // Laad data
 const GROEPEN = {
   "5hoofd": { naam: "5 Landelijke hoofdstations", stns: ["260","235","280","310","380"] },
-  "alle":   { naam: "Alle stations", stns: ["260","235","280","310","380","344","330","240","270","290","210","215","225","229","242","248","249","251","257","258","265","267","269","273","275","277","278","279","283","286","319","323","324","331","340","343","348","350","356","370","375","377","391","392","130","170","20", ...HIST_IDS] },
+  "alle":   { naam: "Alle stations", stns: [] },
 };
 
 let allData = {};
@@ -2248,6 +2213,17 @@ async function wisselStation() {
   const stn = document.getElementById("sel-station").value;
 
   try {
+    const registry = await RecordStations.load();
+    Object.assign(HIST_STATIONS, RecordStations.historical(registry));
+    GROEPEN.alle.stns = registry.sources;
+    if (stn === "alle") {
+      const ext = await laadStation("nl_extreme");
+      if (!ext) throw new Error("Historische recordbron ontbreekt; landelijke records zijn niet volledig");
+      // The record carries its actual station name, even before a registry update.
+      RecordStations.registerSource(ext, registry);
+    }
+    Object.assign(HIST_STATIONS, RecordStations.historical(registry));
+    RecordStations.populate(document.getElementById("sel-station"), registry);
     if (GROEPEN[stn]) {
       const stationIds = GROEPEN[stn].stns;
       const datasets = await Promise.all(stationIds.map(s => laadStation(s)));
@@ -2294,6 +2270,10 @@ async function wisselStation() {
 async function init() {
   const stn = document.getElementById("sel-station").value;
   try {
+    const registry = await RecordStations.load();
+    Object.assign(HIST_STATIONS, RecordStations.historical(registry));
+    GROEPEN.alle.stns = registry.sources;
+    RecordStations.populate(document.getElementById("sel-station"), registry);
     data = await laadStation(stn);
     await laadActueleDatumrecords().catch(() => null);
     updateBijgewerktLabel();
@@ -3185,36 +3165,15 @@ function berekenRecordsPerJaar(d) {
 let natDagCache = null, natDagTag = "";
 function nationaalDagRecords() {
   if (!(Array.isArray(multiData) && multiData.length > 1)) return null;
-  const tag = "multi:" + multiData.length;
-  if (natDagCache && natDagTag === tag) return natDagCache;
-  const HOOG = ["tx_hoog","tn_hoog","rh_hoog","fx_hoog"];
-  const LAAG = ["tx_laag","tn_laag"];
-  const SLEUTELS = [...HOOG, ...LAAG];
-  const nat = {};
-  for (const ds of multiData) {
-    const stn = ds.station; const dg = ds.dag; if (!dg) continue;
-    for (const m in dg) {
-      const nm = nat[m] || (nat[m] = {});
-      for (const dag in dg[m]) {
-        const src = dg[m][dag]; const nd = nm[dag] || (nm[dag] = {});
-        for (const s of SLEUTELS) {
-          const hoog = HOOG.includes(s);
-          for (const t of (src[s] || [])) {
-            if (!t?.[1]) continue;
-            const rij = [t[0], t[1], stn];
-            const bestaand = nd[s];
-            if (!bestaand || (hoog ? t[0] > bestaand[0][0] : t[0] < bestaand[0][0])) {
-              nd[s] = [rij];
-            } else if (t[0] === bestaand[0][0] && !bestaand.some(r => r[1] === rij[1] && r[2] === rij[2])) {
-              bestaand.push(rij);
-            }
-          }
-        }
-      }
-    }
+  if (natDagCache && natDagTag === multiData) return natDagCache;
+  const sources = multiData.slice();
+  if (document.getElementById("sel-station").value === "alle") {
+    if (!allData.nl_extreme) throw new Error("Historische recordbron ontbreekt");
+    sources.push(allData.nl_extreme);
   }
-  natDagCache = nat; natDagTag = tag;
-  return nat;
+  natDagTag = multiData;
+  natDagCache = RecordStations.national(sources);
+  return natDagCache;
 }
 
 function wisselJaarTab(tab) {

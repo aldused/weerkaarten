@@ -3,6 +3,9 @@
 # _deploy is build-output, nooit handmatig te onderhouden broncode.
 set -euo pipefail
 
+node tests/historical-records.test.cjs --fixture
+python3 -m unittest discover -s tests -p test_historical_map.py
+
 OUTPUT="${CF_PAGES_OUTPUT_DIR:-_deploy}"
 STAGE="${OUTPUT}.tmp"
 

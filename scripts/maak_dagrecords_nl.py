@@ -42,73 +42,14 @@ def laad_records(nr):
             pass
     return None, None
 
-# Station-nr -> naam (zelfde set als knmi_records.py)
-STATIONS = [
-    ("260","De Bilt"),("344","Rotterdam Airport"),("330","Hoek van Holland"),
-    ("235","Den Helder"),("240","Schiphol"),("270","Leeuwarden"),
-    ("280","Eelde"),("290","Twenthe"),("310","Vlissingen"),("380","Maastricht"),
-    ("210","Valkenburg"),("215","Voorschoten"),("225","IJmuiden"),
-    ("229","Texelhors"),("242","Vlieland"),("248","Wijdenes"),("249","Berkhout"),
-    ("251","Terschelling"),("257","Wijk aan Zee"),("258","Houtribdijk"),
-    ("265","Soesterberg"),("267","Stavoren"),("269","Lelystad"),
-    ("273","Marknesse"),("275","Deelen"),("277","Lauwersoog"),("278","Heino"),
-    ("279","Hoogeveen"),("283","Hupsel"),("286","Nieuw Beerta"),("319","Westdorpe"),
-    ("323","Wilhelminadorp"),("324","Stavenisse"),("331","Tholen"),
-    ("340","Woensdrecht"),("343","Rotterdam Geulhaven"),("348","Cabauw"),
-    ("350","Gilze-Rijen"),("356","Herwijnen"),("370","Eindhoven"),
-    ("375","Volkel"),("377","Ell"),("391","Arcen"),("392","Horst"),
-]
-
-# Naam -> (lon, lat)  (uit maak_toplijst_kaarten.py)
-COORDS = {
-    "Valkenburg":(4.430,52.171),
-    "Voorschoten":(4.447,52.125),"IJmuiden":(4.555,52.458),"Texelhors":(4.862,52.982),
-    "Den Helder":(4.789,52.928),"Schiphol":(4.781,52.309),"Vlieland":(4.920,53.250),
-    "Wijdenes":(5.166,52.632),"Berkhout":(4.979,52.644),"Terschelling":(5.350,53.392),
-    "Wijk aan Zee":(4.601,52.504),"Houtribdijk":(5.385,52.649),"De Bilt":(5.178,52.101),
-    "Soesterberg":(5.276,52.128),"Stavoren":(5.362,52.882),"Lelystad":(5.521,52.458),
-    "Leeuwarden":(5.774,53.224),"Marknesse":(5.888,52.703),"Deelen":(5.885,52.060),
-    "Lauwersoog":(6.201,53.413),"Heino":(6.261,52.439),"Hoogeveen":(6.520,52.730),
-    "Eelde":(6.586,53.123),"Hupsel":(6.657,52.069),"Nieuw Beerta":(7.150,53.197),
-    "Twenthe":(6.889,52.275),"Vlissingen":(3.596,51.442),"Westdorpe":(3.861,51.226),
-    "Wilhelminadorp":(3.884,51.527),"Stavenisse":(4.001,51.594),
-    "Hoek van Holland":(4.131,51.978),"Tholen":(4.219,51.531),"Woensdrecht":(4.342,51.449),
-    "Rotterdam Geulhaven":(4.320,51.893),"Rotterdam Airport":(4.437,51.957),
-    "Cabauw":(4.926,51.971),"Gilze-Rijen":(4.931,51.567),"Herwijnen":(5.146,51.859),
-    "Eindhoven":(5.377,51.451),"Volkel":(5.707,51.657),"Ell":(5.763,51.198),
-    "Maastricht":(5.770,50.911),"Arcen":(6.196,51.500),"Horst":(6.029,51.449),
-}
-
-# Historische/gecureerde recordplaatsen die niet in de actuele KNMI-stationset
-# zitten. De coordinaten zijn de plaats- of voormalige meetlocatiecoordinaten;
-# ze zijn alleen nodig om de sparse records uit records_nl_extreme.json te tonen.
-HISTORISCHE_COORDS = {
-    "'s-Heerenberg":(6.259,51.877),"Akkrum":(5.831,53.050),"Almen":(6.300,52.158),
-    "Assen":(6.563,52.997),"Avereest":(6.390,52.607),"Breda":(4.776,51.587),
-    "Buchten":(5.810,51.043),"Castricum":(4.669,52.548),"Dedemsvaart":(6.458,52.600),
-    "Echt":(5.874,51.106),"Emmeloord":(5.749,52.711),"Emmen":(6.907,52.779),
-    "Epen":(5.912,50.777),"Ermelo":(5.622,52.298),"Gemert":(5.690,51.556),
-    "Goes":(3.889,51.504),"Haamstede":(3.743,51.697),"Joure":(5.803,52.966),
-    "Kapellebrug":(4.064,51.253),"Kortgene":(3.802,51.556),
-    "Maastricht Caberg":(5.664,50.865),
-    "Oost-Maarland":(5.715,50.794),"Oudenbosch":(4.535,51.588),
-    "Rotterdam":(4.479,51.923),"Rottum":(5.895,52.937),"Sittard":(5.869,50.998),
-    "Slijk-Ewijk":(5.788,51.884),"St. Jansteen":(4.052,51.263),
-    "Ten Post":(6.728,53.298),"Ternaard":(5.965,53.382),
-    "Uithuizermeeden":(6.724,53.414),"Urk":(5.601,52.663),"Venlo":(6.168,51.370),
-    "Wageningen":(5.667,51.970),"Warnsveld":(6.231,52.138),
-    "Wijster":(6.518,52.817),"Winterswijk":(6.700,51.981),"Witteveen":(6.660,52.813),
-}
-
-# Reguliere stationreeksen beperken we tot locaties die recent nog temperatuur
-# meten, zodat de kaart leesbaar blijft. Belangrijke records van opgeheven
-# locaties komen hieronder alsnog gericht uit de gecureerde landelijke bron.
+# One registry for present and former stations; activity never excludes a record.
+from pathlib import Path
+registry = json.loads(Path("record-stations.json").read_text())
+STATIONS = [(entry["source"], name) for name, entry in registry["stations"].items()
+            if entry["source"] != "nl_extreme"]
+COORDS = {name: entry["coordinates"] for name, entry in registry["stations"].items()}
+HISTORISCHE_COORDS = COORDS
 MAX_TX_GAP = 2
-# Min. aantal jaren met TX-waarde voor één kalenderdag. Wind/zee-stations (bv.
-# Rotterdam Geulhaven, Texelhors, Houtribdijk) meten geen of nauwelijks temp →
-# onrealistisch dagrecord. tx_hoog is afgekapt op top-25, dus de lengte =
-# aantal jaren-met-data zolang dat < 25 is.
-MIN_SAMPLE = 10
 VANDAAG = datetime.now().date()
 
 DIT_JAAR = datetime.now().year
@@ -121,7 +62,7 @@ lopend_data = []   # lopend-datum per station (EDR-tussenstand t/m)
 
 bronnen = {"r2": 0, "lokaal": 0}
 for nr, naam in STATIONS:
-    if naam not in COORDS:
+    if not COORDS.get(naam):
         gemist.append((nr, naam, "geen coords")); continue
     rec, bron = laad_records(nr)
     if rec is None:
@@ -134,7 +75,6 @@ for nr, naam in STATIONS:
     nieuwste_tx = max(tx_jaren) if tx_jaren else 0
     if nieuwste_tx < VANDAAG.year - MAX_TX_GAP:
         historische_namen.add(naam)
-        continue
     lon, lat = COORDS[naam]
     stations_out[naam] = [lon, lat]
     if rec.get("lopend"):
@@ -144,7 +84,7 @@ for nr, naam in STATIONS:
         for d_str, vals in dagen.items():
             d = int(d_str)
             txh = vals.get("tx_hoog")
-            if not txh or len(txh) < MIN_SAMPLE:
+            if not txh:
                 continue
             top = txh[0]              # [value, "YYYY-MM-DD"] — bevat al lopende EDR
             val, datum = top[0], top[1]
@@ -200,8 +140,26 @@ uit = {
     "stations": stations_out,
     "dagrecords": dagrecords,
 }
-with open("dagrecords_nl.json", "w") as f:
+# Never replace a valid feed with a partial build.
+if gemist:
+    raise RuntimeError(f"Onvolledige dagrecordbronnen: {gemist}")
+if len(dagrecords) != 366:
+    raise RuntimeError("Niet alle 366 kalenderdagen aanwezig")
+previous = Path("dagrecords_nl.json")
+if previous.exists():
+    old = json.loads(previous.read_text())
+    for day, records in old.get("dagrecords", {}).items():
+        for name, record in records.items():
+            new = dagrecords.get(day, {}).get(name)
+            if new is None or new["t"] < record["t"]:
+                raise RuntimeError(f"Dagrecord verdwenen/verlaagd: {day} {name}")
+for day, value, date in [("09-29", 28.0, "1934-09-29"), ("09-30", 26.7, "1895-09-30")]:
+    record = dagrecords.get(day, {}).get("Winterswijk")
+    if not record or record["t"] < value:
+        raise RuntimeError(f"Historisch controlerecord ontbreekt: {day} Winterswijk")
+with open("dagrecords_nl.json.tmp", "w") as f:
     json.dump(uit, f, ensure_ascii=False, separators=(",", ":"))
+os.replace("dagrecords_nl.json.tmp", "dagrecords_nl.json")
 
 print(f"Meetlocaties: {len(stations_out)} ({len(historisch_gebruikt)} historisch) | "
       f"kalenderdagen: {len(dagrecords)} | bron: {bronnen}")

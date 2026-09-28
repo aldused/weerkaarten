@@ -512,6 +512,7 @@
 <script src="klimaat.js?v=20260914-1"></script>
 <link rel="stylesheet" href="records-ui.css?v=20260914-1">
 <script defer src="records-ui.js?v=20260914-1"></script>
+<script src="record-stations.js?v=20260928-2"></script>
 </head>
 <body class="climate-page climate-dagrecords_jaar">
 <section class="climate-heading" aria-labelledby="climate-title">
@@ -1432,48 +1433,13 @@ function sorteerFX(kolom) {
 }
 
 // Historische plaatsen (gecureerd, sparse) — virtuele stations gefilterd uit nl_extreme
-const HIST_STATIONS = {
-  "hist_s_heerenberg": "'s-Heerenberg",
-  "hist_akkrum": "Akkrum",
-  "hist_almen": "Almen",
-  "hist_assen": "Assen",
-  "hist_avereest": "Avereest",
-  "hist_breda": "Breda",
-  "hist_buchten": "Buchten",
-  "hist_castricum": "Castricum",
-  "hist_dedemsvaart": "Dedemsvaart",
-  "hist_echt": "Echt",
-  "hist_emmeloord": "Emmeloord",
-  "hist_emmen": "Emmen",
-  "hist_ermelo": "Ermelo",
-  "hist_gemert": "Gemert",
-  "hist_goes": "Goes",
-  "hist_haamstede": "Haamstede",
-  "hist_joure": "Joure",
-  "hist_kapellebrug": "Kapellebrug",
-  "hist_maastricht_caberg": "Maastricht Caberg",
-  "hist_oudenbosch": "Oudenbosch",
-  "hist_rotterdam": "Rotterdam",
-  "hist_rottum": "Rottum",
-  "hist_sittard": "Sittard",
-  "hist_slijk_ewijk": "Slijk-Ewijk",
-  "hist_st_jansteen": "St. Jansteen",
-  "hist_ten_post": "Ten Post",
-  "hist_ternaard": "Ternaard",
-  "hist_uithuizermeeden": "Uithuizermeeden",
-  "hist_urk": "Urk",
-  "hist_venlo": "Venlo",
-  "hist_wageningen": "Wageningen",
-  "hist_warnsveld": "Warnsveld",
-  "hist_wijster": "Wijster",
-  "hist_witteveen": "Witteveen",
-};
+const HIST_STATIONS = {};
 const HIST_IDS = Object.keys(HIST_STATIONS);
 
 // Laad data
 const GROEPEN = {
   "5hoofd": { naam: "5 Landelijke hoofdstations", stns: ["260","235","280","310","380"] },
-  "alle":   { naam: "Alle stations", stns: ["260","235","280","310","380","344","330","240","270","290","215","225","229","242","248","249","251","257","258","267","269","273","275","277","278","279","283","286","319","323","324","331","340","343","348","350","356","370","375","377","392"] },
+  "alle":   { naam: "Alle stations", stns: [] },
   "nl_extreme": { naam: "Historische extremen NL", stns: ["nl_extreme"] },
 };
 
@@ -1675,7 +1641,7 @@ function samenvoegPeriodeRecords(datasets, sleutel) {
   const richting = sleutel.split("_")[1];
   const vals = [];
   const p = huidigePeriode;
-  for (const d of datasets) {
+  for (const d of (document.getElementById("sel-station").value === "alle" ? [...datasets, allData.nl_extreme] : datasets)) {
     if (!d) continue;
     let lijst = [];
     if (p === "alltime") lijst = d?.alltime?.[sleutel] || [];
@@ -1718,6 +1684,13 @@ function samenvoegPeriodeRecords(datasets, sleutel) {
       vals.push([arr[0], arr[1], stn, p === "dag" ? { n: lijst.length, van: (d.van || "").slice(0, 4), txTot: laatsteTxJaar(d) } : null]);
     }
   }
+  const unique = new Map();
+  for (const row of vals) {
+    const key = row[1] + "|" + row[2];
+    const old = unique.get(key);
+    if (!old || (richting === "hoog" ? row[0] > old[0] : row[0] < old[0])) unique.set(key, row);
+  }
+  vals.splice(0, vals.length, ...unique.values());
   if (richting === "hoog") vals.sort((a,b) => b[0] - a[0]);
   else vals.sort((a,b) => a[0] - b[0]);
   return vals.slice(0, 25);
@@ -1735,9 +1708,21 @@ async function wisselStation() {
   const stn = document.getElementById("sel-station").value;
 
   try {
+    const registry = await RecordStations.load();
+    Object.assign(HIST_STATIONS, RecordStations.historical(registry));
+    GROEPEN.alle.stns = registry.sources;
+    if (stn === "alle") {
+      const ext = await laadStation("nl_extreme");
+      if (!ext) throw new Error("Historische recordbron ontbreekt; landelijke records zijn niet volledig");
+      // The record carries its actual station name, even before a registry update.
+      RecordStations.registerSource(ext, registry);
+    }
+    Object.assign(HIST_STATIONS, RecordStations.historical(registry));
+    RecordStations.populate(document.getElementById("sel-station"), registry);
     if (GROEPEN[stn]) {
       const datasets = await Promise.all(GROEPEN[stn].stns.map(s => laadStation(s)));
-      multiData = datasets.filter(d => d !== null);
+      if (datasets.some(d => !d)) throw new Error("Stationbestand ontbreekt; landelijke records zijn niet volledig");
+      multiData = datasets;
       data = multiData[0];
       document.getElementById("gegenereerd-lbl").textContent = `${GROEPEN[stn].naam} · ${multiData.length} stations`;
       window.weerlabClimateStatus({fixed:"Meerdere stations · meetperiode verschilt per station"});
@@ -1763,13 +1748,17 @@ async function wisselStation() {
     wisselHoofdtab(huidigeHoofdtab);
   } catch(e) {
     document.getElementById("laden").className = "fout";
-    document.getElementById("laden").textContent = `Data niet beschikbaar voor dit station`;
+    document.getElementById("laden").textContent = `Data niet beschikbaar voor dit station: ${e.message}`;
   }
 }
 
 async function init() {
   const stn = document.getElementById("sel-station").value;
   try {
+    const registry = await RecordStations.load();
+    Object.assign(HIST_STATIONS, RecordStations.historical(registry));
+    GROEPEN.alle.stns = registry.sources;
+    RecordStations.populate(document.getElementById("sel-station"), registry);
     data = await laadStation(stn);
       window.weerlabClimateStatus({through:data.tm, generated:data.gegenereerd, historical:!!HIST_STATIONS[stn] || Number(stn)<200});
     document.getElementById("gegenereerd-lbl").textContent = `Bijgewerkt: ${data.lopend_bijgewerkt || data.gegenereerd}`;
@@ -2603,24 +2592,15 @@ function berekenRecordsPerJaar(d) {
 let natDagCache = null, natDagTag = "";
 function nationaalDagRecords() {
   if (!(Array.isArray(multiData) && multiData.length > 1)) return null;
-  const tag = "multi:" + multiData.length;
-  if (natDagCache && natDagTag === tag) return natDagCache;
-  const HOOG = ["tx_hoog","tn_hoog","rh_hoog","fx_hoog"];
-  const LAAG = ["tx_laag","tn_laag"];
-  const nat = {};
-  for (const ds of multiData) {
-    const stn = ds.station; const dg = ds.dag; if (!dg) continue;
-    for (const m in dg) {
-      const nm = nat[m] || (nat[m] = {});
-      for (const dag in dg[m]) {
-        const src = dg[m][dag]; const nd = nm[dag] || (nm[dag] = {});
-        for (const s of HOOG) { const t = src[s] && src[s][0]; if (t && (!nd[s] || t[0] > nd[s][0][0])) nd[s] = [[t[0], t[1], stn]]; }
-        for (const s of LAAG) { const t = src[s] && src[s][0]; if (t && (!nd[s] || t[0] < nd[s][0][0])) nd[s] = [[t[0], t[1], stn]]; }
-      }
-    }
+  if (natDagCache && natDagTag === multiData) return natDagCache;
+  const sources = multiData.slice();
+  if (document.getElementById("sel-station").value === "alle") {
+    if (!allData.nl_extreme) throw new Error("Historische recordbron ontbreekt");
+    sources.push(allData.nl_extreme);
   }
-  natDagCache = nat; natDagTag = tag;
-  return nat;
+  natDagTag = multiData;
+  natDagCache = RecordStations.national(sources);
+  return natDagCache;
 }
 
 function wisselJaarTab(tab) {
@@ -3433,7 +3413,7 @@ function toon() {
   if (kortAantal > 0) {
     voet.innerHTML = `<span style="font-size:0.9em;background:rgba(245,158,11,0.18);color:#b45309;padding:1px 6px;border-radius:10px;">gemarkeerd</span> ` +
       `= station met een korte meetreeks op deze kalenderdag (minder dan ${MIN_REEKS_JAREN} jaar), of een station dat al jaren geen maximumtemperatuur meer meet. ` +
-      `Zulke waarden staan niet op de <em>Dagrecords komende 6 dagen</em>-kaart: een “hoogste ooit” uit enkele jaren is nog geen record, en oude meetlocaties vertekenen het beeld.`;
+      `Historische meetplaatsen blijven meetellen in de landelijke records en op de dagrecordkaart; de markering geeft alleen informatie over de meetreeks.`;
     voet.style.display = "block";
   } else {
     voet.style.display = "none";
