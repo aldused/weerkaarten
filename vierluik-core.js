@@ -106,5 +106,13 @@
     }
     return {data,nLat:pd.nLat,nLon:pd.nLon,nSteps:pd.nSteps,nComp:1,schaal:1,grid:pd.grid,startMs,dayStarts};
   }
-  return {HOUR,timeMs,dayKey,displayDate,decode,sample,cumulative,bilinear,gustMagnitude,scalarValue};
+  // Meteorologische richting: waaruit de wind komt. Eerst U/V interpoleren,
+  // daarna de hoek bepalen, zodat noord rond 0/360 graden correct blijft.
+  function windDirection(u,v) {
+    if(!Number.isFinite(u)||!Number.isFinite(v)||Math.hypot(u,v)<0.3)return null;
+    const degrees=(Math.atan2(-u,-v)*180/Math.PI+360)%360;
+    const index=Math.floor((degrees+22.5)/45)%8;
+    return {degrees,index,label:['N','NO','O','ZO','Z','ZW','W','NW'][index]};
+  }
+  return {windDirection,HOUR,timeMs,dayKey,displayDate,decode,sample,cumulative,bilinear,gustMagnitude,scalarValue};
 });

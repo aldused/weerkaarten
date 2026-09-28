@@ -637,6 +637,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
       <option value="temp" data-label="Temperatuur">Temperatuur</option>
       <option value="dauwpunt" data-label="Dauwpunt">Dauwpunt</option>
       <option value="wind" data-label="Wind">Wind</option>
+      <option value="windrichting" data-label="Windrichting">Windrichting</option>
       <option value="windstoten" data-label="Windstoten">Windstoten</option>
       <option value="zicht" data-label="Zicht">Zicht</option>
       <option value="druk" data-label="Luchtdruk">Luchtdruk</option>
@@ -805,7 +806,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
   <!-- gevuld door buildTimeline() -->
 </div>
 
-<script src="vierluik-core.js?v=20260908-neerslagdetail1"></script>
+<script src="vierluik-core.js?v=20260928-windrichting1"></script>
 <script src="vierluik-significant.js?v=20260928"></script>
 <script>
 (function() {
@@ -1044,6 +1045,7 @@ function bftFractie(ms) {
 
 // Kleurpunten liggen in het midden van elke Bft-klasse, zodat de legenda
 // blijft kloppen: precies midden in kracht 5 is exact de kleur van kracht 5.
+var WINDRICHTING_COLORS = [[124,166,221],[116,195,206],[125,195,158],[190,197,121],[223,180,119],[217,145,145],[186,145,205],[144,149,213]];
 var WIND_REF = WIND_COLORS.map(function(c, i) { return [i + 0.5, c]; });
 function windKleur(ms) { return interpColor(bftFractie(ms), WIND_REF); }
 
@@ -1808,6 +1810,7 @@ function laagBeschikbaar(md, varNaam, modelId) {
   var key = (varNaam === 'wolkenlagen' || varNaam === 'bewolking_totaal') ? 'bewolking' : varNaam;
   if (key === TEGEL_VAR) return !!tegelMeta[modelId];
   if (!md || !md.meta || !md.meta.parameters) return false;
+  if (key === 'windrichting') return !!md.meta.parameters.wind;
   if (key === 'significant') return VierluikSignificant.required.every(function(k){return !!md.meta.parameters[k];});
   if (key === 'cumul') return !!md.meta.parameters.neerslag;
   if (key === 'cumzon') return !!md.meta.parameters.zon;
@@ -2391,6 +2394,9 @@ function renderPanelActive(pIdx) {
       } else if(activeVar==='wolkenlagen'){
         if(pdNComp<3)continue;
         c=[cc,bb,aa].map(function(v){return Math.round(255*Math.pow(Math.max(0,Math.min(1,v)),0.85));});
+      } else if(activeVar==='windrichting'){
+        var richting=VierluikCore.windDirection(aa,bb);
+        c=richting?WINDRICHTING_COLORS[richting.index]:[235,239,243];
       } else if(activeVar==='wind'||activeVar==='windstoten'){
         var speed=Math.hypot(aa,bb);
         c=windKleur(speed);
@@ -2460,7 +2466,7 @@ function vakVrij(x0, y0, x1, y1) {
 }
 function claimVak(x0, y0, x1, y1) { labelVakken.push([x0, y0, x1, y1]); }
 
-var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, cumul:1, zon:1, cumzon:1, neerslag:1,
+var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, windrichting:1, cumul:1, zon:1, cumzon:1, neerslag:1,
                   bewolking:1, bewolking_totaal:1};
 function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, stepIdx) {
   if (!LABEL_VARS[activeVar]) return;
@@ -2485,7 +2491,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
   // Labeldichtheid op pixel-basis. Het raster staat bewust fijner dan de
   // labels breed zijn; botsingscontrole laat vervolgens alleen de labels staan
   // die passen. Dat geeft veel meer afleesbare punten dan een grof vast raster.
-  var LABEL_AFSTAND = { wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
+  var LABEL_AFSTAND = { windrichting: 66, wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
                         zon: 50, cumzon: 50, temp: 46, dauwpunt: 46, windstoten: 46,
                         bewolking: 52, bewolking_totaal: 52 };
   // Dichtheid schaalt mee met de grootte van het vak. Factor 0,7 op de afstand
@@ -2530,12 +2536,13 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       var fracx = fx - gx0, fracy = fy - gy0;
 
       // ── Wind: pijl in windrichting + Bft-getal ──────────────
-      if (activeVar === 'wind') {
+      if (activeVar === 'wind' || activeVar === 'windrichting') {
         if (pdNComp < 2) continue;
         var u=sampleComponent(pd,stepIdx,lat,lon,0),v=sampleComponent(pd,stepIdx,lat,lon,1);
         if(u===null||v===null)continue;
         var spd = Math.sqrt(u*u + v*v);
         var bft = msNaarBft(spd);
+        var richting = VierluikCore.windDirection(u,v);
         // atan2(U, V): 0 = noord, π/2 = oost (canvas 0 = omhoog)
         var arrowAngle = Math.atan2(u, v);
         var aLen = Math.max(10, Math.min(18 * DPR, fontSize * 1.2 + 2));
@@ -2543,7 +2550,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         // Ruimte voor de windstootregel alleen reserveren als die er ook komt,
         // anders staan de pijlen onnodig ver uit elkaar.
         var windstootPd = modelData[MODELS[panels[pIdx].modelIdx].id];
-        windstootPd = windstootPd && windstootPd.paramData && windstootPd.paramData['windstoten'];
+        windstootPd = activeVar === 'wind' && windstootPd && windstootPd.paramData && windstootPd.paramData['windstoten'];
         var blokOnder = py + aLen * 0.5 + fontSize * (windstootPd ? 2.4 : 1.5);
         if (!vakVrij(px - aLen * 0.6, py - aLen * 0.6, px + aLen * 0.6, blokOnder)) continue;
         claimVak(px - aLen * 0.6, py - aLen * 0.6, px + aLen * 0.6, blokOnder);
@@ -2571,12 +2578,12 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         ctx.shadowColor = 'rgba(0,0,0,0.95)';
         ctx.shadowBlur = 2 * DPR;
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(String(bft), px, bftY);
+        ctx.fillText(activeVar === 'windrichting' ? (richting ? richting.label : 'stil') : String(bft), px, bftY);
 
         // Windstoten km/h onder Bft-getal
         var gsModelId = MODELS[panels[pIdx].modelIdx].id;
         var gsPd = modelData[gsModelId] && modelData[gsModelId].paramData['windstoten'];
-        if(gsPd){
+        if(activeVar === 'wind' && gsPd){
           var gu=sampleComponent(gsPd,stepIdx,lat,lon,0);
           var gv=gsPd.nComp===1?0:sampleComponent(gsPd,stepIdx,lat,lon,1);
           if(gu!==null&&gv!==null){
@@ -2747,6 +2754,7 @@ function computeCumZon(md) {
 // bewolking ook op volle modelresolutie ('bewolking_hr', uint8 0..1, even groot
 // als de float32-versie op halve resolutie); die krijgt voorrang.
 function veldSleutel(modelId, varNaam) {
+  if (varNaam === 'windrichting') return 'wind';
   var basis = (varNaam === 'wolkenlagen' || varNaam === 'bewolking_totaal')
             ? 'bewolking' : varNaam;
   if (basis === 'bewolking') {
@@ -3057,6 +3065,10 @@ function buildLegendHTMLActive(pIdx) {
     title='Horizontaal zicht · km (klasse vanaf)';discrete(ZICHT_M_COLORS,ZICHT_M_LEVELS.map(function(v){return v/1000;}),1,true);note='Onder 1 km tonen de kaartgetallen meters (m).';
   }else if(activeVar==='wind'){
     title='Wind op 10 m · Beaufort';continuous([[0,WIND_REF[0][1]]].concat(WIND_REF,[[13,WIND_REF[WIND_REF.length-1][1]]]),[0,2,4,6,8,10,12]);note='Pijl: stromingsrichting. Puntwaarde: richting waaruit de wind komt; windstil zonder richting.';
+  }else if(activeVar==='windrichting'){
+    title='Windrichting op 10 m · uit welke richting';
+    discrete(WINDRICHTING_COLORS,['N','NO','O','ZO','Z','ZW','W','NW']);
+    note='Kleur en letters: waaruit de wind komt. Pijlen: waarheen de wind waait. Lichtgrijs: windstil (<0,3 m/s), zonder richting. Puntwaarde in graden.';
   }else if(activeVar==='windstoten'){
     title='Windstoten op 10 m · km/u';var ref=[];for(var g=0;g<=150;g++)ref.push([g,windKleur(g/3.6)]);continuous(ref,[0,30,60,90,120,150]);note='Lijnen: 10 km/u. Maximum over de bronperiode; geen gemiddelde wind.';
   }else if(activeVar==='cumul'){
@@ -3295,11 +3307,15 @@ function hoverValue(pd, stepIdx, lat, lon) {
   if (activeVar === 'significant') return VierluikSignificant.sample(pd,stepIdx,lat,lon).label;
   var a = sampleComponent(pd, stepIdx, lat, lon, 0);
   if (a === null) return null;
-  if (activeVar === 'wind' || activeVar === 'windstoten') {
+  if (activeVar === 'wind' || activeVar === 'windrichting' || activeVar === 'windstoten') {
     var b = pd.nComp===1 && activeVar==='windstoten'?0:sampleComponent(pd, stepIdx, lat, lon, 1);
     if(b===null)return null;
     var ms = Math.sqrt(a*a + b*b), kmh = ms * 3.6;
     if (activeVar === 'windstoten') return Math.round(kmh) + ' km/u';
+    if (activeVar === 'windrichting') {
+      var direction=VierluikCore.windDirection(a,b);
+      return direction ? 'Uit '+direction.label+' · '+(Math.round(direction.degrees)%360)+'° · '+Math.round(kmh)+' km/u' : 'Windstil · geen richting';
+    }
     var deg = (Math.atan2(-a, -b) * 180 / Math.PI + 360) % 360;
     return msNaarBft(ms) + ' Bft · ' + Math.round(kmh) + ' km/u · ' + (ms<0.3?'windstil':'uit '+Math.round(deg)+'°');
   }
@@ -3328,7 +3344,7 @@ function hoverValue(pd, stepIdx, lat, lon) {
 
 var VAR_NAMES = {
   significant:'Significant weer', neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
-  dauwpunt:'Dauwpunt', wind:'Wind', windstoten:'Windstoten', druk:'Luchtdruk',
+  dauwpunt:'Dauwpunt', wind:'Wind', windrichting:'Windrichting', windstoten:'Windstoten', druk:'Luchtdruk',
   zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal (geschat)',
   wolkenlagen:'Wolkenlagen',
   wolkenkaart:'Wolkenkaart (modelbeeld)',
