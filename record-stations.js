@@ -2,7 +2,7 @@
 (function(root) {
   let pending;
   function load() {
-    if (!pending) pending = fetch('record-stations.json?v=20260928-1').then(r => {
+    if (!pending) pending = fetch('record-stations.json?v=20260928-3').then(r => {
       if (!r.ok) throw new Error('Stationsregister niet beschikbaar');
       return r.json();
     }).catch(e => { pending = null; throw e; });
