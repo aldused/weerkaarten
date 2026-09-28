@@ -6,7 +6,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(core){
   'use strict';
   const required=['bewolking','neerslag'];
-  const optional=['temp','dauwpunt','cape','zicht','profiel'];
+  const optional=['wind','temp','dauwpunt','cape','zicht','profiel'];
   const colors={helder:[255,247,214],bewolkt:[112,112,112],regen:[58,143,212],sneeuw:[80,221,235],natteSneeuw:[255,192,138],ijzel:[255,64,64],onweer:[232,48,232],mist:[255,244,42],unknown:[200,210,220]};
   const clamp=v=>Math.max(0,Math.min(1,v));
   const blend=(a,b,f)=>a.map((v,i)=>Math.round(v*(1-f)+b[i]*f));

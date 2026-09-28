@@ -807,7 +807,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
 </div>
 
 <script src="vierluik-core.js?v=20260928-windrichting1"></script>
-<script src="vierluik-significant.js?v=20260928"></script>
+<script src="vierluik-significant.js?v=20260928-windpijlen1"></script>
 <script>
 (function() {
 
@@ -2466,10 +2466,12 @@ function vakVrij(x0, y0, x1, y1) {
 }
 function claimVak(x0, y0, x1, y1) { labelVakken.push([x0, y0, x1, y1]); }
 
-var LABEL_VARS = {temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, windrichting:1, cumul:1, zon:1, cumzon:1, neerslag:1,
+var LABEL_VARS = {significant:1, temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, windrichting:1, cumul:1, zon:1, cumzon:1, neerslag:1,
                   bewolking:1, bewolking_totaal:1};
 function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, stepIdx) {
   if (!LABEL_VARS[activeVar]) return;
+  // Significant weer toont alleen pijlen uit het eigen windrooster.
+  if (activeVar === 'significant') pd = pd && pd.fields && pd.fields.wind;
   if (!pd) return;
 
   // Draw on overlay canvas so labels appear ON TOP of borders (overlay is above main canvas in DOM)
@@ -2491,7 +2493,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
   // Labeldichtheid op pixel-basis. Het raster staat bewust fijner dan de
   // labels breed zijn; botsingscontrole laat vervolgens alleen de labels staan
   // die passen. Dat geeft veel meer afleesbare punten dan een grof vast raster.
-  var LABEL_AFSTAND = { windrichting: 66, wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
+  var LABEL_AFSTAND = { significant: 66, windrichting: 66, wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
                         zon: 50, cumzon: 50, temp: 46, dauwpunt: 46, windstoten: 46,
                         bewolking: 52, bewolking_totaal: 52 };
   // Dichtheid schaalt mee met de grootte van het vak. Factor 0,7 op de afstand
@@ -2536,11 +2538,12 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       var fracx = fx - gx0, fracy = fy - gy0;
 
       // ── Wind: pijl in windrichting + Bft-getal ──────────────
-      if (activeVar === 'wind' || activeVar === 'windrichting') {
+      if (activeVar === 'wind' || activeVar === 'windrichting' || activeVar === 'significant') {
         if (pdNComp < 2) continue;
         var u=sampleComponent(pd,stepIdx,lat,lon,0),v=sampleComponent(pd,stepIdx,lat,lon,1);
         if(u===null||v===null)continue;
         var spd = Math.sqrt(u*u + v*v);
+        if (activeVar === 'significant' && spd < 0.3) continue;
         var bft = msNaarBft(spd);
         var richting = VierluikCore.windDirection(u,v);
         // atan2(U, V): 0 = noord, π/2 = oost (canvas 0 = omhoog)
@@ -2551,7 +2554,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         // anders staan de pijlen onnodig ver uit elkaar.
         var windstootPd = modelData[MODELS[panels[pIdx].modelIdx].id];
         windstootPd = activeVar === 'wind' && windstootPd && windstootPd.paramData && windstootPd.paramData['windstoten'];
-        var blokOnder = py + aLen * 0.5 + fontSize * (windstootPd ? 2.4 : 1.5);
+        var blokOnder = py + aLen * 0.5 + (activeVar === 'significant' ? 0 : fontSize * (windstootPd ? 2.4 : 1.5));
         if (!vakVrij(px - aLen * 0.6, py - aLen * 0.6, px + aLen * 0.6, blokOnder)) continue;
         claimVak(px - aLen * 0.6, py - aLen * 0.6, px + aLen * 0.6, blokOnder);
         ctx.save();
@@ -2571,6 +2574,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
         ctx.lineTo( ah * 0.5, -aLen * 0.5 + ah);    // pijlpunt rechts
         if(spd>=0.3)ctx.stroke();
         ctx.restore();
+        if (activeVar === 'significant') continue;
         var bftY = py + aLen * 0.5 + fontSize * 0.8;
         ctx.font = 'bold ' + fontSize + 'px sans-serif';
         ctx.textAlign = 'center';
@@ -3037,6 +3041,7 @@ function buildLegendHTMLActive(pIdx) {
     note='Bewolking met uurneerslag; regen gebruikt de neerslagkleuren. Natte sneeuw, sneeuw en ijzel zijn afgeleid; onweer uit neerslag en CAPE, geen onweerskans. Mist: zicht <500 m.';
     if(pd&&pd.fields){
       var f=pd.fields,missing=[];
+      note+=f.wind?' Pijlen: wind op 10 m, wijzen waarheen de wind waait.':' Windpijlen niet beschikbaar.';
       if(!f.temp||!f.dauwpunt)missing.push('neerslagtype');
       if(!f.profiel)missing.push('ijzel');
       if(!f.cape)missing.push('onweer');
