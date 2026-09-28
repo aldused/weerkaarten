@@ -631,6 +631,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
     <label for="var-select">Alle kaartlagen</label>
     <select id="var-select" aria-label="Zet de kaartlaag van alle vier de kaarten">
       <option value="neerslag" data-label="Neerslag">Neerslag</option>
+      <option value="significant" data-label="Significant weer">Significant weer</option>
       <option value="radar" data-label="Modelradar (dBZ)">Modelradar (dBZ)</option>
       <option value="cumul" data-label="Cumulatieve neerslag">Cumulatieve neerslag</option>
       <option value="temp" data-label="Temperatuur">Temperatuur</option>
@@ -805,6 +806,7 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
 </div>
 
 <script src="vierluik-core.js?v=20260908-neerslagdetail1"></script>
+<script src="vierluik-significant.js?v=20260928"></script>
 <script>
 (function() {
 
@@ -1806,6 +1808,7 @@ function laagBeschikbaar(md, varNaam, modelId) {
   var key = (varNaam === 'wolkenlagen' || varNaam === 'bewolking_totaal') ? 'bewolking' : varNaam;
   if (key === TEGEL_VAR) return !!tegelMeta[modelId];
   if (!md || !md.meta || !md.meta.parameters) return false;
+  if (key === 'significant') return VierluikSignificant.required.every(function(k){return !!md.meta.parameters[k];});
   if (key === 'cumul') return !!md.meta.parameters.neerslag;
   if (key === 'cumzon') return !!md.meta.parameters.zon;
   if (key === 'radar') return !!(md.meta.parameters.radar || md.meta.parameters.neerslag);
@@ -2379,7 +2382,10 @@ function renderPanelActive(pIdx) {
       if(!Number.isFinite(aa)||!Number.isFinite(bb)||!Number.isFinite(cc)){
         pix[pi]=200;pix[pi+1]=210;pix[pi+2]=220;pix[pi+3]=255;continue;
       }
-      if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
+      if (activeVar === 'significant') {
+        var weather=VierluikSignificant.sample(pd,stepIdx,lat,lon);
+        c=weather.kind==='regen'?boundaryColor(Math.max(.1,VierluikCore.sample(pd.fields.neerslag,stepIdx,lat,lon,0,'nearest')),NEERSLAG_MM_LEVELS,NEERSLAG_MM_COLORS):weather.color;
+      } else if (activeVar === 'bewolking' || activeVar === 'bewolking_totaal') {
         if(pdNComp<3)continue;
         c=activeVar==='bewolking_totaal'?octaColor(totaleBewolking(aa,bb,cc)):cloudCompositeColor(aa,bb,cc);
       } else if(activeVar==='wolkenlagen'){
@@ -2766,6 +2772,21 @@ function loadParamIfNeeded(modelId, key) {
   key = veldSleutel(modelId, key);
   var md = modelData[modelId];
   if (!md || !md.meta || !md.meta.parameters) return Promise.resolve();
+  if (key === 'significant') {
+    if (md.paramData.significant) return Promise.resolve();
+    if (md.significantPending) return md.significantPending;
+    markeerLaden(md, key, true);
+    md.significantPending = Promise.all(VierluikSignificant.required.concat(VierluikSignificant.optional).map(function(k){return loadParamIfNeeded(modelId,k);})).then(function(){
+      var fields=Object.assign({},md.paramData);
+      fields.bewolking=fields.bewolking_hr||fields.bewolking;
+      markeerLaden(md,key,false);
+      if (VierluikSignificant.required.every(function(k){return !!fields[k];})) {
+        md.paramData.significant=Object.assign({},fields.neerslag,{fields:fields});
+      } else { md.paramFout.significant=true; }
+      requestRender();
+    }).finally(function(){delete md.significantPending;});
+    return md.significantPending;
+  }
   if (key === 'radar' && !md.meta.parameters['radar']) {
     if (md.paramData['radar']) return Promise.resolve();
     return loadParamIfNeeded(modelId, 'neerslag').then(function() {
@@ -3001,7 +3022,22 @@ function buildLegendHTMLActive(pIdx) {
     bar='<span style="width:100%;background:linear-gradient(to right,'+stops.join(',')+')"></span>';
     ticks.forEach(function(t){labels+=tick(t,(t-min)/range*100);});
   }
-  if(activeVar==='neerslag'){
+  if(activeVar==='significant'){
+    title='Significant weer · modelindicatie';
+    var sc=VierluikSignificant.colors;
+    discrete([sc.helder,sc.bewolkt,sc.regen,sc.sneeuw,sc.natteSneeuw,sc.ijzel,sc.onweer,sc.mist],['helder','wolken','regen','sneeuw','nat','ijzel','onweer','mist']);
+    note='Bewolking met uurneerslag; regen gebruikt de neerslagkleuren. Natte sneeuw, sneeuw en ijzel zijn afgeleid; onweer uit neerslag en CAPE, geen onweerskans. Mist: zicht <500 m.';
+    if(pd&&pd.fields){
+      var f=pd.fields,missing=[];
+      if(!f.temp||!f.dauwpunt)missing.push('neerslagtype');
+      if(!f.profiel)missing.push('ijzel');
+      if(!f.cape)missing.push('onweer');
+      if(!f.zicht)missing.push('mist');
+      if(missing.length)note+=' Geen indicatie voor: '+missing.join(', ')+'.';
+      var capeInfo=md.meta.parameters.cape;
+      if(f.cape&&capeInfo&&capeInfo.source)note+=' CAPE-bron: '+capeInfo.source+'.';
+    }
+  }else if(activeVar==='neerslag'){
     title='Neerslag · mm in het voorgaande uur';discrete(NEERSLAG_MM_COLORS,NEERSLAG_MM_LEVELS.map(String),2,true);note='Bronrooster zonder ruimtelijke middeling. Wit: <0,03 mm; kaartgetallen vanaf 0,2 mm.';
   }else if(activeVar==='radar'){
     title='Modelradar · dBZ (klasse vanaf)';discrete(RADAR_DBZ_COLORS,RADAR_DBZ_LEVELS.map(String),4,true);
@@ -3256,6 +3292,7 @@ function sampleComponent(pd, stepIdx, lat, lon, comp) {
 }
 
 function hoverValue(pd, stepIdx, lat, lon) {
+  if (activeVar === 'significant') return VierluikSignificant.sample(pd,stepIdx,lat,lon).label;
   var a = sampleComponent(pd, stepIdx, lat, lon, 0);
   if (a === null) return null;
   if (activeVar === 'wind' || activeVar === 'windstoten') {
@@ -3290,7 +3327,7 @@ function hoverValue(pd, stepIdx, lat, lon) {
 }
 
 var VAR_NAMES = {
-  neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
+  significant:'Significant weer', neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
   dauwpunt:'Dauwpunt', wind:'Wind', windstoten:'Windstoten', druk:'Luchtdruk',
   zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal (geschat)',
   wolkenlagen:'Wolkenlagen',
