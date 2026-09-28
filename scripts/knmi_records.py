@@ -7,6 +7,7 @@ Stap 3: Sla op als records_debilt.json
 """
 
 import argparse, os, json, requests, calendar
+from pathlib import Path
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 
@@ -38,54 +39,10 @@ def drempel(verwacht):
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 # ── Configuratie ──────────────────────────────────────────────────────────────
-STATIONS = [
-    # Hoofdstations
-    ("260",  "De Bilt"),
-    ("344",  "Rotterdam"),
-    ("330",  "Hoek van Holland"),
-    ("235",  "Den Helder"),
-    ("240",  "Schiphol"),
-    ("270",  "Leeuwarden"),
-    ("280",  "Eelde"),
-    ("290",  "Twenthe"),
-    ("310",  "Vlissingen"),
-    ("380",  "Maastricht"),
-    # Overige stations
-    ("210",  "Valkenburg"),
-    ("215",  "Voorschoten"),
-    ("225",  "IJmuiden"),
-    ("229",  "Texelhors"),
-    ("242",  "Vlieland"),
-    ("248",  "Wijdenes"),
-    ("249",  "Berkhout"),
-    ("251",  "Terschelling"),
-    ("257",  "Wijk aan Zee"),
-    ("258",  "Houtribdijk"),
-    ("265",  "Soesterberg"),
-    ("267",  "Stavoren"),
-    ("269",  "Lelystad"),
-    ("273",  "Marknesse"),
-    ("275",  "Deelen"),
-    ("277",  "Lauwersoog"),
-    ("278",  "Heino"),
-    ("279",  "Hoogeveen"),
-    ("283",  "Hupsel"),
-    ("286",  "Nieuw Beerta"),
-    ("319",  "Westdorpe"),
-    ("323",  "Wilhelminadorp"),
-    ("324",  "Stavenisse"),
-    ("331",  "Tholen"),
-    ("340",  "Woensdrecht"),
-    ("343",  "Rotterdam Geulhaven"),
-    ("348",  "Cabauw"),
-    ("350",  "Gilze-Rijen"),
-    ("356",  "Herwijnen"),
-    ("370",  "Eindhoven"),
-    ("375",  "Volkel"),
-    ("377",  "Ell"),
-    ("391",  "Arcen"),
-    ("392",  "Horst"),
-]
+# The same registry drives imports, national rankings and map records.
+_registry = json.loads((Path(__file__).resolve().parents[1] / "record-stations.json").read_text())
+STATIONS = [(entry["source"], name) for name, entry in _registry["stations"].items()
+            if entry["import"]["type"] == "knmi_daily"]
 
 _cli = argparse.ArgumentParser(description="Genereer KNMI-recordbestanden")
 _cli.add_argument(
@@ -946,17 +903,14 @@ for STATION, STATION_NAAM in STATIONS:
     print(f"  Alltime TN: {tn_rec[0] if tn_rec else 'geen data'}")
 
 # ── Historische CSV-stations (gedigitaliseerde data) ──────────────────────────
-CSV_STATIONS = [
-    ("20",  "Winterswijk",  "Winterswijk_20_G_18940101_19701209.csv"),
-]
+CSV_STATIONS = [(entry["source"], name, entry["import"]["file"])
+                for name, entry in _registry["stations"].items()
+                if entry["import"]["type"] == "historical_csv"]
 
 # Elk station: (nr, naam, [(csv_bestand, csv_code), ...])
-EPEN_STATIONS = [
-    ("130", "Epen",         [("Epen_OostMaarland.csv", "130_H"),
-                              ("Epen_OostMaarlant_feb_1990.csv", "168_H")]),
-    ("170", "Oost-Maarland",[("Epen_OostMaarland.csv", "170_H"),
-                              ("Epen_OostMaarlant_feb_1990.csv", "170_H")]),
-]
+EPEN_STATIONS = [(entry["source"], name, entry["import"]["files"])
+                 for name, entry in _registry["stations"].items()
+                 if entry["import"]["type"] == "epen_csv"]
 
 def parse_historisch_csv(pad):
     """

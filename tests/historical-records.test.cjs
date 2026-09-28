@@ -10,6 +10,7 @@ if (!fixtures) for (const name of fs.readdirSync(dataRoot)) {
 const sources=[]; const sourceSlots={}; let observations=0;
 for (const id of [...registry.sources,'nl_extreme']) {
  const file=fixtures ? fixtures[id] : JSON.parse(fs.readFileSync(path.join(dataRoot,`records_${id}.json`)));
+ core.normalize(file,id,registry);
  core.validate(file,registry);
  if(id!=='nl_extreme') assert.equal(registry.stations[file.station].source,id,`Verkeerde stationskoppeling ${id}`);
  const source={station:file.station,dag:file.dag}; sources.push(source);

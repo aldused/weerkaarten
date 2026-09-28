@@ -8,10 +8,12 @@ de Winterswijk-waarnemingen stonden al correct in beide bronbestanden.
 
 ## Herstel
 
-`record-stations.json` is het gedeelde register van alle 81 meetplaatsen in het
-beschikbare recordarchief: 47 stationreeksen plus 34 aanvullende historische
+`record-stations.json` is het gedeelde register van alle 82 meetplaatsen in het
+beschikbare recordarchief: 47 stationreeksen plus 35 aanvullende historische
 plaatsen. Dit is een inventaris van de beschikbare bronnen, geen claim dat elke
 vroegere KNMI-meetlocatie een volledig gedigitaliseerde reeks heeft.
+
+Ook de dagelijkse KNMI-import gebruikt dit register, inclusief de CSV-bronnen voor opgeheven stations. Historisch Rotterdam en station 344 (Rotterdam Airport) hebben afzonderlijke identiteiten; de oude naam van station 344 wordt alleen binnen die bron genormaliseerd.
 
 Beide recordpagina’s gebruiken hetzelfde register en dezelfde nationale
 berekening. Elke categorie wordt op hoog/laag samengevoegd; de meetplaats van de
@@ -31,7 +33,7 @@ build af vóór de atomische vervanging van de bestaande feed.
 - 6.476.398 ranglijstregels uit de beschikbare bronnen gecontroleerd op stationskoppeling.
 - 510 extremere landelijke waarden dan de oude 41-stationselectie: onder meer
   147 `tx_hoog` en 140 `tn_laag`.
-- Kaartfeed: 12.615 naar 15.486 station-dagrecords; 61 naar 64 kaartmeetplaatsen.
+- Kaartfeed: 12.615 naar 15.488 station-dagrecords; 61 naar 65 kaartmeetplaatsen.
 - 29 september: Winterswijk, 28,0 °C, 29-09-1934.
 - 30 september: Winterswijk, 26,7 °C, 30-09-1895.
 - Beide ranglijsten ook zichtbaar gecontroleerd in de browser.

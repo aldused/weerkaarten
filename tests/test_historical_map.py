@@ -1,8 +1,19 @@
 """Offline end-to-end checks of atomic map updates and retired stations."""
-import gzip,json,shutil,subprocess,sys,tempfile,unittest
+import ast,gzip,json,shutil,subprocess,sys,tempfile,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 class HistoricalMap(unittest.TestCase):
+ def test_import_uses_complete_registry(self):
+  namespace={'json':json,'Path':Path,'__file__':str(ROOT/'scripts/knmi_records.py')}
+  tree=ast.parse((ROOT/'scripts/knmi_records.py').read_text())
+  for node in tree.body:
+   if isinstance(node,ast.Assign) and any(isinstance(t,ast.Name) and t.id in ['_registry','STATIONS','CSV_STATIONS','EPEN_STATIONS'] for t in node.targets):
+    exec(compile(ast.Module(body=[node],type_ignores=[]),'import-config','exec'),namespace)
+  imported=namespace['STATIONS']+namespace['CSV_STATIONS']+namespace['EPEN_STATIONS']
+  self.assertEqual({s[0] for s in imported},set(namespace['_registry']['sources']))
+  self.assertEqual(len(imported),47)
+  self.assertIn(('344','Rotterdam Airport'),namespace['STATIONS'])
+  self.assertIn('20',{s[0] for s in namespace['CSV_STATIONS']})
  def test_preserve_history_and_reject_partial_update(self):
   with tempfile.TemporaryDirectory() as directory:
    root=Path(directory);(root/'scripts').mkdir()
