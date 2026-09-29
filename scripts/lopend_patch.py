@@ -6,6 +6,7 @@
 #   • haalt de actuele etmaalwaarden tot nu (EDR 10-min): tx (running max),
 #     tn (running min), tg (gem), rh (som), sq (zonuren), fg (gem wind)
 #   • patcht het 'vandaag'-record in maanddetail[jaar][maand].dagen
+#   • ververst de dagrecordranglijsten voor TX, TN en TG
 #   • herberekent tussenstand puur uit maanddetail (geen CSV/ZIP nodig)
 #   • print de gewijzigde bestandsnamen op stdout (wrapper uploadt naar R2)
 #
@@ -150,6 +151,35 @@ def patch_vandaag(records, vals, today):
             rec[k] = nieuw; changed = True
     return changed
 
+def patch_dagtemperaturen(records, vals, today):
+    """Herbouw de temperatuurranglijsten voor vandaag, inclusief lopende waarden.
+
+    Maanddetail bewaart ook de historische nummer 26: die moet terug kunnen
+    komen wanneer een voorlopig record later op de dag uit de top 25 valt.
+    Bestaande historische aanvullingen blijven behouden.
+    """
+    iso = today.isoformat()
+    month, day = str(today.month), str(today.day)
+    target = records.setdefault("dag", {}).setdefault(month, {}).setdefault(day, {})
+    for param in ("tx", "tn", "tg"):
+        value = vals.get(param)
+        if value is None:
+            continue  # Een API-gat mag de laatst gemeten waarde niet wissen.
+        for direction in ("hoog", "laag"):
+            key = f"{param}_{direction}"
+            by_date = {row[1]: row for row in target.get(key, []) if row[1] != iso}
+            for year, months in records.get("maanddetail", {}).items():
+                for row in months.get(month, {}).get("dagen", []):
+                    if row.get("dag") == today.day and row.get(param) is not None:
+                        stamp = f"{int(year):04d}-{today.month:02d}-{today.day:02d}"
+                        if stamp != iso:
+                            by_date.setdefault(stamp, [row[param], stamp])
+            by_date[iso] = [value, iso]
+            sign = -1 if direction == "hoog" else 1
+            target[key] = sorted(by_date.values(), key=lambda r: (sign*r[0], r[1]))[:25]
+    records["lopend"] = iso
+    records["tm"] = max(records.get("tm") or iso, iso)
+
 # Patcher-eigen state: laatst NAAR R2 GEÜPLOADE waarden per station. We gaten
 # hierop (niet op de lokale file): de zware ochtendrun muteert de lokale files
 # ook, waardoor een diff-tegen-lokaal de R2-versie stale kan laten. Tegen onze
@@ -195,9 +225,11 @@ def main():
         vandaag_alle[str(int(stn))] = vals   # vóór de state-skip: dump altijd compleet
         key = str(stn)
         sig = [daysig] + [vals.get(k) for k in ("tx", "tn", "tg", "rh", "sq", "fg")]
-        if state.get(key) == sig:
+        if state.get(key) == sig and records.get("lopend_dagrecords_version") == 1:
             continue  # niets nieuws sinds onze laatste R2-upload
         patch_vandaag(records, vals, today)
+        patch_dagtemperaturen(records, vals, today)
+        records["lopend_dagrecords_version"] = 1
         recompute_tussenstand(records, today)
         records["lopend_bijgewerkt"] = datetime.now().strftime("%Y-%m-%d %H:%M")
         tmp = path + ".tmp"

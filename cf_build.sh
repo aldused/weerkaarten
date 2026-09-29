@@ -5,6 +5,7 @@ set -euo pipefail
 
 node tests/historical-records.test.cjs --fixture
 python3 -m unittest discover -s tests -p test_historical_map.py
+python3 -m unittest discover -s tests -p test_lopend_dagrecords.py
 
 OUTPUT="${CF_PAGES_OUTPUT_DIR:-_deploy}"
 STAGE="${OUTPUT}.tmp"
