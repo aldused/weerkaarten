@@ -54,7 +54,8 @@ for(const name of ['records_debilt','dagrecords_jaar']) {
   }
  }
  const debilt=sources.find(s=>s.station==='De Bilt');
- assert.equal(ctx.drjVerzamel(debilt,2024).length,25,`${name}: De Bilt 2024`);
+ // The fixed snapshot has 25; live counts may legitimately fall after new records.
+ if(fixtures) assert.equal(ctx.drjVerzamel(debilt,2024).length,25,`${name}: De Bilt 2024`);
  const regression={dag:{2:{21:{tn_hoog:[[9,'2025-02-21'],[8.7,'2024-02-21'],[8.6,'2016-02-21']]}},3:{3:{tx_hoog:[[16.7,'2026-03-03'],[15.9,'2024-03-03'],[14.4,'1930-03-03']]}},4:{1:{tx_hoog:[[20,'2025-04-01'],[20,'2024-04-01'],[19,'2020-04-01']],tn_laag:[[-5,'2025-04-01'],[-5,'2024-04-01'],[-4,'2020-04-01']]}}}};
  assert.equal(ctx.drjVerzamel(regression,2024).length,2);
  assert.equal(ctx.drjVerzamel(regression,2025).length,1);
