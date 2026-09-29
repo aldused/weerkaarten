@@ -12,11 +12,18 @@ STAGE="${OUTPUT}.tmp"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-for f in *.html *.json *.js *.css *.svg *.ico *.png *.txt *.webp *.ttf; do
+for f in *.html *.json *.js *.css *.svg *.ico *.png *.txt *.webp *.ttf *.pdf; do
   [ -f "$f" ] || continue
   size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
   if [ "$size" -lt 26214400 ]; then
     cp "$f" "$STAGE/"
+  fi
+done
+
+# De kaartenstudio laadt gedeelde modules en de bestaande editorbundels.
+for asset_dir in editor-src regio-editor-assets landelijke-editor-assets; do
+  if [ -d "$asset_dir" ]; then
+    cp -R "$asset_dir" "$STAGE/$asset_dir"
   fi
 done
 

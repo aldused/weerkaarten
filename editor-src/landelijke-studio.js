@@ -1,3 +1,4 @@
+import {useRegioVoice} from './regio-voice.js?v=20260929-voice1';
 // Presentation layer for the existing editor. All weather, drawing, history and
 // export callbacks stay owned by the original React application.
 import {createWeatherIcon, WEATHER_ICON_LABELS, WEATHER_ICON_BASICS} from './weather-icons.js?v=20260913-rain1';
@@ -76,6 +77,7 @@ export function createLandelijkeStudio(React) {
     const [tab, setTab] = React.useState(regional ? 'add' : 'data');
     const [zoom, setZoom] = React.useState(false);
     const panelRef = React.useRef(null);
+    const voice = useRegioVoice(React, regional && !!actions.voiceAdd, actions, props.voicePlaces);
     React.useEffect(() => { if (selected) setTab('edit'); }, [selected?.id]);
     React.useEffect(() => { if (!selected && tab === 'edit') setTab(regional ? 'add' : 'data'); }, [selected, tab, regional]);
     React.useEffect(() => { if (panelRef.current) panelRef.current.scrollTop = 0; }, [tab, selected?.id]);
@@ -148,6 +150,15 @@ export function createLandelijkeStudio(React) {
           h(Button, { icon: 'save', onClick: actions.save, title: 'Kaartindeling opslaan om later verder te werken' }, 'Opslaan'),
           h(Button, { icon: 'download', onClick: actions.download, className: 'studio-primary' }, 'Download PNG'))),
       h('aside', { className: 'studio-sidebar', 'aria-label': 'Kaartinstellingen' },
+        regional && actions.voiceAdd && h('section', {className:'studio-voice', 'aria-label':'Spraakbediening'},
+          h(Button, {onClick:voice.toggle, disabled:!voice.supported, 'aria-label':voice.state.status==='idle'?'Microfoon aan':'Stop luisteren', 'aria-pressed':voice.state.status!=='idle', className:voice.state.status!=='idle'?'studio-voice-active':''}, voice.state.status==='idle'?'🎙 Microfoon aan':'■ Stop luisteren'),
+          h('p', {role:'status','aria-live':'polite'}, voice.supported?voice.state.message:'Spraakherkenning ontbreekt. Gebruik Chrome of Edge, of typ je opdracht.'),
+          voice.state.transcript && h('p', {className:'studio-voice-transcript'}, 'Gehoord: ',voice.state.transcript),
+          h('a', {href:'./regiokaart-spraakkaart.pdf',target:'_blank',rel:'noopener',download:'regiokaart-spraakkaart.pdf'}, 'Symbolen en spraakopdrachten (PDF)'),
+          h('details', null, h('summary', null, 'Voorbeelden en tekstinvoer'),
+            h('p', null, '16 graden · min drie graden · zon met sluierbewolking · maandag · Rotterdam. Andere plaats? Zeg “plaats” gevolgd door de naam. Elk onderdeel verschijnt op een vaste klaarzetplek op de kaart; sleep het zelf naar zijn plek.'),
+            h('p', null, 'Je browser kan audio naar zijn spraakdienst sturen. De microfoon blijft aan tot je stopt of deze pagina verlaat.'),
+            h('form', {onSubmit:voice.submit},h('input',{value:voice.draft,onChange:e=>voice.setDraft(e.target.value),'aria-label':'Gesproken opdracht corrigeren',placeholder:'Bijvoorbeeld: 16 graden',maxLength:100}),h(Button,{type:'submit'},'Toevoegen')))),
         h('div', { className: 'studio-tabs', role: 'tablist', 'aria-label': 'Editoronderdelen' }, tabs.map((t, index) => h('button', {
           key: t.id, type: 'button', role: 'tab', id: `studio-tab-${t.id}`, 'aria-selected': tab === t.id, 'aria-controls': 'studio-panel', tabIndex: tab === t.id ? 0 : -1,
           onClick: () => selectTab(t.id), onKeyDown: event => {
