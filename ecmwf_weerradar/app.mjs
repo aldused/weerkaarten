@@ -728,7 +728,21 @@ $('previous').addEventListener('click',()=>{stopPlayback();requestFrame(wanted-1
 $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);});
 let sliderTimer;
 $('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
-document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{stopPlayback();if(mode===b.dataset.mode)return;mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.mode===mode)));requestFrame(wanted,true);}));
+let isobarsBeforeSignificant=false;
+function setMode(nextMode){
+  if(mode===nextMode)return;
+  if(mode==='significant')$('isobars').checked=isobarsBeforeSignificant;
+  if(nextMode==='significant'){
+    isobarsBeforeSignificant=$('isobars').checked;
+    $('isobars').checked=true;
+  }
+  mode=nextMode;
+}
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{
+  stopPlayback();if(mode===b.dataset.mode)return;setMode(b.dataset.mode);
+  document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.mode===mode)));
+  requestFrame(wanted,true);
+}));
 function syncTempLevels(frame,modelId){
  const upper=MODEL_CONFIG[modelId]?.upperAir,select=$('temperature-select');
  for(const option of select.options)option.disabled=!!option.value&&option.value!=='2m'&&!upper;
@@ -736,10 +750,10 @@ function syncTempLevels(frame,modelId){
  const u=new URL(location.href);if(frame.mode==='temperature'&&tempLevel!=='2m')u.searchParams.set('level',tempLevel);else u.searchParams.delete('level');history.replaceState(null,'',u);
 }
 $('temperature-select').addEventListener('change',()=>{
- const value=$('temperature-select').value;if(!value)return;stopPlayback();mode='temperature';tempLevel=value;requestFrame(wanted,true);
+ const value=$('temperature-select').value;if(!value)return;stopPlayback();setMode('temperature');tempLevel=value;requestFrame(wanted,true);
 });
 $('precipitation-select').addEventListener('change',()=>{
- const value=$('precipitation-select').value;if(!value)return;stopPlayback();mode=value;requestFrame(wanted,true);
+ const value=$('precipitation-select').value;if(!value)return;stopPlayback();setMode(value);requestFrame(wanted,true);
 });
 ['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('isobars').addEventListener('change',()=>{stopPlayback();queueCityDraw();requestFrame(wanted,true);});
