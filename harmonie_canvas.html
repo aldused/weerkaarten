@@ -793,7 +793,7 @@ body.scroll-mode { overflow: hidden; }
   .panel-selector::before { padding: 0 8px; font-size: 9px; }
 }
 </style>
-<link rel="stylesheet" href="modelkaarten.css?v=20260914-1">
+<link rel="stylesheet" href="modelkaarten.css?v=20260929-menu">
 <script>
   // Theme sync: lees uit localStorage, luister naar wijzigingen vanuit sidebar
   (function(){
@@ -828,37 +828,8 @@ body.scroll-mode { overflow: hidden; }
 </div>
 
 <div id="data-notice" role="status" hidden></div>
-<div id="weerkaarten-workspace">
-  <div id="main-content">
-    <div id="kaart-col">
-      <div class="kaart-grid layout-1" id="kaart-grid"></div>
-      <div class="status" id="status" role="status">Laden...</div>
-    </div>
-  </div>
-
   <aside id="control-sidebar" aria-label="Bediening weerkaarten">
-    <section class="control-section time-section" aria-labelledby="time-heading">
-      <h2 id="time-heading">Geldigheidstijd <span>Nederlandse tijd</span></h2>
-    <div class="slider-wrap">
-      <button class="btn-stap" id="btn-vorige" aria-label="Vorig tijdstip">&#9664;</button>
-      <button class="btn-play" id="btn-play" aria-label="Animatie afspelen">&#9654;</button>
-      <button class="btn-stap" id="btn-volgende" aria-label="Volgend tijdstip">&#9654;</button>
-      <span class="uur-label" id="uur-label">+1h</span>
-      <span class="tijd-label" id="tijd-label">--</span>
-      <input type="range" id="slider" aria-label="Geldigheidstijd" min="1" max="60" value="1" step="1">
-
-    </div>
-
-      <button class="btn" id="btn-nu">Naar nu</button>
-    <div id="dag-knoppen" style="background:white;padding:4px 16px;display:flex;gap:4px;border-bottom:1px solid #dde6f0;flex-wrap:wrap;align-items:center;">
-      <span class="toolbar-label">Dag:</span>
-      <!-- Wordt dynamisch gevuld -->
-    </div>
-
-      <label class="sr-only" for="tijd-select">Kies het tijdstip op deze dag</label>
-      <select id="tijd-select"></select>
-    </section>
-    <details class="control-section"><summary>Kaart & plaats</summary>
+    <details class="control-section" open><summary>Kaart & plaats</summary>
     <div id="zoom-bar" style="background:white;padding:4px 16px;display:flex;gap:8px;border-bottom:1px solid #dde6f0;align-items:center;">
       <span class="toolbar-label">Zoom:</span>
       <div class="zoom-groep">
@@ -904,11 +875,44 @@ body.scroll-mode { overflow: hidden; }
       <p id="model-info"></p>
       <p class="control-hint">Kies een kaartlaag boven de kaart. Klik op de kaart voor een tijdreeks. Pijltjestoetsen: ander uur; spatie: animatie.</p>
     </details>
+    <button class="btn" type="button" data-wl-fullscreen aria-pressed="false"><span class="wl-fs-icon">⛶</span> <span class="wl-fs-label">Beeldvullend</span></button>
     <div class="tick-rail-wrap" id="tick-rail-wrap" hidden><div id="tick-rail"></div></div>
     <div id="uur-sidebar" hidden></div>
 
   </aside>
+<div id="weerkaarten-workspace">
+  <div id="main-content">
+    <div id="kaart-col">
+      <div class="kaart-grid layout-1" id="kaart-grid"></div>
+      <div class="status" id="status" role="status">Laden...</div>
+    </div>
+  </div>
+
+
 </div>
+
+    <section class="control-section time-section" aria-labelledby="time-heading">
+      <h2 id="time-heading">Geldigheidstijd <span>Nederlandse tijd</span></h2>
+    <div class="slider-wrap">
+      <button class="btn-stap" id="btn-vorige" aria-label="Vorig tijdstip">&#9664;</button>
+      <button class="btn-play" id="btn-play" aria-label="Animatie afspelen">&#9654;</button>
+      <button class="btn-stap" id="btn-volgende" aria-label="Volgend tijdstip">&#9654;</button>
+      <span class="uur-label" id="uur-label">+1h</span>
+      <span class="tijd-label" id="tijd-label">--</span>
+      <input type="range" id="slider" aria-label="Geldigheidstijd" min="1" max="60" value="1" step="1">
+
+    </div>
+
+      <button class="btn" id="btn-nu">Naar nu</button>
+    <div id="dag-knoppen" style="background:white;padding:4px 16px;display:flex;gap:4px;border-bottom:1px solid #dde6f0;flex-wrap:wrap;align-items:center;">
+      <span class="toolbar-label">Dag:</span>
+      <!-- Wordt dynamisch gevuld -->
+    </div>
+
+      <label class="sr-only" for="tijd-select">Kies het tijdstip op deze dag</label>
+      <select id="tijd-select" hidden></select>
+      <div id="tijd-uren" role="group" aria-label="Kies een tijdstip"></div>
+    </section>
 
 <!-- Film-modal: tijdrange selectie voor mp4-export -->
 <div id="film-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:300; justify-content:center; align-items:center;">
@@ -954,6 +958,7 @@ body.scroll-mode { overflow: hidden; }
 
 <script src="benelux_grens_coords.js"></script>
 <script src="vierluik-core.js?v=20260914-1"></script>
+<script src="weerkaart_fullscreen.js?v=20260924-fs1"></script>
 <script src="modelkaarten-core.js?v=20260914-1"></script>
 <script>
 (function() {
@@ -4244,8 +4249,24 @@ body.scroll-mode { overflow: hidden; }
       });select.dataset.day=day;
     }
     select.value=step;
+    var hours=document.getElementById("tijd-uren");
+    if(hours.dataset.day!==day){
+      hours.replaceChildren();
+      Array.from(select.options).forEach(function(opt){
+        var button=document.createElement("button");
+        button.type="button";button.className="btn";button.dataset.step=opt.value;
+        button.textContent=opt.textContent;
+        button.addEventListener("click",function(){stopSpelen();updateAlle(Number(this.dataset.step));});
+        hours.appendChild(button);
+      });
+      hours.dataset.day=day;
+    }
+    hours.querySelectorAll("button").forEach(function(button){
+      var active=Number(button.dataset.step)===step;
+      button.classList.toggle("actief",active);button.setAttribute("aria-pressed",String(active));
+    });
   }
-  function bouwUurSidebar() { document.getElementById("tijd-select").dataset.day=""; }
+  function bouwUurSidebar() { document.getElementById("tijd-select").dataset.day=""; document.getElementById("tijd-uren").dataset.day=""; }
   function updateUurSidebarActief() {}
   document.getElementById("tijd-select").addEventListener("change",function(){stopSpelen();updateAlle(Number(this.value));});
   document.getElementById("btn-nu").addEventListener("click",function(){stopSpelen();if(meta)updateAlle(C.nearest(meta,Date.now()));});
