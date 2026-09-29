@@ -1077,6 +1077,8 @@ def verwerk_station(code, naam):
 
     hourly = {
         "tijden": tijden_lokaal,
+        "tijden_utc": [dt.strftime("%Y-%m-%dT%H:%M:%SZ") for dt in times],
+        "wwM": [_ri(v) for v in wwm_raw],
         "TTT":  [_r1(v) for v in ttt],
         "Td":   [_r1(v) for v in td],
         "RV":   rv_uurlijks,
@@ -1105,6 +1107,7 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
     vandaag = datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
     alle_data = {}       # {naam: {date: {param: val}}}
     alle_uurlijks = {}   # {naam: {tijden:[], TTT:[], ...}}
+    alle_runs = {}
     laatste_run = None   # IssueTime van het model
 
     for code, naam in stations:
@@ -1114,6 +1117,8 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
             alle_data[naam] = station_data
         if station_hourly:
             alle_uurlijks[naam] = station_hourly
+        if issue_time is not None:
+            alle_runs[naam] = issue_time.strftime("%Y-%m-%dT%H:%M:%SZ")
         if issue_time is not None and (laatste_run is None or issue_time > laatste_run):
             laatste_run = issue_time
 
@@ -1224,6 +1229,7 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
             "run": run_str,
             "stations": coords,
             "data": uur_out,
+            "runs": alle_runs,
         }
         with open(uurlijks_file, "w") as f:
             json.dump(uurlijks_output, f, ensure_ascii=False)

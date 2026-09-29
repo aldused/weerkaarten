@@ -1,10 +1,11 @@
 const assert=require('node:assert/strict'),f=require('../pluim_mist.js');
-const data={hourly:{time:['2026-09-29T00:00','2026-09-29T03:00','2026-09-29T06:00']},hourly_units:{}};
-[0,49,50,249,250,499,500,999,1000,null,-1,NaN].forEach((v,i)=>{let k=i?'visibility_member'+String(i).padStart(2,'0'):'visibility';data.hourly[k]=[v,null,i<2?10000:null];data.hourly_units[k]='m';});
-const p=f.probabilities(data,-Infinity,Infinity);
-assert.equal(p[0].n,9);assert.deepEqual(p[0].chances,[800/9,600/9,400/9,200/9]);assert.deepEqual(p[1].chances,[null,null,null,null]);assert.deepEqual(p[2].chances,[0,0,0,0]);
-const single={hourly:{time:['2026-09-29T00:00'],visibility:[0]},hourly_units:{visibility:'m'}};assert.deepEqual(f.probabilities(single,0,Infinity)[0].chances,[null,null,null,null]);
-single.hourly_units.visibility='km';assert.equal(f.probabilities(single,0,Infinity)[0].n,0);
-assert.equal(f.probabilities(data,Date.UTC(2026,8,29,3),Date.UTC(2026,8,29,3)).length,1);
-const svg=f.render([{name:'ECMWF'},{name:'GFS',data},{name:'ICON'}],'<Bilt>',Date.UTC(2026,8,29),7);assert(!svg.includes('NaN'));assert(svg.includes('&lt;Bilt&gt;'));assert(svg.includes('data-fog-bar="50"'));assert.equal((svg.match(/Geen zicht per ensemblelid/g)||[]).length,2);
-console.log('PASS fog probability boundaries, missing data, units, member counts, time filtering and SVG');
+const now=Date.UTC(2026,8,29,8),feed={run:'2026-09-29T03:00:00Z',data:{'De Bilt':{tijden_utc:['2026-09-29T09:00:00Z','2026-09-29T10:00:00Z','2026-09-29T11:00:00Z','2026-09-29T12:00:00Z','2026-09-29T13:00:00Z'],wwM:[0,63,null,-1,101]}}};
+const rows=f.points(feed,'De Bilt',now,now+86400000,now);assert.deepEqual(rows.map(p=>p.probability),[0,63,null,null,null]);assert.equal(f.dailyMax(rows)[0].value,63);
+assert.throws(()=>f.points({...feed,run:'2026-09-26T03:00:00Z'},'De Bilt',now,now+86400000,now),/te oud/);
+assert.throws(()=>f.points({...feed,runs:{'De Bilt':'2026-09-26T03:00:00Z'}},'De Bilt',now,now+86400000,now),/te oud/);
+assert.throws(()=>f.points(feed,'Ontbreekt',now,now+86400000,now),/ontbreken/);
+assert.deepEqual(f.points(feed,'De Bilt',now+3600000,now+7200000,now).map(p=>p.probability),[63]);
+assert.equal(f.dailyMax([{time:Date.UTC(2026,8,29,22),probability:50}])[0].key,'2026-09-29'); // hour ending at midnight belongs to preceding day
+const dst={run:'2026-10-25T00:00:00Z',data:{X:{tijden_utc:['2026-10-25T00:00:00Z','2026-10-25T01:00:00Z'],wwM:[20,40]}}};assert.equal(f.points(dst,'X',Date.UTC(2026,9,24,23),Date.UTC(2026,9,25,2),Date.UTC(2026,9,25,2)).length,2);
+const svg=f.render(rows,'<Bilt>',feed.run,now,now+86400000);assert(svg.includes('&lt;Bilt&gt;'));assert(!svg.includes('NaN'));assert.equal((svg.match(/data-fog-bar=/g)||[]).length,1);assert.equal((svg.match(/data-fog-zero=/g)||[]).length,1);assert(svg.includes('niet de kans'));assert(!svg.includes('GFS'));
+console.log('PASS direct DWD percentages, missing/invalid values, stale station runs, UTC/DST, hourly windows, daily maximum and SVG');
