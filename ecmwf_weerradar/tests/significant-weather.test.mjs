@@ -44,3 +44,13 @@ test('categorical rendering skips unused interpolation',()=>{
  const pixels=renderTile({variable:'significant_weather',data:{values:new Float32Array([5])},grid},{z:6,x:33,y:21});
  assert.ok(pixels.some(v=>v!==0));
 });
+
+
+test('clear significant weather leaves the shared basemap unchanged',()=>{
+ const grid={getNearestNeighborValue:()=>1};
+ const pixels=renderTile({variable:'significant_weather',data:{values:new Float32Array([1])},grid},{z:6,x:33,y:21});
+ assert.ok(pixels.every(v=>v===0),'clear tiles must not tint or hide the land/sea background');
+ const legend=exportLegends({mode:'significant',variables:['significant_weather']});
+ assert.equal(legend[0].color,'transparent');assert.match(legend[0].label,/kaartondergrond/);
+ for(const state of SIGNIFICANT_WEATHER.filter(s=>s.code!==1))assert.ok(state.color[3]>0,'weather phenomena remain visible');
+});

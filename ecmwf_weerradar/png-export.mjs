@@ -11,7 +11,7 @@ export function pngFilename(model,iso,mode){
 }
 export function exportLegends({mode,variables,cloudVisible,hasBase}){
   const rows=[];
-  if(mode==='significant'){for(const s of SIGNIFICANT_WEATHER)rows.push({label:s.label,color:`rgb(${s.color.slice(0,3)})`});rows.push({label:'Windkracht in Bft · pijl: richting waarin de wind waait',color:'#ffffff'});}
+  if(mode==='significant'){for(const s of SIGNIFICANT_WEATHER)rows.push({label:s.label,color:s.color[3]===0?'transparent':`rgb(${s.color.slice(0,3)})`});rows.push({label:'Windkracht in Bft · pijl: richting waarin de wind waait',color:'#ffffff'});}
   else if(mode==='rain_total'||mode==='snow_total'){const snow=mode==='snow_total',legend=totalLegend(snow);rows.push({label:snow?'Cumulatieve sneeuw · mm smeltwater':'Cumulatieve neerslag · mm',labels:legend.labels,stops:legend.stops});}
   else if(mode==='temperature'){
     const variable=variables.find(v=>v.startsWith('temperature_'))||'temperature_2m',legend=temperatureLegend(variable);

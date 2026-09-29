@@ -3,7 +3,8 @@ import {weatherSymbol} from './weather-symbols.mjs';
 import {cloudIconType} from './cloud-style.mjs';
 import {fogBand} from './fog-style.mjs';
 export const SIGNIFICANT_WEATHER=[
- {code:1,type:'clear',label:'Helder',color:[250,220,80,75]},
+ // Helder weer laat dezelfde land-/zeeondergrond zien als de andere kaarten.
+ {code:1,type:'clear',label:'Helder · kaartondergrond',color:[0,0,0,0]},
  {code:2,type:'filtered',label:'Halfbewolkt',color:[205,214,210,105]},
  {code:3,type:'overcast',label:'Bewolkt',color:[155,166,178,155]},
  {code:4,type:'fog',label:'Mist',color:[218,208,150,200]},

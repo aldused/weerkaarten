@@ -76,7 +76,7 @@ function syncCloudButtons(){
 if(matchMedia('(max-width:700px)').matches)$('map-legend-panel').open=false;
 const modeNames={weather:'Weer',significant:'Significant weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind',rain_total:'Cumulatieve neerslag',snow_total:'Cumulatieve sneeuw'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
-for(const item of SIGNIFICANT_WEATHER){const label=document.createElement('span'),swatch=document.createElement('i');swatch.style.background=`rgb(${item.color.slice(0,3)})`;label.append(swatch,item.label);$('significant-key').append(label);}
+for(const item of SIGNIFICANT_WEATHER){const label=document.createElement('span'),swatch=document.createElement('i');swatch.style.background=item.color[3]===0?'transparent':`rgb(${item.color.slice(0,3)})`;label.append(swatch,item.label);$('significant-key').append(label);}
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
 
 let meta, frames = [], current = null, wanted = 0, revision = 0, rendering = false, refreshing = false;
