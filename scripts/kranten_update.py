@@ -135,7 +135,12 @@ def edition_matches_source(source, edition):
         return False
     published = edition.get('source', {}).get('paragraphs')
     usable = [source['paragraphs'][i] for i in source['eligibleParagraphs']]
-    return published == usable
+    if not isinstance(published, list) or len(published) != len(usable):
+        return False
+    # Het lidwoord in 'rond de 21 graden' verandert de verwachting niet.
+    def normalized(paragraph):
+        return re.sub(r'\brond de (?=\d)', 'rond ', paragraph, flags=re.I)
+    return all(normalized(old) == normalized(new) for old, new in zip(published, usable))
 
 
 def validate(candidate, source, now):

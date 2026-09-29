@@ -48,6 +48,11 @@ class KrantenTest(unittest.TestCase):
         changed_metadata = copy.deepcopy(self.source)
         changed_metadata['publishedAt'] = '2026-09-12T08:30:00+02:00'
         self.assertTrue(k.edition_matches_source(changed_metadata, edition))
+        changed_wording = copy.deepcopy(self.source)
+        changed_wording['paragraphs'][1] = changed_wording['paragraphs'][1].replace('20 graden', 'rond de 20 graden')
+        edition_with_rond = {'publicationDate': self.source['publicationDate'],
+                             'source': {'paragraphs': [usable[0].replace('20 graden', 'rond 20 graden'), usable[1]]}}
+        self.assertTrue(k.edition_matches_source(changed_wording, edition_with_rond))
         changed_forecast = copy.deepcopy(self.source)
         changed_forecast['paragraphs'][1] = 'Morgen is het 18 graden.'
         self.assertFalse(k.edition_matches_source(changed_forecast, edition))
