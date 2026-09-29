@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),f=require('../pluim_mist.js');
+const data={hourly:{time:['2026-09-29T00:00','2026-09-29T03:00','2026-09-29T06:00']},hourly_units:{}};
+[0,49,50,249,250,499,500,999,1000,null,-1,NaN].forEach((v,i)=>{let k=i?'visibility_member'+String(i).padStart(2,'0'):'visibility';data.hourly[k]=[v,null,i<2?10000:null];data.hourly_units[k]='m';});
+const p=f.probabilities(data,-Infinity,Infinity);
+assert.equal(p[0].n,9);assert.deepEqual(p[0].chances,[800/9,600/9,400/9,200/9]);assert.deepEqual(p[1].chances,[null,null,null,null]);assert.deepEqual(p[2].chances,[0,0,0,0]);
+const single={hourly:{time:['2026-09-29T00:00'],visibility:[0]},hourly_units:{visibility:'m'}};assert.deepEqual(f.probabilities(single,0,Infinity)[0].chances,[null,null,null,null]);
+single.hourly_units.visibility='km';assert.equal(f.probabilities(single,0,Infinity)[0].n,0);
+assert.equal(f.probabilities(data,Date.UTC(2026,8,29,3),Date.UTC(2026,8,29,3)).length,1);
+const svg=f.render([{name:'ECMWF'},{name:'GFS',data},{name:'ICON'}],'<Bilt>',Date.UTC(2026,8,29),7);assert(!svg.includes('NaN'));assert(svg.includes('&lt;Bilt&gt;'));assert(svg.includes('data-fog-bar="50"'));assert.equal((svg.match(/Geen zicht per ensemblelid/g)||[]).length,2);
+console.log('PASS fog probability boundaries, missing data, units, member counts, time filtering and SVG');

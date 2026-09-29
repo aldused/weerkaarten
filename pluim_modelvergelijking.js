@@ -107,8 +107,8 @@ function render(results,view,place,start,days,cloudMode='layers'){
 const api={beaufort,bftSpeed,runLabel,metaSignature,median,series,limits,path,render,utc};
 if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}root.PlumeComparison=api;
 const cloudMode='overview';
-const $=id=>document.getElementById(id),view=['wind','winter','wolken'].includes(new URLSearchParams(location.search).get('view'))?new URLSearchParams(location.search).get('view'):'weer';
-document.title=(view==='wolken'?'Bewolking':view==='winter'?'Winterpluim':view==='wind'?'Wind & windstoten':'Temperatuur & neerslag')+' · Weerlab';
+const $=id=>document.getElementById(id),view=['wind','winter','wolken','mist'].includes(new URLSearchParams(location.search).get('view'))?new URLSearchParams(location.search).get('view'):'weer';
+document.title=(view==='mist'?'Mistkans':view==='wolken'?'Bewolking':view==='winter'?'Winterpluim':view==='wind'?'Wind & windstoten':'Temperatuur & neerslag')+' · Weerlab';
 document.querySelector(`[data-view="${view}"]`).setAttribute('aria-current','page');
 let place={name:'De Bilt',lat:52.101,lon:5.178},generation=0,controller,svg='',searchGeneration=0;
 try{const p=JSON.parse(sessionStorage.getItem('weerlab-modelpluim-plaats'));if(p&&finite(p.lat)&&finite(p.lon)&&typeof p.name==='string')place=p;}catch{}
@@ -128,8 +128,8 @@ async function modelData(m,base,fields,days,signal){
   const data=await json(base+'?'+q,signal);if(!data.hourly?.time?.length)throw new Error('Geen gegevens ontvangen');
   const after=before?await modelMetadata(m,signal).catch(()=>null):null;
   if(before&&after&&metaSignature(before)!==metaSignature(after))continue;
-  const available=fields.split(',').some(field=>Object.entries(data.hourly).some(([key,values])=>(key===field||key.startsWith(field+'_member'))&&Array.isArray(values)&&values.some(finite)));
-  return {...m,data,available,error:available?null:(view==='wolken'?'Wolkenlagen niet beschikbaar in deze ensemblebron':'Geen geldige modelwaarden beschikbaar'),runLabel:before&&after?runLabel(after):'Runtijd niet beschikbaar'};
+  const available=view==='mist'?root.FogPlume.probabilities(data,-Infinity,Infinity).some(p=>p.n>=2):fields.split(',').some(field=>Object.entries(data.hourly).some(([key,values])=>(key===field||key.startsWith(field+'_member'))&&Array.isArray(values)&&values.some(finite)));
+  return {...m,data,available,error:available?null:(view==='mist'?'Geen zicht per ensemblelid beschikbaar in deze bron':view==='wolken'?'Wolkenlagen niet beschikbaar in deze ensemblebron':'Geen geldige modelwaarden beschikbaar'),runLabel:before&&after?runLabel(after):'Runtijd niet beschikbaar'};
  }
  throw new Error('Modelrun wisselt; vernieuw de pluim');
 }
@@ -139,14 +139,14 @@ async function load(){
  const days=Number($('days').value),start=Math.floor(Date.now()/DAY)*DAY;
  try{
   const base=location.protocol==='https:'&&/(^|\.)weerlab\.nl$/.test(location.hostname)?'https://om.weerlab.nl/om/ensemble':'https://ensemble-api.open-meteo.com/v1/ensemble';
-  const fields=view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
+  const fields=view==='mist'?'visibility':view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
   const results=await Promise.all((view==='winter'?MODELS.slice(0,1):MODELS).map(async m=>{
    try{return await modelData(m,base,view==='wolken'&&m.id==='ecmwf_ifs025'?'cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low':fields,days,signal);}catch(e){return {...m,error:e.name==='AbortError'?'Laden duurde te lang':e.message};}
   }));
   if(id!==generation)return;
-  svg=view==='winter'?root.WinterPlume.render(results[0],place.name,start,days):render(results,view,place.name,start,days,cloudMode);$('chart').innerHTML=svg;
+  svg=view==='mist'?root.FogPlume.render(results,place.name,start,days):view==='winter'?root.WinterPlume.render(results[0],place.name,start,days):render(results,view,place.name,start,days,cloudMode);$('chart').innerHTML=svg;
   const missing=results.filter(r=>r.error).map(r=>r.name),loaded=results.filter(r=>r.data&&r.available!==false).length;
-  $('status').textContent=`${place.name} · ${loaded}/${view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+(view==='wolken'?'. Geen wolkenlaaggegevens ontvangen.':'. Probeer Vernieuw.'):''}`;
+  $('status').textContent=`${place.name} · ${loaded}/${view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+(view==='mist'?'. Geen ensemblezicht beschikbaar; geen kans berekend.':view==='wolken'?'. Geen wolkenlaaggegevens ontvangen.':'. Probeer Vernieuw.'):''}`;
   $('download').disabled=!loaded;
  }finally{clearTimeout(timeout);if(id===generation)document.querySelector('.comparison-card').setAttribute('aria-busy','false');}
 }
@@ -165,5 +165,6 @@ $('download').onclick=async()=>{
 };
 if(view==='wolken')document.querySelector('.comparison-note').textContent='Links: totale bewolking van ECMWF, GFS en ICON. Rechts: hoge, middelbare en lage bewolking van ECMWF. Staafjes tonen de mediaan; lijntjes de middelste 80% van de ensembleleden (P10–P90). Alle assen 0–100%.';
 if(view==='winter')document.querySelector('.comparison-note').textContent='Etmalen 00–24 UTC. Sneeuw vanaf 0,1 cm; sneeuwdek vanaf 1 cm op enig moment. Vorstkansen tellen koudere temperaturen mee. Alleen volledige etmalen en geldige leden tellen mee.';
+if(view==='mist'){document.querySelector('.comparison-card').setAttribute('aria-label','Mistkansen ECMWF, GFS en ICON');document.querySelector('.comparison-note').textContent='Zicht < 1000, < 500, < 250 en < 50 meter. Per tijdstip tellen alleen geldige zichtwaarden in meters mee (minimaal twee leden). De vier kansen overlappen en worden over elkaar getekend. Dit zijn ruwe zichtkansen, geen gevalideerde mistkansen: ook neerslag kan het zicht beperken. ECMWF en ICON leveren momenteel geen ensemblezicht via deze bron.';}
 syncPlace();load();
 })(typeof window==='undefined'?globalThis:window);
