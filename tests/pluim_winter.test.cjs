@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),w=require('../pluim_winter.js'),p=require('../pluim_modelvergelijking.js');
+const start=Date.UTC(2026,0,1),time=Array.from({length:49},(_,i)=>new Date(start+i*36e5).toISOString());
+const h={time,temperature_2m:Array(49).fill(-7),temperature_2m_member01:Array(49).fill(2),snowfall:Array(49).fill(.1),snowfall_member01:Array(49).fill(0),snow_depth:Array(49).fill(.02),snow_depth_member01:Array(49).fill(0)};
+const daily={time:['2026-01-01','2026-01-02'],temperature_2m_min:[-7,-7],temperature_2m_max:[-1,-1],temperature_2m_min_member01:[1,1],temperature_2m_max_member01:[4,4]};
+let data={hourly:h,daily},result=w.probabilities(data,start,2);assert.deepEqual(result.map(r=>r.points[0].chance),[50,50,50,50,50,0]);
+h.snow_depth_member01[3]=null;result=w.probabilities(data,start,2);assert.equal(result[1].points[0].count,1);assert.equal(result[1].points[0].chance,100);
+assert.equal(w.probabilities({},start,1)[0].points[0].chance,null);
+assert(p.runLabel([{meta:{last_run_initialisation_time:start/1000}}]).includes('01-01 00:00 UTC'));
+assert(p.runLabel([{label:'Global',meta:{last_run_initialisation_time:start/1000}},{label:'EU',meta:{last_run_initialisation_time:start/1000+21600}}]).includes('EU 01-01 06:00 UTC'));
+assert.equal(p.runLabel(null),'Runtijd niet beschikbaar');
+const a=p.series({hourly:{time:time.slice(0,2),wind_speed_10m:[12.1,12.9]}},'wind_speed_10m',start,start+36e5);assert.deepEqual(a.members[0],[12.1,12.9]);
+console.log('PASS winterkansen, ontbrekende leden, dagelijkse min/max, verschillende bronruns en ongeronde wind');
+assert(w.render({data,runLabel:'Run 00 UTC'},'De Bilt',start,2).includes('&lt; 0 °C'));
+console.log('PASS XML-veilige temperatuurgrenzen voor PNG-export');

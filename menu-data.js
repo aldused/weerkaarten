@@ -575,7 +575,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "pluim-ens6",
-    "name": "Weerpluim · 6 elementen",
+    "name": "ECMWF overzicht",
     "description": "Temperatuur, wind en neerslag voor één plaats",
     "category": "verwachting",
     "type": "pluim",
@@ -609,7 +609,7 @@ const MENU_PRODUCTS = [
   {
     "id": "pluim-ens6plus",
     "src": "pluim_6_plus.html?lock=1&station=De%20Bilt&v=20260923-pluimnav",
-    "name": "Weerpluim · extra elementen",
+    "name": "ECMWF uitgebreid",
     "description": "Bewolking, windrichting en extra modelvelden",
     "category": "verwachting",
     "type": "pluim",
@@ -640,6 +640,104 @@ const MENU_PRODUCTS = [
     "keywords": "Ensemble 6-pluim + Met cumulatieve neerslag ENS-pluim Temperatuur Neerslag De Bilt Groningen Twente Maastricht Den Helder / Schiphol Vlissingen Zes plaatsen",
     "restricted": false
   },
+{
+  "id": "pluim-modellenweer",
+  "name": "Modelvergelijking · temperatuur & neerslag",
+  "description": "ECMWF, GFS en ICON: temperatuur en neerslag in één zesluik",
+  "category": "verwachting",
+  "type": "pluim",
+  "section": "Pluimen",
+  "icon": "pluim6",
+  "href": "index.html#pluim-modellenweer",
+  "thumbnail": null,
+  "facets": {
+    "bron": [
+      "ens"
+    ],
+    "grootheid": [
+      "temp",
+      "neerslag"
+    ],
+    "vorm": [
+      "6"
+    ]
+  },
+  "keywords": "ECMWF GFS ICON ensemble modelvergelijking zesluik",
+  "restricted": false
+},
+{
+  "id": "pluim-modellenwind",
+  "name": "Modelvergelijking · wind & windstoten",
+  "description": "ECMWF, GFS en ICON: wind in Bft en windstoten in km/u",
+  "category": "verwachting",
+  "type": "pluim",
+  "section": "Pluimen",
+  "icon": "pluim6",
+  "href": "index.html#pluim-modellenwind",
+  "thumbnail": null,
+  "facets": {
+    "bron": [
+      "ens"
+    ],
+    "grootheid": [
+      "wind"
+    ],
+    "vorm": [
+      "6"
+    ]
+  },
+  "keywords": "ECMWF GFS ICON ensemble modelvergelijking zesluik",
+  "restricted": false
+},
+{
+  "id": "pluim-winter",
+  "name": "Winterpluim",
+  "description": "ECMWF-kansen op sneeuw, sneeuwdek, ijsdagen en vorst",
+  "category": "verwachting",
+  "type": "pluim",
+  "section": "Pluimen",
+  "icon": "pluim6",
+  "href": "index.html#pluim-winter",
+  "thumbnail": null,
+  "facets": {
+    "bron": [
+      "ens"
+    ],
+    "grootheid": [
+      "temp",
+      "neerslag"
+    ],
+    "vorm": [
+      "6"
+    ]
+  },
+  "keywords": "winter sneeuw sneeuwdek ijsdag vorst ensemble kans",
+  "restricted": false
+},
+{
+  "id": "pluim-wolken",
+  "name": "Bewolking · modelvergelijking",
+  "description": "Hoge, middelbare en lage bewolking van ECMWF, GFS en ICON",
+  "category": "verwachting",
+  "type": "pluim",
+  "section": "Pluimen",
+  "icon": "pluim6",
+  "href": "index.html#pluim-wolken",
+  "thumbnail": null,
+  "facets": {
+    "bron": [
+      "ens"
+    ],
+    "grootheid": [
+      "bewolking"
+    ],
+    "vorm": [
+      "9"
+    ]
+  },
+  "keywords": "wolken hoge middelbare lage bewolking sluierbewolking ECMWF GFS ICON ensemble",
+  "restricted": false
+},
   {
     "id": "pluim-trend",
     "name": "Hoe verandert de verwachting?",

@@ -1,9 +1,13 @@
-// Wissel tussen "Ensemble 6 pluim" en "Ensemble 6 pluim+" — zelfde plek en
+// Wissel tussen "ECMWF overzicht" en "ECMWF uitgebreid" — zelfde plek en
 // uitstraling op beide pagina's (rechts in de .wb-nav van weerbewaking_return.js).
 (function(){
   const PAGINAS = [
-    {key:'ens6',     hash:'#pluim-ens6',     file:'weerbewaking_pluim.html', label:'Ensemble 6 pluim'},
-    {key:'ens6plus', hash:'#pluim-ens6plus', file:'pluim_6_plus.html',       label:'Ensemble 6 pluim+'},
+    {key:'ens6',     hash:'#pluim-ens6',     file:'weerbewaking_pluim.html', label:'ECMWF overzicht'},
+    {key:'ens6plus', hash:'#pluim-ens6plus', file:'pluim_6_plus.html',       label:'ECMWF uitgebreid'},
+    {key:'modellenweer',hash:'#pluim-modellenweer',file:'pluim_modelvergelijking.html',view:'weer',label:'Temperatuur & neerslag'},
+    {key:'modellenwind',hash:'#pluim-modellenwind',file:'pluim_modelvergelijking.html',view:'wind',label:'Wind & windstoten'},
+    {key:'winter',hash:'#pluim-winter',file:'pluim_modelvergelijking.html',view:'winter',label:'Winterpluim'},
+    {key:'wolken',hash:'#pluim-wolken',file:'pluim_modelvergelijking.html',view:'wolken',label:'Bewolking'},
   ];
   const huidig = PAGINAS.find(p => location.pathname.endsWith('/' + p.file) || location.pathname.endsWith(p.file)) || PAGINAS[0];
 
@@ -23,6 +27,7 @@
     // Los geopend: zelfde plaats meenemen; runkeuze is per pagina verschillend.
     const params = new URLSearchParams(location.search);
     params.delete('run');
+    if(doel.view)params.set('view',doel.view);else params.delete('view');
     location.assign(doel.file + (params.toString() ? '?' + params : ''));
   }
 
@@ -34,7 +39,7 @@
     wissel.setAttribute('aria-label', 'Kies pluim');
     for (const pagina of PAGINAS) {
       const a = document.createElement('a');
-      a.href = pagina.file;
+      a.href = pagina.file+(pagina.view?'?view='+pagina.view:'');
       a.textContent = pagina.label;
       if (pagina === huidig) a.setAttribute('aria-current', 'page');
       else a.addEventListener('click', event => open(pagina, event));
@@ -59,7 +64,7 @@
   const css = document.createElement('style');
   css.textContent = `
     .wb-nav{flex-wrap:wrap}
-    .pluim-wissel{display:inline-flex;margin-left:auto;border:1px solid #c5d3e3;border-radius:999px;background:#f0f4f8;padding:2px}
+    .pluim-wissel{display:inline-flex;flex-wrap:wrap;margin-left:auto;border:1px solid #c5d3e3;border-radius:999px;background:#f0f4f8;padding:2px}
     .pluim-wissel a{padding:5px 12px!important;border-radius:999px;font-size:12px;font-weight:700;color:#2a4a70!important;text-decoration:none!important;white-space:nowrap}
     .pluim-wissel a:hover{background:#e4f1ff}
     .pluim-wissel a[aria-current=page]{background:#003366;color:#fff!important;cursor:default}
