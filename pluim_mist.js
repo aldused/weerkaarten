@@ -34,7 +34,7 @@ function render(rows,station,run,start,end){
  s+=axes(top,h);[0,25,50,75,100].forEach(p=>{s+=`<path d="M${left},${y(p)}h${w}" stroke="#d9e2ea"/><text x="${left-12}" y="${y(p)+4}" text-anchor="end" font-size="13" fill="#50687a">${p}%</text>`;});
  const bw=w*HOUR/(end-start)*.86;
  for(const p of rows){if(!finite(p.probability))continue;const xx=x(p.time-HOUR/2),title=label(p.time-HOUR)+' – '+clock(p.time)+': '+p.probability+'% kans op mist';s+=p.probability>0?`<rect data-fog-bar="wwM" x="${xx-bw/2}" y="${y(p.probability)}" width="${bw}" height="${h*p.probability/100}" fill="#437ca5"><title>${esc(title)}</title></rect>`:`<circle data-fog-zero="true" cx="${xx}" cy="${y(0)}" r="1.5" fill="#437ca5"><title>${esc(title)}</title></circle>`;}
- s+='<text x="38" y="489" font-size="18" font-weight="700" fill="#20394d">Verwacht zicht (meters)</text><text x="38" y="511" font-size="12" fill="#617789">Logaritmische schaal · zicht ≤50 m onderaan, ≥10.000 m bovenaan · beweeg over een punt voor de exacte waarde en tijd</text>';
+ s+='<text x="38" y="489" font-size="18" font-weight="700" fill="#20394d">Verwacht zicht (meters)</text><text x="38" y="511" font-size="12" fill="#617789">Logaritmische schaal · zicht ≤50 m onderaan, ≥10.000 m bovenaan · beweeg over de grafiek of tik erop voor de exacte waarden en tijd</text>';
  s+=axes(vtop,vh);
  s+=`<rect x="${left}" y="${vy(1000)}" width="${w}" height="${vtop+vh-vy(1000)}" fill="#ead9b6" opacity=".28"/>`;
  [50,250,500,1000,5000,10000].forEach(v=>{s+=`<path d="M${left},${vy(v)}h${w}" stroke="${v<=1000?'#c7a677':'#d9e2ea'}" stroke-dasharray="${v<=1000?'4 4':'none'}"/><text x="${left-12}" y="${vy(v)+4}" text-anchor="end" font-size="12" fill="#50687a">${v===50?'≤50':v===10000?'≥10.000':v.toLocaleString('nl-NL')} m</text>`;});
@@ -47,23 +47,51 @@ function render(rows,station,run,start,end){
  days.forEach((d,i)=>{const xx=38+i*cw;s+=`<rect x="${xx}" y="858" width="${cw-8}" height="105" rx="7" fill="#edf4f8"/><text x="${xx+12}" y="879" font-size="12" fill="#50687a">${esc(format(d.time,{weekday:'short',day:'2-digit',month:'2-digit'}))}</text><text x="${xx+12}" y="911" font-size="25" font-weight="700" fill="#24577a">${d.value===null?'—':d.value+'%'}</text><text x="${xx+12}" y="936" font-size="13" fill="#98551e">Zicht: ${d.minVisibility===null?'—':d.minVisibility.toLocaleString('nl-NL')+' m'}</text><text x="${xx+12}" y="952" font-size="10" fill="#617789">${d.visibilityTime===null?'':clock(d.visibilityTime)+' uur (laagste zicht)'}</text>`;});
  return s+'<text x="38" y="989" font-size="12" fill="#617789">De uurkans geldt voor het uur vóór het tijdstip; zicht is de verwachting óp het tijdstip. Piek in mistkans en laagste zicht kunnen verschillen.</text><text x="38" y="1013" font-size="12" fill="#617789">Zicht is geen kans op een zichtgrens en geen zichtverwachting uitsluitend tijdens mist. Ook neerslag kan het zicht beperken.</text><text x="38" y="1037" font-size="12" fill="#617789">Bron: DWD MOSMIX-L (wwM en VV) · dagpercentage = hoogste getoonde uurkans, geen etmaalkans · ontbrekende waarden blijven leeg · Weerlab</text></svg>';
 }
+function attachHover(chart,rows,start,end,tooltip){
+ const svg=chart.querySelector('svg'),ns='http://www.w3.org/2000/svg';if(!svg||!rows.length)return;
+ const label=t=>format(t,{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+ function hide(){tooltip.hidden=true;line.setAttribute('visibility','hidden');}
+ const line=document.createElementNS(ns,'line');for(const [k,v] of Object.entries({y1:170,y2:755,stroke:'#20394d','stroke-width':1,'stroke-dasharray':'4 4','pointer-events':'none',visibility:'hidden'}))line.setAttribute(k,v);svg.append(line);
+ function show(index,element,event){
+  const p=rows[index];if(!p)return hide();
+  const text=`${label(p.time)} uur (Nederlandse tijd)\nMistkans ${format(p.time-HOUR,{hour:'2-digit',minute:'2-digit'})}–${format(p.time,{hour:'2-digit',minute:'2-digit'})}: ${finite(p.probability)?p.probability+'%':'niet beschikbaar'}\nVerwacht zicht om ${format(p.time,{hour:'2-digit',minute:'2-digit'})}: ${finite(p.visibility)?p.visibility.toLocaleString('nl-NL')+' meter':'niet beschikbaar'}`;
+  tooltip.textContent=text;tooltip.hidden=false;element.setAttribute('aria-valuenow',index);element.setAttribute('aria-valuetext',text);element.dataset.index=index;
+  const x=100+(p.time-start)/(end-start)*1420;line.setAttribute('x1',x);line.setAttribute('x2',x);line.setAttribute('visibility','visible');
+  const bounds=element.getBoundingClientRect(),width=tooltip.offsetWidth,height=tooltip.offsetHeight;
+  const px=event?.clientX??bounds.left+Math.min(bounds.width,100),py=event?.clientY??bounds.top;
+  tooltip.style.left=Math.max(8,Math.min(innerWidth-width-8,px+14))+'px';tooltip.style.top=Math.max(8,Math.min(innerHeight-height-8,py-height-14))+'px';
+ }
+ for(const [kind,y,height] of [['kans',170,240],['zicht',525,230]]){
+  const hit=document.createElementNS(ns,'rect');
+  for(const [k,v] of Object.entries({x:100,y,width:1420,height,fill:'transparent','pointer-events':'all',tabindex:0,role:'slider','aria-label':`${kind==='kans'?'Mistkans':'Verwacht zicht'} per uur; gebruik pijltjestoetsen`,'aria-valuemin':0,'aria-valuemax':rows.length-1,'aria-valuenow':0,'data-fog-hover':kind}))hit.setAttribute(k,v);
+  hit.style.cursor='crosshair';svg.append(hit);
+  function pointer(event){const matrix=svg.getScreenCTM();if(!matrix)return;const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()),hour=(p.x-100)/1420*(end-start)/HOUR;
+   const time=start+(kind==='kans'?Math.floor(hour)+1:Math.round(hour))*HOUR,index=rows.findIndex(r=>r.time===time);show(index,hit,event);
+  }
+  hit.addEventListener('pointermove',pointer);hit.addEventListener('pointerdown',pointer);hit.addEventListener('pointerleave',event=>{if(event.pointerType!=='touch')hide();});hit.addEventListener('blur',hide);hit.addEventListener('focus',()=>show(Number(hit.dataset.index||0),hit));
+  hit.addEventListener('keydown',event=>{let i=Number(hit.dataset.index||0);if(event.key==='Escape'){hide();return;}if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();i=event.key==='Home'?0:event.key==='End'?rows.length-1:i+(event.key==='ArrowLeft'?-1:1);show(Math.max(0,Math.min(rows.length-1,i)),hit);});
+ }
+ chart.onscroll=hide;
+}
+
 function init(){
  const $=id=>document.getElementById(id);let feed=null,station='De Bilt',svg='',controller,generation=0;
+ const tooltip=document.createElement('div');tooltip.id='fog-tooltip';tooltip.setAttribute('role','tooltip');tooltip.hidden=true;tooltip.style.cssText='position:fixed;z-index:10000;pointer-events:none;white-space:pre-line;max-width:calc(100vw - 16px);padding:10px 14px;border-radius:7px;background:#173e59;color:#fff;font:13px/1.6 Arial,sans-serif;box-shadow:0 3px 16px #0003';document.body.append(tooltip);
  document.title='Mistkans · DWD-MOSMIX · Weerlab';document.querySelector('[data-view="mist"]').setAttribute('aria-current','page');
  document.querySelector('.comparison-card').setAttribute('aria-label','DWD-MOSMIX mistkans en verwacht zicht');document.querySelector('.comparison-note').innerHTML='Officiële DWD-mistkansen en verwacht zicht in meters, rechtstreeks overgenomen uit MOSMIX-L. Alle tijden zijn Nederlands; het zicht is geen afzonderlijke kans op dichte mist. Dit product combineert statistisch nabewerkte ICON- en ECMWF-verwachtingen; het zijn geen afzonderlijke ensemblepluimen. <a href="https://www.dwd.de/EN/ourservices/met_application_mosmix/met_application_mosmix.html" target="_blank" rel="noopener">Over DWD-MOSMIX</a>.';
  $('days').innerHTML='<option value="3">3 dagen</option><option value="7" selected>7 dagen</option><option value="10">10 dagen</option>';
  $('search').placeholder='Zoek MOSMIX-station';$('search').setAttribute('aria-label','Zoek MOSMIX-station');
  try{station=sessionStorage.getItem('weerlab-mist-station')||station;}catch{}
  function draw(){
-  svg='';$('download').disabled=true;$('chart').replaceChildren();
+  svg='';tooltip.hidden=true;$('download').disabled=true;$('chart').replaceChildren();
   if(!feed)return;
   try{const now=Date.now(),start=Math.floor(now/HOUR)*HOUR,end=start+Number($('days').value)*DAY,run=feed.runs?.[station]||feed.run,rows=points(feed,station,start,end,now);
    if(!rows.some(p=>finite(p.probability)))throw new Error('Geen geldige mistkansen voor deze periode.');
-   svg=render(rows,station,run,start,end);$('chart').innerHTML=svg;$('download').disabled=false;
+   svg=render(rows,station,run,start,end);$('chart').innerHTML=svg;attachHover($('chart'),rows,start,end,tooltip);$('download').disabled=false;
    $('status').textContent=`${station} · DWD-MOSMIX · run ${format(Date.parse(run),{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} Nederlandse tijd · ${rows.filter(p=>finite(p.probability)).length} uurkansen · maximaal ${Math.max(...rows.filter(p=>finite(p.probability)).map(p=>p.probability))}% in de getoonde periode`;
   }catch(e){$('status').textContent=e.message;$('chart').textContent='Geen mistverwachting beschikbaar. Ontbrekende gegevens zijn geen 0%.';}
  }
- async function load(){const id=++generation;controller?.abort();controller=new AbortController();const active=controller,timeout=setTimeout(()=>active.abort(),30000);$('status').textContent='Officiële DWD-mistkansen laden…';$('download').disabled=true;svg='';$('chart').replaceChildren();document.querySelector('.comparison-card').setAttribute('aria-busy','true');
+ async function load(){const id=++generation;controller?.abort();controller=new AbortController();const active=controller,timeout=setTimeout(()=>active.abort(),30000);tooltip.hidden=true;$('status').textContent='Officiële DWD-mistkansen laden…';$('download').disabled=true;svg='';$('chart').replaceChildren();document.querySelector('.comparison-card').setAttribute('aria-busy','true');
   try{const r=await fetch('https://data.weerlab.nl/mosmix_uurlijks_nl.json?mist='+Date.now(),{signal:controller.signal,cache:'no-store'});if(!r.ok)throw new Error('DWD-feed tijdelijk niet bereikbaar.');const d=await r.json();if(id!==generation)return;feed=d;
    const names=Object.keys(d.data||{}).sort((a,b)=>a.localeCompare(b,'nl'));if(!names.length)throw new Error('Geen MOSMIX-stations ontvangen.');if(!names.includes(station))station=names.includes('De Bilt')?'De Bilt':names[0];$('station').replaceChildren(...names.map(n=>new Option(n,n)));$('station').value=station;draw();
   }catch(e){if(id===generation){feed=null;$('status').textContent=e.name==='AbortError'?'Ophalen duurde te lang. Probeer Vernieuw.':e.message;$('chart').textContent='Geen actuele mistverwachting beschikbaar.';}}
