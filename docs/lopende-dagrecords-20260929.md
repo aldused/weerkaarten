@@ -32,3 +32,10 @@ patcher uit en test vervolgens de echte JavaScript-jaartellingen van beide
 pagina’s: nieuw record, terugvallend voorlopig record, evenaring, ontbrekende
 parameter en herstel van een uit de ranglijst gedrukte historische waarneming.
 Deze tests draaien ook in de websitebuild.
+
+Bij het verwerken van de actuele temperaturen werd het historische record van
+29 september ook daadwerkelijk overtroffen. De publicatiecontrole verifieert
+daarom dat de Winterswijk-waarneming in de bronnen behouden blijft en dat het
+landelijke maximum niet daalt; ze eist alleen in de vaste snapshot dat
+Winterswijk nog op de eerste plaats staat. Een echt nieuw record mag de upload
+niet blokkeren.

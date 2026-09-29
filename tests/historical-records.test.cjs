@@ -25,8 +25,12 @@ for (const id of [...registry.sources,'nl_extreme']) {
 }
 const national=core.national(sources);
 assert.equal(Object.values(national).reduce((n,m)=>n+Object.keys(m).length,0),366);
-for (const [day,value,date] of [['29',28,'1934-09-29'],['30',26.7,'1895-09-30']])
- assert(national[9][day].tx_hoog.some(r=>r[0]===value&&r[1]===date&&r[2]==='Winterswijk'));
+for (const [day,value,date] of [['29',28,'1934-09-29'],['30',26.7,'1895-09-30']]) {
+ // The historical observation must survive, but a live record may beat it.
+ assert(sources.some(s=>(s.dag?.[9]?.[day]?.tx_hoog||[]).some(r=>r[0]===value&&r[1]===date&&(r[2]||s.station)==='Winterswijk')));
+ assert(national[9][day].tx_hoog[0][0]>=value);
+ if(fixtures) assert(national[9][day].tx_hoog.some(r=>r[0]===value&&r[1]===date&&r[2]==='Winterswijk'));
+}
 // An unknown/retired station must survive aggregation; validation blocks publication until registered.
 const unknown={station:'Voormalig station',dag:{1:{1:{tn_laag:[[-30,'1900-01-01']],rh_hoog:[[200,'1900-01-01']]}}}};
 assert.equal(core.national([unknown])[1][1].tn_laag[0][2],'Voormalig station');
@@ -73,7 +77,7 @@ for(const name of ['records_debilt','dagrecords_jaar']) {
  const rankingEnd=html.indexOf('\n}',rankingStart)+2;
  if(name==='dagrecords_jaar') { const a=html.indexOf('function laatsteTxJaar('); vm.runInContext(html.slice(a,html.indexOf('\n}',a)+2),ctx); }
  vm.runInContext(html.slice(rankingStart,rankingEnd),ctx);
- for(const date of ['29','30']) { day=date; const ranking=ctx.samenvoegPeriodeRecords(ctx.multiData,'tx_hoog'); assert.equal(ranking[0][2],'Winterswijk'); assert.equal(ranking.filter(r=>r[1]===ranking[0][1]&&r[2]==='Winterswijk').length,1); }
+ for(const date of ['29','30']) { day=date; const ranking=ctx.samenvoegPeriodeRecords(ctx.multiData,'tx_hoog'); assert.equal(ranking[0][0],national[9][date].tx_hoog[0][0]); if(fixtures) assert.equal(ranking[0][2],'Winterswijk'); assert.equal(ranking.filter(r=>r[1]===ranking[0][1]&&r[2]===ranking[0][2]).length,1); }
  assert(html.includes('GROEPEN.alle.stns = registry.sources'));
  assert(html.includes('Historische recordbron ontbreekt'));
 }
