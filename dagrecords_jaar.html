@@ -2264,7 +2264,21 @@ const DRJ_SPEC = [
 ];
 const drjYr = s => parseInt(String(s).slice(0,4));
 
-// records die in 'jaar' op dat moment een dagrecord vestigden (volledige reeks top-10)
+// Bij een evenaring blijft het record bij de eerste datum waarop de beste
+// waarde werd gemeten. Alleen een strikt extremere waarde zet een nieuw record.
+function eersteBesteRecord(lst) {
+  if (!lst?.length) return null;
+  const beste = lst[0][0];
+  let eerste = null;
+  for (const rij of lst) {
+    if (rij?.[0] !== beste || !rij?.[1]) continue;
+    if (!eerste || String(rij[1]) < String(eerste[1])) eerste = rij;
+  }
+  return eerste;
+}
+
+// Huidige dagrecords die in 'jaar' voor het eerst werden gezet.
+// Een latere evenaring telt dus niet opnieuw als record.
 function drjVerzamel(stObj, jaar){
   const dag = stObj && stObj.dag; if(!dag) return [];
   const out=[];
@@ -2272,18 +2286,17 @@ function drjVerzamel(stObj, jaar){
     const P=dag[m][dd];
     for(const [key,label,kleur,hoog] of DRJ_SPEC){
       const lst=P[key]; if(!lst) continue;
-      for(const [v,date] of lst){
-        if(drjYr(date)!==jaar) continue;
-        let isrec=true, prevV=null, prevY=null;
-        for(const [v2,d2] of lst){
-          if(drjYr(d2)<jaar){
-            if(hoog? v2>=v : v2<=v){ isrec=false; break; }
-            if(prevV==null || (hoog? v2>prevV : v2<prevV)){ prevV=v2; prevY=drjYr(d2); }
-          }
+      if(!lst.length) continue;
+      const houder=eersteBesteRecord(lst);
+      if(!houder || drjYr(houder[1])!==jaar) continue;
+      const [v,date]=houder;
+      let prevV=null, prevY=null;
+      for(const [v2,d2] of lst){
+        if(drjYr(d2)<jaar && (prevV==null || (hoog? v2>prevV : v2<prevV))){
+          prevV=v2; prevY=drjYr(d2);
         }
-        if(isrec) out.push({datum:date,waarde:v,label,kleur,station:stObj.station,prevV,prevY});
-        break;
       }
+      out.push({datum:date,waarde:v,label,kleur,station:stObj.station,prevV,prevY});
     }
   }
   return out;
@@ -2293,15 +2306,14 @@ function drjVerzamel(stObj, jaar){
 const DRJ_MND=["","jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 const DRJ_MNDLANG=["","januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
 function drjIsRec(lst, jaar, hoog){
-  if(!lst) return null;
-  let mine=null;
-  for(const [v,y] of lst){ if(parseInt(String(y).slice(0,4))===jaar){ mine=v; break; } }
-  if(mine==null) return null;
+  if(!lst || !lst.length) return null;
+  const mineEntry=eersteBesteRecord(lst);
+  if(!mineEntry || drjYr(mineEntry[1])!==jaar) return null;
+  const mine=mineEntry[0];
   let prevV=null, prevY=null;
   for(const [v2,y2] of lst){
     const yy=parseInt(String(y2).slice(0,4));
     if(yy<jaar){
-      if(hoog? v2>=mine : v2<=mine) return null;
       if(prevV==null || (hoog? v2>prevV : v2<prevV)){ prevV=v2; prevY=yy; }
     }
   }
@@ -2327,12 +2339,10 @@ function drjTelPerJaar(stObj){
     const P=dag[m][dd];
     for(const [key,,,hoog] of DRJ_SPEC){
       const lst=P[key]; if(!lst) continue;
-      for(const [v,date] of lst){
-        const y=drjYr(date); if(y<DRJ_MINJAAR||y>DRJ_MAXJAAR) continue;
-        let isrec=true;
-        for(const [v2,d2] of lst){ if(drjYr(d2)<y && (hoog?v2>=v:v2<=v)){isrec=false;break;} }
-        if(isrec) t[y][hoog?"warm":"koud"]++;
-      }
+      if(!lst.length) continue;
+      const houder=eersteBesteRecord(lst);
+      const y=houder ? drjYr(houder[1]) : null;
+      if(y>=DRJ_MINJAAR && y<=DRJ_MAXJAAR) t[y][hoog?"warm":"koud"]++;
     }
   }
   return t;
@@ -2367,7 +2377,7 @@ function renderDagrecordsJaar(){
      <select id="drj-jaar" onchange="drjSetJaar(this.value)" style="font-size:1.05em;font-weight:600;padding:5px 12px;border-radius:9px;border:1px solid var(--rand);background:var(--kaart);color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif;">${opts.join("")}</select>
      <div style="font-size:0.92em;color:var(--tekst2);">${stnLabel} · <b style="color:var(--tekst);">${N}</b> dagrecord${N===1?"":"s"} in ${drjJaar}</div>
    </div>
-   <div style="font-size:0.82em;color:var(--tekst2);margin-bottom:18px;">Dagen waarop ${stnLabel} op dat moment de hoogste/laagste temperatuur ooit voor die datum neerzette. Klik een staaf om het jaar te kiezen.</div>
+   <div style="font-size:0.82em;color:var(--tekst2);margin-bottom:18px;">Huidige dagrecords die ${stnLabel} in dit jaar als eerste heeft gezet. Inmiddels verbroken records en latere evenaringen tellen niet mee. Klik een staaf om het jaar te kiezen.</div>
    ${isAlle?`<div style="font-size:0.78em;color:var(--tekst2);margin:-12px 0 18px;">Alleen langjarige reeksen (&ge;30 jaar): ${stations.length} stations${gefilterd?", "+gefilterd+" korte reeksen weggelaten":""}.</div>`:""}
    <div style="background:var(--kaart);border:1px solid var(--rand);border-radius:14px;padding:16px 18px 10px;margin-bottom:22px;">
      <div style="height:230px;position:relative;"><canvas id="drj-chart"></canvas></div>
@@ -2566,20 +2576,22 @@ let sortZon = { kolom: "totaal", richting: "desc" };
 
 function berekenRecordsPerJaar(d) {
   const warm = {}, koud = {}, regen = {}, wind = {};
+  const telHouders = (doel, lijst) => {
+    const houder = eersteBesteRecord(lijst);
+    if (!houder) return;
+    const jaar = String(houder[1]).slice(0, 4);
+    doel[jaar] = (doel[jaar] || 0) + 1;
+  };
   for (const [m, mdagen] of Object.entries(d.dag || {})) {
     for (const [dag, rec] of Object.entries(mdagen)) {
       for (const sleutel of ["tx_hoog","tn_hoog"]) {
-        const top = rec[sleutel];
-        if (top && top[0]) { const j = top[0][1].slice(0,4); warm[j] = (warm[j]||0)+1; }
+        telHouders(warm, rec[sleutel]);
       }
       for (const sleutel of ["tx_laag","tn_laag"]) {
-        const top = rec[sleutel];
-        if (top && top[0]) { const j = top[0][1].slice(0,4); koud[j] = (koud[j]||0)+1; }
+        telHouders(koud, rec[sleutel]);
       }
-      const rh_top = rec["rh_hoog"];
-      if (rh_top && rh_top[0]) { const j = rh_top[0][1].slice(0,4); regen[j] = (regen[j]||0)+1; }
-      const fx_top = rec["fx_hoog"];
-      if (fx_top && fx_top[0]) { const j = fx_top[0][1].slice(0,4); wind[j] = (wind[j]||0)+1; }
+      telHouders(regen, rec["rh_hoog"]);
+      telHouders(wind, rec["fx_hoog"]);
     }
   }
   return { warm, koud, regen, wind };
@@ -3139,7 +3151,18 @@ function vulKLTabel() {
 
 function showJaarDetail(jaar, type) {
   const warmItems = [], koudItems = [], regenItems = [], windItems = [];
-  const stnTxt = top => (top[0][2] ? ` · ${top[0][2]}` : "");
+  const recordVoorJaar = lijst => {
+    const houder = eersteBesteRecord(lijst);
+    if (!houder || String(houder[1]).slice(0, 4) !== jaar) return null;
+    const stations = [...new Set(
+      lijst
+        .filter(r => r?.[0] === houder[0] && r?.[1] === houder[1])
+        .map(r => r[2])
+        .filter(Boolean)
+    )];
+    return [houder[0], houder[1], stations.join(" / ")];
+  };
+  const stnTxt = record => (record?.[2] ? ` · ${record[2]}` : "");
 
   for (const [m, mdagen] of Object.entries(nationaalDagRecords() || data.dag || {})) {
     for (const [d, rec] of Object.entries(mdagen)) {
@@ -3150,29 +3173,29 @@ function showJaarDetail(jaar, type) {
         // Warmte
         if (type === "warmkoude") {
           for (const [sleutel, label, cls] of [["tx_hoog","TX","warm"],["tn_hoog","TN","warm"]]) {
-            const top = rec[sleutel];
-            if (top && top[0] && top[0][1].slice(0,4) === jaar) {
-              warmItems.push({ kalenderdag, label, waarde:`${top[0][0]>0?"+":""}${top[0][0].toFixed(1)}°C${stnTxt(top)}`, cls });
+            const record = recordVoorJaar(rec[sleutel]);
+            if (record) {
+              warmItems.push({ kalenderdag, label, waarde:`${record[0]>0?"+":""}${record[0].toFixed(1)}°C${stnTxt(record)}`, cls });
             }
           }
           for (const [sleutel, label, cls] of [["tx_laag","TX","koud"],["tn_laag","TN","koud"]]) {
-            const top = rec[sleutel];
-            if (top && top[0] && top[0][1].slice(0,4) === jaar) {
-              koudItems.push({ kalenderdag, label, waarde:`${top[0][0]>0?"+":""}${top[0][0].toFixed(1)}°C${stnTxt(top)}`, cls });
+            const record = recordVoorJaar(rec[sleutel]);
+            if (record) {
+              koudItems.push({ kalenderdag, label, waarde:`${record[0]>0?"+":""}${record[0].toFixed(1)}°C${stnTxt(record)}`, cls });
             }
           }
         }
         if (type === "neerslag") {
-          const top = rec["rh_hoog"];
-          if (top && top[0] && top[0][1].slice(0,4) === jaar) {
-            regenItems.push({ kalenderdag, label:"RH", waarde:`${top[0][0].toFixed(1)} mm${stnTxt(top)}`, cls:"regen" });
+          const record = recordVoorJaar(rec["rh_hoog"]);
+          if (record) {
+            regenItems.push({ kalenderdag, label:"RH", waarde:`${record[0].toFixed(1)} mm${stnTxt(record)}`, cls:"regen" });
           }
         }
         if (type === "wind") {
-          const top = rec["fx_hoog"];
-          if (top && top[0] && top[0][1].slice(0,4) === jaar) {
-            const kmh = Math.round(top[0][0]*3.6*10)/10;
-            windItems.push({ kalenderdag, label:"FX", waarde:`${kmh.toFixed(1)} km/u${stnTxt(top)}`, cls:"wind" });
+          const record = recordVoorJaar(rec["fx_hoog"]);
+          if (record) {
+            const kmh = Math.round(record[0]*3.6*10)/10;
+            windItems.push({ kalenderdag, label:"FX", waarde:`${kmh.toFixed(1)} km/u${stnTxt(record)}`, cls:"wind" });
           }
         }
       }

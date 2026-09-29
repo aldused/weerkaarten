@@ -39,6 +39,29 @@ for(const name of ['records_debilt','dagrecords_jaar']) {
  const html=fs.readFileSync(path.join(root,name+'.html'),'utf8');
  for(const [,attrs,body] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) if(!/\bsrc=|application\/ld\+json/.test(attrs)) new vm.Script(body);
  const ctx=vm.createContext({RecordStations:core,natDagCache:null,natDagTag:null,multiData:sources.slice(0,-1),allData:{nl_extreme:sources.at(-1)},document:{getElementById:()=>({value:'alle'})}});
+ // Both year views must count current holders, including superseded records and ties.
+ ctx.knmiDatumDelen=()=>({jaar:new Date().getFullYear()});
+ const dailyStart=html.indexOf('const DRJ_MAXJAAR');
+ vm.runInContext(html.slice(dailyStart,html.indexOf('function drjBron()',dailyStart)),ctx);
+ const countStart=html.indexOf('function berekenRecordsPerJaar(');
+ vm.runInContext(html.slice(countStart,html.indexOf('\n}',countStart)+2),ctx);
+ for (const source of sources) {
+  const short=ctx.drjTelPerJaar(source), long=ctx.berekenRecordsPerJaar(source);
+  for(const [year,counts] of Object.entries(short)) {
+   assert.equal(counts.warm,long.warm[year]||0,`${name}/${source.station}/${year}/warm`);
+   assert.equal(counts.koud,long.koud[year]||0,`${name}/${source.station}/${year}/koud`);
+   assert.equal(ctx.drjVerzamel(source,+year).length,counts.warm+counts.koud);
+  }
+ }
+ const debilt=sources.find(s=>s.station==='De Bilt');
+ assert.equal(ctx.drjVerzamel(debilt,2024).length,25,`${name}: De Bilt 2024`);
+ const regression={dag:{2:{21:{tn_hoog:[[9,'2025-02-21'],[8.7,'2024-02-21'],[8.6,'2016-02-21']]}},3:{3:{tx_hoog:[[16.7,'2026-03-03'],[15.9,'2024-03-03'],[14.4,'1930-03-03']]}},4:{1:{tx_hoog:[[20,'2025-04-01'],[20,'2024-04-01'],[19,'2020-04-01']],tn_laag:[[-5,'2025-04-01'],[-5,'2024-04-01'],[-4,'2020-04-01']]}}}};
+ assert.equal(ctx.drjVerzamel(regression,2024).length,2);
+ assert.equal(ctx.drjVerzamel(regression,2025).length,1);
+ assert.equal(ctx.drjVerzamel(regression,2026).length,1);
+ assert.equal(ctx.drjTelPerJaar(regression)[2024].warm,1);
+ assert.equal(ctx.drjTelPerJaar(regression)[2024].koud,1);
+ assert.equal(ctx.drjIsRec([[20,'2025'],[19,'2024']],2024,1),null);
  const start=html.indexOf('function nationaalDagRecords()');
  vm.runInContext(html.slice(start,html.indexOf('\nfunction wisselJaarTab',start)),ctx);
  assert.equal(JSON.stringify(ctx.nationaalDagRecords()),JSON.stringify(national));
