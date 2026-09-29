@@ -64,6 +64,14 @@ class KrantenTest(unittest.TestCase):
     def test_no_morgen_boundary_rejected(self):
         with self.assertRaises(ValueError): k.parse_source(source_html(start='Later'),self.now)
 
+    def test_next_weekday_boundary_accepted(self):
+        source = k.parse_source(source_html(start='Zondag'), self.now)
+        self.assertEqual(source['eligibleParagraphs'], [1, 2])
+
+    def test_wrong_weekday_boundary_rejected(self):
+        with self.assertRaises(ValueError):
+            k.parse_source(source_html(start='Maandag'), self.now)
+
     def test_day_rollover_including_dst(self):
         for date,expected in [('31 december 2026','2027-01-01'),('28 maart 2026','2026-03-29'),('24 oktober 2026','2026-10-25')]:
             y=int(date.split()[2]);m=k.MONTHS.index(date.split()[1])+1;d=int(date.split()[0])

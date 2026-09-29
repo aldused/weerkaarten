@@ -21,6 +21,7 @@ DATA = ROOT / 'data'
 TZ = ZoneInfo('Europe/Amsterdam')
 URL = 'https://www.buienradar.nl/nederland/weerbericht/weerbericht'
 MONTHS = 'januari februari maart april mei juni juli augustus september oktober november december'.split()
+WEEKDAYS = 'maandag dinsdag woensdag donderdag vrijdag zaterdag zondag'.split()
 LENGTH_RULES = {
     'vk_kort': ('words', 1, 30),
     'vk_lang': ('words', 167, 203),
@@ -103,7 +104,12 @@ def parse_source(raw, now):
     if published.date() != now.date() or published > now + timedelta(minutes=5):
         raise ValueError('De bron is niet van vandaag of ligt in de toekomst; geen nieuwe editie gemaakt.')
     tomorrow_indices = [i for i, p in enumerate(parser.blocks) if re.match(r'^Morgen\b', p, re.I)]
-    # An explicit boundary is required; never silently treat today's intro as tomorrow.
+    # Sommige bronnen beginnen de volgende dag met de weekdag in plaats van 'Morgen'.
+    # Gebruik uitsluitend de berekende volgende weekdag aan het begin van een alinea.
+    if not tomorrow_indices:
+        weekday = WEEKDAYS[(published.date() + timedelta(days=1)).weekday()]
+        tomorrow_indices = [i for i, p in enumerate(parser.blocks) if re.match(r'^' + weekday + r'\b', p, re.I)]
+    # Een expliciete grens blijft vereist; vandaag en vannacht mogen niet meeschuiven.
     if not tomorrow_indices:
         raise ValueError('Geen afzonderlijke morgenpassage herkend. Redactionele beoordeling nodig.')
     start = tomorrow_indices[0]

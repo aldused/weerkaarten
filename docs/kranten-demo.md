@@ -135,10 +135,12 @@ Werk vanuit `/Users/aldus/KNMI_Project/weerlab`:
    bij reguliere updates geen code. Meld alleen betekenisvolle inhoudelijke
    wijzigingen, voltooiing van een nieuwe editie, fouten of benodigde actie.
 
-Wanneer de bron geen afzonderlijke passage beginnend met 'Morgen' meer bevat,
-stopt de parser veilig. Pas de parser uitsluitend aan na inspectie van de echte
-nieuwe bronstructuur. Een gewijzigde of verouderde bron mag nooit automatisch
-onder dezelfde datum als actueel worden gepresenteerd.
+Wanneer de bron geen afzonderlijke passage beginnend met 'Morgen' bevat,
+accepteert de parser ook een alinea die begint met de berekende weekdag van de
+volgende kalenderdag. Ontbreekt ook die expliciete grens, dan stopt hij veilig.
+Pas de parser uitsluitend aan na inspectie van de echte nieuwe bronstructuur.
+Een gewijzigde of verouderde bron mag nooit automatisch onder dezelfde datum
+als actueel worden gepresenteerd.
 
 ## Lokale redactie en export
 
@@ -168,5 +170,6 @@ Na een nieuwe, gevalideerde editie publiceert de Codex-taak uitsluitend
 `data/kranten_demo.json` en `data/kranten_status.json` via
 `bash shell/kranten_publish.sh "Krantconcepten <krantdatum> bijgewerkt"`.
 Deze helper maakt een schone tijdelijke checkout, zodat gelijktijdige weerjobs
-geen krantpublicatie blokkeren of onbedoeld meekomen. Bij een ongewijzigde bron
-wordt niets gepubliceerd. De bestaande homepage en navigatie blijven ongewijzigd.
+geen krantpublicatie blokkeren of onbedoeld meekomen. Bij een ongewijzigde bruikbare verwachting blijft de editie intact en wordt
+alleen de broncontrolestatus gepubliceerd. De bestaande homepage en navigatie
+blijven ongewijzigd.
