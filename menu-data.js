@@ -1265,8 +1265,8 @@ const MENU_PRODUCTS = [
     "id": "weerkaart-europa",
     "name": "Weerkaart Europa",
     "description": "ECMWF · KNMI en DMI HARMONIE Europa · HARMONIE 43 en 46 Benelux",
-    "category": "professioneel",
-    "type": "vak",
+    "category": "verwachting",
+    "type": "kaarten",
     "section": "Analyse",
     "icon": "map",
     "href": "index.html#weerkaart-europa",
@@ -1274,7 +1274,7 @@ const MENU_PRODUCTS = [
     "thumbnail": null,
     "facets": {},
     "keywords": "Weerkaart Europa ECMWF KNMI DMI HARMONIE 43 46 Benelux bewolking neerslag temperatuur wind Bft windstoten mist weerradar",
-    "restricted": true
+    "restricted": false
   },
   {
     "id": "skewt",

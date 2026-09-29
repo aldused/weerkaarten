@@ -8,6 +8,8 @@ const errors=[];page.on('pageerror',e=>{if(/(?:menu|product-host)\.js/.test(e.st
 // The regression test verifies navigation with remote weather APIs and CDNs blocked.
 await page.route('**/*',route=>{const u=new URL(route.request().url());return u.origin===new URL(base).origin?route.continue():route.abort();});
 await page.goto(`${base}/index.html`);
+await page.getByRole('heading',{name:'Weerkaart Europa',exact:true}).waitFor();
+await page.locator('#desktop-nav a[data-route="start"]').click();
 await page.getByRole('heading',{name:'Jouw weeroverzicht'}).waitFor();
 await page.locator('#desktop-nav a[data-route="verwachting"]').click();
 await page.getByRole('heading',{name:'Wat gaat het weer doen?'}).waitFor();

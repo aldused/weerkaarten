@@ -62,7 +62,7 @@
   function say(message,toast=false){$('#announcement').textContent=message;if(toast){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.add('visible');toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2500);}}
   function routeUrl(page,type,filters={}){const q=new URLSearchParams();if(type)q.set('type',type);Object.entries(filters).forEach(([key,value])=>{if(value)q.set(key,value);});return '#menu/'+page+(q.size?'?'+q:'');}
   function readRoute(){
-    const incoming=location.hash.slice(1);
+    const incoming=location.hash.slice(1) || site.defaultRoute || '';
     const raw=site.routeAliases?.[incoming] ?? incoming;
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
