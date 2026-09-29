@@ -81,7 +81,20 @@ function panel(r,field,domain,scale,ox,oy,index){
  s+=`<rect x="${left}" y="${top}" width="${pw}" height="${ph}" fill="none" stroke="#444" stroke-width=".8"/>`;
  return s+'</g>';
 }
+function renderClouds(results,place,start,days){
+ const end=start+days*DAY,ecmwf=results.find(r=>r.id==='ecmwf_ifs025'||r.name==='ECMWF')||{name:'ECMWF'},layers=['cloud_cover_high','cloud_cover_mid','cloud_cover_low'];
+ let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1580 1080" role="img" aria-labelledby="chart-title chart-description" font-family="Arial,sans-serif"><title id="chart-title">${esc(place)} · Bewolking</title><desc id="chart-description">Links totale bewolking van ECMWF, GFS en ICON. Rechts hoge, middelbare en lage bewolking van ECMWF. Staafjes tonen de mediaan, lijnen P10–P90.</desc><rect width="1580" height="1080" fill="white"/><text x="38" y="46" font-size="27" font-weight="700" fill="#20394d">${esc(place)} · Bewolking</text><text x="38" y="73" font-size="13" fill="#617789">${date(start)} – ${date(end)} · ${days} dagen · tijdas UTC · staafjes: mediaan · lijnen: P10–P90</text><text x="38" y="112" font-size="17" font-weight="700" fill="#20394d">Totale bewolking · drie modellen</text><text x="798" y="112" font-size="17" font-weight="700" fill="#20394d">Wolkenlagen · ECMWF</text>`;
+ for(let row=0;row<3;row++){
+  const model=results[row]||{name:MODELS[row].name};
+  for(const [col,r,field] of [[0,model,'cloud_cover'],[1,ecmwf,layers[row]]]){
+   const data={...series(r.data,field,start,end),name:r.name,place,runLabel:r.runLabel,error:r.error};
+   s+=panel(data,field,[start,end],[0,100],38+col*760,130+row*296,row*2+col);
+  }
+ }
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF / NOAA / DWD via Open-Meteo · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
+}
 function render(results,view,place,start,days,cloudMode='layers'){
+ if(view==='wolken')return renderClouds(results,place,start,days);
  const fields=view==='wolken'?(cloudMode==='total'?['cloud_cover']:['cloud_cover_high','cloud_cover_mid','cloud_cover_low']):view==='wind'?['wind_speed_10m','wind_gusts_10m']:['temperature_2m','precipitation'],end=start+days*DAY;
  const columns=fields.map(f=>results.map(r=>({...series(r.data,f,start,end),name:r.name,place,runLabel:r.runLabel,error:r.error})));
  const width=60+fields.length*760;
@@ -93,7 +106,7 @@ function render(results,view,place,start,days,cloudMode='layers'){
 }
 const api={beaufort,bftSpeed,runLabel,metaSignature,median,series,limits,path,render,utc};
 if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}root.PlumeComparison=api;
-let cloudMode=new URLSearchParams(location.search).get('cloud')==='total'?'total':'layers';
+const cloudMode='overview';
 const $=id=>document.getElementById(id),view=['wind','winter','wolken'].includes(new URLSearchParams(location.search).get('view'))?new URLSearchParams(location.search).get('view'):'weer';
 document.title=(view==='wolken'?'Bewolking':view==='winter'?'Winterpluim':view==='wind'?'Wind & windstoten':'Temperatuur & neerslag')+' · Weerlab';
 document.querySelector(`[data-view="${view}"]`).setAttribute('aria-current','page');
@@ -126,9 +139,9 @@ async function load(){
  const days=Number($('days').value),start=Math.floor(Date.now()/DAY)*DAY;
  try{
   const base=location.protocol==='https:'&&/(^|\.)weerlab\.nl$/.test(location.hostname)?'https://om.weerlab.nl/om/ensemble':'https://ensemble-api.open-meteo.com/v1/ensemble';
-  const fields=view==='wolken'?(cloudMode==='total'?'cloud_cover':'cloud_cover_high,cloud_cover_mid,cloud_cover_low'):view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
+  const fields=view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
   const results=await Promise.all((view==='winter'?MODELS.slice(0,1):MODELS).map(async m=>{
-   try{return await modelData(m,base,fields,days,signal);}catch(e){return {...m,error:e.name==='AbortError'?'Laden duurde te lang':e.message};}
+   try{return await modelData(m,base,view==='wolken'&&m.id==='ecmwf_ifs025'?'cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low':fields,days,signal);}catch(e){return {...m,error:e.name==='AbortError'?'Laden duurde te lang':e.message};}
   }));
   if(id!==generation)return;
   svg=view==='winter'?root.WinterPlume.render(results[0],place.name,start,days):render(results,view,place.name,start,days,cloudMode);$('chart').innerHTML=svg;
@@ -150,7 +163,7 @@ $('download').onclick=async()=>{
  if(!svg)return;const source=svg,label=place.name,blob=new Blob([source],{type:'image/svg+xml'}),url=URL.createObjectURL(blob);$('download').disabled=true;
  try{const im=new Image();im.src=url;await im.decode();const canvas=document.createElement('canvas');canvas.width=2*Number(/viewBox="0 0 (\d+) 1080"/.exec(source)?.[1]||1580);canvas.height=2160;canvas.getContext('2d').drawImage(im,0,0,canvas.width,canvas.height);const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!png)throw new Error('Export mislukt');const link=document.createElement('a'),downloadURL=URL.createObjectURL(png);link.href=downloadURL;link.download=`weerlab-${view}-${label.replace(/[^a-z0-9-]/gi,'-')}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(downloadURL),1000);}catch(e){$('status').textContent='Download mislukt. Probeer opnieuw.';}finally{URL.revokeObjectURL(url);$('download').disabled=!svg;}
 };
-if(view==='wolken'){const mode=$('cloud-mode');$('cloud-mode-wrap').hidden=false;mode.value=cloudMode;document.body.classList.toggle('clouds-page',cloudMode==='layers');mode.onchange=()=>{cloudMode=mode.value;document.body.classList.toggle('clouds-page',cloudMode==='layers');load();};document.querySelector('.comparison-note').textContent='Staafjes tonen de mediane bedekkingsgraad; lijntjes P10–P90. Totale bewolking is beschikbaar voor alle drie modellen. Per wolkenlaag levert de huidige bron alleen ECMWF. Hoge bewolking omvat sluierbewolking. Alle assen 0–100%.';}
+if(view==='wolken')document.querySelector('.comparison-note').textContent='Links: totale bewolking van ECMWF, GFS en ICON. Rechts: hoge, middelbare en lage bewolking van ECMWF. Staafjes tonen de mediaan; lijntjes de middelste 80% van de ensembleleden (P10–P90). Alle assen 0–100%.';
 if(view==='winter')document.querySelector('.comparison-note').textContent='Etmalen 00–24 UTC. Sneeuw vanaf 0,1 cm; sneeuwdek vanaf 1 cm op enig moment. Vorstkansen tellen koudere temperaturen mee. Alleen volledige etmalen en geldige leden tellen mee.';
 syncPlace();load();
 })(typeof window==='undefined'?globalThis:window);
