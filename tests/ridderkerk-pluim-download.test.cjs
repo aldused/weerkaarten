@@ -38,8 +38,11 @@ test('download gebruikt de gekozen run en vraagt temperatuur verplicht op',async
 test('export downloadt temperatuur en stopt vóór downloads als die ontbreekt',async()=>{
  const code=exporter.slice(exporter.indexOf('  async function genereerLossePluimenPNGs'),exporter.indexOf('  window.WBPluimExport ='));
  let models=[{param:'temp'},{param:'cloud'}],downloads=[];
- const ctx={validateInput:()=>({naam:'Ridderkerk',startIso:'2026-09-30',endIso:'2026-10-10'}),withRequestedRun:async()=>({value:{},runMeta:{}}),buildModels:()=>models,slug:s=>s,renderInParallel:async(ms,fn)=>Promise.all(ms.map(fn)),renderBlob:async()=>({size:1}),pluimFilename:(folder,param)=>folder+'_'+param+'.png',downloadBlob:(b,name)=>downloads.push(name),setTimeout:fn=>fn()};
+ const ctx={fieldsForParams:()=>'',validateInput:()=>({naam:'Ridderkerk',startIso:'2026-09-30',endIso:'2026-10-10'}),withRequestedRun:async()=>({value:{},runMeta:{}}),buildModels:()=>models,slug:s=>s,renderInParallel:async(ms,fn)=>Promise.all(ms.map(fn)),renderBlob:async()=>({size:1}),pluimFilename:(folder,param)=>folder+'_'+param+'.png',downloadBlob:(b,name)=>downloads.push(name),setTimeout:fn=>fn()};
  vm.runInNewContext(code,ctx);
- await ctx.genereerLossePluimenPNGs({naam:'Ridderkerk',requiredParams:['temp']});assert(downloads.includes('Ridderkerk_temp.png'));
+ let release;const renderAfter=new Promise(resolve=>{release=resolve});
+ const running=ctx.genereerLossePluimenPNGs({naam:'Ridderkerk',requiredParams:['temp'],renderAfter});
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(downloads.length,0,'wacht op PDF voordat PNG downloads starten');
+ release();await running;assert(downloads.includes('Ridderkerk_temp.png'));
  downloads=[];models=[{param:'cloud'}];await assert.rejects(ctx.genereerLossePluimenPNGs({naam:'Ridderkerk',requiredParams:['temp']}),/temperatuur-pluim ontbreekt/);assert.equal(downloads.length,0);
 });

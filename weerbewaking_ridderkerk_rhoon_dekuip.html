@@ -21,7 +21,7 @@ if (!new URLSearchParams(location.search).has('run')) {
 <script src="pluim_run_switcher_48ffbf926db6.js" data-required="temperature_2m,precipitation,wind_speed_10m,cloud_cover,wind_gusts_10m"></script>
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
 <script src="pluim_png_encoder.js?v=20260907-worker-encoder"></script>
-<script src="weerbewaking_pluim_export.js?v=20260930-required-temp"></script>
+<script src="weerbewaking_pluim_export.js?v=20260930-export-pipeline"></script>
 <script src="weerbewaking_wp.js?v=20260710"></script>
 <script>
   // Alleen toegankelijk na ontgrendelen op weerbewaking.html
@@ -1440,22 +1440,22 @@ function exporteerPDF(){
     jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
     pagebreak: { mode:['css','legacy'], before:'.pagina-2' }
   };
-  // PDF eerst, daarna pas de losse pluim-PNG's — anders vechten gelijktijdige
-  // downloads + canvas-renderings om de browser-resources.
+  // Pluimgegevens alvast ophalen terwijl de PDF wordt gemaakt. Het tekenen
+  // en downloaden wacht wel op de PDF, zodat canvaswerk niet concurreert.
   const pdfWorker = window.WBExport
     ? WBExport.html2pdfSave(wrapper,opt)
     : Promise.resolve(html2pdf().set(opt).from(wrapper).save());
   const startPluim = () => {
     if(!document.getElementById('pluim-bij-pdf')?.checked) return;
-    genereerPluimNaast().catch(err=>{
+    genereerPluimNaast(pdfWorker.catch(()=>{})).catch(err=>{
       console.warn('Pluim-export mislukt:', err);
       const st=document.getElementById('save-status');
       if(st) st.textContent="⚠️ Pluim-PNG's mislukt: "+(err.message||err);
     });
   };
-  pdfWorker.then(startPluim).catch(err=>{
+  startPluim();
+  pdfWorker.catch(err=>{
     alert('PDF-export is niet gelukt: '+(err?.message || err));
-    startPluim();
   });
 }
 
@@ -1467,7 +1467,7 @@ const PLAATS_COORDS = {
   'De Kuip | Rotterdam':  { lat:51.9244, lon:4.4777, naam:'Rotterdam', folder:'rotterdam' },
 };
 
-async function genereerPluimNaast(){
+async function genereerPluimNaast(renderAfter=null){
   if(!window.WBPluimExport){ throw new Error('Pluim-module niet geladen'); }
   const selector=window.WeerlabPlumeRuns;
   if(!selector){ throw new Error('Pluim-runselector niet geladen'); }
@@ -1495,6 +1495,7 @@ async function genereerPluimNaast(){
     startDate: start, endDate: eind,
     folderName: coords.folder || coords.naam || plaats,
     zip: false,
+    renderAfter,
     runHour,
     params: params,
     requiredParams: params.includes('temp') ? ['temp'] : [],

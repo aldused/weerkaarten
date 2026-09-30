@@ -751,9 +751,10 @@
       byDay.get(key).idxs.push(i);
     });
     return days.map(day => {
-      const first = Date.parse(times[day.idxs[0]]);
-      const midnight = Date.parse(`${times[day.idxs[0]].slice(0, 10)}T00:00:00Z`);
-      if (first !== midnight || Date.parse(times.at(-1)) < midnight + 24 * 3600000) return null;
+      const firstDate = new Date(times[day.idxs[0]]);
+      const first = firstDate.getTime();
+      const midnight = Date.UTC(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), firstDate.getUTCDate());
+      if (first !== midnight || new Date(times.at(-1)).getTime() < midnight + 24 * 3600000) return null;
       const maxima = members.map(member => {
         const vals = day.idxs.map(i => member[i]).filter(Number.isFinite);
         return vals.length ? Math.max(...vals) : null;
@@ -1360,6 +1361,17 @@
 
   const ENSEMBLE_FIELDS = 'temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover,cape';
 
+  function fieldsForParams(params) {
+    if (!Array.isArray(params) || !params.length) return ENSEMBLE_FIELDS;
+    const fields = new Set();
+    for (const param of params) {
+      if (PARAMS[param]) fields.add(PARAMS[param].hourly);
+      if (param === 'thunder') fields.add('precipitation');
+    }
+    return fields.size ? [...fields].join(',') : ENSEMBLE_FIELDS;
+  }
+
+
   async function fetchEnsemble(lat, lon, startIso, endIso, hourlyFields = ENSEMBLE_FIELDS, runMeta, runContext = null) {
     const params = new URLSearchParams({
       latitude: lat,
@@ -1841,21 +1853,24 @@
     return { filename: fname, sizeBytes: png.size };
   }
 
-  async function genereerLossePluimenPNGs({lat, lon, naam, startDate, endDate, scale=2, zip=false, folderName, params=null, runHour=null, requiredParams=[]}) {
+  async function genereerLossePluimenPNGs({lat, lon, naam, startDate, endDate, scale=2, zip=false, folderName, params=null, runHour=null, requiredParams=[], renderAfter=null}) {
     const { naam: naamOut, startIso, endIso, fetchEndIso } = validateInput({lat, lon, naam, startDate, endDate});
     // Een gearchiveerde hoofdrun bevat het exacte centrale roosterpunt. Gebruik
     // bij een afgedwongen cyclus geen actuele omliggende punten, want dan zouden
     // twee ECMWF-runs in één neerslagpluim worden gemengd.
     const needsSpatialRain = runHour == null && (!params || params.some(param => ['rain', 'rainmm', 'raincum', 'thunder'].includes(param)));
+    const requestedFields = fieldsForParams(params);
     const stable = await withRequestedRun(runHour, runContext => fetchStableEnsembleBatch(runMeta => needsSpatialRain
       ? fetchEnsembleWithSpatialRain(lat, lon, startIso, fetchEndIso, runMeta, runContext)
-      : fetchEnsemble(lat, lon, startIso, fetchEndIso, ENSEMBLE_FIELDS, runMeta, runContext), runContext));
+      : fetchEnsemble(lat, lon, startIso, fetchEndIso, requestedFields, runMeta, runContext), runContext));
     const models = buildModels(stable.value, startIso, endIso, stable.runMeta, params);
     for (const param of requiredParams) {
       if (!models.some(model => model.param === param)) {
         throw new Error(`De ${({temp:'temperatuur'})[param] || param}-pluim ontbreekt in de gekozen run; er zijn geen losse pluimen gedownload. Kies een complete run.`);
       }
     }
+    // Data ophalen overlapt met de PDF; zwaar tekenwerk begint pas erna.
+    if (renderAfter) await renderAfter;
     const results = [];
     const folder = slug(folderName || naamOut || 'plaats');
 
