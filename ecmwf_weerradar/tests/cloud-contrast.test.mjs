@@ -10,16 +10,15 @@ const composite=(rgba,background)=>background.map((channel,i)=>rgba[i]*rgba[3]+c
 const distance=(a,b)=>Math.hypot(...a.map((channel,i)=>channel-b[i]));
 const fullLayer=type=>cloudLayerStyle(type,100,5,52,false);
 
-test('cloud swatches on an identical light background separate a white veil, middle cloud and grey low deck',()=>{
-  const background=[242,245,248];
-  const [high,mid,low]=types.map(type=>composite(fullLayer(type),background));
-  const upperDifference=luminance(high)-luminance(mid);
-  const lowerDifference=luminance(mid)-luminance(low);
-  assert.ok(upperDifference>=12,'high and middle cloud need a visible lightness step on the same background');
-  assert.ok(lowerDifference>=60,'low cloud must be substantially darker than middle cloud');
-  assert.ok(lowerDifference>upperDifference*3,'a low deck must not resemble a second pale veil');
-  assert.ok(luminance(fullLayer('high'))>=254,'the high-cloud tint itself should be nearly pure white');
-  assert.ok(luminance(fullLayer('low'))<=120,'the low-cloud tint itself should be clearly grey');
+test('cloud decks brighten both land and sea while retaining distinct layer tints',()=>{
+  for(const background of [[86,119,73],[69,113,139]]){
+    const [high,mid,low]=types.map(type=>composite(fullLayer(type),background));
+    assert.ok(luminance(mid)>luminance(background)+65,'middle deck must be clearly visible');
+    assert.ok(luminance(low)>luminance(background)+75,'low deck must brighten, not darken the map');
+    assert.ok(luminance(high)<luminance(mid),'high veil remains more transparent');
+  }
+  assert.ok(luminance(fullLayer('high'))>luminance(fullLayer('mid')));
+  assert.ok(luminance(fullLayer('mid'))>luminance(fullLayer('low'))+15);
 });
 
 test('map detail stays legible through a full high veil, decreases under middle cloud and is largely covered by low cloud',()=>{
@@ -30,16 +29,16 @@ test('map detail stays legible through a full high veil, decreases under middle 
     const original=distance(a,b);
     const [high,mid,low]=types.map(type=>distance(composite(fullLayer(type),a),composite(fullLayer(type),b))/original);
     assert.ok(high>=.85,`${surface}: a full high veil should preserve at least 85% of map contrast`);
-    assert.ok(mid>=.50&&mid<=.70,`${surface}: middle cloud should leave an intermediate amount of map contrast`);
+    assert.ok(mid>=.25&&mid<=.50,`${surface}: middle cloud should leave an intermediate amount of map contrast`);
     assert.ok(low<=.20,`${surface}: a full low deck should cover most map contrast`);
     assert.ok(high>mid&&mid>low);
   }
 });
 
-test('simultaneous cloud layers remain independently switchable without washing a low deck white',()=>{
+test('simultaneous cloud layers remain independently switchable with a distinct pale low deck',()=>{
   const args=[100,100,100,5,52,false,1];
   const all=cloudStyle(...args,7);
-  assert.ok(luminance(all)<135,'overlapping white high cloud must not turn the compact low deck pale');
+  assert.ok(luminance(all)>200&&luminance(all)<230,'overlap retains the pale grey low-deck tint');
   assert.ok(all[3]>=.85,'overlapping layers remain substantially opaque');
   for(const [type,bit] of [['high',4],['mid',2],['low',1]]){
     assert.deepEqual(cloudStyle(...args,bit),fullLayer(type),`${type} can be inspected alone`);
@@ -72,7 +71,7 @@ test('tile compositing uses all original percentages unchanged and honours indep
   for(let p=0;p<all.length;p+=4){
     if(!all[p+3])continue;
     checked++;
-    assert.ok(luminance(all.subarray(p,p+3))<135,'the actual rendered overlap should stay grey');
+    assert.ok(luminance(all.subarray(p,p+3))>200,'the actual rendered overlap should stay light grey');
     assert.ok(high[p+3]<=35,'a 90% high veil should remain very transparent');
     assert.ok(low[p+3]>=204,'the low layer should obscure most of the map');
     assert.ok(all[p+3]>low[p+3],'the higher source layers still contribute to the composite');

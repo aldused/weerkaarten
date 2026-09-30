@@ -13,7 +13,7 @@ test('100% high cloud remains a white veil; height sets distinct opacity bands',
   }
   for(const detail of [false,true])for(const km of [.1,1,3,20]){
     assert.ok(cloudStyle(0,0,100,5,52,detail,km)[3]<=.25);
-    assert.ok(cloudStyle(0,100,0,5,52,detail,km)[3]<=.50);
+    assert.ok(cloudStyle(0,100,0,5,52,detail,km)[3]<=.75);
     assert.ok(cloudStyle(100,0,0,5,52,detail,km)[3]>.60);
   }
 });
@@ -64,7 +64,7 @@ test('illustrative low-cloud structure includes dense 85–95% cores without cha
 test('city icons keep sun/moon visible through a full high veil, unlike a low deck',()=>{
   assert.equal(cloudIconType(0,0,0),'clear');
   assert.equal(cloudIconType(0,0,100),'filtered');
-  assert.equal(cloudIconType(0,100,0),'filtered');
+  assert.equal(cloudIconType(0,100,0),'overcast');
   assert.equal(cloudIconType(100,0,0),'overcast');
   assert.equal(cloudIconType(100,100,100),'overcast');
   assert.equal(cloudIconType(NaN,0,100),null);
@@ -74,7 +74,7 @@ test('actual tile renderer uses all three model fields and preserves source valu
   const values=new Float32Array(4).fill(100),zero=new Float32Array(4),field={variable:'cloud_cover',data:{values},grid,texture:false};
   const high=renderTile({...field,cloudLow:zero,cloudMid:zero,cloudHigh:values},coords);
   const low=renderTile({...field,cloudLow:values,cloudMid:zero,cloudHigh:zero},coords);
-  let valid=0;for(let p=0;p<high.length;p+=4)if(high[p+3]){valid++;assert.ok(high[p+3]<=64);assert.ok(high[p]>240);assert.ok(low[p+3]>=153);assert.ok(low[p]<150);}
+  let valid=0;for(let p=0;p<high.length;p+=4)if(high[p+3]){valid++;assert.ok(high[p+3]<=64);assert.ok(high[p]>240);assert.ok(low[p+3]>=153);assert.ok(low[p]>=200&&low[p]<=225);}
   assert.ok(valid>10000);assert.ok(values.every(v=>v===100));assert.ok(zero.every(v=>v===0));
   assert.throws(()=>renderTile(field,coords),/wolkenlagen ontbreken/);
 });

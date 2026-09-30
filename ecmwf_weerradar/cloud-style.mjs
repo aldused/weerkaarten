@@ -2,8 +2,8 @@
 // height controls colour and the opacity of an occupied cloud fragment.
 export const CLOUD_STYLES=Object.freeze({
   high:{label:'Hoge bewolking',rgb:[255,255,255],opacity:[.10,.25],sample:.12},
-  mid:{label:'Middelbare bewolking',rgb:[196,202,210],opacity:[.30,.50],sample:.45},
-  low:{label:'Lage bewolking',rgb:[105,112,120],opacity:[.60,.95],sample:.85},
+  mid:{label:'Middelbare bewolking',rgb:[232,236,240],opacity:[.50,.75],sample:.65},
+  low:{label:'Lage bewolking',rgb:[207,216,223],opacity:[.60,.95],sample:.85},
 });
 // Display threshold, not an official aviation/warning category. Only an
 // actual model cloud-base field may select this style; never cloud fraction.

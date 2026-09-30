@@ -47,10 +47,10 @@ test('rain and snow have an exact visibility threshold; no quantization halo or 
   for(const value of [-1,0,.01,.04762,.049,.049999,NaN,Infinity])assert.equal(precipitationColor(variable,value)[3],0);
   assert.equal(precipitationColor(variable,.05)[3],0);
  }
- assert.deepEqual(precipitationColor('precipitation',1),[0,114,239,255]);
- assert.deepEqual(precipitationColor('precipitation',4),[238,218,28,255]);
- assert.deepEqual(precipitationColor('precipitation',30),[203,50,185,255]);
- assert.deepEqual(precipitationColor('precipitation',100),[203,50,185,255]);
+ assert.deepEqual(precipitationColor('precipitation',1),[30,163,240,224]);
+ assert.deepEqual(precipitationColor('precipitation',4),[35,92,206,250]);
+ assert.deepEqual(precipitationColor('precipitation',30),[241,52,42,255]);
+ assert.deepEqual(precipitationColor('precipitation',100),[241,52,42,255]);
 });
 test('quantized light rain and snow fade continuously, without a solid half-cell contour',()=>{
  for(const variable of ['precipitation','snowfall_water_equivalent']){
@@ -111,4 +111,13 @@ test('recorded native point API matches OM at the SAME grid cell, run and backwa
   assert.ok(Math.abs(intervalRate(p.omNodeIntervalMm,frame.hours)-p.convertedNodeRate)<1e-7);
  }
  assert.equal(fixture.results.length,6);assert.ok(fixture.components.checked>2000);
+});
+
+test('light and moderate rain stay cool coloured; warm colours are reserved for higher rates',()=>{
+ for(const value of [.1,.3,.6,1,2,4,8]){
+  const [r,g,b]=precipitationColor('precipitation',value);
+  assert.ok(b>r&&b>g,`${value} mm/h remains a blue/cyan shade`);
+ }
+ const [r,g,b]=precipitationColor('precipitation',16);
+ assert.ok(r>b&&g>b,'16 mm/h is visibly yellow');
 });
