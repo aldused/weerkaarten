@@ -4,6 +4,7 @@
 set -euo pipefail
 
 node tests/historical-records.test.cjs --fixture
+node tests/historical-days.test.cjs
 python3 -m unittest discover -s tests -p test_historical_map.py
 python3 -m unittest discover -s tests -p test_lopend_dagrecords.py
 
