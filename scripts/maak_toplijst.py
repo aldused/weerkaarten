@@ -21,7 +21,7 @@ RR_DREMPEL = 0.2
 # toplijst ruim onder de KNMI-quota van 1000 aanvragen per uur. De oude aanpak
 # deed per station vijf losse aanvragen en kon daardoor zelfstandig de quota
 # overschrijden.
-BULK_PARAMETERS = "ta,tx,tn,fx,ff,dd,tgn,qg,rg"
+BULK_PARAMETERS = "ta,tx,tn,fx,ff,dd,tgn,ss,qg,rg"
 BULK_BATCH_SIZE = 20
 
 # Stations die alleen wind meten (geen temperatuur)
@@ -480,14 +480,14 @@ def haal_wind_only(station_id: str, dt_range: str) -> dict | None:
     return haal_wind_only_uit_dekking(js["coverages"][0])
 
 def haal_zon_uit_dekking(cov: dict) -> tuple:
-    """Zonuren en tijdstip van maximale straling uit één dekking."""
-    t_vals = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values") or []
-    qg_raw = cov.get("ranges", {}).get("qg", {}).get("values")
-    if not qg_raw: return None, None
-    qg_vals = to_floats(qg_raw)
-    zon_stappen = sum(1 for v in qg_vals if v is not None and v >= 120)
-    sq_t = tijdstip_van_max(qg_vals, t_vals, LOCAL_TZ)
-    return round(zon_stappen / 6.0, 1), sq_t
+    """Gemeten KNMI-zonneschijnminuten, zonder stralingsdrempelschatting."""
+    ranges = cov.get("ranges", {})
+    vals = ranges.get("ss", {}).get("values", [])
+    times = cov.get("domain", {}).get("axes", {}).get("t", {}).get("values", [])
+    good = [(t, float(v)) for t, v in zip(times, vals) if v is not None and float(v) >= 0]
+    if not good:
+        return None, None
+    return round(sum(v for t, v in dict(good).items()) / 60, 1), None
 
 
 def haal_zon(station_id: str, dt_range: str) -> tuple:
@@ -497,7 +497,7 @@ def haal_zon(station_id: str, dt_range: str) -> tuple:
     Per 10-min stap = 1/6 uur.
     Retourneert (uren, tijdstip_max_straling).
     """
-    params = {"datetime": dt_range, "parameter-name": "qg"}
+    params = {"datetime": dt_range, "parameter-name": "ss,qg"}
     r = knmi_get(f"{BASE_URL}/locations/{station_id}", params=params, timeout=25)
     if r.status_code in (400, 404): return None, None
     r.raise_for_status()
@@ -799,7 +799,7 @@ def main():
         oud = resultaten[vandaag_key]
         for sleutel, richting in {
             "max": "max", "min": "min", "t10n": "min", "fx": "max",
-            "ff": "max", "rr": "max", "sq": "max", "gevoels": "min",
+            "ff": "max", "rr": "max", "gevoels": "min",
         }.items():
             nieuwe_dag[sleutel] = voeg_daguitersten_samen(
                 oud.get(sleutel, []), nieuwe_dag.get(sleutel, []), richting
@@ -823,7 +823,7 @@ def main():
             continue
         key = dag.isoformat()
         bestaand = resultaten.get(key)
-        if isinstance(bestaand, dict) and bestaand.get("max"):
+        if isinstance(bestaand, dict) and bestaand.get("max") and dag != vandaag - timedelta(days=1):
             print(f"  {dag}: al in cache, overgeslagen")
             continue
         if bestaand is not None:

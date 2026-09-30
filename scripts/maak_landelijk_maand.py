@@ -344,7 +344,7 @@ def bouw(jaar, maand, src):
         "jaar":jaar,"maand":maand,"maand_naam":MND_NL[maand],
         "bijgewerkt":debilt.get("bijgewerkt",""),
         "n_stations":len(kaart),
-        "ndagen":ndagen,"dim":dim,"volledig":ndagen>=dim,
+        "ndagen":ndagen,"dim":dim,"volledig":ndagen>=dim and not bool(vd_dag),
         "vandaag_in":bool(vd_dag),
         "debilt":debilt_stat,"dagen":dagen_blok,
         "stations":sorted(stations_detail,key=lambda x:x["nr"]),

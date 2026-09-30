@@ -58,45 +58,9 @@ def _edr_floats(vals):
     return out
 
 def haal_dag_lopend(station_nr, dag):
-    """Lopende etmaalwaarden voor `dag` tot nu, uit de 10-minuten API."""
-    wig = _wigos(station_nr)
-    rng_t = f"{dag.isoformat()}T00:00:00Z/{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
-    out = {k: None for k in ("tx","tn","tg","rh","fg","sq")}
-    def _cov(par):
-        r = knmi_get(f"{EDR_10}/locations/{wig}",
-                     params={"datetime": rng_t, "parameter-name": par}, timeout=20)
-        if r.status_code != 200:
-            return None
-        cov = r.json().get("coverages")
-        return cov[0].get("ranges", {}) if cov else None
-    try:
-        rg = _cov("ta,tx,tn,fx,ff")
-        if rg:
-            ta = [v for v in _edr_floats(rg.get("ta", {}).get("values")) if v is not None]
-            tx = [v for v in _edr_floats(rg.get("tx", {}).get("values")) if v is not None]
-            tn = [v for v in _edr_floats(rg.get("tn", {}).get("values")) if v is not None]
-            ff = [v for v in _edr_floats(rg.get("ff", {}).get("values")) if v is not None]
-            if tx or ta: out["tx"] = round(max(tx + ta), 1)
-            if tn or ta: out["tn"] = round(min(tn + ta), 1)
-            if ta:       out["tg"] = round(sum(ta) / len(ta), 1)
-            if ff:       out["fg"] = round(sum(ff) / len(ff), 1)
-    except Exception as e:
-        log(f"  EDR-10min temp {station_nr}: {e}")
-    try:  # neerslag rg (mm/uur) → ×10/60 per 10-min stap
-        rg = _cov("rg")
-        if rg:
-            vals = [v for v in _edr_floats(rg.get("rg", {}).get("values")) if v is not None and v >= 0]
-            if vals: out["rh"] = round(sum(v * (10.0 / 60.0) for v in vals), 1)
-    except Exception as e:
-        log(f"  EDR-10min rg {station_nr}: {e}")
-    try:  # zon qg (W/m²): zon = >120 W/m², per 10-min stap = 1/6 uur
-        rg = _cov("qg")
-        if rg:
-            qg = _edr_floats(rg.get("qg", {}).get("values"))
-            out["sq"] = round(sum(1 for v in qg if v is not None and v >= 120) / 6.0, 1)
-    except Exception as e:
-        log(f"  EDR-10min qg {station_nr}: {e}")
-    return out if any(v is not None for v in out.values()) else None
+    from knmi_live_day import fetch_live_day
+    return fetch_live_day(station_nr, dag, _wigos(station_nr))
+
 
 # ── Tussenstand herberekenen uit maanddetail (1:1 met knmi_records.py) ─────────
 def recompute_tussenstand(records, today):
@@ -149,6 +113,14 @@ def patch_vandaag(records, vals, today):
         nieuw = vals.get(k)
         if nieuw is not None and rec.get(k) != nieuw:
             rec[k] = nieuw; changed = True
+    # Recompute every month summary from unique dated observations.
+    mm["dagen"] = sorted({d["dag"]: d for d in dagen}.values(), key=lambda d: d["dag"])
+    for field in ("tx", "tn", "tg", "rh", "sq", "fg"):
+        values = [d[field] for d in mm["dagen"] if d.get(field) is not None]
+        total = field in ("rh", "sq")
+        mm[("som_" if total else "gem_") + field] = round(sum(values) / (1 if total else len(values)), 1) if values else None
+    for name, field, threshold, below in [("zachte_dagen","tx",15,False),("warme_dagen","tx",20,False),("zomerse_dagen","tx",25,False),("tropische_dagen","tx",30,False),("ijsdagen","tx",0,True),("vorstdagen","tn",0,True)]:
+        mm[name] = sum(1 for d in mm["dagen"] if d.get(field) is not None and (d[field] < threshold if below else d[field] >= threshold))
     return changed
 
 def patch_dagtemperaturen(records, vals, today):
@@ -223,13 +195,25 @@ def main():
         if not vals:
             continue
         vandaag_alle[str(int(stn))] = vals   # vóór de state-skip: dump altijd compleet
+        # Same running observations feed the station month table.
+        mp = os.path.join(WEERLAB_DIR, f"maanddata_{stn}.json")
+        if os.path.exists(mp):
+            with open(mp) as fh:
+                month = json.load(fh)
+            month["data"][daysig] = {("rr" if k == "rh" else k): v for k, v in vals.items() if not k.startswith("_")}
+            month["data"][daysig]["lopend"] = True
+            month["bijgewerkt"] = datetime.now().strftime("%d %b %Y %H:%M")
+            with open(mp + ".tmp", "w") as fh:
+                json.dump(month, fh, separators=(",", ":"))
+            os.replace(mp + ".tmp", mp)
+            changed.append(os.path.basename(mp))
         key = str(stn)
         sig = [daysig] + [vals.get(k) for k in ("tx", "tn", "tg", "rh", "sq", "fg")]
-        if state.get(key) == sig and records.get("lopend_dagrecords_version") == 1:
+        if state.get(key) == sig and records.get("lopend_dagrecords_version") == 2:
             continue  # niets nieuws sinds onze laatste R2-upload
         patch_vandaag(records, vals, today)
         patch_dagtemperaturen(records, vals, today)
-        records["lopend_dagrecords_version"] = 1
+        records["lopend_dagrecords_version"] = 2
         recompute_tussenstand(records, today)
         records["lopend_bijgewerkt"] = datetime.now().strftime("%Y-%m-%d %H:%M")
         tmp = path + ".tmp"

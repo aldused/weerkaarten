@@ -7,6 +7,7 @@ commandoregel beperken een handmatige/test-run; zonder argumenten draait alles.
 import os, requests, zipfile, io, json, sys
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+from knmi_api import knmi_get
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -36,7 +37,7 @@ if len(sys.argv) > 1:
     STATIONS = [station for station in STATIONS if station[0] in gevraagd]
 
 KLIMAATARCHIEF_STATIONS = {235, 240, 260, 270, 275, 280, 283, 286, 290, 310, 330, 344, 350, 370, 380, 391}
-MAANDDATA_FIELDS = ("tx", "tn", "tg", "rr", "sq", "q", "t10n")
+MAANDDATA_FIELDS = ("tx", "tn", "tg", "rr", "sq", "q", "t10n", "fg", "ddvec", "fhvec", "sp")
 
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 KNMI_KEY  = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjY2ZjIwYWZjOTMwYTRkNDY5M2Q3MTc5OWVhMTI4ZGQwIiwiaCI6Im11cm11cjEyOCJ9"
@@ -112,7 +113,7 @@ def parse_zip(tekst):
                 v = rij.get(k,'').strip()
                 if not v: return None
                 iv = int(v)
-                if iv == -1: return 0.0
+                if iv == -1 and k in ("RH", "SQ"): return 0.0
                 return round(iv/schaal, 1)
             data[datum.isoformat()] = {
                 'tx': getal('TX'),
@@ -135,12 +136,11 @@ def _edr_query(wigos, edr_datum):
     """Vraag EDR voor een specifieke (UTC) datum. Returnt dict of None."""
     s = f"{edr_datum}T00:00:00Z"
     e = f"{edr_datum}T23:59:59Z"
-    params = {"datetime": f"{s}/{e}", "parameter-name": "TX,TN,TG,RH,SQ,Q,T10N,DDVEC,FHVEC,FG,SP"}
+    params = {"datetime": s, "parameter-name": "TX,TN,TG,RH,SQ,Q,T10N,DDVEC,FHVEC,FG,SP"}
     for collectie in EDR_COLLECTIES:
         try:
-            r = requests.get(
+            r = knmi_get(
                 f"{EDR_BASE}/{collectie}/locations/{wigos}",
-                headers=HEADERS,
                 params=params,
                 timeout=15
             )
@@ -182,17 +182,8 @@ def _edr_query(wigos, edr_datum):
     return None
 
 def haal_edr_dag(wigos, datum):
-    """Haal 1 dag op via EDR: eerst validated, dan realtime als fallback.
-    De EDR API gebruikt UTC-etmalen (00-00 UTC), terwijl de KNMI ZIP-bestanden
-    etmaalwaarden gebruiken (08-08 UTC). Hierdoor loopt de EDR-datum 1 dag
-    voor op de ZIP-conventie. We vragen daarom eerst datum+1 op (matcht ZIP).
-    Als dat faalt — typisch voor de meest recente dag waarvoor het 0-0 UTC
-    etmaal nog niet voltooid is — vallen we terug op datum zelf (geeft een
-    iets afwijkende, maar bruikbare waarde voor gisteren)."""
-    res = _edr_query(wigos, (date.fromisoformat(datum) + timedelta(days=1)).isoformat())
-    if res:
-        return res
-    return _edr_query(wigos, datum)
+    """Dag D heeft het EDR-eindlabel D+1 00 UTC; nooit D-1 invullen."""
+    return _edr_query(wigos, (date.fromisoformat(datum) + timedelta(days=1)).isoformat())
 
 nu       = date.today()
 gisteren = nu - timedelta(days=1)
@@ -213,12 +204,12 @@ for station_nr, naam, wigos in STATIONS:
         # de ZIP jaren achterloopt; EDR heeft sowieso geen oudere data.
         EDR_MAX_DAGEN_TERUG = 14
         startdatum = max(laatste_datum + timedelta(days=1), gisteren - timedelta(days=EDR_MAX_DAGEN_TERUG))
-        d = startdatum
+        d = startdatum if (gisteren - laatste_datum).days <= 30 else nu
         aangevuld = 0
         while d <= gisteren:
             edr = haal_edr_dag(wigos, d.isoformat())
             if edr:
-                correcties = pas_toplijst_correctie_toe(edr, d.isoformat(), naam)
+                correcties = []  # Exacte KNMI-etmaalwaarden gaan boven een live toplijst.
                 bron = edr.pop('_bron', '?')
                 data[d.isoformat()] = edr
                 aangevuld += 1
@@ -247,6 +238,15 @@ for station_nr, naam, wigos in STATIONS:
             datum: {veld: dag.get(veld) for veld in MAANDDATA_FIELDS}
             for datum, dag in data.items()
         }
+        try:
+            live = json.load(open("vandaag_stations.json"))
+            if live.get("datum") == nu.isoformat():
+                v = live.get("stations", {}).get(str(station_nr))
+                if v:
+                    publieke_data[nu.isoformat()] = {k: v.get("rh" if k == "rr" else k) for k in MAANDDATA_FIELDS}
+                    publieke_data[nu.isoformat()]["lopend"] = True
+        except (OSError, ValueError):
+            pass
         resultaat = {
             "station": station_nr,
             "naam": naam,

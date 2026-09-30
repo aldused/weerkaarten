@@ -30,7 +30,7 @@ CHANGED_FILE="/tmp/lopend_changed.txt"
 : > "$CHANGED_FILE"
 LOPEND_CHANGED_FILE="$CHANGED_FILE" /usr/local/bin/python3 -u scripts/lopend_patch.py || true
 
-CHANGED="$(grep -E '^records_[0-9]+\.json$' "$CHANGED_FILE" 2>/dev/null || true)"
+CHANGED="$(grep -E '^(records|maanddata)_[0-9]+\.json$' "$CHANGED_FILE" 2>/dev/null || true)"
 if [ -n "$CHANGED" ]; then
   echo "Uploaden naar R2: $(echo "$CHANGED" | wc -l | tr -d ' ') bestand(en)"
   # shellcheck disable=SC2086

@@ -322,53 +322,9 @@ def haal_dag_validated(station_nr, dag):
         return None
 
 def haal_dag_lopend(station_nr, dag):
-    """Lopende etmaalwaarden voor vandaag uit de 10-minuten API.
-    tx/tn/tg uit ta(+tx/tn), neerslag uit rg, zonuren uit qg, wind uit fx/ff."""
-    wig = _wigos(station_nr)
-    # Venster = die dag 00:00Z tot nu, maar nooit voorbij het einde van de dag.
-    # Zo levert deze functie ook voor een al-voltooide dag (bv. gisteren) de juiste
-    # etmaal-aggregatie, zonder waarden van de volgende dag mee te nemen.
-    nu = datetime.now(timezone.utc)
-    dag_einde = datetime(dag.year, dag.month, dag.day, tzinfo=timezone.utc) + timedelta(days=1)
-    rng_t = f"{dag.isoformat()}T00:00:00Z/{min(nu, dag_einde).strftime('%Y-%m-%dT%H:%M:%SZ')}"
-    out = {k: None for k in ("tx","tn","tg","rh","fx","fg","fhx","pg","px","pn","sq")}
-    def _cov(par):
-        r = knmi_get(f"{EDR_10}/locations/{wig}",
-                     params={"datetime": rng_t, "parameter-name": par}, timeout=20)
-        if r.status_code != 200:
-            return None
-        cov = r.json().get("coverages")
-        return cov[0].get("ranges", {}) if cov else None
-    try:
-        rg = _cov("ta,tx,tn,fx,ff")
-        if rg:
-            ta = [v for v in _edr_floats(rg.get("ta", {}).get("values")) if v is not None]
-            tx = [v for v in _edr_floats(rg.get("tx", {}).get("values")) if v is not None]
-            tn = [v for v in _edr_floats(rg.get("tn", {}).get("values")) if v is not None]
-            fx = [v for v in _edr_floats(rg.get("fx", {}).get("values")) if v is not None]
-            ff = [v for v in _edr_floats(rg.get("ff", {}).get("values")) if v is not None]
-            if tx or ta: out["tx"] = round(max(tx + ta), 1)
-            if tn or ta: out["tn"] = round(min(tn + ta), 1)
-            if ta:       out["tg"] = round(sum(ta) / len(ta), 1)
-            if fx:       out["fx"] = round(max(fx), 1)
-            if ff:       out["fg"] = round(sum(ff) / len(ff), 1)
-    except Exception as e:
-        print(f"  EDR-10min temp {station_nr}: {e}")
-    try:  # neerslag rg (mm/uur) → ×10/60 per 10-min stap
-        rg = _cov("rg")
-        if rg:
-            vals = [v for v in _edr_floats(rg.get("rg", {}).get("values")) if v is not None and v >= 0]
-            if vals: out["rh"] = round(sum(v * (10.0 / 60.0) for v in vals), 1)
-    except Exception as e:
-        print(f"  EDR-10min rg {station_nr}: {e}")
-    try:  # zon qg (W/m²): zon = >120 W/m², per 10-min stap = 1/6 uur
-        rg = _cov("qg")
-        if rg:
-            qg = _edr_floats(rg.get("qg", {}).get("values"))
-            out["sq"] = round(sum(1 for v in qg if v is not None and v >= 120) / 6.0, 1)
-    except Exception as e:
-        print(f"  EDR-10min qg {station_nr}: {e}")
-    return out if any(v is not None for v in out.values()) else None
+    from knmi_live_day import fetch_live_day
+    return fetch_live_day(station_nr, dag, _wigos(station_nr))
+
 
 def maak_dagrecord(station_nr, datum_obj, waarden, lopend=False):
     """Bouwt een dag-record met dezelfde vorm als parse_csv()."""
@@ -627,6 +583,8 @@ for STATION, STATION_NAAM in STATIONS:
 
         tx_gem, tn_gem, tg_gem, rh_som, sq_som = [], [], [], [], []
         for j, groep in sorted(jaar_groepen.items()):
+            if any(r.get("lopend") for r in groep):
+                continue
             verwacht = dagen_in_maand(j, m)
             min_dagen = drempel(verwacht)
             tx_v = [r["tx"] for r in groep if r["tx"] is not None]
@@ -643,6 +601,8 @@ for STATION, STATION_NAAM in STATIONS:
         # Klimaatdagen per jaar voor deze maand (eis: bijna volledige maand)
         klimaat_per_jaar = []
         for j, groep in sorted(jaar_groepen.items()):
+            if any(r.get("lopend") for r in groep):
+                continue
             verwacht = dagen_in_maand(j, m)
             if len([r for r in groep if r["tx"] is not None]) < drempel(verwacht):
                 continue
@@ -698,6 +658,8 @@ for STATION, STATION_NAAM in STATIONS:
 
         tx_gem, tn_gem, tg_gem, rh_som, sq_som = [], [], [], [], []
         for j, groep in sorted(jaar_groepen.items()):
+            if any(r.get("lopend") for r in groep):
+                continue
             verwacht = dagen_in_seizoen(sei, j)
             min_dagen = drempel(verwacht)
             tx_v = [r["tx"] for r in groep if r["tx"] is not None]
