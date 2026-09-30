@@ -1841,7 +1841,7 @@
     return { filename: fname, sizeBytes: png.size };
   }
 
-  async function genereerLossePluimenPNGs({lat, lon, naam, startDate, endDate, scale=2, zip=false, folderName, params=null, runHour=null}) {
+  async function genereerLossePluimenPNGs({lat, lon, naam, startDate, endDate, scale=2, zip=false, folderName, params=null, runHour=null, requiredParams=[]}) {
     const { naam: naamOut, startIso, endIso, fetchEndIso } = validateInput({lat, lon, naam, startDate, endDate});
     // Een gearchiveerde hoofdrun bevat het exacte centrale roosterpunt. Gebruik
     // bij een afgedwongen cyclus geen actuele omliggende punten, want dan zouden
@@ -1851,6 +1851,11 @@
       ? fetchEnsembleWithSpatialRain(lat, lon, startIso, fetchEndIso, runMeta, runContext)
       : fetchEnsemble(lat, lon, startIso, fetchEndIso, ENSEMBLE_FIELDS, runMeta, runContext), runContext));
     const models = buildModels(stable.value, startIso, endIso, stable.runMeta, params);
+    for (const param of requiredParams) {
+      if (!models.some(model => model.param === param)) {
+        throw new Error(`De ${({temp:'temperatuur'})[param] || param}-pluim ontbreekt in de gekozen run; er zijn geen losse pluimen gedownload. Kies een complete run.`);
+      }
+    }
     const results = [];
     const folder = slug(folderName || naamOut || 'plaats');
 

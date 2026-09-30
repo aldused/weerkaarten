@@ -9,10 +9,19 @@
 <script src="weerbewaking_document.js?v=20260712-mod1"></script>
 <script src="weerbewaking_export.js?v=20260910-scroll-cache-v3"></script>
 <script src="weerbewaking_sync.js?v=20260712-mod1"></script>
+<script>
+// Deze weerbewaking gebruikt standaard de 12 UTC-hoofdrun. Een expliciete
+// keuze in de runselector (URL-parameter) blijft behouden bij herladen.
+if (!new URLSearchParams(location.search).has('run')) {
+  const url = new URL(location.href);
+  url.searchParams.set('run', '12');
+  history.replaceState(null, '', url);
+}
+</script>
 <script src="pluim_run_switcher_48ffbf926db6.js" data-required="temperature_2m,precipitation,wind_speed_10m,cloud_cover,wind_gusts_10m"></script>
 <script src="pluim_math.js?v=20260808-pluim-audit"></script>
 <script src="pluim_png_encoder.js?v=20260907-worker-encoder"></script>
-<script src="weerbewaking_pluim_export.js?v=20260921-nieuwe-kleurpluim-v2"></script>
+<script src="weerbewaking_pluim_export.js?v=20260930-required-temp"></script>
 <script src="weerbewaking_wp.js?v=20260710"></script>
 <script>
   // Alleen toegankelijk na ontgrendelen op weerbewaking.html
@@ -349,7 +358,7 @@ body{--kop-scale:1}
       <label class="sync-toggle no-pdf" title="Pluimen bij PDF · gekozen run; download de aangevinkte kleurpluimen na de PDF"><input type="checkbox" id="pluim-bij-pdf" data-save="pluim-bij-pdf" checked> Download bij PDF</label>
       <fieldset class="pluim-keuzes no-pdf">
         <legend>Welke pluimen</legend>
-        <label><input type="checkbox" id="pluim-type-temp" data-save="pluim-type-temp" data-pluim-param="temp" data-pluim-label="temperatuur" checked> Temperatuur</label>
+        <label><input type="checkbox" id="pluim-type-temp" data-save="pluim-type-temp-v2" data-pluim-param="temp" data-pluim-label="temperatuur" checked> Temperatuur</label>
         <label><input type="checkbox" id="pluim-type-cloud" data-save="pluim-type-cloud" data-pluim-param="cloud" data-pluim-label="zon/bewolking" checked> Zon/bewolking</label>
         <label><input type="checkbox" id="pluim-type-wind" data-save="pluim-type-wind" data-pluim-param="wind" data-pluim-label="windkracht" checked> Windkracht</label>
         <label><input type="checkbox" id="pluim-type-rainmm" data-save="pluim-type-rainmm" data-pluim-param="rainmm" data-pluim-label="neerslag per 6 uur" checked> Neerslag</label>
@@ -1126,6 +1135,7 @@ function restoreDraft(){
       const k=el.getAttribute('data-save');
       if(el.matches('input[type="checkbox"]')){
         if(d[k]!=null) el.checked = !!d[k];
+        else if(k==='pluim-type-temp-v2') el.checked = true;
       } else if(el.matches('input, textarea, select')){
         if(d[k]!=null) el.value=d[k];
       } else {
@@ -1462,6 +1472,7 @@ async function genereerPluimNaast(){
   const selector=window.WeerlabPlumeRuns;
   if(!selector){ throw new Error('Pluim-runselector niet geladen'); }
   await selector.ready;
+  if(selector.state?.requestedUnavailableHour != null) throw new Error('De '+String(selector.state.requestedUnavailableHour).padStart(2,'0')+' UTC-run is nog niet beschikbaar. Kies eventueel bewust een andere run.');
   const runHour=Number(selector.state?.selectedHour);
   if(![0,6,12,18].includes(runHour)){ throw new Error('Geen complete ECMWF-run gekozen'); }
   const plaats = document.getElementById('plaats-in')?.value || 'Ridderkerk';
@@ -1486,7 +1497,9 @@ async function genereerPluimNaast(){
     zip: false,
     runHour,
     params: params,
+    requiredParams: params.includes('temp') ? ['temp'] : [],
   });
+  if(r.unavailable?.length) throw new Error('Niet alle gekozen pluimen konden worden gemaakt: '+r.unavailable.map(item=>item.label || item.param || item).join(', '));
   if(st) st.textContent='📊 '+r.count+' pluim'+(r.count===1?'':'en')+' uit de '+String(runHour).padStart(2,'0')+' UTC-run gedownload: '+labels.join(', ');
 }
 
