@@ -31,6 +31,7 @@ def dekking(station_id="0-20000-0-06260"):
         "dd": [270, 270, 270, 270, 270, 270],
         "tgn": [8, 7, 6, 5, 4, 3],
         "qg": [0, 119, 120, 121, 200, 0],
+        "ss": [0, 2, 3, 5, 2, 0],
         "rg": [0, 0.6, 1.2, 0, 0, 0],
     }
     return {
@@ -75,7 +76,7 @@ class ToplijstBerekeningTest(unittest.TestCase):
         self.assertTrue(math.isclose(anker["ff"], 3.5))
         self.assertEqual(anker["dd"], 270)
         self.assertEqual(t10n, 3.0)
-        self.assertEqual(zon, 0.5)
+        self.assertEqual(zon, 0.2)  # Gemeten 12 minuten; geen qg-drempelschatting.
         self.assertEqual(regen, 0.3)
 
     def test_bulk_opvraag_batcht_alle_stations(self):
