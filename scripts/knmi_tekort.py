@@ -171,8 +171,10 @@ def laad_edr_dag(aws: int, na_datum: pd.Timestamp | None) -> pd.DataFrame:
 
     rows = []
     for i, ts in enumerate(tijden):
-        rh = rng.get("RH", {}).get("values", [None])[i]
-        ev = rng.get("EV24", {}).get("values", [None])[i]
+        rh_values = rng.get("RH", {}).get("values", [])
+        ev_values = rng.get("EV24", {}).get("values", [])
+        rh = rh_values[i] if i < len(rh_values) else None
+        ev = ev_values[i] if i < len(ev_values) else None
         if rh is None or ev is None:
             continue
         # label → waarnemingsdag
