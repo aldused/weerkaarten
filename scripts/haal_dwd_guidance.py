@@ -129,6 +129,8 @@ DUITSE_MAANDEN = {
     11: "november", 12: "december",
 }
 
+TRANSLATION_USED = set()
+
 _model = None
 _tokenizer = None
 
@@ -491,6 +493,7 @@ def vertaal_tekst(tekst, backend=TRANSLATION_BACKEND, sessie=None):
             vertaald, google_ok = _vertaal_met_reserve(
                 stuk, sessie, gebruik_google=gebruik_google
             )
+            TRANSLATION_USED.add("google" if google_ok else "marian")
             vertaalde_stukken.append(vertaald)
             if gebruik_google and not google_ok:
                 gebruik_google = False
@@ -596,11 +599,19 @@ def main():
     output["bijgewerkt"] = datetime.now().isoformat()
     output["translation"] = {
         "backend": TRANSLATION_BACKEND,
+        "used": sorted(TRANSLATION_USED),
         "fallback": "Helsinki-NLP/opus-mt-de-nl",
         "glossaryVersion": 2,
     }
-    with open(args.output, "w") as f:
+    if any(output[naam].get("error") or not output[naam].get("original") or
+           (not args.source_only and not output[naam].get("translated")) for naam in URLS):
+        raise RuntimeError("DWD-feed onvolledig; laatste geldige uitvoer blijft behouden")
+    import tempfile
+    destination = os.path.abspath(args.output)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=os.path.dirname(destination), delete=False) as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
+        pending = f.name
+    os.replace(pending, destination)
     print(f"Opgeslagen: {args.output}")
 
 

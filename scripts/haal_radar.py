@@ -36,7 +36,7 @@ from knmi_api import knmi_get
 # ── Configuratie ─────────────────────────────────────────────────────────────
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 API_BASE = "https://api.dataplatform.knmi.nl/open-data/v1"
-PIPELINE_ID = "knmi_radar_forecast_native_v4_georef"
+PIPELINE_ID = "knmi_radar_forecast_native_v5_validity"
 
 DS_HISTORY  = ("nl_rdr_data_rtcor_5m", "1.0")  # gauge-gecorrigeerd, 1 image/file
 DS_FORECAST = ("radar_forecast",       "2.0")  # 25 images/file (+0..+120 min)
@@ -160,19 +160,18 @@ def _img_to_mmh(image_data, lut):
     row_i, col_i = lut
     # Mask out missing/out-of-image vóór resampling
     src = image_data.astype(np.float32)
-    out_of_image = src >= 65535
     missing      = src >= 65534
-    src[missing] = 0.0  # behandel missing als geen neerslag i.p.v. NaN
+    src[missing] = 0.0  # waarde wordt hieronder apart als ontbrekend gemarkeerd
 
     # PV * 0.01 = mm per 5 min  →  × 12 = mm/h
     src_mmh = src * 0.01 * 12.0
 
     # Nearest-neighbour resample (LUT wijst al naar de dichtstbijzijnde bronpixel)
     mmh = src_mmh[row_i, col_i]
-    oob = out_of_image[row_i, col_i]
+    invalid = missing[row_i, col_i]
 
     pv = mmh_to_pv(mmh)
-    pv[oob] = 255  # markeer out-of-image
+    pv[invalid] = 255  # ontbrekend en buiten beeld blijven onderscheiden van droog
     return pv
 
 
@@ -199,6 +198,8 @@ def parse_h5_forecast(path, n_frames):
             frames.append(_img_to_mmh(g["image_data"][:], lut))
             tv = g.attrs.get("image_datetime_valid", b"").decode().strip()
             tijden_valid.append(tv)
+    if len(frames) != n_frames:
+        raise ValueError(f"Onvolledige radar-nowcast: {len(frames)}/{n_frames} frames")
     return frames, tijden_valid
 
 
@@ -413,8 +414,7 @@ def main():
             print("ok")
         except Exception as e:
             print(f"FOUT: {e}")
-            hist_frames.append(np.zeros((TARGET_NLAT, TARGET_NLON), dtype=np.uint8))
-            hist_tijden.append(ts)
+            raise RuntimeError(f"Radarhistorie onvolledig: {fn}; vorige publicatie blijft behouden") from e
 
     # 5. Nowcast frames downloaden + parsen
     print("4. Nowcast verwerken...")
@@ -437,7 +437,7 @@ def main():
                 fcst_tijden.append(ts)
             print(f"  {len(fcst_frames)} nowcast frames (+5 t/m +{5*len(fcst_frames)} min)")
         except Exception as e:
-            print(f"  Nowcast download mislukt: {e}")
+            raise RuntimeError("Nowcast onvolledig; vorige publicatie blijft behouden") from e
 
     # 5b. De KNMI radar_forecast wordt standaard ongewijzigd gebruikt.
     # De oude 700 hPa-warp kon de officiële nowcast zichtbaar laten afwijken
@@ -549,7 +549,9 @@ def main():
         "calibratie": {
             "encoding": "uint8 PV (Marshall-Palmer terug-encoded)",
             "formule": "dBZ = 0.5 * PV - 32  ;  R = (10^(dBZ/10) / 200)^(1/1.6)",
-            "geen_data": 0,
+            "droog": 0,
+            "ontbrekend": 255,
+            "geen_data": 255,
             "buiten_beeld": 255,
         },
         "bronnen": {

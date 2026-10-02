@@ -2619,16 +2619,18 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
     var cum = 0;
     for (var f = 0; f < nFrames; f++) {
       var pv = radarData[f * nLat * nLon + cellOff];
-      var mmh = (pv > 0 && pv < 255) ? pvToMmh(pv) : 0;
+      var mmh = pv === 255 ? null : (pv > 0 ? pvToMmh(pv) : 0);
       var dbz = (pv > 0 && pv < 255) ? pvToDbz(pv) : null;
       cum += mmh * (dtMin / 60);
-      serie.push({ idx: f, mmh: mmh, dbz: dbz, cum: cum });
+      serie.push({ idx: f, mmh: mmh, dbz: dbz, cum: cum, complete: pv !== 255 && (f === 0 || serie[f-1].complete) });
     }
     return serie;
   }
 
   function bouwSamenvatting(serie) {
     if (!serie || !serie.length || tNowIndex < 0) return "Geen data beschikbaar.";
+    if (serie.some(function(s) { return s.mmh == null; })) return "Radarreeks voor dit punt is onvolledig; geen betrouwbare neerslagsom of droogmelding beschikbaar.";
+    if (serie.length <= tNowIndex + 1) return "Geen nowcast beschikbaar; alleen gemeten radar.";
     var dtMin = meta.interval_min || 5;
     // Vind eerste forecast-frame met regen
     var eersteRegen = -1;
@@ -2857,7 +2859,7 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var dt2 = parseFrameTime(bestIdx);
       var hhmm = dt2 ? String(dt2.getHours()).padStart(2,"0") + ":" + String(dt2.getMinutes()).padStart(2,"0") : "";
       var typ = (bestIdx > tNowIndex) ? " (vw)" : "";
-      var txt = hhmm + typ + " · " + s2.mmh.toFixed(1) + " mm/u · cum " + s2.cum.toFixed(1) + " mm";
+      var txt = hhmm + typ + " · " + (s2.mmh == null ? "ontbreekt" : s2.mmh.toFixed(1) + " mm/u") + " · cum " + (s2.complete ? "" : "≥ ") + s2.cum.toFixed(1) + " mm";
       document.getElementById("punt-spark-info").textContent = txt;
     };
 	    cv.onmouseleave = function() {
@@ -2892,14 +2894,14 @@ body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; background:
       var cls = "";
       if (i === tNowIndex) cls = "now";
       else if (i > tNowIndex) cls = "fcst";
-      if (s.mmh < 0.05) cls += " droog";
+      if (s.mmh != null && s.mmh < 0.05) cls += " droog";
       var label = hhmm;
       if (i === tNowIndex) label = "NU " + hhmm;
       else if (i > tNowIndex) label = "+" + ((i - tNowIndex) * dtMin) + "m " + hhmm;
 	      html += '<tr class="' + cls + '" data-frame="' + i + '"><td>' + label + '</td>';
-      html += '<td>' + (s.mmh < 0.05 ? "—" : s.mmh.toFixed(1)) + '</td>';
+      html += '<td>' + (s.mmh == null ? "ontbreekt" : s.mmh < 0.05 ? "—" : s.mmh.toFixed(1)) + '</td>';
       html += '<td>' + (s.dbz == null || s.dbz < 5 ? "—" : Math.round(s.dbz)) + '</td>';
-      html += '<td>' + s.cum.toFixed(1) + '</td></tr>';
+      html += '<td>' + (s.complete ? '' : '≥ ') + s.cum.toFixed(1) + '</td></tr>';
     }
     tb.innerHTML = html;
   }

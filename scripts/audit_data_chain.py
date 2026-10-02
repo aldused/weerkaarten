@@ -9,6 +9,7 @@ import subprocess
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 def iso(value):
     return datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -95,6 +96,61 @@ def inspect(root, now):
                 issue('station_month_records_disagreement',station,differences)
             observations.append(item)
         except Exception as exc:issue('observation_read',str(p.relative_to(root)),str(exc))
+    streams=[]
+    def stream_age(name, stamp, limit_hours, local=False):
+        try:
+            parsed=iso(stamp)
+            if parsed.tzinfo is None:
+                parsed=parsed.replace(tzinfo=ZoneInfo('Europe/Amsterdam') if local else timezone.utc)
+            age=(now-parsed).total_seconds()/3600
+            streams.append(dict(product=name,source_time=parsed.isoformat(),age_hours=round(age,2),limit_hours=limit_hours))
+            if age>limit_hours or age < -1: issue('stream_freshness',name,streams[-1])
+        except Exception as exc:issue('stream_timestamp',name,str(exc))
+    for name, keys, limit in [
+        ('bliksem_strikes.json',['updated'],0.15),
+        ('metar_data.json',['_update'],2),
+        ('mtg_prov_meta.json',['bijgewerkt'],0.5),
+        ('waarschuwingen.json',['generated'],2),
+        ('weatherpro_uur.json',['_meta','fetched'],2),
+        ('jvens.json',['current_run'],30),
+        ('pluim_archive_meta.json',['updated'],3),
+    ]:
+        if name not in products:issue('missing_active_product',name,'Expected active source absent');continue
+        value=products[name]
+        for key in keys:value=value.get(key) if isinstance(value,dict) else None
+        stream_age(name,value,limit)
+    radar=products.get('radar_meta.json',{})
+    if radar.get('tijden'):
+        stream_age('radar_meta.json',radar['tijden'][radar['t_now_index']],0.4)
+        if len(radar['tijden'])!=radar.get('frames') or radar.get('n_history',0)+radar.get('n_forecast',0)!=radar.get('frames'):
+            issue('radar_steps','radar_meta.json','Frame count differs from time axis')
+        stamps=[iso(t) for t in radar['tijden']]
+        if any((b-a).total_seconds()!=300 for a,b in zip(stamps,stamps[1:])):issue('radar_cadence','radar_meta.json','Missing or duplicate 5-minute step')
+    for name, data in products.items():
+        if not name.startswith('mosmix_') or not isinstance(data,dict) or not data.get('run') or name.endswith(('.local.json','_demo.json')):continue
+        stream_age(name,data['run'],18)
+        if name.startswith('mosmix_uurlijks_'):
+            for station,series in data.get('data',{}).items():
+                times=series.get('tijden_utc',series.get('tijden',[]))
+                if not times:issue('empty_hourly_forecast',name,station);continue
+                for field,values in series.items():
+                    if isinstance(values,list) and len(values)!=len(times):issue('hourly_forecast_length',name,dict(station=station,field=field,steps=len(values),expected=len(times)))
+                if series.get('tijden_utc'):
+                    stamps=[iso(t) for t in times]
+                    if len(set(stamps))!=len(stamps) or any((b-a).total_seconds()!=3600 for a,b in zip(stamps,stamps[1:])):
+                        issue('hourly_forecast_cadence',name,station)
+    dwd=products.get('dwd_guidance.json',{})
+    for section in ('kurzfrist','mittelfrist'):
+        part=dwd.get(section,{})
+        stream_age('dwd_guidance.json/'+section,part.get('fetchedAt'),30,local=True)
+        if not part.get('translated') or part.get('error'):issue('missing_translation','dwd_guidance.json',section)
+    rain=products.get('neerslag_records.json',{})
+    if rain.get('stations_achter_bron'):issue('precipitation_archive_behind','neerslag_records.json',rain['stations_achter_bron'])
+    if now.hour*60+now.minute>=20:
+        yesterday=(now.date()-timedelta(days=1)).isoformat()
+        for directory in (root/'data'/'observations').glob('*'):
+            if directory.is_dir() and (directory/(yesterday+'.json')).exists() and not (directory/(today+'.json')).exists():
+                issue('missing_current_day',directory.name,today)
     # Crawl actual navigation/assets rather than assuming every old/demo file is live.
     todo=['index.html'];seen=set();refs=set()
     while todo:
@@ -131,7 +187,7 @@ def inspect(root, now):
             elif job['process_status'][0]=='-' and job['process_status'][1] not in ('0','-'):issue('scheduler_failed',job['label'],job['process_status'])
     except Exception as exc:
         issues.append(dict(kind='unverified_scheduler_status',file='launchctl',detail=str(exc)))
-    return dict(generated_utc=now.isoformat(),root=str(root),json_products=len(products),models=checks,observations=observations,navigation_pages=sorted(seen),data_references=sorted(refs),schedulers=schedulers,issues=issues,limitations=['Local evidence only; CDN and upstream require separate live verification.','Nulls and stale files can be intentional for retired stations/products.','Log mtime is not evidence of successful import.'])
+    return dict(generated_utc=now.isoformat(),root=str(root),json_products=len(products),streams=streams,models=checks,observations=observations,navigation_pages=sorted(seen),data_references=sorted(refs),schedulers=schedulers,issues=issues,limitations=['Local evidence only; CDN and upstream require separate live verification.','Nulls and stale files can be intentional for retired stations/products.','Log mtime is not evidence of successful import.'])
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--root',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
