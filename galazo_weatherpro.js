@@ -88,5 +88,15 @@
    return exact.length===1?exact:locations;
   }catch(e){if(e.name==='AbortError')throw Error('Plaatszoeker antwoordt niet. Vul de coördinaten handmatig in.');throw e;}finally{clearTimeout(timer);}
  }
- root.GalazoWeatherPro={fetch:fetchForecast,normalize,windowFor,midnight,addDate,dateKey,timestamp,HOUR,TZ,INSTANT,INTERVAL,resolveLocation};
+ async function resolveElevation(lat,lon){
+  if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)throw Error('Ongeldige coördinaten voor hoogte');
+  const url=new URL('https://api.open-meteo.com/v1/elevation');url.searchParams.set('latitude',lat);url.searchParams.set('longitude',lon);
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),15000);
+  try{const r=await fetch(url.href,{signal:ctrl.signal});if(!r.ok)throw Error('Hoogte ophalen mislukt (HTTP '+r.status+')');const j=await r.json(),v=j.elevation?.[0];if(typeof v!=='number'||!Number.isFinite(v)||v< -500||v>4000)throw Error('Geen geldige locatiehoogte beschikbaar');return v;}finally{clearTimeout(timer);}
+ }
+ function selectHours(data,start,end){
+  if(!Number.isInteger(start)||!Number.isInteger(end)||start<0||end>24||start>=end)throw Error('Kies een begintijd vóór de eindtijd, binnen dezelfde dag.');
+  return {...data,range:{...data.range,startHour:start,endHour:end},hours:data.hours.filter(h=>{const hour=Number(h.t.slice(11,13));return hour>=start&&hour<end;})};
+ }
+ root.GalazoWeatherPro={fetch:fetchForecast,normalize,windowFor,midnight,addDate,dateKey,timestamp,HOUR,TZ,INSTANT,INTERVAL,resolveLocation,resolveElevation,selectHours};
 })(typeof window!=='undefined'?window:globalThis);
