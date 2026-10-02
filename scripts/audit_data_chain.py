@@ -33,6 +33,9 @@ def inspect(root, now):
         row['retired_candidate']=retired
         if not retired:
             freshness=meta.get('source_checked_at') or meta.get('run_utc')
+            if not freshness and meta.get('bijgewerkt'):
+                try: freshness=datetime.strptime(meta['bijgewerkt'],'%d %b %Y %H:%M').replace(tzinfo=ZoneInfo('Europe/Amsterdam')).isoformat()
+                except ValueError: issue('unverified_model_freshness',name,meta.get('bijgewerkt'))
             if freshness:
                 stamp=iso(freshness)
                 age=(now-stamp).total_seconds()/3600
