@@ -3,16 +3,10 @@
 # Lichte lopend-patcher — wrapper voor nl.edaldus.weerrecords-lopend.plist
 # Ververst alleen VANDAAG's lopende waarden (EDR 10-min) in records_<nr>.json
 # en uploadt de gewijzigde files naar R2. Geen git, geen ZIP, geen full regen.
-# Draait elke ~10 min; alleen actief 05:00-23:00 (daarbuiten meteen klaar).
+# Draait elke ~10 min, ook tijdens de nacht en dagovergang.
 # ═══════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 cd "/Users/aldus/KNMI_Project/weerlab"
-
-# Alleen overdag draaien (10# = forceer decimaal, anders octaal-fout bij 08/09).
-H=$((10#$(date +%H)))
-if [ "$H" -lt 5 ] || [ "$H" -ge 23 ]; then
-  exit 0
-fi
 
 # Niet over een nog lopende patch heen draaien.
 LOCK_DIR="/tmp/weerrecords-lopend.lock"
@@ -28,7 +22,11 @@ echo "── lopend-patch $(date '+%Y-%m-%d %H:%M') ──"
 # (Niet via stdout: de knmi_get key-rotatie print daar doorheen.)
 CHANGED_FILE="/tmp/lopend_changed.txt"
 : > "$CHANGED_FILE"
-LOPEND_CHANGED_FILE="$CHANGED_FILE" /usr/local/bin/python3 -u scripts/lopend_patch.py || true
+PATCH_STATUS=0
+STATE_FILE="${LOPEND_STATE_FILE:-/tmp/lopend_state.json}"
+PENDING_STATE="${STATE_FILE}.pending"
+rm -f "$PENDING_STATE"
+LOPEND_CHANGED_FILE="$CHANGED_FILE" LOPEND_STATE_PENDING="$PENDING_STATE" /usr/local/bin/python3 -u scripts/lopend_patch.py || PATCH_STATUS=$?
 
 CHANGED="$(grep -E '^(records|maanddata)_[0-9]+\.json$' "$CHANGED_FILE" 2>/dev/null || true)"
 if [ -n "$CHANGED" ]; then
@@ -37,6 +35,11 @@ if [ -n "$CHANGED" ]; then
   shell/r2_publish.sh $CHANGED
 else
   echo "Geen wijzigingen — niets te uploaden."
+fi
+# Commit the last-published signature only after successful R2 publication.
+# An upload error exits under set -e, leaving the old signature for a retry.
+if [ -f "$PENDING_STATE" ]; then
+  mv -f "$PENDING_STATE" "$STATE_FILE"
 fi
 
 # ── Landelijk maandoverzicht: lopende maand meebouwen (vandaag-data uit
@@ -52,3 +55,4 @@ if /usr/local/bin/python3 -u scripts/maak_landelijk_maand.py "$(date +%Y)" "$(da
 fi
 
 echo "Klaar $(date '+%H:%M')"
+exit "$PATCH_STATUS"

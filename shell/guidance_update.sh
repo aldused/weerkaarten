@@ -34,7 +34,7 @@ SHELL_DIR="$WEERLAB/shell"
 CACHE="$PROJECT/guidance_cache"
 CLAUDE_BIN="/opt/homebrew/bin/claude"
 CLAUDE_MODEL="opus"
-CODEX_BIN="/Applications/ChatGPT.app/Contents/Resources/codex"
+CODEX_BIN="${CODEX_BIN:-/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex}"
 BRACK_LEADS=(0 24 48 72 96 120)
 DRY_RUN=0
 PREVIEW=0
@@ -388,7 +388,7 @@ fi
 echo "claude -p concept (model: $CLAUDE_MODEL) ..."
 run_text_model() {
   local prompt_file="$1" output_file="$2" fase="$3"
-  if "$CLAUDE_BIN" -p "$(cat "$prompt_file")" \
+  if /usr/local/bin/python3 "$WEERLAB/scripts/run_with_timeout.py" --seconds 900 "$CLAUDE_BIN" -p "$(cat "$prompt_file")" \
       --model "$CLAUDE_MODEL" \
       --allowedTools "Read" \
       --max-turns 40 \
@@ -399,7 +399,7 @@ run_text_model() {
   fi
 
   echo "WAARSCHUWING: Claude niet beschikbaar voor $fase — probeer Codex read-only" >&2
-  if [ -x "$CODEX_BIN" ] && "$CODEX_BIN" exec \
+  if [ -x "$CODEX_BIN" ] && /usr/local/bin/python3 "$WEERLAB/scripts/run_with_timeout.py" --seconds 900 "$CODEX_BIN" exec \
       --ignore-user-config --ignore-rules --ephemeral \
       --sandbox read-only --skip-git-repo-check \
       -c 'model_reasoning_effort="high"' \

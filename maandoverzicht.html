@@ -278,7 +278,11 @@ var ALLE_NM = {
 };
 
 var ND=['zo','ma','di','wo','do','vr','za'];
-var D={}, TOPLIJST={}, J=new Date().getFullYear(), M=new Date().getMonth()+1;
+function nederlandseMaand(nu) {
+  var parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit'}).formatToParts(nu||new Date());
+  return {jaar:+parts.find(function(p){return p.type==='year';}).value,maand:+parts.find(function(p){return p.type==='month';}).value};
+}
+var liveMaand=nederlandseMaand(), D={}, TOPLIJST={}, J=liveMaand.jaar, M=liveMaand.maand;
 var hSt = STATIONS.find(function(s){return s.nr===344;}) || STATIONS[0]; // Rotterdam default
 var DATA_BASE = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) ? '' : 'https://data.weerlab.nl/';
 
@@ -307,7 +311,11 @@ function vulJaren() {
 
 function sync() {
   document.getElementById('sm').value = M;
-  document.getElementById('sj').value = J;
+  var years=document.getElementById('sj');
+  if(!Array.from(years.options).some(function(o){return +o.value===J;})) {
+    var option=document.createElement('option');option.value=option.textContent=J;years.add(option,0);
+  }
+  years.value = J;
 }
 
 function sel() {
@@ -354,8 +362,9 @@ function corrigeerMetToplijst(data, stationNaam) {
 }
 
 var stationRequest = 0;
-function laadData() {
+function laadData(achtergrond) {
   var request = ++stationRequest, requestedStation = hSt;
+  if (!achtergrond) {
   weerlabClimateStatus({fixed:"Stationgegevens laden…"});
   document.getElementById("st").innerHTML="";
   document.getElementById("rgl-wrap").style.display="none";
@@ -364,10 +373,11 @@ function laadData() {
   document.getElementById('msg').textContent = 'Laden...';
   document.getElementById('tbl').style.display = 'none';
   D = {};
+  }
   Promise.all([
-    fetch(dataUrl(hSt.file), { cache: 'no-store' })
+    fetch(dataUrl(hSt.file), { cache: 'no-store', signal:AbortSignal.timeout(30000) })
       .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
-    fetch(dataUrl('toplijst.json'), { cache: 'no-store' })
+    fetch(dataUrl('toplijst.json'), { cache: 'no-store', signal:AbortSignal.timeout(30000) })
       .then(function(r) { return r.ok ? r.json() : {}; })
       .catch(function() { return {}; })
   ])
@@ -379,8 +389,19 @@ function laadData() {
       document.getElementById('bw').textContent = hSt.naam + ' (0' + hSt.nr + ') · ' + (j.bijgewerkt || '');
       toon();
     })
-    .catch(function(e) { if(request!==stationRequest)return;document.getElementById('msg').textContent = 'De stationgegevens zijn niet beschikbaar. Kies opnieuw een station om te proberen.';weerlabClimateStatus({fixed:'Stationgegevens konden niet worden geladen'}); });
+    .catch(function(e) { if(request!==stationRequest)return;if(achtergrond){weerlabClimateStatus({fixed:'Verversen mislukt · laatst geladen metingen blijven zichtbaar'});return;}document.getElementById('msg').textContent = 'De stationgegevens zijn niet beschikbaar. Kies opnieuw een station om te proberen.';weerlabClimateStatus({fixed:'Stationgegevens konden niet worden geladen'}); });
 }
+function verversMaanddata() {
+  if(document.hidden)return;
+  var volgende=nederlandseMaand();
+  if(J===liveMaand.jaar && M===liveMaand.maand && (volgende.jaar!==J||volgende.maand!==M)) {
+    J=volgende.jaar;M=volgende.maand;sync();
+  }
+  liveMaand=volgende;
+  laadData(true);
+}
+setInterval(verversMaanddata,5*60*1000);
+document.addEventListener('visibilitychange',verversMaanddata);
 
 function bouwIdx() {
   var ms = String(M).padStart(2,'0'), ix = {}, ks = Object.keys(D);
@@ -609,7 +630,7 @@ function toon() {
   bouwRanglijst(eindDag);
   var selectedKeys=rows.filter(r=>r.o && ['tx','tn','tg','rr','sq'].some(field=>r.o[field]!=null)).map(r=>r.k);
   var through=selectedKeys[selectedKeys.length-1];
-  var historical=J!==new Date().getFullYear()||M!==new Date().getMonth()+1;
+  var huidige=nederlandseMaand(), historical=J!==huidige.jaar||M!==huidige.maand;
   weerlabClimateStatus(through?{through,historical,note:`${selectedKeys.length} van ${ad} dagen · normaalwaarden gelden voor de hele maand`}:{fixed:'Geen metingen beschikbaar voor deze maand'});
 
   tekenGrafiek();

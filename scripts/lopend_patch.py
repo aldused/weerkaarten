@@ -167,10 +167,11 @@ def load_state():
 
 def save_state(state):
     try:
-        tmp = STATE_FILE + ".tmp"
+        destination = os.environ.get('LOPEND_STATE_PENDING', STATE_FILE)
+        tmp = destination + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(state, fh)
-        os.replace(tmp, STATE_FILE)
+        os.replace(tmp, destination)
     except Exception as e:
         log(f"state opslaan mislukt: {e}")
 
@@ -181,6 +182,7 @@ def main():
     daysig = today.isoformat()
     changed = []
     vandaag_alle = {}   # per-station vandaag-waarden voor landelijk maandoverzicht
+    failed = []
     for path in files:
         try:
             with open(path) as fh:
@@ -191,7 +193,12 @@ def main():
         # Alleen actieve meetstations: numeriek nummer + dagreeks aanwezig.
         if not (stn and str(stn).isdigit() and records.get("maanddetail")):
             continue
-        vals = haal_dag_lopend(int(stn), today)
+        try:
+            vals = haal_dag_lopend(int(stn), today)
+        except Exception as exc:
+            failed.append(str(stn))
+            log(f"FOUT station {stn}: {exc}")
+            continue
         if not vals:
             continue
         vandaag_alle[str(int(stn))] = vals   # vóór de state-skip: dump altijd compleet
@@ -241,6 +248,8 @@ def main():
     out_list = os.environ.get("LOPEND_CHANGED_FILE", "/tmp/lopend_changed.txt")
     with open(out_list, "w") as fh:
         fh.write("\n".join(changed))
+    if failed:
+        raise SystemExit(f"FOUT: {len(failed)} stations niet bijgewerkt: {', '.join(failed)}")
 
 if __name__ == "__main__":
     main()

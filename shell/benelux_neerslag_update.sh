@@ -54,7 +54,7 @@ bouw_model() {
   local MODEL_VELDEN=("${VELDEN[@]}")
   case "$MODEL" in harmonie*) MODEL_VELDEN+=(radar zicht uursom) ;; esac
 
-  RUN="$("$PY" "$GENERATOR" --model "$MODEL" --latest-run 2>/dev/null | tail -1)"
+  RUN="$("$PY" "$ROOT/weerlab/scripts/run_with_timeout.py" --seconds 120 "$PY" "$GENERATOR" --model "$MODEL" --latest-run | tail -1)"
   if ! [[ "$RUN" =~ ^[0-9]{10}$ ]]; then
     echo "$(date '+%F %T') [$MODEL] FOUT: runlabel niet bepaald (bron onbereikbaar?)" >&2
     return 1
@@ -68,7 +68,7 @@ bouw_model() {
   if [ "$MODEL" = "ecmwf" ]; then
     EXTRA=(--run "$((10#${RUN: -2}))")
   fi
-  if ! "$PY" "$GENERATOR" --model "$MODEL" ${EXTRA[@]+"${EXTRA[@]}"}; then
+  if ! "$PY" "$ROOT/weerlab/scripts/run_with_timeout.py" --seconds 2700 "$PY" "$GENERATOR" --model "$MODEL" ${EXTRA[@]+"${EXTRA[@]}"}; then
     echo "$(date '+%F %T') [$MODEL] FOUT: bouw mislukt — marker blijft op $GEDAAN" >&2
     return 1
   fi

@@ -43,9 +43,27 @@ def fetch_live_day(station, day, wigos):
             if t in rows and rows[t]!=row: raise ValueError('Conflicting duplicate observation')
             rows[t]=row
     if not rows: return None
+    # A later partial response must not erase already observed timestamps.
+    if cache.exists():
+        previous = json.loads(cache.read_text())
+        if previous.get('date') == day.isoformat() and str(previous.get('station')) == str(station):
+            for row in previous.get('rows', []):
+                stamp = datetime.fromisoformat(row['time'].replace('Z', '+00:00'))
+                if start < stamp <= end:
+                    rows.setdefault(row['time'], row)
     dest=ROOT/'data'/'observations'/str(station); dest.mkdir(parents=True,exist_ok=True)
     ordered=[rows[t] for t in sorted(rows)]
-    payload={'station':station,'date':day.isoformat(),'source':BASE,'last_time':ordered[-1]['time'],'rows':ordered}
+    last = datetime.fromisoformat(ordered[-1]['time'].replace('Z', '+00:00'))
+    expected = int((last-start).total_seconds()/600)
+    observed_times = {datetime.fromisoformat(t.replace('Z','+00:00')) for t in rows}
+    missing = [ (start+timedelta(minutes=10*i)).isoformat().replace('+00:00','Z')
+                for i in range(1,expected+1)
+                if (start+timedelta(minutes=10*i)) not in observed_times ]
+    quality={'records':len(ordered),'expected_records':expected,'missing_times':missing,
+             'age_seconds':max(0,int((datetime.now(timezone.utc)-last).total_seconds())),
+             'last_success_utc':datetime.now(timezone.utc).isoformat(),
+             'valid_records_by_parameter':{k:sum(isinstance(r.get(k),(int,float)) and math.isfinite(r[k]) for r in ordered) for k in PARAMS.split(',')}}
+    payload={'station':station,'date':day.isoformat(),'source':BASE,'last_time':ordered[-1]['time'],'quality':quality,'rows':ordered}
     def write(name,obj):
         p=dest/name; tmp=p.with_suffix('.tmp'); tmp.write_text(json.dumps(obj,separators=(',',':'))); os.replace(tmp,p)
     write(f'{day}.json',payload)

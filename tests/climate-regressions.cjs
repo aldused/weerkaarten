@@ -5,7 +5,8 @@ const pages=['records_debilt','dagrecords_6dagen','dagrecords_jaar','hittegolven
 for(const name of pages){
  const html=fs.readFileSync(path.join(root,name+'.html'),'utf8');
  for(const [,attrs,body]of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))if(!/\bsrc=|application\/ld\+json/.test(attrs))new vm.Script(body,{filename:name+'.html'});
- assert(html.includes('klimaat.css?v='));assert(html.includes('id="climate-title"'));
+ if(name!=='p13_records'){assert(html.includes('klimaat.css?v='));assert(html.includes('id="climate-title"'));}
+ else assert(html.includes('<title>'),'P13 uses its own page layout');
 }
 // A fresh export must not make old observations look current.
 const status={dataset:{},setAttribute(){}};

@@ -11,7 +11,8 @@ from knmi_api import knmi_get
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-def _wigos(nr): return f"0-20000-0-06{nr}"
+from knmi_station_ids import station_wigos
+def _wigos(nr): return station_wigos(nr)
 # Volledige KNMI-stations-lijst (zelfde als knmi_records.py)
 _RUW = [
     # Hoofdstations

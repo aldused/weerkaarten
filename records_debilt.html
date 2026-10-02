@@ -2062,8 +2062,8 @@ async function verversActueleDatumrecords() {
   }
 }
 
-async function laadStation(stn) {
-  if (Object.prototype.hasOwnProperty.call(allData, stn)) return allData[stn];
+async function laadStation(stn, refresh = false) {
+  if (!refresh && Object.prototype.hasOwnProperty.call(allData, stn)) return allData[stn];
   if (laadPromises[stn]) return laadPromises[stn];
 
   laadPromises[stn] = (async () => {
@@ -2073,7 +2073,7 @@ async function laadStation(stn) {
         if (!src) throw new Error("Historische bron niet beschikbaar");
         allData[stn] = filterRecordsByStation(src, HIST_STATIONS[stn], stn);
       } else {
-        const r = await fetch(`${RECBASE}records_${stn}.json?t=` + Date.now());
+        const r = await fetch(`${RECBASE}records_${stn}.json?t=` + Date.now(), {cache:'no-store',signal:AbortSignal.timeout(30000)});
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         let base = RecordStations.normalize(await r.json(), stn, await RecordStations.load());
         if (HIST_MERGE[stn]) {
@@ -2085,6 +2085,10 @@ async function laadStation(stn) {
       }
       return allData[stn];
     } catch(e) {
+      if (refresh && allData[stn]) {
+        console.warn('Records verversen mislukt; vorige gegevens behouden:', stn, e);
+        return allData[stn];
+      }
       // Mislukte aanvragen niet cachen: de groepslader probeert ze één keer
       // opnieuw en een latere stationkeuze mag eveneens opnieuw laden.
       delete allData[stn];
@@ -4170,6 +4174,26 @@ function toon() {
 }
 
 // Init
+let recordsRefreshBusy = false;
+async function verversRecordBronnen() {
+  if (document.hidden || recordsRefreshBusy || !data) return;
+  const selected = document.getElementById('sel-station').value;
+  if (HIST_STATIONS[selected]) return;
+  const sources = GROEPEN[selected] ? GROEPEN[selected].stns : [selected];
+  recordsRefreshBusy = true;
+  try {
+    const fresh = await Promise.all(sources.map(stn => laadStation(stn, /^\d+$/.test(String(stn)) || stn === 'debilt')));
+    if (document.getElementById('sel-station').value !== selected || fresh.some(x => !x)) return;
+    multiData = GROEPEN[selected] ? fresh : null;
+    data = fresh[0];
+    natDagCache = null;
+    hertekenNaActueleTx();
+    if (huidigeHoofdtab === 'maandranking') { toonMaandranking(); toonTussenstand(); }
+    if (huidigeHoofdtab === 'koudedagen') kdRender();
+  } finally { recordsRefreshBusy = false; }
+}
+window.setInterval(verversRecordBronnen,5*60*1000);
+document.addEventListener('visibilitychange',verversRecordBronnen);
 document.addEventListener("DOMContentLoaded", () => {
   vulHistorischeStations();
   vulDagDagen();

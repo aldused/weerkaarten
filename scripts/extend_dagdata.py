@@ -43,7 +43,8 @@ STATIONS = [
 ]
 
 def wigos(stn):
-    return f"0-20000-0-06{stn:03d}"
+    from knmi_station_ids import station_wigos
+    return station_wigos(stn)
 
 def haal_edr(stn, datum_iso):
     """Haal 1 dag op via EDR. Returnt dict met raw ints (0.1-eenheden) of None.

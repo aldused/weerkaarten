@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const read=name=>fs.readFileSync(__dirname+'/../'+name,'utf8');
 test('European map metadata uses the data server and flags stale or unknown model times',()=>{
- const source=read('beta_wxcharts.html');
+ const source=read('weerkaarten_europa.html');
  const code=source.match(/function runAgeWarning\([^\n]+/)[0];
  const ctx=vm.createContext({Date});vm.runInContext(code,ctx);
  const now=Date.parse('2026-09-14T13:00:00Z');
@@ -26,10 +26,5 @@ test('Verification distinguishes a failed request from an empty dataset and perm
  ctx.fetch=async()=>({ok:true,json:async()=>({dagen:[]})});await nodes.opnieuw.click();assert.match(nodes.subtitel.textContent,/Nog geen/);assert.doesNotMatch(nodes['geen-data'].innerHTML,/mislukt/);
 });
 
-test('Slow optional plume sources cannot block available core panels indefinitely',async()=>{
- const source=read('pluim_6_plus.html'),start=source.indexOf('async function optionalWithin('),end=source.indexOf('async function fetchCycleMatchedData',start);
- const ctx=vm.createContext({Promise,setTimeout,clearTimeout});vm.runInContext(source.slice(start,end),ctx);
- assert.equal(await ctx.optionalWithin(new Promise(()=>{}),5),null);
- const data={cloud:1};assert.equal(await ctx.optionalWithin(Promise.resolve(data),100),data);
- await assert.rejects(ctx.optionalWithin(Promise.reject(Error('source failed')),100),/source failed/);
-});
+// Optional ENS6plus panels are covered by pluim_6_plus_coherence.test.cjs;
+// the former optionalWithin loader was replaced by the exact-run client.

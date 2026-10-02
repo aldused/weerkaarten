@@ -1499,6 +1499,7 @@ const MENU_LABELS = {
     "9": "9 panelen"
   },
   "vorm": {
+    "9": "9 panelen",
     "1": "Eén plaats",
     "6": "Zes plaatsen",
     "trend": "Runs onder elkaar",
@@ -1512,6 +1513,7 @@ const MENU_LABELS = {
     "kansen": "Kansen (PASCAL)"
   },
   "grootheid": {
+    "bewolking": "Bewolking",
     "temp": "Temperatuur",
     "neerslag": "Neerslag",
     "wind": "Wind",
