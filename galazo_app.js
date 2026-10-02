@@ -1,6 +1,6 @@
 (function(){
  'use strict';
- const $=id=>document.getElementById(id),src=GalazoWeatherPro,core=GalazoCore;let raw=null,processed=null,busy=false;
+ const $=id=>document.getElementById(id),src=GalazoWeatherPro,core=GalazoCore;let raw=null,processed=null,busy=false;const edits=new Map();
  const today=src.dateKey(Date.now());$('start').min=today;$('start').max=src.addDate(today,6);$('start').value=today;$('weather-date').value=today;$('document-date').value=today;$('document-time').value=new Date().toLocaleTimeString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  const textIds=['situation','day-weather','weather-date','report','document-date','document-time'],draftKey='wb_galazo_text_v1';
  try{const saved=JSON.parse(localStorage.getItem(draftKey)||'{}');for(const id of textIds)if(typeof saved[id]==='string')$(id).value=saved[id];}catch{}
@@ -10,9 +10,9 @@
  function settings(){return core.validateCriteria(Object.fromEntries(core.CRITERIA.map(c=>[c.key,numeric('criterion-'+c.key)])));}
  function context(){return {documentDate:$('document-date').value,documentTime:$('document-time').value,event:$('event').value.trim(),location:$('location').value.trim(),report:$('report').value.trim(),situation:$('situation').value.trim(),dayWeather:$('day-weather').value.trim(),weatherDate:$('weather-date').value,elevation:numeric('elevation'),lat:numeric('latitude'),lon:numeric('longitude')};}
  function status(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
- function buttons(){const valid=!!processed&&!busy;$('download').disabled=!valid;$('print').disabled=!valid;$('load').disabled=busy;document.querySelectorAll('#galazo-form input,#galazo-form select,#galazo-form textarea').forEach(el=>el.disabled=busy);document.querySelectorAll('[data-text-field]').forEach(el=>el.contentEditable=busy?'false':'plaintext-only');}
- function clear(){raw=null;processed=null;$('documents').replaceChildren();$('diagnostics').textContent='Nog geen actuele gegevens geladen.';buttons();}
- async function refresh(){if(!raw)return;try{processed=null;buttons();processed=core.process(src.selectHours(raw,Number($('start-hour').value),Number($('end-hour').value)),context(),settings());await GalazoDocument.fit(processed,$('documents'));$('diagnostics').textContent=JSON.stringify({source:processed.source,issued:processed.issued,requestedHours:processed.hours.length,availableHours:processed.hours.filter(h=>h.available).length,wbgtHours:processed.hours.filter(h=>h.wbgt!==null).length,diagnostics:processed.diagnostics},null,2);const noWBGT=processed.hours.filter(h=>h.wbgt===null).length;status(`${processed.hours.filter(h=>h.available).length} van ${processed.hours.length} uurvakken beschikbaar · ${processed.warnings.length} dagwaarschuwing(en).${noWBGT?' WBGT ontbreekt in '+noWBGT+' uurvakken; zie gegevenscontrole.':''}`);buttons();}catch(e){processed=null;$('documents').replaceChildren();status(e.message,true);buttons();}}
+ function buttons(){const valid=!!processed&&!busy;$('download').disabled=!valid;$('print').disabled=!valid;$('load').disabled=busy;document.querySelectorAll('#galazo-form input,#galazo-form select,#galazo-form textarea').forEach(el=>el.disabled=busy);document.querySelectorAll('[data-text-field],[data-hour-field]').forEach(el=>el.contentEditable=busy?'false':'plaintext-only');}
+ function clear(){edits.clear();raw=null;processed=null;$('documents').replaceChildren();$('diagnostics').textContent='Nog geen actuele gegevens geladen.';buttons();}
+ async function refresh(){if(!raw)return;try{processed=null;buttons();processed=GalazoEdits.finish(core.process(GalazoEdits.apply(src.selectHours(raw,Number($('start-hour').value),Number($('end-hour').value)),edits),context(),settings()),edits,core);await GalazoDocument.fit(processed,$('documents'));$('diagnostics').textContent=JSON.stringify({source:processed.source,issued:processed.issued,requestedHours:processed.hours.length,availableHours:processed.hours.filter(h=>h.available).length,wbgtHours:processed.hours.filter(h=>h.wbgt!==null).length,diagnostics:processed.diagnostics},null,2);const noWBGT=processed.hours.filter(h=>h.wbgt===null).length;status(`${processed.hours.filter(h=>h.available).length} van ${processed.hours.length} uurvakken beschikbaar · ${processed.warnings.length} dagwaarschuwing(en).${edits.size?' Handmatige correcties in '+edits.size+' uurvak(ken).':''}${noWBGT?' WBGT ontbreekt in '+noWBGT+' uurvakken; zie gegevenscontrole.':''}`);buttons();}catch(e){processed=null;$('documents').replaceChildren();status(e.message,true);buttons();}}
  $('galazo-form').addEventListener('submit',async e=>{e.preventDefault();if(busy||!$('galazo-form').reportValidity())return;clear();busy=true;buttons();status('WeatherPro laden…');try{const c=context();if(!c.event||!c.location)throw Error('Vul evenementnaam en locatie in');settings();
  if(c.lat===null&&c.lon===null){
   status('Coördinaten zoeken voor '+c.location+'…');const matches=await src.resolveLocation(c.location);
@@ -30,11 +30,25 @@
  for(const id of ['start-hour','end-hour'])$(id).addEventListener('input',()=>refresh());
  for(const id of ['document-date','document-time','event','report','situation','day-weather','weather-date','elevation',...core.CRITERIA.map(c=>'criterion-'+c.key)])$(id).addEventListener('input',()=>{saveText();refresh();});
  $('documents').addEventListener('input',e=>{
+  if(e.target.closest('[data-hour-field]')){$('download').disabled=true;$('print').disabled=true;return;}
   const el=e.target.closest('[data-text-field]');if(!el||busy)return;
   const field=$(el.dataset.textField),text=el.innerText.replace(/\r/g,'').slice(0,field.maxLength);
   field.value=text;if(el.innerText.length>field.maxLength)el.textContent=text;
   if(processed)processed.context=context();saveText();
  });
+ $('documents').addEventListener('focusout',e=>{
+  const cell=e.target.closest('[data-hour-field]');if(!cell||busy||!raw)return;
+  const field=cell.dataset.hourField,iso=cell.dataset.iso;
+  if(cell.textContent===cell.dataset.display){buttons();return;}
+  try{
+   const value=GalazoEdits.parse(field,cell.textContent),changes={...(edits.get(iso)||{}),[field]:value};
+   // A new meteorological correction replaces an earlier manual WBGT estimate.
+   if(['tt','rh','ff'].includes(field))delete changes.wbgt;
+   edits.set(iso,changes);refresh();
+  }catch(err){cell.textContent=cell.dataset.display;status(err.message,true);buttons();}
+ });
+ $('documents').addEventListener('keydown',e=>{if(e.target.closest('[data-hour-field]')&&e.key==='Enter'){e.preventDefault();e.target.blur();}});
+ $('reset-table').addEventListener('click',()=>{if(busy)return;edits.clear();refresh();});
  $('download').addEventListener('click',async()=>{if(!processed||busy)return;busy=true;buttons();status('GALAZO PDF maken…');try{await GalazoDocument.exportPdf(processed);status('GALAZO PDF gedownload.');}catch(e){status('PDF maken mislukt: '+e.message,true);}finally{busy=false;buttons();}});
  $('print').addEventListener('click',()=>{if(processed&&!busy)window.print();});
 })();
