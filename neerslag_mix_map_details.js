@@ -4,6 +4,7 @@ export class MapDetails{
   constructor(map,L){this.map=map;this.L=L;this.cache=new Map();this.layers=new Map();this.requests=new Map();this.revision=0;this.borders=true;this.manifest=null;}
   async update(){
     const revision=++this.revision;
+    if(!this.provinces){this.provinces=fetch('./neerslag_mix_provincies.json').then(r=>{if(!r.ok)throw Error('Provincies niet geladen');return r.json();}).then(data=>{this.L.geoJSON(data,{pane:'land',interactive:false,style:{fillColor:'#f5efd9',fillOpacity:1,stroke:false}}).addTo(this.map);this.L.geoJSON(data,{pane:'borders',interactive:false,style:{fill:false,color:'#fff',weight:1.4,opacity:1}}).addTo(this.map);}).catch(()=>{this.provinces=null;});}
     this.manifest??=fetch('./ecmwf_weerradar/assets/map-details/index.json').then(r=>{if(!r.ok)throw new Error('Kaartindex niet bereikbaar');return r.json();}).catch(error=>{this.manifest=null;throw error;});
     let manifest;try{manifest=await this.manifest;}catch{return;}
     if(revision!==this.revision)return;
@@ -25,7 +26,7 @@ export class MapDetails{
       }
       if(revision!==this.revision)return;
       const groups={};
-      const styles={land:{stroke:false,fillColor:'#719342',fillOpacity:.44},countries:{color:'#1b3034',weight:1,opacity:.75,fill:false},regions:{color:'#2e4d58',weight:.6,opacity:.65,fill:false}};
+      const styles={land:{stroke:false,fillColor:'#f5efd9',fillOpacity:1},countries:{color:'#ffffff',weight:1.6,opacity:1,fill:false},regions:{color:'#ffffff',weight:0,opacity:0,fill:false}};
       for(const kind of ['land','regions','countries']){
         const layer=this.L.geoJSON([],{pane:kind==='land'?'land':'borders',interactive:false,style:styles[kind]});groups[kind]=layer;
         // Inserting thousands of SVG/canvas paths in one task blocks input.
