@@ -7,6 +7,12 @@
  const fmt=(v,d=0)=>finite(v)?v.toFixed(d).replace('.',','):'—';
  const time=iso=>iso?new Date(iso).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',dateStyle:'short',timeStyle:'short'}):'onbekend';
  const day=d=>new Date(d+'T12:00:00Z').toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long',year:'numeric'});
+ function documentDate(data){
+  const date=data.context.documentDate||root.GalazoWeatherPro.dateKey(Date.parse(data.fetched));
+  const label=new Date(date+'T12:00:00Z').toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long'});
+  const clock=data.context.documentTime||new Date(data.fetched).toLocaleTimeString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  return label+' - '+clock+' uur';
+ }
  function weather(code){
   if(!finite(code))return '—';
   const exact={[-8]:'Sluierbewolking',[-7]:'Sneeuwstorm',[-6]:'Storm',[-5]:'IJzel',[-4]:'Dichte mist',[-3]:'Zware sneeuw',[-2]:'Zware regen',[-1]:'Zware regen',0:'Helder',1:'Vrijwel helder',2:'Licht bewolkt',3:'Opklaringen',4:'Half bewolkt',5:'Wolkenvelden',6:'Veel bewolking',7:'Overwegend bewolkt',8:'Bewolkt',9:'Zicht op hemel ontbreekt',10:'Nevel',11:'Grondmist',12:'Grondmist',13:'Weerlicht',17:'Onweerskans',18:'Windstoten',19:'Windhoos',20:'Motregenkans',21:'Regenkans',22:'Sneeuwkans',23:'Natte sneeuw',24:'IJzelkans',25:'Lichte bui',26:'Sneeuwbui',27:'Korrelhagelbui',28:'Mistkans',29:'Onweerskans'};
@@ -26,13 +32,13 @@
    const failures=data.diagnostics.filter(d=>d.code==='request-failed');
    const issues=[missing?`${missing} uurvakken zonder brondata.`:'',wbgtMissing?`WBGT ontbreekt in ${wbgtMissing} uurvakken.`:'',...failures.map(f=>`${f.period}: ${f.message}.`)].filter(Boolean).join(' ');
    const reasons=[...new Set(rows.map(h=>h.wbgtReason).filter(Boolean))];
-   pages.push(`<section class="sheet pagina" data-key="${date}_${start}" data-hours="${chunk.length}"><header class="doc-header"><img src="weerbewaking_logo.png" alt="Weerbewaking"><div class="brand"><strong>GALAZO</strong><span>WEER | HARDLOOPEVENEMENTEN</span></div></header><div class="plaats-blok"><span class="label">LOCATIE</span><strong>${esc(data.context.location)}</strong><span class="coordinates">${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}</span></div><h1 class="titel">${esc(data.context.event)}</h1><p class="metadata">${esc(day(date))} · uurvakken ${esc(chunk[0].t.slice(11,16))}–${esc(chunk.at(-1).t.slice(11,16))} (${esc(chunk[0].offset)})<br>Bijgewerkt ${esc(time(data.fetched))} · uitgifte ${esc(issued)}<br>Periode: ${esc(day(data.range.start))} t/m ${esc(day(root.GalazoWeatherPro.addDate(data.range.end,-1)))} · ${String(data.range.startHour??0).padStart(2,'0')}:00–${String(data.range.endHour??24).padStart(2,'0')}:00 · Europe/Amsterdam</p>${warningHTML(warning,rows)}${issues?`<p class="data-note">${esc(issues)}</p>`:''}${data.issued.some(i=>Date.parse(data.fetched)-Date.parse(i)>86400000)?'<p class="data-note">De bronuitgifte is ouder dan 24 uur.</p>':''}<div class="blocks">${table(chunk.slice(0,6),date)}${chunk.length>6?table(chunk.slice(6),date):''}</div><footer class="doc-footer"><p><strong>* WBGT: modelschatting buiten met zon.</strong> GGD/RIVM 2023: 0,7 × Tnw + 0,2 × Tg + 0,1 × Ta. Tnw en Tg via de bestaande Liljegren-warmtebalans; afgerond op 0,1 °C.</p><p class="source-links"><span class="page-number"></span></p></footer></section>`);first=false;start+=chunk.length;
+   pages.push(`<section class="sheet pagina" data-key="${date}_${start}" data-hours="${chunk.length}"><header class="doc-header"><img src="weerbewaking_logo.png" alt="Weerbewaking"><div class="brand"><strong>GALAZO</strong><span>WEER | HARDLOOPEVENEMENTEN</span></div></header><p class="metadata document-date">${esc(documentDate(data))}</p><div class="plaats-blok"><span class="label">LOCATIE</span><strong>${esc(data.context.location)}</strong><span class="coordinates">${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}</span></div><h1 class="titel">${esc(data.context.event)}</h1>${warningHTML(warning,rows)}${issues?`<p class="data-note">${esc(issues)}</p>`:''}${data.issued.some(i=>Date.parse(data.fetched)-Date.parse(i)>86400000)?'<p class="data-note">De bronuitgifte is ouder dan 24 uur.</p>':''}<div class="blocks">${table(chunk.slice(0,6),date)}${chunk.length>6?table(chunk.slice(6),date):''}</div><footer class="doc-footer"><p><strong>* WBGT: modelschatting buiten met zon.</strong> GGD/RIVM 2023: 0,7 × Tnw + 0,2 × Tg + 0,1 × Ta. Tnw en Tg via de bestaande Liljegren-warmtebalans; afgerond op 0,1 °C.</p><p class="source-links"><span class="page-number"></span></p></footer></section>`);first=false;start+=chunk.length;
   }}
   container.innerHTML=pages.join('');
   const intro=container.querySelector('.sheet')?.cloneNode(true);
   if(intro){
    intro.dataset.key='intro';intro.dataset.hours='0';intro.classList.add('intro-sheet');
-   intro.querySelector('.metadata').innerHTML=`Bijgewerkt ${esc(time(data.fetched))} · uitgifte ${esc(data.issued.map(time).join(' / ')||'onbekend')}<br>Periode: ${esc(day(data.range.start))} t/m ${esc(day(root.GalazoWeatherPro.addDate(data.range.end,-1)))} · ${String(data.range.startHour??0).padStart(2,'0')}:00–${String(data.range.endHour??24).padStart(2,'0')}:00 · Europe/Amsterdam`;
+
    intro.querySelectorAll('.daily-warning,.data-note').forEach(el=>el.remove());
    const chosen=data.context.weatherDate||data.range.start;
    const heading=chosen===root.GalazoWeatherPro.dateKey(Date.parse(data.fetched))?'Vandaag':day(chosen);
