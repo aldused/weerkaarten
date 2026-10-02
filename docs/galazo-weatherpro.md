@@ -68,3 +68,7 @@ Er wordt dezelfde HTML voor scherm, print en export gebruikt. Gewoonlijk twee ze
 ## Aanvulling: tekst op blad 1
 
 Blad 1 bevat afzonderlijke redactionele tekstvakken voor de weersituatie en het weer voor vandaag of een gekozen datum, in dezelfde stijl als de bestaande uurlijkse weerbewaking. Bewerken kan via de invoervakken of rechtstreeks op blad 1. Tekstconcepten worden lokaal bewaard en in de PDF opgenomen. De uurtabellen beginnen op blad 2. Redactionele tekst is geen automatisch gegenereerde of verzonnen brondata.
+
+## Herstel plaatsnaam ophalen
+
+Een plaatsnaam volstaat nu om de tabel op te halen. PDOK Locatieserver wordt uitsluitend gebruikt voor geografische coördinaten, nooit voor weergegevens. Bij meerdere plaatsen kiest de gebruiker het juiste resultaat; handmatige coördinaten blijven mogelijk. Wijziging van de plaatsnaam wist eerdere coördinaten en maakt de oude verwachting ongeldig. Zonder locatiehoogte blijft alleen WBGT leeg. Live gecontroleerd met Singelloop, Utrecht, 4 oktober 2026: 24 van 24 uurvakken beschikbaar zonder vooraf ingevulde coördinaten.

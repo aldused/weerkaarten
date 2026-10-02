@@ -73,5 +73,20 @@
   if(!data.hours.some(h=>h.available))throw Error('WeatherPro levert geen uren in de gekozen periode');
   return {...data,lat,lon,fetched:new Date().toISOString()};
  }
- root.GalazoWeatherPro={fetch:fetchForecast,normalize,windowFor,midnight,addDate,dateKey,timestamp,HOUR,TZ,INSTANT,INTERVAL};
+ // PDOK is used only to resolve Dutch place names into coordinates, never
+ // for weather values. Forecast requests remain exclusively WeatherPro.
+ async function resolveLocation(name){
+  const url=new URL('https://api.pdok.nl/bzk/locatieserver/search/v3_1/free');
+  url.search=new URLSearchParams({q:name,fq:'type:woonplaats',rows:'10'}).toString();
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),15000);
+  try{
+   const r=await fetch(url.href,{signal:ctrl.signal});if(!r.ok)throw Error('Plaats zoeken mislukt (HTTP '+r.status+')');
+   const j=await r.json(),docs=j.response?.docs;
+   if(!Array.isArray(docs))throw Error('Plaatszoeker geeft geen geldige resultaten');
+   const locations=docs.flatMap(d=>{const m=d.centroide_ll?.match(/^POINT\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)$/);if(!m)return [];const lon=Number(m[1]),lat=Number(m[2]);if(!Number.isFinite(lat)||!Number.isFinite(lon))return [];return [{name:d.weergavenaam||d.woonplaatsnaam,place:d.woonplaatsnaam,lat,lon}];});
+   const exact=locations.filter(l=>l.place?.toLocaleLowerCase('nl')===name.trim().toLocaleLowerCase('nl'));
+   return exact.length===1?exact:locations;
+  }catch(e){if(e.name==='AbortError')throw Error('Plaatszoeker antwoordt niet. Vul de coördinaten handmatig in.');throw e;}finally{clearTimeout(timer);}
+ }
+ root.GalazoWeatherPro={fetch:fetchForecast,normalize,windowFor,midnight,addDate,dateKey,timestamp,HOUR,TZ,INSTANT,INTERVAL,resolveLocation};
 })(typeof window!=='undefined'?window:globalThis);
