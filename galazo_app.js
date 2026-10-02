@@ -36,18 +36,33 @@
   field.value=text;if(el.innerText.length>field.maxLength)el.textContent=text;
   if(processed)processed.context=context();saveText();
  });
- $('documents').addEventListener('focusout',e=>{
-  const cell=e.target.closest('[data-hour-field]');if(!cell||busy||!raw)return;
+ let tabbing=false;
+ async function commitCell(cell){
+  if(!cell||busy||!raw)return;
   const field=cell.dataset.hourField,iso=cell.dataset.iso;
   if(cell.textContent===cell.dataset.display){buttons();return;}
   try{
    const value=GalazoEdits.parse(field,cell.textContent),changes={...(edits.get(iso)||{}),[field]:value};
    // A new meteorological correction replaces an earlier manual WBGT estimate.
    if(['tt','rh','ff'].includes(field))delete changes.wbgt;
-   edits.set(iso,changes);refresh();
+   edits.set(iso,changes);await refresh();
   }catch(err){cell.textContent=cell.dataset.display;status(err.message,true);buttons();}
+ }
+ $('documents').addEventListener('focusout',e=>{if(!tabbing)commitCell(e.target.closest('[data-hour-field]'));});
+ $('documents').addEventListener('keydown',async e=>{
+  const cell=e.target.closest('[data-hour-field]');if(!cell||busy||tabbing)return;
+  if(e.key==='Enter'){e.preventDefault();cell.blur();return;}
+  if(e.key!=='Tab')return;
+  e.preventDefault();
+  const cells=[...$('documents').querySelectorAll('[data-hour-field]')],next=cells[cells.indexOf(cell)+(e.shiftKey?-1:1)];
+  const target=next?{field:next.dataset.hourField,iso:next.dataset.iso}:null;
+  tabbing=true;
+  try{
+   await commitCell(cell);
+   const focus=target?[...$('documents').querySelectorAll('[data-hour-field]')].find(el=>el.dataset.hourField===target.field&&el.dataset.iso===target.iso):$(e.shiftKey?'load':'reset-table');
+   if(focus){focus.focus();if(target){const range=document.createRange();range.selectNodeContents(focus);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);}}
+  }finally{tabbing=false;}
  });
- $('documents').addEventListener('keydown',e=>{if(e.target.closest('[data-hour-field]')&&e.key==='Enter'){e.preventDefault();e.target.blur();}});
  $('reset-table').addEventListener('click',()=>{if(busy)return;edits.clear();refresh();});
  $('download').addEventListener('click',async()=>{if(!processed||busy)return;busy=true;buttons();status('GALAZO PDF maken…');try{await GalazoDocument.exportPdf(processed);status('GALAZO PDF gedownload.');}catch(e){status('PDF maken mislukt: '+e.message,true);}finally{busy=false;buttons();}});
  $('print').addEventListener('click',()=>{if(processed&&!busy)window.print();});
