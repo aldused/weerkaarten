@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_DIR="/Users/aldus/KNMI_Project/weerlab"
+REPO_DIR="${KRANTEN_REPO_DIR:-/Users/aldus/KNMI_Project/weerlab}"
 LOCK_DIR="$REPO_DIR/.git/weerlab-publish.lock"
 LOCK_TIMEOUT=900
 WAITED=0
@@ -9,6 +9,7 @@ MESSAGE="${1:-Krantconcepten bijgewerkt}"
 FILES=(data/kranten_demo.json data/kranten_status.json)
 DEPLOY_PARENT=""
 DEPLOY_DIR=""
+LOCK_OWNED=0
 
 cleanup() {
   if [ -n "$DEPLOY_DIR" ] && git -C "$REPO_DIR" worktree list --porcelain | grep -Fq "worktree $DEPLOY_DIR"; then
@@ -17,7 +18,7 @@ cleanup() {
   if [ -n "$DEPLOY_PARENT" ]; then
     rmdir "$DEPLOY_PARENT" 2>/dev/null || true
   fi
-  rmdir "$LOCK_DIR" 2>/dev/null || true
+  if [ "$LOCK_OWNED" -eq 1 ]; then rmdir "$LOCK_DIR" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -31,24 +32,23 @@ while ! mkdir "$LOCK_DIR" 2>/dev/null; do
   WAITED=$((WAITED + 5))
 done
 
-git add -- "${FILES[@]}"
-if git diff --cached --quiet -- "${FILES[@]}"; then
-  echo "Geen gewijzigde krantbestanden; niets gepubliceerd."
-  exit 0
-fi
-
-# Maak één lokale broncommit met uitsluitend de gevalideerde online gegevens.
-git commit -m "$MESSAGE" -- "${FILES[@]}"
-SOURCE_COMMIT="$(git rev-parse HEAD)"
-
-# Publiceer dezelfde kleine wijziging vanaf een schone origin/main-checkout.
-# Dit blijft werken wanneer de operationele hoofdwerkmap vuile of afwijkende
-# weerdata bevat die niet in deze publicatie thuishoort.
+LOCK_OWNED=1
+# Compare the desired files with the remote, not the local staging area.
+# A failed push must be retried even when the local edition is unchanged.
 git fetch origin main
 DEPLOY_PARENT="$(mktemp -d /private/tmp/weerlab-kranten-publish.XXXXXX)"
 DEPLOY_DIR="$DEPLOY_PARENT/worktree"
 git worktree add --detach "$DEPLOY_DIR" origin/main
-git -C "$DEPLOY_DIR" cherry-pick "$SOURCE_COMMIT"
+for file in "${FILES[@]}"; do
+  mkdir -p "$DEPLOY_DIR/$(dirname "$file")"
+  cp "$REPO_DIR/$file" "$DEPLOY_DIR/$file"
+done
+git -C "$DEPLOY_DIR" add -- "${FILES[@]}"
+if git -C "$DEPLOY_DIR" diff --cached --quiet -- "${FILES[@]}"; then
+  echo "Krantbestanden staan al op origin/main: $(git -C "$DEPLOY_DIR" rev-parse HEAD)"
+  exit 0
+fi
+git -C "$DEPLOY_DIR" commit -m "$MESSAGE" -- "${FILES[@]}"
 
 for attempt in 1 2 3; do
   git -C "$DEPLOY_DIR" fetch origin main

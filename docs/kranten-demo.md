@@ -83,7 +83,7 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 
 ## Dagelijkse update (automatisch)
 
-De Codex-heartbeat `krantenconcepten-bijwerken` is actief en draait zeven dagen
+De Codex-heartbeat `krantenredactie-dagelijks-bijwerken` is actief en draait zeven dagen
 per week om 07.00, 08.00, 09.00, 10.00, 11.00 en 12.00 uur Nederlandse tijd.
 Elke run leest dit document en gebruikt de werkstappen hieronder: actuele bron
 ophalen, alleen bij gewijzigde bruikbare verwachting of nieuwe krantdatum vijf
@@ -173,3 +173,9 @@ Deze helper maakt een schone tijdelijke checkout, zodat gelijktijdige weerjobs
 geen krantpublicatie blokkeren of onbedoeld meekomen. Bij een ongewijzigde bruikbare verwachting blijft de editie intact en wordt
 alleen de broncontrolestatus gepubliceerd. De bestaande homepage en navigatie
 blijven ongewijzigd.
+
+## Herstel 2 oktober 2026
+
+De vervangende Codex-planning ontbrak op 2 oktober, terwijl launchd uitgeschakeld was. De heartbeat is opnieuw aangemaakt in de herstelchat: krantenredactie-dagelijks-bijwerken, actief om 07–12 uur. Iedere run controleert de actuele krantdatum en publicatie; vanaf 10 uur wordt een ontbrekende editie direct gemeld. De 12-uur-run controleert expliciet de deadline. Publicatie is pas geslaagd na bevestiging van de bijbehorende productie-deployment. Een opgehaalde bron alleen bewijst niet dat concepten actueel zijn.
+
+De onafhankelijke launchd-controle nl.edaldus.kranten-watchdog draait elke 15 minuten. Ze controleert ook of de Codex-planning nog actief bestaat. Vanaf 10 uur vereist ze de editie voor morgen; vóór 10 uur wordt een editie ouder dan vandaag afgekeurd. Bij achterstand publiceert ze een foutstatus, behoudt alle concepten en verandert ze de echte broncontroletijd niet. Deze controle schrijft geen weerteksten.
