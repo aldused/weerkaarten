@@ -1,50 +1,18 @@
-// Static cartography is fetched by visible tile, independently of model data.
-const pause=()=>new Promise(resolve=>requestAnimationFrame(resolve));
-export class MapDetails{
-  constructor(map,L){this.map=map;this.L=L;this.cache=new Map();this.layers=new Map();this.requests=new Map();this.revision=0;this.borders=true;this.manifest=null;}
-  async update(){
-    const revision=++this.revision;
-    if(!this.provinces){this.provinces=fetch('./neerslag_mix_provincies.json').then(r=>{if(!r.ok)throw Error('Provincies niet geladen');return r.json();}).then(data=>{this.L.geoJSON(data,{pane:'land',interactive:false,style:{fillColor:'#f5efd9',fillOpacity:1,stroke:false}}).addTo(this.map);this.L.geoJSON(data,{pane:'borders',interactive:false,style:{fill:false,color:'#fff',weight:1.4,opacity:1}}).addTo(this.map);}).catch(()=>{this.provinces=null;});}
-    this.manifest??=fetch('./ecmwf_weerradar/assets/map-details/index.json').then(r=>{if(!r.ok)throw new Error('Kaartindex niet bereikbaar');return r.json();}).catch(error=>{this.manifest=null;throw error;});
-    let manifest;try{manifest=await this.manifest;}catch{return;}
-    if(revision!==this.revision)return;
-    const b=this.map.getBounds(),z=this.map.getZoom()<=5?3:5,n=2**z;
-    const row=lat=>(1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n;
-    const allowed=new Set(manifest.levels[z]),wanted=new Set();
-    for(let y=Math.floor(row(Math.min(73,b.getNorth())));y<Math.ceil(row(Math.max(29,b.getSouth())));y++)for(let x=Math.floor((Math.max(-26,b.getWest())+180)/360*n);x<Math.ceil((Math.min(46,b.getEast())+180)/360*n);x++)if(allowed.has(`${x}-${y}`))wanted.add(`${z}/${x}-${y}`);
-    for(const [key,job] of this.requests)if(!wanted.has(key)){job.controller.abort();this.requests.delete(key);}
-    await Promise.allSettled([...wanted].map(async key=>{
-      if(this.layers.has(key))return;
-      let data=this.cache.get(key),job=this.requests.get(key);
-      if(!data){
-        if(!job){
-          const controller=new AbortController();
-          job={controller,promise:fetch(`./ecmwf_weerradar/assets/map-details/${manifest.version}/${key}.json`,{signal:controller.signal,priority:'low'}).then(r=>{if(!r.ok)throw new Error('Kaarttegel niet bereikbaar');return r.json();})};
-          this.requests.set(key,job);
-        }
-        try{data=await job.promise;this.cache.set(key,data);}finally{if(this.requests.get(key)===job)this.requests.delete(key);}
-      }
-      if(revision!==this.revision)return;
-      const groups={};
-      const styles={land:{stroke:false,fillColor:'#f5efd9',fillOpacity:1},countries:{color:'#ffffff',weight:1.6,opacity:1,fill:false},regions:{color:'#ffffff',weight:0,opacity:0,fill:false}};
-      for(const kind of ['land','regions','countries']){
-        const layer=this.L.geoJSON([],{pane:kind==='land'?'land':'borders',interactive:false,style:styles[kind]});groups[kind]=layer;
-        // Inserting thousands of SVG/canvas paths in one task blocks input.
-        let slice=performance.now();
-        for(const feature of data[kind]){
-          layer.addData(feature);
-          if(performance.now()-slice>6){await pause();if(revision!==this.revision)return;slice=performance.now();}
-        }
-      }
-      if(revision!==this.revision)return;
-      this.layers.set(key,groups);
-      for(const [kind,layer] of Object.entries(groups))if(kind==='land'||this.borders)layer.addTo(this.map);
-    }));
-    if(revision!==this.revision)return;
-    for(const [key,groups] of this.layers)if(!wanted.has(key)){for(const layer of Object.values(groups))layer.remove();this.layers.delete(key);}
-    // A small bounded LRU of source tiles, not indefinitely growing Leaflet layers.
-    for(const key of wanted)if(this.cache.has(key)){const value=this.cache.get(key);this.cache.delete(key);this.cache.set(key,value);}
-    while(this.cache.size>24)this.cache.delete(this.cache.keys().next().value);
-  }
-  setBorders(show){this.borders=show;for(const groups of this.layers.values())for(const kind of ['regions','countries']){if(show)groups[kind].addTo(this.map);else groups[kind].remove();}}
+// One static Benelux layer, with shared borders drawn once.
+export class MapDetails {
+ constructor(map,L){this.map=map;this.L=L;this.pending=null;this.boundaries=[];this.borders=true;}
+ async update(){
+  if(this.pending)return this.pending;
+  this.pending=fetch('./neerslag_mix_basemap.json').then(r=>{if(!r.ok)throw Error('Onderkaart niet bereikbaar');return r.json();}).then(data=>{
+   for(const feature of data.features){
+    const land=feature.properties.role==='land';
+    const style=land?{stroke:false,fillColor:'#f5efd9',fillOpacity:1}:{fill:false,color:'#fff',weight:feature.properties.role==='countries'?1.6:1.25,opacity:1};
+    const layer=this.L.geoJSON(feature,{pane:land?'land':'borders',interactive:false,style});
+    if(land||this.borders)layer.addTo(this.map);
+    if(!land)this.boundaries.push(layer);
+   }
+  }).catch(error=>{this.pending=null;document.getElementById('error').textContent=error.message;});
+  return this.pending;
+ }
+ setBorders(show){this.borders=show;for(const layer of this.boundaries){if(show)layer.addTo(this.map);else layer.remove();}}
 }
