@@ -7,7 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js"></script>
 <script src="weerbewaking_store.js?v=20260712-mod1"></script>
 <script src="weerbewaking_document.js?v=20260712-mod1"></script>
-<script src="weerbewaking_export.js?v=20260910-scroll-cache-v3"></script>
+<script src="weerbewaking_export.js?v=20261002-pakket"></script>
 <script src="weerbewaking_sync.js?v=20260712-mod1"></script>
 <script>
 // Deze weerbewaking gebruikt standaard de 12 UTC-hoofdrun. Een expliciete
@@ -355,13 +355,13 @@ body{--kop-scale:1}
       <span class="group-label">Pluim bij PDF</span>
       <label class="field" title="Periode voor de meegeleverde losse pluim-PNG's"><span>Van</span><input type="date" id="pluim-start" data-save="pluim-start" title="Startdatum pluimen"></label>
       <label class="field"><span>t/m</span><input type="date" id="pluim-eind" data-save="pluim-eind" title="Einddatum pluimen"></label>
-      <label class="sync-toggle no-pdf" title="Pluimen bij PDF · gekozen run; download de aangevinkte kleurpluimen na de PDF"><input type="checkbox" id="pluim-bij-pdf" data-save="pluim-bij-pdf" checked> Download bij PDF</label>
+      <label class="sync-toggle no-pdf" title="Pluimen bij PDF · gekozen run plus altijd 12 UTC; PDF en vier kleurpluimen samen in één ZIP"><input type="checkbox" id="pluim-bij-pdf" data-save="pluim-bij-pdf" checked> PDF + pluimen als ZIP</label>
       <fieldset class="pluim-keuzes no-pdf">
-        <legend>Welke pluimen</legend>
-        <label><input type="checkbox" id="pluim-type-temp" data-save="pluim-type-temp-v2" data-pluim-param="temp" data-pluim-label="temperatuur" checked> Temperatuur</label>
-        <label><input type="checkbox" id="pluim-type-cloud" data-save="pluim-type-cloud" data-pluim-param="cloud" data-pluim-label="zon/bewolking" checked> Zon/bewolking</label>
-        <label><input type="checkbox" id="pluim-type-wind" data-save="pluim-type-wind" data-pluim-param="wind" data-pluim-label="windkracht" checked> Windkracht</label>
-        <label><input type="checkbox" id="pluim-type-rainmm" data-save="pluim-type-rainmm" data-pluim-param="rainmm" data-pluim-label="neerslag per 6 uur" checked> Neerslag</label>
+        <legend>Altijd in het pakket · gekozen run + 12 UTC</legend>
+        <label><input type="checkbox" id="pluim-type-temp" data-save="pluim-type-temp-v2" data-pluim-param="temp" data-pluim-label="temperatuur" checked disabled> Temperatuur</label>
+        <label><input type="checkbox" id="pluim-type-cloud" data-save="pluim-type-cloud" data-pluim-param="cloud" data-pluim-label="zon/bewolking" checked disabled> Zon/bewolking</label>
+        <label><input type="checkbox" id="pluim-type-wind" data-save="pluim-type-wind" data-pluim-param="wind" data-pluim-label="windkracht" checked disabled> Windkracht</label>
+        <label><input type="checkbox" id="pluim-type-rainmm" data-save="pluim-type-rainmm" data-pluim-param="rainmm" data-pluim-label="neerslag per 6 uur" checked disabled> Neerslag</label>
       </fieldset>
       <div id="pluim-run-slot" class="no-pdf" aria-label="ECMWF-run voor de pluimen"></div>
     </div>
@@ -1366,7 +1366,11 @@ function gaTerug(){
 }
 
 /* ── PDF-export via html2pdf.js ── */
-function exporteerPDF(){
+let rrdkExportBusy=false;
+async function exporteerPDF(){
+  if(rrdkExportBusy) return;
+  rrdkExportBusy=true;
+  try {
   // cloneNode kopieert het 'selected' attribuut van <option> maar NIET de live
   // selectedIndex. Schrijf eerst de live waarden terug naar attributen, zodat
   // de clone (en de span-vervanging hieronder) de juiste keuze toont.
@@ -1440,23 +1444,19 @@ function exporteerPDF(){
     jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
     pagebreak: { mode:['css','legacy'], before:'.pagina-2' }
   };
-  // Pluimgegevens alvast ophalen terwijl de PDF wordt gemaakt. Het tekenen
-  // en downloaden wacht wel op de PDF, zodat canvaswerk niet concurreert.
-  const pdfWorker = window.WBExport
-    ? WBExport.html2pdfSave(wrapper,opt)
-    : Promise.resolve(html2pdf().set(opt).from(wrapper).save());
-  const startPluim = () => {
-    if(!document.getElementById('pluim-bij-pdf')?.checked) return;
-    genereerPluimNaast(pdfWorker.catch(()=>{})).catch(err=>{
-      console.warn('Pluim-export mislukt:', err);
-      const st=document.getElementById('save-status');
-      if(st) st.textContent="⚠️ Pluim-PNG's mislukt: "+(err.message||err);
-    });
-  };
-  startPluim();
-  pdfWorker.catch(err=>{
-    alert('PDF-export is niet gelukt: '+(err?.message || err));
-  });
+  const st=document.getElementById('save-status');
+  if(document.getElementById('pluim-bij-pdf')?.checked){
+    if(!window.WBExport?.html2pdfBlob) throw new Error('PDF-module niet geladen');
+    const pdf=await WBExport.html2pdfBlob(wrapper,opt);
+    await genereerPluimNaast({pdf,filename:opt.filename});
+  } else {
+    await WBExport.html2pdfSave(wrapper,opt);
+  }
+  } catch(err) {
+    const st=document.getElementById('save-status');
+    if(st) st.textContent='⚠️ Export mislukt: '+(err.message||err)+'. Probeer opnieuw; er is geen onvolledig pakket gedownload.';
+    console.warn('RRDK-export mislukt:',err);
+  } finally { rrdkExportBusy=false; }
 }
 
 /* ── Locatie → coördinaten + label voor ensemble pluim ──
@@ -1467,7 +1467,7 @@ const PLAATS_COORDS = {
   'De Kuip | Rotterdam':  { lat:51.9244, lon:4.4777, naam:'Rotterdam', folder:'rotterdam' },
 };
 
-async function genereerPluimNaast(renderAfter=null){
+async function genereerPluimNaast(pdfFile){
   if(!window.WBPluimExport){ throw new Error('Pluim-module niet geladen'); }
   const selector=window.WeerlabPlumeRuns;
   if(!selector){ throw new Error('Pluim-runselector niet geladen'); }
@@ -1483,25 +1483,26 @@ async function genereerPluimNaast(renderAfter=null){
   if(!startStr || !eindStr) throw new Error('Pluim-datums niet ingevuld');
   const start = new Date(startStr+'T00:00:00');
   const eind  = new Date(eindStr+'T00:00:00');
-  const gekozen = [...document.querySelectorAll('[data-pluim-param]:checked')];
-  const params = gekozen.map(el=>el.dataset.pluimParam);
-  const labels = gekozen.map(el=>el.dataset.pluimLabel);
-  if(!params.length) throw new Error('Kies onder Opties minimaal één pluim');
+  const params = ['temp','rainmm','wind','cloud'];
+  const labels = ['temperatuur','neerslag (mm)','windkracht','zon/bewolking'];
   const st=document.getElementById('save-status');
-  if(st) st.textContent='📊 '+labels.join(', ')+' uit de '+String(runHour).padStart(2,'0')+' UTC-run wordt gegenereerd…';
-  const r = await WBPluimExport.genereerLossePluimenPNGs({
-    lat: coords.lat, lon: coords.lon,
-    naam: coords.naam || plaats,
-    startDate: start, endDate: eind,
-    folderName: coords.folder || coords.naam || plaats,
-    zip: false,
-    renderAfter,
-    runHour,
-    params: params,
-    requiredParams: params.includes('temp') ? ['temp'] : [],
-  });
-  if(r.unavailable?.length) throw new Error('Niet alle gekozen pluimen konden worden gemaakt: '+r.unavailable.map(item=>item.label || item.param || item).join(', '));
-  if(st) st.textContent='📊 '+r.count+' pluim'+(r.count===1?'':'en')+' uit de '+String(runHour).padStart(2,'0')+' UTC-run gedownload: '+labels.join(', ');
+  const files=[{filename:pdfFile.filename,blob:pdfFile.pdf}];
+  const hours=runHour===12 ? [12] : [runHour,12];
+  for(const hour of hours){
+    if(st) st.textContent='📊 PDF gereed; vier kleurenpluimen uit de '+String(hour).padStart(2,'0')+' UTC-run worden gemaakt…';
+    const result=await WBPluimExport.genereerLossePluimenPNGs({
+      lat:coords.lat,lon:coords.lon,naam:coords.naam || plaats,
+      startDate:start,endDate:eind,folderName:coords.folder || plaats,
+      runHour:hour,params,download:false
+    });
+    for(const file of result.files){
+      files.push({...file,path:String(hour).padStart(2,'0')+'UTC/'+file.filename});
+    }
+  }
+  const filename=pdfFile.filename.replace(/\.pdf$/i,'_met_kleurenpluimen.zip');
+  await WBPluimExport.downloadPakket(files,filename);
+  if(st) st.textContent='📦 PDF en '+(files.length-1)+' kleurenpluimen gedownload in '+filename+' · '+labels.join(', ')+' · inclusief 12 UTC.';
+
 }
 
 /* Default pluim-periode: vandaag t/m +14 dagen (= 15 dagen, max van ECMWF IFS-ENS),
@@ -1521,6 +1522,7 @@ function verplaatsRunSelectorNaarPluimOpties(){
   if(bar && slot && bar.parentElement!==slot) slot.appendChild(bar);
 }
 function updatePluimKeuzeStatus(){
+  document.querySelectorAll("[data-pluim-param]").forEach(el=>{el.checked=true;el.disabled=true;});
   const actief=!!document.getElementById('pluim-bij-pdf')?.checked;
   document.querySelector('.pluim-keuzes')?.classList.toggle('uit', !actief);
 }

@@ -1853,7 +1853,7 @@
     return { filename: fname, sizeBytes: png.size };
   }
 
-  async function genereerLossePluimenPNGs({lat, lon, naam, startDate, endDate, scale=2, zip=false, folderName, params=null, runHour=null, requiredParams=[], renderAfter=null}) {
+  async function genereerLossePluimenPNGs({lat, lon, naam, startDate, endDate, scale=2, zip=false, folderName, params=null, runHour=null, requiredParams=[], renderAfter=null, download=true}) {
     const { naam: naamOut, startIso, endIso, fetchEndIso } = validateInput({lat, lon, naam, startDate, endDate});
     // Een gearchiveerde hoofdrun bevat het exacte centrale roosterpunt. Gebruik
     // bij een afgedwongen cyclus geen actuele omliggende punten, want dan zouden
@@ -1871,6 +1871,9 @@
     }
     // Data ophalen overlapt met de PDF; zwaar tekenwerk begint pas erna.
     if (renderAfter) await renderAfter;
+    if(params && (models.length !== params.length || models.unavailable?.length)) {
+      throw new Error("Niet alle gevraagde kleurenpluimen zijn beschikbaar: " + (models.unavailable || []).map(item=>item.param+": "+item.reason).join(", "));
+    }
     const results = [];
     const folder = slug(folderName || naamOut || 'plaats');
 
@@ -1880,6 +1883,7 @@
       return { filename: fname, path: fname, blob: png, sizeBytes: png.size };
     });
     results.push(...gerenderd);
+    if (!download) return { files: results, count: results.length, unavailable: models.unavailable || [] };
     if (!zip) {
       for (const bestand of gerenderd) {
         downloadBlob(bestand.blob, bestand.filename);
@@ -1906,5 +1910,11 @@
     return { files: results.map(({ blob, ...r }) => r), count: results.length, unavailable: models.unavailable || [] };
   }
 
-  window.WBPluimExport = { genereerPluimPNG, genereerLossePluimenPNGs };
+  window.WBPluimExport = { genereerPluimPNG, genereerLossePluimenPNGs,
+    async downloadPakket(files, filename) {
+      const blob=await makeZip(files.map(file=>({path:file.path || file.filename,blob:file.blob})));
+      downloadBlob(blob,filename);
+      return {count:files.length,sizeBytes:blob.size};
+    }
+  };
 })();

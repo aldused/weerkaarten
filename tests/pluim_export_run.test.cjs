@@ -96,8 +96,8 @@ assert.match(source, /buildModels\(stable\.value, startIso, endIso, stable\.runM
 const rrdk = fs.readFileSync(path.resolve(__dirname, '..', 'weerbewaking_ridderkerk_rhoon_dekuip.html'), 'utf8');
 assert.match(rrdk, /const runHour=Number\(selector\.state\?\.selectedHour\)/, 'RRDK gebruikt niet de zichtbaar gekozen pluimrun');
 assert.match(rrdk, /\[0,6,12,18\]\.includes\(runHour\)/, 'RRDK accepteert niet alle vier ECMWF-cycli');
-assert.match(rrdk, /runHour,\s*\n\s*params:/, 'RRDK geeft de gekozen cyclus niet aan de kleurpluimexport door');
-assert.doesNotMatch(rrdk, /runHour:\s*12/, 'RRDK-kleurpluimdownload staat nog hard op 12 UTC');
+assert.match(rrdk, /runHour:hour,params,download:false/, 'RRDK bundelt de gekozen cyclus zonder losse downloads');
+assert.match(rrdk, /runHour===12 \? \[12\] : \[runHour,12\]/, 'RRDK levert altijd ook 12 UTC');
 assert.match(rrdk, /Pluimen bij PDF · gekozen run/, 'RRDK maakt de dynamische runkeuze niet zichtbaar');
 
 const switcher = fs.readFileSync(path.resolve(__dirname, '..', 'pluim_run_switcher_48ffbf926db6.js'), 'utf8');

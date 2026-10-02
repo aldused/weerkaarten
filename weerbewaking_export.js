@@ -177,7 +177,7 @@
     return activeExport;
   }
 
-  function html2pdfSave(element, options={}){
+  function html2pdfSave(element, options={}, outputBlob=false){
     return runExport(async()=>{
       if(typeof html2pdf !== 'function') throw new Error('html2pdf is niet geladen');
       await prepareForCanvas(element);
@@ -186,7 +186,9 @@
       const opt={...options,html2canvas:canvasOptions(options.html2canvas)};
       delete opt.html2canvas.windowWidth;
       delete opt.html2canvas.windowHeight;
-      await html2pdf().set(opt).from(element).save();
+      const worker=html2pdf().set(opt).from(element);
+      if(outputBlob) return await worker.outputPdf("blob");
+      await worker.save();
     });
   }
   function canvasPdf(element, filename, options={}){
@@ -207,5 +209,5 @@
       pdf.save(filename);
     });
   }
-  window.WBExport={ syncSelectValues, safeImageDataUrl, prepareForCanvas, html2pdfSave, canvasPdf };
+  window.WBExport={ syncSelectValues, safeImageDataUrl, prepareForCanvas, html2pdfSave, html2pdfBlob:(element,options)=>html2pdfSave(element,options,true), canvasPdf };
 })();
