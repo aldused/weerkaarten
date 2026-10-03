@@ -2,13 +2,13 @@
  'use strict';
  const $=id=>document.getElementById(id),src=GalazoWeatherPro,core=GalazoCore;let raw=null,processed=null,busy=false;const edits=new Map();
  const today=src.dateKey(Date.now());$('start').min=today;$('start').max=src.addDate(today,6);$('start').value=today;$('weather-date').value=today;$('document-date').value=today;$('document-time').value=new Date().toLocaleTimeString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
- const textIds=['situation','day-weather','weather-date','report','document-date','document-time'],draftKey='wb_galazo_text_v1';
+ const textIds=['headline','situation','day-weather','weather-date','report','document-date','document-time'],draftKey='wb_galazo_text_v1';
  try{const saved=JSON.parse(localStorage.getItem(draftKey)||'{}');for(const id of textIds)if(typeof saved[id]==='string')$(id).value=saved[id];}catch{}
  function saveText(){try{localStorage.setItem(draftKey,JSON.stringify(Object.fromEntries(textIds.map(id=>[id,$(id).value]))));}catch{}}
  for(const c of core.CRITERIA){const label=document.createElement('label');label.textContent=c.label;const input=document.createElement('input');input.type='number';input.id='criterion-'+c.key;input.min=c.min;input.max=c.max;input.step='any';input.placeholder=c.key==='wbgt'?'Eigen evenementprotocol':'Leeg = uit';if(c.defaultValue!==null)input.value=c.defaultValue;label.append(input);$('criteria').append(label);}
  const numeric=id=>$(id).value.trim()===''?null:Number($(id).value);
  function settings(){return core.validateCriteria(Object.fromEntries(core.CRITERIA.map(c=>[c.key,numeric('criterion-'+c.key)])));}
- function context(){return {documentDate:$('document-date').value,documentTime:$('document-time').value,event:$('event').value.trim(),location:$('location').value.trim(),report:$('report').value.trim(),situation:$('situation').value.trim(),dayWeather:$('day-weather').value.trim(),weatherDate:$('weather-date').value,elevation:numeric('elevation'),lat:numeric('latitude'),lon:numeric('longitude')};}
+ function context(){return {headline:$('headline').value.trim(),documentDate:$('document-date').value,documentTime:$('document-time').value,event:$('event').value.trim(),location:$('location').value.trim(),report:$('report').value.trim(),situation:$('situation').value.trim(),dayWeather:$('day-weather').value.trim(),weatherDate:$('weather-date').value,elevation:numeric('elevation'),lat:numeric('latitude'),lon:numeric('longitude')};}
  function status(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
  function buttons(){const valid=!!processed&&!busy;$('download').disabled=!valid;$('print').disabled=!valid;$('load').disabled=busy;document.querySelectorAll('#galazo-form input,#galazo-form select,#galazo-form textarea').forEach(el=>el.disabled=busy);document.querySelectorAll('[data-text-field],[data-hour-field]').forEach(el=>el.contentEditable=busy?'false':'plaintext-only');}
  function clear(){edits.clear();raw=null;processed=null;$('documents').replaceChildren();$('diagnostics').textContent='Nog geen actuele gegevens geladen.';buttons();}
@@ -28,7 +28,7 @@
  $('location-choice').addEventListener('change',()=>{if(!$('location-choice').value)return;const chosen=JSON.parse($('location-choice').value);$('latitude').value=chosen.lat;$('longitude').value=chosen.lon;$('location').value=chosen.name;$('location-choice-label').hidden=true;$('galazo-form').requestSubmit();});
  for(const id of ['latitude','longitude','start','days'])$(id).addEventListener('input',()=>{if(id==='latitude'||id==='longitude'){$('elevation').value='';$('elevation-status').textContent='';}clear();status('Locatie/periode gewijzigd: haal WeatherPro opnieuw op.');});
  for(const id of ['start-hour','end-hour'])$(id).addEventListener('input',()=>refresh());
- for(const id of ['document-date','document-time','event','report','situation','day-weather','weather-date','elevation',...core.CRITERIA.map(c=>'criterion-'+c.key)])$(id).addEventListener('input',()=>{saveText();refresh();});
+ for(const id of ['headline','document-date','document-time','event','report','situation','day-weather','weather-date','elevation',...core.CRITERIA.map(c=>'criterion-'+c.key)])$(id).addEventListener('input',()=>{saveText();refresh();});
  $('documents').addEventListener('input',e=>{
   if(e.target.closest('[data-hour-field]')){$('download').disabled=true;$('print').disabled=true;return;}
   const el=e.target.closest('[data-text-field]');if(!el||busy)return;
