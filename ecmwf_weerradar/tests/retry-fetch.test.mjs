@@ -14,3 +14,13 @@ test('an obsolete time step cancels a retry instead of loading the old run',asyn
  const c=new AbortController();let calls=0;
  await assert.rejects(retryFetch('https://test',{signal:c.signal},async()=>{calls++;c.abort();throw new TypeError('network');},settings),{name:'AbortError'});assert.equal(calls,1);
 });
+
+test('a timeout or interrupted response body retries the complete same-field request',async()=>{
+ let calls=0;const bytes=await retryFetch('https://test',{},async()=>{calls++;return new Response('complete');},{...settings,readResponse:async r=>{if(calls===1)throw new DOMException('body timeout','TimeoutError');if(calls===2)throw new TypeError('body interrupted');return r.text();}});
+ assert.equal(bytes,'complete');assert.equal(calls,3);
+});
+
+test('browser AbortError during a timed-out body is retried, while user cancellation is not',async()=>{
+ let calls=0;const result=await retryFetch('https://test',{},async(u,{signal})=>{calls++;return {status:200,signal};},{...settings,timeoutMs:5,readResponse:async r=>{if(calls===1)await new Promise((resolve,reject)=>{r.signal.addEventListener('abort',()=>reject(new DOMException('body cancelled','AbortError')),{once:true});setTimeout(resolve,50);});return 'loaded';}});
+ assert.equal(result,'loaded');assert.equal(calls,2);
+});

@@ -25,9 +25,10 @@ export class FieldPackets{
     try{present=await cache?.match(url);}catch{cache=undefined;}
     if(present){try{return decode(await present.arrayBuffer(),expected);}catch{await cache.delete(url).catch(()=>{});}}
     signal?.throwIfAborted();
-    const response=await retryFetch(url,{signal},this.fetcher);
-    if(!response.ok)throw new Error(`Weerkaartbron tijdelijk niet bereikbaar (${response.status})`);
-    const bytes=await response.arrayBuffer();signal?.throwIfAborted();
+    const bytes=await retryFetch(url,{signal},this.fetcher,{readResponse:async response=>{
+      if(!response.ok)throw new Error(`Weerkaartbron tijdelijk niet bereikbaar (${response.status})`);
+      return response.arrayBuffer();
+    }});signal?.throwIfAborted();
     const result=decode(bytes,expected);
     if(cache)void cache.put(url,new Response(bytes,{headers:{'Content-Type':'application/octet-stream','X-Stored-At':String(Date.now()),'Content-Length':String(bytes.byteLength)}})).then(()=>{if(++this.writes%8===1)this.trim(cache);}).catch(()=>{});
     return result;

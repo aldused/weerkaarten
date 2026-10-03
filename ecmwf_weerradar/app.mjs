@@ -1,3 +1,4 @@
+import {readConvectiveFields} from './convective-fields.mjs';
 import {installGestureProfile} from './gesture-profile.mjs';
 import {buildSignificantFieldAsync,significantVariables,significantType,thunderVariables,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {MAP_REGIONS} from './map-regions.mjs';
@@ -86,6 +87,7 @@ let requestedContext = null, startupRevision = 0;
 let retryLoad = () => start();
 let mode = 'weather', playing = false, playTimer, sourceCounter = 0, cities = [], selectedPoint = null;
 let pendingSources = new Map(), cityDrawQueued = false, frameErrors = new Set();
+const frameErrorReasons=new Map();
 const adjacentFrames=new AdjacentFrames();
 let nextFrameReady=false;
 const intervalByURL = new Map();
@@ -148,8 +150,8 @@ function readField(file,variable,signal){
       const frame=significantRequests.get(file),variables=variable==='thunderstorm'?thunderVariables(frame.modelMeta):significantVariables(frame.modelMeta);
       // Read pressure-level data only at times actually published by ECMWF.
       if(thunderVariables(frame.modelMeta).length&&fieldFile(frame,'temperature_500hPa'))variables.push('temperature_500hPa');
-      const parts=await Promise.all(variables.map(async v=>[v,await readField(fieldFile(frame,v),v,readSignal)]));
-      readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);$('app').dataset.significantComputeMs=Math.round(performance.now()-started);if(variable==='thunderstorm'){result.values=Float32Array.from(result.values,v=>v===9?9:0);result.metadata.variable=variable;}return result;
+      const {fields,unavailable}=await readConvectiveFields(variables,v=>readField(fieldFile(frame,v),v,readSignal),readSignal);
+      readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(fields,window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);result.metadata.unavailable=unavailable;$('app').dataset.significantComputeMs=Math.round(performance.now()-started);if(variable==='thunderstorm'){result.values=Float32Array.from(result.values,v=>v===9?9:0);result.metadata.variable=variable;}return result;
     })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(!['significant_weather','thunderstorm'].includes(variable)&&!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
@@ -213,7 +215,7 @@ map.addControl(new mapEngine.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-
 const mapReady = new Promise(resolve => map.once('load',resolve));
 map.on('error', e => {
   if (e.sourceId && pendingSources.has(e.sourceId)) {
-    frameErrors.add(e.sourceId);
+    frameErrors.add(e.sourceId);frameErrorReasons.set(e.sourceId,e.error?.message||'Kaartbron niet bereikbaar');
     pendingSources.get(e.sourceId)?.();
   }
   else if(current?.ids.includes(e.sourceId))status('Kaartdeel kon niet worden opgehaald. Probeer opnieuw.',true);
@@ -463,18 +465,18 @@ function addLayer(frame,variable,prefix){
   map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':.00001,'raster-fade-duration':0}},'borders');
   return id;
 }
-function removeLayers(ids){for(const id of ids){pendingSources.delete(id);frameErrors.delete(id);if(map.getLayer(id)) map.removeLayer(id);if(map.getSource(id)) map.removeSource(id);}}
+function removeLayers(ids){for(const id of ids){pendingSources.delete(id);frameErrors.delete(id);frameErrorReasons.delete(id);if(map.getLayer(id)) map.removeLayer(id);if(map.getSource(id)) map.removeSource(id);}}
 function awaitSources(ids,signal){
   return new Promise((resolve,reject)=>{
     const cleanup=()=>{stopTimer();signal?.removeEventListener('abort',abort);map.off('sourcedata',check);ids.forEach(id=>pendingSources.delete(id));};
     const check=()=>{
-      if(ids.some(id=>frameErrors.has(id))){cleanup();reject(new Error('Een ECMWF-weerlaag kon niet worden geladen'));return;}
+      if(ids.some(id=>frameErrors.has(id))){cleanup();reject(new Error(frameErrorReasons.get(ids.find(id=>frameErrors.has(id)))||'Een weerlaag kon niet worden geladen'));return;}
       if(ids.every(id=>map.getSource(id)&&map.isSourceLoaded(id))){cleanup();resolve();}
     };
     const abort=()=>{cleanup();reject(signal.reason);};
     // Only visible seconds count: a background tab renders very slowly and
     // must show its finished map on return, not a load error.
-    const stopTimer=visibleTimeout(mode.endsWith('_total')?240000:45000,()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));});
+    const stopTimer=visibleTimeout(mode.endsWith('_total')?240000:120000,()=>{cleanup();reject(new Error('Het laden van de ECMWF-kaart duurt te lang'));});
     signal?.addEventListener('abort',abort,{once:true});
     ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);if(signal?.aborted)abort();else check();
   });
@@ -535,7 +537,7 @@ async function renderFrame(index,rev,signal,context){
     if(deferredVars.length)void loadRefinements(deferredVars,{
       read:variable=>readField(fieldFile(frame,variable),variable,signal),
       isCurrent:()=>current===committed&&rev===revision,
-      apply:(variable,field)=>{committed.samples[variable]=field;queueCityDraw();updatePoint();},
+      apply:(variable,field)=>{committed.samples[variable]=field;syncUI();queueCityDraw();updatePoint();},
     });
     if(old?.timeline!==current.timeline){
       buildTimeline(current.timeline);
@@ -565,7 +567,7 @@ async function renderFrame(index,rev,signal,context){
   } catch(error){
     removeLayers(ids);
     if(rev!==revision||error.name==='AbortError')return false;
-    $('app').dataset.lastLoadError=error.message;
+    $('app').dataset.lastLoadError=error.message;$('status-text').title=error.message;
     if(current){wanted=current.index;requestedContext={meta:current.modelMeta,timeline:current.timeline,fullTimeline:current.fullTimeline};syncUI();}
     stopPlayback();$('app').dataset.frameStatus='error';
     status(`De weergegevens konden niet worden geladen. ${current?'De vorige tijdstap blijft zichtbaar.':'Probeer opnieuw.'}`,true);
@@ -662,7 +664,7 @@ function syncUI(){
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   $('significant-key').hidden=f.mode!=='significant';
-  const hasThunder=thunderVariables(metadata).length>0;thunderKey.hidden=!['weather','significant'].includes(f.mode)||f.mode==='significant'&&hasThunder;thunderKey.textContent=hasThunder?'● Onweer · modelindicatie':'Onweer: brongegevens ontbreken bij dit model';thunderKey.style.display=thunderKey.hidden?'none':'block';
+  const hasThunder=thunderVariables(metadata).length>0;thunderKey.hidden=!['weather','significant'].includes(f.mode)||f.mode==='significant'&&hasThunder;thunderKey.textContent=hasThunder?'● Onweer · modelindicatie':'Onweer: brongegevens ontbreken bij dit model';const missingThunder=f.samples[f.mode==='significant'?'significant_weather':'thunderstorm']?.packed.unavailable;if(missingThunder?.length){thunderKey.hidden=false;thunderKey.textContent='Onweerindicatie tijdelijk onvolledig';thunderKey.title='Niet beschikbaar: '+missingThunder.join(', ');}else thunderKey.removeAttribute('title');thunderKey.style.display=thunderKey.hidden?'none':'block';
   $('wind-key').hidden=!['wind','significant'].includes(f.mode);
   syncTempLevels(f,modelId);
   $('temperature-select').classList.toggle('selected',f.mode==='temperature');$('precipitation-select').classList.toggle('selected',['rain','rain_total','snow_total'].includes(f.mode));
