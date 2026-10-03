@@ -8,6 +8,7 @@ const {pathToFileURL} = require('node:url');
 const root = path.resolve(__dirname, '..');
 
 (async () => {
+  const {regionalSunTimes} = await import(pathToFileURL(path.join(root, 'editor-src/regio-sun.js')));
   const {createLandelijkeStudio} = await import(pathToFileURL(path.join(root, 'editor-src/landelijke-studio.js')));
   const {createWeatherIcon, WEATHER_ICON_SPECS, WEATHER_ICON_LABELS} = await import(pathToFileURL(path.join(root, 'editor-src/weather-icons.js')));
   const fakeElement = () => ({relList:{supports:()=>true},style:{},setAttribute(){},removeAttribute(){},appendChild(){},addEventListener(){}});
@@ -16,7 +17,7 @@ const root = path.resolve(__dirname, '..');
   globalThis.addEventListener=globalThis.removeEventListener=()=>{};
   const storage = {getItem:()=>null,setItem(){}};
   const alerts = [];
-  const context = {console,document,localStorage:storage,sessionStorage:storage,location:{pathname:'/weerbewaking_regio_kaart.html',protocol:'http:',hostname:'localhost',href:'http://localhost/weerbewaking_regio_kaart.html'},navigator:{userAgent:'node'},setTimeout,clearTimeout,URL,fetch:()=>Promise.reject(new Error('offline fixture')),alert:m=>alerts.push(m),createLandelijkeStudio,createWeatherIcon,WEATHER_ICON_LABELS};
+  const context = {regionalSunTimes,console,document,localStorage:storage,sessionStorage:storage,location:{pathname:'/weerbewaking_regio_kaart.html',protocol:'http:',hostname:'localhost',href:'http://localhost/weerbewaking_regio_kaart.html'},navigator:{userAgent:'node'},setTimeout,clearTimeout,URL,fetch:()=>Promise.reject(new Error('offline fixture')),alert:m=>alerts.push(m),createLandelijkeStudio,createWeatherIcon,WEATHER_ICON_LABELS};
   context.window = context;
   context.addEventListener = context.removeEventListener = () => {};
   vm.createContext(context);
@@ -65,9 +66,9 @@ const root = path.resolve(__dirname, '..');
   const elements = () => app.slots.find(s=>s.kind==='state'&&Array.isArray(s.value))?.value || [];
   let tree=render();
   assert.equal(tree.props.className,'landelijke-studio');
-  // Voice uses ordinary map elements, defaults, selection and undo; never station coordinates.
+  // Voice uses ordinary map elements, defaults, geographic positions, selection and undo.
   const {parseCommand}=await import(pathToFileURL(path.join(root,'editor-src/regio-voice.js')));
-  for(const phrase of ['16 graden','20 graden','min 3 graden','Rotterdam','Dordrecht','Gouda','maandag','zon','half bewolkt','mist']) {
+  for(const phrase of ['16 graden','20 graden','min 3 graden','Rotterdam','Dordrecht','Gouda','maandag','zon','half bewolkt','mist','zuidwest 2','noordoost vijf','zeewatertemperatuur 18 graden','zonsopkomst','zonsondergang','zonkracht vier']) {
     const command=parseCommand(phrase,lastProps.voicePlaces);
     const before=elements().length;
     lastProps.actions.voiceAdd(command);tree=render();
@@ -77,7 +78,12 @@ const root = path.resolve(__dirname, '..');
     if(command.value!==undefined)assert.equal(added.value,command.value);
     const svg=all(tree,n=>n.type==='svg'&&n.props.onPointerUp)[0];
     const box=svg.props.viewBox.split(' ').map(Number);
-    assert.equal(added.x,box[2]*(.35+.15*(before%3)));assert.equal(added.y,box[3]*(.3+.2*(Math.floor(before/3)%3)));
+    if(command.place) {
+      assert.ok(Math.abs(added.x-(command.place.lon-3.55)/(5.35-3.55)*box[2])<1e-7);
+      assert.ok(Math.abs(added.y-(52.08-command.place.lat)/(52.08-51.58)*box[3])<1e-7);
+    } else {assert.equal(added.x,box[2]*(.35+.15*(before%3)));assert.equal(added.y,box[3]*(.3+.2*(Math.floor(before/3)%3)));}
+    if(command.type==='wind'){assert.equal(added.dir,command.dir);assert.equal(added.bft,command.bft);}
+    if(command.type==='zontijden'){assert.match(added.opkomst,/^\d{2}:\d{2}$/);assert.match(added.ondergang,/^\d{2}:\d{2}$/);assert.notEqual(added.opkomst,'--:--');}
     if(command.type==='label')assert.equal(added.fontSize,32);
     if(command.type==='day')assert.equal(added.fontSize,50);
     lastProps.actions.undo();tree=render();assert.equal(elements().length,before);

@@ -1,4 +1,4 @@
-import {useRegioVoice} from './regio-voice.js?v=20260929-voice1';
+import {useRegioVoice} from './regio-voice.js?v=20261003-voice2';
 // Presentation layer for the existing editor. All weather, drawing, history and
 // export callbacks stay owned by the original React application.
 import {createWeatherIcon, WEATHER_ICON_LABELS, WEATHER_ICON_BASICS} from './weather-icons.js?v=20260913-rain1';
@@ -156,7 +156,7 @@ export function createLandelijkeStudio(React) {
           voice.state.transcript && h('p', {className:'studio-voice-transcript'}, 'Gehoord: ',voice.state.transcript),
           h('a', {href:'./regiokaart-spraakkaart.pdf',target:'_blank',rel:'noopener',download:'regiokaart-spraakkaart.pdf'}, 'Symbolen en spraakopdrachten (PDF)'),
           h('details', null, h('summary', null, 'Voorbeelden en tekstinvoer'),
-            h('p', null, '16 graden · min drie graden · zon met sluierbewolking · maandag · Rotterdam. Andere plaats? Zeg “plaats” gevolgd door de naam. Elk onderdeel verschijnt op een vaste klaarzetplek op de kaart; sleep het zelf naar zijn plek.'),
+            h('p', null, '16 graden · zeewatertemperatuur 18 graden · zuidwest 2 · noordoost vijf · zonsopkomst · maandag · Rotterdam. Bekende plaatsen komen direct op hun geografische plek. Andere onderdelen kun je verslepen. Gebruik voor een eigen plaatslabel “plaats” gevolgd door de naam.'),
             h('p', null, 'Je browser kan audio naar zijn spraakdienst sturen. De microfoon blijft aan tot je stopt of deze pagina verlaat.'),
             h('form', {onSubmit:voice.submit},h('input',{value:voice.draft,onChange:e=>voice.setDraft(e.target.value),'aria-label':'Gesproken opdracht corrigeren',placeholder:'Bijvoorbeeld: 16 graden',maxLength:100}),h(Button,{type:'submit'},'Toevoegen')))),
         h('div', { className: 'studio-tabs', role: 'tablist', 'aria-label': 'Editoronderdelen' }, tabs.map((t, index) => h('button', {
