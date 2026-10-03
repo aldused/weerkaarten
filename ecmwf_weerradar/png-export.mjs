@@ -44,10 +44,10 @@ export function cropMapCanvas(canvas,rect){
   cropped.getContext('2d').drawImage(canvas,rect.x,rect.y,rect.width,rect.height,0,0,rect.width,rect.height);
   return cropped;
 }
-export function captureMap(mapElement,places,rectSelection=null){
+export function captureMap(mapElement,places,rectSelection=null,{scale=2}={}){
   const rect=mapElement.getBoundingClientRect(),canvas=document.createElement('canvas');
-  canvas.width=Math.round(rect.width);canvas.height=Math.round(rect.height);
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#365f77';ctx.fillRect(0,0,canvas.width,canvas.height);
+  canvas.width=Math.round(rect.width*scale);canvas.height=Math.round(rect.height*scale);
+  const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle='#365f77';ctx.fillRect(0,0,canvas.width,canvas.height);
   const panes=[...mapElement.querySelector('.leaflet-map-pane').children].filter(p=>p.classList.contains('leaflet-pane')).sort((a,b)=>Number(getComputedStyle(a).zIndex)-Number(getComputedStyle(b).zIndex));
   for(const pane of panes)for(const el of pane.querySelectorAll('img.leaflet-tile,canvas')){
     const r=el.getBoundingClientRect();
@@ -59,19 +59,19 @@ export function captureMap(mapElement,places,rectSelection=null){
     ctx.globalAlpha=opacity;ctx.drawImage(el,r.left-rect.left,r.top-rect.top,r.width,r.height);
   }
   ctx.globalAlpha=1;
-  if(places.width&&places.height)ctx.drawImage(places,0,0,canvas.width,canvas.height);
+  if(places.width&&places.height)ctx.drawImage(places,0,0,rect.width,rect.height);
   ctx.getImageData(0,0,1,1); // Fail explicitly if a source blocks CORS export.
-  return cropMapCanvas(canvas,rectSelection);
+  return cropMapCanvas(canvas,rectSelection?Object.fromEntries(Object.entries(rectSelection).map(([key,value])=>[key,Math.round(value*scale)])):null);
 }
 export function composePNG(mapImage,{title,time,run,lead,source,opacity,legends}){
-  const width=Math.max(640,Math.min(1920,mapImage.width)),pad=28,inner=width-pad*2;
+  const width=Math.max(640,Math.min(1920,mapImage.width/2)),pad=28,inner=width-pad*2,scale=2;
   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
   ctx.font='16px system-ui';
   const lines=text=>wrapText(text,inner,t=>ctx.measureText(t).width);
   const timeLines=lines(time),runLines=lines(`${run} · ${lead}`),sourceLines=lines(`Bron: ${source} · Kaart © Esri, Maxar, Earthstar Geographics · Natural Earth · Plaatsnamen: GeoNames`);
   const header=88+timeLines.length*23,mapHeight=Math.round(mapImage.height*width/mapImage.width);
   const footer=108+(runLines.length+sourceLines.length)*22+legends.reduce((n,l)=>n+(l.stops?78:30),0);
-  canvas.width=width;canvas.height=header+mapHeight+footer;
+  canvas.width=width*scale;canvas.height=(header+mapHeight+footer)*scale;ctx.scale(scale,scale);
   ctx.fillStyle='#fff';ctx.fillRect(0,0,width,canvas.height);
   ctx.fillStyle='#00205b';ctx.fillRect(0,0,width,header);
   ctx.fillStyle='#fff';ctx.font='bold 25px system-ui';ctx.fillText(title,pad,40,inner);

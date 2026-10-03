@@ -25,3 +25,20 @@ test('long header/footer text wraps without losing words',()=>{
   const text='ECMWF run 21 september 2026 Nederlandse zomertijd';
   const lines=wrapText(text,20,s=>s.length);assert.equal(lines.join(' '),text);assert.ok(lines.every(l=>l.length<=20));
 });
+
+test('high-resolution capture preserves map and label coordinates, including square crops',async()=>{
+  const {captureMap,composePNG}=await import('../png-export.mjs');
+  const originalDocument=globalThis.document,created=[];
+  globalThis.document={createElement(){const calls=[],ctx={scale(...args){calls.push(['scale',...args]);},fillRect(){},drawImage(...args){calls.push(['drawImage',...args]);},getImageData(){},measureText(text){return {width:text.length*8};},fillText(){},createLinearGradient(){return {addColorStop(){}};},strokeRect(){}};const canvas={width:0,height:0,calls,getContext(){return ctx;}};created.push(canvas);return canvas;}};
+  try{
+    const map={getBoundingClientRect(){return {width:1600,height:900};},querySelector(){return {children:[]};}},places={width:3200,height:1800};
+    const image=captureMap(map,places);
+    assert.equal(image.width,3200);assert.equal(image.height,1800);
+    assert.deepEqual(image.calls.find(c=>c[0]==='drawImage').slice(2),[0,0,1600,900]);
+    const crop=captureMap(map,places,{x:50,y:30,width:400,height:400});
+    assert.equal(crop.width,800);assert.equal(crop.height,800);
+    assert.deepEqual(crop.calls[0].slice(2),[100,60,800,800,0,0,800,800]);
+    const png=composePNG(image,{title:'ECMWF · Temperatuur 500 hPa',time:'20:00 uur',run:'00 UTC',lead:'+138 uur',source:'ECMWF',opacity:100,legends:[]});
+    assert.equal(png.width,3200);assert.ok(png.height>1800);
+  }finally{globalThis.document=originalDocument;}
+});

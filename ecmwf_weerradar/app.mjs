@@ -791,10 +791,11 @@ async function exportPNG(crop=null){
     const nextCenter=map.getCenter();
     if(current!==frame||revision!==rev||[nextCenter.lng,nextCenter.lat,map.getZoom()].join()!==view)throw Error('De kaart is gewijzigd. Klik opnieuw op PNG voor de nieuwe uitsnede.');
     if(frame.ids.some(id=>!map.isSourceLoaded(id)||frameErrors.has(id)))throw Error('De kaarttegels worden nog geladen. Probeer het zo opnieuw.');
-    drawCities();
+    const exportPlaces=document.createElement('canvas');
+    paintCities({canvas:exportPlaces,exporting:true});
     const modelId=modelFor(frame.modelMeta),label=forecastLabel(frame.time,frame.modelMeta.reference_time,MODELS[modelId].label);
-    const canvas=composePNG(captureMap($('map'),$('places'),crop),{
-      title:`${MODELS[modelId].label} · ${modeNames[frame.mode]}${$('isobars').checked&&hasIsobars(frame.modelMeta)?' · Isobaren (4 hPa)':''}`,
+    const canvas=composePNG(captureMap($('map'),exportPlaces,crop),{
+      title:`${MODELS[modelId].label} · ${frame.mode==='temperature'?'Temperatuur '+(frame.level==='2m'?'2 m':frame.level+' hPa'):modeNames[frame.mode]}${$('isobars').checked&&hasIsobars(frame.modelMeta)?' · Isobaren (4 hPa)':''}`,
       time:frame.mode.endsWith('_total')?$('accumulation-note').textContent:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
       legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta,frame),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
     });
@@ -840,10 +841,10 @@ function drawCities(){
     const d=$('places').dataset;d.drawCount=String(Number(d.drawCount||0)+1);d.drawMs=String(Math.round(performance.now()-started));
   }
 }
-function paintCities(){
-  const canvas=$('places'),ctx=canvas.getContext('2d'),width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight,dpr=Math.min(2,devicePixelRatio||1);
+function paintCities({canvas=$('places'),exporting=false}={}){
+  const ctx=canvas.getContext('2d'),width=map.getCanvas().clientWidth,height=map.getCanvas().clientHeight,dpr=exporting?2:Math.min(2,devicePixelRatio||1);
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
-  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);drawnCities=[];
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);if(!exporting)drawnCities=[];
   if(current?.mode==='temperature'){
     const variable=UPPER_AIR_LEVELS[current.level]||'temperature_2m',field=current.samples[variable];
     if(field)canvas.dataset.isotherms=JSON.stringify(drawIsotherms(ctx,field,p=>map.project(p),width,height));
@@ -854,29 +855,29 @@ function paintCities(){
   }else delete canvas.dataset.isobars;
   if(!$('city-labels').checked||!current)return;
   const symbolAudit=params.get('profile')==='1'?[]:null;
-  const zoom=map.getZoom(), boxes=[], font=zoom<5?11:12,valueFont=font+2,windMode=current.mode==='wind',significantWind=current.mode==='significant',controls=document.querySelector('.bottom-area').getBoundingClientRect();
+  const zoom=map.getZoom(), boxes=[], font=exporting?Math.max(17,17*width/1920):zoom<5?11:12,valueFont=exporting?font+7:font+2,windMode=current.mode==='wind',significantWind=current.mode==='significant',controls=document.querySelector('.bottom-area').getBoundingClientRect();
   for(const city of cities){
     if(city.minZoom>zoom)continue;
     const p=map.project([city.lon,city.lat]);
     if(p.x<25||p.x>width-25||p.y<20||p.y>height-25)continue;
-    if(p.x>controls.left-12&&p.x<controls.right+12&&p.y>controls.top-42&&p.y<controls.bottom+24)continue;
-    const name=city.name, w=Math.max(windMode||significantWind?76:58,name.length*font*.53), rect=[p.x-w/2-9,p.y-(significantWind?60:windMode?44:33),p.x+w/2+9,p.y+18];
+    if(!exporting&&p.x>controls.left-12&&p.x<controls.right+12&&p.y>controls.top-42&&p.y<controls.bottom+24)continue;
+    const name=city.name, w=Math.max(windMode||significantWind?76:58,name.length*font*.53), rect=[p.x-w/2-9,p.y-(significantWind?60:windMode?44:exporting?42:33),p.x+w/2+9,p.y+18];
     if(boxes.some(b=>rect[0]<b[2]&&rect[2]>b[0]&&rect[1]<b[3]&&rect[3]>b[1]))continue;
     boxes.push(rect);
     const temp=sample(current.samples.temperature_2m,city.lat,city.lon),rain=sample(current.samples.precipitation,city.lat,city.lon);
     const cloudField=current.samples.cloud_cover;
     const cloud=cloudIconType(...CLOUD_KEYS.map(key=>cloudField?.[key]?cloudField.grid.getInterpolatedValue(cloudField[key],city.lat,city.lon,'monotone'):NaN));
-    ctx.font=`500 ${font}px Arial`;ctx.textAlign='center';ctx.lineJoin='round';ctx.lineWidth=2.7;ctx.strokeStyle='rgba(28,42,42,.7)';ctx.fillStyle='#f4f6f7';
+    ctx.font=`500 ${font}px Arial`;ctx.textAlign='center';ctx.lineJoin='round';ctx.lineWidth=exporting?4:2.7;ctx.strokeStyle=exporting?'rgba(15,30,45,.95)':'rgba(28,42,42,.7)';ctx.fillStyle='#f4f6f7';
     ctx.strokeText(name,p.x,p.y+12);ctx.fillText(name,p.x,p.y+12);
     if(!windMode){ctx.fillStyle='#f5f8e9';ctx.fillRect(p.x-1.3,p.y-4,2.6,2.6);}
     const levelVar=current.mode==='temperature'?current.ids.map(id=>id.split('-').slice(1).join('-')).find(v=>v.startsWith('temperature_')):null;
     const totalVariable=current.mode==='rain_total'?'precipitation_total':current.mode==='snow_total'?'snowfall_total':null;
     const displayedValue=totalVariable?sample(current.samples[totalVariable],city.lat,city.lon):current.mode==='wind'?sample(current.samples.wind_u_component_10m,city.lat,city.lon):levelVar?sample(current.samples[levelVar],city.lat,city.lon):current.mode==='temperature'?NaN:temp;
-    if(Number.isFinite(displayedValue)){const t=String(windMode?beaufort(displayedValue):Math.round(displayedValue)),y=p.y-(windMode?23:12);ctx.font=`700 ${valueFont}px Arial`;ctx.strokeText(t,p.x+7,y);ctx.fillStyle='#f3f663';ctx.fillText(t,p.x+7,y);}
+    if(Number.isFinite(displayedValue)){const t=String(windMode?beaufort(displayedValue):Math.round(displayedValue)),y=p.y-(windMode?23:12);ctx.font=`700 ${valueFont}px Arial`;ctx.strokeText(t,p.x+7,y);ctx.fillStyle=exporting?'#ffffff':'#f3f663';ctx.fillText(t,p.x+7,y);}
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
     const snowfall=sample(current.samples.snowfall_water_equivalent,city.lat,city.lon);
     const significantField=current.samples.significant_weather;
-    const symbol=totalVariable?null:current.mode==='significant'?significantType(significantField?.grid.getNearestNeighborValue(significantField.data.values,city.lat,city.lon)):weatherSymbol({precipitation:rain,snowfall,cloud,fog});
+    const symbol=totalVariable||(exporting&&current.mode==='temperature')?null:current.mode==='significant'?significantType(significantField?.grid.getNearestNeighborValue(significantField.data.values,city.lat,city.lon)):weatherSymbol({precipitation:rain,snowfall,cloud,fog});
     if(symbolAudit)symbolAudit.push({name,lat:city.lat,lon:city.lon,precipitation:rain,snowfall,cloud,symbol});
     if(['rain','snow','mixed'].includes(symbol))drawPrecipitationSymbol(ctx,p.x-13,p.y-17,symbol);
     else if(symbol==='fog'){
@@ -894,7 +895,7 @@ function paintCities(){
       const gust=sample(current.samples.wind_gusts_10m,city.lat,city.lon);
       if(windMode&&Number.isFinite(gust)&&gust>=0){const text=`stoten ${Math.round(gust)}`;ctx.font=`600 ${font}px Arial`;ctx.strokeText(text,p.x,p.y-4);ctx.fillStyle='#fff';ctx.fillText(text,p.x,p.y-4);}
     }
-    drawnCities.push({...city,x:p.x,y:p.y});
+    if(!exporting)drawnCities.push({...city,x:p.x,y:p.y});
   }
   if(symbolAudit)canvas.dataset.weatherSymbols=JSON.stringify({model:modelFor(current.modelMeta),run:current.modelMeta.reference_time,time:current.iso,places:symbolAudit});
 }
