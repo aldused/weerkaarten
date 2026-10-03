@@ -44,6 +44,10 @@ const BASE=process.env.REGIO_TEST_URL || 'http://127.0.0.1:8799';
  assert.match(await page.locator('.studio-canvas-title').innerText(),/14 onderdelen/);
  await page.getByRole('button',{name:'Opnieuw uitvoeren',exact:true}).click();
  assert.match(await page.locator('.studio-canvas-title').innerText(),/16 onderdelen/);
+ for(const phrase of ['zonkracht','zon kracht vier','2x 20 graden','3x 20 graden','3x zonnig','3x bewolkt','3x zon met sluierbewolking']) {
+   await page.locator('.studio-voice input').fill(phrase);await page.locator('.studio-voice input').press('Enter');
+ }
+ assert.match(await page.locator('.studio-canvas-title').innerText(),/32 onderdelen/);
  await page.screenshot({path:'/tmp/regio-voice-editor.png'});
  await page.getByRole('button',{name:'Stop luisteren',exact:false}).click();
  assert(await page.evaluate(()=>mic.stopped));

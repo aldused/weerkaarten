@@ -45,4 +45,9 @@ assert.equal(parseCommand('zonsop en zonsondergang').type,'zontijden');
 for(const phrase of ['2x zonnig','2 x zonnig','2× zonnig','twee keer zonnig','twee maal zonnig','zet 2x zonnig toe']) assert.deepEqual(parseCommand(phrase),{type:'zon',count:2},phrase);
 assert.deepEqual(parseCommand('2x bewolkt'),{type:'bewolkt',count:2});
 assert.deepEqual(parseCommand('2x zon met sluierbewolking'),{type:'sluierbewolking',count:2});
-for(const phrase of ['0x zonnig','21x zonnig','2x onbekend','2x 16 graden','2x 2x zonnig']) assert.equal(parseCommand(phrase),null,phrase);
+for(const phrase of ['0x zonnig','21x zonnig','2x onbekend','2x 2x zonnig']) assert.equal(parseCommand(phrase),null,phrase);
+
+for(const phrase of ['zonkracht','zon kracht','uv','uv-index']) assert.deepEqual(parseCommand(phrase),{type:'uv'},phrase);
+for(const phrase of ['zonkracht 4','zon kracht vier','zonkracht van vier','uv index vier','zonkracht vier graden']) assert.deepEqual(parseCommand(phrase),{type:'uv',value:'4'},phrase);
+for(const [phrase,count,value] of [['2x 20 graden',2,'20'],['3x 20 graden',3,'20'],['drie keer min vijf graden',3,'-5'],['twee keer temperatuur 20 graden',2,'20']]) assert.deepEqual(parseCommand(phrase),{type:'temp',value,count});
+for(const [phrase,type] of [['3x zonnig','zon'],['3x bewolkt','bewolkt'],['drie keer zon met sluierbewolking','sluierbewolking']]) assert.deepEqual(parseCommand(phrase),{type,count:3});

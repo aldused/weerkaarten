@@ -68,7 +68,7 @@ const root = path.resolve(__dirname, '..');
   assert.equal(tree.props.className,'landelijke-studio');
   // Voice uses ordinary map elements, defaults, geographic positions, selection and undo.
   const {parseCommand}=await import(pathToFileURL(path.join(root,'editor-src/regio-voice.js')));
-  for(const phrase of ['16 graden','20 graden','min 3 graden','Rotterdam','Dordrecht','Gouda','maandag','zon','half bewolkt','mist','zuidwest 2','noordoost vijf','zeewatertemperatuur 18 graden','zonsopkomst','zonsondergang','zonkracht vier']) {
+  for(const phrase of ['16 graden','20 graden','min 3 graden','Rotterdam','Dordrecht','Gouda','maandag','zon','half bewolkt','mist','zuidwest 2','noordoost vijf','zeewatertemperatuur 18 graden','zonsopkomst','zonsondergang','zonkracht vier','zonkracht','zon kracht vijf']) {
     const command=parseCommand(phrase,lastProps.voicePlaces);
     const before=elements().length;
     lastProps.actions.voiceAdd(command);tree=render();
@@ -82,6 +82,7 @@ const root = path.resolve(__dirname, '..');
       assert.ok(Math.abs(added.x-(command.place.lon-3.55)/(5.35-3.55)*box[2])<1e-7);
       assert.ok(Math.abs(added.y-(52.08-command.place.lat)/(52.08-51.58)*box[3])<1e-7);
     } else {assert.equal(added.x,box[2]*(.35+.15*(before%3)));assert.equal(added.y,box[3]*(.3+.2*(Math.floor(before/3)%3)));}
+    if(command.type==='uv')assert.equal(added.value,command.value??'4');
     if(command.type==='wind'){assert.equal(added.dir,command.dir);assert.equal(added.bft,command.bft);}
     if(command.type==='zontijden'){assert.match(added.opkomst,/^\d{2}:\d{2}$/);assert.match(added.ondergang,/^\d{2}:\d{2}$/);assert.notEqual(added.opkomst,'--:--');}
     if(command.type==='label')assert.equal(added.fontSize,32);
@@ -89,14 +90,15 @@ const root = path.resolve(__dirname, '..');
     lastProps.actions.undo();tree=render();assert.equal(elements().length,before);
   }
 
-  for(const phrase of ['2x zonnig','2x bewolkt','twee keer zon met sluierbewolking']) {
+  for(const phrase of ['2x zonnig','2x bewolkt','twee keer zon met sluierbewolking','3x zonnig','3x bewolkt','3x zon met sluierbewolking','2x 20 graden','3x 20 graden']) {
     const before=elements().length, command=parseCommand(phrase,lastProps.voicePlaces);
     lastProps.actions.voiceAdd(command);tree=render();
-    assert.equal(elements().length,before+2);
-    const pair=elements().slice(-2);assert.ok(pair.every(x=>x.type===command.type));
+    assert.equal(elements().length,before+command.count);
+    const pair=elements().slice(-command.count);assert.ok(pair.every(x=>x.type===command.type));
+    if(command.value!==undefined)assert.ok(pair.every(x=>x.value===command.value));
     assert.notEqual(pair[0].x,pair[1].x,'Repeated symbols have different positions');
     lastProps.actions.undo();tree=render();assert.equal(elements().length,before,'Undo the full spoken command');
-    lastProps.actions.redo();tree=render();assert.equal(elements().length,before+2);
+    lastProps.actions.redo();tree=render();assert.equal(elements().length,before+command.count);
     lastProps.actions.undo();tree=render();
   }
 

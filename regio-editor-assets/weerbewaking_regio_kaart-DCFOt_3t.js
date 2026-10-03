@@ -1,6 +1,6 @@
-import {regionalSunTimes} from "../editor-src/regio-sun.js?v=20261003-voice3";
+import {regionalSunTimes} from "../editor-src/regio-sun.js?v=20261003-voice4";
 import {createWeatherIcon,WEATHER_ICON_LABELS} from "../editor-src/weather-icons.js?v=20260913-rain1";
-import {createLandelijkeStudio} from "../editor-src/landelijke-studio.js?v=20261003-voice3";
+import {createLandelijkeStudio} from "../editor-src/landelijke-studio.js?v=20261003-voice4";
 (function(){const A=document.createElement("link").relList;if(A&&A.supports&&A.supports("modulepreload"))return;for(const i of document.querySelectorAll('link[rel="modulepreload"]'))n(i);new MutationObserver(i=>{for(const s of i)if(s.type==="childList")for(const l of s.addedNodes)l.tagName==="LINK"&&l.rel==="modulepreload"&&n(l)}).observe(document,{childList:!0,subtree:!0});function t(i){const s={};return i.integrity&&(s.integrity=i.integrity),i.referrerPolicy&&(s.referrerPolicy=i.referrerPolicy),i.crossOrigin==="use-credentials"?s.credentials="include":i.crossOrigin==="anonymous"?s.credentials="omit":s.credentials="same-origin",s}function n(i){if(i.ep)return;i.ep=!0;const s=t(i);fetch(i.href,s)}})();function r0(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,"default")?e.default:e}var au={exports:{}},Do={},uu={exports:{}},vA={};/**
  * @license React
  * react.production.min.js

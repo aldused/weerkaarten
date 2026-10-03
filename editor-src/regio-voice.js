@@ -23,7 +23,10 @@ export function parseCommand(transcript, places=[]) {
     const count=/^\d+$/.test(repeat[1])?Number(repeat[1]):numbers.get(repeat[1]);
     if(!Number.isInteger(count)||count<1||count>20) return null;
     const symbol=symbols.get(symbolKey(repeat[2].replace(/^(?:symbool|weersymbool)\s+/,'')));
-    return symbol ? {type:symbol,count} : null;
+    if(symbol) return {type:symbol,count};
+    if(/^(\d{1,2}|[a-z]+)\s*(?:x|×|keer|maal)\s+/.test(repeat[2])) return null;
+    const command=parseCommand(repeat[2],places);
+    return command && ['temp','uv'].includes(command.type) ? {...command,count} : null;
   }
   const sea = text.match(/^(?:zeewatertemperatuur|zeewater temperatuur|zeewater|watertemperatuur)(?:\s+(.+))?$/);
   if (sea) {
@@ -42,8 +45,9 @@ export function parseCommand(transcript, places=[]) {
     const parsed=parseCommand(`${direction[1]} 0`);
     if(parsed?.type==='wind') return {type:'wind',dir:parsed.dir};
   }
-  const uv=text.match(/^(?:uv|uv index|zonkracht)\s+(\d{1,2}|[a-z]+)$/);
+  const uv=text.match(/^(?:uv(?:[ -]?index)?|zon\s*kracht)(?:\s+(?:van\s+)?(\d{1,2}|[a-z]+)(?:\s+graden?)?)?$/);
   if(uv) {
+    if(!uv[1]) return {type:'uv'};
     const value=/^\d+$/.test(uv[1])?Number(uv[1]):numbers.get(uv[1]);
     return Number.isInteger(value)&&value>=0&&value<=15 ? {type:'uv',value:String(value)} : null;
   }
@@ -76,7 +80,7 @@ export function parseCommand(transcript, places=[]) {
   if(place) return {type:'label',value:place[1].toUpperCase()};
   return null;
 }
-const singleCommandLabel = command => command.type==='wind' ? `Wind ${command.dir || ''}${command.bft!==undefined ? ' '+command.bft+' Bft' : ''}`.trim() : command.type==='seatemp' ? `Zeewater${command.value ? ' '+command.value+'°' : ''}` : command.type==='zontijden' ? 'Zonsopkomst en zonsondergang' : command.type==='uv' ? `Zonkracht ${command.value}` : command.type==='temp' ? `${command.value}°` : command.value || WEATHER_ICON_LABELS[command.type];
+const singleCommandLabel = command => command.type==='wind' ? `Wind ${command.dir || ''}${command.bft!==undefined ? ' '+command.bft+' Bft' : ''}`.trim() : command.type==='seatemp' ? `Zeewater${command.value ? ' '+command.value+'°' : ''}` : command.type==='zontijden' ? 'Zonsopkomst en zonsondergang' : command.type==='uv' ? `Zonkracht${command.value!==undefined ? ' '+command.value : ''}` : command.type==='temp' ? `${command.value}°` : command.value || WEATHER_ICON_LABELS[command.type];
 
 export const commandLabel = command => `${command.count ? command.count+' × ' : ''}${singleCommandLabel(command)}`;
 

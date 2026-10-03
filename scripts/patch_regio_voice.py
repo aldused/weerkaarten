@@ -19,6 +19,6 @@ replace('z.useState({opkomst:"--:--",ondergang:"--:--",loading:!1})', 'z.useStat
 replace('const ye=z.useCallback((o,c,f,h={})=>{VA(),','const ye=z.useCallback((o,c,f,h={})=>{h.voiceBatch||VA(),')
 s = s.replace('landelijke-studio.js?v=20260913-rain1', 'landelijke-studio.js?v=20260929-voice1')
 replace('T({opkomst:f(c.results.sunrise),ondergang:f(c.results.sunset),loading:!1})', '(()=>{const t={opkomst:f(c.results.sunrise),ondergang:f(c.results.sunset),loading:!1};T(t);A(e=>e.map(o=>o.type==="zontijden"&&o.opkomst===G.opkomst&&o.ondergang===G.ondergang?{...o,opkomst:t.opkomst,ondergang:t.ondergang}:o))})()')
-if 'import {regionalSunTimes}' not in s: s='import {regionalSunTimes} from \"../editor-src/regio-sun.js?v=20261003-voice3\";\n'+s
-s=s.replace('20260929-voice1','20261003-voice3').replace('20261003-voice2','20261003-voice3')
+if 'import {regionalSunTimes}' not in s: s='import {regionalSunTimes} from \"../editor-src/regio-sun.js?v=20261003-voice4\";\n'+s
+s=s.replace('20260929-voice1','20261003-voice4').replace('20261003-voice2','20261003-voice4').replace('20261003-voice3','20261003-voice4')
 p.write_text(s)
