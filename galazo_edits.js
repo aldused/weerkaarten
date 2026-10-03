@@ -1,8 +1,8 @@
 /* Explicit editorial corrections; WeatherPro records remain unchanged. */
 (function(root){
  'use strict';
- const FIELDS=['tt','wbgt','apparent','rh','dd','ff','ffg','rr','pop','thunder','sun','visibility'];
- const LIMITS={tt:[-40,60],wbgt:[-40,60],apparent:[-100,80],rh:[1,100],dd:[0,360],ff:[0,270],ffg:[0,400],rr:[0,500],pop:[0,100],thunder:[0,100],sun:[0,60],visibility:[0,200000]};
+ const FIELDS=['tt','wbgt','apparent','rh','dd','bft','ffg','rr','pop','thunder','sun','visibility'];
+ const LIMITS={bft:[0,12],tt:[-40,60],wbgt:[-40,60],apparent:[-100,80],rh:[1,100],dd:[0,360],ff:[0,270],ffg:[0,400],rr:[0,500],pop:[0,100],thunder:[0,100],sun:[0,60],visibility:[0,200000]};
  const directions=['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
  function parse(field,text){
   if(!LIMITS[field])throw Error('Onbekend tabelveld');
@@ -10,7 +10,7 @@
   if(field==='dd'&&directions.includes(str))return directions.indexOf(str)*22.5;
   if(!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(str))throw Error('Vul een getal in'+(field==='dd'?' of een windrichting (bijvoorbeeld ZZW)':'')+'.');
   const value=Number(str.replace(',','.')),[min,max]=LIMITS[field];
-  if(!Number.isFinite(value)||value<min||value>max)throw Error('Waarde moet tussen '+min+' en '+max+' liggen.');return value;
+  if(!Number.isFinite(value)||value<min||value>max)throw Error('Waarde moet tussen '+min+' en '+max+' liggen.');if(field==='bft'&&!Number.isInteger(value))throw Error('Beaufort moet een heel getal van 0 tot 12 zijn.');return value;
  }
  function apply(data,edits){
   const diagnostics=[...data.diagnostics];
@@ -24,6 +24,7 @@
     h.wind2=changes.ff!==null&&Number.isFinite(original.wind2)&&Number.isFinite(original.ff)&&original.ff>0?original.wind2*changes.ff/original.ff:null;
     diagnostics.push({code:'manual-wind2',iso:h.iso,value:h.wind2,method:'WeatherPro wind-height ratio; missing ratio gives no WBGT'});
    }
+   if(Object.hasOwn(changes,'bft')){h.ff=null;h.wind2=null;diagnostics.push({code:'manual-bft',iso:h.iso,value:changes.bft,reason:'Bft is een klasse; geen exacte windsnelheid voor WBGT beschikbaar'});}
    return h;
   });return {...data,hours,diagnostics};
  }

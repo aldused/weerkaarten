@@ -44,7 +44,7 @@
   try{
    const value=GalazoEdits.parse(field,cell.textContent),changes={...(edits.get(iso)||{}),[field]:value};
    // A new meteorological correction replaces an earlier manual WBGT estimate.
-   if(['tt','rh','ff'].includes(field))delete changes.wbgt;
+   if(['tt','rh','ff','bft'].includes(field))delete changes.wbgt;
    edits.set(iso,changes);await refresh();
   }catch(err){cell.textContent=cell.dataset.display;status(err.message,true);buttons();}
  }
