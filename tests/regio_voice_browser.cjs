@@ -36,6 +36,14 @@ const BASE=process.env.REGIO_TEST_URL || 'http://127.0.0.1:8799';
  assert.match(await page.locator('.studio-voice').innerText(),/geografische plek geplaatst/);
  const canvasText=await page.locator('svg').filter({has:page.locator('text', {hasText:'ROTTERDAM'})}).first().textContent();
  assert.match(canvasText,/18/);assert.match(canvasText,/\d{2}:\d{2}/);assert.doesNotMatch(canvasText,/--:--/);
+ for(const phrase of ['2x zonnig','2x bewolkt','twee keer zon met sluierbewolking']) {
+   await page.locator('.studio-voice input').fill(phrase);await page.locator('.studio-voice input').press('Enter');
+ }
+ assert.match(await page.locator('.studio-canvas-title').innerText(),/16 onderdelen/);
+ await page.getByRole('button',{name:'Ongedaan maken',exact:true}).click();
+ assert.match(await page.locator('.studio-canvas-title').innerText(),/14 onderdelen/);
+ await page.getByRole('button',{name:'Opnieuw uitvoeren',exact:true}).click();
+ assert.match(await page.locator('.studio-canvas-title').innerText(),/16 onderdelen/);
  await page.screenshot({path:'/tmp/regio-voice-editor.png'});
  await page.getByRole('button',{name:'Stop luisteren',exact:false}).click();
  assert(await page.evaluate(()=>mic.stopped));

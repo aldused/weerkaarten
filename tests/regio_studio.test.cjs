@@ -89,6 +89,17 @@ const root = path.resolve(__dirname, '..');
     lastProps.actions.undo();tree=render();assert.equal(elements().length,before);
   }
 
+  for(const phrase of ['2x zonnig','2x bewolkt','twee keer zon met sluierbewolking']) {
+    const before=elements().length, command=parseCommand(phrase,lastProps.voicePlaces);
+    lastProps.actions.voiceAdd(command);tree=render();
+    assert.equal(elements().length,before+2);
+    const pair=elements().slice(-2);assert.ok(pair.every(x=>x.type===command.type));
+    assert.notEqual(pair[0].x,pair[1].x,'Repeated symbols have different positions');
+    lastProps.actions.undo();tree=render();assert.equal(elements().length,before,'Undo the full spoken command');
+    lastProps.actions.redo();tree=render();assert.equal(elements().length,before+2);
+    lastProps.actions.undo();tree=render();
+  }
+
   assert.equal(all(tree,n=>n.props.role==='tab').length,2);
   assert.equal(text(all(tree,n=>n.type==='h1')[0]),'Regionale weerkaart');
   button(tree,'Download PNG');button(tree,'Opslaan');button(tree,'Openen');

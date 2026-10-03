@@ -41,3 +41,8 @@ assert.deepEqual(parseCommand('windkracht vijf'),{type:'wind',bft:'5'});
 assert.deepEqual(parseCommand('windrichting zuidwest'),{type:'wind',dir:'ZW'});
 assert.deepEqual(parseCommand('zonkracht vier'),{type:'uv',value:'4'});
 assert.equal(parseCommand('zonsop en zonsondergang').type,'zontijden');
+
+for(const phrase of ['2x zonnig','2 x zonnig','2× zonnig','twee keer zonnig','twee maal zonnig','zet 2x zonnig toe']) assert.deepEqual(parseCommand(phrase),{type:'zon',count:2},phrase);
+assert.deepEqual(parseCommand('2x bewolkt'),{type:'bewolkt',count:2});
+assert.deepEqual(parseCommand('2x zon met sluierbewolking'),{type:'sluierbewolking',count:2});
+for(const phrase of ['0x zonnig','21x zonnig','2x onbekend','2x 16 graden','2x 2x zonnig']) assert.equal(parseCommand(phrase),null,phrase);

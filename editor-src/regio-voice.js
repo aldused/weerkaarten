@@ -18,6 +18,13 @@ const extraPlaces = ['Rotterdam','Dordrecht','Gouda','Den Haag','Amsterdam','Utr
 export function parseCommand(transcript, places=[]) {
   const explicitPlace = /^(?:(?:voeg|zet)\s+)?(?:plaats(?:naam)?|label)\s+/i.test(transcript);
   let text = normalize(transcript).replace(/^(?:voeg|zet)\s+(?:een\s+)?/, '').replace(/\s+toe$/, '');
+  const repeat = text.match(/^(\d{1,2}|[a-z]+)\s*(?:x|×|keer|maal)\s+(.+)$/);
+  if (repeat) {
+    const count=/^\d+$/.test(repeat[1])?Number(repeat[1]):numbers.get(repeat[1]);
+    if(!Number.isInteger(count)||count<1||count>20) return null;
+    const symbol=symbols.get(symbolKey(repeat[2].replace(/^(?:symbool|weersymbool)\s+/,'')));
+    return symbol ? {type:symbol,count} : null;
+  }
   const sea = text.match(/^(?:zeewatertemperatuur|zeewater temperatuur|zeewater|watertemperatuur)(?:\s+(.+))?$/);
   if (sea) {
     if (!sea[1]) return {type:'seatemp'};
@@ -69,7 +76,9 @@ export function parseCommand(transcript, places=[]) {
   if(place) return {type:'label',value:place[1].toUpperCase()};
   return null;
 }
-export const commandLabel = command => command.type==='wind' ? `Wind ${command.dir || ''}${command.bft!==undefined ? ' '+command.bft+' Bft' : ''}`.trim() : command.type==='seatemp' ? `Zeewater${command.value ? ' '+command.value+'°' : ''}` : command.type==='zontijden' ? 'Zonsopkomst en zonsondergang' : command.type==='uv' ? `Zonkracht ${command.value}` : command.type==='temp' ? `${command.value}°` : command.value || WEATHER_ICON_LABELS[command.type];
+const singleCommandLabel = command => command.type==='wind' ? `Wind ${command.dir || ''}${command.bft!==undefined ? ' '+command.bft+' Bft' : ''}`.trim() : command.type==='seatemp' ? `Zeewater${command.value ? ' '+command.value+'°' : ''}` : command.type==='zontijden' ? 'Zonsopkomst en zonsondergang' : command.type==='uv' ? `Zonkracht ${command.value}` : command.type==='temp' ? `${command.value}°` : command.value || WEATHER_ICON_LABELS[command.type];
+
+export const commandLabel = command => `${command.count ? command.count+' × ' : ''}${singleCommandLabel(command)}`;
 
 export function createVoiceController({Recognition, onState, onCommand, getPlaces=()=>[], schedule=setTimeout, cancel=clearTimeout}) {
   let recognition=null, wanted=false, timer=null, generation=0, restarts=0;
