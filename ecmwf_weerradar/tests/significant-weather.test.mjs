@@ -19,7 +19,7 @@ test('weather fields produce a categorical regular grid and matching PNG legend'
  const constant=value=>({data:{values:[value]},grid:{getInterpolatedValue:a=>a[0]}});
  const fields={precipitation:constant(1),snowfall_water_equivalent:constant(1),cloud_cover:{...constant(100),cloudLow:[100],cloudMid:[0],cloudHigh:[0]}};
  const result=buildSignificantField(fields,[3,50,7,54],9);assert.ok(result.values.every(v=>v===7));assert.equal(result.values.length,result.metadata.grid.n_lon*result.metadata.grid.n_lat);
- assert.equal(exportLegends({mode:'significant',variables:['significant_weather']}).length,9);
+ assert.equal(exportLegends({mode:'significant',variables:['significant_weather']}).length,10);
 });
 
 test('high cloud gets its own key without hiding rain or lower cloud',()=>{
@@ -54,3 +54,15 @@ test('clear significant weather leaves the shared basemap unchanged',()=>{
  assert.equal(legend[0].color,'transparent');assert.match(legend[0].label,/kaartondergrond/);
  for(const state of SIGNIFICANT_WEATHER.filter(s=>s.code!==1))assert.ok(state.color[3]>0,'weather phenomena remain visible');
 });
+
+ test('thunderstorm is pink in both categorical and weather overlay, with no dry or missing-data storms',()=>{
+ const input={precipitation:1,cape:1200,showers:.5,cin:20};
+ assert.equal(significantCode(input),9);
+ for(const values of [{cape:NaN},{cape:0},{showers:0},{cin:150},{cin:NaN}])assert.equal(significantCode({...input,...values}),5);
+ for(const variable of ['significant_weather','thunderstorm']){
+  const grid={getNearestNeighborValue:()=>9},pixels=renderTile({variable,data:{values:new Float32Array([9])},grid},{z:6,x:33,y:21});
+  assert.ok(pixels.some(v=>v));const offset=pixels.findIndex((v,i)=>i%4===3&&v);assert.deepEqual([...pixels.slice(offset-3,offset+1)],[255,70,170,235]);
+ }
+ const missing={variables:['cape','showers']};assert.deepEqual(significantVariables(missing),['precipitation','cloud_cover']);
+ const unsupported={modelId:'ncep_gfs013',variables:['cape','showers','convective_inhibition']};assert.deepEqual(significantVariables(unsupported),['precipitation','cloud_cover']);
+ });

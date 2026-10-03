@@ -26,5 +26,6 @@ export function drawPrecipitationSymbol(ctx,x,y,type){
     }else{ctx.moveTo(dx,4);ctx.lineTo(dx-2,8);}
   }
   ctx.strokeStyle='#203a50';ctx.lineWidth=3;ctx.stroke();
+  if(type==='thunderstorm'){ctx.beginPath();ctx.moveTo(1,-1);ctx.lineTo(-3,5);ctx.lineTo(1,5);ctx.lineTo(-1,11);ctx.lineTo(7,2);ctx.lineTo(3,2);ctx.closePath();ctx.fillStyle='#ff46aa';ctx.fill();ctx.strokeStyle='#203a50';ctx.lineWidth=1;ctx.stroke();ctx.restore();return;}
   ctx.strokeStyle=type==='snow'?'#f5edff':'#64ddff';ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
 }

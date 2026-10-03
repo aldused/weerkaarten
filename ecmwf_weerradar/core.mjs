@@ -67,7 +67,7 @@ const normalizedFields = new WeakMap();
 // °C and cloud percent untouched; only convert backward sums and derived wind.
 export function normalizeFieldData(data, variable, hours) {
   if (!data?.values) return data;
-  const accumulation = variable === 'precipitation' || variable === 'snowfall_water_equivalent';
+  const accumulation = variable === 'showers' || variable === 'precipitation' || variable === 'snowfall_water_equivalent';
   const identity = `${variable}|${accumulation ? hours : ''}`;
   const previous = normalizedFields.get(data);
   if (previous === identity) return data;

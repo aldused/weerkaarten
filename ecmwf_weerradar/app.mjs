@@ -1,5 +1,5 @@
 import {installGestureProfile} from './gesture-profile.mjs';
-import {buildSignificantFieldAsync,significantVariables,significantType,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
+import {buildSignificantFieldAsync,significantVariables,significantType,thunderVariables,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {MAP_REGIONS} from './map-regions.mjs';
 import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
 import {totalLegend} from './accumulation-colors.mjs';
@@ -76,6 +76,7 @@ function syncCloudButtons(){
 if(matchMedia('(max-width:700px)').matches)$('map-legend-panel').open=false;
 const modeNames={weather:'Weer',significant:'Significant weer',rain:'Neerslag',temperature:'Temperatuur',wind:'Wind',rain_total:'Cumulatieve neerslag',snow_total:'Cumulatieve sneeuw'};
 document.querySelectorAll('[data-mode]').forEach(button=>{const label=document.createElement('span');label.textContent=modeNames[button.dataset.mode];button.append(label);});
+const thunderKey=document.createElement('span');thunderKey.id='thunder-key';thunderKey.hidden=true;thunderKey.style.cssText='display:none;font-size:12px;color:#18314c';thunderKey.textContent='● Onweer · modelindicatie';thunderKey.style.color='#b71d70';$('wind-key').after(thunderKey);
 for(const item of SIGNIFICANT_WEATHER){const label=document.createElement('span'),swatch=document.createElement('i');swatch.style.background=item.color[3]===0?'transparent':`rgb(${item.color.slice(0,3)})`;label.append(swatch,item.label);$('significant-key').append(label);}
 const settingsLabel=document.createElement('span');settingsLabel.textContent='Lagen';$('settings-toggle').append(settingsLabel);
 
@@ -143,12 +144,12 @@ function readField(file,variable,signal){
   $('app').dataset.fieldReads=++fieldReads;
   const task=createSharedTask(async readSignal=>{
     const request=accumulationRequests.get(file);
-    const data=variable==='significant_weather'?await (async()=>{
-      const frame=significantRequests.get(file),variables=significantVariables(frame.modelMeta);
+    const data=['significant_weather','thunderstorm'].includes(variable)?await (async()=>{
+      const frame=significantRequests.get(file),variables=variable==='thunderstorm'?thunderVariables(frame.modelMeta):significantVariables(frame.modelMeta);
       const parts=await Promise.all(variables.map(async v=>[v,await readField(fieldFile(frame,v),v,readSignal)]));
-      readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);$('app').dataset.significantComputeMs=Math.round(performance.now()-started);return result;
+      readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);$('app').dataset.significantComputeMs=Math.round(performance.now()-started);if(variable==='thunderstorm'){result.values=Float32Array.from(result.values,v=>v===9?9:0);result.metadata.variable=variable;}return result;
     })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
-    if(!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
+    if(!['significant_weather','thunderstorm'].includes(variable)&&!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
     for(const key of CLOUD_KEYS)if(data[key])field[key]=data[key];
     if(data.cloudBase)field.cloudBase=data.cloudBase;
@@ -171,7 +172,7 @@ let tempLevel=Object.hasOwn(UPPER_AIR_LEVELS,params.get('level'))?params.get('le
 function tempVariable(modelId){const v=UPPER_AIR_LEVELS[tempLevel];return v!=='temperature_2m'&&!MODEL_CONFIG[modelId]?.upperAir?'temperature_2m':v;}
 // File that holds `variable` for this frame: same model, run and valid time.
 function fieldFile(frame,variable){
- if(variable==='significant_weather'){const file=frame.url+'/significant';significantRequests.set(file,frame);return file;}
+ if(['significant_weather','thunderstorm'].includes(variable)){const file=frame.url+'/'+variable;significantRequests.set(file,frame);return file;}
  if(isAccumulation(variable)){
   const anchor=frame.accumulationAnchor??frame.time-frame.hours*HOUR,file=frame.url+'/sum/'+anchor+'/'+variable;
   accumulationRequests.set(file,{frame,anchor});return file;
@@ -440,14 +441,14 @@ new ResizeObserver(entries=>{
   });}
 }).observe(document.querySelector('.bottom-area'));
 // Refinements of the same frame: they must not delay the first usable map.
-const OPTIONAL_LAYERS=['visibility','snowfall_water_equivalent'];
+const OPTIONAL_LAYERS=['visibility','snowfall_water_equivalent','thunderstorm'];
 function variablesForMode(modelMeta=meta,frame){
   if(mode==='significant')return ['significant_weather'];
   if(mode==='rain_total')return ['precipitation_total'];
   if(mode==='snow_total')return ['snowfall_total'];
   if(mode==='temperature'){const v=tempVariable(modelFor(modelMeta));return !frame||fieldFile(frame,v)?[v]:[];}
   if(mode==='wind') return ['wind_u_component_10m'];
-  return [...(mode==='weather'&&$('clouds').checked?['cloud_cover',...($('fog').checked&&modelMeta.variables.includes('visibility')?['visibility']:[])]:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[])];
+  return [...(mode==='weather'&&$('clouds').checked?['cloud_cover',...($('fog').checked&&modelMeta.variables.includes('visibility')?['visibility']:[])]:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[]),...(mode==='weather'&&thunderVariables(modelMeta).length?['thunderstorm']:[])];
 }
 function sampleVariables(layerVariables,modelMeta){
   const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):(mode==='temperature'||mode.endsWith('_total'))?[]:['temperature_2m']):[];
@@ -659,6 +660,7 @@ function syncUI(){
   else{const rainLegend=precipitationLegend();title='Neerslag';unit='mm/u';numbers=rainLegend.labels;gradient=rainLegend.gradient;}
   $('layer-title').textContent=f.mode==='weather'?'Weerradar':title;
   $('significant-key').hidden=f.mode!=='significant';
+  const hasThunder=thunderVariables(metadata).length>0;thunderKey.hidden=!['weather','significant'].includes(f.mode)||f.mode==='significant'&&hasThunder;thunderKey.textContent=hasThunder?'● Onweer · modelindicatie':'Onweer: brongegevens ontbreken bij dit model';thunderKey.style.display=thunderKey.hidden?'none':'block';
   $('wind-key').hidden=!['wind','significant'].includes(f.mode);
   syncTempLevels(f,modelId);
   $('temperature-select').classList.toggle('selected',f.mode==='temperature');$('precipitation-select').classList.toggle('selected',['rain','rain_total','snow_total'].includes(f.mode));
@@ -877,9 +879,10 @@ function paintCities({canvas=$('places'),exporting=false}={}){
     const fog=current.ids.some(id=>id.endsWith('-visibility'))?fogBand(sample(current.samples.visibility,city.lat,city.lon)):null;
     const snowfall=sample(current.samples.snowfall_water_equivalent,city.lat,city.lon);
     const significantField=current.samples.significant_weather;
-    const symbol=totalVariable||(exporting&&current.mode==='temperature')?null:current.mode==='significant'?significantType(significantField?.grid.getNearestNeighborValue(significantField.data.values,city.lat,city.lon)):weatherSymbol({precipitation:rain,snowfall,cloud,fog});
+    const thunder=current.samples.thunderstorm;
+    const symbol=thunder?.grid.getNearestNeighborValue(thunder.data.values,city.lat,city.lon)===9?'thunderstorm':totalVariable||(exporting&&current.mode==='temperature')?null:current.mode==='significant'?significantType(significantField?.grid.getNearestNeighborValue(significantField.data.values,city.lat,city.lon)):weatherSymbol({precipitation:rain,snowfall,cloud,fog});
     if(symbolAudit)symbolAudit.push({name,lat:city.lat,lon:city.lon,precipitation:rain,snowfall,cloud,symbol});
-    if(['rain','snow','mixed'].includes(symbol))drawPrecipitationSymbol(ctx,p.x-13,p.y-17,symbol);
+    if(['rain','snow','mixed','thunderstorm'].includes(symbol))drawPrecipitationSymbol(ctx,p.x-13,p.y-17,symbol);
     else if(symbol==='fog'){
       ctx.fillStyle=fog?.color||'#dad096';ctx.strokeStyle='#4b401d';ctx.lineWidth=1.5;ctx.fillRect(p.x-23,p.y-25,20,18);ctx.strokeRect(p.x-23,p.y-25,20,18);
       for(let line=0;line<3;line++){ctx.beginPath();ctx.moveTo(p.x-20+(line%2)*2,p.y-21+line*5);ctx.lineTo(p.x-6,p.y-21+line*5);ctx.stroke();}

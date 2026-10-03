@@ -27,6 +27,7 @@ export function exportLegends({mode,variables,cloudVisible,hasBase}){
   }
   if(variables.includes('visibility'))for(const band of [...FOG_BANDS].reverse())rows.push({label:`Mist · ${band.label.toLowerCase()}`,color:band.color});
   if(variables.includes('cloud_cover')&&hasBase&&(cloudVisible&1))rows.push({label:'Zeer lage bewolking · wolkenbasis <150 m',color:'#dedcca'});
+  if(mode==='weather'&&variables.includes('thunderstorm'))rows.push({label:'Onweer · modelindicatie',color:'#ff46aa'});
   return rows;
 }
 export function wrapText(text,maxWidth,measure){

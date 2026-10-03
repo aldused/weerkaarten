@@ -10,6 +10,7 @@ function range(values){
 }
 export function transparentField(field){
   if(!field.data.values.length)return false;
+  if(field.variable==='thunderstorm')return range(field.data.values).max<=0;
   if(isPrecipitation(field.variable))return range(field.data.values).max+1e-6<PRECIPITATION_THRESHOLD;
   if(field.variable==='visibility'){const r=range(field.data.values);return r.min>=500||r.max<0;}
   if(field.variable==='cloud_cover'){

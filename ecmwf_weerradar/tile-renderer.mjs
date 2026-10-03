@@ -23,7 +23,7 @@ const significantColors=Object.fromEntries(SIGNIFICANT_WEATHER.map(s=>[s.code,s.
 const palettes=Object.fromEntries(Object.entries(scales).map(([k,v])=>[k,colorsFor(v)]));
 
 export function renderTile(field,coords){
-  const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable),significant=field.variable==='significant_weather';
+  const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable),significant=['significant_weather','thunderstorm'].includes(field.variable);
   if(transparentField(field))return pixels;
   const sampler=significant?null:createGaussianTileSampler(field.grid,field.data.values,coords)||createRegularTileSampler(field.grid,field.data.values,coords);
   const cloud=field.variable==='cloud_cover';

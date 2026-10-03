@@ -1,3 +1,4 @@
+import {retryFetch} from './retry-fetch.mjs';
 import {decodeRegularPacket} from './regular-grid.mjs';
 import {decodeProjectedPacket} from './projected-grid.mjs';
 import {decodePacket} from './packed-grid.mjs';
@@ -24,7 +25,7 @@ export class FieldPackets{
     try{present=await cache?.match(url);}catch{cache=undefined;}
     if(present){try{return decode(await present.arrayBuffer(),expected);}catch{await cache.delete(url).catch(()=>{});}}
     signal?.throwIfAborted();
-    const response=await this.fetcher(url,{signal});
+    const response=await retryFetch(url,{signal},this.fetcher);
     if(!response.ok)throw new Error(`Weerkaartbron tijdelijk niet bereikbaar (${response.status})`);
     const bytes=await response.arrayBuffer();signal?.throwIfAborted();
     const result=decode(bytes,expected);

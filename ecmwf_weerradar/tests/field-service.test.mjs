@@ -112,3 +112,13 @@ test('sea-level pressure uses the exact ECMWF file and rejects other model sourc
  assert.equal((await f.handler(new Request(invalid),{},f.ctx)).status,400);
  await Promise.all(f.pending);
 });
+
+test('ECMWF convective fields use the same immutable native run and reject unsupported models',async()=>{
+ const f=fixture();
+ for(const variable of ['cape','showers','convective_inhibition']){
+  const response=await f.handler(new Request(url(variable)),{},f.ctx);assert.equal(response.status,200);
+  assert.equal(f.reads.at(-1).variable,variable);assert.ok(f.reads.at(-1).source.endsWith(path));
+  const unsupported=await f.handler(new Request(url(variable).replace('/ecmwf_ifs/','/ncep_gfs013/')),{},f.ctx);assert.ok(unsupported.status>=400);
+ }
+ await Promise.all(f.pending);
+});
