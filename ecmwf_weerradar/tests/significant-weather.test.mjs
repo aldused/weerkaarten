@@ -66,3 +66,10 @@ test('clear significant weather leaves the shared basemap unchanged',()=>{
  const missing={variables:['cape','showers']};assert.deepEqual(significantVariables(missing),['precipitation','cloud_cover']);
  const unsupported={modelId:'ncep_gfs013',variables:['cape','showers','convective_inhibition']};assert.deepEqual(significantVariables(unsupported),['precipitation','cloud_cover']);
  });
+
+test('cold-air thunderstorms require upper-air cold, active showers, CAPE and finite weak CIN',()=>{
+ const boulogne={cape:194,showers:.63,cin:8,temperature500:-26.7,precipitation:1};
+ assert.equal(significantCode(boulogne),9);
+ for(const change of [{temperature500:-20},{temperature500:NaN},{cape:0},{showers:.05},{cin:NaN},{cin:80}])assert.equal(significantCode({...boulogne,...change}),5);
+ assert.equal(significantCode({cape:1200,showers:.5,cin:10,precipitation:1}),9,'existing high-CAPE branch remains available without pressure levels');
+});

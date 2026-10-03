@@ -17,8 +17,13 @@ export const SIGNIFICANT_WEATHER=[
 const codes=Object.fromEntries(SIGNIFICANT_WEATHER.map(s=>[s.type,s.code]));
 export const significantType=code=>SIGNIFICANT_WEATHER.find(s=>s.code===code)?.type;
 export const thunderVariables=meta=>(meta.modelId??'ecmwf_ifs')==='ecmwf_ifs'&&['cape','showers','convective_inhibition'].every(v=>meta.variables.includes(v))?['cape','showers','convective_inhibition']:[];
-// Conservative convective indicator, not observed lightning or a probability.
-export const thunderstormIndication=({cape,showers,cin})=>Number.isFinite(cape)&&cape>=800&&Number.isFinite(showers)&&showers>=.1&&Number.isFinite(cin)&&cin>=0&&cin<50;
+// Display heuristic, not observed lightning or a calibrated probability.
+// Cold-air showers can electrify with modest CAPE. Require actual upper-air
+// temperature plus active showers and little inhibition; cold air alone is insufficient.
+export function thunderstormIndication({cape,showers,cin,temperature500}){
+ if(!Number.isFinite(cape)||!Number.isFinite(showers)||!Number.isFinite(cin)||cin<0||cin>=50)return false;
+ return cape>=800&&showers>=.1||Number.isFinite(temperature500)&&temperature500<=-23&&cape>=100&&showers>=.3;
+}
 export function significantVariables(meta){return ['precipitation','cloud_cover',...thunderVariables(meta),...['visibility','snowfall_water_equivalent'].filter(v=>meta.variables.includes(v))];}
 export function significantCode(input){if(thunderstormIndication(input))return 9;const type=weatherSymbol(input);return type&&['clear','filtered'].includes(type)&&input.high>=30&&input.low<25&&input.mid<25?8:codes[type]??NaN;}
 function* significantRows(fields,bounds,resolutionKm=9){
@@ -43,7 +48,7 @@ function* significantRows(fields,bounds,resolutionKm=9){
   column=x;
   const lat=south+y*(north-south)/(ny-1),lon=west+x*(east-west)/(nx-1),cloud=fields.cloud_cover;
   const layers=['cloudLow','cloudMid','cloudHigh'].map(k=>cloud?.[k]?sample('cloud_cover',lat,lon,cloud[k]):NaN);
-  values[y*nx+x]=significantCode({cape:sample('cape',lat,lon),showers:sample('showers',lat,lon),cin:sample('convective_inhibition',lat,lon),precipitation:sample('precipitation',lat,lon),snowfall:sample('snowfall_water_equivalent',lat,lon),cloud:cloudIconType(...layers),low:layers[0],mid:layers[1],high:layers[2],fog:fogBand(sample('visibility',lat,lon))});
+  values[y*nx+x]=significantCode({temperature500:sample('temperature_500hPa',lat,lon),cape:sample('cape',lat,lon),showers:sample('showers',lat,lon),cin:sample('convective_inhibition',lat,lon),precipitation:sample('precipitation',lat,lon),snowfall:sample('snowfall_water_equivalent',lat,lon),cloud:cloudIconType(...layers),low:layers[0],mid:layers[1],high:layers[2],fog:fogBand(sample('visibility',lat,lon))});
  }
  yield;
  }

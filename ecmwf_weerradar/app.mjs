@@ -146,6 +146,8 @@ function readField(file,variable,signal){
     const request=accumulationRequests.get(file);
     const data=['significant_weather','thunderstorm'].includes(variable)?await (async()=>{
       const frame=significantRequests.get(file),variables=variable==='thunderstorm'?thunderVariables(frame.modelMeta):significantVariables(frame.modelMeta);
+      // Read pressure-level data only at times actually published by ECMWF.
+      if(thunderVariables(frame.modelMeta).length&&fieldFile(frame,'temperature_500hPa'))variables.push('temperature_500hPa');
       const parts=await Promise.all(variables.map(async v=>[v,await readField(fieldFile(frame,v),v,readSignal)]));
       readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(Object.fromEntries(parts),window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);$('app').dataset.significantComputeMs=Math.round(performance.now()-started);if(variable==='thunderstorm'){result.values=Float32Array.from(result.values,v=>v===9?9:0);result.metadata.variable=variable;}return result;
     })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
