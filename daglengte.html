@@ -16,10 +16,11 @@
   <h1>Twee datums, bijna evenveel daglicht</h1>
   <div class="text-small text-muted"><span id="licht-location"></span></div>
   <div class="viz-controls" style="margin:20px 0 8px">
-<label class="form-label" for="licht-station">KNMI-station <input class="form-control" id="licht-station" list="licht-stations" autocomplete="off" value="De Bilt · 260" placeholder="Zoek op naam of nummer"><datalist id="licht-stations"></datalist></label>
+<label class="form-label" for="licht-station-search">Zoek een KNMI-station<input class="form-control" id="licht-station-search" type="search" placeholder="Naam of stationsnummer" autocomplete="off"></label>
+<label class="form-label" for="licht-station">KNMI-station<select class="form-control" id="licht-station"></select></label>
 <span id="licht-station-status" class="text-small" role="status"></span>
     <label class="form-label" for="licht-date">Kies een najaarsdatum <input class="form-control" id="licht-date" type="date" min="2026-09-01" max="2026-11-30" value="2026-10-15"></label>
-    <button id="licht-pdf" type="button" class="pdf-button">Download PDF</button>
+    <button id="licht-pdf" type="button" class="pdf-button">Download PNG</button>
     <span id="licht-pdf-status" class="text-small" role="status" aria-live="polite"></span>
   </div>
   <div class="viz-row text-small" style="justify-content:space-between;margin:12px 0"><span>Voorjaar → dagen worden langer</span><span>Najaar → dagen worden korter</span></div>
@@ -39,7 +40,6 @@
 #daglicht-de-bilt .licht-chart .curve{stroke:var(--viz-series-1);fill:none;stroke-width:2.5}
 #daglicht-de-bilt details p{max-width:65ch}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script>
 (()=>{
@@ -72,10 +72,10 @@ let peak=days.reduce((a,b)=>b.minutes>a.minutes?b:a), spring=days.slice(0,peak.i
 const match=d=>spring.reduce((a,b)=>Math.abs(b.minutes-d.minutes)<Math.abs(a.minutes-d.minutes)?b:a);
 
  const root=document.getElementById('daglicht-de-bilt'),picker=root.querySelector('#licht-date'),plot=root.querySelector('#licht-plot'),svg=d3.select(root.querySelector('svg.licht-chart'));
- const stationInput=root.querySelector('#licht-station'),stationList=root.querySelector('#licht-stations');
+ const stationInput=root.querySelector('#licht-station'),stationSearch=root.querySelector('#licht-station-search');
  const stationLabel=s=>`${s.name} · ${s.id}`;
- STATIONS.forEach(s=>{const option=document.createElement('option');option.value=stationLabel(s);stationList.appendChild(option);});
- function setStation(s){station=s;LAT=s.lat;LON=s.lon;days=Array.from({length:365},(_,i)=>{const date=Date.UTC(YEAR,0,i+1),rise=event(date,-1),set=event(date,1);return {i,date,rise,set,minutes:(set-rise)/60000};});peak=days.reduce((a,b)=>b.minutes>a.minutes?b:a);spring=days.slice(0,peak.i+1);stationInput.value=stationLabel(s);apply(picker.value);}
+ function populateStations(){const query=stationSearch.value.trim().toLocaleLowerCase('nl-NL');const matches=STATIONS.filter(s=>stationLabel(s).toLocaleLowerCase('nl-NL').includes(query));stationInput.replaceChildren();const shown=matches.some(s=>s.id===station.id)?matches:[station,...matches];shown.forEach(s=>{const option=document.createElement('option');option.value=s.id;option.textContent=stationLabel(s);stationInput.appendChild(option);});stationInput.value=station.id;root.querySelector('#licht-station-status').textContent=query?`${matches.length} stations gevonden`:'';}populateStations();
+ function setStation(s){station=s;LAT=s.lat;LON=s.lon;days=Array.from({length:365},(_,i)=>{const date=Date.UTC(YEAR,0,i+1),rise=event(date,-1),set=event(date,1);return {i,date,rise,set,minutes:(set-rise)/60000};});peak=days.reduce((a,b)=>b.minutes>a.minutes?b:a);spring=days.slice(0,peak.i+1);stationInput.value=s.id;apply(picker.value);}
  const dateFormat=new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'long',timeZone:'UTC'});
  const timeFormat=new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'});
  const zoneFormat=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',timeZoneName:'short'});
@@ -133,48 +133,38 @@ const match=d=>spring.reduce((a,b)=>Math.abs(b.minutes-d.minutes)<Math.abs(a.min
  let savedDate;try{savedDate=localStorage.getItem('weerlab-daglengte-datum');}catch{}apply(valid(savedDate)?savedDate:'2026-10-15');
  picker.addEventListener('input',()=>{if(!valid(picker.value))return;apply(picker.value);try{localStorage.setItem('weerlab-daglengte-datum',picker.value);}catch{}});
  let savedStation;try{savedStation=localStorage.getItem('weerlab-daglengte-station');}catch{}setStation(STATIONS.find(s=>s.id===savedStation)||station);
- stationInput.addEventListener('input',()=>{const s=STATIONS.find(s=>stationLabel(s).toLowerCase()===stationInput.value.trim().toLowerCase()||s.id===stationInput.value.trim()||s.name.toLowerCase()===stationInput.value.trim().toLowerCase());if(!s){root.querySelector('#licht-station-status').textContent='Kies een station uit de suggesties.';return;}setStation(s);root.querySelector('#licht-station-status').textContent='';pdfStatus.textContent='';try{localStorage.setItem('weerlab-daglengte-station',s.id);}catch{}});
+ stationSearch.addEventListener('input',populateStations);
+ stationInput.addEventListener('change',()=>{const s=STATIONS.find(s=>s.id===stationInput.value);if(!s)return;setStation(s);pdfStatus.textContent='';try{localStorage.setItem('weerlab-daglengte-station',s.id);}catch{}});
  const pdfButton=root.querySelector('#licht-pdf'),pdfStatus=root.querySelector('#licht-pdf-status');
  pdfButton.addEventListener('click',async()=>{
-  pdfButton.disabled=true;pdfStatus.textContent='PDF wordt gemaakt…';let imageUrl;
+  pdfButton.disabled=true;pdfStatus.textContent='PNG wordt gemaakt…';let imageUrl,downloadUrl;
   try{
-   if(!window.jspdf?.jsPDF)throw new Error('PDF-bibliotheek is niet geladen. Controleer je internetverbinding en vernieuw de pagina.');
    const chosen=selected,partner=match(chosen),exportStation={...station};
+   const riseChosen=time(chosen.rise),setChosen=time(chosen.set),risePartner=time(partner.rise),setPartner=time(partner.set);
    draw(partner,900);
    const original=svg.node(),copy=original.cloneNode(true),originalNodes=[original,...original.querySelectorAll('*')],copyNodes=[copy,...copy.querySelectorAll('*')];
    originalNodes.forEach((node,i)=>{const cs=getComputedStyle(node);for(const key of ['fill','stroke','font-family','font-size','font-weight','stroke-width','stroke-dasharray','opacity'])copyNodes[i].style.setProperty(key,cs.getPropertyValue(key));});
-   copy.setAttribute('xmlns','http://www.w3.org/2000/svg');copy.setAttribute('width','900');copy.setAttribute('height','350');
-   draw(match(selected));
+   copy.setAttribute('xmlns','http://www.w3.org/2000/svg');copy.setAttribute('width','900');copy.setAttribute('height','350');draw(match(selected));
    imageUrl=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml;charset=utf-8'}));
    const image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('De grafiek kon niet worden geëxporteerd.'));image.src=imageUrl;});
-   const canvas=document.createElement('canvas');canvas.width=2700;canvas.height=1050;const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,2700,1050);context.drawImage(image,0,0,2700,1050);
-   const pdf=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-   pdf.setProperties({title:`Daglengte ${exportStation.name} - ${fmt(chosen)} 2026`,author:'Weerlab',subject:'Vergelijking daglengte voorjaar en najaar'});
-   const ink=[15,23,42],muted=[82,97,118];
-   function text(value,x,y,size=10,color=ink){pdf.setFontSize(size);pdf.setTextColor(...color);pdf.text(value,x,y);}
-   pdf.setFont('helvetica','bold');text('Weerlab',16,18,16,[0,32,91]);pdf.setFont('helvetica','normal');text('De zon door het jaar',140,18,10,muted);
-   pdf.setDrawColor(227,232,239);pdf.line(16,24,194,24);
-   pdf.setFont('helvetica','bold');text('Twee datums, bijna evenveel daglicht',16,37,17);pdf.setFont('helvetica','normal');
-   text(`${exportStation.name} | KNMI ${exportStation.id} | ${exportStation.lat} N, ${exportStation.lon} O | 2026`,16,46,9,muted);
-   text('Voorjaar: dagen worden langer',16,57,9,muted);text('Najaar: dagen worden korter',140,57,9,muted);
-   pdf.addImage(canvas.toDataURL('image/png'),'PNG',12,62,186,72.33);
-   const block=(d,x,label)=>{
-    pdf.setFillColor(248,250,252);pdf.setDrawColor(227,232,239);pdf.roundedRect(x,146,86,53,2,2,'FD');
-    text(label,x+6,155,8,muted);pdf.setFont('helvetica','bold');text(fmt(d),x+6,167,14);pdf.setFont('helvetica','normal');
-    text(`Zonsopkomst: ${time(d.rise)}   Zonsondergang: ${time(d.set)}`,x+6,177,9);
-    text(`Daglengte: ${duration(d.minutes)}`,x+6,187,10);text(`Lokale tijd: ${zone(d)}`,x+6,194,8,muted);
-   };
-   block(chosen,16,'GEKOZEN DATUM - NAJAAR');block(partner,108,'ZELFDE DAGLENGTE IN HET VOORJAAR');
-   const diff=Math.abs(chosen.minutes-partner.minutes);
-   text(`Verschil: ${diff.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1})} minuten (${Math.round(diff*60)} seconden)`,16,213,12);
-   const notes='De koppeling zoekt de dichtstbijzijnde kalenderdag op de stijgende jaarhelft: 1 januari tot de langste dag. Ook februari en januari kunnen dus overeenkomen met een najaarsdatum. Daglengte is de tijd tussen zonsopkomst en zonsondergang, zonder schemering. Tijden en daglengte zijn afzonderlijk afgerond op minuten; het verschil is berekend uit de ongeronde waarden.';
-   pdf.setFontSize(9);pdf.setTextColor(...muted);pdf.text(pdf.splitTextToSize(notes,178),16,225,{lineHeightFactor:1.45});
-   pdf.line(16,266,194,266);text(`Weerlab.nl | ${exportStation.name} | Kalenderjaar 2026`,16,273,8,muted);text('Pagina 1 van 1',173,273,8,muted);
-   text('Bron: astronomische berekening volgens Meeus/NOAA, zonshoogte -0,833 graden.',16,279,8,muted);
-   text('Vrije horizon, gemiddelde atmosferische breking. Tijdzone: Europe/Amsterdam.',16,284,8,muted);
-   const iso=new Date(chosen.date).toISOString().slice(0,10);pdf.save(`weerlab-daglengte-${exportStation.id}-${iso}.pdf`);pdfStatus.textContent='PDF gedownload.';
+   const canvas=document.createElement('canvas');canvas.width=1800;canvas.height=1480;const ctx=canvas.getContext('2d');
+   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,1800,1480);
+   function text(value,x,y,size=26,color='#0f172a',weight=400){ctx.fillStyle=color;ctx.font=`${weight} ${size}px Arial, sans-serif`;ctx.fillText(value,x,y);}
+   function rule(y){ctx.strokeStyle='#e3e8ef';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(70,y);ctx.lineTo(1730,y);ctx.stroke();}
+   text('Weerlab',70,85,44,'#00205b',700);text('Ed Aldus',1510,85,28,'#526176');rule(115);
+   text('Twee datums, bijna evenveel daglicht',70,180,46,'#0f172a',600);
+   text(`${exportStation.name} · KNMI ${exportStation.id} · ${exportStation.lat.toLocaleString('nl-NL')}° N, ${exportStation.lon.toLocaleString('nl-NL')}° O · 2026`,70,232,26,'#526176');
+   text('Voorjaar → dagen worden langer',70,287,24,'#526176');text('Najaar → dagen worden korter',1280,287,24,'#526176');
+   ctx.drawImage(image,25,310,1750,680.56);
+   const block=(d,x,label,rise,set)=>{ctx.fillStyle='#f8fafc';ctx.fillRect(x,1020,800,235);text(label,x+28,1065,22,'#526176');text(fmt(d),x+28,1120,38,'#0f172a',600);text(`Zonsopkomst: ${rise} · Zonsondergang: ${set}`,x+28,1170,27);text(`Daglengte: ${duration(d.minutes)}`,x+28,1220,29);};
+   block(chosen,70,'GEKOZEN DATUM · NAJAAR',riseChosen,setChosen);block(partner,930,'ZELFDE DAGLENGTE IN HET VOORJAAR',risePartner,setPartner);
+   const diff=Math.abs(chosen.minutes-partner.minutes);text(`Verschil: ${diff.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1})} minuten (${Math.round(diff*60)} seconden)`,70,1310,30);
+   rule(1350);text(`© Ed Aldus · Weerlab.nl · ${exportStation.name} · 2026`,70,1390,24,'#526176');
+   text('Bron: Meeus/NOAA · vrije horizon · zonshoogte −0,833° · lokale Nederlandse tijd',70,1430,22,'#526176');
+   const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG maken is mislukt.')),'image/png'));
+   downloadUrl=URL.createObjectURL(blob);const link=document.createElement('a');link.href=downloadUrl;link.download=`weerlab-daglengte-${exportStation.id}-${new Date(chosen.date).toISOString().slice(0,10)}.png`;document.body.appendChild(link);link.click();link.remove();pdfStatus.textContent='PNG gedownload.';
   }catch(error){pdfStatus.textContent=error.message;draw(match(selected));}
-  finally{if(imageUrl)URL.revokeObjectURL(imageUrl);pdfButton.disabled=false;}
+  finally{if(imageUrl)URL.revokeObjectURL(imageUrl);if(downloadUrl)setTimeout(()=>URL.revokeObjectURL(downloadUrl),30000);pdfButton.disabled=false;}
  });
 
  new ResizeObserver(()=>render()).observe(plot);
