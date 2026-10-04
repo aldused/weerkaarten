@@ -643,9 +643,10 @@ const MENU_PRODUCTS = [
     "keywords": "Ensemble 6-pluim + Met cumulatieve neerslag ENS-pluim Temperatuur Neerslag De Bilt Groningen Twente Maastricht Den Helder / Schiphol Vlissingen Zes plaatsen",
     "restricted": false
   },
+{id:'pluim-aifs',name:'ECMWF vs ECMWF AIFS',description:'Temperatuur, neerslag en wind naast elkaar met gelijke assen',category:'verwachting',type:'pluim',section:'Pluimen',icon:'pluim6',href:'index.html#pluim-aifs',thumbnail:null,facets:{bron:['ens'],grootheid:['temp','neerslag','wind'],vorm:['6']},keywords:'ECMWF IFS AIFS ensemble AI modelvergelijking zesluik',restricted:false},
 {
   "id": "pluim-modellenweer",
-  "name": "Modelvergelijking · temperatuur & neerslag",
+  "name": "ECMWF vs GFS en ICON",
   "description": "ECMWF, GFS en ICON: temperatuur en neerslag in één zesluik",
   "category": "verwachting",
   "type": "pluim",

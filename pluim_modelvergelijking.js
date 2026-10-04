@@ -4,6 +4,7 @@
 const PM=typeof module!=='undefined'&&module.exports?require('./pluim_math.js'):root.WeerlabPlumeMath;
 const HOUR=3600000, DAY=24*HOUR;
 const MODELS=[{id:'ecmwf_ifs025',name:'ECMWF',sources:[['IFS','ecmwf_ifs025_ensemble']]},{id:'gfs_seamless',name:'GFS',sources:[['0,25°','ncep_gefs025'],['0,5°','ncep_gefs05']]},{id:'icon_seamless',name:'ICON',sources:[['Global','dwd_icon_eps'],['EU','dwd_icon_eu_eps']]}];
+const AIFS_MODELS=[MODELS[0],{id:'ecmwf_aifs025',name:'ECMWF AIFS',sources:[['AIFS','ecmwf_aifs025_ensemble']]}];
 const FIELDS={cloud_cover:{title:'Totale bewolking',unit:'%'},cloud_cover_high:{title:'Hoge bewolking',unit:'%'},cloud_cover_mid:{title:'Middelbare bewolking',unit:'%'},cloud_cover_low:{title:'Lage bewolking',unit:'%'},temperature_2m:{title:'Temperatuur',unit:'°C'},precipitation:{title:'Neerslag',unit:'mm / 6 uur'},wind_speed_10m:{title:'Wind',unit:'Bft'},wind_gusts_10m:{title:'Windstoten',unit:'km/u'}};
 const finite=v=>typeof v==='number'&&Number.isFinite(v);
 const utc=t=>Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(t)?t:t+'Z');
@@ -93,7 +94,18 @@ function renderClouds(results,place,start,days){
  }
  return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · ECMWF / NOAA / DWD via Open-Meteo · alle assen 0–100% bedekkingsgraad</text><text x="38" y="1061" font-size="11" fill="#617789">Hoge bewolking omvat sluierbewolking. De wolkenlagen rechts horen uitsluitend bij ECMWF.</text></svg>';
 }
+function renderAifs(results,place,start,days){
+ const end=start+days*DAY,fields=['temperature_2m','precipitation','wind_speed_10m'];
+ let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1580 1080" role="img" aria-labelledby="chart-title chart-description" font-family="Arial,sans-serif"><title id="chart-title">${esc(place)} · ECMWF vs ECMWF AIFS</title><desc id="chart-description">ECMWF links, ECMWF AIFS rechts. Drie rijen: temperatuur, neerslag en wind. Dezelfde tijdas en schaal per rij. Groene lijnen: ensembleleden, blauw: controle, zwart gestippeld: gemiddelde, magenta gestreept: mediaan.</desc><rect width="1580" height="1080" fill="white"/><text x="38" y="46" font-size="27" font-weight="700" fill="#20394d">${esc(place)} · ECMWF vs ECMWF AIFS</text><text x="38" y="73" font-size="13" fill="#617789">${date(start)} – ${date(end)} · ${days} dagen · tijdas UTC</text><text x="38" y="101" font-size="12" fill="#555">Controle · verstoorde leden · gemiddelde · mediaan (P50)</text>`;
+ fields.forEach((field,row)=>{
+  const panels=AIFS_MODELS.map((m,col)=>{const r=results[col]||m;return {...series(r.data,field,start,end),name:r.name,place,runLabel:r.runLabel,error:r.error};});
+  const scale=limits(panels,field);
+  panels.forEach((r,col)=>{s+=panel(r,field,[start,end],scale,38+col*760,130+row*296,row*2+col);});
+ });
+ return s+'<text x="38" y="1040" font-size="12" fill="#617789">Weerlab · Bron: ECMWF via Open-Meteo · laatst beschikbare ensemblegegevens per model</text><text x="38" y="1061" font-size="11" fill="#617789">Gelijke assen per rij · neerslag per volledige 6 uur · wind in Bft · ontbrekende gegevens blijven leeg.</text></svg>';
+}
 function render(results,view,place,start,days,cloudMode='layers'){
+ if(view==='aifs')return renderAifs(results,place,start,days);
  if(view==='wolken')return renderClouds(results,place,start,days);
  const fields=view==='wolken'?(cloudMode==='total'?['cloud_cover']:['cloud_cover_high','cloud_cover_mid','cloud_cover_low']):view==='wind'?['wind_speed_10m','wind_gusts_10m']:['temperature_2m','precipitation'],end=start+days*DAY;
  const columns=fields.map(f=>results.map(r=>({...series(r.data,f,start,end),name:r.name,place,runLabel:r.runLabel,error:r.error})));
@@ -107,9 +119,9 @@ function render(results,view,place,start,days,cloudMode='layers'){
 const api={beaufort,bftSpeed,runLabel,metaSignature,median,series,limits,path,render,utc};
 if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}root.PlumeComparison=api;
 const cloudMode='overview';
-const $=id=>document.getElementById(id),view=['wind','winter','wolken','mist'].includes(new URLSearchParams(location.search).get('view'))?new URLSearchParams(location.search).get('view'):'weer';
+const $=id=>document.getElementById(id),view=['wind','winter','wolken','mist','aifs'].includes(new URLSearchParams(location.search).get('view'))?new URLSearchParams(location.search).get('view'):'weer';
 if(view==='mist'){root.FogPlume.init();return;}
-document.title=(view==='wolken'?'Bewolking':view==='winter'?'Winterpluim':view==='wind'?'Wind & windstoten':'Temperatuur & neerslag')+' · Weerlab';
+document.title=(view==='aifs'?'ECMWF vs ECMWF AIFS':view==='wolken'?'Bewolking':view==='winter'?'Winterpluim':view==='wind'?'Wind & windstoten':'ECMWF vs GFS en ICON')+' · Weerlab';
 document.querySelector(`[data-view="${view}"]`).setAttribute('aria-current','page');
 let place={name:'De Bilt',lat:52.101,lon:5.178},generation=0,controller,svg='',searchGeneration=0;
 try{const p=JSON.parse(sessionStorage.getItem('weerlab-modelpluim-plaats'));if(p&&finite(p.lat)&&finite(p.lon)&&typeof p.name==='string')place=p;}catch{}
@@ -140,14 +152,14 @@ async function load(){
  const days=Number($('days').value),start=Math.floor(Date.now()/DAY)*DAY;
  try{
   const base=location.protocol==='https:'&&/(^|\.)weerlab\.nl$/.test(location.hostname)?'https://om.weerlab.nl/om/ensemble':'https://ensemble-api.open-meteo.com/v1/ensemble';
-  const fields=view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
-  const results=await Promise.all((view==='winter'?MODELS.slice(0,1):MODELS).map(async m=>{
+  const fields=view==='aifs'?'temperature_2m,precipitation,wind_speed_10m':view==='wolken'?'cloud_cover':view==='winter'?'temperature_2m,snowfall,snow_depth':view==='wind'?'wind_speed_10m,wind_gusts_10m':'temperature_2m,precipitation';
+  const results=await Promise.all((view==='aifs'?AIFS_MODELS:view==='winter'?MODELS.slice(0,1):MODELS).map(async m=>{
    try{return await modelData(m,base,view==='wolken'&&m.id==='ecmwf_ifs025'?'cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low':fields,days,signal);}catch(e){return {...m,error:e.name==='AbortError'?'Laden duurde te lang':e.message};}
   }));
   if(id!==generation)return;
   svg=view==='winter'?root.WinterPlume.render(results[0],place.name,start,days):render(results,view,place.name,start,days,cloudMode);$('chart').innerHTML=svg;
   const missing=results.filter(r=>r.error).map(r=>r.name),loaded=results.filter(r=>r.data&&r.available!==false).length;
-  $('status').textContent=`${place.name} · ${loaded}/${view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+(view==='wolken'?'. Geen wolkenlaaggegevens ontvangen.':'. Probeer Vernieuw.'):''}`;
+  $('status').textContent=`${place.name} · ${loaded}/${view==='aifs'?2:view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+(view==='wolken'?'. Geen wolkenlaaggegevens ontvangen.':'. Probeer Vernieuw.'):''}`;
   $('download').disabled=!loaded;
  }finally{clearTimeout(timeout);if(id===generation)document.querySelector('.comparison-card').setAttribute('aria-busy','false');}
 }
@@ -166,5 +178,6 @@ $('download').onclick=async()=>{
 };
 if(view==='wolken')document.querySelector('.comparison-note').textContent='Links: totale bewolking van ECMWF, GFS en ICON. Rechts: hoge, middelbare en lage bewolking van ECMWF. Staafjes tonen de mediaan; lijntjes de middelste 80% van de ensembleleden (P10–P90). Alle assen 0–100%.';
 if(view==='winter')document.querySelector('.comparison-note').textContent='Etmalen 00–24 UTC. Sneeuw vanaf 0,1 cm; sneeuwdek vanaf 1 cm op enig moment. Vorstkansen tellen koudere temperaturen mee. Alleen volledige etmalen en geldige leden tellen mee.';
+if(view==='aifs')document.querySelector('.comparison-note').textContent='ECMWF links, ECMWF AIFS rechts: temperatuur, neerslag en wind. Dezelfde tijdas en schaal per rij. Laatst beschikbare ensemblegegevens; runtijden kunnen verschillen. Neerslag per volledige 6 uur (UTC), wind met Beaufort-as. Ontbrekende gegevens blijven leeg.';
 syncPlace();load();
 })(typeof window==='undefined'?globalThis:window);
