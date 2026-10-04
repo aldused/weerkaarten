@@ -64,6 +64,6 @@
   }finally{tabbing=false;}
  });
  $('reset-table').addEventListener('click',()=>{if(busy)return;edits.clear();refresh();});
- $('download').addEventListener('click',async()=>{if(!processed||busy)return;busy=true;buttons();status('GOLAZA PDF maken…');try{await GalazoDocument.exportPdf(processed);status('GOLAZA PDF gedownload.');}catch(e){status('PDF maken mislukt: '+e.message,true);}finally{busy=false;buttons();}});
+ $('download').addEventListener('click',async()=>{if(!processed||busy)return;busy=true;buttons();status('GOLAZO PDF maken…');try{await GalazoDocument.exportPdf(processed);status('GOLAZO PDF gedownload.');}catch(e){status('PDF maken mislukt: '+e.message,true);}finally{busy=false;buttons();}});
  $('print').addEventListener('click',()=>{if(processed&&!busy)window.print();});
 })();
