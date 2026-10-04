@@ -605,13 +605,44 @@ body.six-hours #btn-reset-models, body.six-hours #focus-reset-models,
 body.six-hours #map-focus-prev, body.six-hours #map-focus-next,
 body.six-hours #map-focus-play, body.six-hours #map-focus-slider,
 body.six-hours #focus-extra, body.six-hours #focus-steps { display:none; }
-body.six-hours .panel-hdr { flex-wrap:wrap; }
+body.six-hours .panel-hdr { flex-wrap:wrap; height:46px; min-height:46px; align-content:center; overflow:hidden; }
+body.six-hours .panel-model-run { flex-basis:100%; text-align:right; }
+body.six-hours .pleg-note { display:none; }
 body.six-hours #map-focus-controls { grid-template-columns:1fr auto auto; grid-template-areas:"laag time exit"; }
 body.six-hours #header-sub { max-width:650px; }
 #focus-actions .view-mode { max-width:210px; min-width:0; font-size:11px; }
 body.six-hours .six-model-name { color:#e2e8f0; font-weight:700; font-size:12px; }
 body.six-hours .panel-status { white-space:normal; text-align:center; width:80%; }
-@media (min-width:1800px) { body.six-hours #grid { min-width:0; } }
+/* Keep the six hours readable: six columns on large screens, then 3×2,
+   2×3 and a vertical sequence on phones. Chronology follows reading order. */
+body.six-hours #grid { min-width:0; grid-template-columns:repeat(6,minmax(0,1fr)); }
+body.six-hours #map-focus-controls { grid-template-columns:minmax(160px,1fr) auto minmax(0,auto); }
+@media (max-width:1799px) {
+  body.six-hours #grid-scroll { align-items:stretch; }
+  body.six-hours #grid { height:100%; min-height:560px; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(280px,1fr)); }
+  body.six-hours .canvas-wrap { flex:1; aspect-ratio:auto; }
+  body.six-hours #map-focus-controls { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"laag time" "exit exit"; }
+  body.six-hours #focus-actions { justify-content:flex-end; flex-wrap:wrap; }
+  body.six-hours #map-focus-time { white-space:normal; }
+}
+@media (max-width:999px) {
+  body.six-hours #grid { height:auto; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(3,auto); }
+  body.six-hours .canvas-wrap { flex:none; aspect-ratio:4/5; }
+}
+@media (max-width:599px) {
+  body.six-hours #grid { grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(6,auto); }
+  body.six-hours #focus-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+  body.six-hours #focus-actions .view-mode { width:100%; max-width:none; min-height:36px; }
+  body.six-hours #focus-actions > button { width:100%; }
+  body.six-hours #header { gap:8px; }
+  body.six-hours #header > label, body.six-hours #header > select { max-width:100%; }
+  body.six-hours #six-model { max-width:230px; }
+  body.six-hours .panel-time-badge { font-size:16px; }
+}
+body.six-hours.six-row #grid { width:100%; min-width:1920px; height:auto; min-height:0; grid-template-columns:repeat(6,minmax(320px,1fr)); grid-template-rows:auto; }
+body.six-hours.six-row .canvas-wrap { flex:none; aspect-ratio:4/5; }
+body.six-hours.six-row #grid-scroll { align-items:center; }
+@media (max-width:599px) { body.six-hours.six-row #grid { min-width:calc(6 * 88vw); grid-template-columns:repeat(6,88vw); } }
 </style>
 <script src="weerkaart_fullscreen.js?v=20260924-fs1"></script>
 </head>
@@ -654,6 +685,7 @@ body.six-hours .panel-status { white-space:normal; text-align:center; width:80%;
     <option value="6">6-luik · laatste zes uren</option>
   </select>
   <label class="six-only" for="six-model">Model <select id="six-model" class="view-mode"></select></label>
+  <label class="six-only" for="six-layout">Indeling <select id="six-layout" class="view-mode"><option value="auto">Auto · grote kaarten</option><option value="row">Zes naast elkaar</option></select></label>
   <div class="var-select-wrap">
     <label for="var-select">Alle kaartlagen</label>
     <select id="var-select" aria-label="Zet de kaartlaag van alle vier de kaarten">
@@ -3825,6 +3857,22 @@ if (IS_SIX_HOURS) {
   focusModel.setAttribute('aria-label', 'Model voor alle zes uren');
   focusModel.addEventListener('change', function() { kiesModel(0, this.value); });
   document.getElementById('focus-actions').prepend(focusModel);
+  var layoutSelect = document.getElementById('six-layout');
+  try { layoutSelect.value = localStorage.getItem('weerlab-six-layout') || 'auto'; } catch (e) {}
+  var focusLayout = layoutSelect.cloneNode(true);
+  focusLayout.id = 'focus-six-layout';
+  focusLayout.setAttribute('aria-label', 'Indeling van de zes kaarten');
+  document.getElementById('focus-actions').prepend(focusLayout);
+  function chooseSixLayout(value) {
+    value = value === 'row' ? 'row' : 'auto';
+    layoutSelect.value = focusLayout.value = value;
+    document.body.classList.toggle('six-row', value === 'row');
+    try { localStorage.setItem('weerlab-six-layout', value); } catch (e) {}
+    requestRender();
+  }
+  layoutSelect.addEventListener('change', function() { chooseSixLayout(this.value); });
+  focusLayout.addEventListener('change', function() { chooseSixLayout(this.value); });
+  chooseSixLayout(layoutSelect.value);
   document.querySelectorAll('.panel-hdr').forEach(function(header) {
     var name = document.createElement('span');
     name.className = 'six-model-name';
