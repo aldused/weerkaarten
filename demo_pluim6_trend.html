@@ -47,6 +47,7 @@ svg text{font-family:'DM Sans',sans-serif}
 </style>
 <link rel="stylesheet" href="pluim-presentatie.css?v=20260928">
 <script src="pluim-presentatie.js?v=20260928" defer></script>
+<script src="pluim-dag-nacht.js?v=20261004-all1"></script>
 </head>
 <body>
 <div class="header">
@@ -200,7 +201,7 @@ function convertRun(raw){
 
 // ---------- SVG render ----------
 const W=1020, M={l:42,r:30,t:8}, PLOT_W=W-M.l-M.r;
-const TH=178, RH=84, GAP=20, LBL=32;
+const TH=178, RH=84, GAP=20, LBL=70;
 const H = M.t+TH+GAP+RH+LBL;
 const TY0=M.t, TY1=M.t+TH;
 const RY0=M.t+TH+GAP, RY1=M.t+TH+GAP+RH;
@@ -239,15 +240,10 @@ function runSvg(rd){
   s+=`<rect x="${M.l}" y="${TY0}" width="${PLOT_W}" height="${TY1-TY0}" fill="#ffffff"/>`;
   s+=`<rect x="${M.l}" y="${RY0}" width="${PLOT_W}" height="${RY1-RY0}" fill="#ffffff"/>`;
 
-  // nacht-arcering (~21–05 lokaal = 19–03 UTC) over beide plots
-  for(let t=AX0-DAY;t<AX1;t+=DAY){
-    const x0=Math.max(M.l,xToPx(t+19*HOUR)), x1=Math.min(M.l+PLOT_W,xToPx(t+27*HOUR));
-    if(x1>x0){
-      s+=`<rect x="${x0.toFixed(1)}" y="${TY0}" width="${(x1-x0).toFixed(1)}" height="${TY1-TY0}" fill="${C_NACHT}"/>`;
-      s+=`<rect x="${x0.toFixed(1)}" y="${RY0}" width="${(x1-x0).toFixed(1)}" height="${RY1-RY0}" fill="${C_NACHT}"/>`;
-    }
+  for(const band of WeerlabDayNight.bands(AX0,AX1)){
+    if(band.day)continue;const x0=xToPx(band.start),x1=xToPx(band.end);
+    s+=`<rect x="${x0}" y="${TY0}" width="${x1-x0}" height="${TY1-TY0}" fill="${C_NACHT}"/><rect x="${x0}" y="${RY0}" width="${x1-x0}" height="${RY1-RY0}" fill="${C_NACHT}"/>`;
   }
-  // 6-uur subgrid
   for(let t=AX0;t<=AX1;t+=6*HOUR){
     if((t-AX0)%DAY===0) continue;
     const px=xToPx(t);
@@ -258,12 +254,8 @@ function runSvg(rd){
   for(let t=AX0;t<=AX1+1;t+=DAY){
     const px=xToPx(t);
     s+=`<line x1="${px.toFixed(1)}" y1="${TY0}" x2="${px.toFixed(1)}" y2="${RY1}" stroke="${C_DAG}" stroke-width="1.1"/>`;
-    const dt=new Date(t), lx=xToPx(t+DAY/2);
-    if(t<AX1){
-      s+=`<text x="${lx.toFixed(1)}" y="${RY1+15}" font-size="12" font-weight="600" text-anchor="middle" fill="${C_AXIS}">${DAGEN[dt.getUTCDay()]}</text>`;
-      s+=`<text x="${lx.toFixed(1)}" y="${RY1+27}" font-size="10.5" text-anchor="middle" fill="#999">${String(dt.getUTCDate()).padStart(2,'0')}-${String(dt.getUTCMonth()+1).padStart(2,'0')}</text>`;
-    }
   }
+  s+=WeerlabDayNight.svg({start:AX0,end:AX1,x:M.l,y:RY1,width:PLOT_W});
   // TEMP grid + dubbele y-as, gedeeld door alle getoonde runs.
   for(let v=tmin;v<=tmax;v+=5){
     const py=yt(v);

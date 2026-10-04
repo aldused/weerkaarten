@@ -1,5 +1,6 @@
 (function(root){
 'use strict';
+const DN=typeof module!=='undefined'&&module.exports?require('./pluim-dag-nacht.js'):root.WeerlabDayNight;
 const H=3600000,D=24*H,valid=n=>typeof n==='number'&&Number.isFinite(n);
 const configs=[
  {title:'Kans sneeuw',detail:'≥ 0,1 cm verse sneeuw per etmaal',field:'snowfall',kind:'sum',test:v=>v>=.1},
@@ -41,8 +42,9 @@ function render(result,place,start,days){
    s+=`<path d="M${x(j)} ${top}v${ph}" stroke="#e4e7ea" stroke-width=".6"/>`;
    if(p.chance!==null){s+=`<rect data-probability="${p.chance}" x="${cx-width/2}" y="${y(p.chance)}" width="${width}" height="${Math.max(1,ph*p.chance/100)}" fill="${panelIndex<2?'#3488b5':'#7258ae'}"><title>${date(p.time)}: ${p.chance.toFixed(1)}% (${p.hits}/${p.count} leden)</title></rect><text x="${cx}" y="${Math.max(top+11,y(p.chance)-5)}" text-anchor="middle" font-size="11" fill="#273f54">${Math.round(p.chance)}%</text>`;}
    else s+=`<text x="${cx}" y="${top+ph-5}" text-anchor="middle" font-size="12" fill="#7a8790">—</text>`;
-   if(show)s+=`<text x="${cx}" y="${top+ph+15}" text-anchor="middle" font-size="11" fill="#333">${['zo','ma','di','wo','do','vr','za'][d.getUTCDay()]}</text><text x="${cx}" y="${top+ph+28}" text-anchor="middle" font-size="10" fill="#333">${date(p.time)}</text>`;
+   if(show)s+=`<text x="${cx}" y="${top+ph+23}" text-anchor="middle" font-size="11" fill="#333">${['zo','ma','di','wo','do','vr','za'][d.getUTCDay()]}</text><text x="${cx}" y="${top+ph+37}" text-anchor="middle" font-size="10" fill="#333">${date(p.time)}</text>`;
   });
+  s+=DN.svg({start,end:start+days*D,x:left,y:top+ph,width:pw,labels:false});
   const counts=c.points.map(p=>p.count).filter(n=>n>0);const coverage=counts.length?`${Math.min(...counts)}–${Math.max(...counts)} geldige leden per etmaal`:'Geen volledige ensemblegegevens';
   s+=`<rect x="${left}" y="${top}" width="${pw}" height="${ph}" fill="none" stroke="#444" stroke-width=".8"/><text x="15" y="263" font-size="10" fill="#667">${esc(result.error||coverage)} · ontbrekende dagen blijven leeg</text></g>`;
  });

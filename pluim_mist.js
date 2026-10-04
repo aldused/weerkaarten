@@ -1,6 +1,7 @@
 /* Officiële DWD MOSMIX-L mistkans (wwM), rechtstreeks overgenomen per uur. */
 (function(root){
 'use strict';
+const DN=typeof module!=='undefined'&&module.exports?require('./pluim-dag-nacht.js'):root.WeerlabDayNight;
 const HOUR=3600000,DAY=24*HOUR,TZ='Europe/Amsterdam';
 const finite=v=>typeof v==='number'&&Number.isFinite(v),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const format=(t,options)=>new Intl.DateTimeFormat('nl-NL',{timeZone:TZ,...options}).format(t);
@@ -23,12 +24,11 @@ function render(rows,station,run,start,end){
  const left=100,w=1420,x=t=>left+(t-start)/(end-start)*w,top=170,h=240,vtop=525,vh=230;
  const y=p=>top+h-p*h/100,vy=v=>vtop+vh*(1-Math.log(Math.max(50,Math.min(10000,v))/50)/Math.log(200));
  const label=t=>format(t,{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),clock=t=>format(t,{hour:'2-digit',minute:'2-digit'});
- let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1580 1060" role="img" aria-labelledby="fog-title fog-desc" font-family="Arial,sans-serif"><title id="fog-title">${esc(station)} · Mistkans en verwacht zicht</title><desc id="fog-desc">Boven: officiële DWD-mistkans per uur. Onder: verwacht zicht in meters op het tijdstip. Nederlandse tijden om de zes uur. Ontbrekende waarden blijven leeg.</desc><rect width="1580" height="1060" fill="white"/><text x="38" y="45" font-size="28" font-weight="700" fill="#20394d">${esc(station)} · Mistkans en verwacht zicht</text><text x="38" y="76" font-size="15" fill="#50687a">DWD-MOSMIX · officiële mistkans en zichtverwachting · statistisch nabewerkt op basis van ICON en ECMWF</text><text x="38" y="103" font-size="13" fill="#617789">Run ${esc(label(Date.parse(run)))} · alle tijden Nederlands · donkere achtergrond: 20–07 uur</text><text x="38" y="139" font-size="18" font-weight="700" fill="#20394d">Kans op mist per uur (%)</text>`;
+ let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1580 1060" role="img" aria-labelledby="fog-title fog-desc" font-family="Arial,sans-serif"><title id="fog-title">${esc(station)} · Mistkans en verwacht zicht</title><desc id="fog-desc">Boven: officiële DWD-mistkans per uur. Onder: verwacht zicht in meters op het tijdstip. Nederlandse tijden met 00- en 12-markeringen. Ontbrekende waarden blijven leeg.</desc><rect width="1580" height="1060" fill="white"/><text x="38" y="45" font-size="28" font-weight="700" fill="#20394d">${esc(station)} · Mistkans en verwacht zicht</text><text x="38" y="76" font-size="15" fill="#50687a">DWD-MOSMIX · officiële mistkans en zichtverwachting · statistisch nabewerkt op basis van ICON en ECMWF</text><text x="38" y="103" font-size="13" fill="#617789">Run ${esc(label(Date.parse(run)))} · alle tijden Nederlands · dag-/nachtbalk: rood 06–18, blauw 18–06 uur</text><text x="38" y="139" font-size="18" font-weight="700" fill="#20394d">Kans op mist per uur (%)</text>`;
  function axes(t,hh){
-  let out='';const dates=new Map();for(let time=start;time<=end;time+=HOUR){const hour=Number(format(time,{hour:'2-digit',hourCycle:'h23'}));if(time<end){const key=dayKey(time);if(!dates.has(key))dates.set(key,{start:time,end:time+HOUR});else dates.get(key).end=time+HOUR;}if(time<end&&(hour<7||hour>=20))out+=`<rect x="${x(time)}" y="${t}" width="${w*HOUR/(end-start)}" height="${hh}" fill="#f0f3f8"/>`;
-   if(hour%6===0&&x(time)>left+15&&x(time)<left+w-15)out+=`<path d="M${x(time)},${t}v${hh+5}" stroke="${hour===0?'#c5d3df':'#e5ebf0'}"/><text data-hour-tick="true" x="${x(time)}" y="${t+hh+20}" text-anchor="middle" font-size="11" fill="#50687a">${clock(time)}</text>`;
+  let out='';const dates=new Map();for(let time=start;time<=end;time+=HOUR){const hour=Number(format(time,{hour:'2-digit',hourCycle:'h23'}));if(time<end){const key=dayKey(time);if(!dates.has(key))dates.set(key,{start:time,end:time+HOUR});else dates.get(key).end=time+HOUR;}if(time<end&&(hour<6||hour>=18))out+=`<rect x="${x(time)}" y="${t}" width="${w*HOUR/(end-start)}" height="${hh}" fill="#f0f3f8"/>`;
   }
-  for(const d of dates.values())out+=`<text x="${x((d.start+d.end)/2)}" y="${t+hh+41}" text-anchor="middle" font-size="13" font-weight="700" fill="#50687a">${esc(format(d.start,{weekday:'short',day:'2-digit',month:'2-digit'}))}</text>`;
+  out+=DN.svg({start,end,x:left,y:t+hh,width:w});
  return out;
  }
  s+=axes(top,h);[0,25,50,75,100].forEach(p=>{s+=`<path d="M${left},${y(p)}h${w}" stroke="#d9e2ea"/><text x="${left-12}" y="${y(p)+4}" text-anchor="end" font-size="13" fill="#50687a">${p}%</text>`;});
