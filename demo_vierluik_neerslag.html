@@ -591,6 +591,27 @@ body.map-focus-mode .pleg-scale { margin-top:3px; }
 body.map-focus-mode .pleg-bar { height:7px; }
 body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
 .no-data-key{display:inline-block;width:8px;height:8px;background:rgb(200,210,220);margin-left:5px;}
+/* Six consecutive hours share the existing renderer, palette and viewport. */
+.view-mode { color:#e2e8f0; background:#1e293b; border:1px solid #475569; border-radius:5px; padding:7px; }
+.six-only { display:none; }
+body.six-hours .six-only { display:inline-flex; align-items:center; gap:6px; }
+body.six-hours #grid { grid-template-columns:repeat(6,minmax(260px,1fr)); grid-template-rows:auto; align-content:start; min-width:1560px; height:auto; min-height:0; }
+body.six-hours #grid-scroll { display:flex; align-items:center; }
+body.six-hours .canvas-wrap { flex:none; aspect-ratio:4/5; }
+body.six-hours .panel-time-badge { top:6px; bottom:auto; font-size:14px; }
+body.six-hours .panel-model-select, body.six-hours .panel-element-select,
+body.six-hours #time-controller, body.six-hours #tl-strip,
+body.six-hours #btn-reset-models, body.six-hours #focus-reset-models,
+body.six-hours #map-focus-prev, body.six-hours #map-focus-next,
+body.six-hours #map-focus-play, body.six-hours #map-focus-slider,
+body.six-hours #focus-extra, body.six-hours #focus-steps { display:none; }
+body.six-hours .panel-hdr { flex-wrap:wrap; }
+body.six-hours #map-focus-controls { grid-template-columns:1fr auto auto; grid-template-areas:"laag time exit"; }
+body.six-hours #header-sub { max-width:650px; }
+#focus-actions .view-mode { max-width:210px; min-width:0; font-size:11px; }
+body.six-hours .six-model-name { color:#e2e8f0; font-weight:700; font-size:12px; }
+body.six-hours .panel-status { white-space:normal; text-align:center; width:80%; }
+@media (min-width:1800px) { body.six-hours #grid { min-width:0; } }
 </style>
 <script src="weerkaart_fullscreen.js?v=20260924-fs1"></script>
 </head>
@@ -627,6 +648,12 @@ body.map-focus-mode .pleg-labels { height:14px; margin-top:2px; }
     <div class="sub" id="header-sub">Kies per vak één van elf modellen</div>
   </div>
   <div class="spacer"></div>
+  <label for="view-mode">Weergave</label>
+  <select id="view-mode" class="view-mode" aria-label="Kies modelvergelijking of laatste zes uren">
+    <option value="4">4-luik · modellen</option>
+    <option value="6">6-luik · laatste zes uren</option>
+  </select>
+  <label class="six-only" for="six-model">Model <select id="six-model" class="view-mode"></select></label>
   <div class="var-select-wrap">
     <label for="var-select">Alle kaartlagen</label>
     <select id="var-select" aria-label="Zet de kaartlaag van alle vier de kaarten">
@@ -1054,6 +1081,48 @@ function windKleur(ms) { return interpColor(bftFractie(ms), WIND_REF); }
 // ═══════════════════════════════════════════════════════════════
 var PAGE_PARAMS = new URLSearchParams(location.search);
 var IS_GLOBAL4 = PAGE_PARAMS.get('reeks') === 'global';
+var IS_SIX_HOURS = PAGE_PARAMS.get('tijdluik') === '6';
+var SIX_FIELDS = ['neerslag', 'wind', 'windstoten'];
+document.getElementById('view-mode').value = IS_SIX_HOURS ? '6' : '4';
+function changeViewMode() {
+  var url = new URL(location.href);
+  if (this.value === '6') {
+    url.searchParams.set('tijdluik', '6');
+    url.searchParams.set('laag', SIX_FIELDS.indexOf(activeVar) >= 0 ? activeVar : 'neerslag');
+    url.searchParams.delete('elementen');
+    url.searchParams.delete('modellen');
+  } else {
+    url.searchParams.delete('tijdluik');
+    url.searchParams.delete('model');
+  }
+  location.replace(url.href);
+}
+document.getElementById('view-mode').addEventListener('change', changeViewMode);
+var focusMode = document.getElementById('view-mode').cloneNode(true);
+focusMode.id = 'focus-view-mode';
+focusMode.value = document.getElementById('view-mode').value;
+focusMode.addEventListener('change', changeViewMode);
+document.getElementById('focus-actions').prepend(focusMode);
+if (IS_SIX_HOURS) {
+  document.body.classList.add('six-hours');
+  document.title = 'Laatste zes uren · Weerlab';
+  document.getElementById('var-select').setAttribute('aria-label', 'Kaartlaag voor alle zes uren');
+  document.getElementById('map-focus-var').setAttribute('aria-label', 'Kaartlaag voor alle zes uren');
+  document.getElementById('header-h1').textContent = 'Dynamisch 6-luik';
+  document.getElementById('header-sub').textContent = 'Laatste zes uren · oud → nieuw · Nederlandse tijd · modelkaarten, geen metingen';
+  Array.from(document.getElementById('var-select').options).forEach(function(o) {
+    if (SIX_FIELDS.indexOf(o.value) < 0) o.remove();
+    else if (o.value === 'wind') { o.textContent = 'Windkracht (Bft)'; o.dataset.label = 'Windkracht (Bft)'; }
+  });
+  [4, 5].forEach(function(idx) {
+    var card = document.getElementById('panel-0').cloneNode(true);
+    card.id = 'panel-' + idx;
+    card.querySelectorAll('[id]').forEach(function(el) {
+      el.id = el.id.replace(/^p0-/, 'p' + idx + '-').replace(/-0$/, '-' + idx).replace(/^cw0$/, 'cw' + idx);
+    });
+    document.getElementById('grid').appendChild(card);
+  });
+}
 var DATA_URL = PAGE_PARAMS.get('localData') === '1'
   ? ''
   : 'https://harmonie-data.weerlab.nl/';
@@ -1084,7 +1153,7 @@ var MODEL_GROEPEN = [
   { key: 'globaal', label: 'Globale modellen (7 dagen)' },
 ];
 
-if (IS_GLOBAL4) {
+if (IS_GLOBAL4 && !IS_SIX_HOURS) {
   document.title = 'Globale modellen 4-luik';
   document.getElementById('header-h1').textContent = 'Globale modellen 4-luik';
   document.getElementById('header-sub').textContent = 'ECMWF · GFS · ICON · UKMO';
@@ -1093,7 +1162,7 @@ if (IS_GLOBAL4) {
 // ── Vierluik: vier vakken, elk vak toont één model uit de actieve reeks ──
 // De keuze staat in de URL (?modellen=harmonie,icond2,…) en wordt daarnaast
 // lokaal onthouden, zodat een eigen samenstelling een volgende keer terugkomt.
-var PANEL_COUNT = 4;
+var PANEL_COUNT = IS_SIX_HOURS ? 6 : 4;
 var ELEMENT_VALUES = Array.from(document.getElementById('var-select').options).map(function(o) { return o.value; });
 var activeVar = ELEMENT_VALUES.indexOf(PAGE_PARAMS.get('laag')) >= 0 ? PAGE_PARAMS.get('laag') : 'neerslag';
 document.getElementById('var-select').value = activeVar;
@@ -1111,6 +1180,12 @@ function modelIndexById(id) {
 }
 
 function leesModelKeuze() {
+  if (IS_SIX_HOURS) {
+    var id = PAGE_PARAMS.get('model');
+    if (!id) { try { id = localStorage.getItem('weerlab-six-model'); } catch (e) {} }
+    var idx = modelIndexById(id || 'ecmwf_global');
+    return Array(6).fill(idx >= 0 ? idx : modelIndexById('ecmwf_global'));
+  }
   var ids = null;
   var uitUrl = new URLSearchParams(location.search).get('modellen');
   if (uitUrl) ids = uitUrl.split(',');
@@ -1127,6 +1202,10 @@ function leesModelKeuze() {
 }
 
 function bewaarModelKeuze() {
+  if (IS_SIX_HOURS) {
+    try { localStorage.setItem('weerlab-six-model', MODELS[panels[0].modelIdx].id); } catch (e) {}
+    return;
+  }
   try {
     localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panels.map(function(p) {
       return p.modelIdx >= 0 ? MODELS[p.modelIdx].id : '';
@@ -1135,6 +1214,7 @@ function bewaarModelKeuze() {
 }
 
 function leesElementKeuze() {
+  if (IS_SIX_HOURS) return Array(6).fill(activeVar);
   var ids = null;
   var uitUrl = PAGE_PARAMS.get('elementen');
   if (uitUrl) ids = uitUrl.split(',');
@@ -1152,6 +1232,7 @@ function leesElementKeuze() {
 }
 
 function bewaarElementKeuze() {
+  if (IS_SIX_HOURS) return;
   try {
     localStorage.setItem(ELEMENT_STORAGE_KEY, JSON.stringify(panels.map(function(p) { return p.varName; })));
   } catch (e) { /* privémodus: keuze geldt dan alleen deze sessie */ }
@@ -1401,7 +1482,7 @@ var globalTimes = [];   // standaard uitsluitend exact gedeelde geldige tijden
 var timeMode = 'common';
 var globalTimeIndex = 0;
 var activeGlobalTime = '';
-var panelStep = [-1, -1, -1, -1]; // direct model-step index per panel
+var panelStep = Array(PANEL_COUNT).fill(-1); // direct model-step index per panel
 var playTimer = null;
 
 function updatePanelTime(pIdx, referenceTime) {
@@ -1413,8 +1494,8 @@ function updatePanelTime(pIdx, referenceTime) {
   if (!lbl) return;
   var t = md && md.meta && md.meta.tijden ? md.meta.tijden[panelStep[pIdx]] : '';
   lbl.classList.toggle('is-offset', !t);
-  lbl.textContent = t ? 'Geldig ' + formatTime(t)
-    : referenceTime ? 'Geen kaart · ' + formatTime(referenceTime) : 'Geen gezamenlijke tijd';
+  lbl.textContent = t ? 'Geldig ' + (IS_SIX_HOURS ? sixTimeLabel(t) : formatTime(t))
+    : referenceTime ? 'Geen kaart · ' + (IS_SIX_HOURS ? sixTimeLabel(referenceTime) : formatTime(referenceTime)) : 'Geen gezamenlijke tijd';
   lbl.title = mCfg.label + ' · ' + lbl.textContent;
 }
 
@@ -1580,6 +1661,10 @@ function limitingModels() {
 }
 
 function updateSyncStatus() {
+  if (IS_SIX_HOURS) {
+    document.getElementById('sync-info').textContent = '↔ ' + panelStep.filter(function(s) { return s >= 0; }).length + '/6 uren beschikbaar · oud → nieuw';
+    return false;
+  }
   var pending = actieveModellen().some(function(m) {
     var md = modelData[m.id];
     return !md || (!md.meta && !md.failed);
@@ -1729,6 +1814,7 @@ function buildTimeAxis() {
 }
 
 function updateGlobalTimeControl() {
+  if (IS_SIX_HOURS) { updateSixWindow(Date.now()); return; }
   var slider = document.getElementById('global-time-slider');
   var focusSlider = document.getElementById('map-focus-slider');
   var label = document.getElementById('global-time-label');
@@ -1794,6 +1880,7 @@ function runLabel(meta) {
 }
 
 function updateHeaderSummary() {
+  if (IS_SIX_HOURS) return;
   var delen = actieveModellen().map(function(m) {
     var md = modelData[m.id];
     var tijden = md && md.meta && md.meta.tijden;
@@ -1929,13 +2016,23 @@ function updatePanelHeader(pIdx) {
 }
 
 function updateAllPanelHeaders() {
-  panels.forEach(function(p) { updatePanelHeader(p.idx); });
+  panels.forEach(function(p) {
+    updatePanelHeader(p.idx);
+    if (IS_SIX_HOURS) {
+      var name = document.querySelector('#panel-' + p.idx + ' .six-model-name');
+      if (name) name.textContent = MODELS[p.modelIdx].label;
+    }
+  });
 }
 
 function kiesModel(pIdx, modelId) {
   var idx = modelIndexById(modelId);
   if (idx < 0 || panels[pIdx].modelIdx === idx) return;
-  panels[pIdx].modelIdx = idx;
+  if (IS_SIX_HOURS) {
+    panels.forEach(function(p) { p.modelIdx = idx; });
+    document.getElementById('six-model').value = modelId;
+    document.getElementById('focus-six-model').value = modelId;
+  } else panels[pIdx].modelIdx = idx;
   bewaarModelKeuze();
   updatePanelHeader(pIdx);
   var mCfg = MODELS[idx];
@@ -2001,7 +2098,24 @@ function bouwModelKiezers() {
   });
 }
 
+// UTC interval arithmetic also keeps six distinct hours across DST and midnight.
+function sixHourWindow(now) {
+  var end = Math.floor(now / 3600000) * 3600000;
+  return Array.from({length:6}, function(_, i) { return new Date(end - (5 - i) * 3600000).toISOString(); });
+}
+function sixTimeLabel(time) {
+  return new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}).format(new Date(VierluikCore.timeMs(time)));
+}
+function updateSixWindow(now) {
+  globalTimes = sixHourWindow(now);
+  globalTimeIndex = 5;
+  activeGlobalTime = globalTimes[5];
+  syncAllToTime(activeGlobalTime);
+  document.getElementById('map-focus-time').textContent = sixTimeLabel(globalTimes[0]) + ' – ' + sixTimeLabel(globalTimes[5]);
+  updateSyncStatus();
+}
 function getGlobalTimes() {
+  if (IS_SIX_HOURS) { updateSixWindow(Date.now()); return; }
   var keepTime = activeGlobalTime || new Date();
   globalTimes = comparisonTimes(modelTimeSets(), timeMode);
   globalTimeIndex = nearestTimeIndex(globalTimes, keepTime);
@@ -2237,7 +2351,7 @@ function renderPanelActive(pIdx) {
   var stepIdx = panelStep[pIdx];
   if (!md.meta.tijden || stepIdx < 0 || stepIdx >= md.meta.tijden.length) {
     statusEl.style.display = 'block';
-    statusEl.textContent = activeGlobalTime ? 'Geen kaart voor dit tijdstip' : 'Geen gezamenlijke tijd';
+    statusEl.textContent = IS_SIX_HOURS ? 'Dit uur ontbreekt in de beschikbare modelreeks' : activeGlobalTime ? 'Geen kaart voor dit tijdstip' : 'Geen gezamenlijke tijd';
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
@@ -3250,7 +3364,7 @@ document.getElementById('view-slider').addEventListener('input', function() {
   var grid = document.getElementById('grid');
   viewSchaalPct = pct;
   grid.style.width = pct + '%';
-  grid.style.height = pct + '%';
+  grid.style.height = IS_SIX_HOURS ? '' : pct + '%';
   document.getElementById('view-val').textContent = pct + '%';
   updateRangeProgress(this);
   this.setAttribute('aria-valuetext', pct + ' procent van de standaardgrootte');
@@ -3479,11 +3593,13 @@ panels.forEach(function(panel) {
 // ═══════════════════════════════════════════════════════════════
 
 function stepAll(delta) {
+  if (IS_SIX_HOURS) return;
   if (!globalTimes.length) return;
   setGlobalTimeIndex(globalTimeIndex + delta);
 }
 
 function setGlobalTimeIndex(nextIndex, fromPlayback) {
+  if (IS_SIX_HOURS) return;
   if (!fromPlayback && playTimer) togglePlay();
   if (!globalTimes.length) return;
   globalTimeIndex = Math.max(0, Math.min(globalTimes.length - 1, Math.round(nextIndex) || 0));
@@ -3494,6 +3610,7 @@ function setGlobalTimeIndex(nextIndex, fromPlayback) {
 }
 
 function togglePlay() {
+  if (IS_SIX_HOURS) return;
   var focusPlay = document.getElementById('map-focus-play');
   if (playTimer) {
     clearInterval(playTimer);
@@ -3531,11 +3648,12 @@ document.getElementById('map-focus-slider').addEventListener('input', function()
 // Nooit een naburig of verlopen uur tonen onder de centrale tijd.
 function syncAllToTime(refTime) {
   panels.forEach(function(p) {
+    var panelTime = IS_SIX_HOURS ? globalTimes[p.idx] : refTime;
     if (p.modelIdx < 0) return;
     var md = modelData[MODELS[p.modelIdx].id];
-    panelStep[p.idx] = md && md.meta && md.meta.tijden && refTime
-      ? exactTimeIndex(md.meta.tijden, refTime) : -1;
-    updatePanelTime(p.idx, refTime);
+    panelStep[p.idx] = md && md.meta && md.meta.tijden && panelTime
+      ? exactTimeIndex(md.meta.tijden, panelTime) : -1;
+    updatePanelTime(p.idx, panelTime);
   });
 }
 
@@ -3604,6 +3722,7 @@ function meldKaartlaag() {
 }
 
 function kiesElement(pIdx, waarde) {
+  if (IS_SIX_HOURS) { kiesKaartlaag(waarde); return; }
   var panel = panels[pIdx];
   if (!panel || ELEMENT_VALUES.indexOf(waarde) < 0 || panel.varName === waarde) return;
   panel.varName = waarde;
@@ -3628,7 +3747,7 @@ function kiesElement(pIdx, waarde) {
 }
 
 function kiesKaartlaag(waarde) {
-  if (!waarde || ELEMENT_VALUES.indexOf(waarde) < 0) return;
+  if (!waarde || ELEMENT_VALUES.indexOf(waarde) < 0 || (IS_SIX_HOURS && SIX_FIELDS.indexOf(waarde) < 0)) return;
   var alGelijk = panels.every(function(p) { return p.varName === waarde; });
   if (waarde === activeVar && alGelijk) return;
   activeVar = waarde;
@@ -3696,6 +3815,30 @@ updateGlobalTimeControl();
 // Alleen de vier gekozen modellen laden — de overige twee pas wanneer ze in
 // een vak worden gekozen. Dat scheelt bij het openen twee volle downloads.
 bouwModelKiezers();
+if (IS_SIX_HOURS) {
+  var modelSelect = document.getElementById('six-model');
+  modelSelect.innerHTML = document.getElementById('p0-select').innerHTML;
+  modelSelect.value = MODELS[panels[0].modelIdx].id;
+  modelSelect.addEventListener('change', function() { kiesModel(0, this.value); });
+  var focusModel = modelSelect.cloneNode(true);
+  focusModel.id = 'focus-six-model';
+  focusModel.setAttribute('aria-label', 'Model voor alle zes uren');
+  focusModel.addEventListener('change', function() { kiesModel(0, this.value); });
+  document.getElementById('focus-actions').prepend(focusModel);
+  document.querySelectorAll('.panel-hdr').forEach(function(header) {
+    var name = document.createElement('span');
+    name.className = 'six-model-name';
+    header.prepend(name);
+  });
+  updateSixWindow(Date.now());
+  window.setInterval(function() {
+    if (!document.hidden && globalTimes[5] !== sixHourWindow(Date.now())[5]) {
+      updateSixWindow(Date.now());
+      requestRender();
+      refreshModels();
+    }
+  }, 1000);
+}
 var loadPromises = actieveModellen().map(function(m) { return loadModel(m, panelVoorModel(m.id)); });
 Promise.all(loadPromises).then(function() {
   requestRender();
@@ -3708,7 +3851,7 @@ Promise.all(loadPromises).then(function() {
 // extra controle; in de achtergrond doen we geen netwerkwerk.
 window.setInterval(refreshModels, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', function() {
-  if (!document.hidden) refreshModels();
+  if (!document.hidden) { if (IS_SIX_HOURS) { updateSixWindow(Date.now()); requestRender(); } refreshModels(); }
 });
 
 })();

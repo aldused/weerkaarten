@@ -155,7 +155,7 @@
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
     if(climate)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Het weer in context</strong><p>Records en metingen worden aangevuld zodra brondata beschikbaar zijn. Klimaatnormalen hebben de vaste referentieperiode <b>1991–2020</b>. De gegevensdatum staat bij het onderdeel.</p></div></aside>`;
     if(archive)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Van dagkaart tot seizoensbalans</strong><p>Kies een landelijk overzicht of bekijk één station in detail. Bij elk onderdeel staan de meetperiode en de bron; recente dagen kunnen nog worden aangevuld.</p></div></aside>`;
-    if(maps)html+=`<nav class="maps-shortcuts" aria-label="Snel naar weerkaarten"><a href="index.html#mosmix-minikaarten">${icon('map')}<span><strong>MOS/MIX Nederland</strong><small>9 dagen in één overzicht</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-modelkaarten">${icon('cloud')}<span><strong>Modelkaarten</strong><small>Uur voor uur vooruit</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-vierluik">${icon('grid')}<span><strong>Vergelijken</strong><small>Vier modellen of elementen</small></span>${icon('arrow')}</a></nav>`;
+    if(maps)html+=`<nav class="maps-shortcuts" aria-label="Snel naar weerkaarten"><a href="index.html#mosmix-minikaarten">${icon('map')}<span><strong>MOS/MIX Nederland</strong><small>9 dagen in één overzicht</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-modelkaarten">${icon('cloud')}<span><strong>Modelkaarten</strong><small>Uur voor uur vooruit</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-vierluik">${icon('grid')}<span><strong>Vergelijken</strong><small>Modellen of zes opeenvolgende uren</small></span>${icon('arrow')}</a></nav>`;
     html+=controls(result.length,{filters:!!filterSets[state.type]})+filterPanel(base);
     if(!result.length)return html+empty(state.page==='favorieten'?'Maak Weerlab een beetje van jou':'Geen onderdelen bij deze combinatie',state.page==='favorieten'?'Tik op het sterretje bij een onderdeel. Je favorieten worden in deze browser bewaard.':'Verwijder een filter om meer weerinformatie te zien.',state.page==='favorieten'?'<a class="button button-primary" href="#start">Ontdek Weerlab</a>':'<button class="button button-primary" data-reset-filters>Alle filters wissen</button>');
     if(maps){
@@ -400,7 +400,7 @@
       // never unload an iframe while leaving its product heading visible.
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20260929-mosmist2'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20261004-six1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
       if(state.product?.id==='pluim-ens6plus'){
         const url=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1] || '');
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));

@@ -11,7 +11,7 @@ function fn(name) {
   return script.slice(start, script.indexOf('\n}', start) + 2);
 }
 const c = vm.createContext({Set, Date, Number, Math, Promise, VierluikCore:require('../vierluik-core'),
-  globalTimes: [], globalTimeIndex:0, activeGlobalTime:'', timeMode:'common', playTimer:null,
+  IS_SIX_HOURS:false, globalTimes: [], globalTimeIndex:0, activeGlobalTime:'', timeMode:'common', playTimer:null,
   panels: [0,1,2,3].map(idx=>({idx,modelIdx:idx,varName:'neerslag'})),
   MODELS: [0,1,2,3].map(id=>({id})), modelData:{}, panelStep:[-1,-1,-1,-1],
   actieveModellen(){return c.MODELS}, updatePanelTime(){},
