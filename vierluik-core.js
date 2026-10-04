@@ -54,6 +54,7 @@
     return (w0?a*w0:0)+(w1?b*w1:0)+(w2?c*w2:0)+(w3?d*w3:0);
   }
   function sample(pd, step, lat, lon, component=0, method='bilinear') {
+    step -= pd && pd.stepOffset || 0;
     if(!pd||!pd.grid||step<0||step>=pd.nSteps||component<0||component>=pd.nComp)return null;
     const g=pd.grid,nx=pd.nLon,ny=pd.nLat;
     let x=(lon-g.lon_min)/(g.lon_max-g.lon_min)*(nx-1),y=(lat-g.lat_min)/(g.lat_max-g.lat_min)*(ny-1);

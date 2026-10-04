@@ -598,7 +598,8 @@ body.six-hours .six-only { display:inline-flex; align-items:center; gap:6px; }
 body.six-hours #grid { grid-template-columns:repeat(6,minmax(260px,1fr)); grid-template-rows:auto; align-content:start; min-width:1560px; height:auto; min-height:0; }
 body.six-hours #grid-scroll { display:flex; align-items:center; }
 body.six-hours .canvas-wrap { flex:none; aspect-ratio:4/5; }
-body.six-hours .panel-time-badge { top:6px; bottom:auto; font-size:14px; }
+body.six-hours .panel-time-badge { top:6px; bottom:auto; font-size:16px; }
+.six-valid-label { display:block; font-size:13px; font-weight:500; margin-top:2px; }
 body.six-hours .panel-model-select, body.six-hours .panel-element-select,
 body.six-hours #time-controller, body.six-hours #tl-strip,
 body.six-hours #btn-reset-models, body.six-hours #focus-reset-models,
@@ -675,11 +676,12 @@ body.six-hours #map-focus-time { white-space:normal; }
   </div>
   <div class="spacer"></div>
   <label for="view-mode">Weergave</label>
-  <select id="view-mode" class="view-mode" aria-label="Kies modelvergelijking of laatste zes uren">
+  <select id="view-mode" class="view-mode" aria-label="Kies modelvergelijking of eerdere modelruns">
     <option value="4">4-luik · modellen</option>
-    <option value="6">6-luik · laatste zes uren</option>
+    <option value="6">6-luik · modelruns</option>
   </select>
   <label class="six-only" for="six-model">Model <select id="six-model" class="view-mode"></select></label>
+  <label class="six-only" for="six-valid">Geldig op <select id="six-valid" class="view-mode" aria-label="Geldig tijdstip voor alle zes runs"></select></label>
   <div class="var-select-wrap">
     <label for="var-select">Alle kaartlagen</label>
     <select id="var-select" aria-label="Zet de kaartlaag van alle vier de kaarten">
@@ -859,7 +861,8 @@ body.six-hours #map-focus-time { white-space:normal; }
   <!-- gevuld door buildTimeline() -->
 </div>
 
-<script src="vierluik-core.js?v=20260928-windrichting1"></script>
+<script src="zesluik-runs.js?v=20261004-runs1"></script>
+<script src="vierluik-core.js?v=20261004-runcompare1"></script>
 <script src="vierluik-significant.js?v=20260928-significant-snel1"></script>
 <script>
 (function() {
@@ -1131,11 +1134,11 @@ focusMode.addEventListener('change', changeViewMode);
 document.getElementById('focus-actions').prepend(focusMode);
 if (IS_SIX_HOURS) {
   document.body.classList.add('six-hours');
-  document.title = 'Laatste zes uren · Weerlab';
-  document.getElementById('var-select').setAttribute('aria-label', 'Kaartlaag voor alle zes uren');
-  document.getElementById('map-focus-var').setAttribute('aria-label', 'Kaartlaag voor alle zes uren');
-  document.getElementById('header-h1').textContent = 'Dynamisch 6-luik';
-  document.getElementById('header-sub').textContent = 'Boven: 1 → 2 → 3 · Onder: 4 → 5 → 6 · oud → nieuw · Nederlandse tijd';
+  document.title = 'Zes modelruns · Weerlab';
+  document.getElementById('var-select').setAttribute('aria-label', 'Kaartlaag voor alle zes runs');
+  document.getElementById('map-focus-var').setAttribute('aria-label', 'Kaartlaag voor alle zes runs');
+  document.getElementById('header-h1').textContent = '6-luik · zes modelruns';
+  document.getElementById('header-sub').textContent = 'Eén geldig tijdstip · zes eerdere runs · boven ouder, onder nieuwer';
   Array.from(document.getElementById('var-select').options).forEach(function(o) {
     if (SIX_FIELDS.indexOf(o.value) < 0) o.remove();
     else if (o.value === 'wind') { o.textContent = 'Windkracht (Bft)'; o.dataset.label = 'Windkracht (Bft)'; }
@@ -1209,8 +1212,9 @@ function leesModelKeuze() {
   if (IS_SIX_HOURS) {
     var id = PAGE_PARAMS.get('model');
     if (!id) { try { id = localStorage.getItem('weerlab-six-model'); } catch (e) {} }
-    var idx = modelIndexById(id || 'ecmwf_global');
-    return Array(6).fill(idx >= 0 ? idx : modelIndexById('ecmwf_global'));
+    if (['harmonie','harmonie46','icond2','icond2ruc'].indexOf(id) < 0) id = 'harmonie';
+    var idx = modelIndexById(id);
+    return Array(6).fill(idx);
   }
   var ids = null;
   var uitUrl = new URLSearchParams(location.search).get('modellen');
@@ -1229,7 +1233,7 @@ function leesModelKeuze() {
 
 function bewaarModelKeuze() {
   if (IS_SIX_HOURS) {
-    try { localStorage.setItem('weerlab-six-model', MODELS[panels[0].modelIdx].id); } catch (e) {}
+    try { localStorage.setItem('weerlab-six-model', sixBaseModel); } catch (e) {}
     return;
   }
   try {
@@ -1513,12 +1517,21 @@ var playTimer = null;
 
 function updatePanelTime(pIdx, referenceTime) {
   var panel = panels[pIdx];
-  if (panel.modelIdx < 0) return;
+  if (panel.modelIdx < 0 && !IS_SIX_HOURS) return;
   var mCfg = MODELS[panel.modelIdx];
-  var md = modelData[mCfg.id];
+  var md = mCfg && modelData[mCfg.id];
   var lbl = document.getElementById('ptlbl-' + pIdx);
   if (!lbl) return;
   var t = md && md.meta && md.meta.tijden ? md.meta.tijden[panelStep[pIdx]] : '';
+  if (IS_SIX_HOURS) {
+    lbl.textContent = (pIdx + 1) + '/6 · Run ' + (md && md.meta && md.meta.run_utc ? sixTimeLabel(md.meta.run_utc) : 'ontbreekt');
+    var valid = document.createElement('span'); valid.className = 'six-valid-label';
+    valid.textContent = referenceTime ? 'Geldig ' + sixTimeLabel(referenceTime) : 'Geldig tijdstip laden…';
+    lbl.appendChild(valid);
+    lbl.title = lbl.textContent;
+    lbl.classList.toggle('is-offset', !t);
+    return;
+  }
   lbl.classList.toggle('is-offset', !t);
   lbl.textContent = t ? 'Geldig ' + (IS_SIX_HOURS ? sixTimeLabel(t) : formatTime(t))
     : referenceTime ? 'Geen kaart · ' + (IS_SIX_HOURS ? sixTimeLabel(referenceTime) : formatTime(referenceTime)) : 'Geen gezamenlijke tijd';
@@ -1689,7 +1702,7 @@ function limitingModels() {
 
 function updateSyncStatus() {
   if (IS_SIX_HOURS) {
-    document.getElementById('sync-info').textContent = '↔ ' + panelStep.filter(function(s) { return s >= 0; }).length + '/6 uren beschikbaar · oud → nieuw';
+    document.getElementById('sync-info').textContent = '↔ ' + panelStep.filter(function(s) { return s >= 0; }).length + '/6 runs · zelfde geldige tijd';
     return false;
   }
   var pending = actieveModellen().some(function(m) {
@@ -1841,7 +1854,7 @@ function buildTimeAxis() {
 }
 
 function updateGlobalTimeControl() {
-  if (IS_SIX_HOURS) { updateSixWindow(Date.now()); return; }
+  if (IS_SIX_HOURS) { updateSixRunControls(); return; }
   var slider = document.getElementById('global-time-slider');
   var focusSlider = document.getElementById('map-focus-slider');
   var label = document.getElementById('global-time-label');
@@ -2047,12 +2060,13 @@ function updateAllPanelHeaders() {
     updatePanelHeader(p.idx);
     if (IS_SIX_HOURS) {
       var name = document.querySelector('#panel-' + p.idx + ' .six-model-name');
-      if (name) name.textContent = MODELS[p.modelIdx].label;
+      if (name) name.textContent = p.modelIdx >= 0 ? MODELS[p.modelIdx].label : 'Eerdere run ontbreekt';
     }
   });
 }
 
 function kiesModel(pIdx, modelId) {
+  if (IS_SIX_HOURS) return loadSixRuns(modelId);
   var idx = modelIndexById(modelId);
   if (idx < 0 || panels[pIdx].modelIdx === idx) return;
   if (IS_SIX_HOURS) {
@@ -2125,30 +2139,94 @@ function bouwModelKiezers() {
   });
 }
 
-// UTC interval arithmetic also keeps six distinct hours across DST and midnight.
-function sixHourWindow(now) {
-  var end = Math.floor(now / 3600000) * 3600000;
-  return Array.from({length:6}, function(_, i) { return new Date(end - (5 - i) * 3600000).toISOString(); });
-}
 function sixTimeLabel(time) {
   return new Intl.DateTimeFormat('nl-NL', {timeZone:'Europe/Amsterdam', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}).format(new Date(VierluikCore.timeMs(time)));
 }
-function updateSixWindow(now) {
-  globalTimes = sixHourWindow(now);
-  globalTimeIndex = 5;
-  activeGlobalTime = globalTimes[5];
-  syncAllToTime(activeGlobalTime);
-  var range = document.getElementById('map-focus-time');
-  range.textContent = sixTimeLabel(globalTimes[0]) + ' – ' + sixTimeLabel(globalTimes[5]);
-  var order = document.createElement('span');
-  order.className = 'six-reading-order';
-  order.textContent = 'Boven: 1 → 2 → 3 · Onder: 4 → 5 → 6';
-  range.appendChild(order);
+var sixBaseModel = 'harmonie';
+var sixDesiredTime = '';
+var sixManifestVersion = '';
+var sixRunLoad = null;
+var sixFieldSerial = 0;
+var sixSelectionSerial = 0;
+function updateSixRunControls() {
+  ['six-valid','focus-six-valid'].forEach(function(id) {
+    var sel = document.getElementById(id); if (!sel) return;
+    var signature = globalTimes.join('|');
+    if (sel.dataset.times !== signature) {
+      sel.innerHTML = '';
+      globalTimes.forEach(function(time, i) { var option = document.createElement('option'); option.value = i; option.textContent = sixTimeLabel(time); sel.appendChild(option); });
+      sel.dataset.times = signature;
+    }
+    sel.disabled = !globalTimes.length; sel.value = globalTimeIndex;
+  });
+  var label = document.getElementById('map-focus-time');
+  label.textContent = activeGlobalTime ? 'Alle kaarten geldig ' + sixTimeLabel(activeGlobalTime) : 'Runarchief laden…';
+  var order = document.createElement('span'); order.className = 'six-reading-order';
+  order.textContent = 'Boven: oudere runs 1 → 2 → 3 · Onder: nieuwere runs 4 → 5 → 6'; label.appendChild(order);
   updateSyncStatus();
 }
+function loadSixRuns(baseId, refresh) {
+  if (['harmonie','harmonie46','icond2','icond2ruc'].indexOf(baseId) < 0) return Promise.resolve();
+  if (refresh && sixRunLoad) return sixRunLoad;
+  var serial = ++sixSelectionSerial;
+  if (activeGlobalTime) sixDesiredTime = activeGlobalTime;
+  sixBaseModel = baseId; bewaarModelKeuze();
+  ['six-model','focus-six-model'].forEach(function(id) { var sel = document.getElementById(id); if (sel) sel.value = baseId; });
+  if (!refresh) {
+    panels.forEach(function(p) { p.modelIdx = -1; panelStep[p.idx] = -1; document.getElementById('status-' + p.idx).textContent = 'Runarchief laden…'; });
+    requestRender();
+  }
+  sixRunLoad = fetch(DATA_URL + 'runcompare/' + baseId + '/manifest.json?t=' + Date.now())
+    .then(function(r) { if (!r.ok) throw Error('Runarchief nog niet beschikbaar'); return r.json(); })
+    .then(function(manifest) {
+      if (serial !== sixSelectionSerial) return;
+      var slots = ZesluikRuns.selectedRuns(manifest);
+      var version = baseId + '|' + slots.map(function(run) { return run && run.run_utc || '-'; }).join('|');
+      if (refresh && version === sixManifestVersion) return;
+      sixManifestVersion = version;
+      var base = MODELS[modelIndexById(baseId)];
+      var activeIds = new Set();
+      var tasks = slots.map(function(run, i) {
+        if (!run) { panels[i].modelIdx = -1; panelStep[i] = -1; return Promise.resolve(); }
+        var id = baseId + '__' + run.run_utc.replace(/[^0-9]/g, ''); activeIds.add(id);
+        var index = modelIndexById(id);
+        if (index < 0) { index = MODELS.length; MODELS.push(Object.assign({},base,{id:id,baseId:baseId,metaFile:run.meta_file,run_utc:run.run_utc})); }
+        panels[i].modelIdx = index;
+        if (modelData[id] && modelData[id].meta) return Promise.resolve();
+        return loadModel(MODELS[index], i);
+      });
+      Object.keys(modelData).forEach(function(id) { if (id.indexOf('__') >= 0 && !activeIds.has(id)) delete modelData[id]; });
+      getGlobalTimes(); requestRender();
+      return Promise.allSettled(tasks).then(function() { if (serial === sixSelectionSerial) { getGlobalTimes(); requestRender(); } });
+    }).catch(function() {
+      if (serial !== sixSelectionSerial) return;
+      panels.forEach(function(p) { if (p.modelIdx < 0) { var el = document.getElementById('status-' + p.idx); el.style.display = 'block'; el.textContent = 'Deze eerdere run is nog niet beschikbaar'; } });
+      updateSixRunControls();
+    }).finally(function() { if (serial === sixSelectionSerial) sixRunLoad = null; });
+  return sixRunLoad;
+}
+function loadSixRunField(modelId, key) {
+  var md = modelData[modelId],time = activeGlobalTime;
+  if (!md || !md.meta || !md.meta.parameters[key] || exactTimeIndex(md.meta.tijden,time) < 0) return Promise.resolve();
+  var existing = md.paramData[key];
+  if (existing && existing.validTime === time) return Promise.resolve();
+  if (!md.runPending) md.runPending = {};
+  if (md.runPending[key] && md.runPending[key].time === time) return md.runPending[key].promise;
+  var serial = ++sixFieldSerial;
+  delete md.paramData[key]; markeerLaden(md,key,true);
+  var request = {time:time,serial:serial}; md.runPending[key] = request;
+  request.promise = ZesluikRuns.fetchFrame(DATA_URL,md.meta,key,time).then(function(frame) {
+    if (modelData[modelId] !== md || md.runPending[key] !== request || activeGlobalTime !== time) return;
+    var pd = VierluikCore.decode(frame.buffer,md.meta.parameters[key],Object.assign({},md.meta,{tijden:[time]}));
+    if (key === 'windstoten') pd = VierluikCore.gustMagnitude(pd);
+    pd.stepOffset = frame.step; pd.validTime = time; md.paramData[key] = pd;
+  }).catch(function() { if (md.runPending[key] === request) md.paramFout[key] = true; })
+    .finally(function() { if (md.runPending[key] === request) { delete md.runPending[key]; markeerLaden(md,key,false); requestRender(); } });
+  return request.promise;
+}
 function getGlobalTimes() {
-  if (IS_SIX_HOURS) { updateSixWindow(Date.now()); return; }
-  var keepTime = activeGlobalTime || new Date();
+
+  var keepTime = (IS_SIX_HOURS && sixDesiredTime) || activeGlobalTime || new Date();
   globalTimes = comparisonTimes(modelTimeSets(), timeMode);
   globalTimeIndex = nearestTimeIndex(globalTimes, keepTime);
   activeGlobalTime = globalTimes[globalTimeIndex] || '';
@@ -2346,6 +2424,9 @@ function renderPanelActive(pIdx) {
       var pctx = ph.getContext('2d');
       pctx.fillStyle = '#0f172a';
       pctx.fillRect(0, 0, ph.width, ph.height);
+      var emptyOverlay = document.getElementById('overlay-' + pIdx);
+      if (emptyOverlay) emptyOverlay.getContext('2d').clearRect(0,0,emptyOverlay.width,emptyOverlay.height);
+      document.getElementById('status-' + pIdx).style.display = 'block';
     }
     return;
   }
@@ -2470,6 +2551,10 @@ function renderPanelActive(pIdx) {
   }
 
   var pd = curParamData;
+  if (pd.stepOffset !== undefined && pd.stepOffset !== stepIdx) {
+    statusEl.style.display = 'block'; statusEl.textContent = 'Kaart voor het gekozen geldige uur laden…';
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0,0,cw,ch); return;
+  }
   var resEl = document.getElementById('p' + pIdx + '-res');
   // Roosterregel toont altijd de échte modelresolutie, niet de verdichting
   if (resEl) resEl.textContent = gridResolutionText(pd);
@@ -2485,7 +2570,7 @@ function renderPanelActive(pIdx) {
   }
   var imgData=ctx.createImageData(cw,ch),pix=imgData.data;
 
-  var veldStap = stepIdx;
+  var veldStap = stepIdx - (pd.stepOffset || 0);
 
   var pdNLat = pd.nLat, pdNLon = pd.nLon, pdNComp = pd.nComp;
   var gebruikBronrooster = neerslagBronrooster();
@@ -2941,6 +3026,7 @@ function markeerLaden(md, key, bezig) {
 }
 
 function loadParamIfNeeded(modelId, key) {
+  if (IS_SIX_HOURS && modelId.indexOf('__') >= 0) return loadSixRunField(modelId,key);
   key = veldSleutel(modelId, key);
   var md = modelData[modelId];
   if (!md || !md.meta || !md.meta.parameters) return Promise.resolve();
@@ -3100,6 +3186,7 @@ function metaVersion(meta) {
 }
 
 function refreshModels() {
+  if (IS_SIX_HOURS) return document.hidden ? Promise.resolve() : loadSixRuns(sixBaseModel, true);
   if (refreshInProgress || document.hidden) return Promise.resolve();
   refreshInProgress = true;
   // Alleen de modellen die nu in het vierluik staan opnieuw controleren
@@ -3625,17 +3712,16 @@ panels.forEach(function(panel) {
 // ═══════════════════════════════════════════════════════════════
 
 function stepAll(delta) {
-  if (IS_SIX_HOURS) return;
   if (!globalTimes.length) return;
   setGlobalTimeIndex(globalTimeIndex + delta);
 }
 
 function setGlobalTimeIndex(nextIndex, fromPlayback) {
-  if (IS_SIX_HOURS) return;
   if (!fromPlayback && playTimer) togglePlay();
   if (!globalTimes.length) return;
   globalTimeIndex = Math.max(0, Math.min(globalTimes.length - 1, Math.round(nextIndex) || 0));
   activeGlobalTime = globalTimes[globalTimeIndex];
+  if (IS_SIX_HOURS) sixDesiredTime = activeGlobalTime;
   syncAllToTime(activeGlobalTime);
   updateGlobalTimeControl();
   requestRender();
@@ -3680,12 +3766,13 @@ document.getElementById('map-focus-slider').addEventListener('input', function()
 // Nooit een naburig of verlopen uur tonen onder de centrale tijd.
 function syncAllToTime(refTime) {
   panels.forEach(function(p) {
-    var panelTime = IS_SIX_HOURS ? globalTimes[p.idx] : refTime;
-    if (p.modelIdx < 0) return;
+    var panelTime = refTime;
+    if (p.modelIdx < 0) { if (IS_SIX_HOURS) updatePanelTime(p.idx, refTime); return; }
     var md = modelData[MODELS[p.modelIdx].id];
     panelStep[p.idx] = md && md.meta && md.meta.tijden && panelTime
       ? exactTimeIndex(md.meta.tijden, panelTime) : -1;
     updatePanelTime(p.idx, panelTime);
+    if (IS_SIX_HOURS && panelStep[p.idx] >= 0) loadParamIfNeeded(MODELS[p.modelIdx].id,p.varName);
   });
 }
 
@@ -3849,12 +3936,14 @@ updateGlobalTimeControl();
 bouwModelKiezers();
 if (IS_SIX_HOURS) {
   var modelSelect = document.getElementById('six-model');
-  modelSelect.innerHTML = document.getElementById('p0-select').innerHTML;
+  modelSelect.innerHTML = MODELS.filter(function(m) { return ['harmonie','harmonie46','icond2','icond2ruc'].indexOf(m.id) >= 0; }).map(function(m) { return '<option value="' + m.id + '">' + m.label + '</option>'; }).join('');
   modelSelect.value = MODELS[panels[0].modelIdx].id;
+  sixBaseModel = modelSelect.value;
   modelSelect.addEventListener('change', function() { kiesModel(0, this.value); });
   var focusModel = modelSelect.cloneNode(true);
   focusModel.id = 'focus-six-model';
-  focusModel.setAttribute('aria-label', 'Model voor alle zes uren');
+  focusModel.value = modelSelect.value;
+  focusModel.setAttribute('aria-label', 'Model voor alle zes runs');
   focusModel.addEventListener('change', function() { kiesModel(0, this.value); });
   document.getElementById('focus-actions').prepend(focusModel);
   document.querySelectorAll('.panel-hdr').forEach(function(header) {
@@ -3862,16 +3951,13 @@ if (IS_SIX_HOURS) {
     name.className = 'six-model-name';
     header.prepend(name);
   });
-  updateSixWindow(Date.now());
-  window.setInterval(function() {
-    if (!document.hidden && globalTimes[5] !== sixHourWindow(Date.now())[5]) {
-      updateSixWindow(Date.now());
-      requestRender();
-      refreshModels();
-    }
-  }, 1000);
+  var validSelect = document.getElementById('six-valid');
+  var focusValid = validSelect.cloneNode(true); focusValid.id = 'focus-six-valid';
+  document.getElementById('focus-actions').prepend(focusValid);
+  [validSelect,focusValid].forEach(function(sel) { sel.addEventListener('change',function() { setGlobalTimeIndex(Number(this.value)); }); });
+  updateSixRunControls();
 }
-var loadPromises = actieveModellen().map(function(m) { return loadModel(m, panelVoorModel(m.id)); });
+var loadPromises = IS_SIX_HOURS ? [loadSixRuns(sixBaseModel)] : actieveModellen().map(function(m) { return loadModel(m, panelVoorModel(m.id)); });
 Promise.all(loadPromises).then(function() {
   requestRender();
   // Overige variabelen worden pas bij selectie geladen. Dit voorkomt honderden
@@ -3881,9 +3967,9 @@ Promise.all(loadPromises).then(function() {
 // Blijf nieuwe modelruns tonen zonder dat een open vierluik handmatig opnieuw
 // geladen hoeft te worden. Bij terugkeren naar dit tabblad volgt meteen een
 // extra controle; in de achtergrond doen we geen netwerkwerk.
-window.setInterval(refreshModels, 5 * 60 * 1000);
+window.setInterval(refreshModels, IS_SIX_HOURS ? 60 * 1000 : 5 * 60 * 1000);
 document.addEventListener('visibilitychange', function() {
-  if (!document.hidden) { if (IS_SIX_HOURS) { updateSixWindow(Date.now()); requestRender(); } refreshModels(); }
+  if (!document.hidden) refreshModels();
 });
 
 })();

@@ -1,72 +1,58 @@
+// Real archived model data; use WEERLAB_RUN_STORE when serving a local archive.
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const {chromium}=require('playwright');
-const root=path.resolve(__dirname,'..');
-const data=process.env.WEERLAB_FIXTURE_DIR || root;
-const base=process.env.WEERLAB_TEST_URL || 'http://127.0.0.1:8794';
+const root=path.resolve(__dirname,'..'),store=process.env.WEERLAB_RUN_STORE||path.resolve(root,'../zesluik-run-data');
+const base=process.env.WEERLAB_LIVE_DATA?'https://weerlab.nl':(process.env.WEERLAB_TEST_URL||'http://127.0.0.1:8794');
 (async()=>{
- const browser=await chromium.launch({headless:true,channel:'chrome'});
- const page=await browser.newPage({viewport:{width:1920,height:1000}}),errors=[];
+ const browser=await chromium.launch({headless:true,channel:'chrome'}),page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[],requests=[];
+ if(process.env.WEERLAB_LIVE_DATA)await page.route('https://weerlab.nl/**',r=>{const file=path.join(root,new URL(r.request().url()).pathname);return fs.existsSync(file)&&fs.statSync(file).isFile()?r.fulfill({path:file}):r.fulfill({status:404,body:''});});
  page.on('pageerror',e=>errors.push(e.message));
- await page.clock.install({time:new Date('2026-10-04T06:37:00Z')});
  await page.route('**/demo_vierluik_neerslag.html*',r=>{
-  const html=fs.readFileSync(root+'/demo_vierluik_neerslag.html','utf8').replace('\n})();\n</script>','\nwindow.audit={get panels(){return panels},get steps(){return panelStep},get times(){return globalTimes},get data(){return modelData},get models(){return MODELS},kiesModel,kiesKaartlaag,loadParamIfNeeded,updateSixWindow,requestRender};\n})();\n</script>');
+  const html=fs.readFileSync(root+'/demo_vierluik_neerslag.html','utf8').replace('\n})();\n</script>','\nwindow.audit={get active(){return activeVar},get time(){return activeGlobalTime},get panels(){return panels},get steps(){return panelStep},get times(){return globalTimes},get data(){return modelData},get models(){return MODELS},kiesModel,kiesKaartlaag,loadParamIfNeeded,setGlobalTimeIndex,requestRender,loadSixRuns};\n})();\n</script>');
   return r.fulfill({contentType:'text/html',body:html});
  });
- await page.route(/\/(?:ecmwf_om|harmonie|icond2).*\.(?:json|bin)(?:\?.*)?$/,r=>{
-  const file=path.join(data,path.basename(new URL(r.request().url()).pathname));
-  if(fs.existsSync(file))return r.fulfill({contentType:file.endsWith('.json')?'application/json':'application/octet-stream',body:fs.readFileSync(file)});
-  return r.continue();
+ if(!process.env.WEERLAB_LIVE_DATA)await page.route('**/runcompare/**',r=>{
+  const url=new URL(r.request().url()),name=url.pathname.replace(/^\//,''),file=path.join(store,name);
+  if(!fs.existsSync(file))return r.fulfill({status:404,body:'Not found'});
+  const range=r.request().headers().range;
+  if(range){const m=range.match(/^bytes=(\d+)-(\d+)$/);assert(m);const start=Number(m[1]),end=Number(m[2]),length=end-start+1,buffer=Buffer.alloc(length),fd=fs.openSync(file,'r');fs.readSync(fd,buffer,0,length,start);fs.closeSync(fd);requests.push({name,length});return r.fulfill({status:206,headers:{'Content-Range':`bytes ${start}-${end}/${fs.statSync(file).size}`,'Content-Type':'application/octet-stream'},body:buffer});}
+  return r.fulfill({contentType:'application/json',body:fs.readFileSync(file)});
  });
- await page.goto(base+'/demo_vierluik_neerslag.html?localData=1&tijdluik=6',{waitUntil:'domcontentloaded'});
- await page.waitForFunction(()=>window.audit && audit.steps.length===6 && audit.steps.every(s=>s>=0) && [...document.querySelectorAll('.panel-status')].every(e=>e.style.display==='none'),{},{timeout:30000});
- async function inspect(){return page.evaluate(()=>({times:audit.times,steps:audit.steps,models:audit.panels.map(p=>audit.models[p.modelIdx].id),fields:audit.panels.map(p=>p.varName),maps:[...document.querySelectorAll('.canvas-wrap')].map(e=>({w:e.clientWidth,h:e.clientHeight,x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y})),legends:[...document.querySelectorAll('.panel-legend')].map(e=>e.innerHTML),labels:[...document.querySelectorAll('.panel-time-badge')].map(e=>e.textContent)}));}
- const initial=await inspect();assert.equal(initial.maps.length,6);assert.equal(new Set(initial.models).size,1);assert.equal(new Set(initial.legends).size,1);assert.ok(initial.maps.every(m=>m.h===initial.maps[0].h));
- assert.ok(initial.maps.slice(0,3).every((m,i)=>i===0||m.x>initial.maps[i-1].x));
- assert.ok(initial.maps.slice(3).every((m,i)=>m.x===initial.maps[i].x && m.y>initial.maps[i].y));
- assert.ok(initial.labels.every((t,i)=>t.startsWith((i+1)+'/6 · ')));
- for(const field of ['neerslag','wind','windstoten']){
-  await page.selectOption('#var-select',field);
-  await page.evaluate(async f=>{await audit.loadParamIfNeeded(audit.models[audit.panels[0].modelIdx].id,f);audit.requestRender();},field);
-  await page.waitForFunction(f=>audit.panels.every(p=>p.varName===f)&&[...document.querySelectorAll('.panel-status')].every(e=>e.style.display==='none'),field);
-  const state=await inspect();assert.equal(new Set(state.legends).size,1);assert.deepEqual(state.fields,Array(6).fill(field));
-  await page.screenshot({path:'/tmp/zesluik-'+field+'.png'});
- }
- // Cross the actual timer boundary without changing metadata.
- await page.clock.setSystemTime(new Date('2026-10-04T07:00:00Z'));await page.clock.runFor(1100);
- const shifted=await inspect();assert.deepEqual(shifted.times.slice(0,5),initial.times.slice(1));
- await page.keyboard.press('ArrowLeft');await page.keyboard.press('Space');assert.deepEqual((await inspect()).times,shifted.times);
- await page.click('#btn-map-focus');
- assert.ok(await page.locator('#focus-view-mode').isVisible());
+ await page.goto(base+'/demo_vierluik_neerslag.html?tijdluik=6&compact=1'+(process.env.WEERLAB_LIVE_DATA?'':'&localData=1'),{waitUntil:'domcontentloaded'});
+ async function ready(){await page.waitForFunction(()=>window.audit && audit.panels.length===6 && audit.panels.every(p=>p.modelIdx>=0 && audit.data[audit.models[p.modelIdx].id]?.paramData[p.varName]?.validTime===audit.time)&&[...document.querySelectorAll('.panel-status')].every(e=>e.style.display==='none'),{},{timeout:45000});}
+ async function inspect(){return page.evaluate(()=>({time:audit.time,times:audit.times,steps:audit.steps,runs:audit.panels.map(p=>audit.data[audit.models[p.modelIdx].id].meta.run_utc),values:audit.panels.map(p=>{const pd=audit.data[audit.models[p.modelIdx].id].paramData[p.varName];return{valid:pd.validTime,offset:pd.stepOffset,steps:pd.nSteps,value:VierluikCore.sample(pd,audit.steps[p.idx],52,5)};}),maps:[...document.querySelectorAll('.canvas-wrap')].map(e=>({w:e.clientWidth,h:e.clientHeight,x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y})),legends:[...document.querySelectorAll('.panel-legend')].map(e=>e.innerHTML),labels:[...document.querySelectorAll('.panel-time-badge')].map(e=>e.textContent)}));}
+ await ready();
  assert.equal(await page.locator('#focus-view-mode').inputValue(),'6');
- assert.ok(await page.locator('#focus-six-model').isVisible());
- await page.screenshot({path:'/tmp/zesluik-focus.png'});
- await page.click('#btn-map-focus-exit');
- await page.selectOption('#six-model','harmonie');
- await page.waitForFunction(()=>audit.panels.every(p=>audit.models[p.modelIdx].id==='harmonie'));
- const modelChanged=await inspect();assert.deepEqual(modelChanged.models,Array(6).fill('harmonie'));assert.deepEqual(modelChanged.times,shifted.times);
- await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/zesluik-mobile.png'});
- const mobile=await page.evaluate(()=>({body:document.body.scrollWidth,width:innerWidth,scroll:document.getElementById('grid-scroll').scrollWidth,panelWidth:document.getElementById('cw0').clientWidth}));
- assert.ok(mobile.body<=mobile.width+1);assert.ok(mobile.scroll>mobile.width);assert.ok(mobile.panelWidth>=300);
- await page.click('#btn-map-focus');
- const resolutions=[];
- for (const [width,height] of [[360,780],[390,844],[844,390],[768,1024],[1024,768],[1366,768],[1920,1080],[2560,1440]]) {
-  await page.setViewportSize({width,height});
-  await page.evaluate(()=>audit.requestRender());
-  await page.waitForTimeout(150);
-  const size=await page.evaluate(()=>({width:innerWidth,body:document.body.scrollWidth,controlWidth:document.getElementById('map-focus-controls').scrollWidth,columns:getComputedStyle(document.getElementById('grid')).gridTemplateColumns.split(' ').length,cards:[...document.querySelectorAll('.canvas-wrap')].map(e=>({w:e.clientWidth,h:e.clientHeight}))}));
-  assert.ok(size.body<=width+1,JSON.stringify(size));
-  assert.ok(size.controlWidth<=width+1,JSON.stringify(size));
-  assert.ok(size.cards.every(c=>c.w>=250 && c.h>=170),JSON.stringify(size));
-  assert.ok(size.cards.every(c=>c.w===size.cards[0].w && Math.abs(c.h-size.cards[0].h)<=1),JSON.stringify(size));
-  assert.equal(size.columns,3);
-  resolutions.push({width,height,...size});
-  if(width===390 || width===1366 || width===1920)await page.screenshot({path:'/tmp/zesluik-responsive-'+width+'.png'});
+ const results=[];
+ for(const model of ['harmonie','harmonie46','icond2','icond2ruc']){
+  await page.selectOption('#focus-six-model',model);await ready();
+  const target='2026-10-04T10:00:00.000Z';
+  const index=await page.evaluate(t=>audit.times.findIndex(v=>Date.parse(t)===Date.parse(v)),target);assert.ok(index>=0,model+' target unavailable');
+  await page.selectOption('#focus-six-valid',String(index));await ready();
+  for(const field of ['neerslag','wind','windstoten']){
+   await page.selectOption('#map-focus-var',field);await ready();const state=await inspect();
+   assert.equal(new Set(state.runs).size,6);assert.ok(state.runs.every((r,i)=>i===0||Date.parse(r)>Date.parse(state.runs[i-1])));
+   assert.ok(state.values.every(v=>v.valid===state.time && v.steps===1 && Number.isFinite(v.value)));
+   assert.equal(new Set(state.legends).size,1);assert.ok(state.labels.every((t,i)=>t.startsWith((i+1)+'/6 · Run ') && t.includes('Geldig 04-10, 12:00')));
+   assert.equal(new Set(state.values.map(v=>v.offset)).size,6);results.push({model,field,runs:state.runs,steps:state.steps,time:state.time,values:state.values.map(v=>v.value)});
+   if(field==='neerslag')await page.screenshot({path:'/tmp/zesluik-runs-'+model+'.png'});
+  }
  }
- await page.setViewportSize({width:390,height:844});
- await page.click('#btn-map-focus-exit');
- console.log('RESOLUTIONS',JSON.stringify(resolutions));
- await page.selectOption('#view-mode','4');await page.waitForURL(url=>!url.searchParams.has('tijdluik'));
- assert.equal(await page.locator('.panel').count(),4);
- assert.deepEqual(errors,[]);console.log(JSON.stringify({initial:initial.labels,shifted:shifted.labels,mobile,errors},null,2));
- await browser.close();
+ // Manual navigation changes all six valid hours together, never their runtimes.
+ const before=await inspect();await page.keyboard.press('ArrowRight');await ready();const after=await inspect();assert.deepEqual(before.runs,after.runs);assert.notEqual(before.time,after.time);assert.ok(after.values.every(v=>v.valid===after.time));
+ // A rapid time change must not publish an older in-flight response under a new label.
+ await page.evaluate(()=>{audit.setGlobalTimeIndex(0);audit.setGlobalTimeIndex(2);audit.setGlobalTimeIndex(1);});await ready();const rapid=await inspect();assert.ok(rapid.values.every(v=>v.valid===rapid.time));
+ const resolutions=[];
+ for(const [width,height] of [[360,780],[390,844],[844,390],[768,1024],[1024,768],[1366,768],[1920,1080],[2560,1440]]){
+  await page.setViewportSize({width,height});await page.evaluate(()=>audit.requestRender());await page.waitForTimeout(150);
+  const state=await inspect(),controls=await page.evaluate(()=>({body:document.body.scrollWidth,controlWidth:document.getElementById('map-focus-controls').scrollWidth,columns:getComputedStyle(document.getElementById('grid')).gridTemplateColumns.split(' ').length}));
+  assert.ok(controls.body<=width+1);assert.ok(controls.controlWidth<=width+1);assert.equal(controls.columns,3);
+  assert.ok(state.maps.every(m=>m.w>=300 && m.h>=170));assert.ok(state.maps.every(m=>m.w===state.maps[0].w&&Math.abs(m.h-state.maps[0].h)<=1));
+  assert.ok(state.maps.slice(3).every((m,i)=>m.x===state.maps[i].x && m.y>state.maps[i].y));
+  resolutions.push({width,height,...controls,map:state.maps[0]});
+  if([390,1366,1920].includes(width))await page.screenshot({path:'/tmp/zesluik-runs-responsive-'+width+'.png'});
+ }
+ await page.selectOption('#focus-view-mode','4');await page.waitForURL(url=>!url.searchParams.has('tijdluik'));assert.equal(await page.locator('.panel').count(),4);assert.deepEqual(errors,[]);
+ assert.ok(requests.every(r=>r.length<5000000));fs.writeFileSync('/tmp/zesluik-runs-browser.json',JSON.stringify({results,resolutions,errors,requests:requests.length,bytes:requests.reduce((s,r)=>s+r.length,0)},null,2));
+ console.log(JSON.stringify({models:results.map(r=>r.model+':'+r.field),resolutions,errors,requests:requests.length,bytes:requests.reduce((s,r)=>s+r.length,0)},null,2));await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

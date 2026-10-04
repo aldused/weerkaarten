@@ -253,8 +253,8 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "hires4",
-    "name": "Vergelijk modellen & uren · 4-/6-luik",
-    "description": "Vergelijk modellen of de laatste zes uren neerslag, windkracht en windstoten",
+    "name": "Vergelijk modellen & runs · 4-/6-luik",
+    "description": "Vergelijk modellen of zes eerdere runs voor hetzelfde tijdstip: neerslag, windkracht en windstoten",
     "category": "verwachting",
     "type": "kaarten",
     "section": "",
