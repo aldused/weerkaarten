@@ -31,7 +31,8 @@ const server=http.createServer((req,res)=>{
    data.location={latitude:Number(u.searchParams.get('latitude')),longitude:Number(u.searchParams.get('longitude'))};
    responses.push(data.run);await route.fulfill({json:data}).catch(()=>{});
   });
-  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();page.on('pageerror',e=>{errors.push(e.message);console.error('Browser:',e.message);});
+  page.on('console',m=>{if(m.type()==='error')console.error('Console:',m.text());});
   const active=async(frame,id)=>{
    await frame.waitForFunction(id=>document.querySelector('#pageHost')?.dataset.runId===id && document.querySelector('#pageCard').getAttribute('aria-busy')==='false',id);
    assert.equal(await frame.locator('#ensRunSelect').inputValue(),id);
@@ -41,7 +42,7 @@ const server=http.createServer((req,res)=>{
    const labels=await frame.locator('#pageHost svg text').allTextContents();
    assert.equal(labels.filter(t=>t.includes('modelrun '+runLabel(id))).length,6);
   };
-  await page.goto(base+'/pluim_6_plus.html?station=De%20Bilt');await active(page,ids[0]);
+  await page.goto(base+'/pluim_6_plus.html?station=De%20Bilt',{waitUntil:'domcontentloaded'});await active(page,ids[0]);
   const checkAxis=async()=>{
    const geometry=await page.locator('#pageHost svg').evaluate(svg=>{
     const scale=svg.getBoundingClientRect().width/svg.viewBox.baseVal.width;
@@ -54,6 +55,11 @@ const server=http.createServer((req,res)=>{
    });
    for(const row of geometry){assert(row.count>0);assert(row.minFont>=13);assert(row.gaps.every(gap=>gap>=6),JSON.stringify(row));}
   };
+  const bands=await page.locator('.axis-daynight-band').evaluateAll(nodes=>nodes.map(n=>({panel:n.dataset.panelIndex,period:n.dataset.period,color:n.getAttribute('fill'),start:Date.parse(n.dataset.start),end:Date.parse(n.dataset.end)})));
+  for(let panel=0;panel<6;panel++){
+   const rows=bands.filter(b=>Number(b.panel)===panel);assert(rows.length>1);assert(rows.some(b=>b.period==='day'&&b.color==='#dc2626'));assert(rows.some(b=>b.period==='night'&&b.color==='#1d4ed8'));
+   assert(rows.every((b,i)=>b.end>b.start && (i===0||b.start===rows[i-1].end)));
+  }
   await checkAxis();
   await page.locator('.axis-time-label[data-panel-index="2"]').first().scrollIntoViewIfNeeded();
   await page.screenshot({path:'/tmp/ens6-axis-desktop.png'});
@@ -93,7 +99,7 @@ const server=http.createServer((req,res)=>{
   await page.goto(require('node:url').pathToFileURL(path.join(root,'pluim_6_plus.html')).href+'?run=20260919T12');await active(page,ids[2]);
   await page.goto(base+'/index.html#pluim-ens6plus?run=20260919T12&station=De%20Bilt');
   await page.waitForSelector('#product-frame');let frame=page.frames().find(f=>f.url().includes('/pluim_6_plus.html'));if(!frame){await page.waitForTimeout(100);frame=page.frames().find(f=>f.url().includes('/pluim_6_plus.html'));}
-  await active(frame,ids[2]);assert.match(await page.locator('#product-title').innerText(),/extra elementen/);
+  await active(frame,ids[2]);assert.match(await page.locator('#product-title').innerText(),/ECMWF uitgebreid/);
   await frame.selectOption('#ensRunSelect',ids[1]);await active(frame,ids[1]);await page.waitForURL(/run=20260919T18/);
   assert.match(await page.locator('#product-permalink').getAttribute('href'),/run=20260919T18/);
   await page.goBack();await active(frame,ids[2]);await page.goForward();await active(frame,ids[1]);

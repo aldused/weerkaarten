@@ -53,8 +53,8 @@
   .method summary{cursor:pointer;color:var(--brand-2);font-weight:800}
   .method p{margin-top:8px}
   .method code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#edf3f9;padding:1px 4px;border-radius:4px}
-  .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:hidden;position:relative;min-height:360px}
-  #pageHost{min-width:0}
+  .page-card{background:#fff;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px rgba(15,23,42,.04);overflow:auto;position:relative;min-height:360px}
+  #pageHost{min-width:1800px}
   .page-card svg{display:block;width:100%;height:auto}
   .stack-bar{cursor:crosshair;outline:none}
   .stack-bar:focus .stack-focus,.stack-bar:hover .stack-focus{stroke:#0077b6;stroke-width:4;fill-opacity:.08}
@@ -125,6 +125,12 @@
   <button class="btn" id="btnRefresh">🔄 Vernieuw</button>
   <button class="btn btn-primair" id="btnPng">📥 Download PNG (A4 landscape)</button>
   <span class="runinfo" id="runinfo"></span>
+</div>
+
+<div class="daynight-key" style="margin:0 20px 12px;display:flex;gap:8px 18px;flex-wrap:wrap;font-size:13px;font-weight:650;color:#344054" aria-label="Uitleg dag- en nachtbalk">
+  <span><i style="display:inline-block;width:22px;height:10px;background:#dc2626;margin-right:6px"></i>Dag 06:00–18:00</span>
+  <span><i style="display:inline-block;width:22px;height:10px;background:#1d4ed8;margin-right:6px"></i>Nacht 18:00–06:00</span>
+  <span>Alle tijden: Nederland (zomer-/wintertijd). Vaste tijdvakken, geen zonsopkomst/-ondergang.</span>
 </div>
 
 <div class="page-wrap">
@@ -582,7 +588,7 @@ function rangeOf(arrs, extra=[]) {
 }
 
 const PAGE_W=2970, PAGE_H=2100;
-const PAGE_MARGIN_X=30, PAGE_HEADER_H=110, PAGE_FOOTER_H=40;
+const PAGE_MARGIN_X=30, PAGE_HEADER_H=140, PAGE_FOOTER_H=40;
 const PANEL_GAP=16;
 const COLS=2, ROWS=3;
 const PANEL_W = (PAGE_W - 2*PAGE_MARGIN_X - (COLS-1)*PANEL_GAP) / COLS;
@@ -592,20 +598,33 @@ const PM = { l: 80, r: 80, t: 92, b: 165 };
 const escapeSvgAttribute = value => String(value)
   .replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-function axisTimeLabelIndexes(times, plotW) {
-  const timestamps=times.map(time=>time.getTime());
-  if(!timestamps.length)return [];
-  const span=Math.max(HOUR_MS,timestamps.at(-1)-timestamps[0]);
-  const minimumGap=76; // SVG units; >=46 screen pixels at the minimum width.
-  const requiredHours=minimumGap/Math.max(1,plotW)*span/HOUR_MS;
-  const interval=([6,12,24,48,72,96].find(hours=>hours>=requiredHours)
-    || Math.ceil(requiredHours/24)*24)*HOUR_MS;
-  const indexes=[];
-  let last=-Infinity;
-  timestamps.forEach((timestamp,index)=>{
-    if(timestamp-last>=interval){indexes.push(index);last=timestamp;}
-  });
-  return indexes;
+// Calendar boundaries are independent of native 1-, 3- or 6-hour forecast steps.
+function localTimeBands(start, end) {
+  const bands=[];
+  for(let t=start;t<end;){
+    const next=Math.min(end,(Math.floor(t/HOUR_MS)+1)*HOUR_MS);
+    const local=WeerlabCloudProbability.localTimeParts(new Date(t));
+    const day=local.hour>=6 && local.hour<18;
+    const last=bands.at(-1);
+    if(last && last.day===day && last.dateKey===local.dateKey)last.end=next;
+    else bands.push({start:t,end:next,day,dateKey:local.dateKey,local});
+    t=next;
+  }
+  return bands;
+}
+
+function axisTimeTicks(start,end,plotW) {
+  const minimumGap=76, range=Math.max(HOUR_MS,end-start);
+  const requiredHours=minimumGap/Math.max(1,plotW)*range/HOUR_MS;
+  const interval=requiredHours<=6?6:requiredHours<=12?12:24;
+  const ticks=[];
+  for(let t=Math.ceil(start/HOUR_MS)*HOUR_MS;t<=end;t+=HOUR_MS){
+    const local=WeerlabCloudProbability.localTimeParts(new Date(t));
+    if(local.hour%interval!==0)continue;
+    if(ticks.length && (t-ticks.at(-1).time)/range*plotW<minimumGap)continue;
+    ticks.push({time:t,local});
+  }
+  return ticks;
 }
 
 function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble, ctrl, hres, p10, p25, p50, p75, p90, hres2, p502, yMin2, yMax2, fanColor, xMode, yMin, yMax, station, datumTxt, runLabel, footLeft, footRight, nDays, times, valueFmt, stacked, unavailable, panelIndex}) {
@@ -634,32 +653,20 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
   const xToPx = index => timeToPx(indexToTime(index));
   const yToPx = y => oy + PM.t + (1 - (y-yMin)/(yMax-yMin))*plotH;
   const yToPx2 = y => oy + PM.t + (1 - (y-yMin2)/(yMax2-yMin2))*plotH;
-  const timeLabelIndexes = axisTimeLabelIndexes(times, plotW);
+  const timeTicks = axisTimeTicks(domainStart, domainEnd, plotW);
+  const timeBands = localTimeBands(domainStart, domainEnd);
   let s = '';
 
   s += `<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" fill="#ffffff"/>`;
 
-  const nightBlocks = computeNightBlocks(times, xMode);
-  for (const [a,b] of nightBlocks) {
-    const x0 = Math.max(ox+PM.l, xToPx(a));
-    const x1 = Math.min(ox+PM.l+plotW, xToPx(b));
-    if (x1>x0) s += `<rect x="${x0.toFixed(1)}" y="${oy+PM.t}" width="${(x1-x0).toFixed(1)}" height="${plotH}" fill="${C_NACHT}"/>`;
+  for (const band of timeBands) {
+    if(band.day)continue;
+    const x0=timeToPx(band.start),x1=timeToPx(band.end);
+    s += `<rect x="${x0.toFixed(1)}" y="${oy+PM.t}" width="${(x1-x0).toFixed(1)}" height="${plotH}" fill="${C_NACHT}"/>`;
   }
-
-  // Dunne grijze lijnen op 6-uursmomenten in Nederlandse lokale tijd.
-  for (const index of timeLabelIndexes) {
-    const local = WeerlabCloudProbability.localTimeParts(times[index]);
-    if (!local) continue;
-    const px = timeToPx(timeMs[index]);
-    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="#dddddd" stroke-width="0.6"/>`;
-  }
-  // Donkere lijnen op Nederlandse kalenderdag-overgangen, ook rond DST.
-  for (let index=1; index<times.length; index++) {
-    const previous = WeerlabCloudProbability.localTimeParts(times[index-1]);
-    const current = WeerlabCloudProbability.localTimeParts(times[index]);
-    if (!previous || !current || previous.dateKey === current.dateKey) continue;
-    const px = timeToPx((timeMs[index-1] + timeMs[index]) / 2);
-    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="#222222" stroke-width="1.4"/>`;
+  for (const tick of timeTicks) {
+    const px=timeToPx(tick.time),midnight=tick.local.hour===0;
+    s += `<line x1="${px.toFixed(1)}" y1="${oy+PM.t}" x2="${px.toFixed(1)}" y2="${oy+PM.t+plotH}" stroke="${midnight?'#64748b':'#dddddd'}" stroke-width="${midnight?1.4:0.6}"/>`;
   }
 
   const fmt = valueFmt || (v => Math.round(v));
@@ -764,23 +771,28 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
 
   s += `<rect x="${ox+PM.l}" y="${oy+PM.t}" width="${plotW}" height="${plotH}" fill="none" stroke="${C_AXIS}" stroke-width="1.2"/>`;
 
-  const dayGroups = [];
-  times.forEach((time, index) => {
-    const local = WeerlabCloudProbability.localTimeParts(time);
-    if (!local) return;
-    const lastGroup = dayGroups.at(-1);
-    if (!lastGroup || lastGroup.key !== local.dateKey) dayGroups.push({ key:local.dateKey, local, first:index, last:index });
-    else lastGroup.last = index;
-    if (timeLabelIndexes.includes(index)) {
-      s += `<text class="axis-time-label" data-panel-index="${panelIndex}" x="${xToPx(index).toFixed(1)}" y="${oy+PM.t+plotH+28}" font-size="24" font-weight="600" text-anchor="middle" fill="#344054">${String(local.hour).padStart(2,'0')}u</text>`;
-    }
-  });
-  let lastDayLabelX = -Infinity;
-  for (const group of dayGroups) {
-    const labelX = (xToPx(group.first) + xToPx(group.last)) / 2;
+  // A separate, high-contrast strip remains visible underneath filled cloud bars.
+  for(const band of timeBands){
+    const x=timeToPx(band.start),width=timeToPx(band.end)-x;
+    const label=band.day?'Dag 06:00–18:00':'Nacht 18:00–06:00';
+    s += `<rect class="axis-daynight-band" data-panel-index="${panelIndex}" data-period="${band.day?'day':'night'}" data-start="${new Date(band.start).toISOString()}" data-end="${new Date(band.end).toISOString()}" x="${x.toFixed(1)}" y="${oy+PM.t+plotH+5}" width="${width.toFixed(1)}" height="18" fill="${band.day?'#dc2626':'#1d4ed8'}"><title>${label} · Nederlandse tijd</title></rect>`;
+  }
+  for(const tick of timeTicks){
+    const px=timeToPx(tick.time);
+    s += `<text class="axis-time-label" data-panel-index="${panelIndex}" data-time="${new Date(tick.time).toISOString()}" x="${px.toFixed(1)}" y="${oy+PM.t+plotH+49}" font-size="24" font-weight="600" text-anchor="middle" fill="#344054">${String(tick.local.hour).padStart(2,'0')}:00</text>`;
+  }
+  const dayGroups=[];
+  for(const band of timeBands){
+    const last=dayGroups.at(-1);
+    if(last && last.key===band.dateKey)last.end=band.end;
+    else dayGroups.push({key:band.dateKey,local:band.local,start:band.start,end:band.end});
+  }
+  let lastDayLabelX=-Infinity;
+  for(const group of dayGroups){
+    const labelX=(timeToPx(group.start)+timeToPx(group.end))/2;
     if(labelX-lastDayLabelX<76)continue;
     lastDayLabelX=labelX;
-    const ly = oy+PM.t+plotH+57;
+    const ly=oy+PM.t+plotH+78;
     s += `<text class="axis-day-label" data-panel-index="${panelIndex}" x="${labelX.toFixed(1)}" y="${ly}" font-size="23" font-weight="700" text-anchor="middle" fill="${C_AXIS}">${group.local.weekday}</text>`;
     s += `<text class="axis-date-label" data-panel-index="${panelIndex}" x="${labelX.toFixed(1)}" y="${ly+26}" font-size="23" text-anchor="middle" fill="${C_AXIS}">${String(group.local.day).padStart(2,'0')}-${String(group.local.month).padStart(2,'0')}</text>`;
   }
@@ -832,27 +844,13 @@ function buildPanelSvg({ox, oy, panelW=PANEL_W, panelH=PANEL_H, title, ensemble,
   return s;
 }
 
-function computeNightBlocks(times, xMode) {
-  const blocks = [];
-  for (let i=0; i<times.length; i++) {
-    const local = WeerlabCloudProbability.localTimeParts(times[i]);
-    if (local?.hour === 18) {
-      let j = i+1;
-      while (j < times.length && WeerlabCloudProbability.localTimeParts(times[j])?.hour !== 6) j++;
-      const a = i;
-      const b = Math.min(j, times.length);
-      blocks.push([a, b]);
-      i = j-1;
-    }
-  }
-  return blocks;
-}
-
 function buildPageSvg(model) {
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PAGE_W} ${PAGE_H}" font-family="Arial, sans-serif">`;
   s += `<rect x="0" y="0" width="${PAGE_W}" height="${PAGE_H}" fill="#ffffff"/>`;
   s += `<text x="${PAGE_W/2}" y="60" font-size="42" font-weight="700" text-anchor="middle" fill="#1a1a1a">ECMWF uitgebreid — ${model.station}</text>`;
   s += `<text x="${PAGE_W/2}" y="92" font-size="22" text-anchor="middle" fill="#555">ECMWF IFS-ENS · ${model.nMembers} berekeningen · ${model.panelStatus} · ${model.hresStatus} · ${model.datumTxt} (run ${model.runLabel})${model.coverageLabel ? ` · ${model.coverageLabel}` : ''}</text>`;
+
+  s += `<text x="${PAGE_W/2}" y="125" font-size="22" font-weight="600" text-anchor="middle"><tspan fill="#dc2626">Rood: dag 06:00–18:00</tspan><tspan fill="#1d4ed8"> · Blauw: nacht 18:00–06:00</tspan><tspan fill="#344054"> · Nederlandse tijd (zomer-/wintertijd)</tspan></text>`;
 
   for (let i=0; i<model.panels.length; i++) {
     const r = Math.floor(i/COLS), c = i%COLS;
