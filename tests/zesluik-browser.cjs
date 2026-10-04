@@ -19,9 +19,11 @@ const base=process.env.WEERLAB_TEST_URL || 'http://127.0.0.1:8794';
  });
  await page.goto(base+'/demo_vierluik_neerslag.html?localData=1&tijdluik=6',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>window.audit && audit.steps.length===6 && audit.steps.every(s=>s>=0) && [...document.querySelectorAll('.panel-status')].every(e=>e.style.display==='none'),{},{timeout:30000});
- async function inspect(){return page.evaluate(()=>({times:audit.times,steps:audit.steps,models:audit.panels.map(p=>audit.models[p.modelIdx].id),fields:audit.panels.map(p=>p.varName),maps:[...document.querySelectorAll('.canvas-wrap')].map(e=>({w:e.clientWidth,h:e.clientHeight,x:e.getBoundingClientRect().x})),legends:[...document.querySelectorAll('.panel-legend')].map(e=>e.innerHTML),labels:[...document.querySelectorAll('.panel-time-badge')].map(e=>e.textContent)}));}
+ async function inspect(){return page.evaluate(()=>({times:audit.times,steps:audit.steps,models:audit.panels.map(p=>audit.models[p.modelIdx].id),fields:audit.panels.map(p=>p.varName),maps:[...document.querySelectorAll('.canvas-wrap')].map(e=>({w:e.clientWidth,h:e.clientHeight,x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y})),legends:[...document.querySelectorAll('.panel-legend')].map(e=>e.innerHTML),labels:[...document.querySelectorAll('.panel-time-badge')].map(e=>e.textContent)}));}
  const initial=await inspect();assert.equal(initial.maps.length,6);assert.equal(new Set(initial.models).size,1);assert.equal(new Set(initial.legends).size,1);assert.ok(initial.maps.every(m=>m.h===initial.maps[0].h));
- assert.ok(initial.maps.every((m,i)=>i===0||m.x>initial.maps[i-1].x));
+ assert.ok(initial.maps.slice(0,3).every((m,i)=>i===0||m.x>initial.maps[i-1].x));
+ assert.ok(initial.maps.slice(3).every((m,i)=>m.x===initial.maps[i].x && m.y>initial.maps[i].y));
+ assert.ok(initial.labels.every((t,i)=>t.startsWith((i+1)+'/6 · ')));
  for(const field of ['neerslag','wind','windstoten']){
   await page.selectOption('#var-select',field);
   await page.evaluate(async f=>{await audit.loadParamIfNeeded(audit.models[audit.panels[0].modelIdx].id,f);audit.requestRender();},field);
@@ -44,7 +46,7 @@ const base=process.env.WEERLAB_TEST_URL || 'http://127.0.0.1:8794';
  const modelChanged=await inspect();assert.deepEqual(modelChanged.models,Array(6).fill('harmonie'));assert.deepEqual(modelChanged.times,shifted.times);
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/zesluik-mobile.png'});
  const mobile=await page.evaluate(()=>({body:document.body.scrollWidth,width:innerWidth,scroll:document.getElementById('grid-scroll').scrollWidth,panelWidth:document.getElementById('cw0').clientWidth}));
- assert.ok(mobile.body<=mobile.width+1);assert.ok(mobile.scroll<=mobile.width+1);assert.ok(mobile.panelWidth>=350);
+ assert.ok(mobile.body<=mobile.width+1);assert.ok(mobile.scroll>mobile.width);assert.ok(mobile.panelWidth>=300);
  await page.click('#btn-map-focus');
  const resolutions=[];
  for (const [width,height] of [[360,780],[390,844],[844,390],[768,1024],[1024,768],[1366,768],[1920,1080],[2560,1440]]) {
@@ -56,14 +58,11 @@ const base=process.env.WEERLAB_TEST_URL || 'http://127.0.0.1:8794';
   assert.ok(size.controlWidth<=width+1,JSON.stringify(size));
   assert.ok(size.cards.every(c=>c.w>=250 && c.h>=170),JSON.stringify(size));
   assert.ok(size.cards.every(c=>c.w===size.cards[0].w && Math.abs(c.h-size.cards[0].h)<=1),JSON.stringify(size));
+  assert.equal(size.columns,3);
   resolutions.push({width,height,...size});
   if(width===390 || width===1366 || width===1920)await page.screenshot({path:'/tmp/zesluik-responsive-'+width+'.png'});
  }
  await page.setViewportSize({width:390,height:844});
- await page.selectOption('#focus-six-layout','row');
- await page.waitForTimeout(150);
- assert.ok(await page.evaluate(()=>document.getElementById('grid-scroll').scrollWidth>innerWidth));
- await page.selectOption('#focus-six-layout','auto');
  await page.click('#btn-map-focus-exit');
  console.log('RESOLUTIONS',JSON.stringify(resolutions));
  await page.selectOption('#view-mode','4');await page.waitForURL(url=>!url.searchParams.has('tijdluik'));

@@ -3,7 +3,7 @@ const script=fs.readFileSync(__dirname+'/../demo_vierluik_neerslag.html','utf8')
 new vm.Script(script);
 function fn(name){const a=script.indexOf('function '+name+'(');assert(a>=0,name);return script.slice(a,script.indexOf('\n}',a)+2);}
 const elements={};
-const c=vm.createContext({Date,Math,Array,Intl,IS_SIX_HOURS:true,VierluikCore:require('../vierluik-core'),globalTimes:[],globalTimeIndex:0,activeGlobalTime:'',panels:Array.from({length:6},(_,idx)=>({idx,modelIdx:0})),MODELS:[{id:'m'}],modelData:{m:{meta:{tijden:[]}}},panelStep:[],updatePanelTime(i,t){c.labels[i]=t;},labels:[],updateSyncStatus(){},document:{getElementById(id){return elements[id] ||= {};}}});
+const c=vm.createContext({Date,Math,Array,Intl,IS_SIX_HOURS:true,VierluikCore:require('../vierluik-core'),globalTimes:[],globalTimeIndex:0,activeGlobalTime:'',panels:Array.from({length:6},(_,idx)=>({idx,modelIdx:0})),MODELS:[{id:'m'}],modelData:{m:{meta:{tijden:[]}}},panelStep:[],updatePanelTime(i,t){c.labels[i]=t;},labels:[],updateSyncStatus(){},document:{createElement(){return {};},getElementById(id){return elements[id] ||= {appendChild(){}};}}});
 ['sixHourWindow','sixTimeLabel','exactTimeIndex','syncAllToTime','updateSixWindow'].forEach(n=>vm.runInContext(fn(n),c));
 test('Six consecutive whole hours ending at now; hour rollover removes only oldest',()=>{
  const now=Date.parse('2026-10-04T08:37:00Z');const before=Array.from(c.sixHourWindow(now)),after=Array.from(c.sixHourWindow(now+3600000));
