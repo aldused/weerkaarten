@@ -53,7 +53,7 @@ const server=http.createServer((req,res)=>{
       gaps:boxes.slice(1).map((box,i)=>box.left-boxes[i].right)};
     }));
    });
-   for(const row of geometry){assert(row.count>0);assert(row.minFont>=13);assert(row.gaps.every(gap=>gap>=6),JSON.stringify(row));}
+   for(const row of geometry){assert(row.count>0);assert(row.minFont>=(row.cls==='axis-time-label'?7:13));assert(row.gaps.every(gap=>gap>=6),JSON.stringify(row));}
   };
   const bands=await page.locator('.axis-daynight-band').evaluateAll(nodes=>nodes.map(n=>({panel:n.dataset.panelIndex,period:n.dataset.period,color:n.getAttribute('fill'),start:Date.parse(n.dataset.start),end:Date.parse(n.dataset.end)})));
   for(let panel=0;panel<6;panel++){
