@@ -3,8 +3,49 @@
  const $=id=>document.getElementById(id),src=GalazoWeatherPro,core=GalazoCore;let raw=null,processed=null,busy=false;const edits=new Map();
  const today=src.dateKey(Date.now());$('start').min=today;$('start').max=src.addDate(today,6);$('start').value=today;$('weather-date').value=today;$('document-date').value=today;$('document-time').value=new Date().toLocaleTimeString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  const textIds=['headline','situation','day-weather','weather-date','report','document-date','document-time'],draftKey='wb_galazo_text_v1';
- try{const saved=JSON.parse(localStorage.getItem(draftKey)||'{}');for(const id of textIds)if(typeof saved[id]==='string')$(id).value=saved[id];}catch{}
- function saveText(){try{localStorage.setItem(draftKey,JSON.stringify(Object.fromEntries(textIds.map(id=>[id,$(id).value]))));}catch{}}
+ const draftLifetime=24*60*60*1000;
+ const textDefaults=Object.fromEntries(textIds.map(id=>[id,$(id).value]));
+ let draftTimer=null;
+ function readTextDraft(){
+  try{
+   const saved=JSON.parse(localStorage.getItem(draftKey)||'null');
+   if(saved===null)return null;
+   if(!saved||!Number.isFinite(saved.savedAt)||saved.savedAt>Date.now()||Date.now()-saved.savedAt>=draftLifetime||!saved.fields||typeof saved.fields!=='object'){
+    localStorage.removeItem(draftKey);return null;
+   }
+   return saved;
+  }catch{try{localStorage.removeItem(draftKey);}catch{}return null;}
+ }
+ function resetDraftText(){
+  for(const id of textIds)$(id).value=textDefaults[id];
+  const currentDay=src.dateKey(Date.now());
+  $('weather-date').value=currentDay;$('document-date').value=currentDay;
+  $('document-time').value=new Date().toLocaleTimeString('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+ }
+ function checkDraftExpiry(){
+  const current=readTextDraft();
+  if(current){scheduleDraftExpiry(current);return;}
+  if(draftTimer===null)return;
+  clearTimeout(draftTimer);draftTimer=null;resetDraftText();refresh();
+ }
+ function scheduleDraftExpiry(saved){
+  if(draftTimer!==null)clearTimeout(draftTimer);
+  draftTimer=setTimeout(checkDraftExpiry,Math.max(0,saved.savedAt+draftLifetime-Date.now()));
+ }
+ const savedDraft=readTextDraft();
+ if(savedDraft){for(const id of textIds)if(typeof savedDraft.fields[id]==='string')$(id).value=savedDraft.fields[id];scheduleDraftExpiry(savedDraft);}
+ function saveText(){
+  try{
+   const fields=Object.fromEntries(textIds.map(id=>[id,$(id).value]));
+   const previous=readTextDraft();
+   // Andere formulierinstellingen verlengen de bewaartermijn van oude tekst niet.
+   if(previous&&textIds.every(id=>previous.fields[id]===fields[id]))return;
+   const saved={savedAt:Date.now(),fields};
+   localStorage.setItem(draftKey,JSON.stringify(saved));scheduleDraftExpiry(saved);
+  }catch{}
+ }
+ window.addEventListener('focus',checkDraftExpiry);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkDraftExpiry();});
  for(const c of core.CRITERIA){const label=document.createElement('label');label.textContent=c.label;const input=document.createElement('input');input.type='number';input.id='criterion-'+c.key;input.min=c.min;input.max=c.max;input.step='any';input.placeholder=c.key==='wbgt'?'Eigen evenementprotocol':'Leeg = uit';if(c.defaultValue!==null)input.value=c.defaultValue;label.append(input);$('criteria').append(label);}
  const numeric=id=>$(id).value.trim()===''?null:Number($(id).value);
  function settings(){return core.validateCriteria(Object.fromEntries(core.CRITERIA.map(c=>[c.key,numeric('criterion-'+c.key)])));}
