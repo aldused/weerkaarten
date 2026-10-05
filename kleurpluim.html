@@ -558,6 +558,11 @@ body.embedded .download-btn {
 <link rel="stylesheet" href="pluim-presentatie.css?v=20260928">
 <script src="pluim-presentatie.js?v=20260928" defer></script>
 </head>
+<style>
+.highlight-wrap .highlight-transparency{display:flex;align-items:center;gap:8px;flex:0 1 auto}
+.highlight-wrap #highlight-transparency{width:110px;min-width:80px;height:20px;padding:0;accent-color:#173e59;background:transparent;cursor:pointer}
+.highlight-transparency output{min-width:34px;font-variant-numeric:tabular-nums}
+</style>
 <body>
 <div class="kaart">
   <div class="terug-rij">
@@ -594,6 +599,7 @@ body.embedded .download-btn {
           <option value="yellow">Geel</option>
           <option value="purple">Paars</option>
         </select>
+        <label class="highlight-transparency">Transparantie <input id="highlight-transparency" type="range" min="0" max="100" step="5" value="70" aria-describedby="highlight-transparency-value"><output id="highlight-transparency-value" for="highlight-transparency">70%</output></label>
         <button class="highlight-clear" id="highlight-clear" type="button" title="Markering wissen">×</button>
       </div>
     </details></div>
@@ -1088,10 +1094,10 @@ function bindDateCommit(ids, commit) {
 }
 
 const DAY_HIGHLIGHT_COLORS = {
-  red: { fill: 'rgba(225, 70, 70, 0.30)', stroke: 'rgba(255, 255, 255, 0.42)' },
-  blue: { fill: 'rgba(70, 165, 255, 0.28)', stroke: 'rgba(255, 255, 255, 0.42)' },
-  yellow: { fill: 'rgba(255, 214, 80, 0.28)', stroke: 'rgba(255, 255, 255, 0.42)' },
-  purple: { fill: 'rgba(170, 95, 255, 0.28)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  red: { fill: 'rgb(225, 70, 70)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  blue: { fill: 'rgb(70, 165, 255)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  yellow: { fill: 'rgb(255, 214, 80)', stroke: 'rgba(255, 255, 255, 0.42)' },
+  purple: { fill: 'rgb(170, 95, 255)', stroke: 'rgba(255, 255, 255, 0.42)' },
 };
 
 function syncHighlightBounds() {
@@ -1120,6 +1126,11 @@ function syncHighlightPeriod(changedId) {
   }
 }
 
+function highlightOpacity() {
+  const value = Number(document.getElementById('highlight-transparency')?.value ?? 70);
+  return 1 - Math.max(0, Math.min(100, Number.isFinite(value) ? value : 70)) / 100;
+}
+
 function selectedHighlight() {
   const startEl = document.getElementById('highlight-start');
   const endEl = document.getElementById('highlight-end');
@@ -1129,7 +1140,7 @@ function selectedHighlight() {
   const startIso = startValue <= endValue ? startValue : endValue;
   const endIso = startValue <= endValue ? endValue : startValue;
   const palette = DAY_HIGHLIGHT_COLORS[document.getElementById('highlight-color')?.value] || DAY_HIGHLIGHT_COLORS.red;
-  return { startIso, endIso, ...palette };
+  return { startIso, endIso, ...palette, opacity: highlightOpacity() };
 }
 
 function highlightBoundsForTimes(ts, startIso, endIso, xF, leftEdge, rightEdge) {
@@ -1218,7 +1229,9 @@ function drawDayHighlight(group, ts, xF, leftEdge, rightEdge, top, height) {
     y: top,
     width: width.toFixed(1),
     height,
+    class: 'day-highlight-fill',
     fill: highlight.fill,
+    'fill-opacity': highlight.opacity,
     stroke: highlight.stroke,
     'stroke-width': 1.2,
     'pointer-events': 'none',
@@ -4166,6 +4179,11 @@ bindDateCommit(['highlight-start', 'highlight-end'], id => {
   syncHighlightBounds();
   syncHighlightPeriod(id);
   loadCurrent();
+});
+document.getElementById('highlight-transparency').addEventListener('input', event => {
+  document.getElementById('highlight-transparency-value').textContent = `${event.target.value}%`;
+  const opacity = highlightOpacity();
+  document.querySelectorAll('.day-highlight-fill').forEach(rect => rect.setAttribute('fill-opacity', opacity));
 });
 document.getElementById('highlight-color').addEventListener('change', () => {
   loadCurrent();
