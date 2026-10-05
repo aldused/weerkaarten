@@ -1150,14 +1150,44 @@ function highlightBoundsForTimes(ts, startIso, endIso, xF, leftEdge, rightEdge) 
     }
     return rightEdge;
   };
-  const start = parseIsoDate(startIso);
-  const endDate = parseIsoDate(endIso);
-  if (!start || !endDate) return null;
-  const end = addDays(endDate, 1);
+  // De grafiekas gebruikt UTC; lokale middernacht verschuift de markering.
+  const start = new Date(`${startIso}T00:00:00Z`);
+  const end = new Date(Date.parse(`${endIso}T00:00:00Z`) + MS_DAY);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null;
   const left = xAt(start.getTime());
   const right = xAt(end.getTime());
   if (right <= left) return null;
   return { left, right };
+}
+
+// Exacte 06/18 UTC-grenzen, ook tussen de latere 6-uursmodelstappen.
+function dayNightSegments(start, end) {
+  const hour = 3600000, segments = [];
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return segments;
+  for (let t = start; t < end;) {
+    const h = new Date(t).getUTCHours();
+    const day = h >= 6 && h < 18;
+    const next = Math.min(end, (Math.floor(t / hour) + 1) * hour);
+    const last = segments[segments.length - 1];
+    if (last && last.day === day) last.end = next;
+    else segments.push({ start: t, end: next, day });
+    t = next;
+  }
+  return segments;
+}
+
+function drawDayNightAxis(svg, start, end, left, width, bottom) {
+  const xAt = time => left + (time - start) / (end - start) * width;
+  const group = mk(svg, 'g', { 'aria-label': 'Dag en nacht in UTC' });
+  for (const segment of dayNightSegments(start, end)) {
+    const rect = mk(group, 'rect', {
+      class: 'axis-daynight-band', 'data-period': segment.day ? 'day' : 'night',
+      x: xAt(segment.start).toFixed(2), y: bottom + 3,
+      width: (xAt(segment.end) - xAt(segment.start)).toFixed(2), height: 3,
+      fill: segment.day ? '#dc2626' : '#1d4ed8',
+    });
+    mk(rect, 'title', {}, segment.day ? 'Dag 06:00–18:00 UTC' : 'Nacht 18:00–06:00 UTC');
+  }
 }
 
 function drawNightBands(bg, ts, xF, top, IH, IW, leftEdge) {
@@ -2159,6 +2189,8 @@ function drawChart(svg, times, stats, cfg, opts = {}) {
 
   updateSummary(st, cfg, opts.summaryEl);
   updateLegend(cfg, opts.legendEl);
+  const legendEl = opts.legendEl || document.getElementById('legenda');
+  if (legendEl) legendEl.insertAdjacentHTML('beforeend', '<div class="leg-item"><div class="leg-ln" style="background:#dc2626"></div>Dag 06–18 UTC</div><div class="leg-item"><div class="leg-ln" style="background:#1d4ed8"></div>Nacht 18–06 UTC</div>');
   if (Object.prototype.hasOwnProperty.call(opts, 'thunderCardEl')) {
     renderThunderCard(st, cfg, opts.thunderCardEl);
   }
@@ -2494,6 +2526,8 @@ function drawChart(svg, times, stats, cfg, opts = {}) {
     }
   }
 
+  drawDayNightAxis(svg, timeStart, timeEnd, M.left, IW, M.top + IH);
+
   const dagSet = new Set();
   let dagIndex = 0;
   for (let i = 0; i < ts.length; i++) {
@@ -2535,7 +2569,7 @@ function drawChart(svg, times, stats, cfg, opts = {}) {
       const xx = xF(i);
       mk(svg, 'line', { x1: xx.toFixed(1), y1: (M.top + IH).toFixed(1), x2: xx.toFixed(1), y2: (M.top + IH + 5).toFixed(1), stroke: 'rgba(255,255,255,0.45)', 'stroke-width': 1 });
       mk(svg, 'text', {
-        x: xx.toFixed(1), y: (M.top + IH + 16).toFixed(1),
+        x: xx.toFixed(1), y: (M.top + IH + 22).toFixed(1),
         'text-anchor': 'middle', 'font-size': 9, 'font-weight': 600,
         'font-family': 'Inter, sans-serif', fill: '#64798a',
         style: 'text-shadow:none',
