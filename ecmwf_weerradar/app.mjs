@@ -459,9 +459,9 @@ function sampleVariables(layerVariables,modelMeta){
   return [...new Set([...layerVariables,...labels,...(mode==='significant'&&$('city-labels').checked?['wind_u_component_10m']:[]),...($('isobars').checked&&hasIsobars(modelMeta)?['pressure_msl']:[])])];
 }
 function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
-function addLayer(frame,variable,prefix){
+function addLayer(frame,variable,prefix,preview=false){
   const id=`${prefix}-${variable}`;
-  map.addSource(id,{type:'raster',url:weatherURL(frame,variable),tileSize:256,maxzoom:10});
+  map.addSource(id,{type:'raster',url:weatherURL(frame,variable),preview,tileSize:256,maxzoom:10});
   map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':.00001,'raster-fade-duration':0}},'borders');
   return id;
 }
@@ -490,7 +490,7 @@ async function renderFrame(index,rev,signal,context){
   const key=viewKey(frame,layerMode),retained=retainedViews.get(key);
   retainedViews.delete(key);
   const initialVars=firstFrameLayers(vars,!!current);
-  const ids=retained?.ids??initialVars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
+  const ids=retained?.ids??initialVars.map(v=>addLayer(frame,v,`frame${sourceCounter}`,!current&&v==='cloud_cover'));sourceCounter++;
   // The first view reveals each layer as soon as its first tile is painted. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.
   let reveal;

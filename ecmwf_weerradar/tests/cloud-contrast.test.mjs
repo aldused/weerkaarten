@@ -79,3 +79,21 @@ test('tile compositing uses all original percentages unchanged and honours indep
   assert.ok(checked>10000,'test a substantial valid part of the rendered tile');
   for(const [name,values] of Object.entries(source))assert.deepEqual(values,originals[name],`${name} source percentages must not be changed by presentation`);
 });
+
+test('startup preview samples the same geographic tile and sharp rendering retains its full resolution',()=>{
+  const grid=createRegularGrid({n_lat:2,n_lon:2,lon_min:0,lon_max:12,lat_min:48,lat_max:57});
+  const values=new Float32Array([0,100,0,100]),zero=new Float32Array(4),coords={z:6,x:32,y:21};
+  const field={variable:'cloud_cover',data:{values},grid,texture:false,cloudLow:values,cloudMid:zero,cloudHigh:zero};
+  for(const size of [128,256]){
+    const pixels=renderTile(field,coords,size);
+    assert.equal(pixels.length,size*size*4);
+    for(const [x,y] of [[30,40],[90,70]]){
+      const lon=(coords.x+(x+.5)/size)/2**coords.z*360-180;
+      const lat=Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/size)/2**coords.z)))*180/Math.PI;
+      const low=grid.getInterpolatedValue(values,lat,lon);
+      const expected=cloudStyle(low,0,0,lon,lat,false,0,7);
+      const rgba=new Uint8ClampedArray([...expected.slice(0,3),expected[3]*255]);
+      assert.deepEqual(pixels.slice((y*size+x)*4,(y*size+x+1)*4),rgba);
+    }
+  }
+});

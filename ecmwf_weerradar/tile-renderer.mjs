@@ -22,21 +22,21 @@ function colorsFor(scale){
 const significantColors=Object.fromEntries(SIGNIFICANT_WEATHER.map(s=>[s.code,s.color]));
 const palettes=Object.fromEntries(Object.entries(scales).map(([k,v])=>[k,colorsFor(v)]));
 
-export function renderTile(field,coords){
-  const pixels=new Uint8ClampedArray(256*256*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable),significant=['significant_weather','thunderstorm'].includes(field.variable);
+export function renderTile(field,coords,size=256){
+  const pixels=new Uint8ClampedArray(size*size*4),palette=palettes[field.variable],world=2**coords.z,precipitation=isPrecipitation(field.variable),significant=['significant_weather','thunderstorm'].includes(field.variable);
   if(transparentField(field))return pixels;
-  const sampler=significant?null:createGaussianTileSampler(field.grid,field.data.values,coords)||createRegularTileSampler(field.grid,field.data.values,coords);
+  const sampler=significant?null:createGaussianTileSampler(field.grid,field.data.values,coords,size)||createRegularTileSampler(field.grid,field.data.values,coords,size);
   const cloud=field.variable==='cloud_cover';
   if(cloud&&![field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>a?.length===field.data.values.length))throw Error('Afzonderlijke wolkenlagen ontbreken');
   const cloudValues=cloud?[field.cloudLow,field.cloudMid,field.cloudHigh]:[];
-  const cloudSamplers=cloudValues.map(values=>createGaussianTileSampler(field.grid,values,coords)||createRegularTileSampler(field.grid,values,coords));
+  const cloudSamplers=cloudValues.map(values=>createGaussianTileSampler(field.grid,values,coords,size)||createRegularTileSampler(field.grid,values,coords,size));
   // Per tile, not per pixel: three colour channels and the structure scale.
   const cloudRGB=cloud?new Float64Array(3):null,resolved=cloud?new Float64Array(3):null;
   const cloudVisible=field.cloudVisible??7,texture=field.texture;
-  const longitudes=sampler?.longitudes||Array.from({length:256},(_,x)=>(coords.x+(x+.5)/256)/world*360-180);
-  for(let y=0;y<256;y++){
-    const lat=sampler?.latitudes[y]??Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/256)/world)))*180/Math.PI;
-    const kmPerPixel=40075*Math.cos(lat*Math.PI/180)/(256*world);
+  const longitudes=sampler?.longitudes||Array.from({length:size},(_,x)=>(coords.x+(x+.5)/size)/world*360-180);
+  for(let y=0;y<size;y++){
+    const lat=sampler?.latitudes[y]??Math.atan(Math.sinh(Math.PI*(1-2*(coords.y+(y+.5)/size)/world)))*180/Math.PI;
+    const kmPerPixel=40075*Math.cos(lat*Math.PI/180)/(size*world);
     if(lat<EUROPE[1]||lat>EUROPE[3])continue;
     // A cloud tile draws only from its three layers; interpolating the total
     // field as well would cost a quarter of the tile for a presence check the
@@ -45,11 +45,11 @@ export function renderTile(field,coords){
     const cloudRows=cloudSamplers.map(s=>s?.row(y));
     const lowRow=cloudRows[0],midRow=cloudRows[1],highRow=cloudRows[2];
     if(cloud)cloudResolved(texture,kmPerPixel,resolved);
-    for(let x=0;x<256;x++){
+    for(let x=0;x<size;x++){
       const lon=longitudes[x];if(lon<EUROPE[0]||lon>EUROPE[2])continue;
       const value=significant?field.grid.getNearestNeighborValue(field.data.values,lat,lon):cloud?0:row?row[x]:field.grid.getInterpolatedValue(field.data.values,lat,lon,'monotone');
       if(!Number.isFinite(value))continue;
-      if(significant){const color=significantColors[value];if(color)pixels.set(color,(y*256+x)*4);continue;}
+      if(significant){const color=significantColors[value];if(color)pixels.set(color,(y*size+x)*4);continue;}
       if(cloud){
         const low=lowRow?lowRow[x]:field.grid.getInterpolatedValue(cloudValues[0],lat,lon,'monotone');
         const mid=midRow?midRow[x]:field.grid.getInterpolatedValue(cloudValues[1],lat,lon,'monotone');
@@ -61,14 +61,14 @@ export function renderTile(field,coords){
         const base=field.cloudBase?field.grid.getNearestNeighborValue(field.cloudBase,lat,lon):NaN;
         const a=blendCloudLayers(low,mid,high,lon,lat,texture,kmPerPixel,cloudVisible,base,cloudRGB,resolved);
         if(!a)continue;
-        const p=(y*256+x)*4;
+        const p=(y*size+x)*4;
         pixels[p]=Math.round(cloudRGB[0]);pixels[p+1]=Math.round(cloudRGB[1]);pixels[p+2]=Math.round(cloudRGB[2]);pixels[p+3]=a*255;continue;
       }
-      if(field.variable==='visibility'){writeFogColor(value,pixels,(y*256+x)*4,coords.x*256+x,coords.y*256+y);continue;}
-      if(field.variable==='precipitation_total'||field.variable==='snowfall_total'){totalColor(field.variable,value,pixels,(y*256+x)*4);continue;}
-      if(precipitation){if(value<PRECIPITATION_THRESHOLD)continue;writePrecipitationColor(field.variable,value,pixels,(y*256+x)*4);continue;}
+      if(field.variable==='visibility'){writeFogColor(value,pixels,(y*size+x)*4,coords.x*size+x,coords.y*size+y);continue;}
+      if(field.variable==='precipitation_total'||field.variable==='snowfall_total'){totalColor(field.variable,value,pixels,(y*size+x)*4);continue;}
+      if(precipitation){if(value<PRECIPITATION_THRESHOLD)continue;writePrecipitationColor(field.variable,value,pixels,(y*size+x)*4);continue;}
       const displayValue=field.variable==='wind_u_component_10m'?beaufort(value):value;
-      const c=Math.min(palette.n-1,Math.max(0,Math.round((displayValue-palette.min)/(palette.max-palette.min)*(palette.n-1))))*4,p=(y*256+x)*4;
+      const c=Math.min(palette.n-1,Math.max(0,Math.round((displayValue-palette.min)/(palette.max-palette.min)*(palette.n-1))))*4,p=(y*size+x)*4;
       pixels[p]=palette.rgba[c];pixels[p+1]=palette.rgba[c+1];pixels[p+2]=palette.rgba[c+2];pixels[p+3]=palette.rgba[c+3];
     }
   }

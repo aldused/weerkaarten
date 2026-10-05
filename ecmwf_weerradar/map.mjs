@@ -52,7 +52,7 @@ function renderOnMain(field,coords,signal){
     const frame=frameScheduler.schedule(()=>{
       signal.removeEventListener('abort',cancel);
       if(signal.aborted){reject(abortError(signal));return;}
-      try{resolve(renderTile(field,coords));}catch(error){reject(error);}
+      try{resolve(renderTile(field,coords,field.renderSize||256));}catch(error){reject(error);}
     });
     signal.addEventListener('abort',cancel,{once:true});
   });
@@ -76,7 +76,7 @@ function renderPixels({field,coords},signal){
       }
     }
     const id=++jobCounter;slot.job={id,resolve,reject,field,coords,signal,started:performance.now()};
-    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture,cloudVisible:field.cloudVisible});}
+    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture,cloudVisible:field.cloudVisible,size:field.renderSize||256});}
     catch(error){slot.job=null;reject(error);}
     // A worker's synchronous render cannot be interrupted. Keep its slot busy
     // until the reply arrives, even when subscribers cancel, so no message
@@ -91,20 +91,32 @@ function paint(field,coords,signal){
   // Whole-field extrema are cached by immutable array identity. An invisible
   // layer needs neither a worker upload nor a job for each visible tile.
   if(transparentField(field))return Promise.resolve(transparentPixels);
-  const key=field.key+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;
+  const key=(field.renderSize||256)+'|'+field.key+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;
   return paintQueue.request(key,{field,coords},signal);
 }
 const WeatherTiles=L.GridLayer.extend({
   initialize(url,options){
     L.GridLayer.prototype.initialize.call(this,options);this.url=url;this.requests=new Set();
+    this.on('load',()=>this.refineTiles());
     this.on('tileunload',({tile})=>{
-      tile.weatherRequest?.abort();
+      tile.weatherRequest?.abort();tile.detailRequest?.abort();
       if(this.unloadCheckPending)return;this.unloadCheckPending=true;
       queueMicrotask(()=>{
         this.unloadCheckPending=false;
         if(this._map&&this._loading&&this._noTilesToLoad()){this._loading=false;this.fire('load');}
       });
     });
+  },
+  refineTiles(){
+    for(const {el:tile} of Object.values(this._tiles||{})){
+      const preview=tile.preview;if(!preview)continue;delete tile.preview;
+      const controller=new AbortController();tile.detailRequest=controller;this.requests.add(controller);
+      paint(preview.field,preview.coords,controller.signal).then(pixels=>canvasCommits.commit(()=>{
+        if(controller.signal.aborted)throw abortError(controller.signal);
+        tile.width=tile.height=256;
+        tile.getContext('2d').putImageData(new ImageData(pixels,256,256),0,0);
+      },controller.signal)).catch(()=>{}).finally(()=>{this.requests.delete(controller);delete tile.detailRequest;});
+    }
   },
   onRemove(map){
     for(const controller of this.requests)controller.abort();this.requests.clear();
@@ -122,15 +134,15 @@ const WeatherTiles=L.GridLayer.extend({
     });
   },
   createTile(coords,done){
-    const tile=document.createElement('canvas');tile.width=tile.height=256;
+    const tile=document.createElement('canvas'),size=this.options.preview?128:256;tile.width=tile.height=size;
     const controller=new AbortController(),{signal}=controller;tile.weatherRequest=controller;this.requests.add(controller);
     Promise.resolve().then(()=>{
       if(signal.aborted)throw abortError(signal);
       return weatherLoader(this.url,signal);
-    }).then(field=>paint(field,coords,signal)).then(pixels=>{const queued=performance.now();return canvasCommits.commit(()=>{
+    }).then(field=>{if(this.options.preview)tile.preview={field,coords};return paint({...field,renderSize:size},coords,signal);}).then(pixels=>{const queued=performance.now();return canvasCommits.commit(()=>{
       renderStats.commits++;renderStats.commitWaitMs+=performance.now()-queued;
       if(signal.aborted)throw abortError(signal);
-      tile.getContext('2d').putImageData(new ImageData(pixels,256,256),0,0);done(null,tile);
+      tile.getContext('2d').putImageData(new ImageData(pixels,size,size),0,0);done(null,tile);
     },signal);}).catch(error=>{
       // Never call Leaflet's done for detached tiles: a new tile can already
       // have reused its coordinates. The unload handler settles loading state.
@@ -233,7 +245,7 @@ export class Map {
   getLayer(id){return this.layers.get(id);}
   addLayer(def){
     const source=this.sources.get(def.source);
-    const layer=new WeatherTiles(source.url,{pane:'weather',tileSize:256,minZoom:2,maxZoom:12,maxNativeZoom:10,noWrap:true,keepBuffer:1,updateWhenIdle:true,updateWhenZooming:false,opacity:def.paint['raster-opacity'],bounds:[[29,-26],[73,46]]});
+    const layer=new WeatherTiles(source.url,{preview:!!source.preview,pane:'weather',tileSize:256,minZoom:2,maxZoom:12,maxNativeZoom:10,noWrap:true,keepBuffer:1,updateWhenIdle:true,updateWhenZooming:false,opacity:def.paint['raster-opacity'],bounds:[[29,-26],[73,46]]});
     layer.on('load',()=>this.fire('sourcedata',{sourceId:def.id}));
     layer.once('tileload',()=>this.fire('sourcedata',{sourceId:def.id,firstTile:true}));
     layer.on('tileerror',e=>this.fire('error',{sourceId:def.id,error:e.error}));
