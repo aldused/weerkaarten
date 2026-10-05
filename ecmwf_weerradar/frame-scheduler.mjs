@@ -3,7 +3,8 @@
 // tab otherwise waits for its load timeout and reports a false error.
 // Visible pages keep using requestAnimationFrame, so painting stays aligned
 // with the compositor; a watchdog covers occluded windows that never repaint.
-const WATCHDOG_MS = 120;
+// A stalled compositor must not add 120 ms to each batch of finished tiles.
+const WATCHDOG_MS = 32;
 
 export function createFrameScheduler({
   raf = globalThis.requestAnimationFrame?.bind(globalThis),

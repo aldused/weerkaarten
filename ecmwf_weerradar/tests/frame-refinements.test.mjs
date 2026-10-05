@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {firstFrameSamples,loadRefinements} from '../frame-refinements.mjs';
-test('first view waits for primary weather and enabled isobars; time changes wait for every sample',()=>{
+import {firstFrameLayers,firstFrameSamples,loadRefinements} from '../frame-refinements.mjs';
+test('first view waits for primary weather; isobars follow afterwards; time changes wait for every sample',()=>{
  const all=['cloud_cover','visibility','precipitation','snowfall_water_equivalent','temperature_2m','pressure_msl'];
- assert.deepEqual(firstFrameSamples(all,all.slice(0,4),false),['cloud_cover','precipitation','pressure_msl']);
+ assert.deepEqual(firstFrameSamples(all,all.slice(0,4),false),['cloud_cover','precipitation']);
  assert.deepEqual(firstFrameSamples(all,all.slice(0,4),true),all);
  assert.deepEqual(firstFrameSamples(['temperature_2m'],['temperature_2m'],false),['temperature_2m']);
 });
@@ -13,4 +13,11 @@ test('late refinement of an obsolete model or time never attaches to the new fra
  current=false;finish(12);await pending;assert.deepEqual(applied,[]);
  const settled=await loadRefinements(['ok','bad'],{read:async v=>{if(v==='bad')throw Error('Network');return 10;},isCurrent:()=>true,apply:(v,f)=>applied.push([v,f])});
  assert.deepEqual(applied,[['ok',10]]);assert.equal(settled[1].status,'rejected');
+});
+
+test('startup postpones optional tiles but later time changes keep all weather layers atomic',()=>{
+ const all=['cloud_cover','visibility','precipitation','snowfall_water_equivalent','thunderstorm'];
+ assert.deepEqual(firstFrameLayers(all,false),['cloud_cover','precipitation']);
+ assert.deepEqual(firstFrameLayers(all,true),all);
+ assert.deepEqual(firstFrameLayers(['temperature_2m'],false),['temperature_2m']);
 });

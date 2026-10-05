@@ -6,7 +6,7 @@ import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation
 import {totalLegend} from './accumulation-colors.mjs';
 import {temperatureTimeline} from './temperature-timeline.mjs';
 import {discoverGFS,gfsFieldFile} from './gfs-runs.mjs';
-import {firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
+import {firstFrameLayers,firstFrameSamples,loadRefinements} from './frame-refinements.mjs';
 import {MovingOverlay} from './moving-overlay.mjs';
 import {hasIsobars,drawIsobars,drawIsotherms} from './isobars.mjs';
 import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
@@ -118,7 +118,7 @@ function prepareOtherMode(){
  const frame=current;modePreparation=new AbortController();const signal=modePreparation.signal;
  modePreparationTimer=setTimeout(async()=>{
   try{
-   await detailsReady;signal.throwIfAborted();
+   await Promise.all([detailsReady,startupDetailsReady]);signal.throwIfAborted();
    const variables=['significant_weather',...($('city-labels').checked?['temperature_2m','wind_u_component_10m']:[])];
    const fields=await Promise.all(variables.map(v=>readField(fieldFile(frame,v),v,signal)));
    signal.throwIfAborted();
@@ -489,7 +489,8 @@ async function renderFrame(index,rev,signal,context){
   retryLoad=()=>requestFrame(index,true,context);
   const key=viewKey(frame,layerMode),retained=retainedViews.get(key);
   retainedViews.delete(key);
-  const ids=retained?.ids??vars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
+  const initialVars=firstFrameLayers(vars,!!current);
+  const ids=retained?.ids??initialVars.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
   // The first view reveals each layer as soon as its first tile is painted. Later time changes
   // remain atomic, so there is never a mixture of different forecast hours.
   let reveal;
@@ -515,7 +516,7 @@ async function renderFrame(index,rev,signal,context){
     // The first map must not wait for mist and snow: both are refinements of
     // the same frame and cost roughly half of all tiles. A later time change
     // still switches every layer together, so no two hours are ever mixed.
-    const requiredIds=!current&&ids.length>1?ids.filter((id,i)=>!OPTIONAL_LAYERS.includes(vars[i])):ids;
+    const requiredIds=ids;
     let [,...fields]=await Promise.all([awaitSources(requiredIds.length?requiredIds:ids,signal),...sampleVars.map(v=>readField(fieldFile(frame,v),v,signal))]);
     // A pan during loading may change the crop while the time stays the same.
     // Commit city/point values only once they cover the current tile window.
@@ -534,11 +535,12 @@ async function renderFrame(index,rev,signal,context){
     const committed=current;
     // City temperatures and optional first-frame fields must not hold up the
     // primary weather. They may only attach to this exact committed frame.
-    if(deferredVars.length)void loadRefinements(deferredVars,{
+    const refinements=loadRefinements(deferredVars,{
       read:variable=>readField(fieldFile(frame,variable),variable,signal),
       isCurrent:()=>current===committed&&rev===revision,
       apply:(variable,field)=>{committed.samples[variable]=field;syncUI();queueCityDraw();updatePoint();},
     });
+    if(!old)startupDetailsReady=Promise.allSettled([refinements,attachStartupLayers(committed,vars.filter(v=>!initialVars.includes(v)),rev,signal)]);
     if(old?.timeline!==current.timeline){
       buildTimeline(current.timeline);
       // Only after the replacement frame is usable may obsolete runs leave
@@ -573,6 +575,20 @@ async function renderFrame(index,rev,signal,context){
     status(`De weergegevens konden niet worden geladen. ${current?'De vorige tijdstap blijft zichtbaar.':'Probeer opnieuw.'}`,true);
     return false;
   }finally{if(reveal&&(rev!==revision||ids.every(id=>!map.getSource(id)||map.isSourceLoaded(id))))map.off('sourcedata',reveal);}
+}
+// Optional weather tiles do not compete with the first cloud/rain image.
+let startupDetailsReady=Promise.resolve();
+async function attachStartupLayers(frame,variables,rev,signal){
+  const ids=variables.map(v=>addLayer(frame,v,`frame${sourceCounter}`));sourceCounter++;
+  frame.ids.push(...ids);
+  const reveal=event=>{
+    if(current!==frame||rev!==revision)return;
+    for(const id of ids)if(map.getSource(id)&&!frameErrors.has(id)&&(map.isSourceLoaded(id)||(event?.firstTile&&event.sourceId===id)))map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100);
+  };
+  map.on('sourcedata',reveal);
+  try{await awaitSources(ids,signal);reveal();}
+  catch{if(current===frame){removeLayers(ids);frame.ids=frame.ids.filter(id=>!ids.includes(id));}}
+  finally{map.off('sourcedata',reveal);}
 }
 let detailsStarted=false,detailsReady=Promise.resolve();
 function loadMapDetails(){
@@ -709,7 +725,7 @@ function prepareAdjacentFrames(){
   const limited=connection?.saveData||['slow-2g','2g','3g'].includes(connection?.effectiveType)||matchMedia('(max-width:700px), (pointer:coarse)').matches;
   adjacentFrames.start(frame.index,frame.timeline.length,async(index,signal)=>{
     // Let the selected view and its map labels finish first on slow links.
-    await detailsReady;signal.throwIfAborted();
+    await Promise.all([detailsReady,startupDetailsReady]);signal.throwIfAborted();
     const next=frame.timeline[index],vars=variablesForMode(next.modelMeta,next);
     const sampleVars=sampleVariables(vars,next.modelMeta);
     const fields=await Promise.all(sampleVars.map(v=>readField(fieldFile(next,v),v,signal)));

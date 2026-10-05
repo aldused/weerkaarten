@@ -144,7 +144,7 @@ export class Map {
   constructor(options){
     this.el=document.getElementById(options.container);this.sources=new globalThis.Map();this.layers=new globalThis.Map();this.events=new globalThis.Map();
     const bounds=options.maxBounds.map(ll);
-    this.native=L.map(this.el,{zoomControl:false,attributionControl:false,preferCanvas:true,zoomSnap:1,zoomDelta:1,maxBounds:bounds,maxBoundsViscosity:1,minZoom:options.minZoom+1,maxZoom:options.maxZoom+1}).setView(ll(options.center),Math.round(options.zoom+1));
+    this.native=L.map(this.el,{zoomControl:false,attributionControl:false,preferCanvas:true,zoomSnap:0.25,zoomDelta:0.25,wheelPxPerZoomLevel:240,maxBounds:bounds,maxBoundsViscosity:1,minZoom:options.minZoom+1,maxZoom:options.maxZoom+1}).setView(ll(options.center),Math.round(options.zoom+1));
     this.native.createPane('weather');this.native.getPane('weather').style.zIndex=350;
     this.native.createPane('land');this.native.getPane('land').style.zIndex=250;this.native.getPane('land').style.pointerEvents='none';
     this.native.createPane('borders');this.native.getPane('borders').style.zIndex=450;this.native.getPane('borders').style.pointerEvents='none';
