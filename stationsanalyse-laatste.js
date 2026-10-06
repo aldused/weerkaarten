@@ -62,7 +62,7 @@
   const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=800;canvas.style.cssText='display:block;width:100%!important;max-width:680px!important;height:auto!important;min-width:0;aspect-ratio:7/4;background:white;border:1px solid #dbe3ef;border-radius:10px';canvas.setAttribute('role','img');
   const caption=document.createElement('figcaption');caption.style.cssText='line-height:1.6;margin:10px 0';
   const download=document.createElement('button');download.type='button';download.className='btn-analyseer';download.textContent='Download maandgrafiek (PNG)';
-  const copyright=document.createElement('p');copyright.textContent='© Weerlab.nl · Ed Aldus';copyright.style.cssText='font-size:12px;color:#64748b;margin:8px 0';
+  const copyright=document.createElement('p');copyright.textContent='© Weerlab.nl · Ed Aldus · Bron: KNMI';copyright.style.cssText='font-size:12px;color:#64748b;margin:8px 0';
   figure.append(canvas,caption,download,copyright);answer.after(figure);
   let chartFile='';
   download.addEventListener('click',()=>canvas.toBlob(blob=>{
