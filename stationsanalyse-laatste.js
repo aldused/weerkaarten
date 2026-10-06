@@ -58,8 +58,8 @@
   function syncMargin(){marginGroup.hidden=$('last-tx-op').value!=='eq';} $('last-tx-op').addEventListener('change',syncMargin);syncMargin();
   const help=document.createElement('p');help.textContent='Bij 15 °C en een marge van ±0,5 °C zoeken we dagmaxima van 14,5 tot en met 15,5 °C. Stel de marge in op 0 voor exact 15,0 °C. De marge geldt alleen bij Rond deze temperatuur.';$('last-tx-form').after(help);
   function conditionText(threshold,op,margin){const n=v=>v.toLocaleString('nl-NL',{maximumFractionDigits:6});return op==='eq' && margin>0 ? `rond ${n(threshold)} °C (${n(threshold-margin)} t/m ${n(threshold+margin)} °C)` : `${phrase[op]} ${n(threshold)} °C`;}
-  const figure=document.createElement('figure');figure.hidden=true;figure.style.margin='20px 0';
-  const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=800;canvas.style.cssText='width:100%;height:auto;background:white;border:1px solid #dbe3ef;border-radius:10px';canvas.setAttribute('role','img');
+  const figure=document.createElement('figure');figure.hidden=true;figure.style.cssText='margin:20px 0;width:100%;max-width:760px';
+  const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=800;canvas.style.cssText='display:block;width:100%;height:auto;background:white;border:1px solid #dbe3ef;border-radius:10px';canvas.setAttribute('role','img');
   const caption=document.createElement('figcaption');caption.style.cssText='line-height:1.6;margin:10px 0';
   const download=document.createElement('button');download.type='button';download.className='btn-analyseer';download.textContent='Download maandgrafiek (PNG)';
   figure.append(canvas,caption,download);answer.after(figure);
