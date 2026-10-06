@@ -62,7 +62,8 @@
   const canvas=document.createElement('canvas');canvas.width=1400;canvas.height=800;canvas.style.cssText='display:block;width:100%!important;max-width:680px!important;height:auto!important;min-width:0;aspect-ratio:7/4;background:white;border:1px solid #dbe3ef;border-radius:10px';canvas.setAttribute('role','img');
   const caption=document.createElement('figcaption');caption.style.cssText='line-height:1.6;margin:10px 0';
   const download=document.createElement('button');download.type='button';download.className='btn-analyseer';download.textContent='Download maandgrafiek (PNG)';
-  figure.append(canvas,caption,download);answer.after(figure);
+  const copyright=document.createElement('p');copyright.textContent='© Weerlab.nl · Ed Aldus';copyright.style.cssText='font-size:12px;color:#64748b;margin:8px 0';
+  figure.append(canvas,caption,download,copyright);answer.after(figure);
   let chartFile='';
   download.addEventListener('click',()=>canvas.toBlob(blob=>{
     if(!blob)return;const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=chartFile;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -92,7 +93,7 @@
       if(day===m.dd){c.fillStyle='#9a3412';c.font='bold 21px system-ui';c.fillText(r.tx.toLocaleString('nl-NL',{minimumFractionDigits:1})+' °C',x(day),py-14);c.font='20px system-ui';}
     }
     c.textAlign='left';c.font='22px system-ui';c.fillStyle='#2563eb';c.fillText('■ Dagmaximum (TX)',100,715);c.fillStyle='#ea580c';c.fillText('■ Laatste passende dag',400,715);c.fillStyle='#7c3aed';c.fillText('┄ Gekozen temperatuur',770,715);
-    c.fillStyle='#64748b';c.font='19px system-ui';c.fillText('Bron: KNMI-daggegevens · Weerlab.nl · × = geen meetwaarde of nog niet beschikbaar · vandaag uitgesloten',100,760);
+    c.fillStyle='#64748b';c.font='19px system-ui';c.fillText('Bron: KNMI · © Weerlab.nl / Ed Aldus · × = ontbrekend of nog niet beschikbaar · vandaag uitgesloten',100,760);
     caption.textContent=`${subtitle}. Blauw: dagmaximum; oranje: gevonden dag; paarse stippellijn: ${threshold.toLocaleString('nl-NL')} °C.${op==='eq' && result.margin>0?' Het paarse vlak toont het zoekbereik.':''} De grafiek toont de maand van de gevonden dag. Ontbrekende en toekomstige dagen zijn met × aangegeven.`;
     figure.hidden=false;
   }
