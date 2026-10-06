@@ -1,6 +1,7 @@
 #!/usr/local/bin/python3
 """Loopback-only, fixed-task newspaper rewrite service."""
 import json, os, subprocess, tempfile, threading, time
+from urllib.request import Request, urlopen
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from datetime import datetime
@@ -11,7 +12,7 @@ ORIGINS={'https://weerlab.nl','https://www.weerlab.nl','http://weerlab.nl'}
 STATE_FILE=ROOT.parent/'artifacts/kranten-demo/local_service_state.json'
 try: STATE=json.loads(STATE_FILE.read_text())
 except (OSError,ValueError): STATE={'state':'idle','message':'Redactieservice beschikbaar.'}
-if STATE.get('state')=='running': STATE={'state':'error','message':'Redactieservice is herstart. Controleer de laatste online editie en start zo nodig opnieuw.'}
+if STATE.get('state')=='running': STATE={**STATE,'state':'error','message':'Redactieservice is herstart. Controleer de laatste online editie en start zo nodig opnieuw.'}
 LOCK=threading.Lock()
 
 def update_state(state,message,**extra):
@@ -74,6 +75,32 @@ def rewrite():
         update_state('error','Redactieronde niet voltooid: '+str(error)[:1200])
         print(str(error),flush=True)
 
+REMOTE_CONFIG=Path.home()/'.config/weerlab/kranten_remote.json'
+def remote_call(path,payload):
+    config=json.loads(REMOTE_CONFIG.read_text())
+    request=Request(config['url']+path,data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+config['token'],'Content-Type':'application/json','User-Agent':'Weerlab-Krantenredactie/1.0 Mozilla/5.0'})
+    with urlopen(request,timeout=20) as response:return json.load(response)
+
+def remote_loop():
+    while True:
+        try:
+            if not REMOTE_CONFIG.exists(): time.sleep(10);continue
+            with LOCK: current=dict(STATE)
+            if current.get('remoteId'):
+                message=current.get('message','') if current.get('state')!='error' else 'Redactieronde niet voltooid. Controleer de redactieservice op de Mac van Ed.'
+                remote_call('/agent/update',{'id':current['remoteId'],'state':current['state'],'message':message})
+            result=remote_call('/agent/poll',{})
+            job=result.get('job')
+            if job:
+                with LOCK:
+                    if STATE.get('state')!='running' and STATE.get('remoteId')!=job['id']:
+                        STATE.clear();STATE.update(state='running',message='Redactieverzoek van de website ontvangen.',remoteId=job['id'],startedAt=datetime.now(ZoneInfo('Europe/Amsterdam')).isoformat())
+                        STATE_FILE.parent.mkdir(parents=True,exist_ok=True);STATE_FILE.write_text(json.dumps(STATE))
+                        threading.Thread(target=rewrite,daemon=True).start()
+        except Exception as error:
+            print('Wachtrijverbinding tijdelijk niet beschikbaar: '+str(error)[:150],flush=True)
+        time.sleep(5)
+
 class Handler(BaseHTTPRequestHandler):
     def allowed(self): return self.headers.get('Origin') in ORIGINS and self.headers.get('Host')=='127.0.0.1:8766'
     def send(self,status,payload):
@@ -106,4 +133,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     os.environ['PATH']='/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+    threading.Thread(target=remote_loop,daemon=True).start()
     ThreadingHTTPServer(('127.0.0.1',8766),Handler).serve_forever()

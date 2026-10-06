@@ -165,6 +165,7 @@
   async function getJson(path) {
     const response=await fetch(path+'?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.ok) throw Error('HTTP '+response.status);
+    if(!response.headers.get('Content-Type')?.includes('application/json'))throw Error('Aanmelding verlopen. Log opnieuw in op Weerlab.');
     return response.json();
   }
   async function load(manual=false) {
@@ -200,33 +201,42 @@
   $('download').addEventListener('click',()=>data&&download(exportText(PAPER[paper].ids),paper+'-'+data.publicationDate+'.txt'));
   $('print').addEventListener('click',()=>data&&window.print());
   let rewriteTimer;
-  async function localRedaction(path,options={}) {
-    const response=await fetch('http://127.0.0.1:8766'+path,{...options,signal:AbortSignal.timeout(8000)});
-    if(!response.ok)throw Error('Redactieservice geeft HTTP '+response.status);
+  async function remoteRedaction(path,options={}) {
+    const response=await fetch('/api/kranten'+path,{...options,credentials:'same-origin',signal:AbortSignal.timeout(12000)});
+    if(!response.ok){const result=await response.json().catch(()=>({}));throw Error(result.error||'Redactieservice geeft HTTP '+response.status);} 
+    if(!response.headers.get('Content-Type')?.includes('application/json'))throw Error('Aanmelding verlopen. Log opnieuw in op Weerlab.');
     return response.json();
   }
   async function pollRewrite() {
     try {
-      const result=await localRedaction('/status');
+      const result=await remoteRedaction('/status');
       $('rewrite-status').textContent=result.message;
-      $('rewrite').disabled=result.state==='running';
-      if(result.state==='running')rewriteTimer=setTimeout(pollRewrite,3000);
+      $('rewrite').disabled=['queued','running'].includes(result.state);
+      if(['queued','running'].includes(result.state))rewriteTimer=setTimeout(pollRewrite,3000);
       else if(result.state==='done'){await load();toast(pending?'Nieuwe teksten klaar; je eigen wijzigingen blijven bewaard.':'Nieuwe teksten geladen.');}
-    } catch {
+    } catch(error) {
       $('rewrite').disabled=false;
-      $('rewrite-status').textContent='Geen verbinding met de redactieservice op deze Mac. Controleer of de Mac aanstaat en geef de browser toegang tot het lokale netwerk als daarom wordt gevraagd.';
+      $('rewrite-status').textContent='Status ophalen lukt niet. '+error.message;
     }
   }
+  async function resumeRemoteRedaction(){
+    try {
+      const result=await remoteRedaction('/status');
+      if(['queued','running'].includes(result.state)){await pollRewrite();}
+      else if(!result.macOnline)$('rewrite-status').textContent='De Mac van Ed is niet verbonden. Een verzoek blijft wachten totdat de Mac online is.';
+    } catch {}
+  }
+  resumeRemoteRedaction();
   $('rewrite').addEventListener('click',async()=>{
     clearTimeout(rewriteTimer);$('rewrite').disabled=true;
     $('rewrite-status').textContent='Redactieronde starten…';
     try {
-      const result=await localRedaction('/rewrite',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const result=await remoteRedaction('/rewrite',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
       $('rewrite-status').textContent=result.message;
       rewriteTimer=setTimeout(pollRewrite,1000);
-    } catch {
+    } catch(error) {
       $('rewrite').disabled=false;
-      $('rewrite-status').textContent='Starten lukt niet. De lokale redactieservice moet op deze Mac actief zijn. Geef de browser toegang tot het lokale netwerk als daarom wordt gevraagd.';
+      $('rewrite-status').textContent='Starten lukt niet. '+error.message;
     }
   });
   $('refresh').addEventListener('click',()=>load(true));
