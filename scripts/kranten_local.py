@@ -2,6 +2,7 @@
 """Loopback-only, fixed-task newspaper rewrite service."""
 import json, os, subprocess, tempfile, threading, time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from datetime import datetime
@@ -79,16 +80,23 @@ REMOTE_CONFIG=Path.home()/'.config/weerlab/kranten_remote.json'
 def remote_call(path,payload):
     config=json.loads(REMOTE_CONFIG.read_text())
     request=Request(config['url']+path,data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+config['token'],'Content-Type':'application/json','User-Agent':'Weerlab-Krantenredactie/1.0 Mozilla/5.0'})
-    with urlopen(request,timeout=20) as response:return json.load(response)
+    try:
+        with urlopen(request,timeout=20) as response:return json.load(response)
+    except HTTPError as error:
+        if path=='/agent/update' and error.code==409:return {'stale':True}
+        raise
 
 def remote_loop():
+    reported=None
     while True:
         try:
             if not REMOTE_CONFIG.exists(): time.sleep(10);continue
             with LOCK: current=dict(STATE)
-            if current.get('remoteId'):
+            signature=(current.get('remoteId'),current.get('state'),current.get('message'))
+            if current.get('remoteId') and signature!=reported:
                 message=current.get('message','') if current.get('state')!='error' else 'Redactieronde niet voltooid. Controleer de redactieservice op de Mac van Ed.'
                 remote_call('/agent/update',{'id':current['remoteId'],'state':current['state'],'message':message})
+                reported=signature
             result=remote_call('/agent/poll',{})
             job=result.get('job')
             if job:
@@ -99,7 +107,7 @@ def remote_loop():
                         threading.Thread(target=rewrite,daemon=True).start()
         except Exception as error:
             print('Wachtrijverbinding tijdelijk niet beschikbaar: '+str(error)[:150],flush=True)
-        time.sleep(5)
+        time.sleep(5 if STATE.get('state')=='running' else 15)
 
 class Handler(BaseHTTPRequestHandler):
     def allowed(self): return self.headers.get('Origin') in ORIGINS and self.headers.get('Host')=='127.0.0.1:8766'
