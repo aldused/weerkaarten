@@ -43,7 +43,7 @@
   document.head.append(style);
   const answer=document.createElement('div');answer.id='last-tx-answer';answer.hidden=true;answer.setAttribute('role','region');answer.setAttribute('aria-label','Antwoord op uw temperatuurvraag');answer.tabIndex=-1;
   $('last-tx-status').after(answer);
-  const help=document.createElement('p');help.textContent='Minstens 15 °C betekent: het dagmaximum was 15 °C of hoger. Kies Exact gelijk als u uitsluitend een dagmaximum van 15,0 °C zoekt.';$('last-tx-form').after(help);
+  const help=document.createElement('p');help.textContent='Standaard zoeken we exact de ingevoerde dagmaximumtemperatuur. Bij 10 °C tellen alleen dagen met TX 10,0 °C mee, geen warmere of koudere dagen. Kies een andere vergelijking als u ook warmere of koudere dagen wilt meenemen.';$('last-tx-form').after(help);
   let version=0;
   $('last-tx-form').addEventListener('submit',async event=>{
     event.preventDefault(); const current=++version;
