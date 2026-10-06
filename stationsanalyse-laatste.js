@@ -36,6 +36,14 @@
   const stations=Object.entries(STATIONS).filter(([,s])=>!s.historisch).sort((a,b)=>a[1].naam.localeCompare(b[1].naam));
   for(const [id,s] of stations){const o=document.createElement('option');o.value=id;o.textContent=`${s.naam} (${id})`;o.selected=id==='260';$('last-tx-station').append(o);}
   const formatDate=epoch=>new Intl.DateTimeFormat('nl-NL',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'}).format(epoch);
+  const phrase={ge:'minstens',gt:'meer dan',le:'hoogstens',lt:'minder dan',eq:'exact'};
+  const section=$('last-tx-form').closest('section');
+  const style=document.createElement('style');
+  style.textContent=`#laatste-temperatuur{margin:20px;padding:24px;background:#fff;border:2px solid #2563eb;border-radius:14px}#laatste-temperatuur h2{font-size:1.4rem;margin-bottom:10px}#laatste-temperatuur p{line-height:1.6;margin:12px 0}#laatste-temperatuur .controls{flex-wrap:wrap;padding:16px 0}#last-tx-answer{padding:20px;background:#eff6ff;border-radius:10px;margin:16px 0}#last-tx-answer h3{font-size:1.25rem;line-height:1.5;color:#123b77}#laatste-temperatuur table{width:100%;border-collapse:collapse}#laatste-temperatuur th,#laatste-temperatuur td{padding:12px;text-align:left;border-bottom:1px solid #dbe3ef}#laatste-temperatuur .detail-scroll{overflow-x:auto}#last-tx-answer[hidden]{display:none}`;
+  document.head.append(style);
+  const answer=document.createElement('div');answer.id='last-tx-answer';answer.hidden=true;answer.setAttribute('role','region');answer.setAttribute('aria-label','Antwoord op uw temperatuurvraag');answer.tabIndex=-1;
+  $('last-tx-status').after(answer);
+  const help=document.createElement('p');help.textContent='Minstens 15 °C betekent: het dagmaximum was 15 °C of hoger. Kies Exact gelijk als u uitsluitend een dagmaximum van 15,0 °C zoekt.';$('last-tx-form').after(help);
   let version=0;
   $('last-tx-form').addEventListener('submit',async event=>{
     event.preventDefault(); const current=++version;
@@ -45,7 +53,7 @@
     const selection=$('last-tx-station').value;
     const ids=selection==='all'?stations.map(([id])=>id):[selection];
     const today=todayEpoch(); const results=new Map();let done=0;
-    $('last-tx-results').replaceChildren();
+    $('last-tx-results').replaceChildren(); answer.hidden=true; answer.replaceChildren();
     $('last-tx-caption').textContent=`Laatste dag vóór vandaag met TX ${symbols[op]} ${threshold.toLocaleString('nl-NL')} °C`;
     const button=event.target.querySelector('button'); button.disabled=true;
     $('last-tx-status').textContent=`Dagreeksen laden: 0/${ids.length}`;
@@ -53,7 +61,7 @@
     let next=0;
     async function worker(){
       while(next<ids.length && current===version){const id=ids[next++];
-        try{const response=await fetch(R2_BASE+`dagdata_${id}.json?t=${Date.now()}`);if(!response.ok)throw new Error('Dagreeks niet geladen');results.set(id,search(await response.json(),threshold,op,today));}
+        try{const response=await fetch((['localhost','127.0.0.1'].includes(location.hostname) ? '' : 'https://data.weerlab.nl/')+`dagdata_${id}.json?t=${Date.now()}`);if(!response.ok)throw new Error('Dagreeks niet geladen');results.set(id,search(await response.json(),threshold,op,today));}
         catch(error){results.set(id,{error:error.message});}
         done++;if(current===version)$('last-tx-status').textContent=`Dagreeksen laden: ${done}/${ids.length}`;
       }
@@ -66,7 +74,21 @@
         const cells=[STATIONS[id].naam,r.error?'Niet beschikbaar':m?formatDate(m.epoch):'Niet gevonden in beschikbare dagreeks',m?m.tx.toLocaleString('nl-NL',{minimumFractionDigits:1})+' °C':'–',m?String(m.days):'–',coverage];
         const tr=document.createElement('tr');for(const text of cells){const td=document.createElement('td');td.textContent=text;tr.append(td);}$('last-tx-results').append(tr);
       }
-      $('last-tx-status').textContent=`${ids.length} stations verwerkt. Vandaag is uitgesloten; uitkomsten gelden voor de beschikbare TX-waarnemingen.`;
+      answer.hidden=false;
+      const title=document.createElement('h3'),detail=document.createElement('p');
+      const condition=`${phrase[op]} ${threshold.toLocaleString('nl-NL')} °C`;
+      if(selection!=='all'){
+        const r=results.get(selection),m=r.match,name=STATIONS[selection].naam;
+        title.textContent=r.error?`${name}: de daggegevens konden niet worden geladen.`:m?`${name}: voor het laatst ${condition} op ${formatDate(m.epoch)}.`:`${name}: geen dagmaximum van ${condition} gevonden.`;
+        detail.textContent=r.error?r.error:m?`Maximumtemperatuur die dag: ${m.tx.toLocaleString('nl-NL',{minimumFractionDigits:1})} °C · ${m.days} ${m.days===1?'dag':'dagen'} geleden.`:'Er is gezocht in alle beschikbare TX-daggegevens vóór vandaag.';
+        if(r.gaps)detail.textContent+=' Er ontbreken meetdagen; dit is de laatste gevonden waarneming.';
+      }else{
+        title.textContent=`Wanneer was het voor het laatst ${condition}?`;
+        detail.textContent=`Hieronder staat het antwoord afzonderlijk voor elk station. ${[...results.values()].filter(r=>r.match).length} van de ${ids.length} stations hebben een passende dag.`;
+      }
+      answer.append(title,detail);
+      $('last-tx-status').textContent='Zoekopdracht voltooid. Vandaag is uitgesloten.';
+      answer.focus({preventScroll:true});answer.scrollIntoView({behavior:'smooth',block:'nearest'});
     }finally{if(current===version)button.disabled=false;}
   });
 })();
