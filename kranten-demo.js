@@ -48,6 +48,13 @@
     if (!messages.length) messages.push('Concept voor '+formatDate(data.publicationDate)+'. ‘Vandaag’ verwijst in de krant naar deze datum. Lees de teksten na vóór aanlevering.');
     $('alert').textContent=messages.join(' ');
     $('alert').className='notice'+(data.sourceDate!==today()||checkStatus?.ok===false?' error':data.demoOnly?'':' good');
+    $('update-summary').textContent=checkStatus ? 'Laatste controle: '+formatDate(checkStatus.checkedAt)+' om '+formatTime(checkStatus.checkedAt)+' uur · '+(checkStatus.ok ? checkStatus.message : 'Controle mislukt: '+checkStatus.message)+' Laatste tekstversie: '+formatTime(data.updatedAt)+' uur.' : 'Broncontrole niet beschikbaar.';
+    $('update-history').replaceChildren(...(checkStatus?.history || []).slice().reverse().map(entry=>{
+      const li=document.createElement('li');
+      const labels={vk_kort:'Volkskrant kort',vk_lang:'Volkskrant lang',trouw:'Trouw',parool:'Parool',ad:'AD'};
+      li.textContent=formatTime(entry.checkedAt)+' uur · '+entry.message+(entry.changedArticles?.length ? ' '+entry.changedArticles.map(key=>labels[key]||key).join(', ')+'.' : '');
+      return li;
+    }));
     $('check-status').textContent=checkStatus ? 'Broncontrole: '+formatDate(checkStatus.checkedAt)+' · '+formatTime(checkStatus.checkedAt)+' uur'+(checkStatus.ok?'':' · mislukt') : 'Status van broncontrole niet beschikbaar';
   }
   function subject() { return 'Weerbericht voor '+formatDate(data.publicationDate)+' '+formatTime(data.updatedAt)+' uur door Buienradar'; }

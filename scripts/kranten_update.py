@@ -103,7 +103,7 @@ def parse_source(raw, now):
     published = datetime(int(year), MONTHS.index(month) + 1, int(day), int(hour), int(minute), tzinfo=TZ)
     if published.date() != now.date() or published > now + timedelta(minutes=5):
         raise ValueError('De bron is niet van vandaag of ligt in de toekomst; geen nieuwe editie gemaakt.')
-    tomorrow_indices = [i for i, p in enumerate(parser.blocks) if re.match(r'^Morgen\b', p, re.I)]
+    tomorrow_indices = [i for i, p in enumerate(parser.blocks) if re.match(r'^Morgen(?:ochtend|middag|avond)?\b', p, re.I)]
     # Sommige bronnen beginnen de volgende dag met de weekdag in plaats van 'Morgen'.
     # Gebruik uitsluitend de berekende volgende weekdag aan het begin van een alinea.
     if not tomorrow_indices:
@@ -184,6 +184,18 @@ def validate(candidate, source, now):
     return errors
 
 
+def write_status(value):
+    path = DATA / 'kranten_status.json'
+    previous = json.loads(path.read_text()) if path.exists() else {}
+    history = previous.get('history', [])
+    if not history and previous.get('checkedAt'):
+        history = [{k: previous[k] for k in ('checkedAt', 'ok', 'message') if k in previous}]
+    day = value['checkedAt'][:10]
+    history = [entry for entry in history if entry.get('checkedAt', '')[:10] == day]
+    value['history'] = (history + [dict(value)])[-48:]
+    atomic_json(path, value)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['fetch', 'validate', 'publish'])
@@ -207,9 +219,10 @@ def main():
             # The page compares sourceId with the edition. Keep that comparison
             # stable when only the source title or timestamp changed.
             visible_id = edition['sourceId'] if matched else source['id']
-            atomic_json(DATA / 'kranten_status.json', {
+            write_status({
                 'checkedAt': now.isoformat(), 'ok': True, 'sourceId': visible_id,
-                'checkedSourceId': source['id'], 'message': 'Bron opgehaald.'})
+                'checkedSourceId': source['id'], 'textChanged': False,
+                'message': 'Tekst ongewijzigd.' if matched else 'Nieuwe bron beschikbaar; tekst wacht op verwerking.'})
             print(json.dumps(source, ensure_ascii=False, indent=2))
         else:
             if not args.candidate:
@@ -231,17 +244,18 @@ def main():
                 }
                 candidate['usedParagraphs'] = list(range(len(selected)))
                 candidate['revision'] = hashlib.sha256(json.dumps(candidate, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+                previous = {}
                 current = DATA / 'kranten_demo.json'
                 if current.exists():
                     previous = json.loads(current.read_text())
                     archive = ROOT / 'kranten-archief' / (previous['publicationDate'] + '-' + previous['revision'] + '.json')
                     atomic_json(archive, previous)
                 atomic_json(current, candidate)
-                atomic_json(DATA / 'kranten_status.json', {'checkedAt': now.isoformat(), 'ok': True, 'sourceId': source['id'], 'message': 'Concepten bijgewerkt.'})
+                write_status({'checkedAt': now.isoformat(), 'ok': True, 'sourceId': source['id'], 'textChanged': previous.get('articles') != candidate['articles'], 'changedArticles': [key for key in candidate['articles'] if previous.get('articles', {}).get(key) != candidate['articles'][key]], 'message': 'Tekst aangepast.' if previous.get('articles') != candidate['articles'] else 'Tekst ongewijzigd.'})
             print('OK: krantdatum, vijf versies, bronverwijzing, tekstlengtes, titels en basisleestekens gecontroleerd.')
     except Exception as error:
         if args.command in {'fetch', 'publish'}:
-            atomic_json(DATA / 'kranten_status.json', {'checkedAt': now.isoformat(), 'ok': False, 'message': str(error)})
+            write_status({'checkedAt': now.isoformat(), 'ok': False, 'message': str(error)})
         parser.exit(1, str(error) + '\n')
 
 
