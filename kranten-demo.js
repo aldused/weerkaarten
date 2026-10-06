@@ -39,7 +39,15 @@
       typeof value.author==='string' && !isNaN(Date.parse(value.updatedAt)) && value.source && Array.isArray(value.source.paragraphs) && Array.isArray(value.usedParagraphs) &&
       Object.keys(SPECS).every(k=>typeof value.articles?.[k]?.title==='string' && typeof value.articles?.[k]?.body==='string');
   }
+  function renderSchedule(now=new Date()) {
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now);
+    const hour=Number(parts.find(p=>p.type==='hour').value);
+    const hours=Array.from({length:7},(_,i)=>i+7).filter(h=>h>hour);
+    const times=(hours.length?hours:Array.from({length:7},(_,i)=>i+7)).map(h=>String(h).padStart(2,'0')+'.00').join(' · ');
+    $('next-updates').textContent=(hours.length?'Vandaag: ':'Morgen: ')+times+' uur';
+  }
   function notice() {
+    renderSchedule();
     const messages=[];
     if (data.sourceDate!==today()) messages.push('Verouderde editie: deze concepten zijn geschreven op '+formatDate(data.sourceDate)+'. Wacht op een actuele versie voor aanlevering.');
     if (checkStatus?.ok===false) messages.push('Laatste broncontrole mislukt. De eerdere concepten zijn behouden. '+checkStatus.message);
@@ -205,5 +213,6 @@
   });
   window.addEventListener('resize',()=>{if(data)PAPER[paper].ids.forEach(updateArticle);});
   window.addEventListener('beforeprint',()=>{if(data){notice();PAPER[paper].ids.forEach(updateArticle);}});
+  renderSchedule();setInterval(renderSchedule,30000);
   load();setInterval(load,60000);
 })();
