@@ -8,11 +8,17 @@ from zoneinfo import ZoneInfo
 ROOT=Path('/Users/aldus/KNMI_Project/weerlab')
 CODEX='/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'
 ORIGINS={'https://weerlab.nl','https://www.weerlab.nl','http://weerlab.nl'}
-STATE={'state':'idle','message':'Redactieservice beschikbaar.'}
+STATE_FILE=ROOT.parent/'artifacts/kranten-demo/local_service_state.json'
+try: STATE=json.loads(STATE_FILE.read_text())
+except (OSError,ValueError): STATE={'state':'idle','message':'Redactieservice beschikbaar.'}
+if STATE.get('state')=='running': STATE={'state':'error','message':'Redactieservice is herstart. Controleer de laatste online editie en start zo nodig opnieuw.'}
 LOCK=threading.Lock()
 
 def update_state(state,message,**extra):
-    with LOCK: STATE.update(state=state,message=message,**extra)
+    with LOCK:
+        STATE.update(state=state,message=message,**extra)
+        STATE_FILE.parent.mkdir(parents=True,exist_ok=True)
+        STATE_FILE.write_text(json.dumps(STATE,ensure_ascii=False))
 
 def command(args,**kwargs):
     result=subprocess.run(args,capture_output=True,text=True,cwd=ROOT,**kwargs)
@@ -52,11 +58,15 @@ def rewrite():
         update_state('running','Websitepublicatie afronden…')
         deadline=time.monotonic()+600
         while time.monotonic()<deadline:
-            deployments=json.loads(command(['/opt/homebrew/bin/gh','api',f'repos/aldused/weerkaarten/deployments?sha={sha}&per_page=5'],timeout=30).stdout)
-            if deployments:
-                statuses=json.loads(command(['/opt/homebrew/bin/gh','api',f"repos/aldused/weerkaarten/deployments/{deployments[0]['id']}/statuses"],timeout=30).stdout)
-                if statuses and statuses[0]['state']=='success': break
-                if statuses and statuses[0]['state'] in ('failure','error'): raise RuntimeError('Websitepublicatie mislukt; vorige online teksten blijven beschikbaar.')
+            deployments=json.loads(command(['/opt/homebrew/bin/gh','api','repos/aldused/weerkaarten/deployments?per_page=10'],timeout=30).stdout)
+            confirmed=False
+            command(['git','fetch','origin','main'],timeout=60)
+            for deployment in deployments:
+                ancestor=subprocess.run(['git','merge-base','--is-ancestor',sha,deployment['sha']],cwd=ROOT,capture_output=True)
+                if ancestor.returncode: continue
+                statuses=json.loads(command(['/opt/homebrew/bin/gh','api',f"repos/aldused/weerkaarten/deployments/{deployment['id']}/statuses"],timeout=30).stdout)
+                if statuses and statuses[0]['state']=='success': confirmed=True;break
+            if confirmed: break
             time.sleep(15)
         else: raise RuntimeError('Publicatie is verstuurd, maar online bevestiging duurt langer dan verwacht. Ververs later.')
         update_state('done','Teksten opnieuw nagekeken, geschreven en online gezet.',finishedAt=datetime.now(ZoneInfo('Europe/Amsterdam')).isoformat())
