@@ -118,3 +118,22 @@ export function cloudIconType(low,mid,high){
   // A full 12% high veil still filters sunshine: it is not a clear sky.
   return opacity<.08?'clear':opacity<.60?'filtered':'overcast';
 }
+
+// Normal cloud maps use averaged coverage. Compose their three fixed colours
+// directly, without allocating or traversing style objects for every pixel.
+// Keep the same high → middle → low operations and byte rounding as the
+// general textured renderer, including missing layers and very low cloud.
+export function writeAveragedCloud(low,mid,high,visible,cloudBase,pixels,offset){
+  if(!Number.isFinite(low)||!Number.isFinite(mid)||!Number.isFinite(high))return;
+  const h=(visible&4)&&high>0?Math.min(1,high/100)*.12:0;
+  const m=(visible&2)&&mid>0?Math.min(1,mid/100)*.65:0;
+  const l=(visible&1)&&low>0?Math.min(1,low/100)*.85:0;
+  const above=1-m,below=1-l;
+  const a=l+(m+h*above)*below;
+  if(!a)return;
+  const veryLow=l>0&&isVeryLowCloud(cloudBase);
+  const r=(veryLow?222:207)*l+(232*m+255*h*above)*below;
+  const g=(veryLow?220:216)*l+(236*m+255*h*above)*below;
+  const b=(veryLow?202:223)*l+(240*m+255*h*above)*below;
+  pixels[offset]=Math.round(r/a);pixels[offset+1]=Math.round(g/a);pixels[offset+2]=Math.round(b/a);pixels[offset+3]=a*255;
+}

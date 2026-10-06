@@ -112,6 +112,7 @@ function viewKey(frame,viewMode){
  const b=map.getBounds();
  return JSON.stringify([frame.url,viewMode,tempLevel,cloudVisibility(),$('texture').checked,$('clouds').checked,$('fog').checked,$('snow').checked,map.getZoom(),b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
 }
+for(const event of ['pointerenter','focus'])document.querySelector('[data-mode="significant"]').addEventListener(event,()=>prepareOtherMode());
 function prepareOtherMode(){
  cancelModePreparation();
  if(current?.mode!=='weather'||document.hidden||playing||navigator.connection?.saveData||['slow-2g','2g'].includes(navigator.connection?.effectiveType))return;
@@ -626,7 +627,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames,full
     do {targetRevision=revision;renderController=new AbortController();success=await renderFrame(wanted,targetRevision,renderController.signal,requestedContext);}while(targetRevision!==revision&&!refreshing);
   } finally {rendering=false;}
   if(success&&!refreshing){
-    prepareAdjacentFrames();prepareOtherMode();
+    prepareAdjacentFrames();
   }
 }
 function updateTimeHeading(frame,metadata){

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cloudStyle,cloudLayerStyle,VERY_LOW_CLOUD} from '../cloud-style.mjs';
+import {cloudStyle,cloudLayerStyle,VERY_LOW_CLOUD,writeAveragedCloud} from '../cloud-style.mjs';
 import {renderTile} from '../tile-renderer.mjs';
 import {createRegularGrid} from '../regular-grid.mjs';
 
@@ -9,6 +9,28 @@ const luminance=rgb=>rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
 const composite=(rgba,background)=>background.map((channel,i)=>rgba[i]*rgba[3]+channel*(1-rgba[3]));
 const distance=(a,b)=>Math.hypot(...a.map((channel,i)=>channel-b[i]));
 const fullLayer=type=>cloudLayerStyle(type,100,5,52,false);
+
+test('fast averaged cloud compositing retains the exact original RGBA bytes',()=>{
+  let state=481;
+  const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/2**32;};
+  const actual=new Uint8ClampedArray(4);
+  for(let i=0;i<12000;i++){
+    const values=i<216?[0,1,40,99,100,130].map(v=>v):null;
+    const low=values?values[i%6]:random()*140-20;
+    const mid=values?values[Math.floor(i/6)%6]:random()*140-20;
+    const high=values?values[Math.floor(i/36)%6]:random()*140-20;
+    const base=[NaN,-1,0,149,150,9999][i%6];
+    for(let visible=0;visible<8;visible++){
+      actual.fill(0);writeAveragedCloud(low,mid,high,visible,base,actual,0);
+      const expected=cloudStyle(low,mid,high,5,52,false,0,visible,base);
+      assert.deepEqual(actual,new Uint8ClampedArray([...expected.slice(0,3),expected[3]*255]));
+    }
+  }
+  for(const missing of [NaN,Infinity,-Infinity]){
+    actual.fill(0);writeAveragedCloud(missing,50,50,7,100,actual,0);
+    assert.deepEqual(actual,new Uint8ClampedArray(4));
+  }
+});
 
 test('cloud decks brighten both land and sea while retaining distinct layer tints',()=>{
   for(const background of [[86,119,73],[69,113,139]]){

@@ -7,7 +7,7 @@ import {writeFogColor} from './fog-style.mjs';
 import {isPrecipitation,writePrecipitationColor,PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import { scales, EUROPE } from './core.mjs';
 import { createGaussianTileSampler } from './gaussian-sampler.mjs';
-import { blendCloudLayers, cloudResolved } from './cloud-style.mjs';
+import { blendCloudLayers, cloudResolved, writeAveragedCloud } from './cloud-style.mjs';
 function colorsFor(scale){
   // Lookup table keeps tile painting independent of the number of palette stops.
   const n=4096,min=scale.breakpoints[0],max=scale.breakpoints.at(-1),rgba=new Uint8ClampedArray(n*4);
@@ -59,6 +59,7 @@ export function renderTile(field,coords,size=256){
         // Nearest model base avoids inventing a low ceiling between a cloud
         // and the source's 9999 m cloud-free sentinel.
         const base=field.cloudBase?field.grid.getNearestNeighborValue(field.cloudBase,lat,lon):NaN;
+        if(!texture){writeAveragedCloud(low,mid,high,cloudVisible,base,pixels,(y*size+x)*4);continue;}
         const a=blendCloudLayers(low,mid,high,lon,lat,texture,kmPerPixel,cloudVisible,base,cloudRGB,resolved);
         if(!a)continue;
         const p=(y*size+x)*4;
