@@ -1,5 +1,6 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
+  {id:"wolkenbasis-actueel",name:"Actuele wolkenbasis · Benelux",description:"Gemeten wolkenhoogten bij KNMI-stations en luchthavens",category:"nu",type:"nu",section:"Metingen",icon:"tabel",href:"index.html#wolkenbasis-actueel",src:"wolkenbasis_actueel.html?v=20261007-1",thumbnail:null,facets:{grootheid:["bewolking"]},keywords:"wolkenhoogte wolkenbasis actueel waarnemingen Benelux KNMI METAR mist ceiling",restricted:false},
   {id:'daglengte',name:'Daglengte',description:'Vergelijk voorjaars- en najaarsdagen met bijna evenveel daglicht bij Nederlandse KNMI-stations.',category:'terugkijken',type:'klimaat',section:'Zon & seizoenen',icon:'tabel',href:'index.html#daglengte',src:'daglengte.html?v=20261003-redactie6',thumbnail:null,facets:{},keywords:'daglengte daglicht zon zonsopkomst zonsondergang voorjaar najaar herfst lente seizoenen KNMI',restricted:false},
 
   {id:'pluim-mist',name:'Mistkans · DWD-MOSMIX',description:'Officiële uurlijkse mistkansen van DWD-MOSMIX in staafjes',category:'verwachting',type:'pluim',section:'Pluimen',icon:'pluim6',href:'index.html#pluim-mist',thumbnail:null,facets:{bron:['ens'],grootheid:['bewolking']},keywords:'mist mistkans DWD MOSMIX uurkansen ICON ECMWF',restricted:false},

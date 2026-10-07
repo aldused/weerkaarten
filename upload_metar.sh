@@ -6,5 +6,7 @@ cd "$SCRIPT_DIR"
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_metar.py" || { echo "FOUT: haal_metar.py"; exit 1; }
 /usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_luchtvaart_bulletin.py" || echo "WAARSCHUWING: haal_luchtvaart_bulletin.py mislukt"
 
+/usr/local/bin/python3 "$SCRIPT_DIR/scripts/haal_wolkenbasis_actueel.py" || echo "WAARSCHUWING: wolkenbasis-import onvolledig; vorige geldige feed behouden"
+
 "$SCRIPT_DIR/shell/r2_publish.sh" \
-    metar_data.json luchtvaart_bulletin.json
+    metar_data.json luchtvaart_bulletin.json wolkenbasis_knmi.json wolkenbasis_metar.json
