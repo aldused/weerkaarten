@@ -697,6 +697,7 @@ body.six-hours #map-focus-time { white-space:normal; }
       <option value="zicht" data-label="Zicht">Zicht</option>
       <option value="druk" data-label="Luchtdruk">Luchtdruk</option>
       <option value="cape" data-label="CAPE">CAPE</option>
+      <option value="wolkenbasis" data-label="Wolkenhoogte / wolkenbasis (m)">Wolkenhoogte / wolkenbasis (m)</option>
       <option value="bewolking_totaal" data-label="Bewolking totaal (schatting, achtsten)">Bewolking totaal (schatting, achtsten)</option>
       <option value="bewolking" data-label="Bewolking (hoog/midden/laag)">Bewolking (hoog/midden/laag)</option>
       <option value="wolkenlagen" data-label="Wolkenlagen (RGB)">Wolkenlagen (RGB)</option>
@@ -949,6 +950,10 @@ var WIND_COLORS = [
   [190,0,185],[230,92,230],[250,180,245]
 ];
 
+// Wolkenbasis: bewaar 9999 (wolkenvrij) door het bronrooster te bemonsteren.
+var WOLKENBASIS_LEVELS = [0,100,200,500,1000,1500,2000,3000,4000,5000];
+var WOLKENBASIS_COLORS = [[150,0,0],[200,40,40],[230,100,40],[250,170,40],[255,220,80],[200,230,100],[130,210,120],[100,200,180],[110,180,230],[180,210,250]];
+function wolkenvrij(value) { return Math.abs(value-9999)<0.5; }
 // Zicht in meters — nadruk op mist en slecht zicht, met rustige klassen voor
 // goed zicht. De grote sprongen boven 10 km voorkomen visuele ruis in het vierluik.
 var ZICHT_M_LEVELS = [0, 200, 500, 1000, 2000, 4000, 7000, 10000, 20000, 35000, 50000];
@@ -2573,7 +2578,7 @@ function renderPanelActive(pIdx) {
   var veldStap = stepIdx - (pd.stepOffset || 0);
 
   var pdNLat = pd.nLat, pdNLon = pd.nLon, pdNComp = pd.nComp;
-  var gebruikBronrooster = neerslagBronrooster();
+  var gebruikBronrooster = neerslagBronrooster() || activeVar === 'wolkenbasis';
   var pdG = pd.grid || g;
   var pdLatH = pdG.lat_max - pdG.lat_min;
   var pdLonW = pdG.lon_max - pdG.lon_min;
@@ -2659,6 +2664,8 @@ function renderPanelActive(pIdx) {
         } else if (activeVar === 'cape') {
           c = interpColor(Math.max(0, val), CAPE_REF);
           veldBuffer[py * cw + px] = Math.max(0, val);
+        } else if (activeVar === 'wolkenbasis') {
+          c = wolkenvrij(val) ? [240,247,255] : val < 0 ? [200,210,220] : boundaryColor(val,WOLKENBASIS_LEVELS,WOLKENBASIS_COLORS);
         } else if (activeVar === 'zicht') {
           c = boundaryColor(Math.max(0, val), ZICHT_M_LEVELS, ZICHT_M_COLORS);
         } else if (activeVar === 'zon') {
@@ -2711,7 +2718,7 @@ function vakVrij(x0, y0, x1, y1) {
 }
 function claimVak(x0, y0, x1, y1) { labelVakken.push([x0, y0, x1, y1]); }
 
-var LABEL_VARS = {significant:1, temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, windrichting:1, cumul:1, zon:1, cumzon:1, neerslag:1,
+var LABEL_VARS = {wolkenbasis:1, significant:1, temp:1, dauwpunt:1, druk:1, cape:1, zicht:1, windstoten:1, wind:1, windrichting:1, cumul:1, zon:1, cumzon:1, neerslag:1,
                   bewolking:1, bewolking_totaal:1};
 function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, stepIdx) {
   if (!LABEL_VARS[activeVar]) return;
@@ -2738,7 +2745,7 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
   // Labeldichtheid op pixel-basis. Het raster staat bewust fijner dan de
   // labels breed zijn; botsingscontrole laat vervolgens alleen de labels staan
   // die passen. Dat geeft veel meer afleesbare punten dan een grof vast raster.
-  var LABEL_AFSTAND = { significant: 66, windrichting: 66, wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
+  var LABEL_AFSTAND = { wolkenbasis: 62, significant: 66, windrichting: 66, wind: 54, zicht: 62, druk: 58, cape: 50, cumul: 48, neerslag: 46,
                         zon: 50, cumzon: 50, temp: 46, dauwpunt: 46, windstoten: 46,
                         bewolking: 52, bewolking_totaal: 52 };
   // Dichtheid schaalt mee met de grootte van het vak. Factor 0,7 op de afstand
@@ -2859,13 +2866,15 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       if(!Number.isFinite(val))continue;
       val=VierluikCore.scalarValue(activeVar,val);
 
+      if (activeVar === 'wolkenbasis' && (wolkenvrij(val) || val < 0)) continue;
       // Geheel-getal-vars: sla lage/onbelangrijke waarden over
       if (activeVar === 'neerslag' && val < 0.2) continue;   // droog: geen getal
       if (activeVar === 'cumul' && val < 0.5) continue;
       if (activeVar === 'zon' && val < 3) continue;      // vrijwel zonloos uur
       if (activeVar === 'cumzon' && val < 0.5) continue;
       if (activeVar === 'cape' && val < 50) continue;
-      var text = activeVar === 'neerslag'    ? (val < 10 ? val.toFixed(1) : String(Math.round(val)))
+      var text = activeVar === 'wolkenbasis' ? Math.round(val) + 'm'
+               : activeVar === 'neerslag'    ? (val < 10 ? val.toFixed(1) : String(Math.round(val)))
                : activeVar === 'windstoten'  ? String(val)
                : activeVar === 'bewolking' || activeVar === 'bewolking_totaal'
                                              ? Math.round(val / 12.5) + ''
@@ -3324,6 +3333,8 @@ function buildLegendHTMLActive(pIdx) {
     title='Luchtdruk op zeeniveau · hPa';continuous(DRUK_REF,[970,990,1010,1030,1050]);note='Lijnen: 1 hPa; zwaardere lijnen: 5 hPa.';
   }else if(activeVar==='cape'){
     title='CAPE · J/kg';continuous(CAPE_REF,[0,1000,2000,3000,4000]);note='Onstabiliteitsenergie, geen onweerskans. Lijnen: 100 J/kg.';
+  }else if(activeVar==='wolkenbasis'){
+    title='Wolkenhoogte · basis in m boven grond';discrete(WOLKENBASIS_COLORS,WOLKENBASIS_LEVELS,1,true);note='Onderkant van de bewolking uit het model; geen wolkentop. Lichtblauw: wolkenvrij. Bronrooster zonder middeling; kaartgetallen in meters.';
   }else if(activeVar==='zicht'){
     title='Horizontaal zicht · km (klasse vanaf)';discrete(ZICHT_M_COLORS,ZICHT_M_LEVELS.map(function(v){return v/1000;}),1,true);note='Onder 1 km tonen de kaartgetallen meters (m).';
   }else if(activeVar==='wind'){
@@ -3563,7 +3574,7 @@ function currentMapExtent() {
 }
 
 function sampleComponent(pd, stepIdx, lat, lon, comp) {
-  return VierluikCore.sample(pd, stepIdx, lat, lon, comp, neerslagBronrooster()?'nearest':'bilinear');
+  return VierluikCore.sample(pd, stepIdx, lat, lon, comp, (neerslagBronrooster() || activeVar==='wolkenbasis')?'nearest':'bilinear');
 }
 
 function hoverValue(pd, stepIdx, lat, lon) {
@@ -3599,6 +3610,7 @@ function hoverValue(pd, stepIdx, lat, lon) {
   if (activeVar === 'dauwpunt') return a.toFixed(1) + ' °C';
   if (activeVar === 'druk') return (a / 100).toFixed(1) + ' hPa';
   if (activeVar === 'cape') return Math.round(a) + ' J/kg';
+  if (activeVar === 'wolkenbasis') return wolkenvrij(a) ? 'Wolkenvrij' : a < 0 ? null : Math.round(a) + ' m boven grond (wolkenbasis)';
   if (activeVar === 'zicht') return a < 1000 ? Math.round(a) + ' m' : (a / 1000).toFixed(a < 10000 ? 1 : 0) + ' km';
   if (activeVar === 'zon') return Math.round(a) + ' min zon';
   if (activeVar === 'cumzon') return a.toFixed(1) + ' uur zon';
@@ -3608,7 +3620,7 @@ function hoverValue(pd, stepIdx, lat, lon) {
 var VAR_NAMES = {
   significant:'Significant weer', neerslag:'Neerslag', radar:'Radar', cumul:'Cumulatieve neerslag', temp:'Temperatuur',
   dauwpunt:'Dauwpunt', wind:'Wind', windrichting:'Windrichting', windstoten:'Windstoten', druk:'Luchtdruk',
-  zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal (geschat)',
+  wolkenbasis:'Wolkenhoogte / wolkenbasis', zicht:'Zicht', cape:'CAPE', bewolking:'Bewolking', bewolking_totaal:'Bewolking totaal (geschat)',
   wolkenlagen:'Wolkenlagen',
   wolkenkaart:'Wolkenkaart (modelbeeld)',
   zon:'Zon (minuten per uur)', cumzon:'Zonuren (dagsom)'
