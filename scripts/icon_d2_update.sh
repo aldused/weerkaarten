@@ -425,6 +425,10 @@ for point_file in point_files:
 print(f"\nKlaar! ICON-D2 run {run_str}, {n_steps} uur")
 PYEOF
 
+cloud_update_status=$?
+if [ "$cloud_update_status" -ne 0 ]; then exit "$cloud_update_status"; fi
+/usr/local/bin/python3 scripts/icon_cloud_height.py --model icond2 --upload || exit 1
+
 # Publish an immutable map snapshot only after the source update succeeded.
 icon_update_status=$?
 if [ "$icon_update_status" -ne 0 ]; then exit "$icon_update_status"; fi

@@ -304,4 +304,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    result = main()
+    cloud_args = parse_args()
+    if result == 0 and cloud_args.prefix == "ecmwf_om":
+        from ecmwf_cloud_height import update
+        update(WORK_DIR, upload=not cloud_args.no_upload)
+    raise SystemExit(result)

@@ -953,7 +953,14 @@ var WIND_COLORS = [
 // Wolkenbasis: bewaar 9999 (wolkenvrij) door het bronrooster te bemonsteren.
 var WOLKENBASIS_LEVELS = [0,100,200,500,1000,1500,2000,3000,4000,5000];
 var WOLKENBASIS_COLORS = [[150,0,0],[200,40,40],[230,100,40],[250,170,40],[255,220,80],[200,230,100],[130,210,120],[100,200,180],[110,180,230],[180,210,250]];
-function wolkenvrij(value) { return Math.abs(value-9999)<0.5; }
+function wolkenvrij(value,pd) { var marker=pd&&pd.info&&pd.info.clear_sky_value; return marker===null ? false : Math.abs(value-(marker===undefined?9999:marker))<0.5; }
+function wolkenbasisTekst(value,pd) {
+  if (!Number.isFinite(value) || value < 0) return null;
+  var kind=pd&&pd.info&&pd.info.kind;
+  if (wolkenvrij(value,pd)) return kind==='ecmwf_cbh' ? 'Geen wolkenbasis gediagnosticeerd (mist niet uitgesloten)' : 'Wolkenvrij';
+  if (kind==='ceiling') return (value>=5000 ? '≥5000' : Math.round(value)) + ' m boven grond (ceiling >50%)';
+  return Math.round(value) + ' m boven grond (wolkenbasis)';
+}
 // Zicht in meters — nadruk op mist en slecht zicht, met rustige klassen voor
 // goed zicht. De grote sprongen boven 10 km voorkomen visuele ruis in het vierluik.
 var ZICHT_M_LEVELS = [0, 200, 500, 1000, 2000, 4000, 7000, 10000, 20000, 35000, 50000];
@@ -2665,7 +2672,7 @@ function renderPanelActive(pIdx) {
           c = interpColor(Math.max(0, val), CAPE_REF);
           veldBuffer[py * cw + px] = Math.max(0, val);
         } else if (activeVar === 'wolkenbasis') {
-          c = wolkenvrij(val) ? [240,247,255] : val < 0 ? [200,210,220] : boundaryColor(val,WOLKENBASIS_LEVELS,WOLKENBASIS_COLORS);
+          c = wolkenvrij(val,pd) ? [240,247,255] : val < 0 ? [200,210,220] : boundaryColor(val,WOLKENBASIS_LEVELS,WOLKENBASIS_COLORS);
         } else if (activeVar === 'zicht') {
           c = boundaryColor(Math.max(0, val), ZICHT_M_LEVELS, ZICHT_M_COLORS);
         } else if (activeVar === 'zon') {
@@ -2866,14 +2873,14 @@ function renderLabels(pIdx, cw, ch, vLonMin, vLonMax, vLatMin, vLatMax, pd, step
       if(!Number.isFinite(val))continue;
       val=VierluikCore.scalarValue(activeVar,val);
 
-      if (activeVar === 'wolkenbasis' && (wolkenvrij(val) || val < 0)) continue;
+      if (activeVar === 'wolkenbasis' && (wolkenvrij(val,pd) || val < 0)) continue;
       // Geheel-getal-vars: sla lage/onbelangrijke waarden over
       if (activeVar === 'neerslag' && val < 0.2) continue;   // droog: geen getal
       if (activeVar === 'cumul' && val < 0.5) continue;
       if (activeVar === 'zon' && val < 3) continue;      // vrijwel zonloos uur
       if (activeVar === 'cumzon' && val < 0.5) continue;
       if (activeVar === 'cape' && val < 50) continue;
-      var text = activeVar === 'wolkenbasis' ? Math.round(val) + 'm'
+      var text = activeVar === 'wolkenbasis' ? (pd.info&&pd.info.kind==='ceiling'&&val>=5000?'5000+':Math.round(val)+'m')
                : activeVar === 'neerslag'    ? (val < 10 ? val.toFixed(1) : String(Math.round(val)))
                : activeVar === 'windstoten'  ? String(val)
                : activeVar === 'bewolking' || activeVar === 'bewolking_totaal'
@@ -3334,7 +3341,12 @@ function buildLegendHTMLActive(pIdx) {
   }else if(activeVar==='cape'){
     title='CAPE · J/kg';continuous(CAPE_REF,[0,1000,2000,3000,4000]);note='Onstabiliteitsenergie, geen onweerskans. Lijnen: 100 J/kg.';
   }else if(activeVar==='wolkenbasis'){
-    title='Wolkenhoogte · basis in m boven grond';discrete(WOLKENBASIS_COLORS,WOLKENBASIS_LEVELS,1,true);note='Onderkant van de bewolking uit het model; geen wolkentop. Lichtblauw: wolkenvrij. Bronrooster zonder middeling; kaartgetallen in meters.';
+    var cloudInfo=pd&&pd.info || md&&md.meta&&md.meta.parameters.wolkenbasis || {};
+    title=cloudInfo.kind==='ceiling'?'Wolkenhoogte · ceiling in m boven grond':'Wolkenhoogte · basis in m boven grond';
+    discrete(WOLKENBASIS_COLORS,WOLKENBASIS_LEVELS,1,true);
+    note=cloudInfo.kind==='ceiling'?'ICON-ceiling: eerste grootschalige wolkenlaag met >50% bedekking. DWD-hoogte minus terrein. 5000+: geen ceiling onder 5 km; betekent niet wolkenvrij.':
+      cloudInfo.kind==='ecmwf_cbh'?'Echte ECMWF-wolkenbasis via FCOO; bronrun '+formatTime(cloudInfo.source_run_utc)+'. 3-uursvelden naar uren geïnterpoleerd; beschikbaar t/m '+formatTime(cloudInfo.valid_until)+'. Lichtblauw: geen basis gediagnosticeerd; mist niet uitgesloten. © ECMWF 2026, CC-BY-4.0.':
+      'Onderkant van de bewolking uit het model; geen wolkentop. Lichtblauw: wolkenvrij. Bronrooster zonder middeling; kaartgetallen in meters.';
   }else if(activeVar==='zicht'){
     title='Horizontaal zicht · km (klasse vanaf)';discrete(ZICHT_M_COLORS,ZICHT_M_LEVELS.map(function(v){return v/1000;}),1,true);note='Onder 1 km tonen de kaartgetallen meters (m).';
   }else if(activeVar==='wind'){
@@ -3610,7 +3622,7 @@ function hoverValue(pd, stepIdx, lat, lon) {
   if (activeVar === 'dauwpunt') return a.toFixed(1) + ' °C';
   if (activeVar === 'druk') return (a / 100).toFixed(1) + ' hPa';
   if (activeVar === 'cape') return Math.round(a) + ' J/kg';
-  if (activeVar === 'wolkenbasis') return wolkenvrij(a) ? 'Wolkenvrij' : a < 0 ? null : Math.round(a) + ' m boven grond (wolkenbasis)';
+  if (activeVar === 'wolkenbasis') return wolkenbasisTekst(a,pd);
   if (activeVar === 'zicht') return a < 1000 ? Math.round(a) + ' m' : (a / 1000).toFixed(a < 10000 ? 1 : 0) + ' km';
   if (activeVar === 'zon') return Math.round(a) + ' min zon';
   if (activeVar === 'cumzon') return a.toFixed(1) + ' uur zon';

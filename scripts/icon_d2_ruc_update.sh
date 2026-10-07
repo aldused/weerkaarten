@@ -409,4 +409,8 @@ for f2 in bestanden:
 print(f"\nKlaar! ICON-D2-RUC run {run_str}, {n_steps} uur")
 PYEOF
 
+cloud_update_status=$?
+if [ "$cloud_update_status" -ne 0 ]; then exit "$cloud_update_status"; fi
+/usr/local/bin/python3 scripts/icon_cloud_height.py --model icond2ruc --upload || exit 1
+
 echo "$(date): ICON-D2-RUC update klaar"
