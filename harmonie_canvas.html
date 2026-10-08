@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- mp4-muxer voor H.264 MP4 export (X/Twitter compatibel) — ~20KB -->
+<script src="map-performance.js?v=20261008-1"></script>
 <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/build/mp4-muxer.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -803,6 +804,7 @@ body.scroll-mode { overflow: hidden; }
     window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
   })();
 </script>
+<link rel="preconnect" href="https://harmonie-data.weerlab.nl" crossorigin>
 </head>
 <body class="scroll-mode">
 
@@ -1626,7 +1628,7 @@ body.scroll-mode { overflow: hidden; }
 
   // HARMONIE Land-Sea Mask — eenmalig laden, alleen voor bewolkingskaart
   function laadLSM() {
-    return fetch(DATA_URL + "harmonie_data_lsm.bin?t=" + Date.now())
+    return fetch(DATA_URL + "harmonie_data_lsm.bin?v=20261008")
       .then(function(r) { if (!r.ok) throw 0; return r.arrayBuffer(); })
       .then(function(buf) {
         var view = new DataView(buf);
@@ -1637,16 +1639,17 @@ body.scroll-mode { overflow: hidden; }
 
   var overlayCache = {}; // { filename: Image }
   function laadOverlay(m) {
+    var overlayVersion=m && (m.bijgewerkt || m.run_utc || m.run) || "20261008";
     var overlayFile = (m && m.overlay) ? m.overlay : "harmonie_overlay.png";
-    if (overlayCache[overlayFile]) {
-      return Promise.resolve(overlayCache[overlayFile]);
+    if (overlayCache[overlayFile+"|"+overlayVersion]) {
+      return Promise.resolve(overlayCache[overlayFile+"|"+overlayVersion]);
     }
     return new Promise(function(resolve) {
       var img = new Image();
       img.crossOrigin = "anonymous";
-      img.onload = function() { overlayCache[overlayFile] = img; resolve(img); };
+      img.onload = function() { overlayCache[overlayFile+"|"+overlayVersion] = img; resolve(img); };
       img.onerror = function() { resolve(null); };
-      img.src = DATA_URL + overlayFile + "?t=" + Date.now();
+      img.src = DATA_URL + overlayFile + "?v=" + encodeURIComponent(m.bijgewerkt || m.run_utc || m.run || "20261008");
     });
   }
 
@@ -1661,11 +1664,12 @@ body.scroll-mode { overflow: hidden; }
     if (info.derived) return Promise.all(info.needs.map(function(k){return loadField(k,m,cache);}));
     if (!cache._pending) Object.defineProperty(cache,"_pending",{value:{}});
     if (cache._pending[key]) return cache._pending[key];
-    var request = fetch(DATA_URL + info.file + "?run=" + encodeURIComponent(m.run_utc || m.bijgewerkt || m.run), {cache:"no-store"})
+    var maskPromise=key!=="druk" && m.parameters.druk ? loadField("druk",m,cache) : Promise.resolve(null);
+    var request = Promise.all([fetch(DATA_URL + info.file + "?run=" + encodeURIComponent(m.run_utc || m.bijgewerkt || m.run), {cache:"no-cache"})
       .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.arrayBuffer();})
-      .then(async function(buf){
-        var result=C.clean(decodeBinBuffer(buf,info,m),key);
-        if(key!=="druk" && m.parameters.druk) C.maskGrid(result,await loadField("druk",m,cache));
+      .then(function(buf){return buf;}), maskPromise]).then(function(values){
+        var result=C.clean(decodeBinBuffer(values[0],info,m),key);
+        if(values[1]) C.maskGrid(result,values[1]);
         cache[key]=result;return result;
       });
     cache._pending[key]=request;
@@ -1709,7 +1713,47 @@ body.scroll-mode { overflow: hidden; }
   function isCloudFree(value) {
     return Math.abs(value-9999)<0.5 && (!meta.parameters.wolkenbasis || /9999/.test(meta.parameters.wolkenbasis.label || ""));
   }
-  function renderMap(canvas, paramKey, stepIdx) {
+  var paperFrames = new MapPerformance.LRU({maxBytes:64*1024*1024,maxEntries:8,dispose:function(e){e.paper.width=0;e.paper.height=0;}});
+  var paperWarmTimer=null, paperWarmEpoch=0;
+  function paperKey(canvas,paramKey,stepIdx) {
+    var idx=parseInt(canvas.id.replace("panel-cvs-",""))||0, rect=canvas.getBoundingClientRect();
+    return JSON.stringify([actiefModel,meta._paperRevision,meta.run,meta.run_utc,meta.bijgewerkt,C.time(meta,stepIdx),paramKey,getZoom(idx),sluierUit,CU_V3,pinPlaats,window.devicePixelRatio||1,rect.width,rect.height,!!lsmData,overlayImg && overlayImg.src]);
+  }
+  function renderMap(canvas,paramKey,stepIdx) {
+    var key=paperKey(canvas,paramKey,stepIdx), cached=paperFrames.get(key);
+    if(cached){
+      canvas.width=cached.paper.width;canvas.height=cached.paper.height;
+      canvas.getContext("2d").drawImage(cached.paper,0,0);
+      Object.assign(canvas,cached.details);return;
+    }
+    renderMapUncached(canvas,paramKey,stepIdx);
+    // Zoom is clamped by the renderer; key the actual final viewport.
+    key=paperKey(canvas,paramKey,stepIdx);
+    var bytes=canvas.width*canvas.height*4;
+    if(!canvas._mapBounds || bytes>paperFrames.maxBytes)return;
+    var paper=document.createElement("canvas");paper.width=canvas.width;paper.height=canvas.height;
+    paper.getContext("2d").drawImage(canvas,0,0);
+    var details={};["_mapBounds","_mapGrid","_field","_fieldStep","_fieldParam"].forEach(function(k){details[k]=canvas[k];});
+    paperFrames.set(key,{paper:paper,details:details},bytes);
+  }
+  function warmPaperFrames(stepIdx) {
+    clearTimeout(paperWarmTimer);var token=++paperWarmEpoch, epoch=sessionEpoch;
+    if(document.hidden || sessionLoading || navigator.connection && navigator.connection.saveData)return;
+    var jobs=[];[1,-1].forEach(function(off){var step=stepIdx+off;if(step>=0 && step<aantalUren)panelParams.forEach(function(p,i){jobs.push({step:step,param:p,panel:i});});});
+    function warm(){
+      if(token!==paperWarmEpoch || epoch!==sessionEpoch || sessionLoading || document.hidden)return;
+      var job=jobs.shift();if(!job)return;
+      var visible=document.getElementById("panel-cvs-"+job.panel);if(!visible)return;
+      // Keep label density and original pixel dimensions equal to the visible paper.
+      var scratch=document.createElement("canvas"), rect=visible.getBoundingClientRect();scratch.id=visible.id;
+      scratch.getBoundingClientRect=function(){return rect;};
+      if(!paperFrames.entries.has(paperKey(scratch,job.param,job.step)))renderMap(scratch,job.param,job.step);
+      scratch.width=0;scratch.height=0;
+      paperWarmTimer=setTimeout(warm,40);
+    }
+    paperWarmTimer=setTimeout(warm,150);
+  }
+  function renderMapUncached(canvas, paramKey, stepIdx) {
     // Afgeleide parameters: bereken data on-the-fly
     var isDerived = meta.parameters[paramKey] && meta.parameters[paramKey].derived;
     var derivedData = null;
@@ -3491,6 +3535,7 @@ body.scroll-mode { overflow: hidden; }
   }
 
   function updateAlle(stepIdx) {
+    clearTimeout(paperWarmTimer);paperWarmEpoch++;
     if(!meta || sessionLoading)return Promise.resolve();
     stepIdx = Math.max(0, Math.min(stepIdx, aantalUren - 1));
     slider.value = stepIdx + 1;
@@ -3512,7 +3557,8 @@ body.scroll-mode { overflow: hidden; }
     });
     var renders=[];
     for(var i=0;i<panelParams.length;i++)renders.push(ensureAndRender(i,stepIdx));
-    return Promise.all(renders);
+    var epoch=sessionEpoch;
+    return Promise.all(renders).then(function(){if(epoch===sessionEpoch && Number(slider.value)-1===stepIdx)warmPaperFrames(stepIdx);});
   }
 
   // ── Tick-rail onder slider (responsief, klikbaar) ─────────────────────────
@@ -4555,7 +4601,7 @@ body.scroll-mode { overflow: hidden; }
   }
 
   async function loadSession(model,refresh) {
-    stopSpelen();
+    stopSpelen();clearTimeout(paperWarmTimer);paperWarmEpoch++;
     var epoch=++sessionEpoch;
     var oldTime=meta ? C.time(meta,Math.max(0,Number(slider.value)-1)) : Date.now();
     var oldModel=actiefModel, hadMeta=!!meta;
@@ -4567,6 +4613,11 @@ body.scroll-mode { overflow: hidden; }
     tooltip.style.display="none";
     try {
       var m=await laadMeta(model), cache={};
+      var saved=modelData[model];
+      var signature=JSON.stringify([m.run,m.run_utc,m.bijgewerkt,m.tijden,m.grid,m.parameters]);
+      if(!refresh && saved && saved.signature===signature)cache=saved.paramCache;
+      m._paperRevision=signature;
+      if(refresh)paperFrames.clear();
       addDerivedParams(m);
       function available(key){var info=m.parameters[key];return !!info && (!info.derived || info.needs.every(available));}
       var params=panelParams.map(function(key){return available(key) ? key : "temp";});
@@ -4577,7 +4628,15 @@ body.scroll-mode { overflow: hidden; }
       if(epoch!==sessionEpoch)return;
       if(check.run!==m.run || check.bijgewerkt!==m.bijgewerkt || JSON.stringify(check.tijden)!==JSON.stringify(m.tijden))throw Error("De bron is zojuist vernieuwd; kies Gegevens vernieuwen");
       meta=m;paramCache=cache;overlayImg=result[0];actiefModel=model;
-      modelData={};modelData[model]={meta:m,paramCache:cache};
+      delete modelData[model];
+      modelData[model]={meta:m,paramCache:cache,signature:signature};
+      // Retain recent models, with a byte budget for decoded arrays.
+      var models=Object.keys(modelData), bytes=models.reduce(function(n,k){return n+Object.keys(modelData[k].paramCache).reduce(function(v,p){var d=modelData[k].paramCache[p];return v+(d && d.data ? d.data.byteLength : 0);},0);},0);
+      while(models.length>3 || (bytes>128*1024*1024 && models.length>1)){
+        var evicted=models.shift();
+        bytes-=Object.keys(modelData[evicted].paramCache).reduce(function(n,k){var d=modelData[evicted].paramCache[k];return n+(d && d.data ? d.data.byteLength : 0);},0);
+        delete modelData[evicted];paperFrames.clear();
+      }
       var changedParams=params.some(function(p,i){return p!==panelParams[i];});
       panelParams=params;
       if(!refresh)panelZoom={};

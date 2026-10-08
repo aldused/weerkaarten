@@ -195,7 +195,8 @@ button:focus-visible,select:focus-visible,a:focus-visible,input:focus-visible {o
  header {padding:10px;}.run-info {margin-left:0;width:100%;font-size:10px;}
  #control-sidebar {grid-template-columns:1fr;}.size-control {width:auto;}#mapsize {width:95px;}
 }
-</style></head>
+</style><link rel="preconnect" href="https://data.weerlab.nl" crossorigin>
+</head>
 <body>
 <header><a class="all-maps" href="index.html#menu/verwachting?type=kaarten" target="_top">← Alle weerkaarten</a>
 <h1>Weerkaarten Europa</h1>
@@ -283,6 +284,7 @@ button:focus-visible,select:focus-visible,a:focus-visible,input:focus-visible {o
 <div class="fs-stage" id="fs-stage"><img alt="" id="fsimg"/></div>
 <div class="fs-hint">scroll / pinch = zoom · sleep = verschuiven · ←/→ = ander tijdstip · klik of Esc = sluiten</div>
 </div>
+<script src="map-performance.js?v=20261008-1"></script>
 <script>if(window.parent!==window)document.body.classList.add('embedded');
 
 let META=null, curModel=null, curCyc=null, varKey=null, idx=0, playing=false, timer=null;
@@ -299,7 +301,8 @@ let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToke
 const META_REFRESH_MS=5*60*1000;
 const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
 function runAgeWarning(run,now=Date.now()){const age=now-Date.parse(run?.run_utc);return !Number.isFinite(age)?'Modeltijd onbekend':age>48*3600000?'Verouderde modelrun · controleer geldigheid':'';}
-const preloaded={};                       // "model|cyc|run|var" -> {frame: Image}
+let frameToken=0, preloadTimer=null;
+const imageFrames=new MapPerformance.ImageFrames({maxBytes:64*1024*1024,maxEntries:12});
 const $=id=>document.getElementById(id);
 const NL_DAG=['zo','ma','di','wo','do','vr','za'];
 function shortValid(iso){ const d=new Date(iso), u=d.getUTCHours();
@@ -307,7 +310,7 @@ function shortValid(iso){ const d=new Date(iso), u=d.getUTCHours();
 
 const D=()=>META.data[curModel];
 const R=()=>D().runs[curCyc];
-const srcOf=(k,i)=>META.base+R().files[k][i]+'?run='+encodeURIComponent(R().run_utc);
+const srcOf=(k,i)=>META.base+R().files[k][i]+'?run='+encodeURIComponent(R().run_utc)+'&revision='+encodeURIComponent((R().renderer||'')+'|'+(R().calculation_revision||''));
 function firstAllowedIndex(){
   if(varKey!=='precip24') return 0;
   const i=R().frames.findIndex(f=>f.lead>=24);
@@ -323,14 +326,10 @@ function orderCycles(d){
 const cycLabel=cc=> cc==='ens' ? 'ENS' : cc+'Z';
 
 function preloadAround(center){
-  if(!R().files[varKey]) return;
-  const k=curModel+'|'+curCyc+'|'+R().run_utc+'|'+varKey;
-  if(!preloaded[k]) preloaded[k]={};
-  [-1,1,2,3].forEach(off=>{
-    const i=center+off;
-    if(i<0||i>=R().frames.length||preloaded[k][i]) return;
-    const im=new Image(); im.src=srcOf(varKey,i); preloaded[k][i]=im;
-  });
+  clearTimeout(preloadTimer);
+  const token=frameToken;
+  const urls=[1,-1].map(off=>center+off).filter(i=>i>=firstAllowedIndex()&&i<R().frames.length).map(i=>srcOf(varKey,i));
+  preloadTimer=setTimeout(()=>{if(token===frameToken)imageFrames.preload(urls);},50);
 }
 
 function buildRunBar(){
@@ -406,25 +405,33 @@ function setVar(key){ varKey=key; buildDaglabels(); syncVarButtons(); show(idx);
 function show(i){
   const first=firstAllowedIndex();
   idx=Math.max(first,Math.min(R().frames.length-1,i));
-  $('slider').min=first;
-  $('slider').value=idx;
-  const fr=R().frames[idx];
-  downloadToken++; $('download').disabled=true; $('download').textContent='PNG voorbereiden…';
-  $('loading').textContent='laden…';
-  $('loading').classList.add('vis');
-  const img=$('kaart');
-  img.onload=()=>{
+  $('slider').min=first; $('slider').value=idx;
+  const fr=R().frames[idx], source=srcOf(varKey,idx), token=++frameToken;
+  imageFrames.select(source); clearTimeout(preloadTimer);
+  downloadToken++; $('download').disabled=true; $('download').textContent='⬇ Download PNG';
+  $('loading').textContent='laden…'; $('loading').classList.add('vis');
+  const alt=META.vars.find(v=>v.key===varKey).label+' · '+fr.valid_label+' · run '+R().run_label;
+  function commit(image){
+    if(token!==frameToken)return;
+    const old=$('kaart');
+    if(old!==image){
+      for(const attr of old.attributes)if(attr.name!=='src'&&attr.name!=='alt')image.setAttribute(attr.name,attr.value);
+      old.replaceWith(image);
+    }
+    image.alt=alt;
     $('loading').classList.remove('vis');
-    $('map-resolution').textContent=`origineel ${img.naturalWidth} × ${img.naturalHeight} px · titel en legenda inbegrepen`;
-    prepareDownload();
-  };
-  img.onerror=()=>{ $('loading').textContent='frame ontbreekt'; };
-  img.alt=META.vars.find(v=>v.key===varKey).label+' · '+fr.valid_label+' · run '+R().run_label;
-  img.src=srcOf(varKey,idx);
-  $('c-valid').textContent=fr.valid_label;
-  $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
-  preloadAround(idx);
-  if(fsOpen) fsUpdate();
+    $('map-resolution').textContent=`origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
+    $('download').disabled=false;
+    $('c-valid').textContent=fr.valid_label;
+    $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
+    document.documentElement.dataset.frameSource=source;
+    document.documentElement.dataset.frameReady=String(token);
+    preloadAround(idx);
+    if(fsOpen) fsUpdate();
+  }
+  const ready=imageFrames.get(source);
+  if(ready)commit(ready);
+  else imageFrames.load(source).then(commit).catch(()=>{if(token===frameToken)$('loading').textContent='frame ontbreekt';});
 }
 
 function step(d){ const L=R().frames.length, first=firstAllowedIndex(); let n=idx+d;
@@ -455,7 +462,7 @@ async function prepareDownload(){
   try{
     // Eigen download-query voorkomt dat een eerdere <img>-request zonder CORS
     // uit de browsercache wordt hergebruikt voor deze blob-download.
-    const r=await fetch(source+'&download=1',{mode:'cors',cache:'no-store'});
+    const r=await fetch(source+'&download=1',{mode:'cors',cache:'default'});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const blob=await r.blob(), url=URL.createObjectURL(blob);
     if(token!==downloadToken){ URL.revokeObjectURL(url); return; }
@@ -469,7 +476,10 @@ async function prepareDownload(){
     b.textContent='↗ Open PNG'; b.disabled=false;
   }
 }
-function downloadPng(){
+async function downloadPng(){
+  if(!downloadObjectUrl || downloadSource!==srcOf(varKey,idx)){
+    const token=frameToken; await prepareDownload(); if(token!==frameToken)return;
+  }
   const b=$('download'), a=document.createElement('a');
   if(downloadObjectUrl&&downloadSource===srcOf(varKey,idx)){
     a.href=downloadObjectUrl; a.download=downloadObjectName;

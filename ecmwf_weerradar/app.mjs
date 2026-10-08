@@ -32,6 +32,7 @@ import {createPackedGrid} from './packed-grid.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
 import {AdjacentFrames} from './adjacent-frames.mjs';
+import {mayRetainFrame} from './retained-frames.mjs';
 import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath, temperatureLegend } from './core.mjs';
 
 const $ = id => document.getElementById(id);
@@ -103,7 +104,7 @@ function trimFieldCache(){
   }
 }
 const accumulationRequests=new Map(),significantRequests=new Map();
-// Keep only the two views of the current hour; discard on viewport/settings changes.
+// Keep two complete recent frames or modes; their keys include immutable time/run and viewport/settings.
 const retainedViews=new Map();
 let modePreparation,modePreparationTimer;
 function clearRetainedViews(){for(const view of retainedViews.values())removeLayers(view.ids);retainedViews.clear();}
@@ -518,7 +519,7 @@ async function renderFrame(index,rev,signal,context){
     // the same frame and cost roughly half of all tiles. A later time change
     // still switches every layer together, so no two hours are ever mixed.
     const requiredIds=ids;
-    let [,...fields]=await Promise.all([awaitSources(requiredIds.length?requiredIds:ids,signal),...sampleVars.map(v=>readField(fieldFile(frame,v),v,signal))]);
+    let [,...fields]=await Promise.all([awaitSources(requiredIds.length?requiredIds:ids,signal),...sampleVars.map(v=>retained?.samples[v] ?? readField(fieldFile(frame,v),v,signal))]);
     // A pan during loading may change the crop while the time stays the same.
     // Commit city/point values only once they cover the current tile window.
     for(;;){
@@ -532,7 +533,7 @@ async function renderFrame(index,rev,signal,context){
     sampleVars.forEach((v,i)=>{samples[v]=fields[i];});
     const old=current;
     meta=modelMeta;frames=context.timeline;
-    current={...frame,index,ids,viewKey:key,mode:layerMode,level:layerMode==='temperature'&&!MODEL_CONFIG[modelFor(modelMeta)]?.upperAir?'2m':tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
+    current={...frame,index,ids,variables:vars,viewKey:key,mode:layerMode,level:layerMode==='temperature'&&!MODEL_CONFIG[modelFor(modelMeta)]?.upperAir?'2m':tempLevel,samples,modelMeta,timeline:context.timeline,fullTimeline:context.fullTimeline};
     const committed=current;
     // City temperatures and optional first-frame fields must not hold up the
     // primary weather. They may only attach to this exact committed frame.
@@ -554,12 +555,14 @@ async function renderFrame(index,rev,signal,context){
     }
     ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));
     if(old){
-      if(old.url===frame.url&&['weather','significant'].includes(old.mode)&&old.viewKey===viewKey(old,old.mode)&&old.ids.every(id=>map.isSourceLoaded(id)&&!frameErrors.has(id))){
+      if(mayRetainFrame(old,viewKey(old,old.mode),id=>map.isSourceLoaded(id)&&!frameErrors.has(id))){
         const previous=retainedViews.get(old.viewKey);if(previous)removeLayers(previous.ids);
         old.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',0));retainedViews.set(old.viewKey,old);
       }else{removeLayers(old.ids);clearRetainedViews();}
     }
-    while(retainedViews.size>2){const [k,v]=retainedViews.entries().next().value;removeLayers(v.ids);retainedViews.delete(k);}
+    while(retainedViews.size>2 || [...retainedViews.values()].reduce((n,v)=>n+map.layerCanvasBytes(v.ids),0)>64*1024*1024){
+      const [k,v]=retainedViews.entries().next().value;removeLayers(v.ids);retainedViews.delete(k);
+    }
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
     $('app').dataset.frameStatus='ready';$('app').dataset.validTime=frame.iso;$('app').dataset.intervalHours=frame.hours;
     delete $('app').dataset.lastLoadError;
@@ -614,7 +617,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames,full
   if(!force&&rendering&&wanted===target&&requestedContext?.timeline===context.timeline)return;
   requestedContext=context;
   cancelPreparation();
-  if(current?.url!==context.timeline[target].url){cancelModePreparation();clearRetainedViews();}
+  if(current?.url!==context.timeline[target].url)cancelModePreparation();
   wanted=target;revision++;
   renderController?.abort();
   syncTimeChoices({...context.timeline[wanted],index:wanted},true);

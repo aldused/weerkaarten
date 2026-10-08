@@ -1280,6 +1280,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
 }
 #reset-btn:hover .reset-icon { color: #0c5a6e; }
 </style>
+<link rel="preconnect" href="https://harmonie-data.weerlab.nl" crossorigin>
 </head>
 <body>
 <main class="page">
@@ -1506,6 +1507,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
   </section>
 </main>
 
+<script src="map-performance.js?v=20261008-1"></script>
 <script>
 (function() {
   "use strict";
@@ -1738,6 +1740,9 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
   let timer = null;
   let current = null;
   let requestSeq = 0;
+  let sourceEpoch=0, adjacentTimer=null;
+  const pendingSteps=new Map();
+  const weatherRasters=new MapPerformance.LRU({maxBytes:48*1024*1024,maxEntries:16,dispose:e=>{e.width=0;e.height=0;}});
   let tempRequestSeq = 0;
   let gustRequestSeq = 0;
   let dataVersion = "";
@@ -2941,7 +2946,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
   }
 
   async function fetchPageJSON(path) {
-    const r = await fetch(path + "?t=" + Date.now(), { cache: "no-store" });
+    const r = await fetch(path, { cache: "no-cache" });
     if (!r.ok) throw new Error(path + " niet beschikbaar");
     return r.json();
   }
@@ -2982,7 +2987,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
   // uint16 nLat, nLon, nSteps, nComp (LE) + byte 8 = dtype (0 float32, 1 uint8-sqrt).
   const paramFilePromises = new Map();
 
-  function decodeParamHeader(info, buf) {
+  function decodeParamHeader(info, buf, sourceMeta=meta) {
     if (buf.byteLength < 16) throw new Error(info.file + " heeft onverwachte lengte");
     const view = new DataView(buf);
     const nLat = view.getUint16(0, true);
@@ -3000,7 +3005,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
       ? new Uint8Array(buf, 16, nSteps * valuesPerStep)
       : new Float32Array(buf, 16, nSteps * valuesPerStep);
     return {
-      grid: info.grid || meta.grid,
+      grid: info.grid || sourceMeta.grid,
       nLat, nLon, nSteps, nComp, nPts, valuesPerStep,
       dtypeFlag,
       scale: info.scale || 16,
@@ -3016,14 +3021,15 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     if (!info) return Promise.reject(new Error("Onbekende parameter: " + paramKey));
     // Bin-URL is al ?v=<run>-geversioneerd, dus laat browser/CDN cachen
     // (geen no-store) — scheelt fors bij het vierluik en bij navigatie.
+    const epoch=sourceEpoch, sourceMeta=meta;
     const promise = fetch(DATA_URL + info.file + dataVersion, { cache: "force-cache" })
       .then(response => {
         if (!response.ok) throw new Error(info.file + " niet beschikbaar");
         return response.arrayBuffer();
       })
-      .then(buf => decodeParamHeader(info, buf))
+      .then(buf => {if(epoch!==sourceEpoch)throw new Error("Modelselectie gewijzigd");return decodeParamHeader(info, buf, sourceMeta);})
       .catch(err => {
-        paramFilePromises.delete(paramKey);
+        if(epoch===sourceEpoch)paramFilePromises.delete(paramKey);
         throw err;
       });
     paramFilePromises.set(paramKey, promise);
@@ -3102,11 +3108,18 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     };
   }
 
-  async function loadStep(stepIdx) {
+  function loadStep(stepIdx,quiet=false) {
+    const key=sourceEpoch+"|"+stepIdx;
+    if(pendingSteps.has(key))return pendingSteps.get(key);
+    const promise=loadStepUncached(stepIdx,quiet);pendingSteps.set(key,promise);
+    promise.then(()=>pendingSteps.delete(key),()=>pendingSteps.delete(key));return promise;
+  }
+  async function loadStepUncached(stepIdx,quiet=false) {
+    const epoch=sourceEpoch;
     const cacheKey = String(stepIdx);
     const cached = stepCache.get(cacheKey);
-    if (cached && cached.cloud && cached.rain && Object.prototype.hasOwnProperty.call(cached, "visibility")) return cached;
-    setStatus(`${modelShort()} stap +${stepIdx + 1}h laden...`);
+    if (cached && cached.cloud && cached.rain && Object.prototype.hasOwnProperty.call(cached, "visibility")) {stepCache.delete(cacheKey);stepCache.set(cacheKey,cached);return cached;}
+    if(!quiet)setStatus(`${modelShort()} stap +${stepIdx + 1}h laden...`);
     const bundle = await Promise.all([
       loadStepParam("bewolking", stepIdx),
       loadStepParam("neerslag", stepIdx),
@@ -3141,8 +3154,17 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
       rainAccumWindowLoading: {},
       rainAccumWindowUnavail: {}
     }));
+    if(epoch!==sourceEpoch)throw new Error("Modelselectie gewijzigd");
     stepCache.set(cacheKey, bundle);
+    // Bound decoded timestep bundles; complete compressed fields stay shared.
+    let bytes=0;for(const item of stepCache.values())for(const field of Object.values(item))bytes+=field?.data?.byteLength||0;
+    while(stepCache.size>8 || (bytes>64*1024*1024 && stepCache.size>1)){
+      const oldest=stepCache.keys().next().value, item=stepCache.get(oldest);
+      for(const field of Object.values(item))bytes-=field?.data?.byteLength||0;
+      stepCache.delete(oldest);
+    }
     loadStepParam("wind", stepIdx).then(wind => {
+      if(epoch!==sourceEpoch)return;
       const latest = stepCache.get(cacheKey);
       if (!latest) return;
       latest.wind = wind;
@@ -3263,7 +3285,16 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     return bundle.rainAccumPromise;
   }
 
-  function ensureWeatherRaster(bundle, view, w, h) {
+  const rasterMessages=new MessageChannel(), rasterContinuations=[];
+  rasterMessages.port1.onmessage=()=>rasterContinuations.shift()?.();
+  function yieldRasterWork(){return new Promise(resolve=>{rasterContinuations.push(resolve);rasterMessages.port2.postMessage(0);});}
+  function ensureWeatherRaster(bundle,view,w,h){
+    const build=weatherRasterBuilder(bundle,view,w,h);let result;
+    do{result=build.next();}while(!result.done);
+    return result.value;
+  }
+  function weatherRasterBuilder(bundle, view, w, h, settings={showRain,showCloudLayers,showHighCloud,showCloudBackground,showRainAccum}) {
+    const {showRain,showCloudLayers,showHighCloud,showCloudBackground,showRainAccum}=settings;
     const rainLayerActive = showRain && !showCloudLayers;
     const ck = accumCacheKey();
     const windowData = showRainAccum ? (bundle.rainAccumWindows && bundle.rainAccumWindows[ck]) || null : null;
@@ -3279,9 +3310,11 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     if (winterRisk && !bundle.profile && !bundle.profileUnavailable && !bundle.profileLoading) {
       ensureStepProfile(bundle, bundle.stepIdx);
     }
+    const rasterBundle=Object.assign({},bundle);
     const viewKey = `${view.lonMin.toFixed(3)}_${view.lonMax.toFixed(3)}_${view.latMin.toFixed(3)}_${view.latMax.toFixed(3)}-${Math.round(w)}x${Math.round(h)}`;
     const rasterKey = `${showCloudLayers ? "cloudLayers" : "significant"}-${showHighCloud ? "withCirrus" : "withoutCirrus"}-${cloudBaseMode}-${precipMode}-prof${bundle.profile ? 1 : 0}-${viewKey}`;
-    if (bundle.rasterCanvases && bundle.rasterCanvases[rasterKey]) return bundle.rasterCanvases[rasterKey];
+    const rasterCacheKey=sourceEpoch+"|"+bundle.stepIdx+"|"+rasterKey;
+    const readyRaster=weatherRasters.get(rasterCacheKey);if(readyRaster)return {next:()=>({done:true,value:readyRaster}),return:()=>({done:true})};
     const cloud = bundle.cloud;
     const rain = bundle.rain;
     const cape = bundle.cape;
@@ -3308,7 +3341,12 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     const pixelsPerCloudCell = rw / Math.max(1, lonSpan / cellLon);
     const cloudSample = pixelsPerCloudCell > 18 ? sampleGridSmooth : sampleGridValue;
 
-    for (let y = 0; y < rh; y++) {
+    let cursor=0, complete=false;
+    return {
+      next(){
+        if(complete)return {done:true,value:off};
+        const end=Math.min(rh,cursor+8);
+        for (let y = cursor; y < end; y++) {
       const lat = view.latMax - (y + 0.5) / rh * latSpan;
       for (let x = 0; x < rw; x++) {
         const lon = view.lonMin + (x + 0.5) / rw * lonSpan;
@@ -3362,7 +3400,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
           const mm = rainLayerActive && rainSource ? sampleScalarLinear(rainSource, lat, lon, 0) : NaN;
           if (Number.isFinite(mm)) {
             const capeVal = accumActive ? 0 : (cape ? sampleScalarLinear(cape, lat, lon, 0) : 0);
-            const rc = accumActive ? accumColor(mm) : significantPrecipColor(bundle, mm, lat, lon, capeVal);
+            const rc = accumActive ? accumColor(mm) : significantPrecipColor(rasterBundle, mm, lat, lon, capeVal);
             if (rc) {
               hasPrecipColor = true;
               const alpha = precipAlpha(mm, accumActive);
@@ -3390,12 +3428,13 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
         p[pi + 3] = cellAlpha;
       }
     }
-    octx.putImageData(img, 0, 0);
-    if (!bundle.rasterCanvases) bundle.rasterCanvases = {};
-    const cachedKeys = Object.keys(bundle.rasterCanvases);
-    if (cachedKeys.length > 6) delete bundle.rasterCanvases[cachedKeys[0]];
-    bundle.rasterCanvases[rasterKey] = off;
-    return off;
+        cursor=end;
+        if(cursor<rh)return {done:false};
+        octx.putImageData(img,0,0);weatherRasters.set(rasterCacheKey,off,off.width*off.height*4);
+        complete=true;return {done:true,value:off};
+      },
+      return(){off.width=0;off.height=0;complete=true;return {done:true};}
+    };
   }
 
   function drawPixelWeather(ctx, w, h, bundle) {
@@ -4088,6 +4127,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
   }
 
   function render() {
+    if(!current && lastRenderW && lastRenderH)return;
     const rect = stage.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const w = Math.max(320, Math.round(rect.width));
@@ -4115,7 +4155,30 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     drawTrackArrow(ctx, w, h);
   }
 
+  function warmAdjacentSteps(index,delay=80){
+    clearTimeout(adjacentTimer);const epoch=sourceEpoch, request=requestSeq;
+    if(document.hidden || navigator.connection?.saveData)return;
+    adjacentTimer=setTimeout(async()=>{
+      for(const next of [index+1,index-1]){
+        if(epoch!==sourceEpoch || request!==requestSeq || document.hidden)return;
+        if(next>=0 && next<meta.uren)try{
+          const bundle=await loadStep(next,true);
+          if(epoch!==sourceEpoch || request!==requestSeq)return;
+          if(!showRainAccum && lastRenderW && lastRenderH){
+            const build=weatherRasterBuilder(bundle,getRenderView(lastRenderW,lastRenderH),lastRenderW,lastRenderH);
+            let result=build.next();
+            while(!result.done){
+              await yieldRasterWork();
+              if(epoch!==sourceEpoch || request!==requestSeq || document.hidden){build.return();return;}
+              result=build.next();
+            }
+          }
+        }catch{}
+      }
+    },delay);
+  }
   async function setStep(nextStep) {
+    clearTimeout(adjacentTimer);
     if (!meta) return;
     step = Math.max(0, Math.min(meta.uren - 1, nextStep));
     const requestedStep = step;
@@ -4145,6 +4208,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
       }
       updateVanLabel();
       render();
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{if(requestId===requestSeq)warmAdjacentSteps(requestedStep);}));
       leadLabel.textContent = formatLeadLabel(requestedStep);
       setStatus(`${VIEW_PRESETS[viewIndex].name} - ${formatValid(meta.tijden[requestedStep])}`);
       if (showTemperature && !current.temp && !current.tempUnavailable) {
@@ -4163,8 +4227,8 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     } catch (err) {
       if (requestId !== requestSeq) return;
       setStatus(err.message || "Data laden mislukt", true);
-      current = null;
-      render();
+      // Preserve the last complete map on a transient load failure.
+      if(!current)render();
     }
   }
 
@@ -4673,8 +4737,11 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
   }
 
   async function init() {
+    const epoch=++sourceEpoch, model=activeModel;
     try {
-      meta = await fetchJSON(MODEL_CONFIG[activeModel].meta);
+      const loadedMeta = await fetchJSON(MODEL_CONFIG[model].meta);
+      if(epoch!==sourceEpoch)return;
+      meta=loadedMeta;
       dataVersion = "?v=" + encodeURIComponent(meta.bijgewerkt || meta.run || "live");
       updateModelBadge();
       updateModeText();
@@ -4693,6 +4760,7 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
       updateTimeScale();
       loadBaseMapData().catch(() => {});
       loadOverlay(meta.overlay || "harmonie_overlay.png").then(img => {
+        if(epoch!==sourceEpoch)return;
         overlayImg = img;
         render();
       }).catch(() => {});
@@ -4713,8 +4781,10 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
         });
       }
       await setStep(step);
+      if(epoch!==sourceEpoch)return;
       postToParent({ cmd: "meta", uren: meta.uren, tijden: meta.tijden, run: meta.run });
     } catch (err) {
+      if(epoch!==sourceEpoch)return;
       setStatus(err.message || "Initialisatie mislukt", true);
       render();
     }
@@ -5097,11 +5167,12 @@ body.accum-visible .van-label-row { display: flex; justify-content: flex-start; 
     // Geldig-tijdstip van huidige stap bewaren vóór meta wordt gewist.
     pendingValidTime = (meta && meta.tijden && meta.tijden[step]) ? meta.tijden[step] : null;
     activeModel = model;
+    requestSeq++;clearTimeout(adjacentTimer);pendingSteps.clear();
     persistModel();
     try { stop(); } catch {}
     // Alle modelgebonden caches leegmaken; bin-bestanden, stappen en
     // accumulatievensters verschillen per model.
-    stepCache.clear();
+    stepCache.clear();weatherRasters.clear();
     paramFilePromises.clear();
     accumWindowCache.clear();
     current = null;

@@ -71,6 +71,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0c1c2e;font-family:
   .credit,.scale{display:none}
 }
 </style>
+<link rel="preconnect" href="https://harmonie-data.weerlab.nl" crossorigin>
 </head>
 <body>
 <canvas id="map"></canvas>
@@ -249,14 +250,14 @@ function inView(lon,lat,ext){return lon>=ext.lonMin&&lon<=ext.lonMax&&lat>=ext.l
 // ─── DATA LOADING ────────────────────────────────────────────────────────────
 // Resolve URLs against page location (works on both http:// and file://)
 var _base=(function(){var a=document.createElement('a');a.href='.';return a.href;})();
-function _url(f){return (/^https?:/.test(f)?f:_base+f)+'?v='+Date.now();}
-function fetchJson(f){return fetch(_url(f)).then(function(r){if(!r.ok)throw new Error(f);return r.json();});}
+function _url(f){return /^https?:/.test(f)?f:_base+f;}
+function fetchJson(f){return fetch(_url(f),{cache:"no-cache"}).then(function(r){if(!r.ok)throw new Error(f);return r.json();});}
 
 function loadRaster(key){
   if(rasters[key])return Promise.resolve(rasters[key]);
   var info=meta.parameters[key];
   if(!info)return Promise.reject(new Error('Geen param: '+key));
-  return fetch(_url(info.file)).then(function(r){
+  return fetch(_url(info.file)+"?run="+encodeURIComponent(meta.bijgewerkt||meta.run_utc||meta.run||"live"),{cache:"no-cache"}).then(function(r){
     if(!r.ok)throw new Error(info.file);
     return r.arrayBuffer();
   }).then(function(buf){
@@ -894,6 +895,15 @@ function bind(){
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 function init(){
+  var geographyReady=Promise.all([
+      fetchJson('europa_land.geojson').then(function(d){geo.land=d;}).catch(function(){}),
+      fetchJson('nl_provincies.geojson').then(function(d){geo.nl=d;}).catch(function(){}),
+      fetchJson('be_provincies.geojson').then(function(d){geo.be=d;}).catch(function(){}),
+      fetchJson('germany_bundeslander.geojson').then(function(d){geo.de=d;}).catch(function(){}),
+      fetchJson('fr_regions.geojson').then(function(d){geo.fr=d;}).catch(function(){}),
+      fetchJson('nl_rivieren.geojson').then(function(d){geo.rivers=d;}).catch(function(){}),
+      loadMosmix().catch(function(){})
+    ]);
   setStatus('Metadata laden…',5);
   fetchJson(META).then(function(d){
     meta=d;
@@ -910,15 +920,7 @@ function init(){
     ]);
   }).then(function(){
     setStatus('Kaartlagen laden…',55);
-    return Promise.all([
-      fetchJson('europa_land.geojson').then(function(d){geo.land=d;}).catch(function(){}),
-      fetchJson('nl_provincies.geojson').then(function(d){geo.nl=d;}).catch(function(){}),
-      fetchJson('be_provincies.geojson').then(function(d){geo.be=d;}).catch(function(){}),
-      fetchJson('germany_bundeslander.geojson').then(function(d){geo.de=d;}).catch(function(){}),
-      fetchJson('fr_regions.geojson').then(function(d){geo.fr=d;}).catch(function(){}),
-      fetchJson('nl_rivieren.geojson').then(function(d){geo.rivers=d;}).catch(function(){}),
-      loadMosmix().catch(function(){})
-    ]);
+    return geographyReady;
   }).then(function(){
     buildTabs();bind();
     setStatus('Wolkentextuur berekenen…',80);

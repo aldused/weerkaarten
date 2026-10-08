@@ -270,6 +270,7 @@
   </div>
 </div>
 
+<script src="map-performance.js?v=20261008-1"></script>
 <script>
 // ── Auth ──────────────────────────────────────────────────────────
 function checkPw() {
@@ -536,6 +537,7 @@ async function fetchMeta(prefix) {
 }
 
 function applyMeta(meta) {
+  imageRevision=encodeURIComponent(meta.bijgewerkt || meta.run || "live");
   uren = meta.uren;
   window._meta_global = { map_axes: meta.map_axes, lon_bounds: meta.lon_bounds, lat_bounds: meta.lat_bounds };
   const maxU = uren.length ? uren[uren.length - 1].t : 0;
@@ -552,11 +554,13 @@ function applyMeta(meta) {
   document.getElementById('map-focus-slider').max = uren.length - 1;
 
   goTo(0);
-  preloadRange(0, 4);
+
 }
 
 async function switchModel(prefix) {
+  const token=++modelLoadToken;
   const meta = await fetchMeta(prefix);
+  if(token!==modelLoadToken)return;
   if (!meta) {
     document.getElementById('run-label').textContent =
       `${prefix}: geen data beschikbaar`;
@@ -571,6 +575,7 @@ async function switchModel(prefix) {
 
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {
+  const token=++modelLoadToken;
   // Voorkeursmodel, met fallback naar het andere
   let meta = await fetchMeta(modelPrefix);
   if (!meta) {
@@ -578,6 +583,7 @@ async function init() {
     meta = await fetchMeta(alt);
     if (meta) modelPrefix = alt;
   }
+  if(token!==modelLoadToken)return;
   if (!meta) {
     document.getElementById('run-label').textContent = 'Geen metadata gevonden — run script eerst';
     return;
@@ -602,21 +608,16 @@ async function init() {
 }
 
 // ── Kaart laden ───────────────────────────────────────────────────
-const imgCache = {};
-function loadImg(idx) {
-  const u = uren[idx];
-  const fname = u ? ((!showHoog && u.fname_nh) ? u.fname_nh : u.fname) : null;
-  if (!fname) return;
-  if (!imgCache[fname]) {
-    const img = new Image();
-    img.src = IMG_BASE + fname;
-    imgCache[fname] = img;
-  }
-  return imgCache[fname];
+let imageRevision='live', imageToken=0, modelLoadToken=0, imageWarmTimer=null;
+const imageFrames=new MapPerformance.ImageFrames({maxBytes:64*1024*1024,maxEntries:12});
+function imageSource(idx){
+  const u=uren[idx], fname=u && (!showHoog && u.fname_nh ? u.fname_nh : u.fname);
+  return fname ? IMG_BASE+fname+'?run='+imageRevision : null;
 }
-
-function preloadRange(idx, n) {
-  for (let i = idx; i < Math.min(idx + n, uren.length); i++) loadImg(i);
+function preloadRange(idx){
+  clearTimeout(imageWarmTimer);const token=imageToken;
+  const urls=[idx+1,idx-1].filter(i=>i>=0&&i<uren.length).map(imageSource).filter(Boolean);
+  imageWarmTimer=setTimeout(()=>{if(token===imageToken)imageFrames.preload(urls);},50);
 }
 
 function goTo(idx) {
@@ -628,19 +629,20 @@ function goTo(idx) {
   const imgEl = document.getElementById('kaart-img');
   const overlay = document.getElementById('loading');
 
-  const cached = loadImg(idx);
-  if (cached && cached.complete) {
-    imgEl.src = cached.src;
-    overlay.classList.remove('vis');
-  } else {
-    overlay.classList.add('vis');
-    const img = loadImg(idx);
-    img.onload = () => {
-      if (currentIdx === idx) {
-        imgEl.src = img.src;
-        overlay.classList.remove('vis');
-      }
-    };
+  const source=imageSource(idx), token=++imageToken;
+  imageFrames.select(source);clearTimeout(imageWarmTimer);
+  function commit(image){
+    if(token!==imageToken)return;
+    imgEl.src=image.src;overlay.classList.remove('vis');
+    if(showTemp)renderTempOverlay(idx);
+    if(showWind)renderWindOverlay(idx);
+    preloadRange(idx);
+  }
+  const cached=imageFrames.get(source);
+  if(cached)commit(cached);
+  else {
+    overlay.textContent='laden…';overlay.classList.add('vis');
+    imageFrames.load(source).then(commit).catch(()=>{if(token===imageToken)overlay.textContent='kaart niet beschikbaar';});
   }
 
   // Slider
@@ -675,11 +677,10 @@ function goTo(idx) {
   const activeThumb = document.querySelector('.thumb.active');
   if (activeThumb) activeThumb.scrollIntoView({block:'nearest', inline:'nearest'});
 
-  preloadRange(idx + 1, 6);
+
 
   // SVG overlays
-  if (showTemp) renderTempOverlay(idx);
-  if (showWind) renderWindOverlay(idx);
+
 }
 
 function step(d) {

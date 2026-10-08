@@ -63,7 +63,7 @@ test('Source descriptions distinguish borrowed CAPE, model run omissions and est
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};}
 function env(extra={}){
  const elements={};function el(id){return elements[id] ||= {id,textContent:'',value:'1',dataset:{},style:{},inert:false,disabled:false,classList:{add(){},remove(){},toggle(){}},setAttribute(){},getContext(){return {clearRect(){}}}};}
- const c=vm.createContext({C,VierluikCore:V,console:{error(){}},document:{getElementById:el,body:{classList:{add(){},remove(){}}}},sessionEpoch:0,sessionLoading:false,meta:meta(),actiefModel:'a',panelParams:['temp'],layout:1,slider:el('slider'),statusEl:el('status'),tooltip:el('tooltip'),panelZoom:{},MODELS:{a:{label:'A'},b:{label:'B'}},modelData:{},paramCache:{},panelRenderTokens:{},stopSpelen(){},addDerivedParams(){},bouwUurSidebar(){},herbouwDagknoppen(){},setLayout(){},bewaarUiState(){},...extra});
+ const c=vm.createContext({C,VierluikCore:V,clearTimeout,paperWarmTimer:null,paperWarmEpoch:0,paperFrames:{clear(){}},console:{error(){}},document:{getElementById:el,body:{classList:{add(){},remove(){}}}},sessionEpoch:0,sessionLoading:false,meta:meta(),actiefModel:'a',panelParams:['temp'],layout:1,slider:el('slider'),statusEl:el('status'),tooltip:el('tooltip'),panelZoom:{},MODELS:{a:{label:'A'},b:{label:'B'}},modelData:{},paramCache:{},panelRenderTokens:{},stopSpelen(){},addDerivedParams(){},bouwUurSidebar(){},herbouwDagknoppen(){},setLayout(){},bewaarUiState(){},...extra});
  return {c,el};
 }
 test('A model swap atomically commits only the latest request, even when older metadata arrives last',async()=>{
@@ -113,4 +113,11 @@ test('Unknown wind does not become calm; high cloud base does not become cloud-f
  vm.runInContext(fn('msNaarBft'),c);vm.runInContext(fn('isCloudFree'),c);
  assert.ok(Number.isNaN(c.msNaarBft(NaN)));assert.equal(c.msNaarBft(32.7),12);
  assert.equal(c.isCloudFree(9999),true);assert.equal(c.isCloudFree(13428),false);
+});
+test('Returning to the same publication reuses decoded fields; a revised publication loads fresh arrays',async()=>{
+ const next=meta([10,11]),cached={temp:{data:new Float32Array(4)}};
+ const signature=JSON.stringify([next.run,next.run_utc,next.bijgewerkt,next.tijden,next.grid,next.parameters]);
+ let seen;const {c}=env({modelData:{a:{meta:next,paramCache:cached,signature}},laadMeta:async()=>next,laadOverlay:async()=>null,loadField:async(k,m,cache)=>{seen=cache;}});
+ vm.runInContext(fn('loadSession'),c);await c.loadSession('a',false);assert.equal(seen,cached);
+ c.laadMeta=async()=>meta([10,11],{bijgewerkt:'corrected'});await c.loadSession('a',false);assert.notEqual(seen,cached);
 });

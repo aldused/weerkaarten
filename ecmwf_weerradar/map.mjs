@@ -185,10 +185,15 @@ export class Map {
   getCenter(){return this.native.getCenter();}
   getZoom(){return this.native.getZoom()-1;}
   getCanvas(){return this.el;}
+  layerCanvasBytes(ids=this.layers.keys()){
+    let bytes=0;
+    for(const id of ids)for(const {el} of Object.values(this.layers.get(id)?._tiles||{}))bytes+=(el?.width||0)*(el?.height||0)*4;
+    return bytes;
+  }
   performanceStats(){return {
     pixelCacheEntries:paintQueue.cache.size,pixelCacheBytes:[...paintQueue.cache.values()].reduce((n,v)=>n+v.byteLength,0),
     workerFields:pool.reduce((n,slot)=>n+slot.fields.size,0),workerFieldBytes:pool.reduce((n,slot)=>n+slot.bytes,0),workers:liveWorkers(),
-    pendingTiles:paintQueue.pending.size,weatherLayers:this.layers.size,
+    pendingTiles:paintQueue.pending.size,weatherLayers:this.layers.size,layerCanvasBytes:this.layerCanvasBytes(),
     renderedTiles:renderStats.tiles,workerMs:Math.round(renderStats.workerMs),
     commits:renderStats.commits,commitWaitMs:Math.round(renderStats.commitWaitMs),mainThreadTiles:renderStats.mainThreadTiles,
     detailTiles:this.details.layers.size,detailCacheTiles:this.details.cache.size,
