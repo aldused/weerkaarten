@@ -1436,20 +1436,6 @@ const MENU_PRODUCTS = [
     "restricted": true
   },
   {
-    "id": "weerbewaking",
-    "name": "Weerbewaking",
-    "description": "Afgeschermd dossier",
-    "category": "professioneel",
-    "type": "vak",
-    "section": "Studio (afgeschermd)",
-    "icon": "studio",
-    "href": "index.html#weerbewaking",
-    "thumbnail": null,
-    "facets": {},
-    "keywords": "Weerbewaking Afgeschermd dossier ",
-    "restricted": true
-  },
-  {
     "id": "krantenredactie",
     "name": "Krantenredactie (demo)",
     "description": "Weerberichten per krant schrijven en controleren",

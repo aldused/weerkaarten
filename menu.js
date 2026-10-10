@@ -63,6 +63,7 @@
   function routeUrl(page,type,filters={}){const q=new URLSearchParams();if(type)q.set('type',type);Object.entries(filters).forEach(([key,value])=>{if(value)q.set(key,value);});return '#menu/'+page+(q.size?'?'+q:'');}
   function readRoute(){
     const incoming=location.hash.slice(1) || site.defaultRoute || '';
+    if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
     const raw=site.routeAliases?.[incoming] ?? incoming;
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
