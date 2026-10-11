@@ -1437,7 +1437,7 @@ const MENU_PRODUCTS = [
   },
   {
     "id": "krantenredactie",
-    "name": "Krantenredactie (demo)",
+    "name": "Krantenredactie",
     "description": "Weerberichten per krant schrijven en controleren",
     "category": "professioneel",
     "type": "vak",

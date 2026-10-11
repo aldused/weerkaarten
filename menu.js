@@ -146,7 +146,7 @@
   function empty(title,text,action){return `<div class="empty">${icon(state.page==='favorieten'?'star':'search')}<h2>${escape(title)}</h2><p>${escape(text)}</p><div class="empty-actions">${action}</div></div>`;}
   function catalogue(){
     const cat=categories[state.page];
-    const base=state.page==='favorieten'?favorites.map(id=>byId.get(id)):products.filter(isInType);
+    const base=state.page==='favorieten'?favorites.map(id=>byId.get(id)):products.filter(p=>isInType(p)&&!(state.page==='professioneel'&&p.id==='krantenredactie'));
     const result=base.filter(p=>matchesFilters(p));
     const climate=state.page==='terugkijken' && state.type==='klimaat';
     const archive=state.page==='terugkijken' && state.type==='terug';
