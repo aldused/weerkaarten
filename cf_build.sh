@@ -39,6 +39,11 @@ if [ -d ecmwf_weerradar ]; then
     -type f ! -name .DS_Store ! -name '*.pyc' -print0)
 fi
 
+# Wegdektemperaturen: pagina, kaartassets en echte bronmomentopname.
+if [ -d beta-wegdek ]; then
+  cp -R beta-wegdek "$STAGE/beta-wegdek"
+fi
+
 # Pas vervangen wanneer de volledige staging-build geslaagd is. Hiermee
 # verdwijnen ook oude bestanden die niet meer in de bronroot bestaan.
 rm -rf "$OUTPUT"
