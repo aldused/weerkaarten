@@ -685,25 +685,36 @@ body.six-hours #map-focus-time { white-space:normal; }
   <div class="var-select-wrap">
     <label for="var-select">Alle kaartlagen</label>
     <select id="var-select" aria-label="Zet de kaartlaag van alle vier de kaarten">
-      <option value="neerslag" data-label="Neerslag">Neerslag</option>
-      <option value="significant" data-label="Significant weer">Significant weer</option>
-      <option value="radar" data-label="Modelradar (dBZ)">Modelradar (dBZ)</option>
-      <option value="cumul" data-label="Cumulatieve neerslag">Cumulatieve neerslag</option>
-      <option value="temp" data-label="Temperatuur">Temperatuur</option>
-      <option value="dauwpunt" data-label="Dauwpunt">Dauwpunt</option>
-      <option value="wind" data-label="Wind">Wind</option>
-      <option value="windrichting" data-label="Windrichting">Windrichting</option>
-      <option value="windstoten" data-label="Windstoten">Windstoten</option>
-      <option value="zicht" data-label="Zicht">Zicht</option>
-      <option value="druk" data-label="Luchtdruk">Luchtdruk</option>
-      <option value="cape" data-label="CAPE">CAPE</option>
-      <option value="wolkenbasis" data-label="Wolkenhoogte / wolkenbasis (m)">Wolkenhoogte / wolkenbasis (m)</option>
-      <option value="bewolking_totaal" data-label="Bewolking totaal (schatting, achtsten)">Bewolking totaal (schatting, achtsten)</option>
-      <option value="bewolking" data-label="Bewolking (hoog/midden/laag)">Bewolking (hoog/midden/laag)</option>
-      <option value="wolkenlagen" data-label="Wolkenlagen (RGB)">Wolkenlagen (RGB)</option>
-      <option value="wolkenkaart" data-label="Wolkenkaart (modelbeeld)">Wolkenkaart (modelbeeld)</option>
-      <option value="zon" data-label="Zon (minuten per uur)">Zon (minuten per uur)</option>
-      <option value="cumzon" data-label="Zonuren (dagsom)">Zonuren (dagsom)</option>
+      <optgroup label="Neerslag en weerbeeld">
+        <option value="neerslag" data-label="Neerslag">Neerslag</option>
+        <option value="cumul" data-label="Cumulatieve neerslag">Cumulatieve neerslag</option>
+        <option value="radar" data-label="Modelradar (dBZ)">Modelradar (dBZ)</option>
+        <option value="significant" data-label="Significant weer">Significant weer</option>
+      </optgroup>
+      <optgroup label="Temperatuur">
+        <option value="temp" data-label="Temperatuur">Temperatuur</option>
+        <option value="dauwpunt" data-label="Dauwpunt">Dauwpunt</option>
+      </optgroup>
+      <optgroup label="Wind">
+        <option value="wind" data-label="Wind">Wind</option>
+        <option value="windrichting" data-label="Windrichting">Windrichting</option>
+        <option value="windstoten" data-label="Windstoten">Windstoten</option>
+      </optgroup>
+      <optgroup label="Bewolking en zicht">
+        <option value="bewolking" data-label="Bewolking (hoog/midden/laag)">Bewolking (hoog/midden/laag)</option>
+        <option value="wolkenlagen" data-label="Wolkenlagen (RGB)">Wolkenlagen (RGB)</option>
+        <option value="wolkenkaart" data-label="Wolkenkaart (modelbeeld)">Wolkenkaart (modelbeeld)</option>
+        <option value="wolkenbasis" data-label="Wolkenhoogte / wolkenbasis (m)">Wolkenhoogte / wolkenbasis (m)</option>
+        <option value="zicht" data-label="Zicht">Zicht</option>
+      </optgroup>
+      <optgroup label="Zon">
+        <option value="zon" data-label="Zon (minuten per uur)">Zon (minuten per uur)</option>
+        <option value="cumzon" data-label="Zonuren (dagsom)">Zonuren (dagsom)</option>
+      </optgroup>
+      <optgroup label="Luchtdruk en onstabiliteit">
+        <option value="druk" data-label="Luchtdruk">Luchtdruk</option>
+        <option value="cape" data-label="CAPE">CAPE</option>
+      </optgroup>
     </select>
     <a href="index.html#wolkenbasis-actueel" target="_top" style="color:#38bdf8;font-size:12px;white-space:nowrap">Bekijk actuele wolkenbasis ↗</a>
     <span id="var-availability" aria-live="polite">laden…</span>
@@ -2007,9 +2018,7 @@ function syncFocusVarSelect() {
   var bron = document.getElementById('var-select');
   var doel = document.getElementById('map-focus-var');
   if (!bron || !doel) return;
-  doel.innerHTML = Array.from(bron.options).map(function(o) {
-    return '<option value="' + o.value + '"' + (o.disabled ? ' disabled' : '') + '>' + o.textContent + '</option>';
-  }).join('');
+  doel.replaceChildren.apply(doel, Array.from(bron.children).map(function(groep) { return groep.cloneNode(true); }));
   doel.value = bron.value;
 }
 
@@ -2142,9 +2151,11 @@ function bouwModelKiezers() {
     sel.addEventListener('change', function() { kiesModel(p.idx, this.value); });
 
     var elementSel = document.getElementById('p' + p.idx + '-element');
-    elementSel.innerHTML = Array.from(document.getElementById('var-select').options).map(function(option) {
-      return '<option value="' + option.value + '" data-label="' + option.dataset.label + '">' + option.dataset.label + '</option>';
-    }).join('');
+    elementSel.replaceChildren.apply(elementSel, Array.from(document.getElementById('var-select').children).map(function(groep) { return groep.cloneNode(true); }));
+    Array.from(elementSel.options).forEach(function(option) {
+      option.textContent = option.dataset.label;
+      option.disabled = false;
+    });
     elementSel.value = p.varName;
     elementSel.addEventListener('change', function() { kiesElement(p.idx, this.value); });
     updatePanelHeader(p.idx);
