@@ -37,7 +37,7 @@ assert.equal(ui.isWindowAvailable([],0,'nu'),false);
 for(const width of [320,600,900,1800])assert.equal(12*ui.mapLabelScale(width,1800)*width/1800,12,'12px map labels stay 12 screen pixels');
 ui.sync({mode:'instant',forecast:true,label:'14:00',layers:{steden:true},latest:times[36]});
 assert.equal(byId['frame-kind'].textContent,'VERWACHTING · KNMI');assert.equal(byId.slider.attrs['aria-valuetext'],'14:00');
-assert.equal(document.querySelectorAll('.layer-btn')[0].attrs['aria-pressed'],'true');
+assert.equal(elements.find(e=>e.attrs['data-layer']==='steden').attrs['aria-pressed'],'true');
 ui.sync({mode:'cum_+1u',forecast:true,label:'1 mm',layers:{}});assert.equal(byId['frame-kind'].dataset.kind,'sum');
 const engine=html.slice(html.lastIndexOf('<script>')+8,html.lastIndexOf('</script>'));
 const start=engine.indexOf('  // Start\n');assert.ok(start>0);
