@@ -39,7 +39,7 @@
     start:{name:'Overzicht',icon:'home'},
     nu:{name:'Nu',icon:'sun',title:'Het weer van dit moment',description:'Bekijk buien, satellietbeelden en de laatste metingen.',types:[['nu','Alles'],['beeld','Radar & satelliet'],['metingen','Metingen'],['water','Water & kust']]},
     verwachting:{name:'Verwachting',icon:'cloud',title:'Wat gaat het weer doen?',description:'Van de komende bui tot de verwachting voor volgende week.',types:[['kaarten','Weerkaarten'],['pluim','Pluimen & kansen'],['tekst','Weerbericht']]},
-    terugkijken:{name:'Terugkijken',icon:'history',title:'Het weer in perspectief',description:'Bekijk eerdere metingen, weerrecords en klimaatgemiddelden.',types:[['terug','Maand & archief'],['klimaat','Records & klimaat']]},
+    terugkijken:{name:'Terugkijken',icon:'history',title:'Het weer in perspectief',description:'Bekijk eerdere metingen, weerrecords en klimaatgemiddelden.',types:[['alles','Alles'],['terug','Metingen & archief'],['klimaat','Records & klimaat']]},
     favorieten:{name:'Favorieten',icon:'star',title:'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
     professioneel:{name:'Voor professionals',icon:'tools',title:'Voor professionals',description:'Verdieping, analyse en gereedschap voor de weerstudio.',types:[['vak','Alles'],['analyse','Analyse'],['tv','TV & uitzending'],['studio','Studio']]},
   };
@@ -67,11 +67,13 @@
     const raw=site.routeAliases?.[incoming] ?? incoming;
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
-      const recordParent={'dagrecords-jaar':'dagrecords',dagrecordsjaar:'dagrecords',droog668:'neerslag668'};
+      const recordViews={'records-warmedagen':'warmedagen','records-koudedagen':'koudedagen','dagrecords-jaar':'dagrecordsjaar',dagrecordsjaar:'dagrecordsjaar'};
+      const recordParent={'dagrecords-jaar':'records',dagrecordsjaar:'records','records-warmedagen':'records','records-koudedagen':'records',droog668:'neerslag668'};
       const product=products.find(p=>new URL(p.href,location.href).hash==='#'+raw.split('?')[0])
         || products.find(p=>p.id===recordParent[raw]);
       if(site.directProducts && !product)return {page:'start',type:'',filters:{},q:''};
-      return {page:product?.category || 'start',type:product?.type || '',filters:{},q:'',productRoute:raw,product};
+      const selectedProduct=recordViews[raw]&&product?{...product,name:recordViews[raw]==='warmedagen'?'Warme dagen tellen':recordViews[raw]==='koudedagen'?'Koude dagen tellen':'Dagrecords per jaar',src:'records_debilt.html?v=20261013-1&tab='+recordViews[raw]}:product;
+      return {page:product?.category || 'start',type:product?.type || '',filters:{},q:'',productRoute:raw,product:selectedProduct};
     }
     const [path,query='']=raw.replace(/^menu\//,'').replace(/^home$/,'start').split('?');
     const params=new URLSearchParams(query);
@@ -114,7 +116,7 @@
     const browse=site.browse || [
       {id:'nu',description:'Wat gebeurt er op dit moment?',links:[['radar','Radar & buien'],['satelliet','Satellietbeelden'],['actueel','Waarnemingen']]},
       {id:'verwachting',description:'Wat kun je de komende dagen verwachten?',links:[['#verwachting?type=kaarten','Weerkaarten'],['#verwachting?type=pluim','Pluimen & kansen'],['#verwachting?type=tekst','Weerbericht']]},
-      {id:'terugkijken',description:'Hoe was het weer, en wat is normaal?',links:[['#terugkijken?type=terug','Maand & seizoen'],['archief','Archief metingen'],['#terugkijken?type=klimaat','Records & klimaat']]},
+      {id:'terugkijken',description:'Zoek een eerdere dag, tel warme dagen of bekijk records.',links:[['archief','Weer op een datum'],['records','Records & dagen tellen'],['#terugkijken?type=alles','Alle onderwerpen']]},
     ];
     return heading(site.homeTitle || 'Jouw weeroverzicht',site.homeDescription || 'Snel naar de kaarten, verwachtingen en metingen die je zoekt.',site.welcome || 'Welkom bij Weerlab')+
       `<section aria-labelledby="quick-title"><div class="section-heading"><h2 id="quick-title">Snel naar</h2><p>Direct naar je weerinformatie</p></div><div class="quick-grid">${(site.quickProducts || ['radar','modelkaarten','pluim-viewer','actueel']).map(id=>productCard(byId.get(id),{featured:true})).join('')}</div></section>
@@ -123,7 +125,7 @@
   }
   function isInType(p){
     if(p.category!==state.page)return false;
-    if(!state.type)return true;
+    if(!state.type || state.page==='terugkijken'&&state.type==='alles')return true;
     const sections={beeld:'Beeld',metingen:'Metingen',water:'Water & kust',analyse:'Analyse',tv:'TV / uitzending',studio:'Studio (afgeschermd)'};
     return sections[state.type]?p.section===sections[state.type]:p.type===state.type || p.alsoTypes?.includes(state.type);
   }
@@ -144,7 +146,26 @@
     }).join('')}</div><div class="filter-footer"><p>Toont de onderdelen waarin deze informatie beschikbaar is.</p><button class="button" data-reset-filters ${n?'':'disabled'}>Wis filters</button></div></div>${n?`<div class="active-filters" aria-label="Gekozen filters">${Object.entries(state.filters).map(([key,value])=>`<button class="filter-chip" data-remove-filter="${key}" aria-label="Filter ${escape(MENU_LABELS[key][value])} verwijderen">${escape(MENU_LABELS[key][value])}${icon('close')}</button>`).join('')}</div>`:''}`;
   }
   function empty(title,text,action){return `<div class="empty">${icon(state.page==='favorieten'?'star':'search')}<h2>${escape(title)}</h2><p>${escape(text)}</p><div class="empty-actions">${action}</div></div>`;}
+  function historyCatalogue(){
+    const groups=[
+      ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','maandbeeld','maandoverzicht']],
+      ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','dagrecords','extremen','feestdagen']],
+      ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
+      ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['normalen','neerslag668','p13']],
+    ];
+    const visible=p=>state.type==='alles'||p.type===state.type;
+    const selected=groups.map(g=>[...g.slice(0,4),g[4].map(id=>byId.get(id)).filter(p=>p&&visible(p))]).filter(g=>g[4].length);
+    const shortcuts=[['records-warmedagen','Warme dagen tellen','Kies station en jaar · vanaf 20 °C','thermometer'],['archief','Weer op een datum','Open een historische dagkaart','history'],['records','Een record zoeken','Hoogste en laagste metingen','chart']];
+    let html=heading('Terugkijken','Het weer van een eerdere dag, warme dagen tellen of een record zoeken: kies hieronder wat je wilt weten.');
+    html+=`<section class="history-start" aria-labelledby="history-start-title"><h2 id="history-start-title">Snel naar</h2><div class="history-shortcuts">${shortcuts.map(([route,title,description,symbol])=>`<a href="index.html#${route}"><span class="history-shortcut-icon">${icon(symbol)}</span><span><strong>${title}</strong><small>${description}</small></span>${icon('arrow')}</a>`).join('')}</div></section>`;
+    if(state.type!=='alles')html+=`<div class="history-selection"><span>Je bekijkt: <strong>${state.type==='terug'?'Metingen & archief':'Records & klimaat'}</strong></span><a href="${routeUrl('terugkijken','alles')}">Toon alle onderwerpen ${icon('arrow')}</a></div>`;
+    html+=`<nav class="history-jumps" aria-label="Onderwerpen binnen Terugkijken"><span>Of ga naar:</span>${selected.map(([id,title,,symbol])=>`<button type="button" data-history-jump="history-${id}">${icon(symbol)}${escape(title)}</button>`).join('')}</nav>`;
+    html+=`<div class="history-groups">${selected.map(([id,title,description,symbol,items])=>`<section class="history-group" aria-labelledby="history-${id}"><div class="history-group-heading"><span>${icon(symbol)}</span><div><h2 id="history-${id}" tabindex="-1">${escape(title)}</h2><p>${escape(description)}</p></div></div>${productCollection(items,'list')}</section>`).join('')}</div>`;
+    html+='<details class="history-help"><summary>Wat is het verschil tussen een dagrecord en een warme dag?</summary><p>Een warme dag heeft een maximumtemperatuur van minstens 20 °C. Die dag hoeft geen record te zijn. Een dagrecord is de hoogste of laagste meting voor een kalenderdag binnen de meetreeks. Bij elk onderdeel staat de meetperiode; een lopend jaar is nog onvolledig.</p></details>';
+    return html;
+  }
   function catalogue(){
+    if(state.page==='terugkijken'&&!site.directProducts)return historyCatalogue();
     const cat=categories[state.page];
     const base=state.page==='favorieten'?favorites.map(id=>byId.get(id)):products.filter(p=>isInType(p)&&!(state.page==='professioneel'&&p.id==='krantenredactie'));
     const result=base.filter(p=>matchesFilters(p));
@@ -304,6 +325,8 @@
   }).observe($('#mobile-nav'));
   document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
   document.addEventListener('click',event=>{
+    const historyJump=event.target.closest('[data-history-jump]');
+    if(historyJump){const target=document.getElementById(historyJump.dataset.historyJump);target?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});target?.focus({preventScroll:true});return;}
     const pinButton=event.target.closest('[data-pin]');if(pinButton){toggleFavorite(pinButton.dataset.pin);return;}
     const viewButton=event.target.closest('[data-view]');if(viewButton){view=viewButton.dataset.view;save(storagePrefix+'-view',view);render();main.querySelector(`[data-view="${view}"]`).focus();say(view==='list'?'Lijstweergave':'Kaartweergave');return;}
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
@@ -388,7 +411,7 @@
     $('#product-title').textContent=title;
     $('#product-permalink').href=selfPage+'#'+route;
     const category=categories[state.page]||categories.start;
-    $('#product-back').href='#menu/'+state.page+(state.type?'?type='+state.type:'');
+    $('#product-back').href='#menu/'+state.page+(state.type&&state.page!=='terugkijken'?'?type='+state.type:'');
     $('#product-back').textContent='← '+category.name;
     const previousFrame=$('#product-frame');
     if(state.product?.id==='pluim-ens6plus' && previousFrame.dataset.route?.split('?')[0]==='pluim-ens6plus' && previousFrame.dataset.route!==route){
