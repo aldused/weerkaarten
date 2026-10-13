@@ -1,0 +1,55 @@
+name: BETA klimaat · officiële gegevens
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: beta-climate-update
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          sparse-checkout: |
+            beta-klimaat
+            scripts/climate
+            tests/climate
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: scripts/climate/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r scripts/climate/requirements.txt
+      - name: Test berekeningen en foutafhandeling
+        run: python -m unittest discover -s tests/climate -p 'test_*.py'
+      - uses: actions/cache@v4
+        with:
+          path: .climate-cache
+          key: beta-climate-v1-${{ github.run_id }}
+          restore-keys: beta-climate-v1-
+      - name: Haal officiële gegevens op en behoud reserves bij bronuitval
+        id: refresh
+        continue-on-error: true
+        run: python scripts/climate/update_climate.py --output beta-klimaat/data --cache .climate-cache
+      - name: Test pagina’s met de nieuwe datasets
+        run: node tests/climate/dashboard.test.mjs
+      - name: Publiceer uitsluitend BETA-klimaatgegevens
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/climate/publish_climate.py
+      - name: Meld bronstoring in de uitvoeringsstatus
+        if: steps.refresh.outcome == 'failure'
+        run: |
+          echo 'Bronactualisatie niet volledig gelukt. Reservegegevens en de vertragingsmelding zijn gepubliceerd.'
+          exit 1
