@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const page = location.pathname.split('/').pop();
+  const page = (location.pathname.split('/').pop() || '').replace(/\.html$/, '') + '.html';
   const links = [
     ['records_debilt.html','Weerrecords'],['dagrecords_6dagen.html','Dagrecords · kaarten'],
     ['dagrecords_jaar.html','Dagrecords · per jaar'],['extremen.html','Zoek extremen'],
