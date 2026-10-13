@@ -14,6 +14,7 @@ export function transparentField(field){
   if(isPrecipitation(field.variable))return range(field.data.values).max+1e-6<PRECIPITATION_THRESHOLD;
   if(field.variable==='visibility'){const r=range(field.data.values);return r.min>=500||r.max<0;}
   if(field.variable==='cloud_cover'){
+    if(field.cloudDisplay&&field.cloudDisplay!=='natural')return false;
     if(![field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>a?.length===field.data.values.length))return false;
     // Preserve mixed/missing-layer behavior of blendCloudLayers.
     return [field.cloudLow,field.cloudMid,field.cloudHigh].every(a=>range(a).max<=0);

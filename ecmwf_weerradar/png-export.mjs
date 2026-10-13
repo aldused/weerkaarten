@@ -1,3 +1,4 @@
+import {LAYER_COLORS,BASE_LEVELS,BASE_COLORS} from './cloud-display.mjs';
 import {SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {totalLegend} from './accumulation-colors.mjs';
 import {CLOUD_STYLES} from './cloud-style.mjs';
@@ -9,7 +10,7 @@ import {temperatureLegend} from './core.mjs';
 export function pngFilename(model,iso,mode){
   return `weerlab-ed-aldus-${model}-${iso.replace(/[:.]/g,'-')}-${mode}.png`;
 }
-export function exportLegends({mode,variables,cloudVisible,hasBase}){
+export function exportLegends({mode,variables,cloudVisible,hasBase,cloudDisplay='natural'}){
   const rows=[];
   if(mode==='significant'){for(const s of SIGNIFICANT_WEATHER)rows.push({label:s.label,color:s.color[3]===0?'transparent':`rgb(${s.color.slice(0,3)})`});rows.push({label:'Windkracht in Bft · pijl: richting waarin de wind waait',color:'#ffffff'});}
   else if(mode==='rain_total'||mode==='snow_total'){const snow=mode==='snow_total',legend=totalLegend(snow);rows.push({label:snow?'Cumulatieve sneeuw · mm smeltwater':'Cumulatieve neerslag · mm',labels:legend.labels,stops:legend.stops});}
@@ -22,11 +23,12 @@ export function exportLegends({mode,variables,cloudVisible,hasBase}){
     const legend=precipitationLegend(variable);
     rows.push({label:variable==='precipitation'?'Neerslag · mm/u':'Sneeuw · mm smeltwater/u',labels:legend.labels,stops:legend.stops.map(s=>[s.percent/100,`rgba(${s.rgba.slice(0,3)},${s.rgba[3]/255})`])});
   }
-  if(variables.includes('cloud_cover'))for(const [type,bit,label] of [['high',4,'Hoge bewolking · ijle witte sluier'],['mid',2,'Middelbare bewolking · doorschijnend lichtgrijs'],['low',1,'Lage bewolking · compact grijs']])if(cloudVisible&bit){
-    const s=CLOUD_STYLES[type];rows.push({label,color:`rgba(${s.rgb},${s.sample})`});
+  if(variables.includes('cloud_cover')&&cloudDisplay==='base'){if(hasBase)BASE_LEVELS.forEach((v,i)=>rows.push({label:`Wolkenbasis ≥${v} m boven grond`,color:`rgb(${BASE_COLORS[i]})`}));else rows.push({label:'Wolkenbasis niet beschikbaar bij dit model',color:'transparent'});}
+  if(variables.includes('cloud_cover')&&cloudDisplay!=='base')for(const [type,bit,label] of [['high',4,'Hoge bewolking · ijle witte sluier'],['mid',2,'Middelbare bewolking · doorschijnend lichtgrijs'],['low',1,'Lage bewolking · compact grijs']])if(cloudVisible&bit){
+    const s=CLOUD_STYLES[type];rows.push({label:cloudDisplay==='layers'?CLOUD_STYLES[type].label+' · vierluik':label,color:cloudDisplay==='layers'?`rgb(${LAYER_COLORS[type]})`:`rgba(${s.rgb},${s.sample})`});
   }
   if(variables.includes('visibility'))for(const band of [...FOG_BANDS].reverse())rows.push({label:`Mist · ${band.label.toLowerCase()}`,color:band.color});
-  if(variables.includes('cloud_cover')&&hasBase&&(cloudVisible&1))rows.push({label:'Zeer lage bewolking · wolkenbasis <150 m',color:'#dedcca'});
+  if(variables.includes('cloud_cover')&&cloudDisplay==='natural'&&hasBase&&(cloudVisible&1))rows.push({label:'Zeer lage bewolking · wolkenbasis <150 m',color:'#dedcca'});
   if(mode==='weather'&&variables.includes('thunderstorm'))rows.push({label:'Onweer · modelindicatie',color:'#ff46aa'});
   return rows;
 }

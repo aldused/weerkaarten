@@ -76,7 +76,7 @@ function renderPixels({field,coords},signal){
       }
     }
     const id=++jobCounter;slot.job={id,resolve,reject,field,coords,signal,started:performance.now()};
-    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture,cloudVisible:field.cloudVisible,size:field.renderSize||256});}
+    try{slot.worker.postMessage({type:'tile',id,key:field.key,coords:{x:coords.x,y:coords.y,z:coords.z},texture:field.texture,cloudVisible:field.cloudVisible,cloudDisplay:field.cloudDisplay,size:field.renderSize||256});}
     catch(error){slot.job=null;reject(error);}
     // A worker's synchronous render cannot be interrupted. Keep its slot busy
     // until the reply arrives, even when subscribers cancel, so no message
@@ -92,7 +92,7 @@ function paint(field,coords,signal){
   // Whole-field extrema are cached by immutable array identity. An invisible
   // layer needs neither a worker upload nor a job for each visible tile.
   if(transparentField(field))return Promise.resolve(field.renderSize===128?transparentPreviewPixels:transparentPixels);
-  const key=(field.renderSize||256)+'|'+field.key+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;
+  const key=(field.renderSize||256)+'|'+field.key+'|'+field.cloudDisplay+'|'+field.texture+'|'+(field.cloudVisible??7)+'|'+coords.z+'/'+coords.x+'/'+coords.y;
   return paintQueue.request(key,{field,coords},signal);
 }
 const WeatherTiles=L.GridLayer.extend({

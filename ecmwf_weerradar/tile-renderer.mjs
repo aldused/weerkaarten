@@ -1,3 +1,4 @@
+import {writeCloudDisplay} from './cloud-display.mjs';
 import {SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {totalColor} from './accumulation-colors.mjs';
 import {transparentField} from './transparent-field.mjs';
@@ -55,10 +56,11 @@ export function renderTile(field,coords,size=256){
         const mid=midRow?midRow[x]:field.grid.getInterpolatedValue(cloudValues[1],lat,lon,'monotone');
         const high=highRow?highRow[x]:field.grid.getInterpolatedValue(cloudValues[2],lat,lon,'monotone');
         // Cloudless points are the common case and need no structure at all.
-        if(low<=0&&mid<=0&&high<=0)continue;
+        if(!field.cloudDisplay||field.cloudDisplay==='natural'){if(low<=0&&mid<=0&&high<=0)continue;}
         // Nearest model base avoids inventing a low ceiling between a cloud
         // and the source's 9999 m cloud-free sentinel.
         const base=field.cloudBase?field.grid.getNearestNeighborValue(field.cloudBase,lat,lon):NaN;
+        if(field.cloudDisplay&&field.cloudDisplay!=='natural'){writeCloudDisplay(field.cloudDisplay,low,mid,high,cloudVisible,base,pixels,(y*size+x)*4);continue;}
         if(!texture){writeAveragedCloud(low,mid,high,cloudVisible,base,pixels,(y*size+x)*4);continue;}
         const a=blendCloudLayers(low,mid,high,lon,lat,texture,kmPerPixel,cloudVisible,base,cloudRGB,resolved);
         if(!a)continue;

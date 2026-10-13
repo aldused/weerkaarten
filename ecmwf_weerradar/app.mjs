@@ -11,6 +11,7 @@ import {MovingOverlay} from './moving-overlay.mjs';
 import {hasIsobars,drawIsobars,drawIsotherms} from './isobars.mjs';
 import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
 import {createProjectedGrid} from './projected-grid.mjs';
+import {LAYER_COLORS,BASE_LEVELS,BASE_COLORS} from './cloud-display.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
 import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
 import {captureMap,composePNG,exportLegends,pngFilename} from './png-export.mjs';
@@ -68,6 +69,7 @@ for(const [type,style] of Object.entries(CLOUD_STYLES)){
     input.dispatchEvent(new Event('change'));
   });
 }
+const cloudDisplay=()=>$('cloud-display').value;
 const cloudVisibility=()=>($('cloud-low').checked?1:0)|($('cloud-mid').checked?2:0)|($('cloud-high').checked?4:0);
 function syncCloudButtons(){
   for(const type of ['high','mid','low']){
@@ -111,7 +113,7 @@ function clearRetainedViews(){for(const view of retainedViews.values())removeLay
 function cancelModePreparation(){clearTimeout(modePreparationTimer);modePreparation?.abort();modePreparation=null;}
 function viewKey(frame,viewMode){
  const b=map.getBounds();
- return JSON.stringify([frame.url,viewMode,tempLevel,cloudVisibility(),$('texture').checked,$('clouds').checked,$('fog').checked,$('snow').checked,map.getZoom(),b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
+ return JSON.stringify([frame.url,viewMode,tempLevel,cloudDisplay(),cloudVisibility(),$('texture').checked,$('clouds').checked,$('fog').checked,$('snow').checked,map.getZoom(),b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
 }
 for(const event of ['pointerenter','focus'])document.querySelector('[data-mode="significant"]').addEventListener(event,()=>prepareOtherMode());
 function prepareOtherMode(){
@@ -169,7 +171,7 @@ function readField(file,variable,signal){
   trimFieldCache();
   return consumeTask(task,signal);
 }
-mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked,cloudVisible:Number(u.searchParams.get('clouds')??7)}));});
+mapEngine.setWeatherLoader((url,signal)=>{const u=new URL(url.replace(/^om:\/\//,'')),variable=u.searchParams.get('variable');return readField(u.origin+u.pathname,variable,signal).then(field=>({...field,texture:$('texture').checked,cloudVisible:Number(u.searchParams.get('clouds')??7),cloudDisplay:u.searchParams.get('cloudDisplay')||'natural'}));});
 const params = new URLSearchParams(location.search);
 let selectedModel=MODELS[params.get('model')]?params.get('model'):'ecmwf_ifs';
 // Temperature level: 2 m, 850 hPa or 500 hPa. Pressure levels come from the
@@ -454,13 +456,14 @@ function variablesForMode(modelMeta=meta,frame){
   if(mode==='snow_total')return ['snowfall_total'];
   if(mode==='temperature'){const v=tempVariable(modelFor(modelMeta));return !frame||fieldFile(frame,v)?[v]:[];}
   if(mode==='wind') return ['wind_u_component_10m'];
+  if(mode==='weather'&&$('clouds').checked&&cloudDisplay()==='base')return ['cloud_cover'];
   return [...(mode==='weather'&&$('clouds').checked?['cloud_cover',...($('fog').checked&&modelMeta.variables.includes('visibility')?['visibility']:[])]:[]),'precipitation',...($('snow').checked&&modelMeta.variables.includes('snowfall_water_equivalent')?['snowfall_water_equivalent']:[]),...(mode==='weather'&&thunderVariables(modelMeta).length?['thunderstorm']:[])];
 }
 function sampleVariables(layerVariables,modelMeta){
   const labels=$('city-labels').checked?(mode==='wind'?(modelMeta.variables.includes('wind_gusts_10m')?['wind_gusts_10m']:[]):(mode==='temperature'||mode.endsWith('_total'))?[]:['temperature_2m']):[];
   return [...new Set([...layerVariables,...labels,...(mode==='significant'&&$('city-labels').checked?['wind_u_component_10m']:[]),...($('isobars').checked&&hasIsobars(modelMeta)?['pressure_msl']:[])])];
 }
-function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}`;}
+function weatherURL(frame,variable){return `om://${fieldFile(frame,variable)}?variable=${variable}&interpolation=monotone&color_blend=true&clouds=${cloudVisibility()}&cloudDisplay=${cloudDisplay()}`;}
 function addLayer(frame,variable,prefix,preview=false){
   const id=`${prefix}-${variable}`;
   map.addSource(id,{type:'raster',url:weatherURL(frame,variable),preview,tileSize:256,maxzoom:10});
@@ -704,7 +707,20 @@ function syncUI(){
   syncCloudButtons();
   const hasBase=!!f.samples.cloud_cover?.cloudBase;
   $('cloud-legend-fog').classList.toggle('cloud-off',!f.ids.some(id=>id.endsWith('-visibility'))&&!(hasBase&&$('cloud-low').checked));
-  $('very-low-key').hidden=$('cloud-legend').hidden;
+  const display=cloudDisplay(),baseView=display==='base';
+  $('cloud-legend').hidden||=baseView;
+  legend.hidden=baseView&&f.mode==='weather'&&$('clouds').checked;
+  if(legend.hidden){thunderKey.hidden=true;thunderKey.style.display='none';$('layer-title').textContent='Wolkenbasis';}
+  $('cloud-display').querySelector('[value=base]').disabled=!hasBase;
+  $('cloud-display-note').textContent=baseView?(hasBase?'Onderkant van de bewolking in meters boven de grond. Klik op de kaart voor de hoogte.':'Wolkenbasis is niet beschikbaar bij dit model. Kies een HARMONIE Benelux-model of een andere bewolkingsweergave.'):'Vierluik: blauw = hoog, geel/oranje = midden, rood = laag. Lagen zijn afzonderlijk aan/uit te zetten.'+(hasBase?'':' Wolkenbasis ontbreekt bij dit model.');
+  $('cloud-base-legend').hidden=!(baseView&&f.mode==='weather'&&$('clouds').checked&&hasBase);
+  $('cloud-base-legend').textContent='Wolkenbasis · m boven grond';
+  if(!$('cloud-base-legend').hidden)BASE_LEVELS.forEach((v,i)=>{const s=document.createElement('span');s.style.cssText=`display:inline-block;padding:4px;background:rgb(${BASE_COLORS[i]});color:#111`;s.textContent=`${v}+`; $('cloud-base-legend').append(s);});
+  if(!$('cloud-base-legend').hidden){const s=document.createElement('span');s.style.cssText='display:inline-block;padding:4px;background:#ecf4f7;color:#111';s.textContent='Wolkenvrij';$('cloud-base-legend').append(s);}
+  for(const type of ['high','mid','low']){const swatch=document.querySelector(`[data-cloud-swatch="${type}"]`),natural=display==='natural',style=CLOUD_STYLES[type];swatch.style.setProperty('--cloud-color',natural?`rgba(${style.rgb},${style.sample})`:`rgb(${LAYER_COLORS[type]})`);swatch.parentElement.title=natural?CLOUD_STYLES[type].label+' aan/uit':CLOUD_STYLES[type].label+' aan/uit · vierluikkleur';swatch.parentElement.querySelector('small').textContent=natural?({high:'IJle witte sluier',mid:'Lichtgrijs wolkendek',low:'Dicht lichtgrijs'})[type]:({high:'Blauw',mid:'Geel / oranje',low:'Rood'})[type];}
+  $('cloud-legend-fog').hidden=display!=='natural';
+  $('texture').disabled=display!=='natural';
+  $('very-low-key').hidden=$('cloud-legend').hidden||display!=='natural';
   $('very-low-key').textContent=hasBase?'Mistkleur: ook zeer lage bewolking · wolkenbasis <150 m.':'Zeer lage bewolking: geen afzonderlijke wolkenbasis in deze bron.';
   $('very-low-key').title=$('very-low-key').textContent;
   $('fog-unavailable').hidden=!(f.mode==='weather'&&$('clouds').checked&&$('fog').checked&&!f.modelMeta.variables.includes('visibility'));
@@ -734,7 +750,7 @@ function prepareAdjacentFrames(){
     const sampleVars=sampleVariables(vars,next.modelMeta);
     const fields=await Promise.all(sampleVars.map(v=>readField(fieldFile(next,v),v,signal)));
     signal.throwIfAborted();
-    await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture,cloudVisible})),signal);
+    await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture,cloudVisible,cloudDisplay:cloudDisplay()})),signal);
   },{previous:!limited,delayMs:limited?1200:350,ready:()=>{
     if(current!==frame)return;
     nextFrameReady=true;$('app').dataset.nextFrameReady='true';$('play').disabled=false;$('play').title='Afspelen / pauzeren';
@@ -781,7 +797,7 @@ $('temperature-select').addEventListener('change',()=>{
 $('precipitation-select').addEventListener('change',()=>{
  const value=$('precipitation-select').value;if(!value)return;stopPlayback();setMode(value);requestFrame(wanted,true);
 });
-['clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
+['cloud-display','clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('isobars').addEventListener('change',()=>{stopPlayback();queueCityDraw();requestFrame(wanted,true);});
 $('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
@@ -823,7 +839,7 @@ async function exportPNG(crop=null){
     const canvas=composePNG(captureMap($('map'),exportPlaces,crop),{
       title:`${MODELS[modelId].label} · ${frame.mode==='temperature'?'Temperatuur '+(frame.level==='2m'?'2 m':frame.level+' hPa'):modeNames[frame.mode]}${$('isobars').checked&&hasIsobars(frame.modelMeta)?' · Isobaren (4 hPa)':''}`,
       time:frame.mode.endsWith('_total')?$('accumulation-note').textContent:label.full,run:label.runLabel,lead:label.leadLabel,source:MODELS[modelId].attribution,opacity:$('opacity').value,
-      legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta,frame),cloudVisible:cloudVisibility(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
+      legends:exportLegends({mode:frame.mode,variables:variablesForMode(frame.modelMeta,frame),cloudVisible:cloudVisibility(),cloudDisplay:cloudDisplay(),hasBase:!!frame.samples.cloud_cover?.cloudBase}),
     });
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('PNG maken is niet gelukt.')),'image/png'));
     if(!$('png-dialog').open)return;
