@@ -211,6 +211,7 @@ export class Map {
     this.setFrameBudget(fields.length);
     await Promise.all(fields.flatMap(field=>tiles.map(coords=>paint(field,coords,signal))));
   }
+  unproject(point){return this.native.containerPointToLatLng(point);}
   project(point){return this.native.latLngToContainerPoint(ll(point));}
   zoomIn(){this.native.zoomIn();} zoomOut(){this.native.zoomOut();}
   flyTo(o){

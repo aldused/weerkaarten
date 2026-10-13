@@ -11,6 +11,7 @@ import {MovingOverlay} from './moving-overlay.mjs';
 import {hasIsobars,drawIsobars,drawIsotherms} from './isobars.mjs';
 import {weatherSymbol,drawPrecipitationSymbol} from './weather-symbols.mjs';
 import {createProjectedGrid} from './projected-grid.mjs';
+import {drawCloudHeightLabels} from './cloud-height-labels.mjs';
 import {LAYER_COLORS,BASE_LEVELS,BASE_COLORS} from './cloud-display.mjs';
 import {CLOUD_STYLES,cloudIconType,isVeryLowCloud} from './cloud-style.mjs';
 import {CLOUD_KEYS,cloudBytes} from './cloud-fields.mjs';
@@ -708,6 +709,7 @@ function syncUI(){
   const hasBase=!!f.samples.cloud_cover?.cloudBase;
   $('cloud-legend-fog').classList.toggle('cloud-off',!f.ids.some(id=>id.endsWith('-visibility'))&&!(hasBase&&$('cloud-low').checked));
   const display=cloudDisplay(),baseView=display==='base';
+  $('cloud-height-labels-control').hidden=!baseView;
   $('cloud-legend').hidden||=baseView;
   legend.hidden=baseView&&f.mode==='weather'&&$('clouds').checked;
   if(legend.hidden){thunderKey.hidden=true;thunderKey.style.display='none';$('layer-title').textContent='Wolkenbasis';}
@@ -799,6 +801,8 @@ $('precipitation-select').addEventListener('change',()=>{
 });
 ['cloud-display','clouds','snow','texture','fog','cloud-high','cloud-mid','cloud-low'].forEach(id=>$(id).addEventListener('change',()=>{syncCloudButtons();requestFrame(wanted,true);}));
 $('isobars').addEventListener('change',()=>{stopPlayback();queueCityDraw();requestFrame(wanted,true);});
+$('cloud-height-labels').addEventListener('change',queueCityDraw);
+$('map-legend-panel').addEventListener('toggle',queueCityDraw);
 $('city-labels').addEventListener('change',()=>{queueCityDraw();if(current)updateViewportSamples();});
 $('borders').addEventListener('change',()=>map.setLayoutProperty('borders','visibility',$('borders').checked?'visible':'none'));
 $('opacity').addEventListener('input',()=>current?.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100)));
@@ -849,8 +853,8 @@ async function exportPNG(crop=null){
   }catch(error){$('png-status').textContent=error.name==='SecurityError'?'De achtergrondbron blokkeert PNG-export. Vernieuw de pagina en probeer opnieuw.':error.message;}
   finally{$('export-png').disabled=false;}
 }
-$('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));});
-document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');}));
+$('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;if(open)closePoint();if(open&&innerHeight<650)setMenuCollapsed(true);$('settings').hidden=!open;$('settings-toggle').setAttribute('aria-expanded',String(open));queueCityDraw();});
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');queueCityDraw();}));
 $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
 $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('info').close();}});
 $('retry').addEventListener('click',()=>retryLoad());
@@ -895,6 +899,12 @@ function paintCities({canvas=$('places'),exporting=false}={}){
     const audit=drawIsobars(ctx,current.samples.pressure_msl,p=>map.project(p),width,height);
     canvas.dataset.isobars=JSON.stringify({...audit,time:current.iso,run:current.modelMeta.reference_time});
   }else delete canvas.dataset.isobars;
+  if(current?.mode==='weather'&&cloudDisplay()==='base'&&$('clouds').checked){
+    const exclude=exporting?[]:['.bottom-area','.layer-toolbar','.zoom-controls','.top-left','.brand','#map-legend-panel','#settings'].map(selector=>document.querySelector(selector)).filter(el=>el&&!el.hidden).map(el=>{const r=el.getBoundingClientRect(),m=map.getCanvas().getBoundingClientRect();return [r.left-m.left,r.top-m.top,r.right-m.left,r.bottom-m.top];});
+    canvas.dataset.cloudHeightLabels=String($('cloud-height-labels').checked?drawCloudHeightLabels(ctx,current.samples.cloud_cover,p=>map.unproject(p),width,height,{exclude}):0);
+    return;
+  }
+  delete canvas.dataset.cloudHeightLabels;
   if(!$('city-labels').checked||!current)return;
   const symbolAudit=params.get('profile')==='1'?[]:null;
   const zoom=map.getZoom(), boxes=[], font=exporting?Math.max(17,17*width/1920):zoom<5?11:12,valueFont=exporting?font+7:font+2,windMode=current.mode==='wind',significantWind=current.mode==='significant',controls=document.querySelector('.bottom-area').getBoundingClientRect();
