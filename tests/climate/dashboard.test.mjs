@@ -8,10 +8,17 @@ class Element{
  constructor(tag){this.tagName=tag;this.children=[];this.attrs={};this.handlers={};this.style={setProperty(){}};this.clientWidth=1180;this._text='';this.value='';}
  set textContent(t){this._text=String(t);this.children=[];}get textContent(){return this._text+this.children.map(c=>c.textContent).join('');}
  setAttribute(k,v){this.attrs[k]=String(v);if(k==='id')this.id=String(v);}getAttribute(k){return this.attrs[k];}
- append(...nodes){this.children.push(...nodes);}prepend(...nodes){this.children.unshift(...nodes);}replaceChildren(...nodes){this.children=nodes;this._text='';}
+ append(...nodes){for(const e of nodes)e.parent=this;this.children.push(...nodes);}prepend(...nodes){for(const e of nodes)e.parent=this;this.children.unshift(...nodes);}replaceChildren(...nodes){this.children=[];this._text='';this.append(...nodes);}
  addEventListener(k,f){this.handlers[k]=f;}getBoundingClientRect(){return {left:0,width:1180};}
- setPointerCapture(){}click(){this.onclick?.();}cloneNode(){return this;}
+ setPointerCapture(){}click(){this.onclick?.();}get firstChild(){return this.children[0];}
+ insertBefore(node,before){node.parent=this;this.children.splice(Math.max(0,this.children.indexOf(before)),0,node);}
+ remove(){if(this.parent)this.parent.children=this.parent.children.filter(e=>e!==this);}
+ querySelectorAll(selector){return [this,...this.children.flatMap(e=>e.querySelectorAll('*'))].filter(e=>selector==='*'||selector==='[visibility]'&&e.attrs.visibility);}
+ cloneNode(){const e=new Element(this.tagName);e.attrs={...this.attrs};e._text=this._text;e.append(...this.children.map(c=>c.cloneNode()));return e;}
 }
+const blobs=[];const createURL=URL.createObjectURL.bind(URL);URL.createObjectURL=blob=>{blobs.push(blob);return createURL(blob);};
+const escape=text=>String(text).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
+globalThis.XMLSerializer=class{serializeToString(e){return `<${e.tagName} ${Object.entries(e.attrs).map(([k,v])=>k+'="'+escape(v)+'"').join(' ')}>${escape(e._text)}${e.children.map(c=>this.serializeToString(c)).join('')}</${e.tagName}>`;}};
 async function test(page,name,width=1180){
  const text=await fs.readFile(path.join(base,'beta-klimaat',name),'utf8');const els=new Map([...text.matchAll(/id="([^"]+)"/g)].map(m=>[m[1],new Element('div')]));
  for(const [id,value]of Object.entries({'episode-index':'roni','episode-align':'start','episode-sort':'strength','extreme-sort':'year','trend-month':'0'}))if(els.has(id))els.get(id).value=value;
@@ -32,6 +39,9 @@ async function test(page,name,width=1180){
   els.get('episode-sort').value='duration';els.get('episode-sort').onchange();assert(els.get('episode-ranking').textContent.includes('middenmaanden'));
   els.get('episode-align').onchange({target:{value:'peak'}});
   const button=els.get('index-switch').children.find(e=>e.textContent==='ONI');button.click();assert(els.get('enso-chart').textContent.includes('ONI'));
+  let nodes=walk(els.get('enso-chart'));nodes.find(e=>e.tagName==='button'&&e.textContent==='CSV').click();const csv=await blobs.at(-1).text();assert(csv.includes('ONI'));assert(csv.includes(String(o.rows.at(-1).value)));assert(csv.includes('NOAA CPC'));
+  nodes.find(e=>e.tagName==='button'&&e.textContent==='SVG').click();const exported=await blobs.at(-1).text();assert(exported.includes('xmlns="http://www.w3.org/2000/svg"'));assert(exported.includes('ONI'));assert(exported.includes('opgehaald'));assert(!/NaN|undefined/.test(exported));
+  nodes.find(e=>e.tagName==='button'&&e.textContent==='Inzoomen').click();nodes=walk(els.get('enso-chart'));nodes.find(e=>e.tagName==='button'&&e.textContent==='Herstel zoom').click();
  }
  if(page==='ice'){
   const n=JSON.parse(await fs.readFile(path.join(base,'beta-klimaat/data/north.json'),'utf8'));assert(els.get('metrics').textContent.includes(new Intl.NumberFormat('nl-NL',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n.analysis.latest.value)));els.get('hemisphere').children.find(e=>e.textContent==='Zuidpool').click();

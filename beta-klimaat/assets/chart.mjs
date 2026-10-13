@@ -65,9 +65,15 @@ export class ClimateChart {
    for(const b of this.options.bands)for(const p of b.points)if(p.x>=xmin&&p.x<=xmax)for(const k of ['lo','hi'])lines.push([b.name+' '+k,p.label,p.x,p[k],this.options.unit,'berekend uit officiële data',this.options.source].map(quote).join(','));
    download(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),'csv');return;
   }
-  const clone=svg.cloneNode(true);clone.querySelectorAll('[visibility]').forEach(e=>e.remove());clone.setAttribute('xmlns',NS);
+  const clone=svg.cloneNode(true);clone.querySelectorAll('[visibility]').forEach(e=>e.remove());clone.setAttribute('xmlns',NS);clone.setAttribute('style','background:#fff;font-family:system-ui,sans-serif;color:#203341');
   const view=clone.getAttribute('viewBox').split(' ').map(Number);clone.setAttribute('width',view[2]);clone.setAttribute('height',view[3]);
   const description=element('desc',{},this.options.source+'; '+this.options.series.filter(s=>!this.hidden.has(s.name)).map(s=>s.name).join('; '));clone.prepend(description);
+  const active=this.options.series.filter(s=>!this.hidden.has(s.name));let cursor=view[3]+18;
+  for(const s of active){clone.append(element('line',{x1:20,x2:40,y1:cursor-4,y2:cursor-4,stroke:s.color||'#687986','stroke-width':s.width||2,'stroke-dasharray':s.dash||''}),element('text',{x:48,y:cursor,fill:'#203341','font-size':11},s.name));cursor+=17;}
+  const words=this.options.source.split(' '),sourceLines=[];let line='';const capacity=Math.floor((view[2]-40)/6);
+  for(const word of words){if((line+' '+word).length>capacity){sourceLines.push(line);line=word;}else line+=(line?' ':'')+word;}if(line)sourceLines.push(line);
+  cursor+=7;for(const text of sourceLines){clone.append(element('text',{x:20,y:cursor,fill:'#5d6e7c','font-size':10},text));cursor+=14;}
+  const height=cursor+12;clone.insertBefore(element('rect',{x:0,y:view[3],width:view[2],height:height-view[3],fill:'#fff'}),clone.firstChild);view[3]=height;clone.setAttribute('viewBox',view.join(' '));clone.setAttribute('height',height);
   const blob=new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml;charset=utf-8'});
   if(type==='SVG'){download(blob,'svg');return;}
   const img=new Image(),url=URL.createObjectURL(blob);img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=view[2]*2;canvas.height=view[3]*2;const ctx=canvas.getContext('2d');ctx.scale(2,2);ctx.drawImage(img,0,0);canvas.toBlob(b=>{download(b,'png');URL.revokeObjectURL(url);},'image/png');};img.onerror=()=>{URL.revokeObjectURL(url);alert('PNG-export mislukt. Gebruik SVG-export.');};img.src=url;

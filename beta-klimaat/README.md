@@ -74,7 +74,7 @@ Bronnen:
 20 berekenings-/foutafhandelingstests en DOM-contracttests bij 1180 en 390 px.
 De DOM-tests draaien zonder browser: ze controleren dat de echte datasets,
 bediening en SVG-coördinaten kloppen, niet de visuele pixelweergave. Een lokale
-browsercontrole was door het browserbeleid geblokkeerd. De PNG-download en de
+browsercontrole was door het browserbeleid geblokkeerd. CSV en SVG zijn via DOM-contracttests gecontroleerd. De PNG-download en de
 visuele mobiele weergave moeten daarom nog in de toegankelijke BETA worden
 beoordeeld. Copernicus is een aanvullende documentatiebron; er is nog geen
 automatische numerieke C3S-kruiscontrole.
