@@ -11,6 +11,8 @@ De nieuwe module gebruikt de bestaande server-side KNMI API-helper; een
 Voor 2 november 2026 blijft de operationele provinciebron actief. De nieuwe
 KNMI-testdataset (inclusief lege heartbeats) vervangt de live waarschuwingen niet.
 Vanaf 2 november leest de taak `KNMI-public-weather-warnings/1.0`. Alleen
+een dataset die in de officiële KNMI-catalogus niet meer als `[TEST]` staat
+mag worden gebruikt, ook als de ingangsdatum inmiddels verstreken is. Alleen
 operationele manual/heartbeat-publicaties en Actual-sets zijn bruikbaar.
 Test/Exercise/System, geannuleerde en verlopen records worden niet als waarschuwing getoond.
 

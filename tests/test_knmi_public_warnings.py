@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from knmi_public_warnings import normalize, validate, NonOperationalSnapshot
+from knmi_public_warnings import normalize, validate, verify_catalog, NonOperationalSnapshot
 from scrape_waarschuwingen import collect, parse_province
 
 FIXTURE = json.loads((Path(__file__).parent / 'fixtures/knmi-test-snapshot-0.7.json').read_text())
@@ -29,6 +29,12 @@ def operational():
 
 
 class WarningsTests(unittest.TestCase):
+    def test_catalog_test_status_prevents_activation_if_knmi_postpones(self):
+        catalog = {'success':True, 'result':{'name':'knmi-public-weather-warnings-1-0','state':'active','title':'[TEST] KNMI public weather warnings'}}
+        with self.assertRaises(NonOperationalSnapshot): verify_catalog(catalog)
+        catalog['result']['title'] = 'KNMI public weather warnings'
+        verify_catalog(catalog)
+        with self.assertRaises(ValueError): verify_catalog({'success':False})
     def test_official_test_fixture_validates_but_cannot_be_live(self):
         validate(FIXTURE)
         with self.assertRaises(NonOperationalSnapshot):

@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 from uuid import UUID
 
 API = "https://api.dataplatform.knmi.nl/open-data/v1/datasets/KNMI-public-weather-warnings/versions/1.0"
+CATALOG = "https://dataplatform.knmi.nl/api/3/action/package_show?id=knmi-public-weather-warnings-1-0"
 # Public, shared anonymous token published by KNMI; expires 1 August 2027.
 # A personal token can be supplied via KNMI_API_KEY, never sent to the browser.
 ANONYMOUS_KEY = "eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6IjUzYTg1ZDBhMmQ5YzRkYzJiYWNlNzQ4NTQ2Zjk4ODExIiwiaCI6Im11cm11cjEyOCJ9"
@@ -211,8 +212,20 @@ def fetch_snapshot():
     return read_json(link["temporaryDownloadUrl"]), filename
 
 
+def verify_catalog(payload):
+    dataset = payload.get("result", {})
+    title = dataset.get("title", "")
+    if not payload.get("success") or dataset.get("name") != "knmi-public-weather-warnings-1-0" or dataset.get("state") != "active" or not isinstance(title, str) or not title:
+        raise ValueError("KNMI dataset state not verified")
+    if "[test]" in title.lower():
+        raise NonOperationalSnapshot("KNMI catalog still marks the dataset as TEST")
+
+
 def load_operational():
     if datetime.now(timezone.utc) < datetime(2026, 11, 2, tzinfo=timezone.utc):
         raise NonOperationalSnapshot("KNMI dataset is in its test phase until 2 November")
+    # KNMI can postpone the switch. Even after the planned date, a heartbeat
+    # with zero sets cannot by itself prove that the test phase has ended.
+    verify_catalog(read_json(CATALOG))
     snapshot, filename = fetch_snapshot()
     return normalize(snapshot, filename=filename)
