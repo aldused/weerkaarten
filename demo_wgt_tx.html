@@ -248,6 +248,7 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 
   <div class="toolbar" role="toolbar" aria-label="Kaartlaag">
     <div class="seg" id="laagSeg" role="group" aria-label="Kaartlaag">
+      <label style="padding:8px">Gebied <select id="regio" aria-label="Gebied" style="font:inherit;color:var(--text);background:var(--paneel,var(--bg));border:1px solid var(--line);border-radius:6px;padding:5px"><option value="nl">Nederland</option><option value="zh">Zuid-Holland</option></select></label>
       <button type="button" data-l="tx" aria-pressed="true">Dagmaximum</button>
       <button type="button" data-l="kans" aria-pressed="false">Kans ≥ 25 °C</button>
       <button type="button" data-l="sigma" aria-pressed="false">Onzekerheid</button>
@@ -358,6 +359,36 @@ GEO.buren.forEach(b => el("path", {d: b.d, class: "buur"}, $("gBuren")));
 $("nlVlak").setAttribute("d", GEO.nl); $("nlClipPad").setAttribute("d", GEO.nl); $("nlKust").setAttribute("d", GEO.nl);
 GEO.provincies.forEach(p => el("path", {d: p.d, class: "prov"}, $("gProv")));
 
+
+let regio = new URLSearchParams(location.search).get("regio") === "zh" ? "zh" : "nl";
+const zhPad = new Path2D(GEO.provincies.find(p => p.n === "Zuid-Holland").d);
+const regioCtx = document.createElement("canvas").getContext("2d");
+const inGebied = (la, lo) => regio === "nl" || regioCtx.isPointInPath(zhPad, ...xy(lo, la));
+const celInGebied = c => inGebied(ll[2*c], ll[2*c+1]);
+let regioCells = null;
+const gebiedCellen = () => regioCells || (regioCells = Array.from({length:C}, (_,c)=>c).filter(celInGebied));
+const gebiedNaam = () => regio === "zh" ? "Zuid-Holland" : "Nederland";
+const zhShape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+zhShape.setAttribute("d",GEO.provincies.find(p=>p.n==="Zuid-Holland").d); svg.appendChild(zhShape);
+const zhBounds = zhShape.getBBox(); zhShape.remove();
+const zhBox = `${zhBounds.x-35} ${zhBounds.y-25} ${zhBounds.width+85} ${zhBounds.height+50}`;
+const regioBox = () => regio === "zh" ? zhBox : `0 0 ${GEO.w} ${GEO.h}`;
+const nlContour = GEO.nl;
+function pasRegioToe() {
+  GEO.nl = regio === "zh" ? GEO.provincies.find(p => p.n === "Zuid-Holland").d : nlContour;
+  svg.setAttribute("viewBox", regioBox());
+  ["nlVlak", "nlClipPad", "nlKust"].forEach(id => $(id).setAttribute("d",GEO.nl));
+  svg.setAttribute("aria-label", "Temperatuurkaart " + gebiedNaam());
+}
+$("regio").value = regio;
+pasRegioToe();
+$("regio").onchange = () => {
+  regio = $("regio").value; regioCells = null; pasRegioToe();
+  staat.vast = null; staat.hov = null; $("tip").hidden = true; $("graf").innerHTML=""; $("grafTitel").textContent="Verloop";
+  stRijen = null; plaatsCel = null;
+  if (D) { bouwDagen(); stationsTabel(); teken(); kpis(); }
+};
+
 const TEMP = [[5,"#1d4ed8"],[10,"#38bdf8"],[14,"#a7f3d0"],[17,"#fef08a"],[20,"#fdba74"],[23,"#fb923c"],[25,"#f87171"],[28,"#dc2626"],[32,"#7f1d1d"]];
 const KANS = [[0,"#f8fafc"],[5,"#fef9c3"],[15,"#fde68a"],[30,"#fdba74"],[50,"#fb923c"],[70,"#f87171"],[90,"#dc2626"],[100,"#7f1d1d"]];
 const SIGMA = [[0.3,"#ecfdf5"],[0.8,"#a7f3d0"],[1.2,"#fde68a"],[1.8,"#fb923c"],[2.5,"#dc2626"],[3.5,"#7f1d1d"]];
@@ -422,7 +453,7 @@ function bouwDagen() {
     const d = new Date(dg.label + "T12:00:00Z");
     const b = document.createElement("button"); b.type = "button"; b.setAttribute("aria-pressed", String(i === staat.di));
     if (dg.buiten_training) b.classList.add("let");
-    const tm = dg.txmax; let mx = -1e9; for (let c = 0; c < C; c++) { const v = v16(tm[c]); if (isFinite(v) && v > mx) mx = v; }
+    const tm = dg.txmax; let mx = -1e9; for (const c of gebiedCellen()) { const v = v16(tm[c]); if (isFinite(v) && v > mx) mx = v; }
     b.innerHTML = `<b>${fmt(mx)}°</b><small>${i === 0 ? "vandaag" : dagKort.format(d)}${dg.onvolledig ? " (tot nu)" : ""}</small>`;
     b.onclick = () => { staat.di = i; bouwDagen(); teken(); };
     wrap.appendChild(b);
@@ -486,15 +517,15 @@ function isolijnen(vals) {
 const PLAATSEN = [["Groningen", 53.22, 6.57], ["Leeuwarden", 53.20, 5.79], ["Den Helder", 52.93, 4.78], ["Zwolle", 52.51, 6.09], ["Enschede", 52.22, 6.89],
   ["Amsterdam", 52.37, 4.90], ["De Bilt", 52.10, 5.18], ["Arnhem", 51.98, 5.91], ["Rotterdam", 51.92, 4.48], ["Vlissingen", 51.44, 3.60],
   ["Eindhoven", 51.44, 5.48], ["Venlo", 51.37, 6.17], ["Maastricht", 50.85, 5.69]];
-function plaatsenLijst() { const st = D.j.stations; return st && st.length ? st.map(s => [s.naam, s.lat, s.lon]) : PLAATSEN; }
-function celBij(la, lo) { let b = 0, bd = 1e9; for (let c = 0; c < C; c++) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
+function plaatsenLijst() { const st = D.j.stations; return (st && st.length ? st.map(s => [s.naam, s.lat, s.lon]) : PLAATSEN).filter(([,la,lo])=>inGebied(la,lo)); }
+function celBij(la, lo) { let b = 0, bd = 1e9; for (const c of gebiedCellen()) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
 let plaatsCel = null;
 function waardenOpKaart() {
   const g = $("gWaarden"); g.innerHTML = "";
   if (!$("waardenChk").checked || staat.laag === "bodem") return;
   if (!plaatsCel) plaatsCel = plaatsenLijst().map(([n, la, lo]) => [n, la, lo, celBij(la, lo)]);
   plaatsCel.forEach(([n, la, lo, c]) => {
-    const v = waarde(c); if (!isFinite(v)) return; const [x, y] = xy(lo, la);
+    if (!inGebied(la,lo)) return; const v = waarde(c); if (!isFinite(v)) return; const [x, y] = xy(lo, la);
     el("circle", {cx: x, cy: y, r: 2.4, class: "wp"}, g);
     const t = el("text", {x: x + 5, y: y + 4.5, class: "wl"}, g); t.textContent = staat.laag === "kans" ? Math.round(v) + "%" : fmt(v, 1) + "°";
   });
@@ -502,13 +533,14 @@ function waardenOpKaart() {
 function laagsteHoogste() {
   const g = $("gLaagst"); g.innerHTML = ""; if (!$("laagChk").checked) return;
   const L = staat.laag; let best = -1, bv = L === "sigma" ? 1e9 : -1e9;
-  for (let c = 0; c < C; c++) { const v = waarde(c); if (!isFinite(v)) continue; if (L === "sigma" ? v < bv : v > bv) { bv = v; best = c; } }
+  for (const c of gebiedCellen()) { const v = waarde(c); if (!isFinite(v)) continue; if (L === "sigma" ? v < bv : v > bv) { bv = v; best = c; } }
   if (best < 0) return;
   const [x, y] = xy(ll[2 * best + 1], ll[2 * best]);
   el("circle", {cx: x, cy: y, r: 9, class: "ls-ring"}, g);
   const kop = (L === "kans" ? "Hoogste kans " + Math.round(bv) + "%" : L === "sigma" ? "Kleinste onzekerheid " + fmt(bv) + " °C" : "Hoogste " + fmt(bv) + " °C");
   const onder = D.plaats[best]; const bw = Math.max(kop.length * 7.2, onder.length * 6.2) + 16, bh = 38;
-  let bx = x + 14, by = y - bh / 2; if (bx + bw > GEO.w - 6) bx = x - 14 - bw; by = Math.max(6, Math.min(GEO.h - bh - 6, by));
+  const [vx,vy,vw,vh]=regioBox().split(" ").map(Number);
+  let bx = x + 14, by = y - bh / 2; if (bx + bw > vx+vw - 6) bx = x - 14 - bw; bx=Math.max(vx+6,bx); by = Math.max(vy+6, Math.min(vy+vh - bh - 6, by));
   el("rect", {x: bx, y: by, width: bw, height: bh, rx: 6, class: "ls-box"}, g);
   el("text", {x: bx + 8, y: by + 16, class: "ls-txt"}, g).textContent = kop;
   el("text", {x: bx + 8, y: by + 31, class: "ls-sub"}, g).textContent = onder;
@@ -566,7 +598,7 @@ function celOp(evt) {
   const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
   const p = pt.matrixTransform(svg.getScreenCTM().inverse()); const [lon, lat] = lonlat(p.x, p.y); const g = D.j.rooster;
   const iy = Math.round((lat - g.lat0) / g.dlat), ix = Math.round((lon - g.lon0) / g.dlon);
-  if (iy < 0 || ix < 0 || iy >= NY || ix >= NX) return -1; return cellVan[iy * NX + ix];
+  if (iy < 0 || ix < 0 || iy >= NY || ix >= NX) return -1; const c = cellVan[iy * NX + ix]; return c >= 0 && inGebied(lat,lon) ? c : -1;
 }
 function plaatsTip(c, evt) {
   const tip = $("tip"); tip.innerHTML = tipHtml(c); tip.hidden = false;
@@ -627,12 +659,12 @@ function statusEnMeldingen() {
 }
 function kpis() {
   const dg = D.dagen[staat.di]; const k = $("kpis"); if (!dg) return;
-  let mi = 0, mx = -1e9, p90 = 0; for (let c = 0; c < C; c++) { const v = v16(dg.txmax[c]); if (v > mx) { mx = v; mi = c; } if (dg.p25[c] >= 50) p90++; }
-  let som = 0; for (let c = 0; c < C; c++) som += v16(dg.txmax[c]); const gem = som / C;
+  let mi = gebiedCellen()[0], mx = -1e9, p90 = 0; for (const c of gebiedCellen()) { const v = v16(dg.txmax[c]); if (v > mx) { mx = v; mi = c; } if (dg.p25[c] >= 50) p90++; }
+  let som = 0; for (const c of gebiedCellen()) som += v16(dg.txmax[c]); const gem = som / gebiedCellen().length;
   const kaartje = (l, v, n) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${n}</div></div>`;
   k.innerHTML = kaartje("Hoogste", `${fmt(mx)}<small> °C</small>`, D.plaats[mi])
-    + kaartje("Gemiddeld NL", `${fmt(gem)}<small> °C</small>`, "dagmaximum, 5 km-cellen")
-    + kaartje("Zomerse dag ≥ 50 %", `${Math.round(100 * p90 / C)}<small> % van NL</small>`, "kans op ≥ 25 °C")
+    + kaartje("Gemiddeld " + gebiedNaam(), `${fmt(gem)}<small> °C</small>`, "dagmaximum, 5 km-cellen")
+    + kaartje("Zomerse dag ≥ 50 %", `${Math.round(100 * p90 / gebiedCellen().length)}<small> % van ${gebiedNaam()}</small>`, "kans op ≥ 25 °C")
     + kaartje("Modellen", `${D.j.runs.filter(r => r.status === "gebruikt").length}<small>/${D.j.runs.length}</small>`, "actuele runs in de mix");
 }
 function runsLijst() {

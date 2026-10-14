@@ -284,8 +284,10 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 
   <div class="toolbar" role="toolbar" aria-label="Kaartlaag">
     <div class="seg" id="laagSeg" role="group" aria-label="Kaartlaag">
+      <label style="padding:8px">Gebied <select id="regio" aria-label="Gebied" style="font:inherit;color:var(--text);background:var(--paneel,var(--bg));border:1px solid var(--line);border-radius:6px;padding:5px"><option value="nl">Nederland</option><option value="zh">Zuid-Holland</option></select></label>
       <button type="button" data-l="t10" aria-pressed="true">T 10 cm</button>
-      <button type="button" data-l="nmin" aria-pressed="false">Nachtminimum</button>
+      <button type="button" data-l="nmin" aria-pressed="false">Minimum 10 cm</button>
+      <button type="button" data-l="tn" aria-pressed="false">Minimum 2 m</button>
       <button type="button" data-l="kans" aria-pressed="false">Kans grondvorst</button>
       <button type="button" data-l="t2" aria-pressed="false">T 2 m</button>
       <button type="button" data-l="diff" aria-pressed="false">T10 − T2</button>
@@ -435,6 +437,36 @@ GEO.buren.forEach(b => el("path", {d: b.d, class: "buur"}, $("gBuren")));
 $("nlVlak").setAttribute("d", GEO.nl); $("nlClipPad").setAttribute("d", GEO.nl); $("nlKust").setAttribute("d", GEO.nl);
 GEO.provincies.forEach(p => el("path", {d: p.d, class: "prov"}, $("gProv")));
 
+
+let regio = new URLSearchParams(location.search).get("regio") === "zh" ? "zh" : "nl";
+const zhPad = new Path2D(GEO.provincies.find(p => p.n === "Zuid-Holland").d);
+const regioCtx = document.createElement("canvas").getContext("2d");
+const inGebied = (la, lo) => regio === "nl" || regioCtx.isPointInPath(zhPad, ...xy(lo, la));
+const celInGebied = c => inGebied(ll[2*c], ll[2*c+1]);
+let regioCells = null;
+const gebiedCellen = () => regioCells || (regioCells = Array.from({length:C}, (_,c)=>c).filter(celInGebied));
+const gebiedNaam = () => regio === "zh" ? "Zuid-Holland" : "Nederland";
+const zhShape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+zhShape.setAttribute("d",GEO.provincies.find(p=>p.n==="Zuid-Holland").d); svg.appendChild(zhShape);
+const zhBounds = zhShape.getBBox(); zhShape.remove();
+const zhBox = `${zhBounds.x-35} ${zhBounds.y-25} ${zhBounds.width+85} ${zhBounds.height+50}`;
+const regioBox = () => regio === "zh" ? zhBox : `0 0 ${GEO.w} ${GEO.h}`;
+const nlContour = GEO.nl;
+function pasRegioToe() {
+  GEO.nl = regio === "zh" ? GEO.provincies.find(p => p.n === "Zuid-Holland").d : nlContour;
+  svg.setAttribute("viewBox", regioBox());
+  ["nlVlak", "nlClipPad", "nlKust"].forEach(id => $(id).setAttribute("d",GEO.nl));
+  svg.setAttribute("aria-label", "Temperatuurkaart " + gebiedNaam());
+}
+$("regio").value = regio;
+pasRegioToe();
+$("regio").onchange = () => {
+  regio = $("regio").value; regioCells = null; pasRegioToe();
+  staat.vast = null; staat.hov = null; $("tip").hidden = true; $("graf").innerHTML=""; $("grafTitel").textContent="Verloop";
+  plaatsRijen = null; plaatsCel = null;
+  if (D) { bouwTijd(); drieNachten(); teken(); kpis(); }
+};
+
 // ---------- kleurschalen ----------
 const TEMP = [[-12,"#084594"],[-9,"#1565c0"],[-6,"#1e88e5"],[-3,"#42a5f5"],[-1,"#90caf9"],[0,"#b2dfdb"],[3,"#2e8b57"],[6,"#66bb6a"],[9,"#cddc39"],[12,"#ffeb3b"],[15,"#fbc02d"],[18,"#f57f17"],[21,"#ef6c00"],[25,"#d84315"],[30,"#8e1b0e"]];
 const DIFF = [[-6,"#08306b"],[-4,"#2171b5"],[-2,"#6baed6"],[-0.5,"#deebf7"],[0,"#f7f7f7"],[0.5,"#fde0d2"],[2,"#f4a582"],[4,"#d6604d"],[6,"#8e1b0e"]];
@@ -495,6 +527,19 @@ async function laad() {
       frac: Object.fromEntries(Object.entries(j.statisch.frac).map(([k, v]) => [k, u1(v)])),
       vocht: u1(j.statisch.vocht), p24: i2(j.statisch.p24), p7: i2(j.statisch.p7), p30: i2(j.statisch.p30),
       hoogte: i2(j.statisch.hoogte), zee: i2(j.statisch.zee), plaats: j.statisch.plaats};
+    // Het echte 2m-nachtminimum is onafhankelijk van het tijdstip van het grasminimum.
+    D.nachten.forEach(n => {
+      n.tn = new Int16Array(C).fill(-32768);
+      for (let c=0;c<C;c++) for (let i=n.i0;i<=n.i1;i++) {
+        const v=D.t2[i*C+c]; if(v!==-32768 && (n.tn[c]===-32768 || v<n.tn[c])) n.tn[c]=v;
+      }
+    });
+    if (new URLSearchParams(location.search).get("laag") === "tn") {
+      staat.laag="tn"; document.title="Minimumtemperatuur 2 m · Weerlab";
+      document.querySelector("h1").firstChild.textContent="Minimumtemperatuur 2 m ";
+      document.querySelector(".sub").textContent="Minimumtemperatuur op 2 meter voor de komende nachten: de laagste uurwaarde tussen 18.00 en 09.00 lokale tijd uit de bijgestuurde modelmix. Kies Nederland of Zuid-Holland.";
+    }
+    [...$("laagSeg").querySelectorAll("button")].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.l===staat.laag)));
     // start op het eerstvolgende hele uur ≥ nu
     const nu = Date.now(); staat.ti = Math.max(0, D.tijden.findIndex(t => t.getTime() >= nu - 30 * 60e3));
     bouwTijd(); statusEnMeldingen(); kpis(); runsLijst(); teken(); drieNachten();
@@ -512,7 +557,7 @@ function bouwTijd() {
   const perDag = new Map();
   D.tijden.forEach((t, i) => { const k = dagKey.format(t); if (!perDag.has(k)) perDag.set(k, []); perDag.get(k).push(i); });
   staat.perDag = perDag;
-  const nachtLaag = staat.laag === "nmin" || staat.laag === "kans";
+  const nachtLaag = (staat.laag === "nmin" || staat.laag === "tn") || staat.laag === "kans";
   const statisch = staat.laag === "bodem" || staat.laag === "vocht";
   $("tijdPaneel").hidden = statisch;
   if (nachtLaag) {
@@ -528,7 +573,7 @@ function bouwTijd() {
     for (const [k, idx] of perDag) {
       const b = el2("button", {type: "button", "aria-pressed": String(idx.includes(staat.ti))}, dagen);
       b.textContent = dagFmt.format(D.tijden[idx[0]]);
-      b.onclick = () => { const h = +uurNr.format(D.tijden[staat.ti]); const k2 = idx.find(i => +uurNr.format(D.tijden[i]) === h); staat.ti = k2 ?? idx[0]; bouwTijd(); teken(); };
+      b.onclick = () => { const h = +uurNr.format(D.tijden[staat.ti]); const k2 = idx.find(i => +uurNr.format(D.tijden[i]) === h); staat.ti = k2 ?? idx[0]; bouwTijd(); teken(); kpis(); };
     }
     const uren = $("uren"); uren.hidden = false; uren.innerHTML = "";
     const p = el2("button", {type: "button", class: "play", "aria-label": "Afspelen"}, uren); p.textContent = speel ? "❚❚" : "▶";
@@ -536,11 +581,11 @@ function bouwTijd() {
     const huidigeDag = [...perDag.values()].find(a => a.includes(staat.ti)) || [];
     huidigeDag.forEach(i => {
       const b = el2("button", {type: "button", "aria-pressed": String(i === staat.ti), title: uurFmt.format(D.tijden[i])}, uren);
-      let mn = 1e9; if (staat.laag === "t10" || staat.laag === "t2") { const A = staat.laag === "t10" ? D.t10 : D.t2; for (let c = 0; c < C; c++) { const v = A[i * C + c]; if (v !== -32768 && v < mn) mn = v; } }
+      let mn = 1e9; if (staat.laag === "t10" || staat.laag === "t2") { const A = staat.laag === "t10" ? D.t10 : D.t2; for (const c of gebiedCellen()) { const v = A[i * C + c]; if (v !== -32768 && v < mn) mn = v; } }
       b.innerHTML = mn < 1e9 ? `${uurNr.format(D.tijden[i])}<small style="display:block;font:500 10px var(--mono);opacity:.8">${fmt(mn / 10, 1)}°</small>` : uurNr.format(D.tijden[i]);
       if (mn < 1e9) { b.style.height = "44px"; b.title = `laagste ${fmt(mn / 10)} °C om ${uurFmt.format(D.tijden[i])}`; }
       const h = +uurNr.format(D.tijden[i]); if (h >= 19 || h <= 7) b.classList.add("nacht");
-      b.onclick = () => { staat.ti = i; bouwTijd(); teken(); };
+      b.onclick = () => { staat.ti = i; bouwTijd(); teken(); kpis(); };
     });
   }
   tijdInfo();
@@ -548,9 +593,9 @@ function bouwTijd() {
 function el2(tag, attrs, parent) { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
 function tijdInfo() {
   const a = new Date(D.j.analyse_utc);
-  if (staat.laag === "nmin" || staat.laag === "kans") {
+  if ((staat.laag === "nmin" || staat.laag === "tn") || staat.laag === "kans") {
     const n = D.nachten[staat.ni];
-    $("tijdInfo").innerHTML = n ? `Minimum over <b>${dagFmt.format(new Date(n.start))} 18.00 → ${dagFmt.format(new Date(n.eind))} 09.00</b> (lokale tijd) · zoals een minimumthermometer het meet: ± 0,7 °C lager dan de laagste uurwaarde` : "";
+    $("tijdInfo").innerHTML = staat.laag === "tn" && n ? `Nacht ${dagFmt.format(new Date(n.start))} 18.00 → ${dagFmt.format(new Date(n.eind))} 09.00 · laagste uurwaarde op 2 m` : n ? `Minimum over <b>${dagFmt.format(new Date(n.start))} 18.00 → ${dagFmt.format(new Date(n.eind))} 09.00</b> (lokale tijd) · zoals een minimumthermometer het meet: ± 0,7 °C lager dan de laagste uurwaarde` : "";
   } else {
     const t = D.tijden[staat.ti]; const lead = Math.round((t - a) / 36e5);
     $("tijdInfo").innerHTML = `<b>${dagFmt.format(t)} ${uurFmt.format(t)}</b> uur (lokale tijd) · +${lead} u na analyse ${uurFmt.format(a)}`;
@@ -567,13 +612,14 @@ function waarde(c) {
     case "t2": return v16(D.t2[o]);
     case "diff": return v16(D.t10[o]) - v16(D.t2[o]);
     case "sigma": return v16(D.sigma[o]);
+    case "tn": return n ? v16(n.tn[c]) : NaN;
     case "nmin": return n ? v16(n.t10min[c]) : NaN;
     case "kans": return n ? (staat.drempel === 0 ? n.p0[c] : n.pm2[c]) : NaN;
     case "vocht": return D.vocht[c];
     case "bodem": return D.bodem[c];
   }
 }
-const lutVan = L => ({t10: LUT.temp, t2: LUT.temp, nmin: LUT.temp, diff: LUT.diff, kans: LUT.kans, sigma: LUT.sigma, vocht: LUT.vocht})[L];
+const lutVan = L => ({t10: LUT.temp, t2: LUT.temp, tn: LUT.temp, nmin: LUT.temp, diff: LUT.diff, kans: LUT.kans, sigma: LUT.sigma, vocht: LUT.vocht})[L];
 
 // ---------- veld tekenen: bilineair opgeschaald, pixel-uitgelijnd op het rooster ----------
 const UP = 6;
@@ -646,34 +692,37 @@ const PLAATSEN_TERUGVAL = [["Groningen", 53.22, 6.57], ["Leeuwarden", 53.20, 5.7
   ["Amsterdam", 52.37, 4.90], ["De Bilt", 52.10, 5.18], ["Arnhem", 51.98, 5.91], ["Rotterdam", 51.92, 4.48], ["Vlissingen", 51.44, 3.60],
   ["Eindhoven", 51.44, 5.48], ["Venlo", 51.37, 6.17], ["Maastricht", 50.85, 5.69]];
 function plaatsenLijst() {
+  if (regio === "zh") return [["Rotterdam",51.92,4.48],["Den Haag",52.07,4.30],["Leiden",52.16,4.49],["Delft",52.01,4.36],["Gouda",52.01,4.71],["Dordrecht",51.81,4.67],["Gorinchem",51.83,4.97],["Middelharnis",51.75,4.17],["Hoek van Holland",51.98,4.13],["Voorschoten",52.13,4.44]].filter(([,la,lo])=>inGebied(la,lo));
   const st = D.j.stations;
-  return st && st.length ? st.map(s => [s.naam, s.lat, s.lon]) : PLAATSEN_TERUGVAL;
+  return (st && st.length ? st.map(s => [s.naam, s.lat, s.lon]) : PLAATSEN_TERUGVAL).filter(([,la,lo])=>inGebied(la,lo));
 }
-function celBij(la, lo) { let b = 0, bd = 1e9; for (let c = 0; c < C; c++) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
+function celBij(la, lo) { let b = 0, bd = 1e9; for (const c of gebiedCellen()) { const d = (ll[2 * c] - la) ** 2 + ((ll[2 * c + 1] - lo) * 0.62) ** 2; if (d < bd) { bd = d; b = c; } } return b; }
 // -1 = kolom "KNMI-station" (op naam), 0.. = nachtkolom (op temperatuur, koudste eerst bij dir 1).
 let plaatsSort = {kol: -1, dir: 1};
 let plaatsRijen = null;
 function drieNachten() {
-  $("drieTitel").textContent = `Minima op 10 cm — komende ${D.nachten.length} nachten`;
+  const tn = staat.laag === "tn";
+  $("drieTitel").textContent = `Minima op ${tn ? "2 m" : "10 cm"} — komende ${D.nachten.length} nachten`;
   const grid = $("drieGrid"); grid.innerHTML = ""; const g = D.j.rooster;
   const [x0, y0] = xy(g.lon0 - g.dlon / 2, g.lat0 + (NY - 0.5) * g.dlat), [x1, y1] = xy(g.lon0 + (NX - 0.5) * g.dlon, g.lat0 - g.dlat / 2);
   D.nachten.forEach((n, i) => {
+    const minima = tn ? n.tn : n.t10min;
     const kaart = document.createElement("div"); kaart.className = "mini"; kaart.tabIndex = 0; kaart.setAttribute("role", "button");
     const s = new Date(n.start), e = new Date(n.eind);
-    let mi = 0, p50 = 0; for (let c = 0; c < C; c++) { if (n.t10min[c] < n.t10min[mi]) mi = c; if (n.p0[c] >= 50) p50++; }
+    let mi = gebiedCellen()[0], p50 = 0; for (const c of gebiedCellen()) { if (minima[c] < minima[mi]) mi = c; if (n.p0[c] >= 50) p50++; }
     const let_ = n.buiten_training ? ` · <b>voorbij 60 u: HARMONIE/ICON-D2 ontbreken, niet geverifieerd</b>` : "";
     kaart.innerHTML = `<h3>Nacht ${dagKort.format(s)} → ${dagKort.format(e)}</h3><div class="m-sub${n.buiten_training ? " let" : ""}">+${Math.max(0, Math.round((s - new Date(D.j.analyse_utc)) / 36e5))}…${n.lead_max_u} u · ${n.n_modellen} modellen${let_}</div>`;
-    const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", `0 0 ${GEO.w} ${GEO.h}`); kaart.appendChild(sv);
+    const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", regioBox()); kaart.appendChild(sv);
     const cid = "clipMini" + i; const defs = el("defs", {}, sv); el("path", {d: GEO.nl}, el("clipPath", {id: cid}, defs));
     GEO.buren.forEach(b => el("path", {d: b.d, class: "buur"}, sv)); el("path", {d: GEO.nl, class: "nlvlak"}, sv);
-    const r = rasterUrl(c => v16(n.t10min[c]), LUT.temp);
+    const r = rasterUrl(c => v16(minima[c]), LUT.temp);
     el("image", {href: r.url, x: x0, y: y0, width: x1 - x0, height: y1 - y0, preserveAspectRatio: "none", "clip-path": `url(#${cid})`}, sv);
     const iso = isoPad(r.vals, 0); if (iso) el("path", {d: iso, class: "iso0", "clip-path": `url(#${cid})`}, sv);
     GEO.provincies.forEach(p => el("path", {d: p.d, class: "prov"}, sv)); el("path", {d: GEO.nl, class: "kust"}, sv);
     const k = document.createElement("div"); k.className = "m-kpi";
-    k.innerHTML = `<span>laagste <b>${fmt(v16(n.t10min[mi]))} °C</b> ${D.plaats[mi]}</span><span>vorstkans ≥ 50 %: <b>${Math.round(100 * p50 / C)} %</b></span>`;
+    k.innerHTML = `<span>laagste <b>${fmt(v16(minima[mi]))} °C</b> ${D.plaats[mi]}</span><span>${tn ? "Laagste uurwaarde op 2 m</span><span hidden>" : "vorstkans ≥ 50 %:"} <b>${Math.round(100 * p50 / gebiedCellen().length)} %</b></span>`;
     kaart.appendChild(k);
-    const kies = () => { staat.laag = "nmin"; staat.ni = i; [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.l === "nmin"))); bouwTijd(); teken(); kpis(); $("kaart").scrollIntoView({behavior: "smooth", block: "start"}); };
+    const kies = () => { staat.laag = tn ? "tn" : "nmin"; staat.ni = i; [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x.dataset.l === staat.laag))); bouwTijd(); teken(); kpis(); $("kaart").scrollIntoView({behavior: "smooth", block: "start"}); };
     kaart.onclick = kies; kaart.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); kies(); } };
     grid.appendChild(kaart);
   });
@@ -684,7 +733,7 @@ function plaatsTabel() {
   const lu = LUT.temp; const kl = v => { const k = Math.max(0, Math.min(lu.n - 1, Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)))); return `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`; };
   if (!plaatsRijen) plaatsRijen = plaatsenLijst().map(([nm, la, lo]) => [nm, la, lo, celBij(la, lo)]);
   const { kol, dir } = plaatsSort;
-  const waarde = r => kol < 0 ? r[0] : v16(D.nachten[kol].t10min[r[3]]);
+  const waarde = r => kol < 0 ? r[0] : v16((staat.laag === "tn" ? D.nachten[kol].tn : D.nachten[kol].t10min)[r[3]]);
   const rijen = [...plaatsRijen].sort((a, b) => {
     const va = waarde(a), vb = waarde(b);
     if (kol < 0) return dir * String(va).localeCompare(String(vb), "nl");
@@ -692,13 +741,13 @@ function plaatsTabel() {
     return dir * (va - vb);
   });
   const ariaVoor = i => i !== kol ? "none" : (dir === 1 ? "ascending" : "descending");
-  let t = `<thead><tr><th data-k="-1" aria-sort="${kol === -1 ? (dir === 1 ? "ascending" : "descending") : "none"}">KNMI-station</th>` +
+  let t = `<thead><tr><th data-k="-1" aria-sort="${kol === -1 ? (dir === 1 ? "ascending" : "descending") : "none"}">${regio === "zh" ? "Plaats" : "KNMI-station"}</th>` +
     D.nachten.map((n, i) => `<th data-k="${i}" aria-sort="${ariaVoor(i)}">${dagKort.format(new Date(n.start))} → ${dagKort.format(new Date(n.eind))}</th>`).join("") + `</tr></thead><tbody>`;
   rijen.forEach(([nm, , , c]) => {
-    t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16(n.t10min[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${n.p0[c]}%</small></td>`; }).join("")}</tr>`;
+    t += `<tr><td>${nm}</td>${D.nachten.map(n => { const v = v16((staat.laag === "tn" ? n.tn : n.t10min)[c]); return `<td><span class="sw" style="background:${kl(v)}"></span>${fmt(v)} °C<small>${staat.laag === "tn" ? "2 m" : n.p0[c] + "%"}</small></td>`; }).join("")}</tr>`;
   });
   $("plaatsTabel").innerHTML = t + "</tbody>";
-  $("drieNoot").textContent = `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
+  $("drieNoot").textContent = staat.laag === "tn" ? `Minimum op 2 m in ${gebiedNaam()}: laagste uurwaarde van de modelmix per nacht (18.00–09.00), op een rooster van 5 km. Geen afzonderlijk getraind TN-MOS-model. Klik op een kolomkop om te sorteren.` : `Alle ${plaatsRijen.length} KNMI-stations met een 10 cm-minimumthermometer: minimum op 10 cm en (klein) de kans op grondvorst < 0 °C. Waarde van de 5 km-cel rond het station; in laagtes en open veld buiten het meetterrein kan het kouder zijn. Klik op een kolomkop om te sorteren.`;
   $("plaatsTabel").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
     const k = +th.dataset.k;
     plaatsSort = { kol: k, dir: plaatsSort.kol === k ? -plaatsSort.dir : 1 };
@@ -709,7 +758,7 @@ function plaatsTabel() {
 // ---------- isolijnen 0 / −2 / −5 (marching squares op het rooster) ----------
 function isolijnen(vals) {
   const gI = $("gIso"); gI.innerHTML = "";
-  if (!$("isoChk").checked || !["t10", "nmin"].includes(staat.laag)) return;
+  if (!$("isoChk").checked || !["t10", "nmin", "tn"].includes(staat.laag)) return;
   const g = D.j.rooster;
   const P = (iy, ix) => xy(g.lon0 + ix * g.dlon, g.lat0 + iy * g.dlat);
   [[0, "iso0"], [-2, "iso2"], [-5, "iso5"]].forEach(([lv, cls]) => {
@@ -746,15 +795,15 @@ function waardenOpKaart() {
   if (!$("waardenChk").checked || !numLaag()) return;
   if (!plaatsCel) plaatsCel = KAARTPLAATSEN.map(([n, la, lo]) => [n, la, lo, celBij(la, lo)]);
   plaatsCel.forEach(([n, la, lo, c]) => {
-    const v = waarde(c); if (!isFinite(v)) return; const [x, y] = xy(lo, la);
+    if (!inGebied(la,lo)) return; const v = waarde(c); if (!isFinite(v)) return; const [x, y] = xy(lo, la);
     el("circle", {cx: x, cy: y, r: 2.4, class: "wp"}, g);
     const t = el("text", {x: x + 5, y: y + 4.5, class: "wl"}, g); t.textContent = labelTekst(staat.laag, v);
   });
 }
 function laagsteCel() {
-  const L = staat.laag; if (!["t10", "t2", "nmin", "diff", "kans"].includes(L)) return -1;
+  const L = staat.laag; if (!["t10", "t2", "nmin", "tn", "diff", "kans"].includes(L)) return -1;
   let best = -1, bv = L === "kans" ? -1 : 1e9;
-  for (let c = 0; c < C; c++) { const v = waarde(c); if (!isFinite(v)) continue; if (L === "kans" ? v > bv : v < bv) { bv = v; best = c; } }
+  for (const c of gebiedCellen()) { const v = waarde(c); if (!isFinite(v)) continue; if (L === "kans" ? v > bv : v < bv) { bv = v; best = c; } }
   return best;
 }
 function laagste() {
@@ -763,7 +812,8 @@ function laagste() {
   el("circle", {cx: x, cy: y, r: 9, class: "ls-ring"}, g);
   const kop = (L === "kans" ? "Hoogste kans " : L === "diff" ? "Grootste verschil " : "Laagste ") + labelTekst(L, v).replace("°", " °C");
   const onder = D.plaats[c]; const bw = Math.max(kop.length * 7.4, onder.length * 6.2) + 16, bh = 38;
-  let bx = x + 14, by = y - bh / 2; if (bx + bw > GEO.w - 6) bx = x - 14 - bw; by = Math.max(6, Math.min(GEO.h - bh - 6, by));
+  const [vx,vy,vw,vh]=regioBox().split(" ").map(Number);
+  let bx = x + 14, by = y - bh / 2; if (bx + bw > vx+vw - 6) bx = x - 14 - bw; bx=Math.max(vx+6,bx); by = Math.max(vy+6, Math.min(vy+vh - bh - 6, by));
   el("rect", {x: bx, y: by, width: bw, height: bh, rx: 6, class: "ls-box"}, g);
   el("text", {x: bx + 8, y: by + 16, class: "ls-txt"}, g).textContent = kop;
   el("text", {x: bx + 8, y: by + 31, class: "ls-sub"}, g).textContent = onder;
@@ -774,7 +824,7 @@ function stations() {
   const gS = $("gSt"); gS.innerHTML = "";
   if (!$("stChk").checked) return;
   const lu = LUT.temp;
-  (D.j.waarnemingen || []).forEach(s => {
+  (D.j.waarnemingen || []).filter(s=>inGebied(s.lat,s.lon)).forEach(s => {
     const [x, y] = xy(s.lon, s.lat);
     const k = Math.max(0, Math.min(lu.n - 1, Math.round((s.tgn - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1))));
     el("circle", {cx: x, cy: y, r: 6, class: "st", fill: `rgb(${lu.lut[k * 3]},${lu.lut[k * 3 + 1]},${lu.lut[k * 3 + 2]})`}, gS);
@@ -790,7 +840,7 @@ function legenda() {
     return;
   }
   const lu = lutVan(L);
-  const titel = {t10: "Temperatuur 10 cm (°C)", t2: "Temperatuur 2 m (°C)", nmin: "Nachtminimum 10 cm (°C)", diff: "T10 − T2 (°C)", kans: `Kans op T10 < ${staat.drempel === 0 ? "0" : "−2"} °C (%)`, sigma: "Onzekerheid σ (°C)", vocht: "Bodemvochtindex (0 = zeer droog, 100 = zeer nat)"}[L];
+  const titel = {t10: "Temperatuur 10 cm (°C)", t2: "Temperatuur 2 m (°C)", tn: "Nachtminimum 2 m (°C, laagste uurwaarde)", nmin: "Nachtminimum 10 cm (°C)", diff: "T10 − T2 (°C)", kans: `Kans op T10 < ${staat.drempel === 0 ? "0" : "−2"} °C (%)`, sigma: "Onzekerheid σ (°C)", vocht: "Bodemvochtindex (0 = zeer droog, 100 = zeer nat)"}[L];
   const wrap = document.createElement("div"); wrap.className = "leg-balk";
   const lab = document.createElement("span"); lab.className = "leg-titel"; lab.textContent = titel; wrap.appendChild(lab);
   const cv = document.createElement("canvas"); cv.width = 256; cv.height = 1; const cx = cv.getContext("2d"); const im = cx.createImageData(256, 1);
@@ -798,7 +848,7 @@ function legenda() {
   for (let i = 0; i < 256; i++) { const v = lo + (hi - lo) * i / 255; const k = Math.round((v - lu.lo) / (lu.hi - lu.lo) * (lu.n - 1)); im.data.set([lu.lut[k * 3], lu.lut[k * 3 + 1], lu.lut[k * 3 + 2], 255], i * 4); }
   cx.putImageData(im, 0, 0); wrap.appendChild(cv);
   const ticks = document.createElement("div"); ticks.className = "leg-ticks";
-  const tv = {t10: [-10, -5, -2, 0, 5, 10, 15, 20, 25], t2: [-10, -5, 0, 5, 10, 15, 20, 25], nmin: [-10, -5, -2, 0, 5, 10, 15, 20, 25], diff: [-6, -4, -2, 0, 2, 4, 6], kans: [0, 10, 30, 50, 70, 90], sigma: [0.5, 1, 1.5, 2, 2.5, 3], vocht: [0, 20, 40, 65, 85, 100]}[L];
+  const tv = {t10: [-10, -5, -2, 0, 5, 10, 15, 20, 25], t2: [-10, -5, 0, 5, 10, 15, 20, 25], tn: [-10, -5, -2, 0, 5, 10, 15, 20, 25], nmin: [-10, -5, -2, 0, 5, 10, 15, 20, 25], diff: [-6, -4, -2, 0, 2, 4, 6], kans: [0, 10, 30, 50, 70, 90], sigma: [0.5, 1, 1.5, 2, 2.5, 3], vocht: [0, 20, 40, 65, 85, 100]}[L];
   tv.forEach(v => { const s = document.createElement("span"); s.style.left = (100 * (v - lo) / (hi - lo)) + "%"; s.textContent = fmt(v, L === "sigma" && v % 1 ? 1 : 0); ticks.appendChild(s); });
   wrap.appendChild(ticks); Lg.appendChild(wrap);
   if (L === "vocht") { const s = document.createElement("span"); s.textContent = "zeer droog < 20 · droog < 40 · normaal < 65 · vochtig < 85 · zeer nat"; Lg.appendChild(s); }
@@ -813,7 +863,7 @@ function titels() {
   const nn = D.nachten[staat.ni];
   const nachtNaam = !nn ? "" : (staat.ni === 0 && new Date(nn.start) - Date.now() < 18 * 36e5 ? "komende nacht" : "nacht") +
     ` (${dagKort.format(new Date(nn.start))} → ${dagKort.format(new Date(nn.eind))})`;
-  $("kaartTitel").textContent = {t10: "Temperatuur op 10 cm boven gras", nmin: "Minimumtemperatuur op 10 cm, " + nachtNaam, kans: "Kans op grondvorst, " + nachtNaam, t2: "Temperatuur op 2 m (modelmix, bijgestuurd)", diff: "Verschil T10 cm − T2 m", sigma: "Onzekerheid van de 10 cm-verwachting", bodem: "Bodemsoort (bovengrond)", vocht: "Bodemvochtindex"}[L];
+  $("kaartTitel").textContent = {t10: "Temperatuur op 10 cm boven gras", tn: "Minimumtemperatuur op 2 m, " + nachtNaam, nmin: "Minimumtemperatuur op 10 cm, " + nachtNaam, kans: "Kans op grondvorst, " + nachtNaam, t2: "Temperatuur op 2 m (modelmix, bijgestuurd)", diff: "Verschil T10 cm − T2 m", sigma: "Onzekerheid van de 10 cm-verwachting", bodem: "Bodemsoort (bovengrond)", vocht: "Bodemvochtindex"}[L];
   $("kaartSub").textContent = {sigma: "1 σ; 80 %-interval ≈ ± 1,28 σ", kans: staat.drempel === 0 ? "T10 < 0 °C ergens in de nacht" : "T10 < −2 °C ergens in de nacht", bodem: "BRO Bodemkaart V2025-1", vocht: D.j.bodemvocht_bron}[L] || "WGT-MOS";
   $("drempelSeg").hidden = L !== "kans";
 }
@@ -826,9 +876,10 @@ function bodemTekst(c) {
   return parts.map(([k, v]) => `${BODEM_KORT[k] || k} ${v}%`).join(", ") || "onbekend";
 }
 function tipHtml(c) {
-  const L = staat.laag, nacht = L === "nmin" || L === "kans";
+  const L = staat.laag, nacht = (L === "nmin" || L === "tn") || L === "kans";
   const plaats = D.plaats[c]; const vocht = D.vocht[c];
   let h = `<button class="sluit" aria-label="Sluiten" hidden>×</button><div class="tk2"><b>${plaats}</b></div>`;
+  if (L === "tn") return h + `<div class="val"><span class="gr">${fmt(waarde(c))} °C</span><span class="eh">minimum op 2 m</span></div><p>Laagste uurwaarde gedurende de geselecteerde nacht (18.00–09.00 lokale tijd), uit de bijgestuurde modelmix. Geen afzonderlijk getrainde TN-MOS-correctie.</p>`;
   if (nacht) {
     const n = D.nachten[staat.ni]; const tm = v16(n.t10min[c]), s = v16(n.sigma[c]); const tu = D.tijden[n.uur[c]];
     const [bk, bl] = bhKlasse(s);
@@ -871,6 +922,7 @@ function modelBlok(c, ti, nacht) {
   h += `<span class="som">Modelmix (gewogen)</span><span class="som">${fmt(mix)}</span><span class="som"></span>`;
   h += `<span>MOS-correctie</span><span>${mos >= 0 ? "+" : ""}${fmt(mos)}</span><span></span>`;
   if (Math.abs(bij) >= 0.05) h += `<span>Bijsturing metingen</span><span>${bij >= 0 ? "+" : ""}${fmt(bij)}</span><span></span>`;
+  if (L === "tn") return h + `<div class="val"><span class="gr">${fmt(waarde(c))} °C</span><span class="eh">minimum op 2 m</span></div><p>Laagste uurwaarde gedurende de geselecteerde nacht (18.00–09.00 lokale tijd), uit de bijgestuurde modelmix. Geen afzonderlijk getrainde TN-MOS-correctie.</p>`;
   if (nacht) {
     const dl = D.j.delta_min;
     h += `<span title="Een continu gemeten minimum (KNMI T10N) ligt lager dan de uurwaarde">Continu minimum (δ)</span><span>${fmt(dl)}</span><span></span>`;
@@ -882,7 +934,7 @@ function celOp(evt) {
   const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
   const p = pt.matrixTransform(svg.getScreenCTM().inverse()); const [lon, lat] = lonlat(p.x, p.y); const g = D.j.rooster;
   const iy = Math.round((lat - g.lat0) / g.dlat), ix = Math.round((lon - g.lon0) / g.dlon);
-  if (iy < 0 || ix < 0 || iy >= NY || ix >= NX) return -1; return cellVan[iy * NX + ix];
+  if (iy < 0 || ix < 0 || iy >= NY || ix >= NX) return -1; const c = cellVan[iy * NX + ix]; return c >= 0 && inGebied(lat,lon) ? c : -1;
 }
 function plaatsTip(c, evt) {
   const tip = $("tip"); tip.innerHTML = tipHtml(c); tip.hidden = false;
@@ -929,7 +981,7 @@ function grafiek(c) {
   if (band) el("path", {d: band + terug + "Z", class: "band"}, G);
   mods.forEach(m => { const s = []; for (let t = 0; t < NT; t++) s.push(v16(D.pm[m][t * C + c])); el("path", {d: pad(s), class: "lm"}, G); });
   el("path", {d: pad(s2), class: "l2"}, G); el("path", {d: pad(s10), class: "l10"}, G);
-  if (!(staat.laag === "nmin" || staat.laag === "kans")) el("line", {x1: X(staat.ti), x2: X(staat.ti), y1: mt, y2: Hg - mb, class: "nu"}, G);
+  if (!((staat.laag === "nmin" || staat.laag === "tn") || staat.laag === "kans")) el("line", {x1: X(staat.ti), x2: X(staat.ti), y1: mt, y2: Hg - mb, class: "nu"}, G);
 }
 
 // ---------- samenvatting ----------
@@ -949,14 +1001,19 @@ function statusEnMeldingen() {
 }
 function kpis() {
   const n = D.nachten[staat.ni] || D.nachten[0]; const k = $("kpis"); if (!n) { k.innerHTML = ""; return; }
-  let mi = 0; for (let c = 1; c < C; c++) if (n.t10min[c] < n.t10min[mi]) mi = c;
-  let p50 = 0, pmax = 0; for (let c = 0; c < C; c++) { if (n.p0[c] >= 50) p50++; pmax = Math.max(pmax, n.p0[c]); }
-  let som = 0; for (let c = 0; c < C; c++) som += n.t10min[c]; const gem = som / C / 10;
-  let som2 = 0; for (let c = 0; c < C; c++) som2 += n.t10min[c] - n.t2min[c]; const vers = som2 / C / 10;
+  let mi = gebiedCellen()[0]; for (const c of gebiedCellen()) if (n.t10min[c] < n.t10min[mi]) mi = c;
+  let p50 = 0, pmax = 0; for (const c of gebiedCellen()) { if (n.p0[c] >= 50) p50++; pmax = Math.max(pmax, n.p0[c]); }
+  let som = 0; for (const c of gebiedCellen()) som += n.t10min[c]; const gem = som / gebiedCellen().length / 10;
+  let som2 = 0; for (const c of gebiedCellen()) som2 += n.t10min[c] - n.t2min[c]; const vers = som2 / gebiedCellen().length / 10;
+  if (staat.laag === "tn") {
+    const cells=gebiedCellen().filter(c=>n.tn[c]!==-32768); const mi=cells.reduce((a,c)=>n.tn[c]<n.tn[a]?c:a,cells[0]);
+    k.innerHTML = `<div class="kpi"><div class="l">Laagste 2 m · ${gebiedNaam()}</div><div class="v">${fmt(v16(n.tn[mi]))} °C</div><div class="n">${D.plaats[mi]} · laagste uurwaarde 18.00–09.00</div></div>`;
+    return;
+  }
   const kaartje = (l, v, nn) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${nn}</div></div>`;
   k.innerHTML = kaartje("Laagste 10 cm", `${fmt(v16(n.t10min[mi]))}<small> °C</small>`, `${D.plaats[mi]} · nacht ${dagKort.format(new Date(n.start))}`)
-    + kaartje("Gemiddeld NL", `${fmt(gem)}<small> °C</small>`, `${fmt(vers)} °C t.o.v. 2 m`)
-    + kaartje("Grondvorstkans ≥ 50 %", `${Math.round(100 * p50 / C)}<small> % van NL</small>`, `hoogste kans ${pmax} %`)
+    + kaartje("Gemiddeld " + gebiedNaam(), `${fmt(gem)}<small> °C</small>`, `${fmt(vers)} °C t.o.v. 2 m`)
+    + kaartje("Grondvorstkans ≥ 50 %", `${Math.round(100 * p50 / gebiedCellen().length)}<small> % van ${gebiedNaam()}</small>`, `hoogste kans ${pmax} %`)
     + kaartje("Modellen", `${D.j.runs.filter(r => r.status === "gebruikt").length}<small>/${D.j.runs.length}</small>`, "actuele runs in de mix");
 }
 function runsLijst() {
@@ -970,7 +1027,7 @@ function runsLijst() {
 
 // ---------- bediening ----------
 $("laagSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; staat.laag = b.dataset.l;
-  [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x === b))); if (D) { bouwTijd(); teken(); } });
+  [...$("laagSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x === b))); if (D) { bouwTijd(); teken(); drieNachten(); kpis(); } });
 $("drempelSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; staat.drempel = +b.dataset.d;
   [...$("drempelSeg").children].forEach(x => x.setAttribute("aria-pressed", String(x === b))); teken(); });
 $("isoChk").onchange = teken; $("stChk").onchange = teken; $("waardenChk").onchange = teken; $("laagChk").onchange = teken;
