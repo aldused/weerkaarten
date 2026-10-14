@@ -29,7 +29,13 @@ const screenshots=process.env.WEERLAB_SCREENSHOT_DIR||'/private/tmp';
     await page.screenshot({path:path.join(screenshots,'kranten-desktop.png'),fullPage:true});
     for(const paper of ['trouw','parool','ad']) {
       await page.locator(`[data-paper="${paper}"]`).click();
-      assert.equal(await page.locator('.article').count(),1);
+      assert.equal(await page.locator('.article').count(),paper==='parool'?2:1);
+      if(paper==='parool'){
+        assert.match(await page.locator('.article').nth(1).innerText(),/Parool Backup/);
+        assert.equal(await page.locator('#body-parool_backup').inputValue(),payload.articles.parool_backup.body);
+        await page.locator('#copy-paper').click();
+        assert.match(await page.evaluate(()=>navigator.clipboard.readText()),/Parool Backup/);
+      }
       if(paper==='trouw')assert.match(await page.locator('.counter').innerText(),/karakters inclusief spaties/);
     }
     await page.locator('#title-ad').fill('Deze titel is veel te lang');
@@ -69,6 +75,6 @@ const screenshots=process.env.WEERLAB_SCREENSHOT_DIR||'/private/tmp';
     assert(!(await page.locator('#body-vk_lang').isVisible()));
     await page.pdf({path:path.join(screenshots,'kranten-print.pdf'),format:'A4',printBackground:true,margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'}});
     assert.deepEqual(errors,[]);
-    console.log('PASS: direct access without login, five versions, combined copy, word/punctuation checks, persistence, new revision protection, backup download, network failure, stale edition, mobile layout and print text.');
+    console.log('PASS: direct access without login, six versions, combined copy, word/punctuation checks, persistence, new revision protection, backup download, network failure, stale edition, mobile layout and print text.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
