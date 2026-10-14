@@ -5,7 +5,8 @@
   const PAPER = {
     volkskrant: {name:'de Volkskrant', ids:['vk_kort','vk_lang'], delivery:'Beide teksten samen · vk-eindredactie@dpgmedia.nl'},
     trouw: {name:'Trouw', ids:['trouw'], delivery:'eindredactie@trouw.nl en foto@trouw.nl'},
-    parool: {name:'Het Parool', ids:['parool','parool_backup'], delivery:'Inplannen via HQ · hq.buienradar.nl/content/parool'},
+    parool: {name:'Het Parool', ids:['parool'], delivery:'Inplannen via HQ · hq.buienradar.nl/content/parool'},
+    parool_backup: {name:'Het Parool (Backup)', ids:['parool_backup'], delivery:'Inplannen via HQ · hq.buienradar.nl/content/parool'},
     ad: {name:'AD', ids:['ad'], delivery:'columnisten@dpgmedia.nl'}
   };
   const SPECS = {
@@ -13,7 +14,7 @@
     vk_lang: {label:'Weerpagina · lang', min:167, max:203, target:'rond 185', unit:'words', title:false},
     trouw: {label:'Weerpagina', min:900, max:1100, target:'rond 1.000', unit:'characters', title:true},
     parool: {label:'Landelijk weerbericht', min:90, max:110, target:'rond 100', unit:'words', title:true},
-    parool_backup: {label:'Parool Backup', min:90, max:110, target:'rond 100', unit:'words', title:true},
+    parool_backup: {label:'Het Parool (Backup)', min:90, max:110, target:'rond 100', unit:'words', title:true},
     ad: {label:'Landelijk weerbericht', min:90, max:110, target:'rond 100', unit:'words', title:true}
   };
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -60,7 +61,7 @@
     $('update-summary').textContent=checkStatus ? 'Laatste controle: '+formatDate(checkStatus.checkedAt)+' om '+formatTime(checkStatus.checkedAt)+' uur · '+(checkStatus.ok ? checkStatus.message : 'Controle mislukt: '+checkStatus.message)+' Laatste tekstversie: '+formatTime(data.updatedAt)+' uur.' : 'Broncontrole niet beschikbaar.';
     $('update-history').replaceChildren(...(checkStatus?.history || []).slice().reverse().map(entry=>{
       const li=document.createElement('li');
-      const labels={vk_kort:'Volkskrant kort',vk_lang:'Volkskrant lang',trouw:'Trouw',parool:'Parool',parool_backup:'Parool Backup',ad:'AD'};
+      const labels={vk_kort:'Volkskrant kort',vk_lang:'Volkskrant lang',trouw:'Trouw',parool:'Parool',parool_backup:'Het Parool (Backup)',ad:'AD'};
       li.textContent=formatTime(entry.checkedAt)+' uur · '+entry.message+(entry.changedArticles?.length ? ' '+entry.changedArticles.map(key=>labels[key]||key).join(', ')+'.' : '');
       return li;
     }));
@@ -71,7 +72,7 @@
     if(key==='parool_backup')date.setUTCDate(date.getUTCDate()+1);
     return date.toISOString().slice(0,10);
   }
-  function subject() { return 'Weerbericht voor '+formatDate(data.publicationDate)+' '+formatTime(data.updatedAt)+' uur door Buienradar'; }
+  function subject() { return 'Weerbericht voor '+formatDate(articleDate(paper))+' '+formatTime(data.updatedAt)+' uur door Buienradar'; }
   function renderMeta() {
     $('written-date').textContent=formatDate(data.sourceDate);
     $('publication-date').textContent=formatDate(data.publicationDate);
@@ -124,6 +125,7 @@
   }
   function renderPaper() {
     const config=PAPER[paper];
+    $('subject').textContent=subject();
     document.querySelectorAll('[data-paper]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.paper===paper)));
     $('paper-name').textContent=config.name;$('delivery').textContent=config.delivery;
     $('copy-paper').textContent=config.ids.length===2?'Kopieer beide teksten':'Kopieer bericht';

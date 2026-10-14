@@ -27,14 +27,14 @@ const screenshots=process.env.WEERLAB_SCREENSHOT_DIR||'/private/tmp';
     assert.match(clip,/Voorpagina/);assert.match(clip,/Weerpagina/);
     assert.equal((clip.match(/Ed Aldus/g)||[]).length,2);
     await page.screenshot({path:path.join(screenshots,'kranten-desktop.png'),fullPage:true});
-    for(const paper of ['trouw','parool','ad']) {
+    for(const paper of ['trouw','parool','parool_backup','ad']) {
       await page.locator(`[data-paper="${paper}"]`).click();
-      assert.equal(await page.locator('.article').count(),paper==='parool'?2:1);
-      if(paper==='parool'){
-        assert.match(await page.locator('.article').nth(1).innerText(),/Parool Backup/);
+      assert.equal(await page.locator('.article').count(),1);
+      if(paper==='parool_backup'){
+        assert.match(await page.locator('.article').first().innerText(),/Het Parool \(Backup\)/);
         assert.equal(await page.locator('#body-parool_backup').inputValue(),payload.articles.parool_backup.body);
         await page.locator('#copy-paper').click();
-        assert.match(await page.evaluate(()=>navigator.clipboard.readText()),/Parool Backup/);
+        assert((await page.evaluate(()=>navigator.clipboard.readText())).includes(payload.articles.parool_backup.body));
       }
       if(paper==='trouw')assert.match(await page.locator('.counter').innerText(),/karakters inclusief spaties/);
     }
