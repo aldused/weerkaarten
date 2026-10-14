@@ -5,7 +5,7 @@
   const PAPER = {
     volkskrant: {name:'de Volkskrant', ids:['vk_kort','vk_lang'], delivery:'Beide teksten samen · vk-eindredactie@dpgmedia.nl'},
     trouw: {name:'Trouw', ids:['trouw'], delivery:'eindredactie@trouw.nl en foto@trouw.nl'},
-    parool: {name:'Het Parool', ids:['parool'], delivery:'Inplannen via HQ · hq.buienradar.nl/content/parool'},
+    parool: {name:'Het Parool', ids:['parool','parool_backup'], delivery:'Inplannen via HQ · hq.buienradar.nl/content/parool'},
     ad: {name:'AD', ids:['ad'], delivery:'columnisten@dpgmedia.nl'}
   };
   const SPECS = {
@@ -13,6 +13,7 @@
     vk_lang: {label:'Weerpagina · lang', min:167, max:203, target:'rond 185', unit:'words', title:false},
     trouw: {label:'Weerpagina', min:900, max:1100, target:'rond 1.000', unit:'characters', title:true},
     parool: {label:'Landelijk weerbericht', min:90, max:110, target:'rond 100', unit:'words', title:true},
+    parool_backup: {label:'Parool Backup', min:90, max:110, target:'rond 100', unit:'words', title:true},
     ad: {label:'Landelijk weerbericht', min:90, max:110, target:'rond 100', unit:'words', title:true}
   };
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -37,7 +38,7 @@
   function validPayload(value) {
     return value && typeof value.revision==='string' && /^\d{4}-\d{2}-\d{2}$/.test(value.publicationDate) && /^\d{4}-\d{2}-\d{2}$/.test(value.sourceDate) &&
       typeof value.author==='string' && !isNaN(Date.parse(value.updatedAt)) && value.source && Array.isArray(value.source.paragraphs) && Array.isArray(value.usedParagraphs) &&
-      Object.keys(SPECS).every(k=>typeof value.articles?.[k]?.title==='string' && typeof value.articles?.[k]?.body==='string');
+      Object.keys(SPECS).filter(k=>k!=='parool_backup').every(k=>typeof value.articles?.[k]?.title==='string' && typeof value.articles?.[k]?.body==='string');
   }
   function renderSchedule(now=new Date()) {
     const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Amsterdam',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now);
@@ -59,11 +60,16 @@
     $('update-summary').textContent=checkStatus ? 'Laatste controle: '+formatDate(checkStatus.checkedAt)+' om '+formatTime(checkStatus.checkedAt)+' uur · '+(checkStatus.ok ? checkStatus.message : 'Controle mislukt: '+checkStatus.message)+' Laatste tekstversie: '+formatTime(data.updatedAt)+' uur.' : 'Broncontrole niet beschikbaar.';
     $('update-history').replaceChildren(...(checkStatus?.history || []).slice().reverse().map(entry=>{
       const li=document.createElement('li');
-      const labels={vk_kort:'Volkskrant kort',vk_lang:'Volkskrant lang',trouw:'Trouw',parool:'Parool',ad:'AD'};
+      const labels={vk_kort:'Volkskrant kort',vk_lang:'Volkskrant lang',trouw:'Trouw',parool:'Parool',parool_backup:'Parool Backup',ad:'AD'};
       li.textContent=formatTime(entry.checkedAt)+' uur · '+entry.message+(entry.changedArticles?.length ? ' '+entry.changedArticles.map(key=>labels[key]||key).join(', ')+'.' : '');
       return li;
     }));
     $('check-status').textContent=checkStatus ? 'Broncontrole: '+formatDate(checkStatus.checkedAt)+' · '+formatTime(checkStatus.checkedAt)+' uur'+(checkStatus.ok?'':' · mislukt') : 'Status van broncontrole niet beschikbaar';
+  }
+  function articleDate(key) {
+    const date=new Date(data.publicationDate+'T12:00:00Z');
+    if(key==='parool_backup')date.setUTCDate(date.getUTCDate()+1);
+    return date.toISOString().slice(0,10);
   }
   function subject() { return 'Weerbericht voor '+formatDate(data.publicationDate)+' '+formatTime(data.updatedAt)+' uur door Buienradar'; }
   function renderMeta() {
@@ -130,7 +136,7 @@
         ? `Richtlengte: ${spec.target} karakters inclusief spaties · marge ${number(spec.min)}–${number(spec.max)}`
         : key==='vk_kort'?'Maximaal 30 woorden':`Richtlengte: ${spec.target} woorden · marge ${spec.min}–${spec.max}`;
       const explanation=spec.unit==='characters'?'Alle letters, leestekens en spaties in het bericht tellen mee. Titel en auteursnaam tellen niet mee.':'We tellen woorden. Titel en auteursnaam tellen niet mee.';
-      card.innerHTML=`<div class="article-top"><h3>${spec.label}</h3><span id="count-${key}" class="counter"></span></div><div class="paper">${titleField}<label class="field-label" for="body-${key}">Bericht · klik om te redigeren</label><p id="word-rule-${key}" class="word-rule"><strong>${rule}</strong><span>${explanation}</span></p><textarea id="body-${key}" spellcheck="true" lang="nl" aria-label="Bericht ${spec.label}" aria-describedby="word-rule-${key} length-status-${key}"></textarea><p id="length-status-${key}" class="length-status" role="status" aria-atomic="true"></p><div id="print-body-${key}" class="print-copy"></div><p class="byline" id="byline-${key}"></p></div><div class="article-bottom"><p id="issues-${key}"></p><button type="button" data-copy="${key}">Kopieer tekst</button></div>`;
+      card.innerHTML=`<div class="article-top"><h3>${spec.label}${key==='parool_backup'?' · '+formatDate(articleDate(key)):''}</h3><span id="count-${key}" class="counter"></span></div><div class="paper">${titleField}<label class="field-label" for="body-${key}">Bericht · klik om te redigeren</label><p id="word-rule-${key}" class="word-rule"><strong>${rule}</strong><span>${explanation}${key==='parool_backup'?' Deze tekst begint bij het weer van overmorgen vanaf de schrijfdatum. Vandaag verwijst hier naar '+formatDate(articleDate(key))+'.':''}</span></p><textarea id="body-${key}" spellcheck="true" lang="nl" aria-label="Bericht ${spec.label}" aria-describedby="word-rule-${key} length-status-${key}"></textarea><p id="length-status-${key}" class="length-status" role="status" aria-atomic="true"></p><div id="print-body-${key}" class="print-copy"></div><p class="byline" id="byline-${key}"></p></div><div class="article-bottom"><p id="issues-${key}"></p><button type="button" data-copy="${key}">Kopieer tekst</button></div>`;
       $('articles').append(card);
       if(spec.title){$('title-'+key).value=item.title;$('title-'+key).addEventListener('input',event=>{data.articles[key].title=event.target.value;updateArticle(key);save();});}
       $('body-'+key).value=item.body;
@@ -149,7 +155,7 @@
     const parts=[...warnings];
     if(includeSubject) parts.push(subject());
     for(const key of keys) {
-      if(keys.length>1) parts.push((key.startsWith('vk_')?'Volkskrant · ':PAPER[key]?.name+' · ')+SPECS[key].label);
+      if(keys.length>1) parts.push((key.startsWith('vk_')?'Volkskrant · ':(key==='parool_backup'?'Het Parool':PAPER[key]?.name)+' · ')+SPECS[key].label+' · '+formatDate(articleDate(key)));
       parts.push((SPECS[key].title?data.articles[key].title.trim()+'\n\n':'')+data.articles[key].body.trim()+'\n\n'+data.author.trim());
     }
     return parts.join('\n\n');
@@ -174,12 +180,15 @@
       const results=await Promise.allSettled([getJson('data/kranten_demo.json'),getJson('data/kranten_status.json')]);
       if(results[0].status==='rejected')throw results[0].reason;
       const incoming=results[0].value;
+      if(!incoming.articles?.parool_backup)throw Error('Parool Backup ontbreekt in de conceptgegevens');
       if(!validPayload(incoming))throw Error('Ongeldige conceptgegevens');
       checkStatus=results[1].status==='fulfilled'?results[1].value:null;
       if(!data) {
         const local=readStored('weerlab.kranten.demo.v1.'+incoming.publicationDate);
         if(local?.dirty && validPayload(local.data) && validPayload(local.base)) {
           data=local.data;base=local.base;dirty=true;
+          if(!data.articles.parool_backup)data.articles.parool_backup=clone(incoming.articles.parool_backup);
+          if(!base.articles.parool_backup)base.articles.parool_backup=clone(incoming.articles.parool_backup);
           if(incoming.revision!==data.revision)pending=incoming;
         } else { data=clone(incoming);base=clone(incoming); }
         renderMeta();renderPaper();

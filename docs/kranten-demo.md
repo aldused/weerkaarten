@@ -6,6 +6,17 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 
 ## Redactionele afspraken
 
+- Onder Parool staat een tweede tekst: **Parool Backup** (`parool_backup`). Deze
+  begint bij **overmorgen vanaf de schrijfdatum**, dus één kalenderdag na de
+  gewone krantdatum. In deze backup betekent vandaag die latere datum en morgen
+  de dag daarna. Laat het weer van morgen vanaf de schrijfdatum weg. Schrijf
+  een zelfstandig landelijk bericht van 90–110 woorden met een titel van 1–5
+  woorden, op basis van de expliciete vervolgverwachting in dezelfde bron.
+  Verschuif geen weekdagen en neem geen weerfeiten van de gewone Parool-opening
+  over. Maak deze zesde versie bij iedere nieuwe editie; controleer de tijdlijn
+  afzonderlijk. De backupdatum wordt ook bij kopiëren en printen getoond.
+
+
 - Schrijfdatum is de huidige datum in Europe/Amsterdam. Krantdatum is de volgende
   kalenderdag. Gebruik geen optelsom van 24 lokale uren rond de zomer-/wintertijd.
 - Begin de tekst bij het weer van morgen uit de bron. In de krant heet dat
@@ -13,7 +24,7 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 - De daaropvolgende dag is **morgen** vanuit de krant. Gebruik in langere teksten
   waar nodig een concrete weekdag of 'de dagen erna'. Verschuif nooit expliciete
   weekdagen of datums door blind woorden te vervangen.
-- De vijf versies gaan allemaal over heel Nederland; Parool wordt dus niet
+- De zes versies gaan allemaal over heel Nederland; Parool wordt dus niet
   uitsluitend een Amsterdams weerbericht.
 - Volkskrant kort: maximaal 30 woorden, weer en temperatuur voor krant-vandaag
   én krant-morgen. Volkskrant lang: rond 185 woorden. Trouw: rond 1.000
@@ -86,7 +97,7 @@ zijn overgenomen uit `Aanleveren input kranten en radio_v3108.docx`.
 De Codex-heartbeat `krantenredactie-dagelijks-bijwerken` is actief en draait zeven dagen
 per week om 07.00, 08.00, 09.00, 10.00, 11.00 en 12.00 uur Nederlandse tijd.
 Elke run leest dit document en gebruikt de werkstappen hieronder: actuele bron
-ophalen, alleen bij gewijzigde bruikbare verwachting of nieuwe krantdatum vijf
+ophalen, alleen bij gewijzigde bruikbare verwachting of nieuwe krantdatum zes
 concepten schrijven, valideren en via de bestaande publicatiehelper online zetten.
 De broncontrolestatus wordt ieder uur gepubliceerd, zodat de online klok de
 werkelijke controle toont. Een ongewijzigde bron levert geen nieuwe editie op.
@@ -120,8 +131,8 @@ Werk vanuit `/Users/aldus/KNMI_Project/weerlab`:
    (maak de map indien nodig). Schema: `sourceId`, `sourceDate`, `publicationDate`,
    `demoOnly`, `author`, `usedParagraphs` (nulgebaseerde indices uit
    `eligibleParagraphs`) en `articles` met exact `vk_kort`, `vk_lang`, `trouw`,
-   `parool`, `ad`. Iedere versie heeft een `title` en `body` (alinea's met `\n\n`).
-5. Schrijf de vijf versies op basis van de nieuwe bron. Controleer inhoudelijk
+   `parool`, `parool_backup`, `ad`. Iedere versie heeft een `title` en `body` (alinea's met `\n\n`).
+5. Schrijf de zes versies op basis van de nieuwe bron. Controleer inhoudelijk
    elke genoemde dag, temperatuur, regensom, wind en onzekerheid. Lees alle
    concepten nogmaals als krantlezer: controleer ook het natuurlijke zinsritme,
    de gevarieerde woordkeuze, de informele toon en het ontbreken van clichés en
@@ -131,7 +142,7 @@ Werk vanuit `/Users/aldus/KNMI_Project/weerlab`:
    `python3 scripts/kranten_update.py publish /pad/kandidaat.json`.
    Dit laatste commando vervangt de lokale demo-JSON atomair en neemt daarin alleen
    de gebruikte bronpassages op. De oude versie blijft in `kranten-archief/` bewaard.
-7. Controleer de vijf woordenaantallen en de krantdatum in het resultaat. Wijzig
+7. Controleer de zes woordenaantallen en de krantdatum in het resultaat. Wijzig
    bij reguliere updates geen code. Meld alleen betekenisvolle inhoudelijke
    wijzigingen, voltooiing van een nieuwe editie, fouten of benodigde actie.
 
@@ -169,7 +180,7 @@ zonder afzonderlijke krantcode. De concepten worden bij het openen geladen.
 Na een nieuwe, gevalideerde editie publiceert de Codex-taak uitsluitend
 `data/kranten_demo.json` en `data/kranten_status.json` via
 `bash shell/kranten_publish.sh "Krantconcepten <krantdatum> bijgewerkt"`.
-Deze helper maakt een schone tijdelijke checkout, zodat gelijktijdige weerjobs
+Deze helper vergelijkt de gewenste bestanden met origin/main en maakt een schone tijdelijke checkout. Een mislukte push wordt bij een volgende poging opnieuw uitgevoerd, ook als de lokale editie ongewijzigd is. De helper zodat gelijktijdige weerjobs
 geen krantpublicatie blokkeren of onbedoeld meekomen. Bij een ongewijzigde bruikbare verwachting blijft de editie intact en wordt
 alleen de broncontrolestatus gepubliceerd. De bestaande homepage en navigatie
 blijven ongewijzigd.

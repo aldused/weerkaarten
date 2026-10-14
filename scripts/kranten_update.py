@@ -27,6 +27,7 @@ LENGTH_RULES = {
     'vk_lang': ('words', 167, 203),
     'trouw': ('characters', 900, 1100),
     'parool': ('words', 90, 110),
+    'parool_backup': ('words', 90, 110),
     'ad': ('words', 90, 110),
 }
 TITLE_LIMITS = {
@@ -34,6 +35,7 @@ TITLE_LIMITS = {
     'vk_lang': (0, 0),
     'trouw': (1, 5),
     'parool': (1, 5),
+    'parool_backup': (1, 5),
     'ad': (1, 5),
 }
 
@@ -161,7 +163,7 @@ def validate(candidate, source, now):
         errors.append('Bronverwijzing bevat vandaag/nacht of ontbreekt.')
     articles = candidate.get('articles', {})
     if not isinstance(articles, dict) or set(articles) != set(LENGTH_RULES):
-        return errors + ['Precies vijf krantversies vereist.']
+        return errors + ['Precies zes krantversies inclusief Parool Backup vereist.']
     for key, (unit, low, high) in LENGTH_RULES.items():
         item = articles[key]
         if not isinstance(item, dict) or not all(isinstance(item.get(x), str) for x in ('title', 'body')):
@@ -252,7 +254,7 @@ def main():
                     atomic_json(archive, previous)
                 atomic_json(current, candidate)
                 write_status({'checkedAt': now.isoformat(), 'ok': True, 'sourceId': source['id'], 'textChanged': previous.get('articles') != candidate['articles'], 'changedArticles': [key for key in candidate['articles'] if previous.get('articles', {}).get(key) != candidate['articles'][key]], 'message': 'Tekst aangepast.' if previous.get('articles') != candidate['articles'] else 'Tekst ongewijzigd.'})
-            print('OK: krantdatum, vijf versies, bronverwijzing, tekstlengtes, titels en basisleestekens gecontroleerd.')
+            print('OK: krantdatum, zes versies, bronverwijzing, tekstlengtes, titels en basisleestekens gecontroleerd.')
     except Exception as error:
         if args.command in {'fetch', 'publish'}:
             write_status({'checkedAt': now.isoformat(), 'ok': False, 'message': str(error)})
