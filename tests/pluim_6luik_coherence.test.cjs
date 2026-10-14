@@ -18,10 +18,10 @@ function extractFunction(name) {
   throw new Error(`${name} is niet volledig`);
 }
 
-assert.match(source, /pluim_run_switcher_48ffbf926db6\.js/, '6-luik gebruikt niet de directe gezamenlijke runkeuze');
+assert.match(source, /pluim_run_switcher_986ffccbe63e\.js/, '6-luik gebruikt niet de directe gezamenlijke runkeuze');
 assert.match(source, /data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"/, 'early-kernvelden worden niet vooraf bewaakt');
-assert.doesNotMatch(source.match(/data-required="([^"]+)"/)?.[1] || '', /cape/,
-  'ontbrekende CAPE mag de overige vijf panelen niet blokkeren');
+assert.doesNotMatch(source.match(/data-required="([^"]+)"/)?.[1] || '', /snowfall/,
+  'ontbrekende sneeuwval mag de overige vijf panelen niet blokkeren');
 assert.match(source, /pluim_math\.js/, 'gedeelde pluimwiskunde ontbreekt');
 assert.match(source, /single-runs-api\.open-meteo\.com\/v1\/forecast/, 'HRES komt niet uit Single Runs');
 assert.match(source, /&models=ecmwf_ifs&run=\$\{encodeURIComponent\(runInitialization\)\}/, 'HRES krijgt niet exact de gekozen run mee');
@@ -43,10 +43,10 @@ assert.match(buildModel, /alignSeries\(useTimes, hresTimes/, 'HRES wordt niet op
 assert.match(buildModel, /alignSeries\(rrTimes6, hresRain6\.endDates/, '6-uurs-HRES-neerslag wordt niet op timestamp gekoppeld');
 assert.doesNotMatch(buildModel, /slice\(0,\s*N\)|const sliceN/, 'HRES wordt nog per index aan ENS gekoppeld');
 assert.match(buildModel, /er wordt niets uit een andere run gemengd/, 'onvolledige gekozen run heeft geen expliciete stopmelding');
-assert.match(buildModel, /cape: optionalEnsembleVariable\(hourly, 'cape', unavailable\)/,
-  'CAPE wordt niet als optioneel same-run-paneel behandeld');
+assert.match(buildModel, /snowfall: optionalEnsembleVariable\(hourly, 'snowfall', unavailable\)/,
+  'sneeuwval wordt niet als optioneel same-run-paneel behandeld');
 assert.match(buildModel, /unavailableText:true/,
-  'ontbrekende CAPE krijgt geen eerlijk leeg paneel');
+  'ontbrekende sneeuwval krijgt geen eerlijk leeg paneel');
 
 const context = {
   Date, Number, Array, Map, Set, Math,
@@ -91,12 +91,12 @@ assert.deepEqual(
 );
 
 const allNullCape = { time: ['2026-08-09T00:00:00Z', '2026-08-09T03:00:00Z'] };
-allNullCape.cape = [null, null];
+allNullCape.snowfall = [null, null];
 for (let member = 1; member <= 50; member++) {
-  allNullCape[`cape_member${String(member).padStart(2, '0')}`] = [null, null];
+  allNullCape[`snowfall_member${String(member).padStart(2, '0')}`] = [null, null];
 }
-assert.equal(context.optionalEnsembleVariable(allNullCape, 'cape', new Set()), null,
-  '51 volledig-null CAPE-reeksen mogen niet tot nulwaarden worden omgezet');
+assert.equal(context.optionalEnsembleVariable(allNullCape, 'snowfall', new Set()), null,
+  '51 volledig-null sneeuwval-reeksen mogen niet tot nulwaarden worden omgezet');
 full[17][3] = null;
 assert.deepEqual(
   { ...context.completeMemberWindow(times, [full]) },

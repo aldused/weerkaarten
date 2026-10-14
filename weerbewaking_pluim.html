@@ -59,11 +59,11 @@
   @keyframes draaien{to{transform:rotate(360deg)}}
   .err{color:#cc2222;font-size:13px;font-weight:600;text-align:center;padding:0 20px}
 </style>
-<link rel="stylesheet" href="pluim-presentatie.css?v=20260928">
+<link rel="stylesheet" href="pluim-presentatie.css?v=20261014-uniform">
 <link rel="stylesheet" href="weerbewaking_workspace.css?v=20260910-v1">
 <script src="weerbewaking_return.js?v=20260910-v2" defer></script>
 <script src="pluim_ens6_nav.js?v=20260929-pluimen" defer></script>
-<script src="pluim-presentatie.js?v=20260928" defer></script>
+<script src="pluim-presentatie.js?v=20261014-uniform" defer></script>
 <script src="pluim-dag-nacht.js?v=20261004-all1"></script>
 </head>
 <body>
@@ -419,7 +419,7 @@ async function fetchRunMeta() {
 async function fetchEnsemble(lat, lon, runMeta, force = false) {
   const { startHour, endHour } = runDateBoundsFromMeta(runMeta);
   const url = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}`
-    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,cape`
+    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,snowfall`
     + `&models=ecmwf_ifs025&start_hour=${encodeURIComponent(startHour)}&end_hour=${encodeURIComponent(endHour)}`
     + `&temporal_resolution=native&timezone=GMT&wind_speed_unit=kmh`;
   try {
@@ -435,7 +435,7 @@ async function fetchEnsemble(lat, lon, runMeta, force = false) {
 async function fetchHres(lat, lon, runMeta, force = false) {
   const runInitialization = runInitializationFromMeta(runMeta);
   const url = `https://single-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
-    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,cape`
+    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,snowfall`
     + `&models=ecmwf_ifs&run=${encodeURIComponent(runInitialization)}`
     + `&forecast_days=${SOURCE_FORECAST_DAYS}&temporal_resolution=native&timezone=GMT&wind_speed_unit=kmh`;
   try {
@@ -458,7 +458,7 @@ function embeddedHresFromEnsemble(ens, runMeta) {
       || !Array.isArray(embedded.time) || requiredFields.some(field => !Array.isArray(embedded[field]))) return null;
   const n = embedded.time.length;
   if (requiredFields.some(field => embedded[field].length !== n)) return null;
-  const optionalFields = ['cape'].filter(field =>
+  const optionalFields = ['snowfall'].filter(field =>
     Array.isArray(embedded[field]) && embedded[field].length === n
       && embedded[field].every(Number.isFinite));
   const fields = [...requiredFields, ...optionalFields];
@@ -477,10 +477,10 @@ async function fetchCoherentPlumeBatch(lat, lon, force = false) {
   const selectedRunMs = Date.parse(runControl?.selectedRunIso?.() || '');
   const liveRunMs = Number(runControl?.state?.liveMeta?.last_run_initialisation_time) * 1000;
   if (Number.isFinite(selectedRunMs) && selectedRunMs === liveRunMs) {
-    // De snelle 00/06-voorlevering bevat geen CAPE. Gebruik voor precies
-    // dezelfde actuele cyclus de inmiddels complete Open-Meteo-respons, zodat
-    // het zesde paneel niet structureel leeg blijft. Oudere runs blijven exact.
-    await runControl?.ensureVariables?.(['cape']);
+    // Controleer sneeuwval voor precies
+    // dezelfde actuele cyclus; gebruik de complete bronrespons waar beschikbaar.
+    // Oudere runs blijven exact; ontbrekende sneeuwgegevens blijven leeg.
+    await runControl?.ensureVariables?.(['snowfall']);
   }
   for (let attempt = 0; attempt < 2; attempt++) {
     const metaBefore = await fetchRunMeta();
@@ -889,6 +889,15 @@ async function renderCurrentPlume(force = false, edgeFresh = false) {
   }
 }
 
+
+// Sneeuwval is in cm per broninterval; eerst per lid sommeren, dan statistieken.
+function buildSnowSeries(variable, hresTimes, hresSnow, times) {
+  if (!variable) return null;
+  const statistics = PLUME_MATH.cumulativeMembers(variable.statistics);
+  const hresCumulative = PLUME_MATH.cumulativeMembers([fillNaN(hresSnow)])[0] || [];
+  return { statistics, hres: alignSeries(times, hresTimes, hresCumulative) };
+}
+
 function buildModel(ens, hres, mosmix = null) {
   const hourly = ens?.hourly;
   if (!Array.isArray(hourly?.time)) throw new Error('Ensemble bevat geen geldige tijdas');
@@ -901,7 +910,7 @@ function buildModel(ens, hres, mosmix = null) {
     wind: ensembleVariable(hourly, 'wind_speed_10m'),
     gust: optionalEnsembleVariable(hourly, 'wind_gusts_10m', unavailable),
     rain: ensembleVariable(hourly, 'precipitation'),
-    cape: optionalEnsembleVariable(hourly, 'cape', unavailable),
+    snowfall: optionalEnsembleVariable(hourly, 'snowfall', unavailable),
   };
   const window = completeMemberWindow(times, Object.values(raw).filter(Boolean).map(variable => variable.statistics));
   if (window.first !== 0 || window.lastExclusive !== times.length) {
@@ -919,7 +928,7 @@ function buildModel(ens, hres, mosmix = null) {
   const wind = trimVariable(raw.wind);
   const gust = trimVariable(raw.gust);
   const rain = trimVariable(raw.rain);
-  const cape = trimVariable(raw.cape);
+  const snowfall = trimVariable(raw.snowfall);
   const useTimes = times.slice(window.first, window.lastExclusive);
 
   const hr = hres?.hourly || {};
@@ -931,7 +940,8 @@ function buildModel(ens, hres, mosmix = null) {
   const tempHres = alignedHres('temperature_2m');
   const windHres = alignedHres('wind_speed_10m');
   const gustHres = gust ? alignedHres('wind_gusts_10m') : [];
-  const capeHres = cape ? alignedHres('cape') : [];
+  const snowSeries = buildSnowSeries(snowfall, hresTimes, hr.snowfall || [], useTimes);
+  const snowfallHres = snowSeries ? snowSeries.hres : [];
 
   // Open-Meteo-neerslag hoort bij het voorafgaande interval. Alleen complete
   // UTC-klokvakken worden op hun rechtergrens (06/12/18/00 UTC) getekend.
@@ -959,14 +969,14 @@ function buildModel(ens, hres, mosmix = null) {
   const gustP50 = gust ? percentile(gust.statistics, 0.5) : [];
   const rr6P50 = percentile(rrStats6, 0.5);
   const rrCumP50 = percentile(rrCumStats, 0.5);
-  const capeP50 = cape ? percentile(cape.statistics, 0.5) : [];
+  const snowfallP50 = snowfall ? percentile(snowSeries.statistics, 0.5) : [];
 
   const tempMean = meanOf(temp.statistics);
   const windMean = meanOf(wind.statistics);
   const gustMean = gust ? meanOf(gust.statistics) : [];
   const rr6Mean = meanOf(rrStats6);
   const rrCumMean = meanOf(rrCumStats);
-  const capeMean = cape ? meanOf(cape.statistics) : [];
+  const snowfallMean = snowfall ? meanOf(snowSeries.statistics) : [];
 
   const mosmixStation = dichtstbijMosmixStation(mosmix, currentStation.lat, currentStation.lon);
   const mosmixTemp = mosmixTemperatuurPunten(mosmix, mosmixStation, useTimes);
@@ -978,7 +988,7 @@ function buildModel(ens, hres, mosmix = null) {
   const gMx = gust ? pad(...rangeOf(gust.statistics, gustHres), 0.05, true)[1] : 0;
   const [, rMx] = pad(...rangeOf(rrStats6, rrHres6), 0.08, true);
   const [, cMx] = pad(...rangeOf(rrCumStats, rrCumHres), 0.08, true);
-  const caMx = cape ? pad(...rangeOf(cape.statistics, capeHres), 0.08, true)[1] : 0;
+  const caMx = snowfall ? pad(...rangeOf(snowSeries.statistics, snowfallHres), 0.08, true)[1] : 0;
 
   const runDate = useTimes[0];
   const runLabel = 'niet geverifieerd';
@@ -1003,9 +1013,9 @@ function buildModel(ens, hres, mosmix = null) {
       ? { title:"Windstoten (km/uur)", times:useTimes, domainStart, domainEnd, ensemble:gust.perturbed, ctrl:gust.control, hres:gustHres, p50:gustP50, mean:gustMean, yMin:0, yMax:Math.max(10, Math.ceil(gMx/10)*10) }
       : { title:"Windstoten (km/uur)", unavailableText:true },
     { title:"Neerslagsom (mm)", times:useTimes, domainStart, domainEnd, ensemble:rrCumEns, ctrl:rrCumCtrl, hres:rrCumHres, p50:rrCumP50, mean:rrCumMean, yMin:0, yMax:Math.max(10, Math.ceil(cMx/10)*10) },
-    cape
-      ? { title:"CAPE/Onweer (J/kg)", times:useTimes, domainStart, domainEnd, ensemble:cape.perturbed, ctrl:cape.control, hres:capeHres, p50:capeP50, mean:capeMean, yMin:0, yMax:Math.max(160, Math.ceil(caMx/160)*160) }
-      : { title:"CAPE/Onweer (J/kg)", unavailableText:true },
+    snowfall
+      ? { title:"Sneeuwsom (cm)", times:useTimes, domainStart, domainEnd, ensemble:snowSeries.statistics.slice(1), ctrl:snowSeries.statistics[0], hres:snowfallHres, p50:snowfallP50, mean:snowfallMean, yMin:0, yMax:Math.max(1, Math.ceil(caMx)) }
+      : { title:"Sneeuwsom (cm)", unavailableText:true },
   ];
 
   return {

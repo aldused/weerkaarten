@@ -56,8 +56,8 @@
   @keyframes draaien{to{transform:rotate(360deg)}}
   .err{color:#cc2222;font-size:13px;font-weight:600;text-align:center;padding:0 20px}
 </style>
-<link rel="stylesheet" href="pluim-presentatie.css?v=20260928">
-<script src="pluim-presentatie.js?v=20260928" defer></script>
+<link rel="stylesheet" href="pluim-presentatie.css?v=20261014-uniform">
+<script src="pluim-presentatie.js?v=20261014-uniform" defer></script>
 <script src="pluim-dag-nacht.js?v=20261004-all1"></script>
 </head>
 <body>
@@ -95,7 +95,7 @@
   </div>
 </div>
 
-<script src="pluim_run_switcher_48ffbf926db6.js" data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"></script>
+<script src="pluim_run_switcher_986ffccbe63e.js" data-required="temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m"></script>
 <script src="pluim_math.js?v=20260808-expertpluim"></script>
 <script>
 const STATIONS = [
@@ -245,7 +245,7 @@ async function fetchRunMeta() {
 async function fetchEnsemble(lat, lon, runMeta) {
   const { startHour, endHour } = runDateBoundsFromMeta(runMeta);
   const url = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}`
-    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,cape`
+    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,snowfall`
     + `&models=ecmwf_ifs025&start_hour=${encodeURIComponent(startHour)}&end_hour=${encodeURIComponent(endHour)}`
     + `&temporal_resolution=native&timezone=GMT&wind_speed_unit=kmh`;
   const data = await fetchJson(url, 35000, 'Ensemble');
@@ -255,7 +255,7 @@ async function fetchEnsemble(lat, lon, runMeta) {
 async function fetchHres(lat, lon, runMeta) {
   const runInitialization = runInitializationFromMeta(runMeta);
   const url = `https://single-runs-api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
-    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,cape`
+    + `&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,snowfall`
     + `&models=ecmwf_ifs&run=${encodeURIComponent(runInitialization)}`
     + `&forecast_days=${SOURCE_FORECAST_DAYS}&temporal_resolution=native&timezone=GMT&wind_speed_unit=kmh`;
   const data = await fetchJson(url, 45000, 'HRES');
@@ -270,7 +270,7 @@ function embeddedHresFromEnsemble(ens, runMeta) {
       || !Array.isArray(embedded.time) || requiredFields.some(field => !Array.isArray(embedded[field]))) return null;
   const n = embedded.time.length;
   if (requiredFields.some(field => embedded[field].length !== n)) return null;
-  const optionalFields = ['cape'].filter(field =>
+  const optionalFields = ['snowfall'].filter(field =>
     Array.isArray(embedded[field]) && embedded[field].length === n
       && embedded[field].every(Number.isFinite));
   const fields = [...requiredFields, ...optionalFields];
@@ -553,6 +553,15 @@ async function loadAndRender() {
   }
 }
 
+
+// Sneeuwval is in cm per broninterval; eerst per lid sommeren, dan statistieken.
+function buildSnowSeries(variable, hresTimes, hresSnow, times) {
+  if (!variable) return null;
+  const statistics = PLUME_MATH.cumulativeMembers(variable.statistics);
+  const hresCumulative = PLUME_MATH.cumulativeMembers([fillNaN(hresSnow)])[0] || [];
+  return { statistics, hres: alignSeries(times, hresTimes, hresCumulative) };
+}
+
 function buildModel(ens, hres) {
   const hourly = ens?.hourly;
   if (!Array.isArray(hourly?.time)) throw new Error('Ensemble bevat geen geldige UTC-tijdas');
@@ -570,7 +579,7 @@ function buildModel(ens, hres) {
     wind: ensembleVariable(hourly, 'wind_speed_10m'),
     gust: ensembleVariable(hourly, 'wind_gusts_10m'),
     rain: ensembleVariable(hourly, 'precipitation'),
-    cape: optionalEnsembleVariable(hourly, 'cape', unavailable),
+    snowfall: optionalEnsembleVariable(hourly, 'snowfall', unavailable),
   };
   const window = completeMemberWindow(times, Object.values(raw).filter(Boolean).map(variable => variable.statistics));
   if (window.first !== 0 || window.lastExclusive !== times.length) {
@@ -586,7 +595,7 @@ function buildModel(ens, hres) {
   const wind = trimVariable(raw.wind);
   const gust = trimVariable(raw.gust);
   const rain = trimVariable(raw.rain);
-  const cape = trimVariable(raw.cape);
+  const snowfall = trimVariable(raw.snowfall);
   const useTimes = times.slice(window.first, window.lastExclusive);
 
   const hr = hres?.hourly || {};
@@ -598,7 +607,8 @@ function buildModel(ens, hres) {
   const tempHres = alignedHres('temperature_2m');
   const windHres = alignedHres('wind_speed_10m');
   const gustHres = alignedHres('wind_gusts_10m');
-  const capeHres = cape ? alignedHres('cape') : [];
+  const snowSeries = buildSnowSeries(snowfall, hresTimes, hr.snowfall || [], useTimes);
+  const snowfallHres = snowSeries ? snowSeries.hres : [];
   if (![tempHres, windHres, gustHres].every(series => series.some(Number.isFinite))) {
     throw new Error('Operationele HRES heeft geen overlappende stappen met de gekozen ENS-run');
   }
@@ -625,14 +635,14 @@ function buildModel(ens, hres) {
   const gustP50 = percentile(gust.statistics, 0.5);
   const rr6P50 = percentile(rrStats6, 0.5);
   const rrCumP50 = percentile(rrCumStats, 0.5);
-  const capeP50 = cape ? percentile(cape.statistics, 0.5) : [];
+  const snowfallP50 = snowfall ? percentile(snowSeries.statistics, 0.5) : [];
 
   const [tMn, tMx] = pad(...rangeOf(temp.statistics, tempHres), 0.08);
   const [, wMx] = pad(...rangeOf(wind.statistics, windHres), 0.05, true);
   const [, gMx] = pad(...rangeOf(gust.statistics, gustHres), 0.05, true);
   const [, rMx] = pad(...rangeOf(rrStats6, rrHres6), 0.08, true);
   const [, cMx] = pad(...rangeOf(rrCumStats, rrCumHres), 0.08, true);
-  const caMx = cape ? pad(...rangeOf(cape.statistics, capeHres), 0.08, true)[1] : 0;
+  const caMx = snowfall ? pad(...rangeOf(snowSeries.statistics, snowfallHres), 0.08, true)[1] : 0;
 
   const runDate = useTimes[0];
   const runLabel = 'niet geverifieerd';
@@ -653,9 +663,9 @@ function buildModel(ens, hres) {
     { title:"Neerslag (mm, voorafgaande 6 uur)", times:rrTimes6, ensemble:rrEns6, ctrl:rrCtrl6, hres:rrHres6, p50:rr6P50, yMin:0, yMax:Math.max(8, Math.ceil(rMx/2)*2) },
     { title:"Windstoten (km/uur)", times:useTimes, ensemble:gust.perturbed, ctrl:gust.control, hres:gustHres, p50:gustP50, yMin:0, yMax:Math.max(10, Math.ceil(gMx/10)*10) },
     { title:"Neerslagsom (mm)", times:useTimes, ensemble:rrCumEns, ctrl:rrCumCtrl, hres:rrCumHres, p50:rrCumP50, yMin:0, yMax:Math.max(10, Math.ceil(cMx/10)*10) },
-    cape
-      ? { title:"CAPE/Onweer (J/kg)", times:useTimes, ensemble:cape.perturbed, ctrl:cape.control, hres:capeHres, p50:capeP50, yMin:0, yMax:Math.max(160, Math.ceil(caMx/160)*160) }
-      : { title:"CAPE/Onweer (J/kg)", unavailableText:true },
+    snowfall
+      ? { title:"Sneeuwsom (cm)", times:useTimes, ensemble:snowSeries.statistics.slice(1), ctrl:snowSeries.statistics[0], hres:snowfallHres, p50:snowfallP50, yMin:0, yMax:Math.max(1, Math.ceil(caMx)) }
+      : { title:"Sneeuwsom (cm)", unavailableText:true },
   ];
 
   return {

@@ -142,7 +142,7 @@ async function modelData(m,base,fields,days,signal){
   const after=before?await modelMetadata(m,signal).catch(()=>null):null;
   if(before&&after&&metaSignature(before)!==metaSignature(after))continue;
   const available=fields.split(',').some(field=>Object.entries(data.hourly).some(([key,values])=>(key===field||key.startsWith(field+'_member'))&&Array.isArray(values)&&values.some(finite)));
-  return {...m,data,available,error:available?null:(view==='wolken'?'Wolkenlagen niet beschikbaar in deze ensemblebron':'Geen geldige modelwaarden beschikbaar'),runLabel:before&&after?runLabel(after):'Runtijd niet beschikbaar'};
+  return {...m,data,available,error:available?null:(view==='wolken'?'Wolkenlagen niet beschikbaar in deze ensemblebron':'Geen geldige modelwaarden beschikbaar'),sourceRuns:after||[],runLabel:before&&after?runLabel(after):'Runtijd niet beschikbaar'};
  }
  throw new Error('Modelrun wisselt; vernieuw de pluim');
 }
@@ -157,6 +157,8 @@ async function load(){
    try{return await modelData(m,base,view==='wolken'&&m.id==='ecmwf_ifs025'?'cloud_cover,cloud_cover_high,cloud_cover_mid,cloud_cover_low':fields,days,signal);}catch(e){return {...m,error:e.name==='AbortError'?'Laden duurde te lang':e.message};}
   }));
   if(id!==generation)return;
+  const sourceRuns=results.flatMap(r=>(r.sourceRuns||[]).map(source=>({name:r.name+(r.sourceRuns.length>1?' '+source.label:''),time:source.meta.last_run_initialisation_time*1000})));
+  root.dispatchEvent(new CustomEvent('weerlab:plume-source-runs',{detail:{label:view==='winter'?'ECMWF-run':'Modelruns',runs:sourceRuns,note:'Laatst beschikbare run per model'}}));
   svg=view==='winter'?root.WinterPlume.render(results[0],place.name,start,days):render(results,view,place.name,start,days,cloudMode);$('chart').innerHTML=svg;
   const missing=results.filter(r=>r.error).map(r=>r.name),loaded=results.filter(r=>r.data&&r.available!==false).length;
   $('status').textContent=`${place.name} · ${loaded}/${view==='aifs'?2:view==='winter'?1:3} modellen geladen · opgehaald ${new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})} · ${results.filter(r=>r.data).map(r=>r.name+': '+r.runLabel).join(' | ')}${missing.length?' · Niet beschikbaar: '+missing.join(', ')+(view==='wolken'?'. Geen wolkenlaaggegevens ontvangen.':'. Probeer Vernieuw.'):''}`;

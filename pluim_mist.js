@@ -87,6 +87,7 @@ function init(){
   if(!feed)return;
   try{const now=Date.now(),start=Math.floor(now/HOUR)*HOUR,end=start+Number($('days').value)*DAY,run=feed.runs?.[station]||feed.run,rows=points(feed,station,start,end,now);
    if(!rows.some(p=>finite(p.probability)))throw new Error('Geen geldige mistkansen voor deze periode.');
+   root.dispatchEvent(new CustomEvent('weerlab:plume-source-runs',{detail:{label:'DWD-MOSMIX-run',runs:[{name:'DWD',time:run}],note:'Officiële mistkans en zichtverwachting'}}));
    svg=render(rows,station,run,start,end);$('chart').innerHTML=svg;attachHover($('chart'),rows,start,end,tooltip);$('download').disabled=false;
    $('status').textContent=`${station} · DWD-MOSMIX · run ${format(Date.parse(run),{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} Nederlandse tijd · ${rows.filter(p=>finite(p.probability)).length} uurkansen · maximaal ${Math.max(...rows.filter(p=>finite(p.probability)).map(p=>p.probability))}% in de getoonde periode`;
   }catch(e){$('status').textContent=e.message;$('chart').textContent='Geen mistverwachting beschikbaar. Ontbrekende gegevens zijn geen 0%.';}

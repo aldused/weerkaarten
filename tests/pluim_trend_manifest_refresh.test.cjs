@@ -154,6 +154,7 @@ async function boot(initialManifest) {
     clearInterval() {},
   };
   const context = {
+    WeerlabDayNight: require('../pluim-dag-nacht.js'),
     URL,
     URLSearchParams,
     console: { error() {}, log() {}, warn() {} },
@@ -219,6 +220,7 @@ test('trenddemo opent een stationarchief alleen achter de complete 39/51-manifes
 test('trenddemo koppelt het stationarchief aan de manifestrevision', async () => {
   const page = await boot(validManifest('rev-a'));
   assert.equal(page.stationCalls().length, 1);
+  assert.equal(Date.parse(page.elements.wrap.children[0]?.dataset.runIso), Date.parse(RUN), 'de runknop moet naar exact dezelfde archiefrun verwijzen');
 
   const stationUrl = new URL(page.stationCalls()[0], page.location.href);
   assert.ok(

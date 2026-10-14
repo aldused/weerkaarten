@@ -59,8 +59,8 @@ for (const [name, html] of [['6-luik', sixPanel], ['6+', sixPlus]]) {
     `${name}: een oude URL zonder coördinaten mag niet stilzwijgend op 0,0 uitkomen`);
   assert.match(html, /\.replace\(\/\[<>&\]\/g, ''\)\.trim\(\)\.slice\(0, 80\)/,
     `${name}: een vrije plaatsnaam uit de URL wordt onveilig in HTML overgenomen`);
-  if(name!=='6+')assert.match(html, /selectedRunMs === liveRunMs[\s\S]*ensureVariables\?\.\(\['cape'\]\)/,
-    `${name}: actuele snelle cyclus schakelt niet door naar de complete CAPE-bron`);
+  if(name!=='6+')assert.match(html, /selectedRunMs === liveRunMs[\s\S]*ensureVariables\?\.\(\['snowfall'\]\)/,
+    `${name}: actuele snelle cyclus schakelt niet door naar de complete sneeuwbron`);
 }
 
 const trend = fs.readFileSync(path.join(root, 'demo_pluim6_trend.html'), 'utf8');
