@@ -3,6 +3,9 @@
  document.body.classList.add('plume-unified');
  const embedded=parent!==window;
  document.body.classList.toggle('plume-embedded',embedded);
+ let hostTabs=false;
+ try{hostTabs=embedded&&!!parent.document.querySelector('#panel-pluim .wl-subtabs');}catch{}
+ document.body.classList.toggle('plume-host-tabs',hostTabs);
  // Header fields are kept in the DOM because existing loaders update them.
  // Unique run details remain readable in a compact, neutral status row.
  const header=document.querySelector('body>.header,body>.header-bg');

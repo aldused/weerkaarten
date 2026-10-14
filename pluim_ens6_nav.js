@@ -2,14 +2,19 @@
 // uitstraling op beide pagina's (rechts in de .wb-nav van weerbewaking_return.js).
 (function(){
   const PAGINAS = [
-    {key:'ens6',     hash:'#pluim-ens6',     file:'weerbewaking_pluim.html', label:'ECMWF overzicht'},
-    {key:'ens6plus', hash:'#pluim-ens6plus', file:'pluim_6_plus.html',       label:'ECMWF uitgebreid'},
-    {key:'modellenweer',hash:'#pluim-modellenweer',file:'pluim_modelvergelijking.html',view:'weer',label:'Temperatuur & neerslag'},
+    {key:'viewer',hash:'#pluim',file:'pluim_interactief.html',label:'Pluim viewer'},
+    {key:'ens6',hash:'#pluim-ens6',file:'weerbewaking_pluim.html',label:'ECMWF overzicht'},
+    {key:'ens6plus',hash:'#pluim-ens6plus',file:'pluim_6_plus.html',label:'ECMWF uitgebreid'},
+    {key:'modellenweer',hash:'#pluim-modellenweer',file:'pluim_modelvergelijking.html',view:'weer',label:'ECMWF vs GFS en ICON'},
+    {key:'aifs',hash:'#pluim-aifs',file:'pluim_modelvergelijking.html',view:'aifs',label:'ECMWF vs ECMWF AIFS'},
     {key:'modellenwind',hash:'#pluim-modellenwind',file:'pluim_modelvergelijking.html',view:'wind',label:'Wind & windstoten'},
     {key:'winter',hash:'#pluim-winter',file:'pluim_modelvergelijking.html',view:'winter',label:'Winterpluim'},
     {key:'wolken',hash:'#pluim-wolken',file:'pluim_modelvergelijking.html',view:'wolken',label:'Bewolking'},
+    {key:'mist',hash:'#pluim-mist',file:'pluim_modelvergelijking.html',view:'mist',label:'Mistkans'},
+    {key:'trend',hash:'#pluim-trend',file:'demo_pluim6_trend.html',label:'Pluim-trend'},
   ];
-  const huidig = PAGINAS.find(p => location.pathname.endsWith('/' + p.file) || location.pathname.endsWith(p.file)) || PAGINAS[0];
+  const view=new URLSearchParams(location.search).get('view')||'weer';
+  const huidig = PAGINAS.find(p => (location.pathname.endsWith('/' + p.file) || location.pathname.endsWith('/'+p.file.replace('.html',''))) && (!p.view||p.view===view));
 
   function open(doel, event){
     if (event) event.preventDefault();
@@ -33,6 +38,7 @@
 
   function init(){
     if (document.querySelector('.pluim-wissel')) return;
+    document.querySelector('body > .plume-tabs')?.remove();
     const wissel = document.createElement('div');
     wissel.className = 'pluim-wissel';
     wissel.setAttribute('role', 'group');
