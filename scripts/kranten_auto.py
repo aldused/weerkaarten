@@ -34,20 +34,21 @@ Antwoord uitsluitend met één JSON-object, zonder uitleg en zonder codeblok.
 
 Tijdlijn: de bronpassage die met 'Morgen' begint is in de krant VANDAAG. De dag daarna heet in de krant MORGEN. Noem latere dagen bij hun weekdag. Gebruik nooit 'overmorgen'. Het weer van de schrijfdag en de nacht ervoor komt niet voor.
 
-Vijf versies, allemaal over heel Nederland (ook Parool):
+Zes versies, allemaal over heel Nederland (ook Parool):
 - vk_kort: MAXIMAAL 30 woorden (mik op 28-30), titel 1-5 woorden, weer en temperatuur voor krant-vandaag én het woord 'morgen' met het weer van de volgende dag.
 - vk_lang: 185-200 woorden (harde grens 167-203), GEEN titel (lege string).
 - trouw: 1.000-1.090 karakters inclusief spaties (harde grens 900-1.100), titel 1-5 woorden.
 - parool: 100-108 woorden (harde grens 90-110), titel 1-5 woorden.
+- parool_backup: 100-108 woorden (harde grens 90-110), titel 1-5 woorden. Begin bij OVERMORGEN vanaf de schrijfdatum; vandaag is in deze backup één dag later dan in de andere versies. Laat het weer van morgen vanaf de schrijfdatum weg en houd expliciete weekdagen intact.
 - ad: 100-108 woorden (harde grens 90-110), titel 1-5 woorden.
 Titels en auteursnaam tellen niet mee. Alinea's scheiden met \\n\\n. Elke tekst eindigt met een punt.
 
 Inhoud: alleen feiten uit de bron. Geen verzonnen temperaturen, wind, tijdstippen, oorzaken of waarschuwingen. Behoud onzekerheden en regionale verschillen. Bouw chronologisch op: vandaag, morgen, de dagen erna.
 
-Stijl: helder krantennederlands, informeel en menselijk, als een weerman die de lezer direct aanspreekt. Concreet en actief. Wissel korte en langere zinnen af, varieer zinsopeningen en woordkeuze. Geen clichés, geen droge opsomming, geen sensatie, geen vakjargon, geen ambtelijke taal, geen 'voorts'/'derhalve'/'desalniettemin'. Een tekst hoeft niet met 'Vandaag' te beginnen. Een praktische zin (paraplu mee e.d.) mag af en toe, niet in elke versie. Laat de vijf versies niet op elkaar lijken: andere openingen en titels.
+Stijl: helder krantennederlands, informeel en menselijk, als een weerman die de lezer direct aanspreekt. Concreet en actief. Wissel korte en langere zinnen af, varieer zinsopeningen en woordkeuze. Geen clichés, geen droge opsomming, geen sensatie, geen vakjargon, geen ambtelijke taal, geen 'voorts'/'derhalve'/'desalniettemin'. Een tekst hoeft niet met 'Vandaag' te beginnen. Een praktische zin (paraplu mee e.d.) mag af en toe, niet in elke versie. Laat de zes versies niet op elkaar lijken: andere openingen en titels.
 
 Schema:
-{"articles":{"vk_kort":{"title":"","body":""},"vk_lang":{"title":"","body":""},"trouw":{"title":"","body":""},"parool":{"title":"","body":""},"ad":{"title":"","body":""}}}"""
+{"articles":{"vk_kort":{"title":"","body":""},"vk_lang":{"title":"","body":""},"trouw":{"title":"","body":""},"parool":{"title":"","body":""},"parool_backup":{"title":"","body":""},"ad":{"title":"","body":""}}}"""
 
 
 def log(msg):
