@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Scrape KNMI waarschuwingen per provincie + Waddeneilanden, schrijf JSON
+Lees KNMI-gebiedswaarschuwingen vanaf 2 november 2026; tot die datum
+scrape de operationele provinciebron. Schrijf een complete live snapshot
 naar weerlab/waarschuwingen.json. Wordt elke 15 min uitgevoerd via launchd.
 
 Bron: https://www.knmi.nl/nederland-nu/weer/waarschuwingen/<slug>
@@ -118,6 +119,8 @@ def parse_province(html: str) -> tuple[str, list[dict]]:
         if w:
             warnings.append(w)
     if not warnings:
+        if not re.search(r"Er zijn (?:momenteel )?geen waarschuwingen", soup.get_text(" ", strip=True), re.I):
+            raise ValueError("KNMI-pagina bevat geen herkenbare waarschuwingenstatus")
         return "groen", []
     highest = max(warnings, key=lambda w: CODE_RANK[w["code"]])["code"]
     return highest, warnings
@@ -125,6 +128,8 @@ def parse_province(html: str) -> tuple[str, list[dict]]:
 
 def scrape_all() -> dict:
     result = {
+        "schema": 2,
+        "mode": "provinces",
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source":    BASE,
         "provinces": {},
@@ -140,13 +145,13 @@ def scrape_all() -> dict:
             html = _fetch(url)
         except (URLError, HTTPError, TimeoutError) as e:
             result["errors"][prov] = f"{type(e).__name__}: {e}"
-            result["provinces"][prov] = {"code": "groen", "warnings": []}
+            result["provinces"][prov] = {"code": None, "warnings": []}
             continue
         try:
             code, warns = parse_province(html)
         except Exception as e:  # noqa: BLE001
             result["errors"][prov] = f"parse: {e}"
-            result["provinces"][prov] = {"code": "groen", "warnings": []}
+            result["provinces"][prov] = {"code": None, "warnings": []}
             continue
 
         result["provinces"][prov] = {"code": code, "warnings": warns}
@@ -172,8 +177,30 @@ def scrape_all() -> dict:
     return result
 
 
+def collect(previous=None, polygon_loader=None, legacy_loader=None, now=None):
+    from knmi_public_warnings import load_operational
+    polygon_loader = polygon_loader or load_operational
+    legacy_loader = legacy_loader or scrape_all
+    try:
+        return polygon_loader()
+    except Exception as exc:
+        if (previous and previous.get("mode") == "polygons") or (now or datetime.now(timezone.utc)) >= datetime(2026, 11, 2, tzinfo=timezone.utc):
+            # Never silently revert to province-wide alerts after KNMI switched.
+            raise RuntimeError("Nieuwe KNMI-bron niet beschikbaar; vorige publicatie behouden") from exc
+        print(f"[waarschuwingen] Nieuwe KNMI-bron nog niet operationeel/beschikbaar ({type(exc).__name__}); huidige bron gebruiken")
+        result = legacy_loader()
+        if result.get("errors"):
+            raise RuntimeError("KNMI-provinciebron onvolledig; vorige publicatie behouden")
+        return result
+
+
 def main() -> int:
-    data = scrape_all()
+    previous = json.loads(OUT_PATH.read_text()) if OUT_PATH.exists() else None
+    try:
+        data = collect(previous)
+    except Exception as exc:
+        print(f"[waarschuwingen] {exc}", file=sys.stderr)
+        return 1
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUT_PATH.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -13,7 +13,7 @@ STAGE="${OUTPUT}.tmp"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-for f in *.html *.json *.js *.css *.svg *.ico *.png *.txt *.webp *.ttf *.pdf; do
+for f in *.html *.json *.js *.mjs *.css *.svg *.ico *.png *.txt *.webp *.ttf *.pdf; do
   [ -f "$f" ] || continue
   size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
   if [ "$size" -lt 26214400 ]; then
