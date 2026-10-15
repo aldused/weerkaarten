@@ -84,7 +84,8 @@
     const type=available?.find(t=>t[0]===candidate)?.[0] || available?.[0][0] || '';
     const filters={};
     for(const [key] of filterSets[type]||[]){const val=params.get(key);if(val && Object.hasOwn(MENU_LABELS[key],val))filters[key]=val;}
-    return {page,type,filters,q:page==='zoeken'?(params.get('q')||'').slice(0,180):''};
+    const historyGroup=page==='terugkijken'&&['dag-maand','records','seizoenen','gemiddelden'].includes(params.get('groep'))?params.get('groep'):'';
+    return {page,type,filters,historyGroup,q:page==='zoeken'?(params.get('q')||'').slice(0,180):''};
   }
   function navigate(hash,{replace=false,focus=false,keepScroll=false}={}){
     clearTimeout(searchTimer);
@@ -154,13 +155,14 @@
       ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['normalen','neerslag668','p13']],
     ];
     const visible=p=>state.type==='alles'||p.type===state.type;
-    const selected=groups.map(g=>[...g.slice(0,4),g[4].map(id=>byId.get(id)).filter(p=>p&&visible(p))]).filter(g=>g[4].length);
+    const availableGroups=groups.map(g=>[...g.slice(0,4),g[4].map(id=>byId.get(id)).filter(p=>p&&visible(p))]).filter(g=>g[4].length);
+    const selected=availableGroups.filter(g=>!state.historyGroup||g[0]===state.historyGroup);
     const shortcuts=[['records-warmedagen','Warme dagen tellen','Kies station en jaar · vanaf 20 °C','thermometer'],['archief','Weer op een datum','Open een historische dagkaart','history'],['records','Een record zoeken','Hoogste en laagste metingen','chart']];
     let html=heading('Terugkijken','Het weer van een eerdere dag, warme dagen tellen of een record zoeken: kies hieronder wat je wilt weten.');
     html+=`<section class="history-start" aria-labelledby="history-start-title"><h2 id="history-start-title">Snel naar</h2><div class="history-shortcuts">${shortcuts.map(([route,title,description,symbol])=>`<a href="index.html#${route}"><span class="history-shortcut-icon">${icon(symbol)}</span><span><strong>${title}</strong><small>${description}</small></span>${icon('arrow')}</a>`).join('')}</div></section>`;
     if(state.type!=='alles')html+=`<div class="history-selection"><span>Je bekijkt: <strong>${state.type==='terug'?'Metingen & archief':'Records & klimaat'}</strong></span><a href="${routeUrl('terugkijken','alles')}">Toon alle onderwerpen ${icon('arrow')}</a></div>`;
-    html+=`<nav class="history-jumps" aria-label="Onderwerpen binnen Terugkijken"><span>Of ga naar:</span>${selected.map(([id,title,,symbol])=>`<button type="button" data-history-jump="history-${id}">${icon(symbol)}${escape(title)}</button>`).join('')}</nav>`;
-    html+=`<div class="history-groups">${selected.map(([id,title,description,symbol,items])=>`<section class="history-group" aria-labelledby="history-${id}"><div class="history-group-heading"><span>${icon(symbol)}</span><div><h2 id="history-${id}" tabindex="-1">${escape(title)}</h2><p>${escape(description)}</p></div></div>${productCollection(items,'list')}</section>`).join('')}</div>`;
+    html+=`<nav class="history-jumps" aria-label="Onderwerpen binnen Terugkijken"><span>Kies onderwerp:</span><a href="${routeUrl('terugkijken',state.type)}" ${!state.historyGroup?'aria-current="page"':''}>Alles</a>${availableGroups.map(([id,title,,symbol])=>`<a href="${routeUrl('terugkijken',state.type,{groep:id})}" ${state.historyGroup===id?'aria-current="page"':''}>${icon(symbol)}${escape(title)}</a>`).join('')}</nav>`;
+    html+=`<div class="history-groups${state.historyGroup?' single-group':''}">${selected.map(([id,title,description,symbol,items])=>`<section class="history-group" aria-labelledby="history-${id}"><div class="history-group-heading"><span>${icon(symbol)}</span><div><h2 id="history-${id}" tabindex="-1">${escape(title)}</h2><p>${escape(description)}</p></div></div>${productCollection(items,'list')}</section>`).join('')}</div>`;
     html+='<details class="history-help"><summary>Wat is het verschil tussen een dagrecord en een warme dag?</summary><p>Een warme dag heeft een maximumtemperatuur van minstens 20 °C. Die dag hoeft geen record te zijn. Een dagrecord is de hoogste of laagste meting voor een kalenderdag binnen de meetreeks. Bij elk onderdeel staat de meetperiode; een lopend jaar is nog onvolledig.</p></details>';
     return html;
   }
@@ -325,8 +327,6 @@
   }).observe($('#mobile-nav'));
   document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
   document.addEventListener('click',event=>{
-    const historyJump=event.target.closest('[data-history-jump]');
-    if(historyJump){const target=document.getElementById(historyJump.dataset.historyJump);target?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});target?.focus({preventScroll:true});return;}
     const pinButton=event.target.closest('[data-pin]');if(pinButton){toggleFavorite(pinButton.dataset.pin);return;}
     const viewButton=event.target.closest('[data-view]');if(viewButton){view=viewButton.dataset.view;save(storagePrefix+'-view',view);render();main.querySelector(`[data-view="${view}"]`).focus();say(view==='list'?'Lijstweergave':'Kaartweergave');return;}
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
