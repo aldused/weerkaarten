@@ -27,7 +27,7 @@ $('download').onclick=async()=>{
   let line='',y=2060;ctx.font='22px Arial, sans-serif';for(const word of note.split(' ')){if(ctx.measureText(line+word).width>2700){text(line,40,y,22);line='';y+=29;}line+=word+' ';}text(line,40,y,22);
   text('UK Met Office via Open-Meteo · CC BY-SA 4.0 | Bracknell © Crown Copyright | Natural Earth | Bijgewerkt '+dateText(manifest.updated)+'',40,2150,21,'#627b80');
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG maken mislukt')),'image/png'));
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Weerlab-Europa-${validDate(day).toISOString().slice(0,10)}-12UTC.png`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Weerlab-'+validDate(day).toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/\s+/g,'-')+'.png';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   $('download-status').textContent='PNG klaargezet · 2800 × 2180 pixels';
  }catch(error){$('download-status').textContent='Download mislukt. Probeer opnieuw. '+error.message;}
  finally{button.disabled=false;button.textContent='Download PNG ↓';}
