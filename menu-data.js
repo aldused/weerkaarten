@@ -1154,6 +1154,7 @@ const MENU_PRODUCTS = [
     "keywords": "Archief waarnemingen historische dagkaarten windstoten km/u ",
     "restricted": false
   },
+  {id:'klimaatarchief',name:'Klimaatarchief',description:'Vergelijk maanden, seizoenen en jaren met historische metingen.',category:'terugkijken',type:'klimaat',section:'Archief',icon:'tabel',href:'index.html#klimaatarchief',src:'demo_winterstatistieken.html?v=20261015-1',thumbnail:null,facets:{},keywords:'klimaatarchief maand seizoen jaar winter statistieken temperatuur neerslag zon',restricted:false},
   {
     "id": "records",
     "name": "Records & dagen tellen",
@@ -1431,6 +1432,7 @@ const MENU_PRODUCTS = [
     "section": "Studio (afgeschermd)",
     "icon": "studio",
     "href": "index.html#beta",
+    "src": "beta.html?v=20261015-1",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
