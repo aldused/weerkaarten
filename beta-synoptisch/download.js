@@ -7,7 +7,7 @@ $('download').onclick=async()=>{
  });
  button.disabled=true;button.textContent='PNG maken…';$('download-status').textContent='';
  try{
-  const images=await Promise.all(sources.map(src=>new Promise((resolve,reject)=>{const i=new Image();i.crossOrigin="anonymous";i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('Kaartlaag kon niet worden geladen'));i.src=src;})));
+  const images=await Promise.all(sources.map(src=>new Promise((resolve,reject)=>{const i=new Image();i.crossOrigin="anonymous";i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('Kaartlaag kon niet worden geladen'));i.src=src+(src.includes('?')?'&':'?')+'export=1&origin='+encodeURIComponent(location.origin);})));
   const canvas=document.createElement('canvas');canvas.width=2800;canvas.height=2180;const ctx=canvas.getContext('2d');
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,2800,2180);
   const text=(value,x,y,size=25,color='#213b42',bold=false)=>{ctx.fillStyle=color;ctx.font=`${bold?'600 ':''}${size}px Arial, sans-serif`;ctx.fillText(value,x,y);};
