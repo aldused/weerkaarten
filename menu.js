@@ -148,7 +148,7 @@
   function empty(title,text,action){return `<div class="empty">${icon(state.page==='favorieten'?'star':'search')}<h2>${escape(title)}</h2><p>${escape(text)}</p><div class="empty-actions">${action}</div></div>`;}
   function historyCatalogue(){
     const groups=[
-      ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','maandbeeld','maandoverzicht']],
+      ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','klimaatarchief','maandbeeld','maandoverzicht']],
       ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','dagrecords','extremen','feestdagen']],
       ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
       ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['normalen','neerslag668','p13']],
