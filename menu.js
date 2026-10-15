@@ -152,7 +152,7 @@
       ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','klimaatarchief','maandbeeld','maandoverzicht']],
       ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','dagrecords','extremen','feestdagen']],
       ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
-      ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['normalen','neerslag668','p13']],
+      ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['klimaattabellen','normalen','neerslag668','p13']],
     ];
     const visible=p=>state.type==='alles'||p.type===state.type;
     const availableGroups=groups.map(g=>[...g.slice(0,4),g[4].map(id=>byId.get(id)).filter(p=>p&&visible(p))]).filter(g=>g[4].length);

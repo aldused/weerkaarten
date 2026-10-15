@@ -1241,6 +1241,21 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
+    "id": "klimaattabellen",
+    "name": "KNMI-klimaattabellen · alle cijfers & PDF’s",
+    "description": "Kies uit 27 stations en 2 landelijke gemiddelden. Bekijk alle cijfers per maand, seizoen en jaar, of download de PDF en CSV.",
+    "category": "terugkijken",
+    "type": "klimaat",
+    "section": "Gemiddelden & neerslag",
+    "icon": "tabel",
+    "href": "index.html#klimaattabellen",
+    "src": "knmi_klimaattabellen.html?v=20261015",
+    "thumbnail": null,
+    "facets": {},
+    "keywords": "KNMI klimaatnormalen 1991–2020 PDF download stations Rotterdam grondvorst wind mist sneeuw langjarige gemiddelden CSV",
+    "restricted": false
+  },
+  {
     "id": "normalen",
     "name": "Klimaatgemiddelden · wat is normaal?",
     "description": "Gemiddelde temperatuur, neerslag en zon in de referentieperiode 1991–2020.",
