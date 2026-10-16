@@ -26,8 +26,9 @@ from pathlib import Path
 
 SHELL = Path(__file__).resolve().parent.parent / "shell"
 PROMPT = SHELL / "rijnmond_redactie_prompt.md"
+STIJLVOORBEELDEN = SHELL / "rijnmond_stijlvoorbeelden.json"
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/opt/homebrew/bin/claude")
-CODEX_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
+CODEX_BIN = os.environ.get("CODEX_BIN", "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
 MODEL = os.environ.get("RIJNMOND_REDACTIE_MODEL", "opus")
 
 MODELNAMEN = re.compile(r"\b(ECMWF|HARMONIE|ICON|GFS|UKMO|AROME|MOSMIX|ENS|IFS|DMI|Open-Meteo)\b", re.I)
@@ -114,10 +115,24 @@ def _roep_model(prompt: str, timeout: int = 420) -> tuple[str | None, str]:
     return None, fout
 
 
+def maak_prompt(invoer: dict) -> str:
+    """Voeg optionele auteursvoorbeelden als afzonderlijke stijldata toe."""
+    gegevens = dict(invoer)
+    if STIJLVOORBEELDEN.exists():
+        voorbeelden = json.loads(STIJLVOORBEELDEN.read_text(encoding="utf-8"))
+        if not isinstance(voorbeelden, list) or len(voorbeelden) > 20:
+            raise ValueError("stijlvoorbeelden moeten een lijst van maximaal 20 teksten zijn")
+        if any(not isinstance(v, str) or not v.strip() or len(v) > 12000 for v in voorbeelden):
+            raise ValueError("ieder stijlvoorbeeld moet een niet-lege tekst van maximaal 12000 tekens zijn")
+        if voorbeelden:
+            gegevens["stijlvoorbeelden"] = voorbeelden
+    return PROMPT.read_text(encoding="utf-8") + "\n" + json.dumps(gegevens, ensure_ascii=False, indent=1) + "\n"
+
+
 def redigeer(tekst: dict, feiten: dict) -> dict:
     secties = tekst["secties"]
     invoer = {"secties": [{"key": s["key"], "titel": s["titel"], "alineas": s["alineas"]} for s in secties]}
-    prompt = PROMPT.read_text(encoding="utf-8") + "\n" + json.dumps(invoer, ensure_ascii=False, indent=1) + "\n"
+    prompt = maak_prompt(invoer)
     ruw, bron = _roep_model(prompt)
     if ruw is None:
         return {"fout": bron}
