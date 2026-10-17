@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="Maak een ingezonden weerfoto publicatieklaar met naam en woonplaats van de fotograaf.">
+<meta name="description" content="Verklein een foto tot minder dan 500 KB, met of zonder naam en woonplaats.">
 <title>Ingezonden foto voorbereiden – Weerlab</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,6 +61,9 @@ button{cursor:pointer}
 .field input:focus,.field select:focus{border-color:var(--wl-color-accent-strong);box-shadow:0 0 0 3px color-mix(in srgb,var(--wl-color-accent) 16%,transparent)}
 .field.needs-input input{border-color:var(--wl-color-warning-yellow);background:color-mix(in srgb,var(--wl-color-warning-yellow) 6%,var(--wl-color-surface));box-shadow:0 0 0 3px color-mix(in srgb,var(--wl-color-warning-yellow) 13%,transparent)}
 .field-hint{display:block;margin-top:4px;color:var(--wl-color-text-soft);font-size:9.5px;line-height:1.35}
+.mode-picker{margin:16px 0 20px;padding:14px 16px;border:1px solid var(--wl-color-border);border-radius:12px;background:var(--wl-color-surface)}
+.mode-picker legend{padding:0 6px;font-weight:700;font-size:13px}
+.mode-options{display:flex;flex-wrap:wrap;gap:12px 24px}.mode-options label{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600}.mode-options input{accent-color:var(--wl-color-primary)}
 .download-btn{width:100%;min-height:43px;border:1px solid var(--wl-color-primary);border-radius:8px;background:var(--wl-color-primary);color:#fff;padding:10px 13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px}
 .download-btn:hover:not(:disabled){background:var(--wl-color-primary-strong)}
 .download-btn:disabled{opacity:.38;cursor:not-allowed}
@@ -120,8 +123,16 @@ button{cursor:pointer}
 <main class="wrap">
   <section class="intro">
     <h2>Van inzending naar publicatieklare foto</h2>
-    <p>Voeg de originele foto en de printscreen van de inzender toe. Naam en woonplaats komen automatisch linksonder in beeld; controleer ze en download de foto op maximaal 1500 pixels.</p>
+    <p>Kies een van de twee opties: alleen de foto verkleinen, of ook naam en woonplaats toevoegen. Je downloadt een JPEG van minder dan 500 KB, met maximaal 1500 pixels aan de langste zijde.</p>
   </section>
+
+  <fieldset class="mode-picker">
+    <legend>Hoe wil je de foto verkleinen?</legend>
+    <div class="mode-options">
+      <label><input type="radio" name="photo-mode" value="plain"> Zonder naam en woonplaats</label>
+      <label><input type="radio" name="photo-mode" value="caption" checked> Met naam en woonplaats</label>
+    </div>
+  </fieldset>
 
   <div class="workspace">
     <aside class="card controls" aria-label="Foto voorbereiden">
@@ -156,14 +167,14 @@ button{cursor:pointer}
         <div class="step-number" aria-hidden="true">3</div>
         <div class="step-body">
           <h3>Controleer en download</h3>
-          <p class="step-copy">De witte tekst in de voorvertoning verandert direct mee.</p>
-          <div class="fields">
+          <p class="step-copy" id="caption-copy">De grotere witte tekst in de voorvertoning verandert direct mee.</p>
+          <div class="fields" id="caption-fields">
             <div class="field"><label for="photographer">Naam fotograaf</label><input id="photographer" type="text" autocomplete="off" placeholder="Bijv. Tim Zijlstra"></div>
             <div class="field" id="place-field"><label for="place">Woonplaats</label><input id="place" type="text" autocomplete="off" placeholder="Bijv. Anjum"></div>
             <div class="field"><label for="province">Provincie</label><select id="province"><option value="">Wordt automatisch opgezocht</option><option>Drenthe</option><option>Flevoland</option><option>Friesland</option><option>Gelderland</option><option>Groningen</option><option>Limburg</option><option>Noord-Brabant</option><option>Noord-Holland</option><option>Overijssel</option><option>Utrecht</option><option>Zeeland</option><option>Zuid-Holland</option></select><span class="field-hint" id="province-hint">Na de woonplaats verschijnt hier automatisch de provincie.</span></div>
           </div>
           <button class="download-btn" id="download" type="button" disabled><span aria-hidden="true">↓</span> Download foto</button>
-          <p class="download-detail" id="download-detail">Vul een naam in en kies een foto</p>
+          <p class="download-detail" id="download-detail">Kies een foto en vul naam en woonplaats in</p>
         </div>
       </section>
     </aside>
@@ -177,14 +188,14 @@ button{cursor:pointer}
         <div class="empty-state" id="empty-state">
           <div class="empty-icon" aria-hidden="true">▧</div>
           <h3>Hier verschijnt de foto</h3>
-          <p>Na stap 1 zie je meteen hoe het onderschrift linksonder op de verkleinde foto komt te staan.</p>
+          <p>Na het kiezen van een foto zie je hier het resultaat van de geselecteerde optie.</p>
         </div>
         <canvas id="preview-canvas" hidden></canvas>
       </div>
     </section>
   </div>
 
-  <section class="card example-section" aria-labelledby="example-title">
+  <section id="caption-example" class="card example-section" aria-labelledby="example-title">
     <div class="example-head">
       <div><h2 id="example-title">Voorbeeld: dit voeg je toe en dit komt eruit</h2><p>Gebruik de grote originele foto en daarnaast de printscreen waarop naam en woonplaats staan.</p></div>
       <span class="example-badge">praktijkvoorbeeld</span>
@@ -217,6 +228,9 @@ button{cursor:pointer}
 const $=id=>document.getElementById(id);
 const MAX_SIDE=1500;
 const JPEG_QUALITY=.92;
+const MAX_BYTES=500000;
+let exporting=false;
+const withCaption=()=>document.querySelector('input[name="photo-mode"]:checked').value==='caption';
 const state={photo:null,photoName:'',width:0,height:0,ocrLoading:null,provinceData:null,provinceLookupSeq:0};
 
 const NAME_PARTICLES=new Set(['de','den','der','des','het','in','op','te','ten','ter','van','von','zu','zum','zur','la','le','du']);
@@ -410,17 +424,20 @@ function drawPreview(){
   const ctx=canvas.getContext('2d',{alpha:false});
   ctx.imageSmoothingEnabled=true;
   ctx.imageSmoothingQuality='high';
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,state.width,state.height);
   ctx.drawImage(state.photo,0,0,state.width,state.height);
   const name=formatPhotographer($('photographer').value);
   const place=formatPlace($('place').value);
   const province=$('province').value;
-  if(!name&&!place)return;
+  if(!withCaption()||(!name&&!place))return;
   const placeLabel=place+(province?` (${province})`:'' );
   const label=`Foto: ${name||'—'}${placeLabel?' - '+placeLabel:''}`;
-  const fontSize=Math.max(16,Math.min(42,Math.round(state.width*.0187)));
+  let fontSize=Math.max(16,Math.min(54,Math.round(state.width*.028)));
   const margin=Math.max(13,Math.round(state.width*.0133));
   ctx.save();
-  ctx.font=`500 ${fontSize}px Arial, sans-serif`;
+  ctx.font=`600 ${fontSize}px Arial, sans-serif`;
+  const available=Math.max(1,state.width-2*margin);
+  if(ctx.measureText(label).width>available){fontSize*=available/ctx.measureText(label).width;ctx.font=`600 ${fontSize}px Arial, sans-serif`;}
   ctx.textBaseline='alphabetic';
   ctx.lineJoin='round';
   ctx.strokeStyle='rgba(0,0,0,.48)';
@@ -537,31 +554,75 @@ async function handleScreenshot(file){
 }
 
 function updateDownloadState(){
+  const caption=withCaption();
   const name=formatPhotographer($('photographer').value);
   const place=formatPlace($('place').value);
-  const ready=Boolean(state.photo&&name);
-  $('download').disabled=!ready;
-  $('step-check').classList.toggle('complete',Boolean(name&&place));
-  $('download-detail').textContent=ready?`${cleanFileName(name)}.jpg · ${state.width} × ${state.height} px`:'Vul een naam in en kies een foto';
+  const ready=Boolean(state.photo&&(!caption||(name&&place)));
+  $('download').disabled=!ready||exporting;
+  $('step-check').classList.toggle('complete',ready);
+  $('download-detail').textContent=ready?`JPEG · minder dan 500 KB · maximaal ${state.width} × ${state.height} px`:caption?'Kies een foto en vul naam en woonplaats in':'Kies een foto om te verkleinen';
+}
+
+function updateMode(){
+  const caption=withCaption();
+  $('step-shot').hidden=!caption;
+  $('caption-fields').hidden=!caption;
+  $('caption-copy').textContent=caption?'De grotere witte tekst in de voorvertoning verandert direct mee.':'Je foto wordt verkleind zonder toegevoegde tekst.';
+  $('caption-example').hidden=!caption;
+  $('step-check').querySelector('.step-number').textContent=caption?'3':'2';
+  drawPreview();
+  updateDownloadState();
+}
+
+function encodeJpeg(canvas,quality){
+  return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('De foto kon niet worden opgeslagen.')),'image/jpeg',quality));
+}
+
+async function compressPhoto(source){
+  // Check actual encoded bytes. Reduce dimensions only if quality alone is insufficient.
+  const canvas=document.createElement('canvas');
+  canvas.width=source.width;canvas.height=source.height;
+  while(true){
+    const ctx=canvas.getContext('2d',{alpha:false});
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(source,0,0,canvas.width,canvas.height);
+    let best=await encodeJpeg(canvas,JPEG_QUALITY);
+    if(best.size<MAX_BYTES)return {blob:best,width:canvas.width,height:canvas.height};
+    best=await encodeJpeg(canvas,.5);
+    if(best.size<MAX_BYTES){
+      let low=.5,high=JPEG_QUALITY;
+      for(let i=0;i<7;i++){
+        const quality=(low+high)/2,blob=await encodeJpeg(canvas,quality);
+        if(blob.size<MAX_BYTES){best=blob;low=quality;}else high=quality;
+      }
+      return {blob:best,width:canvas.width,height:canvas.height};
+    }
+    if(canvas.width===1&&canvas.height===1)throw new Error('Deze foto kan niet onder 500 KB worden opgeslagen.');
+    canvas.width=Math.max(1,Math.floor(canvas.width*.85));
+    canvas.height=Math.max(1,Math.floor(canvas.height*.85));
+  }
 }
 
 async function downloadPhoto(){
-  if(!state.photo||!$('photographer').value.trim())return;
-  normaliseNameFields();
-  if($('place').value.trim()&&!$('province').value)await lookupProvince($('place').value);
-  drawPreview();
-  $('preview-canvas').toBlob(blob=>{
-    if(!blob){showToast('De foto kon niet worden opgeslagen.');return}
-    const url=URL.createObjectURL(blob);
-    const link=document.createElement('a');
-    link.href=url;
-    link.download=cleanFileName($('photographer').value.trim())+'.jpg';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  if(exporting||!state.photo||(withCaption()&&(!$('photographer').value.trim()||!$('place').value.trim())))return;
+  exporting=true;updateDownloadState();
+  try{
+    normaliseNameFields();
+    drawPreview();
+    // Snapshot the selected version before asynchronous encoding; editing stays safe.
+    const source=document.createElement('canvas'),preview=$('preview-canvas');
+    source.width=preview.width;source.height=preview.height;
+    source.getContext('2d').drawImage(preview,0,0);
+    const filename=withCaption()?cleanFileName($('photographer').value)+'.jpg':cleanFileName(state.photoName.replace(/\.[^.]+$/,''))+'-verkleind.jpg';
+    $('download-detail').textContent='Foto verkleinen tot minder dan 500 KB…';
+    const {blob,width,height}=await compressPhoto(source);
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=filename;
+    document.body.appendChild(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
-    showToast('Foto is klaargezet als '+link.download);
-  },'image/jpeg',JPEG_QUALITY);
+    showToast(`${filename} · ${(Math.floor(blob.size/100)/10).toFixed(1)} KB · ${width} × ${height} px`);
+  }catch(error){showToast(error.message||'De foto kon niet worden opgeslagen.');}
+  finally{exporting=false;updateDownloadState();}
 }
 
 let toastTimer;
@@ -582,6 +643,8 @@ $('place').addEventListener('blur',()=>{normaliseNameFields();$('place-field').c
 $('province').addEventListener('change',()=>{$('province-hint').textContent=$('province').value?`In beeld: ${formatPlace($('place').value)} (${$('province').value})`:'Kies een provincie of pas de woonplaats aan.';drawPreview()});
 $('manual-place').addEventListener('click',focusManualPlace);
 $('download').addEventListener('click',downloadPhoto);
+document.querySelectorAll('input[name="photo-mode"]').forEach(input=>input.addEventListener('change',updateMode));
+updateMode();
 </script>
 </body>
 </html>
