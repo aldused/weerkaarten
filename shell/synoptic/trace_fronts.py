@@ -1,12 +1,18 @@
 import os
-"""Manually digitized Bracknell source front lines; pixels refer to retained source images.
-Always include troughs as plain blue lines, alongside fronts, for every source chart.
-Only systems intersecting the demo region are traced. Type and symbol side follow source.
-This static demo is a cartographic interpretation, not operational automated front detection.
+"""Reviewed Bracknell overlays: original source glyph contours when available.
+Legacy reviewed vector geometry is supported for older cycles. Never interpret
+front type or symbol orientation from monochrome alternation alone.
 """
 import json,numpy as np
 from pathlib import Path
 from scipy.interpolate import PchipInterpolator
+if os.environ.get('WEERKAART_FRONT_SOURCE'):
+ import sys
+ from source_fronts import render_sources
+ output=Path(os.environ['WEERKAART_OUT'])
+ render_sources(Path(os.environ['WEERKAART_FRONT_SOURCE']),output,json.loads((output/'build.json').read_text()))
+ sys.exit(0)
+
 O=Path(os.environ.get('WEERKAART_OUT','outputs/weerkaart-demo'));W,H=1400,880
 # type, side relative to directed line in source-image coordinates, pixels
 fronts={int(day):items for day,items in json.loads(Path(os.environ['WEERKAART_FRONTS']).read_text()).items()}
@@ -47,4 +53,4 @@ for day,items in fronts.items():
     theta=np.linspace(0,np.pi,16);shape=[center+t*np.cos(v)*8+n*np.sin(v)*9 for v in theta]
    pts=' '.join(f'{x:.1f},{y:.1f}' for x,y in shape);parts.append(f'<polygon points="{pts}" fill="{color}" stroke="{color}" stroke-width=".8"/>')
  parts.append('</g></svg>');(O/f'{day}-fronts.svg').write_text(''.join(parts))
- (O/f'{day}-fronts.json').write_text(json.dumps({'valid':f'2026-10-{day}T12:00:00Z','source':'Met Office / Bracknell','sourceImage':f'{day}-front-reference.png','method':'Handmatig gedigitaliseerde frontlijnen; cartografische demo-interpretatie','fronts':audit},indent=2))
+ (O/f'{day}-fronts.json').write_text(json.dumps({'valid':next(f['valid'] for f in json.loads((O/'frames.json').read_text()) if f['day']==day),'source':'Met Office / Bracknell','sourceImage':f'{day}-front-reference.png','method':'Handmatig gedigitaliseerde frontlijnen; cartografische demo-interpretatie','fronts':audit},indent=2))

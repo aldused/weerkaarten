@@ -21,7 +21,7 @@ $('download').onclick=async()=>{
   function scale(title,colors,labels){text(title,x,legendY,23,'#213b42',true);colors.forEach((c,j)=>{ctx.fillStyle=c;ctx.fillRect(x+j*55,legendY+15,55,15);});labels.forEach((v,j)=>text(v,x+j*(colors.length*55-35)/(labels.length-1),legendY+57,20));x+=620;}
   if(selected.rain)scale('Totale neerslag · mm/uur',['#8fd4ef','#4da9df','#3186d1','#3658b4','#35a88d','#83bd59','#d8cc44','#e99439','#cf4b47'],['0,1','0,5','2','8','32+']);
   if(selected.temp)scale('Temperatuur · °C',['#b8b6d9','#b9d4e5','#a5d7ca','#d5deb0','#eee1a4','#e8ba86','#ce8b79'],['−10','0','10','20','30']);
-  if(selected.fronts){text('▲ Koufront   ● Warmtefront   ▲● Occlusie',x,legendY,22);text('Blauwe lijn zonder symbolen: trog',x,legendY+34,22,'#1666d1');}
+  if(selected.fronts){text('▲ Koufront',x,legendY,22,'#0032fe');text('● Warmtefront',x+190,legendY,22,'#fe3200');text('▲● Occlusie',x+430,legendY,22,'#e532e5');text('Blauwe lijn zonder symbolen: trog',x,legendY+34,22,'#1666d1');}
   if(selected.pressure)text('Isobaren: 4 hPa · H/L: drukcentrum',2060,legendY,22);
   if(selected.cloud)text(cloudLabel,2060,legendY+34,22);
   if(selected.wind)text('Wind: Bft · pijl wijst stroomrichting',2060,legendY+65,22);
