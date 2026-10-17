@@ -1,6 +1,7 @@
 // Capture selection before asynchronous loading so a day change cannot mix runs.
 $('download').onclick=async()=>{
  const button=$('download'),day=days[current],valid=$('valid').textContent,model=$('model-stamp').textContent,note=$('note').textContent;
+ const cloudLabel=cloudNames[$('cloud-level').value];
  const selected=Object.fromEntries(layers.map(k=>[k,!$('layer-'+k).hidden]));
  const visibleImages=[...document.querySelectorAll('.map>img')].filter(img=>!img.hidden);
  const opacities=visibleImages.map(img=>img.id==='layer-temp'?.55:1);
@@ -22,7 +23,7 @@ $('download').onclick=async()=>{
   if(selected.temp)scale('Temperatuur · °C',['#b8b6d9','#b9d4e5','#a5d7ca','#d5deb0','#eee1a4','#e8ba86','#ce8b79'],['−10','0','10','20','30']);
   if(selected.fronts){text('▲ Koufront   ● Warmtefront   ▲● Occlusie',x,legendY,22);text('Blauwe lijn zonder symbolen: trog',x,legendY+34,22,'#1666d1');}
   if(selected.pressure)text('Isobaren: 4 hPa · H/L: drukcentrum',2060,legendY,22);
-  if(selected.cloud)text(cloudNames[$('cloud-level').value],2060,legendY+34,22);
+  if(selected.cloud)text(cloudLabel,2060,legendY+34,22);
   if(selected.wind)text('Wind: Bft · pijl wijst stroomrichting',2060,legendY+65,22);
   if(selected.maximum)text('Paars: maximumtemperatuur (MOSMIX) · °C',1050,2028,22,'#843aa5');
   if(selected.values)text('Rood: temperatuur op het kaarttijdstip · °C',40,2028,22,'#b32235');
