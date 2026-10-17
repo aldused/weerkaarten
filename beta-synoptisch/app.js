@@ -12,16 +12,17 @@ async function show(i){
  $('note').textContent='Kaartlagen laden…';$('download').disabled=true;
  // Preload every layer before changing the displayed day. Never show mixed dates.
  try{
-  const paths=layers.filter(k=>k!=='snow'||manifest.snowAvailable).map(k=>[k,layerFile(day,k)]);
+  const paths=layers.filter(k=>(k!=='snow'||manifest.snowAvailable)&&(k!=='fronts'||manifest.frontsAvailable!==false)).map(k=>[k,layerFile(day,k)]);
   await Promise.all(paths.map(([,src])=>new Promise((resolve,reject)=>{const image=new Image();image.onload=resolve;image.onerror=()=>reject(Error('Ontbrekende kaartlaag'));image.src=src;})));
   if(token!==selection)return;
   current=i;
   for(const [k,src] of paths){$('layer-'+k).src=src;$('layer-'+k).hidden=!$(k).checked;if(['temp','cloud','rain','snow'].includes(k))$('layer-'+k).srcset=src+' 1x, '+src.replace('.png','@2x.png')+' 2x';}
+  $('fronts').disabled=manifest.frontsAvailable===false;if(manifest.frontsAvailable===false){$('fronts').checked=false;$('layer-fronts').hidden=true;}
   $('snow').disabled=!manifest.snowAvailable;if(!manifest.snowAvailable){$('snow').checked=false;$('layer-snow').hidden=true;}
   document.querySelectorAll('nav button').forEach((b,j)=>b.setAttribute('aria-pressed',String(i===j)));
   $('valid').textContent=date.toLocaleDateString('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long'})+' · '+time+' uur';
   $('model-stamp').textContent='Weerlagen: UKMO Global · '+runText();
-  $('front-stamp').textContent='Fronten: Met Office / Bracknell · 12 UTC';
+  $('front-stamp').textContent=manifest.frontsAvailable===false?'Fronten: beschikbaar via actuele bronkaart':'Fronten: Met Office / Bracknell · 12 UTC';
   $('values-key').textContent='Rood: temperatuur om '+time+' uur · °C';
   $('precip-title').textContent=manifest.snowAvailable?'Regen · mm/uur':'Totale neerslag · mm/uur';
   $('pressure-key').textContent='Isobaren: 4 hPa · H/L: gesloten drukcentrum';
@@ -47,7 +48,8 @@ async function init(){
   $('localBadge').textContent='/ '+localTime(validDate(days[0]))+' UUR';
   const old=Date.now()-Date.parse(manifest.run)>36*3600e3;$('freshness').classList.toggle('stale',old);
   $('freshness').textContent=(old?'Let op: oudere modelrun. ':'')+'Kaartset bijgewerkt '+dateText(manifest.updated)+' om '+localTime(new Date(manifest.updated))+'. Modelrun: '+runText()+'.';
-  await show(0);
+  const todayIndex=manifest.frames.findIndex(f=>f.valid.slice(0,10)>=today);
+  await show(Math.max(0,todayIndex));
  }catch(error){$('freshness').textContent='De kaartset is niet beschikbaar. Vernieuw de pagina om opnieuw te proberen.';$('download').disabled=true;}
 }
 init();

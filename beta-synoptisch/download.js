@@ -12,7 +12,7 @@ $('download').onclick=async()=>{
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,2800,2180);
   const text=(value,x,y,size=25,color='#213b42',bold=false)=>{ctx.fillStyle=color;ctx.font=`${bold?'600 ':''}${size}px Arial, sans-serif`;ctx.fillText(value,x,y);};
   text('ED ALDUS · WEERLAB',40,40,23,'#527b7f',true);
-  text('Midden-Europa · '+valid,40,88,38,'#213b42',true);text(model+' · Fronten en troggen: Met Office / Bracknell · 12 UTC',40,128);
+  text('Midden-Europa · '+valid,40,88,38,'#213b42',true);text(model+' · '+(manifest.frontsAvailable===false?'Fronten: zie Bracknell-bronkaart':'Fronten en troggen: Met Office / Bracknell · 12 UTC'),40,128);
   for(const img of images)ctx.drawImage(img,0,155,2800,1760);
   const legendY=1950;let x=40;
   function scale(title,colors,labels){text(title,x,legendY,23,'#213b42',true);colors.forEach((c,j)=>{ctx.fillStyle=c;ctx.fillRect(x+j*55,legendY+15,55,15);});labels.forEach((v,j)=>text(v,x+j*(colors.length*55-35)/(labels.length-1),legendY+57,20));x+=620;}

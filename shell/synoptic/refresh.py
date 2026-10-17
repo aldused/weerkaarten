@@ -1,7 +1,6 @@
 """Build an immutable, complete synoptic map set; publish its pointer last.
-Fronts require reviewed digital geometry for the EXACT source cycle. Missing
-review never rolls old fronts over onto a new model. Source charts are retained
-in the review inbox. This is deliberately not an automatic meteorologist.
+Front overlays require reviewed geometry for the exact source cycle. Missing
+review disables the overlay while fresh weather and source charts are published.
 """
 import argparse,datetime as dt,fcntl,hashlib,json,os,re,shutil,subprocess,sys,tempfile,urllib.request
 from pathlib import Path
@@ -25,6 +24,8 @@ def discover(html,now):
  wanted=[now.replace(hour=12,minute=0,second=0,microsecond=0)+dt.timedelta(days=i) for i in range(5)]
  for run,charts in sorted(cycles.items(),reverse=True):
   if all(d in charts for d in wanted):return run,{d:charts[d] for d in wanted}
+  available=sorted(d for d in charts if d.hour==12 and d>=wanted[0])
+  if len(available)>=5:return run,{d:charts[d] for d in available[:5]}
  raise ValueError('Geen volledige Bracknell-set voor vijf middagen beschikbaar')
 def refresh(publish=False):
  now=dt.datetime.now(UTC);run,charts=discover(get(SITE).decode(),now);key=run.strftime('%Y%m%dT%H');front=HERE/'fronts'/f'{key}.json'
@@ -38,12 +39,14 @@ def refresh(publish=False):
    with tempfile.NamedTemporaryFile(suffix='.gif') as tmp:
     tmp.write(get(url));tmp.flush();Image.open(tmp.name).convert('RGB').save(path)
  write(review/'sources.json',{str(v.day):u for v,u in charts.items()})
- if not front.exists():raise ValueError(f'Nieuwe cyclus {key}: fronten en troggen wachten op digitalisering en controle; bronkaarten in {review}')
- geometry=json.loads(front.read_text())
- if not all(str(f['day']) in geometry for f in frames):raise ValueError('Frontgeometrie mist een dag; vorige set blijft geldig')
+ geometry=json.loads(front.read_text()) if front.exists() else {}
+ fronts_available=all(str(f['day']) in geometry for f in frames)
+ if not fronts_available:
+  # Never carry old fronts forward. Publish fresh weather with source charts.
+  front=review/'unreviewed.json';write(front,{str(f['day']):[] for f in frames})
  config=dict(run=run.isoformat().replace('+00:00','Z'),runPath=run.strftime('%Y/%m/%d/%H00Z'),frames=frames)
  # Content identity includes reviewed geometry, valid dates and renderer revision.
- version=hashlib.sha256(front.read_bytes()+json.dumps(config).encode()+b'render-v3').hexdigest()[:10];set_id=f'{key}-{version}'
+ version=hashlib.sha256(front.read_bytes()+json.dumps(config).encode()+b'render-v4').hexdigest()[:10];set_id=f'{key}-{version}'
  previous=CACHE/'published.json'
  if previous.exists() and json.loads(previous.read_text()).get('setId')==set_id:print('Zelfde gecontroleerde set; niets gepubliceerd');return
  with tempfile.TemporaryDirectory(dir=CACHE,prefix='build-') as tmp:
@@ -57,7 +60,7 @@ def refresh(publish=False):
    day=frame['day']
    for suffix in ['ukmo-temp.png','ukmo-cloud.png','ukmo-rain.png','ukmo-temp@2x.png','ukmo-cloud@2x.png','ukmo-rain@2x.png','ukmo-pressure.svg','fronts.svg','wind.svg','values.svg','front-reference.png']:
     if not (out/f'{day}-{suffix}').is_file():raise ValueError('Onvolledige uitvoer '+suffix)
-  manifest=dict(updated=now.isoformat(),model='UKMO Global 10km',run=config['run'],frontRun=config['run'],frames=frames,frontMethod='Handmatig gedigitaliseerd en visueel gecontroleerd, inclusief troggen.',snowAvailable=False,automaticRefresh='twice-daily-with-front-review',setId=set_id,assetRoot=f'https://data.weerlab.nl/synoptic/sets/{set_id}/')
+  manifest=dict(updated=now.isoformat(),model='UKMO Global 10km',run=config['run'],frontRun=config['run'] if fronts_available else None,frontsAvailable=fronts_available,frames=frames,frontMethod='Handmatig gedigitaliseerd en visueel gecontroleerd, inclusief troggen.' if fronts_available else 'Nog niet gedigitaliseerd voor deze run; bekijk de actuele Bracknell-bronkaarten.',snowAvailable=False,automaticRefresh='twice-daily',setId=set_id,assetRoot=f'https://data.weerlab.nl/synoptic/sets/{set_id}/')
   # Never upload raw fields. Data assets first; immutable manifest pointer last.
   public=out/'public';public.mkdir()
   for file in out.iterdir():

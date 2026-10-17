@@ -20,7 +20,7 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
   trough, and record front type and symbol side. Existing format is documented
   by `trace_fronts.py`.
 - New source charts are downloaded to `.synoptic-cache/review/<cycle>/`.
-- Missing review blocks publication. **Front extraction is not automated.**
+- Missing review disables the front overlay; fresh weather layers and exact-cycle source charts are still published. **Front extraction is not automated.**
   Raster thickness cannot reliably distinguish all troughs from isobars/text.
 - There is no trustworthy separate UKMO snow field in the present data. No
   subtraction of unrelated precipitation fields or temperature-only snow guess.
@@ -32,5 +32,5 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
   `synoptic/current.json`. Failure preserves the last complete published set.
 
 Check `.synoptic-cache/status.json` and the launchd log when no new set appears.
-This first BETA has deliberate limits: front review remains manual and snowfall
+This first BETA has deliberate limits: front overlays require manual review, while weather layers update independently and snowfall
 cannot yet be displayed separately. Do not describe the entire chain as automatic.
