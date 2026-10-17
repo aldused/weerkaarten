@@ -12,7 +12,7 @@ for frame in json.loads((O/'frames.json').read_text()):
  ys=g['latMin']+np.arange(yr['start'],yr['end'])*g['dy'];xs=g['lonMin']+np.arange(xr['start'],xr['end'])*g['dx'];sample=RegularGridInterpolator((ys,xs),a,bounds_error=True)
  svg=['<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880">'];audit=[]
  for name,lo,la in points:
-  value=float(sample([[la,lo]])[0]);assert np.isfinite(value);label=f'{value:.1f}'.replace('.',',')+'°';x=(lo+13)/37*1400+7;y=(merc(62)-merc(la))/(merc(62)-merc(42))*880+19
+  value=float(sample([[la,lo]])[0]);assert np.isfinite(value);label=f'{math.floor(value+.5)}°';x=(lo+13)/37*1400+7;y=(merc(62)-merc(la))/(merc(62)-merc(42))*880+19
   svg.append(f'<text x="{x:.1f}" y="{y:.1f}" font-family="Arial,sans-serif" font-size="19" font-weight="700" fill="#b32235" stroke="white" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{label}</text>')
   audit.append({'place':name,'lat':la,'lon':lo,'temperature_c':round(value,1),'valid':frame['valid']})
  svg.append('</svg>');(O/f'{day}-values.svg').write_text(''.join(svg));(O/f'{day}-values.json').write_text(json.dumps(audit,indent=2))

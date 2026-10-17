@@ -8,11 +8,13 @@ const grid=domainOptions.find(d=>d.value===domain).grid,ranges=getRanges(grid,[-
 const reader=nativeReader(await readyWasm());
 const response=await fetch(`${root}/${config.runPath}/meta.json`,{signal:AbortSignal.timeout(30000)});if(!response.ok)throw Error(`meta ${response.status}`);
 const meta=await response.json();if(!meta.completed||meta.reference_time!==config.run)throw Error('Incomplete or mismatched model cycle');
+const cloudLevels=['low','mid','high'].filter(level=>meta.variables.includes('cloud_cover_'+level));
+await fs.writeFile(`${out}/capabilities.json`,JSON.stringify({cloudLevels}));
 for(const frame of config.frames){
  const day=frame.day,url=`${root}/${config.runPath}/${frame.valid.slice(0,10)}T1200.om`;
  if(!meta.valid_times.some(t=>Date.parse(t)===Date.parse(frame.valid)))throw Error('Missing valid time '+frame.valid);
  await fs.writeFile(`${out}/${day}-ukmo-meta.json`,JSON.stringify({grid,ranges,source:url,meta}));
- for(const variable of ['temperature_2m','cloud_cover','precipitation','pressure_msl','wind_speed_10m','wind_direction_10m']){
+ for(const variable of ['temperature_2m','cloud_cover','precipitation','pressure_msl','wind_speed_10m','wind_direction_10m',...cloudLevels.map(level=>'cloud_cover_'+level)]){
  const data=await reader.readVariable(url,variable,ranges);
  const values=variable==='wind_direction_10m'?data.directions:data.values;
  const size=(ranges[0].end-ranges[0].start)*(ranges[1].end-ranges[1].start);

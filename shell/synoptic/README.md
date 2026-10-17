@@ -20,7 +20,7 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
   trough, and record front type and symbol side. Existing format is documented
   by `trace_fronts.py`.
 - New source charts are downloaded to `.synoptic-cache/review/<cycle>/`.
-- Missing review disables the front overlay; fresh weather layers and exact-cycle source charts are still published. **Front extraction is not automated.**
+- Missing review blocks replacement of the complete reviewed set. An update may never silently remove fronts. **Front extraction is not automated.**
   Raster thickness cannot reliably distinguish all troughs from isobars/text.
 - There is no trustworthy separate UKMO snow field in the present data. No
   subtraction of unrelated precipitation fields or temperature-only snow guess.
@@ -32,5 +32,19 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
   `synoptic/current.json`. Failure preserves the last complete published set.
 
 Check `.synoptic-cache/status.json` and the launchd log when no new set appears.
-This first BETA has deliberate limits: front overlays require manual review, while weather layers update independently and snowfall
+This first BETA has deliberate limits: new map sets with fronts require manual review and snowfall
 cannot yet be displayed separately. Do not describe the entire chain as automatic.
+
+## Optional meteorological layers
+
+- Six city anchors use native UKMO temperature at 12 UTC (14:00 CEST / 13:00 CET).
+  Dates are formatted with Europe/Amsterdam, including dates spanning the DST change.
+- Separate maxima use current DWD MOSMIX TX from the existing Weerlab feeds.
+  These are daytime maxima, not instantaneous 12 UTC values. Nearby station identity,
+  date, run and update stamp are retained in the manifest. Feeds over 36 hours old,
+  missing dates and nonfinite values produce no invented labels.
+- Cloud selection uses cloud_cover, cloud_cover_low, cloud_cover_mid and cloud_cover_high
+  from the same native UKMO run/time; only supplied levels are enabled.
+- Wind uses mean 10 m speed in m/s, standard Beaufort boundaries, and arrows pointing
+  along the flow (meteorological FROM bearing + 180 degrees); gusts are never substituted.
+- Tests: python3 -m unittest discover -s shell/synoptic -p 'test_*.py'.

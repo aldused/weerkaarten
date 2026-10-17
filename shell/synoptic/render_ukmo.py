@@ -33,7 +33,7 @@ for kind in ['land','countries']:
    for c in coords:walk(c)
  for f in data['features']:walk(f['geometry']['coordinates'])
  features.append(paths)
-base=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}"><rect width="{W}" height="{H}" fill="#ddebf0"/>'+''.join(f'<path d="{p}Z" fill="#e8eddf" stroke="none"/>' for p in features[0])+'</svg>'
+base=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}"><rect width="{W}" height="{H}" fill="#c7dfe9"/>'+''.join(f'<path d="{p}Z" fill="#edeee2" stroke="none"/>' for p in features[0])+'</svg>'
 (O/'base.svg').write_text(base)
 outline=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}"><g fill="none" stroke="#384c54" stroke-width="1.2" opacity=".74">'+''.join(f'<path d="{p}"/>' for p in features[1])+'</g><g fill="none" stroke="#344951" stroke-width="1.4">'+''.join(f'<path d="{p}"/>' for p in features[0])+'</g>'
 for name,lo,la in [('Rotterdam',4.48,51.92),('Londen',-.12,51.5),('Parijs',2.35,48.85),('Berlijn',13.4,52.52),('Kopenhagen',12.57,55.68),('Wenen',16.37,48.21),('Praag',14.42,50.08),('Zürich',8.54,47.37),('Oslo',10.75,59.91),('Dublin',-6.26,53.35)]:
@@ -50,6 +50,11 @@ for frame in json.loads((O/'frames.json').read_text()):
  t=get('temperature_2m');c=get('cloud_cover');r=get('precipitation');p=get('pressure_msl');snow=np.zeros_like(r);r=np.maximum(r,0)
  Image.fromarray((tempmap(np.clip((t+10)/40,0,1))*255).astype('uint8')).save(O/f'{day}-ukmo-temp.png')
  cloud=np.ones((H,W,4));cloud[:,:,:3]=.99;cloud[:,:,3]=np.clip((c-15)/85,0,1)*.76;Image.fromarray((cloud*255).astype('uint8')).save(O/f'{day}-ukmo-cloud.png')
+ for level,color,opacity in [('low',(0.65,0.79,0.82),.70),('mid',(0.78,0.74,0.87),.58),('high',(1.,1.,1.),.46)]:
+  if not (O/f'{day}-ukmo-cloud_cover_{level}.bin').exists():continue
+  coverage=get('cloud_cover_'+level)
+  layer=np.empty((H,W,4));layer[:,:,:3]=color;layer[:,:,3]=np.clip(coverage/100,0,1)*opacity
+  Image.fromarray((layer*255).astype('uint8')).save(O/f'{day}-ukmo-cloud-{level}.png')
  rr=ListedColormap(raincolors)(BoundaryNorm(bounds,len(raincolors))(r));rr[:,:,3]=np.where(r>=.1,.88,0);Image.fromarray((rr*255).astype('uint8')).save(O/f'{day}-ukmo-rain.png')
  snowcolors=['#fbd2e5','#f5a1cc','#ed6eb0','#d63c91','#ad2077','#77115a'];ss=ListedColormap(snowcolors)(BoundaryNorm([.05,.1,.2,.5,1,2,100],len(snowcolors))(snow));ss[:,:,3]=np.where(snow>=.05,.96,0);Image.fromarray((ss*255).astype('uint8')).save(O/f'{day}-ukmo-snow.png')
  fig,ax=plt.subplots(figsize=(W/100,H/100),dpi=100);fig.subplots_adjust(0,0,1,1);ax.set_xlim(0,W);ax.set_ylim(H,0);ax.axis('off');smooth=gaussian_filter(p,3);cs=ax.contour(np.arange(W),np.arange(H),smooth,levels=np.arange(940,1060,4),colors='#344851',linewidths=.8,alpha=.85);ax.clabel(cs,fmt='%d',fontsize=10,inline=True,inline_spacing=5)
