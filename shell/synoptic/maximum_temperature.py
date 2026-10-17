@@ -4,7 +4,20 @@ TX is the supplied daytime maximum, not a maximum synthesized from noon values.
 import datetime as dt,json,math
 from html import escape
 from concurrent.futures import ThreadPoolExecutor
-SITES=[('Rotterdam','nl','Rotterdam Airport',4.48,51.92),('Londen','gb','London Heathrow',-.12,51.5),('Parijs','fr','Paris',2.35,48.85),('Berlijn','de','Berlin',13.4,52.52),('Oslo','scan','Oslo',10.75,59.91),('Wenen','alps','Wien',16.37,48.21)]
+SITES=[
+ ('Dublin','gb','Dublin',-6.26,53.35),
+ ('Edinburgh','gb','Edinburgh',-3.19,55.95),
+ ('Londen','gb','London Heathrow',-.12,51.5),
+ ('Bergen','scan','Bergen',5.32,60.39),
+ ('Oslo','scan','Oslo',10.75,59.91),
+ ('Stockholm','scan','Stockholm',18.06,59.33),
+ ('Kopenhagen','scan','Kopenhagen',12.57,55.68),
+ ('Rotterdam','nl','Rotterdam Airport',4.48,51.92),
+ ('Parijs','fr','Paris',2.35,48.85),
+ ('Bordeaux','fr','Bordeaux',-.58,44.84),
+ ('Berlijn','de','Berlin',13.4,52.52),
+ ('Wenen','alps','Wien',16.37,48.21),
+]
 def number(value):return isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value)
 def select_maxima(feeds,frames,now):
  result={str(f['day']):{'points':[],'sources':[]} for f in frames}
@@ -34,7 +47,7 @@ def fetch_maxima(frames,now,get):
  def fetch(region):
   try:return region,json.loads(get(f'https://data.weerlab.nl/mosmix_{region}.json'))
   except Exception:return region,{}
- with ThreadPoolExecutor(max_workers=6) as pool:feeds=dict(pool.map(fetch,[s[1] for s in SITES]))
+ with ThreadPoolExecutor(max_workers=6) as pool:feeds=dict(pool.map(fetch,sorted({s[1] for s in SITES})))
  return select_maxima(feeds,frames,now)
 
 def render_maxima(out,maximum):
@@ -42,7 +55,7 @@ def render_maxima(out,maximum):
  for day,data in maximum.items():
   svg=['<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880">']
   for point in data['points']:
-   # Pair at the same six city anchors; station provenance is retained in title.
+   # Pair at the same geographically distributed city anchors; station provenance is retained in title.
    site=next(s for s in SITES if s[0]==point['place']);lo,la=site[-2:]
    x=(lo+13)/37*1400+7;y=(merc(62)-merc(la))/(merc(62)-merc(42))*880+43
    value=math.floor(point['value']+.5);title=escape(f"{point['station']}: MOSMIX TX {point['value']} °C, {point['date']}")

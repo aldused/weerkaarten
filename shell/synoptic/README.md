@@ -37,7 +37,7 @@ cannot yet be displayed separately. Do not describe the entire chain as automati
 
 ## Optional meteorological layers
 
-- Six city anchors use native UKMO temperature at 12 UTC (14:00 CEST / 13:00 CET).
+- Twelve geographically distributed city anchors use native UKMO temperature at 12 UTC (14:00 CEST / 13:00 CET).
   Dates are formatted with Europe/Amsterdam, including dates spanning the DST change.
 - Separate maxima use current DWD MOSMIX TX from the existing Weerlab feeds.
   These are daytime maxima, not instantaneous 12 UTC values. Nearby station identity,

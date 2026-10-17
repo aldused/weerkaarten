@@ -46,7 +46,7 @@ def refresh(publish=False):
  config=dict(run=run.isoformat().replace('+00:00','Z'),runPath=run.strftime('%Y/%m/%d/%H00Z'),frames=frames)
  maximum=fetch_maxima(frames,now,get)
  # Content identity includes reviewed geometry, valid dates and renderer revision.
- version=hashlib.sha256(front.read_bytes()+json.dumps(config).encode()+json.dumps(maximum,sort_keys=True).encode()+b'render-v5').hexdigest()[:10];set_id=f'{key}-{version}'
+ version=hashlib.sha256(front.read_bytes()+json.dumps(config).encode()+json.dumps(maximum,sort_keys=True).encode()+b'render-v6-distributed-sites').hexdigest()[:10];set_id=f'{key}-{version}'
  previous=CACHE/'published.json'
  if previous.exists() and json.loads(previous.read_text()).get('setId')==set_id:print('Zelfde gecontroleerde set; niets gepubliceerd');return
  with tempfile.TemporaryDirectory(dir=CACHE,prefix='build-') as tmp:

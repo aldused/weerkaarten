@@ -7,6 +7,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap,BoundaryNorm,ListedColormap
 from PIL import Image
+from maximum_temperature import SITES
 from scipy.interpolate import RegularGridInterpolator
 O=Path(os.environ.get('WEERKAART_OUT','outputs/weerkaart-demo'));W,H=1400,880;west,south,east,north=-13,42,24,62
 merc=lambda v:np.log(np.tan(np.pi/4+np.deg2rad(v)/2));ymn,ymx=merc(south),merc(north)
@@ -36,7 +37,7 @@ for kind in ['land','countries']:
 base=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}"><rect width="{W}" height="{H}" fill="#c7dfe9"/>'+''.join(f'<path d="{p}Z" fill="#edeee2" stroke="none"/>' for p in features[0])+'</svg>'
 (O/'base.svg').write_text(base)
 outline=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}"><g fill="none" stroke="#384c54" stroke-width="1.2" opacity=".74">'+''.join(f'<path d="{p}"/>' for p in features[1])+'</g><g fill="none" stroke="#344951" stroke-width="1.4">'+''.join(f'<path d="{p}"/>' for p in features[0])+'</g>'
-for name,lo,la in [('Rotterdam',4.48,51.92),('Londen',-.12,51.5),('Parijs',2.35,48.85),('Berlijn',13.4,52.52),('Kopenhagen',12.57,55.68),('Wenen',16.37,48.21),('Praag',14.42,50.08),('Zürich',8.54,47.37),('Oslo',10.75,59.91),('Dublin',-6.26,53.35)]:
+for name,lo,la in [(name,lon,lat) for name,_,_,lon,lat in SITES]+[('Praag',14.42,50.08),('Zürich',8.54,47.37)]:
  x,y=xy(lo,la);outline+=f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="#183c49"/><text x="{x+7:.1f}" y="{y-7:.1f}" font-family="Arial" font-size="14" font-weight="600" fill="#163945" stroke="white" stroke-width="3" paint-order="stroke">{name}</text>'
 (O/'geography.svg').write_text(outline+'</svg>')
 tempmap=LinearSegmentedColormap.from_list('temp',[(0,'#b8b6d9'),(.18,'#b9d4e5'),(.35,'#a5d7ca'),(.52,'#d5deb0'),(.7,'#eee1a4'),(.85,'#e8ba86'),(1,'#ce8b79')])

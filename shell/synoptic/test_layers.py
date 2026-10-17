@@ -1,7 +1,7 @@
-import datetime as dt,json,tempfile,unittest
+import datetime as dt,json,math,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from maximum_temperature import select_maxima,render_maxima
+from maximum_temperature import SITES,select_maxima,render_maxima
 from wind_math import beaufort,flow_bearing,THRESHOLDS
 import refresh
 UTC=dt.timezone.utc
@@ -10,6 +10,18 @@ class LayerTests(unittest.TestCase):
   self.now=dt.datetime(2026,10,17,6,tzinfo=UTC)
   self.frames=[dict(day=d,valid=f'2026-10-{d}T12:00:00Z') for d in range(17,22)]
   self.feed={'run':'2026-10-17T03:00:00Z','stations':{'Rotterdam Airport':[4.437,51.957]},'data':{'2026-10-17':{'TX':{'Rotterdam Airport':14.6}}}}
+ def test_temperature_sites_cover_british_isles_and_scandinavia_without_overlap(self):
+  self.assertEqual(len(SITES),12)
+  self.assertEqual({s[0] for s in SITES if s[1]=='gb'},{'Dublin','Edinburgh','Londen'})
+  self.assertEqual({s[0] for s in SITES if s[1]=='scan'},{'Bergen','Oslo','Stockholm','Kopenhagen'})
+  merc=lambda lat:math.log(math.tan(math.pi/4+math.radians(lat)/2))
+  positions=[]
+  for name,_,_,lon,lat in SITES:
+   x=(lon+13)/37*1400+7;y=(merc(62)-merc(lat))/(merc(62)-merc(42))*880+19
+   self.assertTrue(0<x<1320 and 0<y<830,name)
+   for other,ox,oy in positions:
+    self.assertTrue(abs(x-ox)>105 or abs(y-oy)>65,f'{name} overlaps {other}')
+   positions.append((name,x,y))
  def test_daily_maximum_not_noon_temperature_and_missing_days_empty(self):
   result=select_maxima({'nl':self.feed},self.frames,self.now)
   self.assertEqual(result['17']['points'][0]['value'],14.6)

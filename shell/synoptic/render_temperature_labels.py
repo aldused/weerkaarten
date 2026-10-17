@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 O=Path(os.environ['WEERKAART_OUT'])
-points=[('Rotterdam',4.48,51.92),('Londen',-.12,51.5),('Parijs',2.35,48.85),('Berlijn',13.4,52.52),('Oslo',10.75,59.91),('Wenen',16.37,48.21)]
+from maximum_temperature import SITES
+points=[(name,lon,lat) for name,_,_,lon,lat in SITES]
 merc=lambda v:math.log(math.tan(math.pi/4+math.radians(v)/2))
 for frame in json.loads((O/'frames.json').read_text()):
  day=frame['day']
@@ -16,4 +17,4 @@ for frame in json.loads((O/'frames.json').read_text()):
   svg.append(f'<text x="{x:.1f}" y="{y:.1f}" font-family="Arial,sans-serif" font-size="19" font-weight="700" fill="#b32235" stroke="white" stroke-width="4" stroke-linejoin="round" paint-order="stroke">{label}</text>')
   audit.append({'place':name,'lat':la,'lon':lo,'temperature_c':round(value,1),'valid':frame['valid']})
  svg.append('</svg>');(O/f'{day}-values.svg').write_text(''.join(svg));(O/f'{day}-values.json').write_text(json.dumps(audit,indent=2))
-print('30 temperatuurwaarden uit dezelfde UKMO-velden als de kaart.')
+print(f'{len(points)} geografisch verdeelde temperatuurpunten per kaart.')
