@@ -249,7 +249,11 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 </style>
 <style>
 .stage{align-items:stretch}.leftcol{height:100%}.kaart-wrap{position:absolute;inset:0;width:100%;height:100%}.viewer-tools{flex-wrap:nowrap}.viewer-tools .tool-meta{width:auto;margin-left:8px;flex:none}.playback-row .btn.play{flex:0 0 auto}.playback-row .btn{flex-shrink:0}#kaart{border:0;border-radius:0;background:#0b1424}.model-toolbar select,#speed{font-family:inherit;font-size:12px}.size-control{flex-shrink:0}
-</style><style>#run-details .map-explanation{display:block}#run-details .muted{color:#cbd5e1}</style><style>#fsimg{width:100%;height:100%;object-fit:contain}.fs-top{flex-wrap:wrap}.fs-cap{min-width:0;flex:1}</style></head>
+</style><style>#run-details .map-explanation{display:block}#run-details .muted{color:#cbd5e1}</style><style>#fsimg{width:100%;height:100%;object-fit:contain}.fs-top{flex-wrap:wrap}.fs-cap{min-width:0;flex:1}</style><style>
+.fixed-legend[hidden]{display:none}.fixed-legend{flex:none;position:relative;overflow:hidden;background:white;width:min(100%,1100px);aspect-ratio:12.5 / .85;margin:0 auto;pointer-events:none}.fixed-legend img{position:absolute;bottom:0;left:0;width:100%;height:auto;max-width:none}
+.fs-legend{flex:none;position:relative;overflow:hidden;background:white;width:min(100%,1100px);aspect-ratio:12.5 / .85;margin:0 auto;pointer-events:none}
+.fs-legend img{position:absolute;bottom:0;left:0;width:100%;height:auto;max-width:none}
+</style></head>
 <body>
 <header class="model-header"><a class="all-maps" href="index.html#menu/verwachting?type=kaarten" target="_top">← Weerkaarten</a><h1>Weerkaarten Europa</h1><span id="run-info">Modellen laden…</span><span id="update-info" role="status"></span></header>
 <section class="model-toolbar" aria-label="Kaartkeuze">
@@ -280,7 +284,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 </div>
 
 
-<div class="map-explanation"><p class="muted" hidden="" id="jetstream-info" style="margin:8px 16px">Wind op 300 hPa (ongeveer 9 km hoogte). Kleur: snelheid in knopen; stroomlijnen: windrichting. 1 knoop = 1,852 km/u. ECMWF · Atlantische Oceaan en Europa.</p><section hidden="" id="dust-info" style="margin:10px 16px;max-width:1050px;line-height:1.55">
+<div class="fixed-legend" id="map-legend" hidden aria-label="Vaste kaartlegenda"><img id="map-legend-image" alt="Legenda en bronvermelding"/></div><div class="map-explanation"><p class="muted" hidden="" id="jetstream-info" style="margin:8px 16px">Wind op 300 hPa (ongeveer 9 km hoogte). Kleur: snelheid in knopen; stroomlijnen: windrichting. 1 knoop = 1,852 km/u. ECMWF · Atlantische Oceaan en Europa.</p><section hidden="" id="dust-info" style="margin:10px 16px;max-width:1050px;line-height:1.55">
 <p><strong>Saharastof · stof in de hele luchtkolom</strong><br/>Kleuren tonen de optische dikte door mineraalstof bij 550 nm (AOD, zonder eenheid). Hogere waarden betekenen meer uitdoving van licht door stof. <span id="dust-range-info">De legenda begint bij 0,10; een wit gebied betekent dus niet automatisch nul stof.</span></p>
 <details><summary>Hoe wordt dit berekend? En wat zegt het over stof op de grond?</summary>
 <p>CAMS berekent hoeveel stof opwaait uit droge bodems, hoe wind en turbulentie het vervoeren en hoeveel door bezinking en neerslag uit de lucht verdwijnt. Satellietwaarnemingen verbeteren de begintoestand. Voor de kaart wordt het effect van de deeltjes op licht over alle luchtlagen opgeteld.</p>
@@ -308,7 +312,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <button class="fs-btn" id="fs-reset">Reset zoom</button>
 <button class="fs-btn" id="fs-close">✕ Sluiten</button>
 </div>
-<div class="fs-stage" id="fs-stage"><img alt="" id="fsimg"/></div>
+<div class="fs-stage" id="fs-stage"><img alt="" id="fsimg"/></div><div class="fs-legend" aria-label="Vaste kaartlegenda"><img id="fslegend" alt="Legenda en bronvermelding"/></div>
 <div class="fs-hint">scroll / pinch = zoom · sleep = verschuiven · ←/→ = ander tijdstip · klik of Esc = sluiten</div>
 </div>
 <script src="map-performance.js?v=20261008-1"></script>
@@ -449,6 +453,7 @@ function show(i){
       old.replaceWith(image);
     }
     image.alt=alt;
+    $('map-legend-image').src=source;
     $('loading').classList.remove('vis');
     $('map-resolution').textContent=`origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
     $('download').disabled=false;
@@ -476,6 +481,7 @@ function play(){
 
 let mapZoom=1,mapPanX=0,mapPanY=0,regionView='europe';
 function applyMapView(){
+ $('map-legend').hidden=mapZoom<=1;
  const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect();
  const fit=Math.min(box.width/(image.naturalWidth||1625),box.height/(image.naturalHeight||1300));
  const dx=regionView==='central'?-.10*(image.naturalWidth||1625)*fit*mapZoom:0;
@@ -557,6 +563,7 @@ async function downloadPng(){
 function fsApply(){ $('fsimg').style.transform=`translate(calc(-50% + ${fsX}px), calc(-50% + ${fsY}px)) scale(${fsScale})`; }
 function fsUpdate(){ const fr=R().frames[idx], v=META.vars.find(v=>v.key===varKey);
   $('fsimg').src=srcOf(varKey,idx);
+  $('fslegend').src=$('fsimg').src;
   $('fs-cap').innerHTML=`${v.label} · <b>${fr.valid_label}</b> · +${fr.lead} u`; }
 function openFs(){ if(!META||!R()?.frames[idx])return;fsOpen=true; fsScale=1; fsX=0; fsY=0; fsApply(); fsUpdate(); $('fs').classList.add('open'); }
 function closeFs(){ fsOpen=false; $('fs').classList.remove('open'); }
