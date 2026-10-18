@@ -260,7 +260,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <label>Weermodel <select aria-label="Weermodel" id="modelbar"></select></label>
 <label>Kaartlaag <select aria-label="Kaartlaag" id="varbar"></select></label>
 <div class="run-choice"><span>Modelrun · UTC</span><div id="runbar" class="bar" role="group" aria-label="Modelrun"></div></div>
-<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="central">Midden-Europa</option></select></label>
+<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
 <button class="btn" id="zoom-out" aria-label="Uitzoomen">−</button><button class="btn" id="zoom-in" aria-label="Inzoomen">+</button>
 </section>
 <div class="stage">
@@ -485,16 +485,21 @@ function play(){
 let mapZoom=1,mapPanX=0,mapPanY=0,regionView='europe';
 function applyMapView(){
  $('map-legend').hidden=mapZoom<=1;
+ const viewport=$('kaart-scroll');
+ viewport.style.width=regionView==='benelux-uk'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*1.25)+'px':'100%';
+ viewport.style.alignSelf='center';
  const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect();
  const fit=Math.min(box.width/(image.naturalWidth||1625),box.height/(image.naturalHeight||1300));
- const dx=regionView==='central'?-.10*(image.naturalWidth||1625)*fit*mapZoom:0;
- const dy=regionView==='central'?-.015*(image.naturalHeight||1300)*fit*mapZoom:0;
+ const dx=(regionView==='central'?-.10:regionView==='benelux-uk'?.07:0)*(image.naturalWidth||1625)*fit*mapZoom;
+ const dy=(regionView==='central'?-.015:regionView==='benelux-uk'?.025:0)*(image.naturalHeight||1300)*fit*mapZoom;
  const boundX=Math.max(0,((image.naturalWidth||1625)*fit*mapZoom-box.width)/2),boundY=Math.max(0,((image.naturalHeight||1300)*fit*mapZoom-box.height)/2);
  const tx=Math.max(-boundX,Math.min(boundX,mapPanX+dx)),ty=Math.max(-boundY,Math.min(boundY,mapPanY+dy));
- mapPanX=tx-dx;mapPanY=ty-dy;image.style.transform=`translate(${tx}px,${ty}px) scale(${mapZoom})`;
+ mapPanX=tx-dx;mapPanY=ty-dy;
+ $('download').title=mapZoom>1?'Download de zichtbare uitsnede met titel, geldigheid en legenda':'Download de originele PNG met titel, geldigheid en legenda';
+ image.style.transform=`translate(${tx}px,${ty}px) scale(${mapZoom})`;
 }
 function zoomMap(factor){mapZoom=Math.max(1,Math.min(5,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;regionView='europe';$('region-view').value='europe';}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
-function selectRegion(value){regionView=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:1;applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
+function selectRegion(value){regionView=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:value==='benelux-uk'?2.5:1;applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
 $('mapsize').max=500;$('mapsize').min=100;
 $('region-view').addEventListener('change',e=>selectRegion(e.target.value));
 $('zoom-in').onclick=()=>zoomMap(1.2);$('zoom-out').onclick=()=>zoomMap(1/1.2);
@@ -524,42 +529,64 @@ function setMapSize(value, remember=true){
 function safePart(s){ return String(s||'kaart').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 function downloadName(){
   const fr=R().frames[idx], valid=fr.valid_utc.replace(/[-:]/g,'').replace('T','_').slice(0,13);
-  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}.png`;
+  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):''}.png`;
 }
-async function prepareDownload(){
-  const token=++downloadToken, source=srcOf(varKey,idx), name=downloadName(), b=$('download');
-  b.disabled=true; b.textContent='PNG voorbereiden…';
+function downloadView(){
+  const source=srcOf(varKey,idx), label=regionView==='central'?'Midden-Europa':regionView==='benelux-uk'?'Benelux + Verenigd Koninkrijk':'Uitsnede Europa';
+  if(mapZoom<=1)return {key:source,source,crop:null};
+  const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect(),nw=image.naturalWidth,nh=image.naturalHeight;
+  if(!nw||!nh||!box.width||!box.height)throw new Error('Kaart nog niet geladen');
+  const fit=Math.min(box.width/nw,box.height/nh),scale=fit*mapZoom;
+  const transform=new DOMMatrixReadOnly(getComputedStyle(image).transform);
+  const left=box.width/2+transform.m41-nw*scale/2,top=box.height/2+transform.m42-nh*scale/2;
+  const footer=varKey.startsWith('dust_')?.18:varKey==='jetstream'?.11:.085;
+  // Invert the same fitted image and pan/zoom transform used by the viewer.
+  // Retain the original, unzoomed title and legend outside the cropped map.
+  const x=Math.max(.015*nw,-left/scale),y=Math.max(.10*nh,-top/scale);
+  const right=Math.min(.985*nw,(box.width-left)/scale),bottom=Math.min((1-footer)*nh,(box.height-top)/scale);
+  if(right<=x||bottom<=y)throw new Error('Geen kaart in de uitsnede');
+  const crop={x,y,width:right-x,height:bottom-y,footer,label};
+  return {source,crop,key:source+'|'+JSON.stringify(crop)};
+}
+async function cropDownload(blob,crop){
+  const bitmap=await createImageBitmap(blob);
   try{
-    // Eigen download-query voorkomt dat een eerdere <img>-request zonder CORS
-    // uit de browsercache wordt hergebruikt voor deze blob-download.
-    const r=await fetch(source+'&download=1',{mode:'cors',cache:'default'});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const blob=await r.blob(), url=URL.createObjectURL(blob);
-    if(token!==downloadToken){ URL.revokeObjectURL(url); return; }
-    if(downloadObjectUrl) URL.revokeObjectURL(downloadObjectUrl);
-    downloadObjectUrl=url; downloadSource=source; downloadObjectName=name;
-    b.textContent='⬇ Download PNG'; b.disabled=false;
+    const nw=bitmap.width,nh=bitmap.height,scale=Math.min(nw/crop.width,4000/crop.height),width=Math.round(crop.width*scale);
+    const titleHeight=Math.round(nh*.10*width/nw),legendHeight=Math.round(nh*crop.footer*width/nw),mapHeight=Math.round(crop.height*scale),labelHeight=32;
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=titleHeight+labelHeight+mapHeight+legendHeight;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(bitmap,0,0,nw,nh*.10,0,0,width,titleHeight);
+    ctx.fillStyle='#172235';ctx.font='bold 18px sans-serif';ctx.fillText(crop.label+' · kaartuitsnede',16,titleHeight+22);
+    ctx.drawImage(bitmap,crop.x,crop.y,crop.width,crop.height,0,titleHeight+labelHeight,width,mapHeight);
+    ctx.drawImage(bitmap,0,nh*(1-crop.footer),nw,nh*crop.footer,0,titleHeight+labelHeight+mapHeight,width,legendHeight);
+    return await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('PNG maken mislukt')),'image/png'));
+  }finally{bitmap.close();}
+}
+async function prepareDownload(view){
+  const token=++downloadToken,name=downloadName(),b=$('download');
+  b.disabled=true;b.textContent=view.crop?'Uitsnede voorbereiden…':'PNG voorbereiden…';
+  try{
+    const r=await fetch(view.source+'&download=1',{mode:'cors',cache:'default'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    let blob=await r.blob();if(view.crop)blob=await cropDownload(blob,view.crop);
+    if(token!==downloadToken)return false;
+    if(downloadObjectUrl)URL.revokeObjectURL(downloadObjectUrl);
+    downloadObjectUrl=URL.createObjectURL(blob);downloadSource=view.key;downloadObjectName=name;
+    return true;
   }catch(e){
-    if(token!==downloadToken) return;
-    if(downloadObjectUrl) URL.revokeObjectURL(downloadObjectUrl);
-    downloadObjectUrl=''; downloadSource=source; downloadObjectName=name;
-    b.textContent='↗ Open PNG'; b.disabled=false;
-  }
+    if(token===downloadToken){b.textContent='Download mislukt · probeer opnieuw';b.title=e.message;}
+    return false;
+  }finally{if(token===downloadToken)b.disabled=false;}
 }
 async function downloadPng(){
-  if(!downloadObjectUrl || downloadSource!==srcOf(varKey,idx)){
-    const token=frameToken; await prepareDownload(); if(token!==frameToken)return;
-  }
-  const b=$('download'), a=document.createElement('a');
-  if(downloadObjectUrl&&downloadSource===srcOf(varKey,idx)){
-    a.href=downloadObjectUrl; a.download=downloadObjectName;
-    document.body.appendChild(a); a.click(); a.remove();
-    b.textContent='✓ PNG gedownload';
-  }else{
-    a.href=srcOf(varKey,idx); a.target='_blank'; a.rel='noopener'; a.click();
-    b.textContent='PNG geopend';
-  }
-  setTimeout(()=>{ b.textContent=downloadObjectUrl?'⬇ Download PNG':'↗ Open PNG'; },1800);
+  if(playing)play();
+  const token=frameToken,b=$('download');let view;
+  try{view=downloadView();}catch(e){b.textContent='Kaart nog niet klaar';return;}
+  if(!downloadObjectUrl||downloadSource!==view.key){if(!await prepareDownload(view))return;}
+  if(token!==frameToken||view.key!==downloadView().key){b.textContent='Uitsnede gewijzigd · download opnieuw';return;}
+  const a=document.createElement('a');a.href=downloadObjectUrl;a.download=downloadObjectName;
+  document.body.appendChild(a);a.click();a.remove();b.textContent='✓ PNG gedownload';
+  setTimeout(()=>{if(frameToken===token)b.textContent='⬇ Download PNG';},1800);
 }
 
 // ── Fullscreen + zoom ──
