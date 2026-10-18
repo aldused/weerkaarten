@@ -341,7 +341,11 @@ function shortValid(iso){ const d=new Date(iso), u=d.getUTCHours();
   return `${NL_DAG[d.getUTCDay()]} ${d.getUTCDate()} ${String(u).padStart(2,'0')}u`; }
 
 const D=()=>META.data[curModel];
-const R=()=>D().runs[curCyc];
+// Additional native frames can be published per layer without changing other maps.
+const R=()=>{
+  const run=D().runs[curCyc],layer=run.layers?.[varKey];
+  return layer?{...run,frames:layer.frames,files:{...run.files,[varKey]:layer.files}}:run;
+};
 const srcOf=(k,i)=>META.base+R().files[k][i]+'?run='+encodeURIComponent(R().run_utc)+'&revision='+encodeURIComponent((R().renderer||'')+'|'+(R().calculation_revision||''));
 function firstAllowedIndex(){
   if(varKey!=='precip24') return 0;
@@ -434,7 +438,7 @@ function setRun(cc,valid=R()?.frames[idx]?.valid_utc){
   buildDaglabels(); syncVarButtons(); renderRunPanel(); show(idx);
 }
 
-function setVar(key){ varKey=key; buildDaglabels(); syncVarButtons(); show(idx); meldStandAanOuder(); }
+function setVar(key){ const valid=R().frames[idx]?.valid_utc;varKey=key;if(valid)idx=R().frames.reduce((best,f,i,a)=>Math.abs(Date.parse(f.valid_utc)-Date.parse(valid))<Math.abs(Date.parse(a[best].valid_utc)-Date.parse(valid))?i:best,0);$('slider').max=R().frames.length-1;buildDaglabels();syncVarButtons();show(idx);meldStandAanOuder(); }
 
 function show(i){
   const first=firstAllowedIndex();
@@ -625,7 +629,7 @@ function buildStaticBars(m){
 function signatureOf(m){
   return JSON.stringify(m.models.map(md=>[md.key,(m.data[md.key].cycles||[]).map(cc=>{
     const r=m.data[md.key].runs[cc];
-    return [cc,r.run_utc,r.maxlead,r.renderer||'',r.calculation_revision||'',r.files||{}];
+    return [cc,r.run_utc,r.maxlead,r.renderer||'',r.calculation_revision||'',r.files||{},r.layers||{}];
   })]));
 }
 async function refreshMeta(initial=false){
