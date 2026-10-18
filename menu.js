@@ -389,9 +389,22 @@
     if(event.key==='Escape' && document.body.classList.contains('product-expanded')){setProductExpanded(false);$('#product-expand').focus();return;}
     const editing=event.target.matches('input,textarea,select,[contenteditable="true"]');
     if(event.key==='/'&&!editing&&!event.ctrlKey&&!event.metaKey || (event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){
-      event.preventDefault();focusSearch();
+      event.preventDefault();focusSearch();return;
     }
+    // Pijltjes/Home/End gaan naar de open kaart, ook als de focus nog in het
+    // menu staat (bijv. direct na het openen). Het product verwerkt ze zelf.
+    if(!editing&&['ArrowLeft','ArrowRight','Home','End'].includes(event.key)&&!event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&forwardKeyToProduct(event.key))event.preventDefault();
   });
+  function forwardKeyToProduct(key){
+    if(!state.productRoute||$('#product-workspace').hidden)return false;
+    const frame=$('#product-frame');
+    if(!frame||frame.hidden)return false;
+    try{
+      const doc=frame.contentDocument,win=frame.contentWindow;
+      if(!doc||!win)return false;
+      doc.dispatchEvent(new win.KeyboardEvent('keydown',{key,code:key,bubbles:true,cancelable:true}));return true;
+    }catch{return false;}
+  }
   dialog.addEventListener('cancel',event=>{event.preventDefault();closeDialog();});
   dialog.addEventListener('keydown',event=>{
     if(event.key!=='Tab')return;

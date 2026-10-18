@@ -35,6 +35,7 @@ import {createPackedGrid} from './packed-grid.mjs';
 import { createSharedTask, consumeTask } from './shared-task.mjs';
 import {fieldWindow} from './field-window.mjs';
 import {AdjacentFrames} from './adjacent-frames.mjs';
+import {WarmQueue,warmOrder} from './warm-frames.mjs';
 import {mayRetainFrame} from './retained-frames.mjs';
 import { DATA_ROOT, EUROPE, HOUR, FORECAST_DAYS, nearestIndex, normalizeFieldData, localDateKey, fmt, scales, inEurope, runPath, temperatureLegend } from './core.mjs';
 
@@ -95,6 +96,8 @@ let mode = 'weather', playing = false, playTimer, sourceCounter = 0, cities = []
 let pendingSources = new Map(), cityDrawQueued = false, frameErrors = new Set();
 const frameErrorReasons=new Map();
 const adjacentFrames=new AdjacentFrames();
+// Background byte warm-up of nearby hours: scrubbing and arrow keys then skip the network wait.
+const warmQueue=new WarmQueue({concurrency:4,delayMs:300});
 let nextFrameReady=false;
 const intervalByURL = new Map();
 const domain=domainOptions.find(d=>d.value==='ecmwf_ifs');
@@ -118,6 +121,24 @@ $('hours').addEventListener('pointerover',event=>{
   timeNavigation.hover(Number(button.dataset.index),event.pointerType);
 });
 $('hours').addEventListener('pointerleave',()=>timeNavigation.cancel());
+// The map also follows the mouse over the day buttons and the time bar,
+// without clicking. Touch keeps tap/drag behaviour.
+$('days').addEventListener('pointerover',event=>{
+  const button=event.target.closest('button[data-day]');
+  if(event.pointerType!=='mouse'||!button||button.contains(event.relatedTarget))return;
+  const day=dayGroups.find(d=>d.key===button.dataset.day);
+  const entry=chooseDayEntry(day,requestedContext?.timeline[wanted]?.time??current?.time);
+  if(entry&&frames[entry.index]?.time===entry.time)timeNavigation.hover(entry.index,event.pointerType);
+});
+$('days').addEventListener('pointerleave',()=>timeNavigation.cancel());
+$('time-slider').addEventListener('pointermove',event=>{
+  const slider=$('time-slider');
+  if(event.pointerType!=='mouse'||event.buttons||slider.disabled||!frames.length)return;
+  const r=slider.getBoundingClientRect();if(!r.width)return;
+  const ratio=Math.max(0,Math.min(1,(event.clientX-r.left)/r.width));
+  timeNavigation.hover(nearestIndex(frames,frames[0].time+ratio*Number(slider.max)*HOUR),event.pointerType);
+});
+$('time-slider').addEventListener('pointerleave',()=>timeNavigation.cancel());
 
 let modePreparation,modePreparationTimer;
 function clearRetainedViews(){for(const view of retainedViews.values())removeLayers(view.ids);retainedViews.clear();}
@@ -747,7 +768,7 @@ function syncUI(){
   }
 }
 function cancelPreparation(preserveIndex){
-  adjacentFrames.cancel(preserveIndex);clearTimeout(playTimer);nextFrameReady=false;
+  adjacentFrames.cancel(preserveIndex);warmQueue.clear();clearTimeout(playTimer);nextFrameReady=false;
   $('play').disabled=!playing;$('app').dataset.nextFrameReady='false';
   $('play').title=playing?'Animatie pauzeren':'Volgende beeld wordt voorbereid…';
 }
@@ -774,6 +795,38 @@ function prepareAdjacentFrames(){
     if(current!==frame)return;
     stopPlayback();$('play').title='Volgende beeld nog niet beschikbaar; kies Volgende tijdstap om opnieuw te laden';
   }});
+  warmNearbyFrames(frame,limited);
+}
+// Field variables whose packets a later hour of this view will request.
+function warmVariables(frame){
+  const metadata=frame.modelMeta,out=new Set();
+  for(const v of sampleVariables(variablesForMode(metadata,frame),metadata)){
+    if(isAccumulation(v))continue;
+    if(v==='significant_weather'||v==='thunderstorm'){
+      for(const s of v==='thunderstorm'?thunderVariables(metadata):significantVariables(metadata))out.add(s);
+      if(thunderVariables(metadata).length)out.add('temperature_500hPa');
+      continue;
+    }
+    out.add(v);
+  }
+  return [...out].filter(v=>fieldFile(frame,v));
+}
+function warmNearbyFrames(frame,limited){
+  const connection=navigator.connection;
+  if(document.hidden||connection?.saveData||['slow-2g','2g'].includes(connection?.effectiveType))return;
+  const timeline=frame.timeline,b=map.getBounds();
+  // Exactly the crop readField() requests for this view, so the cache key matches.
+  const bounds=fieldWindow([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],map.getZoom(),1280,1).bounds;
+  const extra=limited?[]:dayGroups.map(day=>chooseDayEntry(day,frame.time)).filter(e=>e&&timeline[e.index]?.time===e.time).map(e=>e.index);
+  const order=warmOrder(frame.index,timeline.length,limited?{ahead:8,behind:2}:{ahead:36,behind:12,extra});
+  const jobs=[];
+  for(const index of order){
+    const next=timeline[index];let vars;
+    try{vars=warmVariables(next);}catch{continue;}
+    for(const v of vars)jobs.push(()=>current?.timeline===timeline?fieldPackets.warm(fieldFile(next,v),v,bounds):undefined);
+  }
+  warmQueue.schedule(jobs,{delayMs:limited?1500:300});
+  $('app').dataset.warmQueued=String(jobs.length);
 }
 function stopPlayback(){playing=false;clearTimeout(playTimer);icon($('play'),'play');$('play').setAttribute('aria-label','Animatie afspelen');$('play').disabled=!nextFrameReady;}
 function scheduleNext(){clearTimeout(playTimer);playTimer=setTimeout(()=>{if(playing)requestFrame((wanted+1)%frames.length);},Number($('speed').value));}
