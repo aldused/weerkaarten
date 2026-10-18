@@ -1444,14 +1444,14 @@ const MENU_PRODUCTS = [
     "description": "Experimenten",
     "category": "professioneel",
     "type": "vak",
-    "section": "Studio (afgeschermd)",
+    "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261015-1",
+    "src": "beta.html?v=20261018-open",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
-    "restricted": true
+    "restricted": false
   },
   {
     "id": "krantenredactie",
