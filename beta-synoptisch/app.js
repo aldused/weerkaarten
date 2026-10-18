@@ -12,11 +12,11 @@ for(const [id,colors] of [['raincolors',['#8fd4ef','#4da9df','#3186d1','#3658b4'
 function layerFile(day,k){if(k==='cloud'&&$('cloud-level').value!=='total')return assetRoot+day+'-ukmo-cloud-'+$('cloud-level').value+'.png';return assetRoot+day+(['temp','cloud','rain','snow','pressure'].includes(k)?'-ukmo-':'-')+k+(['pressure','fronts','wind','values','maximum'].includes(k)?'.svg':'.png');}
 async function show(i){
  const token=++selection,frame=manifest.frames[i],day=frame.day,date=new Date(frame.valid),time=localTime(date);
- $('note').textContent='Kaartlagen laden…';$('download').disabled=true;
+ $('note').textContent='Kaartlagen laden…';$('loading-map').hidden=false;$('loading-map').textContent='Kaartlagen laden…';$('download').disabled=true;
  // Preload every layer before changing the displayed day. Never show mixed dates.
  try{
   const paths=layers.filter(k=>(k!=='snow'||manifest.snowAvailable)&&(k!=='fronts'||manifest.frontsAvailable!==false)&&(k!=='maximum'||maximumFor(day).points.length>0)).map(k=>[k,layerFile(day,k)]);
-  await Promise.all(paths.map(([,src])=>new Promise((resolve,reject)=>{const image=new Image();image.onload=resolve;image.onerror=()=>reject(Error('Ontbrekende kaartlaag'));image.src=src;})));
+  await Promise.all(paths.map(([,src])=>new Promise((resolve,reject)=>{const image=new Image();const timer=setTimeout(()=>reject(Error('Kaartlaag laden duurt te lang')),15000);image.onload=()=>{clearTimeout(timer);resolve();};image.onerror=()=>{clearTimeout(timer);reject(Error('Ontbrekende kaartlaag'));};image.src=src;})));
   if(token!==selection)return;
   current=i;
   for(const [k,src] of paths){$('layer-'+k).src=src;$('layer-'+k).hidden=!$(k).checked;if(['temp','cloud','rain','snow'].includes(k))$('layer-'+k).srcset=src+' 1x, '+src.replace('.png','@2x.png')+' 2x';}
@@ -40,8 +40,8 @@ async function show(i){
   $('frontimage').src=assetRoot+day+'-front-reference.png';
   $('source-description').textContent=`Bronkaart geldig ${dateText(date)} om 12 UTC. ${manifest.frontMethod} Model- en frontencyclus: ${runText()}. Fronten zijn een meteorologische interpretatie en hoeven niet precies op het modelveld te liggen.`;
   $('source-credit').textContent='Met Office / Bracknell · © Crown Copyright. Modeldata: UK Met Office via Open-Meteo · CC BY-SA 4.0.';
-  $('download').disabled=false;
- }catch(error){if(token===selection)$('note').textContent='Deze kaart kon niet volledig worden geladen. De vorige kaart blijft staan. Kies de dag opnieuw om te proberen.';}
+  $('loading-map').hidden=true;$('download').disabled=false;
+ }catch(error){if(token===selection){$('note').textContent='Deze kaart kon niet volledig worden geladen. Kies de dag opnieuw om te proberen.';$('loading-map').hidden=false;$('loading-map').textContent='De kaart kon niet worden geladen. Kies hierboven een dag om opnieuw te proberen.';}}
 }
 for(const k of layers)$(k).onchange=()=>{$('layer-'+k).hidden=!$(k).checked;};
 $('cloud-level').onchange=()=>show(current);
@@ -63,6 +63,6 @@ async function init(){
   $('freshness').textContent=(old?'Let op: oudere modelrun. ':'')+'Kaartset bijgewerkt '+dateText(manifest.updated)+' om '+localTime(new Date(manifest.updated))+'. Modelrun: '+runText()+'.';
   const todayIndex=manifest.frames.findIndex(f=>f.valid.slice(0,10)>=today);
   await show(Math.max(0,todayIndex));
- }catch(error){$('freshness').textContent='De kaartset is niet beschikbaar. Vernieuw de pagina om opnieuw te proberen.';$('download').disabled=true;}
+ }catch(error){$('loading-map').textContent='De kaartset kon niet worden geladen. Vernieuw de pagina om opnieuw te proberen.';$('freshness').textContent='De kaartset is niet beschikbaar. Vernieuw de pagina om opnieuw te proberen.';$('download').disabled=true;}
 }
 init();
