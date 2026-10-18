@@ -16,21 +16,23 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
 - Require a completed UKMO model run from exactly the same cycle.
 - Use native accumulation intervals (1/3/6 hours), converted to mm/hour.
 - Prefer reviewed `fronts/YYYYMMDDTHH-source/source.json` with all five exact-cycle
-  official colour references and transparent source-ink masks. Preserve the original
-  cold/warm/occluded symbols, their side, type transitions, and weakening crosses.
+  official colour references and transparent source-ink masks. Retain the original
+  source ink as review evidence; review cold/warm/occluded types and symbol sides.
   Troughs are copied from the black source ink inside individually reviewed corridors.
   `prepare_front_sources.py` rebuilds masks and marks them unreviewed. Review all five
   results against colour AND monochrome originals before setting reviewed=true.
-- `source_fronts.py` validates cycle, valid times, image dimensions, modes and SHA-256
-  checksums, traces ink boundaries (not new front paths or glyphs), and reprojects
-  them from the documented polar stereographic chart CRS into the site's Mercator
-  view. Internal glyph holes and gaps remain intact. A London geographic control
-  point and source-pixel tests protect against projection/type errors.
+- `source_fronts.py` validates cycle, validity, image dimensions and SHA-256 hashes,
+  including the separately reviewed `centerlines.json`. Baselines follow the exact
+  source front branches and are reprojected from polar stereographic to Mercator.
+  Symbols have a fixed destination-map size (14 px wide, at most 10 px tall), rather
+  than magnifying and distorting the original raster glyphs. Types and symbol sides
+  are checked against the source. Tests check same-type source coverage on all days.
+  The original masks remain review evidence, not enlarged display geometry.
 - Legacy reviewed vector geometries are still supported for older cycles, but the
   incorrect manually interpreted 20261016T12 geometry has been removed.
 - New source charts are downloaded to `.synoptic-cache/review/<cycle>/`.
 - Missing review blocks replacement of the complete reviewed set. An update may never silently remove fronts. **Source review is not automated.**
-  Colour front ink is copied directly; troughs require reviewed source corridors,
+  Front baselines and types require reviewed source geometry; troughs require reviewed source corridors,
   since black contours and labels must never be mistaken for troughs.
 - There is no trustworthy separate UKMO snow field in the present data. No
   subtraction of unrelated precipitation fields or temperature-only snow guess.
