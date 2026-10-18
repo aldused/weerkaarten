@@ -33,11 +33,11 @@ function* significantRows(fields,bounds,resolutionKm=9){
  const step=Math.max(.006,resolutionKm/333),nx=Math.max(2,Math.min(1200,Math.ceil((east-west)*Math.cos((south+north)/2*Math.PI/180)/step)+1)),ny=Math.max(2,Math.min(1200,Math.ceil((north-south)/step)+1));
  const grid={n_lon:nx,n_lat:ny,lon_min:west,lon_max:east,lat_min:south,lat_max:north},values=new Float32Array(nx*ny);
  const longitudes=Float64Array.from({length:nx},(_,x)=>west+x*(east-west)/(nx-1)),latitudes=Float64Array.from({length:ny},(_,y)=>south+y*(north-south)/(ny-1));
- const samplers=new Map();
+ const samplers=new Map(),shared={};
  for(const [name,field] of Object.entries(fields)){
   for(const key of ['values',...(name==='cloud_cover'?['cloudLow','cloudMid','cloudHigh']:[])]){
    const array=key==='values'?field.data.values:field[key];
-   if(array){const sampler=createGaussianAreaSampler(field.grid,array,longitudes,latitudes);if(sampler)samplers.set(array,sampler);}
+   if(array){const sampler=createGaussianAreaSampler(field.grid,array,longitudes,latitudes,shared);if(sampler)samplers.set(array,sampler);}
   }
  }
  const sampledRows=new Map();let column=0;
@@ -55,6 +55,47 @@ function* significantRows(fields,bounds,resolutionKm=9){
  return {values,metadata:{kind:'regular',grid,bounds,variable:'significant_weather'}};
 }
 
+// Thunderstorm-only layer: the same indication as significantCode (which tests
+// it first), without classifying clouds, fog or precipitation for ~1M points.
+// CAPE < 100 can never qualify, so rows without such a value skip the other
+// fields entirely; the result is identical to the full classification.
+function* thunderRows(fields,bounds,resolutionKm=9){
+ const [west,south,east,north]=bounds;
+ const step=Math.max(.006,resolutionKm/333),nx=Math.max(2,Math.min(1200,Math.ceil((east-west)*Math.cos((south+north)/2*Math.PI/180)/step)+1)),ny=Math.max(2,Math.min(1200,Math.ceil((north-south)/step)+1));
+ const grid={n_lon:nx,n_lat:ny,lon_min:west,lon_max:east,lat_min:south,lat_max:north},values=new Float32Array(nx*ny);
+ const longitudes=Float64Array.from({length:nx},(_,x)=>west+x*(east-west)/(nx-1)),latitudes=Float64Array.from({length:ny},(_,y)=>south+y*(north-south)/(ny-1));
+ const samplers={},shared={};
+ for(const name of ['cape','showers','convective_inhibition','temperature_500hPa']){
+  const field=fields[name];if(field)samplers[name]=createGaussianAreaSampler(field.grid,field.data.values,longitudes,latitudes,shared);
+ }
+ const rowOf=(name,y,lat)=>{
+  const field=fields[name];if(!field)return null;
+  const sampler=samplers[name];if(sampler)return sampler.row(y);
+  const row=new Float64Array(nx);
+  for(let x=0;x<nx;x++)row[x]=field.grid.getInterpolatedValue(field.data.values,lat,longitudes[x],'monotone');
+  return row;
+ };
+ for(let y=0;y<ny;y++){
+  const lat=latitudes[y],cape=rowOf('cape',y,lat);
+  if(cape){
+   let any=false;for(let x=0;x<nx;x++)if(cape[x]>=100){any=true;break;}
+   if(any){
+    const capeCopy=Float64Array.from(cape),showers=rowOf('showers',y,lat),cin=rowOf('convective_inhibition',y,lat),t500=rowOf('temperature_500hPa',y,lat);
+    if(showers&&cin)for(let x=0;x<nx;x++)if(thunderstormIndication({cape:capeCopy[x],showers:showers[x],cin:cin[x],temperature500:t500?t500[x]:NaN}))values[y*nx+x]=9;
+   }
+  }
+  yield;
+ }
+ return {values,metadata:{kind:'regular',grid,bounds,variable:'thunderstorm'}};
+}
+export async function buildThunderFieldAsync(fields,bounds,resolutionKm=9,signal,{yieldTask=()=>globalThis.scheduler?.yield?globalThis.scheduler.yield():new Promise(resolve=>setTimeout(resolve,0)),now=()=>performance.now(),budgetMs=6}={}){
+ const rows=thunderRows(fields,bounds,resolutionKm);let start=now();
+ for(;;){
+  signal?.throwIfAborted();
+  const result=rows.next();if(result.done)return result.value;
+  if(now()-start>=budgetMs){await yieldTask();start=now();}
+ }
+}
 export function buildSignificantField(fields,bounds,resolutionKm=9){
  const rows=significantRows(fields,bounds,resolutionKm);let result;
  do{result=rows.next();}while(!result.done);

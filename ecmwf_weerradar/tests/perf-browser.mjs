@@ -58,7 +58,8 @@ const {targetId} = await send('Target.createTarget', {url: 'about:blank'});
 const {sessionId} = await send('Target.attachToTarget', {targetId, flatten: true});
 const call = (method, params) => send(method, params, sessionId);
 await call('Page.enable'); await call('Runtime.enable'); await call('Network.enable');
-await call('Emulation.setDeviceMetricsOverride', {width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: false});
+await call('Emulation.setDeviceMetricsOverride', {width: WIDTH, height: HEIGHT, deviceScaleFactor: Number(args.dpr || 1), mobile: false});
+if (args.cpu) await call('Emulation.setCPUThrottlingRate', {rate: Number(args.cpu)});
 if (MBIT) await call('Network.emulateNetworkConditions', {offline: false, latency: LATENCY, downloadThroughput: MBIT * 1e6 / 8, uploadThroughput: MBIT * 1e6 / 8});
 
 const bootstrap = `
@@ -89,6 +90,7 @@ for (let run = 0; run < RUNS; run++) {
   await sleep(150);
   if (!warm) await call('Storage.clearDataForOrigin', {origin: new URL(URL_BASE).origin, storageTypes: 'all'});
   const started = Date.now();
+  if (args.cpuprofile) { await call('Profiler.enable'); await call('Profiler.start'); }
   await call('Page.navigate', {url: URL_BASE});
   await once('Page.loadEventFired');
   const markers = await evaluate(`(async()=>{
@@ -106,7 +108,7 @@ for (let run = 0; run < RUNS; run++) {
     const profile=inShell?host.defaultView.weerlabProfile:globalThis.weerlabProfile;
     const samples=profile?profile.samples():[];
     const perVariable={};
-    for(const s of samples){(perVariable[s.v]??={n:0,render:0});perVariable[s.v].n++;perVariable[s.v].render+=s.render;}
+    for(const s of samples){(perVariable[s.v]??={n:0,render:0,rt:0});perVariable[s.v].n++;perVariable[s.v].render+=s.render;perVariable[s.v].rt+=s.ms;}
     for(const k in perVariable)perVariable[k].avg=Math.round(perVariable[k].render/perVariable[k].n);
     return {
       firstPaint:paint?Math.round(paint.startTime):null,
@@ -123,12 +125,13 @@ for (let run = 0; run < RUNS; run++) {
       stats:profile?profile.stats():null,perVariable,inShell,
       shellToMapMs:Math.round(t0-shellStart),
       memoryMB:performance.memory?Math.round(performance.memory.usedJSHeapSize/1048576):null,
-      stress:${args.stress ? `await (async()=>{const host3=document.getElementById("app")?document:document.querySelector("#product-frame").contentDocument;const app3=host3.getElementById("app");const profile3=host3.defaultView.weerlabProfile;const samples=[];const steps=${Number(args.stress)};for(let i=0;i<steps;i++){const button=i%8===7?"previous":"next";const before=app3.dataset.validTime;const started=performance.now();host3.getElementById(button).click();await waitFor(()=>app3.dataset.frameStatus==="ready"&&app3.dataset.validTime!==before,20000);samples.push(Math.round(performance.now()-started));await new Promise(r=>setTimeout(r,120));}samples.sort((a,b)=>a-b);return {stappen:steps,mediaan:samples[Math.floor(samples.length/2)],p90:samples[Math.floor(samples.length*0.9)],max:samples.at(-1),heapMB:host3.defaultView.performance.memory?Math.round(host3.defaultView.performance.memory.usedJSHeapSize/1048576):null,stats:profile3?profile3.stats():null};})()` : 'null'},
-      interactions:${args.interactions ? 'await (async()=>{const out={};const app=(document.getElementById("app")||document.querySelector("#product-frame").contentDocument.getElementById("app"));const host2=document.getElementById("app")?document:document.querySelector("#product-frame").contentDocument;const press=async(id)=>{const before=app.dataset.validTime;const started=performance.now();host2.getElementById(id).click();await waitFor(()=>app.dataset.frameStatus==="ready"&&app.dataset.validTime!==before);return Math.round(performance.now()-started);};const mode=async(name)=>{const started=performance.now();host2.querySelector(`[data-mode=${name}]`).click();await waitFor(()=>app.dataset.frameStatus==="ready"&&host2.querySelector(`[data-mode=${name}]`).getAttribute("aria-pressed")==="true");return Math.round(performance.now()-started);};await new Promise(r=>setTimeout(r,900));out.volgende=await press("next");await new Promise(r=>setTimeout(r,700));out.volgende2=await press("next");await new Promise(r=>setTimeout(r,700));out.terug=await press("previous");await new Promise(r=>setTimeout(r,500));out.temperatuur=await mode("temperature");await new Promise(r=>setTimeout(r,500));out.weerTerug=await mode("weather");await new Promise(r=>setTimeout(r,500));out.wind=await mode("wind");return out;})()' : 'null'},
+      stress:${args.stress ? `await (async()=>{const host3=document.getElementById("app")?document:document.querySelector("#product-frame").contentDocument;const app3=host3.getElementById("app");const profile3=host3.defaultView.weerlabProfile;const samples=[];const steps=${Number(args.stress)};for(let i=0;i<steps;i++){const button=i%8===7?"previous":"next";const before=app3.dataset.validTime;const started=performance.now();host3.getElementById(button).click();await waitFor(()=>app3.dataset.frameStatus==="ready"&&app3.dataset.validTime!==before,20000);samples.push(Math.round(performance.now()-started));await new Promise(r=>setTimeout(r,${Number(args.settle||120)}));}const alleRaw=samples.slice();samples.sort((a,b)=>a-b);return {alle:alleRaw,stappen:steps,mediaan:samples[Math.floor(samples.length/2)],p90:samples[Math.floor(samples.length*0.9)],max:samples.at(-1),heapMB:host3.defaultView.performance.memory?Math.round(host3.defaultView.performance.memory.usedJSHeapSize/1048576):null,stats:profile3?profile3.stats():null};})()` : 'null'},
+      interactions:${args.interactions ? 'await (async()=>{const out={};const app=(document.getElementById("app")||document.querySelector("#product-frame").contentDocument.getElementById("app"));const host2=document.getElementById("app")?document:document.querySelector("#product-frame").contentDocument;const press=async(id)=>{const before=app.dataset.validTime;const started=performance.now();host2.getElementById(id).click();await waitFor(()=>app.dataset.frameStatus==="ready"&&app.dataset.validTime!==before);return Math.round(performance.now()-started);};const mode=async(name)=>{const started=performance.now();host2.querySelector(`[data-mode=${name}]`).click();await waitFor(()=>app.dataset.frameStatus==="ready"&&host2.querySelector(`[data-mode=${name}]`).getAttribute("aria-pressed")==="true");return Math.round(performance.now()-started);};await new Promise(r=>setTimeout(r,900));out.volgende=await press("next");await new Promise(r=>setTimeout(r,700));out.volgende2=await press("next");await new Promise(r=>setTimeout(r,700));out.terug=await press("previous");await new Promise(r=>setTimeout(r,500));out.temperatuur=await mode("significant");await new Promise(r=>setTimeout(r,500));out.weerTerug=await mode("weather");await new Promise(r=>setTimeout(r,500));out.wind=await mode("wind");return out;})()' : 'null'},
       biggest:res.map(r=>({u:r.name.replace(location.origin,'').slice(0,72),kb:Math.round((r.transferSize||0)/1024),ms:Math.round(r.duration),start:Math.round(r.startTime)})).sort((a,b)=>b.kb-a.kb).slice(0,14),
       byKind:res.reduce((m,r)=>{const k=r.name.includes('arcgisonline')?'esri-tegels':r.name.includes('workers.dev')?'weerdata':r.name.includes('/assets/map-details/')?'kaartdetails':r.name.includes('/assets/')?'app-assets':'overig';(m[k]??={n:0,kb:0});m[k].n++;m[k].kb+=Math.round((r.transferSize||0)/1024);return m;},{}),
     };
   })()`);
+  if (args.cpuprofile) { const {profile} = await call('Profiler.stop'); await writeFile(args.cpuprofile, JSON.stringify(profile)); }
   if (args.screenshot && run === RUNS - 1) {
     // Proof that the faster path draws the same map, not a simplified one.
     await evaluate('new Promise(r=>setTimeout(r,1500))');

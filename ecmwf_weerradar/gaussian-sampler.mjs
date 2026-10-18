@@ -76,9 +76,20 @@ export function createGaussianTileSampler(grid,values,coords,size=256){
   if(!Number.isInteger(grid.latitudeLines)||typeof grid.nxOf!=='function'||typeof grid.integral!=='function')return null;
   return samplerForGeometry(grid,values,geometryFor(grid,coords,size),size);
 }
-export function createGaussianAreaSampler(grid,values,longitudes,latitudes){
+export function createGaussianAreaSampler(grid,values,longitudes,latitudes,shared){
  if(!Number.isInteger(grid.latitudeLines)||typeof grid.nxOf!=='function'||typeof grid.integral!=='function')return null;
- return samplerForGeometry(grid,values,makeGeometry(grid,{z:0},longitudes.length,{longitudes,latitudes}),longitudes.length);
+ return samplerForGeometry(grid,values,areaGeometry(grid,longitudes,latitudes,shared),longitudes.length);
+}
+// Fields of one frame share a grid; its stencils depend on geometry only, so a
+// caller sampling several fields over the same axes may pass one `shared` memo.
+function areaGeometry(grid,longitudes,latitudes,shared){
+  if(!shared)return makeGeometry(grid,{z:0},longitudes.length,{longitudes,latitudes});
+  const key=`${grid.cacheKey||''}/${grid.latitudeLines}/${grid.nx}/${grid.ny}/${grid.nxStart}`;
+  if(shared.key!==key||shared.longitudes!==longitudes||shared.latitudes!==latitudes){
+    shared.geometry=makeGeometry(grid,{z:0},longitudes.length,{longitudes,latitudes});
+    Object.assign(shared,{key,longitudes,latitudes});
+  }
+  return shared.geometry;
 }
 function samplerForGeometry(grid,values,geometry,size){
   const horizontal=new Map(),output=new Float64Array(size);

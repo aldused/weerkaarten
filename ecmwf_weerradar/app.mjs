@@ -1,7 +1,7 @@
 import {TimeNavigation,isTimeNavigationKey} from './time-navigation.mjs';
 import {readConvectiveFields} from './convective-fields.mjs';
 import {installGestureProfile} from './gesture-profile.mjs';
-import {buildSignificantFieldAsync,significantVariables,significantType,thunderVariables,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
+import {buildSignificantFieldAsync,buildThunderFieldAsync,significantVariables,significantType,thunderVariables,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
 import {MAP_REGIONS} from './map-regions.mjs';
 import {AccumulationFields,accumulationPlan,isAccumulation} from './accumulation.mjs';
 import {totalLegend} from './accumulation-colors.mjs';
@@ -187,7 +187,7 @@ function readField(file,variable,signal){
       // Read pressure-level data only at times actually published by ECMWF.
       if(thunderVariables(frame.modelMeta).length&&fieldFile(frame,'temperature_500hPa'))variables.push('temperature_500hPa');
       const {fields,unavailable}=await readConvectiveFields(variables,v=>readField(fieldFile(frame,v),v,readSignal),readSignal);
-      readSignal.throwIfAborted();const started=performance.now();const result=await buildSignificantFieldAsync(fields,window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);result.metadata.unavailable=unavailable;$('app').dataset.significantComputeMs=Math.round(performance.now()-started);if(variable==='thunderstorm'){result.values=Float32Array.from(result.values,v=>v===9?9:0);result.metadata.variable=variable;}return result;
+      readSignal.throwIfAborted();const started=performance.now();const build=variable==='thunderstorm'?buildThunderFieldAsync:buildSignificantFieldAsync;const result=await build(fields,window.bounds,MODEL_CONFIG[modelFor(frame.modelMeta)].nativeResolutionKm,readSignal);result.metadata.unavailable=unavailable;$('app').dataset.significantComputeMs=Math.round(performance.now()-started);return result;
     })():isAccumulation(variable)?await accumulationFields.get(accumulationPlan(request.frame,request.anchor,variable),variable,window.bounds,readSignal,(done,total)=>{if(isAccumulation(variable))status(`Totaal berekenen: ${done} van ${total} tijdstappen…`);}):await fieldPackets.read(file,variable,window.bounds,readSignal);
     if(!['significant_weather','thunderstorm'].includes(variable)&&!isAccumulation(variable)&&(data.metadata.kind!=='regular'||file.includes('/ncep_gfs')))normalizeFieldData(data,variable,intervalByURL.get(file));
     const field={data,grid:data.metadata.kind==='regular'?createRegularGrid(data.metadata.grid):data.metadata.kind==='projected'?createProjectedGrid(data.metadata):createPackedGrid(data.metadata),packed:data.metadata,variable,key,ranges,gridData:domain.grid};
