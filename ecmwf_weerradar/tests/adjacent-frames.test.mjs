@@ -27,3 +27,12 @@ test('a constrained connection fetches only the next frame after the configured 
  await tick();assert.deepEqual(calls,[]);
  await new Promise(resolve=>setTimeout(resolve,30));assert.deepEqual(calls,[5]);queue.cancel();
 });
+test('selecting a neighbour keeps its in-flight preparation alive, without dispatching obsolete previous work',async()=>{
+ const queue=new AdjacentFrames({delayMs:0}),calls=[],ready=[];let finish,signal;
+ queue.start(4,10,(i,s)=>{calls.push(i);signal=s;return new Promise(r=>{finish=r;});},{ready:i=>ready.push(i)});
+ await tick();queue.cancel(5);assert.equal(signal.aborted,false);finish();await tick();assert.deepEqual(calls,[5]);assert.deepEqual(ready,[]);assert.equal(queue.promoted,null);
+});
+test('a promoted neighbour is cancelled if the user moves to another hour',async()=>{
+ const queue=new AdjacentFrames({delayMs:0});let signal,finish;
+ queue.start(4,10,(_,s)=>{signal=s;return new Promise(r=>{finish=r;});});await tick();queue.cancel(5);queue.cancel(8);assert.equal(signal.aborted,true);finish();await tick();
+});

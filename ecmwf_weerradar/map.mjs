@@ -203,8 +203,9 @@ export class Map {
     // Four frames: the selected one, both prepared neighbours and the frame
     // being prepared after a step. With three, the parallel renderers filled
     // the cache and dropped the previous frame that the user steps back to.
-    // The absolute ceiling remains 1024 tiles, never a full-day cache.
-    paintQueue.maxEntries=Math.min(1024,Math.max(32,tiles.length*fieldCount*4+8));
+    // Reserve 32 MB of the previous tile budget for complete desktop frames.
+    // Combined tile + hidden-frame ceilings remain 320 MB, never a full day.
+    paintQueue.maxEntries=Math.min(896,Math.max(32,tiles.length*fieldCount*4+8));
   }
   async prepareFields(fields,signal){
     const b=this.getBounds(),tiles=visibleWeatherTiles([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()],this.getZoom());

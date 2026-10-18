@@ -12,7 +12,11 @@ test('changed viewport/settings and incomplete or failed layers cannot be retain
  assert.equal(mayRetainFrame({...frame,ids:[]},frame.viewKey,()=>true),false);
  assert.equal(mayRetainFrame({...frame,variables:['visibility']},frame.viewKey,()=>true),false);
 });
-test('totals and other modes do not keep costly hidden layer stacks',()=>{
- for(const mode of ['rain_total','snow_total','temperature','wind'])assert.equal(mayRetainFrame({...frame,mode},frame.viewKey,()=>true),false);
+test('totals do not keep costly hidden layer stacks',()=>{
+ for(const mode of ['rain_total','snow_total'])assert.equal(mayRetainFrame({...frame,mode},frame.viewKey,()=>true),false);
  assert.equal(mayRetainFrame(null,'',()=>true),false);
+});
+
+test('cached temperature, wind and rain reuse complete layers under the same memory budget',()=>{
+ for(const mode of ['temperature','wind','rain'])assert.equal(mayRetainFrame({...frame,mode},frame.viewKey,()=>true),true);
 });

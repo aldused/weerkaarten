@@ -1,3 +1,4 @@
+import {TimeNavigation,isTimeNavigationKey} from './time-navigation.mjs';
 import {readConvectiveFields} from './convective-fields.mjs';
 import {installGestureProfile} from './gesture-profile.mjs';
 import {buildSignificantFieldAsync,significantVariables,significantType,thunderVariables,SIGNIFICANT_WEATHER} from './significant-weather.mjs';
@@ -110,6 +111,14 @@ function trimFieldCache(){
 const accumulationRequests=new Map(),significantRequests=new Map();
 // Keep two complete recent frames or modes; their keys include immutable time/run and viewport/settings.
 const retainedViews=new Map();
+const timeNavigation=new TimeNavigation(index=>{if(index===wanted)return;stopPlayback();requestFrame(index);},{cached:index=>!!frames[index]&&(retainedViews.has(viewKey(frames[index],mode))||nextFrameReady&&current?.timeline===frames&&index===(current.index+1)%frames.length)});
+$('hours').addEventListener('pointerover',event=>{
+  const button=event.target.closest('button[data-index]');
+  if(!button||button.contains(event.relatedTarget))return;
+  timeNavigation.hover(Number(button.dataset.index),event.pointerType);
+});
+$('hours').addEventListener('pointerleave',()=>timeNavigation.cancel());
+
 let modePreparation,modePreparationTimer;
 function clearRetainedViews(){for(const view of retainedViews.values())removeLayers(view.ids);retainedViews.clear();}
 function cancelModePreparation(){clearTimeout(modePreparationTimer);modePreparation?.abort();modePreparation=null;}
@@ -231,7 +240,7 @@ const movingOverlay=new MovingOverlay(map,$('places'),queueCityDraw);
 map.on('movestart',()=>movingOverlay.start());
 map.on('move',()=>movingOverlay.move());
 map.on('moveend',()=>movingOverlay.finish());
-map.on('movestart',()=>{cancelPreparation();cancelModePreparation();clearRetainedViews();});
+map.on('movestart',()=>{timeNavigation.cancel();clearTimeout(sliderTimer);cancelPreparation();cancelModePreparation();clearRetainedViews();});
 map.on('resize',()=>{queueCityDraw();clearRetainedViews();cancelModePreparation();});
 map.on('moveend', () => {
   const b=map.getBounds(); updateCurrentBounds([b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]);
@@ -339,7 +348,7 @@ async function start(prefetchedLatest,modelId=selectedModel,focusRegion=false) {
   $('model-select').setAttribute('aria-busy','true');
   const startup=++startupRevision;
   retryLoad=()=>start(undefined,modelId,focusRegion);
-  refreshing=true;stopPlayback();cancelPreparation();cancelModePreparation();clearRetainedViews();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
+  timeNavigation.cancel();refreshing=true;stopPlayback();cancelPreparation();cancelModePreparation();clearRetainedViews();clearTimeout(sliderTimer);revision++;renderController?.abort();status(`${MODELS[modelId].label}-verwachting ophalen…`);
   try {
     const now=Date.now();
     let timeline;
@@ -424,7 +433,7 @@ function syncTimeChoices(frame,pending=false){
     b.classList.toggle('is-pending',pending&&active);b.setAttribute('aria-busy',String(pending&&active));
     const changed=b.getAttribute('aria-pressed')!=='true';
     b.setAttribute('aria-pressed',String(!pending&&active||pending&&Number(b.dataset.index)===current?.index));
-    if(active&&!pending&&changed)b.scrollIntoView({block:'nearest',inline:'center'});
+    if(active&&!pending&&changed){const rect=b.getBoundingClientRect(),strip=$('hours').getBoundingClientRect();if(rect.left<strip.left||rect.right>strip.right)b.scrollIntoView({block:'nearest',inline:'nearest'});}
   }
 }
 function setMenuCollapsed(collapsed){
@@ -496,6 +505,7 @@ async function renderFrame(index,rev,signal,context){
   retryLoad=()=>requestFrame(index,true,context);
   const key=viewKey(frame,layerMode),retained=retainedViews.get(key);
   retainedViews.delete(key);
+  if(params.get('profile')==='1'){$('app').dataset.retainedFrameHit=String(!!retained);$('app').dataset.retainedFrameCount=String(retainedViews.size);}
   const initialVars=firstFrameLayers(vars,!!current);
   const ids=retained?.ids??initialVars.map(v=>addLayer(frame,v,`frame${sourceCounter}`,!current&&v==='cloud_cover'));sourceCounter++;
   // The first view reveals each layer as soon as its first tile is painted. Later time changes
@@ -565,7 +575,7 @@ async function renderFrame(index,rev,signal,context){
         old.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',0));retainedViews.set(old.viewKey,old);
       }else{removeLayers(old.ids);clearRetainedViews();}
     }
-    while(retainedViews.size>2 || [...retainedViews.values()].reduce((n,v)=>n+map.layerCanvasBytes(v.ids),0)>64*1024*1024){
+    while(retainedViews.size>(navigator.deviceMemory&&navigator.deviceMemory<=4?2:4) || [...retainedViews.values()].reduce((n,v)=>n+map.layerCanvasBytes(v.ids),0)>(navigator.deviceMemory&&navigator.deviceMemory<=4?32:96)*1024*1024){
       const [k,v]=retainedViews.entries().next().value;removeLayers(v.ids);retainedViews.delete(k);
     }
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
@@ -608,6 +618,7 @@ function loadMapDetails(){
 }
 let renderController;
 async function requestFrame(index,force=false,context={meta,timeline:frames,fullTimeline:current?.fullTimeline}){
+  timeNavigation.cancel();clearTimeout(sliderTimer);
   if(!context.timeline.length)return;
   const fullTimeline=context.fullTimeline||context.timeline;
   const variable=mode==='temperature'?tempVariable(modelFor(context.meta)):null;
@@ -621,7 +632,7 @@ async function requestFrame(index,force=false,context={meta,timeline:frames,full
   const target=Math.min(context.timeline.length-1,Math.max(0,index));
   if(!force&&rendering&&wanted===target&&requestedContext?.timeline===context.timeline)return;
   requestedContext=context;
-  cancelPreparation();
+  cancelPreparation(target);
   if(current?.url!==context.timeline[target].url)cancelModePreparation();
   wanted=target;revision++;
   renderController?.abort();
@@ -735,8 +746,8 @@ function syncUI(){
     snowLegend.querySelectorAll('.legend-numbers span').forEach((el,i)=>el.textContent=snow.labels[i]);
   }
 }
-function cancelPreparation(){
-  adjacentFrames.cancel();clearTimeout(playTimer);nextFrameReady=false;
+function cancelPreparation(preserveIndex){
+  adjacentFrames.cancel(preserveIndex);clearTimeout(playTimer);nextFrameReady=false;
   $('play').disabled=!playing;$('app').dataset.nextFrameReady='false';
   $('play').title=playing?'Animatie pauzeren':'Volgende beeld wordt voorbereid…';
 }
@@ -747,14 +758,15 @@ function prepareAdjacentFrames(){
   const connection=navigator.connection;
   const limited=connection?.saveData||['slow-2g','2g','3g'].includes(connection?.effectiveType)||matchMedia('(max-width:700px), (pointer:coarse)').matches;
   adjacentFrames.start(frame.index,frame.timeline.length,async(index,signal)=>{
-    // Let the selected view and its map labels finish first on slow links.
-    await Promise.all([detailsReady,startupDetailsReady]);signal.throwIfAborted();
+    // The selected map is already ready. Optional city/border downloads must
+    // not delay weather preparation for the next requested hour.
+    signal.throwIfAborted();
     const next=frame.timeline[index],vars=variablesForMode(next.modelMeta,next);
     const sampleVars=sampleVariables(vars,next.modelMeta);
     const fields=await Promise.all(sampleVars.map(v=>readField(fieldFile(next,v),v,signal)));
     signal.throwIfAborted();
     await map.prepareFields(fields.filter(f=>vars.includes(f.variable)).map(f=>({...f,texture,cloudVisible,cloudDisplay:cloudDisplay()})),signal);
-  },{previous:!limited,delayMs:limited?1200:350,ready:()=>{
+  },{previous:!limited,delayMs:limited?1200:150,ready:()=>{
     if(current!==frame)return;
     nextFrameReady=true;$('app').dataset.nextFrameReady='true';$('play').disabled=false;$('play').title='Afspelen / pauzeren';
     if(playing)scheduleNext();
@@ -772,7 +784,7 @@ $('now').addEventListener('click',()=>{stopPlayback();const index=nowFrameIndex(
 $('previous').addEventListener('click',()=>{stopPlayback();requestFrame(wanted-1);});
 $('next').addEventListener('click',()=>{stopPlayback();requestFrame(wanted+1);});
 let sliderTimer;
-$('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);sliderTimer=setTimeout(()=>requestFrame(target),130);});
+$('time-slider').addEventListener('input',()=>{stopPlayback();clearTimeout(sliderTimer);const target=nearestIndex(frames,frames[0].time+Number($('time-slider').value)*HOUR);$('time-slider').setAttribute('aria-valuetext',`Laden: ${forecastLabel(frames[target].time).text}`);if(retainedViews.has(viewKey(frames[target],mode)))requestFrame(target);else sliderTimer=setTimeout(()=>requestFrame(target),65);});
 let isobarsBeforeSignificant=false;
 function setMode(nextMode){
   if(mode===nextMode)return;
@@ -867,17 +879,22 @@ document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',
 $('info-toggle').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
 $('info').addEventListener('click',e=>{if(e.target===$('info')){const r=$('info').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('info').close();}});
 $('retry').addEventListener('click',()=>retryLoad());
+// Capture before Leaflet consumes arrow keys for panning. Time navigation
+// also works after a map click, while native editors and dialogs keep their keys.
 document.addEventListener('keydown',e=>{
   if(e.defaultPrevented)return;
-  if(!$('area-overlay').hidden)return;
-  if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
-  if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]')||document.querySelector('dialog[open]'))return;
-  if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)&&(!e.target.closest('button')||e.target.closest('.timeline'))){
-    e.preventDefault();stopPlayback();requestFrame(e.key==='Home'?0:e.key==='End'?frames.length-1:wanted+(e.key==='ArrowRight'?1:-1));
+  if(!$('area-overlay').hidden||document.querySelector('dialog[open]'))return;
+  if(isTimeNavigationKey(e)&&frames.length&&!refreshing){
+    e.preventDefault();e.stopPropagation();timeNavigation.cancel();clearTimeout(sliderTimer);stopPlayback();
+    requestFrame(e.key==='Home'?0:e.key==='End'?frames.length-1:wanted+(e.key==='ArrowRight'?1:-1));
+    return;
   }
+  if(e.defaultPrevented)return;
+  if(e.key==='Escape'){$('settings').hidden=true;$('settings-toggle').setAttribute('aria-expanded','false');$('search-form').hidden=true;closePoint();}
+  if(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('input,select,textarea,dialog,#map,[contenteditable=true]'))return;
   if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();$('play').click();}
-});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stopPlayback();cancelPreparation();cancelModePreparation();}else prepareAdjacentFrames();});
+},{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){timeNavigation.cancel();clearTimeout(sliderTimer);stopPlayback();cancelPreparation();cancelModePreparation();}else prepareAdjacentFrames();});
 
 function sample(sampleData,lat,lon){
   if(!sampleData?.data?.values)return NaN;
