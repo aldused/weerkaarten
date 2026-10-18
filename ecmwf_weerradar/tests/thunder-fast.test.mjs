@@ -25,3 +25,21 @@ test('thunder-only builder equals full classification restricted to code 9',asyn
     for(let i=0;i<full.values.length;i++)assert.equal(fast.values[i],full.values[i]===9?9:0,'index '+i);
   }
 });
+
+import {significantCode,lazySignificantCode} from '../significant-weather.mjs';
+import {cloudIconType} from '../cloud-style.mjs';
+import {fogBand} from '../fog-style.mjs';
+test('lazy significant code equals eager significantCode on random points',()=>{
+  let seed=12345;const rnd=()=>(seed=(seed*1664525+1013904223)>>>0)/2**32;
+  const pick=(...opts)=>opts[Math.floor(rnd()*opts.length)];
+  for(let n=0;n<20000;n++){
+    const v={cape:pick(NaN,0,50,150,900,rnd()*1500),showers:pick(NaN,0,.1,.4,rnd()),cin:pick(NaN,0,10,60,rnd()*80),t500:pick(NaN,-30,-20,rnd()*-40),
+      precipitation:pick(NaN,-1,0,.01,.04,.2,rnd()*3),snow:pick(NaN,0,.04,.1,rnd()),vis:pick(NaN,-5,50,500,9000,rnd()*20000),
+      low:pick(NaN,0,10,30,rnd()*100),mid:pick(NaN,0,10,30,rnd()*100),high:pick(NaN,0,10,40,rnd()*100)};
+    const sample=(name,lat,lon,array)=>({cape:v.cape,showers:v.showers,convective_inhibition:v.cin,temperature_500hPa:v.t500,precipitation:v.precipitation,snowfall_water_equivalent:v.snow,visibility:v.vis,cloud_cover:array==='L'?v.low:array==='M'?v.mid:v.high})[name];
+    const cloud={cloudLow:'L',cloudMid:'M',cloudHigh:'H'};
+    const eager=significantCode({temperature500:v.t500,cape:v.cape,showers:v.showers,cin:v.cin,precipitation:v.precipitation,snowfall:v.snow,cloud:cloudIconType(v.low,v.mid,v.high),low:v.low,mid:v.mid,high:v.high,fog:fogBand(v.vis)});
+    const lazy=lazySignificantCode(sample,cloud,0,0);
+    assert.ok(Object.is(eager,lazy),JSON.stringify([v,eager,lazy]));
+  }
+});

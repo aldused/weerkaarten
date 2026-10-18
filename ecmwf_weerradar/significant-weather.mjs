@@ -1,5 +1,6 @@
 import {createGaussianAreaSampler} from './gaussian-sampler.mjs';
 import {weatherSymbol} from './weather-symbols.mjs';
+import {PRECIPITATION_THRESHOLD} from './precipitation-colors.mjs';
 import {cloudIconType} from './cloud-style.mjs';
 import {fogBand} from './fog-style.mjs';
 export const SIGNIFICANT_WEATHER=[
@@ -26,6 +27,29 @@ export function thunderstormIndication({cape,showers,cin,temperature500}){
 }
 export function significantVariables(meta){return ['precipitation','cloud_cover',...thunderVariables(meta),...['visibility','snowfall_water_equivalent'].filter(v=>meta.variables.includes(v))];}
 export function significantCode(input){if(thunderstormIndication(input))return 9;const type=weatherSymbol(input);return type&&['clear','filtered'].includes(type)&&input.high>=30&&input.low<25&&input.mid<25?8:codes[type]??NaN;}
+// Same result as significantCode(all inputs), but fields that cannot change
+// the outcome are not interpolated: thunder needs CAPE >= 100, and rain or
+// snow decide the code before cloud layers and visibility matter.
+export function lazySignificantCode(sample,cloud,lat,lon){
+ const cape=sample('cape',lat,lon);
+ if(cape>=100){
+  const showers=sample('showers',lat,lon),cin=sample('convective_inhibition',lat,lon);
+  if(thunderstormIndication({temperature500:sample('temperature_500hPa',lat,lon),cape,showers,cin}))return 9;
+ }
+ const precipitation=sample('precipitation',lat,lon),snowfall=sample('snowfall_water_equivalent',lat,lon);
+ let type;
+ if(Number.isFinite(snowfall)&&snowfall>=PRECIPITATION_THRESHOLD)type=Number.isFinite(precipitation)&&precipitation-snowfall>=PRECIPITATION_THRESHOLD?'mixed':'snow';
+ else if(Number.isFinite(precipitation)&&precipitation>=PRECIPITATION_THRESHOLD)type='rain';
+ else if(fogBand(sample('visibility',lat,lon)))type='fog';
+ else if(!Number.isFinite(precipitation)||precipitation<0)type=null;
+ else{
+  const low=cloud?.cloudLow?sample('cloud_cover',lat,lon,cloud.cloudLow):NaN,mid=cloud?.cloudMid?sample('cloud_cover',lat,lon,cloud.cloudMid):NaN,high=cloud?.cloudHigh?sample('cloud_cover',lat,lon,cloud.cloudHigh):NaN;
+  const icon=cloudIconType(low,mid,high);
+  type=['clear','filtered','overcast'].includes(icon)?icon:null;
+  if(type&&['clear','filtered'].includes(type)&&high>=30&&low<25&&mid<25)return 8;
+ }
+ return codes[type]??NaN;
+}
 function* significantRows(fields,bounds,resolutionKm=9){
  const [west,south,east,north]=bounds;
  // Interpolate physical fields before classification for finer boundaries.
@@ -46,9 +70,8 @@ function* significantRows(fields,bounds,resolutionKm=9){
  for(const [array,sampler] of samplers)sampledRows.set(array,sampler.row(y));
  for(let x=0;x<nx;x++){
   column=x;
-  const lat=south+y*(north-south)/(ny-1),lon=west+x*(east-west)/(nx-1),cloud=fields.cloud_cover;
-  const layers=['cloudLow','cloudMid','cloudHigh'].map(k=>cloud?.[k]?sample('cloud_cover',lat,lon,cloud[k]):NaN);
-  values[y*nx+x]=significantCode({temperature500:sample('temperature_500hPa',lat,lon),cape:sample('cape',lat,lon),showers:sample('showers',lat,lon),cin:sample('convective_inhibition',lat,lon),precipitation:sample('precipitation',lat,lon),snowfall:sample('snowfall_water_equivalent',lat,lon),cloud:cloudIconType(...layers),low:layers[0],mid:layers[1],high:layers[2],fog:fogBand(sample('visibility',lat,lon))});
+  const lat=south+y*(north-south)/(ny-1),lon=west+x*(east-west)/(nx-1);
+  values[y*nx+x]=lazySignificantCode(sample,fields.cloud_cover,lat,lon);
  }
  yield;
  }
