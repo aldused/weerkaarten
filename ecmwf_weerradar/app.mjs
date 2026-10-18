@@ -518,6 +518,7 @@ function awaitSources(ids,signal){
     ids.forEach(id=>pendingSources.set(id,check));map.on('sourcedata',check);if(signal?.aborted)abort();else check();
   });
 }
+let loadingNoticeTimer;
 async function renderFrame(index,rev,signal,context){
   const started=performance.now();
   viewportController?.abort();viewportRevision++;pointController?.abort();
@@ -545,7 +546,11 @@ async function renderFrame(index,rev,signal,context){
     };
     map.on('sourcedata',reveal);
   }
-  status(`Laden: ${forecastLabel(frame.time).text}…`);
+  // The previous hour stays visible while the next one is prepared, so a
+  // loading notice is only useful for the first map or a really slow source.
+  clearTimeout(loadingNoticeTimer);
+  if(!current)status(`Laden: ${forecastLabel(frame.time).text}…`);
+  else loadingNoticeTimer=setTimeout(()=>{if(rev===revision&&$('app').dataset.frameStatus==='loading')status(`Laden: ${forecastLabel(frame.time).text}…`);},1500);
   $('app').dataset.frameStatus='loading';
   try {
     const allSampleVars=sampleVariables(vars,modelMeta);

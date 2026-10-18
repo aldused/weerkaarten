@@ -2,7 +2,9 @@
  * the small dwell, while explicit clicks/keys always take effect immediately.
  */
 export class TimeNavigation {
-  constructor(select,{delayMs=65,cached=()=>false,setTimer=setTimeout,clearTimer=clearTimeout}={}){
+  constructor(select,{delayMs=65,cached=()=>false,setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id)}={}){
+    // Wrapped timers: calling setTimeout as a method of this object throws
+    // "Illegal invocation" in browsers, which silently broke hover scrubbing.
     this.select=select;this.delayMs=delayMs;this.cached=cached;this.setTimer=setTimer;this.clearTimer=clearTimer;this.timer=null;this.pending=null;
   }
   cancel(){if(this.timer!==null)this.clearTimer(this.timer);this.timer=null;this.pending=null;}
