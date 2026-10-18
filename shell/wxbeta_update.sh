@@ -12,6 +12,7 @@ RCLONE="/opt/homebrew/bin/rclone"
 # De primaire ECMWF-portal kan bij drukte langdurig op 429 blijven hangen.
 # De officiële Google Cloud-spiegel bevat dezelfde Open Data-runs en is hiervoor de
 # standaardbron; handmatig overschrijven blijft mogelijk via de omgeving.
+export WXBETA_PUBLISH_PROGRESS=1
 export ECMWF_OPEN_DATA_SOURCE="${ECMWF_OPEN_DATA_SOURCE:-google}"
 
 cd "$ROOT"
