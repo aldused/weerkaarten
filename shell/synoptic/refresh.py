@@ -1,6 +1,6 @@
 """Build an immutable, complete synoptic map set; publish its pointer last.
-Front overlays require reviewed geometry for the exact source cycle. Missing
-review disables the overlay while fresh weather and source charts are published.
+Front overlays use exact-cycle reviewed geometry or official coloured source ink.
+Missing fronts never block fresh weather; black troughs require reviewed geometry.
 """
 import html as html_module
 import argparse,datetime as dt,fcntl,hashlib,json,os,re,shutil,subprocess,sys,tempfile,urllib.request

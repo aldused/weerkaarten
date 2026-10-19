@@ -9,7 +9,7 @@ def prepare(run,frames,urls,get,directory):
  images=[];entries={}
  for frame in frames:
   lead=int((dt.datetime.fromisoformat(frame['valid'].replace('Z','+00:00'))-run).total_seconds()/3600)
-  matching=[u for u in urls if '/colour/'+run.strftime('%Y-%m-%dT%H%M')+'/' in u and re.search(r'_'+str(lead)+r'\.gif$',u)]
+  matching=[u for u in urls if '/colour/'+run.strftime('%Y-%m-%dT%H%M')+'/' in u and re.search(r'_(\d+)\.gif$',u) and int(re.search(r'_(\d+)\.gif$',u)[1])==lead]
   if len(matching)!=1:raise ValueError('Geen eenduidige officiële kleurenbron voor '+frame['valid'])
   raw=get(matching[0]);image=Image.open(io.BytesIO(raw)).convert('RGB')
   if image.size!=(800,540):raise ValueError('Onbekende Bracknell-afmetingen')
