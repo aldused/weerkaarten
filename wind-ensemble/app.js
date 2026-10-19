@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id),ROOT='https://data.weerlab.nl/wind-six/'
 const names=['Operationeel','Ensemblegemiddelde','Ensemblemaximum'],thresholds=[.3,1.6,3.4,5.5,8,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
 const windColors=['#f1f3f0','#dfeee3','#b6dfd0','#72cbbb','#35b3b2','#329cd0','#6c8dc9','#a596d5','#d69dca','#eda991','#f18a65','#dc575a','#b32d58'];
 const gustColors=['#e4eef0','#b8dedb','#6acdbb','#36b3a5','#35a6c8','#478cd2','#7d79c4','#b773b9','#d97aab','#ee8c91','#f2a174','#ef9250','#e77144','#d04f4d','#b23262','#862c6a','#542663'];
-export const beaufort=ms=>thresholds.filter(t=>ms>=t).length;
+export const beaufort=ms=>thresholds.filter(t=>ms+1e-6>=t).length;
 let manifest,data,fields,rows,geo,index=0,cycle='',token=0,timer=null;
 const width=740,height=770,bounds=[2.6,8,50.35,54.15],merc=lat=>Math.log(Math.tan(Math.PI/4+lat*Math.PI/360));
 const xy=(lon,lat)=>[(lon-bounds[0])/(bounds[1]-bounds[0])*width,(merc(bounds[3])-merc(lat))/(merc(bounds[3])-merc(bounds[2]))*height];
@@ -36,7 +36,7 @@ function hover(event,n){if(!data)return;const box=event.currentTarget.getBoundin
 function stop(){clearInterval(timer);timer=null;$('play').textContent='▶ Afspelen';}
 async function select(cc){
  const entry=manifest.runs[cc];if(!entry)return;stop();const request=++token,previous=data?.times[index];$('status').textContent='Volledige zesluik laden…';$('download').disabled=true;
- try{const response=await fetch(ROOT+entry.file);if(!response.ok)throw Error('Bronbestand ontbreekt');const next=await response.json();if(next.members!==51||next.fields.length!==6||next.shape[0]!==next.times.length||next.shape[1]!==next.coordinates.length||next.shape[2]!==6)throw Error('Onvolledige ensembledata');const bytes=Uint8Array.from(atob(next.data),c=>c.charCodeAt(0));if(bytes.byteLength!==next.shape.reduce((a,b)=>a*b,1)*2)throw Error('Onvolledige velden');if(request!==token)return;fields=new Uint16Array(bytes.buffer);data=next;cycle=cc;
+ try{const response=await fetch(ROOT+entry.file);if(!response.ok)throw Error('Bronbestand ontbreekt');const next=await response.json();if(next.members!==51||next.fields.length!==6||next.shape[0]!==next.times.length||next.shape[1]!==next.coordinates.length||next.shape[2]!==6)throw Error('Onvolledige ensembledata');const bytes=Uint8Array.from(atob(next.data),c=>c.charCodeAt(0));const float=next.encoding==='float32le-base64';if(bytes.byteLength!==next.shape.reduce((a,b)=>a*b,1)*(float?4:2))throw Error('Onvolledige velden');if(request!==token)return;fields=float?new Float32Array(bytes.buffer):new Uint16Array(bytes.buffer);data=next;cycle=cc;
   const groups=new Map();data.coordinates.forEach(([lat,lon],id)=>{const key=lat.toFixed(5);if(!groups.has(key))groups.set(key,{lat,points:[]});groups.get(key).points.push({lon,id});});rows=[...groups.values()].sort((a,b)=>a.lat-b.lat);rows.forEach(row=>row.points.sort((a,b)=>a.lon-b.lon));
   index=previous?data.times.indexOf(previous):-1;if(index<0)index=Math.max(0,data.times.findIndex(t=>Date.parse(t)>=Date.now()));$('time').disabled=data.times.length<2;$('play').disabled=data.times.length<2;$('time').max=data.times.length-1;$('time').value=index;
   document.querySelectorAll('#runs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.c===cc)));$('source').textContent=`Run ${new Date(data.run).toISOString().slice(0,16).replace('T',' ')} UTC · ${data.resolution} · 51 leden`;

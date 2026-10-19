@@ -88,9 +88,9 @@ def build(model,run,cache):
  after=metadata(model,run if native else None)
  if run_of(after)!=run or before.get('created_at',before.get('last_run_modification_time'))!=after.get('created_at',after.get('last_run_modification_time')):raise ValueError('Bron wijzigde tijdens de opbouw')
  coordinates=sorted(unique);data=np.stack([unique[p] for p in coordinates],axis=1)
- encoded=np.rint(data*10).astype('<u2')
+ encoded=data.astype('<f4')
  with (cache/'usage.jsonl').open('a') as log:log.write(json.dumps(dict(consumer='wind-six',model=model,run=iso(run),locations=len(points),requests=len(batches),members=51,fields=2))+'\n')
- return dict(run=iso(run),sourceModel=model,resolution='9 km · native O1280' if native else '0,25° · circa 25 km',members=51,coordinates=coordinates,times=valid,fields=['oper_wind','oper_gust','mean_wind','mean_gust','max_wind','max_gust'],encoding='uint16le-base64',scale=.1,units='m/s',gustIntervalHours=3,shape=list(encoded.shape),data=base64.b64encode(encoded.tobytes()).decode())
+ return dict(run=iso(run),sourceModel=model,resolution='9 km · native O1280' if native else '0,25° · circa 25 km',members=51,coordinates=coordinates,times=valid,fields=['oper_wind','oper_gust','mean_wind','mean_gust','max_wind','max_gust'],encoding='float32le-base64',scale=1,units='m/s',gustIntervalHours=3,shape=list(encoded.shape),data=base64.b64encode(encoded.tobytes()).decode())
 def publish_entry(out,key,entry,publish):
  import fcntl
  with (out/'publish.lock').open('w') as lock:
