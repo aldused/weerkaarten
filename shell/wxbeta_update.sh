@@ -9,9 +9,8 @@ ROOT="/Users/aldus/KNMI_Project"
 WEERLAB="$ROOT/weerlab"
 PY="/usr/local/bin/python3"
 RCLONE="/opt/homebrew/bin/rclone"
-# De primaire ECMWF-portal kan bij drukte langdurig op 429 blijven hangen.
-# De officiële Google Cloud-spiegel bevat dezelfde Open Data-runs en is hiervoor de
-# standaardbron; handmatig overschrijven blijft mogelijk via de omgeving.
+# De officiële Google Cloud-spiegel biedt dezelfde ECMWF Open Data.
+# Begrens bronfouten zodat een mislukte verbinding latere cycli niet blokkeert.
 export WXBETA_PUBLISH_PROGRESS=1
 export ECMWF_OPEN_DATA_SOURCE="${ECMWF_OPEN_DATA_SOURCE:-google}"
 
@@ -40,7 +39,7 @@ echo "=== $(date '+%F %T') wxbeta-check ==="
 
 BUILD_LOG="$(mktemp -t wxbeta_build.XXXXXX)"
 MAX_BUILD_SECONDS="${WXBETA_MAX_BUILD_SECONDS:-3600}"
-"$PY" build_wxbeta.py >"$BUILD_LOG" 2>&1 &
+"$PY" -u -c 'import runpy,sys; sys.path.insert(0,"/Users/aldus/KNMI_Project/weerlab/shell"); from wxbeta_network import configure; configure(); runpy.run_path("build_wxbeta.py",run_name="__main__")'  >"$BUILD_LOG" 2>&1 &
 BUILD_PID=$!
 SECONDS=0
 
@@ -68,7 +67,7 @@ if ! wait "$BUILD_PID"; then
 fi
 OUT="$(<"$BUILD_LOG")"
 rm -f "$BUILD_LOG"
-echo "$OUT" | grep -E "^[0-9]{2}Z|WIJZIGING|geen wijziging|Meta:" || true
+echo "$OUT" | grep -E "^[0-9]{2}Z|WIJZIGING|geen wijziging|Meta:|^CAMS:" || true
 
 if echo "$OUT" | grep -q "WIJZIGING"; then
   echo "$(date '+%F %T') nieuwe run(s) → upload naar R2 + publiceren"
