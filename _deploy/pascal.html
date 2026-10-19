@@ -418,6 +418,21 @@ function dataStatus(meta, now = Date.now(), loadFailed = false, hasData = true) 
   return { code: loadFailed ? 'stale-fetch' : 'ok', label: loadFailed ? 'Actueel · laatste controle mislukt' : 'Actueel', ageH };
 }
 
+/* ── run-achterstand: loopt de gepubliceerde run achter op de nieuwste ECMWF-run? ───── */
+const GRACE_MIN = 90;   // zoveel tijd mag verwerking duren na beschikbaarheid van de nieuwste run
+function runLag(publishedIso, latest, now = Date.now()) {
+  // latest = { iso, completeAt (ms) } of null (onbekend → geen uitspraak, nooit "ok" claimen)
+  const pub = Date.parse(publishedIso);
+  if (!latest || !isFinite(Date.parse(latest.iso)) || !isFinite(pub)) return { code: 'unknown' };
+  if (Date.parse(latest.iso) <= pub) return { code: 'ok' };
+  const waitedMin = latest.completeAt ? Math.max(0, (now - latest.completeAt) / 60000) : GRACE_MIN + 1;
+  return { code: waitedMin > GRACE_MIN ? 'behind' : 'processing', waitedMin, latestIso: latest.iso };
+}
+function ifsSource(meta) {
+  const s = (meta.sources || []).map(x => x.id);
+  return s.includes('grib') ? 'native' : s.includes('om') ? 'openmeteo' : 'none';
+}
+
 /* ── datavalidatie: nooit waarden aanpassen, alleen melden ──────────────── */
 function validate(data) {
   const out = { errors: [], warnings: [], checked: 0 };
@@ -582,7 +597,7 @@ function luminance(hex) {
 function contrast(a, b) { const l1 = luminance(a), l2 = luminance(b); return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05); }
 
 if (typeof module !== 'undefined') module.exports = { fmtP, bin, BIN_EDGES, BIN_LABELS, diffPP, fmtPP, parseDay, dayParts, dayShort, dayLong, amsterdamDate, tzAbbr, fmtDateTime, runToDate,
-  dataStatus, validate, cellInfo, missingReason, TYPE_GROUPS, DEFAULT_FILTERS, visibleDays, visibleCriteria, pickTop, heaviestAbove, topRegion, compareCell, csvCell, toCSV, pctForCSV,
+  dataStatus, runLag, ifsSource, GRACE_MIN, validate, cellInfo, missingReason, TYPE_GROUPS, DEFAULT_FILTERS, visibleDays, visibleCriteria, pickTop, heaviestAbove, topRegion, compareCell, csvCell, toCSV, pctForCSV,
   encodeState, decodeState, luminance, contrast, isNum };
 
 
@@ -686,10 +701,32 @@ async function loadData() {
 }
 function startPolling() {
   const POLL = 5 * 60 * 1000;
-  setInterval(() => { if (!document.hidden) loadData(); }, POLL);
+  setInterval(() => { if (!document.hidden) { loadData(); checkLatestRun(); } }, POLL);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - NET.lastTry > 3 * 60 * 1000) loadData(); });
   window.addEventListener('message', e => { if (e.origin === location.origin && e.data?.type === 'weerlab-refresh' && Date.now() - NET.lastTry > 60000) loadData(); });
 }
+
+/* ── onafhankelijke run-controle: de pagina vraagt zelf bij ECMWF en Open-Meteo welke run de nieuwste is ── */
+const LATEST = { ecmwf: null, om: null, checked: 0 };
+async function headTime(url) {
+  try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return r.ok ? Date.parse(r.headers.get('last-modified') || '') || Date.now() : null; } catch (_) { return null; }
+}
+async function checkLatestRun() {
+  LATEST.checked = Date.now();
+  const now = new Date();
+  for (let back = 0; back < 3 && !LATEST.ecmwf; back++) {
+    for (const hh of [12, 0]) {
+      const t = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - back, hh));
+      if (t > now) continue;
+      const ymd = t.toISOString().slice(0, 10).replace(/-/g, ''), h2 = String(hh).padStart(2, '0');
+      const done = await headTime(`https://data.ecmwf.int/forecasts/${ymd}/${h2}z/ifs/0p25/enfo/${ymd}${h2}0000-240h-enfo-ef.index`);   // laatste stap aanwezig = run compleet
+      if (done) { LATEST.ecmwf = { iso: t.toISOString(), completeAt: done }; break; }
+    }
+  }
+  try { const m = await fetchJson('https://ensemble-api.open-meteo.com/data/ecmwf_ifs025_ensemble/static/meta.json'); LATEST.om = { iso: new Date(m.last_run_initialisation_time * 1000).toISOString(), completeAt: m.last_run_availability_time * 1000 }; } catch (_) {}
+  bus.emit('latest');
+}
+function runLagNow() { return D ? runLag(D.meta.run?.iso, LATEST.ecmwf) : { code: 'unknown' }; }
 
 /* ── modelrun-archief (lazy) ──────────────────────────────────────────── */
 const HIST = { index: null, runs: {}, loading: null };
@@ -1441,6 +1478,15 @@ async function runSelfTest() {
     }
     return mb.length === 0 || 'te kleine aanraakdoelen: ' + mb.slice(0, 4).map(b => (b.textContent || b.id).trim().slice(0, 12) + ' ' + Math.round(b.getBoundingClientRect().height)).join(', ');
   });
+  await t('achterstand-banner verschijnt bij nieuwere ECMWF-run en verdwijnt weer', async () => {
+    const keep = LATEST.ecmwf;
+    LATEST.ecmwf = { iso: '2099-01-01T12:00:00Z', completeAt: Date.now() - 5 * 3600000 }; renderAll(); await wait();
+    const red = /loopt achter/.test($('#banners').innerText) && /nieuwere run beschikbaar/.test($('#infobar').innerText);
+    LATEST.ecmwf = { iso: '2099-01-01T12:00:00Z', completeAt: Date.now() - 10 * 60000 }; renderAll(); await wait();
+    const blue = /Nieuwe ECMWF-run beschikbaar/.test($('#banners').innerText);
+    LATEST.ecmwf = keep; renderAll(); await wait();
+    return (red && blue) || `red=${red} blue=${blue}`;
+  });
   await t('datavalidatie: geen fouten', () => D._checks.errors.length === 0 || D._checks.errors.slice(0, 3).join(' | '));
   await t('geen JavaScript-fouten', () => errors.length === 0 || errors.join(' | '));
 
@@ -1476,8 +1522,8 @@ function renderInfobar() {
   const st = dataStatus(D.meta, Date.now(), NET.failed, true), rd = runDate();
   const models = (D.meta.sources || []).map(s => s.label).join(' · ');
   host.innerHTML = `
-  <div><b>Methode &amp; modellen</b><span>ECMWF IFS-ENS · HarmonEPS · ICON-D2-EPS</span><small>PASCAL-methode (KNMI TR-395), eigen Weerlab-berekening</small></div>
-  <div><b>Modelrun (ECMWF)</b><span>${rd ? esc(fmtDateTime(rd, true)) : 'onbekend'}</span><small>${D.meta.run?.source ? esc(D.meta.run.source) : ''}</small></div>
+  <div><b>Methode &amp; modellen</b><span>ECMWF IFS-ENS · HarmonEPS · ICON-D2-EPS</span><small>PASCAL (KNMI TR-395), eigen berekening · IFS: ${ifsSource(D.meta) === 'native' ? 'ECMWF-bron' : '⚠ Open-Meteo-kopie'}</small></div>
+  <div><b>Modelrun (ECMWF)</b><span>${rd ? esc(fmtDateTime(rd, true)) : 'onbekend'}</span><small>${D.meta.run?.source ? esc(D.meta.run.source) : ''}${(() => { const l = runLagNow(); return l.code === 'ok' ? ' · nieuwste run' : l.code === 'unknown' ? ' · nieuwste run niet gecontroleerd' : ' · ⚠ nieuwere run beschikbaar'; })()}</small></div>
   <div><b>Gepubliceerd</b><span>${esc(fmtDateTime(D.meta.generated_at, true))}</span><small>oudste bron opgehaald ${esc(fmtDateTime(D.meta.data_time))}</small></div>
   <div><b>Laatste succesvolle update</b><span>${NET.lastOk ? esc(fmtDateTime(new Date(NET.lastOk))) : '–'}</span><small>pagina controleert elke 5 min${NET.failed ? ' · laatste poging mislukt' : ''}</small></div>
   <div><b>Geldigheid</b><span>${esc(dayShort(D.days[0]))} – ${esc(dayShort(D.days.at(-1)))}</span><small>${D.days.length} dagen · Europe/Amsterdam</small></div>
@@ -1491,6 +1537,10 @@ function renderBanners() {
     const st = dataStatus(D.meta, Date.now(), NET.failed, true);
     if (st.code === 'stale') h += `<div class="banner" role="alert"><b>Let op: de gegevens zijn verouderd</b> (${Math.floor(st.ageH ?? 0)} uur). Niet operationeel gebruiken.</div>`;
     if (NET.failed) h += `<div class="banner" role="status">Bijwerken mislukt (${esc(NET.error)}). Je ziet de laatste geldige gegevens van ${esc(fmtDateTime(D.meta.generated_at, true))}.</div>`;
+    const lag = runLagNow();
+    if (lag.code === 'behind') h += `<div class="banner bad" role="alert"><b>Deze verwachting loopt achter.</b> ECMWF-run ${esc(fmtDateTime(lag.latestIso, true))} is al ${Math.floor(lag.waitedMin / 60)} u ${Math.round(lag.waitedMin % 60)} min beschikbaar, maar hier staat run ${esc(fmtDateTime(D.meta.run.iso, true))}. Gebruik de kansen met die run in gedachten.</div>`;
+    else if (lag.code === 'processing') h += `<div class="banner" role="status" style="border-color:var(--primary2);background:var(--primary-soft)"><b>Nieuwe ECMWF-run beschikbaar</b> (${esc(fmtDateTime(lag.latestIso, true))}); wordt verwerkt. Tot die tijd geldt run ${esc(fmtDateTime(D.meta.run.iso, true))}.</div>`;
+    if (ifsSource(D.meta) !== 'native') h += `<div class="banner" role="status"><b>Let op:</b> de ECMWF-gegevens komen nu uit de Open-Meteo-kopie. Windstoten wijken daarin merkbaar af van de ECMWF-bron; native gegevens ontbreken tijdelijk.</div>`;
     const ch = D._checks; if (ch && ch.errors.length) h += `<div class="banner bad" role="alert"><b>Datacontrole:</b> ${ch.errors.length} fout(en) in de dataset. Voorbeeld: ${esc(ch.errors[0])}</div>`;
   }
   host.innerHTML = h;
@@ -1565,6 +1615,7 @@ function bindStatic() {
   window.addEventListener('resize', (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => { if (D && S.tab === 'grafiek') drawChart(); }, 150); }; })());
   bus.on('selection', () => { renderDetail(); renderCards(); syncUrl(); if (S.tab === 'regio' || S.tab === 'grafiek') { renderTab(); } });
   bus.on('cmp', () => { $$('#tabBody td.c').forEach(td => td.classList.toggle('cmp', S.cmp.includes(td.dataset.c + '@' + td.dataset.i))); renderTray(); renderDetail(); syncUrl(); });
+  bus.on('latest', () => { if (D) { renderInfobar(); renderBanners(); } });
   bus.on('prev', () => { if (D) { renderDetail(); if (S.delta || S.tab === 'matrix') renderTab(); } });
   bus.on('data', async ({ changed, error }) => {
     if (!D) { renderBanners(); return; }
@@ -1583,7 +1634,7 @@ function bindStatic() {
 function init() {
   initTheme(); loadPrefs(); bindStatic(); startPolling();
   $('#dataLink').href = 'pascal-data.json';
-  loadData();
+  loadData(); checkLatestRun();
 }
 window.PASCAL_DEBUG = { get D() { return D; }, S, loadData, shareUrl, NET, csvRows, drawMatrixCanvas, buildChartSvg, model, compareCell, get PREV() { return PREV; } };   // voor tests/diagnose
 document.addEventListener('DOMContentLoaded', init);
