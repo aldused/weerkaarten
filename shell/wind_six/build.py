@@ -98,7 +98,10 @@ def publish_entry(out,key,entry,publish):
   fcntl.flock(lock,fcntl.LOCK_EX)
   path=out/'current.json';manifest=json.loads(path.read_text()) if path.exists() else dict(runs={},bounds=BOUNDS)
   existing=manifest['runs'].get(key)
-  if existing and (parse(existing['run'])>parse(entry['run']) or (existing['run']==entry['run'] and existing.get('frames',48)>entry.get('frames',48))):return
+  existing_frames=existing.get('frames') if existing else None
+  if existing and existing_frames is None:
+   old=out/existing['file'];existing_frames=len(json.loads(old.read_text()).get('times',[])) if old.exists() else 48
+  if existing and (parse(existing['run'])>parse(entry['run']) or (existing['run']==entry['run'] and existing_frames>entry.get('frames',48))):return
   manifest['runs'][key]=entry;manifest['updated']=iso(dt.datetime.now(UTC));temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(manifest,indent=2));temporary.replace(path)
   if publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(path),'r2:weerlab-data/wind-six/current.json','--header-upload','Cache-Control: no-cache'],check=True)
 def main():
