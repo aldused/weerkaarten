@@ -21,6 +21,8 @@ async function show(i){
   current=i;
   for(const [k,src] of paths){$('layer-'+k).src=src;$('layer-'+k).hidden=!$(k).checked;if(['temp','cloud','rain','snow'].includes(k))$('layer-'+k).srcset=src+' 1x, '+src.replace('.png','@2x.png')+' 2x';}
   $('maximum').disabled=!maximumFor(day).points.length;$('layer-maximum').hidden=!maximumFor(day).points.length||!$('maximum').checked;
+  $('trough-key').hidden=manifest.troughsAvailable===false;
+  $('fronts-label').textContent=manifest.troughsAvailable===false?'Fronten':'Fronten en troggen';
   $('fronts').disabled=manifest.frontsAvailable===false;if(manifest.frontsAvailable===false){$('fronts').checked=false;$('layer-fronts').hidden=true;}
   $('snow').disabled=!manifest.snowAvailable;if(!manifest.snowAvailable){$('snow').checked=false;$('layer-snow').hidden=true;}
   document.querySelectorAll('nav button').forEach((b,j)=>b.setAttribute('aria-pressed',String(i===j)));

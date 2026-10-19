@@ -2,11 +2,13 @@
 Front overlays require reviewed geometry for the exact source cycle. Missing
 review disables the overlay while fresh weather and source charts are published.
 """
+import html as html_module
 import argparse,datetime as dt,fcntl,hashlib,json,os,re,shutil,subprocess,sys,tempfile,urllib.request
 from pathlib import Path
 from PIL import Image
 from maximum_temperature import fetch_maxima,render_maxima
 from source_fronts import source_review,METHOD as SOURCE_FRONT_METHOD
+from automatic_fronts import prepare as prepare_automatic, render as render_automatic, METHOD as AUTOMATIC_METHOD
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1] if HERE.parent.name=='shell' else Path('/Users/aldus/KNMI_Project/weerlab')
 CACHE=REPO/'.synoptic-cache';CACHE.mkdir(exist_ok=True)
@@ -37,7 +39,15 @@ def refresh(publish=False,repair_current=False):
   source=json.loads((HERE/'fronts'/f"{run.strftime('%Y%m%dT%H')}-source"/'source.json').read_text())
   charts={dt.datetime.fromisoformat(f['valid'].replace('Z','+00:00')):source['frames'][str(f['day'])]['source'] for f in previous['frames']}
   if len(charts)!=5:raise ValueError('De bestaande kaartset heeft geen vijf geldige middagen')
- else:run,charts=discover(get(SITE).decode(),now)
+ else:
+  page=html_module.unescape(get(SITE).decode()).replace('\\/', '/')
+  catalogue=CACHE/'source-catalogue.json'
+  urls=set(json.loads(catalogue.read_text()) if catalogue.exists() else [])
+  urls.update(re.findall(r'https://data\.consumer-digital\.api\.metoffice\.gov\.uk/v1/surface-pressure/(?:bw|colour)/[^"<>\s]+?\.gif',page))
+  cutoff=(now-dt.timedelta(days=7)).strftime('%Y-%m-%d')
+  urls=sorted(u for u in urls if u.split('/')[-2][:10]>=cutoff)
+  write(catalogue,urls)
+  run,charts=discover(' '.join(urls),now)
  key=run.strftime('%Y%m%dT%H');front=HERE/'fronts'/f'{key}.json'
  review=CACHE/'review'/key;review.mkdir(parents=True,exist_ok=True)
  frames=[]
@@ -57,12 +67,16 @@ def refresh(publish=False,repair_current=False):
  else:
   geometry=json.loads(front.read_text()) if front.exists() else {}
   fronts_available=all(str(f['day']) in geometry for f in frames)
- if not fronts_available:raise ValueError(f'Frontencontrole ontbreekt voor {key}; de laatste complete kaartset met fronten blijft zichtbaar. Bronkaarten: {review}')
+ automatic=None
+ if not fronts_available:
+  try:
+   automatic=prepare_automatic(run,frames,urls,get,review);fronts_available=True
+  except Exception as error:print('Fronten niet beschikbaar:',error,flush=True)
  config=dict(run=run.isoformat().replace('+00:00','Z'),runPath=run.strftime('%Y/%m/%d/%H00Z'),frames=frames)
  maximum=fetch_maxima(frames,now,get)
  # Content identity includes reviewed geometry, valid dates and renderer revision.
- front_identity=json.dumps(reviewed_source,sort_keys=True).encode() if reviewed_source else front.read_bytes()
- version=hashlib.sha256(front_identity+json.dumps(config).encode()+json.dumps(maximum,sort_keys=True).encode()+b'render-v8-standard-front-symbols').hexdigest()[:10];set_id=f'{key}-{version}'
+ front_identity=json.dumps(reviewed_source,sort_keys=True).encode() if reviewed_source else json.dumps(automatic,sort_keys=True).encode() if automatic else front.read_bytes() if front.exists() else b'no-fronts'
+ version=hashlib.sha256(front_identity+json.dumps(config).encode()+json.dumps(maximum,sort_keys=True).encode()+b'render-v9-current-source-ink').hexdigest()[:10];set_id=f'{key}-{version}'
  previous=CACHE/'published.json'
  if previous.exists() and json.loads(previous.read_text()).get('setId')==set_id:print('Zelfde gecontroleerde set; niets gepubliceerd');return
  with tempfile.TemporaryDirectory(dir=CACHE,prefix='build-') as tmp:
@@ -70,8 +84,11 @@ def refresh(publish=False,repair_current=False):
   env=dict(os.environ,WEERKAART_OUT=str(out),WEERKAART_FRONTS=str(front),MPLCONFIGDIR=str(CACHE/'matplotlib'))
   if reviewed_source:env['WEERKAART_FRONT_SOURCE']=str(source_dir)
   subprocess.run([shutil.which('node') or '/opt/homebrew/bin/node',str(HERE/'ukmo.mjs')],env=env,check=True,timeout=900)
-  for script in ['render_ukmo.py','render_retina.py','render_wind.py','render_temperature_labels.py','trace_fronts.py']:
+  for script in ['render_ukmo.py','render_retina.py','render_wind.py','render_temperature_labels.py']+(['trace_fronts.py'] if reviewed_source or (fronts_available and not automatic) else []):
    subprocess.run([sys.executable,str(HERE/script)],env=env,check=True,timeout=240)
+  if automatic:render_automatic(review,out,automatic)
+  elif not fronts_available:
+   for frame in frames:(out/f"{frame['day']}-fronts.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880"/>')
   render_maxima(out,maximum)
   capabilities=json.loads((out/'capabilities.json').read_text())
   for file in review.glob('*-front-reference.png'):
@@ -80,13 +97,13 @@ def refresh(publish=False,repair_current=False):
    day=frame['day']
    for suffix in ['ukmo-temp.png','ukmo-cloud.png','ukmo-rain.png','ukmo-temp@2x.png','ukmo-cloud@2x.png','ukmo-rain@2x.png','ukmo-pressure.svg','fronts.svg','wind.svg','values.svg','front-reference.png','maximum.svg']:
     if not (out/f'{day}-{suffix}').is_file():raise ValueError('Onvolledige uitvoer '+suffix)
-  manifest=dict(cloudLevels=capabilities['cloudLevels'],maximumTemperature=maximum,updated=now.isoformat(),model='UKMO Global 10km',run=config['run'],frontRun=config['run'] if fronts_available else None,frontsAvailable=fronts_available,frames=frames,frontMethod=SOURCE_FRONT_METHOD if reviewed_source else 'Handmatig gedigitaliseerd en visueel gecontroleerd, inclusief troggen.' if fronts_available else 'Nog niet gedigitaliseerd voor deze run; bekijk de actuele Bracknell-bronkaarten.',snowAvailable=False,automaticRefresh='twice-daily-with-front-review',setId=set_id,assetRoot=f'https://data.weerlab.nl/synoptic/sets/{set_id}/')
+  manifest=dict(cloudLevels=capabilities['cloudLevels'],maximumTemperature=maximum,updated=now.isoformat(),model='UKMO Global 10km',run=config['run'],frontRun=config['run'] if fronts_available else None,frontsAvailable=fronts_available,frames=frames,troughsAvailable=bool(fronts_available and not automatic),frontMethod=AUTOMATIC_METHOD if automatic else SOURCE_FRONT_METHOD if reviewed_source else 'Handmatig gedigitaliseerd en visueel gecontroleerd, inclusief troggen.' if fronts_available else 'Nog niet gedigitaliseerd voor deze run; bekijk de actuele Bracknell-bronkaarten.',snowAvailable=False,automaticRefresh='hourly',setId=set_id,assetRoot=f'https://data.weerlab.nl/synoptic/sets/{set_id}/')
   for frame in frames:
    for level in capabilities['cloudLevels']:
     for resolution in ['', '@2x']:
      if not (out/f"{frame['day']}-ukmo-cloud-{level}{resolution}.png").is_file():raise ValueError('Onvolledige wolkenlaag '+level)
   # Retain source URLs and checksums with the published immutable set.
-  if reviewed_source:write(out/'front-sources.json',reviewed_source)
+  if reviewed_source or automatic:write(out/'front-sources.json',reviewed_source or automatic)
   # Never upload raw fields. Data assets first; immutable manifest pointer last.
   public=out/'public';public.mkdir()
   for file in out.iterdir():

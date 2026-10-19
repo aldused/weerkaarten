@@ -7,7 +7,7 @@ Run `python3 shell/synoptic/refresh.py --publish` from the existing Weerlab envi
 Requires its installed NumPy/SciPy/Matplotlib/Pillow/pyproj, Node/Open-Meteo dependencies,
 and existing rclone `r2:weerlab-data` configuration. No credentials are stored here.
 
-The launchd job checks at 10:00 and 22:00 local time, and once at load. The Mac must
+The launchd job checks hourly at minute 15, local time, and once at load. The Mac must
 be running and logged in; these are checks, not a guarantee of a new chart cycle.
 
 ## Scientific publication gate
@@ -16,24 +16,28 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
 - Require a completed UKMO model run from exactly the same cycle.
 - Use native accumulation intervals (1/3/6 hours), converted to mm/hour.
 - Prefer reviewed `fronts/YYYYMMDDTHH-source/source.json` with all five exact-cycle
-  official colour references and transparent source-ink masks. Retain the original
-  source ink as review evidence; review cold/warm/occluded types and symbol sides.
+  official colour references and transparent source-ink masks. Preserve the original
+  cold/warm/occluded symbols, their side, type transitions, and weakening crosses.
   Troughs are copied from the black source ink inside individually reviewed corridors.
   `prepare_front_sources.py` rebuilds masks and marks them unreviewed. Review all five
   results against colour AND monochrome originals before setting reviewed=true.
-- `source_fronts.py` validates cycle, validity, image dimensions and SHA-256 hashes,
-  including the separately reviewed `centerlines.json`. Baselines follow the exact
-  source front branches and are reprojected from polar stereographic to Mercator.
-  Symbols have a fixed destination-map size (14 px wide, at most 10 px tall), rather
-  than magnifying and distorting the original raster glyphs. Types and symbol sides
-  are checked against the source. Tests check same-type source coverage on all days.
-  The original masks remain review evidence, not enlarged display geometry.
+- `source_fronts.py` validates cycle, valid times, image dimensions, modes and SHA-256
+  checksums, traces ink boundaries (not new front paths or glyphs), and reprojects
+  them from the documented polar stereographic chart CRS into the site's Mercator
+  view. Internal glyph holes and gaps remain intact. A London geographic control
+  point and source-pixel tests protect against projection/type errors.
 - Legacy reviewed vector geometries are still supported for older cycles, but the
   incorrect manually interpreted 20261016T12 geometry has been removed.
 - New source charts are downloaded to `.synoptic-cache/review/<cycle>/`.
-- Missing review blocks replacement of the complete reviewed set. An update may never silently remove fronts. **Source review is not automated.**
-  Front baselines and types require reviewed source geometry; troughs require reviewed source corridors,
-  since black contours and labels must never be mistaken for troughs.
+- Retain seven days of actually observed official source URLs across page cycles.
+  A partial 00 UTC cycle must not hide the previous complete 12 UTC cycle.
+- Missing manual review no longer blocks fresh weather. `automatic_fronts.py`
+  extracts the exact official coloured front ink for the selected cycle and times,
+  preserving source glyphs and their sides, and reprojects its outlines. Provenance
+  explicitly says `reviewed:false`, `representation:official-source-ink`.
+  Black troughs are not inferred: `troughsAvailable:false` and the source comparison
+  retains them. If coloured sources fail, publish fresh weather with fronts disabled
+  and the current monochrome source reference; never reuse another cycle's fronts.
 - There is no trustworthy separate UKMO snow field in the present data. No
   subtraction of unrelated precipitation fields or temperature-only snow guess.
   Until supported, display total precipitation and disable the snow toggle.
@@ -44,8 +48,8 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
   `synoptic/current.json`. Failure preserves the last complete published set.
 
 Check `.synoptic-cache/status.json` and the launchd log when no new set appears.
-This first BETA has deliberate limits: new map sets with fronts require manual review and snowfall
-cannot yet be displayed separately. Do not describe the entire chain as automatic.
+Automatic source-ink overlays omit troughs; reviewed overlays can include them.
+Snowfall cannot yet be displayed separately. The Mac must be awake for updates.
 
 ## Optional meteorological layers
 

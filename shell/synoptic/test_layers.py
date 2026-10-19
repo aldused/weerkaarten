@@ -46,12 +46,22 @@ class LayerTests(unittest.TestCase):
    self.assertEqual(beaufort(threshold),i+1)
   self.assertEqual([flow_bearing(d) for d in [0,90,180,270]],[180,270,0,90])
   with self.assertRaises(ValueError):beaufort(-1)
- def test_missing_front_review_does_not_publish_empty_fronts(self):
+ def test_missing_front_review_publishes_fresh_weather_without_reusing_old_fronts(self):
   with tempfile.TemporaryDirectory() as folder:
    base=Path(folder);review=base/'review'/'20261016T12';review.mkdir(parents=True)
    dates=[self.now.replace(hour=12)+dt.timedelta(days=i) for i in range(5)]
    for date in dates:(review/f'{date.day}-front-reference.png').touch()
-   with patch.object(refresh,'HERE',base),patch.object(refresh,'CACHE',base),patch.object(refresh,'get',return_value=b''),patch.object(refresh,'discover',return_value=(self.now.replace(day=16,hour=12),{d:'https://source.invalid/' for d in dates})),patch.object(refresh.subprocess,'run') as run:
-    with self.assertRaisesRegex(ValueError,'Frontencontrole ontbreekt'):refresh.refresh(True)
-    run.assert_not_called()
+   def renderer(command,**kwargs):
+    if 'env' not in kwargs:return
+    out=Path(kwargs['env']['WEERKAART_OUT'])
+    (out/'capabilities.json').write_text('{"cloudLevels":[]}')
+    for date in dates:
+     for suffix in ['ukmo-temp.png','ukmo-cloud.png','ukmo-rain.png','ukmo-temp@2x.png','ukmo-cloud@2x.png','ukmo-rain@2x.png','ukmo-pressure.svg','wind.svg','values.svg','maximum.svg']:(out/f'{date.day}-{suffix}').touch()
+   with patch.object(refresh,'HERE',base),patch.object(refresh,'CACHE',base),patch.object(refresh,'get',return_value=b''),patch.object(refresh,'fetch_maxima',return_value={}),patch.object(refresh,'render_maxima'),patch.object(refresh,'discover',return_value=(self.now.replace(day=16,hour=12),{d:'https://source.invalid/' for d in dates})),patch.object(refresh.subprocess,'run',side_effect=renderer) as run:
+    refresh.refresh(True)
+    published=json.loads((base/'published.json').read_text())
+    self.assertFalse(published['frontsAvailable']);self.assertFalse(published['troughsAvailable'])
+    self.assertIsNone(published['frontRun']);self.assertEqual(published['frames'][0]['valid'],'2026-10-17T12:00:00Z')
+    self.assertTrue(run.call_args_list[-1].args[0][-1].endswith('max-age=60'))
+    self.assertFalse(any('trace_fronts.py' in str(call) for call in run.call_args_list))
 if __name__=='__main__':unittest.main()
