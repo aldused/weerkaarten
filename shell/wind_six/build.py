@@ -71,6 +71,7 @@ def build(model,run,cache):
   else:
    params=dict(latitude=','.join(str(p[0]) for p in locations),longitude=','.join(str(p[1]) for p in locations),hourly=','.join(FIELDS),models=model,forecast_days=7,timezone='GMT',wind_speed_unit='ms',elevation=','.join('nan' for p in locations),cell_selection='nearest')
    if native:params['run']=run.strftime('%Y-%m-%dT%H:%M')
+   else:params['past_days']=1
    responses=fetch(f'{API}/v1/ensemble?{urllib.parse.urlencode(params)}')
    if not isinstance(responses,list):responses=[responses]
    if len(responses)!=len(locations):raise ValueError('Onvolledige roosterrespons')
