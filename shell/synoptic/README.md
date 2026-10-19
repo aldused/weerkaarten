@@ -32,9 +32,11 @@ be running and logged in; these are checks, not a guarantee of a new chart cycle
 - Retain seven days of actually observed official source URLs across page cycles.
   A partial 00 UTC cycle must not hide the previous complete 12 UTC cycle.
 - Missing manual review no longer blocks fresh weather. `automatic_fronts.py`
-  extracts the exact official coloured front ink for the selected cycle and times,
-  preserving source glyphs and their sides, and reprojects its outlines. Provenance
-  explicitly says `reviewed:false`, `representation:official-source-ink`.
+  extracts official coloured ink for the selected cycle and times.
+  `normalized_fronts.py` traces and smooths source baselines, removes glyph spurs,
+  and renders destination-sized symbols with source-derived sides. Source ink
+  is never magnified as filled polygons. Provenance
+  explicitly says `reviewed:false`, `representation:source-derived-baselines-fixed-symbols`.
   Black troughs are not inferred: `troughsAvailable:false` and the source comparison
   retains them. If coloured sources fail, publish fresh weather with fronts disabled
   and the current monochrome source reference; never reuse another cycle's fronts.

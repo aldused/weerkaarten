@@ -76,7 +76,7 @@ def refresh(publish=False,repair_current=False):
  maximum=fetch_maxima(frames,now,get)
  # Content identity includes reviewed geometry, valid dates and renderer revision.
  front_identity=json.dumps(reviewed_source,sort_keys=True).encode() if reviewed_source else json.dumps(automatic,sort_keys=True).encode() if automatic else front.read_bytes() if front.exists() else b'no-fronts'
- version=hashlib.sha256(front_identity+json.dumps(config).encode()+json.dumps(maximum,sort_keys=True).encode()+b'render-v9-current-source-ink').hexdigest()[:10];set_id=f'{key}-{version}'
+ version=hashlib.sha256(front_identity+json.dumps(config).encode()+json.dumps(maximum,sort_keys=True).encode()+b'render-v10-normalized-fronts').hexdigest()[:10];set_id=f'{key}-{version}'
  previous=CACHE/'published.json'
  if previous.exists() and json.loads(previous.read_text()).get('setId')==set_id:print('Zelfde gecontroleerde set; niets gepubliceerd');return
  with tempfile.TemporaryDirectory(dir=CACHE,prefix='build-') as tmp:

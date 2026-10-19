@@ -15,6 +15,6 @@ class AutomaticFrontTests(unittest.TestCase):
    self.assertFalse(meta['reviewed']);self.assertFalse(meta['troughsAvailable']);self.assertEqual(meta['frames']['19']['source'],url)
    mask=np.asarray(Image.open(path/'19-automatic-fronts.png'))
    self.assertTrue(np.all(mask[252,400:450,3]>220));self.assertTrue(np.all(mask[302,400:450,3]==0));self.assertTrue(np.all(mask[352,400:450,3]==0))
-   render(path,out,meta);self.assertIn('#0032fe',(out/'19-fronts.svg').read_text())
+   render(path,out,meta);self.assertIn('#1666d1',(out/'19-fronts.svg').read_text())
    with self.assertRaisesRegex(ValueError,'kleurenbron'):prepare(run+dt.timedelta(hours=12),frames,[url],lambda _:buffer.getvalue(),path)
 if __name__=='__main__':unittest.main()
