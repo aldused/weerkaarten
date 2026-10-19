@@ -578,7 +578,7 @@ function decodeState(search, valid) {
   const a = get('area'); if (a && valid.areas.includes(a)) out.area = a;
   const d = get('day'); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) out.day = d;
   const c = get('cid'); if (c && valid.cids.includes(c)) out.cid = c;
-  const t = get('tab'); if (t && ['matrix', 'grafiek', 'regio', 'runs'].includes(t)) out.tab = t;
+  const t = get('tab'); if (t && ['matrix', 'grafiek', 'regio', 'runs', 'kust'].includes(t)) out.tab = t;
   const f = {}; const ft = get('ftype'); if (ft && ft in TYPE_GROUPS) f.type = ft;
   const fp = Number(get('fperiod')); if ([3, 5, 7].includes(fp)) f.period = fp;
   const fm = Number(get('fminp')); if ([10, 25, 50, 75].includes(fm)) f.minp = fm;
@@ -960,7 +960,7 @@ function modelTable(c, i) {
 function renderDetail() {
   const host = $('#detail'), main = $('#main');
   const narrow = matchMedia('(max-width:1180px)').matches;
-  const show = !narrow || S.open;
+  const show = S.tab !== 'kust' && (!narrow || S.open);
   host.hidden = !show;
   if (!show) return;
   const c = critById(S.cid), i = D.days.indexOf(S.day);
@@ -1248,6 +1248,53 @@ async function renderRunHistory() {
 }
 
 
+/* ── kust.js ── */
+/* PASCAL 2.0 — windkracht (Beaufort 7–10) langs de kust en rond het IJsselmeer, ECMWF IFS-ENS */
+let KUST = null, KUST_ERR = '';
+const BFT_INFO = {
+  bft7: { naam: 'Windkracht 7 of meer', sub: 'harde wind · ≥ 13,9 m/s (50 km/u)', ernst: 1 },
+  bft8: { naam: 'Windkracht 8 of meer', sub: 'stormachtig · ≥ 17,2 m/s (62 km/u)', ernst: 2 },
+  bft9: { naam: 'Windkracht 9 of meer', sub: 'storm · ≥ 20,8 m/s (75 km/u)', ernst: 3 },
+  bft10: { naam: 'Windkracht 10 of meer', sub: 'zware storm · ≥ 24,5 m/s (89 km/u)', ernst: 4 },
+};
+async function loadKust() {
+  try { KUST = await fetchJson('pascal-kust.json'); KUST_ERR = ''; }
+  catch (e) { KUST_ERR = String(e.message || e); }
+}
+function renderKustTab(host) {
+  if (!KUST) {
+    host.innerHTML = KUST_ERR ? `<div class="empty"><b>Windkracht-kansen niet beschikbaar.</b><br>${esc(KUST_ERR)}</div>` : '<div class="skeleton"></div>';
+    if (!KUST_ERR) loadKust().then(() => { if (S.tab === 'kust') renderKustTab(host); });
+    return;
+  }
+  const today = todayISO();
+  let idx = KUST.days.map((d, i) => i).filter(i => KUST.days[i] >= today);
+  if (!idx.length) idx = KUST.days.map((_, i) => i);
+  const ageH = (Date.now() - Date.parse(KUST.fetched_at)) / 3600000;
+  const rd = runToDate(KUST.run);
+  const head = idx.map(i => { const p = dayParts(KUST.days[i]); return `<th scope="col" class="${KUST.days[i] === today ? 'today' : ''}"><span class="dw">${p.dow} ${p.d} ${p.mon}</span><span class="dd">${KUST.days[i] === today ? 'vandaag' : p.d + '-' + KUST.days[i].slice(5, 7)}</span></th>`; }).join('');
+  let body = '';
+  for (const zone of Object.keys(KUST.zones)) {
+    body += `<tr class="gr"><th colspan="${idx.length + 1}" scope="colgroup">${ICONS['Windstoten']}<span style="vertical-align:6px;margin-left:8px">${esc(zone)} · ${KUST.zone_cells[zone]} rastercellen</span></th></tr>`;
+    for (const key of Object.keys(BFT_INFO)) {
+      const info = BFT_INFO[key], vals = KUST.zones[zone][key], diag = KUST.diagnostics[zone][key];
+      const pips = `<span class="pips e${info.ernst}">${[1, 2, 3, 4].map(n => `<i class="${n <= info.ernst ? 'on' : ''}"></i>`).join('')}</span>`;
+      body += `<tr><th class="rowh" scope="row"><div class="t"><div class="n">${esc(info.naam.replace(' of meer', ' ≥'))}<small>${esc(info.sub)}</small></div>${pips}</div></th>` + idx.map(i => {
+        const v = vals[i], b = bin(v), partial = diag[i] && diag[i].status === 'partial';
+        const t = `${zone} · ${info.naam} · ${dayLong(KUST.days[i])}: ${isNum(v) ? fmtP(v) + '%' : 'geen data'}${partial ? ' (gedeeltelijke dekking: ' + (diag[i].reason || '') + ')' : ''}`;
+        return `<td class="c ${b < 0 ? 'nb' : 'b' + b} ${info.ernst >= 3 ? 'e' + info.ernst : ''} ${partial ? 'partial' : ''}" title="${esc(t)}"><button type="button" tabindex="-1" aria-label="${esc(t)}"><span class="pv">${isNum(v) ? fmtP(v) + '<span class="u">%</span>' : 'n/b'}</span></button></td>`;
+      }).join('') + '</tr>';
+    }
+  }
+  host.innerHTML = `<div class="panel-pad" style="padding-bottom:4px"><h2>Windkracht langs de kust en rond het IJsselmeer</h2>
+    <p style="margin:0 0 6px;color:var(--muted);font-size:13px">Kans op <b style="color:var(--fg)">windkracht 7, 8, 9 of 10 (of meer)</b>, gebaseerd op de gemiddelde 10 m-wind van ECMWF IFS-ENS (50 leden). Kans = aandeel leden waarin <b>ergens in de zone</b>, op minstens één modeltijd van de dag, die windkracht wordt gehaald. Run ${rd ? esc(fmtDateTime(rd, true)) : 'onbekend'}, berekend ${esc(fmtDateTime(KUST.fetched_at))}.</p>
+    ${ageH > 36 ? '<div class="banner" role="alert"><b>Verouderd:</b> deze kansen zijn meer dan 36 uur oud.</div>' : ''}</div>
+    <div class="mx-wrap"><table class="mx" aria-label="Kans op windkracht 7 tot en met 10 per kustzone"><thead><tr><th class="corner" scope="col">Zone en windkracht<span class="dd" style="display:block;font-weight:500;font-size:11.5px;color:var(--muted)">ECMWF IFS-ENS · alleen t/m +144 u</span></th>${head}</tr></thead><tbody>${body}</tbody></table></div>${legendHtml()}
+    <div class="panel-pad"><h3>Zo lees je dit</h3><p style="font-size:13px;margin:4px 0">Windkracht is gebaseerd op het <i>10-minutengemiddelde</i> van de wind, niet op windstoten. Windkracht 8 begint bij 17,2 m/s (62 km/u), 9 bij 20,8 m/s (75 km/u) en 10 bij 24,5 m/s (89 km/u). "Windkracht 8 of meer" omvat dus ook 9 en 10.</p>
+      <p style="font-size:13px;margin:4px 0"><b>Beperkingen:</b> het model levert de momentane wind op 3-uurlijkse tijdstippen; een kortere piek ertussen wordt gemist, dus de kansen zijn eerder een ondergrens. Het raster is 0,25° (±28 km): kustzones bevatten zee- en landcellen en lokale kust- en vloedeffecten, de Waddenzee en kleine meren worden uitgemiddeld. Rond het IJsselmeer zijn weinig rastercellen beschikbaar. Zones zijn ruim afgebakende vakken, geen officiële kustwaterengebieden. Dit zijn geen officiële waarschuwingskansen en niet gekalibreerd.</p></div>`;
+}
+
+
 /* ── export.js ── */
 /* PASCAL 2.0 — export: PNG (matrix), CSV, PDF-rapport en deelbare link */
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
@@ -1487,6 +1534,13 @@ async function runSelfTest() {
     LATEST.ecmwf = keep; renderAll(); await wait();
     return (red && blue) || `red=${red} blue=${blue}`;
   });
+  await t('windkracht-kust-tab: 5 zones × windkracht 7–10', async () => {
+    click('[data-tab="kust"]'); await wait(1200);
+    const txt = $('#tabBody').innerText;
+    if (/niet beschikbaar/.test(txt) && !$('#tabBody table')) { click('[data-tab="matrix"]'); return true; }   // nog geen pascal-kust.json gepubliceerd
+    const rows = $$('#tabBody tbody tr:not(.gr)').length, ok = rows === 20 && /Waddengebied/.test(txt) && /IJsselmeer/.test(txt) && /Windkracht 7|≥ 7|13,9/.test(txt) && $('#toolbar').hidden;
+    click('[data-tab="matrix"]'); await wait(); return (ok && !$('#toolbar').hidden) || `rijen=${rows}`;
+  });
   await t('datavalidatie: geen fouten', () => D._checks.errors.length === 0 || D._checks.errors.slice(0, 3).join(' | '));
   await t('geen JavaScript-fouten', () => errors.length === 0 || errors.join(' | '));
 
@@ -1501,7 +1555,7 @@ async function runSelfTest() {
 const TYPE_LABELS = [['alles', 'Alles'], ['wind', 'Wind'], ['neerslag', 'Neerslag'], ['sneeuw', 'Sneeuw'], ['mist', 'Mist'], ['temperatuur', 'Temperatuur']];
 const PERIODS = [[3, '3 dagen'], [5, '5 dagen'], [7, '7 dagen'], [0, 'Alles']];
 const MINPS = [[0, 'Alle'], [10, '≥ 10%'], [25, '≥ 25%'], [50, '≥ 50%'], [75, '≥ 75%']];
-const TABS = [['matrix', 'Matrix'], ['grafiek', 'Grafiek'], ['regio', "Regio's"], ['runs', 'Modelruns']];
+const TABS = [['matrix', 'Matrix'], ['grafiek', 'Grafiek'], ['regio', "Regio's"], ['runs', 'Modelruns'], ['kust', 'Windkracht kust']];
 let urlApplied = false;
 
 function applyTheme(t) { document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light'); S.theme = t === 'dark' ? 'dark' : 'light'; }
@@ -1570,6 +1624,7 @@ function renderTab() {
   if (S.tab === 'grafiek') renderChartTab(host);
   else if (S.tab === 'regio') renderRegionTab(host);
   else if (S.tab === 'runs') renderRunsTab(host);
+  else if (S.tab === 'kust') renderKustTab(host);
   else renderMatrixTab(host);
 }
 
@@ -1577,8 +1632,9 @@ function renderAll() {
   if (!D) { renderBanners(); return; }
   ensureValidSelection();
   $('#app').hidden = false; $('#skeleton').hidden = true;
+  const kust = S.tab === 'kust';
   renderInfobar(); renderBanners(); renderCards(); renderToolbar(); renderTabs(); renderTab(); renderDetail(); renderTray();
-  $('#main').classList.toggle('nopanel', false);
+  $('#toolbar').hidden = kust; $('#main').classList.toggle('nopanel', kust);
   savePrefs(); syncUrl();
 }
 
