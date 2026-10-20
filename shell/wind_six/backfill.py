@@ -49,13 +49,18 @@ def build_direct(run,cache,targets=None):
   if saved.exists():
    with np.load(saved) as cached:coords=cached['coordinates'];frame=cached['values'];interval=int(cached['interval'])
   else:
-   storage={};coords=None;client=Client('aws')
+   storage={};coords=None
    with tempfile.TemporaryDirectory(prefix='weerlab-wind-grib-') as directory:
     for perturbed in [False,True]:
      path=Path(directory)/('pf.grib2' if perturbed else 'fc.grib2')
      request=dict(date=run.strftime('%Y%m%d'),time=run.hour,step=lead,param=['10u','10v','10fg'],stream='enfo' if perturbed else 'oper',type='pf' if perturbed else 'fc',target=str(path))
      if perturbed:request['number']=list(range(1,51))
-     print('Download',run,'ENS' if perturbed else 'operationeel',target,flush=True);client.retrieve(**request)
+     print('Download',run,'ENS' if perturbed else 'operationeel',target,flush=True)
+     for source in ('aws','google'):
+      try:Client(source).retrieve(**request);break
+      except Exception:
+       if source=='google':raise
+       print('Andere ECMWF-spiegel proberen',flush=True)
      coords=decode(path,run,target,perturbed,storage,coords);path.unlink()
    interval=storage.pop('_interval');
    if set(storage)!={(member,field)for member in range(51)for field in ['u','v','gust']}:raise ValueError('Geen complete set van 51 leden')
