@@ -131,8 +131,13 @@ def main():
    for i,_ in enumerate(pool.map(render,tasks)):
     if i%12==0:print(cycle,'Noordzee',i+1,'/',len(tasks),flush=True)
   if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copy',str(dest),f'r2:weerlab-data/wxbeta-northsea/{folder}','--transfers','8','--header-upload','Cache-Control: public, max-age=31536000, immutable'],check=True)
-  manifest['runs'][cycle]={'run_utc':source['run_utc'],'renderer':REV,'resolution':'0,25° · circa 25 km','frames':source['frames'],'files':{'gust':[f'{folder}/gust_{h:03d}.png' for h in leads]}}
-  manifest['updated']=dt.datetime.now(UTC).isoformat();tmp=manifest_path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(manifest_path)
-  if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(manifest_path),'r2:weerlab-data/wxbeta-northsea/current.json','--header-upload','Cache-Control: no-cache'],check=True)
+  with (args.state/'publish.lock').open('a') as publication:
+   fcntl.flock(publication,fcntl.LOCK_EX)
+   manifest=json.loads(manifest_path.read_text()) if manifest_path.exists() else {'base':'https://data.weerlab.nl/wxbeta-northsea/','runs':{}}
+   previous=manifest['runs'].get(cycle,{})
+   layers=previous.get('layers',{}) if previous.get('run_utc')==source['run_utc'] else {}
+   manifest['runs'][cycle]={'run_utc':source['run_utc'],'renderer':REV,'resolution':'0,25° · circa 25 km','frames':source['frames'],'files':{'gust':[f'{folder}/gust_{h:03d}.png' for h in leads]},'layers':layers}
+   manifest['updated']=dt.datetime.now(UTC).isoformat();tmp=manifest_path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(manifest_path)
+   if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(manifest_path),'r2:weerlab-data/wxbeta-northsea/current.json','--header-upload','Cache-Control: no-cache'],check=True)
   print(cycle,'Noordzeekaarten gepubliceerd',flush=True)
 if __name__=='__main__':main()

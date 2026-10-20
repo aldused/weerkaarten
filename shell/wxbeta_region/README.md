@@ -21,3 +21,16 @@ Aanroep vanuit shell/wxbeta_update.sh:
 
 Kaartgegevens: ECMWF Open Data. Geografie: Natural Earth 1:10m (public domain),
 plaatselijk uitgesneden in noordzee_omgeving_detail.geojson.
+
+Alle overige ECMWF-elementen staan in `layers.py`: overzicht, temperatuur op
+2 m en 850 hPa, wind en windrichting, Bft/luchtdruk, MUCAPE, 24-uursneerslag,
+500-hPa-hoogte en de straalstroom. De bronroosters blijven 0,25°; de export
+verfijnt tekst en geografie. Neerslagperioden worden uit de oorspronkelijke
+accumulaties berekend, met complete tijdvakken.
+
+`cumulative.py` levert daarnaast cumulatieve neerslag voor Europa en Nederland
+(ECMWF, GFS, ICON-EU) en de Noordzee-uitsnede (ECMWF). ECMWF/ICON-accumulaties
+worden direct gebruikt; GFS-vakken van zes uur worden vanaf +0 precies eenmaal
+opgeteld. Voor Nederland worden waar beschikbaar de reeds gevalideerde native
+uurgegevens gebruikt. Zonder complete tijdreeks wordt geen kaart gepubliceerd.
+Het manifest staat los van de basismetadata en wordt op exacte run gekoppeld.

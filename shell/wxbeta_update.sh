@@ -83,6 +83,8 @@ fi
 
 # Noordzee-windstoten volgen direct na de Europese modelrun.
 "$PY" -u "$WEERLAB/shell/wxbeta_region/build.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-northsea" --publish
+"$PY" -u "$WEERLAB/shell/wxbeta_region/layers.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-northsea" --publish
+"$PY" -u "$WEERLAB/shell/wxbeta_region/cumulative.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-cumulative" --publish
 
 # Native Nederlandkaart volgt exact de gepubliceerde ECMWF-runs van Europa.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/build.py"   --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish

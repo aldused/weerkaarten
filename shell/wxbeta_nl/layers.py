@@ -10,6 +10,7 @@ from presentation import header as map_header,footer as map_footer
 ROOT=Path(__file__).resolve().parents[2]
 def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
 REV='nl-mosmap-local-3'
+MAP_LATITUDE=52.2
 def revision(layer):return REV+'-cloud4' if layer=='overview' else REV+'-bft2' if layer=='mslp_bft' else REV
 SURFACE={'temperature_2m':'°C','pressure_msl':'hPa','wind_speed_10m':'m/s','wind_direction_10m':'°','cloud_cover':'%','precipitation':'mm','cape':'J/kg'}
 UPPER={'temperature_850hPa':'°C','geopotential_height_500hPa':'m','wind_speed_300hPa':'m/s','wind_direction_300hPa':'°','pressure_msl':'hPa'}
@@ -21,7 +22,7 @@ def fields_for(model):
  if model=='ecmwf_ifs025':return UPPER
  return {**SURFACE,**{k:v for k,v in UPPER.items() if not k.startswith('wind_')}}
 LAYERS={'ecmwf_ifs':['mslp_bft','overview','t2m','wind','cape','precip24'],'ecmwf_ifs025':['t850','z500','jetstream']}
-LABELS={'t2m':('Temperatuur op 2 meter','°C'),'overview':('Temperatuur, bewolking en neerslag','°C'),'wind':('Wind op 10 meter','km/u'),'mslp_bft':('Windkracht en luchtdruk','Bft'),'cape':('CAPE','J/kg'),'precip24':('Neerslag in de voorgaande 24 uur','mm'),'t850':('Temperatuur op 850 hPa','°C'),'z500':('Geopotentiële hoogte op 500 hPa','dam'),'jetstream':('Wind op 300 hPa','kn'),'dust_europe':('Saharastof · optische dikte op 550 nm','AOD')}
+LABELS={'t2m':('Temperatuur op 2 meter','°C'),'overview':('Temperatuur, bewolking en neerslag','°C'),'wind':('Wind op 10 meter','km/u'),'mslp_bft':('Windkracht en luchtdruk','Bft'),'cape':('CAPE','J/kg'),'precip24':('Neerslag in de voorgaande 24 uur','mm'),'precip_total':('Cumulatieve neerslag vanaf modelrun','mm'),'t850':('Temperatuur op 850 hPa','°C'),'z500':('Geopotentiële hoogte op 500 hPa','dam'),'jetstream':('Wind op 300 hPa','kn'),'dust_europe':('Saharastof · optische dikte op 550 nm','AOD')}
 BFT=np.array([.3,1.6,3.4,5.5,8,10.8,13.9,17.2,20.8,24.5,28.5,32.7])
 def bft(v):return np.searchsorted(BFT,v,side='right')
 def public_meta():
@@ -90,9 +91,11 @@ def chart_values(layer,data):
  if layer=='jetstream':return data['wind_speed_300hPa']*1.94384449
  if layer=='cape':return data['cape']
  if layer=='precip24':return data['rain24']
+ if layer=='precip_total':return data['rain_total']
  if layer=='dust_europe':return data['dust']
  raise ValueError(layer)
 def palette(layer):
+ if layer=='precip_total':return np.array([0,.1,1,2,5,10,20,30,50,75,100,150,200,300,500]),'YlGnBu'
  if layer=='dust_europe':return np.array([0,.005,.01,.025,.05,.1,.2,.3,.5,.75,1,1.5,2,3]),'YlOrBr'
  if layer in ('t2m','overview','t850'):return np.arange(-24,37,1),'turbo'
  if layer=='z500':return np.arange(472,605,4),'turbo'
@@ -118,7 +121,7 @@ def render(task):
  # Render the actual grid at export resolution, and label actual cells below.
  field=LinearNDInterpolator(tri,samples)(xx,yy)
  if not np.isfinite(field).all():raise ValueError('Rooster dekt Nederland niet')
- fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.135,.95,.75]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
+ fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.135,.95,.75]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(MAP_LATITUDE)))
  clip=map_setup(ax)
  levels,cmap=palette(layer);cf=ax.contourf(xx,yy,field,levels=levels,cmap=cmap,extend='both',antialiased=True);cf.set_clip_path(clip)
  if layer=='overview':
@@ -126,8 +129,8 @@ def render(task):
   cloud_image=ax.imshow(np.dstack([np.ones_like(cloud)]*3+[np.clip(cloud*.7,0,.7)]),extent=BOUNDS,origin='lower',aspect='auto',zorder=2);cloud_image.set_clip_path(clip)
   rain=LinearNDInterpolator(tri,data['rain_rate'] if 'rain_rate' in data else data['rain3']/3)(xx,yy)
   rain_cf=ax.contourf(xx,yy,np.ma.masked_less(rain,.1),levels=[.1,.5,1,2,4,8,16,32,64],colors=['#a3d9ee','#77c4e8','#4fa4d6','#347cc1','#2856a5','#243b8c','#4c287a','#812b73'],extend='max',zorder=3,alpha=.9);rain_cf.set_clip_path(clip)
- ax.set_aspect(1/np.cos(np.radians(52.2)))
- if layer not in ('precip24','cape','jetstream','dust_europe'):
+ ax.set_aspect(1/np.cos(np.radians(MAP_LATITUDE)))
+ if layer not in ('precip24','precip_total','cape','jetstream','dust_europe'):
   p=np.round(LinearNDInterpolator(tri,data['pressure_msl'])(xx,yy),3);lo=np.floor(p.min()/2)*2;hi=np.ceil(p.max()/2)*2
   if hi>lo:
    cs=ax.contour(xx,yy,p,levels=np.arange(lo,hi+1,2),colors='#526779',linewidths=.7,zorder=4)
@@ -140,7 +143,7 @@ def render(task):
   for i in ids:
    la,lon=coords[i]
    if not BOUNDS[0]+.045<lon<BOUNDS[1]-.045 or not BOUNDS[2]+.035<la<BOUNDS[3]-.035:continue
-   value=samples[i];label=f'{value:.3f}'.replace('.',',') if layer=='dust_europe' else f'{value:.1f}'.replace('.',',') if layer in ('t2m','t850','overview') else f'{value:.1f}'.replace('.',',') if layer=='precip24' and value<10 else str(round(float(value)))
+   value=samples[i];label=f'{value:.3f}'.replace('.',',') if layer=='dust_europe' else f'{value:.1f}'.replace('.',',') if layer in ('t2m','t850','overview') else f'{value:.1f}'.replace('.',',') if layer in ('precip24','precip_total') and value<10 else str(round(float(value)))
    t=ax.text(lon,la,label,ha='center',va='center',fontsize=7.4 if stride>1 else 9,color='#17353e',weight='bold',zorder=8);t.set_path_effects([pe.withStroke(linewidth=2.1,foreground='#ffffffed')]);count+=1
    direction='wind_direction_300hPa' if layer=='jetstream' else 'wind_direction_10m' if layer in ('wind','mslp_bft') else None
    if direction:
