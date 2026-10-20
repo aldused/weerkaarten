@@ -1,5 +1,5 @@
 """Exact-run cumulative precipitation for Europe, Netherlands and North Sea."""
-import argparse,bz2,concurrent.futures,datetime as dt,fcntl,gzip,importlib.util,json,sys,subprocess,urllib.parse,urllib.request
+import argparse,bz2,concurrent.futures,datetime as dt,fcntl,gzip,importlib.util,json,sys,subprocess,time,urllib.parse,urllib.request
 from functools import lru_cache
 from pathlib import Path
 import numpy as np
@@ -17,7 +17,12 @@ def download(url,path,compressed=False):
  path.parent.mkdir(parents=True,exist_ok=True)
  if path.exists():return
  request=urllib.request.Request(url,headers={'User-Agent':'Weerlab cumulative precipitation/1.0'})
- raw=urllib.request.urlopen(request,timeout=90).read();raw=bz2.decompress(raw) if compressed else raw
+ for attempt in range(3):
+  try:
+   raw=urllib.request.urlopen(request,timeout=60).read();raw=bz2.decompress(raw) if compressed else raw;break
+  except (OSError,EOFError):
+   if attempt==2:raise
+   time.sleep(2+attempt*3)
  if not raw.startswith(b'GRIB'):raise ValueError('Geen GRIB ontvangen')
  tmp=path.with_suffix('.tmp.grib2');tmp.write_bytes(raw);tmp.replace(path)
 
