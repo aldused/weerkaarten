@@ -4,8 +4,9 @@ from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'wind_six'))
 from build import fetch,parse,iso,UTC
-BOUNDS=(3.05,7.5,50.65,53.8)
-REV='nl-native-gust-4'
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from basemap import BOUNDS,setup as map_setup,outlines as map_outlines
+REV='nl-native-gust-mosmap-5'
 ROOT=Path(__file__).resolve().parents[2]
 
 def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
@@ -30,7 +31,8 @@ def retrieve(run,cache):
  leads=steps(run.hour);available={parse(t) for t in before['valid_times']}
  if any(run+dt.timedelta(hours=h) not in available for h in leads):raise ValueError('Native run nog onvolledig')
  identity=hashlib.sha256(json.dumps(before,sort_keys=True).encode()).hexdigest()[:10]
- root=cache/f'{run:%Y%m%d%H}-{identity}';root.mkdir(parents=True,exist_ok=True)
+ domain=hashlib.sha256(json.dumps(BOUNDS).encode()).hexdigest()[:8]
+ root=cache/f'{run:%Y%m%d%H}-{identity}-{domain}';root.mkdir(parents=True,exist_ok=True)
  saved=root/'complete.npz'
  if saved.exists():
   with np.load(saved) as data:return data['coordinates'],data['values'],identity
@@ -70,21 +72,13 @@ def render(task):
  levels=[0,20,40,50,60,70,80,90,100,120,140,160]
  colors=['#e6f0fa','#c1def0','#88c1df','#7bc677','#bbd85b','#f0e65b','#f6ba48','#f78c3d','#e85127','#c92c24','#8a1d68']
  fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.09,.95,.805]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
- cf=ax.contourf(xx,yy,z[:,:,0],levels=levels,cmap=ListedColormap(colors),norm=BoundaryNorm(levels,len(colors)),extend='max',antialiased=True)
+ clip=map_setup(ax)
+ cf=ax.contourf(xx,yy,z[:,:,0],levels=levels,cmap=ListedColormap(colors),norm=BoundaryNorm(levels,len(colors)),extend='max',antialiased=True);cf.set_clip_path(clip)
  pressure=z[:,:,1];lo=int(np.floor(pressure.min()/2)*2);hi=int(np.ceil(pressure.max()/2)*2)
  if hi>lo:
-  cs=ax.contour(xx,yy,pressure,levels=np.arange(lo,hi+1,2),colors='white',linewidths=1.4,alpha=.95)
-  for label in ax.clabel(cs,inline=True,fontsize=10,fmt='%d'):label.set_path_effects([pe.withStroke(linewidth=2,foreground='#355365aa')])
- def rings(g):
-  if g['type']=='Polygon':return g['coordinates']
-  if g['type']=='MultiPolygon':return [ring for poly in g['coordinates'] for ring in poly]
-  if g['type']=='LineString':return [g['coordinates']]
-  if g['type']=='MultiLineString':return g['coordinates']
-  return []
- provinces=json.loads((ROOT/'nl_provincies_detail.geojson').read_text())
- islands=json.loads((ROOT/'nl_provincies_wadden.geojson').read_text())
- provinces['features'] += [f for f in islands['features'] if f['properties'].get('statnaam')=='Waddeneilanden']
- ax.add_collection(LineCollection([np.asarray(r) for f in provinces['features'] for r in rings(f['geometry'])],colors='#243e49',linewidths=.75,zorder=5))
+  cs=ax.contour(xx,yy,pressure,levels=np.arange(lo,hi+1,2),colors='#526779',linewidths=.85,alpha=.95)
+  for label in ax.clabel(cs,inline=True,fontsize=10,fmt='%d'):label.set_path_effects([pe.withStroke(linewidth=2,foreground='#ffffffdc')])
+ map_outlines(ax)
  # Exact native cell values; thin labels in both directions to avoid overlap.
  rows=np.unique(coords[:,0]);chosen=rows[::2]
  for lat in chosen:
@@ -101,7 +95,7 @@ def render(task):
  fig.text(.025,.94,f'ECMWF IFS native 9 km · maximum voorgaande {interval} uur · km/u',fontsize=11,color='#405763')
  fig.text(.975,.916,f'Run: {run:%d-%m-%Y %H} UTC    Geldig: {valid:%d-%m-%Y %H:%M} UTC  (+{lead}u)',fontsize=10,ha='right')
  cax=fig.add_axes([.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',ticks=levels,spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_label('Maximale windstoot 10 m (km/u) · witte lijnen: luchtdruk (hPa)',fontsize=10)
- fig.text(.5,.007,'Cijfers: echte 9 km-roostercellen · ECMWF / Open-Meteo CC BY 4.0 · Ed Aldus / Weerlab',fontsize=9,ha='center',color='#506570')
+ fig.text(.5,.007,'Kleuren op land · cijfers ook op zee: echte 9 km-roostercellen · ECMWF / Open-Meteo CC BY 4.0 · Ed Aldus / Weerlab',fontsize=9,ha='center',color='#506570')
  out.parent.mkdir(parents=True,exist_ok=True);temporary=out.with_suffix('.tmp.png');fig.savefig(temporary,facecolor='white',dpi=288);plt.close(fig);temporary.replace(out)
 
 def main():
@@ -112,7 +106,7 @@ def main():
  except BlockingIOError:return
  meta=json.load(urllib.request.urlopen(urllib.request.Request('https://data.weerlab.nl/wxbeta_meta.json',headers={'User-Agent':'Weerlab Netherlands charts/1.0','Cache-Control':'no-cache'}),timeout=30));manifest_path=args.state/'current.json';manifest=json.loads(manifest_path.read_text()) if manifest_path.exists() else dict(base='https://data.weerlab.nl/wxbeta-nl/',runs={})
  errors=[]
- for cycle in args.cycles:
+ for cycle in sorted(args.cycles,key=lambda c:parse(meta['data']['ecmwf']['runs'].get(f'{c:02d}',{}).get('run_utc','1970-01-01T00:00Z')),reverse=True):
   key=f'{cycle:02d}';source=meta['data']['ecmwf']['runs'].get(key)
   if not source:continue
   run=parse(source['run_utc']);old=manifest['runs'].get(key)
