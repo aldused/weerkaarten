@@ -6,9 +6,10 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'wind_six'))
 from build import fetch,parse,iso,UTC
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from basemap import BOUNDS,setup as map_setup,outlines as map_outlines
+from presentation import header as map_header,footer as map_footer
 ROOT=Path(__file__).resolve().parents[2]
 def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
-REV='nl-mosmap-2'
+REV='nl-mosmap-local-3'
 def revision(layer):return REV+'-cloud4' if layer=='overview' else REV+'-bft2' if layer=='mslp_bft' else REV
 SURFACE={'temperature_2m':'°C','pressure_msl':'hPa','wind_speed_10m':'m/s','wind_direction_10m':'°','cloud_cover':'%','precipitation':'mm','cape':'J/kg'}
 UPPER={'temperature_850hPa':'°C','geopotential_height_500hPa':'m','wind_speed_300hPa':'m/s','wind_direction_300hPa':'°','pressure_msl':'hPa'}
@@ -117,7 +118,7 @@ def render(task):
  # Render the actual grid at export resolution, and label actual cells below.
  field=LinearNDInterpolator(tri,samples)(xx,yy)
  if not np.isfinite(field).all():raise ValueError('Rooster dekt Nederland niet')
- fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.105,.95,.79]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
+ fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.135,.95,.75]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
  clip=map_setup(ax)
  levels,cmap=palette(layer);cf=ax.contourf(xx,yy,field,levels=levels,cmap=cmap,extend='both',antialiased=True);cf.set_clip_path(clip)
  if layer=='overview':
@@ -148,18 +149,15 @@ def render(task):
  ax.set_xticks([]);ax.set_yticks([])
  for spine in ax.spines.values():spine.set_visible(False)
  valid=run+dt.timedelta(hours=lead);title,unit=LABELS[layer];model_label,_,_=MODEL_INFO[model];resolution=resolution_for(model,layer)
- fig.text(.025,.967,title+' · Nederland',fontsize=18,weight='bold')
  interval=6 if model=='gfs025' else 3
- note=f' · wit: bewolking · neerslag: gemiddelde over voorgaande {interval} uur' if layer=='overview' else ''
- fig.text(.025,.94,f'{model_label} {resolution} · {unit}'+note,fontsize=10,color='#405763')
- fig.text(.975,.916,f'Run: {run:%d-%m-%Y %H} UTC    Geldig: {valid:%d-%m-%Y %H:%M} UTC  (+{lead}u)',fontsize=10,ha='right')
- cax=fig.add_axes([.06,.06,.42,.016] if layer=='overview' else [.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(('Temperatuur op 2 meter' if layer=='overview' else 'Windkracht' if layer=='mslp_bft' else title)+' ('+unit+')',fontsize=10)
+ note=f' · wit: bewolking · neerslag: gemiddelde over {interval} uur' if layer=='overview' else ''
+ map_header(fig,title,run,valid,f'{model_label} · {resolution} · {unit}'+note)
+ cax=fig.add_axes([.06,.075,.42,.016] if layer=='overview' else [.08,.075,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(('Temperatuur op 2 meter' if layer=='overview' else 'Windkracht' if layer=='mslp_bft' else title)+' ('+unit+')',fontsize=10)
  if layer=='overview':
-  rain_axis=fig.add_axes([.55,.06,.40,.016]);rain_bar=fig.colorbar(rain_cf,cax=rain_axis,orientation='horizontal',spacing='uniform',ticks=[.1,.5,1,2,4,8,16,32,64]);rain_bar.ax.tick_params(labelsize=8);rain_bar.set_label(f'Neerslag · mm/uur · gemiddelde over {interval} uur',fontsize=9)
+  rain_axis=fig.add_axes([.55,.075,.40,.016]);rain_bar=fig.colorbar(rain_cf,cax=rain_axis,orientation='horizontal',spacing='uniform',ticks=[.1,.5,1,2,4,8,16,32,64]);rain_bar.ax.tick_params(labelsize=8);rain_bar.set_label(f'Neerslag · mm/uur · gemiddelde over {interval} uur',fontsize=9)
  credit='NOAA/NCEP GFS Open Data' if model=='gfs025' else 'Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
  description='modelwaarden' if model=='gfs_global' else 'waarden van oorspronkelijke modelcellen'
- fig.text(.5,.019,f'{count} {description} · kleuren op land, cijfers ook op zee · '+credit,fontsize=8.8,ha='center',color='#506570')
- fig.text(.5,.007,'Ed Aldus / Weerlab · afbeelding 3600 × 3600 pixels',fontsize=8.8,ha='center',color='#506570')
+ map_footer(fig,f'{count} modelcellen · kleuren op land, cijfers ook op zee · '+credit)
  out.parent.mkdir(parents=True,exist_ok=True);tmp=out.with_suffix('.tmp.png');fig.savefig(tmp,facecolor='white',dpi=288);plt.close(fig);tmp.replace(out)
 
 def main():

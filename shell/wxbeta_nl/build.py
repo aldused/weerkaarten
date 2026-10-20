@@ -6,7 +6,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'wind_six'))
 from build import fetch,parse,iso,UTC
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from basemap import BOUNDS,setup as map_setup,outlines as map_outlines
-REV='nl-native-gust-mosmap-5'
+from presentation import header as map_header,footer as map_footer
+REV='nl-native-gust-mosmap-local-6'
 ROOT=Path(__file__).resolve().parents[2]
 
 def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
@@ -71,7 +72,7 @@ def render(task):
  if not np.isfinite(z).all():raise ValueError('Native rooster dekt kaart niet volledig')
  levels=[0,20,40,50,60,70,80,90,100,120,140,160]
  colors=['#e6f0fa','#c1def0','#88c1df','#7bc677','#bbd85b','#f0e65b','#f6ba48','#f78c3d','#e85127','#c92c24','#8a1d68']
- fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.09,.95,.805]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
+ fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.135,.95,.75]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
  clip=map_setup(ax)
  cf=ax.contourf(xx,yy,z[:,:,0],levels=levels,cmap=ListedColormap(colors),norm=BoundaryNorm(levels,len(colors)),extend='max',antialiased=True);cf.set_clip_path(clip)
  pressure=z[:,:,1];lo=int(np.floor(pressure.min()/2)*2);hi=int(np.ceil(pressure.max()/2)*2)
@@ -91,11 +92,9 @@ def render(task):
  ax.set_xticks([]);ax.set_yticks([])
  for spine in ax.spines.values():spine.set_visible(False)
  valid=run+dt.timedelta(hours=lead);interval=3 if lead<=144 else 6
- fig.text(.025,.967,'Maximale windstoten op 10 m · Nederland',fontsize=18,weight='bold',ha='left')
- fig.text(.025,.94,f'ECMWF IFS native 9 km · maximum voorgaande {interval} uur · km/u',fontsize=11,color='#405763')
- fig.text(.975,.916,f'Run: {run:%d-%m-%Y %H} UTC    Geldig: {valid:%d-%m-%Y %H:%M} UTC  (+{lead}u)',fontsize=10,ha='right')
- cax=fig.add_axes([.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',ticks=levels,spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_label('Maximale windstoot 10 m (km/u) · witte lijnen: luchtdruk (hPa)',fontsize=10)
- fig.text(.5,.007,'Kleuren op land · cijfers ook op zee: echte 9 km-roostercellen · ECMWF / Open-Meteo CC BY 4.0 · Ed Aldus / Weerlab',fontsize=9,ha='center',color='#506570')
+ map_header(fig,'Maximale windstoten op 10 m',run,valid,f'ECMWF IFS · native 9 km · maximum over {interval} uur · km/u')
+ cax=fig.add_axes([.08,.075,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',ticks=levels,spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_label('Maximale windstoot 10 m (km/u) · lijnen: luchtdruk (hPa)',fontsize=10)
+ map_footer(fig,'Modelwaarden · kleuren op land, cijfers ook op zee · ECMWF / Open-Meteo CC BY 4.0')
  out.parent.mkdir(parents=True,exist_ok=True);temporary=out.with_suffix('.tmp.png');fig.savefig(temporary,facecolor='white',dpi=288);plt.close(fig);temporary.replace(out)
 
 def main():
