@@ -1447,7 +1447,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261019-wind-six",
+    "src": "beta.html?v=20261020-beta-links",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",

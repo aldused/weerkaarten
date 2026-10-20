@@ -37,6 +37,14 @@
     padding: 2px 6px; border-radius: 3px; letter-spacing: 1px;
   }
 
+  .share-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #copy-url { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  #copy-url:hover { background: #24334c; border-color: var(--accent); }
+  #copy-url:focus-visible, #direct-url:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  #copy-status { color: var(--muted); font-size: 12px; }
+  #direct-url { width: min(340px, 100%); background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 5px; padding: 8px; font-size: 12px; }
+  @media (max-width: 650px) { .header { flex-wrap: wrap; gap: 8px; padding: 10px 12px; } .share-tools { width: 100%; margin-left: 0; } }
+
   /* Tabs */
   .tabs {
     display: flex; background: var(--panel);
@@ -108,6 +116,11 @@
     <span class="header-logo">weerlab<span style="color:var(--muted)">.nl</span></span>
     <span class="beta-badge">BETA</span>
     <span class="header-sub">Experimentele tools</span>
+    <div class="share-tools">
+      <button id="copy-url" type="button">Kopieer directe URL</button>
+      <span id="copy-status" role="status" aria-live="polite"></span>
+      <input id="direct-url" type="url" readonly hidden aria-label="Directe URL van dit BETA-tabblad">
+    </div>
   </div>
 
   <div class="tabs">
@@ -207,6 +220,7 @@ function openTab(name, el, updateHash = true) {
     iframeLoaded[name] = true;
   }
   if (updateHash && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  updateDirectURL();
 }
 
 document.querySelectorAll('.tab[data-tab]').forEach(tab => {
@@ -230,6 +244,42 @@ function restoreTabFromHash() {
 }
 window.addEventListener('hashchange', restoreTabFromHash);
 window.addEventListener('DOMContentLoaded', restoreTabFromHash);
+
+// A shared link opens this BETA tool directly, also outside the main-site iframe.
+function directURL() {
+  const name = document.querySelector('.tab.actief').dataset.tab;
+  const url = new URL('beta.html', location.href);
+  url.hash = name;
+  return url.href;
+}
+function updateDirectURL() {
+  const input = document.getElementById('direct-url');
+  input.value = directURL();
+  input.hidden = true;
+  document.getElementById('copy-url').textContent = 'Kopieer directe URL';
+  document.getElementById('copy-url').title = input.value;
+  document.getElementById('copy-status').textContent = '';
+}
+document.getElementById('copy-url').addEventListener('click', async () => {
+  const button = document.getElementById('copy-url');
+  const input = document.getElementById('direct-url');
+  const url = directURL();
+  let copied = false;
+  try { await navigator.clipboard.writeText(url); copied = true; } catch (_) {
+    input.value = url;
+    input.hidden = false;
+    input.focus();
+    input.select();
+    try { copied = document.execCommand('copy'); } catch (_) {}
+    if (copied) { input.hidden = true; button.focus(); }
+  }
+  // A tab change while permission is pending must not show success for another URL.
+  if (url !== directURL()) return;
+  button.textContent = copied ? '✓ URL gekopieerd' : 'Kopieer directe URL';
+  document.getElementById('copy-status').textContent = copied ? 'Link naar dit tabblad gekopieerd.' : 'Selecteer de link en kopieer met Ctrl+C of ⌘C.';
+});
+document.getElementById('direct-url').addEventListener('click', event => event.target.select());
+updateDirectURL();
 
 // ── Zoom ──────────────────────────────────────────────────
 function setZoom(v) {
