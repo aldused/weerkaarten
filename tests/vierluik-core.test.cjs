@@ -100,3 +100,10 @@ test('Physical scalar bounds are shared by map, labels and point values',()=>{
   assert.equal(C.scalarValue('temp',-10),-10);
   assert.ok(Number.isNaN(C.scalarValue('cape',NaN)));
 });
+
+test('Run badges show actual UTC initialisation, including winter time, never forecast start',()=>{
+  assert.equal(C.modelRunLabel({run_utc:'2026-10-20T00:00:00Z'}),'Run 20-10 00:00 UTC');
+  assert.equal(C.modelRunLabel({run:'dinsdag 20.10.2026 04:00 LT'}),'Run 20-10 02:00 UTC');
+  assert.equal(C.modelRunLabel({run:'maandag 26.10.2026 04:00 LT'}),'Run 26-10 03:00 UTC');
+  assert.equal(C.modelRunLabel({run:'geldig vanaf 2026-10-20T00:00 LT',bijgewerkt:'20 Oct 2026 03:40'}),'Run niet door bron vermeld · update 20 Oct 2026 03:40');
+});

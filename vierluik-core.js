@@ -27,6 +27,22 @@
     // A wall-time Date for the existing date labels; never use this for interval arithmetic.
     return new Date(p.year,p.month-1,p.day,p.hour,p.minute,p.second);
   }
+  function modelRunLabel(meta) {
+    if(!meta)return 'Run laden…';
+    let value=meta.run_utc;
+    // Legacy feeds explicitly label their real initialisation in Dutch local time.
+    if(!value && typeof meta.run==='string' && !/geldig vanaf/i.test(meta.run)) {
+      const m=meta.run.match(/(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}) LT/);
+      if(m)value=m[3]+'-'+m[2]+'-'+m[1]+'T'+m[4]+':'+m[5];
+    }
+    const ms=value?timeMs(value):NaN;
+    if(Number.isFinite(ms)) {
+      const d=new Date(ms),pad=n=>String(n).padStart(2,'0');
+      return 'Run '+pad(d.getUTCDate())+'-'+pad(d.getUTCMonth()+1)+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+' UTC';
+    }
+    // The first forecast hour and download time are not a model initialisation.
+    return 'Run niet door bron vermeld'+(meta.bijgewerkt?' · update '+meta.bijgewerkt:'');
+  }
   function decode(buffer, info, meta) {
     if(buffer.byteLength<16)throw Error('Databestand mist de kop');
     const v=new DataView(buffer),nLat=v.getUint16(0,true),nLon=v.getUint16(2,true),nSteps=v.getUint16(4,true),nComp=v.getUint16(6,true),dtype=v.getUint8(8);
@@ -115,5 +131,5 @@
     const index=Math.floor((degrees+22.5)/45)%8;
     return {degrees,index,label:['N','NO','O','ZO','Z','ZW','W','NW'][index]};
   }
-  return {windDirection,HOUR,timeMs,dayKey,displayDate,decode,sample,cumulative,bilinear,gustMagnitude,scalarValue};
+  return {modelRunLabel,windDirection,HOUR,timeMs,dayKey,displayDate,decode,sample,cumulative,bilinear,gustMagnitude,scalarValue};
 });

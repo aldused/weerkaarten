@@ -95,7 +95,7 @@ def post_bulk(batch: list[tuple[int, int, float, float]], args: argparse.Namespa
         "hourly": HOURLY,
         "models": [args.model],
         "forecast_days": args.days,
-        "timezone": ["Europe/Amsterdam"],
+        "timezone": ["UTC"],
         "wind_speed_unit": "kmh",
         "precipitation_unit": "mm",
         "cell_selection": "nearest",
@@ -136,6 +136,16 @@ def write_bin(path: Path, arrays: tuple[np.ndarray, ...]) -> None:
             for arr in arrays:
                 f.write(arr[s].astype(np.float32).tobytes())
     print(f"  {path.name}: {path.stat().st_size / 1024 / 1024:.1f} MB")
+
+
+def local_forecast_times(times: list[str]) -> list[str]:
+    result = []
+    for value in times:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        result.append(dt.astimezone(LOCAL_TZ).isoformat())
+    return result
 
 
 def main() -> int:
@@ -184,6 +194,10 @@ def main() -> int:
     if times is None:
         raise RuntimeError("Geen tijdstappen ontvangen van Open-Meteo")
 
+    # Haal uren in UTC op, zodat beide 02:00-uren bij wintertijd behouden blijven.
+    # Publiceer expliciete offsets voor bestaande lokale datumlabels.
+    times = local_forecast_times(times)
+
     # Trim naar max_steps
     if args.max_steps and len(times) > args.max_steps:
         times = times[:args.max_steps]
@@ -223,7 +237,7 @@ def main() -> int:
     # de gemeten zonneschijn). zonuren.py leidt de zonnige fractie af uit de
     # directe straling; zie de toets in dat bestand.
     from zonuren import zonminuten_uit_direct
-    zon_tijden = [datetime.fromisoformat(tt).replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc)
+    zon_tijden = [datetime.fromisoformat(tt).astimezone(timezone.utc)
                   for tt in times]
     heeft_zicht = bool(np.isfinite(arrays["visibility"]).any())
     if heeft_zicht:
@@ -287,10 +301,10 @@ def main() -> int:
             region_name="auto",
         )
         R2_BUCKET = "weerlab-harmonie"
-        bestanden = [str(out_meta.name)]
-        for f2 in sorted(os.listdir(WORK_DIR)):
-            if f2.startswith(f"{prefix}_data_") and f2.endswith(".bin"):
-                bestanden.append(f2)
+        bestanden = sorted({info["file"] for info in meta["parameters"].values()
+                            if info.get("file")})
+        bestanden.append(f2)
+        bestanden.append(str(out_meta.name))  # Metadata pas na alle databestanden publiceren.
         for f2 in bestanden:
             ct = "application/json" if f2.endswith(".json") else "application/octet-stream"
             s3.upload_file(str(WORK_DIR / f2), R2_BUCKET, f2, ExtraArgs={"ContentType": ct})
