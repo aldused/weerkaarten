@@ -29,3 +29,12 @@ test('returning to a tab preserves a failed-save retry',async()=>{
 test('a second edit cannot silently replace an unsaved retry',async()=>{
  const h=harness();await h.initialize('a');const save=h.api.toggle('a');h.pending[2].reject(Error('offline'));await save;assert.equal(h.api.ready(),false);await h.api.toggle('a');assert.equal(h.pending.length,3);assert(h.api.html().includes('Opnieuw proberen'));
 });
+test('rapid product visits are queued while a history write is in flight',async()=>{
+ const h=harness(),original=draft('a');original.preferences.history=true;
+ const init=h.api.init(()=>{});h.answer(0,{userId:'a',dashboard:original});h.answer(1,{products:['a','b','c'].map(id=>({id,name:id}))});await init;
+ const first=h.api.visit('a');h.api.visit('b');h.api.visit('c');assert.equal(h.pending.length,3);
+ h.answer(2,{userId:'a',dashboard:{...original,revision:2,recent:['a']}});await first;
+ assert.equal(h.pending.length,4);assert.deepEqual(JSON.parse(h.pending[3].options.body).recent,['c','b','a']);
+ h.answer(3,{userId:'a',dashboard:{...original,revision:3,recent:['c','b','a']}});await new Promise(setImmediate);
+ assert.equal(h.api.ready(),true);
+});

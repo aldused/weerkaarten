@@ -1,10 +1,10 @@
 /* Personal data lives only in memory; the authenticated API owns persistence. */
 window.MijnWeerlab=(()=>{
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let data=null,userId=null,products=[],status='loading',message='',busy=false,retry=null,refresh=()=>{},query='',adding=false,drag=null,generation=0,loading=false;
+  let data=null,userId=null,products=[],status='loading',message='',busy=false,retry=null,refresh=()=>{},query='',adding=false,drag=null,generation=0,loading=false,pendingVisits=[];
   const api='/api/mijn-weerlab';
   const catalog=()=>new Map(products.map(p=>[p.id,p]));
-  function clear(){generation++;loading=false;data=null;userId=null;products=[];retry=null;busy=false;query='';adding=false;drag=null;status='error';message='Log opnieuw in om je persoonlijke omgeving te openen.';refresh();}
+  function clear(){generation++;loading=false;pendingVisits=[];data=null;userId=null;products=[];retry=null;busy=false;query='';adding=false;drag=null;status='error';message='Log opnieuw in om je persoonlijke omgeving te openen.';refresh();}
   async function request(path,options={}){
     const response=await fetch(api+path,{credentials:'same-origin',cache:'no-store',redirect:'manual',...options,headers:{'X-Weerlab-Request':'1',...options.headers},signal:AbortSignal.timeout(15000)});
     if(response.type==='opaqueredirect'||[301,302,303,307,308].includes(response.status)){clear();const error=Error('Je sessie is verlopen. Log opnieuw in.');error.session=true;throw error;}
@@ -18,10 +18,11 @@ window.MijnWeerlab=(()=>{
     try{
       const [account,list]=await Promise.all([request('/dashboard'),request('/catalog')]);
       if(attempt!==generation)return;
+      if(userId&&userId!==account.userId)pendingVisits=[];
       data=account.dashboard;userId=account.userId;products=list.products;status='saved';retry=null;
       if(initial&&!location.hash&&data.preferences.start==='personal')history.replaceState(null,'','#menu/favorieten');
     }catch(error){if(attempt!==generation)return;status='error';message=error.message;retry=()=>load();}
-    finally{if(attempt===generation){loading=false;refresh();}}
+    finally{if(attempt===generation){loading=false;refresh();flushVisits();}}
   }
   async function persist(next,path='/dashboard'){
     if(busy||loading||!data)return false;
@@ -35,9 +36,18 @@ window.MijnWeerlab=(()=>{
       status='error';message=error.message;
       if(!error.session&&!error.validation)retry=error.conflict?()=>load():()=>persist(next,path);
       return false;
-    }finally{if(attempt===generation){busy=false;refresh();}}
+    }finally{if(attempt===generation){busy=false;refresh();flushVisits();}}
   }
-  function change(fn){if(!data||busy||loading||retry)return;const next=structuredClone(data);fn(next);return persist(next);}
+  function change(fn){if(!data||busy||loading||retry)return;const next=structuredClone(data);fn(next);if(!next.preferences.history)pendingVisits=[];return persist(next);}
+  function flushVisits(){
+    if(!data?.preferences.history||busy||loading||retry||!pendingVisits.length)return;
+    const visits=pendingVisits;pendingVisits=[];
+    return change(next=>{for(const id of visits)next.recent=[id,...next.recent.filter(x=>x!==id)].slice(0,5);});
+  }
+  function visit(id){
+    if(!data?.preferences.history||!products.some(p=>p.id===id)||pendingVisits.at(-1)===id||!pendingVisits.length&&data.recent[0]===id)return;
+    pendingVisits=[...pendingVisits.filter(x=>x!==id),id].slice(-5);return flushVisits();
+  }
   const disabled=()=>busy||status==='loading'||!!retry&&!!data?' disabled':'';
   function options(current){return `<option value="">Niet ingedeeld</option>`+(data?.categories||[]).map(c=>`<option value="${esc(c.id)}" ${current===c.id?'selected':''}>${esc(c.name)}</option>`).join('');}
   function favorite(f){
@@ -144,5 +154,5 @@ window.MijnWeerlab=(()=>{
   window.addEventListener('pagehide',clear);
   window.addEventListener('pageshow',event=>{if(event.persisted)load();});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!busy&&!(data&&retry))load();});
-  return {html,toggle,togglePage,savedPages,loaded:()=>!!data,removePage(id){return change(n=>n.savedPages=n.savedPages.filter(p=>p.id!==id));},init(callback){refresh=callback;return load({initial:true});},ids:()=>data?.favorites.map(f=>f.productId)||[],ready:()=>!!data&&!busy&&!retry&&status!=='loading',error:()=>status==='error'?message:'',visit(id){if(data?.preferences.history&&!busy&&data.recent[0]!==id&&products.some(p=>p.id===id))change(n=>n.recent=[id,...n.recent.filter(x=>x!==id)].slice(0,5));}};
+  return {html,toggle,togglePage,savedPages,loaded:()=>!!data,removePage(id){return change(n=>n.savedPages=n.savedPages.filter(p=>p.id!==id));},init(callback){refresh=callback;return load({initial:true});},ids:()=>data?.favorites.map(f=>f.productId)||[],ready:()=>!!data&&!busy&&!retry&&status!=='loading',error:()=>status==='error'?message:'',visit};
 })();

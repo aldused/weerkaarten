@@ -73,7 +73,12 @@ const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  await page.waitForFunction(id=>document.querySelector('[data-favorite]')?.dataset.favorite===id,touchSecond);
  assert.equal(dashboard.favorites[0].id,touchSecond);console.log('PASS: touch-pointer drag preserves the new order');await cdp.detach();
- dashboard=emptyDashboard();await page.reload();await page.getByRole('button',{name:'Mijn eerste favoriet toevoegen'}).click();
+ dashboard=emptyDashboard();dashboard.preferences.history=true;
+ await page.goto(base+'/index.html#radar');await page.reload();await page.waitForFunction(()=>document.querySelector('#page-save:not([disabled])'));
+ assert.equal(dashboard.recent[0],'radar');
+ await page.goto(base+'/index.html#pluim-ens6plus?station=Rotterdam&run=12');await page.waitForFunction(()=>document.querySelector('#page-save:not([disabled])'));
+ assert.deepEqual(dashboard.recent.slice(0,2),['pluim-ens6plus','radar']);console.log('PASS: direct product links are included in recent history');
+ dashboard=emptyDashboard();await page.goto(base+'/index.html#menu/favorieten');await page.reload();await page.getByRole('button',{name:'Mijn eerste favoriet toevoegen'}).click();
  for(const id of ['radar','nowcast','bliksem','satelliet','actueel']){
    await page.locator(`[data-mw="choose"][data-id="${id}"]`).click();
    await page.waitForFunction(id=>document.querySelector(`[data-mw="choose"][data-id="${id}"]`)?.textContent==='Toegevoegd',id);

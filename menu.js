@@ -32,6 +32,11 @@
   const $ = selector => document.querySelector(selector);
   const site = window.WEERLAB_MENU_SITE || {};
   const personal=window.MijnWeerlab;
+  let lastPersonalProduct='';
+  function trackPersonalProduct(){
+    if(!personal?.loaded()){lastPersonalProduct='';return;}
+    const id=state.product?.id||'';if(id===lastPersonalProduct)return;lastPersonalProduct=id;if(id)personal.visit(id);
+  }
   const selfPage = site.selfPage || 'index.html';
   const storagePrefix = site.storagePrefix || 'weerlab-menu-v9';
   const products = MENU_PRODUCTS;
@@ -41,7 +46,7 @@
     nu:{name:'Nu',icon:'sun',title:'Het weer van dit moment',description:'Bekijk buien, satellietbeelden en de laatste metingen.',types:[['nu','Alles'],['beeld','Radar & satelliet'],['metingen','Metingen'],['water','Water & kust']]},
     verwachting:{name:'Verwachting',icon:'cloud',title:'Wat gaat het weer doen?',description:'Van de komende bui tot de verwachting voor volgende week.',types:[['kaarten','Weerkaarten'],['pluim','Pluimen & kansen'],['tekst','Weerbericht']]},
     terugkijken:{name:'Terugkijken',icon:'history',title:'Het weer in perspectief',description:'Bekijk eerdere metingen, weerrecords en klimaatgemiddelden.',types:[['alles','Alles'],['terug','Metingen & archief'],['klimaat','Records & klimaat']]},
-    favorieten:{name:personal?'Mijn Weerlab':'Favorieten',icon:'star',title:personal?'Mijn Weerlab':'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
+    favorieten:{name:personal||!site.storagePrefix?'Mijn Weerlab':'Favorieten',icon:'star',title:personal||!site.storagePrefix?'Mijn Weerlab':'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
     professioneel:{name:'Voor professionals',icon:'tools',title:'Voor professionals',description:'Verdieping, analyse en gereedschap voor de weerstudio.',types:[['vak','Alles'],['analyse','Analyse'],['tv','TV & uitzending'],['studio','Studio']]},
   };
   const typeNames=site.typeNames || {nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals',nieuws:'Nieuws'};
@@ -51,10 +56,10 @@
   };
   const productIcon = p => ({warning:'warning',radar:'radar',neerslag:'water',temp:'thermometer',wind:'wind',bewolking:'cloud',sat:'cloud',bliksem:'lightning',vierluik:'grid',pluim:'chart',pluim6:'chart',pluimtrend:'chart',meteogram:'chart',tekst:'text',studio:'tools',water:'water',records:'chart',tabel:'list',skewt:'chart',kansen:'chart'})[p.icon] || 'map';
   function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback;}catch{return fallback;}}
-  const previous=site.storagePrefix?[]:readStorage('sb_favorieten',[]);
-  const defaultFavorites=site.defaultFavorites || ['radar','significant','pluim-ens6'];
+  const previous=[];
+  const defaultFavorites=site.defaultFavorites || (site.storagePrefix?['radar','significant','pluim-ens6']:[]);
   const migrated=Array.isArray(previous)?previous.map(id=>products.find(p=>p.href==='index.html#'+id)?.id).filter(Boolean):[];
-  let saved=readStorage(storagePrefix+'-favorites',migrated.length?migrated:defaultFavorites);
+  let saved=site.storagePrefix?readStorage(storagePrefix+'-favorites',migrated.length?migrated:defaultFavorites):[];
   let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>id==='global4'?'hires4':id).filter(id=>byId.has(id)))]:defaultFavorites;
   if(personal)favorites=[];
   let view=readStorage(storagePrefix+'-view','cards')==='list'?'list':'cards';
@@ -65,7 +70,7 @@
     if(!Array.isArray(stored))return [];
     return stored.filter(p=>{try{const u=new URL(p.url);return u.origin===location.origin&&/^https?:$/.test(u.protocol)&&typeof p.title==='string';}catch{return false;}});
   }
-  let savedPages=personal?[]:readSavedPages(),restoringPageView=false;
+  let savedPages=personal||!site.storagePrefix?[]:readSavedPages(),restoringPageView=false;
   const pageActions=document.createElement('nav');pageActions.id='page-actions';pageActions.className='page-actions';pageActions.setAttribute('aria-label','Deze pagina');
   pageActions.append($('#product-permalink'));
   if(personal)pageActions.insertAdjacentHTML('afterbegin','<a id="page-personal-back" class="mw-back" href="#menu/favorieten" hidden>← Mijn Weerlab</a>');
@@ -182,7 +187,7 @@
     if(location.hash!==hash) history[replace?'replaceState':'pushState'](null,'',hash);
     window.addEventListener('storage',event=>{if(!personal&&event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
   state=readRoute();render();
-    if(personal&&state.product)personal.visit(state.product.id);
+    trackPersonalProduct();
     if(!keepScroll)window.scrollTo({top:0,behavior:'instant'});
     if(focus)(state.productRoute?$('#product-title'):main.querySelector('h1'))?.focus({preventScroll:true});
   }
@@ -313,7 +318,8 @@
     document.body.classList.toggle('vierluik-open', showingProduct && /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(state.productRoute));
     main.hidden=showingProduct;
     $('#product-workspace').hidden=!showingProduct;
-    if(showingProduct){renderProduct();prefixMenuLinks();refreshPageActions();return;}
+    if(showingProduct){renderProduct();prefixMenuLinks();refreshPageActions();trackPersonalProduct();return;}
+    lastPersonalProduct='';
     const oldFrame=$('#product-frame');
     if(oldFrame.hasAttribute('src') || oldFrame.dataset.route){
       const blank=oldFrame.cloneNode(false);
@@ -596,6 +602,7 @@
       $('#product-permalink').href=selfPage+data.hash;
     }
     if(typeof data.title==='string'){$('#product-title').textContent=data.title;frame.title=data.title;document.title=data.title+' · Weerlab';}
+    trackPersonalProduct();
   });
 
   window.addEventListener('storage',event=>{if(!personal&&event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
