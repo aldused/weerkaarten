@@ -38,13 +38,13 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 echo "=== $(date '+%F %T') wxbeta-check ==="
 
 BUILD_LOG="$(mktemp -t wxbeta_build.XXXXXX)"
-MAX_BUILD_SECONDS="${WXBETA_MAX_BUILD_SECONDS:-3600}"
+MAX_BUILD_SECONDS="${WXBETA_MAX_BUILD_SECONDS:-10800}"
 "$PY" -u -c 'import runpy,sys; sys.path.insert(0,"/Users/aldus/KNMI_Project/weerlab/shell"); from wxbeta_network import configure; configure(); runpy.run_path("build_wxbeta.py",run_name="__main__")'  >"$BUILD_LOG" 2>&1 &
 BUILD_PID=$!
 SECONDS=0
 
 # Een vastgelopen netwerk- of renderproces mag de volgende ECMWF-run niet
-# dagenlang blokkeren. Een volledige kaartopbouw krijgt ruim een uur; daarna
+# dagenlang blokkeren. Een volledige kaartopbouw krijgt ruim drie uur; daarna
 # stoppen we de hoofd- en workerprocessen en geeft launchd de volgende beurt
 # een schone start.
 while kill -0 "$BUILD_PID" 2>/dev/null; do

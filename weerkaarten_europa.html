@@ -23,6 +23,7 @@
   .run-info { color:var(--muted); font-size:12px; margin-left:auto; }
   .update-info { color:#77d9a3; font-size:11px; white-space:nowrap; }
   .update-info.fresh { color:var(--gold); }
+  #update-info.stale { color:#fff; background:#991b1b; border:1px solid #fca5a5; border-radius:5px; padding:6px 10px; font-weight:800; white-space:normal; }
 
   .barlabel { padding:11px 20px 0; color:var(--muted); font-size:10px;
               text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
@@ -333,7 +334,17 @@ let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToke
 const NL_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_nl_meta.json':'https://data.weerlab.nl/wxbeta-nl/current.json';
 const META_REFRESH_MS=5*60*1000;
 const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
-function runAgeWarning(run,now=Date.now()){const age=now-Date.parse(run?.run_utc);return !Number.isFinite(age)?'Modeltijd onbekend':age>48*3600000?'Verouderde modelrun · controleer geldigheid':'';}
+function runAgeWarning(run,now=Date.now(),model=curModel){
+  const age=(now-Date.parse(run?.run_utc))/3600000;
+  if(!Number.isFinite(age))return 'Modeltijd onbekend';
+  const limit=model==='cams'?30:12;
+  return age>limit?'⚠ Oudere modelrun · '+Math.floor(age)+' uur oud · controleer runkeuze':'';
+}
+function updateRunStatus(message=''){
+  const warning=runAgeWarning(R());
+  $('update-info').textContent=[warning,message].filter(Boolean).join(' · ');
+  $('update-info').classList.toggle('stale',!!warning);
+}
 let frameToken=0, preloadTimer=null;
 const imageFrames=new MapPerformance.ImageFrames({maxBytes:64*1024*1024,maxEntries:12});
 const $=id=>document.getElementById(id);
@@ -438,7 +449,7 @@ function setModel(mk){
 function setRun(cc,valid=R()?.frames[idx]?.valid_utc){
   curCyc=cc;
   if(valid)idx=R().frames.reduce((best,f,i,a)=>Math.abs(Date.parse(f.valid_utc)-Date.parse(valid))<Math.abs(Date.parse(a[best].valid_utc)-Date.parse(valid))?i:best,0);
-  $('update-info').textContent=runAgeWarning(R());
+  updateRunStatus();
   document.querySelectorAll('#runbar .pill').forEach(b=>{b.classList.toggle('actief',b.dataset.c===cc);b.setAttribute('aria-pressed',String(b.dataset.c===cc));});
   const md=META.models.find(m=>m.key===curModel);
   $('run-info').textContent=(curModel==='ecmwf'?(cc==='ens'?'ECMWF ENS-gemiddelde':'ECMWF IFS'):md.label)+' · Run: '+R().run_label+' · t/m +'+R().maxlead+'u';
@@ -694,11 +705,11 @@ async function refreshMeta(initial=false){
       setRun(nextCyc,oldValid);
     }
     const now=new Date();
-    $('update-info').textContent=(runAgeWarning(R()) ? runAgeWarning(R())+' · ' : changed?'nieuwe run geladen · ':'bron gecontroleerd · ')+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    updateRunStatus((changed?'nieuwe kaartset geladen · ':'beschikbare kaartset gecontroleerd · ')+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'));
     $('update-info').classList.toggle('fresh',changed);
     if(changed) setTimeout(()=>$('update-info').classList.remove('fresh'),5000);
   }catch(e){
-    $('update-info').textContent='live controle mislukt';
+    if(META)updateRunStatus('live controle mislukt');else $('update-info').textContent='live controle mislukt';
     if(initial) $('run-info').textContent='meta laden mislukt';
   }
 }
