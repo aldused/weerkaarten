@@ -53,10 +53,10 @@ def build_direct(run,cache,targets=None):
    with tempfile.TemporaryDirectory(prefix='weerlab-wind-grib-') as directory:
     for perturbed in [False,True]:
      path=Path(directory)/('pf.grib2' if perturbed else 'fc.grib2')
-     request=dict(date=run.strftime('%Y%m%d'),time=run.hour,step=lead,param=['10u','10v','10fg'],stream='enfo' if perturbed else 'oper',type='pf' if perturbed else 'fc',target=str(path))
+     request=dict(date=run.strftime('%Y%m%d'),time=run.hour,step=lead,param=['10u','10v','10fg' if lead<=90 else '10fg3'],stream='enfo' if perturbed else 'oper',type='pf' if perturbed else 'fc',target=str(path))
      if perturbed:request['number']=list(range(1,51))
      print('Download',run,'ENS' if perturbed else 'operationeel',target,flush=True)
-     for source in ('aws','google'):
+     for source in ('ecmwf','aws','google'):
       try:Client(source).retrieve(**request);break
       except Exception:
        if source=='google':raise
