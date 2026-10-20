@@ -306,6 +306,7 @@
     restoringPageView=false;
     renderNav();
     const showingProduct=!!state.productRoute;
+    document.body.classList.toggle('personal-open',!!personal&&!showingProduct&&state.page==='favorieten');
     document.body.classList.toggle('product-open',showingProduct);
     document.body.classList.remove('map-focus-open');
     setProductExpanded(false);

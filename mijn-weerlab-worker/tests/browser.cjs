@@ -50,7 +50,7 @@ const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),
  fail=true;await page.locator('[data-mw="remove"]').click();await page.getByRole('button',{name:'Opnieuw proberen'}).waitFor();assert.equal(dashboard.favorites.length,1);fail=false;await page.getByRole('button',{name:'Opnieuw proberen'}).click();await page.getByRole('button',{name:'Mijn eerste favoriet toevoegen'}).waitFor();
  // Exercise 100 stored references, including products removed from the current catalog.
  const hundredMap=new Map(map);for(let i=0;i<100-catalog.length;i++)hundredMap.set('retired-'+i,{id:'retired-'+i});
- dashboard=validateDashboard({...dashboard,categories:[],favorites:[...hundredMap.keys()].map((id,i)=>({id:'many'+i,productId:id,customName:'Favoriet '+i,categoryId:null}))},hundredMap,dashboard);
+ dashboard=validateDashboard({...dashboard,categories:Array.from({length:5},(_,i)=>({id:'group'+i,name:'Categorie '+i})),favorites:[...hundredMap.keys()].map((id,i)=>({id:'many'+i,productId:id,customName:'Favoriet '+i,categoryId:'group'+(i%5)}))},hundredMap,dashboard);
  const started=Date.now();await page.reload();await page.waitForFunction(()=>document.querySelectorAll('[data-favorite]').length===100);assert(Date.now()-started<5000);
  assert.equal(await page.getByText('Dit product is momenteel niet beschikbaar. Je favoriet blijft bewaard.',{exact:true}).count(),100-catalog.length);
  console.log('100 favorites rendered in '+(Date.now()-started)+' ms, including '+(100-catalog.length)+' unavailable products');
@@ -59,7 +59,20 @@ const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),
  dashboard=validateDashboard({...dashboard,categories:[{id:'daily',name:'Dagelijkse weerbewaking'}],favorites:catalog.slice(0,25).map((p,i)=>({id:'f'+i,productId:p.id,customName:i===0?'Mijn dagelijkse controle':'',categoryId:'daily'}))},map,dashboard);
  await page.reload();await page.locator('[data-favorite]').first().waitFor();await page.locator('[data-mw="view"][data-view-value="cards"]').click();await page.waitForFunction(()=>document.querySelectorAll('.mw-items:not(.mw-list) [data-favorite]').length===25);
  await page.screenshot({path:path.resolve(__dirname,'../desktop.png'),fullPage:false});
+ await page.setViewportSize({width:3440,height:1440});assert(await page.locator('#main').evaluate(el=>el.getBoundingClientRect().width>2800));
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.waitForTimeout(250);await page.screenshot({path:path.resolve(__dirname,'../mobile.png'),fullPage:false});
+ // Exercise the touch-pointer drag path with two real registered products.
+ dashboard=validateDashboard({...emptyDashboard(),favorites:catalog.slice(0,2).map((p,i)=>({id:'touch'+i,productId:p.id,customName:'Touch '+i,categoryId:null}))},map,dashboard);
+ const [touchFirst,touchSecond]=dashboard.favorites.map(f=>f.id);
+ await page.reload();await page.locator(`[data-drag="${touchSecond}"]`).waitFor();
+ const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+ const first=await page.locator(`[data-drag="${touchSecond}"]`).boundingBox();const second=await page.locator(`[data-favorite="${touchFirst}"]`).boundingBox();
+ const from={x:Math.round(first.x+first.width/2),y:Math.round(first.y+first.height/2)},to={x:Math.round(second.x+second.width/2),y:Math.round(Math.min(second.y+30,760))};
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[from]});
+ for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:from.x+(to.x-from.x)*i/8,y:from.y+(to.y-from.y)*i/8}]});
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await page.waitForFunction(id=>document.querySelector('[data-favorite]')?.dataset.favorite===id,touchSecond);
+ assert.equal(dashboard.favorites[0].id,touchSecond);console.log('PASS: touch-pointer drag preserves the new order');await cdp.detach();
  dashboard=emptyDashboard();await page.reload();await page.getByRole('button',{name:'Mijn eerste favoriet toevoegen'}).click();
  for(const id of ['radar','nowcast','bliksem','satelliet','actueel']){
    await page.locator(`[data-mw="choose"][data-id="${id}"]`).click();
