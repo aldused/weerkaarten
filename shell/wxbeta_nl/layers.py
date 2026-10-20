@@ -11,7 +11,7 @@ REV='nl-detail-1'
 def revision(layer):return REV+'-cloud4' if layer=='overview' else REV+'-bft2' if layer=='mslp_bft' else REV
 SURFACE={'temperature_2m':'°C','pressure_msl':'hPa','wind_speed_10m':'m/s','wind_direction_10m':'°','cloud_cover':'%','precipitation':'mm','cape':'J/kg'}
 UPPER={'temperature_850hPa':'°C','geopotential_height_500hPa':'m','wind_speed_300hPa':'m/s','wind_direction_300hPa':'°','pressure_msl':'hPa'}
-MODEL_INFO={'ecmwf_ifs':('ECMWF IFS','native 9 km',2),'ecmwf_ifs025':('ECMWF IFS','0,25° · circa 25 km',1),'gfs_global':('GFS','native circa 13 km',2),'icon_eu':('ICON-EU','native circa 7 km',3),'ecmwf_ens':('ECMWF ENS-gemiddelde','0,25° · circa 25 km',1),'cams':('CAMS · Saharastof','native circa 40 km',1)}
+MODEL_INFO={'ecmwf_ifs':('ECMWF IFS','native 9 km',2),'ecmwf_ifs025':('ECMWF IFS','0,25° · circa 25 km',1),'gfs025':('GFS','0,25° · circa 25 km',1),'gfs_global':('GFS','native circa 13 km',2),'icon_eu':('ICON-EU','native circa 7 km',3),'ecmwf_ens':('ECMWF ENS-gemiddelde','0,25° · circa 25 km',1),'cams':('CAMS · Saharastof','native circa 40 km',1)}
 def resolution_for(model,layer):return '0,25° · circa 25 km' if model=='gfs_global' and layer in ('t850','z500') else MODEL_INFO[model][1]
 DOMAINS={'gfs_global':'ncep_gfs013','icon_eu':'dwd_icon_eu'}
 def fields_for(model):
@@ -121,7 +121,7 @@ def render(task):
  if layer=='overview':
   cloud=LinearNDInterpolator(tri,data['cloud_cover'])(xx,yy)/100
   ax.imshow(np.dstack([np.ones_like(cloud)]*3+[np.clip(cloud*.7,0,.7)]),extent=BOUNDS,origin='lower',aspect='auto',zorder=2)
-  rain=LinearNDInterpolator(tri,data['rain3']/3)(xx,yy)
+  rain=LinearNDInterpolator(tri,data['rain_rate'] if 'rain_rate' in data else data['rain3']/3)(xx,yy)
   rain_cf=ax.contourf(xx,yy,np.ma.masked_less(rain,.1),levels=[.1,.5,1,2,4,8,16,32,64],colors=['#a3d9ee','#77c4e8','#4fa4d6','#347cc1','#2856a5','#243b8c','#4c287a','#812b73'],extend='max',zorder=3,alpha=.9)
  ax.set_aspect(1/np.cos(np.radians(52.2)))
  if layer not in ('precip24','cape','jetstream','dust_europe'):
@@ -149,13 +149,14 @@ def render(task):
  for spine in ax.spines.values():spine.set_visible(False)
  valid=run+dt.timedelta(hours=lead);title,unit=LABELS[layer];model_label,_,_=MODEL_INFO[model];resolution=resolution_for(model,layer)
  fig.text(.025,.967,title+' · Nederland',fontsize=18,weight='bold')
- note=' · wit: bewolking · neerslag: gemiddelde over voorgaande 3 uur' if layer=='overview' else ''
+ interval=6 if model=='gfs025' else 3
+ note=f' · wit: bewolking · neerslag: gemiddelde over voorgaande {interval} uur' if layer=='overview' else ''
  fig.text(.025,.94,f'{model_label} {resolution} · {unit}'+note,fontsize=10,color='#405763')
  fig.text(.975,.916,f'Run: {run:%d-%m-%Y %H} UTC    Geldig: {valid:%d-%m-%Y %H:%M} UTC  (+{lead}u)',fontsize=10,ha='right')
  cax=fig.add_axes([.06,.06,.42,.016] if layer=='overview' else [.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(('Temperatuur op 2 meter' if layer=='overview' else title)+' ('+unit+')',fontsize=10)
  if layer=='overview':
-  rain_axis=fig.add_axes([.55,.06,.40,.016]);rain_bar=fig.colorbar(rain_cf,cax=rain_axis,orientation='horizontal',spacing='uniform',ticks=[.1,.5,1,2,4,8,16,32,64]);rain_bar.ax.tick_params(labelsize=8);rain_bar.set_label('Neerslag · mm/uur · gemiddelde over 3 uur',fontsize=9)
- credit='Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
+  rain_axis=fig.add_axes([.55,.06,.40,.016]);rain_bar=fig.colorbar(rain_cf,cax=rain_axis,orientation='horizontal',spacing='uniform',ticks=[.1,.5,1,2,4,8,16,32,64]);rain_bar.ax.tick_params(labelsize=8);rain_bar.set_label(f'Neerslag · mm/uur · gemiddelde over {interval} uur',fontsize=9)
+ credit='NOAA/NCEP GFS Open Data' if model=='gfs025' else 'Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
  description='modelwaarden' if model=='gfs_global' else 'waarden van oorspronkelijke modelcellen'
  fig.text(.5,.019,f'{count} {description} · scherpe provinciegrenzen · '+credit,fontsize=8.8,ha='center',color='#506570')
  fig.text(.5,.007,'Ed Aldus / Weerlab · afbeelding 3600 × 3600 pixels',fontsize=8.8,ha='center',color='#506570')
