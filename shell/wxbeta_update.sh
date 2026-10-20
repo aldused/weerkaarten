@@ -83,3 +83,6 @@ fi
 
 # Native Nederlandkaart volgt exact de gepubliceerde ECMWF-runs van Europa.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/build.py"   --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish
+
+# Alle Nederlandlagen worden opnieuw getekend uit de echte modelroosters.
+"$PY" -u "$WEERLAB/shell/wxbeta_nl/layers.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish

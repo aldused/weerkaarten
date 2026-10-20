@@ -5,7 +5,7 @@ import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'wind_six'))
 from build import fetch,parse,iso,UTC
 BOUNDS=(3.05,7.5,50.65,53.8)
-REV='nl-native-gust-3'
+REV='nl-native-gust-4'
 ROOT=Path(__file__).resolve().parents[2]
 
 def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
@@ -69,7 +69,7 @@ def render(task):
  if not np.isfinite(z).all():raise ValueError('Native rooster dekt kaart niet volledig')
  levels=[0,20,40,50,60,70,80,90,100,120,140,160]
  colors=['#e6f0fa','#c1def0','#88c1df','#7bc677','#bbd85b','#f0e65b','#f6ba48','#f78c3d','#e85127','#c92c24','#8a1d68']
- fig=plt.figure(figsize=(12.5,12.5),dpi=180);ax=fig.add_axes([.025,.09,.95,.805]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
+ fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.09,.95,.805]);ax.set_xlim(BOUNDS[:2]);ax.set_ylim(BOUNDS[2:]);ax.set_aspect(1/np.cos(np.radians(52.2)))
  cf=ax.contourf(xx,yy,z[:,:,0],levels=levels,cmap=ListedColormap(colors),norm=BoundaryNorm(levels,len(colors)),extend='max',antialiased=True)
  pressure=z[:,:,1];lo=int(np.floor(pressure.min()/2)*2);hi=int(np.ceil(pressure.max()/2)*2)
  if hi>lo:
@@ -102,7 +102,7 @@ def render(task):
  fig.text(.975,.916,f'Run: {run:%d-%m-%Y %H} UTC    Geldig: {valid:%d-%m-%Y %H:%M} UTC  (+{lead}u)',fontsize=10,ha='right')
  cax=fig.add_axes([.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',ticks=levels,spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_label('Maximale windstoot 10 m (km/u) · witte lijnen: luchtdruk (hPa)',fontsize=10)
  fig.text(.5,.007,'Cijfers: echte 9 km-roostercellen · ECMWF / Open-Meteo CC BY 4.0 · Ed Aldus / Weerlab',fontsize=9,ha='center',color='#506570')
- out.parent.mkdir(parents=True,exist_ok=True);temporary=out.with_suffix('.tmp.png');fig.savefig(temporary,facecolor='white',dpi=180);plt.close(fig);temporary.replace(out)
+ out.parent.mkdir(parents=True,exist_ok=True);temporary=out.with_suffix('.tmp.png');fig.savefig(temporary,facecolor='white',dpi=288);plt.close(fig);temporary.replace(out)
 
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--state',type=Path,required=True);ap.add_argument('--cycles',nargs='+',type=int,default=[18,12,6,0]);ap.add_argument('--publish',action='store_true');args=ap.parse_args();args.state.mkdir(parents=True,exist_ok=True)
@@ -123,9 +123,15 @@ def main():
    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as pool:
     for i,_ in enumerate(pool.map(render,tasks)):print(f'{key}Z kaart {i+1}/{len(tasks)}',flush=True)
    if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copy',str(args.state/'maps'/folder),f'r2:weerlab-data/wxbeta-nl/{folder}','--transfers','8','--header-upload','Cache-Control: public, max-age=31536000, immutable'],check=True)
-   manifest['runs'][key]=dict(run_utc=iso(run),base=manifest['base'],renderer=REV,maxlead=leads[-1],frames=[dict(lead=h,valid_utc=iso(run+dt.timedelta(hours=h)),valid_label=(run+dt.timedelta(hours=h)).strftime('%d-%m-%Y %H:%M UTC')) for h in leads],files={'gust':[f'{folder}/gust_{h:03d}.png' for h in leads]})
-   manifest['updated']=iso(dt.datetime.now(UTC));tmp=manifest_path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(manifest_path)
-   if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(manifest_path),'r2:weerlab-data/wxbeta-nl/current.json','--header-upload','Cache-Control: no-cache'],check=True)
+   entry=dict(run_utc=iso(run),base=manifest['base'],renderer=REV,maxlead=leads[-1],frames=[dict(lead=h,valid_utc=iso(run+dt.timedelta(hours=h)),valid_label=(run+dt.timedelta(hours=h)).strftime('%d-%m-%Y %H:%M UTC')) for h in leads],files={'gust':[f'{folder}/gust_{h:03d}.png' for h in leads]})
+   with (args.state/'publish.lock').open('w') as publication:
+    fcntl.flock(publication,fcntl.LOCK_EX)
+    manifest=json.loads(manifest_path.read_text()) if manifest_path.exists() else dict(base='https://data.weerlab.nl/wxbeta-nl/',runs={})
+    previous=manifest['runs'].get(key,{})
+    if previous.get('run_utc')==entry['run_utc'] and previous.get('layers'):entry['layers']=previous['layers']
+    entry['resolution']='9 km';manifest['runs'][key]=entry
+    manifest['updated']=iso(dt.datetime.now(UTC));tmp=manifest_path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(manifest_path)
+    if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(manifest_path),'r2:weerlab-data/wxbeta-nl/current.json','--header-upload','Cache-Control: no-cache'],check=True)
    print(key,'Nederland gepubliceerd',flush=True)
   except Exception as e:errors.append(key+': '+str(e));print(errors[-1],flush=True)
  if errors:raise SystemExit('; '.join(errors))
