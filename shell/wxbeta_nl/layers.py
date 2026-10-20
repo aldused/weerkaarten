@@ -152,7 +152,7 @@ def render(task):
  ax.set_xticks([]);ax.set_yticks([])
  for spine in ax.spines.values():spine.set_visible(False)
  valid=run+dt.timedelta(hours=lead);title,unit=LABELS[layer];model_label,_,_=MODEL_INFO[model];resolution=resolution_for(model,layer)
- interval=6 if model=='gfs025' else 3
+ interval=int(round(float(data['interval'][0]))) if 'interval' in data else 6 if model=='gfs025' else 3
  note=f' · wit: bewolking · neerslag: gemiddelde over {interval} uur' if layer=='overview' else ''
  map_header(fig,title,run,valid,f'{model_label} · {resolution} · {unit}'+note)
  cax=fig.add_axes([.06,.075,.42,.016] if layer=='overview' else [.08,.075,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(('Temperatuur op 2 meter' if layer=='overview' else 'Windkracht' if layer=='mslp_bft' else title)+' ('+unit+')',fontsize=10)

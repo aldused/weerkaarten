@@ -3,11 +3,15 @@
 Uses the same Dutch presentation as Netherlands charts. Each publication has
 its own immutable files; a missing run never falls back to another cycle.
 """
+import os
 import argparse,concurrent.futures,datetime as dt,fcntl,json,sys,subprocess
 from functools import lru_cache
 from pathlib import Path
 import numpy as np
 ROOT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT/'shell'))
+from wxbeta_network import configure
+configure()
 sys.path.insert(0,str(ROOT/'shell/wxbeta_nl'))
 from presentation import header,footer
 from basemap import geometry_path
@@ -121,7 +125,7 @@ def main():
     try:lon,lat,records=load(PROJECT/'grib_cache/wx_gust.grib2',run,leads)
     except ValueError:
      from ecmwf.opendata import Client
-     tmp=raw.with_suffix('.tmp.grib2');Client('google').retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=leads,param=['msl','10fg','10fg3'],target=str(tmp));tmp.replace(raw)
+     tmp=raw.with_suffix('.tmp.grib2');Client(os.environ.get('ECMWF_OPEN_DATA_SOURCE','google')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=leads,param=['msl','10fg','10fg3'],target=str(tmp));tmp.replace(raw)
      lon,lat,records=load(raw,run,leads)
    else:lon,lat,records=load(raw,run,leads)
    np.savez_compressed(npz,lon=lon,lat=lat,gust=np.stack([records[h]['gust'] for h in leads]),pressure=np.stack([records[h]['pressure'] for h in leads]),interval=np.array([records[h]['interval'] for h in leads]))

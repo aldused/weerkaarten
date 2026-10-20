@@ -1,9 +1,13 @@
 """Exact-run cumulative precipitation for Europe, Netherlands and North Sea."""
+import os
 import argparse,bz2,concurrent.futures,datetime as dt,fcntl,gzip,importlib.util,json,sys,subprocess,time,urllib.parse,urllib.request
 from functools import lru_cache
 from pathlib import Path
 import numpy as np
 ROOT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT/'shell'))
+from wxbeta_network import configure
+configure()
 sys.path.insert(0,str(ROOT/'shell/wxbeta_nl'))
 import layers as nl
 from basemap import geometry_path
@@ -11,6 +15,7 @@ from presentation import header,footer
 spec=importlib.util.spec_from_file_location('northsea_elements',Path(__file__).with_name('layers.py'));elements=importlib.util.module_from_spec(spec);spec.loader.exec_module(elements)
 EU=(-24,45,28,72);NL=(3.3,7.4,50.45,53.8);NS=elements.BOUNDS
 REV='cumulative-local-2'
+def revision(area):return REV+'-labels2' if area=='northsea' else REV
 
 
 def download(url,path,compressed=False):
@@ -68,7 +73,7 @@ def global_data(state,model,run,leads):
    except ValueError:
     if not path.exists():
      from ecmwf.opendata import Client
-     tmp=path.with_suffix('.tmp.grib2');Client('google').retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=sorted(set([0]+leads+[h-24 for h in leads if h>=24])),param=['tp'],target=str(tmp));tmp.replace(path)
+     tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('ECMWF_OPEN_DATA_SOURCE','google')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=sorted(set([0]+leads+[h-24 for h in leads if h>=24])),param=['tp'],target=str(tmp));tmp.replace(path)
     coords,records=elements.read(path,run,leads,['tp'],EU)
   lon=np.unique(coords[:,1]);lat=np.unique(coords[:,0])[::-1]
   # Reader preserves latitude/longitude ordering of the original GRIB.
@@ -112,6 +117,12 @@ def native_netherlands(state,model,run,leads):
  if not points:raise ValueError('Lege native neerslagcache')
  coords=np.array(sorted(points));values=np.stack([points[tuple(p)] for p in coords],axis=1).astype('float32')
  if not np.isfinite(values).all() or np.min(np.diff(values,axis=0))<-.05:raise ValueError('Ongeldige native totalen')
+ from scipy.spatial import Delaunay,QhullError
+ corners=np.array([[NL[0],NL[2]],[NL[1],NL[2]],[NL[0],NL[3]],[NL[1],NL[3]]])
+ if len(coords)<4:raise ValueError('Native cache dekt Nederland niet volledig')
+ try:covered=np.all(Delaunay(coords[:,[1,0]]).find_simplex(corners)>=0)
+ except QhullError:covered=False
+ if not covered:raise ValueError('Native cache dekt Nederland niet volledig')
  return coords,values,{'ecmwf':'native 9 km','gfs':'native circa 13 km','iconeu':'native circa 7 km'}[model]
 
 
@@ -140,7 +151,7 @@ def render(task):
  if lat is None:
   coords=lon;field=LinearNDInterpolator(coords[:,[1,0]],values)(xx,yy);samples=coords[::max(1,len(coords)//350)];labels=LinearNDInterpolator(coords[:,[1,0]],values)(samples[:,1],samples[:,0])
  else:
-  interpolate=RegularGridInterpolator((lat,lon),values,bounds_error=True);field=interpolate(np.stack([yy,xx],axis=-1));ix=np.linspace(1,len(lon)-2,22).astype(int);iy=np.linspace(1,len(lat)-2,16).astype(int);sx,sy=np.meshgrid(lon[ix],lat[iy]);samples=np.column_stack([sy.ravel(),sx.ravel()]);labels=values[np.ix_(iy,ix)].ravel()
+  interpolate=RegularGridInterpolator((lat,lon),values,bounds_error=True);field=interpolate(np.stack([yy,xx],axis=-1));xids=np.flatnonzero((lon>bounds[0])&(lon<bounds[1]));yids=np.flatnonzero((lat>bounds[2])&(lat<bounds[3]));ix=np.unique(np.linspace(xids[0],xids[-1],min(22,len(xids))).astype(int));iy=np.unique(np.linspace(yids[0],yids[-1],min(16,len(yids))).astype(int));sx,sy=np.meshgrid(lon[ix],lat[iy]);samples=np.column_stack([sy.ravel(),sx.ravel()]);labels=values[np.ix_(iy,ix)].ravel()
  if not np.isfinite(field).all():raise ValueError('Neerslagrooster dekt kaart niet')
  fig=plt.figure(figsize=(12.5,12.5),dpi=288);ax=fig.add_axes([.025,.135,.95,.75]);ax.set_xlim(bounds[:2]);ax.set_ylim(bounds[2:]);ax.set_aspect(1/np.cos(np.radians(middle)))
  levels=[0,.1,1,2,5,10,20,30,50,75,100,150,200,300,500];cf=ax.contourf(xx,yy,field,levels=levels,cmap=plt.get_cmap('YlGnBu',len(levels)-1),norm=BoundaryNorm(levels,len(levels)-1),extend='max',antialiased=True)
@@ -161,7 +172,7 @@ def render(task):
 
 
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--state',type=Path,required=True);ap.add_argument('--publish',action='store_true');ap.add_argument('--models',nargs='+',default=['ecmwf','gfs','iconeu']);ap.add_argument('--cycles',nargs='+',default=['00','18','12','06']);args=ap.parse_args();args.state.mkdir(parents=True,exist_ok=True)
+ ap=argparse.ArgumentParser();ap.add_argument('--state',type=Path,required=True);ap.add_argument('--publish',action='store_true');ap.add_argument('--regions',nargs='+',choices=['europe','netherlands','northsea']);ap.add_argument('--models',nargs='+',default=['ecmwf','gfs','iconeu']);ap.add_argument('--cycles',nargs='+',default=['00','18','12','06']);args=ap.parse_args();args.state.mkdir(parents=True,exist_ok=True)
  lock=(args.state/'build.lock').open('a')
  try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
  except BlockingIOError:return
@@ -170,27 +181,30 @@ def main():
   for cc in args.cycles:
    source=meta['data'][model]['runs'].get(cc)
    if not source or 'precip24' not in source['files']:continue
-   run=nl.parse(source['run_utc']);leads=[f['lead'] for f in source['frames']];areas=['europe','netherlands']+(['northsea'] if model=='ecmwf' else [])
+   run=nl.parse(source['run_utc']);leads=[f['lead'] for f in source['frames']];areas=['europe','netherlands']+(['northsea'] if model=='ecmwf' else []);areas=[area for area in areas if not args.regions or area in args.regions]
    try:
-    if all(manifest.get('regions',{}).get(area,{}).get('models',{}).get(model,{}).get('runs',{}).get(cc,{}).get('run_utc')==source['run_utc'] and manifest['regions'][area]['models'][model]['runs'][cc].get('renderer')==REV for area in areas):continue
+    if all(manifest.get('regions',{}).get(area,{}).get('models',{}).get(model,{}).get('runs',{}).get(cc,{}).get('run_utc')==source['run_utc'] and manifest['regions'][area]['models'][model]['runs'][cc].get('renderer')==revision(area) for area in areas):continue
     lon,lat,values=global_data(args.state,model,run,leads)
     for area in areas:
      old=manifest.get('regions',{}).get(area,{}).get('models',{}).get(model,{}).get('runs',{}).get(cc,{})
-     if old.get('run_utc')==source['run_utc'] and old.get('renderer')==REV:continue
+     if old.get('run_utc')==source['run_utc'] and old.get('renderer')==revision(area):continue
      xx,yy,vv=lon,lat,values;resolution='0,25° · circa 25 km' if model!='iconeu' else 'native circa 7 km'
      if area=='netherlands':
       try:xx,vv,resolution=native_netherlands(args.state,model,run,leads);yy=None
       except ValueError as e:print(model,cc,'Nederland:',str(e),'· exact globaal rooster gebruikt',flush=True)
-     folder=f'{model}-{run:%Y%m%d%H}-{area}-{REV}';dest=args.state/'maps'/folder
+     folder=f'{model}-{run:%Y%m%d%H}-{area}-{revision(area)}';dest=args.state/'maps'/folder
      tasks=[(model,run,h,area,xx,yy,vv[i],resolution,dest/f'precip_total_{h:03d}.png') for i,h in enumerate(leads)]
      with concurrent.futures.ProcessPoolExecutor(max_workers=3) as pool:
       for i,_ in enumerate(pool.map(render,tasks)):
        if i%24==0:print(model,cc,area,'cumulatief',i+1,'/',len(tasks),flush=True)
      if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copy',str(dest),f'r2:weerlab-data/wxbeta-cumulative/{folder}','--transfers','8','--header-upload','Cache-Control: public, max-age=31536000, immutable'],check=True)
-     target=manifest['regions'].setdefault(area,{}).setdefault('models',{}).setdefault(model,{}).setdefault('runs',{})
-     target[cc]={'run_utc':source['run_utc'],'renderer':REV,'resolution':resolution,'modelLabel':{'ecmwf':'ECMWF IFS','gfs':'GFS','iconeu':'ICON-EU'}[model],'frames':source['frames'],'files':{'precip_total':[f'{folder}/precip_total_{h:03d}.png' for h in leads]}}
-     manifest['updated']=dt.datetime.now(dt.timezone.utc).isoformat();tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(path)
-     if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(path),'r2:weerlab-data/wxbeta-cumulative/current.json','--header-upload','Cache-Control: no-cache'],check=True)
+     with (args.state/'publish.lock').open('a') as publication:
+      fcntl.flock(publication,fcntl.LOCK_EX)
+      if path.exists():manifest=json.loads(path.read_text())
+      target=manifest['regions'].setdefault(area,{}).setdefault('models',{}).setdefault(model,{}).setdefault('runs',{})
+      target[cc]={'run_utc':source['run_utc'],'renderer':revision(area),'resolution':resolution,'modelLabel':{'ecmwf':'ECMWF IFS','gfs':'GFS','iconeu':'ICON-EU'}[model],'frames':source['frames'],'files':{'precip_total':[f'{folder}/precip_total_{h:03d}.png' for h in leads]}}
+      manifest['updated']=dt.datetime.now(dt.timezone.utc).isoformat();tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(path)
+      if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(path),'r2:weerlab-data/wxbeta-cumulative/current.json','--header-upload','Cache-Control: no-cache'],check=True)
      print(model,cc,area,'cumulatieve neerslag gepubliceerd',flush=True)
    except Exception as e:errors.append(model+' '+cc+': '+str(e));print(errors[-1],flush=True)
  if errors:raise SystemExit('; '.join(errors))

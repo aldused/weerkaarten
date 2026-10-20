@@ -34,3 +34,8 @@ worden direct gebruikt; GFS-vakken van zes uur worden vanaf +0 precies eenmaal
 opgeteld. Voor Nederland worden waar beschikbaar de reeds gevalideerde native
 uurgegevens gebruikt. Zonder complete tijdreeks wordt geen kaart gepubliceerd.
 Het manifest staat los van de basismetadata en wordt op exacte run gekoppeld.
+
+Bron-downloads hebben begrensde pogingen en time-outs. De elementencache
+versie 2 en layers-bounded.lock laten oudere opbouwen hun eigen bestanden
+behouden. Publicaties lezen onder de gedeelde publicatielock steeds het
+nieuwste manifest opnieuw; gelijktijdige aanvullingen blijven behouden.

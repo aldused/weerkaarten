@@ -1,4 +1,5 @@
 """All remaining ECMWF layers for the independent North Sea map."""
+import os
 import argparse,concurrent.futures,datetime as dt,fcntl,json,sys,subprocess
 from pathlib import Path
 import numpy as np
@@ -6,8 +7,10 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'wxbeta_nl'))
 import layers as nl
 import importlib.util
 spec=importlib.util.spec_from_file_location('northsea_gust',Path(__file__).with_name('build.py'));region=importlib.util.module_from_spec(spec);spec.loader.exec_module(region)
+region.configure()
 BOUNDS=region.BOUNDS
 REV='northsea-elements-local-1'
+def revision(layer):return REV+'-rain-period-2' if layer=='overview' else REV
 LAYERS=['mslp_bft','overview','t2m','wind','cape','precip24','t850','z500','jetstream']
 # short name, pressure level, required GRIB units, scaling, offset
 SPECS={'msl':(None,'Pa',.01,0),'2t':(None,'K',1,-273.15),'10u':(None,'m s**-1',1,0),'10v':(None,'m s**-1',1,0),'tcc':(None,'(0 - 1)',100,0),'mucape':(None,'J kg**-1',1,0),'tp':(None,'m',1000,0),'t':(850,'K',1,-273.15),'gh':(500,'gpm',1,0),'u':(300,'m s**-1',1,0),'v':(300,'m s**-1',1,0)}
@@ -55,7 +58,7 @@ def precipitation(total,lead,window):
 
 
 def retrieve(run,leads,cache):
- folder=cache/f'{run:%Y%m%d%H}-elements-1';folder.mkdir(parents=True,exist_ok=True);saved=folder/'complete.npz'
+ folder=cache/f'{run:%Y%m%d%H}-elements-2';folder.mkdir(parents=True,exist_ok=True);saved=folder/'complete.npz'
  if saved.exists():
   with np.load(saved) as d:
    if not np.array_equal(d['leads'],leads):raise ValueError('Cache-tijdas verschilt')
@@ -65,7 +68,7 @@ def retrieve(run,leads,cache):
  for fields,options,candidates in groups:
   expected=sorted(set(leads)|{h-24 for h in leads if h>=24}) if fields==['tp'] else leads
   local={};actual_coords=None
-  for path in [region.PROJECT/'grib_cache'/candidate for candidate in candidates]+list(folder.glob('*.grib2')):
+  for path in [region.PROJECT/'grib_cache'/candidate for candidate in candidates]+list((cache/f'{run:%Y%m%d%H}-elements-1').glob('*.grib2'))+list(folder.glob('*.grib2')):
    if not path.exists():continue
    for field in fields:
     if field in local:continue
@@ -80,7 +83,7 @@ def retrieve(run,leads,cache):
    with (folder/('tp.lock' if missing==['tp'] else 'download.lock')).open('a') as download_lock:
     fcntl.flock(download_lock,fcntl.LOCK_EX)
     if not path.exists():
-     tmp=path.with_suffix('.tmp.grib2');Client('google').retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=expected,param=missing,target=str(tmp),**options);tmp.replace(path)
+     tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('ECMWF_OPEN_DATA_SOURCE','google')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=expected,param=missing,target=str(tmp),**options);tmp.replace(path)
    c,r=read(path,run,expected,missing)
    if actual_coords is not None and not np.array_equal(c,actual_coords):raise ValueError('Roosters verschillen')
    actual_coords=c;local.update(r)
@@ -120,11 +123,11 @@ def process_cycle(args,meta,cc):
  run=nl.parse(source['run_utc']);leads=[f['lead'] for f in source['frames']]
  manifest=json.loads(path.read_text());old=manifest['runs'].get(cc,{})
  if old.get('run_utc')!=source['run_utc']:raise ValueError('Windstootrun moet eerst gereed zijn')
- if all(old.get('layers',{}).get(k,{}).get('renderer')==REV for k in args.layers):return
+ if all(old.get('layers',{}).get(k,{}).get('renderer')==revision(k) for k in args.layers):return
  coords,values,keys=retrieve(run,leads,args.state/'cache')
  for layer in args.layers:
-  if old.get('layers',{}).get(layer,{}).get('renderer')==REV:continue
-  selected=[(i,h) for i,h in enumerate(leads) if layer!='precip24' or h>=24];folder=f'{run:%Y%m%d%H}-{REV}-{layer}';dest=args.state/'maps'/folder
+  if old.get('layers',{}).get(layer,{}).get('renderer')==revision(layer):continue
+  selected=[(i,h) for i,h in enumerate(leads) if layer!='precip24' or h>=24];folder=f'{run:%Y%m%d%H}-{revision(layer)}-{layer}-bounded';dest=args.state/'maps'/folder
   tasks=[(run,h,coords,values[i],keys,layer,'ecmwf_ifs025',dest/f'{layer}_{h:03d}.png') for i,h in selected]
   with concurrent.futures.ProcessPoolExecutor(max_workers=3) as pool:
    for i,_ in enumerate(pool.map(render,tasks)):
@@ -133,7 +136,7 @@ def process_cycle(args,meta,cc):
   with (args.state/'publish.lock').open('a') as publication:
    fcntl.flock(publication,fcntl.LOCK_EX);manifest=json.loads(path.read_text());entry=manifest['runs'][cc]
    if entry['run_utc']!=source['run_utc']:raise ValueError('Run wijzigde tijdens opbouwen')
-   entry.setdefault('layers',{})[layer]={'renderer':REV,'resolution':'0,25° · circa 25 km','frames':[source['frames'][i] for i,h in selected],'files':{layer:[f'{folder}/{layer}_{h:03d}.png' for i,h in selected]}}
+   entry.setdefault('layers',{})[layer]={'renderer':revision(layer),'resolution':'0,25° · circa 25 km','frames':[source['frames'][i] for i,h in selected],'files':{layer:[f'{folder}/{layer}_{h:03d}.png' for i,h in selected]}}
    if layer=='t2m':entry['layers']['t2m_grid']={**entry['layers'][layer],'files':{'t2m_grid':entry['layers'][layer]['files'][layer]}}
    manifest['updated']=dt.datetime.now(dt.timezone.utc).isoformat();tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(manifest));tmp.replace(path)
    if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(path),'r2:weerlab-data/wxbeta-northsea/current.json','--header-upload','Cache-Control: no-cache'],check=True)
@@ -142,7 +145,7 @@ def process_cycle(args,meta,cc):
 
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--state',type=Path,required=True);ap.add_argument('--publish',action='store_true');ap.add_argument('--cycles',nargs='+',default=['00','18','12','06']);ap.add_argument('--layers',nargs='+',default=LAYERS);args=ap.parse_args();args.state.mkdir(parents=True,exist_ok=True)
- lock=(args.state/'layers.lock').open('a')
+ lock=(args.state/'layers-bounded.lock').open('a')
  try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
  except BlockingIOError:return
  meta=nl.public_meta();path=args.state/'current.json';errors=[]
