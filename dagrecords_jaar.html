@@ -4059,10 +4059,10 @@ function ktSeizoenJaar(y,m){ return m===12 ? y+1 : y; }
 function ktSeizoenLabel(sIdx, jaar){ return sIdx===0 ? `${jaar-1}/${String(jaar).slice(2)}` : `${jaar}`; }
 
 // ── Warme dagen (drempel-telling) ───────────────────────────────────────────
-const WD_THR    = [15, 20, 25, 30, 35, 40, 20];
-const WD_LABELS = ["Zachte dagen","Warme dagen","Zomerse dagen","Tropische dagen","Extreem warme dagen","Extreem hete dagen","Tropennachten"];
-const WD_COLORS = ["#22c55e","#eab308","#f59e0b","#f97316","#ef4444","#b91c1c","#c026d3"];
-const WD_KEY    = ["tx","tx","tx","tx","tx","tx","tn"];  // tropennacht = minimumtemp (tn)
+const WD_THR    = [15, 20, 25, 30, 35, 40, 20, 10];
+const WD_LABELS = ["Zachte dagen","Warme dagen","Zomerse dagen","Tropische dagen","Extreem warme dagen","Extreem hete dagen","Tropennachten","Dubbele cijfers"];
+const WD_COLORS = ["#22c55e","#eab308","#f59e0b","#f97316","#ef4444","#b91c1c","#c026d3","#0d9488"];
+const WD_KEY    = ["tx","tx","tx","tx","tx","tx","tn","tx"];  // tropennacht = minimumtemp (tn)
 const WD_EEUWGRENS = 1999;   // vorige eeuw t/m 1999, deze eeuw vanaf 2000
 let wdThr = 2;               // start op 'zomerse dagen ≥25'
 let wdView = "jaar";
@@ -4075,6 +4075,7 @@ let wdTabsGebouwd = false;
 //    drempel werd gehaald (elke dag mag een ander station zijn), top 5.
 // Bij één gekozen station vallen beide samen en tonen we alleen de stationsreeks.
 const WD_REEKS = [
+  {label:"Dubbele cijfers",     thr:"≥10°C",  key:"tx", test:v=>v>=10, col:"#0d9488", unit:"dagen"},
   {label:"Zachte dagen",        thr:"≥15°C",  key:"tx", test:v=>v>=15, col:"#22c55e", unit:"dagen"},
   {label:"Warme dagen",         thr:"≥20°C",  key:"tx", test:v=>v>=20, col:"#eab308", unit:"dagen"},
   {label:"Zomerse dagen",       thr:"≥25°C",  key:"tx", test:v=>v>=25, col:"#f59e0b", unit:"dagen"},
@@ -4127,6 +4128,27 @@ function reeksCompute(cats) {
     });
   }
   return out.map(a => a.sort((x, y) => y[0] - x[0] || x[2] - y[2]).slice(0, 5));
+}
+// Reeks aan het einde van de ingeladen data; ontbrekende dagen breken de reeks.
+function reeksDubbeleCijfersActueel() {
+  const stations = reeksDagen();
+  if (stations.length !== 1) return "";
+  const today = new Intl.DateTimeFormat("sv-SE", {timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  const cutoff = Date.parse(today + "T00:00:00Z") / 864e5;
+  const days = stations[0][1].filter(d => d[0] < cutoff);
+  if (!days.length) return "";
+  let count = 0, start = null, next = null;
+  const end = days[days.length - 1][0];
+  for (let i = days.length - 1; i >= 0; i--) {
+    const [o, tx] = days[i];
+    if (tx == null || tx < 10 || (next !== null && o !== next - 1)) break;
+    count++; start = o; next = o;
+  }
+  const record = reeksCompute([WD_REEKS[0]])[0][0]?.[0] || 0;
+  const comparison = count > 0 ? (count === record
+    ? " Deze reeks evenaart het langst gemeten aantal dagen."
+    : ` Nog ${record - count} dagen tot evenaring, ${record - count + 1} tot een nieuw record.`) : "";
+  return `<p class="rk-uitleg"><b>Reeks t/m ${reeksFmtDatum(end)}: ${count} dagen.</b>${count ? ` Vanaf ${reeksFmtDatum(start)}.` : " Geen dubbele cijfers op de laatste ingeladen meetdag."}${comparison} Dit betreft de ingeladen metingen; latere dagen zijn nog niet meegenomen.</p>`;
 }
 function reeksFmtDatum(o) { const d = new Date(o * 864e5); return `${d.getUTCDate()} ${NL_MAANDEN[d.getUTCMonth() + 1]} ${d.getUTCFullYear()}`; }
 
@@ -4202,10 +4224,11 @@ function reeksRenderInto(elId, cats) {
   let cards = "";
   cats.forEach((c, ci) => {
     const top = res[ci], t1 = top[0];
+    const actueel = c.label === "Dubbele cijfers" && !nat ? reeksDubbeleCijfersActueel() : "";
     const unit1 = c.unit === "nachten" ? (t1 && t1[0] === 1 ? "nacht" : "nachten") : (t1 && t1[0] === 1 ? "dag" : "dagen");
     const rows = top.map((r, i) => `<tr><td>${i + 1}</td><td class="rk-len">${r[0]}</td><td>${r[1]}</td><td class="rk-per">${reeksFmtDatum(r[2])} – ${reeksFmtDatum(r[3])}</td></tr>`).join("");
     cards += `<div class="rk-cat">
-      <div class="rk-h"><span class="rk-dot" style="background:${c.col}"></span><span class="rk-nm">${c.label}</span><span class="rk-thr">${c.thr}</span></div>
+      ${actueel}<div class="rk-h"><span class="rk-dot" style="background:${c.col}"></span><span class="rk-nm">${c.label}</span><span class="rk-thr">${c.thr}</span></div>
       ${t1 ? `<div class="rk-top1"><span class="rk-big" style="color:${c.col}">${t1[0]}<small>${unit1}</small></span><span class="rk-meta"><b>${t1[1]}</b><br>${reeksFmtDatum(t1[2])} – ${reeksFmtDatum(t1[3])}</span></div><table class="rk-tbl"><tbody>${rows}</tbody></table>` : `<div class="rk-leeg">In deze reeks niet voorgekomen.</div>`}
     </div>`;
   });
