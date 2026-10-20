@@ -1447,7 +1447,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261020-nl-detail",
+    "src": "beta.html?v=20261020-page-links",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",

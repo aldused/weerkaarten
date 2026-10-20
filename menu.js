@@ -58,6 +58,90 @@
   let view=readStorage(storagePrefix+'-view','cards')==='list'?'list':'cards';
   let state={}, filterOpen=false, toastTimer, searchTimer, searchOrigin='#start';
   const main=$('#main'), search=$('#search'), dialog=$('#menu-dialog');
+  function readSavedPages(){
+    const stored=readStorage(storagePrefix+'-saved-pages',[]);
+    if(!Array.isArray(stored))return [];
+    return stored.filter(p=>{try{const u=new URL(p.url);return u.origin===location.origin&&/^https?:$/.test(u.protocol)&&typeof p.title==='string';}catch{return false;}});
+  }
+  let savedPages=readSavedPages(),restoringPageView=false;
+  const pageActions=document.createElement('nav');pageActions.id='page-actions';pageActions.className='page-actions';pageActions.setAttribute('aria-label','Deze pagina');
+  pageActions.append($('#product-permalink'));
+  pageActions.insertAdjacentHTML('beforeend',`<button type="button" id="page-copy">Kopieer URL</button><button type="button" id="page-save" aria-pressed="false">☆ Bewaar deze pagina</button><details class="bookmark-help"><summary>Bladwijzer</summary><p>Bewaar deze pagina in je browser met <kbd>${/Mac|iPhone|iPad/.test(navigator.platform)?'⌘D':'Ctrl+D'}</kbd>. Op je telefoon: open het browsermenu en kies ‘Bladwijzer toevoegen’ of ‘Favorieten’.</p></details><input id="page-url" type="url" readonly hidden aria-label="Directe URL van deze pagina">`);
+  main.before(pageActions);
+  function favoriteCount(){return favorites.length+savedPages.length;}
+  function currentPageLink(){
+    const url=new URL(selfPage,location.href);url.hash=location.hash||'#menu/start';
+    let title=document.title.replace(/ · Weerlab$/,'');
+    if(state.product?.id==='beta'){
+      try{
+        const doc=$('#product-frame').contentDocument,tab=doc?.querySelector('.tab.actief'),child=doc?.querySelector('.tab-panel.actief iframe');
+        if(tab){
+          const params=new URLSearchParams();params.set('tab',tab.dataset.tab);title='BETA · '+tab.textContent.trim();
+          if(child){const view=new URL(child.contentWindow.location.href);view.searchParams.delete('v');if(view.origin===location.origin&&(view.search||view.hash))params.set('view',view.pathname+view.search+view.hash);}
+          url.hash='beta?'+params;
+        }
+      }catch{}
+    }
+    const basic=!!state.product&&url.hash===new URL(state.product.href,location.href).hash;
+    return {url:url.href,title,basic,id:state.product?.id};
+  }
+  function refreshPageActions(){
+    if(restoringPageView)return;
+    const page=currentPageLink();
+    if(state.product?.id==='beta'&&location.hash!==new URL(page.url).hash){
+      history.replaceState(null,'',new URL(page.url).hash);$('#product-frame').dataset.route=location.hash.slice(1);state=readRoute();
+    }
+    $('#product-permalink').href=page.url;$('#product-permalink').title=page.url;
+    $('#page-copy').title='Kopieer de directe link naar '+page.title;
+    const marked=savedPages.some(p=>p.url===page.url)||(page.basic&&favorites.includes(page.id));
+    $('#page-save').setAttribute('aria-pressed',String(marked));$('#page-save').textContent=marked?'★ Pagina bewaard':'☆ Bewaar deze pagina';
+    $('#page-save').title=(marked?'Verwijder uit':'Bewaar in')+' Favorieten binnen Weerlab';
+    $('#page-url').value=page.url;$('#page-url').hidden=true;
+  }
+  async function copyPageLink(){
+    const page=currentPageLink(),input=$('#page-url');let copied=false;
+    try{await navigator.clipboard.writeText(page.url);copied=true;}catch{
+      input.value=page.url;input.hidden=false;input.focus();input.select();try{copied=document.execCommand('copy');}catch{}
+      if(copied){input.hidden=true;$('#page-copy').focus();}
+    }
+    say(copied?'Directe link naar '+page.title+' gekopieerd.':'Kopieer de geselecteerde link met Ctrl+C of ⌘C.',true);
+  }
+  function saveCurrentPage(){
+    const page=currentPageLink();
+    if(page.basic&&byId.has(page.id)){toggleFavorite(page.id);refreshPageActions();return;}
+    const removing=savedPages.some(p=>p.url===page.url);
+    savedPages=removing?savedPages.filter(p=>p.url!==page.url):[{url:page.url,title:page.title},...savedPages];
+    const stored=save(storagePrefix+'-saved-pages',savedPages);renderNav();prefixMenuLinks();refreshPageActions();
+    if(!state.productRoute&&state.page==='favorieten')render();
+    say((removing?'Pagina verwijderd uit':'Pagina bewaard bij')+' Favorieten'+(stored?'.':'; alleen voor deze sessie.'),true);
+  }
+  function savedPagesSection(){
+    return savedPages.length?`<section class="saved-pages"><h2>Bewaarde pagina’s</h2><ul>${savedPages.map(p=>`<li><a href="${escape(p.url)}">${icon('star')}<span>${escape(p.title)}</span>${icon('arrow')}</a><button type="button" data-remove-page="${escape(p.url)}" aria-label="${escape(p.title)} verwijderen uit bewaarde pagina’s">${icon('close')}</button></li>`).join('')}</ul></section>`:'';
+  }
+  const linkedDocuments=new WeakSet();
+  function wirePageActions(frame){
+    let doc;try{doc=frame.contentDocument;}catch{return;}if(!doc||linkedDocuments.has(doc))return;linkedDocuments.add(doc);
+    const update=()=>setTimeout(refreshPageActions,0);
+    for(const event of ['click','change','input'])doc.addEventListener(event,update,true);
+    doc.defaultView.addEventListener('hashchange',update);
+    doc.addEventListener('load',event=>{if(event.target.tagName==='IFRAME'){wirePageActions(event.target);update();}},true);
+    doc.querySelectorAll('iframe').forEach(wirePageActions);
+  }
+  function restoreBetaView(frame){
+    if(state.product?.id!=='beta')return;
+    const view=new URLSearchParams(state.productRoute.split('?')[1]||'').get('view');if(!view)return;
+    try{
+      const child=frame.contentDocument?.querySelector('.tab-panel.actief iframe');if(!child)return;
+      const wanted=new URL(view,location.href),configured=new URL(child.src,frame.src);
+      const clean=u=>u.pathname.replace(/\/index(?:\.html)?$/,'/').replace(/\.html$/,'').replace(/\/$/,'');
+      if(wanted.origin!==location.origin||clean(wanted)!==clean(configured))return;
+      for(const [key,value]of wanted.searchParams)if(key!=='v')configured.searchParams.set(key,value);configured.hash=wanted.hash;
+      restoringPageView=true;
+      child.addEventListener('load',()=>{restoringPageView=false;wirePageActions(child);refreshPageActions();},{once:true});
+      child.src=configured.href;
+    }catch{restoringPageView=false;}
+  }
+
   function save(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}
   function say(message,toast=false){$('#announcement').textContent=message;if(toast){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.add('visible');toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2500);}}
   function routeUrl(page,type,filters={}){const q=new URLSearchParams();if(type)q.set('type',type);Object.entries(filters).forEach(([key,value])=>{if(value)q.set(key,value);});return '#menu/'+page+(q.size?'?'+q:'');}
@@ -90,11 +174,12 @@
   function navigate(hash,{replace=false,focus=false,keepScroll=false}={}){
     clearTimeout(searchTimer);
     if(location.hash!==hash) history[replace?'replaceState':'pushState'](null,'',hash);
-    state=readRoute();render();
+    window.addEventListener('storage',event=>{if(event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
+  state=readRoute();render();
     if(!keepScroll)window.scrollTo({top:0,behavior:'instant'});
     if(focus)(state.productRoute?$('#product-title'):main.querySelector('h1'))?.focus({preventScroll:true});
   }
-  function navLink(id){const cat=categories[id];return `<a class="nav-link" href="#${id}" data-route="${id}" ${state.page===id?'aria-current="page"':''}>${icon(cat.icon)}<span>${cat.name}</span>${id==='favorieten'?`<span class="nav-count">${favorites.length}</span>`:''}</a>`;}
+  function navLink(id){const cat=categories[id];return `<a class="nav-link" href="#${id}" data-route="${id}" ${state.page===id?'aria-current="page"':''}>${icon(cat.icon)}<span>${cat.name}</span>${id==='favorieten'?`<span class="nav-count">${favoriteCount()}</span>`:''}</a>`;}
   function renderNav(){
     $('#desktop-nav').innerHTML=navLink('start')+'<div class="nav-label">Ontdek het weer</div>'+(site.navItems || ['nu','verwachting','terugkijken']).map(navLink).join('')+'<div class="nav-divider"></div>'+navLink('favorieten');
     $('.sidebar-bottom [data-route]')?.setAttribute('aria-current',state.page==='professioneel'?'page':'false');
@@ -112,7 +197,7 @@
   function productRow(p,context=false){return `<article class="product-row" data-product="${p.id}"><a class="row-link" href="${escape(p.href)}"><span class="row-icon">${icon(productIcon(p))}</span><span class="row-copy"><strong>${escape(p.name)}</strong><p>${escape(p.description)}</p>${context?`<span class="product-meta">${escape(typeNames[p.type])}</span>`:''}${p.restricted?`<span class="product-meta">${icon('lock')}Afgeschermde tool</span>`:''}</span>${icon('arrow','arrow')}</a>${pin(p)}</article>`;}
   function productCollection(list,mode=view,context=false){return `<div class="${mode==='cards'?'catalogue-grid':'product-list'}">${list.map(p=>mode==='cards'?productCard(p):productRow(p,context)).join('')}</div>`;}
   function heading(title,description,eyebrow){return `<div class="page-heading"><div>${eyebrow?`<div class="eyebrow">${escape(eyebrow)}</div>`:''}<h1 tabindex="-1">${escape(title)}</h1><p>${escape(description)}</p></div></div>`;}
-  function favoriteChips(){return favorites.slice(0,4).map(id=>{const p=byId.get(id);return `<a class="favorite-chip" href="${escape(p.href)}">${escape(p.name)}${icon('chevron')}</a>`;}).join('');}
+  function favoriteChips(){return [...savedPages.map(p=>({href:p.url,name:p.title})),...favorites.map(id=>byId.get(id))].slice(0,4).map(p=>`<a class="favorite-chip" href="${escape(p.href)}">${escape(p.name)}${icon('chevron')}</a>`).join('');}
   function home(){
     const browse=site.browse || [
       {id:'nu',description:'Wat gebeurt er op dit moment?',links:[['radar','Radar & buien'],['satelliet','Satellietbeelden'],['actueel','Waarnemingen']]},
@@ -121,7 +206,7 @@
     ];
     return heading(site.homeTitle || 'Jouw weeroverzicht',site.homeDescription || 'Snel naar de kaarten, verwachtingen en metingen die je zoekt.',site.welcome || 'Welkom bij Weerlab')+
       `<section aria-labelledby="quick-title"><div class="section-heading"><h2 id="quick-title">Snel naar</h2><p>Direct naar je weerinformatie</p></div><div class="quick-grid">${(site.quickProducts || ['radar','modelkaarten','pluim-viewer','actueel']).map(id=>productCard(byId.get(id),{featured:true})).join('')}</div></section>
-      <section class="home-favorites" aria-label="Jouw favorieten"><span class="favorites-label">${icon('star')}Jouw favorieten</span><div class="favorite-chips">${favorites.length?favoriteChips():'<span class="favorites-label">Bewaar een onderdeel met het sterretje.</span>'}</div><a class="quiet-link" href="#favorieten">${favorites.length>4?'Alle '+favorites.length:'Bekijken'}${icon('arrow')}</a></section>
+      <section class="home-favorites" aria-label="Jouw favorieten"><span class="favorites-label">${icon('star')}Jouw favorieten</span><div class="favorite-chips">${favoriteCount()?favoriteChips():'<span class="favorites-label">Bewaar een onderdeel met het sterretje.</span>'}</div><a class="quiet-link" href="#favorieten">${favoriteCount()>4?'Alle '+favoriteCount():'Bekijken'}${icon('arrow')}</a></section>
       <section aria-labelledby="browse-title"><div class="section-heading"><h2 id="browse-title">Ontdek Weerlab</h2><p>Alles op een logische plek</p></div><div class="category-grid">${browse.map(c=>`<div class="category-block" data-category="${c.id}"><div class="category-title">${icon(categories[c.id].icon)}<h2>${categories[c.id].name}</h2></div><p>${c.description}</p><div class="category-links">${c.links.map(([id,label])=>`<a href="${escape(id.startsWith('#')?id:byId.get(id).href)}">${label}${icon('chevron')}</a>`).join('')}</div><a class="quiet-link" href="#${c.id}">Alles bekijken${icon('arrow')}</a></div>`).join('')}</div></section>`;
   }
   function isInType(p){
@@ -176,11 +261,13 @@
     const maps=!site.directProducts && state.page==='verwachting' && state.type==='kaarten';
     if(maps){const order={'mosmix-minikaarten':0,'mosmix-parameter':1,'mosmix-neerslagkans':2};result.sort((a,b)=>(order[a.id]??3)-(order[b.id]??3));}
     let html=heading(climate?'Records & klimaat':archive?'Maand & archief':cat.title,climate?'Van uitzonderlijk weer tot het langjarig gemiddelde. Kies wat je wilt onderzoeken.':archive?'Bekijk de maandbalans, volg het seizoen en zoek het weer van een eerdere dag terug.':cat.description,cat.name);
+    if(state.page==='favorieten')html+=savedPagesSection();
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
     if(climate)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Het weer in context</strong><p>Records en metingen worden aangevuld zodra brondata beschikbaar zijn. Klimaatnormalen hebben de vaste referentieperiode <b>1991–2020</b>. De gegevensdatum staat bij het onderdeel.</p></div></aside>`;
     if(archive)html+=`<aside class="climate-guide"><span>${icon('chart')}</span><div><strong>Van dagkaart tot seizoensbalans</strong><p>Kies een landelijk overzicht of bekijk één station in detail. Bij elk onderdeel staan de meetperiode en de bron; recente dagen kunnen nog worden aangevuld.</p></div></aside>`;
     if(maps)html+=`<nav class="maps-shortcuts" aria-label="Snel naar weerkaarten"><a href="index.html#mosmix-minikaarten">${icon('map')}<span><strong>MOS/MIX Nederland</strong><small>9 dagen in één overzicht</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-modelkaarten">${icon('cloud')}<span><strong>Modelkaarten</strong><small>Uur voor uur vooruit</small></span>${icon('arrow')}</a><a href="index.html#weerkaarten-vierluik">${icon('grid')}<span><strong>Vergelijken</strong><small>Modellen of zes opeenvolgende uren</small></span>${icon('arrow')}</a></nav>`;
-    html+=controls(result.length,{filters:!!filterSets[state.type]})+filterPanel(base);
+    html+=controls(result.length+(state.page==='favorieten'?savedPages.length:0),{filters:!!filterSets[state.type]})+filterPanel(base);
+    if(!result.length&&state.page==='favorieten'&&savedPages.length)return html;
     if(!result.length)return html+empty(state.page==='favorieten'?'Maak Weerlab een beetje van jou':'Geen onderdelen bij deze combinatie',state.page==='favorieten'?'Tik op het sterretje bij een onderdeel. Je favorieten worden in deze browser bewaard.':'Verwijder een filter om meer weerinformatie te zien.',state.page==='favorieten'?'<a class="button button-primary" href="#start">Ontdek Weerlab</a>':'<button class="button button-primary" data-reset-filters>Alle filters wissen</button>');
     if(maps){
       const groups=[['Nederland · MOS/MIX','Statistisch nabewerkte stationsverwachtingen. De kaartkleuren tussen stations zijn een ruimtelijke schatting.',p=>p.facets.model?.includes('mosmix')],['Nederland · modelkaarten','Gedetailleerde verwachtingen per uur. Vergelijk modellen én weerelementen.',p=>!p.facets.model?.includes('mosmix') && p.facets.gebied?.includes('nl')],['Europa · overzicht & scenario’s','Bekijk de grote lijn: luchtdruk, fronten, uitzonderlijk weer en onzekerheid.',p=>!p.facets.model?.includes('mosmix') && !p.facets.gebied?.includes('nl')]];
@@ -209,6 +296,7 @@
     document.querySelectorAll('a[href^="#"]').forEach(a=>{if(a.id==='product-permalink'||a.hash==='#main'||a.hash.startsWith('#menu/'))return;a.setAttribute('href','#menu/'+a.hash.slice(1));});
   }
   function render(){
+    restoringPageView=false;
     renderNav();
     const showingProduct=!!state.productRoute;
     document.body.classList.toggle('product-open',showingProduct);
@@ -217,7 +305,7 @@
     document.body.classList.toggle('vierluik-open', showingProduct && /^weerkaarten-(vierluik|hires4|hires6|global4)$/.test(state.productRoute));
     main.hidden=showingProduct;
     $('#product-workspace').hidden=!showingProduct;
-    if(showingProduct){renderProduct();prefixMenuLinks();return;}
+    if(showingProduct){renderProduct();prefixMenuLinks();refreshPageActions();return;}
     const oldFrame=$('#product-frame');
     if(oldFrame.hasAttribute('src') || oldFrame.dataset.route){
       const blank=oldFrame.cloneNode(false);
@@ -229,7 +317,7 @@
     $('#clear-search').hidden=!search.value;
     $('.search-key').hidden=!!search.value;
     document.title=(state.page==='start'?'Jouw weeroverzicht':state.page==='zoeken'?'Zoeken':categories[state.page].name)+' · Weerlab';
-    prefixMenuLinks();
+    prefixMenuLinks();refreshPageActions();
     // Broken thumbnails degrade to the product icon without blocking navigation.
     main.querySelectorAll('.card-image img').forEach(img=>img.addEventListener('error',()=>{
       const p=byId.get(img.closest('[data-product]').dataset.product);
@@ -244,12 +332,13 @@
     renderNav();
     document.querySelectorAll(`[data-pin="${id}"]`).forEach(button=>{button.setAttribute('aria-pressed',String(!removing));button.setAttribute('aria-label',byId.get(id).name+(!removing?' verwijderen uit':' toevoegen aan')+' favorieten');button.title=(!removing?'Verwijderen uit':'Toevoegen aan')+' favorieten';});
     if(state.page==='start'){
-      $('.favorite-chips').innerHTML=favorites.length?favoriteChips():'<span class="favorites-label">Bewaar een onderdeel met het sterretje.</span>';
-      $('.home-favorites>.quiet-link').innerHTML=(favorites.length>4?'Alle '+favorites.length:'Bekijken')+icon('arrow');
+      $('.favorite-chips').innerHTML=favoriteCount()?favoriteChips():'<span class="favorites-label">Bewaar een onderdeel met het sterretje.</span>';
+      $('.home-favorites>.quiet-link').innerHTML=(favoriteCount()>4?'Alle '+favoriteCount():'Bekijken')+icon('arrow');
     }
     if(state.page==='favorieten'){
       render();const buttons=[...main.querySelectorAll('[data-pin]')];(buttons[Math.min(Math.max(previousIndex,0),buttons.length-1)] || main.querySelector('h1'))?.focus();
     }
+    refreshPageActions();
     say(byId.get(id).name+(removing?' verwijderd uit favorieten':' toegevoegd aan favorieten')+(stored?'':'. Alleen voor deze sessie bewaard.'),true);
   }
   function closeDialog(){clearTimeout(searchTimer);dialog.close();document.body.style.overflow='';$('#open-menu')?.setAttribute('aria-expanded','false');}
@@ -327,6 +416,9 @@
   }).observe($('#mobile-nav'));
   document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
   document.addEventListener('click',event=>{
+    if(event.target.closest('#page-copy')){copyPageLink();return;}
+    if(event.target.closest('#page-save')){saveCurrentPage();return;}
+    const removePage=event.target.closest('[data-remove-page]');if(removePage){savedPages=savedPages.filter(p=>p.url!==removePage.dataset.removePage);save(storagePrefix+'-saved-pages',savedPages);render();say('Pagina verwijderd uit Favorieten.',true);return;}
     const pinButton=event.target.closest('[data-pin]');if(pinButton){toggleFavorite(pinButton.dataset.pin);return;}
     const viewButton=event.target.closest('[data-view]');if(viewButton){view=viewButton.dataset.view;save(storagePrefix+'-view',view);render();main.querySelector(`[data-view="${view}"]`).focus();say(view==='list'?'Lijstweergave':'Kaartweergave');return;}
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
@@ -435,6 +527,7 @@
       // A new browsing context has no previous about:blank/product entry.
       // Only the shell adds browser-history entries; Back must restore a page,
       // never unload an iframe while leaving its product heading visible.
+      restoringPageView=false;
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
       frame.src=state.product?.src || 'product-host.html?v=20261004-all1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
@@ -443,7 +536,8 @@
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
         frame.src=url.href;
       }
-      if(state.product?.src)frame.addEventListener('load',()=>wireDirectProduct(frame));
+      if(state.product?.id==='beta'){const betaURL=new URL(frame.src,location.href),tab=new URLSearchParams(route.split('?')[1]||'').get('tab');if(tab&&/^[a-z0-9_-]+$/i.test(tab))betaURL.hash=tab;frame.src=betaURL.href;}
+      frame.addEventListener('load',()=>{if(state.product?.src)wireDirectProduct(frame);wirePageActions(frame);restoreBetaView(frame);refreshPageActions();});
       previousFrame.replaceWith(frame);
     }
     search.value='';$('#clear-search').hidden=true;$('.search-key').hidden=false;
@@ -464,6 +558,7 @@
     const frame=$('#product-frame');
     if(event.source!==frame.contentWindow || (event.origin!==location.origin && !(location.protocol==='file:'&&event.origin==='null')))return;
     if(!state.productRoute || $('#product-workspace').hidden)return;
+    queueMicrotask(refreshPageActions);
     const data=event.data;
     if(data?.type==='weerlab-ens6-route' && state.product?.id==='pluim-ens6plus' && typeof data.query==='string'){
       const input=new URLSearchParams(data.query),params=new URLSearchParams();
@@ -494,5 +589,6 @@
     if(typeof data.title==='string'){$('#product-title').textContent=data.title;frame.title=data.title;document.title=data.title+' · Weerlab';}
   });
 
+  window.addEventListener('storage',event=>{if(event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
   state=readRoute();render();
 })();

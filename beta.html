@@ -37,6 +37,7 @@
     padding: 2px 6px; border-radius: 3px; letter-spacing: 1px;
   }
 
+  .share-tools[hidden] { display: none; }
   .share-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   #copy-url { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   #copy-url:hover { background: #24334c; border-color: var(--accent); }
@@ -247,11 +248,18 @@ window.addEventListener('DOMContentLoaded', restoreTabFromHash);
 
 // A shared link opens this BETA tool directly, also outside the main-site iframe.
 function directURL() {
-  const name = document.querySelector('.tab.actief').dataset.tab;
-  const url = new URL('beta.html', location.href);
-  url.hash = name;
+  const tab = document.querySelector('.tab.actief');
+  const url = new URL('index.html', location.href), params = new URLSearchParams({tab:tab.dataset.tab});
+  try {
+    const child = document.querySelector('.tab-panel.actief iframe');
+    const view = new URL(child.contentWindow.location.href);
+    view.searchParams.delete('v');
+    if (view.origin === location.origin && (view.search || view.hash)) params.set('view',view.pathname+view.search+view.hash);
+  } catch (_) {}
+  url.hash = 'beta?' + params;
   return url.href;
 }
+try { if (window.parent !== window && window.parent.document.getElementById('page-actions')) document.querySelector('.share-tools').hidden = true; } catch (_) {}
 function updateDirectURL() {
   const input = document.getElementById('direct-url');
   input.value = directURL();
