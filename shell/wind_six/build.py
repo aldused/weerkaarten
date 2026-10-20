@@ -3,6 +3,7 @@ import sys
 import argparse,base64,concurrent.futures,datetime as dt,gzip,hashlib,json,math,os,subprocess,time,urllib.parse,urllib.request
 from pathlib import Path
 import numpy as np
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'scripts'))
 from open_meteo import upgrade_url,has_key,bulk_sessie
 UTC=dt.timezone.utc
@@ -124,5 +125,22 @@ def main():
    publish_entry(args.out,key,dict(run=iso(run),file=name,resolution=document['resolution'],members=51,frames=len(document['times'])),args.publish)
    print(key,'gepubliceerd',flush=True)
   except Exception as e:errors.append(f'{key}: {e}');print(errors[-1],flush=True)
+ # The rolling intermediary may skip a cycle. Recover missing 12/18Z runs
+ # directly after a conservative nine-hour availability margin.
+ cutoff=dt.datetime.now(UTC)-dt.timedelta(hours=9)
+ for cycle in (12,18):
+  if cycle not in args.cycles:continue
+  run=cutoff.replace(hour=cycle,minute=0,second=0,microsecond=0)
+  if run>cutoff:run-=dt.timedelta(days=1)
+  key=f'{cycle:02d}';current=json.loads(manifest_path.read_text()) if manifest_path.exists() else {'runs':{}}
+  existing=current['runs'].get(key)
+  if existing and parse(existing['run'])>=run and existing.get('frames',48)==48:continue
+  try:
+   from backfill import build_direct
+   document=build_direct(run,args.cache);raw=json.dumps(document,separators=(',',':')).encode();name=f'{run:%Y%m%d%H}-{hashlib.sha256(raw).hexdigest()[:10]}.json';(args.out/name).write_bytes(raw)
+   if args.publish:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(args.out/name),f'r2:weerlab-data/wind-six/{name}','--header-upload','Cache-Control: public, max-age=31536000, immutable'],check=True)
+   publish_entry(args.out,key,dict(run=iso(run),file=name,resolution=document['resolution'],members=51,frames=len(document['times'])),args.publish)
+   print(key,'rechtstreeks gepubliceerd',flush=True)
+  except Exception as e:errors.append(f'{key} direct: {e}');print(errors[-1],flush=True)
  if errors:raise SystemExit('; '.join(errors))
 if __name__=='__main__':main()
