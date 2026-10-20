@@ -8,18 +8,25 @@ BOUNDS=(3.05,7.5,50.65,53.8)
 ROOT=Path(__file__).resolve().parents[2]
 def steps(cycle):return list(range(3,145,3))+(list(range(150,361,6)) if cycle in (0,12) else [])
 REV='nl-detail-1'
-def revision(layer):return REV+'-cloud2' if layer=='overview' else REV
+def revision(layer):return REV+'-cloud2' if layer=='overview' else REV+'-bft2' if layer=='mslp_bft' else REV
 SURFACE={'temperature_2m':'°C','pressure_msl':'hPa','wind_speed_10m':'m/s','wind_direction_10m':'°','cloud_cover':'%','precipitation':'mm','cape':'J/kg'}
 UPPER={'temperature_850hPa':'°C','geopotential_height_500hPa':'m','wind_speed_300hPa':'m/s','wind_direction_300hPa':'°','pressure_msl':'hPa'}
+MODEL_INFO={'ecmwf_ifs':('ECMWF IFS','native 9 km',2),'ecmwf_ifs025':('ECMWF IFS','0,25° · circa 25 km',1),'gfs_global':('GFS','native circa 13 km',2),'icon_eu':('ICON-EU','native circa 7 km',3),'ecmwf_ens':('ECMWF ENS-gemiddelde','0,25° · circa 25 km',1),'cams':('CAMS · Saharastof','native circa 40 km',1)}
+def resolution_for(model,layer):return '0,25° · circa 25 km' if model=='gfs_global' and layer in ('t850','z500') else MODEL_INFO[model][1]
+DOMAINS={'gfs_global':'ncep_gfs013','icon_eu':'dwd_icon_eu'}
+def fields_for(model):
+ if model=='ecmwf_ifs':return SURFACE
+ if model=='ecmwf_ifs025':return UPPER
+ return {**SURFACE,**{k:v for k,v in UPPER.items() if not k.startswith('wind_')}}
 LAYERS={'ecmwf_ifs':['t2m','overview','wind','mslp_bft','cape','precip24'],'ecmwf_ifs025':['t850','z500','jetstream']}
-LABELS={'t2m':('Temperatuur op 2 meter','°C'),'overview':('Temperatuur, bewolking en neerslag','°C'),'wind':('Wind op 10 meter','km/u'),'mslp_bft':('Windkracht en luchtdruk','Bft'),'cape':('CAPE','J/kg'),'precip24':('Neerslag in de voorgaande 24 uur','mm'),'t850':('Temperatuur op 850 hPa','°C'),'z500':('Geopotentiële hoogte op 500 hPa','dam'),'jetstream':('Wind op 300 hPa','kn')}
+LABELS={'t2m':('Temperatuur op 2 meter','°C'),'overview':('Temperatuur, bewolking en neerslag','°C'),'wind':('Wind op 10 meter','km/u'),'mslp_bft':('Windkracht en luchtdruk','Bft'),'cape':('CAPE','J/kg'),'precip24':('Neerslag in de voorgaande 24 uur','mm'),'t850':('Temperatuur op 850 hPa','°C'),'z500':('Geopotentiële hoogte op 500 hPa','dam'),'jetstream':('Wind op 300 hPa','kn'),'dust_europe':('Saharastof · optische dikte op 550 nm','AOD')}
 BFT=np.array([.3,1.6,3.4,5.5,8,10.8,13.9,17.2,20.8,24.5,28.5,32.7])
 def bft(v):return np.searchsorted(BFT,v,side='right')
 def public_meta():
  return json.load(urllib.request.urlopen(urllib.request.Request('https://data.weerlab.nl/wxbeta_meta.json',headers={'User-Agent':'Weerlab Netherlands charts/2.0','Cache-Control':'no-cache'}),timeout=30))
-def source_meta(model,run):return fetch(f'https://api.open-meteo.com/data_run/{model}/{run:%Y/%m/%d/%H%M}Z/meta.json')
+def source_meta(model,run):return fetch(f'https://api.open-meteo.com/data_run/{DOMAINS.get(model,model)}/{run:%Y/%m/%d/%H%M}Z/meta.json')
 def point_values(p,run,leads,model):
- fields=SURFACE if model=='ecmwf_ifs' else UPPER
+ fields=fields_for(model)
  if any(p['hourly_units'].get(k)!=unit for k,unit in fields.items()):raise ValueError('Onjuiste broneenheden')
  h=p['hourly'];lookup={parse(t):i for i,t in enumerate(h['time'])}
  arrays={k:np.asarray([np.nan if v is None else v for v in h[k]],float) for k in fields}
@@ -30,7 +37,7 @@ def point_values(p,run,leads,model):
   i=lookup[valid];record={k:float(a[i]) for k,a in arrays.items()}
   # API precipitation is an hourly sum, including conservatively distributed
   # native 3/6-hour intervals. Sum complete equal windows, never missing hours.
-  if model=='ecmwf_ifs':
+  if model!='ecmwf_ifs025':
    for hours,key in [(3,'rain3'),(24,'rain24')]:
     ids=[lookup.get(valid-dt.timedelta(hours=j)) for j in range(hours)]
     record[key]=float(arrays['precipitation'][ids].sum()) if None not in ids and lead>=hours else np.nan
@@ -39,23 +46,23 @@ def point_values(p,run,leads,model):
   if not 850<=record['pressure_msl']<=1100:raise ValueError('Onmogelijke luchtdruk')
   records.append(record)
  keys=list(records[0]);return keys,np.array([[r[k] for k in keys] for r in records],dtype='float32')
-def retrieve(model,run,cache):
+def retrieve(model,run,cache,leads=None):
  before=source_meta(model,run)
  if parse(before['reference_time'])!=run:raise ValueError('Verkeerde bronrun')
- leads=steps(run.hour);available={parse(t) for t in before['valid_times']}
+ leads=leads or steps(run.hour);available={parse(t) for t in before['valid_times']}
  if any(run+dt.timedelta(hours=h) not in available for h in leads):raise ValueError('Bronrun nog onvolledig')
  identity=hashlib.sha256(json.dumps(before,sort_keys=True).encode()).hexdigest()[:10]
  root=cache/f'{model}-{run:%Y%m%d%H}-{identity}-1';root.mkdir(parents=True,exist_ok=True);saved=root/'complete.npz'
  if saved.exists():
   with np.load(saved) as d:return d['coordinates'],d['values'],d['keys'].tolist(),identity
- dy,dx=(.07,.11) if model=='ecmwf_ifs' else (.25,.25)
+ dy,dx=(.07,.11) if model=='ecmwf_ifs' else (.09,.12) if model=='gfs_global' else (.06,.06) if model=='icon_eu' else (.25,.25)
  points=[(round(float(y),4),round(float(x),4)) for y in np.arange(BOUNDS[2]-.3,BOUNDS[3]+.31,dy) for x in np.arange(BOUNDS[0]-.4,BOUNDS[1]+.41,dx)]
- fields=SURFACE if model=='ecmwf_ifs' else UPPER;unique={};keys=None
+ fields=fields_for(model);unique={};keys=None
  for batch,start in enumerate(range(0,len(points),60)):
   subset=points[start:start+60];path=root/f'{batch}.json.gz'
   if path.exists():responses=json.loads(gzip.decompress(path.read_bytes()))
   else:
-   params=dict(latitude=','.join(str(p[0]) for p in subset),longitude=','.join(str(p[1]) for p in subset),hourly=','.join(fields),models=model,run=run.strftime('%Y-%m-%dT%H:%M'),forecast_days=16 if run.hour in (0,12) else 7,timezone='GMT',wind_speed_unit='ms',elevation=','.join('nan' for _ in subset),cell_selection='nearest')
+   params=dict(latitude=','.join(str(p[0]) for p in subset),longitude=','.join(str(p[1]) for p in subset),hourly=','.join(fields),models=model,run=run.strftime('%Y-%m-%dT%H:%M'),forecast_days=16 if model=='gfs_global' or run.hour in (0,12) else 7,timezone='GMT',wind_speed_unit='ms',elevation=','.join('nan' for _ in subset),cell_selection='nearest')
    responses=fetch('https://customer-single-runs-api.open-meteo.com/v1/forecast?'+urllib.parse.urlencode(params))
    if not isinstance(responses,list):responses=[responses]
    if len(responses)!=len(subset):raise ValueError('Onvolledige roosterbatch')
@@ -81,8 +88,10 @@ def chart_values(layer,data):
  if layer=='jetstream':return data['wind_speed_300hPa']*1.94384449
  if layer=='cape':return data['cape']
  if layer=='precip24':return data['rain24']
+ if layer=='dust_europe':return data['dust']
  raise ValueError(layer)
 def palette(layer):
+ if layer=='dust_europe':return np.array([0,.005,.01,.025,.05,.1,.2,.3,.5,.75,1,1.5,2,3]),'YlOrBr'
  if layer in ('t2m','overview','t850'):return np.arange(-24,37,1),'turbo'
  if layer=='z500':return np.arange(472,605,4),'turbo'
  if layer=='mslp_bft':return np.arange(-.5,13.5,1),'Spectral_r'
@@ -115,8 +124,8 @@ def render(task):
   rain=LinearNDInterpolator(tri,data['rain3']/3)(xx,yy)
   ax.contourf(xx,yy,np.ma.masked_less(rain,.1),levels=[.1,.5,1,2,4,8,16,32,64],cmap='Blues',extend='max',zorder=3,alpha=.8)
  ax.set_aspect(1/np.cos(np.radians(52.2)))
- if layer not in ('precip24','cape','jetstream'):
-  p=LinearNDInterpolator(tri,data['pressure_msl'])(xx,yy);lo=np.floor(p.min()/2)*2;hi=np.ceil(p.max()/2)*2
+ if layer not in ('precip24','cape','jetstream','dust_europe'):
+  p=np.round(LinearNDInterpolator(tri,data['pressure_msl'])(xx,yy),3);lo=np.floor(p.min()/2)*2;hi=np.ceil(p.max()/2)*2
   if hi>lo:
    cs=ax.contour(xx,yy,p,levels=np.arange(lo,hi+1,2),colors='white',linewidths=.85,zorder=4)
    for t in ax.clabel(cs,inline=True,fontsize=9,fmt='%d'):t.set_path_effects([pe.withStroke(linewidth=2,foreground='#405160aa')])
@@ -124,27 +133,29 @@ def render(task):
  provinces['features'] += [f for f in islands['features'] if f['properties'].get('statnaam')=='Waddeneilanden']
  ax.add_collection(LineCollection([np.array(r) for f in provinces['features'] for r in rings(f['geometry'])],colors='#243e49',linewidths=.8,zorder=5))
  # About 300 real native values, including coast, sea and Wadden; no city labels.
- count=0;stride=2 if model=='ecmwf_ifs' else 1
+ count=0;stride=MODEL_INFO[model][2]
  for lat in np.unique(coords[:,0])[::stride]:
   ids=np.flatnonzero(coords[:,0]==lat);ids=ids[np.argsort(coords[ids,1])][::stride]
   for i in ids:
    la,lon=coords[i]
    if not BOUNDS[0]+.045<lon<BOUNDS[1]-.045 or not BOUNDS[2]+.035<la<BOUNDS[3]-.035:continue
-   value=samples[i];label=f'{value:.1f}'.replace('.',',') if layer in ('t2m','t850','overview') else f'{value:.1f}'.replace('.',',') if layer=='precip24' and value<10 else str(round(float(value)))
-   t=ax.text(lon,la,label,ha='center',va='center',fontsize=7.4 if model=='ecmwf_ifs' else 9,color='#17353e',weight='bold',zorder=8);t.set_path_effects([pe.withStroke(linewidth=2.1,foreground='#ffffffed')]);count+=1
+   value=samples[i];label=f'{value:.3f}'.replace('.',',') if layer=='dust_europe' else f'{value:.1f}'.replace('.',',') if layer in ('t2m','t850','overview') else f'{value:.1f}'.replace('.',',') if layer=='precip24' and value<10 else str(round(float(value)))
+   t=ax.text(lon,la,label,ha='center',va='center',fontsize=7.4 if stride>1 else 9,color='#17353e',weight='bold',zorder=8);t.set_path_effects([pe.withStroke(linewidth=2.1,foreground='#ffffffed')]);count+=1
    direction='wind_direction_300hPa' if layer=='jetstream' else 'wind_direction_10m' if layer in ('wind','mslp_bft') else None
    if direction:
     a=np.radians(float(data[direction][i]));u=-np.sin(a);v=-np.cos(a)
     ax.annotate('',xy=(lon+u*.06,la+.045+v*.038),xytext=(lon-u*.06,la+.045-v*.038),arrowprops=dict(arrowstyle='->',color='#244354',lw=.7),zorder=7)
  ax.set_xticks([]);ax.set_yticks([])
  for spine in ax.spines.values():spine.set_visible(False)
- valid=run+dt.timedelta(hours=lead);title,unit=LABELS[layer];resolution='native 9 km' if model=='ecmwf_ifs' else '0,25° · circa 25 km'
+ valid=run+dt.timedelta(hours=lead);title,unit=LABELS[layer];model_label,_,_=MODEL_INFO[model];resolution=resolution_for(model,layer)
  fig.text(.025,.967,title+' · Nederland',fontsize=18,weight='bold')
  note=' · neerslag: gemiddelde per uur over voorgaande 3 uur' if layer=='overview' else ''
- fig.text(.025,.94,f'ECMWF IFS {resolution} · {unit}'+note,fontsize=10,color='#405763')
+ fig.text(.025,.94,f'{model_label} {resolution} · {unit}'+note,fontsize=10,color='#405763')
  fig.text(.975,.916,f'Run: {run:%d-%m-%Y %H} UTC    Geldig: {valid:%d-%m-%Y %H:%M} UTC  (+{lead}u)',fontsize=10,ha='right')
- cax=fig.add_axes([.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_label(title+' ('+unit+')',fontsize=10)
- fig.text(.5,.019,f'{count} waarden van oorspronkelijke modelcellen · scherpe provinciegrenzen · ECMWF / Open-Meteo CC BY 4.0',fontsize=8.8,ha='center',color='#506570')
+ cax=fig.add_axes([.08,.06,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(title+' ('+unit+')',fontsize=10)
+ credit='Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
+ description='modelwaarden' if model=='gfs_global' else 'waarden van oorspronkelijke modelcellen'
+ fig.text(.5,.019,f'{count} {description} · scherpe provinciegrenzen · '+credit,fontsize=8.8,ha='center',color='#506570')
  fig.text(.5,.007,'Ed Aldus / Weerlab · afbeelding 3600 × 3600 pixels',fontsize=8.8,ha='center',color='#506570')
  out.parent.mkdir(parents=True,exist_ok=True);tmp=out.with_suffix('.tmp.png');fig.savefig(tmp,facecolor='white',dpi=288);plt.close(fig);tmp.replace(out)
 

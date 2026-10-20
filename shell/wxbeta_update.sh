@@ -86,3 +86,6 @@ fi
 
 # Alle Nederlandlagen worden opnieuw getekend uit de echte modelroosters.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/layers.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish
+
+# Ook GFS, ICON-EU, ENS en CAMS krijgen zelfstandige Nederlandkaarten.
+"$PY" -u "$WEERLAB/shell/wxbeta_nl/other_models.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish

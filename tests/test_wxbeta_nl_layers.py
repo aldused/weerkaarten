@@ -17,6 +17,13 @@ class DetailedNetherlandsTests(unittest.TestCase):
   with self.assertRaises(ValueError):m.point_values(self.point,self.run,[3],'ecmwf_ifs')
   self.point['hourly_units']['temperature_2m']='°C'
   with self.assertRaises(ValueError):m.point_values(self.point,self.run,[150],'ecmwf_ifs')
+ def test_other_models_keep_units_and_pressure_level_resolution(self):
+  for model in ['gfs_global','icon_eu']:
+   point={'hourly_units':dict(m.fields_for(model)),'hourly':dict(self.point['hourly'])}
+   for field in m.fields_for(model):point['hourly'].setdefault(field,[5500 if field=='geopotential_height_500hPa' else 1]*145)
+   keys,values=m.point_values(point,self.run,[24],model);self.assertEqual(values[0,keys.index('rain24')],24)
+  self.assertIn('25 km',m.resolution_for('gfs_global','t850'))
+  self.assertIn('13 km',m.resolution_for('gfs_global','t2m'))
  def test_beaufort_thresholds_and_upper_air_units(self):
   np.testing.assert_equal(m.bft(np.array([0,.3,1.6,5.5,10.8,32.7])),[0,1,2,4,6,12])
   np.testing.assert_allclose(m.chart_values('z500',{'geopotential_height_500hPa':np.array([5500])}),[550])
