@@ -83,7 +83,7 @@ def retrieve(run,leads,cache):
    with (folder/('tp.lock' if missing==['tp'] else 'download.lock')).open('a') as download_lock:
     fcntl.flock(download_lock,fcntl.LOCK_EX)
     if not path.exists():
-     tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('ECMWF_OPEN_DATA_SOURCE','google')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=expected,param=missing,target=str(tmp),**options);tmp.replace(path)
+     tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('WXBETA_REGIONAL_SOURCE','azure')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=expected,param=missing,target=str(tmp),**options);tmp.replace(path)
    c,r=read(path,run,expected,missing)
    if actual_coords is not None and not np.array_equal(c,actual_coords):raise ValueError('Roosters verschillen')
    actual_coords=c;local.update(r)

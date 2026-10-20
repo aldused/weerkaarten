@@ -73,7 +73,7 @@ def global_data(state,model,run,leads):
    except ValueError:
     if not path.exists():
      from ecmwf.opendata import Client
-     tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('ECMWF_OPEN_DATA_SOURCE','google')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=sorted(set([0]+leads+[h-24 for h in leads if h>=24])),param=['tp'],target=str(tmp));tmp.replace(path)
+     tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('WXBETA_REGIONAL_SOURCE','azure')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=sorted(set([0]+leads+[h-24 for h in leads if h>=24])),param=['tp'],target=str(tmp));tmp.replace(path)
     coords,records=elements.read(path,run,leads,['tp'],EU)
   lon=np.unique(coords[:,1]);lat=np.unique(coords[:,0])[::-1]
   # Reader preserves latitude/longitude ordering of the original GRIB.

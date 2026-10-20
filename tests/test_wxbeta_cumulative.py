@@ -22,6 +22,8 @@ class CumulativeTests(unittest.TestCase):
    (folder/'0.json.gz').write_bytes(gzip.compress(json.dumps(responses).encode()))
    coords,values,resolution=c.native_netherlands(root/'wxbeta-cumulative','ecmwf',run,[3,6])
    np.testing.assert_array_equal(values[:,0],[6,21]);self.assertEqual(resolution,'native 9 km')
+   (folder/'0.json.gz').write_bytes(gzip.compress(json.dumps(responses[:1]).encode()))
+   with self.assertRaisesRegex(ValueError,'dekt Nederland niet volledig'):c.native_netherlands(root/'wxbeta-cumulative','ecmwf',run,[3,6])
    response['hourly']['precipitation'][2]=None
    responses=[{**response,'latitude':lat,'longitude':lon} for lat,lon in [(50,3),(54,3),(50,8),(54,8)]]
    (folder/'0.json.gz').write_bytes(gzip.compress(json.dumps(responses).encode()))

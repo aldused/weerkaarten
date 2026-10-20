@@ -39,3 +39,6 @@ Bron-downloads hebben begrensde pogingen en time-outs. De elementencache
 versie 2 en layers-bounded.lock laten oudere opbouwen hun eigen bestanden
 behouden. Publicaties lezen onder de gedeelde publicatielock steeds het
 nieuwste manifest opnieuw; gelijktijdige aanvullingen blijven behouden.
+
+De officiële Azure-spiegel is de voorkeursbron voor de extra kaartgebieden.
+Een andere officiële bron kan via WXBETA_REGIONAL_SOURCE worden gekozen.
