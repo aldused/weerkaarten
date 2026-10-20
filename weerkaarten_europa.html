@@ -260,7 +260,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <label>Weermodel <select aria-label="Weermodel" id="modelbar"></select></label>
 <label>Kaartlaag <select aria-label="Kaartlaag" id="varbar"></select></label>
 <div class="run-choice"><span>Modelrun · UTC</span><div id="runbar" class="bar" role="group" aria-label="Modelrun"></div></div>
-<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="netherlands">Nederland · windstoten 9 km</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
+<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="netherlands">Nederland</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
 <button class="btn" id="zoom-out" aria-label="Uitzoomen">−</button><button class="btn" id="zoom-in" aria-label="Inzoomen">+</button>
 </section>
 <div class="stage">
@@ -346,7 +346,7 @@ const D=()=>META.data[curModel];
 // Additional native frames can be published per layer without changing other maps.
 const R=()=>{
   const run=D().runs[curCyc],native=NL_META?.runs?.[curCyc];
-  if(regionView==='netherlands'&&curModel==='ecmwf'&&varKey==='gust'&&native&&Date.parse(native.run_utc)===Date.parse(run.run_utc))return {...run,...native};
+  if(regionView==='netherlands'&&curModel==='ecmwf'&&varKey==='gust'&&curCyc!=='ens'&&native&&Date.parse(native.run_utc)===Date.parse(run.run_utc))return {...run,...native};
   const layer=run.layers?.[varKey];
   return layer?{...run,frames:layer.frames,files:{...run.files,[varKey]:layer.files}}:run;
 };
@@ -377,7 +377,7 @@ function buildRunBar(){
   orderCycles(D()).forEach(cc=>{
     const b=document.createElement('button'); b.className='pill'; b.dataset.c=cc;
     b.innerHTML=cycLabel(cc)+' <span class="dim">+'+D().runs[cc].maxlead+'u</span>';
-    b.disabled=regionView==='netherlands'&&cc==='ens';b.setAttribute('aria-pressed',String(cc===curCyc));b.onclick=()=>{ if(playing)play(); setRun(cc); };
+    b.disabled=false;b.setAttribute('aria-pressed',String(cc===curCyc));b.onclick=()=>{ if(playing)play(); setRun(cc); };
     rb.appendChild(b);
   });
 }
@@ -413,7 +413,7 @@ function syncVarButtons(){
       : 'Originele kaarten en legenda: Copernicus Atmosphere Monitoring Service / ECMWF. Drie-uursstappen tot +120 uur.';
   }
 
-  $('varbar').replaceChildren(...META.vars.filter(v=>R().files[v.key]).map(v=>new Option(v.label,v.key)));
+  $('varbar').replaceChildren(...META.vars.filter(v=>D().runs[curCyc].files[v.key]).map(v=>new Option(v.label,v.key)));
   $('varbar').value=varKey;
   const v=META.vars.find(v=>v.key===varKey);
   $('c-var').textContent=v.label+(v.unit?` (${v.unit})`:'');
@@ -421,7 +421,6 @@ function syncVarButtons(){
 
 function setModel(mk){
   const valid=curModel&&R()?.frames[idx]?.valid_utc||new Date().toISOString();
-  if(regionView==='netherlands'&&mk!=='ecmwf'){regionView='europe';$('region-view').value='europe';mapZoom=1;}
   curModel=mk;
   $('modelbar').value=mk;
   buildRunBar();
@@ -443,13 +442,13 @@ function setRun(cc,valid=R()?.frames[idx]?.valid_utc){
   buildDaglabels(); syncVarButtons(); renderRunPanel(); show(idx);
 }
 
-function setVar(key){ if(regionView==='netherlands'&&key!=='gust'){regionView='europe';$('region-view').value='europe';mapZoom=1;}const valid=R().frames[idx]?.valid_utc;varKey=key;if(valid)idx=R().frames.reduce((best,f,i,a)=>Math.abs(Date.parse(f.valid_utc)-Date.parse(valid))<Math.abs(Date.parse(a[best].valid_utc)-Date.parse(valid))?i:best,0);$('slider').max=R().frames.length-1;buildDaglabels();syncVarButtons();show(idx);meldStandAanOuder(); }
+function setVar(key){ if(regionView==='netherlands'&&key.startsWith('dust_'))key='dust_europe';const valid=R().frames[idx]?.valid_utc;varKey=key;if(valid)idx=R().frames.reduce((best,f,i,a)=>Math.abs(Date.parse(f.valid_utc)-Date.parse(valid))<Math.abs(Date.parse(a[best].valid_utc)-Date.parse(valid))?i:best,0);$('slider').max=R().frames.length-1;buildDaglabels();syncVarButtons();show(idx);meldStandAanOuder(); }
 
 function show(i){
   const first=firstAllowedIndex();
   idx=Math.max(first,Math.min(R().frames.length-1,i));
   $('slider').min=first; $('slider').value=idx;
-  if(regionView==='netherlands'&&!R().renderer?.startsWith('nl-native-gust-')){++frameToken;if(playing)play();$('kaart').style.visibility='hidden';$('download').disabled=true;$('fsbtn').disabled=true;if(fsOpen)closeFs();for(const id of ['play','prev','next','now','slider'])$(id).disabled=true;$('loading').textContent='Nederlandkaart voor deze run wordt opgebouwd · kies een andere run';$('loading').classList.add('vis');return;}
+  if(regionView==='netherlands'&&curModel==='ecmwf'&&varKey==='gust'&&curCyc!=='ens'&&!R().renderer?.startsWith('nl-native-gust-')){++frameToken;if(playing)play();$('kaart').style.visibility='hidden';$('download').disabled=true;$('fsbtn').disabled=true;if(fsOpen)closeFs();for(const id of ['play','prev','next','now','slider'])$(id).disabled=true;$('loading').textContent='Nederlandkaart voor deze run wordt opgebouwd · kies een andere run';$('loading').classList.add('vis');return;}
   $('kaart').style.visibility='';
   const fr=R().frames[idx], source=srcOf(varKey,idx), token=++frameToken;
   imageFrames.select(source); clearTimeout(preloadTimer);
@@ -469,7 +468,7 @@ function show(i){
     document.querySelector('.fs-legend').style.aspectRatio=`12.5 / ${legendHeight}`;
     $('map-legend-image').src=source;
     $('loading').classList.remove('vis');
-    $('map-resolution').textContent=`${regionView==='netherlands'?'ECMWF native 9 km · ':''}origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
+    $('map-resolution').textContent=`${R().renderer?.startsWith('nl-native-gust-')?'ECMWF native 9 km · ':regionView==='netherlands'?'Nederlanduitsnede · bronresolutie behouden · ':''}origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
     $('download').disabled=false;$('fsbtn').disabled=false;
     $('c-valid').textContent=fr.valid_label;
     $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
@@ -477,6 +476,7 @@ function show(i){
     document.documentElement.dataset.frameReady=String(token);
     preloadAround(idx);
     for(const id of ['play','prev','next','now','slider'])$(id).disabled=false;
+    if(regionView==='netherlands')setNetherlandsView();
     applyMapView();buildTimeChoices();if(playing)schedulePlayback();
     if(fsOpen) fsUpdate();
   }
@@ -494,32 +494,41 @@ function play(){
 }
 
 let mapZoom=1,mapPanX=0,mapPanY=0,regionView='europe';
+function setNetherlandsView(){
+ // Native Netherlands images already contain the complete country. Other
+ // layers retain their original grid and use their own projected map centre.
+ const native=R().renderer?.startsWith('nl-native-gust-');
+ mapZoom=native?1:12;mapPanX=0;mapPanY=0;
+ $('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';
+}
 function applyMapView(){
  $('map-legend').hidden=mapZoom<=1;
  const viewport=$('kaart-scroll');
- viewport.style.width=regionView==='benelux-uk'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*1.25)+'px':'100%';
+ viewport.style.width=regionView==='netherlands'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*.95)+'px':regionView==='benelux-uk'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*1.25)+'px':'100%';
  viewport.style.alignSelf='center';
  const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect();
  const fit=Math.min(box.width/(image.naturalWidth||1625),box.height/(image.naturalHeight||1300));
- const dx=(regionView==='central'?-.10:regionView==='benelux-uk'?.07:0)*(image.naturalWidth||1625)*fit*mapZoom;
- const dy=(regionView==='central'?-.015:regionView==='benelux-uk'?.025:0)*(image.naturalHeight||1300)*fit*mapZoom;
+ const nlCrop=regionView==='netherlands'&&META&&!R().renderer?.startsWith('nl-native-gust-');
+ const nlX=varKey.startsWith('dust_')?(.025+.95*(5.3+25)/70):varKey==='jetstream'?.541368:.449133,nlY=varKey.startsWith('dust_')?(.15+.68*(73-52.2)/48):varKey==='jetstream'?.498667:.528539;
+ const dx=(nlCrop?.5-nlX:regionView==='central'?-.10:regionView==='benelux-uk'?.07:0)*(image.naturalWidth||1625)*fit*mapZoom;
+ const dy=(nlCrop?.5-nlY:regionView==='central'?-.015:regionView==='benelux-uk'?.025:0)*(image.naturalHeight||1300)*fit*mapZoom;
  const boundX=Math.max(0,((image.naturalWidth||1625)*fit*mapZoom-box.width)/2),boundY=Math.max(0,((image.naturalHeight||1300)*fit*mapZoom-box.height)/2);
  const tx=Math.max(-boundX,Math.min(boundX,mapPanX+dx)),ty=Math.max(-boundY,Math.min(boundY,mapPanY+dy));
  mapPanX=tx-dx;mapPanY=ty-dy;
  $('download').title=mapZoom>1?'Download de zichtbare uitsnede met titel, geldigheid en legenda':'Download de originele PNG met titel, geldigheid en legenda';
  image.style.transform=`translate(${tx}px,${ty}px) scale(${mapZoom})`;
 }
-function zoomMap(factor){mapZoom=Math.max(1,Math.min(5,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;if(regionView!=='netherlands'){regionView='europe';$('region-view').value='europe';}}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
+function zoomMap(factor){mapZoom=Math.max(1,Math.min(15,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;if(regionView!=='netherlands'){regionView='europe';$('region-view').value='europe';}}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
 function selectRegion(value){
  const valid=META&&curModel?R().frames[idx]?.valid_utc:null,wasNative=regionView==='netherlands';
  if(playing)play();regionView=value;$('region-view').value=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:value==='benelux-uk'?2.5:1;
  if(META)buildRunBar();
- if(value==='netherlands'&&META){varKey='gust';if(curModel!=='ecmwf')setModel('ecmwf');else setRun(curCyc==='ens'?orderCycles(D()).find(cc=>cc!=='ens'):curCyc,valid);}
+ if(value==='netherlands'&&META){if(varKey.startsWith('dust_'))varKey='dust_europe';setRun(curCyc,valid);setNetherlandsView();}
  else if(wasNative&&META)setRun(curCyc,valid);
  applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';
  if(META)meldStandAanOuder();
 }
-$('mapsize').max=500;$('mapsize').min=100;
+$('mapsize').max=1500;$('mapsize').min=100;
 $('region-view').addEventListener('change',e=>selectRegion(e.target.value));
 $('zoom-in').onclick=()=>zoomMap(1.2);$('zoom-out').onclick=()=>zoomMap(1/1.2);
 addEventListener('resize',applyMapView);
@@ -540,7 +549,7 @@ $('now').onclick=()=>{if(!META)return;if(playing)play();const now=Date.now(),fra
 
 // ── Kaartgrootte + originele PNG-download ──
 function setMapSize(value, remember=true){
-  const v=Math.max(100,Math.min(500,Number(value)||100));
+  const v=Math.max(100,Math.min(1500,Number(value)||100));
   mapZoom=v/100;mapPanX=0;mapPanY=0;applyMapView();
   $('mapsize').value=v; $('mapsize-value').textContent=v+'%';
   if(remember){ try{ localStorage.setItem('wxbeta_map_size',String(v)); }catch(e){} }
@@ -548,7 +557,7 @@ function setMapSize(value, remember=true){
 function safePart(s){ return String(s||'kaart').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 function downloadName(){
   const fr=R().frames[idx], valid=fr.valid_utc.replace(/[-:]/g,'').replace('T','_').slice(0,13);
-  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):regionView==='netherlands'?'_nederland-9km':''}.png`;
+  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):regionView==='netherlands'?'_nederland':''}.png`;
 }
 function downloadView(){
   const source=srcOf(varKey,idx), label=regionView==='netherlands'?'Nederland':regionView==='central'?'Midden-Europa':regionView==='benelux-uk'?'Benelux + Verenigd Koninkrijk':'Uitsnede Europa';
@@ -614,9 +623,15 @@ function fsUpdate(){ const fr=R().frames[idx], v=META.vars.find(v=>v.key===varKe
   $('fsimg').src=srcOf(varKey,idx);
   $('fslegend').src=$('fsimg').src;
   $('fs-cap').innerHTML=`${v.label} · <b>${fr.valid_label}</b> · +${fr.lead} u`; }
-function openFs(){ if(!META||!R()?.frames[idx])return;fsOpen=true; fsScale=1; fsX=0; fsY=0; fsApply(); fsUpdate(); $('fs').classList.add('open'); }
+function openFs(){ if(!META||!R()?.frames[idx])return;fsOpen=true; fsScale=1; fsX=0; fsY=0; fsUpdate(); $('fs').classList.add('open');
+ if(regionView==='netherlands'&&!R().renderer?.startsWith('nl-native-gust-')){
+  const image=$('kaart'),stage=$('fs-stage').getBoundingClientRect(),box=$('kaart-wrap').getBoundingClientRect();
+  const scale=Math.min(stage.width/image.naturalWidth,stage.height/image.naturalHeight),fit=Math.min(box.width/image.naturalWidth,box.height/image.naturalHeight),t=new DOMMatrixReadOnly(getComputedStyle(image).transform);
+  fsScale=mapZoom;fsX=t.m41*scale/fit;fsY=t.m42*scale/fit;
+ }
+ fsApply(); }
 function closeFs(){ fsOpen=false; $('fs').classList.remove('open'); }
-function fsZoom(f,cx,cy){ const ns=Math.min(7,Math.max(1,fsScale*f)); const k=ns/fsScale;
+function fsZoom(f,cx,cy){ const ns=Math.min(15,Math.max(1,fsScale*f)); const k=ns/fsScale;
   fsX=cx-(cx-fsX)*k; fsY=cy-(cy-fsY)*k; fsScale=ns; if(fsScale<=1.001){fsScale=1;fsX=0;fsY=0;} fsApply(); }
 (function(){
   const stage=$('fs-stage');
@@ -658,7 +673,7 @@ async function refreshMeta(initial=false){
       META=m; metaSignature=nextSignature; buildStaticBars(m);
       const wensVar=PAGE_PARAMS.get('var'), wensModel=PAGE_PARAMS.get('model');
       varKey=m.vars.some(v=>v.key===wensVar)?wensVar:m.vars[0].key;
-      if(PAGE_PARAMS.get('region')==='netherlands'){regionView='netherlands';$('region-view').value='netherlands';mapZoom=1;varKey='gust';setModel('ecmwf');}
+      if(PAGE_PARAMS.get('region')==='netherlands'||regionView==='netherlands'){regionView='netherlands';$('region-view').value='netherlands';mapZoom=1;setModel(m.data[wensModel]?wensModel:m.models[0].key);}
       else setModel(m.data[wensModel]?wensModel:m.models[0].key);
     }else if(changed){
       const oldModel=curModel, oldVar=varKey, oldCyc=curCyc;
@@ -691,7 +706,7 @@ setInterval(()=>refreshMeta(false),META_REFRESH_MS);
 
 $('slider').addEventListener('input',e=>show(+e.target.value));
 $('mapsize').addEventListener('input',e=>setMapSize(e.target.value));
-$('size-reset').addEventListener('click',()=>{selectRegion(regionView==='netherlands'?'netherlands':'europe');setMapSize(100);});
+$('size-reset').addEventListener('click',()=>{if(regionView==='netherlands')selectRegion('netherlands');else{selectRegion('europe');setMapSize(100);}});
 $('download').addEventListener('click',downloadPng);
 $('play').addEventListener('click',play);
 $('prev').addEventListener('click',()=>{ if(playing)play(); step(-1); });
