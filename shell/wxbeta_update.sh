@@ -80,3 +80,6 @@ if echo "$OUT" | grep -q "WIJZIGING"; then
 else
   echo "$(date '+%F %T') geen nieuwe run — niets te doen"
 fi
+
+# Native Nederlandkaart volgt exact de gepubliceerde ECMWF-runs van Europa.
+"$PY" -u "$WEERLAB/shell/wxbeta_nl/build.py"   --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish

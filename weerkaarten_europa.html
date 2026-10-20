@@ -260,7 +260,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <label>Weermodel <select aria-label="Weermodel" id="modelbar"></select></label>
 <label>Kaartlaag <select aria-label="Kaartlaag" id="varbar"></select></label>
 <div class="run-choice"><span>Modelrun · UTC</span><div id="runbar" class="bar" role="group" aria-label="Modelrun"></div></div>
-<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
+<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="netherlands">Nederland · windstoten 9 km</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
 <button class="btn" id="zoom-out" aria-label="Uitzoomen">−</button><button class="btn" id="zoom-in" aria-label="Inzoomen">+</button>
 </section>
 <div class="stage">
@@ -318,17 +318,19 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <script src="map-performance.js?v=20261008-1"></script>
 <script>if(window.parent!==window)document.body.classList.add('embedded');
 
+let NL_META=null;
 let META=null, curModel=null, curCyc=null, varKey=null, idx=0, playing=false, timer=null;
 const PAGE_PARAMS=new URLSearchParams(location.search);   // ?model= / ?var= vanuit de facetbalk
 // Meldt model- en veldkeuze aan de weerkaartenpagina, zodat de facetbalk klopt.
 function meldStandAanOuder(){
-  const url=new URL(location.href);url.searchParams.set('model',curModel);url.searchParams.set('var',varKey);history.replaceState(null,'',url);
+  const url=new URL(location.href);url.searchParams.set('model',curModel);url.searchParams.set('var',varKey);url.searchParams.set('region',regionView);history.replaceState(null,'',url);
   if(window.parent===window) return;
   try{ window.parent.postMessage({type:'weerlab-kaart-state', model:curModel, var:varKey}, location.origin); }catch(e){}
 }
 let fsOpen=false, fsScale=1, fsX=0, fsY=0, fsDrag=false, fsSx=0, fsSy=0;
 let metaSignature='';
 let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToken=0;
+const NL_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_nl_meta.json':'https://data.weerlab.nl/wxbeta-nl/current.json';
 const META_REFRESH_MS=5*60*1000;
 const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
 function runAgeWarning(run,now=Date.now()){const age=now-Date.parse(run?.run_utc);return !Number.isFinite(age)?'Modeltijd onbekend':age>48*3600000?'Verouderde modelrun · controleer geldigheid':'';}
@@ -343,10 +345,12 @@ function shortValid(iso){ const d=new Date(iso), u=d.getUTCHours();
 const D=()=>META.data[curModel];
 // Additional native frames can be published per layer without changing other maps.
 const R=()=>{
-  const run=D().runs[curCyc],layer=run.layers?.[varKey];
+  const run=D().runs[curCyc],native=NL_META?.runs?.[curCyc];
+  if(regionView==='netherlands'&&curModel==='ecmwf'&&varKey==='gust'&&native&&Date.parse(native.run_utc)===Date.parse(run.run_utc))return {...run,...native};
+  const layer=run.layers?.[varKey];
   return layer?{...run,frames:layer.frames,files:{...run.files,[varKey]:layer.files}}:run;
 };
-const srcOf=(k,i)=>META.base+R().files[k][i]+'?run='+encodeURIComponent(R().run_utc)+'&revision='+encodeURIComponent((R().renderer||'')+'|'+(R().calculation_revision||''));
+const srcOf=(k,i)=>(R().base||META.base)+R().files[k][i]+'?run='+encodeURIComponent(R().run_utc)+'&revision='+encodeURIComponent((R().renderer||'')+'|'+(R().calculation_revision||''));
 function firstAllowedIndex(){
   if(varKey!=='precip24') return 0;
   const i=R().frames.findIndex(f=>f.lead>=24);
@@ -373,7 +377,7 @@ function buildRunBar(){
   orderCycles(D()).forEach(cc=>{
     const b=document.createElement('button'); b.className='pill'; b.dataset.c=cc;
     b.innerHTML=cycLabel(cc)+' <span class="dim">+'+D().runs[cc].maxlead+'u</span>';
-    b.setAttribute('aria-pressed',String(cc===curCyc));b.onclick=()=>{ if(playing)play(); setRun(cc); };
+    b.disabled=regionView==='netherlands'&&cc==='ens';b.setAttribute('aria-pressed',String(cc===curCyc));b.onclick=()=>{ if(playing)play(); setRun(cc); };
     rb.appendChild(b);
   });
 }
@@ -417,6 +421,7 @@ function syncVarButtons(){
 
 function setModel(mk){
   const valid=curModel&&R()?.frames[idx]?.valid_utc||new Date().toISOString();
+  if(regionView==='netherlands'&&mk!=='ecmwf'){regionView='europe';$('region-view').value='europe';mapZoom=1;}
   curModel=mk;
   $('modelbar').value=mk;
   buildRunBar();
@@ -438,12 +443,14 @@ function setRun(cc,valid=R()?.frames[idx]?.valid_utc){
   buildDaglabels(); syncVarButtons(); renderRunPanel(); show(idx);
 }
 
-function setVar(key){ const valid=R().frames[idx]?.valid_utc;varKey=key;if(valid)idx=R().frames.reduce((best,f,i,a)=>Math.abs(Date.parse(f.valid_utc)-Date.parse(valid))<Math.abs(Date.parse(a[best].valid_utc)-Date.parse(valid))?i:best,0);$('slider').max=R().frames.length-1;buildDaglabels();syncVarButtons();show(idx);meldStandAanOuder(); }
+function setVar(key){ if(regionView==='netherlands'&&key!=='gust'){regionView='europe';$('region-view').value='europe';mapZoom=1;}const valid=R().frames[idx]?.valid_utc;varKey=key;if(valid)idx=R().frames.reduce((best,f,i,a)=>Math.abs(Date.parse(f.valid_utc)-Date.parse(valid))<Math.abs(Date.parse(a[best].valid_utc)-Date.parse(valid))?i:best,0);$('slider').max=R().frames.length-1;buildDaglabels();syncVarButtons();show(idx);meldStandAanOuder(); }
 
 function show(i){
   const first=firstAllowedIndex();
   idx=Math.max(first,Math.min(R().frames.length-1,i));
   $('slider').min=first; $('slider').value=idx;
+  if(regionView==='netherlands'&&!R().renderer?.startsWith('nl-native-gust-')){++frameToken;if(playing)play();$('kaart').style.visibility='hidden';$('download').disabled=true;$('fsbtn').disabled=true;if(fsOpen)closeFs();for(const id of ['play','prev','next','now','slider'])$(id).disabled=true;$('loading').textContent='Nederlandkaart voor deze run wordt opgebouwd · kies een andere run';$('loading').classList.add('vis');return;}
+  $('kaart').style.visibility='';
   const fr=R().frames[idx], source=srcOf(varKey,idx), token=++frameToken;
   imageFrames.select(source); clearTimeout(preloadTimer);
   downloadToken++; $('download').disabled=true; $('download').textContent='⬇ Download PNG';
@@ -462,8 +469,8 @@ function show(i){
     document.querySelector('.fs-legend').style.aspectRatio=`12.5 / ${legendHeight}`;
     $('map-legend-image').src=source;
     $('loading').classList.remove('vis');
-    $('map-resolution').textContent=`origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
-    $('download').disabled=false;
+    $('map-resolution').textContent=`${regionView==='netherlands'?'ECMWF native 9 km · ':''}origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
+    $('download').disabled=false;$('fsbtn').disabled=false;
     $('c-valid').textContent=fr.valid_label;
     $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
     document.documentElement.dataset.frameSource=source;
@@ -502,8 +509,16 @@ function applyMapView(){
  $('download').title=mapZoom>1?'Download de zichtbare uitsnede met titel, geldigheid en legenda':'Download de originele PNG met titel, geldigheid en legenda';
  image.style.transform=`translate(${tx}px,${ty}px) scale(${mapZoom})`;
 }
-function zoomMap(factor){mapZoom=Math.max(1,Math.min(5,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;regionView='europe';$('region-view').value='europe';}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
-function selectRegion(value){regionView=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:value==='benelux-uk'?2.5:1;applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
+function zoomMap(factor){mapZoom=Math.max(1,Math.min(5,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;if(regionView!=='netherlands'){regionView='europe';$('region-view').value='europe';}}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
+function selectRegion(value){
+ const valid=META&&curModel?R().frames[idx]?.valid_utc:null,wasNative=regionView==='netherlands';
+ if(playing)play();regionView=value;$('region-view').value=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:value==='benelux-uk'?2.5:1;
+ if(META)buildRunBar();
+ if(value==='netherlands'&&META){varKey='gust';if(curModel!=='ecmwf')setModel('ecmwf');else setRun(curCyc==='ens'?orderCycles(D()).find(cc=>cc!=='ens'):curCyc,valid);}
+ else if(wasNative&&META)setRun(curCyc,valid);
+ applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';
+ if(META)meldStandAanOuder();
+}
 $('mapsize').max=500;$('mapsize').min=100;
 $('region-view').addEventListener('change',e=>selectRegion(e.target.value));
 $('zoom-in').onclick=()=>zoomMap(1.2);$('zoom-out').onclick=()=>zoomMap(1/1.2);
@@ -533,10 +548,10 @@ function setMapSize(value, remember=true){
 function safePart(s){ return String(s||'kaart').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 function downloadName(){
   const fr=R().frames[idx], valid=fr.valid_utc.replace(/[-:]/g,'').replace('T','_').slice(0,13);
-  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):''}.png`;
+  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):regionView==='netherlands'?'_nederland-9km':''}.png`;
 }
 function downloadView(){
-  const source=srcOf(varKey,idx), label=regionView==='central'?'Midden-Europa':regionView==='benelux-uk'?'Benelux + Verenigd Koninkrijk':'Uitsnede Europa';
+  const source=srcOf(varKey,idx), label=regionView==='netherlands'?'Nederland':regionView==='central'?'Midden-Europa':regionView==='benelux-uk'?'Benelux + Verenigd Koninkrijk':'Uitsnede Europa';
   if(mapZoom<=1)return {key:source,source,crop:null};
   const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect(),nw=image.naturalWidth,nh=image.naturalHeight;
   if(!nw||!nh||!box.width||!box.height)throw new Error('Kaart nog niet geladen');
@@ -636,12 +651,15 @@ async function refreshMeta(initial=false){
   try{
     const response=await fetch(META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.ok) throw new Error('HTTP '+response.status);
-    const m=await response.json(), nextSignature=signatureOf(m), changed=!!META&&nextSignature!==metaSignature;
+    const m=await response.json();
+    try{const nr=await fetch(NL_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(nr.ok)NL_META=await nr.json();}catch(_){}
+    const nextSignature=signatureOf(m)+'|'+(NL_META?.updated||''),changed=!!META&&nextSignature!==metaSignature;
     if(!META){
       META=m; metaSignature=nextSignature; buildStaticBars(m);
       const wensVar=PAGE_PARAMS.get('var'), wensModel=PAGE_PARAMS.get('model');
       varKey=m.vars.some(v=>v.key===wensVar)?wensVar:m.vars[0].key;
-      setModel(m.data[wensModel]?wensModel:m.models[0].key);
+      if(PAGE_PARAMS.get('region')==='netherlands'){regionView='netherlands';$('region-view').value='netherlands';mapZoom=1;varKey='gust';setModel('ecmwf');}
+      else setModel(m.data[wensModel]?wensModel:m.models[0].key);
     }else if(changed){
       const oldModel=curModel, oldVar=varKey, oldCyc=curCyc;
       const oldLatest=orderCycles(D())[0], wasLatest=oldCyc===oldLatest;
@@ -673,7 +691,7 @@ setInterval(()=>refreshMeta(false),META_REFRESH_MS);
 
 $('slider').addEventListener('input',e=>show(+e.target.value));
 $('mapsize').addEventListener('input',e=>setMapSize(e.target.value));
-$('size-reset').addEventListener('click',()=>{selectRegion('europe');$('region-view').value='europe';setMapSize(100);});
+$('size-reset').addEventListener('click',()=>{selectRegion(regionView==='netherlands'?'netherlands':'europe');setMapSize(100);});
 $('download').addEventListener('click',downloadPng);
 $('play').addEventListener('click',play);
 $('prev').addEventListener('click',()=>{ if(playing)play(); step(-1); });
