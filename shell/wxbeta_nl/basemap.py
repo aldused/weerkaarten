@@ -23,11 +23,8 @@ def polygons(geometry):
 
 @lru_cache(maxsize=1)
 def geography():
-    from cartopy.io import shapereader
     land=unary_union([p for f in json.loads((ROOT/'nl_land_detail.geojson').read_text())['features'] for p in polygons(make_valid(shape(f['geometry'])))])
-    extent=box(BOUNDS[0],BOUNDS[2],BOUNDS[1],BOUNDS[3])
-    path=shapereader.natural_earth(resolution='10m',category='physical',name='land')
-    context=unary_union([g.intersection(extent) for g in shapereader.Reader(path).geometries() if g.intersects(extent)])
+    context=shape(json.loads((ROOT/'nl_omgeving_detail.geojson').read_text())['features'][0]['geometry'])
     inland_water=unary_union([Polygon(ring) for polygon in polygons(land) for ring in polygon.interiors])
     context=context.difference(inland_water)
     provinces=[make_valid(shape(f['geometry'])).intersection(land) for f in json.loads((ROOT/'nl_provincies.geojson').read_text())['features']]
