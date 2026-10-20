@@ -311,7 +311,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <div class="time-control-head"><span class="time-control-title">Geldige tijd · Nederlandse tijd</span><output id="c-valid" aria-live="polite">Kaart laden…</output><span id="c-lead">—</span><span id="c-var" hidden></span></div>
 <div class="playback-row"><button class="btn" id="prev" aria-label="Vorige tijdstap">◀</button><button class="btn play" id="play">▶ Afspelen</button><button class="btn" id="next" aria-label="Volgende tijdstap">▶</button><button class="btn" id="now">Nu</button><input aria-label="Geldigheidstijd" id="slider" max="0" min="0" step="1" type="range" value="0"/><select aria-label="Animatiesnelheid" id="speed"><option value="1000">Langzaam</option><option value="700" selected>Normaal</option><option value="400">Snel</option></select><label><input checked id="loopchk" type="checkbox"> Herhalen</label></div>
 <div class="tijdstappen" id="time-steps"><div class="ts-dagen" id="time-days" role="group" aria-label="Kies een dag"></div><div class="ts-uren" id="time-hours" role="group" aria-label="Kies een tijdstip"></div></div><div id="daglabels" hidden></div>
-<details id="run-details"><summary>Beschikbare runs en looptijden</summary><div id="runlist"></div><p>ECMWF IFS: 00/12 UTC tot +360 uur (15 dagen), 06/18 UTC tot +144 uur (6 dagen). ENS is een afzonderlijk ensemblegemiddelde. De knoppen en tijdlijn tonen uitsluitend de daadwerkelijk verwerkte kaarten; oudere reeksen kunnen korter zijn. Verder vooruit neemt de onzekerheid toe. Midden-Europa vergroot de oorspronkelijke kaart; de modelresolutie blijft gelijk.</p></details>
+<details id="run-details"><summary>Beschikbare runs en looptijden</summary><div id="runlist"></div><p>HARMONIE 43: Nederland, uurlijkse kaarten uit de KNMI-bron, met de daadwerkelijk beschikbare looptijd. ECMWF IFS: 00/12 UTC tot +360 uur (15 dagen), 06/18 UTC tot +144 uur (6 dagen). ENS is een afzonderlijk ensemblegemiddelde. De knoppen en tijdlijn tonen uitsluitend de daadwerkelijk verwerkte kaarten; oudere reeksen kunnen korter zijn. Verder vooruit neemt de onzekerheid toe. Midden-Europa vergroot de oorspronkelijke kaart; de modelresolutie blijft gelijk.</p></details>
 </section>
 <div id="fs">
 <div class="fs-top">
@@ -329,7 +329,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <script src="weerkaarten-time.js?v=20261020-nltime"></script>
 <script>if(window.parent!==window)document.body.classList.add('embedded');
 
-let NL_META=null, NORTHSEA_META=null, CUM_META=null, mapViewKind=null;
+let HARMONIE43_META=null, NL_META=null, NORTHSEA_META=null, CUM_META=null, mapViewKind=null;
 let META=null, curModel=null, curCyc=null, varKey=null, idx=0, playing=false, timer=null;
 const PAGE_PARAMS=new URLSearchParams(location.search);   // ?model= / ?var= vanuit de facetbalk
 // Meldt model- en veldkeuze aan de weerkaartenpagina, zodat de facetbalk klopt.
@@ -344,6 +344,7 @@ let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToke
 const NL_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_nl_meta.json':'https://data.weerlab.nl/wxbeta-nl/current.json';
 const NORTHSEA_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_northsea_meta.json':'https://data.weerlab.nl/wxbeta-northsea/current.json';
 const CUM_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_cumulative_meta.json':'https://data.weerlab.nl/wxbeta-cumulative/current.json';
+const HARMONIE43_META_URL='https://data.weerlab.nl/wxbeta-harmonie43/current.json';
 const META_REFRESH_MS=5*60*1000;
 const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
 function runAgeWarning(run,now=Date.now(),model=curModel){
@@ -456,6 +457,7 @@ function setModel(mk){
   if($('region-view').value!==regionView){regionView=$('region-view').value;mapPanX=0;mapPanY=0;mapZoom=regionView==='central'?2.1:regionView==='benelux-uk'?2.5:1;}
   curModel=regionView==='northsea'?'ecmwf':mk;mk=curModel;
   $('modelbar').disabled=regionView==='northsea';
+  if(mk==='harmonie43'){regionView='netherlands';$('region-view').value='netherlands';mapZoom=1;mapPanX=0;mapPanY=0;}
   $('modelbar').value=mk;
   buildRunBar();
   setRun(orderCycles(D())[0],valid);    // nieuwste run, behoud geldigheid
@@ -554,6 +556,7 @@ function applyMapView(){
 }
 function zoomMap(factor){mapZoom=Math.max(1,Math.min(15,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;if(regionView!=='netherlands'&&regionView!=='northsea'){regionView='europe';$('region-view').value='europe';}}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
 function selectRegion(value){
+ if(curModel==='harmonie43'&&value!=='netherlands'){setModel('ecmwf');}
  const valid=META&&curModel?R().frames[idx]?.valid_utc:null,wasNative=regionView==='netherlands'||regionView==='northsea';
  if(playing)play();regionView=value;$('region-view').value=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:value==='benelux-uk'?2.5:1;
  $('modelbar').disabled=value==='northsea';
@@ -706,6 +709,17 @@ async function refreshMeta(initial=false){
     const response=await fetch(META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.ok) throw new Error('HTTP '+response.status);
     const m=await response.json();
+    try{
+      const hr=await fetch(HARMONIE43_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+      if(hr.ok){
+        const hm=await hr.json(),hd=hm.data?.harmonie43;
+        if(hd?.cycles?.length&&hd.cycles.every(c=>hd.runs?.[c]?.frames?.length&&hd.runs[c].files?.mslp_bft?.length))HARMONIE43_META=hd;
+      }
+    }catch(_){}
+    if(HARMONIE43_META){
+      m.models=m.models.filter(md=>md.key!=='harmonie43');
+      m.models.push({key:'harmonie43',label:'HARMONIE 43'});m.data.harmonie43=HARMONIE43_META;
+    }
     try{const nr=await fetch(NL_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(nr.ok)NL_META=await nr.json();}catch(_){}
     try{const nr=await fetch(NORTHSEA_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(nr.ok)NORTHSEA_META=await nr.json();}catch(_){}
     try{const cr=await fetch(CUM_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(cr.ok)CUM_META=await cr.json();}catch(_){}

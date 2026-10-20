@@ -81,16 +81,13 @@ else
   echo "$(date '+%F %T') geen nieuwe run — niets te doen"
 fi
 
-# Noordzee-windstoten volgen direct na de Europese modelrun.
-"$PY" -u "$WEERLAB/shell/wxbeta_region/build.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-northsea" --publish
-"$PY" -u "$WEERLAB/shell/wxbeta_region/layers.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-northsea" --publish
-"$PY" -u "$WEERLAB/shell/wxbeta_region/cumulative.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-cumulative" --publish
+"$PY" -u "$WEERLAB/shell/wxbeta_nl/harmonie43.py" --state "$ROOT/.harmonie43-charts" --publish
 
 # Native Nederlandkaart volgt exact de gepubliceerde ECMWF-runs van Europa.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/build.py"   --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish
 
-# Alle Nederlandlagen worden opnieuw getekend uit de echte modelroosters.
+# Scherpe Nederlandkaarten voor alle ECMWF-elementen.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/layers.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish
 
-# Ook GFS, ICON-EU, ENS en CAMS krijgen zelfstandige Nederlandkaarten.
+# Zelfstandige Nederlandkaarten: GFS, ICON-EU, ENS en CAMS.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/other_models.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish

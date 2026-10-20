@@ -22,7 +22,7 @@ def fields_for(model):
  if model=='ecmwf_ifs025':return UPPER
  return {**SURFACE,**{k:v for k,v in UPPER.items() if not k.startswith('wind_')}}
 LAYERS={'ecmwf_ifs':['mslp_bft','overview','t2m','wind','cape','precip24'],'ecmwf_ifs025':['t850','z500','jetstream']}
-LABELS={'t2m':('Temperatuur op 2 meter','°C'),'overview':('Temperatuur, bewolking en neerslag','°C'),'wind':('Wind op 10 meter','km/u'),'mslp_bft':('Windkracht en luchtdruk','Bft'),'cape':('CAPE','J/kg'),'precip24':('Neerslag in de voorgaande 24 uur','mm'),'precip_total':('Cumulatieve neerslag vanaf modelrun','mm'),'t850':('Temperatuur op 850 hPa','°C'),'z500':('Geopotentiële hoogte op 500 hPa','dam'),'jetstream':('Wind op 300 hPa','kn'),'dust_europe':('Saharastof · optische dikte op 550 nm','AOD')}
+LABELS={'gust':('Windstoten op 10 meter','km/u'),'t2m':('Temperatuur op 2 meter','°C'),'overview':('Temperatuur, bewolking en neerslag','°C'),'wind':('Wind op 10 meter','km/u'),'mslp_bft':('Windkracht en luchtdruk','Bft'),'cape':('CAPE','J/kg'),'precip24':('Neerslag in de voorgaande 24 uur','mm'),'precip_total':('Cumulatieve neerslag vanaf modelrun','mm'),'t850':('Temperatuur op 850 hPa','°C'),'z500':('Geopotentiële hoogte op 500 hPa','dam'),'jetstream':('Wind op 300 hPa','kn'),'dust_europe':('Saharastof · optische dikte op 550 nm','AOD')}
 BFT=np.array([.3,1.6,3.4,5.5,8,10.8,13.9,17.2,20.8,24.5,28.5,32.7])
 def bft(v):return np.searchsorted(BFT,v,side='right')
 def public_meta():
@@ -86,6 +86,7 @@ def chart_values(layer,data):
  if layer in ('t2m','overview'):return data['temperature_2m']
  if layer=='t850':return data['temperature_850hPa']
  if layer=='z500':return data['geopotential_height_500hPa']/10
+ if layer=='gust':return data['wind_gusts_10m']*3.6
  if layer=='wind':return data['wind_speed_10m']*3.6
  if layer=='mslp_bft':return bft(data['wind_speed_10m'])
  if layer=='jetstream':return data['wind_speed_300hPa']*1.94384449
@@ -95,6 +96,7 @@ def chart_values(layer,data):
  if layer=='dust_europe':return data['dust']
  raise ValueError(layer)
 def palette(layer):
+ if layer=='gust':return np.array([0,20,40,50,60,70,80,90,100,120,140,160]),'turbo'
  if layer=='precip_total':return np.array([0,.1,1,2,5,10,20,30,50,75,100,150,200,300,500]),'YlGnBu'
  if layer=='dust_europe':return np.array([0,.005,.01,.025,.05,.1,.2,.3,.5,.75,1,1.5,2,3]),'YlOrBr'
  if layer in ('t2m','overview','t850'):return np.arange(-24,37,1),'turbo'
@@ -158,7 +160,7 @@ def render(task):
  cax=fig.add_axes([.06,.075,.42,.016] if layer=='overview' else [.08,.075,.84,.016]);cb=fig.colorbar(cf,cax=cax,orientation='horizontal',spacing='proportional');cb.ax.tick_params(labelsize=9);cb.set_ticks(np.arange(13)) if layer=='mslp_bft' else None;cb.set_label(('Temperatuur op 2 meter' if layer=='overview' else 'Windkracht' if layer=='mslp_bft' else title)+' ('+unit+')',fontsize=10)
  if layer=='overview':
   rain_axis=fig.add_axes([.55,.075,.40,.016]);rain_bar=fig.colorbar(rain_cf,cax=rain_axis,orientation='horizontal',spacing='uniform',ticks=[.1,.5,1,2,4,8,16,32,64]);rain_bar.ax.tick_params(labelsize=8);rain_bar.set_label(f'Neerslag · mm/uur · gemiddelde over {interval} uur',fontsize=9)
- credit='NOAA/NCEP GFS Open Data' if model=='gfs025' else 'Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
+ credit='KNMI Open Data · HARMONIE 43' if model=='harmonie43' else 'NOAA/NCEP GFS Open Data' if model=='gfs025' else 'Copernicus CAMS / ADS' if model=='cams' else 'ECMWF' if model=='ecmwf_ens' else model_label+' / Open-Meteo CC BY 4.0'
  description='modelwaarden' if model=='gfs_global' else 'waarden van oorspronkelijke modelcellen'
  map_footer(fig,f'{count} modelcellen · kleuren op land, cijfers ook op zee · '+credit)
  out.parent.mkdir(parents=True,exist_ok=True);tmp=out.with_suffix('.tmp.png');fig.savefig(tmp,facecolor='white',dpi=288);plt.close(fig);tmp.replace(out)
