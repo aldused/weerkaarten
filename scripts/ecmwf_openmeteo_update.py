@@ -12,10 +12,12 @@ Gebruik voor demo:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
 import struct
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,7 +30,17 @@ import requests
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
-from open_meteo import _load_key, bulk_sessie, herstart_sessie  # noqa: E402
+from open_meteo import (  # noqa: E402
+    _load_key,
+    bulk_sessie,
+    herstart_sessie,
+)
+
+try:
+    from open_meteo import registreer_gebruik
+except ImportError:  # Older deployed helpers predate usage accounting.
+    def registreer_gebruik(**kwargs):
+        pass
 
 
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
@@ -56,6 +68,7 @@ HOURLY = [
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
+    p.add_argument("--run", help="Expliciete initialisatie in UTC; gebruikt de Single Runs API")
     p.add_argument("--prefix", default="ecmwf_om")
     p.add_argument("--model", default="ecmwf_ifs025")
     p.add_argument("--model-label", default="ECMWF IFS")
@@ -88,6 +101,8 @@ def wind_to_uv(speed_kmh: np.ndarray, direction_deg: np.ndarray) -> tuple[np.nda
 def post_bulk(batch: list[tuple[int, int, float, float]], args: argparse.Namespace) -> list[dict]:
     key = _load_key()
     host = "customer-api.open-meteo.com" if key else "api.open-meteo.com"
+    if getattr(args, "run", None):
+        host = "customer-single-runs-api.open-meteo.com" if key else "single-runs-api.open-meteo.com"
     url = f"https://{host}/v1/forecast"
     payload = {
         "latitude": [x[2] for x in batch],
@@ -100,6 +115,8 @@ def post_bulk(batch: list[tuple[int, int, float, float]], args: argparse.Namespa
         "precipitation_unit": "mm",
         "cell_selection": "nearest",
     }
+    if getattr(args, "run", None):
+        payload["run"] = args.run
     if key:
         payload["apikey"] = key
 
@@ -124,6 +141,18 @@ def post_bulk(batch: list[tuple[int, int, float, float]], args: argparse.Namespa
 
 def has_data(arr: np.ndarray) -> bool:
     return bool(np.isfinite(arr).any())
+
+
+def bron_afdruk(loc: dict) -> str | None:
+    """Hash tijdas en alle velden van één ankerpunt om nieuwe runs te herkennen."""
+    hourly = loc.get("hourly") or {}
+    if not hourly.get("time"):
+        return None
+    delen = [",".join(str(t) for t in hourly["time"])]
+    for var in HOURLY:
+        vals = hourly.get(var) or []
+        delen.append(",".join("" if v is None else f"{v:g}" for v in vals))
+    return hashlib.sha256("|".join(delen).encode()).hexdigest()[:24]
 
 
 def write_bin(path: Path, arrays: tuple[np.ndarray, ...]) -> None:
@@ -161,6 +190,40 @@ def main() -> int:
     print(f"{args.model_label} via Open-Meteo: {n_lat}x{n_lon} = {len(coords)} punten, {len(batches)} batches")
     print(f"Model: {args.model}, forecast_days={args.days}, prefix={args.prefix}")
 
+    # Eén goedkoop ankerpunt bepaalt of Open-Meteo inmiddels een andere run
+    # serveert. De configuratie telt mee, zodat een gewijzigd domein of raster
+    # altijd opnieuw wordt opgebouwd.
+    anker = (-1, -1, float(lats[len(lats) // 2]), float(lons[len(lons) // 2]))
+    anker_loc = post_bulk([anker], args)[0]
+    source_fingerprint = bron_afdruk(anker_loc)
+    source_request = {
+        "model": args.model,
+        "timezone": "UTC",
+        "days": args.days,
+        "max_steps": args.max_steps,
+        "grid": {
+            "n_lat": n_lat, "n_lon": n_lon,
+            "lat_min": float(lats[0]), "lat_max": float(lats[-1]),
+            "lon_min": float(lons[0]), "lon_max": float(lons[-1]),
+        },
+    }
+    if getattr(args, "run", None):
+        source_request["run_utc"] = args.run
+    out_meta = WORK_DIR / f"{args.prefix}_canvas_meta.json"
+    if source_fingerprint and out_meta.exists():
+        try:
+            bestaande_meta = json.loads(out_meta.read_text())
+        except (OSError, ValueError):
+            bestaande_meta = {}
+        if (bestaande_meta.get("source_fingerprint") == source_fingerprint
+                and bestaande_meta.get("source_request") == source_request):
+            print("  dezelfde Open-Meteo-bronrun; volledig raster en R2-upload overgeslagen")
+            registreer_gebruik(
+                consumer=args.prefix, model=args.model, resultaat="ongewijzigd",
+                locaties=1, verzoeken=1, variabelen=len(HOURLY), dagen=args.days,
+            )
+            return 0
+
     arrays: dict[str, np.ndarray] = {}
     times: list[str] | None = None
 
@@ -194,6 +257,12 @@ def main() -> int:
     if times is None:
         raise RuntimeError("Geen tijdstappen ontvangen van Open-Meteo")
 
+    if getattr(args, "run", None):
+        first = datetime.fromisoformat(times[0].replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+        chosen = datetime.fromisoformat(args.run.replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+        if first != chosen:
+            raise ValueError("Single Runs API leverde een andere starttijd")
+
     # Haal uren in UTC op, zodat beide 02:00-uren bij wintertijd behouden blijven.
     # Publiceer expliciete offsets voor bestaande lokale datumlabels.
     times = local_forecast_times(times)
@@ -204,6 +273,11 @@ def main() -> int:
         for var in list(arrays.keys()):
             arrays[var] = arrays[var][:args.max_steps]
     print(f"  Tijdstappen na trim: {len(times)} ({times[0]} t/m {times[-1]})")
+
+    if getattr(args, "run", None):
+        for key in ("temperature_2m", "pressure_msl", "wind_speed_10m", "wind_direction_10m"):
+            if not np.isfinite(arrays[key]).all():
+                raise ValueError("Onvolledige gekozen modelrun: " + key)
 
     # Open-Meteo ECMWF geeft 2m-RV niet; bereken die uit T en Td.
     rv = relhum_from_t_td(arrays["temperature_2m"], arrays["dew_point_2m"])
@@ -280,40 +354,43 @@ def main() -> int:
             **({"zicht": {"file": f"{prefix}_data_zicht.bin", "components": 1, "label": "Zicht (m)"}} if heeft_zicht else {}),
         },
         "overlay": "harmonie_overlay.png",
+        "source_fingerprint": source_fingerprint,
+        "source_request": source_request,
+        "source_checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-    out_meta = WORK_DIR / f"{prefix}_canvas_meta.json"
+    if getattr(args, "run", None):
+        meta["run_utc"] = datetime.fromisoformat(args.run.replace("Z", "+00:00")).replace(tzinfo=timezone.utc).isoformat()
+        meta["run"] = "ECMWF initialisatie " + meta["run_utc"]
     out_meta.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
     print(f"  {out_meta.name}: {len(times)} stappen, {times[0]} t/m {times[-1]}")
 
     if args.no_upload:
         print("R2 upload overgeslagen (--no-upload).")
+        registreer_gebruik(
+            consumer=args.prefix, model=args.model, resultaat="ververst-lokaal",
+            locaties=1 + len(coords), verzoeken=1 + len(batches),
+            variabelen=len(HOURLY), dagen=args.days,
+        )
         print("Klaar.")
         return 0
 
-    # Upload naar R2
-    try:
-        import boto3
-        s3 = boto3.client(
-            "s3",
-            endpoint_url="https://05da71c7c88b8ce49fbb2c2d0a570416.r2.cloudflarestorage.com",
-            aws_access_key_id="baf991003ce3e4075d91b89f8726bc0f",
-            aws_secret_access_key="0f33229e2e03fe7bc7f9fdf7f9fa0acd5336c40718c6e25fe0b6a631ade8ac97",
-            region_name="auto",
-        )
-        R2_BUCKET = "weerlab-harmonie"
-        bestanden = sorted({info["file"] for info in meta["parameters"].values()
-                            if info.get("file")})
-        bestanden.append(f2)
-        bestanden.append(str(out_meta.name))  # Metadata pas na alle databestanden publiceren.
-        for f2 in bestanden:
-            ct = "application/json" if f2.endswith(".json") else "application/octet-stream"
-            s3.upload_file(str(WORK_DIR / f2), R2_BUCKET, f2, ExtraArgs={"ContentType": ct})
-            print(f"   R2: {f2} ({(WORK_DIR / f2).stat().st_size / 1024 / 1024:.1f} MB)")
-        print("R2 upload klaar.")
-    except Exception as exc:
-        print(f"R2 upload mislukt: {exc}")
+    # Upload via de centrale rclone-config; credentials blijven buiten de repo.
+    bestanden = [str(out_meta.name)]
+    for f2 in sorted(os.listdir(WORK_DIR)):
+        if f2.startswith(f"{prefix}_data_") and f2.endswith(".bin"):
+            bestanden.append(f2)
+    subprocess.run(
+        ["bash", str(WORK_DIR / "shell/r2_publish_harmonie.sh"), *bestanden],
+        cwd=WORK_DIR, check=True,
+    )
+    print("R2 upload klaar.")
 
     print("Klaar.")
+    registreer_gebruik(
+        consumer=args.prefix, model=args.model, resultaat="ververst",
+        locaties=1 + len(coords), verzoeken=1 + len(batches),
+        variabelen=len(HOURLY), dagen=args.days,
+    )
     return 0
 
 

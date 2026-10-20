@@ -851,6 +851,8 @@ body.six-hours #map-focus-time { white-space:normal; }
     <span id="global-time-meta">0 tijdstippen</span>
   </div>
   <div class="time-options">
+    <label for="ecmwf-run-select">ECMWF-run</label>
+    <select id="ecmwf-run-select" aria-label="ECMWF-run voor de vier kaarten" title="Geldt voor alle vakken met ECMWF IFS" disabled><option value="latest">Runs laden…</option></select>
     <label for="time-mode">Vergelijken</label>
     <select id="time-mode" aria-describedby="time-range-summary">
       <option value="common">Gelijke tijden</option>
@@ -3128,6 +3130,37 @@ function loadParamIfNeeded(modelId, key) {
   return md.pending[key].finally(function(){delete md.pending[key];});
 }
 
+// Every option points to immutable data from that initialisation, not a relabelled latest feed.
+var ecmwfRuns=[],ecmwfRunChoice='latest',ecmwfRunLoading=false;
+function ecmwfConfig(){return MODELS.find(function(m){return m.id==='ecmwf_global';});}
+function fetchEcmwfRuns(){
+  return fetch(DATA_URL+'ecmwf_runs.json?t='+Date.now(),{cache:'no-store'})
+    .then(function(r){if(!r.ok)throw Error('ECMWF-runs niet beschikbaar');return r.json();})
+    .then(function(index){
+      ecmwfRuns=(index.runs||[]).filter(function(r){return Number.isFinite(Date.parse(r.run_utc))&&/^ecmwf-runs\/\d{10}\/meta\.json$/.test(r.meta);});
+      var select=document.getElementById('ecmwf-run-select');
+      if(!ecmwfRuns.length)throw Error('Geen gepubliceerde ECMWF-runs');
+      // Keep a manually selected run available after a newer cycle arrives.
+      var old=Array.from(select.options).find(function(o){return o.value===ecmwfRunChoice;});
+      select.replaceChildren(new Option('Nieuwste · '+runLabel({run_utc:ecmwfRuns[0].run_utc}),'latest'));
+      ecmwfRuns.forEach(function(r){select.add(new Option(runLabel(r)+' · +'+r.maxlead+'u',r.meta));});
+      if(ecmwfRunChoice!=='latest'&&!ecmwfRuns.some(function(r){return r.meta===ecmwfRunChoice;})&&old)select.add(old);
+      select.value=ecmwfRunChoice;select.disabled=ecmwfRunLoading;
+    }).catch(function(){var select=document.getElementById('ecmwf-run-select');if(!ecmwfRuns.length){select.options[0].textContent='Runkeuze tijdelijk niet beschikbaar';select.disabled=true;}});
+}
+function kiesEcmwfRun(){
+  var select=document.getElementById('ecmwf-run-select'),cfg=ecmwfConfig(),previous=ecmwfRunChoice,previousFile=cfg.metaFile;
+  if(playTimer)togglePlay();
+  ecmwfRunChoice=select.value;
+  cfg.metaFile=ecmwfRunChoice==='latest'?'ecmwf_om_canvas_meta.json':ecmwfRunChoice;
+  select.disabled=true;ecmwfRunLoading=true;
+  return loadModel(cfg,panelVoorModel(cfg.id)).then(function(){
+    if(modelData[cfg.id]?.metaFile!==cfg.metaFile){ecmwfRunChoice=previous;cfg.metaFile=previousFile;select.value=previous;select.title='Run laden mislukt; de vorige run blijft zichtbaar';}
+    updateAllPanelHeaders();getGlobalTimes();requestRender();
+  }).finally(function(){select.disabled=false;ecmwfRunLoading=false;});
+}
+document.getElementById('ecmwf-run-select').addEventListener('change',kiesEcmwfRun);
+
 function fetchModelMeta(mCfg) {
   return fetch(DATA_URL + mCfg.metaFile + '?t=' + Date.now())
     .then(function(r) {
@@ -3146,13 +3179,15 @@ function laadPaneelElementenVoorModel(modelId) {
 }
 
 function loadModel(mCfg, pIdx, freshMeta) {
+  var requestedMetaFile=mCfg.metaFile;
   return (freshMeta ? Promise.resolve(freshMeta) : fetchModelMeta(mCfg))
     .then(function(meta) {
+      if(mCfg.metaFile!==requestedMetaFile)return;
       if(!Array.isArray(meta.tijden)||!meta.tijden.length)throw Error('Geen geldige tijden');
       meta.tijden=meta.tijden.map(function(t){var ms=VierluikCore.timeMs(t);if(!Number.isFinite(ms))throw Error('Ongeldig tijdstip');return new Date(ms).toISOString();});
       if(meta.tijden.some(function(t,i){return i>0 && t<=meta.tijden[i-1];}))throw Error('Niet-oplopende of dubbele tijden in de bron');
       if(modelData[mCfg.id]){delete tegelMeta[mCfg.id];}
-      modelData[mCfg.id] = { meta: meta, paramData: {} };
+      modelData[mCfg.id] = { meta: meta, paramData: {}, metaFile:requestedMetaFile };
       getGlobalTimes();
       requestRender();
 
@@ -3173,6 +3208,7 @@ function loadModel(mCfg, pIdx, freshMeta) {
       return laadPaneelElementenVoorModel(mCfg.id);
     })
     .then(function() {
+      if(mCfg.metaFile!==requestedMetaFile)return;
       // Afgeleide sommen zijn beschikbaar zodra hun bronveld is geladen.
       panelVarsVoorModel(mCfg.id).forEach(function(varNaam) {
         if (varNaam === 'cumul' && !modelData[mCfg.id].paramData['cumul']) computeCumulNeerslag(modelData[mCfg.id]);
@@ -3184,6 +3220,7 @@ function loadModel(mCfg, pIdx, freshMeta) {
       requestRender();
     })
     .catch(function(e) {
+      if(mCfg.metaFile!==requestedMetaFile)return;
       // Alleen als er nog geen bruikbare data is markeren als mislukt —
       // nooit reeds geladen modeldata overschrijven
       if (!modelData[mCfg.id] || !modelData[mCfg.id].meta) {
@@ -3218,7 +3255,7 @@ function refreshModels() {
   refreshInProgress = true;
   // Alleen de modellen die nu in het vierluik staan opnieuw controleren
   var actief = actieveModellen();
-  return Promise.all(actief.map(function(m){return fetchModelMeta(m).catch(function(){return null;});}))
+  return fetchEcmwfRuns().then(function(){return Promise.all(actief.map(function(m){return fetchModelMeta(m).catch(function(){return null;});}));})
     .then(function(metas) {
       var changed = metas.map(function(meta, i) {
         var current = modelData[actief[i].id];
@@ -3994,6 +4031,7 @@ if (IS_SIX_HOURS) {
 }
 var loadPromises = IS_SIX_HOURS ? [loadSixRuns(sixBaseModel)] : actieveModellen().map(function(m) { return loadModel(m, panelVoorModel(m.id)); });
 Promise.all(loadPromises).then(function() {
+  if(!IS_SIX_HOURS)fetchEcmwfRuns();
   requestRender();
   // Overige variabelen worden pas bij selectie geladen. Dit voorkomt honderden
   // MB onnodige downloads en houdt ruimte voor de fijnere modelroosters.

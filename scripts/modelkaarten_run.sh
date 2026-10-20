@@ -75,25 +75,10 @@ verse_global() {   # $1 = prefix; 0 = ophalen, 1 = overslaan
   return 1
 }
 
-echo "$(date): ECMWF Open-Meteo starten..." >> "$LOG"
-TO 1500 python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_openmeteo_update.py" \
+echo "$(date): ECMWF-runs voor vierluik bijwerken..." >> "$LOG"
+TO 1500 python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_fourpanel_runs.py" \
   --prefix ecmwf_om --model ecmwf_ifs025 --model-label "ECMWF IFS" \
   $GLOBAL_TIJD --grid-step 0.25 $GLOBAL_BOX >> "$LOG" 2>&1
-
-echo "$(date): ECMWF Open-Meteo uploaden..." >> "$LOG"
-bash "/Users/aldus/KNMI_Project/weerlab/shell/r2_publish_harmonie.sh" \
-  ecmwf_om_canvas_meta.json \
-  ecmwf_om_data_temp.bin \
-  ecmwf_om_data_dauwpunt.bin \
-  ecmwf_om_data_rv.bin \
-  ecmwf_om_data_neerslag.bin \
-  ecmwf_om_data_bewolking.bin \
-  ecmwf_om_data_wind.bin \
-  ecmwf_om_data_windstoten.bin \
-  ecmwf_om_data_druk.bin \
-  ecmwf_om_data_cape.bin \
-  ecmwf_om_data_straling.bin \
-  ecmwf_om_data_straling_direct.bin >> "$LOG" 2>&1
 
 if verse_global gfs_global_om; then
   echo "$(date): GFS Global voor het 4-luik starten..." >> "$LOG"
