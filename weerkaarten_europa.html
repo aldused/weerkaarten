@@ -270,7 +270,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <label>Weermodel <select aria-label="Weermodel" id="modelbar"></select></label>
 <label>Kaartlaag <select aria-label="Kaartlaag" id="varbar"></select></label>
 <div class="run-choice"><span>Modelrun · Nederlandse tijd</span><div id="runbar" class="bar" role="group" aria-label="Modelrun"></div></div>
-<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="netherlands">Nederland</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
+<label>Gebied <select id="region-view" aria-label="Kaartgebied"><option value="europe">Europa</option><option value="netherlands">Nederland</option><option value="northsea">Noordzee + Britse Eilanden · windstoten</option><option value="central">Midden-Europa</option><option value="benelux-uk">Benelux + Verenigd Koninkrijk</option></select></label>
 <button class="btn" id="zoom-out" aria-label="Uitzoomen">−</button><button class="btn" id="zoom-in" aria-label="Inzoomen">+</button>
 </section>
 <div class="stage">
@@ -329,7 +329,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 <script src="weerkaarten-time.js?v=20261020-nltime"></script>
 <script>if(window.parent!==window)document.body.classList.add('embedded');
 
-let NL_META=null, mapViewKind=null;
+let NL_META=null, NORTHSEA_META=null, mapViewKind=null;
 let META=null, curModel=null, curCyc=null, varKey=null, idx=0, playing=false, timer=null;
 const PAGE_PARAMS=new URLSearchParams(location.search);   // ?model= / ?var= vanuit de facetbalk
 // Meldt model- en veldkeuze aan de weerkaartenpagina, zodat de facetbalk klopt.
@@ -342,6 +342,7 @@ let fsOpen=false, fsScale=1, fsX=0, fsY=0, fsDrag=false, fsSx=0, fsSy=0;
 let metaSignature='';
 let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToken=0;
 const NL_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_nl_meta.json':'https://data.weerlab.nl/wxbeta-nl/current.json';
+const NORTHSEA_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_northsea_meta.json':'https://data.weerlab.nl/wxbeta-northsea/current.json';
 const META_REFRESH_MS=5*60*1000;
 const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
 function runAgeWarning(run,now=Date.now(),model=curModel){
@@ -365,7 +366,9 @@ function shortValid(iso){return WeerkaartenTime.short(iso);}
 const D=()=>META.data[curModel];
 // Additional native frames can be published per layer without changing other maps.
 const R=()=>{
-  const run=D().runs[curCyc],native=curModel==='ecmwf'?NL_META?.runs?.[curCyc]:NL_META?.models?.[curModel]?.runs?.[curCyc];
+  const run=D().runs[curCyc];
+  if(regionView==='northsea'){const detail=NORTHSEA_META?.runs?.[curCyc];if(curModel==='ecmwf'&&varKey==='gust'&&detail&&Date.parse(detail.run_utc)===Date.parse(run.run_utc))return {...run,...detail,base:NORTHSEA_META.base};return run;}
+  const native=curModel==='ecmwf'?NL_META?.runs?.[curCyc]:NL_META?.models?.[curModel]?.runs?.[curCyc];
   if(regionView==='netherlands'&&native&&Date.parse(native.run_utc)===Date.parse(run.run_utc)){
     if(varKey==='gust'&&curModel==='ecmwf'&&curCyc!=='ens')return {...run,...native};
     const detail=native.layers?.[varKey];
@@ -382,7 +385,7 @@ function firstAllowedIndex(){
 }
 
 function orderCycles(d){
-  return d.cycles.slice().sort((a,b)=>{
+  return d.cycles.filter(cc=>regionView!=='northsea'||cc!=='ens').sort((a,b)=>{
     if(a==='ens') return 1; if(b==='ens') return -1;
     return d.runs[b].run_utc.localeCompare(d.runs[a].run_utc);
   });
@@ -438,7 +441,7 @@ function syncVarButtons(){
       : 'Originele kaarten en legenda: Copernicus Atmosphere Monitoring Service / ECMWF. Drie-uursstappen tot +120 uur.';
   }
 
-  $('varbar').replaceChildren(...META.vars.filter(v=>D().runs[curCyc].files[v.key]).map(v=>new Option(v.label,v.key)));
+  $('varbar').replaceChildren(...META.vars.filter(v=>D().runs[curCyc].files[v.key]&&(regionView!=='northsea'||v.key==='gust')).map(v=>new Option(v.label,v.key)));
   $('varbar').value=varKey;
   const v=META.vars.find(v=>v.key===varKey);
   $('c-var').textContent=v.label+(v.unit?` (${v.unit})`:'');
@@ -448,7 +451,8 @@ function setModel(mk){
   const valid=curModel&&R()?.frames[idx]?.valid_utc||new Date().toISOString();
   // Browsers may restore the area select independently of the page URL.
   if($('region-view').value!==regionView){regionView=$('region-view').value;mapPanX=0;mapPanY=0;mapZoom=regionView==='central'?2.1:regionView==='benelux-uk'?2.5:1;}
-  curModel=mk;
+  curModel=regionView==='northsea'?'ecmwf':mk;mk=curModel;
+  $('modelbar').disabled=regionView==='northsea';
   $('modelbar').value=mk;
   buildRunBar();
   setRun(orderCycles(D())[0],valid);    // nieuwste run, behoud geldigheid
@@ -475,7 +479,7 @@ function show(i){
   const first=firstAllowedIndex();
   idx=Math.max(first,Math.min(R().frames.length-1,i));
   $('slider').min=first; $('slider').value=idx;
-  if(regionView==='netherlands'&&!R().renderer?.startsWith('nl-')){++frameToken;if(playing)play();$('kaart').style.visibility='hidden';$('download').disabled=true;$('fsbtn').disabled=true;if(fsOpen)closeFs();for(const id of ['play','prev','next','now','slider'])$(id).disabled=true;$('loading').textContent='Nederlandkaart voor deze run wordt opgebouwd · kies een andere run';$('loading').classList.add('vis');return;}
+  if((regionView==='netherlands'&&!R().renderer?.startsWith('nl-'))||(regionView==='northsea'&&!R().renderer?.startsWith('northsea-'))){++frameToken;if(playing)play();$('kaart').style.visibility='hidden';$('download').disabled=true;$('fsbtn').disabled=true;if(fsOpen)closeFs();for(const id of ['play','prev','next','now','slider'])$(id).disabled=true;$('loading').textContent=(regionView==='northsea'?'Noordzeekaart':'Nederlandkaart')+' voor deze run wordt opgebouwd · kies een andere run';$('loading').classList.add('vis');return;}
   $('kaart').style.visibility='';
   const fr=R().frames[idx], source=srcOf(varKey,idx), token=++frameToken;
   // Dag- en uurknoppen horen direct bij de aangevraagde tijd, ook tijdens laden.
@@ -497,7 +501,7 @@ function show(i){
     document.querySelector('.fs-legend').style.aspectRatio=`12.5 / ${legendHeight}`;
     $('map-legend-image').src=source;
     $('loading').classList.remove('vis');
-    $('map-resolution').textContent=`${R().renderer?.startsWith('nl-')?`${R().modelLabel||'ECMWF'} ${R().resolution||'native 9 km'} · `:regionView==='netherlands'?'Nederlanduitsnede · bronresolutie behouden · ':''}origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
+    $('map-resolution').textContent=`${(R().renderer?.startsWith('nl-')||R().renderer?.startsWith('northsea-'))?`${R().modelLabel||'ECMWF'} ${R().resolution||'native 9 km'} · `:regionView==='netherlands'?'Nederlanduitsnede · bronresolutie behouden · ':''}origineel ${image.naturalWidth} × ${image.naturalHeight} px · titel en legenda inbegrepen`;
     $('download').disabled=false;$('fsbtn').disabled=false;
     $('c-valid').textContent=WeerkaartenTime.label(fr.valid_utc);
     $('c-lead').textContent='+'+fr.lead+' u  (dag '+(Math.round(fr.lead/24*10)/10)+')';
@@ -533,7 +537,7 @@ function setNetherlandsView(){
 function applyMapView(){
  $('map-legend').hidden=mapZoom<=1;
  const viewport=$('kaart-scroll');
- viewport.style.width=regionView==='netherlands'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*.95)+'px':regionView==='benelux-uk'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*1.25)+'px':'100%';
+ viewport.style.width=(regionView==='netherlands'||regionView==='northsea')?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*.95)+'px':regionView==='benelux-uk'?Math.min(viewport.parentElement.clientWidth,viewport.clientHeight*1.25)+'px':'100%';
  viewport.style.alignSelf='center';
  const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect();
  const fit=Math.min(box.width/(image.naturalWidth||1625),box.height/(image.naturalHeight||1300));
@@ -547,11 +551,13 @@ function applyMapView(){
 }
 function zoomMap(factor){mapZoom=Math.max(1,Math.min(15,mapZoom*factor));if(mapZoom===1){mapPanX=0;mapPanY=0;if(regionView!=='netherlands'){regionView='europe';$('region-view').value='europe';}}applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';}
 function selectRegion(value){
- const valid=META&&curModel?R().frames[idx]?.valid_utc:null,wasNative=regionView==='netherlands';
+ const valid=META&&curModel?R().frames[idx]?.valid_utc:null,wasNative=regionView==='netherlands'||regionView==='northsea';
  if(playing)play();regionView=value;$('region-view').value=value;mapPanX=0;mapPanY=0;mapZoom=value==='central'?2.1:value==='benelux-uk'?2.5:1;
+ $('modelbar').disabled=value==='northsea';
+ if(value==='northsea'&&META){varKey='gust';setModel('ecmwf');setNetherlandsView();}
  if(META)buildRunBar();
  if(value==='netherlands'&&META){if(varKey.startsWith('dust_'))varKey='dust_europe';setRun(curCyc,valid);setNetherlandsView();}
- else if(wasNative&&META)setRun(curCyc,valid);
+ else if(wasNative&&META&&value!=='northsea')setRun(curCyc,valid);
  applyMapView();$('mapsize').value=Math.round(mapZoom*100);$('mapsize-value').textContent=Math.round(mapZoom*100)+'%';
  if(META)meldStandAanOuder();
 }
@@ -590,10 +596,10 @@ function setMapSize(value, remember=true){
 function safePart(s){ return String(s||'kaart').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 function downloadName(){
   const fr=R().frames[idx], local=WeerkaartenTime.parts(fr.valid_utc), valid=local.day.replace(/-/g,'')+'_'+local.clock.replace(':','')+'_NL';
-  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):regionView==='netherlands'?'_nederland':''}.png`;
+  return `${safePart(curModel)}_${safePart(cycLabel(curCyc))}_${safePart(varKey)}_${valid}_t${fr.lead}${mapZoom>1?'_'+safePart(regionView==='europe'?'uitsnede':regionView):regionView==='netherlands'?'_nederland':regionView==='northsea'?'_noordzee-britse-eilanden':''}.png`;
 }
 function downloadView(){
-  const source=srcOf(varKey,idx), label=regionView==='netherlands'?'Nederland':regionView==='central'?'Midden-Europa':regionView==='benelux-uk'?'Benelux + Verenigd Koninkrijk':'Uitsnede Europa';
+  const source=srcOf(varKey,idx), label=regionView==='northsea'?'Noordzee + Britse Eilanden':regionView==='netherlands'?'Nederland':regionView==='central'?'Midden-Europa':regionView==='benelux-uk'?'Benelux + Verenigd Koninkrijk':'Uitsnede Europa';
   if(mapZoom<=1)return {key:source,source,crop:null};
   const image=$('kaart'),box=$('kaart-wrap').getBoundingClientRect(),nw=image.naturalWidth,nh=image.naturalHeight;
   if(!nw||!nh||!box.width||!box.height)throw new Error('Kaart nog niet geladen');
@@ -698,12 +704,14 @@ async function refreshMeta(initial=false){
     if(!response.ok) throw new Error('HTTP '+response.status);
     const m=await response.json();
     try{const nr=await fetch(NL_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(nr.ok)NL_META=await nr.json();}catch(_){}
-    const nextSignature=signatureOf(m)+'|'+(NL_META?.updated||''),changed=!!META&&nextSignature!==metaSignature;
+    try{const nr=await fetch(NORTHSEA_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(nr.ok)NORTHSEA_META=await nr.json();}catch(_){}
+    const nextSignature=signatureOf(m)+'|'+(NL_META?.updated||'')+'|'+(NORTHSEA_META?.updated||''),changed=!!META&&nextSignature!==metaSignature;
     if(!META){
       META=m; metaSignature=nextSignature; buildStaticBars(m);
       const wensVar=PAGE_PARAMS.get('var'), wensModel=PAGE_PARAMS.get('model');
       varKey=m.vars.some(v=>v.key===wensVar)?wensVar:m.vars[0].key;
-      if(PAGE_PARAMS.get('region')==='netherlands'||regionView==='netherlands'||$('region-view').value==='netherlands'){regionView='netherlands';$('region-view').value='netherlands';mapZoom=1;setModel(m.data[wensModel]?wensModel:m.models[0].key);}
+      if(PAGE_PARAMS.get('region')==='northsea'){regionView='northsea';$('region-view').value='northsea';varKey='gust';mapZoom=1;setModel('ecmwf');}
+      else if(PAGE_PARAMS.get('region')==='netherlands'||regionView==='netherlands'||$('region-view').value==='netherlands'){regionView='netherlands';$('region-view').value='netherlands';mapZoom=1;setModel(m.data[wensModel]?wensModel:m.models[0].key);}
       else setModel(m.data[wensModel]?wensModel:m.models[0].key);
     }else if(changed){
       const oldModel=curModel, oldVar=varKey, oldCyc=curCyc;

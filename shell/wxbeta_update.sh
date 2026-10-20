@@ -89,3 +89,6 @@ fi
 
 # Ook GFS, ICON-EU, ENS en CAMS krijgen zelfstandige Nederlandkaarten.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/other_models.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish
+
+# Zelfstandige Noordzee/Britse Eilanden-windstotenkaart uit dezelfde ECMWF-runs.
+"$PY" -u "$WEERLAB/shell/wxbeta_region/build.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-northsea" --publish
