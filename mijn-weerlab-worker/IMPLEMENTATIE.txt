@@ -1,0 +1,159 @@
+MIJN WEERLAB — TECHNISCH OVERZICHT EN ACCEPTATIE
+20 oktober 2026
+
+PUBLICATIE
+De website wordt gepubliceerd vanuit aldused/weerkaarten via de bestaande GitHub
+Pages-workflow, met weerlab.nl als eigen domein. De backend gebruikt Cloudflare
+Workers en valt onder de bestaande Cloudflare Access-app. Cloudflare Pages wordt
+niet voor de website gebruikt; de eerdere aanname daarover is gecorrigeerd door
+controle van de GitHub Pages-configuratie.
+De persoonlijke API is gepubliceerd als Worker weerlab-personal op
+weerlab.nl/api/mijn-weerlab/*, versie 43a9f2a4-0207-47f8-bddb-7d7dcd89bd4b.
+De Cloudflare-account info@edaldus.nl is bevestigd. De frontendrelease gebruikt de
+bestaande GitHub Pages-workflow. De release is opnieuw toegepast op de actuele
+main, met behoud van alle overige website- en datawijzigingen.
+
+ARCHITECTUURONDERZOEK EN IMPLEMENTATIEPLAN
+De site gebruikt gewone HTML/CSS/JavaScript. index.html en menu.js vormen de shell:
+hashroutes, productcatalogus, zoeken en een iframe voor het gekozen weerproduct.
+menu-data.js bevat de centrale registratie met stabiele productIDs en canonieke
+routes. De release is gebaseerd op de actuele GitHub-versie, inclusief onlangs
+toegevoegde kopieerlinks, bewaarde pagina’s, BETA-tablinks en pluimconfiguraties.
+Deze versie bevat 78 producten. De stale lokale bronversie is niet als geheel
+over de nieuwere publicatiebron heen gezet.
+Cloudflare Access regelt de bestaande e-mailcode-login en sessiecookies. De
+bestaande kranten-redactie-worker verifieert server-side RS256-JWTs en gebruikt
+SQLite-backed Durable Objects. Dezelfde Access-uitgever, application audience en
+hetzelfde opslagmechanisme zijn hergebruikt, met twee eigen namespaces voor
+accountidentiteiten en persoonlijke dashboards.
+De bestaande gedeelde DRAFTS-KV is geen geschikte vervanging voor transactionele
+accountopslag. Er is geen nieuwe login of tweede databaseprovider toegevoegd.
+
+Uitgevoerde volgorde: architectuurinspectie; serveridentiteit en datamodel;
+accountgebonden favorieten; dashboard; categorieën en personalisatie; integratie
+met navigatie; regressie-, beveiligings- en browsertests; aanvullende geschiedenis,
+import/export en behoud van opgeslagen productconfiguraties.
+
+FUNCTIONALITEIT
+- Mijn Weerlab via de bestaande favorietenroute en hoofdnavigatie.
+- Nieuwe gebruikers krijgen een leeg persoonlijk dashboard met korte introductie.
+- Algemene startpagina of persoonlijk dashboard is instelbaar en persistent.
+- Eerst worden accountinstellingen opgehaald; er wordt vooraf geen standaardkaart
+  geladen die daarna door een persoonlijk dashboard zou worden vervangen.
+- Productsterren gebruiken de bestaande paginabalk en catalogusknoppen.
+- Persoonlijke namen, standaardnaam herstellen, eigen categorieën, hernoemen,
+  categorievolgorde, verwijderen met behoud/verplaatsing van favorieten.
+- Volgorde binnen en tussen categorieën: desktop drag-and-drop, touch-pointer-
+  bediening, en toegankelijke knoppen/selects als alternatief.
+- Permanente tegel-/lijstweergave en directe zoekresultaten op persoonlijke naam,
+  oorspronkelijke naam, omschrijving en categorie.
+- Producten toevoegen vanuit het dashboard; de catalogus gebruikt bestaande IDs.
+- Terug naar Mijn Weerlab in de zichtbare paginabalk, ook bij pluimen waarvan de
+  bestaande site de productkop verbergt.
+- Native openen in een nieuw tabblad blijft werken via gewone links.
+- Productfavorieten zijn onderscheiden van opgeslagen specifieke pagina’s en
+  configuraties. Een opgeslagen pluimstation/run wordt met productID en losse
+  query bewaard; de canonieke productroute wordt centraal opgezocht.
+- Optionele laatste vijf bekeken producten, wissen en uitschakelen.
+- JSON-export van de eigen staat en gevalideerde toevoegende import, met
+  deduplicatie en nieuwe eigen IDs voor geïmporteerde items.
+- Het dashboard laadt geen zware weerkaarten/grafieken zolang ze niet zijn geopend.
+
+BESTANDEN
+Aangepast: index.html en menu.js. De bestaande navigatieregressietest heeft de
+ontbrekende browserhelpers queueMicrotask en refreshPageActions in zijn fixture
+gekregen; de werkelijke navigatie wordt daarnaast in Chrome getest.
+Nieuw: mijn-weerlab.js, mijn-weerlab.css en mijn-weerlab-worker/ met auth.mjs,
+model.mjs, worker.mjs, catalog.mjs, build-catalog.mjs, wrangler.toml, package.json,
+tests/, .gitignore en dit overzicht.
+menu-data.js blijft de bestaande registratie; de backendcatalogus wordt daaruit
+gegenereerd. Bestaande productpagina’s en hun eigen toegangspoorten worden door
+Mijn Weerlab niet vervangen.
+De gerichte release wordt voorbereid in /private/tmp/weerlab-mijn-release, apart
+van de bronmap met vele reeds aanwezige lokale wijzigingen. Alleen de genoemde
+bestanden worden voor deze release gestaged. Back-ups en werkresultaten staan in
+/Users/aldus/Documents/ChatGPT/Weerlab/mijn-weerlab/.
+
+ACCOUNTKOPPELING EN OPSLAG
+De server verifieert JWT-handtekening, uitgever, audience, app-type, geldigheid,
+subject en e-mailadres. Een losse e-mailheader of browser-user_id volstaat niet.
+Een intern accountregister koppelt het geverifieerde issuer/subject en het
+getrimde/lowercase e-mailadres transactioneel aan een eenmalig gegenereerde UUID.
+Nieuwe codes/sessies en een nieuw Access-subject voor hetzelfde geverifieerde
+adres herkennen die UUID. Conflicterende bestaande koppelingen worden geweigerd.
+
+Per UUID bestaat een eigen Dashboard Durable Object met een SQLite-backed record:
+schemaVersion, revision, favorites, categories, savedPages, preferences en recent.
+Favorieten bevatten ID, productId, customName, categoryId, createdAt en updatedAt.
+Arrayvolgorde bepaalt de positie. Categorieën hebben een eigen ID en naam.
+SavedPages bewaren productID of een toegestane menuroute, titel en losse query.
+Voorkeuren bevatten weergave, startpagina en geschiedenisinstelling.
+Het record wordt atomair gevalideerd en opgeslagen. Referenties, effectieve IDs
+en producten worden op geldigheid/uniciteit gecontroleerd. De SQLite-backed
+opslag is binnen elk account geïsoleerd; relationele SQL-RLS tussen gebruikers
+is daardoor niet van toepassing.
+Wrangler-migratie v1 maakt Accounts en Dashboard aan met new_sqlite_classes;
+herdeploy past dezelfde migratie niet opnieuw toe. savedPages is een optionele
+achterwaarts compatibele uitbreiding van schemaVersion 1. Oudere clients die
+het veld niet meesturen wissen bestaande opgeslagen configuraties niet.
+
+VEILIGHEID EN FOUTAFHANDELING
+Alle persoonlijke API-acties vereisen geverifieerde Access-identiteit. De server
+selecteert uitsluitend op basis daarvan het accountobject. X-Expected-User is
+alleen extra bescherming tegen een accountwissel, geen selecteerbare eigenaar.
+Mutaties vereisen dezelfde Origin, JSON en X-Weerlab-Request. Er zijn geen
+CORS-permissies. Responses zijn private/no-store en workers.dev staat uit.
+Werkelijke requestbytes worden begrensd op 256 kB; teksten en collecties hebben
+limieten (1000 favorieten, 100 categorieën en 200 bewaarde pagina’s).
+If-Match/revision voorkomt ongemerkte overschrijving vanaf een ander apparaat.
+Een conflict vereist expliciet ophalen van de nieuwste versie en opnieuw
+uitvoeren van de wijziging. Gewone netwerkfouten krijgen een herhaalactie.
+Een tweede wijziging kan een nog niet opgeslagen herhaalactie niet stil vervangen.
+Er wordt alleen 'Opgeslagen' gemeld na bevestiging door de server.
+Gegevens staan in de browser alleen in actief geheugen. Uitloggen, sessieverloop
+en een Cloudflare-loginredirect wissen die staat. Vertraagde antwoorden van oude
+lees-/schrijfaanvragen kunnen na uitloggen/accountwissel geen gegevens terugzetten.
+Bij browsercacheherstel wordt de accountstaat opnieuw opgehaald.
+De bestaande browserfavorieten en bewaarde pagina’s worden niet automatisch aan
+een account toegewezen: een gedeelde browser kan gegevens van iemand anders
+bevatten. Oude lokale gegevens blijven intact maar worden niet vermengd.
+Een favoriet is een verwijzing; hij verleent geen productrechten en omzeilt geen
+eventuele eigen productcode. De bestaande architectuur heeft geen afzonderlijke
+serverentitlements per product. Eigen toegangspoorten blijven behouden.
+Een uit de catalogus verwijderd product blijft als niet-beschikbare favoriet staan.
+
+UITGEVOERDE VERIFICATIE
+- 20 unit-/clienttests: JWTs, normalisatie, schema, import, duplicaten, verdwenen
+  producten, configuraties, accountwissels, vertraagde antwoorden en herstelacties.
+- 7 bestaande navigatieregressies: iframehistorie, menu-/filterlinks, vreemde of
+  verwijderde frames, skip-link, nieuw-tab/download en catalogusidentiteit.
+- Miniflare met echte SQLite: accountkoppeling, gescheiden gebruikers, account-
+  wisselbescherming, twee gelijktijdige writes met 200/409, behoud na runtimeherstart.
+- Volledige API met ondertekende Access-testtokens: verlopen sessies, CSRF,
+  cacheheaders, vervalste user_id, nieuw token voor hetzelfde genormaliseerde
+  e-mailadres, behoud van persoonlijke naam/categorie/lijstweergave en import.
+- Chrome desktop en 390px mobiel: lege start zonder vooraf geladen kaart,
+  toevoegen/hernoemen, categorieën, verslepen, lijstvoorkeur, herladen, vijf
+  handmatig toegevoegde favorieten, zoeken, fout/herhalen, directe productroute,
+  pluimstation/run bewaren en heropenen, zichtbare terugknop, en 302-sessieverloop.
+- 100 opgeslagen referenties renderen in de lokale browsertest in circa 70–140 ms,
+  inclusief 22 verdwenen producten; geen JavaScript-fouten of mobiele overflow.
+Deze metingen gelden voor de lokale testomgeving, niet als live prestatietoezegging.
+
+PRAKTISCHE ACCEPTATIE EN ONDERHOUD
+Browsertests gebruiken alleen testgegevens. De volledige meteorologische data-
+renderers zijn daarin deels afgevangen; het zijn geen integrale tests van ieder
+weerproduct. Een echte OTP-herlogin, een tweede fysiek apparaat en fysieke touch-
+bediening moeten na publicatie nog als praktische acceptatie worden gecontroleerd.
+Automatische tests bewijzen opslag na nieuwe ondertekende sessies, accountisolatie
+en herstart; zij worden niet gepresenteerd als uitgevoerde menselijke OTP-login.
+
+Bij een cataloguswijziging:
+  node mijn-weerlab-worker/build-catalog.mjs
+  wrangler deploy --config mijn-weerlab-worker/wrangler.toml
+Publiceer daarna via de bestaande GitHub Pages-workflow. Publiceer nooit een
+los mapje met slechts de persoonlijke frontendbestanden als volledige website.
+
+Voor rollback: herstel alleen de aangepaste frontendbestanden vanuit de gerichte
+commit/back-up. Laat persoonlijke SQLite-opslag bestaan zodat gebruikers hun
+opgeslagen gegevens behouden.

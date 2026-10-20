@@ -31,6 +31,7 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const $ = selector => document.querySelector(selector);
   const site = window.WEERLAB_MENU_SITE || {};
+  const personal=window.MijnWeerlab;
   const selfPage = site.selfPage || 'index.html';
   const storagePrefix = site.storagePrefix || 'weerlab-menu-v9';
   const products = MENU_PRODUCTS;
@@ -40,7 +41,7 @@
     nu:{name:'Nu',icon:'sun',title:'Het weer van dit moment',description:'Bekijk buien, satellietbeelden en de laatste metingen.',types:[['nu','Alles'],['beeld','Radar & satelliet'],['metingen','Metingen'],['water','Water & kust']]},
     verwachting:{name:'Verwachting',icon:'cloud',title:'Wat gaat het weer doen?',description:'Van de komende bui tot de verwachting voor volgende week.',types:[['kaarten','Weerkaarten'],['pluim','Pluimen & kansen'],['tekst','Weerbericht']]},
     terugkijken:{name:'Terugkijken',icon:'history',title:'Het weer in perspectief',description:'Bekijk eerdere metingen, weerrecords en klimaatgemiddelden.',types:[['alles','Alles'],['terug','Metingen & archief'],['klimaat','Records & klimaat']]},
-    favorieten:{name:'Favorieten',icon:'star',title:'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
+    favorieten:{name:personal?'Mijn Weerlab':'Favorieten',icon:'star',title:personal?'Mijn Weerlab':'Jouw favorieten',description:'Alles wat je graag bij de hand houdt, op één plek.'},
     professioneel:{name:'Voor professionals',icon:'tools',title:'Voor professionals',description:'Verdieping, analyse en gereedschap voor de weerstudio.',types:[['vak','Alles'],['analyse','Analyse'],['tv','TV & uitzending'],['studio','Studio']]},
   };
   const typeNames=site.typeNames || {nu:'Nu',kaarten:'Weerkaarten',pluim:'Pluimen & kansen',tekst:'Weerbericht',terug:'Maand & archief',klimaat:'Records & klimaat',vak:'Voor professionals',nieuws:'Nieuws'};
@@ -55,6 +56,7 @@
   const migrated=Array.isArray(previous)?previous.map(id=>products.find(p=>p.href==='index.html#'+id)?.id).filter(Boolean):[];
   let saved=readStorage(storagePrefix+'-favorites',migrated.length?migrated:defaultFavorites);
   let favorites=Array.isArray(saved)?[...new Set(saved.map(id=>id==='global4'?'hires4':id).filter(id=>byId.has(id)))]:defaultFavorites;
+  if(personal)favorites=[];
   let view=readStorage(storagePrefix+'-view','cards')==='list'?'list':'cards';
   let state={}, filterOpen=false, toastTimer, searchTimer, searchOrigin='#start';
   const main=$('#main'), search=$('#search'), dialog=$('#menu-dialog');
@@ -63,9 +65,10 @@
     if(!Array.isArray(stored))return [];
     return stored.filter(p=>{try{const u=new URL(p.url);return u.origin===location.origin&&/^https?:$/.test(u.protocol)&&typeof p.title==='string';}catch{return false;}});
   }
-  let savedPages=readSavedPages(),restoringPageView=false;
+  let savedPages=personal?[]:readSavedPages(),restoringPageView=false;
   const pageActions=document.createElement('nav');pageActions.id='page-actions';pageActions.className='page-actions';pageActions.setAttribute('aria-label','Deze pagina');
   pageActions.append($('#product-permalink'));
+  if(personal)pageActions.insertAdjacentHTML('afterbegin','<a id="page-personal-back" class="mw-back" href="#menu/favorieten" hidden>← Mijn Weerlab</a>');
   pageActions.insertAdjacentHTML('beforeend',`<button type="button" id="page-copy">Kopieer URL</button><button type="button" id="page-save" aria-pressed="false">☆ Bewaar deze pagina</button><details class="bookmark-help"><summary>Bladwijzer</summary><p>Bewaar deze pagina in je browser met <kbd>${/Mac|iPhone|iPad/.test(navigator.platform)?'⌘D':'Ctrl+D'}</kbd>. Op je telefoon: open het browsermenu en kies ‘Bladwijzer toevoegen’ of ‘Favorieten’.</p></details><input id="page-url" type="url" readonly hidden aria-label="Directe URL van deze pagina">`);
   main.before(pageActions);
   function favoriteCount(){return favorites.length+savedPages.length;}
@@ -88,6 +91,7 @@
   function refreshPageActions(){
     if(restoringPageView)return;
     const page=currentPageLink();
+    if(personal)$('#page-personal-back').hidden=!state.productRoute;
     if(state.product?.id==='beta'&&location.hash!==new URL(page.url).hash){
       history.replaceState(null,'',new URL(page.url).hash);$('#product-frame').dataset.route=location.hash.slice(1);state=readRoute();
     }
@@ -95,7 +99,8 @@
     $('#page-copy').title='Kopieer de directe link naar '+page.title;
     const marked=savedPages.some(p=>p.url===page.url)||(page.basic&&favorites.includes(page.id));
     $('#page-save').setAttribute('aria-pressed',String(marked));$('#page-save').textContent=marked?'★ Pagina bewaard':'☆ Bewaar deze pagina';
-    $('#page-save').title=(marked?'Verwijder uit':'Bewaar in')+' Favorieten binnen Weerlab';
+    $('#page-save').disabled=!!personal&&!personal.ready();
+    $('#page-save').title=(marked?'Verwijder uit':'Bewaar in')+(personal?' Mijn Weerlab':' Favorieten binnen Weerlab');
     $('#page-url').value=page.url;$('#page-url').hidden=true;
   }
   async function copyPageLink(){
@@ -108,6 +113,7 @@
   }
   function saveCurrentPage(){
     const page=currentPageLink();
+    if(personal){if(!personal.ready())return;if(page.basic&&byId.has(page.id))personal.toggle(page.id);else personal.togglePage(page);return;}
     if(page.basic&&byId.has(page.id)){toggleFavorite(page.id);refreshPageActions();return;}
     const removing=savedPages.some(p=>p.url===page.url);
     savedPages=removing?savedPages.filter(p=>p.url!==page.url):[{url:page.url,title:page.title},...savedPages];
@@ -174,8 +180,9 @@
   function navigate(hash,{replace=false,focus=false,keepScroll=false}={}){
     clearTimeout(searchTimer);
     if(location.hash!==hash) history[replace?'replaceState':'pushState'](null,'',hash);
-    window.addEventListener('storage',event=>{if(event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
+    window.addEventListener('storage',event=>{if(!personal&&event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
   state=readRoute();render();
+    if(personal&&state.product)personal.visit(state.product.id);
     if(!keepScroll)window.scrollTo({top:0,behavior:'instant'});
     if(focus)(state.productRoute?$('#product-title'):main.querySelector('h1'))?.focus({preventScroll:true});
   }
@@ -187,7 +194,7 @@
     const extraLinks=site.extraLinks || [{href:'index.html#waarschuwingen',name:'Waarschuwingen',icon:'warning'},{href:'index.html#nieuws',name:'Wat is nieuw'},{href:'index_be.html',name:'Weer in België'},{href:'/cdn-cgi/access/logout',name:'Uitloggen'}];
     $('#dialog-nav').innerHTML=['start',...(site.navItems || ['nu','verwachting','terugkijken']),'favorieten',...(categories.professioneel?['professioneel']:[])].map(navLink).join('')+extraLinks.map(link=>`<a href="${escape(link.href)}" class="nav-link">${link.icon?icon(link.icon):''}${escape(link.name)}</a>`).join('');
   }
-  function pin(p){const pinned=favorites.includes(p.id);return `<button class="pin-button" data-pin="${p.id}" aria-pressed="${pinned}" aria-label="${escape(p.name)} ${pinned?'verwijderen uit':'toevoegen aan'} favorieten" title="${pinned?'Verwijderen uit':'Toevoegen aan'} favorieten">${icon('star')}</button>`;}
+  function pin(p){const pinned=favorites.includes(p.id);return `<button class="pin-button" data-pin="${p.id}" ${personal&&!personal.ready()?'disabled':''} aria-pressed="${pinned}" aria-label="${escape(p.name)} ${pinned?'verwijderen uit':'toevoegen aan'} favorieten" title="${pinned?'Verwijderen uit':'Toevoegen aan'} favorieten">${icon('star')}</button>`;}
   function productCard(p,{featured=false}={}){
     const quickNames={radar:['Radar & buien','Waar regent het nu?'],modelkaarten:['Weerkaarten','De komende uren en dagen'],'pluim-viewer':['Weerpluim','De verwachting voor jouw plaats'],actueel:['Waarnemingen','Het gemeten weer in Nederland']};
     const [name,description]=featured?(quickNames[p.id] || [p.name,p.description]):[p.name,p.description];
@@ -312,7 +319,7 @@
       blank.removeAttribute('src');blank.dataset.route='';blank.hidden=true;
       oldFrame.replaceWith(blank);
     }
-    main.innerHTML=state.page==='start'?home():state.page==='zoeken'?searchPage():catalogue();
+    main.innerHTML=personal&&state.page==='favorieten'?personal.html():state.page==='start'?home():state.page==='zoeken'?searchPage():catalogue();
     if(search.value!==state.q)search.value=state.q;
     $('#clear-search').hidden=!search.value;
     $('.search-key').hidden=!!search.value;
@@ -325,6 +332,7 @@
     },{once:true}));
   }
   function toggleFavorite(id){
+    if(personal){personal.toggle(id);return;}
     const removing=favorites.includes(id);favorites=removing?favorites.filter(x=>x!==id):favorites.concat(id);
     const stored=save(storagePrefix+'-favorites',favorites);
     const focused=document.activeElement;
@@ -418,7 +426,7 @@
   document.addEventListener('click',event=>{
     if(event.target.closest('#page-copy')){copyPageLink();return;}
     if(event.target.closest('#page-save')){saveCurrentPage();return;}
-    const removePage=event.target.closest('[data-remove-page]');if(removePage){savedPages=savedPages.filter(p=>p.url!==removePage.dataset.removePage);save(storagePrefix+'-saved-pages',savedPages);render();say('Pagina verwijderd uit Favorieten.',true);return;}
+    const removePage=event.target.closest('[data-remove-page]');if(removePage&&personal){const page=savedPages.find(p=>p.url===removePage.dataset.removePage);if(page)personal.removePage(page.id);return;}if(removePage){savedPages=savedPages.filter(p=>p.url!==removePage.dataset.removePage);save(storagePrefix+'-saved-pages',savedPages);render();say('Pagina verwijderd uit Favorieten.',true);return;}
     const pinButton=event.target.closest('[data-pin]');if(pinButton){toggleFavorite(pinButton.dataset.pin);return;}
     const viewButton=event.target.closest('[data-view]');if(viewButton){view=viewButton.dataset.view;save(storagePrefix+'-view',view);render();main.querySelector(`[data-view="${view}"]`).focus();say(view==='list'?'Lijstweergave':'Kaartweergave');return;}
     if(event.target.closest('#toggle-filters')){filterOpen=!filterOpen;$('#filters').hidden=!filterOpen;$('#toggle-filters').setAttribute('aria-expanded',String(filterOpen));return;}
@@ -589,6 +597,7 @@
     if(typeof data.title==='string'){$('#product-title').textContent=data.title;frame.title=data.title;document.title=data.title+' · Weerlab';}
   });
 
-  window.addEventListener('storage',event=>{if(event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
-  state=readRoute();render();
+  window.addEventListener('storage',event=>{if(!personal&&event.key===storagePrefix+'-saved-pages'){savedPages=readSavedPages();renderNav();refreshPageActions();if(!state.productRoute)render();}});
+  state=personal&&!location.hash?{page:'favorieten',type:'',filters:{},q:''}:readRoute();render();
+  if(personal)personal.init(()=>{favorites=personal.ids();savedPages=personal.savedPages();state=!location.hash&&!personal.loaded()?{page:'favorieten',type:'',filters:{},q:''}:readRoute();render();if(personal.error())say(personal.error(),true);});
 })();
