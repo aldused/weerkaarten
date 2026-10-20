@@ -545,7 +545,7 @@
       restoringPageView=false;
       const frame=previousFrame.cloneNode(false);
       frame.hidden=false;frame.dataset.route=route;frame.title=title;
-      frame.src=state.product?.src || 'product-host.html?v=20261004-all1'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
+      frame.src=state.product?.src || 'product-host.html?v=20261020-mijn-weerlab'+(location.hostname==='127.0.0.1' && new URLSearchParams(location.search).get('localData')==='1'?'&localData=1':'')+'#'+route;
       if(state.product?.id==='pluim-ens6plus'){
         const url=new URL(frame.src,location.href),params=new URLSearchParams(route.split('?')[1] || '');
         for(const key of ['run','station','lat','lon'])if(params.has(key))url.searchParams.set(key,params.get(key));
