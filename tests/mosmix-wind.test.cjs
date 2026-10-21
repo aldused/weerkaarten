@@ -15,3 +15,12 @@ test('central periods must cover the full day without overlaps',()=>{assert.thro
 test('six dayparts form a single continuous timeline, including the winter change',()=>{const slots=W.sequence(W.period('2026-10-24','middag'),6);assert.equal(slots.length,6);slots.forEach((p,i)=>{if(i)assert.equal(p.start,slots[i-1].end);});assert.equal(slots[2].id,'nacht');assert.equal(slots[2].expected,undefined);assert.equal(slots[2].end-slots[2].start,7*W.HOUR);});
 test('identical wall clocks in other browser zones never change valid forecast alignment',()=>{const a=W.rows({tijden:['2026-10-21T12:00'],tijden_utc:['2026-10-21T10:00:00Z'],FF:[10],DD:[270]}),b=W.rows({tijden:['2026-10-21T13:00'],tijden_utc:['2026-10-21T11:00:00Z'],FF:[20],DD:[90]});const index=new Map(b.map(r=>[r.time,r]));assert.equal(index.get(a[0].time),undefined);assert.match(W.clock(Date.parse('2026-10-25T00:00Z')),/CEST/);assert.match(W.clock(Date.parse('2026-10-25T01:00Z')),/CET/);});
 test('short strong wind peaks are not described as little change; gradual rotation is retained',()=>{const p=W.period('2026-10-21','middag'),rows=fixture('2026-10-21T10:00Z');rows.forEach((r,i)=>{r.ff=i===2?45:10;r.dd=i*15;});const s=W.summary(rows,p);assert.equal(s.trend,'sterk wisselend');assert.equal(s.turn,75);assert.equal(s.max,45);const m=W.vectorMean([{ff:10,dd:null}]);assert.equal(m.directionMissing,true);assert.equal(m.variable,false);});
+test('additional weather layers preserve source units, zero and missing values',()=>{
+ const rows=W.rows({tijden:['2026-10-21T12:00'],tijden_utc:['2026-10-21T10:00Z'],VV:[1500],SunD1:[1800],Td:[0],RV:[75],Nl:[0],Nm:[null],Nh:[101],wwT:[20]});
+ assert.equal(rows[0].visibility,1.5);assert.equal(rows[0].sun,30);assert.equal(rows[0].dew,0);assert.equal(rows[0].low,0);assert.equal(rows[0].mid,null);assert.equal(rows[0].high,null);assert.equal(rows[0].thunder,20);
+});
+test('weather summaries distinguish point means, minimum visibility, sunshine intervals and peak hourly probability',()=>{
+ const p=W.period('2026-10-21','middag'),rows=fixture('2026-10-21T10:00Z').map((r,i)=>({...r,dew:i,rh:50+i,low:20,mid:40,high:60,visibility:10-i,sun:i?30:60,thunder:i*10}));
+ let s=W.summary(rows,p);assert.equal(s.dew,2.5);assert.equal(s.rh,52.5);assert.equal(s.visibility,5);assert.equal(s.sun,180);assert.equal(s.thunder,60);
+ rows[3].sun=null;rows[2].low=null;s=W.summary(rows,p);assert.equal(s.sun,null);assert.equal(s.low,null);assert.equal(s.high,60);
+});

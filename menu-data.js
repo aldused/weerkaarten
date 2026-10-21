@@ -1,6 +1,6 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
-  {id:'mosmix-werkstation',name:'MOS/MIX · wind en weer in ontwikkeling',description:'Zes brontijden of dagdelen naast één grote kaart · representatieve wind en piekstoten apart',category:'verwachting',type:'kaarten',alsoTypes:['pluim'],section:'Nederland · MOS/MIX',icon:'map',href:'index.html#mosmix-werkstation',src:'mosmix-werkstation.html?v=20261021-1',thumbnail:null,facets:{model:['mosmix'],gebied:['nl','be','eu'],bron:['mosmix'],grootheid:['wind','neerslag','temperatuur'],vorm:['kaart']},keywords:'MOSMIX MOS/MIX wind windrichting Beaufort windstoten ontwikkeling dagdelen nacht zes kaarten grote kaart uren instellingen modellen',restricted:false},
+  {id:'mosmix-werkstation',name:'MOS/MIX · weer in ontwikkeling',description:'Alle onderdelen in één omgeving · zes kaarten, grote kaart en 9-daagse minikaarten',category:'verwachting',type:'kaarten',alsoTypes:['pluim'],section:'Nederland · MOS/MIX',icon:'map',href:'index.html#mosmix-werkstation',src:'mosmix-werkstation.html?v=20261021-2',thumbnail:null,facets:{model:['mosmix'],gebied:['nl','be','eu'],bron:['mosmix'],grootheid:['wind','neerslag','temperatuur'],vorm:['kaart']},keywords:'MOSMIX MOS/MIX wind windrichting Beaufort windstoten ontwikkeling dagdelen nacht zes kaarten grote kaart uren instellingen modellen',restricted:false},
   {id:"wolkenbasis-actueel",name:"Actuele wolkenbasis · Benelux",description:"Gemeten wolkenhoogten bij KNMI-stations en luchthavens",category:"nu",type:"nu",section:"Metingen",icon:"tabel",href:"index.html#wolkenbasis-actueel",src:"wolkenbasis_actueel.html?v=20261007-1",thumbnail:null,facets:{grootheid:["bewolking"]},keywords:"wolkenhoogte wolkenbasis actueel waarnemingen Benelux KNMI METAR mist ceiling",restricted:false},
   {id:'daglengte',name:"Daglicht & seizoenen",description:"Vergelijk daglengte, zonsopkomst en zonsondergang in De Bilt.",category:'terugkijken',type:'klimaat',section:'Zon & seizoenen',icon:'tabel',href:'index.html#daglengte',src:'daglengte.html?v=20261003-redactie6',thumbnail:null,facets:{},keywords:'daglengte daglicht zon zonsopkomst zonsondergang voorjaar najaar herfst lente seizoenen KNMI',restricted:false},
 
@@ -13,7 +13,8 @@ const MENU_PRODUCTS = [
     "description": "Nederland · uurkansen op neerslag per drempel",
     "category": "verwachting", "type": "kaarten", "alsoTypes": ["pluim"],
     "section": "Nederland · MOS/MIX", "icon": "neerslag",
-    "href": "index.html#mosmix-neerslagkans", "thumbnail": null,
+    "href": "index.html#mosmix-neerslagkans",
+    "src": "mosmix-werkstation.html?v=20261021-2&product=rain", "thumbnail": null,
     "facets": {"veld":["neerslag"],"model":["mosmix"],"gebied":["nl"],"bron":["mosmix"],"grootheid":["neerslag"],"vorm":["kaart"]},
     "keywords": "MOSMIX MOS/MIX Nederland regen kans kansen kaarten uurkans", "restricted": false
   },
@@ -786,6 +787,7 @@ const MENU_PRODUCTS = [
     "section": "MOS/MIX",
     "icon": "meteogram",
     "href": "index.html#mosmix-overzicht",
+    "src": "mosmix-werkstation.html?v=20261021-2&product=overview",
     "thumbnail": "thumbs/mosmix-overzicht.webp",
     "facets": {
       "bron": [
@@ -822,6 +824,7 @@ const MENU_PRODUCTS = [
     "section": "Nederland · MOS/MIX",
     "icon": "map",
     "href": "index.html#mosmix-minikaarten",
+    "src": "mosmix_9dag.html?v=20261021-suite1",
     "thumbnail": "thumbs/mosmix-minikaarten.webp",
     "facets": {
       "bron": [
@@ -863,6 +866,7 @@ const MENU_PRODUCTS = [
     "section": "Nederland · MOS/MIX",
     "icon": "map",
     "href": "index.html#mosmix-parameter",
+    "src": "mosmix-werkstation.html?v=20261021-2&product=elements",
     "thumbnail": "thumbs/mosmix-parameter.webp",
     "facets": {
       "bron": [
@@ -910,6 +914,7 @@ const MENU_PRODUCTS = [
     "section": "MOS/MIX",
     "icon": "meteogram",
     "href": "index.html#mosmix-trend",
+    "src": "mosmix-werkstation.html?v=20261021-2&product=trend",
     "thumbnail": "thumbs/mosmix-trend.webp",
     "facets": {
       "bron": [
@@ -944,6 +949,7 @@ const MENU_PRODUCTS = [
     "section": "MOS/MIX",
     "icon": "meteogram",
     "href": "index.html#mosmix-verificatie",
+    "src": "mosmix-werkstation.html?v=20261021-2&product=verification",
     "thumbnail": null,
     "facets": {
       "bron": [
@@ -979,6 +985,7 @@ const MENU_PRODUCTS = [
     "section": "MOS/MIX",
     "icon": "tabel",
     "href": "index.html#mosmix-eu",
+    "src": "mosmix-werkstation.html?v=20261021-2&product=europe",
     "thumbnail": null,
     "facets": {
       "bron": [
