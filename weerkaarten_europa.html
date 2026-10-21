@@ -344,7 +344,7 @@ let downloadObjectUrl='', downloadSource='', downloadObjectName='', downloadToke
 const NL_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_nl_meta.json':'https://data.weerlab.nl/wxbeta-nl/current.json';
 const NORTHSEA_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_northsea_meta.json':'https://data.weerlab.nl/wxbeta-northsea/current.json';
 const CUM_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_cumulative_meta.json':'https://data.weerlab.nl/wxbeta-cumulative/current.json';
-const HARMONIE43_META_URL='https://data.weerlab.nl/wxbeta-harmonie43/current.json';
+const HARMONIE43_META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_harmonie43_meta.json':'https://data.weerlab.nl/wxbeta-harmonie43/current.json';
 const META_REFRESH_MS=5*60*1000;
 const META_URL=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?'wxbeta_meta.json':'https://data.weerlab.nl/wxbeta_meta.json';
 function runAgeWarning(run,now=Date.now(),model=curModel){
@@ -470,7 +470,7 @@ function setRun(cc,valid=R()?.frames[idx]?.valid_utc){
   updateRunStatus();
   document.querySelectorAll('#runbar .pill').forEach(b=>{b.classList.toggle('actief',b.dataset.c===cc);b.setAttribute('aria-pressed',String(b.dataset.c===cc));});
   const md=META.models.find(m=>m.key===curModel);
-  $('run-info').textContent=(curModel==='ecmwf'?(cc==='ens'?'ECMWF ENS-gemiddelde':'ECMWF IFS'):md.label)+' · Run: '+WeerkaartenTime.label(R().run_utc)+' · t/m +'+R().maxlead+'u';
+  $('run-info').textContent=(curModel==='ecmwf'?(cc==='ens'?'ECMWF ENS-gemiddelde':'ECMWF IFS'):md.label)+' · Run: '+WeerkaartenTime.label(R().run_utc)+' · t/m +'+R().maxlead+'u'+(curModel==='harmonie43'?' · elk uur':'');
   if(!R().files[varKey]){ const av=META.vars.find(v=>R().files[v.key]); if(av) varKey=av.key; }
   $('slider').min=firstAllowedIndex();
   $('slider').max=R().frames.length-1;
@@ -694,7 +694,7 @@ function fsZoom(f,cx,cy){ const ns=Math.min(15,Math.max(1,fsScale*f)); const k=n
 })();
 
 function buildStaticBars(m){
-  $('modelbar').replaceChildren(...m.models.map(md=>new Option(md.key==='ecmwf'?'ECMWF IFS':md.label,md.key)));
+  $('modelbar').replaceChildren(...m.models.map(md=>new Option(md.key==='ecmwf'?'ECMWF IFS':md.key==='harmonie43'?'HARMONIE 43 · per uur':md.label,md.key)));
   $('modelbar').onchange=()=>{if(playing)play();setModel($('modelbar').value);};
   $('varbar').onchange=()=>{if(playing)play();setVar($('varbar').value);};
 }
@@ -703,6 +703,16 @@ function signatureOf(m){
     const r=m.data[md.key].runs[cc];
     return [cc,r.run_utc,r.maxlead,r.renderer||'',r.calculation_revision||'',r.files||{},r.layers||{}];
   })]));
+}
+// Publish HARMONIE as hourly only when every layer covers the same real hours.
+function validHarmonieData(data){
+  return !!data?.cycles?.length&&data.cycles.every(c=>{
+    const run=data.runs?.[c],frames=run?.frames,epoch=Date.parse(run?.run_utc);
+    return Number.isFinite(epoch)&&frames?.length>1&&frames.every((f,i)=>
+      Number.isInteger(f.lead)&&f.lead>=0&&Date.parse(f.valid_utc)===epoch+f.lead*3600000&&
+      (!i||f.lead===frames[i-1].lead+1))&&
+      ['mslp_bft','t2m','wind','gust'].every(k=>run.files?.[k]?.length===frames.length&&run.files[k].every(f=>typeof f==='string'&&f.length));
+  });
 }
 async function refreshMeta(initial=false){
   try{
@@ -713,7 +723,7 @@ async function refreshMeta(initial=false){
       const hr=await fetch(HARMONIE43_META_URL+'?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
       if(hr.ok){
         const hm=await hr.json(),hd=hm.data?.harmonie43;
-        if(hd?.cycles?.length&&hd.cycles.every(c=>hd.runs?.[c]?.frames?.length&&hd.runs[c].files?.mslp_bft?.length))HARMONIE43_META=hd;
+        if(validHarmonieData(hd))HARMONIE43_META=hd;
       }
     }catch(_){}
     if(HARMONIE43_META){

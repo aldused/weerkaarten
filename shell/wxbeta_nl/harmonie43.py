@@ -9,6 +9,30 @@ REV='nl-knmi-harmonie43-1'
 ROOT=Path('/Users/aldus/KNMI_Project/weerlab')
 LAYERS=['mslp_bft','t2m','wind','gust']
 
+def hourly_frames(times, run):
+ """Resolve Dutch clock times as one unbroken UTC sequence, including DST."""
+ zone = ZoneInfo('Europe/Amsterdam')
+ sequences = [[]]
+ for value in times:
+  local = dt.datetime.fromisoformat(value)
+  if local.tzinfo:
+   candidates = {local.astimezone(dt.timezone.utc)}
+  else:
+   candidates = {local.replace(tzinfo=zone, fold=fold).astimezone(dt.timezone.utc)
+                 for fold in (0, 1)}
+   candidates = {valid for valid in candidates
+                 if valid.astimezone(zone).replace(tzinfo=None) == local}
+  sequences = [seq + [valid] for seq in sequences for valid in sorted(candidates)
+               if valid >= run and (not seq or valid == seq[-1] + dt.timedelta(hours=1))]
+ if len(times) < 2 or len(sequences) != 1:
+  raise ValueError('Niet-aaneengesloten of ongeldige uurtijden')
+ frames = []
+ for valid in sequences[0]:
+  hours = (valid-run).total_seconds()/3600
+  if hours != int(hours): raise ValueError('Ongeldige prognosetijd')
+  frames.append(dict(lead=int(hours), valid_utc=valid.isoformat()))
+ return frames
+
 def snapshot(root):
  path=root/'harmonie_canvas_meta.json';raw=path.read_bytes();meta=json.loads(raw)
  if meta.get('model')!='HARMONIE V43':raise ValueError('Geen HARMONIE 43 bron')
@@ -28,12 +52,7 @@ def snapshot(root):
  pressure=arrays['druk'][:,0]/100.0  # KNMI GRIB pressure is Pa; chart uses hPa
  if not ((pressure>850)&(pressure<1100)).all():raise ValueError('Luchtdruk niet in hPa')
  values=np.stack([arrays['temp'][:,0],pressure,np.hypot(u,v),np.degrees(np.arctan2(-u,-v))%360,np.hypot(arrays['windstoten'][:,0],arrays['windstoten'][:,1])],axis=-1)[:,mask,:]
- frames=[]
- for value in meta['tijden']:
-  valid=dt.datetime.fromisoformat(value).replace(tzinfo=ZoneInfo('Europe/Amsterdam')).astimezone(dt.timezone.utc);hours=(valid-run).total_seconds()/3600
-  if hours!=int(hours) or hours<0:raise ValueError('Ongeldige prognosetijd')
-  frames.append(dict(lead=int(hours),valid_utc=valid.isoformat()))
- if any(b['lead']!=a['lead']+1 for a,b in zip(frames,frames[1:])):raise ValueError('Niet-aaneengesloten tijden')
+ frames=hourly_frames(meta['tijden'],run)
  return run,frames,coords,values,keys,digest.hexdigest()[:12]
 
 def render(task):
