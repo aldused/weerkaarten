@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Windplaat</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: één verticale "plaat" — kop + kernwaarden, hoofdgrafiek (90 uur), drie accentblokken, dagstrook, bronregel. Bewust één donkere havenwereld. */
+:root{
+  color-scheme:dark;
+  --sea:#0A1C2B;        /* achtergrond: diep havenblauw */
+  --deck:#10283B;       /* panelen */
+  --deck-2:#143049;
+  --rule:#21435C;
+  --fg:#ECF4F8;
+  --muted:#8EABBE;
+  --faint:#5C7C92;
+  --calm:#6FC3DA;       /* rustig */
+  --fresh:#49CFC0;
+  --strong:#F2C43D;     /* stevig */
+  --gust:#FF6B57;       /* windstoten */
+  --warn:#FF3D6E;       /* waarschuwingstint */
+  --f-display:"Big Shoulders Display","Arial Narrow","Roboto Condensed",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.plate>*{min-width:0}
+body{background:var(--sea);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.plate{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 40px;display:grid;gap:22px}
+.mono{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+
+/* kop */
+.head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:end}
+.eyebrow{font-family:var(--f-data);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--calm);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--fresh);box-shadow:0 0 0 0 rgba(73,207,192,.6);animation:pulse 2.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(73,207,192,.55)}70%{box-shadow:0 0 0 9px rgba(73,207,192,0)}100%{box-shadow:0 0 0 0 rgba(73,207,192,0)}}
+h1{font-family:var(--f-display);font-weight:900;font-size:clamp(40px,6.4vw,78px);line-height:.92;letter-spacing:.005em;margin:10px 0 0;text-transform:uppercase;text-wrap:balance}
+h1 em{font-style:normal;color:var(--calm)}
+.verdict{margin:12px 0 0;max-width:62ch;font-size:17px;color:#CFE0EA;text-wrap:pretty}
+.verdict b{color:var(--fg);font-weight:600}
+.runbox{font-family:var(--f-data);font-size:12px;color:var(--muted);text-align:right;display:grid;gap:4px;white-space:nowrap}
+.runbox .live{display:inline-flex;gap:8px;align-items:center;justify-content:flex-end;color:var(--fg);font-size:12.5px}
+.chip{display:inline-block;border:1px solid var(--rule);border-radius:999px;padding:2px 9px;color:var(--fg)}
+
+/* plaatskeuze */
+.bar{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 16px;align-items:center;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+.back{font-family:var(--f-data);font-size:12px;letter-spacing:.06em;color:var(--muted);text-decoration:none;white-space:nowrap}
+.back:hover,.back:focus-visible{color:var(--fg)}
+.zoek{display:flex;gap:8px;min-width:0}
+.zoek input{flex:1 1 auto;min-width:0;font:500 15px var(--f-body);color:var(--fg);background:var(--deck);border:1px solid var(--rule);border-radius:10px;padding:11px 14px}
+.zoek input::placeholder{color:var(--faint)}
+.zoek input:focus{outline:2px solid var(--fresh);outline-offset:1px;border-color:transparent}
+.zoek button{flex:none;font:600 14px var(--f-body);color:#071622;background:var(--fresh);border:0;border-radius:10px;padding:0 16px;cursor:pointer}
+.zoek button:hover{background:#6FE0D3}
+.zoek button:focus-visible,.chipbtn:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.chips{grid-column:2;display:flex;gap:6px;flex-wrap:wrap}
+.chipbtn{font:500 12.5px var(--f-body);color:var(--muted);background:transparent;border:1px solid var(--rule);border-radius:999px;padding:4px 11px;cursor:pointer}
+.chipbtn:hover{color:var(--fg);border-color:var(--muted)}
+.chipbtn.on{color:#071622;background:var(--calm);border-color:var(--calm)}
+.zoekmelding{grid-column:2;margin:0;font-size:13px;color:var(--strong);min-height:0}
+.zoekmelding:empty{display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* social */
+.socialbtn{justify-self:end;margin-top:6px;font:600 12.5px var(--f-body);color:var(--fg);background:transparent;border:1px solid var(--muted);border-radius:8px;padding:7px 12px;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.socialbtn::before{content:"";width:11px;height:11px;border:2px solid var(--gust);border-radius:2px}
+.socialbtn:hover,.socialbtn:focus-visible{border-color:var(--fg);outline:none}
+.modal{position:fixed;inset:0;z-index:20;background:rgba(4,12,20,.78);display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal-box{background:var(--deck);border:1px solid var(--rule);border-radius:14px;padding:16px;width:min(620px,100%);max-height:100%;overflow:auto;display:grid;gap:12px}
+.modal-head{display:flex;justify-content:space-between;align-items:center}
+.modal-head h2{margin:0;font-family:var(--f-display);font-weight:800;font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+.modal .x{background:transparent;border:0;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px}
+.modal img{width:100%;aspect-ratio:1;max-width:100%;border-radius:8px;background:var(--sea);display:block}
+.modal-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.modal .dl{font:600 14px var(--f-body);color:#071622;background:var(--fresh);border:0;border-radius:10px;padding:10px 16px;cursor:pointer}
+
+/* kernwaarden */
+.stats{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.stat{padding:16px 18px 16px 0;display:grid;gap:4px;align-content:start;min-width:0}
+.stat + .stat{padding-left:18px;border-left:1px solid var(--rule)}
+.stat .lbl{font-family:var(--f-data);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.stat .val{font-family:var(--f-display);font-weight:800;font-size:clamp(34px,4.4vw,54px);line-height:1;display:flex;align-items:baseline;gap:6px}
+.stat .val small{font-family:var(--f-body);font-weight:500;font-size:14px;color:var(--muted)}
+.stat .sub{font-size:13.5px;color:#C4D7E3}
+.stat.peak .val{color:var(--gust)}
+.rosewrap{display:flex;gap:14px;align-items:center}
+.rosewrap svg{flex:none}
+
+/* hoofdgrafiek */
+.panel{background:linear-gradient(180deg,var(--deck),var(--sea));border:1px solid var(--rule);border-radius:14px;padding:18px 0 10px;position:relative}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:0 18px 8px}
+.panel-head h2{font-family:var(--f-display);font-weight:800;font-size:22px;letter-spacing:.04em;text-transform:uppercase;margin:0}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);align-items:center}
+.legend i{display:inline-block;vertical-align:middle;margin-right:6px}
+.lg-bar{width:14px;height:10px;border-radius:2px;background:linear-gradient(90deg,#4C7A92,#49CFC0,#F2C43D,#FF5A4E)}
+.lg-gust{width:18px;height:3px;background:var(--gust);border-radius:2px}
+.lg-storm{width:9px;height:9px;border-radius:50%;background:var(--strong);box-shadow:0 0 0 2px var(--sea),0 0 0 3px var(--strong)}
+.lg-night{width:14px;height:10px;background:#061421;border:1px solid var(--rule);border-radius:2px}
+.scroller{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+#chart{display:block;width:100%;min-width:980px;height:auto;touch-action:pan-x}
+#chart text{font-family:var(--f-data);fill:var(--muted)}
+.tip{position:absolute;pointer-events:none;background:rgba(9,24,37,.96);border:1px solid var(--rule);border-radius:10px;padding:10px 12px;min-width:176px;box-shadow:0 12px 30px rgba(0,0,0,.4);font-size:13px;display:grid;gap:3px;transform:translate(-50%,0);z-index:3}
+.tip .t{font-family:var(--f-data);font-size:11.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.tip .r{display:flex;justify-content:space-between;gap:14px}
+.tip .r b{font-family:var(--f-data);font-weight:500}
+.tip .g b{color:var(--gust)}
+.scale{display:flex;gap:0;padding:6px 18px 4px;flex-wrap:wrap;align-items:center;font-family:var(--f-data);font-size:11px;color:var(--muted)}
+.scale span{flex:1 1 0;min-width:44px;text-align:center;padding:4px 0 3px;color:#071622;font-weight:500}
+.scale .cap{flex:0 0 auto;min-width:0;padding-right:10px;color:var(--muted);font-weight:400;letter-spacing:.1em;text-transform:uppercase}
+.hint{display:none;padding:0 18px;font-size:12px;color:var(--faint)}
+
+/* accentblokken */
+.highlights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.hl{border-radius:12px;padding:16px 18px;display:grid;gap:8px;background:var(--deck);border:1px solid var(--rule);position:relative;overflow:hidden;cursor:pointer;transition:transform .15s ease,border-color .15s}
+.hl:hover,.hl:focus-visible{transform:translateY(-2px);border-color:var(--muted);outline:none}
+.hl .k{font-family:var(--f-data);font-size:11px;letter-spacing:.13em;text-transform:uppercase}
+.hl .big{font-family:var(--f-display);font-weight:800;font-size:40px;line-height:1}
+.hl .big small{font-family:var(--f-body);font-size:14px;font-weight:500;color:var(--muted);margin-left:4px}
+.hl .when{font-size:14px;color:var(--fg)}
+.hl .more{font-size:13px;color:var(--muted)}
+.hl svg{position:absolute;right:12px;top:12px;opacity:.9}
+.hl.gust{background:linear-gradient(135deg,rgba(255,107,87,.20),var(--deck) 60%)}
+.hl.gust .k,.hl.gust .big{color:var(--gust)}
+.hl.storm{background:linear-gradient(135deg,rgba(242,196,61,.17),var(--deck) 60%)}
+.hl.storm .k,.hl.storm .big{color:var(--strong)}
+.hl.calm{background:linear-gradient(135deg,rgba(111,195,218,.17),var(--deck) 60%)}
+.hl.calm .k,.hl.calm .big{color:var(--calm)}
+
+/* dagstrook */
+.days{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:0;border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.day{padding:14px 14px 12px;display:grid;gap:6px;min-width:0}
+.day + .day{border-left:1px solid var(--rule)}
+.day .dn{font-family:var(--f-display);font-weight:800;font-size:20px;letter-spacing:.04em;text-transform:uppercase}
+.day .dn small{font-family:var(--f-data);font-size:11px;color:var(--muted);font-weight:400;letter-spacing:.06em;margin-left:6px}
+.day .row{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.bftpill{font-family:var(--f-data);font-weight:500;font-size:12.5px;color:#071622;border-radius:5px;padding:2px 7px}
+.day .g{font-family:var(--f-data);color:var(--gust);font-size:13px}
+
+.foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--faint);border-top:1px solid var(--rule);padding-top:14px}
+.foot b{color:var(--muted);font-weight:500}
+
+@media (max-width:880px){
+  .head{grid-template-columns:1fr}
+  .socialbtn{justify-self:start}
+  .runbox{text-align:left}.runbox .live{justify-content:flex-start}
+  .stats{grid-template-columns:1fr 1fr}
+  .stat:nth-child(3){padding-left:0;border-left:0}
+  .stat:nth-child(n+3){border-top:1px solid var(--rule)}
+  .highlights{grid-template-columns:1fr}
+  .days{grid-template-columns:1fr}
+  .day{border-left:0!important;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;padding:12px 14px}
+  .day + .day{border-top:1px solid var(--rule)}
+  .day .dn{min-width:118px}
+  .hint{display:block}
+  .bar{grid-template-columns:1fr}
+  .chips,.zoekmelding{grid-column:1}
+}
+@media (max-width:880px){.scale .r{display:none}.scale span{min-width:0}}
+@media (max-width:460px){
+  .zoek button{padding:0 12px}
+  h1{font-size:36px}
+  .rosewrap .val small{display:none}
+  .stat{padding:14px 10px 14px 0}.stat + .stat{padding-left:12px}
+  .stat:nth-child(3){padding-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<style>[hidden]{display:none!important}body{margin:0}</style>
+</head>
+<body>
+
+
+<main class="plate" id="plate">
+  <nav class="bar" aria-label="Plaats kiezen">
+    <a class="back" id="back" href="weerbewaking.html" onclick="return gaTerug(event)">← Weerbewaking</a>
+    <form class="zoek" id="zoek" role="search" autocomplete="off">
+      <label for="plaats" class="sr">Plaats</label>
+      <input id="plaats" name="plaats" list="plaatsen" placeholder="Typ een plaats, bijv. Hoek van Holland, of coördinaten" enterkeyhint="search">
+      <datalist id="plaatsen"></datalist>
+      <button type="submit">Toon windplaat</button>
+    </form>
+    <div class="chips" id="chips" aria-label="Recente plaatsen"></div>
+    <p class="zoekmelding" id="melding" role="status" aria-live="polite"></p>
+  </nav>
+
+  <header class="head">
+    <div>
+      <div class="eyebrow"><span class="dot" aria-hidden="true"></span>Windverwachting · uur per uur · <span id="coord"></span></div>
+      <h1>Komende <span id="nuren">90</span> uur<br><span id="vz">in</span> <em id="plaatsnaam">…</em></h1>
+      <p class="verdict" id="verdict"></p>
+    </div>
+    <div class="runbox">
+      <span class="live"><span class="chip" id="live">Live</span></span>
+      <span id="runline"></span>
+      <span id="updline"></span>
+      <button type="button" class="socialbtn" id="btn-vierkant">Vierkant voor social</button>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Samenvatting">
+    <div class="stat peak">
+      <span class="lbl">Zwaarste windstoot</span>
+      <span class="val" id="s-gust"></span>
+      <span class="sub" id="s-gust-sub"></span>
+    </div>
+    <div class="stat">
+      <span class="lbl">Sterkste wind</span>
+      <span class="val" id="s-mean"></span>
+      <span class="sub" id="s-mean-sub"></span>
+    </div>
+    <div class="stat">
+      <span class="lbl">Overheersende richting</span>
+      <div class="rosewrap"><svg id="rose" width="62" height="62" viewBox="-31 -31 62 62" aria-hidden="true"></svg><span class="val" id="s-dir"></span></div>
+      <span class="sub" id="s-dir-sub"></span>
+    </div>
+    <div class="stat">
+      <span class="lbl">Onstuimige uren</span>
+      <span class="val" id="s-storm"></span>
+      <span class="sub" id="s-storm-sub"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Uur-tot-uur windverwachting">
+    <div class="panel-head">
+      <h2>Wind &amp; windstoten per uur</h2>
+      <div class="legend">
+        <span><i class="lg-bar"></i>Gemiddelde wind (kleur = Beaufort)</span>
+        <span><i class="lg-gust"></i>Windstoten</span>
+        <span><i class="lg-storm"></i>Onstuimig uur (stoten ≥ 60 km/u)</span>
+        <span><i class="lg-night"></i>Nacht</span>
+        <span>▲ pijl wijst waar de wind heen waait</span>
+      </div>
+    </div>
+    <p class="hint">Veeg opzij voor alle 90 uur · tik op een uur voor details</p>
+    <div class="scroller" id="scroller"><svg id="chart" role="img" aria-label="Grafiek van gemiddelde wind en windstoten voor 90 uur"></svg></div>
+    <div class="scale" id="scale"></div>
+    <div class="tip" id="tip" hidden></div>
+  </section>
+
+  <section class="highlights" id="highlights" aria-label="Opvallende momenten"></section>
+
+  <section class="days" id="days" aria-label="Per dag"></section>
+
+  <footer class="foot">
+    <span id="src"></span>
+    <span>Windsnelheid op 10 m · km/u · tijden in Nederlandse tijd · <b>Ed Aldus WM · weerlab.nl</b></span>
+  </footer>
+</main>
+
+<div class="modal" id="vierkant" hidden role="dialog" aria-modal="true" aria-labelledby="vierkant-titel">
+  <div class="modal-box">
+    <div class="modal-head"><h2 id="vierkant-titel">Vierkant voor social</h2><button type="button" class="x" id="vierkant-sluit" aria-label="Sluiten">✕</button></div>
+    <img id="vierkant-img" alt="">
+    <div class="modal-foot"><span id="vierkant-status" role="status"></span><button type="button" class="dl" id="vierkant-dl">Download PNG</button></div>
+  </div>
+</div>
+
+<script id="grid-embed" type="application/json">/*GRID*/</script>
+<script>
+(() => {
+const TZ = 'Europe/Amsterdam';
+const REFRESH_MS = 60 * 60 * 1000;
+
+// Beaufort (km/u-ondergrenzen) en kleuren: koel → fel → waarschuwing
+const BFT_LO = [0,1,6,12,20,29,39,50,62,75,89,103,118];
+const BFT_COL = ['#3D6278','#3D6278','#4C7A92','#5FB4D0','#49CFC0','#9BD86A','#F2C43D','#F58A3A','#FF5A4E','#FF3D6E','#E2246B','#C21A7E','#9B1290'];
+const bft = v => { let b = 0; for (let i = 0; i < BFT_LO.length; i++) if (v >= BFT_LO[i]) b = i; return b; };
+const BFT_NAME = ['windstil','zwak','zwak','matig','matig','vrij krachtig','krachtig','hard','stormachtig','storm','zware storm','zeer zware storm','orkaan'];
+const DIRS = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+const DIR_LONG = {N:'noord',NO:'noordoost',O:'oost',ZO:'zuidoost',Z:'zuid',ZW:'zuidwest',W:'west',NW:'noordwest'};
+const DIR_NOUN = {N:'noorden',NO:'noordoosten',O:'oosten',ZO:'zuidoosten',Z:'zuiden',ZW:'zuidwesten',W:'westen',NW:'noordwesten'};
+const dir16 = d => DIRS[Math.round(d / 22.5) % 16];
+const dir8 = d => ['N','NO','O','ZO','Z','ZW','W','NW'][Math.round(d / 45) % 8];
+const STORM = 60, WARN = 75;
+
+const fmt = (o) => new Intl.DateTimeFormat('nl-NL', Object.assign({timeZone: TZ}, o));
+const fH = fmt({hour:'2-digit', minute:'2-digit'});
+const fDay = fmt({weekday:'short'});
+const fDayL = fmt({weekday:'long'});
+const fDate = fmt({day:'numeric', month:'short'});
+const fHour = fmt({hour:'numeric', hourCycle:'h23'});
+const fKey = fmt({year:'numeric', month:'2-digit', day:'2-digit'});
+const hm = d => fH.format(d);
+const dayHm = d => fDay.format(d).replace('.', '') + ' ' + hm(d);
+const lhour = d => +fHour.format(d) % 24;
+
+let state = null;
+
+function prep(raw) {
+  const rows = raw.rows.map((r, i) => ({...r, i, d: new Date(r.t), b: bft(r.ws), gb: bft(r.wg)}));
+  return {...raw, rows};
+}
+
+// Zonsopkomst/-ondergang (NOAA-benadering), voor nachtschaduw
+function sunTimes(date, lat, lon) {
+  const rad = Math.PI / 180;
+  const day0 = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  const n = (day0 - Date.UTC(2000, 0, 1, 12)) / 864e5 + 0.5;
+  const J = n - lon / 360;
+  const M = (357.5291 + 0.98560028 * J) % 360;
+  const C = 1.9148 * Math.sin(M*rad) + 0.02 * Math.sin(2*M*rad) + 0.0003 * Math.sin(3*M*rad);
+  const L = (M + C + 180 + 102.9372) % 360;
+  const Jt = 2451545 + J + 0.0053 * Math.sin(M*rad) - 0.0069 * Math.sin(2*L*rad);
+  const dec = Math.asin(Math.sin(L*rad) * Math.sin(23.44*rad));
+  const w = Math.acos((Math.sin(-0.833*rad) - Math.sin(lat*rad)*Math.sin(dec)) / (Math.cos(lat*rad)*Math.cos(dec))) / rad;
+  const toDate = jd => new Date((jd - 2440587.5) * 864e5);
+  return {rise: toDate(Jt - w/360), set: toDate(Jt + w/360)};
+}
+
+function windows(rows, len, score) {
+  let best = null;
+  for (let s = 0; s + len <= rows.length; s++) {
+    const seg = rows.slice(s, s + len), v = score(seg);
+    if (!best || v > best.v) best = {s, e: s + len - 1, v, seg};
+  }
+  return best;
+}
+const avg = (a, f) => a.reduce((s, x) => s + f(x), 0) / a.length;
+function meanDir(seg) {
+  let x = 0, y = 0; seg.forEach(r => { x += r.ws * Math.sin(r.wd*Math.PI/180); y += r.ws * Math.cos(r.wd*Math.PI/180); });
+  return (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+}
+
+function arrowSvg(deg, size, color) {
+  // pijl wijst mee met de wind (benedenwinds); deg = richting waar de wind vandaan komt
+  return `<svg width="${size}" height="${size}" viewBox="-12 -12 24 24" aria-hidden="true"><g transform="rotate(${deg + 180})"><path d="M0 -10 L6 4 L0 1 L-6 4 Z" fill="${color}"/></g></svg>`;
+}
+
+function render() {
+  const S = state, R = S.rows;
+  const peakG = R.reduce((a, r) => r.wg > a.wg ? r : a);
+  const peakM = R.reduce((a, r) => r.ws > a.ws ? r : a);
+  const stormy = R.filter(r => r.wg >= STORM);
+
+  // windroos (16 sectoren, gewogen naar snelheid)
+  const sect = new Array(16).fill(0); R.forEach(r => sect[Math.round(r.wd/22.5)%16] += r.ws);
+  const sMax = Math.max(...sect); const dom = DIRS[sect.indexOf(sMax)];
+  const dom8 = {}; R.forEach(r => { const k = dir8(r.wd); dom8[k] = (dom8[k]||0) + r.ws; });
+  const domK = Object.keys(dom8).sort((a,b) => dom8[b]-dom8[a])[0];
+  let rose = '<circle r="28" fill="none" stroke="#21435C"/><circle r="14" fill="none" stroke="#21435C" stroke-dasharray="2 3"/>';
+  sect.forEach((v, k) => {
+    const a0 = (k*22.5 - 9) * Math.PI/180, a1 = (k*22.5 + 9) * Math.PI/180, rr = 4 + 24 * v / sMax;
+    const p = (a, r) => `${(r*Math.sin(a)).toFixed(1)} ${(-r*Math.cos(a)).toFixed(1)}`;
+    rose += `<path d="M0 0 L${p(a0, rr)} A${rr} ${rr} 0 0 1 ${p(a1, rr)} Z" fill="${DIRS[k]===dom ? '#49CFC0' : '#3B6A84'}" opacity="${DIRS[k]===dom ? 1 : .85}"/>`;
+  });
+  rose += '<text y="-20" text-anchor="middle" font-size="7" fill="#8EABBE" font-family="IBM Plex Mono,monospace" dy="-1">N</text>';
+  document.getElementById('rose').innerHTML = rose;
+
+  // kop
+  const firstD = R[0].d, lastD = R[R.length-1].d;
+  const strongDayPart = (d) => { const h = lhour(d); return h < 6 ? 'nacht' : h < 12 ? 'ochtend' : h < 18 ? 'middag' : 'avond'; };
+  const storm = windows(R, 6, seg => avg(seg, r => r.wg));
+  const calm = windows(R, 6, seg => -avg(seg, r => r.ws));
+  document.getElementById('verdict').innerHTML =
+    `De zwaarste windstoten verwachten we <b>${fDayL.format(peakG.d)}${strongDayPart(peakG.d) !== 'nacht' ? strongDayPart(peakG.d) : 'nacht'}</b> rond ${hm(peakG.d)}: tot <b>${Math.round(peakG.wg)} km/u</b> uit het ${DIR_NOUN[dir8(peakG.wd)]}. ` +
+    `Het rustigst is het ${fDayL.format(calm.seg[0].d)}${strongDayPart(calm.seg[2].d)}, met wind rond ${Math.round(-calm.v)} km/u.`;
+  document.getElementById('runline').textContent = `HARMONIE 43 · run ${new Date(S.h43_run).toISOString().slice(11,13)} UTC`;
+  document.getElementById('updline').textContent = `Bijgewerkt ${fDate.format(new Date(S.generated))} ${hm(new Date(S.generated))}`;
+
+  // kernwaarden
+  document.getElementById('s-gust').innerHTML = `${Math.round(peakG.wg)}<small>km/u</small>`;
+  document.getElementById('s-gust-sub').textContent = `${dayHm(peakG.d)} · uit ${dir16(peakG.wd)}`;
+  document.getElementById('s-mean').innerHTML = `${peakM.b}<small>Bft · ${Math.round(peakM.ws)} km/u</small>`;
+  document.getElementById('s-mean-sub').textContent = `${dayHm(peakM.d)} · ${BFT_NAME[peakM.b]}`;
+  document.getElementById('s-dir').innerHTML = `${domK}<small>${DIR_LONG[domK]}</small>`;
+  document.getElementById('s-dir-sub').textContent = `Draaiend van ${dir8(R[0].wd)} naar ${dir8(R[R.length-1].wd)}`;
+  document.getElementById('s-storm').innerHTML = `${stormy.length}<small>van 90 uur</small>`;
+  document.getElementById('s-storm-sub').textContent = stormy.length ? `Stoten ≥ ${STORM} km/u · eerste ${dayHm(stormy[0].d)}` : `Geen stoten boven ${STORM} km/u`;
+
+  drawChart(R, peakG, storm, calm);
+
+  // accentblokken
+  const span = w => `${dayHm(w.seg[0].d)} – ${w.seg[0].d.getUTCDate() === w.seg[5].d.getUTCDate() ? '' : fDay.format(w.seg[5].d).replace('.','') + ' '}${hm(new Date(w.seg[5].d.getTime() + 36e5))}`;
+  const H = document.getElementById('highlights');
+  H.innerHTML = `
+    <article class="hl gust" tabindex="0" data-i="${peakG.i}" data-n="1">
+      ${arrowSvg(peakG.wd, 34, '#FF6B57')}
+      <span class="k">Sterkste windstoot</span>
+      <span class="big">${Math.round(peakG.wg)}<small>km/u</small></span>
+      <span class="when">${fDayL.format(peakG.d)} ${hm(peakG.d)}</span>
+      <span class="more">Gemiddeld ${Math.round(peakG.ws)} km/u (Bft ${peakG.b}) uit ${dir16(peakG.wd)}</span>
+    </article>
+    <article class="hl storm" tabindex="0" data-i="${storm.s}" data-n="6">
+      ${arrowSvg(meanDir(storm.seg), 34, '#F2C43D')}
+      <span class="k">Meest onstuimige fase</span>
+      <span class="big">${Math.round(Math.max(...storm.seg.map(r=>r.wg)))}<small>km/u stoten</small></span>
+      <span class="when">${span(storm)}</span>
+      <span class="more">Zes uur lang gemiddeld ${Math.round(avg(storm.seg, r=>r.ws))} km/u, stoten gemiddeld ${Math.round(storm.v)} km/u</span>
+    </article>
+    <article class="hl calm" tabindex="0" data-i="${calm.s}" data-n="6">
+      ${arrowSvg(meanDir(calm.seg), 34, '#6FC3DA')}
+      <span class="k">Rustigste periode</span>
+      <span class="big">${Math.round(-calm.v)}<small>km/u gemiddeld</small></span>
+      <span class="when">${span(calm)}</span>
+      <span class="more">Bft ${bft(-calm.v)}, stoten tot ${Math.round(Math.max(...calm.seg.map(r=>r.wg)))} km/u</span>
+    </article>`;
+  H.querySelectorAll('.hl').forEach(el => {
+    const go = () => focusHour(+el.dataset.i, +el.dataset.n);
+    el.addEventListener('click', go); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+
+  // dagstrook
+  const byDay = new Map(); R.forEach(r => { const k = fKey.format(r.d); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(r); });
+  const D = document.getElementById('days'); D.style.setProperty('--n', byDay.size);
+  D.innerHTML = [...byDay.values()].map(seg => {
+    const mx = seg.reduce((a, r) => r.ws > a.ws ? r : a), g = Math.max(...seg.map(r => r.wg)), dd = meanDir(seg);
+    return `<div class="day"><span class="dn">${fDay.format(seg[0].d).replace('.','')}<small>${fDate.format(seg[0].d)} · ${seg.length}u</small></span>
+      <span class="row"><span class="bftpill" style="background:${BFT_COL[mx.b]}">Bft ${mx.b}</span>${arrowSvg(dd, 20, '#ECF4F8')}<span>${dir8(dd)}</span></span>
+      <span class="row">stoten <span class="g">${Math.round(g)} km/u</span></span></div>`;
+  }).join('');
+
+  // beaufortschaal
+  const used = Math.max(peakG.gb, 9);
+  document.getElementById('scale').innerHTML = '<span class="cap">Beaufort</span>' +
+    BFT_COL.slice(1, used + 1).map((c, k) => `<span style="background:${c}" title="${BFT_LO[k+1]}+ km/u">${k+1}<span class="r" style="opacity:.7;font-weight:400"> · ${BFT_LO[k+1]}+</span></span>`).join('');
+
+  const ifsN = R.filter(r => r.src !== 'H43').length;
+  document.getElementById('src').innerHTML = `<b>Bron:</b> KNMI HARMONIE-AROME cy43 (2 km), run ${new Date(S.h43_run).toISOString().slice(11,13)} UTC` +
+    (ifsN ? ` · uur ${R.length - ifsN + 1}–${R.length}: ECMWF IFS 0,25°, run ${new Date(S.ifs_run).toISOString().slice(11,13)} UTC (HARMONIE 43 rekent 60 uur vooruit)` : '');
+}
+
+// ---------- hoofdgrafiek ----------
+let geom = null;
+function drawChart(R, peakG, storm, calm) {
+  const svg = document.getElementById('chart');
+  const W = 1200, L = 54, Rm = 46, top = 66, plotH = 290, base = top + plotH;
+  const dirY = base + 34, tickY = base + 70, H = base + 98;
+  const n = R.length, cw = (W - L - Rm) / n;
+  const ymax = Math.max(90, Math.ceil((peakG.wg + 12) / 10) * 10);
+  const x = i => L + i * cw, xc = i => L + (i + .5) * cw, y = v => base - v / ymax * plotH;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  let s = `<defs>
+    <linearGradient id="gEnv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF6B57" stop-opacity=".34"/><stop offset="1" stop-color="#FF6B57" stop-opacity=".04"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  // nacht
+  const t0 = R[0].d.getTime(), tx = t => L + (t - t0) / 36e5 * cw;
+  const nights = [];
+  for (let k = -1; k <= 5; k++) {
+    const day = new Date(t0 + k * 864e5), nx = new Date(t0 + (k + 1) * 864e5);
+    const a = sunTimes(day, S0.lat, S0.lon).set.getTime(), b = sunTimes(nx, S0.lat, S0.lon).rise.getTime();
+    const x0 = Math.max(L, tx(a)), x1 = Math.min(W - Rm, tx(b));
+    if (x1 > x0) nights.push([x0, x1]);
+  }
+  nights.forEach(([a, b]) => s += `<rect x="${a.toFixed(1)}" y="${top - 6}" width="${(b - a).toFixed(1)}" height="${plotH + 6}" fill="#061421" opacity=".75"/>`);
+
+  // dagscheiding + daglabels
+  R.forEach((r, i) => {
+    if (i > 0 && lhour(r.d) === 0) s += `<line x1="${x(i)}" x2="${x(i)}" y1="32" y2="${tickY + 6}" stroke="#2A5470" stroke-width="1"/>`;
+  });
+  const starts = R.filter((r, i) => i === 0 || lhour(r.d) === 0);
+  starts.forEach((r, k) => {
+    const nxt = starts[k + 1] ? starts[k + 1].i : n; const mid = (x(r.i) + x(nxt)) / 2;
+    if (nxt - r.i >= 4) s += `<text x="${mid}" y="22" text-anchor="middle" style="font-family:var(--f-display);font-weight:800;font-size:15px;letter-spacing:.08em;fill:#ECF4F8;text-transform:uppercase">${fDayL.format(r.d).toUpperCase()} <tspan style="fill:#8EABBE;font-weight:600">${fDate.format(r.d)}</tspan></text>`;
+  });
+
+  // raster
+  for (let v = 0; v <= ymax; v += 10) {
+    s += `<line x1="${L}" x2="${W - Rm}" y1="${y(v)}" y2="${y(v)}" stroke="#ECF4F8" stroke-opacity="${v === 0 ? .25 : .06}"/>`;
+    if (v % 20 === 0) s += `<text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11">${v}</text>`;
+  }
+  s += `<text x="${L - 8}" y="${top - 12}" text-anchor="end" font-size="10.5" style="letter-spacing:.08em">KM/U</text>`;
+  // Bft-rand rechts
+  [3,4,5,6,7,8,9].forEach(b => { const v = BFT_LO[b]; if (v < ymax) s += `<line x1="${W - Rm}" x2="${W - Rm + 6}" y1="${y(v)}" y2="${y(v)}" stroke="${BFT_COL[b]}" stroke-width="2"/><text x="${W - Rm + 10}" y="${y(v) + 4}" font-size="10.5" style="fill:${BFT_COL[b]}">${b}</text>`; });
+  s += `<text x="${W - Rm + 4}" y="${top - 12}" font-size="10.5" style="letter-spacing:.08em">BFT</text>`;
+
+  // drempel code geel
+  s += `<line x1="${L}" x2="${W - Rm}" y1="${y(WARN)}" y2="${y(WARN)}" stroke="#FF3D6E" stroke-opacity=".7" stroke-dasharray="5 5"/>
+        <text x="${W - Rm - 6}" y="${y(WARN) - 6}" text-anchor="end" font-size="11" style="fill:#FF8FA9;paint-order:stroke;stroke:#0A1C2B;stroke-width:5px;stroke-linejoin:round">${WARN} km/u · drempel windstoten code geel</text>`;
+
+  // highlight-vakken
+  const band = (w, col, label) => s += `<rect x="${x(w.s)}" y="${top - 6}" width="${(w.e - w.s + 1) * cw}" height="${plotH + 6}" fill="${col}" opacity=".08"/><rect x="${x(w.s)}" y="${top - 6}" width="${(w.e - w.s + 1) * cw}" height="3" fill="${col}"/><text x="${x(w.s) + 2}" y="${top - 12}" font-size="10" style="fill:${col};letter-spacing:.08em">${label}</text>`;
+  band(storm, '#F2C43D', 'ONSTUIMIG');
+  band(calm, '#6FC3DA', 'RUSTIG');
+
+  // stotenomhulling (tussen gemiddelde en stoot)
+  const gPts = R.map((r, i) => [xc(i), y(r.wg)]), mPts = R.map((r, i) => [xc(i), y(r.ws)]);
+  s += `<path d="${smooth(gPts)} L${mPts.slice().reverse().map(p => p.join(' ')).join(' L')} Z" fill="url(#gEnv)"/>`;
+
+  // balken gemiddelde wind
+  const bw = Math.max(2, cw - 2.2);
+  R.forEach((r, i) => {
+    const h = base - y(r.ws);
+    s += `<rect class="bar" x="${(x(i) + (cw - bw) / 2).toFixed(1)}" y="${y(r.ws).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.6" fill="${BFT_COL[r.b]}" opacity="${r.src === 'H43' ? .95 : .7}"/>`;
+  });
+
+  // stotenlijn
+  s += `<path d="${smooth(gPts)}" fill="none" stroke="#FF6B57" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+  R.forEach((r, i) => { if (r.wg >= STORM) s += `<circle cx="${xc(i)}" cy="${y(r.wg)}" r="3.6" fill="${r.wg >= WARN ? '#FF3D6E' : '#F2C43D'}" stroke="#0A1C2B" stroke-width="1.5"/>`; });
+
+  // modelovergang
+  const sw = R.findIndex(r => r.src !== 'H43');
+  if (sw > 0) {
+    s += `<line x1="${x(sw)}" x2="${x(sw)}" y1="${top - 6}" y2="${tickY + 22}" stroke="#ECF4F8" stroke-opacity=".45" stroke-dasharray="2 4"/>
+      <text x="${x(sw) - 6}" y="${tickY + 18}" text-anchor="end" font-size="10.5" style="fill:#ECF4F8;letter-spacing:.06em">HARMONIE 43 ←</text>
+      <text x="${x(sw) + 6}" y="${tickY + 18}" font-size="10.5" style="fill:#8EABBE;letter-spacing:.06em">→ ECMWF IFS</text>`;
+  }
+
+  // piek
+  const px = xc(peakG.i), py = y(peakG.wg);
+  const lblRight = peakG.i < n * .75;
+  s += `<circle cx="${px}" cy="${py}" r="9" fill="#FF6B57" opacity=".25" filter="url(#glow)"><animate attributeName="r" values="7;13;7" dur="2.6s" repeatCount="indefinite"/></circle>
+    <circle cx="${px}" cy="${py}" r="5.5" fill="#FF6B57" stroke="#ECF4F8" stroke-width="2"/>
+    <line x1="${px}" x2="${px + (lblRight ? 26 : -26)}" y1="${py}" y2="${py - 26}" stroke="#FF6B57" stroke-width="1.5"/>
+    <g transform="translate(${px + (lblRight ? 30 : -30)},${py - 44})">
+      <text text-anchor="${lblRight ? 'start' : 'end'}" y="0" style="font-family:var(--f-display);font-weight:900;font-size:30px;fill:#FF6B57">${Math.round(peakG.wg)} km/u</text>
+      <text text-anchor="${lblRight ? 'start' : 'end'}" y="17" font-size="11" style="fill:#ECF4F8;letter-spacing:.05em">ZWAARSTE STOOT · ${dayHm(peakG.d).toUpperCase()}</text>
+    </g>`;
+
+  // windrichting: pijlen per uur
+  s += `<text x="${L - 8}" y="${dirY + 4}" text-anchor="end" font-size="10" style="letter-spacing:.08em">RICHT.</text>`;
+  R.forEach((r, i) => {
+    const sc = Math.min(1, cw / 13);
+    s += `<g transform="translate(${xc(i).toFixed(1)},${dirY}) rotate(${r.wd + 180}) scale(${sc.toFixed(2)})"><path d="M0 -7 L4.2 4.5 L0 2.2 L-4.2 4.5 Z" fill="${BFT_COL[r.b]}"/></g>`;
+    if (i % 3 === 1) s += `<text x="${xc(i)}" y="${dirY + 22}" text-anchor="middle" font-size="9.5">${dir16(r.wd)}</text>`;
+  });
+
+  // uurtikken
+  R.forEach((r, i) => {
+    const h = lhour(r.d);
+    if (h % 3 === 0) s += `<line x1="${xc(i)}" x2="${xc(i)}" y1="${base}" y2="${base + 5}" stroke="#ECF4F8" stroke-opacity=".3"/>`;
+    if (h % 6 === 0) s += `<text x="${xc(i)}" y="${tickY}" text-anchor="middle" font-size="11" style="fill:${h === 0 ? '#ECF4F8' : '#8EABBE'}">${String(h).padStart(2, '0')}u</text>`;
+  });
+  s += `<text x="${xc(0)}" y="${top - 12}" text-anchor="middle" font-size="10" style="fill:#49CFC0;letter-spacing:.1em">NU</text><line x1="${x(0)}" x2="${x(0)}" y1="${top - 6}" y2="${base}" stroke="#49CFC0" stroke-width="2"/>`;
+
+  // interactie
+  s += `<line id="cross" x1="0" x2="0" y1="${top - 6}" y2="${tickY - 12}" stroke="#ECF4F8" stroke-opacity=".55" visibility="hidden"/>
+        <rect id="hit" x="${L}" y="0" width="${W - L - Rm}" height="${H}" fill="transparent"/>`;
+  svg.innerHTML = s;
+  geom = {W, L, cw, n, xc, y, top};
+  const hit = svg.querySelector('#hit');
+  const move = e => { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const p = pt.matrixTransform(svg.getScreenCTM().inverse()); showTip(Math.max(0, Math.min(n - 1, Math.floor((p.x - L) / cw)))); };
+  hit.addEventListener('pointermove', move); hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hideTip(); });
+}
+
+function smooth(pts) {
+  // monotone kubische interpolatie (geen overschot boven/onder de data)
+  const n = pts.length; if (n < 2) return '';
+  const dx = [], m = [], t = [];
+  for (let i = 0; i < n - 1; i++) { dx[i] = pts[i+1][0] - pts[i][0]; m[i] = (pts[i+1][1] - pts[i][1]) / dx[i]; }
+  t[0] = m[0]; t[n-1] = m[n-2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i-1] * m[i] <= 0 ? 0 : 3 * (dx[i-1] + dx[i]) / ((2*dx[i] + dx[i-1]) / m[i-1] + (dx[i] + 2*dx[i-1]) / m[i]);
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3;
+    d += ` C${(pts[i][0] + h).toFixed(1)} ${(pts[i][1] + t[i]*h).toFixed(1)} ${(pts[i+1][0] - h).toFixed(1)} ${(pts[i+1][1] - t[i+1]*h).toFixed(1)} ${pts[i+1][0].toFixed(1)} ${pts[i+1][1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function showTip(i) {
+  const r = state.rows[i], svg = document.getElementById('chart'), tip = document.getElementById('tip');
+  const cross = svg.querySelector('#cross'); cross.setAttribute('x1', geom.xc(i)); cross.setAttribute('x2', geom.xc(i)); cross.setAttribute('visibility', 'visible');
+  tip.innerHTML = `<span class="t">${fDayL.format(r.d)} ${hm(r.d)}</span>
+    <span class="r"><span>Gemiddeld</span><b>${Math.round(r.ws)} km/u · Bft ${r.b}</b></span>
+    <span class="r g"><span>Windstoten</span><b>${Math.round(r.wg)} km/u</b></span>
+    <span class="r"><span>Richting</span><b>${dir16(r.wd)} · ${r.wd}°</b></span>
+    <span class="t" style="margin-top:4px">${r.src === 'H43' ? 'HARMONIE 43' : 'ECMWF IFS'}</span>`;
+  tip.hidden = false;
+  const panel = tip.parentElement.getBoundingClientRect(), sb = svg.getBoundingClientRect();
+  const scale = sb.width / geom.W;
+  let left = sb.left - panel.left + geom.xc(i) * scale;
+  const half = tip.offsetWidth / 2 + 8;
+  left = Math.max(half, Math.min(panel.width - half, left));
+  tip.style.left = left + 'px';
+  tip.style.top = (sb.top - panel.top + geom.top * scale + 4) + 'px';
+}
+function hideTip() { document.getElementById('tip').hidden = true; const c = document.querySelector('#cross'); if (c) c.setAttribute('visibility', 'hidden'); }
+
+function focusHour(i, len) {
+  const sc = document.getElementById('scroller'), svg = document.getElementById('chart');
+  const scale = svg.getBoundingClientRect().width / geom.W;
+  const target = geom.xc(i + (len - 1) / 2) * scale - sc.clientWidth / 2;
+  sc.scrollTo({left: Math.max(0, target), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  let k = i; const r0 = state.rows.slice(i, i + len); k = r0.reduce((a, r) => r.wg > a.wg ? r : a).i;
+  setTimeout(() => showTip(k), 250);
+}
+
+// ---------- rooster, plaatskeuze en verversen ----------
+const DATA_BASE = 'https://data.weerlab.nl/windplaat/';
+const SHOW = 90;
+const OP = new Set(['texel','vlieland','terschelling','ameland','schiermonnikoog','goeree-overflakkee','urk','marken','pampus']);
+// [naam, lat, lon] — veelgebruikte plaatsen; andere plaatsen via de zoekdienst of als coördinaten
+const PLAATSEN = [
+['Rotterdam',51.922,4.479],['Amsterdam',52.373,4.893],['Den Haag',52.078,4.288],['Utrecht',52.091,5.122],['Eindhoven',51.441,5.478],
+['Groningen',53.219,6.567],['Tilburg',51.556,5.091],['Almere',52.371,5.222],['Breda',51.589,4.776],['Nijmegen',51.842,5.853],
+['Apeldoorn',52.211,5.970],['Arnhem',51.985,5.899],['Haarlem',52.387,4.646],['Enschede',52.221,6.894],['Amersfoort',52.156,5.388],
+['Zaanstad',52.454,4.813],['\'s-Hertogenbosch',51.697,5.304],['Zwolle',52.517,6.083],['Leiden',52.160,4.497],['Maastricht',50.851,5.691],
+['Dordrecht',51.813,4.690],['Zoetermeer',52.057,4.494],['Ede',52.040,5.665],['Leeuwarden',53.201,5.800],['Alkmaar',52.632,4.749],
+['Emmen',52.785,6.897],['Delft',52.012,4.357],['Venlo',51.370,6.172],['Deventer',52.255,6.163],['Helmond',51.476,5.661],
+['Hilversum',52.223,5.176],['Heerlen',50.888,5.979],['Lelystad',52.518,5.471],['Assen',52.993,6.564],['Middelburg',51.499,3.610],
+['Vlissingen',51.442,3.573],['Goes',51.504,3.889],['Terneuzen',51.336,3.828],['Zierikzee',51.650,3.918],['Domburg',51.564,3.497],
+['Westkapelle',51.529,3.440],['Cadzand',51.369,3.389],['Breskens',51.397,3.556],['Renesse',51.733,3.773],['Ouddorp',51.811,3.934],
+['Hellevoetsluis',51.833,4.135],['Brielle',51.902,4.162],['Hoek van Holland',51.977,4.133],['Maassluis',51.923,4.250],['Vlaardingen',51.912,4.341],
+['Schiedam',51.919,4.400],['Spijkenisse',51.845,4.329],['Maasvlakte',51.960,4.020],['Rozenburg',51.904,4.249],['Ridderkerk',51.872,4.603],
+['Rhoon',51.857,4.418],['Barendrecht',51.857,4.534],['Capelle aan den IJssel',51.929,4.578],['Krimpen aan den IJssel',51.917,4.594],['Gouda',52.011,4.711],
+['Rotterdam The Hague Airport',51.957,4.437],['Feyenoord Stadion (De Kuip)',51.894,4.523],['Kinderdijk',51.884,4.637],['Gorinchem',51.836,4.974],['Scheveningen',52.108,4.271],
+['Kijkduin',52.067,4.218],['Katwijk',52.200,4.413],['Noordwijk',52.240,4.444],['Zandvoort',52.371,4.533],['IJmuiden',52.459,4.611],
+['Wijk aan Zee',52.494,4.594],['Egmond aan Zee',52.620,4.627],['Bergen aan Zee',52.663,4.634],['Petten',52.766,4.660],['Callantsoog',52.840,4.697],
+['Den Helder',52.959,4.760],['Julianadorp',52.893,4.725],['Texel',53.054,4.797],['Den Hoorn (Texel)',53.025,4.756],['De Cocksdorp',53.159,4.857],
+['Vlieland',53.297,5.072],['Terschelling',53.361,5.217],['West-Terschelling',53.360,5.217],['Ameland',53.448,5.773],['Nes (Ameland)',53.445,5.773],
+['Schiermonnikoog',53.480,6.163],['Harlingen',53.175,5.420],['Den Oever',52.934,5.035],['Hoorn',52.643,5.060],['Enkhuizen',52.705,5.290],
+['Medemblik',52.770,5.106],['Edam',52.513,5.048],['Volendam',52.495,5.071],['Marken',52.459,5.103],['Urk',52.662,5.601],
+['Lemmer',52.844,5.712],['Stavoren',52.886,5.360],['Hindeloopen',52.942,5.401],['Makkum',53.056,5.402],['Workum',52.981,5.448],
+['Sneek',53.033,5.659],['Heerenveen',52.960,5.920],['Drachten',53.107,6.099],['Dokkum',53.326,5.999],['Lauwersoog',53.403,6.215],
+['Delfzijl',53.331,6.921],['Eemshaven',53.442,6.836],['Uithuizen',53.408,6.672],['Winschoten',53.144,7.035],['Veendam',53.107,6.876],
+['Stadskanaal',52.988,6.951],['Hoogeveen',52.722,6.477],['Meppel',52.696,6.194],['Steenwijk',52.787,6.119],['Kampen',52.556,5.910],
+['Harderwijk',52.344,5.621],['Dronten',52.525,5.719],['Emmeloord',52.711,5.749],['Hardenberg',52.575,6.618],['Almelo',52.357,6.663],
+['Hengelo',52.266,6.793],['Oldenzaal',52.313,6.928],['Winterswijk',51.972,6.719],['Doetinchem',51.965,6.289],['Zutphen',52.138,6.201],
+['Tiel',51.887,5.429],['Wageningen',51.970,5.665],['Veenendaal',52.027,5.555],['Zeist',52.089,5.234],['Nieuwegein',52.029,5.081],
+['Woerden',52.085,4.883],['Alphen aan den Rijn',52.129,4.656],['Schiphol',52.309,4.764],['Haarlemmermeer (Hoofddorp)',52.302,4.689],['Purmerend',52.505,4.959],
+['Den Bosch',51.697,5.304],['Oss',51.765,5.518],['Uden',51.661,5.619],['Veghel',51.617,5.549],['Roosendaal',51.531,4.465],
+['Bergen op Zoom',51.495,4.288],['Oosterhout',51.645,4.860],['Waalwijk',51.683,5.070],['Etten-Leur',51.570,4.636],['Weert',51.252,5.706],
+['Roermond',51.194,5.987],['Sittard',51.000,5.869],['Geleen',50.971,5.829],['Kerkrade',50.866,6.064],['Valkenburg',50.865,5.831],
+['Vaals',50.771,6.018],['Venray',51.526,5.975],['Boxmeer',51.646,5.946],['Moerdijk',51.701,4.626],['Willemstad',51.692,4.438],
+['Zeeland (Oosterscheldekering)',51.643,3.700],['Brouwersdam',51.758,3.850],['Afsluitdijk (Breezanddijk)',53.016,5.205],['Houtribdijk',52.600,5.370],['De Bilt',52.101,5.177]
+];
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const slug = s => norm(s).replace(/ /g, '-');
+
+let M = null, CUBE = null, current = null, S0 = null;
+const $ = id => document.getElementById(id);
+
+function inGrid(lat, lon) {
+  const g = M.grid;
+  return lat >= g.lat0 && lat <= g.lat0 + g.dlat * (g.ny - 1) && lon >= g.lon0 && lon <= g.lon0 + g.dlon * (g.nx - 1);
+}
+
+function series(p) {
+  // bilineair tussen de vier omliggende roosterpunten; richting via u/v
+  const g = M.grid, H = M.hours, N = g.ny * g.nx;
+  const y = (p.lat - g.lat0) / g.dlat, x = (p.lon - g.lon0) / g.dlon;
+  const i = Math.min(g.ny - 2, Math.max(0, Math.floor(y))), j = Math.min(g.nx - 2, Math.max(0, Math.floor(x)));
+  const fy = y - i, fx = x - j;
+  const corners = [[i, j, (1-fy)*(1-fx)], [i+1, j, fy*(1-fx)], [i, j+1, (1-fy)*fx], [i+1, j+1, fy*fx]];
+  const t0 = new Date(M.t0).getTime(), nowH = Math.floor(Date.now() / 36e5) * 36e5;
+  const rows = [];
+  for (let t = 0; t < H; t++) {
+    const tt = t0 + t * 36e5;
+    if (tt < nowH) continue;
+    let ws = 0, wg = 0, u = 0, v = 0;
+    for (const [ci, cj, w] of corners) {
+      const k = ci * g.nx + cj;
+      const s = CUBE[(0*H + t)*N + k], gg = CUBE[(1*H + t)*N + k], d = CUBE[(2*H + t)*N + k] * 2 * Math.PI / 180;
+      ws += w * s; wg += w * gg; u += w * s * Math.sin(d); v += w * s * Math.cos(d);
+    }
+    rows.push({t: new Date(tt).toISOString(), ws: Math.round(ws*10)/10, wg: Math.round(Math.max(wg, ws)*10)/10,
+               wd: Math.round((Math.atan2(u, v) * 180 / Math.PI + 360) % 360), src: t < M.n_h43 ? 'H43' : 'IFS'});
+    if (rows.length >= SHOW) break;
+  }
+  return rows;
+}
+
+function show(p, opts = {}) {
+  if (!M) return;
+  if (!inGrid(p.lat, p.lon)) { melding(`${p.name} ligt buiten het rekengebied (Nederland en de kust).`); return; }
+  current = p;
+  const rows = series(p);
+  if (rows.length < 12) { melding('Het rooster is verouderd; wacht op de volgende modelrun.'); return; }
+  S0 = {location: p.name, lat: p.lat, lon: p.lon, h43_run: M.h43_run, ifs_run: M.ifs_run, generated: M.generated, rows};
+  state = prep(S0);
+  const op = OP.has(norm(p.name).split(' (')[0]) || OP.has(norm(p.name));
+  $('plaatsnaam').textContent = p.name;
+  $('vz').textContent = op ? 'op' : 'in';
+  $('nuren').textContent = rows.length;
+  $('coord').textContent = `${p.lat.toFixed(2).replace('.', ',')}°N ${p.lon.toFixed(2).replace('.', ',')}°O`;
+  document.title = `Windplaat ${p.name}`;
+  render();
+  hideTip();
+  melding('');
+  $('plaats').value = '';
+  $('plaats').placeholder = `${p.name} · typ een andere plaats of coördinaten`;
+  try { const r = JSON.parse(localStorage.getItem('windplaat-recent') || '[]').filter(x => x.name !== p.name); r.unshift(p); localStorage.setItem('windplaat-recent', JSON.stringify(r.slice(0, 6))); } catch (e) {}
+  chips();
+  if (!opts.quiet) try {
+    const qs = new URLSearchParams(location.search);
+    if (!EMBEDDED) qs.set('plaats', p.name);
+    history.replaceState(null, '', (EMBEDDED ? '' : '?' + qs.toString()) + '#' + slug(p.name));
+  } catch (e) {}
+}
+
+function melding(t) { $('melding').textContent = t; }
+
+function chips() {
+  let recent = [];
+  try { recent = JSON.parse(localStorage.getItem('windplaat-recent') || '[]'); } catch (e) {}
+  const base = [['Rotterdam',51.922,4.479],['Vlissingen',51.442,3.573],['Texel',53.054,4.797],['Hoek van Holland',51.977,4.133],['Schiphol',52.309,4.764]]
+    .map(([name, lat, lon]) => ({name, lat, lon}));
+  const seen = new Set(), list = [];
+  [...recent, ...base].forEach(p => { if (p && !seen.has(p.name) && list.length < 7) { seen.add(p.name); list.push(p); } });
+  $('chips').innerHTML = list.map((p, k) => `<button type="button" class="chipbtn${current && p.name === current.name ? ' on' : ''}" data-k="${k}">${p.name.replace(/[<>&]/g, '')}</button>`).join('');
+  $('chips').querySelectorAll('button').forEach(b => b.addEventListener('click', () => show(list[+b.dataset.k])));
+}
+
+async function zoek(q) {
+  q = q.trim(); if (!q) return;
+  const m = q.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)\s*$/);
+  if (m) { const lat = +m[1].replace(',', '.'), lon = +m[2].replace(',', '.'); return show({name: `${lat.toFixed(2)}°N ${lon.toFixed(2)}°O`, lat, lon}); }
+  const n = norm(q);
+  const hit = PLAATSEN.find(p => norm(p[0]) === n) || PLAATSEN.find(p => norm(p[0]).startsWith(n)) || PLAATSEN.find(p => norm(p[0]).includes(n));
+  if (hit) return show({name: hit[0], lat: hit[1], lon: hit[2]});
+  melding(`Zoeken naar “${q}”…`);
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=nl&format=json`);
+    const j = await r.json();
+    const res = (j.results || []).filter(x => inGrid(x.latitude, x.longitude)).sort((a, b) => (b.country_code === 'NL') - (a.country_code === 'NL'));
+    if (!res.length) return melding(`“${q}” niet gevonden in Nederland. Probeer een andere schrijfwijze of typ coördinaten, bijvoorbeeld 51.98, 4.13.`);
+    const x = res[0];
+    show({name: x.name + (x.country_code !== 'NL' ? ` (${x.country_code})` : ''), lat: x.latitude, lon: x.longitude});
+  } catch (e) {
+    melding(`“${q}” staat niet in de lijst en de zoekdienst is hier niet bereikbaar. Kies een plaats uit de lijst of typ coördinaten, bijvoorbeeld 51.98, 4.13.`);
+  }
+}
+
+function gaTerug(event) {
+  // Komt van de Weerbewaking (?bron=wb): terug in de geschiedenis, anders naar het overzicht.
+  if (event) event.preventDefault();
+  if (document.referrer && history.length > 1) { history.back(); return false; }
+  window.location.assign('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html'); return false;
+}
+window.gaTerug = gaTerug;
+
+function b64(s) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+const EMB = document.getElementById('grid-embed').textContent.trim();
+const EMBEDDED = EMB && !EMB.startsWith('/*');
+
+async function laadRooster() {
+  if (EMBEDDED) { const e = JSON.parse(EMB); return [e.meta, b64(e.data)]; }
+  const meta = await (await fetch(DATA_BASE + 'current.json?t=' + Date.now(), {cache: 'no-store'})).json();
+  if (M && meta.tag === M.tag) return [M, CUBE];
+  const buf = new Uint8Array(await (await fetch(DATA_BASE + meta.file)).arrayBuffer());
+  if (buf.length !== 3 * meta.hours * meta.grid.ny * meta.grid.nx) throw new Error('rooster onvolledig');
+  return [meta, buf];
+}
+
+function startPlaats() {
+  const qs = new URLSearchParams(location.search).get('plaats');
+  const h = decodeURIComponent((location.hash || '').slice(1));
+  const want = qs || h;
+  if (want) {
+    const n = norm(want.replace(/-/g, ' '));
+    const hit = PLAATSEN.find(p => norm(p[0]) === n);
+    if (hit) return {name: hit[0], lat: hit[1], lon: hit[2]};
+  }
+  try { const r = JSON.parse(localStorage.getItem('windplaat-recent') || '[]'); if (r[0] && r[0].name) return r[0]; } catch (e) {}
+  return {name: 'Rotterdam', lat: 51.922, lon: 4.479};
+}
+
+async function refresh(first) {
+  try {
+    const [meta, cube] = await laadRooster();
+    const changed = !M || meta.tag !== M.tag;
+    M = meta; CUBE = cube;
+    $('live').textContent = EMBEDDED ? 'Demo · run ' + new Date(M.h43_run).toISOString().slice(11, 13) + ' UTC' : 'Live · ververst elk uur';
+    if (first) { const q = new URLSearchParams(location.search).get('plaats'); const p = startPlaats(); show(p, {quiet: true}); if (q && norm(q) !== norm(p.name)) zoek(q); }
+    else if (changed || current) show(current, {quiet: true});
+  } catch (e) {
+    if (first) { $('plaatsnaam').textContent = '—'; melding('De windgegevens konden niet worden geladen. Probeer het over een paar minuten opnieuw.'); }
+    $('live').textContent = 'Verbinding weg · laatste gegevens blijven staan';
+  }
+}
+
+// ---------- vierkant voor social (1080 × 1080) ----------
+async function maakVierkant() {
+  try { await document.fonts.ready; await Promise.all(['900 80px "Big Shoulders Display"', '800 40px "Big Shoulders Display"', '500 20px "IBM Plex Sans"', '500 20px "IBM Plex Mono"'].map(f => document.fonts.load(f))); } catch (e) {}
+  const S = state, R = S.rows, Wc = 1080, c = document.createElement('canvas');
+  c.width = Wc; c.height = Wc;
+  const g = c.getContext('2d');
+  const DISP = '"Big Shoulders Display","Arial Narrow",sans-serif', BODY = '"IBM Plex Sans",system-ui,sans-serif', MONO = '"IBM Plex Mono",ui-monospace,monospace';
+  // achtergrond
+  const bg = g.createLinearGradient(0, 0, 0, Wc); bg.addColorStop(0, '#10283B'); bg.addColorStop(1, '#0A1C2B');
+  g.fillStyle = bg; g.fillRect(0, 0, Wc, Wc);
+  const P = 64;
+  const peakG = R.reduce((a, r) => r.wg > a.wg ? r : a), peakM = R.reduce((a, r) => r.ws > a.ws ? r : a);
+  const dom8 = {}; R.forEach(r => { const k = dir8(r.wd); dom8[k] = (dom8[k] || 0) + r.ws; });
+  const domK = Object.keys(dom8).sort((a, b) => dom8[b] - dom8[a])[0];
+  // kop
+  g.fillStyle = '#49CFC0'; g.beginPath(); g.arc(P + 5, 76, 5, 0, 7); g.fill();
+  g.font = `500 19px ${MONO}`; g.fillStyle = '#6FC3DA'; g.textBaseline = 'alphabetic';
+  g.fillText(`WINDVERWACHTING · KOMENDE ${R.length} UUR`, P + 20, 83);
+  g.textAlign = 'right'; g.fillStyle = '#8EABBE';
+  g.fillText(`${fDate.format(new Date(S.generated)).toUpperCase()} · ${hm(new Date(S.generated))}`, Wc - P, 83);
+  g.textAlign = 'left';
+  const op = $('vz').textContent;
+  g.font = `800 44px ${DISP}`; g.fillStyle = '#ECF4F8'; g.fillText(`WIND ${op.toUpperCase()}`, P, 150);
+  let size = 132; const naam = S.location.toUpperCase();
+  do { g.font = `900 ${size}px ${DISP}`; size -= 4; } while (g.measureText(naam).width > Wc - 2 * P && size > 56);
+  g.fillStyle = '#6FC3DA'; g.fillText(naam, P, 150 + size * .95);
+  let y0 = 150 + size * .95 + 36;
+  // drie kernwaarden
+  const cells = [
+    ['ZWAARSTE STOOT', `${Math.round(peakG.wg)}`, 'km/u', `${dayHm(peakG.d)} · uit ${dir16(peakG.wd)}`, '#FF6B57'],
+    ['STERKSTE WIND', `${peakM.b}`, `Bft · ${Math.round(peakM.ws)} km/u`, `${dayHm(peakM.d)}`, BFT_COL[peakM.b]],
+    ['OVERHEERSEND', domK, DIR_LONG[domK], `draaiend ${dir8(R[0].wd)} → ${dir8(R[R.length - 1].wd)}`, '#ECF4F8']];
+  const cw3 = (Wc - 2 * P) / 3;
+  g.strokeStyle = '#21435C'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(P, y0); g.lineTo(Wc - P, y0); g.moveTo(P, y0 + 150); g.lineTo(Wc - P, y0 + 150); g.stroke();
+  cells.forEach(([l, v, u, s, col], k) => {
+    const x = P + k * cw3 + (k ? 24 : 0);
+    if (k) { g.beginPath(); g.moveTo(P + k * cw3, y0 + 18); g.lineTo(P + k * cw3, y0 + 132); g.stroke(); }
+    g.font = `500 16px ${MONO}`; g.fillStyle = '#8EABBE'; g.fillText(l, x, y0 + 36);
+    g.font = `800 76px ${DISP}`; g.fillStyle = col; g.fillText(v, x, y0 + 106);
+    const vw = g.measureText(v).width;
+    g.font = `500 19px ${BODY}`; g.fillStyle = '#8EABBE'; g.fillText(u, x + vw + 8, y0 + 104);
+    g.font = `500 18px ${BODY}`; g.fillStyle = '#C4D7E3'; g.fillText(s, x, y0 + 134);
+  });
+  // grafiek
+  const top = y0 + 200, base = Wc - 150, L = P + 34, Rr = Wc - P, n = R.length, cw = (Rr - L) / n;
+  const ymax = Math.max(90, Math.ceil((peakG.wg + 12) / 10) * 10);
+  const X = i => L + (i + .5) * cw, Y = v => base - v / ymax * (base - top);
+  // nachten
+  const t0 = R[0].d.getTime(), tx = t => L + (t - t0) / 36e5 * cw;
+  for (let k = -1; k <= 5; k++) {
+    const a = sunTimes(new Date(t0 + k * 864e5), S.lat, S.lon).set.getTime(), b = sunTimes(new Date(t0 + (k + 1) * 864e5), S.lat, S.lon).rise.getTime();
+    const x0 = Math.max(L, tx(a)), x1 = Math.min(Rr, tx(b));
+    if (x1 > x0) { g.fillStyle = 'rgba(6,20,33,.7)'; g.fillRect(x0, top - 8, x1 - x0, base - top + 8); }
+  }
+  // raster
+  g.font = `500 15px ${MONO}`; g.textAlign = 'right';
+  for (let v = 0; v <= ymax; v += 20) {
+    g.strokeStyle = v ? 'rgba(236,244,248,.07)' : 'rgba(236,244,248,.3)'; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(Rr, Y(v)); g.stroke();
+    g.fillStyle = '#5C7C92'; g.fillText(v, L - 8, Y(v) + 5);
+  }
+  g.textAlign = 'left';
+  // dagen
+  R.forEach((r, i) => {
+    if (i > 0 && lhour(r.d) === 0) { g.strokeStyle = '#2A5470'; g.beginPath(); g.moveTo(L + i * cw, top - 34); g.lineTo(L + i * cw, base + 20); g.stroke(); }
+  });
+  const starts = R.filter((r, i) => i === 0 || lhour(r.d) === 0);
+  g.font = `800 20px ${DISP}`; g.fillStyle = '#ECF4F8'; g.textAlign = 'center';
+  starts.forEach((r, k) => { const nx = starts[k + 1] ? starts[k + 1].i : n; if (nx - r.i >= 6) g.fillText(fDay.format(r.d).replace('.', '').toUpperCase(), (L + r.i * cw + L + nx * cw) / 2, top - 16); });
+  g.textAlign = 'left';
+  // drempel
+  g.setLineDash([7, 7]); g.strokeStyle = 'rgba(255,61,110,.75)'; g.beginPath(); g.moveTo(L, Y(WARN)); g.lineTo(Rr, Y(WARN)); g.stroke(); g.setLineDash([]);
+  // balken
+  R.forEach((r, i) => { g.fillStyle = BFT_COL[r.b]; g.globalAlpha = r.src === 'H43' ? .95 : .72; g.fillRect(L + i * cw + .8, Y(r.ws), cw - 1.6, base - Y(r.ws)); });
+  g.globalAlpha = 1;
+  // stotenomhulling + lijn
+  const pts = R.map((r, i) => [X(i), Y(r.wg)]);
+  const env = g.createLinearGradient(0, top, 0, base); env.addColorStop(0, 'rgba(255,107,87,.32)'); env.addColorStop(1, 'rgba(255,107,87,.03)');
+  g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+  for (let i = n - 1; i >= 0; i--) g.lineTo(X(i), Y(R[i].ws));
+  g.closePath(); g.fillStyle = env; g.fill();
+  g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+  g.strokeStyle = '#FF6B57'; g.lineWidth = 3.4; g.lineJoin = 'round'; g.stroke(); g.lineWidth = 1.5;
+  R.forEach((r, i) => { if (r.wg >= STORM) { g.fillStyle = r.wg >= WARN ? '#FF3D6E' : '#F2C43D'; g.beginPath(); g.arc(X(i), Y(r.wg), 4.2, 0, 7); g.fill(); } });
+  // modelovergang
+  const sw = R.findIndex(r => r.src !== 'H43');
+  if (sw > 0) { g.setLineDash([3, 5]); g.strokeStyle = 'rgba(236,244,248,.5)'; g.beginPath(); g.moveTo(L + sw * cw, top - 8); g.lineTo(L + sw * cw, base); g.stroke(); g.setLineDash([]); }
+  // piek
+  const px = X(peakG.i), py = Y(peakG.wg);
+  g.fillStyle = 'rgba(255,107,87,.3)'; g.beginPath(); g.arc(px, py, 13, 0, 7); g.fill();
+  g.fillStyle = '#FF6B57'; g.strokeStyle = '#ECF4F8'; g.lineWidth = 2.5; g.beginPath(); g.arc(px, py, 7, 0, 7); g.fill(); g.stroke(); g.lineWidth = 1.5;
+  const right = peakG.i < n * .7;
+  g.font = `900 38px ${DISP}`; g.fillStyle = '#FF6B57'; g.textAlign = right ? 'left' : 'right';
+  const lx = px + (right ? 20 : -20), ly = Math.max(top + 30, py - 22);
+  g.save(); g.lineWidth = 7; g.strokeStyle = '#0D2335'; g.lineJoin = 'round'; g.strokeText(`${Math.round(peakG.wg)} km/u`, lx, ly); g.restore();
+  g.fillText(`${Math.round(peakG.wg)} km/u`, lx, ly);
+  g.textAlign = 'left';
+  // richting elke 3 uur + uren
+  R.forEach((r, i) => {
+    const h = lhour(r.d);
+    if (h % 3 === 0) {
+      g.save(); g.translate(X(i), base + 30); g.rotate((r.wd + 180) * Math.PI / 180);
+      g.fillStyle = BFT_COL[r.b]; g.beginPath(); g.moveTo(0, -10); g.lineTo(6.5, 7); g.lineTo(0, 3.5); g.lineTo(-6.5, 7); g.closePath(); g.fill(); g.restore();
+    }
+    if (h % 12 === 0) { g.font = `500 15px ${MONO}`; g.fillStyle = h ? '#8EABBE' : '#ECF4F8'; g.textAlign = 'center'; g.fillText(String(h).padStart(2, '0') + 'u', X(i), base + 62); g.textAlign = 'left'; }
+  });
+  // legenda + bron
+  let lx2 = P; const ly2 = Wc - 44;
+  g.font = `500 16px ${BODY}`;
+  const leg = (draw, txt) => { draw(lx2, ly2); g.fillStyle = '#8EABBE'; g.fillText(txt, lx2 + 26, ly2 + 5); lx2 += 26 + g.measureText(txt).width + 26; };
+  leg((x, y) => { const gr = g.createLinearGradient(x, 0, x + 18, 0); ['#4C7A92', '#49CFC0', '#F2C43D', '#FF5A4E'].forEach((c2, k) => gr.addColorStop(k / 3, c2)); g.fillStyle = gr; g.fillRect(x, y - 6, 18, 12); }, 'gemiddelde wind (Bft)');
+  leg((x, y) => { g.fillStyle = '#FF6B57'; g.fillRect(x, y - 2, 20, 4); }, 'windstoten');
+  leg((x, y) => { g.setLineDash([5, 4]); g.strokeStyle = '#FF3D6E'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 20, y); g.stroke(); g.setLineDash([]); }, `${WARN} km/u`);
+  g.textAlign = 'right'; g.font = `600 17px ${BODY}`; g.fillStyle = '#ECF4F8'; g.fillText('Ed Aldus WM · weerlab.nl', Wc - P, ly2 + 5);
+  g.font = `500 13px ${MONO}`; g.fillStyle = '#5C7C92';
+  g.fillText(`Bron: KNMI HARMONIE 43, run ${new Date(S.h43_run).toISOString().slice(11, 13)} UTC${sw > 0 ? ' · na +60 u ECMWF IFS' : ''}`, Wc - P, ly2 - 22);
+  g.textAlign = 'left';
+  return c;
+}
+
+async function openVierkant() {
+  const dlg = $('vierkant'), img = $('vierkant-img');
+  $('vierkant-status').textContent = 'Afbeelding maken…';
+  dlg.hidden = false;
+  const c = await maakVierkant();
+  img.src = c.toDataURL('image/png');
+  img.alt = `Windplaat ${state.location}, vierkant`;
+  $('vierkant-status').textContent = '1080 × 1080 px · klaar voor Instagram, Facebook en LinkedIn';
+  $('vierkant-dl').onclick = async () => {
+    const name = `windplaat_${slug(state.location)}_${new Date(state.generated).toISOString().slice(0, 13).replace(/[-T]/g, '')}.png`;
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    if (EMBEDDED) {
+      try {
+        const dl = window.claude && await window.claude.use('downloads');
+        if (dl) { await dl.save({filename: name, data: blob}); $('vierkant-status').textContent = 'Opgeslagen.'; return; }
+      } catch (e) { if (e && e.code === 'declined') { $('vierkant-status').textContent = 'Opslaan geannuleerd.'; return; } }
+      $('vierkant-status').textContent = 'Opslaan kan hier niet: houd de afbeelding ingedrukt of klik met rechts en kies "Afbeelding opslaan".';
+      return;
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  };
+}
+$('btn-vierkant').addEventListener('click', openVierkant);
+$('vierkant-sluit').addEventListener('click', () => { $('vierkant').hidden = true; });
+$('vierkant').addEventListener('click', e => { if (e.target.id === 'vierkant') $('vierkant').hidden = true; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('vierkant').hidden = true; });
+
+$('plaatsen').innerHTML = PLAATSEN.map(p => `<option value="${p[0].replace(/"/g, '&quot;')}"></option>`).join('');
+$('zoek').addEventListener('submit', e => { e.preventDefault(); zoek($('plaats').value); });
+$('plaats').addEventListener('change', e => { const n = norm(e.target.value); if (PLAATSEN.some(p => norm(p[0]) === n)) zoek(e.target.value); });
+if (EMBEDDED || new URLSearchParams(location.search).get('bron') !== 'wb') $('back').hidden = true;
+refresh(true);
+setInterval(() => refresh(false), REFRESH_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && M && Date.now() - new Date(M.generated).getTime() > REFRESH_MS) refresh(false); });
+window.addEventListener('resize', () => hideTip());
+})();
+</script>
+
+</body>
+</html>
