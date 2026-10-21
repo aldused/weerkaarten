@@ -42,3 +42,9 @@ nieuwste manifest opnieuw; gelijktijdige aanvullingen blijven behouden.
 
 De officiële Azure-spiegel is de voorkeursbron voor de extra kaartgebieden.
 Een andere officiële bron kan via WXBETA_REGIONAL_SOURCE worden gekozen.
+
+Bij ECMWF wordt de dalingscontrole uitgevoerd met de som van de `packingError`
+van beide GRIB-tijdstappen, omgerekend van meter naar millimeter. De bronwaarden
+zelf worden niet aangepast. Daardoor blokkeert normale GRIB-kwantisatie geen
+volledige kaartset; dalingen buiten die bronprecisie blijven een fout.
+Uitleg ECMWF: https://confluence.ecmwf.int/spaces/UDOC/pages/208501579/

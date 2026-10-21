@@ -91,3 +91,6 @@ fi
 
 # Zelfstandige Nederlandkaarten: GFS, ICON-EU, ENS en CAMS.
 "$PY" -u "$WEERLAB/shell/wxbeta_nl/other_models.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-nl" --publish
+
+# Cumulatieve neerslag vanaf de exacte modelrun, met eigen manifest.
+"$PY" -u "$WEERLAB/shell/wxbeta_region/cumulative.py" --state "/Users/aldus/Library/Application Support/Weerlab/wxbeta-cumulative" --publish

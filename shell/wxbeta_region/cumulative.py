@@ -59,22 +59,34 @@ def total_cells(path,run,lead,model,bounds=EU):
  raise ValueError('Benodigd neerslagtijdvak ontbreekt')
 
 
+def validate_totals(values,packing_errors=None):
+ """Retain decoded source totals; allow only their documented GRIB uncertainty."""
+ if not np.isfinite(values).all() or np.min(values)<0:raise ValueError('Ongeldige cumulatieve neerslag')
+ errors=np.asarray(packing_errors if packing_errors is not None else np.full(len(values),.025),dtype=float)
+ if errors.shape!=(len(values),) or not np.isfinite(errors).all() or np.any(errors<0):raise ValueError('Ongeldige GRIB-pakprecisie')
+ tolerance=(errors[:-1]+errors[1:]).reshape((-1,)+(1,)*(values.ndim-1))
+ if np.any(np.diff(values,axis=0)<-tolerance-1e-5):raise ValueError('Cumulatieve neerslag neemt af buiten GRIB-pakprecisie')
+
+
 def global_data(state,model,run,leads):
  folder=state/'cache'/f'{model}-{run:%Y%m%d%H}';folder.mkdir(parents=True,exist_ok=True);saved=folder/'complete.npz'
  if saved.exists():
   with np.load(saved) as d:
    if not np.array_equal(d['leads'],leads):raise ValueError('Neerslagcache heeft andere tijdas')
    lon,lat,values=d['lon'],d['lat'],d['values'];ix=np.argsort(lon);iy=np.argsort(lat);return lon[ix],lat[iy],values[:,iy][:,:,ix]
+ packing_errors=None
  if model=='ecmwf':
+  errors={}
   source=state.parent/'wxbeta-northsea/cache'/f'{run:%Y%m%d%H}-elements-1';source.mkdir(parents=True,exist_ok=True);path=source/'tp.grib2'
   with (source/'tp.lock').open('a') as lock:
    fcntl.flock(lock,fcntl.LOCK_EX)
-   try:coords,records=elements.read(elements.region.PROJECT/'grib_cache/wx_precip24.grib2',run,leads,['tp'],EU)
+   try:coords,records=elements.read(elements.region.PROJECT/'grib_cache/wx_precip24.grib2',run,leads,['tp'],EU,packing_errors=errors)
    except ValueError:
     if not path.exists():
      from ecmwf.opendata import Client
      tmp=path.with_suffix('.tmp.grib2');Client(os.environ.get('WXBETA_REGIONAL_SOURCE','azure')).retrieve(date=run.strftime('%Y%m%d'),time=run.hour,stream='oper',type='fc',step=sorted(set([0]+leads+[h-24 for h in leads if h>=24])),param=['tp'],target=str(tmp));tmp.replace(path)
-    coords,records=elements.read(path,run,leads,['tp'],EU)
+    coords,records=elements.read(path,run,leads,['tp'],EU,packing_errors=errors)
+  packing_errors=[errors['tp'][h] for h in leads]
   lon=np.unique(coords[:,1]);lat=np.unique(coords[:,0])[::-1]
   # Reader preserves latitude/longitude ordering of the original GRIB.
   lon=coords[:len(lon),1];lat=coords[::len(lon),0];values=np.stack([records['tp'][h].reshape(len(lat),len(lon)) for h in leads])
@@ -96,7 +108,7 @@ def global_data(state,model,run,leads):
    if h==leads[0] or h%48==0:print(model,run.strftime('%H'),'cumulatieve bron +',h,flush=True)
   values=bucket_total(records,leads) if model=='gfs' else np.stack([records[h] for h in leads])
  ix=np.argsort(lon);iy=np.argsort(lat);lon=lon[ix];lat=lat[iy];values=values[:,iy][:,:,ix]
- if np.min(np.diff(values,axis=0))<-.05:raise ValueError('Cumulatieve neerslag neemt af')
+ validate_totals(values,packing_errors)
  tmp=saved.with_suffix('.tmp.npz');np.savez_compressed(tmp,lon=lon,lat=lat,values=values,leads=leads);tmp.replace(saved)
  return lon,lat,values
 

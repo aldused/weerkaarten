@@ -5,6 +5,13 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('cumulative_tests_module',ROOT/'shell/wxbeta_region/cumulative.py');c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 
 class CumulativeTests(unittest.TestCase):
+ def test_grib_precision_allows_only_documented_roundoff(self):
+  values=np.array([[3.90625],[3.662109375]],dtype='float32');original=values.copy()
+  c.validate_totals(values,[.1220703125,.1220703125])
+  np.testing.assert_array_equal(values,original)
+  with self.assertRaises(ValueError):c.validate_totals(values,[.01,.01])
+  with self.assertRaises(ValueError):c.validate_totals(np.array([[5.],[3.]]),[.122,.122])
+  with self.assertRaises(ValueError):c.validate_totals(values,[float('nan'),.122])
  def test_disjoint_gfs_buckets_are_added_once(self):
   values=c.bucket_total({6:np.array([2.]),12:np.array([3.]),18:np.array([4.])},[6,12,18])
   np.testing.assert_array_equal(values[:,0],[2,5,9])

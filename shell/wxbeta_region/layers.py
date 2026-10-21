@@ -16,7 +16,7 @@ LAYERS=['mslp_bft','overview','t2m','wind','cape','precip24','t850','z500','jets
 SPECS={'msl':(None,'Pa',.01,0),'2t':(None,'K',1,-273.15),'10u':(None,'m s**-1',1,0),'10v':(None,'m s**-1',1,0),'tcc':(None,'(0 - 1)',100,0),'mucape':(None,'J kg**-1',1,0),'tp':(None,'m',1000,0),'t':(850,'K',1,-273.15),'gh':(500,'gpm',1,0),'u':(300,'m s**-1',1,0),'v':(300,'m s**-1',1,0)}
 
 
-def read(path,run,leads,fields,bounds=BOUNDS):
+def read(path,run,leads,fields,bounds=BOUNDS,packing_errors=None):
  """Validate exact time/unit/interval before extracting a regional grid."""
  import eccodes as ec
  before=path.stat();grid=None;records={};coords=None
@@ -43,6 +43,7 @@ def read(path,run,leads,fields,bounds=BOUNDS):
     values=ec.codes_get_values(g).reshape(nj,ni)[np.ix_(iy,ix)].ravel()*scale+offset
     if not np.isfinite(values).all():raise ValueError('Niet-eindige waarden')
     records.setdefault(name,{})[h]=values.astype('float32')
+    if packing_errors is not None:packing_errors.setdefault(name,{})[h]=float(ec.codes_get(g,'packingError'))*abs(scale)
    finally:ec.codes_release(g)
  if path.stat().st_mtime_ns!=before.st_mtime_ns or path.stat().st_size!=before.st_size:raise ValueError('Bron wijzigde tijdens lezen')
  if any(set(records.get(f,{}))!=set(leads) for f in fields):raise ValueError('Onvolledige bronvelden/tijdstappen')
