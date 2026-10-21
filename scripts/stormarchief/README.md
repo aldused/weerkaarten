@@ -1,6 +1,6 @@
 # Stormenarchief Weerlab
 
-Bronnen zijn 47 geselecteerde stations uit de KNMI-dagarchiefindex, opgehaald op 20 oktober 2026. De reeks bevat 755 unieke UTC-datums met FHX >= 208 (0,1 m/s). De eerste beschikbare stormdatum is 30 december 1904. Dit is geen volledige reconstructie van het historische landelijke meetnet. Kust- en waterstations uit de index worden meegenomen; ontbrekende waarden zijn geen nul.
+Bronnen zijn 44 geselecteerde stations uit de KNMI-dagarchiefindex, opgehaald op 20 oktober 2026. De reeks bevat 871 unieke UTC-datums met FHX >= 205 (0,1 m/s). De eerste beschikbare stormdatum is 30 december 1904. Dit is geen volledige reconstructie van het historische landelijke meetnet. Kust- en waterstations uit de index worden meegenomen; ontbrekende waarden zijn geen nul.
 
 ## Herberekenen
 
@@ -26,3 +26,7 @@ Bij installatie onder `scripts/stormarchief` wijst deze output naar de websitebr
 Controle uitgevoerd met `stormzoek.test.cjs` en `test_stormdagen.py` in de ontwikkelmap. Deze toetsen o.a. grenswaarden, stationcombinaties, UTC-deduplicatie, ontbrekende waarden en zes stormdagen waarvan vier herfstdagen in 2025. Zoekpreset kerst, vergelijking en details zijn in de browser gecontroleerd.
 
 Uitgesloten op verzoek: IJmond (209), Cadzand (308), Hoofdplaat (311), Hansweert (315) en Schaar (316). De uitsluiting gebeurt vóór de berekening van dagselectie, dekking, windpieken en windstoten.
+
+Ook uitgesloten op verzoek: Huibertgat (285), Oosterschelde (312) en Vlakte van de Raan (313). Bronmomentopname blijft 20 oktober 2026; de stationsselectie is aangepast op 21 oktober 2026.
+
+Classificatie aangepast op verzoek: afronden op hele m/s, met 9 Bft vanaf 20,5 m/s en 12 Bft vanaf 32,5 m/s. Ruwe FHX en FXX blijven intact; CSV behoudt de oorspronkelijke meetprecisie.

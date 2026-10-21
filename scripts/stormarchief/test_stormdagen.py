@@ -7,8 +7,8 @@ class StormDays(unittest.TestCase):
         rows=list(parse_text('# STN,YYYYMMDD,FHX,FXX\n260,19010101,,300\n260,19010102,0,300'))
         self.assertIsNone(rows[0][2]);self.assertEqual(rows[1][2],0)
     def test_fhx_not_gust(self):
-        rows=list(parse_text('# STN,YYYYMMDD,FHX,FXX\n260,20000101,207,400\n260,20000102,208,400\n260,20000103,244,400\n260,20000104,245,400'))
-        self.assertEqual([r[2]>=208 for r in rows],[False,True,True,True])
+        rows=list(parse_text('# STN,YYYYMMDD,FHX,FXX\n260,20000101,204,400\n260,20000102,205,400\n260,20000103,244,400\n260,20000104,245,400'))
+        self.assertEqual([r[2]>=205 for r in rows],[False,True,True,True])
         self.assertEqual([r[2]>=245 for r in rows],[False,False,False,True])
     def test_published_totals_are_unique_utc_dates(self):
         data=json.loads((Path(__file__).resolve().parents[2]/'stormdagen_data.json').read_text())
@@ -23,8 +23,8 @@ class StormDays(unittest.TestCase):
                 self.assertEqual(y['severe'],sum(max(v for st,v in e['measurements'])>=245 for e in y['events']))
     def test_early_missing_and_recent_source_regression(self):
         data=json.loads((Path(__file__).resolve().parents[2]/'stormdagen_data.json').read_text());years={y['year']:y for y in data['years']}
-        self.assertEqual(len(data['stations']),47)
-        excluded={209,308,311,315,316}
+        self.assertEqual(len(data['stations']),44)
+        excluded={209,308,311,315,316,285,312,313}
         self.assertTrue(excluded.isdisjoint(s['station'] for s in data['stations']))
         for y in data['years']:
             self.assertTrue(excluded.isdisjoint(map(int,y['stations'])))

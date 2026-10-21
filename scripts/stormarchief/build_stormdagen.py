@@ -26,7 +26,7 @@ def parse_text(text):
 
 
 def build(source):
-    excluded={209:'IJmond',308:'Cadzand',311:'Hoofdplaat',315:'Hansweert',316:'Schaar'}
+    excluded={209:'IJmond',308:'Cadzand',311:'Hoofdplaat',315:'Hansweert',316:'Schaar',285:'Huibertgat',312:'Oosterschelde',313:'Vlakte van de Raan'}
     manifest=[m for m in json.loads((source/'manifest.json').read_text()) if m['station'] not in excluded]
     events=defaultdict(dict);coverage=defaultdict(lambda:defaultdict(set));station_meta=[]
     latest=None
@@ -44,7 +44,7 @@ def build(source):
             if value is None:continue
             first=stamp if first is None else min(first,stamp);last=stamp if last is None else max(last,stamp)
             coverage[stamp.year][station].add(stamp.isoformat())
-            if value>=208:events[stamp.isoformat()][station]=value
+            if value>=205:events[stamp.isoformat()][station]=value
         station_meta.append({**m,'first_fhx':first.isoformat() if first else None,'last_fhx':last.isoformat() if last else None})
     # Bewaar op stormdatums ook lagere meetwaarden en windstoten voor een
     # eerlijke stationsvergelijking. FXX bepaalt nooit of een dag storm telt.
@@ -68,7 +68,7 @@ def build(source):
         station_days={str(st):len(ds) for st,ds in sorted(cov.items())}
         year_events=[{'date':d,'measurements':[[st,v] for st,v in sorted(measurements.items())],'observations':sorted(observations[d])} for d,measurements in sorted(events.items()) if d.startswith(str(year))]
         years.append({'year':year,'storm':len(year_events) if days else None,'severe':sum(any(v>=245 for _,v in e['measurements']) for e in year_events) if days else None,'observed_days':len(days),'expected_days':expected,'stations':station_days,'partial_year':year==latest.year and latest<date(year,12,31),'events':year_events})
-    return {'schema_version':2,'observation_columns':['station','FHX_0.1_ms','FXX_0.1_ms','FHXH_UTC_end_hour'],'generated_utc':datetime.now(timezone.utc).isoformat(),'source_index':'https://www.knmi.nl/nederland-nu/klimatologie/daggegevens/','latest_date':latest.isoformat(),'parameter':'FHX','unit':'0.1 m/s','storm_threshold':208,'severe_threshold':245,'day_basis':'UTC 00–24','excluded_stations':[{'station':st,'name':name} for st,name in excluded.items()],'scope':f'{len(station_meta)} geselecteerde stations uit de KNMI-dagarchiefindex, inclusief kust- en watermeetpunten; geen reconstructie van het historische landelijke meetnet.','stations':station_meta,'years':years}
+    return {'classification':'Afgeronde hele m/s: 21–24=9 Bft; 25–28=10 Bft; 29–32=11 Bft; vanaf 33=12 Bft','schema_version':2,'observation_columns':['station','FHX_0.1_ms','FXX_0.1_ms','FHXH_UTC_end_hour'],'generated_utc':datetime.now(timezone.utc).isoformat(),'source_index':'https://www.knmi.nl/nederland-nu/klimatologie/daggegevens/','latest_date':latest.isoformat(),'parameter':'FHX','unit':'0.1 m/s','storm_threshold':205,'severe_threshold':245,'day_basis':'UTC 00–24','excluded_stations':[{'station':st,'name':name} for st,name in excluded.items()],'scope':f'{len(station_meta)} geselecteerde stations uit de KNMI-dagarchiefindex, inclusief kust- en watermeetpunten; geen reconstructie van het historische landelijke meetnet.','stations':station_meta,'years':years}
 
 if __name__=='__main__':
     ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,default=Path(__file__).parent/'source');ap.add_argument('--output',type=Path,default=Path(__file__).parent/'stormdagen_data.json');args=ap.parse_args()
