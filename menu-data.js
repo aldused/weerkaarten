@@ -547,12 +547,13 @@ const MENU_PRODUCTS = [
   {
     "id": "pluim-viewer",
     "name": "Weerpluim per plaats",
-    "description": "De verwachting én onzekerheid voor jouw plaats",
+    "description": "Eén locatie, vijf modellen en één grote grafiek · inclusief HARMONIE",
     "category": "verwachting",
     "type": "pluim",
     "section": "Pluimen",
     "icon": "pluim",
     "href": "index.html#pluim",
+    "src": "pluim_interactief.html?v=20261021-workstation1",
     "thumbnail": "thumbs/pluim-viewer.webp",
     "facets": {
       "bron": [

@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ensemble Pluim – Ed Aldus WM</title>
+<title>Pluimverwachtingen · Weerlab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -404,10 +404,14 @@ select, input[type=date], input[type=text] {
     window.addEventListener("storage", function(e){ if (e.key === "weerlab_theme") apply(e.newValue); });
   })();
 </script>
-<link rel="stylesheet" href="pluim-presentatie.css?v=20261014-nav">
-<script src="pluim-presentatie.js?v=20261014-nav" defer></script>
+<link rel="stylesheet" href="pluim-presentatie.css?v=20261021-shared-location">
+<script src="pluim-presentatie.js?v=20261021-shared-location" defer></script>
 <script src="pluim-dag-nacht.js?v=20261004-all1"></script>
 <script src="pluim_ens6_nav.js?v=20261014-nav" defer></script>
+<link rel="stylesheet" href="pluim-workstation.css?v=20261021-1">
+<script src="harmoneps-data.js?v=20260910" defer></script>
+<script src="pluim-workstation-data.js?v=20261021-1" defer></script>
+<script src="pluim-workstation.js?v=20261021-1" defer></script>
 </head>
 <body>
 
@@ -493,8 +497,8 @@ select, input[type=date], input[type=text] {
     <span class="sub-label" style="margin-left:8px">Model</span>
     <span class="pill actief" title="ECMWF IFS ENS (standaard)">&#127760; ECMWF</span>
     <button class="pill type-btn" data-type="aifs">&#129302; AIFS</button>
-    <button class="pill" onclick="toonHarmonie()" title="KNMI HarmonEPS Cy43 — 2.5 km, 6 members, 60u lead">&#127475;&#127473; HARMONIE 43</button>
-    <button class="pill type-btn" data-type="icon">&#127465;&#127466; ICON-D2</button>
+    <button class="pill" onclick="setActieveType('harmonie');laadData()" title="KNMI HarmonEPS Cy43 — 2.5 km, 6 members, 60u lead">&#127475;&#127473; HARMONIE 43</button>
+    <button class="pill type-btn" data-type="icon">&#127465;&#127466; ICON EPS</button>
 
     <span class="sub-label" style="margin-left:8px">Vergelijk</span>
     <button class="pill type-btn" data-type="vergelijking">+ ICON</button>
@@ -684,7 +688,7 @@ select, input[type=date], input[type=text] {
   <div id="verg-grid" class="verg-grid"></div>
 </div>
 
-<div id="copyright" style="text-align:center;font-size:.78rem;color:#888;padding:10px 0 16px;font-family:Inter,sans-serif;border-top:1px solid #d0d8e4;margin-top:8px">&copy; Ed Aldus WM &middot; Data: ECMWF Open Data / Open-Meteo (IFS ENS, ICON) &middot; <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" style="color:#0066cc;text-decoration:none">ecmwf.int</a> &middot; <a href="https://open-meteo.com" style="color:#0066cc;text-decoration:none">open-meteo.com</a></div>
+<div id="copyright" style="text-align:center;font-size:.78rem;color:#888;padding:10px 0 16px;font-family:Inter,sans-serif;border-top:1px solid #d0d8e4;margin-top:8px">&copy; Ed Aldus WM &middot; Data: KNMI HarmonEPS · ECMWF / DWD / NOAA via Open-Meteo &middot; <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" style="color:#0066cc;text-decoration:none">ecmwf.int</a> &middot; <a href="https://open-meteo.com" style="color:#0066cc;text-decoration:none">open-meteo.com</a></div>
 
 <script src="pluim_run_switcher_986ffccbe63e.js" data-required="temperature_2m,precipitation,wind_speed_10m,cloud_cover,wind_gusts_10m,wind_direction_10m"></script>
 <script src="pluim_math.js?v=20260808-runcoherent-bft"></script>
@@ -1276,11 +1280,7 @@ function setStation(lat,lon,naam){
   document.getElementById('huidig-station').textContent=`${naam} · ${parseFloat(lat).toFixed(3)}° N, ${parseFloat(lon).toFixed(3)}° E`;
   document.getElementById('zoek-input').value='';
   sluitZoek();
-  // Als HARMONIE-overlay open staat: meteen daar de plaats meeschuiven (geen herklik nodig)
-  const fr = document.getElementById('harmonie-iframe');
-  if (fr && document.getElementById('harmonie-host')) {
-    fr.src = `pluim_harmoneps.html?v=${Date.now()}&q=${encodeURIComponent(naam)}&lat=${huidigStation.lat}&lon=${huidigStation.lon}`;
-  }
+
 }
 
 // Door gebruiker gekozen station: selecteren én direct de pluim laden
@@ -2329,6 +2329,7 @@ const ov16=new Date(+nu2+16*86400000).toISOString().slice(0,10);
 // ── Ophalen ──
 let _laadBusy=false, _laadPending=false;
 async function laadData(){
+  if(window.PlumeWorkstation?.native())return window.PlumeWorkstation.load();
   if(_laadBusy){_laadPending=true;return;}
   _laadBusy=true;
   const btn=document.getElementById('btn-laden');
@@ -6036,50 +6037,6 @@ function restoreState(){
 // Sla state op na elke data-load
 const origLaadData=laadData;
 laadData=async function(){await origLaadData();saveState();};
-
-// ── HARMONIE inline tonen in pluim_interactief (iframe overlay) ──
-function toonHarmonie(){
-  const q = (document.getElementById('zoek-input')?.value || huidigStation?.naam || '').trim();
-  const lat = huidigStation?.lat || '';
-  const lon = huidigStation?.lon || '';
-  let host = document.getElementById('harmonie-host');
-  if (!host){
-    host = document.createElement('div');
-    host.id = 'harmonie-host';
-    host.style.cssText = 'background:var(--panel);border-top:1px solid var(--border);padding:0;margin:0';
-    host.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#eef3fa;border-bottom:1px solid var(--border)">
-        <div style="font-size:.82rem;font-weight:600;color:#1a2b40">🇳🇱 HARMONIE 43 — KNMI ensemble (2.5 km, 6 members, 60 u)</div>
-        <button onclick="sluitHarmonie()" style="border:none;background:transparent;font-size:.82rem;color:#5a6a80;cursor:pointer">✕ sluiten</button>
-      </div>
-      <iframe id="harmonie-iframe" style="width:100%;height:780px;border:none;display:block"></iframe>
-    `;
-    // plaats boven de bestaande grafiek-wrap
-    const wrap = document.getElementById('grafiek-wrap');
-    wrap.parentNode.insertBefore(host, wrap);
-  }
-  const fr = document.getElementById('harmonie-iframe');
-  fr.src = `pluim_harmoneps.html?v=${Date.now()}` + (q?`&q=${encodeURIComponent(q)}`:'') + (lat&&lon?`&lat=${lat}&lon=${lon}`:'');
-  // verberg het standaard ECMWF-grafiek-wrap zodat HARMONIE de focus krijgt
-  document.getElementById('grafiek-wrap').style.display = 'none';
-  document.getElementById('vergelijking-wrap').style.display = 'none';
-  host.scrollIntoView({behavior:'smooth', block:'start'});
-}
-function sluitHarmonie(){
-  const host = document.getElementById('harmonie-host');
-  if (host) host.remove();
-  document.getElementById('grafiek-wrap').style.display = '';
-}
-window.toonHarmonie = toonHarmonie;
-window.sluitHarmonie = sluitHarmonie;
-
-// Wanneer er op een ander model/parameter wordt geklikt: sluit HARMONIE-overlay
-document.addEventListener('click', e => {
-  const t = e.target.closest('.type-btn, .param-card, [data-preset], .pill.actief, #btn-laden, #btn-vergelijk');
-  if (t && !t.matches('[onclick*="toonHarmonie"]')) {
-    if (document.getElementById('harmonie-host')) sluitHarmonie();
-  }
-});
 
 // ── Auto-refresh ──
 let autoRefreshInterval=null;

@@ -1,6 +1,7 @@
 /* Gemeenschappelijke bediening; bestaande data- en exportlogica blijft intact. */
 (() => {
  document.body.classList.add('plume-unified');
+ if(new URLSearchParams(location.search).get('plume_embed')==='1')document.body.classList.add('plume-shared-location');
  const embedded=parent!==window;
  document.body.classList.toggle('plume-embedded',embedded);
  let hostTabs=false;
