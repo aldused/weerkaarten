@@ -3,6 +3,8 @@
   'use strict';
   const cards = new WeakMap();
   let legendStops = [], legendUnit = '', dialog, selected, opener;
+  const isNight=data=>data.night||/^00[–-]06/.test(data.period||'');
+  const titledDay=data=>(isNight(data)?'Nacht naar ':'')+formatDay(data.day);
   const formatDay = day => new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Amsterdam' }).format(new Date(day + 'T12:00:00Z'));
   const number = value => new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(value);
   function element(tag, className, text) {
@@ -18,7 +20,7 @@
   function showCard(card) {
     selected = card;
     const data = cards.get(card);
-    dialog.querySelector('h2').textContent = formatDay(data.day) + (data.period ? ' · ' + data.period : '');
+    dialog.querySelector('h2').textContent = titledDay(data) + (data.period ? ' · ' + data.period : '');
     dialog.querySelector('.mini-detail-subtitle').textContent = document.querySelector('h1').textContent;
     const preview = dialog.querySelector('.mini-detail-map');
     const clone = card.cloneNode(true);
@@ -53,6 +55,7 @@
     const today = MosmixCore.dayKey();
     const name = card.querySelector('.mini-dag-naam');
     name.textContent = data.day === today ? 'Vandaag' : data.day === MosmixCore.nextDay(today) ? 'Morgen' : new Intl.DateTimeFormat('nl-NL', { weekday: 'long', timeZone: 'Europe/Amsterdam' }).format(new Date(data.day + 'T12:00Z'));
+    if(isNight(data))name.textContent='Nacht naar '+new Intl.DateTimeFormat('nl-NL',{weekday:'long',timeZone:'Europe/Amsterdam'}).format(new Date(data.day+'T12:00Z'));
     card.classList.toggle('is-today', data.day === today);
     card.querySelector('.mini-dag-datum').textContent = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'short', timeZone: 'Europe/Amsterdam' }).format(new Date(data.day + 'T12:00Z')) + (data.period ? ' · ' + data.period : '');
     const values = Object.values(data.values).filter(Number.isFinite);
@@ -61,10 +64,10 @@
     footer.replaceChildren(element('span', 'mini-range', summary));
     footer.querySelector('.mini-range').title = 'Laagste en hoogste waarde van de getoonde stations';
     const open = button('Vergroot ↗', () => openCard(card, open), 'mini-open');
-    open.setAttribute('aria-label', 'Vergroot kaart van ' + formatDay(data.day) + (data.period ? ' ' + data.period : ''));
+    open.setAttribute('aria-label', 'Vergroot kaart van ' + titledDay(data) + (data.period ? ' ' + data.period : ''));
     footer.append(open);
     card.querySelectorAll('svg, canvas').forEach(el => el.setAttribute('aria-hidden', 'true'));
-    card.setAttribute('aria-label', formatDay(data.day) + ': ' + summary);
+    card.setAttribute('aria-label', titledDay(data) + ': ' + summary);
     card.querySelector('.mini-body, svg').addEventListener('click', () => openCard(card, open));
     if (!values.length) card.append(element('p', 'mini-no-data', 'Geen complete verwachting beschikbaar voor dit tijdvak.'));
   }

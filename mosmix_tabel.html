@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
+<script src="mosmix-wind.js?v=20261021-1"></script>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -565,14 +566,7 @@ function windTxt(deg) {
 }
 
 // Beaufort van km/h
-function kmhNaarBft(kmh) {
-  if (!kmh) return 0;
-  const ms = kmh / 3.6;
-  const BFT = [0.3,1.6,3.4,5.5,8.0,10.8,13.9,17.2,20.8,24.5,28.5,32.7];
-  let b = 0;
-  for (let i=0; i<BFT.length; i++) { if(ms >= BFT[i]) b=i+1; else break; }
-  return b;
-}
+function kmhNaarBft(kmh){ return MosmixWind.beaufort(kmh); }
 
 // TX kleurklasse
 function txKlasse(tx) {
@@ -894,8 +888,9 @@ function ergstCode(codes) {
 function agregeer(h, van, tot) {
   const totUur = h.temperature_2m.length;
   const eind = Math.min(tot, totUur);
-  const temp=[], prec=[], windArr=[], gustArr=[], code=[], vocht=[], bewolk=[], ddArr=[];
+  const temp=[], prec=[], windArr=[], gustArr=[], code=[], vocht=[], bewolk=[], ddArr=[],windRows=[];
   for (let i=van; i<eind; i++) {
+    windRows.push({ff:h.windspeed_10m?.[i],dd:MosmixWind.direction(h.winddirection_10m?.[i])});
     if (h.temperature_2m[i]      != null) temp.push(h.temperature_2m[i]);
     if (h.precipitation[i]       != null) prec.push(h.precipitation[i]);
     if (h.windspeed_10m[i]       != null) windArr.push(h.windspeed_10m[i]);
@@ -914,9 +909,9 @@ function agregeer(h, van, tot) {
     tMax:   Math.max(...temp),
     tMin:   Math.min(...temp),
     prec:   prec.length   ? prec.reduce((a,b)=>a+b,0) : null,
-    ffKmh:  windArr.length ? Math.max(...windArr) : null,
+    ffKmh:  windArr.length===eind-van ? MosmixWind.vectorMean(windRows).ff : null,
     gustKmh: gustArr.length ? Math.max(...gustArr) : null,
-    ffDeg:  ddGem,
+    ffDeg:  MosmixWind.vectorMean(windRows).dir,
     code:   code.length   ? ergstCode(code) : null,
     vocht:  vocht.length  ? vocht.reduce((a,b)=>a+b,0)/vocht.length : null,
     bewolk: bewolk.length ? bewolk.reduce((a,b)=>a+b,0)/bewolk.length : null,
@@ -1093,8 +1088,9 @@ function renderTabel(p, el, data) {
     })();
     const ff  = dagPer?.ffKmh  ?? null;
     const bft = kmhNaarBft(ff);
-    const gust = Math.max(dagPer?.gustKmh || 0, nachtPer?.gustKmh || 0) || null;
-    const gustBft = kmhNaarBft(gust);
+    const gustValues=[dagPer?.gustKmh,nachtPer?.gustKmh];
+    const gust = gustValues.every(MosmixWind.speed)?Math.max(...gustValues):null;
+
     const dd   = dagPer?.ffDeg ?? null;
     const vocht  = dagPer?.vocht  ?? null;
     const bewolk = dagPer?.bewolk ?? null;
@@ -1126,7 +1122,7 @@ function renderTabel(p, el, data) {
     const tnCls = tn != null ? tnKlasse(tn) : '';
     const rrCls = rrKlasse(rr);
     const ffCls = ffKlasse(bft);
-    const gustCls = ffKlasse(gustBft);
+    const gustCls = ''; // Gusts remain physical speeds, never Beaufort.
 
     // UV-klasse
     const uvAdj = uv != null ? uv - 0.5 : null;
@@ -1139,8 +1135,8 @@ function renderTabel(p, el, data) {
     stripTN.push(`<td class="strip-tn ${tnCls}">${tn != null ? tn.toFixed(1).replace('.',',') + '°' : '–'}</td>`);
     stripRR.push(`<td class="${rrCls}">${rr >= 0.1 ? rr.toFixed(1).replace('.',',') + ' mm' : '<span class="rr-geen">0</span>'}</td>`);
     stripDD.push(`<td style="font-size:0.85em;color:#555">${graden2kompas(dd)}</td>`);
-    stripFF.push(`<td><span class="${ffCls}">${ff != null ? Math.round(ff) + ' km/h' : '–'}</span>${ff ? `<br><span style="font-size:0.8em;color:#aaa">Bft ${bft}</span>` : ''}</td>`);
-    stripGust.push(`<td><span class="${gustCls}">${gust != null ? Math.round(gust) + ' km/h' : '–'}</span>${gust ? `<br><span style="font-size:0.8em;color:#aaa">Bft ${gustBft}</span>` : ''}</td>`);
+    stripFF.push(`<td><span class="${ffCls}">${ff != null ? Math.round(ff) + ' km/h' : '–'}</span>${ff != null ? `<br><span style="font-size:0.8em;color:#aaa">Bft ${bft}</span>` : ''}</td>`);
+    stripGust.push(`<td><span class="${gustCls}">${gust != null ? Math.round(gust) + ' km/h' : '–'}</span></td>`);
     stripVocht.push(`<td>${vocht  != null ? Math.round(vocht)  + '%' : '–'}</td>`);
     stripBewolk.push(`<td>${bewolk != null ? Math.round(bewolk) + '%' : '–'}</td>`);
     stripZon.push(`<td style="color:#c47a1a;font-weight:600">${zon != null ? zon.uur + ' u' : '–'}</td>`);

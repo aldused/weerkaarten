@@ -721,6 +721,8 @@ def verwerk_station(code, naam):
     lon_lat = station_coord if station_coord is not None else (None, None)
     lon, lat = lon_lat
 
+    from mosmix_wind import aggregate_wind
+
     # Ruwe waarden ophalen
     tx_raw   = parse_values(root, 'TX')
     tn_raw   = parse_values(root, 'TN')
@@ -807,31 +809,6 @@ def verwerk_station(code, naam):
                 dd["tx_ochtend"].append(ttt[i])
             elif 12 <= hour < 18:
                 dd["tx_middag"].append(ttt[i])
-
-        # Wind: dag 6-18h
-        if 6 <= hour < 18:
-            if i < len(ff_raw) and ff_raw[i] is not None:
-                dd["ff_dag"].append(ff_raw[i])
-                dd["dd_dag"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
-                if hour < 12:
-                    dd["ff_ochtend"].append(ff_raw[i])
-                    dd["dd_ochtend"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
-                else:
-                    dd["ff_middag"].append(ff_raw[i])
-                    dd["dd_middag"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
-            if i < len(fx_raw) and fx_raw[i] is not None:
-                dd["fx_dag"].append(fx_raw[i])
-                if hour < 12:
-                    dd["fx_ochtend"].append(fx_raw[i])
-                else:
-                    dd["fx_middag"].append(fx_raw[i])
-        # Wind: nacht 18-06h
-        else:
-            if i < len(ff_raw) and ff_raw[i] is not None:
-                dd["ff_nacht"].append(ff_raw[i])
-                dd["dd_nacht"].append(dd_raw[i] if i < len(dd_raw) and dd_raw[i] is not None else None)
-            if i < len(fx_raw) and fx_raw[i] is not None:
-                dd["fx_nacht"].append(fx_raw[i])
 
         # Neerslag: hele dag + dag/nacht apart
         if i < len(rr_raw) and rr_raw[i] is not None:
@@ -951,48 +928,7 @@ def verwerk_station(code, naam):
         r["TX_O"] = tx_o_raw
         r["TX_M"] = tx_m_raw
 
-        # Wind
-        if dd["ff_dag"]:
-            r["FF"] = round(sum(dd["ff_dag"]) / len(dd["ff_dag"]) * 3.6, 1)  # km/h
-            # DD bij max FF
-            max_idx = dd["ff_dag"].index(max(dd["ff_dag"]))
-            r["DD"] = round(dd["dd_dag"][max_idx]) if max_idx < len(dd["dd_dag"]) and dd["dd_dag"][max_idx] is not None else None
-        else:
-            r["FF"] = None
-            r["DD"] = None
-
-        r["FX"] = round(max(dd["fx_dag"]) * 3.6, 1) if dd["fx_dag"] else None
-
-        # Wind ochtend (06-12h)
-        if dd["ff_ochtend"]:
-            r["FF_O"] = round(sum(dd["ff_ochtend"]) / len(dd["ff_ochtend"]) * 3.6, 1)
-            max_idx_o = dd["ff_ochtend"].index(max(dd["ff_ochtend"]))
-            r["DD_O"] = round(dd["dd_ochtend"][max_idx_o]) if max_idx_o < len(dd["dd_ochtend"]) and dd["dd_ochtend"][max_idx_o] is not None else None
-        else:
-            r["FF_O"] = None
-            r["DD_O"] = None
-        r["FX_O"] = round(max(dd["fx_ochtend"]) * 3.6, 1) if dd["fx_ochtend"] else None
-
-        # Wind middag (12-18h)
-        if dd["ff_middag"]:
-            r["FF_M"] = round(sum(dd["ff_middag"]) / len(dd["ff_middag"]) * 3.6, 1)
-            max_idx_m = dd["ff_middag"].index(max(dd["ff_middag"]))
-            r["DD_M"] = round(dd["dd_middag"][max_idx_m]) if max_idx_m < len(dd["dd_middag"]) and dd["dd_middag"][max_idx_m] is not None else None
-        else:
-            r["FF_M"] = None
-            r["DD_M"] = None
-        r["FX_M"] = round(max(dd["fx_middag"]) * 3.6, 1) if dd["fx_middag"] else None
-
-        # Wind nacht (18-06h)
-        if dd["ff_nacht"]:
-            r["FF_N"] = round(sum(dd["ff_nacht"]) / len(dd["ff_nacht"]) * 3.6, 1)
-            max_idx_n = dd["ff_nacht"].index(max(dd["ff_nacht"]))
-            r["DD_N"] = round(dd["dd_nacht"][max_idx_n]) if max_idx_n < len(dd["dd_nacht"]) and dd["dd_nacht"][max_idx_n] is not None else None
-        else:
-            r["FF_N"] = None
-            r["DD_N"] = None
-        r["FX_N"] = round(max(dd["fx_nacht"]) * 3.6, 1) if dd["fx_nacht"] else None
-
+        # Wind is aggregated below from exact UTC times: FF points and FX1 intervals.
         # Neerslag
         r["RR"] = round(dd["rr"], 1)
         r["RR_D"] = round(dd["rr_dag"], 1)
@@ -1072,6 +1008,11 @@ def verwerk_station(code, naam):
             rv_uurlijks.append(round(rh_from_td(t_val, td_val)))
         else:
             rv_uurlijks.append(None)
+
+    # Replace only the wind fields, preserving all other established definitions.
+    for day, wind in aggregate_wind(times, ff_raw, dd_raw, fx_raw).items():
+        if day in result:
+            result[day].update(wind)
 
     tijden_lokaal = [dt.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).strftime("%Y-%m-%dT%H:%M") for dt in times]
 
@@ -1164,7 +1105,7 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
     # de landelijke kaarteneditor) breken daarop met "geen complete verwachting".
     # Daarom: gaten in dag 1 vullen met de waarden uit de vorige run. Verse data
     # wordt nooit overschreven, alleen ontbrekende stations aangevuld.
-    CARRY_PARAMS = ["TN", "TG", "TTD", "gevoels", "TX_O", "FF_O", "FX_O", "DD_O", "wwM"]
+    CARRY_PARAMS = ["TN", "TG", "TTD", "gevoels", "TX_O", "wwM"]
     if dagen and os.path.exists(output_file):
         try:
             with open(output_file) as f:
@@ -1199,6 +1140,8 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
                          for oud, k in POP_ALIASSEN.items() for s in ("", "_D", "_N")},
         },
         "data": data_out,
+        "runs": alle_runs,
+        "wind_definition": "ff-point-mean_fx1-end-interval_v2",
     }
 
     with open(output_file, "w") as f:
@@ -1230,6 +1173,7 @@ def bouw_json(stations, coords, output_file, uurlijks_file=None):
             "stations": coords,
             "data": uur_out,
             "runs": alle_runs,
+            "wind_definition": {"FF":"wind op 10 m op brontijd, km/h","DD":"meteorologische herkomstrichting, graden","FX1":"hoogste windstoot in voorgaand uur, km/h"},
         }
         with open(uurlijks_file, "w") as f:
             json.dump(uurlijks_output, f, ensure_ascii=False)

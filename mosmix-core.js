@@ -2,6 +2,7 @@
  * by scripts/mosmix_json.py: °C, km/h and Europe/Amsterdam wall-clock hours. */
 (function(root){
   'use strict';
+  const wind=typeof module==='object'&&module.exports?require('./mosmix-wind.js'):root.MosmixWind;
   const finite = value => typeof value === 'number' && Number.isFinite(value);
   const dayKey = (date=new Date()) => new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
   function nextDay(day){return new Date(Date.parse(day+'T12:00:00Z')+86400000).toISOString().slice(0,10);}
@@ -51,7 +52,7 @@
     const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Over deze gegevens';details.append(summary);
     const note=document.createElement('p');note.textContent='Stationsverwachtingen, geen metingen. Kaartkleuren tussen stations zijn interpolaties. Ontbrekende waarden zijn geen nul. De lopende dag kan onvolledig zijn; ochtendwaarden kunnen uit een eerdere run zijn aangevuld. De genoemde run is de nieuwste stationsrun in het bronbestand. Zonuren kunnen zijn geschat uit bewolking.';details.append(note);box.append(details);
     const nav=document.createElement('nav');nav.setAttribute('aria-label','MOS/MIX kaarten');
-    for(const [route,label] of [['minikaarten','9 dagen'],['parameter','Per element'],['neerslagkans','Neerslagkansen']]){const a=document.createElement('a');a.href='index.html#mosmix-'+route;a.target='_top';a.textContent=label;nav.append(a);}box.append(nav);
+    for(const [route,label] of [['werkstation','Wind & dagdelen'],['minikaarten','9 dagen'],['parameter','Per element'],['neerslagkans','Neerslagkansen']]){const a=document.createElement('a');a.href='index.html#mosmix-'+route;a.target='_top';a.textContent=label;nav.append(a);}box.append(nav);
   }
   async function fetchJSON(url){const response=await fetch(url,{signal:AbortSignal.timeout(20000)});if(!response.ok)throw Error('De gegevensbron is tijdelijk niet beschikbaar (HTTP '+response.status+').');return response.json();}
   async function loadDaily(url, options={}){const data=validateDaily(await fetchJSON(url));showQuality(data, options);return data;}
@@ -85,10 +86,7 @@
   function minTemp(index,name,day,start,end){const rows=hours(index,name,day,start,end,'ttt');return rows.length?Math.min(...rows.map(v=>v.ttt)):null;}
   function meanWind(index,name,day,start,end){
     const rows=hours(index,name,day,start,end,'ff');if(!rows.length)return {ff:null,dir:null};
-    const ff=rows.reduce((sum,v)=>sum+v.ff,0)/rows.length;
-    let dir=null;
-    if(rows.every(v=>finite(v.dd))){const sin=rows.reduce((s,v)=>s+Math.sin(v.dd*Math.PI/180),0),cos=rows.reduce((s,v)=>s+Math.cos(v.dd*Math.PI/180),0);if(Math.hypot(sin,cos)>1e-6)dir=(Math.atan2(sin,cos)*180/Math.PI+360)%360;}
-    return {ff,dir};
+    return wind.vectorMean(rows);
   }
   function legendLabel(param,value){return typeof value==='number'?value+(param.bft?' km/h':param.eenheid||''):value;}
   const api={finite,dayKey,nextDay,validateDaily,runWarning,POP_THRESHOLDS,popKey,popWindow,probabilityIssues,fetchJSON,loadDaily,assertSameRun,hourlyIndex,minTemp,meanWind,legendLabel};

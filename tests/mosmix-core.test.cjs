@@ -26,7 +26,7 @@ test('nacht kiest volgende datum; nulwind blijft nul; richting gemiddeld rond no
   const i=fixture();assert.equal(m.minTemp(i,'Test',m.nextDay('2026-09-09'),0,5),10);
   assert.equal(m.minTemp(i,'Test','2026-09-09',0,5),null);
   assert.equal(m.meanWind(i,'Test','2026-09-10',0,5).ff,0);
-  assert(Math.abs(m.meanWind(i,'Test','2026-09-10',0,5).dir)<1e-8);
+  assert.equal(m.meanWind(i,'Test','2026-09-10',0,5).dir,null); // No direction for a calm.
 });
 test('onvolledig uurvak niet als volwaardige verwachting tonen',()=>{
   const i=fixture('2026-09-10',[0,1,2]);assert.equal(m.minTemp(i,'Test','2026-09-10',0,5),null);

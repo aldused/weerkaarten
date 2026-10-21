@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
+<script src="mosmix-wind.js?v=20261021-1"></script>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -344,7 +345,7 @@ const PARAMS = {
   FF:  { label:"Gemiddelde windsnelheid dag 06–18u (Bft)", eenheid:" Bft", decimalen:0, bft:true, ddParam:"DD",
     kleuren:[["#ffffff",0],["#c8e6c9",6],["#81c784",12],["#4caf50",20],["#ffee58",29],["#ffa726",39],["#ff7043",50],["#e53935",62],["#b71c1c",75],["#7b1fa2",89]],
     schaal:[0,103] },
-  FF_N:{ label:"Gemiddelde windsnelheid 00–06u + 18–24u op deze datum (Bft)", eenheid:" Bft", decimalen:0, bft:true, ddParam:"DD_N", nacht:true,
+  FF_N:{ label:"Representatieve wind avond en volgende nacht · 18–06 uur (Bft)", eenheid:" Bft", decimalen:0, bft:true, ddParam:"DD_N", nacht:true,
     kleuren:[["#ffffff",0],["#c8e6c9",6],["#81c784",12],["#4caf50",20],["#ffee58",29],["#ffa726",39],["#ff7043",50],["#e53935",62],["#b71c1c",75],["#7b1fa2",89]],
     schaal:[0,103] },
   FF_O:{ label:"Gemiddelde windsnelheid ochtend 06–12u (Bft)", eenheid:" Bft", decimalen:0, bft:true, ddParam:"DD_O",
@@ -356,7 +357,7 @@ const PARAMS = {
   FX:  { label:"Max. windstoot dag 06–18u (km/h)", eenheid:" km/h", decimalen:0,
     kleuren:[["#ffffff",20],["#c8e6c9",30],["#81c784",40],["#4caf50",50],["#ffee58",62],["#ffa726",75],["#ff7043",89],["#e53935",103],["#b71c1c",118]],
     schaal:[20,120] },
-  FX_N:{ label:"Max. windstoot 00–06u + 18–24u op deze datum (km/h)", eenheid:" km/h", decimalen:0, nacht:true,
+  FX_N:{ label:"Hoogste windstoot avond en volgende nacht · 18–06 uur (km/h)", eenheid:" km/h", decimalen:0, nacht:true,
     kleuren:[["#ffffff",20],["#c8e6c9",30],["#81c784",40],["#4caf50",50],["#ffee58",62],["#ffa726",75],["#ff7043",89],["#e53935",103],["#b71c1c",118]],
     schaal:[20,120] },
   FX_O:{ label:"Max. windstoot ochtend 06–12u (km/h)", eenheid:" km/h", decimalen:0,
@@ -957,11 +958,7 @@ function windpijl(graden) {
   return pijlen[Math.round(graden/45) % 8];
 }
 
-function kmhNaarBft(kmh) {
-  const grenzen = [1,6,12,20,29,39,50,62,75,89,103,118];
-  for (let i = 0; i < grenzen.length; i++) { if (kmh < grenzen[i]) return i; }
-  return 12;
-}
+function kmhNaarBft(kmh){ return MosmixWind.beaufort(kmh); }
 
 // Heatmap-stationsstijl: kleine dot + groot getal met witte halo (TX/TN/FF/FX)
 function tekenHeatmapStation(svg, item, p, dagObj){
@@ -1410,6 +1407,12 @@ function update() {
   document.getElementById("hdr-datum").textContent = dagLabel(d);
   document.getElementById("kaart-dag-label").textContent = dagLabel(d);
   const p0 = PARAMS[huidigParam];
+  if(['FF_N','FX_N'].includes(huidigParam)){
+    const night=new Date(MosmixCore.nextDay(huidigDag)+'T12:00Z');
+    const title='Avond en nacht naar '+new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',weekday:'long',day:'numeric',month:'long'}).format(night);
+    document.getElementById('kaart-dag-label').textContent=title;
+    document.getElementById('hdr-datum').textContent=title;
+  }
   // Kansvensters liggen vast in UTC; toon de Nederlandse kloktijden erbij.
   document.getElementById("kaart-subtitel").textContent = (p0?.label || huidigParam)
     + (p0?.venster !== undefined ? " · " + MosmixCore.popWindow(huidigDag, p0.venster) : "");

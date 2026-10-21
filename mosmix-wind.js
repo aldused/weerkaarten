@@ -1,0 +1,37 @@
+/* DWD FF/DD: wind at 10 m at the valid time; FX1: maximum over the preceding hour.
+ * Sources and aggregation contracts: docs/mosmix-meteorologie.md. */
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.MosmixWind=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
+'use strict';
+const HOUR=3600000,TZ='Europe/Amsterdam';
+const BFT_MS=Object.freeze([.3,1.6,3.4,5.5,8,10.8,13.9,17.2,20.8,24.5,28.5,32.7]);
+let DAYPARTS=Object.freeze([{id:'nacht',name:'Nacht',start:0,end:6},{id:'ochtend',name:'Ochtend',start:6,end:12},{id:'middag',name:'Middag',start:12,end:18},{id:'avond',name:'Avond',start:18,end:24}].map(Object.freeze));
+const finite=v=>typeof v==='number'&&Number.isFinite(v),speed=v=>finite(v)&&v>=0;
+function convert(v,from='km/h',to='km/h'){if(!speed(v))return null;const scale={'m/s':3.6,'km/h':1,kn:1.852};if(!scale[from]||!scale[to])throw Error('Onbekende windeenheid');return v*scale[from]/scale[to];}
+function beaufort(v,unit='km/h'){const ms=convert(v,unit,'m/s');if(ms===null)return null;let b=0;while(b<BFT_MS.length&&ms+1e-12>=BFT_MS[b])b++;return b;}
+function direction(v){return finite(v)&&v>=0&&v<=360?v%360:null;}
+function uv(v,dd){const d=direction(dd);if(!speed(v)||v>0&&d===null)return {u:null,v:null};const r=(d||0)*Math.PI/180;return {u:-v*Math.sin(r),v:-v*Math.cos(r)};}
+function fromUV(u,v){if(!finite(u)||!finite(v))return {speed:null,direction:null};const s=Math.hypot(u,v);return {speed:s,direction:s<1e-9?null:(Math.atan2(-u,-v)*180/Math.PI+360)%360};}
+function compass(v){const d=direction(v);return d===null?'—':['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];}
+const partsFormatter=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+function parts(ms){return Object.fromEntries(partsFormatter.formatToParts(new Date(ms)).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));}
+function day(ms){const p=parts(ms);return p.year+'-'+p.month+'-'+p.day;}
+function nextDay(value,step=1){return new Date(Date.parse(value+'T12:00Z')+step*24*HOUR).toISOString().slice(0,10);}
+function wallCandidates(value){const match=value.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/);if(!match)return [];const wall=Date.UTC(+match[1],+match[2]-1,+match[3],+match[4],+match[5]);return [wall-2*HOUR,wall-HOUR].filter(t=>{const p=parts(t);return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute===value.slice(0,16);});}
+function time(value,occurrence=0){if(typeof value!=='string')return NaN;if(/(?:Z|[+-]\d\d:\d\d)$/.test(value))return Date.parse(value);return wallCandidates(value)[occurrence]??NaN;}
+function bound(date,hour){const d=hour===24?nextDay(date):date,h=hour===24?0:hour;return time(d+'T'+String(h).padStart(2,'0')+':00');}
+function configure(config){
+ if(config.timezone!==TZ||!Array.isArray(config.parts)||config.parts.length!==4)throw Error('Ongeldige dagdeelconfiguratie');
+ const sorted=[...config.parts].sort((a,b)=>a.start-b.start);
+ if(sorted[0].start!==0||sorted.at(-1).end!==24||sorted.some((p,i)=>!Number.isInteger(p.start)||!Number.isInteger(p.end)||p.end<=p.start||i&&p.start!==sorted[i-1].end)||new Set(sorted.map(p=>p.id)).size!==4||sorted.some(p=>!['nacht','ochtend','middag','avond'].includes(p.id)))throw Error('Dagdeelgrenzen moeten de kalenderdag precies bedekken');
+ DAYPARTS=Object.freeze(sorted.map(p=>Object.freeze({...p})));return DAYPARTS;
+}
+function period(date,id,config=DAYPARTS){const p=config.find(p=>p.id===id);if(!p)throw Error('Onbekend dagdeel');const start=bound(date,p.start),end=bound(date,p.end);if(!finite(start)||!finite(end)||end<=start)throw Error('Ongeldige dagdeelgrenzen');return {...p,date,start,end};}
+function periodAt(ms,config=DAYPARTS){const p=parts(ms),h=+p.hour;const found=config.find(x=>h>=x.start&&h<x.end);return found?period(day(ms),found.id,config):null;}
+function sequence(first,count=6,config=DAYPARTS){const out=[];let p=first;for(let i=0;i<count;i++){out.push(p);p=periodAt(p.end,config);if(!p)break;}return out;}
+function label(p){const date=new Intl.DateTimeFormat('nl-NL',{timeZone:TZ,weekday:'long',day:'numeric',month:'long'}).format(p.start);return (p.id==='nacht'?'Nacht naar ':'')+date+(p.id==='nacht'?'':' · '+p.name.toLowerCase())+' · '+String(p.start===p.end?0:parts(p.start).hour).padStart(2,'0')+'.00–'+parts(p.end).hour+'.00 uur';}
+function clock(ms){return new Intl.DateTimeFormat('nl-NL',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'}).format(ms);}
+function rows(series){const seen=new Map();return (series.tijden||[]).map((s,i)=>{const n=seen.get(s)||0;seen.set(s,n+1);return {time:time(series.tijden_utc?.[i]||s,n),ff:series.FF?.[i],dd:direction(series.DD?.[i]),fx:series.FX1?.[i],temp:series.TTT?.[i],rain:series.RR1c?.[i],cloud:series.Neff?.[i],sourceIndex:i};}).filter(r=>finite(r.time)).sort((a,b)=>a.time-b.time);}
+function vectorMean(data){if(!data.length||data.some(r=>!speed(r.ff)))return {ff:null,dir:null,variable:false};const ff=data.reduce((s,r)=>s+r.ff,0)/data.length;const moving=data.filter(r=>r.ff>0);if(!moving.length)return {ff,dir:null,variable:false};if(moving.some(r=>r.dd===null||!finite(r.dd)))return {ff,dir:null,variable:false,directionMissing:true};const sum=moving.reduce((s,r)=>{const v=uv(r.ff,r.dd);return {u:s.u+v.u,v:s.v+v.v,weight:s.weight+r.ff};},{u:0,v:0,weight:0});const variable=Math.hypot(sum.u,sum.v)/sum.weight<.15;return {ff,dir:variable?null:fromUV(sum.u,sum.v).direction,variable};}
+function summary(data,p){const index=new Map(data.map(r=>[r.time,r])),points=[],intervals=[];for(let t=p.start;t<p.end;t+=HOUR)points.push(index.get(t));for(let t=p.start+HOUR;t<=p.end;t+=HOUR)intervals.push(index.get(t));const complete=points.every(r=>r&&speed(r.ff));const vector=complete?vectorMean(points):{ff:null,dir:null,variable:false};const speeds=complete?points.map(r=>r.ff):[];const gustComplete=intervals.every(r=>r&&speed(r.fx));const gust=gustComplete?Math.max(...intervals.map(r=>r.fx)):null;const peaks=gust===null?[]:intervals.filter(r=>r.fx===gust).map(r=>({start:r.time-HOUR,end:r.time}));const angle=(a,b)=>Math.abs(((b-a+540)%360)-180);const directions=points.filter(r=>r&&speed(r.ff)&&r.ff>0&&r.dd!==null);const turn=directions.reduce((max,r)=>Math.max(max,...directions.map(other=>angle(r.dd,other.dd))),0);const aggregate=(rs,field,fn)=>rs.every(r=>r&&finite(r[field]))?fn(rs.map(r=>r[field])):null;return {...vector,complete,count:points.filter(r=>r&&speed(r.ff)).length,expected:points.length,min:speeds.length?Math.min(...speeds):null,max:speeds.length?Math.max(...speeds):null,first:complete?points[0].ff:null,last:complete?points.at(-1).ff:null,from:directions[0]?.dd??null,to:directions.at(-1)?.dd??null,turn,gust,gustComplete,peaks,trend:complete?(points.at(-1).ff-points[0].ff>=5?'toenemend':points.at(-1).ff-points[0].ff<=-5?'afnemend':Math.max(...speeds)-Math.min(...speeds)>=5?'sterk wisselend':'weinig verandering'):'onvolledig',temp:aggregate(points,'temp',a=>a.reduce((s,v)=>s+v,0)/a.length),rain:aggregate(intervals,'rain',a=>a.reduce((s,v)=>s+v,0)),cloud:aggregate(points,'cloud',a=>a.reduce((s,v)=>s+v,0)/a.length)};}
+return {HOUR,TZ,BFT_MS,get DAYPARTS(){return DAYPARTS;},configure,finite,speed,convert,beaufort,direction,uv,fromUV,compass,parts,day,nextDay,time,bound,period,periodAt,sequence,label,clock,rows,vectorMean,summary};
+});

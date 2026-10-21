@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
+<script src="mosmix-wind.js?v=20261021-1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MOSMIX Overzichtskaart</title>
@@ -235,9 +236,7 @@ function dagdeelWindow(dag, dagdeel){
   if(dagdeel === "middag")  return {start: dag+"T12:00", end: dag+"T17:00"};
   if(dagdeel === "avond")   return {start: dag+"T18:00", end: dag+"T23:00"};
   if(dagdeel === "nacht"){
-    const d = new Date(dag+"T12:00:00");
-    const nd = new Date(d.getTime()+86400000);
-    const nextDag = nd.toISOString().slice(0,10);
+    const nextDag = MosmixWind.nextDay(dag);
     return {start: nextDag+"T00:00", end: nextDag+"T05:00"};
   }
   return null;
@@ -268,14 +267,18 @@ function stationDagdeelStats(naam, dag, dagdeel){
       ddCnt++;
     }
   }
+  const sourceRows=MosmixWind.rows(s);
+  const sampleTimes=sourceRows.filter(r=>r.time>=MosmixWind.time(w.start)&&r.time<=MosmixWind.time(w.end));
+  const reference=MosmixWind.periodAt(MosmixWind.time(w.start));
+  const dagdeelWind=MosmixWind.summary(sourceRows,reference);
   if(totHrs===0) return null;
   return {
     tmax: tmax===-Infinity?null:tmax,
     tmin: tmin===Infinity?null:tmin,
     pop: totHrs ? Math.round(100*popHrs/totHrs) : null,
     rr: rrSum,
-    ff: ffCnt? ffSum/ffCnt : null,
-    dd: ddCnt? ((Math.atan2(ddYSum, ddXSum)*180/Math.PI) + 360) % 360 : null
+    ff: dagdeelWind.ff,
+    dd: dagdeelWind.dir
   };
 }
 
@@ -385,7 +388,7 @@ function tekenOverlay(){
       perStation[n] = {
         tmax: dag.TX?.[n] ?? null,
         tmin: dag.TN?.[n] ?? null,
-        pop:  (dag.Rd00?.[n] ?? dag.R101?.[n] ?? dag.Rh00_D?.[n]) ?? (dag.RR?.[n] != null ? (dag.RR[n] < 0.1 ? 0 : Math.min(100, Math.max(50, dag.wwCh?.[n] ?? 60))) : null),
+        pop:  (dag.Rd00?.[n] ?? dag.R101?.[n]) ?? null,
         rr:   dag.RR?.[n] ?? null,
         ff:   dag.FF?.[n] ?? null,
         dd:   dag.DD?.[n] ?? null
@@ -462,12 +465,7 @@ function tekenOverlay(){
 }
 
 // ─ Helpers ─
-function kmhToBft(kmh){
-  // FF in mosmix_nl.json is in km/h (parser doet m/s × 3.6)
-  if(kmh == null) return null;
-  const tabel = [1,5,11,19,28,38,49,61,74,88,102,117]; // Bft-bovengrens in km/h
-  let b=0; while(b<tabel.length && kmh>tabel[b]) b++; return b;
-}
+function kmhToBft(kmh){ return MosmixWind.beaufort(kmh); }
 
 function windKleur(bft){
   if(bft<=2) return "#607d8b";
@@ -666,7 +664,7 @@ function update(){
   if(huidigDagdeel === "dag"){
     sub.textContent = `${full} ${d.getDate()}/${d.getMonth()+1} — min-temp = nacht van ${dagLabel(new Date(d-86400000))} op ${full}`;
   } else {
-    sub.textContent = `${full} ${d.getDate()}/${d.getMonth()+1} — ${DAGDEEL_LABELS[huidigDagdeel]} (uit uurlijkse MOSMIX)`;
+    sub.textContent = huidigDagdeel==='nacht'?MosmixWind.label(MosmixWind.period(MosmixWind.nextDay(huidigDag),'nacht')):`${full} ${d.getDate()}/${d.getMonth()+1} — ${DAGDEEL_LABELS[huidigDagdeel]} (uit uurlijkse MOSMIX)`;
   }
 }
 

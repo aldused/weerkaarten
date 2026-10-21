@@ -271,7 +271,7 @@
     const climate=state.page==='terugkijken' && state.type==='klimaat';
     const archive=state.page==='terugkijken' && state.type==='terug';
     const maps=!site.directProducts && state.page==='verwachting' && state.type==='kaarten';
-    if(maps){const order={'mosmix-minikaarten':0,'mosmix-parameter':1,'mosmix-neerslagkans':2};result.sort((a,b)=>(order[a.id]??3)-(order[b.id]??3));}
+    if(maps){const order={'mosmix-werkstation':-1,'mosmix-minikaarten':0,'mosmix-parameter':1,'mosmix-neerslagkans':2};result.sort((a,b)=>(order[a.id]??3)-(order[b.id]??3));}
     let html=heading(climate?'Records & klimaat':archive?'Maand & archief':cat.title,climate?'Van uitzonderlijk weer tot het langjarig gemiddelde. Kies wat je wilt onderzoeken.':archive?'Bekijk de maandbalans, volg het seizoen en zoek het weer van een eerdere dag terug.':cat.description,cat.name);
     if(state.page==='favorieten')html+=savedPagesSection();
     if(cat.types)html+=`<nav class="subnav" aria-label="${cat.name}: onderwerpen">${cat.types.map(([type,name])=>`<a href="${routeUrl(state.page,type)}" ${state.type===type?'aria-current="page"':''}>${name}</a>`).join('')}</nav>`;
