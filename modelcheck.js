@@ -27,11 +27,12 @@
       history: (Array.isArray(s.historie) ? s.historie : []).filter(p => p && Number.isFinite(utc(p.t))).map(p => ({t: utc(p.t), v: valid(p.ta) ? p.ta : null})).sort((a,b) => a.t - b.t)
     })).filter(s => s.history.some(p => valid(p.v))).sort((a,b) => a.name.localeCompare(b.name, 'nl'));
   }
+  const delta = (obs, forecast) => valid(obs) && valid(forecast) ? obs - forecast : null;
   function stats(rows) {
-    const values = rows.filter(r => valid(r.obs) && valid(r.model)).map(r => r.model - r.obs);
+    const values = rows.filter(r => valid(r.obs) && valid(r.model)).map(r => delta(r.obs, r.model));
     return {count: values.length, mean: values.length ? values.reduce((a,b) => a+b, 0) / values.length : null, cold: values.filter(v => v < -.5).length, close: values.filter(v => Math.abs(v) <= .5).length, warm: values.filter(v => v > .5).length};
   }
-  const core = {utc, interpolate, observation, normalizeStations, stats};
+  const core = {utc, interpolate, observation, normalizeStations, stats, delta};
   if (typeof module !== 'undefined') module.exports = core;
   if (typeof document === 'undefined') return;
   const $ = id => document.getElementById(id);
@@ -48,8 +49,7 @@
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const chosenTime = () => frames[Number($('time').value)];
   const modelValue = (key, station, t) => interpolate(models[key]?.[station.name], t);
-  const delta = (a,b) => valid(a) && valid(b) ? a - b : null;
-  const verdict = d => !valid(d) ? 'Geen vergelijking beschikbaar' : Math.abs(d) < .05 ? 'Gelijk aan de meting' : `${fmt(Math.abs(d))} °C ${d > 0 ? 'te warm' : 'te koud'}`;
+  const verdict = d => !valid(d) ? 'Geen vergelijking beschikbaar' : Math.abs(d) < .05 ? 'Gelijk aan de verwachting' : `${fmt(Math.abs(d))} °C ${d > 0 ? 'warmer dan verwacht' : 'kouder dan verwacht'}`;
   const deltaClass = d => !valid(d) ? 'muted' : Math.abs(d) <= .5 ? 'close' : d > 0 ? 'warm' : 'cold';
   function color(d) {
     if (!valid(d)) return '#eef2f3';
@@ -139,7 +139,7 @@
   function drawMarkers(t) {
     $('markers').innerHTML = stations.map(s => {
       const [x,y] = xy(s.lon,s.lat), [dx,dy] = offsets[s.name] || [0,0];
-      const obs = observation(s,t), forecast = modelValue(model,s,t), d = delta(forecast,obs);
+      const obs = observation(s,t), forecast = modelValue(model,s,t), d = delta(obs,forecast);
       const label = `${s.name}: KNMI ${fmt(obs)} °C; ${MODELS[model].name} ${fmt(forecast)} °C; ${verdict(d)}`;
       return `<g class="marker" role="button" tabindex="0" data-station="${esc(s.name)}" aria-pressed="${s.name===selected}" aria-label="${esc(label)}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><title>${esc(label)}</title><circle class="station-dot" r="2.5"/><path d="M0 0 L${dx} ${dy-10}" stroke="#8aa0a8" stroke-width="1"/><g transform="translate(${dx} ${dy-21})"><rect class="marker-box" x="${mode==='pair'?-40:-29}" y="-13" width="${mode==='pair'?80:58}" height="29" rx="7" fill="${mode==='delta'?color(d):'#fff'}"/>${mode==='pair'?`<path d="M0 -8V10" stroke="#e0e6e8"/><text x="-20" y="6" text-anchor="middle" fill="#163e45">${fmt(obs)}</text><text x="20" y="6" text-anchor="middle" fill="#996027">${fmt(forecast)}</text>`:`<text y="6" text-anchor="middle" fill="#264657">${signed(d)}°</text>`}<text class="station-caption" y="27" text-anchor="middle">${esc(s.name)}</text></g></g>`;
     }).join('');
@@ -181,18 +181,18 @@
     $('station-meta').textContent = `${s.lat.toFixed(3)}° N · ${s.lon.toFixed(3)}° O · ${time(t)} uur`;
     $('obs-value').textContent = fmt(observation(s,t));
     $('model-cards').innerHTML = Object.entries(MODELS).map(([k,info]) => {
-      const v = modelValue(k,s,t), d = delta(v,observation(s,t));
+      const v = modelValue(k,s,t), d = delta(observation(s,t),v);
       return `<div class="model-card ${k===model?'active':''}"><span class="name">${info.name}</span><strong>${fmt(v)} °C</strong><span class="verdict ${deltaClass(d)}">${valid(d)?signed(d)+'° · ':''}${verdict(d)}</span></div>`;
     }).join('');
     drawTrend(s,t);
     const summary = stats(stations.map(s=>({obs:observation(s,t),model:modelValue(model,s,t)})));
-    $('summary-title').textContent = `${MODELS[model].name} vergeleken`;
+    $('summary-title').textContent = `Werkelijkheid tegenover ${MODELS[model].name}`;
     $('bias').textContent = signed(summary.mean) + '°';
     $('bias-label').textContent = valid(summary.mean) ? `gemiddeld ${verdict(summary.mean).replace(/^Gelijk/, 'gelijk')}` : 'Geen vergelijkbare waarden';
     $('count-cold').textContent = summary.cold; $('count-close').textContent = summary.close; $('count-warm').textContent = summary.warm;
     $('coverage').textContent = `${summary.count} van ${stations.length} stations vergelijkbaar om ${time(t)}. Ongewogen gemiddelde van deze stations.`;
     $('table-count').textContent = `· ${stations.length} stations · ${time(t)}`;
-    $('station-table').innerHTML = stations.map(s=>`<tr><td><button data-station="${esc(s.name)}">${esc(s.name)}</button></td><td>${fmt(observation(s,t))}°</td>${Object.keys(MODELS).map(k=>{const v=modelValue(k,s,t),d=delta(v,observation(s,t));return `<td>${fmt(v)}°</td><td class="${deltaClass(d)}">${signed(d)}°</td>`;}).join('')}</tr>`).join('');
+    $('station-table').innerHTML = stations.map(s=>`<tr><td><button data-station="${esc(s.name)}">${esc(s.name)}</button></td><td>${fmt(observation(s,t))}°</td>${Object.keys(MODELS).map(k=>{const v=modelValue(k,s,t),d=delta(observation(s,t),v);return `<td>${fmt(v)}°</td><td class="${deltaClass(d)}">${signed(d)}°</td>`;}).join('')}</tr>`).join('');
   }
   function selectStation(name) {
     if (!stations.some(s=>s.name===name)) return;

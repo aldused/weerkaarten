@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {utc,interpolate,observation,normalizeStations,stats}=require('../modelcheck.js');
+const {utc,interpolate,observation,normalizeStations,stats,delta}=require('../modelcheck.js');
 assert.equal(utc('2026-09-15T09:40'),Date.parse('2026-09-15T09:40Z'));
 assert.equal(utc('2026-09-15T11:40+02:00'),Date.parse('2026-09-15T09:40Z'));
 const t=utc('2026-09-15T09:00Z'),series=[{t,v:20},{t:t+900000,v:23}];
@@ -19,4 +19,13 @@ const normalized=normalizeStations({stations:{
 assert.equal(normalized.length,1);
 assert.equal(normalized[0].name,'Nul graden');
 assert.equal(normalized[0].history[0].v,0);
-console.log('PASS: UTC, interpolatie op meettijd, ontbrekende waarden, nul graden, stationsselectie en model-minus-meting.');
+console.log('PASS: UTC, interpolatie op meettijd, ontbrekende waarden, nul graden, stationsselectie en meting-minus-model.');
+
+// De werkelijke meting is het uitgangspunt, op elke weergave.
+assert.equal(delta(22,20.5),1.5);
+assert.equal(delta(20.5,22),-1.5);
+assert.equal(delta(0,1),-1);
+assert.equal(delta(null,20),null);
+assert.equal(delta(20,null),null);
+assert.deepEqual(stats([{obs:22,model:20.5},{obs:21,model:20}]),{count:2,mean:1.25,cold:0,close:0,warm:2});
+assert.deepEqual(stats([{obs:18,model:20},{obs:19,model:20}]),{count:2,mean:-1.5,cold:2,close:0,warm:0});
