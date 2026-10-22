@@ -166,7 +166,7 @@
   function render() {
     if (!frames.length) return;
     const t = chosenTime(), s = stations.find(s=>s.name===selected);
-    $('map-title').textContent = mode === 'pair' ? 'Meting & model' : 'Waar wijkt het model af?';
+    $('map-title').textContent = mode === 'pair' ? 'Meting & model' : 'Waar is het warmer of kouder dan verwacht?';
     $('map-time').textContent = time(t); $('map-date').textContent = date(t);
     $('key-model').textContent = MODELS[model].name;
     $('map-key').style.visibility = mode === 'pair' ? 'visible' : 'hidden';
