@@ -159,7 +159,8 @@
   function readRoute(){
     const incoming=location.hash.slice(1) || site.defaultRoute || '';
     if(/^weerbewaking(?:-|$)/.test(incoming)){location.replace('https://meteobewaking.nl/cms/weerbewaking/weerbewaking.html');return {page:'start',type:'',filters:{},q:''};}
-    const raw=site.routeAliases?.[incoming] ?? incoming;
+    let raw=site.routeAliases?.[incoming] ?? incoming;
+    if(raw.split('?')[0]==='beta' && new URLSearchParams(raw.split('?')[1]||'').get('tab')==='stormdagen')raw='stormen-windstoten';
     const isMenu=!raw || raw.startsWith('menu/') || ['start','home','nu','terugkijken','favorieten','professioneel','zoeken',...(site.navItems || [])].includes(raw.split('?')[0]);
     if(!isMenu){
       const recordViews={'records-warmedagen':'warmedagen','records-koudedagen':'koudedagen','dagrecords-jaar':'dagrecordsjaar',dagrecordsjaar:'dagrecordsjaar'};
@@ -247,7 +248,7 @@
   function historyCatalogue(){
     const groups=[
       ['dag-maand','Dag & maand','Hoe was het weer op een dag of in een maand?','history',['archief','klimaatarchief','maandbeeld','maandoverzicht']],
-      ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','dagrecords','extremen','feestdagen']],
+      ['records','Records & bijzondere dagen','Zoek uitzonderlijk weer en vergelijk metingen.','chart',['records','stormen-windstoten','dagrecords','extremen','feestdagen']],
       ['seizoenen','Seizoenen & droogte','Volg warmte, kou, daglicht en neerslagtekort.','sun',['zomerstatistieken','hittegolven','eerstelaatste','daglengte','droogte']],
       ['gemiddelden','Gemiddelden & neerslag','Wat is normaal, en hoe nat of droog was het?','water',['klimaattabellen','normalen','neerslag668','p13']],
     ];

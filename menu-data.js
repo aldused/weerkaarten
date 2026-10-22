@@ -1,5 +1,6 @@
 /* Weerlab productcatalogus. Kaartfilters en routes gecontroleerd tegen index.html; het modellenvierluik heeft één ingang. */
 const MENU_PRODUCTS = [
+  {id:'stormen-windstoten',name:'Stormen en windstoten',description:'Zoek historische stormen en vergelijk de zwaarste windstoten.',category:'terugkijken',type:'terug',section:'Records & extremen',icon:'wind',href:'index.html#stormen-windstoten',src:'beta_stormdagen.html?v=20261022-terugkijken',thumbnail:null,facets:{},keywords:'storm stormen stormenarchief stormarchief stormdagen wind windstoten zware storm orkaan Beaufort KNMI historisch historische meten zoeken vergelijken',restricted:false},
   {id:'mosmix-werkstation',name:'MOS/MIX · weer in ontwikkeling',description:'Alle onderdelen in één omgeving · zes kaarten, grote kaart en 9-daagse minikaarten',category:'verwachting',type:'kaarten',alsoTypes:['pluim'],section:'Nederland · MOS/MIX',icon:'map',href:'index.html#mosmix-werkstation',src:'mosmix-werkstation.html?v=20261021-5',thumbnail:null,facets:{model:['mosmix'],gebied:['nl','be','eu'],bron:['mosmix'],grootheid:['wind','neerslag','temperatuur'],vorm:['kaart']},keywords:'MOSMIX MOS/MIX wind windrichting Beaufort windstoten ontwikkeling dagdelen nacht zes kaarten grote kaart uren instellingen modellen',restricted:false},
   {id:"wolkenbasis-actueel",name:"Actuele wolkenbasis · Benelux",description:"Gemeten wolkenhoogten bij KNMI-stations en luchthavens",category:"nu",type:"nu",section:"Metingen",icon:"tabel",href:"index.html#wolkenbasis-actueel",src:"wolkenbasis_actueel.html?v=20261007-1",thumbnail:null,facets:{grootheid:["bewolking"]},keywords:"wolkenhoogte wolkenbasis actueel waarnemingen Benelux KNMI METAR mist ceiling",restricted:false},
   {id:'daglengte',name:"Daglicht & seizoenen",description:"Vergelijk daglengte, zonsopkomst en zonsondergang in De Bilt.",category:'terugkijken',type:'klimaat',section:'Zon & seizoenen',icon:'tabel',href:'index.html#daglengte',src:'daglengte.html?v=20261003-redactie6',thumbnail:null,facets:{},keywords:'daglengte daglicht zon zonsopkomst zonsondergang voorjaar najaar herfst lente seizoenen KNMI',restricted:false},
@@ -1456,7 +1457,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261020-page-links",
+    "src": "beta.html?v=20261022-stormen-verplaatst",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
