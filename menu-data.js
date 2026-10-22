@@ -1457,7 +1457,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261022-stormen-verplaatst",
+    "src": "beta.html?v=20261022-toolkeuze",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",
