@@ -15,3 +15,6 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 echo "$(date '+%F %T') windplaat-check"
 "$PY" "$ROOT/weerlab/scripts/windplaat_grid.py" --out "$ROOT/windplaat_cache" --publish
+
+# Afzonderlijke modelroosters voor wind en neerslag; geen modelmix.
+"$PY" "$ROOT/weerlab/scripts/modelplaten.py" --root "$ROOT" --out "$ROOT/modelplaten_cache" --publish

@@ -184,10 +184,16 @@ h1 em{font-style:normal;color:var(--calm)}
 .wind-info-dialog .uitleg-tekst{font:400 15px/1.7 var(--f-body);color:var(--muted)}
 .wind-info-dialog p{margin:0 0 16px}.wind-info-dialog p:last-child{margin-bottom:0}.wind-info-dialog strong{color:var(--fg)}
 
+
+.extremes{margin:16px 0 24px;padding:20px;border:1px solid #31556e;border-radius:12px;background:#10283b;color:#ecf4f8;font:16px/1.5 system-ui,sans-serif}.extremes[hidden]{display:none}.extremes h2{margin:0 0 8px;font-size:24px}.extremes h3{font-size:18px;margin:20px 0 8px}.extremes p{color:#a9c2d2;margin:8px 0}.extremes ol{padding-left:24px}.extremes li{padding:6px 0}.extremes button{color:#6fc3da;background:transparent;border:0;text-decoration:underline;font:inherit;padding:6px;cursor:pointer;min-height:44px}.extremes button:focus-visible{outline:3px solid #6fc3da}.extremes .ext-value{font-weight:700;white-space:nowrap}.extremes time{display:block;color:#a9c2d2;font-size:14px}
+
+.extremes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:0 24px}.extremes>h2,.extremes>p{grid-column:1/-1}.extremes section{min-width:0}.extremes li{overflow-wrap:anywhere}
+
+.extremes{grid-template-columns:repeat(3,minmax(0,1fr))}#zoek-extremen::before{content:none}@media(max-width:900px){.extremes{grid-template-columns:minmax(0,1fr)}}
 </style>
 <style>[hidden]{display:none!important}body{margin:0}</style>
-</head>
-<body>
+<style>.graph-switch{display:flex;gap:8px;flex-wrap:wrap;max-width:1280px;margin:0 auto;padding:16px 24px;font:600 16px system-ui,sans-serif}.graph-switch a{color:#a9c2d2;text-decoration:none;padding:10px 18px;border:1px solid #31556e;border-radius:8px;min-height:44px}.graph-switch a[aria-current=page]{color:#10283b;background:#6fc3da}.graph-switch a:focus-visible{outline:3px solid #f2c43d;outline-offset:3px}</style><style>.model-label{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#ecf4f8}.model-label select{font:inherit;background:#143049;color:#ecf4f8;border:1px solid #31556e;border-radius:8px;padding:10px;min-height:44px;max-width:100%}.model-label select:focus-visible{outline:3px solid #6fc3da}</style></head>
+<body><nav class="graph-switch" aria-label="Wind of neerslag"><a id="wind-link" href="windplaat.html" aria-current="page">Wind</a><a id="neerslag-link" href="neerslagplaat.html">Neerslag</a><label class="model-label" for="model-keuze">Model <select id="model-keuze"><option value="harmonie">HARMONIE 43 · tot +60 uur</option><option value="ecmwf">ECMWF · 5 dagen</option><option value="icond2">ICON-D2 · tot +48 uur</option></select></label></nav>
 
 
 <main class="plate" id="plate">
@@ -206,17 +212,19 @@ h1 em{font-style:normal;color:var(--calm)}
   <header class="head">
     <div>
       <div class="eyebrow"><span class="dot" aria-hidden="true"></span>Windverwachting · uur per uur · <span id="coord"></span></div>
-      <h1>Komende <span id="nuren">90</span> uur<br><span id="vz">in</span> <em id="plaatsnaam">…</em></h1>
+      <h1>Komende <span id="nuren">…</span> uur<br><span id="vz">in</span> <em id="plaatsnaam">…</em></h1>
       <p class="verdict" id="verdict"></p>
     </div>
     <div class="runbox">
       <span class="live"><span class="chip" id="live">Live</span></span>
       <span id="runline"></span>
       <span id="updline"></span>
+      <button type="button" class="socialbtn" id="zoek-extremen" aria-expanded="false" aria-controls="extremen">Zoek extremen</button>
       <button type="button" class="socialbtn" id="btn-vierkant">Vierkant voor social</button>
     </div>
   </header>
 
+  <section id="extremen" class="extremes" aria-label="Windextremen" aria-live="polite" hidden></section>
   <section class="stats" aria-label="Samenvatting">
     <div class="stat peak">
       <span class="lbl">Zwaarste windstoot</span>
@@ -251,8 +259,8 @@ h1 em{font-style:normal;color:var(--calm)}
         <span>▲ pijl wijst waar de wind heen waait</span>
       </div>
     </div>
-    <p class="hint">Veeg opzij voor alle 90 uur · tik op een uur voor details</p>
-    <div class="scroller" id="scroller"><svg id="chart" role="img" aria-label="Grafiek van gemiddelde wind en windstoten voor 90 uur"></svg></div>
+    <p class="hint">Veeg opzij voor alle beschikbare uren · tik op een uur voor details</p>
+    <div class="scroller" id="scroller"><svg id="chart" role="img" aria-label="Grafiek van gemiddelde wind en windstoten voor de gekozen modelperiode"></svg></div>
     <div class="scale" id="scale"></div>
     <div class="tip" id="tip" hidden></div>
   </section>
@@ -267,8 +275,8 @@ h1 em{font-style:normal;color:var(--calm)}
   </footer>
 </main>
 <dialog class="wind-info-dialog" id="wind-info-dialog" aria-labelledby="wind-info-title"><div class="modal-box"><div class="modal-head"><h2 id="wind-info-title">Hoe werkt deze windverwachting?</h2><button type="button" class="x" id="wind-info-close" aria-label="Uitleg sluiten">✕</button></div><div class="uitleg-tekst">
-        <p><strong>De wind voor uw locatie</strong><br>De grafiek toont de verwachte wind en windstoten voor de komende 90 uur. De waarden worden berekend voor de gekozen plaats, op basis van omliggende punten uit het modelrooster. Het gaat om wind op 10 meter hoogte.</p>
-        <p><strong>Twee weermodellen</strong><br>Voor de korte termijn gebruiken we het fijnmazige KNMI-model HARMONIE. Dat rekent tot ongeveer 60 uur vanaf het startmoment van de modelberekening vooruit. Voor de periode daarna gebruiken we het Europese ECMWF-model. De gebruikte modelruns staan bij de grafiek.</p>
+        <p><strong>De wind voor uw locatie</strong><br>De grafiek toont de verwachte wind en windstoten voor de beschikbare periode van het gekozen model. De waarden worden berekend voor de gekozen plaats, op basis van omliggende punten uit het modelrooster. Het gaat om wind op 10 meter hoogte.</p>
+        <p><strong>Drie afzonderlijke modellen</strong><br>Kies HARMONIE 43 (maximaal +60 uur vanaf de modelrun), ECMWF IFS (120 uur vanaf het begin van de grafiek) of ICON-D2 (maximaal +48 uur vanaf de modelrun). Iedere grafiek gebruikt uitsluitend het gekozen model. ECMWF-wind is uurlijks geïnterpoleerd; de windstoten zijn geïnterpoleerde drie-uursmaxima. Dat zijn geen afzonderlijk berekende uurmaxima.</p>
         <p><strong>Zo leest u de grafiek</strong><br>De gemiddelde wind wordt aangegeven met de gekleurde lijn of balken; de kleuren horen bij de windkracht in Beaufort. De lijn voor windstoten toont de verwachte uitschieters. De pijlen wijzen waar de wind heen waait. De windrichtingen in de tekst geven aan waar de wind vandaan komt. Donkere vlakken markeren de nacht.</p>
         <p><strong>Ieder uur bijgewerkt met de nieuwste beschikbare run</strong><br>De geopende windverwachting wordt ieder uur automatisch ververst. Op de achtergrond controleren we iedere tien minuten of er nieuwe HARMONIE- of ECMWF-modelgegevens beschikbaar zijn. Zodra een nieuwe run volledig is verwerkt, wordt deze gebruikt. Bij de grafiek staan het tijdstip van bijwerken en de gebruikte modelrun. Als een nieuwe berekening vertraagd binnenkomt, blijft de laatst beschikbare verwachting zichtbaar. Een nieuwe run is daardoor niet altijd precies op het hele uur beschikbaar.</p>
         <p><strong>Houd rekening met lokale verschillen</strong><br>Bebouwing, bomen en open water kunnen de wind ter plaatse beïnvloeden. Vooral verder vooruit kunnen de timing en kracht van windstoten nog veranderen.</p>
@@ -382,7 +390,7 @@ function render() {
   document.getElementById('verdict').innerHTML =
     `De zwaarste windstoten verwachten we <b>${fDayL.format(peakG.d)}${strongDayPart(peakG.d) !== 'nacht' ? strongDayPart(peakG.d) : 'nacht'}</b> rond ${hm(peakG.d)}: tot <b>${Math.round(peakG.wg)} km/u</b> uit het ${DIR_NOUN[dir8(peakG.wd)]}. ` +
     `Het rustigst is het ${fDayL.format(calm.seg[0].d)}${strongDayPart(calm.seg[2].d)}, met wind rond ${Math.round(-calm.v)} km/u.`;
-  document.getElementById('runline').textContent = `HARMONIE 43 · run ${new Date(S.h43_run).toISOString().slice(11,13)} UTC`;
+  document.getElementById('runline').textContent = `${modelLabel()} · run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC · ${R.length} uur`;
   document.getElementById('updline').textContent = `Bijgewerkt ${fDate.format(new Date(S.generated))} ${hm(new Date(S.generated))}`;
 
   // kernwaarden
@@ -392,7 +400,7 @@ function render() {
   document.getElementById('s-mean-sub').textContent = `${dayHm(peakM.d)} · ${BFT_NAME[peakM.b]}`;
   document.getElementById('s-dir').innerHTML = `${domK}<small>${DIR_LONG[domK]}</small>`;
   document.getElementById('s-dir-sub').textContent = `Draaiend van ${dir8(R[0].wd)} naar ${dir8(R[R.length-1].wd)}`;
-  document.getElementById('s-storm').innerHTML = `${stormy.length}<small>van 90 uur</small>`;
+  document.getElementById('s-storm').innerHTML = `${stormy.length}<small>van ${R.length} uur</small>`;
   document.getElementById('s-storm-sub').textContent = stormy.length ? `Stoten ≥ ${STORM} km/u · eerste ${dayHm(stormy[0].d)}` : `Geen stoten boven ${STORM} km/u`;
 
   drawChart(R, peakG, storm, calm);
@@ -443,8 +451,7 @@ function render() {
     BFT_COL.slice(1, used + 1).map((c, k) => `<span style="background:${c}" title="${BFT_LO[k+1]}+ km/u">${k+1}<span class="r" style="opacity:.7;font-weight:400"> · ${BFT_LO[k+1]}+</span></span>`).join('');
 
   const ifsN = R.filter(r => r.src !== 'H43').length;
-  document.getElementById('src').innerHTML = `<b>Bron:</b> KNMI HARMONIE-AROME cy43 (2 km), run ${new Date(S.h43_run).toISOString().slice(11,13)} UTC` +
-    (ifsN ? ` · uur ${R.length - ifsN + 1}–${R.length}: ECMWF IFS 0,25°, run ${new Date(S.ifs_run).toISOString().slice(11,13)} UTC (HARMONIE 43 rekent 60 uur vooruit)` : '');
+  document.getElementById('src').textContent = `Bron: ${modelLabel()}, run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC · ${R.length} uur · uitsluitend dit model`+(M.model==='ecmwf'?' · uurlijks geïnterpoleerd; windstoten uit drie-uursmaxima':'');
 }
 
 // ---------- hoofdgrafiek ----------
@@ -585,7 +592,7 @@ function showTip(i) {
     <span class="r"><span>Gemiddeld</span><b>${Math.round(r.ws)} km/u · Bft ${r.b}</b></span>
     <span class="r g"><span>Windstoten</span><b>${Math.round(r.wg)} km/u</b></span>
     <span class="r"><span>Richting</span><b>${dir16(r.wd)} · ${r.wd}°</b></span>
-    <span class="t" style="margin-top:4px">${r.src === 'H43' ? 'HARMONIE 43' : 'ECMWF IFS'}</span>`;
+    <span class="t" style="margin-top:4px">${modelLabel()}</span>`;
   tip.hidden = false;
   const panel = tip.parentElement.getBoundingClientRect(), sb = svg.getBoundingClientRect();
   const scale = sb.width / geom.W;
@@ -607,8 +614,10 @@ function focusHour(i, len) {
 }
 
 // ---------- rooster, plaatskeuze en verversen ----------
-const DATA_BASE = 'https://data.weerlab.nl/windplaat/';
-const SHOW = 90;
+const DATA_BASE = 'https://data.weerlab.nl/modelplaten/';
+let modelKey=new URLSearchParams(location.search).get('model')||'harmonie';if(!['harmonie','ecmwf','icond2'].includes(modelKey))modelKey='harmonie';
+const modelLabel=()=>M?.label||'HARMONIE 43';
+const SHOW = 120;
 const OP = new Set(['texel','vlieland','terschelling','ameland','schiermonnikoog','goeree-overflakkee','urk','marken','pampus']);
 // [naam, lat, lon] — veelgebruikte plaatsen; andere plaatsen via de zoekdienst of als coördinaten
 const PLAATSEN = [
@@ -675,7 +684,7 @@ function series(p) {
       ws += w * s; wg += w * gg; u += w * s * Math.sin(d); v += w * s * Math.cos(d);
     }
     rows.push({t: new Date(tt).toISOString(), ws: Math.round(ws*10)/10, wg: Math.round(Math.max(wg, ws)*10)/10,
-               wd: Math.round((Math.atan2(u, v) * 180 / Math.PI + 360) % 360), src: t < M.n_h43 ? 'H43' : 'IFS'});
+               wd: Math.round((Math.atan2(u, v) * 180 / Math.PI + 360) % 360), src: M.model==='harmonie'?'H43':M.model==='icond2'?'ICON':'IFS'});
     if (rows.length >= SHOW) break;
   }
   return rows;
@@ -685,8 +694,10 @@ function show(p, opts = {}) {
   if (!M) return;
   if (!inGrid(p.lat, p.lon)) { melding(`${p.name} ligt buiten het rekengebied (Nederland en de kust).`); return; }
   current = p;
+  document.getElementById("neerslag-link").href="neerslagplaat.html?"+new URLSearchParams({plaats:p.name,model:modelKey,lat:p.lat,lon:p.lon});
   const rows = series(p);
   if (rows.length < 12) { melding('Het rooster is verouderd; wacht op de volgende modelrun.'); return; }
+  $('chart').setAttribute('aria-label',`Wind en windstoten · ${modelLabel()} · ${rows.length} uur`);
   S0 = {location: p.name, lat: p.lat, lon: p.lon, h43_run: M.h43_run, ifs_run: M.ifs_run, generated: M.generated, rows};
   state = prep(S0);
   const op = OP.has(norm(p.name).split(' (')[0]) || OP.has(norm(p.name));
@@ -704,7 +715,7 @@ function show(p, opts = {}) {
   chips();
   if (!opts.quiet) try {
     const qs = new URLSearchParams(location.search);
-    if (!EMBEDDED) qs.set('plaats', p.name);
+    if (!EMBEDDED) qs.set('plaats', p.name); qs.set('model',modelKey);
     history.replaceState(null, '', (EMBEDDED ? '' : '?' + qs.toString()) + '#' + slug(p.name));
   } catch (e) {}
 }
@@ -756,7 +767,8 @@ const EMBEDDED = EMB && !EMB.startsWith('/*');
 
 async function laadRooster() {
   if (EMBEDDED) { const e = JSON.parse(EMB); return [e.meta, b64(e.data)]; }
-  const meta = await (await fetch(DATA_BASE + 'current.json?t=' + Date.now(), {cache: 'no-store'})).json();
+  const manifest=await (await fetch(DATA_BASE+'current.json?t='+Date.now(),{cache:'no-store'})).json();
+  const meta=manifest.models?.[modelKey]?.wind;if(!meta||meta.schema!==2)throw Error('Model ontbreekt');
   if (M && meta.tag === M.tag) return [M, CUBE];
   const buf = new Uint8Array(await (await fetch(DATA_BASE + meta.file)).arrayBuffer());
   if (buf.length !== 3 * meta.hours * meta.grid.ny * meta.grid.nx) throw new Error('rooster onvolledig');
@@ -767,6 +779,8 @@ function startPlaats() {
   const qs = new URLSearchParams(location.search).get('plaats');
   const h = decodeURIComponent((location.hash || '').slice(1));
   const want = qs || h;
+  const params=new URLSearchParams(location.search),la=Number(params.get('lat')),lo=Number(params.get('lon'));
+  if(params.has('lat')&&params.has('lon')&&Number.isFinite(la)&&Number.isFinite(lo)&&inGrid(la,lo))return {name:want||'Gekozen locatie',lat:la,lon:lo};
   if (want) {
     const n = norm(want.replace(/-/g, ' '));
     const hit = PLAATSEN.find(p => norm(p[0]) === n);
@@ -780,6 +794,7 @@ async function refresh(first) {
   try {
     const [meta, cube] = await laadRooster();
     const changed = !M || meta.tag !== M.tag;
+    $('extremen').hidden=true;$('zoek-extremen').setAttribute('aria-expanded','false');
     M = meta; CUBE = cube;
     $('live').textContent = EMBEDDED ? 'Demo · run ' + new Date(M.h43_run).toISOString().slice(11, 13) + ' UTC' : 'Live · ververst elk uur';
     if (first) { const q = new URLSearchParams(location.search).get('plaats'); const p = startPlaats(); show(p, {quiet: true}); if (q && norm(q) !== norm(p.name)) zoek(q); }
@@ -807,7 +822,7 @@ async function maakVierkant() {
   // kop
   g.fillStyle = '#49CFC0'; g.beginPath(); g.arc(P + 5, 76, 5, 0, 7); g.fill();
   g.font = `500 19px ${MONO}`; g.fillStyle = '#6FC3DA'; g.textBaseline = 'alphabetic';
-  g.fillText(`WINDVERWACHTING · KOMENDE ${R.length} UUR`, P + 20, 83);
+  g.fillText(`${modelLabel().toUpperCase()} · WIND · ${R.length} UUR`, P + 20, 83);
   g.textAlign = 'right'; g.fillStyle = '#8EABBE';
   g.fillText(`${fDate.format(new Date(S.generated)).toUpperCase()} · ${hm(new Date(S.generated))}`, Wc - P, 83);
   g.textAlign = 'left';
@@ -920,10 +935,40 @@ async function maakVierkant() {
   leg((x, y) => { g.setLineDash([5, 4]); g.strokeStyle = '#FF3D6E'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 20, y); g.stroke(); g.setLineDash([]); }, `${WARN} km/u`);
   g.textAlign = 'right'; g.font = `600 17px ${BODY}`; g.fillStyle = '#ECF4F8'; g.fillText('Ed Aldus WM · weerlab.nl', Wc - P, ly2 + 5);
   g.font = `500 13px ${MONO}`; g.fillStyle = '#5C7C92';
-  g.fillText(`Bron: KNMI HARMONIE 43, run ${new Date(S.h43_run).toISOString().slice(11, 13)} UTC${sw > 0 ? ' · na +60 u ECMWF IFS' : ''}`, Wc - P, ly2 - 22);
+  g.fillText(`Bron: ${modelLabel()}, run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC${M.model==='ecmwf'?' · uurlijks geïnterpoleerd':''}`, Wc - P, ly2 - 22);
   g.textAlign = 'left';
   return c;
 }
+
+
+function extremeGroup(panel,title,entries,value,when,open){
+ const section=document.createElement('section'),heading=document.createElement('h3'),list=document.createElement('ol');heading.textContent=title;section.append(heading,list);
+ for(const entry of entries){const li=document.createElement('li'),button=document.createElement('button'),strong=document.createElement('span'),time=document.createElement('time');button.type='button';button.textContent=entry.name;button.onclick=()=>open(entry);strong.className='ext-value';strong.textContent=' · '+value(entry);time.textContent=when(entry);li.append(button,strong,time);list.append(li)}
+ panel.append(section);
+}
+
+$('zoek-extremen').onclick=()=>{
+ const panel=$('extremen');panel.hidden=false;$('zoek-extremen').setAttribute('aria-expanded','true');panel.replaceChildren();
+ if(!M||!CUBE){panel.textContent='De windgegevens zijn nog niet beschikbaar. Probeer het opnieuw zodra de grafiek is geladen.';return}
+ const places=PLAATSEN.map(([name,lat,lon])=>({name,lat,lon}));if(current&&!places.some(p=>p.lat===current.lat&&p.lon===current.lon))places.push(current);
+ const compared=places.filter(p=>inGrid(p.lat,p.lon)).map(p=>{const rows=series(p);return {...p,rows}}).filter(p=>p.rows.length>0&&p.rows.every(r=>Number.isFinite(r.ws)&&Number.isFinite(r.wg))).map(p=>({...p,maxWind:p.rows.reduce((a,b)=>b.ws>a.ws?b:a),maxGust:p.rows.reduce((a,b)=>b.wg>a.wg?b:a),minWind:p.rows.reduce((a,b)=>b.ws<a.ws?b:a)}));
+ if(!compared.length){panel.textContent='Geen volledige windreeksen beschikbaar.';return}
+ const h=document.createElement('h2'),note=document.createElement('p');h.textContent='Windextremen';const first=compared[0].rows[0].t,last=compared[0].rows.at(-1).t;note.textContent=`${modelLabel()} · ${compared.length} plaatsen vergeleken over dezelfde ${compared[0].rows.length} uur: ${fDate.format(new Date(first))} ${hm(new Date(first))} – ${fDate.format(new Date(last))} ${hm(new Date(last))}. Top 5 per categorie; dit zijn extremen binnen de plaatsenlijst, inclusief de gekozen plaats. Bij gelijke waarden bepaalt de plaatsnaam de volgorde.`;panel.append(h,note);
+ const rank=(field,metric,asc=false)=>[...compared].sort((a,b)=>(asc?a[field][metric]-b[field][metric]:b[field][metric]-a[field][metric])||a.name.localeCompare(b.name,'nl')).slice(0,5);
+ const stamp=(p,field)=>{const r=p[field],d=new Date(r.t);return fDate.format(d)+' '+dayHm(d)+' ('+new Intl.DateTimeFormat('nl-NL',{timeZone:TZ,timeZoneName:'shortOffset'}).formatToParts(d).find(p=>p.type==='timeZoneName').value+') · uit '+dir16(r.wd)+' · '+modelLabel()};
+ const open=p=>{show(p);$('chart').scrollIntoView({behavior:'smooth',block:'center'})};
+ extremeGroup(panel,'Sterkste gemiddelde wind',rank('maxWind','ws'),p=>Math.round(p.maxWind.ws)+' km/u · '+bft(p.maxWind.ws)+' Bft',p=>stamp(p,'maxWind'),open);
+ extremeGroup(panel,'Zwaarste windstoten',rank('maxGust','wg'),p=>Math.round(p.maxGust.wg)+' km/u',p=>stamp(p,'maxGust'),open);
+ extremeGroup(panel,'Zwakste gemiddelde wind (uurminimum)',rank('minWind','ws',true),p=>Math.round(p.minWind.ws)+' km/u · '+bft(p.minWind.ws)+' Bft',p=>stamp(p,'minWind'),open);
+};
+
+
+$('model-keuze').value=modelKey;
+$('model-keuze').onchange=async()=>{
+ const old=modelKey;modelKey=$('model-keuze').value;$('model-keuze').disabled=true;
+ await refresh(false);if(M?.model!==modelKey){modelKey=old;$('model-keuze').value=old}else{const url=new URL(location.href);url.searchParams.set('model',modelKey);history.replaceState(null,'',url)}
+ $('model-keuze').disabled=false;
+};
 
 async function openVierkant() {
   const dlg = $('vierkant'), img = $('vierkant-img');
@@ -934,7 +979,7 @@ async function openVierkant() {
   img.alt = `Windplaat ${state.location}, vierkant`;
   $('vierkant-status').textContent = '1080 × 1080 px · klaar voor Instagram, Facebook en LinkedIn';
   $('vierkant-dl').onclick = async () => {
-    const name = `windplaat_${slug(state.location)}_${new Date(state.generated).toISOString().slice(0, 13).replace(/[-T]/g, '')}.png`;
+    const name = `wind_${slug(state.location)}.png`;
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     if (EMBEDDED) {
       try {

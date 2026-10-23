@@ -145,7 +145,10 @@
       const child=frame.contentDocument?.querySelector('.tab-panel.actief iframe');if(!child)return;
       const wanted=new URL(view,location.href),configured=new URL(child.src,frame.src);
       const clean=u=>u.pathname.replace(/\/index(?:\.html)?$/,'/').replace(/\.html$/,'').replace(/\/$/,'');
-      if(wanted.origin!==location.origin||clean(wanted)!==clean(configured))return;
+      const graphPair=new Set(['/windplaat','/neerslagplaat']);
+      const sameGraphs=graphPair.has(clean(wanted))&&graphPair.has(clean(configured));
+      if(wanted.origin!==location.origin||(!sameGraphs&&clean(wanted)!==clean(configured)))return;
+      if(sameGraphs)configured.pathname=wanted.pathname;
       for(const [key,value]of wanted.searchParams)if(key!=='v')configured.searchParams.set(key,value);configured.hash=wanted.hash;
       restoringPageView=true;
       child.addEventListener('load',()=>{restoringPageView=false;wirePageActions(child);refreshPageActions();},{once:true});
