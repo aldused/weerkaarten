@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const COLORS = ['#fff2bd','#f9da80','#f3b45f','#ec884b','#e66146','#d53f51','#bb315f','#962d6f','#73296f','#4f235e'];
 COLORS.forEach(c => {const el=document.createElement('i');el.style.background=c;$('colors').append(el);});
-const map = L.map('map', {preferCanvas:true, minZoom:3,maxZoom:9}).setView([52,-5],4);
+const map = L.map('map', {preferCanvas:true, zoomSnap:0.25, minZoom:3,maxZoom:9}).setView([52,-5],4);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   crossOrigin:true, attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19
 }).addTo(map);
@@ -113,7 +113,7 @@ async function load(){
       $('member').replaceChildren(new Option('Alle 51 leden','all'),...data.tracks.map(t=>new Option(t.member===0?'Control (oper/fc)':'ENS-lid '+t.member,String(t.member))));
       $('time').max=data.frames.length-1;
       const positions=data.tracks.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));
-      if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.22),{maxZoom:6,animate:false});
+      if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.08),{maxZoom:6,animate:false});
       for(const id of ['member','time','play','prev','next'])$(id).disabled=false;
       const title=data.storm_name?'Storm '+data.storm_name:'Lagedrukgebied · ECMWF ENS';$('storm-name').textContent=title;$('map-name').textContent=title;
       $('run').textContent=`Run ${utc(data.run)} · 50 ENS-leden + control · bijgewerkt ${utc(data.generated)}`;
