@@ -51,3 +51,10 @@ voor een gecontroleerde specifieke run; de automatische viewer kiest het diepste
   vóór vervanging en behoudt bij netwerk/schemafouten de vorige geldige set.
 
 Bron: https://www.ecmwf.int/en/forecasts/datasets/open-data (CC BY 4.0).
+
+## PNG-export
+
+De knop Download PNG exporteert de huidige kaartuitsnede, geselecteerde leden en lagen,
+modelrun, geldige tijd, windstootvenster, legenda en bronvermelding. De animatie wordt gepauzeerd.
+De browser voegt de zichtbare CORS-kaarttegels en lokale canvaslagen samen; er wordt niets naar
+een externe exportdienst gestuurd. Ontbrekende kaarttegels geven een melding in plaats van een onvolledige PNG.

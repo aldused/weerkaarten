@@ -161,7 +161,7 @@ async function load(){
       frame=Math.max(0,data.frames.findIndex(f=>f.valid===oldTime));if(!oldTime)frame=Math.min(8,data.frames.length-1);
       $('member').replaceChildren(new Option('Alle 51 leden','all'),...activeTracks().map(t=>new Option(t.member===0?'Control (oper/fc)':'ENS-lid '+t.member,String(t.member))));
       $('time').max=data.frames.length-1;
-      for(const id of ['member','time','play','prev','next'])$(id).disabled=false;
+      for(const id of ['member','time','play','prev','next','download'])$(id).disabled=false;
       selectSystem(true);
       $('run').textContent=`Run ${utc(data.run)} · 50 ENS-leden + control · bijgewerkt ${utc(data.generated)}`;
       $('issues').textContent=data.issues.length?data.issues.join('\n'):'Geen ontbrekende bronvelden gemeld.';
@@ -179,3 +179,54 @@ for(const id of ['member','tracks','gust'])$(id).onchange=render;
 $('system').onchange=()=>{stop();systemChoice=$('system').value;selectionNote='';selectSystem(true);render();};
 $('refresh').onclick=load;document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else load();});
 load();setInterval(load,300000);
+
+
+// Compose the visible Leaflet layers locally; no weather data or image is sent to a service.
+async function downloadPNG(){
+  if(!data)return;
+  stop();const button=$('download');button.disabled=true;button.textContent='PNG maken…';
+  const filename=`weerlab-ens-${data.run.replace(/[^0-9]/g,'').slice(0,10)}-plus${data.frames[frame].hour}u.png`;
+  try{
+    const container=map.getContainer(), rect=container.getBoundingClientRect();
+    const width=Math.round(rect.width), height=Math.round(rect.height), header=112, footer=260;
+    const canvas=document.createElement('canvas');const scale=Math.min(2,2800/width);
+    canvas.width=Math.round(width*scale);canvas.height=Math.round((header+height+footer)*scale);
+    const ctx=canvas.getContext('2d');ctx.scale(scale,scale);
+    ctx.fillStyle='#edf2f6';ctx.fillRect(0,0,width,header+height+footer);
+    const text=(value,x,y,size=12,color='#14304e',bold=false)=>{ctx.fillStyle=color;ctx.font=`${bold?'700':'400'} ${size}px Arial,sans-serif`;ctx.fillText(value,x,y,width-x-16);};
+    const wrap=(value,y,size=11)=>{ctx.font=`${size}px Arial,sans-serif`;let line='';for(const word of value.split(/\s+/)){if(ctx.measureText(line+word).width>width-40&&line){text(line.trim(),20,y,size);line='';y+=size+5;}line+=word+' ';}text(line.trim(),20,y,size);return y+size+7;};
+    text('WEERLAB · BÈTA · ECMWF ENS',20,23,11,'#60768a',true);
+    text($('storm-name').textContent,20,52,Math.min(27,width/22),'#14304e',true);
+    text(`Run ${utc(data.run)} · geldig ${utc(data.frames[frame].valid)}`,20,77,11);
+    text(`${$('member').selectedOptions[0].textContent} · ${$('tracks').checked?'stormbanen aan':'stormbanen uit'} · ${$('gust').checked?'windstootkans aan':'windstootkans uit'}`,20,98,11,'#60768a');
+    ctx.save();ctx.beginPath();ctx.rect(0,header,width,height);ctx.clip();ctx.fillStyle='#bbd8e8';ctx.fillRect(0,header,width,height);
+    const paint=element=>{const r=element.getBoundingClientRect();ctx.drawImage(element,r.left-rect.left,header+r.top-rect.top,r.width,r.height);};
+    const tiles=[...container.querySelectorAll('.leaflet-tile-pane img.leaflet-tile')];
+    if(!tiles.length||tiles.some(t=>!t.complete||!t.naturalWidth))throw Error('De kaartachtergrond is nog niet volledig geladen. Probeer het over enkele seconden opnieuw.');
+    tiles.forEach(paint);
+    ctx.imageSmoothingEnabled=false;container.querySelectorAll('.gust-layer').forEach(paint);ctx.imageSmoothingEnabled=true;
+    container.querySelectorAll('.leaflet-overlay-pane canvas').forEach(paint);
+    // HTML time labels are outside the canvas renderer and need their own export pass.
+    for(const label of container.querySelectorAll('.core-label')){
+      const r=label.getBoundingClientRect(),x=r.left-rect.left,y=header+r.top-rect.top;
+      ctx.fillStyle='white';ctx.fillRect(x,y,r.width,r.height);ctx.strokeStyle='#acbfd0';ctx.strokeRect(x,y,r.width,r.height);
+      text(label.textContent,x+4,y+r.height-4,10,'#14304e',true);
+    }
+    ctx.restore();let y=header+height+24;
+    const key=(label,color,dashed)=>{ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash(dashed?[7,5]:[]);ctx.moveTo(key.x,y-4);ctx.lineTo(key.x+24,y-4);ctx.stroke();ctx.setLineDash([]);text(label,key.x+31,y,11);key.x+=Math.min(170,(width-40)/3);};
+    key.x=20;if($('tracks').checked){if($('member').value==='all'){key('Leden','#526d9f',false);key('Gemiddelde','#124ed6',true);key('Control','#ed991c',false);}else key($('member').value==='0'?'Control':'ENS-lid '+$('member').value,$('member').value==='0'?'#ed991c':'#526d9f',false);}y+=25;
+    text('Kans op windstoten >90 km/u',20,y,13,'#14304e',true);y+=15;
+    if($('gust').checked&&data.frames[frame].gust){
+      const cell=(width-40)/10;COLORS.forEach((color,i)=>{ctx.fillStyle=color;ctx.fillRect(20+i*cell,y,cell,13);text(String((i+1)*10)+(i===9?'%':''),20+i*cell,y+27,10);});y+=44;
+      y=wrap($('window').textContent,y);
+      y=wrap($('coverage').textContent,y);
+    }else y=wrap($('gust').checked?'Windstootkans niet beschikbaar; ontbrekende data betekenen geen 0%.':'Windstootkans uitgeschakeld in deze export.',y);
+    y=wrap('Banen: lagedrukkernen. Kansveld: alle beschikbare leden, onafhankelijk van gekozen laag. Alleen het genoemde windstootvenster.',y,10);
+    text('Bron: ECMWF Open Data (CC BY 4.0) · © OpenStreetMap-bijdragers · Berekeningen: Weerlab',20,header+height+footer-12,Math.min(10,(width-40)/85),'#60768a');
+    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('PNG kon niet worden gemaakt.')),'image/png'));
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    button.textContent='✓ PNG gedownload';
+  }catch(error){button.textContent='Download PNG';$('notice').textContent=error.name==='SecurityError'?'PNG-export geblokkeerd door de kaartachtergrond. Herlaad de kaart en probeer opnieuw.':error.message;$('notice').classList.add('warn');}
+  finally{button.disabled=false;setTimeout(()=>{button.textContent='Download PNG';},4000);}
+}
+$('download').onclick=downloadPNG;
