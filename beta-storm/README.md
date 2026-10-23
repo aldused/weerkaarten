@@ -1,5 +1,12 @@
 # ECMWF ENS stormkaart — uitsluitend bèta
 
+Standaard kiest de viewer automatisch het diepste nog verwachte gesloten control-laag binnen
+40–65°N, 40°W–20°E. Ook later gevormde of binnengekomen depressies worden gedetecteerd.
+De automatische keuze wordt na iedere modelrun en iedere vijfminutencontrole opnieuw bepaald.
+Een handmatig gekozen laag wordt bij een nieuwe run alleen gekoppeld als een control-kernpositie
+op een overlappend geldig tijdstip binnen 600 km ligt; anders keert de viewer met melding terug naar automatisch.
+Het windstootkansveld blijft onafhankelijk van de gekozen depressie en bevat alle weersystemen.
+
 De ingang staat in `beta.html#storm`; productie-index en bestaande modeldata veranderen niet.
 `build.py` gebruikt dezelfde ECMWF Open Data-index + HTTP Range-aanpak als de bestaande native GRIB-pipeline.
 De kaart gebruikt de al aanwezige lokale Leaflet-bestanden.
@@ -22,8 +29,7 @@ wordt gepubliceerd. Tijdelijke cache: `/tmp/weerlab-storm-cache`, niet in Git. D
 
 Optionele handmatige selectie: `--seed 48.75 -14 --name 'Geverifieerde naam'`. Zonder naam wordt uitsluitend
 'Lagedrukgebied' getoond. De naam wordt niet uit een datum of kern afgeleid. Een vaste seed/naam geldt alleen
-voor een gecontroleerde specifieke run; de automatische taak kiest per run het diepste gesloten laag in het
-zoekgebied. Dit is geen automatische officiële stormidentificatie.
+voor een gecontroleerde specifieke run; de automatische viewer kiest het diepste nog verwachte gesloten laag in het zoekgebied. Dit is geen automatische officiële stormidentificatie.
 
 ## Betekenis en beperkingen
 

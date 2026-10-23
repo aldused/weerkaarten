@@ -9,8 +9,35 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 map.createPane('gusts');map.getPane('gusts').style.zIndex=350;
 const lines=L.layerGroup().addTo(map), markers=L.layerGroup().addTo(map);
-let data=null, file=null, frame=0, timer=null, overlay=null, loading=false, loadError='';
+let data=null, file=null, frame=0, timer=null, overlay=null, loading=false, loadError='', systemChoice='auto', pickedId=null, selectionNote='';
 const utc = s => new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'}).format(new Date(s))+' UTC';
+function systems(){return data?.systems?.length ? data.systems : data ? [{id:'legacy',seed:data.seed,start_hour:0,tracks:data.tracks}] : [];}
+function activeSystem(){return systems().find(s=>s.id===pickedId)||systems()[0]||null;}
+function activeTracks(){return activeSystem()?.tracks||data.tracks;}
+function autoSystem(){
+  const now=Date.now();
+  const score=s=>{
+    const control=s.tracks.find(t=>t.member===0);
+    let points=control.points.filter((p,i)=>p&&Date.parse(data.frames[i].valid)>=now&&p[0]>=40&&p[0]<=65&&p[1]>=-40&&p[1]<=20);
+    return points.length?Math.min(...points.map(p=>p[2])):Infinity;
+  };
+  return [...systems()].sort((a,b)=>score(a)-score(b))[0]||null;
+}
+function selectSystem(fit=true){
+  const before=pickedId;
+  const selected=systemChoice==='auto'?autoSystem():systems().find(s=>s.id===systemChoice);
+  pickedId=selected?.id||systems()[0]?.id;
+  const s=activeSystem();if(!s)return;
+  if(before!==pickedId && Number.isFinite(s.deepest_hour))frame=Math.max(0,data.frames.findIndex(f=>f.hour===s.deepest_hour));
+  if(frame<s.start_hour/3)frame=Math.max(0,data.frames.findIndex(f=>f.hour>=s.start_hour));
+  if(fit||before!==pickedId){const positions=s.tracks.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.08),{maxZoom:6,animate:false});}
+  const title=s.storm_name?'Storm '+s.storm_name:'Lagedrukgebied'+(s.minimum_hpa?' · minimum '+Math.round(s.minimum_hpa)+' hPa':' · ECMWF ENS');
+  $('storm-name').textContent=title;$('map-name').textContent=title;
+}
+function updateSystemMenu(){
+  $('system').replaceChildren(new Option('Automatisch · diepste komende laag','auto'),...systems().map((s,i)=>new Option(`Laag ${i+1} · min. ${Math.round(s.minimum_hpa||s.seed?.[2]||0)} hPa · ${utc(data.frames.find(f=>f.hour===s.deepest_hour)?.valid||data.run)}`,s.id)));
+  $('system').value=systemChoice;$('system').disabled=false;
+}
 function mean(points){
   if(!points.length)return null;
   let x=0,y=0,z=0;
@@ -26,13 +53,15 @@ function status(){
   const f=data.frames[frame], g=f.gust;
   const notes=[];
   if(loadError)notes.push(loadError);
+  if(selectionNote)notes.push(selectionNote);
+  if(systemChoice==='auto'&&activeSystem())notes.push('Automatisch: diepste nog verwachte gesloten laag binnen 40–65°N, 40°W–20°E. Het windstootkansveld blijft het volledige ENS-product.');
   if(age>24)notes.push('Verouderde modelrun: meer dan 24 uur oud.');
-  if(!data.seed)notes.push('Geen gesloten lagedrukkern gevonden in het zoekgebied. Er wordt geen stormbaan getekend.');
+  if(!activeSystem()?.seed)notes.push('Geen gesloten lagedrukkern gevonden in het zoekgebied. Er wordt geen stormbaan getekend.');
   if(g && g.end_hour-g.start_hour<3)notes.push(`Windstootkans geldt voor ${g.end_hour-g.start_hour} uur vóór de gekozen tijd; tussenliggende uren zijn niet beschikbaar in deze drie-uurlijkse dataset.`);
   if(!g)notes.push('Geen windstootkans voor deze tijd: '+(f.hour===0?'op +0u is geen maximumtijdvenster beschikbaar.':'windstootvelden ontbreken of hebben verschillende tijdvensters.'));
   else if(g.members.length<51)notes.push(`Onvolledig ensemble: ${g.members.length}/51 leden voor windstoten. De kans gebruikt uitsluitend deze beschikbare leden.`);
-  const count=data.tracks.filter(t=>t.points[frame]).length;
-  if(data.seed && count<51)notes.push(`${count}/51 gekoppelde lagedrukkernen op deze tijd. Ontbrekende banen worden niet aangevuld.`);
+  const count=activeTracks().filter(t=>t.points[frame]).length;
+  if(activeSystem()?.seed && count<51)notes.push(`${count}/51 gekoppelde lagedrukkernen op deze tijd. Ontbrekende banen worden niet aangevuld.`);
   $('notice').classList.toggle('warn',notes.length>0);
   $('notice').textContent=notes.join('\n') || '51/51 leden beschikbaar · drukbanen en windstootkans zijn afzonderlijk berekend · alle tijden UTC';
 }
@@ -42,9 +71,9 @@ function render(){
   $('valid').textContent=utc(f.valid);$('map-time').textContent=utc(f.valid)+` · +${f.hour}u`;$('time').value=frame;
   lines.clearLayers();markers.clearLayers();if(overlay){map.removeLayer(overlay);overlay=null;}
   const selected=$('member').value;
-  const means=data.frames.map((_,i)=>mean(data.tracks.map(t=>t.points[i]).filter(Boolean)));
+  const means=data.frames.map((_,i)=>mean(activeTracks().map(t=>t.points[i]).filter(Boolean)));
   if($('tracks').checked){
-    for(const t of [...data.tracks].sort((a,b)=>b.member-a.member)){
+    for(const t of [...activeTracks()].sort((a,b)=>b.member-a.member)){
       if(selected!=='all'&&+selected!==t.member)continue;
       const control=t.member===0, style={color:control?'#ed991c':'#526d9f',weight:control?3:1.2,opacity:control?1:.36};
       for(const segment of segments(t.points))L.polyline(segment,style).bindTooltip(control?'Control (IFS oper/fc)':`ENS-lid ${t.member}`).addTo(lines);
@@ -52,7 +81,7 @@ function render(){
     }
     if(selected==='all'){
       for(const seg of segments(means))L.polyline(seg,{color:'#124ed6',weight:3.5,dashArray:'8 6',opacity:1}).addTo(lines);
-      const m=means[frame];if(m)L.circleMarker(m,{color:'#124ed6',radius:7,fillColor:'white',fillOpacity:1,weight:3}).bindTooltip(`Gemiddelde kernpositie · ${data.tracks.filter(t=>t.points[frame]).length} leden`).addTo(markers);
+      const m=means[frame];if(m)L.circleMarker(m,{color:'#124ed6',radius:7,fillColor:'white',fillOpacity:1,weight:3}).bindTooltip(`Gemiddelde kernpositie · ${activeTracks().filter(t=>t.points[frame]).length} leden`).addTo(markers);
       means.forEach((p,i)=>{if(!p||data.frames[i].hour%24)return;L.marker(p,{interactive:false,icon:L.divIcon({className:'',html:`<span class="core-label">${utc(data.frames[i].valid)}</span>`,iconAnchor:[-8,8]})}).addTo(markers);});
     }
   }
@@ -77,7 +106,7 @@ function render(){
     overlay=L.imageOverlay(warped.toDataURL(),[[south,lon[0]-data.grid.resolution/2],[north,lon.at(-1)+data.grid.resolution/2]],{pane:'gusts',className:'gust-layer',interactive:false}).addTo(map);
   }
   $('window').textContent=g?`Maximum van +${g.start_hour}u tot +${g.end_hour}u · ${utc(new Date(new Date(data.run).getTime()+g.start_hour*36e5))} – ${utc(f.valid)}`:'Geen geldig windstootvenster';
-  $('coverage').textContent=g?`${g.members.length}/51 leden · rooster ${String(data.grid.resolution).replace('.',',')}° · strikt >90 km/u · ongekleurd bij <10% · kernposities op geselecteerde tijd: ${data.tracks.filter(t=>t.points[frame]).length}/51`:'Kansveld niet beschikbaar. Ontbrekende data betekenen geen 0% kans.';
+  $('coverage').textContent=g?`${g.members.length}/51 leden · rooster ${String(data.grid.resolution).replace('.',',')}° · strikt >90 km/u · ongekleurd bij <10% · kernposities op geselecteerde tijd: ${activeTracks().filter(t=>t.points[frame]).length}/51`:'Kansveld niet beschikbaar. Ontbrekende data betekenen geen 0% kans.';
   status();
 }
 map.on('click',e=>{
@@ -92,6 +121,14 @@ function validate(d){
   const members=d.tracks.map(t=>t.member);if(new Set(members).size!==51||members.some(m=>!Number.isInteger(m)||m<0||m>50))throw Error('Ongeldige leden');
   if(!d.grid?.lat?.length||!d.grid?.lon?.length)throw Error('Rooster ontbreekt');
   for(const t of d.tracks)if(t.points.length!==d.frames.length||t.points.some(p=>p!==null&&(!Array.isArray(p)||p.length!==3||p.some(v=>!Number.isFinite(v)))))throw Error('Ongeldige baan');
+  if(d.systems){
+    if(!Array.isArray(d.systems)||new Set(d.systems.map(s=>s.id)).size!==d.systems.length)throw Error('Ongeldige lagedruksystemen');
+    for(const s of d.systems){
+      if(typeof s.id!=='string'||!Number.isInteger(s.start_hour)||s.start_hour<0||s.tracks?.length!==51)throw Error('Ongeldig lagedrukgebied');
+      if(new Set(s.tracks.map(t=>t.member)).size!==51||s.tracks.some(t=>!members.includes(t.member)))throw Error('Ongeldige systeemleden');
+      for(const t of s.tracks)if(t.points.length!==d.frames.length||t.points.some(p=>p!==null&&(!Array.isArray(p)||p.length!==3||p.some(v=>!Number.isFinite(v)))))throw Error('Ongeldige systeembaan');
+    }
+  }
   for(const f of d.frames){
     if(!Number.isFinite(Date.parse(f.valid))||!Number.isFinite(f.hour))throw Error('Ongeldige tijd');
     const g=f.gust;if(!g)continue;
@@ -108,18 +145,28 @@ async function load(){
     if(!/^ens-\d{10}-[a-f0-9]{12}\.json$/.test(manifest.file))throw Error('Ongeldige publicatie');
     if(manifest.file!==file){
       const next=await getJSON('data/'+manifest.file);validate(next);if(next.run!==manifest.run)throw Error('Modelruns verschillen');
-      const oldTime=data?.frames[frame]?.valid;stop();data=next;file=manifest.file;
+      const oldTime=data?.frames[frame]?.valid, oldData=data, oldSystem=data?activeSystem():null;
+      stop();data=next;file=manifest.file;selectionNote='';
+      if(systemChoice!=='auto'&&oldSystem){
+        let best=null,bestDistance=600;
+        for(const s of systems())for(let i=0;i<s.tracks[0].points.length;i++){
+          const point=s.tracks.find(t=>t.member===0).points[i];if(!point)continue;
+          const oldIndex=oldData.frames.findIndex(f=>f.valid===data.frames[i].valid), oldPoint=oldSystem.tracks.find(t=>t.member===0).points[oldIndex];
+          if(!oldPoint)continue;const km=map.distance(point.slice(0,2),oldPoint.slice(0,2))/1000;
+          if(km<bestDistance){best=s;bestDistance=km;}
+        }
+        systemChoice=best?.id||'auto';if(!best)selectionNote='Het eerder gekozen laag kon niet aan de nieuwe run worden gekoppeld. Automatische selectie is hervat.';
+      }
+      updateSystemMenu();
       frame=Math.max(0,data.frames.findIndex(f=>f.valid===oldTime));if(!oldTime)frame=Math.min(8,data.frames.length-1);
-      $('member').replaceChildren(new Option('Alle 51 leden','all'),...data.tracks.map(t=>new Option(t.member===0?'Control (oper/fc)':'ENS-lid '+t.member,String(t.member))));
+      $('member').replaceChildren(new Option('Alle 51 leden','all'),...activeTracks().map(t=>new Option(t.member===0?'Control (oper/fc)':'ENS-lid '+t.member,String(t.member))));
       $('time').max=data.frames.length-1;
-      const positions=data.tracks.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));
-      if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.08),{maxZoom:6,animate:false});
       for(const id of ['member','time','play','prev','next'])$(id).disabled=false;
-      const title=data.storm_name?'Storm '+data.storm_name:'Lagedrukgebied · ECMWF ENS';$('storm-name').textContent=title;$('map-name').textContent=title;
+      selectSystem(true);
       $('run').textContent=`Run ${utc(data.run)} · 50 ENS-leden + control · bijgewerkt ${utc(data.generated)}`;
       $('issues').textContent=data.issues.length?data.issues.join('\n'):'Geen ontbrekende bronvelden gemeld.';
     }
-    loadError='';render();
+    loadError='';if(systemChoice==='auto')selectSystem(false);render();
   }catch(e){
     loadError=`Nieuwe ECMWF-publicatie niet beschikbaar (${e.message}). `+(data?'Laatste geldige set blijft zichtbaar.':'Er worden geen banen of kansen verzonnen.');
     if(data)status();else{$('notice').textContent=loadError;$('notice').classList.add('warn');}
@@ -129,5 +176,6 @@ $('time').oninput=()=>{stop();frame=+$('time').value;render();};
 $('prev').onclick=()=>{stop();frame=Math.max(0,frame-1);render();};$('next').onclick=()=>{stop();frame=Math.min(data.frames.length-1,frame+1);render();};
 $('play').onclick=()=>{if(timer){stop();return;}$('play').textContent='Ⅱ';$('play').setAttribute('aria-label','Animatie pauzeren');timer=setInterval(()=>{frame=(frame+1)%data.frames.length;render();},1100);};
 for(const id of ['member','tracks','gust'])$(id).onchange=render;
+$('system').onchange=()=>{stop();systemChoice=$('system').value;selectionNote='';selectSystem(true);render();};
 $('refresh').onclick=load;document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else load();});
 load();setInterval(load,300000);

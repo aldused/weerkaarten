@@ -192,6 +192,37 @@ def probabilities(arrays):
     return p, count
 
 
+def track_systems(core_map, steps):
+    """Discover closed control lows throughout the horizon, then link each member.
+    New systems may enter the domain or form after the run starts.
+    A lost track never resumes by silently switching to another low.
+    """
+    systems = []
+    for i, step in enumerate(steps):
+        for system in systems:
+            for member in MEMBERS:
+                prev = system['tracks'][member][-1]
+                pos = choose_core(core_map.get((step, member), []), prev, 3) if prev else None
+                system['tracks'][member].append(pos)
+        claimed = [system['tracks'][0][-1] for system in systems if system['tracks'][0][-1]]
+        for seed in sorted(core_map.get((step, 0), []), key=lambda c: c[2]):
+            if not (-40 <= seed[1] <= 20 and 40 <= seed[0] <= 65):
+                continue
+            if any(distance(seed, point) < 700 for point in claimed):
+                continue
+            tracks = {m: [None] * i + [choose_core(core_map.get((step, m), []), seed, 0, seed=True)] for m in MEMBERS}
+            systems.append({'id': f'low-{step}-{round(seed[0]*4)}-{round(seed[1]*4)}',
+                            'start_hour': step, 'seed': seed, 'tracks': tracks})
+            claimed.append(seed)
+    for system in systems:
+        control = [(i, p) for i,p in enumerate(system['tracks'][0]) if p]
+        deepest_i, deepest = min(control, key=lambda item: item[1][2])
+        system['minimum_hpa'] = deepest[2]
+        system['deepest_hour'] = steps[deepest_i]
+        system['tracks'] = [{'member':m, 'points':system['tracks'][m]} for m in MEMBERS]
+    return systems
+
+
 def atomic_json(path, value):
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(value, separators=(',', ':'), allow_nan=False))
@@ -205,7 +236,7 @@ def build(args):
     if current.exists() and not args.force:
         manifest = json.loads(current.read_text())
         previous = json.loads((current.parent / manifest['file']).read_text())
-        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25:
+        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25 and 'systems' in previous:
             print('Deze volledige ECMWF-run is al gepubliceerd')
             return
     cache = Path(args.cache) / run.strftime('%Y%m%d%H')
@@ -220,15 +251,24 @@ def build(args):
     if not results[0][1] or (0, 'msl') not in results[0][0]:
         raise RuntimeError('Control-druk op +0u ontbreekt; vorige geldige publicatie blijft behouden')
     lat, lon = results[0][1]
-    control_candidates = cores(results[0][0][(0, 'msl')][0], lat, lon)
+    core_map = {}
+    for step, (fields, coords, problems) in results.items():
+        for (member, param), (a, start) in fields.items():
+            if param == 'msl':
+                core_map[(step, member)] = cores(a, lat, lon)
+    systems = track_systems(core_map, steps)
+    # Compatibility top-level product: a verified requested seed, otherwise deepest start low.
+    initial = [system for system in systems if system['start_hour'] == 0]
     if args.seed:
-        seed = choose_core(control_candidates, args.seed, 0, seed=True)
+        initial = [system for system in initial if distance(system['seed'], args.seed) <= 600]
+        initial.sort(key=lambda system: distance(system['seed'], args.seed))
     else:
-        # Select one system in the Atlantic/Western Europe; never label it an official storm.
-        seed = choose_core([c for c in control_candidates if -40 <= c[1] <= 10 and 40 <= c[0] <= 65], None, 0)
-    tracks = {m: [] for m in MEMBERS}
-    last = {m: None for m in MEMBERS}
-    broken = set()
+        initial.sort(key=lambda system: system['seed'][2])
+    default = initial[0] if initial else (systems[0] if systems else None)
+    if default and args.name:
+        default['storm_name'] = args.name
+    seed = default['seed'] if default else None
+    tracks = default['tracks'] if default else [{'member':m, 'points':[None]*len(steps)} for m in MEMBERS]
     frames, issues = [], []
     for step in steps:
         fields, coords, problems = results[step]
@@ -236,16 +276,6 @@ def build(args):
         valid_time = (run + timedelta(hours=step)).isoformat().replace('+00:00', 'Z')
         if coords and not (np.array_equal(coords[0], lat) and np.array_equal(coords[1], lon)):
             raise ValueError('Tijdstappen gebruiken verschillende roosters')
-        for member in MEMBERS:
-            pos = None
-            if seed and member not in broken and (member, 'msl') in fields:
-                candidates = cores(fields[(member, 'msl')][0], lat, lon)
-                pos = choose_core(candidates, seed if step == 0 else last[member], 3, seed=step == 0)
-            if pos is None:
-                broken.add(member)
-            else:
-                last[member] = pos
-            tracks[member].append(pos)
         gusts = [(m, a, start) for (m, p), (a, start) in fields.items() if p == 'gust']
         windows = sorted(set(start for m, a, start in gusts))
         probability = None
@@ -264,7 +294,7 @@ def build(args):
             'source': 'https://www.ecmwf.int/en/forecasts/datasets/open-data',
             'expected_members': 51, 'control': 'oper/fc', 'threshold_kmh': 90,
             'grid': {'lat': lat.tolist(), 'lon': lon.tolist(), 'resolution': 0.25},
-            'tracks': [{'member': m, 'points': tracks[m]} for m in MEMBERS],
+            'tracks': tracks, 'systems': systems,
             'frames': frames, 'issues': issues,
             'method': {'pressure_grid': 0.25, 'smoothing_degrees': 0.5, 'closure_hpa': 2,
                        'max_speed_kmh': 120, 'mean': 'spherical position mean of matched cores; no mean-pressure minimum',

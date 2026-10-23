@@ -37,6 +37,26 @@ class StormTests(unittest.TestCase):
     def test_no_core_no_position(self):
         self.assertIsNone(storm.choose_core([],None,3))
 
+    def test_discovers_later_low_without_filling_earlier_positions(self):
+        core_map={}
+        for m in range(51):
+            core_map[(0,m)]=[[50,-10,980]]
+            core_map[(3,m)]=[[50,-8,982],[59,-30,960]]
+            core_map[(6,m)]=[[50,-6,984],[59,-28,950]]
+        systems=storm.track_systems(core_map,[0,3,6])
+        self.assertEqual(len(systems),2)
+        later=systems[1]
+        self.assertEqual(later['start_hour'],3)
+        self.assertEqual(later['minimum_hpa'],950)
+        self.assertIsNone(later['tracks'][0]['points'][0])
+        self.assertEqual(len(later['tracks']),51)
+
+    def test_lost_core_does_not_resume(self):
+        core_map={(0,0):[[50,-10,980]],(6,0):[[50,-8,975]]}
+        systems=storm.track_systems(core_map,[0,3,6])
+        self.assertEqual(systems[0]['tracks'][0]['points'],[[50,-10,980],None,None])
+        self.assertEqual(systems[1]['start_hour'],6)
+
     def test_run_paths_separate_control(self):
         from datetime import datetime
         r=datetime(2026,10,22,12)
