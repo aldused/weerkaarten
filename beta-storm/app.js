@@ -66,23 +66,23 @@ function render(){
     ctx.putImageData(img,0,0);
     // ImageOverlay is linear in Mercator y; pre-warp source rows into Mercator.
     const merc=a=>Math.log(Math.tan(Math.PI/4+a*Math.PI/360));
-    const south=lat[0]-.25,north=lat.at(-1)+.25, lo=merc(south),hi=merc(north);
+    const south=lat[0]-data.grid.resolution/2,north=lat.at(-1)+data.grid.resolution/2, lo=merc(south),hi=merc(north);
     const warped=document.createElement('canvas');warped.width=c.width;warped.height=c.height*3;
     const w=warped.getContext('2d');w.imageSmoothingEnabled=false;
     for(let y=0;y<warped.height;y++){
       const a=(2*Math.atan(Math.exp(hi-(y+.5)/warped.height*(hi-lo)))-Math.PI/2)*180/Math.PI;
-      const src=Math.max(0,Math.min(c.height-1,Math.floor((north-a)/.5)));
+      const src=Math.max(0,Math.min(c.height-1,Math.floor((north-a)/data.grid.resolution)));
       w.drawImage(c,0,src,c.width,1,0,y,c.width,1);
     }
-    overlay=L.imageOverlay(warped.toDataURL(),[[south,lon[0]-.25],[north,lon.at(-1)+.25]],{pane:'gusts',className:'gust-layer',interactive:false}).addTo(map);
+    overlay=L.imageOverlay(warped.toDataURL(),[[south,lon[0]-data.grid.resolution/2],[north,lon.at(-1)+data.grid.resolution/2]],{pane:'gusts',className:'gust-layer',interactive:false}).addTo(map);
   }
   $('window').textContent=g?`Maximum van +${g.start_hour}u tot +${g.end_hour}u · ${utc(new Date(new Date(data.run).getTime()+g.start_hour*36e5))} – ${utc(f.valid)}`:'Geen geldig windstootvenster';
-  $('coverage').textContent=g?`${g.members.length}/51 leden · rooster 0,5° · strikt >90 km/u · ongekleurd bij <10% · kernposities op geselecteerde tijd: ${data.tracks.filter(t=>t.points[frame]).length}/51`:'Kansveld niet beschikbaar. Ontbrekende data betekenen geen 0% kans.';
+  $('coverage').textContent=g?`${g.members.length}/51 leden · rooster ${String(data.grid.resolution).replace('.',',')}° · strikt >90 km/u · ongekleurd bij <10% · kernposities op geselecteerde tijd: ${data.tracks.filter(t=>t.points[frame]).length}/51`:'Kansveld niet beschikbaar. Ontbrekende data betekenen geen 0% kans.';
   status();
 }
 map.on('click',e=>{
   if(!data)return;const g=data.frames[frame].gust;if(!g||!$('gust').checked)return;
-  const {lat,lon}=data.grid,y=Math.round((e.latlng.lat-lat[0])/.5),x=Math.round((e.latlng.lng-lon[0])/.5);
+  const {lat,lon}=data.grid,y=Math.round((e.latlng.lat-lat[0])/data.grid.resolution),x=Math.round((e.latlng.lng-lon[0])/data.grid.resolution);
   if(y<0||x<0||y>=lat.length||x>=lon.length)return;
   const p=g.values[y][x],n=g.counts[y][x];
   L.popup().setLatLng(e.latlng).setContent(n?`<b>${p.toFixed(1)}% kans op &gt;90 km/u</b><br>${Math.round(p*n/100)} van ${n} beschikbare leden<br>+${g.start_hour}–${g.end_hour}u · ${utc(data.frames[frame].valid)}<br>Roosterpunt ${lat[y].toFixed(2)}°N, ${lon[x].toFixed(2)}°E`:'Geen windstootdata voor dit punt').openOn(map);
@@ -112,6 +112,8 @@ async function load(){
       frame=Math.max(0,data.frames.findIndex(f=>f.valid===oldTime));if(!oldTime)frame=Math.min(8,data.frames.length-1);
       $('member').replaceChildren(new Option('Alle 51 leden','all'),...data.tracks.map(t=>new Option(t.member===0?'Control (oper/fc)':'ENS-lid '+t.member,String(t.member))));
       $('time').max=data.frames.length-1;
+      const positions=data.tracks.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));
+      if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.22),{maxZoom:6,animate:false});
       for(const id of ['member','time','play','prev','next'])$(id).disabled=false;
       const title=data.storm_name?'Storm '+data.storm_name:'Lagedrukgebied · ECMWF ENS';$('storm-name').textContent=title;$('map-name').textContent=title;
       $('run').textContent=`Run ${utc(data.run)} · 50 ENS-leden + control · bijgewerkt ${utc(data.generated)}`;

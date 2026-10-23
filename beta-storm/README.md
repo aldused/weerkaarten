@@ -36,7 +36,7 @@ zoekgebied. Dit is geen automatische officiële stormidentificatie.
 - Windstoten: `10fg` (alternatieve namen `10fg3/10fg6`), GRIB-eenheden en maximumvenster gecontroleerd.
   Per punt strikt `>25 m/s`; beschikbare gelijke vensters vormen de noemer (maximaal 51).
   Onvolledige ensembles worden expliciet gemeld; gemengde vensters worden niet gecombineerd.
-- Sampling naar 0,5° gebruikt iedere tweede native roosterwaarde, zonder interpolatie of afvlakking van kansen.
+- Het kansveld gebruikt alle oorspronkelijke 0,25°-roosterpunten, zonder uitdunning of afvlakking van kansen.
   Kaartpixels zijn op Mercator geprojecteerd. Klik toont exacte kans en teller/noemer.
 - Kansen gelden uitsluitend voor de vermelde GRIB-vensters, niet voor de hele storm.
   De gecontroleerde run 2026102212 bevat één-uursmaxima op drie-uurlijkse stappen; tussenliggende uren zijn niet gedekt. Niet gekleurd betekent <10%;

@@ -205,7 +205,7 @@ def build(args):
     if current.exists() and not args.force:
         manifest = json.loads(current.read_text())
         previous = json.loads((current.parent / manifest['file']).read_text())
-        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps):
+        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25:
             print('Deze volledige ECMWF-run is al gepubliceerd')
             return
     cache = Path(args.cache) / run.strftime('%Y%m%d%H')
@@ -250,7 +250,7 @@ def build(args):
         windows = sorted(set(start for m, a, start in gusts))
         probability = None
         if len(windows) == 1:
-            p, n = probabilities([a[::2, ::2] for m, a, start in gusts])
+            p, n = probabilities([a for m, a, start in gusts])
             probability = {'start_hour': windows[0], 'end_hour': step, 'members': [m for m,a,s in gusts],
                            'values': np.round(p, 2).tolist(), 'counts': n.tolist()}
         elif step:
@@ -263,7 +263,7 @@ def build(args):
             'storm_name': args.name or None, 'seed': seed,
             'source': 'https://www.ecmwf.int/en/forecasts/datasets/open-data',
             'expected_members': 51, 'control': 'oper/fc', 'threshold_kmh': 90,
-            'grid': {'lat': lat[::2].tolist(), 'lon': lon[::2].tolist(), 'resolution': 0.5},
+            'grid': {'lat': lat.tolist(), 'lon': lon.tolist(), 'resolution': 0.25},
             'tracks': [{'member': m, 'points': tracks[m]} for m in MEMBERS],
             'frames': frames, 'issues': issues,
             'method': {'pressure_grid': 0.25, 'smoothing_degrees': 0.5, 'closure_hpa': 2,
