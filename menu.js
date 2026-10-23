@@ -148,7 +148,7 @@
       const graphPair=new Set(['/windplaat','/neerslagplaat']);
       const sameGraphs=graphPair.has(clean(wanted))&&graphPair.has(clean(configured));
       if(wanted.origin!==location.origin||(!sameGraphs&&clean(wanted)!==clean(configured)))return;
-      if(sameGraphs)configured.pathname=wanted.pathname;
+      if(sameGraphs)configured.pathname=clean(wanted)+'.html';
       for(const [key,value]of wanted.searchParams)if(key!=='v')configured.searchParams.set(key,value);configured.hash=wanted.hash;
       restoringPageView=true;
       child.addEventListener('load',()=>{restoringPageView=false;wirePageActions(child);refreshPageActions();},{once:true});
