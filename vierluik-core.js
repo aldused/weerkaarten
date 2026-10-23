@@ -21,6 +21,26 @@
     if(Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second)!==wall)return NaN;
     return utc;
   }
+  // Offset-free feeds repeat 02:00 at the autumn clock change. Resolve each
+  // occurrence in source order, keeping one timestamp per binary frame.
+  function normalizeTimes(times) {
+    let previous=-Infinity;
+    return times.map(value=>{
+      let ms=timeMs(value);
+      if(typeof value==='string' && !/(?:Z|[+-]\d\d:?\d\d)$/i.test(value) && Number.isFinite(ms)) {
+        const wall=value.length===16?value+':00':value;
+        const candidates=[ms-HOUR,ms,ms+HOUR].filter(candidate=>{
+          const p=parts(candidate),pad=n=>String(n).padStart(2,'0');
+          return p.year+'-'+pad(p.month)+'-'+pad(p.day)+'T'+pad(p.hour)+':'+pad(p.minute)+':'+pad(p.second)===wall;
+        }).filter(candidate=>candidate>previous);
+        if(candidates.length)ms=Math.min(...candidates);
+      }
+      if(!Number.isFinite(ms))throw Error('Ongeldig tijdstip');
+      if(ms<=previous)throw Error('Niet-oplopende of dubbele tijden in de bron');
+      previous=ms;
+      return new Date(ms).toISOString();
+    });
+  }
   function dayKey(value) {const p=parts(timeMs(value));return p.year+'-'+String(p.month).padStart(2,'0')+'-'+String(p.day).padStart(2,'0');}
   function displayDate(value) {
     const p=parts(timeMs(value));
@@ -131,5 +151,5 @@
     const index=Math.floor((degrees+22.5)/45)%8;
     return {degrees,index,label:['N','NO','O','ZO','Z','ZW','W','NW'][index]};
   }
-  return {modelRunLabel,windDirection,HOUR,timeMs,dayKey,displayDate,decode,sample,cumulative,bilinear,gustMagnitude,scalarValue};
+  return {normalizeTimes,modelRunLabel,windDirection,HOUR,timeMs,dayKey,displayDate,decode,sample,cumulative,bilinear,gustMagnitude,scalarValue};
 });
