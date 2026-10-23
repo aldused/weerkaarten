@@ -1457,7 +1457,7 @@ const MENU_PRODUCTS = [
     "section": "Experimenten",
     "icon": "studio",
     "href": "index.html#beta",
-    "src": "beta.html?v=20261023-wind-neerslag",
+    "src": "beta.html?v=20261023-weergrafieken",
     "thumbnail": null,
     "facets": {},
     "keywords": "Beta tools Experimenten ",

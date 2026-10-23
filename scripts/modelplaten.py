@@ -50,19 +50,44 @@ def rain_ifs(root,lat,lon,start,hours):
   out.append(rain);blocks.append(block)
  return run,np.stack(out),blocks
 
+
+def temperature_ifs(root,lat,lon,start,hours):
+ """2-metre instantaneous Kelvin fields -> Celsius; linear time interpolation only within run."""
+ steps={};run=None
+ with (root/'grib_cache/wx_t2m_t.grib2').open('rb') as f:
+  while (h:=ec.codes_grib_new_from_file(f)) is not None:
+   try:
+    if ec.codes_get(h,'shortName')!='2t':continue
+    assert ec.codes_get(h,'typeOfLevel')=='heightAboveGround' and ec.codes_get(h,'level')==2 and ec.codes_get(h,'units')=='K' and ec.codes_get(h,'stepType')=='instant'
+    r=dt.datetime.strptime(f"{ec.codes_get(h,'dataDate')}{ec.codes_get(h,'dataTime'):04d}",'%Y%m%d%H%M').replace(tzinfo=U)
+    if run and run!=r:raise ValueError('Mixed IFS temperature runs')
+    run=r;ni,nj=ec.codes_get(h,'Ni'),ec.codes_get(h,'Nj');la0=ec.codes_get(h,'latitudeOfFirstGridPointInDegrees');lo0=ec.codes_get(h,'longitudeOfFirstGridPointInDegrees');dx=ec.codes_get(h,'iDirectionIncrementInDegrees');dy=ec.codes_get(h,'jDirectionIncrementInDegrees');assert ec.codes_get(h,'jScansPositively')==0
+    la=la0-np.arange(nj)*dy;lo=(lo0+np.arange(ni)*dx+180)%360-180;ky=np.where((la>=min(lat)-1)&(la<=max(lat)+1))[0];kx=np.where((lo>=min(lon)-1)&(lo<=max(lon)+1))[0]
+    field=ec.codes_get_values(h).reshape(nj,ni)[np.ix_(ky,kx)]-273.15
+    steps[int(ec.codes_get(h,'endStep'))]=regrid(field,(la[ky],lo[kx]),lat,lon)
+   finally:ec.codes_release(h)
+ if not run or dt.datetime.now(U)-run>dt.timedelta(hours=24):raise ValueError('Old/missing IFS temperature')
+ keys=sorted(steps);out=[];intervals=[]
+ for t in range(hours):
+  lead=(start+dt.timedelta(hours=t)-run).total_seconds()/3600
+  if lead<keys[0] or lead>keys[-1]:raise ValueError('IFS temperature does not cover five days')
+  i=int(np.clip(np.searchsorted(keys,lead)-1,0,len(keys)-2));w=(lead-keys[i])/(keys[i+1]-keys[i]);out.append(steps[keys[i]]*(1-w)+steps[keys[i+1]]*w);intervals.append(keys[i+1]-keys[i])
+ return run,np.stack(out),intervals
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('--root',type=Path,default=Path('/Users/aldus/KNMI_Project'));p.add_argument('--out',type=Path,required=True);p.add_argument('--publish',action='store_true');a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
- paths=[a.root/'weerlab'/f for f in ['harmonie_canvas_meta.json','icond2_canvas_meta.json']]+[a.root/'grib_cache'/f for f in ['wx_wind.grib2','wx_gust.grib2','wx_precip24.grib2']]
- key=[int(dt.datetime.now(U).timestamp()//3600)]+[p.stat().st_mtime_ns for p in paths];marker=a.out/'published.json'
+ paths=[a.root/'weerlab'/f for f in ['harmonie_canvas_meta.json','icond2_canvas_meta.json']]+[a.root/'grib_cache'/f for f in ['wx_wind.grib2','wx_gust.grib2','wx_precip24.grib2','wx_t2m_t.grib2']]
+ key=[3,int(dt.datetime.now(U).timestamp()//3600)]+[p.stat().st_mtime_ns for p in paths];marker=a.out/'published.json'
  if a.publish and marker.exists() and json.loads(marker.read_text())==key:print('Modelplaten actueel');return
  grid=json.loads((a.root/'windplaat_cache/current.json').read_text())['grid'];lat=grid['lat0']+np.arange(grid['ny'])*grid['dlat'];lon=grid['lon0']+np.arange(grid['nx'])*grid['dlon'];now=dt.datetime.now(U);start=now.replace(minute=0,second=0,microsecond=0)+dt.timedelta(hours=1);manifest={'schema':2,'generated':now.isoformat(),'models':{}};files=[]
  def save(model,kind,run,t0,cube,blocks=None):
-  cube=np.asarray(cube,dtype='<f4' if kind=='rain' else 'u1')
-  if not np.isfinite(cube).all() or (cube<0).any():raise ValueError('Invalid model values')
-  digest=hashlib.sha256(cube.tobytes()).hexdigest()[:12];name=f'{model}_{kind}_{run:%Y%m%d%H}_{digest}.bin';(a.out/name).write_bytes(cube.tobytes());files.append(name);hours=cube.shape[0] if kind=='rain' else cube.shape[1]
-  m=dict(schema=2,model=model,label=LABELS[model],run_utc=run.isoformat(),generated=now.isoformat(),file=name,grid=grid,hours=hours,start=t0.isoformat(),t0=t0.isoformat(),tag=name,dtype='float32-le' if kind=='rain' else 'uint8',h43_run=run.isoformat(),ifs_run=run.isoformat(),n_h43=hours if model=='harmonie' else 0)
+  cube=np.asarray(cube,dtype='<f4' if kind!='wind' else 'u1')
+  if not np.isfinite(cube).all() or (kind!='temp' and (cube<0).any()) or (kind=='temp' and ((cube< -100).any() or (cube>65).any())):raise ValueError('Invalid model values')
+  digest=hashlib.sha256(cube.tobytes()).hexdigest()[:12];name=f'{model}_{kind}_{run:%Y%m%d%H}_{digest}.bin';(a.out/name).write_bytes(cube.tobytes());files.append(name);hours=cube.shape[0] if kind!='wind' else cube.shape[1]
+  m=dict(schema=2,model=model,label=LABELS[model],run_utc=run.isoformat(),generated=now.isoformat(),file=name,grid=grid,hours=hours,start=t0.isoformat(),t0=t0.isoformat(),tag=name,dtype='float32-le' if kind!='wind' else 'uint8',h43_run=run.isoformat(),ifs_run=run.isoformat(),n_h43=hours if model=='harmonie' else 0)
   if kind=='rain':m.update(sources=[{'harmonie':'H43','ecmwf':'IFS','icond2':'ICON'}[model]]*hours,source_intervals=blocks or [1]*hours,interval_label='hour-start')
-  else:m.update(fields=['ws','wg','wd2'])
+  elif kind=='wind':m.update(fields=['ws','wg','wd2'])
+  else:m.update(fields=['temperature'],units='degC',height_m=2,interval_label='instant',source_intervals=blocks or [1]*hours,interpolated=model=='ecmwf')
   manifest['models'].setdefault(model,{})[kind]=m
  for model,filename in [('harmonie','harmonie_canvas_meta.json'),('icond2','icond2_canvas_meta.json')]:
   path=a.root/'weerlab'/filename;raw=path.read_bytes();m=json.loads(raw);run=iso(m['run_utc']);times=native_times(m)
@@ -70,6 +95,7 @@ def main():
   keyw='wind_hr' if model=='harmonie' else 'wind';keyg='windstoten_hr' if model=='harmonie' else 'windstoten'
   w=native_field(a.root,m,keyw,lat,lon);gust=native_field(a.root,m,keyg,lat,lon);u,v=w[:,0],w[:,1];ws=np.hypot(u,v)*3.6;wg=np.maximum(np.hypot(gust[:,0],gust[:,1])*3.6,ws);wd=np.degrees(np.arctan2(-u,-v))%360
   save(model,'wind',run,times[0],np.stack([np.clip(np.rint(ws),0,255),np.clip(np.rint(wg),0,255),np.rint(wd/2)%180]))
+  temp=native_field(a.root,m,'temp_hr' if model=='harmonie' else 'temp',lat,lon)[:,0];save(model,'temp',run,times[0],temp)
   rain=native_field(a.root,m,'neerslag',lat,lon)[:,0];idx=[i for i,t in enumerate(times) if t-dt.timedelta(hours=1)>=start]
   if not idx:raise ValueError('No future rain')
   save(model,'rain',run,times[idx[0]]-dt.timedelta(hours=1),rain[idx])
@@ -85,7 +111,8 @@ def main():
   x=(start+dt.timedelta(hours=t)-run).total_seconds()/3600;u=interp(steps,stacks['10u'],x);v=interp(steps,stacks['10v'],x);gust=interp(mid,stacks['gust'],x);speed=np.hypot(u,v)*3.6;rows.append((speed,np.maximum(gust*3.6,speed),np.degrees(np.arctan2(-u,-v))%360))
  cube=np.stack(rows);save('ecmwf','wind',run,start,np.stack([np.clip(np.rint(cube[:,0]),0,255),np.clip(np.rint(cube[:,1]),0,255),np.rint(cube[:,2]/2)%180]))
  run,rain,blocks=rain_ifs(a.root,lat,lon,start,120);save('ecmwf','rain',run,start,rain,blocks)
- if key[1:]!=[p.stat().st_mtime_ns for p in paths]:raise ValueError('Source changed during build')
+ run,temp,intervals=temperature_ifs(a.root,lat,lon,start,120);save('ecmwf','temp',run,start,temp,intervals)
+ if key[2:]!=[p.stat().st_mtime_ns for p in paths]:raise ValueError('Source changed during build')
  tmp=a.out/'current.tmp';tmp.write_text(json.dumps(manifest,separators=(',',':')))
  if a.publish:
   for name in files:subprocess.run(['/opt/homebrew/bin/rclone','copyto',str(a.out/name),'r2:weerlab-data/modelplaten/'+name,'--header-upload','Cache-Control: public, max-age=31536000, immutable'],check=True)
