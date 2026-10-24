@@ -254,7 +254,8 @@ map.on('error', e => {
     frameErrors.add(e.sourceId);frameErrorReasons.set(e.sourceId,e.error?.message||'Kaartbron niet bereikbaar');
     pendingSources.get(e.sourceId)?.();
   }
-  else if(current?.ids.includes(e.sourceId))status('Kaartdeel kon niet worden opgehaald. Probeer opnieuw.',true);
+  // A tile request cancelled by fast navigation (pan, zoom, new hour) is not a failure.
+  else if(current?.ids.includes(e.sourceId)&&e.error?.name!=='AbortError'&&!/aborted/i.test(e.error?.message??''))status('Kaartdeel kon niet worden opgehaald. Probeer opnieuw.',true);
 });
 if(params.get('profile')==='1')installGestureProfile(map,$('app'));
 const movingOverlay=new MovingOverlay(map,$('places'),queueCityDraw);
