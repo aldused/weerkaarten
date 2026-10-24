@@ -13,3 +13,5 @@ De pagina ververst iedere 15 minuten zolang zij zichtbaar is. Herladen en een pl
 Checks: `node tests/weergrafieken-extra.test.cjs`, `node tests/weather24-platen.test.mjs`, syntaxchecks, desktop en mobiele browsercontrole. Voor een lokale preview kan uitsluitend in de previewkopie BASE naar een lokale kopie van de gepubliceerde modelroosters verwijzen; de productiebron blijft `https://data.weerlab.nl/modelplaten/`.
 
 Gladheid is op verzoek uitgesteld: daarvoor zijn geschikte wegdekgegevens en validatie met metingen nodig. Deze grafieken presenteren geen gladheidsadvies.
+
+Neerslagkans is een vierde extra weergave. Het veld `prrr` uit de uurfeed wordt rechtstreeks getoond op 0–100%, met uurvak-start en expliciete tijdzone. Geen afleiding uit hoeveelheden en geen optelling tot etmaalkans. Ontbrekend blijft null. Export: `neerslagkans_plaats_mos_ecmwf.png`.

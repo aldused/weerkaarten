@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const source=fs.readFileSync(new URL('../weather24-worker/worker.js',import.meta.url),'utf8');
 const {forecast,cities}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-const row=(dtg,extra='')=>`<hour dtg="${dtg}" interval="3600" tt="-0.2" ff="10" ffg="20" dd="270" rrr="0.75" sun="12" n="6" ${extra}/>`;
+const row=(dtg,extra='')=>`<hour dtg="${dtg}" interval="3600" tt="-0.2" ff="10" ffg="20" dd="270" rrr="0.75" sun="12" n="6" prrr="85" ${extra}/>`;
 const xml=rows=>`<forecast><hours>${rows}</hours></forecast>`;
 const now=Date.parse('2026-10-25T00:00:00Z');
 const d=forecast(xml(row('2026-10-25T01:00:00Z')+row('2026-10-25T02:00:00Z')),now);
@@ -15,3 +15,7 @@ assert.deepEqual(cities('<city country-name="Netherlands" name="Leiden" id="1812
 console.log('Weather24: knopen, ontbrekende waarden, uurvakken, wintertijd en plaatsselectie geslaagd.');
 
 assert.equal(d.rows[0].sun,12);assert.equal(d.rows[0].cloud,6);assert.equal(missing.rows[0].sun,null);assert.equal(missing.rows[0].cloud,null);
+
+assert.equal(d.rows[0].pop,85);assert.equal(missing.rows[0].pop,null);
+for(const v of [0,100])assert.equal(forecast(xml(row('2026-10-25T01:00:00Z').replace('prrr="85"',`prrr="${v}"`)),now).rows[0].pop,v);
+assert.equal(forecast(xml(row('2026-10-25T01:00:00Z').replace('prrr="85"','prrr="101"')),now).rows[0].pop,null);
