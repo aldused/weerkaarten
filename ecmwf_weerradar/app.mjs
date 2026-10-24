@@ -523,12 +523,16 @@ let loadingNoticeTimer;
 // Soft time change. A pending fade is always finished first, so layer
 // bookkeeping (retained frames, removal) never sees a half-faded frame.
 let pendingFade=null;
-const FADE_MS=240;
+const FADE_MS=140;
+let lastCommitAt=0;
 function flushFade(){if(!pendingFade)return;const f=pendingFade;pendingFade=null;cancelAnimationFrame(f.raf);f.finish();}
 function crossfade(ids,finish){
   flushFade();
   const target=()=>Number($('opacity').value)/100;
-  const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||document.hidden;
+  // Fast stepping (arrow keys, playback, clicking through) switches instantly:
+  // a fade would only add delay there.
+  const rapid=performance.now()-lastCommitAt<450;lastCommitAt=performance.now();
+  const reduced=rapid||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||document.hidden;
   const set=v=>ids.forEach(id=>map.getLayer(id)&&map.setPaintProperty(id,'raster-opacity',v));
   if(reduced){set(target());finish();return;}
   const t0=performance.now(),f={finish:()=>{set(target());finish();}};
