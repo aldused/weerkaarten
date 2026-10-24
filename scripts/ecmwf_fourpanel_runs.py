@@ -30,6 +30,8 @@ def build(args,run,source):
  return dict(run_utc=meta['run_utc'],meta=f'ecmwf-runs/{key}/meta.json',maxlead=conf.max_steps-1),meta
 
 def main():
+ print("ECMWF-kaarten komen uit de eigen native aanvoer; Open-Meteo staat uit.")
+ return
  args=converter.parse_args()
  if args.model!='ecmwf_ifs025' or args.prefix!='ecmwf_om':raise ValueError('Alleen ECMWF IFS voor vierluik')
  state=ROOT/'.ecmwf-fourpanel-runs';state.mkdir(exist_ok=True)

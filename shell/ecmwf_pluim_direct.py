@@ -43,10 +43,12 @@ LONG_CYCLES = (0, 12)
 LONG_STEPS = tuple(range(0, 145, 3)) + tuple(range(150, 361, 6))
 SHORT_STEPS = tuple(range(0, 145, 3))
 ECMWF_ROOT = "https://data.ecmwf.int/forecasts"
+RUNTIME_ROOT = Path(os.environ.get("ECMWF_NATIVE_RUNTIME", "/tmp"))
 
 FIELD_SETS = {
     "basic": ("2t", "tp"),
     "core": ("2t", "tp", "10u", "10v", "tcc", "10fg", "mucape"),
+    "complete": ("2t", "tp", "10u", "10v", "tcc", "10fg", "mucape", "2d", "sf", "lcc", "mcc", "hcc", "t850", "t500"),
 }
 
 OUTPUT_FIELDS = {
@@ -56,6 +58,8 @@ OUTPUT_FIELDS = {
         "wind_direction_10m", "cloud_cover", "wind_gusts_10m", "cape",
     ),
 }
+
+OUTPUT_FIELDS["complete"] = OUTPUT_FIELDS["core"] + ("dew_point_2m", "relative_humidity_2m", "snowfall", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "temperature_850hPa", "temperature_500hPa")
 
 # The 00Z/06Z O1280 feed is already native 9 km and includes these complete
 # 51-member fields. Once all station archives contain that same pre-scheduled
@@ -231,7 +235,7 @@ class Metrics:
 
 
 def checkpoint_path(run: datetime, field_set: str) -> Path:
-    return Path("/tmp") / f"weerlab_ecmwf_pluim_checkpoint_{run:%Y%m%d_%H}_{field_set}.npz"
+    return RUNTIME_ROOT / f"weerlab_ecmwf_pluim_checkpoint_{run:%Y%m%d_%H}_{field_set}.npz"
 
 
 def save_checkpoint(
@@ -301,6 +305,8 @@ def load_checkpoint(
                 param: np.array(saved[f"raw_{param}"], dtype=np.float64, copy=True)
                 for param in raw_params
             }
+            for key in ("tp_packing_error","sf_packing_error"):
+                if "raw_"+key in saved:raw[key]=np.array(saved["raw_"+key],dtype=np.float64,copy=True)
             if any(values.shape != shape for values in raw.values()):
                 raise RuntimeError("checkpoint array shape is invalid")
             indexes = np.asarray(saved["grid_index"])
@@ -425,6 +431,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=[],
         help="test only: process selected native step(s); requires --no-write",
     )
+    parser.add_argument("--hourly", action="store_true", help="Interpolate each member to hours, preserving precipitation totals")
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
         "--probe-only",
@@ -661,7 +668,8 @@ def retrieve_batch(
 ) -> tuple[int, float]:
     request_params: list[str] = []
     for param in raw_params:
-        request_params.extend(GUST_REQUEST_NAMES if param == "10fg" else (param,))
+        if param in ("t850","t500"):continue
+        request_params.extend(tuple(dict.fromkeys("10fg" if h<=90 else "10fg3" if h<=144 else "10fg6" for h in batch_steps)) if param == "10fg" else (param,))
     request: dict[str, object] = {
         "date": run.strftime("%Y%m%d"),
         "time": cycle,
@@ -683,6 +691,14 @@ def retrieve_batch(
         target.unlink(missing_ok=True)
         try:
             client.retrieve(**request)
+            levels=[int(p[1:]) for p in raw_params if p in ("t850","t500")]
+            if levels:
+                extra=target.with_suffix('.pressure.grib2')
+                upper=dict(request,param=['t'],levtype='pl',levelist=levels,target=str(extra))
+                try:
+                    client.retrieve(**upper)
+                    with target.open('ab') as dst,extra.open('rb') as src:shutil.copyfileobj(src,dst)
+                finally:extra.unlink(missing_ok=True)
             if not target.exists() or target.stat().st_size <= 0:
                 raise RuntimeError(f"ECMWF returned an empty file for steps {batch_steps}")
             return target.stat().st_size, time.monotonic() - started
@@ -741,6 +757,7 @@ def decode_batch(
                 message_count += 1
                 source_short_name = str(eccodes.codes_get(gid, "shortName"))
                 short_name = SHORT_NAME_ALIASES.get(source_short_name, source_short_name)
+                if source_short_name=="t":short_name="t"+str(key_int(gid,"level"))
                 step = key_int(gid, "endStep")
                 member = key_int(gid, "perturbationNumber") if perturbed else 0
                 if short_name not in raw_params or step not in batch_steps:
@@ -800,6 +817,10 @@ def decode_batch(
                         f"invalid sampled values for {combination}: {values.shape}"
                     )
                 raw[short_name][member, :, step_to_index[step]] = values
+                if short_name in ("tp","sf") and short_name+"_packing_error" in raw:
+                    error = float(eccodes.codes_get(gid, "packingError"))
+                    if not math.isfinite(error) or error < 0:raise RuntimeError("Invalid source packing error")
+                    raw[short_name+"_packing_error"][member, :, step_to_index[step]] = error
             finally:
                 eccodes.codes_release(gid)
 
@@ -822,32 +843,30 @@ def decode_batch(
     return grid_points, message_count
 
 
-def deaccumulate_tp(tp_metres: np.ndarray) -> np.ndarray:
+def deaccumulate_tp(tp_metres: np.ndarray, packing_error_metres=None) -> np.ndarray:
     cumulative_mm = tp_metres * 1000.0
-    initial_max = float(np.max(np.abs(cumulative_mm[:, :, 0])))
-    if initial_max > 0.05:
-        raise RuntimeError(
-            f"ECMWF total precipitation at t0 is not zero ({initial_max:.3f} mm)"
-        )
-    intervals = np.empty_like(cumulative_mm)
-    intervals[:, :, 0] = cumulative_mm[:, :, 0]
-    intervals[:, :, 1:] = np.diff(cumulative_mm, axis=2)
-    minimum = float(np.min(intervals))
-    if minimum < -0.05:
-        member, station, step = np.unravel_index(np.argmin(intervals), intervals.shape)
-        raise RuntimeError(
-            "ECMWF total precipitation reset unexpectedly: "
-            f"{minimum:.3f} mm at member={member}, station={station}, step_index={step}"
-        )
-    intervals[(intervals < 0) & (intervals >= -0.05)] = 0.0
-    if float(np.max(intervals)) > 500:
-        raise RuntimeError("implausible precipitation interval above 500 mm")
-    closure_error = float(np.max(np.abs(np.sum(intervals, axis=2) - cumulative_mm[:, :, -1])))
-    if closure_error > 0.1:
-        raise RuntimeError(
-            f"deaccumulated precipitation does not close ({closure_error:.3f} mm)"
-        )
-    return intervals
+    if not np.isfinite(cumulative_mm).all():raise RuntimeError("Non-finite precipitation")
+    errors = np.full_like(cumulative_mm,0.025) if packing_error_metres is None else np.asarray(packing_error_metres)*1000
+    if errors.shape!=cumulative_mm.shape or not np.isfinite(errors).all() or np.any(errors<0):raise RuntimeError("Invalid precipitation precision")
+    if np.max(np.abs(cumulative_mm[:,:,0])) > 0.05:raise RuntimeError("ECMWF total precipitation at t0 is not zero")
+    delta=np.diff(cumulative_mm,axis=2)
+    if np.any(delta < -(errors[:,:,1:]+errors[:,:,:-1]+1e-6)):
+        raise RuntimeError("ECMWF total precipitation reset exceeds source packing precision")
+    # A feasible monotone series within each message's actual packing bounds.
+    # Pin both endpoints, so removing quantisation reversals adds no rainfall.
+    lower=np.maximum(cumulative_mm-errors,0);upper=cumulative_mm+errors
+    lower[:,:,0]=upper[:,:,0]=cumulative_mm[:,:,0]
+    lo=np.maximum.accumulate(lower,axis=2);hi=np.minimum.accumulate(upper[:,:,::-1],axis=2)[:,:,::-1]
+    if np.any(lo>hi+1e-6):raise RuntimeError("No monotone precipitation series within source precision")
+    preserve=lo[:,:,-1]<=cumulative_mm[:,:,-1]+1e-6
+    hi=np.where(preserve[:,:,None],np.minimum(hi,cumulative_mm[:,:,-1,None]),hi)
+    lo[:,:,-1]=np.where(preserve,cumulative_mm[:,:,-1],lo[:,:,-1])
+    hi[:,:,-1]=np.where(preserve,cumulative_mm[:,:,-1],hi[:,:,-1])
+    fixed=np.maximum.accumulate(np.clip(cumulative_mm,lo,hi),axis=2)
+    intervals=np.empty_like(fixed);intervals[:,:,0]=fixed[:,:,0];intervals[:,:,1:]=np.diff(fixed,axis=2)
+    if np.min(intervals)<-1e-8 or np.max(intervals)>500:raise RuntimeError("Implausible precipitation interval")
+    if np.any(np.abs(intervals.sum(axis=2)-cumulative_mm[:,:,-1])>errors[:,:,-1]+1e-6):raise RuntimeError("Precipitation does not close")
+    return np.maximum(intervals,0)
 
 
 def transform_fields(raw: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
@@ -856,7 +875,7 @@ def transform_fields(raw: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     if float(np.min(temperature)) < -100 or float(np.max(temperature)) > 70:
         raise RuntimeError("implausible 2 m temperature values")
     output["temperature_2m"] = temperature
-    output["precipitation"] = deaccumulate_tp(raw["tp"])
+    output["precipitation"] = deaccumulate_tp(raw["tp"], raw.get("tp_packing_error"))
 
     if "10u" in raw and "10v" in raw:
         u = raw["10u"]
@@ -895,6 +914,16 @@ def transform_fields(raw: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
             raise RuntimeError("implausible most-unstable CAPE")
         output["cape"] = np.clip(cape, 0.0, None)
 
+    if '2d' in raw:
+        dew=raw['2d']-273.15
+        output['dew_point_2m']=dew
+        output['relative_humidity_2m']=np.clip(100*np.exp(17.625*dew/(243.04+dew)-17.625*temperature/(243.04+temperature)),0,100)
+    for key,name in [('lcc','cloud_cover_low'),('mcc','cloud_cover_mid'),('hcc','cloud_cover_high')]:
+        if key in raw:output[name]=np.clip(raw[key],0,1)*100
+    for key,name in [('t850','temperature_850hPa'),('t500','temperature_500hPa')]:
+        if key in raw:output[name]=raw[key]-273.15
+    if 'sf' in raw:
+        output['snowfall']=deaccumulate_tp(raw['sf'],raw.get('sf_packing_error'))*.7
     return output
 
 
@@ -929,8 +958,13 @@ def build_station_run(
     times_ms = [int(value.timestamp() * 1000) for value in times]
     members: dict[str, list[list[float]]] = {}
     for name, values in fields.items():
-        decimals = 3 if name == "precipitation" else 1
-        members[name] = rounded_matrix(values[:, station_index, :], decimals)
+        decimals = 3 if name in {"precipitation", "snowfall"} else 1
+        station_values = values[:, station_index, :]
+        if name in {"precipitation", "snowfall"}:
+            # Round cumulative totals before differencing: hourly rounding must not add rain.
+            cumulative = np.round(np.cumsum(station_values, axis=-1, dtype="float64"), decimals)
+            station_values = np.diff(cumulative, axis=-1, prepend=np.zeros_like(cumulative[..., :1]))
+        members[name] = rounded_matrix(station_values, decimals)
     temp_hres = list(members["temperature_2m"][0])
     precip_hres = list(members["precipitation"][0])
     final_interval = steps[-1] - steps[-2]
@@ -1335,7 +1369,7 @@ def main(argv: list[str]) -> int:
         ):
             candidate_checkpoint = checkpoint_path(candidate, args.fields)
             prune_stale_runtime(candidate_checkpoint, args.out_dir)
-            if skip_complete_prescheduled_run(
+            if args.fields != "complete" and skip_complete_prescheduled_run(
                 args.out_dir,
                 args.repo_dir,
                 stations,
@@ -1388,7 +1422,7 @@ def main(argv: list[str]) -> int:
     run_checkpoint = None if args.no_write else checkpoint_path(run, args.fields)
     if not args.no_write:
         prune_stale_runtime(run_checkpoint, args.out_dir)
-        if skip_complete_prescheduled_run(
+        if args.fields != "complete" and skip_complete_prescheduled_run(
             args.out_dir,
             args.repo_dir,
             stations,
@@ -1402,6 +1436,7 @@ def main(argv: list[str]) -> int:
         ]
         if (
             existing_meta.get("complete") is True
+            and existing_meta.get("hourly_interpolated",False) == args.hourly
             and existing_meta.get("run") == run_iso
             and existing_meta.get("field_set") == args.fields
             and existing_meta.get("station_count") == len(stations)
@@ -1481,7 +1516,10 @@ def main(argv: list[str]) -> int:
             flush=True,
         )
 
-    with tempfile.TemporaryDirectory(prefix="weerlab_ecmwf_pluim_", dir="/tmp") as temp_name:
+    raw.setdefault("tp_packing_error", np.full(shape,np.nan,dtype=np.float64))
+    if "sf" in raw:raw.setdefault("sf_packing_error",np.full(shape,np.nan,dtype=np.float64))
+    RUNTIME_ROOT.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="weerlab_ecmwf_pluim_", dir=RUNTIME_ROOT) as temp_name:
         temp_dir = Path(temp_name)
         try:
             for batch_number, batch_steps in enumerate(chunks(steps, args.batch_steps), start=1):
@@ -1496,6 +1534,7 @@ def main(argv: list[str]) -> int:
                         flush=True,
                     )
                     continue
+                batch_params = tuple(p for p in ("tp", "sf") if p in raw and not np.isfinite(raw[p+"_packing_error"][:,:,batch_indexes]).all()) if all(np.isfinite(raw[p][:,:,batch_indexes]).all() for p in raw_params) else raw_params
                 batch_started = time.monotonic()
                 pf_path = temp_dir / f"pf_{batch_number:03d}.grib2"
                 fc_path = temp_dir / f"fc_{batch_number:03d}.grib2"
@@ -1507,7 +1546,7 @@ def main(argv: list[str]) -> int:
                         run,
                         cycle,
                         batch_steps,
-                        raw_params,
+                        batch_params,
                         pf_path,
                         perturbed=True,
                     )
@@ -1519,7 +1558,7 @@ def main(argv: list[str]) -> int:
                         run,
                         cycle,
                         batch_steps,
-                        raw_params,
+                        batch_params,
                         fc_path,
                         perturbed=False,
                     )
@@ -1532,7 +1571,7 @@ def main(argv: list[str]) -> int:
                         pf_path,
                         True,
                         batch_steps,
-                        raw_params,
+                        batch_params,
                         stations,
                         step_to_index,
                         raw,
@@ -1542,7 +1581,7 @@ def main(argv: list[str]) -> int:
                         fc_path,
                         False,
                         batch_steps,
-                        raw_params,
+                        batch_params,
                         stations,
                         step_to_index,
                         raw,
@@ -1585,6 +1624,11 @@ def main(argv: list[str]) -> int:
             if any(not np.isfinite(values).all() for values in raw.values()):
                 raise RuntimeError("one or more member/station/step combinations are missing")
             fields = transform_fields(raw)
+            native_steps = tuple(steps)
+            if args.hourly:
+                sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
+                from ecmwf_interpolate import hourly_ensemble
+                fields,steps=hourly_ensemble(fields,steps)
             if grid_points is None:
                 raise RuntimeError("grid point mapping is missing")
             fetched = datetime.now(timezone.utc)
@@ -1607,7 +1651,9 @@ def main(argv: list[str]) -> int:
                 "last_run_processing_completed_time": int(fetched.timestamp()),
                 "last_run_modification_time": int(fetched.timestamp()),
                 "data_end_time": int((run + timedelta(hours=steps[-1] + (steps[-1] - steps[-2]))).timestamp()),
-                "temporal_resolution_seconds": 10800,
+                "temporal_resolution_seconds": 3600 if args.hourly else 10800,
+                "native_steps_hours": list(native_steps),
+                "hourly_interpolated": args.hourly,
                 "update_interval_seconds": 21600,
                 "source": "ECMWF Open Data direct",
                 "source_url": "https://data.ecmwf.int/forecasts/",
@@ -1647,6 +1693,14 @@ def main(argv: list[str]) -> int:
                 args.keep,
                 args.force,
             )
+            if args.hourly:
+                for document in documents.values():
+                    for item in document['runs']:
+                        if item.get('run')==run_iso:
+                            item['source']['native_steps_hours']=list(native_steps)
+                            item['source']['hourly_interpolated']=True
+                            item['source']['precipitation_alignment']='hourly_mass_conserving_from_native_totals'
+                            item['source']['interpolation']='Members separately; wind vectors; precipitation totals conserved'
             written = attach_capability_manifest(
                 write_documents_atomically(
                     documents,

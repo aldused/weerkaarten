@@ -6,6 +6,7 @@
 # Alleen de compacte schema-3 JSON-bestanden blijven lokaal en gaan naar R2.
 
 set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 REPO_DIR="/Users/aldus/KNMI_Project/weerlab"
 PY="/usr/local/bin/python3"
@@ -16,8 +17,15 @@ PUBLISH_STATE="$STATE_DIR/pluim-direct-published.json"
 REMOTE_META_URL="${PLUIM_DIRECT_META_URL:-https://data.weerlab.nl/pluim_direct_meta.json}"
 ARCHIVE_MANIFEST="$REPO_DIR/pluim_archive_meta.json"
 PUBLISHED_REVISION_STAMP="/tmp/nl.edaldus.pluim-archive-published-revision"
-FIELDS="${PLUIM_DIRECT_FIELDS:-core}"
-if [[ "$FIELDS" != "core" ]]; then
+# All heavy transient sources and checkpoints live on the designated 10 TB disk.
+if ! /usr/sbin/diskutil info -plist /Volumes/WEERLAB | "$PY" -c 'import plistlib,sys; a=plistlib.loads(sys.stdin.buffer.read()); sys.exit(0 if a.get("VolumeUUID")=="BBD67AB1-0A13-4865-B651-E9B8EF6AD337" else 1)'; then
+  echo "WEERLAB-schijf ontbreekt; laatste gepubliceerde pluimen behouden" >&2
+  exit 1
+fi
+export ECMWF_NATIVE_RUNTIME="/Volumes/WEERLAB/Modeldata/ECMWF/pluimen/runtime"
+mkdir -p "$ECMWF_NATIVE_RUNTIME"
+FIELDS="${PLUIM_DIRECT_FIELDS:-complete}"
+if [[ "$FIELDS" != "core" && "$FIELDS" != "complete" ]]; then
   echo "Productiewrapper weigert veldenset '$FIELDS'; alle Weerlab-pluimen vereisen core." >&2
   exit 2
 fi
@@ -28,6 +36,12 @@ if [[ -n "${PLUIM_DIRECT_CYCLE:-}" ]]; then
   if [[ -n "${PLUIM_DIRECT_DATE:-}" ]]; then
     CYCLE_ARGS+=(--date "$PLUIM_DIRECT_DATE")
   fi
+fi
+
+# Four daily cycles, explicitly selected after the normal public-data delay.
+if ((${#CYCLE_ARGS[@]} == 0)); then
+  read -r cycle_date cycle_hour < <("$PY" -c 'from datetime import datetime,timedelta,timezone; n=datetime.now(timezone.utc)-timedelta(hours=7); print(n.strftime("%Y%m%d"),n.hour//6*6)')
+  CYCLE_ARGS=(--date "$cycle_date" --cycle "$cycle_hour")
 fi
 
 acquire_lock() {
@@ -143,7 +157,7 @@ producer_command=(
 if ((${#CYCLE_ARGS[@]})); then
   producer_command+=("${CYCLE_ARGS[@]}")
 fi
-producer_command+=(--batch-steps 1 --max-temp-gib 1)
+producer_command+=(--batch-steps 1 --max-temp-gib 1 --hourly)
 
 set +e
 "${producer_command[@]}" > "$RUN_LOG" &
