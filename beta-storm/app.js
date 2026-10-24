@@ -4,7 +4,29 @@ const $ = id => document.getElementById(id);
 const COLORS = ['#fff2bd','#f9da80','#f3b45f','#ec884b','#e66146','#d53f51','#bb315f','#962d6f','#73296f','#4f235e'];
 COLORS.forEach(c => {const el=document.createElement('i');el.style.background=c;$('colors').append(el);});
 const map = L.map('map', {preferCanvas:true, zoomSnap:0.25, minZoom:3,maxZoom:9}).setView([52,-5],4);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+// Keep the blue water and render land in neutral light greys, including PNG exports.
+const GreyLandTiles=L.TileLayer.extend({
+  createTile(coords,done){
+    const tile=document.createElement('canvas'),size=this.getTileSize();tile.width=size.x;tile.height=size.y;
+    const img=new Image();img.crossOrigin='anonymous';
+    img.onload=()=>{
+      try{
+        const ctx=tile.getContext('2d');ctx.drawImage(img,0,0,size.x,size.y);
+        const pixels=ctx.getImageData(0,0,size.x,size.y),a=pixels.data;
+        for(let i=0;i<a.length;i+=4){
+          const r=a[i],g=a[i+1],b=a[i+2];
+          if(b>r+12&&g>r+8)continue; // OSM blue water remains blue.
+          const grey=Math.round(Math.max(0,Math.min(255,235+(.2126*r+.7152*g+.0722*b-235)*.65)));
+          a[i]=a[i+1]=a[i+2]=grey;
+        }
+        ctx.putImageData(pixels,0,0);tile.dataset.ready='true';done(null,tile);
+      }catch(error){done(error,tile);}
+    };
+    img.onerror=()=>done(Error('Kaarttegel niet beschikbaar'),tile);img.src=this.getTileUrl(coords);
+    return tile;
+  }
+});
+new GreyLandTiles('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   crossOrigin:true, attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19
 }).addTo(map);
 map.createPane('gusts');map.getPane('gusts').style.zIndex=350;
@@ -201,8 +223,8 @@ async function downloadPNG(){
     text(`${$('member').selectedOptions[0].textContent} · ${$('tracks').checked?'stormbanen aan':'stormbanen uit'} · ${$('gust').checked?'windstootkans aan':'windstootkans uit'}`,20,98,11,'#60768a');
     ctx.save();ctx.beginPath();ctx.rect(0,header,width,height);ctx.clip();ctx.fillStyle='#bbd8e8';ctx.fillRect(0,header,width,height);
     const paint=element=>{const r=element.getBoundingClientRect();ctx.drawImage(element,r.left-rect.left,header+r.top-rect.top,r.width,r.height);};
-    const tiles=[...container.querySelectorAll('.leaflet-tile-pane img.leaflet-tile')];
-    if(!tiles.length||tiles.some(t=>!t.complete||!t.naturalWidth))throw Error('De kaartachtergrond is nog niet volledig geladen. Probeer het over enkele seconden opnieuw.');
+    const tiles=[...container.querySelectorAll('.leaflet-tile-pane .leaflet-tile')];
+    if(!tiles.length||tiles.some(t=>t instanceof HTMLCanvasElement?t.dataset.ready!=='true':!t.complete||!t.naturalWidth))throw Error('De kaartachtergrond is nog niet volledig geladen. Probeer het over enkele seconden opnieuw.');
     tiles.forEach(paint);
     ctx.imageSmoothingEnabled=false;container.querySelectorAll('.gust-layer').forEach(paint);ctx.imageSmoothingEnabled=true;
     container.querySelectorAll('.leaflet-overlay-pane canvas').forEach(paint);
