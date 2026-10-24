@@ -15,5 +15,5 @@
   if(kind==='wind')return d.rows.map(r=>({t:r.end,ws:r.ws,wg:r.wg,wd:r.wd,src:'Weather24'}));return {...p,[kind]:d.rows.map(r=>r[kind])};
  }
  async function prepare(places){const results=[];let next=0;await Promise.all(Array.from({length:4},async()=>{while(next<places.length){const p=places[next++];try{await load(p);results.push(p)}catch{}}}));if(!results.length)throw Error('Geen volledige Weather24-plaatsen beschikbaar');const start=cache.get(norm(results[0].name)).start;return results.filter(p=>cache.get(norm(p.name)).start===start);}
- window.Weather24Platen={load,meta,sample,prepare,has:p=>cache.has(norm(p.name)),source:'MOS/ECMWF · Weather24',base:BASE};
+ window.Weather24Platen={load,meta,sample,prepare,has:p=>cache.has(norm(p.name)),source:'MOS/ECMWF',base:BASE};
 })();

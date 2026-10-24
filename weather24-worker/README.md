@@ -1,6 +1,6 @@
 # Weather24 bij Weergrafieken
 
-Wind, neerslag en temperatuur hebben een afzonderlijke Weather24-keuze voor 120 uur. Deze gebruikt de bestaande WeatherServiceFeed van MeteoGroup, dezelfde feed als de bestaande app-tabellen. Bronregel op pagina en PNG: `MOS/ECMWF · Weather24` (gevraagde productvermelding; de feed geeft geen afzonderlijke modelruntime).
+Wind, neerslag en temperatuur hebben een afzonderlijke Weather24-keuze voor 120 uur. Deze gebruikt de bestaande WeatherServiceFeed van MeteoGroup, dezelfde feed als de bestaande app-tabellen. Bronregel op pagina en PNG: `MOS/ECMWF` (gevraagde productvermelding; de feed geeft geen afzonderlijke modelruntime).
 
 De leesproxy heeft uitsluitend `/search?q=...` en `/forecast?lid=...` naar één vaste publieke upstream, zonder sleutels. Nederland wordt op landnaam gefilterd; de browser vereist een exacte plaatsnaam en controleert de coördinaten. Geen vervanging door een nabijgelegen modelpunt. CORS is beperkt tot Weerlab en lokale previews. Succesvolle antwoorden worden vijf minuten gecachet; fouten worden niet gecachet.
 
