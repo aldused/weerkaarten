@@ -433,33 +433,6 @@ const MENU_PRODUCTS = [
     "restricted": false
   },
   {
-    "id": "clusters",
-    "name": "Weerscenario’s",
-    "description": "Groepen mogelijke ontwikkelingen · ECMWF",
-    "category": "verwachting",
-    "type": "kaarten",
-    "section": "",
-    "icon": "druk",
-    "href": "index.html#weerkaarten-clusters",
-    "thumbnail": "thumbs/clusters.webp",
-    "facets": {
-      "veld": [
-        "clusters"
-      ],
-      "model": [
-        "eps"
-      ],
-      "gebied": [
-        "eu"
-      ],
-      "weergave": [
-        "1"
-      ]
-    },
-    "keywords": "ECMWF Clusters Z500 EOF + k-means Clusters ECMWF ENS Europa 1 kaart ECMWF ENS",
-    "restricted": false
-  },
-  {
     "id": "bewolking-harmonie",
     "name": "Wolkenverdeling",
     "description": "HARMONIE, realistisch",
@@ -742,39 +715,6 @@ const MENU_PRODUCTS = [
   "keywords": "wolken hoge middelbare lage bewolking sluierbewolking ECMWF GFS ICON ensemble",
   "restricted": false
 },
-  {
-    "id": "pluim-trend",
-    "name": "Hoe verandert de verwachting?",
-    "description": "Vergelijk de laatste acht modelberekeningen",
-    "category": "verwachting",
-    "type": "pluim",
-    "section": "Pluimen",
-    "icon": "pluimtrend",
-    "href": "index.html#pluim-trend",
-    "thumbnail": null,
-    "facets": {
-      "bron": [
-        "ens"
-      ],
-      "grootheid": [
-        "temp",
-        "neerslag"
-      ],
-      "plaats": [
-        "debilt",
-        "groningen",
-        "twente",
-        "maastricht",
-        "denhelder",
-        "vlissingen"
-      ],
-      "vorm": [
-        "trend"
-      ]
-    },
-    "keywords": "Pluim-trend 6 runs onder elkaar (3 dagen) ENS-pluim Temperatuur Neerslag De Bilt Groningen Twente Maastricht Den Helder / Schiphol Vlissingen Runs onder elkaar",
-    "restricted": false
-  },
   {
     "id": "mosmix-overzicht",
     "name": "10 dagen per plaats",
@@ -1486,7 +1426,6 @@ const MENU_LABELS = {
     "hoogte": "Hoogtevelden",
     "druk": "Druk & fronten",
     "extremen": "Extremen (EFI)",
-    "clusters": "Clusters",
     "overzicht": "Overzicht"
   },
   "model": {

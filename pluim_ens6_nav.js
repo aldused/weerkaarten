@@ -11,7 +11,6 @@
     {key:'winter',hash:'#pluim-winter',file:'pluim_modelvergelijking.html',view:'winter',label:'Winterpluim'},
     {key:'wolken',hash:'#pluim-wolken',file:'pluim_modelvergelijking.html',view:'wolken',label:'Bewolking'},
     {key:'mist',hash:'#pluim-mist',file:'pluim_modelvergelijking.html',view:'mist',label:'Mistkans'},
-    {key:'trend',hash:'#pluim-trend',file:'demo_pluim6_trend.html',label:'Pluim-trend'},
   ];
   const view=new URLSearchParams(location.search).get('view')||'weer';
   const huidig = PAGINAS.find(p => (location.pathname.endsWith('/' + p.file) || location.pathname.endsWith('/'+p.file.replace('.html',''))) && (!p.view||p.view===view));

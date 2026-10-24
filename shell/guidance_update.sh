@@ -112,48 +112,6 @@ if ! python3 "$SHELL_DIR/guidance_knmi_weerkaarten.py" "$CACHE"; then
   rm -f "$CACHE"/guidance_knmi_*.gif "$CACHE/knmi_charts.json" "$CACHE/knmi_weerkaart_sectie.txt"
 fi
 
-# ----------------------------------------- 1b. ENS-clusterkaarten (dag 3-10)
-# Eigen cluster-z500-product van R2 (launchd 10:45/22:45); voedt de
-# vooruitzichten-alinea. Non-fataal: zonder clusters gewoon door.
-python3 - "$CACHE" <<'PYEOF'
-import json, sys, urllib.request
-from datetime import datetime, timedelta
-
-cache = sys.argv[1]
-BASE = "https://data.weerlab.nl/"
-LABELS = {"int1": "dag 3-4 (72-96h)", "int2": "dag 5-7 (120-168h)", "int3": "dag 8-10 (192-240h)"}
-
-def haal(pad):
-    # R2/Cloudflare blokkeert de standaard Python-urllib User-Agent (403)
-    req = urllib.request.Request(BASE + pad, headers={"User-Agent": "Mozilla/5.0 (weerlab-guidance)"})
-    return urllib.request.urlopen(req, timeout=60)
-
-try:
-    with haal("cluster_z500_meta.json") as r:
-        meta = json.load(r)
-    if datetime.now() - datetime.fromisoformat(meta["bijgewerkt"]) > timedelta(hours=24):
-        raise ValueError(f"clusterdata verouderd ({meta['bijgewerkt']})")
-    regels = [f"ENS-clusterrun: {meta['run']}"]
-    for key, bestand in meta["bestanden"].items():
-        with haal(bestand) as r:
-            open(f"{cache}/guidance_cluster_{key}.png", "wb").write(r.read())
-        telling = {}
-        for lid in meta["leden"].get(key, []):
-            telling[lid] = telling.get(lid, 0) + 1
-        verdeling = ", ".join(f"cluster {c}: {n} leden" for c, n in sorted(telling.items()))
-        regels.append(f"- guidance_cluster_{key}.png — {LABELS.get(key, key)} — ledenverdeling: {verdeling}")
-    open(f"{cache}/cluster_sectie.txt", "w").write("\n".join(regels) + "\n")
-    print(f"Clusters: {len(meta['bestanden'])} kaarten (run {meta['run']})")
-except Exception as e:
-    import os
-    for key in LABELS:
-        try: os.remove(f"{cache}/guidance_cluster_{key}.png")
-        except FileNotFoundError: pass
-    try: os.remove(f"{cache}/cluster_sectie.txt")
-    except FileNotFoundError: pass
-    print(f"WAARSCHUWING: clusterkaarten niet beschikbaar ({e})")
-PYEOF
-
 # ------------------------------------------------- 2. ECMWF-frames + manifest
 # Kiest nieuwste wxbeta-run en zoekt per dag (vandaag..+4) het 12 UTC-frame.
 python3 - "$WEERLAB" "$CACHE" <<'PYEOF'
@@ -305,18 +263,6 @@ if man.get("ecmwf_extra"):
     for c in man["ecmwf_extra"]:
         lines.append(f"- {os.path.join(cache, c['file'])} — geldig {c['valid_label']}")
 
-cluster_pad = os.path.join(cache, "cluster_sectie.txt")
-if os.path.isfile(cluster_pad):
-    lines += ["", "## ENS-clusterkaarten z500 (51 leden, voor de vooruitzichten-alinea)",
-              "Elke kaart toont de clusters van het ensemble voor dat tijdvak; de",
-              "ledenverdeling zegt hoeveel steun elk scenario heeft."]
-    for regel in open(cluster_pad).read().strip().split("\n"):
-        if regel.startswith("- guidance_cluster_"):
-            naam, rest = regel[2:].split(" — ", 1)
-            lines.append(f"- {os.path.join(cache, naam)} — {rest}")
-        else:
-            lines.append(regel)
-
 lines += ["", "## Dagen voor het days-array (exact deze datums en labels gebruiken)"]
 for d in man["days"]:
     lines.append(f"- {d['date']} — {d['label']}")
@@ -338,8 +284,6 @@ if kc and kc.get("charts"):
     base_sources.append(("knmi_kaarten", "KNMI-frontkaarten"))
 if os.path.isfile(feiten_pad) and "# ENS DE BILT" in open(feiten_pad).read():
     base_sources.append(("ecmwf_ens", "ECMWF ENS De Bilt"))
-if os.path.isfile(cluster_pad) and any(f.startswith("guidance_cluster_") and f.endswith(".png") for f in os.listdir(cache)):
-    base_sources.append(("ecmwf_clusters", "ECMWF ENS-clusters"))
 register += [{"id": ident, "naam": name, "status": "beschikbaar"} for ident, name in base_sources]
 lines += [references, "# BRONREGISTER", json.dumps(register, ensure_ascii=False, indent=1)]
 open(os.path.join(cache, "bronnen_sectie.txt"), "w").write("\n".join(lines) + "\n")
@@ -540,8 +484,7 @@ out = {
     "knmi_charts": knmi_charts,
     "brack_charts": brack,
     "ecmwf_charts": man["ecmwf_charts"] + man.get("ecmwf_extra", []),
-    "cluster_charts": sorted(f for f in os.listdir(cache)
-                             if f.startswith("guidance_cluster_") and f.endswith(".png")),
+    "cluster_charts": [],
 }
 # let op: 'guidance.json' is al bezet door de KNMI-modelbeoordeling (haal_guidance.py)
 tmp = os.path.join(cache, "ecmwf_guidance.json.tmp")
@@ -557,7 +500,7 @@ fi
 
 # ------------------------------------------------------------------- 6. Upload
 uploads=()
-for f in "$CACHE"/guidance_knmi_*.gif "$CACHE"/guidance_ecmwf_d*.png "$CACHE"/guidance_cluster_*.png; do
+for f in "$CACHE"/guidance_knmi_*.gif "$CACHE"/guidance_ecmwf_d*.png; do
   [ -f "$f" ] && uploads+=("$f")
 done
 "$SHELL_DIR/r2_publish.sh" "${uploads[@]}"

@@ -2,8 +2,8 @@
 import argparse,datetime as dt,gzip,hashlib,json,os,sys,urllib.parse,urllib.request,concurrent.futures
 from pathlib import Path
 import numpy as np
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'wind_six'))
-from build import fetch,parse,iso,UTC
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from om_common import fetch,parse,iso,UTC
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from basemap import BOUNDS,setup as map_setup,outlines as map_outlines
 from presentation import header as map_header,footer as map_footer

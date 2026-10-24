@@ -135,7 +135,7 @@
     if(!visible.some(d=>d.date===selectedDate))selectedDate=visible[0]?.date||'';
     $('day-nav').replaceChildren();$('days').replaceChildren();gallery=[];
     const charts=[];
-    for(const [field,kind] of [['ecmwf_charts','ecmwf'],['knmi_charts','knmi'],['cluster_charts','cluster']]){
+    for(const [field,kind] of [['ecmwf_charts','ecmwf'],['knmi_charts','knmi']]){
       for(const value of Array.isArray(feed[field])?feed[field]:[]){
         const chart=typeof value==='string'?{file:value}:value;
         if(chart&&core.fileUrl(chart.file,BASE,feed.generated_utc))charts.push({chart,kind,date:core.chartDate(chart,feed,kind)});
