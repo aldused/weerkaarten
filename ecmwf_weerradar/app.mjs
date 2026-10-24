@@ -519,7 +519,30 @@ function awaitSources(ids,signal){
   });
 }
 let loadingNoticeTimer;
+// Soft time change. A pending fade is always finished first, so layer
+// bookkeeping (retained frames, removal) never sees a half-faded frame.
+let pendingFade=null;
+const FADE_MS=240;
+function flushFade(){if(!pendingFade)return;const f=pendingFade;pendingFade=null;cancelAnimationFrame(f.raf);f.finish();}
+function crossfade(ids,finish){
+  flushFade();
+  const target=()=>Number($('opacity').value)/100;
+  const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||document.hidden;
+  const set=v=>ids.forEach(id=>map.getLayer(id)&&map.setPaintProperty(id,'raster-opacity',v));
+  if(reduced){set(target());finish();return;}
+  const t0=performance.now(),f={finish:()=>{set(target());finish();}};
+  const step=now=>{
+    if(pendingFade!==f)return;
+    const p=Math.min(1,(now-t0)/FADE_MS),e=p*p*(3-2*p);
+    if(p>=1){pendingFade=null;f.finish();return;}
+    set(Math.max(.00001,target()*e));f.raf=requestAnimationFrame(step);
+  };
+  // Throttled rAF (busy or background page) must never strand the old frame.
+  setTimeout(()=>{if(pendingFade===f)flushFade();},FADE_MS+200);
+  set(.00001);pendingFade=f;f.raf=requestAnimationFrame(step);
+}
 async function renderFrame(index,rev,signal,context){
+  flushFade();
   const started=performance.now();
   viewportController?.abort();viewportRevision++;pointController?.abort();
   const frame=context.timeline[index], modelMeta=frame.modelMeta??context.meta, layerMode=mode, vars=variablesForMode(modelMeta,frame);
@@ -594,16 +617,21 @@ async function renderFrame(index,rev,signal,context){
       // Every entry already owns its immutable model/run/field/area identity.
       trimFieldCache();
     }
-    ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));
-    if(old){
-      if(mayRetainFrame(old,viewKey(old,old.mode),id=>map.isSourceLoaded(id)&&!frameErrors.has(id))){
-        const previous=retainedViews.get(old.viewKey);if(previous)removeLayers(previous.ids);
-        old.ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',0));retainedViews.set(old.viewKey,old);
-      }else{removeLayers(old.ids);clearRetainedViews();}
-    }
-    while(retainedViews.size>(navigator.deviceMemory&&navigator.deviceMemory<=4?2:4) || [...retainedViews.values()].reduce((n,v)=>n+map.layerCanvasBytes(v.ids),0)>(navigator.deviceMemory&&navigator.deviceMemory<=4?32:96)*1024*1024){
-      const [k,v]=retainedViews.entries().next().value;removeLayers(v.ids);retainedViews.delete(k);
-    }
+    const retireOld=()=>{
+      if(old){
+        if(mayRetainFrame(old,viewKey(old,old.mode),id=>map.isSourceLoaded(id)&&!frameErrors.has(id))){
+          const previous=retainedViews.get(old.viewKey);if(previous)removeLayers(previous.ids);
+          old.ids.forEach(id=>map.getLayer(id)&&map.setPaintProperty(id,'raster-opacity',0));retainedViews.set(old.viewKey,old);
+        }else{removeLayers(old.ids);clearRetainedViews();}
+      }
+      while(retainedViews.size>(navigator.deviceMemory&&navigator.deviceMemory<=4?2:4) || [...retainedViews.values()].reduce((n,v)=>n+map.layerCanvasBytes(v.ids),0)>(navigator.deviceMemory&&navigator.deviceMemory<=4?32:96)*1024*1024){
+        const [k,v]=retainedViews.entries().next().value;removeLayers(v.ids);retainedViews.delete(k);
+      }
+    };
+    // Crossfade: the new hour fades in on top of the old one, which only
+    // leaves once the fade is done. Both hours are never shown mixed at rest.
+    if(old)crossfade(ids,retireOld);
+    else{ids.forEach(id=>map.setPaintProperty(id,'raster-opacity',Number($('opacity').value)/100));retireOld();}
     syncUI();queueCityDraw();updatePoint();$('status').hidden=true;
     $('app').dataset.frameStatus='ready';$('app').dataset.validTime=frame.iso;$('app').dataset.intervalHours=frame.hours;
     delete $('app').dataset.lastLoadError;
