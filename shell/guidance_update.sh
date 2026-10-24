@@ -101,28 +101,7 @@ fi
 
 # ---------------------------------------------------------------- 1. Bracknell
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-brack_ok=0
-for lead in "${BRACK_LEADS[@]}"; do
-  url="https://wetterzentrale.de/maps/BRAEU_${lead}.png"
-  tmp="brack_${lead}.tmp"
-  # Wetterzentrale kan tussen www en het kale domein omleiden. Volg zulke
-  # HTTPS-redirects, zodat de HTML-redirectpagina niet als mislukte PNG eindigt.
-  if curl -sSfL --proto-redir '=https' --max-redirs 3 -o "$tmp" \
-       -H "Referer: https://wetterzentrale.de/nl/fax.php" -H "User-Agent: $UA" "$url" \
-     && [ "$(stat -f%z "$tmp")" -gt 20000 ] \
-     && file "$tmp" | grep -q "PNG image"; then
-    mv "$tmp" "guidance_brack_${lead}.png"
-    brack_ok=$((brack_ok + 1))
-  else
-    rm -f "$tmp"
-    echo "WAARSCHUWING: Bracknell T+${lead} niet opgehaald"
-  fi
-done
-if [ "$brack_ok" -lt 4 ]; then
-  echo "FOUT: slechts $brack_ok Bracknell-kaarten, minimaal 4 nodig" >&2
-  exit 1
-fi
-echo "Bracknell: $brack_ok kaarten"
+# UKMO/Bracknell voorlopig uitgeschakeld.
 
 # ------------------------------------- 1a. KNMI-weerkaarten (HARMONIE-analyse)
 # Gezaghebbende Nederlandse grondkaarten met fronten (analyse t/m +36u). Verse
@@ -317,14 +296,6 @@ if kc and kc.get("charts"):
     for c in kc["charts"]:
         lines.append(f"- {os.path.join(cache, c['file'])} — {c['valid_label']}")
 
-lines += ["", "## Bracknell-faxkaarten (UKMO, fronten; breder Europa, tot +120u)"]
-for f in sorted(os.listdir(cache)):
-    m = re.match(r"guidance_brack_(\d+)\.png$", f)
-    if m:
-        lead = int(m.group(1))
-        soort = "analyse" if lead == 0 else f"verwachting T+{lead}u"
-        lines.append(f"- {os.path.join(cache, f)} — {soort} (geldigheid staat op de kaart zelf, linksboven)")
-
 lines += ["", f"## ECMWF HRES overzichtskaarten (run {man['ecmwf_run_label']})"]
 for c in man["ecmwf_charts"]:
     lines.append(f"- {os.path.join(cache, c['file'])} — geldig {c['valid_label']}")
@@ -365,8 +336,6 @@ base_sources = [("ecmwf_hres", "ECMWF HRES-kaarten"),
                 ("ecmwf_dagfeiten", "ECMWF-modelpunten Nederland")]
 if kc and kc.get("charts"):
     base_sources.append(("knmi_kaarten", "KNMI-frontkaarten"))
-if any(re.match(r"guidance_brack_\d+\.png$", f) for f in os.listdir(cache)):
-    base_sources.append(("ukmo", "UKMO/Bracknell-frontkaarten"))
 if os.path.isfile(feiten_pad) and "# ENS DE BILT" in open(feiten_pad).read():
     base_sources.append(("ecmwf_ens", "ECMWF ENS De Bilt"))
 if os.path.isfile(cluster_pad) and any(f.startswith("guidance_cluster_") and f.endswith(".png") for f in os.listdir(cache)):
@@ -537,14 +506,6 @@ if gevonden:
     sys.exit("FOUT: ongewenste formulering(en): " + ", ".join(gevonden))
 
 brack = []
-for f in sorted(os.listdir(cache)):
-    if f.startswith("guidance_brack_") and f.endswith(".png"):
-        lead = int(f.split("_")[2].split(".")[0])
-        # De Wetterzentrale-bestandsstap is niet altijd de kalendergeldigheid:
-        # kaarten met verschillende UKMO-runs staan tegelijk online. Zonder
-        # machineleesbare geldigheidsdatum dus niet aan een dag koppelen.
-        brack.append({"lead": lead, "file": f})
-brack.sort(key=lambda b: b["lead"])
 
 # KNMI-weerkaarten (indien opgehaald) meenemen in de uitvoer
 knmi_charts = []
@@ -596,7 +557,7 @@ fi
 
 # ------------------------------------------------------------------- 6. Upload
 uploads=()
-for f in "$CACHE"/guidance_knmi_*.gif "$CACHE"/guidance_brack_*.png "$CACHE"/guidance_ecmwf_d*.png "$CACHE"/guidance_cluster_*.png; do
+for f in "$CACHE"/guidance_knmi_*.gif "$CACHE"/guidance_ecmwf_d*.png "$CACHE"/guidance_cluster_*.png; do
   [ -f "$f" ] && uploads+=("$f")
 done
 "$SHELL_DIR/r2_publish.sh" "${uploads[@]}"
