@@ -26,11 +26,7 @@ TO 1200 bash "/Users/aldus/KNMI_Project/weerlab/scripts/icon_d2_update.sh" >> "$
 echo "$(date): ICON-D2-RUC starten..." >> "$LOG"
 TO 1200 bash "/Users/aldus/KNMI_Project/weerlab/scripts/icon_d2_ruc_update.sh" >> "$LOG" 2>&1
 
-echo "$(date): AROME (Open-Meteo) starten..." >> "$LOG"
-TO 900 python3 "/Users/aldus/KNMI_Project/weerlab/scripts/arome_om_update.py" --preset arome >> "$LOG" 2>&1
 
-echo "$(date): UKMO (Open-Meteo) starten..." >> "$LOG"
-TO 900 python3 "/Users/aldus/KNMI_Project/weerlab/scripts/arome_om_update.py" --preset ukmo >> "$LOG" 2>&1
 
 echo "$(date): Beta wolkenkaart genereren..." >> "$LOG"
 # Verwijder oude PNGs zodat nieuwe run altijd opnieuw gegenereerd wordt
@@ -98,14 +94,6 @@ else
   echo "$(date): ICON Global overgeslagen (3-uurlijks ritme)." >> "$LOG"
 fi
 
-if verse_global ukmo_global_om; then
-  echo "$(date): UKMO Global voor het 4-luik starten..." >> "$LOG"
-  TO 1800 python3 "/Users/aldus/KNMI_Project/weerlab/scripts/ecmwf_openmeteo_update.py" \
-    --prefix ukmo_global_om --model ukmo_global_deterministic_10km --model-label "UKMO Global" \
-    $GLOBAL_TIJD --grid-step 0.14 $GLOBAL_BOX >> "$LOG" 2>&1
-else
-  echo "$(date): UKMO Global overgeslagen (3-uurlijks ritme)." >> "$LOG"
-fi
 
 # ECMWF Open Data 06/18 runs: per 11 mei 2026 niet meer beschikbaar via data.ecmwf.int.
 # Laag verwijderd uit viewer (harmonie_canvas.html). Script ecmwf_opendata_short.py bewaard.

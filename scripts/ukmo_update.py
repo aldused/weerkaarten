@@ -127,6 +127,8 @@ def write_bin(path: Path, arrays: tuple[np.ndarray, ...]) -> None:
 
 
 def main() -> int:
+    print("UKMO/AROME voorlopig uitgeschakeld wegens Open-Meteo-verbruik.")
+    return 0
     args = parse_args()
     os.chdir(WORK_DIR)
 

@@ -220,6 +220,8 @@ def hourly_get(hourly: dict, var: str, model: str):
 
 
 def main() -> int:
+    print("UKMO/AROME voorlopig uitgeschakeld wegens Open-Meteo-verbruik.")
+    return 0
     args = parse_args()
     os.chdir(WORK_DIR)
     cfg = PRESETS[args.preset]

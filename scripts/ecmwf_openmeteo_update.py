@@ -179,6 +179,9 @@ def local_forecast_times(times: list[str]) -> list[str]:
 
 def main() -> int:
     args = parse_args()
+    if args.model.startswith(("ukmo_", "meteofrance_arome")):
+        print("UKMO/AROME voorlopig uitgeschakeld wegens Open-Meteo-verbruik.")
+        return 0
     os.chdir(WORK_DIR)
 
     lats = np.arange(args.lat_min, args.lat_max + args.grid_step / 2, args.grid_step)

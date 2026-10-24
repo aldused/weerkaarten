@@ -99,6 +99,12 @@ export default {
       return json({ error: 'Server misconfigured: OPEN_METEO_KEY secret ontbreekt' }, 500);
     }
 
+    const disabledModel = (url.searchParams.get('models') || '').split(',')
+      .some(model => /^(ukmo_|meteofrance_arome)/.test(model.trim()));
+    if (disabledModel) {
+      return json({ error: 'UKMO en AROME zijn voorlopig uitgeschakeld op Weerlab.' }, 503);
+    }
+
     const fresh = url.searchParams.get('_weerlab_fresh') === '1';
     const cacheTtl = (endpoint === 'ensemble' || endpoint === 'forecast' || endpoint === 'previous')
       ? OPEN_METEO_FAST_TTL

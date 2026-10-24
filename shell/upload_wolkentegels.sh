@@ -18,7 +18,7 @@ fi
 
 MODELLEN=("$@")
 if [ ${#MODELLEN[@]} -eq 0 ]; then
-  MODELLEN=(harmonie harmonie46 icond2 icond2ruc arome_om ukmo_om dmi_om)
+  MODELLEN=(harmonie harmonie46 icond2 icond2ruc dmi_om)
 fi
 
 for prefix in "${MODELLEN[@]}"; do

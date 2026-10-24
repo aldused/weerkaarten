@@ -205,9 +205,7 @@ const MENU_PRODUCTS = [
       "model": [
         "harmonie",
         "icond2",
-        "icond2ruc",
-        "arome"
-      ],
+        "icond2ruc"],
       "gebied": [
         "nl"
       ],
@@ -215,7 +213,7 @@ const MENU_PRODUCTS = [
         "1"
       ]
     },
-    "keywords": "Significant kaart HARMONIE · ICON-D2 · RUC · AROME Significant HARMONIE 43 ICON-D2 ICON-D2-RUC AROME Nederland 1 kaart HARMONIE 43 ICON-D2 ICON-D2-RUC AROME",
+    "keywords": "Significant kaart HARMONIE · ICON-D2 · RUC Significant HARMONIE 43 ICON-D2 ICON-D2-RUC Nederland 1 kaart HARMONIE 43 ICON-D2 ICON-D2-RUC",
     "restricted": false
   },
   {
@@ -277,7 +275,6 @@ const MENU_PRODUCTS = [
         "harmonie46",
         "icond2",
         "icond2ruc",
-        "arome",
         "ecmwf",
         "gfs",
         "iconeu"
@@ -289,7 +286,7 @@ const MENU_PRODUCTS = [
         "4"
       ]
     },
-    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC AROME ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
+    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
     "restricted": false
   },
   {
@@ -309,9 +306,7 @@ const MENU_PRODUCTS = [
       "model": [
         "harmonie",
         "icond2",
-        "icond2ruc",
-        "arome"
-      ],
+        "icond2ruc"],
       "gebied": [
         "nl"
       ],
@@ -319,7 +314,7 @@ const MENU_PRODUCTS = [
         "4"
       ]
     },
-    "keywords": "Significant 4-luik Zelfde veld, 4 modellen Significant HARMONIE 43 ICON-D2 ICON-D2-RUC AROME Nederland 4-luik HARMONIE 43 ICON-D2 ICON-D2-RUC AROME",
+    "keywords": "Significant 4-luik Zelfde veld, 4 modellen Significant HARMONIE 43 ICON-D2 ICON-D2-RUC Nederland 4-luik HARMONIE 43 ICON-D2 ICON-D2-RUC",
     "restricted": false
   },
   {
@@ -1501,7 +1496,6 @@ const MENU_LABELS = {
     "harmonie46": "HARMONIE 46",
     "icond2": "ICON-D2",
     "icond2ruc": "ICON-D2-RUC",
-    "arome": "AROME",
     "ecmwf": "ECMWF HRES",
     "gfs": "GFS",
     "iconeu": "ICON-EU",

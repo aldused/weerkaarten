@@ -2,6 +2,9 @@
 Front overlays use exact-cycle reviewed geometry or official coloured source ink.
 Missing fronts never block fresh weather; black troughs require reviewed geometry.
 """
+import sys
+print("Synoptische UKMO-kaarten voorlopig uitgeschakeld.")
+sys.exit(0)
 import html as html_module
 import argparse,datetime as dt,fcntl,hashlib,json,os,re,shutil,subprocess,sys,tempfile,urllib.request
 from pathlib import Path

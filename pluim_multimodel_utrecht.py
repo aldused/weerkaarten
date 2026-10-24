@@ -1,3 +1,6 @@
+import sys
+print("Deze oude UKMO-pluim is voorlopig uitgeschakeld.")
+sys.exit(0)
 """
 pluim_multimodel_utrecht.py — Multi-model vergelijking Utrecht
 ECMWF ENS mediaan + ICON-EPS mediaan + GFS ENS mediaan + UKMO deterministisch

@@ -1,3 +1,6 @@
+import sys
+print("Deze oude UKMO-pluim is voorlopig uitgeschakeld.")
+sys.exit(0)
 """
 pluim_multimodel_barendrecht.py — Multi-model vergelijking Barendrecht
 ECMWF ENS mediaan + ICON-EPS mediaan + UKMO deterministisch

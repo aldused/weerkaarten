@@ -96,9 +96,6 @@ MODELKENNIS = {
     "icond2ruc": {"familie": "icon", "res_km": 2.2, "naam": "ICON-D2-RUC (DWD)", "ruc": True},
     "icon_eu": {"familie": "icon", "res_km": 7.0, "naam": "ICON-EU (DWD)"},
     "icon_global_om": {"familie": "icon", "res_km": 13.0, "naam": "ICON globaal (DWD)"},
-    "arome_om": {"familie": "arome", "res_km": 1.5, "naam": "AROME (Météo-France)"},
-    "ukmo_om": {"familie": "ukmo", "res_km": 2.0, "naam": "UKMO 2 km (Met Office)"},
-    "ukmo_global_om": {"familie": "ukmo", "res_km": 10.0, "naam": "UKMO globaal (Met Office)"},
     "ecmwf_om": {"familie": "ecmwf", "res_km": 25.0, "naam": "ECMWF IFS"},
     "gfs_global_om": {"familie": "gfs", "res_km": 13.0, "naam": "GFS (NOAA)"},
 }
@@ -109,11 +106,7 @@ OM_DATASET = {
     "icon_eu": "dwd_icon_eu",
     "icon_d2": "dwd_icon_d2",
     "gfs_seamless": "ncep_gfs013",
-    "ukmo_global_deterministic_10km": "ukmo_global_deterministic_10km",
-    "ukmo_uk_deterministic_2km": "ukmo_uk_deterministic_2km",
     "dmi_harmonie_arome_europe": "dmi_harmonie_arome_europe",
-    "meteofrance_arome_france_hd": "meteofrance_arome_france_hd",
-    "meteofrance_arome_france": "meteofrance_arome_france",
     "knmi_harmonie_arome_netherlands": "knmi_harmonie_arome_netherlands",
     "knmi_harmonie_arome_europe": "knmi_harmonie_arome_europe",
 }
