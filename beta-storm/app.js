@@ -85,7 +85,8 @@ function renderDays(){
   }));
 }
 function fitStorm(){
-  if(!data)return;const positions=activeTracks().flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));
+  if(!data)return;const shown=$('other-tracks').checked?systems().filter(s=>s.id===pickedId||s.tracks.find(t=>t.member===0)?.points[frame]).flatMap(s=>s.tracks):activeTracks();
+  const positions=shown.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));
   const centre=mean(activeTracks().map(t=>t.points[frame]).filter(Boolean)),g=data.frames[frame].gust;
   if(centre&&g){
     for(let y=0;y<data.grid.lat.length;y+=2)for(let x=0;x<data.grid.lon.length;x+=2){
@@ -144,6 +145,22 @@ function render(){
   lines.clearLayers();markers.clearLayers();if(overlay){map.removeLayer(overlay);overlay=null;}
   const selected=$('member').value;
   const means=data.frames.map((_,i)=>mean(activeTracks().map(t=>t.points[i]).filter(Boolean)));
+  if($('tracks').checked&&$('other-tracks').checked){
+    systems().forEach((system,index)=>{
+      if(system.id===pickedId||!system.tracks.find(t=>t.member===0)?.points[frame])return;
+      const label=system.storm_name?'Storm '+system.storm_name:'Laag '+(index+1);
+      const focus=()=>{stop();systemChoice=system.id;pickedId=system.id;$('system').value=system.id;render();};
+      for(const t of system.tracks){
+        if(selected!=='all'&&+selected!==t.member)continue;
+        const control=t.member===0;
+        for(const segment of segments(t.points))L.polyline(segment,{color:control?'#ed991c':'#526d9f',weight:(control?2.4:.8)*drawScale,opacity:control?.85:.20}).bindTooltip(label+' · '+(control?'Control':'ENS-lid '+t.member)).on('click',focus).addTo(lines);
+      }
+      const means=data.frames.map((_,i)=>mean(system.tracks.map(t=>t.points[i]).filter(Boolean)));
+      if(selected==='all')for(const segment of segments(means))L.polyline(segment,{color:'#124ed6',weight:2.5*drawScale,dashArray:'8 6',opacity:.8}).bindTooltip(label+' · ensemblegemiddelde').on('click',focus).addTo(lines);
+      const centre=selected==='all'?means[frame]:system.tracks.find(t=>t.member===+selected)?.points[frame]?.slice(0,2);
+      if(centre)L.marker(centre,{icon:L.divIcon({className:'',html:`<span class="core-label">${label}</span>`,iconAnchor:[-8,8]})}).on('click',focus).addTo(markers);
+    });
+  }
   if($('tracks').checked){
     for(const t of [...activeTracks()].sort((a,b)=>b.member-a.member)){
       if(selected!=='all'&&+selected!==t.member)continue;
@@ -257,6 +274,7 @@ $('time').oninput=()=>{stop();frame=+$('time').value;render();};
 $('prev').onclick=()=>{stop();frame=Math.max(0,frame-1);render();};$('next').onclick=()=>{stop();frame=Math.min(data.frames.length-1,frame+1);render();};
 $('play').onclick=()=>{if(timer){stop();return;}$('play').textContent='Ⅱ';$('play').setAttribute('aria-label','Animatie pauzeren');timer=setInterval(()=>{frame=(frame+1)%data.frames.length;render();},1100);};
 for(const id of ['member','tracks','gust','contours'])$(id).onchange=render;
+$('other-tracks').onchange=()=>{fitStorm();render();};
 $('system').onchange=()=>{stop();systemChoice=$('system').value;selectionNote='';selectSystem(true);fitStorm();render();};
 $('fit').onclick=fitStorm;
 $('refresh').onclick=load;document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else load();});
@@ -305,7 +323,7 @@ async function downloadPNG(){
       y=wrap($('window').textContent,y);
       y=wrap($('coverage').textContent,y);
     }else y=wrap($('gust').checked?'Windstootkans niet beschikbaar; ontbrekende data betekenen geen 0%.':'Windstootkans uitgeschakeld in deze export.',y);
-    y=wrap('Banen: lagedrukkernen. Kansveld: alle beschikbare leden, onafhankelijk van gekozen laag. Alleen het genoemde windstootvenster.',y,10);
+    y=wrap('Banen: lagedrukkernen. '+($('other-tracks').checked?'Ook overige op deze tijd gedetecteerde depressies zichtbaar. ':'')+'Kansveld: alle beschikbare leden, onafhankelijk van gekozen laag. Alleen het genoemde windstootvenster.',y,10);
     text('Bron: ECMWF Open Data (CC BY 4.0) · © OpenStreetMap-bijdragers · Stormnamen: Met Office · Berekeningen: Weerlab',20,header+height+footer-12,Math.min(10,(width-40)/85),'#60768a');
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('PNG kon niet worden gemaakt.')),'image/png'));
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);

@@ -77,3 +77,5 @@ Elk bericht wordt daarna nog afzonderlijk gevalideerd op run, lid, parameter, ee
 De gegroepeerde route is voor alle 51 drukvelden byte voor byte vergeleken met de losse download.
 
 Bestaande banen volgen verzwakkende gesloten kernen vanaf 0,5 hPa op de 300 km-ring; nieuwe banen vereisen nog steeds 2 hPa. De verplaatsingsgrens blijft 120 km/u. Geen ontbrekende posities of toekomstige banen worden ingevuld.
+
+Andere depressies staat standaard aan: behalve de geselecteerde baan worden de op de gekozen tijd beschikbare overige systemen met leden, control, gemiddelde en selecteerbaar label getoond. De windstootkansen blijven onafhankelijk van deze selectie.
