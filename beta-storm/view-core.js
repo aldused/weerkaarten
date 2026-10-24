@@ -28,5 +28,8 @@
     const indices=frames.map((f,i)=>f.valid.startsWith(day)?i:-1).filter(i=>i>=0);
     return indices.reduce((a,b)=>Math.abs(Date.parse(frames[a].valid)-wanted)<=Math.abs(Date.parse(frames[b].valid)-wanted)?a:b,indices[0]);
   }
-  const api={contours,days,dayFrame};if(typeof module==='object'&&module.exports)module.exports=api;else root.StormViewCore=api;
+  function systemAtFrame(systems,frame){
+    return systems.filter(s=>s.tracks.find(t=>t.member===0)?.points[frame]).sort((a,b)=>a.tracks.find(t=>t.member===0).points[frame][2]-b.tracks.find(t=>t.member===0).points[frame][2])[0]||null;
+  }
+  const api={contours,days,dayFrame,systemAtFrame};if(typeof module==='object'&&module.exports)module.exports=api;else root.StormViewCore=api;
 })(typeof globalThis==='object'?globalThis:this);

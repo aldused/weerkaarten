@@ -2,7 +2,7 @@
 
 Standaard kiest de viewer automatisch het diepste nog verwachte gesloten control-laag in de komende vier dagen binnen
 40–65°N, 40°W–20°E. Ook later gevormde of binnengekomen depressies worden gedetecteerd.
-De automatische keuze wordt na iedere modelrun en iedere vijfminutencontrole opnieuw bepaald.
+Bij datumwisseling volgt Automatisch het diepste control-laag op die tijd; de stormnaam wordt steeds opnieuw bepaald.
 Een handmatig gekozen laag wordt bij een nieuwe run alleen gekoppeld als een control-kernpositie
 op een overlappend geldig tijdstip binnen 600 km ligt; anders keert de viewer met melding terug naar automatisch.
 Het windstootkansveld blijft onafhankelijk van de gekozen depressie en bevat alle weersystemen.
@@ -70,7 +70,7 @@ Officiële namen en bron-URL staan in storm-names.json; de koppeling vereist een
 Niet benoemde of ambigu gekoppelde systemen krijgen geen verzonnen naam.
 
 De totale horizon is acht dagen. De dagknop op de allerlaatste UTC-datum heeft alleen het eindtijdstip 00Z.
-De automatische selectie gebruikt vier dagen vooruit; handmatige selectie en animatie gebruiken alle acht dagen.
+De startselectie gebruikt vier dagen vooruit; daarna volgt Automatisch de gekozen tijd over alle acht dagen.
 
 De download voegt alleen aaneengesloten GRIB-berichten samen in HTTP Range-aanvragen (maximaal 20 MB).
 Elk bericht wordt daarna nog afzonderlijk gevalideerd op run, lid, parameter, eenheid en maximumvenster.

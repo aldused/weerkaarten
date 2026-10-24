@@ -38,7 +38,10 @@ const utc = s => new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'2-digit',
 function systems(){return data?.systems?.length ? data.systems : data ? [{id:'legacy',seed:data.seed,start_hour:0,tracks:data.tracks}] : [];}
 function activeSystem(){return systems().find(s=>s.id===pickedId)||systems()[0]||null;}
 function activeTracks(){return activeSystem()?.tracks||data.tracks;}
-function autoSystem(){
+function autoSystem(atFrame=null){
+  if(atFrame!==null){
+    return StormViewCore.systemAtFrame(systems(),atFrame);
+  }
   const now=Date.now();
   const score=s=>{
     const control=s.tracks.find(t=>t.member===0);
@@ -55,14 +58,19 @@ function selectSystem(fit=true){
   if(before!==pickedId && Number.isFinite(s.deepest_hour))frame=Math.max(0,data.frames.findIndex(f=>f.hour===s.deepest_hour));
   if(data.frames[frame].hour<s.start_hour)frame=Math.max(0,data.frames.findIndex(f=>f.hour>=s.start_hour));
   if(fit||before!==pickedId){const positions=s.tracks.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.08),{maxZoom:6,animate:false});}
-  const title=s.storm_name?'Storm '+s.storm_name:'Lagedrukgebied'+(s.minimum_hpa?' · minimum '+Math.round(s.minimum_hpa)+' hPa':' · ECMWF ENS');
+  updateStormTitle();
+}
+function updateStormTitle(){
+  const s=activeSystem();if(!s)return;
+  const available=!!s.tracks.find(t=>t.member===0)?.points[frame];
+  const title=!available?'Windstootkans ENS · geen gekoppelde lagedrukkern':s.storm_name?'Storm '+s.storm_name:'Lagedrukgebied'+(s.minimum_hpa?' · minimum '+Math.round(s.minimum_hpa)+' hPa':' · ECMWF ENS');
   $('storm-name').textContent=title;$('map-name').textContent=title;
   $('name-source').replaceChildren();
-  if(s.name_source){const link=document.createElement('a');link.href=s.name_source;link.target='_blank';link.rel='noopener';link.textContent='Stormnaam: Met Office';$('name-source').append(link,document.createTextNode(' · ECMWF-koppeling: Weerlab'));}
+  if(available&&s.storm_name&&s.name_source){const link=document.createElement('a');link.href=s.name_source;link.target='_blank';link.rel='noopener';link.textContent='Stormnaam: Met Office';$('name-source').append(link,document.createTextNode(' · ECMWF-koppeling: Weerlab'));}
   else $('name-source').textContent='Geen officiële stormnaam gekoppeld aan dit laag.';
 }
 function updateSystemMenu(){
-  $('system').replaceChildren(new Option('Automatisch · komende 4 dagen','auto'),...systems().map((s,i)=>new Option(`${s.storm_name?'Storm '+s.storm_name:'Laag '+(i+1)} · min. ${Math.round(s.minimum_hpa||s.seed?.[2]||0)} hPa · ${utc(data.frames.find(f=>f.hour===s.deepest_hour)?.valid||data.run)}`,s.id)));
+  $('system').replaceChildren(new Option('Automatisch · laag op gekozen tijd','auto'),...systems().map((s,i)=>new Option(`${s.storm_name?'Storm '+s.storm_name:'Laag '+(i+1)} · min. ${Math.round(s.minimum_hpa||s.seed?.[2]||0)} hPa · ${utc(data.frames.find(f=>f.hour===s.deepest_hour)?.valid||data.run)}`,s.id)));
   $('system').value=systemChoice;$('system').disabled=false;
 }
 function renderDays(){
@@ -99,11 +107,16 @@ function segments(points){const out=[];let part=[];for(const p of points){if(p)p
 function status(){
   if(!data)return;
   const age=(Date.now()-new Date(data.run))/36e5;
+  if(systemChoice==='auto'){
+    const selected=autoSystem(frame);
+    if(selected&&selected.id!==pickedId){pickedId=selected.id;fitStorm();}
+  }
+  updateStormTitle();
   const f=data.frames[frame], g=f.gust;
   const notes=[];
   if(loadError)notes.push(loadError);
   if(selectionNote)notes.push(selectionNote);
-  if(systemChoice==='auto'&&activeSystem())notes.push('Automatisch: diepste laag in de komende 4 dagen (control-run). Windstootkans staat los van de stormbaan.');
+  if(systemChoice==='auto'&&activeSystem())notes.push('Automatisch: diepste gekoppelde laag op de gekozen tijd (control-run). Windstootkans staat los van de stormbaan.');
   if(f.hour>120)notes.push(`Langere termijn (+${f.hour}u): grotere onzekerheid; bekijk vooral de ensemblespreiding.`);
   if(age>24)notes.push('Verouderde modelrun: meer dan 24 uur oud.');
   if(!activeSystem()?.seed)notes.push('Geen gesloten lagedrukkern gevonden in het zoekgebied. Er wordt geen stormbaan getekend.');
@@ -117,6 +130,11 @@ function status(){
 }
 function render(){
   if(!data)return;
+  if(systemChoice==='auto'){
+    const selected=autoSystem(frame);
+    if(selected&&selected.id!==pickedId){pickedId=selected.id;fitStorm();}
+  }
+  updateStormTitle();
   const f=data.frames[frame], g=f.gust;
   renderDays();contourLayer.clearLayers();
   const drawScale=Math.min(1.8,Math.max(1,map.getContainer().clientWidth/1800));

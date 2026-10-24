@@ -28,3 +28,12 @@ test('eight days preserve six-hour spacing after +144 and permit the final day',
  assert.equal(frames[core.dayFrame(frames,'2026-10-31',4)].hour,180);
  assert.equal(frames[core.dayFrame(frames,'2026-11-01',4)].hour,192);
 });
+test('automatic storm identity follows the selected time without carrying Boelo forward',()=>{
+ const boelo={id:'boelo',storm_name:'Boelo',tracks:[{member:0,points:[[60,0,950],null]},{member:1,points:[[60,0,951],[60,1,952]]}]};
+ const next={id:'next',tracks:[{member:0,points:[[55,-10,990],[55,-5,960]]}]};
+ assert.equal(core.systemAtFrame([boelo,next],0),boelo);
+ assert.equal(core.systemAtFrame([boelo,next],1),next);
+ assert.equal(core.systemAtFrame([boelo],1),null);
+ assert.equal(boelo.storm_name,'Boelo');
+ assert.equal(next.storm_name,undefined);
+});
