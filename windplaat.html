@@ -192,8 +192,8 @@ h1 em{font-style:normal;color:var(--calm)}
 .extremes{grid-template-columns:repeat(3,minmax(0,1fr))}#zoek-extremen::before{content:none}@media(max-width:900px){.extremes{grid-template-columns:minmax(0,1fr)}}
 </style>
 <style>[hidden]{display:none!important}body{margin:0}</style>
-<style>.graph-switch{display:flex;gap:8px;flex-wrap:wrap;max-width:1280px;margin:0 auto;padding:16px 24px;font:600 16px system-ui,sans-serif}.graph-switch a{color:#a9c2d2;text-decoration:none;padding:10px 18px;border:1px solid #31556e;border-radius:8px;min-height:44px}.graph-switch a[aria-current=page]{color:#10283b;background:#6fc3da}.graph-switch a:focus-visible{outline:3px solid #f2c43d;outline-offset:3px}</style><style>.model-label{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#ecf4f8}.model-label select{font:inherit;background:#143049;color:#ecf4f8;border:1px solid #31556e;border-radius:8px;padding:10px;min-height:44px;max-width:100%}.model-label select:focus-visible{outline:3px solid #6fc3da}</style></head>
-<body><nav class="graph-switch" aria-label="Weergrafieken"><a id="wind-link" href="windplaat.html" aria-current="page">Wind</a><a id="neerslag-link" href="neerslagplaat.html">Neerslag</a><a id="temperatuur-link" href="temperatuurplaat.html">Temperatuur</a><label class="model-label" for="model-keuze">Model <select id="model-keuze"><option value="harmonie">HARMONIE 43 · tot +60 uur</option><option value="ecmwf">ECMWF · 5 dagen</option><option value="icond2">ICON-D2 · tot +48 uur</option></select></label></nav>
+<style>.graph-switch{display:flex;gap:8px;flex-wrap:wrap;max-width:1280px;margin:0 auto;padding:16px 24px;font:600 16px system-ui,sans-serif}.graph-switch a{color:#a9c2d2;text-decoration:none;padding:10px 18px;border:1px solid #31556e;border-radius:8px;min-height:44px}.graph-switch a[aria-current=page]{color:#10283b;background:#6fc3da}.graph-switch a:focus-visible{outline:3px solid #f2c43d;outline-offset:3px}</style><style>.model-label{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#ecf4f8}.model-label select{font:inherit;background:#143049;color:#ecf4f8;border:1px solid #31556e;border-radius:8px;padding:10px;min-height:44px;max-width:100%}.model-label select:focus-visible{outline:3px solid #6fc3da}</style><script src="weather24-platen.js?v=20261024"></script></head>
+<body><nav class="graph-switch" aria-label="Weergrafieken"><a id="wind-link" href="windplaat.html" aria-current="page">Wind</a><a id="neerslag-link" href="neerslagplaat.html">Neerslag</a><a id="temperatuur-link" href="temperatuurplaat.html">Temperatuur</a><label class="model-label" for="model-keuze">Model <select id="model-keuze"><option value="harmonie">HARMONIE 43 · tot +60 uur</option><option value="ecmwf">ECMWF · 5 dagen</option><option value="icond2">ICON-D2 · tot +48 uur</option><option value="weather24">Weather24 · 5 dagen</option></select></label></nav>
 
 
 <main class="plate" id="plate">
@@ -390,7 +390,7 @@ function render() {
   document.getElementById('verdict').innerHTML =
     `De zwaarste windstoten verwachten we <b>${fDayL.format(peakG.d)}${strongDayPart(peakG.d) !== 'nacht' ? strongDayPart(peakG.d) : 'nacht'}</b> rond ${hm(peakG.d)}: tot <b>${Math.round(peakG.wg)} km/u</b> uit het ${DIR_NOUN[dir8(peakG.wd)]}. ` +
     `Het rustigst is het ${fDayL.format(calm.seg[0].d)}${strongDayPart(calm.seg[2].d)}, met wind rond ${Math.round(-calm.v)} km/u.`;
-  document.getElementById('runline').textContent = `${modelLabel()} · run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC · ${R.length} uur`;
+  document.getElementById('runline').textContent = (M.model==='weather24'?`Weather24 · opgehaald ${hm(new Date(M.generated))} · ${R.length} uur`:`${modelLabel()} · run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC · ${R.length} uur`);
   document.getElementById('updline').textContent = `Bijgewerkt ${fDate.format(new Date(S.generated))} ${hm(new Date(S.generated))}`;
 
   // kernwaarden
@@ -451,7 +451,7 @@ function render() {
     BFT_COL.slice(1, used + 1).map((c, k) => `<span style="background:${c}" title="${BFT_LO[k+1]}+ km/u">${k+1}<span class="r" style="opacity:.7;font-weight:400"> · ${BFT_LO[k+1]}+</span></span>`).join('');
 
   const ifsN = R.filter(r => r.src !== 'H43').length;
-  document.getElementById('src').textContent = `Bron: ${modelLabel()}, run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC · ${R.length} uur · uitsluitend dit model`+(M.model==='ecmwf'?' · uurlijks geïnterpoleerd; windstoten uit drie-uursmaxima':'');
+  document.getElementById('src').textContent = (M.model==='weather24'?`Bron: MOS/ECMWF · Weather24 · ${R.length} uur`:`Bron: ${modelLabel()}, run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC · ${R.length} uur · uitsluitend dit model`)+(M.model==='ecmwf'?' · uurlijks geïnterpoleerd; windstoten uit drie-uursmaxima':'');
 }
 
 // ---------- hoofdgrafiek ----------
@@ -615,7 +615,7 @@ function focusHour(i, len) {
 
 // ---------- rooster, plaatskeuze en verversen ----------
 const DATA_BASE = 'https://data.weerlab.nl/modelplaten/';
-let modelKey=new URLSearchParams(location.search).get('model')||'harmonie';if(!['harmonie','ecmwf','icond2'].includes(modelKey))modelKey='harmonie';
+let modelKey=new URLSearchParams(location.search).get('model')||'harmonie';if(!['harmonie','ecmwf','icond2','weather24'].includes(modelKey))modelKey='harmonie';
 const modelLabel=()=>M?.label||'HARMONIE 43';
 const SHOW = 120;
 const OP = new Set(['texel','vlieland','terschelling','ameland','schiermonnikoog','goeree-overflakkee','urk','marken','pampus']);
@@ -657,15 +657,17 @@ const PLAATSEN = [
 const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const slug = s => norm(s).replace(/ /g, '-');
 
-let M = null, CUBE = null, current = null, S0 = null;
+let M = null, CUBE = null, current = null, S0 = null, weatherRequest=0;
 const $ = id => document.getElementById(id);
 
 function inGrid(lat, lon) {
+  if(modelKey==='weather24')return lat>=50&&lat<=54&&lon>=3&&lon<=8;
   const g = M.grid;
   return lat >= g.lat0 && lat <= g.lat0 + g.dlat * (g.ny - 1) && lon >= g.lon0 && lon <= g.lon0 + g.dlon * (g.nx - 1);
 }
 
 function series(p) {
+  if(modelKey==='weather24')return Weather24Platen.sample(p,'wind');
   // bilineair tussen de vier omliggende roosterpunten; richting via u/v
   const g = M.grid, H = M.hours, N = g.ny * g.nx;
   const y = (p.lat - g.lat0) / g.dlat, x = (p.lon - g.lon0) / g.dlon;
@@ -690,7 +692,8 @@ function series(p) {
   return rows;
 }
 
-function show(p, opts = {}) {
+async function show(p, opts = {}) {
+  if(modelKey==='weather24'){const id=++weatherRequest;try{melding('Weather24 ophalen…');const d=await Weather24Platen.load(p);if(id!==weatherRequest||modelKey!=='weather24')return;M=Weather24Platen.meta(d,'wind')}catch(e){melding(e.message);return}}
   if (!M) return;
   if (!inGrid(p.lat, p.lon)) { melding(`${p.name} ligt buiten het rekengebied (Nederland en de kust).`); return; }
   current = p;
@@ -767,6 +770,7 @@ const EMB = document.getElementById('grid-embed').textContent.trim();
 const EMBEDDED = EMB && !EMB.startsWith('/*');
 
 async function laadRooster() {
+  if(modelKey==='weather24'){const d=await Weather24Platen.load(current||startPlaats());return [Weather24Platen.meta(d,'wind'),null]}
   if (EMBEDDED) { const e = JSON.parse(EMB); return [e.meta, b64(e.data)]; }
   const manifest=await (await fetch(DATA_BASE+'current.json?t='+Date.now(),{cache:'no-store'})).json();
   const meta=manifest.models?.[modelKey]?.wind;if(!meta||meta.schema!==2)throw Error('Model ontbreekt');
@@ -798,8 +802,8 @@ async function refresh(first) {
     $('extremen').hidden=true;$('zoek-extremen').setAttribute('aria-expanded','false');
     M = meta; CUBE = cube;
     $('live').textContent = EMBEDDED ? 'Demo · run ' + new Date(M.h43_run).toISOString().slice(11, 13) + ' UTC' : 'Live · ververst elk uur';
-    if (first) { const q = new URLSearchParams(location.search).get('plaats'); const p = startPlaats(); show(p, {quiet: true}); if (q && norm(q) !== norm(p.name)) zoek(q); }
-    else if (changed || current) show(current, {quiet: true});
+    if (first) { const q = new URLSearchParams(location.search).get('plaats'); const p = startPlaats(); await show(p, {quiet: true}); if (q && norm(q) !== norm(p.name)) zoek(q); }
+    else if (changed || current) await show(current, {quiet: true});
   } catch (e) {
     if (first) { $('plaatsnaam').textContent = '—'; melding('De windgegevens konden niet worden geladen. Probeer het over een paar minuten opnieuw.'); }
     $('live').textContent = 'Verbinding weg · laatste gegevens blijven staan';
@@ -936,7 +940,7 @@ async function maakVierkant() {
   leg((x, y) => { g.setLineDash([5, 4]); g.strokeStyle = '#FF3D6E'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 20, y); g.stroke(); g.setLineDash([]); }, `${WARN} km/u`);
   g.textAlign = 'right'; g.font = `600 17px ${BODY}`; g.fillStyle = '#ECF4F8'; g.fillText('Ed Aldus WM · weerlab.nl', Wc - P, ly2 + 5);
   g.font = `500 13px ${MONO}`; g.fillStyle = '#5C7C92';
-  g.fillText(`Bron: ${modelLabel()}, run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC${M.model==='ecmwf'?' · uurlijks geïnterpoleerd':''}`, Wc - P, ly2 - 22);
+  g.fillText((M.model==='weather24'?'Bron: MOS/ECMWF · Weather24':`Bron: ${modelLabel()}, run ${new Date(M.run_utc).toISOString().slice(11,13)} UTC${M.model==='ecmwf'?' · uurlijks geïnterpoleerd':''}`), Wc - P, ly2 - 22);
   g.textAlign = 'left';
   return c;
 }
@@ -948,13 +952,14 @@ function extremeGroup(panel,title,entries,value,when,open){
  panel.append(section);
 }
 
-$('zoek-extremen').onclick=()=>{
+$('zoek-extremen').onclick=async()=>{
  const panel=$('extremen');panel.hidden=false;$('zoek-extremen').setAttribute('aria-expanded','true');panel.replaceChildren();
- if(!M||!CUBE){panel.textContent='De windgegevens zijn nog niet beschikbaar. Probeer het opnieuw zodra de grafiek is geladen.';return}
- const places=PLAATSEN.map(([name,lat,lon])=>({name,lat,lon}));if(current&&!places.some(p=>p.lat===current.lat&&p.lon===current.lon))places.push(current);
+ if(!M||(!CUBE&&modelKey!=='weather24')){panel.textContent='De windgegevens zijn nog niet beschikbaar. Probeer het opnieuw zodra de grafiek is geladen.';return}
+ let places=PLAATSEN.map(([name,lat,lon])=>({name,lat,lon}));if(current&&!places.some(p=>p.lat===current.lat&&p.lon===current.lon))places.push(current);
+ if(modelKey==='weather24'){panel.textContent='Weather24-plaatsen vergelijken…';const comparedModel=modelKey;let ready;try{ready=await Weather24Platen.prepare(places.slice(0,20));}catch(e){panel.textContent=e.message;return}if(modelKey!==comparedModel)return;places=ready;panel.replaceChildren();}
  const compared=places.filter(p=>inGrid(p.lat,p.lon)).map(p=>{const rows=series(p);return {...p,rows}}).filter(p=>p.rows.length>0&&p.rows.every(r=>Number.isFinite(r.ws)&&Number.isFinite(r.wg))).map(p=>({...p,maxWind:p.rows.reduce((a,b)=>b.ws>a.ws?b:a),maxGust:p.rows.reduce((a,b)=>b.wg>a.wg?b:a),minWind:p.rows.reduce((a,b)=>b.ws<a.ws?b:a)}));
  if(!compared.length){panel.textContent='Geen volledige windreeksen beschikbaar.';return}
- const h=document.createElement('h2'),note=document.createElement('p');h.textContent='Windextremen';const first=compared[0].rows[0].t,last=compared[0].rows.at(-1).t;note.textContent=`${modelLabel()} · ${compared.length} plaatsen vergeleken over dezelfde ${compared[0].rows.length} uur: ${fDate.format(new Date(first))} ${hm(new Date(first))} – ${fDate.format(new Date(last))} ${hm(new Date(last))}. Top 5 per categorie; dit zijn extremen binnen de plaatsenlijst, inclusief de gekozen plaats. Bij gelijke waarden bepaalt de plaatsnaam de volgorde.`;panel.append(h,note);
+ const h=document.createElement('h2'),note=document.createElement('p');h.textContent='Windextremen';const first=compared[0].rows[0].t,last=compared[0].rows.at(-1).t;note.textContent=`${modelLabel()} · ${compared.length} plaatsen vergeleken over dezelfde ${compared[0].rows.length} uur: ${fDate.format(new Date(first))} ${hm(new Date(first))} – ${fDate.format(new Date(last))} ${hm(new Date(last))}. Top 5 per categorie; dit zijn extremen binnen de plaatsenlijst, ${M.model==='weather24'?'maximaal 20 vaste woonplaatsen':'inclusief de gekozen plaats'}. Bij gelijke waarden bepaalt de plaatsnaam de volgorde.`;panel.append(h,note);
  const rank=(field,metric,asc=false)=>[...compared].sort((a,b)=>(asc?a[field][metric]-b[field][metric]:b[field][metric]-a[field][metric])||a.name.localeCompare(b.name,'nl')).slice(0,5);
  const stamp=(p,field)=>{const r=p[field],d=new Date(r.t);return fDate.format(d)+' '+dayHm(d)+' ('+new Intl.DateTimeFormat('nl-NL',{timeZone:TZ,timeZoneName:'shortOffset'}).formatToParts(d).find(p=>p.type==='timeZoneName').value+') · uit '+dir16(r.wd)+' · '+modelLabel()};
  const open=p=>{show(p);$('chart').scrollIntoView({behavior:'smooth',block:'center'})};
