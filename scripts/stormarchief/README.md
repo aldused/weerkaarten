@@ -11,7 +11,7 @@ python3 download_knmi.py
 python3 build_stormdagen.py --output ../../stormdagen_data.json
 ```
 
-Bij installatie onder `scripts/stormarchief` wijst deze output naar de websitebron. De download schrijft de originele ZIP-bestanden en SHA-256-controlesommen in `source/`. Deze archieven blijven lokale rekeninputs. `stormdagen_data.json` is de publiceerbare momentopname. Geen nieuwe automatische taak is geïnstalleerd.
+Bij installatie onder `scripts/stormarchief` wijst deze output naar de websitebron. De download schrijft de originele ZIP-bestanden en SHA-256-controlesommen in `source/`. Deze archieven blijven lokale rekeninputs. `stormdagen_data.json` is de publiceerbare momentopname. De website gebruikt inmiddels de automatisch bijgewerkte livebron; dit bestand blijft de terugvalkopie.
 
 ## Zoekgedrag
 
@@ -27,6 +27,24 @@ Controle uitgevoerd met `stormzoek.test.cjs` en `test_stormdagen.py` in de ontwi
 
 Uitgesloten op verzoek: IJmond (209), Cadzand (308), Hoofdplaat (311), Hansweert (315) en Schaar (316). De uitsluiting gebeurt vóór de berekening van dagselectie, dekking, windpieken en windstoten.
 
-Ook uitgesloten op verzoek: Huibertgat (285), Oosterschelde (312) en Vlakte van de Raan (313). Bronmomentopname blijft 20 oktober 2026; de stationsselectie is aangepast op 21 oktober 2026.
+Ook uitgesloten op verzoek: Huibertgat (285), Oosterschelde (312) en Vlakte van de Raan (313). De vaste stationsselectie is aangepast op 21 oktober 2026 en blijft ook bij automatische updates behouden.
 
 Classificatie aangepast op verzoek: afronden op hele m/s, met 9 Bft vanaf 20,5 m/s en 12 Bft vanaf 32,5 m/s. Ruwe FHX en FXX blijven intact; CSV behoudt de oorspronkelijke meetprecisie.
+
+## Automatisch actueel houden
+
+`update_stormdagen.py` draait via de bestaande Weerlab-backend met launchd-label `nl.edaldus.stormdagen`, iedere 15 minuten. `shell/stormdagen_update.sh` voorkomt overlappende taken. Het dagarchief wordt iedere zes uur gecontroleerd met conditionele downloads. De taak publiceert naar `r2:weerlab-data/stormdagen/current.json`; de pagina haalt deze bron bij openen en iedere 15 minuten opnieuw op. Hiervoor moet de bestaande backend actief zijn.
+
+Recente KNMI-uurwaarden FH vullen het dagarchief aan. Waar FH ontbreekt wordt uitsluitend een volledig uur van zes aansluitende tienminutengemiddelden ff gebruikt. Dit blijft voorlopig; officiële FHX-dagwaarden krijgen voorrang en kunnen een voorlopige stormdag intrekken. Een windstoot of afzonderlijke tienminutenwind telt nooit als uurwaarde. Ontbrekende gegevens zijn geen nul. Middernacht hoort bij het voorafgaande UTC-etmaal.
+
+De pagina toont de laatste controle, het nieuwste complete uur en de archiefdatum. Verouderde gegevens en gebruik van de opgeslagen terugvalkopie worden zichtbaar gemeld. De piek van de laatste 24 beschikbare complete uren blijft zichtbaar, ook wanneer die beneden de stormgrens ligt.
+
+Installatie gebruikt de bestaande lokale `scripts/knmi_api.py` en rclone-configuratie; sleutels worden niet in deze repository opgenomen. Cache en originele antwoorden staan onder `/Users/aldus/KNMI_Project/stormdagen_cache`, logs onder `/Users/aldus/KNMI_Project/logs/stormdagen.log`. Publicatie gebeurt pas na validatie; bij fouten blijft de vorige publieke versie beschikbaar.
+
+Handmatig controleren vanuit de geïnstalleerde backend:
+
+```sh
+python3 scripts/stormarchief/update_stormdagen.py --out ../stormdagen_cache --publish
+```
+
+Bronnen: [KNMI uurgegevens](https://www.knmi.nl/nederland-nu/klimatologie/uurgegevens) en de KNMI EDR-collecties `hourly-in-situ-meteorological-observations` en `10-minute-in-situ-meteorological-observations`. `test_storm_live.py` toetst complete uurvakken, bronvoorrang, intrekken van voorlopige dagen en behoud van de stationsselectie.
