@@ -15,3 +15,5 @@ Checks: `node tests/weergrafieken-extra.test.cjs`, `node tests/weather24-platen.
 Gladheid is op verzoek uitgesteld: daarvoor zijn geschikte wegdekgegevens en validatie met metingen nodig. Deze grafieken presenteren geen gladheidsadvies.
 
 Neerslagkans is een vierde extra weergave. Het veld `prrr` uit de uurfeed wordt rechtstreeks getoond op 0–100%, met uurvak-start en expliciete tijdzone. Geen afleiding uit hoeveelheden en geen optelling tot etmaalkans. Ontbrekend blijft null. Export: `neerslagkans_plaats_mos_ecmwf.png`.
+
+Vormgeving sluit aan op de windplaat: grote plaatsnaam, drie gekleurde kerncijfers, nachtvakken, piekmarkering en een vaste kleurenlegenda. Neerslagkans gebruikt kleurklassen (<20, 20–49, 50–79, ≥80%) als visuele schaal voor de uurkans. De gegevens en berekeningen blijven dezelfde. Alle zeven grafieken hebben een zelfstandig blok voor modelkeuze. Bij zon en neerslagkans zijn niet-gekoppelde modelbronnen zichtbaar maar uitgeschakeld; de tekst noemt de beschikbare MOS/ECMWF-uurbron. Een modelvoorkeur voor gevoelstemperatuur blijft behouden na bezoek aan die weergaven.
