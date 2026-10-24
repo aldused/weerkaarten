@@ -428,20 +428,6 @@ input[type="range"]:focus-visible, button:focus-visible, select:focus-visible {
   .sync-info { width: 100%; }
 }
 
-/* Twintig kaarten in tien rijen van twee; scrollen blijft vrij boven de kaarten. */
-body.overview-20 #grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(10, clamp(380px, 48vw, 720px));
-  height: auto; min-width: 0; min-height: 0;
-}
-body.overview-20 #grid-scroll { overflow-y: auto; scrollbar-width: auto; overscroll-behavior-y: contain; }
-body.overview-20 .panel-hdr { min-height: 100px; }
-body.overview-20 .panel-element-select { max-width: 100%; flex: 1 0 100%; opacity: 1; }
-body.overview-20 .panel-model-select { max-width: 85%; }
-body.overview-20 #var-select { display: none; }
-body.overview-20 .var-select-wrap > label { display: none; }
-#map-tooltip { max-height: 80vh; overflow-y: auto; }
-
 /* ─── Vierluikgrootte-slider (schaalt het hele 2×2-blok) ───────── */
 .view-slider-wrap {
   display: flex; align-items: center; gap: 8px;
@@ -722,7 +708,6 @@ body.six-hours #map-focus-time { white-space:normal; }
   <select id="view-mode" class="view-mode" aria-label="Kies modelvergelijking of eerdere modelruns">
     <option value="4">4-luik · modellen</option>
     <option value="6">6-luik · modelruns</option>
-    <option value="20">Overzicht · 20 kaarten</option>
   </select>
   <label class="six-only" for="six-model">Model <select id="six-model" class="view-mode"></select></label>
   <label class="six-only" for="six-valid">Geldig op <select id="six-valid" class="view-mode" aria-label="Geldig tijdstip voor alle zes runs"></select></label>
@@ -1184,21 +1169,12 @@ var FULL_RANGE_LABEL = IS_GLOBAL4 ? 'Volledig bereik' : 'Volledig bereik · HARM
 document.querySelectorAll('#time-mode option[value="all"], #focus-time-mode option[value="all"]').forEach(function(option) {
   option.textContent = FULL_RANGE_LABEL;
 });
-var IS_OVERVIEW = PAGE_PARAMS.get('overzicht') === '20';
-var OVERVIEW_FIELDS = ['bewolking', 'neerslag', 'cumul', 'wind', 'windstoten'];
-var IS_SIX_HOURS = !IS_OVERVIEW && PAGE_PARAMS.get('tijdluik') === '6';
+var IS_SIX_HOURS = PAGE_PARAMS.get('tijdluik') === '6';
 var SIX_FIELDS = ['neerslag', 'wind', 'windstoten'];
-document.getElementById('view-mode').value = IS_OVERVIEW ? '20' : IS_SIX_HOURS ? '6' : '4';
+document.getElementById('view-mode').value = IS_SIX_HOURS ? '6' : '4';
 function changeViewMode() {
   var url = new URL(location.href);
-  url.searchParams.delete('overzicht');
-  if (this.value === '20') {
-    url.searchParams.set('overzicht', '20');
-    url.searchParams.delete('tijdluik');
-    url.searchParams.delete('model');
-    url.searchParams.delete('elementen');
-    if (!IS_SIX_HOURS) url.searchParams.set('modellen', panels.slice(0, 4).map(function(p) { return MODELS[p.modelIdx].id; }).join(','));
-  } else if (this.value === '6') {
+  if (this.value === '6') {
     url.searchParams.set('tijdluik', '6');
     url.searchParams.set('laag', SIX_FIELDS.indexOf(activeVar) >= 0 ? activeVar : 'neerslag');
     url.searchParams.delete('elementen');
@@ -1274,28 +1250,7 @@ if (IS_GLOBAL4 && !IS_SIX_HOURS) {
 // ── Vierluik: vier vakken, elk vak toont één model uit de actieve reeks ──
 // De keuze staat in de URL (?modellen=harmonie,icond2,…) en wordt daarnaast
 // lokaal onthouden, zodat een eigen samenstelling een volgende keer terugkomt.
-var PANEL_COUNT = IS_OVERVIEW ? 20 : IS_SIX_HOURS ? 6 : 4;
-if (IS_OVERVIEW) {
-  document.body.classList.add('overview-20');
-  document.getElementById('header-h1').textContent = 'Modellen · 20 kaarten';
-  document.title = 'Modellen · 20 kaarten';
-  var hint = document.querySelector('.toolbar-hint + .toolbar-hint');
-  if (hint) hint.textContent = 'Scroll = naar beneden · Kaartzoom via de schuifregelaar';
-  var grid = document.getElementById('grid');
-  var template = grid.firstElementChild.cloneNode(true);
-  grid.replaceChildren();
-  for (var n = 0; n < PANEL_COUNT; n++) {
-    var node = template.cloneNode(true);
-    [node].concat(Array.from(node.querySelectorAll('[id]'))).forEach(function(el) {
-      el.id = el.id.replace(/p0-/, 'p' + n + '-').replace(/-0$/, '-' + n).replace(/^cw0$/, 'cw' + n);
-    });
-    node.querySelectorAll('[aria-label]').forEach(function(el) {
-      el.setAttribute('aria-label', el.getAttribute('aria-label').replace(/kaart 1/, 'kaart ' + (n + 1)));
-    });
-    grid.appendChild(node);
-  }
-}
-document.getElementById('var-select').disabled = IS_OVERVIEW;
+var PANEL_COUNT = IS_SIX_HOURS ? 6 : 4;
 var ELEMENT_VALUES = Array.from(document.getElementById('var-select').options).map(function(o) { return o.value; });
 var activeVar = ELEMENT_VALUES.indexOf(PAGE_PARAMS.get('laag')) >= 0 ? PAGE_PARAMS.get('laag') : 'neerslag';
 document.getElementById('var-select').value = activeVar;
@@ -1329,8 +1284,8 @@ function leesModelKeuze() {
   if (!Array.isArray(ids)) ids = [];
   var keuze = [];
   for (var i = 0; i < PANEL_COUNT; i++) {
-    var idx = modelIndexById(String(ids[i % 4] || '').trim());
-    keuze.push(idx >= 0 ? idx : modelIndexById(DEFAULT_PANEL_MODELS[i % 4]));
+    var idx = modelIndexById(String(ids[i] || '').trim());
+    keuze.push(idx >= 0 ? idx : modelIndexById(DEFAULT_PANEL_MODELS[i]));
   }
   return keuze;
 }
@@ -1341,14 +1296,13 @@ function bewaarModelKeuze() {
     return;
   }
   try {
-    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panels.slice(0, 4).map(function(p) {
+    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panels.map(function(p) {
       return p.modelIdx >= 0 ? MODELS[p.modelIdx].id : '';
     })));
   } catch (e) { /* privémodus: keuze geldt dan alleen deze sessie */ }
 }
 
 function leesElementKeuze() {
-  if (IS_OVERVIEW) return Array.from({ length: PANEL_COUNT }, function(_, i) { return OVERVIEW_FIELDS[Math.floor(i / 4)]; });
   if (IS_SIX_HOURS) return Array(6).fill(activeVar);
   var ids = null;
   var uitUrl = PAGE_PARAMS.get('elementen');
@@ -1367,7 +1321,6 @@ function leesElementKeuze() {
 }
 
 function bewaarElementKeuze() {
-  if (IS_OVERVIEW) return;
   if (IS_SIX_HOURS) return;
   try {
     localStorage.setItem(ELEMENT_STORAGE_KEY, JSON.stringify(panels.map(function(p) { return p.varName; })));
@@ -2091,7 +2044,6 @@ function syncFocusVarSelect() {
   if (!bron || !doel) return;
   doel.replaceChildren.apply(doel, Array.from(bron.children).map(function(groep) { return groep.cloneNode(true); }));
   doel.value = bron.value;
-  doel.disabled = IS_OVERVIEW;
 }
 
 function updateSelectedVariableInfo() {
@@ -2104,7 +2056,7 @@ function updateSelectedVariableInfo() {
   var info = document.getElementById('var-availability');
   var perVak = panels.some(function(p) { return p.varName !== panels[0].varName; });
   if (perVak) {
-    info.textContent = IS_OVERVIEW ? '5 weerlagen × 4 modellen · modelkeuze geldt voor de hele kolom' : 'per vak gekozen';
+    info.textContent = 'per vak gekozen';
     select.title = 'Gebruik deze keuze om alle vier de kaartlagen tegelijk gelijk te zetten';
     return;
   }
@@ -2167,9 +2119,7 @@ function kiesModel(pIdx, modelId) {
     panels.forEach(function(p) { p.modelIdx = idx; });
     document.getElementById('six-model').value = modelId;
     document.getElementById('focus-six-model').value = modelId;
-  } else panels.forEach(function(p) {
-    if (p.idx === pIdx || (IS_OVERVIEW && p.idx % 4 === pIdx % 4)) p.modelIdx = idx;
-  });
+  } else panels[pIdx].modelIdx = idx;
   bewaarModelKeuze();
   updatePanelHeader(pIdx);
   var mCfg = MODELS[idx];
@@ -2178,7 +2128,7 @@ function kiesModel(pIdx, modelId) {
   if (!md || !md.meta) {
     if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Laden...'; }
   }
-  var klaar = (md && md.meta) ? laadPaneelElementenVoorModel(mCfg.id) : loadModel(mCfg, pIdx);
+  var klaar = (md && md.meta) ? loadParamIfNeeded(mCfg.id, panelVar(pIdx)) : loadModel(mCfg, pIdx);
   getGlobalTimes();
   requestRender();
   return Promise.resolve(klaar).then(function() {
@@ -2230,7 +2180,6 @@ function bouwModelKiezers() {
       option.textContent = option.dataset.label;
       option.disabled = false;
     });
-    elementSel.disabled = IS_OVERVIEW;
     elementSel.value = p.varName;
     elementSel.addEventListener('change', function() { kiesElement(p.idx, this.value); });
     updatePanelHeader(p.idx);
@@ -3629,7 +3578,7 @@ document.getElementById('view-slider').addEventListener('input', function() {
   grid.style.setProperty('--view-max-width', (1280 * pct / 100) + 'px');
   grid.style.setProperty('--view-max-height', (820 * pct / 100) + 'px');
   grid.style.width = pct + '%';
-  grid.style.height = IS_OVERVIEW ? 'auto' : IS_SIX_HOURS ? '' : pct + '%';
+  grid.style.height = IS_SIX_HOURS ? '' : pct + '%';
   document.getElementById('view-val').textContent = pct + '%';
   updateRangeProgress(this);
   this.setAttribute('aria-valuetext', pct + ' procent van de standaardgrootte');
@@ -3638,7 +3587,6 @@ document.getElementById('view-slider').addEventListener('input', function() {
 
 // Mouse scroll to zoom (on panels)
 document.getElementById('grid').addEventListener('wheel', function(e) {
-  if (IS_OVERVIEW) return; // Het wiel scrolt door de twintig kaarten; zoom via de schuifregelaar.
   e.preventDefault();
   var delta = e.deltaY > 0 ? -0.15 : 0.15;
   var newZoom = zoomLevel + delta * zoomLevel;
@@ -3810,7 +3758,7 @@ function updateComparison() {
   var title = document.createElement('strong');
   var vars = panels.map(function(p) { return p.varName; });
   var zelfdeElement = vars.every(function(varNaam) { return varNaam === vars[0]; });
-  title.textContent = (zelfdeElement ? (VAR_NAMES[vars[0]] || vars[0]) : (IS_OVERVIEW ? 'Vijf weerlagen' : 'Vier elementen')) + ' · dezelfde locatie';
+  title.textContent = (zelfdeElement ? (VAR_NAMES[vars[0]] || vars[0]) : 'Vier elementen') + ' · dezelfde locatie';
   var table = document.createElement('table');
   table.setAttribute('aria-label', 'Modelwaarden op dezelfde locatie');
   panels.forEach(function(panel) {
@@ -3989,7 +3937,6 @@ function meldKaartlaag() {
 }
 
 function kiesElement(pIdx, waarde) {
-  if (IS_OVERVIEW) return;
   if (IS_SIX_HOURS) { kiesKaartlaag(waarde); return; }
   var panel = panels[pIdx];
   if (!panel || ELEMENT_VALUES.indexOf(waarde) < 0 || panel.varName === waarde) return;
@@ -4015,7 +3962,6 @@ function kiesElement(pIdx, waarde) {
 }
 
 function kiesKaartlaag(waarde) {
-  if (IS_OVERVIEW) return;
   if (!waarde || ELEMENT_VALUES.indexOf(waarde) < 0 || (IS_SIX_HOURS && SIX_FIELDS.indexOf(waarde) < 0)) return;
   var alGelijk = panels.every(function(p) { return p.varName === waarde; });
   if (waarde === activeVar && alGelijk) return;
