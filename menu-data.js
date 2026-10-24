@@ -275,6 +275,7 @@ const MENU_PRODUCTS = [
         "harmonie46",
         "icond2",
         "icond2ruc",
+        "arome",
         "ecmwf",
         "gfs",
         "iconeu"
@@ -286,7 +287,7 @@ const MENU_PRODUCTS = [
         "4"
       ]
     },
-    "keywords": "Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
+    "keywords": "AROME HD Météo-France Hoge resolutie 4-luik 4 regiomodellen naast elkaar Neerslag Temperatuur Wind Bewolking HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC Nederland 4-luik HARMONIE 43 HARMONIE 46 ICON-D2 ICON-D2-RUC ECMWF HRES GFS Vergelijk wereldmodellen Globale modellen 4-luik ECMWF · GFS · ICON-EU Neerslag Temperatuur Wind ECMWF HRES GFS ICON-EU Europa 4-luik ECMWF HRES GFS ICON-EU",
     "restricted": false
   },
   {
@@ -1435,6 +1436,7 @@ const MENU_LABELS = {
     "harmonie46": "HARMONIE 46",
     "icond2": "ICON-D2",
     "icond2ruc": "ICON-D2-RUC",
+    "arome": "AROME HD",
     "ecmwf": "ECMWF HRES",
     "gfs": "GFS",
     "iconeu": "ICON-EU",
