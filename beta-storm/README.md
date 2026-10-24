@@ -1,6 +1,6 @@
 # ECMWF ENS stormkaart — uitsluitend bèta
 
-Standaard kiest de viewer automatisch het diepste nog verwachte gesloten control-laag binnen
+Standaard kiest de viewer automatisch het diepste nog verwachte gesloten control-laag in de komende vier dagen binnen
 40–65°N, 40°W–20°E. Ook later gevormde of binnengekomen depressies worden gedetecteerd.
 De automatische keuze wordt na iedere modelrun en iedere vijfminutencontrole opnieuw bepaald.
 Een handmatig gekozen laag wordt bij een nieuwe run alleen gekoppeld als een control-kernpositie
@@ -15,12 +15,12 @@ De kaart gebruikt de al aanwezige lokale Leaflet-bestanden.
 
 ```sh
 pip install -r beta-storm/requirements.txt
-python beta-storm/build.py --hours 72
+python beta-storm/build.py --hours 192
 python -m unittest discover -s tests -p test_beta_storm.py
 ```
 
 GitHub Actions `beta-storm.yml` controleert elke 30 minuten de nieuwste 00/12 UTC-run die in beide
-streams tot +72 uur beschikbaar is. Een al volledig gepubliceerde run wordt overgeslagen.
+streams tot +192 uur beschikbaar is. Een al volledig gepubliceerde run wordt overgeslagen.
 GitHub kan geplande taken vertragen. De browser controleert elke vijf minuten de manifestpublicatie.
 Een fout laat de vorige geldige publicatie intact; frontend waarschuwt bij een run ouder dan 24 uur.
 
@@ -58,3 +58,20 @@ De knop Download PNG exporteert de huidige kaartuitsnede, geselecteerde leden en
 modelrun, geldige tijd, windstootvenster, legenda en bronvermelding. De animatie wordt gepauzeerd.
 De browser voegt de zichtbare CORS-kaarttegels en lokale canvaslagen samen; er wordt niets naar
 een externe exportdienst gestuurd. Ontbrekende kaarttegels geven een melding in plaats van een onvolledige PNG.
+
+## Weergave en extra dag
+
+De kaart gebruikt de beschikbare iframe-breedte en 64% van de iframe-hoogte (op mobiel 58%).
+Getest in de volledige Weerlab-shell op 1920×1080, 2560×1440 en 5120×2880, plus een 390×844 mobiele iframe.
+Dagknoppen behouden waar mogelijk het gekozen uur. Alle 57 stappen (+0 tot +144 per drie uur, daarna +150 tot +192 per zes uur) zijn bereikbaar.
+Kansgrenzen bij 10/50/90% gebruiken marching squares met lineaire interpolatie tussen echte 0,25°-waarden.
+Ze veranderen de kansvelden en puntwaarden niet. Nieuwe fijne modelinformatie wordt niet gesimuleerd.
+Officiële namen en bron-URL staan in storm-names.json; de koppeling vereist een uniek laag in het gecontroleerde tijdvak/gebied.
+Niet benoemde of ambigu gekoppelde systemen krijgen geen verzonnen naam.
+
+De totale horizon is acht dagen. De dagknop op de allerlaatste UTC-datum heeft alleen het eindtijdstip 00Z.
+De automatische selectie gebruikt vier dagen vooruit; handmatige selectie en animatie gebruiken alle acht dagen.
+
+De download voegt alleen aaneengesloten GRIB-berichten samen in HTTP Range-aanvragen (maximaal 20 MB).
+Elk bericht wordt daarna nog afzonderlijk gevalideerd op run, lid, parameter, eenheid en maximumvenster.
+De gegroepeerde route is voor alle 51 drukvelden byte voor byte vergeleken met de losse download.

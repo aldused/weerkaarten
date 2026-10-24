@@ -104,6 +104,38 @@ def read_field(path, run, step, member, param):
             ec.codes_release(gid)
 
 
+def group_ranges(parts):
+    """Combine adjacent GRIB messages only; never fetch unrelated gaps."""
+    groups=[]
+    for part in sorted(parts,key=lambda item:item[0]):
+        if groups and groups[-1][-1][0]+groups[-1][-1][1]==part[0] and part[0]+part[1]-groups[-1][0][0]<=20000000:
+            groups[-1].append(part)
+        else:
+            groups.append([part])
+    return groups
+
+
+def prefetch_fields(entries,run,step,control,cache):
+    parts=[]
+    for member in ([0] if control else range(1,51)):
+        for param,names in [('msl',['msl']),('gust',['10fg','10fg3','10fg6'])]:
+            if step==0 and param=='gust':
+                continue
+            path=cache/f'{step}-{member}-{param}.grib2'
+            if path.exists():
+                continue
+            matches=[e for e in entries if e.get('param') in names and e.get('type')==('fc' if control else 'pf') and (control or int(e.get('number',-1))==member)]
+            if len(matches)==1:
+                e=matches[0];parts.append((int(e['_offset']),int(e['_length']),path))
+    for group in group_ranges(parts):
+        offset=group[0][0];length=group[-1][0]+group[-1][1]-offset
+        data=request(base_url(run,step,control)+'.grib2',{'Range':f'bytes={offset}-{offset+length-1}'})
+        if len(data)!=length:
+            raise ValueError('Onvolledige gegroepeerde download')
+        for start,size,path in group:
+            tmp=path.with_suffix('.tmp');tmp.write_bytes(data[start-offset:start-offset+size]);tmp.replace(path)
+
+
 def fetch_step(run, step, cache):
     fields, problems = {}, []
     coords = None
@@ -113,6 +145,10 @@ def fetch_step(run, step, cache):
         except Exception as e:
             problems.append(f'+{step}u {"control" if control else "ENS"}: index ontbreekt ({type(e).__name__})')
             continue
+        try:
+            prefetch_fields(entries,run,step,control,cache)
+        except Exception:
+            pass  # Per-message requests below retain validation and retry on range failure.
         for member in ([0] if control else range(1, 51)):
             for param, names in [('msl', ['msl']), ('gust', ['10fg', '10fg3', '10fg6'])]:
                 if step == 0 and param == 'gust':
@@ -192,6 +228,11 @@ def probabilities(arrays):
     return p, count
 
 
+def forecast_steps(hours):
+    """ECMWF: 3-hourly through +144, then 6-hourly; no synthetic time steps."""
+    return list(range(0,min(hours,144)+1,3)) + (list(range(150,hours+1,6)) if hours>144 else [])
+
+
 def track_systems(core_map, steps):
     """Discover closed control lows throughout the horizon, then link each member.
     New systems may enter the domain or form after the run starts.
@@ -202,7 +243,7 @@ def track_systems(core_map, steps):
         for system in systems:
             for member in MEMBERS:
                 prev = system['tracks'][member][-1]
-                pos = choose_core(core_map.get((step, member), []), prev, 3) if prev else None
+                pos = choose_core(core_map.get((step, member), []), prev, step-steps[i-1]) if prev else None
                 system['tracks'][member].append(pos)
         claimed = [system['tracks'][0][-1] for system in systems if system['tracks'][0][-1]]
         for seed in sorted(core_map.get((step, 0), []), key=lambda c: c[2]):
@@ -223,6 +264,35 @@ def track_systems(core_map, steps):
     return systems
 
 
+def assign_storm_names(systems, frames, registry):
+    """Official names only; require a unique deep core in the verified event window.
+    A 5 hPa ambiguity margin avoids assigning a name to competing lows.
+    Never carry a name into a later event merely because it is next in the alphabet.
+    """
+    claimed=set()
+    for event in registry.get('storms', []):
+        south,west,north,east=event['box']
+        candidates=[]
+        for system in systems:
+            if system['id'] in claimed:
+                continue
+            control=next(t for t in system['tracks'] if t['member']==0)
+            pressures=[point[2] for point,f in zip(control['points'],frames) if point and
+                       event['from'] <= f['valid'] <= event['until'] and
+                       south <= point[0] <= north and west <= point[1] <= east]
+            if pressures and min(pressures) <= event['maximum_pressure_hpa']:
+                candidates.append((min(pressures),system))
+        candidates.sort(key=lambda item:item[0])
+        if not candidates or (len(candidates)>1 and candidates[1][0]-candidates[0][0]<5):
+            continue
+        system=candidates[0][1]
+        system['storm_name']=event['name']
+        system['name_source']=event['source']
+        system['name_verified_on']=registry['verified_on']
+        system['name_method']='Weerlab: unique deepest control core in verified Met Office event time/region; >=5 hPa separation'
+        claimed.add(system['id'])
+
+
 def atomic_json(path, value):
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(value, separators=(',', ':'), allow_nan=False))
@@ -230,13 +300,14 @@ def atomic_json(path, value):
 
 
 def build(args):
-    steps = list(range(0, args.hours + 1, 3))
+    registry=json.loads((Path(__file__).parent / 'storm-names.json').read_text())
+    steps = forecast_steps(args.hours)
     run = datetime.strptime(args.run, '%Y%m%d%H').replace(tzinfo=timezone.utc) if args.run else latest_run(steps[-1])
     current = Path(args.output) / 'current.json'
     if current.exists() and not args.force:
         manifest = json.loads(current.read_text())
         previous = json.loads((current.parent / manifest['file']).read_text())
-        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25 and 'systems' in previous:
+        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25 and 'systems' in previous and previous.get('naming_revision')==registry['revision']:
             print('Deze volledige ECMWF-run is al gepubliceerd')
             return
     cache = Path(args.cache) / run.strftime('%Y%m%d%H')
@@ -288,7 +359,8 @@ def build(args):
         frames.append({'hour': step, 'valid': valid_time, 'gust': probability})
     if not any(f['gust'] for f in frames):
         raise RuntimeError('Geen geldige windstootdata; vorige geldige publicatie blijft behouden')
-    data = {'schema': 1, 'model': 'ECMWF IFS ENS', 'run': run.isoformat().replace('+00:00','Z'),
+    assign_storm_names(systems,frames,registry)
+    data = {'schema': 1, 'naming_revision':registry['revision'], 'model': 'ECMWF IFS ENS', 'run': run.isoformat().replace('+00:00','Z'),
             'generated': datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
             'storm_name': args.name or None, 'seed': seed,
             'source': 'https://www.ecmwf.int/en/forecasts/datasets/open-data',
@@ -316,7 +388,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--force', action='store_true', help='Bestaande run opnieuw berekenen')
     p.add_argument('--run', help='UTC YYYYMMDDHH; standaard nieuwste volledige 00/12z-run')
-    p.add_argument('--hours', type=int, default=72, choices=range(3, 145, 3))
+    p.add_argument('--hours', type=int, default=192, choices=list(range(3,145,3))+list(range(150,241,6)))
     p.add_argument('--seed', type=float, nargs=2, metavar=('LAT', 'LON'))
     p.add_argument('--name', help='Alleen een gecontroleerde officiële stormnaam opgeven')
     p.add_argument('--cache', default='/tmp/weerlab-storm-cache')

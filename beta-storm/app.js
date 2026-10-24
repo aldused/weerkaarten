@@ -30,6 +30,8 @@ new GreyLandTiles('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   crossOrigin:true, attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19
 }).addTo(map);
 map.createPane('gusts');map.getPane('gusts').style.zIndex=350;
+map.createPane('probabilityContours');map.getPane('probabilityContours').style.zIndex=370;
+const contourRenderer=L.canvas({pane:'probabilityContours'}), contourLayer=L.layerGroup().addTo(map), contourCache=new Map();
 const lines=L.layerGroup().addTo(map), markers=L.layerGroup().addTo(map);
 let data=null, file=null, frame=0, timer=null, overlay=null, loading=false, loadError='', systemChoice='auto', pickedId=null, selectionNote='';
 const utc = s => new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'}).format(new Date(s))+' UTC';
@@ -40,7 +42,7 @@ function autoSystem(){
   const now=Date.now();
   const score=s=>{
     const control=s.tracks.find(t=>t.member===0);
-    let points=control.points.filter((p,i)=>p&&Date.parse(data.frames[i].valid)>=now&&p[0]>=40&&p[0]<=65&&p[1]>=-40&&p[1]<=20);
+    let points=control.points.filter((p,i)=>p&&Date.parse(data.frames[i].valid)>=now&&Date.parse(data.frames[i].valid)<=now+96*36e5&&p[0]>=40&&p[0]<=65&&p[1]>=-40&&p[1]<=20);
     return points.length?Math.min(...points.map(p=>p[2])):Infinity;
   };
   return [...systems()].sort((a,b)=>score(a)-score(b))[0]||null;
@@ -51,14 +53,39 @@ function selectSystem(fit=true){
   pickedId=selected?.id||systems()[0]?.id;
   const s=activeSystem();if(!s)return;
   if(before!==pickedId && Number.isFinite(s.deepest_hour))frame=Math.max(0,data.frames.findIndex(f=>f.hour===s.deepest_hour));
-  if(frame<s.start_hour/3)frame=Math.max(0,data.frames.findIndex(f=>f.hour>=s.start_hour));
+  if(data.frames[frame].hour<s.start_hour)frame=Math.max(0,data.frames.findIndex(f=>f.hour>=s.start_hour));
   if(fit||before!==pickedId){const positions=s.tracks.flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.08),{maxZoom:6,animate:false});}
   const title=s.storm_name?'Storm '+s.storm_name:'Lagedrukgebied'+(s.minimum_hpa?' · minimum '+Math.round(s.minimum_hpa)+' hPa':' · ECMWF ENS');
   $('storm-name').textContent=title;$('map-name').textContent=title;
+  $('name-source').replaceChildren();
+  if(s.name_source){const link=document.createElement('a');link.href=s.name_source;link.target='_blank';link.rel='noopener';link.textContent='Stormnaam: Met Office';$('name-source').append(link,document.createTextNode(' · ECMWF-koppeling: Weerlab'));}
+  else $('name-source').textContent='Geen officiële stormnaam gekoppeld aan dit laag.';
 }
 function updateSystemMenu(){
-  $('system').replaceChildren(new Option('Automatisch · diepste komende laag','auto'),...systems().map((s,i)=>new Option(`Laag ${i+1} · min. ${Math.round(s.minimum_hpa||s.seed?.[2]||0)} hPa · ${utc(data.frames.find(f=>f.hour===s.deepest_hour)?.valid||data.run)}`,s.id)));
+  $('system').replaceChildren(new Option('Automatisch · komende 4 dagen','auto'),...systems().map((s,i)=>new Option(`${s.storm_name?'Storm '+s.storm_name:'Laag '+(i+1)} · min. ${Math.round(s.minimum_hpa||s.seed?.[2]||0)} hPa · ${utc(data.frames.find(f=>f.hour===s.deepest_hour)?.valid||data.run)}`,s.id)));
   $('system').value=systemChoice;$('system').disabled=false;
+}
+function renderDays(){
+  if(!data)return;
+  const day=data.frames[frame].valid.slice(0,10);
+  $('days').replaceChildren(...StormViewCore.days(data.frames).map(date=>{
+    const button=document.createElement('button');button.type='button';
+    button.textContent=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'2-digit',month:'short',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));
+    if(data.frames.filter(f=>f.valid.startsWith(date)).length===1)button.textContent+=' · 00Z';
+    button.setAttribute('aria-pressed',String(date===day));button.setAttribute('aria-label','Toon '+button.textContent+' UTC');
+    button.onclick=()=>{stop();frame=StormViewCore.dayFrame(data.frames,date,frame);render();};return button;
+  }));
+}
+function fitStorm(){
+  if(!data)return;const positions=activeTracks().flatMap(t=>t.points.filter(Boolean).map(p=>p.slice(0,2)));
+  const centre=mean(activeTracks().map(t=>t.points[frame]).filter(Boolean)),g=data.frames[frame].gust;
+  if(centre&&g){
+    for(let y=0;y<data.grid.lat.length;y+=2)for(let x=0;x<data.grid.lon.length;x+=2){
+      const p=[data.grid.lat[y],data.grid.lon[x]];
+      if(g.values[y][x]>=10&&map.distance(centre,p)<1200000)positions.push(p);
+    }
+  }
+  if(positions.length)map.fitBounds(L.latLngBounds(positions).pad(.08),{maxZoom:6,animate:false});
 }
 function mean(points){
   if(!points.length)return null;
@@ -76,10 +103,11 @@ function status(){
   const notes=[];
   if(loadError)notes.push(loadError);
   if(selectionNote)notes.push(selectionNote);
-  if(systemChoice==='auto'&&activeSystem())notes.push('Automatisch: diepste nog verwachte gesloten laag binnen 40–65°N, 40°W–20°E. Het windstootkansveld blijft het volledige ENS-product.');
+  if(systemChoice==='auto'&&activeSystem())notes.push('Automatisch: diepste laag in de komende 4 dagen (control-run). Windstootkans staat los van de stormbaan.');
+  if(f.hour>120)notes.push(`Langere termijn (+${f.hour}u): grotere onzekerheid; bekijk vooral de ensemblespreiding.`);
   if(age>24)notes.push('Verouderde modelrun: meer dan 24 uur oud.');
   if(!activeSystem()?.seed)notes.push('Geen gesloten lagedrukkern gevonden in het zoekgebied. Er wordt geen stormbaan getekend.');
-  if(g && g.end_hour-g.start_hour<3)notes.push(`Windstootkans geldt voor ${g.end_hour-g.start_hour} uur vóór de gekozen tijd; tussenliggende uren zijn niet beschikbaar in deze drie-uurlijkse dataset.`);
+  if(g && g.end_hour-g.start_hour<3)notes.push(`Windstootvenster: ${g.end_hour-g.start_hour} uur vóór de gekozen tijd; tussenliggende uren ontbreken.`);
   if(!g)notes.push('Geen windstootkans voor deze tijd: '+(f.hour===0?'op +0u is geen maximumtijdvenster beschikbaar.':'windstootvelden ontbreken of hebben verschillende tijdvensters.'));
   else if(g.members.length<51)notes.push(`Onvolledig ensemble: ${g.members.length}/51 leden voor windstoten. De kans gebruikt uitsluitend deze beschikbare leden.`);
   const count=activeTracks().filter(t=>t.points[frame]).length;
@@ -90,6 +118,10 @@ function status(){
 function render(){
   if(!data)return;
   const f=data.frames[frame], g=f.gust;
+  renderDays();contourLayer.clearLayers();
+  const drawScale=Math.min(1.8,Math.max(1,map.getContainer().clientWidth/1800));
+  $('field-mode').textContent=$('gust').checked&&$('contours').checked?'Kansgrenzen: 10%, 50% en 90% · bronrooster 0,25°':'Oorspronkelijke roosterwaarden · bronrooster 0,25°';
+  $('map-name').textContent=activeTracks().some(t=>t.points[frame])?$('storm-name').textContent:($('gust').checked?'Windstootkans ENS · gekozen baan niet beschikbaar':'Gekozen baan niet beschikbaar op deze tijd');
   $('valid').textContent=utc(f.valid);$('map-time').textContent=utc(f.valid)+` · +${f.hour}u`;$('time').value=frame;
   lines.clearLayers();markers.clearLayers();if(overlay){map.removeLayer(overlay);overlay=null;}
   const selected=$('member').value;
@@ -97,13 +129,13 @@ function render(){
   if($('tracks').checked){
     for(const t of [...activeTracks()].sort((a,b)=>b.member-a.member)){
       if(selected!=='all'&&+selected!==t.member)continue;
-      const control=t.member===0, style={color:control?'#ed991c':'#526d9f',weight:control?3:1.2,opacity:control?1:.36};
+      const control=t.member===0, style={color:control?'#ed991c':'#526d9f',weight:(control?3:1.2)*drawScale,opacity:control?1:.36};
       for(const segment of segments(t.points))L.polyline(segment,style).bindTooltip(control?'Control (IFS oper/fc)':`ENS-lid ${t.member}`).addTo(lines);
-      const p=t.points[frame];if(p)L.circleMarker(p.slice(0,2),{radius:control?5:2.5,color:style.color,fillOpacity:.95,weight:1}).bindTooltip(`${control?'Control':'Lid '+t.member}: ${p[2]} hPa · ${utc(f.valid)}`).addTo(markers);
+      const p=t.points[frame];if(p)L.circleMarker(p.slice(0,2),{radius:(control?5:2.5)*drawScale,color:style.color,fillOpacity:.95,weight:1}).bindTooltip(`${control?'Control':'Lid '+t.member}: ${p[2]} hPa · ${utc(f.valid)}`).addTo(markers);
     }
     if(selected==='all'){
-      for(const seg of segments(means))L.polyline(seg,{color:'#124ed6',weight:3.5,dashArray:'8 6',opacity:1}).addTo(lines);
-      const m=means[frame];if(m)L.circleMarker(m,{color:'#124ed6',radius:7,fillColor:'white',fillOpacity:1,weight:3}).bindTooltip(`Gemiddelde kernpositie · ${activeTracks().filter(t=>t.points[frame]).length} leden`).addTo(markers);
+      for(const seg of segments(means))L.polyline(seg,{color:'#124ed6',weight:3.5*drawScale,dashArray:`${8*drawScale} ${6*drawScale}`,opacity:1}).addTo(lines);
+      const m=means[frame];if(m)L.circleMarker(m,{color:'#124ed6',radius:7*drawScale,fillColor:'white',fillOpacity:1,weight:3}).bindTooltip(`Gemiddelde kernpositie · ${activeTracks().filter(t=>t.points[frame]).length} leden`).addTo(markers);
       means.forEach((p,i)=>{if(!p||data.frames[i].hour%24)return;L.marker(p,{interactive:false,icon:L.divIcon({className:'',html:`<span class="core-label">${utc(data.frames[i].valid)}</span>`,iconAnchor:[-8,8]})}).addTo(markers);});
     }
   }
@@ -126,6 +158,15 @@ function render(){
       w.drawImage(c,0,src,c.width,1,0,y,c.width,1);
     }
     overlay=L.imageOverlay(warped.toDataURL(),[[south,lon[0]-data.grid.resolution/2],[north,lon.at(-1)+data.grid.resolution/2]],{pane:'gusts',className:'gust-layer',interactive:false}).addTo(map);
+    if($('contours').checked){
+      const key=file+':'+frame;
+      if(!contourCache.has(key)){
+        contourCache.set(key,[10,50,90].map(threshold=>({threshold,segments:StormViewCore.contours(g.values,lat,lon,threshold)})));
+        if(contourCache.size>8)contourCache.delete(contourCache.keys().next().value);
+      }
+      for(const item of contourCache.get(key))L.polyline(item.segments,{renderer:contourRenderer,color:item.threshold===10?'#8b6936':item.threshold===50?'#9b2f48':'#492057',weight:(item.threshold===10?1.2:1.7)*drawScale,opacity:.8,interactive:false}).addTo(contourLayer);
+    }
+
   }
   $('window').textContent=g?`Maximum van +${g.start_hour}u tot +${g.end_hour}u · ${utc(new Date(new Date(data.run).getTime()+g.start_hour*36e5))} – ${utc(f.valid)}`:'Geen geldig windstootvenster';
   $('coverage').textContent=g?`${g.members.length}/51 leden · rooster ${String(data.grid.resolution).replace('.',',')}° · strikt >90 km/u · ongekleurd bij <10% · kernposities op geselecteerde tijd: ${activeTracks().filter(t=>t.points[frame]).length}/51`:'Kansveld niet beschikbaar. Ontbrekende data betekenen geen 0% kans.';
@@ -179,13 +220,13 @@ async function load(){
         }
         systemChoice=best?.id||'auto';if(!best)selectionNote='Het eerder gekozen laag kon niet aan de nieuwe run worden gekoppeld. Automatische selectie is hervat.';
       }
-      updateSystemMenu();
+      contourCache.clear();updateSystemMenu();
       frame=Math.max(0,data.frames.findIndex(f=>f.valid===oldTime));if(!oldTime)frame=Math.min(8,data.frames.length-1);
       $('member').replaceChildren(new Option('Alle 51 leden','all'),...activeTracks().map(t=>new Option(t.member===0?'Control (oper/fc)':'ENS-lid '+t.member,String(t.member))));
       $('time').max=data.frames.length-1;
       for(const id of ['member','time','play','prev','next','download'])$(id).disabled=false;
-      selectSystem(true);
-      $('run').textContent=`Run ${utc(data.run)} · 50 ENS-leden + control · bijgewerkt ${utc(data.generated)}`;
+      selectSystem(true);fitStorm();
+      $('run').textContent=`Run ${utc(data.run)} · 50 ENS-leden + control · ${data.frames.at(-1).hour/24} dagen · bijgewerkt ${utc(data.generated)}`;
       $('issues').textContent=data.issues.length?data.issues.join('\n'):'Geen ontbrekende bronvelden gemeld.';
     }
     loadError='';if(systemChoice==='auto')selectSystem(false);render();
@@ -197,8 +238,9 @@ async function load(){
 $('time').oninput=()=>{stop();frame=+$('time').value;render();};
 $('prev').onclick=()=>{stop();frame=Math.max(0,frame-1);render();};$('next').onclick=()=>{stop();frame=Math.min(data.frames.length-1,frame+1);render();};
 $('play').onclick=()=>{if(timer){stop();return;}$('play').textContent='Ⅱ';$('play').setAttribute('aria-label','Animatie pauzeren');timer=setInterval(()=>{frame=(frame+1)%data.frames.length;render();},1100);};
-for(const id of ['member','tracks','gust'])$(id).onchange=render;
-$('system').onchange=()=>{stop();systemChoice=$('system').value;selectionNote='';selectSystem(true);render();};
+for(const id of ['member','tracks','gust','contours'])$(id).onchange=render;
+$('system').onchange=()=>{stop();systemChoice=$('system').value;selectionNote='';selectSystem(true);fitStorm();render();};
+$('fit').onclick=fitStorm;
 $('refresh').onclick=load;document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else load();});
 load();setInterval(load,300000);
 
@@ -210,29 +252,30 @@ async function downloadPNG(){
   const filename=`weerlab-ens-${data.run.replace(/[^0-9]/g,'').slice(0,10)}-plus${data.frames[frame].hour}u.png`;
   try{
     const container=map.getContainer(), rect=container.getBoundingClientRect();
-    const width=Math.round(rect.width), height=Math.round(rect.height), header=112, footer=260;
-    const canvas=document.createElement('canvas');const scale=Math.min(2,2800/width);
+    const width=Math.min(1800,Math.max(600,Math.round(rect.width))), projectionScale=width/rect.width, height=Math.round(rect.height*projectionScale), header=112, footer=260;
+    const canvas=document.createElement('canvas');const scale=2;
     canvas.width=Math.round(width*scale);canvas.height=Math.round((header+height+footer)*scale);
     const ctx=canvas.getContext('2d');ctx.scale(scale,scale);
     ctx.fillStyle='#edf2f6';ctx.fillRect(0,0,width,header+height+footer);
     const text=(value,x,y,size=12,color='#14304e',bold=false)=>{ctx.fillStyle=color;ctx.font=`${bold?'700':'400'} ${size}px Arial,sans-serif`;ctx.fillText(value,x,y,width-x-16);};
     const wrap=(value,y,size=11)=>{ctx.font=`${size}px Arial,sans-serif`;let line='';for(const word of value.split(/\s+/)){if(ctx.measureText(line+word).width>width-40&&line){text(line.trim(),20,y,size);line='';y+=size+5;}line+=word+' ';}text(line.trim(),20,y,size);return y+size+7;};
     text('WEERLAB · BÈTA · ECMWF ENS',20,23,11,'#60768a',true);
-    text($('storm-name').textContent,20,52,Math.min(27,width/22),'#14304e',true);
+    text($('map-name').textContent,20,52,Math.min(27,width/22),'#14304e',true);
     text(`Run ${utc(data.run)} · geldig ${utc(data.frames[frame].valid)}`,20,77,11);
     text(`${$('member').selectedOptions[0].textContent} · ${$('tracks').checked?'stormbanen aan':'stormbanen uit'} · ${$('gust').checked?'windstootkans aan':'windstootkans uit'}`,20,98,11,'#60768a');
     ctx.save();ctx.beginPath();ctx.rect(0,header,width,height);ctx.clip();ctx.fillStyle='#bbd8e8';ctx.fillRect(0,header,width,height);
-    const paint=element=>{const r=element.getBoundingClientRect();ctx.drawImage(element,r.left-rect.left,header+r.top-rect.top,r.width,r.height);};
+    const paint=element=>{const r=element.getBoundingClientRect();ctx.drawImage(element,(r.left-rect.left)*projectionScale,header+(r.top-rect.top)*projectionScale,r.width*projectionScale,r.height*projectionScale);};
     const tiles=[...container.querySelectorAll('.leaflet-tile-pane .leaflet-tile')];
     if(!tiles.length||tiles.some(t=>t instanceof HTMLCanvasElement?t.dataset.ready!=='true':!t.complete||!t.naturalWidth))throw Error('De kaartachtergrond is nog niet volledig geladen. Probeer het over enkele seconden opnieuw.');
     tiles.forEach(paint);
     ctx.imageSmoothingEnabled=false;container.querySelectorAll('.gust-layer').forEach(paint);ctx.imageSmoothingEnabled=true;
+    container.querySelectorAll('.leaflet-probabilityContours-pane canvas').forEach(paint);
     container.querySelectorAll('.leaflet-overlay-pane canvas').forEach(paint);
     // HTML time labels are outside the canvas renderer and need their own export pass.
     for(const label of container.querySelectorAll('.core-label')){
-      const r=label.getBoundingClientRect(),x=r.left-rect.left,y=header+r.top-rect.top;
-      ctx.fillStyle='white';ctx.fillRect(x,y,r.width,r.height);ctx.strokeStyle='#acbfd0';ctx.strokeRect(x,y,r.width,r.height);
-      text(label.textContent,x+4,y+r.height-4,10,'#14304e',true);
+      const r=label.getBoundingClientRect(),x=(r.left-rect.left)*projectionScale,y=header+(r.top-rect.top)*projectionScale;
+      ctx.fillStyle='white';ctx.fillRect(x,y,r.width*projectionScale,r.height*projectionScale);ctx.strokeStyle='#acbfd0';ctx.strokeRect(x,y,r.width*projectionScale,r.height*projectionScale);
+      text(label.textContent,x+3,y+r.height*projectionScale-3,Math.max(8,10*projectionScale),'#14304e',true);
     }
     ctx.restore();let y=header+height+24;
     const key=(label,color,dashed)=>{ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash(dashed?[7,5]:[]);ctx.moveTo(key.x,y-4);ctx.lineTo(key.x+24,y-4);ctx.stroke();ctx.setLineDash([]);text(label,key.x+31,y,11);key.x+=Math.min(170,(width-40)/3);};
@@ -240,11 +283,12 @@ async function downloadPNG(){
     text('Kans op windstoten >90 km/u',20,y,13,'#14304e',true);y+=15;
     if($('gust').checked&&data.frames[frame].gust){
       const cell=(width-40)/10;COLORS.forEach((color,i)=>{ctx.fillStyle=color;ctx.fillRect(20+i*cell,y,cell,13);text(String((i+1)*10)+(i===9?'%':''),20+i*cell,y+27,10);});y+=44;
+      y=wrap($('field-mode').textContent,y,10);
       y=wrap($('window').textContent,y);
       y=wrap($('coverage').textContent,y);
     }else y=wrap($('gust').checked?'Windstootkans niet beschikbaar; ontbrekende data betekenen geen 0%.':'Windstootkans uitgeschakeld in deze export.',y);
     y=wrap('Banen: lagedrukkernen. Kansveld: alle beschikbare leden, onafhankelijk van gekozen laag. Alleen het genoemde windstootvenster.',y,10);
-    text('Bron: ECMWF Open Data (CC BY 4.0) · © OpenStreetMap-bijdragers · Berekeningen: Weerlab',20,header+height+footer-12,Math.min(10,(width-40)/85),'#60768a');
+    text('Bron: ECMWF Open Data (CC BY 4.0) · © OpenStreetMap-bijdragers · Stormnamen: Met Office · Berekeningen: Weerlab',20,header+height+footer-12,Math.min(10,(width-40)/85),'#60768a');
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('PNG kon niet worden gemaakt.')),'image/png'));
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
     button.textContent='✓ PNG gedownload';
@@ -252,3 +296,10 @@ async function downloadPNG(){
   finally{button.disabled=false;setTimeout(()=>{button.textContent='Download PNG';},4000);}
 }
 $('download').onclick=downloadPNG;
+
+let mapResizeTimer;
+new ResizeObserver(()=>{clearTimeout(mapResizeTimer);mapResizeTimer=setTimeout(()=>map.invalidateSize({pan:false}),100);}).observe($('map'));
+
+const compactControls=matchMedia("(max-width:650px)");
+function syncControls(){ $("map-controls").open=!compactControls.matches; }
+syncControls();compactControls.addEventListener("change",syncControls);

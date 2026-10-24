@@ -57,6 +57,34 @@ class StormTests(unittest.TestCase):
         self.assertEqual(systems[0]['tracks'][0]['points'],[[50,-10,980],None,None])
         self.assertEqual(systems[1]['start_hour'],6)
 
+    def test_storm_name_requires_official_event_and_unique_core(self):
+        registry={'verified_on':'2026-10-24','storms':[{'name':'Verified','source':'https://www.metoffice.gov.uk/test','from':'2026-10-24T00:00:00Z','until':'2026-10-25T00:00:00Z','box':[53,-25,66,5],'maximum_pressure_hpa':980}]}
+        frames=[{'valid':'2026-10-24T12:00:00Z'}]
+        def system(name,pressure):
+            return {'id':name,'tracks':[{'member':0,'points':[[58,-10,pressure]]}]}
+        systems=[system('a',950),system('b',975)]
+        storm.assign_storm_names(systems,frames,registry)
+        self.assertEqual(systems[0]['storm_name'],'Verified')
+        self.assertNotIn('storm_name',systems[1])
+        ambiguous=[system('a',950),system('b',952)]
+        storm.assign_storm_names(ambiguous,frames,registry)
+        self.assertTrue(all('storm_name' not in s for s in ambiguous))
+        expired=[system('a',950)]
+        storm.assign_storm_names(expired,[{'valid':'2026-10-27T12:00:00Z'}],registry)
+        self.assertNotIn('storm_name',expired[0])
+
+    def test_eight_day_steps_keep_native_timing(self):
+        steps=storm.forecast_steps(192)
+        self.assertEqual(len(steps),57)
+        self.assertEqual(steps[-1],192)
+        self.assertEqual(steps[48:51],[144,150,156])
+        self.assertNotIn(147,steps)
+        self.assertEqual(storm.forecast_steps(96),list(range(0,97,3)))
+
+    def test_ranges_only_combine_adjacent_messages(self):
+        groups=storm.group_ranges([(20,5,'c'),(0,10,'a'),(10,5,'b')])
+        self.assertEqual(groups,[[(0,10,'a'),(10,5,'b')],[(20,5,'c')]])
+
     def test_run_paths_separate_control(self):
         from datetime import datetime
         r=datetime(2026,10,22,12)
