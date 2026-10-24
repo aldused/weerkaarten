@@ -5,7 +5,7 @@ Raw files and generated fields live on the dedicated external model-data folder.
 No Open-Meteo calls, credentials or point-query budgets are used.
 """
 from __future__ import annotations
-import argparse, concurrent.futures, fcntl, json, shutil, struct, subprocess
+import argparse, concurrent.futures, fcntl, json, re, shutil, struct, subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -241,6 +241,38 @@ def publish(out,meta):
         print('Gepubliceerd:',name,flush=True)
 
 
+
+def old_runs(names, keep, current):
+    valid=[]
+    for name in names:
+        if not re.fullmatch(r'\d{10}',name):continue
+        try:datetime.strptime(name,'%Y%m%d%H')
+        except ValueError:continue
+        if name<=current:valid.append(name)
+    protected=set(sorted(set(valid))[-keep:])|{current}
+    return sorted(set(valid)-protected)
+
+
+def cleanup(root, current):
+    runs=root/'runs'
+    if runs.is_symlink() or not runs.resolve().is_relative_to(root.resolve()):
+        raise RuntimeError('Onveilige AROME-runmap; niets opgeruimd')
+    local={p.name:p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()}
+    # Only date-named model directories in this dedicated AROME run folder.
+    for name in old_runs(local,8,current):
+        shutil.rmtree(local[name]);print('Oude lokale AROME-run verwijderd:',name,flush=True)
+    result=subprocess.run(['/opt/homebrew/bin/rclone','lsf','r2:weerlab-harmonie/arome-native/','--dirs-only'],capture_output=True,text=True,check=True)
+    remote=[name.removesuffix('/') for name in result.stdout.splitlines()]
+    for name in old_runs(remote,2,current):
+        subprocess.run(['/opt/homebrew/bin/rclone','purge',f'r2:weerlab-harmonie/arome-native/{name}/'],check=True)
+        print('Oude online AROME-run verwijderd:',name,flush=True)
+
+
+def cleanup_safely(root, current):
+    try:cleanup(root,current)
+    except Exception as exc:print(f'AROME-opruimfout; bestaande kaarten blijven beschikbaar: {exc}',flush=True)
+
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--run');ap.add_argument('--root',type=Path,default=ROOT);ap.add_argument('--workers',type=int,default=3);ap.add_argument('--publish',action='store_true');args=ap.parse_args()
     assert_volume(args.root)
@@ -252,12 +284,14 @@ def main():
     if args.publish and state.exists():
         previous=json.loads(state.read_text())
         if previous.get('run_utc','')>=run.strftime('%Y-%m-%dT%H:%M:%SZ'):
+            cleanup_safely(args.root,datetime.fromisoformat(previous['run_utc'].replace('Z','+00:00')).strftime('%Y%m%d%H'))
             print('Zelfde of nieuwere volledige AROME-run al gepubliceerd; geen download');return 0
     meta_path=out/'arome_native_canvas_meta.json'
     meta=json.loads(meta_path.read_text()) if meta_path.exists() else build(run,folder/'raw',out,max(1,min(args.workers,4)))
     if args.publish:
         publish(out,meta)
         temp=state.with_suffix('.tmp');temp.write_text(json.dumps(dict(run_utc=meta['run_utc'],published_at=datetime.now(UTC).isoformat(),folder=str(folder)),indent=2));temp.replace(state)
+        cleanup_safely(args.root,stamp)
     print('Klaar:',meta['run_utc'],out,flush=True);return 0
 
 if __name__=='__main__':raise SystemExit(main())

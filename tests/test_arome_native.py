@@ -5,6 +5,12 @@ spec=importlib.util.spec_from_file_location("arome",Path(__file__).resolve().par
 a=importlib.util.module_from_spec(spec);spec.loader.exec_module(a)
 
 class AromeNativeTests(unittest.TestCase):
+    def test_retention_protects_current_unknown_and_future_directories(self):
+        names=['2026102400','2026102403','2026102406','2026102409','2026102412','BACKUP WEERLAB','2026130100','2026102406/nested']
+        self.assertEqual(a.old_runs(names,2,'2026102409'),['2026102400','2026102403'])
+        self.assertEqual(a.old_runs(names,8,'2026102409'),[])
+        self.assertEqual(a.old_runs(['2026102403'],2,'2026102403'),[])
+
     def test_accumulations_and_missing_cells(self):
         x=np.array([[[0,np.nan]],[[2,np.nan]],[[5,np.nan]]],dtype="float32")
         y=a.hourly_accumulation(x)

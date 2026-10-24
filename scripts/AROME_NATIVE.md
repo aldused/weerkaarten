@@ -4,7 +4,7 @@ Bron: openbare Météo-France GRIB2-pakketten via meteofrance-pnt.s3.rbx.io.clou
 
 De macOS-taak nl.edaldus.arome-native controleert iedere 30 minuten op een volledige nieuwe run. Gelijke of oudere runs worden overgeslagen. Een lock voorkomt dubbele verwerking. Ontbreekt de juiste schijf of is minder dan 50 GB vrij, dan stopt de taak en blijven de laatst gepubliceerde kaarten beschikbaar.
 
-Bronbestanden en kaarten: /Volumes/WEERLAB/Modeldata/AROME/runs/YYYYMMDDHH/. De identiteit van de 10 TB-schijf wordt gecontroleerd. BACKUP WEERLAB wordt niet aangeraakt. Er is geen automatische verwijdering ingesteld. Bewaarde runs moeten worden gemonitord, ook online wegens opslagkosten.
+Bronbestanden en kaarten: /Volumes/WEERLAB/Modeldata/AROME/runs/YYYYMMDDHH/. De identiteit van de 10 TB-schijf wordt gecontroleerd. BACKUP WEERLAB wordt niet aangeraakt. Met expliciete toestemming van de gebruiker worden uitsluitend eigen oudere AROME-runs automatisch verwijderd: lokaal blijven 8 runs bewaard, online 2. De actuele gepubliceerde run is beschermd. Onbekende mapnamen, toekomstige runs en lokale symbolische links worden overgeslagen. Opschoning volgt alleen na succesvolle publicatie of bevestiging van een al gepubliceerde run.
 
 HD-bron: 0,01° (circa 1,3 km). Export: 49–55°N, 0,5–11,3°E met 0,02° stap (301 × 541). Stappen +1 t/m +51; +0 mist volledige wolken- en windstootvelden. Druk en straling komen uit het aanvullende 2,5 km-pakket; metadata vermeldt dit per veld. Geen zonneschijnduur, zicht, wolkenbasis of verticale profielen beschikbaar.
 
