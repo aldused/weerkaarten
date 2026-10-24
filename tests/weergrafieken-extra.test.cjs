@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');const C=require('../weergrafieken-core.js');
+assert.ok(Math.abs(C.chill(0,36)-(-7.05))<.1);assert.equal(C.chill(11,36),null);assert.equal(C.chill(0,4),null);assert.equal(C.chill(-47,36),null);assert.equal(C.chill(0,180),null);
+const h=3600000,t=Date.parse('2026-10-25T00:00Z');
+const feels=C.feels([{t,value:0},{t:t+h,value:0}],[{t,value:36}]);assert.ok(feels[0].value<0);assert.equal(feels[1].value,null);
+assert.deepEqual(C.spread([{rows:[{t,value:1},{t:t+h,value:2}]},{rows:[{t,value:5},{t:t+2*h,value:8}]}]),[{t,min:1,max:5,range:4}]);
+assert.deepEqual(C.spread([{rows:[{t,value:0}]},{rows:[{t,value:null}]}]),[]);
+const m={grid:{lat0:50,lon0:3,dlat:1,dlon:1,nx:2,ny:2},hours:2,start:new Date(t).toISOString()};
+assert.deepEqual(C.at(m,new Float32Array([0,2,2,4,4,6,6,8]),'temp',{lat:50.5,lon:3.5},t).map(r=>r.value),[2,6]);
+assert.deepEqual(C.at(m,new Float32Array(8),'temp',{lat:50,lon:3},t+1).map(r=>r.t),[t+h]);
+assert.throws(()=>C.at(m,new Float32Array(8),'temp',{lat:53,lon:3},t),/buiten/);
+const wind=new Uint8Array([10,10,10,10,20,20,20,20,30,30,30,30,40,40,40,40,0,0,0,0,0,0,0,0]);assert.deepEqual(C.at(m,wind,'wind',{lat:50.5,lon:3.5},t).map(r=>[r.value,r.gust]),[[10,30],[20,40]]);
+console.log('Windkougrenzen, ontbrekende wind, gelijke UTC-uren, wintertijd en afzonderlijke modelvelden geslaagd.');

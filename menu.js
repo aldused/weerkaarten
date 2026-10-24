@@ -145,7 +145,7 @@
       const child=frame.contentDocument?.querySelector('.tab-panel.actief iframe');if(!child)return;
       const wanted=new URL(view,location.href),configured=new URL(child.src,frame.src);
       const clean=u=>u.pathname.replace(/\/index(?:\.html)?$/,'/').replace(/\.html$/,'').replace(/\/$/,'');
-      const graphPair=new Set(['/windplaat','/neerslagplaat','/temperatuurplaat']);
+      const graphPair=new Set(['/windplaat','/neerslagplaat','/temperatuurplaat','/weergrafieken-extra']);
       const sameGraphs=graphPair.has(clean(wanted))&&graphPair.has(clean(configured));
       if(wanted.origin!==location.origin||(!sameGraphs&&clean(wanted)!==clean(configured)))return;
       if(sameGraphs)configured.pathname=clean(wanted)+'.html';
