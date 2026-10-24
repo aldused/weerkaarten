@@ -190,8 +190,8 @@ def distance(a, b):
     return 6371 * 2 * math.asin(math.sqrt(min(1, q)))
 
 
-def cores(pressure, lat, lon):
-    """Smoothed local minima, closed by >=2 hPa on a ~300 km ring.
+def cores(pressure, lat, lon, closure=2):
+    """Smoothed local minima, closed by the requested hPa on a ~300 km ring.
     Border minima and open troughs are not valid cores. Raw central pressure retained.
     """
     p = gaussian_filter(pressure, sigma=2)  # 0.5° smoothing on native 0.25° grid
@@ -202,7 +202,7 @@ def cores(pressure, lat, lon):
         if y-dy < 0 or y+dy >= len(lat) or x-dx < 0 or x+dx >= len(lon):
             continue
         ring = [p[round(y+dy*math.sin(t)), round(x+dx*math.cos(t))] for t in np.linspace(0, 2*math.pi, 24, endpoint=False)]
-        if min(ring) - p[y, x] >= 2:
+        if min(ring) - p[y, x] >= closure:
             result.append([round(float(lat[y]), 3), round(float(lon[x]), 3), round(float(pressure[y,x]), 1)])
     return result
 
@@ -233,17 +233,19 @@ def forecast_steps(hours):
     return list(range(0,min(hours,144)+1,3)) + (list(range(150,hours+1,6)) if hours>144 else [])
 
 
-def track_systems(core_map, steps):
+def track_systems(core_map, steps, continuation_map=None):
     """Discover closed control lows throughout the horizon, then link each member.
     New systems may enter the domain or form after the run starts.
+    Existing cores may weaken to 0.5 hPa closure; new systems require 2 hPa.
     A lost track never resumes by silently switching to another low.
     """
+    continuation_map = continuation_map if continuation_map is not None else core_map
     systems = []
     for i, step in enumerate(steps):
         for system in systems:
             for member in MEMBERS:
                 prev = system['tracks'][member][-1]
-                pos = choose_core(core_map.get((step, member), []), prev, step-steps[i-1]) if prev else None
+                pos = choose_core(continuation_map.get((step, member), []), prev, step-steps[i-1]) if prev else None
                 system['tracks'][member].append(pos)
         claimed = [system['tracks'][0][-1] for system in systems if system['tracks'][0][-1]]
         for seed in sorted(core_map.get((step, 0), []), key=lambda c: c[2]):
@@ -307,7 +309,7 @@ def build(args):
     if current.exists() and not args.force:
         manifest = json.loads(current.read_text())
         previous = json.loads((current.parent / manifest['file']).read_text())
-        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25 and 'systems' in previous and previous.get('naming_revision')==registry['revision']:
+        if previous['run'] == run.isoformat().replace('+00:00', 'Z') and not previous['issues'] and len(previous['frames']) == len(steps) and previous['grid']['resolution'] == 0.25 and 'systems' in previous and previous.get('naming_revision')==registry['revision'] and previous.get('tracking_revision')=='20261024-2':
             print('Deze volledige ECMWF-run is al gepubliceerd')
             return
     cache = Path(args.cache) / run.strftime('%Y%m%d%H')
@@ -323,11 +325,13 @@ def build(args):
         raise RuntimeError('Control-druk op +0u ontbreekt; vorige geldige publicatie blijft behouden')
     lat, lon = results[0][1]
     core_map = {}
+    continuation_map = {}
     for step, (fields, coords, problems) in results.items():
         for (member, param), (a, start) in fields.items():
             if param == 'msl':
                 core_map[(step, member)] = cores(a, lat, lon)
-    systems = track_systems(core_map, steps)
+                continuation_map[(step, member)] = cores(a, lat, lon, closure=0.5)
+    systems = track_systems(core_map, steps, continuation_map)
     # Compatibility top-level product: a verified requested seed, otherwise deepest start low.
     initial = [system for system in systems if system['start_hour'] == 0]
     if args.seed:
@@ -366,9 +370,9 @@ def build(args):
             'source': 'https://www.ecmwf.int/en/forecasts/datasets/open-data',
             'expected_members': 51, 'control': 'oper/fc', 'threshold_kmh': 90,
             'grid': {'lat': lat.tolist(), 'lon': lon.tolist(), 'resolution': 0.25},
-            'tracks': tracks, 'systems': systems,
+            'tracks': tracks, 'systems': systems, 'tracking_revision':'20261024-2',
             'frames': frames, 'issues': issues,
-            'method': {'pressure_grid': 0.25, 'smoothing_degrees': 0.5, 'closure_hpa': 2,
+            'method': {'pressure_grid': 0.25, 'smoothing_degrees': 0.5, 'closure_hpa': 2, 'continuation_closure_hpa':0.5,
                        'max_speed_kmh': 120, 'mean': 'spherical position mean of matched cores; no mean-pressure minimum',
                        'gust': 'pointwise fraction >25 m/s, same run and GRIB maximum window; no spatial smoothing'}}
     payload = json.dumps(data, separators=(',', ':'), allow_nan=False).encode()

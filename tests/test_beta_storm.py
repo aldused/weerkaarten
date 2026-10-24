@@ -91,4 +91,12 @@ class StormTests(unittest.TestCase):
         self.assertTrue(storm.base_url(r,3).endswith('enfo/20261022120000-3h-enfo-ef'))
         self.assertTrue(storm.base_url(r,3,True).endswith('oper/20261022120000-3h-oper-fc'))
 
+    def test_weak_closed_core_continues_existing_track_but_cannot_seed(self):
+        strong={(0,0):[[50,-10,980]],(3,0):[]}
+        weak={(0,0):[[50,-10,980]],(3,0):[[50,-9,985],[45,5,990]]}
+        systems=storm.track_systems(strong,[0,3],weak)
+        self.assertEqual(len(systems),1)
+        self.assertEqual(systems[0]['tracks'][0]['points'][1],[50,-9,985])
+        self.assertEqual(len(storm.track_systems({},[0,3],weak)),0)
+
 if __name__=='__main__':unittest.main()

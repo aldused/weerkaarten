@@ -75,3 +75,5 @@ De startselectie gebruikt vier dagen vooruit; daarna volgt Automatisch de gekoze
 De download voegt alleen aaneengesloten GRIB-berichten samen in HTTP Range-aanvragen (maximaal 20 MB).
 Elk bericht wordt daarna nog afzonderlijk gevalideerd op run, lid, parameter, eenheid en maximumvenster.
 De gegroepeerde route is voor alle 51 drukvelden byte voor byte vergeleken met de losse download.
+
+Bestaande banen volgen verzwakkende gesloten kernen vanaf 0,5 hPa op de 300 km-ring; nieuwe banen vereisen nog steeds 2 hPa. De verplaatsingsgrens blijft 120 km/u. Geen ontbrekende posities of toekomstige banen worden ingevuld.
