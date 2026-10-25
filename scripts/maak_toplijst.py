@@ -623,12 +623,12 @@ def haal_dag(dag: date) -> dict:
             if ff_anker is not None:
                 res["ff"].append([ff_anker["ff"], naam, ff_anker["tijdvak"], ff_anker["dd"]])
             elif br_st.get("ff") is not None:
-                res["ff"].append([br_st["ff"], naam, None, None])
-                print(f"    FF {naam}: KNMI leeg → BR {br_st['ff']:.1f} m/s")
+                print(f"    FF {naam}: geen compleet KNMI-klokuur; niet opgenomen")
+                print(f"    FF {naam}: losse windsnelheid niet als uurgemiddelde gebruikt")
         except Exception as e:
-            print(f"    Anker-uur fout {naam}: {e} → BR fallback")
+            print(f"    Anker-uur fout {naam}: {e}; geen geldig uurgemiddelde")
             if br_st.get("ff") is not None:
-                res["ff"].append([br_st["ff"], naam, None, None])
+                print(f"    FF {naam}: geen compleet KNMI-klokuur; niet opgenomen")
 
         # ── Zon (alleen KNMI) ─────────────────────────────────────────────────
         try:
