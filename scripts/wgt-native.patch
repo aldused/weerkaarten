@@ -1,31 +1,16 @@
 --- a/config.py
 +++ b/config.py
-@@ -53,8 +53,8 @@
-                      "label": "DMI HARMONIE", "res_km": 2.0, "max_h": 60},
-     "icon_d2": {"slug": "icon_d2", "meta": "dwd_icon_d2", "label": "ICON-D2", "res_km": 2.2, "max_h": 48},
-     "icon_eu": {"slug": "icon_eu", "meta": "dwd_icon_eu", "label": "ICON-EU", "res_km": 7.0, "max_h": 120},
+@@ -56,2 +56,2 @@
 -    "ecmwf_ifs": {"slug": "ecmwf_ifs025", "meta": "ecmwf_ifs025", "label": "ECMWF IFS", "res_km": 25, "max_h": 144},
 -    "ecmwf_aifs": {"slug": "ecmwf_aifs025_single", "meta": "ecmwf_aifs025_single", "label": "ECMWF AIFS",
 +    "ecmwf_ifs": {"slug": "ecmwf_ifs025", "meta": "ecmwf_ifs025", "label": "ECMWF IFS 9 km", "res_km": 9, "max_h": 144},
 +    "ecmwf_aifs": {"slug": "ecmwf_aifs025_single", "meta": "ecmwf_aifs025_single", "label": "ECMWF AIFS 25 km",
-                    "res_km": 25, "max_h": 144},
-     "gfs": {"slug": "gfs_seamless", "meta": "ncep_gfs013", "label": "GFS", "res_km": 13, "max_h": 144},
- }
 --- a/run_forecast.py
 +++ b/run_forecast.py
-@@ -3,7 +3,7 @@
- → onzekerheid → JSON voor de kaart (weerlab/wgt/wgt_latest.json).
- 
- Robuustheid
+@@ -6 +6 @@
 -  - Per model wordt de run-initialisatietijd uit Open-Meteo meta.json gelezen; een run ouder
 +  - Per model wordt de run-initialisatietijd uit eigen bronmetadata gelezen; een run ouder
-     dan config.MAX_RUN_AGE_H telt NIET mee en staat als "verouderd" in de uitvoer.
-   - Een model dat niet reageert of leeg terugkomt valt weg; de gewichten worden dan over de
-     overige modellen hernormaliseerd. Minder dan 2 modellen → run afgebroken (geen kaart).
-@@ -51,148 +51,31 @@
- 
- 
- # ---------------------------------------------------------------------------------------
+@@ -54,2 +54,5 @@
 -def run_info(model):
 -    meta = config.MODELS[model]["meta"]
 +def run_info(model, required_until=None):
@@ -33,7 +18,7 @@
 +    if model not in SUPPORTED:
 +        log(f"{model}: tijdelijk buiten de mix; geen actuele eigen aanvoer")
 +        return None, None
-     try:
+@@ -57,7 +60 @@
 -        for poging in range(4):
 -            r = requests.get(f"https://api.open-meteo.com/data/{meta}/static/meta.json", timeout=20)
 -            if r.status_code < 500:
@@ -42,8 +27,7 @@
 -        r.raise_for_status()
 -        j = r.json()
 +        j = prepare(model, required_until=required_until)
-         _MODEL_SOURCES[model] = j
-         init = datetime.fromtimestamp(j["last_run_initialisation_time"], timezone.utc)
+@@ -66,4 +63,4 @@
 -        besch = datetime.fromtimestamp(j.get("last_run_availability_time", j["last_run_initialisation_time"]), timezone.utc)
 -        return init, besch
 -    except Exception as e:
@@ -52,10 +36,7 @@
 +        return init, available
 +    except Exception as exc:
 +        log(f"{model}: eigen bron niet bruikbaar ({exc})")
-         return None, None
- 
- 
- def haal_rooster(model, lats, lons, t0, n_uur, extra_vars=(), past_hours=2, hourly_vars=None):
+@@ -74,122 +71,8 @@
 -    """Gebruik dezelfde modelrun opnieuw; selecteer steeds de actuele absolute uurreeks."""
 -    import gzip
 -    import hashlib
@@ -186,73 +167,27 @@
 +                      locaties=len(lats), verzoeken=0, variabelen=len(variables), dagen=int(np.ceil(n_uur/24)))
 +    log(f"{model}: eigen modelrooster, {len(lats)} cellen, 0 Open-Meteo-aanvragen")
 +    return data, times
- 
- 
- def haal_neerslaghistorie(lats, lons):
-@@ -356,6 +239,9 @@
-         init, besch = run_info(mod)
-         info = {"model": mod, "label": cfg["label"], "init": init.isoformat() if init else None}
-         if init is None:
+@@ -358,0 +242,3 @@
 +            from wgt_native_data import SUPPORTED
 +            if mod not in SUPPORTED:
 +                info.update(status="niet_actief", reden="geen eigen aanvoer; tijdelijk buiten de mix"); runs.append(info); continue
-             info.update(status="ontbreekt", reden="geen run-informatie"); runs.append(info); continue
-         leeftijd = (nu - init).total_seconds() / 3600
-         info["leeftijd_u"] = round(leeftijd, 1)
-@@ -370,6 +256,7 @@
-         n_ok = int(np.isfinite(v["temperature_2m"]).all(0).sum())
-         if n_ok < 6:
-             info.update(status="ontbreekt", reden="geen bruikbare uurwaarden"); runs.append(info); continue
+@@ -372,0 +259 @@
 +        info["bron"] = _MODEL_SOURCES[mod].get("native_source", {})
-         info.update(status="gebruikt", uren=n_ok, lead_start=round((t0 - pd.Timestamp(init)).total_seconds() / 3600, 1))
-         runs.append(info); velden[mod] = v
-         log(f"{mod}: run {init:%d-%m %H}Z ({leeftijd:.1f} u oud), {n_ok} uur volledig")
-@@ -572,6 +459,7 @@
-         "rooster": {"lat0": float(S["lats"][0]), "dlat": config.DLAT, "lon0": float(S["lons"][0]), "dlon": config.DLON,
-                     "ny": int(mask.shape[0]), "nx": int(mask.shape[1]), "iy": iy.tolist(), "ix": ix.tolist(),
-                     "resolutie_km": 5},
+@@ -574,0 +462 @@
 +        "modelaanvoer": "eigen_modelbestanden", "bronversie": "20261025-native-ecmwf",
-         "tijden": [t.isoformat() for t in tijden], "runs": runs, "log": LOG[-40:],
-         "bodemvocht_bron": bron_vocht, "regime_code": reg_code, "delta_min": P["delta"],
-         "modellen": {m: config.MODELS[m]["label"] for m in modellen if m in velden},
 --- a/run_forecast_tx.py
 +++ b/run_forecast_tx.py
-@@ -74,9 +74,12 @@
- 
-     runs, velden = [], {}
-     for mod, cfg in config.MODELS.items():
+@@ -77 +77 @@
 -        init, besch = rf.run_info(mod)
 +        init, besch = rf.run_info(mod, required_until=t0 + pd.Timedelta(hours=NU))
-         info = {"model": mod, "label": cfg["label"], "init": init.isoformat() if init else None}
-         if init is None:
+@@ -79,0 +80,3 @@
 +            from wgt_native_data import SUPPORTED
 +            if mod not in SUPPORTED:
 +                info.update(status="niet_actief", reden="geen eigen aanvoer; tijdelijk buiten de mix"); runs.append(info); continue
-             info.update(status="ontbreekt", reden="geen run-informatie"); runs.append(info); continue
-         leeftijd = (nu - init).total_seconds() / 3600
-         info["leeftijd_u"] = round(leeftijd, 1)
-@@ -90,6 +93,7 @@
-         n_ok = int(np.isfinite(v["temperature_2m"]).all(0).sum())
-         if n_ok < 6:
-             info.update(status="ontbreekt", reden="geen bruikbare uurwaarden"); runs.append(info); continue
+@@ -92,0 +96 @@
 +        info["bron"] = rf._MODEL_SOURCES[mod].get("native_source", {})
-         info.update(status="gebruikt", uren=n_ok, lead_start=round((t0 - pd.Timestamp(init)).total_seconds() / 3600, 1))
-         runs.append(info); velden[mod] = v
-         log(f"{mod}: run {init:%d-%m %H}Z ({leeftijd:.1f} u oud), {n_ok} uur volledig")
-@@ -216,7 +220,7 @@
-         n_mod = int(sum(aanw[mi][:, i0:i1 + 1].mean() >= 0.5 for mi in range(M)))
-         lead_max = float(np.nanmax(np.where(np.isfinite(LEAD[:, i0:i1 + 1]), LEAD[:, i0:i1 + 1], np.nan)))
-         # tijdvak grotendeels in het verleden (rest van vandaag) → onvolledig, apart gemarkeerd
+@@ -219 +223 @@
 -        onvolledig = bool(sel.sum() < 20 and dnr == 0)
 +        onvolledig = bool(np.any(np.isfinite(tx_fin[:, i0:i1 + 1]).sum(axis=1) < sel.sum()))
-         dagen_uit.append({"label": f"{d0:%Y-%m-%d}", "i0": i0, "i1": i1, "n_modellen": n_mod,
-                           "lead_max_u": round(lead_max), "buiten_training": bool(lead_max > 62),
-                           "onvolledig": onvolledig,
-@@ -232,6 +236,7 @@
-         "rooster": {"lat0": float(S["lats"][0]), "dlat": config.DLAT, "lon0": float(S["lons"][0]), "dlon": config.DLON,
-                     "ny": int(mask.shape[0]), "nx": int(mask.shape[1]), "iy": iy.tolist(), "ix": ix.tolist(),
-                     "resolutie_km": 5},
+@@ -234,0 +239 @@
 +        "modelaanvoer": "eigen_modelbestanden", "bronversie": "20261025-native-ecmwf",
-         "tijden": [t.isoformat() for t in tijden], "runs": runs, "log": LOG[-40:],
-         "bodemvocht_bron": bron_vocht,
-         "modellen": {m: config.MODELS[m]["label"] for m in modellen if m in velden},
