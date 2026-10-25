@@ -8,6 +8,11 @@ class NOAAIntervals(unittest.TestCase):
   a=[np.array([x]) for x in (np.nan,3,8,4)];r=n.intervals(a,[[0,0,0],[0,3,0],[0,6,0],[6,9,0]],[0,3,6,9]);np.testing.assert_allclose(r[1:,0],[3,5,4]);self.assertTrue(np.isnan(r[0,0]))
  def test_packing_noise_repair_preserves_window_total(self):
   a=[np.array([x]) for x in (np.nan,1,0.999,2)];r=n.intervals(a,[[0,0,0],[0,1,.001],[0,2,.001],[0,3,.001]],[0,1,2,3]);self.assertAlmostEqual(float(r[1:].sum()),2);self.assertTrue((r[1:]>=0).all())
+ def test_gefs_source_truncation_preserves_final_six_hour_total(self):
+  values=[np.array([x]) for x in (np.nan,.08,0.)];windows=[[0,0,0],[0,3,.005],[0,6,.05]]
+  with self.assertRaises(ValueError):n.intervals(values,windows,[0,3,6])
+  r=n.intervals(values,windows,[0,3,6],packing_factor=2);np.testing.assert_allclose(r[1:,0],[0,0])
+  with self.assertRaises(ValueError):n.intervals([np.array([x]) for x in (np.nan,.3,0.)],windows,[0,3,6],packing_factor=2)
  def test_material_reset_is_rejected(self):
   with self.assertRaises(ValueError):n.intervals([np.array([x]) for x in (np.nan,4,1)],[[0,0,0],[0,3,.01],[0,6,.01]],[0,3,6])
  def test_source_average_radiation_preserves_energy(self):

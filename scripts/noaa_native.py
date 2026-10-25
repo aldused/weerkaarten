@@ -137,7 +137,7 @@ def get_step(mode,run,h,member,points,folder):
  with tmp.open('wb') as f:np.savez_compressed(f,**out)
  tmp.replace(target);print(f'{mode} {run:%d/%H} lid{member:02d} +{h:03d} klaar',flush=True);return out
 
-def intervals(values,windows,steps,average=False):
+def intervals(values,windows,steps,average=False,packing_factor=1):
  """Disjoint amounts, repairing only packing noise while preserving each window total."""
  out=[np.full(values[1].shape,np.nan)];i=1
  while i<len(steps):
@@ -148,7 +148,7 @@ def intervals(values,windows,steps,average=False):
   for k in range(i,j):
    begin,end,error=windows[k]
    if end!=steps[k] or end<=begin:raise ValueError('Onjuist NOAA-interval')
-   scale=end-begin if average else 1;amounts.append(values[k]*scale);errors.append(error*scale*(2 if average else 1))  # NOAA running radiation means include upstream rounding; allow one full GRIB quantum.
+   scale=end-begin if average else 1;amounts.append(values[k]*scale);errors.append(error*scale*(2 if average else packing_factor))  # NOAA running radiation means include upstream rounding; allow one full GRIB quantum.
   a=np.stack(amounts);e=np.asarray(errors)
   delta=np.diff(np.concatenate([np.zeros_like(a[:1]),a]),axis=0)
   bound=(e+np.r_[0,e[:-1]]).reshape((-1,)+(1,)*(a.ndim-1))
@@ -198,8 +198,9 @@ def make_ensemble(run,folder,results,points):
   for k in GEFS_KEYS:
    if k not in fields:fields[k]=np.full((nt,31,n),np.nan)
    fields[k][:,member]=np.stack([r.get(k,np.full(n,np.nan)) for r in rr])
-  rain[:,member]=intervals(list(fields['rain'][:,member]),[m.get('rain',[0,0,0]) for m in metadata],GEFS_STEPS)
+  rain[:,member]=intervals(list(fields['rain'][:,member]),[m.get('rain',[0,0,0]) for m in metadata],GEFS_STEPS,packing_factor=2)  # GEFS source preprocessing can truncate one full packing quantum.
  arrays={'temperature_2m':fields['temp'],'dew_point_2m':fields['dew'],'relative_humidity_2m':fields['rh'],'pressure_msl':fields['pressure']/100,'wind_speed_10m':np.hypot(fields['u'],fields['v'])*3.6,'wind_direction_10m':(270-np.rad2deg(np.arctan2(fields['v'],fields['u'])))%360,'wind_gusts_10m':fields['gust']*3.6,'precipitation':rain,'cloud_cover':fields['cloud'],'cloud_cover_low':fields['low'],'cloud_cover_mid':fields['mid'],'cloud_cover_high':fields['high'],'visibility':fields['visibility']}
+ arrays['wind_direction_10m'][np.hypot(fields['u'],fields['v'])<1e-6]=np.nan
  arrays['wind_gusts_10m'][0]=np.nan
  times=[(run+timedelta(hours=h)).isoformat().replace('+00:00','Z') for h in GEFS_STEPS];stamp=run.strftime('%Y%m%d%H');out=folder/'published';out.mkdir(exist_ok=True);stations=[]
  for i,p in enumerate(points):
@@ -208,7 +209,7 @@ def make_ensemble(run,folder,results,points):
    for member in range(31):hourly[field if member==0 else f'{field}_member{member:02d}']=[round(float(v),4) if np.isfinite(v) else None for v in a[:,member,i]]
   d=dict(model='NOAA GEFS',source='NOAA Open Data direct',run_utc=times[0],member_ids=list(range(31)),control_member=0,latitude=float(results[(0,0)]['_grid_latitude'][i]),longitude=float(results[(0,0)]['_grid_longitude'][i]),grid_latitude_by_step=[float(results[(0,h)]['_grid_latitude'][i]) for h in GEFS_STEPS],grid_longitude_by_step=[float(results[(0,h)]['_grid_longitude'][i]) for h in GEFS_STEPS],hourly=hourly,units={'temperature_2m':'°C','dew_point_2m':'°C','relative_humidity_2m':'%','pressure_msl':'hPa','wind_speed_10m':'km/h','wind_gusts_10m':'km/h','wind_direction_10m':'°','precipitation':'mm','cloud_cover':'%','cloud_cover_low':'%','cloud_cover_mid':'%','cloud_cover_high':'%','visibility':'m'})
   (out/(p['id']+'.json')).write_text(json.dumps(d,separators=(',',':'),allow_nan=False));stations.append({**p,'url':f'https://data.weerlab.nl/gefs/{stamp}/{p["id"]}.json'})
- d=dict(schema=1,complete=True,model='NOAA GEFS',source='NOAA Open Data direct',run_utc=times[0],run_key=stamp,member_ids=list(range(31)),member_count=31,control_member=0,steps=nt,fields=sorted(arrays),stations=stations,native_steps_hours=GEFS_STEPS,resolution='0.25 degrees through +240h; 0.5 degrees thereafter; dew/gust/visibility 0.5 fallback if absent',updated_utc=datetime.now(UTC).isoformat())
+ d=dict(schema=1,complete=True,model='NOAA GEFS',source='NOAA Open Data direct',run_utc=times[0],run_key=stamp,member_ids=list(range(31)),member_count=31,control_member=0,steps=nt,fields=sorted(arrays),stations=stations,native_steps_hours=GEFS_STEPS,rain_precision_policy='Repair only up to one GRIB packing quantum; preserve every original accumulation window total',resolution='0.25 degrees through +240h; 0.5 degrees thereafter; dew/gust/visibility 0.5 fallback if absent',updated_utc=datetime.now(UTC).isoformat())
  (out/'manifest.json').write_text(json.dumps(d,separators=(',',':')));return out,d
 
 def upload(mode,out,meta):
