@@ -1,5 +1,4 @@
-/* Gedeelde logica van het weekraster (eenheden, tijd, feed-parser, symboolcodes, ensemble, KNMI, weerbericht, modelbronnen).
-   Kopie van MeteobewakingWin/src/core.js met eigen localStorage-prefix 'raster.'. */
+/* Gedeelde logica van het weekraster. GEGENEREERD door MeteobewakingWin/scripts/sync_web.py uit src/core.js (eigen localStorage-prefix 'raster.'). */
 // Gedeelde logica: eenheden, tijd, feed, zon, symbolen, waarschuwingen, regenverwachting.
 (function (g) {
   'use strict';
@@ -85,7 +84,7 @@
     let rise = null, set = null, prev = elevation(dayStart, lat, lon);
     for (let m = 1; m <= 1440; m++) {
       const t = new Date(dayStart.getTime() + m * 60000), e = elevation(t, lat, lon);
-      if (!rise && prev < -0.833 && e >= -0.833) rise = t;
+      if (!rise && prev < -0.833 && e >= -0.833) rise = new Date(t.getTime() - 60000);   // opkomst naar beneden afronden (zoals WeatherPro)
       if (!set && prev >= -0.833 && e < -0.833) set = t;
       prev = e;
     }
@@ -331,22 +330,22 @@
     let lastErr;
     for (const slug of slugs) {
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&models=${slug}&hourly=temperature_2m,dew_point_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,cloud_cover,pressure_msl,weather_code,sunshine_duration,precipitation_probability&wind_speed_unit=kn&timezone=UTC&forecast_days=16`;
-        return buildModel(await api.fetchText(url), city, wp);
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&models=${slug}&hourly=temperature_2m,dew_point_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,cloud_cover,pressure_msl,weather_code,direct_radiation,sunshine_duration,precipitation_probability&wind_speed_unit=kn&timezone=UTC&forecast_days=16`;
+        return buildModel(await api.fetchText(url), city, wp, src);
       } catch (e) { lastErr = e; }
     }
     throw new Error(NOAUDATA);
   }
 
-  function buildModel(txt, city, wp) {
+  function buildModel(txt, city, wp, src = 'ecmwf') {
     const d = JSON.parse(txt); if (d.error || !d.hourly || !d.hourly.time) throw new Error(NOAUDATA);
     const h = d.hourly, tz = city.tz, hours = [];
     const v = (k, i) => (h[k] && h[k][i] != null) ? h[k][i] : null;
     h.time.forEach((t, i) => {
       if (v('temperature_2m', i) == null) return;
-      const date = new Date(t + ':00Z'), cl = v('cloud_cover', i), su = v('sunshine_duration', i);
+      const date = new Date(t + ':00Z'), cl = v('cloud_cover', i), dr = v('direct_radiation', i), su = v('sunshine_duration', i), curve = WP.Sunshine && WP.Sunshine.curves[src];
       hours.push({ date, interval: 3600e3, start: new Date(+date - 3600e3), temp: v('temperature_2m', i), dew: v('dew_point_2m', i), ww: v('weather_code', i), cloud: cl == null ? null : Math.round(cl / 12.5),
-        dir: v('wind_direction_10m', i), kn: v('wind_speed_10m', i), gust: v('wind_gusts_10m', i), p: v('pressure_msl', i), sun: su == null ? null : su / 60, rain: v('precipitation', i), prob: v('precipitation_probability', i), symbol: null });
+        dir: v('wind_direction_10m', i), kn: v('wind_speed_10m', i), gust: v('wind_gusts_10m', i), p: v('pressure_msl', i), sun: dr != null ? WP.Sunshine.minuten(dr, date, city.lat, city.lon, curve) : (su == null ? null : Math.min(su / 60, WP.Sunshine.daylightMinutes(date, city.lat, city.lon))), rain: v('precipitation', i), prob: v('precipitation_probability', i), symbol: null });
     });
     if (!hours.length) throw new Error(NOAUDATA);
     const groups = new Map(), byDate = new Map();
@@ -366,4 +365,41 @@
     return { obs: wp ? wp.obs : null, days, hours, expires: Date.now() + 3600e3, fetched: Date.now() };
   }
   Object.assign(WP, { SOURCES, SHORT, loadModel, buildModel });
+})(window);
+
+// ====================================================================================
+// Gekalibreerde zonneschijn voor de modellen (port van weerlab/scripts/zonuren.py)
+// ====================================================================================
+(function (g) {
+  'use strict';
+  const WP = g.WP, CAL = {"harmonie":{"x":[0.0,0.0007,0.0038,0.0166,0.0503,0.1128,0.2047,0.3201,0.4382,0.5463,0.6366,0.7045,0.7557,0.8031,0.8499],"y":[0.0679,0.0679,0.1818,0.2381,0.376,0.4302,0.5248,0.5585,0.6051,0.7157,0.7157,0.7978,0.8379,0.8787,0.9231],"delta":0},"ecmwf":{"x":[0.0012,0.0143,0.0487,0.1303,0.2729,0.3893,0.4661,0.5199,0.5691,0.6078,0.647,0.6826,0.7149,0.7517,0.798,0.9084],"y":[0.0198,0.0198,0.0538,0.1058,0.1971,0.3806,0.5193,0.5696,0.6285,0.6898,0.7122,0.7787,0.8238,0.8384,0.8406,0.8406],"delta":0},"icond2":{"x":[0.0008,0.01,0.0338,0.0777,0.1303,0.1924,0.2643,0.3259,0.3901,0.4541,0.5242,0.6047,0.7052,0.8314,0.9746],"y":[0.0203,0.0361,0.1329,0.2631,0.3585,0.4612,0.5052,0.5779,0.6703,0.7403,0.7767,0.8114,0.8499,0.8946,0.8995],"delta":0}}, CAL_DATE = '2026-10-19T02:40Z';
+  const TH = 120, MINH = 0.01, STEPS = [5, 15, 25, 35, 45, 55].map(x => x / 60), rad = Math.PI / 180;
+  const pmod = (a, m) => ((a % m) + m) % m;
+  function sinH(doy, uur, lat, lon) {
+    const gam = 2 * Math.PI / 365 * (doy - 1 + (uur - 12) / 24);
+    const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(gam) - 0.032077 * Math.sin(gam) - 0.014615 * Math.cos(2 * gam) - 0.040849 * Math.sin(2 * gam));
+    const dec = 0.006918 - 0.399912 * Math.cos(gam) + 0.070257 * Math.sin(gam) - 0.006758 * Math.cos(2 * gam) + 0.000907 * Math.sin(2 * gam) - 0.002697 * Math.cos(3 * gam) + 0.00148 * Math.sin(3 * gam);
+    const tst = pmod(uur * 60 + eq + 4 * lon, 1440), ha = (tst / 4 - 180) * rad, la = lat * rad;
+    return Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(ha);
+  }
+  function helder(doy, start, lat, lon) {
+    let som = 0, min = 0;
+    for (const f of STEPS) { const sh = sinH(doy, pmod(start + f, 24), lat, lon), am = 1 / Math.min(Math.max(sh, 1e-3), 1), dni = 1361 * Math.pow(0.7, Math.pow(am, 0.678)); if (sh > MINH && dni >= TH) { som += dni * Math.max(sh, 0); min += 10; } }
+    return { helder: som / STEPS.length, minuten: min };
+  }
+  function interp(v, xs, ys) {   // np.interp (bij dubbele x telt de laatste)
+    const n = xs.length; if (v < xs[0]) return ys[0]; if (v >= xs[n - 1]) return ys[n - 1];
+    let j = 0; for (let i = 0; i < n; i++) if (xs[i] <= v) j = i;
+    return ys[j] + (v - xs[j]) * (ys[j + 1] - ys[j]) / (xs[j + 1] - xs[j]);
+  }
+  /** zonminuten (0-60) voor het uurvak dat eindigt op `eind` (Open-Meteo: voorgaand uur) */
+  function minuten(direct, eind, lat, lon, curve) {
+    const doy = Math.round((Date.UTC(eind.getUTCFullYear(), eind.getUTCMonth(), eind.getUTCDate()) - Date.UTC(eind.getUTCFullYear(), 0, 1)) / 86400e3) + 1;
+    const start = eind.getUTCHours() + eind.getUTCMinutes() / 60 - 1 + ((curve && curve.delta) || 0) / 60;
+    const h = helder(doy, start, lat, lon); if (!(h.helder > 1)) return 0;
+    const k = Math.max(direct / h.helder, 0), f = curve ? Math.min(Math.max(interp(k, curve.x, curve.y), 0), 1) : Math.min(Math.max(k, 0), 1);
+    return Math.min(Math.max(f * h.minuten, 0), 60);
+  }
+  function daylightMinutes(eind, lat, lon) { let n = 0; const s = eind.getTime() - 3600e3; for (let m = 0; m < 60; m++) if (!WP.isNight(new Date(s + m * 60e3 + 30e3), lat, lon)) n++; return n; }
+  Object.assign(WP, { Sunshine: { minuten, curves: CAL, calibratedOn: CAL_DATE, daylightMinutes } });
 })(window);

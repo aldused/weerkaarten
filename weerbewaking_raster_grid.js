@@ -85,15 +85,16 @@
     const valRow = (cells, cls = '') => `<div class="grow vals ${cls}" style="${colsStyle}"><div class="lab"></div>${cells.join('')}</div>`;
 
     html += chartRow('cTemp', '🌡', [WP.tunit()]);
-    const feelOf = (h) => WP.feelsLike(h.temp, h.dew, h.kn);
+    const on = (k) => prefs[k] !== false, showFeels = on('showFeels'), showSun = on('showSunTimes'), showEnsMax = on('showEnsMax'), showBand = on('showEnsBand');
+    const feelOf = (h) => showFeels ? WP.feelsLike(h.temp, h.dew, h.kn) : null;
     html += valRow(days.map((d, i) => { const fl = hours.filter(h => h.start >= starts[i] && h.start < starts[i + 1]).map(feelOf).filter(v => v != null);
-      return `<div class="colcell tw"><div class="tt"><span>${WP.fTC(d?.tn)}</span><span class="gold">${WP.fTC(d?.tx)}</span></div>${(() => { const b = ens && ens.dailyMax(starts[i], starts[i + 1]); return b ? `<div class="ens">ens. max ${WP.fT(b.p10, false)}–${WP.fT(b.p90)}</div>` : ''; })()}${fl.length ? `<div class="feel">voelt ${WP.fT(Math.min(...fl), false)}–${WP.fT(Math.max(...fl))}</div>` : ''}</div>`; }));
+      return `<div class="colcell tw"><div class="tt"><span>${WP.fTC(d?.tn)}</span><span class="gold">${WP.fTC(d?.tx)}</span></div>${(() => { const b = showEnsMax && ens && ens.dailyMax(starts[i], starts[i + 1]); return b ? `<div class="ens">ens. max ${WP.fT(b.p10, false)}–${WP.fT(b.p90)}</div>` : ''; })()}${fl.length ? `<div class="feel">voelt ${WP.fT(Math.min(...fl), false)}–${WP.fT(Math.max(...fl))}</div>` : ''}</div>`; }));
     html += chartRow('cRain', '💧', [WP.ru(), '%']);
     html += valRow(days.map(d => { const tot = d && d.rain != null ? d.rain + (d.rainN || 0) : null; return `<div class="colcell tt"><span class="cy">${tot == null ? '–' : WP.num(WP.rconv(tot)) + WP.ru()}</span><span class="dim">${WP.fPct(d?.prob)}</span></div>`; }));
     html += chartRow('cSun', '☀', ['min']);
     html += valRow(starts.slice(0, n).map((s, i) => { const d = days[i], rs = WP.riseSet(s, city.lat, city.lon); const lo = Math.round(d?.uvLow ?? d?.uvi ?? 0), hi = Math.round(d?.uvi ?? 0), uv = d ? (lo === hi || lo === 0 ? hi : lo + '-' + hi) : '–';
       const sun = d?.sun != null ? WP.num(d.sun) + 'h' : '–', up = rs.rise ? WP.hm(rs.rise, tz) : '–', dn = rs.set ? WP.hm(rs.set, tz) : '–';
-      return `<div class="colcell sunv"><div class="s2"><div><i>☀</i>${sun}<b>UV ${uv}</b></div><div><i>${Icons.horizon(true)}</i>${up}<i>${Icons.horizon(false)}</i>${dn}</div></div><div class="s4"><div><i>☀</i>${sun}</div><div><i>${Icons.horizon(true)}</i>${up}</div><div><i>${Icons.horizon(false)}</i>${dn}</div><div><b>UV ${uv}</b></div></div></div>`; }), '');
+      return `<div class="colcell sunv"><div class="s2"><div><i>☀</i>${sun}<b>UV ${uv}</b></div>${showSun ? `<div><i>${Icons.horizon(true)}</i>${up}<i>${Icons.horizon(false)}</i>${dn}</div>` : ''}</div><div class="s4"><div><i>☀</i>${sun}</div>${showSun ? `<div><i>${Icons.horizon(true)}</i>${up}</div><div><i>${Icons.horizon(false)}</i>${dn}</div>` : ''}<div><b>UV ${uv}</b></div></div></div>`; }), '');
     html += chartRow('cWind', '🚩', [WP.isBft() ? 'Bft' : WP.windLabel()]);
     html += valRow(days.map((d, i) => { const dh = hours.filter(h => h.start >= starts[i] && h.start < starts[i + 1]); const gm = Math.max(...dh.map(h => h.gust ?? 0), d?.gust ?? 0) || null;
       const mean = d?.kn == null ? '–' : (prefs.wind === 'bftkmh' ? WP.half(WP.bft(d.kn)) + ' Bft' : WP.half(WP.windVal(d.kn)));
@@ -114,10 +115,10 @@
       const ticks = []; for (let v = lo; v <= hi; v += 2) ticks.push(v);
       drawChart(getCv('cTemp'), full, hC, starts, city, (P) => {
         P.grid(ticks, lo, hi); P.hours();
-        if (ens) { const idx = ens.times.map((t, i) => i).filter(i => ens.times[i] >= starts[0] && ens.times[i] < starts[n] && ens.t10[i] != null);
+        if (ens && showBand) { const idx = ens.times.map((t, i) => i).filter(i => ens.times[i] >= starts[0] && ens.times[i] < starts[n] && ens.t10[i] != null);
           P.band(idx.map(i => [ens.times[i], WP.tconv(ens.t90[i])]), idx.map(i => [ens.times[i], WP.tconv(ens.t10[i])]), 'rgba(255,255,255,.17)'); }
         P.line(hours.filter(h => h.dew != null).map(h => [+h.start + 1800e3, WP.tconv(h.dew)]), lo, hi, 'rgba(255,255,255,.55)', 1.4);
-        P.line(hours.filter(h => feelOf(h) != null).map(h => [+h.start + 1800e3, WP.tconv(feelOf(h))]), lo, hi, '#ffb86b', 1.3, [4, 3]);
+        if (showFeels) P.line(hours.filter(h => feelOf(h) != null).map(h => [+h.start + 1800e3, WP.tconv(feelOf(h))]), lo, hi, '#ffb86b', 1.3, [4, 3]);
         P.line(hours.filter(h => h.temp != null).map(h => [+h.start + 1800e3, WP.tconv(h.temp)]), lo, hi, '#fff', 1.8);
         const at = (i, hr, v) => [new Date(+starts[i] + hr * 3600e3), WP.tconv(v)];
         P.line(days.map((d, i) => d?.tx != null ? at(i, 15, d.tx) : null).filter(Boolean), lo, hi, GOLD, 1.4);

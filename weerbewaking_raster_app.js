@@ -1,4 +1,4 @@
-/* Weekraster (web): UI-logica. Afgeleid van MeteobewakingWin/src/app.js; data via R2 (weatherpro_raster.json, knmi_warnings.json) en Open-Meteo. */
+/* Weekraster (web): UI-logica. GEGENEREERD door MeteobewakingWin/scripts/sync_web.py uit src/app.js; data via R2 (weatherpro_raster.json, knmi_warnings.json) en Open-Meteo. */
 (function () {
   'use strict';
   const { prefs, savePrefs } = WP;
@@ -22,7 +22,7 @@
   }
   let dayOffset = 0, popFor = null;
 
-  // ---------- web-adapter: data komt uit R2-bestanden (feed heeft geen CORS) ----------
+  // ---------- web-adapter: data komt uit R2-bestanden (de WeatherPro-feed heeft geen CORS) ----------
   const LOCAL = ['localhost', '127.0.0.1', ''].includes(location.hostname);
   const DATA = LOCAL ? '' : 'https://data.weerlab.nl/';
   window.api = { fetchText: (u) => fetch(u).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }), trayTooltip() {} };
@@ -50,7 +50,7 @@
     setInterval(() => refreshAll(), 5 * 60e3);
   }
   const city = () => cities.find(c => c.id === selected);
-  const saveCities = () => { localStorage.setItem('raster.cities', JSON.stringify(cities)); localStorage.setItem('raster.selected', selected); };
+  const saveCities = () => { localStorage.setItem('raster.cities', JSON.stringify(cities.map(c => c.id))); localStorage.setItem('raster.selected', selected); };
 
   async function refresh(id, force) {
     if (loading.has(id)) return;
@@ -100,8 +100,7 @@
     const o = fc.obs, night = WP.isNight(new Date(), c.lat, c.lon), tz = c.tz;
     const out = WP.rainOutlook(fc.hours, tz), rh = o ? WP.humidity(o.temp, o.dew) : null;
     // kortetermijn: blokken 02-08, 08-14, 14-20
-    const hrNow = +WP.hh(new Date(), tz), lastB = [2, 8, 14, 20].filter(b => b <= hrNow).pop() ?? 20;
-    let base = new Date(WP.todayStart(tz).getTime() + lastB * 3600e3); if (lastB > hrNow) base = new Date(base.getTime() - 86400e3);
+    const base = new Date(Math.floor(Date.now() / 3600e3) * 3600e3);   // blokken van 6 uur vanaf het huidige uur (zoals de originele app)
     const blocks = [0, 1, 2].map(i => new Date(base.getTime() + i * 6 * 3600e3)).map(b0 => {
       const b1 = new Date(b0.getTime() + 6 * 3600e3), inB = fc.hours.filter(h => h.start >= b0 && h.start < b1), mid = inB[3] || inB[0], rain = inB.reduce((s, h) => s + (h.rain || 0), 0);
       return `<div>${WP.hh(b0, tz)}:00<br>${mid ? Icons.icon(WP.decode(mid.symbol, mid.ww, mid.cloud), WP.isNight(new Date(+b0 + 3 * 3600e3), c.lat, c.lon), 46) : ''}<div class="t">${WP.fTC(mid?.temp)}</div><small>${rain < 0.1 ? '<0,1mm' : WP.num(WP.rconv(rain)) + WP.ru()}</small></div>`;
@@ -112,8 +111,8 @@
       <div class="cur-ic">${o ? Icons.icon(WP.decode(o.symbol, o.ww, o.cloud), night, 120) : ''}</div>
       <div class="cur-t">${WP.fTC(o?.temp)}</div><div>${o ? WP.describe(o.ww, o.cloud) : ''}</div>
       ${o ? `<div class="cur-list">
-        ${[['💧', 'Neerslag', WP.num(o.rain != null ? WP.rconv(o.rain) / Math.max(o.rainH || 1, 1) : 0) + ' ' + WP.ru() + '/u'], ['🌡', 'Voelt als', WP.fTC(WP.feelsLike(o.temp, o.dew, o.kn))], ['🚩', 'Wind', WP.compass(o.dir) + ' ' + (WP.isBft() ? WP.half(WP.bft(o.kn || 0)) + ' Bft' : WP.fW(o.kn))], ['💨', 'Windstoten', WP.fG(o.gust)], ['〰', 'Vochtigheid', rh == null ? '–' : Math.round(rh) + '%'], ['◌', 'Dauwpunt', WP.fTC(o.dew)], ['🧭', 'Luchtdruk', WP.fP(o.p)]].map(([ic, k, v]) => `<div><span class="ic">${ic}</span><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>` : ''}
-      <div class="sunline">${Icons.horizon(true)} ${rs.rise ? WP.hm(rs.rise, tz) : '–'} &nbsp; ${Icons.horizon(false)} ${rs.set ? WP.hm(rs.set, tz) : '–'} &nbsp; ☀ ${dayToday?.sun != null ? WP.num(dayToday.sun) + 'h' : '–'}</div>
+        ${[['💧', 'Neerslag', WP.num(o.rain != null ? WP.rconv(o.rain) / Math.max(o.rainH || 1, 1) : 0) + ' ' + WP.ru() + '/u'], ...(prefs.showFeels !== false ? [['🌡', 'Voelt als', WP.fTC(WP.feelsLike(o.temp, o.dew, o.kn))]] : []), ['🚩', 'Wind', WP.compass(o.dir) + ' ' + (WP.isBft() ? WP.half(WP.bft(o.kn || 0)) + ' Bft' : WP.fW(o.kn))], ['💨', 'Windstoten', WP.fG(o.gust)], ['〰', 'Vochtigheid', rh == null ? '–' : Math.round(rh) + '%'], ['◌', 'Dauwpunt', WP.fTC(o.dew)], ['🧭', 'Luchtdruk', WP.fP(o.p)]].map(([ic, k, v]) => `<div><span class="ic">${ic}</span><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>` : ''}
+      <div class="sunline">${prefs.showSunTimes !== false ? `${Icons.horizon(true)} ${rs.rise ? WP.hm(rs.rise, tz) : '–'} &nbsp; ${Icons.horizon(false)} ${rs.set ? WP.hm(rs.set, tz) : '–'} &nbsp;` : ''} ☀ ${dayToday?.sun != null ? WP.num(dayToday.sun) + 'h' : '–'}</div>
       <div class="outlook">${out.wetNow ? '🌧' : '☂'} ${out.long}</div>
       <div>Kortetermijnverwachting</div><div class="short">${blocks}</div>
       ${kw.length ? `<div class="alerts"><h4>🛡 KNMI-waarschuwingen</h4>${kw.map(w => `<div class="kbox" style="background:${WP.levelColor(w.level)}"><b>${w.icon} Code ${WP.levelName(w.level)}: ${w.typeName}</b><small>${WP.wdShort(w.onset, tz)} ${WP.hh(w.onset, tz)}:00 – ${WP.wdShort(w.expires, tz)} ${WP.hh(w.expires, tz)}:00 · ${w.area}</small></div>`).join('')}</div>` : ''}
@@ -177,11 +176,11 @@
       const sym = rain >= 0.1 ? hs.reduce((a, b) => (b.rain || 0) > (a.rain || 0) ? b : a, hs[0]) : mid;
       const prob = Math.max(0, ...hs.map(h => h.prob ?? 0)), sun = hs.reduce((s, h) => s + (h.sun || 0), 0), kn = Math.max(0, ...hs.map(h => h.kn ?? 0)), gu = Math.max(0, ...hs.map(h => h.gust ?? 0));
       const night = WP.isNight(new Date((+b0 + +b1) / 2), c.lat, c.lon);
-      rows.push(`<div class="prow"><div class="tm">${WP.hh(b0, tz)}:00 -<b>${WP.hh(b1, tz)}:00</b></div><div>${sym ? Icons.icon(WP.decode(sym.symbol, sym.ww, sym.cloud), night, 48) : ''}</div><div class="tp">${WP.fTC(mid?.temp)}<small class="feel">${mid ? 'voelt ' + WP.fT(WP.feelsLike(mid.temp, mid.dew, mid.kn)) : ''}</small></div>
+      rows.push(`<div class="prow"><div class="tm">${WP.hh(b0, tz)}:00 -<b>${WP.hh(b1, tz)}:00</b></div><div>${sym ? Icons.icon(WP.decode(sym.symbol, sym.ww, sym.cloud), night, 48) : ''}</div><div class="tp">${WP.fTC(mid?.temp)}<small class="feel">${mid && prefs.showFeels !== false ? 'voelt ' + WP.fT(WP.feelsLike(mid.temp, mid.dew, mid.kn)) : ''}</small></div>
         <div class="c">💧 ${WP.fPct(prob)}<br>💧 ${WP.fR(rain)}</div><div class="c"><span class="sn">☀ ${Math.round(sun)}min</span><div class="w">${Icons.compass(mid?.dir, 18)}${WP.fW(kn)}${prefs.wind === 'bftkmh' ? ' · ' + WP.fG(gu) : ''}</div></div></div>`);
     }
     const rs = WP.riseSet(day0, c.lat, c.lon);
-    $('#pop').innerHTML = `<h3>${WP.wdLong(day0, tz)} ${WP.dmon(day0, tz)}</h3><div class="popsun">${Icons.horizon(true)} ${rs.rise ? WP.hm(rs.rise, tz) : '–'} &nbsp; ${Icons.horizon(false)} ${rs.set ? WP.hm(rs.set, tz) : '–'}</div><div class="seg"><button data-h="0" class="${popFor.perHour ? '' : 'on'}">Per 3 uur</button><button data-h="1" class="${popFor.perHour ? 'on' : ''}">Per uur</button></div>${rows.join('')}`;
+    $('#pop').innerHTML = `<h3>${WP.wdLong(day0, tz)} ${WP.dmon(day0, tz)}</h3>${prefs.showSunTimes !== false ? `<div class="popsun">${Icons.horizon(true)} ${rs.rise ? WP.hm(rs.rise, tz) : '–'} &nbsp; ${Icons.horizon(false)} ${rs.set ? WP.hm(rs.set, tz) : '–'}</div>` : ''}<div class="seg"><button data-h="0" class="${popFor.perHour ? '' : 'on'}">Per 3 uur</button><button data-h="1" class="${popFor.perHour ? 'on' : ''}">Per uur</button></div>${rows.join('')}`;
     $('#pop').hidden = false; Icons.fit($('#pop'));
     $('#pop').querySelectorAll('.seg button').forEach(b => b.onclick = (e) => { e.stopPropagation(); popFor.perHour = b.dataset.h === '1'; drawPop(); });
   }
@@ -198,6 +197,11 @@
       <label>Luchtdruk ${sel('pPres', [['hpa', 'hPa'], ['inhg', 'inHg'], ['mmhg', 'mmHg']], prefs.pressure)}</label>
       <label>Neerslag ${sel('pRain', [['mm', 'mm'], ['in', 'inch']], prefs.rain)}</label>
       <label>Aantal dagen ${sel('pDays', [[7, '7 dagen'], [10, '10 dagen'], [14, '14 dagen']], prefs.days)}</label>
+      <h4>Weergave in het raster</h4>
+      <label>Gevoelstemperatuur <input type="checkbox" id="pFeels" ${prefs.showFeels === false ? '' : 'checked'}></label>
+      <label>Zonsopkomst en -ondergang <input type="checkbox" id="pSunT" ${prefs.showSunTimes === false ? '' : 'checked'}></label>
+      <label>Ensemble-maximum ('ens. max') <input type="checkbox" id="pEnsMax" ${prefs.showEnsMax === false ? '' : 'checked'}></label>
+      <label>Onzekerheidsband (P10–P90) <input type="checkbox" id="pEnsBand" ${prefs.showEnsBand === false ? '' : 'checked'}></label>
       <h4>Gegevens</h4>
       <label>Onzekerheid tonen (ECMWF-ensemble, P10–P90) <input type="checkbox" id="pSpread" ${prefs.showSpread === false ? '' : 'checked'}></label>
       <label>KNMI-waarschuwingen tonen (Nederland) <input type="checkbox" id="pKnmi" ${prefs.showKnmi === false ? '' : 'checked'}></label>
@@ -210,7 +214,7 @@
       <div class="btns"><button id="pTest">Testmelding</button><button id="pOk">Sluiten</button></div>`;
     $('#prefs').classList.remove('wide'); $('#modal').hidden = false;
     const apply = () => { prefs.temp = $('#pTemp').value; prefs.wind = $('#pWind').value; prefs.pressure = $('#pPres').value; prefs.rain = $('#pRain').value; prefs.days = +$('#pDays').value;
-      prefs.showSpread = $('#pSpread').checked; prefs.showKnmi = $('#pKnmi').checked; prefs.alertsOn = $('#pAon').checked; prefs.alertGust = +$('#pAg').value; prefs.alertRain = +$('#pAr').value; prefs.alertHeat = +$('#pAh').value; prefs.alertFrost = +$('#pAf').value; savePrefs(); syncBar(); renderAll(); };
+      prefs.showFeels = $('#pFeels').checked; prefs.showSunTimes = $('#pSunT').checked; prefs.showEnsMax = $('#pEnsMax').checked; prefs.showEnsBand = $('#pEnsBand').checked; prefs.showSpread = $('#pSpread').checked; prefs.showKnmi = $('#pKnmi').checked; prefs.alertsOn = $('#pAon').checked; prefs.alertGust = +$('#pAg').value; prefs.alertRain = +$('#pAr').value; prefs.alertHeat = +$('#pAh').value; prefs.alertFrost = +$('#pAf').value; savePrefs(); syncBar(); renderAll(); };
     $('#prefs').querySelectorAll('select,input').forEach(e => e.addEventListener('change', apply));
     $('#pOk').onclick = () => { $('#modal').hidden = true; };
     $('#pTest').onclick = () => { Notification.requestPermission().then(p => { if (p === 'granted') new Notification('Meteobewaking', { body: 'Testmelding: waarschuwingen staan aan.' }); }); };
@@ -229,6 +233,12 @@
     $('#rOk').onclick = () => { $('#modal').hidden = true; $('#prefs').classList.remove('wide'); };
   }
 
+  const VIEW_OPTS = [['showFeels', 'Gevoelstemperatuur'], ['showSunTimes', 'Zonsopkomst/-ondergang'], ['showEnsMax', 'Ens. max'], ['showEnsBand', 'Onzekerheidsband']];
+  function drawViewMenu() {
+    $('#viewMenu').innerHTML = VIEW_OPTS.map(([k, t]) => `<label><input type="checkbox" data-k="${k}" ${prefs[k] === false ? '' : 'checked'}> ${t}</label>`).join('');
+    $('#viewMenu').querySelectorAll('input').forEach(i => i.addEventListener('change', () => { prefs[i.dataset.k] = i.checked; savePrefs(); renderAll(); }));
+  }
+
   function syncBar() {
     $('#selSrc').innerHTML = WP.SOURCES.map(([v, t]) => `<option value="${v}"${v === src() ? ' selected' : ''}>${t}</option>`).join('');
     $('#selDays').innerHTML = [7, 10, 14].map(n => `<option value="${n}"${n === prefs.days ? ' selected' : ''}>${n} dagen</option>`).join('');
@@ -244,6 +254,8 @@
     $('#prev').onclick = () => { dayOffset = Math.max(0, dayOffset - 1); renderGrid(); };
     $('#next').onclick = () => { dayOffset++; clampOffset(); renderGrid(); };
     $('#refresh').onclick = () => refreshAll(true);
+    drawViewMenu(); $('#viewBtn').onclick = (e) => { e.stopPropagation(); $('#viewMenu').hidden = !$('#viewMenu').hidden; };
+    document.addEventListener('click', (e) => { if (!e.target.closest('.viewwrap')) $('#viewMenu').hidden = true; });
     $('#gear').onclick = openPrefs; $('#report').onclick = openReport;
     const toggle = (side) => { const cur = document.body.dataset[side], visible = getComputedStyle($(side === 'left' ? '#left' : '#right')).display !== 'none'; document.body.dataset[side] = visible ? 'off' : 'on'; renderGrid(); };
     $('#tgLeft').onclick = () => toggle('left'); $('#tgRight').onclick = () => toggle('right');
