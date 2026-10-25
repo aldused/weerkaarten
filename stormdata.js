@@ -7,7 +7,7 @@
  function topFive(data){
   const body=document.getElementById('rolling-top-rows'),note=document.getElementById('rolling-top-note');if(!body)return;
   const rows=StormWindCore.top(data.rolling_wind);body.replaceChildren();
-  note.textContent=rows.length?`${rows.length} hoogste complete complete klokuurgemiddelden · metingen maximaal 100 minuten oud · tijden UTC.`:'Geen complete, recente metingen beschikbaar voor de top 5. Verouderde metingen tellen niet mee.';
+  note.textContent=rows.length?`${rows.length} hoogste complete klokuurgemiddelden · metingen maximaal 100 minuten oud · tijden UTC.`:'Geen complete, recente metingen beschikbaar voor de top 5. Verouderde metingen tellen niet mee.';
   rows.forEach((r,i)=>{
    const tr=document.createElement('tr'),name=data.stations.find(s=>s.station===r.station)?.name||String(r.station),trend=Number.isFinite(r.previous_mean_ms)?r.mean_ms-r.previous_mean_ms:null;
    const cells=[String(i+1),name,number(r.mean_ms)+' m/s',number(r.mean_ms*3.6)+' km/u',r.storm_reached?'Stormgrens bereikt':number(Math.max(0,20.5-r.mean_ms))+' m/s onder grens',trend===null?'—':Math.abs(trend)<.05?'→ Gelijk':(trend>0?'↑ +':'↓ −')+number(Math.abs(trend))+' m/s',date(r.end_utc)];
